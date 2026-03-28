@@ -455,6 +455,43 @@ button{cursor:pointer;font-family:var(--font-ui);border:none;transition:all .2s;
       </div>
 
       <!-- World settings -->
+      <!-- API Settings -->
+      <div>
+        <div class="sp-sec-title">▸ AI エンジン設定</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <!-- Provider toggle -->
+          <div style="display:flex;gap:6px;">
+            <button id="btnProvAnthro" onclick="setProvider('anthropic')"
+              style="flex:1;padding:9px;border-radius:4px;font-family:var(--font-mono);font-size:10px;letter-spacing:.15em;cursor:pointer;border:1px solid;transition:all .2s;">
+              Claude
+            </button>
+            <button id="btnProvNovel" onclick="setProvider('novelai')"
+              style="flex:1;padding:9px;border-radius:4px;font-family:var(--font-mono);font-size:10px;letter-spacing:.15em;cursor:pointer;border:1px solid;transition:all .2s;">
+              NovelAI
+            </button>
+          </div>
+          <!-- Anthropic key -->
+          <div id="secAnthro" style="display:flex;flex-direction:column;gap:5px;">
+            <div style="font-family:var(--font-mono);font-size:9px;color:var(--dim);letter-spacing:.2em;">ANTHROPIC APIキー</div>
+            <div style="display:flex;gap:6px;">
+              <input type="password" id="stAnthroKey" placeholder="sk-ant-..."
+                style="flex:1;background:var(--p1);border:1px solid var(--rim);border-radius:3px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:7px 9px;outline:none;">
+              <button onclick="saveAnthroKey()" style="background:linear-gradient(135deg,#6a4a08,#c4923a);border:none;border-radius:3px;color:#160c00;font-family:var(--font-ui);font-weight:600;font-size:10px;padding:0 12px;cursor:pointer;">保存</button>
+            </div>
+          </div>
+          <!-- NovelAI key -->
+          <div id="secNovel" style="display:flex;flex-direction:column;gap:5px;">
+            <div style="font-family:var(--font-mono);font-size:9px;color:var(--dim);letter-spacing:.2em;">NOVELAI APIキー</div>
+            <div style="display:flex;gap:6px;">
+              <input type="password" id="stNovelKey" placeholder="nai-..."
+                style="flex:1;background:var(--p1);border:1px solid var(--rim);border-radius:3px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:7px 9px;outline:none;">
+              <button onclick="saveNovelKey()" style="background:linear-gradient(135deg,#6a4a08,#c4923a);border:none;border-radius:3px;color:#160c00;font-family:var(--font-ui);font-weight:600;font-size:10px;padding:0 12px;cursor:pointer;">保存</button>
+            </div>
+          </div>
+          <div id="apiStatusMsg" style="font-family:var(--font-mono);font-size:10px;color:var(--gold);letter-spacing:.1em;padding:2px 0;"></div>
+        </div>
+      </div>
+
       <div>
         <div class="sp-sec-title">▸ 世界設定</div>
         <textarea class="world-ta" id="worldEditTa"></textarea>
@@ -770,6 +807,44 @@ function enablePostGame() {
   document.getElementById('btnTake').disabled = false;
 }
 
+async function callNovelAI(msgs, sys) {
+  const key = localStorage.getItem('chronicle_novel_key') || '';
+  if (!key) throw new Error('NovelAI APIキーが設定されていません。設定から入力してください。');
+
+  // Build prompt text from messages
+  const context = sys ? sys + '\n\n' : '';
+  const conversation = msgs.map(m => m.content).join('\n');
+  const prompt = context + conversation;
+
+  const r = await fetch('https://api.novelai.net/ai/generate', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`
+    },
+    body: JSON.stringify({
+      model: 'kayra-v1',
+      input: prompt,
+      parameters: {
+        max_new_tokens: 300,
+        temperature: 1.15,
+        top_p: 0.95,
+        top_k: 0,
+        repetition_penalty: 1.1,
+        repetition_penalty_range: 2048,
+        use_string: true
+      }
+    })
+  });
+
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`NovelAI error ${r.status}: ${t.slice(0,150)}`);
+  }
+  const d = await r.json();
+  return d.output || '';
+}
+
 async function callAI(extraUserMsg) {
   // history[0] is the fake system msg we stored; real system goes in `system` param
   // history.slice(1) gives the actual conversation turns
@@ -782,6 +857,11 @@ async function callAI(extraUserMsg) {
   // API requires at least one message
   if (msgs.length === 0) {
     msgs = [{ role:'user', content: '物語を始めてください。' }];
+  }
+
+  // Route to NovelAI if selected
+  if (currentProvider === 'novelai') {
+    return await callNovelAI(msgs, buildSystemPrompt());
   }
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1058,9 +1138,14 @@ function renderMem() {
 function openSettings() {
   document.getElementById('settingsOverlay').classList.remove('hidden');
   document.getElementById('worldEditTa').value = worldDesc;
-  const saved = localStorage.getItem('chronicle_api_key') || '';
-  const el = document.getElementById('settingsApiKey');
-  if (el) el.value = saved;
+  // Load keys
+  const ak = localStorage.getItem('chronicle_api_key') || '';
+  const nk = localStorage.getItem('chronicle_novel_key') || '';
+  const ska = document.getElementById('stAnthroKey');
+  const skn = document.getElementById('stNovelKey');
+  if (ska) ska.value = ak;
+  if (skn) skn.value = nk;
+  updateProviderUI();
   renderSlotList();
 }
 function closeSettings() {
@@ -1164,6 +1249,50 @@ function saveApiKey() {
 //  UTIL
 // ════════════════════
 function uid() { return Math.random().toString(36).slice(2,10); }
+
+// ── API PROVIDER ──
+let currentProvider = localStorage.getItem('chronicle_provider') || 'anthropic';
+
+function getKey() {
+  if (currentProvider === 'novelai') {
+    return localStorage.getItem('chronicle_novel_key') || '';
+  }
+  return document.getElementById('apiKey')?.value.trim() || localStorage.getItem('chronicle_api_key') || '';
+}
+
+function setProvider(p) {
+  currentProvider = p;
+  localStorage.setItem('chronicle_provider', p);
+  updateProviderUI();
+  showPop(p === 'novelai' ? '🎭 NovelAI に切り替えました' : '⚡ Claude に切り替えました');
+}
+
+function updateProviderUI() {
+  const ba = document.getElementById('btnProvAnthro');
+  const bn = document.getElementById('btnProvNovel');
+  const sa = document.getElementById('secAnthro');
+  const sn = document.getElementById('secNovel');
+  if (!ba) return;
+  if (currentProvider === 'anthropic') {
+    ba.style.background = 'rgba(196,146,58,.15)'; ba.style.borderColor = 'var(--gold)'; ba.style.color = 'var(--gold2)';
+    bn.style.background = 'var(--p2)'; bn.style.borderColor = 'var(--rim)'; bn.style.color = 'var(--dim)';
+    if(sa) sa.style.display='flex'; if(sn) sn.style.display='none';
+  } else {
+    bn.style.background = 'rgba(196,146,58,.15)'; bn.style.borderColor = 'var(--gold)'; bn.style.color = 'var(--gold2)';
+    ba.style.background = 'var(--p2)'; ba.style.borderColor = 'var(--rim)'; ba.style.color = 'var(--dim)';
+    if(sn) sn.style.display='flex'; if(sa) sa.style.display='none';
+  }
+}
+
+function saveAnthroKey() {
+  const k = document.getElementById('stAnthroKey').value.trim();
+  if (k) { localStorage.setItem('chronicle_api_key', k); showPop('Anthropic APIキーを保存しました'); }
+}
+
+function saveNovelKey() {
+  const k = document.getElementById('stNovelKey').value.trim();
+  if (k) { localStorage.setItem('chronicle_novel_key', k); showPop('NovelAI APIキーを保存しました'); }
+}
 function getKey() { return document.getElementById('apiKey')?.value.trim() || localStorage.getItem('chronicle_api_key') || ''; }
 function showPop(text) {
   document.querySelectorAll('.pop').forEach(p=>p.remove());
