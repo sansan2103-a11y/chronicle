@@ -513,6 +513,50 @@ button{cursor:pointer;font-family:var(--font-ui);border:none;transition:all .2s;
 </div>
 
 <script>
+// ── API PROVIDER (must be defined first) ──
+let currentProvider = localStorage.getItem('chronicle_provider') || 'anthropic';
+
+function getKey() {
+  if (currentProvider === 'novelai') {
+    return localStorage.getItem('chronicle_novel_key') || '';
+  }
+  return document.getElementById('apiKey')?.value.trim() || localStorage.getItem('chronicle_api_key') || '';
+}
+
+function setProvider(p) {
+  currentProvider = p;
+  localStorage.setItem('chronicle_provider', p);
+  updateProviderUI();
+  showPop(p === 'novelai' ? '🎭 NovelAI に切り替えました' : '⚡ Claude に切り替えました');
+}
+
+function updateProviderUI() {
+  const ba = document.getElementById('btnProvAnthro');
+  const bn = document.getElementById('btnProvNovel');
+  const sa = document.getElementById('secAnthro');
+  const sn = document.getElementById('secNovel');
+  if (!ba) return;
+  if (currentProvider === 'anthropic') {
+    ba.style.background = 'rgba(196,146,58,.15)'; ba.style.borderColor = 'var(--gold)'; ba.style.color = 'var(--gold2)';
+    bn.style.background = 'var(--p2)'; bn.style.borderColor = 'var(--rim)'; bn.style.color = 'var(--dim)';
+    if(sa) sa.style.display='flex'; if(sn) sn.style.display='none';
+  } else {
+    bn.style.background = 'rgba(196,146,58,.15)'; bn.style.borderColor = 'var(--gold)'; bn.style.color = 'var(--gold2)';
+    ba.style.background = 'var(--p2)'; ba.style.borderColor = 'var(--rim)'; ba.style.color = 'var(--dim)';
+    if(sn) sn.style.display='flex'; if(sa) sa.style.display='none';
+  }
+}
+
+function saveAnthroKey() {
+  const k = document.getElementById('stAnthroKey').value.trim();
+  if (k) { localStorage.setItem('chronicle_api_key', k); showPop('Anthropic APIキーを保存しました'); }
+}
+
+function saveNovelKey() {
+  const k = document.getElementById('stNovelKey').value.trim();
+  if (k) { localStorage.setItem('chronicle_novel_key', k); showPop('NovelAI APIキーを保存しました'); }
+}
+
 // ════════════════════
 //  INTRO
 // ════════════════════
@@ -1251,49 +1295,7 @@ function saveApiKey() {
 // ════════════════════
 function uid() { return Math.random().toString(36).slice(2,10); }
 
-// ── API PROVIDER ──
-let currentProvider = localStorage.getItem('chronicle_provider') || 'anthropic';
 
-function getKey() {
-  if (currentProvider === 'novelai') {
-    return localStorage.getItem('chronicle_novel_key') || '';
-  }
-  return document.getElementById('apiKey')?.value.trim() || localStorage.getItem('chronicle_api_key') || '';
-}
-
-function setProvider(p) {
-  currentProvider = p;
-  localStorage.setItem('chronicle_provider', p);
-  updateProviderUI();
-  showPop(p === 'novelai' ? '🎭 NovelAI に切り替えました' : '⚡ Claude に切り替えました');
-}
-
-function updateProviderUI() {
-  const ba = document.getElementById('btnProvAnthro');
-  const bn = document.getElementById('btnProvNovel');
-  const sa = document.getElementById('secAnthro');
-  const sn = document.getElementById('secNovel');
-  if (!ba) return;
-  if (currentProvider === 'anthropic') {
-    ba.style.background = 'rgba(196,146,58,.15)'; ba.style.borderColor = 'var(--gold)'; ba.style.color = 'var(--gold2)';
-    bn.style.background = 'var(--p2)'; bn.style.borderColor = 'var(--rim)'; bn.style.color = 'var(--dim)';
-    if(sa) sa.style.display='flex'; if(sn) sn.style.display='none';
-  } else {
-    bn.style.background = 'rgba(196,146,58,.15)'; bn.style.borderColor = 'var(--gold)'; bn.style.color = 'var(--gold2)';
-    ba.style.background = 'var(--p2)'; ba.style.borderColor = 'var(--rim)'; ba.style.color = 'var(--dim)';
-    if(sn) sn.style.display='flex'; if(sa) sa.style.display='none';
-  }
-}
-
-function saveAnthroKey() {
-  const k = document.getElementById('stAnthroKey').value.trim();
-  if (k) { localStorage.setItem('chronicle_api_key', k); showPop('Anthropic APIキーを保存しました'); }
-}
-
-function saveNovelKey() {
-  const k = document.getElementById('stNovelKey').value.trim();
-  if (k) { localStorage.setItem('chronicle_novel_key', k); showPop('NovelAI APIキーを保存しました'); }
-}
 function getKey() { return document.getElementById('apiKey')?.value.trim() || localStorage.getItem('chronicle_api_key') || ''; }
 function showPop(text) {
   document.querySelectorAll('.pop').forEach(p=>p.remove());
