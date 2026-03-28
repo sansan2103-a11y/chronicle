@@ -297,12 +297,12 @@ button{cursor:pointer;font-family:var(--font-ui);border:none;transition:all .2s;
       <div class="hint" style="margin-top:6px">舞台・時代・世界観・始まりの場所…なんでも。<br><span>空白でもAIが世界を作ってくれる。</span></div>
 
       <div class="div"></div>
-      <span class="lbl">▸ Anthropic APIキー</span>
+      <span class="lbl">▸ NovelAI APIキー</span>
       <div style="display:flex;gap:8px;align-items:center">
-        <input type="password" class="bta" id="apiKey" placeholder="sk-ant-..." style="height:42px;font-size:14px;font-family:var(--font-mono)" oninput="checkBegin()">
+        <input type="password" class="bta" id="apiKey" placeholder="nai-..." style="height:42px;font-size:14px;font-family:var(--font-mono)" oninput="checkBegin()">
         <button onclick="toggleApiVis()" style="background:var(--p0);border:1px solid var(--rim);color:var(--dim);border-radius:3px;padding:0 12px;height:42px;font-size:13px;flex-shrink:0" id="apiVisBtn">👁</button>
       </div>
-      <div class="hint" style="margin-top:6px"><span>キーはブラウザ内にのみ保存されます。外部には送信されません。</span><br><a href="https://console.anthropic.com" target="_blank" style="color:var(--gold);text-decoration:none">console.anthropic.com でキーを取得</a></div>
+      <div class="hint" style="margin-top:6px"><span>キーはブラウザ内にのみ保存されます。外部には送信されません。</span><br><a href="https://novelai.net/account" target="_blank" style="color:var(--gold);text-decoration:none">novelai.net でキーを取得（アカウント設定→永続的APIトークン）</a></div>
       <button class="begin-btn" id="beginBtn" onclick="beginGame()" disabled>ENTER THE CHRONICLE</button>
     </div>
   </div>
@@ -514,13 +514,12 @@ button{cursor:pointer;font-family:var(--font-ui);border:none;transition:all .2s;
 
 <script>
 // ── API PROVIDER (must be defined first) ──
-let currentProvider = localStorage.getItem('chronicle_provider') || 'anthropic';
+let currentProvider = localStorage.getItem('chronicle_provider') || 'novelai';
 
 function getKey() {
   if (currentProvider === 'novelai') {
-    return localStorage.getItem('chronicle_novel_key') || '';
+    return localStorage.getItem('chronicle_novel_key') || localStorage.getItem('chronicle_api_key') || document.getElementById('apiKey')?.value.trim() || '';
   }
-  // Prioritize localStorage (set on beginGame), fall back to DOM element
   return localStorage.getItem('chronicle_api_key') || document.getElementById('apiKey')?.value.trim() || '';
 }
 
@@ -614,9 +613,19 @@ let openPanelId = null;
 async function beginGame() {
   heroDesc  = document.getElementById('heroDesc').value.trim();
   worldDesc = document.getElementById('worldDesc').value.trim();
-  // persist key
+  // persist key based on provider
   const k = document.getElementById('apiKey').value.trim();
-  if (k) localStorage.setItem('chronicle_api_key', k);
+  if (k) {
+    if (k.startsWith('nai-')) {
+      localStorage.setItem('chronicle_novel_key', k);
+      currentProvider = 'novelai';
+      localStorage.setItem('chronicle_provider', 'novelai');
+    } else {
+      localStorage.setItem('chronicle_api_key', k);
+      currentProvider = 'anthropic';
+      localStorage.setItem('chronicle_provider', 'anthropic');
+    }
+  }
 
   document.getElementById('introScreen').style.display = 'none';
   const gs2 = document.getElementById('gameScreen');
