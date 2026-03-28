@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chronicle — AI RPG</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink:   #08080d;
+  --p0:    #0e0e16;
+  --p1:    #14141e;
+  --p2:    #1c1c28;
+  --p3:    #242432;
+  --rim:   #2a2a3c;
+  --rim2:  #383850;
+  --gold:  #c4923a;
+  --gold2: #e8b84a;
+  --gold3: #f5d888;
+  --red:   #9a2828;
+  --red2:  #d44040;
+  --blue:  #285888;
+  --blue2: #4488c8;
+  --grn:   #286040;
+  --grn2:  #40a060;
+  --pur:   #583888;
+  --pur2:  #9860c8;
+  --text:  #cec8bc;
+  --dim:   #686258;
+  --mid:   #9a9288;
+  --font-serif: 'Cormorant Garamond', serif;
+  --font-ui:    'Rajdhani', sans-serif;
+  --font-mono:  'Share Tech Mono', monospace;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;background:var(--ink);color:var(--text);font-family:var(--font-serif);font-size:18px;overflow:hidden;}
+
+/* ════════ UTIL ════════ */
+.hidden{display:none!important;}
+input,textarea,select{font-family:inherit;color:var(--text);background:var(--p1);border:1px solid var(--rim);border-radius:3px;outline:none;transition:border-color .2s;}
+input:focus,textarea:focus,select:focus{border-color:var(--gold);}
+input::placeholder,textarea::placeholder{color:var(--dim);font-style:italic;}
+button{cursor:pointer;font-family:var(--font-ui);border:none;transition:all .2s;}
+
+/* ════════ INTRO SCREEN ════════ */
+#introScreen{
+  height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 50% 20%,#1c1530 0%,var(--ink) 65%);
+  overflow-y:auto;position:relative;
+}
+#introScreen::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 48px,rgba(196,146,58,.025) 48px,rgba(196,146,58,.025) 49px),
+             repeating-linear-gradient(90deg,transparent,transparent 48px,rgba(196,146,58,.025) 48px,rgba(196,146,58,.025) 49px);
+  animation:gridDrift 20s linear infinite;
+}
+@keyframes gridDrift{to{transform:translate(48px,48px);}}
+
+.intro-wrap{position:relative;width:100%;max-width:640px;padding:32px 20px;display:flex;flex-direction:column;align-items:center;gap:0;}
+.sigil{font-size:48px;margin-bottom:16px;filter:drop-shadow(0 0 22px rgba(196,146,58,.5));animation:pulse 3s ease-in-out infinite;}
+@keyframes pulse{0%,100%{filter:drop-shadow(0 0 22px rgba(196,146,58,.5));}50%{filter:drop-shadow(0 0 40px rgba(196,146,58,.8));}}
+.logo{font-family:var(--font-ui);font-weight:700;font-size:clamp(28px,9vw,52px);letter-spacing:.3em;color:var(--gold2);text-shadow:0 0 40px rgba(196,146,58,.3),0 2px 0 #000;margin-bottom:4px;}
+.logo-sub{font-family:var(--font-mono);font-size:10px;letter-spacing:.45em;color:var(--dim);margin-bottom:36px;}
+
+.card{width:100%;background:var(--p1);border:1px solid var(--rim);border-radius:4px;padding:24px;position:relative;}
+.card::before{content:'';position:absolute;top:-1px;left:40px;right:40px;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);}
+
+.lbl{font-family:var(--font-mono);font-size:10px;letter-spacing:.3em;color:var(--gold);margin-bottom:10px;display:block;}
+.lbl-sm{font-family:var(--font-mono);font-size:9px;letter-spacing:.2em;color:var(--dim);margin-bottom:7px;display:block;}
+
+.big-ta{width:100%;background:var(--p0);border:1px solid var(--rim);border-radius:3px;color:var(--text);font-family:var(--font-serif);font-size:17px;line-height:1.7;padding:13px 15px;resize:none;height:110px;}
+.sm-ta{width:100%;background:var(--p0);border:1px solid var(--rim);border-radius:3px;color:var(--text);font-family:var(--font-serif);font-size:16px;line-height:1.65;padding:10px 13px;resize:none;height:80px;}
+.hint{font-size:13px;color:var(--dim);font-style:italic;margin-top:8px;line-height:1.5;}
+.hint span{color:var(--mid);}
+
+.begin-btn{
+  width:100%;margin-top:20px;
+  background:linear-gradient(135deg,#7a5808,#c4923a,#e8b84a);
+  border-radius:3px;color:#1a0e00;
+  font-family:var(--font-ui);font-weight:700;font-size:15px;letter-spacing:.3em;
+  padding:13px;box-shadow:0 4px 24px rgba(196,146,58,.22);
+}
+.begin-btn:hover{filter:brightness(1.08);transform:translateY(-2px);box-shadow:0 8px 32px rgba(196,146,58,.32);}
+.begin-btn:disabled{opacity:.3;cursor:not-allowed;transform:none;box-shadow:none;}
+
+.divider{width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--rim),transparent);margin:20px 0;}
+
+/* ════════ GAME SCREEN ════════ */
+#gameScreen{display:none;height:100vh;flex-direction:column;max-width:1020px;width:100%;margin:0 auto;}
+
+/* Topbar */
+.topbar{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 14px;background:var(--p1);border-bottom:1px solid var(--rim);
+  flex-shrink:0;flex-wrap:wrap;
+}
+.tb-name{font-family:var(--font-ui);font-weight:600;font-size:14px;color:var(--gold2);letter-spacing:.05em;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.vital{display:flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:10px;}
+.v-track{width:42px;height:4px;background:var(--rim);border-radius:2px;overflow:hidden;}
+.v-fill{height:100%;border-radius:2px;transition:width .5s;}
+.v-fill.hp{background:linear-gradient(90deg,var(--red),var(--red2));}
+.v-fill.mp{background:linear-gradient(90deg,var(--blue),var(--blue2));}
+.v-num{color:var(--mid);min-width:26px;font-size:9px;}
+.pill{font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:9px;border:1px solid;white-space:nowrap;}
+.pill.lv  {color:var(--grn2);border-color:var(--grn);background:rgba(40,96,64,.12);}
+.pill.gold{color:var(--gold2);border-color:var(--gold);background:rgba(196,146,58,.1);}
+.pill.xp  {color:#d09050;border-color:#906030;background:rgba(144,96,48,.1);}
+.tb-r{margin-left:auto;display:flex;gap:5px;}
+.ib{background:var(--p0);border:1px solid var(--rim);color:var(--dim);font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:3px;letter-spacing:.1em;}
+.ib:hover{border-color:var(--rim2);color:var(--text);}
+.ib.on{border-color:var(--gold);color:var(--gold);}
+
+/* Main */
+.game-body{flex:1;display:flex;overflow:hidden;}
+.story-col{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.story-scroll{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth;}
+.story-scroll::-webkit-scrollbar{width:3px;}
+.story-scroll::-webkit-scrollbar-thumb{background:var(--rim);border-radius:2px;}
+
+/* Messages */
+.msg{animation:mi .3s ease;}
+@keyframes mi{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:translateY(0);}}
+.msg.narrate{background:var(--p1);border:1px solid var(--rim);border-left:2px solid var(--gold);border-radius:0 4px 4px 0;padding:12px 14px;line-height:1.82;font-size:17px;}
+.msg.player-act{align-self:flex-end;background:var(--p2);border:1px solid var(--rim);border-right:2px solid var(--pur2);border-radius:4px 0 0 4px;padding:8px 13px;color:#b0a8d0;font-style:italic;max-width:76%;font-size:16px;}
+.msg.player-act::before{content:attr(data-n)' ▸ ' attr(data-mode);color:var(--pur2);font-style:normal;font-family:var(--font-mono);font-size:9px;letter-spacing:.1em;display:block;margin-bottom:3px;}
+.msg.sys-note{text-align:center;font-family:var(--font-mono);font-size:10px;color:var(--gold);letter-spacing:.3em;padding:3px;opacity:.6;}
+.msg.disc{text-align:center;font-family:var(--font-mono);font-size:11px;color:var(--gold3);background:rgba(196,146,58,.05);border:1px solid rgba(196,146,58,.18);border-radius:3px;padding:6px 12px;letter-spacing:.08em;}
+.thinking{display:flex;align-items:center;gap:9px;padding:5px 2px;color:var(--dim);font-family:var(--font-mono);font-size:10px;letter-spacing:.15em;}
+.t-orb{width:13px;height:13px;border:1.5px solid var(--rim2);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── Input zone ── */
+.input-zone{border-top:1px solid var(--rim);padding:10px 13px 13px;flex-shrink:0;background:var(--ink);}
+.sug-row{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;min-height:24px;}
+.sg{background:var(--p1);border:1px solid var(--rim);color:var(--mid);font-family:var(--font-serif);font-size:14px;padding:3px 11px;border-radius:2px;}
+.sg:hover{border-color:var(--gold);color:var(--gold2);background:rgba(196,146,58,.05);}
+/* Action bar */
+.action-bar{display:flex;gap:8px;margin-bottom:9px;}
+.ab-btn{
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  background:var(--p2);border:1px solid var(--rim2);border-radius:10px;
+  color:var(--text);font-family:var(--font-ui);font-weight:500;font-size:13px;letter-spacing:.06em;
+  padding:10px 16px;transition:all .18s;flex-shrink:0;
+}
+.ab-btn:hover:not(:disabled){background:var(--p3);filter:brightness(1.18);}
+.ab-btn:active:not(:disabled){transform:scale(.97);}
+.ab-btn:disabled{opacity:.3;cursor:not-allowed;}
+.ab-btn.primary{flex:1;}
+.ab-btn.active{border-color:var(--gold);color:var(--gold2);}
+/* Mode bar (Do/Say/Story/See) */
+.mode-bar{display:none;margin-bottom:9px;background:var(--p2);border:1px solid var(--rim2);border-radius:10px;overflow:hidden;}
+.mode-bar.open{display:flex;animation:wSlide .18s ease;}
+.mode-back{display:flex;align-items:center;justify-content:center;width:44px;height:44px;flex-shrink:0;color:var(--mid);border-right:1px solid var(--rim);background:transparent;}
+.mode-back:hover{color:var(--text);}
+.mode-btn{
+  flex:1;display:flex;align-items:center;justify-content:center;gap:5px;
+  background:transparent;color:var(--mid);
+  font-family:var(--font-ui);font-weight:500;font-size:13px;letter-spacing:.05em;
+  padding:11px 4px;border:none;border-left:1px solid var(--rim);transition:all .15s;
+}
+.mode-btn:hover{color:var(--text);background:rgba(255,255,255,.04);}
+.mode-btn.active{color:var(--gold2);background:rgba(196,146,58,.08);}
+/* Write area */
+.write-area{display:none;flex-direction:column;gap:3px;}
+.write-area.open{display:flex;animation:wSlide .2s ease;}
+@keyframes wSlide{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+.write-mode-label{font-family:var(--font-mono);font-size:9px;letter-spacing:.25em;color:var(--gold);padding:4px 12px 2px;}
+.write-inp-row{display:flex;gap:7px;align-items:flex-end;}
+.act-inp{
+  flex:1;background:var(--p1);border:1px solid var(--rim);border-radius:3px;
+  color:var(--text);font-family:var(--font-serif);font-size:17px;line-height:1.5;
+  padding:8px 12px;resize:none;min-height:42px;max-height:110px;overflow-y:auto;
+}
+.act-inp:focus{border-color:var(--gold);}
+.act-inp::placeholder{color:var(--dim);font-style:italic;}
+.send-btn{background:linear-gradient(135deg,#6a4a08,#c4923a);border-radius:3px;color:#160c00;font-family:var(--font-ui);font-weight:600;font-size:13px;letter-spacing:.2em;padding:0 16px;height:42px;white-space:nowrap;flex-shrink:0;}
+.send-btn:hover{filter:brightness(1.1);transform:translateY(-1px);}
+.send-btn:disabled{opacity:.3;cursor:not-allowed;transform:none;}
+
+/* ════════ SIDE PANELS ════════ */
+.side-panel{width:0;overflow:hidden;transition:width .28s ease;border-left:1px solid var(--rim);background:#0b0b12;display:flex;flex-direction:column;flex-shrink:0;}
+.side-panel.open{width:260px;}
+.pan-head{padding:10px 13px;border-bottom:1px solid var(--rim);font-family:var(--font-ui);font-weight:600;font-size:13px;color:var(--gold);letter-spacing:.15em;flex-shrink:0;}
+.pan-body{flex:1;overflow-y:auto;padding:11px;}
+.pan-body::-webkit-scrollbar{width:3px;}
+.pan-body::-webkit-scrollbar-thumb{background:var(--rim);}
+.psec{margin-bottom:14px;}
+.psec-t{font-family:var(--font-mono);font-size:9px;color:var(--dim);letter-spacing:.25em;margin-bottom:7px;padding-bottom:4px;border-bottom:1px solid var(--rim);}
+.mc{background:var(--p1);border:1px solid var(--rim);border-radius:3px;padding:7px 9px;margin-bottom:5px;font-size:12px;line-height:1.45;}
+.mb{font-family:var(--font-mono);font-size:8px;padding:1px 5px;border-radius:7px;margin-bottom:3px;display:inline-block;letter-spacing:.1em;}
+.mb.sk  {color:var(--red2);background:rgba(154,40,40,.12);border:1px solid rgba(154,40,40,.3);}
+.mb.npc {color:#70a8e8;background:rgba(64,112,192,.15);border:1px solid rgba(64,112,192,.3);}
+.mb.pl  {color:var(--grn2);background:rgba(40,96,64,.12);border:1px solid rgba(40,96,64,.3);}
+.mb.it  {color:var(--gold2);background:rgba(196,146,58,.1);border:1px solid rgba(196,146,58,.22);}
+.mb.ev  {color:var(--pur2);background:rgba(88,56,136,.12);border:1px solid rgba(88,56,136,.3);}
+.mb.qu  {color:#d09050;background:rgba(144,96,48,.12);border:1px solid rgba(144,96,48,.3);}
+.mm{color:var(--mid);}
+.ms{font-size:11px;color:var(--dim);margin-top:2px;font-style:italic;}
+.me{font-size:12px;color:var(--dim);font-style:italic;}
+.char-bio{background:var(--p1);border:1px solid var(--rim);border-left:2px solid var(--gold);border-radius:0 3px 3px 0;padding:9px 11px;font-size:13px;color:var(--mid);font-style:italic;line-height:1.6;margin-bottom:10px;}
+
+/* ════════ SETTINGS PANEL ════════ */
+#settingsOverlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:300;display:flex;align-items:flex-start;justify-content:flex-end;}
+#settingsPanel{
+  width:min(420px,100vw);height:100vh;background:var(--p0);border-left:1px solid var(--rim);
+  display:flex;flex-direction:column;overflow:hidden;
+  animation:slideIn .25s ease;
+}
+@keyframes slideIn{from{transform:translateX(100%);}to{transform:translateX(0);}}
+.sp-head{padding:14px 18px;border-bottom:1px solid var(--rim);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.sp-title{font-family:var(--font-ui);font-weight:700;font-size:16px;color:var(--gold2);letter-spacing:.15em;}
+.sp-close{background:var(--p1);border:1px solid var(--rim);color:var(--dim);font-size:18px;width:32px;height:32px;border-radius:3px;display:flex;align-items:center;justify-content:center;}
+.sp-close:hover{border-color:var(--rim2);color:var(--text);}
+.sp-body{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:18px;}
+.sp-body::-webkit-scrollbar{width:3px;}
+.sp-body::-webkit-scrollbar-thumb{background:var(--rim);}
+.sp-sec-title{font-family:var(--font-mono);font-size:10px;color:var(--gold);letter-spacing:.3em;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--rim);}
+
+/* Character slots */
+.slot-list{display:flex;flex-direction:column;gap:8px;}
+.char-slot{
+  background:var(--p1);border:1px solid var(--rim);border-radius:4px;padding:11px 13px;
+  display:flex;align-items:center;gap:10px;cursor:pointer;transition:all .2s;
+}
+.char-slot:hover{border-color:var(--rim2);}
+.char-slot.protagonist{border-color:var(--gold);background:rgba(196,146,58,.05);}
+.slot-avatar{font-size:24px;flex-shrink:0;}
+.slot-info{flex:1;min-width:0;}
+.slot-name{font-family:var(--font-ui);font-weight:600;font-size:14px;color:var(--gold2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.slot-role{font-family:var(--font-mono);font-size:9px;color:var(--dim);letter-spacing:.1em;margin-top:2px;}
+.slot-desc{font-size:12px;color:var(--mid);margin-top:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;}
+.slot-actions{display:flex;flex-direction:column;gap:4px;flex-shrink:0;}
+.sa-btn{background:var(--p2);border:1px solid var(--rim);color:var(--dim);font-family:var(--font-mono);font-size:9px;padding:3px 8px;border-radius:2px;letter-spacing:.1em;}
+.sa-btn:hover{border-color:var(--rim2);color:var(--text);}
+.sa-btn.edit:hover{border-color:var(--blue2);color:var(--blue2);}
+.sa-btn.del:hover{border-color:var(--red2);color:var(--red2);}
+
+.add-slot-btn{
+  width:100%;background:transparent;border:1px dashed var(--rim2);border-radius:4px;color:var(--dim);
+  font-family:var(--font-mono);font-size:11px;letter-spacing:.2em;padding:11px;
+}
+.add-slot-btn:hover{border-color:var(--gold);color:var(--gold);}
+
+/* Char edit form inside settings */
+.char-form{background:var(--p1);border:1px solid var(--rim);border-radius:4px;padding:14px;display:flex;flex-direction:column;gap:10px;}
+.cf-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.cf-group{display:flex;flex-direction:column;gap:5px;}
+.cf-label{font-family:var(--font-mono);font-size:9px;color:var(--dim);letter-spacing:.2em;}
+.cf-input{background:var(--p0);border:1px solid var(--rim);border-radius:3px;color:var(--text);font-family:var(--font-serif);font-size:15px;padding:7px 10px;}
+.cf-ta{background:var(--p0);border:1px solid var(--rim);border-radius:3px;color:var(--text);font-family:var(--font-serif);font-size:15px;padding:8px 10px;resize:none;height:80px;line-height:1.6;width:100%;}
+.cf-ta:focus,.cf-input:focus{border-color:var(--gold);}
+.cf-ta::placeholder,.cf-input::placeholder{color:var(--dim);font-style:italic;}
+.emoji-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
+.emoji-opt{font-size:22px;background:var(--p0);border:1px solid var(--rim);border-radius:3px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;}
+.emoji-opt:hover{border-color:var(--rim2);}
+.emoji-opt.sel{border-color:var(--gold);}
+.cf-save-btn{background:linear-gradient(135deg,#6a4a08,#c4923a);border-radius:3px;color:#160c00;font-family:var(--font-ui);font-weight:700;font-size:13px;letter-spacing:.2em;padding:10px;width:100%;}
+.cf-save-btn:hover{filter:brightness(1.1);}
+.cf-cancel-btn{background:var(--p2);border:1px solid var(--rim);border-radius:3px;color:var(--mid);font-family:var(--font-ui);font-size:12px;letter-spacing:.15em;padding:8px;width:100%;}
+.cf-cancel-btn:hover{border-color:var(--rim2);color:var(--text);}
+
+/* World settings */
+.world-ta{width:100%;background:var(--p1);border:1px solid var(--rim);border-radius:3px;color:var(--text);font-family:var(--font-serif);font-size:16px;padding:10px 12px;resize:none;height:88px;line-height:1.65;}
+.world-ta:focus{border-color:var(--gold);}
+
+/* Pop notification */
+.pop{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--p1);border:1px solid var(--gold);border-radius:3px;padding:7px 18px;font-family:var(--font-mono);font-size:11px;color:var(--gold2);letter-spacing:.1em;box-shadow:0 4px 20px rgba(196,146,58,.2);animation:pIn .25s ease,pOut .3s ease 2.4s forwards;z-index:400;pointer-events:none;white-space:nowrap;max-width:92vw;text-align:center;}
+@keyframes pIn {from{opacity:0;transform:translateX(-50%) translateY(8px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
+@keyframes pOut{to{opacity:0;transform:translateX(-50%) translateY(-6px);}}
+</style>
+</head>
+<body>
+
+<!-- ════════════════ INTRO ════════════════ -->
+<div id="introScreen">
+  <div class="intro-wrap">
+    <div class="sigil">🕯️</div>
+    <div class="logo">CHRONICLE</div>
+    <div class="logo-sub">YOUR WORLD · YOUR RULES · AI NARRATED</div>
+
+    <div class="card">
+      <!-- Protagonist -->
+      <span class="lbl">▸ 主人公を語れ</span>
+      <textarea class="big-ta" id="heroDesc"
+        placeholder="銀髪のエルフ魔法使い。幼い頃に師匠を目の前で殺され、復讐のために旅している。炎魔法と古代語が得意だが、人間不信で口下手。右腕に呪いの刻印がある。"></textarea>
+      <div class="hint">職業・外見・性格・過去・得意なこと、なんでも書いていい。<br><span>書いた内容がそのままゲームに反映される。</span></div>
+
+      <div class="divider"></div>
+
+      <!-- World -->
+      <span class="lbl">▸ 世界・舞台を語れ</span>
+      <textarea class="sm-ta" id="worldDesc"
+        placeholder="魔法が衰退しつつある中世ファンタジーの帝国。皇帝は傀儡で、影の宗教組織が実権を握っている。主人公は帝都の外れの廃教会を拠点にしている。"></textarea>
+      <div class="hint" style="margin-top:6px">舞台・時代・世界観・始まりの場所…なんでも。<br><span>空白でもAIが世界を作ってくれる。</span></div>
+
+      <div class="div"></div>
+      <span class="lbl">▸ Anthropic APIキー</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="password" class="bta" id="apiKey" placeholder="sk-ant-..." style="height:42px;font-size:14px;font-family:var(--font-mono)" oninput="checkBegin()">
+        <button onclick="toggleApiVis()" style="background:var(--p0);border:1px solid var(--rim);color:var(--dim);border-radius:3px;padding:0 12px;height:42px;font-size:13px;flex-shrink:0" id="apiVisBtn">👁</button>
+      </div>
+      <div class="hint" style="margin-top:6px"><span>キーはブラウザ内にのみ保存されます。外部には送信されません。</span><br><a href="https://console.anthropic.com" target="_blank" style="color:var(--gold);text-decoration:none">console.anthropic.com でキーを取得</a></div>
+      <button class="begin-btn" id="beginBtn" onclick="beginGame()" disabled>ENTER THE CHRONICLE</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ GAME ════════════════ -->
+<div id="gameScreen">
+  <div class="topbar">
+    <div class="tb-name" id="tbName">—</div>
+    <div class="vital">
+      <span style="font-size:12px">❤</span>
+      <div class="v-track"><div class="v-fill hp" id="vHpBar" style="width:100%"></div></div>
+      <span class="v-num" id="vHp">—</span>
+    </div>
+    <div class="vital">
+      <span style="font-size:12px">✦</span>
+      <div class="v-track"><div class="v-fill mp" id="vMpBar" style="width:100%"></div></div>
+      <span class="v-num" id="vMp">—</span>
+    </div>
+    <div class="pill lv"   id="pLv">Lv.1</div>
+    <div class="pill xp"   id="pXp">XP 0</div>
+    <div class="pill gold" id="pGold">🪙 0</div>
+    <div class="tb-r">
+      <button class="ib" id="btnChar" onclick="togglePanel('char')">📜 キャラ</button>
+      <button class="ib" id="btnMem"  onclick="togglePanel('mem')">🧠 記憶</button>
+      <button class="ib" onclick="openSettings()">⚙️ 設定</button>
+    </div>
+  </div>
+
+  <div class="game-body">
+    <div class="story-col">
+      <div class="story-scroll" id="storyScroll"></div>
+      <div class="input-zone">
+        <div class="sug-row" id="sugRow"></div>
+
+        <!-- Action bar: TAKE A TURN / CONTINUE / RETRY -->
+        <div class="action-bar">
+          <button class="ab-btn primary" id="btnTake" onclick="toggleModeBar()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            TAKE A TURN
+          </button>
+          <button class="ab-btn" id="btnContinue" onclick="doContinue()" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+            CONTINUE
+          </button>
+          <button class="ab-btn" id="btnRetry" onclick="doRetry()" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            RETRY
+          </button>
+        </div>
+
+        <!-- Mode bar: Do / Say / Story / See -->
+        <div class="mode-bar" id="modeBar">
+          <button class="mode-back" onclick="closeModeBar()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+          </button>
+          <button class="mode-btn active" id="mDo" onclick="pickMode('do')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+            Do
+          </button>
+          <button class="mode-btn" id="mSay" onclick="pickMode('say')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Say
+          </button>
+          <button class="mode-btn" id="mStory" onclick="pickMode('story')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            Story
+          </button>
+          <button class="mode-btn" id="mSee" onclick="pickMode('see')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            See
+          </button>
+        </div>
+
+        <!-- Write area -->
+        <div class="write-area" id="writeArea">
+          <div class="write-mode-label" id="writeModeLabel">▸ DO — 行動する</div>
+          <div class="write-inp-row">
+            <textarea class="act-inp" id="actInp"
+              placeholder="何をする？（Enterで送信、Shift+Enterで改行）"
+              onkeydown="onKey(event)" oninput="autoResize(this)"></textarea>
+            <button class="send-btn" id="sendBtn" onclick="send()">送る</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Char Panel -->
+    <div class="side-panel" id="charPanel">
+      <div class="pan-head">📜 キャラクターシート</div>
+      <div class="pan-body" id="charPanelBody"></div>
+    </div>
+
+    <!-- Memory Panel -->
+    <div class="side-panel" id="memPanel">
+      <div class="pan-head">🧠 記憶の書</div>
+      <div class="pan-body">
+        <div class="psec"><div class="psec-t">スキル・能力</div><div id="mSk"><div class="me">まだ発見されていない</div></div></div>
+        <div class="psec"><div class="psec-t">登場人物</div><div id="mNPC"><div class="me">誰とも会っていない</div></div></div>
+        <div class="psec"><div class="psec-t">訪れた場所</div><div id="mPl"><div class="me">未探索</div></div></div>
+        <div class="psec"><div class="psec-t">所持アイテム</div><div id="mIt"><div class="me">何も持っていない</div></div></div>
+        <div class="psec"><div class="psec-t">クエスト</div><div id="mQu"><div class="me">なし</div></div></div>
+        <div class="psec"><div class="psec-t">重要な出来事</div><div id="mEv"><div class="me">何もない</div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ SETTINGS OVERLAY ════════════════ -->
+<div id="settingsOverlay" class="hidden" onclick="onOverlayClick(event)">
+  <div id="settingsPanel">
+    <div class="sp-head">
+      <div class="sp-title">⚙ 設定</div>
+      <button class="sp-close" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="sp-body">
+
+      <!-- Character Slots -->
+      <div>
+        <div class="sp-sec-title">▸ キャラクタースロット</div>
+        <div class="slot-list" id="slotList"></div>
+        <button class="add-slot-btn" style="margin-top:8px" onclick="openCharForm(null)">＋ キャラクターを追加</button>
+      </div>
+
+      <!-- Char Edit Form (hidden until needed) -->
+      <div id="charFormWrap" class="hidden">
+        <div class="sp-sec-title" id="charFormTitle">▸ キャラクター編集</div>
+        <div class="char-form">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:2px">
+            <span class="cf-label" style="width:100%">アバター</span>
+            <div class="emoji-row" id="emojiRow"></div>
+          </div>
+          <div class="cf-row">
+            <div class="cf-group">
+              <span class="cf-label">名前</span>
+              <input class="cf-input" id="cfName" placeholder="キャラクター名" maxlength="20">
+            </div>
+            <div class="cf-group">
+              <span class="cf-label">役割</span>
+              <input class="cf-input" id="cfRole" placeholder="例：仲間、敵、商人" maxlength="20">
+            </div>
+          </div>
+          <div class="cf-group">
+            <span class="cf-label">キャラクター説明</span>
+            <textarea class="cf-ta" id="cfDesc" placeholder="外見・性格・過去・能力など自由に…"></textarea>
+          </div>
+          <button class="cf-save-btn" onclick="saveCharForm()">保存</button>
+          <button class="cf-cancel-btn" onclick="cancelCharForm()">キャンセル</button>
+        </div>
+      </div>
+
+      <!-- World settings -->
+      <div>
+        <div class="sp-sec-title">▸ 世界設定</div>
+        <textarea class="world-ta" id="worldEditTa"></textarea>
+        <button style="margin-top:8px;background:var(--p2);border:1px solid var(--rim);color:var(--mid);font-family:var(--font-mono);font-size:10px;padding:7px 14px;border-radius:3px;width:100%;letter-spacing:.15em;" onclick="saveWorld()">世界設定を更新</button>
+      </div>
+
+      <div>
+        <div class="sp-sec-title">▸ APIキー</div>
+        <div style="display:flex;gap:6px">
+          <input type="password" id="settingsApiKey" placeholder="sk-ant-..."
+            style="flex:1;background:var(--p1);border:1px solid var(--rim);border-radius:3px;color:var(--text);font-family:var(--font-mono);font-size:12px;padding:7px 10px;outline:none;">
+          <button onclick="saveApiKey()" style="background:linear-gradient(135deg,#6a4a08,#c4923a);border:none;border-radius:3px;color:#160c00;font-family:var(--font-ui);font-weight:600;font-size:11px;padding:0 14px;letter-spacing:.1em;">保存</button>
+        </div>
+        <div style="font-size:11px;color:var(--dim);font-style:italic;margin-top:6px">変更はすぐに反映されます。ブラウザのlocalStorageに保存されます。</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════
+//  INTRO
+// ════════════════════
+document.getElementById('heroDesc').addEventListener('input', checkBegin);
+function checkBegin() {
+  const hasHero = document.getElementById('heroDesc').value.trim().length >= 4;
+  const hasKey  = document.getElementById('apiKey').value.trim().startsWith('sk-');
+  document.getElementById('beginBtn').disabled = !(hasHero && hasKey);
+}
+// Load saved key on startup
+(function(){
+  const saved = localStorage.getItem('chronicle_api_key');
+  if (saved) {
+    const inp = document.getElementById('apiKey');
+    if (inp) { inp.value = saved; checkBegin(); }
+  }
+})();
+
+function toggleApiVis() {
+  const inp = document.getElementById('apiKey');
+  const btn = document.getElementById('apiVisBtn');
+  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
+  else { inp.type = 'password'; btn.textContent = '👁'; }
+}
+
+// ════════════════════
+//  STATE
+// ════════════════════
+const AVATARS = ['🧙','⚔️','🗡️','🏹','🛡️','✨','🔮','🌀','🎵','🌿','🔥','💀','👑','🐉','🌊','🌑'];
+
+let heroDesc  = '';
+let worldDesc = '';
+let charName  = '冒険者';
+
+// Character slots: { id, avatar, name, role, desc, isHero, skills:[] }
+let charSlots = [];
+let editingSlotId = null;
+let selectedAvatar = AVATARS[0];
+
+// Game stats
+let gs = { hp:100, maxHp:100, mp:60, maxMp:60, lv:1, xp:0, xpNext:100, gold:0 };
+
+// Memory
+let mem = { skills:[], npcs:[], places:[], items:[], quests:[], events:[] };
+
+let history = [];
+let busy = false;
+let openPanelId = null;
+
+// ════════════════════
+//  BEGIN
+// ════════════════════
+async function beginGame() {
+  heroDesc  = document.getElementById('heroDesc').value.trim();
+  worldDesc = document.getElementById('worldDesc').value.trim();
+  // persist key
+  const k = document.getElementById('apiKey').value.trim();
+  if (k) localStorage.setItem('chronicle_api_key', k);
+
+  document.getElementById('introScreen').style.display = 'none';
+  const gs2 = document.getElementById('gameScreen');
+  gs2.style.display = 'flex'; gs2.style.flexDirection = 'column';
+
+  charName = await extractName(heroDesc) || '冒険者';
+
+  // Create hero slot
+  charSlots = [{ id: uid(), avatar:'🧙', name: charName, role:'主人公', desc: heroDesc, isHero: true, skills:[] }];
+  renderSlotList();
+
+  document.getElementById('tbName').textContent = charName;
+  document.getElementById('worldEditTa').value = worldDesc;
+  updateHUD();
+  renderCharPanel();
+
+  const intro = await genIntro();
+  addMsg('sys-note', '── 物語が始まる ──');
+  addMsg('narrate', intro);
+
+  history = [
+    { role:'user', content: buildSys() },
+    { role:'assistant', content: intro }
+  ];
+
+  mem.places.push({ name:'出発地点', desc:'物語の幕開け' });
+  renderMem();
+  await genSuggestions();
+  enablePostGame();
+}
+
+async function genIntro() {
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers:{'Content-Type':'application/json','x-api-key':getKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-6', max_tokens:400,
+        messages:[{ role:'user', content:`
+あなたはインタラクティブRPGのナレーターです。
+主人公：${heroDesc}
+世界設定：${worldDesc || '（任意の中世ファンタジー世界）'}
+物語の冒頭シーンを200文字程度の日本語で書いてください。臨場感があり、続きが気になる場面で終わること。[UPDATE:...]は含めないこと。` }]
+      })
+    });
+    const d = await res.json();
+    return d.content.map(c=>c.text||'').join('').trim();
+  } catch(e) {
+    return `${charName}の旅が始まった。`;
+  }
+}
+
+async function extractName(desc) {
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers:{'Content-Type':'application/json','x-api-key':getKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-6', max_tokens:20,
+        messages:[{ role:'user', content:`次のキャラクター説明から名前だけ抽出。名前がなければ「冒険者」。説明：「${desc}」\n名前のみ：` }]
+      })
+    });
+    const d = await res.json();
+    return d.content.map(c=>c.text||'').join('').trim().replace(/[「」]/g,'').split(/[\s、。]/)[0].slice(0,16);
+  } catch(e) { return null; }
+}
+
+// ════════════════════
+//  SYSTEM PROMPT
+// ════════════════════
+function buildSys() {
+  const hero = charSlots.find(s=>s.isHero);
+  const npcsCtx = charSlots.filter(s=>!s.isHero).map(s=>`${s.name}（${s.role}）：${s.desc}`).join('\n') || 'なし';
+  const memCtx = buildMemCtx();
+
+  return `あなたはインタラクティブファンタジーRPGのナレーターです。
+
+【主人公】
+${hero?.desc || heroDesc}
+
+【世界設定・舞台】
+${worldDesc || '（中世ファンタジー世界）'}
+
+【登場キャラクター（主人公以外）】
+${npcsCtx}
+
+【現在の記憶・状況】
+${memCtx}
+
+【ナレーションルール】
+1. 主人公・世界設定・登場キャラクターの描写を完全に尊重し一貫して物語を生成する
+2. プレイヤーの行動に登場する「〇〇が得意」「〇〇の魔法を使う」などは事実として以後反映する
+3. 能力・スキルの成否はキャラクター描写との整合性で判定する
+4. NPCは固有名・性格・動機を持ち一貫して行動する
+5. 場所・天候・時間帯・感覚を具体的かつ詩的に描写する
+6. 返答は150〜240文字の臨場感ある日本語で、物語は必ず緊張感ある場面で終わること
+7. 必ず返答末尾に改行して以下のJSONを含める：
+[UPDATE:{"hp":0,"mp":0,"xp":0,"gold":0,"skill":null,"npc":null,"place":null,"item":null,"event":null,"quest":null}]
+  hp/mp/xp/gold = 変化量（-15でダメージ15、+10で回復10）
+  skill = 行動から発見したスキル/能力 {"name":"名前","desc":"一言"} または null
+  npc   = 新登場人物 {"name":"名前","rel":"友好|中立|敵対","desc":"一言"} または null
+  place = 新しい場所 {"name":"名前","desc":"一言"} または null
+  item  = 入手アイテム "名前" または null
+  event = 重要な出来事 "一言" または null
+  quest = 新クエスト {"title":"名前","desc":"目標"} または null`;
+}
+
+function buildMemCtx() {
+  const p = [];
+  if (mem.skills.length) p.push(`判明スキル: ${mem.skills.map(s=>s.name).join(', ')}`);
+  if (mem.npcs.length)   p.push(`登場人物: ${mem.npcs.map(n=>`${n.name}(${n.rel})`).join(', ')}`);
+  if (mem.places.length) p.push(`訪れた場所: ${mem.places.map(x=>x.name).join(', ')}`);
+  if (mem.items.length)  p.push(`所持品: ${mem.items.join(', ')}`);
+  if (mem.quests.length) p.push(`クエスト: ${mem.quests.map(q=>q.title).join(', ')}`);
+  if (mem.events.length) p.push(`出来事: ${mem.events.slice(-6).map(e=>e.text).join('; ')}`);
+  return p.join('\n') || '（まだ何も起きていない）';
+}
+
+// ════════════════════
+//  MESSAGING
+// ════════════════════
+function addMsg(cls, text, mode) {
+  const sc = document.getElementById('storyScroll');
+  const d = document.createElement('div');
+  d.className = `msg ${cls}`;
+  if (cls === 'player-act') {
+    const modeLabels = { do:'DO', say:'SAY', story:'STORY', see:'SEE' };
+    const mLabel = modeLabels[mode || currentMode] || 'DO';
+    d.setAttribute('data-n', charName);
+    d.setAttribute('data-mode', mLabel);
+  }
+  d.textContent = text;
+  sc.appendChild(d); sc.scrollTop = sc.scrollHeight;
+  return d;
+}
+function addThinking() {
+  const sc = document.getElementById('storyScroll');
+  const d = document.createElement('div');
+  d.className='thinking'; d.id='thinkEl';
+  d.innerHTML=`<div class="t-orb"></div><span>物語が紡がれている…</span>`;
+  sc.appendChild(d); sc.scrollTop=sc.scrollHeight;
+}
+function removeThinking() { document.getElementById('thinkEl')?.remove(); }
+
+// ════════════════════
+//  SEND
+// ════════════════════
+// ── mode / write area ──
+let currentMode = 'do';
+const MODES = {
+  do:    { label:'▸ DO — 行動する',       placeholder:'何をする？（剣を抜く、走る、攻撃する…）' },
+  say:   { label:'▸ SAY — 話す',          placeholder:'何と言う？（「待て！」「名前を教えろ」…）' },
+  story: { label:'▸ STORY — 物語として', placeholder:'物語として語る（場面転換、状況説明など…）' },
+  see:   { label:'▸ SEE — 見る・描写',   placeholder:'何を観察する？（周囲を見渡す、人物を観察する…）' },
+};
+
+function toggleModeBar() {
+  const mb = document.getElementById('modeBar');
+  const btn = document.getElementById('btnTake');
+  const wa  = document.getElementById('writeArea');
+  const isOpen = mb.classList.contains('open');
+  if (isOpen) {
+    mb.classList.remove('open');
+    wa.classList.remove('open');
+    btn.classList.remove('active');
+  } else {
+    mb.classList.add('open');
+    btn.classList.add('active');
+    wa.classList.remove('open'); // hide write until mode picked
+  }
+}
+
+function closeModeBar() {
+  document.getElementById('modeBar').classList.remove('open');
+  document.getElementById('writeArea').classList.remove('open');
+  document.getElementById('btnTake').classList.remove('active');
+}
+
+function pickMode(mode) {
+  currentMode = mode;
+  // highlight active mode btn
+  ['do','say','story','see'].forEach(m => {
+    document.getElementById('m' + m.charAt(0).toUpperCase() + m.slice(1))
+      .classList.toggle('active', m === mode);
+  });
+  // update label + placeholder
+  const cfg = MODES[mode];
+  document.getElementById('writeModeLabel').textContent = cfg.label;
+  document.getElementById('actInp').placeholder = cfg.placeholder;
+  // show write area
+  document.getElementById('writeArea').classList.add('open');
+  setTimeout(() => document.getElementById('actInp').focus(), 50);
+}
+
+function setAllBusy(on) {
+  busy = on;
+  ['sendBtn','btnTake','btnContinue','btnRetry'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = on;
+  });
+}
+
+function enablePostGame() {
+  document.getElementById('btnContinue').disabled = false;
+  document.getElementById('btnRetry').disabled = false;
+  document.getElementById('btnTake').disabled = false;
+}
+
+async function callAI(extraUserMsg) {
+  // history[0] is the fake system msg we stored; real system goes in `system` param
+  // history.slice(1) gives the actual conversation turns
+  let msgs = history.length > 1 ? history.slice(1) : [];
+
+  if (extraUserMsg) {
+    msgs = [...msgs, { role:'user', content: extraUserMsg }];
+  }
+
+  // API requires at least one message
+  if (msgs.length === 0) {
+    msgs = [{ role:'user', content: '物語を始めてください。' }];
+  }
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      model:'claude-sonnet-4-6', max_tokens:1000,
+      system: buildSys(),
+      messages: msgs
+    })
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.content.map(c=>c.text||'').join('');
+}
+
+function handleStoryResponse(full, userMsg) {
+  const m = full.match(/\[UPDATE:([\s\S]*?)\]/);
+  const story = full.replace(/\[UPDATE:[\s\S]*?\]/g,'').trim();
+  if (m) { try { applyUpdate(JSON.parse(m[1])); } catch(e){} }
+  addMsg('narrate', story);
+  if (userMsg) history.push({ role:'user', content: userMsg });
+  history.push({ role:'assistant', content: full });
+  if (history.length > 48) history = [history[0], ...history.slice(-44)];
+}
+
+async function send() {
+  const el = document.getElementById('actInp');
+  const raw = el.value.trim();
+  if (!raw || busy) return;
+  el.value = ''; autoResize(el);
+  // close mode bar and write area
+  document.getElementById('modeBar').classList.remove('open');
+  document.getElementById('writeArea').classList.remove('open');
+  document.getElementById('btnTake').classList.remove('active');
+
+  // Prefix action with mode for AI context
+  const modePrefixes = { do:'（行動）', say:'（発言）「', story:'（物語）', see:'（観察）' };
+  const modeSuffix   = { say:'」' };
+  const action = (modePrefixes[currentMode] || '') + raw + (modeSuffix[currentMode] || '');
+  const displayAction = currentMode === 'say' ? `「${raw}」` : raw;
+
+  setAllBusy(true);
+  addMsg('player-act', displayAction);
+  addThinking();
+  try {
+    const full = await callAI(action);
+    removeThinking();
+    handleStoryResponse(full, action);
+    await genSuggestions();
+  } catch(e) {
+    removeThinking();
+    console.error('send error:', e);
+    addMsg('sys-note', 'エラーが発生しました。もう一度お試しください。');
+  }
+  setAllBusy(false);
+  enablePostGame();
+}
+
+async function doContinue() {
+  if (busy) return;
+  setAllBusy(true);
+  addThinking();
+  try {
+    const full = await callAI('[CONTINUE: 物語を自然に進めてください。プレイヤーの行動なしで次の展開を生成。]');
+    removeThinking();
+    handleStoryResponse(full, null);
+    await genSuggestions();
+  } catch(e) {
+    removeThinking();
+    addMsg('sys-note', 'エラーが発生しました。');
+  }
+  setAllBusy(false);
+  enablePostGame();
+}
+
+async function doRetry() {
+  if (busy) return;
+  // Remove last AI narrate message from DOM
+  const sc = document.getElementById('storyScroll');
+  const narMsgs = sc.querySelectorAll('.msg.narrate');
+  if (narMsgs.length > 0) narMsgs[narMsgs.length-1].remove();
+  // Remove last assistant turn from history (keep at least the intro)
+  if (history.length > 2 && history[history.length-1].role === 'assistant') {
+    history.pop();
+  }
+  setAllBusy(true);
+  addThinking();
+  try {
+    const full = await callAI(null);
+    removeThinking();
+    handleStoryResponse(full, null);
+    await genSuggestions();
+  } catch(e) {
+    removeThinking();
+    addMsg('sys-note', 'エラーが発生しました。');
+  }
+  setAllBusy(false);
+  enablePostGame();
+}
+
+function onKey(e) { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); send(); } }
+function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,110)+'px'; }
+
+// ════════════════════
+//  APPLY UPDATE
+// ════════════════════
+function applyUpdate(u) {
+  const notes = [];
+  const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+
+  if (u.hp) { gs.hp = clamp(gs.hp+u.hp, 0, gs.maxHp); notes.push(u.hp<0 ? `❤ HP ${u.hp}` : `❤ +${u.hp} 回復`); }
+  if (u.mp) { gs.mp = clamp(gs.mp+u.mp, 0, gs.maxMp); if (u.mp<0) notes.push(`✦ MP ${u.mp}`); }
+  if (u.xp && u.xp>0) { gs.xp+=u.xp; notes.push(`⭐ XP +${u.xp}`); checkLvUp(); }
+  if (u.gold) { gs.gold=Math.max(0,gs.gold+u.gold); if (u.gold>0) notes.push(`🪙 +${u.gold}G`); }
+
+  if (u.skill?.name && !mem.skills.find(s=>s.name===u.skill.name)) {
+    mem.skills.push(u.skill); notes.push(`⚡ ${u.skill.name}`);
+    addMsg('disc', `✦ スキル解放：${u.skill.name} ——「${u.skill.desc}」`);
+    // also update hero slot
+    const hero = charSlots.find(s=>s.isHero);
+    if (hero) { hero.skills = hero.skills || []; hero.skills.push(u.skill.name); }
+    renderCharPanel();
+  }
+  if (u.npc?.name && !mem.npcs.find(n=>n.name===u.npc.name)) {
+    mem.npcs.push(u.npc); notes.push(`👤 ${u.npc.name}`);
+  }
+  if (u.place?.name && !mem.places.find(p=>p.name===u.place.name)) {
+    mem.places.push(u.place); notes.push(`📍 ${u.place.name}`);
+  }
+  if (u.item) { mem.items.push(u.item); notes.push(`🎒 ${u.item}`); addMsg('disc', `✦ 入手：${u.item}`); }
+  if (u.event) mem.events.push({ text: u.event });
+  if (u.quest?.title && !mem.quests.find(q=>q.title===u.quest.title)) {
+    mem.quests.push(u.quest); notes.push(`📋 ${u.quest.title}`);
+  }
+
+  updateHUD(); renderMem();
+  if (notes.length) showPop(notes.join('  '));
+
+  if (gs.hp<=0) {
+    setTimeout(()=>{
+      addMsg('sys-note','── あなたは倒れた ──');
+      addMsg('narrate',`${charName}の意識が闇に沈む。しかしこれは終わりではない——伝説は、また別の形で語り継がれる。`);
+      document.getElementById('sendBtn').disabled=true;
+    }, 600);
+  }
+}
+
+function checkLvUp() {
+  while (gs.xp >= gs.xpNext) {
+    gs.xp -= gs.xpNext; gs.lv++;
+    gs.xpNext = Math.floor(gs.xpNext*1.6);
+    gs.maxHp+=15; gs.hp=Math.min(gs.maxHp,gs.hp+15); gs.maxMp+=8;
+    showPop(`🌟 Lv.${gs.lv} にレベルアップ！`);
+    addMsg('sys-note',`── Lv.${gs.lv} にレベルアップ ──`);
+  }
+}
+
+function updateHUD() {
+  document.getElementById('vHp').textContent=`${gs.hp}/${gs.maxHp}`;
+  document.getElementById('vMp').textContent=`${gs.mp}/${gs.maxMp}`;
+  document.getElementById('vHpBar').style.width=`${gs.hp/gs.maxHp*100}%`;
+  document.getElementById('vMpBar').style.width=`${gs.mp/gs.maxMp*100}%`;
+  document.getElementById('pLv').textContent=`Lv.${gs.lv}`;
+  document.getElementById('pXp').textContent=`XP ${gs.xp}`;
+  document.getElementById('pGold').textContent=`🪙 ${gs.gold}`;
+}
+
+// ════════════════════
+//  SUGGESTIONS
+// ════════════════════
+async function genSuggestions() {
+  try {
+    const baseMsgs = history.length > 1 ? history.slice(1) : [];
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers:{'Content-Type':'application/json','x-api-key':getKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-6', max_tokens:150,
+        system: buildSys(),
+        messages:[
+          ...baseMsgs,
+          { role:'user', content:`${charName}が今の状況で取れる行動4つを、キャラクターらしい短い動詞句で。JSON配列のみ。` }
+        ]
+      })
+    });
+    const d = await res.json();
+    const txt = d.content.map(c=>c.text||'').join('').replace(/```json|```/g,'').trim();
+    const acts = JSON.parse(txt);
+    if (Array.isArray(acts)) renderSuggestions(acts.slice(0,4));
+  } catch(e) { renderSuggestions(['周囲を調べる','前進する','警戒する','引き返す']); }
+}
+
+function renderSuggestions(acts) {
+  const row = document.getElementById('sugRow');
+  row.innerHTML='';
+  acts.forEach(a => {
+    const b=document.createElement('button');
+    b.className='sg'; b.textContent=a;
+    b.onclick=()=>{ document.getElementById('actInp').value=a; send(); };
+    row.appendChild(b);
+  });
+}
+
+// ════════════════════
+//  SIDE PANELS
+// ════════════════════
+function togglePanel(which) {
+  const cp = document.getElementById('charPanel');
+  const mp = document.getElementById('memPanel');
+  const bc = document.getElementById('btnChar');
+  const bm = document.getElementById('btnMem');
+  if (which === 'char') {
+    const open = cp.classList.contains('open');
+    cp.classList.toggle('open'); mp.classList.remove('open');
+    bc.classList.toggle('on',!open); bm.classList.remove('on');
+    openPanelId = open ? null : 'char';
+  } else {
+    const open = mp.classList.contains('open');
+    mp.classList.toggle('open'); cp.classList.remove('open');
+    bm.classList.toggle('on',!open); bc.classList.remove('on');
+    openPanelId = open ? null : 'mem';
+  }
+}
+
+function renderCharPanel() {
+  const body = document.getElementById('charPanelBody');
+  const hero = charSlots.find(s=>s.isHero);
+  if (!hero) return;
+  const skillsHtml = hero.skills?.length
+    ? hero.skills.map(s=>`<div class="mc"><div class="mb sk">SKILL</div><div class="mm">${s}</div></div>`).join('')
+    : '<div class="me">まだ発見されていない</div>';
+
+  body.innerHTML=`
+    <div class="psec">
+      <div class="psec-t">キャラクター描写</div>
+      <div class="char-bio">${hero.desc}</div>
+    </div>
+    <div class="psec">
+      <div class="psec-t">発見済みスキル</div>
+      ${skillsHtml}
+    </div>
+    <div class="psec">
+      <div class="psec-t">登場キャラクター（${charSlots.filter(s=>!s.isHero).length}人）</div>
+      ${charSlots.filter(s=>!s.isHero).map(c=>`
+        <div class="mc">
+          <div style="display:flex;gap:7px;align-items:center">
+            <span style="font-size:20px">${c.avatar}</span>
+            <div>
+              <div class="mb npc">${c.role}</div>
+              <div class="mm" style="font-weight:600">${c.name}</div>
+              <div class="ms">${c.desc.slice(0,60)}${c.desc.length>60?'…':''}</div>
+            </div>
+          </div>
+        </div>`).join('') || '<div class="me">なし</div>'}
+    </div>
+  `;
+}
+
+function renderMem() {
+  const r = (id,arr,fn,empty)=>{
+    const el=document.getElementById(id); if(!el)return;
+    el.innerHTML=arr.length ? arr.slice().reverse().slice(0,8).map(x=>`<div class="mc">${fn(x)}</div>`).join('') : `<div class="me">${empty}</div>`;
+  };
+  r('mSk', mem.skills, s=>`<div class="mb sk">SKILL</div><div class="mm">${s.name}</div><div class="ms">${s.desc}</div>`, 'まだ発見されていない');
+  r('mNPC',mem.npcs,   n=>`<div class="mb npc">NPC</div><div class="mm">${n.name}</div><div class="ms">${n.rel} — ${n.desc}</div>`, '誰とも会っていない');
+  r('mPl', mem.places, p=>`<div class="mb pl">場所</div><div class="mm">${p.name}</div><div class="ms">${p.desc}</div>`, '未探索');
+  r('mIt', mem.items.map(i=>({n:i})), i=>`<div class="mb it">アイテム</div><div class="mm">${i.n}</div>`, '何も持っていない');
+  r('mQu', mem.quests, q=>`<div class="mb qu">クエスト</div><div class="mm">${q.title}</div><div class="ms">${q.desc}</div>`, 'なし');
+  r('mEv', mem.events, e=>`<div class="mb ev">出来事</div><div class="mm">${e.text}</div>`, '何もない');
+}
+
+// ════════════════════
+//  SETTINGS
+// ════════════════════
+function openSettings() {
+  document.getElementById('settingsOverlay').classList.remove('hidden');
+  document.getElementById('worldEditTa').value = worldDesc;
+  const saved = localStorage.getItem('chronicle_api_key') || '';
+  const el = document.getElementById('settingsApiKey');
+  if (el) el.value = saved;
+  renderSlotList();
+}
+function closeSettings() {
+  document.getElementById('settingsOverlay').classList.add('hidden');
+  cancelCharForm();
+}
+function onOverlayClick(e) { if (e.target === document.getElementById('settingsOverlay')) closeSettings(); }
+
+// Slot list
+function renderSlotList() {
+  const list = document.getElementById('slotList');
+  list.innerHTML = charSlots.map(s => `
+    <div class="char-slot ${s.isHero?'protagonist':''}">
+      <div class="slot-avatar">${s.avatar}</div>
+      <div class="slot-info">
+        <div class="slot-name">${s.name}${s.isHero?' ⭐':''}</div>
+        <div class="slot-role">${s.role}</div>
+        <div class="slot-desc">${s.desc}</div>
+      </div>
+      <div class="slot-actions">
+        <button class="sa-btn edit" onclick="openCharForm('${s.id}')">編集</button>
+        ${!s.isHero ? `<button class="sa-btn del" onclick="deleteSlot('${s.id}')">削除</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function deleteSlot(id) {
+  charSlots = charSlots.filter(s=>s.id!==id);
+  renderSlotList();
+  renderCharPanel();
+  showPop('キャラクターを削除しました');
+}
+
+// Char form
+function openCharForm(id) {
+  editingSlotId = id;
+  const slot = id ? charSlots.find(s=>s.id===id) : null;
+  selectedAvatar = slot?.avatar || AVATARS[0];
+
+  document.getElementById('charFormTitle').textContent = id ? '▸ キャラクター編集' : '▸ 新しいキャラクター';
+  document.getElementById('cfName').value  = slot?.name  || '';
+  document.getElementById('cfRole').value  = slot?.role  || '';
+  document.getElementById('cfDesc').value  = slot?.desc  || '';
+
+  // Render emoji picker
+  const emojiRow = document.getElementById('emojiRow');
+  emojiRow.innerHTML = AVATARS.map(e=>`
+    <button class="emoji-opt ${e===selectedAvatar?'sel':''}" onclick="pickEmoji(this,'${e}')">${e}</button>
+  `).join('');
+
+  document.getElementById('charFormWrap').classList.remove('hidden');
+  document.getElementById('charFormWrap').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function pickEmoji(el, emoji) {
+  selectedAvatar = emoji;
+  document.querySelectorAll('.emoji-opt').forEach(b=>b.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+function saveCharForm() {
+  const name = document.getElementById('cfName').value.trim();
+  const role = document.getElementById('cfRole').value.trim();
+  const desc = document.getElementById('cfDesc').value.trim();
+  if (!name || !desc) { alert('名前と説明を入力してください'); return; }
+
+  if (editingSlotId) {
+    const slot = charSlots.find(s=>s.id===editingSlotId);
+    if (slot) { slot.avatar=selectedAvatar; slot.name=name; slot.role=role||slot.role; slot.desc=desc; }
+    // update hero name in HUD if editing hero
+    if (slot?.isHero) { charName=name; document.getElementById('tbName').textContent=name; }
+  } else {
+    charSlots.push({ id:uid(), avatar:selectedAvatar, name, role:role||'登場人物', desc, isHero:false, skills:[] });
+  }
+
+  renderSlotList();
+  renderCharPanel();
+  cancelCharForm();
+  showPop(editingSlotId ? `${name} を更新しました` : `${name} を追加しました`);
+}
+
+function cancelCharForm() {
+  document.getElementById('charFormWrap').classList.add('hidden');
+  editingSlotId = null;
+}
+
+function saveWorld() {
+  worldDesc = document.getElementById('worldEditTa').value.trim();
+  showPop('世界設定を更新しました');
+}
+function saveApiKey() {
+  const k = document.getElementById('settingsApiKey').value.trim();
+  if (k) {
+    localStorage.setItem('chronicle_api_key', k);
+    showPop('APIキーを保存しました');
+  }
+}
+
+// ════════════════════
+//  UTIL
+// ════════════════════
+function uid() { return Math.random().toString(36).slice(2,10); }
+function getKey() { return document.getElementById('apiKey')?.value.trim() || localStorage.getItem('chronicle_api_key') || ''; }
+function showPop(text) {
+  document.querySelectorAll('.pop').forEach(p=>p.remove());
+  const d=document.createElement('div');
+  d.className='pop'; d.textContent=text;
+  document.body.appendChild(d);
+  setTimeout(()=>d.remove(), 3000);
+}
+</script>
+</body>
+</html>
