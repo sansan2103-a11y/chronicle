@@ -519,7 +519,8 @@ button{cursor:pointer;font-family:var(--font-ui);border:none;transition:all .2s;
 document.getElementById('heroDesc').addEventListener('input', checkBegin);
 function checkBegin() {
   const hasHero = document.getElementById('heroDesc').value.trim().length >= 4;
-  const hasKey  = document.getElementById('apiKey').value.trim().startsWith('sk-');
+  const keyVal  = document.getElementById('apiKey').value.trim();
+  const hasKey  = keyVal.startsWith('sk-') || keyVal.startsWith('nai-') || keyVal.length > 10;
   document.getElementById('beginBtn').disabled = !(hasHero && hasKey);
 }
 // Load saved key on startup
