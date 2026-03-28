@@ -299,10 +299,10 @@ button{cursor:pointer;font-family:var(--font-ui);border:none;transition:all .2s;
       <div class="div"></div>
       <span class="lbl">▸ NovelAI APIキー</span>
       <div style="display:flex;gap:8px;align-items:center">
-        <input type="password" class="bta" id="apiKey" placeholder="nai-..." style="height:42px;font-size:14px;font-family:var(--font-mono)" oninput="checkBegin()">
+        <input type="password" class="bta" id="apiKey" placeholder="pst-..." style="height:42px;font-size:14px;font-family:var(--font-mono)" oninput="checkBegin()">
         <button onclick="toggleApiVis()" style="background:var(--p0);border:1px solid var(--rim);color:var(--dim);border-radius:3px;padding:0 12px;height:42px;font-size:13px;flex-shrink:0" id="apiVisBtn">👁</button>
       </div>
-      <div class="hint" style="margin-top:6px"><span>キーはブラウザ内にのみ保存されます。外部には送信されません。</span><br><a href="https://novelai.net/account" target="_blank" style="color:var(--gold);text-decoration:none">novelai.net でキーを取得（アカウント設定→永続的APIトークン）</a></div>
+      <div class="hint" style="margin-top:6px"><span>キーはブラウザ内にのみ保存されます。外部には送信されません。</span><br><a href="https://novelai.net/account" target="_blank" style="color:var(--gold);text-decoration:none">novelai.net でキーを取得（アカウント設定 → 永続的APIトークン）※ pst-... で始まるキー</a></div>
       <button class="begin-btn" id="beginBtn" onclick="beginGame()" disabled>ENTER THE CHRONICLE</button>
     </div>
   </div>
@@ -483,7 +483,7 @@ button{cursor:pointer;font-family:var(--font-ui);border:none;transition:all .2s;
           <div id="secNovel" style="display:flex;flex-direction:column;gap:5px;">
             <div style="font-family:var(--font-mono);font-size:9px;color:var(--dim);letter-spacing:.2em;">NOVELAI APIキー</div>
             <div style="display:flex;gap:6px;">
-              <input type="password" id="stNovelKey" placeholder="nai-..."
+              <input type="password" id="stNovelKey" placeholder="pst-..."
                 style="flex:1;background:var(--p1);border:1px solid var(--rim);border-radius:3px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:7px 9px;outline:none;">
               <button onclick="saveNovelKey()" style="background:linear-gradient(135deg,#6a4a08,#c4923a);border:none;border-radius:3px;color:#160c00;font-family:var(--font-ui);font-weight:600;font-size:10px;padding:0 12px;cursor:pointer;">保存</button>
             </div>
@@ -616,7 +616,7 @@ async function beginGame() {
   // persist key based on provider
   const k = document.getElementById('apiKey').value.trim();
   if (k) {
-    if (k.startsWith('nai-')) {
+    if (k.startsWith('pst-') || k.startsWith('nai-')) {
       localStorage.setItem('chronicle_novel_key', k);
       currentProvider = 'novelai';
       localStorage.setItem('chronicle_provider', 'novelai');
