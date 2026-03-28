@@ -520,7 +520,8 @@ function getKey() {
   if (currentProvider === 'novelai') {
     return localStorage.getItem('chronicle_novel_key') || '';
   }
-  return document.getElementById('apiKey')?.value.trim() || localStorage.getItem('chronicle_api_key') || '';
+  // Prioritize localStorage (set on beginGame), fall back to DOM element
+  return localStorage.getItem('chronicle_api_key') || document.getElementById('apiKey')?.value.trim() || '';
 }
 
 function setProvider(p) {
@@ -906,7 +907,7 @@ async function callAI(extraUserMsg) {
 
   // Route to NovelAI if selected
   if (currentProvider === 'novelai') {
-    return await callNovelAI(msgs, buildSystemPrompt());
+    return await callNovelAI(msgs, buildSys());
   }
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
