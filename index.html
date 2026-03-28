@@ -120,7 +120,10 @@ button{cursor:pointer;font-family:var(--font-ui);border:none;transition:all .2s;
 /* Messages */
 .msg{animation:mi .3s ease;}
 @keyframes mi{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:translateY(0);}}
-.msg.narrate{background:var(--p1);border:1px solid var(--rim);border-left:2px solid var(--gold);border-radius:0 4px 4px 0;padding:12px 14px;line-height:1.82;font-size:17px;}
+.msg.narrate{background:var(--p1);border:1px solid var(--rim);border-left:2px solid var(--gold);border-radius:0 4px 4px 0;padding:12px 14px;line-height:1.82;font-size:17px;cursor:text;position:relative;}
+.msg.narrate:hover::after{content:'✎';position:absolute;top:6px;right:8px;font-size:11px;color:var(--gold);opacity:.5;}
+.msg.narrate.editing{border-color:var(--gold);outline:none;background:var(--p2);}
+.msg.narrate[contenteditable="true"]{outline:none;}
 .msg.player-act{align-self:flex-end;background:var(--p2);border:1px solid var(--rim);border-right:2px solid var(--pur2);border-radius:4px 0 0 4px;padding:8px 13px;color:#b0a8d0;font-style:italic;max-width:76%;font-size:16px;}
 .msg.player-act::before{content:attr(data-n)' ▸ ' attr(data-mode);color:var(--pur2);font-style:normal;font-family:var(--font-mono);font-size:9px;letter-spacing:.1em;display:block;margin-bottom:3px;}
 .msg.sys-note{text-align:center;font-family:var(--font-mono);font-size:10px;color:var(--gold);letter-spacing:.3em;padding:3px;opacity:.6;}
@@ -661,6 +664,36 @@ function addMsg(cls, text, mode) {
     d.setAttribute('data-mode', mLabel);
   }
   d.textContent = text;
+
+  // Double-click to edit narrator messages
+  if (cls === 'narrate') {
+    d.title = 'ダブルクリックで編集';
+    d.addEventListener('dblclick', () => {
+      d.contentEditable = 'true';
+      d.classList.add('editing');
+      d.focus();
+      // Place cursor at end
+      const range = document.createRange();
+      range.selectNodeContents(d);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    });
+    d.addEventListener('blur', () => {
+      d.contentEditable = 'false';
+      d.classList.remove('editing');
+      // Update history with edited text
+      const editedText = d.textContent;
+      if (hist.length > 0 && hist[hist.length-1].role === 'assistant') {
+        hist[hist.length-1].content = editedText;
+      }
+    });
+    d.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { d.blur(); }
+    });
+  }
+
   sc.appendChild(d); sc.scrollTop = sc.scrollHeight;
   return d;
 }
