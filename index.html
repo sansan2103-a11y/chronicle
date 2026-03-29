@@ -657,210 +657,38 @@ async function beginGame() {
   enablePostGame();
 }
 
+// Unified API call - routes to NovelAI or Anthropic based on currentProvider
+async function apiCall(messages, system, maxTokens) {
+  if (currentProvider === 'novelai') {
+    return await callNovelAI(messages, system);
+  }
+  const body = { model:'claude-sonnet-4-6', max_tokens: maxTokens||500, messages };
+  if (system) body.system = system;
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':getKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body: JSON.stringify(body)
+  });
+  const d = JSON.parse(await res.text());
+  if(d.error) throw new Error(d.error.message);
+  return d.content.map(x=>x.text||'').join('');
+}
+
 async function genIntro() {
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST', headers:{'Content-Type':'application/json','x-api-key':getKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body: JSON.stringify({
-        model:'claude-sonnet-4-6', max_tokens:400,
-        messages:[{ role:'user', content:`
-あなたはインタラクティブRPGのナレーターです。
-主人公：${heroDesc}
-世界設定：${worldDesc || '（任意の中世ファンタジー世界）'}
-物語の冒頭シーンを200文字程度の日本語で書いてください。臨場感があり、続きが気になる場面で終わること。[UPDATE:...]は含めないこと。` }]
-      })
-    });
-    const d = await res.json();
-    return d.content.map(c=>c.text||'').join('').trim();
-  } catch(e) {
-    return `${charName}の旅が始まった。`;
-  }
+    const prompt = `\nあなたはインタラクティブRPGのナレーターです。\n主人公：${heroDesc}\n世界設定：${worldDesc || '中世ファンタジー'}\n物語の冒頭シーンを200文字程度で書いてください。臨場感があり続きが気になる場面で終わること。[UPDATE:...]は含めないこと。`;
+    return await apiCall([{role:'user',content:prompt}], null, 400);
+  } catch(e){ console.error('genIntro:', e); return `${charName}の旅が始まった。`; }
 }
+
 
 async function extractName(desc) {
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST', headers:{'Content-Type':'application/json','x-api-key':getKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body: JSON.stringify({
-        model:'claude-sonnet-4-6', max_tokens:20,
-        messages:[{ role:'user', content:`次のキャラクター説明から名前だけ抽出。名前がなければ「冒険者」。説明：「${desc}」\n名前のみ：` }]
-      })
-    });
-    const d = await res.json();
-    return d.content.map(c=>c.text||'').join('').trim().replace(/[「」]/g,'').split(/[\s、。]/)[0].slice(0,16);
-  } catch(e) { return null; }
+    const t = await apiCall([{role:'user',content:`次のキャラクター説明から名前だけ抽出してください。名前がなければ「冒険者」と答えてください。説明：「${desc}」\n名前のみ：`}], null, 20);
+    return t.trim().replace(/[「」]/g,'').split(/[\s、。]/)[0].slice(0,16) || null;
+  } catch(e){ return null; }
 }
 
-// ════════════════════
-//  SYSTEM PROMPT
-// ════════════════════
-function buildSys() {
-  const hero = charSlots.find(s=>s.isHero);
-  const npcsCtx = charSlots.filter(s=>!s.isHero).map(s=>`${s.name}（${s.role}）：${s.desc}`).join('\n') || 'なし';
-  const memCtx = buildMemCtx();
-
-  return `あなたはインタラクティブファンタジーRPGのナレーターです。
-
-【主人公】
-${hero?.desc || heroDesc}
-
-【世界設定・舞台】
-${worldDesc || '（中世ファンタジー世界）'}
-
-【登場キャラクター（主人公以外）】
-${npcsCtx}
-
-【現在の記憶・状況】
-${memCtx}
-
-【ナレーションルール】
-1. 主人公・世界設定・登場キャラクターの描写を完全に尊重し一貫して物語を生成する
-2. プレイヤーの行動に登場する「〇〇が得意」「〇〇の魔法を使う」などは事実として以後反映する
-3. 能力・スキルの成否はキャラクター描写との整合性で判定する
-4. NPCは固有名・性格・動機を持ち一貫して行動する
-5. 場所・天候・時間帯・感覚を具体的かつ詩的に描写する
-6. 返答は150〜240文字の臨場感ある日本語で、物語は必ず緊張感ある場面で終わること
-7. 必ず返答末尾に改行して以下のJSONを含める：
-[UPDATE:{"hp":0,"mp":0,"xp":0,"gold":0,"skill":null,"npc":null,"place":null,"item":null,"event":null,"quest":null}]
-  hp/mp/xp/gold = 変化量（-15でダメージ15、+10で回復10）
-  skill = 行動から発見したスキル/能力 {"name":"名前","desc":"一言"} または null
-  npc   = 新登場人物 {"name":"名前","rel":"友好|中立|敵対","desc":"一言"} または null
-  place = 新しい場所 {"name":"名前","desc":"一言"} または null
-  item  = 入手アイテム "名前" または null
-  event = 重要な出来事 "一言" または null
-  quest = 新クエスト {"title":"名前","desc":"目標"} または null`;
-}
-
-function buildMemCtx() {
-  const p = [];
-  if (mem.skills.length) p.push(`判明スキル: ${mem.skills.map(s=>s.name).join(', ')}`);
-  if (mem.npcs.length)   p.push(`登場人物: ${mem.npcs.map(n=>`${n.name}(${n.rel})`).join(', ')}`);
-  if (mem.places.length) p.push(`訪れた場所: ${mem.places.map(x=>x.name).join(', ')}`);
-  if (mem.items.length)  p.push(`所持品: ${mem.items.join(', ')}`);
-  if (mem.quests.length) p.push(`クエスト: ${mem.quests.map(q=>q.title).join(', ')}`);
-  if (mem.events.length) p.push(`出来事: ${mem.events.slice(-6).map(e=>e.text).join('; ')}`);
-  return p.join('\n') || '（まだ何も起きていない）';
-}
-
-// ════════════════════
-//  MESSAGING
-// ════════════════════
-function addMsg(cls, text, mode) {
-  const sc = document.getElementById('storyScroll');
-  const d = document.createElement('div');
-  d.className = `msg ${cls}`;
-  if (cls === 'player-act') {
-    const modeLabels = { do:'DO', say:'SAY', story:'STORY', see:'SEE' };
-    const mLabel = modeLabels[mode || currentMode] || 'DO';
-    d.setAttribute('data-n', charName);
-    d.setAttribute('data-mode', mLabel);
-  }
-  d.textContent = text;
-
-  // Double-click to edit narrator messages
-  if (cls === 'narrate') {
-    d.title = 'ダブルクリックで編集';
-    d.addEventListener('dblclick', () => {
-      d.contentEditable = 'true';
-      d.classList.add('editing');
-      d.focus();
-      // Place cursor at end
-      const range = document.createRange();
-      range.selectNodeContents(d);
-      range.collapse(false);
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
-    });
-    d.addEventListener('blur', () => {
-      d.contentEditable = 'false';
-      d.classList.remove('editing');
-      // Update history with edited text
-      const editedText = d.textContent;
-      if (hist.length > 0 && hist[hist.length-1].role === 'assistant') {
-        hist[hist.length-1].content = editedText;
-      }
-    });
-    d.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { d.blur(); }
-    });
-  }
-
-  sc.appendChild(d); sc.scrollTop = sc.scrollHeight;
-  return d;
-}
-function addThinking() {
-  const sc = document.getElementById('storyScroll');
-  const d = document.createElement('div');
-  d.className='thinking'; d.id='thinkEl';
-  d.innerHTML=`<div class="t-orb"></div><span>物語が紡がれている…</span>`;
-  sc.appendChild(d); sc.scrollTop=sc.scrollHeight;
-}
-function removeThinking() { document.getElementById('thinkEl')?.remove(); }
-
-// ════════════════════
-//  SEND
-// ════════════════════
-// ── mode / write area ──
-let currentMode = 'do';
-const MODES = {
-  do:    { label:'▸ DO — 行動する',       placeholder:'何をする？（剣を抜く、走る、攻撃する…）' },
-  say:   { label:'▸ SAY — 話す',          placeholder:'何と言う？（「待て！」「名前を教えろ」…）' },
-  story: { label:'▸ STORY — 物語として', placeholder:'物語として語る（場面転換、状況説明など…）' },
-  see:   { label:'▸ SEE — 見る・描写',   placeholder:'何を観察する？（周囲を見渡す、人物を観察する…）' },
-};
-
-function toggleModeBar() {
-  const mb = document.getElementById('modeBar');
-  const btn = document.getElementById('btnTake');
-  const wa  = document.getElementById('writeArea');
-  const isOpen = mb.classList.contains('open');
-  if (isOpen) {
-    mb.classList.remove('open');
-    wa.classList.remove('open');
-    btn.classList.remove('active');
-  } else {
-    mb.classList.add('open');
-    btn.classList.add('active');
-    wa.classList.remove('open'); // hide write until mode picked
-  }
-}
-
-function closeModeBar() {
-  document.getElementById('modeBar').classList.remove('open');
-  document.getElementById('writeArea').classList.remove('open');
-  document.getElementById('btnTake').classList.remove('active');
-}
-
-function pickMode(mode) {
-  currentMode = mode;
-  // highlight active mode btn
-  ['do','say','story','see'].forEach(m => {
-    document.getElementById('m' + m.charAt(0).toUpperCase() + m.slice(1))
-      .classList.toggle('active', m === mode);
-  });
-  // update label + placeholder
-  const cfg = MODES[mode];
-  document.getElementById('writeModeLabel').textContent = cfg.label;
-  document.getElementById('actInp').placeholder = cfg.placeholder;
-  // show write area
-  document.getElementById('writeArea').classList.add('open');
-  setTimeout(() => document.getElementById('actInp').focus(), 50);
-}
-
-function setAllBusy(on) {
-  busy = on;
-  ['sendBtn','btnTake','btnContinue','btnRetry'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.disabled = on;
-  });
-}
-
-function enablePostGame() {
-  document.getElementById('btnContinue').disabled = false;
-  document.getElementById('btnRetry').disabled = false;
-  document.getElementById('btnTake').disabled = false;
-}
 
 async function callNovelAI(msgs, sys) {
   const key = localStorage.getItem('chronicle_novel_key') || '';
@@ -1090,34 +918,15 @@ function updateHUD() {
 async function genSuggestions() {
   try {
     const baseMsgs = history.length > 1 ? history.slice(1) : [];
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST', headers:{'Content-Type':'application/json','x-api-key':getKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body: JSON.stringify({
-        model:'claude-sonnet-4-6', max_tokens:150,
-        system: buildSys(),
-        messages:[
-          ...baseMsgs,
-          { role:'user', content:`${charName}が今の状況で取れる行動4つを、キャラクターらしい短い動詞句で。JSON配列のみ。` }
-        ]
-      })
-    });
-    const d = await res.json();
-    const txt = d.content.map(c=>c.text||'').join('').replace(/```json|```/g,'').trim();
-    const acts = JSON.parse(txt);
-    if (Array.isArray(acts)) renderSuggestions(acts.slice(0,4));
-  } catch(e) { renderSuggestions(['周囲を調べる','前進する','警戒する','引き返す']); }
+    const t = await apiCall(
+      [...baseMsgs, {role:'user',content:`${charName}が今の状況で取れる行動4つを短い動詞句で答えてください。JSON配列のみ。`}],
+      buildSys(), 150
+    );
+    const acts = JSON.parse(t.replace(/```json|```/g,'').trim());
+    if(Array.isArray(acts)) renderSuggestions(acts.slice(0,4));
+  } catch(e){ renderSuggestions(['周囲を調べる','前進する','警戒する','引き返す']); }
 }
 
-function renderSuggestions(acts) {
-  const row = document.getElementById('sugRow');
-  row.innerHTML='';
-  acts.forEach(a => {
-    const b=document.createElement('button');
-    b.className='sg'; b.textContent=a;
-    b.onclick=()=>{ document.getElementById('actInp').value=a; send(); };
-    row.appendChild(b);
-  });
-}
 
 // ════════════════════
 //  SIDE PANELS
