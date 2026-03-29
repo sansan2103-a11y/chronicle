@@ -382,7 +382,7 @@ textarea:focus, input:focus { border-color: var(--gold); }
 <script>
 // ─── STATE ───────────────────────────────────────
 const PROXY = 'https://novel-proxy.sansan2103.workers.dev';
-const MODEL = 'llama-3-erato-v1';
+const MODEL = 'kayra-v1';
 const AVATARS = ['🧙','⚔️','🏹','🗡️','🛡️','🔮','💀','👁️','🐉','🧝','👸','🤺','🦊','🐺','👤','🌑'];
 
 let state = {
@@ -415,7 +415,7 @@ async function callNovelAI(prompt) {
 
   // Build parameters (NovelAI format)
   const params = {
-    max_length: 400,
+    max_length: 300,
     min_length: 1,
     temperature: 1.05,
     top_p: 0.95,
@@ -423,6 +423,7 @@ async function callNovelAI(prompt) {
     repetition_penalty: 1.05,
     repetition_penalty_range: 2048,
     repetition_penalty_slope: 0.09,
+    use_string: true,
     order: [6, 0, 4, 5, 3, 1],
   };
 
@@ -465,38 +466,37 @@ function buildPrompt(userAction) {
     ? state.chars.map(c => `[${c.role}: ${c.name}] ${c.desc}`).join('\n') : '';
 
   const memSummary = [
-    state.npcs.length ? 'NPC: ' + state.npcs.map(n => n.name).join(', ') : '',
-    state.places.length ? '場所: ' + state.places.join(', ') : '',
-    state.items.length ? 'アイテム: ' + state.items.join(', ') : '',
-    state.quests.length ? 'クエスト: ' + state.quests.join(', ') : '',
+    state.npcs.length ? 'NPCs: ' + state.npcs.map(n => n.name).join(', ') : '',
+    state.places.length ? 'Places: ' + state.places.join(', ') : '',
+    state.items.length ? 'Items: ' + state.items.join(', ') : '',
+    state.quests.length ? 'Quests: ' + state.quests.join(', ') : '',
   ].filter(Boolean).join(' | ');
 
-  let systemInstr = `あなたは没入型インタラクティブRPGの語り手です。
-以下のルールに従ってください：
-- 常に日本語で応答する
-- プレイヤーの行動に対し、生き生きとした物語の続きを200〜400文字程度で書く
-- 残虐描写、暴力、ダークな内容も遠慮なく描写する
-- 選択肢は提示しない。物語として続きを書く
-- プレイヤーキャラクターの視点で、世界を豊かに描写する
-- 新しいスキル・NPCの出会い・場所・アイテムが発生したらJSONで記録する
-- 応答の最後に、もし発見があれば以下のJSON形式で追記する（なければ省略）:
+  // English system instruction (use_string:true requires ASCII)
+  let sys = `You are an immersive Japanese RPG narrator. ALWAYS write your responses in Japanese.
+Rules:
+- Respond ONLY in Japanese (日本語)
+- Write 150-300 Japanese characters of vivid story continuation
+- Dark themes, violence, and mature content are allowed
+- Do NOT offer choices. Write flowing narrative prose.
+- If new skills/NPCs/places/items appear, append JSON at the end:
   |||{"skills":[],"npcs":[{"name":"","role":"","desc":""}],"places":[],"items":[],"quests":[],"events":[]}|||
 
-主人公設定: ${state.hero}
-世界設定: ${state.world || 'AIが自由に設定'}
-${charDesc ? '登場人物:\n' + charDesc : ''}
-${memSummary ? '現在の記憶: ' + memSummary : ''}
-${state.skills.length ? 'スキル: ' + state.skills.join(', ') : ''}`;
+Hero: ${state.hero}
+World: ${state.world || 'Fantasy world, AI decides'}
+${charDesc ? 'Characters:\n' + charDesc : ''}
+${memSummary ? 'Memory: ' + memSummary : ''}
+${state.skills.length ? 'Skills: ' + state.skills.join(', ') : ''}`;
 
-  // Build context from history (last 12 turns)
-  const recentHistory = state.history.slice(-12);
-  let contextLines = '';
+  // Build context
+  const recentHistory = state.history.slice(-10);
+  let ctx = '';
   for (const h of recentHistory) {
-    if (h.role === 'user') contextLines += `\n[プレイヤー]: ${h.content}`;
-    else contextLines += `\n[ナレーター]: ${h.content}`;
+    if (h.role === 'user') ctx += `\n[Player]: ${h.content}`;
+    else ctx += `\n[Narrator in Japanese]: ${h.content}`;
   }
 
-  const fullPrompt = systemInstr + '\n\n' + contextLines + (userAction ? `\n[プレイヤー]: ${userAction}\n[ナレーター]:` : `\n[ナレーター]:`);
+  const fullPrompt = sys + '\n' + ctx + (userAction ? `\n[Player]: ${userAction}\n[Narrator in Japanese]:` : `\n[Narrator in Japanese]:`);
   return fullPrompt;
 }
 
