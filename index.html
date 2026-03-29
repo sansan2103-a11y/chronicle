@@ -669,7 +669,15 @@ async function startGame() {
   setAllBusy(true);
   addThinking();
   try {
-    const prompt = buildPrompt(null) + `冒険の始まり――\n　`;
+    const heroText = state.hero || '名もなき冒険者';
+    const worldText = state.world || '剣と魔法の世界';
+    // Seed with Japanese prose so Kayra continues in that style
+    const prompt = `[ Tags: dark fantasy, japanese prose, mature, action ]
+[ Genre: japanese adventure novel ]
+***
+${heroText}の物語。舞台は${worldText}。
+***
+　`;
     const raw = await callNovelAI(prompt);
     removeThinking();
     const clean = parseResponse(raw);
