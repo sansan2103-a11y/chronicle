@@ -462,37 +462,31 @@ async function callNovelAI(prompt) {
 
 // ─── BUILD PROMPT ─────────────────────────────────
 function buildPrompt(userAction) {
-  const charDesc = state.chars.length > 0
-    ? state.chars.map(c => `${c.name}（${c.role}）: ${c.desc}`).join('\n') : '';
-
-  // ATTG metadata (English OK for tags)
-  const attg = `[ Tags: dark fantasy, japanese prose, adventure, mature ]
-[ Style: japanese literary fiction, vivid, immersive ]
-[ Genre: interactive RPG ]`;
-
-  // World setup as Japanese prose seed
   const heroText = state.hero || '名もなき冒険者';
   const worldText = state.world || '剣と魔法の世界';
+  const charDesc = state.chars.length > 0
+    ? state.chars.map(c => `${c.name}（${c.role}）`).join('、') : '';
 
-  const setup = `${charDesc ? charDesc + '\n' : ''}舞台：${worldText}
+  // ATTG header
+  let prompt = `[ Tags: dark fantasy, japanese prose, mature ]
+[ Genre: japanese adventure novel ]
+***
 主人公：${heroText}
-***`;
+舞台：${worldText}${charDesc ? '\n登場人物：' + charDesc : ''}
+***
+`;
 
-  // Build story from history - pure Japanese narrative
-  let story = '';
-  for (const h of state.history.slice(-8)) {
-    if (h.role === 'user') {
-      story += `\n>>${h.content}\n`;
-    } else {
-      story += h.content + '\n';
-    }
+  // Add history as pure prose
+  for (const h of state.history.slice(-6)) {
+    prompt += h.content + '\n';
   }
 
+  // Embed user action as narrative trigger
   if (userAction) {
-    story += `\n>>${userAction}\n`;
+    prompt += `　${userAction}——\n　`;
   }
 
-  return attg + '\n' + setup + '\n' + story;
+  return prompt;
 }
 
 // ─── PARSE AI RESPONSE ────────────────────────────
