@@ -1123,6 +1123,72 @@ function showPop(text) {
   document.body.appendChild(d);
   setTimeout(()=>d.remove(), 3000);
 }
+
+// ── MISSING FUNCTION ALIASES ──
+function addMsg(cls, text) {
+  const sc = document.getElementById('storyScroll');
+  if (!sc) return;
+  const d = document.createElement('div');
+  d.className = 'msg ' + cls;
+  d.textContent = text;
+  // Double-click to edit narrator messages
+  if (cls === 'narrate') {
+    d.title = 'ダブルクリックで編集';
+    d.addEventListener('dblclick', () => {
+      d.contentEditable = 'true';
+      d.classList.add('editing');
+      d.focus();
+    });
+    d.addEventListener('blur', () => {
+      d.contentEditable = 'false';
+      d.classList.remove('editing');
+    });
+    d.addEventListener('keydown', e => { if(e.key==='Escape') d.blur(); });
+  }
+  sc.appendChild(d);
+  sc.scrollTop = sc.scrollHeight;
+  return d;
+}
+
+function toggleModeBar() {
+  const mb = document.getElementById('modeBar');
+  const wa = document.getElementById('writeArea');
+  if (!mb) return;
+  const isHidden = mb.style.display === 'none' || !mb.style.display;
+  mb.style.display = isHidden ? 'flex' : 'none';
+  if (wa) wa.style.display = 'none';
+}
+
+function closeModeBar() {
+  const mb = document.getElementById('modeBar');
+  const wa = document.getElementById('writeArea');
+  if (mb) mb.style.display = 'none';
+  if (wa) wa.style.display = 'none';
+}
+
+function renderSuggestions(acts) {
+  const row = document.getElementById('sugRow');
+  if (!row) return;
+  row.innerHTML = '';
+  acts.forEach(a => {
+    const b = document.createElement('button');
+    b.className = 'sug-btn';
+    b.textContent = a;
+    b.onclick = () => {
+      const inp = document.getElementById('actionInput');
+      if (inp) { inp.value = a; }
+      const mb = document.getElementById('modeBar');
+      const wa = document.getElementById('writeArea');
+      if (mb) mb.style.display = 'flex';
+      if (wa) wa.style.display = 'flex';
+    };
+    row.appendChild(b);
+  });
+}
+
+// Alias
+function renderSug(acts) { renderSuggestions(acts); }
+
 </script>
 </body>
 </html>
