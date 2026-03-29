@@ -565,51 +565,49 @@ function setMode(mode, btn) {
 
 function buildPrompt(action, mode) {
   // ===== KAYRA戦略 =====
-  // ATTGタグ・英語・***・メタテキストは全廃。
-  // Kayraは「直前のテキストのスタイルを続ける」だけ。
-  // → 純粋な日本語小説文だけを渡せば、小説として続けてくれる。
-  // → Web小説のメタ（作者コメント、☆評価）を出させないために、
-  //    プロンプトから一切のメタ要素を排除する。
+  // Kayraは末尾のテキストを続けるだけ。
+  // 行動を「〜した。すると、」で終わらせることで、
+  // Kayraは行動の直接的結果を書くしかなくなる。
 
-  // ユーザーの行動を自然な物語文に変換
+  // ユーザーの行動→ 物語文 + 「すると、」
   let actionLine = '';
   if (action && action.trim()) {
     const act = action.trim();
     if (mode === 'say') {
-      actionLine = `「${act}」\n　${STATE.heroName}はそう口にした。`;
+      actionLine = `「${act}」\n　${STATE.heroName}はそう口にした。すると、`;
     } else if (mode === 'story') {
+      // 描写モードはすると不要、そのまま
       actionLine = '　' + (act.endsWith('。') ? act : act + '。');
     } else {
-      // 行動モード
+      // 行動モード → 「〜した。すると、」で強制
+      let sentence = '';
       if (act.endsWith('る') || act.endsWith('す') || act.endsWith('く') || act.endsWith('ぐ') || act.endsWith('む') || act.endsWith('ぶ') || act.endsWith('つ') || act.endsWith('ぬ')) {
-        actionLine = `　${STATE.heroName}は${act}ことにした。`;
+        sentence = `${STATE.heroName}は${act}ことにした。`;
       } else if (act.endsWith('した') || act.endsWith('った') || act.endsWith('いた') || act.endsWith('んだ')) {
-        actionLine = `　${STATE.heroName}は${act}。`;
+        sentence = `${STATE.heroName}は${act}。`;
       } else if (act.endsWith('て') || act.endsWith('で')) {
-        actionLine = `　${STATE.heroName}は${act}みた。`;
+        sentence = `${STATE.heroName}は${act}みた。`;
       } else if (act.endsWith('。') || act.endsWith('！') || act.endsWith('？')) {
-        actionLine = `　${STATE.heroName}は${act}`;
+        sentence = `${STATE.heroName}は${act}`;
       } else {
-        actionLine = `　${STATE.heroName}は${act}した。`;
+        sentence = `${STATE.heroName}は${act}した。`;
       }
+      actionLine = `　${sentence}すると、`;
     }
   }
 
   // ===== プロンプト組み立て =====
-  // 純粋な日本語散文のみ。タグ・記号・英語なし。
   let prompt = '';
 
   if (STATE.storyText.length === 0) {
-    // 初回：小説の冒頭として書く
-    prompt += `　${STATE.world}――。\n`;
-    prompt += `　${STATE.heroName}。${STATE.heroDesc}。\n`;
+    // 初回：設定は最小限、行動をメインに
+    prompt += `　ここは${STATE.world}。${STATE.heroName}は${STATE.heroDesc}。\n`;
     if (actionLine) {
       prompt += actionLine;
     }
   } else {
     // 2回目以降：直近の文脈＋行動
     const clean = STATE.storyText.trim();
-    // 最後の400文字だけ（多すぎるとKayraが文脈に溺れる）
     const context = clean.length > 400 ? clean.slice(-400) : clean;
     prompt += context + '\n';
     if (actionLine) {
@@ -663,6 +661,13 @@ async function callKayra(prompt) {
 function cleanOutput(raw) {
   let text = raw;
 
+  // NovelAIルビタグ除去 — <rubycover>本文<rubystart>ルビ<rubyend> → 本文
+  text = text.replace(/<rubycover>([^<]*)<rubystart>[^<]*<rubyend>/g, '$1');
+  // 残ったrubyタグ断片も除去
+  text = text.replace(/<\/?ruby(cover|start|end)>/g, '');
+  // その他のHTMLタグも除去
+  text = text.replace(/<[^>]{1,50}>/g, '');
+
   // ATTG タグ除去 [ ... ]
   text = text.replace(/\[[^\]]{0,200}\]/g, '');
 
@@ -708,6 +713,41 @@ function cleanOutput(raw) {
   text = text.trim();
 
   // ループ検出＆除去（類似文も検出）
+  // === フレーズループ検出（8文字以上の同一フレーズが3回出たらそこで切る） ===
+  const phrases = text.replace(/[\s　]/g, '');
+  for (let len = 12; len >= 8; len--) {
+    for (let i = 0; i <= phrases.length - len; i++) {
+      const phrase = phrases.slice(i, i + len);
+      const regex = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+      const matches = phrases.match(regex);
+      if (matches && matches.length >= 3) {
+        // 2回目の出現位置で切る
+        const first = text.replace(/[\s　]/g, '').indexOf(phrase);
+        const second = text.replace(/[\s　]/g, '').indexOf(phrase, first + len);
+        if (second > 0) {
+          // 元テキストでの対応位置を見つけて切る
+          let count = 0;
+          let cutPos = 0;
+          for (let j = 0; j < text.length && count < second; j++) {
+            if (text[j] !== ' ' && text[j] !== '　' && text[j] !== '\n') count++;
+            cutPos = j;
+          }
+          text = text.slice(0, cutPos);
+          // 最後の文末で切る
+          const lastSentEnd = Math.max(
+            text.lastIndexOf('。'), text.lastIndexOf('！'),
+            text.lastIndexOf('？'), text.lastIndexOf('」')
+          );
+          if (lastSentEnd > text.length * 0.3) {
+            text = text.slice(0, lastSentEnd + 1);
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  // === 文レベルの類似検出 ===
   const sentences = text.split(/(?<=[。！？…」』])/);
   const unique = [];
   
@@ -715,31 +755,23 @@ function cleanOutput(raw) {
     const key = s.trim().replace(/[\s　]/g, '');
     if (key.length < 3) continue;
     
-    // 既存の文と類似度チェック
     let isDuplicate = false;
     for (const prev of unique) {
       const prevKey = prev.trim().replace(/[\s　]/g, '');
-      // 短い方の長さの60%以上が一致したらループとみなす
       const shorter = Math.min(key.length, prevKey.length);
       if (shorter < 5) continue;
       
-      // 共通部分の長さを簡易計算
       let common = 0;
-      const target = prevKey;
       for (let i = 0; i < key.length - 3; i++) {
-        const chunk = key.slice(i, i + 4);
-        if (target.includes(chunk)) common++;
+        if (prevKey.includes(key.slice(i, i + 4))) common++;
       }
-      const similarity = common / (shorter - 3);
-      if (similarity > 0.5) {
+      if (common / (shorter - 3) > 0.5) {
         isDuplicate = true;
         break;
       }
     }
     
-    if (!isDuplicate) {
-      unique.push(s);
-    }
+    if (!isDuplicate) unique.push(s);
   }
   text = unique.join('');
 
@@ -806,24 +838,29 @@ async function send() {
     }
 
     removeLoading();
-    addBlock('narrator', text);
+    // 行動/発言モードなら「すると、」を先頭に付けて自然な流れに
+    const displayText = (STATE.mode !== 'story' && action)
+      ? 'すると、' + text : text;
+    addBlock('narrator', displayText);
 
     // クリーンテキストを蓄積（次のプロンプトの文脈になる）
-    // buildPromptと同じ形式で行動文を組み立てる
+    // 「すると、」も含めて自然な文脈にする
     let actionText = '';
     if (STATE.mode === 'say') {
-      actionText = `「${action}」と${STATE.heroName}は言った。`;
+      actionText = `「${action}」と${STATE.heroName}は言った。すると、`;
     } else if (STATE.mode === 'story') {
       actionText = action.endsWith('。') ? action : action + '。';
     } else {
       const act = action.trim();
+      let sentence = '';
       if (act.endsWith('る') || act.endsWith('す') || act.endsWith('く') || act.endsWith('ぐ') || act.endsWith('む')) {
-        actionText = `${STATE.heroName}は${act}ことにした。`;
+        sentence = `${STATE.heroName}は${act}ことにした。`;
       } else if (act.endsWith('した') || act.endsWith('った') || act.endsWith('いた')) {
-        actionText = `${STATE.heroName}は${act}。`;
+        sentence = `${STATE.heroName}は${act}。`;
       } else {
-        actionText = `${STATE.heroName}は${act}。`;
+        sentence = `${STATE.heroName}は${act}した。`;
       }
+      actionText = sentence + 'すると、';
     }
     STATE.storyText += actionText + text + '\n';
 
