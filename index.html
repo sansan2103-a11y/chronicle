@@ -2,1268 +2,943 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Chronicle — AI RPG</title>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=IM+Fell+English:ital@0;1&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <style>
 :root {
-  --ink:   #08080d;
-  --p0:    #0e0e16;
-  --p1:    #14141e;
-  --p2:    #1c1c28;
-  --p3:    #242432;
-  --rim:   #2a2a3c;
-  --rim2:  #383850;
-  --gold:  #c4923a;
-  --gold2: #e8b84a;
-  --gold3: #f5d888;
-  --red:   #9a2828;
-  --red2:  #d44040;
-  --blue:  #285888;
-  --blue2: #4488c8;
-  --grn:   #286040;
-  --grn2:  #40a060;
-  --pur:   #583888;
-  --pur2:  #9860c8;
-  --text:  #cec8bc;
-  --dim:   #686258;
-  --mid:   #9a9288;
-  --font-serif: 'Cormorant Garamond', serif;
-  --font-ui:    'Rajdhani', sans-serif;
-  --font-mono:  'Share Tech Mono', monospace;
+  --bg: #0a0804;
+  --bg2: #110e08;
+  --bg3: #1a1510;
+  --border: #3a2e1e;
+  --gold: #c8983a;
+  --gold2: #f0c060;
+  --amber: #e8a020;
+  --text: #e8d8b0;
+  --text2: #a89060;
+  --text3: #6a5030;
+  --red: #cc3322;
+  --blue: #3a6090;
+  --green: #3a7050;
+  --radius: 4px;
+  --panel-w: 280px;
 }
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
-html,body{height:100%;background:var(--ink);color:var(--text);font-family:var(--font-serif);font-size:18px;overflow:hidden;}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Crimson Text', serif; font-size: 16px; }
 
-/* ════════ UTIL ════════ */
-.hidden{display:none!important;}
-input,textarea,select{font-family:inherit;color:var(--text);background:var(--p1);border:1px solid var(--rim);border-radius:3px;outline:none;transition:border-color .2s;}
-input:focus,textarea:focus,select:focus{border-color:var(--gold);}
-input::placeholder,textarea::placeholder{color:var(--dim);font-style:italic;}
-button{cursor:pointer;font-family:var(--font-ui);border:none;transition:all .2s;}
+/* SCROLLBAR */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-/* ════════ INTRO SCREEN ════════ */
-#introScreen{
-  height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  background:radial-gradient(ellipse at 50% 20%,#1c1530 0%,var(--ink) 65%);
-  overflow-y:auto;position:relative;
+/* ─── START SCREEN ─── */
+#startScreen {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 100vh; padding: 2rem 1rem;
+  background: radial-gradient(ellipse at 50% 0%, #2a1a05 0%, var(--bg) 70%);
 }
-#introScreen::before{
-  content:'';position:absolute;inset:0;pointer-events:none;
-  background:repeating-linear-gradient(0deg,transparent,transparent 48px,rgba(196,146,58,.025) 48px,rgba(196,146,58,.025) 49px),
-             repeating-linear-gradient(90deg,transparent,transparent 48px,rgba(196,146,58,.025) 48px,rgba(196,146,58,.025) 49px);
-  animation:gridDrift 20s linear infinite;
+.logo {
+  font-family: 'Cinzel', serif; font-size: clamp(2.4rem, 8vw, 4rem); font-weight: 900;
+  color: var(--gold2); letter-spacing: 0.25em; text-transform: uppercase;
+  text-shadow: 0 0 40px rgba(200,152,58,0.5), 0 0 80px rgba(200,152,58,0.2);
+  margin-bottom: 0.25rem;
 }
-@keyframes gridDrift{to{transform:translate(48px,48px);}}
-
-.intro-wrap{position:relative;width:100%;max-width:640px;padding:32px 20px;display:flex;flex-direction:column;align-items:center;gap:0;}
-.sigil{font-size:48px;margin-bottom:16px;filter:drop-shadow(0 0 22px rgba(196,146,58,.5));animation:pulse 3s ease-in-out infinite;}
-@keyframes pulse{0%,100%{filter:drop-shadow(0 0 22px rgba(196,146,58,.5));}50%{filter:drop-shadow(0 0 40px rgba(196,146,58,.8));}}
-.logo{font-family:var(--font-ui);font-weight:700;font-size:clamp(28px,9vw,52px);letter-spacing:.3em;color:var(--gold2);text-shadow:0 0 40px rgba(196,146,58,.3),0 2px 0 #000;margin-bottom:4px;}
-.logo-sub{font-family:var(--font-mono);font-size:10px;letter-spacing:.45em;color:var(--dim);margin-bottom:36px;}
-
-.card{width:100%;background:var(--p1);border:1px solid var(--rim);border-radius:4px;padding:24px;position:relative;}
-.card::before{content:'';position:absolute;top:-1px;left:40px;right:40px;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);}
-
-.lbl{font-family:var(--font-mono);font-size:10px;letter-spacing:.3em;color:var(--gold);margin-bottom:10px;display:block;}
-.lbl-sm{font-family:var(--font-mono);font-size:9px;letter-spacing:.2em;color:var(--dim);margin-bottom:7px;display:block;}
-
-.big-ta{width:100%;background:var(--p0);border:1px solid var(--rim);border-radius:3px;color:var(--text);font-family:var(--font-serif);font-size:17px;line-height:1.7;padding:13px 15px;resize:none;height:110px;}
-.sm-ta{width:100%;background:var(--p0);border:1px solid var(--rim);border-radius:3px;color:var(--text);font-family:var(--font-serif);font-size:16px;line-height:1.65;padding:10px 13px;resize:none;height:80px;}
-.hint{font-size:13px;color:var(--dim);font-style:italic;margin-top:8px;line-height:1.5;}
-.hint span{color:var(--mid);}
-
-.begin-btn{
-  width:100%;margin-top:20px;
-  background:linear-gradient(135deg,#7a5808,#c4923a,#e8b84a);
-  border-radius:3px;color:#1a0e00;
-  font-family:var(--font-ui);font-weight:700;font-size:15px;letter-spacing:.3em;
-  padding:13px;box-shadow:0 4px 24px rgba(196,146,58,.22);
+.tagline { font-family: 'IM Fell English', serif; font-style: italic; color: var(--text2); font-size: 1rem; letter-spacing: 0.1em; margin-bottom: 2.5rem; }
+.start-form { width: 100%; max-width: 540px; display: flex; flex-direction: column; gap: 1rem; }
+.field-label { font-family: 'Cinzel', serif; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 0.35rem; }
+.field-label span { color: var(--text3); font-family: 'Crimson Text', serif; font-size: 0.85rem; text-transform: none; letter-spacing: 0; font-style: italic; }
+textarea, input[type=text], input[type=password] {
+  width: 100%; background: var(--bg2); border: 1px solid var(--border);
+  color: var(--text); padding: 0.75rem; font-family: 'Crimson Text', serif; font-size: 0.95rem;
+  border-radius: var(--radius); resize: vertical; outline: none; transition: border-color 0.2s;
 }
-.begin-btn:hover{filter:brightness(1.08);transform:translateY(-2px);box-shadow:0 8px 32px rgba(196,146,58,.32);}
-.begin-btn:disabled{opacity:.3;cursor:not-allowed;transform:none;box-shadow:none;}
-
-.divider{width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--rim),transparent);margin:20px 0;}
-
-/* ════════ GAME SCREEN ════════ */
-#gameScreen{display:none;height:100vh;flex-direction:column;max-width:1020px;width:100%;margin:0 auto;}
-
-/* Topbar */
-.topbar{
-  display:flex;align-items:center;gap:8px;
-  padding:7px 14px;background:var(--p1);border-bottom:1px solid var(--rim);
-  flex-shrink:0;flex-wrap:wrap;
+textarea:focus, input:focus { border-color: var(--gold); }
+.api-row { position: relative; }
+.api-row input { padding-right: 2.5rem; }
+.eye-btn { position: absolute; right: 0.6rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text3); cursor: pointer; font-size: 1.1rem; padding: 0.2rem; }
+.eye-btn:hover { color: var(--gold); }
+.api-note { font-size: 0.78rem; color: var(--text3); font-style: italic; margin-top: 0.25rem; }
+.api-note a { color: var(--text2); }
+.enter-btn {
+  font-family: 'Cinzel', serif; font-size: 0.9rem; letter-spacing: 0.2em; text-transform: uppercase;
+  background: linear-gradient(135deg, #2a1e08 0%, #3a2a10 100%);
+  border: 1px solid var(--gold); color: var(--gold2); padding: 0.9rem 2rem;
+  cursor: pointer; border-radius: var(--radius); transition: all 0.2s; margin-top: 0.5rem;
 }
-.tb-name{font-family:var(--font-ui);font-weight:600;font-size:14px;color:var(--gold2);letter-spacing:.05em;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.vital{display:flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:10px;}
-.v-track{width:42px;height:4px;background:var(--rim);border-radius:2px;overflow:hidden;}
-.v-fill{height:100%;border-radius:2px;transition:width .5s;}
-.v-fill.hp{background:linear-gradient(90deg,var(--red),var(--red2));}
-.v-fill.mp{background:linear-gradient(90deg,var(--blue),var(--blue2));}
-.v-num{color:var(--mid);min-width:26px;font-size:9px;}
-.pill{font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:9px;border:1px solid;white-space:nowrap;}
-.pill.lv  {color:var(--grn2);border-color:var(--grn);background:rgba(40,96,64,.12);}
-.pill.gold{color:var(--gold2);border-color:var(--gold);background:rgba(196,146,58,.1);}
-.pill.xp  {color:#d09050;border-color:#906030;background:rgba(144,96,48,.1);}
-.tb-r{margin-left:auto;display:flex;gap:5px;}
-.ib{background:var(--p0);border:1px solid var(--rim);color:var(--dim);font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:3px;letter-spacing:.1em;}
-.ib:hover{border-color:var(--rim2);color:var(--text);}
-.ib.on{border-color:var(--gold);color:var(--gold);}
+.enter-btn:hover { background: linear-gradient(135deg, #3a2e12 0%, #4a3a18 100%); box-shadow: 0 0 20px rgba(200,152,58,0.3); }
+.enter-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
 
-/* Main */
-.game-body{flex:1;display:flex;overflow:hidden;}
-.story-col{flex:1;display:flex;flex-direction:column;overflow:hidden;}
-.story-scroll{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth;}
-.story-scroll::-webkit-scrollbar{width:3px;}
-.story-scroll::-webkit-scrollbar-thumb{background:var(--rim);border-radius:2px;}
+/* ─── GAME SCREEN ─── */
+#gameScreen { display: none; height: 100vh; flex-direction: column; overflow: hidden; position: relative; }
 
-/* Messages */
-.msg{animation:mi .3s ease;}
-@keyframes mi{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:translateY(0);}}
-.msg.narrate{background:var(--p1);border:1px solid var(--rim);border-left:2px solid var(--gold);border-radius:0 4px 4px 0;padding:12px 14px;line-height:1.82;font-size:17px;cursor:text;position:relative;}
-.msg.narrate:hover::after{content:'✎';position:absolute;top:6px;right:8px;font-size:11px;color:var(--gold);opacity:.5;}
-.msg.narrate.editing{border-color:var(--gold);outline:none;background:var(--p2);}
-.msg.narrate[contenteditable="true"]{outline:none;}
-.msg.player-act{align-self:flex-end;background:var(--p2);border:1px solid var(--rim);border-right:2px solid var(--pur2);border-radius:4px 0 0 4px;padding:8px 13px;color:#b0a8d0;font-style:italic;max-width:76%;font-size:16px;}
-.msg.player-act::before{content:attr(data-n)' ▸ ' attr(data-mode);color:var(--pur2);font-style:normal;font-family:var(--font-mono);font-size:9px;letter-spacing:.1em;display:block;margin-bottom:3px;}
-.msg.sys-note{text-align:center;font-family:var(--font-mono);font-size:10px;color:var(--gold);letter-spacing:.3em;padding:3px;opacity:.6;}
-.msg.disc{text-align:center;font-family:var(--font-mono);font-size:11px;color:var(--gold3);background:rgba(196,146,58,.05);border:1px solid rgba(196,146,58,.18);border-radius:3px;padding:6px 12px;letter-spacing:.08em;}
-.thinking{display:flex;align-items:center;gap:9px;padding:5px 2px;color:var(--dim);font-family:var(--font-mono);font-size:10px;letter-spacing:.15em;}
-.t-orb{width:13px;height:13px;border:1.5px solid var(--rim2);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;}
-@keyframes spin{to{transform:rotate(360deg);}}
-
-/* ── Input zone ── */
-.input-zone{border-top:1px solid var(--rim);padding:10px 13px 13px;flex-shrink:0;background:var(--ink);}
-.sug-row{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;min-height:24px;}
-.sg{background:var(--p1);border:1px solid var(--rim);color:var(--mid);font-family:var(--font-serif);font-size:14px;padding:3px 11px;border-radius:2px;}
-.sg:hover{border-color:var(--gold);color:var(--gold2);background:rgba(196,146,58,.05);}
-/* Action bar */
-.action-bar{display:flex;gap:8px;margin-bottom:9px;}
-.ab-btn{
-  display:flex;align-items:center;justify-content:center;gap:7px;
-  background:var(--p2);border:1px solid var(--rim2);border-radius:10px;
-  color:var(--text);font-family:var(--font-ui);font-weight:500;font-size:13px;letter-spacing:.06em;
-  padding:10px 16px;transition:all .18s;flex-shrink:0;
+/* TOP BAR */
+.topbar {
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem;
+  background: var(--bg2); border-bottom: 1px solid var(--border); flex-shrink: 0;
+  flex-wrap: wrap;
 }
-.ab-btn:hover:not(:disabled){background:var(--p3);filter:brightness(1.18);}
-.ab-btn:active:not(:disabled){transform:scale(.97);}
-.ab-btn:disabled{opacity:.3;cursor:not-allowed;}
-.ab-btn.primary{flex:1;}
-.ab-btn.active{border-color:var(--gold);color:var(--gold2);}
-/* Mode bar (Do/Say/Story/See) */
-.mode-bar{display:none;margin-bottom:9px;background:var(--p2);border:1px solid var(--rim2);border-radius:10px;overflow:hidden;}
-.mode-bar.open{display:flex;animation:wSlide .18s ease;}
-.mode-back{display:flex;align-items:center;justify-content:center;width:44px;height:44px;flex-shrink:0;color:var(--mid);border-right:1px solid var(--rim);background:transparent;}
-.mode-back:hover{color:var(--text);}
-.mode-btn{
-  flex:1;display:flex;align-items:center;justify-content:center;gap:5px;
-  background:transparent;color:var(--mid);
-  font-family:var(--font-ui);font-weight:500;font-size:13px;letter-spacing:.05em;
-  padding:11px 4px;border:none;border-left:1px solid var(--rim);transition:all .15s;
+.stat { display: flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; }
+.stat-icon { font-size: 0.9rem; }
+.stat-val { font-family: 'Cinzel', serif; font-weight: 600; color: var(--gold); font-size: 0.78rem; }
+.stat-bar { width: 50px; height: 5px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+.stat-fill { height: 100%; border-radius: 3px; transition: width 0.4s; }
+.hp-fill { background: linear-gradient(90deg, var(--red), #ee5544); }
+.mp-fill { background: linear-gradient(90deg, var(--blue), #6090c0); }
+.xp-fill { background: linear-gradient(90deg, var(--green), #60b080); }
+.spacer { flex: 1; }
+.icon-btn { background: none; border: none; color: var(--text2); cursor: pointer; font-size: 1.2rem; padding: 0.25rem 0.4rem; border-radius: var(--radius); transition: color 0.15s; }
+.icon-btn:hover { color: var(--gold); }
+
+/* MAIN LAYOUT */
+.game-layout { display: flex; flex: 1; overflow: hidden; }
+
+/* STORY */
+.story-area {
+  flex: 1; overflow-y: auto; padding: 1.25rem 1rem;
+  display: flex; flex-direction: column; gap: 0;
 }
-.mode-btn:hover{color:var(--text);background:rgba(255,255,255,.04);}
-.mode-btn.active{color:var(--gold2);background:rgba(196,146,58,.08);}
-/* Write area */
-.write-area{display:none;flex-direction:column;gap:3px;}
-.write-area.open{display:flex;animation:wSlide .2s ease;}
-@keyframes wSlide{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
-.write-mode-label{font-family:var(--font-mono);font-size:9px;letter-spacing:.25em;color:var(--gold);padding:4px 12px 2px;}
-.write-inp-row{display:flex;gap:7px;align-items:flex-end;}
-.act-inp{
-  flex:1;background:var(--p1);border:1px solid var(--rim);border-radius:3px;
-  color:var(--text);font-family:var(--font-serif);font-size:17px;line-height:1.5;
-  padding:8px 12px;resize:none;min-height:42px;max-height:110px;overflow-y:auto;
+.msg { padding: 0.6rem 0; animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.msg-narr { font-family: 'IM Fell English', serif; font-size: 1.05rem; line-height: 1.75; color: var(--text); }
+.msg-narr[contenteditable=true] { outline: 1px dashed var(--border); padding: 2px 4px; border-radius: 2px; }
+.msg-narr[contenteditable=true]:focus { outline-color: var(--gold); background: rgba(200,152,58,0.05); }
+.msg-player { font-family: 'Crimson Text', serif; font-size: 0.9rem; color: var(--text2); font-style: italic; padding: 0.25rem 0; }
+.msg-player::before { content: '▶ '; color: var(--text3); font-style: normal; }
+.msg-badge { font-size: 0.75rem; color: var(--text3); font-family: 'Cinzel', serif; letter-spacing: 0.1em; margin-right: 0.4rem; }
+.msg-thinking { color: var(--text3); font-style: italic; font-size: 0.9rem; animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+.divider { border: none; border-top: 1px solid var(--border); opacity: 0.4; margin: 0.5rem 0; }
+
+/* SIDE PANELS */
+.side-panel {
+  width: var(--panel-w); background: var(--bg2); border-left: 1px solid var(--border);
+  overflow-y: auto; padding: 1rem; display: none; flex-direction: column; gap: 0.75rem;
+  flex-shrink: 0;
 }
-.act-inp:focus{border-color:var(--gold);}
-.act-inp::placeholder{color:var(--dim);font-style:italic;}
-.send-btn{background:linear-gradient(135deg,#6a4a08,#c4923a);border-radius:3px;color:#160c00;font-family:var(--font-ui);font-weight:600;font-size:13px;letter-spacing:.2em;padding:0 16px;height:42px;white-space:nowrap;flex-shrink:0;}
-.send-btn:hover{filter:brightness(1.1);transform:translateY(-1px);}
-.send-btn:disabled{opacity:.3;cursor:not-allowed;transform:none;}
+.side-panel.open { display: flex; }
+.panel-title { font-family: 'Cinzel', serif; font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+.panel-section { font-size: 0.85rem; }
+.panel-section h4 { font-family: 'Cinzel', serif; font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text3); margin-bottom: 0.35rem; }
+.tag { display: inline-block; background: var(--bg3); border: 1px solid var(--border); color: var(--text2); font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 2px; margin: 0.1rem; }
+.empty-note { color: var(--text3); font-style: italic; font-size: 0.82rem; }
+.npc-item { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.5rem; margin-bottom: 0.4rem; }
+.npc-name { font-family: 'Cinzel', serif; font-size: 0.78rem; color: var(--gold); }
+.npc-role { font-size: 0.78rem; color: var(--text3); font-style: italic; }
+.npc-desc { font-size: 0.82rem; color: var(--text2); margin-top: 0.25rem; }
 
-/* ════════ SIDE PANELS ════════ */
-.side-panel{width:0;overflow:hidden;transition:width .28s ease;border-left:1px solid var(--rim);background:#0b0b12;display:flex;flex-direction:column;flex-shrink:0;}
-.side-panel.open{width:260px;}
-.pan-head{padding:10px 13px;border-bottom:1px solid var(--rim);font-family:var(--font-ui);font-weight:600;font-size:13px;color:var(--gold);letter-spacing:.15em;flex-shrink:0;}
-.pan-body{flex:1;overflow-y:auto;padding:11px;}
-.pan-body::-webkit-scrollbar{width:3px;}
-.pan-body::-webkit-scrollbar-thumb{background:var(--rim);}
-.psec{margin-bottom:14px;}
-.psec-t{font-family:var(--font-mono);font-size:9px;color:var(--dim);letter-spacing:.25em;margin-bottom:7px;padding-bottom:4px;border-bottom:1px solid var(--rim);}
-.mc{background:var(--p1);border:1px solid var(--rim);border-radius:3px;padding:7px 9px;margin-bottom:5px;font-size:12px;line-height:1.45;}
-.mb{font-family:var(--font-mono);font-size:8px;padding:1px 5px;border-radius:7px;margin-bottom:3px;display:inline-block;letter-spacing:.1em;}
-.mb.sk  {color:var(--red2);background:rgba(154,40,40,.12);border:1px solid rgba(154,40,40,.3);}
-.mb.npc {color:#70a8e8;background:rgba(64,112,192,.15);border:1px solid rgba(64,112,192,.3);}
-.mb.pl  {color:var(--grn2);background:rgba(40,96,64,.12);border:1px solid rgba(40,96,64,.3);}
-.mb.it  {color:var(--gold2);background:rgba(196,146,58,.1);border:1px solid rgba(196,146,58,.22);}
-.mb.ev  {color:var(--pur2);background:rgba(88,56,136,.12);border:1px solid rgba(88,56,136,.3);}
-.mb.qu  {color:#d09050;background:rgba(144,96,48,.12);border:1px solid rgba(144,96,48,.3);}
-.mm{color:var(--mid);}
-.ms{font-size:11px;color:var(--dim);margin-top:2px;font-style:italic;}
-.me{font-size:12px;color:var(--dim);font-style:italic;}
-.char-bio{background:var(--p1);border:1px solid var(--rim);border-left:2px solid var(--gold);border-radius:0 3px 3px 0;padding:9px 11px;font-size:13px;color:var(--mid);font-style:italic;line-height:1.6;margin-bottom:10px;}
-
-/* ════════ SETTINGS PANEL ════════ */
-#settingsOverlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:300;display:flex;align-items:flex-start;justify-content:flex-end;}
-#settingsPanel{
-  width:min(420px,100vw);height:100vh;background:var(--p0);border-left:1px solid var(--rim);
-  display:flex;flex-direction:column;overflow:hidden;
-  animation:slideIn .25s ease;
+/* SETTINGS PANEL */
+#settingsPanel {
+  position: fixed; top: 0; right: 0; height: 100%; width: min(340px, 90vw);
+  background: var(--bg2); border-left: 1px solid var(--border); z-index: 100;
+  overflow-y: auto; padding: 1.25rem; display: none; flex-direction: column; gap: 1rem;
+  transform: translateX(100%); transition: transform 0.2s ease;
 }
-@keyframes slideIn{from{transform:translateX(100%);}to{transform:translateX(0);}}
-.sp-head{padding:14px 18px;border-bottom:1px solid var(--rim);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
-.sp-title{font-family:var(--font-ui);font-weight:700;font-size:16px;color:var(--gold2);letter-spacing:.15em;}
-.sp-close{background:var(--p1);border:1px solid var(--rim);color:var(--dim);font-size:18px;width:32px;height:32px;border-radius:3px;display:flex;align-items:center;justify-content:center;}
-.sp-close:hover{border-color:var(--rim2);color:var(--text);}
-.sp-body{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:18px;}
-.sp-body::-webkit-scrollbar{width:3px;}
-.sp-body::-webkit-scrollbar-thumb{background:var(--rim);}
-.sp-sec-title{font-family:var(--font-mono);font-size:10px;color:var(--gold);letter-spacing:.3em;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--rim);}
+#settingsPanel.open { display: flex; transform: translateX(0); }
+.settings-header { display: flex; justify-content: space-between; align-items: center; }
+.settings-title { font-family: 'Cinzel', serif; font-size: 0.9rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); }
+.close-btn { background: none; border: none; color: var(--text2); cursor: pointer; font-size: 1.4rem; line-height: 1; }
+.close-btn:hover { color: var(--gold); }
+.settings-section { border-top: 1px solid var(--border); padding-top: 0.75rem; }
+.settings-section h4 { font-family: 'Cinzel', serif; font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text3); margin-bottom: 0.6rem; }
+.slot-card { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.6rem; display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem; cursor: pointer; transition: border-color 0.15s; }
+.slot-card:hover { border-color: var(--gold); }
+.slot-avatar { font-size: 1.6rem; line-height: 1; }
+.slot-info { flex: 1; min-width: 0; }
+.slot-name { font-family: 'Cinzel', serif; font-size: 0.8rem; color: var(--gold); }
+.slot-role { font-size: 0.78rem; color: var(--text3); font-style: italic; }
+.slot-del { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 1rem; padding: 0.2rem; }
+.slot-del:hover { color: var(--red); }
+.add-slot-btn { width: 100%; background: var(--bg); border: 1px dashed var(--border); color: var(--text3); padding: 0.5rem; cursor: pointer; border-radius: var(--radius); font-family: 'Crimson Text', serif; font-size: 0.9rem; transition: all 0.15s; }
+.add-slot-btn:hover { border-color: var(--gold); color: var(--gold); }
+.char-edit { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem; margin-top: 0.5rem; display: none; flex-direction: column; gap: 0.5rem; }
+.char-edit.open { display: flex; }
+.char-edit input, .char-edit textarea { font-size: 0.85rem; padding: 0.4rem 0.6rem; }
+.char-edit .avatar-row { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.char-edit .avatar-opt { font-size: 1.4rem; cursor: pointer; padding: 0.2rem; border: 1px solid transparent; border-radius: 3px; transition: border-color 0.1s; }
+.char-edit .avatar-opt:hover, .char-edit .avatar-opt.sel { border-color: var(--gold); }
+.btn-row { display: flex; gap: 0.5rem; }
+.mini-btn { flex: 1; background: var(--bg3); border: 1px solid var(--border); color: var(--text2); padding: 0.4rem; cursor: pointer; border-radius: var(--radius); font-family: 'Crimson Text', serif; font-size: 0.85rem; transition: all 0.15s; }
+.mini-btn:hover { border-color: var(--gold); color: var(--gold); }
+.mini-btn.primary { background: rgba(200,152,58,0.15); border-color: var(--gold); color: var(--gold); }
+.provider-row { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; }
+.provider-btn { flex: 1; padding: 0.45rem; background: var(--bg); border: 1px solid var(--border); color: var(--text2); font-family: 'Cinzel', serif; font-size: 0.7rem; letter-spacing: 0.1em; cursor: pointer; border-radius: var(--radius); transition: all 0.15s; }
+.provider-btn.active { border-color: var(--gold); color: var(--gold2); background: rgba(200,152,58,0.1); }
+.save-btn { width: 100%; background: rgba(200,152,58,0.1); border: 1px solid var(--gold); color: var(--gold); padding: 0.5rem; cursor: pointer; border-radius: var(--radius); font-family: 'Cinzel', serif; font-size: 0.75rem; letter-spacing: 0.15em; transition: all 0.15s; }
+.save-btn:hover { background: rgba(200,152,58,0.2); }
 
-/* Character slots */
-.slot-list{display:flex;flex-direction:column;gap:8px;}
-.char-slot{
-  background:var(--p1);border:1px solid var(--rim);border-radius:4px;padding:11px 13px;
-  display:flex;align-items:center;gap:10px;cursor:pointer;transition:all .2s;
+/* INPUT AREA */
+.input-area { border-top: 1px solid var(--border); background: var(--bg2); flex-shrink: 0; }
+.action-row { display: flex; gap: 0; border-bottom: 1px solid var(--border); }
+.action-btn {
+  flex: 1; padding: 0.65rem 0.4rem; background: var(--bg2); border: none; border-right: 1px solid var(--border);
+  color: var(--text2); font-family: 'Cinzel', serif; font-size: 0.65rem; letter-spacing: 0.12em;
+  text-transform: uppercase; cursor: pointer; transition: all 0.15s;
 }
-.char-slot:hover{border-color:var(--rim2);}
-.char-slot.protagonist{border-color:var(--gold);background:rgba(196,146,58,.05);}
-.slot-avatar{font-size:24px;flex-shrink:0;}
-.slot-info{flex:1;min-width:0;}
-.slot-name{font-family:var(--font-ui);font-weight:600;font-size:14px;color:var(--gold2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.slot-role{font-family:var(--font-mono);font-size:9px;color:var(--dim);letter-spacing:.1em;margin-top:2px;}
-.slot-desc{font-size:12px;color:var(--mid);margin-top:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;}
-.slot-actions{display:flex;flex-direction:column;gap:4px;flex-shrink:0;}
-.sa-btn{background:var(--p2);border:1px solid var(--rim);color:var(--dim);font-family:var(--font-mono);font-size:9px;padding:3px 8px;border-radius:2px;letter-spacing:.1em;}
-.sa-btn:hover{border-color:var(--rim2);color:var(--text);}
-.sa-btn.edit:hover{border-color:var(--blue2);color:var(--blue2);}
-.sa-btn.del:hover{border-color:var(--red2);color:var(--red2);}
-
-.add-slot-btn{
-  width:100%;background:transparent;border:1px dashed var(--rim2);border-radius:4px;color:var(--dim);
-  font-family:var(--font-mono);font-size:11px;letter-spacing:.2em;padding:11px;
+.action-btn:last-child { border-right: none; }
+.action-btn:hover { background: var(--bg3); color: var(--gold); }
+.action-btn.active { background: var(--bg3); color: var(--gold2); }
+.action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.mode-bar {
+  display: none; border-bottom: 1px solid var(--border);
+  background: var(--bg);
 }
-.add-slot-btn:hover{border-color:var(--gold);color:var(--gold);}
+.mode-bar.open { display: flex; }
+.mode-row { display: flex; gap: 0; width: 100%; }
+.mode-btn { flex: 1; padding: 0.5rem 0.25rem; background: none; border: none; border-right: 1px solid var(--border); color: var(--text2); font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: all 0.15s; }
+.mode-btn:last-child { border-right: none; }
+.mode-btn:hover { color: var(--gold); background: var(--bg2); }
+.mode-btn.active { color: var(--gold2); background: rgba(200,152,58,0.08); }
+.back-btn { padding: 0.5rem 0.7rem; background: none; border: none; border-right: 1px solid var(--border); color: var(--text3); cursor: pointer; font-size: 0.9rem; }
+.back-btn:hover { color: var(--gold); }
+.text-row { display: none; padding: 0.5rem; gap: 0.5rem; align-items: flex-end; }
+.text-row.open { display: flex; }
+.mode-indicator { font-family: 'Cinzel', serif; font-size: 0.65rem; letter-spacing: 0.15em; color: var(--gold); text-transform: uppercase; padding: 0.25rem 0.4rem; border: 1px solid var(--border); border-radius: var(--radius); white-space: nowrap; align-self: flex-end; margin-bottom: 0.35rem; }
+.text-row textarea { flex: 1; min-height: 52px; max-height: 160px; resize: none; font-size: 0.95rem; padding: 0.5rem 0.65rem; }
+.send-btn { background: rgba(200,152,58,0.15); border: 1px solid var(--gold); color: var(--gold); padding: 0.5rem 0.9rem; cursor: pointer; border-radius: var(--radius); font-family: 'Cinzel', serif; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; transition: all 0.15s; white-space: nowrap; align-self: flex-end; margin-bottom: 0.35rem; }
+.send-btn:hover { background: rgba(200,152,58,0.25); }
+.send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.sugg-row { display: flex; gap: 0.4rem; padding: 0.4rem 0.5rem; overflow-x: auto; }
+.sugg-btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text2); padding: 0.3rem 0.7rem; font-family: 'Crimson Text', serif; font-size: 0.82rem; font-style: italic; cursor: pointer; border-radius: 20px; white-space: nowrap; transition: all 0.15s; }
+.sugg-btn:hover { border-color: var(--gold); color: var(--gold); background: rgba(200,152,58,0.08); }
 
-/* Char edit form inside settings */
-.char-form{background:var(--p1);border:1px solid var(--rim);border-radius:4px;padding:14px;display:flex;flex-direction:column;gap:10px;}
-.cf-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-.cf-group{display:flex;flex-direction:column;gap:5px;}
-.cf-label{font-family:var(--font-mono);font-size:9px;color:var(--dim);letter-spacing:.2em;}
-.cf-input{background:var(--p0);border:1px solid var(--rim);border-radius:3px;color:var(--text);font-family:var(--font-serif);font-size:15px;padding:7px 10px;}
-.cf-ta{background:var(--p0);border:1px solid var(--rim);border-radius:3px;color:var(--text);font-family:var(--font-serif);font-size:15px;padding:8px 10px;resize:none;height:80px;line-height:1.6;width:100%;}
-.cf-ta:focus,.cf-input:focus{border-color:var(--gold);}
-.cf-ta::placeholder,.cf-input::placeholder{color:var(--dim);font-style:italic;}
-.emoji-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
-.emoji-opt{font-size:22px;background:var(--p0);border:1px solid var(--rim);border-radius:3px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;}
-.emoji-opt:hover{border-color:var(--rim2);}
-.emoji-opt.sel{border-color:var(--gold);}
-.cf-save-btn{background:linear-gradient(135deg,#6a4a08,#c4923a);border-radius:3px;color:#160c00;font-family:var(--font-ui);font-weight:700;font-size:13px;letter-spacing:.2em;padding:10px;width:100%;}
-.cf-save-btn:hover{filter:brightness(1.1);}
-.cf-cancel-btn{background:var(--p2);border:1px solid var(--rim);border-radius:3px;color:var(--mid);font-family:var(--font-ui);font-size:12px;letter-spacing:.15em;padding:8px;width:100%;}
-.cf-cancel-btn:hover{border-color:var(--rim2);color:var(--text);}
+/* overlay */
+.overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 99; }
+.overlay.open { display: block; }
 
-/* World settings */
-.world-ta{width:100%;background:var(--p1);border:1px solid var(--rim);border-radius:3px;color:var(--text);font-family:var(--font-serif);font-size:16px;padding:10px 12px;resize:none;height:88px;line-height:1.65;}
-.world-ta:focus{border-color:var(--gold);}
-
-/* Pop notification */
-.pop{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--p1);border:1px solid var(--gold);border-radius:3px;padding:7px 18px;font-family:var(--font-mono);font-size:11px;color:var(--gold2);letter-spacing:.1em;box-shadow:0 4px 20px rgba(196,146,58,.2);animation:pIn .25s ease,pOut .3s ease 2.4s forwards;z-index:400;pointer-events:none;white-space:nowrap;max-width:92vw;text-align:center;}
-@keyframes pIn {from{opacity:0;transform:translateX(-50%) translateY(8px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
-@keyframes pOut{to{opacity:0;transform:translateX(-50%) translateY(-6px);}}
+@media (max-width: 600px) {
+  :root { --panel-w: 100vw; }
+  .side-panel { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 50; }
+  .stat-bar { width: 36px; }
+}
 </style>
 </head>
 <body>
 
-<!-- ════════════════ INTRO ════════════════ -->
-<div id="introScreen">
-  <div class="intro-wrap">
-    <div class="sigil">🕯️</div>
-    <div class="logo">CHRONICLE</div>
-    <div class="logo-sub">YOUR WORLD · YOUR RULES · AI NARRATED</div>
-
-    <div class="card">
-      <!-- Protagonist -->
-      <span class="lbl">▸ 主人公を語れ</span>
-      <textarea class="big-ta" id="heroDesc"
-        placeholder="銀髪のエルフ魔法使い。幼い頃に師匠を目の前で殺され、復讐のために旅している。炎魔法と古代語が得意だが、人間不信で口下手。右腕に呪いの刻印がある。"></textarea>
-      <div class="hint">職業・外見・性格・過去・得意なこと、なんでも書いていい。<br><span>書いた内容がそのままゲームに反映される。</span></div>
-
-      <div class="divider"></div>
-
-      <!-- World -->
-      <span class="lbl">▸ 世界・舞台を語れ</span>
-      <textarea class="sm-ta" id="worldDesc"
-        placeholder="魔法が衰退しつつある中世ファンタジーの帝国。皇帝は傀儡で、影の宗教組織が実権を握っている。主人公は帝都の外れの廃教会を拠点にしている。"></textarea>
-      <div class="hint" style="margin-top:6px">舞台・時代・世界観・始まりの場所…なんでも。<br><span>空白でもAIが世界を作ってくれる。</span></div>
-
-      <div class="div"></div>
-      <span class="lbl">▸ NovelAI APIキー</span>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input type="password" class="bta" id="apiKey" placeholder="pst-..." style="height:42px;font-size:14px;font-family:var(--font-mono)" oninput="checkBegin()">
-        <button onclick="toggleApiVis()" style="background:var(--p0);border:1px solid var(--rim);color:var(--dim);border-radius:3px;padding:0 12px;height:42px;font-size:13px;flex-shrink:0" id="apiVisBtn">👁</button>
-      </div>
-      <div class="hint" style="margin-top:6px"><span>キーはブラウザ内にのみ保存されます。外部には送信されません。</span><br><a href="https://novelai.net/account" target="_blank" style="color:var(--gold);text-decoration:none">novelai.net でキーを取得（アカウント設定 → 永続的APIトークン）※ pst-... で始まるキー</a></div>
-      <button class="begin-btn" id="beginBtn" onclick="beginGame()" disabled>ENTER THE CHRONICLE</button>
+<!-- START -->
+<div id="startScreen">
+  <div class="logo">Chronicle</div>
+  <div class="tagline">Your World · Your Rules · AI Narrated</div>
+  <div class="start-form">
+    <div>
+      <div class="field-label">▸ 主人公を語れ <span>— 外見・性格・過去・得意なこと、なんでも</span></div>
+      <textarea id="heroInput" rows="4" placeholder="例：銀髪のエルフ魔法使い、師匠を殺された復讐者。炎魔法が得意で、口数は少ない。左目に傷がある。"></textarea>
     </div>
+    <div>
+      <div class="field-label">▸ 世界・舞台を語れ <span>— 空白でもAIが世界を作る</span></div>
+      <textarea id="worldInput" rows="3" placeholder="例：近未来の廃墟都市。魔法と機械が混在する世界。腐敗した帝国が支配している。"></textarea>
+    </div>
+    <div>
+      <div class="field-label">▸ NovelAI APIキー</div>
+      <div class="api-row">
+        <input type="password" id="apiKeyInput" placeholder="pst-..." autocomplete="off">
+        <button class="eye-btn" onclick="toggleApiVis()" id="eyeBtn">👁</button>
+      </div>
+      <div class="api-note">キーはブラウザ内にのみ保存されます。<a href="https://novelai.net/account" target="_blank">novelai.net</a> → アカウント設定 → 永続的APIトークン</div>
+    </div>
+    <button class="enter-btn" id="enterBtn" onclick="startGame()" disabled>ENTER THE CHRONICLE</button>
   </div>
 </div>
 
-<!-- ════════════════ GAME ════════════════ -->
+<!-- GAME -->
 <div id="gameScreen">
   <div class="topbar">
-    <div class="tb-name" id="tbName">—</div>
-    <div class="vital">
-      <span style="font-size:12px">❤</span>
-      <div class="v-track"><div class="v-fill hp" id="vHpBar" style="width:100%"></div></div>
-      <span class="v-num" id="vHp">—</span>
+    <div class="stat">
+      <span class="stat-icon">❤</span>
+      <div class="stat-bar"><div class="stat-fill hp-fill" id="hpBar" style="width:100%"></div></div>
+      <span class="stat-val" id="hpVal">100/100</span>
     </div>
-    <div class="vital">
-      <span style="font-size:12px">✦</span>
-      <div class="v-track"><div class="v-fill mp" id="vMpBar" style="width:100%"></div></div>
-      <span class="v-num" id="vMp">—</span>
+    <div class="stat">
+      <span class="stat-icon">✦</span>
+      <div class="stat-bar"><div class="stat-fill mp-fill" id="mpBar" style="width:100%"></div></div>
+      <span class="stat-val" id="mpVal">50/50</span>
     </div>
-    <div class="pill lv"   id="pLv">Lv.1</div>
-    <div class="pill xp"   id="pXp">XP 0</div>
-    <div class="pill gold" id="pGold">🪙 0</div>
-    <div class="tb-r">
-      <button class="ib" id="btnChar" onclick="togglePanel('char')">📜 キャラ</button>
-      <button class="ib" id="btnMem"  onclick="togglePanel('mem')">🧠 記憶</button>
-      <button class="ib" onclick="openSettings()">⚙️ 設定</button>
+    <div class="stat">
+      <span class="stat-icon" style="font-family:'Cinzel',serif;font-size:0.72rem;color:var(--gold)">Lv.</span>
+      <span class="stat-val" id="lvVal">1</span>
+    </div>
+    <div class="stat">
+      <span class="stat-icon" style="font-size:0.8rem;color:var(--text3)">XP</span>
+      <div class="stat-bar"><div class="stat-fill xp-fill" id="xpBar" style="width:0%"></div></div>
+    </div>
+    <div class="stat">🪙 <span class="stat-val" id="goldVal">0</span></div>
+    <div class="spacer"></div>
+    <button class="icon-btn" onclick="togglePanel('charPanel')" title="キャラ">📜</button>
+    <button class="icon-btn" onclick="togglePanel('memPanel')" title="記憶">🧠</button>
+    <button class="icon-btn" onclick="toggleSettings()" title="設定">⚙️</button>
+  </div>
+
+  <div class="game-layout">
+    <div class="story-area" id="storyArea"></div>
+
+    <!-- CHAR PANEL -->
+    <div class="side-panel" id="charPanel">
+      <div class="panel-title">📜 キャラクターシート</div>
+      <div class="panel-section">
+        <h4>スキル・能力</h4>
+        <div id="skillsList"><span class="empty-note">まだ発見されていない</span></div>
+      </div>
+      <div class="panel-section">
+        <h4>特性</h4>
+        <div id="traitsList"><span class="empty-note">—</span></div>
+      </div>
+    </div>
+
+    <!-- MEM PANEL -->
+    <div class="side-panel" id="memPanel">
+      <div class="panel-title">🧠 記憶の書</div>
+      <div class="panel-section">
+        <h4>登場人物</h4>
+        <div id="npcList"><span class="empty-note">誰とも会っていない</span></div>
+      </div>
+      <div class="panel-section">
+        <h4>訪れた場所</h4>
+        <div id="placesList"><span class="empty-note">未探索</span></div>
+      </div>
+      <div class="panel-section">
+        <h4>所持アイテム</h4>
+        <div id="itemsList"><span class="empty-note">何も持っていない</span></div>
+      </div>
+      <div class="panel-section">
+        <h4>クエスト</h4>
+        <div id="questsList"><span class="empty-note">なし</span></div>
+      </div>
+      <div class="panel-section">
+        <h4>重要な出来事</h4>
+        <div id="eventsList"><span class="empty-note">何もない</span></div>
+      </div>
     </div>
   </div>
 
-  <div class="game-body">
-    <div class="story-col">
-      <div class="story-scroll" id="storyScroll"></div>
-      <div class="input-zone">
-        <div class="sug-row" id="sugRow"></div>
-
-        <!-- Action bar: TAKE A TURN / CONTINUE / RETRY -->
-        <div class="action-bar">
-          <button class="ab-btn primary" id="btnTake" onclick="toggleModeBar()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            TAKE A TURN
-          </button>
-          <button class="ab-btn" id="btnContinue" onclick="doContinue()" disabled>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-            CONTINUE
-          </button>
-          <button class="ab-btn" id="btnRetry" onclick="doRetry()" disabled>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-            RETRY
-          </button>
-        </div>
-
-        <!-- Mode bar: Do / Say / Story / See -->
-        <div class="mode-bar" id="modeBar">
-          <button class="mode-back" onclick="closeModeBar()">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
-          </button>
-          <button class="mode-btn active" id="mDo" onclick="pickMode('do')">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-            Do
-          </button>
-          <button class="mode-btn" id="mSay" onclick="pickMode('say')">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            Say
-          </button>
-          <button class="mode-btn" id="mStory" onclick="pickMode('story')">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-            Story
-          </button>
-          <button class="mode-btn" id="mSee" onclick="pickMode('see')">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            See
-          </button>
-        </div>
-
-        <!-- Write area -->
-        <div class="write-area" id="writeArea">
-          <div class="write-mode-label" id="writeModeLabel">▸ DO — 行動する</div>
-          <div class="write-inp-row">
-            <textarea class="act-inp" id="actInp"
-              placeholder="何をする？（Enterで送信、Shift+Enterで改行）"
-              onkeydown="onKey(event)" oninput="autoResize(this)"></textarea>
-            <button class="send-btn" id="sendBtn" onclick="send()">送る</button>
-          </div>
-        </div>
+  <!-- INPUT -->
+  <div class="input-area">
+    <div class="action-row">
+      <button class="action-btn" id="takeTurnBtn" onclick="toggleModeBar()">TAKE A TURN</button>
+      <button class="action-btn" id="continueBtn" onclick="doContinue()" disabled>CONTINUE</button>
+      <button class="action-btn" id="retryBtn" onclick="doRetry()" disabled>RETRY</button>
+    </div>
+    <div class="mode-bar" id="modeBar">
+      <div class="mode-row">
+        <button class="back-btn" onclick="closeModeBar()">←</button>
+        <button class="mode-btn" id="modeDoBtn" onclick="pickMode('Do')">Do</button>
+        <button class="mode-btn" id="modeSayBtn" onclick="pickMode('Say')">Say</button>
+        <button class="mode-btn" id="modeStoryBtn" onclick="pickMode('Story')">Story</button>
+        <button class="mode-btn" id="modeSeeBtn" onclick="pickMode('See')">See</button>
       </div>
     </div>
-
-    <!-- Char Panel -->
-    <div class="side-panel" id="charPanel">
-      <div class="pan-head">📜 キャラクターシート</div>
-      <div class="pan-body" id="charPanelBody"></div>
+    <div class="text-row" id="textRow">
+      <span class="mode-indicator" id="modeIndicator">DO</span>
+      <textarea id="actionInput" placeholder="行動を入力..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send();}"></textarea>
+      <button class="send-btn" id="sendBtn" onclick="send()">送る</button>
     </div>
-
-    <!-- Memory Panel -->
-    <div class="side-panel" id="memPanel">
-      <div class="pan-head">🧠 記憶の書</div>
-      <div class="pan-body">
-        <div class="psec"><div class="psec-t">スキル・能力</div><div id="mSk"><div class="me">まだ発見されていない</div></div></div>
-        <div class="psec"><div class="psec-t">登場人物</div><div id="mNPC"><div class="me">誰とも会っていない</div></div></div>
-        <div class="psec"><div class="psec-t">訪れた場所</div><div id="mPl"><div class="me">未探索</div></div></div>
-        <div class="psec"><div class="psec-t">所持アイテム</div><div id="mIt"><div class="me">何も持っていない</div></div></div>
-        <div class="psec"><div class="psec-t">クエスト</div><div id="mQu"><div class="me">なし</div></div></div>
-        <div class="psec"><div class="psec-t">重要な出来事</div><div id="mEv"><div class="me">何もない</div></div></div>
-      </div>
-    </div>
+    <div class="sugg-row" id="suggRow"></div>
   </div>
 </div>
 
-<!-- ════════════════ SETTINGS OVERLAY ════════════════ -->
-<div id="settingsOverlay" class="hidden" onclick="onOverlayClick(event)">
-  <div id="settingsPanel">
-    <div class="sp-head">
-      <div class="sp-title">⚙ 設定</div>
-      <button class="sp-close" onclick="closeSettings()">✕</button>
+<!-- SETTINGS -->
+<div class="overlay" id="overlay" onclick="toggleSettings()"></div>
+<div id="settingsPanel">
+  <div class="settings-header">
+    <span class="settings-title">⚙ 設定</span>
+    <button class="close-btn" onclick="toggleSettings()">✕</button>
+  </div>
+
+  <div class="settings-section">
+    <h4>▸ キャラクタースロット</h4>
+    <div id="slotList"></div>
+    <button class="add-slot-btn" onclick="addSlot()">＋ キャラクターを追加</button>
+    <div class="char-edit" id="charEditForm">
+      <div class="field-label" style="font-size:0.65rem">アバター</div>
+      <div class="avatar-row" id="avatarRow"></div>
+      <div class="field-label" style="font-size:0.65rem;margin-top:0.3rem">名前</div>
+      <input type="text" id="editName" placeholder="キャラクター名">
+      <div class="field-label" style="font-size:0.65rem">役割</div>
+      <input type="text" id="editRole" placeholder="仲間・敵・NPC など">
+      <div class="field-label" style="font-size:0.65rem">説明</div>
+      <textarea id="editDesc" rows="3" placeholder="外見・性格・関係性など"></textarea>
+      <div class="btn-row">
+        <button class="mini-btn primary" onclick="saveSlot()">保存</button>
+        <button class="mini-btn" onclick="cancelEdit()">キャンセル</button>
+      </div>
     </div>
-    <div class="sp-body">
+  </div>
 
-      <!-- Character Slots -->
-      <div>
-        <div class="sp-sec-title">▸ キャラクタースロット</div>
-        <div class="slot-list" id="slotList"></div>
-        <button class="add-slot-btn" style="margin-top:8px" onclick="openCharForm(null)">＋ キャラクターを追加</button>
-      </div>
-
-      <!-- Char Edit Form (hidden until needed) -->
-      <div id="charFormWrap" class="hidden">
-        <div class="sp-sec-title" id="charFormTitle">▸ キャラクター編集</div>
-        <div class="char-form">
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:2px">
-            <span class="cf-label" style="width:100%">アバター</span>
-            <div class="emoji-row" id="emojiRow"></div>
-          </div>
-          <div class="cf-row">
-            <div class="cf-group">
-              <span class="cf-label">名前</span>
-              <input class="cf-input" id="cfName" placeholder="キャラクター名" maxlength="20">
-            </div>
-            <div class="cf-group">
-              <span class="cf-label">役割</span>
-              <input class="cf-input" id="cfRole" placeholder="例：仲間、敵、商人" maxlength="20">
-            </div>
-          </div>
-          <div class="cf-group">
-            <span class="cf-label">キャラクター説明</span>
-            <textarea class="cf-ta" id="cfDesc" placeholder="外見・性格・過去・能力など自由に…"></textarea>
-          </div>
-          <button class="cf-save-btn" onclick="saveCharForm()">保存</button>
-          <button class="cf-cancel-btn" onclick="cancelCharForm()">キャンセル</button>
-        </div>
-      </div>
-
-      <!-- World settings -->
-      <!-- API Settings -->
-      <div>
-        <div class="sp-sec-title">▸ AI エンジン設定</div>
-        <div style="display:flex;flex-direction:column;gap:8px;">
-          <!-- Provider toggle -->
-          <div style="display:flex;gap:6px;">
-            <button id="btnProvAnthro" onclick="setProvider('anthropic')"
-              style="flex:1;padding:9px;border-radius:4px;font-family:var(--font-mono);font-size:10px;letter-spacing:.15em;cursor:pointer;border:1px solid;transition:all .2s;">
-              Claude
-            </button>
-            <button id="btnProvNovel" onclick="setProvider('novelai')"
-              style="flex:1;padding:9px;border-radius:4px;font-family:var(--font-mono);font-size:10px;letter-spacing:.15em;cursor:pointer;border:1px solid;transition:all .2s;">
-              NovelAI
-            </button>
-          </div>
-          <!-- Anthropic key -->
-          <div id="secAnthro" style="display:flex;flex-direction:column;gap:5px;">
-            <div style="font-family:var(--font-mono);font-size:9px;color:var(--dim);letter-spacing:.2em;">ANTHROPIC APIキー</div>
-            <div style="display:flex;gap:6px;">
-              <input type="password" id="stAnthroKey" placeholder="sk-ant-..."
-                style="flex:1;background:var(--p1);border:1px solid var(--rim);border-radius:3px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:7px 9px;outline:none;">
-              <button onclick="saveAnthroKey()" style="background:linear-gradient(135deg,#6a4a08,#c4923a);border:none;border-radius:3px;color:#160c00;font-family:var(--font-ui);font-weight:600;font-size:10px;padding:0 12px;cursor:pointer;">保存</button>
-            </div>
-          </div>
-          <!-- NovelAI key -->
-          <div id="secNovel" style="display:flex;flex-direction:column;gap:5px;">
-            <div style="font-family:var(--font-mono);font-size:9px;color:var(--dim);letter-spacing:.2em;">NOVELAI APIキー</div>
-            <div style="display:flex;gap:6px;">
-              <input type="password" id="stNovelKey" placeholder="pst-..."
-                style="flex:1;background:var(--p1);border:1px solid var(--rim);border-radius:3px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:7px 9px;outline:none;">
-              <button onclick="saveNovelKey()" style="background:linear-gradient(135deg,#6a4a08,#c4923a);border:none;border-radius:3px;color:#160c00;font-family:var(--font-ui);font-weight:600;font-size:10px;padding:0 12px;cursor:pointer;">保存</button>
-            </div>
-          </div>
-          <div id="apiStatusMsg" style="font-family:var(--font-mono);font-size:10px;color:var(--gold);letter-spacing:.1em;padding:2px 0;"></div>
-        </div>
-      </div>
-
-      <div>
-        <div class="sp-sec-title">▸ 世界設定</div>
-        <textarea class="world-ta" id="worldEditTa"></textarea>
-        <button style="margin-top:8px;background:var(--p2);border:1px solid var(--rim);color:var(--mid);font-family:var(--font-mono);font-size:10px;padding:7px 14px;border-radius:3px;width:100%;letter-spacing:.15em;" onclick="saveWorld()">世界設定を更新</button>
-      </div>
-
-      <div>
-        <div class="sp-sec-title">▸ APIキー</div>
-        <div style="display:flex;gap:6px">
-          <input type="password" id="settingsApiKey" placeholder="sk-ant-..."
-            style="flex:1;background:var(--p1);border:1px solid var(--rim);border-radius:3px;color:var(--text);font-family:var(--font-mono);font-size:12px;padding:7px 10px;outline:none;">
-          <button onclick="saveApiKey()" style="background:linear-gradient(135deg,#6a4a08,#c4923a);border:none;border-radius:3px;color:#160c00;font-family:var(--font-ui);font-weight:600;font-size:11px;padding:0 14px;letter-spacing:.1em;">保存</button>
-        </div>
-        <div style="font-size:11px;color:var(--dim);font-style:italic;margin-top:6px">変更はすぐに反映されます。ブラウザのlocalStorageに保存されます。</div>
-      </div>
-
+  <div class="settings-section">
+    <h4>▸ APIキー設定</h4>
+    <div class="api-row">
+      <input type="password" id="settingsApiKey" placeholder="pst-...">
+      <button class="eye-btn" onclick="toggleSettingsApiVis()" id="settingsEye">👁</button>
     </div>
+    <button class="save-btn" onclick="saveApiKey()" style="margin-top:0.5rem">保存</button>
+  </div>
+
+  <div class="settings-section">
+    <h4>▸ 世界設定（更新）</h4>
+    <textarea id="settingsWorld" rows="3" placeholder="世界設定を変更..."></textarea>
+    <button class="save-btn" onclick="saveWorld()" style="margin-top:0.5rem">更新</button>
   </div>
 </div>
 
 <script>
-// ── API PROVIDER (must be defined first) ──
-let currentProvider = localStorage.getItem('chronicle_provider') || 'novelai';
+// ─── STATE ───────────────────────────────────────
+const PROXY = 'https://novel-proxy.sansan2103.workers.dev';
+const MODEL = 'kayra-v1';
+const AVATARS = ['🧙','⚔️','🏹','🗡️','🛡️','🔮','💀','👁️','🐉','🧝','👸','🤺','🦊','🐺','👤','🌑'];
 
-function getKey() {
-  if (currentProvider === 'novelai') {
-    return localStorage.getItem('chronicle_novel_key') || localStorage.getItem('chronicle_api_key') || document.getElementById('apiKey')?.value.trim() || '';
-  }
-  return localStorage.getItem('chronicle_api_key') || document.getElementById('apiKey')?.value.trim() || '';
+let state = {
+  hp: 100, hpMax: 100, mp: 50, mpMax: 50,
+  lv: 1, xp: 0, xpNext: 100, gold: 0,
+  skills: [], traits: [],
+  npcs: [], places: [], items: [], quests: [], events: [],
+  chars: [],
+  hero: '', world: '', apiKey: '',
+  history: [],     // {role, content} for context
+  lastAI: null,    // last AI message element for retry
+  lastUserMsg: '', // for retry
+  mode: 'Do',
+  busy: false,
+  gameStarted: false,
+};
+
+// ─── LOAD from localStorage ───────────────────────
+function loadStorage() {
+  const k = localStorage.getItem('chronicle_key') || '';
+  const ch = localStorage.getItem('chronicle_chars');
+  state.apiKey = k;
+  if (ch) try { state.chars = JSON.parse(ch); } catch(e) {}
 }
 
-function setProvider(p) {
-  currentProvider = p;
-  localStorage.setItem('chronicle_provider', p);
-  updateProviderUI();
-  showPop(p === 'novelai' ? '🎭 NovelAI に切り替えました' : '⚡ Claude に切り替えました');
-}
+// ─── API CALL (NovelAI) ───────────────────────────
+async function callNovelAI(prompt) {
+  const key = state.apiKey;
+  if (!key) throw new Error('APIキーが設定されていません');
 
-function updateProviderUI() {
-  const ba = document.getElementById('btnProvAnthro');
-  const bn = document.getElementById('btnProvNovel');
-  const sa = document.getElementById('secAnthro');
-  const sn = document.getElementById('secNovel');
-  if (!ba) return;
-  if (currentProvider === 'anthropic') {
-    ba.style.background = 'rgba(196,146,58,.15)'; ba.style.borderColor = 'var(--gold)'; ba.style.color = 'var(--gold2)';
-    bn.style.background = 'var(--p2)'; bn.style.borderColor = 'var(--rim)'; bn.style.color = 'var(--dim)';
-    if(sa) sa.style.display='flex'; if(sn) sn.style.display='none';
-  } else {
-    bn.style.background = 'rgba(196,146,58,.15)'; bn.style.borderColor = 'var(--gold)'; bn.style.color = 'var(--gold2)';
-    ba.style.background = 'var(--p2)'; ba.style.borderColor = 'var(--rim)'; ba.style.color = 'var(--dim)';
-    if(sn) sn.style.display='flex'; if(sa) sa.style.display='none';
-  }
-}
+  // Build parameters
+  const params = {
+    max_new_tokens: 400,
+    temperature: 1.05,
+    top_p: 0.95,
+    top_k: 85,
+    repetition_penalty: 1.05,
+    use_string: true,
+  };
 
-function saveAnthroKey() {
-  const k = document.getElementById('stAnthroKey').value.trim();
-  if (k) { localStorage.setItem('chronicle_api_key', k); showPop('Anthropic APIキーを保存しました'); }
-}
+  const body = {
+    input: prompt,
+    model: MODEL,
+    parameters: params,
+  };
 
-function saveNovelKey() {
-  const k = document.getElementById('stNovelKey').value.trim();
-  if (k) { localStorage.setItem('chronicle_novel_key', k); showPop('NovelAI APIキーを保存しました'); }
-}
-
-// ════════════════════
-//  INTRO
-// ════════════════════
-document.getElementById('heroDesc').addEventListener('input', checkBegin);
-function checkBegin() {
-  const hasHero = document.getElementById('heroDesc').value.trim().length >= 4;
-  const keyVal  = document.getElementById('apiKey').value.trim();
-  const hasKey  = keyVal.startsWith('sk-') || keyVal.startsWith('nai-') || keyVal.length > 10;
-  document.getElementById('beginBtn').disabled = !(hasHero && hasKey);
-}
-// Load saved key on startup
-(function(){
-  const saved = localStorage.getItem('chronicle_api_key');
-  if (saved) {
-    const inp = document.getElementById('apiKey');
-    if (inp) { inp.value = saved; checkBegin(); }
-  }
-})();
-
-function toggleApiVis() {
-  const inp = document.getElementById('apiKey');
-  const btn = document.getElementById('apiVisBtn');
-  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
-  else { inp.type = 'password'; btn.textContent = '👁'; }
-}
-
-// ════════════════════
-//  STATE
-// ════════════════════
-const AVATARS = ['🧙','⚔️','🗡️','🏹','🛡️','✨','🔮','🌀','🎵','🌿','🔥','💀','👑','🐉','🌊','🌑'];
-
-let heroDesc  = '';
-let worldDesc = '';
-let charName  = '冒険者';
-
-// Character slots: { id, avatar, name, role, desc, isHero, skills:[] }
-let charSlots = [];
-let editingSlotId = null;
-let selectedAvatar = AVATARS[0];
-
-// Game stats
-let gs = { hp:100, maxHp:100, mp:60, maxMp:60, lv:1, xp:0, xpNext:100, gold:0 };
-
-// Memory
-let mem = { skills:[], npcs:[], places:[], items:[], quests:[], events:[] };
-
-let history = [];
-let busy = false;
-let openPanelId = null;
-
-// ════════════════════
-//  BEGIN
-// ════════════════════
-async function beginGame() {
-  heroDesc  = document.getElementById('heroDesc').value.trim();
-  worldDesc = document.getElementById('worldDesc').value.trim();
-  // persist key based on provider
-  const k = document.getElementById('apiKey').value.trim();
-  if (k) {
-    if (k.startsWith('pst-') || k.startsWith('nai-')) {
-      localStorage.setItem('chronicle_novel_key', k);
-      currentProvider = 'novelai';
-      localStorage.setItem('chronicle_provider', 'novelai');
-    } else {
-      localStorage.setItem('chronicle_api_key', k);
-      currentProvider = 'anthropic';
-      localStorage.setItem('chronicle_provider', 'anthropic');
-    }
-  }
-
-  document.getElementById('introScreen').style.display = 'none';
-  const gs2 = document.getElementById('gameScreen');
-  gs2.style.display = 'flex'; gs2.style.flexDirection = 'column';
-
-  charName = await extractName(heroDesc) || '冒険者';
-
-  // Create hero slot
-  charSlots = [{ id: uid(), avatar:'🧙', name: charName, role:'主人公', desc: heroDesc, isHero: true, skills:[] }];
-  renderSlotList();
-
-  document.getElementById('tbName').textContent = charName;
-  document.getElementById('worldEditTa').value = worldDesc;
-  updateHUD();
-  renderCharPanel();
-
-  const intro = await genIntro();
-  addMsg('sys-note', '── 物語が始まる ──');
-  addMsg('narrate', intro);
-
-  history = [
-    { role:'user', content: buildSys() },
-    { role:'assistant', content: intro }
-  ];
-
-  mem.places.push({ name:'出発地点', desc:'物語の幕開け' });
-  renderMem();
-  await genSuggestions();
-  enablePostGame();
-}
-
-// Unified API call - routes to NovelAI or Anthropic based on currentProvider
-async function apiCall(messages, system, maxTokens) {
-  if (currentProvider === 'novelai') {
-    return await callNovelAI(messages, system);
-  }
-  const body = { model:'claude-sonnet-4-6', max_tokens: maxTokens||500, messages };
-  if (system) body.system = system;
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method:'POST',
-    headers:{'Content-Type':'application/json','x-api-key':getKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body: JSON.stringify(body)
-  });
-  const d = JSON.parse(await res.text());
-  if(d.error) throw new Error(d.error.message);
-  return d.content.map(x=>x.text||'').join('');
-}
-
-async function genIntro() {
-  try {
-    const prompt = `\nあなたはインタラクティブRPGのナレーターです。\n主人公：${heroDesc}\n世界設定：${worldDesc || '中世ファンタジー'}\n物語の冒頭シーンを200文字程度で書いてください。臨場感があり続きが気になる場面で終わること。[UPDATE:...]は含めないこと。`;
-    return await apiCall([{role:'user',content:prompt}], null, 400);
-  } catch(e){ console.error('genIntro:', e); return `${charName}の旅が始まった。`; }
-}
-
-
-async function extractName(desc) {
-  try {
-    const t = await apiCall([{role:'user',content:`次のキャラクター説明から名前だけ抽出してください。名前がなければ「冒険者」と答えてください。説明：「${desc}」\n名前のみ：`}], null, 20);
-    return t.trim().replace(/[「」]/g,'').split(/[\s、。]/)[0].slice(0,16) || null;
-  } catch(e){ return null; }
-}
-
-
-async function callNovelAI(msgs, sys) {
-  const key = localStorage.getItem('chronicle_novel_key') || '';
-  if (!key) throw new Error('NovelAI APIキーが設定されていません。設定から入力してください。');
-
-  // Build prompt text from messages
-  const context = sys ? sys + '\n\n' : '';
-  const conversation = msgs.map(m => m.content).join('\n');
-  const prompt = context + conversation;
-
-  const r = await fetch('https://novel-proxy.sansan2103.workers.dev', {
+  const res = await fetch(PROXY, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${key}`
+      'Authorization': 'Bearer ' + key,
     },
-    body: JSON.stringify({
-      model: 'kayra-v1',
-      input: prompt,
-      parameters: {
-        max_new_tokens: 300,
-        temperature: 1.15,
-        top_p: 0.95,
-        top_k: 0,
-        repetition_penalty: 1.1,
-        repetition_penalty_range: 2048,
-        use_string: true
-      }
-    })
+    body: JSON.stringify(body),
   });
 
-  if (!r.ok) {
-    const t = await r.text();
-    throw new Error(`NovelAI error ${r.status}: ${t.slice(0,150)}`);
-  }
-  const d = await r.json();
-  return d.output || '';
-}
-
-async function callAI(extraUserMsg) {
-  // history[0] is the fake system msg we stored; real system goes in `system` param
-  // history.slice(1) gives the actual conversation turns
-  let msgs = history.length > 1 ? history.slice(1) : [];
-
-  if (extraUserMsg) {
-    msgs = [...msgs, { role:'user', content: extraUserMsg }];
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}: ${errText.slice(0, 200)}`);
   }
 
-  // API requires at least one message
-  if (msgs.length === 0) {
-    msgs = [{ role:'user', content: '物語を始めてください。' }];
-  }
-
-  // Route to NovelAI if selected
-  if (currentProvider === 'novelai') {
-    return await callNovelAI(msgs, buildSys());
-  }
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method:'POST', headers:{'Content-Type':'application/json','x-api-key':getKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body: JSON.stringify({
-      model:'claude-sonnet-4-6', max_tokens:1000,
-      system: buildSys(),
-      messages: msgs
-    })
-  });
   const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
-  return data.content.map(c=>c.text||'').join('');
+
+  // NovelAI returns { output: "text" }
+  if (data.output !== undefined) return data.output.trim();
+
+  // fallback
+  if (data.text) return data.text.trim();
+  if (typeof data === 'string') return data.trim();
+
+  console.error('Unexpected NovelAI response:', data);
+  throw new Error('予期しないレスポンス形式: ' + JSON.stringify(data).slice(0, 200));
 }
 
-function handleStoryResponse(full, userMsg) {
-  const m = full.match(/\[UPDATE:([\s\S]*?)\]/);
-  const story = full.replace(/\[UPDATE:[\s\S]*?\]/g,'').trim();
-  if (m) { try { applyUpdate(JSON.parse(m[1])); } catch(e){} }
-  addMsg('narrate', story);
-  if (userMsg) history.push({ role:'user', content: userMsg });
-  history.push({ role:'assistant', content: full });
-  if (history.length > 48) history = [history[0], ...history.slice(-44)];
-}
+// ─── BUILD PROMPT ─────────────────────────────────
+function buildPrompt(userAction) {
+  const charDesc = state.chars.length > 0
+    ? state.chars.map(c => `[${c.role}: ${c.name}] ${c.desc}`).join('\n') : '';
 
-async function send() {
-  const el = document.getElementById('actInp');
-  const raw = el.value.trim();
-  if (!raw || busy) return;
-  el.value = ''; autoResize(el);
-  // close mode bar and write area
-  document.getElementById('modeBar').classList.remove('open');
-  document.getElementById('writeArea').classList.remove('open');
-  document.getElementById('btnTake').classList.remove('active');
+  const memSummary = [
+    state.npcs.length ? 'NPC: ' + state.npcs.map(n => n.name).join(', ') : '',
+    state.places.length ? '場所: ' + state.places.join(', ') : '',
+    state.items.length ? 'アイテム: ' + state.items.join(', ') : '',
+    state.quests.length ? 'クエスト: ' + state.quests.join(', ') : '',
+  ].filter(Boolean).join(' | ');
 
-  // Prefix action with mode for AI context
-  const modePrefixes = { do:'（行動）', say:'（発言）「', story:'（物語）', see:'（観察）' };
-  const modeSuffix   = { say:'」' };
-  const action = (modePrefixes[currentMode] || '') + raw + (modeSuffix[currentMode] || '');
-  const displayAction = currentMode === 'say' ? `「${raw}」` : raw;
+  let systemInstr = `あなたは没入型インタラクティブRPGの語り手です。
+以下のルールに従ってください：
+- 常に日本語で応答する
+- プレイヤーの行動に対し、生き生きとした物語の続きを200〜400文字程度で書く
+- 残虐描写、暴力、ダークな内容も遠慮なく描写する
+- 選択肢は提示しない。物語として続きを書く
+- プレイヤーキャラクターの視点で、世界を豊かに描写する
+- 新しいスキル・NPCの出会い・場所・アイテムが発生したらJSONで記録する
+- 応答の最後に、もし発見があれば以下のJSON形式で追記する（なければ省略）:
+  |||{"skills":[],"npcs":[{"name":"","role":"","desc":""}],"places":[],"items":[],"quests":[],"events":[]}|||
 
-  setAllBusy(true);
-  addMsg('player-act', displayAction);
-  addThinking();
-  try {
-    const full = await callAI(action);
-    removeThinking();
-    handleStoryResponse(full, action);
-    await genSuggestions();
-  } catch(e) {
-    removeThinking();
-    console.error('send error:', e);
-    addMsg('sys-note', 'エラーが発生しました。もう一度お試しください。');
-  }
-  setAllBusy(false);
-  enablePostGame();
-}
+主人公設定: ${state.hero}
+世界設定: ${state.world || 'AIが自由に設定'}
+${charDesc ? '登場人物:\n' + charDesc : ''}
+${memSummary ? '現在の記憶: ' + memSummary : ''}
+${state.skills.length ? 'スキル: ' + state.skills.join(', ') : ''}`;
 
-async function doContinue() {
-  if (busy) return;
-  setAllBusy(true);
-  addThinking();
-  try {
-    const full = await callAI('[CONTINUE: 物語を自然に進めてください。プレイヤーの行動なしで次の展開を生成。]');
-    removeThinking();
-    handleStoryResponse(full, null);
-    await genSuggestions();
-  } catch(e) {
-    removeThinking();
-    addMsg('sys-note', 'エラーが発生しました。');
-  }
-  setAllBusy(false);
-  enablePostGame();
-}
-
-async function doRetry() {
-  if (busy) return;
-  // Remove last AI narrate message from DOM
-  const sc = document.getElementById('storyScroll');
-  const narMsgs = sc.querySelectorAll('.msg.narrate');
-  if (narMsgs.length > 0) narMsgs[narMsgs.length-1].remove();
-  // Remove last assistant turn from history (keep at least the intro)
-  if (history.length > 2 && history[history.length-1].role === 'assistant') {
-    history.pop();
-  }
-  setAllBusy(true);
-  addThinking();
-  try {
-    const full = await callAI(null);
-    removeThinking();
-    handleStoryResponse(full, null);
-    await genSuggestions();
-  } catch(e) {
-    removeThinking();
-    addMsg('sys-note', 'エラーが発生しました。');
-  }
-  setAllBusy(false);
-  enablePostGame();
-}
-
-function onKey(e) { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); send(); } }
-function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,110)+'px'; }
-
-// ════════════════════
-//  APPLY UPDATE
-// ════════════════════
-function applyUpdate(u) {
-  const notes = [];
-  const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
-
-  if (u.hp) { gs.hp = clamp(gs.hp+u.hp, 0, gs.maxHp); notes.push(u.hp<0 ? `❤ HP ${u.hp}` : `❤ +${u.hp} 回復`); }
-  if (u.mp) { gs.mp = clamp(gs.mp+u.mp, 0, gs.maxMp); if (u.mp<0) notes.push(`✦ MP ${u.mp}`); }
-  if (u.xp && u.xp>0) { gs.xp+=u.xp; notes.push(`⭐ XP +${u.xp}`); checkLvUp(); }
-  if (u.gold) { gs.gold=Math.max(0,gs.gold+u.gold); if (u.gold>0) notes.push(`🪙 +${u.gold}G`); }
-
-  if (u.skill?.name && !mem.skills.find(s=>s.name===u.skill.name)) {
-    mem.skills.push(u.skill); notes.push(`⚡ ${u.skill.name}`);
-    addMsg('disc', `✦ スキル解放：${u.skill.name} ——「${u.skill.desc}」`);
-    // also update hero slot
-    const hero = charSlots.find(s=>s.isHero);
-    if (hero) { hero.skills = hero.skills || []; hero.skills.push(u.skill.name); }
-    renderCharPanel();
-  }
-  if (u.npc?.name && !mem.npcs.find(n=>n.name===u.npc.name)) {
-    mem.npcs.push(u.npc); notes.push(`👤 ${u.npc.name}`);
-  }
-  if (u.place?.name && !mem.places.find(p=>p.name===u.place.name)) {
-    mem.places.push(u.place); notes.push(`📍 ${u.place.name}`);
-  }
-  if (u.item) { mem.items.push(u.item); notes.push(`🎒 ${u.item}`); addMsg('disc', `✦ 入手：${u.item}`); }
-  if (u.event) mem.events.push({ text: u.event });
-  if (u.quest?.title && !mem.quests.find(q=>q.title===u.quest.title)) {
-    mem.quests.push(u.quest); notes.push(`📋 ${u.quest.title}`);
+  // Build context from history (last 12 turns)
+  const recentHistory = state.history.slice(-12);
+  let contextLines = '';
+  for (const h of recentHistory) {
+    if (h.role === 'user') contextLines += `\n[プレイヤー]: ${h.content}`;
+    else contextLines += `\n[ナレーター]: ${h.content}`;
   }
 
-  updateHUD(); renderMem();
-  if (notes.length) showPop(notes.join('  '));
-
-  if (gs.hp<=0) {
-    setTimeout(()=>{
-      addMsg('sys-note','── あなたは倒れた ──');
-      addMsg('narrate',`${charName}の意識が闇に沈む。しかしこれは終わりではない——伝説は、また別の形で語り継がれる。`);
-      document.getElementById('sendBtn').disabled=true;
-    }, 600);
-  }
+  const fullPrompt = systemInstr + '\n\n' + contextLines + (userAction ? `\n[プレイヤー]: ${userAction}\n[ナレーター]:` : `\n[ナレーター]:`);
+  return fullPrompt;
 }
 
-function checkLvUp() {
-  while (gs.xp >= gs.xpNext) {
-    gs.xp -= gs.xpNext; gs.lv++;
-    gs.xpNext = Math.floor(gs.xpNext*1.6);
-    gs.maxHp+=15; gs.hp=Math.min(gs.maxHp,gs.hp+15); gs.maxMp+=8;
-    showPop(`🌟 Lv.${gs.lv} にレベルアップ！`);
-    addMsg('sys-note',`── Lv.${gs.lv} にレベルアップ ──`);
-  }
-}
+// ─── PARSE AI RESPONSE ────────────────────────────
+function parseResponse(text) {
+  // Extract JSON discoveries
+  const jsonMatch = text.match(/\|\|\|([\s\S]*?)\|\|\|/);
+  let discoveries = null;
+  let clean = text;
 
-function updateHUD() {
-  document.getElementById('vHp').textContent=`${gs.hp}/${gs.maxHp}`;
-  document.getElementById('vMp').textContent=`${gs.mp}/${gs.maxMp}`;
-  document.getElementById('vHpBar').style.width=`${gs.hp/gs.maxHp*100}%`;
-  document.getElementById('vMpBar').style.width=`${gs.mp/gs.maxMp*100}%`;
-  document.getElementById('pLv').textContent=`Lv.${gs.lv}`;
-  document.getElementById('pXp').textContent=`XP ${gs.xp}`;
-  document.getElementById('pGold').textContent=`🪙 ${gs.gold}`;
-}
-
-// ════════════════════
-//  SUGGESTIONS
-// ════════════════════
-async function genSuggestions() {
-  try {
-    const baseMsgs = history.length > 1 ? history.slice(1) : [];
-    const t = await apiCall(
-      [...baseMsgs, {role:'user',content:`${charName}が今の状況で取れる行動4つを短い動詞句で答えてください。JSON配列のみ。`}],
-      buildSys(), 150
-    );
-    const acts = JSON.parse(t.replace(/```json|```/g,'').trim());
-    if(Array.isArray(acts)) renderSuggestions(acts.slice(0,4));
-  } catch(e){ renderSuggestions(['周囲を調べる','前進する','警戒する','引き返す']); }
-}
-
-
-// ════════════════════
-//  SIDE PANELS
-// ════════════════════
-function togglePanel(which) {
-  const cp = document.getElementById('charPanel');
-  const mp = document.getElementById('memPanel');
-  const bc = document.getElementById('btnChar');
-  const bm = document.getElementById('btnMem');
-  if (which === 'char') {
-    const open = cp.classList.contains('open');
-    cp.classList.toggle('open'); mp.classList.remove('open');
-    bc.classList.toggle('on',!open); bm.classList.remove('on');
-    openPanelId = open ? null : 'char';
-  } else {
-    const open = mp.classList.contains('open');
-    mp.classList.toggle('open'); cp.classList.remove('open');
-    bm.classList.toggle('on',!open); bc.classList.remove('on');
-    openPanelId = open ? null : 'mem';
-  }
-}
-
-function renderCharPanel() {
-  const body = document.getElementById('charPanelBody');
-  const hero = charSlots.find(s=>s.isHero);
-  if (!hero) return;
-  const skillsHtml = hero.skills?.length
-    ? hero.skills.map(s=>`<div class="mc"><div class="mb sk">SKILL</div><div class="mm">${s}</div></div>`).join('')
-    : '<div class="me">まだ発見されていない</div>';
-
-  body.innerHTML=`
-    <div class="psec">
-      <div class="psec-t">キャラクター描写</div>
-      <div class="char-bio">${hero.desc}</div>
-    </div>
-    <div class="psec">
-      <div class="psec-t">発見済みスキル</div>
-      ${skillsHtml}
-    </div>
-    <div class="psec">
-      <div class="psec-t">登場キャラクター（${charSlots.filter(s=>!s.isHero).length}人）</div>
-      ${charSlots.filter(s=>!s.isHero).map(c=>`
-        <div class="mc">
-          <div style="display:flex;gap:7px;align-items:center">
-            <span style="font-size:20px">${c.avatar}</span>
-            <div>
-              <div class="mb npc">${c.role}</div>
-              <div class="mm" style="font-weight:600">${c.name}</div>
-              <div class="ms">${c.desc.slice(0,60)}${c.desc.length>60?'…':''}</div>
-            </div>
-          </div>
-        </div>`).join('') || '<div class="me">なし</div>'}
-    </div>
-  `;
-}
-
-function renderMem() {
-  const r = (id,arr,fn,empty)=>{
-    const el=document.getElementById(id); if(!el)return;
-    el.innerHTML=arr.length ? arr.slice().reverse().slice(0,8).map(x=>`<div class="mc">${fn(x)}</div>`).join('') : `<div class="me">${empty}</div>`;
-  };
-  r('mSk', mem.skills, s=>`<div class="mb sk">SKILL</div><div class="mm">${s.name}</div><div class="ms">${s.desc}</div>`, 'まだ発見されていない');
-  r('mNPC',mem.npcs,   n=>`<div class="mb npc">NPC</div><div class="mm">${n.name}</div><div class="ms">${n.rel} — ${n.desc}</div>`, '誰とも会っていない');
-  r('mPl', mem.places, p=>`<div class="mb pl">場所</div><div class="mm">${p.name}</div><div class="ms">${p.desc}</div>`, '未探索');
-  r('mIt', mem.items.map(i=>({n:i})), i=>`<div class="mb it">アイテム</div><div class="mm">${i.n}</div>`, '何も持っていない');
-  r('mQu', mem.quests, q=>`<div class="mb qu">クエスト</div><div class="mm">${q.title}</div><div class="ms">${q.desc}</div>`, 'なし');
-  r('mEv', mem.events, e=>`<div class="mb ev">出来事</div><div class="mm">${e.text}</div>`, '何もない');
-}
-
-// ════════════════════
-//  SETTINGS
-// ════════════════════
-function openSettings() {
-  document.getElementById('settingsOverlay').classList.remove('hidden');
-  document.getElementById('worldEditTa').value = worldDesc;
-  // Load keys
-  const ak = localStorage.getItem('chronicle_api_key') || '';
-  const nk = localStorage.getItem('chronicle_novel_key') || '';
-  const ska = document.getElementById('stAnthroKey');
-  const skn = document.getElementById('stNovelKey');
-  if (ska) ska.value = ak;
-  if (skn) skn.value = nk;
-  updateProviderUI();
-  renderSlotList();
-}
-function closeSettings() {
-  document.getElementById('settingsOverlay').classList.add('hidden');
-  cancelCharForm();
-}
-function onOverlayClick(e) { if (e.target === document.getElementById('settingsOverlay')) closeSettings(); }
-
-// Slot list
-function renderSlotList() {
-  const list = document.getElementById('slotList');
-  list.innerHTML = charSlots.map(s => `
-    <div class="char-slot ${s.isHero?'protagonist':''}">
-      <div class="slot-avatar">${s.avatar}</div>
-      <div class="slot-info">
-        <div class="slot-name">${s.name}${s.isHero?' ⭐':''}</div>
-        <div class="slot-role">${s.role}</div>
-        <div class="slot-desc">${s.desc}</div>
-      </div>
-      <div class="slot-actions">
-        <button class="sa-btn edit" onclick="openCharForm('${s.id}')">編集</button>
-        ${!s.isHero ? `<button class="sa-btn del" onclick="deleteSlot('${s.id}')">削除</button>` : ''}
-      </div>
-    </div>
-  `).join('');
-}
-
-function deleteSlot(id) {
-  charSlots = charSlots.filter(s=>s.id!==id);
-  renderSlotList();
-  renderCharPanel();
-  showPop('キャラクターを削除しました');
-}
-
-// Char form
-function openCharForm(id) {
-  editingSlotId = id;
-  const slot = id ? charSlots.find(s=>s.id===id) : null;
-  selectedAvatar = slot?.avatar || AVATARS[0];
-
-  document.getElementById('charFormTitle').textContent = id ? '▸ キャラクター編集' : '▸ 新しいキャラクター';
-  document.getElementById('cfName').value  = slot?.name  || '';
-  document.getElementById('cfRole').value  = slot?.role  || '';
-  document.getElementById('cfDesc').value  = slot?.desc  || '';
-
-  // Render emoji picker
-  const emojiRow = document.getElementById('emojiRow');
-  emojiRow.innerHTML = AVATARS.map(e=>`
-    <button class="emoji-opt ${e===selectedAvatar?'sel':''}" onclick="pickEmoji(this,'${e}')">${e}</button>
-  `).join('');
-
-  document.getElementById('charFormWrap').classList.remove('hidden');
-  document.getElementById('charFormWrap').scrollIntoView({ behavior:'smooth', block:'nearest' });
-}
-
-function pickEmoji(el, emoji) {
-  selectedAvatar = emoji;
-  document.querySelectorAll('.emoji-opt').forEach(b=>b.classList.remove('sel'));
-  el.classList.add('sel');
-}
-
-function saveCharForm() {
-  const name = document.getElementById('cfName').value.trim();
-  const role = document.getElementById('cfRole').value.trim();
-  const desc = document.getElementById('cfDesc').value.trim();
-  if (!name || !desc) { alert('名前と説明を入力してください'); return; }
-
-  if (editingSlotId) {
-    const slot = charSlots.find(s=>s.id===editingSlotId);
-    if (slot) { slot.avatar=selectedAvatar; slot.name=name; slot.role=role||slot.role; slot.desc=desc; }
-    // update hero name in HUD if editing hero
-    if (slot?.isHero) { charName=name; document.getElementById('tbName').textContent=name; }
-  } else {
-    charSlots.push({ id:uid(), avatar:selectedAvatar, name, role:role||'登場人物', desc, isHero:false, skills:[] });
+  if (jsonMatch) {
+    clean = text.replace(/\|\|\|[\s\S]*?\|\|\|/, '').trim();
+    try {
+      discoveries = JSON.parse(jsonMatch[1]);
+    } catch(e) { /* ignore */ }
   }
 
-  renderSlotList();
-  renderCharPanel();
-  cancelCharForm();
-  showPop(editingSlotId ? `${name} を更新しました` : `${name} を追加しました`);
-}
-
-function cancelCharForm() {
-  document.getElementById('charFormWrap').classList.add('hidden');
-  editingSlotId = null;
-}
-
-function saveWorld() {
-  worldDesc = document.getElementById('worldEditTa').value.trim();
-  showPop('世界設定を更新しました');
-}
-function saveApiKey() {
-  const k = document.getElementById('settingsApiKey').value.trim();
-  if (k) {
-    localStorage.setItem('chronicle_api_key', k);
-    showPop('APIキーを保存しました');
+  // Apply discoveries
+  if (discoveries) {
+    if (discoveries.skills) discoveries.skills.forEach(s => { if (s && !state.skills.includes(s)) state.skills.push(s); });
+    if (discoveries.npcs) discoveries.npcs.forEach(n => { if (n.name && !state.npcs.find(x => x.name === n.name)) state.npcs.push(n); });
+    if (discoveries.places) discoveries.places.forEach(p => { if (p && !state.places.includes(p)) state.places.push(p); });
+    if (discoveries.items) discoveries.items.forEach(i => { if (i && !state.items.includes(i)) state.items.push(i); });
+    if (discoveries.quests) discoveries.quests.forEach(q => { if (q && !state.quests.includes(q)) state.quests.push(q); });
+    if (discoveries.events) discoveries.events.forEach(e => { if (e && !state.events.includes(e)) state.events.push(e); });
+    renderMemory();
+    renderChar();
   }
+
+  // Stats change heuristics
+  if (/戦闘|攻撃|傷|ダメージ/.test(clean)) state.hp = Math.max(1, state.hp - Math.floor(Math.random() * 15 + 3));
+  if (/魔法|呪文|発動/.test(clean)) state.mp = Math.max(0, state.mp - Math.floor(Math.random() * 8 + 2));
+  if (/勝利|倒し|撃破/.test(clean)) { state.xp += 15; state.gold += Math.floor(Math.random() * 20 + 5); }
+  if (/宝|金貨|報酬/.test(clean)) state.gold += Math.floor(Math.random() * 30 + 10);
+  if (state.xp >= state.xpNext) { state.lv++; state.xpNext = state.lv * 100; state.hpMax += 10; state.hp = state.hpMax; state.mpMax += 5; state.mp = state.mpMax; }
+  updateStats();
+
+  return clean;
 }
 
-// ════════════════════
-//  UTIL
-// ════════════════════
-function uid() { return Math.random().toString(36).slice(2,10); }
+// ─── RENDER ───────────────────────────────────────
+function addMsg(type, text, badge) {
+  const area = document.getElementById('storyArea');
+  const div = document.createElement('div');
+  div.className = 'msg';
 
-
-function getKey() { return document.getElementById('apiKey')?.value.trim() || localStorage.getItem('chronicle_api_key') || ''; }
-function showPop(text) {
-  document.querySelectorAll('.pop').forEach(p=>p.remove());
-  const d=document.createElement('div');
-  d.className='pop'; d.textContent=text;
-  document.body.appendChild(d);
-  setTimeout(()=>d.remove(), 3000);
-}
-
-// ── MISSING FUNCTION ALIASES ──
-function addMsg(cls, text) {
-  const sc = document.getElementById('storyScroll');
-  if (!sc) return;
-  const d = document.createElement('div');
-  d.className = 'msg ' + cls;
-  d.textContent = text;
-  // Double-click to edit narrator messages
-  if (cls === 'narrate') {
-    d.title = 'ダブルクリックで編集';
-    d.addEventListener('dblclick', () => {
-      d.contentEditable = 'true';
-      d.classList.add('editing');
-      d.focus();
+  if (type === 'narr') {
+    div.className += ' msg-narr';
+    div.textContent = text;
+    div.addEventListener('dblclick', () => {
+      div.contentEditable = div.contentEditable === 'true' ? 'false' : 'true';
+      if (div.contentEditable === 'true') div.focus();
     });
-    d.addEventListener('blur', () => {
-      d.contentEditable = 'false';
-      d.classList.remove('editing');
-    });
-    d.addEventListener('keydown', e => { if(e.key==='Escape') d.blur(); });
+    state.lastAI = div;
+    area.appendChild(div);
+    // Update history
+    state.history.push({ role: 'assistant', content: text });
+  } else if (type === 'player') {
+    div.className += ' msg-player';
+    const b = badge ? `<span class="msg-badge">${badge}</span>` : '';
+    div.innerHTML = b + text;
+    area.appendChild(div);
+  } else if (type === 'divider') {
+    const hr = document.createElement('hr');
+    hr.className = 'divider';
+    area.appendChild(hr);
+    return;
   }
-  sc.appendChild(d);
-  sc.scrollTop = sc.scrollHeight;
-  return d;
-}
 
-function toggleModeBar() {
-  const mb = document.getElementById('modeBar');
-  const wa = document.getElementById('writeArea');
-  if (!mb) return;
-  const isHidden = mb.style.display === 'none' || !mb.style.display;
-  mb.style.display = isHidden ? 'flex' : 'none';
-  if (wa) wa.style.display = 'none';
-}
-
-function closeModeBar() {
-  const mb = document.getElementById('modeBar');
-  const wa = document.getElementById('writeArea');
-  if (mb) mb.style.display = 'none';
-  if (wa) wa.style.display = 'none';
-}
-
-function renderSuggestions(acts) {
-  const row = document.getElementById('sugRow');
-  if (!row) return;
-  row.innerHTML = '';
-  acts.forEach(a => {
-    const b = document.createElement('button');
-    b.className = 'sug-btn';
-    b.textContent = a;
-    b.onclick = () => {
-      const inp = document.getElementById('actionInput');
-      if (inp) { inp.value = a; }
-      const mb = document.getElementById('modeBar');
-      const wa = document.getElementById('writeArea');
-      if (mb) mb.style.display = 'flex';
-      if (wa) wa.style.display = 'flex';
-    };
-    row.appendChild(b);
-  });
-}
-
-// Alias
-function renderSug(acts) { renderSuggestions(acts); }
-
-function buildSys() {
-  const hero = charSlots.find(s=>s.isHero);
-  const others = charSlots.filter(s=>!s.isHero).map(s=>`${s.name}（${s.role}）：${s.desc}`).join('\n') || 'なし';
-  const mParts = [];
-  if(mem.skills.length) mParts.push(`スキル:${mem.skills.map(s=>s.name).join(',')}`);
-  if(mem.npcs.length) mParts.push(`人物:${mem.npcs.map(n=>n.name).join(',')}`);
-  if(mem.places.length) mParts.push(`場所:${mem.places.map(p=>p.name).join(',')}`);
-  if(mem.items.length) mParts.push(`所持品:${mem.items.join(',')}`);
-  if(mem.quests.length) mParts.push(`クエスト:${mem.quests.map(q=>q.title).join(',')}`);
-  if(mem.events.length) mParts.push(`出来事:${mem.events.slice(-5).map(e=>e.text).join(';')}`);
-  return `あなたはインタラクティブRPGのナレーターです。
-【主人公】${hero ? hero.desc : heroDesc}
-【世界設定】${worldDesc || '中世ファンタジー世界'}
-【登場キャラクター】${others}
-【記憶・状況】${mParts.join(' | ') || 'なし'}
-【ルール】
-1. 主人公・世界・登場人物の設定を完全に尊重し一貫して物語を生成する
-2. プレイヤーの言及した能力・スキル・所持品は事実として以後反映する
-3. 場所・天候・時間・感覚を具体的に描写する
-4. 150〜240文字の臨場感ある日本語、必ず緊張感ある場面で終わること
-5. 返答末尾に改行して以下のJSONを含める：
-[UPDATE:{"hp":0,"mp":0,"xp":0,"gold":0,"skill":null,"npc":null,"place":null,"item":null,"event":null,"quest":null}]
-  変化量（-15=ダメージ15）。skill/npc/place/item/event/questはnullか適切なオブジェクト/文字列`;
-}
-
-function pickMode(mode) {
-  currentMode = mode;
-  const modes = ['do','say','story','see'];
-  modes.forEach(m => {
-    const btn = document.getElementById('m' + m.charAt(0).toUpperCase() + m.slice(1));
-    if (btn) btn.classList.toggle('active', m === mode);
-  });
-  const labels = { do:'▸ DO — 行動する', say:'▸ SAY — 話す', story:'▸ STORY — 物語として', see:'▸ SEE — 見る' };
-  const lbl = document.getElementById('writeModeLabel');
-  if (lbl) lbl.textContent = labels[mode] || '';
-  const wa = document.getElementById('writeArea');
-  if (wa) wa.style.display = 'flex';
-}
-
-
-function enablePostGame() {
-  const btnCont = document.getElementById('btnCont');
-  const btnRetry = document.getElementById('btnRetry');
-  if (btnCont) btnCont.disabled = false;
-  if (btnRetry) btnRetry.disabled = false;
+  area.scrollTop = area.scrollHeight;
+  return div;
 }
 
 function addThinking() {
-  const sc = document.getElementById('storyScroll');
-  if (!sc) return;
-  const d = document.createElement('div');
-  d.className = 'msg thinking';
-  d.id = 'thinkingMsg';
-  d.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
-  sc.appendChild(d);
-  sc.scrollTop = sc.scrollHeight;
+  const area = document.getElementById('storyArea');
+  const div = document.createElement('div');
+  div.className = 'msg msg-thinking';
+  div.id = 'thinkingMsg';
+  div.textContent = '語り手が言葉を紡いでいる…';
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
 }
 
 function removeThinking() {
-  const t = document.getElementById('thinkingMsg');
-  if (t) t.remove();
-  // Also remove any thinking class messages
-  document.querySelectorAll('.msg.thinking').forEach(e => e.remove());
+  const el = document.getElementById('thinkingMsg');
+  if (el) el.remove();
 }
 
-function setAllBusy(busy) {
-  const btns = ['btnTake','btnCont','btnRetry'];
-  btns.forEach(id => {
-    const b = document.getElementById(id);
-    if (b) b.disabled = busy;
-  });
-  const inp = document.getElementById('actionInput');
-  if (inp) inp.disabled = busy;
+function updateStats() {
+  document.getElementById('hpBar').style.width = (state.hp / state.hpMax * 100) + '%';
+  document.getElementById('hpVal').textContent = state.hp + '/' + state.hpMax;
+  document.getElementById('mpBar').style.width = (state.mp / state.mpMax * 100) + '%';
+  document.getElementById('mpVal').textContent = state.mp + '/' + state.mpMax;
+  document.getElementById('xpBar').style.width = Math.min(100, state.xp / state.xpNext * 100) + '%';
+  document.getElementById('lvVal').textContent = state.lv;
+  document.getElementById('goldVal').textContent = state.gold;
 }
 
+function renderChar() {
+  const sl = document.getElementById('skillsList');
+  sl.innerHTML = state.skills.length ? state.skills.map(s => `<span class="tag">${s}</span>`).join('') : '<span class="empty-note">まだ発見されていない</span>';
+  const tl = document.getElementById('traitsList');
+  tl.innerHTML = state.traits.length ? state.traits.map(t => `<span class="tag">${t}</span>`).join('') : '<span class="empty-note">—</span>';
+}
+
+function renderMemory() {
+  const npcEl = document.getElementById('npcList');
+  npcEl.innerHTML = state.npcs.length ? state.npcs.map(n =>
+    `<div class="npc-item"><div class="npc-name">${n.name}</div><div class="npc-role">${n.role || ''}</div><div class="npc-desc">${n.desc || ''}</div></div>`
+  ).join('') : '<span class="empty-note">誰とも会っていない</span>';
+
+  const plEl = document.getElementById('placesList');
+  plEl.innerHTML = state.places.length ? state.places.map(p => `<span class="tag">${p}</span>`).join('') : '<span class="empty-note">未探索</span>';
+
+  const itEl = document.getElementById('itemsList');
+  itEl.innerHTML = state.items.length ? state.items.map(i => `<span class="tag">${i}</span>`).join('') : '<span class="empty-note">何も持っていない</span>';
+
+  const qtEl = document.getElementById('questsList');
+  qtEl.innerHTML = state.quests.length ? state.quests.map(q => `<div style="font-size:0.83rem;color:var(--text2);margin-bottom:0.2rem">• ${q}</div>`).join('') : '<span class="empty-note">なし</span>';
+
+  const evEl = document.getElementById('eventsList');
+  evEl.innerHTML = state.events.length ? state.events.map(e => `<div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.2rem">◆ ${e}</div>`).join('') : '<span class="empty-note">何もない</span>';
+}
+
+function renderSlots() {
+  const el = document.getElementById('slotList');
+  if (!state.chars.length) { el.innerHTML = '<span class="empty-note" style="font-size:0.82rem">キャラクターなし</span>'; return; }
+  el.innerHTML = state.chars.map((c, i) =>
+    `<div class="slot-card" onclick="editSlot(${i})">
+      <div class="slot-avatar">${c.avatar || '👤'}</div>
+      <div class="slot-info"><div class="slot-name">${c.name || '名前なし'}</div><div class="slot-role">${c.role || ''}</div></div>
+      <button class="slot-del" onclick="event.stopPropagation();deleteSlot(${i})">✕</button>
+    </div>`
+  ).join('');
+}
+
+// ─── SUGGESTIONS ──────────────────────────────────
+async function genSuggestions() {
+  const suggRow = document.getElementById('suggRow');
+  suggRow.innerHTML = '';
+  if (!state.gameStarted || state.history.length < 2) return;
+  try {
+    const prompt = buildPrompt('') + `\n次のプレイヤー行動として自然な短いアクション提案を3つだけJSON配列で出力してください。例: ["〜する","〜と言う","〜を調べる"]\nJSONのみ、他のテキストなし:`;
+    const raw = await callNovelAI(prompt);
+    const match = raw.match(/\[[\s\S]*?\]/);
+    if (!match) return;
+    const suggs = JSON.parse(match[0]);
+    if (!Array.isArray(suggs)) return;
+    suggs.slice(0, 4).forEach(s => {
+      const btn = document.createElement('button');
+      btn.className = 'sugg-btn';
+      btn.textContent = s;
+      btn.onclick = () => { document.getElementById('actionInput').value = s; pickMode('Do'); };
+      suggRow.appendChild(btn);
+    });
+  } catch(e) { /* silently fail */ }
+}
+
+// ─── GAME FLOW ────────────────────────────────────
+async function startGame() {
+  const hero = document.getElementById('heroInput').value.trim();
+  const world = document.getElementById('worldInput').value.trim();
+  const key = document.getElementById('apiKeyInput').value.trim();
+
+  if (!key) { alert('APIキーを入力してください'); return; }
+
+  state.hero = hero || 'プレイヤーキャラクター';
+  state.world = world;
+  state.apiKey = key;
+  localStorage.setItem('chronicle_key', key);
+
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('gameScreen').style.display = 'flex';
+
+  setAllBusy(true);
+  addThinking();
+  try {
+    const prompt = buildPrompt('') + `\nこの世界での冒険の始まりを、300〜500文字の物語文で書いてください。主人公の状況と周囲の描写から始めてください。\n[ナレーター]:`;
+    const raw = await callNovelAI(prompt);
+    removeThinking();
+    const clean = parseResponse(raw);
+    addMsg('narr', clean);
+    addMsg('divider', '');
+    state.gameStarted = true;
+    enablePostGame();
+    genSuggestions();
+  } catch(e) {
+    removeThinking();
+    addMsg('narr', 'エラーが発生しました: ' + e.message);
+  }
+  setAllBusy(false);
+}
+
+async function send() {
+  const input = document.getElementById('actionInput');
+  const text = input.value.trim();
+  if (!text || state.busy) return;
+
+  const modeLabel = state.mode;
+  let actionText = text;
+  if (modeLabel === 'Say') actionText = `「${text}」と言う`;
+  else if (modeLabel === 'Story') actionText = text;
+  else if (modeLabel === 'See') actionText = `${text}を見回す`;
+
+  state.lastUserMsg = actionText;
+  state.history.push({ role: 'user', content: actionText });
+
+  input.value = '';
+  addMsg('player', text, modeLabel);
+
+  setAllBusy(true);
+  addThinking();
+  try {
+    const prompt = buildPrompt(null); // user msg already in history
+    const raw = await callNovelAI(prompt);
+    removeThinking();
+    const clean = parseResponse(raw);
+    addMsg('narr', clean);
+    addMsg('divider', '');
+    enablePostGame();
+    genSuggestions();
+  } catch(e) {
+    removeThinking();
+    addMsg('narr', 'エラー: ' + e.message);
+  }
+  setAllBusy(false);
+  closeModeBar();
+}
+
+async function doContinue() {
+  if (state.busy) return;
+  state.history.push({ role: 'user', content: '(続けて)' });
+  setAllBusy(true);
+  addThinking();
+  try {
+    const prompt = buildPrompt(null);
+    const raw = await callNovelAI(prompt);
+    removeThinking();
+    const clean = parseResponse(raw);
+    addMsg('narr', clean);
+    addMsg('divider', '');
+    genSuggestions();
+  } catch(e) {
+    removeThinking();
+    addMsg('narr', 'エラー: ' + e.message);
+  }
+  setAllBusy(false);
+}
+
+async function doRetry() {
+  if (state.busy || !state.lastAI) return;
+  // Remove last AI message and its history entry
+  state.lastAI.remove();
+  // Remove last assistant entry from history
+  for (let i = state.history.length - 1; i >= 0; i--) {
+    if (state.history[i].role === 'assistant') { state.history.splice(i, 1); break; }
+  }
+  setAllBusy(true);
+  addThinking();
+  try {
+    const prompt = buildPrompt(null);
+    const raw = await callNovelAI(prompt);
+    removeThinking();
+    const clean = parseResponse(raw);
+    addMsg('narr', clean);
+    addMsg('divider', '');
+    genSuggestions();
+  } catch(e) {
+    removeThinking();
+    addMsg('narr', 'エラー: ' + e.message);
+  }
+  setAllBusy(false);
+}
+
+// ─── UI HELPERS ───────────────────────────────────
+function setAllBusy(v) {
+  state.busy = v;
+  document.getElementById('sendBtn').disabled = v;
+  document.getElementById('continueBtn').disabled = v || !state.gameStarted;
+  document.getElementById('retryBtn').disabled = v || !state.gameStarted;
+  document.getElementById('takeTurnBtn').disabled = v;
+}
+
+function enablePostGame() {
+  document.getElementById('continueBtn').disabled = false;
+  document.getElementById('retryBtn').disabled = false;
+}
+
+function toggleModeBar() {
+  if (state.busy) return;
+  const bar = document.getElementById('modeBar');
+  const textRow = document.getElementById('textRow');
+  if (bar.classList.contains('open')) {
+    bar.classList.remove('open');
+    textRow.classList.remove('open');
+  } else {
+    bar.classList.add('open');
+    document.getElementById('takeTurnBtn').classList.add('active');
+  }
+}
+
+function closeModeBar() {
+  document.getElementById('modeBar').classList.remove('open');
+  document.getElementById('textRow').classList.remove('open');
+  document.getElementById('takeTurnBtn').classList.remove('active');
+}
+
+function pickMode(mode) {
+  state.mode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('mode' + mode + 'Btn').classList.add('active');
+  document.getElementById('modeIndicator').textContent = mode.toUpperCase();
+  const textRow = document.getElementById('textRow');
+  textRow.classList.add('open');
+  const placeholders = { Do: '行動を入力…', Say: 'セリフを入力…', Story: '物語として語る…', See: '何を見る・観察する…' };
+  document.getElementById('actionInput').placeholder = placeholders[mode] || '';
+  document.getElementById('actionInput').focus();
+}
+
+function togglePanel(id) {
+  const el = document.getElementById(id);
+  const other = id === 'charPanel' ? 'memPanel' : 'charPanel';
+  document.getElementById(other).classList.remove('open');
+  el.classList.toggle('open');
+}
+
+function toggleSettings() {
+  const p = document.getElementById('settingsPanel');
+  const ov = document.getElementById('overlay');
+  const isOpen = p.classList.contains('open');
+  if (!isOpen) {
+    renderSlots();
+    const savedKey = localStorage.getItem('chronicle_key') || '';
+    document.getElementById('settingsApiKey').value = savedKey;
+    document.getElementById('settingsWorld').value = state.world;
+  }
+  p.classList.toggle('open');
+  ov.classList.toggle('open');
+}
+
+function toggleApiVis() {
+  const inp = document.getElementById('apiKeyInput');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+function toggleSettingsApiVis() {
+  const inp = document.getElementById('settingsApiKey');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+// ─── START SCREEN VALIDATION ──────────────────────
+document.getElementById('apiKeyInput').addEventListener('input', function() {
+  const v = this.value.trim();
+  document.getElementById('enterBtn').disabled = v.length < 8;
+});
+
+// ─── CHAR SLOTS ───────────────────────────────────
+let editingSlotIndex = null;
+
+function addSlot() {
+  editingSlotIndex = null;
+  clearEditForm();
+  document.getElementById('charEditForm').classList.add('open');
+  buildAvatarRow(null);
+}
+
+function editSlot(i) {
+  editingSlotIndex = i;
+  const c = state.chars[i];
+  document.getElementById('editName').value = c.name || '';
+  document.getElementById('editRole').value = c.role || '';
+  document.getElementById('editDesc').value = c.desc || '';
+  buildAvatarRow(c.avatar);
+  document.getElementById('charEditForm').classList.add('open');
+}
+
+function deleteSlot(i) {
+  state.chars.splice(i, 1);
+  saveChars();
+  renderSlots();
+}
+
+function saveSlot() {
+  const name = document.getElementById('editName').value.trim();
+  const role = document.getElementById('editRole').value.trim();
+  const desc = document.getElementById('editDesc').value.trim();
+  const selAvatar = document.querySelector('.avatar-opt.sel');
+  const avatar = selAvatar ? selAvatar.textContent : '👤';
+  const entry = { name, role, desc, avatar };
+  if (editingSlotIndex !== null) state.chars[editingSlotIndex] = entry;
+  else state.chars.push(entry);
+  saveChars();
+  renderSlots();
+  document.getElementById('charEditForm').classList.remove('open');
+  clearEditForm();
+}
+
+function cancelEdit() {
+  document.getElementById('charEditForm').classList.remove('open');
+  clearEditForm();
+}
+
+function clearEditForm() {
+  ['editName','editRole','editDesc'].forEach(id => document.getElementById(id).value = '');
+}
+
+function buildAvatarRow(sel) {
+  const row = document.getElementById('avatarRow');
+  row.innerHTML = AVATARS.map(a =>
+    `<span class="avatar-opt${sel === a ? ' sel' : ''}" onclick="selectAvatar(this)">${a}</span>`
+  ).join('');
+}
+
+function selectAvatar(el) {
+  document.querySelectorAll('.avatar-opt').forEach(e => e.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+function saveChars() {
+  localStorage.setItem('chronicle_chars', JSON.stringify(state.chars));
+}
+
+function saveApiKey() {
+  const k = document.getElementById('settingsApiKey').value.trim();
+  if (!k) return;
+  state.apiKey = k;
+  localStorage.setItem('chronicle_key', k);
+  alert('APIキーを保存しました');
+}
+
+function saveWorld() {
+  state.world = document.getElementById('settingsWorld').value.trim();
+  alert('世界設定を更新しました');
+}
+
+// ─── INIT ─────────────────────────────────────────
+loadStorage();
+// Pre-fill API key if saved
+const savedKey = localStorage.getItem('chronicle_key') || '';
+if (savedKey) {
+  document.getElementById('apiKeyInput').value = savedKey;
+  document.getElementById('enterBtn').disabled = false;
+}
+updateStats();
+renderChar();
+renderMemory();
 </script>
 </body>
 </html>
