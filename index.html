@@ -413,14 +413,17 @@ async function callNovelAI(prompt) {
   const key = state.apiKey;
   if (!key) throw new Error('APIキーが設定されていません');
 
-  // Build parameters
+  // Build parameters (NovelAI format)
   const params = {
-    max_new_tokens: 400,
+    max_length: 400,
+    min_length: 1,
     temperature: 1.05,
     top_p: 0.95,
     top_k: 85,
     repetition_penalty: 1.05,
-    use_string: true,
+    repetition_penalty_range: 2048,
+    repetition_penalty_slope: 0.09,
+    order: [6, 0, 4, 5, 3, 1],
   };
 
   const body = {
