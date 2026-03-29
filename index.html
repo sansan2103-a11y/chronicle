@@ -445,26 +445,19 @@ function buildPrompt(userAction) {
   const heroText = state.hero || '冒険者';
   const worldText = state.world || '異世界';
 
-  // Get only the LAST sentence of previous AI output (max 80 chars)
-  const aiHistory = state.history.filter(h => h.role === 'assistant').slice(-1);
-  let lastSentence = '';
-  if (aiHistory.length > 0) {
-    const txt = aiHistory[0].content;
-    // Get last sentence
-    const sentences = txt.split(/(?<=[。！？])/);
-    lastSentence = sentences.slice(-2).join('').slice(-80);
-  }
-
   if (!userAction) {
-    // CONTINUE: just keep the last bit and let it flow
-    if (!lastSentence) return `${worldText}にて、${heroText}の物語。\n`;
-    return lastSentence + '\n';
+    // CONTINUE: use last sentence of previous output
+    const aiHistory = state.history.filter(h => h.role === 'assistant').slice(-1);
+    if (!aiHistory.length) return `${worldText}にて、${heroText}は`;
+    const last = aiHistory[0].content;
+    const sentences = last.split(/(?<=[。！？」』…])/);
+    return sentences.slice(-1)[0].trim() || last.slice(-60);
   }
 
-  // User action - use Text Adventure format
-  // Short context + clear action = Kayra responds to action
-  const ctx = lastSentence ? lastSentence + '\n' : `${worldText}にて。\n`;
-  return ctx + `>「${userAction}」\n`;
+  // ACTION: ignore previous context entirely
+  // Just: setting + hero + did action + Kayra continues
+  const verbalized = userAction.endsWith('。') ? userAction : `${userAction}した。`;
+  return `${worldText}。${heroText}は${verbalized}`;
 }
 
 // ─── PARSE AI RESPONSE ────────────────────────────
