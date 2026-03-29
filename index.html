@@ -446,53 +446,48 @@ async function callNovelAI(prompt) {
 
 // ─── BUILD PROMPT ─────────────────────────────────
 function buildPrompt(userAction) {
-  const heroText = state.hero || '冒険者';
-  const worldText = state.world || '異世界';
-  const anchor = `${worldText}。主人公は${heroText}。\n`;
+  const heroText = (state.hero || '冒険者').split('\n')[0].slice(0, 30);
+  const worldText = (state.world || '異世界').split('\n')[0].slice(0, 30);
 
   const aiHistory = state.history.filter(h => h.role === 'assistant').slice(-1);
   const lastAI = aiHistory.length > 0 ? aiHistory[0].content : '';
-  // Last 100 chars of previous output for context
   const ctx = lastAI.length > 100 ? lastAI.slice(-100) : lastAI;
 
   if (!userAction) {
-    if (!ctx) return anchor + `${heroText}は`;
-    return anchor + ctx;
+    if (!ctx) return `${worldText}にて、${heroText}は`;
+    return ctx;
   }
 
-  let action = userAction.trim();
+  let action = userAction.trim().slice(0, 50);
   let suffix;
-  if (/[。た]$/.test(action)) {
-    suffix = action;
-  } else if (/[するくるいえあおうるれ]$/.test(action)) {
-    suffix = `${action}と、`;
-  } else {
-    suffix = `${action}した。`;
-  }
+  if (/[。た]$/.test(action)) suffix = action;
+  else if (/[するくるいえあおうるれ]$/.test(action)) suffix = `${action}と、`;
+  else suffix = `${action}した。`;
 
-  // With context: keeps story coherent. Without: action-only start
-  if (ctx) {
-    return anchor + ctx + `\n　${heroText}は${suffix}`;
-  }
-  return anchor + `${heroText}は${suffix}`;
+  if (ctx) return ctx + `\n　${heroText}は${suffix}`;
+  return `${worldText}にて、${heroText}は${suffix}`;
 }
 
 // ─── PARSE AI RESPONSE ────────────────────────────
 function parseResponse(text) {
   let clean = text;
 
-  // Strip numbered/bulleted lists (Kayra shop menu degeneration)
+  // Strip system text that leaked into output
+  clean = clean.replace(/最初の行動を入力してください。/g, '');
+  clean = clean.replace(/主人公：[^\n]*/g, '');
+  clean = clean.replace(/【[^】]*】/g, '');
+  // Strip numbered/bulleted lists
   clean = clean.replace(/[１-９1-9]+[\.．、]\s*.{0,20}\n/g, '');
   // Strip repeated phrases (loop detection)
-  clean = clean.replace(/(.{3,10})\1{3,}/g, '$1');
-  // Cut at obvious list degeneration
-  const cutAt = ['１.', '1.', '武器', 'アクセサリー', 'Equipment', '装備'];
+  clean = clean.replace(/(.{4,12})\1{2,}/g, '$1');
+  // Cut at list degeneration
+  const cutAt = ['武器', 'アクセサリー', 'Equipment', '装備'];
   for (const c of cutAt) {
     const i = clean.indexOf(c);
     if (i > 20) { clean = clean.slice(0, i).trim(); break; }
   }
 
-  // Stats change heuristics
+  // Stats heuristics
   if (/戦闘|攻撃|傷|ダメージ/.test(clean)) state.hp = Math.max(1, state.hp - Math.floor(Math.random() * 15 + 3));
   if (/魔法|呪文|発動/.test(clean)) state.mp = Math.max(0, state.mp - Math.floor(Math.random() * 8 + 2));
   if (/勝利|倒し|撃破/.test(clean)) { state.xp += 15; state.gold += Math.floor(Math.random() * 20 + 5); }
