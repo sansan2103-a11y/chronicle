@@ -423,7 +423,7 @@ async function callNovelAI(prompt) {
     temperature: 0.85,
     top_p: 0.9,
     top_k: 30,
-    repetition_penalty: 1.35,
+    repetition_penalty: 1.5,
     repetition_penalty_range: 256,
     use_string: true,
   };
@@ -479,28 +479,17 @@ function buildPrompt(userAction) {
 
 // ─── PARSE AI RESPONSE ────────────────────────────
 function parseResponse(text) {
-  // Extract JSON discoveries
-  const jsonMatch = text.match(/\|\|\|([\s\S]*?)\|\|\|/);
-  let discoveries = null;
   let clean = text;
 
-  if (jsonMatch) {
-    clean = text.replace(/\|\|\|[\s\S]*?\|\|\|/, '').trim();
-    try {
-      discoveries = JSON.parse(jsonMatch[1]);
-    } catch(e) { /* ignore */ }
-  }
-
-  // Apply discoveries
-  if (discoveries) {
-    if (discoveries.skills) discoveries.skills.forEach(s => { if (s && !state.skills.includes(s)) state.skills.push(s); });
-    if (discoveries.npcs) discoveries.npcs.forEach(n => { if (n.name && !state.npcs.find(x => x.name === n.name)) state.npcs.push(n); });
-    if (discoveries.places) discoveries.places.forEach(p => { if (p && !state.places.includes(p)) state.places.push(p); });
-    if (discoveries.items) discoveries.items.forEach(i => { if (i && !state.items.includes(i)) state.items.push(i); });
-    if (discoveries.quests) discoveries.quests.forEach(q => { if (q && !state.quests.includes(q)) state.quests.push(q); });
-    if (discoveries.events) discoveries.events.forEach(e => { if (e && !state.events.includes(e)) state.events.push(e); });
-    renderMemory();
-    renderChar();
+  // Strip numbered/bulleted lists (Kayra shop menu degeneration)
+  clean = clean.replace(/[１-９1-9]+[\.．、]\s*.{0,20}\n/g, '');
+  // Strip repeated phrases (loop detection)
+  clean = clean.replace(/(.{3,10})\1{3,}/g, '$1');
+  // Cut at obvious list degeneration
+  const cutAt = ['１.', '1.', '武器', 'アクセサリー', 'Equipment', '装備'];
+  for (const c of cutAt) {
+    const i = clean.indexOf(c);
+    if (i > 20) { clean = clean.slice(0, i).trim(); break; }
   }
 
   // Stats change heuristics
@@ -511,7 +500,7 @@ function parseResponse(text) {
   if (state.xp >= state.xpNext) { state.lv++; state.xpNext = state.lv * 100; state.hpMax += 10; state.hp = state.hpMax; state.mpMax += 5; state.mp = state.mpMax; }
   updateStats();
 
-  return clean;
+  return clean.trim() || text.trim();
 }
 
 // ─── RENDER ───────────────────────────────────────
