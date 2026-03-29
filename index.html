@@ -229,9 +229,9 @@ textarea:focus, input:focus { border-color: var(--gold); }
       <textarea id="worldInput" rows="3" placeholder="例：近未来の廃墟都市。魔法と機械が混在する世界。腐敗した帝国が支配している。"></textarea>
     </div>
     <div>
-      <div class="field-label">▸ NovelAI APIキー</div>
+      <div class="field-label">▸ APIキー <span>— Anthropic（Claude）または NovelAI</span></div>
       <div class="api-row">
-        <input type="password" id="apiKeyInput" placeholder="pst-..." autocomplete="off">
+        <input type="password" id="apiKeyInput" placeholder="sk-ant-... または pst-..." autocomplete="off">
         <button class="eye-btn" onclick="toggleApiVis()" id="eyeBtn">👁</button>
       </div>
       <div class="api-note">キーはブラウザ内にのみ保存されます。<a href="https://novelai.net/account" target="_blank">novelai.net</a> → アカウント設定 → 永続的APIトークン</div>
@@ -395,6 +395,7 @@ let state = {
   history: [],     // {role, content} for context
   lastAI: null,    // last AI message element for retry
   lastUserMsg: '', // for retry
+  lastCleanOutput: '', // clean previous output for Kayra context
   mode: 'Do',
   busy: false,
   gameStarted: false,
@@ -412,60 +413,60 @@ function loadStorage() {
   if (ch) try { state.chars = JSON.parse(ch); } catch(e) {}
 }
 
-// ─── API CALL (NovelAI) ───────────────────────────
-async function callNovelAI(prompt) {
+// ─── API CALL (NovelAI Kayra) ────────────────────
+async function callNovelAI(userAction) {
   const key = state.apiKey;
   if (!key) throw new Error('APIキーが設定されていません');
 
+  const heroText = (state.hero || '冒険者').split(/[\n。]/)[0].slice(0, 20);
+  const worldText = (state.world || '異世界').split(/[\n。]/)[0].slice(0, 20);
+
+  // Build clean prose prompt
+  const lastClean = state.lastCleanOutput || '';
+  const ctx = lastClean.slice(-80); // only last 80 chars of previous output
+
+  let prompt;
+  if (!userAction) {
+    // CONTINUE
+    prompt = ctx || `${worldText}にて、${heroText}は`;
+  } else {
+    // ACTION: context + hero + action
+    const verb = /[するくるいえおうるれ]$/.test(userAction)
+      ? `${userAction}と、`
+      : `${userAction}した。`;
+    prompt = ctx
+      ? `${ctx}\n　${heroText}は${verb}`
+      : `${worldText}にて、${heroText}は${verb}`;
+  }
+
   const params = {
     max_length: 150,
-    min_length: 10,
+    min_length: 20,
     temperature: 0.85,
-    top_p: 0.9,
-    top_k: 30,
-    repetition_penalty: 1.5,
-    repetition_penalty_range: 256,
+    top_p: 0.92,
+    top_k: 40,
+    repetition_penalty: 1.4,
+    repetition_penalty_range: 512,
     use_string: true,
   };
 
-  const body = { input: prompt, model: MODEL, parameters: params };
   const res = await fetch(PROXY, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ input: prompt, model: MODEL, parameters: params }),
   });
   if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error(`HTTP ${res.status}: ${errText.slice(0, 200)}`);
+    const err = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}: ${err.slice(0, 200)}`);
   }
   const data = await res.json();
   if (data.event === 'error') throw new Error(JSON.stringify(data));
-  const out = data.output !== undefined ? data.output : (data.text || '');
-  return out.trim();
+  return (data.output ?? data.text ?? '').trim();
 }
 
 // ─── BUILD PROMPT ─────────────────────────────────
 function buildPrompt(userAction) {
-  const heroText = (state.hero || '冒険者').split('\n')[0].slice(0, 30);
-  const worldText = (state.world || '異世界').split('\n')[0].slice(0, 30);
-
-  const aiHistory = state.history.filter(h => h.role === 'assistant').slice(-1);
-  const lastAI = aiHistory.length > 0 ? aiHistory[0].content : '';
-  const ctx = lastAI.length > 100 ? lastAI.slice(-100) : lastAI;
-
-  if (!userAction) {
-    if (!ctx) return `${worldText}にて、${heroText}は`;
-    return ctx;
-  }
-
-  let action = userAction.trim().slice(0, 50);
-  let suffix;
-  if (/[。た]$/.test(action)) suffix = action;
-  else if (/[するくるいえあおうるれ]$/.test(action)) suffix = `${action}と、`;
-  else suffix = `${action}した。`;
-
-  if (ctx) return ctx + `\n　${heroText}は${suffix}`;
-  return `${worldText}にて、${heroText}は${suffix}`;
+  return userAction || null;
 }
 
 // ─── PARSE AI RESPONSE ────────────────────────────
@@ -660,22 +661,21 @@ async function send() {
   const modeLabel = state.mode;
   let actionText = text;
   if (modeLabel === 'Say') actionText = `「${text}」と言う`;
-  else if (modeLabel === 'Story') actionText = text;
   else if (modeLabel === 'See') actionText = `${text}を見回す`;
 
   state.lastUserMsg = actionText;
-  state.history.push({ role: 'user', content: actionText });
-
   input.value = '';
   addMsg('player', text, modeLabel);
 
   setAllBusy(true);
   addThinking();
   try {
-    const prompt = buildPrompt(actionText); // pass user action directly
-    const raw = await callNovelAI(prompt);
+    const raw = await callNovelAI(actionText);
     removeThinking();
     const clean = parseResponse(raw);
+    state.lastCleanOutput = clean; // save for next prompt
+    state.history.push({ role: 'user', content: actionText });
+    state.history.push({ role: 'assistant', content: clean });
     addMsg('narr', clean);
     addMsg('divider', '');
     enablePostGame();
@@ -690,14 +690,14 @@ async function send() {
 
 async function doContinue() {
   if (state.busy) return;
-  state.history.push({ role: 'user', content: '(続けて)' });
   setAllBusy(true);
   addThinking();
   try {
-    const prompt = buildPrompt(null);
-    const raw = await callNovelAI(prompt);
+    const raw = await callNovelAI(null);
     removeThinking();
     const clean = parseResponse(raw);
+    state.lastCleanOutput = clean;
+    state.history.push({ role: 'assistant', content: clean });
     addMsg('narr', clean);
     addMsg('divider', '');
     genSuggestions();
@@ -710,19 +710,22 @@ async function doContinue() {
 
 async function doRetry() {
   if (state.busy || !state.lastAI) return;
-  // Remove last AI message and its history entry
   state.lastAI.remove();
-  // Remove last assistant entry from history
   for (let i = state.history.length - 1; i >= 0; i--) {
     if (state.history[i].role === 'assistant') { state.history.splice(i, 1); break; }
   }
+  // Restore previous clean output
+  const prev = state.history.filter(h => h.role === 'assistant').slice(-1)[0];
+  state.lastCleanOutput = prev ? prev.content : '';
   setAllBusy(true);
   addThinking();
   try {
-    const prompt = buildPrompt(null);
-    const raw = await callNovelAI(prompt);
+    const lastUser = state.history.filter(h => h.role === 'user').slice(-1)[0];
+    const raw = await callNovelAI(lastUser ? lastUser.content : null);
     removeThinking();
     const clean = parseResponse(raw);
+    state.lastCleanOutput = clean;
+    state.history.push({ role: 'assistant', content: clean });
     addMsg('narr', clean);
     addMsg('divider', '');
     genSuggestions();
