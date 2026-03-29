@@ -1189,6 +1189,45 @@ function renderSuggestions(acts) {
 // Alias
 function renderSug(acts) { renderSuggestions(acts); }
 
+function buildSys() {
+  const hero = charSlots.find(s=>s.isHero);
+  const others = charSlots.filter(s=>!s.isHero).map(s=>`${s.name}（${s.role}）：${s.desc}`).join('\n') || 'なし';
+  const mParts = [];
+  if(mem.skills.length) mParts.push(`スキル:${mem.skills.map(s=>s.name).join(',')}`);
+  if(mem.npcs.length) mParts.push(`人物:${mem.npcs.map(n=>n.name).join(',')}`);
+  if(mem.places.length) mParts.push(`場所:${mem.places.map(p=>p.name).join(',')}`);
+  if(mem.items.length) mParts.push(`所持品:${mem.items.join(',')}`);
+  if(mem.quests.length) mParts.push(`クエスト:${mem.quests.map(q=>q.title).join(',')}`);
+  if(mem.events.length) mParts.push(`出来事:${mem.events.slice(-5).map(e=>e.text).join(';')}`);
+  return `あなたはインタラクティブRPGのナレーターです。
+【主人公】${hero ? hero.desc : heroDesc}
+【世界設定】${worldDesc || '中世ファンタジー世界'}
+【登場キャラクター】${others}
+【記憶・状況】${mParts.join(' | ') || 'なし'}
+【ルール】
+1. 主人公・世界・登場人物の設定を完全に尊重し一貫して物語を生成する
+2. プレイヤーの言及した能力・スキル・所持品は事実として以後反映する
+3. 場所・天候・時間・感覚を具体的に描写する
+4. 150〜240文字の臨場感ある日本語、必ず緊張感ある場面で終わること
+5. 返答末尾に改行して以下のJSONを含める：
+[UPDATE:{"hp":0,"mp":0,"xp":0,"gold":0,"skill":null,"npc":null,"place":null,"item":null,"event":null,"quest":null}]
+  変化量（-15=ダメージ15）。skill/npc/place/item/event/questはnullか適切なオブジェクト/文字列`;
+}
+
+function pickMode(mode) {
+  currentMode = mode;
+  const modes = ['do','say','story','see'];
+  modes.forEach(m => {
+    const btn = document.getElementById('m' + m.charAt(0).toUpperCase() + m.slice(1));
+    if (btn) btn.classList.toggle('active', m === mode);
+  });
+  const labels = { do:'▸ DO — 行動する', say:'▸ SAY — 話す', story:'▸ STORY — 物語として', see:'▸ SEE — 見る' };
+  const lbl = document.getElementById('writeModeLabel');
+  if (lbl) lbl.textContent = labels[mode] || '';
+  const wa = document.getElementById('writeArea');
+  if (wa) wa.style.display = 'flex';
+}
+
 </script>
 </body>
 </html>
