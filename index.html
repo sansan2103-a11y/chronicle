@@ -416,11 +416,11 @@ async function callNovelAI(prompt) {
   const params = {
     max_length: 150,
     min_length: 10,
-    temperature: 0.9,
+    temperature: 0.85,
     top_p: 0.9,
-    top_k: 40,
-    repetition_penalty: 1.15,
-    repetition_penalty_range: 512,
+    top_k: 30,
+    repetition_penalty: 1.35,
+    repetition_penalty_range: 256,
     use_string: true,
   };
 
@@ -446,18 +446,17 @@ function buildPrompt(userAction) {
   const worldText = state.world || '異世界';
 
   if (!userAction) {
-    // CONTINUE: use last sentence of previous output
     const aiHistory = state.history.filter(h => h.role === 'assistant').slice(-1);
-    if (!aiHistory.length) return `${worldText}にて、${heroText}は`;
+    if (!aiHistory.length) return `${heroText}は${worldText}にいた。`;
     const last = aiHistory[0].content;
     const sentences = last.split(/(?<=[。！？」』…])/);
-    return sentences.slice(-1)[0].trim() || last.slice(-60);
+    const tail = sentences.slice(-1)[0].trim() || last.slice(-50);
+    return tail.length > 5 ? tail : last.slice(-50);
   }
 
-  // ACTION: ignore previous context entirely
-  // Just: setting + hero + did action + Kayra continues
-  const verbalized = userAction.endsWith('。') ? userAction : `${userAction}した。`;
-  return `${worldText}。${heroText}は${verbalized}`;
+  // End with incomplete clause - Kayra MUST complete it
+  // "Hero did X, and then" → Kayra writes what happened
+  return `${heroText}が${userAction}と、`;
 }
 
 // ─── PARSE AI RESPONSE ────────────────────────────
