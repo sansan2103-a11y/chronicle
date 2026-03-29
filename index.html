@@ -2,912 +2,914 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Chronicle — AI RPG</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=IM+Fell+English:ital@0;1&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&family=Cinzel:wght@400;700&display=swap');
+
 :root {
-  --bg: #0a0804;
-  --bg2: #110e08;
-  --bg3: #1a1510;
-  --border: #3a2e1e;
-  --gold: #c8983a;
-  --gold2: #f0c060;
-  --amber: #e8a020;
-  --text: #e8d8b0;
-  --text2: #a89060;
-  --text3: #6a5030;
-  --red: #cc3322;
-  --blue: #3a6090;
-  --green: #3a7050;
-  --radius: 4px;
-  --panel-w: 280px;
+  --bg: #0a0a0f;
+  --bg2: #12121a;
+  --bg3: #1a1a26;
+  --gold: #c8a44e;
+  --gold-dim: #8a7235;
+  --text: #d4c5a0;
+  --text-dim: #7a7060;
+  --red: #a83232;
+  --blue: #3a5a8a;
+  --accent: #e8d5a0;
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Crimson Text', serif; font-size: 16px; }
 
-/* SCROLLBAR */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--bg2); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+* { margin:0; padding:0; box-sizing:border-box; }
 
-/* ─── START SCREEN ─── */
-#startScreen {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  min-height: 100vh; padding: 2rem 1rem;
-  background: radial-gradient(ellipse at 50% 0%, #2a1a05 0%, var(--bg) 70%);
+body {
+  font-family: 'Noto Serif JP', serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100dvh;
+  overflow-x: hidden;
 }
-.logo {
-  font-family: 'Cinzel', serif; font-size: clamp(2.4rem, 8vw, 4rem); font-weight: 900;
-  color: var(--gold2); letter-spacing: 0.25em; text-transform: uppercase;
-  text-shadow: 0 0 40px rgba(200,152,58,0.5), 0 0 80px rgba(200,152,58,0.2);
-  margin-bottom: 0.25rem;
-}
-.tagline { font-family: 'IM Fell English', serif; font-style: italic; color: var(--text2); font-size: 1rem; letter-spacing: 0.1em; margin-bottom: 2.5rem; }
-.start-form { width: 100%; max-width: 540px; display: flex; flex-direction: column; gap: 1rem; }
-.field-label { font-family: 'Cinzel', serif; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 0.35rem; }
-.field-label span { color: var(--text3); font-family: 'Crimson Text', serif; font-size: 0.85rem; text-transform: none; letter-spacing: 0; font-style: italic; }
-textarea, input[type=text], input[type=password] {
-  width: 100%; background: var(--bg2); border: 1px solid var(--border);
-  color: var(--text); padding: 0.75rem; font-family: 'Crimson Text', serif; font-size: 0.95rem;
-  border-radius: var(--radius); resize: vertical; outline: none; transition: border-color 0.2s;
-}
-textarea:focus, input:focus { border-color: var(--gold); }
-.api-row { position: relative; }
-.api-row input { padding-right: 2.5rem; }
-.eye-btn { position: absolute; right: 0.6rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text3); cursor: pointer; font-size: 1.1rem; padding: 0.2rem; }
-.eye-btn:hover { color: var(--gold); }
-.api-note { font-size: 0.78rem; color: var(--text3); font-style: italic; margin-top: 0.25rem; }
-.api-note a { color: var(--text2); }
-.enter-btn {
-  font-family: 'Cinzel', serif; font-size: 0.9rem; letter-spacing: 0.2em; text-transform: uppercase;
-  background: linear-gradient(135deg, #2a1e08 0%, #3a2a10 100%);
-  border: 1px solid var(--gold); color: var(--gold2); padding: 0.9rem 2rem;
-  cursor: pointer; border-radius: var(--radius); transition: all 0.2s; margin-top: 0.5rem;
-}
-.enter-btn:hover { background: linear-gradient(135deg, #3a2e12 0%, #4a3a18 100%); box-shadow: 0 0 20px rgba(200,152,58,0.3); }
-.enter-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
 
-/* ─── GAME SCREEN ─── */
-#gameScreen { display: none; height: 100vh; flex-direction: column; overflow: hidden; position: relative; }
+/* ===== SETUP SCREEN ===== */
+#setup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 20px;
+  background: radial-gradient(ellipse at center, #1a1520 0%, #0a0a0f 70%);
+}
 
-/* TOP BAR */
+#setup h1 {
+  font-family: 'Cinzel', serif;
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  color: var(--gold);
+  letter-spacing: 0.15em;
+  margin-bottom: 8px;
+  text-shadow: 0 0 30px rgba(200,164,78,0.3);
+}
+
+#setup .subtitle {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  letter-spacing: 0.3em;
+  margin-bottom: 40px;
+}
+
+.setup-group {
+  width: 100%;
+  max-width: 500px;
+  margin-bottom: 24px;
+}
+
+.setup-group label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--gold);
+  margin-bottom: 6px;
+  letter-spacing: 0.05em;
+}
+
+.setup-group .hint {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.setup-group input,
+.setup-group textarea {
+  width: 100%;
+  background: var(--bg2);
+  border: 1px solid var(--gold-dim);
+  color: var(--text);
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-family: 'Noto Serif JP', serif;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.setup-group input:focus,
+.setup-group textarea:focus {
+  border-color: var(--gold);
+}
+
+.setup-group textarea { resize: vertical; min-height: 60px; }
+
+#btn-start {
+  font-family: 'Cinzel', serif;
+  font-size: 1rem;
+  background: linear-gradient(135deg, var(--gold-dim), var(--gold));
+  color: var(--bg);
+  border: none;
+  padding: 14px 48px;
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  margin-top: 16px;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+#btn-start:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(200,164,78,0.3); }
+#btn-start:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.key-note {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.key-note a { color: var(--gold-dim); }
+
+/* ===== GAME SCREEN ===== */
+#game { display: none; flex-direction: column; min-height: 100dvh; }
+
+/* Top bar */
 .topbar {
-  display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem;
-  background: var(--bg2); border-bottom: 1px solid var(--border); flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--bg2);
+  border-bottom: 1px solid #2a2a35;
+  font-size: 0.75rem;
   flex-wrap: wrap;
 }
-.stat { display: flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; }
-.stat-icon { font-size: 0.9rem; }
-.stat-val { font-family: 'Cinzel', serif; font-weight: 600; color: var(--gold); font-size: 0.78rem; }
-.stat-bar { width: 50px; height: 5px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
-.stat-fill { height: 100%; border-radius: 3px; transition: width 0.4s; }
-.hp-fill { background: linear-gradient(90deg, var(--red), #ee5544); }
-.mp-fill { background: linear-gradient(90deg, var(--blue), #6090c0); }
-.xp-fill { background: linear-gradient(90deg, var(--green), #60b080); }
-.spacer { flex: 1; }
-.icon-btn { background: none; border: none; color: var(--text2); cursor: pointer; font-size: 1.2rem; padding: 0.25rem 0.4rem; border-radius: var(--radius); transition: color 0.15s; }
-.icon-btn:hover { color: var(--gold); }
 
-/* MAIN LAYOUT */
-.game-layout { display: flex; flex: 1; overflow: hidden; }
+.stat { display: flex; align-items: center; gap: 4px; }
+.stat-bar {
+  width: 60px; height: 6px;
+  background: #2a2a35;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.stat-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+.hp-fill { background: var(--red); width: 100%; }
+.mp-fill { background: var(--blue); width: 100%; }
 
-/* STORY */
+.topbar .lv { color: var(--gold); font-weight: 700; margin-left: auto; }
+
+/* Story area */
 .story-area {
-  flex: 1; overflow-y: auto; padding: 1.25rem 1rem;
-  display: flex; flex-direction: column; gap: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 16px 120px;
+  scroll-behavior: smooth;
 }
-.msg { padding: 0.6rem 0; animation: fadeIn 0.3s ease; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-.msg-narr { font-family: 'IM Fell English', serif; font-size: 1.05rem; line-height: 1.75; color: var(--text); }
-.msg-narr[contenteditable=true] { outline: 1px dashed var(--border); padding: 2px 4px; border-radius: 2px; }
-.msg-narr[contenteditable=true]:focus { outline-color: var(--gold); background: rgba(200,152,58,0.05); }
-.msg-player { font-family: 'Crimson Text', serif; font-size: 0.9rem; color: var(--text2); font-style: italic; padding: 0.25rem 0; }
-.msg-player::before { content: '▶ '; color: var(--text3); font-style: normal; }
-.msg-badge { font-size: 0.75rem; color: var(--text3); font-family: 'Cinzel', serif; letter-spacing: 0.1em; margin-right: 0.4rem; }
-.msg-thinking { color: var(--text3); font-style: italic; font-size: 0.9rem; animation: pulse 1.2s ease-in-out infinite; }
-@keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
-.divider { border: none; border-top: 1px solid var(--border); opacity: 0.4; margin: 0.5rem 0; }
 
-/* SIDE PANELS */
-.side-panel {
-  width: var(--panel-w); background: var(--bg2); border-left: 1px solid var(--border);
-  overflow-y: auto; padding: 1rem; display: none; flex-direction: column; gap: 0.75rem;
-  flex-shrink: 0;
+.story-block {
+  margin-bottom: 16px;
+  animation: fadeIn 0.4s ease;
 }
-.side-panel.open { display: flex; }
-.panel-title { font-family: 'Cinzel', serif; font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
-.panel-section { font-size: 0.85rem; }
-.panel-section h4 { font-family: 'Cinzel', serif; font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text3); margin-bottom: 0.35rem; }
-.tag { display: inline-block; background: var(--bg3); border: 1px solid var(--border); color: var(--text2); font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 2px; margin: 0.1rem; }
-.empty-note { color: var(--text3); font-style: italic; font-size: 0.82rem; }
-.npc-item { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.5rem; margin-bottom: 0.4rem; }
-.npc-name { font-family: 'Cinzel', serif; font-size: 0.78rem; color: var(--gold); }
-.npc-role { font-size: 0.78rem; color: var(--text3); font-style: italic; }
-.npc-desc { font-size: 0.82rem; color: var(--text2); margin-top: 0.25rem; }
 
-/* SETTINGS PANEL */
-#settingsPanel {
-  position: fixed; top: 0; right: 0; height: 100%; width: min(340px, 90vw);
-  background: var(--bg2); border-left: 1px solid var(--border); z-index: 100;
-  overflow-y: auto; padding: 1.25rem; display: none; flex-direction: column; gap: 1rem;
-  transform: translateX(100%); transition: transform 0.2s ease;
-}
-#settingsPanel.open { display: flex; transform: translateX(0); }
-.settings-header { display: flex; justify-content: space-between; align-items: center; }
-.settings-title { font-family: 'Cinzel', serif; font-size: 0.9rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); }
-.close-btn { background: none; border: none; color: var(--text2); cursor: pointer; font-size: 1.4rem; line-height: 1; }
-.close-btn:hover { color: var(--gold); }
-.settings-section { border-top: 1px solid var(--border); padding-top: 0.75rem; }
-.settings-section h4 { font-family: 'Cinzel', serif; font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text3); margin-bottom: 0.6rem; }
-.slot-card { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.6rem; display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem; cursor: pointer; transition: border-color 0.15s; }
-.slot-card:hover { border-color: var(--gold); }
-.slot-avatar { font-size: 1.6rem; line-height: 1; }
-.slot-info { flex: 1; min-width: 0; }
-.slot-name { font-family: 'Cinzel', serif; font-size: 0.8rem; color: var(--gold); }
-.slot-role { font-size: 0.78rem; color: var(--text3); font-style: italic; }
-.slot-del { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 1rem; padding: 0.2rem; }
-.slot-del:hover { color: var(--red); }
-.add-slot-btn { width: 100%; background: var(--bg); border: 1px dashed var(--border); color: var(--text3); padding: 0.5rem; cursor: pointer; border-radius: var(--radius); font-family: 'Crimson Text', serif; font-size: 0.9rem; transition: all 0.15s; }
-.add-slot-btn:hover { border-color: var(--gold); color: var(--gold); }
-.char-edit { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem; margin-top: 0.5rem; display: none; flex-direction: column; gap: 0.5rem; }
-.char-edit.open { display: flex; }
-.char-edit input, .char-edit textarea { font-size: 0.85rem; padding: 0.4rem 0.6rem; }
-.char-edit .avatar-row { display: flex; gap: 0.3rem; flex-wrap: wrap; }
-.char-edit .avatar-opt { font-size: 1.4rem; cursor: pointer; padding: 0.2rem; border: 1px solid transparent; border-radius: 3px; transition: border-color 0.1s; }
-.char-edit .avatar-opt:hover, .char-edit .avatar-opt.sel { border-color: var(--gold); }
-.btn-row { display: flex; gap: 0.5rem; }
-.mini-btn { flex: 1; background: var(--bg3); border: 1px solid var(--border); color: var(--text2); padding: 0.4rem; cursor: pointer; border-radius: var(--radius); font-family: 'Crimson Text', serif; font-size: 0.85rem; transition: all 0.15s; }
-.mini-btn:hover { border-color: var(--gold); color: var(--gold); }
-.mini-btn.primary { background: rgba(200,152,58,0.15); border-color: var(--gold); color: var(--gold); }
-.provider-row { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; }
-.provider-btn { flex: 1; padding: 0.45rem; background: var(--bg); border: 1px solid var(--border); color: var(--text2); font-family: 'Cinzel', serif; font-size: 0.7rem; letter-spacing: 0.1em; cursor: pointer; border-radius: var(--radius); transition: all 0.15s; }
-.provider-btn.active { border-color: var(--gold); color: var(--gold2); background: rgba(200,152,58,0.1); }
-.save-btn { width: 100%; background: rgba(200,152,58,0.1); border: 1px solid var(--gold); color: var(--gold); padding: 0.5rem; cursor: pointer; border-radius: var(--radius); font-family: 'Cinzel', serif; font-size: 0.75rem; letter-spacing: 0.15em; transition: all 0.15s; }
-.save-btn:hover { background: rgba(200,152,58,0.2); }
+@keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
 
-/* INPUT AREA */
-.input-area { border-top: 1px solid var(--border); background: var(--bg2); flex-shrink: 0; }
-.action-row { display: flex; gap: 0; border-bottom: 1px solid var(--border); }
-.action-btn {
-  flex: 1; padding: 0.65rem 0.4rem; background: var(--bg2); border: none; border-right: 1px solid var(--border);
-  color: var(--text2); font-family: 'Cinzel', serif; font-size: 0.65rem; letter-spacing: 0.12em;
-  text-transform: uppercase; cursor: pointer; transition: all 0.15s;
+.story-block.narrator {
+  line-height: 1.9;
+  font-size: 0.95rem;
+  color: var(--text);
 }
-.action-btn:last-child { border-right: none; }
-.action-btn:hover { background: var(--bg3); color: var(--gold); }
-.action-btn.active { background: var(--bg3); color: var(--gold2); }
-.action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.mode-bar {
-  display: none; border-bottom: 1px solid var(--border);
+
+.story-block.action {
+  color: var(--gold);
+  font-size: 0.85rem;
+  padding: 8px 0;
+  border-left: 2px solid var(--gold-dim);
+  padding-left: 12px;
+}
+
+.story-block.action::before {
+  content: '▸ ';
+  color: var(--gold-dim);
+}
+
+.story-block.system {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 12px;
+}
+
+.story-block.error {
+  color: #c44;
+  font-size: 0.8rem;
+  padding: 8px 12px;
+  background: rgba(200,60,60,0.1);
+  border-radius: 4px;
+}
+
+/* Loading */
+.loading-dots { display: inline-flex; gap: 4px; padding: 12px 0; }
+.loading-dots span {
+  width: 6px; height: 6px;
+  background: var(--gold-dim);
+  border-radius: 50%;
+  animation: bounce 1.2s infinite;
+}
+.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce { 0%,80%,100% { transform:translateY(0); } 40% { transform:translateY(-8px); } }
+
+/* Input area */
+.input-area {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg2);
+  border-top: 1px solid #2a2a35;
+  padding: 10px 12px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+}
+
+.mode-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.mode-tab {
+  flex: 1;
+  padding: 6px;
+  background: var(--bg3);
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  font-family: 'Noto Serif JP', serif;
+  cursor: pointer;
+  border-radius: 3px;
+  text-align: center;
+  transition: all 0.15s;
+}
+
+.mode-tab.active {
   background: var(--bg);
+  border-color: var(--gold-dim);
+  color: var(--gold);
 }
-.mode-bar.open { display: flex; }
-.mode-row { display: flex; gap: 0; width: 100%; }
-.mode-btn { flex: 1; padding: 0.5rem 0.25rem; background: none; border: none; border-right: 1px solid var(--border); color: var(--text2); font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: all 0.15s; }
-.mode-btn:last-child { border-right: none; }
-.mode-btn:hover { color: var(--gold); background: var(--bg2); }
-.mode-btn.active { color: var(--gold2); background: rgba(200,152,58,0.08); }
-.back-btn { padding: 0.5rem 0.7rem; background: none; border: none; border-right: 1px solid var(--border); color: var(--text3); cursor: pointer; font-size: 0.9rem; }
-.back-btn:hover { color: var(--gold); }
-.text-row { display: none; padding: 0.5rem; gap: 0.5rem; align-items: flex-end; }
-.text-row.open { display: flex; }
-.mode-indicator { font-family: 'Cinzel', serif; font-size: 0.65rem; letter-spacing: 0.15em; color: var(--gold); text-transform: uppercase; padding: 0.25rem 0.4rem; border: 1px solid var(--border); border-radius: var(--radius); white-space: nowrap; align-self: flex-end; margin-bottom: 0.35rem; }
-.text-row textarea { flex: 1; min-height: 52px; max-height: 160px; resize: none; font-size: 0.95rem; padding: 0.5rem 0.65rem; }
-.send-btn { background: rgba(200,152,58,0.15); border: 1px solid var(--gold); color: var(--gold); padding: 0.5rem 0.9rem; cursor: pointer; border-radius: var(--radius); font-family: 'Cinzel', serif; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; transition: all 0.15s; white-space: nowrap; align-self: flex-end; margin-bottom: 0.35rem; }
-.send-btn:hover { background: rgba(200,152,58,0.25); }
-.send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.sugg-row { display: flex; gap: 0.4rem; padding: 0.4rem 0.5rem; overflow-x: auto; }
-.sugg-btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text2); padding: 0.3rem 0.7rem; font-family: 'Crimson Text', serif; font-size: 0.82rem; font-style: italic; cursor: pointer; border-radius: 20px; white-space: nowrap; transition: all 0.15s; }
-.sugg-btn:hover { border-color: var(--gold); color: var(--gold); background: rgba(200,152,58,0.08); }
 
-/* overlay */
-.overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 99; }
-.overlay.open { display: block; }
+.input-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
 
-@media (max-width: 600px) {
-  :root { --panel-w: 100vw; }
-  .side-panel { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 50; }
-  .stat-bar { width: 36px; }
+.input-row textarea {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid #2a2a35;
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-family: 'Noto Serif JP', serif;
+  font-size: 0.9rem;
+  resize: none;
+  height: 42px;
+  max-height: 100px;
+  outline: none;
+  line-height: 1.4;
+}
+
+.input-row textarea:focus { border-color: var(--gold-dim); }
+
+.btn-send {
+  width: 42px;
+  height: 42px;
+  background: var(--gold);
+  border: none;
+  border-radius: 6px;
+  color: var(--bg);
+  font-size: 1.2rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s;
+}
+
+.btn-send:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.action-btns {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.action-btn {
+  padding: 5px 14px;
+  background: transparent;
+  border: 1px solid #2a2a35;
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  font-family: 'Noto Serif JP', serif;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+
+.action-btn:hover { border-color: var(--gold-dim); color: var(--text); }
+.action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Settings overlay */
+.overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.8);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.overlay.show { display: flex; }
+
+.overlay-box {
+  background: var(--bg2);
+  border: 1px solid var(--gold-dim);
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 480px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.overlay-box h3 {
+  color: var(--gold);
+  font-size: 1rem;
+  margin-bottom: 16px;
+  font-family: 'Cinzel', serif;
+}
+
+.overlay-box .close-btn {
+  float: right;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.overlay-box label { display: block; color: var(--gold-dim); font-size: 0.8rem; margin: 12px 0 4px; }
+.overlay-box textarea, .overlay-box input[type="text"], .overlay-box input[type="password"] {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid #2a2a35;
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-family: 'Noto Serif JP', serif;
+  font-size: 0.85rem;
+}
+
+.overlay-box textarea { min-height: 80px; resize: vertical; }
+
+.overlay-box .save-btn {
+  margin-top: 16px;
+  padding: 8px 24px;
+  background: var(--gold);
+  color: var(--bg);
+  border: none;
+  border-radius: 4px;
+  font-family: 'Noto Serif JP', serif;
+  cursor: pointer;
 }
 </style>
 </head>
 <body>
 
-<!-- START -->
-<div id="startScreen">
-  <div class="logo">Chronicle</div>
-  <div class="tagline">Your World · Your Rules · AI Narrated</div>
-  <div class="start-form">
-    <div>
-      <div class="field-label">▸ 主人公を語れ <span>— 外見・性格・過去・得意なこと、なんでも</span></div>
-      <textarea id="heroInput" rows="4" placeholder="例：銀髪のエルフ魔法使い、師匠を殺された復讐者。炎魔法が得意で、口数は少ない。左目に傷がある。"></textarea>
-    </div>
-    <div>
-      <div class="field-label">▸ 世界・舞台を語れ <span>— 空白でもAIが世界を作る</span></div>
-      <textarea id="worldInput" rows="3" placeholder="例：近未来の廃墟都市。魔法と機械が混在する世界。腐敗した帝国が支配している。"></textarea>
-    </div>
-    <div>
-      <div class="field-label">▸ APIキー <span>— Anthropic（Claude）または NovelAI</span></div>
-      <div class="api-row">
-        <input type="password" id="apiKeyInput" placeholder="sk-ant-... または pst-..." autocomplete="off">
-        <button class="eye-btn" onclick="toggleApiVis()" id="eyeBtn">👁</button>
-      </div>
-      <div class="api-note">キーはブラウザ内にのみ保存されます。<a href="https://novelai.net/account" target="_blank">novelai.net</a> → アカウント設定 → 永続的APIトークン</div>
-    </div>
-    <button class="enter-btn" id="enterBtn" onclick="startGame()" disabled>ENTER THE CHRONICLE</button>
+<!-- ===== SETUP SCREEN ===== -->
+<div id="setup">
+  <h1>CHRONICLE</h1>
+  <div class="subtitle">YOUR STORY · YOUR RULES</div>
+
+  <div class="setup-group">
+    <label>▸ 主人公の名前</label>
+    <input type="text" id="s-name" placeholder="例：魔王、リン、旅人…">
   </div>
+
+  <div class="setup-group">
+    <label>▸ 主人公の説明</label>
+    <div class="hint">職業・外見・性格・能力など。書いた内容がそのままゲームに反映される。</div>
+    <textarea id="s-hero" rows="3" placeholder="例：中性的な見た目の魔王。圧倒的な魔力を持つが退屈している。"></textarea>
+  </div>
+
+  <div class="setup-group">
+    <label>▸ 世界・舞台</label>
+    <div class="hint">舞台・時代・世界観・始まりの場所。空欄ならAIが決める。</div>
+    <textarea id="s-world" rows="2" placeholder="例：日本の大阪、中世ファンタジー…"></textarea>
+  </div>
+
+  <div class="setup-group">
+    <label>▸ NovelAI APIキー</label>
+    <input type="password" id="s-key" placeholder="pst-...">
+    <div class="key-note">キーはブラウザ内にのみ保存。<a href="https://novelai.net/account" target="_blank">novelai.net</a> → アカウント設定 → 永続的APIトークン</div>
+  </div>
+
+  <button id="btn-start" onclick="startGame()">冒険を始める</button>
 </div>
 
-<!-- GAME -->
-<div id="gameScreen">
+<!-- ===== GAME SCREEN ===== -->
+<div id="game">
   <div class="topbar">
-    <div class="stat">
-      <span class="stat-icon">❤</span>
-      <div class="stat-bar"><div class="stat-fill hp-fill" id="hpBar" style="width:100%"></div></div>
-      <span class="stat-val" id="hpVal">100/100</span>
-    </div>
-    <div class="stat">
-      <span class="stat-icon">✦</span>
-      <div class="stat-bar"><div class="stat-fill mp-fill" id="mpBar" style="width:100%"></div></div>
-      <span class="stat-val" id="mpVal">50/50</span>
-    </div>
-    <div class="stat">
-      <span class="stat-icon" style="font-family:'Cinzel',serif;font-size:0.72rem;color:var(--gold)">Lv.</span>
-      <span class="stat-val" id="lvVal">1</span>
-    </div>
-    <div class="stat">
-      <span class="stat-icon" style="font-size:0.8rem;color:var(--text3)">XP</span>
-      <div class="stat-bar"><div class="stat-fill xp-fill" id="xpBar" style="width:0%"></div></div>
-    </div>
-    <div class="stat">🪙 <span class="stat-val" id="goldVal">0</span></div>
-    <div class="spacer"></div>
-    <button class="icon-btn" onclick="togglePanel('charPanel')" title="キャラ">📜</button>
-    <button class="icon-btn" onclick="togglePanel('memPanel')" title="記憶">🧠</button>
-    <button class="icon-btn" onclick="toggleSettings()" title="設定">⚙️</button>
+    <div class="stat">❤ <div class="stat-bar"><div class="stat-bar-fill hp-fill"></div></div></div>
+    <div class="stat">✦ <div class="stat-bar"><div class="stat-bar-fill mp-fill"></div></div></div>
+    <div class="lv">Lv.1</div>
+    <button class="action-btn" onclick="showSettings()" style="margin-left:auto;">⚙</button>
   </div>
 
-  <div class="game-layout">
-    <div class="story-area" id="storyArea"></div>
+  <div class="story-area" id="story-area"></div>
 
-    <!-- CHAR PANEL -->
-    <div class="side-panel" id="charPanel">
-      <div class="panel-title">📜 キャラクターシート</div>
-      <div class="panel-section">
-        <h4>スキル・能力</h4>
-        <div id="skillsList"><span class="empty-note">まだ発見されていない</span></div>
-      </div>
-      <div class="panel-section">
-        <h4>特性</h4>
-        <div id="traitsList"><span class="empty-note">—</span></div>
-      </div>
-    </div>
-
-    <!-- MEM PANEL -->
-    <div class="side-panel" id="memPanel">
-      <div class="panel-title">🧠 記憶の書</div>
-      <div class="panel-section">
-        <h4>登場人物</h4>
-        <div id="npcList"><span class="empty-note">誰とも会っていない</span></div>
-      </div>
-      <div class="panel-section">
-        <h4>訪れた場所</h4>
-        <div id="placesList"><span class="empty-note">未探索</span></div>
-      </div>
-      <div class="panel-section">
-        <h4>所持アイテム</h4>
-        <div id="itemsList"><span class="empty-note">何も持っていない</span></div>
-      </div>
-      <div class="panel-section">
-        <h4>クエスト</h4>
-        <div id="questsList"><span class="empty-note">なし</span></div>
-      </div>
-      <div class="panel-section">
-        <h4>重要な出来事</h4>
-        <div id="eventsList"><span class="empty-note">何もない</span></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- INPUT -->
   <div class="input-area">
-    <div class="action-row">
-      <button class="action-btn" id="takeTurnBtn" onclick="toggleModeBar()">TAKE A TURN</button>
-      <button class="action-btn" id="continueBtn" onclick="doContinue()" disabled>CONTINUE</button>
-      <button class="action-btn" id="retryBtn" onclick="doRetry()" disabled>RETRY</button>
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="do" onclick="setMode('do',this)">⚔ 行動する</button>
+      <button class="mode-tab" data-mode="say" onclick="setMode('say',this)">💬 話す</button>
+      <button class="mode-tab" data-mode="story" onclick="setMode('story',this)">📖 描写</button>
     </div>
-    <div class="mode-bar" id="modeBar">
-      <div class="mode-row">
-        <button class="back-btn" onclick="closeModeBar()">←</button>
-        <button class="mode-btn" id="modeDoBtn" onclick="pickMode('Do')">Do</button>
-        <button class="mode-btn" id="modeSayBtn" onclick="pickMode('Say')">Say</button>
-        <button class="mode-btn" id="modeStoryBtn" onclick="pickMode('Story')">Story</button>
-        <button class="mode-btn" id="modeSeeBtn" onclick="pickMode('See')">See</button>
-      </div>
+    <div class="input-row">
+      <textarea id="user-input" placeholder="行動を入力…" rows="1" onkeydown="handleKey(event)"></textarea>
+      <button class="btn-send" id="btn-send" onclick="send()">▶</button>
     </div>
-    <div class="text-row" id="textRow">
-      <span class="mode-indicator" id="modeIndicator">DO</span>
-      <textarea id="actionInput" placeholder="行動を入力..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send();}"></textarea>
-      <button class="send-btn" id="sendBtn" onclick="send()">送る</button>
+    <div class="action-btns">
+      <button class="action-btn" id="btn-continue" onclick="doContinue()">続きを書く</button>
+      <button class="action-btn" id="btn-retry" onclick="doRetry()">やり直す</button>
     </div>
-    <div class="sugg-row" id="suggRow"></div>
   </div>
 </div>
 
-<!-- SETTINGS -->
-<div class="overlay" id="overlay" onclick="toggleSettings()"></div>
-<div id="settingsPanel">
-  <div class="settings-header">
-    <span class="settings-title">⚙ 設定</span>
-    <button class="close-btn" onclick="toggleSettings()">✕</button>
-  </div>
-
-  <div class="settings-section">
-    <h4>▸ キャラクタースロット</h4>
-    <div id="slotList"></div>
-    <button class="add-slot-btn" onclick="addSlot()">＋ キャラクターを追加</button>
-    <div class="char-edit" id="charEditForm">
-      <div class="field-label" style="font-size:0.65rem">アバター</div>
-      <div class="avatar-row" id="avatarRow"></div>
-      <div class="field-label" style="font-size:0.65rem;margin-top:0.3rem">名前</div>
-      <input type="text" id="editName" placeholder="キャラクター名">
-      <div class="field-label" style="font-size:0.65rem">役割</div>
-      <input type="text" id="editRole" placeholder="仲間・敵・NPC など">
-      <div class="field-label" style="font-size:0.65rem">説明</div>
-      <textarea id="editDesc" rows="3" placeholder="外見・性格・関係性など"></textarea>
-      <div class="btn-row">
-        <button class="mini-btn primary" onclick="saveSlot()">保存</button>
-        <button class="mini-btn" onclick="cancelEdit()">キャンセル</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="settings-section">
-    <h4>▸ APIキー設定</h4>
-    <div class="api-row">
-      <input type="password" id="settingsApiKey" placeholder="pst-...">
-      <button class="eye-btn" onclick="toggleSettingsApiVis()" id="settingsEye">👁</button>
-    </div>
-    <button class="save-btn" onclick="saveApiKey()" style="margin-top:0.5rem">保存</button>
-  </div>
-
-  <div class="settings-section">
-    <h4>▸ 世界設定（更新）</h4>
-    <textarea id="settingsWorld" rows="3" placeholder="世界設定を変更..."></textarea>
-    <button class="save-btn" onclick="saveWorld()" style="margin-top:0.5rem">更新</button>
+<!-- ===== SETTINGS OVERLAY ===== -->
+<div class="overlay" id="settings-overlay">
+  <div class="overlay-box">
+    <button class="close-btn" onclick="hideSettings()">✕</button>
+    <h3>SETTINGS</h3>
+    <label>主人公の名前</label>
+    <input type="text" id="set-name">
+    <label>主人公の説明</label>
+    <textarea id="set-hero"></textarea>
+    <label>世界設定</label>
+    <textarea id="set-world"></textarea>
+    <label>NovelAI APIキー</label>
+    <input type="password" id="set-key">
+    <button class="save-btn" onclick="saveSettings()">保存</button>
   </div>
 </div>
 
 <script>
-// ─── STATE ───────────────────────────────────────
-const PROXY = 'https://novel-proxy.sansan2103.workers.dev';
-const MODEL = 'kayra-v1';
-const AVATARS = ['🧙','⚔️','🏹','🗡️','🛡️','🔮','💀','👁️','🐉','🧝','👸','🤺','🦊','🐺','👤','🌑'];
-
-let state = {
-  hp: 100, hpMax: 100, mp: 50, mpMax: 50,
-  lv: 1, xp: 0, xpNext: 100, gold: 0,
-  skills: [], traits: [],
-  npcs: [], places: [], items: [], quests: [], events: [],
-  chars: [],
-  hero: '', world: '', apiKey: '',
-  history: [],     // {role, content} for context
-  lastAI: null,    // last AI message element for retry
-  lastUserMsg: '', // for retry
-  lastCleanOutput: '', // clean previous output for Kayra context
-  mode: 'Do',
-  busy: false,
-  gameStarted: false,
+// ===== STATE =====
+const STATE = {
+  heroName: '',
+  heroDesc: '',
+  world: '',
+  apiKey: '',
+  mode: 'do',        // do / say / story
+  storyText: '',      // 全ストーリーのクリーンテキスト
+  lastPrompt: '',     // 最後に送ったプロンプト（retry用）
+  lastAction: '',     // 最後のユーザー入力（retry用）
+  lastMode: 'do',     // 最後のモード（retry用）
+  busy: false
 };
 
-// ─── LOAD from localStorage ───────────────────────
-function loadStorage() {
-  const k = localStorage.getItem('chronicle_key') || '';
-  const ch = localStorage.getItem('chronicle_chars');
-  const hero = localStorage.getItem('chronicle_hero') || '';
-  const world = localStorage.getItem('chronicle_world') || '';
-  state.apiKey = k;
-  state.hero = hero;
-  state.world = world;
-  if (ch) try { state.chars = JSON.parse(ch); } catch(e) {}
+const PROXY_URL = 'https://novel-proxy.sansan2103.workers.dev';
+
+// ===== INIT =====
+function init() {
+  // Restore saved settings
+  STATE.heroName = localStorage.getItem('chr_name') || '';
+  STATE.heroDesc = localStorage.getItem('chr_hero') || '';
+  STATE.world = localStorage.getItem('chr_world') || '';
+  STATE.apiKey = localStorage.getItem('chronicle_key') || '';
+
+  document.getElementById('s-name').value = STATE.heroName;
+  document.getElementById('s-hero').value = STATE.heroDesc;
+  document.getElementById('s-world').value = STATE.world;
+  document.getElementById('s-key').value = STATE.apiKey;
 }
 
-// ─── API CALL (NovelAI Kayra) ────────────────────
-async function callNovelAI(userAction) {
-  const key = state.apiKey;
-  if (!key) throw new Error('APIキーが設定されていません');
+init();
 
-  const heroText = (state.hero || '冒険者').split(/[\n。]/)[0].slice(0, 20);
-  const worldText = (state.world || '異世界').split(/[\n。]/)[0].slice(0, 20);
+// ===== START GAME =====
+function startGame() {
+  STATE.heroName = document.getElementById('s-name').value.trim() || '冒険者';
+  STATE.heroDesc = document.getElementById('s-hero').value.trim() || '謎多き旅人';
+  STATE.world = document.getElementById('s-world').value.trim() || '剣と魔法の異世界';
+  STATE.apiKey = document.getElementById('s-key').value.trim();
 
-  // Build clean prose prompt
-  const lastClean = state.lastCleanOutput || '';
-  const ctx = lastClean.slice(-80); // only last 80 chars of previous output
-
-  let prompt;
-  if (!userAction) {
-    // CONTINUE
-    prompt = ctx || `${worldText}にて、${heroText}は`;
-  } else {
-    // ACTION: context + hero + action
-    const verb = /[するくるいえおうるれ]$/.test(userAction)
-      ? `${userAction}と、`
-      : `${userAction}した。`;
-    prompt = ctx
-      ? `${ctx}\n　${heroText}は${verb}`
-      : `${worldText}にて、${heroText}は${verb}`;
-  }
-
-  const params = {
-    max_length: 150,
-    min_length: 20,
-    temperature: 0.85,
-    top_p: 0.92,
-    top_k: 40,
-    repetition_penalty: 1.4,
-    repetition_penalty_range: 512,
-    use_string: true,
-  };
-
-  const res = await fetch(PROXY, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
-    body: JSON.stringify({ input: prompt, model: MODEL, parameters: params }),
-  });
-  if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    throw new Error(`HTTP ${res.status}: ${err.slice(0, 200)}`);
-  }
-  const data = await res.json();
-  if (data.event === 'error') throw new Error(JSON.stringify(data));
-  return (data.output ?? data.text ?? '').trim();
-}
-
-// ─── BUILD PROMPT ─────────────────────────────────
-function buildPrompt(userAction) {
-  return userAction || null;
-}
-
-// ─── PARSE AI RESPONSE ────────────────────────────
-function parseResponse(text) {
-  let clean = text;
-
-  // Strip system text that leaked into output
-  clean = clean.replace(/最初の行動を入力してください。/g, '');
-  clean = clean.replace(/主人公：[^\n]*/g, '');
-  clean = clean.replace(/【[^】]*】/g, '');
-  // Strip numbered/bulleted lists
-  clean = clean.replace(/[１-９1-9]+[\.．、]\s*.{0,20}\n/g, '');
-  // Strip repeated phrases (loop detection)
-  clean = clean.replace(/(.{4,12})\1{2,}/g, '$1');
-  // Cut at list degeneration
-  const cutAt = ['武器', 'アクセサリー', 'Equipment', '装備'];
-  for (const c of cutAt) {
-    const i = clean.indexOf(c);
-    if (i > 20) { clean = clean.slice(0, i).trim(); break; }
-  }
-
-  // Stats heuristics
-  if (/戦闘|攻撃|傷|ダメージ/.test(clean)) state.hp = Math.max(1, state.hp - Math.floor(Math.random() * 15 + 3));
-  if (/魔法|呪文|発動/.test(clean)) state.mp = Math.max(0, state.mp - Math.floor(Math.random() * 8 + 2));
-  if (/勝利|倒し|撃破/.test(clean)) { state.xp += 15; state.gold += Math.floor(Math.random() * 20 + 5); }
-  if (/宝|金貨|報酬/.test(clean)) state.gold += Math.floor(Math.random() * 30 + 10);
-  if (state.xp >= state.xpNext) { state.lv++; state.xpNext = state.lv * 100; state.hpMax += 10; state.hp = state.hpMax; state.mpMax += 5; state.mp = state.mpMax; }
-  updateStats();
-
-  return clean.trim() || text.trim();
-}
-
-// ─── RENDER ───────────────────────────────────────
-function addMsg(type, text, badge) {
-  const area = document.getElementById('storyArea');
-  const div = document.createElement('div');
-  div.className = 'msg';
-
-  if (type === 'narr') {
-    div.className += ' msg-narr';
-    div.textContent = text;
-    div.addEventListener('dblclick', () => {
-      div.contentEditable = div.contentEditable === 'true' ? 'false' : 'true';
-      if (div.contentEditable === 'true') div.focus();
-    });
-    state.lastAI = div;
-    area.appendChild(div);
-    // Update history
-    state.history.push({ role: 'assistant', content: text });
-  } else if (type === 'player') {
-    div.className += ' msg-player';
-    const b = badge ? `<span class="msg-badge">${badge}</span>` : '';
-    div.innerHTML = b + text;
-    area.appendChild(div);
-  } else if (type === 'divider') {
-    const hr = document.createElement('hr');
-    hr.className = 'divider';
-    area.appendChild(hr);
+  if (!STATE.apiKey) {
+    alert('APIキーを入力してください');
     return;
   }
 
-  area.scrollTop = area.scrollHeight;
-  return div;
+  // Save
+  localStorage.setItem('chr_name', STATE.heroName);
+  localStorage.setItem('chr_hero', STATE.heroDesc);
+  localStorage.setItem('chr_world', STATE.world);
+  localStorage.setItem('chronicle_key', STATE.apiKey);
+
+  // Switch screen
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('game').style.display = 'flex';
+
+  // Show intro message
+  addBlock('system', `【${STATE.world}】 ${STATE.heroName}：${STATE.heroDesc}`);
+  addBlock('system', '最初の行動を入力してください。');
 }
 
-function addThinking() {
-  const area = document.getElementById('storyArea');
+// ===== DISPLAY =====
+function addBlock(type, text) {
+  const area = document.getElementById('story-area');
   const div = document.createElement('div');
-  div.className = 'msg msg-thinking';
-  div.id = 'thinkingMsg';
-  div.textContent = '語り手が言葉を紡いでいる…';
+  div.className = `story-block ${type}`;
+  div.textContent = text;
   area.appendChild(div);
   area.scrollTop = area.scrollHeight;
 }
 
-function removeThinking() {
-  const el = document.getElementById('thinkingMsg');
+function addLoading() {
+  const area = document.getElementById('story-area');
+  const div = document.createElement('div');
+  div.className = 'story-block narrator';
+  div.id = 'loading';
+  div.innerHTML = '<div class="loading-dots"><span></span><span></span><span></span></div>';
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+}
+
+function removeLoading() {
+  const el = document.getElementById('loading');
   if (el) el.remove();
 }
 
-function updateStats() {
-  document.getElementById('hpBar').style.width = (state.hp / state.hpMax * 100) + '%';
-  document.getElementById('hpVal').textContent = state.hp + '/' + state.hpMax;
-  document.getElementById('mpBar').style.width = (state.mp / state.mpMax * 100) + '%';
-  document.getElementById('mpVal').textContent = state.mp + '/' + state.mpMax;
-  document.getElementById('xpBar').style.width = Math.min(100, state.xp / state.xpNext * 100) + '%';
-  document.getElementById('lvVal').textContent = state.lv;
-  document.getElementById('goldVal').textContent = state.gold;
+// ===== MODE =====
+function setMode(mode, btn) {
+  STATE.mode = mode;
+  document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  const input = document.getElementById('user-input');
+  const placeholders = { do: '行動を入力…', say: '台詞を入力…', story: '展開を記述…' };
+  input.placeholder = placeholders[mode] || '';
+  input.focus();
 }
 
-function renderChar() {
-  const sl = document.getElementById('skillsList');
-  sl.innerHTML = state.skills.length ? state.skills.map(s => `<span class="tag">${s}</span>`).join('') : '<span class="empty-note">まだ発見されていない</span>';
-  const tl = document.getElementById('traitsList');
-  tl.innerHTML = state.traits.length ? state.traits.map(t => `<span class="tag">${t}</span>`).join('') : '<span class="empty-note">—</span>';
-}
+// ===== PROMPT BUILDING =====
+// Kayraは純粋なテキスト補完モデル。
+// プロンプトの末尾をそのまま「続ける」だけ。
+// だからユーザーの行動をプロンプトの最後の文にして、
+// Kayraにその直後を書かせる。
 
-function renderMemory() {
-  const npcEl = document.getElementById('npcList');
-  npcEl.innerHTML = state.npcs.length ? state.npcs.map(n =>
-    `<div class="npc-item"><div class="npc-name">${n.name}</div><div class="npc-role">${n.role || ''}</div><div class="npc-desc">${n.desc || ''}</div></div>`
-  ).join('') : '<span class="empty-note">誰とも会っていない</span>';
+function buildPrompt(action, mode) {
+  // ATTG memory block - Kayraにジャンルを教える
+  // これはKayraが学習時に見たNovelAIのメモリ形式
+  const memory = `[ Author: Japanese light novel writer; Tags: interactive fiction, fantasy, adventure, RPG, Japanese text; Genre: ${STATE.world.includes('現代') || STATE.world.includes('日本') ? 'modern fiction' : 'fantasy adventure'} ]\n`;
 
-  const plEl = document.getElementById('placesList');
-  plEl.innerHTML = state.places.length ? state.places.map(p => `<span class="tag">${p}</span>`).join('') : '<span class="empty-note">未探索</span>';
+  // 世界とキャラの設定（短く）
+  const setting = `${STATE.world}。${STATE.heroName}は${STATE.heroDesc}。\n`;
 
-  const itEl = document.getElementById('itemsList');
-  itEl.innerHTML = state.items.length ? state.items.map(i => `<span class="tag">${i}</span>`).join('') : '<span class="empty-note">何も持っていない</span>';
-
-  const qtEl = document.getElementById('questsList');
-  qtEl.innerHTML = state.quests.length ? state.quests.map(q => `<div style="font-size:0.83rem;color:var(--text2);margin-bottom:0.2rem">• ${q}</div>`).join('') : '<span class="empty-note">なし</span>';
-
-  const evEl = document.getElementById('eventsList');
-  evEl.innerHTML = state.events.length ? state.events.map(e => `<div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.2rem">◆ ${e}</div>`).join('') : '<span class="empty-note">何もない</span>';
-}
-
-function renderSlots() {
-  const el = document.getElementById('slotList');
-  if (!state.chars.length) { el.innerHTML = '<span class="empty-note" style="font-size:0.82rem">キャラクターなし</span>'; return; }
-  el.innerHTML = state.chars.map((c, i) =>
-    `<div class="slot-card" onclick="editSlot(${i})">
-      <div class="slot-avatar">${c.avatar || '👤'}</div>
-      <div class="slot-info"><div class="slot-name">${c.name || '名前なし'}</div><div class="slot-role">${c.role || ''}</div></div>
-      <button class="slot-del" onclick="event.stopPropagation();deleteSlot(${i})">✕</button>
-    </div>`
-  ).join('');
-}
-
-// ─── SUGGESTIONS ──────────────────────────────────
-async function genSuggestions() {
-  const suggRow = document.getElementById('suggRow');
-  suggRow.innerHTML = '';
-  if (!state.gameStarted || state.history.length < 2) return;
-  try {
-    const prompt = buildPrompt('') + `\n次のプレイヤー行動として自然な短いアクション提案を3つだけJSON配列で出力してください。例: ["〜する","〜と言う","〜を調べる"]\nJSONのみ、他のテキストなし:`;
-    const raw = await callNovelAI(prompt);
-    const match = raw.match(/\[[\s\S]*?\]/);
-    if (!match) return;
-    const suggs = JSON.parse(match[0]);
-    if (!Array.isArray(suggs)) return;
-    suggs.slice(0, 4).forEach(s => {
-      const btn = document.createElement('button');
-      btn.className = 'sugg-btn';
-      btn.textContent = s;
-      btn.onclick = () => { document.getElementById('actionInput').value = s; pickMode('Do'); };
-      suggRow.appendChild(btn);
-    });
-  } catch(e) { /* silently fail */ }
-}
-
-// ─── GAME FLOW ────────────────────────────────────
-async function startGame() {
-  const hero = document.getElementById('heroInput').value.trim();
-  const world = document.getElementById('worldInput').value.trim();
-  const key = document.getElementById('apiKeyInput').value.trim();
-
-  if (!key) { alert('APIキーを入力してください'); return; }
-
-  state.hero = hero || 'プレイヤーキャラクター';
-  state.world = world;
-  state.apiKey = key;
-  localStorage.setItem('chronicle_key', key);
-  localStorage.setItem('chronicle_hero', state.hero);
-  localStorage.setItem('chronicle_world', state.world);
-
-  document.getElementById('startScreen').style.display = 'none';
-  document.getElementById('gameScreen').style.display = 'flex';
-
-  // Show start info WITHOUT adding to history
-  const worldDisplay = state.world ? `【${state.world}】` : '【異世界】';
-  const area = document.getElementById('storyArea');
-  const div = document.createElement('div');
-  div.className = 'msg msg-narr';
-  div.style.color = 'var(--text3)';
-  div.style.fontStyle = 'italic';
-  div.textContent = `${worldDisplay} 主人公：${state.hero}\n最初の行動を入力してください。`;
-  area.appendChild(div);
-  const hr = document.createElement('hr');
-  hr.className = 'divider';
-  area.appendChild(hr);
-
-  state.gameStarted = true;
-  enablePostGame();
-  setAllBusy(false);
-}
-
-async function send() {
-  const input = document.getElementById('actionInput');
-  const text = input.value.trim();
-  if (!text || state.busy) return;
-
-  const modeLabel = state.mode;
-  let actionText = text;
-  if (modeLabel === 'Say') actionText = `「${text}」と言う`;
-  else if (modeLabel === 'See') actionText = `${text}を見回す`;
-
-  state.lastUserMsg = actionText;
-  input.value = '';
-  addMsg('player', text, modeLabel);
-
-  setAllBusy(true);
-  addThinking();
-  try {
-    const raw = await callNovelAI(actionText);
-    removeThinking();
-    const clean = parseResponse(raw);
-    state.lastCleanOutput = clean; // save for next prompt
-    state.history.push({ role: 'user', content: actionText });
-    state.history.push({ role: 'assistant', content: clean });
-    addMsg('narr', clean);
-    addMsg('divider', '');
-    enablePostGame();
-    genSuggestions();
-  } catch(e) {
-    removeThinking();
-    addMsg('narr', 'エラー: ' + e.message);
+  // 前の物語テキスト（最後の600文字だけ）
+  let context = '';
+  if (STATE.storyText.length > 0) {
+    const clean = STATE.storyText.trim();
+    context = clean.length > 600 ? clean.slice(-600) : clean;
+    context += '\n';
   }
-  setAllBusy(false);
-  closeModeBar();
-}
 
-async function doContinue() {
-  if (state.busy) return;
-  setAllBusy(true);
-  addThinking();
-  try {
-    const raw = await callNovelAI(null);
-    removeThinking();
-    const clean = parseResponse(raw);
-    state.lastCleanOutput = clean;
-    state.history.push({ role: 'assistant', content: clean });
-    addMsg('narr', clean);
-    addMsg('divider', '');
-    genSuggestions();
-  } catch(e) {
-    removeThinking();
-    addMsg('narr', 'エラー: ' + e.message);
+  // ユーザーの行動を物語文に変換
+  let actionLine = '';
+  if (action && action.trim()) {
+    const act = action.trim();
+    if (mode === 'say') {
+      // 話す → 台詞として
+      actionLine = `「${act}」と${STATE.heroName}は言った。`;
+    } else if (mode === 'story') {
+      // 描写 → そのまま追加
+      actionLine = act.endsWith('。') ? act : act + '。';
+    } else {
+      // 行動する → "〜ことにした。" で行動を確定事実にする
+      // Kayraはこの直後から「その結果何が起きたか」を書く
+      if (act.endsWith('する') || act.endsWith('った') || act.endsWith('した') || act.endsWith('いた') || act.endsWith('る')) {
+        actionLine = `${STATE.heroName}は${act}。`;
+      } else if (act.endsWith('。') || act.endsWith('！') || act.endsWith('？')) {
+        actionLine = `${STATE.heroName}は${act}`;
+      } else {
+        actionLine = `${STATE.heroName}は${act}た。`;
+      }
+    }
   }
-  setAllBusy(false);
-}
 
-async function doRetry() {
-  if (state.busy || !state.lastAI) return;
-  state.lastAI.remove();
-  for (let i = state.history.length - 1; i >= 0; i--) {
-    if (state.history[i].role === 'assistant') { state.history.splice(i, 1); break; }
-  }
-  // Restore previous clean output
-  const prev = state.history.filter(h => h.role === 'assistant').slice(-1)[0];
-  state.lastCleanOutput = prev ? prev.content : '';
-  setAllBusy(true);
-  addThinking();
-  try {
-    const lastUser = state.history.filter(h => h.role === 'user').slice(-1)[0];
-    const raw = await callNovelAI(lastUser ? lastUser.content : null);
-    removeThinking();
-    const clean = parseResponse(raw);
-    state.lastCleanOutput = clean;
-    state.history.push({ role: 'assistant', content: clean });
-    addMsg('narr', clean);
-    addMsg('divider', '');
-    genSuggestions();
-  } catch(e) {
-    removeThinking();
-    addMsg('narr', 'エラー: ' + e.message);
-  }
-  setAllBusy(false);
-}
+  // プロンプト組み立て
+  // Kayraは末尾のテキストパターンを続ける
+  // → 行動文で終わらせれば、行動の結果を書いてくれる
+  let prompt = memory;
 
-// ─── UI HELPERS ───────────────────────────────────
-function setAllBusy(v) {
-  state.busy = v;
-  document.getElementById('sendBtn').disabled = v;
-  document.getElementById('continueBtn').disabled = v || !state.gameStarted;
-  document.getElementById('retryBtn').disabled = v || !state.gameStarted;
-  document.getElementById('takeTurnBtn').disabled = v;
-}
-
-function enablePostGame() {
-  document.getElementById('continueBtn').disabled = false;
-  document.getElementById('retryBtn').disabled = false;
-}
-
-function toggleModeBar() {
-  if (state.busy) return;
-  const bar = document.getElementById('modeBar');
-  const textRow = document.getElementById('textRow');
-  if (bar.classList.contains('open')) {
-    bar.classList.remove('open');
-    textRow.classList.remove('open');
+  if (STATE.storyText.length === 0) {
+    // 初回：設定 + 行動
+    prompt += setting + '\n' + actionLine + '\n';
   } else {
-    bar.classList.add('open');
-    document.getElementById('takeTurnBtn').classList.add('active');
+    // 2回目以降：前の文脈 + 行動
+    prompt += setting + '***\n' + context;
+    if (actionLine) {
+      prompt += actionLine + '\n';
+    }
+  }
+
+  return prompt;
+}
+
+// ===== API CALL =====
+async function callKayra(prompt) {
+  const res = await fetch(PROXY_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + STATE.apiKey
+    },
+    body: JSON.stringify({
+      input: prompt,
+      model: 'kayra-v1',
+      parameters: {
+        max_length: 150,
+        min_length: 1,
+        use_string: true,
+        temperature: 0.72,
+        top_k: 40,
+        top_p: 0.95,
+        tail_free_sampling: 0.975,
+        repetition_penalty: 1.5,
+        repetition_penalty_range: 2048,
+        repetition_penalty_slope: 3.33,
+        repetition_penalty_frequency: 0.02,
+        repetition_penalty_presence: 0
+      }
+    })
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API Error ${res.status}: ${text}`);
+  }
+
+  const data = await res.json();
+  if (data.error) throw new Error(data.error || data.message || JSON.stringify(data));
+  return data.output || '';
+}
+
+// ===== OUTPUT CLEANING =====
+function cleanOutput(raw) {
+  let text = raw;
+
+  // ATTG タグを除去 [ ... ]
+  text = text.replace(/\[[^\]]{0,200}\]/g, '');
+
+  // > action 形式を除去
+  text = text.replace(/^>.*$/gm, '');
+
+  // *** 区切りを除去
+  text = text.replace(/\*{2,}/g, '');
+
+  // リスト系を除去（武器：、アイテム：、スキル：などで始まる行）
+  text = text.replace(/^[\s　]*(武器|防具|アイテム|スキル|能力|ステータス|HP|MP|攻撃力|防御力|所持|装備|レベル|Lv|種族|職業|称号|クエスト|名前|年齢|性別)[\s　]*[：:].*/gm, '');
+
+  // 箇条書き除去
+  text = text.replace(/^[\s　]*[-・●▸▹►◆◇★☆※→⇒]+\s*.*/gm, '');
+
+  // 番号付きリスト除去
+  text = text.replace(/^[\s　]*\d+[\.)）]\s*.*/gm, '');
+
+  // 空行を整理
+  text = text.replace(/\n{3,}/g, '\n\n');
+  text = text.trim();
+
+  // ループ検出＆除去：同じ文が繰り返されてたら最初の1つだけ残す
+  const sentences = text.split(/(?<=[。！？…」』])/);
+  const seen = new Set();
+  const unique = [];
+  for (const s of sentences) {
+    const key = s.trim();
+    if (key.length < 2) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(s);
+  }
+  text = unique.join('');
+
+  // 最後の完全な文で切る（。！？…」』のいずれかで終わる位置）
+  const lastEnd = Math.max(
+    text.lastIndexOf('。'),
+    text.lastIndexOf('！'),
+    text.lastIndexOf('？'),
+    text.lastIndexOf('…'),
+    text.lastIndexOf('」'),
+    text.lastIndexOf('』')
+  );
+  if (lastEnd > 0 && lastEnd < text.length - 1) {
+    text = text.slice(0, lastEnd + 1);
+  }
+
+  return text.trim();
+}
+
+// ===== SEND =====
+async function send() {
+  if (STATE.busy) return;
+  const input = document.getElementById('user-input');
+  const action = input.value.trim();
+  if (!action) return;
+
+  STATE.busy = true;
+  setUIBusy(true);
+  input.value = '';
+
+  // ユーザーの行動を表示
+  const modeLabels = { do: '行動', say: '発言', story: '描写' };
+  addBlock('action', `${modeLabels[STATE.mode]}：${action}`);
+
+  // プロンプト構築
+  const prompt = buildPrompt(action, STATE.mode);
+  STATE.lastPrompt = prompt;
+  STATE.lastAction = action;
+  STATE.lastMode = STATE.mode;
+
+  addLoading();
+
+  try {
+    let raw = await callKayra(prompt);
+    let text = cleanOutput(raw);
+
+    // テキストが短すぎたら追加生成（最大2回）
+    let attempts = 0;
+    while (text.length < 30 && attempts < 2) {
+      const morePrompt = prompt + text;
+      const more = await callKayra(morePrompt);
+      text += cleanOutput(more);
+      attempts++;
+    }
+
+    if (!text || text.length < 5) {
+      text = '（物語の続きを生成できませんでした。もう一度試してください。）';
+    }
+
+    removeLoading();
+    addBlock('narrator', text);
+
+    // クリーンテキストを蓄積（次のプロンプトの文脈になる）
+    // ユーザーの行動文もストーリーに含める
+    const actionText = STATE.mode === 'say'
+      ? `「${action}」と${STATE.heroName}は言った。`
+      : STATE.mode === 'story'
+        ? action
+        : `${STATE.heroName}は${action}。`;
+    STATE.storyText += actionText + text + '\n';
+
+  } catch (err) {
+    removeLoading();
+    addBlock('error', `エラー: ${err.message}`);
+    console.error(err);
+  }
+
+  STATE.busy = false;
+  setUIBusy(false);
+}
+
+// ===== CONTINUE =====
+async function doContinue() {
+  if (STATE.busy || STATE.storyText.length === 0) return;
+
+  STATE.busy = true;
+  setUIBusy(true);
+  addLoading();
+
+  // 行動なしで続きを生成
+  const prompt = buildPrompt(null, 'story');
+  STATE.lastPrompt = prompt;
+
+  try {
+    const raw = await callKayra(prompt);
+    let text = cleanOutput(raw);
+
+    if (!text || text.length < 5) {
+      text = '（続きを生成できませんでした。）';
+    }
+
+    removeLoading();
+    addBlock('narrator', text);
+    STATE.storyText += text + '\n';
+
+  } catch (err) {
+    removeLoading();
+    addBlock('error', `エラー: ${err.message}`);
+  }
+
+  STATE.busy = false;
+  setUIBusy(false);
+}
+
+// ===== RETRY =====
+async function doRetry() {
+  if (STATE.busy || !STATE.lastPrompt) return;
+
+  // 最後のnarrator blockを削除
+  const area = document.getElementById('story-area');
+  const blocks = area.querySelectorAll('.story-block.narrator');
+  if (blocks.length > 0) {
+    const lastBlock = blocks[blocks.length - 1];
+    // storyTextから最後の出力を除去
+    const lastText = lastBlock.textContent;
+    if (STATE.storyText.endsWith(lastText + '\n')) {
+      STATE.storyText = STATE.storyText.slice(0, -(lastText.length + 1));
+    }
+    lastBlock.remove();
+  }
+
+  STATE.busy = true;
+  setUIBusy(true);
+  addLoading();
+
+  try {
+    // 同じプロンプトで再生成（temperatureが効くので違う結果になる）
+    const raw = await callKayra(STATE.lastPrompt);
+    let text = cleanOutput(raw);
+
+    if (!text || text.length < 5) {
+      text = '（生成できませんでした。）';
+    }
+
+    removeLoading();
+    addBlock('narrator', text);
+
+    // storyTextを更新
+    const actionText = STATE.lastMode === 'say'
+      ? `「${STATE.lastAction}」と${STATE.heroName}は言った。`
+      : STATE.lastMode === 'story'
+        ? STATE.lastAction
+        : `${STATE.heroName}は${STATE.lastAction}。`;
+    if (STATE.lastAction) {
+      STATE.storyText += actionText + text + '\n';
+    } else {
+      STATE.storyText += text + '\n';
+    }
+
+  } catch (err) {
+    removeLoading();
+    addBlock('error', `エラー: ${err.message}`);
+  }
+
+  STATE.busy = false;
+  setUIBusy(false);
+}
+
+// ===== UI HELPERS =====
+function setUIBusy(busy) {
+  document.getElementById('btn-send').disabled = busy;
+  document.getElementById('btn-continue').disabled = busy;
+  document.getElementById('btn-retry').disabled = busy;
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    send();
   }
 }
 
-function closeModeBar() {
-  document.getElementById('modeBar').classList.remove('open');
-  document.getElementById('textRow').classList.remove('open');
-  document.getElementById('takeTurnBtn').classList.remove('active');
-}
-
-function pickMode(mode) {
-  state.mode = mode;
-  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('mode' + mode + 'Btn').classList.add('active');
-  document.getElementById('modeIndicator').textContent = mode.toUpperCase();
-  const textRow = document.getElementById('textRow');
-  textRow.classList.add('open');
-  const placeholders = { Do: '行動を入力…', Say: 'セリフを入力…', Story: '物語として語る…', See: '何を見る・観察する…' };
-  document.getElementById('actionInput').placeholder = placeholders[mode] || '';
-  document.getElementById('actionInput').focus();
-}
-
-function togglePanel(id) {
-  const el = document.getElementById(id);
-  const other = id === 'charPanel' ? 'memPanel' : 'charPanel';
-  document.getElementById(other).classList.remove('open');
-  el.classList.toggle('open');
-}
-
-function toggleSettings() {
-  const p = document.getElementById('settingsPanel');
-  const ov = document.getElementById('overlay');
-  const isOpen = p.classList.contains('open');
-  if (!isOpen) {
-    renderSlots();
-    const savedKey = localStorage.getItem('chronicle_key') || '';
-    document.getElementById('settingsApiKey').value = savedKey;
-    document.getElementById('settingsWorld').value = state.world;
-  }
-  p.classList.toggle('open');
-  ov.classList.toggle('open');
-}
-
-function toggleApiVis() {
-  const inp = document.getElementById('apiKeyInput');
-  inp.type = inp.type === 'password' ? 'text' : 'password';
-}
-function toggleSettingsApiVis() {
-  const inp = document.getElementById('settingsApiKey');
-  inp.type = inp.type === 'password' ? 'text' : 'password';
-}
-
-// ─── START SCREEN VALIDATION ──────────────────────
-document.getElementById('apiKeyInput').addEventListener('input', function() {
-  const v = this.value.trim();
-  document.getElementById('enterBtn').disabled = v.length < 8;
+// Auto-resize textarea
+document.getElementById('user-input')?.addEventListener('input', function() {
+  this.style.height = '42px';
+  this.style.height = Math.min(this.scrollHeight, 100) + 'px';
 });
 
-// ─── CHAR SLOTS ───────────────────────────────────
-let editingSlotIndex = null;
-
-function addSlot() {
-  editingSlotIndex = null;
-  clearEditForm();
-  document.getElementById('charEditForm').classList.add('open');
-  buildAvatarRow(null);
+// ===== SETTINGS =====
+function showSettings() {
+  document.getElementById('set-name').value = STATE.heroName;
+  document.getElementById('set-hero').value = STATE.heroDesc;
+  document.getElementById('set-world').value = STATE.world;
+  document.getElementById('set-key').value = STATE.apiKey;
+  document.getElementById('settings-overlay').classList.add('show');
 }
 
-function editSlot(i) {
-  editingSlotIndex = i;
-  const c = state.chars[i];
-  document.getElementById('editName').value = c.name || '';
-  document.getElementById('editRole').value = c.role || '';
-  document.getElementById('editDesc').value = c.desc || '';
-  buildAvatarRow(c.avatar);
-  document.getElementById('charEditForm').classList.add('open');
+function hideSettings() {
+  document.getElementById('settings-overlay').classList.remove('show');
 }
 
-function deleteSlot(i) {
-  state.chars.splice(i, 1);
-  saveChars();
-  renderSlots();
-}
+function saveSettings() {
+  STATE.heroName = document.getElementById('set-name').value.trim() || STATE.heroName;
+  STATE.heroDesc = document.getElementById('set-hero').value.trim() || STATE.heroDesc;
+  STATE.world = document.getElementById('set-world').value.trim() || STATE.world;
+  STATE.apiKey = document.getElementById('set-key').value.trim() || STATE.apiKey;
 
-function saveSlot() {
-  const name = document.getElementById('editName').value.trim();
-  const role = document.getElementById('editRole').value.trim();
-  const desc = document.getElementById('editDesc').value.trim();
-  const selAvatar = document.querySelector('.avatar-opt.sel');
-  const avatar = selAvatar ? selAvatar.textContent : '👤';
-  const entry = { name, role, desc, avatar };
-  if (editingSlotIndex !== null) state.chars[editingSlotIndex] = entry;
-  else state.chars.push(entry);
-  saveChars();
-  renderSlots();
-  document.getElementById('charEditForm').classList.remove('open');
-  clearEditForm();
-}
+  localStorage.setItem('chr_name', STATE.heroName);
+  localStorage.setItem('chr_hero', STATE.heroDesc);
+  localStorage.setItem('chr_world', STATE.world);
+  localStorage.setItem('chronicle_key', STATE.apiKey);
 
-function cancelEdit() {
-  document.getElementById('charEditForm').classList.remove('open');
-  clearEditForm();
+  hideSettings();
+  addBlock('system', '設定を更新しました。');
 }
-
-function clearEditForm() {
-  ['editName','editRole','editDesc'].forEach(id => document.getElementById(id).value = '');
-}
-
-function buildAvatarRow(sel) {
-  const row = document.getElementById('avatarRow');
-  row.innerHTML = AVATARS.map(a =>
-    `<span class="avatar-opt${sel === a ? ' sel' : ''}" onclick="selectAvatar(this)">${a}</span>`
-  ).join('');
-}
-
-function selectAvatar(el) {
-  document.querySelectorAll('.avatar-opt').forEach(e => e.classList.remove('sel'));
-  el.classList.add('sel');
-}
-
-function saveChars() {
-  localStorage.setItem('chronicle_chars', JSON.stringify(state.chars));
-}
-
-function saveApiKey() {
-  const k = document.getElementById('settingsApiKey').value.trim();
-  if (!k) return;
-  state.apiKey = k;
-  localStorage.setItem('chronicle_key', k);
-  alert('APIキーを保存しました');
-}
-
-function saveWorld() {
-  state.world = document.getElementById('settingsWorld').value.trim();
-  alert('世界設定を更新しました');
-}
-
-// ─── INIT ─────────────────────────────────────────
-loadStorage();
-const savedKey = localStorage.getItem('chronicle_key') || '';
-if (savedKey) {
-  document.getElementById('apiKeyInput').value = savedKey;
-  document.getElementById('enterBtn').disabled = false;
-}
-if (state.hero) document.getElementById('heroInput').value = state.hero;
-if (state.world) document.getElementById('worldInput').value = state.world;
-updateStats();
-renderChar();
-renderMemory();
 </script>
 </body>
 </html>
