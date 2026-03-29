@@ -639,10 +639,19 @@ async function startGame() {
   document.getElementById('startScreen').style.display = 'none';
   document.getElementById('gameScreen').style.display = 'flex';
 
-  // Clean start message
+  // Show start info WITHOUT adding to history
   const worldDisplay = state.world ? `【${state.world}】` : '【異世界】';
-  addMsg('narr', `${worldDisplay}\n主人公：${state.hero}\n\n最初の行動を入力してください。`);
-  addMsg('divider', '');
+  const area = document.getElementById('storyArea');
+  const div = document.createElement('div');
+  div.className = 'msg msg-narr';
+  div.style.color = 'var(--text3)';
+  div.style.fontStyle = 'italic';
+  div.textContent = `${worldDisplay} 主人公：${state.hero}\n最初の行動を入力してください。`;
+  area.appendChild(div);
+  const hr = document.createElement('hr');
+  hr.className = 'divider';
+  area.appendChild(hr);
+
   state.gameStarted = true;
   enablePostGame();
   setAllBusy(false);
