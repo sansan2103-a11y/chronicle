@@ -564,57 +564,57 @@ function setMode(mode, btn) {
 // Kayraにその直後を書かせる。
 
 function buildPrompt(action, mode) {
-  // ATTG memory block - Kayraのジャンル制御
-  // 冒険・アクション寄りにして、恋愛・BLを回避
-  const isModern = STATE.world.includes('現代') || STATE.world.includes('日本') || STATE.world.includes('大阪') || STATE.world.includes('東京');
-  const genre = isModern ? 'modern action adventure' : 'dark fantasy adventure';
-  const memory = `[ Author: adventure novelist; Tags: action, adventure, exploration, dramatic, descriptive prose; Genre: ${genre}; Setting: ${STATE.world} ]\n`;
+  // ===== KAYRA戦略 =====
+  // ATTGタグ・英語・***・メタテキストは全廃。
+  // Kayraは「直前のテキストのスタイルを続ける」だけ。
+  // → 純粋な日本語小説文だけを渡せば、小説として続けてくれる。
+  // → Web小説のメタ（作者コメント、☆評価）を出させないために、
+  //    プロンプトから一切のメタ要素を排除する。
 
   // ユーザーの行動を自然な物語文に変換
   let actionLine = '';
   if (action && action.trim()) {
     const act = action.trim();
     if (mode === 'say') {
-      actionLine = `\n「${act}」\n　${STATE.heroName}はそう言った。`;
+      actionLine = `「${act}」\n　${STATE.heroName}はそう口にした。`;
     } else if (mode === 'story') {
-      actionLine = '\n　' + (act.endsWith('。') ? act : act + '。');
+      actionLine = '　' + (act.endsWith('。') ? act : act + '。');
     } else {
-      // 行動モード：ユーザー入力をそのまま行動文に組み込む
-      // 末尾の形で判定して自然な文にする
+      // 行動モード
       if (act.endsWith('る') || act.endsWith('す') || act.endsWith('く') || act.endsWith('ぐ') || act.endsWith('む') || act.endsWith('ぶ') || act.endsWith('つ') || act.endsWith('ぬ')) {
-        // 辞書形 → そのまま「〜ことにした」
-        actionLine = `\n　${STATE.heroName}は${act}ことにした。`;
-      } else if (act.endsWith('した') || act.endsWith('った') || act.endsWith('いた') || act.endsWith('んだ') || act.endsWith('てた')) {
-        // 過去形 → そのまま
-        actionLine = `\n　${STATE.heroName}は${act}。`;
+        actionLine = `　${STATE.heroName}は${act}ことにした。`;
+      } else if (act.endsWith('した') || act.endsWith('った') || act.endsWith('いた') || act.endsWith('んだ')) {
+        actionLine = `　${STATE.heroName}は${act}。`;
       } else if (act.endsWith('て') || act.endsWith('で')) {
-        // て形 → 「〜みた」
-        actionLine = `\n　${STATE.heroName}は${act}みた。`;
+        actionLine = `　${STATE.heroName}は${act}みた。`;
       } else if (act.endsWith('。') || act.endsWith('！') || act.endsWith('？')) {
-        actionLine = `\n　${STATE.heroName}は${act}`;
+        actionLine = `　${STATE.heroName}は${act}`;
       } else {
-        // その他 → 「〜した」
-        actionLine = `\n　${STATE.heroName}は${act}。`;
+        actionLine = `　${STATE.heroName}は${act}した。`;
       }
     }
   }
 
-  // プロンプト組み立て
-  let prompt = memory;
-
-  // キャラ設定（常に含める＝Kayraのアンカー）
-  const charLine = `　${STATE.heroName}――${STATE.heroDesc}。`;
+  // ===== プロンプト組み立て =====
+  // 純粋な日本語散文のみ。タグ・記号・英語なし。
+  let prompt = '';
 
   if (STATE.storyText.length === 0) {
-    // 初回：舞台設定→行動で物語開始
-    prompt += `　${STATE.world}。${charLine}\n`;
-    prompt += actionLine + '\n';
+    // 初回：小説の冒頭として書く
+    prompt += `　${STATE.world}――。\n`;
+    prompt += `　${STATE.heroName}。${STATE.heroDesc}。\n`;
+    if (actionLine) {
+      prompt += actionLine + '\n　';
+    }
   } else {
-    // 2回目以降：前の文脈（最後の500文字）＋行動
+    // 2回目以降：直近の文脈＋行動
     const clean = STATE.storyText.trim();
-    const context = clean.length > 500 ? clean.slice(-500) : clean;
-    prompt += charLine + '\n***\n' + context;
-    prompt += actionLine + '\n';
+    // 最後の400文字だけ（多すぎるとKayraが文脈に溺れる）
+    const context = clean.length > 400 ? clean.slice(-400) : clean;
+    prompt += context + '\n';
+    if (actionLine) {
+      prompt += actionLine + '\n　';
+    }
   }
 
   return prompt;
@@ -663,8 +663,11 @@ async function callKayra(prompt) {
 function cleanOutput(raw) {
   let text = raw;
 
-  // ATTG タグを除去 [ ... ]
+  // ATTG タグ除去 [ ... ]
   text = text.replace(/\[[^\]]{0,200}\]/g, '');
+
+  // 【】で囲まれたメタテキスト除去（作者コメント、選択肢UI等）
+  text = text.replace(/【[^】]{0,100}】/g, '');
 
   // > action 形式を除去
   text = text.replace(/^>.*$/gm, '');
@@ -672,8 +675,23 @@ function cleanOutput(raw) {
   // *** 区切りを除去
   text = text.replace(/\*{2,}/g, '');
 
+  // Web小説メタ（作者コメント、評価依頼、ブクマ）を丸ごと除去
+  // 「と、思ってくれたなら」以降の作者コメントパターン
+  text = text.replace(/と、思って(くれた|もらえた)なら.*/gs, '');
+  // ブクマ・評価・応援系
+  text = text.replace(/(ブクマ|ブックマーク|お気に入り|ポイント評価|☆|★|応援|感想|コメント|フォロー).*(嬉しい|ください|お願い|よろしく|ありがと).*/g, '');
+  // 作者からのお願い系
+  text = text.replace(/(作者|筆者|著者)から.*/g, '');
+  // 「面白かった！」「続きが気になる」パターン
+  text = text.replace(/[「『]*(面白かった|続きが気になる|次回も|次話|更新)[！!」』]*/g, '');
+  // 「→」で始まる選択肢風テキスト
+  text = text.replace(/^.*→.*「.*」.*$/gm, '');
+  // 「を選択。」パターン
+  text = text.replace(/.*を選択[。．.]*/g, '');
+
   // メタ情報・指示文の漏出を除去
-  text = text.replace(/^[\s　]*(Author|Tags|Genre|Setting|Note|Chapter|Scene|END|続く|つづく|第\d+[話章回節部])[\s　]*[：:].*/gim, '');
+  text = text.replace(/^[\s　]*(Author|Tags|Genre|Setting|Note|Chapter|Scene|END|続く|つづく).*$/gim, '');
+  text = text.replace(/第\d+[話章回節部].*/gm, '');
   text = text.replace(/^[\s　]*(最初の行動|行動を入力|入力してください|主人公[：:]).*/gm, '');
 
   // リスト系を除去
