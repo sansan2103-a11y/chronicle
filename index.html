@@ -416,70 +416,55 @@ async function callNovelAI(prompt) {
   const params = {
     max_length: 150,
     min_length: 10,
-    temperature: 1.0,
-    top_p: 0.95,
-    top_k: 85,
-    repetition_penalty: 1.05,
-    repetition_penalty_range: 2048,
-    repetition_penalty_slope: 0.09,
+    temperature: 0.9,
+    top_p: 0.9,
+    top_k: 40,
+    repetition_penalty: 1.15,
+    repetition_penalty_range: 512,
     use_string: true,
   };
 
-  // Generate and auto-continue until sentence ends (max 3 calls)
-  let fullOutput = '';
-  let currentPrompt = prompt;
-
-  for (let i = 0; i < 3; i++) {
-    const body = { input: currentPrompt, model: MODEL, parameters: params };
-    const res = await fetch(PROXY, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      throw new Error(`HTTP ${res.status}: ${errText.slice(0, 200)}`);
-    }
-    const data = await res.json();
-    if (data.event === 'error') throw new Error(JSON.stringify(data));
-    const chunk = data.output !== undefined ? data.output : (data.text || '');
-    fullOutput += chunk;
-
-    // Stop if we hit sentence-ending punctuation
-    if (/[。！？…」』]$/.test(fullOutput.trim())) break;
-    // Also stop if second call and we have enough text
-    if (i >= 1 && fullOutput.length > 100) break;
-
-    // Continue from where we left off
-    currentPrompt = currentPrompt + chunk;
+  const body = { input: prompt, model: MODEL, parameters: params };
+  const res = await fetch(PROXY, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}: ${errText.slice(0, 200)}`);
   }
-
-  return fullOutput.trim();
+  const data = await res.json();
+  if (data.event === 'error') throw new Error(JSON.stringify(data));
+  const out = data.output !== undefined ? data.output : (data.text || '');
+  return out.trim();
 }
 
 // ─── BUILD PROMPT ─────────────────────────────────
 function buildPrompt(userAction) {
-  const heroText = state.hero || '名もなき冒険者';
-  const worldText = state.world || '剣と魔法の世界';
+  const heroText = state.hero || '冒険者';
+  const worldText = state.world || '異世界';
 
+  // Get only the LAST sentence of previous AI output (max 80 chars)
   const aiHistory = state.history.filter(h => h.role === 'assistant').slice(-1);
-  const lastAI = aiHistory.length > 0 ? aiHistory[0].content : '';
-
-  if (!lastAI) {
-    // Strong narrative seed - specific enough to prevent template matching
-    return `${worldText}。${heroText}は、今この瞬間に立っていた。`;
+  let lastSentence = '';
+  if (aiHistory.length > 0) {
+    const txt = aiHistory[0].content;
+    // Get last sentence
+    const sentences = txt.split(/(?<=[。！？])/);
+    lastSentence = sentences.slice(-2).join('').slice(-80);
   }
-
-  // Use NovelAI Text Adventure native format
-  // "> action" is Kayra's native trigger for narrative response
-  const trimmed = lastAI.length > 180 ? lastAI.slice(-180) : lastAI;
 
   if (!userAction) {
-    return trimmed;
+    // CONTINUE: just keep the last bit and let it flow
+    if (!lastSentence) return `${worldText}にて、${heroText}の物語。\n`;
+    return lastSentence + '\n';
   }
 
-  // Native text adventure format - Kayra is trained on this
-  return trimmed + `\n> ${userAction}\n`;
+  // User action - use Text Adventure format
+  // Short context + clear action = Kayra responds to action
+  const ctx = lastSentence ? lastSentence + '\n' : `${worldText}にて。\n`;
+  return ctx + `>「${userAction}」\n`;
 }
 
 // ─── PARSE AI RESPONSE ────────────────────────────
