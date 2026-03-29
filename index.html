@@ -871,7 +871,7 @@ async function callNovelAI(msgs, sys) {
   const conversation = msgs.map(m => m.content).join('\n');
   const prompt = context + conversation;
 
-  const r = await fetch('https://api.novelai.net/ai/generate', {
+  const r = await fetch('https://novel-proxy.sansan2103.workers.dev', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
