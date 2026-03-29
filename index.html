@@ -466,19 +466,20 @@ function buildPrompt(userAction) {
   const lastAI = aiHistory.length > 0 ? aiHistory[0].content : '';
 
   if (!lastAI) {
-    return `これは${heroText}の物語だ。舞台は${worldText}。\n　`;
+    // Strong narrative seed - specific enough to prevent template matching
+    return `${worldText}。${heroText}は、今この瞬間に立っていた。`;
   }
 
-  // Trim context to last 200 chars
-  const trimmed = lastAI.length > 200 ? lastAI.slice(-200) : lastAI;
+  // Use NovelAI Text Adventure native format
+  // "> action" is Kayra's native trigger for narrative response
+  const trimmed = lastAI.length > 180 ? lastAI.slice(-180) : lastAI;
 
   if (!userAction) {
-    return trimmed + '\n　';
+    return trimmed;
   }
 
-  // Make user action the undeniable next event
-  // State it as a new paragraph fact - Kayra MUST continue from this
-  return trimmed + `\n\n　${userAction}。`;
+  // Native text adventure format - Kayra is trained on this
+  return trimmed + `\n> ${userAction}\n`;
 }
 
 // ─── PARSE AI RESPONSE ────────────────────────────
@@ -657,7 +658,7 @@ async function startGame() {
   try {
     const heroText = state.hero || '名もなき冒険者';
     const worldText = state.world || '剣と魔法の世界';
-    const prompt = `${worldText}を舞台に、${heroText}の物語が始まる。\n　`;
+    const prompt = `${worldText}。${heroText}は、今この瞬間に立っていた。`;
     const raw = await callNovelAI(prompt);
     removeThinking();
     const clean = parseResponse(raw);
