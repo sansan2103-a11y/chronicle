@@ -445,17 +445,17 @@ function buildPrompt(userAction) {
   const heroText = state.hero || '冒険者';
   const worldText = state.world || '異世界';
 
+  // Always anchor with hero+world so Kayra knows the setting
+  const anchor = `${worldText}の物語。主人公は${heroText}。\n`;
+
   if (!userAction) {
-    // CONTINUE: last sentence only
     const aiHistory = state.history.filter(h => h.role === 'assistant').slice(-1);
-    if (!aiHistory.length) return `${worldText}。${heroText}は`;
-    const last = aiHistory[0].content;
-    return last.slice(-80);
+    if (!aiHistory.length) return anchor + `${heroText}は`;
+    return anchor + aiHistory[0].content.slice(-100);
   }
 
-  // ACTION FIRST - no prior context
-  // Action is the anchor, Kayra writes what happens next
-  return `${heroText}は${userAction}した。`;
+  // Hero + world + action = Kayra writes the scene
+  return anchor + `${heroText}は${userAction}した。`;
 }
 
 // ─── PARSE AI RESPONSE ────────────────────────────
@@ -629,24 +629,11 @@ async function startGame() {
   document.getElementById('startScreen').style.display = 'none';
   document.getElementById('gameScreen').style.display = 'flex';
 
-  setAllBusy(true);
-  addThinking();
-  try {
-    const heroText = state.hero || '名もなき冒険者';
-    const worldText = state.world || '剣と魔法の世界';
-    const prompt = `${worldText}。${heroText}は、今この瞬間に立っていた。`;
-    const raw = await callNovelAI(prompt);
-    removeThinking();
-    const clean = parseResponse(raw);
-    addMsg('narr', clean);
-    addMsg('divider', '');
-    state.gameStarted = true;
-    enablePostGame();
-    genSuggestions();
-  } catch(e) {
-    removeThinking();
-    addMsg('narr', 'エラーが発生しました: ' + e.message);
-  }
+  // No intro generation - show setup and wait for user input
+  addMsg('narr', `【${state.world || '異世界'}】\n主人公：${state.hero}\n\n最初の行動を入力してください。`);
+  addMsg('divider', '');
+  state.gameStarted = true;
+  enablePostGame();
   setAllBusy(false);
 }
 
