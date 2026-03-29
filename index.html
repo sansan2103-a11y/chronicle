@@ -564,58 +564,57 @@ function setMode(mode, btn) {
 // Kayraにその直後を書かせる。
 
 function buildPrompt(action, mode) {
-  // ATTG memory block - Kayraにジャンルを教える
-  // これはKayraが学習時に見たNovelAIのメモリ形式
-  const memory = `[ Author: Japanese light novel writer; Tags: interactive fiction, fantasy, adventure, RPG, Japanese text; Genre: ${STATE.world.includes('現代') || STATE.world.includes('日本') ? 'modern fiction' : 'fantasy adventure'} ]\n`;
+  // ATTG memory block - Kayraのジャンル制御
+  // 冒険・アクション寄りにして、恋愛・BLを回避
+  const isModern = STATE.world.includes('現代') || STATE.world.includes('日本') || STATE.world.includes('大阪') || STATE.world.includes('東京');
+  const genre = isModern ? 'modern action adventure' : 'dark fantasy adventure';
+  const memory = `[ Author: adventure novelist; Tags: action, adventure, exploration, dramatic, descriptive prose; Genre: ${genre}; Setting: ${STATE.world} ]\n`;
 
-  // 世界とキャラの設定（短く）
-  const setting = `${STATE.world}。${STATE.heroName}は${STATE.heroDesc}。\n`;
-
-  // 前の物語テキスト（最後の600文字だけ）
-  let context = '';
-  if (STATE.storyText.length > 0) {
-    const clean = STATE.storyText.trim();
-    context = clean.length > 600 ? clean.slice(-600) : clean;
-    context += '\n';
-  }
-
-  // ユーザーの行動を物語文に変換
+  // ユーザーの行動を自然な物語文に変換
   let actionLine = '';
   if (action && action.trim()) {
     const act = action.trim();
     if (mode === 'say') {
-      // 話す → 台詞として
-      actionLine = `「${act}」と${STATE.heroName}は言った。`;
+      actionLine = `\n「${act}」\n　${STATE.heroName}はそう言った。`;
     } else if (mode === 'story') {
-      // 描写 → そのまま追加
-      actionLine = act.endsWith('。') ? act : act + '。';
+      actionLine = '\n　' + (act.endsWith('。') ? act : act + '。');
     } else {
-      // 行動する → "〜ことにした。" で行動を確定事実にする
-      // Kayraはこの直後から「その結果何が起きたか」を書く
-      if (act.endsWith('する') || act.endsWith('った') || act.endsWith('した') || act.endsWith('いた') || act.endsWith('る')) {
-        actionLine = `${STATE.heroName}は${act}。`;
+      // 行動モード：ユーザー入力をそのまま行動文に組み込む
+      // 末尾の形で判定して自然な文にする
+      if (act.endsWith('る') || act.endsWith('す') || act.endsWith('く') || act.endsWith('ぐ') || act.endsWith('む') || act.endsWith('ぶ') || act.endsWith('つ') || act.endsWith('ぬ')) {
+        // 辞書形 → そのまま「〜ことにした」
+        actionLine = `\n　${STATE.heroName}は${act}ことにした。`;
+      } else if (act.endsWith('した') || act.endsWith('った') || act.endsWith('いた') || act.endsWith('んだ') || act.endsWith('てた')) {
+        // 過去形 → そのまま
+        actionLine = `\n　${STATE.heroName}は${act}。`;
+      } else if (act.endsWith('て') || act.endsWith('で')) {
+        // て形 → 「〜みた」
+        actionLine = `\n　${STATE.heroName}は${act}みた。`;
       } else if (act.endsWith('。') || act.endsWith('！') || act.endsWith('？')) {
-        actionLine = `${STATE.heroName}は${act}`;
+        actionLine = `\n　${STATE.heroName}は${act}`;
       } else {
-        actionLine = `${STATE.heroName}は${act}た。`;
+        // その他 → 「〜した」
+        actionLine = `\n　${STATE.heroName}は${act}。`;
       }
     }
   }
 
   // プロンプト組み立て
-  // Kayraは末尾のテキストパターンを続ける
-  // → 行動文で終わらせれば、行動の結果を書いてくれる
   let prompt = memory;
 
+  // キャラ設定（常に含める＝Kayraのアンカー）
+  const charLine = `　${STATE.heroName}――${STATE.heroDesc}。`;
+
   if (STATE.storyText.length === 0) {
-    // 初回：設定 + 行動
-    prompt += setting + '\n' + actionLine + '\n';
+    // 初回：舞台設定→行動で物語開始
+    prompt += `　${STATE.world}。${charLine}\n`;
+    prompt += actionLine + '\n';
   } else {
-    // 2回目以降：前の文脈 + 行動
-    prompt += setting + '***\n' + context;
-    if (actionLine) {
-      prompt += actionLine + '\n';
-    }
+    // 2回目以降：前の文脈（最後の500文字）＋行動
+    const clean = STATE.storyText.trim();
+    const context = clean.length > 500 ? clean.slice(-500) : clean;
+    prompt += charLine + '\n***\n' + context;
+    prompt += actionLine + '\n';
   }
 
   return prompt;
@@ -636,15 +635,16 @@ async function callKayra(prompt) {
         max_length: 150,
         min_length: 1,
         use_string: true,
-        temperature: 0.72,
-        top_k: 40,
-        top_p: 0.95,
-        tail_free_sampling: 0.975,
+        temperature: 0.55,
+        top_k: 30,
+        top_p: 0.9,
+        tail_free_sampling: 0.95,
         repetition_penalty: 1.5,
         repetition_penalty_range: 2048,
         repetition_penalty_slope: 3.33,
-        repetition_penalty_frequency: 0.02,
-        repetition_penalty_presence: 0
+        repetition_penalty_frequency: 0.03,
+        repetition_penalty_presence: 0,
+        ban_bracket_generation: true
       }
     })
   });
@@ -672,8 +672,12 @@ function cleanOutput(raw) {
   // *** 区切りを除去
   text = text.replace(/\*{2,}/g, '');
 
-  // リスト系を除去（武器：、アイテム：、スキル：などで始まる行）
-  text = text.replace(/^[\s　]*(武器|防具|アイテム|スキル|能力|ステータス|HP|MP|攻撃力|防御力|所持|装備|レベル|Lv|種族|職業|称号|クエスト|名前|年齢|性別)[\s　]*[：:].*/gm, '');
+  // メタ情報・指示文の漏出を除去
+  text = text.replace(/^[\s　]*(Author|Tags|Genre|Setting|Note|Chapter|Scene|END|続く|つづく|第\d+[話章回節部])[\s　]*[：:].*/gim, '');
+  text = text.replace(/^[\s　]*(最初の行動|行動を入力|入力してください|主人公[：:]).*/gm, '');
+
+  // リスト系を除去
+  text = text.replace(/^[\s　]*(武器|防具|アイテム|スキル|能力|ステータス|HP|MP|攻撃力|防御力|所持|装備|レベル|Lv|種族|職業|称号|クエスト|名前|年齢|性別|身長|体重|好き|嫌い|趣味|特技|属性)[\s　]*[：:].*/gm, '');
 
   // 箇条書き除去
   text = text.replace(/^[\s　]*[-・●▸▹►◆◇★☆※→⇒]+\s*.*/gm, '');
@@ -738,8 +742,11 @@ async function send() {
   addLoading();
 
   try {
+    console.log('=== PROMPT ===\n', prompt);
     let raw = await callKayra(prompt);
+    console.log('=== RAW OUTPUT ===\n', raw);
     let text = cleanOutput(raw);
+    console.log('=== CLEAN OUTPUT ===\n', text);
 
     // テキストが短すぎたら追加生成（最大2回）
     let attempts = 0;
@@ -758,12 +765,22 @@ async function send() {
     addBlock('narrator', text);
 
     // クリーンテキストを蓄積（次のプロンプトの文脈になる）
-    // ユーザーの行動文もストーリーに含める
-    const actionText = STATE.mode === 'say'
-      ? `「${action}」と${STATE.heroName}は言った。`
-      : STATE.mode === 'story'
-        ? action
-        : `${STATE.heroName}は${action}。`;
+    // buildPromptと同じ形式で行動文を組み立てる
+    let actionText = '';
+    if (STATE.mode === 'say') {
+      actionText = `「${action}」と${STATE.heroName}は言った。`;
+    } else if (STATE.mode === 'story') {
+      actionText = action.endsWith('。') ? action : action + '。';
+    } else {
+      const act = action.trim();
+      if (act.endsWith('る') || act.endsWith('す') || act.endsWith('く') || act.endsWith('ぐ') || act.endsWith('む')) {
+        actionText = `${STATE.heroName}は${act}ことにした。`;
+      } else if (act.endsWith('した') || act.endsWith('った') || act.endsWith('いた')) {
+        actionText = `${STATE.heroName}は${act}。`;
+      } else {
+        actionText = `${STATE.heroName}は${act}。`;
+      }
+    }
     STATE.storyText += actionText + text + '\n';
 
   } catch (err) {
