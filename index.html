@@ -655,8 +655,17 @@ function buildPrompt(action, mode) {
     }
   } else {
     // 2回目以降：直近の文脈＋行動
-    const clean = STATE.storyText.trim();
-    const context = clean.length > 400 ? clean.slice(-400) : clean;
+    // 文脈は短く（200文字）— 長いとKayraが文脈の悪いパターンを真似る
+    let context = STATE.storyText.trim();
+    context = context.length > 200 ? context.slice(-200) : context;
+    // 文脈を文末で切る（途中の文は不要）
+    const firstEnd = Math.max(
+      context.indexOf('。'), context.indexOf('！'),
+      context.indexOf('？'), context.indexOf('」')
+    );
+    if (firstEnd > 0 && firstEnd < context.length - 10) {
+      context = context.slice(firstEnd + 1).trim();
+    }
     prompt += context + '\n';
     if (actionLine) {
       prompt += actionLine;
@@ -895,7 +904,7 @@ async function send() {
     addBlock('narrator', displayText);
 
     // クリーンテキストを蓄積（buildPromptと同じ形式）
-    // 全モード共通：「主人公は〜した。すると、[AI出力]」
+    // 品質チェック：壊れた文や繰り返しを蓄積しない
     let actionText = '';
     if (action) {
       const act = action.trim();
@@ -911,9 +920,36 @@ async function send() {
       } else {
         sentence = `${STATE.heroName}は${act}した。`;
       }
-      actionText = sentence + 'すると、';
+      actionText = sentence;
     }
-    STATE.storyText += actionText + text + '\n';
+
+    // AI出力の品質チェック — 壊れた文を蓄積しない
+    let storeText = text;
+    // 同じ助詞パターンが3回以上 → 壊れた文
+    const particles = storeText.match(/は|が|を|に|で|の/g) || [];
+    const avgLen = storeText.length / Math.max(particles.length, 1);
+    if (avgLen < 3 && particles.length > 8) {
+      // 助詞だらけの壊れた文 → 最初の文だけ保存
+      const firstSentEnd = storeText.search(/[。！？」]/);
+      storeText = firstSentEnd > 5 ? storeText.slice(0, firstSentEnd + 1) : '';
+    }
+    // エラーメッセージは蓄積しない
+    if (storeText.startsWith('（')) storeText = '';
+
+    if (storeText) {
+      STATE.storyText += actionText + 'すると、' + storeText + '\n';
+    } else {
+      // 壊れた出力の場合、行動文だけ保存（文脈を維持）
+      STATE.storyText += actionText + '\n';
+    }
+
+    // storyTextが長くなりすぎたら古い部分を切る（最大800文字）
+    if (STATE.storyText.length > 800) {
+      STATE.storyText = STATE.storyText.slice(-600);
+      // 文頭を文末で切りそろえる
+      const cut = STATE.storyText.search(/[。！？」]/);
+      if (cut > 0) STATE.storyText = STATE.storyText.slice(cut + 1);
+    }
 
   } catch (err) {
     removeLoading();
@@ -947,7 +983,9 @@ async function doContinue() {
 
     removeLoading();
     addBlock('narrator', text);
-    STATE.storyText += text + '\n';
+    if (!text.startsWith('（')) {
+      STATE.storyText += text + '\n';
+    }
 
   } catch (err) {
     removeLoading();
@@ -991,16 +1029,13 @@ async function doRetry() {
     removeLoading();
     addBlock('narrator', text);
 
-    // storyTextを更新
-    const actionText = STATE.lastMode === 'say'
-      ? `「${STATE.lastAction}」と${STATE.heroName}は言った。`
-      : STATE.lastMode === 'story'
-        ? STATE.lastAction
-        : `${STATE.heroName}は${STATE.lastAction}。`;
-    if (STATE.lastAction) {
-      STATE.storyText += actionText + text + '\n';
-    } else {
-      STATE.storyText += text + '\n';
+    // storyTextを更新（品質チェック付き）
+    let retryStore = text;
+    if (retryStore.startsWith('（')) retryStore = '';
+    if (STATE.lastAction && retryStore) {
+      STATE.storyText += `${STATE.heroName}は${STATE.lastAction}した。すると、${retryStore}\n`;
+    } else if (retryStore) {
+      STATE.storyText += retryStore + '\n';
     }
 
   } catch (err) {
