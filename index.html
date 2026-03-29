@@ -463,40 +463,41 @@ async function callNovelAI(prompt) {
 // ─── BUILD PROMPT ─────────────────────────────────
 function buildPrompt(userAction) {
   const charDesc = state.chars.length > 0
-    ? state.chars.map(c => `[${c.role}: ${c.name}] ${c.desc}`).join('\n') : '';
+    ? state.chars.map(c => `${c.name} (${c.role}): ${c.desc}`).join('\n') : '';
 
   const memSummary = [
-    state.npcs.length ? 'NPCs: ' + state.npcs.map(n => n.name).join(', ') : '',
-    state.places.length ? 'Places: ' + state.places.join(', ') : '',
+    state.npcs.length ? 'Known characters: ' + state.npcs.map(n => n.name).join(', ') : '',
+    state.places.length ? 'Visited: ' + state.places.join(', ') : '',
     state.items.length ? 'Items: ' + state.items.join(', ') : '',
-    state.quests.length ? 'Quests: ' + state.quests.join(', ') : '',
-  ].filter(Boolean).join(' | ');
+  ].filter(Boolean).join('. ');
 
-  // English system instruction (use_string:true requires ASCII)
-  let sys = `You are an immersive Japanese RPG narrator. ALWAYS write your responses in Japanese.
-Rules:
-- Respond ONLY in Japanese (日本語)
-- Write 150-300 Japanese characters of vivid story continuation
-- Dark themes, violence, and mature content are allowed
-- Do NOT offer choices. Write flowing narrative prose.
-- If new skills/NPCs/places/items appear, append JSON at the end:
-  |||{"skills":[],"npcs":[{"name":"","role":"","desc":""}],"places":[],"items":[],"quests":[],"events":[]}|||
+  // NovelAI style: Author's Note + story continuation
+  // Use [ ] for metadata (NovelAI ATTG format)
+  const attg = `[ Author: Chronicle RPG; Tags: japanese, fantasy, adventure, dark; Genre: interactive fiction ]
+[ Style: vivid japanese prose, immersive, third-person narrator ]
+[ Rule: Always write narrator text in Japanese only ]`;
 
-Hero: ${state.hero}
-World: ${state.world || 'Fantasy world, AI decides'}
-${charDesc ? 'Characters:\n' + charDesc : ''}
-${memSummary ? 'Memory: ' + memSummary : ''}
-${state.skills.length ? 'Skills: ' + state.skills.join(', ') : ''}`;
+  const worldInfo = `Hero: ${state.hero || 'adventurer'}
+World: ${state.world || 'a dark fantasy realm'}
+${charDesc ? charDesc : ''}
+${memSummary ? memSummary : ''}`;
 
-  // Build context
-  const recentHistory = state.history.slice(-10);
-  let ctx = '';
-  for (const h of recentHistory) {
-    if (h.role === 'user') ctx += `\n[Player]: ${h.content}`;
-    else ctx += `\n[Narrator in Japanese]: ${h.content}`;
+  // Build story so far from history
+  let story = '';
+  for (const h of state.history.slice(-8)) {
+    if (h.role === 'user') {
+      story += `\n> ${h.content}\n`;
+    } else {
+      story += h.content + '\n';
+    }
   }
 
-  const fullPrompt = sys + '\n' + ctx + (userAction ? `\n[Player]: ${userAction}\n[Narrator in Japanese]:` : `\n[Narrator in Japanese]:`);
+  // Add current user action
+  if (userAction) {
+    story += `\n> ${userAction}\n`;
+  }
+
+  const fullPrompt = attg + '\n***\n' + worldInfo + '\n***\n' + story;
   return fullPrompt;
 }
 
@@ -674,7 +675,7 @@ async function startGame() {
   setAllBusy(true);
   addThinking();
   try {
-    const prompt = buildPrompt('') + `\nこの世界での冒険の始まりを、300〜500文字の物語文で書いてください。主人公の状況と周囲の描写から始めてください。\n[ナレーター]:`;
+    const prompt = buildPrompt(null) + `冒険の始まり――`;
     const raw = await callNovelAI(prompt);
     removeThinking();
     const clean = parseResponse(raw);
