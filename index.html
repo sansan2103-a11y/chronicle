@@ -404,7 +404,11 @@ let state = {
 function loadStorage() {
   const k = localStorage.getItem('chronicle_key') || '';
   const ch = localStorage.getItem('chronicle_chars');
+  const hero = localStorage.getItem('chronicle_hero') || '';
+  const world = localStorage.getItem('chronicle_world') || '';
   state.apiKey = k;
+  state.hero = hero;
+  state.world = world;
   if (ch) try { state.chars = JSON.parse(ch); } catch(e) {}
 }
 
@@ -444,9 +448,7 @@ async function callNovelAI(prompt) {
 function buildPrompt(userAction) {
   const heroText = state.hero || '冒険者';
   const worldText = state.world || '異世界';
-
-  // Always anchor with hero+world so Kayra knows the setting
-  const anchor = `${worldText}の物語。主人公は${heroText}。\n`;
+  const anchor = `${worldText}。主人公は${heroText}。\n`;
 
   if (!userAction) {
     const aiHistory = state.history.filter(h => h.role === 'assistant').slice(-1);
@@ -454,8 +456,19 @@ function buildPrompt(userAction) {
     return anchor + aiHistory[0].content.slice(-100);
   }
 
-  // Hero + world + action = Kayra writes the scene
-  return anchor + `${heroText}は${userAction}した。`;
+  // Handle verb endings properly
+  let action = userAction.trim();
+  // If already ends with 。or た/だ form, use as-is
+  if (/[。た]$/.test(action)) {
+    return anchor + `${heroText}は${action}`;
+  }
+  // Convert plain verb/noun to past tense
+  if (/[するくるいえあおいうるれ]$/.test(action)) {
+    // ends with verb - just append すると
+    return anchor + `${heroText}は${action}と、`;
+  }
+  // Default: treat as action phrase
+  return anchor + `${heroText}は${action}した。`;
 }
 
 // ─── PARSE AI RESPONSE ────────────────────────────
@@ -625,6 +638,8 @@ async function startGame() {
   state.world = world;
   state.apiKey = key;
   localStorage.setItem('chronicle_key', key);
+  localStorage.setItem('chronicle_hero', state.hero);
+  localStorage.setItem('chronicle_world', state.world);
 
   document.getElementById('startScreen').style.display = 'none';
   document.getElementById('gameScreen').style.display = 'flex';
@@ -880,12 +895,13 @@ function saveWorld() {
 
 // ─── INIT ─────────────────────────────────────────
 loadStorage();
-// Pre-fill API key if saved
 const savedKey = localStorage.getItem('chronicle_key') || '';
 if (savedKey) {
   document.getElementById('apiKeyInput').value = savedKey;
   document.getElementById('enterBtn').disabled = false;
 }
+if (state.hero) document.getElementById('heroInput').value = state.hero;
+if (state.world) document.getElementById('worldInput').value = state.world;
 updateStats();
 renderChar();
 renderMemory();
