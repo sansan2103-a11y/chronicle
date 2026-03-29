@@ -465,26 +465,23 @@ function buildPrompt(userAction) {
   const heroText = state.hero || '名もなき冒険者';
   const worldText = state.world || '剣と魔法の世界';
 
-  // Pure Japanese prose - no tags, no separators
-  // Just story text so Kayra continues naturally
   let prompt = '';
 
   if (state.history.length === 0) {
-    // First generation - seed with opening line
     prompt = `${worldText}を舞台に、${heroText}の物語が始まる。\n　`;
   } else {
-    // Continue from history - just the last AI outputs
-    const recent = state.history.slice(-4);
-    for (const h of recent) {
-      if (h.role === 'assistant') {
-        prompt += h.content + '\n';
-      }
+    // Use only last 2 AI responses to keep context short
+    const aiHistory = state.history.filter(h => h.role === 'assistant').slice(-2);
+    for (const h of aiHistory) {
+      prompt += h.content + '\n';
     }
-    // Add user action as prose trigger
+
     if (userAction) {
-      prompt += `　${userAction}と、`;
+      // Clear scene break then embed action
+      prompt += `\n　その時、${heroText}は${userAction}。すると`;
     } else {
-      prompt += '　';
+      // Continue naturally
+      prompt += '\n　';
     }
   }
 
