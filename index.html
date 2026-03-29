@@ -443,20 +443,18 @@ async function callNovelAI(prompt) {
 // ─── BUILD PROMPT ─────────────────────────────────
 function buildPrompt(userAction) {
   const heroText = state.hero || '冒険者';
-  const worldText = state.world || '異世界';
 
   if (!userAction) {
     const aiHistory = state.history.filter(h => h.role === 'assistant').slice(-1);
-    if (!aiHistory.length) return `${heroText}は${worldText}にいた。`;
+    if (!aiHistory.length) return `${heroText}は`;
     const last = aiHistory[0].content;
-    const sentences = last.split(/(?<=[。！？」』…])/);
-    const tail = sentences.slice(-1)[0].trim() || last.slice(-50);
-    return tail.length > 5 ? tail : last.slice(-50);
+    // Just the last 60 chars
+    return last.slice(-60);
   }
 
-  // End with incomplete clause - Kayra MUST complete it
-  // "Hero did X, and then" → Kayra writes what happened
-  return `${heroText}が${userAction}と、`;
+  // DEAD SIMPLE: "[hero][action]、[result begins here]"
+  // This is the most reliable way to get Kayra to write about the action
+  return `${heroText}は${userAction}。その結果、`;
 }
 
 // ─── PARSE AI RESPONSE ────────────────────────────
