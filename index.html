@@ -408,6 +408,22 @@ body {
   </div>
 
   <div class="setup-group">
+    <label>▸ 文体</label>
+    <div class="hint">AIの文章スタイルを選択。</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;padding:8px 12px;background:var(--bg2);border:1px solid var(--gold-dim);border-radius:4px;font-size:0.8rem;">
+        <input type="radio" name="s-tone" value="literary" checked style="accent-color:var(--gold);"> 純文学（リアル・描写的）
+      </label>
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;padding:8px 12px;background:var(--bg2);border:1px solid var(--gold-dim);border-radius:4px;font-size:0.8rem;">
+        <input type="radio" name="s-tone" value="dark" style="accent-color:var(--gold);"> ダーク（残酷・生々しい）
+      </label>
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;padding:8px 12px;background:var(--bg2);border:1px solid var(--gold-dim);border-radius:4px;font-size:0.8rem;">
+        <input type="radio" name="s-tone" value="light" style="accent-color:var(--gold);"> ラノベ（軽快・テンポ重視）
+      </label>
+    </div>
+  </div>
+
+  <div class="setup-group">
     <label>▸ NovelAI APIキー</label>
     <input type="password" id="s-key" placeholder="pst-...">
     <div class="key-note">キーはブラウザ内にのみ保存。<a href="https://novelai.net/account" target="_blank">novelai.net</a> → アカウント設定 → 永続的APIトークン</div>
@@ -455,6 +471,12 @@ body {
     <textarea id="set-hero"></textarea>
     <label>世界設定</label>
     <textarea id="set-world"></textarea>
+    <label>文体</label>
+    <select id="set-tone" style="width:100%;background:var(--bg);border:1px solid #2a2a35;color:var(--text);padding:8px;border-radius:4px;font-family:'Noto Serif JP',serif;font-size:0.85rem;">
+      <option value="literary">純文学（リアル・描写的）</option>
+      <option value="dark">ダーク（残酷・生々しい）</option>
+      <option value="light">ラノベ（軽快・テンポ重視）</option>
+    </select>
     <label>NovelAI APIキー</label>
     <input type="password" id="set-key">
     <button class="save-btn" onclick="saveSettings()">保存</button>
@@ -468,6 +490,7 @@ const STATE = {
   heroDesc: '',
   world: '',
   apiKey: '',
+  tone: 'literary',   // literary / dark / light
   mode: 'do',        // do / say / story
   storyText: '',      // 全ストーリーのクリーンテキスト
   lastPrompt: '',     // 最後に送ったプロンプト（retry用）
@@ -485,11 +508,15 @@ function init() {
   STATE.heroDesc = localStorage.getItem('chr_hero') || '';
   STATE.world = localStorage.getItem('chr_world') || '';
   STATE.apiKey = localStorage.getItem('chronicle_key') || '';
+  STATE.tone = localStorage.getItem('chr_tone') || 'literary';
 
   document.getElementById('s-name').value = STATE.heroName;
   document.getElementById('s-hero').value = STATE.heroDesc;
   document.getElementById('s-world').value = STATE.world;
   document.getElementById('s-key').value = STATE.apiKey;
+  // Restore tone radio
+  const toneRadio = document.querySelector(`input[name="s-tone"][value="${STATE.tone}"]`);
+  if (toneRadio) toneRadio.checked = true;
 }
 
 init();
@@ -500,6 +527,7 @@ function startGame() {
   STATE.heroDesc = document.getElementById('s-hero').value.trim() || '謎多き旅人';
   STATE.world = document.getElementById('s-world').value.trim() || '剣と魔法の異世界';
   STATE.apiKey = document.getElementById('s-key').value.trim();
+  STATE.tone = document.querySelector('input[name="s-tone"]:checked')?.value || 'literary';
 
   if (!STATE.apiKey) {
     alert('APIキーを入力してください');
@@ -511,6 +539,7 @@ function startGame() {
   localStorage.setItem('chr_hero', STATE.heroDesc);
   localStorage.setItem('chr_world', STATE.world);
   localStorage.setItem('chronicle_key', STATE.apiKey);
+  localStorage.setItem('chr_tone', STATE.tone);
 
   // Switch screen
   document.getElementById('setup').style.display = 'none';
@@ -601,10 +630,26 @@ function buildPrompt(action, mode) {
   let prompt = '';
 
   if (STATE.storyText.length === 0) {
-    // 初回：舞台を地の文で具体的に描写してからアクション
-    prompt += `　ここは${STATE.world}。\n`;
-    prompt += `　${STATE.heroName}は${STATE.heroDesc}。\n`;
-    prompt += `　${STATE.heroName}は周囲を見回した。\n`;
+    // 初回：文体に応じたプライミングテキスト
+    // Kayraは直前の文体を真似る → ここで文体が決まる
+
+    if (STATE.tone === 'dark') {
+      // ダーク：残酷で生々しい描写
+      prompt += `　${STATE.world}。薄暗い空気が肌に纏わりつく。嫌な予感がする。この場所には、何かが潜んでいる。\n`;
+      prompt += `　${STATE.heroName}。${STATE.heroDesc}。その目には、常人には理解できない冷たさが宿っている。\n`;
+      prompt += `　${STATE.heroName}は足を止めた。空気の中に、血の匂いが混じっている気がした。\n`;
+    } else if (STATE.tone === 'light') {
+      // ラノベ：テンポ良く軽快
+      prompt += `　${STATE.world}。\n`;
+      prompt += `　${STATE.heroName}は${STATE.heroDesc}。\n`;
+      prompt += `　さて、今日も一日が始まる。${STATE.heroName}は大きく伸びをした。\n`;
+    } else {
+      // 純文学（デフォルト）：五感描写、心理描写、リアリティ重視
+      prompt += `　${STATE.world}。空気は湿り気を帯び、微かに土と埃の匂いが漂っている。光が斜めに差し込み、空間の輪郭を浮かび上がらせた。\n`;
+      prompt += `　${STATE.heroName}――${STATE.heroDesc}。\n`;
+      prompt += `　${STATE.heroName}は息を吐き、周囲に目を向けた。風が頬を撫でる。遠くで何かの音がする。皮膚が、空気の変化を感じ取っていた。\n`;
+    }
+
     if (actionLine) {
       prompt += actionLine;
     }
@@ -993,6 +1038,7 @@ function showSettings() {
   document.getElementById('set-hero').value = STATE.heroDesc;
   document.getElementById('set-world').value = STATE.world;
   document.getElementById('set-key').value = STATE.apiKey;
+  document.getElementById('set-tone').value = STATE.tone;
   document.getElementById('settings-overlay').classList.add('show');
 }
 
@@ -1005,11 +1051,13 @@ function saveSettings() {
   STATE.heroDesc = document.getElementById('set-hero').value.trim() || STATE.heroDesc;
   STATE.world = document.getElementById('set-world').value.trim() || STATE.world;
   STATE.apiKey = document.getElementById('set-key').value.trim() || STATE.apiKey;
+  STATE.tone = document.getElementById('set-tone').value || STATE.tone;
 
   localStorage.setItem('chr_name', STATE.heroName);
   localStorage.setItem('chr_hero', STATE.heroDesc);
   localStorage.setItem('chr_world', STATE.world);
   localStorage.setItem('chronicle_key', STATE.apiKey);
+  localStorage.setItem('chr_tone', STATE.tone);
 
   hideSettings();
   addBlock('system', '設定を更新しました。');
