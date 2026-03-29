@@ -604,7 +604,7 @@ function buildPrompt(action, mode) {
     prompt += `　${STATE.world}――。\n`;
     prompt += `　${STATE.heroName}。${STATE.heroDesc}。\n`;
     if (actionLine) {
-      prompt += actionLine + '\n　';
+      prompt += actionLine;
     }
   } else {
     // 2回目以降：直近の文脈＋行動
@@ -613,7 +613,7 @@ function buildPrompt(action, mode) {
     const context = clean.length > 400 ? clean.slice(-400) : clean;
     prompt += context + '\n';
     if (actionLine) {
-      prompt += actionLine + '\n　';
+      prompt += actionLine;
     }
   }
 
@@ -632,18 +632,18 @@ async function callKayra(prompt) {
       input: prompt,
       model: 'kayra-v1',
       parameters: {
-        max_length: 150,
+        max_length: 100,
         min_length: 1,
         use_string: true,
-        temperature: 0.55,
-        top_k: 30,
-        top_p: 0.9,
-        tail_free_sampling: 0.95,
+        temperature: 0.72,
+        top_k: 50,
+        top_p: 0.95,
+        tail_free_sampling: 0.975,
         repetition_penalty: 1.5,
         repetition_penalty_range: 2048,
         repetition_penalty_slope: 3.33,
-        repetition_penalty_frequency: 0.03,
-        repetition_penalty_presence: 0,
+        repetition_penalty_frequency: 0.1,
+        repetition_penalty_presence: 0.05,
         ban_bracket_generation: true
       }
     })
@@ -707,16 +707,39 @@ function cleanOutput(raw) {
   text = text.replace(/\n{3,}/g, '\n\n');
   text = text.trim();
 
-  // ループ検出＆除去：同じ文が繰り返されてたら最初の1つだけ残す
+  // ループ検出＆除去（類似文も検出）
   const sentences = text.split(/(?<=[。！？…」』])/);
-  const seen = new Set();
   const unique = [];
+  
   for (const s of sentences) {
-    const key = s.trim();
-    if (key.length < 2) continue;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    unique.push(s);
+    const key = s.trim().replace(/[\s　]/g, '');
+    if (key.length < 3) continue;
+    
+    // 既存の文と類似度チェック
+    let isDuplicate = false;
+    for (const prev of unique) {
+      const prevKey = prev.trim().replace(/[\s　]/g, '');
+      // 短い方の長さの60%以上が一致したらループとみなす
+      const shorter = Math.min(key.length, prevKey.length);
+      if (shorter < 5) continue;
+      
+      // 共通部分の長さを簡易計算
+      let common = 0;
+      const target = prevKey;
+      for (let i = 0; i < key.length - 3; i++) {
+        const chunk = key.slice(i, i + 4);
+        if (target.includes(chunk)) common++;
+      }
+      const similarity = common / (shorter - 3);
+      if (similarity > 0.5) {
+        isDuplicate = true;
+        break;
+      }
+    }
+    
+    if (!isDuplicate) {
+      unique.push(s);
+    }
   }
   text = unique.join('');
 
@@ -766,13 +789,16 @@ async function send() {
     let text = cleanOutput(raw);
     console.log('=== CLEAN OUTPUT ===\n', text);
 
-    // テキストが短すぎたら追加生成（最大2回）
-    let attempts = 0;
-    while (text.length < 30 && attempts < 2) {
+    // テキストが途中で切れてたら追加生成（1回だけ）
+    // ただし文末（。！？…」』）で終わってたらそのままでOK
+    const endsAtSentence = /[。！？…」』]$/.test(text.trim());
+    if (text.length > 5 && text.length < 40 && !endsAtSentence) {
       const morePrompt = prompt + text;
       const more = await callKayra(morePrompt);
-      text += cleanOutput(more);
-      attempts++;
+      const moreCleaned = cleanOutput(more);
+      if (moreCleaned.length > 3) {
+        text += moreCleaned;
+      }
     }
 
     if (!text || text.length < 5) {
