@@ -463,42 +463,36 @@ async function callNovelAI(prompt) {
 // ─── BUILD PROMPT ─────────────────────────────────
 function buildPrompt(userAction) {
   const charDesc = state.chars.length > 0
-    ? state.chars.map(c => `${c.name} (${c.role}): ${c.desc}`).join('\n') : '';
+    ? state.chars.map(c => `${c.name}（${c.role}）: ${c.desc}`).join('\n') : '';
 
-  const memSummary = [
-    state.npcs.length ? 'Known characters: ' + state.npcs.map(n => n.name).join(', ') : '',
-    state.places.length ? 'Visited: ' + state.places.join(', ') : '',
-    state.items.length ? 'Items: ' + state.items.join(', ') : '',
-  ].filter(Boolean).join('. ');
+  // ATTG metadata (English OK for tags)
+  const attg = `[ Tags: dark fantasy, japanese prose, adventure, mature ]
+[ Style: japanese literary fiction, vivid, immersive ]
+[ Genre: interactive RPG ]`;
 
-  // NovelAI style: Author's Note + story continuation
-  // Use [ ] for metadata (NovelAI ATTG format)
-  const attg = `[ Author: Chronicle RPG; Tags: japanese, fantasy, adventure, dark; Genre: interactive fiction ]
-[ Style: vivid japanese prose, immersive, third-person narrator ]
-[ Rule: Always write narrator text in Japanese only ]`;
+  // World setup as Japanese prose seed
+  const heroText = state.hero || '名もなき冒険者';
+  const worldText = state.world || '剣と魔法の世界';
 
-  const worldInfo = `Hero: ${state.hero || 'adventurer'}
-World: ${state.world || 'a dark fantasy realm'}
-${charDesc ? charDesc : ''}
-${memSummary ? memSummary : ''}`;
+  const setup = `${charDesc ? charDesc + '\n' : ''}舞台：${worldText}
+主人公：${heroText}
+***`;
 
-  // Build story so far from history
+  // Build story from history - pure Japanese narrative
   let story = '';
   for (const h of state.history.slice(-8)) {
     if (h.role === 'user') {
-      story += `\n> ${h.content}\n`;
+      story += `\n>>${h.content}\n`;
     } else {
       story += h.content + '\n';
     }
   }
 
-  // Add current user action
   if (userAction) {
-    story += `\n> ${userAction}\n`;
+    story += `\n>>${userAction}\n`;
   }
 
-  const fullPrompt = attg + '\n***\n' + worldInfo + '\n***\n' + story;
-  return fullPrompt;
+  return attg + '\n' + setup + '\n' + story;
 }
 
 // ─── PARSE AI RESPONSE ────────────────────────────
@@ -675,7 +669,7 @@ async function startGame() {
   setAllBusy(true);
   addThinking();
   try {
-    const prompt = buildPrompt(null) + `冒険の始まり――`;
+    const prompt = buildPrompt(null) + `冒険の始まり――\n　`;
     const raw = await callNovelAI(prompt);
     removeThinking();
     const clean = parseResponse(raw);
