@@ -443,18 +443,24 @@ async function callNovelAI(prompt) {
 // ─── BUILD PROMPT ─────────────────────────────────
 function buildPrompt(userAction) {
   const heroText = state.hero || '冒険者';
+  const worldText = state.world || '異世界';
+
+  const aiHistory = state.history.filter(h => h.role === 'assistant').slice(-1);
+  const lastAI = aiHistory.length > 0 ? aiHistory[0].content : '';
+
+  // Always include previous context so story stays coherent
+  const ctx = lastAI.length > 120 ? lastAI.slice(-120) : lastAI;
 
   if (!userAction) {
-    const aiHistory = state.history.filter(h => h.role === 'assistant').slice(-1);
-    if (!aiHistory.length) return `${heroText}は`;
-    const last = aiHistory[0].content;
-    // Just the last 60 chars
-    return last.slice(-60);
+    if (!ctx) return `${worldText}にて、${heroText}は`;
+    return ctx;
   }
 
-  // DEAD SIMPLE: "[hero][action]、[result begins here]"
-  // This is the most reliable way to get Kayra to write about the action
-  return `${heroText}は${userAction}。その結果、`;
+  // Include context + action as past-tense fact + open connector
+  if (!ctx) {
+    return `${worldText}にて、${heroText}は${userAction}。すると、`;
+  }
+  return ctx + `\n　${heroText}は${userAction}。すると、`;
 }
 
 // ─── PARSE AI RESPONSE ────────────────────────────
