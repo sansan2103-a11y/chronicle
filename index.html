@@ -1228,6 +1228,42 @@ function pickMode(mode) {
   if (wa) wa.style.display = 'flex';
 }
 
+
+function enablePostGame() {
+  const btnCont = document.getElementById('btnCont');
+  const btnRetry = document.getElementById('btnRetry');
+  if (btnCont) btnCont.disabled = false;
+  if (btnRetry) btnRetry.disabled = false;
+}
+
+function addThinking() {
+  const sc = document.getElementById('storyScroll');
+  if (!sc) return;
+  const d = document.createElement('div');
+  d.className = 'msg thinking';
+  d.id = 'thinkingMsg';
+  d.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+  sc.appendChild(d);
+  sc.scrollTop = sc.scrollHeight;
+}
+
+function removeThinking() {
+  const t = document.getElementById('thinkingMsg');
+  if (t) t.remove();
+  // Also remove any thinking class messages
+  document.querySelectorAll('.msg.thinking').forEach(e => e.remove());
+}
+
+function setAllBusy(busy) {
+  const btns = ['btnTake','btnCont','btnRetry'];
+  btns.forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.disabled = busy;
+  });
+  const inp = document.getElementById('actionInput');
+  if (inp) inp.disabled = busy;
+}
+
 </script>
 </body>
 </html>
