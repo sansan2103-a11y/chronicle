@@ -565,25 +565,24 @@ function setMode(mode, btn) {
 
 function buildPrompt(action, mode) {
   // ===== KAYRA戦略 =====
-  // Kayraは末尾のテキストを続けるだけ。
-  // 行動を「〜した。すると、」で終わらせることで、
-  // Kayraは行動の直接的結果を書くしかなくなる。
+  // 全モードで必ず：
+  // 1. 主人公の名前を含める（誰の話かアンカー）
+  // 2. 末尾を未完成にする（Kayraに続きを強制）
 
-  // ユーザーの行動→ 物語文 + 「すると、」
   let actionLine = '';
   if (action && action.trim()) {
     const act = action.trim();
+
+    // まず行動文を作る（全モード共通で主人公名を含む）
+    let sentence = '';
     if (mode === 'say') {
-      actionLine = `「${act}」\n　${STATE.heroName}はそう口にした。すると、`;
-    } else if (mode === 'story') {
-      // 描写モードはすると不要、そのまま
-      actionLine = '　' + (act.endsWith('。') ? act : act + '。');
+      sentence = `${STATE.heroName}は「${act}」と言った。`;
     } else {
-      // 行動モード → 「〜した。すると、」で強制
-      let sentence = '';
+      // 行動・描写モード共通
+      // 動詞の末尾で判定して自然な文にする
       if (act.endsWith('る') || act.endsWith('す') || act.endsWith('く') || act.endsWith('ぐ') || act.endsWith('む') || act.endsWith('ぶ') || act.endsWith('つ') || act.endsWith('ぬ')) {
         sentence = `${STATE.heroName}は${act}ことにした。`;
-      } else if (act.endsWith('した') || act.endsWith('った') || act.endsWith('いた') || act.endsWith('んだ')) {
+      } else if (act.endsWith('した') || act.endsWith('った') || act.endsWith('いた') || act.endsWith('んだ') || act.endsWith('てた')) {
         sentence = `${STATE.heroName}は${act}。`;
       } else if (act.endsWith('て') || act.endsWith('で')) {
         sentence = `${STATE.heroName}は${act}みた。`;
@@ -592,16 +591,20 @@ function buildPrompt(action, mode) {
       } else {
         sentence = `${STATE.heroName}は${act}した。`;
       }
-      actionLine = `　${sentence}すると、`;
     }
+
+    // 末尾を「すると、」で終わらせて、Kayraに結果を書かせる
+    actionLine = `　${sentence}すると、`;
   }
 
   // ===== プロンプト組み立て =====
   let prompt = '';
 
   if (STATE.storyText.length === 0) {
-    // 初回：設定は最小限、行動をメインに
-    prompt += `　ここは${STATE.world}。${STATE.heroName}は${STATE.heroDesc}。\n`;
+    // 初回：舞台を地の文で具体的に描写してからアクション
+    prompt += `　ここは${STATE.world}。\n`;
+    prompt += `　${STATE.heroName}は${STATE.heroDesc}。\n`;
+    prompt += `　${STATE.heroName}は周囲を見回した。\n`;
     if (actionLine) {
       prompt += actionLine;
     }
@@ -698,6 +701,10 @@ function cleanOutput(raw) {
   text = text.replace(/^[\s　]*(Author|Tags|Genre|Setting|Note|Chapter|Scene|END|続く|つづく).*$/gim, '');
   text = text.replace(/第\d+[話章回節部].*/gm, '');
   text = text.replace(/^[\s　]*(最初の行動|行動を入力|入力してください|主人公[：:]).*/gm, '');
+  // 章番号（行全体が数字だけの行）を除去
+  text = text.replace(/^\s*\d{1,3}\s*$/gm, '');
+  // 「第N話」「Chapter N」形式
+  text = text.replace(/^[\s　]*(第\d+|Chapter\s*\d+|Episode\s*\d+|#\d+).*/gim, '');
 
   // リスト系を除去
   text = text.replace(/^[\s　]*(武器|防具|アイテム|スキル|能力|ステータス|HP|MP|攻撃力|防御力|所持|装備|レベル|Lv|種族|職業|称号|クエスト|名前|年齢|性別|身長|体重|好き|嫌い|趣味|特技|属性)[\s　]*[：:].*/gm, '');
@@ -838,25 +845,24 @@ async function send() {
     }
 
     removeLoading();
-    // 行動/発言モードなら「すると、」を先頭に付けて自然な流れに
-    const displayText = (STATE.mode !== 'story' && action)
-      ? 'すると、' + text : text;
+    // 全モードで「すると、」で始まる表示
+    const displayText = action ? 'すると、' + text : text;
     addBlock('narrator', displayText);
 
-    // クリーンテキストを蓄積（次のプロンプトの文脈になる）
-    // 「すると、」も含めて自然な文脈にする
+    // クリーンテキストを蓄積（buildPromptと同じ形式）
+    // 全モード共通：「主人公は〜した。すると、[AI出力]」
     let actionText = '';
-    if (STATE.mode === 'say') {
-      actionText = `「${action}」と${STATE.heroName}は言った。すると、`;
-    } else if (STATE.mode === 'story') {
-      actionText = action.endsWith('。') ? action : action + '。';
-    } else {
+    if (action) {
       const act = action.trim();
       let sentence = '';
-      if (act.endsWith('る') || act.endsWith('す') || act.endsWith('く') || act.endsWith('ぐ') || act.endsWith('む')) {
+      if (STATE.mode === 'say') {
+        sentence = `${STATE.heroName}は「${act}」と言った。`;
+      } else if (act.endsWith('る') || act.endsWith('す') || act.endsWith('く') || act.endsWith('ぐ') || act.endsWith('む') || act.endsWith('ぶ') || act.endsWith('つ') || act.endsWith('ぬ')) {
         sentence = `${STATE.heroName}は${act}ことにした。`;
-      } else if (act.endsWith('した') || act.endsWith('った') || act.endsWith('いた')) {
+      } else if (act.endsWith('した') || act.endsWith('った') || act.endsWith('いた') || act.endsWith('んだ')) {
         sentence = `${STATE.heroName}は${act}。`;
+      } else if (act.endsWith('て') || act.endsWith('で')) {
+        sentence = `${STATE.heroName}は${act}みた。`;
       } else {
         sentence = `${STATE.heroName}は${act}した。`;
       }
