@@ -669,7 +669,7 @@ async function send() {
   setAllBusy(true);
   addThinking();
   try {
-    const prompt = buildPrompt(null); // user msg already in history
+    const prompt = buildPrompt(actionText); // pass user action directly
     const raw = await callNovelAI(prompt);
     removeThinking();
     const clean = parseResponse(raw);
