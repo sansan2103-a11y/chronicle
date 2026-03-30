@@ -189,29 +189,34 @@ const S = {
 function buildPrompt(action, mode) {
   const parts = [];
 
-  // === 設定（最小限） ===
+  // === 設定は極限まで短く ===
+  // 長い世界設定やキャラ説明はKayraが「それを語る」モードに入る原因。
+  // 場所名＋名前だけにして、描写はKayraに任せる。
+
+  // 世界は場所名だけ（「灯都市エルシア」→ OK、長い説明 → NG）
+  const worldShort = S.world.slice(0, 15);
+
   if (S.turnCount === 0) {
-    const primers = {
-      literary: `　${S.world}。空気は重く、光が揺れている。\n　${S.hero}――${S.heroDesc}。`,
-      dark: `　${S.world}。淀んだ空気が纏わりつく。\n　${S.hero}――${S.heroDesc}。`,
-      light: `　${S.world}。\n　${S.hero}は${S.heroDesc}。`
-    };
-    parts.push(primers[S.tone] || primers.literary);
-    if (S.npc) parts.push(`　${S.npc}――${S.npcDesc}。`);
+    // 初回：文体プライミング（場所＋主人公名だけ）
+    parts.push(`　${worldShort}。`);
+    parts.push(`　${S.hero}はそこにいた。`);
+    if (S.npc) parts.push(`　${S.npc}の姿が見えた。`);
   } else {
-    parts.push(`　${S.hero}は${S.world}にいる。`);
+    // 2回目以降：最小限の状況だけ
     if (S.npc) {
-      let npcLine = `${S.npc}がそばにいる。`;
-      if (S.npcEmotion) npcLine += `${S.npcEmotion}。`;
-      parts.push(`　${npcLine}`);
+      if (S.npcEmotion) {
+        parts.push(`　${S.npc}は${S.npcEmotion}。`);
+      } else {
+        parts.push(`　${S.npc}がそばにいる。`);
+      }
     }
   }
 
-  // === 直近の行動文脈（行動のみ） ===
+  // === 直近2ターンの行動（行動のみ、AI出力は入れない） ===
   for (const t of S.turns.slice(-2)) {
     if (t.action) {
       if (t.mode === 'say') parts.push(`　${S.hero}は「${t.action}」と言った。`);
-      else parts.push(`　${S.hero}は${t.action}した。`);
+      else parts.push(`　${S.hero}は${t.action}。`);
     }
   }
 
@@ -220,36 +225,35 @@ function buildPrompt(action, mode) {
     if (mode === 'say') {
       parts.push(`　${S.hero}は「${action}」と言った。`);
     } else if (mode === 'story') {
-      parts.push(`　${action}。`);
+      // STORYモード制限：主人公の確定行動は書かない。
+      // 環境や雰囲気の方向だけ。主人公名を含めない。
+      const storyText = action.replace(new RegExp(S.hero, 'g'), '').trim();
+      parts.push(`　${storyText}。`);
     } else {
-      parts.push(`　${S.hero}は${action}した。`);
+      parts.push(`　${S.hero}は${action}。`);
     }
   }
 
-  // === ★末尾を必ずNPC/環境視点にする ===
+  // === ★末尾を必ずNPC/環境で終わらせる ===
   // Kayraは末尾を続ける。末尾がNPCなら出力もNPC視点。
-  // これで「主人公が勝手に動く」出力を構造的に防ぐ。
   if (S.npc && S.npc.length > 0) {
-    // NPC反応の書き出し（感情に応じて変える）
     const npcStarts = {
       '怯えている': [
-        `　${S.npc}の肩が震えた。`,
-        `　${S.npc}は思わず一歩下がった。`,
-        `　${S.npc}の目が揺れる。`
+        `　${S.npc}の肩が小さく震えた。`,
+        `　${S.npc}は目をそらした。`
       ],
       '少し安心している': [
-        `　${S.npc}は少しだけ表情を緩めた。`,
-        `　${S.npc}はこちらを見上げた。`
+        `　${S.npc}は顔を上げた。`,
+        `　${S.npc}は小さく息をついた。`
       ],
       '様子を見ている': [
         `　${S.npc}はじっとこちらを見ている。`,
-        `　${S.npc}は何か言いかけて、口を閉じた。`
+        `　${S.npc}は黙っている。`
       ]
     };
     const options = npcStarts[S.npcEmotion] || [`　${S.npc}は`];
     parts.push(options[Math.floor(Math.random() * options.length)]);
   } else {
-    // NPCがいない → 環境描写で終わる
     parts.push('　辺りは静かだった。');
   }
 
@@ -348,8 +352,6 @@ function clean(raw) {
   t = t.replace(/\n{3,}/g, '\n').trim();
 
   // ★主人公の勝手な行動を除去★
-  // AIが書いた「主人公は〜した」「主人公は〜と思った」等を除去。
-  // 主人公の行動はプレイヤーだけが決める。
   if (S.hero) {
     const heroName = S.hero;
     const sentences = t.split(/(?<=[。！？…」])/);
@@ -357,23 +359,43 @@ function clean(raw) {
     for (const s of sentences) {
       const trimmed = s.trim();
       if (trimmed.length < 2) continue;
-      // 主人公が主語で行動している文を検出
-      const heroActing = new RegExp(`${heroName}は.*(した|する|た|ている|ていた|と思|と感じ|ことにし|を決め|に向か)`, 'g');
-      // 主人公の台詞も除去（プレイヤーが言ってないことを言わせない）
-      const heroSpeaking = new RegExp(`${heroName}は「[^」]+」と(言|呟|叫|答|尋|聞)`, 'g');
+      
+      // (1) 主人公が行動/発言している文 → 除去
+      const heroActing = new RegExp(`${heroName}は.*(した|する|ている|ていた|と思|と感じ|ことにし|を決め|に向か|と名乗|と答え)`, 'g');
+      const heroSpeaking = new RegExp(`${heroName}は「[^」]+」と(言|呟|叫|答|尋|聞|名乗)`, 'g');
       
       if (heroActing.test(trimmed) || heroSpeaking.test(trimmed)) {
-        // 主人公が行動/発言している文 → 除去
         console.log('=== STRIPPED (hero acting) ===', trimmed.slice(0, 40));
         continue;
       }
+
+      // (2) 設定・概念説明文を除去（場面描写ではなく世界観解説）
+      // 「〜とは」「〜と呼ばれる」「〜という」「〜の力は」等は解説文
+      if (/とは[、。]|と呼ばれ|という(存在|もの|力|概念|制度)|の力は|の能力は|の契約は|システムは/.test(trimmed)) {
+        console.log('=== STRIPPED (lore exposition) ===', trimmed.slice(0, 40));
+        continue;
+      }
+
+      // (3) 名前混線の修正
+      // 主人公名がNPC側で使われてたり、NPC名が主人公側で使われてたりする文を検出
+      if (S.npc) {
+        // 「NPC名は主人公名と名乗った」のような混線
+        const confusion1 = new RegExp(`${S.npc}は.*${heroName}と(名乗|言)`, 'g');
+        const confusion2 = new RegExp(`${heroName}は.*${S.npc}と(名乗|言)`, 'g');
+        if (confusion1.test(trimmed) || confusion2.test(trimmed)) {
+          console.log('=== STRIPPED (name confusion) ===', trimmed.slice(0, 40));
+          continue;
+        }
+      }
+
       filtered.push(s);
     }
     t = filtered.join('');
     
-    // もし全文除去されてしまったら、元の最初の2文だけ残す
     if (t.trim().length < 5) {
-      t = sentences.slice(0, 2).join('');
+      // 全部除去されたら、NPC名を含む文だけ探す
+      const npcSentences = sentences.filter(s => S.npc && s.includes(S.npc));
+      t = npcSentences.length > 0 ? npcSentences.slice(0, 2).join('') : sentences.slice(0, 2).join('');
     }
   }
 
