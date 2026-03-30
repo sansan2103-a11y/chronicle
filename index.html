@@ -163,6 +163,10 @@ a { color:var(--gd); }
         <div class="hint">物語の始まりの状況。</div>
         <textarea id="s-scene" rows="2" placeholder="夜の繁華街。ネオンの光が路面を照らしている。"></textarea>
       </div>
+      <div class="fd"><label>雰囲気・聞こえる音</label>
+        <div class="hint">場面のリアリティに影響します。</div>
+        <input id="s-atmo" placeholder="薄暗い路地裏、雨音が響いている">
+      </div>
     </div>
   </details>
 
@@ -318,13 +322,19 @@ const State = {
     pacing: 'normal'    // slow / normal / fast
   },
 
-  // --- Current Scene（今この瞬間の状況） ---
+  // --- Current Scene（今この瞬間の状況 + 環境） ---
   currentScene: {
     location: '',
     time: '',
     present: [],        // 今いるNPC名
     mood: '',
-    summary: ''         // 1-2文の状況要約
+    summary: '',        // 1-2文の状況要約
+    // --- 環境（展開に影響する装置） ---
+    atmosphere: '',     // 雰囲気（薄暗い、賑やか、静寂、不穏…）
+    crowdLevel: 'none', // none / few / crowd（人目の多さ→行動制約）
+    dangerLevel: 'low', // low / medium / high（危険度→NPC緊張度に影響）
+    objects: '',        // その場にある使えそうな物（ナイフ、椅子、窓…）
+    sounds: ''          // 聞こえる音（雨音、足音、音楽、悲鳴…）
   },
 
   // --- Meta ---
@@ -548,9 +558,8 @@ const PromptBuilder = {
     }
 
     // === ScenePlanの場面指示 → 行動の後に置く ===
-    // ★ここが核心。行動の後にNPCの反応の「書き出し」を置く。
-    // Kayraはこの続きを書く → NPCの反応から始まる出力になる。
-    if (scenePlan?.npc) {
+    // 環境描写 + NPCの反応開始。NPCがいなくても環境描写は入る。
+    if (scenePlan?.sceneDirection) {
       parts.push(scenePlan.sceneDirection);
     }
 
@@ -634,19 +643,18 @@ const ScenePlanner = {
   // --- NPCの反応を決める（AIなし、ルールベース） ---
   decideNpcReaction(npc, action, mode) {
     const emotion = npc.emotion || '';
-    const rel = npc.relationship || '';
-    const personality = npc.personality || '';
+    const env = State.currentScene;
 
     // 反応の方向性を決める
-    let reactionType = 'neutral';  // neutral / fearful / hostile / friendly / curious
+    let reactionType = 'neutral';
 
-    // 感情ベース
+    // (1) 感情ベース
     if (/怯|恐|震/.test(emotion)) reactionType = 'fearful';
     else if (/怒|敵|憎/.test(emotion)) reactionType = 'hostile';
     else if (/安心|信頼|好/.test(emotion)) reactionType = 'friendly';
     else if (/興味|好奇|警戒/.test(emotion)) reactionType = 'curious';
 
-    // 行動の激しさで修正
+    // (2) 行動の激しさで修正
     if (action && /殴|斬|殺|壊|奪|脅|縛|攻撃/.test(action)) {
       if (reactionType !== 'hostile') reactionType = 'fearful';
     }
@@ -655,33 +663,28 @@ const ScenePlanner = {
       if (reactionType === 'neutral') reactionType = 'friendly';
     }
 
-    // 反応テンプレート（Kayraに書かせる場面の方向付け）
+    // (3) ★環境による修正 — ここが新しい
+    // 人目が多い → 大胆な行動が抑制される、NPCが助けを求めやすい
+    if (env.crowdLevel === 'crowd') {
+      if (reactionType === 'fearful') reactionType = 'hostile'; // 人前なら怯えより怒り
+    }
+    // 危険度が高い → NPCが緊張、警戒寄りに
+    if (env.dangerLevel === 'high') {
+      if (reactionType === 'neutral') reactionType = 'curious'; // 平静→警戒
+      if (reactionType === 'friendly') reactionType = 'curious'; // 友好→慎重
+    }
+    // 暗い・密室 → 恐怖が増幅
+    if (env.atmosphere && /暗|薄暗|闇|密室|狭/.test(env.atmosphere)) {
+      if (reactionType === 'curious') reactionType = 'fearful';
+    }
+
+    // 反応テンプレート
     const reactions = {
-      fearful: {
-        behavior: '怯えて後ずさりする',
-        speech: '短く震えた声で',
-        mood: '恐怖'
-      },
-      hostile: {
-        behavior: '睨みつける',
-        speech: '低い声で',
-        mood: '敵意'
-      },
-      friendly: {
-        behavior: '少し表情を緩める',
-        speech: '穏やかに',
-        mood: '好意'
-      },
-      curious: {
-        behavior: 'じっとこちらを見る',
-        speech: '探るように',
-        mood: '興味'
-      },
-      neutral: {
-        behavior: '反応を返す',
-        speech: '',
-        mood: '平静'
-      }
+      fearful: { behavior: '怯えて後ずさりする', speech: '短く震えた声で', mood: '恐怖' },
+      hostile: { behavior: '睨みつける', speech: '低い声で', mood: '敵意' },
+      friendly: { behavior: '少し表情を緩める', speech: '穏やかに', mood: '好意' },
+      curious: { behavior: 'じっとこちらを見る', speech: '探るように', mood: '興味' },
+      neutral: { behavior: '反応を返す', speech: '', mood: '平静' }
     };
 
     return {
@@ -696,41 +699,53 @@ const ScenePlanner = {
   },
 
   // --- Kayraに渡す場面指示を組み立て ---
-  // ★核心の変更：行動の後にNPCの反応の「書き出し」を置く。
-  // Kayraはこの書き出しの続きを書くので、反応の方向が固定される。
+  // 環境描写 + NPCの反応開始 をプロンプト末尾に置く。
+  // Kayraはこの続きを書く。
   buildDirection(action, mode, npcReaction, heroName) {
-    if (!npcReaction) return '';
-
-    const npc = npcReaction;
+    const env = State.currentScene;
     let dir = '';
 
-    // NPCの反応の書き出し（Kayraがここから続ける）
-    // 感情ごとに具体的な仕草・間を入れる
-    const starters = {
-      fearful: [
-        `　${npc.name}の体が強張った。`,
-        `　${npc.name}は一歩後ずさった。`,
-        `　${npc.name}の目が揺れた。`,
-      ],
-      hostile: [
-        `　${npc.name}の目が鋭くなった。`,
-        `　${npc.name}は唇を噛んだ。`,
-      ],
-      friendly: [
-        `　${npc.name}は少しだけ表情を緩めた。`,
-        `　${npc.name}の目がこちらを見上げた。`,
-      ],
-      curious: [
-        `　${npc.name}はじっとこちらを見ている。`,
-        `　${npc.name}は何か言いたげに口を開きかけた。`,
-      ],
-      neutral: [
-        `　${npc.name}は`,
-      ]
-    };
+    // ★環境の一言描写（音・空気・光）→ 場面のリアリティを上げる
+    const envBits = [];
+    if (env.sounds) envBits.push(env.sounds);
+    if (env.atmosphere) envBits.push(env.atmosphere);
+    if (env.crowdLevel === 'crowd') envBits.push('周囲には人の気配がある');
+    if (env.crowdLevel === 'none') envBits.push('辺りに人の気配はない');
 
-    const options = starters[npc.reactionType] || starters.neutral;
-    dir = options[Math.floor(Math.random() * options.length)];
+    if (envBits.length > 0) {
+      // ランダムに1つ選んで環境の一文を作る
+      const bit = envBits[Math.floor(Math.random() * envBits.length)];
+      dir += `　${bit}。`;
+    }
+
+    // NPCの反応開始
+    if (npcReaction) {
+      const npc = npcReaction;
+      const starters = {
+        fearful: [
+          `${npc.name}の体が強張った。`,
+          `${npc.name}は一歩後ずさった。`,
+          `${npc.name}の目が揺れた。`,
+        ],
+        hostile: [
+          `${npc.name}の目が鋭くなった。`,
+          `${npc.name}は唇を噛んだ。`,
+        ],
+        friendly: [
+          `${npc.name}は少しだけ表情を緩めた。`,
+          `${npc.name}の目がこちらを見上げた。`,
+        ],
+        curious: [
+          `${npc.name}はじっとこちらを見ている。`,
+          `${npc.name}は何か言いたげに口を開きかけた。`,
+        ],
+        neutral: [
+          `${npc.name}は`,
+        ]
+      };
+      const options = starters[npc.reactionType] || starters.neutral;
+      dir += options[Math.floor(Math.random() * options.length)];
+    }
 
     return dir;
   }
@@ -1173,17 +1188,40 @@ const UI = {
         <button class="modal-ok" onclick="State.plotEssentials.worldCore=$('m-wc').value.trim()||State.plotEssentials.worldCore;State.plotEssentials.storyPremise=$('m-wp').value.trim();State.save();UI.closeModal();UI.updateScene()">保存</button>`;
     }
     else if (type === 'scene') {
+      const cs = State.currentScene;
       h = `<h3>シーンを編集</h3>
-        <div class="fd"><label>現在のシーン要約</label>
-          <div class="hint">AIに送られる「今の状況」を直接編集できます。</div>
-          <textarea id="m-ss" rows="3">${State.currentScene.summary}</textarea>
+        <div class="fd"><label>シーン要約</label>
+          <div class="hint">AIに送られる「今の状況」。</div>
+          <textarea id="m-ss" rows="2">${cs.summary}</textarea>
         </div>
-        <div class="fd"><label>場所</label><input id="m-sl" value="${State.currentScene.location || ''}"></div>
-        <div class="fd"><label>今いるNPC（カンマ区切り）</label><input id="m-sp" value="${(State.currentScene.present || []).join(',')}"></div>
+        <div class="fd"><label>場所</label><input id="m-sl" value="${cs.location || ''}"></div>
+        <div class="fd"><label>今いるNPC（カンマ区切り）</label><input id="m-sp" value="${(cs.present || []).join(',')}"></div>
+        <div class="fd"><label>雰囲気</label><input id="m-sa" value="${cs.atmosphere || ''}" placeholder="薄暗い、賑やか、静寂、不穏、穏やか…"></div>
+        <div class="fd"><label>聞こえる音</label><input id="m-sn" value="${cs.sounds || ''}" placeholder="雨音、遠くの足音、音楽、静寂…"></div>
+        <div class="fd"><label>周囲の物</label><input id="m-so" value="${cs.objects || ''}" placeholder="壊れた椅子、ナイフ、窓、毛布…"></div>
+        <div class="fd"><label>人目</label>
+          <select id="m-sc" style="width:100%;background:var(--srf);border:1px solid var(--bdr);color:var(--tx);padding:8px;border-radius:var(--r);font-family:var(--fb)">
+            <option value="none" ${cs.crowdLevel==='none'?'selected':''}>誰もいない</option>
+            <option value="few" ${cs.crowdLevel==='few'?'selected':''}>数人</option>
+            <option value="crowd" ${cs.crowdLevel==='crowd'?'selected':''}>人が多い</option>
+          </select>
+        </div>
+        <div class="fd"><label>危険度</label>
+          <select id="m-sd" style="width:100%;background:var(--srf);border:1px solid var(--bdr);color:var(--tx);padding:8px;border-radius:var(--r);font-family:var(--fb)">
+            <option value="low" ${cs.dangerLevel==='low'?'selected':''}>安全</option>
+            <option value="medium" ${cs.dangerLevel==='medium'?'selected':''}>やや危険</option>
+            <option value="high" ${cs.dangerLevel==='high'?'selected':''}>危険</option>
+          </select>
+        </div>
         <button class="modal-ok" onclick="
           State.currentScene.summary=$('m-ss').value.trim();
           State.currentScene.location=$('m-sl').value.trim();
           State.currentScene.present=$('m-sp').value.split(',').map(s=>s.trim()).filter(Boolean);
+          State.currentScene.atmosphere=$('m-sa').value.trim();
+          State.currentScene.sounds=$('m-sn').value.trim();
+          State.currentScene.objects=$('m-so').value.trim();
+          State.currentScene.crowdLevel=$('m-sc').value;
+          State.currentScene.dangerLevel=$('m-sd').value;
           State.save();UI.closeModal();UI.updateScene();
         ">保存</button>`;
     }
@@ -1231,6 +1269,11 @@ const Game = {
 
     // Current Scene
     State.currentScene.summary = $('s-scene').value.trim() || '';
+    const atmo = $('s-atmo')?.value.trim() || '';
+    if (atmo) {
+      State.currentScene.atmosphere = atmo;
+      State.currentScene.sounds = atmo; // 初回は雰囲気と音を兼用
+    }
 
     // Author's Note
     State.authorNote.tone = $('s-tone').value;
