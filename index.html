@@ -489,7 +489,8 @@ const PromptBuilder = {
   },
 
   // --- メイン：プロンプト組み立て ---
-  build(action, mode) {
+  // scenePlan が渡された場合、NPCの反応方向をプロンプトに組み込む
+  build(action, mode, scenePlan) {
     let parts = [];
 
     if (State.turnCount === 0) {
@@ -512,15 +513,14 @@ const PromptBuilder = {
         parts.push(mem.length > 80 ? mem.slice(-80) : mem);
       }
 
-      // recentHistory（直近2ターンの最終文）
+      // recentHistory
       const ctx = this.recentContext();
       if (ctx) parts.push(ctx);
     }
 
-    // Story Cards（アクションテキストからキーワードマッチ）
+    // Story Cards（キーワードマッチ）
     if (action) {
       const cards = this.findRelevantCards(action);
-      // currentScene.presentにいるNPCも追加
       for (const name of State.currentScene.present || []) {
         const card = State.storyCards.find(c => c.name === name);
         if (card && !cards.includes(card)) cards.push(card);
@@ -528,6 +528,13 @@ const PromptBuilder = {
       for (const card of cards.slice(0, 2)) {
         parts.push(this.cardToText(card));
       }
+    }
+
+    // === ScenePlanの場面指示（NPCの反応方向） ===
+    // これが核心。Kayraに「NPCはこう反応する」と書いてから
+    // アクションを置くことで、出力がNPC反応の続きになる。
+    if (scenePlan?.npc) {
+      parts.push(scenePlan.sceneDirection);
     }
 
     // ユーザーの行動
@@ -540,9 +547,7 @@ const PromptBuilder = {
 
     // ===== トークン予算チェック（600文字以内） =====
     if (prompt.length > 600) {
-      // 古い部分から削る
       prompt = prompt.slice(-600);
-      // 文頭を文末で切りそろえる
       const cut = prompt.search(/[。！？」]/);
       if (cut > 0 && cut < 100) prompt = prompt.slice(cut + 1);
     }
@@ -557,6 +562,149 @@ const PromptBuilder = {
     const parts = text.split(/(?<=[。！？…」』])/);
     const valid = parts.filter(s => s.trim().length > 3);
     return valid.length ? valid[valid.length - 1].trim() : text.slice(-50);
+  }
+};
+
+
+/* ================================================================
+   MODULE 2.5: ScenePlanner — ターンの内部結果をAIなしで決める
+   
+   ★核心：Kayraに「何が起きるか」を考えさせない。
+   アプリが決めて、Kayraには「この場面を書け」とだけ頼む。
+   
+   入力：プレイヤーの行動 + NPC状態 + シーン状態
+   出力：ScenePlan（このターンで何が起きるか）
+   ================================================================ */
+const ScenePlanner = {
+
+  // --- メイン：シーン計画を生成 ---
+  plan(action, mode) {
+    const name = State.plotEssentials.protagonist.name;
+
+    // 関連NPC（行動テキスト + 現在のシーンから）
+    const npcs = this.findActiveNpcs(action);
+
+    // NPCの反応を決める
+    const npcReaction = npcs.length > 0
+      ? this.decideNpcReaction(npcs[0], action, mode)
+      : null;
+
+    // 行動文を組み立て
+    const actionText = PromptBuilder.formatAction(action, mode);
+
+    // シーン計画
+    const plan = {
+      action: actionText,
+      npc: npcReaction,
+      // Kayraに渡す「書くべき場面」の指示文
+      sceneDirection: this.buildDirection(action, mode, npcReaction, name)
+    };
+
+    console.log('=== SCENE PLAN ===', plan);
+    return plan;
+  },
+
+  // --- アクティブNPCを特定 ---
+  findActiveNpcs(action) {
+    const found = [];
+    for (const card of State.storyCards) {
+      if (card.type !== 'person') continue;
+      const keywords = [card.name, ...(card.aliases || [])];
+      const inAction = action && keywords.some(kw => kw && action.includes(kw));
+      const inScene = (State.currentScene.present || []).includes(card.name);
+      if (inAction || inScene || card.active) {
+        found.push(card);
+      }
+    }
+    return found;
+  },
+
+  // --- NPCの反応を決める（AIなし、ルールベース） ---
+  decideNpcReaction(npc, action, mode) {
+    const emotion = npc.emotion || '';
+    const rel = npc.relationship || '';
+    const personality = npc.personality || '';
+
+    // 反応の方向性を決める
+    let reactionType = 'neutral';  // neutral / fearful / hostile / friendly / curious
+
+    // 感情ベース
+    if (/怯|恐|震/.test(emotion)) reactionType = 'fearful';
+    else if (/怒|敵|憎/.test(emotion)) reactionType = 'hostile';
+    else if (/安心|信頼|好/.test(emotion)) reactionType = 'friendly';
+    else if (/興味|好奇|警戒/.test(emotion)) reactionType = 'curious';
+
+    // 行動の激しさで修正
+    if (action && /殴|斬|殺|壊|奪|脅|縛|攻撃/.test(action)) {
+      if (reactionType !== 'hostile') reactionType = 'fearful';
+    }
+    if (action && /助|守|救|癒|治|優/.test(action)) {
+      if (reactionType === 'fearful') reactionType = 'curious';
+      if (reactionType === 'neutral') reactionType = 'friendly';
+    }
+
+    // 反応テンプレート（Kayraに書かせる場面の方向付け）
+    const reactions = {
+      fearful: {
+        behavior: '怯えて後ずさりする',
+        speech: '短く震えた声で',
+        mood: '恐怖'
+      },
+      hostile: {
+        behavior: '睨みつける',
+        speech: '低い声で',
+        mood: '敵意'
+      },
+      friendly: {
+        behavior: '少し表情を緩める',
+        speech: '穏やかに',
+        mood: '好意'
+      },
+      curious: {
+        behavior: 'じっとこちらを見る',
+        speech: '探るように',
+        mood: '興味'
+      },
+      neutral: {
+        behavior: '反応を返す',
+        speech: '',
+        mood: '平静'
+      }
+    };
+
+    return {
+      name: npc.name,
+      desc: npc.desc,
+      emotion: emotion,
+      personality: personality,
+      speakingStyle: npc.speakingStyle || '',
+      reaction: reactions[reactionType] || reactions.neutral,
+      reactionType
+    };
+  },
+
+  // --- Kayraに渡す場面指示を組み立て ---
+  // 「行動→NPC反応→結果」の順序をプロンプトの構造で強制する
+  buildDirection(action, mode, npcReaction, heroName) {
+    let dir = '';
+
+    // NPCがいる場合：NPCの状態を地の文で描写してからアクション
+    if (npcReaction) {
+      const npc = npcReaction;
+
+      // NPCの現在の様子を1文で（Kayraがこの文体を引き継ぐ）
+      if (npc.emotion) {
+        dir += `　${npc.name}は${npc.emotion}ようだった。`;
+      }
+
+      // 主人公のアクション
+      // （formatActionの結果はbuild側で追加するのでここでは省略）
+
+      // NPCの反応の方向を示唆する文（Kayraへの強い誘導）
+      dir += `${npc.name}は${npc.reaction.behavior}。`;
+    }
+
+    return dir;
   }
 };
 
@@ -1135,10 +1283,13 @@ const Game = {
     UI.showLoad();
 
     try {
-      // ②③④ プロンプト組み立て（PromptBuilderが全部やる）
-      const prompt = PromptBuilder.build(action, mode);
+      // ② ScenePlanner（アプリ側で場面を決める — AIなし）
+      const plan = ScenePlanner.plan(action, mode);
 
-      // ⑤ AI呼び出し
+      // ③④ プロンプト組み立て（ScenePlanを使う）
+      const prompt = PromptBuilder.build(action, mode, plan);
+
+      // ⑤ AI呼び出し（Kayraは場面を書くだけ）
       const raw = await AIEngine.generate(prompt);
 
       // ⑥ 出力クリーニング
@@ -1181,34 +1332,22 @@ const Game = {
       }
 
       // NPCのactive状態と感情を更新
+      // ScenePlannerが決めた反応を優先（AI出力のキーワードより信頼性が高い）
       for (const card of State.storyCards) {
         card.active = text.includes(card.name) || (action && action.includes(card.name));
         if (card.active && !State.currentScene.present.includes(card.name)) {
           State.currentScene.present.push(card.name);
         }
 
-        // === NPC感情更新（キーワードベース） ===
-        // AI出力とプレイヤー行動からNPCの感情を推測して更新
-        if (card.active && card.type === 'person') {
-          const combined = (action || '') + text;
-
-          // 恐怖系
-          if (/怯え|震え|恐|怖|逃げ|叫び|悲鳴|泣/.test(combined)) {
-            card.emotion = '怯えている';
-          }
-          // 怒り系
-          else if (/怒|睨|叫|罵|殴|抵抗/.test(combined)) {
-            card.emotion = '怒っている';
-          }
-          // 安心・好意系
-          else if (/笑|微笑|安心|信頼|感謝|ありがと|嬉し/.test(combined)) {
-            card.emotion = '安心している';
-          }
-          // 警戒系
-          else if (/警戒|疑|不審|睨|黙/.test(combined)) {
-            card.emotion = '警戒している';
-          }
-          // 上記に該当しなければ変更なし
+        // ScenePlannerの決定で感情更新
+        if (plan.npc && plan.npc.name === card.name) {
+          const emotionMap = {
+            fearful: '怯えている', hostile: '怒っている',
+            friendly: '安心している', curious: '興味を持っている',
+            neutral: ''
+          };
+          const newEmotion = emotionMap[plan.npc.reactionType];
+          if (newEmotion) card.emotion = newEmotion;
         }
       }
 
