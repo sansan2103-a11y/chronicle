@@ -427,12 +427,27 @@ const PromptBuilder = {
     return matched.slice(0, 2);
   },
 
-  // --- Story Cardを散文に変換（箇条書きにしない！） ---
+  // --- Story Cardを散文に変換 ---
+  // NPCの感情・性格・関係性を自然な文に組み込む。
+  // Kayraはこの文体を真似るので、具体的な描写が重要。
   cardToText(card) {
-    let t = `${card.name}。${card.desc || ''}`;
-    if (card.personality) t += `。${card.personality}`;
-    // 50文字以内に収める
-    return t.length > 50 ? t.slice(0, 50) : t;
+    const parts = [card.name];
+
+    // 説明
+    if (card.desc) parts.push(card.desc);
+
+    // 感情状態（あれば）→ 今の態度を決める
+    if (card.emotion) parts.push(`今は${card.emotion}`);
+
+    // 性格＋話し方 → セリフの口調を決める
+    if (card.personality) parts.push(card.personality);
+
+    // 主人公との関係 → 距離感を決める
+    if (card.relationship) parts.push(`${State.plotEssentials.protagonist.name}に対して${card.relationship}`);
+
+    // 60文字以内に収める
+    let t = parts.join('。') + '。';
+    return t.length > 60 ? t.slice(0, 60) : t;
   },
 
   // --- Recent Historyから文脈を組み立て ---
@@ -763,6 +778,49 @@ const Cleaner = {
     );
     if (i > 0 && i < t.length - 1) return t.slice(0, i + 1);
     return t;
+  },
+
+  // --- 品質スコア（0.0〜1.0） ---
+  // 壊れた出力を検出して、履歴に入れるかどうかを判定する。
+  scoreQuality(text) {
+    if (!text || text.length < 10) return 0;
+    let score = 1.0;
+
+    // (1) 文の多様性チェック — 同じ主語が3回以上 → 減点
+    const sentences = text.split(/(?<=[。！？」])/);
+    const subjects = {};
+    for (const s of sentences) {
+      const sub = s.trim().slice(0, 8); // 先頭8文字を主語とみなす
+      subjects[sub] = (subjects[sub] || 0) + 1;
+    }
+    for (const count of Object.values(subjects)) {
+      if (count >= 3) score -= 0.3;
+    }
+
+    // (2) 助詞密度チェック — 助詞が多すぎ＝文法が壊れてる
+    const particles = (text.match(/[はがをにでの]/g) || []).length;
+    const avgGap = text.length / Math.max(particles, 1);
+    if (avgGap < 2.5) score -= 0.3;
+
+    // (3) 反復フレーズチェック — 6文字以上のフレーズが3回以上
+    const flat = text.replace(/[\s　\n]/g, '');
+    for (let len = 6; len <= 10; len++) {
+      for (let i = 0; i <= flat.length - len; i++) {
+        const ph = flat.slice(i, i + len);
+        const escaped = ph.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const matches = flat.match(new RegExp(escaped, 'g'));
+        if (matches && matches.length >= 3) {
+          score -= 0.4;
+          break;
+        }
+      }
+      if (score < 0.3) break;
+    }
+
+    // (4) 極端に短い → 減点
+    if (text.length < 20) score -= 0.2;
+
+    return Math.max(0, Math.min(1, score));
   }
 };
 
@@ -837,9 +895,11 @@ const UI = {
       </div>`;
       State.storyCards.filter(c => c.type === 'person').forEach((c, i) => {
         const idx = State.storyCards.indexOf(c);
+        const emotionBadge = c.emotion ? `<span style="display:inline-block;padding:1px 6px;background:var(--bg3);border-radius:10px;font-size:.6rem;color:var(--txb);margin-left:4px">${c.emotion}</span>` : '';
         h += `<div style="margin-bottom:8px;padding:10px;background:var(--srf);border-radius:var(--r);border:1px solid var(--bdr)">
-          <div style="color:var(--gold);font-size:.82rem;font-weight:700">${c.name}</div>
+          <div style="color:var(--gold);font-size:.82rem;font-weight:700">${c.name}${emotionBadge}</div>
           <div style="color:var(--txd);font-size:.75rem;margin-top:2px">${c.desc}</div>
+          ${c.personality ? `<div style="color:var(--txd);font-size:.65rem;margin-top:1px">性格：${c.personality}</div>` : ''}
           <button onclick="UI.modal('npc',${idx})" style="margin-top:6px;background:none;border:1px solid var(--bdr);color:var(--txd);padding:2px 8px;border-radius:3px;font-size:.65rem;cursor:pointer;font-family:var(--fb)">編集</button>
         </div>`;
       });
@@ -878,7 +938,8 @@ const UI = {
   },
 
   addNpcRuntime() {
-    State.storyCards.push({ type: 'person', name: '新NPC', aliases: [], desc: '説明なし', personality: '', relationship: '' });
+    State.storyCards.push({ type:'person', name:'新NPC', aliases:[], desc:'説明なし',
+      personality:'', speakingStyle:'', relationship:'', emotion:'', goal:'', active:false });
     State.save();
     this.modal('npc', State.storyCards.length - 1);
   },
@@ -900,14 +961,31 @@ const UI = {
         <div class="fd"><label>名前</label><input id="m-nn" value="${c.name}"></div>
         <div class="fd"><label>別名（カンマ区切り）</label><input id="m-na" value="${(c.aliases || []).join(',')}"></div>
         <div class="fd"><label>説明</label><textarea id="m-nd" rows="2">${c.desc}</textarea></div>
-        <div class="fd"><label>口調・性格</label><input id="m-np" value="${c.personality || ''}" placeholder="おどおど、敬語"></div>
-        <div class="fd"><label>主人公との関係</label><input id="m-nr" value="${c.relationship || ''}" placeholder="魔王を恐れている"></div>
+        <div class="fd"><label>性格</label><input id="m-np" value="${c.personality || ''}" placeholder="臆病だが芯は強い、好奇心旺盛"></div>
+        <div class="fd"><label>話し方</label><input id="m-ns" value="${c.speakingStyle || ''}" placeholder="言いよどみが多い、敬語、ぶっきらぼう"></div>
+        <div class="fd"><label>主人公との関係</label><input id="m-nr" value="${c.relationship || ''}" placeholder="警戒しているが興味もある"></div>
+        <div class="fd"><label>今の感情</label>
+          <select id="m-ne" style="width:100%;background:var(--srf);border:1px solid var(--bdr);color:var(--tx);padding:8px;border-radius:var(--r);font-family:var(--fb)">
+            <option value="" ${!c.emotion?'selected':''}>（自動検出）</option>
+            <option value="怯えている" ${c.emotion==='怯えている'?'selected':''}>怯えている</option>
+            <option value="警戒している" ${c.emotion==='警戒している'?'selected':''}>警戒している</option>
+            <option value="怒っている" ${c.emotion==='怒っている'?'selected':''}>怒っている</option>
+            <option value="安心している" ${c.emotion==='安心している'?'selected':''}>安心している</option>
+            <option value="興味を持っている" ${c.emotion==='興味を持っている'?'selected':''}>興味を持っている</option>
+            <option value="悲しんでいる" ${c.emotion==='悲しんでいる'?'selected':''}>悲しんでいる</option>
+            <option value="混乱している" ${c.emotion==='混乱している'?'selected':''}>混乱している</option>
+          </select>
+        </div>
+        <div class="fd"><label>長期的な目的</label><input id="m-ng" value="${c.goal || ''}" placeholder="生き残りたい、秘密を守りたい"></div>
         <button class="modal-ok" onclick="
           State.storyCards[${idx}].name=$('m-nn').value.trim()||State.storyCards[${idx}].name;
           State.storyCards[${idx}].aliases=$('m-na').value.split(',').map(s=>s.trim()).filter(Boolean);
           State.storyCards[${idx}].desc=$('m-nd').value.trim();
           State.storyCards[${idx}].personality=$('m-np').value.trim();
+          State.storyCards[${idx}].speakingStyle=$('m-ns').value.trim();
           State.storyCards[${idx}].relationship=$('m-nr').value.trim();
+          State.storyCards[${idx}].emotion=$('m-ne').value;
+          State.storyCards[${idx}].goal=$('m-ng').value.trim();
           State.save();UI.closeModal();UI.renderSide('cards');
         ">保存</button>
         <button style="margin-top:8px;margin-left:8px;padding:8px 16px;background:var(--err);color:white;border:none;border-radius:var(--r);cursor:pointer;font-family:var(--fb)" onclick="State.storyCards.splice(${idx},1);State.save();UI.closeModal();UI.renderSide('cards')">削除</button>`;
@@ -994,7 +1072,7 @@ const Game = {
       if (name) {
         State.storyCards.push({
           type: 'person', name, aliases: [], desc: desc || name,
-          personality: '', relationship: '', active: false
+          personality: '', speakingStyle: '', relationship: '', emotion: '', goal: '', active: false
         });
       }
     });
@@ -1075,23 +1153,62 @@ const Game = {
       UI.addTurn('nar', text);
 
       // ⑦ 状態更新
-      const sceneSummary = Cleaner.cutEnd(text).slice(-60);
-      State.recentHistory.push({
-        playerAction: action, mode, narrative: text, sceneSummary
-      });
 
-      // 直近10ターン以上は削除（設計書：recentHistoryは直近のみ保持）
+      // === 品質ゲート ===
+      // 壊れた出力を履歴に入れない。表示はするが、次のプロンプトには使わない。
+      const quality = Cleaner.scoreQuality(text);
+      console.log('=== QUALITY SCORE ===', quality);
+
+      if (quality >= 0.4) {
+        // 品質OK → 履歴に保存（行動のみ。AI出力は入れない）
+        State.recentHistory.push({
+          playerAction: action, mode, sceneSummary: Cleaner.cutEnd(text).slice(-40)
+        });
+      } else {
+        // 品質NG → 行動だけ保存、シーン要約は更新しない
+        State.recentHistory.push({ playerAction: action, mode, sceneSummary: '' });
+        console.warn('=== LOW QUALITY: not stored in context ===');
+      }
+
+      // 直近10ターン以上は削除
       if (State.recentHistory.length > 10) {
         State.recentHistory = State.recentHistory.slice(-10);
       }
 
-      State.currentScene.summary = sceneSummary;
+      // シーン要約は品質OKの時だけ更新
+      if (quality >= 0.4) {
+        State.currentScene.summary = Cleaner.cutEnd(text).slice(-60);
+      }
 
-      // NPCのactive状態を更新（テキストに名前が含まれていたら）
+      // NPCのactive状態と感情を更新
       for (const card of State.storyCards) {
-        card.active = text.includes(card.name);
+        card.active = text.includes(card.name) || (action && action.includes(card.name));
         if (card.active && !State.currentScene.present.includes(card.name)) {
           State.currentScene.present.push(card.name);
+        }
+
+        // === NPC感情更新（キーワードベース） ===
+        // AI出力とプレイヤー行動からNPCの感情を推測して更新
+        if (card.active && card.type === 'person') {
+          const combined = (action || '') + text;
+
+          // 恐怖系
+          if (/怯え|震え|恐|怖|逃げ|叫び|悲鳴|泣/.test(combined)) {
+            card.emotion = '怯えている';
+          }
+          // 怒り系
+          else if (/怒|睨|叫|罵|殴|抵抗/.test(combined)) {
+            card.emotion = '怒っている';
+          }
+          // 安心・好意系
+          else if (/笑|微笑|安心|信頼|感謝|ありがと|嬉し/.test(combined)) {
+            card.emotion = '安心している';
+          }
+          // 警戒系
+          else if (/警戒|疑|不審|睨|黙/.test(combined)) {
+            card.emotion = '警戒している';
+          }
+          // 上記に該当しなければ変更なし
         }
       }
 
