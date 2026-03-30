@@ -387,25 +387,29 @@ const PromptBuilder = {
     const name = State.plotEssentials.protagonist.name;
     const desc = State.plotEssentials.protagonist.desc;
     const world = State.plotEssentials.worldCore;
+    const premise = State.plotEssentials.storyPremise;
 
     const tones = {
       literary: [
         `　${world}。空気は重く湿り気を帯びていた。光が揺れ、影が長く伸びる。`,
         `　${name}――${desc}。`,
+        premise ? `　${premise}。` : '',
         `　${name}は足を止め、息を整えた。周囲の気配に意識を向ける。`
       ],
       dark: [
         `　${world}。淀んだ空気が喉に纏わりつく。嫌な臭いが漂っている。`,
         `　${name}――${desc}。`,
+        premise ? `　${premise}。` : '',
         `　${name}は薄暗い空間に目を凝らした。何かが蠢いている。`
       ],
       light: [
         `　${world}。`,
         `　${name}は${desc}。`,
+        premise ? `　${premise}。` : '',
         `　「さて、と」${name}は軽く伸びをした。今日も何かが起きそうだ。`
       ]
     };
-    return (tones[State.authorNote.tone] || tones.literary).join('\n');
+    return (tones[State.authorNote.tone] || tones.literary).filter(Boolean).join('\n');
   },
 
   // --- Story Card抽出（設計書②：キーワードマッチ） ---
@@ -428,26 +432,31 @@ const PromptBuilder = {
   },
 
   // --- Story Cardを散文に変換 ---
-  // NPCの感情・性格・関係性を自然な文に組み込む。
-  // Kayraはこの文体を真似るので、具体的な描写が重要。
+  // NPCの設定を「小説の地の文」として書く。
+  // Kayraはこの文体とキャラ描写を引き継いでNPCを書く。
   cardToText(card) {
-    const parts = [card.name];
+    const parts = [];
 
-    // 説明
-    if (card.desc) parts.push(card.desc);
+    // 名前＋説明（必須）
+    parts.push(`${card.name}――${card.desc || '謎の人物'}`);
 
-    // 感情状態（あれば）→ 今の態度を決める
-    if (card.emotion) parts.push(`今は${card.emotion}`);
-
-    // 性格＋話し方 → セリフの口調を決める
+    // 性格（あれば）→ 行動パターンを決める
     if (card.personality) parts.push(card.personality);
 
-    // 主人公との関係 → 距離感を決める
-    if (card.relationship) parts.push(`${State.plotEssentials.protagonist.name}に対して${card.relationship}`);
+    // 話し方（あれば）→ セリフの口調を決める
+    if (card.speakingStyle) parts.push(`話し方は${card.speakingStyle}`);
 
-    // 60文字以内に収める
+    // 今の感情（あれば）→ 今のテンションを決める
+    if (card.emotion) parts.push(`今は${card.emotion}`);
+
+    // 主人公との関係（あれば）→ 距離感を決める
+    if (card.relationship) {
+      parts.push(`${State.plotEssentials.protagonist.name}に対して${card.relationship}`);
+    }
+
+    // 80文字以内に収める（Kayraのコンテキストを節約）
     let t = parts.join('。') + '。';
-    return t.length > 60 ? t.slice(0, 60) : t;
+    return t.length > 80 ? t.slice(0, 80) + '。' : t;
   },
 
   // --- Recent Historyから文脈を組み立て ---
@@ -499,8 +508,11 @@ const PromptBuilder = {
     } else {
       // ===== 2回目以降 =====
 
-      // plotEssentials（世界＋主人公、1行ずつ）
+      // plotEssentials（世界＋主人公＋物語前提）
       parts.push(`　${State.plotEssentials.worldCore}。${State.plotEssentials.protagonist.name}は${State.plotEssentials.protagonist.desc}。`);
+      if (State.plotEssentials.storyPremise) {
+        parts.push(`　${State.plotEssentials.storyPremise}。`);
+      }
 
       // currentScene
       if (State.currentScene.summary) {
@@ -530,16 +542,16 @@ const PromptBuilder = {
       }
     }
 
-    // === ScenePlanの場面指示（NPCの反応方向） ===
-    // これが核心。Kayraに「NPCはこう反応する」と書いてから
-    // アクションを置くことで、出力がNPC反応の続きになる。
-    if (scenePlan?.npc) {
-      parts.push(scenePlan.sceneDirection);
-    }
-
-    // ユーザーの行動
+    // ユーザーの行動 → 先に置く
     if (action) {
       parts.push(this.formatAction(action, mode));
+    }
+
+    // === ScenePlanの場面指示 → 行動の後に置く ===
+    // ★ここが核心。行動の後にNPCの反応の「書き出し」を置く。
+    // Kayraはこの続きを書く → NPCの反応から始まる出力になる。
+    if (scenePlan?.npc) {
+      parts.push(scenePlan.sceneDirection);
     }
 
     // 結合
@@ -684,25 +696,41 @@ const ScenePlanner = {
   },
 
   // --- Kayraに渡す場面指示を組み立て ---
-  // 「行動→NPC反応→結果」の順序をプロンプトの構造で強制する
+  // ★核心の変更：行動の後にNPCの反応の「書き出し」を置く。
+  // Kayraはこの書き出しの続きを書くので、反応の方向が固定される。
   buildDirection(action, mode, npcReaction, heroName) {
+    if (!npcReaction) return '';
+
+    const npc = npcReaction;
     let dir = '';
 
-    // NPCがいる場合：NPCの状態を地の文で描写してからアクション
-    if (npcReaction) {
-      const npc = npcReaction;
+    // NPCの反応の書き出し（Kayraがここから続ける）
+    // 感情ごとに具体的な仕草・間を入れる
+    const starters = {
+      fearful: [
+        `　${npc.name}の体が強張った。`,
+        `　${npc.name}は一歩後ずさった。`,
+        `　${npc.name}の目が揺れた。`,
+      ],
+      hostile: [
+        `　${npc.name}の目が鋭くなった。`,
+        `　${npc.name}は唇を噛んだ。`,
+      ],
+      friendly: [
+        `　${npc.name}は少しだけ表情を緩めた。`,
+        `　${npc.name}の目がこちらを見上げた。`,
+      ],
+      curious: [
+        `　${npc.name}はじっとこちらを見ている。`,
+        `　${npc.name}は何か言いたげに口を開きかけた。`,
+      ],
+      neutral: [
+        `　${npc.name}は`,
+      ]
+    };
 
-      // NPCの現在の様子を1文で（Kayraがこの文体を引き継ぐ）
-      if (npc.emotion) {
-        dir += `　${npc.name}は${npc.emotion}ようだった。`;
-      }
-
-      // 主人公のアクション
-      // （formatActionの結果はbuild側で追加するのでここでは省略）
-
-      // NPCの反応の方向を示唆する文（Kayraへの強い誘導）
-      dir += `${npc.name}は${npc.reaction.behavior}。`;
-    }
+    const options = starters[npc.reactionType] || starters.neutral;
+    dir = options[Math.floor(Math.random() * options.length)];
 
     return dir;
   }
@@ -734,10 +762,10 @@ const AIEngine = {
         input: prompt,
         model: 'kayra-v1',
         parameters: {
-          max_length: 60,       // 短く＝1ターン1イベント
+          max_length: 40,       // 極短 = 1反応だけ書かせる
           min_length: 1,
           use_string: true,
-          temperature: 0.65,    // やや低め＝文章の一貫性優先
+          temperature: 0.65,
           top_k: 40,
           top_p: 0.92,
           tail_free_sampling: 0.95,
@@ -824,8 +852,8 @@ const Cleaner = {
     // === Stage 5: 文末で切る ===
     t = this.cutEnd(t);
 
-    // === Stage 6: 文数制限（最大6文） ===
-    t = this.limitSentences(t, 6);
+    // === Stage 6: 文数制限（最大4文） ===
+    t = this.limitSentences(t, 4);
 
     // === Stage 7: 壊れた会話文の修復 ===
     t = this.fixDialogue(t);
