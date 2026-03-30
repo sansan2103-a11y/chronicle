@@ -377,7 +377,7 @@ const State = {
    - 純粋な日本語散文のみ（英語タグ・メタ指示禁止）
    - 全角字下げで段落開始
    - 主人公名を行動文に必ず含める
-   - 「すると、」で終わらせる
+   - 行動文で終わらせる（「すると」は使わない＝イベント連鎖防止）
    - 合計400-600文字以内
    ================================================================ */
 const PromptBuilder = {
@@ -435,41 +435,42 @@ const PromptBuilder = {
     return t.length > 50 ? t.slice(0, 50) : t;
   },
 
-  // --- Recent Historyから文脈を組み立て（直近2ターンの最終文だけ） ---
+  // --- Recent Historyから文脈を組み立て ---
+  // AI出力は文脈に入れない（汚染防止の核心）。
+  // プレイヤーの行動だけを文脈にすれば、壊れた文が伝播しない。
   recentContext() {
-    const recent = State.recentHistory.slice(-2);
+    const recent = State.recentHistory.slice(-3);
+    const name = State.plotEssentials.protagonist.name;
     let ctx = '';
     for (const turn of recent) {
       if (turn.playerAction) {
-        ctx += `${State.plotEssentials.protagonist.name}は${turn.playerAction}した。`;
-      }
-      if (turn.narrative) {
-        // 最終文だけ抽出（全文は渡さない = 汚染防止）
-        ctx += this.lastSentence(turn.narrative);
+        ctx += `${name}は${turn.playerAction}した。`;
       }
     }
     return ctx;
   },
 
-  // --- ユーザー入力を行動文に変換 + 「すると、」 ---
+  // --- ユーザー入力を行動文に変換 ---
+  // 「すると、」を付けない。行動文で終わらせることで、
+  // Kayraは「その直後の反応」だけを書く（イベント連鎖を防ぐ）。
   formatAction(action, mode) {
     const name = State.plotEssentials.protagonist.name;
     const act = action.trim();
 
     if (mode === 'say') {
-      return `${name}は「${act}」と言った。すると、`;
+      return `　${name}は「${act}」と言った。`;
     }
 
-    // 行動・描写モード共通
+    // 行動・描写モード
     const last = act.slice(-1);
     const dictForm = 'るすくぐむぶつぬ';
     if (dictForm.includes(last))
-      return `　${name}は${act}ことにした。すると、`;
+      return `　${name}は${act}ことにした。`;
     if (act.endsWith('した') || act.endsWith('った') || act.endsWith('いた') || act.endsWith('んだ'))
-      return `　${name}は${act}。すると、`;
+      return `　${name}は${act}。`;
     if (act.endsWith('て') || act.endsWith('で'))
-      return `　${name}は${act}みた。すると、`;
-    return `　${name}は${act}した。すると、`;
+      return `　${name}は${act}みた。`;
+    return `　${name}は${act}した。`;
   },
 
   // --- メイン：プロンプト組み立て ---
@@ -570,13 +571,13 @@ const AIEngine = {
         input: prompt,
         model: 'kayra-v1',
         parameters: {
-          max_length: 100,      // 短く＝ループ前に止める
+          max_length: 60,       // 短く＝1ターン1イベント
           min_length: 1,
           use_string: true,
-          temperature: 0.72,
-          top_k: 50,
-          top_p: 0.95,
-          tail_free_sampling: 0.975,
+          temperature: 0.65,    // やや低め＝文章の一貫性優先
+          top_k: 40,
+          top_p: 0.92,
+          tail_free_sampling: 0.95,
           repetition_penalty: 1.5,
           repetition_penalty_range: 2048,
           repetition_penalty_slope: 3.33,
@@ -598,22 +599,20 @@ const AIEngine = {
 /* ================================================================
    MODULE 4: OutputCleaner — AI出力のクリーニング
    
-   設計書の「出力の安全策」をすべて実装。
-   - HTMLタグ、ルビタグ除去
-   - メタテキスト除去
-   - フレーズループ検出・除去
-   - 文レベル重複除去
-   - 文末整形
+   改善ポイント：
+   - 1ターン内の視点固定（視点飛び検出）
+   - 文数制限（3〜6文）
+   - 時間飛び検出（「次の日」「数日後」等で切る）
+   - 壊れた会話文の修復
+   - 重複文、番号、見出し除去
    ================================================================ */
 const Cleaner = {
   clean(raw) {
     let t = raw;
 
-    // HTMLタグ（ルビ含む）
+    // === Stage 1: タグ・メタ除去 ===
     t = t.replace(/<rubycover>([^<]*)<rubystart>[^<]*<rubyend>/g, '$1');
     t = t.replace(/<[^>]{1,60}>/g, '');
-
-    // メタタグ
     t = t.replace(/\[[^\]]{0,200}\]/g, '');
     t = t.replace(/【[^】]{0,100}】/g, '');
     t = t.replace(/\*{2,}/g, '');
@@ -634,29 +633,86 @@ const Cleaner = {
     t = t.replace(/^[\s　]*[-・●▸▹►◆◇★☆※→⇒]+\s*.*/gm, '');
     t = t.replace(/^[\s　]*\d+[\.)）]\s*.*/gm, '');
 
-    // 整理
     t = t.replace(/\n{3,}/g, '\n\n').trim();
 
-    // フレーズループ検出（8文字が3回→2回目で切る）
+    // === Stage 2: 時間飛び検出（1ターン内のシーン変更を防ぐ） ===
+    // 「次の日」「翌朝」「数日後」等が出たらそこで切る
+    const timeSkipPatterns = [
+      /次の日/, /翌日/, /翌朝/, /翌晩/, /数日後/, /数時間後/,
+      /一週間後/, /数ヶ月/, /それから/, /あれから/,
+      /気がつくと/, /目が覚めると/, /目を覚ますと/
+    ];
+    for (const pat of timeSkipPatterns) {
+      const match = t.match(pat);
+      if (match && match.index > 10) {
+        // 時間飛びの前で切る
+        t = t.slice(0, match.index);
+        t = this.cutEnd(t) || t;
+        break;
+      }
+    }
+
+    // === Stage 3: フレーズループ検出 ===
     t = this.cutLoop(t);
 
-    // 文レベル重複除去
+    // === Stage 4: 文レベル重複除去 ===
     t = this.dedup(t);
 
-    // 文末で切る
+    // === Stage 5: 文末で切る ===
     t = this.cutEnd(t);
+
+    // === Stage 6: 文数制限（最大6文） ===
+    t = this.limitSentences(t, 6);
+
+    // === Stage 7: 壊れた会話文の修復 ===
+    t = this.fixDialogue(t);
 
     console.log('=== CLEAN OUTPUT ===\n', t);
     return t;
   },
 
+  // --- 文数制限 ---
+  limitSentences(t, max) {
+    const sentences = t.split(/(?<=[。！？…」』])/);
+    const valid = sentences.filter(s => s.trim().length > 2);
+    if (valid.length <= max) return t;
+    // 最初のmax文だけ残す（後半のイベント連鎖をカット）
+    return valid.slice(0, max).join('');
+  },
+
+  // --- 壊れた会話文の修復 ---
+  fixDialogue(t) {
+    // 開き「があるのに閉じ」がない → 末尾に」を追加
+    const opens = (t.match(/「/g) || []).length;
+    const closes = (t.match(/」/g) || []).length;
+    if (opens > closes) {
+      // 最後の「以降のテキストを探して」で閉じる
+      const lastOpen = t.lastIndexOf('「');
+      const afterOpen = t.slice(lastOpen);
+      // 閉じ」がなければ末尾の。で切る
+      const periodAfter = afterOpen.indexOf('。');
+      if (periodAfter > 0) {
+        t = t.slice(0, lastOpen + periodAfter) + '」';
+      }
+    }
+    // 閉じ」があるのに開き「がない行 → 先頭に「を追加
+    t = t.replace(/^([^「]*)(」)/gm, (match, before, close) => {
+      if (!before.includes('「') && before.trim().length > 0) {
+        return '「' + before + close;
+      }
+      return match;
+    });
+    return t;
+  },
+
+  // --- フレーズループ検出 ---
   cutLoop(t) {
     const flat = t.replace(/[\s　\n]/g, '');
     for (let len = 10; len >= 8; len--) {
       for (let i = 0; i <= flat.length - len; i++) {
         const ph = flat.slice(i, i + len);
-        const esc = ph.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const m = flat.match(new RegExp(esc, 'g'));
+        const escaped = ph.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const m = flat.match(new RegExp(escaped, 'g'));
         if (m && m.length >= 3) {
           const pos2 = flat.indexOf(ph, flat.indexOf(ph) + len);
           if (pos2 > 0) {
@@ -675,6 +731,7 @@ const Cleaner = {
     return t;
   },
 
+  // --- 文レベル重複除去 ---
   dedup(t) {
     const parts = t.split(/(?<=[。！？…」』])/);
     const result = [];
@@ -698,6 +755,7 @@ const Cleaner = {
     return result.join('');
   },
 
+  // --- 文末で切る ---
   cutEnd(t) {
     const i = Math.max(
       t.lastIndexOf('。'), t.lastIndexOf('！'), t.lastIndexOf('？'),
@@ -969,7 +1027,7 @@ const Game = {
         const label = { do: '行動', say: '発言', story: '描写' }[turn.mode] || '行動';
         UI.addTurn('act', `${label}：${turn.playerAction}`);
       }
-      if (turn.narrative) UI.addTurn('nar', 'すると、' + turn.narrative);
+      if (turn.narrative) UI.addTurn('nar', turn.narrative);
     }
     UI.updateScene();
   },
@@ -1014,7 +1072,7 @@ const Game = {
       UI.hideLoad();
 
       // ⑧ 表示
-      UI.addTurn('nar', 'すると、' + text);
+      UI.addTurn('nar', text);
 
       // ⑦ 状態更新
       const sceneSummary = Cleaner.cutEnd(text).slice(-60);
