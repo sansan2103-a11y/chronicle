@@ -189,11 +189,8 @@ const S = {
 function buildPrompt(action, mode) {
   const parts = [];
 
-  // === 設定は最小限（1行だけ） ===
-  // 長い設定はKayraが「設定を語る」モードに入る原因。
-  // 1行に凝縮して、残りのトークンを行動に使う。
+  // === 設定（最小限） ===
   if (S.turnCount === 0) {
-    // 初回だけフルプライミング
     const primers = {
       literary: `　${S.world}。空気は重く、光が揺れている。\n　${S.hero}――${S.heroDesc}。`,
       dark: `　${S.world}。淀んだ空気が纏わりつく。\n　${S.hero}――${S.heroDesc}。`,
@@ -202,7 +199,6 @@ function buildPrompt(action, mode) {
     parts.push(primers[S.tone] || primers.literary);
     if (S.npc) parts.push(`　${S.npc}――${S.npcDesc}。`);
   } else {
-    // 2回目以降は設定を極短に（Kayraのトークンを行動に回す）
     parts.push(`　${S.hero}は${S.world}にいる。`);
     if (S.npc) {
       let npcLine = `${S.npc}がそばにいる。`;
@@ -211,52 +207,50 @@ function buildPrompt(action, mode) {
     }
   }
 
-  // === 直近の行動文脈（2ターン、行動のみ） ===
-  const recent = S.turns.slice(-2);
-  for (const t of recent) {
+  // === 直近の行動文脈（行動のみ） ===
+  for (const t of S.turns.slice(-2)) {
     if (t.action) {
       if (t.mode === 'say') parts.push(`　${S.hero}は「${t.action}」と言った。`);
       else parts.push(`　${S.hero}は${t.action}した。`);
     }
   }
 
-  // === ★プレイヤーの行動（プロンプトの核心） ===
-  // ここがプロンプトの最も大きな部分。Kayraは末尾を最も重視する。
+  // === プレイヤーの行動 ===
   if (action) {
     if (mode === 'say') {
-      // SAY: 台詞 → NPC反応誘導
       parts.push(`　${S.hero}は「${action}」と言った。`);
-      if (S.npc) {
-        // NPCの反応開始（Kayraはここから続ける）
-        if (S.npcEmotion && /怯|恐/.test(S.npcEmotion)) {
-          parts.push(`　${S.npc}は一瞬ためらった。`);
-        } else if (S.npcEmotion && /安心|好/.test(S.npcEmotion)) {
-          parts.push(`　${S.npc}は`);
-        } else {
-          parts.push(`　${S.npc}は`);
-        }
-      }
     } else if (mode === 'story') {
-      // STORY: プレイヤーが描写の方向を指定
-      // 設定を壊さない範囲で、シーンを進める
       parts.push(`　${action}。`);
     } else {
-      // DO: 行動を具体的に書いてから、結果の書き出しを置く
       parts.push(`　${S.hero}は${action}した。`);
-
-      // ★ここが「プレイヤー主導」の核心：
-      // 行動の後に「その結果」の書き出しを置くことで、
-      // Kayraは「この行動の結果」を書くしかなくなる。
-      // AIが勝手に別の展開に飛ぶのを防ぐ。
-      if (S.npc && S.npc.length > 0) {
-        const reactions = {
-          '怯えている': `　${S.npc}の体が強張った。`,
-          '少し安心している': `　${S.npc}は少しだけ表情を緩めた。`,
-          '様子を見ている': `　${S.npc}はじっとこちらを見ている。`,
-        };
-        parts.push(reactions[S.npcEmotion] || `　${S.npc}は`);
-      }
     }
+  }
+
+  // === ★末尾を必ずNPC/環境視点にする ===
+  // Kayraは末尾を続ける。末尾がNPCなら出力もNPC視点。
+  // これで「主人公が勝手に動く」出力を構造的に防ぐ。
+  if (S.npc && S.npc.length > 0) {
+    // NPC反応の書き出し（感情に応じて変える）
+    const npcStarts = {
+      '怯えている': [
+        `　${S.npc}の肩が震えた。`,
+        `　${S.npc}は思わず一歩下がった。`,
+        `　${S.npc}の目が揺れる。`
+      ],
+      '少し安心している': [
+        `　${S.npc}は少しだけ表情を緩めた。`,
+        `　${S.npc}はこちらを見上げた。`
+      ],
+      '様子を見ている': [
+        `　${S.npc}はじっとこちらを見ている。`,
+        `　${S.npc}は何か言いかけて、口を閉じた。`
+      ]
+    };
+    const options = npcStarts[S.npcEmotion] || [`　${S.npc}は`];
+    parts.push(options[Math.floor(Math.random() * options.length)]);
+  } else {
+    // NPCがいない → 環境描写で終わる
+    parts.push('　辺りは静かだった。');
   }
 
   return parts.join('\n');
@@ -273,7 +267,7 @@ async function callAPI(prompt) {
     input: prompt,
     model: 'kayra-v1',
     parameters: {
-      max_length: 50,
+      max_length: 60,
       min_length: 1,
       use_string: true,
       temperature: 0.65,
@@ -329,7 +323,7 @@ async function callAPI(prompt) {
 }
 
 // ========================================
-// CLEANER — 最小限だが確実
+// CLEANER — 主人公の勝手な行動を除去
 // ========================================
 function clean(raw) {
   if (!raw || typeof raw !== 'string') return '';
@@ -352,6 +346,36 @@ function clean(raw) {
 
   // 整理
   t = t.replace(/\n{3,}/g, '\n').trim();
+
+  // ★主人公の勝手な行動を除去★
+  // AIが書いた「主人公は〜した」「主人公は〜と思った」等を除去。
+  // 主人公の行動はプレイヤーだけが決める。
+  if (S.hero) {
+    const heroName = S.hero;
+    const sentences = t.split(/(?<=[。！？…」])/);
+    const filtered = [];
+    for (const s of sentences) {
+      const trimmed = s.trim();
+      if (trimmed.length < 2) continue;
+      // 主人公が主語で行動している文を検出
+      const heroActing = new RegExp(`${heroName}は.*(した|する|た|ている|ていた|と思|と感じ|ことにし|を決め|に向か)`, 'g');
+      // 主人公の台詞も除去（プレイヤーが言ってないことを言わせない）
+      const heroSpeaking = new RegExp(`${heroName}は「[^」]+」と(言|呟|叫|答|尋|聞)`, 'g');
+      
+      if (heroActing.test(trimmed) || heroSpeaking.test(trimmed)) {
+        // 主人公が行動/発言している文 → 除去
+        console.log('=== STRIPPED (hero acting) ===', trimmed.slice(0, 40));
+        continue;
+      }
+      filtered.push(s);
+    }
+    t = filtered.join('');
+    
+    // もし全文除去されてしまったら、元の最初の2文だけ残す
+    if (t.trim().length < 5) {
+      t = sentences.slice(0, 2).join('');
+    }
+  }
 
   // 重複文除去
   const sents = t.split(/(?<=[。！？…」])/);
