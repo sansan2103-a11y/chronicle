@@ -767,17 +767,21 @@ const AIEngine = {
   },
 
   async kayra(prompt) {
+    // APIキーをASCIIのみに洗浄（全角スペース、BOM、不可視文字を除去）
+    const cleanKey = State.apiKey.replace(/[^\x20-\x7E]/g, '').trim();
+    if (!cleanKey) throw new Error('APIキーが無効です。設定を確認してください。');
+
     const res = await fetch(this.PROXY, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + State.apiKey
+        'Authorization': 'Bearer ' + cleanKey
       },
       body: JSON.stringify({
         input: prompt,
         model: 'kayra-v1',
         parameters: {
-          max_length: 40,       // 極短 = 1反応だけ書かせる
+          max_length: 40,
           min_length: 1,
           use_string: true,
           temperature: 0.65,
@@ -1239,11 +1243,18 @@ const UI = {
         <button class="modal-ok" onclick="
           State.authorNote.tone=$('m-tone').value;
           State.authorNote.customNote=$('m-an').value.trim();
-          State.apiKey=$('m-key').value.trim()||State.apiKey;
+          State.apiKey=$('m-key').value.replace(/[^\x20-\x7E]/g,'').trim()||State.apiKey;
           State.save();UI.closeModal();UI.addTurn('sys','設定を更新。');
         ">保存</button>
         <hr style="margin:16px 0;border-color:var(--bdr)">
-        <button style="padding:8px 16px;background:var(--err);color:white;border:none;border-radius:var(--r);cursor:pointer;font-family:var(--fb);font-size:.8rem" onclick="if(confirm('データを削除してやり直しますか？')){localStorage.removeItem('chr3');location.reload()}">データリセット</button>`;
+        <div style="font-size:.72rem;color:var(--txd);margin-bottom:8px">リセット</div>
+        <button style="padding:8px 16px;background:var(--gd);color:var(--bg);border:none;border-radius:var(--r);cursor:pointer;font-family:var(--fb);font-size:.78rem;margin-right:8px" onclick="if(confirm('物語をリセットしますか？\\n（APIキーと設定は残ります）')){
+          State.recentHistory=[];State.memorySummary={summary:'',keyEvents:[]};
+          State.currentScene={location:'',time:'',present:[],mood:'',summary:'',atmosphere:'',crowdLevel:'none',dangerLevel:'low',objects:'',sounds:''};
+          State.turnCount=0;State.storyCards.forEach(c=>{c.emotion='';c.active=false});
+          State.save();location.reload();
+        }">物語リセット</button>
+        <button style="padding:8px 16px;background:var(--err);color:white;border:none;border-radius:var(--r);cursor:pointer;font-family:var(--fb);font-size:.78rem" onclick="if(confirm('全データを削除しますか？\\n（APIキーも消えます）')){localStorage.removeItem('chr3');location.reload()}">完全リセット</button>`;
     }
 
     el.innerHTML = h;
@@ -1267,20 +1278,30 @@ const Game = {
     State.plotEssentials.worldCore = $('s-world').value.trim() || '剣と魔法の異世界';
     State.plotEssentials.storyPremise = $('s-premise').value.trim() || '';
 
-    // Current Scene
-    State.currentScene.summary = $('s-scene').value.trim() || '';
+    // Current Scene — 空欄はデフォルト値で補完
+    State.currentScene.summary = $('s-scene').value.trim() || '物語が始まる場所。';
     const atmo = $('s-atmo')?.value.trim() || '';
     if (atmo) {
       State.currentScene.atmosphere = atmo;
-      State.currentScene.sounds = atmo; // 初回は雰囲気と音を兼用
+      State.currentScene.sounds = atmo;
+    } else {
+      // デフォルト環境（世界観に合わせて推測）
+      const w = State.plotEssentials.worldCore;
+      if (/現代|都会|街|大阪|東京/.test(w)) {
+        State.currentScene.atmosphere = '街の喧騒が遠くに聞こえる';
+      } else if (/ファンタジー|異世界|魔法|剣/.test(w)) {
+        State.currentScene.atmosphere = '風が草原を渡る音がする';
+      } else {
+        State.currentScene.atmosphere = '静かな空気が漂っている';
+      }
     }
 
     // Author's Note
     State.authorNote.tone = $('s-tone').value;
     State.authorNote.customNote = $('s-anote').value.trim();
 
-    // API
-    State.apiKey = $('s-key').value.trim();
+    // API — 非ASCII文字を除去して保存
+    State.apiKey = $('s-key').value.replace(/[^\x20-\x7E]/g, '').trim();
     if (!State.apiKey) { alert('APIキーを入力してください'); return; }
 
     // Story Cards (NPCs from setup)
