@@ -53,6 +53,14 @@ body{font-family:var(--f);background:var(--bg);color:var(--t);min-height:100vh}
 .inp-sub{display:flex;gap:6px;max-width:700px;margin:4px auto 0}
 .inp-sub button{padding:3px 10px;background:none;border:1px solid var(--b);color:var(--td);font-size:.65rem;border-radius:3px;cursor:pointer;font-family:var(--f)}
 .inp-sub button:hover{border-color:var(--gd);color:var(--t)}
+.modes{display:flex;gap:2px;max-width:700px;margin:0 auto 4px}
+.mode{flex:1;padding:5px;background:var(--s);border:1px solid transparent;color:var(--td);font-size:.68rem;text-align:center;cursor:pointer;border-radius:3px;font-family:var(--f)}
+.mode.on{border-color:var(--gd);color:var(--g);background:var(--bg)}
+.t-edit{display:none;font-size:.65rem;color:var(--td);cursor:pointer;margin-top:3px}
+.turn:hover .t-edit{display:inline-block}
+.t-edit:hover{color:var(--g)}
+.t-undo{font-size:.6rem;color:var(--td);cursor:pointer;float:right;margin-top:2px}
+.t-undo:hover{color:var(--e)}
 
 /* Modal */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:50;overflow-y:auto;padding:20px}
@@ -115,6 +123,11 @@ body{font-family:var(--f);background:var(--bg);color:var(--t);min-height:100vh}
 </div>
 <div id="story"></div>
 <div class="inp">
+  <div class="modes">
+    <button class="mode on" onclick="setMode('do',this)">⚔ DO 行動</button>
+    <button class="mode" onclick="setMode('say',this)">💬 SAY 話す</button>
+    <button class="mode" onclick="setMode('story',this)">📖 STORY 描写</button>
+  </div>
   <div class="inp-row">
     <textarea id="input" placeholder="行動を入力…" rows="1"></textarea>
     <button id="sendbtn" onclick="send()">▶</button>
@@ -122,6 +135,7 @@ body{font-family:var(--f);background:var(--bg);color:var(--t);min-height:100vh}
   <div class="inp-sub">
     <button onclick="cont()">続きを書く</button>
     <button onclick="retry()">やり直す</button>
+    <button onclick="undo()">↩取消</button>
   </div>
 </div>
 </div>
@@ -145,7 +159,8 @@ const S = {
   npc: '', npcDesc: '', npcEmotion: '',
   world: '', scene: '', tone: 'literary',
   key: '', debug: false,
-  turns: [],   // [{action, text}]
+  mode: 'do',  // do / say / story
+  turns: [],   // [{action, mode, text}]
   turnCount: 0,
   busy: false,
 
@@ -154,7 +169,7 @@ const S = {
       hero:this.hero, heroDesc:this.heroDesc,
       npc:this.npc, npcDesc:this.npcDesc, npcEmotion:this.npcEmotion,
       world:this.world, scene:this.scene, tone:this.tone,
-      key:this.key, debug:this.debug,
+      key:this.key, debug:this.debug, mode:this.mode,
       turns:this.turns.slice(-20), turnCount:this.turnCount
     }));
   },
@@ -171,10 +186,10 @@ const S = {
 // ========================================
 // PROMPT — シンプルに組み立てる
 // ========================================
-function buildPrompt(action) {
+function buildPrompt(action, mode) {
   const parts = [];
 
-  // 文体プライミング（初回のみフル、2回目以降は短縮）
+  // 文体プライミング
   if (S.turnCount === 0) {
     const primers = {
       literary: `　${S.world}。空気は重く、光が揺れている。\n　${S.hero}――${S.heroDesc}。`,
@@ -186,25 +201,54 @@ function buildPrompt(action) {
     parts.push(`　${S.world}。${S.hero}は${S.heroDesc}。`);
   }
 
-  // シーン（あれば）
+  // シーン
   if (S.scene) parts.push(`　${S.scene}`);
 
-  // NPC情報（いれば）
+  // NPC情報
   if (S.npc) {
     let npcLine = `　${S.npc}――${S.npcDesc}。`;
     if (S.npcEmotion) npcLine += `今は${S.npcEmotion}。`;
     parts.push(npcLine);
   }
 
-  // 直近2ターンの行動だけ（AI出力は入れない＝汚染防止）
+  // 直近2ターンの行動のみ（AI出力は入れない）
   const recent = S.turns.slice(-2);
   for (const t of recent) {
-    if (t.action) parts.push(`　${S.hero}は${t.action}した。`);
+    if (t.action) {
+      if (t.mode === 'say') parts.push(`　${S.hero}は「${t.action}」と言った。`);
+      else parts.push(`　${S.hero}は${t.action}した。`);
+    }
   }
 
-  // 今の行動
+  // 今の行動 — モードごとに変える
   if (action) {
-    parts.push(`　${S.hero}は${action}した。`);
+    if (mode === 'say') {
+      // SAY: 台詞として、NPC反応を誘導
+      parts.push(`　${S.hero}は「${action}」と言った。`);
+      if (S.npc) {
+        // NPCの反応開始を書く（Kayraがここから続ける）
+        const starts = S.npcEmotion && /怯|恐/.test(S.npcEmotion)
+          ? [`　${S.npc}は一瞬黙った。`]
+          : [`　${S.npc}は`];
+        parts.push(starts[0]);
+      }
+    } else if (mode === 'story') {
+      // STORY: 描写の方向指定（設定を壊さない範囲で）
+      parts.push(`　${action}。`);
+    } else {
+      // DO: 行動 → NPC反応プライミング
+      parts.push(`　${S.hero}は${action}した。`);
+      if (S.npc && S.npc.length > 0) {
+        // NPCが場面にいれば反応の書き出しを追加
+        const reactionStarts = {
+          '怯えている': `　${S.npc}の体が強張った。`,
+          '少し安心している': `　${S.npc}は少しだけ表情を緩めた。`,
+          '様子を見ている': `　${S.npc}はじっとこちらを見ている。`,
+          '': `　${S.npc}は`
+        };
+        parts.push(reactionStarts[S.npcEmotion] || reactionStarts['']);
+      }
+    }
   }
 
   return parts.join('\n');
@@ -338,15 +382,32 @@ function updateEmotion(action) {
 // ========================================
 // UI
 // ========================================
-function addTurn(type, text) {
+function setMode(m, btn) {
+  S.mode = m;
+  document.querySelectorAll('.mode').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  const ph = { do: '行動を入力…', say: '台詞を入力…', story: '描写の方向を入力…' };
+  document.getElementById('input').placeholder = ph[m] || ph.do;
+}
+
+function addTurn(type, text, turnIdx) {
   const d = document.createElement('div');
   d.className = 'turn';
   const esc = t => { const e = document.createElement('span'); e.textContent = t; return e.innerHTML; };
 
-  if (type === 'act') d.innerHTML = `<div class="t-act">▸ ${esc(text)}</div>`;
+  if (type === 'act') {
+    const modeLabels = { do: '行動', say: '発言', story: '描写' };
+    const mode = (turnIdx !== undefined && S.turns[turnIdx]?.mode) || S.mode;
+    const label = modeLabels[mode] || '行動';
+    d.innerHTML = `<div class="t-act">▸ ${label}：${esc(text)}</div>`;
+  }
   else if (type === 'nar') {
     const ps = text.split(/\n+/).filter(p => p.trim());
     d.innerHTML = `<div class="t-nar">${ps.map(p => `<p>${esc(p.trim())}</p>`).join('')}</div>`;
+    // 編集ボタン（ターンインデックスがあれば）
+    if (turnIdx !== undefined) {
+      d.innerHTML += `<span class="t-edit" onclick="editTurn(${turnIdx})">✎ 編集</span>`;
+    }
   }
   else if (type === 'sys') d.innerHTML = `<div class="t-sys">${esc(text)}</div>`;
   else if (type === 'err') d.innerHTML = `<div class="t-err">${esc(text)}</div>`;
@@ -399,11 +460,7 @@ function startGame() {
 function resumeGame() {
   document.getElementById('setup').style.display = 'none';
   document.getElementById('game').style.display = 'block';
-  for (const t of S.turns) {
-    if (t.action) addTurn('act', t.action);
-    if (t.text) addTurn('nar', t.text);
-  }
-  document.getElementById('bar').textContent = S.scene || S.world;
+  refreshStory();
 }
 
 async function send() {
@@ -414,35 +471,34 @@ async function send() {
 
   setBusy(true);
   inp.value = '';
+  const mode = S.mode;
 
+  const modeLabels = { do: '行動', say: '発言', story: '描写' };
   addTurn('act', action);
+
   showLoad();
 
   try {
-    // NPC感情更新
     updateEmotion(action);
-
-    // プロンプト
-    const prompt = buildPrompt(action);
+    const prompt = buildPrompt(action, mode);
 
     if (S.debug) addTurn('dbg', `PROMPT (${prompt.length}文字): ${prompt}`);
 
-    // API呼び出し
     const raw = await callAPI(prompt);
 
     if (S.debug) addTurn('dbg', `RAW: ${(raw || '').slice(0, 200)}`);
 
-    // クリーニング
     let text = clean(raw);
     if (!text || text.length < 3) {
       text = '（生成できませんでした。やり直しを試してください。）';
     }
 
     hideLoad();
-    addTurn('nar', text);
 
-    // 保存（行動のみ。AI出力はプロンプトに入れない）
-    S.turns.push({ action, text });
+    const idx = S.turns.length;  // このターンのインデックス
+    addTurn('nar', text, idx);
+
+    S.turns.push({ action, mode, text });
     if (S.turns.length > 20) S.turns = S.turns.slice(-20);
     S.turnCount++;
     S.scene = text.slice(-40);
@@ -459,17 +515,60 @@ async function send() {
   setBusy(false);
 }
 
+// 直前出力を編集
+function editTurn(idx) {
+  if (idx < 0 || idx >= S.turns.length) return;
+  const turn = S.turns[idx];
+  const el = document.getElementById('modal-body');
+  el.innerHTML = `
+    <h3>出力を編集</h3>
+    <div class="fg"><label>本文</label>
+    <textarea id="edit-text" rows="6" style="min-height:120px">${turn.text || ''}</textarea></div>
+    <button class="modal-ok" onclick="
+      S.turns[${idx}].text = document.getElementById('edit-text').value.trim();
+      S.save();
+      closeModal();
+      refreshStory();
+    ">保存</button>`;
+  document.getElementById('modal').classList.add('show');
+}
+
+// 物語表示をリフレッシュ
+function refreshStory() {
+  const story = document.getElementById('story');
+  story.innerHTML = '';
+  addTurn('sys', S.world + ' — ' + S.hero);
+  if (S.npc) addTurn('sys', 'NPC：' + S.npc);
+  for (let i = 0; i < S.turns.length; i++) {
+    const t = S.turns[i];
+    if (t.action) addTurn('act', t.action, i);
+    if (t.text) addTurn('nar', t.text, i);
+  }
+}
+
+// Undo — 直前ターンを完全に取り消す
+function undo() {
+  if (S.turns.length === 0) return;
+  if (!confirm('直前のターンを取り消しますか？')) return;
+  S.turns.pop();
+  S.turnCount = Math.max(0, S.turnCount - 1);
+  S.scene = S.turns.length > 0 ? (S.turns[S.turns.length-1].text || '').slice(-40) : '';
+  S.save();
+  refreshStory();
+}
+
 async function cont() {
   if (S.busy || S.turns.length === 0) return;
   setBusy(true); showLoad();
   try {
-    const prompt = buildPrompt(null);
+    const prompt = buildPrompt(null, 'story');
     const raw = await callAPI(prompt);
     let text = clean(raw);
     if (!text) text = '（続きを生成できませんでした。）';
     hideLoad();
-    addTurn('nar', text);
-    S.turns.push({ action: null, text });
+    const idx = S.turns.length;
+    addTurn('nar', text, idx);
+    S.turns.push({ action: null, mode: 'story', text });
     S.turnCount++;
     S.save();
   } catch (err) {
@@ -481,12 +580,17 @@ async function cont() {
 
 async function retry() {
   if (S.busy || S.turns.length === 0) return;
-  const story = document.getElementById('story');
-  const divs = story.querySelectorAll('.turn');
-  if (divs.length >= 2) { divs[divs.length-1].remove(); divs[divs.length-2].remove(); }
   const last = S.turns.pop();
+  S.turnCount = Math.max(0, S.turnCount - 1);
+  S.save();
+  refreshStory();
   if (last?.action) {
     document.getElementById('input').value = last.action;
+    S.mode = last.mode || 'do';
+    // モードボタンも更新
+    document.querySelectorAll('.mode').forEach(b => {
+      b.classList.toggle('on', b.textContent.toLowerCase().includes(S.mode));
+    });
     await send();
   }
 }
