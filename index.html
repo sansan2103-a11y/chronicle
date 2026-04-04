@@ -189,35 +189,27 @@ const S = {
 function buildPrompt(action, mode) {
   const parts = [];
 
-  // === 設定は極限まで短く ===
-  // 長い世界設定やキャラ説明はKayraが「それを語る」モードに入る原因。
-  // 場所名＋名前だけにして、描写はKayraに任せる。
-
-  // 世界は場所名だけ（「灯都市エルシア」→ OK、長い説明 → NG）
-  const worldShort = S.world.slice(0, 15);
+  // === 世界名を抽出（説明文を一切入れない） ===
+  // 「灯都市エルシアでは、記憶が…」→「灯都市エルシア」だけ取る
+  // 最初の助詞（は、で、の、に、を、、、。）の前で切る
+  const worldName = S.world.split(/[はでのにを、。]/)[0].trim().slice(0, 10) || '異世界';
 
   if (S.turnCount === 0) {
-    // 初回：文体プライミング（場所＋主人公名だけ）
-    parts.push(`　${worldShort}。`);
+    parts.push(`　${worldName}。`);
     parts.push(`　${S.hero}はそこにいた。`);
     if (S.npc) parts.push(`　${S.npc}の姿が見えた。`);
   } else {
-    // 2回目以降：最小限の状況だけ
+    // 2回目以降：NPC状態だけ。世界設定は一切入れない。
     if (S.npc) {
-      if (S.npcEmotion) {
-        parts.push(`　${S.npc}は${S.npcEmotion}。`);
-      } else {
-        parts.push(`　${S.npc}がそばにいる。`);
-      }
+      parts.push(S.npcEmotion ? `　${S.npc}は${S.npcEmotion}。` : `　${S.npc}がそばにいる。`);
     }
   }
 
-  // === 直近2ターンの行動（行動のみ、AI出力は入れない） ===
+  // === 直近2ターンの行動（行動のみ） ===
   for (const t of S.turns.slice(-2)) {
-    if (t.action) {
-      if (t.mode === 'say') parts.push(`　${S.hero}は「${t.action}」と言った。`);
-      else parts.push(`　${S.hero}は${t.action}。`);
-    }
+    if (!t.action) continue;
+    if (t.mode === 'say') parts.push(`　${S.hero}は「${t.action}」と言った。`);
+    else parts.push(`　${S.hero}は${t.action}。`);
   }
 
   // === プレイヤーの行動 ===
@@ -225,39 +217,32 @@ function buildPrompt(action, mode) {
     if (mode === 'say') {
       parts.push(`　${S.hero}は「${action}」と言った。`);
     } else if (mode === 'story') {
-      // STORYモード制限：主人公の確定行動は書かない。
-      // 環境や雰囲気の方向だけ。主人公名を含めない。
-      const storyText = action.replace(new RegExp(S.hero, 'g'), '').trim();
-      parts.push(`　${storyText}。`);
+      // STORY: 主人公名を除去、主人公の行動動詞も除去
+      let st = action;
+      if (S.hero) st = st.replace(new RegExp(S.hero + '(は|が|の|を|に|も)', 'g'), '');
+      st = st.replace(/(した|する|行った|言った|決めた|名乗った)。?$/g, '');
+      parts.push(`　${st.trim() || action}。`);
     } else {
       parts.push(`　${S.hero}は${action}。`);
     }
   }
 
-  // === ★末尾を必ずNPC/環境で終わらせる ===
-  // Kayraは末尾を続ける。末尾がNPCなら出力もNPC視点。
-  if (S.npc && S.npc.length > 0) {
-    const npcStarts = {
-      '怯えている': [
-        `　${S.npc}の肩が小さく震えた。`,
-        `　${S.npc}は目をそらした。`
-      ],
-      '少し安心している': [
-        `　${S.npc}は顔を上げた。`,
-        `　${S.npc}は小さく息をついた。`
-      ],
-      '様子を見ている': [
-        `　${S.npc}はじっとこちらを見ている。`,
-        `　${S.npc}は黙っている。`
-      ]
+  // === ★末尾：NPC反応で終わる（主人公は絶対に書かない） ===
+  if (S.npc) {
+    const starts = {
+      '怯えている': [`　${S.npc}の肩が小さく震えた。`, `　${S.npc}は目をそらした。`],
+      '少し安心している': [`　${S.npc}は顔を上げた。`, `　${S.npc}は小さく息をついた。`],
+      '様子を見ている': [`　${S.npc}はじっとこちらを見ている。`, `　${S.npc}は黙っている。`]
     };
-    const options = npcStarts[S.npcEmotion] || [`　${S.npc}は`];
-    parts.push(options[Math.floor(Math.random() * options.length)]);
+    const opts = starts[S.npcEmotion] || [`　${S.npc}は`];
+    parts.push(opts[Math.floor(Math.random() * opts.length)]);
   } else {
     parts.push('　辺りは静かだった。');
   }
 
-  return parts.join('\n');
+  const prompt = parts.join('\n');
+  console.log('=== PROMPT LENGTH:', prompt.length, '===');
+  return prompt;
 }
 
 // ========================================
@@ -353,49 +338,43 @@ function clean(raw) {
 
   // ★主人公の勝手な行動を除去★
   if (S.hero) {
-    const heroName = S.hero;
+    // 名前バリエーション（フルネーム＋名だけ）
+    const names = [S.hero];
+    if (/[・＝\s]/.test(S.hero)) names.push(S.hero.split(/[・＝\s]/)[0]);
+    const hp = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+
     const sentences = t.split(/(?<=[。！？…」])/);
     const filtered = [];
     for (const s of sentences) {
-      const trimmed = s.trim();
-      if (trimmed.length < 2) continue;
-      
-      // (1) 主人公が行動/発言している文 → 除去
-      const heroActing = new RegExp(`${heroName}は.*(した|する|ている|ていた|と思|と感じ|ことにし|を決め|に向か|と名乗|と答え)`, 'g');
-      const heroSpeaking = new RegExp(`${heroName}は「[^」]+」と(言|呟|叫|答|尋|聞|名乗)`, 'g');
-      
-      if (heroActing.test(trimmed) || heroSpeaking.test(trimmed)) {
-        console.log('=== STRIPPED (hero acting) ===', trimmed.slice(0, 40));
-        continue;
-      }
+      const tr = s.trim();
+      if (tr.length < 2) continue;
+      let bad = false;
 
-      // (2) 設定・概念説明文を除去（場面描写ではなく世界観解説）
-      // 「〜とは」「〜と呼ばれる」「〜という」「〜の力は」等は解説文
-      if (/とは[、。]|と呼ばれ|という(存在|もの|力|概念|制度)|の力は|の能力は|の契約は|システムは/.test(trimmed)) {
-        console.log('=== STRIPPED (lore exposition) ===', trimmed.slice(0, 40));
-        continue;
-      }
+      // (1) 主人公が行動 → 除去
+      if (new RegExp(`(${hp})(は|が|も).*(した|する|ている|ていた|と名乗|と答え|を渡|を交換|を差し出|を手渡|を握|を掴|を抱|に触|にキス|に向か|を決め|ことにし)`).test(tr)) bad = true;
 
-      // (3) 名前混線の修正
-      // 主人公名がNPC側で使われてたり、NPC名が主人公側で使われてたりする文を検出
+      // (2) 主人公の台詞 → 除去
+      if (new RegExp(`(${hp})(は|が).*「[^」]+」`).test(tr)) bad = true;
+
+      // (3) 主人公の内面 → 除去
+      if (new RegExp(`(${hp})(は|の).*(思った|感じた|考えた|決意|覚悟|理解|気づ|悟|知って)`).test(tr)) bad = true;
+
+      // (4) 設定解説 → 除去
+      if (/とは[、。]|と呼ばれ[てる]|という(存在|もの|力|概念|制度|仕組)|として(扱|使|機能)|を意味|が必要であ|の(代償|力|能力|契約|記録|結晶|称号)は/.test(tr)) bad = true;
+
+      // (5) 名前混線 → 除去
       if (S.npc) {
-        // 「NPC名は主人公名と名乗った」のような混線
-        const confusion1 = new RegExp(`${S.npc}は.*${heroName}と(名乗|言)`, 'g');
-        const confusion2 = new RegExp(`${heroName}は.*${S.npc}と(名乗|言)`, 'g');
-        if (confusion1.test(trimmed) || confusion2.test(trimmed)) {
-          console.log('=== STRIPPED (name confusion) ===', trimmed.slice(0, 40));
-          continue;
-        }
+        const np = S.npc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (new RegExp(`(${hp}).*(${np})と(名乗|名前を)|(${np}).*(${hp})と(名乗|名前を)`).test(tr)) bad = true;
       }
 
+      if (bad) { console.log('=== STRIPPED ===', tr.slice(0, 50)); continue; }
       filtered.push(s);
     }
     t = filtered.join('');
-    
     if (t.trim().length < 5) {
-      // 全部除去されたら、NPC名を含む文だけ探す
-      const npcSentences = sentences.filter(s => S.npc && s.includes(S.npc));
-      t = npcSentences.length > 0 ? npcSentences.slice(0, 2).join('') : sentences.slice(0, 2).join('');
+      const ns = S.npc ? sentences.filter(s => s.includes(S.npc)) : [];
+      t = ns.length > 0 ? ns.slice(0, 2).join('') : sentences.slice(0, 2).join('');
     }
   }
 
