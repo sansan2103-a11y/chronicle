@@ -286,15 +286,34 @@
 
     <div class="sec">API</div>
     <div class="fld">
-      <label>Anthropic API キー</label>
-      <input type="password" id="cfgKey" placeholder="sk-ant-...">
-    </div>
-    <div class="fld">
-      <label>モデル</label>
-      <select id="cfgModel">
-        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5（推奨：軽量・高速）</option>
-        <option value="claude-sonnet-4-6">Claude Sonnet 4.6（高品質）</option>
+      <label>プロバイダー</label>
+      <select id="cfgProvider" onchange="UI.onProviderChange()">
+        <option value="anthropic">Anthropic（Claude）— キーは sk-ant-... で始まる</option>
+        <option value="novelai">NovelAI（Kayra）— トークンは pst-... で始まる</option>
       </select>
+    </div>
+    <div id="provAnthropic">
+      <div class="fld">
+        <label>Anthropic API キー（<code>sk-ant-</code> で始まる）</label>
+        <input type="password" id="cfgKey" placeholder="sk-ant-api03-...">
+      </div>
+      <div class="fld">
+        <label>モデル</label>
+        <select id="cfgModel">
+          <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5（推奨：軽量・高速）</option>
+          <option value="claude-sonnet-4-6">Claude Sonnet 4.6（高品質）</option>
+        </select>
+      </div>
+    </div>
+    <div id="provNovelAI" style="display:none">
+      <div class="fld">
+        <label>NovelAI トークン（<code>pst-</code> で始まる）</label>
+        <input type="password" id="cfgNaiKey" placeholder="pst-...">
+      </div>
+      <div class="fld" style="background:rgba(196,144,64,.1);border:1px solid rgba(196,144,64,.3);border-radius:8px;padding:10px;font-size:12px;color:#c49040">
+        ⚠ NovelAI（Kayra）はテキスト補完モデルです。JSONで計画を立ててから本文生成に使います。
+        Anthropicに比べて応答品質が不安定な場合があります。
+      </div>
     </div>
     <div class="fld">
       <label class="chk-row"><input type="checkbox" id="cfgDbg"> デバッグ表示（プロンプト/レスポンスを表示）</label>
@@ -360,7 +379,7 @@ const KEY = 'chr5';
 // State
 // ────────────────────────────────────────────────
 const S = {
-  cfg: { key: '', model: 'claude-haiku-4-5-20251001', debug: false },
+  cfg: { provider: 'anthropic', key: '', naiKey: '', model: 'claude-haiku-4-5-20251001', debug: false },
   cast: {
     hero: { name: '', desc: '' },
     npcs: []   // [{id,name,desc,emotion,attitude,trust}]
@@ -391,62 +410,153 @@ const S = {
 // API — Anthropic Claude
 // ────────────────────────────────────────────────
 const Api = {
-  async call(system, userContent, maxTok = 600) {
-    // キーはホワイトスペース・制御文字・BOMだけ除去（過剰なstrip禁止）
-    const raw = S.cfg.key || '';
-    const key = raw.replace(/[\s\u200B\uFEFF\u00A0]/g, '');
-    if (!key) throw new Error('APIキーが設定されていません');
+  // Normalize key: remove only whitespace/invisible chars, never touch sk-ant- or pst- chars
+  normalize(raw) {
+    if (!raw) return '';
+    let s = String(raw).trim();
+    // Remove invisible/zero-width chars
+    s = s.replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '');
+    // Remove accidental surrounding quotes
+    if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) s = s.slice(1,-1).trim();
+    return s;
+  },
 
-    // デバッグ: キーのソースと先頭6文字+末尾4文字だけ表示
-    console.log('[Api] key source: S.cfg.key');
-    console.log('[Api] raw len:', raw.length, '/ cleaned len:', key.length);
-    console.log('[Api] key preview:', key.slice(0, 6) + '...' + key.slice(-4));
-    console.log('[Api] model:', S.cfg.model);
+  async call(system, userContent, maxTok = 600) {
+    const prov = S.cfg.provider || 'anthropic';
+
+    if (prov === 'novelai') {
+      return this._callNovelAI(system, userContent, maxTok);
+    }
+    return this._callAnthropic(system, userContent, maxTok);
+  },
+
+  async _callAnthropic(system, userContent, maxTok) {
+    const key = this.normalize(S.cfg.key);
+    if (!key) throw new Error('AnthropicのAPIキーが設定されていません（sk-ant-... 形式）');
+    if (!key.startsWith('sk-')) throw new Error(`キーの形式が違います: "${key.slice(0,8)}..." → Anthropicキーは sk-ant- で始まります`);
+
+    console.log('[Anthropic] key preview:', key.slice(0,8)+'...'+key.slice(-4), '/ len:', key.length);
+    console.log('[Anthropic] model:', S.cfg.model);
 
     const id = ++S.reqId;
     S.inFlight = true;
 
-    const body = {
-      model: S.cfg.model,
-      max_tokens: maxTok,
-      system,
-      messages: [{ role: 'user', content: userContent }]
-    };
-
+    const body = { model: S.cfg.model, max_tokens: maxTok, system, messages: [{ role: 'user', content: userContent }] };
     const headers = {
       'Content-Type': 'application/json',
       'x-api-key': key,
       'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true'
     };
-    console.log('[Api] headers preview:', {
-      ...headers,
-      'x-api-key': key.slice(0, 6) + '...' + key.slice(-4)
-    });
 
     let res;
     try {
       res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
+        method: 'POST', headers, body: JSON.stringify(body),
         signal: AbortSignal.timeout(35000)
       });
-    } finally {
-      S.inFlight = false;
-    }
+    } finally { S.inFlight = false; }
 
     if (!res.ok) {
       const t = await res.text().catch(() => '');
-      console.error('[Api] error response:', t.slice(0, 300));
-      throw new Error(`HTTP ${res.status}: ${t.slice(0, 200)}`);
+      console.error('[Anthropic] error:', t.slice(0,300));
+      throw new Error(`HTTP ${res.status}: ${t.slice(0,200)}`);
     }
 
     const json = await res.json();
-    if (id !== S.reqId) return null;   // stale
-
+    if (id !== S.reqId) return null;
     const text = (json.content || []).map(c => c.text || '').join('');
     return { text, body };
+  },
+
+  async _callNovelAI(system, userContent, maxTok) {
+    const token = this.normalize(S.cfg.naiKey);
+    if (!token) throw new Error('NovelAIのトークンが設定されていません（pst-... 形式）');
+    if (!token.startsWith('pst-')) throw new Error(`トークンの形式が違います: "${token.slice(0,8)}..." → NovelAIトークンは pst- で始まります`);
+
+    console.log('[NovelAI] token preview:', token.slice(0,8)+'...'+token.slice(-4), '/ len:', token.length);
+
+    // For NovelAI (Kayra), we do a two-step:
+    // 1. Use the JSON plan from system/user as a structured prompt
+    // 2. Send as text completion with the narrative portion as the actual generation target
+    const id = ++S.reqId;
+    S.inFlight = true;
+
+    // Build a Kayra-compatible prompt from the JSON plan context
+    // We extract key info and format as Japanese prose primer
+    let planContext = '';
+    try {
+      const parsed = JSON.parse(userContent);
+      const hero = parsed.cast?.protagonist?.name || '主人公';
+      const npc = (parsed.cast?.npcs || []).map(n => n.name).join('・');
+      const loc = parsed.scene?.location || '';
+      const inp = parsed.currentInput || {};
+      const hist = parsed.recentHistory || '';
+      planContext = [
+        loc ? `　${loc}。` : '',
+        hero ? `　${hero}はそこにいた。` : '',
+        npc ? `　${npc}の姿があった。` : '',
+        hist && hist !== '（ゲーム開始）' ? `　${hist.split('\n').slice(-1)[0].replace(/^\[[^\]]+\]\s*/,'')}。` : '',
+        inp.text ? (inp.type === 'SAY' ? `　${hero}は「${inp.text}」と言った。` : `　${hero}は${inp.text}。`) : ''
+      ].filter(Boolean).join('\n');
+    } catch { planContext = userContent.slice(0, 200); }
+
+    const prompt = planContext + '\n　';
+
+    const body = {
+      input: prompt,
+      model: 'kayra-v1',
+      parameters: {
+        max_new_tokens: Math.min(maxTok, 100),
+        min_new_tokens: 10,
+        temperature: 0.72,
+        top_p: 0.925,
+        top_k: 30,
+        repetition_penalty: 1.15,
+        use_string: true
+      }
+    };
+
+    let res;
+    try {
+      res = await fetch('https://api.novelai.net/ai/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(35000)
+      });
+    } finally { S.inFlight = false; }
+
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      console.error('[NovelAI] error:', t.slice(0,300));
+      throw new Error(`HTTP ${res.status}: ${t.slice(0,200)}`);
+    }
+
+    const json = await res.json();
+    if (id !== S.reqId) return null;
+    const rawText = json.output || json.text || json.result || '';
+
+    // NovelAI returns raw prose — wrap it in JSON-like structure for the planner
+    const fakeJson = JSON.stringify({
+      playerIntent: { kind: 'other', tone: 'neutral' },
+      npcReactionPhase: {
+        npcName: (S.cast.npcs[0] || {}).name || '',
+        emotion: '不明',
+        interpretation: '',
+        dialogue: null,
+        bodyLanguage: '',
+        resistance: 'mid'
+      },
+      environmentResponse: '',
+      branchCandidates: [],
+      narrative: rawText.split(/[\n。！？]/).filter(s => s.trim().length > 2).slice(0,5).map(s => s.trim() + (s.endsWith('。') ? '' : '。'))
+    });
+
+    return { text: fakeJson, body };
   }
 };
 
@@ -669,10 +779,19 @@ const UI = {
   },
 
   // ── Settings ──
+  onProviderChange() {
+    const prov = document.getElementById('cfgProvider').value;
+    document.getElementById('provAnthropic').style.display = prov === 'anthropic' ? '' : 'none';
+    document.getElementById('provNovelAI').style.display   = prov === 'novelai'   ? '' : 'none';
+  },
+
   openSettings() {
+    document.getElementById('cfgProvider').value = S.cfg.provider || 'anthropic';
     document.getElementById('cfgKey').value   = S.cfg.key   || '';
+    document.getElementById('cfgNaiKey').value = S.cfg.naiKey || '';
     document.getElementById('cfgModel').value = S.cfg.model || 'claude-haiku-4-5-20251001';
     document.getElementById('cfgDbg').checked = S.cfg.debug || false;
+    this.onProviderChange();
     document.getElementById('cfgHName').value = S.cast.hero.name || '';
     document.getElementById('cfgHDesc').value = S.cast.hero.desc || '';
     document.getElementById('cfgLore').value  = S.scene.lore || '';
@@ -718,10 +837,15 @@ const UI = {
   },
 
   saveSettings() {
+    S.cfg.provider = document.getElementById('cfgProvider').value;
     // ホワイトスペース・不可視文字だけ除去（sk-ant-...のASCII文字は触らない）
     const rawKey = document.getElementById('cfgKey').value || '';
     S.cfg.key = rawKey.replace(/[\s\u200B\uFEFF\u00A0]/g, '');
-    console.log('[saveSettings] key len saved:', S.cfg.key.length, '/ preview:', S.cfg.key.slice(0,6)+'...'+S.cfg.key.slice(-4));
+    const rawNai = document.getElementById('cfgNaiKey').value || '';
+    S.cfg.naiKey = rawNai.replace(/[\s\u200B\uFEFF\u00A0]/g, '');
+    console.log('[saveSettings] provider:', S.cfg.provider);
+    if (S.cfg.key) console.log('[saveSettings] anthropic key preview:', S.cfg.key.slice(0,8)+'...'+S.cfg.key.slice(-4));
+    if (S.cfg.naiKey) console.log('[saveSettings] novelai token preview:', S.cfg.naiKey.slice(0,8)+'...'+S.cfg.naiKey.slice(-4));
     S.cfg.model = document.getElementById('cfgModel').value;
     S.cfg.debug = document.getElementById('cfgDbg').checked;
     S.cast.hero.name = document.getElementById('cfgHName').value.trim();
