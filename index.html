@@ -392,8 +392,16 @@ const S = {
 // ────────────────────────────────────────────────
 const Api = {
   async call(system, userContent, maxTok = 600) {
-    const key = (S.cfg.key || '').replace(/[^\x20-\x7E]/g, '').trim();
+    // キーはホワイトスペース・制御文字・BOMだけ除去（過剰なstrip禁止）
+    const raw = S.cfg.key || '';
+    const key = raw.replace(/[\s\u200B\uFEFF\u00A0]/g, '');
     if (!key) throw new Error('APIキーが設定されていません');
+
+    // デバッグ: キーのソースと先頭6文字+末尾4文字だけ表示
+    console.log('[Api] key source: S.cfg.key');
+    console.log('[Api] raw len:', raw.length, '/ cleaned len:', key.length);
+    console.log('[Api] key preview:', key.slice(0, 6) + '...' + key.slice(-4));
+    console.log('[Api] model:', S.cfg.model);
 
     const id = ++S.reqId;
     S.inFlight = true;
@@ -405,16 +413,22 @@ const Api = {
       messages: [{ role: 'user', content: userContent }]
     };
 
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    };
+    console.log('[Api] headers preview:', {
+      ...headers,
+      'x-api-key': key.slice(0, 6) + '...' + key.slice(-4)
+    });
+
     let res;
     try {
       res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': key,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
+        headers,
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(35000)
       });
@@ -424,6 +438,7 @@ const Api = {
 
     if (!res.ok) {
       const t = await res.text().catch(() => '');
+      console.error('[Api] error response:', t.slice(0, 300));
       throw new Error(`HTTP ${res.status}: ${t.slice(0, 200)}`);
     }
 
@@ -703,7 +718,10 @@ const UI = {
   },
 
   saveSettings() {
-    S.cfg.key   = (document.getElementById('cfgKey').value || '').replace(/[^\x20-\x7E]/g, '').trim();
+    // ホワイトスペース・不可視文字だけ除去（sk-ant-...のASCII文字は触らない）
+    const rawKey = document.getElementById('cfgKey').value || '';
+    S.cfg.key = rawKey.replace(/[\s\u200B\uFEFF\u00A0]/g, '');
+    console.log('[saveSettings] key len saved:', S.cfg.key.length, '/ preview:', S.cfg.key.slice(0,6)+'...'+S.cfg.key.slice(-4));
     S.cfg.model = document.getElementById('cfgModel').value;
     S.cfg.debug = document.getElementById('cfgDbg').checked;
     S.cast.hero.name = document.getElementById('cfgHName').value.trim();
