@@ -1,708 +1,906 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Chronicle MVP</title>
-<style>
-:root{--bg:#0c0b10;--s:#161520;--b:#252335;--g:#c9a84c;--gd:#806830;--t:#cdc0a0;--td:#6e6555;--e:#c44;--r:6px;--f:'Georgia','Hiragino Mincho ProN',serif}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:var(--f);background:var(--bg);color:var(--t);min-height:100vh}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Chronicle</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #09090f;
+      --s1: #111119;
+      --s2: #17172a;
+      --s3: #1f1f35;
+      --acc: #8b76f0;
+      --gold: #c4a45a;
+      --tx: #e0dcf0;
+      --dim: #6868a0;
+      --border: rgba(139,118,240,.14);
+      --do: #5a8ef0;
+      --say: #6aaf78;
+      --story: #c49040;
+      --err: #e06060;
+      --r: 10px;
+    }
+    html { height: 100%; }
+    body {
+      display: flex; flex-direction: column;
+      min-height: 100dvh;
+      max-width: 760px; margin: 0 auto;
+      background: var(--bg); color: var(--tx);
+      font-family: 'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic UI',sans-serif;
+      font-size: 15px; line-height: 1.75;
+    }
 
-/* Setup */
-#setup{max-width:500px;margin:0 auto;padding:40px 20px}
-#setup h1{text-align:center;color:var(--g);font-size:2rem;margin-bottom:8px}
-#setup .sub{text-align:center;color:var(--td);font-size:.7rem;margin-bottom:30px}
-.fg{margin-bottom:14px}
-.fg label{display:block;color:var(--gd);font-size:.78rem;margin-bottom:3px}
-.fg .hint{font-size:.62rem;color:var(--td);margin-bottom:3px}
-.fg input,.fg textarea,.fg select{width:100%;background:var(--s);border:1px solid var(--b);color:var(--t);padding:8px;border-radius:var(--r);font-family:var(--f);font-size:.85rem}
-.fg textarea{resize:vertical;min-height:45px}
-.start{display:block;margin:20px auto 0;padding:12px 40px;background:var(--g);color:var(--bg);border:none;border-radius:var(--r);font-size:1rem;font-family:var(--f);cursor:pointer}
-.start:hover{opacity:.9}
+    /* ── Top bar ── */
+    #topbar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px;
+      background: var(--s1); border-bottom: 1px solid var(--border);
+      flex-shrink: 0; position: sticky; top: 0; z-index: 10;
+    }
+    #topbar h1 { flex: 1; font-size: 15px; font-weight: 700; letter-spacing: .12em; color: var(--acc); }
+    #topStatus { font-size: 12px; color: var(--dim); }
+    .top-btn {
+      background: none; border: 1px solid var(--border);
+      color: var(--dim); padding: 5px 11px; border-radius: 7px;
+      cursor: pointer; font-size: 13px; transition: all .15s;
+    }
+    .top-btn:hover { color: var(--tx); border-color: rgba(139,118,240,.4); }
 
-/* Game */
-#game{display:none;max-width:700px;margin:0 auto;padding:10px 16px 160px}
-.bar{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--b);margin-bottom:12px}
-.bar-text{flex:1;font-size:.72rem;color:var(--td);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.bar button{background:none;border:1px solid var(--b);color:var(--td);padding:4px 10px;border-radius:var(--r);font-size:.7rem;cursor:pointer;font-family:var(--f)}
-.bar button:hover{border-color:var(--gd);color:var(--t)}
+    /* ── Story ── */
+    #story {
+      flex: 1; overflow-y: auto;
+      padding: 20px 16px 8px; display: flex; flex-direction: column; gap: 22px;
+    }
+    #welcome {
+      text-align: center; padding: 60px 20px; color: var(--dim);
+    }
+    #welcome h2 { font-size: 24px; color: var(--acc); margin-bottom: 10px; letter-spacing: .15em; }
+    #welcome p { font-size: 14px; line-height: 1.9; }
 
-/* Turns */
-.turn{margin-bottom:16px;animation:fi .3s}
-@keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
-.t-act{color:var(--g);font-size:.8rem;padding:4px 0 2px 10px;border-left:2px solid var(--gd);margin-bottom:4px}
-.t-nar{line-height:1.9;font-size:.92rem}
-.t-nar p{margin-bottom:6px;text-indent:1em}
-.t-sys{text-align:center;color:var(--td);font-size:.75rem;padding:6px}
-.t-err{color:var(--e);font-size:.78rem;padding:6px 10px;background:rgba(200,60,60,.08);border-radius:var(--r)}
-.t-dbg{color:var(--td);font-size:.6rem;padding:4px 8px;background:var(--s);border-radius:var(--r);margin-top:4px;word-break:break-all}
-.dots{display:flex;gap:4px;padding:8px 0}
-.dots span{width:5px;height:5px;background:var(--gd);border-radius:50%;animation:p 1.2s infinite}
-.dots span:nth-child(2){animation-delay:.15s}
-.dots span:nth-child(3){animation-delay:.3s}
-@keyframes p{0%,80%,100%{opacity:.3}40%{opacity:1}}
+    /* ── Turn block ── */
+    .turn { display: flex; flex-direction: column; gap: 10px; }
+    .player-line {
+      display: flex; align-items: baseline; gap: 8px;
+    }
+    .mbadge {
+      font-size: 11px; font-weight: 700; letter-spacing: .1em;
+      padding: 2px 8px; border-radius: 4px; flex-shrink: 0;
+    }
+    .mbadge.DO  { background: rgba(90,142,240,.18); color: var(--do); }
+    .mbadge.SAY { background: rgba(106,175,120,.18); color: var(--say); }
+    .mbadge.STORY { background: rgba(196,144,64,.18); color: var(--story); }
+    .ptext { color: var(--dim); font-size: 14px; }
 
-/* Input */
-.inp{position:fixed;bottom:0;left:0;right:0;background:var(--bg);border-top:1px solid var(--b);padding:10px 16px max(10px,env(safe-area-inset-bottom))}
-.inp-row{display:flex;gap:6px;max-width:700px;margin:0 auto}
-.inp-row textarea{flex:1;background:var(--s);border:1px solid var(--b);color:var(--t);padding:9px;border-radius:var(--r);font-family:var(--f);font-size:.88rem;resize:none;height:40px;max-height:80px}
-.inp-row textarea:focus{border-color:var(--gd);outline:none}
-.inp-row button{width:40px;height:40px;background:var(--g);border:none;border-radius:var(--r);color:var(--bg);font-size:1rem;cursor:pointer;flex-shrink:0}
-.inp-row button:disabled{opacity:.2}
-.inp-sub{display:flex;gap:6px;max-width:700px;margin:4px auto 0}
-.inp-sub button{padding:3px 10px;background:none;border:1px solid var(--b);color:var(--td);font-size:.65rem;border-radius:3px;cursor:pointer;font-family:var(--f)}
-.inp-sub button:hover{border-color:var(--gd);color:var(--t)}
-.modes{display:flex;gap:2px;max-width:700px;margin:0 auto 4px}
-.mode{flex:1;padding:5px;background:var(--s);border:1px solid transparent;color:var(--td);font-size:.68rem;text-align:center;cursor:pointer;border-radius:3px;font-family:var(--f)}
-.mode.on{border-color:var(--gd);color:var(--g);background:var(--bg)}
-.t-edit{display:none;font-size:.65rem;color:var(--td);cursor:pointer;margin-top:3px}
-.turn:hover .t-edit{display:inline-block}
-.t-edit:hover{color:var(--g)}
-.t-undo{font-size:.6rem;color:var(--td);cursor:pointer;float:right;margin-top:2px}
-.t-undo:hover{color:var(--e)}
+    .narr-block {
+      background: var(--s2); border-left: 3px solid var(--gold);
+      border-radius: var(--r); padding: 14px 38px 14px 16px;
+      position: relative;
+      font-family: 'Hiragino Mincho ProN','Yu Mincho',serif;
+      font-size: 15px; line-height: 1.9;
+    }
+    .narr-block p { margin-bottom: 5px; }
+    .narr-block p:last-child { margin-bottom: 0; }
+    .narr-block .dial { color: #c8bae8; }
 
-/* Modal */
-.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:50;overflow-y:auto;padding:20px}
-.modal-bg.show{display:block}
-.modal{max-width:450px;margin:40px auto;background:var(--s);border:1px solid var(--b);border-radius:8px;padding:20px}
-.modal h3{color:var(--g);margin-bottom:12px}
-.modal-ok{margin-top:12px;padding:7px 24px;background:var(--g);color:var(--bg);border:none;border-radius:var(--r);cursor:pointer;font-family:var(--f)}
-.modal-x{float:right;background:none;border:none;color:var(--td);font-size:1.1rem;cursor:pointer}
-</style>
+    .edit-btn {
+      position: absolute; top: 10px; right: 10px;
+      background: none; border: 1px solid var(--border);
+      color: var(--dim); font-size: 12px; padding: 3px 8px;
+      border-radius: 5px; cursor: pointer; opacity: 0; transition: opacity .15s;
+    }
+    .narr-block:hover .edit-btn { opacity: 1; }
+
+    .dbg {
+      font-family: monospace; font-size: 11px; color: #5a5a80;
+      background: #060610; border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px; white-space: pre-wrap;
+      max-height: 110px; overflow-y: auto;
+    }
+
+    /* ── Branches ── */
+    #branches {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      padding: 4px 16px 8px; flex-shrink: 0;
+    }
+    .chip {
+      padding: 6px 14px; border-radius: 999px;
+      border: 1px solid var(--border); background: var(--s1);
+      color: var(--tx); font-size: 13px; cursor: pointer; transition: all .15s;
+    }
+    .chip.main { border-color: rgba(139,118,240,.4); }
+    .chip.side  { color: var(--dim); }
+    .chip:hover { background: var(--s2); border-color: var(--acc); color: var(--tx); }
+
+    /* ── Composer ── */
+    #composer {
+      flex-shrink: 0; background: var(--s1);
+      border-top: 1px solid var(--border);
+      padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px;
+    }
+    .mode-row { display: flex; gap: 6px; }
+    .mdbtn {
+      flex: 1; padding: 7px 0; border: 1px solid var(--border);
+      border-radius: 7px; background: none; color: var(--dim);
+      font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s;
+    }
+    .mdbtn.aDO    { border-color: var(--do);    color: var(--do);    background: rgba(90,142,240,.1); }
+    .mdbtn.aSAY   { border-color: var(--say);   color: var(--say);   background: rgba(106,175,120,.1); }
+    .mdbtn.aSTORY { border-color: var(--story); color: var(--story); background: rgba(196,144,64,.1); }
+
+    .inp-row { display: flex; gap: 8px; align-items: flex-end; }
+    #inp {
+      flex: 1; background: var(--s2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--tx); padding: 10px 12px;
+      font-size: 14px; font-family: inherit; resize: none;
+      min-height: 44px; max-height: 120px; line-height: 1.5;
+    }
+    #inp:focus { outline: none; border-color: var(--acc); }
+    #sendBtn {
+      width: 44px; height: 44px; border-radius: 10px; border: none;
+      background: var(--acc); color: #fff; font-size: 18px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: opacity .15s;
+    }
+    #sendBtn:disabled { opacity: .35; cursor: not-allowed; }
+
+    .tool-row { display: flex; gap: 6px; }
+    .tbtn {
+      flex: 1; padding: 5px 0; border: 1px solid var(--border);
+      border-radius: 6px; background: none; color: var(--dim);
+      font-size: 12px; cursor: pointer; transition: all .15s;
+    }
+    .tbtn:hover { color: var(--tx); border-color: rgba(255,255,255,.2); }
+
+    /* ── Settings overlay ── */
+    #settingsOv {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.75); z-index: 100;
+      overflow-y: auto; padding: 16px;
+    }
+    #settingsOv.open { display: block; }
+    #settingsPanel {
+      background: var(--s1); border-radius: 14px;
+      max-width: 540px; margin: 0 auto; padding: 20px;
+    }
+    .mhdr { display: flex; align-items: center; margin-bottom: 18px; }
+    .mhdr h2 { flex: 1; font-size: 17px; }
+    .mclose {
+      background: none; border: none; color: var(--dim);
+      font-size: 22px; cursor: pointer; padding: 4px; line-height: 1;
+    }
+    .sec { font-size: 11px; font-weight: 700; letter-spacing: .12em;
+      color: var(--dim); text-transform: uppercase; margin: 16px 0 8px; }
+    .fld { margin-bottom: 10px; }
+    .fld label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+    .fld input, .fld textarea, .fld select {
+      width: 100%; background: var(--s2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--tx); padding: 8px 10px;
+      font-size: 13px; font-family: inherit;
+    }
+    .fld textarea { resize: vertical; min-height: 68px; }
+    .fld input:focus, .fld textarea:focus, .fld select:focus { outline: none; border-color: var(--acc); }
+    .fld select option { background: #1a1a2e; }
+    .chk-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); }
+    .chk-row input { width: auto; }
+
+    .npc-card {
+      background: var(--s2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px; margin-bottom: 8px;
+    }
+    .npc-hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .npc-hdr span { flex: 1; font-size: 13px; font-weight: 600; color: var(--say); }
+    .npc-del { background: none; border: none; color: var(--err); cursor: pointer; font-size: 16px; }
+
+    .mbtn-row { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+    .btn-p {
+      flex: 1; padding: 10px; background: var(--acc); color: #fff;
+      border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+      cursor: pointer; min-width: 120px;
+    }
+    .btn-s {
+      flex: 1; padding: 10px; background: none; color: var(--dim);
+      border: 1px solid var(--border); border-radius: 8px; font-size: 14px;
+      cursor: pointer; min-width: 80px;
+    }
+    .btn-d {
+      padding: 9px 14px; background: none; color: var(--err);
+      border: 1px solid rgba(224,96,96,.3); border-radius: 8px; font-size: 13px;
+      cursor: pointer;
+    }
+
+    /* ── Edit overlay ── */
+    #editOv {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.8); z-index: 200;
+      align-items: center; justify-content: center; padding: 20px;
+    }
+    #editOv.open { display: flex; }
+    #editPanel {
+      background: var(--s1); border-radius: 14px; padding: 20px;
+      width: 100%; max-width: 500px;
+    }
+    #editPanel h3 { margin-bottom: 12px; }
+    #editTa {
+      width: 100%; background: var(--s2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--tx); padding: 10px;
+      font-size: 14px; font-family: 'Hiragino Mincho ProN','Yu Mincho',serif;
+      line-height: 1.7; resize: vertical; min-height: 120px;
+    }
+    .edit-acts { display: flex; gap: 8px; margin-top: 12px; }
+
+    @media (max-width: 480px) {
+      #story { padding: 14px 12px 6px; }
+      .narr-block { font-size: 14px; padding: 12px 34px 12px 14px; }
+    }
+  </style>
 </head>
 <body>
 
-<!-- ===== SETUP ===== -->
-<div id="setup">
-<h1>CHRONICLE</h1>
-<div class="sub">MVP — まず動くものを</div>
-
-<div class="fg"><label>主人公の名前</label>
-<input id="s-name" placeholder="レン、魔王…"></div>
-
-<div class="fg"><label>主人公の説明</label>
-<textarea id="s-desc" rows="2" placeholder="中性的で美しい魔王。退屈している。"></textarea></div>
-
-<div class="fg"><label>NPC（1人）の名前</label>
-<input id="s-npc" placeholder="ミリア"></div>
-
-<div class="fg"><label>NPCの説明</label>
-<textarea id="s-npcd" rows="2" placeholder="16歳の少女。臆病だが好奇心旺盛。"></textarea></div>
-
-<div class="fg"><label>世界観（1-2文）</label>
-<textarea id="s-world" rows="2" placeholder="剣と魔法の異世界。"></textarea></div>
-
-<div class="fg"><label>最初のシーン</label>
-<textarea id="s-scene" rows="2" placeholder="森の中の小さな泉。静かで、鳥の声が聞こえる。"></textarea></div>
-
-<div class="fg"><label>文体</label>
-<select id="s-tone">
-<option value="literary">純文学</option>
-<option value="dark">ダーク</option>
-<option value="light">ラノベ</option>
-</select></div>
-
-<div class="fg"><label>NovelAI APIキー</label>
-<input type="password" id="s-key" placeholder="pst-...">
-<div class="hint"><a href="https://novelai.net/account" target="_blank" style="color:var(--gd)">novelai.net</a> → 永続的APIトークン</div></div>
-
-<label style="display:flex;align-items:center;gap:6px;font-size:.72rem;color:var(--td);margin-bottom:10px">
-<input type="checkbox" id="s-debug"> デバッグ表示（プロンプト・生データを画面に表示）
-</label>
-
-<button class="start" onclick="startGame()">始める</button>
+<!-- Top bar -->
+<div id="topbar">
+  <h1>◈ CHRONICLE</h1>
+  <span id="topStatus"></span>
+  <button class="top-btn" onclick="UI.openSettings()">⚙ 設定</button>
 </div>
 
-<!-- ===== GAME ===== -->
-<div id="game">
-<div class="bar">
-  <span class="bar-text" id="bar">―</span>
-  <button onclick="openSettings()">⚙設定</button>
-  <button onclick="storyReset()">リセット</button>
+<!-- Story -->
+<div id="story">
+  <div id="welcome">
+    <h2>CHRONICLE</h2>
+    <p>⚙ 設定 からAPIキーと世界設定を入力して<br>ゲームを開始してください。</p>
+  </div>
 </div>
-<div id="story"></div>
-<div class="inp">
-  <div class="modes">
-    <button class="mode on" onclick="setMode('do',this)">⚔ DO 行動</button>
-    <button class="mode" onclick="setMode('say',this)">💬 SAY 話す</button>
-    <button class="mode" onclick="setMode('story',this)">📖 STORY 描写</button>
+
+<!-- Branch candidates -->
+<div id="branches"></div>
+
+<!-- Composer -->
+<div id="composer">
+  <div class="mode-row">
+    <button class="mdbtn" data-m="DO"    onclick="G.setMode('DO')">⚔ DO 行動</button>
+    <button class="mdbtn" data-m="SAY"   onclick="G.setMode('SAY')">💬 SAY 話す</button>
+    <button class="mdbtn" data-m="STORY" onclick="G.setMode('STORY')">📖 STORY 描写</button>
   </div>
   <div class="inp-row">
-    <textarea id="input" placeholder="行動を入力…" rows="1"></textarea>
-    <button id="sendbtn" onclick="send()">▶</button>
+    <textarea id="inp" rows="1" placeholder="行動を入力..."
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();G.submit()}"
+      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
+    <button id="sendBtn" onclick="G.submit()">▶</button>
   </div>
-  <div class="inp-sub">
-    <button onclick="cont()">続きを書く</button>
-    <button onclick="retry()">やり直す</button>
-    <button onclick="undo()">↩取消</button>
+  <div class="tool-row">
+    <button class="tbtn" onclick="G.cont()">続きを書く</button>
+    <button class="tbtn" onclick="G.retry()">やり直す</button>
+    <button class="tbtn" onclick="G.undo()">↩ 取消</button>
   </div>
-</div>
 </div>
 
-<!-- ===== SETTINGS MODAL ===== -->
-<div class="modal-bg" id="modal">
-<div class="modal">
-<button class="modal-x" onclick="closeModal()">✕</button>
-<div id="modal-body"></div>
+<!-- Settings overlay -->
+<div id="settingsOv">
+  <div id="settingsPanel">
+    <div class="mhdr">
+      <h2>設定</h2>
+      <button class="mclose" onclick="UI.closeSettings()">✕</button>
+    </div>
+
+    <div class="sec">API</div>
+    <div class="fld">
+      <label>Anthropic API キー</label>
+      <input type="password" id="cfgKey" placeholder="sk-ant-...">
+    </div>
+    <div class="fld">
+      <label>モデル</label>
+      <select id="cfgModel">
+        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5（推奨：軽量・高速）</option>
+        <option value="claude-sonnet-4-6">Claude Sonnet 4.6（高品質）</option>
+      </select>
+    </div>
+    <div class="fld">
+      <label class="chk-row"><input type="checkbox" id="cfgDbg"> デバッグ表示（プロンプト/レスポンスを表示）</label>
+    </div>
+
+    <div class="sec">主人公</div>
+    <div class="fld"><label>名前</label><input type="text" id="cfgHName" placeholder="例: アリア・フェイン"></div>
+    <div class="fld"><label>説明（性格・外見・立場）</label><textarea id="cfgHDesc" placeholder="例: 18歳の記録官見習い。慎重だが好奇心が強い。"></textarea></div>
+
+    <div class="sec">NPC</div>
+    <div id="npcList"></div>
+    <button class="btn-s" style="width:100%;margin-bottom:4px" onclick="UI.addNpc()">+ NPC を追加</button>
+
+    <div class="sec">世界設定（Lore）</div>
+    <div class="fld"><label>世界観メモ（AIへの参照用、本文には流さない）</label>
+      <textarea id="cfgLore" placeholder="例: 記憶が結晶化した「灯片」が通貨として使われる都市。"></textarea></div>
+
+    <div class="sec">シーン設定</div>
+    <div class="fld"><label>現在の場所</label><input type="text" id="cfgLoc" placeholder="例: 路地裏、夕暮れ時"></div>
+    <div class="fld"><label>物語の前提・目的</label>
+      <textarea id="cfgObj" placeholder="例: 主人公は謎の少女の正体を探っている。"></textarea></div>
+    <div class="fld"><label>文体・雰囲気（Author's Note）</label>
+      <input type="text" id="cfgTone" placeholder="例: ダークファンタジー、心理描写重視、会話多め"></div>
+
+    <div class="mbtn-row">
+      <button class="btn-p" onclick="UI.saveSettings()">保存してゲーム開始</button>
+      <button class="btn-s" onclick="UI.closeSettings()">閉じる</button>
+    </div>
+    <div class="mbtn-row" style="margin-top:10px">
+      <button class="btn-d" onclick="G.resetStory()">物語リセット（設定は保持）</button>
+      <button class="btn-d" onclick="G.resetAll()">完全リセット</button>
+    </div>
+  </div>
 </div>
+
+<!-- Edit overlay -->
+<div id="editOv">
+  <div id="editPanel">
+    <h3>本文を編集</h3>
+    <textarea id="editTa"></textarea>
+    <div class="edit-acts">
+      <button class="btn-p" onclick="UI.saveEdit()">保存</button>
+      <button class="btn-s" onclick="UI.closeEdit()">キャンセル</button>
+    </div>
+  </div>
 </div>
 
 <script>
-'use strict';
+// ────────────────────────────────────────────────
+// Safe Storage
+// ────────────────────────────────────────────────
+const SS = {
+  get(k, d = null) {
+    try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : d; }
+    catch { return d; }
+  },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} }
+};
+const KEY = 'chr5';
 
-// ========================================
-// STATE — 最小限のデータ
-// ========================================
+// ────────────────────────────────────────────────
+// State
+// ────────────────────────────────────────────────
 const S = {
-  hero: '', heroDesc: '',
-  npc: '', npcDesc: '', npcEmotion: '',
-  world: '', scene: '', tone: 'literary',
-  key: '', debug: false,
-  mode: 'do',  // do / say / story
-  turns: [],   // [{action, mode, text}]
-  turnCount: 0,
-  busy: false,
+  cfg: { key: '', model: 'claude-haiku-4-5-20251001', debug: false },
+  cast: {
+    hero: { name: '', desc: '' },
+    npcs: []   // [{id,name,desc,emotion,attitude,trust}]
+  },
+  scene: { loc: '', obj: '', tone: '', lore: '', branches: [] },
+  turns: [],      // [{inputType,playerText,narrative,plan,debug}]
+  mode: 'DO',
+  inFlight: false,
+  reqId: 0,
+  editIdx: -1,
 
   save() {
-    localStorage.setItem('chr4', JSON.stringify({
-      hero:this.hero, heroDesc:this.heroDesc,
-      npc:this.npc, npcDesc:this.npcDesc, npcEmotion:this.npcEmotion,
-      world:this.world, scene:this.scene, tone:this.tone,
-      key:this.key, debug:this.debug, mode:this.mode,
-      turns:this.turns.slice(-20), turnCount:this.turnCount
-    }));
+    SS.set(KEY, { cfg: this.cfg, cast: this.cast, scene: this.scene, turns: this.turns, mode: this.mode });
   },
   load() {
-    try {
-      const d = JSON.parse(localStorage.getItem('chr4'));
-      if (!d) return false;
-      Object.keys(d).forEach(k => { if (k in this) this[k] = d[k]; });
-      return this.turns.length > 0 && this.key;
-    } catch { return false; }
+    const d = SS.get(KEY);
+    if (!d) return false;
+    Object.assign(this.cfg,   d.cfg   || {});
+    Object.assign(this.cast,  d.cast  || {});
+    Object.assign(this.scene, d.scene || {});
+    this.turns = d.turns || [];
+    this.mode  = d.mode  || 'DO';
+    return true;
   }
 };
 
-// ========================================
-// PROMPT — シンプルに組み立てる
-// ========================================
-function buildPrompt(action, mode) {
-  const parts = [];
+// ────────────────────────────────────────────────
+// API — Anthropic Claude
+// ────────────────────────────────────────────────
+const Api = {
+  async call(system, userContent, maxTok = 600) {
+    const key = (S.cfg.key || '').replace(/[^\x20-\x7E]/g, '').trim();
+    if (!key) throw new Error('APIキーが設定されていません');
 
-  // === 世界名を抽出（説明文を一切入れない） ===
-  // 「灯都市エルシアでは、記憶が…」→「灯都市エルシア」だけ取る
-  // 最初の助詞（は、で、の、に、を、、、。）の前で切る
-  const worldName = S.world.split(/[はでのにを、。]/)[0].trim().slice(0, 10) || '異世界';
+    const id = ++S.reqId;
+    S.inFlight = true;
 
-  if (S.turnCount === 0) {
-    parts.push(`　${worldName}。`);
-    parts.push(`　${S.hero}はそこにいた。`);
-    if (S.npc) parts.push(`　${S.npc}の姿が見えた。`);
-  } else {
-    // 2回目以降：NPC状態だけ。世界設定は一切入れない。
-    if (S.npc) {
-      parts.push(S.npcEmotion ? `　${S.npc}は${S.npcEmotion}。` : `　${S.npc}がそばにいる。`);
-    }
-  }
-
-  // === 直近2ターンの行動（行動のみ） ===
-  for (const t of S.turns.slice(-2)) {
-    if (!t.action) continue;
-    if (t.mode === 'say') parts.push(`　${S.hero}は「${t.action}」と言った。`);
-    else parts.push(`　${S.hero}は${t.action}。`);
-  }
-
-  // === プレイヤーの行動 ===
-  if (action) {
-    if (mode === 'say') {
-      parts.push(`　${S.hero}は「${action}」と言った。`);
-    } else if (mode === 'story') {
-      // STORY: 主人公名を除去、主人公の行動動詞も除去
-      let st = action;
-      if (S.hero) st = st.replace(new RegExp(S.hero + '(は|が|の|を|に|も)', 'g'), '');
-      st = st.replace(/(した|する|行った|言った|決めた|名乗った)。?$/g, '');
-      parts.push(`　${st.trim() || action}。`);
-    } else {
-      parts.push(`　${S.hero}は${action}。`);
-    }
-  }
-
-  // === ★末尾：NPC反応で終わる（主人公は絶対に書かない） ===
-  if (S.npc) {
-    const starts = {
-      '怯えている': [`　${S.npc}の肩が小さく震えた。`, `　${S.npc}は目をそらした。`],
-      '少し安心している': [`　${S.npc}は顔を上げた。`, `　${S.npc}は小さく息をついた。`],
-      '様子を見ている': [`　${S.npc}はじっとこちらを見ている。`, `　${S.npc}は黙っている。`]
+    const body = {
+      model: S.cfg.model,
+      max_tokens: maxTok,
+      system,
+      messages: [{ role: 'user', content: userContent }]
     };
-    const opts = starts[S.npcEmotion] || [`　${S.npc}は`];
-    parts.push(opts[Math.floor(Math.random() * opts.length)]);
-  } else {
-    parts.push('　辺りは静かだった。');
-  }
 
-  const prompt = parts.join('\n');
-  console.log('=== PROMPT LENGTH:', prompt.length, '===');
-  return prompt;
-}
-
-// ========================================
-// API — 防弾仕様
-// ========================================
-async function callAPI(prompt) {
-  const key = S.key.replace(/[^\x20-\x7E]/g, '').trim();
-  if (!key) throw new Error('APIキーが空です');
-
-  const body = {
-    input: prompt,
-    model: 'kayra-v1',
-    parameters: {
-      max_length: 60,
-      min_length: 1,
-      use_string: true,
-      temperature: 0.65,
-      top_k: 40,
-      top_p: 0.92,
-      tail_free_sampling: 0.95,
-      repetition_penalty: 1.5,
-      repetition_penalty_range: 2048,
-      repetition_penalty_slope: 3.33,
-      repetition_penalty_frequency: 0.1,
-      repetition_penalty_presence: 0.05
+    let res;
+    try {
+      res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(35000)
+      });
+    } finally {
+      S.inFlight = false;
     }
-  };
 
-  console.log('=== REQUEST BODY ===', JSON.stringify(body).slice(0, 200));
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status}: ${t.slice(0, 200)}`);
+    }
 
-  const res = await fetch('https://novel-proxy.sansan2103.workers.dev', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + key
-    },
-    body: JSON.stringify(body)
-  });
+    const json = await res.json();
+    if (id !== S.reqId) return null;   // stale
 
-  // レスポンス全体をテキストで取得（JSONパース失敗に備えて）
-  const rawText = await res.text();
-  console.log('=== RAW RESPONSE ===', rawText.slice(0, 300));
-
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${rawText.slice(0, 100)}`);
+    const text = (json.content || []).map(c => c.text || '').join('');
+    return { text, body };
   }
+};
 
-  // JSONパース
-  let data;
-  try {
-    data = JSON.parse(rawText);
-  } catch {
-    throw new Error('JSONパース失敗: ' + rawText.slice(0, 100));
+// ────────────────────────────────────────────────
+// Planner — build prompts, parse JSON plan
+// ────────────────────────────────────────────────
+const Planner = {
+  build(inputType, inputText) {
+    const hero  = S.cast.hero;
+    const npcs  = S.cast.npcs;
+    const scene = S.scene;
+
+    // Recent history: last 3 turns, player action only
+    const hist = S.turns.slice(-3).map(t => `[${t.inputType}] ${t.playerText}`).join('\n');
+
+    // NPC state summary
+    const npcBlock = npcs.map(n =>
+      `- ${n.name}（${(n.desc || '').slice(0, 50)}）/ 感情: ${n.emotion || '中立'} / 信頼: ${n.trust || 0}`
+    ).join('\n');
+
+    const sys = `あなたはADV型シナリオゲームのゲームマスターです。プレイヤーが主人公を操作します。
+必ず以下の全制約を守り、JSONのみを返してください。余分なテキストは一切出力禁止。
+
+【主人公ロック ★最重要】
+- DO入力がない限り、主人公の新しい物理行動を確定文で書かない
+- SAY入力がない限り、主人公の新しいセリフを確定文で書かない
+- STORY入力は「描写の方向・雰囲気・進行希望」のみ。不可逆イベントを勝手に確定しない
+- narrative の中で主人公が「〜した」「〜と言った」を追加行動として書かない
+
+【NPC反応必須】
+- npcReactionPhase を必ず全フィールド埋める
+- "黙っている"だけを3ターン以上連続させない。仕草・視線・短い返答・拒否・言いよどみで変化を付ける
+- NPCは感情と関係性に基づいて自然に反応する
+
+【名前・役割固定】
+- 主人公名: ${hero.name || '（未設定）'}
+- NPC名: ${npcs.map(n => n.name).join(' / ') || '（未設定）'}
+- 名前の入れ替え・改名・役割混線は禁止
+
+【Lore露出制限】
+- 世界観説明を本文に長々と書かない。最大1文以内
+
+【出力形式 — このJSONのみ返す】
+{
+  "playerIntent": {"kind": "approach|talk|explore|attack|other", "tone": "neutral|gentle|aggressive|curious"},
+  "npcReactionPhase": {
+    "npcName": "反応するNPCの名前",
+    "emotion": "感情の説明（2〜4文字）",
+    "interpretation": "NPCがどう解釈したか（1文）",
+    "dialogue": "台詞（文字列）またはnull（沈黙）",
+    "bodyLanguage": "仕草・視線・動作の描写（1文）",
+    "resistance": "low|mid|high"
+  },
+  "environmentResponse": "環境の変化・音・雰囲気の1文（またはnull）",
+  "branchCandidates": [
+    {"id":"b1","label":"次の候補（モード付き例: 名前を聞く（SAY））","type":"main|side"}
+  ],
+  "narrative": ["文1","文2","文3","文4"]
+}`;
+
+    const user = JSON.stringify({
+      protagonist: { name: hero.name, desc: hero.desc },
+      npcs: npcs.map(n => ({ name: n.name, desc: n.desc, emotion: n.emotion || '中立', trust: n.trust || 0 })),
+      scene: { location: scene.loc, objective: scene.obj, tone: scene.tone },
+      loreDigest: scene.lore,
+      recentHistory: hist || '（ゲーム開始）',
+      currentInput: { type: inputType, text: inputText }
+    }, null, 2);
+
+    return { sys, user };
+  },
+
+  parsePlan(rawText, inputType) {
+    // Extract JSON from response
+    let t = rawText.trim();
+    const m = t.match(/```(?:json)?\s*([\s\S]+?)\s*```/);
+    if (m) t = m[1];
+    const s = t.indexOf('{'), e = t.lastIndexOf('}');
+    if (s !== -1 && e !== -1) t = t.slice(s, e + 1);
+
+    let plan;
+    try { plan = JSON.parse(t); }
+    catch { console.warn('JSON parse failed:', rawText); return null; }
+
+    // Normalize
+    plan.playerIntent       = plan.playerIntent || {};
+    plan.npcReactionPhase   = plan.npcReactionPhase || {};
+    plan.environmentResponse = plan.environmentResponse || '';
+    plan.branchCandidates   = Array.isArray(plan.branchCandidates) ? plan.branchCandidates : [];
+    plan.narrative          = Array.isArray(plan.narrative) ? plan.narrative.filter(Boolean) : [];
+
+    // Protagonist lock: remove lines where hero acts without input
+    const heroName = S.cast.hero.name;
+    if (heroName && inputType !== 'DO') {
+      const rxAct = new RegExp(`${heroName}[はがを].{0,20}(した|した。|する。|殴|刺|掴|捕まえ|引き|蹴|握)`);
+      plan.narrative = plan.narrative.filter(s => !rxAct.test(s));
+    }
+    if (heroName && inputType !== 'SAY') {
+      // Remove lines where hero speaks unprompted (but keep NPC dialogue)
+      plan.narrative = plan.narrative.filter(s => {
+        const isHeroDial = new RegExp(`${heroName}[はが].*「`).test(s);
+        return !isHeroDial;
+      });
+    }
+
+    plan.narrative = plan.narrative.slice(0, 5);
+    return plan;
   }
+};
 
-  // レスポンス形式を探索（output / text / choices など）
-  const output = data.output || data.text || data.result ||
-    (data.choices && data.choices[0]?.text) ||
-    (data.content && data.content[0]?.text);
+// ────────────────────────────────────────────────
+// UI
+// ────────────────────────────────────────────────
+const UI = {
+  esc(s) {
+    return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  },
 
-  if (!output && output !== '') {
-    console.log('=== FULL RESPONSE DATA ===', JSON.stringify(data));
-    throw new Error('レスポンスに出力テキストがありません: ' + JSON.stringify(data).slice(0, 100));
+  setStatus(msg, err = false) {
+    const el = document.getElementById('topStatus');
+    el.textContent = msg;
+    el.style.color = err ? 'var(--err)' : 'var(--dim)';
+  },
+
+  setLoading(on) {
+    const btn = document.getElementById('sendBtn');
+    btn.disabled = on;
+    btn.textContent = on ? '⋯' : '▶';
+    if (on) this.setStatus('生成中…');
+    else this.setStatus('');
+  },
+
+  renderNarr(text) {
+    // Format narrative: wrap dialogue in span, convert newlines to <p>
+    return (text || '').split('\n').filter(Boolean).map(line => {
+      const escaped = this.esc(line);
+      const formatted = escaped.replace(/「([^」]*)」/g, '<span class="dial">「$1」</span>');
+      return `<p>${formatted}</p>`;
+    }).join('');
+  },
+
+  renderTurn(turn, idx) {
+    const div = document.createElement('div');
+    div.className = 'turn'; div.dataset.idx = idx;
+
+    const pline = document.createElement('div');
+    pline.className = 'player-line';
+    pline.innerHTML = `<span class="mbadge ${turn.inputType}">${turn.inputType}</span>
+      <span class="ptext">${this.esc(turn.playerText)}</span>`;
+    div.appendChild(pline);
+
+    if (turn.narrative) {
+      const block = document.createElement('div');
+      block.className = 'narr-block';
+      block.innerHTML = this.renderNarr(turn.narrative);
+      const eb = document.createElement('button');
+      eb.className = 'edit-btn';
+      eb.textContent = '✎ 編集';
+      eb.onclick = () => UI.openEdit(idx);
+      block.appendChild(eb);
+      div.appendChild(block);
+    }
+
+    if (S.cfg.debug && turn.dbg) {
+      const db = document.createElement('div');
+      db.className = 'dbg';
+      db.textContent = [
+        '=== SYSTEM (先頭300文字) ===',
+        (turn.dbg.sys || '').slice(0, 300),
+        '=== USER ===',
+        (turn.dbg.user || '').slice(0, 400),
+        '=== RAW RESPONSE ===',
+        (turn.dbg.raw || '').slice(0, 400)
+      ].join('\n');
+      div.appendChild(db);
+    }
+    return div;
+  },
+
+  renderAll() {
+    const el = document.getElementById('story');
+    el.querySelectorAll('.turn').forEach(t => t.remove());
+    const wl = document.getElementById('welcome');
+    if (wl) wl.style.display = S.turns.length ? 'none' : 'block';
+    S.turns.forEach((t, i) => el.appendChild(this.renderTurn(t, i)));
+    this._scroll();
+  },
+
+  appendTurn(turn, idx) {
+    const el = document.getElementById('story');
+    const wl = document.getElementById('welcome');
+    if (wl) wl.style.display = 'none';
+    el.appendChild(this.renderTurn(turn, idx));
+    this._scroll();
+  },
+
+  _scroll() {
+    const el = document.getElementById('story');
+    el.scrollTop = el.scrollHeight;
+  },
+
+  renderBranches(cands) {
+    const el = document.getElementById('branches');
+    el.innerHTML = '';
+    (cands || []).slice(0, 5).forEach(c => {
+      const btn = document.createElement('button');
+      btn.className = `chip ${c.type || 'side'}`;
+      btn.textContent = c.label;
+      btn.onclick = () => {
+        const mm = c.label.match(/\(([A-Z]+)\)\s*$/);
+        if (mm) G.setMode(mm[1]);
+        const cleanLabel = c.label.replace(/\s*\([^)]*\)\s*$/, '').trim();
+        const input = document.getElementById('inp');
+        input.value = cleanLabel;
+        input.style.height = 'auto';
+        input.focus();
+      };
+      el.appendChild(btn);
+    });
+  },
+
+  // ── Settings ──
+  openSettings() {
+    document.getElementById('cfgKey').value   = S.cfg.key   || '';
+    document.getElementById('cfgModel').value = S.cfg.model || 'claude-haiku-4-5-20251001';
+    document.getElementById('cfgDbg').checked = S.cfg.debug || false;
+    document.getElementById('cfgHName').value = S.cast.hero.name || '';
+    document.getElementById('cfgHDesc').value = S.cast.hero.desc || '';
+    document.getElementById('cfgLore').value  = S.scene.lore || '';
+    document.getElementById('cfgLoc').value   = S.scene.loc  || '';
+    document.getElementById('cfgObj').value   = S.scene.obj  || '';
+    document.getElementById('cfgTone').value  = S.scene.tone || '';
+    this._renderNpcList();
+    document.getElementById('settingsOv').classList.add('open');
+  },
+
+  closeSettings() {
+    document.getElementById('settingsOv').classList.remove('open');
+  },
+
+  _renderNpcList() {
+    const el = document.getElementById('npcList');
+    el.innerHTML = '';
+    S.cast.npcs.forEach((npc, i) => {
+      const card = document.createElement('div');
+      card.className = 'npc-card'; card.dataset.npcIdx = i;
+      card.innerHTML = `
+        <div class="npc-hdr">
+          <span>${this.esc(npc.name || `NPC ${i+1}`)}</span>
+          <button class="npc-del" onclick="UI._delNpc(${i})">✕</button>
+        </div>
+        <div class="fld"><label>名前</label>
+          <input type="text" data-f="name" value="${this.esc(npc.name || '')}"></div>
+        <div class="fld"><label>説明（性格・口調・主人公との関係）</label>
+          <textarea data-f="desc">${this.esc(npc.desc || '')}</textarea></div>
+      `;
+      el.appendChild(card);
+    });
+  },
+
+  addNpc() {
+    S.cast.npcs.push({ id: 'npc' + Date.now(), name: '', desc: '', emotion: '中立', attitude: '中立', trust: 0 });
+    this._renderNpcList();
+  },
+
+  _delNpc(i) {
+    S.cast.npcs.splice(i, 1);
+    this._renderNpcList();
+  },
+
+  saveSettings() {
+    S.cfg.key   = (document.getElementById('cfgKey').value || '').replace(/[^\x20-\x7E]/g, '').trim();
+    S.cfg.model = document.getElementById('cfgModel').value;
+    S.cfg.debug = document.getElementById('cfgDbg').checked;
+    S.cast.hero.name = document.getElementById('cfgHName').value.trim();
+    S.cast.hero.desc = document.getElementById('cfgHDesc').value.trim();
+    S.scene.lore = document.getElementById('cfgLore').value.trim();
+    S.scene.loc  = document.getElementById('cfgLoc').value.trim();
+    S.scene.obj  = document.getElementById('cfgObj').value.trim();
+    S.scene.tone = document.getElementById('cfgTone').value.trim();
+
+    // Collect NPCs from DOM
+    const cards = document.querySelectorAll('#npcList .npc-card');
+    cards.forEach((card, i) => {
+      if (!S.cast.npcs[i]) return;
+      const n = card.querySelector('[data-f="name"]');
+      const d = card.querySelector('[data-f="desc"]');
+      if (n) S.cast.npcs[i].name = n.value.trim();
+      if (d) S.cast.npcs[i].desc = d.value.trim();
+    });
+    S.cast.npcs = S.cast.npcs.filter(n => n.name);
+
+    S.save();
+    this.closeSettings();
+    this.setStatus('設定を保存しました');
+    if (S.turns.length === 0) this._showIntro();
+  },
+
+  _showIntro() {
+    const wl = document.getElementById('welcome');
+    if (!wl) return;
+    const h = S.cast.hero.name || '主人公';
+    const l = S.scene.loc || '場所';
+    wl.style.display = 'block';
+    wl.innerHTML = `<h2>CHRONICLE</h2><p>場所: ${this.esc(l)}<br>主人公: ${this.esc(h)}<br><br>最初の行動を入力してください。</p>`;
+  },
+
+  // ── Edit ──
+  openEdit(idx) {
+    S.editIdx = idx;
+    document.getElementById('editTa').value = S.turns[idx]?.narrative || '';
+    document.getElementById('editOv').classList.add('open');
+  },
+  closeEdit() {
+    document.getElementById('editOv').classList.remove('open');
+    S.editIdx = -1;
+  },
+  saveEdit() {
+    if (S.editIdx < 0) return;
+    S.turns[S.editIdx].narrative = document.getElementById('editTa').value;
+    S.save();
+    this.closeEdit();
+    this.renderAll();
+    this.renderBranches(S.scene.branches);
   }
+};
 
-  return output;
-}
+// ────────────────────────────────────────────────
+// Game — orchestration
+// ────────────────────────────────────────────────
+const G = {
+  init() {
+    S.load();
+    this.setMode(S.mode);
 
-// ========================================
-// CLEANER — 主人公の勝手な行動を除去
-// ========================================
-function clean(raw) {
-  if (!raw || typeof raw !== 'string') return '';
-  let t = raw;
+    if (S.turns.length > 0) {
+      UI.renderAll();
+      UI.renderBranches(S.scene.branches);
+    } else if (S.cfg.key) {
+      UI._showIntro();
+    }
+  },
 
-  // タグ除去
-  t = t.replace(/<[^>]{1,60}>/g, '');
-  t = t.replace(/\[[^\]]{0,200}\]/g, '');
-  t = t.replace(/【[^】]{0,100}】/g, '');
-  t = t.replace(/\*{2,}/g, '');
+  setMode(m) {
+    S.mode = m;
+    document.querySelectorAll('.mdbtn').forEach(b => {
+      b.className = 'mdbtn';
+      if (b.dataset.m === m) b.classList.add('a' + m);
+    });
+    const phs = { DO: '行動を入力…  例: 女の子に声をかける', SAY: 'セリフを入力…  例: 「名前を教えてくれ」', STORY: '描写の方向を入力…  例: 遠くから足音が近づく' };
+    document.getElementById('inp').placeholder = phs[m] || '';
+  },
 
-  // メタ除去
-  t = t.replace(/^\s*\d{1,3}\s*$/gm, '');
-  t = t.replace(/^[\s　]*(第\d+|Chapter|Scene|END|続く).*$/gim, '');
-  t = t.replace(/(ブクマ|作者|筆者|ポイント|☆|★).*/g, '');
+  async submit() {
+    if (S.inFlight) return;
+    const inputEl = document.getElementById('inp');
+    const text = inputEl.value.trim();
+    if (!text) return;
 
-  // リスト除去
-  t = t.replace(/^[\s　]*(武器|防具|HP|MP|名前|年齢|性別|種族|職業)[\s　]*[：:].*/gm, '');
-  t = t.replace(/^[\s　]*[-・●▸★→]+\s*.*/gm, '');
+    if (!S.cfg.key) {
+      UI.setStatus('APIキーが設定されていません', true);
+      UI.openSettings(); return;
+    }
 
-  // 整理
-  t = t.replace(/\n{3,}/g, '\n').trim();
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    UI.setLoading(true);
+    UI.renderBranches([]);
 
-  // ★主人公の勝手な行動を除去★
-  if (S.hero) {
-    // 名前バリエーション（フルネーム＋名だけ）
-    const names = [S.hero];
-    if (/[・＝\s]/.test(S.hero)) names.push(S.hero.split(/[・＝\s]/)[0]);
-    const hp = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    try {
+      const { sys, user } = Planner.build(S.mode, text);
+      const result = await Api.call(sys, user);
+      if (!result) return;
 
-    const sentences = t.split(/(?<=[。！？…」])/);
-    const filtered = [];
-    for (const s of sentences) {
-      const tr = s.trim();
-      if (tr.length < 2) continue;
-      let bad = false;
+      const plan = Planner.parsePlan(result.text, S.mode);
+      if (!plan) throw new Error('AIの応答をJSONとして解析できませんでした。\nデバッグをONにして確認してください。\n\n' + result.text.slice(0, 300));
 
-      // (1) 主人公が行動 → 除去
-      if (new RegExp(`(${hp})(は|が|も).*(した|する|ている|ていた|と名乗|と答え|を渡|を交換|を差し出|を手渡|を握|を掴|を抱|に触|にキス|に向か|を決め|ことにし)`).test(tr)) bad = true;
-
-      // (2) 主人公の台詞 → 除去
-      if (new RegExp(`(${hp})(は|が).*「[^」]+」`).test(tr)) bad = true;
-
-      // (3) 主人公の内面 → 除去
-      if (new RegExp(`(${hp})(は|の).*(思った|感じた|考えた|決意|覚悟|理解|気づ|悟|知って)`).test(tr)) bad = true;
-
-      // (4) 設定解説 → 除去
-      if (/とは[、。]|と呼ばれ[てる]|という(存在|もの|力|概念|制度|仕組)|として(扱|使|機能)|を意味|が必要であ|の(代償|力|能力|契約|記録|結晶|称号)は/.test(tr)) bad = true;
-
-      // (5) 名前混線 → 除去
-      if (S.npc) {
-        const np = S.npc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        if (new RegExp(`(${hp}).*(${np})と(名乗|名前を)|(${np}).*(${hp})と(名乗|名前を)`).test(tr)) bad = true;
+      // Update NPC state
+      const rp = plan.npcReactionPhase;
+      if (rp && rp.npcName) {
+        const npc = S.cast.npcs.find(n => n.name === rp.npcName || rp.npcName.includes(n.name));
+        if (npc) {
+          npc.emotion  = rp.emotion  || npc.emotion;
+          // Trust: increase slightly for gentle/explore, decrease for aggressive
+          const intent = plan.playerIntent?.kind || '';
+          if (intent === 'attack') npc.trust = (npc.trust || 0) - 1;
+          else if (['talk','explore'].includes(intent)) npc.trust = (npc.trust || 0) + 0.5;
+        }
       }
 
-      if (bad) { console.log('=== STRIPPED ===', tr.slice(0, 50)); continue; }
-      filtered.push(s);
-    }
-    t = filtered.join('');
-    if (t.trim().length < 5) {
-      const ns = S.npc ? sentences.filter(s => s.includes(S.npc)) : [];
-      t = ns.length > 0 ? ns.slice(0, 2).join('') : sentences.slice(0, 2).join('');
-    }
-  }
+      const narr = plan.narrative.join('\n');
+      const turn = {
+        inputType: S.mode,
+        playerText: text,
+        narrative: narr,
+        plan,
+        dbg: S.cfg.debug ? { sys, user, raw: result.text } : null
+      };
 
-  // 重複文除去
-  const sents = t.split(/(?<=[。！？…」])/);
-  const seen = new Set();
-  const unique = [];
-  for (const s of sents) {
-    const k = s.trim().replace(/\s/g, '');
-    if (k.length < 2) continue;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    unique.push(s);
-  }
-  t = unique.join('');
-
-  // 最大4文
-  const final = t.split(/(?<=[。！？…」])/);
-  t = final.filter(s => s.trim().length > 2).slice(0, 4).join('');
-
-  // 文末で切る
-  const last = Math.max(t.lastIndexOf('。'), t.lastIndexOf('！'), t.lastIndexOf('？'), t.lastIndexOf('」'));
-  if (last > 0 && last < t.length - 1) t = t.slice(0, last + 1);
-
-  return t.trim();
-}
-
-// ========================================
-// NPC感情更新（シンプル版）
-// ========================================
-function updateEmotion(action) {
-  if (!action || !S.npc) return;
-  // プレイヤーの行動から感情を推測
-  // 暴力的
-  if (/殴|斬|殺|壊|脅|攻撃|奪|縛|掴|押し倒/.test(action)) S.npcEmotion = '怯えている';
-  // 優しい
-  else if (/助|守|救|優|癒|治|抱きしめ|撫で/.test(action)) S.npcEmotion = '少し安心している';
-  // 会話・探り
-  else if (/話|声|聞|尋|質問|名前/.test(action)) S.npcEmotion = '様子を見ている';
-  // 寄り道・環境探索（NPCに直接関係ない）
-  else if (/見|調べ|探|歩|周囲|触|拾|読/.test(action)) {
-    // 寄り道行動 → NPCの感情は変えない（プレイヤーの自由を尊重）
-    // ただし、長く無視されたら少し寂しくなる等は将来追加
-  }
-  // その他 → 変更なし（プレイヤーの意図を尊重）
-}
-
-// ========================================
-// UI
-// ========================================
-function setMode(m, btn) {
-  S.mode = m;
-  document.querySelectorAll('.mode').forEach(b => b.classList.remove('on'));
-  btn.classList.add('on');
-  const ph = { do: '行動を入力…', say: '台詞を入力…', story: '描写の方向を入力…' };
-  document.getElementById('input').placeholder = ph[m] || ph.do;
-}
-
-function addTurn(type, text, turnIdx) {
-  const d = document.createElement('div');
-  d.className = 'turn';
-  const esc = t => { const e = document.createElement('span'); e.textContent = t; return e.innerHTML; };
-
-  if (type === 'act') {
-    const modeLabels = { do: '行動', say: '発言', story: '描写' };
-    const mode = (turnIdx !== undefined && S.turns[turnIdx]?.mode) || S.mode;
-    const label = modeLabels[mode] || '行動';
-    d.innerHTML = `<div class="t-act">▸ ${label}：${esc(text)}</div>`;
-  }
-  else if (type === 'nar') {
-    const ps = text.split(/\n+/).filter(p => p.trim());
-    d.innerHTML = `<div class="t-nar">${ps.map(p => `<p>${esc(p.trim())}</p>`).join('')}</div>`;
-    // 編集ボタン（ターンインデックスがあれば）
-    if (turnIdx !== undefined) {
-      d.innerHTML += `<span class="t-edit" onclick="editTurn(${turnIdx})">✎ 編集</span>`;
-    }
-  }
-  else if (type === 'sys') d.innerHTML = `<div class="t-sys">${esc(text)}</div>`;
-  else if (type === 'err') d.innerHTML = `<div class="t-err">${esc(text)}</div>`;
-  else if (type === 'dbg') d.innerHTML = `<div class="t-dbg">${esc(text)}</div>`;
-
-  document.getElementById('story').appendChild(d);
-  window.scrollTo(0, document.body.scrollHeight);
-}
-
-function showLoad() {
-  const d = document.createElement('div');
-  d.className = 'turn'; d.id = 'ld';
-  d.innerHTML = '<div class="dots"><span></span><span></span><span></span></div>';
-  document.getElementById('story').appendChild(d);
-  window.scrollTo(0, document.body.scrollHeight);
-}
-function hideLoad() { document.getElementById('ld')?.remove(); }
-function setBusy(b) { S.busy = b; document.getElementById('sendbtn').disabled = b; }
-
-// ========================================
-// GAME LOGIC
-// ========================================
-function startGame() {
-  S.hero = document.getElementById('s-name').value.trim() || '冒険者';
-  S.heroDesc = document.getElementById('s-desc').value.trim() || '謎多き旅人';
-  S.npc = document.getElementById('s-npc').value.trim() || '';
-  S.npcDesc = document.getElementById('s-npcd').value.trim() || '';
-  S.world = document.getElementById('s-world').value.trim() || '異世界';
-  S.scene = document.getElementById('s-scene').value.trim() || '';
-  S.tone = document.getElementById('s-tone').value;
-  S.key = document.getElementById('s-key').value.replace(/[^\x20-\x7E]/g, '').trim();
-  S.debug = document.getElementById('s-debug').checked;
-
-  if (!S.key) { alert('APIキーを入力してください'); return; }
-
-  S.turns = [];
-  S.turnCount = 0;
-  S.npcEmotion = '';
-  S.save();
-
-  document.getElementById('setup').style.display = 'none';
-  document.getElementById('game').style.display = 'block';
-
-  addTurn('sys', `${S.world} — ${S.hero}：${S.heroDesc}`);
-  if (S.npc) addTurn('sys', `NPC：${S.npc} — ${S.npcDesc}`);
-  addTurn('sys', '行動を入力してください。');
-  document.getElementById('bar').textContent = S.scene || S.world;
-}
-
-function resumeGame() {
-  document.getElementById('setup').style.display = 'none';
-  document.getElementById('game').style.display = 'block';
-  refreshStory();
-}
-
-async function send() {
-  if (S.busy) return;
-  const inp = document.getElementById('input');
-  const action = inp.value.trim();
-  if (!action) return;
-
-  setBusy(true);
-  inp.value = '';
-  const mode = S.mode;
-
-  const modeLabels = { do: '行動', say: '発言', story: '描写' };
-  addTurn('act', action);
-
-  showLoad();
-
-  try {
-    updateEmotion(action);
-    const prompt = buildPrompt(action, mode);
-
-    if (S.debug) addTurn('dbg', `PROMPT (${prompt.length}文字): ${prompt}`);
-
-    const raw = await callAPI(prompt);
-
-    if (S.debug) addTurn('dbg', `RAW: ${(raw || '').slice(0, 200)}`);
-
-    let text = clean(raw);
-    if (!text || text.length < 3) {
-      text = '（生成できませんでした。やり直しを試してください。）';
-    }
-
-    hideLoad();
-
-    const idx = S.turns.length;  // このターンのインデックス
-    addTurn('nar', text, idx);
-
-    S.turns.push({ action, mode, text });
-    if (S.turns.length > 20) S.turns = S.turns.slice(-20);
-    S.turnCount++;
-    S.scene = text.slice(-40);
-    document.getElementById('bar').textContent = S.scene;
-    S.save();
-
-  } catch (err) {
-    hideLoad();
-    addTurn('err', `エラー: ${err.message}`);
-    if (S.debug) addTurn('dbg', `Stack: ${err.stack?.slice(0, 200)}`);
-    console.error(err);
-  }
-
-  setBusy(false);
-}
-
-// 直前出力を編集
-function editTurn(idx) {
-  if (idx < 0 || idx >= S.turns.length) return;
-  const turn = S.turns[idx];
-  const el = document.getElementById('modal-body');
-  el.innerHTML = `
-    <h3>出力を編集</h3>
-    <div class="fg"><label>本文</label>
-    <textarea id="edit-text" rows="6" style="min-height:120px">${turn.text || ''}</textarea></div>
-    <button class="modal-ok" onclick="
-      S.turns[${idx}].text = document.getElementById('edit-text').value.trim();
+      S.turns.push(turn);
+      S.scene.branches = plan.branchCandidates || [];
       S.save();
-      closeModal();
-      refreshStory();
-    ">保存</button>`;
-  document.getElementById('modal').classList.add('show');
-}
 
-// 物語表示をリフレッシュ
-function refreshStory() {
-  const story = document.getElementById('story');
-  story.innerHTML = '';
-  addTurn('sys', S.world + ' — ' + S.hero);
-  if (S.npc) addTurn('sys', 'NPC：' + S.npc);
-  for (let i = 0; i < S.turns.length; i++) {
-    const t = S.turns[i];
-    if (t.action) addTurn('act', t.action, i);
-    if (t.text) addTurn('nar', t.text, i);
-  }
-}
+      UI.appendTurn(turn, S.turns.length - 1);
+      UI.renderBranches(plan.branchCandidates);
+      UI.setStatus('');
 
-// Undo — 直前ターンを完全に取り消す
-function undo() {
-  if (S.turns.length === 0) return;
-  if (!confirm('直前のターンを取り消しますか？')) return;
-  S.turns.pop();
-  S.turnCount = Math.max(0, S.turnCount - 1);
-  S.scene = S.turns.length > 0 ? (S.turns[S.turns.length-1].text || '').slice(-40) : '';
-  S.save();
-  refreshStory();
-}
+    } catch (e) {
+      UI.setStatus('エラー: ' + e.message, true);
+      console.error(e);
+    } finally {
+      UI.setLoading(false);
+    }
+  },
 
-async function cont() {
-  if (S.busy || S.turns.length === 0) return;
-  setBusy(true); showLoad();
-  try {
-    const prompt = buildPrompt(null, 'story');
-    const raw = await callAPI(prompt);
-    let text = clean(raw);
-    if (!text) text = '（続きを生成できませんでした。）';
-    hideLoad();
-    const idx = S.turns.length;
-    addTurn('nar', text, idx);
-    S.turns.push({ action: null, mode: 'story', text });
-    S.turnCount++;
+  async cont() {
+    if (S.inFlight || S.turns.length === 0) return;
+    const inp = document.getElementById('inp');
+    inp.value = '続きを自然に進めてください。';
+    const prev = S.mode;
+    this.setMode('STORY');
+    await this.submit();
+    this.setMode(prev);
+  },
+
+  async retry() {
+    if (S.inFlight || S.turns.length === 0) return;
+    const last = S.turns[S.turns.length - 1];
+    S.turns.pop();
     S.save();
-  } catch (err) {
-    hideLoad();
-    addTurn('err', `エラー: ${err.message}`);
+    UI.renderAll();
+    UI.renderBranches([]);
+    const inp = document.getElementById('inp');
+    inp.value = last.playerText;
+    this.setMode(last.inputType);
+    await this.submit();
+  },
+
+  undo() {
+    if (S.turns.length === 0) return;
+    if (!confirm('直前のターンを取り消しますか？')) return;
+    S.turns.pop();
+    S.scene.branches = S.turns.length ? (S.turns[S.turns.length - 1].plan?.branchCandidates || []) : [];
+    S.save();
+    UI.renderAll();
+    UI.renderBranches(S.scene.branches);
+    UI.setStatus('取り消しました');
+  },
+
+  resetStory() {
+    if (!confirm('物語をリセットしますか？\n設定・APIキー・NPC設定は保持されます。')) return;
+    S.turns = []; S.scene.branches = [];
+    S.cast.npcs.forEach(n => { n.emotion = '中立'; n.attitude = '中立'; n.trust = 0; });
+    S.save();
+    UI.renderAll();
+    UI.renderBranches([]);
+    UI._showIntro();
+    UI.setStatus('物語をリセットしました');
+  },
+
+  resetAll() {
+    if (!confirm('すべてのデータ（APIキー・設定を含む）を削除しますか？\nこの操作は取り消せません。')) return;
+    SS.del(KEY);
+    location.reload();
   }
-  setBusy(false);
-}
+};
 
-async function retry() {
-  if (S.busy || S.turns.length === 0) return;
-  const last = S.turns.pop();
-  S.turnCount = Math.max(0, S.turnCount - 1);
-  S.save();
-  refreshStory();
-  if (last?.action) {
-    document.getElementById('input').value = last.action;
-    S.mode = last.mode || 'do';
-    // モードボタンも更新
-    document.querySelectorAll('.mode').forEach(b => {
-      b.classList.toggle('on', b.textContent.toLowerCase().includes(S.mode));
-    });
-    await send();
-  }
-}
-
-function storyReset() {
-  if (!confirm('物語をリセットしますか？（設定とAPIキーは残ります）')) return;
-  S.turns = [];
-  S.turnCount = 0;
-  S.npcEmotion = '';
-  S.scene = '';
-  S.save();
-  location.reload();
-}
-
-function openSettings() {
-  const el = document.getElementById('modal-body');
-  el.innerHTML = `
-    <h3>設定</h3>
-    <div class="fg"><label>主人公</label><input id="e-hero" value="${S.hero}"></div>
-    <div class="fg"><label>主人公説明</label><textarea id="e-desc" rows="2">${S.heroDesc}</textarea></div>
-    <div class="fg"><label>NPC名</label><input id="e-npc" value="${S.npc}"></div>
-    <div class="fg"><label>NPC説明</label><textarea id="e-npcd" rows="2">${S.npcDesc}</textarea></div>
-    <div class="fg"><label>世界観</label><textarea id="e-world" rows="2">${S.world}</textarea></div>
-    <div class="fg"><label>APIキー</label><input type="password" id="e-key" value="${S.key}"></div>
-    <button class="modal-ok" onclick="
-      S.hero=document.getElementById('e-hero').value.trim()||S.hero;
-      S.heroDesc=document.getElementById('e-desc').value.trim()||S.heroDesc;
-      S.npc=document.getElementById('e-npc').value.trim();
-      S.npcDesc=document.getElementById('e-npcd').value.trim();
-      S.world=document.getElementById('e-world').value.trim()||S.world;
-      S.key=document.getElementById('e-key').value.replace(/[^\\x20-\\x7E]/g,'').trim()||S.key;
-      S.save(); closeModal(); addTurn('sys','設定を更新しました。');
-    ">保存</button>
-    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--b)">
-      <button style="padding:6px 14px;background:var(--e);color:white;border:none;border-radius:var(--r);cursor:pointer;font-size:.75rem" onclick="if(confirm('全データを削除しますか？')){localStorage.removeItem('chr4');location.reload()}">完全リセット</button>
-    </div>`;
-  document.getElementById('modal').classList.add('show');
-}
-function closeModal() { document.getElementById('modal').classList.remove('show'); }
-
-// Keyboard
-document.getElementById('input')?.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-});
-document.getElementById('input')?.addEventListener('input', function() {
-  this.style.height = '40px';
-  this.style.height = Math.min(this.scrollHeight, 80) + 'px';
-});
-
-// ========================================
-// INIT
-// ========================================
-(function() {
-  const ok = S.load();
-  if (ok) {
-    resumeGame();
-  } else {
-    // フォーム復元
-    if (S.hero) document.getElementById('s-name').value = S.hero;
-    if (S.heroDesc) document.getElementById('s-desc').value = S.heroDesc;
-    if (S.npc) document.getElementById('s-npc').value = S.npc;
-    if (S.npcDesc) document.getElementById('s-npcd').value = S.npcDesc;
-    if (S.world) document.getElementById('s-world').value = S.world;
-    if (S.scene) document.getElementById('s-scene').value = S.scene;
-    if (S.tone) document.getElementById('s-tone').value = S.tone;
-    if (S.key) document.getElementById('s-key').value = S.key;
-    if (S.debug) document.getElementById('s-debug').checked = true;
-  }
-})();
+// ── Boot ──
+G.init();
 </script>
 </body>
 </html>
