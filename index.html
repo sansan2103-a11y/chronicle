@@ -156,16 +156,42 @@
     /* ── Settings overlay ── */
     #settingsOv {
       display: none; position: fixed; inset: 0;
-      background: rgba(0,0,0,.75); z-index: 100;
-      overflow-y: auto; padding: 16px;
+      background: rgba(0,0,0,.8); z-index: 100;
+      align-items: flex-start; justify-content: center;
+      padding: 16px; padding-top: max(16px, env(safe-area-inset-top));
+      overflow-y: auto;
     }
-    #settingsOv.open { display: block; }
+    #settingsOv.open { display: flex; }
     #settingsPanel {
       background: var(--s1); border-radius: 14px;
-      max-width: 540px; margin: 0 auto; padding: 20px;
+      max-width: 540px; width: 100%;
+      display: flex; flex-direction: column;
+      /* 画面高さに収める。はみ出た分はbodyがスクロール */
+      max-height: calc(100dvh - 32px);
+      margin: auto 0;
     }
-    .mhdr { display: flex; align-items: center; margin-bottom: 18px; }
-    .mhdr h2 { flex: 1; font-size: 17px; }
+    /* ヘッダー：固定 */
+    .mpanel-hdr {
+      display: flex; align-items: center;
+      padding: 16px 20px 12px; flex-shrink: 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .mpanel-hdr h2 { flex: 1; font-size: 17px; }
+    /* ボディ：スクロール可能 */
+    .mpanel-body {
+      overflow-y: auto; padding: 4px 20px 8px; flex: 1;
+    }
+    /* フッター：常時表示（スティッキー） */
+    .mpanel-footer {
+      flex-shrink: 0;
+      padding: 12px 20px;
+      padding-bottom: calc(12px + env(safe-area-inset-bottom));
+      border-top: 1px solid var(--border);
+      background: var(--s1);
+      border-radius: 0 0 14px 14px;
+    }
+    .mpanel-footer-main { display: flex; gap: 8px; }
+    .mpanel-footer-danger { display: flex; gap: 8px; margin-top: 8px; }
     .mclose {
       background: none; border: none; color: var(--dim);
       font-size: 22px; cursor: pointer; padding: 4px; line-height: 1;
@@ -193,21 +219,20 @@
     .npc-hdr span { flex: 1; font-size: 13px; font-weight: 600; color: var(--say); }
     .npc-del { background: none; border: none; color: var(--err); cursor: pointer; font-size: 16px; }
 
-    .mbtn-row { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
     .btn-p {
-      flex: 1; padding: 10px; background: var(--acc); color: #fff;
+      flex: 1; padding: 11px; background: var(--acc); color: #fff;
       border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
-      cursor: pointer; min-width: 120px;
+      cursor: pointer; min-height: 44px;
     }
     .btn-s {
-      flex: 1; padding: 10px; background: none; color: var(--dim);
+      flex: 1; padding: 11px; background: none; color: var(--dim);
       border: 1px solid var(--border); border-radius: 8px; font-size: 14px;
-      cursor: pointer; min-width: 80px;
+      cursor: pointer; min-height: 44px;
     }
     .btn-d {
-      padding: 9px 14px; background: none; color: var(--err);
+      flex: 1; padding: 9px 14px; background: none; color: var(--err);
       border: 1px solid rgba(224,96,96,.3); border-radius: 8px; font-size: 13px;
-      cursor: pointer;
+      cursor: pointer; min-height: 40px;
     }
 
     /* ── Edit overlay ── */
@@ -278,11 +303,16 @@
 
 <!-- Settings overlay -->
 <div id="settingsOv">
-  <div id="settingsPanel">
-    <div class="mhdr">
-      <h2>設定</h2>
-      <button class="mclose" onclick="UI.closeSettings()">✕</button>
+  <div id="settingsPanel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+
+    <!-- 常時表示ヘッダー -->
+    <div class="mpanel-hdr">
+      <h2 id="settingsTitle">⚙ 設定</h2>
+      <button class="mclose" onclick="UI.closeSettings()" aria-label="閉じる">✕</button>
     </div>
+
+    <!-- スクロール可能な本体 -->
+    <div class="mpanel-body">
 
     <div class="sec">API</div>
     <div class="fld">
@@ -311,8 +341,7 @@
         <input type="password" id="cfgNaiKey" placeholder="pst-...">
       </div>
       <div class="fld" style="background:rgba(196,144,64,.1);border:1px solid rgba(196,144,64,.3);border-radius:8px;padding:10px;font-size:12px;color:#c49040">
-        ⚠ NovelAI（Kayra）はテキスト補完モデルです。JSONで計画を立ててから本文生成に使います。
-        Anthropicに比べて応答品質が不安定な場合があります。
+        ⚠ NovelAI（Kayra）はテキスト補完モデルです。Anthropicに比べて応答品質が不安定な場合があります。
       </div>
     </div>
     <div class="fld">
@@ -338,14 +367,20 @@
     <div class="fld"><label>文体・雰囲気（Author's Note）</label>
       <input type="text" id="cfgTone" placeholder="例: ダークファンタジー、心理描写重視、会話多め"></div>
 
-    <div class="mbtn-row">
-      <button class="btn-p" onclick="UI.saveSettings()">保存してゲーム開始</button>
-      <button class="btn-s" onclick="UI.closeSettings()">閉じる</button>
+    </div><!-- /mpanel-body -->
+
+    <!-- 常時表示フッター（ここが常に画面内に見える） -->
+    <div class="mpanel-footer">
+      <div class="mpanel-footer-main">
+        <button class="btn-p" onclick="UI.saveSettings()">✔ 保存してゲーム開始</button>
+        <button class="btn-s" onclick="UI.closeSettings()">閉じる</button>
+      </div>
+      <div class="mpanel-footer-danger">
+        <button class="btn-d" onclick="G.resetStory()">物語リセット（設定は保持）</button>
+        <button class="btn-d" onclick="G.resetAll()">完全リセット</button>
+      </div>
     </div>
-    <div class="mbtn-row" style="margin-top:10px">
-      <button class="btn-d" onclick="G.resetStory()">物語リセット（設定は保持）</button>
-      <button class="btn-d" onclick="G.resetAll()">完全リセット</button>
-    </div>
+
   </div>
 </div>
 
@@ -909,11 +944,22 @@ const G = {
     S.load();
     this.setMode(S.mode);
 
+    // ESCで設定モーダルを閉じる
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        if (document.getElementById('editOv').classList.contains('open')) UI.closeEdit();
+        else if (document.getElementById('settingsOv').classList.contains('open')) UI.closeSettings();
+      }
+    });
+
     if (S.turns.length > 0) {
       UI.renderAll();
       UI.renderBranches(S.scene.branches);
-    } else if (S.cfg.key) {
+    } else if (S.cfg.key || S.cfg.naiKey) {
       UI._showIntro();
+    } else {
+      // 初回起動: 設定モーダルを自動で開く
+      setTimeout(() => UI.openSettings(), 100);
     }
   },
 
