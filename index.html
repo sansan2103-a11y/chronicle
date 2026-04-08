@@ -511,35 +511,33 @@ const Api = {
 
     console.log('[NovelAI] token preview:', token.slice(0,8)+'...'+token.slice(-4), '/ len:', token.length);
 
-    // For NovelAI (Kayra), we do a two-step:
-    // 1. Use the JSON plan from system/user as a structured prompt
-    // 2. Send as text completion with the narrative portion as the actual generation target
+    // 既存のCloudflare Workersプロキシを使用（CORSバイパス）
+    // novel-proxy.sansan2103.workers.dev がAPIキーをAuthorizationヘッダーとして転送する
+    const PROXY = 'https://novel-proxy.sansan2103.workers.dev';
+
     const id = ++S.reqId;
     S.inFlight = true;
 
-    // Build a Kayra-compatible prompt from the JSON plan context
-    // We extract key info and format as Japanese prose primer
+    // Build a Kayra-compatible prompt from the structured context
     let planContext = '';
     try {
       const parsed = JSON.parse(userContent);
       const hero = parsed.cast?.protagonist?.name || '主人公';
-      const npc = (parsed.cast?.npcs || []).map(n => n.name).join('・');
-      const loc = parsed.scene?.location || '';
-      const inp = parsed.currentInput || {};
+      const npc  = (parsed.cast?.npcs || []).map(n => n.name).join('・');
+      const loc  = parsed.scene?.location || '';
+      const inp  = parsed.currentInput || {};
       const hist = parsed.recentHistory || '';
       planContext = [
-        loc ? `　${loc}。` : '',
+        loc  ? `　${loc}。` : '',
         hero ? `　${hero}はそこにいた。` : '',
-        npc ? `　${npc}の姿があった。` : '',
-        hist && hist !== '（ゲーム開始）' ? `　${hist.split('\n').slice(-1)[0].replace(/^\[[^\]]+\]\s*/,'')}。` : '',
+        npc  ? `　${npc}の姿があった。` : '',
+        hist && hist !== '（ゲーム開始）' ? `　${hist.split('\n').slice(-1)[0].replace(/^\[[^\]]+\]\s*/, '')}。` : '',
         inp.text ? (inp.type === 'SAY' ? `　${hero}は「${inp.text}」と言った。` : `　${hero}は${inp.text}。`) : ''
       ].filter(Boolean).join('\n');
     } catch { planContext = userContent.slice(0, 200); }
 
-    const prompt = planContext + '\n　';
-
     const body = {
-      input: prompt,
+      input: planContext + '\n　',
       model: 'kayra-v1',
       parameters: {
         max_new_tokens: Math.min(maxTok, 100),
@@ -552,9 +550,11 @@ const Api = {
       }
     };
 
+    console.log('[NovelAI] prompt preview:', (planContext || '').slice(0, 100));
+
     let res;
     try {
-      res = await fetch('https://api.novelai.net/ai/generate', {
+      res = await fetch(PROXY, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -568,14 +568,24 @@ const Api = {
     if (!res.ok) {
       const t = await res.text().catch(() => '');
       console.error('[NovelAI] error:', t.slice(0,300));
-      throw new Error(`HTTP ${res.status}: ${t.slice(0,200)}`);
+      throw new Error(`NovelAI HTTP ${res.status}: ${t.slice(0,200)}`);
     }
 
     const json = await res.json();
     if (id !== S.reqId) return null;
     const rawText = json.output || json.text || json.result || '';
+    console.log('[NovelAI] raw output:', rawText.slice(0, 200));
 
-    // NovelAI returns raw prose — wrap it in JSON-like structure for the planner
+    if (!rawText) throw new Error('NovelAIから出力がありませんでした。プロキシとトークンを確認してください。');
+
+    // Wrap prose output into JSON structure
+    const sentences = rawText
+      .replace(/<[^>]+>/g, '')              // タグ除去
+      .split(/(?<=[。！？」])\s*/)           // 文末で分割
+      .map(s => s.trim())
+      .filter(s => s.length > 2)
+      .slice(0, 5);
+
     const fakeJson = JSON.stringify({
       playerIntent: { kind: 'other', tone: 'neutral' },
       npcReactionPhase: {
@@ -588,7 +598,7 @@ const Api = {
       },
       environmentResponse: '',
       branchCandidates: [],
-      narrative: rawText.split(/[\n。！？]/).filter(s => s.trim().length > 2).slice(0,5).map(s => s.trim() + (s.endsWith('。') ? '' : '。'))
+      narrative: sentences.length ? sentences : [rawText.slice(0, 150)]
     });
 
     return { text: fakeJson, body };
@@ -714,6 +724,20 @@ const UI = {
     const el = document.getElementById('topStatus');
     el.textContent = msg;
     el.style.color = err ? 'var(--err)' : 'var(--dim)';
+    // エラーはストーリーエリアにも表示
+    if (err && msg) {
+      const story = document.getElementById('story');
+      const existing = story.querySelector('.err-msg');
+      if (existing) existing.remove();
+      const div = document.createElement('div');
+      div.className = 'err-msg';
+      div.style.cssText = 'background:rgba(224,96,96,.12);border:1px solid rgba(224,96,96,.3);border-radius:8px;padding:12px 14px;font-size:13px;color:var(--err);white-space:pre-wrap;';
+      div.textContent = '⚠ ' + msg;
+      story.appendChild(div);
+      story.scrollTop = story.scrollHeight;
+    } else if (!err) {
+      document.querySelector('.err-msg')?.remove();
+    }
   },
 
   setLoading(on) {
@@ -979,8 +1003,11 @@ const G = {
     const text = inputEl.value.trim();
     if (!text) return;
 
-    if (!S.cfg.key) {
-      UI.setStatus('APIキーが設定されていません', true);
+    // プロバイダーに応じて正しいキーを確認
+    const prov = S.cfg.provider || 'anthropic';
+    const hasKey = prov === 'novelai' ? S.cfg.naiKey : S.cfg.key;
+    if (!hasKey) {
+      UI.setStatus(`APIキーが設定されていません（${prov === 'novelai' ? 'NovelAI: pst-...' : 'Anthropic: sk-ant-...'}）`, true);
       UI.openSettings(); return;
     }
 
