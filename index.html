@@ -138,10 +138,10 @@
     }
     #inp:focus { outline: none; border-color: var(--acc); }
     #sendBtn {
-      width: 44px; height: 44px; border-radius: 10px; border: none;
-      background: var(--acc); color: #fff; font-size: 18px;
+      min-width: 80px; height: 44px; border-radius: 10px; border: none;
+      background: var(--acc); color: #fff; font-size: 14px; font-weight: 600;
       cursor: pointer; display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0; transition: opacity .15s;
+      gap: 4px; flex-shrink: 0; transition: opacity .15s; padding: 0 14px;
     }
     #sendBtn:disabled { opacity: .35; cursor: not-allowed; }
 
@@ -274,7 +274,11 @@
 <div id="story">
   <div id="welcome">
     <h2>CHRONICLE</h2>
-    <p>⚙ 設定 からAPIキーと世界設定を入力して<br>ゲームを開始してください。</p>
+    <p id="welcomeMsg">⚙ 設定 からAPIキーと世界設定を入力してください。</p>
+    <div id="welcomeActions" style="display:none; margin-top:18px; display:none;">
+      <button class="btn-p" style="min-width:200px" onclick="G.startScene()">▶ 物語を始める</button>
+      <div id="quickStarts" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:12px"></div>
+    </div>
   </div>
 </div>
 
@@ -292,7 +296,7 @@
     <textarea id="inp" rows="1" placeholder="行動を入力..."
       onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();G.submit()}"
       oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
-    <button id="sendBtn" onclick="G.submit()">▶</button>
+    <button id="sendBtn" onclick="G.submit()">送信 ▶</button>
   </div>
   <div class="tool-row">
     <button class="tbtn" onclick="G.cont()">続きを書く</button>
@@ -512,8 +516,8 @@ const Api = {
     console.log('[NovelAI] token preview:', token.slice(0,8)+'...'+token.slice(-4), '/ len:', token.length);
 
     // 既存のCloudflare Workersプロキシを使用（CORSバイパス）
-    // novel-proxy.sansan2103.workers.dev がAPIキーをAuthorizationヘッダーとして転送する
-    const PROXY = 'https://novel-proxy.sansan2103.workers.dev';
+    // Workers内でhttps://api.novelai.net/ai/generateへ転送する想定
+    const PROXY = 'https://novel-proxy.sansan2103.workers.dev/ai/generate';
 
     const id = ++S.reqId;
     S.inFlight = true;
@@ -935,9 +939,38 @@ const UI = {
     const wl = document.getElementById('welcome');
     if (!wl) return;
     const h = S.cast.hero.name || '主人公';
-    const l = S.scene.loc || '場所';
+    const l = S.scene.loc || '不明の場所';
+    const hasKey = (S.cfg.provider === 'novelai' ? S.cfg.naiKey : S.cfg.key);
+
     wl.style.display = 'block';
-    wl.innerHTML = `<h2>CHRONICLE</h2><p>場所: ${this.esc(l)}<br>主人公: ${this.esc(h)}<br><br>最初の行動を入力してください。</p>`;
+    document.getElementById('welcomeMsg').innerHTML =
+      hasKey
+        ? `場所: <strong style="color:var(--tx)">${this.esc(l)}</strong>　主人公: <strong style="color:var(--tx)">${this.esc(h)}</strong><br><br>下の入力欄に行動を入力して <strong style="color:var(--acc)">「送信 ▶」</strong> を押してください。`
+        : `<span style="color:var(--err)">⚙ 設定 からAPIキーと世界設定を入力してください。</span>`;
+
+    const actEl = document.getElementById('welcomeActions');
+    if (hasKey) {
+      actEl.style.display = 'block';
+      // クイックスタート例
+      const examples = [
+        { mode: 'DO', text: '周囲を見渡す' },
+        { mode: 'DO', text: `${h}は一歩踏み出した` },
+        { mode: 'STORY', text: '物語が始まる' },
+      ];
+      const qs = document.getElementById('quickStarts');
+      qs.innerHTML = '';
+      examples.forEach(ex => {
+        const b = document.createElement('button');
+        b.className = 'chip main';
+        b.textContent = `${ex.mode}: ${ex.text}`;
+        b.onclick = () => {
+          G.setMode(ex.mode);
+          document.getElementById('inp').value = ex.text;
+          document.getElementById('inp').focus();
+        };
+        qs.appendChild(b);
+      });
+    }
   },
 
   // ── Edit ──
@@ -987,6 +1020,15 @@ const G = {
     }
   },
 
+  startScene() {
+    const h = S.cast.hero.name || '主人公';
+    const l = S.scene.loc || 'その場所';
+    const inp = document.getElementById('inp');
+    inp.value = `${l}で${h}は目を開けた`;
+    this.setMode('STORY');
+    this.submit();
+  },
+
   setMode(m) {
     S.mode = m;
     document.querySelectorAll('.mdbtn').forEach(b => {
@@ -1001,7 +1043,17 @@ const G = {
     if (S.inFlight) return;
     const inputEl = document.getElementById('inp');
     const text = inputEl.value.trim();
-    if (!text) return;
+    if (!text) {
+      // 入力が空ならヒントを表示
+      inputEl.placeholder = '⬆ ここに行動や発言を入力してから送信してください';
+      inputEl.style.borderColor = 'var(--acc)';
+      inputEl.focus();
+      setTimeout(() => {
+        inputEl.placeholder = { DO: '行動を入力…  例: 女の子に声をかける', SAY: 'セリフを入力…  例: 「名前を教えてくれ」', STORY: '描写の方向を入力…  例: 遠くから足音が近づく' }[S.mode] || '';
+        inputEl.style.borderColor = '';
+      }, 2500);
+      return;
+    }
 
     // プロバイダーに応じて正しいキーを確認
     const prov = S.cfg.provider || 'anthropic';
