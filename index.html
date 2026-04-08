@@ -511,101 +511,197 @@ const Api = {
   async _callNovelAI(system, userContent, maxTok) {
     const token = this.normalize(S.cfg.naiKey);
     if (!token) throw new Error('NovelAIのトークンが設定されていません（pst-... 形式）');
-    if (!token.startsWith('pst-')) throw new Error(`トークンの形式が違います: "${token.slice(0,8)}..." → NovelAIトークンは pst- で始まります`);
+    if (!token.startsWith('pst-')) throw new Error(`トークン形式が違います → pst- で始まるはずです`);
 
-    console.log('[NovelAI] token preview:', token.slice(0,8)+'...'+token.slice(-4), '/ len:', token.length);
-
-    // 既存のCloudflare Workersプロキシを使用（CORSバイパス）
-    // Workers内でhttps://api.novelai.net/ai/generateへ転送する想定
     const PROXY = 'https://novel-proxy.sansan2103.workers.dev/ai/generate';
-
     const id = ++S.reqId;
     S.inFlight = true;
 
-    // Build a Kayra-compatible prompt from the structured context
-    let planContext = '';
+    // ── Kayra用プロンプト設計 ──
+    // 核心: プロンプトの末尾を「NPCの反応の書き出し」にする
+    // Kayraは末尾テキストの続きを書くので、末尾がNPCなら出力もNPC視点になる
+    let prompt = '';
     try {
-      const parsed = JSON.parse(userContent);
-      const hero = parsed.cast?.protagonist?.name || '主人公';
-      const npc  = (parsed.cast?.npcs || []).map(n => n.name).join('・');
-      const loc  = parsed.scene?.location || '';
-      const inp  = parsed.currentInput || {};
-      const hist = parsed.recentHistory || '';
-      planContext = [
-        loc  ? `　${loc}。` : '',
-        hero ? `　${hero}はそこにいた。` : '',
-        npc  ? `　${npc}の姿があった。` : '',
-        hist && hist !== '（ゲーム開始）' ? `　${hist.split('\n').slice(-1)[0].replace(/^\[[^\]]+\]\s*/, '')}。` : '',
-        inp.text ? (inp.type === 'SAY' ? `　${hero}は「${inp.text}」と言った。` : `　${hero}は${inp.text}。`) : ''
-      ].filter(Boolean).join('\n');
-    } catch { planContext = userContent.slice(0, 200); }
+      const ctx = JSON.parse(userContent);
+      const hero    = ctx.cast?.protagonist?.name || '主人公';
+      const npcs    = ctx.cast?.npcs || [];
+      const npc1    = npcs[0] || {};
+      const loc     = ctx.scene?.location || '';
+      const lore    = ctx.memory?.loreDigest || '';
+      const inp     = ctx.currentInput || {};
+      const hist    = (ctx.recentHistory || '').split('\n').filter(Boolean);
 
-    const body = {
-      input: planContext + '\n　',
+      // ── 1. 文体プライミング（最初の2文でKayraの文体を決める） ──
+      const tone = S.scene.tone || '';
+      let primer = '';
+      if (tone.includes('ダーク') || tone.includes('残酷')) {
+        primer = `　空気は重く、息が詰まるようだった。`;
+      } else if (tone.includes('ラノベ') || tone.includes('軽')) {
+        primer = `　さて、どうしたものか。`;
+      } else {
+        primer = `　静寂が場を包んでいた。`;
+      }
+
+      // ── 2. 場所・基本設定（短く） ──
+      const lines = [];
+      if (loc)   lines.push(`　${loc}。`);
+      if (lore)  lines.push(`　${lore.slice(0, 40)}。`);
+      lines.push(primer);
+
+      // ── 3. NPCの状態（短く） ──
+      if (npc1.name) {
+        const emo   = npc1.emotion  || '中立';
+        const desc  = (npc1.desc   || '').slice(0, 30);
+        lines.push(`　${npc1.name}${desc ? `（${desc}）` : ''}がいた。`);
+      }
+
+      // ── 4. 直近の流れ（最大1ターン分のプレイヤー行動のみ） ──
+      const lastAction = hist.slice(-1)[0] || '';
+      if (lastAction) {
+        const clean = lastAction.replace(/^\[[^\]]+\]\s*/, '');
+        lines.push(`　${hero}は${clean}。`);
+      }
+
+      // ── 5. プレイヤーの今回の行動 ──
+      if (inp.text) {
+        if (inp.type === 'SAY') {
+          lines.push(`　「${inp.text}」`);
+          lines.push(`　${hero}はそう言った。`);
+        } else if (inp.type === 'DO') {
+          lines.push(`　${hero}は${inp.text}。`);
+        } else {
+          // STORY: 方向だけ。主人公名を入れない
+          lines.push(`　${inp.text.replace(new RegExp(hero, 'g'), '').trim()}。`);
+        }
+      }
+
+      // ── 6. 末尾をNPC反応の書き出しにする（★最重要） ──
+      // Kayraはここから続けるので、NPC視点の反応が出力される
+      if (npc1.name) {
+        const emo = npc1.emotion || '中立';
+        const starters = {
+          '恐怖': [`　${npc1.name}は身を固くした。`, `　${npc1.name}の顔が青ざめた。`],
+          '怒り': [`　${npc1.name}の目が鋭くなった。`, `　${npc1.name}は唇を噛んだ。`],
+          '驚き': [`　${npc1.name}は目を見開いた。`, `　${npc1.name}が息を飲んだ。`],
+          '好意': [`　${npc1.name}は少し表情を緩めた。`, `　${npc1.name}がこちらを見た。`],
+          '警戒': [`　${npc1.name}は一歩後ずさった。`, `　${npc1.name}の視線が揺れた。`],
+          '中立': [`　${npc1.name}はこちらを見た。`, `　${npc1.name}の様子が変わった。`],
+        };
+        const pool = starters[emo] || starters['中立'];
+        lines.push(pool[S.turns.length % pool.length]);
+      } else {
+        // NPCなし: 環境描写で終わる
+        lines.push(`　風が吹き抜けた。`);
+      }
+
+      prompt = lines.join('\n');
+
+    } catch(e) {
+      console.warn('[NovelAI] prompt build error:', e);
+      prompt = `　場所は不明。\n　何かが起きた。\n　`;
+    }
+
+    console.log('[NovelAI] prompt:\n' + prompt);
+
+    const reqBody = {
+      input: prompt,
       model: 'kayra-v1',
       parameters: {
-        max_new_tokens: Math.min(maxTok, 100),
+        max_new_tokens: 80,
         min_new_tokens: 10,
         temperature: 0.72,
-        top_p: 0.925,
+        top_p: 0.92,
         top_k: 30,
-        repetition_penalty: 1.15,
-        use_string: true
+        repetition_penalty: 1.2,
+        repetition_penalty_range: 512,
+        use_string: true,
+        bad_words_ids: [],
       }
     };
-
-    console.log('[NovelAI] prompt preview:', (planContext || '').slice(0, 100));
 
     let res;
     try {
       res = await fetch(PROXY, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(body),
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(reqBody),
         signal: AbortSignal.timeout(35000)
       });
     } finally { S.inFlight = false; }
 
     if (!res.ok) {
       const t = await res.text().catch(() => '');
-      console.error('[NovelAI] error:', t.slice(0,300));
+      console.error('[NovelAI] HTTP error:', res.status, t.slice(0,300));
       throw new Error(`NovelAI HTTP ${res.status}: ${t.slice(0,200)}`);
     }
 
     const json = await res.json();
     if (id !== S.reqId) return null;
-    const rawText = json.output || json.text || json.result || '';
+    const rawText = (json.output || json.text || json.result || '').trim();
     console.log('[NovelAI] raw output:', rawText.slice(0, 200));
+    if (!rawText) throw new Error('NovelAIから出力がありませんでした');
 
-    if (!rawText) throw new Error('NovelAIから出力がありませんでした。プロキシとトークンを確認してください。');
+    // ── 出力クリーニング ──
+    const hero = S.cast.hero.name || '';
+    const cleaned = this._cleanNaiOutput(rawText, hero);
 
-    // Wrap prose output into JSON structure
-    const sentences = rawText
-      .replace(/<[^>]+>/g, '')              // タグ除去
-      .split(/(?<=[。！？」])\s*/)           // 文末で分割
+    // fakeJSON形式に包む
+    return {
+      text: JSON.stringify({
+        playerIntent: { kind: 'other', tone: 'neutral' },
+        npcReactionPhase: {
+          npcName: (S.cast.npcs[0] || {}).name || '',
+          emotion: S.cast.npcs[0]?.emotion || '不明',
+          interpretation: '', dialogue: null, bodyLanguage: '', resistance: 'mid'
+        },
+        environmentResponse: '',
+        branchCandidates: [],
+        narrative: cleaned
+      }),
+      body: reqBody
+    };
+  },
+
+  // NovelAI出力専用クリーナー
+  _cleanNaiOutput(raw, heroName) {
+    let text = raw
+      .replace(/<[^>]+>/g, '')           // HTMLタグ除去（rubyタグ等）
+      .replace(/^\s*[\d]+\s*$/gm, '')   // 単独の数字行（章番号）除去
+      .replace(/\n{3,}/g, '\n\n')       // 連続改行を整理
+      .trim();
+
+    // 主人公が行動する文を除去（プレイヤーが入力していない行動）
+    if (heroName) {
+      const lines = text.split('\n');
+      text = lines.filter(line => {
+        // 主人公名 + 動詞パターン = 除去
+        const heroActs = new RegExp(`${heroName}[はがを].{0,30}(した。|する。|した、|殴|刺|掴|捕まえ|引き|蹴|握|奪|押|叫|叫|言った。|と言った)`);
+        if (heroActs.test(line)) {
+          console.log('[CleanNAI] removed hero action:', line.trim());
+          return false;
+        }
+        return true;
+      }).join('\n');
+    }
+
+    // ループ除去：同じ8文字以上のフレーズが2回以上出たら2回目以降を削除
+    const seen = new Set();
+    const deduped = text.split('\n').filter(line => {
+      const key = line.replace(/\s/g,'').slice(0,20);
+      if (key.length < 6) return true;
+      if (seen.has(key)) { console.log('[CleanNAI] dup removed:', line.trim()); return false; }
+      seen.add(key);
+      return true;
+    }).join('\n');
+
+    // 文末で完全な文に切る
+    const sentences = deduped
+      .split(/(?<=[。！？」])\s*/)
       .map(s => s.trim())
-      .filter(s => s.length > 2)
-      .slice(0, 5);
+      .filter(s => s.length > 1);
 
-    const fakeJson = JSON.stringify({
-      playerIntent: { kind: 'other', tone: 'neutral' },
-      npcReactionPhase: {
-        npcName: (S.cast.npcs[0] || {}).name || '',
-        emotion: '不明',
-        interpretation: '',
-        dialogue: null,
-        bodyLanguage: '',
-        resistance: 'mid'
-      },
-      environmentResponse: '',
-      branchCandidates: [],
-      narrative: sentences.length ? sentences : [rawText.slice(0, 150)]
-    });
-
-    return { text: fakeJson, body };
+    // 最大4文
+    return sentences.slice(0, 4);
   }
 };
 
