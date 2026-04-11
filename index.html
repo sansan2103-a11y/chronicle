@@ -319,7 +319,7 @@ body {
       </div>
       <div id="provNovelAI" style="display:none">
         <div class="fld">
-          <label>NovelAI トークン���<code>pst-</code> で始まる）</label>
+          <label>NovelAI トークン（<code>pst-</code> で始まる）</label>
           <input type="password" id="cfgNaiKey" placeholder="pst-...">
         </div>
         <div class="fld" style="background:rgba(196,144,64,.1);border:1px solid rgba(196,144,64,.3);border-radius:8px;padding:10px;font-size:12px;color:#c49040">
@@ -357,6 +357,9 @@ body {
       <div class="mpanel-footer-main">
         <button class="btn-p" onclick="UI.saveSettings()">✔ 保存してゲーム開始</button>
         <button class="btn-s" onclick="UI.closeSettings()">閉じる</button>
+      </div>
+      <div style="margin-top:8px">
+        <button class="btn-s" style="width:100%;font-size:13px" onclick="UI.randomFill()">🎲 未入力をランダム生成</button>
       </div>
       <div class="mpanel-footer-danger">
         <button class="btn-d" onclick="G.resetStory()">物語リセット（設定は保持）</button>
@@ -596,11 +599,17 @@ const Api = {
         lines.push(` ${npc1.name}${desc ? `（${desc}）` : ''}は${emo}の様子だった。`);
         // 心理ヒント
         if (npc1.coreDesire) lines.push(` ${npc1.name}の心の奥には「${npc1.coreDesire}」という欲求があった。`);
-        if (npc1.coreFear && npc1.stress > 60) lines.push(` 「${npc1.coreFear}」とう恐怖が頭をよぎっていた。`);
+        if (npc1.coreFear && npc1.stress > 60) lines.push(` 「${npc1.coreFear}」という恐怖が頭をよぎっていた。`);
       }
 
       const lastAction = hist.slice(-1)[0] || '';
-      if (lastAction) lines.push(` ${lastAction.replace(/^\[[^\]]+\]\s*/, hero + 'は').trim()}。`);
+      if (lastAction) {
+        const stripped = lastAction.replace(/^\[[^\]]+\]\s*/, '').trim();
+        // 既にヒーロー名で始まっていたら二重にしない
+        const prefixed = (hero && stripped.length > 0 && !stripped.startsWith(hero)) ? `${hero}は${stripped}` : stripped;
+        const sentence = /[。！？」]$/.test(prefixed) ? prefixed : prefixed + '。';
+        lines.push(' ' + sentence);
+      }
 
       if (inp.type === 'SAY')  { lines.push(` 「${inp.text}」`); lines.push(` ${hero}はそう言った。`); }
       else if (inp.type === 'DO') { lines.push(` ${hero}は${inp.text}。`); }
@@ -646,7 +655,7 @@ const Api = {
     const rawText = (json.output || json.text || json.result || '').trim();
     if (!rawText) throw new Error('NovelAIから出力がありませんでした');
     const hero = S.cast.hero.name || '';
-    const cleaned = this._cleanNaiOutput(rawText, hero);
+    const cleaned = this._cleanNaiOutput(rawText, hero, prompt);
     return {
       text: JSON.stringify({
         playerIntent: { kind: 'other', tone: 'neutral' },
@@ -656,13 +665,16 @@ const Api = {
           emotion: S.cast.npcs[0]?.emotion || '不明',
           interpretation: '', dialogue: null, bodyLanguage: '', resistance: 'mid', subtext: null
         },
-        environmentResponse: '', branchCandidates: [], narrative: cleaned
+        environmentResponse: '', branchCandidates: [],
+        // 空ナレーション対策フォールバック
+        narrative: (cleaned && cleaned.length > 0) ? cleaned
+          : (S.cast.npcs[0] ? [`${S.cast.npcs[0].name}は黙っていた。`] : ['静寂が続いた。'])
       }),
       body: null
     };
   },
 
-  _cleanNaiOutput(raw, heroName) {
+  _cleanNaiOutput(raw, heroName, promptText = '') {
     let text = raw.replace(/<[^>]+>/g, '').replace(/^\s*[\d]+\s*$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
     if (heroName) {
       text = text.split('\n').filter(line => {
@@ -672,6 +684,13 @@ const Api = {
       }).join('\n');
     }
     const seen = new Set();
+    // プロンプト行を既出セットに追加してNAI出力の繰り返しを防ぐ
+    if (promptText) {
+      promptText.split('\n').forEach(line => {
+        const k = line.trim().replace(/\s/g,'').slice(0, 20);
+        if (k.length >= 4) seen.add(k);
+      });
+    }
     const deduped = text.split('\n').filter(line => {
       const key = line.replace(/\s/g,'').slice(0,20);
       if (key.length < 6) return true;
@@ -700,7 +719,7 @@ const Planner = {
 
 【このゲームの核心：人間心理に特化したRPG】
 NPCを生きた人間として描写してください：
-- NPCには「核心的欲求」と「核心的恐怖」があり、しはまななら、すべての反応がそこから生まれる
+- NPCには「核心的欲求」と「核心的恐怖」があり、すべての反応がそこから生まれる
 - 表の言葉と内心は一致しない——人間はいつも本心を言わない
 - 防衛機制（否定・合理化・回避・投影・置き換え・抑圧）を状況に応じて自然に使う
 - 感情は論理より先に来る。感情が先に体に現れ、言葉はあとから出る
@@ -717,12 +736,12 @@ NPCを生きた人間として描写してください：
 防衛機制の例：
 - denial（否定）: 「平気」と言いながら手が震える / 感情を認めない
 - avoidance（回避）: 話題を変える、立ち去ろうとする、目を逸らす
-- rationalization（合理化）: 感情に論理的な理由をつする
+- rationalization（合理化）: 感情に論理的な理由をつける
 - projection（投影）: 自分の感情を相手に押し付ける
 - suppression（抑圧）: 感情を押し込めて無表情になる
-- displacement（置き換え）: 関係ない対象に感情をぶつする
+- displacement（置き換え）: 関係ない対象に感情をぶつける
 
-【NPC心理プロファイル（これを基くNPCを演じる）】
+【NPC心理プロファイル（これを基にNPCを演じる）】
 ${npcProfiles || '（NPC未設定）'}
 
 【主人公ロック ★最重要】
@@ -735,7 +754,7 @@ ${npcProfiles || '（NPC未設定）'}
 1. npcInnerLife.innerThought で内心（本音）を決める
 2. defenseMechanism を決める（none も可）
 3. bodyLanguage は体の反応で感情を表す（表情・仕草・視線）
-4. dialogue は防衛機制に沿っ�セリフ（内心と矛盾してよい）
+4. dialogue は防衛機制に沿ったセリフ（内心と矛盾してよい）
 5. subtext で台詞の裏にある本音を記録する
 
 【名前・役割固定】
@@ -755,18 +774,18 @@ ${scene.lore || 'なし'}
   "npcInnerLife": {
     "npcName": "反応するNPCの名前",
     "instantEmotion": "即座に湧いた感情（2-4文字）",
-    "triggeredFear": "この瞬間か刺激された恐怖（1文またき�ull）",
+    "triggeredFear": "この瞬間に刺激された恐怖（1文またはnull）",
     "underlyingNeed": "この瞬間に動いている欲求（1文またはnull）",
     "defenseMechanism": "none|denial|rationalization|avoidance|projection|displacement|suppression",
-    "innerThought": "NPCの内心（読者だすき知る独白、1文、絶対に嘘をつかない）",
+    "innerThought": "NPCの内心（読者だけが知る独白、1文、絶対に嘘をつかない）",
     "trustDelta": 0,
     "stressDelta": 0
   },
   "npcReactionPhase": {
     "npcName": "反応するNPCの名前",
-    "emotion": "表の感情（2-4文���）",
+    "emotion": "表の感情（2-4文字）",
     "interpretation": "NPCがこの行動をどう解釈したか（1文）",
-    "dialogue": "台詞またぅ�ull（沈黙）",
+    "dialogue": "台詞またはnull（沈黙）",
     "bodyLanguage": "仕草・視線・身体反応（1文、感情を体で表す）",
     "resistance": "low|mid|high",
     "subtext": "台詞の裏にある本音（1文またはnull）"
@@ -940,7 +959,7 @@ const UI = {
     // デバッグ
     if (S.cfg.debug && turn.dbg) {
       const db = document.createElement('div'); db.className = 'dbg';
-      db.textContent = ['=== SYSTEM (先鄭300) ===', (turn.dbg.sys||'').slice(0,300),
+      db.textContent = ['=== SYSTEM (先頭300) ===', (turn.dbg.sys||'').slice(0,300),
         '=== USER ===', (turn.dbg.user||'').slice(0,400),
         '=== RAW ===', (turn.dbg.raw||'').slice(0,400)].join('\n');
       div.appendChild(db);
@@ -1052,6 +1071,109 @@ const UI = {
 
   _delNpc(i) { S.cast.npcs.splice(i, 1); this._renderNpcList(); },
 
+  randomFill() {
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    // ── ヒーロー ──
+    const heroNames = ['アリア・フェイン','レン・ヴォルク','カイル・ドレイク','ソフィア・クレア',
+      'ユア・ミスト','ファウスト','エリナ・ルーン','ゼイン','ルカ・セルト','ナノ'];
+    const heroDescs = [
+      '18歳の見習い記録官。慎重だが好奇心旺盛。秘密を抱えている。',
+      '元傭兵の青年。無口だが仲間想い。過去に後悔がある。',
+      '魔法使いの助手。才能はあるが自信がない。師匠を探している。',
+      '没落貴族の末裔。誇り高く、しかし孤独。居場所を求めている。',
+      '行商人の娘。人懐っこいが目が鋭い。生き残るためなら何でもする。',
+      '記憶を失った旅人。素性不明。断片的な過去が夢に現れる。',
+    ];
+    // ── NPC ──
+    const npcData = [
+      { name:'イルム', desc:'銀髪の少女。感情が読みにくく、言葉が少ない。', personality:'無口・内向・観察眼が鋭い',
+        coreDesire:'誰かに本当の自分を認めてもらいたい', coreFear:'また見捨てられること',
+        wound:'幼い頃、親に棄てられた経験がある。以来、人を信じることが怖い。' },
+      { name:'カデル', desc:'壮年の行商人。愛想がよいが目が笑っていない。', personality:'社交的・計算高い・表裏がある',
+        coreDesire:'安全と財を手に入れ、誰にも頭を下げない生活', coreFear:'貧困と無力感',
+        wound:'若い頃の失敗で大切な人を失い、それ以来感情を切り離して生きている。' },
+      { name:'セイラ', desc:'神殿の見習い司祭。真面目だが脆さを隠している。', personality:'誠実・完璧主義・自罰的',
+        coreDesire:'善い人間であり続けること、誰かを救うこと', coreFear:'自分が悪であると知られること',
+        wound:'信じていた師が腐敗していた。信仰と現実の間で今も揺れている。' },
+      { name:'ヴォルグ', desc:'老齢の元兵士。片足が不自由。皮肉屋。', personality:'シニカル・経験豊富・情に厚い',
+        coreDesire:'かつて失った仲間の死に意味を見つけたい', coreFear:'無駄死にだったと気づくこと',
+        wound:'唯一の親友を自分の命令ミスで死なせた。今もその責任を引きずっている。' },
+      { name:'ミア', desc:'少年のような外見の少女。素早く動き、嘘をつく。', personality:'活発・ずる賢い・本当は臆病',
+        coreDesire:'自由に、誰にも縛られず生きること', coreFear:'檻に入れられること・管理されること',
+        wound:'孤児院で厳しく管理された幼少期。自由を奪われることへの恐怖が根深い。' },
+    ];
+    // ── 世界観・シーン ──
+    const lores = [
+      '記憶が結晶化した「灯片」が通貨として使われる都市。灯片を多く持つ者ほど過去が薄れていく。',
+      '魔法が「禁忌の技術」として弾圧されている帝国。使い手は地下に潜り秘密結社を作っている。',
+      '海に浮かぶ群島国家。島ごとに独自の文化と掟があり、島間の移動は命がけ。',
+      '死者が「霊燐」として漂う世界。霊燐は人の感情を映し出し、時に現実に干渉する。',
+      '科学と魔法が共存する近未来都市。しかし旧市街には古い呪いが残っている。',
+    ];
+    const locs = [
+      '廃墟の図書館、夕暮れ時', '霧深い港町の路地', '古い教会の地下室',
+      '砂漠の中の隊商宿', '雪に閉ざされた山小屋', '地下に広がる市場',
+      '廃城の謁見室', '霊廟の入口', '夜の橋の上', '嵐の前の森の中',
+    ];
+    const objs = [
+      '謎の少女の正体を探っている', '行方不明の師匠を捜索中',
+      '奪われた重要な書物を取り戻す', '呪いを解く方法を見つけなければならない',
+      '逃げる途中で偶然出会った人物と協力することになった',
+      'ある組織の陰謀に巻き込まれ、真実を追っている',
+    ];
+    const tones = [
+      'ダークファンタジー、心理描写重視、会話多め',
+      '退廃的・詩的、内面独白が多い',
+      'ミステリー要素あり、伏線と謎解き重視',
+      '重厚なドラマ、感情の衝突と和解',
+      'サバイバル緊張感、信頼と疑惑の交差',
+    ];
+
+    // 未入力のみ埋める
+    const hName = document.getElementById('cfgHName');
+    const hDesc = document.getElementById('cfgHDesc');
+    if (!hName.value.trim()) hName.value = pick(heroNames);
+    if (!hDesc.value.trim()) hDesc.value = pick(heroDescs);
+
+    const lore = document.getElementById('cfgLore');
+    const loc  = document.getElementById('cfgLoc');
+    const obj  = document.getElementById('cfgObj');
+    const tone = document.getElementById('cfgTone');
+    if (!lore.value.trim()) lore.value = pick(lores);
+    if (!loc.value.trim())  loc.value  = pick(locs);
+    if (!obj.value.trim())  obj.value  = pick(objs);
+    if (!tone.value.trim()) tone.value = pick(tones);
+
+    // NPCが0件なら1件追加
+    const npcCards = document.querySelectorAll('#npcList .npc-card');
+    if (npcCards.length === 0) {
+      UI.addNpc();
+      // 少し待ってからフィールドを埋める
+      setTimeout(() => UI._fillNpcRandom(pick(npcData)), 50);
+    } else {
+      // 既存NPCの未入力フィールドを埋める
+      npcCards.forEach((card) => {
+        const get = (f) => card.querySelector(`[data-f="${f}"]`);
+        const nd = pick(npcData);
+        if (!get('name')?.value.trim())        get('name').value = nd.name;
+        if (!get('desc')?.value.trim())        get('desc').value = nd.desc;
+        if (!get('personality')?.value.trim()) get('personality').value = nd.personality;
+        if (!get('coreDesire')?.value.trim())  get('coreDesire').value = nd.coreDesire;
+        if (!get('coreFear')?.value.trim())    get('coreFear').value = nd.coreFear;
+        if (!get('wound')?.value.trim())       get('wound').value = nd.wound;
+      });
+    }
+    UI.setStatus('🎲 ランダム生成しました。内容を確認して保存してください。');
+  },
+
+  _fillNpcRandom(nd) {
+    const card = document.querySelector('#npcList .npc-card:last-child');
+    if (!card) return;
+    const set = (f, v) => { const el = card.querySelector(`[data-f="${f}"]`); if (el && !el.value.trim()) el.value = v; };
+    set('name', nd.name); set('desc', nd.desc); set('personality', nd.personality);
+    set('coreDesire', nd.coreDesire); set('coreFear', nd.coreFear); set('wound', nd.wound);
+  },
+
   saveSettings() {
     S.cfg.provider = document.getElementById('cfgProvider').value;
     S.cfg.key      = (document.getElementById('cfgKey').value    || '').replace(/[\s\u200B\uFEFF\u00A0]/g, '');
@@ -1088,7 +1210,7 @@ const UI = {
     wl.style.display = 'block';
     document.getElementById('welcomeMsg').innerHTML = hasKey
       ? `場所: <strong style="color:var(--tx)">${this.esc(l)}</strong>　主人公: <strong style="color:var(--tx)">${this.esc(h)}</strong><br><br>下の入力欄に行動を入力して <strong style="color:var(--acc)">「送信 ▶」</strong> を押してください。`
-      : `<span style="color:var(--err)">⚙ 設定 からAPIキーと世界設定を入力してください</span>`;
+      : `<span style="color:var(--err)">⚙ 設定 からAPIキーと世界設定を入力してください。</span>`;
     const actEl = document.getElementById('welcomeActions');
     if (hasKey) {
       actEl.style.display = 'block';
@@ -1137,14 +1259,14 @@ const G = {
   startScene() {
     const h = S.cast.hero.name || '主人公';
     const l = S.scene.loc || 'その場所';
-    document.getElementById('inp').value = `${l}で${h}は目り開けた`;
+    document.getElementById('inp').value = `${l}で${h}は目を開けた`;
     this.setMode('STORY'); this.submit();
   },
 
   setMode(m) {
     S.mode = m;
     document.querySelectorAll('.mdbtn').forEach(b => { b.className = 'mdbtn'; if (b.dataset.m === m) b.classList.add('a' + m); });
-    const phs = { DO: '行動を入力… 例: 女の子に声をかける', SAY: 'セリフを入力… $��: 「名前を教えてくれ」', STORY: '描写の方向を入力… 例: 遠くから足音が近づく' };
+    const phs = { DO: '行動を入力… 例: 女の子に声をかける', SAY: 'セリフを入力… 例: 「名前を教えてくれ」', STORY: '描写の方向を入力… 例: 遠くから足音が近づく' };
     document.getElementById('inp').placeholder = phs[m] || '';
   },
 
@@ -1237,7 +1359,7 @@ const G = {
   },
 
   resetAll() {
-    if (!confirm('すべてのデータ（APIキー・設定を含　）を削除しますか？\nこの操作は取り消せません。')) return;
+    if (!confirm('すべてのデータ（APIキー・設定を含む）を削除しますか？\nこの操作は取り消せません。')) return;
     SS.del(KEY); location.reload();
   }
 };
