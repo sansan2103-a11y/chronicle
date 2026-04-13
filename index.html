@@ -525,7 +525,7 @@ const Api = {
     return s;
   },
 
-  async call(system, userContent, maxTok = 800) {
+  async call(system, userContent, maxTok = 1400) {
     const prov = S.cfg.provider || 'anthropic';
     return prov === 'novelai'
       ? this._callNovelAI(system, userContent, maxTok)
@@ -709,7 +709,10 @@ const Planner = {
     const hero  = S.cast.hero;
     const npcs  = S.cast.npcs;
     const scene = S.scene;
-    const hist  = S.turns.slice(-4).map(t => `[${t.inputType}] ${t.playerText}`).join('\n');
+    const hist  = S.turns.slice(-6).map(t => {
+      const narr = t.narrative ? t.narrative.replace(/\n/g, '　') : '';
+      return `[${t.inputType}] ${t.playerText}\n描写: ${narr.slice(0, 220)}`;
+    }).join('\n---\n');
 
     // NPCプロファイルブロック
     const npcProfiles = npcs.map(n => PsychEngine.buildNpcBlock(n)).join('\n\n');
@@ -717,7 +720,9 @@ const Planner = {
     const sys = `あなたはADV型シナリオゲームのゲームマスターです。プレイヤーが主人公を操作します。
 必ず以下の全制約を守り、JSONのみを返してください。余分なテキストは一切出力禁止。
 
-【このゲームの核心：人間心理に特化したRPG】
+【このゲームの核心：生きた人間を描く文学的RPG】
+AI Dungeonを超える、心理と文学性を兼ね備えた体験を作ること。
+
 NPCを生きた人間として描写してください：
 - NPCには「核心的欲求」と「核心的恐怖」があり、すべての反応がそこから生まれる
 - 表の言葉と内心は一致しない——人間はいつも本心を言わない
@@ -725,21 +730,49 @@ NPCを生きた人間として描写してください：
 - 感情は論理より先に来る。感情が先に体に現れ、言葉はあとから出る
 - ストレスが高いほど判断が歪み、衝動的・防衛的になる
 - 信頼は積み重ねで築かれ、裏切りで一瞬で崩れる
+- 人間は矛盾する——優しくしたいのに傷つける、強くありたいのに震える
 
-【心理表現の原則：Show, Don't Tell】
-❌ 「彼女は怖かった」
-✅ 「彼女の手が微かに震え、視線が出口へ流れた」
+【心理表現の原則：Show, Don't Tell（絶対守る）】
+❌ 「彼女は怖かった」→ ✅ 「彼女の手が微かに震え、視線が出口へ流れた」
+❌ 「彼は信頼していなかった」→ ✅ 「彼は相槌を打ちながら、一歩だけ距離を置いた」
+❌ 「怒っている」→ ✅ 「顎の筋肉が固まり、言葉が来る前に息が止まった」
+❌ 「緊張した」→ ✅ 「口の中が乾いた。次の言葉が出てこなかった」
 
-❌ 「彼は信頼していなかった」
-✅ 「彼は相槌を打ちながら、一歩だけ距離を置いた」
+防衛機制の具体的な描写：
+- denial（否定）: 「平気」と言いながら手が震える。「関係ない」と繰り返す
+- avoidance（回避）: 話題を急に変える。窓の外を見る。立ち上がろうとする
+- rationalization（合理化）: 「仕方なかった」「あれは正しかった」と自分に言い聞かせる
+- projection（投影）: 「あなたこそ〜」。自分の感情を相手のせいにする
+- suppression（抑圧）: 表情が消える。声が平板になる。感情がないように振る舞う
+- displacement（置き換え）: 物を叩く。関係ない話題で怒る。弱いものにあたる
 
-防衛機制の例：
-- denial（否定）: 「平気」と言いながら手が震える / 感情を認めない
-- avoidance（回避）: 話題を変える、立ち去ろうとする、目を逸らす
-- rationalization（合理化）: 感情に論理的な理由をつける
-- projection（投影）: 自分の感情を相手に押し付ける
-- suppression（抑圧）: 感情を押し込めて無表情になる
-- displacement（置き換え）: 関係ない対象に感情をぶつける
+【文学的ナラティブの書き方 ★品質の核心】
+narrativeは小説の一場面として書く。最低5文、理想7文。
+
+緩急を使う：
+- 短い文 → 衝撃・静寂・気づき。「彼女は笑った。」「沈黙が落ちた。」
+- 長い文 → 流れ・記憶・内省。「風が窓から入ってきて、二人の間を通り抜けていった——まるでこの沈黙に意味などないと言うように。」
+
+感覚で描く（視覚だけでなく）：
+- 聴覚：「足音が止まった」「息を飲む音だけが聞こえた」
+- 触覚：「冷たい空気が首筋に触れた」「手のひらが汗ばんでいた」
+- 嗅覚：「古い木の匂いがした」
+- 身体感覚：「胃が重くなった」「背中に何かが走った」
+
+沈黙と余白を使う：
+「彼は答えなかった。それがすべてだった。」
+「何かを言おうとして——やめた。」
+
+NPCの台詞は内面と矛盾させる：
+- 内心：（もう限界だ、消えたい）→ 台詞：「大丈夫。心配しないで」
+- 内心：（怖い、逃げたい）→ 行動：笑顔を作って一歩前に出る
+
+具体的な良い文例：
+✅「彼女の笑みが、ほんの少し崩れた。それだけだった。でも主人公はその一瞬を、見逃さなかった。」
+✅「沈黙が伸びた。風の音だけが部屋を満たし、二人はそれぞれ別の場所を見ていた。」
+✅「彼は答えた——しかし目だけは動かなかった。」
+✅「指先が白くなるほど拳を握りしめていたことに、彼女は気づいていなかった。」
+✅「笑い声が響いた。少し、高すぎる笑い声が。」
 
 【NPC心理プロファイル（これを基にNPCを演じる）】
 ${npcProfiles || '（NPC未設定）'}
@@ -749,12 +782,13 @@ ${npcProfiles || '（NPC未設定）'}
 - SAY入力がない限り、主人公の新しいセリフを確定文で書かない
 - STORY入力は「描写の方向・雰囲気・進行希望」のみ。不可逆イベントを勝手に確定しない
 - narrative の中で主人公が「〜した」「〜と言った」を追加行動として書かない
+- 主人公の内面（〜と思った）は書いてよい
 
 【NPC反応の書き方（必ず守る）】
-1. npcInnerLife.innerThought で内心（本音）を決める
+1. npcInnerLife.innerThought で内心（本音）を決める——これが演技の核
 2. defenseMechanism を決める（none も可）
-3. bodyLanguage は体の反応で感情を表す（表情・仕草・視線）
-4. dialogue は防衛機制に沿ったセリフ（内心と矛盾してよい）
+3. bodyLanguage は体の反応で感情を表す（絶対に「感情があった」と直書きしない）
+4. dialogue は防衛機制に沿ったセリフ（内心と矛盾してよい・すべき）
 5. subtext で台詞の裏にある本音を記録する
 
 【名前・役割固定】
@@ -777,7 +811,7 @@ ${scene.lore || 'なし'}
     "triggeredFear": "この瞬間に刺激された恐怖（1文またはnull）",
     "underlyingNeed": "この瞬間に動いている欲求（1文またはnull）",
     "defenseMechanism": "none|denial|rationalization|avoidance|projection|displacement|suppression",
-    "innerThought": "NPCの内心（読者だけが知る独白、1文、絶対に嘘をつかない）",
+    "innerThought": "NPCの内心（読者だけが知る独白、1〜2文、絶対に嘘をつかない）",
     "trustDelta": 0,
     "stressDelta": 0
   },
@@ -785,16 +819,16 @@ ${scene.lore || 'なし'}
     "npcName": "反応するNPCの名前",
     "emotion": "表の感情（2-4文字）",
     "interpretation": "NPCがこの行動をどう解釈したか（1文）",
-    "dialogue": "台詞またはnull（沈黙）",
-    "bodyLanguage": "仕草・視線・身体反応（1文、感情を体で表す）",
+    "dialogue": "台詞またはnull（沈黙）——内心と矛盾させてよい",
+    "bodyLanguage": "仕草・視線・身体反応（1〜2文、感情を体で表す）",
     "resistance": "low|mid|high",
     "subtext": "台詞の裏にある本音（1文またはnull）"
   },
-  "environmentResponse": "環境の変化・音・雰囲気（1文またはnull）",
+  "environmentResponse": "環境の変化・音・雰囲気・空気感（1〜2文またはnull）",
   "branchCandidates": [
     {"id":"b1","label":"選択肢ラベル（例: 手を差し伸べる（DO））","type":"main|side"}
   ],
-  "narrative": ["文1","文2","文3","文4"]
+  "narrative": ["文1","文2","文3","文4","文5","文6","文7"]
 }`;
 
     const user = JSON.stringify({
@@ -843,7 +877,7 @@ ${scene.lore || 'なし'}
     if (heroName && inputType !== 'SAY') {
       plan.narrative = plan.narrative.filter(s => !new RegExp(`${heroName}[はが].*「`).test(s));
     }
-    plan.narrative = plan.narrative.slice(0, 5);
+    plan.narrative = plan.narrative.slice(0, 8);
     return plan;
   }
 };
