@@ -21,7 +21,7 @@ body {
   font-size: 15px; line-height: 1.75;
 }
 
-/* ── Top bar ── */
+/* ââ Top bar ââ */
 #topbar {
   display: flex; align-items: center; gap: 8px; padding: 10px 14px;
   background: var(--s1); border-bottom: 1px solid var(--border);
@@ -35,13 +35,13 @@ body {
 }
 .top-btn:hover { color: var(--tx); border-color: rgba(139,118,240,.4); }
 
-/* ── Story ── */
+/* ââ Story ââ */
 #story { flex: 1; overflow-y: auto; padding: 20px 16px 8px; display: flex; flex-direction: column; gap: 22px; }
 #welcome { text-align: center; padding: 60px 20px; color: var(--dim); }
 #welcome h2 { font-size: 24px; color: var(--acc); margin-bottom: 10px; letter-spacing: .15em; }
 #welcome p { font-size: 14px; line-height: 1.9; }
 
-/* ── Turn block ── */
+/* ââ Turn block ââ */
 .turn { display: flex; flex-direction: column; gap: 10px; }
 .player-line { display: flex; align-items: baseline; gap: 8px; }
 .mbadge {
@@ -53,7 +53,7 @@ body {
 .mbadge.STORY { background: rgba(196,144,64,.18); color: var(--story); }
 .ptext { color: var(--dim); font-size: 14px; }
 
-/* ── Narr block ── */
+/* ââ Narr block ââ */
 .narr-block {
   background: var(--s2); border-left: 3px solid var(--gold);
   border-radius: var(--r); padding: 14px 38px 14px 16px;
@@ -64,7 +64,7 @@ body {
 .narr-block p:last-child { margin-bottom: 0; }
 .narr-block .dial { color: #c8bae8; }
 
-/* ── Psychology display elements ── */
+/* ââ Psychology display elements ââ */
 .inner-thought {
   font-style: italic; color: rgba(139,118,240,.7); font-size: 13px;
   padding: 5px 10px 5px 8px; margin-bottom: 8px;
@@ -72,15 +72,15 @@ body {
   font-family: 'Hiragino Kaku Gothic ProN','Yu Gothic UI',sans-serif;
   line-height: 1.6;
 }
-.inner-thought::before { content: '《'; color: var(--acc); font-style: normal; opacity: .6; }
-.inner-thought::after  { content: '》'; color: var(--acc); font-style: normal; opacity: .6; }
+.inner-thought::before { content: 'ã'; color: var(--acc); font-style: normal; opacity: .6; }
+.inner-thought::after  { content: 'ã'; color: var(--acc); font-style: normal; opacity: .6; }
 
 .subtext {
   font-size: 11px; color: rgba(139,118,240,.4); font-style: italic;
   text-align: right; margin-top: 5px; padding-right: 2px;
   font-family: 'Hiragino Kaku Gothic ProN','Yu Gothic UI',sans-serif;
 }
-.subtext::before { content: '本音: '; color: rgba(139,118,240,.35); }
+.subtext::before { content: 'æ¬é³: '; color: rgba(139,118,240,.35); }
 
 /* NPC state meters */
 .psych-meters {
@@ -123,7 +123,7 @@ body {
   max-height: 110px; overflow-y: auto;
 }
 
-/* ── Branches ── */
+/* ââ Branches ââ */
 #branches { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 16px 8px; flex-shrink: 0; }
 .chip {
   padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border);
@@ -134,7 +134,7 @@ body {
 .chip.side { color: var(--dim); }
 .chip:hover { background: var(--s2); border-color: var(--acc); color: var(--tx); }
 
-/* ── Composer ── */
+/* ââ Composer ââ */
 #composer {
   flex-shrink: 0; background: var(--s1);
   border-top: 1px solid var(--border); padding: 10px 12px 12px;
@@ -173,7 +173,7 @@ body {
 }
 .tbtn:hover { color: var(--tx); border-color: rgba(255,255,255,.2); }
 
-/* ── Settings overlay ── */
+/* ââ Settings overlay ââ */
 #settingsOv {
   display: none; position: fixed; inset: 0;
   background: rgba(0,0,0,.8); z-index: 100;
@@ -229,7 +229,7 @@ body {
 .btn-s { flex: 1; padding: 11px; background: none; color: var(--dim); border: 1px solid var(--border); border-radius: 8px; font-size: 14px; cursor: pointer; min-height: 44px; }
 .btn-d { flex: 1; padding: 9px 14px; background: none; color: var(--err); border: 1px solid rgba(224,96,96,.3); border-radius: 8px; font-size: 13px; cursor: pointer; min-height: 40px; }
 
-/* ── Edit overlay ── */
+/* ââ Edit overlay ââ */
 #editOv { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
 #editOv.open { display: flex; }
 #editPanel { background: var(--s1); border-radius: 14px; padding: 20px; width: 100%; max-width: 500px; }
@@ -247,18 +247,18 @@ body {
 
 <!-- Top bar -->
 <div id="topbar">
-  <h1>◈ CHRONICLE</h1>
+  <h1>â CHRONICLE</h1>
   <span id="topStatus"></span>
-  <button class="top-btn" onclick="UI.openSettings()">⚙ 設定</button>
+  <button class="top-btn" onclick="UI.openSettings()">â è¨­å®</button>
 </div>
 
 <!-- Story -->
 <div id="story">
   <div id="welcome">
     <h2>CHRONICLE</h2>
-    <p id="welcomeMsg">⚙ 設定 からAPIキーと世界設定を入力してください。</p>
+    <p id="welcomeMsg">â è¨­å® ããAPIã­ã¼ã¨ä¸çè¨­å®ãå¥åãã¦ãã ããã</p>
     <div id="welcomeActions" style="display:none; margin-top:18px;">
-      <button class="btn-p" style="min-width:200px" onclick="G.startScene()">▶ 物語を始める</button>
+      <button class="btn-p" style="min-width:200px" onclick="G.startScene()">â¶ ç©èªãå§ãã</button>
       <div id="quickStarts" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:12px"></div>
     </div>
   </div>
@@ -270,20 +270,20 @@ body {
 <!-- Composer -->
 <div id="composer">
   <div class="mode-row">
-    <button class="mdbtn" data-m="DO"    onclick="G.setMode('DO')">⚔ DO 行動</button>
-    <button class="mdbtn" data-m="SAY"   onclick="G.setMode('SAY')">💬 SAY 話す</button>
-    <button class="mdbtn" data-m="STORY" onclick="G.setMode('STORY')">📖 STORY 描写</button>
+    <button class="mdbtn" data-m="DO"    onclick="G.setMode('DO')">â DO è¡å</button>
+    <button class="mdbtn" data-m="SAY"   onclick="G.setMode('SAY')">ð¬ SAY è©±ã</button>
+    <button class="mdbtn" data-m="STORY" onclick="G.setMode('STORY')">ð STORY æå</button>
   </div>
   <div class="inp-row">
-    <textarea id="inp" rows="1" placeholder="行動を入力..."
+    <textarea id="inp" rows="1" placeholder="è¡åãå¥å..."
       onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();G.submit()}"
       oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
-    <button id="sendBtn" onclick="G.submit()">送信 ▶</button>
+    <button id="sendBtn" onclick="G.submit()">éä¿¡ â¶</button>
   </div>
   <div class="tool-row">
-    <button class="tbtn" onclick="G.cont()">続きを書く</button>
-    <button class="tbtn" onclick="G.retry()">やり直す</button>
-    <button class="tbtn" onclick="G.undo()">↩ 取消</button>
+    <button class="tbtn" onclick="G.cont()">ç¶ããæ¸ã</button>
+    <button class="tbtn" onclick="G.retry()">ããç´ã</button>
+    <button class="tbtn" onclick="G.undo()">â© åæ¶</button>
   </div>
 </div>
 
@@ -291,79 +291,79 @@ body {
 <div id="settingsOv">
   <div id="settingsPanel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
     <div class="mpanel-hdr">
-      <h2 id="settingsTitle">⚙ 設定</h2>
-      <button class="mclose" onclick="UI.closeSettings()" aria-label="閉じる">✕</button>
+      <h2 id="settingsTitle">â è¨­å®</h2>
+      <button class="mclose" onclick="UI.closeSettings()" aria-label="éãã">â</button>
     </div>
     <div class="mpanel-body">
 
       <div class="sec">API</div>
       <div class="fld">
-        <label>プロバイダー</label>
+        <label>ãã­ãã¤ãã¼</label>
         <select id="cfgProvider" onchange="UI.onProviderChange()">
-          <option value="anthropic">Anthropic（Claude）— sk-ant-...</option>
-          <option value="novelai">NovelAI（Kayra）— pst-...</option>
+          <option value="anthropic">Anthropicï¼Claudeï¼â sk-ant-...</option>
+          <option value="novelai">NovelAIï¼Kayraï¼â pst-...</option>
         </select>
       </div>
       <div id="provAnthropic">
         <div class="fld">
-          <label>Anthropic API キー（<code>sk-ant-</code> で始まる）</label>
+          <label>Anthropic API ã­ã¼ï¼<code>sk-ant-</code> ã§å§ã¾ãï¼</label>
           <input type="password" id="cfgKey" placeholder="sk-ant-api03-...">
         </div>
         <div class="fld">
-          <label>モデル</label>
+          <label>ã¢ãã«</label>
           <select id="cfgModel">
-            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5（推奨：軽量・高速）</option>
-            <option value="claude-sonnet-4-6">Claude Sonnet 4.6（高品質）</option>
+            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5ï¼æ¨å¥¨ï¼è»½éã»é«éï¼</option>
+            <option value="claude-sonnet-4-6">Claude Sonnet 4.6ï¼é«åè³ªï¼</option>
           </select>
         </div>
       </div>
       <div id="provNovelAI" style="display:none">
         <div class="fld">
-          <label>NovelAI トークン（<code>pst-</code> で始まる）</label>
+          <label>NovelAI ãã¼ã¯ã³ï¼<code>pst-</code> ã§å§ã¾ãï¼</label>
           <input type="password" id="cfgNaiKey" placeholder="pst-...">
         </div>
         <div class="fld" style="background:rgba(196,144,64,.1);border:1px solid rgba(196,144,64,.3);border-radius:8px;padding:10px;font-size:12px;color:#c49040">
-          ⚠ NovelAI（Kayra）は補完モデルです。心理エンジンの一部機能はClaude APIで最大限に活かせます。
+          â  NovelAIï¼Kayraï¼ã¯è£å®ã¢ãã«ã§ããå¿çã¨ã³ã¸ã³ã®ä¸é¨æ©è½ã¯Claude APIã§æå¤§éã«æ´»ããã¾ãã
         </div>
       </div>
       <div class="fld">
-        <label class="chk-row"><input type="checkbox" id="cfgDbg"> デバッグ表示</label>
+        <label class="chk-row"><input type="checkbox" id="cfgDbg"> ãããã°è¡¨ç¤º</label>
       </div>
       <div class="fld">
-        <label class="chk-row"><input type="checkbox" id="cfgShowInner" checked> NPCの内心を表示（《》で表示）</label>
+        <label class="chk-row"><input type="checkbox" id="cfgShowInner" checked> NPCã®åå¿ãè¡¨ç¤ºï¼ããã§è¡¨ç¤ºï¼</label>
       </div>
 
-      <div class="sec">主人公</div>
-      <div class="fld"><label>名前</label><input type="text" id="cfgHName" placeholder="例: アリア・フェイン"></div>
-      <div class="fld"><label>説明（性格・外見・立場）</label><textarea id="cfgHDesc" placeholder="例: 18歳の記録官見習い。慎重だが好奇心が強い。"></textarea></div>
+      <div class="sec">ä¸»äººå¬</div>
+      <div class="fld"><label>åå</label><input type="text" id="cfgHName" placeholder="ä¾: ã¢ãªã¢ã»ãã§ã¤ã³"></div>
+      <div class="fld"><label>èª¬æï¼æ§æ ¼ã»å¤è¦ã»ç«å ´ï¼</label><textarea id="cfgHDesc" placeholder="ä¾: 18æ­³ã®è¨é²å®è¦ç¿ããæéã ãå¥½å¥å¿ãå¼·ãã"></textarea></div>
 
       <div class="sec">NPC</div>
       <div id="npcList"></div>
-      <button class="btn-s" style="width:100%;margin-bottom:4px" onclick="UI.addNpc()">+ NPC を追加</button>
+      <button class="btn-s" style="width:100%;margin-bottom:4px" onclick="UI.addNpc()">+ NPC ãè¿½å </button>
 
-      <div class="sec">世界設定</div>
-      <div class="fld"><label>世界観メモ（参照用、本文には直接流さない）</label>
-        <textarea id="cfgLore" placeholder="例: 記憶が結晶化した「灯片」が通貨として使われる都市。"></textarea></div>
+      <div class="sec">ä¸çè¨­å®</div>
+      <div class="fld"><label>ä¸çè¦³ã¡ã¢ï¼åç§ç¨ãæ¬æã«ã¯ç´æ¥æµããªãï¼</label>
+        <textarea id="cfgLore" placeholder="ä¾: è¨æ¶ãçµæ¶åãããç¯çããéè²¨ã¨ãã¦ä½¿ãããé½å¸ã"></textarea></div>
 
-      <div class="sec">シーン設定</div>
-      <div class="fld"><label>現在の場所</label><input type="text" id="cfgLoc" placeholder="例: 路地裏、夕暮れ時"></div>
-      <div class="fld"><label>物語の前提・目的</label>
-        <textarea id="cfgObj" placeholder="例: 主人公は謎の少女の正体を探っている。"></textarea></div>
-      <div class="fld"><label>文体・雰囲気</label>
-        <input type="text" id="cfgTone" placeholder="例: ダークファンタジー、心理描写重視、会話多め"></div>
+      <div class="sec">ã·ã¼ã³è¨­å®</div>
+      <div class="fld"><label>ç¾å¨ã®å ´æ</label><input type="text" id="cfgLoc" placeholder="ä¾: è·¯å°è£ãå¤æ®ãæ"></div>
+      <div class="fld"><label>ç©èªã®åæã»ç®ç</label>
+        <textarea id="cfgObj" placeholder="ä¾: ä¸»äººå¬ã¯è¬ã®å°å¥³ã®æ­£ä½ãæ¢ã£ã¦ããã"></textarea></div>
+      <div class="fld"><label>æä½ã»é°å²æ°</label>
+        <input type="text" id="cfgTone" placeholder="ä¾: ãã¼ã¯ãã¡ã³ã¿ã¸ã¼ãå¿çæåéè¦ãä¼è©±å¤ã"></div>
 
     </div>
     <div class="mpanel-footer">
       <div class="mpanel-footer-main">
-        <button class="btn-p" onclick="UI.saveSettings()">✔ 保存してゲーム開始</button>
-        <button class="btn-s" onclick="UI.closeSettings()">閉じる</button>
+        <button class="btn-p" onclick="UI.saveSettings()">â ä¿å­ãã¦ã²ã¼ã éå§</button>
+        <button class="btn-s" onclick="UI.closeSettings()">éãã</button>
       </div>
       <div style="margin-top:8px">
-        <button class="btn-s" style="width:100%;font-size:13px" onclick="UI.randomFill()">🎲 未入力をランダム生成</button>
+        <button class="btn-s" style="width:100%;font-size:13px" onclick="UI.randomFill()">ð² æªå¥åãã©ã³ãã çæ</button>
       </div>
       <div class="mpanel-footer-danger">
-        <button class="btn-d" onclick="G.resetStory()">物語リセット（設定は保持）</button>
-        <button class="btn-d" onclick="G.resetAll()">完全リセット</button>
+        <button class="btn-d" onclick="G.resetStory()">ç©èªãªã»ããï¼è¨­å®ã¯ä¿æï¼</button>
+        <button class="btn-d" onclick="G.resetAll()">å®å¨ãªã»ãã</button>
       </div>
     </div>
   </div>
@@ -372,19 +372,19 @@ body {
 <!-- Edit overlay -->
 <div id="editOv">
   <div id="editPanel">
-    <h3>本文を編集</h3>
+    <h3>æ¬æãç·¨é</h3>
     <textarea id="editTa"></textarea>
     <div class="edit-acts">
-      <button class="btn-p" onclick="UI.saveEdit()">保存</button>
-      <button class="btn-s" onclick="UI.closeEdit()">キャンセル</button>
+      <button class="btn-p" onclick="UI.saveEdit()">ä¿å­</button>
+      <button class="btn-s" onclick="UI.closeEdit()">ã­ã£ã³ã»ã«</button>
     </div>
   </div>
 </div>
 
 <script>
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // Safe Storage
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 const SS = {
   get(k, d = null) {
     try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : d; } catch { return d; }
@@ -394,9 +394,9 @@ const SS = {
 };
 const KEY = 'chr6';
 
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // State
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 const S = {
   cfg: {
     provider: 'anthropic', key: '', naiKey: '',
@@ -429,12 +429,12 @@ const S = {
   }
 };
 
-// ─────────────────────────────────────────────────────────────
-// PsychEngine — NPC 心理状態の追跡・更新
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// PsychEngine â NPC å¿çç¶æã®è¿½è·¡ã»æ´æ°
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 const PsychEngine = {
 
-  // AIのレスポンスを元にNPC心理状態を更新
+  // AIã®ã¬ã¹ãã³ã¹ãåã«NPCå¿çç¶æãæ´æ°
   process(plan) {
     const inner = plan.npcInnerLife;
     if (!inner || !inner.npcName) return;
@@ -450,7 +450,7 @@ const PsychEngine = {
     npc.stress   = Math.max(0,    Math.min(100, (npc.stress   || 50) + sd));
     if (td > 0) npc.intimacy = Math.min(100, (npc.intimacy || 0) + td * 0.4);
 
-    // 重要な瞬間を記録
+    // éè¦ãªç¬éãè¨é²
     const significant = Math.abs(td) >= 1.5 || inner.triggeredFear || inner.underlyingNeed;
     if (significant && inner.innerThought) {
       npc.keyMoments = npc.keyMoments || [];
@@ -472,69 +472,69 @@ const PsychEngine = {
     );
   },
 
-  // プロンプト用：NPC心理プロファイルブロックを生成
+  // ãã­ã³ããç¨ï¼NPCå¿çãã­ãã¡ã¤ã«ãã­ãã¯ãçæ
   buildNpcBlock(npc) {
     const trust   = npc.trust   || 0;
     const stress  = npc.stress  || 50;
     const intimacy = npc.intimacy || 0;
 
-    let trustDesc = '中立';
-    if      (trust >=  70) trustDesc = '深い信頼';
-    else if (trust >=  40) trustDesc = '好意的';
-    else if (trust >=  15) trustDesc = 'やや好意的';
-    else if (trust >=  -15) trustDesc = '中立・様子見';
-    else if (trust >=  -40) trustDesc = '警戒・不信感';
-    else if (trust >=  -70) trustDesc = '強い不信感';
-    else                    trustDesc = '敵対的・憎しみ';
+    let trustDesc = 'ä¸­ç«';
+    if      (trust >=  70) trustDesc = 'æ·±ãä¿¡é ¼';
+    else if (trust >=  40) trustDesc = 'å¥½æç';
+    else if (trust >=  15) trustDesc = 'ããå¥½æç';
+    else if (trust >=  -15) trustDesc = 'ä¸­ç«ã»æ§å­è¦';
+    else if (trust >=  -40) trustDesc = 'è­¦æã»ä¸ä¿¡æ';
+    else if (trust >=  -70) trustDesc = 'å¼·ãä¸ä¿¡æ';
+    else                    trustDesc = 'æµå¯¾çã»æãã¿';
 
-    let stressDesc = '平静';
-    if      (stress >= 80) stressDesc = '極度の緊張——判断が歪み衝動的';
-    else if (stress >= 65) stressDesc = '高ストレス——防衛的・感情的';
-    else if (stress >= 45) stressDesc = '軽い緊張——警戒心がある';
-    else                   stressDesc = '平静——比較的安定';
+    let stressDesc = 'å¹³é';
+    if      (stress >= 80) stressDesc = 'æ¥µåº¦ã®ç·å¼µââå¤æ­ãæ­ªã¿è¡åç';
+    else if (stress >= 65) stressDesc = 'é«ã¹ãã¬ã¹ââé²è¡çã»ææç';
+    else if (stress >= 45) stressDesc = 'è»½ãç·å¼µââè­¦æå¿ããã';
+    else                   stressDesc = 'å¹³éââæ¯è¼çå®å®';
 
     const moments = (npc.keyMoments || []).slice(-3).map(m =>
-      `  ・${m.type === 'hurt' ? '傷になった瞬間' : m.type === 'connect' ? '絆が生まれた瞬間' : '印象的な瞬間'}${m.defense ? `（防衛: ${m.defense}）` : ''}: 「${m.note}」`
+      `  ã»${m.type === 'hurt' ? 'å·ã«ãªã£ãç¬é' : m.type === 'connect' ? 'çµãçã¾ããç¬é' : 'å°è±¡çãªç¬é'}${m.defense ? `ï¼é²è¡: ${m.defense}ï¼` : ''}: ã${m.note}ã`
     ).join('\n');
 
-    // 話し方ヒントを性格から自動生成
+    // è©±ãæ¹ãã³ããæ§æ ¼ããèªåçæ
     let speechHint = '';
     const p = (npc.personality || '').toLowerCase();
     const d = (npc.coreDesire  || '').toLowerCase();
     const f = (npc.coreFear    || '').toLowerCase();
-    if (p.includes('神秘') || p.includes('超越') || p.includes('神') || p.includes('古'))
-      speechHint = '古風・抽象的な言い回し。「汝」「〜なのだ」など。感情を直接言わない。';
-    else if (p.includes('支配') || p.includes('傲慢') || p.includes('冷酷') || p.includes('権威'))
-      speechHint = '断言・命令形。「当然だ」「〜しなさい」。弱さを見せない。';
-    else if (p.includes('傷') || p.includes('臆病') || p.includes('繊細') || p.includes('不安'))
-      speechHint = '曖昧・遠回し。「……」が多い。言葉の途中で止まる。語尾が「〜かな」「〜けど」。';
-    else if (p.includes('陽気') || p.includes('軽') || p.includes('明るい') || p.includes('楽観'))
-      speechHint = '軽い口調。話題をよく変える。「まあまあ」「なんとかなる」。';
-    else if (p.includes('誇り') || p.includes('武') || p.includes('剛') || p.includes('戦士'))
-      speechHint = '簡潔・直接。一言で切る。「やるか」「面白い」「それだけか」。';
-    else if (p.includes('孤独') || p.includes('内向') || p.includes('静') || p.includes('寡黙'))
-      speechHint = '独り言のような口調。間が長い。「……そうか」「（沈黙）」。';
+    if (p.includes('ç¥ç§') || p.includes('è¶è¶') || p.includes('ç¥') || p.includes('å¤'))
+      speechHint = 'å¤é¢¨ã»æ½è±¡çãªè¨ãåãããæ±ããããªã®ã ããªã©ãææãç´æ¥è¨ããªãã';
+    else if (p.includes('æ¯é') || p.includes('å²æ¢') || p.includes('å·é·') || p.includes('æ¨©å¨'))
+      speechHint = 'æ­è¨ã»å½ä»¤å½¢ããå½ç¶ã ãããããªããããå¼±ããè¦ããªãã';
+    else if (p.includes('å·') || p.includes('èç') || p.includes('ç¹ç´°') || p.includes('ä¸å®'))
+      speechHint = 'ææ§ã»é åãããâ¦â¦ããå¤ããè¨èã®éä¸­ã§æ­¢ã¾ããèªå°¾ãããããªããããã©ãã';
+    else if (p.includes('é½æ°') || p.includes('è»½') || p.includes('æãã') || p.includes('æ¥½è¦³'))
+      speechHint = 'è»½ãå£èª¿ãè©±é¡ãããå¤ããããã¾ãã¾ããããªãã¨ããªããã';
+    else if (p.includes('èªã') || p.includes('æ­¦') || p.includes('å') || p.includes('æ¦å£«'))
+      speechHint = 'ç°¡æ½ã»ç´æ¥ãä¸è¨ã§åããããããããé¢ç½ãããããã ãããã';
+    else if (p.includes('å­¤ç¬') || p.includes('åå') || p.includes('é') || p.includes('å¯¡é»'))
+      speechHint = 'ç¬ãè¨ã®ãããªå£èª¿ãéãé·ãããâ¦â¦ãããããï¼æ²é»ï¼ãã';
 
     return [
-      `【${npc.name} — 心理プロファイル】`,
-      npc.desc        ? `立場: ${npc.desc.slice(0,60)}` : '',
-      npc.personality ? `性格特性: ${npc.personality}` : '',
-      npc.coreDesire  ? `核心的欲求: 「${npc.coreDesire}」` : '',
-      npc.coreFear    ? `核心的恐怖: 「${npc.coreFear}」` : '',
-      npc.wound       ? `傷・過去: ${npc.wound}` : '',
-      speechHint      ? `★話し方の個性: ${speechHint}` : '',
-      `現在の感情: ${npc.emotion || '中立'}`,
-      `ストレス: ${stressDesc} (${stress}/100)`,
-      `信頼度: ${trustDesc} (${trust}/100)`,
-      `親密度: ${intimacy}/100`,
-      moments ? `重要な記憶:\n${moments}` : ''
+      `ã${npc.name} â å¿çãã­ãã¡ã¤ã«ã`,
+      npc.desc        ? `ç«å ´: ${npc.desc.slice(0,60)}` : '',
+      npc.personality ? `æ§æ ¼ç¹æ§: ${npc.personality}` : '',
+      npc.coreDesire  ? `æ ¸å¿çæ¬²æ±: ã${npc.coreDesire}ã` : '',
+      npc.coreFear    ? `æ ¸å¿çææ: ã${npc.coreFear}ã` : '',
+      npc.wound       ? `å·ã»éå»: ${npc.wound}` : '',
+      speechHint      ? `âè©±ãæ¹ã®åæ§: ${speechHint}` : '',
+      `ç¾å¨ã®ææ: ${npc.emotion || 'ä¸­ç«'}`,
+      `ã¹ãã¬ã¹: ${stressDesc} (${stress}/100)`,
+      `ä¿¡é ¼åº¦: ${trustDesc} (${trust}/100)`,
+      `è¦ªå¯åº¦: ${intimacy}/100`,
+      moments ? `éè¦ãªè¨æ¶:\n${moments}` : ''
     ].filter(Boolean).join('\n');
   }
 };
 
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // API
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 const Api = {
   normalize(raw) {
     if (!raw) return '';
@@ -553,8 +553,8 @@ const Api = {
 
   async _callAnthropic(system, userContent, maxTok) {
     const key = this.normalize(S.cfg.key);
-    if (!key) throw new Error('AnthropicのAPIキーが設定されていません（sk-ant-... 形式）');
-    if (!key.startsWith('sk-')) throw new Error(`キー形式が違います: "${key.slice(0,8)}..." → sk-ant- で始まる必要があります`);
+    if (!key) throw new Error('Anthropicã®APIã­ã¼ãè¨­å®ããã¦ãã¾ããï¼sk-ant-... å½¢å¼ï¼');
+    if (!key.startsWith('sk-')) throw new Error(`ã­ã¼å½¢å¼ãéãã¾ã: "${key.slice(0,8)}..." â sk-ant- ã§å§ã¾ãå¿è¦ãããã¾ã`);
     console.log('[Anthropic] key:', key.slice(0,8)+'...'+key.slice(-4), 'model:', S.cfg.model);
 
     const id = ++S.reqId;
@@ -590,8 +590,8 @@ const Api = {
 
   async _callNovelAI(system, userContent, maxTok) {
     const token = this.normalize(S.cfg.naiKey);
-    if (!token) throw new Error('NovelAIトークンが設定されていません（pst-... 形式）');
-    if (!token.startsWith('pst-')) throw new Error('トークン形式が違います → pst- で始まる必要があります');
+    if (!token) throw new Error('NovelAIãã¼ã¯ã³ãè¨­å®ããã¦ãã¾ããï¼pst-... å½¢å¼ï¼');
+    if (!token.startsWith('pst-')) throw new Error('ãã¼ã¯ã³å½¢å¼ãéãã¾ã â pst- ã§å§ã¾ãå¿è¦ãããã¾ã');
 
     const PROXY = 'https://novel-proxy.sansan2103.workers.dev/ai/generate';
     const id = ++S.reqId;
@@ -600,7 +600,7 @@ const Api = {
     let prompt = '';
     try {
       const ctx = JSON.parse(userContent);
-      const hero  = ctx.cast?.protagonist?.name || '主人公';
+      const hero  = ctx.cast?.protagonist?.name || 'ä¸»äººå¬';
       const npcs  = ctx.cast?.npcs || [];
       const npc1  = npcs[0] || {};
       const loc   = ctx.scene?.location || '';
@@ -609,48 +609,48 @@ const Api = {
       const tone  = S.scene.tone || '';
 
       const lines = [];
-      if (loc) lines.push(` ${loc}。`);
-      lines.push(tone.includes('ダーク') ? ` 空気は重く、息が詰まるようだった。` : ` 静寂が場を包んでいた。`);
+      if (loc) lines.push(` ${loc}ã`);
+      lines.push(tone.includes('ãã¼ã¯') ? ` ç©ºæ°ã¯éããæ¯ãè©°ã¾ãããã ã£ãã` : ` éå¯ãå ´ãåãã§ããã`);
 
       if (npc1.name) {
         const desc = (npc1.desc || '').slice(0,25);
-        const emo  = npc1.emotion || '中立';
-        lines.push(` ${npc1.name}${desc ? `（${desc}）` : ''}は${emo}の様子だった。`);
-        // 心理ヒント
-        if (npc1.coreDesire) lines.push(` ${npc1.name}の心の奥には「${npc1.coreDesire}」という欲求があった。`);
-        if (npc1.coreFear && npc1.stress > 60) lines.push(` 「${npc1.coreFear}」という恐怖が頭をよぎっていた。`);
+        const emo  = npc1.emotion || 'ä¸­ç«';
+        lines.push(` ${npc1.name}${desc ? `ï¼${desc}ï¼` : ''}ã¯${emo}ã®æ§å­ã ã£ãã`);
+        // å¿çãã³ã
+        if (npc1.coreDesire) lines.push(` ${npc1.name}ã®å¿ã®å¥¥ã«ã¯ã${npc1.coreDesire}ãã¨ããæ¬²æ±ããã£ãã`);
+        if (npc1.coreFear && npc1.stress > 60) lines.push(` ã${npc1.coreFear}ãã¨ããææãé ­ãããã£ã¦ããã`);
       }
 
       const lastAction = hist.slice(-1)[0] || '';
       if (lastAction) {
         const stripped = lastAction.replace(/^\[[^\]]+\]\s*/, '').trim();
-        // 既にヒーロー名で始まっていたら二重にしない
-        const prefixed = (hero && stripped.length > 0 && !stripped.startsWith(hero)) ? `${hero}は${stripped}` : stripped;
-        const sentence = /[。！？」]$/.test(prefixed) ? prefixed : prefixed + '。';
+        // æ¢ã«ãã¼ã­ã¼åã§å§ã¾ã£ã¦ãããäºéã«ããªã
+        const prefixed = (hero && stripped.length > 0 && !stripped.startsWith(hero)) ? `${hero}ã¯${stripped}` : stripped;
+        const sentence = /[ãï¼ï¼ã]$/.test(prefixed) ? prefixed : prefixed + 'ã';
         lines.push(' ' + sentence);
       }
 
-      if (inp.type === 'SAY')  { lines.push(` 「${inp.text}」`); lines.push(` ${hero}はそう言った。`); }
-      else if (inp.type === 'DO') { lines.push(` ${hero}は${inp.text}。`); }
-      else                        { lines.push(` ${inp.text || ''}。`); }
+      if (inp.type === 'SAY')  { lines.push(` ã${inp.text}ã`); lines.push(` ${hero}ã¯ããè¨ã£ãã`); }
+      else if (inp.type === 'DO') { lines.push(` ${hero}ã¯${inp.text}ã`); }
+      else                        { lines.push(` ${inp.text || ''}ã`); }
 
       if (npc1.name) {
-        const emo = npc1.emotion || '中立';
+        const emo = npc1.emotion || 'ä¸­ç«';
         const starters = {
-          '恐怖': [` ${npc1.name}は身を固くした。`, ` ${npc1.name}の顔が青ざめた。`],
-          '怒り': [` ${npc1.name}の目が鋭くなった。`, ` ${npc1.name}は唇を噛んだ。`],
-          '驚き': [` ${npc1.name}は目を見開いた。`, ` ${npc1.name}が息を飲んだ。`],
-          '好意': [` ${npc1.name}は少し表情を緩めた。`, ` ${npc1.name}がこちらを見た。`],
-          '警戒': [` ${npc1.name}は一歩後ずさった。`, ` ${npc1.name}の視線が揺れた。`],
-          '中立': [` ${npc1.name}はこちらを見た。`, ` ${npc1.name}の様子が変わった。`],
+          'ææ': [` ${npc1.name}ã¯èº«ãåºãããã`, ` ${npc1.name}ã®é¡ãéãããã`],
+          'æã': [` ${npc1.name}ã®ç®ãé­ããªã£ãã`, ` ${npc1.name}ã¯åãåãã ã`],
+          'é©ã': [` ${npc1.name}ã¯ç®ãè¦éããã`, ` ${npc1.name}ãæ¯ãé£²ãã ã`],
+          'å¥½æ': [` ${npc1.name}ã¯å°ãè¡¨æãç·©ããã`, ` ${npc1.name}ããã¡ããè¦ãã`],
+          'è­¦æ': [` ${npc1.name}ã¯ä¸æ­©å¾ããã£ãã`, ` ${npc1.name}ã®è¦ç·ãæºããã`],
+          'ä¸­ç«': [` ${npc1.name}ã¯ãã¡ããè¦ãã`, ` ${npc1.name}ã®æ§å­ãå¤ãã£ãã`],
         };
-        const pool = starters[emo] || starters['中立'];
+        const pool = starters[emo] || starters['ä¸­ç«'];
         lines.push(pool[S.turns.length % pool.length]);
       } else {
-        lines.push(` 風が吹き抜けた。`);
+        lines.push(` é¢¨ãå¹ãæããã`);
       }
       prompt = lines.join('\n');
-    } catch(e) { prompt = ` 場所は不明。\n 何かが起きた。\n `; }
+    } catch(e) { prompt = ` å ´æã¯ä¸æã\n ä½ããèµ·ããã\n `; }
 
     console.log('[NovelAI] prompt:\n' + prompt);
     const ctrl2 = new AbortController();
@@ -672,7 +672,7 @@ const Api = {
     const json = await res.json();
     if (id !== S.reqId) return null;
     const rawText = (json.output || json.text || json.result || '').trim();
-    if (!rawText) throw new Error('NovelAIから出力がありませんでした');
+    if (!rawText) throw new Error('NovelAIããåºåãããã¾ããã§ãã');
     const hero = S.cast.hero.name || '';
     const cleaned = this._cleanNaiOutput(rawText, hero, prompt);
     return {
@@ -681,13 +681,13 @@ const Api = {
         npcInnerLife: null,
         npcReactionPhase: {
           npcName: (S.cast.npcs[0] || {}).name || '',
-          emotion: S.cast.npcs[0]?.emotion || '不明',
+          emotion: S.cast.npcs[0]?.emotion || 'ä¸æ',
           interpretation: '', dialogue: null, bodyLanguage: '', resistance: 'mid', subtext: null
         },
         environmentResponse: '', branchCandidates: [],
-        // 空ナレーション対策フォールバック
+        // ç©ºãã¬ã¼ã·ã§ã³å¯¾ç­ãã©ã¼ã«ããã¯
         narrative: (cleaned && cleaned.length > 0) ? cleaned
-          : (S.cast.npcs[0] ? [`${S.cast.npcs[0].name}は黙っていた。`] : ['静寂が続いた。'])
+          : (S.cast.npcs[0] ? [`${S.cast.npcs[0].name}ã¯é»ã£ã¦ããã`] : ['éå¯ãç¶ããã'])
       }),
       body: null
     };
@@ -695,15 +695,28 @@ const Api = {
 
   _cleanNaiOutput(raw, heroName, promptText = '') {
     let text = raw.replace(/<[^>]+>/g, '').replace(/^\s*[\d]+\s*$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+
+    // è±èªãã­ã¹ãã»ãã­ã³ããã¨ã³ã¼ãé¤å»
+    text = text.split('\n').filter(line => {
+      const t = line.trim();
+      if (!t) return false;
+      // "Arias description:" "description:" "Name:" ãªã©è±èªã©ãã«ãé¤å»
+      if (/^[A-Za-z].{0,30}:/i.test(t)) { console.log('[CleanNAI] eng label:', t.slice(0,30)); return false; }
+      // è¡ã®æå­ã®50%ä»¥ä¸ãASCIIï¼æ°å­è¨å·é¤ãè±å­ï¼ãªãé¤å»
+      const ascii = (t.match(/[a-zA-Z]/g)||[]).length;
+      if (ascii / t.length > 0.5) { console.log('[CleanNAI] eng line:', t.slice(0,30)); return false; }
+      return true;
+    }).join('\n');
+
     if (heroName) {
       text = text.split('\n').filter(line => {
-        const rx = new RegExp(`${heroName}[はがを].{0,30}(した。|する。|殴|刺|掴|捕まえ|引き|蹴|握|奪|押|叫|言った。)`);
+        const rx = new RegExp(`${heroName}[ã¯ãã].{0,30}(ããã|ããã|æ®´|åº|æ´|æã¾ã|å¼ã|è¹´|æ¡|å¥ª|æ¼|å«|è¨ã£ãã)`);
         if (rx.test(line)) { console.log('[CleanNAI] removed:', line.trim()); return false; }
         return true;
       }).join('\n');
     }
     const seen = new Set();
-    // プロンプト行を既出セットに追加してNAI出力の繰り返しを防ぐ
+    // ãã­ã³ããè¡ãæ¢åºã»ããã«è¿½å ãã¦NAIåºåã®ç¹°ãè¿ããé²ã
     if (promptText) {
       promptText.split('\n').forEach(line => {
         const k = line.trim().replace(/\s/g,'').slice(0, 20);
@@ -716,169 +729,187 @@ const Api = {
       if (seen.has(key)) { console.log('[CleanNAI] dup:', line.trim()); return false; }
       seen.add(key); return true;
     }).join('\n');
-    return deduped.split(/(?<=[。！？」])\s*/).map(s => s.trim()).filter(s => s.length > 1).slice(0, 4);
+    return deduped.split(/(?<=[ãï¼ï¼ã])\s*/).map(s => s.trim()).filter(s => s.length > 1).slice(0, 4);
   }
 };
 
-// ─────────────────────────────────────────────────────────────
-// Planner — システムプロンプト生成・JSONパース
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Planner â ã·ã¹ãã ãã­ã³ããçæã»JSONãã¼ã¹
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 const Planner = {
   build(inputType, inputText) {
     const hero  = S.cast.hero;
     const npcs  = S.cast.npcs;
     const scene = S.scene;
-    const hist  = S.turns.slice(-6).map(t => {
-      const narr = t.narrative ? t.narrative.replace(/\n/g, '　') : '';
-      return `[${t.inputType}] ${t.playerText}\n描写: ${narr.slice(0, 220)}`;
+    const turns = S.turns.slice(-6);
+    const hist  = turns.map((t, i) => {
+      const narr = t.narrative ? t.narrative.replace(/\n/g, 'ã') : '';
+      const isLast = (i === turns.length - 1);
+      const prefix = isLast ? 'âç´å' : `${i - turns.length + 1}çªå`;
+      return `[${prefix}][${t.inputType}] ${t.playerText}\næå: ${narr.slice(0, isLast ? 350 : 180)}`;
     }).join('\n---\n');
 
-    // NPCプロファイルブロック
+    // NPCãã­ãã¡ã¤ã«ãã­ãã¯
     const npcProfiles = npcs.map(n => PsychEngine.buildNpcBlock(n)).join('\n\n');
 
-    const sys = `あなたはADV型シナリオゲームのゲームマスターです。プレイヤーが主人公を操作します。
-必ず以下の全制約を守り、JSONのみを返してください。余分なテキストは一切出力禁止。
+    const sys = `ããªãã¯ADVåã·ããªãªã²ã¼ã ã®ã²ã¼ã ãã¹ã¿ã¼ã§ãããã¬ã¤ã¤ã¼ãä¸»äººå¬ãæä½ãã¾ãã
+å¿ãä»¥ä¸ã®å¨å¶ç´ãå®ããJSONã®ã¿ãè¿ãã¦ãã ãããä½åãªãã­ã¹ãã¯ä¸ååºåç¦æ­¢ã
 
-【このゲームの核心：生きた人間を描く文学的RPG】
-AI Dungeonを超える、心理と文学性を兼ね備えた体験を作ること。
+ããã®ã²ã¼ã ã®æ ¸å¿ï¼çããäººéãæãæå­¦çRPGã
+AI Dungeonãè¶ãããå¿çã¨æå­¦æ§ãå¼ã­åããä½é¨ãä½ããã¨ã
 
-NPCを生きた人間として描写してください：
-- NPCには「核心的欲求」と「核心的恐怖」があり、すべての反応がそこから生まれる
-- 表の言葉と内心は一致しない——人間はいつも本心を言わない
-- 防衛機制（否定・合理化・回避・投影・置き換え・抑圧）を状況に応じて自然に使う
-- 感情は論理より先に来る。感情が先に体に現れ、言葉はあとから出る
-- ストレスが高いほど判断が歪み、衝動的・防衛的になる
-- 信頼は積み重ねで築かれ、裏切りで一瞬で崩れる
-- 人間は矛盾する——優しくしたいのに傷つける、強くありたいのに震える
+NPCãçããäººéã¨ãã¦æåãã¦ãã ããï¼
+- NPCã«ã¯ãæ ¸å¿çæ¬²æ±ãã¨ãæ ¸å¿çææããããããã¹ã¦ã®åå¿ãããããçã¾ãã
+- è¡¨ã®è¨èã¨åå¿ã¯ä¸è´ããªãââäººéã¯ãã¤ãæ¬å¿ãè¨ããªã
+- é²è¡æ©å¶ï¼å¦å®ã»åçåã»åé¿ã»æå½±ã»ç½®ãæãã»æå§ï¼ãç¶æ³ã«å¿ãã¦èªç¶ã«ä½¿ã
+- ææã¯è«çããåã«æ¥ããææãåã«ä½ã«ç¾ããè¨èã¯ãã¨ããåºã
+- ã¹ãã¬ã¹ãé«ãã»ã©å¤æ­ãæ­ªã¿ãè¡åçã»é²è¡çã«ãªã
+- ä¿¡é ¼ã¯ç©ã¿éã­ã§ç¯ãããè£åãã§ä¸ç¬ã§å´©ãã
+- äººéã¯çç¾ããââåªãããããã®ã«å·ã¤ãããå¼·ãããããã®ã«éãã
 
-【心理表現の原則：Show, Don't Tell（絶対守る）】
-❌ 「彼女は怖かった」→ ✅ 「彼女の手が微かに震え、視線が出口へ流れた」
-❌ 「彼は信頼していなかった」→ ✅ 「彼は相槌を打ちながら、一歩だけ距離を置いた」
-❌ 「怒っている」→ ✅ 「顎の筋肉が固まり、言葉が来る前に息が止まった」
-❌ 「緊張した」→ ✅ 「口の中が乾いた。次の言葉が出てこなかった」
+ãå¿çè¡¨ç¾ã®ååï¼Show, Don't Tellï¼çµ¶å¯¾å®ãï¼ã
+â ãå½¼å¥³ã¯æãã£ããâ â ãå½¼å¥³ã®æãå¾®ãã«éããè¦ç·ãåºå£ã¸æµããã
+â ãå½¼ã¯ä¿¡é ¼ãã¦ããªãã£ããâ â ãå½¼ã¯ç¸æ§ãæã¡ãªãããä¸æ­©ã ãè·é¢ãç½®ããã
+â ãæã£ã¦ãããâ â ãé¡ã®ç­èãåºã¾ããè¨èãæ¥ãåã«æ¯ãæ­¢ã¾ã£ãã
+â ãç·å¼µãããâ â ãå£ã®ä¸­ãä¹¾ãããæ¬¡ã®è¨èãåºã¦ããªãã£ãã
 
-防衛機制の具体的な描写：
-- denial（否定）: 「平気」と言いながら手が震える。「関係ない」と繰り返す
-- avoidance（回避）: 話題を急に変える。窓の外を見る。立ち上がろうとする
-- rationalization（合理化）: 「仕方なかった」「あれは正しかった」と自分に言い聞かせる
-- projection（投影）: 「あなたこそ〜」。自分の感情を相手のせいにする
-- suppression（抑圧）: 表情が消える。声が平板になる。感情がないように振る舞う
-- displacement（置き換え）: 物を叩く。関係ない話題で怒る。弱いものにあたる
+é²è¡æ©å¶ã®å·ä½çãªæåï¼
+- denialï¼å¦å®ï¼: ãå¹³æ°ãã¨è¨ããªããæãéããããé¢ä¿ãªããã¨ç¹°ãè¿ã
+- avoidanceï¼åé¿ï¼: è©±é¡ãæ¥ã«å¤ãããçªã®å¤ãè¦ããç«ã¡ä¸ãããã¨ãã
+- rationalizationï¼åçåï¼: ãä»æ¹ãªãã£ãããããã¯æ­£ããã£ããã¨èªåã«è¨ãèããã
+- projectionï¼æå½±ï¼: ãããªããããããèªåã®ææãç¸æã®ããã«ãã
+- suppressionï¼æå§ï¼: è¡¨æãæ¶ãããå£°ãå¹³æ¿ã«ãªããææããªãããã«æ¯ãèã
+- displacementï¼ç½®ãæãï¼: ç©ãå©ããé¢ä¿ãªãè©±é¡ã§æããå¼±ããã®ã«ããã
 
-【narrativeの絶対ルール ★ここを守らないと全品質が崩壊する】
+ãnarrativeã®çµ¶å¯¾ã«ã¼ã« âãããå®ããªãã¨å¨åè³ªãå´©å£ããã
 
-❌ 絶対禁止:
-1. 「キャラ名：セリフ」の羅列——dialogueスクリプト形式をnarrative配列に入れない
-   ダメ例: ["女神：私はあなたに勝てない", "アリア：なぜ？", "女神：あなたは私の子だから"]
-2. 同じ内容を言い換えて連続で書く
-   ダメ例: 「私はあなたに勝てません」の直後に「あなたには勝てない」→ 同じことを2回言っている
-3. 環境を箇条書きで列挙する
-   ダメ例: 「草原だ。遠くに森が見える。空は快晴。太陽が輝いている。」
-4. 途中で終わる文（「風が吹き」「彼女は——」で終わらせない）
+â çµ¶å¯¾ç¦æ­¢:
+1. ãã­ã£ã©åï¼ã»ãªããã®ç¾åââdialogueã¹ã¯ãªããå½¢å¼ãnarrativeéåã«å¥ããªã
+   ãã¡ä¾: ["å¥³ç¥ï¼ç§ã¯ããªãã«åã¦ãªã", "ã¢ãªã¢ï¼ãªãï¼", "å¥³ç¥ï¼ããªãã¯ç§ã®å­ã ãã"]
+2. åãåå®¹ãè¨ãæãã¦é£ç¶ã§æ¸ã
+   ãã¡ä¾: ãç§ã¯ããªãã«åã¦ã¾ãããã®ç´å¾ã«ãããªãã«ã¯åã¦ãªããâ åããã¨ã2åè¨ã£ã¦ãã
+3. ç°å¢ãç®æ¡æ¸ãã§åæãã
+   ãã¡ä¾: ãèåã ãé ãã«æ£®ãè¦ãããç©ºã¯å¿«æ´ãå¤ªé½ãè¼ãã¦ãããã
+4. éä¸­ã§çµããæï¼ãé¢¨ãå¹ãããå½¼å¥³ã¯ââãã§çµããããªãï¼
 
-✅ 正しい書き方: 地の文（prose）として書く。セリフは動作・表情・間と一体化させる
-良い例: 「〝私には、あなたに刃を向ける意味が分からない〟——女神はそう言って、目を閉じた。その言葉に怒りはなかった。ただ静かな何かが、空気を満たした。」
-良い例: 「草原の風が頬を撫でた。遠くに森の輪郭が霞み、空は透き通るように青かった——だが何かがこの穏やかさの下に潜んでいる気がした。」
-良い例: 「彼女の唇が動いた。でも声は出てこなかった。代わりに——目が、少しだけ細くなった。」
+â æ­£ããæ¸ãæ¹: å°ã®æï¼proseï¼ã¨ãã¦æ¸ããã»ãªãã¯åä½ã»è¡¨æã»éã¨ä¸ä½åããã
+è¯ãä¾: ããç§ã«ã¯ãããªãã«åãåããæå³ãåãããªããââå¥³ç¥ã¯ããè¨ã£ã¦ãç®ãéããããã®è¨èã«æãã¯ãªãã£ãããã éããªä½ãããç©ºæ°ãæºããããã
+è¯ãä¾: ãèåã®é¢¨ãé ¬ãæ«ã§ããé ãã«æ£®ã®è¼ªé­ãéã¿ãç©ºã¯éãéãããã«éãã£ãââã ãä½ãããã®ç©ãããã®ä¸ã«æ½ãã§ããæ°ããããã
+è¯ãä¾: ãå½¼å¥³ã®åãåãããã§ãå£°ã¯åºã¦ããªãã£ããä»£ããã«ââç®ããå°ãã ãç´°ããªã£ããã
 
-narrativeは小説の一場面として書く。最低5文、理想7〜8文。
+narrativeã¯å°èª¬ã®ä¸å ´é¢ã¨ãã¦æ¸ããæä½5æãçæ³7ã8æã
 
-緩急を使う：
-- 短い文 → 衝撃・静寂・気づき。「彼女は笑った。」「沈黙が落ちた。」
-- 長い文 → 流れ・記憶・内省。「風が窓から入ってきて、二人の間を通り抜けていった——まるでこの沈黙に意味などないと言うように。」
+ç·©æ¥ãä½¿ãï¼
+- ç­ãæ â è¡æã»éå¯ã»æ°ã¥ãããå½¼å¥³ã¯ç¬ã£ããããæ²é»ãè½ã¡ããã
+- é·ãæ â æµãã»è¨æ¶ã»åçããé¢¨ãçªããå¥ã£ã¦ãã¦ãäºäººã®éãéãæãã¦ãã£ãââã¾ãã§ãã®æ²é»ã«æå³ãªã©ãªãã¨è¨ãããã«ãã
 
-感覚で描く（視覚だけでなく）：
-- 聴覚：「足音が止まった」「息を飲む音だけが聞こえた」
-- 触覚：「冷たい空気が首筋に触れた」「手のひらが汗ばんでいた」
-- 嗅覚：「古い木の匂いがした」「雨の前の匂いがした」
-- 身体感覚：「胃が重くなった」「背中に何かが走った」
+æè¦ã§æãï¼è¦è¦ã ãã§ãªãï¼ï¼
+- è´è¦ï¼ãè¶³é³ãæ­¢ã¾ã£ãããæ¯ãé£²ãé³ã ããèãããã
+- è§¦è¦ï¼ãå·ããç©ºæ°ãé¦ç­ã«è§¦ããããæã®ã²ããæ±ã°ãã§ããã
+- åè¦ï¼ãå¤ãæ¨ã®åããããããé¨ã®åã®åããããã
+- èº«ä½æè¦ï¼ãèãéããªã£ãããèä¸­ã«ä½ããèµ°ã£ãã
 
-沈黙と余白を使う：
-「彼は答えなかった。それがすべてだった。」
-「何かを言おうとして——やめた。」
+æ²é»ã¨ä½ç½ãä½¿ãï¼
+ãå½¼ã¯ç­ããªãã£ããããããã¹ã¦ã ã£ããã
+ãä½ããè¨ããã¨ãã¦ââããããã
 
-NPCの台詞は内面と矛盾させる：
-- 内心：（もう限界だ、消えたい）→ 台詞：「大丈夫。心配しないで」
-- 内心：（怖い、逃げたい）→ 行動：笑顔を作って一歩前に出る
+NPCã®å°è©ã¯åé¢ã¨çç¾ãããï¼
+- åå¿ï¼ï¼ããéçã ãæ¶ãããï¼â å°è©ï¼ãå¤§ä¸å¤«ãå¿éããªãã§ã
+- åå¿ï¼ï¼æããéãããï¼â è¡åï¼ç¬é¡ãä½ã£ã¦ä¸æ­©åã«åºã
 
-【NPCの「話し方の個性」——これがキャラを生きさせる】
-NPCの台詞は必ずその「性格・核心欲求・傷」から生まれる固有の言い回しで書くこと。
+ãNPCã®ãè©±ãæ¹ã®åæ§ãââãããã­ã£ã©ãçããããã
+NPCã®å°è©ã¯å¿ããã®ãæ§æ ¼ã»æ ¸å¿æ¬²æ±ã»å·ãããçã¾ããåºæã®è¨ãåãã§æ¸ããã¨ã
 
-性格タイプ別の話し方の例（NPCの設定に合わせて応用する）：
-- 支配的・傲慢: 命令形・断言「〜しなさい」「当たり前だろう」「お前には分からない」
-- 傷ついた・臆病: 曖昧・遠回し「……別に」「そう、なのかな」「気にしてない、けど」
-- 神秘的・超越的: 抽象的・古風「汝は問うのか」「それは既に定められた」「答えを求めるな」
-- 陽気・軽率: 軽い口調・話題転換「まあまあ」「なんとかなるって」「ねえそれより——」
-- 孤独・内向的: 独り言のような「……そうか」「（間）……うん」「誰も知らないけど」
-- 誇り高い・武人的: 簡潔・直接「やるか」「面白い」「後悔するな」「それだけか」
+æ§æ ¼ã¿ã¤ãå¥ã®è©±ãæ¹ã®ä¾ï¼NPCã®è¨­å®ã«åããã¦å¿ç¨ããï¼ï¼
+- æ¯éçã»å²æ¢: å½ä»¤å½¢ã»æ­è¨ããããªããããå½ããåã ãããããåã«ã¯åãããªãã
+- å·ã¤ããã»èç: ææ§ã»é åããâ¦â¦å¥ã«ããããããªã®ããªããæ°ã«ãã¦ãªãããã©ã
+- ç¥ç§çã»è¶è¶ç: æ½è±¡çã»å¤é¢¨ãæ±ã¯åãã®ãããããã¯æ¢ã«å®ããããããç­ããæ±ãããªã
+- é½æ°ã»è»½ç: è»½ãå£èª¿ã»è©±é¡è»¢æãã¾ãã¾ããããªãã¨ããªãã£ã¦ããã­ãããããââã
+- å­¤ç¬ã»ååç: ç¬ãè¨ã®ãããªãâ¦â¦ãããããï¼éï¼â¦â¦ããããèª°ãç¥ããªããã©ã
+- èªãé«ãã»æ­¦äººç: ç°¡æ½ã»ç´æ¥ããããããé¢ç½ãããå¾æãããªããããã ããã
 
-★キャラの口癖・語尾・言い回しを一貫させること。会話ごとにばらつかせない。
+âã­ã£ã©ã®å£çã»èªå°¾ã»è¨ãåããä¸è²«ããããã¨ãä¼è©±ãã¨ã«ã°ãã¤ãããªãã
 
-具体的な良い文例：
-✅「彼女の笑みが、ほんの少し崩れた。それだけだった。でも主人公はその一瞬を、見逃さなかった。」
-✅「沈黙が伸びた。風の音だけが部屋を満たし、二人はそれぞれ別の場所を見ていた。」
-✅「彼は答えた——しかし目だけは動かなかった。」
-✅「指先が白くなるほど拳を握りしめていたことに、彼女は気づいていなかった。」
-✅「〝笑えばいい〟と彼女は言った。その声が少しだけ震えていても、誰も気づかなかった。」
+å·ä½çãªè¯ãæä¾ï¼
+âãå½¼å¥³ã®ç¬ã¿ããã»ãã®å°ãå´©ãããããã ãã ã£ããã§ãä¸»äººå¬ã¯ãã®ä¸ç¬ããè¦éããªãã£ããã
+âãæ²é»ãä¼¸ã³ããé¢¨ã®é³ã ããé¨å±ãæºãããäºäººã¯ããããå¥ã®å ´æãè¦ã¦ãããã
+âãå½¼ã¯ç­ããââãããç®ã ãã¯åããªãã£ããã
+âãæåãç½ããªãã»ã©æ³ãæ¡ãããã¦ãããã¨ã«ãå½¼å¥³ã¯æ°ã¥ãã¦ããªãã£ããã
+âããç¬ãã°ãããã¨å½¼å¥³ã¯è¨ã£ãããã®å£°ãå°ãã ãéãã¦ãã¦ããèª°ãæ°ã¥ããªãã£ããã
 
-【NPC心理プロファイル（これを基にNPCを演じる）】
-${npcProfiles || '（NPC未設定）'}
+ãNPCå¿çãã­ãã¡ã¤ã«ï¼ãããåºã«NPCãæ¼ããï¼ã
+${npcProfiles || 'ï¼NPCæªè¨­å®ï¼'}
 
-【主人公ロック ★最重要】
-- DO入力がない限り、主人公の新しい物理行動を確定文で書かない
-- SAY入力がない限り、主人公の新しいセリフを確定文で書かない
-- STORY入力は「描写の方向・雰囲気・進行希望」のみ。不可逆イベントを勝手に確定しない
-- narrative の中で主人公が「〜した」「〜と言った」を追加行動として書かない
-- 主人公の内面（〜と思った）は書いてよい
+ããã¬ã¤ã¤ã¼å¥åã¯ãä¸çã®ç¢ºå®ããäºå®ãâçµ¶å¯¾ã«å®ãæåªåã«ã¼ã«ã
+ãã¬ã¤ã¤ã¼ã®å¥åã¯ãã¹ã¦ãèµ·ããç¾å®ãã¨ãã¦å³åº§ã«åãå¥ããã
 
-【NPC反応の書き方（必ず守る）】
-1. npcInnerLife.innerThought で内心（本音）を決める——これが演技の核
-2. defenseMechanism を決める（none も可）
-3. bodyLanguage は体の反応で感情を表す（絶対に「感情があった」と直書きしない）
-4. dialogue は防衛機制に沿ったセリフ（内心と矛盾してよい・すべき）
-5. subtext で台詞の裏にある本音を記録する
+- DOå¥å: ãã®è¡åã¯å®äºããäºå®ãçµæããç¶ããæ¸ã
+  ä¾:ãã¢ãªã¢ã¯å¥³ã®å­ãç¸ã£ããâç¸ãçµãã£ãå¾ã®ç¶æ³ãæã
+- SAYå¥å: ãã®å°è©ã¯çºããããäºå®ãç¸æã®åå¿ãæã
+- STORYå¥å: ãã¬ã¤ã¤ã¼ãç¤ºããåºæ¥äºã»å±éã»æ¹åã¯ãæ±ºå®ããç¾å®ãã¨ãã¦åãå¥ãã
+  ä¾:ãã¢ãªã¢ã¯å¥³ã®å­ãèãåããç¬éã«ç¸ãåããªããããâãããèµ·ããå¾ãæã
+  ä¾:ãçªç¶æãéãããâéããå¾ããæã
 
-【名前・役割固定】
-主人公名: ${hero.name || '（未設定）'}
-NPC名: ${npcs.map(n => n.name).join(' / ') || '（未設定）'}
-名前の入れ替え・役割混線は禁止
+â çµ¶å¯¾ç¦æ­¢: ãã¬ã¤ã¤ã¼å¥åãç¡è¦ããã»å¦å®ããã»ãªãã£ããã¨ã«ããã»çç¾ããå±éãæ¸ã
+â æ¥å±éã»äºæ³å¤ã®è¡åãåãââæµæããåãå¥ãããã®ç¶æ³ããèªç¶ã«ç¶ããæ¸ã
+â éå»ã®æµãã¨ã®çç¾ã¯ããããããã¨ãèµ·ããä¸çãã¨ãã¦é£²ã¿è¾¼ãã§åé²ãã
 
-【世界設定（参照のみ、本文への説明書きは最大1文）】
-${scene.lore || 'なし'}
+ç´è¿ã®ãã¬ã¤ã¤ã¼å¥åãæåªåã§åæ ãããã¨ã
 
-【出力形式 — このJSONのみ返す】
+ãä¸»äººå¬ã­ãã¯ï¼AIèªèº«ã®è¿½å è¡åãå¶éããï¼ã
+- AIãåæã«ä¸»äººå¬ã®æ°ããè¡åãè¿½å ããªãï¼ãã¬ã¤ã¤ã¼ãæå®ãã¦ããªãè¡åï¼
+- AIãåæã«ä¸»äººå¬ã®æ°ããã»ãªããè¿½å ããªãï¼ãã¬ã¤ã¤ã¼ãæå®ãã¦ããªãã»ãªãï¼
+- ãã ããã¬ã¤ã¤ã¼ãå¥åããDOã»SAYã»STORYã®åå®¹ã¯å®å¨ã»å¿ å®ã«åæ ãã
+- ä¸»äººå¬ã®åé¢ï¼ãã¨æããã»ãã¨æã£ãï¼ã¯æ¸ãã¦ãã
+
+ãNPCåå¿ã®æ¸ãæ¹ï¼å¿ãå®ãï¼ã
+1. npcInnerLife.innerThought ã§åå¿ï¼æ¬é³ï¼ãæ±ºããââãããæ¼æã®æ ¸
+2. defenseMechanism ãæ±ºããï¼none ãå¯ï¼
+3. bodyLanguage ã¯ä½ã®åå¿ã§ææãè¡¨ãï¼çµ¶å¯¾ã«ãææããã£ããã¨ç´æ¸ãããªãï¼
+4. dialogue ã¯é²è¡æ©å¶ã«æ²¿ã£ãã»ãªãï¼åå¿ã¨çç¾ãã¦ããã»ãã¹ãï¼
+5. subtext ã§å°è©ã®è£ã«ããæ¬é³ãè¨é²ãã
+
+ãååã»å½¹å²åºå®ã
+ä¸»äººå¬å: ${hero.name || 'ï¼æªè¨­å®ï¼'}
+NPCå: ${npcs.map(n => n.name).join(' / ') || 'ï¼æªè¨­å®ï¼'}
+ååã®å¥ãæ¿ãã»å½¹å²æ··ç·ã¯ç¦æ­¢
+
+ãä¸çè¨­å®ï¼åç§ã®ã¿ãæ¬æã¸ã®èª¬ææ¸ãã¯æå¤§1æï¼ã
+${scene.lore || 'ãªã'}
+
+ãåºåå½¢å¼ â ãã®JSONã®ã¿è¿ãã
 {
   "playerIntent": {
     "kind": "approach|talk|explore|attack|comfort|threaten|deceive|other",
     "tone": "neutral|gentle|aggressive|curious|fearful|manipulative"
   },
   "npcInnerLife": {
-    "npcName": "反応するNPCの名前",
-    "instantEmotion": "即座に湧いた感情（2-4文字）",
-    "triggeredFear": "この瞬間に刺激された恐怖（1文またはnull）",
-    "underlyingNeed": "この瞬間に動いている欲求（1文またはnull）",
+    "npcName": "åå¿ããNPCã®åå",
+    "instantEmotion": "å³åº§ã«æ¹§ããææï¼2-4æå­ï¼",
+    "triggeredFear": "ãã®ç¬éã«åºæ¿ãããææï¼1æã¾ãã¯nullï¼",
+    "underlyingNeed": "ãã®ç¬éã«åãã¦ããæ¬²æ±ï¼1æã¾ãã¯nullï¼",
     "defenseMechanism": "none|denial|rationalization|avoidance|projection|displacement|suppression",
-    "innerThought": "NPCの内心（読者だけが知る独白、1〜2文、絶対に嘘をつかない）",
+    "innerThought": "NPCã®åå¿ï¼èª­èã ããç¥ãç¬ç½ã1ã2æãçµ¶å¯¾ã«åãã¤ããªãï¼",
     "trustDelta": 0,
     "stressDelta": 0
   },
   "npcReactionPhase": {
-    "npcName": "反応するNPCの名前",
-    "emotion": "表の感情（2-4文字）",
-    "interpretation": "NPCがこの行動をどう解釈したか（1文）",
-    "dialogue": "台詞またはnull（沈黙）——内心と矛盾させてよい",
-    "bodyLanguage": "仕草・視線・身体反応（1〜2文、感情を体で表す）",
+    "npcName": "åå¿ããNPCã®åå",
+    "emotion": "è¡¨ã®ææï¼2-4æå­ï¼",
+    "interpretation": "NPCããã®è¡åãã©ãè§£éãããï¼1æï¼",
+    "dialogue": "å°è©ã¾ãã¯nullï¼æ²é»ï¼ââåå¿ã¨çç¾ããã¦ãã",
+    "bodyLanguage": "ä»èã»è¦ç·ã»èº«ä½åå¿ï¼1ã2æãææãä½ã§è¡¨ãï¼",
     "resistance": "low|mid|high",
-    "subtext": "台詞の裏にある本音（1文またはnull）"
+    "subtext": "å°è©ã®è£ã«ããæ¬é³ï¼1æã¾ãã¯nullï¼"
   },
-  "environmentResponse": "環境の変化・音・雰囲気・空気感（1〜2文またはnull）",
+  "environmentResponse": "ç°å¢ã®å¤åã»é³ã»é°å²æ°ã»ç©ºæ°æï¼1ã2æã¾ãã¯nullï¼",
   "branchCandidates": [
-    {"id":"b1","label":"選択肢ラベル（例: 手を差し伸べる（DO））","type":"main|side"}
+    {"id":"b1","label":"é¸æè¢ã©ãã«ï¼ä¾: æãå·®ãä¼¸ã¹ãï¼DOï¼ï¼","type":"main|side"}
   ],
-  "narrative": ["地の文1（環境・状況・空気感）","地の文2（NPCの動作・表情——感情を体で表す）","地の文3（セリフは動作と一体化させる）「〝台詞〟——動作/間」","地の文4","地の文5（心理・余白・沈黙）","地の文6","地の文7（余韻・次への引き）"]
+  "narrative": ["å°ã®æ1ï¼ç°å¢ã»ç¶æ³ã»ç©ºæ°æï¼","å°ã®æ2ï¼NPCã®åä½ã»è¡¨æââææãä½ã§è¡¨ãï¼","å°ã®æ3ï¼ã»ãªãã¯åä½ã¨ä¸ä½åãããï¼ããå°è©ãââåä½/éã","å°ã®æ4","å°ã®æ5ï¼å¿çã»ä½ç½ã»æ²é»ï¼","å°ã®æ6","å°ã®æ7ï¼ä½é»ã»æ¬¡ã¸ã®å¼ãï¼"]
 }
 
-narrativeの注意: 各要素は「〜した」「〜と言った」形式の完結した一文にすること。途中で切らない。同じ内容を言い換えて連続で出さない。`;
+narrativeã®æ³¨æ: åè¦ç´ ã¯ãããããããã¨è¨ã£ããå½¢å¼ã®å®çµããä¸æã«ãããã¨ãéä¸­ã§åããªããåãåå®¹ãè¨ãæãã¦é£ç¶ã§åºããªãã`;
 
     const user = JSON.stringify({
       cast: {
@@ -887,13 +918,14 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
           name: n.name, desc: n.desc,
           personality: n.personality, coreDesire: n.coreDesire,
           coreFear: n.coreFear, wound: n.wound,
-          emotion: n.emotion || '中立', stress: n.stress || 50,
+          emotion: n.emotion || 'ä¸­ç«', stress: n.stress || 50,
           trust: n.trust || 0, intimacy: n.intimacy || 0
         }))
       },
       scene: { location: scene.loc, objective: scene.obj, tone: scene.tone },
-      recentHistory: hist || '（ゲーム開始）',
-      currentInput: { type: inputType, text: inputText }
+      recentHistory: hist || 'ï¼ã²ã¼ã éå§ï¼',
+      currentInput: { type: inputType, text: inputText },
+      CRITICAL_INSTRUCTION: `ãã®å¥åã${inputText}ããå®å¨ã«åãå¥ãããããèµ·ããå¾ã®ç¶ããnarrativeã«æ¸ãããã®å¥åãç¡è¦ã»å¦å®ã»çç¾ããããã¨ã¯ç¦æ­¢ã`
     }, null, 2);
 
     return { sys, user };
@@ -917,23 +949,29 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
     plan.branchCandidates = Array.isArray(plan.branchCandidates) ? plan.branchCandidates : [];
     plan.narrative        = Array.isArray(plan.narrative) ? plan.narrative.filter(Boolean) : [];
 
-    // 主人公ロック
+    // ä¸»äººå¬ã­ãã¯ï¼AIèªèº«ãè¿½å ããä¸»äººå¬è¡åã®ã¿é¤å»ï¼
+    // STORYå¥åã¯ãã¬ã¤ã¤ã¼ãæç¤ºããè¡åãå«ãããããã£ã«ã¿ãç·©ãã
     const heroName = S.cast.hero.name;
-    if (heroName && inputType !== 'DO') {
-      const rxAct = new RegExp(`${heroName}[はがを].{0,20}(した|した。|する。|殴|刺|掴|捕まえ|引き|蹴|握)`);
+    if (heroName && inputType === 'DO') {
+      // DOã¢ã¼ã: ä¸»äººå¬ãæ°ããªç©çè¡åãéè¤ãã¦æ¸ãã®ãé²ãï¼å¥åè¡åèªä½ã¯OKï¼
+      // â ãã£ã«ã¿ä¸è¦ï¼ãã¬ã¤ã¤ã¼ãDOã§æå®ããè¡åã¯åæ ãã¦ããï¼
+    } else if (heroName && inputType === 'SAY') {
+      // SAYã¢ã¼ã: ä¸»äººå¬ã®æ°ããªç©çè¡åãAIãè¿½å ããã®ãé²ã
+      const rxAct = new RegExp(`${heroName}[ã¯ãã].{0,20}(æ®´|åº|æ´|æã¾ã|è¹´|æ¡|ç¸|æ¼|å«ã³)`);
       plan.narrative = plan.narrative.filter(s => !rxAct.test(s));
     }
-    if (heroName && inputType !== 'SAY') {
-      plan.narrative = plan.narrative.filter(s => !new RegExp(`${heroName}[はが].*「`).test(s));
+    // SAYä»¥å¤ã®ã¢ã¼ãã§AIãä¸»äººå¬ã«åæã«ã»ãªããè¿½å ããã®ãé²ã
+    if (heroName && inputType !== 'SAY' && inputType !== 'STORY') {
+      plan.narrative = plan.narrative.filter(s => !new RegExp(`${heroName}[ã¯ã].*ã`).test(s));
     }
     plan.narrative = plan.narrative.slice(0, 8);
     return plan;
   }
 };
 
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // UI
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 const UI = {
   esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); },
 
@@ -945,29 +983,29 @@ const UI = {
       story.querySelector('.err-msg')?.remove();
       const div = document.createElement('div'); div.className = 'err-msg';
       div.style.cssText = 'background:rgba(224,96,96,.12);border:1px solid rgba(224,96,96,.3);border-radius:8px;padding:12px 14px;font-size:13px;color:var(--err);white-space:pre-wrap;';
-      div.textContent = '⚠ ' + msg;
+      div.textContent = 'â  ' + msg;
       story.appendChild(div); story.scrollTop = story.scrollHeight;
     } else if (!err) { document.querySelector('.err-msg')?.remove(); }
   },
 
   setLoading(on) {
     const btn = document.getElementById('sendBtn');
-    btn.disabled = on; btn.textContent = on ? '⋯' : '▶';
-    if (on) this.setStatus('生成中…'); else this.setStatus('');
+    btn.disabled = on; btn.textContent = on ? 'â¯' : 'â¶';
+    if (on) this.setStatus('çæä¸­â¦'); else this.setStatus('');
   },
 
   renderNarr(text) {
     return (text||'').split('\n').filter(Boolean).map(line => {
       const escaped = this.esc(line);
-      const formatted = escaped.replace(/「([^」]*)」/g, '<span class="dial">「$1」</span>');
+      const formatted = escaped.replace(/ã([^ã]*)ã/g, '<span class="dial">ã$1ã</span>');
       return `<p>${formatted}</p>`;
     }).join('');
   },
 
   _defenseLabel(d) {
     const map = {
-      denial: '否定', rationalization: '合理化', avoidance: '回避',
-      projection: '投影', displacement: '置き換え', suppression: '抑圧'
+      denial: 'å¦å®', rationalization: 'åçå', avoidance: 'åé¿',
+      projection: 'æå½±', displacement: 'ç½®ãæã', suppression: 'æå§'
     };
     return map[d] || d;
   },
@@ -976,7 +1014,7 @@ const UI = {
     const div = document.createElement('div');
     div.className = 'turn'; div.dataset.idx = idx;
 
-    // プレイヤー行動
+    // ãã¬ã¤ã¤ã¼è¡å
     const pline = document.createElement('div'); pline.className = 'player-line';
     pline.innerHTML = `<span class="mbadge ${turn.inputType}">${turn.inputType}</span> <span class="ptext">${this.esc(turn.playerText)}</span>`;
     div.appendChild(pline);
@@ -984,11 +1022,11 @@ const UI = {
     if (turn.narrative) {
       const block = document.createElement('div'); block.className = 'narr-block';
 
-      // 内心表示（showInner ONの場合）
+      // åå¿è¡¨ç¤ºï¼showInner ONã®å ´åï¼
       if (S.cfg.showInner && turn.innerThought) {
         const it = document.createElement('div'); it.className = 'inner-thought';
         it.textContent = turn.innerThought;
-        // 防衛機制バッジ
+        // é²è¡æ©å¶ããã¸
         if (turn.defenseMechanism && turn.defenseMechanism !== 'none') {
           const badge = document.createElement('span'); badge.className = 'defense-badge';
           badge.textContent = this._defenseLabel(turn.defenseMechanism);
@@ -997,16 +1035,16 @@ const UI = {
         block.appendChild(it);
       }
 
-      // 本文
+      // æ¬æ
       block.innerHTML += this.renderNarr(turn.narrative);
 
-      // 台詞の本音（subtext）
+      // å°è©ã®æ¬é³ï¼subtextï¼
       if (turn.subtext) {
         const st = document.createElement('div'); st.className = 'subtext';
         st.textContent = turn.subtext; block.appendChild(st);
       }
 
-      // NPC 心理メーター
+      // NPC å¿çã¡ã¼ã¿ã¼
       const npc = turn.npcName ? S.cast.npcs.find(n => n.name === turn.npcName || (turn.npcName && turn.npcName.includes(n.name))) : null;
       if (npc && (npc.trust !== undefined || npc.stress !== undefined)) {
         const meters = document.createElement('div'); meters.className = 'psych-meters';
@@ -1014,35 +1052,35 @@ const UI = {
         const stress = npc.stress || 50;
         const trustW = Math.min(100, Math.abs(trust));
         const trustCls = trust >= 0 ? 'trust-pos' : 'trust-neg';
-        const trustLabel = trust >= 40 ? '信頼' : trust >= 0 ? '中立' : trust >= -40 ? '警戒' : '敵対';
+        const trustLabel = trust >= 40 ? 'ä¿¡é ¼' : trust >= 0 ? 'ä¸­ç«' : trust >= -40 ? 'è­¦æ' : 'æµå¯¾';
         meters.innerHTML = `
           <div class="pmeter">
             <span class="pmeter-label">${this.esc(npc.name)}</span>
           </div>
           <div class="pmeter">
-            <span class="pmeter-label">信頼</span>
+            <span class="pmeter-label">ä¿¡é ¼</span>
             <div class="pmeter-bar"><div class="pmeter-fill ${trustCls}" style="width:${trustW}%"></div></div>
             <span class="pmeter-val">${trust > 0 ? '+' : ''}${trust}</span>
           </div>
           <div class="pmeter">
-            <span class="pmeter-label">緊張</span>
+            <span class="pmeter-label">ç·å¼µ</span>
             <div class="pmeter-bar"><div class="pmeter-fill stress" style="width:${stress}%"></div></div>
             <span class="pmeter-val">${stress}</span>
           </div>`;
         block.appendChild(meters);
       }
 
-      // 編集ボタン
+      // ç·¨éãã¿ã³
       const eb = document.createElement('button'); eb.className = 'edit-btn';
-      eb.textContent = '✎ 編集'; eb.onclick = () => UI.openEdit(idx);
+      eb.textContent = 'â ç·¨é'; eb.onclick = () => UI.openEdit(idx);
       block.appendChild(eb);
       div.appendChild(block);
     }
 
-    // デバッグ
+    // ãããã°
     if (S.cfg.debug && turn.dbg) {
       const db = document.createElement('div'); db.className = 'dbg';
-      db.textContent = ['=== SYSTEM (先頭300) ===', (turn.dbg.sys||'').slice(0,300),
+      db.textContent = ['=== SYSTEM (åé ­300) ===', (turn.dbg.sys||'').slice(0,300),
         '=== USER ===', (turn.dbg.user||'').slice(0,400),
         '=== RAW ===', (turn.dbg.raw||'').slice(0,400)].join('\n');
       div.appendChild(db);
@@ -1083,7 +1121,7 @@ const UI = {
     });
   },
 
-  // ── Settings ──
+  // ââ Settings ââ
   onProviderChange() {
     const prov = document.getElementById('cfgProvider').value;
     document.getElementById('provAnthropic').style.display = prov === 'anthropic' ? '' : 'none';
@@ -1117,27 +1155,27 @@ const UI = {
       card.innerHTML = `
         <div class="npc-hdr">
           <span>${this.esc(npc.name || `NPC ${i+1}`)}</span>
-          <button class="npc-del" onclick="UI._delNpc(${i})">✕</button>
+          <button class="npc-del" onclick="UI._delNpc(${i})">â</button>
         </div>
-        <div class="fld"><label>名前</label>
+        <div class="fld"><label>åå</label>
           <input type="text" data-f="name" value="${this.esc(npc.name||'')}"></div>
-        <div class="fld"><label>外見・立場</label>
+        <div class="fld"><label>å¤è¦ã»ç«å ´</label>
           <textarea data-f="desc">${this.esc(npc.desc||'')}</textarea></div>
-        <div class="psych-divider">心理プロファイル</div>
+        <div class="psych-divider">å¿çãã­ãã¡ã¤ã«</div>
         <div class="fld">
-          <label>性格特性（例: 臆病、知識欲が強い、過去を隠している）</label>
+          <label>æ§æ ¼ç¹æ§ï¼ä¾: èçãç¥è­æ¬²ãå¼·ããéå»ãé ãã¦ããï¼</label>
           <input type="text" data-f="personality" value="${this.esc(npc.personality||'')}">
         </div>
         <div class="fld">
-          <label>核心的欲求（例: 誰かに認めてほしい / 守りたいものがある）</label>
+          <label>æ ¸å¿çæ¬²æ±ï¼ä¾: èª°ãã«èªãã¦ã»ãã / å®ããããã®ãããï¼</label>
           <input type="text" data-f="coreDesire" value="${this.esc(npc.coreDesire||'')}">
         </div>
         <div class="fld">
-          <label>核心的恐怖（例: また見捨てられること / 弱さを見られること）</label>
+          <label>æ ¸å¿çææï¼ä¾: ã¾ãè¦æ¨ã¦ããããã¨ / å¼±ããè¦ããããã¨ï¼</label>
           <input type="text" data-f="coreFear" value="${this.esc(npc.coreFear||'')}">
         </div>
         <div class="fld">
-          <label>傷・過去（例: 幼少期に家族を失った / 信頼した人に裏切られた）</label>
+          <label>å·ã»éå»ï¼ä¾: å¹¼å°æã«å®¶æãå¤±ã£ã / ä¿¡é ¼ããäººã«è£åãããï¼</label>
           <textarea data-f="wound">${this.esc(npc.wound||'')}</textarea></div>`;
       el.appendChild(card);
     });
@@ -1147,7 +1185,7 @@ const UI = {
     S.cast.npcs.push({
       id: 'npc' + Date.now(), name: '', desc: '',
       personality: '', coreDesire: '', coreFear: '', wound: '',
-      emotion: '中立', stress: 50, trust: 0, intimacy: 0, keyMoments: []
+      emotion: 'ä¸­ç«', stress: 50, trust: 0, intimacy: 0, keyMoments: []
     });
     this._renderNpcList();
   },
@@ -1156,63 +1194,63 @@ const UI = {
 
   randomFill() {
     const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-    // ── ヒーロー ──
-    const heroNames = ['アリア・フェイン','レン・ヴォルク','カイル・ドレイク','ソフィア・クレア',
-      'ユア・ミスト','ファウスト','エリナ・ルーン','ゼイン','ルカ・セルト','ナノ'];
+    // ââ ãã¼ã­ã¼ ââ
+    const heroNames = ['ã¢ãªã¢ã»ãã§ã¤ã³','ã¬ã³ã»ã´ã©ã«ã¯','ã«ã¤ã«ã»ãã¬ã¤ã¯','ã½ãã£ã¢ã»ã¯ã¬ã¢',
+      'ã¦ã¢ã»ãã¹ã','ãã¡ã¦ã¹ã','ã¨ãªãã»ã«ã¼ã³','ã¼ã¤ã³','ã«ã«ã»ã»ã«ã','ãã'];
     const heroDescs = [
-      '18歳の見習い記録官。慎重だが好奇心旺盛。秘密を抱えている。',
-      '元傭兵の青年。無口だが仲間想い。過去に後悔がある。',
-      '魔法使いの助手。才能はあるが自信がない。師匠を探している。',
-      '没落貴族の末裔。誇り高く、しかし孤独。居場所を求めている。',
-      '行商人の娘。人懐っこいが目が鋭い。生き残るためなら何でもする。',
-      '記憶を失った旅人。素性不明。断片的な過去が夢に現れる。',
+      '18æ­³ã®è¦ç¿ãè¨é²å®ãæéã ãå¥½å¥å¿æºçãç§å¯ãæ±ãã¦ããã',
+      'åå­åµã®éå¹´ãç¡å£ã ãä»²éæ³ããéå»ã«å¾æãããã',
+      'é­æ³ä½¿ãã®å©æãæè½ã¯ãããèªä¿¡ããªããå¸«å ãæ¢ãã¦ããã',
+      'æ²¡è½è²´æã®æ«è£ãèªãé«ãããããå­¤ç¬ãå±å ´æãæ±ãã¦ããã',
+      'è¡åäººã®å¨ãäººæã£ãããç®ãé­ããçãæ®ããããªãä½ã§ãããã',
+      'è¨æ¶ãå¤±ã£ãæäººãç´ æ§ä¸æãæ­ççãªéå»ãå¤¢ã«ç¾ããã',
     ];
-    // ── NPC ──
+    // ââ NPC ââ
     const npcData = [
-      { name:'イルム', desc:'銀髪の少女。感情が読みにくく、言葉が少ない。', personality:'無口・内向・観察眼が鋭い',
-        coreDesire:'誰かに本当の自分を認めてもらいたい', coreFear:'また見捨てられること',
-        wound:'幼い頃、親に棄てられた経験がある。以来、人を信じることが怖い。' },
-      { name:'カデル', desc:'壮年の行商人。愛想がよいが目が笑っていない。', personality:'社交的・計算高い・表裏がある',
-        coreDesire:'安全と財を手に入れ、誰にも頭を下げない生活', coreFear:'貧困と無力感',
-        wound:'若い頃の失敗で大切な人を失い、それ以来感情を切り離して生きている。' },
-      { name:'セイラ', desc:'神殿の見習い司祭。真面目だが脆さを隠している。', personality:'誠実・完璧主義・自罰的',
-        coreDesire:'善い人間であり続けること、誰かを救うこと', coreFear:'自分が悪であると知られること',
-        wound:'信じていた師が腐敗していた。信仰と現実の間で今も揺れている。' },
-      { name:'ヴォルグ', desc:'老齢の元兵士。片足が不自由。皮肉屋。', personality:'シニカル・経験豊富・情に厚い',
-        coreDesire:'かつて失った仲間の死に意味を見つけたい', coreFear:'無駄死にだったと気づくこと',
-        wound:'唯一の親友を自分の命令ミスで死なせた。今もその責任を引きずっている。' },
-      { name:'ミア', desc:'少年のような外見の少女。素早く動き、嘘をつく。', personality:'活発・ずる賢い・本当は臆病',
-        coreDesire:'自由に、誰にも縛られず生きること', coreFear:'檻に入れられること・管理されること',
-        wound:'孤児院で厳しく管理された幼少期。自由を奪われることへの恐怖が根深い。' },
+      { name:'ã¤ã«ã ', desc:'éé«ªã®å°å¥³ãææãèª­ã¿ã«ãããè¨èãå°ãªãã', personality:'ç¡å£ã»ååã»è¦³å¯ç¼ãé­ã',
+        coreDesire:'èª°ãã«æ¬å½ã®èªåãèªãã¦ããããã', coreFear:'ã¾ãè¦æ¨ã¦ããããã¨',
+        wound:'å¹¼ãé ãè¦ªã«æ£ã¦ãããçµé¨ããããä»¥æ¥ãäººãä¿¡ãããã¨ãæãã' },
+      { name:'ã«ãã«', desc:'å£®å¹´ã®è¡åäººãææ³ããããç®ãç¬ã£ã¦ããªãã', personality:'ç¤¾äº¤çã»è¨ç®é«ãã»è¡¨è£ããã',
+        coreDesire:'å®å¨ã¨è²¡ãæã«å¥ããèª°ã«ãé ­ãä¸ããªãçæ´»', coreFear:'è²§å°ã¨ç¡åæ',
+        wound:'è¥ãé ã®å¤±æã§å¤§åãªäººãå¤±ããããä»¥æ¥ææãåãé¢ãã¦çãã¦ããã' },
+      { name:'ã»ã¤ã©', desc:'ç¥æ®¿ã®è¦ç¿ãå¸ç¥­ãçé¢ç®ã ãèããé ãã¦ããã', personality:'èª å®ã»å®ç§ä¸»ç¾©ã»èªç½°ç',
+        coreDesire:'åãäººéã§ããç¶ãããã¨ãèª°ããæããã¨', coreFear:'èªåãæªã§ããã¨ç¥ããããã¨',
+        wound:'ä¿¡ãã¦ããå¸«ãèæãã¦ãããä¿¡ä»°ã¨ç¾å®ã®éã§ä»ãæºãã¦ããã' },
+      { name:'ã´ã©ã«ã°', desc:'èé½¢ã®ååµå£«ãçè¶³ãä¸èªç±ãç®èå±ã', personality:'ã·ãã«ã«ã»çµé¨è±å¯ã»æã«åã',
+        coreDesire:'ãã¤ã¦å¤±ã£ãä»²éã®æ­»ã«æå³ãè¦ã¤ããã', coreFear:'ç¡é§æ­»ã«ã ã£ãã¨æ°ã¥ããã¨',
+        wound:'å¯ä¸ã®è¦ªåãèªåã®å½ä»¤ãã¹ã§æ­»ãªãããä»ããã®è²¬ä»»ãå¼ããã£ã¦ããã' },
+      { name:'ãã¢', desc:'å°å¹´ã®ãããªå¤è¦ã®å°å¥³ãç´ æ©ãåããåãã¤ãã', personality:'æ´»çºã»ããè³¢ãã»æ¬å½ã¯èç',
+        coreDesire:'èªç±ã«ãèª°ã«ãç¸ãããçãããã¨', coreFear:'æª»ã«å¥ãããããã¨ã»ç®¡çããããã¨',
+        wound:'å­¤åé¢ã§å³ããç®¡çãããå¹¼å°æãèªç±ãå¥ªããããã¨ã¸ã®ææãæ ¹æ·±ãã' },
     ];
-    // ── 世界観・シーン ──
+    // ââ ä¸çè¦³ã»ã·ã¼ã³ ââ
     const lores = [
-      '記憶が結晶化した「灯片」が通貨として使われる都市。灯片を多く持つ者ほど過去が薄れていく。',
-      '魔法が「禁忌の技術」として弾圧されている帝国。使い手は地下に潜り秘密結社を作っている。',
-      '海に浮かぶ群島国家。島ごとに独自の文化と掟があり、島間の移動は命がけ。',
-      '死者が「霊燐」として漂う世界。霊燐は人の感情を映し出し、時に現実に干渉する。',
-      '科学と魔法が共存する近未来都市。しかし旧市街には古い呪いが残っている。',
+      'è¨æ¶ãçµæ¶åãããç¯çããéè²¨ã¨ãã¦ä½¿ãããé½å¸ãç¯çãå¤ãæã¤èã»ã©éå»ãèãã¦ããã',
+      'é­æ³ããç¦å¿ã®æè¡ãã¨ãã¦å¼¾å§ããã¦ããå¸å½ãä½¿ãæã¯å°ä¸ã«æ½ãç§å¯çµç¤¾ãä½ã£ã¦ããã',
+      'æµ·ã«æµ®ãã¶ç¾¤å³¶å½å®¶ãå³¶ãã¨ã«ç¬èªã®æåã¨æããããå³¶éã®ç§»åã¯å½ããã',
+      'æ­»èããéçãã¨ãã¦æ¼ãä¸çãéçã¯äººã®ææãæ ãåºããæã«ç¾å®ã«å¹²æ¸ããã',
+      'ç§å­¦ã¨é­æ³ãå±å­ããè¿æªæ¥é½å¸ããããæ§å¸è¡ã«ã¯å¤ãåªããæ®ã£ã¦ããã',
     ];
     const locs = [
-      '廃墟の図書館、夕暮れ時', '霧深い港町の路地', '古い教会の地下室',
-      '砂漠の中の隊商宿', '雪に閉ざされた山小屋', '地下に広がる市場',
-      '廃城の謁見室', '霊廟の入口', '夜の橋の上', '嵐の前の森の中',
+      'å»å¢ã®å³æ¸é¤¨ãå¤æ®ãæ', 'é§æ·±ãæ¸¯çºã®è·¯å°', 'å¤ãæä¼ã®å°ä¸å®¤',
+      'ç æ¼ ã®ä¸­ã®éåå®¿', 'éªã«éããããå±±å°å±', 'å°ä¸ã«åºããå¸å ´',
+      'å»åã®è¬è¦å®¤', 'éå»ã®å¥å£', 'å¤ã®æ©ã®ä¸', 'åµã®åã®æ£®ã®ä¸­',
     ];
     const objs = [
-      '謎の少女の正体を探っている', '行方不明の師匠を捜索中',
-      '奪われた重要な書物を取り戻す', '呪いを解く方法を見つけなければならない',
-      '逃げる途中で偶然出会った人物と協力することになった',
-      'ある組織の陰謀に巻き込まれ、真実を追っている',
+      'è¬ã®å°å¥³ã®æ­£ä½ãæ¢ã£ã¦ãã', 'è¡æ¹ä¸æã®å¸«å ãæç´¢ä¸­',
+      'å¥ªãããéè¦ãªæ¸ç©ãåãæ»ã', 'åªããè§£ãæ¹æ³ãè¦ã¤ããªããã°ãªããªã',
+      'éããéä¸­ã§å¶ç¶åºä¼ã£ãäººç©ã¨ååãããã¨ã«ãªã£ã',
+      'ããçµç¹ã®é°è¬ã«å·»ãè¾¼ã¾ããçå®ãè¿½ã£ã¦ãã',
     ];
     const tones = [
-      'ダークファンタジー、心理描写重視、会話多め',
-      '退廃的・詩的、内面独白が多い',
-      'ミステリー要素あり、伏線と謎解き重視',
-      '重厚なドラマ、感情の衝突と和解',
-      'サバイバル緊張感、信頼と疑惑の交差',
+      'ãã¼ã¯ãã¡ã³ã¿ã¸ã¼ãå¿çæåéè¦ãä¼è©±å¤ã',
+      'éå»çã»è©©çãåé¢ç¬ç½ãå¤ã',
+      'ãã¹ããªã¼è¦ç´ ãããä¼ç·ã¨è¬è§£ãéè¦',
+      'éåãªãã©ããææã®è¡çªã¨åè§£',
+      'ãµãã¤ãã«ç·å¼µæãä¿¡é ¼ã¨çæã®äº¤å·®',
     ];
 
-    // 未入力のみ埋める
+    // æªå¥åã®ã¿åãã
     const hName = document.getElementById('cfgHName');
     const hDesc = document.getElementById('cfgHDesc');
     if (!hName.value.trim()) hName.value = pick(heroNames);
@@ -1227,14 +1265,14 @@ const UI = {
     if (!obj.value.trim())  obj.value  = pick(objs);
     if (!tone.value.trim()) tone.value = pick(tones);
 
-    // NPCが0件なら1件追加
+    // NPCã0ä»¶ãªã1ä»¶è¿½å 
     const npcCards = document.querySelectorAll('#npcList .npc-card');
     if (npcCards.length === 0) {
       UI.addNpc();
-      // 少し待ってからフィールドを埋める
+      // å°ãå¾ã£ã¦ãããã£ã¼ã«ããåãã
       setTimeout(() => UI._fillNpcRandom(pick(npcData)), 50);
     } else {
-      // 既存NPCの未入力フィールドを埋める
+      // æ¢å­NPCã®æªå¥åãã£ã¼ã«ããåãã
       npcCards.forEach((card) => {
         const get = (f) => card.querySelector(`[data-f="${f}"]`);
         const nd = pick(npcData);
@@ -1246,7 +1284,7 @@ const UI = {
         if (!get('wound')?.value.trim())       get('wound').value = nd.wound;
       });
     }
-    UI.setStatus('🎲 ランダム生成しました。内容を確認して保存してください。');
+    UI.setStatus('ð² ã©ã³ãã çæãã¾ãããåå®¹ãç¢ºèªãã¦ä¿å­ãã¦ãã ããã');
   },
 
   _fillNpcRandom(nd) {
@@ -1281,24 +1319,24 @@ const UI = {
     });
     S.cast.npcs = S.cast.npcs.filter(n => n.name);
 
-    S.save(); this.closeSettings(); this.setStatus('設定を保存しました');
+    S.save(); this.closeSettings(); this.setStatus('è¨­å®ãä¿å­ãã¾ãã');
     if (S.turns.length === 0) this._showIntro();
   },
 
   _showIntro() {
     const wl = document.getElementById('welcome'); if (!wl) return;
-    const h = S.cast.hero.name || '主人公';
-    const l = S.scene.loc || '不明の場所';
+    const h = S.cast.hero.name || 'ä¸»äººå¬';
+    const l = S.scene.loc || 'ä¸æã®å ´æ';
     const hasKey = S.cfg.provider === 'novelai' ? S.cfg.naiKey : S.cfg.key;
     wl.style.display = 'block';
     document.getElementById('welcomeMsg').innerHTML = hasKey
-      ? `場所: <strong style="color:var(--tx)">${this.esc(l)}</strong>　主人公: <strong style="color:var(--tx)">${this.esc(h)}</strong><br><br>下の入力欄に行動を入力して <strong style="color:var(--acc)">「送信 ▶」</strong> を押してください。`
-      : `<span style="color:var(--err)">⚙ 設定 からAPIキーと世界設定を入力してください。</span>`;
+      ? `å ´æ: <strong style="color:var(--tx)">${this.esc(l)}</strong>ãä¸»äººå¬: <strong style="color:var(--tx)">${this.esc(h)}</strong><br><br>ä¸ã®å¥åæ¬ã«è¡åãå¥åãã¦ <strong style="color:var(--acc)">ãéä¿¡ â¶ã</strong> ãæ¼ãã¦ãã ããã`
+      : `<span style="color:var(--err)">â è¨­å® ããAPIã­ã¼ã¨ä¸çè¨­å®ãå¥åãã¦ãã ããã</span>`;
     const actEl = document.getElementById('welcomeActions');
     if (hasKey) {
       actEl.style.display = 'block';
       const qs = document.getElementById('quickStarts'); qs.innerHTML = '';
-      [{ mode:'DO', text:'周囲を見渡す' }, { mode:'DO', text:`${h}は一歩踏み出した` }, { mode:'STORY', text:'物語が始まる' }]
+      [{ mode:'DO', text:'å¨å²ãè¦æ¸¡ã' }, { mode:'DO', text:`${h}ã¯ä¸æ­©è¸ã¿åºãã` }, { mode:'STORY', text:'ç©èªãå§ã¾ã' }]
         .forEach(ex => {
           const b = document.createElement('button'); b.className = 'chip main';
           b.textContent = `${ex.mode}: ${ex.text}`;
@@ -1308,7 +1346,7 @@ const UI = {
     }
   },
 
-  // ── Edit ──
+  // ââ Edit ââ
   openEdit(idx) {
     S.editIdx = idx;
     document.getElementById('editTa').value = S.turns[idx]?.narrative || '';
@@ -1322,9 +1360,9 @@ const UI = {
   }
 };
 
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // Game
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 const G = {
   init() {
     S.load(); this.setMode(S.mode);
@@ -1340,16 +1378,16 @@ const G = {
   },
 
   startScene() {
-    const h = S.cast.hero.name || '主人公';
-    const l = S.scene.loc || 'その場所';
-    document.getElementById('inp').value = `${l}で${h}は目を開けた`;
+    const h = S.cast.hero.name || 'ä¸»äººå¬';
+    const l = S.scene.loc || 'ãã®å ´æ';
+    document.getElementById('inp').value = `${l}ã§${h}ã¯ç®ãéãã`;
     this.setMode('STORY'); this.submit();
   },
 
   setMode(m) {
     S.mode = m;
     document.querySelectorAll('.mdbtn').forEach(b => { b.className = 'mdbtn'; if (b.dataset.m === m) b.classList.add('a' + m); });
-    const phs = { DO: '行動を入力… 例: 女の子に声をかける', SAY: 'セリフを入力… 例: 「名前を教えてくれ」', STORY: '描写の方向を入力… 例: 遠くから足音が近づく' };
+    const phs = { DO: 'è¡åãå¥åâ¦ ä¾: å¥³ã®å­ã«å£°ãããã', SAY: 'ã»ãªããå¥åâ¦ ä¾: ãååãæãã¦ããã', STORY: 'æåã®æ¹åãå¥åâ¦ ä¾: é ãããè¶³é³ãè¿ã¥ã' };
     document.getElementById('inp').placeholder = phs[m] || '';
   },
 
@@ -1358,17 +1396,17 @@ const G = {
     const inputEl = document.getElementById('inp');
     const text = inputEl.value.trim();
     if (!text) {
-      inputEl.placeholder = '⬆ ここに行動や発言を入力してから送信してください';
+      inputEl.placeholder = 'â¬ ããã«è¡åãçºè¨ãå¥åãã¦ããéä¿¡ãã¦ãã ãã';
       inputEl.style.borderColor = 'var(--acc)'; inputEl.focus();
       setTimeout(() => {
-        inputEl.placeholder = { DO:'行動を入力…', SAY:'セリフを入力…', STORY:'描写の方向を入力…' }[S.mode] || '';
+        inputEl.placeholder = { DO:'è¡åãå¥åâ¦', SAY:'ã»ãªããå¥åâ¦', STORY:'æåã®æ¹åãå¥åâ¦' }[S.mode] || '';
         inputEl.style.borderColor = '';
       }, 2500);
       return;
     }
     const prov = S.cfg.provider || 'anthropic';
     const hasKey = prov === 'novelai' ? S.cfg.naiKey : S.cfg.key;
-    if (!hasKey) { UI.setStatus(`APIキーが未設定です`, true); UI.openSettings(); return; }
+    if (!hasKey) { UI.setStatus(`APIã­ã¼ãæªè¨­å®ã§ã`, true); UI.openSettings(); return; }
 
     inputEl.value = ''; inputEl.style.height = 'auto';
     UI.setLoading(true); UI.renderBranches([]);
@@ -1379,9 +1417,9 @@ const G = {
       if (!result) return;
 
       const plan = Planner.parsePlan(result.text, S.mode);
-      if (!plan) throw new Error('AIの応答をJSONとして解析できませんでした。\nデバッグをONにして確認してください。\n\n' + result.text.slice(0,300));
+      if (!plan) throw new Error('AIã®å¿ç­ãJSONã¨ãã¦è§£æã§ãã¾ããã§ããã\nãããã°ãONã«ãã¦ç¢ºèªãã¦ãã ããã\n\n' + result.text.slice(0,300));
 
-      // 心理エンジンで NPC 状態を更新
+      // å¿çã¨ã³ã¸ã³ã§ NPC ç¶æãæ´æ°
       PsychEngine.process(plan);
 
       const narr = plan.narrative.join('\n');
@@ -1407,13 +1445,13 @@ const G = {
       UI.renderBranches(plan.branchCandidates);
       UI.setStatus('');
     } catch(e) {
-      UI.setStatus('エラー: ' + e.message, true); console.error(e);
+      UI.setStatus('ã¨ã©ã¼: ' + e.message, true); console.error(e);
     } finally { UI.setLoading(false); }
   },
 
   async cont() {
     if (S.inFlight || S.turns.length === 0) return;
-    document.getElementById('inp').value = '続きを自然に進めてください。';
+    document.getElementById('inp').value = 'ç¶ããèªç¶ã«é²ãã¦ãã ããã';
     const prev = S.mode; this.setMode('STORY');
     await this.submit(); this.setMode(prev);
   },
@@ -1428,21 +1466,21 @@ const G = {
 
   undo() {
     if (S.turns.length === 0) return;
-    if (!confirm('直前のターンを取り消しますか？')) return;
+    if (!confirm('ç´åã®ã¿ã¼ã³ãåãæ¶ãã¾ããï¼')) return;
     S.turns.pop();
     S.scene.branches = S.turns.length ? (S.turns[S.turns.length-1].plan?.branchCandidates || []) : [];
-    S.save(); UI.renderAll(); UI.renderBranches(S.scene.branches); UI.setStatus('取り消しました');
+    S.save(); UI.renderAll(); UI.renderBranches(S.scene.branches); UI.setStatus('åãæ¶ãã¾ãã');
   },
 
   resetStory() {
-    if (!confirm('物語をリセットしますか？\n設定・APIキー・NPC設定は保持されます。')) return;
+    if (!confirm('ç©èªããªã»ãããã¾ããï¼\nè¨­å®ã»APIã­ã¼ã»NPCè¨­å®ã¯ä¿æããã¾ãã')) return;
     S.turns = []; S.scene.branches = [];
-    S.cast.npcs.forEach(n => { n.emotion = '中立'; n.stress = 50; n.trust = 0; n.intimacy = 0; n.keyMoments = []; });
-    S.save(); UI.renderAll(); UI.renderBranches([]); UI._showIntro(); UI.setStatus('物語をリセットしました');
+    S.cast.npcs.forEach(n => { n.emotion = 'ä¸­ç«'; n.stress = 50; n.trust = 0; n.intimacy = 0; n.keyMoments = []; });
+    S.save(); UI.renderAll(); UI.renderBranches([]); UI._showIntro(); UI.setStatus('ç©èªããªã»ãããã¾ãã');
   },
 
   resetAll() {
-    if (!confirm('すべてのデータ（APIキー・設定を含む）を削除しますか？\nこの操作は取り消せません。')) return;
+    if (!confirm('ãã¹ã¦ã®ãã¼ã¿ï¼APIã­ã¼ã»è¨­å®ãå«ãï¼ãåé¤ãã¾ããï¼\nãã®æä½ã¯åãæ¶ãã¾ããã')) return;
     SS.del(KEY); location.reload();
   }
 };
