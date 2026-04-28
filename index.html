@@ -559,7 +559,7 @@ const Api = {
   normalize(raw) {
     if (!raw) return '';
     let s = String(raw).trim();
-    s = s.replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '');
+    s = s.replace(/[​-‍﻿ ]/g, '');
     if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) s = s.slice(1,-1).trim();
     return s;
   },
@@ -608,44 +608,66 @@ const Api = {
     return { text: (json.content || []).map(c => c.text || '').join(''), body: null };
   },
 
+  _hasForeignGarbage(text) {
+    if (!text) return false;
+    const enMatches = (text.match(/[A-Za-z][A-Za-z0-9_.]{2,}/g) || []).length;
+    const zhMatches = (text.match(/[过这没现还说让对给从将们点东几亲爱觉吗么吧呢哪谁怎样此后状围]/g) || []).length;
+    return enMatches >= 3 || zhMatches >= 2;
+  },
+
   async _callOpenRouter(system, userContent, maxTok) {
     const key = this.normalize(S.cfg.orKey);
     if (!key) throw new Error('OpenRouter APIキーが設定されていません（sk-or-... 形式）');
     const model = S.cfg.orModel || 'meta-llama/llama-3.3-70b-instruct';
     console.log('[OpenRouter] model:', model);
 
-    const id = ++S.reqId;
-    S.inFlight = true;
-    const ctrl = new AbortController();
-    const tid  = setTimeout(() => ctrl.abort(), 60000);
-    let res;
-    try {
-      res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${key}`,
-          'HTTP-Referer': 'https://sansan2103-a11y.github.io/chronicle/',
-          'X-Title': 'Chronicle TRPG'
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: maxTok,
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user',   content: userContent }
-          ]
-        }),
-        signal: ctrl.signal
-      });
-    } finally { clearTimeout(tid); S.inFlight = false; }
+    const maxRetries = 2;
+    let lastResult = null;
 
-    if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(`OpenRouter HTTP ${res.status}: ${t.slice(0,200)}`); }
-    const json = await res.json();
-    if (id !== S.reqId) return null;
-    const text = (json.choices?.[0]?.message?.content || '').trim();
-    if (!text) throw new Error('OpenRouterから出力がありませんでした');
-    return { text, body: null };
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const id = ++S.reqId;
+      S.inFlight = true;
+      const ctrl = new AbortController();
+      const tid  = setTimeout(() => ctrl.abort(), 60000);
+      let res;
+      try {
+        res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${key}`,
+            'HTTP-Referer': 'https://sansan2103-a11y.github.io/chronicle/',
+            'X-Title': 'Chronicle TRPG'
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: maxTok,
+            temperature: 0.6,
+            top_p: 0.9,
+            messages: [
+              { role: 'system', content: system },
+              { role: 'user',   content: userContent }
+            ]
+          }),
+          signal: ctrl.signal
+        });
+      } finally { clearTimeout(tid); S.inFlight = false; }
+
+      if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(`OpenRouter HTTP ${res.status}: ${t.slice(0,200)}`); }
+      const json = await res.json();
+      if (id !== S.reqId) return null;
+      const text = (json.choices?.[0]?.message?.content || '').trim();
+      if (!text) throw new Error('OpenRouterから出力がありませんでした');
+
+      lastResult = { text, body: null };
+
+      if (attempt < maxRetries && this._hasForeignGarbage(text)) {
+        console.warn(`[Retry ${attempt+1}/${maxRetries}] 外国語混入を検出、再生成します`);
+        continue;
+      }
+      return lastResult;
+    }
+    return lastResult;
   },
 
   async _callNovelAI(system, userContent, maxTok) {
@@ -969,7 +991,19 @@ ${scene.lore || 'なし'}
   "narrative": ["地の文1（環境・状況・空気感）","地の文2（NPCの動作・表情——感情を体で表す）","地の文3（セリフは動作と一体化させる）「〝台詞〟——動作/間」","地の文4","地の文5（心理・余白・沈黙）","地の文6","地の文7（余韻・次への引き）"]
 }
 
-narrativeの注意: 各要素は「〜した」「〜と言った」形式の完結した一文にすること。途中で切らない。同じ内容を言い換えて連続で出さない。`;
+narrativeの注意: 各要素は「〜した」「〜と言った」形式の完結した一文にすること。途中で切らない。同じ内容を言い換えて連続で出さない。
+
+【⚠️絶対厳守 — 言語制約】
+出力narrativeは100%純粋な日本語のみ。以下を絶対に含めてはならない:
+- 英単語（3文字以上のアルファベット連続）
+- 中国簡体字や中国語の文
+- コード片、変数名
+違反した行は無効として破棄される。
+
+【お手本となる正しいnarrative出力例】
+例1（DO、彼女に手を伸ばす）: ["アリアはゆっくりと手を伸ばした。","ミリアの肩がびくりと跳ねる。","「触らないで……」彼女の声は震えていた。"]
+例2（STORY、血の海で）: ["床は血の海と化していた。","鉄の匂いが鼻孔を刺す。","ミリアの白いドレスは、もう赤黒く染まっている。"]
+すべての例で完全に日本語のみ。これと同じ品質で生成すること。`;
 
     const user = JSON.stringify({
       cast: {
@@ -1035,6 +1069,19 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
     if (heroName && inputType !== 'SAY' && inputType !== 'STORY') {
       plan.narrative = plan.narrative.filter(s => !new RegExp(`${heroName}[はが].*「`).test(s));
     }
+        // 言語フィルタ: 英単語・中国簡体字を除去
+    plan.narrative = plan.narrative.map(line => {
+      if (!line) return '';
+      let t = line;
+      t = t.replace(/[A-Za-z][A-Za-z0-9_.]{2,}/g, '');
+      t = t.replace(/[过这没现还说让对给从将们点东几亲爱觉吗么吧呢哪谁怎样此后状围]/g, '');
+      t = t.replace(/\s+/g, ' ').trim();
+      return t;
+    }).filter(line => {
+      if (!line || line.length < 2) return false;
+      return /[぀-ゟ゠-ヿ]/.test(line);
+    });
+    if (plan.narrative.length === 0) plan.narrative = ['…'];
     plan.narrative = plan.narrative.slice(0, 8);
     return plan;
   }
@@ -1371,10 +1418,10 @@ const UI = {
 
   saveSettings() {
     S.cfg.provider = document.getElementById('cfgProvider').value;
-    S.cfg.key      = (document.getElementById('cfgKey').value    || '').replace(/[\s\u200B\uFEFF\u00A0]/g, '');
-    S.cfg.orKey    = (document.getElementById('cfgOrKey').value  || '').replace(/[\s\u200B\uFEFF\u00A0]/g, '');
+    S.cfg.key      = (document.getElementById('cfgKey').value    || '').replace(/[\s​﻿ ]/g, '');
+    S.cfg.orKey    = (document.getElementById('cfgOrKey').value  || '').replace(/[\s​﻿ ]/g, '');
     S.cfg.orModel  = document.getElementById('cfgOrModel').value;
-    S.cfg.naiKey   = (document.getElementById('cfgNaiKey').value || '').replace(/[\s\u200B\uFEFF\u00A0]/g, '');
+    S.cfg.naiKey   = (document.getElementById('cfgNaiKey').value || '').replace(/[\s​﻿ ]/g, '');
     S.cfg.model    = document.getElementById('cfgModel').value;
     S.cfg.debug    = document.getElementById('cfgDbg').checked;
     S.cfg.showInner = document.getElementById('cfgShowInner').checked;
