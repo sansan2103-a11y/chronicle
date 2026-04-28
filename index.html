@@ -535,6 +535,76 @@ const PsychEngine = {
     else if (p.includes('孤独') || p.includes('内向') || p.includes('静') || p.includes('寡黙'))
       speechHint = '独り言のような口調。間が長い。「……そうか」「（沈黙）」。';
 
+    // 年齢・性別の抽出と口調指針
+    const desc = npc.desc || '';
+    const all = (npc.name||'') + ' ' + desc + ' ' + (npc.personality||'');
+    let age = null;
+    const am = desc.match(/(\d+)\s*歳/);
+    if (am) {
+      const a = parseInt(am[1], 10);
+      if      (a <= 6)  age = 'infant';
+      else if (a <= 12) age = 'child';
+      else if (a <= 17) age = 'teen';
+      else if (a <= 30) age = 'youth';
+      else if (a <= 50) age = 'adult';
+      else if (a <= 70) age = 'middle';
+      else              age = 'elder';
+    } else if (/幼少|赤ん坊|赤子/.test(desc)) age = 'infant';
+    else if (/子供|少年|少女|童/.test(desc)) age = 'child';
+    else if (/青年|十代|高校生|学生/.test(desc)) age = 'teen';
+    else if (/若者|若い|二十代/.test(desc)) age = 'youth';
+    else if (/中年|壮年|大人/.test(desc)) age = 'adult';
+    else if (/初老/.test(desc)) age = 'middle';
+    else if (/老人|老婆|老兵|長老|高齢/.test(desc)) age = 'elder';
+
+    let gender = null;
+    let fS = 0, mS = 0;
+    if (/女の子|少女|娘|姫|お姫様|お嬢様|魔女|巫女|尼|姉|妹|母|祖母|老婆|乙女|淑女|貴婦人|彼女/.test(all)) fS += 4;
+    if (/可愛|可憐|綺麗|美しい|麗しい|清楚|淑やか|嫋やか|長い髪|お下げ|ポニーテール|ツインテール|ドレス|スカート/.test(all)) fS += 2;
+    if (/[♀]|female|woman|girl/i.test(all)) fS += 3;
+    if (/男の子|少年|息子|王子|武人|騎士|戦士|兄[はがをに]|弟|父|祖父|老爺|男性|男児|親父|彼[はがをにと]/.test(all)) mS += 4;
+    if (/凛々しい|精悍|逞しい|たくましい|筋骨|髭|短髪|スーツ|軍服|武装|鎧/.test(all)) mS += 2;
+    if (/[♂]|male|man|boy/i.test(all)) mS += 3;
+    if (npc.name) {
+      if (/[子美香奈愛織絵音優]$/.test(npc.name)) fS += 2;
+      if (/(ミ|リ|ル|ナ|ヤ|コ|ア|エ|セ|シ)[アィエ]?$/.test(npc.name)) fS += 1;
+      if (/[郎太助男人介彦哉]$/.test(npc.name)) mS += 2;
+    }
+    if (fS > mS && fS >= 2) gender = 'female';
+    else if (mS > fS && mS >= 2) gender = 'male';
+
+    const SPEECH_TABLE = {
+      'infant_female': '舌足らず・幼児語。「〜なの」「〜だもん」「ママ」「いやだ」。語彙単純。',
+      'infant_male':   '舌足らず・幼児語。「〜なの」「〜だもん」「やだ」。元気か泣き気味。',
+      'child_female':  '子供っぽい甘え言葉。「〜なの」「〜だもん」「やだやだ」。語尾を伸ばす。',
+      'child_male':    '子供っぽく元気。「〜だぞ」「〜だもん」「すごいや」。明るい語尾。',
+      'teen_female':   '少女らしい口調。「〜だよ」「〜なんだ」「〜じゃない？」「〜だってば」。一人称は「私」「あたし」。',
+      'teen_male':     '少年らしい口調。「〜だな」「〜だぜ」「〜じゃん」「マジで」。一人称は「俺」「僕」。',
+      'youth_female':  '若い女性の口調。「〜よ」「〜ね」「〜かしら」「〜わ」。落ち着きと色気が混在。',
+      'youth_male':    '若い男性の口調。「〜だ」「〜だな」「〜さ」「ああ」。気取らず率直。',
+      'adult_female':  '大人の女性の口調。「〜です」「〜ですね」「〜でしょう」。理性的で抑制的。',
+      'adult_male':    '大人の男性の口調。「〜だ」「〜だろう」「〜と思う」。落ち着いた響き。',
+      'middle_female': '中年女性の口調。「〜だわね」「〜よね」「あら」。経験ある優しさ。',
+      'middle_male':   '中年男性の口調。「〜だな」「〜だ」「ふむ」「〜と思うが」。重みあり。',
+      'elder_female':  '老婆の口調。「〜じゃ」「〜のう」「ほっほ」「〜のじゃよ」。古風。',
+      'elder_male':    '老人の口調。「〜じゃ」「〜のう」「わしは」「ほう」。古風で重厚。'
+    };
+    const ageGenderKey = (age && gender) ? (age + '_' + gender) : null;
+    const ageGenderHint = ageGenderKey && SPEECH_TABLE[ageGenderKey] ? SPEECH_TABLE[ageGenderKey] : null;
+
+    // ストレス値による台詞リアリティ調整
+    let stressRealism = '';
+    if (stress >= 80) {
+      stressRealism = '【極限ストレス '+stress+'】台詞は完全に破綻させる: ' +
+        '敬語禁止（「ですます」「〜してください」絶対NG）。文を最後まで完成させない（「やめ……」「いや、いやだ……っ」「は、離し……」）。' +
+        '嗚咽・喘ぎが混じる（「ひっ」「うっ」「あっ」）。主語省略・語順崩壊。身体描写が台詞より先（肩が震え、呼吸が浅く、涙）。' +
+        '例: 「いや……っ、ち、違う……お願い、やめて、やめてよぉ……っ」。綺麗な敬語は絶対禁止。';
+    } else if (stress >= 65) {
+      stressRealism = '【高ストレス '+stress+'】台詞は乱れる: 敬語と素の言葉が混在。「あ……」「で、でも」など言葉が詰まる。文末が震えて途切れる。例: 「やめ……やめてよ、本当に……」';
+    } else if (stress >= 45) {
+      stressRealism = '【中ストレス '+stress+'】台詞は抑制的だが感情が滲む。語尾が小さくなる、目を逸らす。';
+    }
+
     return [
       `【${npc.name} — 心理プロファイル】`,
       npc.desc        ? `立場: ${npc.desc.slice(0,60)}` : '',
@@ -543,11 +613,14 @@ const PsychEngine = {
       npc.coreFear    ? `核心的恐怖: 「${npc.coreFear}」` : '',
       npc.wound       ? `傷・過去: ${npc.wound}` : '',
       speechHint      ? `★話し方の個性: ${speechHint}` : '',
+      ageGenderHint   ? `★年齢×性別の口調指針【絶対遵守】: ${ageGenderHint}` : '',
+      stressRealism   ? `★${stressRealism}` : '',
       `現在の感情: ${npc.emotion || '中立'}`,
       `ストレス: ${stressDesc} (${stress}/100)`,
       `信頼度: ${trustDesc} (${trust}/100)`,
       `親密度: ${intimacy}/100`,
-      moments ? `重要な記憶:\n${moments}` : ''
+      moments ? `重要な記憶:\n${moments}` : '',
+      '【台詞のリアリティ原則】整った敬語より「途切れる息」「身体反応」を優先。暴力・恐怖の中では人は綺麗に喋れない。'
     ].filter(Boolean).join('\n');
   }
 };
