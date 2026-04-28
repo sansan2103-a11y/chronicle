@@ -301,6 +301,7 @@ body {
         <label>プロバイダー</label>
         <select id="cfgProvider" onchange="UI.onProviderChange()">
           <option value="anthropic">Anthropic（Claude）— sk-ant-...</option>
+          <option value="openrouter">OpenRouter（推奨）— sk-or-...</option>
           <option value="novelai">NovelAI（Kayra）— pst-...</option>
         </select>
       </div>
@@ -315,6 +316,24 @@ body {
             <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5（推奨：軽量・高速）</option>
             <option value="claude-sonnet-4-6">Claude Sonnet 4.6（高品質）</option>
           </select>
+        </div>
+      </div>
+      <div id="provOpenRouter" style="display:none">
+        <div class="fld">
+          <label>OpenRouter API キー（<code>sk-or-</code> で始まる）</label>
+          <input type="password" id="cfgOrKey" placeholder="sk-or-v1-...">
+        </div>
+        <div class="fld">
+          <label>モデル</label>
+          <select id="cfgOrModel">
+            <option value="meta-llama/llama-3.3-70b-instruct">LLaMA 3.3 70B（推奨：高品質・低コスト）</option>
+            <option value="nousresearch/hermes-3-llama-3.1-405b">Hermes 3 405B（最高品質）</option>
+            <option value="mistralai/mistral-nemo">Mistral Nemo（高速・軽量）</option>
+            <option value="google/gemma-3-27b-it">Gemma 3 27B（バランス型）</option>
+          </select>
+        </div>
+        <div class="fld" style="background:rgba(139,118,240,.08);border:1px solid rgba(139,118,240,.25);border-radius:8px;padding:10px;font-size:12px;color:#a090d0">
+          ✦ 指示追従モデル。心理エンジン・ホラー・成人描写など表現制限なし。
         </div>
       </div>
       <div id="provNovelAI" style="display:none">
@@ -399,8 +418,9 @@ const KEY = 'chr6';
 // ─────────────────────────────────────────────────────────────
 const S = {
   cfg: {
-    provider: 'anthropic', key: '', naiKey: '',
-    model: 'claude-haiku-4-5-20251001', debug: false, showInner: true
+    provider: 'anthropic', key: '', naiKey: '', orKey: '',
+    model: 'claude-haiku-4-5-20251001', orModel: 'meta-llama/llama-3.3-70b-instruct',
+    debug: false, showInner: true
   },
   cast: {
     hero: { name: '', desc: '' },
@@ -505,7 +525,7 @@ const PsychEngine = {
     if (p.includes('神秘') || p.includes('超越') || p.includes('神') || p.includes('古'))
       speechHint = '古風・抽象的な言い回し。「汝」「〜なのだ」など。感情を直接言わない。';
     else if (p.includes('支配') || p.includes('傲慢') || p.includes('冷酷') || p.includes('権威'))
-      speechHint = '断言・命令形。「当然だ」「〜しなさい」。弱さを見せない。';
+      speechHint = '断言・命令形。「当然だ」「〜しなさい〝。弱さを見せない。';
     else if (p.includes('傷') || p.includes('臆病') || p.includes('繊細') || p.includes('不安'))
       speechHint = '曖昧・遠回し。「……」が多い。言葉の途中で止まる。語尾が「〜かな」「〜けど」。';
     else if (p.includes('陽気') || p.includes('軽') || p.includes('明るい') || p.includes('楽観'))
@@ -546,9 +566,9 @@ const Api = {
 
   async call(system, userContent, maxTok = 1400) {
     const prov = S.cfg.provider || 'anthropic';
-    return prov === 'novelai'
-      ? this._callNovelAI(system, userContent, maxTok)
-      : this._callAnthropic(system, userContent, maxTok);
+    if (prov === 'novelai')     return this._callNovelAI(system, userContent, maxTok);
+    if (prov === 'openrouter')  return this._callOpenRouter(system, userContent, maxTok);
+    return this._callAnthropic(system, userContent, maxTok);
   },
 
   async _callAnthropic(system, userContent, maxTok) {
@@ -586,6 +606,46 @@ const Api = {
     const json = await res.json();
     if (id !== S.reqId) return null;
     return { text: (json.content || []).map(c => c.text || '').join(''), body: null };
+  },
+
+  async _callOpenRouter(system, userContent, maxTok) {
+    const key = this.normalize(S.cfg.orKey);
+    if (!key) throw new Error('OpenRouter APIキーが設定されていません（sk-or-... 形式）');
+    const model = S.cfg.orModel || 'meta-llama/llama-3.3-70b-instruct';
+    console.log('[OpenRouter] model:', model);
+
+    const id = ++S.reqId;
+    S.inFlight = true;
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), 40000);
+    let res;
+    try {
+      res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${key}`,
+          'HTTP-Referer': 'https://sansan2103-a11y.github.io/chronicle/',
+          'X-Title': 'Chronicle TRPG'
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: maxTok,
+   2      messages: [
+            { role: 'system', content: system },
+            { role: 'user',   content: userContent }
+          ]
+        }),
+        signal: ctrl.signal
+      });
+    } finally { clearTimeout(tid); S.inFlight = false; }
+
+    if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(`OpenRouter HTTP ${res.status}: ${t.slice(0,200)}`); }
+    const json = await res.json();
+    if (id !== S.reqId) return null;
+    const text = (json.choices?.[0]?.message?.content || '').trim();
+    if (!text) throw new Error('OpenRouterから出力がありませんでした');
+    return { text, body: null };
   },
 
   async _callNovelAI(system, userContent, maxTok) {
@@ -759,7 +819,7 @@ const Planner = {
 AI Dungeonを超える、心理と文学性を兼ね備えた体験を作ること。
 
 NPCを生きた人間として描写してください：
-- NPCには「核心的欲求」と「核心的恐怖」があり、すべての反応がそこから生まれる
+- NPCには「核心的欲求」と「核心的恐怖」があり、すぶての反応がそこから生まれる
 - 表の言葉と内心は一致しない——人間はいつも本心を言わない
 - 防衛機制（否定・合理化・回避・投影・置き換え・抑圧）を状況に応じて自然に使う
 - 感情は論理より先に来る。感情が先に体に現れ、言葉はあとから出る
@@ -794,7 +854,7 @@ NPCを生きた人間として描写してください：
 
 ✅ 正しい書き方: 地の文（prose）として書く。セリフは動作・表情・間と一体化させる
 良い例: 「〝私には、あなたに刃を向ける意味が分からない〟——女神はそう言って、目を閉じた。その言葉に怒りはなかった。ただ静かな何かが、空気を満たした。」
-良い例: 「草原の風が頬を撫でた。遠くに森の輪郭が霞み、空は透き通るように青かった——だが何かがこの穏やかさの下に潜んでいる気がした。」
+良い例: 「草原の颸が頬を撫でた。遠くに森の輪郭が霞み、空は透き通るように青かった——だが何かがこの穏やかさの下に潜んでいる気がした。」
 良い例: 「彼女の唇が動いた。でも声は出てこなかった。代わりに——目が、少しだけ細くなった。」
 
 narrativeは小説の一場面として書く。最低5文、理想7〜8文。
@@ -1080,7 +1140,7 @@ const UI = {
     // デバッグ
     if (S.cfg.debug && turn.dbg) {
       const db = document.createElement('div'); db.className = 'dbg';
-      db.textContent = ['=== SYSTEM (先頭300) ===', (turn.dbg.sys||'').slice(0,300),
+      db.textContent = ['=== SYSTEM (先鄭300) ===', (turn.dbg.sys||'').slice(0,300),
         '=== USER ===', (turn.dbg.user||'').slice(0,400),
         '=== RAW ===', (turn.dbg.raw||'').slice(0,400)].join('\n');
       div.appendChild(db);
@@ -1124,13 +1184,16 @@ const UI = {
   // ── Settings ──
   onProviderChange() {
     const prov = document.getElementById('cfgProvider').value;
-    document.getElementById('provAnthropic').style.display = prov === 'anthropic' ? '' : 'none';
-    document.getElementById('provNovelAI').style.display   = prov === 'novelai'   ? '' : 'none';
+    document.getElementById('provAnthropic').style.display   = prov === 'anthropic'   ? '' : 'none';
+    document.getElementById('provOpenRouter').style.display  = prov === 'openrouter'  ? '' : 'none';
+    document.getElementById('provNovelAI').style.display     = prov === 'novelai'     ? '' : 'none';
   },
 
   openSettings() {
     document.getElementById('cfgProvider').value  = S.cfg.provider || 'anthropic';
     document.getElementById('cfgKey').value       = S.cfg.key      || '';
+    document.getElementById('cfgOrKey').value     = S.cfg.orKey    || '';
+    document.getElementById('cfgOrModel').value   = S.cfg.orModel  || 'meta-llama/llama-3.3-70b-instruct';
     document.getElementById('cfgNaiKey').value    = S.cfg.naiKey   || '';
     document.getElementById('cfgModel').value     = S.cfg.model    || 'claude-haiku-4-5-20251001';
     document.getElementById('cfgDbg').checked     = S.cfg.debug    || false;
@@ -1298,6 +1361,8 @@ const UI = {
   saveSettings() {
     S.cfg.provider = document.getElementById('cfgProvider').value;
     S.cfg.key      = (document.getElementById('cfgKey').value    || '').replace(/[\s\u200B\uFEFF\u00A0]/g, '');
+    S.cfg.orKey    = (document.getElementById('cfgOrKey').value  || '').replace(/[\s\u200B\uFEFF\u00A0]/g, '');
+    S.cfg.orModel  = document.getElementById('cfgOrModel').value;
     S.cfg.naiKey   = (document.getElementById('cfgNaiKey').value || '').replace(/[\s\u200B\uFEFF\u00A0]/g, '');
     S.cfg.model    = document.getElementById('cfgModel').value;
     S.cfg.debug    = document.getElementById('cfgDbg').checked;
@@ -1327,7 +1392,7 @@ const UI = {
     const wl = document.getElementById('welcome'); if (!wl) return;
     const h = S.cast.hero.name || '主人公';
     const l = S.scene.loc || '不明の場所';
-    const hasKey = S.cfg.provider === 'novelai' ? S.cfg.naiKey : S.cfg.key;
+    const hasKey = S.cfg.provider === 'novelai' ? S.cfg.naiKey : S.cfg.provider === 'openrouter' ? S.cfg.orKey : S.cfg.key;
     wl.style.display = 'block';
     document.getElementById('welcomeMsg').innerHTML = hasKey
       ? `場所: <strong style="color:var(--tx)">${this.esc(l)}</strong>　主人公: <strong style="color:var(--tx)">${this.esc(h)}</strong><br><br>下の入力欄に行動を入力して <strong style="color:var(--acc)">「送信 ▶」</strong> を押してください。`
@@ -1373,7 +1438,7 @@ const G = {
       }
     });
     if (S.turns.length > 0)    { UI.renderAll(); UI.renderBranches(S.scene.branches); }
-    else if (S.cfg.key || S.cfg.naiKey) { UI._showIntro(); }
+    else if (S.cfg.key || S.cfg.naiKey || S.cfg.orKey) { UI._showIntro(); }
     else                                { setTimeout(() => UI.openSettings(), 100); }
   },
 
@@ -1405,7 +1470,7 @@ const G = {
       return;
     }
     const prov = S.cfg.provider || 'anthropic';
-    const hasKey = prov === 'novelai' ? S.cfg.naiKey : S.cfg.key;
+    const hasKey = prov === 'novelai' ? S.cfg.naiKey : prov === 'openrouter' ? S.cfg.orKey : S.cfg.key;
     if (!hasKey) { UI.setStatus(`APIキーが未設定です`, true); UI.openSettings(); return; }
 
     inputEl.value = ''; inputEl.style.height = 'auto';
