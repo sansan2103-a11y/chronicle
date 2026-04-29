@@ -6249,6 +6249,449 @@ window._renderDialogueCards = function(turn) {
 };
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Brave Shields fix: use fetch + blob URL instead of direct img.src
+// (Brave blocks <img> from pollinations.ai but allows fetch)
+// ─────────────────────────────────────────────────────────────
+
+window._blobUrlCache = window._blobUrlCache || {};
+
+// Fetch image as blob URL (cached) — bypasses Brave's <img> blocker
+async function _fetchAsBlob(url, timeoutMs) {
+  // Check cache first
+  if (window._blobUrlCache[url]) return { ok: true, blobUrl: window._blobUrlCache[url] };
+  
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs || 45000);
+  try {
+    const r = await fetch(url, { cache: 'force-cache', signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!r.ok) return { ok: false, reason: 'http ' + r.status };
+    const blob = await r.blob();
+    if (!blob.type.startsWith('image/')) return { ok: false, reason: 'not image: ' + blob.type };
+    if (blob.size < 1000) return { ok: false, reason: 'too small ' + blob.size };
+    const blobUrl = URL.createObjectURL(blob);
+    window._blobUrlCache[url] = blobUrl;
+    return { ok: true, blobUrl, bytes: blob.size };
+  } catch (e) {
+    clearTimeout(timer);
+    return { ok: false, reason: e.name + ':' + e.message };
+  }
+}
+window._fetchAsBlob = _fetchAsBlob;
+
+// Replace _tryLoadPollinations to use blob fetch
+window._tryLoadPollinations = async function(url, timeoutMs) {
+  const r = await _fetchAsBlob(url, timeoutMs || 45000);
+  return r.ok ? { ok: true, blobUrl: r.blobUrl, w: 384 } : { ok: false, reason: r.reason };
+};
+
+// Helper: persist cache (blob URLs not persisted, but URL→ok mapping stays)
+function _persistAvCache2(url, state) {
+  window._avatarLoadCache[url] = state;
+  try {
+    const KEY = 'chr_av_cache_v1';
+    const ls = JSON.parse(localStorage.getItem(KEY) || '{}');
+    ls[url] = state;
+    const entries = Object.entries(ls);
+    if (entries.length > 80) {
+      const trimmed = Object.fromEntries(entries.slice(-60));
+      localStorage.setItem(KEY, JSON.stringify(trimmed));
+    } else {
+      localStorage.setItem(KEY, JSON.stringify(ls));
+    }
+  } catch(e){}
+}
+
+// New _setAvatarBg using blob URLs
+window._setAvatarBg = function(el, primaryUrl, fallbackChar, name, desc, extraSeed) {
+  if (!el) return;
+  el.textContent = fallbackChar || '?';
+  el.style.backgroundImage = '';
+  
+  if (!primaryUrl) {
+    const dbUrl = (name || desc) ? window._dicebearUrl(name, desc, extraSeed) : null;
+    if (dbUrl) {
+      // DiceBear is SVG, also fetch via blob to bypass Brave
+      _fetchAsBlob(dbUrl, 10000).then(r => {
+        if (r.ok) { el.style.backgroundImage = 'url("' + r.blobUrl + '")'; el.textContent = ''; }
+      });
+    }
+    return;
+  }
+  
+  // Already cached as ok with blob URL?
+  if (window._avatarLoadCache[primaryUrl] === 'ok' && window._blobUrlCache[primaryUrl]) {
+    el.style.backgroundImage = 'url("' + window._blobUrlCache[primaryUrl] + '")';
+    el.textContent = '';
+    return;
+  }
+  
+  (async () => {
+    const TIMEOUT_MS = 45000;
+    const MAX_RETRIES = 3;
+    
+    let result = await _fetchAsBlob(primaryUrl, TIMEOUT_MS);
+    if (result.ok) {
+      _persistAvCache2(primaryUrl, 'ok');
+      el.style.backgroundImage = 'url("' + result.blobUrl + '")';
+      el.textContent = '';
+      return;
+    }
+    _persistAvCache2(primaryUrl, 'fail');
+    
+    let currentSeed = extraSeed || 0;
+    for (let i = 0; i < MAX_RETRIES; i++) {
+      currentSeed += Math.floor(Math.random() * 1000) + 100;
+      const retryUrl = window._avatarUrl(name, desc, currentSeed);
+      if (!retryUrl) break;
+      result = await _fetchAsBlob(retryUrl, TIMEOUT_MS);
+      if (result.ok) {
+        _persistAvCache2(retryUrl, 'ok');
+        el.style.backgroundImage = 'url("' + result.blobUrl + '")';
+        el.textContent = '';
+        return;
+      }
+      _persistAvCache2(retryUrl, 'fail');
+    }
+    
+    // All Pollinations attempts failed → DiceBear via blob
+    const dbUrl = window._dicebearUrl(name, desc, extraSeed);
+    const dbR = await _fetchAsBlob(dbUrl, 10000);
+    if (dbR.ok) {
+      el.style.backgroundImage = 'url("' + dbR.blobUrl + '")';
+      el.textContent = '';
+    }
+  })();
+};
+
+// New batch regen using blob fetch
+window._regenAllAvatars = async function() {
+  const characters = [];
+  if (S.cast.hero && S.cast.hero.name) characters.push({ type: 'hero', label: S.cast.hero.name });
+  (S.cast.npcs || []).forEach((npc, i) => { if (npc && npc.name) characters.push({ type: 'npc', idx: i, label: npc.name }); });
+  const total = characters.length;
+  const btn = document.getElementById('btnRegenAll');
+  if (total === 0) { window._toast('対象キャラがいません', 'warn'); return; }
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.classList.add('regen-running'); }
+  
+  // Clear caches fully
+  window._avatarLoadCache = {};
+  // Revoke old blob URLs
+  for (const u of Object.values(window._blobUrlCache || {})) {
+    try { URL.revokeObjectURL(u); } catch(e){}
+  }
+  window._blobUrlCache = {};
+  try { localStorage.removeItem('chr_av_cache_v1'); } catch(e){}
+  
+  const failures = [];
+  
+  for (let i = 0; i < total; i++) {
+    const c = characters[i];
+    if (btn) btn.textContent = '再生成中 (' + (i+1) + '/' + total + ')...';
+    
+    let success = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const jump = Math.floor(Math.random() * 1000) + (attempt > 0 ? 200 : 1);
+      let url = null;
+      if (c.type === 'hero') {
+        S.cast.hero.avatarSeed = (S.cast.hero.avatarSeed || 0) + jump;
+        url = window._getHeroAvatar();
+      } else {
+        const npc = S.cast.npcs[c.idx];
+        if (npc) {
+          npc.avatarSeed = (npc.avatarSeed || 0) + jump;
+          url = window._getNpcAvatar(npc);
+        }
+      }
+      if (!url) break;
+      const r = await _fetchAsBlob(url, 45000);
+      if (r.ok) {
+        _persistAvCache2(url, 'ok');
+        success = true;
+        break;
+      }
+      _persistAvCache2(url, 'fail');
+    }
+    if (!success) failures.push(c.label);
+    
+    if (i < total - 1) await new Promise(r => setTimeout(r, 500));
+  }
+  
+  S.save();
+  if (UI._renderNpcList) UI._renderNpcList();
+  if (UI.renderAll) UI.renderAll();
+  if (window._renderHeroAvatarInSettings) window._renderHeroAvatarInSettings();
+  
+  if (btn) { btn.disabled = false; btn.classList.remove('regen-running'); btn.textContent = origText || '🔄 全キャラ一括再生成'; }
+  
+  if (failures.length === 0) window._toast('全' + total + 'キャラの再生成完了', 'ok');
+  else window._toast((total - failures.length) + '/' + total + '完了。失敗: ' + failures.join('、'), 'warn');
+};
+
+
+
+// ─────────────────────────────────────────────────────────────
+// Expanded randomFill — 20+ patterns per category for huge variety
+// ─────────────────────────────────────────────────────────────
+
+window._RANDOM_DATA_V2 = {
+  heroes: [
+    // 戦士系
+    { name:'カイル・ドレイク', desc:'歴戦の傭兵。剣と魔法の両刀使い。寡黙で冷静、戦場で初めて素を見せる。' },
+    { name:'レン・ヴォルク', desc:'元騎士団長。汚名を着せられて流浪の身に。誇りと責務の間で揺れる。' },
+    { name:'ガレス・ストーン', desc:'山岳民族の戦士。野性的で直感重視。仲間を家族のように守る。' },
+    // 盗賊・暗殺者系
+    { name:'シルヴィア・ノクス', desc:'凄腕の盗賊。皮肉屋で口が悪いが情に厚い。過去の借りを返すために生きてる。' },
+    { name:'ジン・カゲロウ', desc:'抜け忍。冷徹に見えて義理を重んじる。誰にも本当の名前を教えない。' },
+    // 魔術師系
+    { name:'エリナ・ルーン', desc:'若き魔導書記官。天才的だが対人スキル皆無。古文書を解読することに執着。' },
+    { name:'ファウスト・ブラック', desc:'禁忌に手を染めた元魔術師。黒い手袋で何かを隠している。代償を払い続けている。' },
+    { name:'リリア・スターハート', desc:'治癒魔法に特化した若き僧侶。明るいが、過去に救えなかった者の影が残る。' },
+    // 聖職者・神官系
+    { name:'セイラ・ホーリー', desc:'神殿の見習い司祭。真面目で完璧主義、自罰的。信仰と現実の間で揺れる。' },
+    { name:'バルトロメ', desc:'破門された神父。神を疑い、自分を疑い、それでも誰かを救おうとする。' },
+    // ハンター・狩人系
+    { name:'カイン・ウルフ', desc:'魔物狩りの専門家。狼と心を通わす。少数の言葉で多くを語る。' },
+    { name:'ミラベル・スカウト', desc:'森林ハンター。動物の気配を読む。人間社会を信用しない。' },
+    // 元貴族系
+    { name:'ソフィア・クレア', desc:'没落貴族の末裔。誇り高く、しかし孤独。自分の居場所を求めている。' },
+    { name:'アリア・リュミエール', desc:'家を追われた令嬢。礼儀正しいが芯が強い。復讐より真実を望む。' },
+    // 流れ者・記憶喪失系
+    { name:'ナノ', desc:'記憶を失った旅人。素性不明。断片的な過去が夢に現れる。' },
+    { name:'ユア・ミスト', desc:'霧の中から現れた女。誰の問いにも曖昧に微笑む。本心は深い闇の底。' },
+    // 呪われた者
+    { name:'ゼイン・カース', desc:'呪われた剣に取り憑かれた青年。常に剣の声と対話している。眠れない。' },
+    { name:'ルカ・セルト', desc:'体に異形の刻印を持つ。人前では隠している。刻印が何かを呼び寄せる。' },
+    // 商人・記録官系
+    { name:'カデル・トレイン', desc:'壮年の行商人。愛想がよいが目が笑っていない。情報こそが命。' },
+    { name:'リュカ・スクリーブ', desc:'18歳の見習い記録官。慎重だが好奇心旺盛。秘密を抱えている。' },
+    // 反逆者・革命家系
+    { name:'ヴェルナ・レッド', desc:'帝国に追われる革命家。理想に燃えるが孤独を抱える。' },
+    { name:'クロウ・シャドウ', desc:'地下組織のリーダー。皮肉と笑いで本心を覆い隠す。仲間想い。' },
+    // 異能者
+    { name:'ミナ・ライト', desc:'人の心が見える少女。願ってもいない能力に苦しむ。誰にも触れたくない。' },
+    { name:'シオン・カラス', desc:'死者と話せる青年。墓場が居場所。生者と関わると傷つく。' }
+  ],
+  
+  npcs: [
+    // 同行者・仲間系
+    { name:'イルム', desc:'銀髪の少女。感情が読みにくく、言葉が少ない。', personality:'無口・内向・観察眼が鋭い',
+      coreDesire:'誰かに本当の自分を認めてもらいたい', coreFear:'また見捨てられること',
+      wound:'幼い頃、親に棄てられた経験がある。以来、人を信じることが怖い。' },
+    { name:'エルシア', desc:'銀の髪を持つ剣士。寡黙だが誠実で、主人公を何よりも信じている。',
+      personality:'忠実・物静か・意志が強い', coreDesire:'守るべき人と共にあること',
+      coreFear:'再び誰かを失うこと', wound:'過去に主君を守れずに失った。' },
+    { name:'ミラ・グレイス', desc:'妹分の少女。明るく無邪気、しかし時折大人びた目をする。',
+      personality:'天真爛漫・洞察力鋭い', coreDesire:'兄/姉のような存在に守られていたい',
+      coreFear:'置いていかれること', wound:'家族を一人ずつ失った。' },
+    // 敵対者系
+    { name:'ヴァルガ卿', desc:'冷酷な貴族。礼儀正しく振る舞うが、目には殺意が宿る。',
+      personality:'冷酷・計算高い・プライド高い', coreDesire:'絶対的な権力',
+      coreFear:'自分より優れた者の存在', wound:'幼少期に父から「無能」と罵られ続けた。' },
+    { name:'クライド', desc:'裏社会の元締め。笑顔で話すが、瞳が氷のよう。',
+      personality:'狡猾・寡黙・冷血', coreDesire:'誰にも頭を下げずに済む立場',
+      coreFear:'過去の失敗が暴かれること', wound:'若き日に大切な人を見殺しにした。' },
+    // 元恋人・過去の縁系
+    { name:'リオン・フェイル', desc:'かつての恋人。微笑むたびに昔の傷跡を思い出させる。',
+      personality:'優しい・しかし秘密がある', coreDesire:'過去をやり直したい',
+      coreFear:'真実を告げて拒絶されること', wound:'別れの日、本当のことを言えなかった。' },
+    { name:'セレナ・ローズ', desc:'幼馴染。昔と変わらない笑顔だが、何かを隠している様子。',
+      personality:'快活・しかし影を持つ', coreDesire:'失われた絆を取り戻すこと',
+      coreFear:'また同じ過ちを繰り返すこと', wound:'幼い頃の約束を守れなかった。' },
+    // 謎の女・男系
+    { name:'ノクス', desc:'黒衣の女。素性不明。常に微笑むが目は笑わない。',
+      personality:'神秘的・冷静・操作的', coreDesire:'失われた何かを取り戻すこと',
+      coreFear:'過去が暴かれること', wound:'裏切りの記憶を抱えている。' },
+    { name:'白衣の少女', desc:'真っ白な髪と瞳の少女。声が透けて聞こえる。',
+      personality:'静謐・神聖・どこか悲しげ', coreDesire:'人間の世界を理解したい',
+      coreFear:'人間の悪意に触れること', wound:'人ならぬ者として生まれた孤独。' },
+    // 囚人・被害者系
+    { name:'ミリア・フェルナ', desc:'囚われの少女。茶髪、緑の瞳、16歳。震える声で助けを求める。',
+      personality:'臆病・知識欲が強い・過去を隠している', coreDesire:'誰かに認めてほしい',
+      coreFear:'また見捨てられること', wound:'家族に裏切られた経験。' },
+    { name:'カナタ', desc:'地下牢で長く囚われていた青年。光に怯え、人を恐れる。',
+      personality:'臆病・繊細・観察眼鋭い', coreDesire:'外の世界を知ること',
+      coreFear:'再び閉じ込められること', wound:'幼少期から牢獄で育った。' },
+    // 裏切り者系
+    { name:'ヴィンス・グレイ', desc:'信頼していた仲間。最近様子がおかしい。',
+      personality:'温和・しかし最近変', coreDesire:'家族を守るため何でもする',
+      coreFear:'家族を失うこと', wound:'敵に家族を人質にされている。' },
+    // 老兵・賢者系
+    { name:'ヴォルグ将軍', desc:'老齢の元兵士。片足が不自由。皮肉屋。',
+      personality:'シニカル・経験豊富・情に厚い', coreDesire:'失った仲間の死に意味を見つけたい',
+      coreFear:'無駄死にだったと気づくこと', wound:'唯一の親友を自分の命令ミスで死なせた。' },
+    { name:'グレン老師', desc:'山籠りの賢者。蔑むような口調だが、若者を見ると目が優しくなる。',
+      personality:'頑固・賢明・諦観', coreDesire:'弟子に己の過ちを繰り返させない',
+      coreFear:'時代遅れになること', wound:'自分の若き日の失敗を悔いている。' },
+    // 子ども・少年少女系
+    { name:'ミア', desc:'少年のような外見の少女。素早く動き、嘘をつく。',
+      personality:'活発・ずる賢い・本当は臆病', coreDesire:'自由に生きること',
+      coreFear:'檻に入れられること', wound:'孤児院で厳しく管理された幼少期。' },
+    { name:'ルーク', desc:'10歳の少年。明るく無邪気だが、最近誰かに脅されている様子。',
+      personality:'素直・好奇心旺盛・我慢強い', coreDesire:'家族と一緒にいたい',
+      coreFear:'ひとりぼっちになること', wound:'最近、母親が病気で倒れた。' },
+    // 異種族・神秘系
+    { name:'カナリア', desc:'妖精族の女性。羽が薄く透け、どこか脆そう。',
+      personality:'幻想的・直感的・人懐っこい', coreDesire:'人間の友を持つこと',
+      coreFear:'人間の世界が滅びること', wound:'同族に追放された過去がある。' },
+    { name:'シャドウ', desc:'実体のない影。声だけが聞こえる。',
+      personality:'予言的・遊戯的・気まぐれ', coreDesire:'器を得て人になりたい',
+      coreFear:'忘れ去られること', wound:'数百年前、一度人間だった記憶が断片的に残る。' },
+    // 神官・巫女系
+    { name:'ユーリ巫女', desc:'神殿の若き巫女。聖性と悲しみを同時に纏う。',
+      personality:'清廉・脆い・自己犠牲的', coreDesire:'救えるはずだった者を救うこと',
+      coreFear:'信仰が間違いだったと知ること', wound:'託された予言を遂行できなかった。' },
+    // 宿敵・ライバル系
+    { name:'カゲヤ・ジン', desc:'同じ流派の兄弟子。実力者だが、暗い情念を抱えている。',
+      personality:'冷静・しかし執念深い', coreDesire:'流派の真伝を継ぐこと',
+      coreFear:'弟弟子に超されること', wound:'師に認められなかった過去。' }
+  ],
+  
+  locs: [
+    '雪に閉ざされた山小屋', '霧深い港町の路地', '古い教会の地下室',
+    '砂漠の中の隊商宿', '廃墟の図書館、夕暮れ時', '地下に広がる市場',
+    '廃城の謁見室', '霊廟の入口', '夜の橋の上', '嵐の前の森の中',
+    '月夜の森、霧立ち込める', '血の祭壇の前', '海に浮かぶ要塞', '砂漠の遺跡、星空の下',
+    '炭鉱跡地、廃坑の奥', '吊り橋の中央、深い谷の上', '塔の最上階、嵐の夜',
+    '王城の地下牢、湿った石壁', '神殿の祭壇、明け方', '貴族の屋敷、舞踏会の最中',
+    '酒場の奥の小部屋、煙草の煙', '路地裏の遊郭、雨上がり', '遺跡の祭壇、月光が射す'
+  ],
+  
+  tones: [
+    'ダークファンタジー、心理描写重視、会話多め',
+    '重厚なドラマ、感情の衝突と和解',
+    'サバイバル緊張感、信頼と疑惑の交差',
+    'ヴィクトリアン・ホラー、上品な狂気',
+    'サイバーパンク、湿ったネオンと孤独',
+    '和風妖怪譚、静寂と物の怪',
+    '大正浪漫、退廃と耽美',
+    'ノワール、煙草と裏切り',
+    'スチームパンク、煤煙と発明',
+    '北欧ファンタジー、雪と古代の歌',
+    '現代奇譚、日常の隙間に異形',
+    '騎士道物語、誇りと忠誠',
+    '魔王討伐譚、運命と覚悟',
+    'コズミックホラー、無理解の恐怖',
+    'ゴシックロマンス、廃墟と純愛',
+    '冒険活劇、軽妙な掛け合い',
+    '心理サスペンス、誰も信じられない',
+    '神話的悲劇、避けられない結末',
+    'ミリタリーSF、戦友と覚悟',
+    '怪奇短編、意味のない悪意',
+    '異世界転移、戸惑いと適応',
+    '吸血鬼ロマンス、夜と禁忌'
+  ],
+  
+  objs: [
+    '謎の少女の正体を探っている',
+    '行方不明の師匠を捜索中',
+    '失われた聖剣を取り戻す',
+    '魔王討伐の旅',
+    '真実を暴き、復讐を遂げる',
+    '呪われた血族の解放',
+    '消えた幼馴染の手がかりを追う',
+    '故郷を滅ぼした組織を壊滅させる',
+    '禁忌の魔導書を奪い返す',
+    '王国転覆の陰謀を阻止する',
+    '亡くなった家族を蘇らせる方法を探す',
+    '世界を蝕む厄災の根源を断つ',
+    '裏切り者を見つけ出す',
+    '隔離された村の謎を解く',
+    '古代神への封印を確かめる',
+    '逃亡者を保護し、安全な場所まで送り届ける',
+    '消えた母を探して旅をしている',
+    '呪いを解く儀式の道具を集める',
+    '地下迷宮の最深部に眠る何かを目覚めさせる',
+    '記憶を取り戻す手がかりを探す',
+    '神の不在を証明する',
+    '愛した者を殺した相手に報復する',
+    '世界の終わりを見届けるため旅をする'
+  ],
+  
+  lores: [
+    '記憶が結晶化した「灯片」が通貨として使われる都市。灯片を多く持つ者ほど過去が薄れていく。',
+    '魔法が「禁忌の技術」として弾圧されている帝国。使い手は地下に潜り秘密結社を作っている。',
+    '海に浮かぶ群島国家。島ごとに独自の文化と掟があり、島間の移動は命がけ。',
+    '死者が「霊燐」として漂う世界。霊燐は人の感情を映し出し、時に現実に干渉する。',
+    '科学と魔法が共存する近未来都市。しかし旧市街には古い呪いが残っている。',
+    '神々が完全に消えた後の世界。教会の力は地に堕ち、邪な信仰が広がっている。',
+    '常に夜の世界。太陽は神話の中だけの存在。',
+    '全ての言葉が魔力を持つ世界。誰もが言葉に呪縛されている。',
+    '全ての魂が地下の井戸から汲み上げられて生まれる世界。井戸が枯れかけている。',
+    '時が逆方向に流れる地域がある世界。記憶を失う代わりに過去に戻れる。',
+    '古代の機械文明が滅び、その遺物だけが残った世界。誰も使い方を知らない。',
+    '森が意志を持つ世界。木々が密かに人間を判定している。',
+    '貴族が血の儀式で永続的な若さを保つ世界。下層民は燃料として消費される。',
+    '夢の世界と現実が密に重なる世界。眠ることが最も危険な行為。',
+    '巨大な怪物の体内が一つの大陸となっている世界。'
+  ]
+};
+
+// Override randomFill with massively expanded data
+const _origRandomFillExpand = UI.randomFill.bind(UI);
+UI.randomFill = function() {
+  const D = window._RANDOM_DATA_V2;
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  
+  const hName = document.getElementById('cfgHName');
+  const hDesc = document.getElementById('cfgHDesc');
+  const cLoc = document.getElementById('cfgLoc');
+  const cTone = document.getElementById('cfgTone');
+  const cObj = document.getElementById('cfgObj');
+  const cLore = document.getElementById('cfgLore');
+  
+  if (hName && !hName.value.trim()) {
+    const h = pick(D.heroes);
+    hName.value = h.name;
+    if (hDesc && !hDesc.value.trim()) hDesc.value = h.desc;
+  } else if (hDesc && !hDesc.value.trim()) {
+    hDesc.value = pick(D.heroes).desc;
+  }
+  if (cLoc && !cLoc.value.trim()) cLoc.value = pick(D.locs);
+  if (cTone && !cTone.value.trim()) cTone.value = pick(D.tones);
+  if (cObj && !cObj.value.trim()) cObj.value = pick(D.objs);
+  if (cLore && !cLore.value.trim()) cLore.value = pick(D.lores);
+  
+  // NPC: add one if list is empty, then fill
+  const existingCards = document.querySelectorAll('#npcList .npc-card');
+  if (existingCards.length === 0) {
+    UI.addNpc();
+    setTimeout(() => {
+      const card = document.querySelector('#npcList .npc-card:last-child');
+      if (!card) return;
+      const nd = pick(D.npcs);
+      const set = (f, v) => { const el = card.querySelector('[data-f="' + f + '"]'); if (el && !el.value.trim()) el.value = v; };
+      set('name', nd.name); set('desc', nd.desc); set('personality', nd.personality);
+      set('coreDesire', nd.coreDesire); set('coreFear', nd.coreFear); set('wound', nd.wound);
+    }, 50);
+  }
+  
+  // Sync to state after fill (existing wrapper does this with toast)
+  setTimeout(() => {
+    if (hName) S.cast.hero.name = hName.value.trim();
+    if (hDesc) S.cast.hero.desc = hDesc.value.trim();
+    if (cLoc) S.scene.loc = cLoc.value.trim();
+    if (cTone) S.scene.tone = cTone.value.trim();
+    if (cObj) S.scene.obj = cObj.value.trim();
+    if (cLore) S.scene.lore = cLore.value.trim();
+    document.querySelectorAll('#npcList .npc-card').forEach((card, i) => {
+      if (!S.cast.npcs[i]) return;
+      ['name','desc','personality','coreDesire','coreFear','wound'].forEach(f => {
+        const el = card.querySelector('[data-f="' + f + '"]');
+        if (el) S.cast.npcs[i][f] = el.value.trim();
+      });
+    });
+    S.save();
+    if (window._renderHeroAvatarInSettings) window._renderHeroAvatarInSettings();
+    if (window._toast) window._toast('未入力フィールドをランダム生成して保存しました', 'ok');
+  }, 250);
+};
+
+
 // Boot
 G.init();
 </script>
