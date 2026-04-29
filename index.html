@@ -588,6 +588,142 @@ body > #topbar, body > #story, body > #branches, body > #composer {
   border-radius: 2px;
 }
 
+
+
+/* ─────────── Avatar regen button ─────────── */
+.av-wrap { position: relative; display: inline-block; flex-shrink: 0; }
+.av-regen {
+  position: absolute;
+  bottom: -4px; right: -4px;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--acc), var(--acc-dim));
+  color: #fff;
+  border: 2px solid var(--bg-deep);
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  transition: transform 0.18s, filter 0.18s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  z-index: 2;
+}
+.av-regen:hover { filter: brightness(1.18); transform: scale(1.1) rotate(120deg); }
+.av-regen:active { transform: scale(0.95); }
+
+/* ─────────── Hero avatar in welcome ─────────── */
+.hero-avatar-slot {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 8px 0 18px;
+}
+.hero-avatar {
+  width: 130px; height: 130px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(160,138,240,0.4), rgba(120,90,210,0.55));
+  background-size: cover; background-position: center;
+  border: 3px solid rgba(212,180,120,0.45);
+  box-shadow: 0 0 36px rgba(160,138,240,0.35), 0 0 0 1px rgba(160,138,240,0.4), 0 6px 24px rgba(0,0,0,0.5);
+}
+.hero-avatar-slot .av-regen.hero-regen {
+  bottom: 28px; right: -4px;
+  width: 30px; height: 30px;
+  font-size: 14px;
+}
+.hero-name-label {
+  font-family: var(--ff-disp);
+  font-size: 17px;
+  letter-spacing: 0.18em;
+  color: var(--acc-bright);
+  margin-top: 12px;
+  text-shadow: 0 0 16px var(--acc-glow);
+}
+
+/* ─────────── Narrative section header & dividers ─────────── */
+.narr-block {
+  background: linear-gradient(180deg, rgba(28,20,48,0.78), rgba(20,14,35,0.88));
+  border: 1px solid rgba(212,180,120,0.22);
+  border-left: 3px solid var(--gold);
+  padding: 22px 44px 22px 26px;
+  position: relative;
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-1), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.narr-block::before {
+  display: none;
+}
+.narr-block .narr-header {
+  font-family: var(--ff-disp);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: var(--acc-bright);
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(212,180,120,0.2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.narr-block .narr-header::before {
+  content: '✦';
+  color: var(--gold);
+  font-size: 14px;
+}
+.narr-divider {
+  text-align: center;
+  margin: 14px 0;
+  color: rgba(212,180,120,0.45);
+  font-size: 12px;
+  letter-spacing: 0.5em;
+  position: relative;
+}
+.narr-divider::before, .narr-divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 35%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(212,180,120,0.25), transparent);
+}
+.narr-divider::before { left: 5%; }
+.narr-divider::after { right: 5%; }
+
+/* ─────────── 2-column layout (desktop) ─────────── */
+@media (min-width: 920px) {
+  body { max-width: 1200px; }
+  body > #topbar { max-width: 1200px; }
+  #content-flow {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 28px;
+    flex: 1;
+    overflow: hidden;
+    align-items: start;
+  }
+  #welcome-panel {
+    position: sticky;
+    top: 76px;
+    align-self: start;
+    padding: 20px 18px;
+    max-height: calc(100dvh - 100px);
+    overflow-y: auto;
+  }
+  #story-panel {
+    overflow-y: auto;
+    max-height: calc(100dvh - 100px);
+    padding-right: 6px;
+  }
+  #welcome { padding: 30px 18px; }
+  #welcome h2 { font-size: 44px; }
+  body > #composer { max-width: 1200px; }
+}
+
 </style>
 </head>
 <body>
@@ -2628,6 +2764,122 @@ function _renderDialogueCards(turn) {
     return div;
   };
 })();
+
+
+
+
+// ─────────────────────────────────────────────────────────────
+// Avatar regen (seed-based) + hero avatar on welcome
+// ─────────────────────────────────────────────────────────────
+
+// Upgrade _avatarUrl to accept extra seed
+const _origAvatarUrl = window._avatarUrl;
+window._avatarUrl = function(name, desc, extraSeed) {
+  if (!name && !desc) return null;
+  const prompt = _buildAvatarPrompt(name, desc);
+  const baseSeed = _strHash((name || '') + '|' + (desc || ''));
+  const seed = (baseSeed + (extraSeed || 0) * 7919) % 100000;
+  return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=512&height=512&seed=' + seed + '&nologo=true&model=flux';
+};
+
+// Helper: get current avatar URL respecting stored seed
+window._getNpcAvatar = function(npc) {
+  if (!npc) return null;
+  return _avatarUrl(npc.name, npc.desc, npc.avatarSeed || 0);
+};
+window._getHeroAvatar = function() {
+  const h = S.cast.hero;
+  return _avatarUrl(h.name, h.desc, h.avatarSeed || 0);
+};
+// Override _heroAvatar (already used by dialogue cards) to use seed
+window._heroAvatar = window._getHeroAvatar;
+
+// Regen functions
+window._regenNpcAvatar = function(idx) {
+  const npc = S.cast.npcs[idx];
+  if (!npc) return;
+  npc.avatarSeed = (npc.avatarSeed || 0) + 1;
+  S.save();
+  UI._renderNpcList();
+  UI.renderAll();
+};
+window._regenHeroAvatar = function() {
+  S.cast.hero.avatarSeed = (S.cast.hero.avatarSeed || 0) + 1;
+  S.save();
+  UI.renderAll();
+  // Re-render hero avatar in welcome
+  const heroAvEl = document.getElementById('heroAvatarImg');
+  if (heroAvEl) heroAvEl.style.backgroundImage = 'url("' + window._getHeroAvatar() + '")';
+};
+
+// Patch NPC list render to show regen button + use stored seed
+const _origRenderNpc2 = UI._renderNpcList.bind(UI);
+UI._renderNpcList = function() {
+  _origRenderNpc2();
+  document.querySelectorAll('#npcList .npc-card').forEach((card, i) => {
+    const npc = S.cast.npcs[i];
+    if (!npc) return;
+    const av = card.querySelector('.npc-avatar');
+    if (av) {
+      const url = window._getNpcAvatar(npc);
+      if (url) {
+        av.style.backgroundImage = 'url("' + url + '")';
+        av.textContent = '';
+      }
+      // Add regen button if not already
+      if (!card.querySelector('.av-regen')) {
+        const btn = document.createElement('button');
+        btn.className = 'av-regen';
+        btn.title = 'アイコン再生成';
+        btn.textContent = '⟳';
+        btn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); window._regenNpcAvatar(i); };
+        const hdrRow = card.querySelector('.npc-hdr-row');
+        if (hdrRow) {
+          const wrap = document.createElement('div');
+          wrap.className = 'av-wrap';
+          if (av.parentNode === hdrRow) {
+            hdrRow.insertBefore(wrap, av);
+            wrap.appendChild(av);
+            wrap.appendChild(btn);
+          }
+        }
+      }
+    }
+  });
+};
+
+// Patch welcome render to add hero avatar slot
+function _renderHeroAvatarInWelcome() {
+  const wel = document.getElementById('welcome');
+  if (!wel) return;
+  const heroUrl = window._getHeroAvatar();
+  if (!heroUrl || !S.cast.hero.name) return;
+  let slot = document.getElementById('heroAvSlot');
+  if (!slot) {
+    slot = document.createElement('div');
+    slot.id = 'heroAvSlot';
+    slot.className = 'hero-avatar-slot';
+    slot.innerHTML = '<div id="heroAvatarImg" class="hero-avatar"></div>' +
+      '<button class="av-regen hero-regen" title="主人公アイコン再生成">⟳</button>' +
+      '<div class="hero-name-label">' + UI.esc(S.cast.hero.name) + '</div>';
+    const emblem = wel.querySelector('.wel-emblem');
+    if (emblem) emblem.after(slot);
+    else wel.prepend(slot);
+    slot.querySelector('.av-regen').onclick = (e) => { e.preventDefault(); window._regenHeroAvatar(); };
+  }
+  const img = slot.querySelector('.hero-avatar');
+  if (img) img.style.backgroundImage = 'url("' + heroUrl + '")';
+  const nl = slot.querySelector('.hero-name-label');
+  if (nl) nl.textContent = S.cast.hero.name || '';
+}
+const _origRenderAll = UI.renderAll.bind(UI);
+UI.renderAll = function() {
+  _origRenderAll();
+  _renderHeroAvatarInWelcome();
+};
+
+// Force initial render
+setTimeout(() => UI.renderAll && UI.renderAll(), 100);
 
 
 // Boot
