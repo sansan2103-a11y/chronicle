@@ -568,7 +568,7 @@ body > #topbar, body > #story, body > #branches, body > #composer {
   </div>
   <div class="tool-row">
     <button class="tbtn" onclick="G.cont()">✦ 続きを書く</button>
-    <button class="tbtn" onclick="G.retry()">⟲ やり直す</button>
+    <button class="tbtn" onclick="G.retry()">🔄 再生成</button>
     <button class="tbtn" onclick="G.undo()">↩ 取消</button>
   </div>
 </div>
@@ -2374,6 +2374,27 @@ Planner.parsePlan = function(rawText, inputType) {
     };
   }
   return _origParsePlan(rawText, inputType);
+};
+
+// Wire retry() to use regenerate-counter-based variation (so multiple presses yield different outputs)
+const _origRetry = G.retry.bind(G);
+G.retry = async function() {
+  if (S.inFlight || S.turns.length === 0) return;
+  const last = S.turns[S.turns.length - 1];
+  if (_lastRegenerateInput === last.playerText) _regenerateCounter++;
+  else { _regenerateCounter = 1; _lastRegenerateInput = last.playerText; }
+  return _origRetry();
+};
+
+// Hide hover-regen button on the LAST turn (toolbar button serves that purpose)
+const _origRT3 = UI.renderTurn.bind(UI);
+UI.renderTurn = function(turn, idx) {
+  const div = _origRT3(turn, idx);
+  if (idx === S.turns.length - 1) {
+    const rb = div.querySelector('.regen-btn');
+    if (rb) rb.style.display = 'none';
+  }
+  return div;
 };
 
 // Boot
