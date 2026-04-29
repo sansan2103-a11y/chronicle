@@ -7103,6 +7103,58 @@ window._extractDialogue = function(narrativeText) {
 };
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Fix narrative slice limit — original cuts at 8 items, but we now have
+// chapter markers, env SFX, dialogues, inner thoughts → easily exceed 8
+// ─────────────────────────────────────────────────────────────
+const _origParsePlanSlice = Planner.parsePlan.bind(Planner);
+Planner.parsePlan = function(rawText, inputType) {
+  const plan = _origParsePlanSlice(rawText, inputType);
+  if (!plan || !plan.narrative) return plan;
+  // The original applies .slice(0, 8). Our wrappers run AFTER. So if input had >8,
+  // some are already gone. We can't recover those. But we can ensure narratives
+  // re-extracted from raw JSON contain MORE items.
+  // Fix: re-extract narrative from raw JSON if available, ignoring slice limit
+  try {
+    let t = rawText.trim();
+    const fence = t.match(/\`\`\`(?:json)?\\s*([\\s\\S]+?)\\s*\`\`\`/);
+    if (fence) t = fence[1];
+    const s = t.indexOf('{'), e = t.lastIndexOf('}');
+    if (s !== -1 && e !== -1) t = t.slice(s, e + 1);
+    const json = JSON.parse(t);
+    if (Array.isArray(json.narrative) && json.narrative.length > plan.narrative.length) {
+      // We lost items to the slice. Recover ALL items, then apply OUR sanitize
+      let allNarr = json.narrative.filter(x => typeof x === 'string' && x.trim());
+      // Apply hero filter if needed (DO/SAY) — minimal version
+      const heroName = S.cast.hero.name;
+      if (heroName && inputType === 'SAY') {
+        const rxAct = new RegExp(heroName + '[はがを].{0,20}(殴|刺|掴|捕まえ|蹴|握|縛|押|叫び)');
+        allNarr = allNarr.filter(s => !rxAct.test(s));
+      }
+      // Apply foreign garbage filter from original
+      allNarr = allNarr.map(line => {
+        let t = line;
+        // ASCII 3+ removal — but skip our marker patterns =場面: etc
+        if (!/=場面:|\*[—–-]/.test(t)) {
+          t = t.replace(/[A-Za-z][A-Za-z0-9_.]{2,}/g, '');
+        }
+        t = t.replace(/[过这没现还说让对给从将们点东几亲爱觉吗么吧呢哪谁怎样此后状围]/g, '');
+        return t.replace(/\\s+/g, ' ').trim();
+      }).filter(line => line && line.length >= 2 && /[぀-ゟ゠-ヿ]/.test(line));
+      // Apply our sanitize
+      allNarr = window._sanitizeNarrative(allNarr);
+      // INCREASED limit: 15
+      plan.narrative = allNarr.slice(0, 15);
+    }
+  } catch(e) {
+    // not JSON, leave plan.narrative as is
+  }
+  if (plan.narrative.length === 0) plan.narrative = ['…'];
+  return plan;
+};
+
 // Boot
 G.init();
 </script>
