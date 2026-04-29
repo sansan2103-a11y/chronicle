@@ -7914,6 +7914,70 @@ window._extractEphemeralNpcs = function(narrativeText) {
 };
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Multi-quote extraction + R18 label normalization + JP quote rule
+// ─────────────────────────────────────────────────────────────
+
+const _origExtractMultiQuote = window._extractDialogue;
+window._extractDialogue = function(narrativeText) {
+  if (!narrativeText) return _origExtractMultiQuote(narrativeText);
+  let text = Array.isArray(narrativeText) ? narrativeText.join('\n') : String(narrativeText);
+  // Normalize 〝...〟 → 「...」
+  text = text.replace(/〝([^〝〟\n]+?)〟/g, '「$1」');
+  // ASCII " ... " around Japanese → 「 ... 」
+  text = text.replace(/"([^"\n]{1,80}?)"/g, function(m, inner) {
+    if (/[぀-ゟ゠-ヿ一-龥]/.test(inner) && !/^\s*\w+\s*:\s*/.test(inner)) {
+      return '「' + inner + '」';
+    }
+    return m;
+  });
+  // Full-width " ... "
+  text = text.replace(/"([^"\n]{1,80}?)"/g, function(m, inner) {
+    if (/[぀-ゟ゠-ヿ一-龥]/.test(inner)) return '「' + inner + '」';
+    return m;
+  });
+  return _origExtractMultiQuote(text);
+};
+
+const _origPlanBuildQuote = Planner.build.bind(Planner);
+Planner.build = function(inputType, inputText) {
+  const result = _origPlanBuildQuote(inputType, inputText);
+  if (S.cfg.simpleMode) return result;
+  result.sys += '\n\n【★引用符の統一】台詞は必ず鉤括弧 **「...」** で囲む。〝〟や " " (ダブルクォート) を台詞に使用してはならない。内心の独白は **《...》** で統一。それ以外の引用記号は使わない。';
+  return result;
+};
+
+if (window.GENRE_PRESETS) {
+  const RELABEL = {
+    'splatter':       'スプラッター表現（R18）',
+    'gore':           'ゴア・流血表現（R18）',
+    'cannibalism':    '食人表現（R18+）',
+    'horror_full':    'ホラー全般',
+    'body_horror':    'ボディホラー（R18）',
+    'cosmic':         'コズミックホラー',
+    'psycho':         'サイコサスペンス',
+    'dark_fantasy':   'ダークファンタジー',
+    'sensual_soft':   '親密表現（R18）',
+    'sensual_direct': '直接的性描写（R18+）',
+    'forced':         '強制描写（R18+）',
+    'slow_burn':      'スローバーン',
+    'fast_pace':      '展開加速',
+    'tension':        '緊張感維持',
+    'tanizaki':       '谷崎潤一郎風（耽美）',
+    'rampo':          '江戸川乱歩風（怪奇）',
+    'kyogoku':        '京極夏彦風（蘊蓄）',
+    'pop':            'ポップ（軽妙）'
+  };
+  for (const k in RELABEL) {
+    if (window.GENRE_PRESETS[k]) {
+      window.GENRE_PRESETS[k].label = RELABEL[k];
+    }
+  }
+}
+
+
 // Boot
 G.init();
 </script>
