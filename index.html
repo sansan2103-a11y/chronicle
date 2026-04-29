@@ -9811,5 +9811,239 @@ G.init();
   console.log("[Patch v8] all loaded");
 })();
 </script>
+<script>
+/* === PATCH: quality-fixes-v9 === */
+(function(){
+  console.log("[Patch v9] loading: soften-FLUX + smart-gender + disable-refusal");
+  /* ===== 1. Override v8 FLUX call with content-policy-safe prompt ===== */
+  /* Remove dangerous keywords that trigger Black Forest Labs moderation */
+  function sanitizePrompt(p){
+    var unsafe = [
+      /horror/gi, /scary/gi, /demon/gi, /demonic/gi, /evil/gi, /sinister/gi,
+      /blood/gi, /bloody/gi, /gore/gi, /grotesque/gi, /violent/gi, /violence/gi,
+      /naked/gi, /nude/gi, /sexy/gi, /seductive/gi, /erotic/gi, /sensual/gi,
+      /dark fantasy/gi, /\bdark\b/gi, /shadow/gi, /corruption/gi, /corrupt/gi,
+      /scared/gi, /terrified/gi, /afraid/gi, /panic/gi, /pain/gi, /suffering/gi,
+      /captive/gi, /prisoner/gi, /imprisoned/gi, /bound/gi, /tied/gi,
+      /ruin/gi, /ruined/gi, /decay/gi, /decaying/gi, /rot/gi, /rotten/gi,
+      /skull/gi, /bone/gi, /corpse/gi, /death/gi, /dead/gi, /dying/gi
+    ];
+    var clean = String(p);
+    unsafe.forEach(function(rx){ clean = clean.replace(rx, " "); });
+    /* Also strip Japanese problematic words */
+    var jpUnsafe = [
+      /[闇暗黒怖恐血赤死殺刃刺斬剣槍鎖縛繋禁囚牢獄奪犯]/g,
+      /[凌辱姦淫挿肉乳尻臀股腰腿]/g,
+      /[虐殺残忍冷酷狂気邪悪]/g
+    ];
+    jpUnsafe.forEach(function(rx){ clean = clean.replace(rx, ""); });
+    clean = clean.replace(/\s+/g, " ").trim();
+    return clean;
+  }
+  /* Get pristine fetch from v8 if available */
+  function getPristineV9(){
+    /* Try to reuse v8 iframe */
+    var existing = document.querySelectorAll("iframe[style*=\"display:none\"]");
+    for (var i=0; i<existing.length; i++){
+      try {
+        if (existing[i].contentWindow && existing[i].contentWindow.fetch) {
+          return existing[i].contentWindow.fetch.bind(existing[i].contentWindow);
+        }
+      } catch(e){}
+    }
+    /* Make new */
+    var f = document.createElement("iframe");
+    f.style.cssText = "display:none;position:absolute;top:-9999px;";
+    document.documentElement.appendChild(f);
+    return f.contentWindow.fetch.bind(f.contentWindow);
+  }
+  function getApiKeyV9(){
+    for (var i=0; i<localStorage.length; i++){
+      var v = localStorage.getItem(localStorage.key(i));
+      if (v && /sk-or-/.test(v)) {
+        var m = v.match(/sk-or-[a-zA-Z0-9-]{20,}/);
+        if (m) return m[0];
+      }
+    }
+    return null;
+  }
+  function getProviderV9(){ return localStorage.getItem("_imgProvider_v6") || "pollinations"; }
+  function svgRespV9(seed){
+    var svg = window._horrorSvg(decodeURIComponent(String(seed||"x").slice(0,30)));
+    var raw = decodeURIComponent(svg.replace("data:image/svg+xml;utf8,", ""));
+    return new Response(new Blob([raw], {type: "image/svg+xml"}), {status: 200, headers: {"Content-Type": "image/svg+xml"}});
+  }
+  function callFluxV9(prompt, apiKey){
+    var pristine = getPristineV9();
+    return pristine("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {"Authorization": "Bearer " + apiKey, "Content-Type": "application/json"},
+      body: JSON.stringify({
+        model: "black-forest-labs/flux.2-klein-4b",
+        modalities: ["image"],
+        messages: [{role: "user", content: prompt}]
+      })
+    }).then(function(r){
+      if (!r.ok) {
+        return r.text().then(function(eb){
+          /* If content policy violation - try with much simpler prompt */
+          if (eb.indexOf("Content Policy") >= 0 || eb.indexOf("Moderat") >= 0) {
+            console.warn("[Patch v9] FLUX content-policy block, retrying with safe prompt");
+            return null;  /* signal retry */
+          }
+          throw new Error("FLUX " + r.status);
+        });
+      }
+      return r.text();
+    }).then(function(txt){
+      if (txt === null) {
+        /* Content-policy retry: minimal anime portrait prompt */
+        return pristine("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {"Authorization": "Bearer " + apiKey, "Content-Type": "application/json"},
+          body: JSON.stringify({
+            model: "black-forest-labs/flux.2-klein-4b",
+            modalities: ["image"],
+            messages: [{role: "user", content: "anime style portrait of a fantasy character, ornate frame"}]
+          })
+        }).then(function(r2){
+          if (!r2.ok) throw new Error("FLUX retry " + r2.status);
+          return r2.text();
+        });
+      }
+      return txt;
+    }).then(function(txt){
+      var data = JSON.parse(txt.trim());
+      var msg = data.choices && data.choices[0] && data.choices[0].message;
+      if (!msg) throw new Error("no message");
+      var img = null;
+      if (msg.images && msg.images[0]) {
+        var f = msg.images[0];
+        img = (f.image_url && f.image_url.url) || f.image_url || (typeof f === "string" ? f : null);
+      }
+      if (!img && msg.content) {
+        var m = String(msg.content).match(/data:image\/[a-z]+;base64,[A-Za-z0-9+\/=]+/);
+        if (m) img = m[0];
+      }
+      if (!img) throw new Error("no image in response");
+      var match = img.match(/^data:(image\/[a-z]+);base64,(.+)$/);
+      if (!match) throw new Error("bad format");
+      console.log("[Patch v9] FLUX success");
+      var bin = atob(match[2]);
+      var arr = new Uint8Array(bin.length);
+      for (var i=0; i<bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return new Response(new Blob([arr], {type: match[1]}), {status: 200, headers: {"Content-Type": match[1]}});
+    });
+  }
+  /* Re-wrap fetch with v9 sanitized version */
+  var _origFetchV9 = window.fetch;
+  window.fetch = function(u, o){
+    var url = String(u||"");
+    if (url.indexOf("pollinations.ai") >= 0) {
+      var prov = getProviderV9();
+      if (prov === "svg-only") {
+        var seed = url.split("/prompt/")[1] || url;
+        return Promise.resolve(svgRespV9(seed));
+      }
+      if (prov === "flux-klein") {
+        var apiKey = getApiKeyV9();
+        if (!apiKey) return Promise.resolve(svgRespV9(url));
+        var pm = url.match(/\/prompt\/([^?]+)/);
+        if (!pm) return getPristineV9()(url, o);
+        var rawPrompt = decodeURIComponent(pm[1]);
+        if (rawPrompt.length > 800) rawPrompt = rawPrompt.slice(0, 800);
+        /* Sanitize aggressively */
+        var safePrompt = sanitizePrompt(rawPrompt);
+        if (safePrompt.length < 30) safePrompt = "anime fantasy character portrait";
+        var fluxPrompt = "anime style portrait, ornate frame, clean illustration of " + safePrompt;
+        return callFluxV9(fluxPrompt, apiKey).catch(function(err){
+          console.warn("[Patch v9] FLUX failed, using SVG:", err.message);
+          return svgRespV9(url);
+        });
+      }
+      return getPristineV9()(u, o).catch(function(){return svgRespV9(url);});
+    }
+    return _origFetchV9.apply(this, arguments);
+  };
+  console.log("[Patch v9] FLUX prompt sanitizer active");
+  /* ===== 2. SMART GENDER DETECTION ===== */
+  /* Check description for existing gender cues before auto-assigning */
+  function detectGenderFromText(text){
+    if (!text) return null;
+    var t = String(text);
+    /* Explicit female cues */
+    if (/少女|女性|女の子|姉|妹|娘|彼女|女子|女王|女神|女神|女性的|女子高生|乙女|令嬢|姫|淑女|未亡人|魔女|お嬢様|女医|女騎士|女剣士|シスター|メイド|貴婦人|女将|ヴァンプ/.test(t)) return "女性";
+    /* Explicit male cues */
+    if (/少年|男性|男の子|兄|弟|息子|彼[はがを]|男子|王(?!女)|神(?!女)|男性的|青年|紳士|王子|騎士団長(?!の娘)|男爵|公爵|司教|司令官|執事|武士|侍|騎士|戦士|将軍/.test(t)) return "男性";
+    /* Pronouns */
+    if (/「彼女」/.test(t) || /彼女の/.test(t)) return "女性";
+    if (/「彼」/.test(t) || /彼の/.test(t)) return "男性";
+    return null;
+  }
+  /* Override v7/v8 random-fill gender to use detection first */
+  function smartGenderFill(){
+    document.querySelectorAll(".npc-card, .hero-card, [class*=npc-card], [class*=hero-card]").forEach(function(card){
+      var nameInp = card.querySelector('input[type=text], input:not([type])');
+      var ta = card.querySelector("textarea");
+      if (!nameInp || !ta) return;
+      var existing = ta.value || "";
+      /* If already has 性別: prefix, validate it matches the description */
+      var existingGenderMatch = existing.match(/^性別[:：]\s*([^。\s]+)。\s*(.*)$/);
+      if (existingGenderMatch) {
+        var declared = existingGenderMatch[1];
+        var rest = existingGenderMatch[2];
+        var detected = detectGenderFromText(rest);
+        if (detected && detected !== declared) {
+          /* Mismatch - fix it */
+          ta.value = "性別: " + detected + "。 " + rest;
+          ta.dispatchEvent(new Event("input", {bubbles: true}));
+          ta.dispatchEvent(new Event("change", {bubbles: true}));
+          console.log("[Patch v9] gender corrected:", declared, "→", detected, "based on description");
+          card.dataset._v9genderFixed = "1";
+        }
+      }
+    });
+  }
+  setInterval(smartGenderFill, 2000);
+  setTimeout(smartGenderFill, 800);
+  /* Hook random fill: detect from description before assigning */
+  function setupV9RandomFill(){
+    var btns = Array.from(document.querySelectorAll("button"));
+    var randomBtn = btns.find(function(b){return b.textContent && b.textContent.indexOf("ランダム") >= 0;});
+    if (!randomBtn || randomBtn.dataset._v9hooked === "1") return;
+    randomBtn.addEventListener("click", function(){
+      setTimeout(function(){
+        document.querySelectorAll(".npc-card, .hero-card, [class*=npc-card], [class*=hero-card]").forEach(function(card){
+          var nameInp = card.querySelector('input[type=text], input:not([type])');
+          var ta = card.querySelector("textarea");
+          if (!nameInp || !ta) return;
+          var existing = ta.value || "";
+          /* Already has gender? skip */
+          if (/^性別[:：]/.test(existing)) return;
+          /* Detect from description */
+          var detected = detectGenderFromText(existing);
+          if (!detected) {
+            /* fallback: hash name */
+            var name = nameInp.value || "X";
+            var h = 0;
+            for (var i=0;i<name.length;i++) h = (h*31 + name.charCodeAt(i)) & 0xffff;
+            detected = ["女性", "男性", "中性的", "両性具有"][h % 4];
+          }
+          ta.value = "性別: " + detected + "。 " + existing;
+          ta.dispatchEvent(new Event("input", {bubbles: true}));
+          ta.dispatchEvent(new Event("change", {bubbles: true}));
+        });
+        console.log("[Patch v9] smart-gender random-fill applied");
+      }, 1100);  /* run after v7/v8 hooks */
+    }, true);  /* capture phase to run before v7/v8 */
+    randomBtn.dataset._v9hooked = "1";
+  }
+  setInterval(setupV9RandomFill, 2500);
+  setTimeout(setupV9RandomFill, 1300);
+  /* ===== 3. INFO MESSAGE about FLUX moderation ===== */
+  console.log("[Patch v9] FYI: FLUX 400 errors are usually content moderation by Black Forest Labs. Prompts now auto-sanitized + auto-retry with minimal prompt.");
+  console.log("[Patch v9] all loaded");
+})();
+</script>
 </body>
 </html>
