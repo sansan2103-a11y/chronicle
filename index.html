@@ -4191,6 +4191,191 @@ window._renderDialogueCards = function(turn) {
 setTimeout(() => UI.renderAll && UI.renderAll(), 200);
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Split long quoted dialogues into sentence-level cards
+// ─────────────────────────────────────────────────────────────
+
+window._splitDialogueText = function(text) {
+  if (!text || text.length < 8) return [text];
+  // Split when sentence-final punctuation is followed by space, full-width space, end, or 「」
+  const result = [];
+  let current = '';
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    current += c;
+    if (/[！？]/.test(c)) {
+      const next = text[i+1] || '';
+      if (next === ' ' || next === '　' || next === '' || /[「」]/.test(next)) {
+        const trimmed = current.trim();
+        if (trimmed) result.push(trimmed);
+        current = '';
+        if (next === ' ' || next === '　') i++;
+      }
+    } else if (c === '。') {
+      const next = text[i+1] || '';
+      if (next === ' ' || next === '　' || next === '' || /[「」]/.test(next)) {
+        const trimmed = current.trim();
+        if (trimmed) result.push(trimmed);
+        current = '';
+        if (next === ' ' || next === '　') i++;
+      }
+    }
+  }
+  const last = current.trim();
+  if (last) result.push(last);
+  return result.length > 0 ? result : [text];
+};
+
+// Override _extractDialogue to apply splitting + onomatopoeia
+window._extractDialogue = function(narrativeText) {
+  if (!narrativeText) return [];
+  const text = Array.isArray(narrativeText) ? narrativeText.join('\n') : String(narrativeText);
+  const heroName = S.cast.hero.name || '';
+  const npcs = (S.cast.npcs || []).map(n => n.name).filter(Boolean);
+
+  const heroParts = new Set();
+  if (heroName) {
+    heroParts.add(heroName);
+    heroName.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) heroParts.add(p); });
+  }
+  const nameToFull = {};
+  if (heroName) {
+    nameToFull[heroName] = heroName;
+    heroName.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) nameToFull[p] = heroName; });
+  }
+  npcs.forEach(n => {
+    nameToFull[n] = n;
+    n.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) nameToFull[p] = n; });
+  });
+  const namesArr = Object.keys(nameToFull).sort((a,b) => b.length - a.length);
+
+  let lastNamedSpeaker = null;
+  const events = [];
+  let order = 0;
+
+  const dRx = /「([^「」]+?)」/g;
+  let m;
+  while ((m = dRx.exec(text)) !== null) {
+    const dStart = m.index, dEnd = m.index + m[0].length, dText = m[1];
+    const before = text.slice(Math.max(0, dStart - 80), dStart);
+    const after = text.slice(dEnd, dEnd + 40);
+    let speaker = null;
+
+    let bestPosBefore = -1, bestNameBefore = null;
+    for (const n of namesArr) {
+      const pos = before.lastIndexOf(n);
+      if (pos > bestPosBefore) { bestPosBefore = pos; bestNameBefore = n; }
+    }
+    if (bestNameBefore) speaker = bestNameBefore;
+
+    if (!speaker) {
+      for (const n of namesArr) {
+        if (after.includes(n)) { speaker = n; break; }
+      }
+    }
+
+    if (!speaker) {
+      const ctx = before + after;
+      if (/彼女|あの娘|あの子|彼の|彼は|彼が/.test(ctx) && lastNamedSpeaker) {
+        speaker = lastNamedSpeaker;
+      }
+    }
+
+    const fullName = speaker ? (nameToFull[speaker] || speaker) : null;
+    if (fullName) lastNamedSpeaker = speaker;
+
+    // === SPLIT the dialogue into sentence-level chunks ===
+    const chunks = window._splitDialogueText(dText);
+    chunks.forEach((chunk, idx) => {
+      events.push({
+        type: 'quoted',
+        start: dStart, end: dEnd, order: order++, subIdx: idx, parentLen: chunks.length,
+        text: chunk,
+        speaker: fullName,
+        isHero: !!(fullName && (fullName === heroName || heroParts.has(fullName)))
+      });
+    });
+  }
+
+  // Layer 1: adjacent quotes inherit speaker (only between distinct quote sources)
+  for (let i = 0; i < events.length; i++) {
+    if (events[i].speaker) continue;
+    if (i > 0 && events[i-1].speaker && events[i].start - events[i-1].end <= 25) {
+      events[i].speaker = events[i-1].speaker;
+      events[i].isHero = events[i-1].isHero;
+      continue;
+    }
+    if (i < events.length-1 && events[i+1].speaker && events[i+1].start - events[i].end <= 25) {
+      events[i].speaker = events[i+1].speaker;
+      events[i].isHero = events[i+1].isHero;
+    }
+  }
+
+  // Layer 2: Onomatopoeia outside quoted regions
+  const dict = window.ONOMATOPOEIA_DICT || [];
+  const SPEECH_VERB_RX = /と[^。、\n]{0,4}(叫|呟|漏ら|呻|喘|発し|呼び|言|喚|吐|声)/;
+  // Build ranges of quoted regions for skip check (use original quote ranges)
+  const quoteRanges = [];
+  const qRx = /「([^「」]+?)」/g;
+  let qm;
+  while ((qm = qRx.exec(text)) !== null) {
+    quoteRanges.push({ start: qm.index, end: qm.index + qm[0].length });
+  }
+
+  for (const onomato of dict) {
+    let pos = 0;
+    while ((pos = text.indexOf(onomato, pos)) !== -1) {
+      const oStart = pos, oEnd = pos + onomato.length;
+      pos = oEnd;
+      // Skip if inside quoted dialogue
+      if (quoteRanges.some(r => r.start < oStart && r.end > oEnd)) continue;
+      const charAfter = text[oEnd] || '\n';
+      if (!/[、。！？「」\s\nと]/.test(charAfter)) continue;
+      const after15 = text.slice(oEnd, oEnd + 15);
+      const hasSpeechVerb = SPEECH_VERB_RX.test(after15);
+      const before30 = text.slice(Math.max(0, oStart - 30), oStart);
+      const after30 = text.slice(oEnd, oEnd + 30);
+      let nameNearby = null;
+      for (const n of namesArr) {
+        if (before30.includes(n) || after30.includes(n)) { nameNearby = n; break; }
+      }
+      const hasPronoun = /彼女|あの娘|あの子|彼は|彼が|彼の/.test(before30 + after30);
+      if (!hasSpeechVerb && !nameNearby && !(hasPronoun && lastNamedSpeaker)) continue;
+      let speaker = nameNearby || (hasPronoun ? lastNamedSpeaker : null) || lastNamedSpeaker;
+      const fullName = speaker ? (nameToFull[speaker] || speaker) : null;
+      if (!fullName) continue;
+      events.push({
+        type: 'sfx', start: oStart, end: oEnd, order: order++,
+        text: onomato,
+        speaker: fullName,
+        isHero: fullName === heroName || heroParts.has(fullName)
+      });
+    }
+  }
+
+  // Sort by position then order
+  events.sort((a,b) => a.start - b.start || a.order - b.order);
+  // Dedup
+  const seen = new Set();
+  return events.filter(e => {
+    if (!e.speaker) return false;
+    const key = e.start + ':' + e.text;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).map(e => ({
+    speaker: e.speaker,
+    text: e.text,
+    isHero: e.isHero,
+    isSfx: e.type === 'sfx'
+  }));
+};
+
+setTimeout(() => UI.renderAll && UI.renderAll(), 200);
+
+
 // Boot
 G.init();
 </script>
