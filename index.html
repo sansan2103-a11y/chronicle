@@ -6938,6 +6938,171 @@ Planner.parsePlan = function(rawText, inputType) {
 };
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Fix A: Chapter marker — switch from =SCENE: to =場面: (Japanese)
+// to avoid getting eaten by English-stripping filter
+// ─────────────────────────────────────────────────────────────
+
+// Update Planner.build to use =場面: in instructions
+const _origPlanBuildABFix = Planner.build.bind(Planner);
+Planner.build = function(inputType, inputText) {
+  const result = _origPlanBuildABFix(inputType, inputText);
+  if (S.cfg.simpleMode) return result;
+  // Replace any =SCENE: instructions with =場面: in the prompt
+  result.sys = result.sys.replace(/=SCENE:/g, '=場面:').replace(/=SCENE\\s*:/g, '=場面:');
+  return result;
+};
+
+// Update renderTurn to detect both =場面: and legacy =SCENE: (in case stripped to =:)
+const _origRTChapterFix = UI.renderTurn.bind(UI);
+UI.renderTurn = function(turn, idx) {
+  const div = _origRTChapterFix(turn, idx);
+  // Remove any chapter-marker that may have been added by the original (with broken =:)
+  div.querySelectorAll('.chapter-marker').forEach(m => m.remove());
+  // Look for our patterns
+  const narr = Array.isArray(turn.narrative) ? turn.narrative.join('\n') : (turn.narrative || '');
+  const mJP = narr.match(/=場面:\s*([^=\n]+?)=/);
+  const mLegacy = narr.match(/=:\s*([^=\n]+?)=/);  // English stripped
+  const m = mJP || mLegacy;
+  if (m) {
+    // Compute chapter num
+    let chapterNum = 1;
+    for (let i = 0; i <= idx && i < S.turns.length; i++) {
+      const t = S.turns[i];
+      const tNarr = Array.isArray(t.narrative) ? t.narrative.join('\n') : (t.narrative || '');
+      if (/=場面:|=:/i.test(tNarr) && /=[^=\n]+=/.test(tNarr)) {
+        if (i === idx) break;
+        chapterNum++;
+      }
+    }
+    const title = m[1].trim();
+    const marker = document.createElement('div');
+    marker.className = 'chapter-marker';
+    marker.innerHTML = '<span class="cm-deco">✦</span>' +
+      '<div class="cm-content">' +
+        '<div class="cm-num">第' + chapterNum + '章</div>' +
+        '<div class="cm-title">' + UI.esc(title) + '</div>' +
+      '</div>' +
+      '<span class="cm-deco">✦</span>';
+    if (div.firstChild) div.insertBefore(marker, div.firstChild);
+    else div.appendChild(marker);
+    // Strip the marker from displayed narrative
+    const block = div.querySelector('.narr-block');
+    if (block) {
+      block.querySelectorAll('p, .ptext').forEach(p => {
+        p.innerHTML = p.innerHTML.replace(/=場面:\s*[^=\n]+?=\s*/g, '').replace(/=:\s*[^=\n]+?=\s*/g, '');
+        if (!p.textContent.trim()) p.remove();
+      });
+    }
+  }
+  return div;
+};
+
+// ─────────────────────────────────────────────────────────────
+// Fix B: Speaker attribution — exclude names inside quotes (vocative)
+// when searching BEFORE for the speaker
+// ─────────────────────────────────────────────────────────────
+
+// Wrap _extractDialogue to apply better speaker resolution
+const _origExtractAB = window._extractDialogue;
+window._extractDialogue = function(narrativeText) {
+  const baseEvents = _origExtractAB(narrativeText);
+  if (!narrativeText) return baseEvents;
+  const text = Array.isArray(narrativeText) ? narrativeText.join('\n') : String(narrativeText);
+  
+  const heroName = S.cast.hero.name || '';
+  const npcs = (S.cast.npcs || []).map(n => n.name).filter(Boolean);
+  const heroParts = new Set();
+  if (heroName) {
+    heroParts.add(heroName);
+    heroName.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) heroParts.add(p); });
+  }
+  const nameToFull = {};
+  if (heroName) {
+    nameToFull[heroName] = heroName;
+    heroName.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) nameToFull[p] = heroName; });
+  }
+  npcs.forEach(n => {
+    nameToFull[n] = n;
+    n.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) nameToFull[p] = n; });
+  });
+  const namesArr = Object.keys(nameToFull).sort((a,b) => b.length - a.length);
+  
+  // Strip quoted regions from text for speaker search (vocative names inside 「」 don't count)
+  function stripQuotes(s) {
+    return s.replace(/「[^「」]*」/g, '____').replace(/《[^《》]*》/g, '____');
+  }
+  
+  // For each event, re-evaluate speaker using stripped text
+  let lastNamedSpeaker = null;
+  const enriched = [];
+  for (const ev of baseEvents) {
+    if (!ev.text) { enriched.push(ev); continue; }
+    const quoted = '「' + ev.text + '」';
+    const idx = text.indexOf(quoted);
+    if (idx < 0) {
+      // Can't find — keep as is (may be split chunk or sfx)
+      if (ev.speaker) lastNamedSpeaker = ev.speaker;
+      enriched.push(ev);
+      continue;
+    }
+    const dEnd = idx + quoted.length;
+    
+    // BEFORE: search 80 chars before, BUT strip quoted text
+    const beforeRaw = text.slice(Math.max(0, idx - 80), idx);
+    const beforeStripped = stripQuotes(beforeRaw);
+    
+    let bestPos = -1, bestName = null;
+    for (const n of namesArr) {
+      const pos = beforeStripped.lastIndexOf(n);
+      if (pos > bestPos) { bestPos = pos; bestName = n; }
+    }
+    
+    // AFTER pattern: と+name+verb (already prioritized in earlier wrapper)
+    const after60 = text.slice(dEnd, dEnd + 60);
+    const SPEECH_VERBS = '言|呟|叫|呻|喘|漏ら|呼び|尋ね|応|返|答|問|告|微笑|頷|首を|語|諭|怒鳴|喚|嘆|嘲|呼|聞';
+    let afterPatternName = null;
+    for (const n of namesArr) {
+      const escName = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const rx = new RegExp('と' + escName + '[はがも]?[^。、\\n]{0,8}(?:' + SPEECH_VERBS + ')');
+      if (rx.test(after60)) { afterPatternName = n; break; }
+    }
+    
+    let chosenName = afterPatternName || bestName;
+    
+    // Layer 1 inheritance: if no speaker found, use last from PREVIOUS adjacent quote
+    if (!chosenName && enriched.length > 0) {
+      // Check if previous event's quote ends within 25 chars of this one's start
+      const prev = enriched[enriched.length - 1];
+      if (prev.speaker) {
+        // Use prev speaker if quotes are close (Layer 1 adjacency)
+        // We don't have direct positions but adjacency is reasonable assumption
+        chosenName = prev.speaker;
+      }
+    }
+    
+    // Pronoun resolution
+    if (!chosenName) {
+      const ctx = beforeStripped + stripQuotes(after60);
+      if (/彼女|あの娘|あの子|彼の|彼は|彼が/.test(ctx) && lastNamedSpeaker) {
+        chosenName = lastNamedSpeaker;
+      }
+    }
+    
+    const fullName = chosenName ? (nameToFull[chosenName] || chosenName) : null;
+    const isHero = !!(fullName && (fullName === heroName || heroParts.has(fullName)));
+    
+    if (fullName) lastNamedSpeaker = chosenName;
+    
+    enriched.push({ ...ev, speaker: fullName, isHero });
+  }
+  
+  return enriched;
+};
+
+
 // Boot
 G.init();
 </script>
