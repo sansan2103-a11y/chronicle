@@ -724,6 +724,44 @@ body > #topbar, body > #story, body > #branches, body > #composer {
   body > #composer { max-width: 1200px; }
 }
 
+
+
+/* ─────────── Hero avatar in settings ─────────── */
+.hero-settings-avatar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0 6px;
+  margin-bottom: 4px;
+}
+.hsa-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.hsa-img {
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(160,138,240,0.4), rgba(120,90,210,0.55));
+  background-size: cover; background-position: center;
+  border: 2px solid rgba(212,180,120,0.45);
+  box-shadow: 0 0 16px rgba(160,138,240,0.25), 0 4px 12px rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--ff-disp); font-size: 28px;
+  color: rgba(255,255,255,0.85);
+}
+.hsa-regen {
+  position: absolute;
+  bottom: -2px; right: -2px;
+  width: 28px; height: 28px;
+  font-size: 14px;
+}
+.hsa-hint {
+  font-size: 11.5px;
+  color: var(--tx-faint);
+  line-height: 1.55;
+  flex: 1;
+}
+
 </style>
 </head>
 <body>
@@ -2880,6 +2918,80 @@ UI.renderAll = function() {
 
 // Force initial render
 setTimeout(() => UI.renderAll && UI.renderAll(), 100);
+
+
+
+
+// ─────────────────────────────────────────────────────────────
+// Hero avatar in settings panel
+// ─────────────────────────────────────────────────────────────
+function _renderHeroAvatarInSettings() {
+  const settingsPanel = document.getElementById('settingsPanel');
+  if (!settingsPanel || !settingsPanel.classList.contains('open') && !document.getElementById('settingsOv').classList.contains('open')) return;
+  // Find the section header "主人公"
+  const secs = settingsPanel.querySelectorAll('.sec');
+  let heroSec = null;
+  secs.forEach(s => { if (s.textContent.trim() === '主人公') heroSec = s; });
+  if (!heroSec) return;
+  // Insert avatar slot just after the section header
+  let slot = document.getElementById('heroAvSettings');
+  if (slot) slot.remove();  // re-render fresh
+  slot = document.createElement('div');
+  slot.id = 'heroAvSettings';
+  slot.className = 'hero-settings-avatar';
+  slot.innerHTML = '<div class="hsa-wrap">' +
+    '<div class="hsa-img" id="hsaImg"></div>' +
+    '<button class="av-regen hsa-regen" title="主人公アイコン再生成">⟳</button>' +
+    '</div>' +
+    '<div class="hsa-hint">名前と説明から自動生成 — 気に入らなければ ⟳ で再生成</div>';
+  heroSec.after(slot);
+  // Update image
+  const heroUrl = window._getHeroAvatar();
+  const img = document.getElementById('hsaImg');
+  if (heroUrl && img) {
+    img.style.backgroundImage = 'url("' + heroUrl + '")';
+  } else if (img) {
+    img.textContent = (S.cast.hero.name || '?').charAt(0);
+  }
+  // Wire regen
+  slot.querySelector('.hsa-regen').onclick = (e) => {
+    e.preventDefault();
+    window._regenHeroAvatar();
+    // Re-render this slot
+    setTimeout(() => _renderHeroAvatarInSettings(), 50);
+  };
+}
+window._renderHeroAvatarInSettings = _renderHeroAvatarInSettings;
+
+// Hook openSettings to render after panel opens
+const _origOpenSettingsHero = UI.openSettings.bind(UI);
+UI.openSettings = function() {
+  _origOpenSettingsHero();
+  setTimeout(() => _renderHeroAvatarInSettings(), 80);
+};
+
+// Re-render when hero name/desc changes
+const _heroNameInput = () => document.getElementById('cfgHName');
+const _heroDescInput = () => document.getElementById('cfgHDesc');
+document.addEventListener('input', (e) => {
+  if (e.target && (e.target.id === 'cfgHName' || e.target.id === 'cfgHDesc')) {
+    // Save to state on the fly so avatar updates
+    if (e.target.id === 'cfgHName') S.cast.hero.name = e.target.value;
+    if (e.target.id === 'cfgHDesc') S.cast.hero.desc = e.target.value;
+    // Throttled re-render
+    clearTimeout(window._heroAvDebounce);
+    window._heroAvDebounce = setTimeout(() => {
+      const img = document.getElementById('hsaImg');
+      if (img) {
+        const url = window._getHeroAvatar();
+        if (url) {
+          img.style.backgroundImage = 'url("' + url + '")';
+          img.textContent = '';
+        }
+      }
+    }, 800);
+  }
+});
 
 
 // Boot
