@@ -5879,6 +5879,77 @@ UI.randomFill = function() {
 };
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Fix dialogue attribution priority — handle と+name+verb after-pattern
+// ─────────────────────────────────────────────────────────────
+const _origExtractAttrFix = window._extractDialogue;
+window._extractDialogue = function(narrativeText) {
+  // Use original extraction but post-process to fix attribution
+  if (!narrativeText) return _origExtractAttrFix(narrativeText);
+  const text = Array.isArray(narrativeText) ? narrativeText.join('\n') : String(narrativeText);
+  const heroName = S.cast.hero.name || '';
+  const npcs = (S.cast.npcs || []).map(n => n.name).filter(Boolean);
+  const heroParts = new Set();
+  if (heroName) {
+    heroParts.add(heroName);
+    heroName.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) heroParts.add(p); });
+  }
+  const nameToFull = {};
+  if (heroName) {
+    nameToFull[heroName] = heroName;
+    heroName.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) nameToFull[p] = heroName; });
+  }
+  npcs.forEach(n => {
+    nameToFull[n] = n;
+    n.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) nameToFull[p] = n; });
+  });
+  const namesArr = Object.keys(nameToFull).sort((a,b) => b.length - a.length);
+  const SPEECH_VERBS = '言|呟|叫|呻|喘|漏ら|呼び|尋ね|応|返|答|問|告|微笑|頷|首を|語|諭|怒鳴|喚|嘆|嘲|呼|聞';
+  
+  // Step 1: Get base events from existing extraction
+  const baseEvents = _origExtractAttrFix(narrativeText);
+  
+  // Step 2: For each event, check if there's a と+name+verb pattern AFTER the quote that overrides
+  // We need to find each event's position in the text
+  const enriched = baseEvents.map(ev => {
+    if (!ev.text) return ev;
+    // Find position of this exact dialogue text in narrative
+    const quoted = '「' + ev.text + '」';
+    const idx = text.indexOf(quoted);
+    if (idx < 0) return ev;  // can't find (might be split chunk), keep as is
+    const dEnd = idx + quoted.length;
+    const after = text.slice(dEnd, dEnd + 60);
+    // Check pattern: と[NAME](?:[はがも])?(...)*[VERB]
+    let attrName = null;
+    for (const n of namesArr) {
+      const escName = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const rx = new RegExp('と' + escName + '[はがも]?[^。、\\n]{0,8}(?:' + SPEECH_VERBS + ')');
+      if (rx.test(after)) {
+        attrName = n;
+        break;
+      }
+      // Also: 「」+name+は+verb pattern (no と)
+      const rx2 = new RegExp('^[^「]{0,3}' + escName + '[はがも][^。、\\n]{0,12}(?:' + SPEECH_VERBS + ')');
+      if (rx2.test(after)) {
+        attrName = n;
+        break;
+      }
+    }
+    if (attrName) {
+      const fullName = nameToFull[attrName] || attrName;
+      const isHero = fullName === heroName || heroParts.has(fullName);
+      // Override attribution
+      return { ...ev, speaker: fullName, isHero };
+    }
+    return ev;
+  });
+  
+  return enriched;
+};
+
+
 // Boot
 G.init();
 </script>
