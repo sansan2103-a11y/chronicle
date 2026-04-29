@@ -195,10 +195,27 @@ body > #topbar, body > #story, body > #branches, body > #composer {
   cursor: pointer; transition: all 0.15s; min-height: 42px;
 }
 .mdbtn:hover { background: rgba(160,138,240,0.1); color: var(--tx-mid); }
-.mdbtn.active {
-  background: rgba(160,138,240,0.18); border-color: var(--border-strong);
-  color: var(--acc-bright);
-  box-shadow: inset 0 -2px 0 var(--acc), 0 0 12px rgba(160,138,240,0.2);
+.mdbtn.aDO, .mdbtn.aSAY, .mdbtn.aSTORY {
+  font-weight: 700;
+  transform: translateY(-1px);
+}
+.mdbtn.aDO {
+  background: linear-gradient(180deg, rgba(120,160,240,0.32), rgba(80,120,210,0.22));
+  border-color: rgba(120,160,240,0.65);
+  color: #c9dcff;
+  box-shadow: inset 0 -3px 0 #5a8ef0, 0 0 18px rgba(90,142,240,0.35), 0 4px 12px rgba(0,0,0,0.3);
+}
+.mdbtn.aSAY {
+  background: linear-gradient(180deg, rgba(120,200,140,0.32), rgba(80,160,100,0.22));
+  border-color: rgba(120,200,140,0.65);
+  color: #c9eed3;
+  box-shadow: inset 0 -3px 0 #6aaf78, 0 0 18px rgba(106,175,120,0.35), 0 4px 12px rgba(0,0,0,0.3);
+}
+.mdbtn.aSTORY {
+  background: linear-gradient(180deg, rgba(212,180,120,0.32), rgba(180,140,80,0.22));
+  border-color: rgba(212,180,120,0.65);
+  color: #f3d8a3;
+  box-shadow: inset 0 -3px 0 #c49040, 0 0 18px rgba(196,144,64,0.35), 0 4px 12px rgba(0,0,0,0.3);
 }
 .inp-row { display: flex; gap: 8px; margin-bottom: 10px; }
 #inp {
