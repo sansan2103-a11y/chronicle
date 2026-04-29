@@ -1212,6 +1212,90 @@ body > #topbar, body > #story, body > #branches, body > #composer {
   .chapter-marker .cm-deco { font-size: 16px; }
 }
 
+
+
+/* ─────────── Batch regen button + Toast ─────────── */
+.btn-regen-all {
+  width: 100%;
+  font-family: inherit;
+  padding: 11px;
+  background: linear-gradient(135deg, rgba(212,180,120,0.18), rgba(160,138,240,0.12));
+  border: 1px solid rgba(212,180,120,0.45);
+  color: var(--gold);
+  border-radius: var(--r-md);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+.btn-regen-all:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(212,180,120,0.28), rgba(160,138,240,0.2));
+  border-color: rgba(212,180,120,0.7);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(212,180,120,0.18);
+}
+.btn-regen-all:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.btn-regen-all.regen-running {
+  background: linear-gradient(135deg, rgba(160,138,240,0.22), rgba(120,90,210,0.18));
+  border-color: rgba(160,138,240,0.55);
+  color: var(--acc-bright);
+  animation: regenPulse 1.4s ease-in-out infinite;
+}
+@keyframes regenPulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(160,138,240,0.18); }
+  50% { box-shadow: 0 0 20px rgba(160,138,240,0.4); }
+}
+
+/* Toast notification */
+.toast {
+  position: fixed;
+  bottom: 88px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  padding: 13px 24px;
+  background: linear-gradient(180deg, rgba(28,20,48,0.97), rgba(15,10,25,0.98));
+  border: 1px solid rgba(160,138,240,0.45);
+  color: var(--tx);
+  border-radius: var(--r-md);
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 0.32s, transform 0.32s;
+  pointer-events: none;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.55), 0 0 14px rgba(160,138,240,0.18);
+  max-width: 90vw;
+  text-align: center;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(8px);
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.toast.toast-ok {
+  border-color: rgba(124,184,124,0.55);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.55), 0 0 16px rgba(124,184,124,0.22);
+}
+.toast.toast-ok::before { content: '✓ '; color: var(--ok); margin-right: 4px; }
+.toast.toast-warn {
+  border-color: rgba(212,180,120,0.55);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.55), 0 0 16px rgba(212,180,120,0.2);
+}
+.toast.toast-warn::before { content: '⚠ '; color: var(--warn); margin-right: 4px; }
+.toast.toast-err {
+  border-color: rgba(229,115,115,0.6);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.55), 0 0 16px rgba(229,115,115,0.2);
+}
+.toast.toast-err::before { content: '✕ '; color: var(--err); margin-right: 4px; }
+@media (max-width: 640px) {
+  .toast { bottom: 12px; padding: 11px 18px; font-size: 12.5px; }
+}
+
 </style>
 </head>
 <body>
@@ -5401,6 +5485,148 @@ UI.openSettings = function() {
 
 // Force re-render
 setTimeout(() => UI.renderAll && UI.renderAll(), 200);
+
+
+
+
+// ─────────────────────────────────────────────────────────────
+// Batch avatar regeneration: hero + all NPCs sequentially
+// ─────────────────────────────────────────────────────────────
+
+// Toast notification system
+window._toast = function(msg, type) {
+  type = type || 'ok';
+  const t = document.createElement('div');
+  t.className = 'toast toast-' + type;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => {
+    t.classList.remove('show');
+    setTimeout(() => t.remove(), 400);
+  }, 4500);
+};
+
+window._regenAllAvatars = async function() {
+  const characters = [];
+  if (S.cast.hero && S.cast.hero.name) {
+    characters.push({ type: 'hero', label: S.cast.hero.name });
+  }
+  (S.cast.npcs || []).forEach((npc, i) => {
+    if (npc && npc.name) characters.push({ type: 'npc', idx: i, label: npc.name });
+  });
+
+  const total = characters.length;
+  const btn = document.getElementById('btnRegenAll');
+  if (total === 0) {
+    window._toast('対象キャラがいません（名前未設定）', 'warn');
+    return;
+  }
+
+  const origText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add('regen-running');
+  }
+
+  // Clear caches once at start
+  window._avatarLoadCache = {};
+  try { localStorage.removeItem('chr_av_cache_v1'); } catch (e) {}
+
+  const failures = [];
+
+  for (let i = 0; i < total; i++) {
+    const c = characters[i];
+    if (btn) btn.textContent = '再生成中 (' + (i+1) + '/' + total + ')...';
+
+    try {
+      // Bump seed with random jump
+      const jump = Math.floor(Math.random() * 1000) + 1;
+      let url = null;
+      if (c.type === 'hero') {
+        S.cast.hero.avatarSeed = (S.cast.hero.avatarSeed || 0) + jump;
+        url = window._getHeroAvatar();
+      } else {
+        const npc = S.cast.npcs[c.idx];
+        if (npc) {
+          npc.avatarSeed = (npc.avatarSeed || 0) + jump;
+          url = window._getNpcAvatar(npc);
+        }
+      }
+
+      // Preload (8s timeout)
+      if (url) {
+        await new Promise(resolve => {
+          const img = new Image();
+          let done = false;
+          const timer = setTimeout(() => {
+            if (done) return; done = true;
+            failures.push(c.label);
+            resolve();
+          }, 8000);
+          img.onload = () => {
+            if (done) return; done = true;
+            clearTimeout(timer);
+            if (img.naturalWidth < 32) failures.push(c.label);
+            resolve();
+          };
+          img.onerror = () => {
+            if (done) return; done = true;
+            clearTimeout(timer);
+            failures.push(c.label);
+            resolve();
+          };
+          img.src = url;
+        });
+      }
+    } catch (e) {
+      failures.push(c.label);
+    }
+
+    // Throttle 700ms between requests
+    if (i < total - 1) {
+      await new Promise(r => setTimeout(r, 700));
+    }
+  }
+
+  // Save state and refresh UI
+  S.save();
+  if (UI._renderNpcList) UI._renderNpcList();
+  if (UI.renderAll) UI.renderAll();
+  if (window._renderHeroAvatarInSettings) window._renderHeroAvatarInSettings();
+
+  if (btn) {
+    btn.disabled = false;
+    btn.classList.remove('regen-running');
+    btn.textContent = origText || '🔄 全キャラ一括再生成';
+  }
+
+  if (failures.length === 0) {
+    window._toast('全' + total + 'キャラの再生成完了', 'ok');
+  } else {
+    const succ = total - failures.length;
+    window._toast(succ + '/' + total + '完了。失敗: ' + failures.join('、'), 'warn');
+  }
+};
+
+// Settings UI: insert button in heroAvSettings slot
+function _renderBatchRegenButton() {
+  const slot = document.getElementById('heroAvSettings');
+  if (!slot) return;
+  if (document.getElementById('btnRegenAll')) return;
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'flex-basis:100%;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)';
+  wrap.innerHTML = '<button id="btnRegenAll" class="btn-regen-all">🔄 全キャラ一括再生成</button>' +
+    '<div style="font-size:10.5px;color:var(--tx-faint);margin-top:4px;line-height:1.5">主人公＋全NPCのアバターを順番に再生成します（700ms間隔・8秒タイムアウト）。レートリミット配慮。</div>';
+  slot.appendChild(wrap);
+  document.getElementById('btnRegenAll').addEventListener('click', () => window._regenAllAvatars());
+}
+
+const _origOpenSettingsBatch = UI.openSettings.bind(UI);
+UI.openSettings = function() {
+  _origOpenSettingsBatch();
+  setTimeout(() => _renderBatchRegenButton(), 280);
+};
 
 
 // Boot
