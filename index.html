@@ -803,6 +803,83 @@ body > #topbar, body > #story, body > #branches, body > #composer {
   .dialogue-list { width: auto; }
 }
 
+
+
+/* ─────────── Two-column content layout (dialogue|narrative) ─────────── */
+#content-cols {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  padding: 16px 18px 8px;
+  overflow-y: auto;
+}
+@media (min-width: 880px) {
+  #content-cols {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 22px;
+    overflow: hidden;
+  }
+  #content-cols > .col-frame {
+    overflow-y: auto;
+    max-height: calc(100dvh - 230px);
+    padding-right: 4px;
+  }
+}
+.col-frame {
+  background: linear-gradient(180deg, rgba(20,14,35,0.55), rgba(15,10,25,0.7));
+  border: 1px solid rgba(212,180,120,0.22);
+  border-radius: var(--r-lg);
+  padding: 16px 18px;
+  position: relative;
+  box-shadow: var(--shadow-1), inset 0 1px 0 rgba(255,255,255,0.03);
+}
+.col-frame::before, .col-frame::after {
+  content: '';
+  position: absolute;
+  width: 22px; height: 22px;
+  border: 1px solid rgba(212,180,120,0.5);
+  pointer-events: none;
+}
+.col-frame::before { top: 6px; left: 6px; border-right: none; border-bottom: none; }
+.col-frame::after { bottom: 6px; right: 6px; border-left: none; border-top: none; }
+.col-header {
+  display: flex; align-items: baseline; gap: 10px;
+  padding-bottom: 12px; margin-bottom: 14px;
+  border-bottom: 1px solid rgba(212,180,120,0.18);
+}
+.col-header .ch-icon { font-size: 18px; }
+.col-header .ch-title {
+  font-family: var(--ff-disp); font-size: 17px;
+  letter-spacing: 0.18em; color: var(--acc-bright); font-weight: 500;
+}
+.col-header .ch-sub {
+  font-size: 11px; color: var(--tx-faint);
+  letter-spacing: 0.1em; margin-left: auto;
+}
+
+/* In split view, dialogue list inside dialogue-stream is full width */
+#dialogue-stream { display: flex; flex-direction: column; gap: 12px; }
+#dialogue-stream .dialogue-list { max-width: 100%; margin: 0; width: auto; }
+#dialogue-stream .dialogue-row { width: 100%; }
+
+/* In split view, narrative blocks are full width within right column */
+#narrative-col #story { padding: 0; gap: 14px; overflow: visible; }
+#narrative-col .narr-block { max-width: 100%; margin: 0; }
+#narrative-col .turn { gap: 8px; }
+
+/* Hide original #story max-height since we're in panel */
+#narrative-col #welcome { padding: 32px 12px; }
+#narrative-col #welcome h2 { font-size: 36px; }
+.hero-avatar-slot .hero-avatar { width: 96px; height: 96px; }
+
+/* Mobile: stack vertically */
+@media (max-width: 879px) {
+  .col-frame { padding: 14px; }
+  .col-header .ch-title { font-size: 15px; }
+}
+
 </style>
 </head>
 <body>
@@ -3165,6 +3242,87 @@ window._renderDialogueCards = function(turn) {
 
 // Force re-render of all turns
 setTimeout(() => { if (UI.renderAll) UI.renderAll(); }, 200);
+
+
+
+
+// ─────────────────────────────────────────────────────────────
+// Refine avatar prompts for higher quality (matching mihoyo/gacha look)
+// ─────────────────────────────────────────────────────────────
+window.AVATAR_STYLES = {
+  anime:      { label: 'アニメ調（標準）',   prefix: 'detailed anime character portrait, japanese animation art, polished anime style, soft cel shading, sharp expressive eyes, painted face, fantasy character design, professional illustration' },
+  gacha:      { label: '高品質ファンタジー（mihoyo風・推奨）', prefix: 'high quality fantasy character portrait, gacha game art, mihoyo style, detailed face, sharp eyes, polished anime illustration, dramatic atmospheric lighting, fantasy character design, professional digital art' },
+  jrpg:       { label: 'JRPGゲーム風',       prefix: 'jrpg character art, painterly anime, japanese rpg character portrait, detailed face, fantasy art, professional illustration' },
+  vn:         { label: 'ビジュアルノベル風', prefix: 'visual novel character art, japanese galge style portrait, soft cel shading, detailed eyes, gentle expression' },
+  semireal:   { label: 'セミリアル',         prefix: 'semi-realistic anime portrait, painterly fantasy art, detailed face, atmospheric lighting' },
+  watercolor: { label: '水彩画風',           prefix: 'watercolor painting portrait, soft ethereal washes, ink lines, character art' },
+  oil:        { label: '油彩画風',           prefix: 'classical oil painting portrait, baroque chiaroscuro, character art' },
+  pixel:      { label: 'ピクセルアート',     prefix: 'pixel art portrait, 16bit jrpg sprite face, retro game style' },
+  manga:      { label: 'モノクロ漫画風',     prefix: 'monochrome manga portrait, ink illustration, screentone shading' }
+};
+
+// Default to gacha style for highest quality
+if (!S.cfg.avatarStyle || S.cfg.avatarStyle === 'anime') {
+  // Don't auto-change if user already picked something
+}
+
+// Restructure DOM: add #dialogue-stream container + wrapper #content-cols
+(function restructureLayout() {
+  const story = document.getElementById('story');
+  if (!story) return;
+  if (document.getElementById('content-cols')) return; // already done
+  // Build wrapper
+  const wrap = document.createElement('div');
+  wrap.id = 'content-cols';
+  // Left column: dialogue stream
+  const leftCol = document.createElement('div');
+  leftCol.id = 'dialogue-col';
+  leftCol.className = 'col-frame';
+  leftCol.innerHTML = '<div class="col-header"><span class="ch-icon">💬</span><span class="ch-title">会話ログ</span><span class="ch-sub">キャラクターの発言</span></div>' +
+    '<div id="dialogue-stream"></div>';
+  // Right column: narrative (move existing #story into here)
+  const rightCol = document.createElement('div');
+  rightCol.id = 'narrative-col';
+  rightCol.className = 'col-frame';
+  rightCol.innerHTML = '<div class="col-header"><span class="ch-icon">📖</span><span class="ch-title">展開の描写</span><span class="ch-sub">物語の進行・記録</span></div>';
+  // Move story into right col
+  story.parentNode.insertBefore(wrap, story);
+  wrap.appendChild(leftCol);
+  wrap.appendChild(rightCol);
+  rightCol.appendChild(story);
+})();
+
+// Patch renderTurn: extract dialogue cards and append them to #dialogue-stream instead
+(function patchRenderTurnSplit() {
+  const orig = UI.renderTurn.bind(UI);
+  UI.renderTurn = function(turn, idx) {
+    const div = orig(turn, idx);
+    // Find the dialogue-list inside the turn and move it to dialogue stream
+    const dlgList = div.querySelector('.dialogue-list');
+    if (dlgList) {
+      const stream = document.getElementById('dialogue-stream');
+      if (stream) {
+        // Tag with turn idx for re-render alignment
+        dlgList.dataset.turnIdx = idx;
+        stream.appendChild(dlgList);
+      }
+    }
+    return div;
+  };
+})();
+
+// Patch renderAll to clear dialogue stream too
+(function patchRenderAllSplit() {
+  const orig = UI.renderAll.bind(UI);
+  UI.renderAll = function() {
+    const stream = document.getElementById('dialogue-stream');
+    if (stream) stream.innerHTML = '';
+    return orig();
+  };
+})();
+
+// Force re-render
+setTimeout(() => UI.renderAll && UI.renderAll(), 100);
 
 
 // Boot
