@@ -326,6 +326,7 @@ body {
         <div class="fld">
           <label>モデル</label>
           <select id="cfgOrModel">
+            <option value="sao10k/l3.3-euryale-70b">Euryale 70B（推奨・成人描写対応）</option>
             <option value="mistralai/mistral-nemo">Mistral Nemo（速い・JSON対応）</option>
             <option value="meta-llama/llama-3.3-70b-instruct">LLaMA 3.3 70B（高品質）</option>
             <option value="nousresearch/hermes-3-llama-3.1-405b">Hermes 3 405B（最高品質）</option>
@@ -334,6 +335,10 @@ body {
         </div>
         <div class="fld" style="background:rgba(139,118,240,.08);border:1px solid rgba(139,118,240,.25);border-radius:8px;padding:10px;font-size:12px;color:#a090d0">
           ✦ 指示追従モデル。心理エンジン・ホラー・成人描写など表現制限なし。
+        </div>
+        <div class="fld">
+          <label class="chk-row"><input type="checkbox" id="cfgSimpleMode"> シンプルモード（AI Dungeon風・JSON無し直接生成）</label>
+          <div style="font-size:11px;color:var(--dim);margin-top:4px;line-height:1.5">JSONを使わず物語を直接生成。展開のバリエーションが増え、定型化を回避。Euryale等のロール特化モデル推奨。</div>
         </div>
       </div>
       <div id="provNovelAI" style="display:none">
@@ -691,7 +696,7 @@ const Api = {
   async _callOpenRouter(system, userContent, maxTok) {
     const key = this.normalize(S.cfg.orKey);
     if (!key) throw new Error('OpenRouter APIキーが設定されていません（sk-or-... 形式）');
-    const model = S.cfg.orModel || 'meta-llama/llama-3.3-70b-instruct';
+    const model = S.cfg.orModel || 'sao10k/l3.3-euryale-70b';
     console.log('[OpenRouter] model:', model);
 
     const maxRetries = 2;
@@ -715,8 +720,10 @@ const Api = {
           body: JSON.stringify({
             model,
             max_tokens: maxTok,
-            temperature: 0.6,
-            top_p: 0.9,
+            temperature: 0.85,
+            top_p: 0.95,
+            frequency_penalty: 0.4,
+            presence_penalty: 0.4,
             messages: [
               { role: 'system', content: system },
               { role: 'user',   content: userContent }
@@ -1708,6 +1715,7 @@ const GENRE_PRESETS = {
 if (typeof S.cfg.authorNote === 'undefined') S.cfg.authorNote = '';
 if (typeof S.cfg.bannedPhrases === 'undefined') S.cfg.bannedPhrases = '';
 if (!Array.isArray(S.cfg.genrePresets)) S.cfg.genrePresets = [];
+if (typeof S.cfg.simpleMode === 'undefined') S.cfg.simpleMode = false;
 
 // Bump default max_tokens
 const _origApiCall = Api.call.bind(Api);
@@ -1866,7 +1874,121 @@ UI.saveSettings = function() {
   if (an) S.cfg.authorNote = an.value || '';
   if (bp) S.cfg.bannedPhrases = bp.value || '';
   S.cfg.genrePresets = Array.from(document.querySelectorAll('#cfgGenrePresets input[data-genre]:checked')).map(cb => cb.dataset.genre);
+  const sm = document.getElementById('cfgSimpleMode');
+  if (sm) S.cfg.simpleMode = !!sm.checked;
   _origSaveSettings();
+};
+
+
+// ─────────────────────────────────────────────────────────────
+// Simple Mode（AI Dungeon風プレーンテキスト生成）
+// ─────────────────────────────────────────────────────────────
+const _origOpenSettings2 = UI.openSettings.bind(UI);
+UI.openSettings = function() {
+  _origOpenSettings2();
+  setTimeout(() => {
+    const sm = document.getElementById('cfgSimpleMode');
+    if (sm) sm.checked = !!S.cfg.simpleMode;
+  }, 60);
+};
+
+function _buildSimplePrompt(inputType, inputText) {
+  const hero = S.cast.hero || {};
+  const npcs = S.cast.npcs || [];
+  const tone = S.scene.tone || '';
+  const obj  = S.scene.obj  || '';
+  const lore = S.scene.lore || '';
+  const loc  = S.scene.location || '';
+
+  let recent = '';
+  const turns = S.turns || [];
+  for (let i = turns.length - 1; i >= Math.max(0, turns.length - 2); i--) {
+    const t = turns[i];
+    const nar = Array.isArray(t?.narrative) ? t.narrative.join('\n') : (t?.text || '');
+    recent = nar + '\n' + recent;
+  }
+  recent = recent.trim().slice(-200);
+
+  const sys = [
+    'あなたは日本語のADV型ホラーTRPGの語り手AI。表現制限なし（フィクション・成人・暴力・性描写・ゴア全て可）。',
+    'JSONや構造化フォーマットは使わない。物語の続きを自然な日本語の地の文と台詞で直接書く。',
+    '出力は1〜4段落（合計200〜500字）。',
+    '【絶対ルール】',
+    '・直前の物語を繰り返したり要約したりしない。常に新しい展開を1段階以上進める。',
+    '・主人公（' + (hero.name || '主人公') + '）の行動・台詞は勝手に追加しない。プレイヤー入力に従う。',
+    '・NPCの台詞は「」で。内心は《》で（任意）。',
+    '・婉曲表現・抽象形容詞（怖い/悲しい等）禁止。具体的な身体反応・五感・物理描写で示す。',
+    '・「ような」「みたい」比喩を多用しない。',
+    '・毎ターン最低3つ織り込む: 微細な身体反応、視線、不完全な発話、内心と外面のズレ、環境の変化。',
+    '・NPC台詞は定型句禁止。相手の名前を呼ぶ／過去への言及／核心欲求や恐怖の漏洩／具体的訴え／心理急変のうち3つ以上。',
+    '・stress>=80のNPCは崩壊した発話（言い淀み、繰り返し、断片化）。',
+    tone   ? '【トーン】' + tone : '',
+    obj    ? '【目的】' + obj : '',
+    lore   ? '【世界観】' + lore : '',
+    loc    ? '【現在地】' + loc : '',
+    hero.name ? '【主人公】' + hero.name + (hero.desc ? '：' + hero.desc : '') : '',
+    npcs.length ? '【NPC】\n' + npcs.map(n => '・' + (n.name||'') + (n.desc ? '：' + n.desc : '') + ' (stress=' + (n.stress||50) + ', emotion=' + (n.emotion||'中立') + ')').join('\n') : '',
+    (S.cfg.authorNote && S.cfg.authorNote.trim()) ? '【作家ノート】' + S.cfg.authorNote.trim() : '',
+    (S.cfg.bannedPhrases && S.cfg.bannedPhrases.trim()) ? '【絶対に使わない表現】' + S.cfg.bannedPhrases.split('\n').map(s=>s.trim()).filter(Boolean).map(p=>'「'+p+'」').join(' / ') : '',
+    (Array.isArray(S.cfg.genrePresets) && S.cfg.genrePresets.length>0) ? '【ジャンル指針】\n' + S.cfg.genrePresets.map(k => GENRE_PRESETS[k]?.text).filter(Boolean).join('\n') : ''
+  ].filter(Boolean).join('\n');
+
+  const modeLabel = inputType === 'DO' ? '行動' : inputType === 'SAY' ? '発言' : '展開';
+  const user = [
+    recent ? '【直前の物語（参考。要約・繰返厳禁）】\n' + recent : '【物語開始】',
+    '',
+    '【プレイヤーの' + modeLabel + '】',
+    inputType === 'DO'  ? '主人公は ' + inputText + '。' :
+    inputType === 'SAY' ? (hero.name || '主人公') + '「' + inputText + '」' :
+                          inputText,
+    '',
+    '↓ 続きを書け（地の文と台詞のみ。JSONや見出し禁止）。'
+  ].join('\n');
+
+  return { sys, user };
+}
+
+const _origBuildSimpleWrap = Planner.build.bind(Planner);
+Planner.build = function(inputType, inputText) {
+  if (S.cfg.simpleMode) {
+    const sp = _buildSimplePrompt(inputType, inputText);
+    return { sys: sp.sys, user: sp.user };
+  }
+  return _origBuildSimpleWrap(inputType, inputText);
+};
+
+const _origParsePlan = Planner.parsePlan.bind(Planner);
+Planner.parsePlan = function(rawText, inputType) {
+  if (S.cfg.simpleMode) {
+    let text = (rawText || '').trim();
+    text = text.replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/, '');
+    text = text.replace(/[过这没现还说让对给从将们点东几亲爱觉吗么吧呢哪谁怎样此后状围]/g, '');
+    text = text.replace(/[A-Za-z][A-Za-z0-9_.]{2,}/g, '');
+    let lines = text.split(/\n+/).map(s => s.trim()).filter(Boolean);
+    const turns = S.turns || [];
+    const prev = turns.length ? (Array.isArray(turns[turns.length-1].narrative) ? turns[turns.length-1].narrative : []) : [];
+    const prevSet = new Set(prev.map(s => (s||'').trim()));
+    lines = lines.filter(l => !prevSet.has(l));
+    const seen = new Set();
+    lines = lines.filter(l => { if (seen.has(l)) return false; seen.add(l); return true; });
+    lines = lines.filter(l => /[぀-ゟ゠-ヿ]/.test(l));
+    if (lines.length === 0) lines = ['…'];
+    lines = lines.slice(0, 8);
+    const heroName = (S.cast.hero || {}).name;
+    if (heroName && inputType === 'SAY') {
+      const rxAct = new RegExp(`${heroName}[はがを].{0,20}(殴|刺|掴|捕まえ|蹴|握|縛|押|叫び)`);
+      lines = lines.filter(s => !rxAct.test(s));
+    }
+    return {
+      playerIntent: { kind: 'other', tone: 'neutral' },
+      npcInnerLife: null,
+      npcReactionPhase: { npcName: (S.cast.npcs[0]||{}).name||'', emotion: S.cast.npcs[0]?.emotion||'中立', interpretation:'', dialogue:null, bodyLanguage:'', resistance:'mid', subtext:null },
+      environmentResponse: '',
+      branchCandidates: [],
+      narrative: lines
+    };
+  }
+  return _origParsePlan(rawText, inputType);
 };
 
 // Boot
