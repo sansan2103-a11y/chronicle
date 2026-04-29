@@ -762,6 +762,47 @@ body > #topbar, body > #story, body > #branches, body > #composer {
   flex: 1;
 }
 
+
+
+/* ─────────── Chat-style layout: dialogue left, narrative right ─────────── */
+.turn { gap: 14px; }
+.narr-block {
+  margin-left: auto;
+  max-width: 88%;
+  border-left: none;
+  border-right: 3px solid var(--gold);
+  padding: 18px 24px 18px 26px;
+}
+.narr-block::before { display: none; }
+.narr-block .edit-btn { right: 14px; }
+.narr-block .regen-btn { right: 64px; }
+
+.dialogue-list {
+  margin-right: auto;
+  max-width: 88%;
+  width: fit-content;
+}
+.dialogue-row {
+  /* row already has avatar on left + body */
+}
+.dialogue-row::after {
+  /* sparkle moved to left side since the bubble is on the left */
+  content: '';
+  display: none;
+}
+
+/* Player line stays centered at full-width */
+.player-line {
+  justify-content: center;
+  margin: 4px 0;
+}
+
+/* Mobile: revert to full width on narrow screens */
+@media (max-width: 600px) {
+  .narr-block, .dialogue-list { max-width: 100%; margin: 0; }
+  .dialogue-list { width: auto; }
+}
+
 </style>
 </head>
 <body>
