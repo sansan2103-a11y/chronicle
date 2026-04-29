@@ -8800,5 +8800,235 @@ G.init();
   console.log("[Patch v4] all patches loaded");
 })();
 </script>
+<script>
+/* === PATCH: quality-fixes-v5 === */
+(function(){
+  console.log("[Patch v5] loading native-card cleanup + onomatopoeia + serial pollinations");
+  /* ===== Helper: hero/npc detection (re-derived since v4 funcs are inner-scope) ===== */
+  function getHero(){
+    var inp = document.getElementById("cfgHeroName");
+    if (inp && inp.value) return inp.value.trim();
+    var heroCard = document.querySelector(".hero-card .name, .hero-card [class*=name], [class*=hero] [class*=name]");
+    if (heroCard && heroCard.textContent) return heroCard.textContent.trim();
+    try {
+      for (var i=0; i<localStorage.length; i++){
+        var v = localStorage.getItem(localStorage.key(i));
+        if (v && v.indexOf(\"hero\") >= 0) {
+          var m = v.match(/\"hero\"\s*:\s*\{[^}]*\"name\"\s*:\s*\"([^\"]+)\"/);
+          if (m) return m[1];
+        }
+      }
+    } catch(e){}
+    return null;
+  }
+  function getNpcs(){
+    var names = [];
+    document.querySelectorAll(".npc-card .name, .npc-card [class*=name], [id*=npc][id*=name]").forEach(function(el){
+      var v = el.value || el.textContent;
+      if (v && v.length > 1 && v.length < 30 && names.indexOf(v.trim()) < 0) names.push(v.trim());
+    });
+    try {
+      for (var i=0; i<localStorage.length; i++){
+        var v = localStorage.getItem(localStorage.key(i));
+        if (v && v.indexOf(\"npcs\") >= 0) {
+          var rx = /\"name\"\s*:\s*\"([^\"]+)\"/g, m;
+          while ((m = rx.exec(v)) !== null){
+            if (m[1].length > 1 && m[1].length < 30 && names.indexOf(m[1]) < 0) names.push(m[1]);
+          }
+        }
+      }
+    } catch(e){}
+    return names;
+  }
+  function findNarrPanel(){
+    var hdrs = Array.from(document.querySelectorAll("h1,h2,h3,h4,div,span"));
+    var lp = null;
+    for (var i=0;i<hdrs.length;i++){
+      if (hdrs[i].textContent && hdrs[i].textContent.indexOf("会話ログ") >= 0 && hdrs[i].children.length === 0) {
+        lp = hdrs[i].closest("section,aside,div,article");
+        break;
+      }
+    }
+    var sections = Array.from(document.querySelectorAll("section,aside,div,article"));
+    for (var j=0;j<sections.length;j++){
+      if (sections[j] !== lp && sections[j].textContent.length > 200 && sections[j].textContent.indexOf("会話ログ") < 0 && sections[j].textContent.indexOf("設定") < 0) return sections[j];
+    }
+    return null;
+  }
+  /* ===== 1. NATIVE CARD CLEANUP ===== */
+  function findCorrectSpeaker(quote, npcs){
+    var np = findNarrPanel();
+    if (!np) return null;
+    var nt = np.innerText || "";
+    var qIdx = nt.indexOf(quote.slice(0,Math.min(30,quote.length)));
+    if (qIdx === -1) return null;
+    /* Search narrative around the quote for a clear attribution */
+    var afterWindow = nt.slice(qIdx, Math.min(nt.length, qIdx+200));
+    /* Pattern: NAME(の声|は|が|と|...) right after the quote */
+    var rxAfter = /」\s*([^\s「」、。\n]{2,15})(?:の声|の言葉|は|が|と)/;
+    var m = afterWindow.match(rxAfter);
+    if (m) {
+      for (var i=0;i<npcs.length;i++) if (m[1].indexOf(npcs[i].split(/[\s・]/)[0]) >=0 || npcs[i].indexOf(m[1]) >=0) return npcs[i];
+      if (npcs.indexOf(m[1]) < 0) return m[1];
+    }
+    /* Fallback: last NPC mentioned in 200 chars before quote */
+    var beforeWindow = nt.slice(Math.max(0, qIdx-300), qIdx);
+    var lastPos = -1, lastName = null;
+    for (var k=0;k<npcs.length;k++){
+      var p = beforeWindow.lastIndexOf(npcs[k]);
+      if (p > lastPos) { lastPos = p; lastName = npcs[k]; }
+    }
+    return lastName;
+  }
+  function isOnomatopoeia(text){
+    /* screams / cries / non-verbal */
+    if (/^[あいうえおっーァィゥェォッーaeiouギャキャウァひぃ!！　\s\?？]+$/i.test(text.trim())) return true;
+    if (/^[ぐだグダ]ぁ?ぁ*[ーぁ]*[っぁ]?$/.test(text.trim())) return true;
+    /* Allow if many same-char repeated (scream) */
+    var clean = text.replace(/[ーァぁ\s]/g, "");
+    if (clean.length >= 2 && /^(.)\1{2,}$/.test(clean)) return true;
+    return false;
+  }
+  function fixNativeCards(){
+    var hero = getHero();
+    var npcs = getNpcs();
+    if (!hero) return;
+    var heroFirst = hero.split(/[\s・]/)[0];
+    var heroVoc = new RegExp("^\\s*" + heroFirst + "[、。・!！\\?？\\s]|" + heroFirst + "[、\\s「」]");
+    document.querySelectorAll(".dialogue-row").forEach(function(row){
+      if (row.dataset._v5done === "1") return;
+      var nameEl = row.querySelector(".dialogue-name");
+      var textEl = row.querySelector(".dialogue-text");
+      if (!nameEl || !textEl) return;
+      var speaker = (nameEl.textContent||"").trim();
+      var dialogue = (textEl.textContent||"").trim().replace(/^[「『《」』》]+|[「『《」』》]+$/g, "");
+      var attribIsHero = (speaker === hero) || (speaker.split(/[\s・]/)[0] === heroFirst);
+      if (!attribIsHero) return;
+      /* Bad if hero name appears as vocative inside dialogue */
+      var isVocative = heroVoc.test(dialogue) || dialogue.indexOf(heroFirst) >= 0 && !dialogue.startsWith(heroFirst+"は") && !dialogue.startsWith(heroFirst+"が");
+      var isScream = isOnomatopoeia(dialogue);
+      if (isVocative || isScream) {
+        var correct = findCorrectSpeaker(dialogue, npcs) || (npcs.length > 0 ? npcs[0] : null);
+        if (correct && correct !== hero) {
+          nameEl.textContent = correct;
+          row.style.borderLeft = "3px solid #d4b375";
+          row.dataset._v5done = "1";
+          row.title = "v5: " + hero + " → " + correct;
+          /* Update avatar to horror SVG for the corrected speaker */
+          var img = row.querySelector("img");
+          if (img && window._horrorSvg) {
+            img.src = window._horrorSvg(correct);
+          }
+          console.log("[Patch v5] re-attributed:", hero, "→", correct, "|", dialogue.slice(0,30));
+        } else {
+          /* Can\u0027t determine - mark uncertain */
+          nameEl.textContent = "(話者不明)";
+          nameEl.style.color = "#888";
+          row.dataset._v5done = "1";
+          console.log("[Patch v5] could not re-attribute:", dialogue.slice(0,30));
+        }
+      } else {
+        row.dataset._v5done = "1";
+      }
+    });
+  }
+  /* ===== 2. EXTRACT MISSING SCREAMS/ONOMATOPOEIA from narrative ===== */
+  function extractScreams(){
+    var np = findNarrPanel();
+    var lp = null;
+    var hdrs = Array.from(document.querySelectorAll("h1,h2,h3,h4,div,span"));
+    for (var i=0;i<hdrs.length;i++){
+      if (hdrs[i].textContent && hdrs[i].textContent.indexOf("会話ログ") >= 0 && hdrs[i].children.length === 0) {
+        lp = hdrs[i].closest("section,aside,div,article");
+        break;
+      }
+    }
+    if (!np || !lp) return;
+    var nt = np.innerText || "";
+    var npcs = getNpcs();
+    /* Find scream patterns: ああ+, ぎゃあ+, きゃー+, etc. */
+    var screamRx = /([あいうえァィゥェギャキャぐぁグァ][あいうえーァィゥェぁグぐだダ]{3,})/g;
+    var lp_dl = lp.querySelector(".dialogue-list") || lp;
+    var added = 0;
+    var m;
+    while ((m = screamRx.exec(nt)) !== null && added < 5) {
+      var scream = m[1];
+      var pos = m.index;
+      /* Find closest NPC */
+      var lastPos = -1, lastNpc = null;
+      for (var k=0;k<npcs.length;k++){
+        var p = nt.lastIndexOf(npcs[k], pos);
+        if (p > lastPos && pos - p < 400) { lastPos = p; lastNpc = npcs[k]; }
+      }
+      if (!lastNpc) continue;
+      /* Check if already in log */
+      var key = lastNpc + "::" + scream.slice(0,20);
+      if (lp.querySelector('[data-v5scream="'+key.replace(/"/g,'\\"')+'"]')) continue;
+      var existingTexts = Array.from(lp.querySelectorAll(".dialogue-text, .dial-card-v4")).map(function(el){return el.textContent;});
+      if (existingTexts.some(function(t){return t.indexOf(scream.slice(0,15)) >= 0;})) continue;
+      /* Inject card */
+      var card = document.createElement("div");
+      card.className = "dialogue-row v5-scream";
+      card.dataset.v5scream = key;
+      card.style.cssText = "display:flex;gap:10px;padding:10px 12px;margin:8px 6px;background:rgba(80,30,30,0.45);border:1px solid rgba(229,115,115,0.4);border-radius:6px;align-items:flex-start;";
+      var avatar = document.createElement("img");
+      avatar.src = window._horrorSvg(lastNpc);
+      avatar.style.cssText = "width:44px;height:44px;border-radius:50%;flex-shrink:0;";
+      avatar.alt = lastNpc;
+      var body = document.createElement("div");
+      body.style.cssText = "flex:1;color:#f2eef9;";
+      var nameEl = document.createElement("div");
+      nameEl.style.cssText = "font-weight:bold;color:#e57373;font-size:13px;margin-bottom:3px;";
+      nameEl.textContent = lastNpc + " （悲鳴）";
+      var textEl = document.createElement("div");
+      textEl.style.cssText = "font-size:14px;line-height:1.55;font-style:italic;";
+      textEl.textContent = scream;
+      body.appendChild(nameEl);
+      body.appendChild(textEl);
+      card.appendChild(avatar);
+      card.appendChild(body);
+      lp_dl.appendChild(card);
+      added++;
+    }
+  }
+  /* ===== 3. SERIALIZE POLLINATIONS REQUESTS WITH SEED ===== */
+  var _origFetch5 = window.fetch;
+  var _pollQueue = [];
+  var _pollProcessing = false;
+  function processQueue(){
+    if (_pollQueue.length === 0) { _pollProcessing = false; return; }
+    _pollProcessing = true;
+    var task = _pollQueue.shift();
+    _origFetch5(task.url, task.opts).then(function(r){ task.resolve(r); }).catch(function(e){ task.reject(e); });
+    setTimeout(processQueue, 2500);  /* 2.5s delay between requests */
+  }
+  window.fetch = function(u, o){
+    var url = String(u||"");
+    if (url.indexOf("pollinations.ai") >= 0) {
+      /* Add seed for stable cache */
+      var seedUrl = url;
+      if (url.indexOf("seed=") < 0 && url.indexOf("?") < 0) {
+        var hashSeed = 0;
+        for (var i=0;i<url.length;i++) hashSeed = (hashSeed*31 + url.charCodeAt(i)) & 0xfffffff;
+        seedUrl = url + "?seed=" + (hashSeed % 100000);
+      }
+      return new Promise(function(resolve, reject){
+        _pollQueue.push({url: seedUrl, opts: o, resolve: resolve, reject: reject});
+        if (!_pollProcessing) processQueue();
+      });
+    }
+    return _origFetch5.apply(this, arguments);
+  };
+  console.log("[Patch v5] pollinations serialized with seed");
+  /* ===== Run loops ===== */
+  setInterval(function(){
+    try { fixNativeCards(); } catch(e){ console.warn("v5 fix err", e); }
+    try { extractScreams(); } catch(e){ console.warn("v5 scream err", e); }
+  }, 2000);
+  setTimeout(fixNativeCards, 500);
+  setTimeout(extractScreams, 700);
+  console.log("[Patch v5] all loaded");
+})();
+</script>
 </body>
 </html>
