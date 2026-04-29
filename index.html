@@ -5834,6 +5834,51 @@ window._regenAllAvatars = async function() {
 };
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Fix randomFill — auto-persist state to S.cast/S.scene + toast
+// ─────────────────────────────────────────────────────────────
+const _origRandomFill = UI.randomFill.bind(UI);
+UI.randomFill = function() {
+  _origRandomFill();
+  // Wait 250ms for setTimeout-based NPC fill in original randomFill to complete
+  setTimeout(() => {
+    // Sync DOM → state (similar to saveSettings but without closing dialog)
+    try {
+      const hName = document.getElementById('cfgHName');
+      const hDesc = document.getElementById('cfgHDesc');
+      const cLoc = document.getElementById('cfgLoc');
+      const cTone = document.getElementById('cfgTone');
+      const cObj = document.getElementById('cfgObj');
+      const cLore = document.getElementById('cfgLore');
+      if (hName) S.cast.hero.name = hName.value.trim();
+      if (hDesc) S.cast.hero.desc = hDesc.value.trim();
+      if (cLoc) S.scene.loc = cLoc.value.trim();
+      if (cTone) S.scene.tone = cTone.value.trim();
+      if (cObj) S.scene.obj = cObj.value.trim();
+      if (cLore) S.scene.lore = cLore.value.trim();
+      // NPC fields
+      document.querySelectorAll('#npcList .npc-card').forEach((card, i) => {
+        if (!S.cast.npcs[i]) return;
+        ['name','desc','personality','coreDesire','coreFear','wound'].forEach(f => {
+          const el = card.querySelector('[data-f="' + f + '"]');
+          if (el) S.cast.npcs[i][f] = el.value.trim();
+        });
+      });
+      S.save();
+      // Refresh hero avatar in settings (since name/desc changed)
+      if (window._renderHeroAvatarInSettings) window._renderHeroAvatarInSettings();
+      // Toast feedback
+      if (window._toast) window._toast('未入力フィールドをランダム生成して保存しました', 'ok');
+    } catch (e) {
+      console.error('[randomFill sync] error:', e);
+      if (window._toast) window._toast('ランダム生成に失敗: ' + e.message, 'err');
+    }
+  }, 250);
+};
+
+
 // Boot
 G.init();
 </script>
