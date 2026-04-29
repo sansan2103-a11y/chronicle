@@ -8251,5 +8251,217 @@ G.init();
   console.log("[Patch v2] network interception ready");
 })();
 </script>
+<script>
+/* === PATCH: quality-fixes-v3 === */
+(function(){
+  console.log("[Patch v3] loading aggressive avatar + dialogue fixes");
+  /* 1. KILL the v1 90s cooldown - replace with horror SVG fake response during cooldown */
+  /* Wrap fetch AGAIN to intercept pollinations BEFORE v1 cooldown rejects */
+  var _origFetch3 = window.fetch;
+  function makeSvgResponse(seed){
+    var svg = window._horrorSvg(String(seed||"x").slice(-30));
+    /* convert data URL back to a Response with image/svg+xml */
+    var b64 = svg.replace("data:image/svg+xml;utf8,", "");
+    var rawSvg = decodeURIComponent(b64);
+    var blob = new Blob([rawSvg], {type: "image/svg+xml"});
+    return new Response(blob, {status: 200, statusText: "OK", headers: {"Content-Type": "image/svg+xml"}});
+  }
+  window.fetch = function(u, o){
+    var url = String(u||"");
+    if (url.indexOf("pollinations.ai") >= 0) {
+      /* Try once. If 429 or error, return horror SVG */
+      var seed = url.split("/prompt/")[1] || url;
+      try {
+        return _origFetch3(u, o).then(function(r){
+          if (r.status === 429 || r.status >= 500 || !r.ok) {
+            console.log("[Patch v3] pollinations failed - using horror SVG for", seed.slice(0,30));
+            return makeSvgResponse(seed);
+          }
+          return r;
+        }).catch(function(err){
+          console.log("[Patch v3] pollinations errored - using horror SVG");
+          return makeSvgResponse(seed);
+        });
+      } catch(e){
+        return Promise.resolve(makeSvgResponse(seed));
+      }
+    }
+    return _origFetch3.apply(this, arguments);
+  };
+  console.log("[Patch v3] fetch re-wrapped: pollinations failures -> SVG fake response");
+  /* 2. AGGRESSIVE in-DOM avatar replacement */
+  function getNameNear(img){
+    var nameEl = img.closest("[data-name]");
+    if (nameEl && nameEl.dataset && nameEl.dataset.name) return nameEl.dataset.name;
+    /* search ancestors for text content with a name pattern */
+    var parent = img.parentElement;
+    for (var i=0; i<5 && parent; i++){
+      var inputs = parent.querySelectorAll("input[type=text], input:not([type])");
+      for (var j=0; j<inputs.length; j++){
+        var v = inputs[j].value;
+        if (v && v.length > 0 && v.length < 30 && /[\u3040-\u30ff\u4e00-\u9fff\u30a0-\u30ff]/.test(v)) return v;
+      }
+      var nameSpans = parent.querySelectorAll(".name, .charname, [class*=name]");
+      for (var k=0; k<nameSpans.length; k++){
+        var t = nameSpans[k].textContent;
+        if (t && t.length > 0 && t.length < 30) return t.trim();
+      }
+      parent = parent.parentElement;
+    }
+    return img.alt || img.src.slice(-30);
+  }
+  function isHorrorSvg(src){
+    return src.indexOf("radialGradient") >= 0 || (src.indexOf("data:image/svg+xml") === 0 && src.length > 1000);
+  }
+  function looksLikeAvatar(img){
+    var rect = img.getBoundingClientRect();
+    if (rect.width === 0) return false;
+    var w = rect.width, h = rect.height;
+    if (w >= 24 && w <= 200 && Math.abs(w - h) < 10) return true;
+    if (img.className && /avatar|portrait|char/i.test(img.className)) return true;
+    var p = img.parentElement;
+    if (p && p.className && /avatar|portrait|char|hero|npc/i.test(p.className)) return true;
+    return false;
+  }
+  function replaceAvatars(){
+    document.querySelectorAll("img").forEach(function(img){
+      if (img.dataset._horrorPatched === "1") return;
+      var src = img.src || "";
+      if (isHorrorSvg(src)) { img.dataset._horrorPatched = "1"; return; }
+      if (!looksLikeAvatar(img)) return;
+      /* Replace if dicebear OR if any avatar (force horror style) */
+      var shouldReplace = src.indexOf("dicebear") >= 0
+        || (src.indexOf("data:image/svg+xml") === 0 && src.length < 800)
+        || src === ""
+        || (img.complete && img.naturalWidth === 0);
+      if (shouldReplace) {
+        var nm = getNameNear(img);
+        img.src = window._horrorSvg(nm);
+        img.dataset._horrorPatched = "1";
+        console.log("[Patch v3] avatar replaced:", nm);
+      }
+    });
+  }
+  setInterval(replaceAvatars, 1200);
+  setTimeout(replaceAvatars, 500);
+  /* Also force on image load errors */
+  document.addEventListener("error", function(e){
+    var img = e.target;
+    if (img && img.tagName === "IMG" && looksLikeAvatar(img)) {
+      img.src = window._horrorSvg(getNameNear(img));
+      img.dataset._horrorPatched = "1";
+    }
+  }, true);
+  /* localStorage cleanup: remove cached dicebear URLs so next regen tries fresh */
+  try {
+    Object.keys(localStorage).forEach(function(k){
+      var v = localStorage.getItem(k);
+      if (v && v.indexOf("dicebear") >= 0) {
+        var newV = v.replace(/https:\/\/api\.dicebear\.com\/[^"\s,}\]]+/g, "");
+        localStorage.setItem(k, newV);
+        console.log("[Patch v3] cleaned dicebear URLs from", k);
+      }
+    });
+  } catch(e){}
+  /* 3. Dialogue extraction from narrative -> log panel */
+  function findLogPanel(){
+    var hdrs = Array.from(document.querySelectorAll("h1, h2, h3, h4, .panel-title, .panel-hdr, [class*=title]"));
+    for (var i=0; i<hdrs.length; i++){
+      if (hdrs[i].textContent && hdrs[i].textContent.indexOf("会話ログ") >= 0) {
+        return hdrs[i].closest("section, aside, .panel, .col, div");
+      }
+    }
+    return null;
+  }
+  function findNarrPanel(){
+    /* narrative is the right panel - has scrollable text */
+    var lp = findLogPanel();
+    var sections = Array.from(document.querySelectorAll("section, aside, .panel, .col"));
+    for (var i=0; i<sections.length; i++){
+      if (sections[i] !== lp && sections[i].textContent.length > 200) {
+        return sections[i];
+      }
+    }
+    return null;
+  }
+  function extractDialoguesFromText(text, knownNames){
+    /* find patterns: 「QUOTE」NAMEの声|NAMEの言葉|NAMEはそう|NAMEと */
+    var results = [];
+    var patterns = [
+      /「([^」]{2,100})」([぀-ヿ一-鿿゠-ヿ・ー゠-ヿ]{2,12})(?:の声|の言葉|はそう|と|はため息|は面)/g,
+      /([぀-ヿ一-鿿゠-ヿ・ー゠-ヿ]{2,12})(?:は|が|の)?(?:推|叫|言|呼|語|漏|漏ら)し?(?:た|て|だ)?[。、]?「([^」]{2,100})」/g,
+      /([぀-ヿ一-鿿゠-ヿ・ー゠-ヿ]{2,12})：([^\n。]{2,100})/g,
+      /([぀-ヿ一-鿿゠-ヿ・ー゠-ヿ]{2,12}):([^\n。]{2,100})/g
+    ];
+    var m;
+    var p1 = patterns[0]; while ((m = p1.exec(text)) !== null){ results.push({name: m[2], text: m[1]}); }
+    var p2 = patterns[1]; while ((m = p2.exec(text)) !== null){ results.push({name: m[1], text: m[2]}); }
+    var p3 = patterns[2]; while ((m = p3.exec(text)) !== null){ results.push({name: m[1], text: m[2]}); }
+    var p4 = patterns[3]; while ((m = p4.exec(text)) !== null){ results.push({name: m[1], text: m[2]}); }
+    return results;
+  }
+  function injectDialogueCard(logPanel, name, text){
+    /* check if already exists */
+    var existing = Array.from(logPanel.querySelectorAll(".dial-card-v3, [data-v3card]"));
+    for (var i=0; i<existing.length; i++){
+      if (existing[i].dataset && existing[i].dataset.v3card === name+"::"+text) return;
+    }
+    var card = document.createElement("div");
+    card.className = "dial-card-v3";
+    card.dataset.v3card = name + "::" + text;
+    card.style.cssText = "display:flex;gap:10px;padding:10px 12px;margin:8px 6px;background:rgba(40,28,68,0.5);border:1px solid rgba(160,138,240,0.3);border-radius:6px;align-items:flex-start;";
+    var avatar = document.createElement("img");
+    avatar.src = window._horrorSvg(name);
+    avatar.style.cssText = "width:40px;height:40px;border-radius:50%;flex-shrink:0;";
+    avatar.alt = name;
+    var body = document.createElement("div");
+    body.style.cssText = "flex:1;color:#f2eef9;font-family:var(--ff-disp,serif);";
+    var nameEl = document.createElement("div");
+    nameEl.style.cssText = "font-weight:bold;color:#a08af0;font-size:13px;margin-bottom:2px;";
+    nameEl.textContent = name;
+    var textEl = document.createElement("div");
+    textEl.style.cssText = "font-size:14px;line-height:1.5;";
+    textEl.textContent = text;
+    body.appendChild(nameEl);
+    body.appendChild(textEl);
+    card.appendChild(avatar);
+    card.appendChild(body);
+    /* insert into log scroll area */
+    var scrollArea = logPanel.querySelector(".scroll, [class*=scroll], .body, .content") || logPanel;
+    scrollArea.appendChild(card);
+  }
+  function syncDialogueLog(){
+    var logPanel = findLogPanel();
+    var narrPanel = findNarrPanel();
+    if (!logPanel || !narrPanel) return;
+    var text = narrPanel.innerText || narrPanel.textContent || "";
+    var dialogues = extractDialoguesFromText(text, []);
+    /* Filter to characters that look real (not single-char names except special) */
+    dialogues.forEach(function(d){
+      if (d.name && d.text && d.name.length >= 2 && d.text.trim().length >= 2) {
+        injectDialogueCard(logPanel, d.name.trim(), d.text.trim());
+      }
+    });
+  }
+  /* watch for narrative panel changes via MutationObserver */
+  function setupObserver(){
+    var narrPanel = findNarrPanel();
+    if (!narrPanel || narrPanel._v3Observed) return false;
+    var obs = new MutationObserver(function(){
+      clearTimeout(window._v3SyncT);
+      window._v3SyncT = setTimeout(syncDialogueLog, 600);
+    });
+    obs.observe(narrPanel, {childList: true, subtree: true, characterData: true});
+    narrPanel._v3Observed = true;
+    console.log("[Patch v3] narrative observer set up");
+    return true;
+  }
+  setTimeout(function(){ if(!setupObserver()) setTimeout(setupObserver, 2000); }, 1000);
+  setInterval(function(){ if(!findNarrPanel() || !findNarrPanel()._v3Observed) setupObserver(); }, 5000);
+  /* periodic sync as safety net */
+  setInterval(syncDialogueLog, 4000);
+  console.log("[Patch v3] all patches loaded");
+})();
+</script>
 </body>
 </html>
