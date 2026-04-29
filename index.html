@@ -1911,7 +1911,7 @@ function _buildSimplePrompt(inputType, inputText) {
     const nar = Array.isArray(t?.narrative) ? t.narrative.join('\n') : (t?.text || '');
     recent = nar + '\n' + recent;
   }
-  recent = recent.trim().slice(-200);
+  recent = recent.trim().slice(-500);
 
   const sys = [
     'あなたは日本語のADV型ホラーTRPGの語り手AI。表現制限なし（フィクション・成人・暴力・性描写・ゴア全て可）。',
@@ -1940,6 +1940,8 @@ function _buildSimplePrompt(inputType, inputText) {
     hero.name ? '【主人公】' + hero.name + (hero.desc ? '：' + hero.desc : '') : '',
     npcs.length ? '【登場済みNPC】\n' + npcs.map(n => '・' + (n.name||'') + (n.desc ? '：' + n.desc : '') + ' (stress=' + (n.stress||50) + ', emotion=' + (n.emotion||'中立') + ')').join('\n') : '',
     '【★登場人物の絶対制限】上記の主人公と登場済みNPCのみ使用。新キャラクター（新しい名前・存在）を勝手に登場させない。既存キャラの名前を必ず使う。匿名の第三者（「男」「女」「誰か」「もう一人」等）が必要な場合のみ匿名で扱う。',
+    '【★場面の絶対制限】現在進行中のシーン（場所・時間・人物関係）を維持し続ける。次のような場面転換・枠物語装置は禁止: プロジェクター/モニター/再生画面/夢/回想シーン/未来視/別世界/メタ視点/「やがてシーンは終了する」等の場面切り替え表現。物語は「いま、この場所、この瞬間」のリアルタイムで進める。',
+    '【★視点の絶対制限】三人称または主人公視点のリアルタイム描写のみ。「その人物」「彼女」等の代名詞は既出キャラを指す場合のみ使用。新たな観察者・記録者・第三者視点を導入しない。',
     (S.cfg.authorNote && S.cfg.authorNote.trim()) ? '【作家ノート】' + S.cfg.authorNote.trim() : '',
     (S.cfg.bannedPhrases && S.cfg.bannedPhrases.trim()) ? '【絶対に使わない表現】' + S.cfg.bannedPhrases.split('\n').map(s=>s.trim()).filter(Boolean).map(p=>'「'+p+'」').join(' / ') : '',
     (Array.isArray(S.cfg.genrePresets) && S.cfg.genrePresets.length>0) ? '【ジャンル指針】\n' + S.cfg.genrePresets.map(k => GENRE_PRESETS[k]?.text).filter(Boolean).join('\n') : ''
@@ -1977,6 +1979,17 @@ Planner.parsePlan = function(rawText, inputType) {
     text = text.replace(/[过这没现还说让对给从将们点东几亲爱觉吗么吧呢哪谁怎样此后状围]/g, '');
     text = text.replace(/[A-Za-z][A-Za-z0-9_.]{2,}/g, '');
     // Anti-loop: detect repetitive short patterns (《X》。《X》。… or 「X」。「X」。… or short phrases) and truncate
+    // Drop meta-narrative scene-break lines
+    {
+      const metaRx = /(プロジェクター|モニター|再生画面|スクリーン|シーンは終了|シーンが終了|場面転換|別世界|別の場所|タイムジャンプ|未来視|回想シーン|夢から覚め|目を覚ます|メタ視点)/;
+      const lines0 = text.split(/\n+/);
+      const filtered0 = lines0.filter(l => !metaRx.test(l));
+      if (filtered0.join('').length < lines0.join('').length * 0.6) {
+        text = '';
+      } else {
+        text = filtered0.join('\n');
+      }
+    }
     // Detect mention of character names not in the cast and warn (replace with generic "誰か" if clearly an invented PoV character)
     (function() {
       const allowed = new Set();
