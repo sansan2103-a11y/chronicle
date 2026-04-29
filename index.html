@@ -10904,5 +10904,56 @@ G.init();
   console.log("[Patch v16] anti-repetition v2 ready");
 })();
 </script>
+<script>
+/* PATCH: quality-fixes-v17 (rollback v16, gentler approach) */
+(function(){
+  console.log("[Patch v17] loading: disable v16 phrase ban, use softer variation hint");
+  /* Mark v16 as disabled - check this in v16 wrapper */
+  window._v16Disabled = true;
+  /* Softer approach: just add a brief hint to vary wording */
+  var _origFetch17 = window.fetch;
+  window.fetch = function(u, o){
+    var url = String(u||"");
+    if (url.indexOf("openrouter.ai") >= 0 && url.indexOf("/chat/completions") >= 0 && o && o.body) {
+      try {
+        var body = typeof o.body === "string" ? JSON.parse(o.body) : null;
+        if (body && body.messages && !body._v17Inj) {
+          /* Strip the v16 aggressive banned phrases system message */
+          body.messages = body.messages.filter(function(m){
+            return !(m.role === "system" && m.content && m.content.indexOf("禁止フレーズ") >= 0);
+          });
+          /* Add softer hint */
+          var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+          var turns = c.turns || [];
+          if (turns.length >= 2) {
+            body.messages.push({
+              role: "system",
+              content: "【表現を変える】前ターンと同じ動作・同じ表現の繰り返しを避け、新しい言い回しと視点で物語を進めること。具体的には、状況の変化（場所・体勢・心理）を1つ以上含めよ。"
+            });
+          }
+          /* Context trim: drop old user/assistant if too many */
+          var historyMsgs = body.messages.filter(function(m){return m.role === "user" || m.role === "assistant";});
+          if (historyMsgs.length > 14) {
+            var dropCount = historyMsgs.length - 12;
+            var dropped = 0;
+            var kept = [];
+            for (var i = 0; i < body.messages.length; i++) {
+              var m = body.messages[i];
+              if ((m.role === "user" || m.role === "assistant") && dropped < dropCount) { dropped++; continue; }
+              kept.push(m);
+            }
+            body.messages = kept;
+            console.log("[Patch v17] trimmed " + dropped + " old msgs");
+          }
+          body._v17Inj = true;
+          o.body = JSON.stringify(body);
+        }
+      } catch(e){ console.warn("[Patch v17] inject failed", e); }
+    }
+    return _origFetch17.apply(this, arguments);
+  };
+  console.log("[Patch v17] gentler variation + context trim ready");
+})();
+</script>
 </body>
 </html>
