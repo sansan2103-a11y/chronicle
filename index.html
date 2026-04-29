@@ -10163,5 +10163,251 @@ G.init();
   console.log("[Patch v10] all loaded - input emphasis active, debug toggle in settings");
 })();
 </script>
+<script>
+/* === PATCH: quality-fixes-v11 === */
+(function(){
+  console.log("[Patch v11] loading: API persistence + debug snapshot");
+  /* ===== 1. API KEY PERSISTENCE ===== */
+  var KEY_STORE = "_persistApiKey_v11";
+  /* On load: if chr6.cfg.orKey is empty but persistKey exists, restore */
+  function restoreApiKey(){
+    try {
+      var persisted = localStorage.getItem(KEY_STORE);
+      if (!persisted) return;
+      /* Find the cfg location and restore */
+      var keys = ["chr6", "chr5", "chronicle"];
+      keys.forEach(function(k){
+        var raw = localStorage.getItem(k);
+        if (!raw) return;
+        try {
+          var obj = JSON.parse(raw);
+          if (obj.cfg) {
+            var changed = false;
+            if (!obj.cfg.orKey || obj.cfg.orKey.length < 5) {
+              obj.cfg.orKey = persisted;
+              changed = true;
+            }
+            if (!obj.cfg.key || obj.cfg.key.length < 5) {
+              obj.cfg.key = persisted;
+              changed = true;
+            }
+            if (changed) {
+              localStorage.setItem(k, JSON.stringify(obj));
+              console.log("[Patch v11] restored API key to", k);
+            }
+          }
+        } catch(e){}
+      });
+      /* Also restore to UI if visible */
+      var keyInputs = document.querySelectorAll('input[type=password], input[id*=Key], input[id*=key]');
+      keyInputs.forEach(function(inp){
+        if (!inp.value && persisted) {
+          inp.value = persisted;
+          inp.dispatchEvent(new Event("input", {bubbles: true}));
+          inp.dispatchEvent(new Event("change", {bubbles: true}));
+        }
+      });
+    } catch(e){ console.warn("[Patch v11] restore failed", e); }
+  }
+  /* On any input/change in API key field, save to persistent store */
+  function watchApiKeyField(){
+    var inputs = document.querySelectorAll('input[type=password], input[id*=Key], input[id*=key]');
+    inputs.forEach(function(inp){
+      if (inp.dataset._v11watched === "1") return;
+      inp.addEventListener("input", function(){
+        var v = inp.value || "";
+        if (v.length >= 20 && /^sk-/.test(v)) {
+          localStorage.setItem(KEY_STORE, v);
+          console.log("[Patch v11] API key persisted");
+        }
+      });
+      inp.addEventListener("change", function(){
+        var v = inp.value || "";
+        if (v.length >= 20 && /^sk-/.test(v)) {
+          localStorage.setItem(KEY_STORE, v);
+        }
+      });
+      inp.dataset._v11watched = "1";
+    });
+  }
+  /* Periodically scan for stored key in chr6 and copy to persist store */
+  function scanAndPersist(){
+    try {
+      for (var i=0; i<localStorage.length; i++){
+        var k = localStorage.key(i);
+        if (k === KEY_STORE) continue;
+        var v = localStorage.getItem(k);
+        if (v && /sk-or-[a-zA-Z0-9-]{20,}/.test(v)) {
+          var m = v.match(/sk-or-[a-zA-Z0-9-]{20,}/);
+          if (m && m[0].length > 30) {
+            var existing = localStorage.getItem(KEY_STORE);
+            if (existing !== m[0]) {
+              localStorage.setItem(KEY_STORE, m[0]);
+              console.log("[Patch v11] auto-persisted API key from", k);
+            }
+            break;
+          }
+        }
+      }
+    } catch(e){}
+  }
+  setTimeout(restoreApiKey, 800);
+  setTimeout(restoreApiKey, 2500);
+  setInterval(restoreApiKey, 5000);
+  setInterval(watchApiKeyField, 2000);
+  setInterval(scanAndPersist, 3000);
+  /* ===== 2. DEBUG SNAPSHOT SYSTEM ===== */
+  var DBG_STORE = "_debugLog_v11";
+  var MAX_ENTRIES = 12;
+  function getLog(){ try{return JSON.parse(localStorage.getItem(DBG_STORE)||"[]");}catch(e){return [];} }
+  function pushLog(entry){
+    var log = getLog();
+    log.push(Object.assign({t: new Date().toISOString()}, entry));
+    if (log.length > MAX_ENTRIES) log = log.slice(-MAX_ENTRIES);
+    try { localStorage.setItem(DBG_STORE, JSON.stringify(log)); } catch(e){
+      /* If storage full, trim more aggressively */
+      log = log.slice(-5);
+      try { localStorage.setItem(DBG_STORE, JSON.stringify(log)); } catch(e2){}
+    }
+  }
+  /* Wrap fetch to capture OpenRouter calls */
+  var _origFetch11 = window.fetch;
+  window.fetch = function(u, o){
+    var url = String(u||"");
+    if (url.indexOf("openrouter.ai") >= 0 && url.indexOf("/chat/completions") >= 0 && o && o.body) {
+      var reqBody = null;
+      try { reqBody = typeof o.body === "string" ? JSON.parse(o.body) : null; } catch(e){}
+      var startT = Date.now();
+      return _origFetch11.apply(this, arguments).then(function(r){
+        var elapsed = Date.now() - startT;
+        if (!r.ok) {
+          return r.clone().text().then(function(errBody){
+            pushLog({type: "openrouter_error", model: reqBody && reqBody.model, status: r.status, elapsedMs: elapsed, errBody: errBody.slice(0,300)});
+            return r;
+          }).catch(function(){return r;});
+        }
+        return r.clone().text().then(function(txt){
+          try {
+            var data = JSON.parse(txt);
+            var content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+            var lastUser = reqBody && reqBody.messages ? reqBody.messages.filter(function(m){return m.role==="user";}).pop() : null;
+            pushLog({
+              type: "openrouter_ok",
+              model: reqBody && reqBody.model,
+              elapsedMs: elapsed,
+              userInputTail: lastUser ? String(lastUser.content || "").slice(-400) : null,
+              responseHead: String(content || "").slice(0, 600),
+              responseLen: String(content || "").length
+            });
+          } catch(e){}
+          return r;
+        }).catch(function(){return r;});
+      }).catch(function(err){
+        pushLog({type: "openrouter_throw", err: String(err.message || err)});
+        throw err;
+      });
+    }
+    if (url.indexOf("pollinations.ai") >= 0 || url.indexOf("openrouter.ai") >= 0) {
+      /* Image gen */
+      var startT = Date.now();
+      return _origFetch11.apply(this, arguments).then(function(r){
+        var elapsed = Date.now() - startT;
+        if (!r.ok) {
+          pushLog({type: "image_error", url: url.slice(0,80), status: r.status, elapsedMs: elapsed});
+        }
+        return r;
+      });
+    }
+    return _origFetch11.apply(this, arguments);
+  };
+  /* ===== 3. Settings UI: Debug + Persistence panel ===== */
+  function injectDebugPanel(){
+    if (document.getElementById("v11-debug-panel")) return;
+    var anchor = document.getElementById("v6-img-provider") || document.getElementById("cfgOrModel");
+    if (!anchor) return;
+    var anchorRow = anchor.closest("div, label, fieldset") || anchor.parentElement;
+    if (!anchorRow) return;
+    var wrap = document.createElement("div");
+    wrap.id = "v11-debug-panel";
+    wrap.style.cssText = "margin:14px 0;padding:12px;background:rgba(40,28,68,0.4);border-radius:6px;border-left:3px solid #6c5ab8;";
+    wrap.innerHTML = 
+      '<div style="font-weight:bold;color:#a08af0;margin-bottom:8px;font-size:13px;">デバッグ・状態確認</div>' +
+      '<button id="v11-copy-debug" style="background:#6c5ab8;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;margin-right:6px;">📋 デバッグ情報をコピー</button>' +
+      '<button id="v11-clear-debug" style="background:#a04040;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;margin-right:6px;">🗑 ログクリア</button>' +
+      '<button id="v11-restore-key" style="background:#5a8a5a;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;">🔑 APIキー復元</button>' +
+      '<div id="v11-status" style="margin-top:8px;font-size:11px;color:#888;"></div>';
+    anchorRow.parentElement.insertBefore(wrap, anchorRow.nextSibling);
+    document.getElementById("v11-copy-debug").addEventListener("click", function(){
+      var log = getLog();
+      var snapshot = {
+        timestamp: new Date().toISOString(),
+        url: location.href,
+        userAgent: navigator.userAgent.slice(0,80),
+        provider: localStorage.getItem("_imgProvider_v6"),
+        cfg: (function(){
+          try {
+            var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+            if (c.cfg) {
+              var safe = Object.assign({}, c.cfg);
+              if (safe.orKey) safe.orKey = "sk-or-***" + safe.orKey.slice(-6);
+              if (safe.key) safe.key = "sk-***" + safe.key.slice(-6);
+              if (safe.naiKey) safe.naiKey = safe.naiKey ? "[set]" : "";
+              return safe;
+            }
+          } catch(e){}
+          return null;
+        })(),
+        scene: (function(){
+          try { return JSON.parse(localStorage.getItem("chr6") || "{}").scene; } catch(e){return null;}
+        })(),
+        cast: (function(){
+          try {
+            var c = JSON.parse(localStorage.getItem("chr6") || "{}").cast;
+            return c ? {hero: c.hero, npcs: (c.npcs||[]).map(function(n){return {name: n.name, desc: (n.desc||"").slice(0,80)};})} : null;
+          } catch(e){return null;}
+        })(),
+        turnCount: (function(){
+          try { return (JSON.parse(localStorage.getItem("chr6") || "{}").turns || []).length; } catch(e){return 0;}
+        })(),
+        recentLog: log
+      };
+      var json = JSON.stringify(snapshot, null, 2);
+      navigator.clipboard.writeText(json).then(function(){
+        document.getElementById("v11-status").textContent = "✓ クリップボードにコピーしました（" + json.length + " 文字）。Claudeのチャットに貼ってください。";
+        document.getElementById("v11-status").style.color = "#7cb87c";
+        setTimeout(function(){document.getElementById("v11-status").textContent="";}, 8000);
+      }).catch(function(err){
+        /* Fallback: select + copy */
+        var ta = document.createElement("textarea");
+        ta.value = json;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand("copy"); } catch(e){}
+        ta.remove();
+        document.getElementById("v11-status").textContent = "✓ コピー完了（" + json.length + " 文字）";
+      });
+    });
+    document.getElementById("v11-clear-debug").addEventListener("click", function(){
+      localStorage.setItem(DBG_STORE, "[]");
+      document.getElementById("v11-status").textContent = "✓ ログをクリアしました";
+      document.getElementById("v11-status").style.color = "#7cb87c";
+    });
+    document.getElementById("v11-restore-key").addEventListener("click", function(){
+      var p = localStorage.getItem(KEY_STORE);
+      if (!p) {
+        document.getElementById("v11-status").textContent = "✗ 保存済みキーがありません";
+        document.getElementById("v11-status").style.color = "#e57373";
+        return;
+      }
+      restoreApiKey();
+      document.getElementById("v11-status").textContent = "✓ APIキーを復元しました（末尾: " + p.slice(-6) + "）";
+      document.getElementById("v11-status").style.color = "#7cb87c";
+    });
+  }
+  setInterval(injectDebugPanel, 3000);
+  setTimeout(injectDebugPanel, 1500);
+  console.log("[Patch v11] all loaded - API persisted, debug system ready");
+})();
+</script>
 </body>
 </html>
