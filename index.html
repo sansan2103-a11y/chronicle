@@ -4376,6 +4376,188 @@ window._extractDialogue = function(narrativeText) {
 setTimeout(() => UI.renderAll && UI.renderAll(), 200);
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Diversity & onomatopoeia: prompt injection + dict expansion + regex patterns
+// ─────────────────────────────────────────────────────────────
+
+// D. Expanded dictionary
+window.ONOMATOPOEIA_DICT = [
+  // Pain / distress
+  '痛い','いたい','いてっ','痛っ','ううっ','うっ','うぐっ','ぐっ','けほっ','げほっ','うぐ','うえっ','おえっ',
+  // Refusal / plea
+  'やめて','いや','だめ','お願い','助けて','嫌','やだ','やめろ',
+  // Shock / surprise
+  'えっ','ええっ','なんで','嘘','まさか','そんな','どうして',
+  // Pure onomatopoeia
+  'ぎゃあ','うわぁ','ひっ','ひぃ','ひぃっ','ああっ','うわっ','わっ','きゃあ','きゃっ','びくっ','ぴくっ',
+  // Breath / whimper
+  'はあっ','ふぐっ','ぐすっ','ぐすん','ふぅ','はぁ','ふぅん','ぜぇ','ぜいぜい',
+  // Tears / sobs
+  'うう','しゃくり','ひっく','うえー',
+  // Choking / convulsing
+  'けほ','げほ','ぐぼっ','ううぅ',
+  // High-stress scream
+  'あぁああ','いやああ','たすけて','たすけてぇ','やだぁ','ううぅぅ',
+  // Erotic involuntary
+  'ふぁ','ぁぁ','ぅぅ'
+];
+
+// D2. Regex patterns for vowel-elongated cries (e.g. "あぁあぁ", "ううぅ", "いやぁぁ")
+window.ONOMATOPOEIA_REGEX = [
+  /[あぁ]{2,}[っー]?/g,           // ああ、あぁあ、ああー
+  /[うぅ]{2,}[っー]?/g,           // うう、うぅう、ううー
+  /[いぃ]{2,}[っ]?[やゃ]?/g,      // いい、いやぁ、いいや
+  /[ひ][ぃっ]{1,}/g,              // ひっ、ひぃっ
+  /[んむぐ][ううぅっ]+/g,         // んっ、むぅっ、ぐぅっ
+  /[はふ][ぁあっ]+/g              // はぁっ、ふぁっ
+];
+
+// Override _extractDialogue to also try regex patterns
+const _origExtractDiv = window._extractDialogue;
+window._extractDialogue = function(narrativeText) {
+  const baseEvents = _origExtractDiv(narrativeText);
+  if (!narrativeText) return baseEvents;
+  const text = Array.isArray(narrativeText) ? narrativeText.join('\n') : String(narrativeText);
+  const heroName = S.cast.hero.name || '';
+  const npcs = (S.cast.npcs || []).map(n => n.name).filter(Boolean);
+  const heroParts = new Set();
+  if (heroName) {
+    heroParts.add(heroName);
+    heroName.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) heroParts.add(p); });
+  }
+  const nameToFull = {};
+  if (heroName) {
+    nameToFull[heroName] = heroName;
+    heroName.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) nameToFull[p] = heroName; });
+  }
+  npcs.forEach(n => {
+    nameToFull[n] = n;
+    n.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) nameToFull[p] = n; });
+  });
+  const namesArr = Object.keys(nameToFull).sort((a,b) => b.length - a.length);
+
+  // Build quote ranges to skip
+  const quoteRanges = [];
+  const qRx = /「([^「」]+?)」/g;
+  let qm;
+  while ((qm = qRx.exec(text)) !== null) {
+    quoteRanges.push({ start: qm.index, end: qm.index + qm[0].length });
+  }
+
+  const SPEECH_VERB_RX = /と[^。、\n]{0,4}(叫|呟|漏ら|呻|喘|発し|呼び|言|喚|吐|声|嗚)/;
+  let lastNamedSpeaker = null;
+  // Roughly determine last speaker from baseEvents
+  if (baseEvents.length > 0) lastNamedSpeaker = baseEvents[baseEvents.length-1].speaker;
+
+  const seenAt = new Set();
+  baseEvents.forEach(e => seenAt.add(e.text));
+  const newEvents = [];
+
+  // Apply regex patterns
+  for (const rx of window.ONOMATOPOEIA_REGEX) {
+    let m;
+    rx.lastIndex = 0;
+    while ((m = rx.exec(text)) !== null) {
+      const oStart = m.index, oEnd = m.index + m[0].length;
+      const matched = m[0];
+      if (matched.length < 2) continue;
+      // Skip if inside a quote
+      if (quoteRanges.some(r => r.start < oStart && r.end > oEnd)) continue;
+      // Skip duplicates
+      if (seenAt.has(matched)) continue;
+      // Word boundary check
+      const charBefore = text[oStart-1] || '\n';
+      const charAfter = text[oEnd] || '\n';
+      // Allow if surrounded by punctuation/whitespace/と
+      if (charAfter && !/[、。！？「」\s\nと]/.test(charAfter)) continue;
+      // Context check
+      const before30 = text.slice(Math.max(0, oStart-30), oStart);
+      const after30 = text.slice(oEnd, oEnd+30);
+      const after15 = text.slice(oEnd, oEnd+15);
+      const hasSpeechVerb = SPEECH_VERB_RX.test(after15);
+      let nameNearby = null;
+      for (const n of namesArr) {
+        if (before30.includes(n) || after30.includes(n)) { nameNearby = n; break; }
+      }
+      const hasPronoun = /彼女|あの娘|あの子|彼は|彼が|彼の/.test(before30 + after30);
+      if (!hasSpeechVerb && !nameNearby && !(hasPronoun && lastNamedSpeaker)) continue;
+      let speaker = nameNearby || lastNamedSpeaker;
+      const fullName = speaker ? (nameToFull[speaker] || speaker) : null;
+      if (!fullName) continue;
+      seenAt.add(matched);
+      newEvents.push({
+        speaker: fullName,
+        text: matched,
+        isHero: fullName === heroName || heroParts.has(fullName),
+        isSfx: true
+      });
+    }
+  }
+
+  return baseEvents.concat(newEvents);
+};
+
+// ─────────────────────────────────────────────────────────────
+// A+B+C: Prompt injection — onomatopoeia, anti-repetition, few-shot
+// ─────────────────────────────────────────────────────────────
+const _origPlanBuildDiv = Planner.build.bind(Planner);
+Planner.build = function(inputType, inputText) {
+  const result = _origPlanBuildDiv(inputType, inputText);
+  if (S.cfg.simpleMode) return result; // Simple mode has its own prompt
+
+  // Collect recent dialogue from last 3 turns to ban repetition
+  const recentDialogues = [];
+  const turns = S.turns || [];
+  for (let i = Math.max(0, turns.length - 3); i < turns.length; i++) {
+    const narr = typeof turns[i].narrative === 'string' ? turns[i].narrative : (Array.isArray(turns[i].narrative) ? turns[i].narrative.join('\n') : '');
+    const dRx = /「([^「」]+?)」/g;
+    let mm;
+    while ((mm = dRx.exec(narr)) !== null) {
+      const t = mm[1].trim();
+      if (t.length >= 2 && t.length <= 30) recentDialogues.push(t);
+    }
+  }
+  const recentSet = Array.from(new Set(recentDialogues)).slice(0, 12);
+
+  // Check if any NPC has high stress for onomatopoeia injection
+  const maxStress = Math.max(0, ...((S.cast.npcs || []).map(n => n.stress || 0)));
+
+  // Inject diversity + onomatopoeia rules
+  let extra = '\n\n【★台詞表現の多様性ルール】';
+  extra += '\n・直前3ターンと同じ台詞・同じパターン（「やめて」「痛い」「お願い」「なんで」等の単純な定型）の連呼禁止。';
+  extra += '\n・毎ターン、新しい語彙・新しい音・新しい言い回しを使う。';
+  if (recentSet.length > 0) {
+    extra += '\n・【直前で使用済み（避ける）】: ' + recentSet.map(s => '「'+s+'」').join(' / ');
+  }
+
+  if (maxStress >= 70) {
+    extra += '\n\n【★身体音・感嘆音の生成義務（高ストレス時）】';
+    extra += '\nNPCのstress >= 70 の場合、台詞には**必ず身体音か感嘆音を1〜2個織り込む**:';
+    extra += '\n  痛み: 「ぐっ……」「うっ」「いてっ」「ううっ」';
+    extra += '\n  喘鳴: 「はぁっ……はぁっ……」「ふぐっ」「ぜぇ……」';
+    extra += '\n  涙混じり: 「ぐすっ」「ひっく」「うえぇ」';
+    extra += '\n  叫び: 「ぎゃあ」「ひぃ！」「あぁああ」「うわぁ」';
+    extra += '\n  嘔吐感: 「うえっ」「おえっ」';
+    extra += '\n  痙攣: 「びくっ」「ぴくっ」';
+    extra += '\nこれらは台詞「」の冒頭・中間・末尾どこに入れてもよい。直前と同じ音は禁止。';
+    extra += '\n良い例（バリエーション）：';
+    extra += '\n  「ぐっ……いた、いたい……っ」';
+    extra += '\n  「ひぃっ、やめ、やめてぇ……」';
+    extra += '\n  「うえっ、けほっ……げほっ……」';
+    extra += '\n  「あぁああ、もう、もうやめて……っ！」';
+    extra += '\n  「はぁっ、はぁっ……ふぐっ……」';
+    extra += '\n避ける（既出すぎる定型）：単純な「やめて」「痛い」「なんで」だけの繰返し。';
+  }
+
+  result.sys += extra;
+  return result;
+};
+
+setTimeout(() => UI.renderAll && UI.renderAll(), 200);
+
+
 // Boot
 G.init();
 </script>
