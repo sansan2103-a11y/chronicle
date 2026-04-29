@@ -520,6 +520,74 @@ body > #topbar, body > #story, body > #branches, body > #composer {
 .dbg::-webkit-scrollbar { width: 4px; }
 .dbg::-webkit-scrollbar-thumb { background: rgba(160,138,240,0.2); border-radius: 2px; }
 
+
+/* ─────────── Dialogue VN-style cards ─────────── */
+.dialogue-list {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-top: 10px;
+}
+.dialogue-row {
+  display: flex; align-items: stretch; gap: 0;
+  background: linear-gradient(180deg, rgba(40,28,68,0.55), rgba(28,20,48,0.7));
+  border: 1px solid rgba(212,180,120,0.28);
+  border-radius: var(--r-md);
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04);
+  position: relative;
+}
+.dialogue-row::after {
+  content: '✦';
+  position: absolute;
+  right: 12px; top: 50%;
+  transform: translateY(-50%);
+  color: rgba(212,180,120,0.45);
+  font-size: 14px;
+  pointer-events: none;
+}
+.dialogue-avatar {
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(160,138,240,0.5), rgba(120,90,210,0.6));
+  background-size: cover; background-position: center;
+  margin: 12px 0 12px 12px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--ff-disp); font-size: 26px;
+  color: rgba(255,255,255,0.92);
+  border: 2px solid rgba(212,180,120,0.35);
+  box-shadow: 0 0 12px rgba(212,180,120,0.18), 0 0 0 1px rgba(160,138,240,0.2);
+}
+.dialogue-body {
+  flex: 1; min-width: 0;
+  padding: 12px 36px 12px 14px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.dialogue-name {
+  font-size: 13px; font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+  font-family: var(--ff-disp);
+}
+.dialogue-text {
+  font-family: var(--ff-narr);
+  font-size: 14.5px; line-height: 1.7;
+  color: var(--tx);
+}
+
+/* ─────────── Decorative narrative frame upgrade ─────────── */
+.narr-block {
+  position: relative;
+}
+.narr-block::before {
+  content: '';
+  position: absolute;
+  top: 8px; bottom: 8px; left: 0;
+  width: 3px;
+  background: linear-gradient(180deg, transparent 0%, var(--gold) 20%, var(--gold) 80%, transparent 100%);
+  border-radius: 2px;
+}
+
 </style>
 </head>
 <body>
@@ -2398,6 +2466,169 @@ UI.renderTurn = function(turn, idx) {
   }
   return div;
 };
+
+
+
+// ─────────────────────────────────────────────────────────────
+// Avatar generation (Pollinations)
+// ─────────────────────────────────────────────────────────────
+function _strHash(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; }
+  return Math.abs(h);
+}
+function _buildAvatarPrompt(name, desc) {
+  const d = (desc || '').slice(0, 200);
+  return 'anime portrait headshot, ' + d + ', fantasy character, dark fantasy aesthetic, dramatic lighting, purple ambient light, detailed face, single character, centered, no text, no logo';
+}
+function _avatarUrl(name, desc) {
+  if (!name && !desc) return null;
+  const prompt = _buildAvatarPrompt(name, desc);
+  const seed = _strHash((name || '') + '|' + (desc || '')) % 100000;
+  return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=512&height=512&seed=' + seed + '&nologo=true&model=flux';
+}
+window._avatarUrl = _avatarUrl;
+
+// Update NPC card render to use real avatar image
+(function patchNpcRender() {
+  const orig = UI._renderNpcList.bind(UI);
+  UI._renderNpcList = function() {
+    orig();
+    // Now upgrade each .npc-avatar to show the actual generated image
+    document.querySelectorAll('#npcList .npc-card').forEach((card, i) => {
+      const npc = S.cast.npcs[i];
+      if (!npc) return;
+      const av = card.querySelector('.npc-avatar');
+      if (av && (npc.name || npc.desc)) {
+        const url = _avatarUrl(npc.name, npc.desc);
+        if (url) {
+          av.style.backgroundImage = 'url("' + url + '")';
+          av.textContent = '';
+        }
+      }
+    });
+  };
+})();
+
+// Hero avatar display in welcome / dialogue
+function _heroAvatar() {
+  return _avatarUrl(S.cast.hero.name, S.cast.hero.desc);
+}
+window._heroAvatar = _heroAvatar;
+
+
+
+// ─────────────────────────────────────────────────────────────
+// Dialogue extraction & VN-style cards
+// ─────────────────────────────────────────────────────────────
+function _extractDialogue(narrativeText) {
+  if (!narrativeText) return [];
+  const text = Array.isArray(narrativeText) ? narrativeText.join('\n') : String(narrativeText);
+  const heroName = S.cast.hero.name || '';
+  const npcs = (S.cast.npcs || []).map(n => n.name).filter(Boolean);
+  const allNames = heroName ? [heroName, ...npcs] : npcs;
+  // Build name regex parts (also handle name parts split by spaces)
+  const nameParts = new Set();
+  allNames.forEach(n => {
+    nameParts.add(n);
+    n.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) nameParts.add(p); });
+  });
+  const namesArr = Array.from(nameParts).sort((a,b) => b.length - a.length);
+  // Extract dialogue patterns
+  const results = [];
+  // Split into lines first
+  const lines = text.split(/\n+/);
+  for (const line of lines) {
+    // Pattern A: Name「dialogue」 or Name は/が ... 「dialogue」
+    // Pattern B: 「dialogue」 と Name が言った/呟いた/etc
+    // Find ALL 「...」 in line and try to find nearest preceding/following name
+    const dialogueMatches = [];
+    let m;
+    const dRx = /「([^「」]+?)」/g;
+    while ((m = dRx.exec(line)) !== null) {
+      dialogueMatches.push({ text: m[1], start: m.index, end: m.index + m[0].length });
+    }
+    for (const d of dialogueMatches) {
+      // Look backwards in line for a name within 20 chars
+      const before = line.slice(Math.max(0, d.start - 30), d.start);
+      // Look forward for name with 言/呟/叫/etc within 20 chars
+      const after = line.slice(d.end, d.end + 30);
+      let speaker = null;
+      for (const n of namesArr) {
+        if (before.includes(n)) { speaker = n; break; }
+      }
+      if (!speaker) {
+        for (const n of namesArr) {
+          if (after.includes(n)) { speaker = n; break; }
+        }
+      }
+      if (!speaker && results.length > 0) {
+        // No identifiable speaker, use last speaker (continuation)
+        // Skip - require explicit identification
+      }
+      results.push({ speaker: speaker || null, text: d.text, isHero: speaker === heroName });
+    }
+  }
+  return results;
+}
+window._extractDialogue = _extractDialogue;
+
+function _renderDialogueCards(turn) {
+  const dialogues = _extractDialogue(turn.narrative);
+  if (dialogues.length === 0) return null;
+  const heroName = S.cast.hero.name || '主人公';
+  const heroAvUrl = _heroAvatar();
+  // Map NPC name → avatarUrl
+  const npcMap = {};
+  (S.cast.npcs || []).forEach(n => {
+    if (n.name) npcMap[n.name] = _avatarUrl(n.name, n.desc);
+  });
+  const wrap = document.createElement('div');
+  wrap.className = 'dialogue-list';
+  for (const d of dialogues) {
+    if (!d.speaker) continue; // skip unattributed
+    const row = document.createElement('div');
+    row.className = 'dialogue-row';
+    const av = document.createElement('div');
+    av.className = 'dialogue-avatar';
+    let url = null;
+    let nm = d.speaker;
+    if (d.isHero || d.speaker === heroName) {
+      url = heroAvUrl; nm = heroName;
+    } else {
+      url = npcMap[d.speaker] || null;
+    }
+    if (url) av.style.backgroundImage = 'url("' + url + '")';
+    else av.textContent = nm.charAt(0);
+    const body = document.createElement('div');
+    body.className = 'dialogue-body';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'dialogue-name';
+    nameEl.textContent = nm;
+    const textEl = document.createElement('div');
+    textEl.className = 'dialogue-text';
+    textEl.textContent = d.text;
+    body.appendChild(nameEl);
+    body.appendChild(textEl);
+    row.appendChild(av);
+    row.appendChild(body);
+    wrap.appendChild(row);
+  }
+  if (wrap.children.length === 0) return null;
+  return wrap;
+}
+
+// Hook renderTurn to append dialogue cards
+(function patchRenderTurn() {
+  const orig = UI.renderTurn.bind(UI);
+  UI.renderTurn = function(turn, idx) {
+    const div = orig(turn, idx);
+    const cards = _renderDialogueCards(turn);
+    if (cards) div.appendChild(cards);
+    return div;
+  };
+})();
+
 
 // Boot
 G.init();
