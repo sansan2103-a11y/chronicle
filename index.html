@@ -5950,6 +5950,174 @@ window._extractDialogue = function(narrativeText) {
 };
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Pollinations cold-start fix — 45s timeout + 3 seed-retry before DiceBear
+// ─────────────────────────────────────────────────────────────
+
+// Helper: try loading Pollinations with timeout
+function _tryLoadPollinations(url, timeoutMs) {
+  return new Promise(resolve => {
+    const img = new Image();
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) return; done = true;
+      resolve({ ok: false, reason: 'timeout' });
+    }, timeoutMs);
+    img.onload = () => {
+      if (done) return; done = true;
+      clearTimeout(timer);
+      if (img.naturalWidth >= 32) resolve({ ok: true, w: img.naturalWidth });
+      else resolve({ ok: false, reason: 'tiny image' });
+    };
+    img.onerror = () => {
+      if (done) return; done = true;
+      clearTimeout(timer);
+      resolve({ ok: false, reason: 'load error' });
+    };
+    img.src = url;
+  });
+}
+
+// Helper: persist cache state to localStorage
+function _persistAvCache(url, state) {
+  window._avatarLoadCache[url] = state;
+  try {
+    const KEY = 'chr_av_cache_v1';
+    const ls = JSON.parse(localStorage.getItem(KEY) || '{}');
+    ls[url] = state;
+    // Keep size bounded
+    const entries = Object.entries(ls);
+    if (entries.length > 80) {
+      const trimmed = Object.fromEntries(entries.slice(-60));
+      localStorage.setItem(KEY, JSON.stringify(trimmed));
+    } else {
+      localStorage.setItem(KEY, JSON.stringify(ls));
+    }
+  } catch(e){}
+}
+
+// Override _setAvatarBg with longer timeout + retry-with-different-seed
+window._setAvatarBg = function(el, primaryUrl, fallbackChar, name, desc, extraSeed) {
+  if (!el) return;
+  el.textContent = fallbackChar || '?';
+  el.style.backgroundImage = '';
+  
+  if (!primaryUrl) {
+    const dbUrl = (name || desc) ? window._dicebearUrl(name, desc, extraSeed) : null;
+    if (dbUrl) { el.style.backgroundImage = 'url("' + dbUrl + '")'; el.textContent = ''; }
+    return;
+  }
+  
+  // Cached as ok? show immediately
+  if (window._avatarLoadCache[primaryUrl] === 'ok') {
+    el.style.backgroundImage = 'url("' + primaryUrl + '")';
+    el.textContent = '';
+    return;
+  }
+  
+  // Async: try original URL, then retry with bumped seeds, then DiceBear
+  (async () => {
+    const TIMEOUT_MS = 45000;  // ← extended 22s → 45s for Pollinations cold-start
+    const MAX_RETRIES = 3;
+    
+    // Attempt 1: original URL
+    let result = await _tryLoadPollinations(primaryUrl, TIMEOUT_MS);
+    if (result.ok) {
+      _persistAvCache(primaryUrl, 'ok');
+      el.style.backgroundImage = 'url("' + primaryUrl + '")';
+      el.textContent = '';
+      return;
+    }
+    _persistAvCache(primaryUrl, 'fail');
+    
+    // Retry attempts: bump seed and try again
+    let currentSeed = extraSeed || 0;
+    for (let i = 0; i < MAX_RETRIES; i++) {
+      currentSeed += Math.floor(Math.random() * 1000) + 100;
+      const retryUrl = window._avatarUrl(name, desc, currentSeed);
+      if (!retryUrl) break;
+      result = await _tryLoadPollinations(retryUrl, TIMEOUT_MS);
+      if (result.ok) {
+        _persistAvCache(retryUrl, 'ok');
+        el.style.backgroundImage = 'url("' + retryUrl + '")';
+        el.textContent = '';
+        return;
+      }
+      _persistAvCache(retryUrl, 'fail');
+    }
+    
+    // All retries failed → DiceBear
+    const dbUrl = window._dicebearUrl(name, desc, extraSeed);
+    el.style.backgroundImage = 'url("' + dbUrl + '")';
+    el.textContent = '';
+  })();
+};
+
+// Override batch regen with 45s timeout + retry
+window._regenAllAvatars = async function() {
+  const characters = [];
+  if (S.cast.hero && S.cast.hero.name) characters.push({ type: 'hero', label: S.cast.hero.name });
+  (S.cast.npcs || []).forEach((npc, i) => { if (npc && npc.name) characters.push({ type: 'npc', idx: i, label: npc.name }); });
+  const total = characters.length;
+  const btn = document.getElementById('btnRegenAll');
+  if (total === 0) { window._toast('対象キャラがいません', 'warn'); return; }
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.classList.add('regen-running'); }
+  
+  // Clear cache fully
+  window._avatarLoadCache = {};
+  try { localStorage.removeItem('chr_av_cache_v1'); } catch(e){}
+  
+  const failures = [];
+  
+  for (let i = 0; i < total; i++) {
+    const c = characters[i];
+    if (btn) btn.textContent = '再生成中 (' + (i+1) + '/' + total + ')...';
+    
+    // Try up to 3 attempts with different seeds
+    let success = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const jump = Math.floor(Math.random() * 1000) + (attempt > 0 ? 200 : 1);
+      let url = null;
+      if (c.type === 'hero') {
+        S.cast.hero.avatarSeed = (S.cast.hero.avatarSeed || 0) + jump;
+        url = window._getHeroAvatar();
+      } else {
+        const npc = S.cast.npcs[c.idx];
+        if (npc) {
+          npc.avatarSeed = (npc.avatarSeed || 0) + jump;
+          url = window._getNpcAvatar(npc);
+        }
+      }
+      if (!url) break;
+      const r = await _tryLoadPollinations(url, 45000);
+      if (r.ok) {
+        _persistAvCache(url, 'ok');
+        success = true;
+        break;
+      }
+      _persistAvCache(url, 'fail');
+    }
+    if (!success) failures.push(c.label);
+    
+    // Throttle 500ms between characters
+    if (i < total - 1) await new Promise(r => setTimeout(r, 500));
+  }
+  
+  S.save();
+  if (UI._renderNpcList) UI._renderNpcList();
+  if (UI.renderAll) UI.renderAll();
+  if (window._renderHeroAvatarInSettings) window._renderHeroAvatarInSettings();
+  
+  if (btn) { btn.disabled = false; btn.classList.remove('regen-running'); btn.textContent = origText || '🔄 全キャラ一括再生成'; }
+  
+  if (failures.length === 0) window._toast('全' + total + 'キャラの再生成完了', 'ok');
+  else window._toast((total - failures.length) + '/' + total + '完了。失敗: ' + failures.join('、'), 'warn');
+};
+
+
 // Boot
 G.init();
 </script>
