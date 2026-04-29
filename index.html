@@ -5184,6 +5184,80 @@ UI.openSettings = function() {
 setTimeout(() => UI.renderAll && UI.renderAll(), 200);
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Monogatari series style preset (Watanabe Akio / VOFAN / Shinbo Akiyuki)
+// ─────────────────────────────────────────────────────────────
+const ORNATE_FRAME_V2 = ', inside ornate dark fantasy circular emblem frame, golden filigree border with four-pointed star decorations at cardinal points, purple amethyst gemstone accents, dark purple starry cosmic background, mystical sparkles, character centered headshot, black outer background, no text, no logo';
+
+window.AVATAR_STYLES = {
+  monogatari: {
+    label: '物語シリーズ風（渡辺明夫・推奨）',
+    prefix: 'monogatari series style anime portrait, akio watanabe character design, shinbo akiyuki direction, VOFAN art style, large expressive eyes with light reflections, delicate sharp line art, flat vibrant cel shading, minimal shadows, bright saturated colors, stylized angular jawline, refined anime illustration, shaft animation studio aesthetic'
+  },
+  chronicle: {
+    label: 'Chronicle 公式（mihoyo+紋章枠）',
+    prefix: 'high quality fantasy character portrait, mihoyo gacha game art style, polished anime illustration, sharp expressive eyes, detailed face, dramatic atmospheric lighting'
+  },
+  anime: {
+    label: 'アニメ調（標準）',
+    prefix: 'detailed anime character portrait, japanese animation art, polished anime style, soft cel shading, sharp expressive eyes, painted face, fantasy character design'
+  },
+  gacha: {
+    label: '高品質ファンタジー（mihoyo風）',
+    prefix: 'high quality fantasy character portrait, gacha game art, mihoyo style, detailed face, sharp eyes, polished anime illustration, dramatic atmospheric lighting'
+  },
+  jrpg: {
+    label: 'JRPGゲーム風',
+    prefix: 'jrpg character art, painterly anime, japanese rpg character portrait, detailed face, fantasy art'
+  },
+  vn: {
+    label: 'ビジュアルノベル風',
+    prefix: 'visual novel character art, japanese galge style portrait, soft cel shading, detailed eyes, gentle expression'
+  },
+  chibi: {
+    label: 'デフォルメ（ちびキャラ）',
+    prefix: 'cute chibi anime character portrait, deformed style, big eyes, soft pastel anime, kawaii fantasy character'
+  },
+  semireal: {
+    label: 'セミリアル',
+    prefix: 'semi-realistic anime portrait, painterly fantasy art, detailed face, atmospheric lighting'
+  },
+  watercolor: { label: '水彩画風', prefix: 'watercolor painting portrait, soft ethereal washes, ink lines, character art' },
+  oil: { label: '油彩画風', prefix: 'classical oil painting portrait, baroque chiaroscuro, character art' },
+  pixel: { label: 'ピクセルアート', prefix: 'pixel art portrait, 16bit jrpg sprite face, retro game style' },
+  manga: { label: 'モノクロ漫画風', prefix: 'monochrome manga portrait, ink illustration, screentone shading' }
+};
+
+// Override _buildAvatarPrompt to use new ORNATE_FRAME_V2 suffix consistently
+window._buildAvatarPrompt = function(name, desc) {
+  const styleKey = (S.cfg && S.cfg.avatarStyle) || 'monogatari';
+  const style = window.AVATAR_STYLES[styleKey] || window.AVATAR_STYLES.monogatari;
+  const d = (desc || '').slice(0, 200);
+  // Most styles get ornate frame; flat painterly styles skip
+  const skipFrame = ['watercolor','oil','pixel','manga'].includes(styleKey);
+  const suffix = skipFrame ? '' : ORNATE_FRAME_V2;
+  return style.prefix + ', headshot, ' + d + ', single character, centered' + suffix;
+};
+
+// Default to monogatari style for users on chronicle/gacha (or unset)
+if (!S.cfg.avatarStyle || S.cfg.avatarStyle === 'chronicle' || S.cfg.avatarStyle === 'gacha' || S.cfg.avatarStyle === 'anime') {
+  S.cfg.avatarStyle = 'monogatari';
+  S.save();
+}
+
+// Clear caches so the new prompts are attempted
+window._avatarLoadCache = {};
+try { localStorage.removeItem('chr_av_cache_v1'); } catch {}
+
+// Force re-render to fetch new images
+setTimeout(() => {
+  if (UI._renderNpcList) UI._renderNpcList();
+  if (UI.renderAll) UI.renderAll();
+}, 200);
+
+
 // Boot
 G.init();
 </script>
