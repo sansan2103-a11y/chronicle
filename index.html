@@ -1038,6 +1038,121 @@ body > #topbar, body > #story, body > #branches, body > #composer {
   margin-top: 18px !important;
 }
 
+
+
+/* ─────────── D: Stress-modulated text effects ─────────── */
+
+/* stress 50-69: subtle color shift, no animation */
+.dialogue-row.stress-mild .dialogue-text {
+  color: rgba(232,220,250,0.95);
+}
+
+/* stress 70-89: gentle wobble */
+.dialogue-row.stress-shaky .dialogue-text {
+  display: inline-block;
+  animation: stressShaky 3.6s ease-in-out infinite;
+  color: #f0d8e0;
+}
+.dialogue-row.stress-shaky .dialogue-avatar {
+  animation: avatarSway 4.2s ease-in-out infinite;
+}
+@keyframes stressShaky {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  20% { transform: translateY(-0.4px) translateX(0.3px); }
+  50% { transform: translateY(0.4px) translateX(-0.3px); }
+  70% { transform: translateY(-0.2px) translateX(0.4px); }
+}
+@keyframes avatarSway {
+  0%, 100% { transform: rotate(0deg); }
+  33% { transform: rotate(0.6deg); }
+  66% { transform: rotate(-0.5deg); }
+}
+
+/* stress 90-99: visible tremor + letter-spacing variation */
+.dialogue-row.stress-breaking {
+  border-color: rgba(229,115,115,0.35);
+}
+.dialogue-row.stress-breaking .dialogue-text {
+  display: inline-block;
+  animation: stressBreaking 0.85s ease-in-out infinite;
+  color: #f5cfd0;
+  letter-spacing: 0.02em;
+}
+.dialogue-row.stress-breaking .dialogue-avatar {
+  animation: avatarTremor 0.9s ease-in-out infinite;
+  filter: saturate(0.8);
+}
+.dialogue-row.stress-breaking .dialogue-name {
+  color: rgba(245,200,200,0.95);
+}
+@keyframes stressBreaking {
+  0% { transform: translate(0, 0) skewX(0deg); letter-spacing: 0.02em; }
+  25% { transform: translate(-0.8px, -0.5px) skewX(0.4deg); letter-spacing: 0.045em; }
+  50% { transform: translate(0.6px, 0.4px) skewX(-0.3deg); letter-spacing: 0.015em; }
+  75% { transform: translate(-0.4px, 0.6px) skewX(0.5deg); letter-spacing: 0.05em; }
+  100% { transform: translate(0, 0) skewX(0deg); letter-spacing: 0.02em; }
+}
+@keyframes avatarTremor {
+  0%, 100% { transform: translate(0,0) rotate(0); }
+  20% { transform: translate(-1px, 0.5px) rotate(-1deg); }
+  40% { transform: translate(1px, -0.5px) rotate(1deg); }
+  60% { transform: translate(-0.6px, 0.8px) rotate(-0.5deg); }
+  80% { transform: translate(0.6px, -0.6px) rotate(0.6deg); }
+}
+
+/* stress 100: shattered — RGB-split text, glitch, broken font */
+.dialogue-row.stress-shattered {
+  border-color: rgba(229,115,115,0.55);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.5), 0 0 16px rgba(229,115,115,0.18), inset 0 1px 0 rgba(229,115,115,0.05);
+  background: linear-gradient(180deg, rgba(50,20,30,0.55), rgba(28,14,22,0.7));
+}
+.dialogue-row.stress-shattered .dialogue-text {
+  display: inline-block;
+  animation: stressShatter 0.5s steps(3) infinite;
+  color: #fff0f0;
+  text-shadow: 1.4px 0 0 rgba(229,115,115,0.8), -1.4px 0 0 rgba(160,138,240,0.8);
+  letter-spacing: 0.04em;
+  font-family: var(--ff-narr);
+}
+.dialogue-row.stress-shattered .dialogue-avatar {
+  animation: avatarShatter 0.6s steps(2) infinite;
+  filter: saturate(0.5) hue-rotate(-10deg);
+  border-color: rgba(229,115,115,0.55);
+}
+.dialogue-row.stress-shattered .dialogue-name {
+  color: var(--err);
+  text-shadow: 0 0 6px rgba(229,115,115,0.6);
+}
+.dialogue-row.stress-shattered .dialogue-name::after {
+  content: ' ⚠';
+  margin-left: 4px;
+  color: var(--err);
+}
+@keyframes stressShatter {
+  0% { transform: translate(0,0) skewX(0); filter: blur(0); }
+  33% { transform: translate(-1.2px, 0.8px) skewX(0.6deg); filter: blur(0.3px); text-shadow: 2px 0 0 rgba(229,115,115,0.9), -2px 0 0 rgba(160,138,240,0.9); }
+  66% { transform: translate(1.2px, -0.4px) skewX(-0.5deg); filter: blur(0.1px); text-shadow: -1.5px 0 0 rgba(229,115,115,0.8), 1.5px 0 0 rgba(160,138,240,0.8); }
+  100% { transform: translate(0,0) skewX(0); filter: blur(0); }
+}
+@keyframes avatarShatter {
+  0% { transform: translate(0,0); }
+  50% { transform: translate(-1.6px, 1px); filter: saturate(0.4) hue-rotate(-15deg); }
+}
+
+/* ─────────── F: Environmental SFX in narrative ─────────── */
+.env-sfx {
+  display: inline-block;
+  font-family: var(--ff-disp);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 0.94em;
+  color: var(--gold);
+  letter-spacing: 0.06em;
+  padding: 0 4px;
+  opacity: 0.82;
+  text-shadow: 0 0 8px rgba(212,180,120,0.18);
+}
+
 </style>
 </head>
 <body>
@@ -4784,6 +4899,83 @@ window._renderDialogueCards = function(turn) {
   }
 
   return div;
+};
+
+setTimeout(() => UI.renderAll && UI.renderAll(), 200);
+
+
+
+
+// ─────────────────────────────────────────────────────────────
+// Phase 3: D (stress-modulated text) + F (env SFX)
+// ─────────────────────────────────────────────────────────────
+
+// Helper: stress class based on bucket
+window._stressClass = function(stress) {
+  if (stress >= 100) return 'stress-shattered';
+  if (stress >= 90)  return 'stress-breaking';
+  if (stress >= 70)  return 'stress-shaky';
+  if (stress >= 50)  return 'stress-mild';
+  return null;
+};
+
+// Wrap _renderDialogueCards: apply stress class to NPC dialogue cards
+const _origDlgCardsP3 = window._renderDialogueCards;
+window._renderDialogueCards = function(turn) {
+  const div = _origDlgCardsP3(turn);
+  if (!div) return null;
+  // Look up each row's speaker, find NPC, get stress, add class
+  const rows = div.querySelectorAll('.dialogue-row');
+  const npcByName = {};
+  (S.cast.npcs || []).forEach(n => {
+    if (n.name) {
+      npcByName[n.name] = n;
+      n.name.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) npcByName[p] = n; });
+    }
+  });
+  rows.forEach(row => {
+    const nameEl = row.querySelector('.dialogue-name');
+    const sp = nameEl ? nameEl.textContent.replace(/（呟き）/g,'').trim() : '';
+    if (!sp) return;
+    // skip hero (no stress concept)
+    if (row.classList.contains('hero-say')) return;
+    const npc = npcByName[sp];
+    if (!npc) return;
+    const cls = window._stressClass(npc.stress || 0);
+    if (cls) row.classList.add(cls);
+  });
+  return div;
+};
+
+// ─────────────────────────────────────────────────────────────
+// F: Environmental SFX rendering — convert *—...—* in narrative to italic spans
+// ─────────────────────────────────────────────────────────────
+const _origRTSfx = UI.renderTurn.bind(UI);
+UI.renderTurn = function(turn, idx) {
+  const div = _origRTSfx(turn, idx);
+  // Process narr-block paragraphs to convert *—text—* to env-sfx span
+  const block = div.querySelector('.narr-block');
+  if (block) {
+    const ps = block.querySelectorAll('p, .ptext');
+    ps.forEach(p => {
+      const html = p.innerHTML;
+      // Match *—...—* (full-width or half-width dashes)
+      const newHtml = html.replace(/\*[—–-]([^—–\*]+?)[—–-]\*/g, '<span class="env-sfx">— $1 —</span>');
+      if (newHtml !== html) p.innerHTML = newHtml;
+    });
+  }
+  return div;
+};
+
+// ─────────────────────────────────────────────────────────────
+// F: Inject SFX instruction into Planner prompt
+// ─────────────────────────────────────────────────────────────
+const _origPlanBuildP3 = Planner.build.bind(Planner);
+Planner.build = function(inputType, inputText) {
+  const result = _origPlanBuildP3(inputType, inputText);
+  if (S.cfg.simpleMode) return result;
+  result.sys += '\n\n【★環境音の挿入】毎ターン**1〜2回**、地の文の中に環境音を **\`*—音の描写—*\`** という書式で挟む。地の文の独立した一文として置く。NPC台詞や行動と混ぜない。\n例: \n  *—鎖の擦れる音が遠くで響いた—*\n  *—蝋燭の灯がじりじりと音を立てる—*\n  *—風が窓を叩いた—*\n  *—地下水のしずくが石床に落ちた—*\n  *—ミリアの呼吸が浅く速くなる—*\nこの書式は描写の解像度を上げるためのもので、必ず五感（音/匂い/温度/光/触覚）に紐付ける。';
+  return result;
 };
 
 setTimeout(() => UI.renderAll && UI.renderAll(), 200);
