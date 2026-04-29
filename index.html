@@ -10484,5 +10484,132 @@ G.init();
   console.log("[Patch v12] genre enforcement active");
 })();
 </script>
+<script>
+/* === PATCH: quality-fixes-v13 === */
+(function(){
+  console.log("[Patch v13] loading: timeout-extension + abort-UX + anti-repetition");
+  /* ===== 1. TIMEOUT EXTENSION (60s -> 180s) ===== */
+  /* Replace any AbortSignal with longer one for OpenRouter calls */
+  var _origFetch13 = window.fetch;
+  window.fetch = function(u, o){
+    var url = String(u||"");
+    if (url.indexOf("openrouter.ai") >= 0 && url.indexOf("/chat/completions") >= 0) {
+      o = o || {};
+      /* Replace any existing signal with a 180s timeout */
+      var newCtrl = new AbortController();
+      window._v13LastCtrl = newCtrl;
+      var timer = setTimeout(function(){
+        console.warn("[Patch v13] 180s timeout fired");
+        newCtrl.abort();
+      }, 180000);
+      var origSignal = o.signal;
+      o.signal = newCtrl.signal;
+      /* Inject anti-repetition rule based on last turn narrative */
+      try {
+        if (o.body && typeof o.body === "string") {
+          var body = JSON.parse(o.body);
+          if (body.messages && Array.isArray(body.messages) && !body._v13antiRepeat) {
+            var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+            var turns = c.turns || [];
+            if (turns.length > 0) {
+              var last = turns[turns.length - 1];
+              var lastNarr = "";
+              if (last && last.plan && last.plan.narrative) {
+                lastNarr = Array.isArray(last.plan.narrative) ? last.plan.narrative.join(" ") : String(last.plan.narrative);
+              }
+              if (lastNarr.length > 50) {
+                /* Extract distinctive 8+ char phrases */
+                var snippet = lastNarr.slice(0, 600);
+                var antiRepeat = {
+                  role: "system",
+                  content: "【★反復絶対禁止★】直前ターンに以下の表現が使われた。今ターンでは **同じ動作・同じセリフ・同じ表現を繰り返さず**、必ず別の動作／別の場面／別の言い回しで物語を進めよ。前ターンとの差分を最低3つ作ること。\n\n[直前ターン抜粋]\n" + snippet + "\n\n上記の文章をそのまま再利用するのは禁止。新しい展開・新しい状況描写・新しいキャラクター反応を含めよ。"
+                };
+                body.messages.push(antiRepeat);
+                body._v13antiRepeat = true;
+                o.body = JSON.stringify(body);
+                console.log("[Patch v13] anti-repetition injected (" + snippet.length + " chars)");
+              }
+            }
+          }
+        }
+      } catch(e){ console.warn("[Patch v13] anti-repeat inject failed", e); }
+      var result = _origFetch13.apply(this, arguments);
+      result.then(function(){clearTimeout(timer);}).catch(function(){clearTimeout(timer);});
+      result.catch(function(err){
+        if (err && err.name === "AbortError") {
+          showAbortToast();
+        }
+      });
+      return result;
+    }
+    return _origFetch13.apply(this, arguments);
+  };
+  console.log("[Patch v13] fetch timeout extended to 180s for OpenRouter");
+  /* ===== 2. AbortError TOAST + AUTO-RETRY ===== */
+  function showAbortToast(){
+    /* Remove any existing toast */
+    var existing = document.getElementById("v13-abort-toast");
+    if (existing) existing.remove();
+    var toast = document.createElement("div");
+    toast.id = "v13-abort-toast";
+    toast.style.cssText = "position:fixed;top:20px;right:20px;background:rgba(160,40,40,0.95);color:#fff;padding:14px 18px;border-radius:6px;border:1px solid #e57373;font-family:var(--ff-disp,serif);font-size:13px;line-height:1.5;z-index:99999;max-width:380px;box-shadow:0 6px 20px rgba(0,0,0,0.6);";
+    toast.innerHTML = 
+      '<div style="font-weight:bold;margin-bottom:6px;font-size:14px;">⚠ 応答タイムアウト</div>' +
+      '<div>180秒以内にモデルから応答がありませんでした。R18+残虐の重い場面ではEuryale 70Bが時間を要する場合があります。</div>' +
+      '<div style="margin-top:10px;display:flex;gap:8px;">' +
+      '<button id="v13-retry-btn" style="background:#a08af0;color:#0a0612;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-weight:bold;">🔄 再生成</button>' +
+      '<button id="v13-dismiss-btn" style="background:#444;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;">閉じる</button>' +
+      '</div>';
+    document.body.appendChild(toast);
+    document.getElementById("v13-retry-btn").addEventListener("click", function(){
+      toast.remove();
+      /* Find and click 再生成 button */
+      var btns = Array.from(document.querySelectorAll("button"));
+      var regen = btns.find(function(b){return (b.textContent||"").indexOf("再生成") >= 0;});
+      if (regen) regen.click();
+    });
+    document.getElementById("v13-dismiss-btn").addEventListener("click", function(){
+      toast.remove();
+    });
+    /* Auto-dismiss after 30s */
+    setTimeout(function(){if(toast.parentElement)toast.remove();}, 30000);
+  }
+  console.log("[Patch v13] abort UX toast ready");
+  /* ===== 3. STALL detection (improved from v10) ===== */
+  /* If 3 consecutive turns have very similar narrative, show warning */
+  var _v13LastNarrs = [];
+  setInterval(function(){
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      var turns = c.turns || [];
+      if (turns.length < 2) return;
+      var last = turns[turns.length - 1];
+      var narr = (last && last.plan && last.plan.narrative) ? (Array.isArray(last.plan.narrative) ? last.plan.narrative.join(" ") : String(last.plan.narrative)) : "";
+      if (!narr || narr.length < 50) return;
+      var sig = narr.slice(0, 200);
+      if (_v13LastNarrs.length > 0 && _v13LastNarrs[_v13LastNarrs.length-1] === sig) return;
+      _v13LastNarrs.push(sig);
+      if (_v13LastNarrs.length > 5) _v13LastNarrs.shift();
+      /* Check for repetition: any pair of last 3 turns sharing > 50% chars */
+      if (_v13LastNarrs.length >= 3) {
+        var l1 = _v13LastNarrs[_v13LastNarrs.length-1];
+        var l2 = _v13LastNarrs[_v13LastNarrs.length-2];
+        var l3 = _v13LastNarrs[_v13LastNarrs.length-3];
+        function sim(a, b){
+          var common = 0;
+          for (var i=0; i<Math.min(a.length,b.length); i+=10){
+            if (b.indexOf(a.slice(i, i+10)) >= 0) common++;
+          }
+          return common / (Math.min(a.length, b.length) / 10);
+        }
+        if (sim(l1,l2) > 0.5 || sim(l2,l3) > 0.5 || sim(l1,l3) > 0.5) {
+          console.warn("[Patch v13] HIGH REPETITION DETECTED across 3 turns");
+        }
+      }
+    } catch(e){}
+  }, 3000);
+  console.log("[Patch v13] all loaded");
+})();
+</script>
 </body>
 </html>
