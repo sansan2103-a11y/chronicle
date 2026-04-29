@@ -416,6 +416,93 @@ body > #topbar, body > #story, body > #branches, body > #composer {
   .mpanel-footer { padding: 14px 18px; }
 }
 
+
+
+/* ─────────── Psych meters (NPC stress/trust/intimacy) ─────────── */
+.psych-meters {
+  display: flex; flex-wrap: wrap; gap: 14px;
+  font-size: 11px; color: var(--tx-dim);
+  padding: 10px 14px; margin-top: 10px;
+  background: rgba(15,10,25,0.5);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.pmeter {
+  display: flex; align-items: center; gap: 8px;
+  flex: 1; min-width: 140px;
+}
+.pmeter-label {
+  font-size: 10.5px; letter-spacing: 0.08em;
+  color: var(--tx-faint); flex-shrink: 0;
+  text-transform: uppercase;
+}
+.pmeter-bar {
+  flex: 1; height: 4px;
+  background: rgba(160,138,240,0.1);
+  border-radius: 100px; overflow: hidden;
+  position: relative;
+}
+.pmeter-fill {
+  height: 100%; transition: width 0.4s, background 0.4s;
+  background: var(--acc);
+  border-radius: 100px;
+}
+.pmeter-fill.stress {
+  background: linear-gradient(90deg, var(--ok) 0%, var(--warn) 50%, var(--err) 100%);
+}
+.pmeter-fill.trust-pos { background: linear-gradient(90deg, var(--acc-dim), var(--ok)); }
+.pmeter-fill.trust-neg { background: linear-gradient(90deg, var(--err), var(--warn)); }
+.pmeter-fill.intimacy { background: linear-gradient(90deg, var(--acc-dim), var(--acc)); }
+.pmeter-val {
+  font-size: 11px; color: var(--tx-mid);
+  font-variant-numeric: tabular-nums; flex-shrink: 0;
+  min-width: 28px; text-align: right;
+}
+
+/* ─────────── Defense badge (NPC) ─────────── */
+.defense-badge {
+  display: inline-block;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+  padding: 2px 7px; margin-right: 6px;
+  background: rgba(212,180,120,0.14);
+  color: var(--gold);
+  border: 1px solid rgba(212,180,120,0.3);
+  border-radius: var(--r-sm);
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+/* ─────────── Subtext (NPC underlying meaning) ─────────── */
+.subtext {
+  font-size: 12.5px; color: var(--tx-dim);
+  font-style: italic;
+  padding: 6px 12px;
+  margin-top: 6px;
+  background: rgba(40,28,68,0.4);
+  border-left: 2px solid var(--gold-dim);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+.subtext::before { content: '裏: '; color: var(--gold); font-weight: 600; font-style: normal; margin-right: 4px; }
+
+/* ─────────── Debug box ─────────── */
+.dbg {
+  margin-top: 10px;
+  background: rgba(10,6,18,0.7);
+  border: 1px solid rgba(160,138,240,0.12);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  font-family: 'SF Mono','Monaco','Consolas',monospace;
+  font-size: 10.5px;
+  color: var(--tx-faint);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.dbg::-webkit-scrollbar { width: 4px; }
+.dbg::-webkit-scrollbar-thumb { background: rgba(160,138,240,0.2); border-radius: 2px; }
+
 </style>
 </head>
 <body>
