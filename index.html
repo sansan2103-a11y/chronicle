@@ -1985,11 +1985,8 @@ Planner.parsePlan = function(rawText, inputType) {
       const metaRx = /(プロジェクター|モニター|再生画面|スクリーン|シーンは終了|シーンが終了|場面転換|別世界|別の場所|タイムジャンプ|未来視|回想シーン|夢から覚め|目を覚ます|メタ視点|作戦会議|プレゼント|お暇します|戻ります|今夜\d+時|\d+日目|\d+時\d+分|\d+:\d+\)?|失礼します|お疲れ様|では失礼|いつもの|背広姿|スーツ姿|サラリーマン|出勤|退勤|帰宅)/;
       const lines0 = text.split(/\n+/);
       const filtered0 = lines0.filter(l => !metaRx.test(l));
-      if (filtered0.join('').length < lines0.join('').length * 0.6) {
-        text = '';
-      } else {
-        text = filtered0.join('\n');
-      }
+      // Keep filtered output even if heavily meta-tainted; just drop offending lines
+      text = filtered0.join('\n');
     }
     // Detect mention of character names not in the cast and warn (replace with generic "誰か" if clearly an invented PoV character)
     (function() {
@@ -2059,7 +2056,12 @@ Planner.parsePlan = function(rawText, inputType) {
     const seen = new Set();
     lines = lines.filter(l => { if (seen.has(l)) return false; seen.add(l); return true; });
     lines = lines.filter(l => /[぀-ゟ゠-ヿ]/.test(l));
-    if (lines.length === 0) lines = ['…'];
+    // Safety net: if everything got filtered out, recover at least something from raw text
+    if (lines.length === 0) {
+      const rawSentences = (rawText || '').replace(/[\u0000-\u001F]/g, ' ').split(/[。！？\n]+/).map(s=>s.trim()).filter(s => s.length >= 4 && /[぀-ゟ゠-ヿ]/.test(s));
+      if (rawSentences.length > 0) lines = rawSentences.slice(0, 4).map(s => s + '。');
+      else lines = ['…再生成に失敗。もう一度試してください。'];
+    }
     lines = lines.slice(0, 8);
     const heroName = (S.cast.hero || {}).name;
     if (heroName && inputType === 'SAY') {
