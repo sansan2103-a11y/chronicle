@@ -7768,6 +7768,79 @@ window._renderDialogueCards = function(turn) {
 };
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Ephemeral NPC v3 — non-greedy + mandatory particle for proper boundary
+// ─────────────────────────────────────────────────────────────
+window._extractEphemeralNpcs = function(narrativeText) {
+  const text = Array.isArray(narrativeText) ? narrativeText.join('\n') : String(narrativeText || '');
+  const knownNames = new Set();
+  if (S.cast.hero.name) {
+    knownNames.add(S.cast.hero.name);
+    S.cast.hero.name.split(/[\s・]/).forEach(p => { if (p) knownNames.add(p); });
+  }
+  (S.cast.npcs || []).forEach(n => {
+    if (n.name) {
+      knownNames.add(n.name);
+      n.name.split(/[\s・]/).forEach(p => { if (p) knownNames.add(p); });
+    }
+  });
+  const personNounSet = new Set(window.PERSON_NOUNS || []);
+  const result = {};
+  
+  // FIXED REGEX: non-greedy capture + mandatory particle
+  // 」と<NAME(non-greedy)>[はがも][optional 0-5 chars]<verb>
+  const SPEECH = '言|呟|叫|呻|喘|漏ら|呼び|尋ね|応|返|答|問|告|微笑|頷|首を|語|諭|怒鳴|喚|嘆|嘲|呼|聞|唸|咆哮|嘶|啼';
+  const rxAttrib = new RegExp('」と([^\\s「」、。！？\\n]{1,8}?)[はがも][^。、\\n]{0,8}(?:' + SPEECH + ')', 'g');
+  
+  let m;
+  while ((m = rxAttrib.exec(text)) !== null) {
+    const candidate = m[1];
+    if (knownNames.has(candidate)) continue;
+    
+    let acceptedName = null;
+    if (personNounSet.has(candidate)) {
+      acceptedName = candidate;
+    } else {
+      // Try suffix match
+      for (const pn of (window.PERSON_NOUNS || [])) {
+        if (candidate.endsWith(pn) && candidate.length > pn.length && candidate.length <= 8) {
+          acceptedName = pn;
+          break;
+        }
+      }
+    }
+    if (!acceptedName) continue;
+    if (result[acceptedName]) continue;
+    
+    // Extract descriptor by looking at the original candidate text + before
+    const dialogueStart = m.index;
+    const before = text.slice(Math.max(0, dialogueStart - 100), dialogueStart);
+    
+    // The candidate itself might be "黒衣の男" or similar — use that as desc
+    let desc = candidate.length > acceptedName.length ? candidate : '';
+    if (!desc) {
+      // Look further back for descriptor
+      const escName = acceptedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const descRx = new RegExp('([^\\s、。「」]{2,15}[のな]?)' + escName);
+      const dm = before.match(descRx);
+      if (dm) desc = dm[0];
+      else desc = acceptedName;
+    }
+    if (S.scene.tone) desc += '、' + S.scene.tone.split(/[、,。]/)[0].slice(0, 25) + 'な雰囲気';
+    
+    result[acceptedName] = {
+      name: acceptedName,
+      desc: desc.slice(0, 100),
+      ephemeral: true,
+      avatarSeed: 0
+    };
+  }
+  return result;
+};
+
+
 // Boot
 G.init();
 </script>
