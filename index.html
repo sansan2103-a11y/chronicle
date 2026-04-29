@@ -3846,6 +3846,41 @@ function _hideLoader() {
 setTimeout(() => UI.renderAll && UI.renderAll(), 200);
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Updated avatar prompts to match Chronicle ornate-frame style
+// (gold filigree circular frame + purple gemstones + dark cosmic bg)
+// ─────────────────────────────────────────────────────────────
+const ORNATE_FRAME_SUFFIX = ', inside ornate dark fantasy circular emblem frame, golden filigree border with four-pointed star decorations at cardinal points, purple amethyst gemstone accents, dark purple starry cosmic background, mystical sparkles, character centered headshot, black outer background, polished digital illustration, detailed face';
+
+window.AVATAR_STYLES = {
+  chronicle:  { label: 'Chronicle 公式（mihoyo+紋章枠・推奨）', prefix: 'high quality fantasy character portrait, mihoyo gacha game art style, polished anime illustration, sharp expressive eyes, detailed face, dramatic atmospheric lighting' + ORNATE_FRAME_SUFFIX },
+  anime:      { label: 'アニメ調（標準）',    prefix: 'detailed anime character portrait, japanese animation art, polished anime style, soft cel shading, sharp expressive eyes, painted face, fantasy character design' + ORNATE_FRAME_SUFFIX },
+  gacha:      { label: '高品質ファンタジー（mihoyo風）', prefix: 'high quality fantasy character portrait, gacha game art, mihoyo style, detailed face, sharp eyes, polished anime illustration, dramatic atmospheric lighting' + ORNATE_FRAME_SUFFIX },
+  jrpg:       { label: 'JRPGゲーム風',        prefix: 'jrpg character art, painterly anime, japanese rpg character portrait, detailed face, fantasy art' + ORNATE_FRAME_SUFFIX },
+  vn:         { label: 'ビジュアルノベル風',  prefix: 'visual novel character art, japanese galge style portrait, soft cel shading, detailed eyes, gentle expression' + ORNATE_FRAME_SUFFIX },
+  chibi:      { label: 'デフォルメ（ちびキャラ）',  prefix: 'cute chibi anime character portrait, deformed style, big eyes, soft pastel anime, kawaii fantasy character' + ORNATE_FRAME_SUFFIX },
+  semireal:   { label: 'セミリアル',          prefix: 'semi-realistic anime portrait, painterly fantasy art, detailed face, atmospheric lighting' + ORNATE_FRAME_SUFFIX },
+  watercolor: { label: '水彩画風',            prefix: 'watercolor painting portrait, soft ethereal washes, ink lines, character art' },
+  oil:        { label: '油彩画風',            prefix: 'classical oil painting portrait, baroque chiaroscuro, character art' },
+  pixel:      { label: 'ピクセルアート',      prefix: 'pixel art portrait, 16bit jrpg sprite face, retro game style' },
+  manga:      { label: 'モノクロ漫画風',      prefix: 'monochrome manga portrait, ink illustration, screentone shading' }
+};
+
+// Default to chronicle style for new users
+if (typeof S.cfg.avatarStyle === 'undefined' || S.cfg.avatarStyle === 'gacha') {
+  S.cfg.avatarStyle = 'chronicle';
+  S.save();
+}
+
+// Force fresh avatars (clear cache so new prompts are tried)
+window._avatarLoadCache = {};
+try { localStorage.removeItem('chr_av_cache_v1'); } catch {}
+
+setTimeout(() => UI.renderAll && UI.renderAll(), 200);
+
+
 // Boot
 G.init();
 </script>
