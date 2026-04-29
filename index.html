@@ -7625,6 +7625,149 @@ window._extractDialogue = function(narrativeText) {
 };
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Ephemeral NPC v2 — refined detection with short-noun + descriptor extraction
+// ─────────────────────────────────────────────────────────────
+
+// Whitelist of "person nouns" that can be ephemeral speakers (vs common-noun-skip list)
+window.PERSON_NOUNS = [
+  // 人物
+  '男','女','少年','少女','老人','老婆','老女','婆さん','爺さん','青年','若者','子供','赤子',
+  // 職業/身分
+  '兵士','衛兵','騎士','戦士','傭兵','盗賊','商人','行商人','農夫','農民','市民','住民','村人',
+  '司祭','神官','僧','尼','巫女','占い師','魔導士','魔術師','魔女','学者','記録官','使者',
+  '貴族','王','姫','王妃','執事','侍女','使用人','奴隷','囚人','逃亡者','旅人','流れ者',
+  // 怪物・異形
+  '狼','獣','犬','猫','蛇','鳥','鴉','烏','馬','龍','竜','妖精','幽霊','亡霊','怪物','魔物',
+  'モンスター','悪魔','悪霊','吸血鬼','人狼','妖','化物','化け物','異形','不死者','屍鬼',
+  // 抽象
+  '人物','者','声'
+];
+
+window._extractEphemeralNpcs = function(narrativeText) {
+  const text = Array.isArray(narrativeText) ? narrativeText.join('\n') : String(narrativeText || '');
+  const knownNames = new Set();
+  if (S.cast.hero.name) {
+    knownNames.add(S.cast.hero.name);
+    S.cast.hero.name.split(/[\s・]/).forEach(p => { if (p) knownNames.add(p); });
+  }
+  (S.cast.npcs || []).forEach(n => {
+    if (n.name) {
+      knownNames.add(n.name);
+      n.name.split(/[\s・]/).forEach(p => { if (p) knownNames.add(p); });
+    }
+  });
+  const personNounSet = new Set(window.PERSON_NOUNS);
+  const result = {};
+  const SPEECH_VERBS = '言|呟|叫|呻|喘|漏ら|呼び|尋ね|応|返|答|問|告|微笑|頷|首を|語|諭|怒鳴|喚|嘆|嘲|呼|聞|唸';
+  
+  // Find dialogues with post-attribution: 「...」と[noun]は[verb]
+  const rxAttrib = /」と([^\s「」、。！？\n]{1,8})[はがも]?[^。、\n]{0,5}(?:言|呟|叫|呻|喘|漏ら|呼び|尋ね|応|返|答|問|告|微笑|頷|首を|語|諭|怒鳴|喚|嘆|嘲|呼|聞|唸)/g;
+  let m;
+  while ((m = rxAttrib.exec(text)) !== null) {
+    const candidate = m[1];
+    if (knownNames.has(candidate)) continue;
+    // Only accept if it's a person noun OR ends with a person noun
+    let acceptedName = null;
+    if (personNounSet.has(candidate)) {
+      acceptedName = candidate;
+    } else {
+      // Try suffix match — e.g. "黒衣の男" → "男"
+      for (const pn of window.PERSON_NOUNS) {
+        if (candidate.endsWith(pn) && candidate.length > pn.length) {
+          acceptedName = pn; // use the short form as display name
+          break;
+        }
+      }
+    }
+    if (!acceptedName) continue;
+    if (result[acceptedName]) continue; // already extracted
+    
+    // Extract descriptor from before the dialogue (within 60 chars)
+    const dialogueStart = m.index;
+    const before = text.slice(Math.max(0, dialogueStart - 100), dialogueStart);
+    // Pattern: adjective + noun (黒衣の男, 巨大な狼, 青白い少女, etc.)
+    const escName = acceptedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const descRx = new RegExp('([^\\s、。「」]{1,20}[のなき]?)?' + escName, 'g');
+    let descMatch = null;
+    let dm;
+    while ((dm = descRx.exec(before)) !== null) {
+      descMatch = dm[1] || ''; // keep last (closest to dialogue)
+    }
+    let desc = (descMatch || '') + acceptedName;
+    if (S.scene.tone) desc += '、' + S.scene.tone.split(/[、,。]/)[0].slice(0, 25) + 'な雰囲気';
+    
+    result[acceptedName] = {
+      name: acceptedName,
+      desc: desc.slice(0, 100),
+      ephemeral: true,
+      avatarSeed: 0
+    };
+  }
+  return result;
+};
+
+// Re-extract dialogues including ephemerals
+const _origExtractEphV2 = window._extractDialogue;
+window._extractDialogue = function(narrativeText) {
+  let baseEvents = _origExtractEphV2(narrativeText);
+  if (!narrativeText) return baseEvents;
+  const text = Array.isArray(narrativeText) ? narrativeText.join('\n') : String(narrativeText);
+  const ephemerals = window._extractEphemeralNpcs(text);
+  if (Object.keys(ephemerals).length === 0) return baseEvents;
+  
+  const SPEECH_VERBS = '言|呟|叫|呻|喘|漏ら|呼び|尋ね|応|返|答|問|告|微笑|頷|首を|語|諭|怒鳴|喚|嘆|嘲|呼|聞|唸';
+  
+  // For each base event, check if its speaker should actually be an ephemeral
+  // (because there's a と[noun][verb] pattern AFTER the quote)
+  const enriched = baseEvents.map(ev => {
+    if (!ev.text) return ev;
+    const quoted = '「' + ev.text + '」';
+    const idx = text.indexOf(quoted);
+    if (idx < 0) return ev;
+    const after = text.slice(idx + quoted.length, idx + quoted.length + 60);
+    
+    for (const ephName of Object.keys(ephemerals)) {
+      const escName = ephName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const rx = new RegExp('と' + escName + '[はがも]?[^。、\\n]{0,8}(?:' + SPEECH_VERBS + ')');
+      if (rx.test(after)) {
+        return { ...ev, speaker: ephName, isHero: false, ephemeral: true };
+      }
+    }
+    return ev;
+  });
+  
+  return enriched;
+};
+
+// Update render with ephemeral handling
+const _origRenderEphV2 = window._renderDialogueCards;
+window._renderDialogueCards = function(turn) {
+  const div = _origRenderEphV2(turn);
+  if (!div) return null;
+  const ephemerals = window._extractEphemeralNpcs(turn.narrative);
+  if (Object.keys(ephemerals).length === 0) return div;
+  
+  div.querySelectorAll('.dialogue-row').forEach(row => {
+    const av = row.querySelector('.dialogue-avatar');
+    if (!av) return;
+    const nameEl = row.querySelector('.dialogue-name');
+    const speakerName = nameEl?.textContent?.replace(/（呟き）/g,'').trim() || '';
+    if (!speakerName) return;
+    const eph = ephemerals[speakerName];
+    if (!eph) return;
+    
+    row.classList.add('ephemeral-char');
+    const url = window._avatarUrl(eph.name, eph.desc, eph.avatarSeed);
+    window._setAvatarBg(av, url, speakerName.charAt(0), eph.name, eph.desc, eph.avatarSeed);
+  });
+  
+  return div;
+};
+
+
 // Boot
 G.init();
 </script>
