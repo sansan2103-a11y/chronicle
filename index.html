@@ -3881,6 +3881,105 @@ try { localStorage.removeItem('chr_av_cache_v1'); } catch {}
 setTimeout(() => UI.renderAll && UI.renderAll(), 200);
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Improved dialogue extraction: global search + pronoun resolution
+// ─────────────────────────────────────────────────────────────
+window._extractDialogue = function(narrativeText) {
+  if (!narrativeText) return [];
+  const text = Array.isArray(narrativeText) ? narrativeText.join('\n') : String(narrativeText);
+  const heroName = S.cast.hero.name || '';
+  const npcs = (S.cast.npcs || []).map(n => n.name).filter(Boolean);
+  const allNames = heroName ? [heroName, ...npcs] : npcs.slice();
+
+  // Build name parts (full + split fragments)
+  const heroParts = new Set();
+  if (heroName) {
+    heroParts.add(heroName);
+    heroName.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) heroParts.add(p); });
+  }
+  const nameToFull = {}; // name fragment → original full name
+  if (heroName) {
+    nameToFull[heroName] = heroName;
+    heroName.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) nameToFull[p] = heroName; });
+  }
+  npcs.forEach(n => {
+    nameToFull[n] = n;
+    n.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) nameToFull[p] = n; });
+  });
+  // Sort by length desc so longer names match first
+  const namesArr = Object.keys(nameToFull).sort((a,b) => b.length - a.length);
+
+  let lastNamedSpeaker = null; // for pronoun resolution
+
+  const results = [];
+  const dRx = /「([^「」]+?)」/g;
+  let m;
+  while ((m = dRx.exec(text)) !== null) {
+    const dStart = m.index;
+    const dEnd = m.index + m[0].length;
+    const dText = m[1];
+
+    // Look at surrounding text: 80 chars before, 40 chars after
+    const before = text.slice(Math.max(0, dStart - 80), dStart);
+    const after = text.slice(dEnd, dEnd + 40);
+
+    let speaker = null;
+
+    // Search BEFORE: prefer the closest (rightmost) name occurrence
+    let bestPosBefore = -1;
+    let bestNameBefore = null;
+    for (const n of namesArr) {
+      const pos = before.lastIndexOf(n);
+      if (pos > bestPosBefore) {
+        bestPosBefore = pos;
+        bestNameBefore = n;
+      }
+    }
+    if (bestNameBefore) speaker = bestNameBefore;
+
+    // Search AFTER if not found before
+    if (!speaker) {
+      for (const n of namesArr) {
+        if (after.includes(n)) { speaker = n; break; }
+      }
+    }
+
+    // Pronoun resolution: 彼女/彼/あの子/あの娘 → last named speaker
+    if (!speaker) {
+      const ctx = before + after;
+      if (/彼女|あの娘|あの子|彼の|彼は|彼が/.test(ctx) && lastNamedSpeaker) {
+        speaker = lastNamedSpeaker;
+      }
+    }
+
+    // Resolve to full name
+    const fullName = speaker ? (nameToFull[speaker] || speaker) : null;
+
+    // Update lastNamedSpeaker only if we found one in the actual surrounding context
+    // (not via pronoun fallback)
+    if (bestNameBefore || (after && namesArr.some(n => after.includes(n)))) {
+      lastNamedSpeaker = speaker;
+    } else if (fullName) {
+      // If we resolved via pronoun, keep tracking
+      lastNamedSpeaker = speaker;
+    }
+
+    results.push({
+      speaker: fullName,
+      text: dText,
+      isHero: fullName && (fullName === heroName || heroParts.has(fullName))
+    });
+  }
+
+  return results;
+};
+
+// Force re-render
+setTimeout(() => UI.renderAll && UI.renderAll(), 200);
+
+
 // Boot
 G.init();
 </script>
