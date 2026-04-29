@@ -6118,6 +6118,137 @@ window._regenAllAvatars = async function() {
 };
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Fix 4 critical issues:
+// 1. Narrative coherence (tighten prompt — reduce noise)
+// 2. JSON leak in narrative (filter JSON-like items)
+// 3. English inner thoughts (stronger language rule)
+// 4. Missing avatars (better speaker fallback)
+// ─────────────────────────────────────────────────────────────
+
+// Sanitize narrative array — drop JSON-like / English-heavy items
+window._sanitizeNarrative = function(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.filter(item => {
+    if (typeof item !== 'string') return false;  // drop objects/null
+    const s = item.trim();
+    if (!s) return false;
+    // Drop JSON-like fragments
+    if (/^[{[]/.test(s)) return false;
+    if (/^"s*"s*:/.test(s)) return false;        // empty-key JSON like '"" : "..."'
+    if (/^"[a-zA-Z]+"s*:/.test(s)) return false;  // English JSON keys '"name": "..."'
+    if (/^s*"s*:s*/.test(s)) return false;
+    // Drop English-heavy lines (over 40% ASCII letters with no Japanese kana)
+    const totalChars = s.length;
+    const asciiLetters = (s.match(/[a-zA-Z]/g) || []).length;
+    const hasJapanese = /[぀-ゟ゠-ヿ一-龥]/.test(s);
+    if (asciiLetters > 8 && asciiLetters / totalChars > 0.35 && !hasJapanese) return false;
+    // Drop lines with too many English words (3+ words of 3+ ASCII chars)
+    const enWords = (s.match(/[A-Za-z][A-Za-z]{2,}/g) || []).length;
+    if (enWords >= 4 && !hasJapanese) return false;
+    // Drop pure key/value JSON dump lines
+    if (/^[^「『《]*"[^"]*"s*:s*"[^"]*"[^「『《]*$/.test(s)) return false;
+    return true;
+  }).map(s => {
+    // Strip stray English-language inner thoughts that match common patterns
+    return s.replace(/《s*[A-Za-z][A-Za-zs?!,'".-]+》/g, '');
+  }).filter(s => s.trim());
+};
+
+// Wrap parsePlan to apply sanitization
+const _origParsePlanFix = Planner.parsePlan.bind(Planner);
+Planner.parsePlan = function(rawText, inputType) {
+  const plan = _origParsePlanFix(rawText, inputType);
+  // Sanitize narrative
+  if (plan && plan.narrative) {
+    plan.narrative = window._sanitizeNarrative(plan.narrative);
+    if (plan.narrative.length === 0) plan.narrative = ['…'];
+  }
+  return plan;
+};
+
+// Strengthen language rule in Planner.build (deduplicated emphasis)
+const _origPlanBuildLangFix = Planner.build.bind(Planner);
+Planner.build = function(inputType, inputText) {
+  const result = _origPlanBuildLangFix(inputType, inputText);
+  if (S.cfg.simpleMode) return result;
+  // Add a CRITICAL language constraint at the very end (highest priority)
+  result.sys += '\n\n【🚫 出力フォーマット違反の絶対禁止 🚫】' +
+    '\n以下の違反は出力を破棄します。何があっても守れ:' +
+    '\n1) narrative配列の各要素は **完全に日本語の自然な地の文または日本語の台詞**。' +
+    '\n2) narrative内に JSON 構造（"":"..." や "key":"value"）、英語の単語連続（3語以上の英文）、コード片、変数名を一切含めない。' +
+    '\n3) 内心《...》も100%日本語のみ。英語の独白（"Why is he..." 等）は絶対禁止。日本語のみ。' +
+    '\n4) NPCのフィールド値（coreDesire, coreFear, wound 等）をそのまま narrative に貼り付けない。物語として自然な日本語に変換して使う。' +
+    '\n5) 出力する narrative の各要素は人間が読む文章。フィールド辞書の値ダンプは禁止。' +
+    '\n違反したら全部破棄される。';
+  return result;
+};
+
+// Improve dialogue card avatar resolution: when speaker name unknown, try ALL nameToFull keys + fuzzy match
+const _origRenderDlgFix = window._renderDialogueCards;
+window._renderDialogueCards = function(turn) {
+  const div = _origRenderDlgFix(turn);
+  if (!div) return null;
+  
+  // Build comprehensive name lookup
+  const heroName = S.cast.hero.name || '';
+  const heroParts = new Set();
+  if (heroName) {
+    heroParts.add(heroName);
+    heroName.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) heroParts.add(p); });
+  }
+  const npcMap = {};
+  (S.cast.npcs || []).forEach(n => {
+    if (!n.name) return;
+    const url = window._getNpcAvatar(n);
+    npcMap[n.name] = { url, fullName: n.name, npc: n };
+    n.name.split(/[\s・]/).forEach(p => {
+      if (p && p.length >= 2 && !npcMap[p]) npcMap[p] = { url, fullName: n.name, npc: n };
+    });
+  });
+  const heroEntry = { url: window._getHeroAvatar(), fullName: heroName };
+  
+  // Walk through dialogue rows
+  div.querySelectorAll('.dialogue-row').forEach(row => {
+    const av = row.querySelector('.dialogue-avatar');
+    if (!av) return;
+    if (av.style.backgroundImage) return;  // already set
+    
+    const nameEl = row.querySelector('.dialogue-name');
+    const speakerName = nameEl?.textContent?.replace(/（呟き）/g,'').trim() || '';
+    if (!speakerName || speakerName === '?') return;
+    
+    // Try all matching strategies
+    let url = null, displayName = speakerName, npc = null;
+    if (heroParts.has(speakerName) || speakerName === heroName) {
+      url = heroEntry.url; displayName = heroName;
+    } else if (npcMap[speakerName]) {
+      url = npcMap[speakerName].url;
+      displayName = npcMap[speakerName].fullName;
+      npc = npcMap[speakerName].npc;
+    } else {
+      // Fuzzy: find npc whose name CONTAINS the speaker
+      for (const n of (S.cast.npcs || [])) {
+        if (n.name && (n.name.includes(speakerName) || speakerName.includes(n.name))) {
+          url = window._getNpcAvatar(n);
+          displayName = n.name;
+          npc = n;
+          break;
+        }
+      }
+    }
+    
+    if (url) {
+      window._setAvatarBg(av, url, displayName.charAt(0), displayName, npc?.desc || S.cast.hero.desc, npc?.avatarSeed || S.cast.hero.avatarSeed || 0);
+    }
+  });
+  
+  return div;
+};
+
+
 // Boot
 G.init();
 </script>
