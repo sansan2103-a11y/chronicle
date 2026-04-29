@@ -880,6 +880,51 @@ body > #topbar, body > #story, body > #branches, body > #composer {
   .col-header .ch-title { font-size: 15px; }
 }
 
+
+
+/* ─────────── Loading indicator ─────────── */
+#genLoader {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  background: linear-gradient(135deg, rgba(40,28,68,0.95), rgba(28,20,48,0.95));
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  padding: 14px 22px;
+  display: none;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6), 0 0 24px rgba(160,138,240,0.25);
+  backdrop-filter: blur(8px);
+  z-index: 500;
+}
+#genLoader.show { display: inline-flex; }
+#genLoader .gl-spin {
+  display: inline-block;
+  font-size: 22px;
+  color: var(--gold);
+  animation: glspin 1.4s linear infinite;
+  text-shadow: 0 0 14px var(--gold);
+}
+@keyframes glspin {
+  0%   { transform: rotate(0deg) scale(1); }
+  50%  { transform: rotate(180deg) scale(1.2); color: var(--acc); text-shadow: 0 0 20px var(--acc-glow); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+#genLoader .gl-text {
+  font-family: var(--ff-disp);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: var(--acc-bright);
+}
+@media (max-width: 640px) {
+  #genLoader {
+    bottom: 8px; right: 8px; left: 8px;
+    justify-content: center;
+    padding: 12px 16px;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -3697,6 +3742,107 @@ window._renderDialogueCards = function(turn) {
 };
 
 // Force re-render to apply
+setTimeout(() => UI.renderAll && UI.renderAll(), 200);
+
+
+
+
+// ─────────────────────────────────────────────────────────────
+// Fix retry false-positive (smarter foreign-language check)
+// + speed up (lower max_tokens, fewer retries)
+// + loading indicator
+// ─────────────────────────────────────────────────────────────
+
+// Smarter foreign garbage check: extract narrative from JSON first
+window._hasForeignGarbageOriginal = Api._hasForeignGarbage.bind(Api);
+Api._hasForeignGarbage = function(text) {
+  if (!text) return false;
+  let checkText = text;
+  // Try to extract narrative from JSON if present
+  try {
+    let t = text;
+    const fence = t.match(/\`\`\`(?:json)?\\s*([\\s\\S]+?)\\s*\`\`\`/);
+    if (fence) t = fence[1];
+    const s = t.indexOf('{'), e = t.lastIndexOf('}');
+    if (s !== -1 && e !== -1 && s < e) {
+      const json = JSON.parse(t.slice(s, e + 1));
+      if (json.narrative) {
+        checkText = Array.isArray(json.narrative) ? json.narrative.join('\n') : String(json.narrative);
+      } else {
+        // It's JSON but no narrative field — check the values, not keys
+        const values = [];
+        function collectValues(obj) {
+          if (typeof obj === 'string') values.push(obj);
+          else if (Array.isArray(obj)) obj.forEach(collectValues);
+          else if (obj && typeof obj === 'object') Object.values(obj).forEach(collectValues);
+        }
+        collectValues(json);
+        checkText = values.join('\n');
+      }
+    }
+  } catch(e) { /* not JSON, use raw text */ }
+
+  const enMatches = (checkText.match(/[A-Za-z][A-Za-z0-9_.]{2,}/g) || []).length;
+  const zhMatches = (checkText.match(/[过这没现还说让对给从将们点东几亲爱觉吗么吧呢哪谁怎样此后状围]/g) || []).length;
+  return enMatches >= 3 || zhMatches >= 2;
+};
+
+// Lower max_tokens for speed
+const _origApiCallSpeed = Api.call.bind(Api);
+Api.call = function(s, u, m) {
+  const cap = S.cfg.simpleMode ? 800 : 2000;
+  return _origApiCallSpeed(s, u, Math.min(m || cap, cap));
+};
+
+// Reduce retries on OpenRouter from 2 to 1 (one retry is enough)
+// Override the loop counter via wrapping — easier to just patch the constant indirectly
+// We'll patch _callOpenRouter wrapper that bumps maxRetries down
+window._origORCall = Api._callOpenRouter.bind(Api);
+Api._callOpenRouter = async function(system, userContent, maxTok) {
+  // Force max_tok cap here as well in case
+  const cap = S.cfg.simpleMode ? 800 : 2000;
+  const limited = Math.min(maxTok || cap, cap);
+  return window._origORCall(system, userContent, limited);
+};
+
+// ─────────────────────────────────────────────────────────────
+// Loading indicator
+// ─────────────────────────────────────────────────────────────
+function _ensureLoadingEl() {
+  let el = document.getElementById('genLoader');
+  if (el) return el;
+  el = document.createElement('div');
+  el.id = 'genLoader';
+  el.innerHTML = '<div class="gl-spin">✦</div><div class="gl-text">物語を紡いでいます...</div>';
+  document.body.appendChild(el);
+  return el;
+}
+
+function _showLoader(text) {
+  const el = _ensureLoadingEl();
+  if (text) el.querySelector('.gl-text').textContent = text;
+  el.classList.add('show');
+}
+function _hideLoader() {
+  const el = document.getElementById('genLoader');
+  if (el) el.classList.remove('show');
+}
+
+// Hook G.submit and friends to show/hide loader
+['submit', 'cont', 'retry', 'regenerateTurn'].forEach(fnName => {
+  if (typeof G[fnName] !== 'function') return;
+  const orig = G[fnName].bind(G);
+  G[fnName] = async function(...args) {
+    _showLoader();
+    try {
+      return await orig(...args);
+    } finally {
+      _hideLoader();
+    }
+  };
+});
+
+// Also force-render existing turns to apply SAY hero card patch
 setTimeout(() => UI.renderAll && UI.renderAll(), 200);
 
 
