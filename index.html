@@ -1029,8 +1029,10 @@ const Api = {
       if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(`OpenRouter HTTP ${res.status}: ${t.slice(0,200)}`); }
       const json = await res.json();
       if (id !== S.reqId) return null;
-      const text = (json.choices?.[0]?.message?.content || '').trim();
+      let text = (json.choices?.[0]?.message?.content || '').trim();
       if (!text) throw new Error('OpenRouterから出力がありませんでした');
+      // Decode \uXXXX escape sequences so Japanese encoded as escapes isn't flagged as foreign garbage
+      try { text = text.replace(/\\u([0-9A-Fa-f]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16))); } catch(e) {}
 
       lastResult = { text, body: null };
 
@@ -2017,7 +2019,7 @@ if (typeof S.cfg.simpleMode === 'undefined') S.cfg.simpleMode = false;
 // Bump default max_tokens (clamp lower in simple mode to prevent loops)
 const _origApiCall = Api.call.bind(Api);
 Api.call = function(s, u, m) {
-  const cap = S.cfg.simpleMode ? 800 : 2400;
+  const cap = S.cfg.simpleMode ? 800 : 3200;
   return _origApiCall(s, u, Math.min(m || cap, cap));
 };
 
