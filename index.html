@@ -10955,5 +10955,162 @@ G.init();
   console.log("[Patch v17] gentler variation + context trim ready");
 })();
 </script>
+<script>
+/* PATCH: quality-fixes-v18 (provider auto-detect + full persistence) */
+(function(){
+  console.log("[Patch v18] loading: provider auto-detect + full persistence");
+  var SHADOW = "_chrShadow_v18";
+  /* === Helper: auto-detect provider by key prefix === */
+  function detectProvider(key){
+    if (!key) return null;
+    if (/^sk-or-/.test(key)) return "openrouter";
+    if (/^sk-ant-/.test(key)) return "anthropic";
+    if (/^sk-[A-Za-z0-9]{20,}/.test(key)) return "openai";
+    return null;
+  }
+  /* === Restore from shadow on init === */
+  function restoreFromShadow(){
+    try {
+      var shadow = JSON.parse(localStorage.getItem(SHADOW) || "null");
+      if (!shadow) return false;
+      var current = JSON.parse(localStorage.getItem("chr6") || "{}");
+      var changed = false;
+      /* Restore cfg fields if missing or empty */
+      if (shadow.cfg) {
+        current.cfg = current.cfg || {};
+        Object.keys(shadow.cfg).forEach(function(k){
+          var cur = current.cfg[k];
+          var sv = shadow.cfg[k];
+          if ((cur === undefined || cur === null || cur === "" || (Array.isArray(cur) && cur.length === 0)) && sv !== undefined && sv !== null) {
+            current.cfg[k] = sv;
+            changed = true;
+          }
+        });
+      }
+      /* Restore cast if missing */
+      if (shadow.cast) {
+        if (!current.cast || !current.cast.hero || !current.cast.hero.name) {
+          current.cast = shadow.cast;
+          changed = true;
+        }
+      }
+      /* Auto-correct provider based on key */
+      if (current.cfg && current.cfg.orKey) {
+        var detected = detectProvider(current.cfg.orKey) || detectProvider(current.cfg.key);
+        if (detected && current.cfg.provider !== detected) {
+          console.log("[Patch v18] provider corrected: " + current.cfg.provider + " -> " + detected);
+          current.cfg.provider = detected;
+          changed = true;
+        }
+      }
+      if (changed) {
+        localStorage.setItem("chr6", JSON.stringify(current));
+        console.log("[Patch v18] restored settings from shadow");
+      }
+      return changed;
+    } catch(e){ console.warn("[Patch v18] restore failed", e); return false; }
+  }
+  /* === Save shadow on every chr6 update === */
+  function saveShadow(){
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      if (c.cfg) {
+        var shadow = {
+          cfg: Object.assign({}, c.cfg),
+          cast: c.cast,
+          ts: Date.now()
+        };
+        /* Only save if has meaningful content */
+        if (shadow.cfg.orKey || shadow.cfg.key || (shadow.cast && shadow.cast.hero && shadow.cast.hero.name)) {
+          localStorage.setItem(SHADOW, JSON.stringify(shadow));
+        }
+      }
+    } catch(e){}
+  }
+  /* === Update DOM dropdowns to match restored config === */
+  function syncDOMToConfig(){
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      if (!c.cfg) return;
+      /* Provider dropdown */
+      var provDD = document.getElementById("cfgProvider");
+      if (provDD && c.cfg.provider && provDD.value !== c.cfg.provider) {
+        provDD.value = c.cfg.provider;
+        provDD.dispatchEvent(new Event("change", {bubbles:true}));
+      }
+      /* Model dropdown */
+      var modDD = document.getElementById("cfgOrModel");
+      if (modDD && c.cfg.orModel && modDD.value !== c.cfg.orModel) {
+        var hasOpt = Array.from(modDD.options).some(function(o){return o.value === c.cfg.orModel;});
+        if (hasOpt) {
+          modDD.value = c.cfg.orModel;
+          modDD.dispatchEvent(new Event("change", {bubbles:true}));
+        }
+      }
+      /* Genre presets */
+      var presets = c.cfg.genrePresets || [];
+      if (presets.length > 0) {
+        document.querySelectorAll('input[type=checkbox]').forEach(function(el){
+          var lbl = el.closest("label");
+          if (!lbl) return;
+          var t = lbl.textContent || "";
+          /* Check labels matching preset keys */
+          var labelMap = {
+            "horror_general": "ホラー全般",
+            "splatter": "スプラッター",
+            "body_horror": "ボディホラー",
+            "psycho_suspense": "サイコサスペンス",
+            "cosmic_horror": "コズミックホラー",
+            "dark_fantasy": "ダークファンタジー",
+            "erotic_soft": "ラブシーン",
+            "erotic_direct": "性描写（R18+）",
+            "noncon": "凌辱",
+            "cannibalism": "食人",
+            "tension": "緊張感"
+          };
+          presets.forEach(function(p){
+            var label = labelMap[p];
+            if (label && t.indexOf(label) >= 0 && !el.checked) el.click();
+          });
+        });
+      }
+    } catch(e){ console.warn("[Patch v18] sync DOM failed", e); }
+  }
+  /* === Run on load and periodically === */
+  setTimeout(restoreFromShadow, 200);
+  setTimeout(restoreFromShadow, 1000);
+  setTimeout(syncDOMToConfig, 1500);
+  setTimeout(syncDOMToConfig, 3000);
+  setInterval(saveShadow, 4000);
+  /* === Hook fetch to also auto-correct provider mid-flight === */
+  var _origFetch18 = window.fetch;
+  window.fetch = function(u, o){
+    var url = String(u||"");
+    if (url.indexOf("api.anthropic.com") >= 0 && o && o.headers) {
+      /* If using Anthropic endpoint, check if key is OpenRouter type */
+      var auth = (o.headers["x-api-key"] || o.headers["X-API-Key"] || "");
+      if (auth && /^sk-or-/.test(auth)) {
+        console.warn("[Patch v18] sk-or- key going to Anthropic API - blocking and switching provider");
+        try {
+          var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+          if (c.cfg) {
+            c.cfg.provider = "openrouter";
+            localStorage.setItem("chr6", JSON.stringify(c));
+          }
+        } catch(e){}
+        /* Show user toast */
+        var toast = document.createElement("div");
+        toast.style.cssText = "position:fixed;top:20px;right:20px;background:#a04040;color:#fff;padding:14px 18px;border-radius:6px;z-index:99999;font-size:13px;max-width:400px;";
+        toast.innerHTML = "<strong>⚠ プロバイダ不一致</strong><br>OpenRouterのキー(sk-or-)を使ってますが、プロバイダがAnthropicでした。<br><strong>OpenRouterに自動切替えました。再度送信してください。</strong>";
+        document.body.appendChild(toast);
+        setTimeout(function(){toast.remove();}, 8000);
+        return Promise.reject(new Error("provider mismatch corrected, please retry"));
+      }
+    }
+    return _origFetch18.apply(this, arguments);
+  };
+  console.log("[Patch v18] all loaded - provider correction + shadow persistence active");
+})();
+</script>
 </body>
 </html>
