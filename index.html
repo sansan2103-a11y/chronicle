@@ -1153,6 +1153,65 @@ body > #topbar, body > #story, body > #branches, body > #composer {
   text-shadow: 0 0 8px rgba(212,180,120,0.18);
 }
 
+
+
+/* ─────────── G: Chapter marker ─────────── */
+.chapter-marker {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 32px 12px 16px;
+  margin: 8px 0 14px;
+  position: relative;
+}
+.chapter-marker::before, .chapter-marker::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(212,180,120,0.55), transparent);
+}
+.chapter-marker .cm-deco {
+  font-size: 22px;
+  color: var(--gold);
+  text-shadow: 0 0 14px rgba(212,180,120,0.6);
+  flex-shrink: 0;
+  animation: cmGlow 5s ease-in-out infinite;
+}
+@keyframes cmGlow {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+.chapter-marker .cm-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.chapter-marker .cm-num {
+  font-family: var(--ff-disp);
+  font-size: 11.5px;
+  color: var(--gold);
+  letter-spacing: 0.32em;
+  font-weight: 500;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+.chapter-marker .cm-title {
+  font-family: var(--ff-disp);
+  font-size: 18px;
+  color: var(--acc-bright);
+  letter-spacing: 0.18em;
+  text-shadow: 0 0 16px var(--acc-glow);
+  font-weight: 500;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .chapter-marker { gap: 10px; padding: 22px 6px 12px; }
+  .chapter-marker .cm-title { font-size: 14px; }
+  .chapter-marker .cm-deco { font-size: 16px; }
+}
+
 </style>
 </head>
 <body>
@@ -4976,6 +5035,150 @@ Planner.build = function(inputType, inputText) {
   if (S.cfg.simpleMode) return result;
   result.sys += '\n\n【★環境音の挿入】毎ターン**1〜2回**、地の文の中に環境音を **\`*—音の描写—*\`** という書式で挟む。地の文の独立した一文として置く。NPC台詞や行動と混ぜない。\n例: \n  *—鎖の擦れる音が遠くで響いた—*\n  *—蝋燭の灯がじりじりと音を立てる—*\n  *—風が窓を叩いた—*\n  *—地下水のしずくが石床に落ちた—*\n  *—ミリアの呼吸が浅く速くなる—*\nこの書式は描写の解像度を上げるためのもので、必ず五感（音/匂い/温度/光/触覚）に紐付ける。';
   return result;
+};
+
+setTimeout(() => UI.renderAll && UI.renderAll(), 200);
+
+
+
+
+// ─────────────────────────────────────────────────────────────
+// Phase 4: G (chapter markers) + E (dynamic avatars)
+// ─────────────────────────────────────────────────────────────
+
+// Initialize dynamic avatar setting
+if (typeof S.cfg.dynamicAvatar === 'undefined') S.cfg.dynamicAvatar = false;
+
+// Emotion → English expression mapping for avatar prompt
+window.EMOTION_MAP = {
+  '中立': 'calm composed neutral',
+  '不安': 'anxious worried uneasy',
+  '恐怖': 'terrified eyes wide horrified',
+  '怒り': 'angry furious enraged',
+  '悲しみ': 'sad tearful sorrowful',
+  '諦観': 'resigned vacant blank',
+  '哀願': 'pleading desperate begging',
+  '解離': 'dissociated vacant absent',
+  '混乱': 'confused dazed bewildered',
+  '喜び': 'smiling joyful happy',
+  '驚き': 'surprised shocked',
+  '羞恥': 'blushing embarrassed shy',
+  '快感': 'flushed dazed ecstatic',
+  '苦痛': 'in pain agonized grimacing',
+  '憎悪': 'hateful glaring venomous',
+  '憐憫': 'sympathetic pitying',
+  '冷静': 'cold composed stoic',
+  '困惑': 'troubled perplexed'
+};
+
+// Wrap _avatarUrl to optionally include emotion
+const _origAvatarUrlP4 = window._avatarUrl;
+window._avatarUrl = function(name, desc, extraSeed, emotion) {
+  if (!name && !desc) return null;
+  let prompt = window._buildAvatarPrompt(name, desc);
+  let seedExtra = '';
+  if (S.cfg && S.cfg.dynamicAvatar && emotion) {
+    const expr = window.EMOTION_MAP[emotion] || emotion;
+    prompt = 'expression: ' + expr + ', ' + prompt;
+    seedExtra = '|' + emotion;
+  }
+  const baseSeed = window._strHash((name || '') + '|' + (desc || '') + seedExtra);
+  const seed = (baseSeed + (extraSeed || 0) * 7919) % 100000;
+  return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=384&height=384&seed=' + seed + '&nologo=true&private=true';
+};
+
+// Update _getNpcAvatar to pass emotion
+window._getNpcAvatar = function(npc) {
+  if (!npc) return null;
+  return window._avatarUrl(npc.name, npc.desc, npc.avatarSeed || 0, npc.emotion);
+};
+
+// ─────────────────────────────────────────────────────────────
+// G: Chapter marker detection + rendering
+// ─────────────────────────────────────────────────────────────
+
+// Inject prompt instruction
+const _origPlanBuildP4 = Planner.build.bind(Planner);
+Planner.build = function(inputType, inputText) {
+  const result = _origPlanBuildP4(inputType, inputText);
+  if (S.cfg.simpleMode) return result;
+  result.sys += '\n\n【★場面転換マーカー】場面・時間が大きく変わる時のみ（毎ターンではない、本当に必要な時のみ）、narrative配列の最初の要素を **\`=SCENE: タイトル=\`** で始める。例:\n  - 時間経過: =SCENE: 翌朝、廃城の中庭=\n  - 場所移動: =SCENE: 地下牢にて=\n  - 大きな展開: =SCENE: 第二夜、運命の対峙=\n通常ターンでは絶対に入れない。AIが状況を判断して**真に章が変わる時のみ**使う。';
+  return result;
+};
+
+// Helper: count chapter markers in turns up to idx
+function _chapterNumberFor(idx) {
+  let n = 1;
+  for (let i = 0; i <= idx && i < S.turns.length; i++) {
+    const t = S.turns[i];
+    const narr = Array.isArray(t.narrative) ? t.narrative.join('\n') : (t.narrative || '');
+    if (/=SCENE:\s*[^=\n]+?=/.test(narr)) {
+      if (i === idx) return n;
+      n++;
+    }
+  }
+  return null; // not a chapter-starting turn
+}
+
+// Hook renderTurn: detect SCENE marker and prepend chapter UI
+const _origRTChapter = UI.renderTurn.bind(UI);
+UI.renderTurn = function(turn, idx) {
+  const div = _origRTChapter(turn, idx);
+  // Get narrative text
+  const narr = Array.isArray(turn.narrative) ? turn.narrative.join('\n') : (turn.narrative || '');
+  const m = narr.match(/=SCENE:\s*([^=\n]+?)=/);
+  if (m) {
+    const chapterNum = _chapterNumberFor(idx);
+    const title = m[1].trim();
+    const marker = document.createElement('div');
+    marker.className = 'chapter-marker';
+    marker.innerHTML = '<span class="cm-deco">✦</span>' +
+      '<div class="cm-content">' +
+        '<div class="cm-num">第' + (chapterNum || '?') + '章</div>' +
+        '<div class="cm-title">' + UI.esc(title) + '</div>' +
+      '</div>' +
+      '<span class="cm-deco">✦</span>';
+    if (div.firstChild) div.insertBefore(marker, div.firstChild);
+    else div.appendChild(marker);
+    // Strip =SCENE: ...= from displayed narrative
+    const block = div.querySelector('.narr-block');
+    if (block) {
+      block.querySelectorAll('p, .ptext').forEach(p => {
+        p.innerHTML = p.innerHTML.replace(/=SCENE:\s*[^=\n]+?=\s*/g, '');
+        // If paragraph is now empty, remove it
+        if (!p.textContent.trim()) p.remove();
+      });
+    }
+  }
+  return div;
+};
+
+// ─────────────────────────────────────────────────────────────
+// E: Dynamic avatar — settings UI toggle
+// ─────────────────────────────────────────────────────────────
+function _renderDynAvatarToggle() {
+  const slot = document.getElementById('heroAvSettings');
+  if (!slot) return;
+  if (document.getElementById('cfgDynAvatar')) return;
+  const row = document.createElement('div');
+  row.className = 'fld';
+  row.style.cssText = 'flex-basis:100%;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)';
+  row.innerHTML = '<label class="chk-row" style="font-size:12px"><input type="checkbox" id="cfgDynAvatar"' + (S.cfg.dynamicAvatar ? ' checked':'') + '> 感情連動アバター（emotion変化で再生成）</label>' +
+    '<div style="font-size:10.5px;color:var(--tx-faint);margin-top:3px;line-height:1.5">ONにすると感情（恐怖/哀願/怒り等）が変わるたび新しい表情のアバター生成。Pollinationsレートに注意。</div>';
+  slot.appendChild(row);
+  document.getElementById('cfgDynAvatar').addEventListener('change', (e) => {
+    S.cfg.dynamicAvatar = !!e.target.checked;
+    S.save();
+    if (window._renderHeroAvatarInSettings) window._renderHeroAvatarInSettings();
+    if (UI._renderNpcList) UI._renderNpcList();
+    if (UI.renderAll) UI.renderAll();
+  });
+}
+
+const _origOpenSettingsP4 = UI.openSettings.bind(UI);
+UI.openSettings = function() {
+  _origOpenSettingsP4();
+  setTimeout(() => _renderDynAvatarToggle(), 200);
 };
 
 setTimeout(() => UI.renderAll && UI.renderAll(), 200);
