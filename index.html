@@ -6692,6 +6692,158 @@ UI.randomFill = function() {
 };
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Fix avatar regen wiping NPC fields + randomFill 2nd press
+// ─────────────────────────────────────────────────────────────
+
+// Helper: sync ALL NPC card DOM values back to S.cast.npcs
+function _syncNpcDomToState() {
+  document.querySelectorAll('#npcList .npc-card').forEach((card, i) => {
+    if (!S.cast.npcs[i]) return;
+    ['name','desc','personality','coreDesire','coreFear','wound'].forEach(f => {
+      const el = card.querySelector('[data-f="' + f + '"]');
+      if (el) S.cast.npcs[i][f] = el.value.trim();
+    });
+  });
+}
+window._syncNpcDomToState = _syncNpcDomToState;
+
+// Helper: sync hero/scene DOM to state too
+function _syncAllDomToState() {
+  const hName = document.getElementById('cfgHName');
+  const hDesc = document.getElementById('cfgHDesc');
+  const cLoc = document.getElementById('cfgLoc');
+  const cTone = document.getElementById('cfgTone');
+  const cObj = document.getElementById('cfgObj');
+  const cLore = document.getElementById('cfgLore');
+  if (hName) S.cast.hero.name = hName.value.trim();
+  if (hDesc) S.cast.hero.desc = hDesc.value.trim();
+  if (cLoc) S.scene.loc = cLoc.value.trim();
+  if (cTone) S.scene.tone = cTone.value.trim();
+  if (cObj) S.scene.obj = cObj.value.trim();
+  if (cLore) S.scene.lore = cLore.value.trim();
+  _syncNpcDomToState();
+}
+window._syncAllDomToState = _syncAllDomToState;
+
+// Fix #1: NPC avatar regen — sync DOM before re-render to preserve typed-but-not-saved data
+window._regenNpcAvatar = function(idx) {
+  const npc = S.cast.npcs[idx];
+  if (!npc) return;
+  // CRITICAL: sync ALL DOM values to state BEFORE re-render (preserves user typing)
+  _syncAllDomToState();
+  
+  // Bump seed
+  const jump = Math.floor(Math.random() * 1000) + 1;
+  npc.avatarSeed = (npc.avatarSeed || 0) + jump;
+  // Clear cache
+  window._avatarLoadCache = {};
+  for (const u of Object.values(window._blobUrlCache || {})) {
+    try { URL.revokeObjectURL(u); } catch(e){}
+  }
+  window._blobUrlCache = {};
+  try { localStorage.removeItem('chr_av_cache_v1'); } catch(e){}
+  S.save();
+  if (UI._renderNpcList) UI._renderNpcList();
+  if (UI.renderAll) UI.renderAll();
+};
+
+// Fix hero avatar regen too (same issue could occur)
+window._regenHeroAvatar = function() {
+  // Sync DOM to state
+  _syncAllDomToState();
+  
+  const jump = Math.floor(Math.random() * 1000) + 1;
+  S.cast.hero.avatarSeed = (S.cast.hero.avatarSeed || 0) + jump;
+  window._avatarLoadCache = {};
+  for (const u of Object.values(window._blobUrlCache || {})) {
+    try { URL.revokeObjectURL(u); } catch(e){}
+  }
+  window._blobUrlCache = {};
+  try { localStorage.removeItem('chr_av_cache_v1'); } catch(e){}
+  S.save();
+  if (UI.renderAll) UI.renderAll();
+  if (window._renderHeroAvatarInSettings) window._renderHeroAvatarInSettings();
+  const heroAvEl = document.getElementById('heroAvatarImg');
+  if (heroAvEl) {
+    const url = window._getHeroAvatar();
+    if (window._setAvatarBg) window._setAvatarBg(heroAvEl, url, (S.cast.hero.name||'?').charAt(0), S.cast.hero.name, S.cast.hero.desc, S.cast.hero.avatarSeed || 0);
+  }
+};
+
+// Fix #2: randomFill — also fill empty fields in EXISTING NPC cards (not just newly added)
+const _origRandomFillFix2 = UI.randomFill.bind(UI);
+UI.randomFill = function() {
+  const D = window._RANDOM_DATA_V2;
+  if (!D) { _origRandomFillFix2(); return; }
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  
+  const hName = document.getElementById('cfgHName');
+  const hDesc = document.getElementById('cfgHDesc');
+  const cLoc = document.getElementById('cfgLoc');
+  const cTone = document.getElementById('cfgTone');
+  const cObj = document.getElementById('cfgObj');
+  const cLore = document.getElementById('cfgLore');
+  
+  if (hName && !hName.value.trim()) {
+    const h = pick(D.heroes);
+    hName.value = h.name;
+    if (hDesc && !hDesc.value.trim()) hDesc.value = h.desc;
+  } else if (hDesc && !hDesc.value.trim()) {
+    hDesc.value = pick(D.heroes).desc;
+  }
+  if (cLoc && !cLoc.value.trim()) cLoc.value = pick(D.locs);
+  if (cTone && !cTone.value.trim()) cTone.value = pick(D.tones);
+  if (cObj && !cObj.value.trim()) cObj.value = pick(D.objs);
+  if (cLore && !cLore.value.trim()) cLore.value = pick(D.lores);
+  
+  // ── NEW: Fill empty fields in EXISTING NPC cards ──
+  document.querySelectorAll('#npcList .npc-card').forEach((card, idx) => {
+    // Check if this card has any empty field
+    const fields = ['name','desc','personality','coreDesire','coreFear','wound'];
+    const hasEmpty = fields.some(f => {
+      const el = card.querySelector('[data-f="' + f + '"]');
+      return el && !el.value.trim();
+    });
+    if (hasEmpty) {
+      const nd = pick(D.npcs);
+      fields.forEach(f => {
+        const el = card.querySelector('[data-f="' + f + '"]');
+        if (el && !el.value.trim() && nd[f]) el.value = nd[f];
+      });
+    }
+  });
+  
+  // If no NPC cards exist, add one with random data
+  const existingCards = document.querySelectorAll('#npcList .npc-card');
+  if (existingCards.length === 0) {
+    UI.addNpc();
+    setTimeout(() => {
+      const card = document.querySelector('#npcList .npc-card:last-child');
+      if (!card) return;
+      const nd = pick(D.npcs);
+      const set = (f, v) => { const el = card.querySelector('[data-f="' + f + '"]'); if (el && !el.value.trim()) el.value = v; };
+      set('name', nd.name); set('desc', nd.desc); set('personality', nd.personality);
+      set('coreDesire', nd.coreDesire); set('coreFear', nd.coreFear); set('wound', nd.wound);
+      _afterFillSync();
+    }, 50);
+  } else {
+    _afterFillSync();
+  }
+  
+  function _afterFillSync() {
+    setTimeout(() => {
+      _syncAllDomToState();
+      S.save();
+      if (window._renderHeroAvatarInSettings) window._renderHeroAvatarInSettings();
+      if (window._toast) window._toast('未入力フィールドをランダム生成して保存しました', 'ok');
+    }, 250);
+  }
+};
+
+
 // Boot
 G.init();
 </script>
