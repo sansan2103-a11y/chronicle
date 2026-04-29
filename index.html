@@ -9288,5 +9288,320 @@ G.init();
   console.log("[Patch v6] all loaded");
 })();
 </script>
+<script>
+/* === PATCH: quality-fixes-v7 === */
+(function(){
+  console.log("[Patch v7] loading: FLUX-fix + dedup-inner + NPC-vocative + defaults + gender");
+  /* ===== 1. FORCE DEFAULTS ON FIRST LOAD ===== */
+  if (!localStorage.getItem("_v7DefaultsApplied")) {
+    /* Set FLUX Klein as default */
+    if (!localStorage.getItem("_imgProvider_v6")) {
+      localStorage.setItem("_imgProvider_v6", "flux-klein");
+    }
+    /* Set Euryale 70B as default model */
+    try {
+      for (var i=0; i<localStorage.length; i++){
+        var k = localStorage.key(i);
+        var v = localStorage.getItem(k);
+        if (v && /\"orModel\"/.test(v)) {
+          var newV = v.replace(/\"orModel\"\s*:\s*\"[^\"]*\"/, '"orModel":"sao10k/l3.3-euryale-70b"');
+          if (newV !== v) localStorage.setItem(k, newV);
+        }
+      }
+    } catch(e){}
+    localStorage.setItem("_v7DefaultsApplied", "1");
+    console.log("[Patch v7] defaults applied: Euryale 70B + FLUX Klein");
+  }
+  /* Update DOM dropdown */
+  setTimeout(function(){
+    var dd = document.getElementById("cfgOrModel");
+    if (dd && dd.value !== "sao10k/l3.3-euryale-70b") {
+      var hasEur = Array.from(dd.options).some(function(o){return o.value === "sao10k/l3.3-euryale-70b";});
+      if (hasEur) {
+        dd.value = "sao10k/l3.3-euryale-70b";
+        dd.dispatchEvent(new Event("change", {bubbles:true}));
+      }
+    }
+  }, 1500);
+  /* ===== 2. FIX FLUX endpoint - replace v6 callFlux ===== */
+  var _origFetch7v = window.fetch;
+  function makeBlobResp(b64Match){
+    var bin = atob(b64Match[2]);
+    var arr = new Uint8Array(bin.length);
+    for (var i=0; i<bin.length; i++) arr[i] = bin.charCodeAt(i);
+    var blob = new Blob([arr], {type: b64Match[1]});
+    return new Response(blob, {status: 200, headers: {"Content-Type": b64Match[1]}});
+  }
+  function getApiKey(){
+    for (var i=0; i<localStorage.length; i++){
+      var v = localStorage.getItem(localStorage.key(i));
+      if (v && /sk-or-/.test(v)) {
+        var m = v.match(/sk-or-[a-zA-Z0-9-]{20,}/);
+        if (m) return m[0];
+      }
+    }
+    return null;
+  }
+  function getProvider(){ return localStorage.getItem("_imgProvider_v6") || "pollinations"; }
+  function callFluxV7(prompt, apiKey){
+    return fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + apiKey,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "black-forest-labs/flux.2-klein-4b",
+        modalities: ["image"],  /* image-only */
+        messages: [{ role: "user", content: prompt }]
+      })
+    }).then(function(r){
+      if (!r.ok) throw new Error("FLUX HTTP " + r.status);
+      return r.text();  /* parse text first to handle whitespace */
+    }).then(function(txt){
+      var data = JSON.parse(txt.trim());
+      if (!data.choices || !data.choices[0]) throw new Error("no choices");
+      var msg = data.choices[0].message;
+      var img = null;
+      if (msg.images && msg.images.length > 0) {
+        var first = msg.images[0];
+        img = first.image_url ? (first.image_url.url || first.image_url) : (typeof first === "string" ? first : null);
+      }
+      if (!img && msg.content) {
+        var m = String(msg.content).match(/data:image\/[a-z]+;base64,[A-Za-z0-9+\/=]+/);
+        if (m) img = m[0];
+      }
+      if (!img) throw new Error("no image in response");
+      var match = img.match(/^data:(image\/[a-z]+);base64,(.+)$/);
+      if (!match) throw new Error("bad image format");
+      console.log("[Patch v7] FLUX success:", prompt.slice(0,40));
+      return makeBlobResp(match);
+    });
+  }
+  /* Override outer fetch to route Pollinations to FLUX (replacing v6) */
+  window.fetch = function(u, o){
+    var url = String(u||"");
+    if (url.indexOf("pollinations.ai") >= 0) {
+      var prov = getProvider();
+      if (prov === "svg-only") {
+        var seed = url.split("/prompt/")[1] || url;
+        var svg = window._horrorSvg(decodeURIComponent(String(seed).slice(0,30)));
+        var raw = decodeURIComponent(svg.replace("data:image/svg+xml;utf8,", ""));
+        var blob = new Blob([raw], {type: "image/svg+xml"});
+        return Promise.resolve(new Response(blob, {status: 200, headers: {"Content-Type": "image/svg+xml"}}));
+      }
+      if (prov === "flux-klein") {
+        var apiKey = getApiKey();
+        if (!apiKey) return _origFetch7v.apply(this, arguments);
+        var pm = url.match(/\/prompt\/([^?]+)/);
+        if (!pm) return _origFetch7v.apply(this, arguments);
+        var rawPrompt = decodeURIComponent(pm[1]);
+        /* Construct better prompt for FLUX */
+        var fluxPrompt = "Anime portrait, ornate frame, " + rawPrompt;
+        return callFluxV7(fluxPrompt, apiKey).catch(function(err){
+          console.warn("[Patch v7] FLUX failed, fallback to pollinations:", err.message);
+          return _origFetch7v.call(window, u, o);
+        });
+      }
+    }
+    return _origFetch7v.apply(this, arguments);
+  };
+  console.log("[Patch v7] FLUX router replaced");
+  /* ===== 3. FIX inner thought duplication + clean tags ===== */
+  /* Remove all v6 inner thought cards and re-sync cleanly */
+  function cleanupV6InnerCards(){
+    document.querySelectorAll("[data-v6inner]").forEach(function(c){c.remove();});
+    document.querySelectorAll(".inner-thought-card").forEach(function(c){
+      delete c.dataset._v6synced;
+    });
+  }
+  function findLogPanelV7(){
+    var hdrs = Array.from(document.querySelectorAll("h1,h2,h3,h4,div,span"));
+    for (var i=0;i<hdrs.length;i++){
+      if (hdrs[i].textContent && hdrs[i].textContent.indexOf("会話ログ") >= 0 && hdrs[i].children.length === 0) {
+        return hdrs[i].closest("section,aside,div,article");
+      }
+    }
+    return null;
+  }
+  function findNarrPanelV7(){
+    var lp = findLogPanelV7();
+    var sections = Array.from(document.querySelectorAll("section,aside,div,article"));
+    for (var j=0;j<sections.length;j++){
+      if (sections[j] !== lp && sections[j].textContent.length > 200 && sections[j].textContent.indexOf("会話ログ") < 0) return sections[j];
+    }
+    return null;
+  }
+  function syncInnerThoughtsV7(){
+    var lp = findLogPanelV7();
+    var np = findNarrPanelV7();
+    if (!lp || !np) return;
+    var lp_dl = lp.querySelector(".dialogue-list") || lp;
+    var innerCards = np.querySelectorAll(".inner-thought-card");
+    innerCards.forEach(function(card){
+      if (card.dataset._v7synced === "1") return;
+      var raw = (card.innerText || card.textContent || "").trim();
+      if (!raw || raw.length < 3) return;
+      /* Strip leading/trailing 《》, dialog quotes 「」, and 否定/抑圧/葛藤 labels */
+      var clean = raw.replace(/^[「『《""]+|[」』》""]+$/g, "").trim();
+      clean = clean.replace(/[\s]?(否定|抑圧|葛藤|混乱)[\s]*$/, "").trim();
+      /* Skip if clean is too short or looks like a regular dialogue (in 「」 already extracted) */
+      if (clean.length < 3) return;
+      if (/^「.+」$/.test(clean)) return; /* This is a quoted dialogue, native handles it */
+      /* Identify speaker: look for NAME: prefix or use "(内心)" */
+      var speaker = "(内心)";
+      var m = clean.match(/^([^:：\s]{1,15})[:：]\s*/);
+      if (m) {
+        speaker = m[1];
+        clean = clean.slice(m[0].length).trim();
+      }
+      var key = speaker + "::" + clean.slice(0,50);
+      var existing = Array.from(lp.querySelectorAll('[data-v7inner]')).some(function(e){return e.dataset.v7inner === key;});
+      if (existing) { card.dataset._v7synced = "1"; return; }
+      var newCard = document.createElement("div");
+      newCard.className = "dialogue-row v7-inner-thought";
+      newCard.dataset.v7inner = key;
+      newCard.style.cssText = "display:flex;gap:10px;padding:10px 12px;margin:8px 6px;background:rgba(28,40,68,0.5);border:1px solid rgba(108,90,184,0.4);border-radius:6px;align-items:flex-start;font-style:italic;";
+      var av = document.createElement("img");
+      av.src = window._horrorSvg(speaker);
+      av.style.cssText = "width:42px;height:42px;border-radius:50%;flex-shrink:0;opacity:0.75;";
+      av.alt = speaker;
+      var body = document.createElement("div");
+      body.style.cssText = "flex:1;color:#c4c0e0;";
+      var nameEl = document.createElement("div");
+      nameEl.style.cssText = "font-weight:bold;color:#9c8ad9;font-size:12px;margin-bottom:3px;";
+      nameEl.textContent = speaker + " 《内心》";
+      var textEl = document.createElement("div");
+      textEl.style.cssText = "font-size:13px;line-height:1.55;";
+      textEl.textContent = clean;
+      body.appendChild(nameEl);
+      body.appendChild(textEl);
+      newCard.appendChild(av);
+      newCard.appendChild(body);
+      lp_dl.appendChild(newCard);
+      card.dataset._v7synced = "1";
+    });
+  }
+  /* Run cleanup once then start v7 */
+  setTimeout(cleanupV6InnerCards, 500);
+  setInterval(syncInnerThoughtsV7, 1500);
+  /* ===== 4. NPC VOCATIVE - extend v5 fix to NPCs ===== */
+  function fixNpcVocative(){
+    var allNames = [];
+    /* Hero name */
+    var heroInp = document.getElementById("cfgHeroName");
+    if (heroInp && heroInp.value) allNames.push(heroInp.value.trim());
+    /* NPC names from cards */
+    document.querySelectorAll(".npc-card .name, .npc-card [class*=name]").forEach(function(el){
+      var v = el.value || el.textContent;
+      if (v) allNames.push(v.trim());
+    });
+    /* From localStorage */
+    try {
+      for (var i=0; i<localStorage.length; i++){
+        var v = localStorage.getItem(localStorage.key(i));
+        if (v && v.indexOf("npcs") >= 0) {
+          var rx = /\"name\"\s*:\s*\"([^\"]+)\"/g, m;
+          while ((m = rx.exec(v)) !== null) if (allNames.indexOf(m[1]) < 0) allNames.push(m[1]);
+        }
+      }
+    } catch(e){}
+    if (allNames.length === 0) return;
+    var firstNames = allNames.map(function(n){return n.split(/[\s・]/)[0];});
+    document.querySelectorAll(".dialogue-row").forEach(function(row){
+      if (row.dataset._v7checked === "1") return;
+      var nameEl = row.querySelector(".dialogue-name");
+      var textEl = row.querySelector(".dialogue-text");
+      if (!nameEl || !textEl) return;
+      var speaker = (nameEl.textContent || "").trim();
+      var dialogue = (textEl.textContent || "").trim();
+      var speakerFirst = speaker.split(/[\s・]/)[0];
+      /* Check if dialogue contains speaker name as vocative */
+      var vocativeRx = new RegExp(speakerFirst + "(?:さん|ちゃん|くん|様|殿)?[、！\\?。\\s]");
+      if (vocativeRx.test(dialogue)) {
+        /* Find correct speaker: another character mentioned in narrative around this quote */
+        var np = findNarrPanelV7();
+        if (np) {
+          var nt = np.innerText || "";
+          var qIdx = nt.indexOf(dialogue.slice(0,Math.min(20,dialogue.length)));
+          if (qIdx >= 0) {
+            var afterText = nt.slice(qIdx, qIdx+200);
+            var beforeText = nt.slice(Math.max(0,qIdx-300), qIdx);
+            /* Look for "NAMEの声" or "NAMEは" right after */
+            var afterMatch = afterText.match(/」\s*([^\s「」、。\n]{2,15})(?:の声|の言葉|は|が|と)/);
+            var correctName = null;
+            if (afterMatch) {
+              var found = afterMatch[1];
+              for (var k=0;k<allNames.length;k++) if (allNames[k].indexOf(found) === 0 || found.indexOf(firstNames[k]) === 0) { correctName = allNames[k]; break; }
+            }
+            if (!correctName) {
+              /* Last NPC in before-text, excluding self */
+              var lastPos = -1, lastName = null;
+              for (var i2=0;i2<allNames.length;i2++){
+                if (allNames[i2] === speaker) continue;
+                var p = beforeText.lastIndexOf(allNames[i2]);
+                if (p > lastPos) { lastPos = p; lastName = allNames[i2]; }
+              }
+              correctName = lastName;
+            }
+            if (correctName && correctName !== speaker) {
+              nameEl.textContent = correctName;
+              row.style.borderLeft = "3px solid #d4b375";
+              row.title = "v7: " + speaker + " → " + correctName + " (vocative fix)";
+              var img = row.querySelector("img");
+              if (img && window._horrorSvg) img.src = window._horrorSvg(correctName);
+              console.log("[Patch v7] NPC vocative fix:", speaker, "→", correctName);
+            }
+          }
+        }
+      }
+      row.dataset._v7checked = "1";
+    });
+  }
+  setInterval(fixNpcVocative, 2000);
+  /* ===== 5. RANDOM FILL: add gender ===== */
+  /* Hook the random-fill button (find by text content) */
+  function setupRandomFillGender(){
+    var btns = Array.from(document.querySelectorAll("button"));
+    var randomBtn = btns.find(function(b){return b.textContent && (b.textContent.indexOf("ランダム生成") >= 0 || b.textContent.indexOf("ランダム入力") >= 0 || b.textContent.indexOf("未入力をランダム") >= 0);});
+    if (!randomBtn) return;
+    if (randomBtn.dataset._v7genderHooked === "1") return;
+    randomBtn.addEventListener("click", function(){
+      /* Wait for native fill to complete, then add genders */
+      setTimeout(function(){
+        /* Get all NPC name fields */
+        var nameInputs = Array.from(document.querySelectorAll("input")).filter(function(i){
+          var label = i.closest("label, div, .field");
+          return label && (label.textContent||"").indexOf("名前") >= 0;
+        });
+        var genders = ["女性", "男性", "中性的", "不明"];
+        nameInputs.forEach(function(inp){
+          var name = inp.value || "";
+          if (!name) return;
+          /* Hash name to pick gender deterministically */
+          var h = 0;
+          for (var i=0; i<name.length; i++) h = (h*31 + name.charCodeAt(i)) & 0xffff;
+          var pick = genders[h % 4];
+          /* Append to appearance field if not already present */
+          var card = inp.closest(".npc-card, .hero-card, .char-card, [class*=card]") || inp.parentElement;
+          if (!card) return;
+          var appInp = card.querySelector("textarea, input[type=text]:not([id*=name])");
+          if (appInp && appInp.value && appInp.value.indexOf(pick) < 0 && appInp.value.indexOf("性別") < 0) {
+            var newVal = "性別: " + pick + "。" + appInp.value;
+            appInp.value = newVal;
+            appInp.dispatchEvent(new Event("input", {bubbles: true}));
+            appInp.dispatchEvent(new Event("change", {bubbles: true}));
+          }
+        });
+        console.log("[Patch v7] random-fill gender appended");
+      }, 800);
+    });
+    randomBtn.dataset._v7genderHooked = "1";
+  }
+  setInterval(setupRandomFillGender, 2000);
+  setTimeout(setupRandomFillGender, 1000);
+  console.log("[Patch v7] all loaded");
+})();
+</script>
 </body>
 </html>
