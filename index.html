@@ -3325,6 +3325,146 @@ if (!S.cfg.avatarStyle || S.cfg.avatarStyle === 'anime') {
 setTimeout(() => UI.renderAll && UI.renderAll(), 100);
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Robust avatar loader: removes model=flux (use default lighter model),
+// preloads via Image(), shows letter fallback if load fails (429/timeout)
+// ─────────────────────────────────────────────────────────────
+
+// Update _avatarUrl: remove &model=flux, use default which has higher rate limits
+window._avatarUrl = function(name, desc, extraSeed) {
+  if (!name && !desc) return null;
+  const prompt = window._buildAvatarPrompt(name, desc);
+  const baseSeed = window._strHash((name || '') + '|' + (desc || ''));
+  const seed = (baseSeed + (extraSeed || 0) * 7919) % 100000;
+  return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=384&height=384&seed=' + seed + '&nologo=true&private=true';
+};
+
+// Avatar load tracker (caches success/fail per URL)
+window._avatarLoadCache = window._avatarLoadCache || {};
+
+// Robust avatar setter: tries to preload, on success sets bg, on failure shows letter
+window._setAvatarBg = function(el, url, fallbackChar) {
+  if (!el) return;
+  if (!url) {
+    el.style.backgroundImage = '';
+    el.textContent = fallbackChar || '?';
+    return;
+  }
+  // Reset state
+  el.textContent = fallbackChar || '?';
+  el.style.backgroundImage = '';
+
+  // Check cache
+  const cached = window._avatarLoadCache[url];
+  if (cached === 'ok') {
+    el.style.backgroundImage = 'url("' + url + '")';
+    el.textContent = '';
+    return;
+  }
+  if (cached === 'fail') {
+    return; // already known to fail; keep letter
+  }
+
+  // Preload
+  const img = new Image();
+  let done = false;
+  const timeout = setTimeout(() => {
+    if (done) return;
+    done = true;
+    window._avatarLoadCache[url] = 'fail';
+    // keep letter
+  }, 25000);
+  img.onload = () => {
+    if (done) return;
+    done = true;
+    clearTimeout(timeout);
+    window._avatarLoadCache[url] = 'ok';
+    if (img.naturalWidth > 32) { // valid image
+      el.style.backgroundImage = 'url("' + url + '")';
+      el.textContent = '';
+    }
+  };
+  img.onerror = () => {
+    if (done) return;
+    done = true;
+    clearTimeout(timeout);
+    window._avatarLoadCache[url] = 'fail';
+    // keep letter shown
+  };
+  img.src = url;
+};
+
+// Re-render NPC avatars with the new robust setter
+const _origRenderNpcRobust = UI._renderNpcList.bind(UI);
+UI._renderNpcList = function() {
+  _origRenderNpcRobust();
+  document.querySelectorAll('#npcList .npc-card').forEach((card, i) => {
+    const npc = S.cast.npcs[i];
+    if (!npc) return;
+    const av = card.querySelector('.npc-avatar');
+    if (av) {
+      const url = window._getNpcAvatar(npc);
+      const initial = (npc.name || ('N' + (i+1))).trim().charAt(0);
+      window._setAvatarBg(av, url, initial);
+    }
+  });
+};
+
+// Re-render hero avatar in welcome
+const _origRenderHeroWelcome = window._renderHeroAvatarInWelcome || (() => {});
+window._renderHeroAvatarInWelcome = function() {
+  _origRenderHeroWelcome();
+  const slot = document.getElementById('heroAvSlot');
+  if (!slot) return;
+  const img = slot.querySelector('.hero-avatar');
+  if (img) {
+    const url = window._getHeroAvatar();
+    const initial = (S.cast.hero.name || '?').charAt(0);
+    window._setAvatarBg(img, url, initial);
+  }
+};
+
+// Re-render hero avatar in settings
+const _origRenderHeroSettings = window._renderHeroAvatarInSettings || (() => {});
+window._renderHeroAvatarInSettings = function() {
+  _origRenderHeroSettings();
+  const img = document.getElementById('hsaImg');
+  if (img) {
+    const url = window._getHeroAvatar();
+    const initial = (S.cast.hero.name || '?').charAt(0);
+    window._setAvatarBg(img, url, initial);
+  }
+};
+
+// Update _renderDialogueCards to use robust setter
+const _origDlgCardsRobust = window._renderDialogueCards;
+window._renderDialogueCards = function(turn) {
+  const div = _origDlgCardsRobust(turn);
+  if (!div) return null;
+  // Walk through avatars and replace bg setting with robust loader
+  div.querySelectorAll('.dialogue-row').forEach(row => {
+    const av = row.querySelector('.dialogue-avatar');
+    if (!av) return;
+    const bg = av.style.backgroundImage || '';
+    const m = bg.match(/url\(["']?([^"')]+)["']?\)/);
+    if (m && m[1]) {
+      // Already had URL set; replace with robust load
+      const url = m[1];
+      const initial = av.textContent && av.textContent.length > 0 ? av.textContent : (row.querySelector('.dialogue-name')?.textContent || '?').charAt(0);
+      window._setAvatarBg(av, url, initial);
+    } else if (av.textContent) {
+      // No URL was set but has letter — keep
+    }
+  });
+  return div;
+};
+
+// Force re-render to apply
+setTimeout(() => { if (UI.renderAll) UI.renderAll(); }, 200);
+
+
 // Boot
 G.init();
 </script>
