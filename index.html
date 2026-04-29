@@ -722,8 +722,9 @@ const Api = {
             max_tokens: maxTok,
             temperature: 0.85,
             top_p: 0.95,
-            frequency_penalty: 0.4,
-            presence_penalty: 0.4,
+            frequency_penalty: 0.7,
+            presence_penalty: 0.5,
+            repetition_penalty: 1.15,
             messages: [
               { role: 'system', content: system },
               { role: 'user',   content: userContent }
@@ -1717,9 +1718,12 @@ if (typeof S.cfg.bannedPhrases === 'undefined') S.cfg.bannedPhrases = '';
 if (!Array.isArray(S.cfg.genrePresets)) S.cfg.genrePresets = [];
 if (typeof S.cfg.simpleMode === 'undefined') S.cfg.simpleMode = false;
 
-// Bump default max_tokens
+// Bump default max_tokens (clamp lower in simple mode to prevent loops)
 const _origApiCall = Api.call.bind(Api);
-Api.call = function(s, u, m) { return _origApiCall(s, u, m || 2400); };
+Api.call = function(s, u, m) {
+  const cap = S.cfg.simpleMode ? 800 : 2400;
+  return _origApiCall(s, u, Math.min(m || cap, cap));
+};
 
 // Regenerate state
 let _regenerateCounter = 0;
@@ -1915,6 +1919,9 @@ function _buildSimplePrompt(inputType, inputText) {
     '出力は1〜4段落（合計200〜500字）。',
     '【絶対ルール】',
     '・直前の物語を繰り返したり要約したりしない。常に新しい展開を1段階以上進める。',
+    '・同じ語・同じ短いフレーズを3回以上繰り返さない（「もう、〜」「終わった」「壊れた」などの連呼禁止）。',
+    '・《内心》は1段落につき最大1回まで。多用禁止。台詞「」は通常通り使ってよい。',
+    '・出力末尾は新しい状況・行動・台詞で終え、内心の独白で終わらせない。',
     '・主人公（' + (hero.name || '主人公') + '）の行動・台詞は勝手に追加しない。プレイヤー入力に従う。',
     '・NPCの台詞は「」で。内心は《》で（任意）。',
     '・婉曲表現・抽象形容詞（怖い/悲しい等）禁止。具体的な身体反応・五感・物理描写で示す。',
@@ -1964,6 +1971,14 @@ Planner.parsePlan = function(rawText, inputType) {
     text = text.replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/, '');
     text = text.replace(/[过这没现还说让对给从将们点东几亲爱觉吗么吧呢哪谁怎样此后状围]/g, '');
     text = text.replace(/[A-Za-z][A-Za-z0-9_.]{2,}/g, '');
+    // Anti-loop: detect repetitive short patterns (《X》。《X》。… or 「X」。「X」。… or short phrases) and truncate
+    text = (function(t) {
+      // Pattern A: 《...》。 or 「...」。 or （...）。 repeated 3+ times consecutively → keep first
+      t = t.replace(/((?:《[^《》\n]{1,30}》|「[^「」\n]{1,30}」|（[^（）\n]{1,30}）)。?)\1{2,}/g, '$1');
+      // Pattern B: same 4-20 char substring repeated 3+ times consecutively → keep first
+      t = t.replace(/(.{4,20}?)\1{2,}/g, '$1');
+      return t;
+    })(text);
     let lines = text.split(/\n+/).map(s => s.trim()).filter(Boolean);
     const turns = S.turns || [];
     const prev = turns.length ? (Array.isArray(turns[turns.length-1].narrative) ? turns[turns.length-1].narrative : []) : [];
