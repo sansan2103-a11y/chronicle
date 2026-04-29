@@ -5629,6 +5629,71 @@ UI.openSettings = function() {
 };
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Strengthened Monogatari + other prompts (remove flat/minimal,
+// add masterpiece/intricate/detailed quality boosters)
+// ─────────────────────────────────────────────────────────────
+
+window.AVATAR_STYLES = {
+  monogatari: {
+    label: '物語シリーズ風（渡辺明夫・推奨）',
+    prefix: 'masterpiece, best quality, professional anime illustration, monogatari series art style, akio watanabe character design, shinbo akiyuki direction, VOFAN cover art aesthetic, beautiful detailed face, large expressive eyes with shiny highlights and detailed eyelashes, sharp clean delicate line art, anime cel shading with proper soft shadows, vibrant saturated colors, stylized angular jawline, intricate detailed hair strands with light reflections, glossy iris, polished refined illustration, light pink cheek blush, shaft animation studio quality'
+  },
+  chronicle: {
+    label: 'Chronicle 公式（mihoyo+紋章枠）',
+    prefix: 'masterpiece, best quality, high detail, fantasy character portrait, mihoyo gacha game art style, polished anime illustration, sharp expressive eyes with shiny highlights, detailed face, intricate hair, dramatic atmospheric lighting, cel shaded with soft shadows'
+  },
+  anime: {
+    label: 'アニメ調（標準）',
+    prefix: 'masterpiece, best quality, professional anime illustration, japanese animation art, refined cel shading, sharp expressive eyes with detailed eyelashes, beautiful detailed face, intricate hair strands, vibrant saturated colors, fantasy character design'
+  },
+  gacha: {
+    label: '高品質ファンタジー（mihoyo風）',
+    prefix: 'masterpiece, best quality, ultra detailed, fantasy character portrait, gacha game cover art, mihoyo style illustration, beautiful detailed face, sharp eyes with shiny highlights, intricate hair, polished anime illustration, dramatic atmospheric lighting, cel shading with proper shadows'
+  },
+  jrpg: {
+    label: 'JRPGゲーム風',
+    prefix: 'masterpiece, best quality, jrpg character art, painterly anime, japanese rpg portrait, beautiful detailed face, fantasy art, intricate detail, soft cel shading'
+  },
+  vn: {
+    label: 'ビジュアルノベル風',
+    prefix: 'masterpiece, best quality, visual novel character art, japanese galge portrait, soft cel shading with proper shadows, detailed eyes with highlights, gentle expression, beautiful face, intricate hair'
+  },
+  chibi: {
+    label: 'デフォルメ（ちびキャラ）',
+    prefix: 'masterpiece, cute chibi anime character, detailed deformed style, big sparkling eyes, soft pastel anime, kawaii fantasy character, polished illustration, detailed face'
+  },
+  semireal: {
+    label: 'セミリアル',
+    prefix: 'masterpiece, best quality, semi-realistic anime portrait, detailed painterly fantasy art, beautiful face with realistic features, intricate hair, atmospheric lighting'
+  },
+  watercolor: { label: '水彩画風', prefix: 'masterpiece, best quality, watercolor painting portrait, soft ethereal washes, detailed ink lines, expressive character art' },
+  oil: { label: '油彩画風', prefix: 'masterpiece, best quality, classical oil painting portrait, baroque chiaroscuro, detailed brushwork, character art' },
+  pixel: { label: 'ピクセルアート', prefix: 'pixel art portrait, detailed 16bit jrpg sprite face, retro game style, vibrant palette' },
+  manga: { label: 'モノクロ漫画風', prefix: 'masterpiece, monochrome manga portrait, detailed ink illustration, screentone shading, expressive face' }
+};
+
+// Frame system: also strengthen 'simple' frame to avoid pushing toward flat
+window.AVATAR_FRAMES = {
+  ornate: ', inside ornate dark fantasy circular emblem frame, golden filigree border with four-pointed star decorations at cardinal points, purple amethyst gemstone accents, dark purple starry cosmic background, mystical sparkles, character centered headshot, no text, no logo',
+  simple: ', circular portrait composition, thin elegant gold rim border, soft dark purple gradient background with subtle texture, character centered headshot, no text, no logo',
+  none: ', soft pastel gradient background, character centered, no text, no logo'
+};
+
+// Clear caches so new prompts are tried fresh
+window._avatarLoadCache = {};
+try { localStorage.removeItem('chr_av_cache_v1'); } catch (e) {}
+
+// Force re-render
+setTimeout(() => {
+  if (UI._renderNpcList) UI._renderNpcList();
+  if (UI.renderAll) UI.renderAll();
+  if (window._renderHeroAvatarInSettings) window._renderHeroAvatarInSettings();
+}, 200);
+
+
 // Boot
 G.init();
 </script>
