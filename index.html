@@ -10827,5 +10827,82 @@ G.init();
   console.log("[Patch v15] mobile UI ready");
 })();
 </script>
+<script>
+/* PATCH: quality-fixes-v16 */
+(function(){
+  console.log("[Patch v16] loading: aggressive anti-repetition + phrase ban + context trim");
+  function extractPhrases(text, minLen, maxPhrases){
+    /* Split into Japanese sentence-like chunks and pick distinctive 5-12 char phrases */
+    var chunks = String(text||"").split(/[。、！？!?\s「」『』《》]/g);
+    var phrases = [];
+    chunks.forEach(function(c){
+      c = c.trim();
+      if (c.length >= minLen && c.length <= 30) phrases.push(c);
+    });
+    /* Dedup */
+    var uniq = [];
+    var seen = {};
+    phrases.forEach(function(p){ if (!seen[p]) { seen[p]=1; uniq.push(p); } });
+    return uniq.slice(0, maxPhrases);
+  }
+  var _origFetch16 = window.fetch;
+  window.fetch = function(u, o){
+    var url = String(u||"");
+    if (url.indexOf("openrouter.ai") >= 0 && url.indexOf("/chat/completions") >= 0 && o && o.body) {
+      try {
+        var body = typeof o.body === "string" ? JSON.parse(o.body) : null;
+        if (body && body.messages && !body._v16Inj) {
+          var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+          var turns = c.turns || [];
+          if (turns.length > 0) {
+            /* Collect last 3 turns narratives */
+            var recent = turns.slice(-3);
+            var bannedPhrases = [];
+            recent.forEach(function(t){
+              if (t && t.plan && t.plan.narrative) {
+                var n = Array.isArray(t.plan.narrative) ? t.plan.narrative.join("。") : String(t.plan.narrative);
+                bannedPhrases = bannedPhrases.concat(extractPhrases(n, 6, 25));
+              }
+            });
+            /* Dedup */
+            var seen = {};
+            var unique = bannedPhrases.filter(function(p){ if (seen[p]) return false; seen[p]=1; return true; });
+            unique = unique.slice(0, 50);
+            if (unique.length > 0) {
+              body.messages.push({
+                role: "system",
+                content: "【★禁止フレーズ★】以下のフレーズは直前の数ターンで既に使われた。今ターンの narrative に **これらの語句を一切再利用してはならない**。同じ動作・同じセリフ・同じ描写を繰り返すな。新しい語彙・新しい状況・新しい行動を必ず使え。\n\n禁止語句:\n" + unique.map(function(p){return "「" + p + "」";}).join("、") + "\n\n上記を含む narrative を生成したら失敗とみなす。前ターンの繰り返しではなく、必ず展開を一段階先に進めよ。"
+              });
+              console.log("[Patch v16] banned " + unique.length + " phrases from prev turns");
+            }
+            /* Context trim: limit history to last 5 turns to reduce token bloat */
+            var historyMsgs = body.messages.filter(function(m){return m.role === "user" || m.role === "assistant";});
+            if (historyMsgs.length > 12) {
+              /* Drop earliest user/assistant pairs while keeping system messages */
+              var kept = [];
+              var dropCount = historyMsgs.length - 10;
+              var dropped = 0;
+              for (var i = 0; i < body.messages.length; i++) {
+                var m = body.messages[i];
+                if ((m.role === "user" || m.role === "assistant") && dropped < dropCount) {
+                  dropped++;
+                  continue;
+                }
+                kept.push(m);
+              }
+              body.messages = kept;
+              console.log("[Patch v16] trimmed " + dropped + " old history msgs");
+            }
+          }
+          body._v16Inj = true;
+          o.body = JSON.stringify(body);
+        }
+      } catch(e){ console.warn("[Patch v16] inject failed", e); }
+    }
+    return _origFetch16.apply(this, arguments);
+  };
+  console.log("[Patch v16] anti-repetition v2 ready");
+})();
+</script>
 </body>
 </html>
