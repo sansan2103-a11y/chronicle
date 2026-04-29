@@ -10611,5 +10611,178 @@ G.init();
   console.log("[Patch v13] all loaded");
 })();
 </script>
+<script>
+/* === PATCH: quality-fixes-v14 === */
+(function(){
+  console.log("[Patch v14] loading: re-attribution + anti-soften + avatar-persist");
+  /* ===== A. RE-ATTRIBUTE hero-card dialogue containing NPC name ===== */
+  function getHeroNamesV14(){
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      return c.cast && c.cast.hero ? c.cast.hero.name : null;
+    } catch(e){ return null; }
+  }
+  function getNpcNamesV14(){
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      return (c.cast && c.cast.npcs) ? c.cast.npcs.map(function(n){return n.name;}).filter(Boolean) : [];
+    } catch(e){ return []; }
+  }
+  function reAttributeNativeCards(){
+    var hero = getHeroNamesV14();
+    var npcs = getNpcNamesV14();
+    if (!hero || npcs.length === 0) return;
+    var heroFirst = hero.split(/[\s・]/)[0];
+    var rows = document.querySelectorAll(".dialogue-row");
+    rows.forEach(function(row){
+      if (row.dataset._v14checked === "1") return;
+      var nameEl = row.querySelector(".dialogue-name");
+      var textEl = row.querySelector(".dialogue-text");
+      if (!nameEl || !textEl) return;
+      var speaker = (nameEl.textContent || "").trim();
+      var dialogue = (textEl.textContent || "").trim();
+      var isHero = (speaker === hero) || (speaker.split(/[\s・]/)[0] === heroFirst);
+      if (!isHero) { row.dataset._v14checked = "1"; return; }
+      /* Hero-attributed: check if dialogue contains an NPC name as vocative or speech subject */
+      var npcInDialogue = null;
+      for (var i = 0; i < npcs.length; i++) {
+        var npcFirst = npcs[i].split(/[\s・]/)[0];
+        if (dialogue.indexOf(npcFirst) >= 0) {
+          npcInDialogue = npcs[i];
+          break;
+        }
+      }
+      /* Heuristic: if dialogue is plea/begging tone OR question OR no hero name -> probably NPC */
+      var isPleaTone = /離して|やめて|お願い|助けて|苦しい|痛い|怖い|嫌|ださ.+|ません|ますか|ですか/.test(dialogue);
+      var noHeroName = dialogue.indexOf(heroFirst) < 0;
+      /* If the dialogue starts with hero name (vocative), the speaker is likely an NPC */
+      var heroAtStart = new RegExp("^" + heroFirst + "[、。!\\?！？\\s]").test(dialogue);
+      if (npcInDialogue || (isPleaTone && noHeroName) || heroAtStart) {
+        var correctSpeaker = npcInDialogue || npcs[npcs.length - 1];  /* last NPC mentioned, or first NPC */
+        if (correctSpeaker && correctSpeaker !== hero) {
+          nameEl.textContent = correctSpeaker;
+          row.style.borderLeft = "3px solid #d4b375";
+          row.title = "v14: " + hero + " → " + correctSpeaker;
+          /* Update avatar */
+          var img = row.querySelector("img");
+          if (img) {
+            try {
+              var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+              var npcObj = (c.cast && c.cast.npcs) ? c.cast.npcs.find(function(n){return n.name === correctSpeaker;}) : null;
+              if (npcObj && npcObj.avatar) img.src = npcObj.avatar;
+              else if (window._horrorSvg) img.src = window._horrorSvg(correctSpeaker);
+            } catch(e){}
+          }
+          console.log("[Patch v14] re-attributed:", hero, "→", correctSpeaker, "|", dialogue.slice(0, 30));
+        }
+      }
+      row.dataset._v14checked = "1";
+    });
+  }
+  setInterval(reAttributeNativeCards, 1500);
+  setTimeout(reAttributeNativeCards, 800);
+  /* ===== B. ANTI-SOFTEN PROMPT ===== */
+  var _origFetch14 = window.fetch;
+  window.fetch = function(u, o){
+    var url = String(u||"");
+    if (url.indexOf("openrouter.ai") >= 0 && url.indexOf("/chat/completions") >= 0 && o && o.body) {
+      try {
+        var body = typeof o.body === "string" ? JSON.parse(o.body) : null;
+        if (body && body.messages && !body._v14antiSoftenInjected) {
+          /* Find last user message - check if it contains violent action words */
+          var userMsgs = body.messages.filter(function(m){return m.role === "user";});
+          var lastUser = userMsgs[userMsgs.length - 1];
+          var lastContent = lastUser ? String(lastUser.content || "") : "";
+          var violenceKeywords = ["切り裂", "斬", "刺", "殴", "蹴", "首", "喉", "血", "縛", "拘束", "暴力", "拷問", "悲鳴", "絶叫"];
+          var hasViolence = violenceKeywords.some(function(k){return lastContent.indexOf(k) >= 0;});
+          if (hasViolence) {
+            body.messages.push({
+              role: "system",
+              content: "【★行動ソフト化絶対禁止★】プレイヤーの最新入力は明確に暴力的・残虐な行動を指示している。これを **婉曲化・抽象化・別の優しい行動に置き換えることを絶対禁止**。プレイヤーが「切り裂く」と書いたら、刃で切り裂く動作と血の流れる結果を直接的に描写する。プレイヤーが「縛る」と書いたら、実際に拘束する動作と被害者の反応を直接的に描写する。プレイヤーが「殴る」と書いたら、打撃と痛みを直接描写する。曖昧化・回避・トーンダウン全て禁止。R18+ジャンル設定が有効なため、生々しい描写を行うこと。"
+            });
+            body._v14antiSoftenInjected = true;
+            o.body = JSON.stringify(body);
+            console.log("[Patch v14] anti-soften rule injected for violent input");
+          }
+        }
+      } catch(e){ console.warn("[Patch v14] anti-soften inject failed", e); }
+    }
+    return _origFetch14.apply(this, arguments);
+  };
+  /* ===== C. AVATAR PERSISTENCE ===== */
+  /* Watch <img> tags for FLUX-generated avatars and save to cast.hero/npc.avatar */
+  function persistAvatars(){
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      if (!c.cast) return;
+      var hero = c.cast.hero;
+      var npcs = c.cast.npcs || [];
+      var changed = false;
+      /* Find dialogue rows and extract avatar by speaker name */
+      document.querySelectorAll(".dialogue-row").forEach(function(row){
+        var nameEl = row.querySelector(".dialogue-name");
+        var img = row.querySelector("img");
+        if (!nameEl || !img || !img.src) return;
+        var name = (nameEl.textContent || "").trim();
+        var src = img.src;
+        /* Only persist if it looks like a real generated image (data URL with image, large) */
+        if (src.indexOf("data:image/jpeg") !== 0 && src.indexOf("data:image/png") !== 0) return;
+        if (src.length < 5000) return;  /* skip tiny SVG */
+        if (hero && (name === hero.name || name.split(/[\s・]/)[0] === hero.name.split(/[\s・]/)[0])) {
+          if (!hero.avatar || hero.avatar.length < src.length) {
+            hero.avatar = src;
+            changed = true;
+            console.log("[Patch v14] persisted hero avatar:", name, "len:", src.length);
+          }
+        } else {
+          for (var i = 0; i < npcs.length; i++) {
+            if (name === npcs[i].name || name.split(/[\s・]/)[0] === npcs[i].name.split(/[\s・]/)[0]) {
+              if (!npcs[i].avatar || npcs[i].avatar.length < src.length) {
+                npcs[i].avatar = src;
+                changed = true;
+                console.log("[Patch v14] persisted npc avatar:", npcs[i].name, "len:", src.length);
+              }
+              break;
+            }
+          }
+        }
+      });
+      /* Also check character-card images in settings */
+      document.querySelectorAll(".hero-card img, .npc-card img").forEach(function(img){
+        var src = img.src || "";
+        if (src.indexOf("data:image/jpeg") !== 0 && src.indexOf("data:image/png") !== 0) return;
+        if (src.length < 5000) return;
+        var card = img.closest(".hero-card, .npc-card");
+        if (!card) return;
+        var nameInp = card.querySelector("input[type=text], input:not([type])");
+        if (!nameInp) return;
+        var name = nameInp.value || "";
+        if (card.classList.contains("hero-card") || card.className.indexOf("hero") >= 0) {
+          if (hero && (!hero.avatar || hero.avatar.length < src.length)) {
+            hero.avatar = src;
+            changed = true;
+          }
+        } else {
+          for (var i = 0; i < npcs.length; i++) {
+            if (name === npcs[i].name) {
+              if (!npcs[i].avatar || npcs[i].avatar.length < src.length) {
+                npcs[i].avatar = src;
+                changed = true;
+              }
+              break;
+            }
+          }
+        }
+      });
+      if (changed) {
+        localStorage.setItem("chr6", JSON.stringify(c));
+      }
+    } catch(e){ console.warn("[Patch v14] avatar persist failed", e); }
+  }
+  setInterval(persistAvatars, 3000);
+  setTimeout(persistAvatars, 1500);
+  console.log("[Patch v14] all loaded");
+})();
+</script>
 </body>
 </html>
