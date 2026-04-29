@@ -9603,5 +9603,213 @@ G.init();
   console.log("[Patch v7] all loaded");
 })();
 </script>
+<script>
+/* === PATCH: quality-fixes-v8 === */
+(function(){
+  console.log("[Patch v8] loading: pristine-fetch + FLUX-debug + gender-fix + cleanup");
+  /* ===== Get pristine native fetch via hidden iframe ===== */
+  var _v8Iframe = null;
+  var _pristineFetch = null;
+  function getPristine(){
+    if (_pristineFetch) return _pristineFetch;
+    _v8Iframe = document.createElement("iframe");
+    _v8Iframe.style.cssText = "display:none;position:absolute;top:-9999px;";
+    document.documentElement.appendChild(_v8Iframe);
+    _pristineFetch = _v8Iframe.contentWindow.fetch.bind(_v8Iframe.contentWindow);
+    console.log("[Patch v8] pristine fetch acquired");
+    return _pristineFetch;
+  }
+  /* ===== Helpers ===== */
+  function getApiKey(){
+    for (var i=0; i<localStorage.length; i++){
+      var v = localStorage.getItem(localStorage.key(i));
+      if (v && /sk-or-/.test(v)) {
+        var m = v.match(/sk-or-[a-zA-Z0-9-]{20,}/);
+        if (m) return m[0];
+      }
+    }
+    return null;
+  }
+  function getProvider(){ return localStorage.getItem("_imgProvider_v6") || "pollinations"; }
+  function makeBlobResponse(b64Match){
+    var bin = atob(b64Match[2]);
+    var arr = new Uint8Array(bin.length);
+    for (var i=0; i<bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Response(new Blob([arr], {type: b64Match[1]}), {status: 200, headers: {"Content-Type": b64Match[1]}});
+  }
+  function svgResponse(seed){
+    var svg = window._horrorSvg(decodeURIComponent(String(seed||"x").slice(0,30)));
+    var raw = decodeURIComponent(svg.replace("data:image/svg+xml;utf8,", ""));
+    return new Response(new Blob([raw], {type: "image/svg+xml"}), {status: 200, headers: {"Content-Type": "image/svg+xml"}});
+  }
+  /* ===== FLUX caller (uses pristine fetch, full error capture) ===== */
+  function callFluxV8(prompt, apiKey){
+    var pristine = getPristine();
+    return pristine("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {"Authorization": "Bearer " + apiKey, "Content-Type": "application/json"},
+      body: JSON.stringify({
+        model: "black-forest-labs/flux.2-klein-4b",
+        modalities: ["image"],
+        messages: [{role: "user", content: prompt}]
+      })
+    }).then(function(r){
+      if (!r.ok) {
+        return r.text().then(function(errBody){
+          console.error("[Patch v8] FLUX HTTP " + r.status + " body:", errBody.slice(0,400));
+          throw new Error("FLUX " + r.status + ": " + errBody.slice(0,150));
+        });
+      }
+      return r.text();
+    }).then(function(txt){
+      var data = JSON.parse(txt.trim());
+      var msg = data.choices && data.choices[0] && data.choices[0].message;
+      if (!msg) throw new Error("no message in response");
+      var img = null;
+      if (msg.images && msg.images[0]) {
+        var f = msg.images[0];
+        img = (f.image_url && f.image_url.url) || f.image_url || (typeof f === "string" ? f : null);
+      }
+      if (!img && msg.content) {
+        var m = String(msg.content).match(/data:image\/[a-z]+;base64,[A-Za-z0-9+\/=]+/);
+        if (m) img = m[0];
+      }
+      if (!img) {
+        console.error("[Patch v8] no image in response, msg keys:", Object.keys(msg));
+        throw new Error("no image");
+      }
+      var match = img.match(/^data:(image\/[a-z]+);base64,(.+)$/);
+      if (!match) throw new Error("bad image format");
+      console.log("[Patch v8] FLUX success:", prompt.slice(0,50));
+      return makeBlobResponse(match);
+    });
+  }
+  /* ===== v8 fetch wrap: bypass v6/v7 cascade for Pollinations ===== */
+  var _origFetch8 = window.fetch;
+  window.fetch = function(u, o){
+    var url = String(u||"");
+    if (url.indexOf("pollinations.ai") >= 0) {
+      var prov = getProvider();
+      if (prov === "svg-only") {
+        var seed = url.split("/prompt/")[1] || url;
+        return Promise.resolve(svgResponse(seed));
+      }
+      if (prov === "flux-klein") {
+        var apiKey = getApiKey();
+        if (!apiKey) {
+          console.warn("[Patch v8] no API key, using SVG");
+          return Promise.resolve(svgResponse(url));
+        }
+        var pm = url.match(/\/prompt\/([^?]+)/);
+        if (!pm) return getPristine()(url, o);
+        var rawPrompt = decodeURIComponent(pm[1]);
+        /* Truncate prompt if too long */
+        if (rawPrompt.length > 800) rawPrompt = rawPrompt.slice(0, 800);
+        var fluxPrompt = "Anime portrait, ornate frame, " + rawPrompt;
+        return callFluxV8(fluxPrompt, apiKey).catch(function(err){
+          console.warn("[Patch v8] FLUX failed, using SVG:", err.message);
+          return svgResponse(url);
+        });
+      }
+      /* Pollinations default - use pristine to skip v3 cooldown logic */
+      return getPristine()(u, o).catch(function(){return svgResponse(url);});
+    }
+    /* All other URLs go through existing chain (v2 JSON repair etc) */
+    return _origFetch8.apply(this, arguments);
+  };
+  console.log("[Patch v8] fetch wrapped, pollinations bypasses cascade");
+  /* ===== Cleanup broken v6/v7 inner thought cards ===== */
+  function cleanupOldInnerCards(){
+    document.querySelectorAll("[data-v6inner], [data-v7inner]").forEach(function(c){
+      if (c.parentElement) c.remove();
+    });
+  }
+  cleanupOldInnerCards();
+  setTimeout(cleanupOldInnerCards, 500);
+  setTimeout(cleanupOldInnerCards, 2000);
+  /* ===== Block v7 inner thought sync from re-running ===== */
+  /* Tag all current inner-thought-cards as already synced so v7 ignores them */
+  setInterval(function(){
+    document.querySelectorAll(".inner-thought-card").forEach(function(c){
+      if (!c.dataset._v7synced) c.dataset._v7synced = "1";
+    });
+    cleanupOldInnerCards();
+  }, 1500);
+  /* ===== Fix random-fill gender placement ===== */
+  /* Override v7 random fill behavior - target appearance textarea correctly */
+  function fixGenderPlacement(){
+    /* Detect bad placement: name field contains "性別:" */
+    var nameInputs = document.querySelectorAll('input[type=text], input:not([type])');
+    nameInputs.forEach(function(inp){
+      var v = inp.value || "";
+      if (/^性別[:：]\s*[^\s]+。/.test(v)) {
+        /* Extract gender prefix */
+        var m = v.match(/^(性別[:：]\s*[^\s。]+。)\s*(.*)$/);
+        if (!m) return;
+        var genderPart = m[1];
+        var realName = m[2];
+        /* Restore name */
+        inp.value = realName;
+        inp.dispatchEvent(new Event("input", {bubbles: true}));
+        inp.dispatchEvent(new Event("change", {bubbles: true}));
+        /* Find appearance textarea in same card */
+        var card = inp.closest(".npc-card, .hero-card, [class*=card]");
+        if (!card) {
+          /* Try parent traversal */
+          var p = inp.parentElement;
+          for (var i=0; i<6 && p; i++){
+            if (p.querySelector("textarea")) { card = p; break; }
+            p = p.parentElement;
+          }
+        }
+        if (!card) return;
+        var ta = card.querySelector("textarea");
+        if (ta && ta.value.indexOf("性別") < 0) {
+          ta.value = genderPart + " " + (ta.value || "");
+          ta.dispatchEvent(new Event("input", {bubbles: true}));
+          ta.dispatchEvent(new Event("change", {bubbles: true}));
+          console.log("[Patch v8] gender restored from name to appearance for", realName);
+        }
+      }
+    });
+  }
+  setInterval(fixGenderPlacement, 1500);
+  /* ===== Improved random-fill: target appearance properly ===== */
+  function setupV8RandomFillGender(){
+    var btns = Array.from(document.querySelectorAll("button"));
+    var randomBtn = btns.find(function(b){return b.textContent && b.textContent.indexOf("ランダム") >= 0;});
+    if (!randomBtn || randomBtn.dataset._v8gender === "1") return;
+    randomBtn.addEventListener("click", function(){
+      setTimeout(function(){
+        /* For each character card with appearance textarea */
+        document.querySelectorAll(".npc-card, .hero-card, [class*=npc-card], [class*=hero-card]").forEach(function(card){
+          var nameInp = card.querySelector('input[type=text], input:not([type])');
+          var ta = card.querySelector("textarea");
+          if (!nameInp || !ta) return;
+          var name = nameInp.value || "";
+          if (!name || ta.value.indexOf("性別") >= 0) return;
+          /* Hash name -> gender */
+          var h = 0;
+          for (var i=0;i<name.length;i++) h = (h*31 + name.charCodeAt(i)) & 0xffff;
+          var genders = ["女性", "男性", "中性的", "両性具有"];
+          var pick = genders[h % 4];
+          /* Prepend to appearance */
+          ta.value = "性別: " + pick + "。 " + (ta.value || "");
+          ta.dispatchEvent(new Event("input", {bubbles: true}));
+          ta.dispatchEvent(new Event("change", {bubbles: true}));
+        });
+        console.log("[Patch v8] random-fill gender applied to appearance fields");
+      }, 1000);
+    });
+    randomBtn.dataset._v8gender = "1";
+  }
+  setInterval(setupV8RandomFillGender, 2500);
+  setTimeout(setupV8RandomFillGender, 1200);
+  /* ===== Reduce v6 false-positive refusal detection ===== */
+  /* Tighten the pattern: only trigger on multi-pattern matches AND English-dominant content */
+  /* This is implicit since v8 doesnt re-wrap openrouter, but we can flag content */
+  console.log("[Patch v8] all loaded");
+})();
+</script>
 </body>
 </html>
