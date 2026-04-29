@@ -1513,7 +1513,7 @@ const KEY = 'chr6';
 const S = {
   cfg: {
     provider: 'anthropic', key: '', naiKey: '', orKey: '',
-    model: 'claude-haiku-4-5-20251001', orModel: 'mistralai/mistral-nemo',
+    model: 'claude-haiku-4-5-20251001', orModel: 'anthropic/claude-haiku-4-5',
     debug: false, showInner: true
   },
   cast: {
@@ -2007,7 +2007,7 @@ const Planner = {
     const npcProfiles = npcs.map(n => PsychEngine.buildNpcBlock(n)).join('\n\n');
 
     const sys = `あなたはADV型シナリオゲームのゲームマスターです。プレイヤーが主人公を操作します。
-必ず以下の全制約を守り、JSONのみを返してください。余分なテキストは一切出力禁止。
+必ず以下の全制約を守り、JSONのみを返してください。余分なテキストは一切出力禁止。\n【★絶対遵守・JSON厳守★】JSON構造内に日本語の句読点（。、）を絶対に入れないこと。「,」の直後に「。」を置くな（NG例: "key": "値",。）。すべてのキー・区切り記号は ASCII で書く（全角カンマ・全角コロン禁止）。文字列値内の改行は \\n でエスケープ。
 
 【このゲームの核心：生きた人間を描く文学的RPG】
 AI Dungeonを超える、心理と文学性を兼ね備えた体験を作ること。
@@ -2198,7 +2198,7 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
   },
 
   parsePlan(rawText, inputType) {
-    let t = rawText.trim();
+    let t = String(rawText||'').trim().replace(/,\s*。/g, ',').replace(/:\s*。/g, ':').replace(/\}\s*。/g, '}').replace(/\]\s*。/g, ']');
     const m = t.match(/```(?:json)?\s*([\s\S]+?)\s*```/);
     if (m) t = m[1];
     const s = t.indexOf('{'), e = t.lastIndexOf('}');
@@ -2215,7 +2215,7 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
         npcInnerLife: null,
         npcReactionPhase: { npcName: (S.cast.npcs[0]||{}).name||'', emotion: S.cast.npcs[0]?.emotion||'中立', interpretation:'', dialogue:null, bodyLanguage:'', resistance:'mid', subtext:null },
         environmentResponse: '', branchCandidates: [],
-        narrative: lines.length > 0 ? lines : ['物語が続く…']
+        narrative: ['__PARSE_FAILED_MARKER__'], _parseFailed: true
       };
     }
 
@@ -8142,6 +8142,113 @@ G.init();
     return _origFetch.apply(this, arguments);
   };
   console.log("[Patch] quality-fixes-v1 loaded");
+})();
+</script>
+<script>
+/* === PATCH: quality-fixes-v2 (network-layer interception) === */
+(function(){
+  console.log("[Patch v2] loading network-layer fixes");
+  /* localStorage forced model upgrade */
+  try {
+    var keys = Object.keys(localStorage);
+    keys.forEach(function(k){
+      var v = localStorage.getItem(k);
+      if (v && v.indexOf("mistralai/mistral-nemo") !== -1) {
+        var newV = v.replace(/mistralai\/mistral-nemo/g, "anthropic/claude-haiku-4-5");
+        localStorage.setItem(k, newV);
+        console.log("[Patch v2] upgraded localStorage key:", k);
+      }
+    });
+  } catch(e){ console.warn("[Patch v2] ls upgrade failed", e); }
+  /* Force dropdown to claude-haiku */
+  function forceDropdown(){
+    var dd = document.getElementById("cfgOrModel");
+    if (!dd) return;
+    var hasHaiku = false;
+    Array.from(dd.options).forEach(function(o){if(o.value.indexOf("claude-haiku")>=0)hasHaiku=true;});
+    if (!hasHaiku) {
+      var opt = document.createElement("option");
+      opt.value = "anthropic/claude-haiku-4-5";
+      opt.text = "Claude Haiku 4.5（推奨）";
+      dd.insertBefore(opt, dd.firstChild);
+    }
+    if (dd.value === "mistralai/mistral-nemo" || !dd.value) {
+      dd.value = "anthropic/claude-haiku-4-5";
+      dd.dispatchEvent(new Event("change", {bubbles:true}));
+    }
+  }
+  setTimeout(forceDropdown, 800);
+  setTimeout(forceDropdown, 2500);
+  /* Network interception: OpenRouter request enhance + response repair */
+  var _origFetch2 = window.fetch;
+  window.fetch = function(u, o){
+    var url = String(u||"");
+    if (url.indexOf("openrouter.ai") >= 0 && o && o.body) {
+      try {
+        var body = typeof o.body === "string" ? JSON.parse(o.body) : null;
+        if (body && body.messages && Array.isArray(body.messages)) {
+          body.messages.forEach(function(m){
+            if (m.role === "system" && typeof m.content === "string" && m.content.indexOf("JSON厳守v2") < 0) {
+              m.content += "\n\n【★絶対遵守・JSON厳守v2★】" +
+                "\n- 出力は **有効な JSON のみ**。前後・内部に説明文を付けない。" +
+                "\n- JSON構造の中に **日本語の句読点（。、）を絶対に入れない**。" +
+                "\n- カンマ「,」の直後に句点「。」を置いてはならない。NG例: \"key\": \"値\",。" +
+                "\n- 全てのキー名・区切り（: , { } [ ] \"）は ASCII。全角コロン・全角カンマ・全角クォート禁止。" +
+                "\n- 文字列値内の改行は \\\\n でエスケープ。生改行禁止。" +
+                "\n- 出力前に自分でJSON.parseできるか確認せよ。";
+            }
+            if (typeof m.content === "string" && body.model && body.model.indexOf("mistral") < 0) {
+              /* For non-mistral models we still want strict but slightly less aggressive */
+            }
+          });
+          /* Force model upgrade in request */
+          if (body.model === "mistralai/mistral-nemo") {
+            body.model = "anthropic/claude-haiku-4-5";
+            console.log("[Patch v2] runtime model swap to haiku");
+          }
+          o.body = JSON.stringify(body);
+        }
+      } catch(e){ console.warn("[Patch v2] request enhance failed", e); }
+      return _origFetch2.apply(this, arguments).then(function(r){
+        if (!r.ok) return r;
+        return r.clone().text().then(function(txt){
+          try {
+            var data = JSON.parse(txt);
+            if (data && data.choices) {
+              var modified = false;
+              data.choices.forEach(function(c){
+                if (c.message && typeof c.message.content === "string") {
+                  var orig = c.message.content;
+                  var fixed = orig
+                    .replace(/,\s*。/g, ",")
+                    .replace(/:\s*。/g, ":")
+                    .replace(/\}\s*。/g, "}")
+                    .replace(/\]\s*。/g, "]")
+                    .replace(/，/g, ",")
+                    .replace(/：/g, ":")
+                    .replace(/"\s*。/g, "\"")
+                    .replace(/，\s*"/g, ", \"");
+                  if (fixed !== orig) {
+                    c.message.content = fixed;
+                    modified = true;
+                    console.log("[Patch v2] repaired JSON punctuation in response");
+                  }
+                }
+              });
+              if (modified) {
+                return new Response(JSON.stringify(data), {
+                  status: r.status, statusText: r.statusText, headers: r.headers
+                });
+              }
+            }
+          } catch(e){ /* not JSON, pass through */ }
+          return r;
+        }).catch(function(){ return r; });
+      });
+    }
+    return _origFetch2.apply(this, arguments);
+  };
+  console.log("[Patch v2] network interception ready");
 })();
 </script>
 </body>
