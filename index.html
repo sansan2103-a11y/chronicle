@@ -3035,6 +3035,69 @@ document.addEventListener('input', (e) => {
 });
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Avatar art-style selector
+// ─────────────────────────────────────────────────────────────
+window.AVATAR_STYLES = {
+  anime:      { label: 'アニメ調（標準）',     prefix: 'anime portrait, japanese anime style, detailed shading' },
+  jrpg:       { label: 'JRPGゲーム風',         prefix: 'jrpg game illustration portrait, japanese rpg character art, painterly anime' },
+  vn:         { label: 'ビジュアルノベル風',   prefix: 'visual novel character art, japanese galge style portrait, soft cel shading' },
+  semireal:   { label: 'セミリアル',           prefix: 'semi-realistic anime portrait, detailed face, painterly fantasy art' },
+  watercolor: { label: '水彩画風',             prefix: 'watercolor painting portrait, soft ethereal washes, ink lines' },
+  oil:        { label: '油彩画風',             prefix: 'classical oil painting portrait, baroque style, chiaroscuro' },
+  pixel:      { label: 'ピクセルアート',       prefix: 'pixel art portrait, 16bit jrpg sprite face, retro game style' },
+  manga:      { label: 'モノクロ漫画風',       prefix: 'monochrome manga portrait, ink illustration, screentone shading' }
+};
+
+// Default style
+if (typeof S.cfg.avatarStyle === 'undefined') S.cfg.avatarStyle = 'anime';
+
+// Override prompt builder to include style prefix
+window._buildAvatarPrompt = function(name, desc) {
+  const styleKey = (S.cfg && S.cfg.avatarStyle) || 'anime';
+  const style = window.AVATAR_STYLES[styleKey] || window.AVATAR_STYLES.anime;
+  const d = (desc || '').slice(0, 200);
+  return style.prefix + ', headshot, ' + d + ', fantasy character, dark fantasy aesthetic, dramatic lighting, single character, centered, no text, no logo';
+};
+
+// Inject style selector into settings panel (added to hero settings avatar block)
+function _renderStyleSelector() {
+  const slot = document.getElementById('heroAvSettings');
+  if (!slot) return;
+  if (document.getElementById('cfgAvatarStyle')) return; // already exists
+  const styleRow = document.createElement('div');
+  styleRow.className = 'fld avatar-style-row';
+  styleRow.style.cssText = 'flex-basis: 100%; margin-top: 10px;';
+  let opts = '';
+  Object.entries(window.AVATAR_STYLES).forEach(([k, v]) => {
+    const sel = (S.cfg.avatarStyle === k) ? ' selected' : '';
+    opts += '<option value="' + k + '"' + sel + '>' + v.label + '</option>';
+  });
+  styleRow.innerHTML = '<label style="font-size:12px;color:var(--tx-mid);margin-bottom:4px;display:block">画風（全キャラ共通）</label>' +
+    '<select id="cfgAvatarStyle" style="width:100%">' + opts + '</select>';
+  slot.appendChild(styleRow);
+  // Wire change event
+  document.getElementById('cfgAvatarStyle').addEventListener('change', (e) => {
+    S.cfg.avatarStyle = e.target.value;
+    S.save();
+    // Regenerate all avatars (settings + welcome)
+    if (window._renderHeroAvatarInSettings) window._renderHeroAvatarInSettings();
+    if (UI._renderNpcList) UI._renderNpcList();
+    if (UI.renderAll) UI.renderAll();
+  });
+}
+window._renderStyleSelector = _renderStyleSelector;
+
+// Hook openSettings to also render style selector
+const _origOpenSettingsStyle = UI.openSettings.bind(UI);
+UI.openSettings = function() {
+  _origOpenSettingsStyle();
+  setTimeout(() => _renderStyleSelector(), 120);
+};
+
+
 // Boot
 G.init();
 </script>
