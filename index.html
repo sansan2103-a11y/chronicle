@@ -3465,6 +3465,194 @@ window._renderDialogueCards = function(turn) {
 setTimeout(() => { if (UI.renderAll) UI.renderAll(); }, 200);
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// DiceBear fallback for when Pollinations rate-limits
+// ─────────────────────────────────────────────────────────────
+
+// DiceBear style mapping
+window.DICEBEAR_STYLES = {
+  anime: 'lorelei',     // anime-ish portraits
+  gacha: 'lorelei',
+  jrpg: 'adventurer',
+  vn: 'lorelei',
+  semireal: 'micah',
+  watercolor: 'avataaars',
+  oil: 'avataaars',
+  pixel: 'pixel-art',
+  manga: 'lorelei'
+};
+
+window._dicebearUrl = function(name, desc, extraSeed) {
+  const styleKey = (S.cfg && S.cfg.avatarStyle) || 'gacha';
+  const dbStyle = window.DICEBEAR_STYLES[styleKey] || 'lorelei';
+  const seedStr = (name || '') + '|' + (desc || '');
+  const baseSeed = window._strHash(seedStr);
+  const seed = (baseSeed + (extraSeed || 0) * 7919) % 100000;
+  return 'https://api.dicebear.com/7.x/' + dbStyle + '/svg?seed=' + seed + '&backgroundColor=2e1f4a,3a2660,1f1535&backgroundType=gradientLinear';
+};
+
+// Persistent cache via localStorage
+const _AV_CACHE_KEY = 'chr_av_cache_v1';
+function _loadAvCache() {
+  try { return JSON.parse(localStorage.getItem(_AV_CACHE_KEY) || '{}'); } catch { return {}; }
+}
+function _saveAvCache(cache) {
+  try {
+    // Keep cache size manageable (max 50 entries)
+    const entries = Object.entries(cache);
+    if (entries.length > 50) {
+      const trimmed = Object.fromEntries(entries.slice(-40));
+      localStorage.setItem(_AV_CACHE_KEY, JSON.stringify(trimmed));
+    } else {
+      localStorage.setItem(_AV_CACHE_KEY, JSON.stringify(cache));
+    }
+  } catch {}
+}
+window._avatarLoadCache = _loadAvCache();
+
+// Override _setAvatarBg with Pollinations -> DiceBear fallback
+window._setAvatarBg = function(el, primaryUrl, fallbackChar, name, desc, extraSeed) {
+  if (!el) return;
+  el.textContent = fallbackChar || '?';
+  el.style.backgroundImage = '';
+
+  if (!primaryUrl) {
+    // Try DiceBear directly
+    const dbUrl = (name || desc) ? window._dicebearUrl(name, desc, extraSeed) : null;
+    if (dbUrl) {
+      el.style.backgroundImage = 'url("' + dbUrl + '")';
+      el.textContent = '';
+    }
+    return;
+  }
+
+  // Cached?
+  const cached = window._avatarLoadCache[primaryUrl];
+  if (cached === 'ok') {
+    el.style.backgroundImage = 'url("' + primaryUrl + '")';
+    el.textContent = '';
+    return;
+  }
+  // If known fail, go straight to DiceBear
+  if (cached === 'fail') {
+    const dbUrl = window._dicebearUrl(name, desc, extraSeed);
+    el.style.backgroundImage = 'url("' + dbUrl + '")';
+    el.textContent = '';
+    return;
+  }
+
+  // Try Pollinations with timeout
+  const img = new Image();
+  let done = false;
+  const timeout = setTimeout(() => {
+    if (done) return; done = true;
+    window._avatarLoadCache[primaryUrl] = 'fail';
+    _saveAvCache(window._avatarLoadCache);
+    // Fallback to DiceBear
+    const dbUrl = window._dicebearUrl(name, desc, extraSeed);
+    el.style.backgroundImage = 'url("' + dbUrl + '")';
+    el.textContent = '';
+  }, 12000);
+  img.onload = () => {
+    if (done) return; done = true;
+    clearTimeout(timeout);
+    if (img.naturalWidth > 32) {
+      window._avatarLoadCache[primaryUrl] = 'ok';
+      _saveAvCache(window._avatarLoadCache);
+      el.style.backgroundImage = 'url("' + primaryUrl + '")';
+      el.textContent = '';
+    } else {
+      window._avatarLoadCache[primaryUrl] = 'fail';
+      _saveAvCache(window._avatarLoadCache);
+      const dbUrl = window._dicebearUrl(name, desc, extraSeed);
+      el.style.backgroundImage = 'url("' + dbUrl + '")';
+      el.textContent = '';
+    }
+  };
+  img.onerror = () => {
+    if (done) return; done = true;
+    clearTimeout(timeout);
+    window._avatarLoadCache[primaryUrl] = 'fail';
+    _saveAvCache(window._avatarLoadCache);
+    const dbUrl = window._dicebearUrl(name, desc, extraSeed);
+    el.style.backgroundImage = 'url("' + dbUrl + '")';
+    el.textContent = '';
+  };
+  img.src = primaryUrl;
+};
+
+// Re-render with new fallback-aware setter
+const _origRenderNpcDB = UI._renderNpcList.bind(UI);
+UI._renderNpcList = function() {
+  _origRenderNpcDB();
+  document.querySelectorAll('#npcList .npc-card').forEach((card, i) => {
+    const npc = S.cast.npcs[i];
+    if (!npc) return;
+    const av = card.querySelector('.npc-avatar');
+    if (av) {
+      const url = window._getNpcAvatar(npc);
+      const initial = (npc.name || ('N' + (i+1))).trim().charAt(0);
+      window._setAvatarBg(av, url, initial, npc.name, npc.desc, npc.avatarSeed || 0);
+    }
+  });
+};
+
+const _origRenderHeroWel2 = window._renderHeroAvatarInWelcome || (() => {});
+window._renderHeroAvatarInWelcome = function() {
+  _origRenderHeroWel2();
+  const slot = document.getElementById('heroAvSlot');
+  if (slot) {
+    const img = slot.querySelector('.hero-avatar');
+    if (img) {
+      const url = window._getHeroAvatar();
+      const initial = (S.cast.hero.name || '?').charAt(0);
+      window._setAvatarBg(img, url, initial, S.cast.hero.name, S.cast.hero.desc, S.cast.hero.avatarSeed || 0);
+    }
+  }
+};
+
+const _origRenderHeroSet2 = window._renderHeroAvatarInSettings || (() => {});
+window._renderHeroAvatarInSettings = function() {
+  _origRenderHeroSet2();
+  const img = document.getElementById('hsaImg');
+  if (img) {
+    const url = window._getHeroAvatar();
+    const initial = (S.cast.hero.name || '?').charAt(0);
+    window._setAvatarBg(img, url, initial, S.cast.hero.name, S.cast.hero.desc, S.cast.hero.avatarSeed || 0);
+  }
+};
+
+// Fix dialogue avatar render to use the new setter
+const _origDlgRender2 = window._renderDialogueCards;
+window._renderDialogueCards = function(turn) {
+  const div = _origDlgRender2(turn);
+  if (!div) return null;
+  // Iterate dialogue rows; we need to know speaker for fallback DiceBear
+  div.querySelectorAll('.dialogue-row').forEach(row => {
+    const av = row.querySelector('.dialogue-avatar');
+    if (!av) return;
+    const speaker = row.querySelector('.dialogue-name')?.textContent || '';
+    const bg = av.style.backgroundImage || '';
+    const m = bg.match(/url\(["']?([^"')]+)["']?\)/);
+    const primaryUrl = m && m[1] ? m[1] : null;
+    // Find character desc from cast
+    let desc = '';
+    if (speaker === S.cast.hero.name) desc = S.cast.hero.desc || '';
+    else {
+      const npc = (S.cast.npcs || []).find(n => n.name === speaker);
+      if (npc) desc = npc.desc || '';
+    }
+    window._setAvatarBg(av, primaryUrl, speaker.charAt(0), speaker, desc, 0);
+  });
+  return div;
+};
+
+// Force re-render
+setTimeout(() => UI.renderAll && UI.renderAll(), 200);
+
+
 // Boot
 G.init();
 </script>
