@@ -1938,7 +1938,8 @@ function _buildSimplePrompt(inputType, inputText) {
     lore   ? '【世界観】' + lore : '',
     loc    ? '【現在地】' + loc : '',
     hero.name ? '【主人公】' + hero.name + (hero.desc ? '：' + hero.desc : '') : '',
-    npcs.length ? '【NPC】\n' + npcs.map(n => '・' + (n.name||'') + (n.desc ? '：' + n.desc : '') + ' (stress=' + (n.stress||50) + ', emotion=' + (n.emotion||'中立') + ')').join('\n') : '',
+    npcs.length ? '【登場済みNPC】\n' + npcs.map(n => '・' + (n.name||'') + (n.desc ? '：' + n.desc : '') + ' (stress=' + (n.stress||50) + ', emotion=' + (n.emotion||'中立') + ')').join('\n') : '',
+    '【★登場人物の絶対制限】上記の主人公と登場済みNPCのみ使用。新キャラクター（新しい名前・存在）を勝手に登場させない。既存キャラの名前を必ず使う。匿名の第三者（「男」「女」「誰か」「もう一人」等）が必要な場合のみ匿名で扱う。',
     (S.cfg.authorNote && S.cfg.authorNote.trim()) ? '【作家ノート】' + S.cfg.authorNote.trim() : '',
     (S.cfg.bannedPhrases && S.cfg.bannedPhrases.trim()) ? '【絶対に使わない表現】' + S.cfg.bannedPhrases.split('\n').map(s=>s.trim()).filter(Boolean).map(p=>'「'+p+'」').join(' / ') : '',
     (Array.isArray(S.cfg.genrePresets) && S.cfg.genrePresets.length>0) ? '【ジャンル指針】\n' + S.cfg.genrePresets.map(k => GENRE_PRESETS[k]?.text).filter(Boolean).join('\n') : ''
@@ -1976,6 +1977,40 @@ Planner.parsePlan = function(rawText, inputType) {
     text = text.replace(/[过这没现还说让对给从将们点东几亲爱觉吗么吧呢哪谁怎样此后状围]/g, '');
     text = text.replace(/[A-Za-z][A-Za-z0-9_.]{2,}/g, '');
     // Anti-loop: detect repetitive short patterns (《X》。《X》。… or 「X」。「X」。… or short phrases) and truncate
+    // Detect mention of character names not in the cast and warn (replace with generic "誰か" if clearly an invented PoV character)
+    (function() {
+      const allowed = new Set();
+      const heroN = (S.cast.hero||{}).name;
+      if (heroN) {
+        allowed.add(heroN);
+        // Also add first/last name parts split on common separators
+        heroN.split(/[\s・]/).forEach(p => p && allowed.add(p));
+      }
+      (S.cast.npcs||[]).forEach(n => {
+        if (n && n.name) {
+          allowed.add(n.name);
+          n.name.split(/[\s・]/).forEach(p => p && allowed.add(p));
+        }
+      });
+      // Find candidate katakana names (2-6 chars) followed by particle が|は|を|に|と|の|も|へ|や
+      const rx = /([ァ-ヶー]{2,6})(?=[がはをにとのもへやでまでより、。「」])/g;
+      const seen = new Map();
+      let m;
+      while ((m = rx.exec(text)) !== null) {
+        const name = m[1];
+        if (allowed.has(name)) continue;
+        // Skip common words / pronouns
+        if (/^(コト|モノ|ココ|ソコ|アソコ|ドコ|ナニ|アレ|コレ|ソレ|ドレ|ボク|オレ|ワタシ|アナタ|キミ|オマエ|カレ|カノジョ|ミナ|ミンナ|ダレ|ナゼ|ドウ|アア|ウン|ハイ|イイエ|イヤ)$/.test(name)) continue;
+        seen.set(name, (seen.get(name)||0)+1);
+      }
+      // Replace high-frequency unknown names (3+ occurrences) with generic "その人物"
+      for (const [name, count] of seen) {
+        if (count >= 3) {
+          text = text.split(name).join('その人物');
+        }
+      }
+      window._lastUnknownNames = Array.from(seen.entries());
+    })();
     text = (function(t) {
       // Pattern A: 《...》。 or 「...」。 or （...）。 repeated 3+ times consecutively → keep first
       t = t.replace(/((?:《[^《》\n]{1,30}》|「[^「」\n]{1,30}」|（[^（）\n]{1,30}）)。?)\1{2,}/g, '$1');
