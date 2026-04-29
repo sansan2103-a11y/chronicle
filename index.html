@@ -10784,5 +10784,48 @@ G.init();
   console.log("[Patch v14] all loaded");
 })();
 </script>
+<script>
+/* PATCH: quality-fixes-v15 */
+(function(){
+  console.log("[Patch v15] loading: mobile UI + toggle");
+  var style = document.createElement("style");
+  style.id = "v15-mobile-css";
+  style.textContent = "body.v15-mobile-mode { font-size: 14px; }body.v15-mobile-mode .panel-grid, body.v15-mobile-mode .main-grid, body.v15-mobile-mode main, body.v15-mobile-mode .col-main, body.v15-mobile-mode #app > div, body.v15-mobile-mode .content-area { display: flex !important; flex-direction: column !important; gap: 8px !important; padding: 6px !important; }body.v15-mobile-mode section, body.v15-mobile-mode aside, body.v15-mobile-mode .panel, body.v15-mobile-mode .col, body.v15-mobile-mode .content-area > div { width: 100% !important; max-width: 100% !important; flex: none !important; box-sizing: border-box !important; }body.v15-mobile-mode .dialogue-list { max-height: 38vh !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch !important; }body.v15-mobile-mode #narr, body.v15-mobile-mode .narr, body.v15-mobile-mode [class*=narr-]:not([class*=panel-hdr]) { max-height: 42vh !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch !important; }body.v15-mobile-mode .dialogue-row { padding: 8px 10px !important; margin: 4px !important; gap: 8px !important; }body.v15-mobile-mode .dialogue-avatar, body.v15-mobile-mode .dialogue-row img { width: 36px !important; height: 36px !important; }body.v15-mobile-mode .dialogue-name { font-size: 11px !important; }body.v15-mobile-mode .dialogue-text { font-size: 13px !important; line-height: 1.45 !important; }body.v15-mobile-mode textarea { font-size: 14px !important; }body.v15-mobile-mode button { font-size: 12px !important; padding: 8px 10px !important; }#v15-mode-toggle { position: fixed; top: 12px; right: 70px; z-index: 9000; background: rgba(40,28,68,0.85); color: #d4b375; border: 1px solid rgba(212,179,117,0.5); padding: 6px 12px; border-radius: 5px; font-size: 12px; cursor: pointer; }#v15-mode-toggle:hover { background: rgba(60,40,90,0.95); }";
+  document.head.appendChild(style);
+  function injectToggle(){
+    if (document.getElementById("v15-mode-toggle")) return;
+    var btn = document.createElement("button");
+    btn.id = "v15-mode-toggle";
+    btn.title = "PC <-> Mobile toggle";
+    var isMobile = localStorage.getItem("_v15mobileMode") === "1";
+    btn.textContent = isMobile ? "🖥 PC表示" : "📱 スマホ表示";
+    if (isMobile) document.body.classList.add("v15-mobile-mode");
+    btn.addEventListener("click", function(){
+      var nowMobile = !document.body.classList.contains("v15-mobile-mode");
+      if (nowMobile) {
+        document.body.classList.add("v15-mobile-mode");
+        btn.textContent = "🖥 PC表示";
+        localStorage.setItem("_v15mobileMode", "1");
+      } else {
+        document.body.classList.remove("v15-mobile-mode");
+        btn.textContent = "📱 スマホ表示";
+        localStorage.setItem("_v15mobileMode", "0");
+      }
+    });
+    document.body.appendChild(btn);
+  }
+  setTimeout(injectToggle, 500);
+  setInterval(function(){ if (!document.getElementById("v15-mode-toggle")) injectToggle(); }, 3000);
+  if (localStorage.getItem("_v15mobileMode") === null) {
+    if (window.innerWidth < 768 || /iPhone|iPad|Android|Mobile/i.test(navigator.userAgent)) {
+      localStorage.setItem("_v15mobileMode", "1");
+      document.body.classList.add("v15-mobile-mode");
+    } else {
+      localStorage.setItem("_v15mobileMode", "0");
+    }
+  }
+  console.log("[Patch v15] mobile UI ready");
+})();
+</script>
 </body>
 </html>
