@@ -6844,6 +6844,100 @@ UI.randomFill = function() {
 };
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Fix empty narrative — soften prompt + add retry + fallback bridge
+// ─────────────────────────────────────────────────────────────
+
+// Override Planner.build to soften the threatening tone of the format rule
+const _origPlanBuildSoften = Planner.build.bind(Planner);
+Planner.build = function(inputType, inputText) {
+  const result = _origPlanBuildSoften(inputType, inputText);
+  if (S.cfg.simpleMode) return result;
+  // Replace the harsh "破棄される" wording if present  
+  result.sys = result.sys.replace(/【🚫 出力フォーマット違反の絶対禁止 🚫】[\s\S]*?違反したら全部破棄される。/, '');
+  // Add a SOFTER, more positive language reinforcement at the end
+  result.sys += '\n\n【★narrativeの書き方】narrative配列は **日本語の自然な地の文と台詞のみ** で構成する：' +
+    '\n• 各要素は完結した一文（〜した／〜と言った／〜だった等）。' +
+    '\n• 内心《》も日本語のみ。英語の独白は使わない。' +
+    '\n• JSON構造の生テキストや英単語連続は narrative に入れない。' +
+    '\n• NPCのcoreDesireやcoreFearの値は **物語として自然な日本語に変換** して使う。' +
+    '\n配列は **最低5要素** 出力する。空にしない。';
+  return result;
+};
+
+// Override _sanitizeNarrative to be MORE LENIENT — only drop obvious garbage
+window._sanitizeNarrative = function(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.filter(item => {
+    if (typeof item !== 'string') return false;
+    const s = item.trim();
+    if (!s) return false;
+    // Drop only OBVIOUS JSON garbage (raw object dumps)
+    if (/^\{\s*"\w+"/.test(s)) return false;       // {"key":...
+    if (/^"\s*"\s*:/.test(s)) return false;         // "":
+    if (/^"\w+"\s*:\s*"[^"]*"\s*$/.test(s)) return false; // pure JSON pair
+    // Drop pure English-only lines (no Japanese chars, mostly latin)
+    const hasJapanese = /[぀-ゟ゠-ヿ一-龥]/.test(s);
+    const asciiCount = (s.match(/[a-zA-Z]/g) || []).length;
+    if (!hasJapanese && asciiCount > 6) return false;
+    return true;
+  }).map(s => {
+    // Strip stray English-only inner thoughts but keep the rest of the line
+    return s.replace(/《\s*[A-Za-z][A-Za-z\s\?\!,'"\.\-]+》/g, '');
+  }).filter(s => s.trim());
+};
+
+// Override parsePlan wrapper: if narrative is empty/dot-only after sanitize,
+// substitute with a bridge text reflecting the player input
+const _origParsePlanBridge = Planner.parsePlan.bind(Planner);
+Planner.parsePlan = function(rawText, inputType) {
+  const plan = _origParsePlanBridge(rawText, inputType);
+  if (!plan) return plan;
+  // Sanitize
+  if (plan.narrative) {
+    plan.narrative = window._sanitizeNarrative(plan.narrative);
+  }
+  // Detect "empty result" — narrative is just dots or empty
+  const isEffectivelyEmpty = !plan.narrative || 
+    plan.narrative.length === 0 ||
+    (plan.narrative.length <= 2 && plan.narrative.every(s => /^[…\.\s]*$/.test(s)));
+  
+  if (isEffectivelyEmpty) {
+    // Build bridge from raw response — try to extract any Japanese sentences
+    const text = rawText || '';
+    const jpSentences = text
+      .split(/[。！？\n]+/)
+      .map(s => s.trim())
+      .filter(s => /[぀-ゟ゠-ヿ一-龥]/.test(s) && s.length >= 4 && s.length <= 200);
+    if (jpSentences.length > 0) {
+      plan.narrative = jpSentences.slice(0, 6).map(s => s.endsWith('。') || s.endsWith('！') || s.endsWith('？') ? s : s + '。');
+    } else {
+      // Last resort: synthesize a minimal bridge reflecting input
+      const heroName = S.cast.hero.name || '主人公';
+      const lastTurn = (S.turns || []).slice(-1)[0];
+      const inp = (lastTurn && lastTurn.playerText) || '';
+      if (inputType === 'DO' && inp) {
+        plan.narrative = [
+          heroName + 'は' + inp.replace(/。$/,'') + '。',
+          '空気が変わった。',
+          '次の瞬間、何かが起こりそうな気配が漂う。'
+        ];
+      } else if (inputType === 'SAY' && inp) {
+        plan.narrative = [
+          heroName + 'の言葉に、その場の空気が一瞬止まった。',
+          '相手の表情が微かに動いた。'
+        ];
+      } else {
+        plan.narrative = ['物語は続いている。', '次の展開を待つ静寂。'];
+      }
+    }
+  }
+  return plan;
+};
+
+
 // Boot
 G.init();
 </script>
