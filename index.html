@@ -950,6 +950,94 @@ body > #topbar, body > #story, body > #branches, body > #composer {
   font-weight: 600;
 }
 
+
+
+/* ─────────── Layer 3: Inner thought as muted dialogue card ─────────── */
+.dialogue-row.inner-thought-card {
+  opacity: 0.88;
+  background: linear-gradient(180deg, rgba(28,16,52,0.5), rgba(20,12,36,0.65));
+  border-style: dashed;
+  border-color: rgba(160,138,240,0.42);
+  border-width: 1px;
+  position: relative;
+}
+.dialogue-row.inner-thought-card .dialogue-avatar {
+  opacity: 0.75;
+  filter: blur(0.4px) saturate(0.7);
+  border-color: rgba(160,138,240,0.4);
+}
+.dialogue-row.inner-thought-card .dialogue-name {
+  color: rgba(196,175,255,0.85);
+  font-weight: 500;
+}
+.dialogue-row.inner-thought-card .dialogue-name::after {
+  content: ' （呟き）';
+  font-family: var(--ff-disp);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  color: var(--tx-faint);
+  margin-left: 4px;
+}
+.dialogue-row.inner-thought-card .dialogue-text {
+  font-style: italic;
+  color: rgba(218,205,255,0.92);
+  font-size: 14px;
+}
+.dialogue-row.inner-thought-card .dialogue-text::before { content: '《'; color: var(--acc); margin-right: 1px; }
+.dialogue-row.inner-thought-card .dialogue-text::after { content: '》'; color: var(--acc); margin-left: 1px; }
+.dialogue-row.inner-thought-card::after {
+  content: '';
+  display: none;
+}
+
+/* ─────────── H: Connection arrows between outer dialogue and inner thought ─────────── */
+.dialogue-row.connected-from {
+  margin-bottom: 0 !important;
+  position: relative;
+}
+.dialogue-row.connected-from::before {
+  content: '↓';
+  position: absolute;
+  left: 50%;
+  bottom: -14px;
+  transform: translateX(-50%);
+  font-size: 16px;
+  color: var(--gold);
+  text-shadow: 0 0 10px rgba(212,180,120,0.6);
+  z-index: 5;
+  animation: arrowFlicker 2.4s ease-in-out infinite;
+}
+@keyframes arrowFlicker {
+  0%, 100% { opacity: 0.85; transform: translateX(-50%) translateY(0); }
+  50% { opacity: 1; transform: translateX(-50%) translateY(2px); }
+}
+.dialogue-row.connected-to {
+  margin-top: 14px !important;
+  position: relative;
+}
+.dialogue-row.connected-to::before {
+  content: '⇡ 心の声';
+  position: absolute;
+  top: -16px;
+  right: 16px;
+  font-family: var(--ff-disp);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  color: var(--gold);
+  background: rgba(20,12,36,0.95);
+  padding: 1px 8px;
+  border: 1px solid rgba(212,180,120,0.4);
+  border-radius: 100px;
+  z-index: 5;
+}
+
+/* Adjust spacing in dialogue stream when connection is present */
+#dialogue-stream .dialogue-row.connected-from + .dialogue-row.connected-to {
+  margin-top: 18px !important;
+}
+
 </style>
 </head>
 <body>
@@ -4553,6 +4641,149 @@ Planner.build = function(inputType, inputText) {
 
   result.sys += extra;
   return result;
+};
+
+setTimeout(() => UI.renderAll && UI.renderAll(), 200);
+
+
+
+
+// ─────────────────────────────────────────────────────────────
+// Phase 2: Layer 3 (inner thought to dialogue, stress>=80) + H (connection arrows)
+// ─────────────────────────────────────────────────────────────
+
+// Threshold: NPC inner thoughts surface as dialogue when stress >= this
+window.INNER_STRESS_THRESHOLD = 80;
+
+// Extend _extractDialogue: chain on top of current version, add 《》 inner thought extraction
+const _origExtractP2 = window._extractDialogue;
+window._extractDialogue = function(narrativeText) {
+  const baseEvents = _origExtractP2(narrativeText);
+  if (!narrativeText) return baseEvents;
+  const text = Array.isArray(narrativeText) ? narrativeText.join('\n') : String(narrativeText);
+  const heroName = S.cast.hero.name || '';
+  const npcs = (S.cast.npcs || []).map(n => n.name).filter(Boolean);
+  const heroParts = new Set();
+  if (heroName) {
+    heroParts.add(heroName);
+    heroName.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) heroParts.add(p); });
+  }
+  const nameToFull = {};
+  if (heroName) {
+    nameToFull[heroName] = heroName;
+    heroName.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) nameToFull[p] = heroName; });
+  }
+  npcs.forEach(n => {
+    nameToFull[n] = n;
+    n.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) nameToFull[p] = n; });
+  });
+  const namesArr = Object.keys(nameToFull).sort((a,b) => b.length - a.length);
+
+  const innerEvents = [];
+  let lastNamedSpeaker = null;
+  if (baseEvents.length > 0) lastNamedSpeaker = baseEvents[baseEvents.length-1].speaker;
+
+  // Extract 《...》 inner thoughts
+  const innerRx = /《([^《》]+?)》/g;
+  let im;
+  while ((im = innerRx.exec(text)) !== null) {
+    const iStart = im.index, iEnd = im.index + im[0].length, iText = im[1];
+    const before = text.slice(Math.max(0, iStart - 80), iStart);
+    const after = text.slice(iEnd, iEnd + 40);
+
+    let speaker = null;
+    let bestPos = -1, bestName = null;
+    for (const n of namesArr) {
+      const pos = before.lastIndexOf(n);
+      if (pos > bestPos) { bestPos = pos; bestName = n; }
+    }
+    if (bestName) speaker = bestName;
+    if (!speaker) {
+      for (const n of namesArr) {
+        if (after.includes(n)) { speaker = n; break; }
+      }
+    }
+    if (!speaker && lastNamedSpeaker) speaker = lastNamedSpeaker;
+
+    const fullName = speaker ? (nameToFull[speaker] || speaker) : null;
+    if (!fullName) continue;
+
+    const isHero = fullName === heroName || heroParts.has(fullName);
+    // For NPCs: only surface inner thoughts when stress >= threshold
+    if (!isHero) {
+      const npc = (S.cast.npcs || []).find(n => n.name === fullName);
+      if (!npc || (npc.stress || 0) < window.INNER_STRESS_THRESHOLD) continue;
+    }
+    // Hero: always include (no stress concept)
+
+    innerEvents.push({
+      type: 'inner',
+      start: iStart, end: iEnd,
+      text: iText,
+      speaker: fullName,
+      isHero,
+      isInner: true,
+      isSfx: false
+    });
+  }
+
+  // Merge with base events, sort by position
+  const allEvents = baseEvents.concat(innerEvents).sort((a, b) => {
+    // sort by start; for events without start (e.g. baseEvents lacks position), keep order
+    return (a.start || 0) - (b.start || 0);
+  });
+
+  return allEvents;
+};
+
+// Wrap _renderDialogueCards: apply inner-thought-card class and connection markers
+const _origRenderCardsP2 = window._renderDialogueCards;
+window._renderDialogueCards = function(turn) {
+  const div = _origRenderCardsP2(turn);
+  if (!div) return null;
+  // Get current extracted dialogues (in same order as rendered) for class assignment
+  const dialogues = window._extractDialogue(turn.narrative);
+  // Also include the prepended SAY hero card if present
+  const rows = Array.from(div.querySelectorAll('.dialogue-row'));
+  // Map rows to dialogues by text content (best-effort)
+  const usedDlg = new Set();
+  rows.forEach(row => {
+    const textEl = row.querySelector('.dialogue-text');
+    const nameEl = row.querySelector('.dialogue-name');
+    if (!textEl || !nameEl) return;
+    const text = textEl.textContent;
+    const speaker = nameEl.textContent;
+    // Find matching dialogue
+    for (let i = 0; i < dialogues.length; i++) {
+      if (usedDlg.has(i)) continue;
+      const d = dialogues[i];
+      if (d.text === text && d.speaker === speaker) {
+        usedDlg.add(i);
+        if (d.isInner) {
+          row.classList.add('inner-thought-card');
+        }
+        break;
+      }
+    }
+  });
+
+  // Apply connection markers: when row[i] is inner and row[i-1] is same-speaker outer
+  for (let i = 1; i < rows.length; i++) {
+    const cur = rows[i];
+    const prev = rows[i-1];
+    const curIsInner = cur.classList.contains('inner-thought-card');
+    const prevIsInner = prev.classList.contains('inner-thought-card');
+    if (curIsInner && !prevIsInner) {
+      const curName = cur.querySelector('.dialogue-name')?.textContent;
+      const prevName = prev.querySelector('.dialogue-name')?.textContent;
+      if (curName && curName === prevName) {
+        prev.classList.add('connected-from');
+        cur.classList.add('connected-to');
+      }
+    }
+  }
+
+  return div;
 };
 
 setTimeout(() => UI.renderAll && UI.renderAll(), 200);
