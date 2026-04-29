@@ -1922,6 +1922,10 @@ function _buildSimplePrompt(inputType, inputText) {
     '・同じ語・同じ短いフレーズを3回以上繰り返さない（「もう、〜」「終わった」「壊れた」などの連呼禁止）。',
     '・《内心》は1段落につき最大1回まで。多用禁止。台詞「」は通常通り使ってよい。',
     '・出力末尾は新しい状況・行動・台詞で終え、内心の独白で終わらせない。',
+    '・「……」入りの断片的な崩壊台詞は1ターン2発話まで。同一キャラの似た台詞（同じ単語の言い直し）は禁止。',
+    '・1ターンに同じ単語（「私は」「もう」等）を5回以上使わない。',
+    '・必ず物語を1段階以上前進させる: 場所/時間/状況/関係性のどれかが変わる。停滞禁止。',
+    '・主人公以外の登場人物（NPC）が必ず1つは新しい行動・反応を取る。',
     '・主人公（' + (hero.name || '主人公') + '）の行動・台詞は勝手に追加しない。プレイヤー入力に従う。',
     '・NPCの台詞は「」で。内心は《》で（任意）。',
     '・婉曲表現・抽象形容詞（怖い/悲しい等）禁止。具体的な身体反応・五感・物理描写で示す。',
@@ -1977,6 +1981,25 @@ Planner.parsePlan = function(rawText, inputType) {
       t = t.replace(/((?:《[^《》\n]{1,30}》|「[^「」\n]{1,30}」|（[^（）\n]{1,30}）)。?)\1{2,}/g, '$1');
       // Pattern B: same 4-20 char substring repeated 3+ times consecutively → keep first
       t = t.replace(/(.{4,20}?)\1{2,}/g, '$1');
+      // Pattern C: dialogue lines starting with same character speaker repeated 3+ times → keep 2
+      const quoteLines = t.match(/「[^「」\n]{1,80}」/g) || [];
+      if (quoteLines.length >= 4) {
+        const counts = {};
+        for (const q of quoteLines) {
+          const head = q.replace(/^「(.{1,4}).*$/, '$1');
+          counts[head] = (counts[head]||0) + 1;
+        }
+        for (const head in counts) {
+          if (counts[head] >= 3) {
+            // Remove all but first 2 occurrences of quotes starting with this head
+            let kept = 0;
+            t = t.replace(new RegExp('「' + head.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '[^「」\\n]*」', 'g'), (m) => {
+              kept++;
+              return kept <= 2 ? m : '';
+            });
+          }
+        }
+      }
       return t;
     })(text);
     let lines = text.split(/\n+/).map(s => s.trim()).filter(Boolean);
