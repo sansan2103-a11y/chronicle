@@ -3098,6 +3098,75 @@ UI.openSettings = function() {
 };
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Fix: dialogue avatar name matching + seed-aware lookup
+// ─────────────────────────────────────────────────────────────
+window._renderDialogueCards = function(turn) {
+  const dialogues = window._extractDialogue(turn.narrative);
+  if (dialogues.length === 0) return null;
+  const heroName = S.cast.hero.name || '主人公';
+  const heroUrl = window._getHeroAvatar();
+  // Build name → {url, fullName} map, keyed by both full names AND split parts
+  const npcMap = {};
+  (S.cast.npcs || []).forEach(n => {
+    if (!n.name) return;
+    const url = window._getNpcAvatar(n);
+    npcMap[n.name] = { url, fullName: n.name };
+    n.name.split(/[\s・]/).forEach(p => {
+      if (p && p.length >= 2 && !npcMap[p]) npcMap[p] = { url, fullName: n.name };
+    });
+  });
+  // Same for hero name parts
+  const heroEntry = { url: heroUrl, fullName: heroName };
+  const heroParts = new Set([heroName]);
+  heroName.split(/[\s・]/).forEach(p => { if (p && p.length >= 2) heroParts.add(p); });
+
+  const wrap = document.createElement('div');
+  wrap.className = 'dialogue-list';
+  for (const d of dialogues) {
+    if (!d.speaker) continue;
+    let url = null;
+    let displayName = d.speaker;
+    if (heroParts.has(d.speaker) || d.isHero) {
+      url = heroUrl;
+      displayName = heroName;
+    } else if (npcMap[d.speaker]) {
+      url = npcMap[d.speaker].url;
+      displayName = npcMap[d.speaker].fullName;
+    }
+    const row = document.createElement('div');
+    row.className = 'dialogue-row';
+    const av = document.createElement('div');
+    av.className = 'dialogue-avatar';
+    if (url) {
+      av.style.backgroundImage = 'url("' + url + '")';
+    } else {
+      av.textContent = displayName.charAt(0);
+    }
+    const body = document.createElement('div');
+    body.className = 'dialogue-body';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'dialogue-name';
+    nameEl.textContent = displayName;
+    const textEl = document.createElement('div');
+    textEl.className = 'dialogue-text';
+    textEl.textContent = d.text;
+    body.appendChild(nameEl);
+    body.appendChild(textEl);
+    row.appendChild(av);
+    row.appendChild(body);
+    wrap.appendChild(row);
+  }
+  if (wrap.children.length === 0) return null;
+  return wrap;
+};
+
+// Force re-render of all turns
+setTimeout(() => { if (UI.renderAll) UI.renderAll(); }, 200);
+
+
 // Boot
 G.init();
 </script>
