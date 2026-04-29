@@ -3653,6 +3653,53 @@ window._renderDialogueCards = function(turn) {
 setTimeout(() => UI.renderAll && UI.renderAll(), 200);
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Show hero's SAY input as a dialogue card in the stream
+// ─────────────────────────────────────────────────────────────
+const _origDlgCardsSay = window._renderDialogueCards;
+window._renderDialogueCards = function(turn) {
+  let div = _origDlgCardsSay(turn);
+  // If SAY mode and we have player text, prepend a hero dialogue card
+  if (turn.inputType === 'SAY' && turn.playerText && turn.playerText.trim()) {
+    if (!div) {
+      div = document.createElement('div');
+      div.className = 'dialogue-list';
+    }
+    const heroName = S.cast.hero.name || '主人公';
+    const heroDesc = S.cast.hero.desc || '';
+    const heroSeed = S.cast.hero.avatarSeed || 0;
+    const heroUrl = window._getHeroAvatar();
+    const row = document.createElement('div');
+    row.className = 'dialogue-row hero-say';
+    const av = document.createElement('div');
+    av.className = 'dialogue-avatar';
+    const body = document.createElement('div');
+    body.className = 'dialogue-body';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'dialogue-name';
+    nameEl.textContent = heroName;
+    const textEl = document.createElement('div');
+    textEl.className = 'dialogue-text';
+    textEl.textContent = turn.playerText;
+    body.appendChild(nameEl);
+    body.appendChild(textEl);
+    row.appendChild(av);
+    row.appendChild(body);
+    // Insert at top so it precedes any AI-generated dialogue from this turn
+    if (div.firstChild) div.insertBefore(row, div.firstChild);
+    else div.appendChild(row);
+    // Robust avatar load
+    window._setAvatarBg(av, heroUrl, heroName.charAt(0), heroName, heroDesc, heroSeed);
+  }
+  return div;
+};
+
+// Force re-render to apply
+setTimeout(() => UI.renderAll && UI.renderAll(), 200);
+
+
 // Boot
 G.init();
 </script>
