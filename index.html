@@ -7981,5 +7981,168 @@ if (window.GENRE_PRESETS) {
 // Boot
 G.init();
 </script>
+<script>
+/* === PATCH: quality-fixes-v1 === */
+(function(){
+  console.log("[Patch] quality-fixes-v1 loading");
+  /* 1. Default model upgrade */
+  try {
+    if (window.S && S.orModel === "mistralai/mistral-nemo") {
+      S.orModel = "anthropic/claude-haiku-4-5";
+      if (typeof S.save === "function") S.save();
+      console.log("[Patch] orModel upgraded mistral-nemo -> claude-haiku-4-5");
+    }
+  } catch(e){ console.warn("[Patch] model upgrade failed", e); }
+  /* 2. Dropdown enhance */
+  function enhanceDropdown(){
+    var dd = document.getElementById("cfgOrModel");
+    if (!dd) return;
+    var hasHaiku = false, hasSonnet = false;
+    Array.from(dd.options).forEach(function(opt){
+      if (opt.value.indexOf("claude-haiku") >= 0) hasHaiku = true;
+      if (opt.value.indexOf("claude-sonnet") >= 0) hasSonnet = true;
+      if (opt.value === "mistralai/mistral-nemo" && opt.text.indexOf("低品質") < 0) {
+        opt.text = "Mistral Nemo（軽量・低品質・JSON崩れやすい）";
+      }
+    });
+    if (!hasSonnet) {
+      var o2 = document.createElement("option");
+      o2.value = "anthropic/claude-sonnet-4-5";
+      o2.text = "Claude Sonnet 4.5（最高品質）";
+      dd.insertBefore(o2, dd.firstChild);
+    }
+    if (!hasHaiku) {
+      var o = document.createElement("option");
+      o.value = "anthropic/claude-haiku-4-5";
+      o.text = "Claude Haiku 4.5（推奨・JSON安定・日本語高品質）";
+      dd.insertBefore(o, dd.firstChild);
+    }
+  }
+  document.addEventListener("DOMContentLoaded", enhanceDropdown);
+  setTimeout(enhanceDropdown, 500);
+  setTimeout(enhanceDropdown, 2000);
+  /* 3. parsePlan repair + parse-fail marker */
+  setTimeout(function(){
+    if (window.Planner && Planner.parsePlan && !Planner._patchedV1) {
+      var _orig = Planner.parsePlan.bind(Planner);
+      Planner.parsePlan = function(rawText, inputType){
+        try {
+          var repaired = String(rawText||"");
+          repaired = repaired.replace(/,\s*。/g, ",");
+          repaired = repaired.replace(/:\s*。/g, ":");
+          repaired = repaired.replace(/"\s*，/g, "\",");
+          repaired = repaired.replace(/\}\s*。/g, "}");
+          var result = _orig(repaired, inputType);
+          var narr = (result && result.narrative) || [];
+          var brokenLines = narr.filter(function(s){return /^"[a-zA-Z_]+"\s*:/.test(String(s).trim());});
+          if (brokenLines.length >= 2) {
+            console.warn("[Patch] narrative looks like raw JSON keys - flagging parse-fail");
+            result.narrative = ["__PARSE_FAILED_MARKER__"];
+            result._parseFailed = true;
+          }
+          return result;
+        } catch(e){ console.warn("[Patch] parsePlan wrapper", e); return _orig(rawText, inputType); }
+      };
+      Planner._patchedV1 = true;
+      console.log("[Patch] parsePlan wrapped");
+    }
+  }, 1000);
+  /* 4. JSON prompt strengthening */
+  setTimeout(function(){
+    if (window.Planner && Planner.build && !Planner._builtPatchedV1) {
+      var _origBuild = Planner.build.bind(Planner);
+      Planner.build = function(){
+        var r = _origBuild.apply(this, arguments);
+        if (r && r.sys) {
+          r.sys += "\n\n【★絶対遵守・JSON厳守★】" +
+            "\n- 出力は **有効な JSON のみ**。前後に説明文を付けない。" +
+            "\n- JSON 構造内に **日本語の句読点（。、）を絶対に入れない**。" +
+            "\n- カンマ「,」の直後に「。」を置くな。例 NG: \"key\": \"値\",。" +
+            "\n- 文字列値内の改行は \\n でエスケープ。生改行禁止。" +
+            "\n- 全てのキー・区切り記号は ASCII で書け（全角カンマ・全角コロン禁止）。";
+        }
+        return r;
+      };
+      Planner._builtPatchedV1 = true;
+      console.log("[Patch] Planner.build wrapped (JSON strict)");
+    }
+  }, 1100);
+  /* 5. Parse-fail marker -> error card */
+  setInterval(function(){
+    var nodes = document.querySelectorAll("p, div, span");
+    for (var i=0; i<nodes.length; i++){
+      var el = nodes[i];
+      if (el.children.length === 0 && el.textContent && el.textContent.indexOf("__PARSE_FAILED_MARKER__") >= 0) {
+        var card = document.createElement("div");
+        card.style.cssText = "background:rgba(229,115,115,0.12);border:1px solid #e57373;padding:14px 16px;border-radius:6px;margin:10px 0;color:#f2eef9;font-family:var(--ff-disp,serif);";
+        card.innerHTML = '<strong style="color:#e57373;font-size:16px;">⚠ 出力解析エラー</strong><br><span style="color:#b8b0d0;font-size:13px;">モデルからの応答が壊れていました（JSON構造を逸脱）。Mistral Nemo は構造化出力が苦手です。設定で Claude Haiku 等に切り替えると安定します。</span><br><button style="margin-top:10px;padding:7px 16px;background:#a08af0;color:#0a0612;border:none;border-radius:4px;cursor:pointer;font-weight:bold;" onclick="(window.regenerate||window.retryTurn||function(){var b=document.getElementById(\'btnRetry\')||document.querySelector(\'[data-action=retry]\');if(b)b.click();else location.reload();})()">再生成</button>';
+        el.replaceWith(card);
+      }
+    }
+  }, 800);
+  /* 6. Avatar fallback - horror SVG */
+  function horrorSvg(seed){
+    var h = 0; for (var i=0; i<seed.length; i++) h = (h*31 + seed.charCodeAt(i)) & 0xfffffff;
+    var hue = h % 360, hueAcc = (hue+30) % 360;
+    var bg = "hsl("+hue+",30%,10%)", fg = "hsl("+hueAcc+",55%,55%)", glow = "hsl("+hue+",65%,38%)", face = "hsl("+hue+",18%,18%)";
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">'
+      + '<defs><radialGradient id="g'+h+'" cx="50%" cy="35%" r="70%"><stop offset="0%" stop-color="'+glow+'" stop-opacity="0.8"/><stop offset="55%" stop-color="'+bg+'"/><stop offset="100%" stop-color="#000"/></radialGradient><filter id="b'+h+'"><feGaussianBlur stdDeviation="0.6"/></filter></defs>'
+      + '<rect width="256" height="256" fill="url(#g'+h+')"/>'
+      + '<g transform="translate(128,170) scale(1.45)" filter="url(#b'+h+')">'
+      + '<ellipse cx="0" cy="-95" rx="44" ry="52" fill="'+face+'"/>'
+      + '<path d="M-78,-40 Q-42,-58 0,-55 Q42,-58 78,-40 L78,40 L-78,40 Z" fill="'+face+'"/>'
+      + '<ellipse cx="-15" cy="-100" rx="3" ry="5" fill="'+fg+'" opacity="0.9"/>'
+      + '<ellipse cx="15" cy="-100" rx="3" ry="5" fill="'+fg+'" opacity="0.9"/>'
+      + '<path d="M-12,-78 Q0,-72 12,-78" stroke="'+fg+'" stroke-width="1.2" fill="none" opacity="0.5"/>'
+      + '</g>'
+      + '<rect x="3" y="3" width="250" height="250" fill="none" stroke="'+fg+'" stroke-opacity="0.4" stroke-width="1.5"/>'
+      + '</svg>';
+    return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+  }
+  window._horrorSvg = horrorSvg;
+  document.addEventListener("error", function(e){
+    var img = e.target;
+    if (img && img.tagName === "IMG") {
+      var s = img.src || "";
+      if (s.indexOf("dicebear") >= 0 || s.indexOf("pollinations") >= 0) {
+        var seed = String(img.alt || s).slice(-30);
+        img.src = horrorSvg(seed);
+      }
+    }
+  }, true);
+  setInterval(function(){
+    document.querySelectorAll("img").forEach(function(img){
+      var s = img.src || "";
+      if (s.indexOf("dicebear.com") >= 0 || s.indexOf("/api/") >= 0 && s.indexOf("dicebear") >= 0) {
+        var seed = String(img.alt || s).slice(-30);
+        img.src = horrorSvg(seed);
+      }
+    });
+  }, 1800);
+  /* 7. Pollinations 429 cooldown */
+  var _pollCooldownUntil = 0;
+  var _origFetch = window.fetch;
+  window.fetch = function(u, o){
+    var url = String(u||"");
+    if (url.indexOf("pollinations.ai") >= 0) {
+      if (Date.now() < _pollCooldownUntil) {
+        return Promise.reject(new Error("pollinations cooldown"));
+      }
+      return _origFetch.apply(this, arguments).then(function(r){
+        if (r.status === 429) {
+          _pollCooldownUntil = Date.now() + 90000;
+          console.warn("[Patch] Pollinations 429 - cooldown 90s");
+        }
+        return r;
+      }).catch(function(err){
+        _pollCooldownUntil = Math.max(_pollCooldownUntil, Date.now() + 30000);
+        throw err;
+      });
+    }
+    return _origFetch.apply(this, arguments);
+  };
+  console.log("[Patch] quality-fixes-v1 loaded");
+})();
+</script>
 </body>
 </html>
