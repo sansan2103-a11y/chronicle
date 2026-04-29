@@ -5,245 +5,426 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Chronicle</title>
 <style>
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg: #09090f; --s1: #111119; --s2: #17172a; --s3: #1f1f35;
-  --acc: #8b76f0; --gold: #c4a45a; --tx: #e0dcf0; --dim: #6868a0;
-  --border: rgba(139,118,240,.14); --do: #5a8ef0; --say: #6aaf78;
-  --story: #c49040; --err: #e06060; --r: 10px;
-  --fear: #a060c0; --desire: #60a0c0;
+  --bg-deep: #050308;
+  --bg-base: #0a0612;
+  --bg-elev1: rgba(20,14,35,0.92);
+  --bg-elev2: rgba(28,20,48,0.96);
+  --bg-elev3: rgba(40,28,68,0.92);
+  --acc: #a08af0;
+  --acc-bright: #c4afff;
+  --acc-dim: #6c5ab8;
+  --acc-glow: rgba(160,138,240,0.35);
+  --gold: #d4b375;
+  --gold-dim: #8d7445;
+  --err: #e57373;
+  --warn: #d4a05a;
+  --ok: #7cb87c;
+  --tx: #f2eef9;
+  --tx-mid: #b8b0d0;
+  --tx-dim: #8278a8;
+  --tx-faint: #5a5278;
+  --border: rgba(160,138,240,0.18);
+  --border-mid: rgba(160,138,240,0.32);
+  --border-strong: rgba(160,138,240,0.55);
+  --ff-disp: 'Cormorant Garamond','Hiragino Mincho ProN','Yu Mincho',serif;
+  --ff-body: 'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic UI',sans-serif;
+  --ff-narr: 'Hiragino Mincho ProN','Yu Mincho',serif;
+  --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 20px;
+  --shadow-1: 0 4px 16px rgba(0,0,0,0.4);
+  --shadow-2: 0 8px 32px rgba(0,0,0,0.6);
+  /* Legacy aliases for old code that references these */
+  --bg: var(--bg-deep); --s1: var(--bg-elev1); --s2: var(--bg-elev2); --s3: var(--bg-elev3);
+  --dim: var(--tx-dim); --do: #8eaef5; --say: #8edca0; --story: var(--gold);
+  --fear: #c490d8; --desire: #90c4d8; --r: var(--r-md);
 }
-html { height: 100%; }
+html, body { height: 100%; }
 body {
   display: flex; flex-direction: column; min-height: 100dvh;
-  max-width: 760px; margin: 0 auto; background: var(--bg);
-  color: var(--tx); font-family: 'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic UI',sans-serif;
-  font-size: 15px; line-height: 1.75;
+  background: var(--bg-deep); color: var(--tx);
+  font-family: var(--ff-body); font-size: 15px; line-height: 1.7;
+  position: relative; overflow-x: hidden;
 }
-
-/* ── Top bar ── */
+#bgLayer { position: fixed; inset: 0; z-index: -2; background: var(--bg-deep); }
+#bgImage {
+  position: absolute; inset: 0;
+  background-image: url('https://image.pollinations.ai/prompt/dark%20gothic%20fantasy%20castle%20at%20night%20moody%20atmospheric%20matte%20painting%20deep%20purple%20sky%20cinematic?width=1600&height=1200&seed=88&nologo=true');
+  background-size: cover; background-position: center;
+  opacity: 0.32; filter: blur(0.5px);
+}
+#bgVignette {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse at center top, transparent 0%, rgba(5,3,8,0.4) 50%, var(--bg-deep) 100%),
+    linear-gradient(180deg, rgba(20,14,35,0.55) 0%, rgba(10,6,18,0.78) 100%);
+}
+body > #topbar, body > #story, body > #branches, body > #composer {
+  width: 100%; max-width: 820px; margin-left: auto; margin-right: auto;
+}
 #topbar {
-  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
-  background: var(--s1); border-bottom: 1px solid var(--border);
-  flex-shrink: 0; position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 22px;
+  background: linear-gradient(180deg, rgba(15,10,25,0.92), rgba(15,10,25,0.78));
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  position: sticky; top: 0; z-index: 30; flex-shrink: 0;
 }
-#topbar h1 { flex: 1; font-size: 15px; font-weight: 700; letter-spacing: .12em; color: var(--acc); }
-#topStatus { font-size: 12px; color: var(--dim); }
+#topbar h1 {
+  font-family: var(--ff-disp); font-size: 22px; font-weight: 600;
+  letter-spacing: 0.18em; color: var(--acc); text-shadow: 0 0 20px var(--acc-glow);
+  flex-shrink: 0;
+}
+#topStatus {
+  flex: 1; font-size: 12px; color: var(--tx-faint);
+  text-align: center; font-style: italic;
+}
+#topStatus:empty::before { content: '— 物語の記録はまだありません —'; color: var(--tx-faint); }
 .top-btn {
-  background: none; border: 1px solid var(--border); color: var(--dim);
-  padding: 5px 11px; border-radius: 7px; cursor: pointer; font-size: 13px; transition: all .15s;
+  background: rgba(160,138,240,0.08); border: 1px solid var(--border-mid);
+  color: var(--tx-mid); padding: 7px 14px; border-radius: var(--r-md);
+  cursor: pointer; font-size: 13px; font-family: inherit;
+  transition: all 0.18s; display: inline-flex; align-items: center; gap: 6px;
 }
-.top-btn:hover { color: var(--tx); border-color: rgba(139,118,240,.4); }
+.top-btn:hover { background: rgba(160,138,240,0.16); border-color: var(--border-strong); color: var(--tx); }
 
-/* ── Story ── */
-#story { flex: 1; overflow-y: auto; padding: 20px 16px 8px; display: flex; flex-direction: column; gap: 22px; }
-#welcome { text-align: center; padding: 60px 20px; color: var(--dim); }
-#welcome h2 { font-size: 24px; color: var(--acc); margin-bottom: 10px; letter-spacing: .15em; }
-#welcome p { font-size: 14px; line-height: 1.9; }
-
-/* ── Turn block ── */
-.turn { display: flex; flex-direction: column; gap: 10px; }
-.player-line { display: flex; align-items: baseline; gap: 8px; }
+#story { flex: 1; overflow-y: auto; padding: 28px 22px 12px; display: flex; flex-direction: column; gap: 26px; }
+#welcome { text-align: center; padding: 80px 24px 40px; display: flex; flex-direction: column; align-items: center; }
+.wel-emblem { font-size: 32px; color: var(--acc); margin-bottom: 12px; text-shadow: 0 0 30px var(--acc-glow); animation: pulse 4s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.7; transform: scale(1.05); } }
+#welcome h2 {
+  font-family: var(--ff-disp); font-size: 56px; color: var(--acc-bright);
+  letter-spacing: 0.32em; font-weight: 400; margin-bottom: 20px;
+  text-shadow: 0 0 60px var(--acc-glow);
+}
+#welcome .wel-sub { font-size: 14px; color: var(--tx-mid); line-height: 1.95; margin-bottom: 30px; max-width: 380px; }
+#welcomeMsg { font-size: 14px; color: var(--tx-mid); line-height: 1.95; margin-bottom: 22px; max-width: 420px; }
+.btn-cta {
+  font-family: inherit;
+  background: linear-gradient(135deg, rgba(160,138,240,0.22), rgba(160,138,240,0.10));
+  border: 1px solid var(--border-strong); color: var(--acc-bright);
+  padding: 16px 48px; border-radius: var(--r-md); font-size: 16px; font-weight: 600;
+  letter-spacing: 0.08em; cursor: pointer; min-width: 240px;
+  box-shadow: 0 0 40px rgba(160,138,240,0.18), inset 0 1px 0 rgba(255,255,255,0.06);
+  transition: all 0.2s;
+}
+.btn-cta:hover {
+  background: linear-gradient(135deg, rgba(160,138,240,0.32), rgba(160,138,240,0.18));
+  border-color: var(--acc); transform: translateY(-1px);
+  box-shadow: 0 0 50px rgba(160,138,240,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+.quick-starts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; }
+.chip.main {
+  background: rgba(160,138,240,0.06); border: 1px solid var(--border);
+  color: var(--tx-mid); padding: 8px 14px; border-radius: 100px;
+  font-size: 12px; cursor: pointer; font-family: inherit; transition: all 0.15s;
+}
+.chip.main:hover { background: rgba(160,138,240,0.15); border-color: var(--border-mid); color: var(--tx); }
+.turn { display: flex; flex-direction: column; gap: 12px; }
+.player-line { display: flex; align-items: baseline; gap: 10px; padding: 0 4px; }
 .mbadge {
-  font-size: 11px; font-weight: 700; letter-spacing: .1em;
-  padding: 2px 8px; border-radius: 4px; flex-shrink: 0;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+  padding: 3px 9px; border-radius: var(--r-sm); flex-shrink: 0; text-transform: uppercase;
 }
-.mbadge.DO { background: rgba(90,142,240,.18); color: var(--do); }
-.mbadge.SAY { background: rgba(106,175,120,.18); color: var(--say); }
-.mbadge.STORY { background: rgba(196,144,64,.18); color: var(--story); }
-.ptext { color: var(--dim); font-size: 14px; }
-
-/* ── Narr block ── */
+.mbadge.DO    { background: rgba(120,160,240,0.16); color: #8eaef5; border: 1px solid rgba(120,160,240,0.3); }
+.mbadge.SAY   { background: rgba(120,200,140,0.14); color: #8edca0; border: 1px solid rgba(120,200,140,0.3); }
+.mbadge.STORY { background: rgba(212,180,120,0.16); color: #e2b878; border: 1px solid rgba(212,180,120,0.3); }
+.ptext { color: var(--tx-mid); font-size: 14px; }
 .narr-block {
-  background: var(--s2); border-left: 3px solid var(--gold);
-  border-radius: var(--r); padding: 14px 38px 14px 16px;
-  position: relative; font-family: 'Hiragino Mincho ProN','Yu Mincho',serif;
-  font-size: 15px; line-height: 1.9;
+  background: linear-gradient(180deg, rgba(28,20,48,0.7), rgba(20,14,35,0.85));
+  border: 1px solid var(--border); border-left: 3px solid var(--gold);
+  border-radius: var(--r-md); padding: 18px 44px 18px 20px; position: relative;
+  font-family: var(--ff-narr); font-size: 15.5px; line-height: 1.95; color: var(--tx);
+  box-shadow: var(--shadow-1); backdrop-filter: blur(6px);
 }
-.narr-block p { margin-bottom: 5px; }
+.narr-block p { margin-bottom: 8px; }
 .narr-block p:last-child { margin-bottom: 0; }
-.narr-block .dial { color: #c8bae8; }
-
-/* ── Psychology display elements ── */
+.narr-block .dial { color: #d8c8f0; }
 .inner-thought {
-  font-style: italic; color: rgba(139,118,240,.7); font-size: 13px;
-  padding: 5px 10px 5px 8px; margin-bottom: 8px;
-  border-left: 2px solid rgba(139,118,240,.25);
-  font-family: 'Hiragino Kaku Gothic ProN','Yu Gothic UI',sans-serif;
-  line-height: 1.6;
+  font-style: italic; color: rgba(160,138,240,0.85); font-size: 13.5px;
+  padding: 6px 12px 6px 10px; margin-bottom: 8px;
+  border-left: 2px solid rgba(160,138,240,0.4);
+  background: rgba(160,138,240,0.05); border-radius: 0 var(--r-sm) var(--r-sm) 0;
 }
-.inner-thought::before { content: '《'; color: var(--acc); font-style: normal; opacity: .6; }
-.inner-thought::after  { content: '》'; color: var(--acc); font-style: normal; opacity: .6; }
+.edit-btn, .regen-btn {
+  position: absolute; background: rgba(160,138,240,0.1);
+  border: 1px solid var(--border); color: var(--acc);
+  font-size: 11px; padding: 4px 9px; border-radius: var(--r-sm);
+  cursor: pointer; opacity: 0; transition: opacity 0.15s, background 0.15s;
+  font-family: inherit;
+}
+.narr-block:hover .edit-btn, .narr-block:hover .regen-btn { opacity: 1; }
+.edit-btn { top: 10px; right: 10px; }
+.regen-btn { top: 10px; right: 60px; }
+.edit-btn:hover, .regen-btn:hover { background: rgba(160,138,240,0.2); }
 
-.subtext {
-  font-size: 11px; color: rgba(139,118,240,.4); font-style: italic;
-  text-align: right; margin-top: 5px; padding-right: 2px;
-  font-family: 'Hiragino Kaku Gothic ProN','Yu Gothic UI',sans-serif;
+.npc-status-row {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 11px; color: var(--tx-dim);
+  padding: 10px 0; border-top: 1px solid var(--border); margin-top: 8px;
 }
-.subtext::before { content: '本音: '; color: rgba(139,118,240,.35); }
-
-/* NPC state meters */
-.psych-meters {
-  display: flex; gap: 10px; margin-top: 8px;
-  flex-wrap: wrap; padding-top: 6px;
-  border-top: 1px solid var(--border);
+.npc-status-row .nm { color: var(--tx-mid); flex-shrink: 0; }
+.npc-status-row .lbl { color: var(--tx-faint); }
+.npc-status-row .meter {
+  flex: 1; height: 4px; background: rgba(160,138,240,0.1);
+  border-radius: 100px; overflow: hidden; position: relative;
 }
-.pmeter { display: flex; align-items: center; gap: 5px; font-size: 11px; }
-.pmeter-label { color: var(--dim); min-width: 42px; }
-.pmeter-bar {
-  width: 48px; height: 4px; background: rgba(255,255,255,.08);
-  border-radius: 2px; overflow: hidden;
+.npc-status-row .meter > .bar { height: 100%; background: linear-gradient(90deg, var(--ok), var(--warn), var(--err)); transition: width 0.4s; }
+.npc-status-row .num { color: var(--tx-mid); font-variant-numeric: tabular-nums; }
+#branches { padding: 0 22px; display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.branch-btn {
+  font-family: inherit; background: rgba(212,180,120,0.08);
+  border: 1px solid rgba(212,180,120,0.25); color: var(--gold);
+  padding: 9px 16px; border-radius: 100px; font-size: 12.5px;
+  cursor: pointer; transition: all 0.15s;
 }
-.pmeter-fill { height: 100%; border-radius: 2px; transition: width .4s; }
-.pmeter-fill.trust-pos { background: var(--say); }
-.pmeter-fill.trust-neg { background: var(--err); }
-.pmeter-fill.stress { background: linear-gradient(90deg, var(--gold), var(--err)); }
-.pmeter-val { color: var(--dim); font-size: 10px; min-width: 28px; }
-
-/* Defense badge */
-.defense-badge {
-  display: inline-block; font-size: 10px; padding: 1px 6px;
-  border-radius: 4px; border: 1px solid rgba(160,96,192,.3);
-  color: rgba(160,96,192,.8); background: rgba(160,96,192,.08);
-  margin-left: 6px; font-family: sans-serif; font-style: normal;
-  vertical-align: middle;
-}
-
-.edit-btn {
-  position: absolute; top: 10px; right: 10px;
-  background: none; border: 1px solid var(--border);
-  color: var(--dim); font-size: 12px; padding: 3px 8px;
-  border-radius: 5px; cursor: pointer; opacity: 0; transition: opacity .15s;
-}
-.narr-block:hover .edit-btn { opacity: 1; }
-.dbg {
-  font-family: monospace; font-size: 11px; color: #5a5a80;
-  background: #060610; border: 1px solid var(--border);
-  border-radius: 6px; padding: 8px; white-space: pre-wrap;
-  max-height: 110px; overflow-y: auto;
-}
-
-/* ── Branches ── */
-#branches { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 16px 8px; flex-shrink: 0; }
-.chip {
-  padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border);
-  background: var(--s1); color: var(--tx); font-size: 13px;
-  cursor: pointer; transition: all .15s;
-}
-.chip.main { border-color: rgba(139,118,240,.4); }
-.chip.side { color: var(--dim); }
-.chip:hover { background: var(--s2); border-color: var(--acc); color: var(--tx); }
-
-/* ── Composer ── */
+.branch-btn:hover { background: rgba(212,180,120,0.18); border-color: rgba(212,180,120,0.5); }
 #composer {
-  flex-shrink: 0; background: var(--s1);
-  border-top: 1px solid var(--border); padding: 10px 12px 12px;
-  display: flex; flex-direction: column; gap: 8px;
+  background: linear-gradient(180deg, rgba(15,10,25,0.78), rgba(15,10,25,0.95));
+  border-top: 1px solid var(--border);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  padding: 14px 20px 16px; flex-shrink: 0;
 }
-.mode-row { display: flex; gap: 6px; }
+.mode-row { display: flex; gap: 6px; margin-bottom: 10px; }
 .mdbtn {
-  flex: 1; padding: 7px 0; border: 1px solid var(--border);
-  border-radius: 7px; background: none; color: var(--dim);
-  font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s;
+  flex: 1; font-family: inherit;
+  background: rgba(160,138,240,0.04); border: 1px solid var(--border);
+  color: var(--tx-dim); padding: 11px 8px; border-radius: var(--r-md);
+  font-size: 13.5px; font-weight: 500; letter-spacing: 0.06em;
+  cursor: pointer; transition: all 0.15s; min-height: 42px;
 }
-.mdbtn.aDO  { border-color: var(--do);    color: var(--do);    background: rgba(90,142,240,.1); }
-.mdbtn.aSAY { border-color: var(--say);   color: var(--say);   background: rgba(106,175,120,.1); }
-.mdbtn.aSTORY { border-color: var(--story); color: var(--story); background: rgba(196,144,64,.1); }
-.inp-row { display: flex; gap: 8px; align-items: flex-end; }
+.mdbtn:hover { background: rgba(160,138,240,0.1); color: var(--tx-mid); }
+.mdbtn.active {
+  background: rgba(160,138,240,0.18); border-color: var(--border-strong);
+  color: var(--acc-bright);
+  box-shadow: inset 0 -2px 0 var(--acc), 0 0 12px rgba(160,138,240,0.2);
+}
+.inp-row { display: flex; gap: 8px; margin-bottom: 10px; }
 #inp {
-  flex: 1; background: var(--s2); border: 1px solid var(--border);
-  border-radius: 8px; color: var(--tx); padding: 10px 12px;
-  font-size: 14px; font-family: inherit; resize: none;
-  min-height: 44px; max-height: 120px; line-height: 1.5;
+  flex: 1; font-family: inherit;
+  background: rgba(20,14,35,0.7); border: 1px solid var(--border-mid);
+  border-radius: var(--r-md); color: var(--tx);
+  padding: 12px 14px; font-size: 14.5px; line-height: 1.6;
+  resize: none; max-height: 120px; min-height: 44px;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-#inp:focus { outline: none; border-color: var(--acc); }
+#inp:focus { outline: none; border-color: var(--acc); box-shadow: 0 0 0 3px rgba(160,138,240,0.12); }
 #sendBtn {
-  min-width: 80px; height: 44px; border-radius: 10px; border: none;
-  background: var(--acc); color: #fff; font-size: 14px; font-weight: 600;
-  cursor: pointer; display: flex; align-items: center;
-  justify-content: center; gap: 4px; flex-shrink: 0;
-  transition: opacity .15s; padding: 0 14px;
+  font-family: inherit;
+  background: linear-gradient(135deg, rgba(160,138,240,0.7), rgba(120,90,210,0.7));
+  border: 1px solid var(--border-strong); color: #fff;
+  padding: 0 22px; border-radius: var(--r-md);
+  font-size: 14px; font-weight: 600; cursor: pointer; min-width: 88px;
+  box-shadow: 0 4px 14px rgba(160,138,240,0.25); transition: all 0.15s;
 }
-#sendBtn:disabled { opacity: .35; cursor: not-allowed; }
+#sendBtn:hover {
+  background: linear-gradient(135deg, rgba(180,158,255,0.85), rgba(140,110,230,0.85));
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(160,138,240,0.35);
+}
+#sendBtn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 .tool-row { display: flex; gap: 6px; }
 .tbtn {
-  flex: 1; padding: 5px 0; border: 1px solid var(--border);
-  border-radius: 6px; background: none; color: var(--dim);
-  font-size: 12px; cursor: pointer; transition: all .15s;
+  flex: 1; font-family: inherit; background: none;
+  border: 1px solid var(--border); color: var(--tx-dim);
+  padding: 9px 6px; border-radius: var(--r-md);
+  font-size: 12.5px; cursor: pointer; transition: all 0.15s; min-height: 38px;
 }
-.tbtn:hover { color: var(--tx); border-color: rgba(255,255,255,.2); }
+.tbtn:hover { background: rgba(160,138,240,0.08); color: var(--tx-mid); border-color: var(--border-mid); }
 
-/* ── Settings overlay ── */
 #settingsOv {
   display: none; position: fixed; inset: 0;
-  background: rgba(0,0,0,.8); z-index: 100;
-  align-items: flex-start; justify-content: center;
-  padding: 16px; padding-top: max(16px, env(safe-area-inset-top)); overflow-y: auto;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  z-index: 200; align-items: center; justify-content: center;
+  padding: 20px; overflow-y: auto;
 }
 #settingsOv.open { display: flex; }
 #settingsPanel {
-  background: var(--s1); border-radius: 14px; max-width: 540px; width: 100%;
-  display: flex; flex-direction: column; max-height: calc(100dvh - 32px); margin: auto 0;
+  background: linear-gradient(180deg, rgba(28,20,48,0.98), rgba(15,10,25,0.99));
+  border: 1px solid var(--border-mid); border-radius: var(--r-xl);
+  width: 100%; max-width: 980px; max-height: calc(100vh - 40px);
+  display: flex; flex-direction: column; box-shadow: var(--shadow-2);
 }
 .mpanel-hdr {
-  display: flex; align-items: center; padding: 16px 20px 12px;
-  flex-shrink: 0; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 24px; border-bottom: 1px solid var(--border);
 }
-.mpanel-hdr h2 { flex: 1; font-size: 17px; }
-.mpanel-body { overflow-y: auto; padding: 4px 20px 8px; flex: 1; }
-.mpanel-footer {
-  flex-shrink: 0; padding: 12px 20px;
-  padding-bottom: calc(12px + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--border);
-  background: var(--s1); border-radius: 0 0 14px 14px;
+.mpanel-hdr h2 {
+  font-family: var(--ff-disp); font-size: 20px; color: var(--acc-bright);
+  letter-spacing: 0.16em; font-weight: 500;
+  display: inline-flex; align-items: center; gap: 10px;
 }
-.mpanel-footer-main { display: flex; gap: 8px; }
-.mpanel-footer-danger { display: flex; gap: 8px; margin-top: 8px; }
-.mclose { background: none; border: none; color: var(--dim); font-size: 22px; cursor: pointer; padding: 4px; line-height: 1; }
-.sec { font-size: 11px; font-weight: 700; letter-spacing: .12em; color: var(--dim); text-transform: uppercase; margin: 16px 0 8px; }
-.fld { margin-bottom: 10px; }
-.fld label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
-.fld input, .fld textarea, .fld select {
-  width: 100%; background: var(--s2); border: 1px solid var(--border);
-  border-radius: 8px; color: var(--tx); padding: 8px 10px; font-size: 13px; font-family: inherit;
+.mclose {
+  background: none; border: 1px solid var(--border); color: var(--tx-dim);
+  width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
+  font-size: 14px; font-family: inherit; transition: all 0.15s;
+  display: inline-flex; align-items: center; justify-content: center;
 }
-.fld textarea { resize: vertical; min-height: 68px; }
-.fld input:focus, .fld textarea:focus, .fld select:focus { outline: none; border-color: var(--acc); }
-.fld select option { background: #1a1a2e; }
-.chk-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); }
-.chk-row input { width: auto; }
-
-/* NPC card */
-.npc-card { background: var(--s2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 8px; }
-.npc-hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.npc-hdr span { flex: 1; font-size: 13px; font-weight: 600; color: var(--say); }
-.npc-del { background: none; border: none; color: var(--err); cursor: pointer; font-size: 16px; }
+.mclose:hover { background: rgba(229,115,115,0.15); color: var(--err); border-color: rgba(229,115,115,0.3); }
+.mpanel-body { flex: 1; overflow-y: auto; padding: 22px 24px; }
+.settings-grid { display: grid; grid-template-columns: 1fr; gap: 28px; }
+@media (min-width: 760px) { .settings-grid { grid-template-columns: 1fr 1fr; } }
+.settings-col { display: flex; flex-direction: column; gap: 14px; }
+.sec {
+  font-family: var(--ff-disp); font-size: 16px; font-weight: 500;
+  letter-spacing: 0.16em; color: var(--acc); margin: 8px 0 4px;
+  display: flex; align-items: center; gap: 8px;
+}
+.sec::before { content: '◈'; color: var(--acc); font-size: 14px; }
+.sec-row { display: flex; align-items: center; justify-content: space-between; margin: 8px 0 4px; }
+.sec-row .sec { margin: 0; }
+.fld { display: flex; flex-direction: column; gap: 5px; }
+.fld label { font-size: 12px; color: var(--tx-mid); letter-spacing: 0.04em; }
+.fld code {
+  font-size: 11px; color: var(--gold);
+  background: rgba(212,180,120,0.08);
+  padding: 1px 5px; border-radius: 3px;
+}
+.fld input[type="text"], .fld input[type="password"], .fld textarea, .fld select {
+  background: rgba(15,10,25,0.7); border: 1px solid var(--border);
+  color: var(--tx); padding: 10px 12px; border-radius: var(--r-md);
+  font-family: inherit; font-size: 13.5px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.fld input:focus, .fld textarea:focus, .fld select:focus {
+  outline: none; border-color: var(--acc);
+  box-shadow: 0 0 0 3px rgba(160,138,240,0.1);
+}
+.fld textarea { min-height: 70px; resize: vertical; line-height: 1.6; }
+.chk-row { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: var(--tx-mid); }
+.chk-row input { accent-color: var(--acc); }
+.btn-add-npc {
+  background: rgba(160,138,240,0.06); border: 1px solid var(--border);
+  color: var(--acc); padding: 5px 12px; border-radius: var(--r-md);
+  font-size: 12px; cursor: pointer; font-family: inherit; transition: all 0.15s;
+}
+.btn-add-npc:hover { background: rgba(160,138,240,0.12); border-color: var(--border-mid); }
+.npc-card {
+  background: linear-gradient(180deg, rgba(40,28,68,0.5), rgba(28,20,48,0.6));
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  padding: 14px; position: relative; transition: border-color 0.15s;
+  margin-bottom: 12px;
+}
+.npc-card:hover { border-color: var(--border-mid); }
+.npc-hdr-row { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
+.npc-avatar {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: linear-gradient(135deg, rgba(160,138,240,0.4), rgba(120,90,210,0.55));
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  font-family: var(--ff-disp); font-size: 22px; color: rgba(255,255,255,0.92);
+  font-weight: 500; border: 1px solid var(--border-mid);
+  box-shadow: 0 0 20px rgba(160,138,240,0.2);
+  background-size: cover; background-position: center;
+}
+.npc-hdr {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 8px; flex: 1; min-width: 0;
+}
+.npc-hdr span { flex: 1; font-size: 14.5px; font-weight: 600; color: var(--tx); }
+.npc-del {
+  background: none; border: none; color: var(--tx-dim); cursor: pointer;
+  font-size: 16px; padding: 4px 6px; border-radius: var(--r-sm);
+  transition: all 0.15s;
+}
+.npc-del:hover { color: var(--err); background: rgba(229,115,115,0.1); }
 .psych-divider {
-  font-size: 10px; font-weight: 700; letter-spacing: .1em;
-  color: rgba(139,118,240,.5); text-transform: uppercase;
-  margin: 10px 0 6px; padding-top: 8px;
-  border-top: 1px solid rgba(139,118,240,.15);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
+  color: var(--gold); text-transform: uppercase;
+  margin: 12px 0 6px; padding-top: 10px;
+  border-top: 1px solid rgba(212,180,120,0.18);
 }
 
-.btn-p { flex: 1; padding: 11px; background: var(--acc); color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; min-height: 44px; }
-.btn-s { flex: 1; padding: 11px; background: none; color: var(--dim); border: 1px solid var(--border); border-radius: 8px; font-size: 14px; cursor: pointer; min-height: 44px; }
-.btn-d { flex: 1; padding: 9px 14px; background: none; color: var(--err); border: 1px solid rgba(224,96,96,.3); border-radius: 8px; font-size: 13px; cursor: pointer; min-height: 40px; }
-
-/* ── Edit overlay ── */
-#editOv { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
+.mpanel-footer {
+  padding: 16px 24px; border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.footer-main, .mpanel-footer-main { display: flex; gap: 8px; }
+.footer-danger, .mpanel-footer-danger { display: flex; gap: 8px; margin-top: 4px; }
+.btn-p {
+  flex: 1; font-family: inherit; padding: 12px;
+  background: linear-gradient(135deg, var(--acc), #8a72d4);
+  color: #fff; border: none; border-radius: var(--r-md);
+  font-size: 14px; font-weight: 600; letter-spacing: 0.04em;
+  cursor: pointer; min-height: 46px;
+  box-shadow: 0 4px 14px rgba(160,138,240,0.25); transition: all 0.15s;
+}
+.btn-p:hover { filter: brightness(1.12); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(160,138,240,0.4); }
+.btn-s {
+  flex: 1; font-family: inherit; padding: 12px;
+  background: rgba(160,138,240,0.04); color: var(--tx-mid);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  font-size: 14px; cursor: pointer; min-height: 46px; transition: all 0.15s;
+}
+.btn-s:hover { background: rgba(160,138,240,0.12); color: var(--tx); border-color: var(--border-mid); }
+.btn-rand {
+  width: 100%; font-family: inherit; padding: 11px;
+  background: rgba(212,180,120,0.06);
+  border: 1px solid rgba(212,180,120,0.25);
+  color: var(--gold); border-radius: var(--r-md);
+  font-size: 13px; cursor: pointer; transition: all 0.15s;
+}
+.btn-rand:hover { background: rgba(212,180,120,0.14); border-color: rgba(212,180,120,0.45); }
+.btn-d {
+  flex: 1; font-family: inherit; padding: 10px;
+  background: none; color: var(--err);
+  border: 1px solid rgba(229,115,115,0.3); border-radius: var(--r-md);
+  font-size: 12.5px; cursor: pointer; min-height: 40px; transition: all 0.15s;
+}
+.btn-d:hover { background: rgba(229,115,115,0.12); border-color: rgba(229,115,115,0.55); }
+#editOv {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.8); backdrop-filter: blur(6px);
+  z-index: 200; align-items: center; justify-content: center; padding: 20px;
+}
 #editOv.open { display: flex; }
-#editPanel { background: var(--s1); border-radius: 14px; padding: 20px; width: 100%; max-width: 500px; }
-#editPanel h3 { margin-bottom: 12px; }
-#editTa { width: 100%; background: var(--s2); border: 1px solid var(--border); border-radius: 8px; color: var(--tx); padding: 10px; font-size: 14px; font-family: 'Hiragino Mincho ProN','Yu Mincho',serif; line-height: 1.7; resize: vertical; min-height: 120px; }
-.edit-acts { display: flex; gap: 8px; margin-top: 12px; }
-
-@media (max-width: 480px) {
-  #story { padding: 14px 12px 6px; }
-  .narr-block { font-size: 14px; padding: 12px 34px 12px 14px; }
+#editPanel {
+  background: linear-gradient(180deg, rgba(28,20,48,0.98), rgba(15,10,25,0.99));
+  border: 1px solid var(--border-mid); border-radius: var(--r-lg);
+  padding: 22px; width: 100%; max-width: 540px; box-shadow: var(--shadow-2);
 }
+#editPanel h3 {
+  margin-bottom: 14px; color: var(--acc-bright);
+  font-family: var(--ff-disp); font-size: 17px; letter-spacing: 0.12em;
+}
+#editTa {
+  width: 100%; background: rgba(15,10,25,0.7);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  color: var(--tx); padding: 12px; font-size: 14px;
+  font-family: var(--ff-narr); line-height: 1.8;
+  resize: vertical; min-height: 140px;
+}
+#editTa:focus { outline: none; border-color: var(--acc); box-shadow: 0 0 0 3px rgba(160,138,240,0.12); }
+.edit-acts { display: flex; gap: 8px; margin-top: 14px; }
+.err-msg {
+  background: rgba(229,115,115,0.1); border: 1px solid rgba(229,115,115,0.3);
+  border-radius: var(--r-md); padding: 12px 16px;
+  font-size: 13px; color: var(--err); white-space: pre-wrap;
+}
+@media (max-width: 640px) {
+  #welcome { padding: 60px 18px 30px; }
+  #welcome h2 { font-size: 42px; }
+  .narr-block { font-size: 14.5px; padding: 14px 38px 14px 16px; }
+  #topbar { padding: 12px 16px; }
+  #topbar h1 { font-size: 18px; }
+  #story { padding: 20px 14px 8px; }
+  #composer { padding: 12px 14px 14px; }
+  .mdbtn { font-size: 12px; padding: 9px 4px; }
+  #settingsPanel { max-height: calc(100vh - 20px); }
+  .mpanel-hdr { padding: 14px 18px; }
+  .mpanel-body { padding: 18px; }
+  .mpanel-footer { padding: 14px 18px; }
+}
+
 </style>
 </head>
 <body>
+
+<!-- Background image layer -->
+<div id="bgLayer">
+  <div id="bgImage"></div>
+  <div id="bgVignette"></div>
+</div>
 
 <!-- Top bar -->
 <div id="topbar">
@@ -255,11 +436,12 @@ body {
 <!-- Story -->
 <div id="story">
   <div id="welcome">
+    <div class="wel-emblem">◈</div>
     <h2>CHRONICLE</h2>
     <p id="welcomeMsg">⚙ 設定 からAPIキーと世界設定を入力してください。</p>
-    <div id="welcomeActions" style="display:none; margin-top:18px;">
-      <button class="btn-p" style="min-width:200px" onclick="G.startScene()">▶ 物語を始める</button>
-      <div id="quickStarts" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:12px"></div>
+    <div id="welcomeActions" style="display:none;">
+      <button class="btn-cta" onclick="G.startScene()">▶ 物語を始める</button>
+      <div id="quickStarts" class="quick-starts"></div>
     </div>
   </div>
 </div>
@@ -281,8 +463,8 @@ body {
     <button id="sendBtn" onclick="G.submit()">送信 ▶</button>
   </div>
   <div class="tool-row">
-    <button class="tbtn" onclick="G.cont()">続きを書く</button>
-    <button class="tbtn" onclick="G.retry()">やり直す</button>
+    <button class="tbtn" onclick="G.cont()">✦ 続きを書く</button>
+    <button class="tbtn" onclick="G.retry()">⟲ やり直す</button>
     <button class="tbtn" onclick="G.undo()">↩ 取消</button>
   </div>
 </div>
@@ -295,99 +477,105 @@ body {
       <button class="mclose" onclick="UI.closeSettings()" aria-label="閉じる">✕</button>
     </div>
     <div class="mpanel-body">
+      <div class="settings-grid">
 
-      <div class="sec">API</div>
-      <div class="fld">
-        <label>プロバイダー</label>
-        <select id="cfgProvider" onchange="UI.onProviderChange()">
-          <option value="anthropic">Anthropic（Claude）— sk-ant-...</option>
-          <option value="openrouter">OpenRouter（推奨）— sk-or-...</option>
-          <option value="novelai">NovelAI（Kayra）— pst-...</option>
-        </select>
-      </div>
-      <div id="provAnthropic">
-        <div class="fld">
-          <label>Anthropic API キー（<code>sk-ant-</code> で始まる）</label>
-          <input type="password" id="cfgKey" placeholder="sk-ant-api03-...">
-        </div>
-        <div class="fld">
-          <label>モデル</label>
-          <select id="cfgModel">
-            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5（推奨：軽量・高速）</option>
-            <option value="claude-sonnet-4-6">Claude Sonnet 4.6（高品質）</option>
-          </select>
-        </div>
-      </div>
-      <div id="provOpenRouter" style="display:none">
-        <div class="fld">
-          <label>OpenRouter API キー（<code>sk-or-</code> で始まる）</label>
-          <input type="password" id="cfgOrKey" placeholder="sk-or-v1-...">
-        </div>
-        <div class="fld">
-          <label>モデル</label>
-          <select id="cfgOrModel">
-            <option value="sao10k/l3.3-euryale-70b">Euryale 70B（推奨・成人描写対応）</option>
-            <option value="mistralai/mistral-nemo">Mistral Nemo（速い・JSON対応）</option>
-            <option value="meta-llama/llama-3.3-70b-instruct">LLaMA 3.3 70B（高品質）</option>
-            <option value="nousresearch/hermes-3-llama-3.1-405b">Hermes 3 405B（最高品質）</option>
-            <option value="google/gemma-3-27b-it">Gemma 3 27B（日本語対応）</option>
-          </select>
-        </div>
-        <div class="fld" style="background:rgba(139,118,240,.08);border:1px solid rgba(139,118,240,.25);border-radius:8px;padding:10px;font-size:12px;color:#a090d0">
-          ✦ 指示追従モデル。心理エンジン・ホラー・成人描写など表現制限なし。
-        </div>
-        <div class="fld">
-          <label class="chk-row"><input type="checkbox" id="cfgSimpleMode"> シンプルモード（AI Dungeon風・JSON無し直接生成）</label>
-          <div style="font-size:11px;color:var(--dim);margin-top:4px;line-height:1.5">JSONを使わず物語を直接生成。展開のバリエーションが増え、定型化を回避。Euryale等のロール特化モデル推奨。</div>
-        </div>
-      </div>
-      <div id="provNovelAI" style="display:none">
-        <div class="fld">
-          <label>NovelAI トークン（<code>pst-</code> で始まる）</label>
-          <input type="password" id="cfgNaiKey" placeholder="pst-...">
-        </div>
-        <div class="fld" style="background:rgba(196,144,64,.1);border:1px solid rgba(196,144,64,.3);border-radius:8px;padding:10px;font-size:12px;color:#c49040">
-          ⚠ NovelAI（Kayra）は補完モデルです。心理エンジンの一部機能はClaude APIで最大限に活かせます。
-        </div>
-      </div>
-      <div class="fld">
-        <label class="chk-row"><input type="checkbox" id="cfgDbg"> デバッグ表示</label>
-      </div>
-      <div class="fld">
-        <label class="chk-row"><input type="checkbox" id="cfgShowInner" checked> NPCの内心を表示（《》で表示）</label>
-      </div>
+        <!-- Left column: API + 主人公 + シーン設定 -->
+        <div class="settings-col">
 
-      <div class="sec">主人公</div>
-      <div class="fld"><label>名前</label><input type="text" id="cfgHName" placeholder="例: アリア・フェイン"></div>
-      <div class="fld"><label>説明（性格・外見・立場）</label><textarea id="cfgHDesc" placeholder="例: 18歳の記録官見習い。慎重だが好奇心が強い。"></textarea></div>
+          <div class="sec">API</div>
+          <div class="fld">
+            <label>プロバイダー</label>
+            <select id="cfgProvider" onchange="UI.onProviderChange()">
+              <option value="anthropic">Anthropic（Claude）— sk-ant-...</option>
+              <option value="openrouter">OpenRouter（推奨）— sk-or-...</option>
+              <option value="novelai">NovelAI（Kayra）— pst-...</option>
+            </select>
+          </div>
+          <div id="provAnthropic">
+            <div class="fld">
+              <label>Anthropic API キー（<code>sk-ant-</code> で始まる）</label>
+              <input type="password" id="cfgKey" placeholder="sk-ant-api03-...">
+            </div>
+            <div class="fld">
+              <label>モデル</label>
+              <select id="cfgModel">
+                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5（推奨：軽量・高速）</option>
+                <option value="claude-sonnet-4-6">Claude Sonnet 4.6（高品質）</option>
+              </select>
+            </div>
+          </div>
+          <div id="provOpenRouter" style="display:none">
+            <div class="fld">
+              <label>OpenRouter API キー（<code>sk-or-</code> で始まる）</label>
+              <input type="password" id="cfgOrKey" placeholder="sk-or-v1-...">
+            </div>
+            <div class="fld">
+              <label>モデル</label>
+              <select id="cfgOrModel">
+                <option value="sao10k/l3.3-euryale-70b">Euryale 70B（推奨・成人描写対応）</option>
+                <option value="mistralai/mistral-nemo">Mistral Nemo（速い・JSON対応）</option>
+                <option value="meta-llama/llama-3.3-70b-instruct">LLaMA 3.3 70B（高品質）</option>
+                <option value="nousresearch/hermes-3-llama-3.1-405b">Hermes 3 405B（最高品質）</option>
+                <option value="google/gemma-3-27b-it">Gemma 3 27B（日本語対応）</option>
+              </select>
+            </div>
+            <div class="fld" style="background:rgba(160,138,240,0.08);border:1px solid var(--border-mid);border-radius:8px;padding:10px;font-size:12px;color:var(--acc-bright)">
+              ✦ 指示追従モデル。心理エンジン・ホラー・成人描写など表現制限なし。
+            </div>
+            <div class="fld">
+              <label class="chk-row"><input type="checkbox" id="cfgSimpleMode"> シンプルモード（AI Dungeon風・JSON無し直接生成）</label>
+              <div style="font-size:11px;color:var(--tx-dim);margin-top:4px;line-height:1.5">JSONを使わず物語を直接生成。展開のバリエーションが増え、定型化を回避。Euryale等のロール特化モデル推奨。</div>
+            </div>
+          </div>
+          <div id="provNovelAI" style="display:none">
+            <div class="fld">
+              <label>NovelAI トークン（<code>pst-</code> で始まる）</label>
+              <input type="password" id="cfgNaiKey" placeholder="pst-...">
+            </div>
+            <div class="fld" style="background:rgba(212,180,120,0.1);border:1px solid rgba(212,180,120,0.3);border-radius:8px;padding:10px;font-size:12px;color:var(--gold)">
+              ⚠ NovelAI（Kayra）は補完モデルです。心理エンジンの一部機能はClaude APIで最大限に活かせます。
+            </div>
+          </div>
+          <div class="fld"><label class="chk-row"><input type="checkbox" id="cfgDbg"> デバッグ表示</label></div>
+          <div class="fld"><label class="chk-row"><input type="checkbox" id="cfgShowInner" checked> NPCの内心を表示（《》で表示）</label></div>
 
-      <div class="sec">NPC</div>
-      <div id="npcList"></div>
-      <button class="btn-s" style="width:100%;margin-bottom:4px" onclick="UI.addNpc()">+ NPC を追加</button>
+          <div class="sec">主人公</div>
+          <div class="fld"><label>名前</label><input type="text" id="cfgHName" placeholder="例: ルーク、アリア、あなた など"></div>
+          <div class="fld"><label>説明（性格・外見・立場）</label><textarea id="cfgHDesc" placeholder="例: 好奇心旺盛な旅人。小さな村で育ち、世界の真実を知るために旅をしている。"></textarea></div>
 
-      <div class="sec">世界設定</div>
-      <div class="fld"><label>世界観メモ（参照用、本文には直接流さない）</label>
-        <textarea id="cfgLore" placeholder="例: 記憶が結晶化した「灯片」が通貨として使われる都市。"></textarea></div>
+          <div class="sec">シーン設定</div>
+          <div class="fld"><label>現在の場所</label><input type="text" id="cfgLoc" placeholder="例: 王都ダランセル / 北の森 / 古城の地下 など"></div>
+          <div class="fld"><label>文体・雰囲気</label><input type="text" id="cfgTone" placeholder="例: ダークファンタジー / 切ない / 緊張感のある"></div>
+        </div>
 
-      <div class="sec">シーン設定</div>
-      <div class="fld"><label>現在の場所</label><input type="text" id="cfgLoc" placeholder="例: 路地裏、夕暮れ時"></div>
-      <div class="fld"><label>物語の前提・目的</label>
-        <textarea id="cfgObj" placeholder="例: 主人公は謎の少女の正体を探っている。"></textarea></div>
-      <div class="fld"><label>文体・雰囲気</label>
-        <input type="text" id="cfgTone" placeholder="例: ダークファンタジー、心理描写重視、会話多め"></div>
+        <!-- Right column: NPC + 世界設定 -->
+        <div class="settings-col">
+          <div class="sec-row">
+            <div class="sec">NPC</div>
+            <button class="btn-add-npc" onclick="UI.addNpc()">+ NPC を追加</button>
+          </div>
+          <div id="npcList"></div>
 
+          <div class="sec">世界設定</div>
+          <div class="fld"><label>世界観メモ（参照用、本文には直接流さない）</label>
+            <textarea id="cfgLore" placeholder="この世界の歴史、文化、魔法の法則、宗教、国家、種族関係などを自由にメモしてください。"></textarea></div>
+          <div class="fld"><label>物語の前提・目的</label>
+            <textarea id="cfgObj" placeholder="例: 失われた聖剣を探す旅 / 魔王討伐 / 真実を暴く など"></textarea></div>
+        </div>
+
+      </div>
     </div>
     <div class="mpanel-footer">
-      <div class="mpanel-footer-main">
+      <div class="footer-main">
         <button class="btn-p" onclick="UI.saveSettings()">✔ 保存してゲーム開始</button>
         <button class="btn-s" onclick="UI.closeSettings()">閉じる</button>
       </div>
-      <div style="margin-top:8px">
-        <button class="btn-s" style="width:100%;font-size:13px" onclick="UI.randomFill()">🎲 未入力をランダム生成</button>
+      <div>
+        <button class="btn-rand" onclick="UI.randomFill()">🎲 未入力をランダム生成</button>
       </div>
-      <div class="mpanel-footer-danger">
-        <button class="btn-d" onclick="G.resetStory()">物語リセット（設定は保持）</button>
-        <button class="btn-d" onclick="G.resetAll()">完全リセット</button>
+      <div class="footer-danger">
+        <button class="btn-d" onclick="G.resetStory()">⟲ 物語リセット（設定は保持）</button>
+        <button class="btn-d" onclick="G.resetAll()">🗑 完全リセット</button>
       </div>
     </div>
   </div>
@@ -1354,10 +1542,14 @@ const UI = {
     const el = document.getElementById('npcList'); el.innerHTML = '';
     S.cast.npcs.forEach((npc, i) => {
       const card = document.createElement('div'); card.className = 'npc-card'; card.dataset.npcIdx = i;
+      const initial = (npc.name || ('N'+(i+1))).trim().charAt(0);
       card.innerHTML = `
-        <div class="npc-hdr">
-          <span>${this.esc(npc.name || `NPC ${i+1}`)}</span>
-          <button class="npc-del" onclick="UI._delNpc(${i})">✕</button>
+        <div class="npc-hdr-row">
+          <div class="npc-avatar">${this.esc(initial)}</div>
+          <div class="npc-hdr" style="flex:1;margin-bottom:0">
+            <span>${this.esc(npc.name || `NPC ${i+1}`)}</span>
+            <button class="npc-del" onclick="UI._delNpc(${i})">✕</button>
+          </div>
         </div>
         <div class="fld"><labl>名前</label>
           <input type="text" data-f="name" value="${this.esc(npc.name||'')}"></div>
