@@ -5258,6 +5258,151 @@ setTimeout(() => {
 }, 200);
 
 
+
+
+// ─────────────────────────────────────────────────────────────
+// Frame system: ornate / simple / none + per-preset defaults + user override
+// ─────────────────────────────────────────────────────────────
+
+window.AVATAR_FRAMES = {
+  ornate: ', inside ornate dark fantasy circular emblem frame, golden filigree border with four-pointed star decorations at cardinal points, purple amethyst gemstone accents, dark purple starry cosmic background, mystical sparkles, character centered headshot, black outer background, no text, no logo',
+  simple: ', circular portrait composition, thin gold rim border, smooth dark purple gradient background, minimal background detail, clean composition, no text, no logo',
+  none: ', solid soft pastel background, simple portrait composition, clean minimal background, no text, no logo'
+};
+
+// Per-preset frame defaults
+window.AVATAR_STYLE_FRAME_DEFAULT = {
+  monogatari: 'simple',
+  chibi: 'simple',
+  watercolor: 'none',
+  oil: 'none',
+  pixel: 'none',
+  manga: 'none',
+  // others default to 'ornate'
+  chronicle: 'ornate',
+  anime: 'ornate',
+  gacha: 'ornate',
+  jrpg: 'ornate',
+  vn: 'ornate',
+  semireal: 'ornate'
+};
+
+// User override config: 'preset' (use default) | 'ornate' | 'simple' | 'none'
+if (typeof S.cfg.frameStyle === 'undefined') S.cfg.frameStyle = 'preset';
+
+// New _buildAvatarPrompt that uses frame system
+window._buildAvatarPrompt = function(name, desc) {
+  const styleKey = (S.cfg && S.cfg.avatarStyle) || 'monogatari';
+  const style = window.AVATAR_STYLES[styleKey] || window.AVATAR_STYLES.monogatari;
+  const d = (desc || '').slice(0, 200);
+  // Determine frame
+  let frameKey;
+  const userOverride = S.cfg.frameStyle;
+  if (!userOverride || userOverride === 'preset') {
+    frameKey = window.AVATAR_STYLE_FRAME_DEFAULT[styleKey] || 'ornate';
+  } else {
+    frameKey = userOverride;
+  }
+  const frame = window.AVATAR_FRAMES[frameKey] || '';
+  return style.prefix + ', headshot, ' + d + ', single character, centered' + frame;
+};
+
+// Update _avatarUrl to include frame key in seed (so frame change = new image)
+window._avatarUrl = function(name, desc, extraSeed, emotion) {
+  if (!name && !desc) return null;
+  let prompt = window._buildAvatarPrompt(name, desc);
+  // Determine current frame for seed
+  const styleKey = (S.cfg && S.cfg.avatarStyle) || 'monogatari';
+  let frameKey = (S.cfg.frameStyle && S.cfg.frameStyle !== 'preset') ? S.cfg.frameStyle : (window.AVATAR_STYLE_FRAME_DEFAULT[styleKey] || 'ornate');
+  let seedExtra = '|' + frameKey;
+  if (S.cfg && S.cfg.dynamicAvatar && emotion) {
+    const expr = window.EMOTION_MAP[emotion] || emotion;
+    prompt = 'expression: ' + expr + ', ' + prompt;
+    seedExtra += '|' + emotion;
+  }
+  const baseSeed = window._strHash((name || '') + '|' + (desc || '') + seedExtra);
+  const seed = (baseSeed + (extraSeed || 0) * 7919) % 100000;
+  return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=384&height=384&seed=' + seed + '&nologo=true&private=true';
+};
+
+// Better regen: use random jumps instead of +1 to explore seed space more
+window._regenNpcAvatar = function(idx) {
+  const npc = S.cast.npcs[idx];
+  if (!npc) return;
+  // Random jump 1..1000 to explore wider seed space, ensures visual variety
+  const jump = Math.floor(Math.random() * 1000) + 1;
+  npc.avatarSeed = (npc.avatarSeed || 0) + jump;
+  // Clear cache for old + new URL to force fresh fetch
+  window._avatarLoadCache = {};
+  try { localStorage.removeItem('chr_av_cache_v1'); } catch {}
+  S.save();
+  if (UI._renderNpcList) UI._renderNpcList();
+  if (UI.renderAll) UI.renderAll();
+};
+window._regenHeroAvatar = function() {
+  const jump = Math.floor(Math.random() * 1000) + 1;
+  S.cast.hero.avatarSeed = (S.cast.hero.avatarSeed || 0) + jump;
+  window._avatarLoadCache = {};
+  try { localStorage.removeItem('chr_av_cache_v1'); } catch {}
+  S.save();
+  if (UI.renderAll) UI.renderAll();
+  if (window._renderHeroAvatarInSettings) window._renderHeroAvatarInSettings();
+  // Refresh welcome avatar
+  const heroAvEl = document.getElementById('heroAvatarImg');
+  if (heroAvEl) {
+    const url = window._getHeroAvatar();
+    const initial = (S.cast.hero.name || '?').charAt(0);
+    if (window._setAvatarBg) window._setAvatarBg(heroAvEl, url, initial, S.cast.hero.name, S.cast.hero.desc, S.cast.hero.avatarSeed || 0);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
+// Settings UI: frame style selector
+// ─────────────────────────────────────────────────────────────
+function _renderFrameSelector() {
+  const slot = document.getElementById('heroAvSettings');
+  if (!slot) return;
+  if (document.getElementById('cfgFrameStyle')) return;
+  const row = document.createElement('div');
+  row.className = 'fld';
+  row.style.cssText = 'flex-basis:100%;margin-top:8px';
+  const opts = [
+    { v: 'preset', label: 'プリセット推奨（自動）' },
+    { v: 'ornate', label: '豪華枠（金縁＋宝石＋星屑）' },
+    { v: 'simple', label: 'シンプル枠（細金縁＋紫グラデ）' },
+    { v: 'none', label: '枠なし（パステル背景のみ）' }
+  ];
+  let html = '<label style="font-size:12px;color:var(--tx-mid);margin-bottom:4px;display:block">フレーム装飾</label>';
+  html += '<select id="cfgFrameStyle" style="width:100%">';
+  for (const o of opts) {
+    html += '<option value="' + o.v + '"' + (S.cfg.frameStyle === o.v ? ' selected' : '') + '>' + o.label + '</option>';
+  }
+  html += '</select>';
+  html += '<div style="font-size:10.5px;color:var(--tx-faint);margin-top:3px;line-height:1.5">物語シリーズやちびキャラ系はシンプル枠推奨。豪華絢爛なJRPG系は豪華枠推奨。</div>';
+  row.innerHTML = html;
+  slot.appendChild(row);
+  document.getElementById('cfgFrameStyle').addEventListener('change', (e) => {
+    S.cfg.frameStyle = e.target.value;
+    S.save();
+    // Clear cache to refresh
+    window._avatarLoadCache = {};
+    try { localStorage.removeItem('chr_av_cache_v1'); } catch {}
+    if (window._renderHeroAvatarInSettings) window._renderHeroAvatarInSettings();
+    if (UI._renderNpcList) UI._renderNpcList();
+    if (UI.renderAll) UI.renderAll();
+  });
+}
+
+const _origOpenSettingsFrame = UI.openSettings.bind(UI);
+UI.openSettings = function() {
+  _origOpenSettingsFrame();
+  setTimeout(() => _renderFrameSelector(), 250);
+};
+
+// Force re-render
+setTimeout(() => UI.renderAll && UI.renderAll(), 200);
+
+
 // Boot
 G.init();
 </script>
