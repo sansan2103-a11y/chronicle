@@ -13633,5 +13633,63 @@ G.init();
   console.log(TAG, 'narrative + dialogue dedupe active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v44: Override v31's overly-aggressive model filter. Restore Hermes 3 405B
+ *      and ensure full curated set is present in cfgOrModel dropdown.
+ * ======================================================================== */
+(function v44ModelRestore(){
+  var TAG = '[v44]';
+
+  /* Final curated set with labels, ordered by recommendation for R18 horror */
+  var DESIRED = [
+    {value: 'nousresearch/hermes-3-llama-3.1-405b', label: 'Hermes 3 405B（最高品質：表現の幅）'},
+    {value: 'anthropic/claude-sonnet-4-5',          label: 'Claude Sonnet 4.5（高品質：文章繊細）'},
+    {value: 'sao10k/l3.3-euryale-70b',              label: 'Euryale 70B（成人描写）'},
+    {value: 'anthropic/claude-haiku-4-5',           label: 'Claude Haiku 4.5（安定・速い）'},
+    {value: 'meta-llama/llama-3.3-70b-instruct',    label: 'LLaMA 3.3 70B（汎用：反復しやすい）'}
+  ];
+
+  function applyV44(){
+    var sel = document.getElementById('cfgOrModel');
+    if (!sel) return;
+    /* Build a set of current values */
+    var currentValues = Array.from(sel.options).map(function(o){return o.value;});
+    var desiredValues = DESIRED.map(function(d){return d.value;});
+
+    /* If we already match exactly + in correct order, skip */
+    var matches = currentValues.length === desiredValues.length &&
+                  currentValues.every(function(v,i){ return v === desiredValues[i]; });
+    if (matches && sel.dataset.v44 === '1') return;
+
+    /* Save current selection */
+    var prevSelected = sel.value;
+
+    /* Wipe + rebuild */
+    sel.innerHTML = '';
+    DESIRED.forEach(function(d){
+      var o = document.createElement('option');
+      o.value = d.value;
+      o.textContent = d.label;
+      sel.appendChild(o);
+    });
+
+    /* Restore selection if possible, else default to Hermes */
+    if (desiredValues.indexOf(prevSelected) >= 0) {
+      sel.value = prevSelected;
+    } else {
+      sel.value = 'nousresearch/hermes-3-llama-3.1-405b';
+    }
+    sel.dataset.v44 = '1';
+    /* Clear v31's flag so it re-runs filter only if dropdown is re-populated by user code */
+    delete sel.dataset.v31;
+  }
+  setInterval(applyV44, 800);
+  setTimeout(applyV44, 200);
+  setTimeout(applyV44, 1000);
+  console.log(TAG, 'model dropdown curated, Hermes restored');
+})();
+</script>
 </body>
 </html>
