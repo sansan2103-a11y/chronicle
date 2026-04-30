@@ -11569,5 +11569,94 @@ G.init();
   console.log("[Patch v23] all loaded");
 })();
 </script>
+<script>
+/* PATCH: quality-fixes-v24 (honorific vocative + dedup) */
+(function(){
+  console.log("[Patch v24] loading: honorific vocative + dedup");
+  function getHero(){
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      return c.cast && c.cast.hero ? c.cast.hero.name : null;
+    } catch(e){ return null; }
+  }
+  function getNpcs(){
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      return (c.cast && c.cast.npcs) ? c.cast.npcs.map(function(n){return n.name;}).filter(Boolean) : [];
+    } catch(e){ return []; }
+  }
+  /* (1) Re-attribute hero-cards where dialogue contains hero firstname + honorific (さん/ちゃん/くん/様/etc) */
+  function fixHonorificVocative(){
+    var hero = getHero();
+    var npcs = getNpcs();
+    if (!hero || npcs.length === 0) return;
+    var heroFirst = hero.split(/[\s・]/)[0];
+    /* Match: heroFirst + honorific OR heroFirst at start */
+    var honorificRx = new RegExp(heroFirst + "(?:さん|ちゃん|くん|様|さま|殿|氏|お兄|お姉)", "");
+    var heroAtStartRx = new RegExp("^\\s*" + heroFirst + "[、。!?！？\\s「」]", "");
+    var rows = document.querySelectorAll(".dialogue-row");
+    rows.forEach(function(row){
+      if (row.dataset._v24done === "1") return;
+      var nameEl = row.querySelector(".dialogue-name");
+      var textEl = row.querySelector(".dialogue-text");
+      if (!nameEl || !textEl) return;
+      var speaker = (nameEl.textContent||"").trim();
+      var dialogue = (textEl.textContent||"").trim().replace(/^[「『《""]+|[」』》""]+$/g, "");
+      var isHero = (speaker === hero) || (speaker.split(/[\s・]/)[0] === heroFirst);
+      if (!isHero) { row.dataset._v24done = "1"; return; }
+      /* Hero-attributed: check if dialogue calls hero name */
+      var hasHonorific = honorificRx.test(dialogue);
+      var heroAtStart = heroAtStartRx.test(dialogue);
+      if (hasHonorific || heroAtStart) {
+        /* Pick first NPC as new speaker (or last NPC mentioned) */
+        var correct = npcs[0];
+        if (correct && correct !== hero) {
+          nameEl.textContent = correct;
+          row.style.borderLeft = "3px solid #d4b375";
+          row.title = "v24: " + hero + " → " + correct + " (honorific vocative fix)";
+          var img = row.querySelector("img");
+          if (img && window._horrorSvg) img.src = window._horrorSvg(correct);
+          console.log("[Patch v24] honorific re-attribution:", hero, "→", correct, "|", dialogue.slice(0,30));
+        }
+      }
+      row.dataset._v24done = "1";
+    });
+  }
+  /* (2) Stronger duplicate dedup */
+  function dedupCards(){
+    /* Find log panel */
+    var hdrs = Array.from(document.querySelectorAll("h1,h2,h3,h4,div,span"));
+    var logHdr = hdrs.find(function(h){return h.textContent && h.textContent.indexOf("会話ログ") >= 0 && h.children.length === 0;});
+    if (!logHdr) return;
+    var lp = logHdr.closest("section,aside,div,article");
+    if (!lp) return;
+    var rows = Array.from(lp.querySelectorAll(".dialogue-row"));
+    var seen = {};
+    var removed = 0;
+    rows.forEach(function(row){
+      var nameEl = row.querySelector(".dialogue-name");
+      var textEl = row.querySelector(".dialogue-text");
+      if (!nameEl || !textEl) return;
+      var name = (nameEl.textContent||"").trim();
+      var text = (textEl.textContent||"").trim().slice(0,60);
+      var key = name + "::" + text;
+      if (seen[key]) {
+        row.remove();
+        removed++;
+      } else {
+        seen[key] = true;
+      }
+    });
+    if (removed > 0) console.log("[Patch v24] removed " + removed + " duplicate cards");
+  }
+  setInterval(function(){
+    fixHonorificVocative();
+    dedupCards();
+  }, 1500);
+  setTimeout(fixHonorificVocative, 800);
+  setTimeout(dedupCards, 1000);
+  console.log("[Patch v24] all loaded");
+})();
+</script>
 </body>
 </html>
