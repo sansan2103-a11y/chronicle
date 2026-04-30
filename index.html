@@ -13130,5 +13130,176 @@ G.init();
   console.log(TAG, 'NPC card input syncer active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v38: Take ownership of NPC + Hero gender dropdown to stop the v28 / v29 / v33
+ *      race that makes the 性別 selector flicker on screen.
+ *  - Hide ALL existing v28-/v29-injected gender rows permanently via CSS.
+ *  - Insert exactly ONE v38-managed select per character card, stamped with
+ *    data-v38="1" so it survives re-renders and won't be re-created.
+ *  - Two-way sync: select.value <-> state.cast[*].gender ('男性'/'女性').
+ * ======================================================================== */
+(function v38GenderOwner(){
+  var TAG = '[v38]';
+
+  if (!document.getElementById('v38-style')) {
+    var st = document.createElement('style');
+    st.id = 'v38-style';
+    st.textContent =
+      '.v28-gender-row,.v29-gender-row,[data-v28-gender],[data-v29-gender]{display:none !important}\n' +
+      '.v38-gender-row{display:flex;align-items:center;gap:8px;margin:6px 0 8px 0;font-size:13px}\n' +
+      '.v38-gender-row label{margin:0 4px 0 0;color:var(--dim);font-weight:600;min-width:34px}\n' +
+      '.v38-gender-row select{padding:4px 8px;background:var(--s2);color:var(--tx);border:1px solid var(--border);border-radius:6px}\n';
+    document.head.appendChild(st);
+  }
+
+  function loadState(){
+    try { return JSON.parse(localStorage.getItem('chr6')||'{}'); }
+    catch(e){ return {}; }
+  }
+  function saveState(s){
+    try { localStorage.setItem('chr6', JSON.stringify(s)); } catch(e){}
+  }
+
+  function detectFromDesc(text, name){
+    var t = String(text||'');
+    if (/性別[:：]?\s*女|少女|女子|女の子|姉|妹|姫|淑女|彼女|令嬢|王女/.test(t)) return '女性';
+    if (/性別[:：]?\s*男|少年|男子|男の子|兄|弟|王子|青年/.test(t)) return '男性';
+    var n = String(name||'');
+    var h = 0;
+    for (var i=0;i<n.length;i++) h = (h*31 + n.charCodeAt(i)) & 0xffff;
+    return (h % 2 === 0) ? '女性' : '男性';
+  }
+
+  function buildSelect(initial){
+    var wrap = document.createElement('div');
+    wrap.className = 'v38-gender-row';
+    wrap.dataset.v38 = '1';
+    wrap.innerHTML = '<label>性別:</label>';
+    var sel = document.createElement('select');
+    sel.dataset.v38 = '1';
+    sel.dataset.f = 'gender';
+    [['男性','男性'],['女性','女性']].forEach(function(p){
+      var o = document.createElement('option');
+      o.value = p[0]; o.textContent = p[1];
+      sel.appendChild(o);
+    });
+    sel.value = initial || '男性';
+    wrap.appendChild(sel);
+    return {wrap: wrap, sel: sel};
+  }
+
+  function ensureNpcCardsHaveOurDropdown(){
+    var cards = document.querySelectorAll('.npc-card');
+    var st = loadState();
+    var npcs = (st.cast && st.cast.npcs) || [];
+    cards.forEach(function(card, i){
+      /* Hide all stale gender rows that are NOT v38 */
+      Array.from(card.querySelectorAll('select')).forEach(function(s){
+        if (s.dataset && s.dataset.v38 === '1') return;
+        var hasGen = Array.from(s.options||[]).some(function(o){return o.value==='男性'||o.value==='女性';});
+        if (hasGen) {
+          var row = s.closest('.fld, .v28-gender-row, .v29-gender-row, .v38-gender-row, [class*=gender-row]') || s.parentElement;
+          if (row && !row.classList.contains('v38-gender-row')) row.style.display = 'none';
+        }
+      });
+
+      /* If our row already exists in this card, skip */
+      if (card.querySelector('.v38-gender-row[data-v38="1"]')) return;
+
+      /* Determine initial value */
+      var n = npcs[i] || {};
+      var nameInp = card.querySelector('input[data-f="name"]');
+      var descTa  = card.querySelector('textarea[data-f="desc"]');
+      var initial = n.gender || detectFromDesc((descTa && descTa.value) || (n.desc||''), (nameInp && nameInp.value) || (n.name||''));
+
+      var b = buildSelect(initial);
+
+      /* Wire change handler -> update state */
+      b.sel.addEventListener('change', function(){
+        var s2 = loadState();
+        if (!s2.cast) s2.cast = {};
+        if (!s2.cast.npcs) s2.cast.npcs = [];
+        while (s2.cast.npcs.length <= i) s2.cast.npcs.push({});
+        s2.cast.npcs[i].gender = b.sel.value;
+        saveState(s2);
+      });
+
+      /* Insert right after the name field (before desc) */
+      var nameFld = nameInp ? nameInp.closest('.fld') : null;
+      if (nameFld && nameFld.parentElement) {
+        nameFld.parentElement.insertBefore(b.wrap, nameFld.nextSibling);
+      } else {
+        /* Fallback: prepend to card */
+        card.insertBefore(b.wrap, card.firstChild);
+      }
+    });
+  }
+
+  function ensureHeroHasOurDropdown(){
+    var hName = document.getElementById('cfgHName');
+    if (!hName) return;
+    var heroSec = null;
+    Array.from(document.querySelectorAll('.sec')).forEach(function(s){
+      if ((s.textContent||'').trim() === '主人公') heroSec = s;
+    });
+    if (!heroSec) return;
+
+    /* Walk siblings until next .sec; collect all elements */
+    var node = heroSec.nextElementSibling;
+    var heroRegion = [];
+    while (node && !node.classList.contains('sec')) { heroRegion.push(node); node = node.nextElementSibling; }
+
+    /* Hide stale gender rows in hero region */
+    heroRegion.forEach(function(el){
+      Array.from(el.querySelectorAll('select')).forEach(function(s){
+        if (s.dataset && s.dataset.v38 === '1') return;
+        var hasGen = Array.from(s.options||[]).some(function(o){return o.value==='男性'||o.value==='女性';});
+        if (hasGen) {
+          var row = s.closest('.fld, .v28-gender-row, .v29-gender-row, [class*=gender-row]') || s.parentElement;
+          if (row && !row.classList.contains('v38-gender-row')) row.style.display = 'none';
+        }
+      });
+    });
+
+    /* If our hero row exists, skip */
+    var existing = heroRegion.some(function(el){return el.querySelector && el.querySelector('.v38-gender-row[data-v38="1"][data-hero="1"]');});
+    if (existing) return;
+
+    /* Determine initial */
+    var st = loadState();
+    var hero = (st.cast && st.cast.hero) || {};
+    var hDesc = document.getElementById('cfgHDesc');
+    var initial = hero.gender || detectFromDesc((hDesc && hDesc.value) || (hero.desc||''), (hName && hName.value) || (hero.name||''));
+
+    var b = buildSelect(initial);
+    b.wrap.dataset.hero = '1';
+    b.sel.addEventListener('change', function(){
+      var s2 = loadState();
+      if (!s2.cast) s2.cast = {};
+      if (!s2.cast.hero) s2.cast.hero = {};
+      s2.cast.hero.gender = b.sel.value;
+      saveState(s2);
+    });
+
+    /* Insert right after name field */
+    var nameFld = hName.closest('.fld');
+    if (nameFld && nameFld.parentElement) {
+      nameFld.parentElement.insertBefore(b.wrap, nameFld.nextSibling);
+    }
+  }
+
+  function applyAll(){
+    try { ensureNpcCardsHaveOurDropdown(); } catch(e){ console.warn(TAG,'npc',e); }
+    try { ensureHeroHasOurDropdown(); } catch(e){ console.warn(TAG,'hero',e); }
+  }
+
+  setInterval(applyAll, 700);
+  setTimeout(applyAll, 200);
+  setTimeout(applyAll, 800);
+  console.log(TAG, 'gender dropdown owner active');
+})();
+</script>
 </body>
 </html>
