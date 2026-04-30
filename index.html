@@ -13301,5 +13301,34 @@ G.init();
   console.log(TAG, 'gender dropdown owner active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v39: Force-show v38 gender rows that v33 dedupe inadvertently hid.
+ *  - Add CSS with !important so v38 row always wins over inline display:none.
+ *  - Also: actively clear inline display:'' on v38 rows in case JS already set it.
+ * ======================================================================== */
+(function v39GenderShow(){
+  if (!document.getElementById('v39-style')) {
+    var st = document.createElement('style');
+    st.id = 'v39-style';
+    st.textContent =
+      '.v38-gender-row[data-v38="1"]{display:flex !important;align-items:center;gap:8px;margin:6px 0 8px 0;font-size:13px}\n' +
+      '.v38-gender-row[data-v38="1"] select{display:inline-block !important}\n' +
+      '.v38-gender-row[data-v38="1"] label{display:inline !important}\n';
+    document.head.appendChild(st);
+  }
+  function showV38Rows(){
+    document.querySelectorAll('.v38-gender-row[data-v38="1"]').forEach(function(r){
+      if (r.style.display === 'none' || r.style.display === '') {
+        r.style.removeProperty('display');
+      }
+    });
+  }
+  setInterval(showV38Rows, 600);
+  setTimeout(showV38Rows, 200);
+  console.log('[v39] gender row force-show active');
+})();
+</script>
 </body>
 </html>
