@@ -12561,5 +12561,172 @@ G.init();
   console.log(TAG, 'provider+form sync active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v33: Eradicate non-binary gender artifacts that confuse the model.
+ *  - Strip "両性具有", "中性的", "不明", "両性" from any descriptions.
+ *  - Force binary (男 / 女) for hero & NPCs in state on every load + save.
+ *  - Deduplicate 性別 dropdowns when v28+v29 both render one.
+ * ======================================================================== */
+(function v33Binarize(){
+  var TAG = '[v33]';
+
+  function pickBinaryFromName(name){
+    var n = String(name||'');
+    var h = 0;
+    for (var i=0; i<n.length; i++) h = (h*31 + n.charCodeAt(i)) & 0xffff;
+    return (h % 2 === 0) ? '女' : '男';
+  }
+
+  function detectBinary(text, name){
+    var t = String(text||'');
+    /* Explicit female markers */
+    if (/性別[:：]?\s*女|少女|女子|女の子|姉|妹|姫|淑女|彼女|女の|令嬢|王女|お嬢/.test(t)) return '女';
+    /* Explicit male markers */
+    if (/性別[:：]?\s*男|少年|男子|男の子|兄|弟|王子|彼\s|彼は|青年/.test(t)) return '男';
+    /* Fall back: use name hash */
+    return pickBinaryFromName(name);
+  }
+
+  function rewriteDescription(desc, decided){
+    var d = String(desc||'');
+    /* Remove "両性具有" + variants */
+    d = d.replace(/性別[:：]?\s*(両性具有|両性|中性的|中性|不明|どちらでもない|無性|曖昧)/g, '性別: ' + (decided==='男'?'男性':'女性'));
+    /* Cleanup leftover bare "両性具有" tokens */
+    d = d.replace(/(両性具有|中性的|無性|どちらでもない)/g, '');
+    /* Collapse extra whitespace */
+    d = d.replace(/\s{2,}/g, ' ').trim();
+    return d;
+  }
+
+  function fixState(){
+    var raw;
+    try { raw = JSON.parse(localStorage.getItem('chr6')||'{}'); } catch(e){ return; }
+    if (!raw.cast) return;
+    var changed = false;
+    /* Hero */
+    if (raw.cast.hero) {
+      var oldDesc = raw.cast.hero.desc || '';
+      var hg = detectBinary(oldDesc, raw.cast.hero.name);
+      if (raw.cast.hero.gender !== (hg==='男'?'男性':'女性')) {
+        raw.cast.hero.gender = (hg==='男'?'男性':'女性');
+        changed = true;
+      }
+      var newDesc = rewriteDescription(oldDesc, hg);
+      if (newDesc !== oldDesc) {
+        raw.cast.hero.desc = newDesc;
+        changed = true;
+      }
+    }
+    /* NPCs */
+    (raw.cast.npcs||[]).forEach(function(n){
+      var oldDesc = n.desc || '';
+      var ng = detectBinary(oldDesc, n.name);
+      if (n.gender !== (ng==='男'?'男性':'女性')) {
+        n.gender = (ng==='男'?'男性':'女性');
+        changed = true;
+      }
+      var newDesc = rewriteDescription(oldDesc, ng);
+      if (newDesc !== oldDesc) {
+        n.desc = newDesc;
+        changed = true;
+      }
+    });
+    if (changed) {
+      try { localStorage.setItem('chr6', JSON.stringify(raw)); } catch(e){}
+    }
+  }
+
+  function dedupeDropdowns(){
+    /* Hero card */
+    var heroSec = null;
+    Array.from(document.querySelectorAll('.sec')).forEach(function(s){
+      if ((s.textContent||'').trim() === '主人公') heroSec = s;
+    });
+    function dedupeWithinScope(scope){
+      if (!scope) return;
+      var rows = scope.querySelectorAll('select');
+      var seenGender = false;
+      rows.forEach(function(sel){
+        var hasGenderOpts = false;
+        Array.from(sel.options||[]).forEach(function(o){
+          if (o.value === '男性' || o.value === '女性') hasGenderOpts = true;
+        });
+        if (!hasGenderOpts) return;
+        if (seenGender) {
+          /* Hide the duplicate row */
+          var row = sel.closest('.fld, .v28-gender-row, .v29-gender-row, [class*=gender-row]') || sel.parentElement;
+          if (row) row.style.display = 'none';
+        } else {
+          seenGender = true;
+        }
+      });
+    }
+    /* Run for each .npc-card and the hero region */
+    document.querySelectorAll('.npc-card').forEach(dedupeWithinScope);
+    if (heroSec && heroSec.parentElement) {
+      /* hero scope: the section between '主人公' and next '.sec' */
+      var p = heroSec;
+      var scope = document.createElement('div');
+      var n = p.nextElementSibling;
+      var nodes = [];
+      while (n && !n.classList.contains('sec')) { nodes.push(n); n = n.nextElementSibling; }
+      /* Just dedupe within ALL nodes by collecting their selects */
+      var sels = [];
+      nodes.forEach(function(nd){
+        Array.from(nd.querySelectorAll('select')).forEach(function(s){sels.push(s);});
+      });
+      var seen = false;
+      sels.forEach(function(sel){
+        var hasGen = Array.from(sel.options||[]).some(function(o){return o.value==='男性'||o.value==='女性';});
+        if (!hasGen) return;
+        if (seen) {
+          var row = sel.closest('.fld, [class*=gender-row]') || sel.parentElement;
+          if (row) row.style.display = 'none';
+        } else seen = true;
+      });
+    }
+  }
+
+  function fixVisibleDescTextarea(){
+    /* Strip 両性具有 from any visible textarea field */
+    document.querySelectorAll('textarea').forEach(function(ta){
+      if (!ta.value) return;
+      if (/両性具有|中性的|無性|どちらでもない|性別[:：]\s*不明/.test(ta.value)) {
+        var name = '';
+        var card = ta.closest('.npc-card');
+        if (card) {
+          var ni = card.querySelector('input[data-f="name"]');
+          if (ni) name = ni.value;
+        } else {
+          var hn = document.getElementById('cfgHName');
+          if (hn) name = hn.value;
+        }
+        var g = detectBinary(ta.value, name);
+        var newV = rewriteDescription(ta.value, g);
+        if (newV !== ta.value) {
+          var setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+          setter.call(ta, newV);
+          ta.dispatchEvent(new Event('input', {bubbles:true}));
+        }
+      }
+    });
+  }
+
+  /* Patch random-fill output by intercepting + cleaning. The random-fill helper
+   * inserts text into textarea via setter. We just re-clean after a delay. */
+  function applyAll(){
+    try { fixState(); } catch(e){ console.warn(TAG,'state',e); }
+    try { dedupeDropdowns(); } catch(e){ console.warn(TAG,'dedupe',e); }
+    try { fixVisibleDescTextarea(); } catch(e){ console.warn(TAG,'desc',e); }
+  }
+
+  setInterval(applyAll, 1500);
+  setTimeout(applyAll, 400);
+  setTimeout(applyAll, 1200);
+  console.log(TAG, 'binary-only enforcer active');
+})();
+</script>
 </body>
 </html>
