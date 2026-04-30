@@ -13876,5 +13876,247 @@ G.init();
   console.log(TAG, 'Hermes improvement bundle active (gender voice + asterisk sanitize + dialogue extract + state protect)');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v46: Euryale-friendly text-marker output mode.
+ *  Replaces the JSON output schema with === NARRATIVE / NPC / DIALOGUE /
+ *  ENVIRONMENT / BRANCH === markers when state.cfg.orModel is Euryale.
+ *  Parses the response back into Chronicle's plan JSON shape so downstream
+ *  rendering works unchanged. Adds per-turn random scene direction for
+ *  anti-repetition, gender voice rules, and asterisk ban.
+ * ======================================================================== */
+(function v46EuryaleMode(){
+  var TAG = '[v46]';
+
+  var SCENE_DIRECTIONS = [
+    '今ターンは緊張感を一段引き上げる。微細な不穏な兆しを増やす',
+    '今ターンは静寂と微細な変化で進める。動作と感覚を細密に描く',
+    '今ターンはNPCの執着を一歩前面に出す',
+    '今ターンは肉体的な恐怖や違和感を導入する',
+    '今ターンはNPCの本性が垣間見える瞬間を作る',
+    '今ターンは主人公の判断を迫る局面に',
+    '今ターンは時間や空間の歪みで超常感を増す',
+    '今ターンはNPCと主人公の物理的距離が縮まる',
+    '今ターンは記憶や過去の断片が侵入する',
+    '今ターンはNPCの内なる獣性が滲む',
+    '今ターンは予期せぬ感情の暴発が起きる',
+    '今ターンは禁忌の境界が揺らぐ',
+    '今ターンはNPCが秘密の一片を漏らす',
+    '今ターンは主人公の身体感覚が異常を訴える',
+    '今ターンは情景描写を主体に物語の余韻を作る'
+  ];
+  function pickDirection(){
+    return SCENE_DIRECTIONS[Math.floor(Math.random() * SCENE_DIRECTIONS.length)];
+  }
+
+  function isEuryale(model){
+    return model && String(model).indexOf('euryale') >= 0;
+  }
+
+  function buildEuryaleAddon(direction){
+    return '\n\n【★★★ 出力形式（厳守・JSONを絶対に書くな） ★★★】\n' +
+      'JSONや { } を一切書かない。以下のセクション形式で必ず出力する。\n\n' +
+      '=== NARRATIVE ===\n' +
+      '（ここに本文の地の文を3〜5段落書く。\n' +
+      ' セリフは「」で囲んで地の文に埋め込んでよい。\n' +
+      ' R18・暴力・心理描写は文学的に書き切る。場面回避禁止。\n' +
+      ' アスタリスク（*）は使わない。装飾は — — や 。 のみ）\n\n' +
+      '=== NPC ===\n' +
+      '名前: （登場するNPC名。複数いれば最も中心的な1名）\n' +
+      '感情: （瞬間的な感情、漢字熟語2〜4語）\n' +
+      '内心: （NPCが今思っていること、1〜2文）\n' +
+      '本能的恐怖: （触発された恐怖、なければ -）\n' +
+      '本能的欲求: （触発された欲求、なければ -）\n' +
+      'ストレス変動: （-20〜+20の整数。例: +15）\n' +
+      '信頼変動: （-10〜+10の整数。例: -3）\n\n' +
+      '=== DIALOGUE ===\n' +
+      '（NPCが直接発したセリフを「」付きで1行。なければ -）\n\n' +
+      '=== ENVIRONMENT ===\n' +
+      '（環境音・空気感・SFXの1行描写。なければ -）\n\n' +
+      '=== BRANCH ===\n' +
+      '（次にプレイヤーが取りそうな行動候補3つ、改行区切り）\n\n' +
+      '【★今ターンの演出指示】\n' + direction + '\n\n' +
+      '【★言語ルール】\n' +
+      '- 男性キャラの語尾「〜だ」「〜だな」「〜ぜ」「〜さ」を使う。「〜わ」「〜のよ」「〜かしら」絶対禁止。\n' +
+      '- 女性キャラの語尾「〜わ」「〜のよ」「〜かしら」OK。男言葉「〜だぜ」禁止。\n' +
+      '- 性別: 男性 → 必ず男性的語尾。性別: 女性 → 必ず女性的語尾。\n' +
+      '- 日本語誤字や造語禁止（「さっきり」「ぼっそり」のような存在しない語禁止）\n' +
+      '- narrative セクション内に { } や JSON 構文を一切書かない。';
+  }
+
+  function getSection(text, name){
+    var re = new RegExp('===\\s*' + name + '\\s*===\\s*([\\s\\S]*?)(?:\\n===|$)');
+    var m = text.match(re);
+    return m ? m[1].trim() : '';
+  }
+
+  function parseEuryaleOutput(text){
+    var plan = {
+      playerIntent: { kind: 'other', tone: 'neutral' },
+      npcInnerLife: {
+        npcName: '', instantEmotion: '', innerThought: '',
+        triggeredFear: null, underlyingNeed: null, defenseMechanism: 'none',
+        stressDelta: 0, trustDelta: 0
+      },
+      narrative: [],
+      npcReactionPhase: {
+        npcName: '', emotion: '', bodyLanguage: '',
+        dialogue: null, subtext: null, interpretation: '', resistance: ''
+      },
+      environmentResponse: '',
+      branchCandidates: []
+    };
+
+    var narr = getSection(text, 'NARRATIVE');
+    if (narr) {
+      plan.narrative = narr.split(/\n\n+/)
+        .map(function(s){ return s.trim().replace(/^\*+\s*/, '').replace(/\s*\*+$/, ''); })
+        .filter(function(s){ return s.length > 0; });
+      if (plan.narrative.length === 0) {
+        plan.narrative = narr.split(/\n/)
+          .map(function(s){ return s.trim(); })
+          .filter(function(s){ return s.length > 0; });
+      }
+    }
+
+    var npcRaw = getSection(text, 'NPC');
+    if (npcRaw) {
+      var fields = [
+        ['名前', 'npcName_raw'],
+        ['感情', 'instantEmotion'],
+        ['内心', 'innerThought'],
+        ['本能的恐怖', 'triggeredFear'],
+        ['本能的欲求', 'underlyingNeed'],
+        ['ストレス変動', 'stressDelta_raw'],
+        ['信頼変動', 'trustDelta_raw']
+      ];
+      var parsed = {};
+      fields.forEach(function(f){
+        var re = new RegExp(f[0] + '[:：]\\s*(.+)');
+        var m = npcRaw.match(re);
+        if (m) parsed[f[1]] = m[1].trim();
+      });
+      if (parsed.npcName_raw) {
+        plan.npcInnerLife.npcName = parsed.npcName_raw;
+        plan.npcReactionPhase.npcName = parsed.npcName_raw;
+      }
+      if (parsed.instantEmotion) {
+        plan.npcInnerLife.instantEmotion = parsed.instantEmotion;
+        plan.npcReactionPhase.emotion = parsed.instantEmotion;
+      }
+      if (parsed.innerThought) plan.npcInnerLife.innerThought = parsed.innerThought;
+      if (parsed.triggeredFear && parsed.triggeredFear !== '-') plan.npcInnerLife.triggeredFear = parsed.triggeredFear;
+      if (parsed.underlyingNeed && parsed.underlyingNeed !== '-') plan.npcInnerLife.underlyingNeed = parsed.underlyingNeed;
+      if (parsed.stressDelta_raw) {
+        var sd = parseInt(parsed.stressDelta_raw, 10);
+        if (!isNaN(sd)) plan.npcInnerLife.stressDelta = sd;
+      }
+      if (parsed.trustDelta_raw) {
+        var td = parseInt(parsed.trustDelta_raw, 10);
+        if (!isNaN(td)) plan.npcInnerLife.trustDelta = td;
+      }
+    }
+
+    var dlg = getSection(text, 'DIALOGUE');
+    if (dlg && dlg !== '-') {
+      var dlgClean = dlg.replace(/^「+/, '').replace(/」+$/, '').trim();
+      if (dlgClean) plan.npcReactionPhase.dialogue = dlgClean;
+    }
+
+    var env = getSection(text, 'ENVIRONMENT');
+    if (env && env !== '-') plan.environmentResponse = env;
+
+    var br = getSection(text, 'BRANCH');
+    if (br) {
+      plan.branchCandidates = br.split(/\n/)
+        .map(function(s){ return s.trim().replace(/^[・\-\*\d\.\)]+\s*/, ''); })
+        .filter(function(s){ return s.length > 0 && s !== '-'; })
+        .slice(0, 3);
+    }
+    return plan;
+  }
+
+  function isValidPlan(plan){
+    return plan && Array.isArray(plan.narrative) && plan.narrative.length > 0;
+  }
+
+  /* ---- fetch wrapper ---- */
+  var origFetch = window.fetch;
+  if (!origFetch.__v46Wrapped) {
+    window.fetch = async function(input, init){
+      var url = typeof input === 'string' ? input : (input && input.url) || '';
+      var isEuryaleReq = false;
+      var direction = '';
+
+      if (url.indexOf('openrouter.ai') >= 0 && init && typeof init.body === 'string') {
+        try {
+          var st = JSON.parse(localStorage.getItem('chr6')||'{}');
+          if (st.cfg && isEuryale(st.cfg.orModel)) {
+            var body = JSON.parse(init.body);
+            if (body && body.messages) {
+              isEuryaleReq = true;
+              direction = pickDirection();
+              var addon = buildEuryaleAddon(direction);
+              body.messages = body.messages.map(function(m){
+                if (m.role === 'system' && typeof m.content === 'string') {
+                  if (m.content.indexOf('=== NARRATIVE ===') < 0) {
+                    /* Strip JSON-format instructions to avoid confusion */
+                    var stripped = m.content
+                      .replace(/JSON[ぁ-んァ-ヶ一-龥]*[で形にてを]+[ぁ-んァ-ヶ一-龥]*/g, 'テキストマーカー形式で')
+                      .replace(/\\{[\\s\\S]{0,500}?\\}/g, '');
+                    m.content = stripped + addon;
+                  }
+                }
+                return m;
+              });
+              if (body.response_format) delete body.response_format;
+              init = Object.assign({}, init, {body: JSON.stringify(body)});
+              console.log(TAG, 'Euryale prompt injected; direction:', direction);
+            }
+          }
+        } catch(e){ console.warn(TAG, 'pre-fetch', e); }
+      }
+
+      var resp = await origFetch.call(this, input, init);
+      if (!isEuryaleReq || !resp.ok) return resp;
+
+      try {
+        var text = await resp.text();
+        var data = JSON.parse(text);
+        var content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        if (content && content.indexOf('=== NARRATIVE ===') >= 0) {
+          var plan = parseEuryaleOutput(content);
+          if (isValidPlan(plan)) {
+            data.choices[0].message.content = JSON.stringify(plan);
+            console.log(TAG, 'parsed', plan.narrative.length, 'narrative segments, NPC=', plan.npcInnerLife.npcName);
+            return new Response(JSON.stringify(data), {
+              status: resp.status,
+              statusText: resp.statusText,
+              headers: resp.headers
+            });
+          } else {
+            console.warn(TAG, 'parse produced invalid plan');
+          }
+        } else {
+          console.warn(TAG, 'response missing === NARRATIVE === marker');
+        }
+        /* Fallback: return original text wrapped */
+        return new Response(text, {
+          status: resp.status,
+          statusText: resp.statusText,
+          headers: resp.headers
+        });
+      } catch(e){
+        console.warn(TAG, 'response handling', e);
+      }
+      return resp;
+    };
+    window.fetch.__v46Wrapped = true;
+  }
+
+  console.log(TAG, 'Euryale text-marker mode active');
+})();
+</script>
 </body>
 </html>
