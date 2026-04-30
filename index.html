@@ -11359,5 +11359,74 @@ G.init();
   console.log("[Patch v21] all loaded - v20 markers neutralized, safe state preserved");
 })();
 </script>
+<script>
+/* PATCH: quality-fixes-v22 (Llama 3.3 default + dropdown) */
+(function(){
+  console.log("[Patch v22] loading: Llama 3.3 default model promotion");
+  /* (1) Set default model to Llama 3.3 for new/unset users only */
+  function setDefaultModel(){
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      c.cfg = c.cfg || {};
+      /* Only default if empty OR if previous default Claude Haiku was set (from v7 default applied) and never customized */
+      var v22ApplyKey = "_v22DefaultApplied";
+      var alreadyApplied = localStorage.getItem(v22ApplyKey) === "1";
+      if (!alreadyApplied) {
+        var current = c.cfg.orModel || "";
+        /* Apply if no model OR currently on previous v7 forced default OR mistral-nemo */
+        var shouldDefault = !current || 
+          current === "anthropic/claude-haiku-4-5" || 
+          current === "mistralai/mistral-nemo";
+        if (shouldDefault) {
+          c.cfg.orModel = "meta-llama/llama-3.3-70b-instruct";
+          localStorage.setItem("chr6", JSON.stringify(c));
+          console.log("[Patch v22] default model set to Llama 3.3 70B Instruct");
+        }
+        localStorage.setItem(v22ApplyKey, "1");
+      }
+    } catch(e){ console.warn("[Patch v22] default failed", e); }
+  }
+  setTimeout(setDefaultModel, 300);
+  /* (2) Inject Llama 3.3 option at top of model dropdown with 推奨 label */
+  function enhanceDropdown(){
+    var dd = document.getElementById("cfgOrModel");
+    if (!dd) return false;
+    var hasLlama = false;
+    Array.from(dd.options).forEach(function(o){
+      if (o.value === "meta-llama/llama-3.3-70b-instruct") {
+        hasLlama = true;
+        /* Update text to mark as 推奨 */
+        if (o.text.indexOf("推奨") < 0) {
+          o.text = "Llama 3.3 70B Instruct（推奨・JSON安定・反復少）";
+        }
+      }
+    });
+    if (!hasLlama) {
+      var opt = document.createElement("option");
+      opt.value = "meta-llama/llama-3.3-70b-instruct";
+      opt.text = "Llama 3.3 70B Instruct（推奨・JSON安定・反復少）";
+      dd.insertBefore(opt, dd.firstChild);
+    } else {
+      /* Move existing Llama option to top */
+      var llamaOpt = Array.from(dd.options).find(function(o){return o.value === "meta-llama/llama-3.3-70b-instruct";});
+      if (llamaOpt && dd.options[0] !== llamaOpt) {
+        dd.insertBefore(llamaOpt, dd.firstChild);
+      }
+    }
+    /* Sync DOM value if storage says Llama */
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      if (c.cfg && c.cfg.orModel === "meta-llama/llama-3.3-70b-instruct" && dd.value !== "meta-llama/llama-3.3-70b-instruct") {
+        dd.value = "meta-llama/llama-3.3-70b-instruct";
+        dd.dispatchEvent(new Event("change", {bubbles: true}));
+      }
+    } catch(e){}
+    return true;
+  }
+  setTimeout(enhanceDropdown, 800);
+  setInterval(enhanceDropdown, 3000);
+  console.log("[Patch v22] all loaded");
+})();
+</script>
 </body>
 </html>
