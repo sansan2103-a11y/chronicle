@@ -11658,5 +11658,130 @@ G.init();
   console.log("[Patch v24] all loaded");
 })();
 </script>
+<script>
+/* PATCH: quality-fixes-v25 (avatar update on re-attrib + voice style) */
+(function(){
+  console.log("[Patch v25] loading: avatar update + voice style");
+  /* (1) Aggressive avatar update for re-attributed cards */
+  function fixAvatars(){
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      var hero = c.cast && c.cast.hero;
+      var npcs = (c.cast && c.cast.npcs) || [];
+      if (!hero) return;
+      var byName = {};
+      byName[hero.name] = hero;
+      npcs.forEach(function(n){ byName[n.name] = n; });
+      document.querySelectorAll(".dialogue-row").forEach(function(row){
+        var nameEl = row.querySelector(".dialogue-name");
+        var img = row.querySelector("img");
+        if (!nameEl || !img) return;
+        var displayName = (nameEl.textContent||"").trim().replace(/\s*《.*$/, "");
+        var charObj = byName[displayName];
+        if (!charObj) {
+          /* Try first-name match */
+          var firstNameKey = Object.keys(byName).find(function(k){
+            return k.split(/[\s・]/)[0] === displayName.split(/[\s・]/)[0];
+          });
+          charObj = byName[firstNameKey];
+        }
+        if (!charObj) return;
+        /* Determine target avatar: prefer charObj.avatar, then horror SVG */
+        var targetSrc = null;
+        if (charObj.avatar && charObj.avatar.length > 100) {
+          targetSrc = charObj.avatar;
+        } else if (window._horrorSvg) {
+          targetSrc = window._horrorSvg(charObj.name);
+        }
+        if (!targetSrc) return;
+        /* Check if current src matches target */
+        if (img.src === targetSrc) return;
+        /* Mismatch detected: force update */
+        if (row.dataset._v25fixed !== charObj.name) {
+          img.src = targetSrc;
+          img.alt = charObj.name;
+          row.dataset._v25fixed = charObj.name;
+          console.log("[Patch v25] avatar fixed for", charObj.name);
+        }
+      });
+    } catch(e){ console.warn("[Patch v25] avatar fix err", e); }
+  }
+  setInterval(fixAvatars, 1500);
+  setTimeout(fixAvatars, 800);
+  /* (2) Inject character voice style into OpenRouter system prompt */
+  function detectGenderAge(desc){
+    if (!desc) return {};
+    var t = String(desc);
+    var gender = null, age = null, isChild = false;
+    if (/性別[:：]?\s*男性|少年|男子|男の子|青年|王子/.test(t)) gender = "男";
+    else if (/性別[:：]?\s*女性|少女|女子|女の子|姉|妹|姫|淑女/.test(t)) gender = "女";
+    else if (/性別[:：]?\s*中性的/.test(t)) gender = "中性";
+    var ageMatch = t.match(/(\d{1,2})歳/);
+    if (ageMatch) {
+      age = parseInt(ageMatch[1]);
+      if (age <= 12) isChild = true;
+    } else if (/少年|少女|子供|児童|幼/.test(t)) isChild = true;
+    return {gender: gender, age: age, isChild: isChild};
+  }
+  function buildVoiceDirective(){
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      var hero = c.cast && c.cast.hero;
+      var npcs = (c.cast && c.cast.npcs) || [];
+      var allChars = [];
+      if (hero) allChars.push(hero);
+      allChars = allChars.concat(npcs);
+      var directives = [];
+      allChars.forEach(function(ch){
+        if (!ch || !ch.name || !ch.desc) return;
+        var info = detectGenderAge(ch.desc);
+        if (!info.gender && !info.isChild) return;
+        var d = ch.name + ": ";
+        if (info.isChild && info.gender === "男") {
+          d += "10歳前後の男児。一人称「ぼく / おれ」、文末「だよ」「だね」「〜なんだ」「〜だ」。女性的語尾「〜の」「〜だわ」「〜なの」「〜よ」「〜かしら」絶対禁止。子供らしい語彙のみ使用。";
+        } else if (info.isChild && info.gender === "女") {
+          d += "10歳前後の女児。一人称「わたし / あたし」、文末「〜だよ」「〜なの」「〜だもん」。子供らしい語彙のみ使用。";
+        } else if (info.gender === "男") {
+          d += "成人男性。一人称「俺 / 僕 / 私」、文末は男性的（「〜だ」「〜だろう」「〜さ」）。女性的語尾「〜の」「〜だわ」「〜なの」「〜かしら」絶対禁止。";
+        } else if (info.gender === "女") {
+          d += "成人女性。一人称「私 / あたし」、女性的語尾OK。";
+        } else if (info.gender === "中性") {
+          d += "中性的。一人称「私」、性別を断定しない言い回し。";
+        }
+        if (d.length > ch.name.length + 3) directives.push(d);
+      });
+      return directives;
+    } catch(e){ return []; }
+  }
+  var _origFetch25 = window.fetch;
+  window.fetch = function(u, o){
+    var url = String(u||"");
+    if (url.indexOf("openrouter.ai") >= 0 && url.indexOf("/chat/completions") >= 0 && o && o.body) {
+      try {
+        var body = typeof o.body === "string" ? JSON.parse(o.body) : null;
+        if (body && body.messages && !body._v25Inj) {
+          var directives = buildVoiceDirective();
+          if (directives.length > 0) {
+            var msg = {
+              role: "system",
+              content: "【★キャラクター話し方厳守★】各キャラの台詞・内心は以下の話し方ルールを厳守する。性別・年齢に合わない口調を絶対に出してはならない。\n\n" + directives.map(function(d){return "・" + d;}).join("\n")
+            };
+            var lastUserIdx = -1;
+            for (var i = body.messages.length - 1; i >= 0; i--) {
+              if (body.messages[i].role === "user") { lastUserIdx = i; break; }
+            }
+            if (lastUserIdx >= 0) body.messages.splice(lastUserIdx, 0, msg);
+            console.log("[Patch v25] voice style injected (" + directives.length + " chars)");
+          }
+          body._v25Inj = true;
+          o.body = JSON.stringify(body);
+        }
+      } catch(e){ console.warn("[Patch v25] inject failed", e); }
+    }
+    return _origFetch25.apply(this, arguments);
+  };
+  console.log("[Patch v25] all loaded");
+})();
+</script>
 </body>
 </html>
