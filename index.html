@@ -12969,5 +12969,97 @@ G.init();
   console.log(TAG, 'NPC render + reroll + avatar variety active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v36: Stabilize v35 - replace thrashy NPC render trick with one-shot trigger
+ * tied to settings-open event. Also hide psych fields on newly-created cards.
+ * ======================================================================== */
+(function v36Stable(){
+  var TAG = '[v36]';
+
+  /* Disable v35's interval-based ensureNpcRendered which caused thrash. */
+  /* Instead: observe #settingsOv class change, fire ONE add+remove cycle. */
+
+  var lastOpen = false;
+  var renderTriggered = false;
+
+  function isOpen(){
+    var ov = document.getElementById('settingsOv');
+    return !!(ov && ov.classList.contains('open'));
+  }
+
+  function getNpcCount(){
+    try {
+      var c = JSON.parse(localStorage.getItem('chr6')||'{}');
+      return ((c.cast && c.cast.npcs) || []).length;
+    } catch(e){ return 0; }
+  }
+
+  function triggerRenderOnce(){
+    if (renderTriggered) return;
+    var npcList = document.getElementById('npcList');
+    if (!npcList) return;
+    var stateNpcs = getNpcCount();
+    if (stateNpcs === 0) return;
+    if (npcList.children.length >= stateNpcs) {
+      renderTriggered = true;
+      return;
+    }
+    /* Render is missing. Click +Add then immediately delete the last card. */
+    var addBtn = null;
+    document.querySelectorAll('button').forEach(function(b){
+      if ((b.textContent||'').indexOf('+ NPC を追加') >= 0) addBtn = b;
+    });
+    if (!addBtn) return;
+    renderTriggered = true; /* mark before clicking to prevent re-entry */
+    addBtn.click();
+    setTimeout(function(){
+      /* Wait for render. Find LAST card (the newly added one). */
+      var cards = document.querySelectorAll('.npc-card');
+      if (cards.length > stateNpcs) {
+        var last = cards[cards.length-1];
+        var del = last.querySelector('.npc-del, button[onclick*="delNpc"]');
+        if (del) del.click();
+      }
+    }, 250);
+  }
+
+  function applyV30HidesNow(){
+    /* For freshly-rendered NPC card, ensure psych fields hidden again */
+    document.querySelectorAll('.npc-card').forEach(function(card){
+      ['coreDesire','coreFear','wound'].forEach(function(f){
+        var inp = card.querySelector('[data-f="'+f+'"]');
+        if (inp){
+          var p = inp.closest('.fld');
+          if (p && !p.classList.contains('v30-hide')) p.classList.add('v30-hide');
+        }
+      });
+      var div = card.querySelector('.psych-divider');
+      if (div && !div.classList.contains('v30-hide')) div.classList.add('v30-hide');
+    });
+  }
+
+  function watch(){
+    var nowOpen = isOpen();
+    if (nowOpen && !lastOpen) {
+      /* Just opened - reset trigger and schedule render check */
+      renderTriggered = false;
+      setTimeout(function(){
+        triggerRenderOnce();
+        setTimeout(applyV30HidesNow, 400);
+        setTimeout(applyV30HidesNow, 1000);
+      }, 200);
+    }
+    lastOpen = nowOpen;
+    /* Always reapply v30 hides if cards are in DOM */
+    applyV30HidesNow();
+  }
+  setInterval(watch, 500);
+  setTimeout(watch, 100);
+
+  console.log(TAG, 'stable NPC-render trigger + psych-hide enforcer active');
+})();
+</script>
 </body>
 </html>
