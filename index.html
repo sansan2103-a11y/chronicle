@@ -11428,5 +11428,146 @@ G.init();
   console.log("[Patch v22] all loaded");
 })();
 </script>
+<script>
+/* PATCH: quality-fixes-v23 (NPC dialogue extraction + prominent toast) */
+(function(){
+  console.log("[Patch v23] loading: NPC extraction + better toast");
+  /* (1) Make loading toast prominent (centered, large) */
+  var toastStyle = document.createElement("style");
+  toastStyle.id = "v23-toast-style";
+  toastStyle.textContent = 
+    ".v23-toast-prominent { position: fixed !important; top: 50% !important; left: 50% !important; right: auto !important; bottom: auto !important; transform: translate(-50%, -50%) !important; padding: 22px 36px !important; font-size: 18px !important; font-weight: bold !important; background: rgba(40,28,68,0.96) !important; color: #d4b375 !important; border: 2px solid #d4b375 !important; border-radius: 10px !important; box-shadow: 0 12px 50px rgba(0,0,0,0.85), 0 0 60px rgba(212,179,117,0.35) !important; z-index: 99999 !important; min-width: 280px !important; text-align: center !important; }" +
+    ".v23-toast-prominent::before { content: \"✦ \"; }" +
+    ".v23-toast-prominent::after { content: \" ✦\"; animation: v23pulse 1.4s ease-in-out infinite; display: inline-block; }" +
+    "@keyframes v23pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }";
+  document.head.appendChild(toastStyle);
+  /* Periodically apply prominent class to loading toast */
+  function enhanceToast(){
+    document.querySelectorAll("body > *").forEach(function(el){
+      var t = (el.textContent||"").trim();
+      if (t.indexOf("物語を紡いでい") >= 0 || t.indexOf("物語を紡いでます") >= 0 || t.indexOf("生成中") >= 0) {
+        if (el.classList && !el.classList.contains("v23-toast-prominent")) {
+          el.classList.add("v23-toast-prominent");
+        }
+      }
+    });
+  }
+  setInterval(enhanceToast, 800);
+  /* (2) NPC dialogue extraction enhancement */
+  function extractNPCDialogues(){
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      var npcs = (c.cast && c.cast.npcs) || [];
+      var hero = c.cast && c.cast.hero;
+      if (!hero || npcs.length === 0) return;
+      /* Find log panel */
+      var hdrs = Array.from(document.querySelectorAll("h1,h2,h3,h4,div,span"));
+      var logHdr = hdrs.find(function(h){return h.textContent && h.textContent.indexOf("会話ログ") >= 0 && h.children.length === 0;});
+      if (!logHdr) return;
+      var lp = logHdr.closest("section,aside,div,article");
+      if (!lp) return;
+      var dlist = lp.querySelector(".dialogue-list") || lp;
+      /* Find narrative panel */
+      var sections = Array.from(document.querySelectorAll("section,aside,div,article"));
+      var np = null;
+      for (var i=0;i<sections.length;i++){
+        if (sections[i] !== lp && sections[i].textContent.length > 200 && sections[i].textContent.indexOf("会話ログ") < 0) { np = sections[i]; break; }
+      }
+      if (!np) return;
+      var text = np.innerText || "";
+      /* Extract patterns */
+      var added = 0;
+      function injectCard(speaker, body, kind){
+        var key = speaker + "::" + (kind||"") + "::" + body.slice(0,40);
+        var existing = lp.querySelector(\'[data-v23card="\' + key.replace(/"/g, \'\\\\"\').slice(0,200) + \'"]\');
+        if (existing) return false;
+        /* Also check if any card already has this content */
+        var dups = Array.from(lp.querySelectorAll(".dialogue-text, .dial-card-v3, .dial-card-v4")).some(function(el){return el.textContent && el.textContent.indexOf(body.slice(0,25)) >= 0;});
+        if (dups) return false;
+        var card = document.createElement("div");
+        card.className = "dialogue-row v23-extracted" + (kind ? " v23-" + kind : "");
+        card.dataset.v23card = key.slice(0,200);
+        var bg = kind === "scream" ? "rgba(120,40,40,0.5)" : kind === "inner" ? "rgba(28,40,68,0.5)" : "rgba(40,28,68,0.5)";
+        var border = kind === "scream" ? "rgba(229,115,115,0.6)" : kind === "inner" ? "rgba(108,90,184,0.4)" : "rgba(160,138,240,0.3)";
+        card.style.cssText = "display:flex;gap:10px;padding:10px 12px;margin:8px 6px;background:" + bg + ";border:1px solid " + border + ";border-radius:6px;align-items:flex-start;";
+        var img = document.createElement("img");
+        img.src = window._horrorSvg ? window._horrorSvg(speaker) : "";
+        img.style.cssText = "width:42px;height:42px;border-radius:50%;flex-shrink:0;";
+        img.alt = speaker;
+        var bd = document.createElement("div");
+        bd.style.cssText = "flex:1;color:#f2eef9;";
+        var nm = document.createElement("div");
+        nm.style.cssText = "font-weight:bold;color:" + (kind === "inner" ? "#9c8ad9" : kind === "scream" ? "#e57373" : "#a08af0") + ";font-size:12px;margin-bottom:3px;";
+        nm.textContent = speaker + (kind === "inner" ? " 《内心》" : kind === "scream" ? " 《悲鳴》" : "");
+        var bt = document.createElement("div");
+        bt.style.cssText = "font-size:13px;line-height:1.55;" + (kind === "inner" ? "font-style:italic;" : kind === "scream" ? "font-style:italic;color:#ffaaaa;" : "");
+        bt.textContent = body;
+        bd.appendChild(nm);
+        bd.appendChild(bt);
+        card.appendChild(img);
+        card.appendChild(bd);
+        dlist.appendChild(card);
+        return true;
+      }
+      /* Pattern A: 「QUOTE」 attributed by surrounding context */
+      var rxQuote = /「([^「」\n]{2,200})」/g;
+      var m;
+      var quotePositions = [];
+      while ((m = rxQuote.exec(text)) !== null) {
+        quotePositions.push({pos: m.index, quote: m[1], full: m[0]});
+      }
+      quotePositions.forEach(function(q){
+        /* Find speaker by looking 100 chars before/after */
+        var window = text.slice(Math.max(0,q.pos-150), Math.min(text.length, q.pos+150));
+        var speaker = null;
+        for (var i=0;i<npcs.length;i++){
+          if (window.indexOf(npcs[i].name) >= 0) { speaker = npcs[i].name; break; }
+          var first = npcs[i].name.split(/[\s・]/)[0];
+          if (first.length >= 2 && window.indexOf(first) >= 0) { speaker = npcs[i].name; break; }
+        }
+        if (!speaker && hero) {
+          /* Skip if hero name is in window */
+          if (window.indexOf(hero.name) >= 0) speaker = hero.name;
+        }
+        if (!speaker) speaker = "(誰か)";
+        if (injectCard(speaker, q.quote, null)) added++;
+      });
+      /* Pattern B: NPC suffering keywords near scream */
+      var screamRx = /([あいうえァィゥェギャキャぐぁグァひぃイ][あいうえーァィゥェぁグぐだダひぃイ]{2,})/g;
+      while ((m = screamRx.exec(text)) !== null) {
+        var scream = m[1];
+        if (scream.length < 4) continue;
+        var pos = m.index;
+        var window2 = text.slice(Math.max(0,pos-200), pos);
+        var lastNpc = null;
+        var lastPos = -1;
+        for (var k=0;k<npcs.length;k++){
+          var p = window2.lastIndexOf(npcs[k].name);
+          if (p > lastPos) { lastPos = p; lastNpc = npcs[k].name; }
+        }
+        if (lastNpc && injectCard(lastNpc, scream, "scream")) added++;
+      }
+      /* Pattern C: 《inner thought》 */
+      var innerRx = /《([^《》\n]{3,150})》/g;
+      while ((m = innerRx.exec(text)) !== null) {
+        var inner = m[1];
+        var pos = m.index;
+        var window3 = text.slice(Math.max(0,pos-150), pos);
+        var speaker2 = null;
+        for (var k=0;k<npcs.length;k++){
+          if (window3.lastIndexOf(npcs[k].name) >= 0) speaker2 = npcs[k].name;
+        }
+        if (!speaker2 && hero && window3.indexOf(hero.name) >= 0) speaker2 = hero.name;
+        if (!speaker2) continue;
+        if (injectCard(speaker2, inner, "inner")) added++;
+      }
+      if (added > 0) console.log("[Patch v23] extracted " + added + " NPC dialogues/inners/screams");
+    } catch(e){ console.warn("[Patch v23] extract err", e); }
+  }
+  setInterval(extractNPCDialogues, 2500);
+  setTimeout(extractNPCDialogues, 1500);
+  console.log("[Patch v23] all loaded");
+})();
+</script>
 </body>
 </html>
