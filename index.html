@@ -11909,5 +11909,95 @@ G.init();
   console.log("[Patch v26] all loaded");
 })();
 </script>
+<script>
+/* PATCH: quality-fixes-v27 (continuous avatar sync) */
+(function(){
+  console.log("[Patch v27] loading: continuous avatar sync (no run-once gate)");
+  function continuousAvatarSync(){
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      var hero = c.cast && c.cast.hero;
+      var npcs = (c.cast && c.cast.npcs) || [];
+      if (!hero) return;
+      var byName = {};
+      var byFirst = {};
+      function reg(ch){
+        if (!ch || !ch.name) return;
+        byName[ch.name] = ch;
+        var f = ch.name.split(/[\s・]/)[0];
+        if (f && f.length >= 2) byFirst[f] = ch;
+      }
+      reg(hero);
+      npcs.forEach(reg);
+      /* Get settings panel avatars (real generated images) */
+      var imgsByChar = {};
+      /* Hero card */
+      var heroCard = document.querySelector(".hero-card, [class*=hero-card]");
+      if (heroCard) {
+        var heroImg = heroCard.querySelector("img");
+        if (heroImg && heroImg.src && heroImg.src.length > 1500) imgsByChar[hero.name] = heroImg.src;
+      }
+      /* NPC cards */
+      var npcCards = document.querySelectorAll(".npc-card, [class*=npc-card]");
+      npcCards.forEach(function(card){
+        var img = card.querySelector("img");
+        var nameInp = card.querySelector('input[type=text], input:not([type])');
+        var name = nameInp ? nameInp.value : null;
+        if (img && name && img.src && img.src.length > 1500) imgsByChar[name] = img.src;
+      });
+      /* Sync conversation log cards */
+      document.querySelectorAll(".dialogue-row").forEach(function(row){
+        var nameEl = row.querySelector(".dialogue-name");
+        var img = row.querySelector("img");
+        if (!nameEl || !img) return;
+        var displayName = (nameEl.textContent||"").trim().replace(/\s*《.*$/, "").replace(/\s*（.*$/, "");
+        /* Find expected avatar */
+        var charObj = byName[displayName] || byFirst[displayName.split(/[\s・]/)[0]];
+        if (!charObj) return;
+        var expected = imgsByChar[charObj.name];
+        if (!expected) {
+          /* Fall back to charObj.avatar from storage */
+          if (charObj.avatar && charObj.avatar.length > 1500) expected = charObj.avatar;
+          else if (window._horrorSvg) expected = window._horrorSvg(charObj.name);
+        }
+        if (!expected) return;
+        /* Continuous sync: update if mismatch, regardless of previous state */
+        if (img.src !== expected) {
+          img.src = expected;
+          img.alt = charObj.name;
+          /* Don\u0027t set _v27fixed flag - always re-check */
+        }
+      });
+    } catch(e){}
+  }
+  /* Run frequently to catch v14/v24 re-attributions */
+  setInterval(continuousAvatarSync, 1000);
+  setTimeout(continuousAvatarSync, 500);
+  /* MutationObserver: watch dialogue-list for new cards or text changes */
+  var observer = new MutationObserver(function(mutations){
+    var shouldSync = false;
+    mutations.forEach(function(m){
+      if (m.type === "childList" && m.addedNodes.length > 0) shouldSync = true;
+      if (m.type === "characterData") shouldSync = true;
+      if (m.type === "attributes" && m.target.classList && m.target.classList.contains("dialogue-name")) shouldSync = true;
+    });
+    if (shouldSync) {
+      setTimeout(continuousAvatarSync, 100);
+      setTimeout(continuousAvatarSync, 500);
+    }
+  });
+  function attachObserver(){
+    var dlist = document.querySelector(".dialogue-list");
+    if (dlist && !dlist._v27observed) {
+      observer.observe(dlist, { childList: true, subtree: true, characterData: true });
+      dlist._v27observed = true;
+      console.log("[Patch v27] observer attached");
+    }
+  }
+  setTimeout(attachObserver, 800);
+  setInterval(attachObserver, 5000);
+  console.log("[Patch v27] all loaded");
+})();
+</script>
 </body>
 </html>
