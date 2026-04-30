@@ -11193,5 +11193,113 @@ G.init();
   console.log("[Patch v19] aggressive gender fix active");
 })();
 </script>
+<script>
+/* PATCH: quality-fixes-v20 (context-preserve + progress-state + emphasized-input) */
+(function(){
+  console.log("[Patch v20] loading: context-preserve + progress-state + emphasized-input");
+  /* Disable v17 trim by pre-setting flags */
+  var _origFetch20 = window.fetch;
+  window.fetch = function(u, o){
+    var url = String(u||"");
+    if (url.indexOf("openrouter.ai") >= 0 && url.indexOf("/chat/completions") >= 0 && o && o.body) {
+      try {
+        var body = typeof o.body === "string" ? JSON.parse(o.body) : null;
+        if (body && body.messages && !body._v20Inj) {
+          /* (1) PREVENT v17 from trimming - inject before v17 sees it */
+          body._v17Inj = true;
+          body._v16Inj = true;
+          /* (2) Get progress state from chr6 */
+          var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+          var turns = c.turns || [];
+          if (turns.length >= 1) {
+            var lastTurn = turns[turns.length - 1];
+            var lastNarr = "";
+            if (lastTurn && lastTurn.plan && lastTurn.plan.narrative) {
+              var n = Array.isArray(lastTurn.plan.narrative) ? lastTurn.plan.narrative : [String(lastTurn.plan.narrative)];
+              lastNarr = n.slice(-3).join("\n");
+            }
+            if (lastNarr && lastNarr.length > 5) {
+              var stateMsg = {
+                role: "system",
+                content: "【▼ 直前ターンの結末（現在の場面） ▼】\n" +
+                  lastNarr + "\n" +
+                  "【▲ ここまでが直前の状態。今ターンはこの状態から **必ず一段階先へ進める**。同じ場面・同じ動作・同じセリフに戻ることを禁止。場所か体勢か心理が変化していること ▲】"
+              };
+              /* Insert before last user message */
+              var lastUserIdx = -1;
+              for (var i = body.messages.length - 1; i >= 0; i--) {
+                if (body.messages[i].role === "user") { lastUserIdx = i; break; }
+              }
+              if (lastUserIdx >= 0) {
+                body.messages.splice(lastUserIdx, 0, stateMsg);
+              }
+              console.log("[Patch v20] progress state injected (" + lastNarr.length + " chars)");
+            }
+          }
+          /* (3) Visual emphasis on player input */
+          var userMsgs = body.messages.filter(function(m){return m.role === "user";});
+          var lastUser = userMsgs[userMsgs.length - 1];
+          if (lastUser && lastUser.content) {
+            var content = String(lastUser.content);
+            var inputMatch = content.match(/\"currentInput\"\s*:\s*\{\s*\"type\"\s*:\s*\"(\w+)\"\s*,\s*\"text\"\s*:\s*\"([^\"]+)\"/);
+            if (inputMatch) {
+              var actionType = inputMatch[1];
+              var actionText = inputMatch[2];
+              var emphBlock = "\n\n>>>>>>>>>>>>>>>>>>>>\n" +
+                "【★最重要プレイヤー指示★】\n" +
+                "プレイヤーは「" + actionType + "」モードで以下の行動を入力した：\n\n" +
+                "  「" + actionText + "」\n\n" +
+                "この入力を **物語の中心アクション** として narrative の冒頭で必ず描写せよ。\n" +
+                "・無視・省略・婉曲化・ソフト化・別動作への置換 全て禁止。\n" +
+                "・前ターンと同じ表現の繰り返しも禁止。\n" +
+                "・この行動の結果として状況が一段階進展することを描写せよ。\n" +
+                "<<<<<<<<<<<<<<<<<<<<\n";
+              lastUser.content = content + emphBlock;
+              console.log("[Patch v20] input emphasis applied: " + actionText.slice(0,40));
+            }
+          }
+          body._v20Inj = true;
+          o.body = JSON.stringify(body);
+        }
+      } catch(e) { console.warn("[Patch v20] inject failed", e); }
+    }
+    return _origFetch20.apply(this, arguments);
+  };
+  /* (4) Repetition detection -> recommend model switch */
+  var _v20RepCount = 0;
+  var _v20LastNarr = "";
+  setInterval(function(){
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      var turns = c.turns || [];
+      if (turns.length < 2) return;
+      var last = turns[turns.length - 1];
+      var n = last && last.plan && last.plan.narrative;
+      var nstr = Array.isArray(n) ? n.join(" ") : String(n||"");
+      var sig = nstr.slice(0, 100);
+      if (sig === _v20LastNarr && sig.length > 30) {
+        _v20RepCount++;
+        if (_v20RepCount === 2) {
+          var msg = "[Patch v20] 反復検出: 同じ narrative が " + (_v20RepCount+1) + " ターン続いてます。Euryale が限界の可能性あり。設定で次のモデルを試してください: meta-llama/llama-3.3-70b-instruct, nousresearch/hermes-3-llama-3.1-405b";
+          console.warn(msg);
+          /* Show toast */
+          if (!document.getElementById("v20-rep-toast")) {
+            var toast = document.createElement("div");
+            toast.id = "v20-rep-toast";
+            toast.style.cssText = "position:fixed;top:20px;right:20px;background:rgba(180,140,40,0.95);color:#fff;padding:12px 16px;border-radius:6px;z-index:99999;font-size:12px;max-width:380px;box-shadow:0 4px 16px rgba(0,0,0,0.5);";
+            toast.innerHTML = "<strong>⚠ 物語が反復してます</strong><br>Euryale 70B が限界かもしれません。<br>設定で <strong>Llama 3.3 70B Instruct</strong> や <strong>Hermes 3 405B</strong> に切り替えると改善するかも。<br><button onclick=\"this.parentElement.remove()\" style=\"margin-top:6px;background:#fff;color:#000;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;\">閉じる</button>";
+            document.body.appendChild(toast);
+            setTimeout(function(){var t=document.getElementById("v20-rep-toast");if(t)t.remove();}, 30000);
+          }
+        }
+      } else if (sig !== _v20LastNarr) {
+        _v20RepCount = 0;
+        _v20LastNarr = sig;
+      }
+    } catch(e){}
+  }, 4000);
+  console.log("[Patch v20] all loaded - context preserved, state injected, input emphasized");
+})();
+</script>
 </body>
 </html>
