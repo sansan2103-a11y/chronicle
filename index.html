@@ -12270,5 +12270,183 @@ G.init();
   console.log("[Patch v29] all loaded");
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v30: Big settings UI cleanup (7-item simplification)
+ * Hide rarely-used / overlapping fields to reduce bug surface.
+ * ======================================================================== */
+(function v30Cleanup(){
+  var TAG = '[v30]';
+
+  if (!document.getElementById('v30-style')) {
+    var st = document.createElement('style');
+    st.id = 'v30-style';
+    st.textContent =
+      '.v30-hide{display:none !important}\n' +
+      '.v30-debug-bar{display:flex;flex-direction:column;gap:6px;padding:8px;background:rgba(160,138,240,.06);border:1px solid var(--border);border-radius:8px;margin-top:6px}\n' +
+      '.v30-debug-bar button{font-size:12px;padding:6px 8px}\n';
+    document.head.appendChild(st);
+  }
+
+  function hideFldOf(el){
+    if (!el) return;
+    var p = el.closest ? el.closest('.fld, .chk-row') : null;
+    if (!p && el.parentElement) p = el.parentElement;
+    if (p) p.classList.add('v30-hide');
+  }
+  function hideById(id){ hideFldOf(document.getElementById(id)); }
+
+  function hideProvider(){ hideById('cfgProvider'); }
+  function hideUnusedToggles(){
+    hideById('cfgSimpleMode');
+    hideById('cfgDynAvatar');
+    hideById('cfgEmotionAvatar');
+  }
+
+  function trimModelDropdown(){
+    var sel = document.getElementById('cfgOrModel');
+    if (!sel || sel.dataset.v30 === '1') return;
+    var keep = {
+      'meta-llama/llama-3.3-70b-instruct': true,
+      'sao10k/l3.3-euryale-70b': true,
+      'nousresearch/hermes-3-llama-3.1-405b': true
+    };
+    Array.from(sel.options).forEach(function(opt){
+      if (!keep[opt.value]) opt.remove();
+    });
+    Array.from(sel.options).forEach(function(opt){
+      if (opt.value === 'meta-llama/llama-3.3-70b-instruct')
+        opt.textContent = 'LLaMA 3.3 70B（推奨：標準）';
+      else if (opt.value === 'sao10k/l3.3-euryale-70b')
+        opt.textContent = 'Euryale 70B（成人描写）';
+      else if (opt.value === 'nousresearch/hermes-3-llama-3.1-405b')
+        opt.textContent = 'Hermes 3 405B（最高品質）';
+    });
+    sel.dataset.v30 = '1';
+  }
+
+  function consolidateWorldFields(){
+    hideById('cfgLoc');
+    hideById('cfgObj');
+    hideById('cfgTone');
+    var lore = document.getElementById('cfgLore');
+    if (lore && !lore.dataset.v30){
+      var lbl = lore.parentElement && lore.parentElement.querySelector('label');
+      if (lbl) lbl.textContent = '世界観・シーン設定（場所・雰囲気・目的・文体をまとめて記述）';
+      lore.placeholder = '例: 記憶が結晶化した灯片が通貨の都市。路地裏、夕暮れ。心理描写重視。\nここに世界観・場所・目的・文体すべてを書いてOK。';
+      lore.style.minHeight = '120px';
+      lore.dataset.v30 = '1';
+    }
+  }
+
+  function consolidateAiFields(){
+    hideById('cfgBannedPhrases');
+    var an = document.getElementById('cfgAuthorNote');
+    if (an && !an.dataset.v30){
+      var lbl = an.parentElement && an.parentElement.querySelector('label');
+      if (lbl) lbl.textContent = 'AI指示（文体・進行ルール・禁止表現を自由記述）';
+      an.placeholder = '例: 心理描写重視。比喩を控えめに。\n禁止: 光に包まれた、不思議な力\n進行: ハッピーエンドにしないで';
+      an.style.minHeight = '120px';
+      an.dataset.v30 = '1';
+    }
+  }
+
+  function consolidateNpcFields(){
+    document.querySelectorAll('.npc-card').forEach(function(card){
+      ['coreDesire','coreFear','wound'].forEach(function(f){
+        var inp = card.querySelector('[data-f="'+f+'"]');
+        if (inp){
+          var p = inp.closest('.fld');
+          if (p) p.classList.add('v30-hide');
+        }
+      });
+      var pers = card.querySelector('[data-f="personality"]');
+      if (pers && !pers.dataset.v30){
+        var lbl = pers.parentElement && pers.parentElement.querySelector('label');
+        if (lbl) lbl.textContent = 'キャラ深掘り（性格・欲求・恐怖・過去をまとめて）';
+        pers.placeholder = '例: 臆病、過去に家族を失った、認められたいが裏切りを恐れる';
+        pers.dataset.v30 = '1';
+      }
+      var div = card.querySelector('.psych-divider');
+      if (div) div.classList.add('v30-hide');
+    });
+  }
+
+  function consolidateDebugUI(){
+    var dbg = document.getElementById('cfgDbg');
+    if (!dbg) return;
+    var dbgWrap = dbg.closest('.fld') || dbg.parentElement;
+    if (!dbgWrap || dbgWrap.dataset.v30Debug === '1') return;
+    var bar = document.createElement('div');
+    bar.className = 'v30-debug-bar';
+    bar.innerHTML =
+      '<div style="font-size:11px;color:var(--dim);font-weight:600">デバッグ</div>' +
+      '<label class="chk-row" style="font-size:12px"><input type="checkbox" id="v30DbgCheck"> ログ出力を有効化</label>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+      '<button class="btn-s" id="v30DbgCopy" style="flex:1;font-size:12px">📋 状態をコピー</button>' +
+      '<button class="btn-s" id="v30DbgConsole" style="flex:1;font-size:12px">🖥 コンソール表示</button>' +
+      '</div>';
+    dbgWrap.parentNode.insertBefore(bar, dbgWrap);
+    dbgWrap.classList.add('v30-hide');
+    dbgWrap.dataset.v30Debug = '1';
+    var newCb = document.getElementById('v30DbgCheck');
+    if (newCb){
+      newCb.checked = !!dbg.checked;
+      newCb.addEventListener('change', function(){
+        dbg.checked = newCb.checked;
+        dbg.dispatchEvent(new Event('change', {bubbles:true}));
+      });
+    }
+    var copyBtn = document.getElementById('v30DbgCopy');
+    if (copyBtn){
+      copyBtn.addEventListener('click', function(){
+        var report = {
+          state: JSON.parse(localStorage.getItem('chr6')||'{}'),
+          imgProvider: localStorage.getItem('_imgProvider_v6'),
+          recentDebug: JSON.parse(localStorage.getItem('_debugLog_v11')||'[]').slice(-15),
+          ts: new Date().toISOString()
+        };
+        var json = JSON.stringify(report, null, 2);
+        if (navigator.clipboard) navigator.clipboard.writeText(json).then(function(){
+          copyBtn.textContent = '✓ コピー完了';
+          setTimeout(function(){ copyBtn.textContent = '📋 状態をコピー'; }, 1500);
+        });
+        console.log('[v30 debug snapshot]', report);
+      });
+    }
+    var conBtn = document.getElementById('v30DbgConsole');
+    if (conBtn){
+      conBtn.addEventListener('click', function(){
+        var s = JSON.parse(localStorage.getItem('chr6')||'{}');
+        console.group('[v30] Chronicle state');
+        console.log('hero:', s.cast && s.cast.hero);
+        console.log('npcs:', s.cast && s.cast.npcs);
+        console.log('cfg:', s.cfg);
+        console.log('scene:', s.scene);
+        console.log('turns:', (s.turns||[]).length);
+        console.log('last turn:', (s.turns||[]).slice(-1)[0]);
+        console.groupEnd();
+        conBtn.textContent = '✓ コンソール表示';
+        setTimeout(function(){ conBtn.textContent = '🖥 コンソール表示'; }, 1500);
+      });
+    }
+  }
+
+  function applyAll(){
+    try { hideProvider(); } catch(e){ console.warn(TAG,'provider',e); }
+    try { hideUnusedToggles(); } catch(e){ console.warn(TAG,'toggles',e); }
+    try { trimModelDropdown(); } catch(e){ console.warn(TAG,'model',e); }
+    try { consolidateWorldFields(); } catch(e){ console.warn(TAG,'world',e); }
+    try { consolidateAiFields(); } catch(e){ console.warn(TAG,'ai',e); }
+    try { consolidateNpcFields(); } catch(e){ console.warn(TAG,'npc',e); }
+    try { consolidateDebugUI(); } catch(e){ console.warn(TAG,'debug',e); }
+  }
+
+  applyAll();
+  setInterval(applyAll, 1500);
+  console.log(TAG,'v30 settings cleanup active');
+})();
+</script>
 </body>
 </html>
