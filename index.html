@@ -12495,5 +12495,71 @@ G.init();
   console.log('[v31] cleanup follow-up active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v32: Fix provider panel mismatch when v30 hid the cfgProvider dropdown.
+ * Also force form fields to refresh from state on settings open.
+ * ======================================================================== */
+(function v32Fix(){
+  var TAG = '[v32]';
+
+  function loadStorageState(){
+    try { return JSON.parse(localStorage.getItem('chr6')||'{}'); }
+    catch(e){ return {}; }
+  }
+
+  function syncProviderPanel(){
+    var st = loadStorageState();
+    var prov = (st.cfg && st.cfg.provider) || 'anthropic';
+    /* Override key by detecting which key looks more valid */
+    var orKey = st.cfg && st.cfg.orKey || '';
+    var antKey = st.cfg && st.cfg.key || '';
+    if (/^sk-or-/.test(orKey)) prov = 'openrouter';
+    else if (/^sk-ant-/.test(antKey)) prov = 'anthropic';
+    else if (/^pst-/.test(st.cfg && st.cfg.naiKey || '')) prov = 'novelai';
+
+    var pa = document.getElementById('provAnthropic');
+    var po = document.getElementById('provOpenRouter');
+    var pn = document.getElementById('provNovelAI');
+    if (pa) pa.style.display = (prov === 'anthropic') ? '' : 'none';
+    if (po) po.style.display = (prov === 'openrouter') ? '' : 'none';
+    if (pn) pn.style.display = (prov === 'novelai') ? '' : 'none';
+    /* Sync hidden cfgProvider value too */
+    var cp = document.getElementById('cfgProvider');
+    if (cp && cp.value !== prov) cp.value = prov;
+  }
+
+  function syncHeroFields(){
+    var st = loadStorageState();
+    var hero = (st.cast && st.cast.hero) || {};
+    var hName = document.getElementById('cfgHName');
+    var hDesc = document.getElementById('cfgHDesc');
+    if (hName && !hName.value && hero.name) hName.value = hero.name;
+    if (hDesc && !hDesc.value && hero.desc) hDesc.value = hero.desc;
+    /* Lore + AuthorNote */
+    var st2 = st;
+    var lore = document.getElementById('cfgLore');
+    var an   = document.getElementById('cfgAuthorNote');
+    if (lore && !lore.value && st2.scene && st2.scene.lore) lore.value = st2.scene.lore;
+    if (an && !an.value && st2.cfg && st2.cfg.authorNote) an.value = st2.cfg.authorNote;
+  }
+
+  function applyV32(){
+    /* Run only when settings panel is open (visible) */
+    var panel = document.querySelector('#settingsOv, .mpanel');
+    if (!panel) return;
+    var rect = panel.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    syncProviderPanel();
+    syncHeroFields();
+  }
+  setInterval(applyV32, 800);
+  /* Initial run shortly after load */
+  setTimeout(applyV32, 500);
+  setTimeout(applyV32, 1500);
+  console.log(TAG, 'provider+form sync active');
+})();
+</script>
 </body>
 </html>
