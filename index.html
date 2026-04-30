@@ -13691,5 +13691,190 @@ G.init();
   console.log(TAG, 'model dropdown curated, Hermes restored');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v45: Hermes 3 405B improvement bundle.
+ *  (1) Wrap fetch to inject explicit gender-voice rules + Japanese-quality
+ *      nudge into the system prompt for OpenRouter requests.
+ *  (2) Force model = Hermes 3 405B if state says Hermes (state-protector).
+ *  (3) Sanitize narrative segments after parsing to strip leading/trailing
+ *      asterisks (markdown leak) before they render.
+ *  (4) Re-extract dialogue from narrative quoted strings 「...」 / 『...』
+ *      when the model embeds dialogue in narrative.
+ * ======================================================================== */
+(function v45HermesImprove(){
+  var TAG = '[v45]';
+
+  /* ---- (1) + (2): fetch wrapper ---- */
+  var origFetch = window.fetch;
+  if (!origFetch.__v45Wrapped) {
+    window.fetch = function(input, init){
+      try {
+        var url = typeof input === 'string' ? input : (input && input.url) || '';
+        if (url.indexOf('openrouter.ai') >= 0 && init && typeof init.body === 'string') {
+          var body = JSON.parse(init.body);
+          if (body && body.messages) {
+            /* Force Hermes if state has it */
+            try {
+              var st = JSON.parse(localStorage.getItem('chr6')||'{}');
+              if (st.cfg && st.cfg.orModel === 'nousresearch/hermes-3-llama-3.1-405b') {
+                body.model = 'nousresearch/hermes-3-llama-3.1-405b';
+              }
+            } catch(e){}
+
+            /* Inject gender-voice + Japanese-quality rules into system message */
+            var hermesAddon =
+              '\n\n【★日本語表現の必須ルール（厳守）】\n' +
+              '1. 男性キャラは女言葉（〜わ、〜のよ、〜かしら、〜なのね）絶対禁止。「〜だ」「〜だな」「〜だろう」「〜ぜ」「〜さ」「〜か？」を使う。\n' +
+              '2. 女性キャラは「〜わ」「〜のよ」「〜かしら」自然に使う。男言葉「〜だぜ」は禁止。\n' +
+              '3. 性別: 男性 → 必ず男性的語尾。性別: 女性 → 必ず女性的語尾。\n' +
+              '4. 日本語の typo（誤字・存在しない単語）禁止。「さっきり」「ぼっそり」のような誤字は使わない。\n' +
+              '5. narrative内のセリフは必ず「」で囲む。地の文と混ぜない。\n' +
+              '6. 装飾は *—...—* ではなく — ... — を使う。アスタリスク（*）は narrative に書かない。';
+
+            body.messages = body.messages.map(function(m){
+              if (m.role === 'system' && typeof m.content === 'string') {
+                if (m.content.indexOf('日本語表現の必須ルール') < 0) {
+                  m.content = m.content + hermesAddon;
+                }
+              }
+              return m;
+            });
+            init = Object.assign({}, init, {body: JSON.stringify(body)});
+          }
+        }
+      } catch(e){ console.warn(TAG, 'fetch hook', e); }
+      return origFetch.call(this, input, init);
+    };
+    window.fetch.__v45Wrapped = true;
+  }
+
+  /* ---- State protector: keep Hermes selected if user wanted it ---- */
+  var lastUserChoice = null;
+  function protectState(){
+    var st;
+    try { st = JSON.parse(localStorage.getItem('chr6')||'{}'); } catch(e){ return; }
+    if (!st.cfg) return;
+    /* If state was Hermes recently and got reverted, restore */
+    if (lastUserChoice === 'nousresearch/hermes-3-llama-3.1-405b' &&
+        st.cfg.orModel !== 'nousresearch/hermes-3-llama-3.1-405b') {
+      st.cfg.orModel = 'nousresearch/hermes-3-llama-3.1-405b';
+      try { localStorage.setItem('chr6', JSON.stringify(st)); } catch(e){}
+    } else if (st.cfg.orModel === 'nousresearch/hermes-3-llama-3.1-405b') {
+      lastUserChoice = 'nousresearch/hermes-3-llama-3.1-405b';
+    } else if (lastUserChoice === null) {
+      /* First read */
+      lastUserChoice = st.cfg.orModel;
+    }
+  }
+  setInterval(protectState, 1000);
+  setTimeout(protectState, 200);
+
+  /* ---- (3): sanitize narrative segments after they're rendered ---- */
+  function sanitizeNarrativeSegments(){
+    /* Find all rendered narrative paragraphs and strip * markers */
+    var nodes = document.querySelectorAll('.narrative p, .narr-p, [class*="narrative"] p, .narr-segment');
+    nodes.forEach(function(n){
+      if (n.dataset.v45Sanitized === '1') return;
+      var t = n.textContent || '';
+      /* Strip leading/trailing single-asterisks AND wrappers like *—text—* */
+      var cleaned = t
+        .replace(/^\s*\*+\s*/, '')          /* leading * */
+        .replace(/\s*\*+\s*$/, '')          /* trailing * */
+        .replace(/\*+(——|—|--)/g, '$1')      /* *— or *-- */
+        .replace(/(——|—|--)\*+/g, '$1');     /* —* or --* */
+      if (cleaned !== t) {
+        n.textContent = cleaned;
+        n.dataset.v45Sanitized = '1';
+      }
+    });
+  }
+
+  /* Also sanitize at state level - rewrite saved narrative arrays */
+  function sanitizeStateNarrative(){
+    try {
+      var st = JSON.parse(localStorage.getItem('chr6')||'{}');
+      var changed = false;
+      (st.turns || []).forEach(function(t){
+        if (t.plan && t.plan.narrative && Array.isArray(t.plan.narrative)) {
+          t.plan.narrative = t.plan.narrative.map(function(seg){
+            if (typeof seg !== 'string') return seg;
+            var orig = seg;
+            seg = seg
+              .replace(/^\s*\*+\s*/, '')
+              .replace(/\s*\*+\s*$/, '')
+              .replace(/\*+(——|—|--)/g, '$1')
+              .replace(/(——|—|--)\*+/g, '$1');
+            if (seg !== orig) changed = true;
+            return seg;
+          });
+        }
+      });
+      if (changed) localStorage.setItem('chr6', JSON.stringify(st));
+    } catch(e){}
+  }
+
+  /* ---- (4): extract dialogue from narrative quoted strings ---- */
+  function extractDialogueFromNarrative(){
+    /* Walk turns: for each turn where dialogue card is empty but narrative has 「...」, extract */
+    /* Note: we don't mutate state here since the original render is from state.
+       Instead, we patch the dialogue list in DOM if cards look empty. */
+    var dlgCards = document.querySelectorAll('.dialogue-card, [class*="dialogue-card"]');
+    /* Find empty cards (no name OR no text) */
+    var emptyCards = [];
+    dlgCards.forEach(function(card){
+      var nameEl = card.querySelector('.dialogue-name, .name, .speaker, [class*="name"]');
+      var textEl = card.querySelector('.dialogue-text, .text, .line, [class*="text"]');
+      var nameTxt = nameEl ? (nameEl.textContent||'').trim() : '';
+      var textTxt = textEl ? (textEl.textContent||'').trim() : '';
+      if (!nameTxt || !textTxt) emptyCards.push({card: card, name: nameEl, text: textEl});
+    });
+    if (emptyCards.length === 0) return;
+    /* Pull recent narratives & extract 「...」 */
+    var st;
+    try { st = JSON.parse(localStorage.getItem('chr6')||'{}'); } catch(e){ return; }
+    var npcs = (st.cast && st.cast.npcs) || [];
+    var allDialogues = [];
+    (st.turns||[]).slice(-3).forEach(function(t){
+      if (t.plan && t.plan.narrative) {
+        var narr = Array.isArray(t.plan.narrative) ? t.plan.narrative.join(' ') : String(t.plan.narrative);
+        var matches = narr.match(/「([^」]+)」/g) || [];
+        matches.forEach(function(m){
+          var line = m.replace(/^「|」$/g, '');
+          /* Guess speaker by mention proximity */
+          var speaker = '';
+          npcs.forEach(function(n){
+            if (n.name && narr.indexOf(n.name) >= 0 && narr.indexOf(n.name) < narr.indexOf(m)) {
+              speaker = n.name;
+            }
+          });
+          if (!speaker && st.cast && st.cast.hero && narr.indexOf(st.cast.hero.name) < narr.indexOf(m)) {
+            speaker = st.cast.hero.name;
+          }
+          if (speaker && line) allDialogues.push({speaker: speaker, text: line});
+        });
+      }
+    });
+    /* Fill empty cards */
+    emptyCards.forEach(function(ec, i){
+      if (i >= allDialogues.length) return;
+      var d = allDialogues[i];
+      if (ec.name && !ec.name.textContent.trim()) ec.name.textContent = d.speaker;
+      if (ec.text && !ec.text.textContent.trim()) ec.text.textContent = d.text;
+    });
+  }
+
+  function applyAll(){
+    try { sanitizeNarrativeSegments(); } catch(e){ console.warn(TAG,'sanitize',e); }
+    try { sanitizeStateNarrative(); } catch(e){ console.warn(TAG,'state',e); }
+    try { extractDialogueFromNarrative(); } catch(e){ console.warn(TAG,'extract',e); }
+  }
+  setInterval(applyAll, 1500);
+  setTimeout(applyAll, 600);
+
+  console.log(TAG, 'Hermes improvement bundle active (gender voice + asterisk sanitize + dialogue extract + state protect)');
+})();
+</script>
 </body>
 </html>
