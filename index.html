@@ -12448,5 +12448,52 @@ G.init();
   console.log(TAG,'v30 settings cleanup active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v31: Cleanup follow-up - hide v11 debug panel + SVG-only radio + prompt debug
+ * ======================================================================== */
+(function v31Cleanup(){
+  if (!document.getElementById('v31-style')) {
+    var st = document.createElement('style');
+    st.id = 'v31-style';
+    st.textContent =
+      '#v11-debug-panel{display:none !important}\n' +
+      '.v31-hide{display:none !important}\n';
+    document.head.appendChild(st);
+  }
+
+  function applyV31(){
+    /* Hide SVG-only avatar option */
+    document.querySelectorAll('input[type="radio"][value="svg-only"]').forEach(function(r){
+      var lbl = r.closest('label') || r.parentElement;
+      if (lbl) lbl.classList.add('v31-hide');
+    });
+    /* Hide prompt debug checkbox row */
+    document.querySelectorAll('label').forEach(function(l){
+      if ((l.textContent||'').indexOf('プロンプトデバッグ') >= 0) l.classList.add('v31-hide');
+    });
+    /* Filter model dropdown - remove non-recommended */
+    var sel = document.getElementById('cfgOrModel');
+    if (sel && sel.dataset.v31 !== '1' && sel.options.length > 3) {
+      var keep = {
+        'meta-llama/llama-3.3-70b-instruct': 'LLaMA 3.3 70B（推奨：標準）',
+        'sao10k/l3.3-euryale-70b': 'Euryale 70B（成人描写）',
+        'anthropic/claude-haiku-4-5': 'Claude Haiku 4.5（高品質：安定）'
+      };
+      Array.from(sel.options).forEach(function(opt){
+        if (!keep[opt.value]) opt.remove();
+      });
+      Array.from(sel.options).forEach(function(opt){
+        if (keep[opt.value]) opt.textContent = keep[opt.value];
+      });
+      sel.dataset.v31 = '1';
+    }
+  }
+  applyV31();
+  setInterval(applyV31, 1500);
+  console.log('[v31] cleanup follow-up active');
+})();
+</script>
 </body>
 </html>
