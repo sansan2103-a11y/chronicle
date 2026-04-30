@@ -13524,5 +13524,114 @@ G.init();
   console.log(TAG, 'gender desc-dropdown sync active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v43: Post-render dedupe of duplicated narrative paragraphs + dialogue cards.
+ *  Llama-3.3 70B has been emitting identical-paragraph repeats; v10/v20 only
+ *  warn. v43 cleans the visible UI so the user doesn't have to look at it.
+ *  - Narrative panel: remove identical consecutive paragraph elements.
+ *  - Dialogue log: remove identical consecutive cards (same speaker + text).
+ *  - Also: same speaker + same text duplicates within recent N cards (3-window).
+ * ======================================================================== */
+(function v43Dedupe(){
+  var TAG = '[v43]';
+
+  function dedupeNarrative(){
+    /* Narrative paragraphs are inside the展開の描写 column. Best heuristic:
+     * find paragraph-like nodes inside the right column, dedupe by trimmed text. */
+    var roots = document.querySelectorAll('.narrative, .narr, .narrative-frame, [class*="narrative"]');
+    var nodes = [];
+    if (roots.length) {
+      roots.forEach(function(r){
+        Array.from(r.querySelectorAll('p, div')).forEach(function(n){
+          /* leaf-ish: no large children */
+          if (n.children.length <= 1) nodes.push(n);
+        });
+      });
+    } else {
+      /* Fallback: find narrative text by scanning common patterns */
+      Array.from(document.querySelectorAll('p, .narr-p, .narrative p')).forEach(function(n){
+        nodes.push(n);
+      });
+    }
+    var prevText = '';
+    nodes.forEach(function(n){
+      var t = (n.textContent||'').trim();
+      if (!t) return;
+      if (t === prevText && t.length > 8) {
+        /* Mark hidden via style */
+        if (n.style.display !== 'none') {
+          n.style.display = 'none';
+          n.dataset.v43Dup = '1';
+        }
+      } else {
+        prevText = t;
+      }
+    });
+  }
+
+  function dedupeDialogueCards(){
+    /* Dialogue cards are typically in 会話ログ panel. Find by .dialogue-list or
+     * .dialogue-card class. */
+    var lists = document.querySelectorAll('.dialogue-list, .dialogue-log, .dlg-list, [class*="dialogue"]');
+    var cards = [];
+    lists.forEach(function(list){
+      Array.from(list.children).forEach(function(c){
+        if (c.classList && (c.className.indexOf('card') >= 0 || c.className.indexOf('dialogue') >= 0)) {
+          cards.push(c);
+        }
+      });
+    });
+    /* Fallback: any .dialogue-card */
+    if (cards.length === 0) {
+      cards = Array.from(document.querySelectorAll('.dialogue-card, [class*="dialogue-card"]'));
+    }
+    /* Dedupe: collect (speaker, text) tuples; mark second+ occurrence within last 5 hidden */
+    var recentSeen = [];
+    cards.forEach(function(card){
+      /* Extract speaker + text. Speaker often in .name/.speaker/h-class, text in .text/.line */
+      var sp = card.querySelector('.dialogue-name, .speaker, .name, [class*="name"]');
+      var tx = card.querySelector('.dialogue-text, .text, .line, [class*="text"]');
+      var key = (sp ? sp.textContent.trim() : '') + '|' + (tx ? tx.textContent.trim() : card.textContent.trim().slice(0,80));
+      if (!key || key.length < 5) return;
+      var found = recentSeen.indexOf(key) >= 0;
+      if (found) {
+        if (card.style.display !== 'none') {
+          card.style.display = 'none';
+          card.dataset.v43Dup = '1';
+        }
+      } else {
+        recentSeen.push(key);
+        if (recentSeen.length > 5) recentSeen.shift();
+      }
+    });
+  }
+
+  function applyAll(){
+    try { dedupeNarrative(); } catch(e){ console.warn(TAG,'narr',e); }
+    try { dedupeDialogueCards(); } catch(e){ console.warn(TAG,'dlg',e); }
+  }
+  /* Hook MutationObserver for instant cleanup when new content arrives */
+  var observer = new MutationObserver(function(){
+    if (window.__v43Pending) return;
+    window.__v43Pending = setTimeout(function(){
+      window.__v43Pending = null;
+      applyAll();
+    }, 300);
+  });
+  function startObserver(){
+    var targets = document.querySelectorAll('.dialogue-list, .narrative, .narrative-frame, [class*="narrative"], main');
+    targets.forEach(function(t){
+      observer.observe(t, {childList: true, subtree: true, characterData: true});
+    });
+    if (targets.length === 0) setTimeout(startObserver, 1000);
+  }
+  setTimeout(startObserver, 500);
+  setInterval(applyAll, 2000);
+  setTimeout(applyAll, 600);
+  console.log(TAG, 'narrative + dialogue dedupe active');
+})();
+</script>
 </body>
 </html>
