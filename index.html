@@ -12728,5 +12728,55 @@ G.init();
   console.log(TAG, 'binary-only enforcer active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v34: Slim avatar widget area in settings (eliminate visual noise & broken
+ * vertical-label artifact). Hide style-picker, frame, batch-regen, help texts.
+ * ======================================================================== */
+(function v34Slim(){
+  if (!document.getElementById('v34-style')) {
+    var st = document.createElement('style');
+    st.id = 'v34-style';
+    st.textContent =
+      /* Hide style picker (画風), frame decoration, batch-regen widgets */
+      '.avatar-style-row{display:none !important}\n' +
+      '#heroAvSettings .fld:not(.avatar-keep){display:none !important}\n' +
+      /* Hide batch regen + frame decoration buttons by text */
+      '.v34-hide{display:none !important}\n';
+    document.head.appendChild(st);
+  }
+
+  function applyV34(){
+    /* Hide elements containing batch regen / frame decoration text */
+    document.querySelectorAll('#heroAvSettings *, .npc-card *').forEach(function(el){
+      var t = (el.textContent||'').trim();
+      if (el.children.length < 4 && (
+        t.indexOf('全キャラ一括再生成') >= 0 ||
+        t.indexOf('フレーム装飾') >= 0 ||
+        t.indexOf('画風（全キャラ共通）') >= 0 ||
+        t.indexOf('ONにすると感情') >= 0 ||
+        t.indexOf('物語シリーズやちびキャラ系はシン') >= 0 ||
+        t.indexOf('主人公＋全NPCのアバターを順番に再生成します') >= 0
+      )) {
+        el.classList.add('v34-hide');
+      }
+    });
+    /* Hide the broken vertical text - if a div text is over 5 chars and width<20px, hide */
+    document.querySelectorAll('#heroAvSettings div, .npc-card div').forEach(function(d){
+      var t = (d.textContent||'').trim();
+      if (t.length > 8 && d.children.length === 0) {
+        var r = d.getBoundingClientRect();
+        if (r.width > 0 && r.width < 30 && r.height > 80) {
+          d.classList.add('v34-hide');
+        }
+      }
+    });
+  }
+  setInterval(applyV34, 1500);
+  setTimeout(applyV34, 500);
+  console.log('[v34] avatar widget slim active');
+})();
+</script>
 </body>
 </html>
