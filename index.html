@@ -12778,5 +12778,196 @@ G.init();
   console.log('[v34] avatar widget slim active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v35: NPC card auto-render + Re-roll random button + Avatar prompt variety
+ * ======================================================================== */
+(function v35Suite(){
+  var TAG = '[v35]';
+
+  /* ---- (1) Force NPC card render when panel opens ---- */
+  function ensureNpcRendered(){
+    var panel = document.querySelector('#settingsOv');
+    if (!panel || !panel.classList.contains('open')) return;
+    var npcList = document.getElementById('npcList');
+    if (!npcList) return;
+    var raw;
+    try { raw = JSON.parse(localStorage.getItem('chr6')||'{}'); } catch(e){ return; }
+    var npcs = (raw.cast && raw.cast.npcs) || [];
+    if (npcs.length === 0) return;
+    if (npcList.children.length >= npcs.length) return;
+    /* Trigger re-render via add+remove of a placeholder NPC */
+    var addBtn = null;
+    document.querySelectorAll('button').forEach(function(b){
+      if ((b.textContent||'').indexOf('+ NPC を追加') >= 0) addBtn = b;
+    });
+    if (!addBtn) return;
+    /* Click add */
+    addBtn.click();
+    /* Find the newly added (last) NPC and remove it */
+    setTimeout(function(){
+      var cards = document.querySelectorAll('.npc-card');
+      if (!cards.length) return;
+      var last = cards[cards.length-1];
+      var del = last.querySelector('.npc-del, button[onclick*="delNpc"]');
+      if (del) del.click();
+    }, 100);
+  }
+
+  /* ---- (2) Add re-roll button next to existing random-fill ---- */
+  function addRerollBtn(){
+    if (document.getElementById('v35Reroll')) return;
+    var randBtn = null;
+    document.querySelectorAll('button').forEach(function(b){
+      if ((b.textContent||'').indexOf('未入力をランダム生成') >= 0) randBtn = b;
+    });
+    if (!randBtn) return;
+    /* Build new button */
+    var btn = document.createElement('button');
+    btn.id = 'v35Reroll';
+    btn.className = randBtn.className || 'btn-s';
+    btn.style.cssText = 'width:100%;font-size:13px;margin-top:4px;background:rgba(216,140,180,.15);border:1px solid rgba(216,140,180,.4);color:#d8a0c0';
+    btn.textContent = '🎲 全部やり直し（強制再ランダム）';
+    btn.addEventListener('click', function(){
+      if (!confirm('主人公・NPCの名前と説明を全クリアしてランダム再生成します。よろしいですか？')) return;
+      try {
+        var raw = JSON.parse(localStorage.getItem('chr6')||'{}');
+        if (raw.cast) {
+          if (raw.cast.hero) {
+            raw.cast.hero.name = '';
+            raw.cast.hero.desc = '';
+            raw.cast.hero.gender = '';
+            raw.cast.hero.avatar = '';
+          }
+          (raw.cast.npcs||[]).forEach(function(n){
+            n.name = '';
+            n.desc = '';
+            n.personality = '';
+            n.coreDesire = '';
+            n.coreFear = '';
+            n.wound = '';
+            n.gender = '';
+            n.avatar = '';
+          });
+          localStorage.setItem('chr6', JSON.stringify(raw));
+        }
+        /* Clear visible inputs too */
+        var hn = document.getElementById('cfgHName'); if (hn) hn.value='';
+        var hd = document.getElementById('cfgHDesc'); if (hd) hd.value='';
+        document.querySelectorAll('.npc-card').forEach(function(card){
+          card.querySelectorAll('input,textarea').forEach(function(inp){
+            if (inp.dataset && inp.dataset.f) inp.value='';
+          });
+        });
+        /* Trigger original random-fill button */
+        randBtn.click();
+      } catch(e){ console.warn(TAG, 'reroll', e); }
+    });
+    /* Insert after the original random-fill button */
+    if (randBtn.parentElement) randBtn.parentElement.appendChild(btn);
+  }
+
+  /* ---- (3) Avatar prompt variety - inject random style/composition ---- */
+  var STYLE_VARIATIONS = [
+    'soft cinematic lighting, three-quarter view',
+    'dramatic side lighting, profile view',
+    'warm rim light, looking at viewer',
+    'cool moonlight, looking aside, melancholic',
+    'candlelight glow, downcast eyes, contemplative',
+    'sharp shadows, frontal portrait, intense gaze',
+    'misty backlight, soft focus background',
+    'dappled light, slight smile, mysterious',
+    'golden hour, looking up, hopeful',
+    'overcast diffuse light, neutral expression',
+    'twilight purple gradient, distant gaze',
+    'low-key chiaroscuro, brooding',
+    'high-contrast monochrome accent, theatrical',
+    'pastel color palette, ethereal mood',
+    'desaturated muted tones, somber'
+  ];
+  var COMPOSITION_VARIATIONS = [
+    'close-up portrait',
+    'bust shot',
+    'shoulder up, slight angle',
+    'half body, looking back',
+    'over-the-shoulder framing',
+    'centered headshot',
+    'asymmetric crop, dynamic',
+    'cinematic letterbox framing'
+  ];
+  var DETAIL_VARIATIONS = [
+    'intricate fabric texture, detailed iris',
+    'wisps of hair, subtle skin imperfections',
+    'metallic accessory glint, fabric folds',
+    'subtle facial expression, lip detail',
+    'hair-strand detail, eye reflection',
+    'ornate clothing texture, jewelry sparkle',
+    'fine pore detail, eyelash detail'
+  ];
+  function pickRand(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+  function injectVariety(prompt, characterName){
+    if (!prompt || typeof prompt !== 'string') return prompt;
+    /* Use character name as a stable seed for one re-gen */
+    var st = pickRand(STYLE_VARIATIONS);
+    var cm = pickRand(COMPOSITION_VARIATIONS);
+    var dt = pickRand(DETAIL_VARIATIONS);
+    /* Insert variety AFTER the main subject description */
+    return prompt + ', ' + cm + ', ' + st + ', ' + dt;
+  }
+
+  /* Hook the fetch to add variety to FLUX/Pollinations prompts */
+  var origFetch = window.fetch;
+  if (!origFetch.__v35Wrapped) {
+    window.fetch = function(input, init){
+      try {
+        var url = typeof input === 'string' ? input : (input && input.url) || '';
+        if (/pollinations\.ai|fal\.run|black-forest|flux/.test(url)) {
+          /* For Pollinations: prompt is in URL path. */
+          if (url.indexOf('pollinations.ai/prompt/') >= 0) {
+            var u = new URL(url, location.origin);
+            var pathParts = u.pathname.split('/prompt/');
+            if (pathParts[1]) {
+              var p = decodeURIComponent(pathParts[1].split('?')[0]);
+              if (p && p.indexOf('___v35') < 0) {
+                var newP = injectVariety(p, '');
+                u.pathname = pathParts[0] + '/prompt/' + encodeURIComponent(newP + '___v35');
+                /* Also vary seed query */
+                u.searchParams.set('seed', String(Math.floor(Math.random()*999999)));
+                input = u.toString();
+              }
+            }
+          }
+          /* For JSON-body fetches (FLUX): inject in prompt field */
+          if (init && typeof init.body === 'string' && init.body.indexOf('"prompt"') >= 0 && init.body.indexOf('___v35') < 0) {
+            try {
+              var body = JSON.parse(init.body);
+              if (body.prompt) {
+                body.prompt = injectVariety(body.prompt, '') + '___v35';
+                /* Inject random seed if available */
+                body.seed = Math.floor(Math.random()*999999);
+                init = Object.assign({}, init, {body: JSON.stringify(body)});
+              }
+            } catch(e){}
+          }
+        }
+      } catch(e){ console.warn(TAG, 'variety', e); }
+      return origFetch.call(this, input, init);
+    };
+    window.fetch.__v35Wrapped = true;
+  }
+
+  /* ---- Run interval ---- */
+  function applyAll(){
+    try { ensureNpcRendered(); } catch(e){ console.warn(TAG,'render',e); }
+    try { addRerollBtn(); } catch(e){ console.warn(TAG,'reroll',e); }
+  }
+  setInterval(applyAll, 1000);
+  setTimeout(applyAll, 500);
+
+  console.log(TAG, 'NPC render + reroll + avatar variety active');
+})();
+</script>
 </body>
 </html>
