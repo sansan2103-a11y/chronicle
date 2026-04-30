@@ -13415,5 +13415,114 @@ G.init();
   console.log(TAG, 'hero gender row relocate active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v42: Sync gender dropdown <-> description '性別: X' prefix.
+ *  - On settings open: if desc has '性別: 男' or '性別: 女' that contradicts
+ *    the dropdown value, take desc as truth and update dropdown.
+ *  - When user changes dropdown: rewrite desc's leading '性別: X' phrase.
+ *  - When user types in desc and changes '性別: X': update dropdown.
+ *  - Same logic for hero (cfgHDesc) and each NPC card.
+ * ======================================================================== */
+(function v42GenderSync(){
+  var TAG = '[v42]';
+
+  function detectGenderInDesc(text){
+    var t = String(text||'');
+    var m = t.match(/性別[:：]?\s*([男女])(性)?/);
+    if (m) return m[1] === '男' ? '男性' : '女性';
+    return null; /* unknown */
+  }
+
+  function rewriteDescGender(desc, newGender){
+    var d = String(desc||'');
+    if (/性別[:：]?\s*[男女](性)?/.test(d)) {
+      d = d.replace(/性別[:：]?\s*[男女](性)?[。、]?\s*/, '性別: ' + newGender + '。 ');
+    } else {
+      d = '性別: ' + newGender + '。 ' + d;
+    }
+    return d;
+  }
+
+  function getCurrentDropdown(scope){
+    var sel = scope.querySelector('.v38-gender-row[data-v38="1"] select');
+    return sel ? sel.value : null;
+  }
+  function setDropdown(scope, value){
+    var sel = scope.querySelector('.v38-gender-row[data-v38="1"] select');
+    if (!sel) return;
+    if (sel.value !== value) {
+      sel.value = value;
+      sel.dispatchEvent(new Event('change', {bubbles:true}));
+    }
+  }
+  function setTextareaValue(ta, newVal){
+    if (!ta) return;
+    if (ta.value === newVal) return;
+    var setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+    setter.call(ta, newVal);
+    ta.dispatchEvent(new Event('input', {bubbles:true}));
+  }
+
+  function syncOne(descTa, scope, isHero, idx){
+    if (!descTa || !scope) return;
+    var descGen = detectGenderInDesc(descTa.value);
+    var dropdownGen = getCurrentDropdown(scope);
+    if (!dropdownGen) return;
+    /* If desc has explicit gender and it differs from dropdown -> trust desc */
+    if (descGen && descGen !== dropdownGen) {
+      setDropdown(scope, descGen);
+      /* Update state */
+      try {
+        var st = JSON.parse(localStorage.getItem('chr6')||'{}');
+        if (isHero) {
+          if (st.cast && st.cast.hero) { st.cast.hero.gender = descGen; }
+        } else {
+          if (st.cast && st.cast.npcs && st.cast.npcs[idx]) { st.cast.npcs[idx].gender = descGen; }
+        }
+        localStorage.setItem('chr6', JSON.stringify(st));
+      } catch(e){}
+    }
+  }
+
+  function wireDropdownChange(descTa, scope){
+    var sel = scope.querySelector('.v38-gender-row[data-v38="1"] select');
+    if (!sel || sel.dataset.v42Wired === '1') return;
+    sel.dataset.v42Wired = '1';
+    sel.addEventListener('change', function(){
+      if (!descTa) return;
+      var newDesc = rewriteDescGender(descTa.value, sel.value);
+      if (newDesc !== descTa.value) setTextareaValue(descTa, newDesc);
+    });
+  }
+
+  function applyAll(){
+    /* Hero */
+    var hDesc = document.getElementById('cfgHDesc');
+    var hName = document.getElementById('cfgHName');
+    if (hDesc && hName) {
+      var heroScope = hName.closest('.fld') || hName.parentElement;
+      /* Need a scope that contains v38 hero row. v41 placed it in nameFld. */
+      var heroFld = hName.closest('.fld');
+      if (heroFld && heroFld.querySelector('.v38-gender-row[data-v38="1"][data-hero="1"]')) {
+        syncOne(hDesc, heroFld, true, -1);
+        wireDropdownChange(hDesc, heroFld);
+      }
+    }
+    /* NPCs */
+    document.querySelectorAll('.npc-card').forEach(function(card, i){
+      var descTa = card.querySelector('textarea[data-f="desc"]');
+      if (!descTa) return;
+      syncOne(descTa, card, false, i);
+      wireDropdownChange(descTa, card);
+    });
+  }
+  setInterval(applyAll, 800);
+  setTimeout(applyAll, 300);
+  setTimeout(applyAll, 1000);
+  console.log(TAG, 'gender desc-dropdown sync active');
+})();
+</script>
 </body>
 </html>
