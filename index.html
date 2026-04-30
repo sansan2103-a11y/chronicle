@@ -12151,5 +12151,124 @@ G.init();
   console.log("[Patch v28] all loaded");
 })();
 </script>
+<script>
+/* PATCH: quality-fixes-v29 (fix v28 misplaced gender selects) */
+(function(){
+  console.log("[Patch v29] loading: rebuild gender selects with proper DOM targeting");
+  var SELECT_STYLE = "background:rgba(40,28,68,0.6);color:#f2eef9;border:1px solid rgba(160,138,240,0.4);border-radius:4px;padding:4px 8px;font-size:13px;margin-left:6px;cursor:pointer;";
+  var LABEL_STYLE = "color:#a08af0;font-size:13px;font-weight:bold;margin-right:4px;";
+  /* (1) Clean up all v28 rows first */
+  function cleanupV28(){
+    document.querySelectorAll(".v28-gender-row").forEach(function(r){r.remove();});
+  }
+  setInterval(cleanupV28, 1500);
+  setTimeout(cleanupV28, 200);
+  /* (2) Detect gender from desc */
+  function detectGender(desc){
+    if (!desc) return null;
+    if (/性別[:：]?\s*男性|少年|男子|男の子/.test(desc)) return "男性";
+    if (/性別[:：]?\s*女性|少女|女子|女の子/.test(desc)) return "女性";
+    return null;
+  }
+  function pickByHash(name){
+    var h = 0;
+    for (var i=0; i<name.length; i++) h = (h*31 + name.charCodeAt(i)) & 0xffff;
+    return (h % 2 === 0) ? "女性" : "男性";
+  }
+  /* (3) Inject gender select with EXACT DOM targeting */
+  function buildSelect(currentValue, onChange){
+    var row = document.createElement("div");
+    row.className = "v29-gender-row";
+    row.style.cssText = "margin:8px 0;display:flex;align-items:center;gap:6px;";
+    var lbl = document.createElement("span");
+    lbl.style.cssText = LABEL_STYLE;
+    lbl.textContent = "性別:";
+    var sel = document.createElement("select");
+    sel.style.cssText = SELECT_STYLE;
+    sel.innerHTML = '<option value="男性">男性</option><option value="女性">女性</option>';
+    sel.value = currentValue;
+    sel.addEventListener("change", function(){onChange(sel.value);});
+    row.appendChild(lbl);
+    row.appendChild(sel);
+    return row;
+  }
+  function injectHeroGender(){
+    var heroNameInp = document.getElementById("cfgHName");
+    if (!heroNameInp) return;
+    /* Check if already injected nearby */
+    var heroSection = heroNameInp.closest('[class*="hero"], section, fieldset') || heroNameInp.parentElement.parentElement;
+    if (!heroSection) return;
+    if (heroSection.querySelector(".v29-gender-row")) return;
+    /* Get current gender */
+    var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+    var hero = c.cast && c.cast.hero;
+    var current = (hero && hero.gender) || (hero && detectGender(hero.desc)) || (hero && pickByHash(hero.name||"x")) || "男性";
+    var row = buildSelect(current, function(val){
+      try {
+        var cc = JSON.parse(localStorage.getItem("chr6") || "{}");
+        if (!cc.cast) cc.cast = {};
+        if (!cc.cast.hero) cc.cast.hero = {};
+        cc.cast.hero.gender = val;
+        cc.cast.hero.avatar = "";
+        localStorage.setItem("chr6", JSON.stringify(cc));
+        console.log("[Patch v29] hero gender:", val);
+      } catch(e){}
+    });
+    /* Insert directly after the name input wrapper */
+    var nameWrap = heroNameInp.closest("div, label") || heroNameInp.parentElement;
+    if (nameWrap && nameWrap.parentElement) {
+      nameWrap.parentElement.insertBefore(row, nameWrap.nextSibling);
+    }
+  }
+  function injectNpcGender(card){
+    if (!card || card.querySelector(".v29-gender-row")) return;
+    /* NPC card has a name input as first input */
+    var nameInp = card.querySelector('input[type=text], input:not([type])');
+    if (!nameInp) return;
+    var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+    var nm = nameInp.value;
+    var npc = (c.cast && c.cast.npcs) ? c.cast.npcs.find(function(n){return n.name === nm;}) : null;
+    var current = (npc && npc.gender) || (npc && detectGender(npc.desc)) || (npc && pickByHash(npc.name||"x")) || (nm && pickByHash(nm)) || "男性";
+    var row = buildSelect(current, function(val){
+      try {
+        var cc = JSON.parse(localStorage.getItem("chr6") || "{}");
+        var nm2 = nameInp.value;
+        var n = (cc.cast && cc.cast.npcs) ? cc.cast.npcs.find(function(x){return x.name === nm2;}) : null;
+        if (n) { n.gender = val; n.avatar = ""; }
+        localStorage.setItem("chr6", JSON.stringify(cc));
+        console.log("[Patch v29] npc " + nm2 + " gender:", val);
+      } catch(e){}
+    });
+    /* Insert directly after name input wrapper, INSIDE the card */
+    var nameWrap = nameInp.closest("div, label") || nameInp.parentElement;
+    if (nameWrap && nameWrap.parentElement && card.contains(nameWrap.parentElement)) {
+      nameWrap.parentElement.insertBefore(row, nameWrap.nextSibling);
+    } else {
+      card.insertBefore(row, card.firstChild);
+    }
+  }
+  function injectAll(){
+    /* Clean stale v29 rows that lost their context (parent removed/changed) */
+    document.querySelectorAll(".v29-gender-row").forEach(function(r){
+      var sel = r.querySelector("select");
+      if (!sel) { r.remove(); return; }
+      /* Verify still valid context: name input nearby */
+      var parent = r.parentElement;
+      if (!parent || !parent.querySelector('input[type=text], input:not([type])')) {
+        r.remove();
+      }
+    });
+    injectHeroGender();
+    /* Only target proper .npc-card class, NOT [class*=npc-card] which is too broad */
+    document.querySelectorAll(".npc-card").forEach(function(card){
+      injectNpcGender(card);
+    });
+  }
+  setInterval(injectAll, 2000);
+  setTimeout(injectAll, 600);
+  setTimeout(injectAll, 1500);
+  console.log("[Patch v29] all loaded");
+})();
+</script>
 </body>
 </html>
