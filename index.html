@@ -11112,5 +11112,86 @@ G.init();
   console.log("[Patch v18] all loaded - provider correction + shadow persistence active");
 })();
 </script>
+<script>
+/* PATCH: quality-fixes-v19 (aggressive gender-from-desc) */
+(function(){
+  console.log("[Patch v19] loading: aggressive gender mismatch fix");
+  function detect(t){
+    if (!t) return null;
+    if (/少女|女子|女性|女の子|姉|妹|娘|彼女|乙女|姫|淑女|魔女|シスター|メイド|令嬢|未亡人|お嬢様|女医|女騎士|女剣士|貴婦人|女将/.test(t)) return "女性";
+    if (/少年|男子|男性|男の子|兄|弟|息子|青年|王子|騎士団長|男爵|公爵|司教|司令官|執事|武士|侍|騎士|戦士|将軍|紳士/.test(t)) return "男性";
+    return null;
+  }
+  function fixChar(char){
+    if (!char || !char.desc) return false;
+    var t = char.desc;
+    var m = t.match(/^性別[:：]\s*([^。\s]+)。?\s*([\s\S]*)$/);
+    var declared = m ? m[1] : null;
+    var rest = m ? m[2] : t;
+    var detected = detect(rest);
+    if (!detected) return false;
+    if (declared && declared === detected) return false;
+    char.desc = "性別: " + detected + "。 " + rest;
+    /* Clear avatar so it regens with correct gender */
+    if (char.avatar) char.avatar = "";
+    return true;
+  }
+  function aggressiveFix(){
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      if (!c.cast) return;
+      var changed = false;
+      if (c.cast.hero && fixChar(c.cast.hero)) {
+        changed = true;
+        console.log("[Patch v19] hero gender corrected to match desc");
+      }
+      (c.cast.npcs || []).forEach(function(n){
+        if (fixChar(n)) {
+          changed = true;
+          console.log("[Patch v19] npc " + n.name + " gender corrected");
+        }
+      });
+      if (changed) {
+        localStorage.setItem("chr6", JSON.stringify(c));
+        /* Update DOM textareas */
+        var setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+        var heroDesc = document.getElementById("cfgHDesc");
+        if (heroDesc && c.cast.hero && c.cast.hero.desc) {
+          setter.call(heroDesc, c.cast.hero.desc);
+          heroDesc.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+        var npcCards = document.querySelectorAll(".npc-card, [class*=npc-card]");
+        npcCards.forEach(function(card, i){
+          var ta = card.querySelector("textarea");
+          var n = c.cast.npcs && c.cast.npcs[i];
+          if (ta && n && n.desc) {
+            setter.call(ta, n.desc);
+            ta.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+        });
+      }
+    } catch(e){ console.warn("[Patch v19] fix err", e); }
+  }
+  setInterval(aggressiveFix, 1500);
+  setTimeout(aggressiveFix, 800);
+  /* Also hook the random fill button to run fix immediately after */
+  setInterval(function(){
+    var btns = Array.from(document.querySelectorAll("button"));
+    btns.forEach(function(b){
+      var t = (b.textContent || "");
+      if (t.indexOf("ランダム") >= 0 && b.dataset._v19hooked !== "1") {
+        b.dataset._v19hooked = "1";
+        b.addEventListener("click", function(){
+          /* Run fix multiple times after random fill (descriptions may load async) */
+          setTimeout(aggressiveFix, 1200);
+          setTimeout(aggressiveFix, 2500);
+          setTimeout(aggressiveFix, 4000);
+        });
+      }
+    });
+  }, 2000);
+  console.log("[Patch v19] aggressive gender fix active");
+})();
+</script>
 </body>
 </html>
