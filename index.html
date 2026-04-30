@@ -11783,5 +11783,131 @@ G.init();
   console.log("[Patch v25] all loaded");
 })();
 </script>
+<script>
+/* PATCH: quality-fixes-v26 (binary gender + avatar sync) */
+(function(){
+  console.log("[Patch v26] loading: binary gender + cross-UI avatar sync");
+  /* (1) Binary gender enforcement: replace 不明 / 中性的 / 両性具有 with hash-picked 男/女 */
+  function enforceBinaryGender(){
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      if (!c.cast) return;
+      var changed = false;
+      function pickBinary(name){
+        var h = 0;
+        for (var i=0; i<name.length; i++) h = (h*31 + name.charCodeAt(i)) & 0xffff;
+        return (h % 2 === 0) ? "女性" : "男性";
+      }
+      function fix(char){
+        if (!char || !char.desc) return false;
+        var t = char.desc;
+        var m = t.match(/^性別[:：]\s*([^。\s]+)。?\s*([\s\S]*)$/);
+        if (!m) return false;
+        var declared = m[1];
+        var rest = m[2];
+        if (declared === "不明" || declared === "中性的" || declared === "両性具有" || declared === "中性") {
+          /* Detect from description first */
+          var detected = null;
+          if (/少女|女子|女性|女の子|姉|妹|姫|淑女|乙女/.test(rest)) detected = "女性";
+          else if (/少年|男子|男性|男の子|兄|弟|青年|王子|騎士|侍/.test(rest)) detected = "男性";
+          /* Fallback: hash-pick from name */
+          if (!detected) detected = pickBinary(char.name || "x");
+          char.desc = "性別: " + detected + "。 " + rest;
+          /* Clear avatar so it regens with correct gender */
+          if (char.avatar) char.avatar = "";
+          return true;
+        }
+        return false;
+      }
+      if (c.cast.hero && fix(c.cast.hero)) {
+        changed = true;
+        console.log("[Patch v26] hero gender forced binary");
+      }
+      (c.cast.npcs || []).forEach(function(n){
+        if (fix(n)) {
+          changed = true;
+          console.log("[Patch v26] npc " + n.name + " gender forced binary");
+        }
+      });
+      if (changed) {
+        localStorage.setItem("chr6", JSON.stringify(c));
+        /* Update DOM */
+        var setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+        var heroDesc = document.getElementById("cfgHDesc");
+        if (heroDesc && c.cast.hero && c.cast.hero.desc) {
+          setter.call(heroDesc, c.cast.hero.desc);
+          heroDesc.dispatchEvent(new Event("input", {bubbles:true}));
+        }
+        var npcCards = document.querySelectorAll(".npc-card, [class*=npc-card]");
+        npcCards.forEach(function(card, i){
+          var ta = card.querySelector("textarea");
+          var n = c.cast.npcs && c.cast.npcs[i];
+          if (ta && n && n.desc) {
+            setter.call(ta, n.desc);
+            ta.dispatchEvent(new Event("input", {bubbles:true}));
+          }
+        });
+      }
+    } catch(e){ console.warn("[Patch v26] gender err", e); }
+  }
+  setInterval(enforceBinaryGender, 1500);
+  setTimeout(enforceBinaryGender, 600);
+  /* (2) Cross-UI avatar sync: ensure same character has same avatar in settings panel AND conversation log */
+  function syncAvatarsAcrossUI(){
+    try {
+      var c = JSON.parse(localStorage.getItem("chr6") || "{}");
+      var hero = c.cast && c.cast.hero;
+      var npcs = (c.cast && c.cast.npcs) || [];
+      if (!hero) return;
+      var byName = {};
+      byName[hero.name] = hero;
+      npcs.forEach(function(n){ byName[n.name] = n; });
+      /* Get all character avatars from DOM (settings panel hero card + npc cards) */
+      var imgsByChar = {};
+      /* Hero card avatar */
+      var heroCardImg = document.querySelector(".hero-card img, [class*=hero-card] img, .hero img");
+      if (heroCardImg && heroCardImg.src) imgsByChar[hero.name] = heroCardImg.src;
+      /* NPC card avatars */
+      var npcCards = document.querySelectorAll(".npc-card, [class*=npc-card]");
+      npcCards.forEach(function(card, i){
+        var img = card.querySelector("img");
+        var nameInp = card.querySelector('input[type=text], input:not([type])');
+        var name = nameInp ? nameInp.value : (npcs[i] ? npcs[i].name : null);
+        if (img && name && img.src) {
+          imgsByChar[name] = img.src;
+        }
+      });
+      /* Conversation log cards: sync img.src to character\'s settings avatar */
+      document.querySelectorAll(".dialogue-row").forEach(function(row){
+        var nameEl = row.querySelector(".dialogue-name");
+        var img = row.querySelector("img");
+        if (!nameEl || !img) return;
+        var displayName = (nameEl.textContent||"").trim().replace(/\s*《.*$/, "").replace(/\s*（.*$/, "");
+        var settingsAvatar = imgsByChar[displayName];
+        /* Try first-name match */
+        if (!settingsAvatar) {
+          var firstNameKey = Object.keys(imgsByChar).find(function(k){
+            return k.split(/[\s・]/)[0] === displayName.split(/[\s・]/)[0];
+          });
+          settingsAvatar = imgsByChar[firstNameKey];
+        }
+        if (settingsAvatar && img.src !== settingsAvatar && settingsAvatar.length > 100) {
+          /* Only sync if settings avatar is real image (not tiny SVG) */
+          if (settingsAvatar.indexOf("data:image/jpeg") === 0 || settingsAvatar.indexOf("data:image/png") === 0 ||
+              (settingsAvatar.indexOf("data:image/svg") === 0 && settingsAvatar.length > 1500)) {
+            img.src = settingsAvatar;
+            row.dataset._v26synced = displayName;
+          }
+        }
+      });
+    } catch(e){ console.warn("[Patch v26] sync err", e); }
+  }
+  setInterval(syncAvatarsAcrossUI, 2000);
+  /* (3) Update genders dropdown in random fill behavior — already handled in v8/v9 but reinforce */
+  /* Override v8 random-fill behavior: only 男性/女性 */
+  /* This is done via v26 enforceBinaryGender that runs after random-fill triggers gender:不明 */
+  console.log("[Patch v26] all loaded");
+})();
+</script>
 </body>
 </html>
