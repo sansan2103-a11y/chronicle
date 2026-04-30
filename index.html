@@ -13061,5 +13061,74 @@ G.init();
   console.log(TAG, 'stable NPC-render trigger + psych-hide enforcer active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v37: Sync NPC card inputs from localStorage state after render (since v36's
+ * render-trick produces empty input values).
+ * Also: capture input changes back to state via 'input' event so saveSettings
+ * picks them up.
+ * ======================================================================== */
+(function v37NpcSync(){
+  var TAG = '[v37]';
+
+  function loadState(){
+    try { return JSON.parse(localStorage.getItem('chr6')||'{}'); }
+    catch(e){ return {}; }
+  }
+  function saveState(s){
+    try { localStorage.setItem('chr6', JSON.stringify(s)); }
+    catch(e){}
+  }
+
+  function syncNpcCards(){
+    var panel = document.getElementById('settingsOv');
+    if (!panel || !panel.classList.contains('open')) return;
+    var c = loadState();
+    var npcs = (c.cast && c.cast.npcs) || [];
+    var cards = document.querySelectorAll('.npc-card');
+    cards.forEach(function(card, i){
+      if (i >= npcs.length) return;
+      var n = npcs[i];
+      var fields = ['name','desc','personality','coreDesire','coreFear','wound'];
+      fields.forEach(function(f){
+        var inp = card.querySelector('[data-f="'+f+'"]');
+        if (!inp) return;
+        if (!inp.value && n[f]) {
+          var setter = inp.tagName === 'TEXTAREA'
+            ? Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+            : Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+          setter.call(inp, n[f]);
+          inp.dispatchEvent(new Event('input', {bubbles:true}));
+        }
+        /* Wire change handler if not already */
+        if (!inp.dataset.v37Wired) {
+          inp.dataset.v37Wired = '1';
+          inp.addEventListener('input', function(){
+            var st = loadState();
+            if (!st.cast) st.cast = {};
+            if (!st.cast.npcs) st.cast.npcs = [];
+            while (st.cast.npcs.length <= i) st.cast.npcs.push({});
+            st.cast.npcs[i][f] = inp.value;
+            saveState(st);
+          });
+        }
+      });
+      /* Set NPC card heading to actual name if available */
+      var heading = card.querySelector('.npc-head span, .npc-head, h4, h5');
+      if (heading && n.name && !heading.dataset.v37Updated) {
+        heading.textContent = n.name;
+        heading.dataset.v37Updated = '1';
+      }
+    });
+  }
+
+  setInterval(syncNpcCards, 500);
+  setTimeout(syncNpcCards, 200);
+  setTimeout(syncNpcCards, 800);
+
+  console.log(TAG, 'NPC card input syncer active');
+})();
+</script>
 </body>
 </html>
