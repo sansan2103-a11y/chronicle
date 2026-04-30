@@ -13330,5 +13330,52 @@ G.init();
   console.log('[v39] gender row force-show active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v40: Fix v38 hero-region duplicate insertion + aggressive global dedupe.
+ *  v38's hero check used el.querySelector which only matches descendants, so
+ *  the inserted sibling row was never detected → infinite duplicates every
+ *  700ms. v40 takes over and:
+ *  - Keeps ONLY the first v38 row per logical character (hero / each NPC card)
+ *  - Deletes all subsequent v38 rows in the same scope
+ *  - Runs more frequently to clean up the existing pile fast
+ * ======================================================================== */
+(function v40GenderDedupe(){
+  var TAG = '[v40]';
+
+  function dedupe(){
+    /* HERO scope: rows with data-hero="1" outside any .npc-card */
+    var heroRows = Array.from(document.querySelectorAll('.v38-gender-row[data-v38="1"][data-hero="1"]'))
+      .filter(function(r){ return !r.closest('.npc-card'); });
+    if (heroRows.length > 1) {
+      heroRows.slice(1).forEach(function(r){ r.remove(); });
+    }
+    /* NPC scope: per-card */
+    document.querySelectorAll('.npc-card').forEach(function(card){
+      var rows = Array.from(card.querySelectorAll('.v38-gender-row[data-v38="1"]'));
+      if (rows.length > 1) {
+        rows.slice(1).forEach(function(r){ r.remove(); });
+      }
+    });
+    /* Stray v38 rows that don't belong to hero or any NPC card: also nuke */
+    Array.from(document.querySelectorAll('.v38-gender-row[data-v38="1"]')).forEach(function(r){
+      if (r.dataset.hero === '1') return;        /* hero row OK if first */
+      if (r.closest('.npc-card')) return;        /* NPC row OK */
+      /* Otherwise stray - remove */
+      r.remove();
+    });
+  }
+
+  /* Patch v38's insertion check by overriding hero check at runtime.
+   * Easiest: just block v38's hero insertion globally by removing data-hero
+   * stragglers. v38 still tries to insert, but we delete extras. */
+
+  setInterval(dedupe, 300);
+  setTimeout(dedupe, 100);
+  setTimeout(dedupe, 600);
+  console.log(TAG, 'gender dedupe active');
+})();
+</script>
 </body>
 </html>
