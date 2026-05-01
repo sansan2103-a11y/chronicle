@@ -16705,5 +16705,106 @@ G.init();
   console.log(TAG, "v61 stability: synchronous MO cleanup + appendChild block + pronoun handling");
 })();
 </script>
+
+<script type="application/javascript">
+/* ========================================================================
+ * v62: Eliminate micro-repaint jitter (画面が動く症状).
+ *  Diagnosis: 135 DOM mutations / 5 sec, body height stable.
+ *    - v44 thrashing #cfgOrModel options every 1.5s (45 mutations)
+ *    - v30/v34 re-applying hide classes (44 mutations)
+ *    - v28-gender-row insert/remove cycle (4 mutations)
+ *  Fix: FREEZE elements once stable. Block dropdown rebuild + class re-apply.
+ *  Add CSS contain to limit reflow scope.
+ * ======================================================================== */
+(function v62FreezeUI(){
+  var TAG = "[v62]";
+
+  /* CSS containment to limit reflow propagation */
+  if (!document.getElementById("v62-style")) {
+    var st = document.createElement("style");
+    st.id = "v62-style";
+    st.textContent =
+      ".mpanel-body { contain: layout style; }\n" +
+      "#dialogue-stream, #story { contain: layout style; }\n" +
+      "#cfgOrModel, #cfgOutputLength, #cfgImgProv, #cfgAvatarStyle { contain: layout style; }\n" +
+      ".npc-card { contain: layout style; }\n" +
+      "/* Prevent any element from causing global reflow when its content changes */\n" +
+      "[data-v62-frozen] { contain: strict; }\n";
+    document.head.appendChild(st);
+  }
+
+  /* Freeze cfgOrModel dropdown after stable state */
+  function freezeModelDropdown(){
+    var sel = document.getElementById("cfgOrModel");
+    if (!sel || sel.__v62Frozen) return;
+    /* Wait until dropdown has at least 3 options (stable state) */
+    if (sel.options.length < 3) return;
+    /* Save the current options as the source of truth */
+    var savedOptions = Array.from(sel.options).map(function(o){
+      return {value: o.value, text: o.textContent};
+    });
+    /* Override appendChild and removeChild to no-op on this element */
+    sel.appendChild = function(){ return arguments[0]; };
+    sel.removeChild = function(){ return arguments[0]; };
+    sel.insertBefore = function(){ return arguments[0]; };
+    /* Override innerHTML setter */
+    Object.defineProperty(sel, "innerHTML", {
+      get: function(){ return this.__innerHTML || ""; },
+      set: function(v){
+        /* Block - dropdown is frozen */
+        try { console.log("[v62] blocked cfgOrModel.innerHTML write"); } catch(e){}
+      },
+      configurable: true
+    });
+    /* Set marker */
+    sel.__v62Frozen = true;
+    sel.dataset.v62Frozen = "1";
+    sel.dataset.v44 = "1"; /* satisfy v44 short-circuit */
+    sel.dataset.v31 = "1"; /* satisfy v31 short-circuit */
+    console.log("[v62] cfgOrModel frozen with " + savedOptions.length + " options");
+  }
+
+  /* Suppress redundant classList.add calls for hide classes */
+  if (!window.__v62ClassListPatched) {
+    var origAdd = DOMTokenList.prototype.add;
+    DOMTokenList.prototype.add = function(){
+      var args = Array.prototype.filter.call(arguments, function(c){
+        /* Skip if already in list - prevents redundant attribute mutations */
+        return !this.contains(c);
+      }, this);
+      if (args.length === 0) return; /* No-op */
+      return origAdd.apply(this, args);
+    };
+    window.__v62ClassListPatched = true;
+  }
+
+  /* Block v28-gender-row creation entirely (v38 owns gender now) */
+  if (!window.__v62V28Blocked) {
+    var origAppend2 = Element.prototype.appendChild;
+    var origInsBef2 = Element.prototype.insertBefore;
+    function isV28Row(el){
+      if (!el || !el.classList) return false;
+      if (el.classList.contains("v28-gender-row") || el.classList.contains("v29-gender-row")) return true;
+      return false;
+    }
+    Element.prototype.appendChild = function(child){
+      if (isV28Row(child)) return child;
+      return origAppend2.call(this, child);
+    };
+    Element.prototype.insertBefore = function(child, ref){
+      if (isV28Row(child)) return child;
+      return origInsBef2.call(this, child, ref);
+    };
+    window.__v62V28Blocked = true;
+  }
+
+  /* Run freeze on intervals */
+  setInterval(freezeModelDropdown, 2000);
+  setTimeout(freezeModelDropdown, 1000);
+  setTimeout(freezeModelDropdown, 3000);
+
+  console.log(TAG, "v62 freeze + contain + classList dedupe + v28-block active");
+})();
+</script>
 </body>
 </html>
