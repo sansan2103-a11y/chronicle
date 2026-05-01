@@ -14813,5 +14813,262 @@ G.init();
   console.log(TAG, 'v49 unregistered speaker fixed selectors active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v50: Backward entity lookup for unregistered speakers.
+ *  v49 regex required entity directly adjacent to quote, missing common
+ *  patterns where narrative text intervenes. v50: find 「<text>」と<verb>
+ *  patterns, then walk backward in same sentence/paragraph to find the
+ *  nearest known entity name (animal/monster/job/generic).
+ * ======================================================================== */
+(function v50UnregBackward(){
+  var TAG = '[v50]';
+
+  var ANIMALS = {
+    '狼':'wolf','犬':'dog','猫':'cat','馬':'horse','牛':'cow','鳥':'bird',
+    '龍':'eastern dragon','竜':'dragon','ドラゴン':'dragon','蛇':'snake','大蛇':'giant snake',
+    '虎':'tiger','熊':'bear','狐':'fox','鷲':'eagle','烏':'crow','鴉':'crow','梟':'owl',
+    '鼠':'rat','蝙蝠':'bat','獅子':'lion','豹':'panther','蜘蛛':'spider',
+    'カラス':'crow','ライオン':'lion','クマ':'bear','ヘビ':'snake','フクロウ':'owl'
+  };
+  var MONSTERS = {
+    'ゴブリン':'goblin','オーク':'orc','スライム':'slime monster','ゾンビ':'zombie',
+    '亡霊':'wraith','悪魔':'demon','魔物':'monster','幽霊':'ghost','霊':'spirit',
+    'スケルトン':'skeleton','コボルト':'kobold','トロル':'troll','人狼':'werewolf',
+    '吸血鬼':'vampire','屍鬼':'ghoul','邪霊':'evil spirit',
+    'ミノタウロス':'minotaur','妖精':'fairy','妖魔':'apparition','幻影':'phantom',
+    'リッチ':'lich','悪霊':'evil spirit','怪物':'monster','化け物':'creature'
+  };
+  var JOBS = {
+    '衛兵':'medieval guard','兵士':'soldier','商人':'merchant','神官':'priest',
+    '僧侶':'monk','騎士':'knight','町人':'townsperson','村人':'villager',
+    '客':'patron','店主':'shopkeeper','給仕':'serving girl','子供':'child',
+    '老人':'elder','女将':'innkeeper woman','修道士':'monk','修道女':'nun',
+    '旅人':'traveler','傭兵':'mercenary','盗賊':'thief','貴族':'noble',
+    '王':'king','女王':'queen','王子':'prince','王女':'princess','姫':'princess',
+    '召使':'servant','医者':'physician','学者':'scholar','船乗り':'sailor',
+    '通りすがり':'random traveler','男':'man','女':'woman'
+  };
+  var GENERIC = ['声','子供','老人','誰か','何か','人物','人影','影','少女','少年','子','者'];
+
+  var SPEAK_VERBS = [
+    '言う','叫ぶ','呟く','告げる','問う','囁く','怒鳴る','喚く','喋る','話す',
+    '答える','返す','零す','吐き捨てる','呼ぶ','呼びかける','口にする','語る',
+    '吠える','咆哮する','咆哮を上げる','唸る','鳴く','鳴き声を上げる',
+    '唸り声を上げる','嘶く','囀る','声を上げる','うめく','うなる',
+    '吼える','哭く','哮る','金切声を上げる','叫び声を上げる',
+    '声がした','声が響いた','声がこぼれた','声が漏れた'
+  ];
+
+  function classify(name){
+    var n = String(name||'');
+    for (var k in ANIMALS) if (n.indexOf(k) >= 0) return {type:'animal', enKey:k, en:ANIMALS[k]};
+    for (var k in MONSTERS) if (n.indexOf(k) >= 0) return {type:'monster', enKey:k, en:MONSTERS[k]};
+    for (var k in JOBS) if (n.indexOf(k) >= 0) return {type:'job', enKey:k, en:JOBS[k]};
+    for (var i = 0; i < GENERIC.length; i++) if (n.indexOf(GENERIC[i]) >= 0) return {type:'generic', enKey:GENERIC[i], en:'figure'};
+    return null;
+  }
+  function hashSeed(s){
+    var h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0xffffff;
+    return h;
+  }
+  function avatarUrl(name, cls){
+    var seed = hashSeed(name);
+    var prompt = '';
+    if (cls.type === 'animal') prompt = cls.en + ' headshot portrait, dark fantasy, anime style, detailed eyes, atmospheric, painterly';
+    else if (cls.type === 'monster') prompt = cls.en + ' creature portrait, dark fantasy, anime style, menacing, detailed';
+    else if (cls.type === 'job') prompt = cls.en + ' portrait headshot, medieval fantasy, anime style, character art, detailed face';
+    else prompt = 'mysterious silhouette portrait, dark anime style, atmospheric, ' + cls.enKey;
+    return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=240&height=240&seed=' + seed + '&nologo=true&model=flux';
+  }
+
+  function getRegisteredNames(){
+    try {
+      var c = JSON.parse(localStorage.getItem('chr6')||'{}');
+      var names = [];
+      if (c.cast && c.cast.hero && c.cast.hero.name) names.push(c.cast.hero.name);
+      (c.cast && c.cast.npcs || []).forEach(function(n){ if (n.name) names.push(n.name); });
+      return names;
+    } catch(e){ return []; }
+  }
+
+  /* Build pre-compiled entity keyword list for backward search */
+  function buildKeywordList(){
+    var list = [];
+    for (var k in ANIMALS) list.push({k:k, type:'animal', en:ANIMALS[k]});
+    for (var k in MONSTERS) list.push({k:k, type:'monster', en:MONSTERS[k]});
+    for (var k in JOBS) list.push({k:k, type:'job', en:JOBS[k]});
+    GENERIC.forEach(function(g){ list.push({k:g, type:'generic', en:'figure'}); });
+    /* Sort by keyword length desc so longer matches first */
+    list.sort(function(a,b){return b.k.length - a.k.length;});
+    return list;
+  }
+  var KEYWORD_LIST = buildKeywordList();
+
+  function findNearestEntity(beforeText){
+    /* Walk backward through sentence boundaries */
+    var sentStarts = [0];
+    /* Split on sentence terminators */
+    for (var i = 0; i < beforeText.length; i++) {
+      var ch = beforeText[i];
+      if (ch === '。' || ch === '！' || ch === '？' || ch === '\n') {
+        sentStarts.push(i + 1);
+      }
+    }
+    /* Try the last sentence first, fall back to earlier */
+    for (var s = sentStarts.length - 1; s >= 0; s--) {
+      var sentence = beforeText.slice(sentStarts[s]);
+      /* Find ALL entity keyword matches in this sentence */
+      var hits = [];
+      KEYWORD_LIST.forEach(function(item){
+        var idx = sentence.lastIndexOf(item.k);
+        if (idx >= 0) hits.push({pos: idx + sentStarts[s], item: item});
+      });
+      if (hits.length > 0) {
+        /* Take the rightmost (closest to quote) */
+        hits.sort(function(a,b){return b.pos - a.pos;});
+        return hits[0];
+      }
+      /* Try previous sentence */
+      if (s === 0) break;
+    }
+    return null;
+  }
+
+  function extractUnregV2(narrText){
+    var registered = getRegisteredNames();
+    var verbsAlt = SPEAK_VERBS.map(function(v){return v.replace(/[\\^$.*+?()|\[\]{}]/g, '\\$&');}).join('|');
+    /* Find ALL <quote>と<verb> patterns */
+    var re = new RegExp('[「『]([^」』]{1,100})[」』]\\s*と[、。\\s]*(' + verbsAlt + ')', 'g');
+
+    var found = [];
+    var seen = {};
+    var m;
+    while ((m = re.exec(narrText)) !== null) {
+      var quoteText = m[1];
+      var beforeQuote = narrText.slice(0, m.index);
+      var entityHit = findNearestEntity(beforeQuote);
+      if (!entityHit) continue;
+      var name = entityHit.item.k;
+      /* Skip if this name is registered */
+      if (registered.indexOf(name) >= 0) continue;
+      /* Take the actual text appearing in narrative as speaker name */
+      /* For longer names, try to find compound speaker (e.g., 通りすがりの男) */
+      /* For now use the keyword as speaker name */
+      var actualName = name;
+      /* Try to expand name with prefix like "若い", "巨大な" */
+      var prefixRe = /([\u4e00-\u9fa5\u30a0-\u30ff\u3040-\u309f]{1,5})$/;
+      var preMatch = beforeQuote.slice(Math.max(0, entityHit.pos - 8), entityHit.pos).match(prefixRe);
+      /* Skip prefix expansion for now */
+
+      var cls = classify(name);
+      if (!cls) continue;
+      var key = name + '|' + quoteText;
+      if (seen[key]) continue;
+      seen[key] = true;
+      found.push({name: name, text: quoteText, cls: cls, pos: m.index});
+    }
+    return found;
+  }
+
+  function buildCard(speaker, text, avatarSrc, type){
+    var card = document.createElement('div');
+    card.className = 'dialogue-card v50-injected';
+    card.dataset.v50 = '1';
+    var typeColor = type === 'animal' ? 'rgba(180,140,80,.4)' :
+                    type === 'monster' ? 'rgba(180,80,140,.4)' :
+                    type === 'job' ? 'rgba(140,180,140,.4)' :
+                    'rgba(160,138,240,.4)';
+    card.style.cssText = 'display:flex;align-items:flex-start;gap:10px;padding:10px 12px;margin:8px 4px;background:linear-gradient(135deg,rgba(40,30,55,.6),rgba(60,45,80,.4));border:1px solid '+typeColor+';border-radius:10px;box-shadow:0 2px 6px rgba(0,0,0,.3)';
+    var av = document.createElement('div');
+    av.style.cssText = 'flex:0 0 56px;width:56px;height:56px;border-radius:50%;overflow:hidden;border:2px solid '+typeColor+';background:#1a1224';
+    var img = document.createElement('img');
+    img.src = avatarSrc;
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block';
+    img.alt = speaker;
+    img.onerror = function(){
+      this.style.display='none';
+      av.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:24px;color:#a08af0">?</div>';
+    };
+    av.appendChild(img);
+    var body = document.createElement('div');
+    body.style.cssText = 'flex:1;min-width:0';
+    var nameEl = document.createElement('div');
+    nameEl.className = 'dialogue-name';
+    var typeBadge = type === 'animal' ? ' 🐾' : type === 'monster' ? ' 👹' : type === 'job' ? ' 🛡️' : '';
+    nameEl.textContent = speaker + typeBadge;
+    nameEl.style.cssText = 'font-size:12px;color:#c4afff;font-weight:600;margin-bottom:3px';
+    var textEl = document.createElement('div');
+    textEl.className = 'dialogue-text';
+    textEl.textContent = '「' + text + '」';
+    textEl.style.cssText = 'font-size:14px;color:#e8d8ff;line-height:1.5;word-wrap:break-word';
+    body.appendChild(nameEl);
+    body.appendChild(textEl);
+    card.appendChild(av);
+    card.appendChild(body);
+    return card;
+  }
+
+  function applyV50(){
+    var dlgStream = document.getElementById('dialogue-stream');
+    var story = document.getElementById('story');
+    if (!dlgStream || !story) return;
+    var narrText = story.textContent || '';
+    if (narrText.length < 20) return;
+
+    var found = extractUnregV2(narrText);
+    if (found.length === 0) return;
+
+    var existing = {};
+    dlgStream.querySelectorAll('[data-v50="1"], [data-v49="1"]').forEach(function(c){
+      var nm = c.querySelector('.dialogue-name');
+      var tx = c.querySelector('.dialogue-text');
+      if (nm && tx) {
+        var rawName = (nm.textContent || '').replace(/[🐾👹🛡️\s]+/gu, '').trim();
+        existing[rawName + '|' + (tx.textContent||'').replace(/^「|」$/g, '')] = true;
+      }
+    });
+    dlgStream.querySelectorAll('.dialogue-card:not([data-v49="1"]):not([data-v50="1"])').forEach(function(c){
+      var nm = c.querySelector('.dialogue-name');
+      var tx = c.querySelector('.dialogue-text');
+      if (nm && tx) {
+        existing[(nm.textContent||'').trim() + '|' + (tx.textContent||'').replace(/^「|」$/g, '')] = true;
+      }
+    });
+
+    found.forEach(function(item){
+      var key = item.name + '|' + item.text;
+      if (existing[key]) return;
+      var url = avatarUrl(item.name, item.cls);
+      var card = buildCard(item.name, item.text, url, item.cls.type);
+      dlgStream.appendChild(card);
+      console.log('[v50] +' + item.cls.type + ': ' + item.name + ' → ' + item.text.slice(0,30));
+    });
+  }
+
+  setInterval(applyV50, 2000);
+  setTimeout(applyV50, 1200);
+
+  var observer = new MutationObserver(function(){
+    if (window.__v50Pending) return;
+    window.__v50Pending = setTimeout(function(){
+      window.__v50Pending = null;
+      applyV50();
+    }, 500);
+  });
+  function startObs(){
+    var ds = document.getElementById('dialogue-stream');
+    var st = document.getElementById('story');
+    if (ds) observer.observe(ds, {childList: true, subtree: true});
+    if (st) observer.observe(st, {childList: true, subtree: true, characterData: true});
+    if (!ds || !st) setTimeout(startObs, 1000);
+  }
+  setTimeout(startObs, 800);
+
+  console.log(TAG, 'v50 backward-lookup unregistered speaker active');
+})();
+</script>
 </body>
 </html>
