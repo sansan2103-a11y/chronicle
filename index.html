@@ -16078,5 +16078,67 @@ G.init();
   console.log(TAG, 'output length mode active, current:', getMode());
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v55: Recalibrate v54's max_tokens. v54 had 400/900/1600 but Chronicle's
+ *  JSON overhead (~280 tokens for psychology fields) left narrative starved
+ *  in short mode (only ~33 chars). v55 bumps to 700/1100/1800 and overrides
+ *  v54's MODE_CONFIG by re-wrapping fetch.
+ * ======================================================================== */
+(function v55Recalibrate(){
+  var TAG = '[v55]';
+
+  var MODE_CONFIG = {
+    short:    { max_tokens: 700,  promptAddon: '\n\n【★出力長：短文モード】\nnarrative は 2〜3段落、合計 150〜250字。今ターンの最重要な瞬間1〜2つだけ描写し、それ以外は次ターンへ。' },
+    standard: { max_tokens: 1100, promptAddon: '' },
+    long:     { max_tokens: 1800, promptAddon: '\n\n【★出力長：長文モード】\nnarrative は 5〜7段落、400〜700字でじっくり描写してよい。' }
+  };
+
+  function getMode(){
+    try {
+      var c = JSON.parse(localStorage.getItem('chr6')||'{}');
+      if (c.cfg && c.cfg.outputLength) return c.cfg.outputLength;
+      var model = c.cfg && c.cfg.orModel || '';
+      if (/euryale|hermes/.test(model)) return 'short';
+      return 'standard';
+    } catch(e){ return 'standard'; }
+  }
+
+  /* Re-wrap fetch with v55's stronger config */
+  var origFetch = window.fetch;
+  if (!origFetch.__v55Wrapped) {
+    window.fetch = async function(input, init){
+      var url = typeof input === 'string' ? input : (input && input.url) || '';
+      if (url.indexOf('openrouter.ai') >= 0 && init && typeof init.body === 'string') {
+        try {
+          var body = JSON.parse(init.body);
+          if (body && body.messages) {
+            var mode = getMode();
+            var cfg = MODE_CONFIG[mode] || MODE_CONFIG.standard;
+            body.max_tokens = cfg.max_tokens;
+            if (cfg.promptAddon) {
+              body.messages = body.messages.map(function(m){
+                if (m.role === 'system' && typeof m.content === 'string') {
+                  /* Strip v54's old addon if present and replace */
+                  m.content = m.content.replace(/【★出力長制限：[^\n]*\n[\s\S]*?(?=\n\n|\n【|$)/g, '');
+                  m.content = m.content + cfg.promptAddon;
+                }
+                return m;
+              });
+            }
+            init = Object.assign({}, init, {body: JSON.stringify(body)});
+            console.log('[v55] mode:', mode, 'max_tokens:', cfg.max_tokens);
+          }
+        } catch(e){}
+      }
+      return origFetch.call(this, input, init);
+    };
+    window.fetch.__v55Wrapped = true;
+  }
+
+  console.log(TAG, 'recalibrated tokens (700/1100/1800)');
+})();
+</script>
 </body>
 </html>
