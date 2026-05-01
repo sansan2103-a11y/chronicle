@@ -14393,5 +14393,205 @@ G.init();
   console.log(TAG, 'v47 Euryale parser fixes + meta-leak filter active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v48: Unregistered NPC / monster / mob support in dialogue log.
+ *  Scans narrative for <speaker>「<text>」<verb> patterns where <speaker>
+ *  is NOT a registered character, classifies the entity type (animal /
+ *  monster / job / human), generates a type-appropriate avatar URL, and
+ *  injects a dialogue card into the chat log.
+ * ======================================================================== */
+(function v48UnregSpeakers(){
+  var TAG = '[v48]';
+
+  /* ---------- Entity dictionaries ---------- */
+  var ANIMALS = {
+    '狼':'wolf','犬':'dog','猫':'cat','馬':'horse','牛':'cow','鳥':'bird','大鴉':'large raven',
+    '龍':'eastern dragon','竜':'dragon','ドラゴン':'dragon','蛇':'snake','大蛇':'giant snake',
+    '虎':'tiger','熊':'bear','狐':'fox','鷲':'eagle','烏':'crow','鴉':'crow','梟':'owl','鼠':'rat',
+    '蝙蝠':'bat','獅子':'lion','豹':'panther','鯨':'whale','蜘蛛':'spider','蜘':'spider',
+    '蛙':'frog','カラス':'crow','ワシ':'eagle','ライオン':'lion','クマ':'bear'
+  };
+  var MONSTERS = {
+    'ゴブリン':'goblin','オーク':'orc','スライム':'slime monster','ゾンビ':'zombie',
+    '亡霊':'wraith','悪魔':'demon','魔物':'monster','幽霊':'ghost','霊':'spirit',
+    'スケルトン':'skeleton','コボルト':'kobold','トロル':'troll','人狼':'werewolf',
+    '吸血鬼':'vampire','魔人':'evil mage','屍鬼':'ghoul','邪霊':'evil spirit',
+    'ミノタウロス':'minotaur','妖精':'fairy','妖魔':'apparition','幻影':'phantom',
+    'リッチ':'lich','悪霊':'evil spirit','怪物':'monster','化け物':'creature'
+  };
+  var JOBS = {
+    '衛兵':'medieval guard','兵士':'soldier','商人':'merchant','神官':'priest',
+    '僧侶':'monk','騎士':'knight','町人':'townsperson','村人':'villager',
+    '客':'patron','店主':'shopkeeper','給仕':'serving girl','子供':'child',
+    '老人':'elder','女将':'innkeeper woman','修道士':'monk','修道女':'nun',
+    '旅人':'traveler','傭兵':'mercenary','盗賊':'thief','貴族':'noble',
+    '王':'king','女王':'queen','王子':'prince','王女':'princess','姫':'princess',
+    '召使':'servant','奴隷':'slave','医者':'physician','学者':'scholar','船乗り':'sailor'
+  };
+  var GENERIC = ['男','女','声','子供','老人','誰か','何か','人物','人影','影','少女','少年'];
+
+  /* Verbs that indicate speech/utterance (existing + animal/monster) */
+  var SPEAK_VERBS = [
+    /* human */ '言う','叫ぶ','呟く','告げる','問う','囁く','怒鳴る','喚く','喋る','話す',
+                '答える','返す','告げる','零す','吐き捨てる','呼ぶ','呼びかける','口にする',
+    /* animal/monster */ '吠える','咆哮する','咆哮を上げる','唸る','鳴く','鳴き声を上げる',
+                '唸り声を上げる','遠吠え','嘶く','囀る','声を上げる','うめく','うなる',
+                '吼える','哭く','哮る','息を漏らす','息を吐く','金切声を上げる',
+    /* generic */ '声がした','声が響いた','声がこぼれた','声が漏れた'
+  ];
+
+  /* ---------- Classification ---------- */
+  function classify(name){
+    var n = String(name||'');
+    for (var k in ANIMALS) if (n.indexOf(k) >= 0) return {type:'animal', enKey:k, en:ANIMALS[k]};
+    for (var k in MONSTERS) if (n.indexOf(k) >= 0) return {type:'monster', enKey:k, en:MONSTERS[k]};
+    for (var k in JOBS) if (n.indexOf(k) >= 0) return {type:'job', enKey:k, en:JOBS[k]};
+    for (var i = 0; i < GENERIC.length; i++) if (n.indexOf(GENERIC[i]) >= 0) return {type:'generic', enKey:GENERIC[i], en:'figure'};
+    return null;
+  }
+
+  /* ---------- Avatar URL generation ---------- */
+  function hashSeed(s){
+    var h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0xffffff;
+    return h;
+  }
+  function avatarUrl(name, cls){
+    var seed = hashSeed(name);
+    var prompt = '';
+    if (cls.type === 'animal') {
+      prompt = cls.en + ' headshot portrait, dark fantasy, anime style, detailed eyes, atmospheric, painterly';
+    } else if (cls.type === 'monster') {
+      prompt = cls.en + ' creature portrait, dark fantasy, anime style, menacing, detailed';
+    } else if (cls.type === 'job') {
+      prompt = cls.en + ' portrait headshot, medieval fantasy, anime style, character art, detailed face';
+    } else {
+      prompt = 'mysterious silhouette portrait, dark anime style, atmospheric, ' + cls.enKey;
+    }
+    return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=240&height=240&seed=' + seed + '&nologo=true';
+  }
+
+  /* ---------- Extract unregistered dialogue from narrative ---------- */
+  function getRegisteredNames(){
+    try {
+      var c = JSON.parse(localStorage.getItem('chr6')||'{}');
+      var names = [];
+      if (c.cast && c.cast.hero && c.cast.hero.name) names.push(c.cast.hero.name);
+      (c.cast && c.cast.npcs || []).forEach(function(n){ if (n.name) names.push(n.name); });
+      return names;
+    } catch(e){ return []; }
+  }
+
+  function extractUnregisteredDialogues(narrText){
+    var registered = getRegisteredNames();
+    var verbsAlt = SPEAK_VERBS.map(function(v){return v.replace(/[\\^$.*+?()|\[\]{}]/g, '\\$&');}).join('|');
+    /* Pattern A: <entity>(が|は|の)?「<text>」<verb> */
+    var reA = new RegExp('([\\u4e00-\\u9fa5\\u30a0-\\u30ff\\u3040-\\u309fA-Za-z]{1,8})(?:が|は|の|から|たち|の[一二三]人)?[、。\\s]*[「『]([^」』]{1,80})[」』]\\s*(?:と)?\\s*(' + verbsAlt + ')', 'g');
+    /* Pattern B: 「<text>」と<entity><verb> */
+    var reB = new RegExp('[「『]([^」』]{1,80})[」』]\\s*と\\s*([\\u4e00-\\u9fa5\\u30a0-\\u30ff\\u3040-\\u309fA-Za-z]{1,8})(?:が|は)?[、。\\s]*(' + verbsAlt + ')', 'g');
+
+    var found = [];
+    var seen = {};
+    var m;
+    while ((m = reA.exec(narrText)) !== null) {
+      var name = m[1], text = m[2];
+      if (registered.indexOf(name) >= 0) continue;
+      var cls = classify(name);
+      if (!cls) continue;
+      var key = name + '|' + text;
+      if (seen[key]) continue;
+      seen[key] = true;
+      found.push({name: name, text: text, cls: cls, pos: m.index});
+    }
+    while ((m = reB.exec(narrText)) !== null) {
+      var name = m[2], text = m[1];
+      if (registered.indexOf(name) >= 0) continue;
+      var cls = classify(name);
+      if (!cls) continue;
+      var key = name + '|' + text;
+      if (seen[key]) continue;
+      seen[key] = true;
+      found.push({name: name, text: text, cls: cls, pos: m.index});
+    }
+    /* Sort by position in narrative */
+    found.sort(function(a,b){return a.pos - b.pos;});
+    return found;
+  }
+
+  /* ---------- Build a dialogue card ---------- */
+  function buildCard(speaker, text, avatarSrc){
+    var card = document.createElement('div');
+    card.className = 'dialogue-card v48-injected';
+    card.dataset.v48 = '1';
+    card.style.cssText = 'display:flex;align-items:flex-start;gap:10px;padding:10px 12px;margin:6px 0;background:linear-gradient(135deg,rgba(40,30,55,.6),rgba(60,45,80,.4));border:1px solid rgba(160,138,240,.25);border-radius:10px';
+    /* Avatar */
+    var av = document.createElement('div');
+    av.style.cssText = 'flex:0 0 56px;width:56px;height:56px;border-radius:50%;overflow:hidden;border:2px solid rgba(160,138,240,.4);background:#1a1224';
+    var img = document.createElement('img');
+    img.src = avatarSrc;
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block';
+    img.alt = speaker;
+    img.onerror = function(){
+      this.style.display='none';
+      av.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:20px;color:#a08af0">?</div>';
+    };
+    av.appendChild(img);
+    /* Body */
+    var body = document.createElement('div');
+    body.style.cssText = 'flex:1;min-width:0';
+    var nameEl = document.createElement('div');
+    nameEl.className = 'dialogue-name';
+    nameEl.textContent = speaker;
+    nameEl.style.cssText = 'font-size:12px;color:#c4afff;font-weight:600;margin-bottom:3px';
+    var textEl = document.createElement('div');
+    textEl.className = 'dialogue-text';
+    textEl.textContent = '「' + text + '」';
+    textEl.style.cssText = 'font-size:14px;color:#e8d8ff;line-height:1.5;word-wrap:break-word';
+    body.appendChild(nameEl);
+    body.appendChild(textEl);
+    card.appendChild(av);
+    card.appendChild(body);
+    return card;
+  }
+
+  /* ---------- Render: scan narrative + inject missing cards ---------- */
+  function applyV48(){
+    var dlgList = document.querySelector('.dialogue-list, .dlg-list, [class*="dialogue-list"]');
+    if (!dlgList) return;
+    /* Get narrative text from the right column */
+    var narrPanel = document.querySelector('.narrative, .narrative-frame, [class*="narrative"]');
+    if (!narrPanel) return;
+    var narrText = narrPanel.textContent || '';
+    if (narrText.length < 20) return;
+
+    var found = extractUnregisteredDialogues(narrText);
+    if (found.length === 0) return;
+
+    /* Existing v48-injected cards: skip already-rendered */
+    var existing = {};
+    dlgList.querySelectorAll('[data-v48="1"]').forEach(function(c){
+      var nm = c.querySelector('.dialogue-name');
+      var tx = c.querySelector('.dialogue-text');
+      if (nm && tx) {
+        existing[nm.textContent + '|' + (tx.textContent||'').replace(/^「|」$/g, '')] = true;
+      }
+    });
+
+    found.forEach(function(item){
+      var key = item.name + '|' + item.text;
+      if (existing[key]) return;
+      var url = avatarUrl(item.name, item.cls);
+      var card = buildCard(item.name, item.text, url);
+      dlgList.appendChild(card);
+    });
+  }
+
+  setInterval(applyV48, 2500);
+  setTimeout(applyV48, 1500);
+  console.log(TAG, 'unregistered speaker / monster / mob support active');
+})();
+</script>
 </body>
 </html>
