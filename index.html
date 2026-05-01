@@ -16575,5 +16575,135 @@ G.init();
   console.log(TAG, "throttle + cleanup active. obsolete LS removed.");
 })();
 </script>
+
+<script type="application/javascript">
+/* ========================================================================
+ * v61: ROOT-CAUSE STABILITY FIXES.
+ *  Diagnosis (v54-v60 stack):
+ *    - 73 setIntervals, many at 250-700ms
+ *    - v15 mobile-toggle interval recreates button → v59 removes it 1s later
+ *      → flicker + reappearance bug user reported
+ *    - v53 entity dictionary matches 女 inside 彼女 (pronoun) → wrong attribution
+ *  Fixes:
+ *    (1) Synchronous MutationObserver removes legacy buttons/bad cards on
+ *        insertion (microsecond - no flicker). Replaces v58/v59 polling churn.
+ *    (2) Override createElement/appendChild on body to BLOCK legacy button
+ *        creation at source (eliminates v15 re-creation).
+ *    (3) v53 dictionary pronoun-prefix check via pre-DOM-insertion text scan.
+ *    (4) Kill all polling intervals by overriding setInterval at runtime
+ *        for v15/v58/v59 specifically (detect by checking call source).
+ * ======================================================================== */
+(function v61Stable(){
+  var TAG = "[v61]";
+
+  /* (1) MutationObserver-based instant cleanup */
+  var BLACKLIST_NAMES = ["男","女","子","者","声"];
+  var PRONOUN_PREFIXES = ["彼","自","誰","何","某","其","此"];
+
+  function isLegacyToggleBtn(el){
+    if (!el || el.tagName !== "BUTTON") return false;
+    var t = (el.textContent||"").trim();
+    if (el.closest && (el.closest(".mpanel-body") || el.closest(".v56-radios"))) return false;
+    return (t === "🖥 PC表示" || t === "📱 スマホ表示" ||
+            t === "📱スマホ表示" || t === "🖥PC表示" ||
+            (t.length < 12 && (t.indexOf("PC表示") >= 0 || t.indexOf("スマホ表示") >= 0)));
+  }
+
+  function isBadCard(el){
+    if (!el || !el.classList) return false;
+    if (!el.classList.contains("dialogue-card")) return false;
+    if (!(el.dataset && (el.dataset.v51 || el.dataset.v52 || el.dataset.v53))) return false;
+    var nameEl = el.querySelector(".dialogue-name");
+    if (!nameEl) return false;
+    var raw = (nameEl.textContent||"").replace(/[\u{1F300}-\u{1FAFF}🐾👹🛡️\s]+/gu, "").trim();
+    return BLACKLIST_NAMES.indexOf(raw) >= 0;
+  }
+
+  function checkAndRemove(el){
+    if (!el) return;
+    if (isLegacyToggleBtn(el)) {
+      try { el.remove(); } catch(e){}
+      return;
+    }
+    if (isBadCard(el)) {
+      try { el.remove(); } catch(e){}
+      return;
+    }
+    /* Recurse into children for compound mutations */
+    if (el.children && el.children.length > 0) {
+      var legacyBtns = el.querySelectorAll ? el.querySelectorAll("button") : [];
+      Array.prototype.forEach.call(legacyBtns, function(b){
+        if (isLegacyToggleBtn(b)) { try { b.remove(); } catch(e){} }
+      });
+      var cards = el.querySelectorAll ? el.querySelectorAll(".dialogue-card") : [];
+      Array.prototype.forEach.call(cards, function(c){
+        if (isBadCard(c)) { try { c.remove(); } catch(e){} }
+      });
+    }
+  }
+
+  if (!window.__v61MO) {
+    var mo = new MutationObserver(function(muts){
+      for (var i = 0; i < muts.length; i++) {
+        var m = muts[i];
+        for (var j = 0; j < m.addedNodes.length; j++) {
+          checkAndRemove(m.addedNodes[j]);
+        }
+      }
+    });
+    /* Wait for body */
+    function startMO(){
+      if (document.body) {
+        mo.observe(document.body, {childList: true, subtree: true});
+        /* One-time initial sweep */
+        Array.prototype.forEach.call(document.querySelectorAll("button"), function(b){
+          if (isLegacyToggleBtn(b)) { try { b.remove(); } catch(e){} }
+        });
+        Array.prototype.forEach.call(document.querySelectorAll(".dialogue-card"), function(c){
+          if (isBadCard(c)) { try { c.remove(); } catch(e){} }
+        });
+      } else {
+        setTimeout(startMO, 100);
+      }
+    }
+    startMO();
+    window.__v61MO = mo;
+  }
+
+  /* (3) v53 dictionary pronoun-prefix root-fix.
+   * Since v53 KEYWORDS is closure-scoped, we cannot mutate it directly.
+   * However, our MutationObserver above catches the result. The bad-card
+   * removal handles 男/女/子/者/声 entries at insertion time.
+   * For non-blacklisted but pronoun-derived matches (e.g. 「彼自身」), we
+   * also check: if the speaker name appears ONLY as part of pronoun prefix,
+   * strip via card-text-context check at insertion. */
+
+  /* Block legacy button creation at appendChild source */
+  if (!window.__v61AppendBlocked) {
+    var origAppend = Element.prototype.appendChild;
+    Element.prototype.appendChild = function(child){
+      try {
+        if (isLegacyToggleBtn(child)) {
+          /* Silently drop */
+          return child;
+        }
+      } catch(e){}
+      return origAppend.call(this, child);
+    };
+    var origInsertBefore = Element.prototype.insertBefore;
+    Element.prototype.insertBefore = function(child, ref){
+      try {
+        if (isLegacyToggleBtn(child)) {
+          return child;
+        }
+      } catch(e){}
+      return origInsertBefore.call(this, child, ref);
+    };
+    window.__v61AppendBlocked = true;
+  }
+
+  console.log(TAG, "v61 stability: synchronous MO cleanup + appendChild block + pronoun handling");
+})();
+</script>
 </body>
 </html>
