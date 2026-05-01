@@ -15879,5 +15879,204 @@ G.init();
   console.log(TAG, 'v53 attribution fix (と<verb>=backward, particle=forward, distance fallback) active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v54: Output length mode (短文 / 標準 / 長文)
+ *  Adds a settings dropdown to control max_tokens + narrative density.
+ *  Short mode reduces Euryale's JSON corruption rate by limiting output
+ *  size before the model goes off the rails. Auto-defaults to 短文 for
+ *  Euryale, 標準 for Claude/Llama.
+ *
+ *  Modes:
+ *    短文: max_tokens=400, prompt="narrative 1〜2段落、100〜200字、最重要瞬間1つ"
+ *    標準: max_tokens=900 (default Chronicle behavior)
+ *    長文: max_tokens=1600, prompt="narrative 5〜7段落、丁寧に描写"
+ * ======================================================================== */
+(function v54OutputLength(){
+  var TAG = '[v54]';
+
+  function getMode(){
+    try {
+      var c = JSON.parse(localStorage.getItem('chr6')||'{}');
+      if (c.cfg && c.cfg.outputLength) return c.cfg.outputLength;
+      /* Auto-default */
+      var model = c.cfg && c.cfg.orModel || '';
+      if (/euryale|hermes/.test(model)) return 'short';
+      return 'standard';
+    } catch(e){ return 'standard'; }
+  }
+  function setMode(m){
+    try {
+      var c = JSON.parse(localStorage.getItem('chr6')||'{}');
+      if (!c.cfg) c.cfg = {};
+      c.cfg.outputLength = m;
+      localStorage.setItem('chr6', JSON.stringify(c));
+    } catch(e){}
+  }
+
+  var MODE_CONFIG = {
+    short: {
+      max_tokens: 400,
+      label: '短文（高速・バグ少）',
+      promptAddon: '\n\n【★出力長制限：短文モード】\nnarrative は 1〜2段落、合計100〜200字に収める。今ターンの最重要な瞬間1つだけを切り取って描写する。それ以外は次ターンに回す。長文化禁止。'
+    },
+    standard: {
+      max_tokens: 900,
+      label: '標準（バランス）',
+      promptAddon: ''
+    },
+    long: {
+      max_tokens: 1600,
+      label: '長文（リッチ・崩壊リスクあり）',
+      promptAddon: '\n\n【★出力長制限：長文モード】\nnarrative は 5〜7段落、合計400〜700字でじっくり描写してよい。'
+    }
+  };
+
+  /* ---- Inject UI: settings dropdown for 出力長 ---- */
+  function injectModeSelector(){
+    if (document.getElementById('cfgOutputLength')) return;
+    /* Find spot to insert: after the model dropdown */
+    var modelSel = document.getElementById('cfgOrModel');
+    if (!modelSel) return;
+    var modelFld = modelSel.closest('.fld');
+    if (!modelFld || !modelFld.parentElement) return;
+
+    /* Build the new field */
+    var fld = document.createElement('div');
+    fld.className = 'fld v54-output-length-fld';
+    fld.innerHTML =
+      '<label>出力長（narrative の長さ）</label>' +
+      '<select id="cfgOutputLength" style="width:100%;padding:6px 8px;background:var(--s2);color:var(--tx);border:1px solid var(--border);border-radius:6px">' +
+      '<option value="short">短文（高速・バグ少）</option>' +
+      '<option value="standard">標準（バランス）</option>' +
+      '<option value="long">長文（リッチ・崩壊リスクあり）</option>' +
+      '</select>' +
+      '<div style="font-size:11px;color:var(--dim);margin-top:4px;line-height:1.4">' +
+      'Euryale 70B は短文推奨（JSON崩壊回避）。Claude 系は標準でOK。' +
+      '</div>';
+
+    modelFld.parentElement.insertBefore(fld, modelFld.nextSibling);
+
+    /* Initialize to current mode */
+    var sel = fld.querySelector('#cfgOutputLength');
+    sel.value = getMode();
+    sel.addEventListener('change', function(){
+      setMode(sel.value);
+      console.log('[v54] mode →', sel.value);
+    });
+  }
+
+  /* Watch for model dropdown changes to auto-update default */
+  function watchModelChange(){
+    var modelSel = document.getElementById('cfgOrModel');
+    if (!modelSel || modelSel.dataset.v54Wired === '1') return;
+    modelSel.dataset.v54Wired = '1';
+    modelSel.addEventListener('change', function(){
+      var c = JSON.parse(localStorage.getItem('chr6')||'{}');
+      if (!c.cfg) c.cfg = {};
+      var newModel = modelSel.value;
+      /* Auto-set default if user hasn't manually set outputLength */
+      if (!c.cfg.outputLength || c.cfg.outputLengthAuto) {
+        var newMode = /euryale|hermes/.test(newModel) ? 'short' : 'standard';
+        c.cfg.outputLength = newMode;
+        c.cfg.outputLengthAuto = true;
+        localStorage.setItem('chr6', JSON.stringify(c));
+        var lengthSel = document.getElementById('cfgOutputLength');
+        if (lengthSel) lengthSel.value = newMode;
+        console.log('[v54] auto-mode for', newModel, '→', newMode);
+      }
+    });
+    /* User manually changes outputLength → mark not-auto */
+    var lengthSel = document.getElementById('cfgOutputLength');
+    if (lengthSel) {
+      lengthSel.addEventListener('change', function(){
+        var c = JSON.parse(localStorage.getItem('chr6')||'{}');
+        if (c.cfg) c.cfg.outputLengthAuto = false;
+        localStorage.setItem('chr6', JSON.stringify(c));
+      });
+    }
+  }
+
+  setInterval(function(){
+    try { injectModeSelector(); watchModelChange(); } catch(e){}
+  }, 1500);
+  setTimeout(injectModeSelector, 500);
+
+  /* ---- Fetch wrapper: apply mode to OpenRouter request ---- */
+  var origFetch = window.fetch;
+  if (!origFetch.__v54Wrapped) {
+    window.fetch = async function(input, init){
+      var url = typeof input === 'string' ? input : (input && input.url) || '';
+      if (url.indexOf('openrouter.ai') >= 0 && init && typeof init.body === 'string') {
+        try {
+          var body = JSON.parse(init.body);
+          if (body && body.messages) {
+            var mode = getMode();
+            var cfg = MODE_CONFIG[mode] || MODE_CONFIG.standard;
+            /* Apply max_tokens */
+            body.max_tokens = cfg.max_tokens;
+            /* Inject prompt addon for short/long modes */
+            if (cfg.promptAddon) {
+              body.messages = body.messages.map(function(m){
+                if (m.role === 'system' && typeof m.content === 'string') {
+                  if (m.content.indexOf('出力長制限') < 0) {
+                    m.content = m.content + cfg.promptAddon;
+                  }
+                }
+                return m;
+              });
+            }
+            init = Object.assign({}, init, {body: JSON.stringify(body)});
+            console.log('[v54] applied mode:', mode, 'max_tokens:', cfg.max_tokens);
+          }
+        } catch(e){ console.warn(TAG, 'fetch hook', e); }
+      }
+      return origFetch.call(this, input, init);
+    };
+    window.fetch.__v54Wrapped = true;
+  }
+
+  /* ---- Track JSON corruption rate (for verification) ---- */
+  if (!window.__v54CorruptionStats) {
+    window.__v54CorruptionStats = {total: 0, corrupt: 0, mode: getMode()};
+    window.getV54Stats = function(){
+      var s = window.__v54CorruptionStats;
+      return {
+        total: s.total,
+        corrupt: s.corrupt,
+        rate: s.total > 0 ? Math.round(s.corrupt * 100 / s.total) + '%' : 'N/A',
+        currentMode: getMode()
+      };
+    };
+  }
+
+  /* Hook the response to detect corruption */
+  var origFetchForStats = window.fetch;
+  window.fetch = async function(input, init){
+    var url = typeof input === 'string' ? input : (input && input.url) || '';
+    var resp = await origFetchForStats.call(this, input, init);
+    if (url.indexOf('openrouter.ai') >= 0 && resp.ok) {
+      try {
+        var clone = resp.clone();
+        var data = await clone.json();
+        var content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        if (content) {
+          window.__v54CorruptionStats.total++;
+          /* Corrupt heuristic: contains JSON fragments or unbalanced quotes */
+          if (/^[\s]*"[a-zA-Z]+":/.test(content) || /\}\s*$/.test(content) === false && /\{/.test(content) ||
+              /[a-zA-Z][a-zA-Z0-9_]+\s+[a-zA-Z][a-zA-Z0-9_]+\s+[a-zA-Z][a-zA-Z0-9_]+/.test(content)) {
+            window.__v54CorruptionStats.corrupt++;
+          }
+          window.__v54CorruptionStats.mode = getMode();
+        }
+      } catch(e){}
+    }
+    return resp;
+  };
+
+  console.log(TAG, 'output length mode active, current:', getMode());
+})();
+</script>
 </body>
 </html>
