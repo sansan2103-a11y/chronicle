@@ -16317,5 +16317,84 @@ G.init();
   console.log(TAG, 'mobile dropdown fix + display mode UI active, current:', getDisplayMode());
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v57: Fix v56's insertBefore (firstSec is nested, not direct child).
+ *  Use firstSec.parentNode.insertBefore instead.
+ * ======================================================================== */
+(function v57DisplayInject(){
+  var TAG = '[v57]';
+
+  function getDisplayMode(){
+    try {
+      var c = JSON.parse(localStorage.getItem('chr6')||'{}');
+      return (c.cfg && c.cfg.displayMode) || 'auto';
+    } catch(e){ return 'auto'; }
+  }
+  function setDisplayMode(m){
+    try {
+      var c = JSON.parse(localStorage.getItem('chr6')||'{}');
+      if (!c.cfg) c.cfg = {};
+      c.cfg.displayMode = m;
+      localStorage.setItem('chr6', JSON.stringify(c));
+    } catch(e){}
+  }
+  function applyDisplayMode(){
+    var mode = getDisplayMode();
+    var shouldBeMobile = mode === 'mobile' || (mode === 'auto' && window.innerWidth <= 760);
+    var body = document.body;
+    if (shouldBeMobile) body.classList.add('v15-mobile-mode');
+    else body.classList.remove('v15-mobile-mode');
+  }
+
+  function injectRow(){
+    if (document.getElementById('v56DisplayModeRow')) return;
+    /* Use parentNode of firstSec, not settingsBody (which may not be direct parent) */
+    var firstSec = document.querySelector('.mpanel-body .sec');
+    if (!firstSec || !firstSec.parentNode) return;
+
+    var row = document.createElement('div');
+    row.id = 'v56DisplayModeRow';
+    row.className = 'v56-display-mode-row fld';
+    row.innerHTML =
+      '<div class="v56-label">📱 表示モード（PC ↔ スマホ）</div>' +
+      '<div class="v56-radios">' +
+      '<label class="v56-radio" data-mode="auto"><input type="radio" name="v56DisplayMode" value="auto"> 自動</label>' +
+      '<label class="v56-radio" data-mode="mobile"><input type="radio" name="v56DisplayMode" value="mobile"> 📱 スマホ</label>' +
+      '<label class="v56-radio" data-mode="pc"><input type="radio" name="v56DisplayMode" value="pc"> 🖥 PC</label>' +
+      '</div>';
+    firstSec.parentNode.insertBefore(row, firstSec);
+
+    var current = getDisplayMode();
+    row.querySelectorAll('input[type=radio]').forEach(function(r){
+      if (r.value === current) r.checked = true;
+      r.addEventListener('change', function(){
+        if (r.checked) {
+          setDisplayMode(r.value);
+          applyDisplayMode();
+          row.querySelectorAll('label.v56-radio').forEach(function(l){
+            l.classList.toggle('active', l.dataset.mode === r.value);
+          });
+        }
+      });
+    });
+    row.querySelectorAll('label.v56-radio').forEach(function(l){
+      l.classList.toggle('active', l.dataset.mode === current);
+    });
+    console.log('[v57] display mode row injected');
+  }
+
+  setInterval(function(){
+    try { applyDisplayMode(); injectRow(); } catch(e){}
+  }, 1500);
+  setTimeout(injectRow, 300);
+  setTimeout(injectRow, 800);
+  window.addEventListener('resize', function(){
+    if (getDisplayMode() === 'auto') applyDisplayMode();
+  });
+  console.log(TAG, 'v57 display-mode injection fix active');
+})();
+</script>
 </body>
 </html>
