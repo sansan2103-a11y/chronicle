@@ -264,7 +264,7 @@
 
     var turns = s.turns || [];
     turns.forEach(function(t){
-      var inputType = t.inputType || '';
+      var inputType = t.inputType || '';
       var playerText = t.playerText || '';
       if (inputType === 'SAY' && playerText){
         addCard({ speaker: heroName, text: playerText, isHero: true, avatar: hero.avatar });
