@@ -16465,5 +16465,49 @@ G.init();
   console.log(TAG, 'v58 pronoun-blacklist purger active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v59: Remove legacy floating 🖥 PC表示 / 📱 スマホ表示 toggle button.
+ *  Settings panel radio (auto/mobile/pc) is now the single source of truth.
+ *  Approach: CSS hide + DOM remove + interval cleanup (button may be re-
+ *  created by v15's render logic).
+ * ======================================================================== */
+(function v59RemoveLegacyToggle(){
+  var TAG = '[v59]';
+
+  /* CSS: hide any button containing PC表示 or スマホ表示 in its text */
+  if (!document.getElementById('v59-style')) {
+    var st = document.createElement('style');
+    st.id = 'v59-style';
+    st.textContent =
+      /* Hide the v15 mobile toggle by common selectors */
+      '#v15MobileToggle, [data-v15-toggle], .v15-mobile-toggle { display: none !important; }\n';
+    document.head.appendChild(st);
+  }
+
+  function purge(){
+    /* Find any button with PC表示 or スマホ表示 text and hide+remove */
+    document.querySelectorAll('button').forEach(function(b){
+      var t = (b.textContent||'').trim();
+      if ((t === '🖥 PC表示' || t === '📱 スマホ表示' ||
+           t === '📱スマホ表示' || t === '🖥PC表示' ||
+           (t.indexOf('PC表示') >= 0 && t.length < 12) ||
+           (t.indexOf('スマホ表示') >= 0 && t.length < 12)) &&
+          !b.closest('.mpanel-body') &&  /* don't kill any button inside settings */
+          !b.classList.contains('v56-radio')) {
+        b.style.display = 'none';
+        b.style.visibility = 'hidden';
+        b.style.pointerEvents = 'none';
+        try { b.remove(); } catch(e){}
+      }
+    });
+  }
+  setInterval(purge, 1000);
+  setTimeout(purge, 200);
+  setTimeout(purge, 600);
+  console.log(TAG, 'legacy display toggle button purger active');
+})();
+</script>
 </body>
 </html>
