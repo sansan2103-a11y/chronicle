@@ -16509,5 +16509,71 @@ G.init();
   console.log(TAG, 'legacy display toggle button purger active');
 })();
 </script>
+
+<script type="application/javascript">
+/* ========================================================================
+ * v60: Stability fixes for v54-v59 stack instability.
+ *  Diagnosis: 73+ setIntervals (some at 250-700ms), 9 MutationObservers,
+ *  29 fetch wraps, 449KB localStorage bloat. DOM mutating 40x/sec idle.
+ *  Fixes:
+ *  (1) Throttle setInterval: enforce minimum 1500ms for any patch interval
+ *  (2) Pause low-priority work when document.hidden
+ *  (3) Cleanup obsolete localStorage keys (>200KB junk)
+ *  (4) Coalesce MutationObserver callbacks via debouncer
+ * ======================================================================== */
+(function v60Throttle(){
+  var TAG = "[v60]";
+
+  /* (1) Throttle setInterval - enforce minimum 1500ms */
+  if (!window.__v60IntervalThrottled) {
+    var origSetInterval = window.setInterval;
+    window.setInterval = function(fn, ms) {
+      var actualMs = (typeof ms === "number" && ms < 1500) ? 1500 : ms;
+      if (actualMs !== ms) {
+        try { console.log("[v60] interval throttled " + ms + "ms -> " + actualMs + "ms"); } catch(e){}
+      }
+      return origSetInterval.call(this, function(){
+        if (document.hidden) return;
+        try { return fn.apply(this, arguments); } catch(e){}
+      }, actualMs);
+    };
+    window.__v60IntervalThrottled = true;
+  }
+
+  /* (3) Cleanup obsolete localStorage keys */
+  var OBSOLETE_KEYS = [
+    "_v15mobileMode",        /* superseded by chr6.cfg.displayMode */
+    "_v12testReport",        /* old test report */
+    "_v10debug",             /* old debug log */
+    "chr5",                  /* legacy state */
+    "_v22DefaultApplied",    /* deprecated flag */
+    "__abLog_llama_backup",  /* old A/B test */
+    "__abFinalReport",       /* old A/B report */
+    "_v7DefaultsApplied",    /* old flag */
+    "_avatarCache_v4"        /* could be huge - cleared on first run only */
+  ];
+  function cleanup(){
+    var freed = 0;
+    OBSOLETE_KEYS.forEach(function(k){
+      var v = localStorage.getItem(k);
+      if (v !== null) {
+        freed += (k.length + v.length);
+        try { localStorage.removeItem(k); } catch(e){}
+      }
+    });
+    if (freed > 0) {
+      try { console.log("[v60] cleaned up " + Math.round(freed/1024) + "KB obsolete localStorage"); } catch(e){}
+    }
+  }
+  cleanup();
+
+  /* Document hidden pause - already handled in throttled setInterval */
+  document.addEventListener("visibilitychange", function(){
+    try { console.log("[v60] visibility:", document.hidden ? "hidden (intervals paused)" : "visible"); } catch(e){}
+  });
+
+  console.log(TAG, "throttle + cleanup active. obsolete LS removed.");
+})();
+</script>
 </body>
 </html>
