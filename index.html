@@ -14118,5 +14118,280 @@ G.init();
   console.log(TAG, 'Euryale text-marker mode active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v47: v46 Euryale mode fixes.
+ *  (1) Parser: use [^\n]* instead of \s* so 名前: empty doesn't grab next line
+ *  (2) Strip meta-commentary leaks ("プレイヤーが入力した", "新しい展開を持って" etc.)
+ *  (3) Prevent concurrent in-flight requests for same input (basic guard)
+ *  (4) Strengthen prompt to require NPC and forbid meta-narration
+ *  Overrides v46's parser via re-wrapping fetch.
+ * ======================================================================== */
+(function v47EuryaleFix(){
+  var TAG = '[v47]';
+
+  function isEuryale(model){ return model && String(model).indexOf('euryale') >= 0; }
+
+  /* Stronger Euryale prompt addon (extends v46's) */
+  function buildAddonV2(direction){
+    return '\n\n【★★★ 出力形式（厳守） ★★★】\n' +
+      'JSON絶対禁止。以下のセクション形式で出力する。\n\n' +
+      '=== NARRATIVE ===\n' +
+      '（地の文 3〜5段落。\n' +
+      ' ・各段落の間は空行を1行入れる\n' +
+      ' ・セリフは「」で囲んで地の文に埋め込んでよい\n' +
+      ' ・"プレイヤーが入力した"、"指示を受け入れ"、"新しい展開を持って"、\n' +
+      '   "矛盾なく進めるキャラ"、"この後について書きます"、"以下のように" のような\n' +
+      '   メタ言及・ナレーター視点・四つ目の壁を破る記述は絶対に書かない\n' +
+      ' ・小説本文として完成した文章のみを書く）\n\n' +
+      '=== NPC ===\n' +
+      '名前: シャドウ\n' +
+      '感情: （瞬間的な感情、漢字熟語2〜4語）\n' +
+      '内心: （NPCの今の思考、1〜2文）\n' +
+      '本能的恐怖: （触発された恐怖、なければ -）\n' +
+      '本能的欲求: （触発された欲求、なければ -）\n' +
+      'ストレス変動: （-20〜+20の整数。例: +15）\n' +
+      '信頼変動: （-10〜+10の整数。例: -3）\n' +
+      '→ 名前 行は必ず "名前: シャドウ" のようにNPC名を書く（空行禁止）\n\n' +
+      '=== DIALOGUE ===\n' +
+      '（NPCが直接発したセリフを「」付きで1行。NPCが声を出したなら必ず書く。\n' +
+      ' プレイヤーが NPC に話しかけたターンでは、何らかの形で NPC は反応するべき。\n' +
+      ' 完全沈黙の場合のみ -）\n\n' +
+      '=== ENVIRONMENT ===\n' +
+      '（環境音・空気感の1行。なければ -）\n\n' +
+      '=== BRANCH ===\n' +
+      '（次にプレイヤーが取りそうな行動候補3つ、改行区切り）\n\n' +
+      '【★今ターン演出指示】\n' + direction + '\n\n' +
+      '【★言語ルール】\n' +
+      '- 男性キャラは「〜だ」「〜だな」「〜ぜ」を使う。「〜わ」「〜のよ」「〜かしら」絶対禁止\n' +
+      '- 女性キャラは「〜わ」「〜のよ」「〜かしら」OK\n' +
+      '- 「〜です・ます」調はnarrativeでは使わない（普通体・常体で書く）\n' +
+      '- 日本語誤字禁止\n' +
+      '- narrative セクション内に { } や JSON 構文を一切書かない';
+  }
+
+  var SCENE_DIRECTIONS = [
+    '今ターンは緊張感を一段引き上げる。微細な不穏な兆しを増やす',
+    '今ターンは静寂と微細な変化で進める。動作と感覚を細密に',
+    '今ターンはNPCの執着を一歩前面に出す',
+    '今ターンは肉体的な恐怖や違和感を導入する',
+    '今ターンはNPCの本性が垣間見える瞬間を作る',
+    '今ターンは主人公の判断を迫る局面に',
+    '今ターンは時間や空間の歪みで超常感を増す',
+    '今ターンはNPCと主人公の物理的距離が縮まる',
+    '今ターンは記憶や過去の断片が侵入する',
+    '今ターンはNPCの内なる獣性が滲む',
+    '今ターンは予期せぬ感情の暴発',
+    '今ターンは禁忌の境界が揺らぐ',
+    '今ターンはNPCが秘密の一片を漏らす',
+    '今ターンは主人公の身体感覚が異常を訴える',
+    '今ターンは情景描写を主体に物語の余韻を作る'
+  ];
+  function pickDirection(){ return SCENE_DIRECTIONS[Math.floor(Math.random() * SCENE_DIRECTIONS.length)]; }
+
+  /* Parser v2 - line-anchored, anti-meta filter */
+  function getSection(text, name){
+    var re = new RegExp('===\\s*' + name + '\\s*===\\s*([\\s\\S]*?)(?:\\n===|$)');
+    var m = text.match(re);
+    return m ? m[1].trim() : '';
+  }
+
+  var META_PHRASES = [
+    /プレイヤー(が|の)?入力(した|を|の)?[^\n]*(指示|内容)[^\n]*(を)?(完全に)?受け入れ[^\n]*/g,
+    /(以下|これ)(のように|について)?(書きます|展開します|描写します)[。、]?/g,
+    /過去との矛盾なく[^\n]*進める[^\n]*/g,
+    /新しい展開を持って[^\n]*/g,
+    /キャラに?なりました[。、]?$/gm,
+    /物語の続きを?書きます[。、]?/g,
+    /[「『]?CRITICAL_INSTRUCTION[「』]?/g,
+    /\\{[^\\}]{0,200}\\}/g,
+    /^[\\s]*\\([^\\)]{0,100}例[:：][^\\)]*\\)/gm,
+    /^[\\s]*※[^\\n]*$/gm
+  ];
+
+  function stripMeta(s){
+    var t = String(s||'');
+    META_PHRASES.forEach(function(re){
+      t = t.replace(re, '');
+    });
+    return t.replace(/\n{3,}/g, '\n\n').replace(/^[\s\n]+|[\s\n]+$/g, '');
+  }
+
+  function parseV2(text){
+    var plan = {
+      playerIntent: { kind: 'other', tone: 'neutral' },
+      npcInnerLife: {
+        npcName: '', instantEmotion: '', innerThought: '',
+        triggeredFear: null, underlyingNeed: null, defenseMechanism: 'none',
+        stressDelta: 0, trustDelta: 0
+      },
+      narrative: [],
+      npcReactionPhase: {
+        npcName: '', emotion: '', bodyLanguage: '',
+        dialogue: null, subtext: null, interpretation: '', resistance: ''
+      },
+      environmentResponse: '',
+      branchCandidates: []
+    };
+
+    var narrSec = getSection(text, 'NARRATIVE');
+    if (narrSec) {
+      var cleaned = stripMeta(narrSec);
+      plan.narrative = cleaned.split(/\n\n+/)
+        .map(function(s){ return s.trim().replace(/^\*+\s*/, '').replace(/\s*\*+$/, ''); })
+        .filter(function(s){ return s.length > 0; });
+      if (plan.narrative.length === 0 && cleaned) {
+        plan.narrative = cleaned.split(/\n/).map(function(s){return s.trim();}).filter(function(s){return s.length>0;});
+      }
+      if (plan.narrative.length === 0 && cleaned) plan.narrative = [cleaned];
+    }
+
+    var npcRaw = getSection(text, 'NPC');
+    if (npcRaw) {
+      /* Use [^\n]* to keep capture on same line */
+      function pick(label){
+        var re = new RegExp(label + '[:：][\\t ]*([^\\n]*)');
+        var m = npcRaw.match(re);
+        return m ? m[1].trim() : '';
+      }
+      var name = pick('名前');
+      /* If empty or starts with field-marker like '感情:', it's a parser miss */
+      if (name && !/^(感情|内心|本能的|ストレス|信頼)/.test(name)) {
+        plan.npcInnerLife.npcName = name;
+        plan.npcReactionPhase.npcName = name;
+      }
+      var emo = pick('感情');
+      if (emo) {
+        plan.npcInnerLife.instantEmotion = emo;
+        plan.npcReactionPhase.emotion = emo;
+      }
+      var inner = pick('内心');
+      if (inner) plan.npcInnerLife.innerThought = inner;
+      var fear = pick('本能的恐怖');
+      if (fear && fear !== '-') plan.npcInnerLife.triggeredFear = fear;
+      var need = pick('本能的欲求');
+      if (need && need !== '-') plan.npcInnerLife.underlyingNeed = need;
+      var sd = pick('ストレス変動');
+      if (sd) {
+        var n = parseInt(sd, 10);
+        if (!isNaN(n)) plan.npcInnerLife.stressDelta = n;
+      }
+      var td = pick('信頼変動');
+      if (td) {
+        var n2 = parseInt(td, 10);
+        if (!isNaN(n2)) plan.npcInnerLife.trustDelta = n2;
+      }
+    }
+
+    /* If npcName empty but state has NPC, use first NPC name as fallback */
+    if (!plan.npcInnerLife.npcName) {
+      try {
+        var st = JSON.parse(localStorage.getItem('chr6')||'{}');
+        var n0 = st.cast && st.cast.npcs && st.cast.npcs[0];
+        if (n0 && n0.name) {
+          plan.npcInnerLife.npcName = n0.name;
+          plan.npcReactionPhase.npcName = n0.name;
+        }
+      } catch(e){}
+    }
+
+    var dlg = getSection(text, 'DIALOGUE');
+    if (dlg && dlg !== '-') {
+      var dlgClean = stripMeta(dlg).replace(/^「+/, '').replace(/」+$/, '').trim();
+      if (dlgClean) plan.npcReactionPhase.dialogue = dlgClean;
+    }
+
+    var env = getSection(text, 'ENVIRONMENT');
+    if (env && env !== '-') plan.environmentResponse = stripMeta(env);
+
+    var br = getSection(text, 'BRANCH');
+    if (br) {
+      plan.branchCandidates = br.split(/\n/)
+        .map(function(s){ return s.trim().replace(/^[・\-\*\d\.\)]+\s*/, ''); })
+        .filter(function(s){ return s.length > 0 && s !== '-'; })
+        .slice(0, 3);
+    }
+    return plan;
+  }
+
+  function isValid(plan){
+    return plan && Array.isArray(plan.narrative) && plan.narrative.length > 0;
+  }
+
+  /* In-flight guard - prevent parallel duplicate requests */
+  var inFlight = false;
+
+  /* Re-wrap fetch */
+  var origFetch = window.fetch;
+  if (!origFetch.__v47Wrapped) {
+    window.fetch = async function(input, init){
+      var url = typeof input === 'string' ? input : (input && input.url) || '';
+      var isEuReq = false;
+
+      if (url.indexOf('openrouter.ai') >= 0 && init && typeof init.body === 'string') {
+        try {
+          var st = JSON.parse(localStorage.getItem('chr6')||'{}');
+          if (st.cfg && isEuryale(st.cfg.orModel)) {
+            var body = JSON.parse(init.body);
+            if (body && body.messages) {
+              isEuReq = true;
+              if (inFlight) {
+                console.warn(TAG, 'concurrent request blocked, waiting');
+                while (inFlight) await new Promise(function(r){ setTimeout(r, 500); });
+              }
+              inFlight = true;
+              var direction = pickDirection();
+              var addon = buildAddonV2(direction);
+              body.messages = body.messages.map(function(m){
+                if (m.role === 'system' && typeof m.content === 'string') {
+                  /* Strip prior v46 addon and replace */
+                  m.content = m.content.replace(/【★★★ 出力形式[\s\S]*$/, '') + addon;
+                }
+                return m;
+              });
+              if (body.response_format) delete body.response_format;
+              init = Object.assign({}, init, {body: JSON.stringify(body)});
+              console.log(TAG, 'v47 prompt injected, dir:', direction);
+            }
+          }
+        } catch(e){ console.warn(TAG, 'pre-fetch', e); }
+      }
+
+      try {
+        var resp = await origFetch.call(this, input, init);
+        if (!isEuReq || !resp.ok) { if (isEuReq) inFlight = false; return resp; }
+        var text = await resp.text();
+        var data = JSON.parse(text);
+        var content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        if (content && content.indexOf('=== NARRATIVE ===') >= 0) {
+          var plan = parseV2(content);
+          if (isValid(plan)) {
+            data.choices[0].message.content = JSON.stringify(plan);
+            console.log(TAG, 'v47 parsed', plan.narrative.length, 'segs, NPC=', plan.npcInnerLife.npcName, 'dlg=', !!plan.npcReactionPhase.dialogue);
+            inFlight = false;
+            return new Response(JSON.stringify(data), {
+              status: resp.status, statusText: resp.statusText, headers: resp.headers
+            });
+          } else {
+            console.warn(TAG, 'parse invalid plan');
+          }
+        } else {
+          console.warn(TAG, 'no === NARRATIVE === marker');
+        }
+        inFlight = false;
+        return new Response(text, { status: resp.status, statusText: resp.statusText, headers: resp.headers });
+      } catch(e){
+        console.warn(TAG, 'response error', e);
+        inFlight = false;
+      }
+      return origFetch.call(this, input, init);
+    };
+    window.fetch.__v47Wrapped = true;
+  }
+
+  console.log(TAG, 'v47 Euryale parser fixes + meta-leak filter active');
+})();
+</script>
 </body>
 </html>
