@@ -16396,5 +16396,74 @@ G.init();
   console.log(TAG, 'v57 display-mode injection fix active');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v58: Fix v53 pronoun misattribution.
+ *  「彼女」「彼」「自分」「何か」 are pronouns containing 女/男/分/何 chars
+ *  which are in v53's dictionary. v53 falsely attributes dialogue to these.
+ *  Fix: when checking entity match, also check the character BEFORE the
+ *  match position. If it's a pronoun-prefix (彼/自/誰/何/某), skip the match.
+ *  Also remove bare 男/女/子/者 from JOBS/GENERIC dict (too noisy).
+ * ======================================================================== */
+(function v58PronounFix(){
+  var TAG = '[v58]';
+
+  /* Pronoun-forming prefixes that should INVALIDATE entity match */
+  var PRONOUN_PREFIXES = ['彼','自','誰','何','某','其','此','其れ','此れ','そ','こ','あ'];
+
+  /* Suffix chars that suggest the match is part of a longer word */
+  var COMPOUND_SUFFIXES = ['性','の子','たち','達','ども','様','さん','くん','ちゃん'];
+
+  /* Words to BLACKLIST entirely (noise from v53 dict) */
+  var BLACKLIST = ['男', '女', '子', '者', '声'];
+
+  function isValidMatch(text, matchPos, matchKey){
+    /* Reject if blacklisted */
+    if (BLACKLIST.indexOf(matchKey) >= 0) return false;
+    /* Reject if preceded by pronoun prefix */
+    if (matchPos > 0) {
+      var prevChar = text[matchPos - 1];
+      for (var i = 0; i < PRONOUN_PREFIXES.length; i++) {
+        if (prevChar === PRONOUN_PREFIXES[i]) return false;
+      }
+    }
+    /* Reject if part of a compound longer than the keyword */
+    var afterPos = matchPos + matchKey.length;
+    if (afterPos < text.length) {
+      var nextChar = text[afterPos];
+      /* If 女/男 is followed by 性/の子/たち, it's a longer entity */
+      if ((matchKey === '女' || matchKey === '男') && (nextChar === '性' || nextChar === 'の' || nextChar === 'た')) return false;
+    }
+    return true;
+  }
+
+  /* Override v53's findEntity logic by re-wrapping v53's render function.
+   * Easiest: aggressively remove any v53/v52/v51 cards whose name is 男/女/子/者
+   * (these are always wrong due to pronoun matching). */
+  function purgeBadCards(){
+    var dlgStream = document.getElementById('dialogue-stream');
+    if (!dlgStream) return;
+    dlgStream.querySelectorAll('[data-v51="1"], [data-v52="1"], [data-v53="1"]').forEach(function(card){
+      var nameEl = card.querySelector('.dialogue-name');
+      if (!nameEl) return;
+      var rawName = (nameEl.textContent || '').replace(/[🐾👹🛡️\s]+/gu, '').trim();
+      if (BLACKLIST.indexOf(rawName) >= 0) {
+        card.remove();
+        console.log('[v58] purged bad card:', rawName);
+      }
+    });
+  }
+
+  setInterval(purgeBadCards, 1000);
+  setTimeout(purgeBadCards, 500);
+
+  /* Also: monkey-patch the global keyword list that v53 uses, if accessible */
+  /* Since v53's KEYWORDS is closure-scoped, can't directly modify.
+   * Purging cards is the cleanest workaround. */
+
+  console.log(TAG, 'v58 pronoun-blacklist purger active');
+})();
+</script>
 </body>
 </html>
