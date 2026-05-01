@@ -16140,5 +16140,182 @@ G.init();
   console.log(TAG, 'recalibrated tokens (700/1100/1800)');
 })();
 </script>
+
+<script>
+/* ========================================================================
+ * v56: Mobile dropdown bug fix + 表示モード in settings
+ *  - iOS Safari/Brave font-size <16px causes auto-zoom on tap → looks broken
+ *  - Apple HIG: min-height 44px for tap targets
+ *  - 表示モード ラジオを設定画面に追加（自動/スマホ/PC）
+ *  - localStorage に保存、次回起動時も維持
+ *  - 既存の v15 mobile toggle ボタンも維持（後方互換）
+ * ======================================================================== */
+(function v56MobileFix(){
+  var TAG = '[v56]';
+
+  /* ---- (1) CSS: enforce 16px font + 44px min-height on selects/inputs ---- */
+  if (!document.getElementById('v56-style')) {
+    var st = document.createElement('style');
+    st.id = 'v56-style';
+    st.textContent =
+      /* iOS auto-zoom prevention + tap target HIG */
+      '#cfgOrModel, #cfgModel, #cfgProvider, #cfgOutputLength, #cfgImgProv, #cfgAvatarStyle, ' +
+      '#cfgKey, #cfgOrKey, #cfgNaiKey, #cfgHName, #cfgHDesc, #cfgLore, #cfgLoc, #cfgObj, #cfgTone, ' +
+      '#cfgAuthorNote, #cfgBannedPhrases, .npc-card input, .npc-card textarea, .npc-card select, ' +
+      '.v38-gender-row select, .v56-display-mode-row input, .v56-display-mode-row select {' +
+      '  font-size: 16px !important;' +
+      '  min-height: 44px !important;' +
+      '  padding: 8px 10px !important;' +
+      '  -webkit-appearance: menulist;' +
+      '  appearance: menulist;' +
+      '  touch-action: manipulation;' +
+      '  pointer-events: auto !important;' +
+      '}\n' +
+      '.v38-gender-row select { min-width: 80px !important; }\n' +
+      /* Display mode row styling */
+      '.v56-display-mode-row { display:flex; flex-direction:column; gap:6px; padding:8px; ' +
+      '  background:rgba(160,138,240,.06); border:1px solid var(--border, rgba(160,138,240,.25)); ' +
+      '  border-radius:8px; margin:8px 0; }\n' +
+      '.v56-display-mode-row > .v56-label { font-size:11px; color:var(--dim,#999); font-weight:600; }\n' +
+      '.v56-display-mode-row .v56-radios { display:flex; gap:6px; flex-wrap:wrap; }\n' +
+      '.v56-display-mode-row label.v56-radio { display:flex; align-items:center; gap:4px; ' +
+      '  font-size:13px; color:var(--tx,#e8d8ff); padding:6px 10px; background:var(--s2,rgba(40,30,55,.5)); ' +
+      '  border:1px solid var(--border,rgba(160,138,240,.25)); border-radius:6px; cursor:pointer; flex:1; ' +
+      '  min-height:36px; box-sizing:border-box; }\n' +
+      '.v56-display-mode-row label.v56-radio.active { background:rgba(160,138,240,.2); ' +
+      '  border-color:rgba(160,138,240,.6); }\n' +
+      '.v56-display-mode-row input[type=radio] { margin:0; min-height:auto !important; }\n';
+    document.head.appendChild(st);
+  }
+
+  /* ---- (2) Display mode logic ---- */
+  function getDisplayMode(){
+    try {
+      var c = JSON.parse(localStorage.getItem('chr6')||'{}');
+      return (c.cfg && c.cfg.displayMode) || 'auto';
+    } catch(e){ return 'auto'; }
+  }
+  function setDisplayMode(m){
+    try {
+      var c = JSON.parse(localStorage.getItem('chr6')||'{}');
+      if (!c.cfg) c.cfg = {};
+      c.cfg.displayMode = m;
+      localStorage.setItem('chr6', JSON.stringify(c));
+    } catch(e){}
+  }
+  function isMobileViewport(){
+    return window.innerWidth <= 760;
+  }
+  function applyDisplayMode(){
+    var mode = getDisplayMode();
+    var shouldBeMobile = mode === 'mobile' || (mode === 'auto' && isMobileViewport());
+    var body = document.body;
+    if (shouldBeMobile) {
+      if (!body.classList.contains('v15-mobile-mode')) body.classList.add('v15-mobile-mode');
+    } else {
+      if (body.classList.contains('v15-mobile-mode')) body.classList.remove('v15-mobile-mode');
+    }
+  }
+
+  /* ---- (3) Inject 表示モード radio into settings ---- */
+  function injectDisplayModeUI(){
+    if (document.getElementById('v56DisplayModeRow')) return;
+    /* Find a good spot: top of settings body, or after API key field */
+    var settingsBody = document.querySelector('.mpanel-body');
+    if (!settingsBody) return;
+    /* Find first .sec section to insert before */
+    var firstSec = settingsBody.querySelector('.sec');
+    if (!firstSec) return;
+
+    var row = document.createElement('div');
+    row.id = 'v56DisplayModeRow';
+    row.className = 'v56-display-mode-row fld';
+    row.innerHTML =
+      '<div class="v56-label">📱 表示モード（PC / スマホ）</div>' +
+      '<div class="v56-radios">' +
+      '<label class="v56-radio" data-mode="auto"><input type="radio" name="v56DisplayMode" value="auto"> 自動</label>' +
+      '<label class="v56-radio" data-mode="mobile"><input type="radio" name="v56DisplayMode" value="mobile"> 📱 スマホ</label>' +
+      '<label class="v56-radio" data-mode="pc"><input type="radio" name="v56DisplayMode" value="pc"> 🖥 PC</label>' +
+      '</div>';
+
+    settingsBody.insertBefore(row, firstSec);
+
+    /* Initialize state */
+    var current = getDisplayMode();
+    row.querySelectorAll('input[type=radio]').forEach(function(r){
+      if (r.value === current) r.checked = true;
+      r.addEventListener('change', function(){
+        if (r.checked) {
+          setDisplayMode(r.value);
+          applyDisplayMode();
+          /* Update active class */
+          row.querySelectorAll('label.v56-radio').forEach(function(l){
+            l.classList.toggle('active', l.dataset.mode === r.value);
+          });
+        }
+      });
+    });
+    /* Set initial active class */
+    row.querySelectorAll('label.v56-radio').forEach(function(l){
+      l.classList.toggle('active', l.dataset.mode === current);
+    });
+  }
+
+  /* ---- (4) Ensure cfgOutputLength is visible (re-inject if v54 missed it) ---- */
+  function ensureOutputLengthVisible(){
+    var sel = document.getElementById('cfgOutputLength');
+    if (!sel) {
+      /* Try to call v54's injectModeSelector if it exists */
+      var modelSel = document.getElementById('cfgOrModel');
+      if (!modelSel) return;
+      var modelFld = modelSel.closest('.fld');
+      if (!modelFld || !modelFld.parentElement) return;
+      if (document.getElementById('cfgOutputLength')) return;
+
+      var fld = document.createElement('div');
+      fld.className = 'fld v54-output-length-fld v56-fallback';
+      fld.innerHTML =
+        '<label>出力長（narrative の長さ）</label>' +
+        '<select id="cfgOutputLength">' +
+        '<option value="short">短文（高速・バグ少）</option>' +
+        '<option value="standard">標準（バランス）</option>' +
+        '<option value="long">長文（リッチ・崩壊リスクあり）</option>' +
+        '</select>' +
+        '<div style="font-size:11px;color:var(--dim);margin-top:4px;line-height:1.4">Euryale 70B は短文推奨。Claude 系は標準でOK。</div>';
+      modelFld.parentElement.insertBefore(fld, modelFld.nextSibling);
+      var newSel = document.getElementById('cfgOutputLength');
+      try {
+        var c = JSON.parse(localStorage.getItem('chr6')||'{}');
+        if (c.cfg && c.cfg.outputLength) newSel.value = c.cfg.outputLength;
+      } catch(e){}
+      newSel.addEventListener('change', function(){
+        try {
+          var c = JSON.parse(localStorage.getItem('chr6')||'{}');
+          if (!c.cfg) c.cfg = {};
+          c.cfg.outputLength = newSel.value;
+          c.cfg.outputLengthAuto = false;
+          localStorage.setItem('chr6', JSON.stringify(c));
+        } catch(e){}
+      });
+    }
+  }
+
+  /* ---- (5) Run loop ---- */
+  function applyAll(){
+    try { applyDisplayMode(); } catch(e){}
+    try { injectDisplayModeUI(); } catch(e){}
+    try { ensureOutputLengthVisible(); } catch(e){}
+  }
+  setInterval(applyAll, 1500);
+  setTimeout(applyAll, 300);
+  setTimeout(applyAll, 800);
+  /* Re-apply on window resize for auto mode */
+  window.addEventListener('resize', function(){
+    if (getDisplayMode() === 'auto') applyDisplayMode();
+  });
+
+  console.log(TAG, 'mobile dropdown fix + display mode UI active, current:', getDisplayMode());
+})();
+</script>
 </body>
 </html>
