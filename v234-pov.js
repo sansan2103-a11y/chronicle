@@ -13,6 +13,10 @@
   if (window.__v234Active) return;
   window.__v234Active = true;
 
+
+  /* v23X-fix: codebase exposes top-level `const UI`, not window.UI.
+     Bridge once so the rest of the patch (which uses window.UI) just works. */
+  if (typeof UI !== 'undefined' && !window.UI) { try { window.UI = UI; } catch(_e){} }
   var FIELD_ID   = 'cfgPovChar';
   var SECTION_ID = 'v234-pov-section';
   var SENTINEL   = '# 🎭 視点指示（POV）';
@@ -154,6 +158,7 @@
   }
 
   function hookSettings(){
+    if (typeof UI !== 'undefined' && !window.UI) { try { window.UI = UI; } catch(_e){} }
     if (!window.UI) return;
     if (typeof window.UI.openSettings === 'function' && !window.UI.__v234OS){
       var orig = window.UI.openSettings.bind(window.UI);
