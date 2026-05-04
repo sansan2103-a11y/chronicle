@@ -14,6 +14,10 @@
   if (window.__v233Active) return;
   window.__v233Active = true;
 
+
+  /* v23X-fix: codebase exposes top-level `const UI`, not window.UI.
+     Bridge once so the rest of the patch (which uses window.UI) just works. */
+  if (typeof UI !== 'undefined' && !window.UI) { try { window.UI = UI; } catch(_e){} }
   var SECTION_ID  = 'v233-worldinfo-section';
   var TABLE_ID    = 'v233-wi-table';
   var SENTINEL    = '# 📚 ワールド情報（自動注入）';
@@ -276,6 +280,7 @@
   }
 
   function hookSettings(){
+    if (typeof UI !== 'undefined' && !window.UI) { try { window.UI = UI; } catch(_e){} }
     if (!window.UI) return;
     if (typeof window.UI.openSettings === 'function' && !window.UI.__v233OS){
       var orig = window.UI.openSettings.bind(window.UI);
