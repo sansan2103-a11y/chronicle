@@ -5,15 +5,25 @@
 //   3. スマホで送信ボタンをタップしてもターンが進まない（iOS タップ問題）
 //
 // 根本原因 (1)(2):
-//   - v258 / v259 / v260 が setInterval で UI.renderAll() を周期実行
-//   - UI.renderAll は連鎖 hook 経由で各種 rerenderStream() を呼ぶ
-//   - rerenderStream() は無条件に dialogue-stream.innerHTML = "" → scrollTop = scrollHeight
+//   - v201 / v258 / v259 / v260 が setInterval で DOM 再描画を実行し、
+//     その中で stream.scrollTop = stream.scrollHeight を無条件に呼ぶ
+//   - v201 line 103: if (scrollHeight - scrollTop - clientHeight < 100) scrollTop = scrollHeight;
+//     スクロール量が小さい panel ではユーザがどこにいても auto-bottom する
 //   - v249 の scroll gate は 3秒のみ + UI._scroll しかカバーしない
 //
 // 根本原因 (3):
 //   - inline onclick="G.submit()" のみ → iOS Safari のタップ遅延・blur レースで失われやすい
 //   - 過去の submit 失敗で sendBtn.disabled / S.inFlight が stuck することがある
 //   - v229 の 5秒判定 toast が「進行中なのに送信失敗」誤通知を出す
+//
+// 修正方針:
+//   A. dialogue-stream / #story の scrollTop SETTER を override
+//      → ユーザが「底にいない」状態なら、script による「底へジャンプ」を拒否
+//   B. ユーザ操作（touchstart/touchmove/wheel）で「ユーザの意図」を更新
+//   C. UI.renderAll を wrap して snapshot-based restore（補助的）
+//   D. v258/v259 の周期 reprocessAll を chr6 hash で gate
+//   E. CSS で scroll-behavior: auto / overflow-anchor: none を強制
+//   F. 送信ボタンに pointerup/touchend バインド + stuck 復帰
 //
 // ガード: window.__v261Active
 
@@ -29,208 +39,76 @@
   var BOTTOM_THRESHOLD = 30; // px
 
   // ========================================================================
-  // A. パネル状態トラッカ
+  // A. scrollTop setter gate — KEY FIX
   // ========================================================================
-  var panels = {};
-
-  function trackPanel(id) {
+  function installScrollGate(id) {
     var el = document.getElementById(id);
-    if (!el) return null;
-    if (panels[id] && panels[id].el === el && panels[id].__attached) return panels[id];
+    if (!el || el.__v261ScrollGated) return false;
 
-    var p = {
-      el: el,
-      scrollTop: el.scrollTop,
-      isAtBottom: (el.scrollHeight - el.scrollTop - el.clientHeight) < BOTTOM_THRESHOLD,
-      __attached: true,
-      lastUserAction: 0
-    };
+    var origSetter = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop').set;
+    var origGetter = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop').get;
 
-    function refresh() {
-      p.scrollTop = el.scrollTop;
-      p.isAtBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < BOTTOM_THRESHOLD;
+    // ユーザの意図 (最後にユーザが触れた位置)
+    var userScrollTop = origGetter.call(el);
+    var userIsAtBottom = (el.scrollHeight - userScrollTop - el.clientHeight) < BOTTOM_THRESHOLD;
+    var lastUserActionTs = 0;
+    var inGate = false;
+
+    function refreshUserIntent() {
+      if (inGate) return;
+      userScrollTop = origGetter.call(el);
+      userIsAtBottom = (el.scrollHeight - userScrollTop - el.clientHeight) < BOTTOM_THRESHOLD;
+      lastUserActionTs = Date.now();
     }
 
+    el.addEventListener('touchstart', refreshUserIntent, { passive: true });
+    el.addEventListener('touchmove', refreshUserIntent, { passive: true });
+    el.addEventListener('wheel', refreshUserIntent, { passive: true });
     el.addEventListener('scroll', function () {
-      if (p.__suppressUserUpdate) return;
-      p.lastUserAction = Date.now();
-      refresh();
+      if (inGate) return;
+      // ユーザ起因の scroll かどうかは厳密に判別不可なので、
+      // 直近 500ms にユーザ操作（touch/wheel）があればユーザ起因とみなす
+      if (Date.now() - lastUserActionTs < 500) {
+        userScrollTop = origGetter.call(el);
+        userIsAtBottom = (el.scrollHeight - userScrollTop - el.clientHeight) < BOTTOM_THRESHOLD;
+      }
     }, { passive: true });
 
-    el.addEventListener('touchstart', function () { p.lastUserAction = Date.now(); }, { passive: true });
-    el.addEventListener('touchmove', function () { p.lastUserAction = Date.now(); }, { passive: true });
-    el.addEventListener('wheel', function () { p.lastUserAction = Date.now(); }, { passive: true });
-
-    panels[id] = p;
-    return p;
-  }
-
-  function trackAll() {
-    trackPanel('story');
-    trackPanel('dialogue-stream');
-  }
-  trackAll();
-  setTimeout(trackAll, 500);
-  setTimeout(trackAll, 1500);
-  setTimeout(trackAll, 4000);
-
-  // ========================================================================
-  // B. scrollTop 復元ヘルパ
-  // ========================================================================
-  function restorePanel(p) {
-    if (!p || !p.el) return;
-    var el = p.el;
-    if (p.isAtBottom) {
-      var target = Math.max(0, el.scrollHeight - el.clientHeight);
-      if (Math.abs(el.scrollTop - target) > 1) {
-        p.__suppressUserUpdate = true;
-        el.scrollTop = target;
-        setTimeout(function () { p.__suppressUserUpdate = false; }, 80);
-      }
-    } else {
-      var t = Math.max(0, Math.min(p.scrollTop, el.scrollHeight - el.clientHeight));
-      if (Math.abs(el.scrollTop - t) > 1) {
-        p.__suppressUserUpdate = true;
-        el.scrollTop = t;
-        setTimeout(function () { p.__suppressUserUpdate = false; }, 80);
-      }
-    }
-  }
-
-  function restoreAll() {
-    Object.keys(panels).forEach(function (k) { restorePanel(panels[k]); });
-  }
-
-  // ========================================================================
-  // C. UI.renderAll / appendTurn ラップ
-  // ========================================================================
-  function snapshotPanels() {
-    Object.keys(panels).forEach(function (k) {
-      var p = panels[k];
-      if (!p || !p.el) return;
-      p.scrollTop = p.el.scrollTop;
-      p.isAtBottom = (p.el.scrollHeight - p.el.scrollTop - p.el.clientHeight) < BOTTOM_THRESHOLD;
-    });
-  }
-
-  function wrapRenderAll() {
-    if (typeof UI !== 'object' || !UI || typeof UI.renderAll !== 'function') return false;
-    if (UI.renderAll.__v261Wrapped) return true;
-    var orig = UI.renderAll.bind(UI);
-    UI.renderAll = function () {
-      snapshotPanels();
-      var r;
-      try { r = orig.apply(this, arguments); } catch (e) { console.warn('[v261] renderAll err', e); }
-      restoreAll();
-      requestAnimationFrame(restoreAll);
-      setTimeout(restoreAll, 0);
-      setTimeout(restoreAll, 16);
-      setTimeout(restoreAll, 50);
-      setTimeout(restoreAll, 120);
-      setTimeout(restoreAll, 250);
-      return r;
-    };
-    UI.renderAll.__v261Wrapped = true;
-    console.log('[v261] UI.renderAll wrapped');
-    return true;
-  }
-
-  function wrapAppendTurn() {
-    if (typeof UI !== 'object' || !UI || typeof UI.appendTurn !== 'function') return false;
-    if (UI.appendTurn.__v261Wrapped) return true;
-    var orig = UI.appendTurn.bind(UI);
-    UI.appendTurn = function () {
-      snapshotPanels();
-      var r;
-      try { r = orig.apply(this, arguments); } catch (e) { console.warn('[v261] appendTurn err', e); }
-      restoreAll();
-      requestAnimationFrame(restoreAll);
-      setTimeout(restoreAll, 50);
-      setTimeout(restoreAll, 200);
-      return r;
-    };
-    UI.appendTurn.__v261Wrapped = true;
-    console.log('[v261] UI.appendTurn wrapped');
-    return true;
-  }
-
-  function wrapUI() {
-    var ok1 = wrapRenderAll();
-    var ok2 = wrapAppendTurn();
-    return ok1 && ok2;
-  }
-
-  if (!wrapUI()) {
-    var iv = setInterval(function () {
-      if (wrapUI()) { clearInterval(iv); }
-    }, 200);
-    setTimeout(function () { clearInterval(iv); }, 30000);
-  }
-
-  // ========================================================================
-  // D. MutationObserver
-  // ========================================================================
-  function installStreamObserver() {
-    var stream = document.getElementById('dialogue-stream');
-    if (!stream) return false;
-    if (stream.__v261Observed) return true;
-    var p = trackPanel('dialogue-stream');
-    if (!p) return false;
-    var pending = false;
-    var mo = new MutationObserver(function () {
-      if (pending) return;
-      pending = true;
-      requestAnimationFrame(function () {
-        pending = false;
-        restorePanel(p);
-      });
-    });
-    mo.observe(stream, { childList: true, subtree: false });
-    stream.__v261Observed = true;
-    console.log('[v261] dialogue-stream observer installed');
-    return true;
-  }
-
-  function installStoryObserver() {
-    var story = document.getElementById('story');
-    if (!story) return false;
-    if (story.__v261Observed) return true;
-    var p = trackPanel('story');
-    if (!p) return false;
-    var pending = false;
-    var mo = new MutationObserver(function (mutations) {
-      var relevant = false;
-      for (var i = 0; i < mutations.length; i++) {
-        var m = mutations[i];
-        if ((m.addedNodes && m.addedNodes.length) || (m.removedNodes && m.removedNodes.length)) {
-          relevant = true; break;
+    Object.defineProperty(el, 'scrollTop', {
+      get: function () { return origGetter.call(this); },
+      set: function (v) {
+        if (!userIsAtBottom) {
+          var maxScroll = Math.max(0, this.scrollHeight - this.clientHeight);
+          // script が「底へジャンプ」しようとしている場合は拒否
+          if (v >= maxScroll - 5) {
+            inGate = true;
+            origSetter.call(this, Math.min(userScrollTop, maxScroll));
+            setTimeout(function () { inGate = false; }, 30);
+            return;
+          }
         }
-      }
-      if (!relevant) return;
-      if (pending) return;
-      pending = true;
-      requestAnimationFrame(function () {
-        pending = false;
-        restorePanel(p);
-      });
+        origSetter.call(this, v);
+      },
+      configurable: true
     });
-    mo.observe(story, { childList: true, subtree: false });
-    story.__v261Observed = true;
-    console.log('[v261] #story observer installed');
+
+    el.__v261ScrollGated = true;
+    el.__v261UpdateUserIntent = refreshUserIntent;
+    console.log('[v261] scroll gate installed on #' + id);
     return true;
   }
 
-  function installObservers() {
-    installStreamObserver();
-    installStoryObserver();
+  function installAllGates() {
+    installScrollGate('dialogue-stream');
+    installScrollGate('story');
   }
-  installObservers();
-  setTimeout(installObservers, 800);
-  setTimeout(installObservers, 2500);
-  setTimeout(installObservers, 6000);
+  installAllGates();
+  setTimeout(installAllGates, 500);
+  setTimeout(installAllGates, 1500);
+  setTimeout(installAllGates, 4000);
 
   // ========================================================================
-  // E. v258 / v259 の周期 reprocessAll を「変化検知時のみ」に絞る
+  // B. v258 / v259 の周期 reprocessAll を「変化検知時のみ」に絞る
   // ========================================================================
   (function gateReprocess() {
     var lastChr6Hash = null;
@@ -250,13 +128,8 @@
         var orig = obj[methodName];
         obj[methodName] = function () {
           var h = chr6Hash();
-          if (arguments.length > 0) {
-            lastChr6Hash = h;
-            return orig.apply(this, arguments);
-          }
-          if (h === lastChr6Hash) {
-            return false;
-          }
+          if (arguments.length > 0) { lastChr6Hash = h; return orig.apply(this, arguments); }
+          if (h === lastChr6Hash) return false;
           lastChr6Hash = h;
           return orig.apply(this, arguments);
         };
@@ -272,14 +145,14 @@
     }
     tryAllG();
     var tries = 0;
-    var iv2 = setInterval(function () {
+    var iv = setInterval(function () {
       tryAllG();
-      if (++tries > 30) clearInterval(iv2);
+      if (++tries > 30) clearInterval(iv);
     }, 500);
   })();
 
   // ========================================================================
-  // F. CSS: スクロール挙動の安定化
+  // C. CSS: scroll behavior 安定化
   // ========================================================================
   (function injectCSS() {
     var id = '__v261-style';
@@ -304,21 +177,7 @@
   })();
 
   // ========================================================================
-  // G. デバッグ用 API
-  // ========================================================================
-  window.__v261 = {
-    panels: panels,
-    restoreAll: restoreAll,
-    trackPanel: trackPanel
-  };
-
-  // ========================================================================
-  // H. スマホ送信ボタン信頼性向上（追加報告対応）
-  //    - touch-action: manipulation で 300ms delay 排除
-  //    - pointerup / touchend に直接 submit を bind
-  //    - sendBtn.disabled が stuck (>8s かつ S.inFlight=false) なら強制復帰
-  //    - 二重発火防止 600ms debounce
-  //    - v229 の誤発火 toast を抑制
+  // D. 送信ボタン信頼性向上（スマホ送信できないバグ対応）
   // ========================================================================
   (function reinforceSend() {
     function injectSendCSS() {
@@ -376,18 +235,12 @@
       if (btn.__v261SendBound) return true;
 
       btn.addEventListener('pointerup', function () {
-        if (btn.disabled) {
-          tryReviveBtn(btn);
-          if (btn.disabled) return;
-        }
+        if (btn.disabled) { tryReviveBtn(btn); if (btn.disabled) return; }
         triggerSubmit('pointerup');
       }, { passive: true });
 
       btn.addEventListener('touchend', function () {
-        if (btn.disabled) {
-          tryReviveBtn(btn);
-          if (btn.disabled) return;
-        }
+        if (btn.disabled) { tryReviveBtn(btn); if (btn.disabled) return; }
         triggerSubmit('touchend');
       }, { passive: true });
 
@@ -411,16 +264,13 @@
               btn.__v261StuckTrack.since = 0;
               console.log('[v261] forcibly revived sendBtn (stuck>8s, no inFlight)');
             }
-          } else {
-            btn.__v261StuckTrack.since = 0;
-          }
+          } else { btn.__v261StuckTrack.since = 0; }
         }
       } catch (e) {}
     }
     tryAllH();
     setInterval(tryAllH, 1000);
 
-    // v229 の誤発火 toast 抑制
     function patchV229() {
       try {
         if (window.__v229 && typeof window.__v229.showToast === 'function' && !window.__v229.showToast.__v261Patched) {
@@ -443,6 +293,14 @@
     setTimeout(patchV229, 1000);
     setTimeout(patchV229, 3000);
   })();
+
+  // ========================================================================
+  // E. デバッグ用 API
+  // ========================================================================
+  window.__v261 = {
+    installScrollGate: installScrollGate,
+    installAllGates: installAllGates
+  };
 
   console.log('[v261] init complete');
 })();
