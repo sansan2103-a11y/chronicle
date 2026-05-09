@@ -1,4 +1,11 @@
-/* v284: random-fill lore awareness via LLM (full delegation) — v2 fixed for Api global
+/* v284: random-fill lore awareness via LLM (full delegation) — v3
+ *
+ * v3 変更点 (2026-05-09):
+ *   - Api.call 名前参照に修正 (top-level const、window 経由不可)
+ *   - 出力 JSON 内の引用符の扱いを強化:
+ *     ・プロンプトで 「」 を使うよう指示
+ *     ・safeParseJson に「JSON 値内の素の "」を「\"」に repair する fallback
+ *     ・name/desc を regex で抽出する最終 fallback
  *
  * 概要:
  *   設定パネルの「🎲 未入力をランダム生成」ボタン (UI.randomFill) を wrap し、
@@ -7,18 +14,10 @@
  *
  * 哲学 (CLAUDE_RULES.md §3 + おしんさん 2026-05-09 指示):
  *   - 「制約より刺激」 — LLM の自由度を最大化
- *   - 固定リストを廃止せず、「lore 無し」「API キー無し」「LLM 失敗」時は
- *     既存挙動 (固定リスト) にフォールバック
+ *   - 固定リストを廃止せず、「lore 無し」「API キー無し」「LLM 失敗」時は既存挙動
  *   - 名前を固定プールに縛らない (世界観に響く造語名 OK)
- *   - 性別・年齢・種族・職能・立場すべて世界観に合わせて自由
  *
- * 動作:
- *   1) wrap前にフォームの blank フラグを snapshot
- *   2) orig (v111→v108→base) を呼ぶ … base が cfgLore も埋める (空なら固定リスト)
- *   3) lore + APIキーがあれば、blank だった項目だけ LLM で生成
- *   4) DOM に書き込み + localStorage cast にも sync (v111 上書き防止)
- *
- * 依存: index.html の UI.randomFill / Api.call(sys, user, maxTok) / cfgLore #/cfgHName/cfgHDesc / .npc-card[data-f]
+ * 依存: Api.call(sys, user, maxTok) / cfgLore #/cfgHName/cfgHDesc / .npc-card[data-f]
  *   ※ Api は index.html の top-level const。window には付かないので名前参照する。
  * Chain: v111 (form sync) ← v108 (gender) ← v284 (lore-aware)  ※v284 が最外
  * Idempotent: __v284Active / UI.__v284Hooked
@@ -85,7 +84,9 @@
       '・性別・年齢・種族・職能・立場・体質・癖は世界観に合わせて自由に決めてよい',
       '・desc は1〜3文の自然な日本語紹介。性別/年齢/特徴/小さな秘密や癖などを織り込めると良い',
       '・複数キャラがいれば互いの対比や関係性が滲むと魅力的 (強制ではない)',
-      '・出力は厳密に JSON のみ。前後に説明文・コードフェンス・コメントは付けない'
+      '・出力は厳密に JSON のみ。前後に説明文・コードフェンス・コメントは付けない',
+      '・JSON 値の文字列の中で引用符を使いたい時は 「」 や 『』 を使う (素の " は JSON が壊れる)',
+      '・desc は短めに。各 desc は 80 文字以内で'
     ].join('\n');
 
     var user = [
@@ -98,13 +99,51 @@
       '【NPC 数】 ' + npcCount,
       '',
       '【出力 JSON 形式の例】',
-      '{"hero":{"name":"...","desc":"..."},"npcs":[{"name":"...","desc":"..."},{"name":"...","desc":"..."}]}',
+      '{"hero":{"name":"...","desc":"..."},"npcs":[{"name":"...","desc":"..."}]}',
       '',
-      '※ 必要なフィールドだけ含めればよい。npcs 配列は対応する index に入れる。',
-      '※ name は短く呼び名として機能する形 (フルネームでも、二つ名でも、種族名でも自由)。'
+      '※ npcs 配列は対応する index に入れる。',
+      '※ name は短く呼び名として機能する形 (フルネームでも、二つ名でも、種族名でも自由)。',
+      '※ 文字列値の中に " を使わない。代わりに 「」 を使う。'
     ].join('\n');
 
     return { sys: sys, user: user };
+  }
+
+  // ── 値内の素 " を \" に repair ──
+  // 「キー: "値"」型は保護しつつ、値の中の不正な " を捕まえる
+  function repairInlineQuotes(s){
+    // 値の開始 `: "` または `, "` の直後の " 以降、
+    // `"` の次が `,` `}` `]` `:` 改行・空白・終端 のいずれでもなければ inline quote と見なし \" に置換
+    return s.replace(/("(?:[^"\\]|\\.)*?")/g, function(m){
+      // m はマッチした完全な文字列。素のままならそのまま
+      return m;
+    });
+    // ↑ 単純なパスのみだと不十分なので、下の loose repair を使う。
+  }
+
+  // 値内に素の " が混入したケースを修復
+  // ヒューリスティック: ある " について、両側が日本語/CJK なら \" に置換
+  function escapeJpInlineQuotes(s){
+    var out = '';
+    for (var i = 0; i < s.length; i++){
+      var c = s[i];
+      if (c === '"'){
+        var prev = i > 0 ? s.charCodeAt(i - 1) : 0;
+        var next = i + 1 < s.length ? s.charCodeAt(i + 1) : 0;
+        var isJp = function(cc){
+          return (cc >= 0x3040 && cc <= 0x309F) || // Hiragana
+                 (cc >= 0x30A0 && cc <= 0x30FF) || // Katakana
+                 (cc >= 0x4E00 && cc <= 0x9FFF) || // CJK
+                 (cc >= 0xFF01 && cc <= 0xFF60);   // Fullwidth
+        };
+        if (isJp(prev) && isJp(next)){
+          out += '\\"';
+          continue;
+        }
+      }
+      out += c;
+    }
+    return out;
   }
 
   function safeParseJson(text){
@@ -113,10 +152,44 @@
     s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
     try { return JSON.parse(s); } catch (e) {}
     var lo = s.indexOf('{'), hi = s.lastIndexOf('}');
-    if (lo >= 0 && hi > lo){
-      try { return JSON.parse(s.slice(lo, hi + 1)); } catch (e) {}
+    var trimmed = (lo >= 0 && hi > lo) ? s.slice(lo, hi + 1) : s;
+    try { return JSON.parse(trimmed); } catch (e) {}
+    // repair inline JP quotes
+    var repaired = escapeJpInlineQuotes(trimmed);
+    try { return JSON.parse(repaired); } catch (e) {}
+    // last fallback: regex extraction
+    return regexExtract(trimmed);
+  }
+
+  // 最終 fallback: 各 hero/npc の name/desc を regex で取り出す (壊れた JSON でも動く)
+  function regexExtract(s){
+    var out = { hero: {}, npcs: [] };
+    var heroBlock = s.match(/"hero"\s*:\s*\{([\s\S]*?)\}/);
+    if (heroBlock){
+      var hb = heroBlock[1];
+      var hn = hb.match(/"name"\s*:\s*"([^"]*)"/);
+      var hd = hb.match(/"desc"\s*:\s*"([^"]*)"/);
+      if (hn) out.hero.name = hn[1];
+      if (hd) out.hero.desc = hd[1];
     }
-    return null;
+    var npcsBlock = s.match(/"npcs"\s*:\s*\[([\s\S]*?)\](?:\s*\})/);
+    if (npcsBlock){
+      var nb = npcsBlock[1];
+      // split by '},' but keep the boundary
+      var parts = nb.split(/\}\s*,\s*\{/);
+      parts.forEach(function(p){
+        var nm = p.match(/"name"\s*:\s*"([^"]*)"/);
+        var dc = p.match(/"desc"\s*:\s*"([^"]*)"/);
+        if (nm || dc){
+          var npc = {};
+          if (nm) npc.name = nm[1];
+          if (dc) npc.desc = dc[1];
+          out.npcs.push(npc);
+        }
+      });
+    }
+    if (!out.hero.name && !out.hero.desc && out.npcs.length === 0) return null;
+    return out;
   }
 
   function setVal(el, v){
@@ -201,10 +274,13 @@
     if (!api){ console.warn(TAG, 'Api.call not ready'); return; }
     showStatus('🌌 世界観に馴染むキャラを生成中…');
     console.log(TAG, 'LLM ask fields', listAskFields(blank));
-    api.call(pr.sys, pr.user, 1200).then(function(r){
+    api.call(pr.sys, pr.user, 1500).then(function(r){
       if (!r || !r.text){ console.warn(TAG, 'LLM returned empty'); return; }
       var parsed = safeParseJson(r.text);
-      if (!parsed){ console.warn(TAG, 'JSON parse failed:', String(r.text).slice(0, 200)); return; }
+      if (!parsed){
+        console.warn(TAG, 'JSON parse failed even after repair:', String(r.text).slice(0, 300));
+        return;
+      }
       console.log(TAG, 'parsed', parsed);
       var n = applyResult(blank, parsed);
       if (n > 0){
@@ -248,7 +324,9 @@
     safeParseJson: safeParseJson,
     loreEnhance: loreEnhance,
     listAskFields: listAskFields,
-    getApi: getApi
+    getApi: getApi,
+    escapeJpInlineQuotes: escapeJpInlineQuotes,
+    regexExtract: regexExtract
   };
-  console.log(TAG, 'v284 active: random-lore-aware (LLM full delegation)');
+  console.log(TAG, 'v284 active: random-lore-aware v3 (LLM + repair)');
 })();
