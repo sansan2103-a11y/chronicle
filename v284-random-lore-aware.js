@@ -1,4 +1,4 @@
-/* v284: random-fill lore awareness via LLM (full delegation)
+/* v284: random-fill lore awareness via LLM (full delegation) — v2 fixed for Api global
  *
  * 概要:
  *   設定パネルの「🎲 未入力をランダム生成」ボタン (UI.randomFill) を wrap し、
@@ -18,7 +18,8 @@
  *   3) lore + APIキーがあれば、blank だった項目だけ LLM で生成
  *   4) DOM に書き込み + localStorage cast にも sync (v111 上書き防止)
  *
- * 依存: index.html の UI.randomFill / S.api.call(sys, user, maxTok) / cfgLore #/cfgHName/cfgHDesc / .npc-card[data-f]
+ * 依存: index.html の UI.randomFill / Api.call(sys, user, maxTok) / cfgLore #/cfgHName/cfgHDesc / .npc-card[data-f]
+ *   ※ Api は index.html の top-level const。window には付かないので名前参照する。
  * Chain: v111 (form sync) ← v108 (gender) ← v284 (lore-aware)  ※v284 が最外
  * Idempotent: __v284Active / UI.__v284Hooked
  */
@@ -28,7 +29,6 @@
   window.__v284Active = true;
   console.log(TAG, 'init');
 
-  // ── snapshot which form fields are blank, BEFORE orig fills them ──
   function snapshotBlanks(){
     var hN = document.getElementById('cfgHName');
     var hD = document.getElementById('cfgHDesc');
@@ -36,7 +36,7 @@
       hName: hN ? !hN.value.trim() : false,
       hDesc: hD ? !hD.value.trim() : false,
       oldNpcCount: 0,
-      npcs: [] // [{name:bool, desc:bool}, ...] — true = was blank (or newly added)
+      npcs: []
     };
     var cards = document.querySelectorAll('#npcList .npc-card');
     blank.oldNpcCount = cards.length;
@@ -51,7 +51,6 @@
     return blank;
   }
 
-  // base randomFill が NPC 0 件時に 1 件追加するので、追加分も blank として扱う
   function extendBlanksForNewNpcs(blank){
     var cards = document.querySelectorAll('#npcList .npc-card');
     for (var i = blank.oldNpcCount; i < cards.length; i++){
@@ -80,7 +79,6 @@
     if (ask.length === 0) return null;
     var npcCount = blank.npcs.length;
 
-    // 肯定文の刺激のみ。禁止語を増やさない。
     var sys = [
       '与えられた世界観に自然に馴染むキャラクターを作ってください。',
       '・名前は世界観の語彙・響きに合わせて自由に造語してよい (既存リストに縛られない)',
@@ -109,7 +107,6 @@
     return { sys: sys, user: user };
   }
 
-  // ── tolerant JSON parse (markdown fence / 前後ノイズ除去) ──
   function safeParseJson(text){
     if (!text) return null;
     var s = String(text).trim();
@@ -150,7 +147,6 @@
     return changed;
   }
 
-  // localStorage cast を form と同期 (v111 が後で sync しても上書きされないように)
   function syncCastFromForm(){
     try {
       var s = JSON.parse(localStorage.getItem('chr6') || '{}');
@@ -174,6 +170,11 @@
     }
   }
 
+  function getApi(){
+    try { if (typeof Api === 'object' && Api && typeof Api.call === 'function') return Api; } catch(e){}
+    return null;
+  }
+
   function hasApiKey(){
     try {
       var prov = (window.S && S.cfg && S.cfg.provider) || '';
@@ -192,35 +193,18 @@
   function loreEnhance(blank){
     extendBlanksForNewNpcs(blank);
     var lore = getLore();
-    if (!lore){
-      console.log(TAG, 'no lore — skip LLM');
-      return;
-    }
-    if (!hasApiKey()){
-      console.log(TAG, 'no API key — skip LLM');
-      return;
-    }
+    if (!lore){ console.log(TAG, 'no lore — skip LLM'); return; }
+    if (!hasApiKey()){ console.log(TAG, 'no API key — skip LLM'); return; }
     var pr = buildPrompt(lore, blank);
-    if (!pr){
-      console.log(TAG, 'no blank fields — skip LLM');
-      return;
-    }
-    if (!(window.S && S.api && typeof S.api.call === 'function')){
-      console.warn(TAG, 'S.api.call not ready');
-      return;
-    }
+    if (!pr){ console.log(TAG, 'no blank fields — skip LLM'); return; }
+    var api = getApi();
+    if (!api){ console.warn(TAG, 'Api.call not ready'); return; }
     showStatus('🌌 世界観に馴染むキャラを生成中…');
     console.log(TAG, 'LLM ask fields', listAskFields(blank));
-    S.api.call(pr.sys, pr.user, 1200).then(function(r){
-      if (!r || !r.text){
-        console.warn(TAG, 'LLM returned empty');
-        return;
-      }
+    api.call(pr.sys, pr.user, 1200).then(function(r){
+      if (!r || !r.text){ console.warn(TAG, 'LLM returned empty'); return; }
       var parsed = safeParseJson(r.text);
-      if (!parsed){
-        console.warn(TAG, 'JSON parse failed:', String(r.text).slice(0, 200));
-        return;
-      }
+      if (!parsed){ console.warn(TAG, 'JSON parse failed:', String(r.text).slice(0, 200)); return; }
       console.log(TAG, 'parsed', parsed);
       var n = applyResult(blank, parsed);
       if (n > 0){
@@ -244,8 +228,6 @@
     UI.randomFill = function(){
       var blank = snapshotBlanks();
       var r = orig.apply(this, arguments);
-      // base が _fillNpcRandom を 50ms setTimeout で呼ぶ + v111 が 50/300ms で form sync する
-      // → 全部終わってから LLM 起動 (LLM 自体は数秒かかる)
       setTimeout(function(){ loreEnhance(blank); }, 400);
       return r;
     };
@@ -260,13 +242,13 @@
   setTimeout(init, 2000);
   setTimeout(init, 4000);
 
-  // Console から触れる
   window.__v284 = {
     snapshotBlanks: snapshotBlanks,
     buildPrompt: buildPrompt,
     safeParseJson: safeParseJson,
     loreEnhance: loreEnhance,
-    listAskFields: listAskFields
+    listAskFields: listAskFields,
+    getApi: getApi
   };
   console.log(TAG, 'v284 active: random-lore-aware (LLM full delegation)');
 })();
