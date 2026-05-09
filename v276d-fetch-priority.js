@@ -13,9 +13,16 @@
 //   レスポンスを clone().json() で覗いて window.__v276bRepair で repair → window.__v276Mind に格納。
 //   非対象呼び出しは apply で素通し (this/arguments を保持)。
 //
-// 設計上の注意:
-//   - install タイミング: DOMContentLoaded + setTimeout 3000ms。
-//     v211 / v220 / v276b / v276c など他の hook が全部上書きを終えた後を狙う。
+// 設計上の注意 (v276d-rev2 で修正):
+//   - install タイミング:
+//       (1) IIFE 評価時に「即時」install。この時点で v211/v220/v276b/v276c は
+//           上のスクリプトとして同期実行済み (v276d は HTML の最後尾配置)。
+//       (2) DOMContentLoaded 後にもう一度、3000ms の safety net で install。
+//           もし誰かが setTimeout/Promise で遅延 install した場合に上を取り直す。
+//       (3) install() 関数は冪等 (top.__v276dInstalled で重複防止)。
+//     [背景] 旧 rev は「DOMContentLoaded + 3000ms」のみに依存していたため、
+//     初回 character-mind コール (DOMContentLoaded 直後に v276 がトリガー) を
+//     捕まえる前に install が間に合わず、__v276Mind が空のまま残る race があった。
 //   - 二重 install ガード:
 //       window.__v276dActive       (process-level: スクリプトの再評価防止)
 //       window.fetch.__v276dInstalled (function-level: 同じ wrapper の二重設置防止)
@@ -23,7 +30,7 @@
 //     (新しい Response オブジェクトを構築しない — 上層が clone を期待する場合に壊れるため)。
 //
 // チェーン (install 後):
-//   呼び出し側 → window.fetch (v276d wrapper)
+//   呼び出しは → window.fetch (v276d wrapper)
 //     → top.apply (= v211 など、その時点で window.fetch だったもの)
 //       → … 後ロード hook 群 …
 //         → v276c (送信時 body 改変)
@@ -40,7 +47,7 @@
 
   if (window.__v276dActive) return;
   window.__v276dActive = true;
-  console.log('[v276d] fetch-priority init (will install after DOMContentLoaded + 3s)');
+  console.log('[v276d] fetch-priority init (immediate install + safety net at +3s)');
 
   var INSTALL_DELAY_MS = 3000;
 
@@ -53,7 +60,6 @@
   }
 
   function extractAndStoreMind(res) {
-    // res は消費せずに clone から JSON を読む。本体 (res) はそのまま return する。
     return res.clone().json().then(function (json) {
       try {
         var text = '';
@@ -71,7 +77,6 @@
             console.warn('[v276d] __v276bRepair threw', e1);
           }
         }
-        // フォールバック: repair が無い / 失敗した場合は素の JSON.parse
         if (!parsed) {
           try { parsed = JSON.parse(text); } catch (_) { parsed = null; }
         }
@@ -99,38 +104,38 @@
       return;
     }
     if (top.__v276dInstalled) {
-      console.log('[v276d] hook already installed on current window.fetch, skip');
       return;
     }
 
     var wrapped = function (url, opts) {
-      // 非対象は this / arguments を保ったまま素通し
       if (!isMindCall(url, opts)) {
         return top.apply(this, arguments);
       }
-      // mind 呼び出し: 下層 (v211 / v276c / 元の fetch) に投げて、戻り Response を覗き見る
       var p = top.apply(this, arguments);
-      // p が Promise でない場合 (理論上ありえないが念のため) はそのまま返す
       if (!p || typeof p.then !== 'function') return p;
       return p.then(function (res) {
         return extractAndStoreMind(res);
       });
     };
     wrapped.__v276dInstalled = true;
-    wrapped.__wrappedFetch = top;  // debug 用に下層を保持
+    wrapped.__wrappedFetch = top;
 
     window.fetch = wrapped;
     console.log('[v276d] top-level fetch wrapper installed');
   }
 
-  function schedule() {
+  function scheduleSafetyNet() {
     setTimeout(install, INSTALL_DELAY_MS);
   }
 
+  // (1) 即時 install。
+  install();
+
+  // (2) safety net: DOMContentLoaded 後に setTimeout 3000ms で再確認。
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', schedule, { once: true });
+    document.addEventListener('DOMContentLoaded', scheduleSafetyNet, { once: true });
   } else {
-    schedule();
+    scheduleSafetyNet();
   }
 
   // === Public API (debug 用) ===
@@ -139,7 +144,6 @@
       return !!(window.fetch && window.fetch.__v276dInstalled);
     },
     reinstall: function () {
-      // 既存 wrapper を一旦剥がして再インストール (debug 用、通常は不要)
       try {
         if (window.fetch && window.fetch.__v276dInstalled && window.fetch.__wrappedFetch) {
           window.fetch = window.fetch.__wrappedFetch;
