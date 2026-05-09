@@ -85,8 +85,10 @@
         msgs.unshift({ role: 'system', content: SCHEMA_EXAMPLE + '\n\n' + BANLIST + '\n\n' + REINFORCE });
       }
 
-      // 2. assistant プレフィル: Hermes に JSON のキャラ名から書き始めることを強制
-      msgs.push({ role: 'assistant', content: PREFILL });
+      // 2. (旧 prefill ロジックは Hermes via OpenRouter では逆効果だったため除去。
+      //    Hermes は assistant role を「前のターン」として扱い、独自に markdown
+      //    で包んだ JSON を返してしまい、レスポンス側で prepend すると壊れる。
+      //    schema 例 + 禁止リスト + temperature 0.8 だけで構造を安定させる。)
 
       // 3. 温度: 0.95 → 0.8
       body.temperature = TARGET_TEMP;
@@ -105,14 +107,9 @@
     }
   }
 
-  // === Response 補正: プレフィルが応答に含まれない場合は前置 ===
+  // === Response 補正: 旧 prefill 戦略は除去。応答はそのまま v276b に渡す。 ===
   function fixResponseContent(content) {
-    if (typeof content !== 'string') return content;
-    var trimmed = content.trim();
-    // すでに { から始まっていればそのまま (一部プロバイダはプレフィル含めて返す)
-    if (trimmed.charAt(0) === '{') return content;
-    // それ以外は PREFILL を前置
-    return PREFILL + content;
+    return content;  // no-op (markdown 剥がし & 欠落カンマ修復は v276b の責務)
   }
 
   // === Fetch hook ===
