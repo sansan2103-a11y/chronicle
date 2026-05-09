@@ -1,24 +1,20 @@
-/* v284: random-fill lore awareness via LLM (full delegation) — v3
+/* v284: random-fill lore awareness via LLM (full delegation) — v4
  *
- * v3 変更点 (2026-05-09):
- *   - Api.call 名前参照に修正 (top-level const、window 経由不可)
- *   - 出力 JSON 内の引用符の扱いを強化:
- *     ・プロンプトで 「」 を使うよう指示
- *     ・safeParseJson に「JSON 値内の素の "」を「\"」に repair する fallback
- *     ・name/desc を regex で抽出する最終 fallback
+ * v4 変更点 (2026-05-09):
+ *   - 世界観 (cfgLore) 自体も LLM 生成対象に拡張
+ *   - 場所 (cfgLoc) / 目的 (cfgObj) / トーン (cfgTone) も同様
+ *   - LLM は「空欄だったフィールドだけ」自由に発明 (固定リストの結果に上書き)
+ *   - lore が空でも api key があれば LLM 起動 (旧仕様: lore 必須)
  *
- * 概要:
- *   設定パネルの「🎲 未入力をランダム生成」ボタン (UI.randomFill) を wrap し、
- *   未入力だったフィールド (hero.name / hero.desc / 各 NPC の name / desc) を、
- *   世界観 (cfgLore) に馴染むキャラに LLM が全権で生成し直す。
+ * v3 (継承):
+ *   - Api.call 名前参照 (top-level const、window 経由不可)
+ *   - JSON 引用符 repair (escapeJpInlineQuotes / regexExtract fallback)
  *
- * 哲学 (CLAUDE_RULES.md §3 + おしんさん 2026-05-09 指示):
- *   - 「制約より刺激」 — LLM の自由度を最大化
- *   - 固定リストを廃止せず、「lore 無し」「API キー無し」「LLM 失敗」時は既存挙動
- *   - 名前を固定プールに縛らない (世界観に響く造語名 OK)
+ * 哲学 (おしんさん 2026-05-09 指示):
+ *   - 「自由度に制限かけたくない・モデルの良さを活かしたい」
+ *   - 空欄 = 「自由に発明してよい」シグナル、入力済み = 制約として尊重
  *
- * 依存: Api.call(sys, user, maxTok) / cfgLore #/cfgHName/cfgHDesc / .npc-card[data-f]
- *   ※ Api は index.html の top-level const。window には付かないので名前参照する。
+ * 依存: Api.call(sys, user, maxTok) / cfgLore #/cfgLoc/cfgObj/cfgTone/cfgHName/cfgHDesc / .npc-card[data-f]
  * Chain: v111 (form sync) ← v108 (gender) ← v284 (lore-aware)  ※v284 が最外
  * Idempotent: __v284Active / UI.__v284Hooked
  */
@@ -26,14 +22,21 @@
   var TAG = '[v284]';
   if (window.__v284Active) return;
   window.__v284Active = true;
-  console.log(TAG, 'init');
+  console.log(TAG, 'init v4');
+
+  function val(id){
+    var el = document.getElementById(id);
+    return el ? el.value.trim() : '';
+  }
 
   function snapshotBlanks(){
-    var hN = document.getElementById('cfgHName');
-    var hD = document.getElementById('cfgHDesc');
     var blank = {
-      hName: hN ? !hN.value.trim() : false,
-      hDesc: hD ? !hD.value.trim() : false,
+      sceneLore: !val('cfgLore'),
+      sceneLoc:  !val('cfgLoc'),
+      sceneObj:  !val('cfgObj'),
+      sceneTone: !val('cfgTone'),
+      hName: !val('cfgHName'),
+      hDesc: !val('cfgHDesc'),
       oldNpcCount: 0,
       npcs: []
     };
@@ -57,13 +60,12 @@
     }
   }
 
-  function getLore(){
-    var l = document.getElementById('cfgLore');
-    return l ? l.value.trim() : '';
-  }
-
   function listAskFields(blank){
     var ask = [];
+    if (blank.sceneLore) ask.push('scene.lore');
+    if (blank.sceneLoc)  ask.push('scene.loc');
+    if (blank.sceneObj)  ask.push('scene.obj');
+    if (blank.sceneTone) ask.push('scene.tone');
     if (blank.hName) ask.push('hero.name');
     if (blank.hDesc) ask.push('hero.desc');
     blank.npcs.forEach(function(n, i){
@@ -73,56 +75,56 @@
     return ask;
   }
 
-  function buildPrompt(lore, blank){
+  function buildPrompt(blank){
     var ask = listAskFields(blank);
     if (ask.length === 0) return null;
-    var npcCount = blank.npcs.length;
+
+    // 既に入力済み (= ロックされた条件) を集める。空欄 = LLM 自由領域
+    var locked = [];
+    if (!blank.sceneLore && val('cfgLore')) locked.push('世界観: ' + val('cfgLore'));
+    if (!blank.sceneLoc  && val('cfgLoc'))  locked.push('場所: '  + val('cfgLoc'));
+    if (!blank.sceneObj  && val('cfgObj'))  locked.push('目的: '  + val('cfgObj'));
+    if (!blank.sceneTone && val('cfgTone')) locked.push('トーン: ' + val('cfgTone'));
+    if (!blank.hName && val('cfgHName')) locked.push('主人公名: ' + val('cfgHName'));
+    if (!blank.hDesc && val('cfgHDesc')) locked.push('主人公: ' + val('cfgHDesc'));
+    document.querySelectorAll('#npcList .npc-card').forEach(function(card, i){
+      var nm = card.querySelector('[data-f="name"]');
+      var dc = card.querySelector('[data-f="desc"]');
+      if (nm && nm.value.trim() && !blank.npcs[i].name) locked.push('NPC[' + i + ']名: ' + nm.value.trim());
+      if (dc && dc.value.trim() && !blank.npcs[i].desc) locked.push('NPC[' + i + ']: ' + dc.value.trim());
+    });
 
     var sys = [
-      '与えられた世界観に自然に馴染むキャラクターを作ってください。',
-      '・名前は世界観の語彙・響きに合わせて自由に造語してよい (既存リストに縛られない)',
-      '・性別・年齢・種族・職能・立場・体質・癖は世界観に合わせて自由に決めてよい',
-      '・desc は1〜3文の自然な日本語紹介。性別/年齢/特徴/小さな秘密や癖などを織り込めると良い',
-      '・複数キャラがいれば互いの対比や関係性が滲むと魅力的 (強制ではない)',
+      'TRPG セッションの世界観とキャラクター一式を作ってください。',
+      '・与えられた「ロック条件」を尊重しつつ、空いている要素を自由に発明する',
+      '・世界観・場所・目的・トーン・主人公・NPC が互いに響き合う一貫した物語空間を作る',
+      '・名前は世界観の語彙・響きに合わせて自由に造語してよい',
+      '・性別・年齢・種族・職能・立場は自由',
+      '・desc は1〜3文・80文字以内',
       '・出力は厳密に JSON のみ。前後に説明文・コードフェンス・コメントは付けない',
-      '・JSON 値の文字列の中で引用符を使いたい時は 「」 や 『』 を使う (素の " は JSON が壊れる)',
-      '・desc は短めに。各 desc は 80 文字以内で'
+      '・JSON 値の中で引用符を使う時は 「」 や 『』 を使う (素の " は JSON が壊れる)'
     ].join('\n');
 
     var user = [
-      '【世界観】',
-      lore,
+      '【ロック条件 (尊重して動かさない)】',
+      locked.length ? locked.join('\n') : '(なし — 完全に自由に発明してよい)',
       '',
       '【生成してほしいフィールド】',
       JSON.stringify(ask),
       '',
-      '【NPC 数】 ' + npcCount,
+      '【NPC 数】 ' + blank.npcs.length,
       '',
       '【出力 JSON 形式の例】',
-      '{"hero":{"name":"...","desc":"..."},"npcs":[{"name":"...","desc":"..."}]}',
+      '{"scene":{"lore":"...","loc":"...","obj":"...","tone":"..."},"hero":{"name":"...","desc":"..."},"npcs":[{"name":"...","desc":"..."}]}',
       '',
-      '※ npcs 配列は対応する index に入れる。',
-      '※ name は短く呼び名として機能する形 (フルネームでも、二つ名でも、種族名でも自由)。',
+      '※ 必要なフィールドだけ含めればよい。',
+      '※ scene.lore は世界の根本設定 (1〜2文)、loc は具体的な場所、obj は主人公の現在の目的、tone は語りのトーン。',
       '※ 文字列値の中に " を使わない。代わりに 「」 を使う。'
     ].join('\n');
 
     return { sys: sys, user: user };
   }
 
-  // ── 値内の素 " を \" に repair ──
-  // 「キー: "値"」型は保護しつつ、値の中の不正な " を捕まえる
-  function repairInlineQuotes(s){
-    // 値の開始 `: "` または `, "` の直後の " 以降、
-    // `"` の次が `,` `}` `]` `:` 改行・空白・終端 のいずれでもなければ inline quote と見なし \" に置換
-    return s.replace(/("(?:[^"\\]|\\.)*?")/g, function(m){
-      // m はマッチした完全な文字列。素のままならそのまま
-      return m;
-    });
-    // ↑ 単純なパスのみだと不十分なので、下の loose repair を使う。
-  }
-
-  // 値内に素の " が混入したケースを修復
-  // ヒューリスティック: ある " について、両側が日本語/CJK なら \" に置換
   function escapeJpInlineQuotes(s){
     var out = '';
     for (var i = 0; i < s.length; i++){
@@ -131,10 +133,11 @@
         var prev = i > 0 ? s.charCodeAt(i - 1) : 0;
         var next = i + 1 < s.length ? s.charCodeAt(i + 1) : 0;
         var isJp = function(cc){
-          return (cc >= 0x3040 && cc <= 0x309F) || // Hiragana
-                 (cc >= 0x30A0 && cc <= 0x30FF) || // Katakana
-                 (cc >= 0x4E00 && cc <= 0x9FFF) || // CJK
-                 (cc >= 0xFF01 && cc <= 0xFF60);   // Fullwidth
+          return (cc >= 0x3040 && cc <= 0x309F) ||
+                 (cc >= 0x30A0 && cc <= 0x30FF) ||
+                 (cc >= 0x4E00 && cc <= 0x9FFF) ||
+                 (cc >= 0xFF01 && cc <= 0xFF60) ||
+                 (cc >= 0x3000 && cc <= 0x303F); // CJK punctuation も含める
         };
         if (isJp(prev) && isJp(next)){
           out += '\\"';
@@ -154,16 +157,22 @@
     var lo = s.indexOf('{'), hi = s.lastIndexOf('}');
     var trimmed = (lo >= 0 && hi > lo) ? s.slice(lo, hi + 1) : s;
     try { return JSON.parse(trimmed); } catch (e) {}
-    // repair inline JP quotes
     var repaired = escapeJpInlineQuotes(trimmed);
     try { return JSON.parse(repaired); } catch (e) {}
-    // last fallback: regex extraction
     return regexExtract(trimmed);
   }
 
-  // 最終 fallback: 各 hero/npc の name/desc を regex で取り出す (壊れた JSON でも動く)
+  // 壊れた JSON 用の最終 fallback
   function regexExtract(s){
-    var out = { hero: {}, npcs: [] };
+    var out = { scene: {}, hero: {}, npcs: [] };
+    var sceneBlock = s.match(/"scene"\s*:\s*\{([\s\S]*?)\}/);
+    if (sceneBlock){
+      var sb = sceneBlock[1];
+      ['lore','loc','obj','tone'].forEach(function(k){
+        var m = sb.match(new RegExp('"' + k + '"\\s*:\\s*"([^"]*)"'));
+        if (m) out.scene[k] = m[1];
+      });
+    }
     var heroBlock = s.match(/"hero"\s*:\s*\{([\s\S]*?)\}/);
     if (heroBlock){
       var hb = heroBlock[1];
@@ -172,10 +181,9 @@
       if (hn) out.hero.name = hn[1];
       if (hd) out.hero.desc = hd[1];
     }
-    var npcsBlock = s.match(/"npcs"\s*:\s*\[([\s\S]*?)\](?:\s*\})/);
+    var npcsBlock = s.match(/"npcs"\s*:\s*\[([\s\S]*?)\](?:\s*\}?)/);
     if (npcsBlock){
       var nb = npcsBlock[1];
-      // split by '},' but keep the boundary
       var parts = nb.split(/\}\s*,\s*\{/);
       parts.forEach(function(p){
         var nm = p.match(/"name"\s*:\s*"([^"]*)"/);
@@ -188,8 +196,9 @@
         }
       });
     }
-    if (!out.hero.name && !out.hero.desc && out.npcs.length === 0) return null;
-    return out;
+    var hasAny = out.scene.lore || out.scene.loc || out.scene.obj || out.scene.tone
+              || out.hero.name || out.hero.desc || out.npcs.length;
+    return hasAny ? out : null;
   }
 
   function setVal(el, v){
@@ -201,14 +210,27 @@
     return true;
   }
 
+  function setById(id, v){ return setVal(document.getElementById(id), v); }
+
   function applyResult(blank, parsed){
     if (!parsed || typeof parsed !== 'object') return 0;
     var changed = 0;
-    var hN = document.getElementById('cfgHName');
-    var hD = document.getElementById('cfgHDesc');
-    if (blank.hName && parsed.hero && setVal(hN, parsed.hero.name)) changed++;
-    if (blank.hDesc && parsed.hero && setVal(hD, parsed.hero.desc)) changed++;
 
+    // scene fields
+    if (parsed.scene && typeof parsed.scene === 'object'){
+      if (blank.sceneLore && setById('cfgLore', parsed.scene.lore)) changed++;
+      if (blank.sceneLoc  && setById('cfgLoc',  parsed.scene.loc))  changed++;
+      if (blank.sceneObj  && setById('cfgObj',  parsed.scene.obj))  changed++;
+      if (blank.sceneTone && setById('cfgTone', parsed.scene.tone)) changed++;
+    }
+
+    // hero
+    if (parsed.hero){
+      if (blank.hName && setById('cfgHName', parsed.hero.name)) changed++;
+      if (blank.hDesc && setById('cfgHDesc', parsed.hero.desc)) changed++;
+    }
+
+    // npcs
     var cards = document.querySelectorAll('#npcList .npc-card');
     var pNpcs = (parsed.npcs && Array.isArray(parsed.npcs)) ? parsed.npcs : [];
     blank.npcs.forEach(function(b, i){
@@ -220,15 +242,14 @@
     return changed;
   }
 
-  function syncCastFromForm(){
+  // localStorage cast / scene を form と同期 (v111 が後で sync しても上書きされないように)
+  function syncStateFromForm(){
     try {
       var s = JSON.parse(localStorage.getItem('chr6') || '{}');
       s.cast = s.cast || {};
       s.cast.hero = s.cast.hero || {};
-      var hN = document.getElementById('cfgHName');
-      var hD = document.getElementById('cfgHDesc');
-      if (hN) s.cast.hero.name = hN.value.trim();
-      if (hD) s.cast.hero.desc = hD.value.trim();
+      s.cast.hero.name = val('cfgHName');
+      s.cast.hero.desc = val('cfgHDesc');
       s.cast.npcs = s.cast.npcs || [];
       document.querySelectorAll('#npcList .npc-card').forEach(function(card, i){
         s.cast.npcs[i] = s.cast.npcs[i] || {};
@@ -237,9 +258,19 @@
         if (nameEl) s.cast.npcs[i].name = nameEl.value.trim();
         if (descEl) s.cast.npcs[i].desc = descEl.value.trim();
       });
+      s.scene = s.scene || {};
+      s.scene.lore = val('cfgLore');
+      s.scene.loc  = val('cfgLoc');
+      s.scene.obj  = val('cfgObj');
+      s.scene.tone = val('cfgTone');
       localStorage.setItem('chr6', JSON.stringify(s));
+      // also sync in-memory S if exposed
+      if (window.S){
+        if (S.cast && S.cast.hero){ S.cast.hero.name = s.cast.hero.name; S.cast.hero.desc = s.cast.hero.desc; }
+        if (S.scene){ S.scene.lore = s.scene.lore; S.scene.loc = s.scene.loc; S.scene.obj = s.scene.obj; S.scene.tone = s.scene.tone; }
+      }
     } catch(e){
-      console.warn(TAG, 'cast sync failed', e && e.message);
+      console.warn(TAG, 'state sync failed', e && e.message);
     }
   }
 
@@ -265,26 +296,31 @@
 
   function loreEnhance(blank){
     extendBlanksForNewNpcs(blank);
-    var lore = getLore();
-    if (!lore){ console.log(TAG, 'no lore — skip LLM'); return; }
-    if (!hasApiKey()){ console.log(TAG, 'no API key — skip LLM'); return; }
-    var pr = buildPrompt(lore, blank);
-    if (!pr){ console.log(TAG, 'no blank fields — skip LLM'); return; }
+    if (!hasApiKey()){
+      console.log(TAG, 'no API key — skip LLM');
+      return;
+    }
+    var pr = buildPrompt(blank);
+    if (!pr){
+      console.log(TAG, 'no blank fields — skip LLM');
+      return;
+    }
     var api = getApi();
     if (!api){ console.warn(TAG, 'Api.call not ready'); return; }
-    showStatus('🌌 世界観に馴染むキャラを生成中…');
+    showStatus('🌌 世界観とキャラを生成中…');
     console.log(TAG, 'LLM ask fields', listAskFields(blank));
-    api.call(pr.sys, pr.user, 1500).then(function(r){
+    api.call(pr.sys, pr.user, 2200).then(function(r){
       if (!r || !r.text){ console.warn(TAG, 'LLM returned empty'); return; }
       var parsed = safeParseJson(r.text);
       if (!parsed){
-        console.warn(TAG, 'JSON parse failed even after repair:', String(r.text).slice(0, 300));
+        console.warn(TAG, 'JSON parse failed:', String(r.text).slice(0, 300));
+        showStatus('🎲 ランダム生成しました（LLM 解析失敗 → 固定リスト）');
         return;
       }
       console.log(TAG, 'parsed', parsed);
       var n = applyResult(blank, parsed);
       if (n > 0){
-        syncCastFromForm();
+        syncStateFromForm();
         showStatus('🌌 ' + n + ' 件を世界観に馴染ませました');
         console.log(TAG, 'applied', n, 'fields');
       } else {
@@ -292,7 +328,7 @@
       }
     }).catch(function(e){
       console.warn(TAG, 'LLM error', e && e.message);
-      showStatus('🎲 ランダム生成しました（世界観連動はスキップ）');
+      showStatus('🎲 ランダム生成しました（LLM スキップ）');
     });
   }
 
@@ -303,12 +339,13 @@
     var orig = UI.randomFill.bind(UI);
     UI.randomFill = function(){
       var blank = snapshotBlanks();
+      console.log(TAG, 'snapshot', blank);
       var r = orig.apply(this, arguments);
       setTimeout(function(){ loreEnhance(blank); }, 400);
       return r;
     };
     UI.__v284Hooked = true;
-    console.log(TAG, 'UI.randomFill wrapped');
+    console.log(TAG, 'UI.randomFill wrapped (v4)');
   }
 
   function init(){ hookRandomFill(); }
@@ -328,5 +365,5 @@
     escapeJpInlineQuotes: escapeJpInlineQuotes,
     regexExtract: regexExtract
   };
-  console.log(TAG, 'v284 active: random-lore-aware v3 (LLM + repair)');
+  console.log(TAG, 'v284 active: random-lore-aware v4 (scene + chars LLM full delegation)');
 })();
