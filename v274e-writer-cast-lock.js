@@ -128,28 +128,24 @@
     return true;
   }
 
+  // 起動直後の wrap (60 回 retry)
   if (!wrapPlanner()){
     var tries = 0;
     var iv = setInterval(function(){
       if (wrapPlanner() || ++tries > 60) clearInterval(iv);
     }, 500);
   }
+  // 継続監視: v275/v276 が後から Planner.build を上書きして v274e の wrap が
+  // 剥がれることがあるため、毎秒チェックして必要なら再 wrap する。
+  // wrapPlanner 自体が冪等 (Planner.build.__v274eWrapped を見る) なので二重
+  // wrap にはならない。
+  setInterval(function(){
+    try {
+      if (typeof Planner === 'object' && Planner && typeof Planner.build === 'function'
+          && !Planner.build.__v274eWrapped){
+        wrapPlanner();
+      }
+    } catch(e){}
+  }, 1000);
 
-  // === Public API ===
-  window.__v274e = {
-    getCastRoster: getCastRoster,
-    buildCastLockBlock: buildCastLockBlock,
-    reinstall: function(){
-      try {
-        // 既存 wrap を外して再 install (debug 用)
-        if (typeof Planner === 'object' && Planner && typeof Planner.build === 'function' && Planner.build.__v274eWrapped){
-          // 元に戻すのは難しいので、フラグだけリセットして二重に被せる
-          Planner.build.__v274eWrapped = false;
-        }
-      } catch(e){}
-      wrapPlanner();
-    }
-  };
-
-  console.log('[v274e] init complete');
-})();
+  // === Public API 
