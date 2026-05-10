@@ -148,4 +148,21 @@
     } catch(e){}
   }, 1000);
 
-  // === Public API 
+  // === Public API ===
+  window.__v274e = {
+    getCastRoster: getCastRoster,
+    buildCastLockBlock: buildCastLockBlock,
+    reinstall: function(){
+      try {
+        // 既存 wrap を外して再 install (debug 用)
+        if (typeof Planner === 'object' && Planner && typeof Planner.build === 'function' && Planner.build.__v274eWrapped){
+          // 元に戻すのは難しいので、フラグだけリセットして二重に被せる
+          Planner.build.__v274eWrapped = false;
+       }
+      } catch(e){}
+      wrapPlanner();
+    }
+  };
+
+  console.log('[v274e] init complete');
+})();
