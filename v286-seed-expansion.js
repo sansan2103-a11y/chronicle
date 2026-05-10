@@ -440,7 +440,18 @@
         }
       }
     });
-    returnF��㰢Р�������������&WG'�&��B���������ТgV�7F���'V��E&WG'�&��B�&���&We'6VB�F���f�V�G2�����vV�FW"6��7G&��B8)"F���f�V�BXَK��8~Xh�h�"�8(�8(�[�~8�f"vV�FW$���G2��Ӱ�F���f�V�G2�f�$V6��gV�7F���b����b�b���v�W&��FW62r���f"�v2�vWD�W&�vV�FW$6��7G&��B�&�沓���b��v2�vV�FW"���vV�FW$���G2�W6��v�W&��FW628�[�^8�8�r��v2�vV�FW"'」の人物として書く (前回は性別が指定と異なっていた可能性)');
+    return thin;
+  }
+
+  // ---------- Retry prompt ----------
+  function buildRetryPrompt(blank, prevParsed, thinFields){
+    // gender constraint を thin field 単位で再掲 (より強く)
+    var genderHints = [];
+    thinFields.forEach(function(f){
+      if (f === 'hero.desc'){
+        var hGc = getHeroGenderConstraint(blank);
+        if (hGc.gender){
+          genderHints.push('hero.desc は必ず「' + hGc.gender + '」の人物として書く (前回は性別が指定と異なっていた可能性)');
         }
       } else {
         var m = f.match(/^npcs\[(\d+)\]\.desc$/);
