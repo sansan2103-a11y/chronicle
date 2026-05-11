@@ -372,6 +372,10 @@
       return prevFetch(input, init);
     };
     hooked.__v291PenaltyHook = true;
+    // Defeat fetch re-wrap loops from earlier patches that check their own
+    // idempotency flag on window.fetch (v287-hermes4-pin, v288-mind-comma-repair).
+    hooked.__v287Wrapped = true;
+    hooked.__v288Wrapped = true;
     return hooked;
   }
 
