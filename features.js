@@ -1885,6 +1885,10 @@
     function extractDialogues(narrSrc, turn){
       if (!narrSrc) return [];
       var src = Array.isArray(narrSrc) ? narrSrc.join('\n') : String(narrSrc);
+      // v292-D fix4 (bug #2): Markdown bold (**) を strip して Pattern A/B/C 全部で
+      // 「**「セリフ」**」のような装飾付き dialogue を拾えるようにする。
+      // src はマッチ用のローカル変数なので display 側に影響しない。
+      src = src.replace(/\*\*/g, '');
       var out = [];
       var seen = Object.create(null);
       function hasText(text){
@@ -1920,6 +1924,19 @@
         .filter(function(n){ return n && n.length > 0; })
         .map(function(n){ return n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); })
         .join('|');
+      // v292-D fix4 (bug #1): SAY モードで playerText のエコーを抑止。
+      // renderStream 側が addCard('主人公', t.playerText) で先に hero カードを描画するため、
+      // narrative 内の同一 dialogue を pattern A/B/C/fallback で拾い直すと重複表示になる。
+      // seen に pre-seed して pushUnique/hasText が skip するよう仕込む。
+      if (turn && turn.inputType === 'SAY' && turn.playerText) {
+        var pt = String(turn.playerText).trim();
+        if (pt) {
+          seen['|' + pt] = true;
+          seen['主人公|' + pt] = true;
+          var heroName = cast.hero && cast.hero.name;
+          if (heroName && heroName !== '主人公') seen[heroName + '|' + pt] = true;
+        }
+      }
       // パターン A: name「dialogue」と言/答/叫/問/呼/応/笑/囁/吐/怒鳴/命...
       var rxA = /([一-鿿ぁ-ゖァ-ヺ々ー・]+?)(?:は|が|の)?「([^「」]+?)」(?:と[^」]*?(?:言|答|命|叫|問|呼|尋|応|返|笑|囁|吐|怒鳴))/g;
       var m;
