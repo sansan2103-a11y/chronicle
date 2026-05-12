@@ -326,10 +326,11 @@ body {
         <div class="fld">
           <label>モデル</label>
           <select id="cfgOrModel">
-            <option value="sao10k/l3.3-euryale-70b">Euryale 70B（推奨・成人描写対応）</option>
+            <option value="nousresearch/hermes-4-405b">Hermes 4 405B（推奨：最高品質・指示追従）</option>
+            <option value="sao10k/l3.3-euryale-70b">Euryale 70B（成人描写対応）</option>
+            <option value="nousresearch/hermes-3-llama-3.1-405b">Hermes 3 405B</option>
             <option value="mistralai/mistral-nemo">Mistral Nemo（速い・JSON対応）</option>
-            <option value="meta-llama/llama-3.3-70b-instruct">LLaMA 3.3 70B（高品質）</option>
-            <option value="nousresearch/hermes-3-llama-3.1-405b">Hermes 3 405B（最高品質）</option>
+            <option value="meta-llama/llama-3.3-70b-instruct">LLaMA 3.3 70B</option>
             <option value="google/gemma-3-27b-it">Gemma 3 27B（日本語対応）</option>
           </select>
         </div>
@@ -643,10 +644,26 @@ const Api = {
   },
 
   async call(system, userContent, maxTok = 1400) {
+    // v292 pre-call hook: features can mutate { system, userContent, maxTok } before send.
+    let _system = system, _userContent = userContent, _maxTok = maxTok;
+    if (Array.isArray(this._preCallHooks)) {
+      for (let i = 0; i < this._preCallHooks.length; i++) {
+        try {
+          const r = this._preCallHooks[i]({
+            system: _system, userContent: _userContent, maxTok: _maxTok, state: S
+          });
+          if (r && typeof r === 'object') {
+            if (typeof r.system === 'string') _system = r.system;
+            if (typeof r.userContent === 'string') _userContent = r.userContent;
+            if (typeof r.maxTok === 'number') _maxTok = r.maxTok;
+          }
+        } catch (e) { console.warn('[v292] preCall hook err:', e && e.message); }
+      }
+    }
     const prov = S.cfg.provider || 'anthropic';
-    if (prov === 'novelai')     return this._callNovelAI(system, userContent, maxTok);
-    if (prov === 'openrouter')  return this._callOpenRouter(system, userContent, maxTok);
-    return this._callAnthropic(system, userContent, maxTok);
+    if (prov === 'novelai')     return this._callNovelAI(_system, _userContent, _maxTok);
+    if (prov === 'openrouter')  return this._callOpenRouter(_system, _userContent, _maxTok);
+    return this._callAnthropic(_system, _userContent, _maxTok);
   },
 
   async _callAnthropic(system, userContent, maxTok) {
@@ -1109,7 +1126,41 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
       CRITICAL_INSTRUCTION: `この入力「${inputText}」を完全に受け入れ、これが起きた後の続きをnarrativeに書く。この入力を無視・否定・矛盾させることは禁止。`
     }, null, 2);
 
-    return { sys, user };
+    // v292 hook integration: extensions can mutate sys & user.
+    // Features push into Planner._extensions / Planner._userExtensions instead of wrapping.
+    let _sys = sys, _user = user;
+    // First, append PromptRegistry entries (deduped, capped at 4000 chars).
+    if (window.PromptRegistry && typeof window.PromptRegistry.build === 'function') {
+      try {
+        const extras = window.PromptRegistry.build(4000);
+        if (extras) _sys = _sys + '\n\n' + extras;
+      } catch (e) { console.warn('[v292] PromptRegistry err:', e && e.message); }
+    }
+    if (Array.isArray(Planner._extensions)) {
+      for (let i = 0; i < Planner._extensions.length; i++) {
+        try {
+          const r = Planner._extensions[i]({ sys: _sys, state: S });
+          if (typeof r === 'string') _sys = r;
+        } catch (e) { console.warn('[v292] sys ext err:', e && e.message); }
+      }
+    }
+    if (Array.isArray(Planner._userExtensions)) {
+      for (let i = 0; i < Planner._userExtensions.length; i++) {
+        try {
+          const r = Planner._userExtensions[i]({ user: _user, state: S });
+          if (typeof r === 'string') _user = r;
+        } catch (e) { console.warn('[v292] user ext err:', e && e.message); }
+      }
+    }
+    // UserMessageRegistry: dedup user-side per-key instructions appended once at end.
+    if (window.UserMessageRegistry && typeof window.UserMessageRegistry.build === 'function') {
+      try {
+        const extra = window.UserMessageRegistry.build();
+        if (extra) _user = _user + '\n' + extra;
+      } catch (e) { console.warn('[v292] UserMessageRegistry err:', e && e.message); }
+    }
+
+    return { sys: _sys, user: _user };
   },
 
   parsePlan(rawText, inputType) {
@@ -1174,6 +1225,15 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
     });
     if (plan.narrative.length === 0) plan.narrative = ['…'];
     plan.narrative = plan.narrative.slice(0, 8);
+    // v292 parse extension hook: features can post-process plan (e.g., narrative dedup).
+    if (Array.isArray(Planner._parseExtensions)) {
+      for (let i = 0; i < Planner._parseExtensions.length; i++) {
+        try {
+          const r = Planner._parseExtensions[i](plan, { inputType: inputType, state: S, raw: rawText });
+          if (r && typeof r === 'object') plan = r;
+        } catch (e) { console.warn('[v292] parse ext err:', e && e.message); }
+      }
+    }
     return plan;
   }
 };
@@ -1304,12 +1364,26 @@ const UI = {
     if (wl) wl.style.display = S.turns.length ? 'none' : 'block';
     S.turns.forEach((t, i) => el.appendChild(this.renderTurn(t, i)));
     this._scroll();
+    // v292 render hook: features push into UI._renderHooks instead of wrapping renderAll.
+    if (Array.isArray(this._renderHooks)) {
+      for (let i = 0; i < this._renderHooks.length; i++) {
+        try { this._renderHooks[i](null); }
+        catch (e) { console.warn('[v292] render hook err:', e && e.message); }
+      }
+    }
   },
 
   appendTurn(turn, idx) {
     const el = document.getElementById('story');
     document.getElementById('welcome').style.display = 'none';
     el.appendChild(this.renderTurn(turn, idx)); this._scroll();
+    // v292 render hook: per-turn render notification.
+    if (Array.isArray(this._renderHooks)) {
+      for (let i = 0; i < this._renderHooks.length; i++) {
+        try { this._renderHooks[i](turn); }
+        catch (e) { console.warn('[v292] render hook err:', e && e.message); }
+      }
+    }
   },
 
   _scroll() { const el = document.getElementById('story'); el.scrollTop = el.scrollHeight; },

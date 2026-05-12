@@ -1730,5 +1730,357 @@
     whenReady(register);
   })();
 
-  console.log('[v292] 10 features loaded (Phase 4-B)');
+  // ====================================================================
+  // 11. dialogue_layout (Phase 4-C — restored from v101)
+  // 目的: PC 横並び 2 列 (会話ログ + 展開の描写) / スマホ縦 50/50。
+  //       narrative から「name「dialogue」と言/答/叫…」を抽出して
+  //       左カラムに speaker + avatar カードで表示。
+  // 旧パッチ: v101 (UI.renderAll / UI.appendTurn wrap) → v292 _renderHooks に変換
+  // hook 使用: UI._renderHooks (毎 turn render 後にカラム再生成)
+  // 設計憲法準拠:
+  //   - wrap なし (UI._renderHooks.push のみ)
+  //   - setInterval watchdog なし (whenReady の 1 回 init)
+  //   - state は S.turns 直参照 (window.S は base が alias 済み)
+  //   - DOM 再構築は #content-cols が無いときだけ 1 度
+  // ====================================================================
+  (function dialogueLayout(){
+    var TAG = '[v292:dialogue_layout]';
+    var INITIALIZED = false;
+
+    /* --- CSS 注入 (v101 css string をほぼそのまま) --- */
+    function injectCss(){
+      if (document.getElementById('dialogueLayoutCss')) return;
+      var css = ''
+        // PC 横並び (>= 761px)
+        + '@media (min-width: 761px){'
+        +   'body{max-width:1200px !important}'
+        +   '#content-cols{display:flex;flex:1;gap:12px;padding:12px;min-height:0;overflow:hidden}'
+        +   '#dialogue-col{flex:1 1 50%;display:flex;flex-direction:column;'
+        +     'background:rgba(160,138,240,.04);border:1px solid var(--border);'
+        +     'border-radius:12px;overflow:hidden}'
+        +   '#narrative-col{flex:1 1 50%;display:flex;flex-direction:column;'
+        +     'background:var(--s1);border:1px solid var(--border);'
+        +     'border-radius:12px;overflow:hidden}'
+        +   '#dialogue-col .col-hdr,#narrative-col .col-hdr{'
+        +     'padding:8px 14px;font-size:12px;font-weight:600;color:var(--dim);'
+        +     'border-bottom:1px solid var(--border);flex:0 0 auto;'
+        +     'display:flex;justify-content:space-between;align-items:center}'
+        +   '.col-hdr-sub{font-weight:400;opacity:0.7;font-size:11px}'
+        +   '#dialogue-stream{flex:1;overflow-y:auto;padding:10px;'
+        +     'display:flex;flex-direction:column;gap:8px}'
+        +   '#narrative-col #story{flex:1;overflow-y:auto;padding:16px}'
+        +   'body{display:flex;flex-direction:column;height:100dvh;max-height:100dvh}'
+        + '}'
+        // モバイル縦 50/50 (<= 760px) — body.v292-mobile クラスで適用
+        + '@media (max-width:760px){'
+        +   'body.v292-mobile{height:100dvh;max-height:100dvh;overflow:hidden;'
+        +     'display:flex;flex-direction:column}'
+        +   'body.v292-mobile #content-cols{flex:1 1 auto;min-height:0;'
+        +     'display:flex;flex-direction:column;gap:4px;padding:4px}'
+        +   'body.v292-mobile #narrative-col{flex:1 1 50%;min-height:0;max-height:50%;'
+        +     'display:flex;flex-direction:column;border:1px solid var(--border);'
+        +     'border-radius:8px;overflow:hidden;order:1}'
+        +   'body.v292-mobile #dialogue-col{flex:1 1 50%;min-height:0;max-height:50%;'
+        +     'display:flex;flex-direction:column;background:rgba(160,138,240,.04);'
+        +     'border:1px solid var(--border);border-radius:8px;overflow:hidden;order:2}'
+        +   'body.v292-mobile #narrative-col #story,'
+        +     'body.v292-mobile #dialogue-stream{flex:1;overflow-y:auto;padding:8px}'
+        +   'body.v292-mobile #dialogue-stream{display:flex;flex-direction:column;gap:6px}'
+        + '}'
+        // dialogue card 共通スタイル
+        + '.v292-dlg-card{display:flex;gap:8px;align-items:flex-start;padding:8px;'
+        +   'background:var(--s2);border-radius:10px;border-left:3px solid var(--say)}'
+        + '.v292-dlg-card.hero-card{border-left-color:var(--acc)}'
+        + '.v292-dlg-card .dlg-av{width:40px;height:40px;flex:0 0 40px;border-radius:50%;'
+        +   'background:#333;display:flex;align-items:center;justify-content:center;'
+        +   'overflow:hidden;font-size:18px;color:var(--dim)}'
+        + '.v292-dlg-card .dlg-av img{width:100%;height:100%;object-fit:cover}'
+        + '.v292-dlg-card .dlg-body{flex:1;min-width:0}'
+        + '.v292-dlg-card .dlg-name{font-size:11px;color:var(--say);'
+        +   'font-weight:600;margin-bottom:2px}'
+        + '.v292-dlg-card.hero-card .dlg-name{color:var(--acc)}'
+        + '.v292-dlg-card .dlg-text{font-size:14px;color:var(--tx);'
+        +   'line-height:1.5;word-break:break-word}';
+      var st = document.createElement('style');
+      st.id = 'dialogueLayoutCss';
+      st.textContent = css;
+      document.head.appendChild(st);
+    }
+
+    /* --- DOM 再構築: #story を #narrative-col で囲み、隣に #dialogue-col を作る --- */
+    function restructure(){
+      if (document.getElementById('content-cols')) return; // 既に構築済み
+      var story = document.getElementById('story');
+      if (!story || !story.parentNode) return;
+
+      var wrap = document.createElement('div');
+      wrap.id = 'content-cols';
+
+      var dCol = document.createElement('div');
+      dCol.id = 'dialogue-col';
+      dCol.innerHTML =
+        '<div class="col-hdr">会話ログ <span class="col-hdr-sub">キャラクターの発言</span></div>'
+        + '<div id="dialogue-stream"></div>';
+
+      var nCol = document.createElement('div');
+      nCol.id = 'narrative-col';
+      nCol.innerHTML =
+        '<div class="col-hdr">展開の描写 <span class="col-hdr-sub">物語の進行・記録</span></div>';
+
+      story.parentNode.insertBefore(wrap, story);
+      wrap.appendChild(dCol);
+      wrap.appendChild(nCol);
+      nCol.appendChild(story); // story を narrative-col の中に移動
+
+      // モバイルクラスのトグル (resize は 1 回だけ listener 登録)
+      function updateMobileClass(){
+        if (window.innerWidth <= 760) document.body.classList.add('v292-mobile');
+        else document.body.classList.remove('v292-mobile');
+      }
+      updateMobileClass();
+      window.addEventListener('resize', updateMobileClass);
+    }
+
+    /* --- 補助関数 --- */
+    function getState(){
+      try {
+        if (typeof S !== 'undefined' && S) return S;
+        return JSON.parse(localStorage.getItem('chr6') || '{}');
+      } catch(e){ return {}; }
+    }
+
+    function isHero(name){
+      if (!name) return false;
+      var st = getState();
+      var h = ((st.cast || {}).hero || {}).name;
+      return !!(h && (h === name || name.indexOf(h) !== -1));
+    }
+
+    function getAvatar(name){
+      if (!name) return '';
+      var st = getState();
+      var cast = st.cast || {};
+      if (cast.hero && cast.hero.name === name) return cast.hero.avatar || '';
+      var npcs = cast.npcs || [];
+      if (Array.isArray(npcs)){
+        for (var i = 0; i < npcs.length; i++){
+          var n = npcs[i];
+          if (n && n.name && (n.name === name || name.indexOf(n.name) !== -1)){
+            return n.avatar || '';
+          }
+        }
+      }
+      return '';
+    }
+
+    function escHtml(s){
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    /* --- narrative から (speaker, dialogue) を抽出 --- */
+    function extractDialogues(narrSrc, turn){
+      if (!narrSrc) return [];
+      var src = Array.isArray(narrSrc) ? narrSrc.join('\n') : String(narrSrc);
+      var out = [];
+      // パターン A: name「dialogue」と言/答/叫/問/呼/応/笑/囁/吐/怒鳴/命...
+      var rxA = /([一-鿿ぁ-ゖァ-ヺ々ー・]+?)(?:は|が|の)?「([^「」]+?)」(?:と[^」]*?(?:言|答|命|叫|問|呼|尋|応|返|笑|囁|吐|怒鳴))/g;
+      var m;
+      while ((m = rxA.exec(src))){
+        out.push({ speaker: (m[1] || '').trim(), text: (m[2] || '').trim() });
+      }
+      // フォールバック: SAY 入力時、最初の鉤括弧を主人公の台詞として拾う
+      if (out.length === 0 && turn && turn.inputType === 'SAY' && turn.playerText){
+        var q = src.match(/「([^「」]+?)」/);
+        if (q) out.push({ speaker: '主人公', text: q[1], isHero: true });
+      }
+      return out;
+    }
+
+    /* --- 1 ターン分の dialogue cards を stream に描画 --- */
+    function addCard(speaker, text, isHeroFlag){
+      var stream = document.getElementById('dialogue-stream');
+      if (!stream) return;
+      var av = getAvatar(speaker);
+      var avHtml = av
+        ? '<img src="' + escHtml(av) + '" alt="' + escHtml(speaker) + '" loading="lazy"'
+          + ' onerror="this.parentNode.textContent=String.fromCharCode(63)">'
+        : '?';
+      var card = document.createElement('div');
+      card.className = 'v292-dlg-card' + (isHeroFlag ? ' hero-card' : '');
+      card.innerHTML =
+        '<div class="dlg-av">' + avHtml + '</div>'
+        + '<div class="dlg-body">'
+        +   '<div class="dlg-name">' + escHtml(speaker || '???') + '</div>'
+        +   '<div class="dlg-text">' + escHtml(text) + '</div>'
+        + '</div>';
+      stream.appendChild(card);
+    }
+
+    /* --- 全 turns を回して dialogue-stream を再構築 --- */
+    function renderStream(){
+      var stream = document.getElementById('dialogue-stream');
+      if (!stream) return;
+      stream.innerHTML = '';
+      var st = getState();
+      var turns = st.turns || [];
+      for (var i = 0; i < turns.length; i++){
+        var t = turns[i];
+        if (!t) continue;
+        // SAY モードでプレイヤーの直接発言があれば主人公カードを先に
+        if (t.playerText && t.inputType === 'SAY'){
+          addCard('主人公', t.playerText, true);
+        }
+        var ds = extractDialogues(t.narrative, t);
+        for (var j = 0; j < ds.length; j++){
+          var d = ds[j];
+          addCard(d.speaker, d.text, d.isHero || isHero(d.speaker));
+        }
+      }
+      stream.scrollTop = stream.scrollHeight;
+    }
+
+    function register(){
+      try {
+        injectCss();
+        restructure();
+        renderStream(); // 初回描画
+        INITIALIZED = true;
+      } catch(e){
+        console.warn(TAG, 'init err:', e && e.message);
+        return;
+      }
+
+      // 毎ターン render 後に dialogue-stream を更新
+      if (Array.isArray(UI && UI._renderHooks)){
+        UI._renderHooks.push(function dialogueLayoutHook(/* turn */){
+          if (!INITIALIZED) return;
+          try { renderStream(); }
+          catch(e){ console.warn(TAG, 'render err:', e && e.message); }
+        });
+      } else {
+        console.warn(TAG, 'UI._renderHooks missing — dialogue stream will not update');
+      }
+
+      window.__v292 = window.__v292 || {};
+      window.__v292.dialogueLayout = {
+        renderStream: renderStream,
+        restructure: restructure,
+        extractDialogues: extractDialogues
+      };
+      console.log(TAG, 'registered (PC 2-col + mobile vsplit; hooked into UI._renderHooks)');
+    }
+
+    whenReady(register);
+  })();
+
+  // ====================================================================
+  // 12. aidungeon_style (Phase 4-C — port of v228)
+  // 目的: AI Dungeon 級の没入描写ルール (五感・身体感覚・断片セリフ・POV 切替) を
+  //       sys prompt に注入。v228 は fetch wrap で同等のことをしていたので、
+  //       v292 では PromptRegistry に静的テキストとして登録する。
+  // 旧パッチ: v228 (fetch wrap on every API call) → PromptRegistry に統合
+  // hook 使用: PromptRegistry.add (priority=40 style/voice hint)
+  //            + _extensions fallback (PromptRegistry が読まれないケース保険)
+  // toggle: localStorage 'v292_aidungeon_style' で ON/OFF (デフォルト ON)
+  // ====================================================================
+  (function aidungeonStyle(){
+    var TAG = '[v292:aidungeon_style]';
+    var LS_KEY = 'v292_aidungeon_style';
+
+    function isEnabled(){
+      try { return localStorage.getItem(LS_KEY) !== 'false'; }
+      catch(e){ return true; }
+    }
+
+    function buildBlock(){
+      return [
+        '',
+        '# 🎭 AI Dungeon 級の生々しい没入描写ルール',
+        '',
+        '## 1. 五感・身体感覚を物理的に描写',
+        '- 拘束・接触: 「鎖が肉に食い込む」「縄が皮膚を擦る」「冷気が肌を刺す」のように、接触面の物理感を必ず書く',
+        '- 内側の生体感覚: 「内側の肉壁が痙攣する」「血の気が引いていく」「胃の奥がせり上がる」など、観察者視点で冷静に',
+        '- 呼吸・反応: 「呼吸が荒くなる」「喉から細い音が漏れる」「歯がカチカチ鳴る」',
+        '',
+        '## 2. 意識の朦朧と限界反応',
+        '- 「意識が遠のく」「視界が霞む」「思考が断片化していく」',
+        '- 限界の生理反応: 嘔吐 / 白目 / 気絶寸前 / 涙と唾液で潰れる声',
+        '',
+        '## 3. 弱々しい・断片的なセリフ',
+        '- 点リーダー「……」で息切れと弱さを表現',
+        '- 例: 「……やめて」「あ……っ」「ひっ……」「もう……許して……」',
+        '- 声の物理化: 「声は嗚咽に変わり、もはや言葉になっていない」',
+        '',
+        '## 4. 心理状態の物理化 (感情 → 生理現象)',
+        '- 「声がかすれ、涙が頬を伝う」「視線が定まらず瞳が震える」',
+        '- 「指先が小刻みに痙攣する」「見るのも耐えられず目を背けた」',
+        '',
+        '## 5. 強制・被害者視点の状況描写',
+        '- 「頭を掴まれ、無理やり顔を向けさせられる」「拒否できず見せつけられる」',
+        '- 「視界を塞がれ、何が起きるか分からない恐怖に身を竦める」',
+        '',
+        '## 6. POV (視点) 切替で没入感を増す',
+        '- 主人公以外の登場人物の視点も適宜挿入',
+        '- 観察される側 ＋ 観察する側の双方向描写',
+        '- 同じ瞬間を異なる人物の知覚から描く',
+        '',
+        '## 7. 環境・余波の描写',
+        '- 「血まみれの床」「響く嗚咽」など空間に残る余波',
+        '- 静けさと音、光と影のコントラスト',
+        '',
+        '## 必須ルール',
+        '- 触覚 (接触面の物理) ＋ 生理反応 ＋ 断片セリフ ＋ 意識描写 の 4 層を毎ターン最低 1 回',
+        '- 「縛られていた」「怖がっていた」のような状態説明だけで終えない',
+        '- 必ず能動的・運動的描写 (「○○が○○に食い込む」「○○が○○を伝う」)',
+        '- セリフは「……」を多用、息切れと弱さを表現',
+        '- 1 場面 3〜5 文で情景・身体・感情・意識を多層化'
+      ].join('\n');
+    }
+
+    function register(){
+      if (!window.PromptRegistry || typeof PromptRegistry.add !== 'function'){
+        console.warn(TAG, 'PromptRegistry missing — feature disabled');
+        return;
+      }
+      // priority 40 = style hint。下げ目にして cast_lock (80) や npc_freedom (60)
+      // よりは後に挿入させる。OFF 時は空文字で skip。
+      PromptRegistry.add({
+        key: 'aidungeon_style',
+        priority: 40,
+        get text(){ return isEnabled() ? buildBlock() : ''; }
+      });
+
+      // _extensions fallback (PromptRegistry が getter を解釈しない実装に保険)
+      if (Array.isArray(Planner && Planner._extensions)){
+        Planner._extensions.push(function aidungeonExt(ctx){
+          try {
+            if (!isEnabled()) return ctx.sys;
+            if (ctx.sys && ctx.sys.indexOf('# 🎭 AI Dungeon 級の生々しい没入描写ルール') >= 0) {
+              return ctx.sys; // 二重挿入回避
+            }
+            return (ctx.sys || '') + '\n' + buildBlock();
+          } catch(e){ return ctx.sys; }
+        });
+      }
+
+      window.__v292 = window.__v292 || {};
+      window.__v292.aidungeonStyle = {
+        isEnabled: isEnabled,
+        setEnabled: function(b){
+          try { localStorage.setItem(LS_KEY, b ? 'true' : 'false'); }
+          catch(e){}
+        },
+        buildBlock: buildBlock
+      };
+      console.log(TAG, 'registered (toggle=' + (isEnabled() ? 'ON' : 'OFF') + ')');
+    }
+
+    whenReady(register);
+  })();
+
+  console.log('[v292] 12 features loaded (Phase 4-C: +dialogue_layout +aidungeon_style)');
 })();
