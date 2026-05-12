@@ -726,6 +726,22 @@ const Api = {
       const tid  = setTimeout(() => ctrl.abort(), 60000);
       let res;
       try {
+        const body = {
+          model,
+          max_tokens: maxTok,
+          temperature: 0.85,
+          top_p: 0.95,
+          frequency_penalty: 0.4,
+          presence_penalty: 0.4,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user',   content: userContent }
+          ]
+        };
+        // Tier 1: OpenRouter の JSON モード（Hermes 系のみ。Llama 微調整系は対象外）
+        if (/hermes/i.test(model)) {
+          body.response_format = { type: 'json_object' };
+        }
         res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -734,18 +750,7 @@ const Api = {
             'HTTP-Referer': 'https://sansan2103-a11y.github.io/chronicle/',
             'X-Title': 'Chronicle TRPG'
           },
-          body: JSON.stringify({
-            model,
-            max_tokens: maxTok,
-            temperature: 0.85,
-            top_p: 0.95,
-            frequency_penalty: 0.4,
-            presence_penalty: 0.4,
-            messages: [
-              { role: 'system', content: system },
-              { role: 'user',   content: userContent }
-            ]
-          }),
+          body: JSON.stringify(body),
           signal: ctrl.signal
         });
       } finally { clearTimeout(tid); S.inFlight = false; }
