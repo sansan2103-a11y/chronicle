@@ -705,8 +705,14 @@ const Api = {
 
   _hasForeignGarbage(text) {
     if (!text) return false;
-    const enMatches = (text.match(/[A-Za-z][A-Za-z0-9_.]{2,}/g) || []).length;
-    const zhMatches = (text.match(/[过这没现还说让对给从将们点东几亲爱觉吗么吧呢哪谁怎样此后状围]/g) || []).length;
+    // v292 Tier 1.5: JSON モード対応。response_format=json_object 有効時、
+    // 正当な JSON キー (playerIntent, npcInnerLife 等) と true/false/null
+    // リテラルで誤発火するのを防ぐ。
+    let cleaned = text
+      .replace(/"[A-Za-z][A-Za-z0-9_]*"\s*:/g, '')   // JSON キー名を除外
+      .replace(/\b(true|false|null)\b/g, '');         // JSON リテラルを除外
+    const enMatches = (cleaned.match(/[A-Za-z][A-Za-z0-9_.]{2,}/g) || []).length;
+    const zhMatches = (cleaned.match(/[过这没现还说让对给从将们点东几亲爱觉吗么吧呢哪谁怎样此后状围]/g) || []).length;
     return enMatches >= 3 || zhMatches >= 2;
   },
 
@@ -2295,7 +2301,8 @@ G.init();
           var b = JSON.parse(opts.body);
           if (b && b.messages){
             var len = getOutputLen();
-            var max = len === 'short' ? 700 : (len === 'long' ? 1800 : 1100);
+            // v292 Tier 1.5: JSON モードで verbose な schema が truncate しないよう cap 緩和
+            var max = len === 'short' ? 900 : (len === 'long' ? 2500 : 1600);
             if (b.max_tokens && b.max_tokens > max) b.max_tokens = max;
             else if (!b.max_tokens) b.max_tokens = max;
             opts.body = JSON.stringify(b);
