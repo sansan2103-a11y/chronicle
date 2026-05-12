@@ -1981,7 +1981,8 @@
       // フォールバック: SAY 入力時、最初の鉤括弧を主人公の台詞として拾う
       if (out.length === 0 && turn && turn.inputType === 'SAY' && turn.playerText){
         var q = src.match(/「([^「」]+?)」/);
-        if (q) pushUnique('主人公', q[1], true);
+        var __heroName2 = (cast.hero && cast.hero.name) ? cast.hero.name : '主人公';
+        if (q) pushUnique(__heroName2, q[1], true);
       }
       return out;
     }
@@ -2018,7 +2019,8 @@
         if (!t) continue;
         // SAY モードでプレイヤーの直接発言があれば主人公カードを先に
         if (t.playerText && t.inputType === 'SAY'){
-          addCard('主人公', t.playerText, true);
+          var __heroName1 = (st && st.cast && st.cast.hero && st.cast.hero.name) ? st.cast.hero.name : '主人公';
+          addCard(__heroName1, t.playerText, true);
         }
         var ds = extractDialogues(t.narrative, t);
         for (var j = 0; j < ds.length; j++){
