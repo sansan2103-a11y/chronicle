@@ -771,8 +771,12 @@ const Api = {
 
       lastResult = { text, body: null };
 
-      if (attempt < maxRetries && this._hasForeignGarbage(text)) {
-        console.warn(`[Retry ${attempt+1}/${maxRetries}] 外国語混入を検出、再生成します`);
+      // v292 Tier 1.5 Fix G: also retry on incomplete Hermes responses
+      // (response missing narrative key, or contains 省略 laziness marker)
+      const isIncomplete = text.indexOf('"narrative"') < 0 || /以下省略|（省略|省略\)/.test(text);
+      if (attempt < maxRetries && (this._hasForeignGarbage(text) || isIncomplete)) {
+        const reason = isIncomplete ? '不完全な出力' : '外国語混入';
+        console.warn(`[Retry ${attempt+1}/${maxRetries}] ${reason}を検出、再生成します`);
         continue;
       }
       return lastResult;
