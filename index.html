@@ -1186,7 +1186,15 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
     let plan;
     try { plan = JSON.parse(t); }
     catch {
-      console.warn('JSON parse failed, using fallback:', rawText.slice(0,200));
+      // v292 Tier 1.5 Fix E: JSON repair for Hermes over-escape patterns
+      // Hermes sometimes outputs \\" (literal) in narrative strings,
+      // breaking JSON parse. Convert to \" and retry.
+      try {
+        const repaired = t.replace(/\\\\"/g, '\\"');
+        plan = JSON.parse(repaired);
+        console.log('[Tier 1.5 Fix E] JSON repaired');
+      } catch {
+        console.warn('JSON parse failed even after repair, using fallback:', rawText.slice(0,200));
       // フォールバック：生テキストをナラティブとして使う
       const lines = rawText.trim().split('\n').filter(l=>l.trim()).slice(0,6);
       plan = {
@@ -1196,6 +1204,7 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
         environmentResponse: '', branchCandidates: [],
         narrative: lines.length > 0 ? lines : ['物語が続く…']
       };
+      }
     }
 
     plan.playerIntent     = plan.playerIntent     || {};
