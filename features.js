@@ -1860,13 +1860,24 @@
       if (!name) return '';
       var st = getState();
       var cast = st.cast || {};
-      if (cast.hero && cast.hero.name === name) return cast.hero.avatar || '';
+      // v292-D fix6: cast.hero.avatar / npc.avatar が空の場合は
+      //  window.avatarUrl() にフォールバックして on-the-fly 生成する。
+      //  Pollinations URL は name+desc+gender から決定的なので
+      //  ⟳ 未クリックでも ⟳ 済みと同じ URL が出る。
+      function genUrl(c){
+        if (typeof window === 'undefined' || typeof window.avatarUrl !== 'function') return '';
+        try { return window.avatarUrl(c.name || '', c.desc || '', c.gender || ''); }
+        catch(e){ return ''; }
+      }
+      if (cast.hero && cast.hero.name === name){
+        return cast.hero.avatar || genUrl(cast.hero);
+      }
       var npcs = cast.npcs || [];
       if (Array.isArray(npcs)){
         for (var i = 0; i < npcs.length; i++){
           var n = npcs[i];
           if (n && n.name && (n.name === name || name.indexOf(n.name) !== -1)){
-            return n.avatar || '';
+            return n.avatar || genUrl(n);
           }
         }
       }
@@ -2170,5 +2181,155 @@
     whenReady(register);
   })();
 
-  console.log('[v292] 12 features loaded (Phase 4-C: +dialogue_layout +aidungeon_style)');
+  // ====================================================================
+  // 13. gender_radio (v292-D fix6: 旧 v108 相当)
+  // 目的: 設定 overlay に「女性 / 男性 / 未設定」ラジオを挿入。
+  //       UI.randomFill を wrap して性別固定 random (名前/desc 女性用/男性用プール) を実現。
+  // features.js 既存の readHeroGender / readNpcGender / writeGenderRadio はこの UI を探す reader。
+  // ====================================================================
+  (function genderRadio(){
+    var TAG = '[v292:gender_radio]';
+    var FNAMES_F = ['アリア','スピカ','エチカ','セシリア','ノエル','オリヴィア','ケイト','ローズ','クララ','ミコト'];
+    var FNAMES_M = ['ノクス','シャドウ','ジャード','カイラス','イザク','ソーラ','ケンジ','タオラ','ジン','チオ'];
+    var DESCS_F = ['18歳。意志が強い記録官見習い。','16歳。他人の感情に敏感。','20歳。踊り手。','17歳。天才的だが壊れやすい魔法使い。','少女のような外見の珍財ハンター。'];
+    var DESCS_M = ['老齢の元兵士。皮肉屋。','15歳の魔法使い見習い。','真面目な役人。','無口だが仲間思いの元傭兵。'];
+    function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
+    function getCast(){ try { return JSON.parse(localStorage.getItem('chr6') || '{}'); } catch(e){ return {}; } }
+    function setCast(s){ try { localStorage.setItem('chr6', JSON.stringify(s)); } catch(e){} }
+
+    var __busy = false;
+    function injectOnce(){
+      if (__busy) return;
+      __busy = true;
+      try {
+        var ov = document.getElementById('settingsOv');
+        if (!ov || getComputedStyle(ov).display === 'none'){ __busy = false; return; }
+        ov.querySelectorAll('.v292-grow').forEach(function(n){ n.remove(); });
+        var heroDesc = ov.querySelector('#cfgHDesc');
+        var heroName = ov.querySelector('#cfgHName');
+        if (heroName){
+          var heroRow = buildRow('主人公', 'hero', function(){ return ((getCast().cast || {}).hero || {}).gender || ''; });
+          var anchor = heroDesc || heroName;
+          if (anchor.parentNode) anchor.parentNode.insertBefore(heroRow, anchor.nextSibling);
+        }
+        ov.querySelectorAll('.npc-card').forEach(function(card, idx){
+          var anchor = card.querySelector('textarea') || card.querySelector('input');
+          if (!anchor) return;
+          var npcRow = buildRow('NPC', 'npc' + idx, function(){
+            var n = ((getCast().cast || {}).npcs || [])[idx] || {};
+            return n.gender || '';
+          });
+          if (anchor.parentNode) anchor.parentNode.insertBefore(npcRow, anchor.nextSibling);
+        });
+      } catch(e){ console.warn(TAG, e); }
+      setTimeout(function(){ __busy = false; }, 100);
+    }
+
+    function buildRow(label, target, getter){
+      var row = document.createElement('div');
+      row.className = 'v292-grow';
+      row.style.cssText = 'display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap';
+      row.innerHTML =
+        '<span style="font-size:11px;color:var(--dim);min-width:60px">' + label + '性別:</span>'
+        + '<label style="font-size:12px;display:flex;align-items:center;gap:3px;cursor:pointer">'
+        +   '<input type="radio" name="v108g_' + target + '" value="女性">女性</label>'
+        + '<label style="font-size:12px;display:flex;align-items:center;gap:3px;cursor:pointer">'
+        +   '<input type="radio" name="v108g_' + target + '" value="男性">男性</label>'
+        + '<label style="font-size:12px;display:flex;align-items:center;gap:3px;cursor:pointer;opacity:.7">'
+        +   '<input type="radio" name="v108g_' + target + '" value="">未設定</label>';
+      var cur = getter() || '';
+      row.querySelectorAll('input').forEach(function(r){
+        if (r.value === cur) r.checked = true;
+        r.addEventListener('change', function(){
+          var s = getCast();
+          s.cast = s.cast || {};
+          if (target === 'hero'){
+            s.cast.hero = s.cast.hero || {};
+            s.cast.hero.gender = r.value;
+          } else {
+            var i = parseInt(target.replace('npc', ''), 10);
+            s.cast.npcs = s.cast.npcs || [];
+            if (s.cast.npcs[i]) s.cast.npcs[i].gender = r.value;
+          }
+          setCast(s);
+        });
+      });
+      return row;
+    }
+
+    function hookUI(){
+      if (typeof UI !== 'object' || !UI || UI.__v292GR) return false;
+      if (typeof UI.openSettings === 'function'){
+        var orig = UI.openSettings.bind(UI);
+        UI.openSettings = function(){
+          var r = orig.apply(this, arguments);
+          setTimeout(injectOnce, 150);
+          setTimeout(injectOnce, 500);
+          return r;
+        };
+      }
+      if (typeof UI._renderNpcList === 'function'){
+        var orig2 = UI._renderNpcList.bind(UI);
+        UI._renderNpcList = function(){
+          var r = orig2.apply(this, arguments);
+          setTimeout(injectOnce, 100);
+          return r;
+        };
+      }
+      if (typeof UI.addNpc === 'function'){
+        var orig3 = UI.addNpc.bind(UI);
+        UI.addNpc = function(){
+          var r = orig3.apply(this, arguments);
+          setTimeout(injectOnce, 200);
+          return r;
+        };
+      }
+      if (typeof UI.randomFill === 'function' && !UI.__v292GR_RF){
+        var origRF = UI.randomFill.bind(UI);
+        UI.randomFill = function(){
+          // 既存 randomFill (場所/目的/トーン等) を先に実行
+          try { origRF(); } catch(e){}
+          // その後、性別整合を cast に反映
+          var s = getCast();
+          s.cast = s.cast || {};
+          var h = s.cast.hero = s.cast.hero || {};
+          if (!h.gender) h.gender = Math.random() < 0.5 ? '女性' : '男性';
+          if (!h.name) h.name = (h.gender === '男性' ? pick(FNAMES_M) : pick(FNAMES_F));
+          if (!h.desc) h.desc = '性別: ' + h.gender + '。' + (h.gender === '男性' ? pick(DESCS_M) : pick(DESCS_F));
+          (s.cast.npcs || []).forEach(function(n){
+            if (!n) return;
+            if (!n.gender) n.gender = Math.random() < 0.5 ? '女性' : '男性';
+            if (!n.name) n.name = (n.gender === '男性' ? pick(FNAMES_M) : pick(FNAMES_F));
+            if (!n.desc) n.desc = (n.gender === '男性' ? pick(DESCS_M) : pick(DESCS_F));
+          });
+          setCast(s);
+          // form を再描画（旧 v111 相当: 設定を閉じてもう一度開くと sync する）
+          try {
+            var ov = document.getElementById('settingsOv');
+            if (ov && getComputedStyle(ov).display !== 'none' && typeof UI.openSettings === 'function'){
+              UI.openSettings();
+            }
+          } catch(e){}
+          console.log(TAG, 'random fill done (gender-aware)');
+        };
+        UI.__v292GR_RF = true;
+      }
+      UI.__v292GR = true;
+      return true;
+    }
+
+    function register(){
+      // UI がまだ未イニシの場合はリトライ
+      var hooked = hookUI();
+      if (!hooked){
+        setTimeout(register, 500);
+        return;
+      }
+      console.log(TAG, 'registered (gender radio + gender-aware randomFill)');
+    }
+
+    whenReady(register);
+  })();
+
+  console.log('[v292] 13 features loaded (Phase 4-C: +dialogue_layout +aidungeon_style +gender_radio)');
 })();
