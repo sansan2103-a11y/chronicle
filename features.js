@@ -1902,10 +1902,15 @@
         out.push(item);
       }
       // 既知キャラ名リストを構築
+      // v292-D fix3: const S は window にバインドされないため、bare S を最初に試す
+      // (castLock 等他 feature と同じ安全パターン)
       var cast = {};
       var names = [];
       try {
-        cast = (window.S && window.S.cast) || {};
+        var st = (typeof S !== 'undefined' && S) ? S
+               : (typeof window !== 'undefined' && window.S) ? window.S
+               : null;
+        if (st && st.cast) cast = st.cast;
         if (cast.hero && cast.hero.name) names.push(cast.hero.name);
         if (Array.isArray(cast.npcs)) {
           cast.npcs.forEach(function(n){ if (n && n.name) names.push(n.name); });
