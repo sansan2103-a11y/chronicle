@@ -1887,42 +1887,74 @@
       var src = Array.isArray(narrSrc) ? narrSrc.join('\n') : String(narrSrc);
       var out = [];
       var seen = Object.create(null);
+      function hasText(text){
+        for (var k in seen){ if (k.indexOf('|' + text) === k.length - text.length - 1) return true; }
+        return false;
+      }
       function pushUnique(speaker, text, isHero){
-        var k = speaker + '|' + text;
+        var k = (speaker||'') + '|' + text;
         if (seen[k]) return;
+        // 同 text が既に他 speaker で取れていれば、speaker 空のものは破棄
+        if (!speaker && hasText(text)) return;
         seen[k] = true;
         var item = { speaker: speaker, text: text };
         if (isHero) item.isHero = true;
         out.push(item);
       }
+      // 既知キャラ名リストを構築
+      var cast = {};
+      var names = [];
+      try {
+        cast = (window.S && window.S.cast) || {};
+        if (cast.hero && cast.hero.name) names.push(cast.hero.name);
+        if (Array.isArray(cast.npcs)) {
+          cast.npcs.forEach(function(n){ if (n && n.name) names.push(n.name); });
+        }
+      } catch(e) {}
+      var namePat = names
+        .filter(function(n){ return n && n.length > 0; })
+        .map(function(n){ return n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); })
+        .join('|');
       // パターン A: name「dialogue」と言/答/叫/問/呼/応/笑/囁/吐/怒鳴/命...
       var rxA = /([一-鿿ぁ-ゖァ-ヺ々ー・]+?)(?:は|が|の)?「([^「」]+?)」(?:と[^」]*?(?:言|答|命|叫|問|呼|尋|応|返|笑|囁|吐|怒鳴))/g;
       var m;
       while ((m = rxA.exec(src))){
         pushUnique((m[1] || '').trim(), (m[2] || '').trim());
       }
-      // パターン B (v292-D 追加): 既知のキャラ名直後の「dialogue」(suffix を要求しない)
-      // aidungeon_style 純化で narrative が「フィオナ「ここは……どこ？」」のように
-      // 「と〇〇した」を省略する形式になったため、cast 名リストで直接抽出する
-      var names = [];
-      try {
-        var cast = (window.S && window.S.cast) || {};
-        if (cast.hero && cast.hero.name) names.push(cast.hero.name);
-        if (Array.isArray(cast.npcs)) {
-          cast.npcs.forEach(function(n){ if (n && n.name) names.push(n.name); });
+      // パターン B (v292-D): 既知名直後の「dialogue」(suffix 不要)
+      if (namePat){
+        var rxB = new RegExp('(?:^|\\n|。|、|」|\\s)(' + namePat + ')(?:は|が|の)?「([^「」]+?)」', 'g');
+        while ((m = rxB.exec(src))){
+          pushUnique(m[1].trim(), m[2].trim());
         }
-      } catch(e) {}
-      if (names.length > 0){
-        var namePat = names
-          .filter(function(n){ return n && n.length > 0; })
-          .map(function(n){ return n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); })
-          .join('|');
+      }
+      // パターン C (v292-D): speaker 名なし bare dialogue
+      // aidungeon_style の極端な省略で「「ここは……どこ？」言葉は～」のような
+      // 完全に bare な発話が出る。直前 150 chars 内で最後に言及された
+      // 既知名 (or 彼/彼女) から speaker を推測する。
+      var rxC = /(?:^|[\n。、！？])「([^「」]{2,80})」/g;
+      while ((m = rxC.exec(src))){
+        var dlg = m[1].trim();
+        if (hasText(dlg)) continue;
+        var pos = m.index;
+        var preStart = Math.max(0, pos - 150);
+        var preContext = src.substring(preStart, pos);
+        var speaker = '';
         if (namePat){
-          var rxB = new RegExp('(?:^|\\n|。|、|」|\\s)(' + namePat + ')(?:は|が|の)?「([^「」]+?)」', 'g');
-          while ((m = rxB.exec(src))){
-            pushUnique(m[1].trim(), m[2].trim());
+          var nameRx = new RegExp('(' + namePat + ')', 'g');
+          var lastMatch = null, nm;
+          while ((nm = nameRx.exec(preContext))) lastMatch = nm[1];
+          if (lastMatch) speaker = lastMatch;
+        }
+        // 名前が見つからなければ「彼女/彼」を hero/npc[0] で簡易解決
+        if (!speaker){
+          if (/彼女/.test(preContext) && cast.hero && cast.hero.name) speaker = cast.hero.name;
+          else if (/彼[^女]/.test(preContext)){
+            if (cast.npcs && cast.npcs[0] && cast.npcs[0].name) speaker = cast.npcs[0].name;
+            else if (cast.hero && cast.hero.name) speaker = cast.hero.name;
           }
         }
+        pushUnique(speaker, dlg);
       }
       // フォールバック: SAY 入力時、最初の鉤括弧を主人公の台詞として拾う
       if (out.length === 0 && turn && turn.inputType === 'SAY' && turn.playerText){
