@@ -709,8 +709,9 @@ const Api = {
     // 正当な JSON キー (playerIntent, npcInnerLife 等) と true/false/null
     // リテラルで誤発火するのを防ぐ。
     let cleaned = text
-      .replace(/"[A-Za-z][A-Za-z0-9_]*"\s*:/g, '')   // JSON キー名を除外
-      .replace(/:\s*"[a-zA-Z|]+"/g, '')               // enum 値を除外 (approach, denial, mid 等)
+      .replace(/"[A-Za-z][A-Za-z0-9_]*"\s*:\s*"[a-zA-Z|]+"/g, '')  // JSON キー+enum値ペア ("kind": "comfort")
+      .replace(/"[A-Za-z][A-Za-z0-9_]*"\s*:/g, '')   // 残り JSON キー名
+      .replace(/:\s*"[a-zA-Z|]+"/g, '')               // 残り enum 値
       .replace(/\b(true|false|null)\b/g, '');         // JSON リテラルを除外
     const enMatches = (cleaned.match(/[A-Za-z][A-Za-z0-9_.]{2,}/g) || []).length;
     const zhMatches = (cleaned.match(/[过这没现还说让对给从将们点东几亲爱觉吗么吧呢哪谁怎样此后状围]/g) || []).length;
