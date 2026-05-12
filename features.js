@@ -1886,16 +1886,48 @@
       if (!narrSrc) return [];
       var src = Array.isArray(narrSrc) ? narrSrc.join('\n') : String(narrSrc);
       var out = [];
+      var seen = Object.create(null);
+      function pushUnique(speaker, text, isHero){
+        var k = speaker + '|' + text;
+        if (seen[k]) return;
+        seen[k] = true;
+        var item = { speaker: speaker, text: text };
+        if (isHero) item.isHero = true;
+        out.push(item);
+      }
       // パターン A: name「dialogue」と言/答/叫/問/呼/応/笑/囁/吐/怒鳴/命...
       var rxA = /([一-鿿ぁ-ゖァ-ヺ々ー・]+?)(?:は|が|の)?「([^「」]+?)」(?:と[^」]*?(?:言|答|命|叫|問|呼|尋|応|返|笑|囁|吐|怒鳴))/g;
       var m;
       while ((m = rxA.exec(src))){
-        out.push({ speaker: (m[1] || '').trim(), text: (m[2] || '').trim() });
+        pushUnique((m[1] || '').trim(), (m[2] || '').trim());
+      }
+      // パターン B (v292-D 追加): 既知のキャラ名直後の「dialogue」(suffix を要求しない)
+      // aidungeon_style 純化で narrative が「フィオナ「ここは……どこ？」」のように
+      // 「と〇〇した」を省略する形式になったため、cast 名リストで直接抽出する
+      var names = [];
+      try {
+        var cast = (window.S && window.S.cast) || {};
+        if (cast.hero && cast.hero.name) names.push(cast.hero.name);
+        if (Array.isArray(cast.npcs)) {
+          cast.npcs.forEach(function(n){ if (n && n.name) names.push(n.name); });
+        }
+      } catch(e) {}
+      if (names.length > 0){
+        var namePat = names
+          .filter(function(n){ return n && n.length > 0; })
+          .map(function(n){ return n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); })
+          .join('|');
+        if (namePat){
+          var rxB = new RegExp('(?:^|\\n|。|、|」|\\s)(' + namePat + ')(?:は|が|の)?「([^「」]+?)」', 'g');
+          while ((m = rxB.exec(src))){
+            pushUnique(m[1].trim(), m[2].trim());
+          }
+        }
       }
       // フォールバック: SAY 入力時、最初の鉤括弧を主人公の台詞として拾う
       if (out.length === 0 && turn && turn.inputType === 'SAY' && turn.playerText){
         var q = src.match(/「([^「」]+?)」/);
-        if (q) out.push({ speaker: '主人公', text: q[1], isHero: true });
+        if (q) pushUnique('主人公', q[1], true);
       }
       return out;
     }
