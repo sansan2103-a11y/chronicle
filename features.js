@@ -3360,3 +3360,436 @@
 
   console.log(TAG, 'IIFE loaded — narrative recovery V4 active');
 })();
+
+
+// ====================================================================
+// v292Dfix15 — dialogue pronoun resolver
+// ====================================================================
+// Session report: narrative 内の「彼女「あっ……！？」」「彼「ぐっ」」
+//   のような代名詞付きセリフが会話ログに抽出されない。
+// 原因:
+//   - dialogue_layout の Pattern A は と言/答/叫 等の suffix 必須
+//     → 「彼女「あっ」」(suffix なし) はマッチしない
+//   - Pattern B は cast 登録名のみ → 「彼女」は cast にない
+//   - Pattern C は ^/。/、/！/？/\n 直後の bare 「」 のみ
+//     → 「彼女「」」前に文字があるので不発
+//   結果: 代名詞付きセリフが完全にスルーされる。
+// 修正:
+//   - 既存 dialogue_layout の renderStream hook を取り外し
+//   - enhanced renderStream を新 hook として install
+//   - Pattern A verb list 拡張 (呟/漏/喚/喘/呻/吼/吠/喝/促)
+//   - Pattern A の name 末尾が代名詞なら resolve
+//   - Pattern D 新設: pronoun + 「」 (suffix 不要) → resolve
+//   - resolvePronoun: 直前 pre-context の同性別 named speaker
+//     → cast 内最初の同性別 NPC → 最近言及名、の 3 段階 fallback
+//   - 性別は cast.gender (gender_radio 由来) と desc heuristic 両用
+//   - Markdown ** strip は既存 fix4 のまま継承
+//   - SAY playerText echo 抑止も既存通り
+// __v292Dfix15Active フラグで二重 install 防止。fix12/13/14 と非競合。
+// ====================================================================
+(function v292Dfix15(){
+  if (window.__v292Dfix15Active) return;
+  window.__v292Dfix15Active = true;
+  var TAG = '[v292:Dfix15]';
+
+  var FEMALE_PRONOUNS = ['彼女','あの女','あの少女','少女'];
+  var MALE_PRONOUNS   = ['彼','あの男','あの少年','少年'];
+  var ALL_PRONOUNS    = FEMALE_PRONOUNS.concat(MALE_PRONOUNS);
+
+  function isFemalePronoun(p){ return FEMALE_PRONOUNS.indexOf(p) >= 0; }
+  function isMalePronoun(p){ return MALE_PRONOUNS.indexOf(p) >= 0; }
+
+  function whenDom(fn){
+    if (document.readyState === 'loading'){
+      document.addEventListener('DOMContentLoaded', fn, { once: true });
+    } else {
+      try { fn(); } catch(e){ console.warn(TAG, 'init err:', e && e.message); }
+    }
+  }
+
+  function getState(){
+    try {
+      if (typeof S !== 'undefined' && S) return S;
+      if (typeof window !== 'undefined' && window.S) return window.S;
+      return JSON.parse(localStorage.getItem('chr6') || '{}');
+    } catch(e){ return {}; }
+  }
+
+  function escHtml(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function isHero(name){
+    if (!name) return false;
+    var st = getState();
+    var h = ((st.cast || {}).hero || {}).name;
+    return !!(h && (h === name || name.indexOf(h) !== -1));
+  }
+
+  function avatarUrlLocal(name, desc, gender){
+    if (!name) return '';
+    var prompt = 'anime portrait of ';
+    prompt += (gender === '男性') ? 'a young man, ' : 'a young woman, ';
+    prompt += name + ', ';
+    if (desc){
+      var d = String(desc).replace(/^性別:\s*[男女][性]?[。、]?/, '').slice(0, 60);
+      prompt += d + ', ';
+    }
+    prompt += 'detailed face, dark fantasy, dramatic lighting, high quality';
+    var seed = 0;
+    for (var i = 0; i < name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) & 0x7fffffff;
+    return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
+           '?width=384&height=384&seed=' + seed + '&nologo=true&model=flux';
+  }
+
+  function getAvatar(name){
+    if (!name) return '';
+    var st = getState();
+    var cast = st.cast || {};
+    function genUrl(c){
+      try { return avatarUrlLocal(c.name || '', c.desc || '', c.gender || ''); }
+      catch(e){ return ''; }
+    }
+    if (cast.hero && cast.hero.name === name){
+      return cast.hero.avatar || genUrl(cast.hero);
+    }
+    var npcs = cast.npcs || [];
+    if (Array.isArray(npcs)){
+      for (var i = 0; i < npcs.length; i++){
+        var n = npcs[i];
+        if (n && n.name && (n.name === name || name.indexOf(n.name) !== -1)){
+          return n.avatar || genUrl(n);
+        }
+      }
+    }
+    return '';
+  }
+
+  function castInfo(){
+    var st = getState();
+    var cast = st.cast || {};
+    var names = [];
+    var byName = {};
+    if (cast.hero && cast.hero.name){
+      names.push(cast.hero.name);
+      byName[cast.hero.name] = cast.hero;
+    }
+    if (Array.isArray(cast.npcs)){
+      cast.npcs.forEach(function(n){
+        if (n && n.name){
+          names.push(n.name);
+          byName[n.name] = n;
+        }
+      });
+    }
+    return { cast: cast, names: names, byName: byName };
+  }
+
+  function inferGenderFromDesc(c){
+    if (!c) return '';
+    if (c.gender === '女性' || c.gender === '男性') return c.gender;
+    var s = (c.desc || '') + ' ' + (c.name || '') + ' ' + (c.personality || '');
+    var fHits = (s.match(/(少女|令嬢|乙女|女王|王女|魔女|尼僧|シスター|聖女|淑女|姉|妹|母|妻|娘|女性|女子|お嬢|彼女)/g) || []).length;
+    var mHits = (s.match(/(少年|青年|男性|男子|彼[^女]|王子|騎士|戦士|兄|弟|父|夫|息子|青年|若者)/g) || []).length;
+    if (fHits > mHits) return '女性';
+    if (mHits > fHits) return '男性';
+    return '';
+  }
+
+  function resolvePronoun(pronoun, preContext, info){
+    if (!info || !info.names || !info.names.length) return null;
+    var female = isFemalePronoun(pronoun);
+    var male   = isMalePronoun(pronoun);
+
+    var pat = info.names.map(function(n){
+      return n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }).join('|');
+    if (!pat) return null;
+    var rx = new RegExp('(' + pat + ')', 'g');
+
+    var matches = [];
+    var m;
+    while ((m = rx.exec(preContext))) matches.push(m[1]);
+
+    // 1) Most recent same-gender name in pre-context
+    for (var i = matches.length - 1; i >= 0; i--){
+      var nm = matches[i];
+      var c = info.byName[nm];
+      var g = c ? (c.gender || inferGenderFromDesc(c)) : '';
+      if (female && g === '女性') return nm;
+      if (male && g === '男性') return nm;
+    }
+    // 2) Pronoun has definite gender — fall back to first same-gender cast member
+    if (female || male){
+      for (var k = 0; k < info.names.length; k++){
+        var name2 = info.names[k];
+        var c2 = info.byName[name2];
+        var g2 = c2 ? (c2.gender || inferGenderFromDesc(c2)) : '';
+        if (female && g2 === '女性') return name2;
+        if (male && g2 === '男性') return name2;
+      }
+    }
+    // 3) Last resort: most recent name regardless of gender
+    if (matches.length) return matches[matches.length - 1];
+    return null;
+  }
+
+  function extractDialoguesEnhanced(narrSrc, turn){
+    if (!narrSrc) return [];
+    var src = Array.isArray(narrSrc) ? narrSrc.join('\n') : String(narrSrc);
+    src = src.replace(/\*\*/g, '');
+    var out = [];
+    var seen = Object.create(null);
+    var info = castInfo();
+    var cast = info.cast;
+    var names = info.names;
+
+    function hasText(text){
+      for (var k in seen){
+        if (k.indexOf('|' + text) === k.length - text.length - 1) return true;
+      }
+      return false;
+    }
+    function pushUnique(speaker, text, isHeroFlag){
+      text = (text == null ? '' : String(text)).trim();
+      if (!text) return;
+      speaker = (speaker == null ? '' : String(speaker)).trim();
+      if (ALL_PRONOUNS.indexOf(speaker) >= 0){
+        speaker = '';
+      }
+      var k = (speaker || '') + '|' + text;
+      if (seen[k]) return;
+      if (!speaker && hasText(text)) return;
+      seen[k] = true;
+      var item = { speaker: speaker, text: text };
+      if (isHeroFlag) item.isHero = true;
+      out.push(item);
+    }
+
+    var namePat = names.filter(function(n){ return n; }).map(function(n){
+      return n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }).join('|');
+
+    // SAY echo suppression
+    if (turn && turn.inputType === 'SAY' && turn.playerText){
+      var pt = String(turn.playerText).trim();
+      if (pt){
+        seen['|' + pt] = true;
+        seen['主人公|' + pt] = true;
+        var heroName = cast.hero && cast.hero.name;
+        if (heroName && heroName !== '主人公') seen[heroName + '|' + pt] = true;
+      }
+    }
+
+    // Pattern A: name + 「」 + と...verb (extended verb list)
+    var rxA = /([一-鿿ぁ-ゖァ-ヺ々ー・]+?)(?:は|が|の)?「([^「」]+?)」(?:と[^」]*?(?:言|答|命|叫|問|呼|尋|応|返|笑|囁|吐|怒鳴|呟|漏|喚|喘|呻|吼|吠|喝|促))/g;
+    var m;
+    while ((m = rxA.exec(src))){
+      var spA = (m[1] || '').trim();
+      var dlgA = (m[2] || '').trim();
+      var pronounSuffix = null;
+      for (var pi = 0; pi < ALL_PRONOUNS.length; pi++){
+        var pr = ALL_PRONOUNS[pi];
+        if (spA === pr || (spA.length > pr.length && spA.slice(-pr.length) === pr)){
+          pronounSuffix = pr;
+          break;
+        }
+      }
+      if (pronounSuffix){
+        var resolvedA = resolvePronoun(pronounSuffix, src.substring(0, m.index), info);
+        if (resolvedA) spA = resolvedA;
+        else spA = '';
+      }
+      pushUnique(spA, dlgA);
+    }
+
+    // Pattern B: cast name + 「」 (no suffix)
+    if (namePat){
+      var rxB = new RegExp('(?:^|\\n|。|、|」|\\s)(' + namePat + ')(?:は|が|の)?「([^「」]+?)」', 'g');
+      while ((m = rxB.exec(src))){
+        pushUnique(m[1].trim(), m[2].trim());
+      }
+    }
+
+    // Pattern D (NEW): pronoun + 「」 → resolve to recent named speaker
+    var rxD = /(彼女|あの女|あの少女|少女|彼|あの男|あの少年|少年)(?:は|が|の)?「([^「」]+?)」/g;
+    while ((m = rxD.exec(src))){
+      var pronoun = m[1];
+      var dlgD = (m[2] || '').trim();
+      if (!dlgD) continue;
+      var pre = src.substring(0, m.index);
+      var resolvedD = resolvePronoun(pronoun, pre, info);
+      if (resolvedD){
+        pushUnique(resolvedD, dlgD);
+      } else if (cast.hero && cast.hero.name){
+        var hero = cast.hero;
+        var hg = hero.gender || inferGenderFromDesc(hero);
+        if (isFemalePronoun(pronoun) && hg === '女性'){
+          pushUnique(hero.name, dlgD);
+        } else if (isMalePronoun(pronoun) && hg === '男性'){
+          pushUnique(hero.name, dlgD);
+        } else if (cast.npcs && cast.npcs[0] && cast.npcs[0].name){
+          pushUnique(cast.npcs[0].name, dlgD);
+        } else {
+          pushUnique(hero.name, dlgD);
+        }
+      } else {
+        pushUnique(pronoun, dlgD);
+      }
+    }
+
+    // Pattern C: bare 「」 after sentence boundary
+    var rxC = /(?:^|[\n。、！？])「([^「」]{2,80})」/g;
+    while ((m = rxC.exec(src))){
+      var dlgC = m[1].trim();
+      if (hasText(dlgC)) continue;
+      var pos = m.index;
+      var preStart = Math.max(0, pos - 200);
+      var preContext = src.substring(preStart, pos);
+      var speaker = '';
+      if (namePat){
+        var nameRx = new RegExp('(' + namePat + ')', 'g');
+        var lastMatch = null, nm2;
+        while ((nm2 = nameRx.exec(preContext))) lastMatch = nm2[1];
+        if (lastMatch) speaker = lastMatch;
+      }
+      if (!speaker){
+        var lastPronoun = null, lastPronounIdx = -1;
+        for (var ppi = 0; ppi < ALL_PRONOUNS.length; ppi++){
+          var pp = ALL_PRONOUNS[ppi];
+          var idx = preContext.lastIndexOf(pp);
+          if (idx > lastPronounIdx){ lastPronoun = pp; lastPronounIdx = idx; }
+        }
+        if (lastPronoun){
+          var resolvedC = resolvePronoun(lastPronoun, preContext, info);
+          if (resolvedC) speaker = resolvedC;
+        }
+      }
+      pushUnique(speaker, dlgC);
+    }
+
+    // SAY fallback
+    if (out.length === 0 && turn && turn.inputType === 'SAY' && turn.playerText){
+      var q = src.match(/「([^「」]+?)」/);
+      var __heroName2 = (cast.hero && cast.hero.name) ? cast.hero.name : '主人公';
+      if (q) pushUnique(__heroName2, q[1], true);
+    }
+
+    return out;
+  }
+
+  function addCard(speaker, text, isHeroFlag){
+    var stream = document.getElementById('dialogue-stream');
+    if (!stream) return;
+    var av = getAvatar(speaker);
+    var avHtml = av
+      ? '<img src="' + escHtml(av) + '" alt="' + escHtml(speaker) + '" loading="lazy"'
+        + ' onerror="this.parentNode.textContent=String.fromCharCode(63)">'
+      : '?';
+    var card = document.createElement('div');
+    card.className = 'v292-dlg-card' + (isHeroFlag ? ' hero-card' : '');
+    card.innerHTML =
+      '<div class="dlg-av">' + avHtml + '</div>'
+      + '<div class="dlg-body">'
+      +   '<div class="dlg-name">' + escHtml(speaker || '???') + '</div>'
+      +   '<div class="dlg-text">' + escHtml(text) + '</div>'
+      + '</div>';
+    stream.appendChild(card);
+  }
+
+  function renderStreamV15(){
+    var stream = document.getElementById('dialogue-stream');
+    if (!stream) return;
+    stream.innerHTML = '';
+    var st = getState();
+    var turns = st.turns || [];
+    for (var i = 0; i < turns.length; i++){
+      var t = turns[i];
+      if (!t) continue;
+      if (t.playerText && t.inputType === 'SAY'){
+        var __heroName1 = (st && st.cast && st.cast.hero && st.cast.hero.name) ? st.cast.hero.name : '主人公';
+        addCard(__heroName1, t.playerText, true);
+      }
+      var ds = extractDialoguesEnhanced(t.narrative, t);
+      for (var j = 0; j < ds.length; j++){
+        var d = ds[j];
+        addCard(d.speaker, d.text, d.isHero || isHero(d.speaker));
+      }
+    }
+    stream.scrollTop = stream.scrollHeight;
+  }
+
+  function removeOldHook(UI){
+    if (!UI || !Array.isArray(UI._renderHooks)) return 0;
+    var removed = 0;
+    for (var i = UI._renderHooks.length - 1; i >= 0; i--){
+      var h = UI._renderHooks[i];
+      if (h && h.name === 'dialogueLayoutHook'){
+        UI._renderHooks.splice(i, 1);
+        removed++;
+      }
+    }
+    return removed;
+  }
+
+  function getUIRef(){
+    try {
+      var U = (0, eval)('typeof UI !== "undefined" ? UI : null');
+      return U;
+    } catch(e){ return null; }
+  }
+
+  function tryInstall(){
+    var UI = getUIRef();
+    if (!UI || !Array.isArray(UI._renderHooks)) return false;
+    if (!window.__v292 || !window.__v292.dialogueLayout) return false;
+    if (UI._renderHooks.__v292Dfix15) return true;
+
+    var removed = removeOldHook(UI);
+
+    window.__v292.dialogueLayout.renderStream = renderStreamV15;
+    window.__v292.dialogueLayout.extractDialogues = extractDialoguesEnhanced;
+
+    UI._renderHooks.push(function dialogueLayoutHookV15(/* turn */){
+      try { renderStreamV15(); }
+      catch(e){ console.warn(TAG, 'render err:', e && e.message); }
+    });
+    UI._renderHooks.__v292Dfix15 = true;
+
+    try { renderStreamV15(); }
+    catch(e){ console.warn(TAG, 'initial render err:', e && e.message); }
+
+    window.__v292 = window.__v292 || {};
+    window.__v292.dfix15 = {
+      renderStream: renderStreamV15,
+      extractDialogues: extractDialoguesEnhanced,
+      resolvePronoun: resolvePronoun,
+      castInfo: castInfo
+    };
+
+    console.log(TAG, 'pronoun resolver active (removed=' + removed +
+                ' old dialogueLayoutHook(s), installed dialogueLayoutHookV15)');
+    return true;
+  }
+
+  function init(){
+    if (tryInstall()) return;
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (tryInstall()){
+        console.log(TAG, 'installed after', tries, 'polls');
+        clearInterval(iv);
+      } else if (tries > 600){ // 120s
+        console.warn(TAG, 'install timeout after', tries, 'polls');
+        clearInterval(iv);
+      }
+    }, 200);
+  }
+
+  whenDom(init);
+})();
