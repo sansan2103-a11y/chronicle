@@ -1856,17 +1856,32 @@
       return !!(h && (h === name || name.indexOf(h) !== -1));
     }
 
+    function avatarUrlLocal(name, desc, gender){
+      if (!name) return '';
+      var prompt = 'anime portrait of ';
+      prompt += (gender === '男性') ? 'a young man, ' : 'a young woman, ';
+      prompt += name + ', ';
+      if (desc){
+        var d = String(desc).replace(/^性別:\s*[男女][性]?[。、]?/, '').slice(0, 60);
+        prompt += d + ', ';
+      }
+      prompt += 'detailed face, dark fantasy, dramatic lighting, high quality';
+      var seed = 0;
+      for (var i = 0; i < name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) & 0x7fffffff;
+      return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
+             '?width=384&height=384&seed=' + seed + '&nologo=true&model=flux';
+    }
+
     function getAvatar(name){
       if (!name) return '';
       var st = getState();
       var cast = st.cast || {};
-      // v292-D fix6: cast.hero.avatar / npc.avatar が空の場合は
-      //  window.avatarUrl() にフォールバックして on-the-fly 生成する。
-      //  Pollinations URL は name+desc+gender から決定的なので
-      //  ⟳ 未クリックでも ⟳ 済みと同じ URL が出る。
+      // v292-D fix7: avatarUrl は index.html の IIFE 内 local function で
+      //   window に露出してないので、ローカル実装 avatarUrlLocal を使う。
+      //   Pollinations URL は name+desc+gender から決定的なので、⟳ 未クリックでも
+      //   ⟳ 済みと同じ URL が出る後方互換。
       function genUrl(c){
-        if (typeof window === 'undefined' || typeof window.avatarUrl !== 'function') return '';
-        try { return window.avatarUrl(c.name || '', c.desc || '', c.gender || ''); }
+        try { return avatarUrlLocal(c.name || '', c.desc || '', c.gender || ''); }
         catch(e){ return ''; }
       }
       if (cast.hero && cast.hero.name === name){
@@ -2286,31 +2301,157 @@
       }
       if (typeof UI.randomFill === 'function' && !UI.__v292GR_RF){
         var origRF = UI.randomFill.bind(UI);
+
+        // v292-D fix7: 種を広げた gender 別プール (旧 v108 + α、姓名コンビ含む)
+        var HERO_NAMES_F = [
+          'アリア・フェイン','ソフィア・クレア','エリナ・ルーン','ユア・ミスト',
+          'スピカ・ヴァレン','エチカ・モルガナ','セシリア・ノクト','ノエル・ヴェント',
+          'オリヴィア・グレイ','ローズ・アルブ','クララ・ヴォルフ','ミコト・ハル',
+          'リリス・ストーン','イリア・カノン','メリル・ダスク','カレン・ロウ',
+          'ナノ・シュリ','フィオラ・ベル','エルザ・リム','ヴィオラ・ノヴァ',
+          'シエル・ガラン','ティアナ・ペル','レイア・モルト','カミラ・セレナ'
+        ];
+        var HERO_NAMES_M = [
+          'レン・ヴォルク','カイル・ドレイク','ファウスト・グリム','ゼイン・コルト',
+          'ルカ・セルト','ノクス・ヴァイン','シャドウ・グレイ','ジャード・ロウ',
+          'カイラス・ベル','イザク・ノクト','ソーラ・リム','ケンジ・アスタ',
+          'タオラ・カノン','ジン・ヴォルフ','チオ・グリム','ヴォルガ・ハル',
+          'アシュ・モル','ラギ・ダスク','レオ・ストーン','クロウ・ノヴァ',
+          'カデル・フォン','エドガー・ヴェル','イグナス・ベル','ザイル・ペル'
+        ];
+        var HERO_DESCS_F = [
+          '18歳の見習い記録官。慎重だが好奇心旺盛。秘密を抱えている。',
+          '没落貴族の末裔。誇り高く、しかし孤独。居場所を求めている。',
+          '行商人の娘。人懐っこいが目が鋭い。生き残るためなら何でもする。',
+          '記憶を失った旅人。素性不明。断片的な過去が夢に現れる。',
+          '魔法使いの助手。才能はあるが自信がない。師匠を探している。',
+          '神殿の見習い司祭。真面目だが脆さを隠している。',
+          '少女のような外見の珍財ハンター。鋭い直感を持つ。',
+          '踊り手として旅をする旅芸人。本当の名前を隠している。',
+          '貴族の影として育てられた暗殺者見習い。命令以外を知らない。',
+          '記憶を売り買いする街で生きる17歳。自分の過去を取り戻したい。',
+          '森の辺境に住む薬師の娘。動物と話せると噂される。'
+        ];
+        var HERO_DESCS_M = [
+          '元傭兵の青年。無口だが仲間想い。過去に後悔がある。',
+          '老齢の元兵士。皮肉屋。失った仲間を引きずる。',
+          '15歳の魔法使い見習い。真面目で堅物。',
+          '無口だが仲間思いの元傭兵。剣を捨てたばかり。',
+          '若き隊商の主。算術に長け、危険を嗅ぎ分ける。',
+          '失踪した王子の影武者。本物を知る者を探している。',
+          '街を流れる旅楽士。歌と引き換えに情報を集める。',
+          '禁忌の研究を続ける学者。代償として記憶を失いつつある。',
+          '酒場の用心棒だった青年。理由あって街を出てきた。',
+          '没落した家の三男坊。出世を諦め旅に出た。',
+          '魔導書を盗んだ罪で追われる元神官。償いの旅の途中。'
+        ];
+        var NPC_NAMES_F = [
+          'イルム','セイラ','ミア','フィーネ','エナ','ルカ','クレア','ノア',
+          'ティナ','リア','カナ','エミ','レイ','サラ','ユキ','ハル',
+          'ジア','ナナ','イヴ','メイ','ロザ','ヴェラ','エルナ','シズク','アシュ'
+        ];
+        var NPC_NAMES_M = [
+          'カデル','ヴォルグ','ロイ','ガイア','ライ','カイ','テオ','ラフ',
+          'ジン','クラウ','ダレン','レオン','ヴェル','ザイ','コル','ゲン',
+          'ハイク','マル','レナ','ノル','オーレン','ベルゴ','カラム','ディオン','エヴァン'
+        ];
+        var NPC_DESCS_F = [
+          '銀髪の少女。感情が読みにくく、言葉が少ない。',
+          '神殿の見習い司祭。真面目だが脆さを隠している。',
+          '少年のような外見の少女。素早く動き、嘘をつく。',
+          '酒場の歌い手。客の秘密を集めている。',
+          '路地裏に住む占い師。本当の力は別にある。',
+          '宿屋の娘。明るいが家族の問題を抱えている。',
+          '魔法学院の同期。優秀だが嫉妬深い。',
+          '辺境の薬師。村人に慕われているが過去を隠す。',
+          '元修道女。今は流浪の癒し手として旅をしている。',
+          '盗賊団の紅一点。気まぐれだが情に脆い。'
+        ];
+        var NPC_DESCS_M = [
+          '壮年の行商人。愛想がよいが目が笑っていない。',
+          '老齢の元兵士。片足が不自由。皮肉屋。',
+          '王宮警備隊の若い隊長。誠実だが融通が利かない。',
+          '盗賊団の頭目。残忍だが部下には情がある。',
+          '隠居した賢者。多くを語らないが知識は深い。',
+          '酒場の主人。元冒険者。客の身の上話を聞き続ける。',
+          '隠遁中の元宮廷魔術師。失策で追われている。',
+          '裏稼業を仕切る老人。表向きは小さな店主。',
+          '若い書記官。出世のためなら手段を選ばない。',
+          '街の鍛冶屋。寡黙だが鍛えた剣には魂が宿ると言う。'
+        ];
+        // 心理プロファイルの種 (NPC 用、性別問わず使える形に)
+        var NPC_PERSONALITY = [
+          '無口・内向・観察眼が鋭い','社交的・計算高い・表裏がある','誠実・完璧主義・自罰的',
+          'シニカル・経験豊富・情に厚い','活発・ずる賢い・本当は臆病','楽天的・直感型・衝動的',
+          '冷静・分析的・他人を信じない','理想主義・正義感が強い・脆い','寡黙・忠誠心・武人気質',
+          '好奇心旺盛・浮き沈み激しい・天真爛漫'
+        ];
+        var NPC_DESIRE = [
+          '誰かに本当の自分を認めてもらいたい','安全と財を手に入れ、誰にも頭を下げない生活',
+          '善い人間であり続けること、誰かを救うこと','かつて失った仲間の死に意味を見つけたい',
+          '自由に、誰にも縛られず生きること','故郷を取り戻す','真実を知る',
+          '自分の才能を世に証明する','誰かに必要とされ続けたい','静かに余生を過ごす'
+        ];
+        var NPC_FEAR = [
+          'また見捨てられること','貧困と無力感','自分が悪であると知られること',
+          '無駄死にだったと気づくこと','檻に入れられること・管理されること','信じていた者の裏切り',
+          '老いと衰え','自分が空虚であると気付くこと','他人に依存してしまうこと','過去が暴かれること'
+        ];
+        var NPC_WOUND = [
+          '幼い頃、親に棄てられた経験がある。以来、人を信じることが怖い。',
+          '若い頃の失敗で大切な人を失い、それ以来感情を切り離して生きている。',
+          '信じていた師が腐敗していた。信仰と現実の間で今も揺れている。',
+          '唯一の親友を自分の命令ミスで死なせた。今もその責任を引きずっている。',
+          '孤児院で厳しく管理された幼少期。自由を奪われることへの恐怖が根深い。',
+          '故郷を戦火で失った。誰にも語れない罪悪感を抱える。',
+          '愛した人に裏切られ、それ以来心を閉ざしている。'
+        ];
+
         UI.randomFill = function(){
-          // 既存 randomFill (場所/目的/トーン等) を先に実行
-          try { origRF(); } catch(e){}
-          // その後、性別整合を cast に反映
-          var s = getCast();
-          s.cast = s.cast || {};
-          var h = s.cast.hero = s.cast.hero || {};
-          if (!h.gender) h.gender = Math.random() < 0.5 ? '女性' : '男性';
-          if (!h.name) h.name = (h.gender === '男性' ? pick(FNAMES_M) : pick(FNAMES_F));
-          if (!h.desc) h.desc = '性別: ' + h.gender + '。' + (h.gender === '男性' ? pick(DESCS_M) : pick(DESCS_F));
-          (s.cast.npcs || []).forEach(function(n){
-            if (!n) return;
-            if (!n.gender) n.gender = Math.random() < 0.5 ? '女性' : '男性';
-            if (!n.name) n.name = (n.gender === '男性' ? pick(FNAMES_M) : pick(FNAMES_F));
-            if (!n.desc) n.desc = (n.gender === '男性' ? pick(DESCS_M) : pick(DESCS_F));
-          });
-          setCast(s);
-          // form を再描画（旧 v111 相当: 設定を閉じてもう一度開くと sync する）
+          // v292-D fix7: form 直接操作 (cast 経由でなく) して未入力ガードを尊重。
+          //   openSettings 再呼び出しは廃止 (それが「上書き」バグの原因だった)。
           try {
-            var ov = document.getElementById('settingsOv');
-            if (ov && getComputedStyle(ov).display !== 'none' && typeof UI.openSettings === 'function'){
-              UI.openSettings();
+            // 主人公 (性別ラジオ checked 時のみ、ここで埋める)
+            var hgEl = document.querySelector('input[name="v108g_hero"]:checked');
+            var hg = hgEl ? hgEl.value : '';
+            var hNameEl = document.getElementById('cfgHName');
+            var hDescEl = document.getElementById('cfgHDesc');
+            if (hg && hNameEl && !hNameEl.value.trim()){
+              hNameEl.value = pick(hg === '男性' ? HERO_NAMES_M : HERO_NAMES_F);
             }
-          } catch(e){}
-          console.log(TAG, 'random fill done (gender-aware)');
+            if (hg && hDescEl && !hDescEl.value.trim()){
+              hDescEl.value = '性別: ' + hg + '。' + pick(hg === '男性' ? HERO_DESCS_M : HERO_DESCS_F);
+            }
+
+            // NPC: DOM 上の全 .npc-card を iterate (cast.npcs[] ではなく)
+            var npcCards = document.querySelectorAll('#npcList .npc-card');
+            npcCards.forEach(function(card, idx){
+              var ngEl = card.querySelector('input[name="v108g_npc' + idx + '"]:checked');
+              var ng = ngEl ? ngEl.value : '';
+              if (!ng) return;  // 性別未設定の NPC は origRF に任せる
+              function fillField(f, pool){
+                var el = card.querySelector('[data-f="' + f + '"]');
+                if (el && !el.value.trim()) el.value = pick(pool);
+              }
+              fillField('name', ng === '男性' ? NPC_NAMES_M : NPC_NAMES_F);
+              var descEl = card.querySelector('[data-f="desc"]');
+              if (descEl && !descEl.value.trim()){
+                descEl.value = '性別: ' + ng + '。' + pick(ng === '男性' ? NPC_DESCS_M : NPC_DESCS_F);
+              }
+              fillField('personality', NPC_PERSONALITY);
+              fillField('coreDesire', NPC_DESIRE);
+              fillField('coreFear', NPC_FEAR);
+              fillField('wound', NPC_WOUND);
+            });
+          } catch(e){ console.warn(TAG, 'pre-fill', e); }
+
+          // 残り (lore/loc/obj/tone/性別未設定 hero/NPC の name/desc) を origRF で埋める
+          try { origRF(); } catch(e){}
+
+          // 性別ラジオ UI のみ refresh (openSettings は呼ばない！上書きバグの原因)
+          try { setTimeout(injectOnce, 100); } catch(e){}
+
+          console.log(TAG, 'random fill done (gender-aware, form-based)');
         };
         UI.__v292GR_RF = true;
       }
@@ -2331,5 +2472,5 @@
     whenReady(register);
   })();
 
-  console.log('[v292] 13 features loaded (Phase 4-C: +dialogue_layout +aidungeon_style +gender_radio)');
+  console.log('[v292] 13 features loaded (Phase 4-C: +dialogue_layout +aidungeon_style +gender_radio[v292-D fix7])');
 })();
