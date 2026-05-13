@@ -1527,6 +1527,23 @@
       return null;
     }
 
+    // v292-D fix9: state transition の severity rank.
+    //   旧 v264-266 相当 — 死亡/負傷の永続化のため、
+    //   condition は severity を下げる方向の遷移を block する。
+    var SEV_RANK = {
+      '': 0, '無傷': 0,
+      '軽傷': 1, '発声不可': 1,
+      '重傷': 2,
+      '気絶': 3,
+      '瀕死': 4,
+      '死亡': 5
+    };
+    function sevOf(cond){
+      if (cond == null) return 0;
+      var v = SEV_RANK[cond];
+      return (typeof v === 'number') ? v : 0;
+    }
+
     function applyInferred(arr){
       if (!arr || !Array.isArray(arr) || !window.S || !S.cast) return 0;
       var n = 0;
@@ -1544,19 +1561,116 @@
         var c = findChar(it.name);
         if (!c) return;
         c.state = c.state || {};
-        if (typeof it.alive       === 'boolean') c.state.alive = it.alive;
-        if (typeof it.conscious   === 'boolean') c.state.conscious = it.conscious;
-        if (typeof it.canSpeak    === 'boolean') c.state.canSpeak = it.canSpeak;
-        if (typeof it.canAct      === 'boolean') c.state.canAct = it.canAct;
-        if (typeof it.hpEstimate  === 'number')  c.state.hpEstimate = it.hpEstimate;
-        if (typeof it.condition   === 'string')  c.state.condition = it.condition;
-        if (typeof it.reason      === 'string')  c.state.reasonV259 = it.reason;
-        c.state.lastInferTurn = (S.turns || []).length;
+        var prev = c.state;
+
+        // v292-D fix9 (旧 v264-266 相当): 死亡/負傷の永続化
+        //   LLM は narrative に登場していないキャラに対しても default
+        //   ("alive":true,"hpEstimate":80,"condition":"無傷") を返すことが多く、
+        //   前ターンで死亡/瀕死だったキャラが「復活」してしまう。
+        //   state 遷移を monotonic に固定する:
+        //     - alive: false → true への遷移を禁止 (永続死亡)
+        //     - canSpeak: false → true への遷移を禁止 (失声/呪縛/猿轡の永続)
+        //     - condition: severity を下げる方向の遷移を禁止
+        //     - hpEstimate: 急回復 (+5/turn 超) を抑制
+
+        // (1) 既に alive=false なら、以降の上書きは原則ブロック
+        if (prev.alive === false){
+          prev.alive      = false;
+          prev.conscious  = false;
+          prev.canSpeak   = false;
+          prev.canAct     = false;
+          prev.hpEstimate = 0;
+          if (sevOf(prev.condition) < SEV_RANK['死亡']) prev.condition = '死亡';
+          if (typeof it.reason === 'string') prev.reasonV259 = it.reason;
+          prev.lastInferTurn = (S.turns || []).length;
+          n++;
+          return;
+        }
+
+        // (2) alive=false への新規遷移は無条件で許可。他フラグも強制 false に統一。
+        if (it.alive === false){
+          prev.alive      = false;
+          prev.conscious  = false;
+          prev.canSpeak   = false;
+          prev.canAct     = false;
+          prev.hpEstimate = 0;
+          prev.condition  = '死亡';
+          if (typeof it.reason === 'string') prev.reasonV259 = it.reason;
+          prev.lastInferTurn = (S.turns || []).length;
+          n++;
+          return;
+        }
+
+        // (3) 生存中の更新: severity は下げない、急回復は抑制
+        if (typeof it.alive === 'boolean') prev.alive = it.alive;
+
+        if (typeof it.conscious === 'boolean') prev.conscious = it.conscious;
+
+        if (typeof it.canSpeak === 'boolean'){
+          // 失声系は永続。回復は revive() 経由のみ。
+          if (prev.canSpeak === false){
+            // keep false
+          } else {
+            prev.canSpeak = it.canSpeak;
+          }
+        }
+
+        if (typeof it.canAct === 'boolean') prev.canAct = it.canAct;
+
+        if (typeof it.hpEstimate === 'number'){
+          var pHp = (typeof prev.hpEstimate === 'number') ? prev.hpEstimate : 80;
+          // 回復は最大 +5/turn まで。減少は無制限。
+          if (it.hpEstimate > pHp + 5) prev.hpEstimate = pHp + 5;
+          else                          prev.hpEstimate = it.hpEstimate;
+        }
+
+        if (typeof it.condition === 'string'){
+          // severity が下がる方向 (例: 瀕死 → 無傷) は無視。同等以上なら更新。
+          if (sevOf(it.condition) >= sevOf(prev.condition)){
+            prev.condition = it.condition;
+          }
+        }
+
+        if (typeof it.reason === 'string') prev.reasonV259 = it.reason;
+        prev.lastInferTurn = (S.turns || []).length;
         n++;
       });
       if (n > 0){
         try { if (S.save) S.save(); } catch(e){}
       }
+      return n;
+    }
+
+    // v292-D fix9: 死亡/負傷を明示的に解除するデバッグヘルパー。
+    //   ゲームリセット時や手動修正用。
+    //   window.__v292.stateInference.revive(name) で呼ぶ。
+    //   name を省略すると全キャラを revive。
+    function revive(name){
+      if (!window.S || !S.cast) return 0;
+      var targets = [];
+      if (S.cast.hero && (!name || S.cast.hero.name === name)) targets.push(S.cast.hero);
+      (S.cast.npcs || []).forEach(function(c){
+        if (c && (!name || c.name === name)) targets.push(c);
+      });
+      var n = 0;
+      targets.forEach(function(c){
+        if (!c.state) return;
+        c.state.alive      = true;
+        c.state.conscious  = true;
+        c.state.canSpeak   = true;
+        c.state.canAct     = true;
+        c.state.hpEstimate = 80;
+        c.state.condition  = '';
+        c.state.reasonV259 = 'manual revive';
+        n++;
+      });
+      if (n > 0){
+        try { if (S.save) S.save(); } catch(e){}
+        try {
+          if (typeof UI !== 'undefined' && UI && typeof UI.renderAll === 'function') UI.renderAll();
+        } catch(e){}
+      }
+      console.log(TAG, 'revived', n, 'char(s)' + (name ? ' (' + name + ')' : ''));
       return n;
     }
 
@@ -1721,7 +1835,10 @@
         inferStateByKeyword: inferStateByKeyword,
         buildInferStateBlock: buildInferStateBlock,
         decorateCards: decorateCards,
-        maybeInfer: maybeInfer
+        maybeInfer: maybeInfer,
+        // v292-D fix9: 死亡/負傷の永続化を解除するヘルパー
+        revive: revive,
+        sevOf: sevOf
       };
       console.log(TAG, 'registered (toggle=' + (isEnabled() ? 'ON' : 'OFF') +
                   '; default OFF — enable via window.__v292.stateInference.setEnabled(true))');
