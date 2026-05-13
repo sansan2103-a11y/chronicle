@@ -3024,3 +3024,339 @@
   inject();
   console.log(TAG, "loaded (radio/label overlap fix active)");
 })();
+
+// =====================================================================
+// === v292Dfix14 ===
+// Goal: SAY/DO/STORY 後の narrative が「...」「…」 等の placeholder だけに
+//       なる problem を確実に rescue する safety net。
+//
+// 背景 (fix12/13 で解消されなかった原因):
+//   - fix12 の installRecovery は `window.Planner` を check していたが、
+//     Planner は top-level `let`/`const` (グローバル lexical binding) で
+//     window には属さない。よって polling が **永続的に空振り** し、
+//     recoveryExtV2 が Planner._parseExtensions に push されていなかった。
+//   - parsePlan が実際に extension を call するのは
+//        Planner._parseExtensions[i](plan, { inputType, state: S, raw: rawText })
+//     つまり **(plan, ctx)** signature。fix10 の `recoveryExt(rawResponse)`
+//     は (rawResponse) 単一引数を想定していたため silently no-op。
+//
+// fix14 の対策:
+//   A. `window.Planner = Planner` を set し、fix12 の polling 永続 retry を
+//      retroactively 成功させる (V2 も入る)。
+//   B. fix14 自体は (plan, ctx) signature の **recoveryExtV4** を末尾に push。
+//      V2 でも救えない (raw 自体が空 or プレースホルダーのみ) ケースで
+//      `synthFallback` で playerText/inputType ベースの最低限 narrative
+//      を合成する。
+//   C. detection を緩める: 「.」「…」「。」「..」 のみ / 6 文字未満 /
+//      「物語が続く」「物語の続き」「（続く）」「(続く)」「to be continued」
+//      「続く」を empty 扱い。
+//   D. playerText 取得用に `#inp` textarea を watch して
+//      `window.__v292Dfix14LastInput` に lock-in。
+//   E. Setter trap で **後から Planner._parseExtensions が replace** された
+//      ケースでも自動 reinstall (defense in depth)。
+// =====================================================================
+(function v292Dfix14(){
+  if (window.__v292Dfix14Active) return;
+  window.__v292Dfix14Active = true;
+
+  var TAG = '[v292Dfix14]';
+
+  // ----- Detection -----
+  function isNarrativeEmpty(narr){
+    if (!Array.isArray(narr)) return true;
+    if (narr.length === 0) return true;
+    var joined = narr.map(function(s){ return String(s||'').trim(); }).join('').trim();
+    if (joined.length < 6) return true;
+    // 記号・空白のみ
+    if (/^[\.…。、・\s\n\r]+$/.test(joined)) return true;
+    // 既知 placeholder 文字列
+    if (/^(\.\.\.|\.\.|…+|。+|（続く）|\(続く\)|物語が続く|物語の続き|物語は続く|to\s*be\s*continued|続く|つづく)$/i.test(joined)) return true;
+    return false;
+  }
+
+  function isJapaneseValid(text){
+    if (!text || typeof text !== 'string') return false;
+    var t = text.trim();
+    if (t.length < 4) return false;
+    if (!/[ぁ-ん]/.test(t)) return false;
+    if (/[a-zA-Z]{4,}/.test(t)) return false;
+    // 漢字のみ (ひらがな・カタカナ無し) は schema key の可能性が高い
+    if (/[一-鿿]/.test(t) && !/[ぁ-んァ-ヶー]/.test(t)) return false;
+    return true;
+  }
+
+  // ----- Recovery (Stage 1+2): ctx.raw から narrative を抽出 -----
+  function extractFromRaw(raw){
+    if (!raw || typeof raw !== 'string') return null;
+    // Stage 1: "narrative":[...] regex
+    var m1 = raw.match(/"narrative"\s*:\s*\[([\s\S]*?)\]/);
+    if (m1){
+      try {
+        var arr = JSON.parse('[' + m1[1] + ']');
+        var cleaned = arr
+          .filter(function(s){ return typeof s === 'string' && isJapaneseValid(s); })
+          .map(function(s){ return s.trim(); })
+          .slice(0, 8);
+        if (cleaned.length > 0) return cleaned;
+      } catch(e){}
+    }
+    // Stage 2: 任意の quoted Japanese string を gather
+    try {
+      var rx = /"((?:[^"\\]|\\.){4,300})"/g;
+      var match;
+      var out = [];
+      var seen = {};
+      while ((match = rx.exec(raw)) !== null){
+        try {
+          var parsed = JSON.parse('"' + match[1] + '"');
+          if (typeof parsed !== 'string') continue;
+          var t = parsed.trim();
+          if (t.length < 6) continue;
+          if (!isJapaneseValid(t)) continue;
+          if (/^(playerIntent|branchCandidates|narrative|kind|tone|label|type|id|main|side|talk|other|explore|aggressive|neutral|act|do|say|story)$/i.test(t)) continue;
+          if (seen[t]) continue;
+          seen[t] = true;
+          out.push(t);
+          if (out.length >= 6) break;
+        } catch(e){}
+      }
+      if (out.length > 0) return out;
+    } catch(e){}
+    return null;
+  }
+
+  // ----- Recovery (Stage 3): synth fallback -----
+  function safeStr(s, max){
+    if (s == null) return '';
+    var t = String(s).trim();
+    if (max && t.length > max) t = t.slice(0, max);
+    return t;
+  }
+
+  function pickHeroName(S){
+    try {
+      if (S && S.cast){
+        if (S.cast.hero && S.cast.hero.name) return safeStr(S.cast.hero.name, 30);
+        if (S.cast.pc && S.cast.pc.name) return safeStr(S.cast.pc.name, 30);
+        var keys = Object.keys(S.cast);
+        for (var i = 0; i < keys.length; i++){
+          var c = S.cast[keys[i]];
+          if (c && (c.role === 'hero' || c.role === 'pc' || c.isHero) && c.name) return safeStr(c.name, 30);
+        }
+      }
+    } catch(e){}
+    return 'キャラクター';
+  }
+
+  function pickPlayerText(ctx){
+    // 1. fix14 input watcher が捕まえた直近 input
+    try {
+      var x = window.__v292Dfix14LastInput;
+      if (x && typeof x === 'string' && x.trim().length > 0) return safeStr(x, 200);
+    } catch(e){}
+    // 2. ctx に明示されたもの (将来拡張)
+    if (ctx){
+      if (ctx.playerText && typeof ctx.playerText === 'string') return safeStr(ctx.playerText, 200);
+      if (ctx.userText && typeof ctx.userText === 'string') return safeStr(ctx.userText, 200);
+    }
+    // 3. 現在の input field の値 (まだ clear されていない場合)
+    try {
+      var el = document.getElementById('inp');
+      if (el && el.value) return safeStr(el.value, 200);
+    } catch(e){}
+    return '';
+  }
+
+  function synthFallback(plan, ctx){
+    try {
+      var S = (ctx && ctx.state) || (typeof window !== 'undefined' && window.__v292Dfix14_S) || null;
+      if (!S){ try { S = (0,eval)('typeof S !== "undefined" ? S : null'); } catch(e){} }
+      var hero = pickHeroName(S);
+      var inputType = (ctx && ctx.inputType) || 'STORY';
+      var playerText = pickPlayerText(ctx);
+
+      if (inputType === 'SAY'){
+        if (playerText){
+          return [
+            '「' + playerText + '」と' + hero + 'は静かに口にした。',
+            '声は場の空気にわずかに溶け、短い余韻だけが残る。',
+            '相手の反応を待つあいだ、時間がゆるやかに引き伸ばされた。'
+          ];
+        }
+        return [
+          hero + 'は言葉を選びながら口を開いた。',
+          '声は短く、しかし場の空気をかすかに揺らした。',
+          '相手の反応を窺いながら、視線をそらさずにいる。'
+        ];
+      }
+      if (inputType === 'DO'){
+        if (playerText){
+          return [
+            hero + 'は「' + playerText + '」を試みた。',
+            'その動作は短く、しかし場に小さな変化を残す。',
+            '次に何が起きるかは、まだ定かではない。'
+          ];
+        }
+        return [
+          hero + 'は身を動かし、状況に小さな変化を加えた。',
+          '次に起きることを見定めるように、視線を巡らせる。'
+        ];
+      }
+      if (inputType === 'STORY'){
+        if (playerText){
+          return [
+            playerText,
+            '物語は静かに次の場面へと続いていく。'
+          ];
+        }
+        return [
+          '物語は息をひそめ、次の展開を待っている。',
+          ' ' + hero + 'は、まだ動かない景色のなかに身を置いていた。'
+        ];
+      }
+      return [
+        hero + 'はその場で次の動きを伺っている。',
+        '物語は静かに進み、わずかな気配だけが流れていく。'
+      ];
+    } catch(e){
+      console.warn(TAG, 'synthFallback error', e);
+      return ['物語は静かに進む。'];
+    }
+  }
+
+  // ----- The actual extension -----
+  function recoveryExtV4(plan, ctx){
+    try {
+      if (!plan) return plan;
+      // narrative を array に強制
+      if (!Array.isArray(plan.narrative)){
+        plan.narrative = plan.narrative ? [String(plan.narrative)] : [];
+      }
+      if (!isNarrativeEmpty(plan.narrative)) return plan;
+
+      // Stage 1+2: ctx.raw から救済
+      if (ctx && ctx.raw){
+        try {
+          var rescued = extractFromRaw(ctx.raw);
+          if (rescued && rescued.length > 0){
+            plan.narrative = rescued;
+            console.log(TAG, 'V4 stage12: rescued from raw, lines=' + rescued.length);
+            if (!isNarrativeEmpty(plan.narrative)) return plan;
+          }
+        } catch(e){ console.warn(TAG, 'V4 stage12 err', e); }
+      }
+
+      // Stage 3: synth fallback
+      try {
+        var synth = synthFallback(plan, ctx);
+        if (synth && synth.length > 0){
+          plan.narrative = synth;
+          console.log(TAG, 'V4 stage3: synthesized fallback, lines=' + synth.length);
+        }
+      } catch(e){ console.warn(TAG, 'V4 stage3 err', e); }
+    } catch(e){
+      console.warn(TAG, 'recoveryExtV4 error', e);
+    }
+    return plan;
+  }
+  recoveryExtV4.__v292Dfix14 = true;
+
+  // ----- Planner ref (handles top-level let/const not on window) -----
+  function getPlannerRef(){
+    try {
+      var P = (0, eval)('typeof Planner !== "undefined" ? Planner : null');
+      return P;
+    } catch(e){ return null; }
+  }
+
+  // ----- Install V4 (idempotent + reinstallable) -----
+  function ensureInstalled(){
+    var P = getPlannerRef();
+    if (!P || !Array.isArray(P._parseExtensions)) return false;
+
+    // Expose to window so fix12's broken installRecovery (which polls
+    // window.Planner) can finally succeed and push recoveryExtV2 too.
+    // We use Object.defineProperty so we don't clobber later assignments.
+    try {
+      if (!window.Planner){
+        try {
+          Object.defineProperty(window, 'Planner', {
+            value: P, writable: true, configurable: true, enumerable: false
+          });
+        } catch(e){ try { window.Planner = P; } catch(e2){} }
+      }
+    } catch(e){}
+
+    if (P._parseExtensions.__v292Dfix14) return true;
+
+    // Mark + push
+    P._parseExtensions.push(recoveryExtV4);
+    P._parseExtensions.__v292Dfix14 = true;
+    console.log(TAG, 'V4 installed at position', P._parseExtensions.length - 1, 'of', P._parseExtensions.length);
+    return true;
+  }
+
+  if (!ensureInstalled()){
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (ensureInstalled()){
+        console.log(TAG, 'V4 installed after', tries, 'polls');
+        clearInterval(iv);
+      } else if (tries > 600){ // 120s
+        console.warn(TAG, 'V4 install timeout after', tries, 'polls');
+        clearInterval(iv);
+      }
+    }, 200);
+  }
+
+  // Defense-in-depth: periodic re-check (in case _parseExtensions gets replaced)
+  setInterval(function(){
+    var P = getPlannerRef();
+    if (!P || !Array.isArray(P._parseExtensions)) return;
+    if (!P._parseExtensions.__v292Dfix14){
+      P._parseExtensions.push(recoveryExtV4);
+      P._parseExtensions.__v292Dfix14 = true;
+      console.log(TAG, 'V4 re-installed (array was replaced)');
+    }
+  }, 3000);
+
+  // ----- Input watcher to capture playerText for synth fallback -----
+  function startInputWatcher(){
+    var lastVal = '';
+    function tick(){
+      try {
+        var el = document.getElementById('inp');
+        if (!el) return;
+        var v = el.value || '';
+        if (v.trim().length > 0 && v !== lastVal){
+          window.__v292Dfix14LastInput = v;
+        }
+        if ((!v || v.trim().length === 0) && lastVal && lastVal.trim().length > 0){
+          // 直前まで text があって今 空 = submit 直後
+          window.__v292Dfix14LastInput = lastVal;
+        }
+        lastVal = v;
+      } catch(e){}
+    }
+    setInterval(tick, 100);
+  }
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', startInputWatcher, { once: true });
+  } else {
+    startInputWatcher();
+  }
+
+  // Expose for diag
+  window.__v292Dfix14 = {
+    isNarrativeEmpty: isNarrativeEmpty,
+    isJapaneseValid: isJapaneseValid,
+    extractFromRaw: extractFromRaw,
+    synthFallback: synthFallback,
+    recoveryExtV4: recoveryExtV4,
+    ensureInstalled: ensureInstalled,
+    pickPlayerText: pickPlayerText
+  };
+
+  console.log(TAG, 'IIFE loaded — narrative recovery V4 active');
+})();
