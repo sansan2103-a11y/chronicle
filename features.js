@@ -2908,3 +2908,119 @@
   setTimeout(injectCSS, 500);
   setTimeout(injectCSS, 1500);
 })();
+
+
+// ====================================================================
+// v292Dfix13 — gender radio overlap fix (radio circle covering label text)
+// ====================================================================
+// Session 9 報告: v292Dfix12 (white-space:nowrap + min-width:max-content)
+//   を当てた後でも、設定 overlay の Hero/NPC 性別ラジオで
+//   「女性」「男性」の 2 文字目 (性) が input[type=radio] の描画円に
+//   visually 重なって読めない症状が残る。
+// 原因: label の display:flex (gap:3px) では gap が radio の円と text
+//   baseline の真上重ねを防げていない。Mobile WebKit 上で <input
+//   type=radio> の rendered glyph が左方向にはみ出して描画される時、
+//   gap だけでは間隔が確保されない。
+// 修正: head に <style> sheet を !important 付きで注入し、
+//   .v292-grow > label を display:inline-flex / gap:6px /
+//   white-space:nowrap / min-width:max-content / position:relative にし、
+//   input[type=radio] を flex:0 0 auto / position:static / float:none /
+//   margin:0 / 固定 14x14 サイズで強制。これで radio 円と文字が分離。
+// __v292Dfix13Active フラグで二重 inject 防止。fix12 と競合しない設計。
+(function v292Dfix13(){
+  if (window.__v292Dfix13Active) return;
+  window.__v292Dfix13Active = true;
+  var TAG = "[v292:Dfix13]";
+  var STYLE_ID = "v292Dfix13-style";
+  function buildCss(){
+    return [
+      "/* v292Dfix13: gender radio overlap fix */",
+      ".v292-grow{",
+      "  display:flex !important;",
+      "  flex-wrap:wrap !important;",
+      "  align-items:center !important;",
+      "  column-gap:14px !important;",
+      "  row-gap:6px !important;",
+      "  margin:6px 0 !important;",
+      "  width:100% !important;",
+      "  box-sizing:border-box !important;",
+      "}",
+      ".v292-grow > span{",
+      "  flex:0 0 auto !important;",
+      "  min-width:60px !important;",
+      "  font-size:11px !important;",
+      "  color:var(--dim,#888) !important;",
+      "  white-space:nowrap !important;",
+      "  line-height:1.4 !important;",
+      "}",
+      ".v292-grow label{",
+      "  display:inline-flex !important;",
+      "  align-items:center !important;",
+      "  gap:6px !important;",
+      "  flex:0 0 auto !important;",
+      "  min-width:-webkit-max-content !important;",
+      "  min-width:max-content !important;",
+      "  white-space:nowrap !important;",
+      "  font-size:12px !important;",
+      "  line-height:1.4 !important;",
+      "  cursor:pointer !important;",
+      "  padding:2px 4px 2px 2px !important;",
+      "  margin:0 !important;",
+      "  position:relative !important;",
+      "  background:transparent !important;",
+      "  color:var(--tx,#eee) !important;",
+      "}",
+      ".v292-grow label input[type=\"radio\"]{",
+      "  -webkit-appearance:radio !important;",
+      "  -moz-appearance:radio !important;",
+      "  appearance:auto !important;",
+      "  flex:0 0 auto !important;",
+      "  width:14px !important;",
+      "  height:14px !important;",
+      "  min-width:14px !important;",
+      "  min-height:14px !important;",
+      "  max-width:14px !important;",
+      "  max-height:14px !important;",
+      "  margin:0 !important;",
+      "  padding:0 !important;",
+      "  position:static !important;",
+      "  float:none !important;",
+      "  vertical-align:middle !important;",
+      "  transform:none !important;",
+      "  top:auto !important;",
+      "  left:auto !important;",
+      "  right:auto !important;",
+      "  bottom:auto !important;",
+      "  inset:auto !important;",
+      "  display:inline-block !important;",
+      "  box-sizing:border-box !important;",
+      "  opacity:1 !important;",
+      "  visibility:visible !important;",
+      "  pointer-events:auto !important;",
+      "  cursor:pointer !important;",
+      "  accent-color:var(--acc,#a08af0) !important;",
+      "}",
+      "@media (max-width: 420px){",
+      "  .v292-grow{ column-gap:10px !important; }",
+      "  .v292-grow label{ padding:3px 6px 3px 2px !important; }",
+      "}"
+    ].join("\n");
+  }
+  function inject(){
+    try {
+      var head = document.head || document.documentElement;
+      if (!head) return false;
+      var existing = document.getElementById(STYLE_ID);
+      var css = buildCss();
+      if (existing){ if (existing.textContent !== css) existing.textContent = css; return true; }
+      var s = document.createElement("style");
+      s.id = STYLE_ID; s.textContent = css; head.appendChild(s);
+      console.log(TAG, "CSS injected (" + css.length + " chars)");
+      return true;
+    } catch(e){ console.warn(TAG, "inject error", e); return false; }
+  }
+  function whenDOM(fn){ if (document.readyState !== "loading") { fn(); return; } document.addEventListener("DOMContentLoaded", fn, { once: true }); }
+  whenDOM(function(){ inject(); var n = 0; var iv = setInterval(function(){ if (!document.getElementById(STYLE_ID)) inject(); if (++n >= 20) clearInterval(iv); }, 500); });
+  inject();
+  console.log(TAG, "loaded (radio/label overlap fix active)");
+})();
