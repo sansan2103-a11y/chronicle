@@ -321,20 +321,25 @@
   }
 
   function init() {
-    if (tryWrap()) return;
-    // Retry: if a later module re-wraps UI.randomFill, the function-level
-    // __v291Wrapped flag disappears, and we wrap again on top.
+    tryWrap();
+    // Always start a monitor — even if we wrapped successfully, later modules
+    // (v213, v286 etc) may re-wrap UI.randomFill, removing our function-level
+    // flag. In that case re-wrap on top so we are again the outermost.
+    if (window.__v291Monitor) return;
+    window.__v291Monitor = true;
     var attempts = 0;
     var id = setInterval(function(){
       try {
         if (typeof UI === 'object' && UI && typeof UI.randomFill === 'function') {
           if (!UI.randomFill.__v291Wrapped) {
             UI.__v291Wrapped = false;  // allow tryWrap to proceed
-            tryWrap();
+            if (tryWrap()) {
+              console.log(TAG, 're-wrapped (someone else wrapped over us)');
+            }
           }
         }
       } catch(e){}
-      if (++attempts > 30) clearInterval(id);
+      if (++attempts > 60) clearInterval(id);  // monitor for ~18s
     }, 300);
   }
 
