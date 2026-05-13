@@ -2806,3 +2806,105 @@
 
   console.log('[v292] 15 features loaded (Phase 4-C: +dialogue_layout +aidungeon_style +gender_radio +narrative_recovery +avatar_autofill[v292-D fix8/9/10/11])');
 })();
+
+// === v292Dfix12 ===
+(function(){
+  if (window.__v292Dfix12Active) return;
+  window.__v292Dfix12Active = true;
+  
+  // ----- Bug 1: narrative recovery V2 with (plan, ctx) signature -----
+  function isNarrativeEmpty(narr) {
+    if (!Array.isArray(narr) || narr.length === 0) return true;
+    const joined = narr.join('').trim();
+    if (joined.length < 4) return true;
+    if (narr.every(n => /^[…\.\s物語が続]+$/.test(n))) return true;
+    return false;
+  }
+  
+  function isJapaneseValid(text) {
+    if (!text || typeof text !== 'string') return false;
+    if (!/[ぁ-ん]/.test(text)) return false;
+    if (/[a-zA-Z]{3,}/.test(text)) return false;
+    if (/[一-鿿]/.test(text) && !/[ぁ-んァ-ヶー]/.test(text)) return false;
+    return true;
+  }
+  
+  function recoveryExtV2(plan, ctx) {
+    if (!plan || !ctx || !ctx.raw) return plan;
+    if (!isNarrativeEmpty(plan.narrative)) return plan;
+    
+    const raw = ctx.raw;
+    const match = raw.match(/"narrative"\s*:\s*\[([^\]]+)\]/);
+    if (!match) return plan;
+    
+    try {
+      const arrStr = '[' + match[1] + ']';
+      const extracted = JSON.parse(arrStr.replace(/,\s*$/, ''));
+      const cleaned = extracted
+        .filter(s => typeof s === 'string' && isJapaneseValid(s))
+        .slice(0, 8);
+      if (cleaned.length > 0) {
+        plan.narrative = cleaned;
+        console.log('[v292Dfix12] narrative recovered from raw, lines:', cleaned.length);
+      }
+    } catch(e) {
+      console.warn('[v292Dfix12] recovery JSON parse failed:', e);
+    }
+    return plan;
+  }
+  
+  // Hook into Planner._parseExtensions
+  function installRecovery() {
+    if (!window.Planner || !window.Planner._parseExtensions) {
+      setTimeout(installRecovery, 200);
+      return;
+    }
+    if (!window.Planner._parseExtensions.__v292Dfix12) {
+      window.Planner._parseExtensions.push(recoveryExtV2);
+      window.Planner._parseExtensions.__v292Dfix12 = true;
+      console.log('[v292Dfix12] narrative recovery V2 installed');
+    }
+  }
+  installRecovery();
+  
+  // ----- Bug 2: gender radio CSS fix -----
+  function injectCSS() {
+    if (document.getElementById('v292Dfix12-style')) return;
+    const style = document.createElement('style');
+    style.id = 'v292Dfix12-style';
+    style.textContent = `
+      .v292-grow, .v292-grow label, #settingsOv label.v292-grow,
+      .v292-grow > label {
+        white-space: nowrap !important;
+        flex: 0 0 auto !important;
+        word-break: keep-all !important;
+        min-width: max-content !important;
+      }
+      .v292-grow input[type="radio"] {
+        flex: 0 0 auto !important;
+        min-width: 16px !important;
+      }
+      @media (max-width: 480px) {
+        .v292-grow label, #settingsOv label {
+          font-size: 16px !important;
+          min-height: 36px !important;
+        }
+      }
+      @media (max-width: 360px) {
+        .v292-grow label, #settingsOv label {
+          font-size: 14px !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    console.log('[v292Dfix12] gender radio CSS injected');
+  }
+  
+  // Re-inject at multiple times to handle late-rendered overlays
+  injectCSS();
+  if (document.readyState !== 'complete') {
+    document.addEventListener('DOMContentLoaded', injectCSS);
+  }
+  setTimeout(injectCSS, 500);
+  setTimeout(injectCSS, 1500);
+})();
