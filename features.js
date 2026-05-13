@@ -2617,5 +2617,192 @@
     whenReady(register);
   })();
 
-  console.log('[v292] 13 features loaded (Phase 4-C: +dialogue_layout +aidungeon_style +gender_radio[v292-D fix8])');
+
+  // ====================================================================
+  // 14. narrative_recovery (v292-D fix10)
+  // 目的: LLM 応答が truncate されて JSON parse 失敗 → narrative が「...」のみ
+  //       になるバグを修正。Planner._parseExtensions で raw text から narrative
+  //       配列を救済抽出し、最低限の plan オブジェクトを合成する。
+  // ====================================================================
+  (function narrativeRecovery(){
+    var TAG = '[v292-D fix10]';
+
+    function extractPartialNarrative(rawText){
+      if (!rawText || typeof rawText !== 'string') return null;
+      var m = rawText.match(/"narrative"\s*:\s*\[([\s\S]*?)(?:\]|$)/);
+      if (!m) return null;
+      var arrText = m[1];
+      var strs = [];
+      var rx = /"((?:[^"\\]|\\.)*?)"/g;
+      var match;
+      while ((match = rx.exec(arrText)) !== null) {
+        try {
+          var parsed = JSON.parse('"' + match[1] + '"');
+          if (parsed && parsed.length > 0) strs.push(parsed);
+        } catch(e){}
+      }
+      return strs.length > 0 ? strs : null;
+    }
+
+    function extractFromAnyJapanese(rawText){
+      if (!rawText) return null;
+      var out = [];
+      var rx = /"((?:[^"\\]|\\.)*?)"/g;
+      var match;
+      while ((match = rx.exec(rawText)) !== null && out.length < 10){
+        try {
+          var s = JSON.parse('"' + match[1] + '"');
+          if (typeof s !== 'string') continue;
+          if (s.length < 4) continue;
+          if (!/[ぁ-んァ-ヶー一-龥]/.test(s)) continue;
+          if (/^(playerIntent|branchCandidates|narrative|kind|tone|label|type|id|main)$/.test(s)) continue;
+          out.push(s);
+        } catch(e){}
+      }
+      return out.length > 0 ? out : null;
+    }
+
+    function tryParse(s){
+      try { JSON.parse(s); return true; } catch(e){ return false; }
+    }
+
+    function register(){
+      if (typeof Planner !== 'object' || !Planner || !Array.isArray(Planner._parseExtensions)){
+        console.warn(TAG, 'Planner._parseExtensions missing — feature disabled');
+        return;
+      }
+      Planner._parseExtensions.push(function recoveryExt(rawResponse){
+        try {
+          var content = null;
+          var isEnvelope = false;
+          if (typeof rawResponse === 'string'){
+            content = rawResponse;
+          } else if (rawResponse && rawResponse.choices && rawResponse.choices[0] && rawResponse.choices[0].message){
+            content = rawResponse.choices[0].message.content;
+            isEnvelope = true;
+          }
+          if (!content || typeof content !== 'string') return rawResponse;
+          if (tryParse(content)) return rawResponse;
+          var nar = extractPartialNarrative(content);
+          if (!nar) nar = extractFromAnyJapanese(content);
+          if (!nar || nar.length === 0) return rawResponse;
+          var rescued = {
+            playerIntent: { kind: 'other', tone: 'neutral' },
+            branchCandidates: [],
+            narrative: nar
+          };
+          var newContent = JSON.stringify(rescued);
+          console.log(TAG, 'rescued narrative from broken JSON,', nar.length, 'lines');
+          if (isEnvelope){
+            rawResponse.choices[0].message.content = newContent;
+            return rawResponse;
+          }
+          return newContent;
+        } catch(e){
+          console.warn(TAG, 'err:', e && e.message);
+          return rawResponse;
+        }
+      });
+      window.__v292 = window.__v292 || {};
+      window.__v292.narrativeRecovery = {
+        extractPartialNarrative: extractPartialNarrative,
+        extractFromAnyJapanese: extractFromAnyJapanese
+      };
+      console.log(TAG, 'narrative recovery registered');
+    }
+
+    whenReady(register);
+  })();
+
+  // ====================================================================
+  // 15. avatar_autofill (v292-D fix11)
+  // 目的: ランダム生成 / saveSettings / addNpc 後、c.avatar が未設定なら
+  //       Pollinations URL を自動生成して S.cast.*.avatar に格納する。
+  //       これで設定 UI のアイコン枠の「?」が消える。
+  // ====================================================================
+  (function avatarAutofill(){
+    var TAG = '[v292-D fix11]';
+
+    function genUrl(name, desc, gender){
+      if (!name) return '';
+      var prompt = 'anime portrait of ';
+      prompt += (gender === '男性') ? 'a young man, ' : 'a young woman, ';
+      prompt += name + ', ';
+      if (desc){
+        var d = String(desc).replace(/^性別:\s*[男女][性]?[。、]?/, '').slice(0, 60);
+        prompt += d + ', ';
+      }
+      prompt += 'detailed face, dark fantasy, dramatic lighting, high quality';
+      var seed = 0;
+      for (var i = 0; i < name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) & 0x7fffffff;
+      return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
+             '?width=384&height=384&seed=' + seed + '&nologo=true&model=flux';
+    }
+
+    function autofill(){
+      try {
+        if (typeof S === 'undefined' || !S || !S.cast) return 0;
+        var n = 0;
+        function fillFor(c){
+          if (!c || !c.name) return;
+          if (!c.avatar){
+            var u = genUrl(c.name, c.desc || '', c.gender || '');
+            if (u){ c.avatar = u; n++; }
+          }
+        }
+        if (S.cast.hero) fillFor(S.cast.hero);
+        if (Array.isArray(S.cast.npcs)) S.cast.npcs.forEach(fillFor);
+        if (n > 0){
+          try { if (S.save) S.save(); } catch(e){}
+          try { if (typeof UI !== 'undefined' && UI && typeof UI.renderAll === 'function') UI.renderAll(); } catch(e){}
+        }
+        return n;
+      } catch(e){
+        console.warn(TAG, 'autofill err:', e && e.message);
+        return 0;
+      }
+    }
+
+    function register(){
+      if (typeof UI !== 'object' || !UI || UI.__v292Fix11) return;
+
+      if (typeof UI.saveSettings === 'function' && !UI.__v292Fix11SS){
+        var origSS = UI.saveSettings.bind(UI);
+        UI.saveSettings = function(){
+          var r = origSS.apply(this, arguments);
+          setTimeout(autofill, 50);
+          return r;
+        };
+        UI.__v292Fix11SS = true;
+      }
+
+      if (typeof UI.randomFill === 'function' && !UI.__v292Fix11RF){
+        var origRF = UI.randomFill.bind(UI);
+        UI.randomFill = function(){
+          var r = origRF.apply(this, arguments);
+          setTimeout(autofill, 600);
+          return r;
+        };
+        UI.__v292Fix11RF = true;
+      }
+
+      if (Array.isArray(UI._renderHooks)){
+        UI._renderHooks.push(function avatarFillHook(){
+          autofill();
+        });
+      }
+
+      window.__v292 = window.__v292 || {};
+      window.__v292.avatarAutofill = {
+        genUrl: genUrl,
+        autofill: autofill
+      };
+      UI.__v292Fix11 = true;
+      console.log(TAG, 'avatar autofill registered');
+    }
+
+    whenReady(register);
+  })();
+
+  console.log('[v292] 15 features loaded (Phase 4-C: +dialogue_layout +aidungeon_style +gender_radio +narrative_recovery +avatar_autofill[v292-D fix8/9/10/11])');
 })();
