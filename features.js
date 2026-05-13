@@ -2264,7 +2264,8 @@
           } else {
             var i = parseInt(target.replace('npc', ''), 10);
             s.cast.npcs = s.cast.npcs || [];
-            if (s.cast.npcs[i]) s.cast.npcs[i].gender = r.value;
+            if (!s.cast.npcs[i]) s.cast.npcs[i] = {};
+            s.cast.npcs[i].gender = r.value;
           }
           setCast(s);
         });
@@ -2298,6 +2299,33 @@
           setTimeout(injectOnce, 200);
           return r;
         };
+      }
+      if (typeof UI.saveSettings === 'function' && !UI.__v292GR_SS){
+        var origSS = UI.saveSettings.bind(UI);
+        UI.saveSettings = function(){
+          // v292-D fix8: form の性別ラジオから gender を読んで S.cast に入れる。
+          //   原本 saveSettings は cast.hero.name/desc と NPC name/desc/psych のみ書き込み、
+          //   gender を touch しないので、ラジオ checked が失われていた。
+          try {
+            var hg = document.querySelector('input[name="v108g_hero"]:checked');
+            if (typeof S !== 'undefined' && S.cast && S.cast.hero){
+              S.cast.hero.gender = hg ? hg.value : '';
+            }
+          } catch(e){}
+          var r = origSS.apply(this, arguments);
+          // origSS が S.cast.npcs を rebuild した後、NPC ごとの gender を入れる
+          try {
+            document.querySelectorAll('#npcList .npc-card').forEach(function(card, idx){
+              if (typeof S !== 'undefined' && S.cast && S.cast.npcs && S.cast.npcs[idx]){
+                var ng = card.querySelector('input[name="v108g_npc' + idx + '"]:checked');
+                S.cast.npcs[idx].gender = ng ? ng.value : '';
+              }
+            });
+            if (typeof S !== 'undefined' && typeof S.save === 'function') S.save();
+          } catch(e){}
+          return r;
+        };
+        UI.__v292GR_SS = true;
       }
       if (typeof UI.randomFill === 'function' && !UI.__v292GR_RF){
         var origRF = UI.randomFill.bind(UI);
@@ -2472,5 +2500,5 @@
     whenReady(register);
   })();
 
-  console.log('[v292] 13 features loaded (Phase 4-C: +dialogue_layout +aidungeon_style +gender_radio[v292-D fix7])');
+  console.log('[v292] 13 features loaded (Phase 4-C: +dialogue_layout +aidungeon_style +gender_radio[v292-D fix8])');
 })();
