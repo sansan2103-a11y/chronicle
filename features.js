@@ -2,7 +2,7 @@
 // Chronicle v292 features (Phase 4-B) — 10 features + v292Dfix17 patches
 // =====================================================================
 // v292Dfix17 patches (2026-05-14):
-//   - fix16 fixPronouns: quote-aware + mixed-gender-line bypass
+//   - fix16 fixPronouns: quote-aware + mixed-gender-line bypass + v292Dfix19 local-antecedent guard
 //   - fix15 extractDialoguesEnhanced: 〝〟『』 quote class + Pattern E/F/G (post-quote attribution incl. NAMEの…声 possessive)
 //   - fix14 extractFromRaw Stage 2: branchCandidates label exclusion filter
 // 設計思想: モデル(Hermes 4 405B)の表現自由度を尊重し、機械的書換は高信頼な場合のみ。
@@ -3959,13 +3959,13 @@
     ].join('\n');
   }
 
-  // v292Dfix17: quote-aware + mixed-gender-line safety guard
-  // 旧 fixPronouns はクオート内の人物名で lastG が汚染され、quote 直後の代名詞を逆書換するバグがあった。
+  // v292Dfix17+19: quote-aware + mixed-gender bypass + local-antecedent guard
   // 修正方針:
   //   (a) 「」『』〝〟 内の人物名では lastG を更新しない / クオート内の代名詞は触らない
-  //   (b) 1 行内に 男性キャラと女性キャラが同時に登場する場合、antecedent 推定が原理的に
-  //       曖昧なのでモデルの選択を尊重して書き換えない(model freedom 重視)
-  //   (c) (a)(b) を満たした上で残ったケース(単一性別 cast 等)だけ元のアルゴリズムを適用する
+  //   (b) 1 行内に 男性/女性 両キャラが登場する行は曖昧なのでモデル尊重で書換しない
+  //   (c) v292Dfix19: 名前と代名詞の間に句読点 (、。!?) がある or 名前が 20 文字以上前なら
+  //       オフ行の別キャラを指している可能性が高いので書換しない (model freedom 重視)
+  //   (d) (a)(b)(c) を満たした上で残ったケース(明白な隣接ミス)だけ元のアルゴリズム適用
   function fixPronouns(text, allChars){
     if (!text || typeof text !== 'string') return text;
     if (!allChars.length) return text;
@@ -3973,34 +3973,33 @@
     for (var li = 0; li < lines.length; li++){
       var line = lines[li];
 
-      // (b) mixed-gender-line bypass: skip rewriting if line mentions 男性 and 女性 both
+      // (b) mixed-gender-line bypass
       var seenGenders = {};
       for (var sgi = 0; sgi < allChars.length; sgi++){
         var snm = allChars[sgi].name, sg = allChars[sgi].gender;
         if (snm && sg && line.indexOf(snm) >= 0) seenGenders[sg] = true;
       }
       if (seenGenders['男性'] && seenGenders['女性']){
-        // ambiguous — trust model
         continue;
       }
 
       var lastG = '';
+      var lastNameIdx = -999;
       var out = '';
       var i = 0;
-      var qDepth = 0; // (a) quote scope depth
+      var qDepth = 0;
       while (i < line.length){
         var ch = line[i];
         if (ch === '「' || ch === '『' || ch === '〝'){ qDepth++; out += ch; i += 1; continue; }
         if (ch === '」' || ch === '』' || ch === '〟'){ if (qDepth > 0) qDepth--; out += ch; i += 1; continue; }
-        if (qDepth > 0){
-          out += ch; i += 1; continue;
-        }
+        if (qDepth > 0){ out += ch; i += 1; continue; }
 
         var matched = false;
         for (var ci = 0; ci < allChars.length; ci++){
           var nm = allChars[ci].name;
           if (nm && line.substr(i, nm.length) === nm){
             lastG = allChars[ci].gender || '';
+            lastNameIdx = i;
             out += nm;
             i += nm.length;
             matched = true;
@@ -4008,16 +4007,24 @@
           }
         }
         if (matched) continue;
+
+        // (c) v292Dfix19 local-antecedent guard
+        var localOk = (i - lastNameIdx) < 20;
+        if (localOk){
+          var between = line.substring(lastNameIdx, i);
+          if (/[、。！？!?]/.test(between)) localOk = false;
+        }
+
         if (line.substr(i, 2) === '彼女'){
-          if (lastG === '男性'){ out += '彼'; i += 2; continue; }
+          if (localOk && lastG === '男性'){ out += '彼'; i += 2; continue; }
           out += '彼女'; i += 2; continue;
         }
         if (line[i] === '彼' && line[i+1] !== '女'){
-          if (lastG === '女性'){ out += '彼女'; i += 1; continue; }
+          if (localOk && lastG === '女性'){ out += '彼女'; i += 1; continue; }
           out += '彼'; i += 1; continue;
         }
-        if (line.substr(i, 2) === '少女' && lastG === '男性'){ out += '少年'; i += 2; continue; }
-        if (line.substr(i, 2) === '少年' && lastG === '女性'){ out += '少女'; i += 2; continue; }
+        if (line.substr(i, 2) === '少女' && localOk && lastG === '男性'){ out += '少年'; i += 2; continue; }
+        if (line.substr(i, 2) === '少年' && localOk && lastG === '女性'){ out += '少女'; i += 2; continue; }
         out += line[i];
         i += 1;
       }
@@ -4176,6 +4183,6 @@
   if (window.__v292Dfix17Active) return;
   window.__v292Dfix17Active = true;
   try {
-    console.log('[v292:Dfix17+18] patches active (fix16 quote-aware, fix15 〝〟 + post-quote + possessive attribution, fix14 branch filter)');
+    console.log('[v292:Dfix17+18+19] patches active (fix16 quote-aware + local-antecedent guard, fix15 〝〟 + post-quote + possessive attribution, fix14 branch filter)');
   } catch(e){}
 })();
