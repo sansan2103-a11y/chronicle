@@ -1,5 +1,11 @@
 // =====================================================================
-// Chronicle v292 features (Phase 4-B) — 10 features integrated
+// Chronicle v292 features (Phase 4-B) — 10 features + v292Dfix17 patches
+// =====================================================================
+// v292Dfix17 patches (2026-05-14):
+//   - fix16 fixPronouns: quote-aware + mixed-gender-line bypass
+//   - fix15 extractDialoguesEnhanced: 〝〟『』 quote class + Pattern E/F (post-quote attribution)
+//   - fix14 extractFromRaw Stage 2: branchCandidates label exclusion filter
+// 設計思想: モデル(Hermes 4 405B)の表現自由度を尊重し、機械的書換は高信頼な場合のみ。
 // =====================================================================
 // Each feature is an IIFE that registers itself into the hook system.
 // No Planner.build wrapping, no setInterval watchdogs, no __state aliases.
@@ -3114,6 +3120,10 @@
           if (t.length < 6) continue;
           if (!isJapaneseValid(t)) continue;
           if (/^(playerIntent|branchCandidates|narrative|kind|tone|label|type|id|main|side|talk|other|explore|aggressive|neutral|act|do|say|story)$/i.test(t)) continue;
+          // v292Dfix17: branchCandidates の label が narrative に紛れ込むのを除外
+          // ex: "リアの反応をじっと見つめる（DO）" / "(SAY)" 末尾 など
+          if (/[（(]\s*(DO|SAY|STORY)\s*[）)]\s*$/i.test(t)) continue;
+          if (/^[:：]\s/.test(t)) continue;
           if (seen[t]) continue;
           seen[t] = true;
           out.push(t);
@@ -3585,8 +3595,11 @@
       }
     }
 
-    // Pattern A: name + 「」 + と...verb (extended verb list)
-    var rxA = /([一-鿿ぁ-ゖァ-ヺ々ー・]+?)(?:は|が|の)?「([^「」]+?)」(?:と[^」]*?(?:言|答|命|叫|問|呼|尋|応|返|笑|囁|吐|怒鳴|呟|漏|喚|喘|呻|吼|吠|喝|促))/g;
+    // v292Dfix17: quote class unified to 「」『』〝〟 (Hermes 4 uses 〝〟 heavily).
+    // 各パターンの open/close を character class に拡張し、Pattern E/F (post-quote attribution) を追加。
+
+    // Pattern A: name + [「『〝]QUOTE[」』〟] + と...verb
+    var rxA = /([一-鿿ぁ-ゖァ-ヺ々ー・]+?)(?:は|が|の)?[「『〝]([^」』〟]+?)[」』〟](?:と[^」』〟]*?(?:言|答|命|叫|問|呼|尋|応|返|笑|囁|吐|怒鳴|呟|漏|喚|喘|呻|吼|吠|喝|促))/g;
     var m;
     while ((m = rxA.exec(src))){
       var spA = (m[1] || '').trim();
@@ -3607,16 +3620,16 @@
       pushUnique(spA, dlgA);
     }
 
-    // Pattern B: cast name + 「」 (no suffix)
+    // Pattern B: cast name + [「『〝]QUOTE[」』〟] (no verb suffix)
     if (namePat){
-      var rxB = new RegExp('(?:^|\\n|。|、|」|\\s)(' + namePat + ')(?:は|が|の)?「([^「」]+?)」', 'g');
+      var rxB = new RegExp('(?:^|\\n|。|、|」|』|〟|\\s)(' + namePat + ')(?:は|が|の)?[「『〝]([^」』〟]+?)[」』〟]', 'g');
       while ((m = rxB.exec(src))){
         pushUnique(m[1].trim(), m[2].trim());
       }
     }
 
-    // Pattern D (NEW): pronoun + 「」 → resolve to recent named speaker
-    var rxD = /(彼女|あの女|あの少女|少女|彼|あの男|あの少年|少年)(?:は|が|の)?「([^「」]+?)」/g;
+    // Pattern D: pronoun + [「『〝]QUOTE[」』〟] → resolve to recent named speaker
+    var rxD = /(彼女|あの女|あの少女|少女|彼|あの男|あの少年|少年)(?:は|が|の)?[「『〝]([^」』〟]+?)[」』〟]/g;
     while ((m = rxD.exec(src))){
       var pronoun = m[1];
       var dlgD = (m[2] || '').trim();
@@ -3642,16 +3655,48 @@
       }
     }
 
-    // Pattern C: bare 「」 after sentence boundary
-    var rxC = /(?:^|[\n。、！？])「([^「」]{2,80})」/g;
+    // Pattern E (NEW v292Dfix17): [「『〝]QUOTE[」』〟] + NAME + は/が + ...verb (post-quote attribution)
+    // 例: 「……感じるよ」リアはそう答えた / 〝なんだろう〟イヴが呟いた
+    if (namePat){
+      var rxE = new RegExp('[「『〝]([^」』〟]+?)[」』〟]\\s*(' + namePat + ')(?:は|が)(?:[^。]{0,40})?(?:言|答|応|呟|尋|叫|呼|笑|囁|返|促|命|問|怒鳴|喚)', 'g');
+      while ((m = rxE.exec(src))){
+        var dlgE = (m[1] || '').trim();
+        var spE = (m[2] || '').trim();
+        if (dlgE && spE) pushUnique(spE, dlgE);
+      }
+    }
+
+    // Pattern F (NEW v292Dfix17): [「『〝]QUOTE[」』〟] + 代名詞は/が (post-quote pronoun)
+    var rxF = /[「『〝]([^」』〟]+?)[」』〟]\s*(彼女|あの女|あの少女|少女|彼|あの男|あの少年|少年)(?:は|が)/g;
+    while ((m = rxF.exec(src))){
+      var dlgF = (m[1] || '').trim();
+      var prnF = m[2];
+      if (!dlgF) continue;
+      var preF = src.substring(0, m.index);
+      var resolvedF = resolvePronoun(prnF, preF, info);
+      if (resolvedF) pushUnique(resolvedF, dlgF);
+    }
+
+    // Pattern C: bare [「『〝]QUOTE[」』〟] after sentence boundary, with post-quote NAME peek
+    var rxC = /(?:^|[\n。、！？])[「『〝]([^」』〟]{2,80})[」』〟]/g;
     while ((m = rxC.exec(src))){
       var dlgC = m[1].trim();
       if (hasText(dlgC)) continue;
       var pos = m.index;
-      var preStart = Math.max(0, pos - 200);
-      var preContext = src.substring(preStart, pos);
+      var preContext = src.substring(Math.max(0, pos - 200), pos);
       var speaker = '';
-      if (namePat){
+      // v292Dfix17: post-quote NAME peek (handles "「Q」NAMEは...verb" patterns Pattern E may have missed)
+      var quoteEndMatch = src.slice(pos).match(/[「『〝][^」』〟]+[」』〟]/);
+      if (quoteEndMatch){
+        var quoteEndIdx = pos + quoteEndMatch.index + quoteEndMatch[0].length;
+        var afterCtx = src.substring(quoteEndIdx, Math.min(src.length, quoteEndIdx + 40));
+        if (namePat){
+          var postNameRx = new RegExp('^\\s*(' + namePat + ')(?:は|が)');
+          var postM = afterCtx.match(postNameRx);
+          if (postM) speaker = postM[1];
+        }
+      }
+      if (!speaker && namePat){
         var nameRx = new RegExp('(' + namePat + ')', 'g');
         var lastMatch = null, nm2;
         while ((nm2 = nameRx.exec(preContext))) lastMatch = nm2[1];
@@ -3899,17 +3944,43 @@
     ].join('\n');
   }
 
-  // recentHistory 文字列内の代名詞を、直前に言及されたキャラの設定性別に基づき正規化
+  // v292Dfix17: quote-aware + mixed-gender-line safety guard
+  // 旧 fixPronouns はクオート内の人物名で lastG が汚染され、quote 直後の代名詞を逆書換するバグがあった。
+  // 修正方針:
+  //   (a) 「」『』〝〟 内の人物名では lastG を更新しない / クオート内の代名詞は触らない
+  //   (b) 1 行内に 男性キャラと女性キャラが同時に登場する場合、antecedent 推定が原理的に
+  //       曖昧なのでモデルの選択を尊重して書き換えない(model freedom 重視)
+  //   (c) (a)(b) を満たした上で残ったケース(単一性別 cast 等)だけ元のアルゴリズムを適用する
   function fixPronouns(text, allChars){
     if (!text || typeof text !== 'string') return text;
     if (!allChars.length) return text;
     var lines = text.split('\n');
     for (var li = 0; li < lines.length; li++){
       var line = lines[li];
+
+      // (b) mixed-gender-line bypass: skip rewriting if line mentions 男性 and 女性 both
+      var seenGenders = {};
+      for (var sgi = 0; sgi < allChars.length; sgi++){
+        var snm = allChars[sgi].name, sg = allChars[sgi].gender;
+        if (snm && sg && line.indexOf(snm) >= 0) seenGenders[sg] = true;
+      }
+      if (seenGenders['男性'] && seenGenders['女性']){
+        // ambiguous — trust model
+        continue;
+      }
+
       var lastG = '';
       var out = '';
       var i = 0;
+      var qDepth = 0; // (a) quote scope depth
       while (i < line.length){
+        var ch = line[i];
+        if (ch === '「' || ch === '『' || ch === '〝'){ qDepth++; out += ch; i += 1; continue; }
+        if (ch === '」' || ch === '』' || ch === '〟'){ if (qDepth > 0) qDepth--; out += ch; i += 1; continue; }
+        if (qDepth > 0){
+          out += ch; i += 1; continue;
+        }
+
         var matched = false;
         for (var ci = 0; ci < allChars.length; ci++){
           var nm = allChars[ci].name;
@@ -3922,17 +3993,14 @@
           }
         }
         if (matched) continue;
-        // 彼女 (2文字) check first
         if (line.substr(i, 2) === '彼女'){
           if (lastG === '男性'){ out += '彼'; i += 2; continue; }
           out += '彼女'; i += 2; continue;
         }
-        // 彼 (1文字、女が続かない)
         if (line[i] === '彼' && line[i+1] !== '女'){
           if (lastG === '女性'){ out += '彼女'; i += 1; continue; }
           out += '彼'; i += 1; continue;
         }
-        // 少女 / 少年 mapping
         if (line.substr(i, 2) === '少女' && lastG === '男性'){ out += '少年'; i += 2; continue; }
         if (line.substr(i, 2) === '少年' && lastG === '女性'){ out += '少女'; i += 2; continue; }
         out += line[i];
@@ -4083,4 +4151,16 @@
   }, 3000);
 
   console.log(TAG, 'IIFE loaded — gender drift enforcement active');
+})();
+
+
+// =====================================================================
+// v292Dfix17 marker — set window flag and emit boot log to confirm patches active
+// =====================================================================
+(function v292Dfix17Marker(){
+  if (window.__v292Dfix17Active) return;
+  window.__v292Dfix17Active = true;
+  try {
+    console.log('[v292:Dfix17] patches active (fix16 quote-aware, fix15 〝〟 + post-quote, fix14 branch filter)');
+  } catch(e){}
 })();
