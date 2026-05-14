@@ -3,7 +3,7 @@
 // =====================================================================
 // v292Dfix17 patches (2026-05-14):
 //   - fix16 fixPronouns: quote-aware + mixed-gender-line bypass
-//   - fix15 extractDialoguesEnhanced: 〝〟『』 quote class + Pattern E/F (post-quote attribution)
+//   - fix15 extractDialoguesEnhanced: 〝〟『』 quote class + Pattern E/F/G (post-quote attribution incl. NAMEの…声 possessive)
 //   - fix14 extractFromRaw Stage 2: branchCandidates label exclusion filter
 // 設計思想: モデル(Hermes 4 405B)の表現自由度を尊重し、機械的書換は高信頼な場合のみ。
 // =====================================================================
@@ -3677,6 +3677,21 @@
       if (resolvedF) pushUnique(resolvedF, dlgF);
     }
 
+    // Pattern G (NEW v292Dfix18): [「Q」](と)?(、)?NAME(の|から|に)…(声|言葉|呟き|呼びかけ|応答|問い|返事|叫び|囁き|嘆息|溜息|怒鳴り|喘ぎ|呻き|笑み|笑い)
+    // 例: 「気づかなかった？」と、セルジオの低い声が静寂を破った
+    //     「やめて」と、リアの呟きが漏れた
+    //     「ここよ」リアの声が答えた
+    // Pattern E が NAME(は|が) しか拾わなかった漏れを補完。属格 / 起点 / 着点 助詞 + 発話関連名詞 で attribute。
+    if (namePat){
+      var ATTR_NOUNS = '声|言葉|呟き|つぶやき|呼びかけ|応答|問い|返事|叫び|囁き|嘆息|溜息|怒鳴り|喘ぎ|呻き|笑み|笑い';
+      var rxG = new RegExp('[「『〝]([^」』〟]+?)[」』〟]\\s*と?\\s*[、,。]?\\s*(' + namePat + ')(?:の|から|に)(?:[^。]{0,40})?(?:' + ATTR_NOUNS + ')', 'g');
+      while ((m = rxG.exec(src))){
+        var dlgG = (m[1] || '').trim();
+        var spG = (m[2] || '').trim();
+        if (dlgG && spG) pushUnique(spG, dlgG);
+      }
+    }
+
     // Pattern C: bare [「『〝]QUOTE[」』〟] after sentence boundary, with post-quote NAME peek
     var rxC = /(?:^|[\n。、！？])[「『〝]([^」』〟]{2,80})[」』〟]/g;
     while ((m = rxC.exec(src))){
@@ -4161,6 +4176,6 @@
   if (window.__v292Dfix17Active) return;
   window.__v292Dfix17Active = true;
   try {
-    console.log('[v292:Dfix17] patches active (fix16 quote-aware, fix15 〝〟 + post-quote, fix14 branch filter)');
+    console.log('[v292:Dfix17+18] patches active (fix16 quote-aware, fix15 〝〟 + post-quote + possessive attribution, fix14 branch filter)');
   } catch(e){}
 })();
