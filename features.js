@@ -3793,3 +3793,294 @@
 
   whenDom(init);
 })();
+
+// ====================================================================
+// v292Dfix16 — character gender enforcement (キャラ性別違反バグ修正)
+// ====================================================================
+// Bug report 2026-05-14 (BUG_REPORT_2026-05-14_char_setting_drift.md):
+//   ユーザーが gender_radio で設定したキャラ性別と LLM 描写が食い違う。
+//   例: 「ガイア（男性）」NPC が narrative で「彼女」と書かれる、
+//       「イヴ（女性）」設定なのに男性的描写、など。
+//
+// Hypothesis A 確定 (実機検証 2026-05-14):
+//   1. Planner.build の user payload は { name, desc, personality, coreDesire,
+//      coreFear, wound } のみで **gender フィールド自体が含まれない**
+//   2. sys プロンプトに「キャラの声」内で「ガイア（男性、...）」と書かれては
+//      いるが、attention が低い「口調指示」の文脈に埋もれる
+//   3. 直前 narrative に LLM の誤用が含まれると、次ターンの recentHistory で
+//      再強化されて誤用が継続する (Hypothesis C も寄与)
+//
+// 修正アプローチ:
+//   A. sys プロンプト先頭に【キャラ性別（絶対遵守 — 最優先ルール）】ブロックを挿入
+//      → Planner._extensions に登録 (sys を mutate)
+//   B. user payload の cast.protagonist と cast.npcs[] に gender フィールドを注入
+//      → Planner._userExtensions に登録 (user JSON を rebuild)
+//   C. user payload の recentHistory 内の誤用代名詞を、cast 設定に基づき正解に
+//      置換 (例: 男性ガイアの直後の「彼女」→「彼」)
+//      → 同じく _userExtensions 内で処理
+//   D. parsePlan 結果 plan.narrative に対しても同じ pronoun fix を実行
+//      → Planner._parseExtensions に登録、S.turns に保存される前に修正
+//
+// 既存機能との非競合:
+//   - fix15 dialogue_pronoun_resolver は display 時 (renderStream) の代名詞→
+//     名前置換。本 fix16 は prompt と保存 narrative を対象とする preventive 層。
+//     互いに介入レイヤが異なり競合しない。
+//   - fix14 narrative recovery V4 は plan.narrative が空のときの synth fallback。
+//     本 fix16 の parse ext は plan.narrative が非空のときに pronoun を正規化する。
+//     fix14 が V4 で push されるのに対し fix16 は最後に push されるため、
+//     fix14 の rescue 結果に対しても fix16 の pronoun fix が掛かる。
+//
+// __v292Dfix16Active flag で IIFE 二重実行防止。
+// _extensions / _userExtensions / _parseExtensions それぞれに __v292Dfix16* flag。
+// 3 秒 polling で配列 replace されても自動 reinstall。
+// ====================================================================
+(function v292Dfix16(){
+  if (window.__v292Dfix16Active) return;
+  window.__v292Dfix16Active = true;
+  var TAG = '[v292:Dfix16]';
+
+  function getState(){
+    try {
+      if (typeof S !== 'undefined' && S) return S;
+      if (typeof window !== 'undefined' && window.S) return window.S;
+    } catch(e){}
+    return null;
+  }
+
+  function getCast(){
+    var st = getState();
+    if (!st || !st.cast) return null;
+    var hero = st.cast.hero || {};
+    var npcs = Array.isArray(st.cast.npcs) ? st.cast.npcs : [];
+    return { hero: hero, npcs: npcs };
+  }
+
+  // ヒューリスティック: gender 未設定キャラに対し desc/name から推測
+  function inferGender(c){
+    if (!c) return '';
+    if (c.gender === '男性' || c.gender === '女性') return c.gender;
+    var s = (c.desc || '') + ' ' + (c.name || '') + ' ' + (c.personality || '');
+    var fHits = (s.match(/(少女|令嬢|乙女|女王|王女|魔女|尼僧|シスター|聖女|淑女|姉(?!弟)|妹|母|妻|娘|女性|女子|お嬢)/g) || []).length;
+    var mHits = (s.match(/(少年|青年|男性|男子|王子|騎士|兄(?!弟)|弟|父|夫|息子|若者|郎)/g) || []).length;
+    if (fHits > mHits) return '女性';
+    if (mHits > fHits) return '男性';
+    return '';
+  }
+
+  function buildGenderBlock(cast){
+    var entries = [];
+    if (cast.hero && cast.hero.name){
+      var hg = cast.hero.gender || inferGender(cast.hero);
+      if (hg) entries.push('・**' + cast.hero.name + '**:**' + hg + '** (主人公)');
+    }
+    cast.npcs.forEach(function(n){
+      if (n && n.name){
+        var ng = n.gender || inferGender(n);
+        if (ng) entries.push('・**' + n.name + '**:**' + ng + '**');
+      }
+    });
+    if (!entries.length) return '';
+    return [
+      '',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '【キャラ性別（絶対遵守 — 最優先ルール）】',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━',
+      entries.join('\n'),
+      '',
+      '★以下のルールを厳格に守ること。違反した行は無効として破棄される:',
+      '・男性キャラを「彼女」「あの女」「少女」「女の子」「彼女の◯」等の女性的代名詞・呼称で呼ばない',
+      '・女性キャラを「彼」「あの男」「少年」「男の子」「彼の◯」等の男性的代名詞・呼称で呼ばない',
+      '・身体的描写（体格・声色・服装・所作）も指定された性別と整合させる',
+      '・「兄/姉」「弟/妹」「お兄さん/お姉さん」も上記性別に合わせる',
+      '・直前 narrative に過去の誤用が残っていても、上記の性別設定を最優先する',
+      '・指定された性別と矛盾する代名詞・呼称・身体描写は creative writing の自由度を超える事実誤認である',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━',
+      ''
+    ].join('\n');
+  }
+
+  // recentHistory 文字列内の代名詞を、直前に言及されたキャラの設定性別に基づき正規化
+  function fixPronouns(text, allChars){
+    if (!text || typeof text !== 'string') return text;
+    if (!allChars.length) return text;
+    var lines = text.split('\n');
+    for (var li = 0; li < lines.length; li++){
+      var line = lines[li];
+      var lastG = '';
+      var out = '';
+      var i = 0;
+      while (i < line.length){
+        var matched = false;
+        for (var ci = 0; ci < allChars.length; ci++){
+          var nm = allChars[ci].name;
+          if (nm && line.substr(i, nm.length) === nm){
+            lastG = allChars[ci].gender || '';
+            out += nm;
+            i += nm.length;
+            matched = true;
+            break;
+          }
+        }
+        if (matched) continue;
+        // 彼女 (2文字) check first
+        if (line.substr(i, 2) === '彼女'){
+          if (lastG === '男性'){ out += '彼'; i += 2; continue; }
+          out += '彼女'; i += 2; continue;
+        }
+        // 彼 (1文字、女が続かない)
+        if (line[i] === '彼' && line[i+1] !== '女'){
+          if (lastG === '女性'){ out += '彼女'; i += 1; continue; }
+          out += '彼'; i += 1; continue;
+        }
+        // 少女 / 少年 mapping
+        if (line.substr(i, 2) === '少女' && lastG === '男性'){ out += '少年'; i += 2; continue; }
+        if (line.substr(i, 2) === '少年' && lastG === '女性'){ out += '少女'; i += 2; continue; }
+        out += line[i];
+        i += 1;
+      }
+      lines[li] = out;
+    }
+    return lines.join('\n');
+  }
+
+  function buildAllCharsWithGender(cast){
+    var list = [];
+    if (cast.hero && cast.hero.name){
+      list.push({ name: String(cast.hero.name).trim(), gender: cast.hero.gender || inferGender(cast.hero) });
+    }
+    cast.npcs.forEach(function(n){
+      if (n && n.name){
+        list.push({ name: String(n.name).trim(), gender: n.gender || inferGender(n) });
+      }
+    });
+    return list;
+  }
+
+  function genderEnforceSysExt(ctx){
+    try {
+      var cast = getCast();
+      if (!cast) return ctx.sys;
+      var block = buildGenderBlock(cast);
+      if (!block) return ctx.sys;
+      var s = ctx.sys || '';
+      if (s.indexOf('【キャラ性別（絶対遵守 — 最優先ルール）】') >= 0) return s;
+      // 先頭の見出し直前に挿入: 最初の「【」または冒頭に配置
+      var idx = s.indexOf('\n\n【');
+      if (idx === -1){
+        idx = s.indexOf('【');
+        return s.slice(0, idx >= 0 ? idx : 0) + block + s.slice(idx >= 0 ? idx : 0);
+      }
+      return s.slice(0, idx + 2) + block + s.slice(idx + 2);
+    } catch(e){
+      console.warn(TAG, 'sys ext err:', e && e.message);
+      return ctx.sys;
+    }
+  }
+
+  function genderEnforceUserExt(ctx){
+    try {
+      var cast = getCast();
+      if (!cast) return ctx.user;
+      var user = ctx.user;
+      var allChars = buildAllCharsWithGender(cast);
+
+      // Try parse as JSON (index.html Planner.build emits JSON)
+      var parsed = null;
+      try { parsed = JSON.parse(user); } catch(e){}
+
+      if (parsed && typeof parsed === 'object'){
+        if (parsed.cast){
+          if (parsed.cast.protagonist && cast.hero){
+            var hg = cast.hero.gender || inferGender(cast.hero);
+            if (hg) parsed.cast.protagonist.gender = hg;
+          }
+          if (Array.isArray(parsed.cast.npcs)){
+            parsed.cast.npcs.forEach(function(n, i){
+              var src = cast.npcs[i];
+              if (src){
+                var g = src.gender || inferGender(src);
+                if (g) n.gender = g;
+              }
+            });
+          }
+        }
+        if (parsed.recentHistory && typeof parsed.recentHistory === 'string'){
+          parsed.recentHistory = fixPronouns(parsed.recentHistory, allChars);
+        }
+        return JSON.stringify(parsed, null, 2);
+      }
+
+      // Non-JSON user (prose-mode): only fix recentHistory-like content embedded
+      return user;
+    } catch(e){
+      console.warn(TAG, 'user ext err:', e && e.message);
+      return ctx.user;
+    }
+  }
+
+  function genderFixParseExt(plan, ctx){
+    try {
+      if (!plan || !Array.isArray(plan.narrative)) return;
+      var cast = getCast();
+      if (!cast) return;
+      var allChars = buildAllCharsWithGender(cast);
+      var hasGendered = allChars.some(function(c){ return c.gender === '男性' || c.gender === '女性'; });
+      if (!hasGendered) return;
+      var fixedCount = 0;
+      plan.narrative = plan.narrative.map(function(line){
+        var fx = fixPronouns(line, allChars);
+        if (fx !== line) fixedCount++;
+        return fx;
+      });
+      if (fixedCount) console.log(TAG, 'narrative pronoun fixes applied:', fixedCount);
+    } catch(e){
+      console.warn(TAG, 'parse ext err:', e && e.message);
+    }
+  }
+
+  function getPlanner(){
+    try { return (0, eval)('typeof Planner !== "undefined" ? Planner : null)'; }
+    catch(e){ return null; }
+  }
+
+  function install(){
+    var P = getPlanner();
+    if (!P){ setTimeout(install, 200); return; }
+
+    // sys extension — unshift to apply early (before other extensions may modify sys)
+    if (Array.isArray(P._extensions) && !P._extensions.__v292Dfix16Sys){
+      P._extensions.unshift(genderEnforceSysExt);
+      P._extensions.__v292Dfix16Sys = true;
+    }
+    // user extension — push at end so we mutate after others
+    if (Array.isArray(P._userExtensions) && !P._userExtensions.__v292Dfix16User){
+      P._userExtensions.push(genderEnforceUserExt);
+      P._userExtensions.__v292Dfix16User = true;
+    }
+    // parse extension — push at end so it runs after fix14 recovery
+    if (Array.isArray(P._parseExtensions) && !P._parseExtensions.__v292Dfix16Parse){
+      P._parseExtensions.push(genderFixParseExt);
+      P._parseExtensions.__v292Dfix16Parse = true;
+    }
+
+    console.log(TAG, 'gender enforcement installed',
+      '(sys=' + ((P._extensions||[]).length) + ', user=' + ((P._userExtensions||[]).length) + ', parse=' + ((P._parseExtensions||[]).length) + ')');
+  }
+
+  install();
+
+  // Periodic re-check (defends against array-replace by other patches)
+  setInterval(function(){
+    try {
+      var P = getPlanner();
+      if (!P) return;
+      var needs = false;
+      if (Array.isArray(P._extensions) && !P._extensions.__v292Dfix16Sys) needs = true;
+      if (Array.isArray(P._userExtensions) && !P._userExtensions.__v292Dfix16User) needs = true;
+      if (Array.isArray(P._parseExtensions) && !P._parseExtensions.__v292Dfix16Parse) needs = true;
+      if (needs) install();
+    } catch(e){}
+  }, 3000);
+
+  console.log(TAG, 'IIFE loaded — gender drift enforcement active');
+})();
