@@ -4039,7 +4039,7 @@
   }
 
   function getPlanner(){
-    try { return (0, eval)('typeof Planner !== "undefined" ? Planner : null)'; }
+    try { return (0, eval)('typeof Planner !== "undefined" ? Planner : null'); }
     catch(e){ return null; }
   }
 
