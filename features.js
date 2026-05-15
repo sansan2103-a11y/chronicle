@@ -3,7 +3,7 @@
 // =====================================================================
 // v292Dfix17 patches (2026-05-14):
 //   - fix16 fixPronouns: quote-aware + mixed-gender-line bypass + v292Dfix19 local-antecedent guard
-//   - fix15 extractDialoguesEnhanced: 〝〟『』 quote class + Pattern E/F/G (post-quote attribution incl. NAMEの…声 possessive, v292Dfix20: remove に particle)
+//   - fix15 extractDialoguesEnhanced: 〝〟『』 quote class + Pattern E/F/G/H (post-quote attribution: NAMEの/から, 代名詞のbody-part; v292Dfix20: remove に particle)
 //   - fix14 extractFromRaw Stage 2: branchCandidates label exclusion filter
 // 設計思想: モデル(Hermes 4 405B)の表現自由度を尊重し、機械的書換は高信頼な場合のみ。
 // =====================================================================
@@ -3681,15 +3681,30 @@
     // 例: 「気づかなかった？」と、セルジオの低い声が静寂を破った
     //     「やめて」と、リアの呟きが漏れた
     //     「ここよ」リアの声が答えた
-    // Pattern E が NAME(は|が) しか拾わなかった漏れを補完。属格 / 起点 / 着点 助詞 + 発話関連名詞 で attribute。
+    // Pattern E が NAME(は|が) しか拾わなかった漏れを補完。属格 / 起点 助詞 + 発話関連名詞 で attribute。
+    var ATTR_NOUNS_BASE = '声|言葉|呟き|つぶやき|呼びかけ|応答|問い|返事|叫び|囁き|嘆息|溜息|怒鳴り|喘ぎ|呻き|笑み|笑い';
     if (namePat){
-      var ATTR_NOUNS = '声|言葉|呟き|つぶやき|呼びかけ|応答|問い|返事|叫び|囁き|嘆息|溜息|怒鳴り|喘ぎ|呻き|笑み|笑い';
-      var rxG = new RegExp('[「『〝]([^」』〟]+?)[」』〟]\\s*と?\\s*[、,。]?\\s*(' + namePat + ')(?:の|から)(?:[^。]{0,40})?(?:' + ATTR_NOUNS + ')', 'g');
+      var rxG = new RegExp('[「『〝]([^」』〟]+?)[」』〟]\\s*と?\\s*[、,。]?\\s*(' + namePat + ')(?:の|から)(?:[^。]{0,40})?(?:' + ATTR_NOUNS_BASE + ')', 'g');
       while ((m = rxG.exec(src))){
         var dlgG = (m[1] || '').trim();
         var spG = (m[2] || '').trim();
         if (dlgG && spG) pushUnique(spG, dlgG);
       }
+    }
+
+    // Pattern H (NEW v292Dfix21): [「Q」](と)?(、)?PRONOUN(の)…(body-part|attribute-noun)
+    //   ex: 「う…」と、彼の喉が小さく震えた / 「あぁ」と、彼女の唇が動いた
+    //   代名詞 + の + 発話源 (喉/口/唇/息/呼吸/etc.) または ATTR_NOUNS。
+    //   代名詞 → 直前の同性別 named char に解決して attribute。
+    var ATTR_NOUNS_H = ATTR_NOUNS_BASE + '|喉|口|唇|息|呼吸|表情|顔|声音|口元';
+    var rxH = new RegExp('[「『〝]([^」』〟]+?)[」』〟]\\s*と?\\s*[、,。]?\\s*(彼女|彼)(?:の)(?:[^。]{0,40})?(?:' + ATTR_NOUNS_H + ')', 'g');
+    while ((m = rxH.exec(src))){
+      var dlgH = (m[1] || '').trim();
+      var prnH = m[2];
+      if (!dlgH) continue;
+      var preH = src.substring(0, m.index);
+      var resolvedH = resolvePronoun(prnH, preH, info);
+      if (resolvedH) pushUnique(resolvedH, dlgH);
     }
 
     // Pattern C: bare [「『〝]QUOTE[」』〟] after sentence boundary, with post-quote NAME peek
@@ -4183,6 +4198,6 @@
   if (window.__v292Dfix17Active) return;
   window.__v292Dfix17Active = true;
   try {
-    console.log('[v292:Dfix17+18+19+20] patches active (fix16 quote-aware + local-antecedent guard, fix15 〝〟 + post-quote + possessive Pattern G [recipient-に excluded], fix14 branch filter)');
+    console.log('[v292:Dfix17+18+19+20+21] patches active (fix16 quote-aware + local-antecedent guard, fix15 〝〟 + Pattern E/F/G/H [pronoun possessive], fix14 branch filter)');
   } catch(e){}
 })();
