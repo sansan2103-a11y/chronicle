@@ -4201,3 +4201,107 @@
     console.log('[v292:Dfix17+18+19+20+21] patches active (fix16 quote-aware + local-antecedent guard, fix15 〝〟 + Pattern E/F/G/H [pronoun possessive], fix14 branch filter)');
   } catch(e){}
 })();
+
+
+// =====================================================================
+// v292Dfix22 — avatar gender enforcement
+// 問題: avatar 生成プロンプトで gender が反映されず、男性キャラに女性アイコンが付く。
+// 原因:
+//   1) avatarUrlLocal/genUrl が「gender === '男性' ? man : woman」で
+//      gender 空時に女性 fallback
+//   2) desc 本文に「謎多き女性」など gender 矛盾語が含まれると prompt に混入
+//   3) 既存 c.avatar がセットされてると autofill は再生成しないため、
+//      過去に作られた誤性別アイコンがそのまま残る
+// 対策:
+//   A. desc から性別矛盾語を全削除 (先頭の「性別:」prefix だけでなく body 内も)
+//   B. gender token を "young man, male, masculine features" 等の3連で強化
+//   C. window.__v292.avatarAutofill.genUrl / autofill を上書き
+//   D. window.regenerateAvatars() で c.avatar を強制再生成する手段を提供
+//   E. window.__v292.previewAvatarPrompt() で生成プロンプトを目視確認可
+// =====================================================================
+(function v292Dfix22(){
+  if (window.__v292Dfix22Active) return;
+  var TAG = '[v292Dfix22]';
+
+  function genUrlV22(name, desc, gender){
+    if (!name) return '';
+    var isM = (gender === '男性');
+    var isF = (gender === '女性');
+    var prompt = 'anime portrait of ';
+    if (isM)      prompt += 'a young man, male, masculine features, ';
+    else if (isF) prompt += 'a young woman, female, feminine features, ';
+    else          prompt += 'a young person, ';
+    prompt += name + ', ';
+    if (desc){
+      var d = String(desc);
+      // 「性別: 男性。」「性別:女」等を全位置で削除
+      d = d.replace(/性別\s*[:：]\s*[男女][性]?[。、.]?/g, '');
+      // gender と矛盾する語を削除
+      if (isM){
+        d = d.replace(/女性|女の子|女の人|お姉さん|お嬢様|お嬢|乙女/g, '');
+      } else if (isF){
+        d = d.replace(/男性|男の子|男の人|お兄さん|青年|少年|男児/g, '');
+      }
+      d = d.trim().slice(0, 80);
+      if (d) prompt += d + ', ';
+    }
+    prompt += 'detailed face, dark fantasy, dramatic lighting, high quality';
+    var seed = 0;
+    for (var i = 0; i < name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) & 0x7fffffff;
+    return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
+           '?width=384&height=384&seed=' + seed + '&nologo=true&model=flux';
+  }
+
+  function autofillV22(opts){
+    opts = opts || {};
+    try {
+      if (typeof S === 'undefined' || !S || !S.cast) return 0;
+      var n = 0;
+      function fillFor(c){
+        if (!c || !c.name) return;
+        if (opts.force || !c.avatar){
+          var u = genUrlV22(c.name, c.desc || '', c.gender || '');
+          if (u && u !== c.avatar){ c.avatar = u; n++; }
+        }
+      }
+      if (S.cast.hero) fillFor(S.cast.hero);
+      if (Array.isArray(S.cast.npcs)) S.cast.npcs.forEach(fillFor);
+      if (n > 0){
+        try { if (S.save) S.save(); } catch(e){}
+        try { if (typeof UI !== 'undefined' && UI && typeof UI.renderAll === 'function') UI.renderAll(); } catch(e){}
+      }
+      return n;
+    } catch(e){
+      console.warn(TAG, 'autofill err:', e && e.message);
+      return 0;
+    }
+  }
+
+  // window.__v292.avatarAutofill が登録されたら上書き
+  function install(){
+    window.__v292 = window.__v292 || {};
+    if (window.__v292.avatarAutofill){
+      window.__v292.avatarAutofill.genUrl   = genUrlV22;
+      window.__v292.avatarAutofill.autofill = autofillV22;
+    } else {
+      // fix11 がまだ初期化されてない場合 — 後で再試行
+      setTimeout(install, 500);
+      return;
+    }
+    // 強制再生成ヘルパー (Console から呼ぶ用)
+    window.regenerateAvatars = function(){
+      var changed = autofillV22({force: true});
+      console.log(TAG, 'regenerated avatars:', changed);
+      return changed;
+    };
+    // プロンプト確認用
+    window.__v292.previewAvatarPrompt = function(name, desc, gender){
+      return decodeURIComponent(genUrlV22(name, desc, gender).split('?')[0])
+        .replace('https://image.pollinations.ai/prompt/', '');
+    };
+    window.__v292Dfix22Active = true;
+    console.log(TAG, 'avatar gender enforcement installed.',
+      'Call window.regenerateAvatars() to force-refresh existing avatars.');
+  }
+  install();
+})();
