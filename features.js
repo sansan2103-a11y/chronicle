@@ -4305,3 +4305,31 @@
   }
   install();
 })();
+
+/* v292Dfix23: Hermes JSON-mode sampling conservatization
+ * response_format=json_object は既存実装だが、temperature 0.85 +
+ * frequency/presence_penalty 0.4 では Hermes 4 が JSON 構文を時折破壊する。
+ * Hermes 系 + json_object モード時のみ temperature=0.5, penalty=0 に下げる。
+ */
+(function(){
+  if (window.__v292Dfix23Active) return;
+  const origFetch = window.fetch;
+  window.fetch = function(url, opts){
+    try {
+      if (typeof url === 'string' && url.indexOf('openrouter.ai') !== -1
+          && opts && opts.body && typeof opts.body === 'string') {
+        const b = JSON.parse(opts.body);
+        if (b && b.model && /hermes/i.test(b.model)
+            && b.response_format && b.response_format.type === 'json_object') {
+          b.temperature = 0.5;
+          b.frequency_penalty = 0;
+          b.presence_penalty = 0;
+          opts.body = JSON.stringify(b);
+        }
+      }
+    } catch(e){}
+    return origFetch.apply(this, arguments);
+  };
+  window.__v292Dfix23Active = true;
+  console.log('[v292Dfix23] installed — Hermes JSON-mode sampling conservatized');
+})();
