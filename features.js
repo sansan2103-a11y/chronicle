@@ -4418,3 +4418,48 @@
   window.__v292Dfix24Active = true;
   console.log('[v292Dfix24] installed — input-as-seed + psych anchors active');
 })();
+
+/* v292Dfix25: Phase 2 — remove negative example section + positive framing
+ * fix24 で入力素材分解と心理 anchor は注入できたが、system prompt 内の
+ * 「お手本となる正しいnarrative出力例」セクションが文体テンプレートとして
+ * Hermes に強く影響し、クリシェ(鼓動が速まる/モナリザの微笑/無機質な動作 等)
+ * を再生産していた。このセクションを削除して positive framing に置換する。
+ * 削除対象は例示セクションのみ。narrative 注意・言語制約・主人公ロック等は維持。
+ */
+(function(){
+  if (window.__v292Dfix25Active) return;
+  window.Planner = window.Planner || {};
+  Planner._extensions = Planner._extensions || [];
+
+  Planner._extensions.push(function(ctx){
+    try {
+      let sys = ctx.sys || '';
+      const before = sys.length;
+      sys = sys.replace(
+        /【お手本となる正しいnarrative出力例】[\s\S]*?これと同じ品質でnarrativeを生成すること。/,
+        ''
+      );
+      const removed = before - sys.length;
+
+      const positive = '\n\n【表現の自由度(fix25)】\n' +
+        '- narrative の文体・語彙・比喩・身体描写はモデルの判断に委ねる\n' +
+        '- 慣用化された反応表現(鼓動が速まる/息を呑む/身体が冷える/モナリザの微笑/無機質な動作 等)に依存せず、別角度の感覚で表現する\n' +
+        '- 五感の微細な変化、キャラ固有の過去/記憶/連想、環境との物理的接触の質感を、文ごとに別の組み合わせで選ぶ\n' +
+        '- 1ターン内で同じ慣用句・同じ身体反応を繰り返さない(別の局面では別の表現を選ぶ)\n' +
+        '- narrative の各文は完結し、自然な文末で終わること(これは引き続き守る)';
+
+      if (removed > 0) {
+        console.log('[v292Dfix25] removed example section, ' + removed + ' bytes');
+      } else {
+        console.warn('[v292Dfix25] example section not found, only adding positive framing');
+      }
+      return sys + positive;
+    } catch(e){
+      console.warn('[v292Dfix25] err:', e && e.message);
+      return ctx.sys;
+    }
+  });
+
+  window.__v292Dfix25Active = true;
+  console.log('[v292Dfix25] installed — example section removed, positive framing added');
+})();
