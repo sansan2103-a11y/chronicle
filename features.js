@@ -4463,3 +4463,87 @@
   window.__v292Dfix25Active = true;
   console.log('[v292Dfix25] installed — example section removed, positive framing added');
 })();
+
+/* v292Dfix26: Phase 3 — dialogue schema extension + dedup guard
+ * fix24/25 で narrative の品質と没入感は大幅改善。残る問題:
+ *   1. 会話ログの speaker が ? になることがある(pronoun resolver の限界)
+ *   2. 同一台詞が複数回出ることがある
+ * 根本対策として narrative element に object 形式 {type, speaker, text} を許容、
+ * Hermes が speaker を明示すれば原理的に解決する。
+ * 既存の文字列形式も完全サポート(後方互換)。
+ * parse 側で object → '<speaker>「<text>」' 文字列化 + 完全一致重複を dedup。
+ * _structuredNarrative に構造化版を保存(将来 UI が直接読める)。
+ */
+(function(){
+  if (window.__v292Dfix26Active) return;
+  window.Planner = window.Planner || {};
+  Planner._extensions = Planner._extensions || [];
+  Planner._parseExtensions = Planner._parseExtensions || [];
+
+  // 1. system side: schema 拡張の指示
+  Planner._extensions.push(function(ctx){
+    try {
+      const addendum = '\n\n【dialogue 構造化スキーマ(fix26)】\n' +
+        '- narrative 配列の各要素は次のどちらかでよい:\n' +
+        '  - 文字列(従来形式の地の文)\n' +
+        '  - オブジェクト: {"type":"dialogue", "speaker":"<キャラ名(主人公名 または NPC 名)>", "text":"<台詞のみ。鉤括弧不要>"}\n' +
+        '- 「誰が話したか曖昧」になる台詞は必ず dialogue オブジェクトで返し、speaker を明示する\n' +
+        '- 地の文に含めるセリフ(動作と一体化した台詞)は従来通り文字列内に「…」で記述してよい\n' +
+        '- 1ターン内で同じ台詞(text 完全一致)を繰り返さない';
+      return ctx.sys + addendum;
+    } catch(e) { return ctx.sys; }
+  });
+
+  // 2. parse side: object 要素を文字列化 + 重複ガード
+  Planner._parseExtensions.push(function(plan, meta){
+    try {
+      if (!plan || !Array.isArray(plan.narrative)) return plan;
+      const seenText = new Set();
+      const out = [];
+      const structured = [];
+      plan.narrative.forEach(function(el){
+        if (el == null) return;
+        if (typeof el === 'string') {
+          const norm = el.trim();
+          if (!norm) return;
+          if (seenText.has(norm)) {
+            console.log('[v292Dfix26] dedup string:', norm.slice(0,30));
+            return;
+          }
+          seenText.add(norm);
+          out.push(el);
+          structured.push({type:'prose', text: el});
+        } else if (typeof el === 'object') {
+          const type = el.type || '';
+          const speaker = (el.speaker || '').trim();
+          const text = (el.text || '').trim();
+          if (!text) return;
+          if (seenText.has(text)) {
+            console.log('[v292Dfix26] dedup dialogue:', text.slice(0,30));
+            return;
+          }
+          seenText.add(text);
+          if (type === 'dialogue' && speaker) {
+            out.push(speaker + '「' + text + '」');
+            structured.push({type:'dialogue', speaker: speaker, text: text});
+          } else if (type === 'dialogue') {
+            out.push('「' + text + '」');
+            structured.push({type:'dialogue', speaker: null, text: text});
+          } else {
+            out.push(text);
+            structured.push({type:'prose', text: text});
+          }
+        }
+      });
+      plan.narrative = out;
+      plan._structuredNarrative = structured;
+      return plan;
+    } catch(e) {
+      console.warn('[v292Dfix26] parse ext err:', e && e.message);
+      return plan;
+    }
+  });
+
+  window.__v292Dfix26Active = true;
+  console.log('[v292Dfix26] installed — dialogue schema extension + dedup active');
+})();
