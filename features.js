@@ -4333,3 +4333,88 @@
   window.__v292Dfix23Active = true;
   console.log('[v292Dfix23] installed — Hermes JSON-mode sampling conservatized');
 })();
+
+/* v292Dfix24: Phase 1 — input atomization + psych profile injection
+ * fix22/23 後の課題に対応 — narrative の没入感とキャラ固有性を高める。
+ * Planner._userExtensions に push して user message に inputSeed と psychAnchors を追加、
+ * Planner._extensions に push して system に「入力を種に展開する」枠組みを追記する。
+ * 既存 Planner.build をラップせず、hook 配列のみ使う(wrap-detector 警告を出さない)。
+ */
+(function(){
+  if (window.__v292Dfix24Active) return;
+  window.Planner = window.Planner || {};
+  Planner._userExtensions = Planner._userExtensions || [];
+  Planner._extensions = Planner._extensions || [];
+
+  // user side: enrich with input atomization + psych anchors
+  Planner._userExtensions.push(function(ctx){
+    try {
+      const user = ctx.user;
+      const state = ctx.state;
+      if (typeof user !== 'string' || !user.trim().startsWith('{')) return user;
+      const obj = JSON.parse(user);
+      const input = obj.currentInput && obj.currentInput.text || '';
+      const inputType = obj.currentInput && obj.currentInput.type || '';
+      if (!input) return user;
+
+      obj.inputSeed = {
+        text: input,
+        type: inputType,
+        instruction: 'プレイヤー入力は物語の次の3秒の起点である。なぞり書き(同じ内容を別の表現で繰り返す/言い換え反復)は禁止。入力に含まれる動詞・身体動作・感情ヒントを「種」として、その直後のミクロな展開(0.5〜3秒の範囲)を超解像で描く。'
+      };
+
+      const hero = state && state.cast && state.cast.hero;
+      const npcs = (state && state.cast && state.cast.npcs) || [];
+      const anchors = [];
+      if (hero && (hero.coreFear || hero.coreDesire || hero.wound)) {
+        anchors.push({
+          who: (hero.name || '主人公') + '(主人公)',
+          coreFear: hero.coreFear || null,
+          coreDesire: hero.coreDesire || null,
+          wound: hero.wound || null
+        });
+      }
+      npcs.forEach(function(n){
+        if (n.coreFear || n.coreDesire || n.wound) {
+          anchors.push({
+            who: (n.name || 'NPC') + '(NPC)',
+            coreFear: n.coreFear || null,
+            coreDesire: n.coreDesire || null,
+            wound: n.wound || null
+          });
+        }
+      });
+      if (anchors.length) {
+        obj.psychAnchors = {
+          note: '各キャラの恐怖・欲望・傷は narrative の地の文に間接的に滲ませる。クリシェ反応(鼓動が速まる/息を呑む/身体が冷える 等)ではなく、そのキャラ固有の身体記憶・連想・過去の傷との結びつきで表現する。',
+          chars: anchors
+        };
+      }
+
+      return JSON.stringify(obj, null, 2);
+    } catch(e){
+      console.warn('[v292Dfix24] user-ext err:', e && e.message);
+      return ctx.user;
+    }
+  });
+
+  // system side: input-as-seed framing (additive, short)
+  Planner._extensions.push(function(ctx){
+    try {
+      const sys = ctx.sys;
+      const addendum = '\n\n【入力を種に展開する(fix24)】\n' +
+        '- プレイヤー入力(DO/SAY/STORY)は物語の次の3秒の起点である\n' +
+        '- 入力テキストをなぞり書き(同じ内容の言い換え反復)せず、その直後のミクロな展開(0.5〜3秒範囲)を描く\n' +
+        '- 入力中の動詞・身体動作・感情ヒントを素材として、その先の枝を広げる\n' +
+        '【キャラ固有性(fix24)】\n' +
+        '- user message の psychAnchors(各キャラの coreFear / coreDesire / wound)を毎ターン参照する\n' +
+        '- 同じ恐怖/痛みの反応でも、キャラごとに表出は固有である(過去の傷や記憶想起と結びつけて描き分ける)';
+      return sys + addendum;
+    } catch(e){
+      return ctx.sys;
+    }
+  });
+
+  window.__v292Dfix24Active = true;
+  console.log('[v292Dfix24] installed — input-as-seed + psych anchors active');
+})();
