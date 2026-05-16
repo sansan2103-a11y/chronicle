@@ -4855,3 +4855,214 @@
   window.__v292Dfix27Active = true;
   console.log(TAG, 'installed — C-1/C-2/C-3/M-1..M-5 corrections active');
 })();
+/* v292Dfix28: Bug 1 (target-indicator-aware speaker resolver) + Bug 2 (読点 dedup hint)
+ * 観察された症状:
+ *   B-1 narrative の「Aは...Bに向けて...動詞」構文の後の dialogue が
+ *       B(target=受け手) を speaker として登録される (本来は A=主体)
+ *       例: 「レナは、かすかな笑みを、カエデに向けて、浮かべた」
+ *            → 「やっと、会えたね」の speaker が カエデ(誤) → レナ(正) であるべき
+ *   B-2 narrative の文体が読点(、) 過多で不自然
+ *       例: 「彼女の目は、カエデのものと、廊下の先で、ふと、合った」(読点 4 個)
+ *
+ * 対策:
+ *   1. Planner._extensions に system prompt addendum を追加
+ *      - subject/target 区別ガイド + NG/OK 例示
+ *      - 読点制御 NG/OK 例示
+ *   2. Planner._parseExtensions に後段補正 IIFE を push (fix27 の後に実行)
+ *      - prevProse から target indicator(「に向けて」「を見て」等) を検出
+ *      - speaker がそのフレーズの target に該当する場合、prevProse から
+ *        真の subject 候補(は/が マーカー優先) を探して speaker を補正
+ *      - 読点 ratio が高い narrative line を console.warn (post-process 監視)
+ *
+ * 設計原則:
+ *   - __v292Dfix28Active フラグで二重 install 防止
+ *   - fix27 と非競合: fix28 は fix27 が処理した後の _structuredNarrative を読む
+ *   - prose 文体は変更しない (Bug 2 は監視 + prompt hint のみ)
+ *   - speaker 補正は cast名→cast名 の置換のみ。pronoun resolver(fix15/27) と非競合
+ */
+(function v292Dfix28(){
+  if (window.__v292Dfix28Active) return;
+  var TAG = '[v292Dfix28]';
+  window.Planner = window.Planner || {};
+  Planner._extensions = Planner._extensions || [];
+  Planner._userExtensions = Planner._userExtensions || [];
+  Planner._parseExtensions = Planner._parseExtensions || [];
+
+  // ---- target indicator パターン (particle + verb stem) ----
+  // prose 中に <name>+<particle>+(任意読点)+<verb stem> の形で現れたら、name は target(受け手)
+  // 例: "カエデに向けて" / "カエデに、向けて" / "カエデを見つめた" / "カエデの肩を叩いた"
+  var TARGET_PATTERNS = [
+    ['に', ['向けて','向かって','向き','対して','対し','呼びかけ','声をかけ','話しかけ','問いかけ','語りかけ','囁','微笑']],
+    ['を', ['見て','見つめ','見据え','見上げ','見下ろし','覗き込','抱き','抱え','引き寄せ']],
+    ['の', ['目を見','顔を見','方を見','方を向','方向を','手を取','肩を','腕を','頬に','額に','名を呼']]
+  ];
+
+  function castNames(){
+    try {
+      var st = (typeof S !== 'undefined' && S) ? S
+            : (typeof window !== 'undefined' && window.S) ? window.S : null;
+      if (!st || !st.cast) return [];
+      var out = [];
+      if (st.cast.hero && st.cast.hero.name) out.push(String(st.cast.hero.name).trim());
+      if (Array.isArray(st.cast.npcs)) st.cast.npcs.forEach(function(n){
+        if (n && n.name) out.push(String(n.name).trim());
+      });
+      return out.filter(function(n){ return !!n; });
+    } catch(_){ return []; }
+  }
+
+  function escRe(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+  function isTargetOfPhrase(prose, name){
+    if (!prose || !name) return false;
+    var nm = escRe(name);
+    for (var i = 0; i < TARGET_PATTERNS.length; i++){
+      var particle = TARGET_PATTERNS[i][0];
+      var verbs = TARGET_PATTERNS[i][1];
+      for (var j = 0; j < verbs.length; j++){
+        var pat = new RegExp(nm + escRe(particle) + '[、,\\s　]{0,3}' + escRe(verbs[j]));
+        if (pat.test(prose)) return true;
+      }
+    }
+    return false;
+  }
+
+  function findSubjectCandidate(prose, names){
+    if (!prose || !names || !names.length) return '';
+    // Priority 1: name+は (topic marker)
+    for (var i = 0; i < names.length; i++){
+      var n = names[i];
+      if (new RegExp(escRe(n) + 'は').test(prose) && !isTargetOfPhrase(prose, n)) return n;
+    }
+    // Priority 2: name+が (subject marker)
+    for (var j = 0; j < names.length; j++){
+      var n2 = names[j];
+      if (new RegExp(escRe(n2) + 'が').test(prose) && !isTargetOfPhrase(prose, n2)) return n2;
+    }
+    // Priority 3: any name not in target position
+    for (var k = 0; k < names.length; k++){
+      var n3 = names[k];
+      if (prose.indexOf(n3) >= 0 && !isTargetOfPhrase(prose, n3)) return n3;
+    }
+    return '';
+  }
+
+  // ---- 1. SYSTEM-SIDE: prompt addendum ----
+  function sysExt(ctx){
+    try {
+      var add =
+        '\n\n【subject/target 区別 (fix28 Bug-1)】\n' +
+        '- 地の文(prose)で動作を描く時、subject(動作主) と target(対象/受け手) を厳格に区別する\n' +
+        '- 構文「Aは…Bに向けて/に対して/を見て/を見つめて/に呼びかけて…動詞」では\n' +
+        '  A が動作主体である。B は受け手・対象であって動作主ではない\n' +
+        '- 直後の dialogue の speaker は A(主体) を選ぶこと。B(対象) を speaker にしない\n' +
+        '- 例: 「レナは、笑みをカエデに向けて浮かべた。」→ 直後の台詞 speaker は レナ\n' +
+        '       「カエデは、レナの目を見つめた。」→ 直後の台詞 speaker は カエデ\n' +
+        '【日本語の読点制御 (fix28 Bug-2)】\n' +
+        '- 読点(、) の多用を避け、自然な日本語の文章で書く\n' +
+        '- 1 文に読点を 3 個以上連続で使わない\n' +
+        '- 短いフレーズや修飾語を区切るために読点を入れない\n' +
+        '- NG例: 「彼女の目は、カエデのものと、廊下の先で、ふと、合った。」(読点 4 個 = 過剰)\n' +
+        '- OK例: 「彼女の目がカエデのそれと、廊下の先で重なった。」(読点 1 個 = 自然)\n' +
+        '- NG例: 「レナは、かすかな笑みを、カエデに向けて、浮かべた。」(読点 3 個 = 装飾過剰)\n' +
+        '- OK例: 「レナはかすかな笑みをカエデに向けて浮かべた。」(読点 0 個 = 簡潔)\n' +
+        '- 文学的効果を狙う場合でも、意味の区切りでのみ読点を使う';
+      return ctx.sys + add;
+    } catch(e){ return ctx.sys; }
+  }
+  if (!Planner._extensions.__v292Dfix28){
+    Planner._extensions.push(sysExt);
+    Planner._extensions.__v292Dfix28 = true;
+  }
+
+  // ---- 2. PARSE-SIDE: 後段補正 (fix27 の後で動く) ----
+  function parseExt(plan, ctx){
+    try {
+      if (!plan) return plan;
+      var structured = plan._structuredNarrative;
+      if (!Array.isArray(structured)) return plan;
+      var names = castNames();
+      if (!names.length) return plan;
+
+      var prevProse = '';
+      var corrections = 0;
+      var rebuilt = structured.map(function(el){
+        if (!el || typeof el !== 'object') return el;
+        if (el.type === 'prose'){
+          prevProse = (el.text || '').trim();
+          return el;
+        }
+        if (el.type !== 'dialogue') return el;
+        if (!prevProse) return el;
+        var speaker = (el.speaker || '').trim();
+        if (!speaker || names.indexOf(speaker) < 0) return el;
+        // speaker が prevProse の target 位置にあるか
+        if (!isTargetOfPhrase(prevProse, speaker)) return el;
+        // 真の subject を探す
+        var candidate = findSubjectCandidate(prevProse, names);
+        if (!candidate || candidate === speaker) return el;
+        console.log(TAG, 'target->subject correction: "' + speaker + '" -> "' + candidate +
+                    '" (prose: ' + prevProse.slice(0, 60) + '...)');
+        corrections++;
+        return { type: 'dialogue', speaker: candidate, text: el.text };
+      });
+
+      if (corrections > 0){
+        plan._structuredNarrative = rebuilt;
+        plan.narrative = rebuilt.map(function(el){
+          if (el && el.type === 'dialogue'){
+            return el.speaker ? (el.speaker + '「' + el.text + '」') : ('「' + el.text + '」');
+          }
+          return el && el.text;
+        }).filter(function(x){ return x != null; });
+        console.log(TAG, 'speaker corrections applied:', corrections);
+      }
+
+      // Bug-2 monitor: warn lines with too many 読点 (no rewrite)
+      if (Array.isArray(plan.narrative)){
+        var heavy = 0;
+        plan.narrative.forEach(function(line, idx){
+          if (typeof line !== 'string') return;
+          var commas = (line.match(/、/g) || []).length;
+          var chars = line.length;
+          if (chars > 20 && commas >= 3 && (commas / chars) > 0.05){
+            heavy++;
+            if (heavy <= 3){
+              console.warn(TAG, '読点過多 line ' + idx + ' (commas=' + commas + ', chars=' + chars + '):',
+                line.slice(0, 80));
+            }
+          }
+        });
+        if (heavy > 0){
+          console.log(TAG, '読点過多 lines total:', heavy, '(prompt addendum will improve next turns)');
+        }
+      }
+    } catch(e){
+      console.warn(TAG, 'parse-ext err:', e && e.message);
+    }
+    return plan;
+  }
+  if (!Planner._parseExtensions.__v292Dfix28){
+    Planner._parseExtensions.push(parseExt);
+    Planner._parseExtensions.__v292Dfix28 = true;
+  }
+
+  // 定期再 install (fix14 系と同様、Planner._parseExtensions が replace された時の保険)
+  setInterval(function(){
+    try {
+      if (Array.isArray(Planner._extensions) && !Planner._extensions.__v292Dfix28){
+        Planner._extensions.push(sysExt);
+        Planner._extensions.__v292Dfix28 = true;
+        console.log(TAG, 'sysExt reinstalled');
+      }
+      if (Array.isArray(Planner._parseExtensions) && !Planner._parseExtensions.__v292Dfix28){
+        Planner._parseExtensions.push(parseExt);
+        Planner._parseExtensions.__v292Dfix28 = true;
+        console.log(TAG, 'parseExt reinstalled');
+      }
+    } catch(_){}
+  }, 3000);
+
+  window.__v292Dfix28Active = true;
+  console.log(TAG, 'installed - target-indicator speaker resolver + 読点 dedup hint active');
+})();
