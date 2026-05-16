@@ -4547,3 +4547,311 @@
   window.__v292Dfix26Active = true;
   console.log('[v292Dfix26] installed — dialogue schema extension + dedup active');
 })();
+
+/* v292Dfix27: Phase 4 — vocative/dedup/STORY-quote correction + cross-turn cliche/verbatim guard
+ * fix26 後の実機テストで残る課題:
+ *   C-1 自名 vocative の speaker 入れ替え (例: セイラ「セイラ！」)
+ *   C-2 正規化不足で素通りする重複登録 (text 揺れで素通り)
+ *   C-3 STORY 入力に含まれる「」が新規 speaker として昇格してしまう
+ *   M-1 pronoun antecedent が同性最寄り選択で誤マッチ
+ *   M-2 動的挿入された dialogue card で avatar autofill が発火しない
+ *   M-3 fix25 で除いたクリシェがまだ出る
+ *   M-4 同一文 verbatim の複数ターン再出力
+ *   M-5 やり直す経路でも同種バグが再発
+ * Planner._extensions / _userExtensions / _parseExtensions + 単独 MutationObserver で処理。
+ * Planner.build はラップしない(既存原則維持)。後方互換 OK。
+ */
+(function(){
+  if (window.__v292Dfix27Active) return;
+  var TAG = '[v292Dfix27]';
+  window.Planner = window.Planner || {};
+  Planner._extensions = Planner._extensions || [];
+  Planner._userExtensions = Planner._userExtensions || [];
+  Planner._parseExtensions = Planner._parseExtensions || [];
+
+  if (!window.__v292Dfix27History) {
+    window.__v292Dfix27History = { lines: [], cap: 60 };
+  }
+
+  // 1. SYSTEM-SIDE: C-1 / C-3 / M-1 / M-3 / M-4 を予防
+  Planner._extensions.push(function(ctx){
+    try {
+      var addendum =
+        '\n\n【vocative 区別 (fix27 C-1)】\n' +
+        '- speaker の text は「呼びかけ」と「発話」を厳格に区別する\n' +
+        '- speaker 自身の名前で text が始まる場合(例: セイラ「セイラ！」)は\n' +
+        '  vocative の誤帰属である。その台詞は「呼ばれる側」ではなく「呼びかける側」を speaker にする\n' +
+        '- 自分で自分の名前を呼ぶ dialogue オブジェクトは作らない\n' +
+        '【STORY 入力内の「」(fix27 C-3)】\n' +
+        '- user message 内 currentInput.type === "STORY" の場合、その text に含まれる\n' +
+        '  「…」はナレーションの一部であり、新規 dialogue として抽出しない\n' +
+        '- STORY 内の「」内テキストや任意フレーズを speaker name に昇格させてはならない\n' +
+        '- speaker が cast.hero/npcs.name のいずれにも一致しない値になる場合は dialogue を作らず prose に流す\n' +
+        '【pronoun 禁止 (fix27 M-1)】\n' +
+        '- dialogue.speaker フィールドには代名詞(彼/彼女/少女/少年/あの男/あの女 等)を入れない\n' +
+        '- 必ず cast に登録された固有名詞を入れる\n' +
+        '- 地の文で代名詞を使った直後の dialogue は、直前文の動作主体(主語)と一致させる\n' +
+        '【cliche 強化 (fix27 M-3)】\n' +
+        '- 次の慣用表現は使用禁止: 鼓動が速[くまっ]/息を呑[んみ]/身体が冷え/体が冷え/\n' +
+        '  モナリザの(微笑|笑み)/無機質な(動作|表情|声)/何かが弾けた/目を見開いた/\n' +
+        '  ぞくりとした/背筋が凍/声にならない悲鳴/空気が凍/時が止ま\n' +
+        '- 同等の心理描写は別語彙・別アングル(具体的身体部位/環境物質との接触/過去想起 等)で書く\n' +
+        '【verbatim 反復禁止 (fix27 M-4)】\n' +
+        '- 直前 2 ターンと同一の文(完全一致 or 句読点・空白を除いて一致)を再出力しない\n' +
+        '- 象徴的フレーズ(モナリザ/触手/海/夕暮れ 等)を 2 ターンに 1 回より高頻度で使わない';
+      return ctx.sys + addendum;
+    } catch(e) { return ctx.sys; }
+  });
+
+  // 2. USER-SIDE: STORY 入力にメタを付与 (C-3)
+  Planner._userExtensions.push(function(ctx){
+    try {
+      var user = ctx.user;
+      if (typeof user !== 'string' || !user.trim().startsWith('{')) return user;
+      var obj = JSON.parse(user);
+      var ci = obj.currentInput || {};
+      var text = ci.text || '';
+      var type = (ci.type || '').toUpperCase();
+      if (type === 'STORY' && /「[^」]*」/.test(text)) {
+        obj.storyQuoteNote = {
+          warning: 'currentInput.text は STORY 種別。内部の「…」はナレーションの一部であり、新規 dialogue speaker として抽出してはならない。speaker は必ず cast 既存名と一致させること。'
+        };
+      }
+      return JSON.stringify(obj);
+    } catch(e){
+      console.warn(TAG, 'user-ext err:', e && e.message);
+      return ctx.user;
+    }
+  });
+
+  // 3. PARSE-SIDE: 後段補正
+  function castNamesFromState(){
+    try {
+      var st = (typeof S !== 'undefined' && S) ? S
+            : (typeof window !== 'undefined' && window.S) ? window.S : null;
+      if (!st || !st.cast) return [];
+      var out = [];
+      if (st.cast.hero && st.cast.hero.name) out.push(st.cast.hero.name);
+      if (Array.isArray(st.cast.npcs)) st.cast.npcs.forEach(function(n){
+        if (n && n.name) out.push(n.name);
+      });
+      return out;
+    } catch(_){ return []; }
+  }
+  var PRONOUNS = ['彼','彼女','少女','少年','あの男','あの女','あの少女','あの少年'];
+  function isPronoun(s){
+    if (!s) return false;
+    var t = String(s).trim();
+    return PRONOUNS.indexOf(t) >= 0;
+  }
+  function extractSubject(proseText, knownNames){
+    if (!proseText || !knownNames || !knownNames.length) return '';
+    for (var i = knownNames.length - 1; i >= 0; i--){
+      var nm = knownNames[i];
+      var re = new RegExp(nm + '(は|が|の|を|に|へ|と)');
+      if (re.test(proseText)) return nm;
+    }
+    return '';
+  }
+  function isSelfVocative(speaker, text){
+    if (!speaker || !text) return false;
+    var s = String(speaker).trim();
+    var t = String(text).trim();
+    if (t.indexOf(s) !== 0) return false;
+    var rest = t.slice(s.length);
+    return /^[！!?？…・、\s　]/.test(rest) || rest === '';
+  }
+  function normText(t){
+    return String(t || '')
+      .replace(/[\s　]+/g, '')
+      .replace(/[！!?？.,、。…・「」『』]+/g, '')
+      .toLowerCase();
+  }
+  var CLICHES = [
+    /鼓動が速[くまっ]/,
+    /息を呑[んみ]/,
+    /身体が冷え/,
+    /体が冷え/,
+    /モナリザの(微笑|笑み)/,
+    /無機質な(動作|表情|声)/,
+    /何かが弾けた/,
+    /背筋が凍/,
+    /声にならない悲鳴/,
+    /空気が凍/,
+    /時が止ま/,
+    /ぞくりとした/,
+    /目を見開いた/
+  ];
+  function isCliche(text){
+    if (!text) return false;
+    var s = String(text);
+    for (var i=0;i<CLICHES.length;i++){
+      if (CLICHES[i].test(s)) return true;
+    }
+    return false;
+  }
+
+  Planner._parseExtensions.push(function(plan, meta){
+    try {
+      if (!plan) return plan;
+      var structured = Array.isArray(plan._structuredNarrative) ? plan._structuredNarrative : null;
+      if (!structured && Array.isArray(plan.narrative)){
+        structured = plan.narrative.map(function(el){
+          if (typeof el === 'string') return { type: 'prose', text: el };
+          if (el && typeof el === 'object') return el;
+          return null;
+        }).filter(Boolean);
+      }
+      if (!structured) return plan;
+
+      var names = castNamesFromState();
+      var history = (window.__v292Dfix27History && window.__v292Dfix27History.lines) || [];
+
+      var seenNorm = {};
+      var prevProse = '';
+      var fixed = [];
+      var counts = { vocFix:0, dedup:0, cliche:0, verbatim:0, pronounFix:0, storyDrop:0 };
+
+      structured.forEach(function(el){
+        if (!el || typeof el !== 'object') return;
+        var type = el.type || '';
+        var speaker = (el.speaker || '').trim();
+        var text = (el.text || '').trim();
+
+        if (type === 'dialogue'){
+          if (!text) return;
+
+          // C-3 残処理: speaker が cast にも代名詞にも一致しない場合は prose に格下げ
+          if (speaker && names.length && names.indexOf(speaker) < 0 && !isPronoun(speaker)){
+            counts.storyDrop++;
+            type = 'prose';
+            text = speaker + '「' + text + '」';
+            speaker = '';
+          }
+
+          // M-1: pronoun in speaker
+          if (type === 'dialogue' && isPronoun(speaker)){
+            var resolved = extractSubject(prevProse, names);
+            if (resolved){
+              counts.pronounFix++;
+              speaker = resolved;
+            }
+          }
+
+          // C-1: self-vocative
+          if (type === 'dialogue' && speaker && names.indexOf(speaker) >= 0 && isSelfVocative(speaker, text)){
+            var altNames = names.filter(function(n){ return n !== speaker; });
+            var alt = extractSubject(prevProse, altNames);
+            if (!alt){
+              for (var i=fixed.length-1;i>=0;i--){
+                if (fixed[i].type === 'dialogue' && fixed[i].speaker && fixed[i].speaker !== speaker){
+                  alt = fixed[i].speaker; break;
+                }
+              }
+            }
+            counts.vocFix++;
+            speaker = alt || '';
+          }
+
+          if (type === 'dialogue'){
+            if (isCliche(text)){ counts.cliche++; return; }
+            var nk = normText(text);
+            var k1 = (speaker||'')+'|'+nk;
+            var k2 = 'd|'+nk;
+            if (seenNorm[k1] || seenNorm[k2]){ counts.dedup++; return; }
+            seenNorm[k1] = 1; seenNorm[k2] = 1;
+            if (history.indexOf(nk) >= 0){ counts.verbatim++; return; }
+            fixed.push({ type:'dialogue', speaker: speaker, text: text });
+            return;
+          }
+        }
+
+        // prose (元 prose または C-3 格下げ)
+        if (!text) return;
+        if (isCliche(text)){ counts.cliche++; return; }
+        var pk = normText(text);
+        if (seenNorm['p|'+pk]){ counts.dedup++; return; }
+        seenNorm['p|'+pk] = 1;
+        if (history.indexOf(pk) >= 0){ counts.verbatim++; return; }
+        fixed.push({ type:'prose', text: text });
+        prevProse = text;
+      });
+
+      plan.narrative = fixed.map(function(el){
+        if (el.type === 'dialogue'){
+          return el.speaker ? (el.speaker + '「' + el.text + '」') : ('「' + el.text + '」');
+        }
+        return el.text;
+      });
+      plan._structuredNarrative = fixed;
+
+      try {
+        var hist = window.__v292Dfix27History.lines;
+        fixed.forEach(function(el){ hist.push(normText(el.text)); });
+        var cap = window.__v292Dfix27History.cap || 60;
+        if (hist.length > cap) hist.splice(0, hist.length - cap);
+      } catch(_){}
+
+      if (counts.vocFix||counts.dedup||counts.cliche||counts.verbatim||counts.pronounFix||counts.storyDrop){
+        console.log(TAG, 'corrections:', counts);
+      }
+    } catch(e){
+      console.warn(TAG, 'parse-ext err:', e && e.message);
+    }
+    return plan;
+  });
+
+  // 4. AVATAR MUTATION OBSERVER (M-2)
+  function installAvatarObserver(){
+    try {
+      function runFill(){
+        try {
+          var aaf = window.__v292 && window.__v292.avatarAutofill;
+          if (aaf && typeof aaf.autofill === 'function') aaf.autofill();
+        } catch(_){}
+      }
+      var target = document.body;
+      if (!target || !window.MutationObserver) return false;
+      if (window.__v292Dfix27Observer) return true;
+      var pending = null;
+      var obs = new MutationObserver(function(muts){
+        var any = false;
+        for (var i=0;i<muts.length && !any;i++){
+          var m = muts[i];
+          if (m.addedNodes && m.addedNodes.length){
+            for (var j=0;j<m.addedNodes.length;j++){
+              var n = m.addedNodes[j];
+              if (n && n.nodeType === 1){
+                var cls = (n.className && typeof n.className==='string')?n.className:'';
+                if (/(dialogue|speaker|chat|log|message|card|avatar)/i.test(cls) ||
+                    (n.querySelector && n.querySelector('[class*="speaker"],[class*="avatar"],[class*="dialogue"]'))){
+                  any = true; break;
+                }
+              }
+            }
+          }
+        }
+        if (any){
+          if (pending) return;
+          pending = setTimeout(function(){ pending = null; runFill(); }, 80);
+        }
+      });
+      obs.observe(target, { childList:true, subtree:true });
+      window.__v292Dfix27Observer = obs;
+      console.log(TAG, 'avatar MutationObserver installed');
+      return true;
+    } catch(e){
+      console.warn(TAG, 'observer err:', e && e.message);
+      return false;
+    }
+  }
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', installAvatarObserver, { once:true });
+  } else {
+    installAvatarObserver();
+  }
+
+  // 5. M-5: retry path stability — hooks are idempotent and on Planner.build path
+  window.__v292Dfix27Active = true;
+  console.log(TAG, 'installed — C-1/C-2/C-3/M-1..M-5 corrections active');
+})();
