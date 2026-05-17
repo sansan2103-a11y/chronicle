@@ -7350,3 +7350,152 @@
   window.__v292Dfix38 = { openPanel: renderPanel, closePanel: closePanel, loadStates: loadStates, getCharState: getCharState, setCharStat: setCharStat, setCharNotes: setCharNotes, resetChar: resetChar, describeState: describeState, buildStateContext: buildStateContext, STAT_AXES: STAT_AXES };
   init();
 })();
+
+/* v292Dfix39: ステータスフラグ (status flags / narrative tags)
+ *
+ * 目的 (Phase 3-B): fix38 数値 stat より具体的な「物語タグ」を char ごとに付与。
+ *   例: 「怪我 (左肩)」「魅了されてる」「決意した」「呪われている」「酔っている」
+ *   AI は narrative の前提として参照する。
+ *
+ * 設計:
+ *   - schema: localStorage.chr6_char_flags_<slotId> = { name: [tag1, tag2, ...] }
+ *   - prompt 注入: Planner._extensions で「【現在の状態フラグ】」block を ctx.sys 末尾に push
+ *   - UI: topbar 「🏷 タグ」 → modal で char ごとの list 編集 (Enter で追加、× で削除)
+ *   - fix30 active slot 連動 / fix38 と coexist
+ *
+ * 設計原則: __v292Dfix39Active フラグ、S.cast schema 不侵入、各 12 タグまで
+ */
+(function v292Dfix39(){
+  if (window.__v292Dfix39Active) return;
+  var TAG = '[v292Dfix39]';
+  function getActiveSlotId(){ try { if (window.__v292Dfix30 && typeof window.__v292Dfix30.getActive === 'function') return window.__v292Dfix30.getActive(); } catch(_){} return 'default'; }
+  function flagsKey(){ return 'chr6_char_flags_' + getActiveSlotId(); }
+  function loadFlags(){ try { var v = localStorage.getItem(flagsKey()); return v ? JSON.parse(v) : {}; } catch(_){ return {}; } }
+  function saveFlags(f){ try { localStorage.setItem(flagsKey(), JSON.stringify(f)); } catch(_){} }
+  function getCharFlags(name){ var all = loadFlags(); return Array.isArray(all[name]) ? all[name] : []; }
+  function addFlag(name, tag){
+    var all = loadFlags(); var arr = Array.isArray(all[name]) ? all[name] : [];
+    tag = (tag || '').trim().slice(0, 40); if (!tag) return;
+    if (arr.indexOf(tag) >= 0) return;
+    arr.push(tag); if (arr.length > 12) arr.shift();
+    all[name] = arr; saveFlags(all);
+  }
+  function removeFlag(name, tag){
+    var all = loadFlags(); if (!Array.isArray(all[name])) return;
+    all[name] = all[name].filter(function(t){ return t !== tag; });
+    if (!all[name].length) delete all[name];
+    saveFlags(all);
+  }
+  function castNames(){
+    try { var st = (typeof S !== 'undefined' && S) ? S : null; if (!st || !st.cast) return [];
+      var out = []; if (st.cast.hero && st.cast.hero.name) out.push(String(st.cast.hero.name).trim());
+      if (Array.isArray(st.cast.npcs)){ st.cast.npcs.forEach(function(n){ if (n && n.name) out.push(String(n.name).trim()); }); }
+      return out.filter(function(n){ return !!n; });
+    } catch(_){ return []; }
+  }
+  function buildFlagsContext(){
+    var names = castNames(); if (!names.length) return '';
+    var all = loadFlags(); var entries = [];
+    names.forEach(function(name){
+      var flags = Array.isArray(all[name]) ? all[name] : [];
+      if (!flags.length) return;
+      entries.push('- ' + name + ': ' + flags.map(function(t){ return '[' + t + ']'; }).join(' '));
+    });
+    if (!entries.length) return '';
+    var lines = ['【現在の状態フラグ (narrative の前提)】'].concat(entries);
+    lines.push(''); lines.push('上記のフラグは各キャラの現在進行中の状態。narrative で動作・台詞・反応に反映すること (怪我フラグなら該当部位をかばう、魅了フラグなら相手の言動への抵抗が弱まる、等)。');
+    return lines.join('\n');
+  }
+  function sysExt(ctx){ try { var block = buildFlagsContext(); if (!block) return ctx.sys; return ctx.sys + '\n\n' + block; } catch(e){ return ctx.sys; } }
+  function installPlannerExt(){
+    if (typeof window.Planner === 'undefined' || !window.Planner) return false;
+    window.Planner._extensions = window.Planner._extensions || [];
+    if (window.Planner._extensions.__v292Dfix39) return true;
+    window.Planner._extensions.push(sysExt); window.Planner._extensions.__v292Dfix39 = true;
+    return true;
+  }
+  function ensureStyles(){
+    if (document.getElementById('v292Dfix39-style')) return;
+    var style = document.createElement('style'); style.id = 'v292Dfix39-style';
+    style.textContent = ['.v39-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center;font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI",sans-serif}','.v39-modal{background:var(--s1,#111119);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:8px;width:560px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.6)}','.v39-head{padding:14px 18px;border-bottom:1px solid var(--border,rgba(139,118,240,.2));display:flex;align-items:center;gap:10px}','.v39-head h2{margin:0;font-size:15px;color:var(--acc,#8b76f0);font-weight:600;flex:1}','.v39-close{background:none;border:none;color:var(--dim,#888);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:4px}','.v39-close:hover{background:var(--s2,#17172a);color:var(--tx)}','.v39-body{flex:1;overflow:auto;padding:14px 18px}','.v39-intro{font-size:11px;color:var(--dim,#888);line-height:1.6;margin-bottom:12px;padding:8px 10px;background:var(--bg,#09090f);border-radius:4px;border-left:3px solid var(--acc,#8b76f0)}','.v39-char{border:1px solid var(--border,rgba(139,118,240,.15));border-radius:6px;padding:10px 12px;margin-bottom:8px;background:var(--bg,#09090f)}','.v39-char-name{font-weight:600;font-size:13px;color:var(--tx,#e0dcf0);margin-bottom:8px;display:flex;align-items:center;gap:8px}','.v39-char-count{font-size:10px;color:var(--dim,#888);font-weight:normal}','.v39-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;min-height:28px;align-items:center}','.v39-tag{background:rgba(139,118,240,.15);border:1px solid rgba(139,118,240,.3);color:var(--tx,#e0dcf0);padding:3px 8px 3px 10px;border-radius:12px;font-size:12px;display:inline-flex;align-items:center;gap:6px}','.v39-tag-remove{background:none;border:none;color:var(--dim,#888);cursor:pointer;font-size:14px;padding:0;line-height:1;font-family:inherit}','.v39-tag-remove:hover{color:#e06060}','.v39-empty{font-size:11px;color:var(--dim,#888);font-style:italic}','.v39-add{display:flex;gap:6px}','.v39-add input{flex:1;background:var(--bg,#09090f);color:var(--tx);border:1px solid var(--border,rgba(139,118,240,.2));border-radius:4px;padding:5px 8px;font-size:12px;font-family:inherit;box-sizing:border-box}','.v39-add input:focus{outline:none;border-color:var(--acc,#8b76f0)}','.v39-add button{background:var(--acc,#8b76f0);color:#fff;border:1px solid var(--acc,#8b76f0);border-radius:4px;padding:5px 12px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}','.v39-add button:hover{filter:brightness(1.15)}'].join('\n');
+    document.head.appendChild(style);
+  }
+  function escAttr(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escHtml(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function renderPanel(){
+    closePanel(); ensureStyles();
+    var names = castNames(); var all = loadFlags();
+    var overlay = document.createElement('div'); overlay.className = 'v39-overlay'; overlay.id = 'v39-overlay';
+    overlay.addEventListener('click', function(e){ if (e.target === overlay) closePanel(); });
+    var modal = document.createElement('div'); modal.className = 'v39-modal';
+    var html = ['<div class="v39-head"><h2>🏷 状態フラグ</h2><button class="v39-close" id="v39-close-x">×</button></div>'];
+    html.push('<div class="v39-body"><div class="v39-intro">各キャラに <b>具体的な状態タグ</b> を付与 (例: 「怪我 (左肩)」「魅了されてる」「決意した」「呪い」)。fix38 の数値 stat と組み合わせると AI がより具体的な narrative を書きます。各 12 個まで保持、Enter で追加。</div>');
+    if (!names.length){ html.push('<div style="padding:20px;text-align:center;color:#888;font-size:12px;">キャラ未設定</div>'); }
+    else {
+      names.forEach(function(name){
+        var flags = all[name] || [];
+        html.push('<div class="v39-char"><div class="v39-char-name">' + escHtml(name) + '<span class="v39-char-count">' + flags.length + ' タグ</span></div><div class="v39-tags">');
+        if (!flags.length){ html.push('<span class="v39-empty">タグなし</span>'); }
+        else {
+          flags.forEach(function(tag){
+            html.push('<span class="v39-tag">' + escHtml(tag) + ' <button class="v39-tag-remove" data-act="remove" data-name="' + escAttr(name) + '" data-tag="' + escAttr(tag) + '">×</button></span>');
+          });
+        }
+        html.push('</div><div class="v39-add"><input type="text" data-char="' + escAttr(name) + '" maxlength="40" placeholder="新しいタグ (Enter で追加)"><button data-act="add" data-name="' + escAttr(name) + '">追加</button></div></div>');
+      });
+    }
+    html.push('</div>');
+    modal.innerHTML = html.join(''); overlay.appendChild(modal); document.body.appendChild(overlay);
+    document.getElementById('v39-close-x').addEventListener('click', closePanel);
+    modal.addEventListener('click', function(e){
+      var t = e.target;
+      if (t && t.dataset && t.dataset.act === 'remove'){ removeFlag(t.dataset.name, t.dataset.tag); renderPanel(); return; }
+      if (t && t.dataset && t.dataset.act === 'add'){
+        var inp = t.parentElement.querySelector('input[data-char="' + (t.dataset.name).replace(/"/g, '\\"') + '"]');
+        if (inp && inp.value.trim()){ addFlag(t.dataset.name, inp.value); renderPanel(); }
+      }
+    });
+    modal.addEventListener('keydown', function(e){
+      var t = e.target;
+      if (e.key === 'Enter' && t && t.dataset && t.dataset.char){
+        if (t.value.trim()){ addFlag(t.dataset.char, t.value); renderPanel(); }
+      }
+    });
+  }
+  function closePanel(){ var ov = document.getElementById('v39-overlay'); if (ov && ov.parentNode) ov.parentNode.removeChild(ov); }
+  function injectTopbarButton(){
+    if (document.getElementById('v39-topbar-btn')) return true;
+    var anchor = document.getElementById('v38-topbar-btn') || document.getElementById('v37-topbar-btn') || document.getElementById('v30-topbar-btn');
+    if (!anchor){
+      var allBtns = document.querySelectorAll('button');
+      for (var i = 0; i < allBtns.length; i++){
+        if ((allBtns[i].textContent || '').indexOf('設定') >= 0){ anchor = allBtns[i]; break; }
+      }
+    }
+    if (!anchor) return false;
+    var btn = document.createElement('button');
+    btn.id = 'v39-topbar-btn'; btn.className = 'v30-topbar-btn';
+    btn.textContent = '🏷 タグ'; btn.title = '状態フラグ';
+    btn.style.cssText = 'background:var(--s2,#17172a);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer;margin-right:8px;font-family:inherit';
+    btn.addEventListener('click', renderPanel);
+    anchor.parentNode.insertBefore(btn, anchor);
+    return true;
+  }
+  function init(){
+    if (installPlannerExt() && injectTopbarButton()){ window.__v292Dfix39Active = true; console.log(TAG, 'installed'); return; }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (installPlannerExt() && injectTopbarButton()){ clearInterval(iv); window.__v292Dfix39Active = true; console.log(TAG, 'installed (deferred ' + tries + ')'); }
+      else if (tries > 80){ clearInterval(iv); console.warn(TAG, 'gave up'); }
+    }, 200);
+  }
+  setInterval(function(){
+    if (window.__v292Dfix39Active){
+      if (!document.getElementById('v39-topbar-btn')){ if (injectTopbarButton()) console.log(TAG, 'btn reinjected'); }
+      if (window.Planner && window.Planner._extensions && !window.Planner._extensions.__v292Dfix39){ if (installPlannerExt()) console.log(TAG, 'sysExt reinstalled'); }
+    }
+  }, 5000);
+  window.__v292Dfix39 = { openPanel: renderPanel, closePanel: closePanel, loadFlags: loadFlags, getCharFlags: getCharFlags, addFlag: addFlag, removeFlag: removeFlag, buildFlagsContext: buildFlagsContext };
+  init();
+})();
