@@ -6803,3 +6803,189 @@
   window.__v292Dfix35 = { openPanel: renderPanel, closePanel: closePanel, autoSummary: autoSummary, getSummary: getSummary, buildMemoryContext: buildMemoryContext, loadOverrides: loadOverrides, setOverride: setOverride, MEMORY_WINDOW: MEMORY_WINDOW };
   init();
 })();
+
+/* v292Dfix36: 関係性マトリクス
+ *
+ * 目的 (Phase 2-B):
+ *   キャラ間の関係性を構造化して持ち、prompt に注入することで
+ *   narrative が「Fiona ⇄ Sakura は守る/守られる関係」「Miria は無口だが信頼厚い」等の
+ *   relational continuity を維持できるようにする。fix35 の経緯記憶と相補。
+ *
+ * 設計:
+ *   - schema: localStorage.chr6_relations_<slotId> = { "from||to": { trust, intimacy, label, notes } }
+ *     方向性あり (asymmetric)、trust/intimacy は 0-10 整数、label 短い形容、notes 補足
+ *   - UI: topbar 「💞 関係」ボタン → matrix grid modal、セルクリックで個別編集
+ *   - prompt 注入: Planner._extensions push、ctx.sys 末尾に「【キャラクター関係性】」block
+ *
+ * 設計原則:
+ *   - __v292Dfix36Active フラグで二重 install 防止
+ *   - S.cast schema 不侵入 (localStorage 外部保存)
+ *   - fix30 active slot 連動
+ */
+(function v292Dfix36(){
+  if (window.__v292Dfix36Active) return;
+  var TAG = '[v292Dfix36]';
+  function getActiveSlotId(){ try { if (window.__v292Dfix30 && typeof window.__v292Dfix30.getActive === 'function') return window.__v292Dfix30.getActive(); } catch(_){} return 'default'; }
+  function relKey(){ return 'chr6_relations_' + getActiveSlotId(); }
+  function loadRelations(){ try { var v = localStorage.getItem(relKey()); return v ? JSON.parse(v) : {}; } catch(_){ return {}; } }
+  function saveRelations(r){ try { localStorage.setItem(relKey(), JSON.stringify(r)); } catch(_){} }
+  function pairKey(from, to){ return from + '||' + to; }
+  function getRelation(from, to){ var r = loadRelations(); return r[pairKey(from, to)] || null; }
+  function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+  function setRelation(from, to, data){
+    var r = loadRelations(); var k = pairKey(from, to);
+    if (data && (data.label || data.trust != null || data.intimacy != null || data.notes)){
+      r[k] = { trust: clamp(parseInt(data.trust, 10) || 0, 0, 10), intimacy: clamp(parseInt(data.intimacy, 10) || 0, 0, 10), label: (data.label || '').slice(0, 40), notes: (data.notes || '').slice(0, 200) };
+    } else { delete r[k]; }
+    saveRelations(r);
+  }
+  function castNames(){
+    try { var st = (typeof S !== 'undefined' && S) ? S : null; if (!st || !st.cast) return [];
+      var out = []; if (st.cast.hero && st.cast.hero.name) out.push(String(st.cast.hero.name).trim());
+      if (Array.isArray(st.cast.npcs)){ st.cast.npcs.forEach(function(n){ if (n && n.name) out.push(String(n.name).trim()); }); }
+      return out.filter(function(n){ return !!n; });
+    } catch(_){ return []; }
+  }
+  function buildRelationsContext(){
+    var rels = loadRelations(); var names = castNames(); if (!names.length) return '';
+    var entries = [];
+    for (var i = 0; i < names.length; i++){
+      for (var j = 0; j < names.length; j++){
+        if (i === j) continue;
+        var r = rels[pairKey(names[i], names[j])];
+        if (r && (r.label || r.trust || r.intimacy || r.notes)){
+          var parts = []; if (r.label) parts.push(r.label);
+          var meta = []; if (r.trust) meta.push('信頼 ' + r.trust + '/10'); if (r.intimacy) meta.push('親密 ' + r.intimacy + '/10');
+          if (meta.length) parts.push('(' + meta.join(', ') + ')');
+          if (r.notes) parts.push('— ' + r.notes);
+          entries.push('- ' + names[i] + ' → ' + names[j] + ': ' + parts.join(' '));
+        }
+      }
+    }
+    if (!entries.length) return '';
+    var lines = ['【キャラクター関係性 (現在)】'].concat(entries);
+    lines.push(''); lines.push('上記の関係性を踏まえて、各キャラの言動・心理がそれぞれの相手に対して一貫するように描くこと。');
+    return lines.join('\n');
+  }
+  function sysExt(ctx){ try { var block = buildRelationsContext(); if (!block) return ctx.sys; return ctx.sys + '\n\n' + block; } catch(e){ return ctx.sys; } }
+  function installPlannerExt(){
+    if (typeof window.Planner === 'undefined' || !window.Planner) return false;
+    window.Planner._extensions = window.Planner._extensions || [];
+    if (window.Planner._extensions.__v292Dfix36) return true;
+    window.Planner._extensions.push(sysExt); window.Planner._extensions.__v292Dfix36 = true;
+    return true;
+  }
+  function ensureStyles(){
+    if (document.getElementById('v292Dfix36-style')) return;
+    var style = document.createElement('style'); style.id = 'v292Dfix36-style';
+    style.textContent = ['.v36-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center;font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI",sans-serif}','.v36-modal{background:var(--s1,#111119);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:8px;width:720px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.6)}','.v36-head{padding:14px 18px;border-bottom:1px solid var(--border,rgba(139,118,240,.2));display:flex;align-items:center;gap:10px}','.v36-head h2{margin:0;font-size:15px;color:var(--acc,#8b76f0);font-weight:600;flex:1}','.v36-close{background:none;border:none;color:var(--dim,#888);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:4px}','.v36-close:hover{background:var(--s2,#17172a);color:var(--tx)}','.v36-body{flex:1;overflow:auto;padding:14px 18px}','.v36-intro{font-size:11px;color:var(--dim,#888);line-height:1.6;margin-bottom:14px;padding:8px 10px;background:var(--bg,#09090f);border-radius:4px;border-left:3px solid var(--acc,#8b76f0)}','.v36-matrix{width:100%;border-collapse:collapse;font-size:12px}','.v36-matrix th{padding:6px 8px;border:1px solid var(--border,rgba(139,118,240,.2));background:var(--bg,#09090f);color:var(--dim,#888);font-weight:600;text-align:left;white-space:nowrap}','.v36-matrix th.corner{background:transparent;border:none}','.v36-matrix th.rowhead{font-weight:600;color:var(--tx);background:var(--bg,#09090f);min-width:90px}','.v36-matrix td{padding:0;border:1px solid var(--border,rgba(139,118,240,.15));vertical-align:top;width:140px}','.v36-cell{display:block;padding:8px;cursor:pointer;height:100%;min-height:60px;background:var(--bg,#09090f);transition:background .15s;color:var(--tx,#e0dcf0)}','.v36-cell:hover{background:var(--s2,#17172a)}','.v36-cell.empty{color:var(--dim,#888);font-style:italic;font-size:11px}','.v36-cell.diag{background:#0a0a13;color:#555;cursor:default;text-align:center;font-size:18px}','.v36-cell-label{font-weight:600;font-size:12px;line-height:1.3;margin-bottom:4px;word-break:break-word}','.v36-cell-bar{display:flex;gap:4px;font-size:10px;color:var(--dim,#888)}','.v36-cell-bar span{padding:1px 5px;background:var(--s2,#17172a);border-radius:3px;white-space:nowrap}','.v36-cell-bar span.t{color:#c49040}','.v36-cell-bar span.i{color:#5a8ef0}','.v36-edit-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center;font-family:inherit}','.v36-edit-modal{background:var(--s1,#111119);color:var(--tx,#e0dcf0);border:1px solid var(--acc,#8b76f0);border-radius:8px;padding:18px;width:420px;max-width:92vw;box-shadow:0 8px 32px rgba(0,0,0,.7)}','.v36-edit-modal h3{margin:0 0 12px;font-size:14px;color:var(--acc,#8b76f0);font-weight:600}','.v36-edit-row{margin-bottom:10px;font-size:12px}','.v36-edit-row label{display:block;color:var(--dim,#888);font-size:11px;margin-bottom:4px}','.v36-edit-row input[type="text"], .v36-edit-row textarea{width:100%;background:var(--bg,#09090f);color:var(--tx);border:1px solid var(--border,rgba(139,118,240,.2));border-radius:4px;padding:6px 8px;font-size:13px;font-family:inherit;box-sizing:border-box}','.v36-edit-row input[type="text"]:focus, .v36-edit-row textarea:focus{outline:none;border-color:var(--acc,#8b76f0)}','.v36-edit-row textarea{resize:vertical;min-height:60px}','.v36-edit-row .num-row{display:flex;gap:14px;align-items:center}','.v36-edit-row input[type="range"]{width:100%;accent-color:var(--acc,#8b76f0)}','.v36-edit-row .num-val{color:var(--acc,#8b76f0);font-weight:600;text-align:right;font-size:13px}','.v36-edit-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}','.v36-btn{background:var(--s2,#17172a);color:var(--tx);border:1px solid var(--border,rgba(139,118,240,.2));border-radius:4px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:inherit}','.v36-btn:hover{background:var(--acc,#8b76f0);color:#fff;border-color:var(--acc)}','.v36-btn-primary{background:var(--acc,#8b76f0);color:#fff;border-color:var(--acc)}','.v36-btn-danger{color:#e06060;border-color:rgba(224,96,96,.3)}','.v36-btn-danger:hover{background:#e06060;color:#fff;border-color:#e06060}'].join('\n');
+    document.head.appendChild(style);
+  }
+  function escAttr(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escHtml(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function renderMatrix(){
+    closeMatrix(); ensureStyles();
+    var names = castNames(); var rels = loadRelations();
+    var overlay = document.createElement('div'); overlay.className = 'v36-overlay'; overlay.id = 'v36-overlay';
+    overlay.addEventListener('click', function(e){ if (e.target === overlay) closeMatrix(); });
+    var modal = document.createElement('div'); modal.className = 'v36-modal';
+    var html = ['<div class="v36-head"><h2>💞 関係性マトリクス</h2><button class="v36-close" id="v36-close-x">×</button></div>'];
+    html.push('<div class="v36-body"><div class="v36-intro">行のキャラ <b>→</b> 列のキャラ への関係性。セルクリックで編集。label・信頼 0-10・親密 0-10・notes が AI に毎ターン注入されます。</div>');
+    if (!names.length){ html.push('<div style="padding:20px;text-align:center;color:#888;">キャラ未設定</div>'); }
+    else {
+      html.push('<table class="v36-matrix"><tr><th class="corner"></th>');
+      names.forEach(function(c){ html.push('<th>' + escHtml(c) + '</th>'); });
+      html.push('</tr>');
+      names.forEach(function(from){
+        html.push('<tr><th class="rowhead">' + escHtml(from) + '</th>');
+        names.forEach(function(to){
+          if (from === to){ html.push('<td><div class="v36-cell diag">—</div></td>'); return; }
+          var r = rels[pairKey(from, to)];
+          if (r && (r.label || r.trust || r.intimacy || r.notes)){
+            html.push('<td><div class="v36-cell" data-from="' + escAttr(from) + '" data-to="' + escAttr(to) + '">');
+            if (r.label) html.push('<div class="v36-cell-label">' + escHtml(r.label) + '</div>');
+            html.push('<div class="v36-cell-bar">');
+            if (r.trust) html.push('<span class="t">信 ' + r.trust + '</span>');
+            if (r.intimacy) html.push('<span class="i">親 ' + r.intimacy + '</span>');
+            html.push('</div></div></td>');
+          } else {
+            html.push('<td><div class="v36-cell empty" data-from="' + escAttr(from) + '" data-to="' + escAttr(to) + '">+ 編集</div></td>');
+          }
+        });
+        html.push('</tr>');
+      });
+      html.push('</table>');
+    }
+    html.push('</div>');
+    modal.innerHTML = html.join(''); overlay.appendChild(modal); document.body.appendChild(overlay);
+    document.getElementById('v36-close-x').addEventListener('click', closeMatrix);
+    modal.addEventListener('click', function(e){
+      var cell = e.target.closest('.v36-cell:not(.diag)');
+      if (cell){ renderEdit(cell.dataset.from, cell.dataset.to); }
+    });
+  }
+  function closeMatrix(){ var ov = document.getElementById('v36-overlay'); if (ov && ov.parentNode) ov.parentNode.removeChild(ov); }
+  function renderEdit(from, to){
+    closeEdit(); ensureStyles();
+    var r = getRelation(from, to) || { trust: 0, intimacy: 0, label: '', notes: '' };
+    var overlay = document.createElement('div'); overlay.className = 'v36-edit-overlay'; overlay.id = 'v36-edit-overlay';
+    overlay.addEventListener('click', function(e){ if (e.target === overlay) closeEdit(); });
+    var modal = document.createElement('div'); modal.className = 'v36-edit-modal';
+    modal.innerHTML = '<h3>' + escHtml(from) + ' → ' + escHtml(to) + ' の関係性</h3>' +
+      '<div class="v36-edit-row"><label>label (短い形容、40字まで)</label><input type="text" id="v36-label" maxlength="40" value="' + escAttr(r.label) + '" placeholder="例: 守りたい妹分 / 警戒する敵 / 旧知の友"></div>' +
+      '<div class="v36-edit-row"><label>信頼 <span class="num-val" id="v36-trust-val">' + r.trust + '</span> / 10</label><input type="range" id="v36-trust" min="0" max="10" value="' + r.trust + '"></div>' +
+      '<div class="v36-edit-row"><label>親密 <span class="num-val" id="v36-intimacy-val">' + r.intimacy + '</span> / 10</label><input type="range" id="v36-intimacy" min="0" max="10" value="' + r.intimacy + '"></div>' +
+      '<div class="v36-edit-row"><label>notes (補足、200字まで)</label><textarea id="v36-notes" maxlength="200" placeholder="共有した過去 / 秘密 / きっかけ等">' + escHtml(r.notes) + '</textarea></div>' +
+      '<div class="v36-edit-actions"><button class="v36-btn v36-btn-danger" id="v36-edit-clear">クリア</button><button class="v36-btn" id="v36-edit-cancel">キャンセル</button><button class="v36-btn v36-btn-primary" id="v36-edit-save">保存</button></div>';
+    overlay.appendChild(modal); document.body.appendChild(overlay);
+    var trustEl = document.getElementById('v36-trust'), trustVal = document.getElementById('v36-trust-val');
+    var intimacyEl = document.getElementById('v36-intimacy'), intimacyVal = document.getElementById('v36-intimacy-val');
+    trustEl.addEventListener('input', function(){ trustVal.textContent = trustEl.value; });
+    intimacyEl.addEventListener('input', function(){ intimacyVal.textContent = intimacyEl.value; });
+    document.getElementById('v36-edit-cancel').addEventListener('click', closeEdit);
+    document.getElementById('v36-edit-clear').addEventListener('click', function(){
+      if (!confirm(from + ' → ' + to + ' の関係性をクリア?')) return;
+      setRelation(from, to, null); closeEdit(); renderMatrix();
+    });
+    document.getElementById('v36-edit-save').addEventListener('click', function(){
+      setRelation(from, to, { label: document.getElementById('v36-label').value, trust: trustEl.value, intimacy: intimacyEl.value, notes: document.getElementById('v36-notes').value });
+      closeEdit(); renderMatrix();
+    });
+  }
+  function closeEdit(){ var ov = document.getElementById('v36-edit-overlay'); if (ov && ov.parentNode) ov.parentNode.removeChild(ov); }
+  function injectTopbarButton(){
+    if (document.getElementById('v36-topbar-btn')) return true;
+    var anchor = document.getElementById('v35-topbar-btn') || document.getElementById('v34-topbar-btn') || document.getElementById('v30-topbar-btn');
+    if (!anchor){
+      var allBtns = document.querySelectorAll('button');
+      for (var i = 0; i < allBtns.length; i++){
+        if ((allBtns[i].textContent || '').indexOf('設定') >= 0){ anchor = allBtns[i]; break; }
+      }
+    }
+    if (!anchor) return false;
+    var btn = document.createElement('button');
+    btn.id = 'v36-topbar-btn'; btn.className = 'v30-topbar-btn';
+    btn.textContent = '💞 関係'; btn.title = 'キャラクター関係性マトリクス';
+    btn.style.cssText = 'background:var(--s2,#17172a);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer;margin-right:8px;font-family:inherit';
+    btn.addEventListener('click', renderMatrix);
+    anchor.parentNode.insertBefore(btn, anchor);
+    return true;
+  }
+  function init(){
+    if (installPlannerExt() && injectTopbarButton()){ window.__v292Dfix36Active = true; console.log(TAG, 'installed'); return; }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (installPlannerExt() && injectTopbarButton()){ clearInterval(iv); window.__v292Dfix36Active = true; console.log(TAG, 'installed (deferred ' + tries + ')'); }
+      else if (tries > 80){ clearInterval(iv); console.warn(TAG, 'gave up'); }
+    }, 200);
+  }
+  setInterval(function(){
+    if (window.__v292Dfix36Active){
+      if (!document.getElementById('v36-topbar-btn')){ if (injectTopbarButton()) console.log(TAG, 'btn reinjected'); }
+      if (window.Planner && window.Planner._extensions && !window.Planner._extensions.__v292Dfix36){ if (installPlannerExt()) console.log(TAG, 'sysExt reinstalled'); }
+    }
+  }, 5000);
+  window.__v292Dfix36 = { openMatrix: renderMatrix, closeMatrix: closeMatrix, openEdit: renderEdit, loadRelations: loadRelations, getRelation: getRelation, setRelation: setRelation, buildRelationsContext: buildRelationsContext };
+  init();
+})();
