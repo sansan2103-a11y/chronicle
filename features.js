@@ -7499,3 +7499,137 @@
   window.__v292Dfix39 = { openPanel: renderPanel, closePanel: closePanel, loadFlags: loadFlags, getCharFlags: getCharFlags, addFlag: addFlag, removeFlag: removeFlag, buildFlagsContext: buildFlagsContext };
   init();
 })();
+
+/* v292Dfix40: 軽量ダイス判定 (soft skill check)
+ *
+ * 目的 (Phase 3-C): 決定的瞬間に「成功/失敗」を ロール で決め、結果を narrative に反映。
+ *   行動を gate しない (失敗しても物語が止まらず別方向に進む)。
+ *
+ * 設計:
+ *   - 4 段階難易度: 易 (60%), 普 (40%), 難 (20%), 極難 (10%)
+ *   - localStorage.chr6_pending_dice_<slotId> = { difficulty, roll, success, threshold, timestamp }
+ *   - Planner._userExtensions で user message 末尾に「【ダイス判定結果】...」を 1 turn 限定注入
+ *   - 注入後自動 clear
+ *   - UI: topbar 「🎲 判定」 → 難易度選択 → ロール結果表示
+ *
+ * 設計原則: __v292Dfix40Active フラグ、fix30 active slot 連動、soft (gate なし)
+ */
+(function v292Dfix40(){
+  if (window.__v292Dfix40Active) return;
+  var TAG = '[v292Dfix40]';
+  var DIFFICULTIES = [
+    { key: 'easy', label: '易', threshold: 60, color: '#6aaf78', desc: '日常的、得意分野' },
+    { key: 'normal', label: '普', threshold: 40, color: '#5a8ef0', desc: '通常の挑戦' },
+    { key: 'hard', label: '難', threshold: 20, color: '#c49040', desc: '困難、訓練が必要' },
+    { key: 'epic', label: '極難', threshold: 10, color: '#e06060', desc: '奇跡的、運頼み' }
+  ];
+  function getActiveSlotId(){ try { if (window.__v292Dfix30 && typeof window.__v292Dfix30.getActive === 'function') return window.__v292Dfix30.getActive(); } catch(_){} return 'default'; }
+  function pendingKey(){ return 'chr6_pending_dice_' + getActiveSlotId(); }
+  function loadPending(){ try { var v = localStorage.getItem(pendingKey()); return v ? JSON.parse(v) : null; } catch(_){ return null; } }
+  function savePending(p){ if (!p) try { localStorage.removeItem(pendingKey()); } catch(_){} else try { localStorage.setItem(pendingKey(), JSON.stringify(p)); } catch(_){} }
+  function clearPending(){ savePending(null); }
+  function roll(difficultyKey){
+    var d = DIFFICULTIES.find(function(x){ return x.key === difficultyKey; });
+    if (!d) return null;
+    var rollVal = Math.floor(Math.random() * 100) + 1;
+    var success = rollVal <= d.threshold;
+    var result = { difficulty: difficultyKey, difficultyLabel: d.label, threshold: d.threshold, roll: rollVal, success: success, timestamp: Date.now() };
+    savePending(result);
+    return result;
+  }
+  function userExt(ctx){
+    try {
+      var p = loadPending(); if (!p) return ctx.user;
+      clearPending();
+      var hint = '\n\n【ダイス判定結果】\n直前にプレイヤーが「' + p.difficultyLabel + '判定」を行い、結果は ' + (p.success ? '成功' : '失敗') + ' (ロール値 ' + p.roll + '/100、必要 ' + p.threshold + ' 以下)。\n次の narrative でこの ' + (p.success ? '成功' : '失敗') + ' を自然に物語に組み込むこと:\n- 成功なら: 行動が首尾よく運んだ結末を描く\n- 失敗なら: 別方向の展開、予想外の反応、副次的な結果に turn 物語が止まらないように\n結果を直接「ダイスは X だった」と書かず、narrative の出来事として滲ませる。';
+      return ctx.user + hint;
+    } catch(e){ return ctx.user; }
+  }
+  function installPlannerExt(){
+    if (typeof window.Planner === 'undefined' || !window.Planner) return false;
+    window.Planner._userExtensions = window.Planner._userExtensions || [];
+    if (window.Planner._userExtensions.__v292Dfix40) return true;
+    window.Planner._userExtensions.push(userExt); window.Planner._userExtensions.__v292Dfix40 = true;
+    return true;
+  }
+  function ensureStyles(){
+    if (document.getElementById('v292Dfix40-style')) return;
+    var style = document.createElement('style'); style.id = 'v292Dfix40-style';
+    style.textContent = ['.v40-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center;font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI",sans-serif}','.v40-modal{background:var(--s1,#111119);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:8px;width:480px;max-width:96vw;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.6)}','.v40-head{padding:14px 18px;border-bottom:1px solid var(--border,rgba(139,118,240,.2));display:flex;align-items:center;gap:10px}','.v40-head h2{margin:0;font-size:15px;color:var(--acc,#8b76f0);font-weight:600;flex:1}','.v40-close{background:none;border:none;color:var(--dim,#888);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:4px}','.v40-close:hover{background:var(--s2,#17172a);color:var(--tx)}','.v40-body{padding:18px}','.v40-intro{font-size:11px;color:var(--dim,#888);line-height:1.6;margin-bottom:14px;padding:8px 10px;background:var(--bg,#09090f);border-radius:4px;border-left:3px solid var(--acc,#8b76f0)}','.v40-diff-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}','.v40-diff-btn{background:var(--bg,#09090f);border:2px solid;border-radius:6px;padding:14px 10px;text-align:center;cursor:pointer;transition:all .15s;font-family:inherit}','.v40-diff-btn:hover{filter:brightness(1.2);transform:translateY(-1px)}','.v40-diff-label{font-size:18px;font-weight:600;margin-bottom:4px}','.v40-diff-pct{font-size:11px;color:var(--dim,#888);margin-bottom:2px}','.v40-diff-desc{font-size:10px;color:var(--dim,#888);font-style:italic}','.v40-result{padding:18px 14px;border-radius:6px;text-align:center;margin-bottom:14px;background:var(--bg,#09090f);border:2px solid var(--border,rgba(139,118,240,.3))}','.v40-result.success{border-color:#6aaf78;background:rgba(106,175,120,.08)}','.v40-result.fail{border-color:#e06060;background:rgba(224,96,96,.08)}','.v40-result-status{font-size:22px;font-weight:600;margin-bottom:6px}','.v40-result-status.success{color:#6aaf78}','.v40-result-status.fail{color:#e06060}','.v40-result-detail{font-size:12px;color:var(--dim,#888);line-height:1.5}','.v40-result-roll{font-size:32px;font-weight:600;color:var(--acc,#8b76f0);margin:4px 0}','.v40-hint{font-size:11px;color:var(--dim,#888);line-height:1.5;padding:10px;background:var(--bg,#09090f);border-radius:4px;border-left:3px solid var(--acc,#8b76f0)}','.v40-actions{display:flex;gap:8px;margin-top:12px}','.v40-actions button{flex:1;background:var(--s2,#17172a);color:var(--tx);border:1px solid var(--border,rgba(139,118,240,.2));border-radius:4px;padding:8px;font-size:12px;cursor:pointer;font-family:inherit}','.v40-actions button:hover{background:var(--acc,#8b76f0);color:#fff;border-color:var(--acc)}'].join('\n');
+    document.head.appendChild(style);
+  }
+  function escAttr(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escHtml(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function renderDicePanel(result){
+    closeDicePanel(); ensureStyles();
+    var overlay = document.createElement('div'); overlay.className = 'v40-overlay'; overlay.id = 'v40-overlay';
+    overlay.addEventListener('click', function(e){ if (e.target === overlay) closeDicePanel(); });
+    var modal = document.createElement('div'); modal.className = 'v40-modal';
+    var html = ['<div class="v40-head"><h2>🎲 判定 (Skill Check)</h2><button class="v40-close" id="v40-close-x">×</button></div><div class="v40-body">'];
+    if (!result){
+      var pending = loadPending();
+      if (pending){
+        html.push('<div class="v40-intro">⚠️ 前回のロール (' + escHtml(pending.difficultyLabel) + ' / ' + (pending.success ? '成功' : '失敗') + ' / ロール ' + pending.roll + ') は次の送信で AI に反映されます。新しくロールするとそれが上書きされます。</div>');
+      } else {
+        html.push('<div class="v40-intro">行動の難易度を選んでロール。結果は <b>次の送信</b> で AI に伝わり、narrative に反映されます。<b>失敗しても物語は止まりません</b> (別方向に展開)。</div>');
+      }
+      html.push('<div class="v40-diff-grid">');
+      DIFFICULTIES.forEach(function(d){
+        html.push('<button class="v40-diff-btn" data-act="roll" data-diff="' + d.key + '" style="border-color:' + d.color + '"><div class="v40-diff-label" style="color:' + d.color + '">' + d.label + '</div><div class="v40-diff-pct">成功率 ' + d.threshold + '%</div><div class="v40-diff-desc">' + d.desc + '</div></button>');
+      });
+      html.push('</div>');
+    } else {
+      var resClass = result.success ? 'success' : 'fail';
+      var statusText = result.success ? '✓ 成功' : '✗ 失敗';
+      html.push('<div class="v40-result ' + resClass + '"><div class="v40-result-status ' + resClass + '">' + statusText + '</div><div class="v40-result-detail">' + escHtml(result.difficultyLabel) + '判定 (' + result.threshold + '/100 以下で成功)</div><div class="v40-result-roll">' + result.roll + '</div><div class="v40-result-detail">/ 100</div></div>');
+      html.push('<div class="v40-hint">この結果は <b>次の送信</b> で AI に伝わります。「DO 行動」「STORY 描写」のいずれかで次のアクションを送信してください。AI が結果を踏まえた展開を描きます。</div>');
+      html.push('<div class="v40-actions"><button data-act="reroll">もう一度</button><button data-act="cancel">キャンセル (ロール無効化)</button><button data-act="close">閉じる</button></div>');
+    }
+    html.push('</div>');
+    modal.innerHTML = html.join(''); overlay.appendChild(modal); document.body.appendChild(overlay);
+    document.getElementById('v40-close-x').addEventListener('click', closeDicePanel);
+    modal.addEventListener('click', function(e){
+      var t = e.target.closest('button'); if (!t || !t.dataset || !t.dataset.act) return;
+      if (t.dataset.act === 'roll'){ var r = roll(t.dataset.diff); renderDicePanel(r); return; }
+      if (t.dataset.act === 'reroll'){ renderDicePanel(null); return; }
+      if (t.dataset.act === 'cancel'){ clearPending(); closeDicePanel(); return; }
+      if (t.dataset.act === 'close'){ closeDicePanel(); return; }
+    });
+  }
+  function closeDicePanel(){ var ov = document.getElementById('v40-overlay'); if (ov && ov.parentNode) ov.parentNode.removeChild(ov); }
+  function injectTopbarButton(){
+    if (document.getElementById('v40-topbar-btn')) return true;
+    var anchor = document.getElementById('v39-topbar-btn') || document.getElementById('v38-topbar-btn') || document.getElementById('v37-topbar-btn') || document.getElementById('v30-topbar-btn');
+    if (!anchor){
+      var allBtns = document.querySelectorAll('button');
+      for (var i = 0; i < allBtns.length; i++){
+        if ((allBtns[i].textContent || '').indexOf('設定') >= 0){ anchor = allBtns[i]; break; }
+      }
+    }
+    if (!anchor) return false;
+    var btn = document.createElement('button');
+    btn.id = 'v40-topbar-btn'; btn.className = 'v30-topbar-btn';
+    btn.textContent = '🎲 判定'; btn.title = '軽量ダイス判定 — 次のターンに反映';
+    btn.style.cssText = 'background:var(--s2,#17172a);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer;margin-right:8px;font-family:inherit';
+    btn.addEventListener('click', function(){ renderDicePanel(null); });
+    anchor.parentNode.insertBefore(btn, anchor);
+    return true;
+  }
+  function init(){
+    if (installPlannerExt() && injectTopbarButton()){ window.__v292Dfix40Active = true; console.log(TAG, 'installed'); return; }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (installPlannerExt() && injectTopbarButton()){ clearInterval(iv); window.__v292Dfix40Active = true; console.log(TAG, 'installed (deferred ' + tries + ')'); }
+      else if (tries > 80){ clearInterval(iv); console.warn(TAG, 'gave up'); }
+    }, 200);
+  }
+  setInterval(function(){
+    if (window.__v292Dfix40Active){
+      if (!document.getElementById('v40-topbar-btn')){ if (injectTopbarButton()) console.log(TAG, 'btn reinjected'); }
+      if (window.Planner && window.Planner._userExtensions && !window.Planner._userExtensions.__v292Dfix40){ if (installPlannerExt()) console.log(TAG, 'userExt reinstalled'); }
+    }
+  }, 5000);
+  window.__v292Dfix40 = { openPanel: function(){ renderDicePanel(null); }, closePanel: closeDicePanel, roll: roll, loadPending: loadPending, clearPending: clearPending, DIFFICULTIES: DIFFICULTIES };
+  init();
+})();
