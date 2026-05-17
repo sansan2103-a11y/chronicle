@@ -8373,3 +8373,230 @@
     cleanPlanNarrative: cleanPlanNarrative
   };
 })();
+
+  // =====================================================================
+  // v292Dfix50: Natural Conversation Architecture (自然な会話アーキテクチャ)
+  // ---------------------------------------------------------------------
+  // 目的: NPC との対話を「単発反応」から「会話のラリー」に進化させる。
+  //       Hermes 4 405B の構造化指示への追従性を活かし、system prompt に
+  //       (A) Voice Signature, (B) NPC 主導性, (C) サブテキスト,
+  //       (D) 連鎖反応, (E) 会話フック の 5 要素を明示的に注入する。
+  //
+  // 既存 fix12～49 とは独立(__v292Dfix50Active フラグで idempotent)。
+  // Planner._extensions に push する純粋な hook(Planner.build を wrap しない)。
+  // =====================================================================
+  (function(){
+    if (window.__v292Dfix50Active) return;
+    window.__v292Dfix50Active = true;
+    var TAG = '[v292Dfix50]';
+    var MARKER = '【自然な会話アーキテクチャ v292Dfix50】';
+
+    // ----- A. Voice Signature ----------------------------------------
+    // desc から声紋を heuristic に推定。明示値があればそれを尊重。
+    function deriveVoiceSignature(name, desc){
+      var d = String(desc || '');
+      var sig = {
+        formality: '混在',
+        speech_tics: [],
+        vocabulary: '普通',
+        sentence_length: '普通',
+        emotional_default: '中立'
+      };
+      // formality
+      if (/敬語|丁寧|執事|騎士|貴族|令嬢|王女|王子|司祭|軍人|司令官|教官/.test(d)) sig.formality = '敬語';
+      else if (/タメ口|乱暴|無頼|無頼漢|不良|盗賊|盗っ人|傭兵|子供|幼/.test(d)) sig.formality = 'タメ口';
+      // vocabulary
+      if (/学者|博士|魔術師|賢者|司書|錬金術師|学院/.test(d)) sig.vocabulary = '学術的';
+      else if (/兵|軍|戦士|傭兵|騎士団/.test(d)) sig.vocabulary = '軍人風';
+      else if (/子供|幼|少年|少女|童|わんぱく/.test(d)) sig.vocabulary = '子供っぽい';
+      else if (/大人|長|老|村長|族長|爺|婆/.test(d)) sig.vocabulary = '大人びてる';
+      // sentence_length
+      if (/口数少|寡黙|無口|寡言/.test(d)) sig.sentence_length = '短い';
+      else if (/饒舌|話好き|おしゃべり|多弁/.test(d)) sig.sentence_length = '長い';
+      // emotional_default
+      if (/怯え|不安|内気|気弱|引っ込み|オドオド/.test(d)) sig.emotional_default = '怯え';
+      else if (/冷静|沈着|無表情|クール|冷淡/.test(d)) sig.emotional_default = '冷静';
+      else if (/明る|快活|元気|陽気|無邪気/.test(d)) sig.emotional_default = '快活';
+      else if (/皮肉|嫌味|斜に構|シニカル/.test(d)) sig.emotional_default = '皮肉';
+      else if (/激し|怒|短気|猛/.test(d)) sig.emotional_default = '激情';
+      // speech_tics
+      if (/恥ずか|内気|気弱|オドオド/.test(d)) sig.speech_tics.push('……っ', 'あの');
+      if (/陽気|無邪気/.test(d)) sig.speech_tics.push('えへへ');
+      if (/老人|爺|婆|長老/.test(d)) sig.speech_tics.push('じゃ', 'のう');
+      if (/軍人|戦士|騎士/.test(d)) sig.speech_tics.push('了解した', '承知');
+      if (/学者|博士|魔術師/.test(d)) sig.speech_tics.push('つまり', 'すなわち');
+      if (/皮肉|斜に構/.test(d)) sig.speech_tics.push('ふん', 'へえ');
+      if (sig.speech_tics.length === 0) sig.speech_tics = ['—(特有の口癖なし)'];
+      return sig;
+    }
+
+    function ensureVoiceSignature(ch){
+      if (!ch) return null;
+      // 既に詳細が設定されているなら尊重(ユーザ手動上書き対応)
+      var existing = ch.voice_signature;
+      if (existing && existing.formality && existing.vocabulary
+          && existing.sentence_length && existing.emotional_default
+          && Array.isArray(existing.speech_tics) && existing.speech_tics.length > 0){
+        return existing;
+      }
+      var derived = deriveVoiceSignature(ch.name, ch.desc);
+      // マージ: existing で部分指定がある場合は優先
+      if (existing && typeof existing === 'object'){
+        ['formality','vocabulary','sentence_length','emotional_default'].forEach(function(k){
+          if (existing[k]) derived[k] = existing[k];
+        });
+        if (Array.isArray(existing.speech_tics) && existing.speech_tics.length){
+          derived.speech_tics = existing.speech_tics.slice();
+        }
+      }
+      ch.voice_signature = derived;
+      return derived;
+    }
+
+    function formatVoiceBlock(roster){
+      if (!roster || !roster.length) return '';
+      var lines = ['【キャラクター声紋(Voice Signature)】'];
+      lines.push('各キャラ固有の話し方を必ず保つこと。話者を変えたら声紋も切り替える。');
+      roster.forEach(function(ch){
+        var sig = ensureVoiceSignature(ch);
+        if (!sig) return;
+        lines.push('●' + ch.name);
+        lines.push('    - 言葉遣い: ' + sig.formality);
+        lines.push('    - 語彙: ' + sig.vocabulary);
+        lines.push('    - 文の長さ: ' + sig.sentence_length);
+        lines.push('    - デフォルト感情: ' + sig.emotional_default);
+        lines.push('    - 口癖/言い回し: ' + sig.speech_tics.join(' / '));
+      });
+      return lines.join('\n');
+    }
+
+    // ----- B. NPC 主導性ルール ---------------------------------------
+    var INITIATIVE_BLOCK = [
+      '【NPC 主導性ルール】',
+      '・NPC は受動的に反応するだけでなく、能動的に対話を進める。',
+      '・適切な場面で次の選択肢から自然に行動を選ぶ:',
+      '    - 質問する: 「それって本当?」「どうしてそう思うの?」',
+      '    - 話題転換する: 「……ねえ、別のこと聞いてもいい?」',
+      '    - 沈黙する: 「……」とだけ書き、次への余韻を残す。',
+      '    - 行動で応える: セリフではなく身体動作(首振り・視線逸らし・後ずさり)。',
+      '・NPC は自分の感情・記憶・目的に基づいて主体的に動く。',
+      '・「ユーザのセリフを待つだけの NPC」は禁止。'
+    ].join('\n');
+
+    // ----- C. サブテキスト指示 ---------------------------------------
+    var SUBTEXT_BLOCK = [
+      '【サブテキスト】',
+      '・セリフの直後の地の文で「言葉と内心の乖離」を描写する。',
+      '・素直なセリフ(怒り・喜び・恐怖を素直に表すもの)にはサブテキスト不要。',
+      '・強がり・嘘・建前・遠慮のセリフには内心を地の文で表現する。',
+      '・例:',
+      '    「大丈夫……」',
+      '    彼女の声は震えていた。手のひらに爪を立てて、何かを我慢している。',
+      '・例(逆パターン・素直):',
+      '    「怖いよ……」',
+      '    本当に怖いのだ、と伝わる声色だった。'
+    ].join('\n');
+
+    // ----- D. 連鎖反応 -----------------------------------------------
+    var CHAIN_BLOCK = [
+      '【連鎖反応(会話のラリー)】',
+      '・各キャラのセリフは直前のセリフを直接参照する。',
+      '・意味的にも感情的にも反応し、独立した独白を並べない。',
+      '・良い例:',
+      '    A「行こう」',
+      '    B「……どこに?」(A への質問)',
+      '    A「分からない、でも、ここにいたくない」(B の問いに弱音で返す)',
+      '    B「私も……でも、足が動かない」(共感 + 自己開示)',
+      '・悪い例(禁止):',
+      '    A「行こう」',
+      '    B「今日はいい天気だな」(A と無関係な独白)'
+    ].join('\n');
+
+    // ----- E. 会話フック露出 -----------------------------------------
+    var HOOK_BLOCK = [
+      '【会話フック露出】',
+      '・narrative の最後に、ユーザーが次に取れる行動・対話のヒントを 2〜3 個埋め込む。',
+      '・観察可能な身体描写・小さな動作・視線・声色変化として埋め込む(指示文ではなく描写)。',
+      '・例:',
+      '    - 「ミリアの肩が震えている」(→ DO「肩を抱く」を誘導)',
+      '    - 「セリアは何か言いたそうにしている」(→ SAY「どうしたの?」を誘導)',
+      '    - 「商人は値札を指でとんとんと叩いた」(→ SAY「もう少し負けてくれない?」を誘導)',
+      '・これでユーザーが次の手を選びやすくなる。',
+      '・露骨な選択肢提示(「A) ... B) ...」)はせず、あくまで描写に紛れさせる。'
+    ].join('\n');
+
+    // ----- Roster 取得 -----------------------------------------------
+    function getRoster(){
+      var S = (typeof window !== 'undefined' && window.S) ? window.S : null;
+      if (!S || !S.cast) return [];
+      var list = [];
+      if (S.cast.hero && S.cast.hero.name) list.push(S.cast.hero);
+      if (Array.isArray(S.cast.npcs)){
+        S.cast.npcs.forEach(function(n){ if (n && n.name) list.push(n); });
+      }
+      return list;
+    }
+
+    // ----- Planner._extensions hook ----------------------------------
+    function fix50Ext(ctx){
+      try {
+        var sys = (ctx && ctx.sys) ? ctx.sys : '';
+        if (sys.indexOf(MARKER) >= 0) return sys; // double-injection guard
+
+        var roster = getRoster();
+        var voiceBlock = formatVoiceBlock(roster);
+
+        var parts = [sys, MARKER];
+        if (voiceBlock) parts.push(voiceBlock);
+        parts.push(INITIATIVE_BLOCK);
+        parts.push(SUBTEXT_BLOCK);
+        parts.push(CHAIN_BLOCK);
+        parts.push(HOOK_BLOCK);
+        return parts.filter(Boolean).join('\n\n');
+      } catch(e){
+        console.warn(TAG, 'ext error', e);
+        return (ctx && ctx.sys) ? ctx.sys : '';
+      }
+    }
+
+    // ----- 登録 ------------------------------------------------------
+    function tryRegister(){
+      if (!window.Planner || !Array.isArray(window.Planner._extensions)) return false;
+      var already = window.Planner._extensions.some(function(fn){
+        return fn && (fn === fix50Ext || fn.name === 'fix50Ext');
+      });
+      if (!already){
+        window.Planner._extensions.push(fix50Ext);
+      }
+      // expose 検査用 API
+      window.Planner.v292Dfix50 = {
+        deriveVoiceSignature: deriveVoiceSignature,
+        ensureVoiceSignature: ensureVoiceSignature,
+        formatVoiceBlock: formatVoiceBlock,
+        getRoster: getRoster,
+        fix50Ext: fix50Ext,
+        MARKER: MARKER
+      };
+      console.log(TAG, 'registered');
+      return true;
+    }
+
+    function whenReady(fn){
+      if (document.readyState === 'loading'){
+        document.addEventListener('DOMContentLoaded', fn, {once:true});
+      } else {
+        try { fn(); } catch(e){ console.warn(TAG, 'init err', e); }
+      }
+    }
+
+    whenReady(function(){
+      if (tryRegister()) return;
+      // Planner がまだ存在しない場合は遅延リトライ
+      var tries = 0;
+      var iv = setInterval(function(){
+        tries++;
+        if (tryRegister()){ clearInterval(iv); return; }
+        if (tries > 50){ clearInterval(iv); console.warn(TAG, 'gave up'); }
+      }, 200);
+    });
+  })();
