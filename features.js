@@ -7775,3 +7775,100 @@
   init();
 })();
 
+
+/* v292Dfix42: キャラクター生成 wizard
+ * Phase 4-B: archetype 選択で desc + 心理プロフィールを一括生成
+ * topbar 「🧬 キャラ生成」 → modal、archetype card クリックで Hero/NPC に適用
+ */
+(function v292Dfix42(){
+  if (window.__v292Dfix42Active) return;
+  var TAG = '[v292Dfix42]';
+  var ARCHETYPES = [
+    { id: 'seeker', label: '🔍 探求者', desc: '真理を求めて旅をする学者、知識欲が人より強く、本物を見極める眼を持つ。探査隰長として仕入れられることも。', personality: '好奇心旺盛で冷静、謎に魅せられると他を忘れる', coreDesire: '未知を明らかにし、世界の真姿を知る', coreFear: '無知のまま死ぬこと、重要な事実を見逃すこと', wound: '重要な真実を気づけないうちに誰かを失った', nameSamples: ['アキラ', 'ノエル', 'コウジ', 'スピカ', 'イグナツ'] },
+    { id: 'protector', label: '🛡 守護者', desc: '仲間と弱者を守ることを使命とする倉、頭は柔軟だが身体は鋭く鋨えられている。騎士道や武術の心得あり。', personality: '誠実で勇敢、責任感が重い、さうさうそりゃうされる', coreDesire: '托された者を必ず生して帰す', coreFear: '自分の豍弱さで守るべきものを失うこと', wound: '以前守り切れず誰かを失った', nameSamples: ['ゲイル', 'レオン', 'アイダ', '三郎', 'ロイ'] },
+    { id: 'healer', label: '✨ 治癒者', desc: '病と傷を癒すことに人生を捧げる者。薬草の知識 or 治癒魔法もしくは医術を修める。心も身体も見てしまう。', personality: '穏やかで忍耐強い、しかし誰かが傷つけられると鬼になる', coreDesire: 'この世から不必要な苦しみを減らす', coreFear: '手の及ばない者を見送ること', wound: '救えなかった者の記憶を背負う', nameSamples: ['スズナ', 'ジュリア', '七月', 'エッサ', 'さくら'] },
+    { id: 'rebel', label: '🔥 反逆者', desc: '権力や伝統に反抵する者。誰かが決めたルールに従わず、自分の道を進む。剣も口も鋭い。', personality: '独立心強く反骨精神、人を挨拶はしないが打ち解けるのに時間がかかる', coreDesire: '自分の選択で生き、他者にもその自由をもたらす', coreFear: 'システムに吐き込まれ、何者でもなくなること', wound: '見せしめのために大切な人を許せなかった', nameSamples: ['レイ', 'ツバサ', '咲夜', 'シン', 'アキ'] },
+    { id: 'mage', label: '🌟 魔術師', desc: '魔法、同限術、もしくはテクノロジーを操る者。人よりも学問に近しい面もある。思考が独特。', personality: '離脱的だが全力で追求するとスタミナ無限、謎を隠し事と見る', coreDesire: '未知のものを理解し、自分のものにする', coreFear: '他者の価値観で推し退けられ、思考をやめること', wound: '未熟な魔法で誰かを傷つけた', nameSamples: ['セリカ', 'ザック', '零', 'オフィーリア', 'サラス'] },
+    { id: 'trickster', label: '🎭 道化師', desc: '軽妙な言動で周りをよく笑わせるが、その裏側に鮮やかな冷めさを勘ぐ者もいる。人間観察が鋭い。', personality: '陽気かつ鋭い、堆かためず、本心を洩らさない', coreDesire: '人を笑わせ、そしてその隣で生きる', coreFear: '本当の自分を見られ、拒絶されること', wound: '頭脱してもと人との街道に二度と交わらないと誓った', nameSamples: ['キロ', 'トキメ', '凪柳', 'ジル', 'ひより'] },
+    { id: 'avenger', label: '⚖ 復讐者', desc: '過去の傷を背負い、重要な誰かを追う者。野心と罪悪感に引き裂かれている。誰より宇宙一髪の迷いがある。', personality: '陰鬱だが業りは上質、雠したターゲットには容赦なし', coreDesire: '複讐を果たし、魂を休める', coreFear: '復讐のサイクルに本当の自分を失うこと', wound: '世界を崩壊させた下手人の迸を見ても、逆护しが出る', nameSamples: ['クロエ', 'ダーク', '震', 'リアテリア', '雷'] },
+    { id: 'wanderer', label: '🌦 流浪者', desc: 'どこにも属さず、風のように旅し続ける者。見てきたものは計り知れず、読みも言は逆、何を考えているか誠に不明。', personality: '静かで中立、來計と生活のため一点集中するとプロだがそれを誰にも語らない', coreDesire: '期待に肌されず見たいものを見、続ける', coreFear: '一つの場所、一つの人間関係に損とられること', wound: '根を下ろした者たちが一夜で消えていき魔法を見た', nameSamples: ['カケル', 'ダイ', '友', 'オリコ', 'イオン'] }
+  ];
+  function randName(arch){ var s = arch.nameSamples || ['名前']; return s[Math.floor(Math.random()*s.length)]; }
+  function applyToHero(arch){
+    if (typeof S === 'undefined' || !S || !S.cast) return false;
+    if (!confirm('Hero を「' + arch.label + '」アーキタイプで上書きしますか？\n名前: ' + randName(arch) + ' / 既存 Hero の設定は失われます')) return false;
+    S.cast.hero = { name: randName(arch), desc: arch.desc, personality: arch.personality, coreDesire: arch.coreDesire, coreFear: arch.coreFear, wound: arch.wound };
+    try { if (S.save) S.save(); } catch(_){}
+    try { if (typeof UI !== 'undefined' && UI._renderHooks) UI._renderHooks.forEach(function(h){ try { h({}); } catch(_){} }); } catch(_){}
+    return true;
+  }
+  function applyToNpc(arch){
+    if (typeof S === 'undefined' || !S || !S.cast) return false;
+    if (!S.cast.npcs) S.cast.npcs = [];
+    if (S.cast.npcs.length >= 5){ alert('NPC は最大 5 名まで'); return false; }
+    var id = String.fromCharCode(97 + S.cast.npcs.length);
+    var npc = { id: id, name: randName(arch), desc: arch.desc, personality: arch.personality, coreDesire: arch.coreDesire, coreFear: arch.coreFear, wound: arch.wound };
+    S.cast.npcs.push(npc);
+    try { if (S.save) S.save(); } catch(_){}
+    try { if (typeof UI !== 'undefined' && UI._renderHooks) UI._renderHooks.forEach(function(h){ try { h({}); } catch(_){} }); } catch(_){}
+    return true;
+  }
+  function ensureStyles(){
+    if (document.getElementById('v292Dfix42-style')) return;
+    var style = document.createElement('style'); style.id = 'v292Dfix42-style';
+    style.textContent = ['.v42-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center;font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI",sans-serif}','.v42-modal{background:var(--s1,#111119);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:8px;width:780px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.6)}','.v42-head{padding:14px 18px;border-bottom:1px solid var(--border,rgba(139,118,240,.2));display:flex;align-items:center;gap:10px}','.v42-head h2{margin:0;font-size:15px;color:var(--acc,#8b76f0);font-weight:600;flex:1}','.v42-close{background:none;border:none;color:var(--dim,#888);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:4px}','.v42-close:hover{background:var(--s2,#17172a);color:var(--tx)}','.v42-body{flex:1;overflow:auto;padding:14px 18px}','.v42-intro{font-size:11px;color:var(--dim,#888);line-height:1.6;margin-bottom:14px;padding:8px 10px;background:var(--bg,#09090f);border-radius:4px;border-left:3px solid var(--acc,#8b76f0)}','.v42-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}','.v42-card{background:var(--bg,#09090f);border:1px solid var(--border,rgba(139,118,240,.15));border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:8px}','.v42-card:hover{border-color:var(--acc,#8b76f0)}','.v42-title{font-size:14px;font-weight:600;color:var(--tx,#e0dcf0)}','.v42-desc{font-size:11px;color:var(--dim,#888);line-height:1.5}','.v42-meta{font-size:10px;color:var(--dim,#888);font-style:italic}','.v42-actions{display:flex;gap:6px;margin-top:6px}','.v42-btn{flex:1;background:var(--s2,#17172a);color:var(--tx);border:1px solid var(--border,rgba(139,118,240,.2));border-radius:4px;padding:6px 8px;font-size:11px;cursor:pointer;font-family:inherit}','.v42-btn:hover{background:var(--acc,#8b76f0);color:#fff;border-color:var(--acc)}','.v42-btn-primary{background:var(--acc,#8b76f0);color:#fff;border-color:var(--acc)}'].join('\n');
+    document.head.appendChild(style);
+  }
+  function escAttr(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escHtml(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function renderWizard(){
+    closeWizard(); ensureStyles();
+    var overlay = document.createElement('div'); overlay.className = 'v42-overlay'; overlay.id = 'v42-overlay';
+    overlay.addEventListener('click', function(e){ if (e.target === overlay) closeWizard(); });
+    var modal = document.createElement('div'); modal.className = 'v42-modal';
+    var html = ['<div class="v42-head"><h2>🧬 キャラクター生成 wizard</h2><button class="v42-close" id="v42-close-x">×</button></div><div class="v42-body">'];
+    html.push('<div class="v42-intro">archetype を選んで <b>Hero に適用</b> (上書き) or <b>NPC に追加</b>。名前はサンプルからランダム、後で 設定 で編集可能。</div>');
+    html.push('<div class="v42-grid">');
+    ARCHETYPES.forEach(function(arch){
+      html.push('<div class="v42-card" data-id="' + escAttr(arch.id) + '"><div class="v42-title">' + escHtml(arch.label) + '</div><div class="v42-desc">' + escHtml(arch.desc) + '</div><div class="v42-meta">名前例: ' + arch.nameSamples.join(' / ') + '</div><div class="v42-actions"><button class="v42-btn v42-btn-primary" data-act="hero" data-id="' + escAttr(arch.id) + '">Hero に適用</button><button class="v42-btn" data-act="npc" data-id="' + escAttr(arch.id) + '">NPC に追加</button></div></div>');
+    });
+    html.push('</div></div>');
+    modal.innerHTML = html.join(''); overlay.appendChild(modal); document.body.appendChild(overlay);
+    document.getElementById('v42-close-x').addEventListener('click', closeWizard);
+    modal.addEventListener('click', function(e){
+      var t = e.target.closest('button'); if (!t || !t.dataset || !t.dataset.act) return;
+      var arch = ARCHETYPES.find(function(x){ return x.id === t.dataset.id; }); if (!arch) return;
+      if (t.dataset.act === 'hero'){ if (applyToHero(arch)) closeWizard(); }
+      else if (t.dataset.act === 'npc'){ if (applyToNpc(arch)){ alert('NPC「' + arch.label + '」を追加しました'); closeWizard(); } }
+    });
+  }
+  function closeWizard(){ var ov = document.getElementById('v42-overlay'); if (ov && ov.parentNode) ov.parentNode.removeChild(ov); }
+  function injectTopbarButton(){
+    if (document.getElementById('v42-topbar-btn')) return true;
+    var anchor = document.getElementById('v41-topbar-btn') || document.getElementById('v40-topbar-btn') || document.getElementById('v30-topbar-btn');
+    if (!anchor){ var allBtns = document.querySelectorAll('button'); for (var i = 0; i < allBtns.length; i++){ if ((allBtns[i].textContent || '').indexOf('設定') >= 0){ anchor = allBtns[i]; break; } } }
+    if (!anchor) return false;
+    var btn = document.createElement('button');
+    btn.id = 'v42-topbar-btn'; btn.className = 'v30-topbar-btn';
+    btn.textContent = '🧬 キャラ生成'; btn.title = 'キャラクター生成 wizard';
+    btn.style.cssText = 'background:var(--s2,#17172a);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer;margin-right:8px;font-family:inherit';
+    btn.addEventListener('click', renderWizard);
+    anchor.parentNode.insertBefore(btn, anchor);
+    return true;
+  }
+  function init(){
+    if (injectTopbarButton()){ window.__v292Dfix42Active = true; console.log(TAG, 'installed - ' + ARCHETYPES.length + ' archetypes'); return; }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (injectTopbarButton()){ clearInterval(iv); window.__v292Dfix42Active = true; console.log(TAG, 'installed (deferred ' + tries + ')'); }
+      else if (tries > 80){ clearInterval(iv); console.warn(TAG, 'gave up'); }
+    }, 200);
+  }
+  setInterval(function(){
+    if (window.__v292Dfix42Active && !document.getElementById('v42-topbar-btn')){ if (injectTopbarButton()) console.log(TAG, 'btn reinjected'); }
+  }, 5000);
+  window.__v292Dfix42 = { openWizard: renderWizard, closeWizard: closeWizard, applyToHero: applyToHero, applyToNpc: applyToNpc, ARCHETYPES: ARCHETYPES };
+  init();
+})();
+
