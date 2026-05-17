@@ -7872,3 +7872,115 @@
   init();
 })();
 
+
+/* v292Dfix43: シーン画像生成 (背景イラスト)
+ * Phase 4-C: 各 turn の narrative から Pollinations で scene 画像を生成
+ * topbar 「🖤 描写画」トグル、UI._renderHooks で .turn に <img> を inject
+ * fix22 avatar gen と同じ Pollinations API、turn idx を seed に使うことでキャッシュ
+ */
+(function v292Dfix43(){
+  if (window.__v292Dfix43Active) return;
+  var TAG = '[v292Dfix43]';
+  var STORAGE_KEY = 'chr6_v43_scene_enabled';
+  function isEnabled(){ try { return localStorage.getItem(STORAGE_KEY) === 'true'; } catch(_){ return false; } }
+  function setEnabled(b){ try { localStorage.setItem(STORAGE_KEY, b ? 'true' : 'false'); } catch(_){} }
+  function buildPrompt(narrative, scene){
+    var src = '';
+    if (typeof narrative === 'string') src = narrative;
+    else if (Array.isArray(narrative)){
+      for (var i = 0; i < narrative.length; i++){
+        var n = narrative[i];
+        if (typeof n === 'string') src += n + ' ';
+        else if (n && typeof n === 'object' && typeof n.text === 'string') src += n.text + ' ';
+        if (src.length > 200) break;
+      }
+    }
+    src = src.replace(/「[^」]*」/g, '').slice(0, 120).trim();
+    var sceneHint = scene && (scene.loc || scene.tone) ? (scene.loc || '') + ' ' + (scene.tone || '') : '';
+    return 'cinematic illustration, ' + sceneHint + ', ' + src + ', atmospheric, detailed, no text, no people focus';
+  }
+  function urlFor(turnIdx, narrative, scene){
+    var prompt = buildPrompt(narrative, scene);
+    var encoded = encodeURIComponent(prompt);
+    return 'https://image.pollinations.ai/prompt/' + encoded + '?width=512&height=288&seed=' + (turnIdx + 100) + '&nologo=true&model=flux';
+  }
+  function injectImages(){
+    if (!isEnabled()) return;
+    var st = (typeof S !== 'undefined' && S) ? S : null;
+    if (!st || !Array.isArray(st.turns)) return;
+    var story = document.getElementById('story');
+    if (!story) return;
+    var turnEls = Array.from(story.querySelectorAll(':scope > .turn'));
+    turnEls.forEach(function(el, idx){
+      if (el.dataset.v43imgDone === 'true') return;
+      var t = st.turns[idx]; if (!t) return;
+      var img = document.createElement('img');
+      img.className = 'v43-scene-img';
+      img.src = urlFor(idx, t.narrative, st.scene);
+      img.alt = 'scene';
+      img.style.cssText = 'width:100%;max-width:512px;height:auto;border-radius:6px;margin:8px 0;display:block;border:1px solid var(--border,rgba(139,118,240,.2));loading:lazy';
+      img.loading = 'lazy';
+      // insert after first child (header)
+      var firstChild = el.firstElementChild;
+      if (firstChild) firstChild.insertAdjacentElement('afterend', img);
+      else el.insertBefore(img, el.firstChild);
+      el.dataset.v43imgDone = 'true';
+    });
+  }
+  function removeImages(){
+    var story = document.getElementById('story'); if (!story) return;
+    Array.from(story.querySelectorAll('.v43-scene-img')).forEach(function(im){ im.parentNode && im.parentNode.removeChild(im); });
+    Array.from(story.querySelectorAll('.turn')).forEach(function(t){ delete t.dataset.v43imgDone; });
+  }
+  function installRenderHook(){
+    try {
+      var UI = (0, eval)('typeof UI !== "undefined" ? UI : null');
+      if (!UI || !Array.isArray(UI._renderHooks)) return false;
+      if (UI._renderHooks.__v292Dfix43) return true;
+      UI._renderHooks.push(function v43Hook(){ try { setTimeout(injectImages, 100); } catch(_){} });
+      UI._renderHooks.__v292Dfix43 = true;
+      return true;
+    } catch(e){ return false; }
+  }
+  function injectTopbarButton(){
+    if (document.getElementById('v43-topbar-btn')) return true;
+    var anchor = document.getElementById('v42-topbar-btn') || document.getElementById('v41-topbar-btn') || document.getElementById('v30-topbar-btn');
+    if (!anchor){ var allBtns = document.querySelectorAll('button'); for (var i = 0; i < allBtns.length; i++){ if ((allBtns[i].textContent || '').indexOf('設定') >= 0){ anchor = allBtns[i]; break; } } }
+    if (!anchor) return false;
+    var btn = document.createElement('button');
+    btn.id = 'v43-topbar-btn'; btn.className = 'v30-topbar-btn';
+    function updateLabel(){ btn.textContent = isEnabled() ? '🖼 描写画 ON' : '🖼 描写画'; btn.title = isEnabled() ? 'シーン画像生成 ON (クリックで OFF)' : 'シーン画像生成 OFF (クリックで ON)'; }
+    updateLabel();
+    btn.style.cssText = 'background:var(--s2,#17172a);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer;margin-right:8px;font-family:inherit';
+    btn.addEventListener('click', function(){
+      var was = isEnabled(); setEnabled(!was); updateLabel();
+      if (!was){ if (confirm('シーン画像生成を ON にします。Pollinations API を turn ごとに呼び出します (無料、但 1-3 秒/img)。進める？')){ injectImages(); } else { setEnabled(false); updateLabel(); } }
+      else { removeImages(); }
+    });
+    anchor.parentNode.insertBefore(btn, anchor);
+    return true;
+  }
+  function init(){
+    if (installRenderHook() && injectTopbarButton()){
+      window.__v292Dfix43Active = true;
+      if (isEnabled()) setTimeout(injectImages, 500);
+      console.log(TAG, 'installed - scene image generation', (isEnabled() ? 'ON' : 'OFF'));
+      return;
+    }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (installRenderHook() && injectTopbarButton()){ clearInterval(iv); window.__v292Dfix43Active = true; if (isEnabled()) setTimeout(injectImages, 500); console.log(TAG, 'installed (deferred ' + tries + ')'); }
+      else if (tries > 80){ clearInterval(iv); console.warn(TAG, 'gave up'); }
+    }, 200);
+  }
+  setInterval(function(){
+    if (window.__v292Dfix43Active){
+      if (!document.getElementById('v43-topbar-btn')){ if (injectTopbarButton()) console.log(TAG, 'btn reinjected'); }
+      try { var UI = (0, eval)('typeof UI !== "undefined" ? UI : null'); if (UI && Array.isArray(UI._renderHooks) && !UI._renderHooks.__v292Dfix43){ installRenderHook(); } } catch(_){}
+    }
+  }, 5000);
+  window.__v292Dfix43 = { isEnabled: isEnabled, setEnabled: setEnabled, injectImages: injectImages, removeImages: removeImages, urlFor: urlFor, buildPrompt: buildPrompt };
+  init();
+})();
+
