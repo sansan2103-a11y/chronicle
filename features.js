@@ -7633,3 +7633,145 @@
   window.__v292Dfix40 = { openPanel: function(){ renderDicePanel(null); }, closePanel: closeDicePanel, roll: roll, loadPending: loadPending, clearPending: clearPending, DIFFICULTIES: DIFFICULTIES };
   init();
 })();
+
+/* v292Dfix41: シナリオテンプレートライブラリ
+ * 目的 (Phase 4-A): 6 種のプリセット (廃墟探索/古城ミステリ/異世界転生/学園ホラー/SF/江戸怪奇譚) でユーザーが空状態から即ゲーム開始可能に
+ * 設計: templates IIFE 内 hardcode、UI: topbar 「📚 シナリオ」 → modal、適用 (上書き) / 新規 slot 作成、fix30 連携
+ */
+(function v292Dfix41(){
+  if (window.__v292Dfix41Active) return;
+  var TAG = '[v292Dfix41]';
+  var TEMPLATES = [
+    { id: 'ruins', title: '🏚 廃墟と化した遊園地', summary: 'ホラー / サバイバル — かつて賑わった遊園地の廃墟で目覚めた仲間たち', tags: ['ホラー', '探索', '仲間'],
+      scene: { loc: '廃墟と化した遊園地', obj: '怪異から逃れ、出口を見つける', tone: '不気味で緊張感のある', lore: '夜の廃墟。観覧車は錆び、メリーゴーラウンドは雨に濡れている。', branches: [] },
+      cast: { hero: { name: 'フィオナ', desc: '金髪碧眼の踊り手。芯は強靭。仲間を守ることを最優先。', personality: '誠実で勇敢', coreDesire: '誰一人欠けることなく全員で出口を見つけ出す', coreFear: 'また見捨てられる', wound: '幼少期に家族を失った' },
+        npcs: [{ id: 'a', name: 'ミリア', desc: '銀髪の無口な少女。観察力鋭く冷静。', personality: '寡黙だが芯がある', coreDesire: '大切な人を守る', coreFear: '自分の力が及ばない', wound: '言葉で人を救えなかった' },
+          { id: 'b', name: 'サクラ', desc: '小柄で怯えがちな少女。優しいが恐怖に弱い。', personality: '怖がりだが内に優しさ', coreDesire: '誰かに守られたい', coreFear: '一人ぼっち', wound: '親に見放された' }] } },
+    { id: 'castle', title: '🏰 古城ミステリ', summary: '中世風 / 謎解き — 嵐の夜に避難した古城で発生した不可解な事件', tags: ['ミステリ', '中世', '謎解き'],
+      scene: { loc: '雨に閉ざされた中世の古城', obj: '事件の真相を解明し、生き残る', tone: '陰鬱で疑心暗鬼', lore: '13世紀ヨーロッパ風の城。城主は数年前に行方不明、今は使用人と客のみ。', branches: [] },
+      cast: { hero: { name: 'セルジオ', desc: '黒髪の旅人、優れた観察眼。元騎士で剣の心得あり。', personality: '寡黙で観察的', coreDesire: '真実を明らかにする', coreFear: '自分の判断ミス', wound: '過去の裁定で人を死なせた' },
+        npcs: [{ id: 'a', name: 'リア', desc: '修道女然とした女性、城に長く仕える。秘密を抱える。', personality: '優しいが何かを隠す', coreDesire: '城の秘密を守る', coreFear: '過去が暴かれる', wound: '若い頃の罪' },
+          { id: 'b', name: 'カエデ', desc: '若い貴族の客。鋭い舌鋒、誰もを疑う。', personality: '皮肉屋で頭が切れる', coreDesire: '誰よりも先に真実に辿り着く', coreFear: '騙されること', wound: '信じた人に裏切られた' }] } },
+    { id: 'isekai', title: '🌌 異世界転生', summary: 'ファンタジー — 突然見知らぬ世界に放り込まれた現代日本人', tags: ['ファンタジー', '冒険', '魔法'],
+      scene: { loc: '見知らぬ森の入り口、遠くに塔', obj: '元の世界に戻る方法を探す', tone: '驚きと不安、徐々に高揚', lore: '魔法と剣の世界。3 つの月、青い太陽。「異邦人」は神話的存在。', branches: [] },
+      cast: { hero: { name: 'カナデ', desc: '20代の現代日本人。理系の知識を持つ。冷静沈着だが内心パニック。', personality: '理性的だが好奇心旺盛', coreDesire: '世界の橋渡しを理解する', coreFear: '永遠に帰れない', wound: '大切な人を一人残してきた' },
+        npcs: [{ id: 'a', name: 'エルナ', desc: 'エルフの若き魔術師、好奇心からカナデに近づく。', personality: '研究熱心で明るい', coreDesire: '異邦人の謎を解明', coreFear: '長命ゆえに友を失う', wound: '前世代の異邦人を看取った' },
+          { id: 'b', name: 'グレン', desc: '元傭兵の中年男性。カナデを警戒しつつ守る。', personality: '皮肉屋で慎重', coreDesire: '家族を再び見つけたい', coreFear: '無力さ', wound: '内戦で家族を失った' }] } }
+  ];
+  TEMPLATES.push({ id: 'school', title: '🏫 学園ホラー', summary: '青春+怪奇 — 放課後の学校に閉じ込められた生徒たち', tags: ['学園', 'ホラー', '青春'],
+    scene: { loc: '深夜の私立高校', obj: '校舎から朝までに脱出', tone: '日常が崩れていく恐怖', lore: '創立 80 年の私立高校、7 不思議が囁かれる。', branches: [] },
+    cast: { hero: { name: '春香', desc: '高校 2 年、生徒会副会長。責任感強く仲間思い。', personality: '優等生風だが熱い', coreDesire: '全員で朝を迎える', coreFear: '判断ミスで仲間を危険に', wound: '小学生時代に妹を迷子にした' },
+      npcs: [{ id: 'a', name: '凛太郎', desc: '同級生、飄々としているが芯は強い。春香を密かに想う。', personality: 'クールだが優しい', coreDesire: '春香を守る', coreFear: '本心を伝えられない', wound: '幼少期の母との別れ' },
+        { id: 'b', name: '美波', desc: '春香の親友、明るく行動的、霊感やや強い。', personality: '陽気で勘が鋭い', coreDesire: '皆で笑い合える日常', coreFear: '見えないものに引きずられる', wound: '霊感ゆえに孤立した時期' }] } });
+  TEMPLATES.push({ id: 'spaceship', title: '🚀 宇宙船 SF', summary: 'SF — 深宇宙を航行する研究船で発生した謎', tags: ['SF', '宇宙', 'サスペンス'],
+    scene: { loc: '深宇宙航行中の研究船 ARGO 号', obj: '船を制御し、地球に生還', tone: '密閉空間の閉塞感', lore: '2087 年、太陽系外探査 20 年。ARGO は 6 名で半年任務中、3 日前に未知信号受信。', branches: [] },
+    cast: { hero: { name: 'ルカ', desc: '機関主任、35 歳、技術者として一流。家族残して任務参加。', personality: '実直で技術的', coreDesire: '無事に娘の元へ帰る', coreFear: '判断ミスで仲間死亡', wound: '前任務で同僚を失った' },
+      npcs: [{ id: 'a', name: 'アイラ', desc: '生物学者、28 歳、未知生命体研究。好奇心と慎重さ。', personality: '探求心旺盛だが慎重', coreDesire: '人類の知識を拓く発見', coreFear: '取り返しのつかない侵食', wound: '実験で同僚を危険に晒した' },
+        { id: 'b', name: 'コーエン', desc: '船長代理、軍出身。規律を重んじる。', personality: '厳格だが正義感強い', coreDesire: '全員を生かして帰還', coreFear: '指揮の責任で失う', wound: '若い頃の作戦で部下を失った' }] } });
+  TEMPLATES.push({ id: 'edo', title: '🏯 江戸怪奇譚', summary: '時代劇+怪奇 — 江戸の長屋で起こる怪異', tags: ['時代劇', '怪奇', '江戸'],
+    scene: { loc: '江戸の下町、ある長屋の界隈', obj: '怪異の正体を突き止め、鎮める', tone: '夜の灯篭、生と死の薄い境', lore: '寛政年間 (1789-1801)。江戸の下町、夜中の泣き声・消える子供。', branches: [] },
+    cast: { hero: { name: '紫苑', desc: '20代の女岡っ引、男装で町を駆ける。義理人情に厚い。', personality: '気風がよく芯が強い', coreDesire: '弱き者を守りたい、義を貫く', coreFear: '自分の正義が間違いだったら', wound: '幼少期に家族を辻斬りに失った' },
+      npcs: [{ id: 'a', name: '宗右衛門', desc: '40代の浪人、剣の腕は確か。気だるげだが誠実。', personality: '皮肉屋だが芯は熱い', coreDesire: '失った家名を取り戻す', coreFear: '無意味に生き続ける', wound: '主家を失った過去' },
+        { id: 'b', name: 'お春', desc: '近所の若い娘、明るく好奇心旺盛、紫苑を慕う。', personality: '元気で素直', coreDesire: '広い世界を見たい', coreFear: '長屋の閉じた日常', wound: '病弱で外出制限された幼少期' }] } });
+
+  function getActiveSlotId(){ try { if (window.__v292Dfix30 && typeof window.__v292Dfix30.getActive === 'function') return window.__v292Dfix30.getActive(); } catch(_){} return 'default'; }
+  function applyTemplate(tpl, options){
+    options = options || {};
+    if (typeof S === 'undefined' || !S){ alert('S 未初期化'); return false; }
+    try {
+      var t = JSON.parse(JSON.stringify(tpl));
+      if (S.scene){ S.scene.loc = t.scene.loc; S.scene.obj = t.scene.obj; S.scene.tone = t.scene.tone; S.scene.lore = t.scene.lore; S.scene.branches = []; }
+      if (S.cast){ S.cast.hero = t.cast.hero; S.cast.npcs = t.cast.npcs; }
+      if (options.resetTurns !== false) S.turns = [];
+      if (typeof S.save === 'function') S.save();
+      try { if (typeof UI !== 'undefined' && typeof UI.renderAll === 'function') UI.renderAll(); } catch(_){}
+      try { if (typeof UI !== 'undefined' && Array.isArray(UI._renderHooks)){ UI._renderHooks.forEach(function(h){ try { h({}); } catch(_){} }); } } catch(_){}
+      return true;
+    } catch(e){ console.warn(TAG, 'apply err:', e && e.message); return false; }
+  }
+  function ensureStyles(){
+    if (document.getElementById('v292Dfix41-style')) return;
+    var style = document.createElement('style'); style.id = 'v292Dfix41-style';
+    style.textContent = ['.v41-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center;font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI",sans-serif}','.v41-modal{background:var(--s1,#111119);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:8px;width:760px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.6)}','.v41-head{padding:14px 18px;border-bottom:1px solid var(--border,rgba(139,118,240,.2));display:flex;align-items:center;gap:10px}','.v41-head h2{margin:0;font-size:15px;color:var(--acc,#8b76f0);font-weight:600;flex:1}','.v41-close{background:none;border:none;color:var(--dim,#888);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:4px}','.v41-close:hover{background:var(--s2,#17172a);color:var(--tx)}','.v41-body{flex:1;overflow:auto;padding:14px 18px}','.v41-intro{font-size:11px;color:var(--dim,#888);line-height:1.6;margin-bottom:14px;padding:8px 10px;background:var(--bg,#09090f);border-radius:4px;border-left:3px solid var(--acc,#8b76f0)}','.v41-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}','.v41-card{background:var(--bg,#09090f);border:1px solid var(--border,rgba(139,118,240,.15));border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:8px}','.v41-card:hover{border-color:var(--acc,#8b76f0);background:var(--s2,#17172a)}','.v41-card-title{font-size:14px;font-weight:600;color:var(--tx,#e0dcf0)}','.v41-card-summary{font-size:11px;color:var(--dim,#888);line-height:1.5;flex:1}','.v41-card-tags{display:flex;flex-wrap:wrap;gap:4px}','.v41-card-tag{font-size:10px;background:rgba(139,118,240,.15);color:var(--tx);padding:2px 6px;border-radius:3px;border:1px solid rgba(139,118,240,.2)}','.v41-card-meta{font-size:10px;color:var(--dim,#888);font-style:italic}','.v41-card-actions{display:flex;gap:6px;margin-top:6px}','.v41-btn{flex:1;background:var(--s2,#17172a);color:var(--tx);border:1px solid var(--border,rgba(139,118,240,.2));border-radius:4px;padding:6px 8px;font-size:11px;cursor:pointer;font-family:inherit}','.v41-btn:hover{background:var(--acc,#8b76f0);color:#fff;border-color:var(--acc)}','.v41-btn-primary{background:var(--acc,#8b76f0);color:#fff;border-color:var(--acc)}'].join('\n');
+    document.head.appendChild(style);
+  }
+  function escAttr(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escHtml(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function renderLibrary(){
+    closeLibrary(); ensureStyles();
+    var overlay = document.createElement('div'); overlay.className = 'v41-overlay'; overlay.id = 'v41-overlay';
+    overlay.addEventListener('click', function(e){ if (e.target === overlay) closeLibrary(); });
+    var modal = document.createElement('div'); modal.className = 'v41-modal';
+    var html = ['<div class="v41-head"><h2>📚 シナリオテンプレート</h2><button class="v41-close" id="v41-close-x">×</button></div>'];
+    html.push('<div class="v41-body"><div class="v41-intro">テンプレ選択でシナリオ一括設定。「適用」は現在 slot に上書き、「新規 slot に作成」は空 slot に書き込み。turns はリセット。</div><div class="v41-grid">');
+    TEMPLATES.forEach(function(tpl){
+      html.push('<div class="v41-card" data-id="' + escAttr(tpl.id) + '"><div class="v41-card-title">' + escHtml(tpl.title) + '</div><div class="v41-card-summary">' + escHtml(tpl.summary) + '</div><div class="v41-card-tags">');
+      tpl.tags.forEach(function(t){ html.push('<span class="v41-card-tag">' + escHtml(t) + '</span>'); });
+      html.push('</div><div class="v41-card-meta">主: ' + escHtml(tpl.cast.hero.name) + ' / NPC: ' + tpl.cast.npcs.map(function(n){ return n.name; }).join(', ') + '</div><div class="v41-card-actions"><button class="v41-btn v41-btn-primary" data-act="apply" data-id="' + escAttr(tpl.id) + '">適用 (上書き)</button><button class="v41-btn" data-act="apply-to-slot" data-id="' + escAttr(tpl.id) + '">新規 slot へ</button></div></div>');
+    });
+    html.push('</div></div>');
+    modal.innerHTML = html.join(''); overlay.appendChild(modal); document.body.appendChild(overlay);
+    document.getElementById('v41-close-x').addEventListener('click', closeLibrary);
+    modal.addEventListener('click', function(e){
+      var t = e.target.closest('button'); if (!t || !t.dataset || !t.dataset.act) return;
+      var tpl = TEMPLATES.find(function(x){ return x.id === t.dataset.id; }); if (!tpl) return;
+      if (t.dataset.act === 'apply'){
+        if (!confirm('「' + tpl.title + '」を現在の slot に適用しますか？\n現在の scene/cast/turns は完全上書きされます。')) return;
+        if (applyTemplate(tpl, { resetTurns: true })){ showToast('「' + tpl.title + '」を適用しました'); closeLibrary(); }
+        else { showToast('適用失敗', true); }
+      }
+      if (t.dataset.act === 'apply-to-slot'){
+        if (!window.__v292Dfix30){ showToast('fix30 未 install', true); return; }
+        var meta = window.__v292Dfix30.getMeta();
+        var emptySlots = meta.filter(function(s){ if (s.id === 'default') return false; var raw = null; try { raw = localStorage.getItem(s.key); } catch(_){} return !raw; });
+        if (!emptySlots.length){ showToast('空 slot がありません', true); return; }
+        var choice = prompt('適用する slot を選択:\n' + emptySlots.map(function(s, i){ return (i+1) + ': ' + s.name; }).join('\n') + '\n\n番号 (1-' + emptySlots.length + '):');
+        var idx = parseInt(choice, 10) - 1;
+        if (isNaN(idx) || idx < 0 || idx >= emptySlots.length) return;
+        var target = emptySlots[idx]; var prevActive = window.__v292Dfix30.getActive();
+        try {
+          localStorage.setItem('chr6_active_slot', JSON.stringify(target.id));
+          if (applyTemplate(tpl, { resetTurns: true })){ showToast('slot 「' + target.name + '」に適用 (active 切替)'); closeLibrary(); }
+          else { localStorage.setItem('chr6_active_slot', JSON.stringify(prevActive)); showToast('適用失敗', true); }
+        } catch(e){ localStorage.setItem('chr6_active_slot', JSON.stringify(prevActive)); showToast('err: ' + e.message, true); }
+      }
+    });
+  }
+  function closeLibrary(){ var ov = document.getElementById('v41-overlay'); if (ov && ov.parentNode) ov.parentNode.removeChild(ov); }
+  function showToast(msg, isErr){
+    var t = document.createElement('div'); t.className = 'v30-toast' + (isErr ? ' err' : ''); t.textContent = msg;
+    if (!document.getElementById('v292Dfix30-style')){ t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:' + (isErr ? '#e06060' : '#8b76f0') + ';color:#fff;padding:10px 18px;border-radius:6px;font-size:13px;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,.4);font-family:inherit'; }
+    document.body.appendChild(t); setTimeout(function(){ if (t.parentNode) t.parentNode.removeChild(t); }, 2800);
+  }
+  function injectTopbarButton(){
+    if (document.getElementById('v41-topbar-btn')) return true;
+    var anchor = document.getElementById('v40-topbar-btn') || document.getElementById('v39-topbar-btn') || document.getElementById('v38-topbar-btn') || document.getElementById('v30-topbar-btn');
+    if (!anchor){
+      var allBtns = document.querySelectorAll('button');
+      for (var i = 0; i < allBtns.length; i++){ if ((allBtns[i].textContent || '').indexOf('設定') >= 0){ anchor = allBtns[i]; break; } }
+    }
+    if (!anchor) return false;
+    var btn = document.createElement('button');
+    btn.id = 'v41-topbar-btn'; btn.className = 'v30-topbar-btn';
+    btn.textContent = '📚 シナリオ'; btn.title = 'シナリオテンプレートライブラリ';
+    btn.style.cssText = 'background:var(--s2,#17172a);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer;margin-right:8px;font-family:inherit';
+    btn.addEventListener('click', renderLibrary);
+    anchor.parentNode.insertBefore(btn, anchor);
+    return true;
+  }
+  function init(){
+    if (injectTopbarButton()){ window.__v292Dfix41Active = true; console.log(TAG, 'installed - ' + TEMPLATES.length + ' templates'); return; }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (injectTopbarButton()){ clearInterval(iv); window.__v292Dfix41Active = true; console.log(TAG, 'installed (deferred ' + tries + ')'); }
+      else if (tries > 80){ clearInterval(iv); console.warn(TAG, 'gave up'); }
+    }, 200);
+  }
+  setInterval(function(){
+    if (window.__v292Dfix41Active && !document.getElementById('v41-topbar-btn')){ if (injectTopbarButton()) console.log(TAG, 'btn reinjected'); }
+  }, 5000);
+  window.__v292Dfix41 = { openLibrary: renderLibrary, closeLibrary: closeLibrary, applyTemplate: applyTemplate, TEMPLATES: TEMPLATES };
+  init();
+})();
+
