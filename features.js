@@ -5966,3 +5966,186 @@
 
   init();
 })();
+
+/* v292Dfix31: keyboard shortcuts
+ *
+ * 目的: パワーユーザー向けにキーボード操作を追加。Phase 1 UI/UX 強化の一環。
+ *
+ * Shortcuts:
+ *   Ctrl/Cmd + S        現在の状態を active slot に保存
+ *   Ctrl/Cmd + Shift+S  セーブ管理 modal を開く
+ *   Ctrl/Cmd + E        現在の状態を JSON エクスポート
+ *   Esc                 開いている modal/overlay を閉じる
+ *   ? (Shift+/) / F1    ショートカット help を表示
+ *
+ * 設計原則:
+ *   - __v292Dfix31Active フラグで二重 install 防止
+ *   - input/textarea/contenteditable focus 時は Esc 以外は通過 (typing 邪魔しない)
+ *   - Ctrl+S はブラウザの「ページ保存」を上書き → preventDefault
+ *   - Ctrl+E はブラウザの「アドレスバー検索」(Firefox 等) を上書き → preventDefault
+ *   - 全アクションで discrete toast 表示 (アクション確認)
+ *   - fix30 の API (window.__v292Dfix30.openManager/exportCurrent) に依存
+ *   - fix30 未 install でも crash しない (機能制限のみ)
+ */
+(function v292Dfix31(){
+  if (window.__v292Dfix31Active) return;
+  var TAG = '[v292Dfix31]';
+
+  function isMac(){ return /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || ''); }
+  function modKey(e){ return isMac() ? e.metaKey : e.ctrlKey; }
+  function isTypingTarget(t){
+    if (!t) return false;
+    if (t.isContentEditable) return true;
+    var tag = (t.tagName || '').toUpperCase();
+    if (tag === 'INPUT'){
+      var type = (t.type || '').toLowerCase();
+      if (['text','textarea','search','url','email','password','tel','number',''].indexOf(type) >= 0) return true;
+    }
+    if (tag === 'TEXTAREA') return true;
+    return false;
+  }
+
+  function showToast(msg, isErr){
+    var t = document.createElement('div');
+    t.className = 'v30-toast' + (isErr ? ' err' : '');
+    t.textContent = msg;
+    if (!document.getElementById('v292Dfix30-style')){
+      t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);' +
+        'background:' + (isErr ? '#e06060' : '#8b76f0') + ';color:#fff;padding:10px 18px;' +
+        'border-radius:6px;font-size:13px;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,.4);' +
+        'font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI",sans-serif';
+    }
+    document.body.appendChild(t);
+    setTimeout(function(){ if (t.parentNode) t.parentNode.removeChild(t); }, 2400);
+  }
+
+  function actSave(){
+    try {
+      if (typeof S !== 'undefined' && typeof S.save === 'function'){
+        S.save();
+        showToast('💾 保存しました');
+      } else {
+        showToast('S.save 未定義 (state 未初期化?)', true);
+      }
+    } catch(e){ showToast('save 失敗: ' + e.message, true); }
+  }
+  function actOpenManager(){
+    try {
+      if (window.__v292Dfix30 && typeof window.__v292Dfix30.openManager === 'function'){
+        window.__v292Dfix30.openManager();
+      } else {
+        showToast('fix30 (セーブ管理) が未 install', true);
+      }
+    } catch(e){ showToast('open manager err: ' + e.message, true); }
+  }
+  function actExport(){
+    try {
+      if (window.__v292Dfix30 && typeof window.__v292Dfix30.exportCurrent === 'function'){
+        window.__v292Dfix30.exportCurrent();
+        showToast('📤 JSON ダウンロード開始');
+      } else {
+        showToast('fix30 (エクスポート) が未 install', true);
+      }
+    } catch(e){ showToast('export err: ' + e.message, true); }
+  }
+  function actCloseModal(){
+    var v30 = document.getElementById('v30-overlay');
+    if (v30 && v30.parentNode){ v30.parentNode.removeChild(v30); return true; }
+    var v31help = document.getElementById('v31-help-overlay');
+    if (v31help && v31help.parentNode){ v31help.parentNode.removeChild(v31help); return true; }
+    var allBtns = document.querySelectorAll('button');
+    for (var i = 0; i < allBtns.length; i++){
+      var b = allBtns[i];
+      if ((b.textContent || '').trim() === '閉じる' && b.offsetParent !== null){
+        try { b.click(); return true; } catch(_){}
+      }
+    }
+    return false;
+  }
+  function actShowHelp(){
+    var existing = document.getElementById('v31-help-overlay');
+    if (existing){ existing.parentNode.removeChild(existing); return; }
+    var mod = isMac() ? '⌘' : 'Ctrl';
+    var overlay = document.createElement('div');
+    overlay.id = 'v31-help-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;' +
+      'display:flex;align-items:center;justify-content:center;' +
+      'font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI",sans-serif';
+    overlay.addEventListener('click', function(e){
+      if (e.target === overlay) overlay.parentNode.removeChild(overlay);
+    });
+    var box = document.createElement('div');
+    box.style.cssText = 'background:#111119;color:#e0dcf0;border:1px solid rgba(139,118,240,.3);' +
+      'border-radius:8px;padding:20px 24px;width:440px;max-width:92vw;' +
+      'box-shadow:0 8px 32px rgba(0,0,0,.6)';
+    var rows = [
+      [mod + ' + S',         '現在の状態を保存'],
+      [mod + ' + Shift + S', 'セーブ管理を開く'],
+      [mod + ' + E',         'JSON エクスポート'],
+      ['Esc',                '開いている modal を閉じる'],
+      ['? / F1',             'このヘルプを表示']
+    ];
+    var html = ['<h2 style="margin:0 0 14px;font-size:16px;color:#8b76f0;font-weight:600;">⌨️ キーボードショートカット <span style="float:right;cursor:pointer;color:#888;font-size:18px;font-weight:normal;" id="v31-help-close">×</span></h2>'];
+    html.push('<table style="width:100%;border-collapse:collapse;font-size:13px;">');
+    rows.forEach(function(r){
+      html.push('<tr>');
+      html.push('<td style="padding:8px 10px;border-bottom:1px solid rgba(139,118,240,.15);width:42%;"><kbd style="background:#17172a;border:1px solid rgba(139,118,240,.3);border-radius:4px;padding:3px 8px;font-family:monospace;font-size:12px;color:#e0dcf0;">' + r[0] + '</kbd></td>');
+      html.push('<td style="padding:8px 10px;border-bottom:1px solid rgba(139,118,240,.15);color:#e0dcf0;">' + r[1] + '</td>');
+      html.push('</tr>');
+    });
+    html.push('</table>');
+    html.push('<div style="margin-top:14px;font-size:11px;color:#888;line-height:1.5;">入力欄に focus 中は ' + mod + ' + 系のみ動作 (Esc/?/F1 は無効化)</div>');
+    box.innerHTML = html.join('');
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    var closeBtn = document.getElementById('v31-help-close');
+    if (closeBtn) closeBtn.addEventListener('click', function(){ overlay.parentNode.removeChild(overlay); });
+  }
+
+  function onKeyDown(e){
+    var typing = isTypingTarget(e.target);
+    if (e.key === 'Escape'){
+      if (actCloseModal()){ e.preventDefault(); return; }
+      return;
+    }
+    if (!typing && (e.key === 'F1' || (e.key === '?' && e.shiftKey))){
+      e.preventDefault();
+      actShowHelp();
+      return;
+    }
+    if (modKey(e)){
+      if (e.shiftKey && (e.key === 'S' || e.key === 's')){
+        e.preventDefault();
+        actOpenManager();
+        return;
+      }
+      if (!e.shiftKey && (e.key === 'S' || e.key === 's')){
+        e.preventDefault();
+        actSave();
+        return;
+      }
+      if (!e.shiftKey && (e.key === 'E' || e.key === 'e')){
+        e.preventDefault();
+        actExport();
+        return;
+      }
+    }
+  }
+
+  function install(){
+    if (window.__v292Dfix31Installed) return;
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    window.__v292Dfix31Installed = true;
+    window.__v292Dfix31Active = true;
+    console.log(TAG, 'installed - keyboard shortcuts active (' + (isMac() ? 'Cmd' : 'Ctrl') + ' + S/E, Shift+? for help)');
+  }
+
+  window.__v292Dfix31 = {
+    showHelp: actShowHelp,
+    save: actSave,
+    export: actExport,
+    openManager: actOpenManager
+  };
+
+  install();
+})();
