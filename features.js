@@ -6149,3 +6149,77 @@
 
   install();
 })();
+
+/* v292Dfix32: mobile UI optimization
+ *
+ * 目的: 狭画面 (≤ 768px) での体験を改善。
+ *   - #content-cols (会話ログ + 展開の描写) を 2-col → 1-col 縦並びに
+ *   - topbar / composer / 設定 modal のレイアウト調整
+ *   - タップ領域を 44px 以上確保 (アクセシビリティ準拠)
+ *   - 設定 overlay を全幅化
+ *
+ * 設計原則:
+ *   - __v292Dfix32Active フラグで二重 install 防止
+ *   - CSS injection のみ (DOM / JS state は touch しない)
+ *   - !important で既存スタイルを優先上書き
+ *   - desktop (> 768px) では効果なし
+ */
+(function v292Dfix32(){
+  if (window.__v292Dfix32Active) return;
+  var TAG = '[v292Dfix32]';
+  var STYLE_ID = 'v292Dfix32-style';
+
+  function inject(){
+    if (document.getElementById(STYLE_ID)) return true;
+    var style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = [
+      '/* === v292Dfix32: mobile UI (≤ 768px) === */',
+      '@media (max-width: 768px) {',
+      '  body { max-width: 100% !important; padding: 0 !important; }',
+      '  #topbar { padding: 8px 12px !important; gap: 6px !important; flex-wrap: wrap !important; }',
+      '  #topbar > * { font-size: 13px !important; }',
+      '  #content-cols { flex-direction: column !important; gap: 8px !important; padding: 0 8px !important; }',
+      '  #content-cols > * { width: 100% !important; min-width: 0 !important; max-width: 100% !important; }',
+      '  #dialogue-col { max-height: 35vh !important; overflow-y: auto !important; }',
+      '  #branches { flex-wrap: wrap !important; padding: 4px 8px !important; gap: 6px !important; }',
+      '  #branches button { font-size: 12px !important; padding: 6px 10px !important; }',
+      '  #composer { padding: 8px !important; gap: 6px !important; }',
+      '  #composer button { min-height: 44px !important; font-size: 14px !important; }',
+      '  #composer input, #composer textarea { font-size: 16px !important; min-height: 44px !important; }',
+      '  #settingsOv > div, #editOv > div { width: 96vw !important; max-width: 96vw !important; max-height: 92vh !important; margin: 2vh auto !important; padding: 14px !important; box-sizing: border-box !important; }',
+      '  #settingsOv input, #settingsOv textarea, #editOv input, #editOv textarea { font-size: 16px !important; }',
+      '  #settingsOv button, #editOv button { min-height: 40px !important; }',
+      '  .v30-modal { width: 96vw !important; max-width: 96vw !important; padding: 14px !important; }',
+      '  .v30-btn { min-height: 36px !important; padding: 7px 12px !important; font-size: 13px !important; }',
+      '  .v30-slot-actions { gap: 4px !important; }',
+      '  #v31-help-overlay > div { width: 96vw !important; padding: 16px !important; }',
+      '  .badge, [class*="badge"] { font-size: 10px !important; }',
+      '}',
+      '@media (max-width: 480px) {',
+      '  #topbar { padding: 6px 8px !important; }',
+      '  #v30-topbar-btn { padding: 6px 8px !important; }',
+      '  .v292-dlg-card { padding: 6px !important; gap: 6px !important; }',
+      '  .dlg-name { font-size: 12px !important; }',
+      '  .dlg-text { font-size: 13px !important; }',
+      '  .dlg-av img { width: 32px !important; height: 32px !important; }',
+      '}'
+    ].join('\n');
+    document.head.appendChild(style);
+    return true;
+  }
+  function init(){
+    if (inject()){ window.__v292Dfix32Active = true; console.log(TAG, 'installed - mobile UI CSS injected (≤ 768px responsive)'); return; }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (inject()){ clearInterval(iv); window.__v292Dfix32Active = true; console.log(TAG, 'installed (deferred ' + tries + ' tries)'); }
+      else if (tries > 30){ clearInterval(iv); console.warn(TAG, 'install gave up'); }
+    }, 200);
+  }
+  setInterval(function(){
+    if (window.__v292Dfix32Active && !document.getElementById(STYLE_ID)){ if (inject()) console.log(TAG, 'style reinjected'); }
+  }, 5000);
+  window.__v292Dfix32 = { reinject: function(){ var s = document.getElementById(STYLE_ID); if (s) s.parentNode.removeChild(s); return inject(); } };
+  init();
+})();
