@@ -8280,3 +8280,96 @@
   init();
 })();
 
+
+/* v292Dfix49: JSON 残骸 narrative cleaner
+ * fix48 で parsePlan の TypeError は解消したが、Hermes 4 が JSON parse 失敗時、
+ * fallback 経路で raw text が 1 本の巨大文字列として narrative に格納される。
+ * 言語フィルタで英字は消えるが JSON 構文 ("," "{":""}" 等) は残る。
+ * これにより extractDialoguesEnhanced の Pattern E ([」]\s*NAMEはverb) が
+ * "," を吞めず 0 件抽出 → 会話ログ panel が空 + narrative panel に JSON 残骸露出。
+ *
+ * 対策: Planner._parseExtensions の position 0 に preprocessor を unshift。
+ * JSON 残骸密度 5%+ の行を検出 → "," で split → 両端 JSON 文字 strip
+ * → 日本語含むフラグメントだけ残す + branchCandidate label (DO)/()/(SAY)/(STORY)/(TALK) も除去。
+ * 通常 (parse 成功時) narrative は ratio < 5% で完全 no-op。
+ */
+(function v292Dfix49(){
+  if (window.__v292Dfix49Active) return;
+  var TAG = '[v292Dfix49]';
+
+  function cleanJsonGarbageOnLine(line) {
+    if (typeof line !== 'string') return [line];
+    var jsonChars = (line.match(/["{}\[\]]/g) || []).length;
+    var ratio = jsonChars / Math.max(1, line.length);
+    if (ratio < 0.05) return [line];
+    var fragments = line
+      .split(/"\s*,\s*"/g)
+      .map(function(f) { return f.replace(/^[{}\[\]":,\s]+|[{}\[\]":,\s]+$/g, ''); })
+      .filter(function(f) { return f && /[぀-ゟ゠-ヿ]/.test(f) && f.length >= 2; })
+      .filter(function(f) {
+        var t = f.trim();
+        return !/\((?:DO|SAY|STORY|TALK)?\)\s*$/.test(t);
+      });
+    return fragments.length ? fragments : [line];
+  }
+
+  function cleanPlanNarrative(plan, meta) {
+    try {
+      if (!plan || !Array.isArray(plan.narrative)) return plan;
+      var out = [];
+      var rescued = 0;
+      for (var i = 0; i < plan.narrative.length; i++) {
+        var line = plan.narrative[i];
+        if (typeof line !== 'string') { out.push(line); continue; }
+        var jsonChars = (line.match(/["{}\[\]]/g) || []).length;
+        var ratio = jsonChars / Math.max(1, line.length);
+        if (ratio < 0.05) { out.push(line); continue; }
+        var fragments = cleanJsonGarbageOnLine(line);
+        if (fragments.length > 1 || (fragments.length === 1 && fragments[0] !== line)) rescued++;
+        for (var j = 0; j < fragments.length; j++) out.push(fragments[j]);
+      }
+      if (rescued > 0) console.log(TAG, 'rescued', rescued, 'JSON-garbage line(s) →', out.length, 'fragments');
+      plan.narrative = out;
+      return plan;
+    } catch (e) {
+      console.warn(TAG, 'parse ext err:', e && e.message);
+      return plan;
+    }
+  }
+
+  function install() {
+    var P = window.Planner;
+    if (!P || !Array.isArray(P._parseExtensions)) return false;
+    if (P._parseExtensions.__v292Dfix49) return true;
+    P._parseExtensions.unshift(cleanPlanNarrative);
+    P._parseExtensions.__v292Dfix49 = true;
+    console.log(TAG, 'installed (parseExt position 0 of', P._parseExtensions.length, ')');
+    return true;
+  }
+
+  if (!install()) {
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (install()) { clearInterval(iv); window.__v292Dfix49Active = true; }
+      else if (tries > 80) { clearInterval(iv); console.warn(TAG, 'gave up'); }
+    }, 200);
+  } else {
+    window.__v292Dfix49Active = true;
+  }
+
+  setInterval(function(){
+    var P = window.Planner;
+    if (!P || !Array.isArray(P._parseExtensions)) return;
+    if (!P._parseExtensions.__v292Dfix49 || P._parseExtensions.indexOf(cleanPlanNarrative) < 0) {
+      P._parseExtensions.unshift(cleanPlanNarrative);
+      P._parseExtensions.__v292Dfix49 = true;
+      console.log(TAG, 'reinstalled');
+    }
+  }, 5000);
+
+  window.__v292Dfix49 = {
+    cleanJsonGarbageOnLine: cleanJsonGarbageOnLine,
+    cleanPlanNarrative: cleanPlanNarrative
+  };
+})();
