@@ -8152,3 +8152,131 @@
   init();
 })();
 
+
+/* v292Dfix47: fix44 拡張 — 壊れ JSON (empty key) 形式 dialogue 救出
+ * 実機で Hermes が {"":"","":"speaker","":"text"} 形式で出してるので fix44 regex で拾えない。fix47 で キー名空の壊れ pattern にもマッチするれて追加 regex を実装。cast 名フィルタで false positive 防止。
+ */
+(function v292Dfix47(){
+  if (window.__v292Dfix47Active) return;
+  var TAG = '[v292Dfix47]';
+  function castNames(){
+    try { var st = (typeof S !== 'undefined' && S) ? S : null; if (!st || !st.cast) return [];
+      var out = []; if (st.cast.hero && st.cast.hero.name) out.push(String(st.cast.hero.name).trim());
+      if (Array.isArray(st.cast.npcs)) st.cast.npcs.forEach(function(n){ if (n && n.name) out.push(String(n.name).trim()); });
+      return out.filter(function(n){ return !!n; });
+    } catch(_){ return []; }
+  }
+  function extractBrokenDialogues(text){
+    if (!text || typeof text !== 'string') return [];
+    var names = castNames(); if (!names.length) return [];
+    var nameSet = {}; names.forEach(function(n){ nameSet[n] = true; });
+    var out = [];
+    var rx = /\{\s*\\?"\\?"\s*:\s*\\?"([^"\\]*?)\\?"\s*,\s*\\?"\\?"\s*:\s*\\?"([^"\\]+?)\\?"\s*,\s*\\?"\\?"\s*:\s*\\?"([^"]+?)\\?"\s*\}/g;
+    var m;
+    while ((m = rx.exec(text))){
+      var sp = (m[2] || '').trim();
+      var tx = (m[3] || '').trim().replace(/\\n/g, '\n');
+      if (sp && tx && nameSet[sp]) out.push({ speaker: sp, text: tx });
+    }
+    return out;
+  }
+  function extractRobustDialogues(text){
+    if (!text || typeof text !== 'string') return [];
+    var names = castNames(); if (!names.length) return [];
+    var nameSet = {}; names.forEach(function(n){ nameSet[n] = true; });
+    var out = [];
+    var rx = /\{[^{}]*?speaker\s*:\s*\\?"([^"\\]+?)\\?"[^{}]*?text\s*:\s*\\?"([^"]+?)\\?"[^{}]*?\}/g;
+    var m;
+    while ((m = rx.exec(text))){
+      var sp = (m[1] || '').trim();
+      var tx = (m[2] || '').trim().replace(/\\n/g, '\n');
+      if (sp && tx && nameSet[sp]) out.push({ speaker: sp, text: tx });
+    }
+    return out;
+  }
+  function getNarrText(narrative){
+    if (typeof narrative === 'string') return narrative;
+    if (Array.isArray(narrative)){
+      var s = '';
+      for (var i = 0; i < narrative.length; i++){
+        var n = narrative[i];
+        if (typeof n === 'string') s += n + '\n';
+        else if (n && typeof n === 'object' && typeof n.text === 'string') s += n.text + '\n';
+      }
+      return s;
+    }
+    return '';
+  }
+  function castInfo(){
+    var st = (typeof S !== 'undefined' && S) ? S : null;
+    if (!st || !st.cast) return { hero: null, members: [] };
+    var members = [];
+    if (st.cast.hero && st.cast.hero.name) members.push(st.cast.hero);
+    if (Array.isArray(st.cast.npcs)) st.cast.npcs.forEach(function(n){ if (n && n.name) members.push(n); });
+    return { hero: st.cast.hero || null, members: members };
+  }
+  function escHtml(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function addCard(speaker, text, stream){
+    var ci = castInfo();
+    var isHero = !!(ci.hero && ci.hero.name === speaker);
+    var avatarUrl = '';
+    for (var i = 0; i < ci.members.length; i++){
+      if (ci.members[i].name === speaker && ci.members[i].avatar){ avatarUrl = ci.members[i].avatar; break; }
+    }
+    var card = document.createElement('div');
+    card.className = 'v292-dlg-card' + (isHero ? ' hero-card' : '');
+    card.setAttribute('data-v47-rescued', 'true');
+    var avHtml = avatarUrl ? '<img src="' + escHtml(avatarUrl) + '" alt="' + escHtml(speaker) + '" loading="lazy" onerror="this.parentNode.textContent=String.fromCharCode(63)">' : '?';
+    card.innerHTML = '<div class="dlg-av">' + avHtml + '</div><div class="dlg-body"><div class="dlg-name">' + escHtml(speaker) + '</div><div class="dlg-text">' + escHtml(text) + '</div></div>';
+    stream.appendChild(card);
+  }
+  function rescueBrokenJsonDialogues(){
+    var stream = document.getElementById('dialogue-stream'); if (!stream) return 0;
+    var st = (typeof S !== 'undefined' && S) ? S : null; if (!st || !Array.isArray(st.turns) || !st.turns.length) return 0;
+    var allFragments = [];
+    st.turns.forEach(function(t){
+      if (!t || !t.narrative) return;
+      var txt = getNarrText(t.narrative);
+      var f1 = extractBrokenDialogues(txt);
+      var f2 = extractRobustDialogues(txt);
+      f1.concat(f2).forEach(function(f){ allFragments.push(f); });
+    });
+    if (!allFragments.length) return 0;
+    var existingTexts = Array.from(stream.querySelectorAll('.v292-dlg-card .dlg-text')).map(function(el){ return el.textContent.trim(); });
+    var added = 0;
+    allFragments.forEach(function(f){
+      if (existingTexts.indexOf(f.text) >= 0) return;
+      addCard(f.speaker, f.text, stream);
+      existingTexts.push(f.text);
+      added++;
+    });
+    if (added > 0) console.log(TAG, 'rescued ' + added + ' missing dialogue(s) from broken JSON');
+    return added;
+  }
+  function getUIRef(){ try { return (0, eval)('typeof UI !== "undefined" ? UI : null'); } catch(_){ return null; } }
+  function installHook(){
+    var UI = getUIRef(); if (!UI || !Array.isArray(UI._renderHooks)) return false;
+    if (UI._renderHooks.__v292Dfix47) return true;
+    UI._renderHooks.push(function dialogueLayoutHookV47(){ try { setTimeout(rescueBrokenJsonDialogues, 80); } catch(_){} });
+    UI._renderHooks.__v292Dfix47 = true;
+    return true;
+  }
+  function init(){
+    if (installHook()){ try { rescueBrokenJsonDialogues(); } catch(_){} window.__v292Dfix47Active = true; console.log(TAG, 'installed'); return; }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (installHook()){ clearInterval(iv); try { rescueBrokenJsonDialogues(); } catch(_){} window.__v292Dfix47Active = true; console.log(TAG, 'installed (deferred ' + tries + ')'); }
+      else if (tries > 80){ clearInterval(iv); console.warn(TAG, 'gave up'); }
+    }, 200);
+  }
+  setInterval(function(){
+    if (window.__v292Dfix47Active){
+      var UI = getUIRef();
+      if (UI && Array.isArray(UI._renderHooks) && !UI._renderHooks.__v292Dfix47){ installHook(); console.log(TAG, 'hook reinstalled'); }
+    }
+  }, 5000);
+  window.__v292Dfix47 = { rescueBrokenJsonDialogues: rescueBrokenJsonDialogues, extractBrokenDialogues: extractBrokenDialogues, extractRobustDialogues: extractRobustDialogues };
+  init();
+})();
+
