@@ -1096,6 +1096,16 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
     }
     // 言語フィルタ: 英単語・中国簡体字・コード片を除去
     plan.narrative = plan.narrative.map(line => {
+      // v292Dfix48: dialogue object 等の非 string 要素を文字列化 (fix26 schema を .map() 前に展開)
+      if (line && typeof line === 'object') {
+        const kind = line.type || '';
+        const sp = (line.speaker || '').toString().trim();
+        const tx = (line.text || '').toString().trim();
+        if (kind === 'dialogue' && sp && tx) line = sp + '「' + tx + '」';
+        else if (tx) line = tx;
+        else line = '';
+      }
+      if (typeof line !== 'string') return '';
       if (!line) return '';
       let t = line;
       // 英字3文字以上の連続を削除
@@ -2193,6 +2203,6 @@ G.init();
 })();
 </script>
 <!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
-<script src="features.js?cb=v292Dfix47"></script>
+<script src="features.js?cb=v292Dfix48"></script>
 </body>
 </html>
