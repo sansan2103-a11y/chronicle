@@ -5303,3 +5303,105 @@
 
   init();
 })();
+
+/* v292Dfix29b: ensure fix29 catches initial render via MutationObserver
+ *
+ * 観察された問題 (fix29 deploy 後):
+ *   ページ初回ロード時、fix15 の renderStreamV15 が fix29 の hook install より
+ *   早く dialogue cards を render するケースで、fix29 の auto-sweep が空打ちになり、
+ *   ユーザーが UI action (turn 進行等) するまで誤帰属が画面に残る。
+ *
+ * 対策:
+ *   #dialogue-stream に MutationObserver を install し、cards 追加 (childList) を
+ *   catch したら window.__v292Dfix29.fixDomCards() を実行。
+ *   fix29 の DOM 訂正 (textContent 変更, classList toggle, img.src/alt 変更, 内部
+ *   innerHTML on .dlg-av) は #dialogue-stream 自体の childList に影響しないので
+ *   feedback loop は発生しない。
+ *   加えて、install 後に setTimeout (+200/+800/+2000ms) で delayed sweep を実行
+ *   (observer install 自体が遅延するケースの保険)。
+ *
+ * 設計原則:
+ *   - __v292Dfix29bActive フラグで二重 install 防止
+ *   - window.__v292Dfix29 (fix29 の API) が ready になるまで wait
+ *   - 5 秒ごとの periodic re-install で observer が disconnect された時の保険
+ *   - fix29 とは別 IIFE として共存 (fix29 本体は touch しない)
+ */
+(function v292Dfix29b(){
+  if (window.__v292Dfix29bActive) return;
+  var TAG = '[v292Dfix29b]';
+  var observer = null;
+
+  function trySweep(){
+    try {
+      if (window.__v292Dfix29 && typeof window.__v292Dfix29.fixDomCards === 'function'){
+        window.__v292Dfix29.fixDomCards();
+      }
+    } catch(_){}
+  }
+
+  function installObserver(){
+    var stream = document.getElementById('dialogue-stream');
+    if (!stream) return false;
+    if (!window.__v292Dfix29 || typeof window.__v292Dfix29.fixDomCards !== 'function') return false;
+    if (stream.__v292Dfix29bObserved) return true;
+
+    observer = new MutationObserver(function(mutations){
+      // Trigger sweep on any childList mutation (cards added/removed by renderStreamV15)
+      var hasChange = false;
+      for (var i = 0; i < mutations.length; i++){
+        if (mutations[i].type === 'childList' &&
+            (mutations[i].addedNodes.length > 0 || mutations[i].removedNodes.length > 0)){
+          hasChange = true;
+          break;
+        }
+      }
+      if (hasChange){
+        // Defer slightly so all batched mutations complete first
+        setTimeout(trySweep, 0);
+      }
+    });
+    observer.observe(stream, { childList: true });
+    stream.__v292Dfix29bObserved = true;
+
+    // Initial sweeps (in case cards are already present at install time)
+    trySweep();
+    setTimeout(trySweep, 200);
+    setTimeout(trySweep, 800);
+    setTimeout(trySweep, 2000);
+    return true;
+  }
+
+  function init(){
+    if (installObserver()){
+      window.__v292Dfix29bActive = true;
+      console.log(TAG, 'installed - MutationObserver on #dialogue-stream + delayed sweeps');
+      return;
+    }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (installObserver()){
+        clearInterval(iv);
+        window.__v292Dfix29bActive = true;
+        console.log(TAG, 'installed (deferred ' + tries + ' tries)');
+      } else if (tries > 100){
+        clearInterval(iv);
+        console.warn(TAG, 'install gave up after 100 tries');
+      }
+    }, 100);
+  }
+
+  // 定期再 install (observer disconnect / stream replace 保険)
+  setInterval(function(){
+    try {
+      var stream = document.getElementById('dialogue-stream');
+      if (stream && !stream.__v292Dfix29bObserved &&
+          window.__v292Dfix29 && typeof window.__v292Dfix29.fixDomCards === 'function'){
+        installObserver();
+        console.log(TAG, 'observer reinstalled');
+      }
+    } catch(_){}
+  }, 5000);
+
+  init();
+})();
