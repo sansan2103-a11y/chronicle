@@ -6989,3 +6989,188 @@
   window.__v292Dfix36 = { openMatrix: renderMatrix, closeMatrix: closeMatrix, openEdit: renderEdit, loadRelations: loadRelations, getRelation: getRelation, setRelation: setRelation, buildRelationsContext: buildRelationsContext };
   init();
 })();
+
+/* v292Dfix37: シーン境界 + 過去シーン圧縮
+ *
+ * 目的 (Phase 2-C):
+ *   長セッションで turn 数が増えると、fix35 の「直近 N turn」だけでは古い文脈が失われる。
+ *   fix37 では turn を「シーン」単位にグループ化し、過去シーンを 1-2 行要約として
+ *   prompt に注入することで、長期 continuity を維持する。
+ *
+ * 設計:
+ *   - シーン境界: localStorage.chr6_scene_breaks_<slotId> = [turnIdx, ...] (新シーン開始 turn)
+ *   - シーン要約: localStorage.chr6_scene_summaries_<slotId> = {sceneIdx: "..."}
+ *   - buildScenes(turns): 境界をもとに scenes = [{idx, startTurn, endTurn, summary}] を構築
+ *   - prompt 注入: 「【過去シーン要約】」block を ctx.sys 末尾に追加 (現在シーンは除く)
+ *     fix35 の「これまでの経緯 (直近 N turn)」と coexist — fix35 = 詳細 / fix37 = 高レベル
+ *   - UI: topbar 「🎬 シーン管理」ボタン → modal (シーン list + 境界 toggle)
+ *
+ * 設計原則:
+ *   - __v292Dfix37Active フラグで二重 install 防止
+ *   - S.turns schema 不侵入 (境界 + 要約 とも localStorage 外部保存)
+ *   - fix30 active slot 連動 / fix34 fix35 と非競合
+ */
+(function v292Dfix37(){
+  if (window.__v292Dfix37Active) return;
+  var TAG = '[v292Dfix37]';
+  function getActiveSlotId(){ try { if (window.__v292Dfix30 && typeof window.__v292Dfix30.getActive === 'function') return window.__v292Dfix30.getActive(); } catch(_){} return 'default'; }
+  function breaksKey(){ return 'chr6_scene_breaks_' + getActiveSlotId(); }
+  function summariesKey(){ return 'chr6_scene_summaries_' + getActiveSlotId(); }
+  function loadBreaks(){ try { var v = localStorage.getItem(breaksKey()); var arr = v ? JSON.parse(v) : []; return Array.isArray(arr) ? arr.sort(function(a,b){ return a-b; }) : []; } catch(_){ return []; } }
+  function saveBreaks(arr){ try { localStorage.setItem(breaksKey(), JSON.stringify((arr || []).sort(function(a,b){ return a-b; }))); } catch(_){} }
+  function toggleBreak(turnIdx){ var arr = loadBreaks(); var pos = arr.indexOf(turnIdx); if (pos >= 0) arr.splice(pos, 1); else arr.push(turnIdx); saveBreaks(arr); }
+  function loadSummaries(){ try { var v = localStorage.getItem(summariesKey()); return v ? JSON.parse(v) : {}; } catch(_){ return {}; } }
+  function saveSummaries(o){ try { localStorage.setItem(summariesKey(), JSON.stringify(o)); } catch(_){} }
+  function setSummary(sceneIdx, summary){ var o = loadSummaries(); if (summary && summary.trim()) o[sceneIdx] = String(summary).trim().slice(0, 200); else delete o[sceneIdx]; saveSummaries(o); }
+  function autoSceneSummary(scene, turns){
+    if (window.__v292Dfix35 && typeof window.__v292Dfix35.autoSummary === 'function'){
+      var firstTurn = turns[scene.startTurn]; if (firstTurn) return window.__v292Dfix35.autoSummary(firstTurn);
+    }
+    var t = turns[scene.startTurn]; if (!t) return '';
+    var src = (typeof t.narrative === 'string') ? t.narrative : (t.playerText || '');
+    return String(src).slice(0, 60) + '…';
+  }
+  function buildScenes(turns){
+    if (!Array.isArray(turns) || !turns.length) return [];
+    var rawBreaks = loadBreaks();
+    var breaks = [0].concat(rawBreaks.filter(function(i){ return i > 0 && i < turns.length; }));
+    breaks = Array.from(new Set(breaks)).sort(function(a,b){ return a-b; });
+    var summaries = loadSummaries();
+    var scenes = [];
+    for (var i = 0; i < breaks.length; i++){
+      var startTurn = breaks[i];
+      var endTurn = (i + 1 < breaks.length) ? (breaks[i+1] - 1) : (turns.length - 1);
+      var scene = { idx: i, startTurn: startTurn, endTurn: endTurn, customSummary: summaries[i] || '' };
+      scene.summary = scene.customSummary || autoSceneSummary(scene, turns);
+      scenes.push(scene);
+    }
+    return scenes;
+  }
+  function buildPastScenesContext(){
+    var st = (typeof S !== 'undefined' && S) ? S : null;
+    if (!st || !Array.isArray(st.turns) || !st.turns.length) return '';
+    var scenes = buildScenes(st.turns);
+    if (scenes.length <= 1) return '';
+    var pastScenes = scenes.slice(0, -1);
+    var lines = ['【過去シーン要約 (高レベル)】'];
+    pastScenes.forEach(function(s){
+      var rangeNote = '(turn ' + (s.startTurn+1) + (s.endTurn !== s.startTurn ? '-' + (s.endTurn+1) : '') + ')';
+      lines.push('- 第' + (s.idx+1) + 'シーン ' + rangeNote + ': ' + s.summary);
+    });
+    var current = scenes[scenes.length - 1];
+    lines.push(''); lines.push('現在のシーン: 第' + (current.idx+1) + 'シーン (turn ' + (current.startTurn+1) + ' から) — 詳細は別途「これまでの経緯」を参照。');
+    lines.push('過去シーンとの一貫性を保ち、過去の出来事を踏まえて現在を描くこと。');
+    return lines.join('\n');
+  }
+  function sysExt(ctx){ try { var block = buildPastScenesContext(); if (!block) return ctx.sys; return ctx.sys + '\n\n' + block; } catch(e){ return ctx.sys; } }
+  function installPlannerExt(){
+    if (typeof window.Planner === 'undefined' || !window.Planner) return false;
+    window.Planner._extensions = window.Planner._extensions || [];
+    if (window.Planner._extensions.__v292Dfix37) return true;
+    window.Planner._extensions.push(sysExt); window.Planner._extensions.__v292Dfix37 = true;
+    return true;
+  }
+  function ensureStyles(){
+    if (document.getElementById('v292Dfix37-style')) return;
+    var style = document.createElement('style'); style.id = 'v292Dfix37-style';
+    style.textContent = ['.v37-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center;font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI",sans-serif}','.v37-modal{background:var(--s1,#111119);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:8px;width:660px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.6)}','.v37-head{padding:14px 18px;border-bottom:1px solid var(--border,rgba(139,118,240,.2));display:flex;align-items:center;gap:10px}','.v37-head h2{margin:0;font-size:15px;color:var(--acc,#8b76f0);font-weight:600;flex:1}','.v37-close{background:none;border:none;color:var(--dim,#888);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:4px}','.v37-close:hover{background:var(--s2,#17172a);color:var(--tx)}','.v37-body{flex:1;overflow:auto;padding:14px 18px}','.v37-intro{font-size:11px;color:var(--dim,#888);line-height:1.6;margin-bottom:14px;padding:8px 10px;background:var(--bg,#09090f);border-radius:4px;border-left:3px solid var(--acc,#8b76f0)}','.v37-section-title{font-size:11px;color:var(--dim,#888);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin:14px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--border,rgba(139,118,240,.15))}','.v37-scene{border:1px solid var(--border,rgba(139,118,240,.15));border-radius:6px;padding:10px 12px;margin-bottom:8px;background:var(--bg,#09090f)}','.v37-scene.current{border-color:var(--acc,#8b76f0);background:var(--s2,#17172a)}','.v37-scene-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}','.v37-scene-num{font-weight:600;color:var(--acc,#8b76f0);font-size:13px}','.v37-scene-range{font-size:11px;color:var(--dim,#888)}','.v37-scene-badge{margin-left:auto;font-size:10px;background:var(--acc,#8b76f0);color:#fff;padding:1px 6px;border-radius:3px;font-weight:600}','.v37-scene-summary{margin-top:6px}','.v37-scene-summary textarea{width:100%;background:var(--bg,#09090f);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.2));border-radius:4px;padding:6px 8px;font-size:12px;font-family:inherit;line-height:1.4;resize:vertical;min-height:34px;box-sizing:border-box}','.v37-scene-summary textarea:focus{outline:none;border-color:var(--acc,#8b76f0)}','.v37-scene-summary textarea.custom{border-color:var(--acc,#8b76f0)}','.v37-breaks{margin-top:10px}','.v37-turn-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;font-size:12px;border-bottom:1px solid var(--border,rgba(139,118,240,.1))}','.v37-turn-row:hover{background:var(--s2,#17172a)}','.v37-turn-num{font-weight:600;color:var(--dim,#888);min-width:50px}','.v37-turn-preview{flex:1;color:var(--tx,#e0dcf0);opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px}','.v37-toggle-btn{background:var(--s2,#17172a);color:var(--dim,#888);border:1px solid var(--border,rgba(139,118,240,.2));border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap}','.v37-toggle-btn.on{background:var(--acc,#8b76f0);color:#fff;border-color:var(--acc,#8b76f0)}','.v37-toggle-btn:hover{border-color:var(--acc,#8b76f0)}'].join('\n');
+    document.head.appendChild(style);
+  }
+  function escAttr(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escHtml(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function renderManager(){
+    closeManager(); ensureStyles();
+    var st = (typeof S !== 'undefined' && S) ? S : null;
+    var turns = (st && Array.isArray(st.turns)) ? st.turns : [];
+    var scenes = buildScenes(turns); var breaks = loadBreaks();
+    var overlay = document.createElement('div'); overlay.className = 'v37-overlay'; overlay.id = 'v37-overlay';
+    overlay.addEventListener('click', function(e){ if (e.target === overlay) closeManager(); });
+    var modal = document.createElement('div'); modal.className = 'v37-modal';
+    var html = ['<div class="v37-head"><h2>🎬 シーン管理</h2><button class="v37-close" id="v37-close-x">×</button></div>'];
+    html.push('<div class="v37-body"><div class="v37-intro">長い物語を <b>シーン</b> 単位で区切ります。<b>過去シーン</b>は要約として AI に注入され、<b>現在シーン</b>は fix35 の詳細経緯として注入されます。要約は手動編集可能 (空にすれば自動推測)。</div>');
+    html.push('<div class="v37-section-title">シーン一覧 (' + scenes.length + ' 個)</div>');
+    if (!scenes.length){ html.push('<div style="padding:14px;color:#888;text-align:center;font-size:12px;">turn なし</div>'); }
+    else {
+      scenes.forEach(function(s, sceneIdx){
+        var isCurrent = (sceneIdx === scenes.length - 1);
+        var hasCustom = !!s.customSummary;
+        var displaySummary = hasCustom ? s.customSummary : s.summary;
+        var rangeNote = 'turn ' + (s.startTurn+1) + (s.endTurn !== s.startTurn ? '〜' + (s.endTurn+1) : '');
+        html.push('<div class="v37-scene' + (isCurrent ? ' current' : '') + '" data-scene="' + sceneIdx + '"><div class="v37-scene-head"><span class="v37-scene-num">第' + (sceneIdx+1) + 'シーン</span><span class="v37-scene-range">' + rangeNote + '</span>');
+        if (isCurrent) html.push('<span class="v37-scene-badge">現在</span>');
+        html.push('</div><div class="v37-scene-summary"><textarea data-scene="' + sceneIdx + '" class="' + (hasCustom ? 'custom' : '') + '" rows="2" placeholder="要約 (自動推測)">' + escHtml(displaySummary) + '</textarea></div></div>');
+      });
+    }
+    if (turns.length > 1){
+      html.push('<div class="v37-section-title">シーン境界の設定</div><div class="v37-breaks">');
+      turns.forEach(function(t, idx){
+        if (idx === 0) return;
+        var isBreak = breaks.indexOf(idx) >= 0;
+        var preview = '';
+        if (typeof t.narrative === 'string') preview = t.narrative.slice(0, 60);
+        else if (Array.isArray(t.narrative)){
+          for (var i = 0; i < t.narrative.length; i++){
+            var n = t.narrative[i];
+            if (typeof n === 'string'){ preview = n.slice(0, 60); break; }
+            if (n && typeof n === 'object' && typeof n.text === 'string'){ preview = n.text.slice(0, 60); break; }
+          }
+        }
+        if (!preview) preview = (t.playerText || '').slice(0, 60);
+        html.push('<div class="v37-turn-row"><span class="v37-turn-num">turn ' + (idx+1) + '</span><span class="v37-turn-preview">' + escHtml(preview) + '</span><button class="v37-toggle-btn ' + (isBreak ? 'on' : '') + '" data-act="toggle-break" data-idx="' + idx + '">' + (isBreak ? '✓ 区切り中' : 'シーン区切り') + '</button></div>');
+      });
+      html.push('</div>');
+    }
+    html.push('</div>');
+    modal.innerHTML = html.join(''); overlay.appendChild(modal); document.body.appendChild(overlay);
+    document.getElementById('v37-close-x').addEventListener('click', closeManager);
+    modal.addEventListener('click', function(e){
+      var t = e.target;
+      if (t && t.dataset && t.dataset.act === 'toggle-break'){ toggleBreak(parseInt(t.dataset.idx, 10)); renderManager(); }
+    });
+    Array.from(modal.querySelectorAll('textarea[data-scene]')).forEach(function(ta){
+      ta.addEventListener('blur', function(){
+        var sceneIdx = parseInt(ta.dataset.scene, 10);
+        var val = ta.value.trim();
+        var auto = autoSceneSummary({ startTurn: scenes[sceneIdx].startTurn }, turns);
+        if (val && val !== auto) setSummary(sceneIdx, val);
+        else setSummary(sceneIdx, '');
+      });
+    });
+  }
+  function closeManager(){ var ov = document.getElementById('v37-overlay'); if (ov && ov.parentNode) ov.parentNode.removeChild(ov); }
+  function injectTopbarButton(){
+    if (document.getElementById('v37-topbar-btn')) return true;
+    var anchor = document.getElementById('v36-topbar-btn') || document.getElementById('v35-topbar-btn') || document.getElementById('v34-topbar-btn') || document.getElementById('v30-topbar-btn');
+    if (!anchor){
+      var allBtns = document.querySelectorAll('button');
+      for (var i = 0; i < allBtns.length; i++){
+        if ((allBtns[i].textContent || '').indexOf('設定') >= 0){ anchor = allBtns[i]; break; }
+      }
+    }
+    if (!anchor) return false;
+    var btn = document.createElement('button');
+    btn.id = 'v37-topbar-btn'; btn.className = 'v30-topbar-btn';
+    btn.textContent = '🎬 シーン管理'; btn.title = 'シーン境界 + 過去シーン要約';
+    btn.style.cssText = 'background:var(--s2,#17172a);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer;margin-right:8px;font-family:inherit';
+    btn.addEventListener('click', renderManager);
+    anchor.parentNode.insertBefore(btn, anchor);
+    return true;
+  }
+  function init(){
+    if (installPlannerExt() && injectTopbarButton()){ window.__v292Dfix37Active = true; console.log(TAG, 'installed'); return; }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (installPlannerExt() && injectTopbarButton()){ clearInterval(iv); window.__v292Dfix37Active = true; console.log(TAG, 'installed (deferred ' + tries + ')'); }
+      else if (tries > 80){ clearInterval(iv); console.warn(TAG, 'gave up'); }
+    }, 200);
+  }
+  setInterval(function(){
+    if (window.__v292Dfix37Active){
+      if (!document.getElementById('v37-topbar-btn')){ if (injectTopbarButton()) console.log(TAG, 'btn reinjected'); }
+      if (window.Planner && window.Planner._extensions && !window.Planner._extensions.__v292Dfix37){ if (installPlannerExt()) console.log(TAG, 'sysExt reinstalled'); }
+    }
+  }, 5000);
+  window.__v292Dfix37 = { openManager: renderManager, closeManager: closeManager, buildScenes: buildScenes, buildPastScenesContext: buildPastScenesContext, loadBreaks: loadBreaks, saveBreaks: saveBreaks, toggleBreak: toggleBreak, loadSummaries: loadSummaries, setSummary: setSummary };
+  init();
+})();
