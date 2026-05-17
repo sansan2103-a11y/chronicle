@@ -6623,3 +6623,183 @@
 
   init();
 })();
+
+/* v292Dfix35: 長期記憶 — turn 要約 + prompt 注入
+ *
+ * 目的 (Phase 2 narrative 深化の核):
+ *   長セッションで context window を超えた古い turn を LLM が忘れる問題に対処。
+ *   各 turn の narrative を 1 文程度に自動要約し、直近 N turn 分を
+ *   prompt の system 末尾に「これまでの経緯」として注入する。
+ *   ユーザーは UI で各要約を手動上書き可能 (より正確/簡潔にする等)。
+ *
+ * 設計:
+ *   - 自動要約: narrative の先頭から「。」「！」「？」 まで or 80 char (lightweight, deterministic)
+ *     → S.turns[i] には書かない (schema 不侵入)、別 localStorage に override のみ保存
+ *   - 直近 N=8 turn を「【これまでの経緯】」block として system prompt 末尾に注入
+ *   - Planner._extensions に push (fix24/25/26/28 と同じパターン)
+ *   - UI: topbar 「🧠 メモリ」ボタン → panel で全 turn 要約一覧 + 編集可
+ *   - 上書き保存: localStorage.chr6_turn_summaries_<slotId> = {turnIdx: customSummary}
+ *
+ * 設計原則:
+ *   - __v292Dfix35Active フラグで二重 install 防止
+ *   - Planner._extensions の二重 push 防止 (__v292Dfix35 marker)
+ *   - 5 秒ごとの periodic re-install (extensions が replace されたケース)
+ *   - schema 改変なし (S.turns は触らない)、localStorage に override 別管理
+ *   - fix30 active slot 連動 (slot 切替で要約上書きも切替)
+ */
+(function v292Dfix35(){
+  if (window.__v292Dfix35Active) return;
+  var TAG = '[v292Dfix35]';
+  var MEMORY_WINDOW = 8;
+  function getActiveSlotId(){ try { if (window.__v292Dfix30 && typeof window.__v292Dfix30.getActive === 'function') return window.__v292Dfix30.getActive(); } catch(_){} return 'default'; }
+  function overridesKey(){ return 'chr6_turn_summaries_' + getActiveSlotId(); }
+  function loadOverrides(){ try { var v = localStorage.getItem(overridesKey()); return v ? JSON.parse(v) : {}; } catch(_){ return {}; } }
+  function saveOverrides(o){ try { localStorage.setItem(overridesKey(), JSON.stringify(o)); } catch(_){} }
+  function setOverride(idx, summary){ var o = loadOverrides(); if (summary && summary.trim()) o[idx] = String(summary).trim().slice(0, 200); else delete o[idx]; saveOverrides(o); }
+  function autoSummary(turn){
+    if (!turn) return '';
+    var src = '';
+    if (typeof turn.narrative === 'string') src = turn.narrative;
+    else if (Array.isArray(turn.narrative)){
+      for (var i = 0; i < turn.narrative.length; i++){
+        var n = turn.narrative[i];
+        if (typeof n === 'string') src += n + ' ';
+        else if (n && typeof n === 'object' && typeof n.text === 'string') src += n.text + ' ';
+        if (src.length > 200) break;
+      }
+    }
+    src = String(src || '').trim();
+    if (!src) return (turn.playerText || '').slice(0, 80);
+    var m = src.match(/^([^。！？\n]{1,80}[。！？])/);
+    if (m) return m[1].trim();
+    return src.slice(0, 80) + '…';
+  }
+  function getSummary(turn, idx){ var ov = loadOverrides(); if (ov[idx]) return ov[idx]; return autoSummary(turn); }
+  function buildMemoryContext(turns){
+    if (!Array.isArray(turns) || !turns.length) return '';
+    var start = Math.max(0, turns.length - MEMORY_WINDOW);
+    var lines = ['【これまでの経緯 (直近 ' + (turns.length - start) + ' turn)】'];
+    for (var i = start; i < turns.length; i++){
+      var t = turns[i];
+      var typeBadge = t.inputType || '?';
+      var summary = getSummary(t, i);
+      lines.push((i+1) + '. [' + typeBadge + '] ' + summary);
+    }
+    if (start > 0) lines.push('(さらに古い ' + start + ' turn は省略)');
+    lines.push('');
+    lines.push('上記の経緯を踏まえ、矛盾なく自然に続きを書くこと。キャラクターの関係性・心理・場所の連続性を保つ。');
+    return lines.join('\n');
+  }
+  function sysExt(ctx){
+    try {
+      var st = (typeof S !== 'undefined' && S) ? S : (typeof window !== 'undefined' && window.S) ? window.S : null;
+      if (!st || !Array.isArray(st.turns) || !st.turns.length) return ctx.sys;
+      var memBlock = buildMemoryContext(st.turns);
+      if (!memBlock) return ctx.sys;
+      return ctx.sys + '\n\n' + memBlock;
+    } catch(e){ console.warn(TAG, 'sysExt err:', e && e.message); return ctx.sys; }
+  }
+  function installPlannerExt(){
+    if (typeof window.Planner === 'undefined' || !window.Planner) return false;
+    window.Planner._extensions = window.Planner._extensions || [];
+    if (window.Planner._extensions.__v292Dfix35) return true;
+    window.Planner._extensions.push(sysExt);
+    window.Planner._extensions.__v292Dfix35 = true;
+    return true;
+  }
+  function ensureStyles(){
+    if (document.getElementById('v292Dfix35-style')) return;
+    var style = document.createElement('style');
+    style.id = 'v292Dfix35-style';
+    style.textContent = ['.v35-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center;font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI",sans-serif}','.v35-modal{background:var(--s1,#111119);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:8px;width:600px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.6)}','.v35-head{padding:14px 18px;border-bottom:1px solid var(--border,rgba(139,118,240,.2));display:flex;align-items:center;gap:10px}','.v35-head h2{margin:0;font-size:15px;color:var(--acc,#8b76f0);font-weight:600;flex:1}','.v35-close{background:none;border:none;color:var(--dim,#888);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:4px}','.v35-close:hover{background:var(--s2,#17172a);color:var(--tx)}','.v35-body{flex:1;overflow-y:auto;padding:12px 18px}','.v35-intro{font-size:11px;color:var(--dim,#888);line-height:1.6;margin-bottom:12px;padding:8px 10px;background:var(--bg,#09090f);border-radius:4px;border-left:3px solid var(--acc,#8b76f0)}','.v35-item{border-bottom:1px solid var(--border,rgba(139,118,240,.1));padding:10px 0}','.v35-item:last-child{border-bottom:none}','.v35-item-head{display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11px;color:var(--dim,#888)}','.v35-item-num{font-weight:600;color:var(--acc,#8b76f0);min-width:40px}','.v35-item-type{background:var(--s2,#17172a);padding:1px 6px;border-radius:3px;font-size:10px}','.v35-item-type.STORY{color:#c49040}','.v35-item-type.SAY{color:#5a8ef0}','.v35-item-type.DO{color:#6aaf78}','.v35-item-window{margin-left:auto;font-size:10px;color:var(--acc,#8b76f0);background:rgba(139,118,240,.15);padding:1px 6px;border-radius:3px}','.v35-summary{display:flex;gap:6px;align-items:center}','.v35-summary textarea{flex:1;background:var(--bg,#09090f);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.2));border-radius:4px;padding:6px 8px;font-size:13px;font-family:inherit;line-height:1.4;resize:vertical;min-height:36px}','.v35-summary textarea:focus{outline:none;border-color:var(--acc,#8b76f0)}','.v35-summary textarea.custom{border-color:var(--acc,#8b76f0);box-shadow:0 0 0 1px rgba(139,118,240,.3)}','.v35-reset{background:none;border:1px solid var(--border,rgba(139,118,240,.2));color:var(--dim,#888);padding:4px 8px;border-radius:4px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap}','.v35-reset:hover{color:var(--tx);border-color:var(--acc,#8b76f0)}','.v35-foot{padding:12px 18px;border-top:1px solid var(--border,rgba(139,118,240,.2));font-size:11px;color:var(--dim,#888)}'].join('\n');
+    document.head.appendChild(style);
+  }
+  function renderPanel(){
+    closePanel(); ensureStyles();
+    var overlay = document.createElement('div'); overlay.className = 'v35-overlay'; overlay.id = 'v35-overlay';
+    overlay.addEventListener('click', function(e){ if (e.target === overlay) closePanel(); });
+    var modal = document.createElement('div'); modal.className = 'v35-modal';
+    var st = (typeof S !== 'undefined' && S) ? S : null;
+    var turns = (st && Array.isArray(st.turns)) ? st.turns : [];
+    var overrides = loadOverrides();
+    var windowStart = Math.max(0, turns.length - MEMORY_WINDOW);
+    var html = ['<div class="v35-head"><h2>🧠 長期記憶 (要約)</h2><button class="v35-close" id="v35-close-x">×</button></div>'];
+    html.push('<div class="v35-body">');
+    html.push('<div class="v35-intro">');
+    html.push('各 turn の自動要約を「これまでの経緯」として AI に毎回注入します。直近 <b>' + MEMORY_WINDOW + ' turn</b> 分が文脈として使われます。');
+    html.push('要約は自由編集可能。空にすれば自動推測に戻ります。');
+    html.push('</div>');
+    if (!turns.length){ html.push('<div style="padding:20px;text-align:center;color:#888;">turn がまだありません</div>'); }
+    else {
+      turns.forEach(function(turn, idx){
+        var inWindow = idx >= windowStart;
+        var inputType = turn.inputType || '?';
+        var hasCustom = !!overrides[idx];
+        var displaySummary = hasCustom ? overrides[idx] : autoSummary(turn);
+        html.push('<div class="v35-item"><div class="v35-item-head"><span class="v35-item-num">第' + (idx+1) + '章</span><span class="v35-item-type ' + escAttr(inputType) + '">' + escHtml(inputType) + '</span>');
+        if (inWindow) html.push('<span class="v35-item-window">プロンプト注入中</span>');
+        html.push('</div><div class="v35-summary"><textarea data-idx="' + idx + '" class="' + (hasCustom ? 'custom' : '') + '" placeholder="要約 (自動推測)" rows="2">' + escHtml(displaySummary) + '</textarea>');
+        if (hasCustom) html.push('<button class="v35-reset" data-act="reset" data-idx="' + idx + '">自動に戻す</button>');
+        html.push('</div></div>');
+      });
+    }
+    html.push('</div><div class="v35-foot">💡 編集した内容はテキストエリアからフォーカスが外れたタイミングで自動保存されます</div>');
+    modal.innerHTML = html.join('');
+    overlay.appendChild(modal); document.body.appendChild(overlay);
+    var closeBtn = document.getElementById('v35-close-x');
+    if (closeBtn) closeBtn.addEventListener('click', closePanel);
+    modal.addEventListener('click', function(e){
+      var t = e.target;
+      if (t && t.dataset && t.dataset.act === 'reset'){ setOverride(parseInt(t.dataset.idx, 10), ''); renderPanel(); }
+    });
+    Array.from(modal.querySelectorAll('textarea[data-idx]')).forEach(function(ta){
+      ta.addEventListener('blur', function(){
+        var idx = parseInt(ta.dataset.idx, 10);
+        var val = ta.value.trim();
+        var auto = autoSummary(turns[idx]);
+        if (val && val !== auto) setOverride(idx, val);
+        else setOverride(idx, '');
+      });
+    });
+  }
+  function closePanel(){ var ov = document.getElementById('v35-overlay'); if (ov && ov.parentNode) ov.parentNode.removeChild(ov); }
+  function injectTopbarButton(){
+    if (document.getElementById('v35-topbar-btn')) return true;
+    var anchor = document.getElementById('v34-topbar-btn') || document.getElementById('v30-topbar-btn');
+    if (!anchor){
+      var allBtns = document.querySelectorAll('button');
+      for (var i = 0; i < allBtns.length; i++){
+        if ((allBtns[i].textContent || '').indexOf('設定') >= 0){ anchor = allBtns[i]; break; }
+      }
+    }
+    if (!anchor) return false;
+    var btn = document.createElement('button');
+    btn.id = 'v35-topbar-btn'; btn.className = 'v30-topbar-btn';
+    btn.textContent = '🧠 メモリ';
+    btn.title = '長期記憶 (turn 要約) を確認・編集';
+    btn.style.cssText = 'background:var(--s2,#17172a);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer;margin-right:8px;font-family:inherit';
+    btn.addEventListener('click', renderPanel);
+    anchor.parentNode.insertBefore(btn, anchor);
+    return true;
+  }
+  function escAttr(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escHtml(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function init(){
+    var pe = installPlannerExt(); var bi = injectTopbarButton();
+    if (pe && bi){ window.__v292Dfix35Active = true; console.log(TAG, 'installed'); return; }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (installPlannerExt() && injectTopbarButton()){ clearInterval(iv); window.__v292Dfix35Active = true; console.log(TAG, 'installed (deferred ' + tries + ')'); }
+      else if (tries > 80){ clearInterval(iv); console.warn(TAG, 'gave up'); }
+    }, 200);
+  }
+  setInterval(function(){
+    if (window.__v292Dfix35Active){
+      if (!document.getElementById('v35-topbar-btn')){ if (injectTopbarButton()) console.log(TAG, 'btn reinjected'); }
+      if (window.Planner && window.Planner._extensions && !window.Planner._extensions.__v292Dfix35){ if (installPlannerExt()) console.log(TAG, 'sysExt reinstalled'); }
+    }
+  }, 5000);
+  window.__v292Dfix35 = { openPanel: renderPanel, closePanel: closePanel, autoSummary: autoSummary, getSummary: getSummary, buildMemoryContext: buildMemoryContext, loadOverrides: loadOverrides, setOverride: setOverride, MEMORY_WINDOW: MEMORY_WINDOW };
+  init();
+})();
