@@ -7174,3 +7174,179 @@
   window.__v292Dfix37 = { openManager: renderManager, closeManager: closeManager, buildScenes: buildScenes, buildPastScenesContext: buildPastScenesContext, loadBreaks: loadBreaks, saveBreaks: saveBreaks, toggleBreak: toggleBreak, loadSummaries: loadSummaries, setSummary: setSummary };
   init();
 })();
+
+/* v292Dfix38: キャラクター状態 (emotional/physical soft stat) + prompt 注入
+ *
+ * 目的 (Phase 3-A):
+ *   各キャラに soft な状態軸を持たせ、narrative に滲ませる。
+ *   D&D 的な HP/MP ではなく narrative-friendly な軸:
+ *     体力 (stamina), 怪我 (injury), 集中 (focus), 動揺 (agitation), 気力 (resolve), 気分 (mood)
+ *   行動を gate せず、AI が「状態に応じた表現の選択」をするためのヒントとして prompt 注入。
+ *
+ * 設計:
+ *   - schema: localStorage.chr6_char_states_<slotId> = { name: { stamina, injury, focus, agitation, resolve, mood, notes } }
+ *   - prompt 注入: Planner._extensions で「【現在のキャラクター状態】」block を ctx.sys 末尾に push
+ *   - UI: topbar 「💪 状態」ボタン → modal で全キャラ状態 (slider + notes) 編集
+ *   - fix30 active slot 連動 / fix35-37 と coexist
+ *
+ * 設計原則:
+ *   - __v292Dfix38Active フラグで二重 install 防止
+ *   - S.cast schema 不侵入 (localStorage 外部保存)
+ */
+(function v292Dfix38(){
+  if (window.__v292Dfix38Active) return;
+  var TAG = '[v292Dfix38]';
+  var STAT_AXES = [
+    { key: 'stamina', label: '体力', lo: '疲労困憊', hi: '元気', defaultV: 7, color: '#6aaf78' },
+    { key: 'injury', label: '怪我', lo: '無傷', hi: '重傷', defaultV: 0, color: '#e06060' },
+    { key: 'focus', label: '集中', lo: '散漫', hi: '研ぎ澄ま', defaultV: 6, color: '#5a8ef0' },
+    { key: 'agitation', label: '動揺', lo: '冷静', hi: 'パニック', defaultV: 3, color: '#c49040' },
+    { key: 'resolve', label: '気力', lo: '絶望', hi: '決意', defaultV: 6, color: '#8b76f0' },
+    { key: 'mood', label: '気分', lo: '憂鬱', hi: '高揚', defaultV: 5, color: '#a060a0' }
+  ];
+  function getActiveSlotId(){ try { if (window.__v292Dfix30 && typeof window.__v292Dfix30.getActive === 'function') return window.__v292Dfix30.getActive(); } catch(_){} return 'default'; }
+  function statesKey(){ return 'chr6_char_states_' + getActiveSlotId(); }
+  function loadStates(){ try { var v = localStorage.getItem(statesKey()); return v ? JSON.parse(v) : {}; } catch(_){ return {}; } }
+  function saveStates(s){ try { localStorage.setItem(statesKey(), JSON.stringify(s)); } catch(_){} }
+  function defaultState(){ var o = { notes: '' }; STAT_AXES.forEach(function(ax){ o[ax.key] = ax.defaultV; }); return o; }
+  function getCharState(name){ var all = loadStates(); return all[name] || defaultState(); }
+  function setCharStat(name, key, value){ var all = loadStates(); all[name] = all[name] || defaultState(); all[name][key] = Math.max(0, Math.min(10, parseInt(value, 10) || 0)); saveStates(all); }
+  function setCharNotes(name, notes){ var all = loadStates(); all[name] = all[name] || defaultState(); all[name].notes = (notes || '').slice(0, 60); saveStates(all); }
+  function resetChar(name){ var all = loadStates(); delete all[name]; saveStates(all); }
+  function castNames(){
+    try { var st = (typeof S !== 'undefined' && S) ? S : null; if (!st || !st.cast) return [];
+      var out = []; if (st.cast.hero && st.cast.hero.name) out.push(String(st.cast.hero.name).trim());
+      if (Array.isArray(st.cast.npcs)){ st.cast.npcs.forEach(function(n){ if (n && n.name) out.push(String(n.name).trim()); }); }
+      return out.filter(function(n){ return !!n; });
+    } catch(_){ return []; }
+  }
+  function describeState(state){
+    if (!state) return '';
+    var parts = [];
+    if (state.stamina <= 3) parts.push('体力低下'); else if (state.stamina >= 8) parts.push('元気');
+    if (state.injury >= 7) parts.push('重傷'); else if (state.injury >= 4) parts.push('負傷');
+    if (state.focus >= 8) parts.push('集中状態'); else if (state.focus <= 3) parts.push('注意散漫');
+    if (state.agitation >= 7) parts.push('動揺/パニック'); else if (state.agitation >= 5) parts.push('やや動揺');
+    if (state.resolve >= 8) parts.push('決意'); else if (state.resolve <= 3) parts.push('意気消沈');
+    if (state.mood >= 8) parts.push('高揚'); else if (state.mood <= 3) parts.push('憂鬱');
+    return parts.join(' / ');
+  }
+  function buildStateContext(){
+    var names = castNames(); if (!names.length) return '';
+    var states = loadStates(); var entries = [];
+    names.forEach(function(name){
+      var s = states[name]; if (!s) return;
+      var desc = describeState(s);
+      var line = '- ' + name + ':'; if (desc) line += ' ' + desc;
+      var nums = STAT_AXES.map(function(ax){ return ax.label + ' ' + (s[ax.key] != null ? s[ax.key] : ax.defaultV); }).join(' / ');
+      line += ' [' + nums + ']';
+      if (s.notes) line += '\n  メモ: ' + s.notes;
+      entries.push(line);
+    });
+    if (!entries.length) return '';
+    var lines = ['【現在のキャラクター状態】'].concat(entries);
+    lines.push(''); lines.push('上記の状態を narrative に反映すること: 動揺中なら震える/声がうわずる、疲労中なら息切れする、決意中なら毅然と振る舞う、負傷中ならかばう動作、等。');
+    lines.push('状態を数字で書かず、表現として自然に滲ませる。');
+    return lines.join('\n');
+  }
+  function sysExt(ctx){ try { var block = buildStateContext(); if (!block) return ctx.sys; return ctx.sys + '\n\n' + block; } catch(e){ return ctx.sys; } }
+  function installPlannerExt(){
+    if (typeof window.Planner === 'undefined' || !window.Planner) return false;
+    window.Planner._extensions = window.Planner._extensions || [];
+    if (window.Planner._extensions.__v292Dfix38) return true;
+    window.Planner._extensions.push(sysExt); window.Planner._extensions.__v292Dfix38 = true;
+    return true;
+  }
+  function ensureStyles(){
+    if (document.getElementById('v292Dfix38-style')) return;
+    var style = document.createElement('style'); style.id = 'v292Dfix38-style';
+    style.textContent = ['.v38-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center;font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI",sans-serif}','.v38-modal{background:var(--s1,#111119);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:8px;width:660px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.6)}','.v38-head{padding:14px 18px;border-bottom:1px solid var(--border,rgba(139,118,240,.2));display:flex;align-items:center;gap:10px}','.v38-head h2{margin:0;font-size:15px;color:var(--acc,#8b76f0);font-weight:600;flex:1}','.v38-close{background:none;border:none;color:var(--dim,#888);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:4px}','.v38-close:hover{background:var(--s2,#17172a);color:var(--tx)}','.v38-body{flex:1;overflow:auto;padding:14px 18px}','.v38-intro{font-size:11px;color:var(--dim,#888);line-height:1.6;margin-bottom:14px;padding:8px 10px;background:var(--bg,#09090f);border-radius:4px;border-left:3px solid var(--acc,#8b76f0)}','.v38-char{border:1px solid var(--border,rgba(139,118,240,.15));border-radius:6px;padding:12px;margin-bottom:10px;background:var(--bg,#09090f)}','.v38-char-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border,rgba(139,118,240,.1))}','.v38-char-name{font-weight:600;font-size:14px;color:var(--tx,#e0dcf0);flex:1}','.v38-char-summary{font-size:11px;color:var(--acc,#8b76f0);font-style:italic}','.v38-reset{background:none;border:1px solid var(--border,rgba(139,118,240,.2));color:var(--dim,#888);padding:3px 8px;border-radius:4px;font-size:11px;cursor:pointer;font-family:inherit}','.v38-reset:hover{color:#e06060;border-color:rgba(224,96,96,.4)}','.v38-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}','.v38-stat{display:flex;flex-direction:column;gap:3px}','.v38-stat-head{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim,#888)}','.v38-stat-label{font-weight:600;color:var(--tx,#e0dcf0);min-width:34px}','.v38-stat-val{margin-left:auto;font-weight:600;font-size:12px}','.v38-stat-band{font-size:10px;color:var(--dim,#888)}','.v38-stat input[type="range"]{width:100%;accent-color:var(--acc,#8b76f0);height:14px}','.v38-notes{margin-top:8px}','.v38-notes label{display:block;font-size:11px;color:var(--dim,#888);margin-bottom:3px}','.v38-notes input{width:100%;background:var(--bg,#09090f);color:var(--tx);border:1px solid var(--border,rgba(139,118,240,.2));border-radius:4px;padding:5px 8px;font-size:12px;font-family:inherit;box-sizing:border-box}','.v38-notes input:focus{outline:none;border-color:var(--acc,#8b76f0)}'].join('\n');
+    document.head.appendChild(style);
+  }
+  function escAttr(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escHtml(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function renderPanel(){
+    closePanel(); ensureStyles();
+    var names = castNames(); var states = loadStates();
+    var overlay = document.createElement('div'); overlay.className = 'v38-overlay'; overlay.id = 'v38-overlay';
+    overlay.addEventListener('click', function(e){ if (e.target === overlay) closePanel(); });
+    var modal = document.createElement('div'); modal.className = 'v38-modal';
+    var html = ['<div class="v38-head"><h2>💪 キャラクター状態</h2><button class="v38-close" id="v38-close-x">×</button></div>'];
+    html.push('<div class="v38-body"><div class="v38-intro">各キャラの <b>体力 / 怪我 / 集中 / 動揺 / 気力 / 気分</b> を 0-10 で設定。AI は状態を数字ではなく <b>表現</b> として narrative に滲ませます (動揺中なら声が震える、決意中なら毅然と、等)。状態未設定のキャラは prompt に含まれません。</div>');
+    if (!names.length){ html.push('<div style="padding:20px;text-align:center;color:#888;font-size:12px;">キャラ未設定</div>'); }
+    else {
+      names.forEach(function(name){
+        var s = states[name] || defaultState();
+        var summary = describeState(s) || '平静';
+        html.push('<div class="v38-char" data-char="' + escAttr(name) + '"><div class="v38-char-head"><span class="v38-char-name">' + escHtml(name) + '</span><span class="v38-char-summary">' + escHtml(summary) + '</span>');
+        if (states[name]) html.push('<button class="v38-reset" data-act="reset" data-char="' + escAttr(name) + '">リセット</button>');
+        html.push('</div><div class="v38-stats">');
+        STAT_AXES.forEach(function(ax){
+          var v = (s[ax.key] != null) ? s[ax.key] : ax.defaultV;
+          html.push('<div class="v38-stat" data-key="' + ax.key + '"><div class="v38-stat-head"><span class="v38-stat-label" style="color:' + ax.color + '">' + ax.label + '</span><span class="v38-stat-band">' + ax.lo + ' ↔ ' + ax.hi + '</span><span class="v38-stat-val" style="color:' + ax.color + '">' + v + '/10</span></div><input type="range" min="0" max="10" value="' + v + '" data-char="' + escAttr(name) + '" data-key="' + ax.key + '"></div>');
+        });
+        html.push('</div><div class="v38-notes"><label>現在の様子 (短いメモ、60字まで)</label><input type="text" maxlength="60" data-char="' + escAttr(name) + '" data-key="notes" value="' + escAttr(s.notes || '') + '" placeholder="例: 怪異への恐怖でフィオナにしがみつく"></div></div>');
+      });
+    }
+    html.push('</div>');
+    modal.innerHTML = html.join(''); overlay.appendChild(modal); document.body.appendChild(overlay);
+    document.getElementById('v38-close-x').addEventListener('click', closePanel);
+    modal.addEventListener('input', function(e){
+      var t = e.target;
+      if (t && t.dataset && t.dataset.char && t.dataset.key){
+        if (t.type === 'range'){ setCharStat(t.dataset.char, t.dataset.key, t.value); var valEl = t.parentElement.querySelector('.v38-stat-val'); if (valEl) valEl.textContent = t.value + '/10'; }
+      }
+    });
+    modal.addEventListener('change', function(e){
+      var t = e.target;
+      if (t && t.dataset && t.dataset.char && t.dataset.key === 'notes'){ setCharNotes(t.dataset.char, t.value); }
+    });
+    modal.addEventListener('blur', function(e){
+      var t = e.target;
+      if (t && t.dataset && t.dataset.char && t.dataset.key === 'notes'){ setCharNotes(t.dataset.char, t.value); }
+    }, true);
+    modal.addEventListener('click', function(e){
+      var t = e.target;
+      if (t && t.dataset && t.dataset.act === 'reset'){
+        if (!confirm(t.dataset.char + ' の状態を完全リセットしますか?')) return;
+        resetChar(t.dataset.char); renderPanel();
+      }
+    });
+  }
+  function closePanel(){ var ov = document.getElementById('v38-overlay'); if (ov && ov.parentNode) ov.parentNode.removeChild(ov); }
+  function injectTopbarButton(){
+    if (document.getElementById('v38-topbar-btn')) return true;
+    var anchor = document.getElementById('v37-topbar-btn') || document.getElementById('v36-topbar-btn') || document.getElementById('v35-topbar-btn') || document.getElementById('v30-topbar-btn');
+    if (!anchor){
+      var allBtns = document.querySelectorAll('button');
+      for (var i = 0; i < allBtns.length; i++){
+        if ((allBtns[i].textContent || '').indexOf('設定') >= 0){ anchor = allBtns[i]; break; }
+      }
+    }
+    if (!anchor) return false;
+    var btn = document.createElement('button');
+    btn.id = 'v38-topbar-btn'; btn.className = 'v30-topbar-btn';
+    btn.textContent = '💪 状態'; btn.title = 'キャラクター状態 (体力/集中/動揺/気力 等)';
+    btn.style.cssText = 'background:var(--s2,#17172a);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer;margin-right:8px;font-family:inherit';
+    btn.addEventListener('click', renderPanel);
+    anchor.parentNode.insertBefore(btn, anchor);
+    return true;
+  }
+  function init(){
+    if (installPlannerExt() && injectTopbarButton()){ window.__v292Dfix38Active = true; console.log(TAG, 'installed'); return; }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (installPlannerExt() && injectTopbarButton()){ clearInterval(iv); window.__v292Dfix38Active = true; console.log(TAG, 'installed (deferred ' + tries + ')'); }
+      else if (tries > 80){ clearInterval(iv); console.warn(TAG, 'gave up'); }
+    }, 200);
+  }
+  setInterval(function(){
+    if (window.__v292Dfix38Active){
+      if (!document.getElementById('v38-topbar-btn')){ if (injectTopbarButton()) console.log(TAG, 'btn reinjected'); }
+      if (window.Planner && window.Planner._extensions && !window.Planner._extensions.__v292Dfix38){ if (installPlannerExt()) console.log(TAG, 'sysExt reinstalled'); }
+    }
+  }, 5000);
+  window.__v292Dfix38 = { openPanel: renderPanel, closePanel: closePanel, loadStates: loadStates, getCharState: getCharState, setCharStat: setCharStat, setCharNotes: setCharNotes, resetChar: resetChar, describeState: describeState, buildStateContext: buildStateContext, STAT_AXES: STAT_AXES };
+  init();
+})();
