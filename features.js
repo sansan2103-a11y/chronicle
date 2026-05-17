@@ -6355,3 +6355,271 @@
   window.__v292Dfix33 = { redo: actRedo, getStack: function(){ return undoStack.slice(); }, clear: function(){ undoStack.length = 0; updateRedoButton(); }, getStackSize: function(){ return undoStack.length; } };
   init();
 })();
+
+/* v292Dfix34: チャプター/シーンナビゲーション
+ *
+ * 目的:
+ *   長くなった narrative の見通しを良くする。各 turn にユーザーが章タイトルを付け、
+ *   一覧から任意の turn へ瞬時にジャンプできる。
+ *
+ * 設計:
+ *   - 「📑 章」ボタンを topbar に inject (📁 セーブ ボタンの左)
+ *   - クリックで右側スライドイン panel: 全 turn を chronological list
+ *     各エントリ: 「第N章 [title]」(editable, blur で保存) + inputType badge + preview
+ *     クリック → 該当 .turn 要素を scrollIntoView + flash highlight
+ *   - 章タイトル保存: localStorage.chr6_chapter_titles_<slotId> = {turnIdx: title}
+ *     active slot に紐付け (slot 切替で章タイトルも切替)
+ *   - 自動推測: title 未設定なら narrative 先頭から「。」までの短い文を default
+ *
+ * 設計原則:
+ *   - __v292Dfix34Active フラグで二重 install 防止
+ *   - fix30 の active slot 概念を活用 (window.__v292Dfix30 が無くても default 動作)
+ *   - .turn DOM 要素は既存構造を読むだけで触らない
+ *   - 5 秒ごとの button re-install + slot 切替時の panel 再描画
+ */
+(function v292Dfix34(){
+  if (window.__v292Dfix34Active) return;
+  var TAG = '[v292Dfix34]';
+
+  function getActiveSlotId(){
+    try {
+      if (window.__v292Dfix30 && typeof window.__v292Dfix30.getActive === 'function'){
+        return window.__v292Dfix30.getActive();
+      }
+    } catch(_){}
+    return 'default';
+  }
+
+  function titlesKey(){ return 'chr6_chapter_titles_' + getActiveSlotId(); }
+
+  function loadTitles(){
+    try { var v = localStorage.getItem(titlesKey()); return v ? JSON.parse(v) : {}; }
+    catch(_){ return {}; }
+  }
+  function saveTitles(t){
+    try { localStorage.setItem(titlesKey(), JSON.stringify(t)); } catch(_){}
+  }
+  function setTitle(idx, title){
+    var t = loadTitles();
+    if (title && title.trim()){ t[idx] = String(title).slice(0, 60); }
+    else { delete t[idx]; }
+    saveTitles(t);
+  }
+
+  function autoTitle(turn){
+    if (!turn) return '';
+    var src = '';
+    if (typeof turn.narrative === 'string') src = turn.narrative;
+    else if (Array.isArray(turn.narrative)){
+      for (var i = 0; i < turn.narrative.length; i++){
+        var n = turn.narrative[i];
+        if (typeof n === 'string'){ src = n; break; }
+        if (n && typeof n === 'object' && typeof n.text === 'string'){ src = n.text; break; }
+      }
+    }
+    if (!src) src = turn.playerText || '';
+    var m = src.match(/^([^。！？\n]{0,30}[。！？]?)/);
+    return m ? m[1].trim() : src.slice(0, 30);
+  }
+
+  function getTurnElems(){
+    var story = document.getElementById('story');
+    if (!story) return [];
+    return Array.from(story.querySelectorAll(':scope > .turn'));
+  }
+
+  function ensureStyles(){
+    if (document.getElementById('v292Dfix34-style')) return;
+    var style = document.createElement('style');
+    style.id = 'v292Dfix34-style';
+    style.textContent = [
+      '.v34-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9998;display:none;font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI",sans-serif}',
+      '.v34-overlay.open{display:block}',
+      '.v34-panel{position:fixed;top:0;right:0;height:100vh;width:380px;max-width:92vw;background:var(--s1,#111119);color:var(--tx,#e0dcf0);border-left:1px solid var(--border,rgba(139,118,240,.3));box-shadow:-4px 0 16px rgba(0,0,0,.4);overflow-y:auto;z-index:9999;transform:translateX(100%);transition:transform .25s ease-out;display:flex;flex-direction:column}',
+      '.v34-overlay.open .v34-panel{transform:translateX(0)}',
+      '.v34-head{padding:14px 16px;border-bottom:1px solid var(--border,rgba(139,118,240,.2));display:flex;align-items:center;gap:10px}',
+      '.v34-head h2{margin:0;font-size:15px;color:var(--acc,#8b76f0);font-weight:600;flex:1}',
+      '.v34-close{background:none;border:none;color:var(--dim,#888);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:4px}',
+      '.v34-close:hover{background:var(--s2,#17172a);color:var(--tx)}',
+      '.v34-list{flex:1;overflow-y:auto;padding:8px}',
+      '.v34-item{border:1px solid var(--border,rgba(139,118,240,.15));border-radius:6px;padding:10px;margin-bottom:6px;background:var(--bg,#09090f);cursor:pointer;transition:all .15s}',
+      '.v34-item:hover{border-color:var(--acc,#8b76f0);background:var(--s2,#17172a)}',
+      '.v34-item-head{display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11px;color:var(--dim,#888)}',
+      '.v34-item-num{font-weight:600;color:var(--acc,#8b76f0)}',
+      '.v34-item-type{background:var(--s2,#17172a);padding:1px 6px;border-radius:3px;font-size:10px}',
+      '.v34-item-type.STORY{color:#c49040}',
+      '.v34-item-type.SAY{color:#5a8ef0}',
+      '.v34-item-type.DO{color:#6aaf78}',
+      '.v34-item-title{font-size:14px;font-weight:600;color:var(--tx,#e0dcf0);margin-bottom:4px;word-break:break-word}',
+      '.v34-item-title input{background:transparent;border:none;color:inherit;font:inherit;font-weight:inherit;width:100%;padding:2px 4px;border-radius:3px;border:1px solid transparent}',
+      '.v34-item-title input:focus{outline:none;background:var(--s2,#17172a);border-color:var(--acc,#8b76f0)}',
+      '.v34-item-preview{font-size:11px;color:var(--dim,#888);line-height:1.4;opacity:.8}',
+      '.v34-hint{padding:10px 16px;font-size:11px;color:var(--dim,#888);border-top:1px solid var(--border,rgba(139,118,240,.15));background:var(--bg,#09090f)}',
+      '@keyframes v34-flash{0%,100%{background:transparent}50%{background:rgba(139,118,240,.18)}}',
+      '.v34-flash{animation:v34-flash 1.2s ease-out 1}'
+    ].join('\n');
+    document.head.appendChild(style);
+  }
+
+  function renderPanel(){
+    closePanel();
+    ensureStyles();
+    var overlay = document.createElement('div');
+    overlay.className = 'v34-overlay';
+    overlay.id = 'v34-overlay';
+    overlay.addEventListener('click', function(e){
+      if (e.target === overlay) closePanel();
+    });
+
+    var panel = document.createElement('div');
+    panel.className = 'v34-panel';
+    panel.innerHTML = '<div class="v34-head"><h2>📑 シーン</h2>' +
+      '<button class="v34-close" id="v34-close-x">×</button></div>' +
+      '<div class="v34-list" id="v34-list"></div>' +
+      '<div class="v34-hint">クリックで該当シーンへジャンプ。タイトルは自由編集可能</div>';
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+
+    var st = (typeof S !== 'undefined' && S) ? S : (window.S || null);
+    if (!st || !Array.isArray(st.turns)){
+      document.getElementById('v34-list').innerHTML = '<div style="padding:12px;color:#888;font-size:12px;">turn データ無し</div>';
+    } else {
+      var titles = loadTitles();
+      var list = document.getElementById('v34-list');
+      var html = [];
+      st.turns.forEach(function(turn, idx){
+        var customTitle = titles[idx] || '';
+        var displayTitle = customTitle || autoTitle(turn);
+        var inputType = turn.inputType || '?';
+        var preview = '';
+        if (typeof turn.narrative === 'string') preview = turn.narrative;
+        else if (Array.isArray(turn.narrative)){
+          for (var i = 0; i < turn.narrative.length; i++){
+            var n = turn.narrative[i];
+            if (typeof n === 'string'){ preview += n + ' '; }
+            else if (n && typeof n === 'object' && typeof n.text === 'string'){ preview += n.text + ' '; }
+            if (preview.length > 120) break;
+          }
+        }
+        preview = preview.slice(0, 100) + (preview.length > 100 ? '…' : '');
+        html.push('<div class="v34-item" data-idx="' + idx + '">');
+        html.push('<div class="v34-item-head">');
+        html.push('<span class="v34-item-num">第' + (idx+1) + '章</span>');
+        html.push('<span class="v34-item-type ' + escAttr(inputType) + '">' + escHtml(inputType) + '</span>');
+        html.push('</div>');
+        html.push('<div class="v34-item-title"><input data-idx="' + idx + '" value="' + escAttr(displayTitle) + '" placeholder="タイトル"></div>');
+        html.push('<div class="v34-item-preview">' + escHtml(preview) + '</div>');
+        html.push('</div>');
+      });
+      list.innerHTML = html.join('');
+      list.addEventListener('click', function(e){
+        var item = e.target.closest('.v34-item');
+        if (!item) return;
+        if (e.target.tagName === 'INPUT') return;
+        var idx = parseInt(item.dataset.idx, 10);
+        jumpToTurn(idx);
+      });
+      Array.from(list.querySelectorAll('input[data-idx]')).forEach(function(inp){
+        inp.addEventListener('blur', function(){
+          var idx = parseInt(inp.dataset.idx, 10);
+          var newVal = inp.value.trim();
+          if (newVal && newVal === autoTitle(st.turns[idx])){
+            setTitle(idx, '');
+          } else {
+            setTitle(idx, newVal);
+          }
+        });
+        inp.addEventListener('keydown', function(e){
+          if (e.key === 'Enter') inp.blur();
+        });
+        inp.addEventListener('click', function(e){ e.stopPropagation(); });
+      });
+    }
+
+    var closeBtn = document.getElementById('v34-close-x');
+    if (closeBtn) closeBtn.addEventListener('click', closePanel);
+
+    requestAnimationFrame(function(){ overlay.classList.add('open'); });
+  }
+
+  function closePanel(){
+    var ov = document.getElementById('v34-overlay');
+    if (ov && ov.parentNode){ ov.parentNode.removeChild(ov); }
+  }
+
+  function jumpToTurn(idx){
+    var elems = getTurnElems();
+    if (idx < 0 || idx >= elems.length){ console.warn(TAG, 'jump idx out of range:', idx); return; }
+    var el = elems[idx];
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el.classList.add('v34-flash');
+    setTimeout(function(){ el.classList.remove('v34-flash'); }, 1300);
+    closePanel();
+  }
+
+  function injectTopbarButton(){
+    if (document.getElementById('v34-topbar-btn')) return true;
+    var saveBtn = document.getElementById('v30-topbar-btn');
+    var settingsBtn = null;
+    if (!saveBtn){
+      var allBtns = document.querySelectorAll('button');
+      for (var i = 0; i < allBtns.length; i++){
+        if ((allBtns[i].textContent || '').indexOf('設定') >= 0){ settingsBtn = allBtns[i]; break; }
+      }
+    }
+    var anchor = saveBtn || settingsBtn;
+    if (!anchor) return false;
+    ensureStyles();
+    var btn = document.createElement('button');
+    btn.id = 'v34-topbar-btn';
+    btn.className = 'v30-topbar-btn';
+    btn.textContent = '📑 シーン';
+    btn.title = 'シーン/章ナビゲーション (全 turn へジャンプ)';
+    btn.style.cssText = 'background:var(--s2,#17172a);color:var(--tx,#e0dcf0);' +
+      'border:1px solid var(--border,rgba(139,118,240,.3));border-radius:6px;' +
+      'padding:6px 10px;font-size:13px;cursor:pointer;margin-right:8px;font-family:inherit';
+    btn.addEventListener('click', renderPanel);
+    anchor.parentNode.insertBefore(btn, anchor);
+    return true;
+  }
+
+  function escAttr(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escHtml(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+  function init(){
+    if (injectTopbarButton()){
+      window.__v292Dfix34Active = true;
+      console.log(TAG, 'installed - scene/chapter navigation active');
+      return;
+    }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (injectTopbarButton()){
+        clearInterval(iv);
+        window.__v292Dfix34Active = true;
+        console.log(TAG, 'installed (deferred ' + tries + ' tries)');
+      } else if (tries > 80){
+        clearInterval(iv);
+        console.warn(TAG, 'install gave up');
+      }
+    }, 200);
+  }
+
+  setInterval(function(){
+    if (window.__v292Dfix34Active && !document.getElementById('v34-topbar-btn')){
+      if (injectTopbarButton()) console.log(TAG, 'topbar button reinjected');
+    }
+  }, 5000);
+
+  window.__v292Dfix34 = {
+    openPanel: renderPanel,
+    closePanel: closePanel,
+    jumpToTurn: jumpToTurn,
+    loadTitles: loadTitles,
+    setTitle: setTitle,
+    autoTitle: autoTitle
+  };
+
+  init();
+})();
