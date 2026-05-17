@@ -7984,3 +7984,171 @@
   init();
 })();
 
+
+/* v292Dfix44: JSON parse 失敗時の dialogue 救出
+ * Hermes JSON が壊れた時に raw text から {type:"dialogue",speaker,text} を regex 抽出して会話ログに追加
+ */
+(function v292Dfix44(){
+  if (window.__v292Dfix44Active) return;
+  var TAG = '[v292Dfix44]';
+  function extractJsonDialogues(text){
+    if (!text || typeof text !== 'string') return [];
+    var out = [];
+    var rx = /\{\s*\\?"?type\\?"?\s*:\s*\\?"dialogue\\?"\s*,\s*\\?"?speaker\\?"?\s*:\s*\\?"([^"\\]+)\\?"\s*,\s*\\?"?text\\?"?\s*:\s*\\?"([^"]+?)\\?"\s*\}/g;
+    var m;
+    while ((m = rx.exec(text))){
+      var sp = (m[1] || '').trim();
+      var tx = (m[2] || '').trim().replace(/\\n/g, '\n');
+      if (sp && tx) out.push({ speaker: sp, text: tx });
+    }
+    return out;
+  }
+  function getNarrText(narrative){
+    if (typeof narrative === 'string') return narrative;
+    if (Array.isArray(narrative)){
+      var s = '';
+      for (var i = 0; i < narrative.length; i++){
+        var n = narrative[i];
+        if (typeof n === 'string') s += n + '\n';
+        else if (n && typeof n === 'object' && typeof n.text === 'string') s += n.text + '\n';
+      }
+      return s;
+    }
+    return '';
+  }
+  function castInfo(){
+    var st = (typeof S !== 'undefined' && S) ? S : null;
+    if (!st || !st.cast) return { hero: null, members: [] };
+    var members = [];
+    if (st.cast.hero && st.cast.hero.name) members.push(st.cast.hero);
+    if (Array.isArray(st.cast.npcs)) st.cast.npcs.forEach(function(n){ if (n && n.name) members.push(n); });
+    return { hero: st.cast.hero || null, members: members };
+  }
+  function escHtml(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function addCard(speaker, text, stream){
+    var ci = castInfo();
+    var isHero = !!(ci.hero && ci.hero.name === speaker);
+    var avatarUrl = '';
+    for (var i = 0; i < ci.members.length; i++){
+      if (ci.members[i].name === speaker && ci.members[i].avatar){ avatarUrl = ci.members[i].avatar; break; }
+    }
+    var card = document.createElement('div');
+    card.className = 'v292-dlg-card' + (isHero ? ' hero-card' : '');
+    card.setAttribute('data-v44-rescued', 'true');
+    var avHtml = avatarUrl ? '<img src="' + escHtml(avatarUrl) + '" alt="' + escHtml(speaker) + '" loading="lazy" onerror="this.parentNode.textContent=String.fromCharCode(63)">' : '?';
+    card.innerHTML = '<div class="dlg-av">' + avHtml + '</div><div class="dlg-body"><div class="dlg-name">' + escHtml(speaker || '???') + '</div><div class="dlg-text">' + escHtml(text) + '</div></div>';
+    stream.appendChild(card);
+  }
+  function rescueMissingDialogues(){
+    var stream = document.getElementById('dialogue-stream');
+    if (!stream) return 0;
+    var st = (typeof S !== 'undefined' && S) ? S : null;
+    if (!st || !Array.isArray(st.turns) || !st.turns.length) return 0;
+    var allFragments = [];
+    st.turns.forEach(function(t){
+      if (!t || !t.narrative) return;
+      var txt = getNarrText(t.narrative);
+      var frags = extractJsonDialogues(txt);
+      frags.forEach(function(f){ allFragments.push(f); });
+    });
+    if (!allFragments.length) return 0;
+    var existingTexts = Array.from(stream.querySelectorAll('.v292-dlg-card .dlg-text')).map(function(el){ return el.textContent.trim(); });
+    var added = 0;
+    allFragments.forEach(function(f){
+      if (existingTexts.indexOf(f.text) >= 0) return;
+      addCard(f.speaker, f.text, stream);
+      existingTexts.push(f.text);
+      added++;
+    });
+    if (added > 0) console.log(TAG, 'rescued ' + added + ' missing dialogue(s)');
+    return added;
+  }
+  function getUIRef(){ try { return (0, eval)('typeof UI !== "undefined" ? UI : null'); } catch(_){ return null; } }
+  function installHook(){
+    var UI = getUIRef(); if (!UI || !Array.isArray(UI._renderHooks)) return false;
+    if (UI._renderHooks.__v292Dfix44) return true;
+    UI._renderHooks.push(function dialogueLayoutHookV44(){ try { setTimeout(rescueMissingDialogues, 60); } catch(_){} });
+    UI._renderHooks.__v292Dfix44 = true;
+    return true;
+  }
+  function init(){
+    if (installHook()){ try { rescueMissingDialogues(); } catch(_){} window.__v292Dfix44Active = true; console.log(TAG, 'installed'); return; }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (installHook()){ clearInterval(iv); try { rescueMissingDialogues(); } catch(_){} window.__v292Dfix44Active = true; console.log(TAG, 'installed (deferred ' + tries + ')'); }
+      else if (tries > 80){ clearInterval(iv); console.warn(TAG, 'gave up'); }
+    }, 200);
+  }
+  setInterval(function(){
+    if (window.__v292Dfix44Active){
+      var UI = getUIRef();
+      if (UI && Array.isArray(UI._renderHooks) && !UI._renderHooks.__v292Dfix44){ installHook(); console.log(TAG, 'hook reinstalled'); }
+    }
+  }, 5000);
+  window.__v292Dfix44 = { rescueMissingDialogues: rescueMissingDialogues, extractJsonDialogues: extractJsonDialogues };
+  init();
+})();
+
+/* v292Dfix45: 物語推進力 prompt 強化
+ * AI が描写だけで turn 消費 / NPC 背景化 / dialogue 無し を改善
+ * system prompt に「毎 turn dialogue 必須 / NPC 能動 / 矛盾防止」addendum を push
+ */
+(function v292Dfix45(){
+  if (window.__v292Dfix45Active) return;
+  var TAG = '[v292Dfix45]';
+  function sysExt(ctx){
+    try {
+      var add = '\n\n【物語推進ルール (重要)】\n' +
+        '1. **毎 turn で最低 1 つ dialogue を含める** — 描写だけで終わらせない。主人公独白/NPC反応/呟き何でも良い。形式: {"type":"dialogue","speaker":"<cast の name>","text":"<セリフ>"}\n' +
+        '2. **NPC を背景化させない** — 主人公以外のキャラも能動的に動く・発言する・反応する。「無言で見ている」だけにしない。各 NPC の personality/coreDesire/coreFear を踏まえた言動を引き出す\n' +
+        '3. **状況を前進させる** — atmospheric な描写の連続で turn を消費しない。1 turn で必ず: 状況変化 (誰かが動く/新事象/緊張変化) を 1 つ以上\n' +
+        '4. **矛盾防止** — これまでの経緯と矛盾する展開を書かない。キャラの coreDesire/coreFear に反する行動を不自然に取らせない。既存の関係性を急変させない\n' +
+        '5. **speaker 名は cast の name と完全一致** — 苗字省略・あだ名禁止。不明な speaker は出さない';
+      return ctx.sys + add;
+    } catch(e){ return ctx.sys; }
+  }
+  function installPlannerExt(){
+    if (typeof window.Planner === 'undefined' || !window.Planner) return false;
+    window.Planner._extensions = window.Planner._extensions || [];
+    if (window.Planner._extensions.__v292Dfix45) return true;
+    window.Planner._extensions.push(sysExt); window.Planner._extensions.__v292Dfix45 = true;
+    return true;
+  }
+  function init(){
+    if (installPlannerExt()){ window.__v292Dfix45Active = true; console.log(TAG, 'installed'); return; }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (installPlannerExt()){ clearInterval(iv); window.__v292Dfix45Active = true; console.log(TAG, 'installed (deferred ' + tries + ')'); }
+      else if (tries > 80){ clearInterval(iv); console.warn(TAG, 'gave up'); }
+    }, 200);
+  }
+  setInterval(function(){
+    if (window.__v292Dfix45Active && window.Planner && window.Planner._extensions && !window.Planner._extensions.__v292Dfix45){
+      if (installPlannerExt()) console.log(TAG, 'sysExt reinstalled');
+    }
+  }, 5000);
+  window.__v292Dfix45 = { reinstall: installPlannerExt };
+  init();
+})();
+
+/* v292Dfix46: topbar アイコン削減
+ * manual-entry panel ボタンを CSS で hide、API は window.__v292Dfix* に残す
+ */
+(function v292Dfix46(){
+  if (window.__v292Dfix46Active) return;
+  var TAG = '[v292Dfix46]';
+  var STYLE_ID = 'v292Dfix46-style';
+  function inject(){
+    if (document.getElementById(STYLE_ID)) return true;
+    var style = document.createElement('style'); style.id = STYLE_ID;
+    style.textContent = '#v34-topbar-btn,#v35-topbar-btn,#v36-topbar-btn,#v37-topbar-btn,#v38-topbar-btn,#v39-topbar-btn,#v40-topbar-btn,#v43-topbar-btn { display: none !important; }';
+    document.head.appendChild(style); return true;
+  }
+  function init(){ if (inject()){ window.__v292Dfix46Active = true; console.log(TAG, 'installed - 8 manual-entry buttons hidden'); } }
+  setInterval(function(){ if (window.__v292Dfix46Active && !document.getElementById(STYLE_ID)){ if (inject()) console.log(TAG, 'style reinjected'); } }, 5000);
+  window.__v292Dfix46 = { show: function(){ var s = document.getElementById(STYLE_ID); if (s) s.parentNode.removeChild(s); }, hide: function(){ inject(); } };
+  init();
+})();
+
