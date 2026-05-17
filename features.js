@@ -5405,3 +5405,564 @@
 
   init();
 })();
+
+/* v292Dfix30: multi-slot save + JSON export/import
+ *
+ * 目的:
+ *   既存の単一 localStorage 'chr6' 保存に上書きしない形で、複数 save スロット
+ *   (default + 3 named slots) と JSON エクスポート / インポートを追加。
+ *   ユーザーが「別シナリオ試したいけど今の進行は残したい」を可能にする。
+ *
+ * 設計:
+ *   - 'chr6' は default slot として温存 (後方互換、既存ユーザーに影響なし)
+ *   - 'chr6_slot_<id>' に named slots を保存 (id: 'a', 'b', 'c')
+ *   - 'chr6_slots_meta' に slot メタデータ array [{id, name, key, updatedAt}]
+ *   - 'chr6_active_slot' に現在アクティブな slot id (default / a / b / c)
+ *   - S.save をラップして active slot key に書き込む
+ *   - slot 切替時: その slot の data を localStorage から読んで S に Object.assign
+ *
+ * UI:
+ *   - topbar 右側 (設定 ボタンの左) に「📁」ボタンを inject
+ *   - クリックで overlay modal: 現在の slot + slot 一覧 + Export/Import
+ *
+ * 安全:
+ *   - すべての破壊的操作は confirm() で確認
+ *   - import 前に JSON schema を validate
+ *   - export ファイル名に timestamp 含めて履歴復元しやすく
+ *
+ * 設計原則:
+ *   - __v292Dfix30Active フラグで二重 install 防止
+ *   - 既存 S.save / S.load は touch せず、ラップで slot 対応
+ *   - fix28/29/29b と非競合 (UI レイヤ追加のみ)
+ */
+(function v292Dfix30(){
+  if (window.__v292Dfix30Active) return;
+  var TAG = '[v292Dfix30]';
+
+  var SLOT_IDS = ['a', 'b', 'c'];
+  var META_KEY = 'chr6_slots_meta';
+  var ACTIVE_KEY = 'chr6_active_slot';
+  var DEFAULT_SLOT_KEY = 'chr6';
+  var SCHEMA_VERSION = 'v292Dfix30';
+
+  // ---- Storage helpers ----
+  function lsGet(k, def){
+    try { var v = localStorage.getItem(k); return v != null ? JSON.parse(v) : def; }
+    catch(_){ return def; }
+  }
+  function lsSet(k, v){
+    try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(_){ return false; }
+  }
+  function lsRemove(k){
+    try { localStorage.removeItem(k); } catch(_){}
+  }
+
+  // ---- Slot meta management ----
+  function getMeta(){
+    var meta = lsGet(META_KEY, null);
+    if (!Array.isArray(meta) || !meta.length){
+      meta = [
+        { id: 'default', name: 'デフォルト', key: DEFAULT_SLOT_KEY, updatedAt: null }
+      ];
+      SLOT_IDS.forEach(function(id){
+        meta.push({ id: id, name: 'スロット ' + id.toUpperCase(), key: 'chr6_slot_' + id, updatedAt: null });
+      });
+      lsSet(META_KEY, meta);
+    }
+    return meta;
+  }
+  function setMeta(meta){ lsSet(META_KEY, meta); }
+  function getActive(){ return lsGet(ACTIVE_KEY, 'default') || 'default'; }
+  function setActive(id){ lsSet(ACTIVE_KEY, id); }
+  function findSlot(id){ return getMeta().find(function(s){ return s.id === id; }) || null; }
+  function activeSlot(){ return findSlot(getActive()) || getMeta()[0]; }
+
+  function touchSlot(id){
+    var meta = getMeta();
+    var s = meta.find(function(x){ return x.id === id; });
+    if (s){ s.updatedAt = new Date().toISOString(); setMeta(meta); }
+  }
+  function renameSlot(id, newName){
+    var meta = getMeta();
+    var s = meta.find(function(x){ return x.id === id; });
+    if (s && newName){ s.name = String(newName).slice(0, 40); setMeta(meta); }
+  }
+  function clearSlot(id){
+    var s = findSlot(id);
+    if (!s) return;
+    lsRemove(s.key);
+    var meta = getMeta();
+    var t = meta.find(function(x){ return x.id === id; });
+    if (t){ t.updatedAt = null; setMeta(meta); }
+  }
+  function slotHasData(id){
+    var s = findSlot(id);
+    if (!s) return false;
+    var raw = null;
+    try { raw = localStorage.getItem(s.key); } catch(_){}
+    return !!raw;
+  }
+
+  // ---- S.save wrapping ----
+  function wrapSave(){
+    if (typeof S === 'undefined' || !S || typeof S.save !== 'function') return false;
+    if (S.__v292Dfix30Wrapped) return true;
+    var origSave = S.save.bind(S);
+    S.save = function(){
+      var slot = activeSlot();
+      if (!slot || slot.id === 'default'){
+        // default slot: use original behavior (writes to 'chr6')
+        var r = origSave.apply(this, arguments);
+        touchSlot('default');
+        return r;
+      }
+      // named slot: write to slot.key
+      try {
+        var payload = { cfg: this.cfg, cast: this.cast, scene: this.scene, turns: this.turns, mode: this.mode };
+        lsSet(slot.key, payload);
+        touchSlot(slot.id);
+      } catch(e){
+        console.warn(TAG, 'save error:', e && e.message);
+      }
+    };
+    S.__v292Dfix30Wrapped = true;
+    console.log(TAG, 'S.save wrapped for multi-slot support');
+    return true;
+  }
+
+  function loadSlot(id){
+    var s = findSlot(id);
+    if (!s) return false;
+    var data = lsGet(s.key, null);
+    if (!data || typeof data !== 'object') return false;
+    // Apply to S
+    try {
+      if (data.cfg) Object.assign(S.cfg, data.cfg);
+      if (data.cast){
+        Object.assign(S.cast, data.cast);
+        // ensure npcs is array
+        if (!Array.isArray(S.cast.npcs)) S.cast.npcs = [];
+      }
+      if (data.scene) Object.assign(S.scene, data.scene);
+      S.turns = Array.isArray(data.turns) ? data.turns : [];
+      S.mode = data.mode || 'DO';
+      setActive(id);
+      triggerReRender();
+      return true;
+    } catch(e){
+      console.warn(TAG, 'loadSlot err:', e && e.message);
+      return false;
+    }
+  }
+
+  function triggerReRender(){
+    try {
+      if (typeof UI !== 'undefined' && Array.isArray(UI._renderHooks)){
+        UI._renderHooks.forEach(function(h){ try { h({}); } catch(_){} });
+      }
+      // Also try to render via known UI functions
+      if (typeof UI !== 'undefined' && typeof UI.render === 'function'){
+        try { UI.render(); } catch(_){}
+      }
+    } catch(_){}
+  }
+
+  // ---- JSON export / import ----
+  function exportCurrent(){
+    var slot = activeSlot();
+    var payload = {
+      _meta: {
+        version: SCHEMA_VERSION,
+        exportedAt: new Date().toISOString(),
+        slotId: slot.id,
+        slotName: slot.name,
+        scenarioHint: (S.scene && (S.scene.loc || S.scene.lore)) || ''
+      },
+      cfg: S.cfg,
+      cast: S.cast,
+      scene: S.scene,
+      turns: S.turns,
+      mode: S.mode
+    };
+    var json = JSON.stringify(payload, null, 2);
+    var blob = new Blob([json], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    var stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+    var safeName = (slot.name || 'chronicle').replace(/[^\w぀-ゟ゠-ヿ一-龯a-zA-Z0-9_-]/g, '_');
+    a.download = 'chronicle-' + safeName + '-' + stamp + '.json';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+    console.log(TAG, 'exported slot "' + slot.name + '" to ' + a.download);
+  }
+
+  function validateImportData(d){
+    if (!d || typeof d !== 'object') return { ok: false, err: 'invalid JSON' };
+    if (!d.cfg || typeof d.cfg !== 'object') return { ok: false, err: 'cfg 欠落' };
+    if (!d.cast || typeof d.cast !== 'object') return { ok: false, err: 'cast 欠落' };
+    if (!d.scene || typeof d.scene !== 'object') return { ok: false, err: 'scene 欠落' };
+    if (!Array.isArray(d.turns)) return { ok: false, err: 'turns が array じゃない' };
+    if (typeof d.mode !== 'string') return { ok: false, err: 'mode が string じゃない' };
+    return { ok: true };
+  }
+
+  function importToSlot(targetSlotId, data){
+    var s = findSlot(targetSlotId);
+    if (!s) return { ok: false, err: 'slot 未定義: ' + targetSlotId };
+    var v = validateImportData(data);
+    if (!v.ok) return v;
+    var payload = { cfg: data.cfg, cast: data.cast, scene: data.scene, turns: data.turns, mode: data.mode };
+    if (s.id === 'default'){
+      lsSet(DEFAULT_SLOT_KEY, payload);
+    } else {
+      lsSet(s.key, payload);
+    }
+    touchSlot(targetSlotId);
+    return { ok: true };
+  }
+
+  function handleImportFile(file, targetSlotId, onDone){
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      try {
+        var data = JSON.parse(ev.target.result);
+        var r = importToSlot(targetSlotId, data);
+        onDone(r, data);
+      } catch(e){
+        onDone({ ok: false, err: 'JSON parse error: ' + e.message }, null);
+      }
+    };
+    reader.onerror = function(){ onDone({ ok: false, err: 'file read error' }, null); };
+    reader.readAsText(file, 'UTF-8');
+  }
+
+  // ---- UI: floating manager modal ----
+  function fmtTs(iso){
+    if (!iso) return '未保存';
+    try {
+      var d = new Date(iso);
+      var pad = function(n){ return n < 10 ? '0' + n : '' + n; };
+      return d.getFullYear() + '/' + pad(d.getMonth()+1) + '/' + pad(d.getDate()) + ' ' +
+             pad(d.getHours()) + ':' + pad(d.getMinutes());
+    } catch(_){ return iso; }
+  }
+
+  function buildScenarioPreview(slot){
+    var key = slot.id === 'default' ? DEFAULT_SLOT_KEY : slot.key;
+    var data = lsGet(key, null);
+    if (!data) return '';
+    var hero = (data.cast && data.cast.hero && data.cast.hero.name) || '';
+    var loc = (data.scene && data.scene.loc) || '';
+    var turns = (Array.isArray(data.turns) ? data.turns.length : 0);
+    var bits = [];
+    if (hero) bits.push('主: ' + hero);
+    if (loc) bits.push('場: ' + loc);
+    bits.push(turns + ' turn');
+    return bits.join(' / ');
+  }
+
+  function ensureStyles(){
+    if (document.getElementById('v292Dfix30-style')) return;
+    var style = document.createElement('style');
+    style.id = 'v292Dfix30-style';
+    style.textContent = [
+      '.v30-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI",sans-serif}',
+      '.v30-modal{background:var(--s1,#111119);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:8px;padding:20px;width:520px;max-width:92vw;max-height:88vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.6)}',
+      '.v30-modal h2{margin:0 0 12px;font-size:16px;color:var(--acc,#8b76f0);font-weight:600;display:flex;align-items:center;gap:8px}',
+      '.v30-modal h3{margin:18px 0 8px;font-size:13px;color:var(--dim,#8888a0);font-weight:600;text-transform:uppercase;letter-spacing:.5px}',
+      '.v30-close{margin-left:auto;background:none;border:none;color:var(--dim,#888);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:4px}',
+      '.v30-close:hover{background:var(--s2,#17172a);color:var(--tx,#e0dcf0)}',
+      '.v30-slot{border:1px solid var(--border,rgba(139,118,240,.2));border-radius:6px;padding:10px 12px;margin-bottom:8px;background:var(--bg,#09090f);transition:border-color .2s}',
+      '.v30-slot.active{border-color:var(--acc,#8b76f0);background:var(--s2,#17172a)}',
+      '.v30-slot-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}',
+      '.v30-slot-name{flex:1;font-weight:600;font-size:14px}',
+      '.v30-slot-name input{background:var(--bg,#09090f);color:var(--tx);border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-size:14px;font-family:inherit;width:100%;box-sizing:border-box}',
+      '.v30-slot-active-badge{font-size:10px;background:var(--acc,#8b76f0);color:#fff;padding:2px 6px;border-radius:3px;font-weight:600}',
+      '.v30-slot-meta{font-size:11px;color:var(--dim,#888);margin-bottom:8px}',
+      '.v30-slot-preview{font-size:11px;color:var(--tx,#e0dcf0);opacity:.7;margin-bottom:8px;font-style:italic}',
+      '.v30-slot-actions{display:flex;gap:6px;flex-wrap:wrap}',
+      '.v30-btn{background:var(--s2,#17172a);color:var(--tx,#e0dcf0);border:1px solid var(--border,rgba(139,118,240,.2));border-radius:4px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s}',
+      '.v30-btn:hover:not(:disabled){background:var(--acc,#8b76f0);color:#fff;border-color:var(--acc,#8b76f0)}',
+      '.v30-btn:disabled{opacity:.4;cursor:not-allowed}',
+      '.v30-btn-primary{background:var(--acc,#8b76f0);color:#fff;border-color:var(--acc,#8b76f0)}',
+      '.v30-btn-danger{color:var(--err,#e06060);border-color:rgba(224,96,96,.3)}',
+      '.v30-btn-danger:hover:not(:disabled){background:var(--err,#e06060);color:#fff;border-color:var(--err,#e06060)}',
+      '.v30-toolbar{display:flex;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border,rgba(139,118,240,.2))}',
+      '.v30-toolbar button{flex:1;padding:8px}',
+      '.v30-hint{font-size:11px;color:var(--dim,#888);margin-top:8px;line-height:1.5}',
+      '.v30-toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--acc,#8b76f0);color:#fff;padding:10px 18px;border-radius:6px;font-size:13px;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,.4);font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI",sans-serif}',
+      '.v30-toast.err{background:var(--err,#e06060)}',
+      '.v30-topbar-btn{background:var(--s2,#17172a);color:var(--tx);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer;margin-right:8px;font-family:inherit}',
+      '.v30-topbar-btn:hover{background:var(--acc,#8b76f0);color:#fff;border-color:var(--acc)}'
+    ].join('\n');
+    document.head.appendChild(style);
+  }
+
+  function showToast(msg, isErr){
+    var t = document.createElement('div');
+    t.className = 'v30-toast' + (isErr ? ' err' : '');
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function(){
+      if (t.parentNode) t.parentNode.removeChild(t);
+    }, 2400);
+  }
+
+  function renderManager(){
+    closeManager();
+    ensureStyles();
+    var overlay = document.createElement('div');
+    overlay.className = 'v30-overlay';
+    overlay.id = 'v30-overlay';
+    overlay.addEventListener('click', function(e){ if (e.target === overlay) closeManager(); });
+
+    var modal = document.createElement('div');
+    modal.className = 'v30-modal';
+
+    var meta = getMeta();
+    var activeId = getActive();
+
+    var html = [];
+    html.push('<h2>📁 セーブ管理 <button class="v30-close" id="v30-close-x">×</button></h2>');
+    html.push('<h3>セーブスロット</h3>');
+
+    meta.forEach(function(slot){
+      var isActive = slot.id === activeId;
+      var hasData = slotHasData(slot.id);
+      var preview = hasData ? buildScenarioPreview(slot) : '';
+      html.push('<div class="v30-slot ' + (isActive ? 'active' : '') + '" data-id="' + slot.id + '">');
+      html.push('<div class="v30-slot-head">');
+      html.push('<div class="v30-slot-name"><input data-act="rename" data-id="' + slot.id + '" value="' + escAttr(slot.name) + '"' + (slot.id === 'default' ? ' disabled' : '') + '></div>');
+      if (isActive) html.push('<span class="v30-slot-active-badge">ACTIVE</span>');
+      html.push('</div>');
+      html.push('<div class="v30-slot-meta">更新: ' + fmtTs(slot.updatedAt) + (hasData ? '' : ' (空)') + '</div>');
+      if (preview) html.push('<div class="v30-slot-preview">' + escHtml(preview) + '</div>');
+      html.push('<div class="v30-slot-actions">');
+      html.push('<button class="v30-btn ' + (isActive ? '' : 'v30-btn-primary') + '" data-act="load" data-id="' + slot.id + '"' + (!hasData || isActive ? ' disabled' : '') + '>読込</button>');
+      html.push('<button class="v30-btn" data-act="saveto" data-id="' + slot.id + '">現在の状態を保存</button>');
+      html.push('<button class="v30-btn" data-act="import" data-id="' + slot.id + '">JSON 取込</button>');
+      if (slot.id !== 'default'){
+        html.push('<button class="v30-btn v30-btn-danger" data-act="clear" data-id="' + slot.id + '"' + (hasData ? '' : ' disabled') + '>削除</button>');
+      }
+      html.push('</div>');
+      html.push('</div>');
+    });
+
+    html.push('<div class="v30-toolbar">');
+    html.push('<button class="v30-btn v30-btn-primary" data-act="export-current">📤 現在を JSON エクスポート</button>');
+    html.push('<button class="v30-btn" data-act="close">閉じる</button>');
+    html.push('</div>');
+    html.push('<div class="v30-hint">');
+    html.push('• 「現在の状態を保存」で active slot のデータをそのスロットへ書き込み<br>');
+    html.push('• 「読込」で他スロットの内容を画面に呼び出し (active が切り替わる)<br>');
+    html.push('• 「JSON 取込」でファイルからインポート (現在のスロットの内容を上書き)<br>');
+    html.push('• エクスポートはダウンロード形式 — クラウド同期や別環境への移行用<br>');
+    html.push('• デフォルトスロット (chr6) は既存ユーザーとの互換のため固定');
+    html.push('</div>');
+
+    modal.innerHTML = html.join('');
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    bindManagerEvents(modal);
+  }
+
+  function closeManager(){
+    var overlay = document.getElementById('v30-overlay');
+    if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  }
+
+  function bindManagerEvents(modal){
+    var closeX = modal.querySelector('#v30-close-x');
+    if (closeX) closeX.addEventListener('click', closeManager);
+
+    modal.addEventListener('click', function(e){
+      var t = e.target;
+      if (!t || !t.dataset || !t.dataset.act) return;
+      var act = t.dataset.act;
+      var id = t.dataset.id || '';
+
+      if (act === 'close'){ closeManager(); return; }
+      if (act === 'export-current'){ exportCurrent(); showToast('JSON ダウンロードしたよ'); return; }
+
+      if (act === 'load'){
+        var s = findSlot(id);
+        if (!s) return;
+        if (!confirm('「' + s.name + '」を読み込む？\n現在の状態は active slot に自動 save される前の状態に戻る (注: 現セッションでまだ save してない変更は失われる)')){
+          return;
+        }
+        // Auto-save current to active slot first
+        try { if (typeof S !== 'undefined' && typeof S.save === 'function') S.save(); } catch(_){}
+        var ok = loadSlot(id);
+        if (ok){
+          showToast('「' + s.name + '」を読み込んだ');
+          closeManager();
+          setTimeout(function(){ try { triggerReRender(); } catch(_){} }, 50);
+        } else {
+          showToast('読み込み失敗 (スロットが空かも)', true);
+        }
+        return;
+      }
+
+      if (act === 'saveto'){
+        var s2 = findSlot(id);
+        if (!s2) return;
+        var hasExisting = slotHasData(id);
+        if (hasExisting && id !== getActive()){
+          if (!confirm('「' + s2.name + '」を現在の状態で上書き保存する？')) return;
+        }
+        // Temporarily switch active, save, restore
+        var prevActive = getActive();
+        setActive(id);
+        try { if (typeof S !== 'undefined' && typeof S.save === 'function') S.save(); } catch(_){}
+        setActive(prevActive);
+        showToast('「' + s2.name + '」に保存した');
+        renderManager(); // refresh
+        return;
+      }
+
+      if (act === 'rename'){
+        // input - handled via blur event below
+        return;
+      }
+
+      if (act === 'clear'){
+        var s3 = findSlot(id);
+        if (!s3) return;
+        if (!confirm('「' + s3.name + '」を完全削除する？ この操作は取り消せない。')) return;
+        clearSlot(id);
+        showToast('「' + s3.name + '」を削除');
+        renderManager();
+        return;
+      }
+
+      if (act === 'import'){
+        promptImport(id);
+        return;
+      }
+    });
+
+    // Rename via blur
+    Array.from(modal.querySelectorAll('input[data-act="rename"]')).forEach(function(inp){
+      inp.addEventListener('blur', function(){
+        var newName = inp.value.trim();
+        if (newName){
+          renameSlot(inp.dataset.id, newName);
+        } else {
+          inp.value = findSlot(inp.dataset.id).name;
+        }
+      });
+      inp.addEventListener('keydown', function(e){
+        if (e.key === 'Enter'){ inp.blur(); }
+      });
+    });
+  }
+
+  function promptImport(targetSlotId){
+    var slot = findSlot(targetSlotId);
+    if (!slot) return;
+    var fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.json,application/json';
+    fileInput.style.display = 'none';
+    document.body.appendChild(fileInput);
+    fileInput.addEventListener('change', function(){
+      var file = fileInput.files && fileInput.files[0];
+      if (!file){ document.body.removeChild(fileInput); return; }
+      handleImportFile(file, targetSlotId, function(r, data){
+        document.body.removeChild(fileInput);
+        if (!r.ok){
+          showToast('取込失敗: ' + r.err, true);
+          return;
+        }
+        var hint = '';
+        if (data && data._meta){
+          hint = ' (元: ' + (data._meta.slotName || '?') + ' / ' + (data._meta.exportedAt || '') + ')';
+        }
+        showToast('「' + slot.name + '」に取込完了' + hint);
+        renderManager();
+      });
+    });
+    fileInput.click();
+  }
+
+  // ---- Topbar button injection ----
+  function injectTopbarButton(){
+    if (document.getElementById('v30-topbar-btn')) return true;
+    // Find the 設定 button or topbar
+    var settingsBtn = null;
+    var allBtns = document.querySelectorAll('button');
+    for (var i = 0; i < allBtns.length; i++){
+      var b = allBtns[i];
+      var txt = (b.textContent || '').trim();
+      if (txt === '⚙ 設定' || txt === '設定' || txt.indexOf('設定') >= 0){
+        settingsBtn = b;
+        break;
+      }
+    }
+    if (!settingsBtn) return false;
+    ensureStyles();
+    var saveBtn = document.createElement('button');
+    saveBtn.id = 'v30-topbar-btn';
+    saveBtn.className = 'v30-topbar-btn';
+    saveBtn.textContent = '📁 セーブ';
+    saveBtn.title = 'セーブ管理 (複数スロット + JSON エクスポート/インポート)';
+    saveBtn.addEventListener('click', renderManager);
+    settingsBtn.parentNode.insertBefore(saveBtn, settingsBtn);
+    return true;
+  }
+
+  function escAttr(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escHtml(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+  function init(){
+    var wrapped = wrapSave();
+    var injected = injectTopbarButton();
+    if (wrapped && injected){
+      window.__v292Dfix30Active = true;
+      console.log(TAG, 'installed - multi-slot save + JSON export/import active');
+      return;
+    }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (wrapSave() && injectTopbarButton()){
+        clearInterval(iv);
+        window.__v292Dfix30Active = true;
+        console.log(TAG, 'installed (deferred ' + tries + ' tries)');
+      } else if (tries > 80){
+        clearInterval(iv);
+        console.warn(TAG, 'install gave up after 80 tries');
+      }
+    }, 200);
+  }
+
+  // 定期再 install (UI 再構築で button が消えたケース等)
+  setInterval(function(){
+    try {
+      if (window.__v292Dfix30Active && !document.getElementById('v30-topbar-btn')){
+        if (injectTopbarButton()){
+          console.log(TAG, 'topbar button reinjected');
+        }
+      }
+    } catch(_){}
+  }, 5000);
+
+  // 検証用 API
+  window.__v292Dfix30 = {
+    openManager: renderManager,
+    closeManager: closeManager,
+    getMeta: getMeta,
+    getActive: getActive,
+    loadSlot: loadSlot,
+    exportCurrent: exportCurrent,
+    importToSlot: importToSlot
+  };
+
+  init();
+})();
