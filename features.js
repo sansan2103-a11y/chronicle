@@ -5066,3 +5066,240 @@
   window.__v292Dfix28Active = true;
   console.log(TAG, 'installed - target-indicator speaker resolver + 読点 dedup hint active');
 })();
+
+/* v292Dfix29: post-quote「Q」と<NAME>(は|が)<verb> attribution fixer
+ *
+ * 観察された症状:
+ *   narrative: 「ど、どこから……？」とサクラが呟く。
+ *   会話ログ: フィオナ「ど、どこから……？」 (誤)
+ *   期待:    サクラ「ど、どこから……？」
+ *
+ * 真の原因 (features.js 構造解析):
+ *   extractDialoguesEnhanced 内の Pattern E (line 3661) は
+ *     [「『〝]QUOTE[」』〟]\s*NAME(は|が)...verb
+ *   で が-particle を catch するが、quote と NAME の間に "と" が入る場合
+ *   \s* が許容してないため match しない。
+ *   Pattern G (line 3687) は \s*と?\s* を許容するが (の|から) 限定で、
+ *   (は|が) は対象外。
+ *   結果、Pattern C fallback で preContext の最後の cast 名(別キャラ)を
+ *   speaker として拾ってしまう。
+ *
+ * 対策:
+ *   UI._renderHooks に fix29 hook を push (fix15 dialogueLayoutHookV15 の後ろ)。
+ *   fix15 が dialogue cards を生成した後、DOM を sweep し、
+ *   narrative を再 parse して "「Q」と<NAME>(は|が)<verb>" を catch、
+ *   dialogue cards の speaker/avatar/hero-card class を訂正する。
+ *
+ * 設計原則:
+ *   - __v292Dfix29Active フラグで二重 install 防止
+ *   - fix15/fix17 の hook を破壊しない (push のみ、削除なし)
+ *   - DOM 更新のみ (extractDialoguesEnhanced は touch しない)
+ *   - 3 秒ごとの periodic re-install で UI._renderHooks が replace された時の保険
+ *   - fix28 と非競合: fix28 は target-indicator (異なるパターン)
+ */
+(function v292Dfix29(){
+  if (window.__v292Dfix29Active) return;
+  var TAG = '[v292Dfix29]';
+
+  function escRe(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+  function castInfo(){
+    try {
+      var st = (typeof S !== 'undefined' && S) ? S
+            : (typeof window !== 'undefined' && window.S) ? window.S : null;
+      if (!st || !st.cast) return { names: [], hero: null, members: [] };
+      var members = [];
+      if (st.cast.hero && st.cast.hero.name) members.push(st.cast.hero);
+      if (Array.isArray(st.cast.npcs)) {
+        st.cast.npcs.forEach(function(n){ if (n && n.name) members.push(n); });
+      }
+      return {
+        names: members.map(function(m){ return String(m.name).trim(); }).filter(function(n){ return !!n; }),
+        hero: st.cast.hero || null,
+        members: members
+      };
+    } catch(_){ return { names: [], hero: null, members: [] }; }
+  }
+
+  // 「Q」と<NAME>(は|が)<verb> パターンを catch
+  function extractToParticleAttributions(src, names){
+    if (!src || !names || !names.length) return [];
+    var namePat = names.map(escRe).join('|');
+    var SPEAK_VERBS = '言|答|応|呟|尋|叫|呼|笑|囁|返|促|命|問|怒鳴|喚|発|告|漏|諭|頷|拒|嘆|溜|呻|喘';
+    var rxE2 = new RegExp(
+      '[「『〝]([^」』〟]+?)[」』〟]\\s*と\\s*[、,。]?\\s*(' + namePat + ')(?:は|が)(?:[^。]{0,40})?(?:' + SPEAK_VERBS + ')',
+      'g'
+    );
+    var out = [];
+    var m;
+    while ((m = rxE2.exec(src))){
+      out.push({ text: (m[1] || '').trim(), speaker: (m[2] || '').trim() });
+    }
+    return out;
+  }
+
+  // narrative (string | array) を全部走査して { text: speaker } map を返す
+  function buildCorrectionMap(narrative, names){
+    var srcs = [];
+    if (typeof narrative === 'string') srcs.push(narrative);
+    else if (Array.isArray(narrative)) {
+      for (var i = 0; i < narrative.length; i++){
+        var n = narrative[i];
+        if (typeof n === 'string') srcs.push(n);
+        else if (n && typeof n === 'object' && typeof n.text === 'string') srcs.push(n.text);
+      }
+    }
+    var map = {};
+    for (var k = 0; k < srcs.length; k++){
+      var matches = extractToParticleAttributions(srcs[k], names);
+      for (var j = 0; j < matches.length; j++){
+        if (matches[j].text && matches[j].speaker){
+          map[matches[j].text] = matches[j].speaker;
+        }
+      }
+    }
+    return map;
+  }
+
+  // DOM の dialogue cards を sweep して訂正
+  function fixDomCards(){
+    var stream = document.getElementById('dialogue-stream');
+    if (!stream) return 0;
+    var ci = castInfo();
+    if (!ci.names.length) return 0;
+    var st = (typeof S !== 'undefined' && S) ? S
+          : (typeof window !== 'undefined' && window.S) ? window.S : null;
+    if (!st || !st.turns) return 0;
+
+    // 全 turn の narrative から global correction map を構築
+    var globalMap = {};
+    for (var ti = 0; ti < st.turns.length; ti++){
+      var t = st.turns[ti];
+      if (!t || !t.narrative) continue;
+      var tm = buildCorrectionMap(t.narrative, ci.names);
+      for (var key in tm){
+        if (Object.prototype.hasOwnProperty.call(tm, key)){
+          globalMap[key] = tm[key];
+        }
+      }
+    }
+
+    var corrections = 0;
+    var cards = stream.querySelectorAll('.v292-dlg-card');
+    for (var i = 0; i < cards.length; i++){
+      var card = cards[i];
+      var textEl = card.querySelector('.dlg-text');
+      var nameEl = card.querySelector('.dlg-name');
+      if (!textEl || !nameEl) continue;
+      var text = (textEl.textContent || '').trim();
+      var currentSpeaker = (nameEl.textContent || '').trim();
+      var correctSpeaker = globalMap[text];
+      if (!correctSpeaker || currentSpeaker === correctSpeaker) continue;
+
+      // 訂正: name 表示
+      nameEl.textContent = correctSpeaker;
+
+      // 訂正: avatar
+      var img = card.querySelector('.dlg-av img');
+      var avatarDiv = card.querySelector('.dlg-av');
+      var newAvatarUrl = null;
+      for (var mi = 0; mi < ci.members.length; mi++){
+        if (ci.members[mi].name === correctSpeaker && ci.members[mi].avatar){
+          newAvatarUrl = ci.members[mi].avatar;
+          break;
+        }
+      }
+      if (img && newAvatarUrl){
+        img.src = newAvatarUrl;
+        img.alt = correctSpeaker;
+      } else if (avatarDiv && newAvatarUrl){
+        avatarDiv.innerHTML = '<img src="' + newAvatarUrl + '" alt="' + correctSpeaker +
+          '" loading="lazy" onerror="this.parentNode.textContent=String.fromCharCode(63)">';
+      } else if (img){
+        img.alt = correctSpeaker;
+      }
+
+      // 訂正: hero-card class
+      var isHero = !!(ci.hero && ci.hero.name === correctSpeaker);
+      if (isHero) card.classList.add('hero-card');
+      else card.classList.remove('hero-card');
+
+      console.log(TAG, 'と+(は|が) correction: "' + currentSpeaker + '" -> "' +
+        correctSpeaker + '" for text "' + text.slice(0, 30) + '"');
+      corrections++;
+    }
+
+    if (corrections > 0){
+      console.log(TAG, 'corrections applied:', corrections);
+    }
+    return corrections;
+  }
+
+  function getUIRef(){
+    try {
+      var U = (0, eval)('typeof UI !== "undefined" ? UI : null');
+      return U;
+    } catch(_){ return null; }
+  }
+
+  function installHook(){
+    var UI = getUIRef();
+    if (!UI || !Array.isArray(UI._renderHooks)) return false;
+    if (UI._renderHooks.__v292Dfix29) return true;
+    UI._renderHooks.push(function dialogueLayoutHookV29(){
+      try { fixDomCards(); }
+      catch(e){ console.warn(TAG, 'hook err:', e && e.message); }
+    });
+    UI._renderHooks.__v292Dfix29 = true;
+    return true;
+  }
+
+  function init(){
+    var ok = installHook();
+    if (!ok){
+      var tries = 0;
+      var iv = setInterval(function(){
+        tries++;
+        if (installHook()){
+          clearInterval(iv);
+          // initial sweep (in case render already happened)
+          try { fixDomCards(); } catch(_){}
+          window.__v292Dfix29Active = true;
+          console.log(TAG, 'installed (deferred ' + tries + ' tries) - post-quote と+(は|が) attribution active');
+        } else if (tries > 50){
+          clearInterval(iv);
+          console.warn(TAG, 'install gave up after 50 tries (UI._renderHooks not found)');
+        }
+      }, 200);
+      return;
+    }
+    // initial sweep
+    try { fixDomCards(); } catch(_){}
+    window.__v292Dfix29Active = true;
+    console.log(TAG, 'installed - post-quote と+(は|が) attribution active');
+  }
+
+  // 定期再 install (UI._renderHooks が replace された時の保険)
+  setInterval(function(){
+    try {
+      var UI = getUIRef();
+      if (UI && Array.isArray(UI._renderHooks) && !UI._renderHooks.__v292Dfix29){
+        UI._renderHooks.push(function dialogueLayoutHookV29(){
+          try { fixDomCards(); }
+          catch(e){ console.warn(TAG, 'hook err:', e && e.message); }
+        });
+        UI._renderHooks.__v292Dfix29 = true;
+        console.log(TAG, 'hook reinstalled');
+      }
+    } catch(_){}
+  }, 3000);
+
+  // 検証用 API
+  window.__v292Dfix29 = {
+    fixDomCards: fixDomCards,
+    buildCorrectionMap: buildCorrectionMap,
+    extractToParticleAttributions: extractToParticleAttributions
+  };
+
+  init();
+})();
