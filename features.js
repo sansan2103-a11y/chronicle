@@ -6223,3 +6223,135 @@
   window.__v292Dfix32 = { reinject: function(){ var s = document.getElementById(STYLE_ID); if (s) s.parentNode.removeChild(s); return inject(); } };
   init();
 })();
+
+/* v292Dfix33: undo 履歴強化 + redo
+ *
+ * 目的:
+ *   既存の G.undo() は単発 pop で、popped turn が失われると戻せない。
+ *   fix33 は popped turn を undoStack に capture し、redo (やり戻す) を可能にする。
+ *
+ * 設計:
+ *   - G.undo を wrap: pop 前の turn を deep clone で snapshot、pop 成功後 undoStack に push
+ *   - undoStack 上限 N=10 (FIFO)
+ *   - redo: undoStack.pop() を S.turns に push、UI 再描画 + S.save
+ *   - 新 turn 追加検知 (S.turns.length 増加) で redo stack を clear
+ *
+ * 設計原則:
+ *   - __v292Dfix33Active フラグで二重 install 防止
+ *   - G.undo wrap は二重防止 (G.__v292Dfix33Wrapped)
+ *   - fix30 が S.save をすでに wrap してるが競合なし
+ *   - 5 秒ごとの button re-install + 1 秒ごとの new-turn poll
+ */
+(function v292Dfix33(){
+  if (window.__v292Dfix33Active) return;
+  var TAG = '[v292Dfix33]';
+  var MAX_UNDO = 10;
+  var undoStack = [];
+  var lastTurnsLen = -1;
+  function deepClone(o){ try { return JSON.parse(JSON.stringify(o)); } catch(_){ return o; } }
+  function wrapUndo(){
+    if (typeof G === 'undefined' || !G || typeof G.undo !== 'function') return false;
+    if (G.__v292Dfix33Wrapped) return true;
+    var origUndo = G.undo.bind(G);
+    G.undo = function(){
+      if (typeof S === 'undefined' || !S || !Array.isArray(S.turns) || S.turns.length === 0) return origUndo();
+      var lenBefore = S.turns.length;
+      var snapshot = deepClone(S.turns[lenBefore - 1]);
+      origUndo();
+      if (S.turns.length < lenBefore){
+        undoStack.push(snapshot);
+        if (undoStack.length > MAX_UNDO) undoStack.shift();
+        lastTurnsLen = S.turns.length;
+        updateRedoButton();
+        console.log(TAG, 'captured to undoStack, size=', undoStack.length);
+      }
+    };
+    G.__v292Dfix33Wrapped = true;
+    return true;
+  }
+  function actRedo(){
+    if (!undoStack.length){ showToast('戻すターンがありません', true); return; }
+    if (typeof S === 'undefined' || !S || !Array.isArray(S.turns)){ showToast('S 未初期化', true); return; }
+    var turn = undoStack.pop();
+    S.turns.push(turn);
+    try { if (S.scene){ S.scene.branches = (turn.plan && turn.plan.branchCandidates) || []; } } catch(_){}
+    try { if (typeof S.save === 'function') S.save(); } catch(_){}
+    try {
+      if (typeof UI !== 'undefined'){
+        if (typeof UI.renderAll === 'function') UI.renderAll();
+        if (typeof UI.renderBranches === 'function') UI.renderBranches(S.scene.branches);
+        if (typeof UI.setStatus === 'function') UI.setStatus('戻しました');
+      }
+    } catch(_){}
+    lastTurnsLen = S.turns.length;
+    updateRedoButton();
+    showToast('↪ 1 ターン戻した');
+  }
+  function showToast(msg, isErr){
+    var t = document.createElement('div');
+    t.className = 'v30-toast' + (isErr ? ' err' : '');
+    t.textContent = msg;
+    if (!document.getElementById('v292Dfix30-style')){
+      t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:' + (isErr ? '#e06060' : '#8b76f0') + ';color:#fff;padding:10px 18px;border-radius:6px;font-size:13px;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,.4);font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI",sans-serif';
+    }
+    document.body.appendChild(t);
+    setTimeout(function(){ if (t.parentNode) t.parentNode.removeChild(t); }, 2400);
+  }
+  function injectRedoButton(){
+    if (document.getElementById('v33-redo-btn')) return true;
+    var undoBtn = null;
+    var btns = document.querySelectorAll('button.tbtn');
+    for (var i = 0; i < btns.length; i++){
+      var t = (btns[i].textContent || '').trim();
+      if (t === '↩ 取消' || t.indexOf('取消') >= 0){ undoBtn = btns[i]; break; }
+    }
+    if (!undoBtn) return false;
+    var redoBtn = document.createElement('button');
+    redoBtn.id = 'v33-redo-btn';
+    redoBtn.className = 'tbtn';
+    redoBtn.textContent = '↪ 戻す';
+    redoBtn.title = 'やり直した内容を戻す (redo)';
+    redoBtn.disabled = undoStack.length === 0;
+    redoBtn.style.cssText = 'opacity:' + (undoStack.length ? '1' : '.5');
+    redoBtn.addEventListener('click', actRedo);
+    undoBtn.parentNode.insertBefore(redoBtn, undoBtn.nextSibling);
+    return true;
+  }
+  function updateRedoButton(){
+    var btn = document.getElementById('v33-redo-btn');
+    if (!btn) return;
+    var hasStack = undoStack.length > 0;
+    btn.disabled = !hasStack;
+    btn.style.opacity = hasStack ? '1' : '.5';
+    btn.title = hasStack ? 'やり直した内容を戻す (' + undoStack.length + ' ターン分 保持)' : '戻すターンがありません';
+  }
+  function pollNewTurn(){
+    if (typeof S === 'undefined' || !S || !Array.isArray(S.turns)) return;
+    var len = S.turns.length;
+    if (lastTurnsLen < 0){ lastTurnsLen = len; return; }
+    if (len > lastTurnsLen && undoStack.length > 0){
+      undoStack.length = 0; updateRedoButton();
+      console.log(TAG, 'new turn — cleared redo');
+    }
+    lastTurnsLen = len;
+  }
+  function init(){
+    var ok = wrapUndo() && injectRedoButton();
+    if (ok){ window.__v292Dfix33Active = true; lastTurnsLen = (S && S.turns) ? S.turns.length : 0; console.log(TAG, 'installed'); return; }
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (wrapUndo() && injectRedoButton()){ clearInterval(iv); window.__v292Dfix33Active = true; lastTurnsLen = (S && S.turns) ? S.turns.length : 0; console.log(TAG, 'installed (deferred ' + tries + ')'); }
+      else if (tries > 80){ clearInterval(iv); console.warn(TAG, 'gave up'); }
+    }, 200);
+  }
+  setInterval(pollNewTurn, 1000);
+  setInterval(function(){
+    if (window.__v292Dfix33Active){
+      if (!document.getElementById('v33-redo-btn')){ if (injectRedoButton()){ updateRedoButton(); console.log(TAG, 'reinjected'); } }
+      if (typeof G !== 'undefined' && G && typeof G.undo === 'function' && !G.__v292Dfix33Wrapped){ if (wrapUndo()) console.log(TAG, 'G.undo re-wrapped'); }
+    }
+  }, 5000);
+  window.__v292Dfix33 = { redo: actRedo, getStack: function(){ return undoStack.slice(); }, clear: function(){ undoStack.length = 0; updateRedoButton(); }, getStackSize: function(){ return undoStack.length; } };
+  init();
+})();
