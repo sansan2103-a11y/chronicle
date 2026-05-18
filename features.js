@@ -8600,3 +8600,160 @@
       }, 200);
     });
   })();
+
+
+// === v292Dfix51 ===
+(function(){
+  if (window.__v292Dfix51Active) return;
+  window.__v292Dfix51Active = true;
+  
+  // Robust state resolver
+  function resolveState() {
+    if (window.__state && window.__state.cast) return window.__state;
+    if (window._state && window._state.cast) return window._state;
+    if (window.S && window.S.cast) return window.S;
+    try { return (typeof S !== 'undefined' && S.cast) ? S : null; } catch(e) { return null; }
+  }
+  
+  // Voice signature heuristic
+  function inferVoice(c) {
+    if (!c) return null;
+    const desc = (c.desc || '').toLowerCase();
+    const name = c.name || '';
+    
+    let voice = {
+      formality: 'タメ口',
+      speech_tics: [],
+      vocabulary: '普通',
+      sentence_length: '普通',
+      emotional_default: '普通'
+    };
+    
+    // Heuristic patterns
+    if (/商人|商売|店主/.test(desc)) {
+      voice.formality = '敬語';
+      voice.vocabulary = '商人風';
+      voice.speech_tics = ['いかがでしょう', 'お客様', 'お買い得'];
+    }
+    if (/魔法使い|魔導士|学者|賢者/.test(desc)) {
+      voice.vocabulary = '学術的';
+      voice.speech_tics = ['ふふ', '運命というものは', '真理'];
+    }
+    if (/騎士|軍人|戦士/.test(desc)) {
+      voice.formality = '敬語';
+      voice.vocabulary = '軍人風';
+      voice.sentence_length = '短い';
+    }
+    if (/控えめ|内向|大人しい|神秘的/.test(desc)) {
+      voice.sentence_length = '短い';
+      voice.emotional_default = '抑制';
+    }
+    if (/子供|幼|無邪気|快活/.test(desc)) {
+      voice.vocabulary = '子供っぽい';
+      voice.formality = 'タメ口';
+    }
+    if (/怯え|臆病|不安/.test(desc)) {
+      voice.emotional_default = '怯え';
+      voice.speech_tics.push('……っ', 'ぁ');
+    }
+    if (/皮肉|冷笑|傲慢/.test(desc)) {
+      voice.emotional_default = '皮肉';
+    }
+    if (/礼儀正しい|丁寧/.test(desc)) {
+      voice.formality = '敬語';
+    }
+    if (/好奇心/.test(desc)) {
+      voice.emotional_default = '好奇心';
+    }
+    
+    // Use explicit voice_signature if provided
+    if (c.voice_signature) {
+      Object.assign(voice, c.voice_signature);
+    }
+    
+    return voice;
+  }
+  
+  function buildVoiceBlock(cast) {
+    if (!cast) return '';
+    const lines = ['【キャラ声紋】'];
+    [cast.hero, ...(cast.npcs || [])].filter(c => c && c.name).forEach(c => {
+      const v = inferVoice(c);
+      if (!v) return;
+      lines.push(`${c.name}: formality=${v.formality}, vocabulary=${v.vocabulary}, sentence=${v.sentence_length}, emotion=${v.emotional_default}${v.speech_tics.length ? ', tics=' + v.speech_tics.join('/') : ''}`);
+    });
+    return lines.join('\n');
+  }
+  
+  // Build the conversation architecture prompt block
+  function buildArchBlock(state) {
+    let block = '';
+    
+    // A. Voice Signature
+    if (state && state.cast) {
+      block += buildVoiceBlock(state.cast) + '\n\n';
+    }
+    
+    // B-E. Static rules
+    block += `【NPC 主導性ルール】
+- NPC は受動的でなく能動的に対話する
+- 質問・話題転換・沈黙・身体動作で対話する
+
+【サブテキスト】
+- 強がり/嘘/建前のセリフ直後に内心を地の文で描写
+
+【連鎖反応】
+- 各セリフは直前のセリフを直接参照
+
+【会話フック】
+- narrative 末尾に次の選択肢ヒント 2-3 個を埋める`;
+    
+    return block;
+  }
+  
+  // Hook into Planner._extensions
+  function installHook() {
+    if (typeof window.Planner === 'undefined') {
+      // Try to bridge from top-level const
+      const p = (function(){ try { return (typeof Planner !== 'undefined') ? Planner : null; } catch(e){ return null; }})();
+      if (p) window.Planner = p;
+    }
+    if (!window.Planner || !window.Planner._extensions) {
+      setTimeout(installHook, 300);
+      return;
+    }
+    
+    // Remove old fix50 if present (hot-swap)
+    if (Array.isArray(window.Planner._extensions)) {
+      window.Planner._extensions = window.Planner._extensions.filter(fn => 
+        !(fn && fn.__v292Dfix51 === true || fn.__v292Dfix50 === true)
+      );
+    }
+    
+    const fix51Ext = function(plan, ctx) {
+      const state = resolveState();
+      if (!plan) return plan;
+      if (typeof plan.sys === 'string') {
+        const block = buildArchBlock(state);
+        if (block && !plan.sys.includes('【キャラ声紋】') && !plan.sys.includes('【NPC 主導性')) {
+          plan.sys = block + '\n\n' + plan.sys;
+        }
+      }
+      return plan;
+    };
+    fix51Ext.__v292Dfix51 = true;
+    
+    window.Planner._extensions.push(fix51Ext);
+    console.log('[v292Dfix51] conversation architecture installed (with state resolver fix)');
+  }
+  installHook();
+  
+  // Expose API
+  if (!window.Planner) window.Planner = {};
+  window.Planner.v292Dfix51 = {
+    resolveState,
+    inferVoice,
+    buildVoiceBlock,
+    buildArchBlock
+  };
+})();
