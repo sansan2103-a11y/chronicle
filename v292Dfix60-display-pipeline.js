@@ -5,7 +5,7 @@
 //   fix58 で Hermes に <say who="..."> タグと <summary>...</summary> タグの使用を
 //   指示したため、narrative テキストにこれらが含まれる。UI.renderNarr が
 //   そのまま HTML エスケープすると画面に「<say who="ミリア">…</say>」が
-//   生のまま表示される。
+//   生のまま(��示される。
 //
 //   fix60 では UI.renderNarr を wrap し、レンダリング前に：
 //     - <summary>...</summary> ブロックを完全除去（fix58 parseExt の保険）
@@ -94,4 +94,3 @@
 
   tryWrap();
 })();
-「」
