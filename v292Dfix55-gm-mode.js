@@ -281,14 +281,22 @@
   function boot() {
     watchSettingsOverlay();
     watchInputPlaceholder();
+    // re-install sys/parse hooks so we land AFTER later-loading extensions
+    // (some extensions like v292Dfix54 replace the sys chain instead of prepending,
+    // so being at the tail of _extensions is the only way to survive).
+    installSysHook();
+    installParseHook();
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);
   } else {
     boot();
   }
-  // single delayed retry covers late DOM (no setInterval cascade)
+  // delayed retries cover late DOM and late-loading sys extensions
+  // (no setInterval cascade — explicit one-shot timers only)
   setTimeout(boot, 1500);
+  setTimeout(boot, 4000);
+  setTimeout(boot, 9000);
 
   // ---------- Public API ----------
   window.Chr6GmMode = {
