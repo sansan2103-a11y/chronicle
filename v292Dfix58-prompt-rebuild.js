@@ -7,15 +7,15 @@
 //   3. 台詞を <say who="..."> タグで囲む指示（fix59 hybrid extractor が拾う）
 //   4. Hermes 自身に <summary>...</summary> タグで「物語の現在地」を書かせる
 //
-// 副作用:
-//   - JSON parse 失敗 ×2 が消える（そもそも JSON 求めない）
-//   - クロスターン台詞重複が消える（過去 narrative を渡さないから）
-//   - 文学的指針セクション（Show Don't Tell、防衛機制、口調など）は全部キープ
+// v2 (self-healing):
+//   既存の sysExt extensions に「sys を完全置換するもの」が複数あり、
+//   fix58 を中間位置に push するだけだと後続に上書きされる。
+//   解決: setInterval で fix58 hook を配列末尾に維持する。
 //
 // 使う hook:
-//   Planner._extensions       : sys プロンプト書き換え
+//   Planner._extensions       : sys プロンプト書き換え（末尾維持）
 //   Planner._userExtensions   : user payload 書き換え（delta-aware）
-//   Planner._parseExtensions  : <summary> 抽出 → S.rollingSummary 保存
+//   Planner._parseExtensions  : <summary> 抽出 → S.rollingSummary 保存（末尾維持）
 // =====================================================================
 (function(){
   if (window.__v292Dfix58Active) return;
@@ -36,12 +36,10 @@
   }
 
   function buildRollingSummary(state){
-    // 優先: 前ターンの Hermes 出力から保存済みの要約
     if (state.rollingSummary && typeof state.rollingSummary === 'string' &&
         state.rollingSummary.trim().length > 0){
       return state.rollingSummary.trim();
     }
-    // フォールバック (方式 1 雑ヒューリスティック): 最終 narrative の冒頭抜粋
     var turns = state.turns || [];
     if (!turns.length) return '（物語の開始時点）';
     var last = turns[turns.length - 1];
@@ -50,7 +48,6 @@
   }
 
   function buildRecentDialoguesList(state, maxN){
-    // 直近の台詞を最大 maxN 本、新しい順に並べて返す（[{speaker, text}, ...]）
     var lines = [];
     var turns = state.turns || [];
     var extract = window.__v292 && window.__v292.dialogueLayout && window.__v292.dialogueLayout.extractDialogues;
@@ -73,36 +70,36 @@
   }
 
   // ---------------------------------------------------------------
-  // 1. sys プロンプト書き換え
+  // 1. sys プロンプト書き換え（末尾に出力形式仕様を追加）
   // ---------------------------------------------------------------
-  // 戦略: 既存 sys の文学的指針はキープ、JSON 関連セクションのみ削除して
-  //       自由プローズ + XML タグ + summary 指示の新セクションを末尾に追加
+  // 注意: 他の sysExt が sys を完全置換するため、本 hook は配列末尾で実行されるよう
+  //       setInterval で維持する。受け取る ctx.sys は最終形なので、不要な regex 置換が
+  //       マッチしなくても問題ない。我々の責任は「出力形式仕様を末尾に append」のみ。
   function sysExt(ctx){
     var sys = ctx.sys || '';
 
-    // (a) JSON のみ返してください → 撤回
+    // (a) 旧 JSON のみ要件があれば撤回
     sys = sys.replace(
       /必ず以下の全制約を守り、JSONのみを返してください。余分なテキストは一切出力禁止。/g,
       '必ず以下の文学的指針を守ってください。'
     );
 
-    // (b) 【出力形式 — このJSONのみ返す】〜 次の 【 直前まで（narrativeの注意も巻き込む）
+    // (b) 旧 JSON 出力スキーマセクションが残っていれば削除
     sys = sys.replace(
       /【出力形式 — このJSONのみ返す】[\s\S]*?(?=\n【|$)/g,
       ''
     );
 
-    // (c) お手本の JSON 配列例（末尾）を削除
+    // (c) 旧 JSON 配列例セクションが残っていれば削除
     sys = sys.replace(
-      /【お手本となる正しいnarrative出力例】[\s\S]*$/g,
+      /【お手本となる正しいnarrative出力例】[\s\S]*?(?=\n【|$)/g,
       ''
     );
 
-    // (d) narrative 配列要件への軽い言い換え
-    sys = sys.replace(/narrativeを生成すること/g, '描写を生成すること');
-    sys = sys.replace(/narrative\s*\[\]/g, '描写');
+    // (d) 既に fix58 のセクションが含まれていれば二重 append を防ぐ
+    if (sys.indexOf('【出力形式 ★絶対遵守】') !== -1) return sys;
 
-    // (e) 新セクション追加（出力形式仕様）
+    // (e) 新セクション追加
     sys += '\n\n【出力形式 ★絶対遵守】\n' +
       'プレイヤー入力の「直後」に起こることだけを、自由な散文で描写してください。\n' +
       'JSON 出力は禁止。地の文・心理描写・行動描写は自由なプローズで書く。\n\n' +
@@ -125,21 +122,16 @@
   }
 
   // ---------------------------------------------------------------
-  // 2. user payload 書き換え
+  // 2. user payload 書き換え（delta-aware）
   // ---------------------------------------------------------------
-  // 戦略: 既存の recentHistory (6 ターン full text) を捨てて、
-  //       storySoFar (rolling summary) + recentScenes (直近 2 ターン full) +
-  //       recentDialogues (直近台詞 5 本) + deltaInstruction に置換
   function userExt(ctx){
     var user = ctx.user;
     try {
       var parsed = JSON.parse(user);
       var state = ctx.state || getStateLocal();
 
-      // storySoFar: rolling summary
       parsed.storySoFar = buildRollingSummary(state);
 
-      // recentScenes: 直近 2 ターン full text（リキャップ防止に「言い換え禁止」を強調）
       var turns = state.turns || [];
       var recent = turns.slice(-2);
       parsed.recentScenes = recent.map(function(t){
@@ -149,16 +141,13 @@
         };
       });
 
-      // recentDialogues: 直近台詞 5 本
       parsed.recentDialogues = buildRecentDialoguesList(state, 5);
 
-      // delta 指示を強化
       var inputText = (parsed.currentInput && parsed.currentInput.text) || '';
       parsed.deltaInstruction =
         '上記入力「' + inputText + '」の直後だけを描写してください。' +
         'recentScenes / recentDialogues の内容は「これまでの文脈」であり、再演・言い換え・引用は禁止。';
 
-      // 古い recentHistory は捨てる
       delete parsed.recentHistory;
 
       return JSON.stringify(parsed, null, 2);
@@ -169,33 +158,26 @@
   }
 
   // ---------------------------------------------------------------
-  // 3. parse: <summary> タグを抽出 → S.rollingSummary に保存
-  //          + plan.narrative から <summary> ブロックを除去
+  // 3. parse: <summary> 抽出 + 除去
   // ---------------------------------------------------------------
   function parseExt(plan, info){
     try {
       var raw = (info && info.raw) || '';
       var state = (info && info.state) || getStateLocal();
 
-      // <summary>...</summary> を抽出
       var m = raw.match(/<summary>([\s\S]*?)<\/summary>/);
       if (m){
         var summary = (m[1] || '').trim();
         if (summary){
           state.rollingSummary = summary;
-          // 永続化
           try {
             if (typeof state.save === 'function') state.save();
             else localStorage.setItem('chr6', JSON.stringify(state));
           } catch(e){}
           console.log(TAG, 'summary captured (' + summary.length + ' chars):', summary.slice(0, 60) + (summary.length > 60 ? '…' : ''));
         }
-      } else {
-        // 取れなかった: rollingSummary を更新しない（次ターンで方式 1 fallback が動く）
-        console.log(TAG, 'no <summary> tag found; will use heuristic fallback next turn');
       }
 
-      // plan.narrative から <summary> ブロックを除去（表示時にユーザーに見せない）
       if (plan && plan.narrative){
         var stripSummary = function(s){
           return String(s).replace(/<summary>[\s\S]*?<\/summary>/g, '').trim();
@@ -213,8 +195,22 @@
   }
 
   // ---------------------------------------------------------------
-  // install hooks
+  // install + self-heal: 配列末尾位置を維持
   // ---------------------------------------------------------------
+  function ensureAtTail(arr, fn){
+    if (!arr || !fn) return false;
+    var i = arr.indexOf(fn);
+    if (i < 0){
+      arr.push(fn);
+      return true;
+    } else if (i < arr.length - 1){
+      arr.splice(i, 1);
+      arr.push(fn);
+      return true;
+    }
+    return false; // 既に末尾
+  }
+
   function install(){
     var P = window.Planner;
     if (!P){
@@ -225,20 +221,22 @@
     P._userExtensions = P._userExtensions || [];
     P._parseExtensions = P._parseExtensions || [];
 
-    if (!P._extensions.__v292Dfix58){
-      P._extensions.push(sysExt);
-      P._extensions.__v292Dfix58 = true;
-    }
-    if (!P._userExtensions.__v292Dfix58){
-      P._userExtensions.push(userExt);
-      P._userExtensions.__v292Dfix58 = true;
-    }
-    if (!P._parseExtensions.__v292Dfix58){
-      P._parseExtensions.push(parseExt);
-      P._parseExtensions.__v292Dfix58 = true;
-    }
+    var movedSys = ensureAtTail(P._extensions, sysExt);
+    var movedUser = ensureAtTail(P._userExtensions, userExt);
+    var movedParse = ensureAtTail(P._parseExtensions, parseExt);
 
-    console.log(TAG, 'prompt rebuild active (sys + user + summary parse)');
+    P._extensions.__v292Dfix58 = true;
+    P._userExtensions.__v292Dfix58 = true;
+    P._parseExtensions.__v292Dfix58 = true;
+
+    if (movedSys || movedUser || movedParse){
+      console.log(TAG, 'hooks ensured at array tail (sys+user+parse) — sysMoved=' + movedSys + ' userMoved=' + movedUser + ' parseMoved=' + movedParse);
+    }
   }
+
   install();
+  // 他 feature が後から push したら末尾を奪われる → 3 秒毎に末尾位置を再確保
+  setInterval(install, 3000);
+
+  console.log(TAG, 'prompt rebuild active (v2 self-healing)');
 })();
