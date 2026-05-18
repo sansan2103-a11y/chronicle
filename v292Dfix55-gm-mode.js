@@ -303,7 +303,7 @@
         });
       } catch (e) {}
     },
-    buildBlock: buildGmBlock
+    buildBlock: function (name) { return buildGmBlock(name || getHeroName()); }
   };
 
   console.log(TAG, 'loaded — current mode:', getMode());
