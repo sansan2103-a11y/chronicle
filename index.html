@@ -597,7 +597,7 @@ const Api = {
     // v292 Tier 1.5: JSON モード対応。response_format=json_object 有効時、
     // 正当な JSON キー (playerIntent, npcInnerLife 等) と true/false/null
     // リテラルで誤発火するのを防ぐ。
-    let cleaned = text
+    let cleaned = text      .replace(/<\/?[a-zA-Z][^>]*>/g, '')
       .replace(/"[A-Za-z][A-Za-z0-9_]*"\s*:\s*"[a-zA-Z|]+"/g, '')  // JSON キー+enum値ペア ("kind": "comfort")
       .replace(/"[A-Za-z][A-Za-z0-9_]*"\s*:/g, '')   // 残り JSON キー名
       .replace(/:\s*"[a-zA-Z|]+"/g, '')               // 残り enum 値
