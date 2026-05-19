@@ -4,10 +4,10 @@
 // 真因 (Chrome MCP で実 API トレース、ext#7 を behavior fingerprint で特定):
 //   features.js の fix27 (line ~4697) は Planner._parseExtensions に
 //   parse-side hook を push。この hook は plan.narrative の各行を
-//   forEach し、isCliche(text) で /息を吞[んみ]/ 等の正規表現に
+//   forEach し、isCliche(text) で /息を呑[んみ]/ 等の正規表現に
 //   ヒットすると **その行全体** を drop する。
 //
-//   結果: 300字超の濃い物理描写パラグラフの中に「サクラは息を吞んだ。」が
+//   結果: 300字超の濃い物理描写パラグラフの中に「サクラは息を呑んだ。」が
 //   1文だけ含まれていると、パラグラフがまるごと消滅し、画面には
 //   別行の薄い内省ラップだけが残る → 「ゲーム成立してるのに微妙」状態。
 //
@@ -24,7 +24,7 @@
 //     AFTER  fix: 358字 → 162字 (cliche 1文だけ削って残す、3行)
 //
 //   実 API E2E テスト:
-//     DO「サクラの頰を掌で叩く」→ Hermes 4 が「皮膚と骨がぶつかる鈍い音」
+//     DO「サクラの頼を掌で叩く」→ Hermes 4 が「皮膚と骨がぶつかる鈍い音」
 //     「ミリアは地面に這いつくばり、引き抜かれた眼球の傷口から…」等の
 //     物理描写を返し、それが画面まで通った。
 //
@@ -41,9 +41,11 @@
   var TAG = '[v292Dfix68:cliche-sentence-aware]';
 
   // fix27 と同じクリシェリスト
+  // Unicode escape を使う理由: CodeMirror / IME 経由で 呑(U+5451) が
+  // 吞(U+541E) に化けるのを防ぐ (実機で起きた)
   var CLICHES = [
     /鼓動が速[くまっ]/,
-    /息を吞[んみ]/,
+    /息を呑[んみ]/,
     /身体が冷え/,
     /体が冷え/,
     /モナリザの(微笑|笑み)/,
@@ -146,7 +148,7 @@
     return true;
   }
 
-  // selfHeal: 他のフィーチャーが配列を replace する可能性に備えて末尾位置を保つ
+  // selfHeal: 他のフィーチャが配列を replace する可能性に備えて末尾位置を保つ
   // (今回は position 0 を維持したい)
   function selfHeal(){
     try {
