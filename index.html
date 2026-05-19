@@ -1157,7 +1157,7 @@ const UI = {
   setLoading(on) {
     const btn = document.getElementById('sendBtn');
     btn.disabled = on; btn.textContent = on ? '⋯' : '▶';
-    if (on) this.setStatus('生成中…'); else this.setStatus('');
+    if (on) this.setStatus('物語を紡いでいます…'); else this.setStatus('');
   },
 
   renderNarr(text) {
