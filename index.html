@@ -602,8 +602,8 @@ const Api = {
       .replace(/"[A-Za-z][A-Za-z0-9_]*"\s*:/g, '')   // 残り JSON キー名
       .replace(/:\s*"[a-zA-Z|]+"/g, '')               // 残り enum 値
       .replace(/\b(true|false|null)\b/g, '');         // JSON リテラルを除外
-    const enMatches = (cleaned.match(/[A-Za-z][A-Za-z0-9_.]{2,}/g) || []).length;
-    const zhMatches = (cleaned.match(/[过这没现还说让对给从将们点东几亲爱觉吗么吧呢哪谁怎样此后状围]/g) || []).length;
+    const enMatches = (cleaned.match(/[A-Za-z][]{2,}/g) || []).length;
+    const zhMatches = (cleaned.match(/[过这现还说让对给从们东几亲爱觉吗么吧呢哪谁怎样围]/g) || []).length;
     return enMatches >= 3 || zhMatches >= 2;
   },
 
@@ -1109,9 +1109,9 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
       if (!line) return '';
       let t = line;
       // 英字3文字以上の連続を削除
-      t = t.replace(/[A-Za-z][A-Za-z0-9_.]{2,}/g, '');
+      t = t.replace(/[A-Za-z][]{2,}/g, '');
       // 中国簡体字（日本語で使わないもの）を削除h
-      t = t.replace(/[过这没现还说让对给从将们点东几亲爱觉吗么吧呢哪谁怎样此后状围]/g, '');
+      t = t.replace(/[过这现还说让对给从们东几亲爱觉吗么吧呢哪谁怎样围]/g, '');
       // 連続スペースを1つに
       t = t.replace(/\s+/g, ' ').trim();
       return t;
