@@ -1,8 +1,10 @@
 /* v292Dfix79 — momentum-anchor
  * 課題A(前進力)とB(無表情アンカー)のプロンプト即効対策。
- * Planner._extensions に同型関数を push し、system prompt 末尾(=recency最高)に
+ * Planner._extensions に同型関数を置き、system prompt 末尾(=recency最高)に
  * 「場面前進と反応の鮮度」ルールを追記する。fix76 土台の上に重ねる。
  * 契約: ext(ctx{sys,state}) -> 改変後の sys 文字列を返す。
+ * ※ 後段の dedup 拡張が sys を再構築して追記を捨てるため、
+ *   install で常に _extensions の末尾に再配置して最後に走らせる。
  */
 (function(){
 'use strict';
@@ -29,14 +31,14 @@ function install(){
 try{
 var P = window.Planner;
 if(!P || !Array.isArray(P._extensions)) return;
-if(!P._extensions.some(function(f){ return f && f.__fix79 === "momentum-anchor"; })){
-P._extensions.push(fix79Ext);
+for(var i = P._extensions.length - 1; i >= 0; i--){
+if(P._extensions[i] && P._extensions[i].__fix79 === "momentum-anchor"){ P._extensions.splice(i, 1); }
 }
+P._extensions.push(fix79Ext);
 window.__v292Dfix79Active = true;
 }catch(e){}
 }
 
 install();
 setInterval(install, 2000);
-try{ if(window.console && console.log) console.log("[v292Dfix79] momentum-anchor installed"); }catch(e){}
 })();
