@@ -275,6 +275,28 @@
       if (!turns.length) return 0;
       var hero = getHero(st);
       var existing = collectExistingKeys(stream);
+      // v292Dfix89: fix66 runs last, so remove non-speech cards that EARLIER
+      // render hooks may have injected (additive repair never removed them).
+      // Citations like 「X」という事実 are not dialogue and must not stay in the log.
+      try {
+        var __allNarr = '';
+        for (var __ti = 0; __ti < turns.length; __ti++){
+          if (turns[__ti]) __allNarr += '\n' + preprocessNarrative(turns[__ti].narrative);
+        }
+        var __cards = stream.querySelectorAll('.v292-dlg-card');
+        for (var __ci = 0; __ci < __cards.length; __ci++){
+          var __c = __cards[__ci];
+          var __nm = __c.querySelector('.dlg-name');
+          var __tx = __c.querySelector('.dlg-text');
+          if (!__tx) continue;
+          // skip input/STORY badge cards (📖 展開 等) — only plain dialogue cards
+          if (__nm && /📖|⚔|💭|🎭|✨|展開/.test(__nm.textContent || '')) continue;
+          var __ct = (__tx.textContent || '').trim();
+          if (__ct && isNonSpeechQuote(__allNarr, __ct) && __c.parentNode){
+            __c.parentNode.removeChild(__c);
+          }
+        }
+      } catch(__e){}
       var added = 0;
       for (var i = 0; i < turns.length; i++){
         var t = turns[i];
