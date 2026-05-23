@@ -637,7 +637,7 @@ const Api = {
         };
         // Tier 1: OpenRouter の JSON モード（Hermes 系のみ。Llama 微調整系は対象外）
         if (/hermes/i.test(model)) {
-          body.response_format = { type: 'json_object' };
+          /* v292Dfix87: disabled json_object - fix58 outputs prose, not JSON */ void 0;
         }
         res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
@@ -1066,7 +1066,7 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
       } catch {
         console.warn('JSON parse failed even after repair, using fallback:', rawText.slice(0,200));
       // フォールバック：生テキストをナラティブとして使う
-      const lines = rawText.trim().split('\n').filter(l=>l.trim()).slice(0,6);
+      const lines = rawText.trim().split('\n').filter(l=>l.trim()); /* v292Dfix87: removed slice(0,6) cap */
       plan = {
         playerIntent: { kind: 'other', tone: 'neutral' },
         branchCandidates: [],
