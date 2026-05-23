@@ -2107,6 +2107,10 @@
       while ((m = rxC.exec(src))){
         var dlg = m[1].trim();
         if (hasText(dlg)) continue;
+        // v292Dfix89: skip non-speech quotes — 「X」という事実 / のような / みたいな 等は
+        // 引用・概念であって発話ではないので会話ログに出さない。
+        var __afterC = src.slice(m.index + m[0].length, m.index + m[0].length + 10);
+        if (/^(?:という(?:事実|言葉|もの|こと|名前?|概念|感覚|感じ|気持ち|思い|考え|意味|響き|噂|話|風|点|わけ|の)|といった(?:もの|こと)|のような|のように|みたいな|みたいに|的な)/.test(__afterC)) continue;
         var pos = m.index;
         var preStart = Math.max(0, pos - 150);
         var preContext = src.substring(preStart, pos);
@@ -2133,6 +2137,14 @@
         var __heroName2 = (cast.hero && cast.hero.name) ? cast.hero.name : '主人公';
         if (q) pushUnique(__heroName2, q[1], true);
       }
+      // v292Dfix89: stable reading order — sort extracted dialogue by first
+      // occurrence in source so the log matches narrative order (Pattern A/B/C
+      // run in pattern order, not text order) and stays stable as turns grow.
+      out.sort(function(a,b){
+        var ia = src.indexOf(a.text); if (ia === -1) ia = Number.MAX_SAFE_INTEGER;
+        var ib = src.indexOf(b.text); if (ib === -1) ib = Number.MAX_SAFE_INTEGER;
+        return ia - ib;
+      });
       return out;
     }
 
