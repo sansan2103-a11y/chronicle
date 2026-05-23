@@ -202,6 +202,24 @@
     return set;
   }
 
+  // v292Dfix89: a 「quote」 immediately followed by these is a citation/concept,
+  // not speech (e.g. 「襲われた」という事実). Used to drop non-dialogue from the log.
+  function isNonSpeechQuote(narr, text){
+    if (!text || !narr) return false;
+    var QO = '「『〝', QC = '」』〟';
+    for (var o = 0; o < QO.length; o++){
+      for (var c = 0; c < QC.length; c++){
+        var needle = QO.charAt(o) + text + QC.charAt(c);
+        var idx = narr.indexOf(needle);
+        if (idx !== -1){
+          var after = narr.slice(idx + needle.length, idx + needle.length + 10);
+          return /^(?:という(?:事実|言葉|もの|こと|名前?|概念|感覚|感じ|気持ち|思い|考え|意味|響き|噂|話|風|点|わけ|の)|といった(?:もの|こと)|のような|のように|みたいな|みたいに|的な)/.test(after);
+        }
+      }
+    }
+    return false;
+  }
+
   // turn から全 dialogue を抽出 (preprocess → dl.extractDialogues = fix65-wrapped)
   function extractFromTurn(turn){
     var narr = turn && turn.narrative;
@@ -216,6 +234,8 @@
         for (var i = 0; i < ds.length; i++){
           var d = ds[i];
           if (!d || !d.text) continue;
+          // v292Dfix89: skip non-speech quotes (citation/concept, not dialogue)
+          if (isNonSpeechQuote(preprocessed, String(d.text))) continue;
           var k = dialogueKey(d.speaker, d.text);
           if (seen[k]) continue;
           seen[k] = true;
@@ -225,6 +245,13 @@
     } catch(e){
       try { console.warn(TAG, 'extract err on turn:', e && e.message); } catch(_){}
     }
+    // v292Dfix89: stable reading order within the turn (pattern/wrapper order
+    // is not text order; sort by first occurrence so the log follows narrative).
+    out.sort(function(a,b){
+      var ia = preprocessed.indexOf(a.text); if (ia === -1) ia = Number.MAX_SAFE_INTEGER;
+      var ib = preprocessed.indexOf(b.text); if (ib === -1) ib = Number.MAX_SAFE_INTEGER;
+      return ia - ib;
+    });
     return out;
   }
 
