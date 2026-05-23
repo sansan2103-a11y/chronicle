@@ -3724,6 +3724,11 @@
     while ((m = rxC.exec(src))){
       var dlgC = m[1].trim();
       if (hasText(dlgC)) continue;
+      // v292Dfix89: skip non-speech quotes (「X」という事実 / のような / みたいな 等は
+      // 引用・概念であって発話ではない)。Pattern C の bare quote 拾いが地の文を
+      // 会話ログに混ぜる原因だったので除外する。
+      var __afterEC = src.slice(m.index + m[0].length, m.index + m[0].length + 10);
+      if (/^(?:という(?:事実|言葉|もの|こと|名前?|概念|感覚|感じ|気持ち|思い|考え|意味|響き|噂|話|風|点|わけ|の)|といった(?:もの|こと)|のような|のように|みたいな|みたいに|的な)/.test(__afterEC)) continue;
       var pos = m.index;
       var preContext = src.substring(Math.max(0, pos - 200), pos);
       var speaker = '';
@@ -3766,6 +3771,14 @@
       if (q) pushUnique(__heroName2, q[1], true);
     }
 
+    // v292Dfix89: stable reading order — sort by first occurrence in source
+    // so the conversation log follows narrative order and stays stable as
+    // turns accumulate (Pattern A–H+C run in pattern order, not text order).
+    out.sort(function(a,b){
+      var ia = src.indexOf(a.text); if (ia === -1) ia = Number.MAX_SAFE_INTEGER;
+      var ib = src.indexOf(b.text); if (ib === -1) ib = Number.MAX_SAFE_INTEGER;
+      return ia - ib;
+    });
     return out;
   }
 
