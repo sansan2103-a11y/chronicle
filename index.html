@@ -820,12 +820,14 @@ const Planner = {
     const hero  = S.cast.hero;
     const npcs  = S.cast.npcs;
     const scene = S.scene;
-    const turns = S.turns.slice(-6);
+    // v292Dfix91: 履歴の圧縮を緩和（6→8ターン / 各 180→300字, 最新 350→420字）。
+    // 長文プロセ物語で直前ターンの感情・弧が切れてキャラ反応が繋がらない問題への対策。
+    const turns = S.turns.slice(-8);
     const hist  = turns.map((t, i) => {
       const narr = t.narrative ? t.narrative.replace(/\n/g, '　') : '';
       const isLast = (i === turns.length - 1);
       const prefix = isLast ? '★直前' : `${i - turns.length + 1}番前`;
-      return `[${prefix}][${t.inputType}] ${t.playerText}\n描写: ${narr.slice(0, isLast ? 350 : 180)}`;
+      return `[${prefix}][${t.inputType}] ${t.playerText}\n描写: ${narr.slice(0, isLast ? 420 : 300)}`;
     }).join('\n---\n');
 
     // NPCプロファイルブロック
@@ -2230,7 +2232,7 @@ G.init();
   <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix64"></script>
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=v292Dfix74"></script>
-  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix89g"></script>
+  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix91"></script>
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
     <script src="v292Dfix70-dialogue-order.js?cb=v292Dfix70"></script>

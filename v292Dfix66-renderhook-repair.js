@@ -51,6 +51,21 @@
 
   var TAG = '[v292Dfix66:renderhook-repair]';
 
+  // v292Dfix91: 会話ログのカードに、引用に隣接する地の文（動作・トーン）を
+  // sub-text として添えるためのスタイル。--dim は有効な配色なので fallback 付きで使用。
+  (function injectBeatStyle(){
+    try {
+      if (document.getElementById('v292Dfix91-beat-style')) return;
+      var st = document.createElement('style');
+      st.id = 'v292Dfix91-beat-style';
+      st.textContent =
+        '.v292-dlg-card .dlg-beat{font-size:12px;color:var(--dim,#6868a0);'
+        + 'line-height:1.4;margin-top:3px;font-style:italic;opacity:.92;'
+        + 'word-break:break-word}';
+      (document.head || document.documentElement).appendChild(st);
+    } catch(e){}
+  })();
+
   // ---------- helpers ----------
   function escHtml(s){
     return String(s == null ? '' : s)
@@ -220,6 +235,87 @@
     return false;
   }
 
+  // ---------- v292Dfix91: dialogue beat (会話ログに地の文の動作/トーンを添える) ----------
+  // 引用に隣接する地の文（動作・表情・トーン）を1文抜き出して sub-text にする。
+  // narrative 本体に書かれた "reaction" を会話ログにも反映し、bare quote だけの薄さを解消。
+  function findBeat(narr, speaker, text){
+    if (!narr || !text) return '';
+    var QO = '「『〝', QC = '」』〟';
+    var idx = -1, needleLen = 0;
+    for (var o = 0; o < QO.length && idx === -1; o++){
+      for (var c = 0; c < QC.length && idx === -1; c++){
+        var needle = QO.charAt(o) + text + QC.charAt(c);
+        var p = narr.indexOf(needle);
+        if (p !== -1){ idx = p; needleLen = needle.length; }
+      }
+    }
+    if (idx === -1) return '';
+    // 引用を含む1文の範囲を取る（文区切り = 。．！？!?改行）
+    var term = /[。．！？!?\n]/;
+    var start = idx;
+    while (start > 0 && !term.test(narr.charAt(start - 1))) start--;
+    var end = idx + needleLen;
+    while (end < narr.length && !term.test(narr.charAt(end))) end++;
+    if (end < narr.length) end++; // 文末記号を含める
+    var sentence = narr.slice(start, end);
+    // 引用スパンを全部除去（動作・トーンの地の文だけ残す）
+    var beat = sentence.replace(/[「『〝][^「」『』〝〟]*[」』〟]/g, '');
+    // 話者名 + 助詞の先頭プレフィックスを除去（例: サクラは… / サクラ、…）
+    if (speaker){
+      var sp = String(speaker).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      beat = beat.replace(new RegExp('^[\\s、。]*' + sp + '(?:は|が|の|も|に|へ|と|を|、)?'), '');
+    }
+    beat = beat
+      .replace(/\s+/g, '')
+      .replace(/^[、。，,・…ー—\-\s]+/, '')
+      .replace(/[、，\s]+$/, '')
+      .trim();
+    if (beat.length < 2) return '';
+    if (beat.length > 40) beat = beat.slice(0, 40) + '…';
+    return beat;
+  }
+
+  // 全カードに beat を後付け（base レンダラー由来も fix66 追記分も一律に処理）。
+  // data-beat-checked で再処理を防ぐ（selfHeal 2s ループでの flicker/重複を回避）。
+  function enhanceBeats(stream, allNarr){
+    if (!stream || !allNarr) return;
+    try {
+      var cards = stream.querySelectorAll('.v292-dlg-card');
+      for (var i = 0; i < cards.length; i++){
+        var c = cards[i];
+        if (c.getAttribute('data-beat-checked')) continue;
+        var nameEl = c.querySelector('.dlg-name');
+        var textEl = c.querySelector('.dlg-text');
+        var bodyEl = c.querySelector('.dlg-body');
+        if (!textEl || !bodyEl) continue;
+        // 展開/入力バッジカード（📖 等）は対象外
+        if (nameEl && /📖|⚔|💭|🎭|✨|展開/.test(nameEl.textContent || '')){
+          c.setAttribute('data-beat-checked', '1'); continue;
+        }
+        if (c.querySelector('.dlg-beat')){ c.setAttribute('data-beat-checked', '1'); continue; }
+        var nm = '';
+        if (nameEl){
+          var fc = nameEl.firstChild;
+          if (fc && fc.nodeType === 3) nm = (fc.textContent || '').trim();
+          if (!nm) nm = (nameEl.textContent || '').trim().split(/\s|📖|⚔|💭|🎭|✨/)[0];
+        }
+        if (nm === '???') nm = '';
+        var tx = (textEl.textContent || '').trim();
+        c.setAttribute('data-beat-checked', '1');
+        if (!tx) continue;
+        var beat = findBeat(allNarr, nm, tx);
+        if (beat){
+          var bd = document.createElement('div');
+          bd.className = 'dlg-beat';
+          bd.textContent = beat;
+          bodyEl.appendChild(bd);
+        }
+      }
+    } catch(e){
+      try { console.warn(TAG, 'enhanceBeats err:', e && e.message); } catch(_){}
+    }
+  }
+
   // turn から全 dialogue を抽出 (preprocess → dl.extractDialogues = fix65-wrapped)
   function extractFromTurn(turn){
     var narr = turn && turn.narrative;
@@ -314,6 +410,10 @@
           added++;
         }
       }
+      // v292Dfix91: 全カードに地の文 beat を後付け（__allNarr は上で構築済みを再利用）。
+      try {
+        if (typeof __allNarr === 'string' && __allNarr) enhanceBeats(stream, __allNarr);
+      } catch(__be){}
       if (added > 0){
         stream.scrollTop = stream.scrollHeight;
         try { console.log(TAG, 'repaired', added, 'dialogue cards'); } catch(_){}
