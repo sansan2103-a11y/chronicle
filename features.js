@@ -8748,11 +8748,18 @@
       return;
     }
     
-    // Remove old fix50 if present (hot-swap)
+    // Remove old fix50/51 if present (hot-swap).
+    // v292Dfix92: splice IN PLACE instead of reassigning the array. Reassigning
+    // (= ...filter(...)) created a NEW array, dropping every other module's
+    // __v292DfixNN self-heal flag, which made all their setInterval reinstallers
+    // re-fire (log spam + transient duplicate sysExts that fix90 then had to clean).
+    // In-place splice preserves the array identity + flag props, so no cascade.
     if (Array.isArray(window.Planner._extensions)) {
-      window.Planner._extensions = window.Planner._extensions.filter(fn => 
-        !(fn && fn.__v292Dfix51 === true || fn.__v292Dfix50 === true)
-      );
+      const _ex = window.Planner._extensions;
+      for (let _i = _ex.length - 1; _i >= 0; _i--) {
+        const _fn = _ex[_i];
+        if (_fn && (_fn.__v292Dfix51 === true || _fn.__v292Dfix50 === true)) _ex.splice(_i, 1);
+      }
     }
     
     const fix51Ext = function(plan, ctx) {
