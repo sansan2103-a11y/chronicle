@@ -8791,136 +8791,98 @@
 })();
 
 /* =====================================================================
- * v292Dfix93: cast-scope guard for prompt injection ("設定スルー" fix)
+ * v292Dfix93: reset hygiene — clear accumulated scenario state on reset
  * ---------------------------------------------------------------------
- * Root cause: character-state stores accumulate EVERY character from EVERY
- * scenario/slot and are never scoped to the current cast or cleared on reset:
- *   - v292Dfix77States   (GLOBAL across slots — the worst offender)
- *   - chr6_char_states_<slot>, chr6_char_flags_<slot>  (name-keyed)
- *   - chr6_relations_<slot>  (keyed by "from||to" pairs)
- * Their sysExts inject these characters into the system prompt, so a fresh
- * scene gets contaminated with old-scenario characters (e.g. ミリア appears
- * in the prompt even though the current cast is カエデ/サクラ/サヤ).
+ * Root cause of "設定スルー" (settings/old-characters bleeding into a new
+ * scenario): character/scenario state accumulates across scenarios in MANY
+ * stores — localStorage (v292Dfix77States [GLOBAL], chr6_char_states_*,
+ * chr6_char_flags_*, chr6_relations_*, chr6_*_summaries_*, etc.) AND in-memory
+ * caches (window.__v292Dfix77Store) AND saved few-shot examples. The reset
+ * buttons only cleared the main "chr6" save, so every other store survived and
+ * old characters (e.g. ミリア/フィオナ from a previous game) kept getting
+ * injected into a fresh scene's system prompt.
  *
- * Fix (NON-DESTRUCTIVE, slot-safe): wrap Planner.build so that DURING build
- * (the synchronous window in which the sysExts read these stores) the stores
- * are temporarily reduced to ONLY the current cast, then fully restored in a
- * finally{} immediately after build returns. build is synchronous, so no other
- * code observes the reduced state and other slots' data is never lost. This
- * enforces the invariant "a character not in the current cast is never injected
- * into the prompt" without deleting anyone's saved data.
+ * Earlier attempt (build-time localStorage pruning) was INEFFECTIVE because the
+ * worst offender reads an in-memory cache, not localStorage, and names are also
+ * baked into output-format examples. The robust, source-agnostic fix is to make
+ * reset clear EVERY accumulating store and then RELOAD — a reload re-initialises
+ * all in-memory caches from the (now-cleared) localStorage, so nothing stale can
+ * survive a reset. resetAll wipes everything; resetStory keeps cfg + cast + scene
+ * settings (the "chr6" main save) and only wipes per-scenario state.
  * ===================================================================== */
 (function v292Dfix93(){
   if (window.__v292Dfix93) return;
   window.__v292Dfix93 = true;
   var TAG = '[v292Dfix93]';
 
-  function getPlanner(){
-    if (window.Planner) return window.Planner;
-    try { return (typeof Planner !== 'undefined') ? Planner : null; } catch(e){ return null; }
-  }
-  function getState(){
-    try { if (typeof S !== 'undefined' && S) return S; } catch(e){}
-    return (window.S || null);
-  }
-
-  // Set of names in the current cast (hero + npcs). null = unknown → no pruning.
-  function castSet(){
-    var st = getState();
-    if (!st || !st.cast) return null;
-    var set = Object.create(null);
-    if (st.cast.hero && st.cast.hero.name) set[String(st.cast.hero.name).trim()] = 1;
-    if (Array.isArray(st.cast.npcs)){
-      st.cast.npcs.forEach(function(n){ if (n && n.name) set[String(n.name).trim()] = 1; });
-    }
-    // empty cast → treat as unknown (don't prune everything away mid-setup)
-    var any = false; for (var k in set){ any = true; break; }
-    return any ? set : null;
-  }
-
-  function isNameKeyedStore(key){
-    return key === 'v292Dfix77States' ||
-           /^chr6_char_states_/.test(key) ||
-           /^chr6_char_flags_/.test(key);
-  }
-  function isPairKeyedStore(key){
-    return /^chr6_relations_/.test(key);
-  }
-
-  // Reduce all character stores to current cast; return restore-snapshot.
-  function scopeDown(){
-    var cast = castSet();
-    if (!cast) return null;
-    var snap = [];
-    var keys = [];
-    try { for (var i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i)); }
-    catch(e){ return null; }
-
-    keys.forEach(function(key){
-      try {
-        if (isNameKeyedStore(key)){
-          var raw = localStorage.getItem(key);
-          if (raw == null) return;
-          var obj = JSON.parse(raw);
-          if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return;
-          var filtered = {}, changed = false;
-          Object.keys(obj).forEach(function(name){
-            if (cast[String(name).trim()]) filtered[name] = obj[name];
-            else changed = true;
-          });
-          if (changed){ snap.push({ key: key, raw: raw }); localStorage.setItem(key, JSON.stringify(filtered)); }
-        } else if (isPairKeyedStore(key)){
-          var raw2 = localStorage.getItem(key);
-          if (raw2 == null) return;
-          var obj2 = JSON.parse(raw2);
-          if (!obj2 || typeof obj2 !== 'object' || Array.isArray(obj2)) return;
-          var filt2 = {}, chg2 = false;
-          Object.keys(obj2).forEach(function(pk){
-            var ok = String(pk).split('||').every(function(p){ return !!cast[p.trim()]; });
-            if (ok) filt2[pk] = obj2[pk];
-            else chg2 = true;
-          });
-          if (chg2){ snap.push({ key: key, raw: raw2 }); localStorage.setItem(key, JSON.stringify(filt2)); }
+  // Per-scenario state stores (safe to wipe on 物語リセット; cfg/cast/scene live
+  // in the main "chr6" key and in slot meta, which are preserved).
+  function scenarioStoreKeys(){
+    var out = [];
+    try {
+      for (var i = 0; i < localStorage.length; i++){
+        var k = localStorage.key(i);
+        if (k === 'v292Dfix77States' ||
+            /^chr6_(char_states|char_flags|relations|scene_summaries|scene_breaks|turn_summaries|chapter_titles|pending_dice)_/.test(k)){
+          out.push(k);
         }
-      } catch(e){ /* leave this store untouched on any error */ }
-    });
-    return snap.length ? snap : null;
+      }
+    } catch(e){}
+    return out;
   }
-  function restore(snap){
-    if (!snap) return;
-    for (var i = 0; i < snap.length; i++){
-      try { localStorage.setItem(snap[i].key, snap[i].raw); } catch(e){}
-    }
+  // Everything this app owns (for 完全リセット).
+  function allAppKeys(){
+    var out = [];
+    try {
+      for (var i = 0; i < localStorage.length; i++){
+        var k = localStorage.key(i);
+        if (/^chr6/.test(k) || /^v292Dfix/.test(k) || /^v100/.test(k) || /^_dbg/.test(k) || /^__torture/.test(k)){
+          out.push(k);
+        }
+      }
+    } catch(e){}
+    return out;
   }
+  function removeKeys(keys){
+    var n = 0;
+    keys.forEach(function(k){ try { localStorage.removeItem(k); n++; } catch(e){} });
+    return n;
+  }
+  function clearScenarioStores(){ var n = removeKeys(scenarioStoreKeys()); try { console.log(TAG, 'cleared', n, 'scenario stores'); } catch(e){} return n; }
 
-  function wrapBuild(){
-    var P = getPlanner();
-    if (!P || typeof P.build !== 'function') return false;
-    if (P.__v292Dfix93Build) return true;
-    var orig = P.build.bind(P);
-    P.build = function(){
-      var snap = null;
-      try { snap = scopeDown(); } catch(e){}
-      try { return orig.apply(this, arguments); }
-      finally { try { restore(snap); } catch(e){} }
-    };
-    P.__v292Dfix93Build = true;
-    try { console.log(TAG, 'cast-scope guard installed on Planner.build'); } catch(e){}
+  // expose for manual / diagnostic use
+  window.__v292Dfix93 = { clearScenarioStores: clearScenarioStores, scenarioStoreKeys: scenarioStoreKeys, allAppKeys: allAppKeys };
+
+  function wrapReset(){
+    if (typeof G === 'undefined' || !G) return false;
+
+    // 物語リセット（設定は保持）: clear turns + ALL per-scenario stores, then reload
+    // so in-memory caches (e.g. window.__v292Dfix77Store) re-init empty.
+    if (typeof G.resetStory === 'function' && !G.__v292Dfix93RS){
+      G.resetStory = function(){
+        if (!confirm('物語をリセットしますか？\n設定・APIキー・NPC設定は保持されます。\n（蓄積された旧シナリオの状態も消去します）')) return;
+        try { if (window.S){ S.turns = []; if (S.scene) S.scene.branches = []; if (typeof S.save === 'function') S.save(); } } catch(e){}
+        try { clearScenarioStores(); } catch(e){}
+        location.reload();
+      };
+      G.__v292Dfix93RS = true;
+    }
+
+    // 完全リセット: wipe every app-owned key, then reload.
+    if (typeof G.resetAll === 'function' && !G.__v292Dfix93RA){
+      G.resetAll = function(){
+        if (!confirm('すべてのデータ（APIキー・設定を含む）を削除しますか？\nこの操作は取り消せません。')) return;
+        try { removeKeys(allAppKeys()); } catch(e){}
+        try { location.reload(); } catch(e){}
+      };
+      G.__v292Dfix93RA = true;
+    }
     return true;
   }
 
-  // install (retry until Planner.build exists), then keep wrapped (re-wrap if replaced)
-  if (!wrapBuild()){
+  if (!wrapReset()){
     var tries = 0;
-    var iv = setInterval(function(){
-      tries++;
-      if (wrapBuild() || tries > 120) clearInterval(iv);
-    }, 200);
+    var iv = setInterval(function(){ tries++; if (wrapReset() || tries > 120) clearInterval(iv); }, 200);
   }
-  setInterval(function(){
-    var P = getPlanner();
-    if (P && typeof P.build === 'function' && !P.__v292Dfix93Build) wrapBuild();
-  }, 5000);
-
-  window.__v292Dfix93Api = { scopeDown: scopeDown, castSet: castSet };
+  try { console.log(TAG, 'reset hygiene armed'); } catch(e){}
 })();
