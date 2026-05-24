@@ -238,6 +238,9 @@
   // ---------- v292Dfix91: dialogue beat (会話ログに地の文の動作/トーンを添える) ----------
   // 引用に隣接する地の文（動作・表情・トーン）を1文抜き出して sub-text にする。
   // narrative 本体に書かれた "reaction" を会話ログにも反映し、bare quote だけの薄さを解消。
+  // 発話の実体は地の文に書かれるが、<say>/「」は独立行になりがちで、動作プロセは
+  // 隣の行にある。よって「引用の直後(次行)のプロセを次の引用/タグまで跨いで拾い、
+  // 無ければ直前のプロセ」を beat とし、最初の1文に整える。
   function findBeat(narr, speaker, text){
     if (!narr || !text) return '';
     var QO = '「『〝', QC = '」』〟';
@@ -245,33 +248,45 @@
     for (var o = 0; o < QO.length && idx === -1; o++){
       for (var c = 0; c < QC.length && idx === -1; c++){
         var needle = QO.charAt(o) + text + QC.charAt(c);
-        var p = narr.indexOf(needle);
-        if (p !== -1){ idx = p; needleLen = needle.length; }
+        var pp = narr.indexOf(needle);
+        if (pp !== -1){ idx = pp; needleLen = needle.length; }
       }
     }
     if (idx === -1) return '';
-    // 引用を含む1文の範囲を取る（文区切り = 。．！？!?改行）
-    var term = /[。．！？!?\n]/;
-    var start = idx;
-    while (start > 0 && !term.test(narr.charAt(start - 1))) start--;
-    var end = idx + needleLen;
-    while (end < narr.length && !term.test(narr.charAt(end))) end++;
-    if (end < narr.length) end++; // 文末記号を含める
-    var sentence = narr.slice(start, end);
-    // 引用スパンを全部除去（動作・トーンの地の文だけ残す）
-    var beat = sentence.replace(/[「『〝][^「」『』〝〟]*[」』〟]/g, '');
-    // 話者名 + 助詞の先頭プレフィックスを除去（例: サクラは… / サクラ、…）
-    if (speaker){
-      var sp = String(speaker).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      beat = beat.replace(new RegExp('^[\\s、。]*' + sp + '(?:は|が|の|も|に|へ|と|を|、)?'), '');
+    // 残存タグ・引用スパン・話者名を除去し、前後の余分な記号を整える
+    function clean(str){
+      if (!str) return '';
+      var b = str.replace(/<\/?[^>]*>/g, '').replace(/[「『〝][^「」『』〝〟]*[」』〟]/g, '');
+      if (speaker){
+        var sp = String(speaker).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        b = b.replace(new RegExp(sp + '(?:は|が|の|も|に|へ|と|を|、)?', 'g'), '');
+      }
+      return b.replace(/\s+/g, '')
+              .replace(/^[、。，,・…ー—\-]+/, '')
+              .replace(/[、，]+$/, '')
+              .trim();
     }
-    beat = beat
-      .replace(/\s+/g, '')
-      .replace(/^[、。，,・…ー—\-\s]+/, '')
-      .replace(/[、，\s]+$/, '')
-      .trim();
+    // 引用の直後(次行のプロセ)を、次の引用/タグまで跨いで拾う
+    function fwd(from){
+      var s = narr.slice(from, from + 140);
+      var m = s.search(/[「『〝]|<say|<\s*="/);
+      return m !== -1 ? s.slice(0, m) : s;
+    }
+    // 直前のプロセ(前の引用/タグ以降)を拾う
+    function bwd(from){
+      var s = narr.slice(Math.max(0, from - 140), from);
+      var last = -1, mm, re = /[」』〟]|<\/say>|<\s*\/\s*>/g;
+      while ((mm = re.exec(s))) last = mm.index + mm[0].length;
+      return last !== -1 ? s.slice(last) : s;
+    }
+    var beat = clean(fwd(idx + needleLen));        // 発話の「後」の反応プロセを優先
+    if (beat.length < 2) beat = clean(bwd(idx));   // 無ければ「前」のプロセ
     if (beat.length < 2) return '';
-    if (beat.length > 40) beat = beat.slice(0, 40) + '…';
+    // 最初の文(。！？)で切って1文の beat にする
+    var re2 = /[。！？]/g, m2, cut = -1;
+    while ((m2 = re2.exec(beat))){ if (m2.index + 1 >= 10){ cut = m2.index + 1; break; } cut = m2.index + 1; }
+    if (cut !== -1 && cut >= 6) beat = beat.slice(0, cut);
+    if (beat.length > 42) beat = beat.slice(0, 42) + '…';
     return beat;
   }
 
