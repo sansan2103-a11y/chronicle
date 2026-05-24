@@ -937,6 +937,12 @@ ${npcProfiles || '（NPC未設定）'}
 
 直近のプレイヤー入力を最優先で反映すること。
 
+【STORY入力の展開とセリフ（AI Dungeon式・重要）】
+- STORY入力は「これから起きることの種」。なぞり書きせず、その種から場面を一歩前へ進める。停滞させず、前のターンとの差分（状況・関係・空気の変化）を必ず作る。
+- その場に居て反応・発話し得るキャラがいるなら、地の文に溶かすだけで終わらせず、実際のセリフを `<say who="名前">セリフ</say>` の形で出す。短い相槌や喘ぎだけでなく、状況への反応・意図・感情を含む「生きたセリフ」を最低1つは置く。
+- ただし機械的に毎ターン喋らせる必要はない。抑圧・解離・気絶・沈黙が状況的に妥当なら無理に喋らせず、その時は地の文で反応を描く。
+- セリフはキャラの性格・口調・核心欲求/恐怖から生まれる固有の言い回しにする（キャラごとに表出を変える）。
+
 【主人公ロック（AI自身の追加行動を制限する）】
 - AIが勝手に主人公の新しい行動を追加しない（プレイヤーが指定していない行動）
 - AIが勝手に主人公の新しいセリフを追加しない（プレイヤーが指定していないセリフ）
@@ -2232,7 +2238,7 @@ G.init();
   <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix64"></script>
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=v292Dfix74"></script>
-  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix91b"></script>
+  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix91c"></script>
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
     <script src="v292Dfix70-dialogue-order.js?cb=v292Dfix70"></script>

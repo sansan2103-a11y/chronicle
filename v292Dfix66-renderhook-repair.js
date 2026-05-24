@@ -400,6 +400,13 @@
           var __nm = __c.querySelector('.dlg-name');
           var __tx = __c.querySelector('.dlg-text');
           if (!__tx) continue;
+          // v292Dfix91c: 会話ログは「発言ログ」。STORY(展開)/DO(行動) の入力echoカード
+          // (fix56 製) はセリフではないので除去する。SAY(発話) は主人公の発言なので残す。
+          if (__c.className.indexOf('v292Dfix56-input-card') !== -1 &&
+              __nm && /展開|行動/.test(__nm.textContent || '') && __c.parentNode){
+            __c.parentNode.removeChild(__c);
+            continue;
+          }
           // skip input/STORY badge cards (📖 展開 等) — only plain dialogue cards
           if (__nm && /📖|⚔|💭|🎭|✨|展開/.test(__nm.textContent || '')) continue;
           var __ct = (__tx.textContent || '').trim();
