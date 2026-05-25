@@ -73,9 +73,7 @@
       return;
     }
     // hot-swap: drop previous fix55 entry if reloaded
-    window.Planner._extensions = window.Planner._extensions.filter(function (fn) {
-      return !(fn && fn.__v292Dfix55 === true);
-    });
+    (function(){ var _e = window.Planner._extensions; for (var _i = _e.length - 1; _i >= 0; _i--){ if (_e[_i] && _e[_i].__v292Dfix55 === true) _e.splice(_i, 1); } })(); /* v292Dfix94: in-place splice (was reassign via .filter — dropped other modules' __v292DfixNN flags -> reinstaller spam) */
 
     var ext = function (ctx) {
       try {
@@ -110,9 +108,7 @@
       setTimeout(installParseHook, 300);
       return;
     }
-    window.Planner._parseExtensions = window.Planner._parseExtensions.filter(function (fn) {
-      return !(fn && fn.__v292Dfix55 === true);
-    });
+    (function(){ var _p = window.Planner._parseExtensions; for (var _i = _p.length - 1; _i >= 0; _i--){ if (_p[_i] && _p[_i].__v292Dfix55 === true) _p.splice(_i, 1); } })(); /* v292Dfix94: in-place splice */
 
     var ext = function (plan /*, parseCtx */) {
       try {
@@ -316,4 +312,3 @@
 
   console.log(TAG, 'loaded — current mode:', getMode());
 })();
-
