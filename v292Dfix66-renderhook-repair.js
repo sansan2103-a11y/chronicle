@@ -332,12 +332,49 @@
   }
 
   // turn から全 dialogue を抽出 (preprocess → dl.extractDialogues = fix65-wrapped)
+  // ---------- v292Dfix97: post-quote speaker attribution ----------
+  // Resolve "???" speakers when the name follows the quote, e.g.
+  //   「ひ——っ……！？」と、フィーネの喉が裂けるような短い悲鳴が割って入った。
+  // The base extractor only catches names BEFORE the quote / <say who>, so a
+  // post-positioned attribution leaves speaker="" → shown as "???". Here we read
+  // the prose right after the quote and, if it is a quotative「と …<cast name>…
+  // <speech/voice word>」construction, assign that cast member. Only CURRENT cast
+  // names are candidates and a speech word is required, so a listener/bystander
+  // mentioned after the line is not mis-attributed.
+  function castNameList(){
+    var out = [];
+    try {
+      var st = getState();
+      if (st && st.cast){
+        if (st.cast.hero && st.cast.hero.name) out.push(String(st.cast.hero.name).trim());
+        if (Array.isArray(st.cast.npcs)) st.cast.npcs.forEach(function(n){ if (n && n.name) out.push(String(n.name).trim()); });
+      }
+    } catch(e){}
+    // longest first so e.g. "アカネ" wins over a substring
+    return out.filter(Boolean).sort(function(a,b){ return b.length - a.length; });
+  }
+  var SPEECH_WORD_RX = /(悲鳴|絶叫|叫|声|呻|うめ|呟|つぶや|囁|ささや|喚|わめ|喘|あえ|啜|嗚咽|呼|言|吐|漏らし|上げ|応じ|返し|続け|呟き)/;
+  function resolvePostQuoteSpeaker(narr, text, names){
+    if (!narr || !text || !names || !names.length) return '';
+    var idx = narr.indexOf('「' + text + '」');
+    if (idx >= 0){ idx += text.length + 2; }
+    else { idx = narr.indexOf(text); if (idx < 0) return ''; idx += text.length; }
+    var tail = narr.slice(idx, idx + 60);
+    var stop = tail.search(/[「。\n]/);
+    if (stop >= 0) tail = tail.slice(0, stop);
+    if (!/^\s*[とっ、]*と/.test(tail)) return '';   // require quotative と right after the quote
+    if (!SPEECH_WORD_RX.test(tail)) return '';        // require a speech/voice word
+    for (var i = 0; i < names.length; i++){ if (tail.indexOf(names[i]) >= 0) return names[i]; }
+    return '';
+  }
+
   function extractFromTurn(turn){
     var narr = turn && turn.narrative;
     if (!narr) return [];
     var preprocessed = preprocessNarrative(narr);
     var out = [];
     var seen = Object.create(null);
+    var _names = castNameList();
     try {
       var dl = window.__v292 && window.__v292.dialogueLayout;
       if (dl && typeof dl.extractDialogues === 'function'){
@@ -347,6 +384,11 @@
           if (!d || !d.text) continue;
           // v292Dfix89: skip non-speech quotes (citation/concept, not dialogue)
           if (isNonSpeechQuote(preprocessed, String(d.text))) continue;
+          // v292Dfix97: resolve post-positioned speaker (「…」と、◯◯の悲鳴…)
+          if (!d.speaker){
+            var rs = resolvePostQuoteSpeaker(preprocessed, String(d.text), _names);
+            if (rs) d.speaker = rs;
+          }
           var k = dialogueKey(d.speaker, d.text);
           if (seen[k]) continue;
           seen[k] = true;
