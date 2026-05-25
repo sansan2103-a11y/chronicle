@@ -9062,30 +9062,30 @@
     '・要するに「音」と「声（言葉）」を区別し、音はセリフ（「」/<say>）にしないこと。'
   ].join('\n');
 
-  function sysExt(ctx){
-    try {
-      if (!ctx || typeof ctx.sys !== 'string') return ctx && ctx.sys;
-      if (ctx.sys.indexOf(MARK) >= 0) return ctx.sys; // already present this build
-      return ctx.sys + '\n\n' + BLOCK;
-    } catch(e){ return ctx && ctx.sys; }
-  }
-  sysExt.__v292Dfix96 = true;
-
-  function install(){
+  // NOTE: a Planner._extensions sysExt was tried first but a later sysExt
+  // (genderPronounExt / PromptRegistry dedup) replaced _sys and dropped the block.
+  // So instead we wrap Planner.build and append the rule to the FINAL sys, after
+  // all extensions + dedup have run — nothing downstream can remove it.
+  function wrap(){
     var P = window.Planner || (typeof Planner !== 'undefined' ? Planner : null);
-    if (!P || !Array.isArray(P._extensions)) return false;
-    if (P._extensions.indexOf(sysExt) >= 0) return true;
-    P._extensions.push(sysExt);
-    try { console.log('[v292Dfix96] sound-vs-speech prompt rule installed'); } catch(e){}
+    if (!P || typeof P.build !== 'function') return false;
+    if (P.__v292Dfix96Build) return true;
+    var orig = P.build.bind(P);
+    P.build = function(){
+      var r = orig.apply(this, arguments);
+      try {
+        if (r && typeof r.sys === 'string' && r.sys.indexOf(MARK) < 0){
+          r.sys = r.sys + '\n\n' + BLOCK;
+        }
+      } catch(e){}
+      return r;
+    };
+    P.__v292Dfix96Build = true;
+    try { console.log('[v292Dfix96] sound-vs-speech rule armed (build-append)'); } catch(e){}
     return true;
   }
-  if (!install()){
+  if (!wrap()){
     var tries = 0;
-    var iv = setInterval(function(){ tries++; if (install() || tries > 120) clearInterval(iv); }, 150);
+    var iv = setInterval(function(){ tries++; if (wrap() || tries > 120) clearInterval(iv); }, 150);
   }
-  // light idempotent re-check (re-push only if genuinely dropped; no spam)
-  setInterval(function(){
-    var P = window.Planner || (typeof Planner !== 'undefined' ? Planner : null);
-    if (P && Array.isArray(P._extensions) && P._extensions.indexOf(sysExt) < 0) install();
-  }, 10000);
 })();
