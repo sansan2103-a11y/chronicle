@@ -368,6 +368,41 @@
     return '';
   }
 
+  // ---------- v292Dfix98: non-cast (entity) speaker, from the name the prose gives ----------
+  // Generalises fix97 to NON-cast speakers WITHOUT a fixed keyword list: use whatever
+  // name the narrative attributes the line to (妖怪/モンスター/怪異/独自名…). Only OVERRIDES
+  // the base extractor's (proximity) guess; never touches a clearly-cast line.
+  //   A) 「…」と <X>(は|が) …<speech verb>   where X is not a cast member → label X
+  //   B) 「…」と …(息遣い/噛む音/呼吸…) with no name → preceding sentence's non-cast subject
+  var DFX98_SPEECH = /(言|叫|呟|呻|囁|唸|怒鳴|喚|吠|咆|嘶|喉|告げ|呼ん|笑|吐き捨|吐き出|応じ|返し|続け|問|答|きゃ|悲鳴|絶叫|うめ|喘|怒号|わめ|吼)/;
+  var DFX98_SOUND  = /(息遣い|吐息|鼻息|寝息|呼吸|噛む音|咀嚼|啜|立てる音|立てた音|物音|呼気)/;
+  function resolveNonCastSpeaker(narr, text, names){
+    if (!narr || !text || !names || !names.length) return '';
+    function isCastName(x){ for (var i = 0; i < names.length; i++){ if (x === names[i] || x.indexOf(names[i]) >= 0 || names[i].indexOf(x) >= 0) return true; } return false; }
+    var qi = narr.indexOf('「' + text + '」'), qOpen, after;
+    if (qi >= 0){ qOpen = qi; after = qi + text.length + 2; }
+    else { var ti = narr.indexOf(text); if (ti < 0) return ''; qOpen = ti; after = ti + text.length; }
+    var pre = narr.slice(Math.max(0, qOpen - 8), qOpen);
+    for (var p = 0; p < names.length; p++){ if (pre.indexOf(names[p]) >= 0) return ''; } // cast pre-name → keep
+    var tail = narr.slice(after, after + 50);
+    var ts = tail.search(/[「。\n]/); if (ts >= 0) tail = tail.slice(0, ts);
+    for (var c = 0; c < names.length; c++){ if (tail.indexOf(names[c]) >= 0) return ''; } // cast in tail → keep
+    // A) と<X>(は|が)…<speech verb>, X not cast
+    if (/^\s*[、っ]*と/.test(tail) && DFX98_SPEECH.test(tail)){
+      var mA = tail.match(/^[、\s]*と[、\s]*([^、。\s「」はがをにへとのも]{1,12})(?:は|が)/);
+      if (mA && !isCastName(mA[1]) && mA[1].length >= 2) return mA[1];
+    }
+    // B) sound attribution with no name → preceding sentence's non-cast subject
+    if (DFX98_SOUND.test(tail)){
+      var before = narr.slice(0, qOpen);
+      var segs = before.split(/[。\n]/), prev = '';
+      for (var s = segs.length - 1; s >= 0; s--){ if (segs[s].trim()){ prev = segs[s].trim(); break; } }
+      var mB = prev.match(/([^、。\s「」はがをにへとのも]{2,12})(?:は|が)/);
+      if (mB && !isCastName(mB[1])) return mB[1];
+    }
+    return '';
+  }
+
   function extractFromTurn(turn){
     var narr = turn && turn.narrative;
     if (!narr) return [];
@@ -389,6 +424,10 @@
             var rs = resolvePostQuoteSpeaker(preprocessed, String(d.text), _names);
             if (rs) d.speaker = rs;
           }
+          // v292Dfix98: a non-cast entity named by the prose (妖怪/モンスター/怪異/独自名)
+          // overrides a wrong proximity-guessed cast speaker (e.g. しゃ…… → 人形, not フィーネ).
+          var nc = resolveNonCastSpeaker(preprocessed, String(d.text), _names);
+          if (nc) d.speaker = nc;
           var k = dialogueKey(d.speaker, d.text);
           if (seen[k]) continue;
           seen[k] = true;
