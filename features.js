@@ -9036,3 +9036,56 @@
     }, 150);
   }
 })();
+
+/* =====================================================================
+ * v292Dfix96: "sound vs speech" prompt rule (keep SFX out of the conv log)
+ * ---------------------------------------------------------------------
+ * Problem: the model sometimes wraps a non-human SOUND in a speech marker
+ * (e.g. <say who="アカネ">……ピタ</say>), so an ambient sound shows up in the
+ * conversation log as a character's line. Source-level fix (no risky extractor
+ * filter): a system-prompt block telling the model to reserve 「」/<say> for words
+ * a character actually SPEAKS, and to write sounds/SFX/non-human noises as plain
+ * narration. Screams/groans (a character's voice) and a non-human SPEAKER's real
+ * lines are explicitly still allowed, so we don't lose legitimate dialogue.
+ * Added as a Planner._extensions sysExt (appends to ctx.sys), idempotent.
+ * ===================================================================== */
+(function v292Dfix96(){
+  if (window.__v292Dfix96) return;
+  window.__v292Dfix96 = true;
+  var MARK = '【セリフと物音の区別';
+  var BLOCK = [
+    '【セリフと物音の区別（会話ログ用・厳守）】',
+    '・「」および <say> は、登場人物が「口に出した言葉（セリフ）」だけに使う。',
+    '・物音・効果音・気配・人ならぬ音（例: ピタ、ガタッ、ザワ、コツコツ、ヒタヒタ）は「」や <say> で囲まず、地の文（描写）として書く。「…という音」「人のものではない音」も地の文で書く。',
+    '・悲鳴・うめき・荒い息など、登場人物が発する声（例: きゃあっ、うっ、ひっ）はセリフなので「」/<say> で囲んでよい。',
+    '・怪異・モンスター等「人でない話者」が実際に言葉を発する場合は、who にその名前を付けてセリフにしてよい。',
+    '・要するに「音」と「声（言葉）」を区別し、音はセリフ（「」/<say>）にしないこと。'
+  ].join('\n');
+
+  function sysExt(ctx){
+    try {
+      if (!ctx || typeof ctx.sys !== 'string') return ctx && ctx.sys;
+      if (ctx.sys.indexOf(MARK) >= 0) return ctx.sys; // already present this build
+      return ctx.sys + '\n\n' + BLOCK;
+    } catch(e){ return ctx && ctx.sys; }
+  }
+  sysExt.__v292Dfix96 = true;
+
+  function install(){
+    var P = window.Planner || (typeof Planner !== 'undefined' ? Planner : null);
+    if (!P || !Array.isArray(P._extensions)) return false;
+    if (P._extensions.indexOf(sysExt) >= 0) return true;
+    P._extensions.push(sysExt);
+    try { console.log('[v292Dfix96] sound-vs-speech prompt rule installed'); } catch(e){}
+    return true;
+  }
+  if (!install()){
+    var tries = 0;
+    var iv = setInterval(function(){ tries++; if (install() || tries > 120) clearInterval(iv); }, 150);
+  }
+  // light idempotent re-check (re-push only if genuinely dropped; no spam)
+  setInterval(function(){
+    var P = window.Planner || (typeof Planner !== 'undefined' ? Planner : null);
+    if (P && Array.isArray(P._extensions) && P._extensions.indexOf(sysExt) < 0) install();
+  }, 10000);
+})();
