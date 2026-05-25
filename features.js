@@ -8861,7 +8861,10 @@
     if (typeof G.resetStory === 'function' && !G.__v292Dfix93RS){
       G.resetStory = function(){
         if (!confirm('物語をリセットしますか？\n設定・APIキー・NPC設定は保持されます。\n（蓄積された旧シナリオの状態も消去します）')) return;
-        try { if (window.S){ S.turns = []; if (S.scene) S.scene.branches = []; if (typeof S.save === 'function') S.save(); } } catch(e){}
+        // NOTE: S is a top-level const, NOT on window — must use the lexical binding,
+        // not window.S (which is undefined → would skip clearing turns → reset no-op).
+        var _S = (typeof S !== 'undefined' && S) ? S : (window.S || null);
+        try { if (_S){ _S.turns = []; if (_S.scene) _S.scene.branches = []; if (typeof _S.save === 'function') _S.save(); } } catch(e){}
         try { clearScenarioStores(); } catch(e){}
         location.reload();
       };
