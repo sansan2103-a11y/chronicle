@@ -8886,3 +8886,65 @@
   }
   try { console.log(TAG, 'reset hygiene armed'); } catch(e){}
 })();
+
+/* =====================================================================
+ * v292Dfix94: flag-preserving extension-array guard (stops reinstaller spam)
+ * ---------------------------------------------------------------------
+ * Several modules "hot-swap" themselves via
+ *   Planner._extensions = Planner._extensions.filter(fn => !fn.__v292DfixNN)
+ * (confirmed: fix55[now splice], fix83-name-truncation-repair, fix85-reaction-
+ * spectrum, and likely more). That `.filter()` returns a FRESH array which drops
+ * EVERY other module's `__v292DfixNN` self-heal flag, so all their setInterval
+ * reinstallers re-fire forever — endless "[v292DfixNN] sysExt reinstalled" console
+ * spam that buries real errors (and needless churn fix90 then has to dedup).
+ *
+ * Fix: make `_extensions`/`_parseExtensions` accessor properties whose SETTER, on
+ * any whole-array reassignment, copies the previous array's `__v292Dfix*` flag
+ * properties onto the new array before accepting it. The reassignment still works
+ * (the new/filtered array is stored, so each module's own hot-swap still happens),
+ * but the OTHER modules' flags survive → their reinstallers see themselves as
+ * installed and stay quiet. NON-DESTRUCTIVE: array CONTENTS are never merged or
+ * altered, only the flag props are carried across. Lives in features.js because it
+ * loads before fix52–85, so the guard is in place before they reassign.
+ * (General catch-all; supersedes the need for per-file splice fixes like fix92.)
+ * ===================================================================== */
+(function v292Dfix94(){
+  if (window.__v292Dfix94) return;
+  window.__v292Dfix94 = true;
+
+  function arm(P){
+    if (!P) return false;
+    ['_extensions', '_parseExtensions'].forEach(function(name){
+      try {
+        var d = Object.getOwnPropertyDescriptor(P, name);
+        if (d && d.get) return; // already an accessor — idempotent
+        var backing = Array.isArray(P[name]) ? P[name] : [];
+        Object.defineProperty(P, name, {
+          configurable: true,
+          get: function(){ return backing; },
+          set: function(v){
+            if (Array.isArray(v) && v !== backing){
+              for (var k in backing){
+                if (/^__v292Dfix/.test(k) && !(k in v)){ try { v[k] = backing[k]; } catch(e){} }
+              }
+              backing = v;
+            }
+            // non-array / same-ref assignments are ignored (keep the live array)
+          }
+        });
+      } catch(e){}
+    });
+    try { console.log('[v292Dfix94] flag-preserving extension guard armed'); } catch(e){}
+    return true;
+  }
+
+  var P = window.Planner || (typeof Planner !== 'undefined' ? Planner : null);
+  if (!arm(P)){
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      var p = window.Planner || (typeof Planner !== 'undefined' ? Planner : null);
+      if (arm(p) || tries > 120) clearInterval(iv);
+    }, 100);
+  }
+})();
