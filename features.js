@@ -8864,7 +8864,16 @@
         // NOTE: S is a top-level const, NOT on window — must use the lexical binding,
         // not window.S (which is undefined → would skip clearing turns → reset no-op).
         var _S = (typeof S !== 'undefined' && S) ? S : (window.S || null);
-        try { if (_S){ _S.turns = []; if (_S.scene) _S.scene.branches = []; if (typeof _S.save === 'function') _S.save(); } } catch(e){}
+        try {
+          if (_S){
+            _S.turns = [];
+            if (_S.scene) _S.scene.branches = [];
+            // v292Dfix95: reset NPC appearance — a fresh story starts with all NPCs
+            // dormant again (they re-enter when their name is mentioned).
+            if (_S.cast && Array.isArray(_S.cast.npcs)) _S.cast.npcs.forEach(function(n){ if (n) delete n.appeared; });
+            if (typeof _S.save === 'function') _S.save();
+          }
+        } catch(e){}
         try { clearScenarioStores(); } catch(e){}
         location.reload();
       };
@@ -8949,5 +8958,81 @@
       var p = window.Planner || (typeof Planner !== 'undefined' ? Planner : null);
       if (arm(p) || tries > 120) clearInterval(iv);
     }, 100);
+  }
+})();
+
+/* =====================================================================
+ * v292Dfix95: name-triggered NPC appearance (AI-Dungeon "Story Card" style)
+ * ---------------------------------------------------------------------
+ * Problem: every configured NPC was injected into the prompt from turn 1, so the
+ * AI introduced/used them all immediately — a "boss" NPC would show up at the
+ * start and tend to be treated as present/ally. User wants NPCs to enter at THEIR
+ * chosen timing.
+ *
+ * Design (matches AI Dungeon's World Info / Story Cards, no role tags): each NPC
+ * is DORMANT (kept out of the prompt) until its NAME appears in the player's input
+ * or recent narrative — then it "appears" and is injected from then on (STICKY:
+ * stays once introduced, even after the name scrolls out, for TRPG continuity).
+ * Ally/enemy is left to the narrative flow + the user's input (no forced tags).
+ * The hero and scene are always present. 物語リセット clears the appeared flags
+ * (handled in fix93), so a fresh story starts with all NPCs dormant again.
+ *
+ * Implementation: wrap Planner.build; before it runs, temporarily reduce
+ * S.cast.npcs to only the "appeared" NPCs (sticky flag n.appeared) plus any whose
+ * name is found in (inputText + last 8 turns); newly-appeared ones get n.appeared
+ * set + saved; S.cast.npcs is restored in finally{}. Non-destructive (the full
+ * roster is never lost). build is synchronous so other sysExts during the build
+ * also only see the appeared NPCs (consistent).
+ * ===================================================================== */
+(function v292Dfix95(){
+  if (window.__v292Dfix95) return;
+  window.__v292Dfix95 = true;
+
+  function getState(){ try { if (typeof S !== 'undefined' && S) return S; } catch(e){} return window.S || null; }
+  function getPlanner(){ return window.Planner || (typeof Planner !== 'undefined' ? Planner : null); }
+  function recentCtx(st){
+    try {
+      return (st.turns || []).slice(-8).map(function(t){
+        return ((t && t.playerText) || '') + ' ' + ((t && t.narrative) || '');
+      }).join(' ');
+    } catch(e){ return ''; }
+  }
+
+  function wrap(){
+    var P = getPlanner();
+    if (!P || typeof P.build !== 'function') return false;
+    if (P.__v292Dfix95Build) return true;
+    var orig = P.build.bind(P);
+    P.build = function(inputType, inputText){
+      var st = getState();
+      if (!st || !st.cast || !Array.isArray(st.cast.npcs) || st.cast.npcs.length === 0){
+        return orig(inputType, inputText);
+      }
+      var npcs = st.cast.npcs;
+      var ctx = (inputText || '') + ' ' + recentCtx(st);
+      var changed = false;
+      var active = npcs.filter(function(n){
+        if (!n || !n.name) return false;
+        if (n.appeared === true) return true;
+        if (ctx.indexOf(n.name) >= 0){ n.appeared = true; changed = true; return true; }
+        return false;
+      });
+      if (changed){ try { if (typeof st.save === 'function') st.save(); } catch(e){} }
+      if (active.length === npcs.length){ return orig(inputType, inputText); } // all appeared — no swap needed
+      st.cast.npcs = active;
+      try { return orig(inputType, inputText); }
+      finally { st.cast.npcs = npcs; }
+    };
+    P.__v292Dfix95Build = true;
+    try { console.log('[v292Dfix95] name-triggered NPC appearance guard armed'); } catch(e){}
+    return true;
+  }
+
+  if (!wrap()){
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if (wrap() || tries > 120) clearInterval(iv);
+    }, 150);
   }
 })();
