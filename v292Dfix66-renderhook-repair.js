@@ -576,7 +576,14 @@
   // fails — so nothing breaks. 展開 stays fully free (the MAIN call is untouched).
   // Key is read from chr6.cfg.orKey at call time and never logged. Uses XHR to bypass the
   // fix84 fetch-wrapper so temperature stays 0 (deterministic extraction).
-  var B_MODEL    = 'nousresearch/hermes-4-70b';
+  // v292Dfix104b: use the SAME model as the main call (cfg.orModel = Hermes 4 405B).
+  // Validation showed 70B mis-attributes hard cases (天狗→フィーネ) while 405B gets them
+  // right (天狗) and honestly returns ??? only when truly ambiguous. Extraction input is
+  // one small turn, so 405B here is still cheap (~0.2 yen/turn).
+  function bModel(){
+    try { var c = JSON.parse(localStorage.getItem('chr6') || '{}').cfg || {}; if (c.orModel) return c.orModel; } catch(e){}
+    return 'nousresearch/hermes-4-405b';
+  }
   var B_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
   var B_CACHE_KEY = 'chr6_v292Dfix104_dlg';
   var B_OFF_KEY   = 'chr6_v292Dfix104_off';
@@ -631,7 +638,7 @@
     try { var c = JSON.parse(localStorage.getItem('chr6') || '{}'); key = (c.cfg && c.cfg.orKey) || ''; } catch(e){}
     if (!key){ cb(null); return; }
     var body;
-    try { body = JSON.stringify({ model: B_MODEL, temperature: 0, max_tokens: 900,
+    try { body = JSON.stringify({ model: bModel(), temperature: 0, max_tokens: 900,
       messages: [{ role: 'user', content: bBuildPrompt(narr, names) }] }); } catch(e){ cb(null); return; }
     try {
       var xhr = new XMLHttpRequest();
@@ -852,7 +859,12 @@
   window.__v292Dfix66 = {
     repair: repair,
     preprocessNarrative: preprocessNarrative,
-    lookupAvatar: lookupAvatar
+    lookupAvatar: lookupAvatar,
+    // v292Dfix104: manual extraction trigger (also bypasses any repair() wrapper,
+    // so it can be invoked directly to (re)build the LLM dialogue cache).
+    runExtraction: function(){
+      try { var st = getState(); bSchedule((st && st.turns) || [], castNameList()); } catch(e){}
+    }
   };
 
   // Manual re-trigger shortcut
