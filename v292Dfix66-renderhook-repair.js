@@ -451,6 +451,33 @@
     return '';
   }
 
+  // ---------- v292Dfix100: pre-positioned speaker (name BEFORE the quote) ----------
+  // fix97 = name AFTER quote (「…」と◯◯が); fix98 = と<X>が / sound attribution.
+  // This covers the remaining ??? form: "◯◯は…(発話動詞)。 「…」" where the speaker is
+  // the subject of the sentence right before the quote (e.g. 怪異は…独り言を漏らしている。
+  // 「…お前も…」). FILLS empty speakers only — never overrides an existing attribution —
+  // so it can only improve ??? cards. Works for cast and non-cast; non-cast names then
+  // get an auto avatar via fix99.
+  var DFX100_SPEECH = /(言|叫|呟|つぶや|囁|ささや|漏らし|唸|呻|うめ|告げ|呼び|口にし|吐き|紡|嘯|独り言|ぼやい|わめ|怒鳴|発し)/;
+  function resolvePreSpeaker(narr, text){
+    if (!narr || !text) return '';
+    var qi = narr.indexOf('「' + text + '」');
+    if (qi < 0){ qi = narr.indexOf(text); if (qi < 0) return ''; }
+    var win = narr.slice(0, qi).slice(-160);
+    var segs = win.split(/[。\n]/).filter(function(s){ return s.trim(); });
+    if (!segs.length) return '';
+    var lastSent = segs[segs.length - 1];
+    if (!DFX100_SPEECH.test(lastSent)) return '';   // preceding sentence must be an utterance
+    var m = lastSent.match(/([^、。\s「」はがをにへとのもだでも！？!?]{2,16})(?:は|が)/);
+    if (!m) return '';
+    var subj = m[1];
+    var parts = subj.split(/(?:から|まで|より|へ|で|に|を|と|の|も)/);
+    subj = parts[parts.length - 1];
+    subj = subj.replace(/^(?:その|この|あの|新たな|新しい|例の|件の|赤黒い|青白い|小さな|大きな|黒い|白い|赤い|不気味な|巨大な)/, '').trim();
+    if (subj.length < 2) return '';
+    return subj;
+  }
+
   function extractFromTurn(turn){
     var narr = turn && turn.narrative;
     if (!narr) return [];
@@ -476,6 +503,11 @@
           // overrides a wrong proximity-guessed cast speaker (e.g. しゃ…… → 人形, not フィーネ).
           var nc = resolveNonCastSpeaker(preprocessed, String(d.text), _names);
           if (nc) d.speaker = nc;
+          // v292Dfix100: pre-positioned speaker (◯◯は…発話動詞。「…」) — fill ??? only.
+          if (!d.speaker){
+            var pc = resolvePreSpeaker(preprocessed, String(d.text));
+            if (pc) d.speaker = pc;
+          }
           var k = dialogueKey(d.speaker, d.text);
           if (seen[k]) continue;
           seen[k] = true;
