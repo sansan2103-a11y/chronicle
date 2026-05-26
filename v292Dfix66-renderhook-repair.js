@@ -242,6 +242,45 @@
     return card;
   }
 
+  // ---------- v292Dfix102: upgrade stale / cold-start "?" avatars ----------
+  // repair() only ADDS new cards; it never rebuilds existing ones. So a card rendered
+  // before fix99 (no avatar) — or one whose Pollinations image failed on first load
+  // during cold-start (30-40s), tripping onerror → "?" — stays "?" forever. This walks
+  // existing "?" cards and, if lookupAvatar now yields a URL, re-inserts a fresh <img>
+  // (the same path a fresh build uses, so fix86 converts it to a blob). Re-runs via the
+  // bounded delayed repair() calls below, so a cold image is retried until it warms up.
+  function nameOfCard(card){
+    var nameEl = card.querySelector('.dlg-name');
+    if (!nameEl) return '';
+    var fc = nameEl.firstChild;
+    var name = (fc && fc.nodeType === 3) ? (fc.textContent || '').trim() : '';
+    if (!name) name = (nameEl.textContent || '').trim().split(/\s|📖|⚔|💭|🎭|✨/)[0];
+    return name;
+  }
+  function upgradeMissingAvatars(stream){
+    try {
+      if (!stream) return;
+      if (!NC_NARR){
+        try { var st = getState(); var ts = (st && st.turns) || []; var a = '';
+          for (var k = 0; k < ts.length; k++){ if (ts[k]) a += '\n' + preprocessNarrative(ts[k].narrative); }
+          NC_NARR = a; } catch(e){}
+      }
+      var cards = stream.querySelectorAll('.v292-dlg-card');
+      for (var i = 0; i < cards.length; i++){
+        var card = cards[i];
+        var av = card.querySelector('.dlg-av');
+        if (!av || av.querySelector('img')) continue;     // already has an image
+        var name = nameOfCard(card);
+        if (!name || name === '???') continue;
+        var url = lookupAvatar(name);
+        if (url){
+          av.innerHTML = '<img src="' + escHtml(url) + '" alt="' + escHtml(name) + '" loading="lazy"'
+            + ' onerror="this.parentNode.textContent=String.fromCharCode(63)">';
+        }
+      }
+    } catch(e){}
+  }
+
   function dialogueKey(speaker, text){
     return (speaker || '') + '|' + (text || '');
   }
@@ -644,6 +683,8 @@
       try {
         if (typeof __allNarr === 'string' && __allNarr) enhanceBeats(stream, __allNarr);
       } catch(__be){}
+      // v292Dfix102: upgrade any stale / cold-start "?" avatars on every repair.
+      try { upgradeMissingAvatars(stream); } catch(__ua){}
       if (added > 0){
         stream.scrollTop = stream.scrollHeight;
         try { console.log(TAG, 'repaired', added, 'dialogue cards'); } catch(_){}
@@ -719,6 +760,19 @@
   setTimeout(installHook, 400);
   setTimeout(installHook, 1500);
   setTimeout(installHook, 4000);
+
+  // v292Dfix102: bounded retries for cold-start avatars. A non-cast entity's
+  // Pollinations image is generated on first request (~30-40s); the first <img>
+  // load can fail → onerror → "?". These delayed repairs re-insert the <img> for
+  // any "?" card once the image has had time to warm up, with no user reload needed.
+  [4000, 10000, 20000, 35000].forEach(function(ms){
+    setTimeout(function(){
+      try {
+        var s = document.getElementById('dialogue-stream');
+        if (s) upgradeMissingAvatars(s);
+      } catch(e){}
+    }, ms);
+  });
 
   // ---------- selfHeal: ensure our hook stays at the end ----------
   // 他フィーチャが後から push しても末尾位置を維持し、
