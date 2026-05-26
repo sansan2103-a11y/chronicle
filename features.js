@@ -9173,3 +9173,74 @@
     var iv = setInterval(function(){ tries++; if (wrap() || tries > 120) clearInterval(iv); }, 150);
   }
 })();
+
+/* =====================================================================
+ * v292Dfix106: protect user-typed NPC fields from 🎲 random-fill
+ * ---------------------------------------------------------------------
+ * おしん report 2026-05-27: clicking "未入力をランダム生成" overwrites NPC
+ * names she had already typed. The in-page randomFill() guards each field
+ * with !value.trim() in BOTH local and live index.html (verified), yet the
+ * overwrite still happens for her — exact mechanism not reproducible from
+ * code alone (and we won't run a destructive repro on her live game).
+ * Robust DOM-level belt, independent of the page's randomFill internals:
+ * a document capture-phase click listener fires BEFORE the button's inline
+ * onclick="UI.randomFill()". On the dice button it snapshots every NON-EMPTY
+ * field in #npcList; shortly after (covering randomFill's sync run + its
+ * 50ms async _fillNpcRandom branch) it restores any snapshotted value that
+ * changed. Empty-before fields keep the random data → "fill empty only".
+ * Pure DOM, no lexical UI/S access needed. Idempotent.
+ * ===================================================================== */
+(function v292Dfix106(){
+  if (window.__v292Dfix106) return;
+  window.__v292Dfix106 = true;
+  var FIELDS = ['name','desc','personality','coreDesire','coreFear','wound'];
+
+  function snapshot(){
+    var snap = [];
+    var cards = document.querySelectorAll('#npcList .npc-card');
+    for (var i = 0; i < cards.length; i++){
+      var rec = {};
+      for (var j = 0; j < FIELDS.length; j++){
+        var el = cards[i].querySelector('[data-f="' + FIELDS[j] + '"]');
+        if (el && el.value && el.value.trim()) rec[FIELDS[j]] = el.value;
+      }
+      snap[i] = rec;
+    }
+    return snap;
+  }
+
+  function restore(snap){
+    var cards = document.querySelectorAll('#npcList .npc-card');
+    for (var i = 0; i < snap.length; i++){
+      var card = cards[i]; if (!card) continue;
+      var rec = snap[i] || {};
+      for (var j = 0; j < FIELDS.length; j++){
+        var f = FIELDS[j];
+        if (!Object.prototype.hasOwnProperty.call(rec, f)) continue;
+        var el = card.querySelector('[data-f="' + f + '"]');
+        if (el && el.value !== rec[f]){
+          el.value = rec[f];
+          try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch(e){}
+        }
+      }
+    }
+  }
+
+  function isDiceBtn(btn){
+    if (!btn) return false;
+    var tx = (btn.textContent || '');
+    return tx.indexOf('未入力をランダム') > -1 ||
+           (tx.indexOf('ランダム生成') > -1 && tx.indexOf('🎲') > -1);
+  }
+
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    var btn = (t && t.closest) ? t.closest('button') : null;
+    if (!isDiceBtn(btn)) return;
+    var snap = snapshot();                         // taken BEFORE randomFill (capture phase)
+    setTimeout(function(){ try { restore(snap); } catch(e){} }, 130);
+    setTimeout(function(){ try { restore(snap); } catch(e){} }, 400);
+  }, true);
+
+  try { console.log('[v292Dfix106] NPC typed-field protector armed (capture-phase guard)'); } catch(e){}
+})();
