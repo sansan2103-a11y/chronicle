@@ -9095,3 +9095,75 @@
     var iv = setInterval(function(){ tries++; if (wrap() || tries > 120) clearInterval(iv); }, 150);
   }
 })();
+
+/* =====================================================================
+ * v292Dfix105: "narrative momentum + autonomous cast + readability"
+ * ---------------------------------------------------------------------
+ * Problem (おしん report 2026-05-27): the story stalls and re-describes
+ * the same beat every turn; entities that have appeared sit as props and
+ * don't speak unless directed; long dense prose without forward motion
+ * becomes hard to read. The base prompt over-weights psychological prose
+ * and has only a weak, STORY-only anti-stagnation line, plus an explicit
+ * "no need to make them speak every turn" brake.
+ * Fix: append THREE rule groups to the FINAL sys via build-wrap (same as
+ * fix96), so nothing downstream removes them and they sit AFTER the base
+ * prompt (later/explicit instructions win):
+ *   A 進行エンジン  — force one new beat per turn, end on a hook
+ *   B 自律発話      — appeared entities act/speak on their own (overrides
+ *                     the earlier "機械的に喋らせる必要はない" brake)
+ *   C 読みやすさ    — 1 turn = 1 focus, no re-saying, structured beat
+ * Literary density is explicitly PRESERVED (おしん: 今の濃さを保つ).
+ * Idempotent via MARK check. Wraps Planner.build; chains harmlessly with
+ * fix96 / fix66 wraps (each only appends + calls orig).
+ * ===================================================================== */
+(function v292Dfix105(){
+  if (window.__v292Dfix105) return;
+  window.__v292Dfix105 = true;
+  var MARK = '【展開を前に進める';
+  var BLOCK = [
+    '【展開を前に進める（進行エンジン・最優先 / 他の文体・抑制指示と並ぶ最重要ルール）】',
+    '・毎ターン、必ず状況を「一歩」前進させる。前のターンと同じ動作・同じ膠着状態を、言葉や比喩を変えて描き直すことを固く禁じる（例:「掴む→投げる→呻く」を毎ターン変奏し続けるのは禁止）。',
+    '・各ターンで、新しい「展開ビート」を最低1つ起こす。次のいずれかを必ず含める: 立場や力関係の変化／新たな脅威・人物・情報の出現／誰かの決断や主体的な行動／状況の悪化または好転／場所・時間の移動。',
+    '・narrative の最後の一文は「余韻」で終わらせず、「次に向けた新しい変化のフック」にする（新たな影、近づく足音、選択を迫る声、独りでに動く扉、見つかった手がかりなど）。',
+    '・scene.objective（目的）を意識し、毎ターン物語をその目的へ近づけるか、または目的を脅かす方向へ少し動かす。',
+    '・プレイヤー入力が空・「続きを進めて」等の汎用的な継続指示のときこそ、最も強く新展開を起こす。直前の場面に固執して止まらないこと。',
+    '・重要: 文学的な描写の濃さ（7〜8文・Show Don\'t Tell・五感・余白・心理）はこれまで通り保つ。これは描写を薄くする指示ではない。目標は「濃いまま、止まらず前へ進む」。',
+    '',
+    '【場にいる者は“生きている”（自律発話・積極 / 上位指示）】',
+    '・その場に登場している全ての存在（NPC・怪異・モンスター・人ならぬ者を含む）は、自分の意志・欲求・恐怖を持つ。プレイヤーが指定しなくても、自分から考え、喋り、動く。',
+    '・毎ターン、場にいる存在のうち最低1〜2体が、自発的にセリフ（「」/ <say who="名前">…</say>）または主体的な行動を取る。存在を「置物」にしない。',
+    '・このルールは、先に書かれた「機械的に毎ターン喋らせる必要はない」より優先する。ただし気絶・解離・物理的に声を出せない等、状況的に発声が不可能な存在のみ、声の代わりに身体反応で示してよい。',
+    '・各存在のセリフは、その性格・口調・核心欲求/恐怖から生まれる固有の言い回しにする。複数体が同時に喋るときは、声・語彙・態度を互いに被らせない。',
+    '',
+    '【読みやすさ（1ターン1焦点・厳守）】',
+    '・1ターンは「①今ターンの新しい出来事 → ②それへの各キャラの反応・セリフ → ③次への変化（フック）」の流れで構成する。',
+    '・同じ情報・同じ感情を、言い換えて何度も重ねない。比喩を1場面に過剰に積まない。',
+    '・焦点を1つに絞り、視点が散らばって何が起きているか分からなくならないようにする（描写の濃さは保ったまま、伝わりやすく）。'
+  ].join('\n');
+
+  // Wrap Planner.build and append the block to the FINAL sys (after all
+  // extensions + dedup + earlier wraps like fix96), so nothing removes it
+  // and it sits after the base prompt. Idempotent via MARK.
+  function wrap(){
+    var P = window.Planner || (typeof Planner !== 'undefined' ? Planner : null);
+    if (!P || typeof P.build !== 'function') return false;
+    if (P.__v292Dfix105Build) return true;
+    var orig = P.build.bind(P);
+    P.build = function(){
+      var r = orig.apply(this, arguments);
+      try {
+        if (r && typeof r.sys === 'string' && r.sys.indexOf(MARK) < 0){
+          r.sys = r.sys + '\n\n' + BLOCK;
+        }
+      } catch(e){}
+      return r;
+    };
+    P.__v292Dfix105Build = true;
+    try { console.log('[v292Dfix105] momentum + autonomous-cast + readability rules armed (build-append)'); } catch(e){}
+    return true;
+  }
+  if (!wrap()){
+    var tries = 0;
+    var iv = setInterval(function(){ tries++; if (wrap() || tries > 120) clearInterval(iv); }, 150);
+  }
+})();
