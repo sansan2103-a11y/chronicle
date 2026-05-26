@@ -101,6 +101,16 @@
     if (!narr) return '';
     var s = Array.isArray(narr) ? narr.join('\n') : String(narr);
 
+    // v292Dfix101: the model sometimes emits ESCAPED output (literal \n, \", \t)
+    // that no upstream step un-escapes, so a real newline shows up as the text "\n"
+    // and a tag as <say who=\"X\">. Un-escape first: this restores real newlines
+    // (so the speaker resolvers' sentence-splitting on \n works again) AND turns
+    // \"  into " so the <say who="X"> regex below can match & convert it.
+    if (s.indexOf('\\') >= 0){
+      s = s.replace(/\\r\\n/g, '\n').replace(/\\r/g, '\n').replace(/\\n/g, '\n')
+           .replace(/\\t/g, ' ').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+    }
+
     function isInnerMonologue(t){
       return /^\s*[\(（][^\)）]*[\)）]\s*$/.test(t);
     }
@@ -478,6 +488,38 @@
     return subj;
   }
 
+  // ---------- v292Dfix101: right-panel (展開の描写) escape-leak sanitizer ----------
+  // The right narrative panel splits on real newlines into <p> and converts real
+  // <say> tags. When the model emits ESCAPED output (literal \n, \" and an escaped
+  // <say who=\"X\"> tag), the renderer can't process it → the raw "\n" and the tag
+  // show as visible text. preprocessNarrative fixes the LEFT log; this cleans the
+  // already-rendered RIGHT panel. Operates only on <p>/<span> (never buttons), and
+  // is idempotent (after cleaning there are no artifacts left to match).
+  function sanitizeNarrHtml(html){
+    if (!html) return html;
+    if (!/\\n|\\t|\\r|\\"|&lt;\/?say|<\/?say/i.test(html) && html.indexOf('\\') < 0) return html;
+    var out = html;
+    out = out.replace(/&lt;\/?say[^&]*?&gt;/gi, '');   // entity-escaped <say ...> / </say>
+    out = out.replace(/<\/?say[^>]*>/gi, '');           // raw <say ...> / </say>
+    out = out.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+    out = out.replace(/\\r\\n/g, '<br>').replace(/\\r/g, '<br>').replace(/\\n/g, '<br>').replace(/\\t/g, ' ');
+    return out;
+  }
+  function sanitizeRightPanel(){
+    try {
+      var story = document.getElementById('story');
+      if (!story) return;
+      var nodes = story.querySelectorAll('.narr-block p, .narr-block span, .narr-block .dial');
+      for (var i = 0; i < nodes.length; i++){
+        var el = nodes[i];
+        if (el.querySelector && el.querySelector('button')) continue;  // never touch button hosts
+        var h = el.innerHTML;
+        var cleaned = sanitizeNarrHtml(h);
+        if (cleaned !== h) el.innerHTML = cleaned;
+      }
+    } catch(e){}
+  }
+
   function extractFromTurn(turn){
     var narr = turn && turn.narrative;
     if (!narr) return [];
@@ -540,6 +582,8 @@
   // ---------- main: render-hook repair ----------
   function repair(){
     try {
+      // v292Dfix101: clean any escape-leak (\n / <say>) from the right narrative panel
+      sanitizeRightPanel();
       var stream = document.getElementById('dialogue-stream');
       if (!stream) return 0;
       var st = getState();
