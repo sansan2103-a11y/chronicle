@@ -141,6 +141,49 @@
     return s;
   }
 
+  // ---------- v292Dfix99: non-cast (entity) avatar auto-generation ----------
+  // Cast avatars are Pollinations URLs (anime portrait of <appearance>, ... ?model=flux).
+  // Non-cast speakers labeled by fix98 (人形/妖怪/モンスター/custom) have no avatar →
+  // show '?'. Generate one for them too, from the appearance the PROSE gives at the
+  // entity's first mention. Deterministic seed per name = same entity, same image,
+  // stable across re-renders. In-memory cache; new story (turns cleared) = fresh.
+  var NC_AVATARS = Object.create(null);   // name -> pollinations url
+  var NC_NARR = '';                       // all-turns narrative, set by repair()
+  function ncHash(s){
+    var h = 0; s = String(s || '');
+    for (var i = 0; i < s.length; i++){ h = ((h << 5) - h + s.charCodeAt(i)) | 0; }
+    return Math.abs(h);
+  }
+  // Pull the entity's appearance from its FIRST mention: the sentence containing the
+  // name plus up to 2 following sentences (intros usually describe looks right after),
+  // with any 「dialogue」 stripped so speech doesn't pollute the image prompt.
+  function ncAppearance(name, narr){
+    if (!name || !narr) return '';
+    var pos = narr.indexOf(name);
+    if (pos < 0) return '';
+    var s1 = narr.lastIndexOf('。', pos), s2 = narr.lastIndexOf('\n', pos);
+    var start = Math.max(s1, s2) + 1;
+    var chunk = narr.slice(start, start + 200);
+    var m = chunk.match(/^(?:[^。\n]*[。\n]){1,3}/);
+    var appear = (m ? m[0] : chunk);
+    appear = appear.replace(/[「『〝][^」』〟]*[」』〟]/g, ' ');  // drop quoted speech
+    appear = appear.replace(/\s+/g, ' ').trim();
+    if (appear.length > 150) appear = appear.slice(0, 150);
+    return appear;
+  }
+  function ncBuildAvatar(name){
+    if (!name || name === '???' ) return '';
+    if (NC_AVATARS[name]) return NC_AVATARS[name];
+    var appear = ncAppearance(name, NC_NARR);
+    var subject = appear ? (name + ', ' + appear) : (name + ', mysterious figure');
+    var prompt = 'anime portrait of ' + subject + ', fantasy, dramatic lighting, high quality';
+    var seed = ncHash(name) % 1000000;
+    var url = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt)
+            + '?width=384&height=384&seed=' + seed + '&nologo=true&model=flux';
+    NC_AVATARS[name] = url;
+    return url;
+  }
+
   // ---------- avatar lookup (fix62 と協調) ----------
   function lookupAvatar(name){
     if (!name) return '';
@@ -162,6 +205,11 @@
           if (arr[i] && arr[i].name === name && arr[i].avatar) return arr[i].avatar;
         }
       }
+    } catch(e){}
+    // v292Dfix99: not a cast member → auto-generate an avatar from the prose
+    try {
+      var nc = ncBuildAvatar(name);
+      if (nc) return nc;
     } catch(e){}
     return '';
   }
@@ -496,6 +544,9 @@
           }
         }
       } catch(__e){}
+      // v292Dfix99: expose all-turns narrative so lookupAvatar can derive a
+      // non-cast entity's appearance for auto-generated avatars.
+      try { if (typeof __allNarr === 'string') NC_NARR = __allNarr; } catch(__ne){}
       var added = 0;
       for (var i = 0; i < turns.length; i++){
         var t = turns[i];
