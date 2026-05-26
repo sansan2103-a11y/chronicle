@@ -568,10 +568,151 @@
     } catch(e){}
   }
 
+  // ---------- v292Dfix104: second-pass LLM dialogue extraction (Option B) ----------
+  // The prose heuristics (fix97/98/100) can't catch every Japanese form (天狗 / 「空気」
+  // mis-attribution / observer exclamations…). Instead, after a turn's narrative exists,
+  // ask a cheap UNCENSORED model (Hermes 4 70B) to list {speaker,text} for that ONE turn,
+  // and build the log from it. Falls back to the heuristics if extraction is missing or
+  // fails — so nothing breaks. 展開 stays fully free (the MAIN call is untouched).
+  // Key is read from chr6.cfg.orKey at call time and never logged. Uses XHR to bypass the
+  // fix84 fetch-wrapper so temperature stays 0 (deterministic extraction).
+  var B_MODEL    = 'nousresearch/hermes-4-70b';
+  var B_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
+  var B_CACHE_KEY = 'chr6_v292Dfix104_dlg';
+  var B_OFF_KEY   = 'chr6_v292Dfix104_off';
+  var B_CACHE = (function(){ try { return JSON.parse(localStorage.getItem(B_CACHE_KEY) || '{}') || {}; } catch(e){ return {}; } })();
+  var B_PENDING = Object.create(null);
+  var B_FAILS   = Object.create(null);
+  var B_QUEUE   = [];
+  var B_BUSY    = false;
+  var B_DIRTY   = false;
+  var B_MAX_FAILS = 3;
+  function bSaveCache(){ try { localStorage.setItem(B_CACHE_KEY, JSON.stringify(B_CACHE)); } catch(e){} }
+  function bGet(preNarr){ var v = B_CACHE[ncHash(preNarr)]; return (v && v.length) ? v : null; }
+  function bHasQuote(s){ return /[「『][^」』]/.test(s || ''); }
+  function bEnabled(){
+    try {
+      if (localStorage.getItem(B_OFF_KEY)) return false;
+      var c = (JSON.parse(localStorage.getItem('chr6') || '{}').cfg) || {};
+      return c.provider === 'openrouter' && !!c.orKey;
+    } catch(e){ return false; }
+  }
+  function bBuildPrompt(narr, names){
+    return 'You extract spoken dialogue from one scene of a Japanese story.\n'
+      + 'Known characters: ' + (names && names.length ? names.join(', ') : '(none listed)') + '.\n'
+      + 'List EVERY line a character SPEAKS ALOUD, in the order it appears, with the speaker.\n'
+      + 'Rules:\n'
+      + '- Copy each line EXACTLY as written (verbatim; do NOT paraphrase, translate, or trim).\n'
+      + '- speaker = whoever the prose attributes the line to. For non-cast beings, use the name the prose uses (e.g. 怪異, 天狗, 人形).\n'
+      + '- Do NOT include sound effects, onomatopoeia, or narration — only real spoken words.\n'
+      + '- If a line\'s speaker is genuinely unknown, use "???".\n'
+      + '- Output ONLY a JSON array, nothing else: [{"speaker":"name","text":"line"}]\n'
+      + 'Scene:\n' + narr;
+  }
+  function bParse(text){
+    if (!text) return null;
+    var s = String(text), i = s.indexOf('['), j = s.lastIndexOf(']');
+    if (i < 0 || j < 0 || j < i) return null;
+    try {
+      var arr = JSON.parse(s.slice(i, j + 1));
+      if (!Array.isArray(arr)) return null;
+      var out = [];
+      for (var k = 0; k < arr.length; k++){
+        var o = arr[k];
+        if (o && o.text != null && String(o.text).trim()){
+          out.push({ speaker: String(o.speaker || '').trim(), text: String(o.text).trim() });
+        }
+      }
+      return out;
+    } catch(e){ return null; }
+  }
+  function bCall(narr, names, cb){
+    var key = '';
+    try { var c = JSON.parse(localStorage.getItem('chr6') || '{}'); key = (c.cfg && c.cfg.orKey) || ''; } catch(e){}
+    if (!key){ cb(null); return; }
+    var body;
+    try { body = JSON.stringify({ model: B_MODEL, temperature: 0, max_tokens: 900,
+      messages: [{ role: 'user', content: bBuildPrompt(narr, names) }] }); } catch(e){ cb(null); return; }
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', B_ENDPOINT, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('Authorization', 'Bearer ' + key);
+      xhr.timeout = 30000;
+      xhr.onload = function(){
+        if (xhr.status >= 200 && xhr.status < 300){
+          try {
+            var j = JSON.parse(xhr.responseText);
+            var content = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+            cb(bParse(content));
+          } catch(e){ cb(null); }
+        } else { cb(null); }
+      };
+      xhr.onerror = function(){ cb(null); };
+      xhr.ontimeout = function(){ cb(null); };
+      xhr.send(body);
+    } catch(e){ cb(null); }
+  }
+  function bFullRebuild(){
+    try {
+      var s = document.getElementById('dialogue-stream');
+      if (s) s.innerHTML = '';
+      var ns = window.__v292Dfix66;
+      if (ns && ns.repair) ns.repair();
+    } catch(e){}
+  }
+  function bProcess(){
+    if (B_BUSY || !B_QUEUE.length) return;
+    var item = B_QUEUE.shift();
+    if (B_CACHE[item.hash] || B_PENDING[item.hash]){ bProcess(); return; }
+    B_PENDING[item.hash] = true; B_BUSY = true;
+    bCall(item.narr, item.names, function(arr){
+      delete B_PENDING[item.hash]; B_BUSY = false;
+      if (arr && arr.length){ B_CACHE[item.hash] = arr; bSaveCache(); B_DIRTY = true; }
+      else { B_FAILS[item.hash] = (B_FAILS[item.hash] || 0) + 1; }
+      if (B_QUEUE.length){ setTimeout(bProcess, 300); }
+      else if (B_DIRTY){ B_DIRTY = false; try { bFullRebuild(); } catch(e){} }
+    });
+  }
+  function bSchedule(turns, names){
+    if (!turns || !turns.length){
+      if (Object.keys(B_CACHE).length){ B_CACHE = {}; bSaveCache(); }  // story reset → clean
+      return;
+    }
+    if (!bEnabled()) return;
+    for (var i = 0; i < turns.length; i++){
+      var t = turns[i]; if (!t || !t.narrative) continue;
+      var pre = preprocessNarrative(t.narrative);
+      if (!bHasQuote(pre)) continue;
+      var h = ncHash(pre);
+      if (B_CACHE[h] || B_PENDING[h] || (B_FAILS[h] || 0) >= B_MAX_FAILS) continue;
+      B_QUEUE.push({ hash: h, narr: pre, names: names });
+    }
+    bProcess();
+  }
+
   function extractFromTurn(turn){
     var narr = turn && turn.narrative;
     if (!narr) return [];
     var preprocessed = preprocessNarrative(narr);
+    // v292Dfix104: prefer the LLM extraction for this turn if we have it
+    var bres = bGet(preprocessed);
+    if (bres){
+      var bout = [], bseen = Object.create(null);
+      for (var bi = 0; bi < bres.length; bi++){
+        var be = bres[bi];
+        if (!be || !be.text) continue;
+        var bk = dialogueKey(be.speaker, be.text);
+        if (bseen[bk]) continue; bseen[bk] = true;
+        bout.push({ speaker: be.speaker, text: be.text });
+      }
+      bout.sort(function(a, b){
+        var ia = preprocessed.indexOf(a.text); if (ia === -1) ia = Number.MAX_SAFE_INTEGER;
+        var ib = preprocessed.indexOf(b.text); if (ib === -1) ib = Number.MAX_SAFE_INTEGER;
+        return ia - ib;
+      });
+      return bout;
+    }
     var out = [];
     var seen = Object.create(null);
     var _names = castNameList();
@@ -694,6 +835,8 @@
       } catch(__be){}
       // v292Dfix102: upgrade any stale / cold-start "?" avatars on every repair.
       try { upgradeMissingAvatars(stream); } catch(__ua){}
+      // v292Dfix104: queue LLM dialogue extraction for any uncached turns (async).
+      try { bSchedule(turns, castNameList()); } catch(__bse){}
       if (added > 0){
         stream.scrollTop = stream.scrollHeight;
         try { console.log(TAG, 'repaired', added, 'dialogue cards'); } catch(_){}
