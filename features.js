@@ -9244,3 +9244,64 @@
 
   try { console.log('[v292Dfix106] NPC typed-field protector armed (capture-phase guard)'); } catch(e){}
 })();
+
+/* =====================================================================
+ * v292Dfix107: stop NPC add/delete from wiping unsaved NPC edits
+ * ---------------------------------------------------------------------
+ * おしん report 2026-05-27: adding NPC2 erases NPC1's typed info.
+ * Root cause: UI.addNpc() pushes an empty npc to S.cast.npcs then calls
+ * _renderNpcList(), which does el.innerHTML='' and rebuilds every card
+ * from S.cast.npcs. Field text the user typed but hasn't Saved lives only
+ * in the DOM inputs (Save = saveSettings writes DOM->S.cast). So the
+ * rebuild repopulates existing cards from the still-empty S.cast and the
+ * typed data vanishes. Same hazard on _delNpc (delete re-renders too).
+ * Fix (root cause, via the only safe channel — index.html is uneditable):
+ * UI/S are reachable from this classic script's global lexical scope, so
+ * wrap UI.addNpc & UI._delNpc to first commit the current DOM card values
+ * into S.cast.npcs (what saveSettings does, minus the empty-name filter &
+ * without persisting), THEN run the original. The rebuild now has the
+ * latest values and keeps them. Idempotent. Retries until UI exists.
+ * ===================================================================== */
+(function v292Dfix107(){
+  if (window.__v292Dfix107) return;
+  var FIELDS = ['name','desc','personality','coreDesire','coreFear','wound'];
+
+  function getUI(){ try { if (typeof UI !== 'undefined') return UI; } catch(e){} return (window.UI || null); }
+  function getS(){ try { if (typeof S !== 'undefined') return S; } catch(e){} return (window.S || null); }
+
+  function commitDomToCast(){
+    try {
+      var st = getS();
+      if (!st || !st.cast || !st.cast.npcs) return;
+      var cards = document.querySelectorAll('#npcList .npc-card');
+      for (var i = 0; i < cards.length; i++){
+        if (!st.cast.npcs[i]) continue;
+        for (var j = 0; j < FIELDS.length; j++){
+          var el = cards[i].querySelector('[data-f="' + FIELDS[j] + '"]');
+          if (el) st.cast.npcs[i][FIELDS[j]] = el.value;
+        }
+      }
+    } catch(e){}
+  }
+
+  function arm(){
+    var U = getUI();
+    if (!U || typeof U.addNpc !== 'function') return false;
+    if (U.__v292Dfix107) return true;
+    var origAdd = U.addNpc.bind(U);
+    U.addNpc = function(){ commitDomToCast(); return origAdd.apply(this, arguments); };
+    if (typeof U._delNpc === 'function'){
+      var origDel = U._delNpc.bind(U);
+      U._delNpc = function(){ commitDomToCast(); return origDel.apply(this, arguments); };
+    }
+    U.__v292Dfix107 = true;
+    window.__v292Dfix107 = true;
+    try { console.log('[v292Dfix107] NPC add/delete now commits DOM->cast first (no edit loss)'); } catch(e){}
+    return true;
+  }
+
+  if (!arm()){
+    var n = 0;
+    var iv = setInterval(function(){ n++; if (arm() || n > 200) clearInterval(iv); }, 200);
+  }
+})();
