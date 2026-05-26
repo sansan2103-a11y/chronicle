@@ -1,6 +1,6 @@
 // =====================================================================
 // Chronicle TRPG - v292Dfix66: render-hook based repair
-// (redeploy: fix102 — Pages build #738 failed at 13s; re-triggering)
+// (fix103: non-cast avatar prompt → eerie/horror creature style + scene tone)
 // ---------------------------------------------------------------------
 // 症状 (実機 iPhone, ?cb=v292Dfix65b):
 //   - 会話ログにカードが累積しない。各ターン送信ごとに直近1ターン分
@@ -186,8 +186,16 @@
     if (!name || name === '???' ) return '';
     if (NC_AVATARS[name]) return NC_AVATARS[name];
     var appear = ncAppearance(name, NC_NARR);
-    var subject = appear ? (name + ', ' + appear) : (name + ', mysterious figure');
-    var prompt = 'anime portrait of ' + subject + ', fantasy, dramatic lighting, high quality';
+    // v292Dfix103: non-cast entities are usually creatures/threats, not pretty cast
+    // characters — the old "anime portrait of X, fantasy, high quality" wrapper made
+    // 怪異/モンスター look cute. Use an eerie/menacing wrapper instead, and fold in the
+    // scene's tone (e.g. 不気味) so the mood matches the story.
+    var tone = '';
+    try { var st = getState(); if (st && st.scene && st.scene.tone) tone = String(st.scene.tone).trim(); } catch(e){}
+    var subject = appear ? (name + ', ' + appear) : (name + ', unknown ominous entity');
+    var prompt = 'dark eerie horror creature art of ' + subject
+               + (tone ? ', ' + tone : '')
+               + ', ominous, sinister, unsettling, grim dark atmosphere, dramatic shadows, detailed';
     var seed = ncHash(name) % 1000000;
     var url = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt)
             + '?width=384&height=384&seed=' + seed + '&nologo=true&model=flux';
