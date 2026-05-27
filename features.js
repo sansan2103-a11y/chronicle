@@ -9234,6 +9234,26 @@
               _react = ['【キャラの反応（標準）】',
                 '・場にいるキャラは毎ターン、出来事に感情・身体・声のいずれかで具体的に反応する。淡々とした要約で流さない。'].join('\n');
             }
+            // v292Dfix113: DIALOGUE quality, scaled by S.cfg.dialogueLevel
+            // (0 控えめ / 1 標準 / 2 濃いめ, default 1), chosen via the topbar
+            // "セリフ" selector. Controls how characterful/substantive spoken lines are.
+            var _dl = 1;
+            try { var _c3 = (typeof S !== 'undefined' && S.cfg) ? S.cfg : ((window.S && window.S.cfg) || {}); if (_c3 && _c3.dialogueLevel != null) _dl = +_c3.dialogueLevel; } catch(_e3){}
+            var _dlg = '';
+            if (_dl <= 0){
+              _dlg = ['【セリフ（控えめ）】',
+                '・セリフは短く最小限でよい。'].join('\n');
+            } else if (_dl >= 2){
+              _dlg = ['【セリフのキャラ立ち（濃いめ・厳守）】',
+                '・キャラのセリフは、その性格・口調・核心欲求/恐怖から生まれる「固有の言い回し」にする。誰が喋っても同じ言葉、にしない。',
+                '・状況的に喋れるなら、呻き・叫びだけで終わらせず、中身のある言葉（問い・拒絶・懇願・皮肉・本音/建前・呼びかけ・独白）を最低1つ入れる。',
+                '・セリフに意図・感情・サブテキスト（言外の含み）を込める。棒読みの説明ゼリフにしない。',
+                '・複数キャラが喋るときは、声・語彙・テンポ・態度を互いに被らせない。',
+                '・ただし気絶・口を塞がれる・物理的に発話不能なときは無理に喋らせず、その時は短い声や地の文で示す。'].join('\n');
+            } else {
+              _dlg = ['【セリフ（標準）】',
+                '・キャラが喋るときは、その性格・口調が表れた自然なセリフにする。誰でも同じ言い回しにしない。'].join('\n');
+            }
             // v292Dfix112b: re-assert the output guard as the VERY LAST thing,
             // AFTER the drama/reaction rules — otherwise the model echoes those
             // strong structured rules into the prose as a "【重要ルール監査】" block.
@@ -9241,7 +9261,7 @@
               '・ここまでの全ルール（進行・反応・反復禁止など）は「あなたへの内部指示」。物語の本文には絶対に出力しない。',
               '・「【重要ルール監査】」「〜順守」「〜起点」「〜追加」のような、ルールの列挙・自己点検・チェックリスト・メモを本文に書くことを固く禁じる。【】で囲んだ管理用ブロックを本文に出さない。',
               '・出力は物語の地の文と登場人物のセリフ（「」/ <say>）だけ。'].join('\n');
-            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_react ? ('\n\n' + _react) : '') + '\n\n' + _guard;
+            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_react ? ('\n\n' + _react) : '') + (_dlg ? ('\n\n' + _dlg) : '') + '\n\n' + _guard;
           }
         }
       } catch(e){}
@@ -9447,6 +9467,7 @@
   // v292Dfix112: reaction-intensity selector alongside the drama one.
   var REACT_LABELS = ['控えめ','標準','濃いめ'];
   function curReaction(){ var c = getCfg(); var v = c && c.reactionLevel; return (v == null) ? 1 : (+v); }
+  function curDialogue(){ var c = getCfg(); var v = c && c.dialogueLevel; return (v == null) ? 1 : (+v); }
   function mkSel(id, labelText, title, labels, curVal, cfgKey){
     var wrap = document.createElement('span');
     wrap.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin-right:6px;font-size:12px;color:var(--dim,#888);';
@@ -9473,8 +9494,10 @@
       if (!setBtn || !setBtn.parentNode) return false;
       var w1 = mkSel('v292-drama-sel', '📖 進行', '物語の進行の強さ（オフ=雰囲気漂流 ←→ 強め=ドラマ重視）', LABELS, curLevel(), 'dramaLevel');
       var w2 = mkSel('v292-react-sel', '💬 反応', 'キャラの反応の濃さ（控えめ ←→ 濃いめ）', REACT_LABELS, curReaction(), 'reactionLevel');
+      var w3 = mkSel('v292-dlg-sel', '🗨 セリフ', 'セリフのキャラ立ち・中身（控えめ ←→ 濃いめ）', REACT_LABELS, curDialogue(), 'dialogueLevel');
       setBtn.parentNode.insertBefore(w1, setBtn);
       setBtn.parentNode.insertBefore(w2, setBtn);
+      setBtn.parentNode.insertBefore(w3, setBtn);
       return true;
     } catch(e){ return false; }
   }
