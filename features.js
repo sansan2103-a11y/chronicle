@@ -9254,6 +9254,39 @@
               _dlg = ['【セリフ（標準）】',
                 '・キャラが喋るときは、その性格・口調が表れた自然なセリフにする。誰でも同じ言い回しにしない。'].join('\n');
             }
+            // v292Dfix114: re-inject the per-character VOICE profile that fix58's
+            // prompt-rebuild dropped (personality / desire / fear), and push the
+            // active NPCs to speak proactively in their own voice. Only NPCs whose
+            // name is ALREADY in the prompt are listed (so fix95's "appear when
+            // named" gating is respected — a not-yet-introduced NPC like サヤ stays
+            // out). The hero is player-controlled, so it's NOT pushed to self-talk.
+            var _voice = '';
+            try {
+              var _cast = (typeof S !== 'undefined' && S.cast) ? S.cast : ((window.S && window.S.cast) || null);
+              if (_cast && Array.isArray(_cast.npcs)){
+                var _vl = [];
+                for (var _ni = 0; _ni < _cast.npcs.length; _ni++){
+                  var _n = _cast.npcs[_ni];
+                  if (!_n || !_n.name) continue;
+                  if (r.sys.indexOf(_n.name) < 0) continue;   // not active in this scene → skip (fix95)
+                  var _bits = [];
+                  if (_n.personality) _bits.push('性格: ' + _n.personality);
+                  if (_n.coreDesire)  _bits.push('欲求: ' + _n.coreDesire);
+                  if (_n.coreFear)    _bits.push('恐怖: ' + _n.coreFear);
+                  _vl.push('・' + _n.name + (_bits.length ? '（' + _bits.join(' ／ ') + '）' : ''));
+                }
+                if (_vl.length){
+                  _voice = ['【登場キャラの声（このターン場にいる登場人物）】']
+                    .concat(_vl)
+                    .concat([
+                      '・上記の各キャラは、その性格・欲求・恐怖から生まれる「固有の声」を持つ。誰が喋っても同じ言葉、にしない。',
+                      '・プレイヤーが指定しなくても、場にいる上記キャラ（および登場済みの怪異・モンスター等）は毎ターン最低1人、自分の意志で能動的に発言する。呻き・相槌だけで終わらせず、その性格に沿った中身のある言葉を出す。',
+                      '・気絶・口を塞がれる等で物理的に発話不能なキャラのみ、無理に喋らせず短い声か地の文で示す。',
+                      '・主人公（操作キャラ）の新しいセリフは勝手に作らない（プレイヤー入力に従う）。'
+                    ]).join('\n');
+                }
+              }
+            } catch(_ev){}
             // v292Dfix112b: re-assert the output guard as the VERY LAST thing,
             // AFTER the drama/reaction rules — otherwise the model echoes those
             // strong structured rules into the prose as a "【重要ルール監査】" block.
@@ -9261,7 +9294,7 @@
               '・ここまでの全ルール（進行・反応・反復禁止など）は「あなたへの内部指示」。物語の本文には絶対に出力しない。',
               '・「【重要ルール監査】」「〜順守」「〜起点」「〜追加」のような、ルールの列挙・自己点検・チェックリスト・メモを本文に書くことを固く禁じる。【】で囲んだ管理用ブロックを本文に出さない。',
               '・出力は物語の地の文と登場人物のセリフ（「」/ <say>）だけ。'].join('\n');
-            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_react ? ('\n\n' + _react) : '') + (_dlg ? ('\n\n' + _dlg) : '') + '\n\n' + _guard;
+            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_react ? ('\n\n' + _react) : '') + (_dlg ? ('\n\n' + _dlg) : '') + (_voice ? ('\n\n' + _voice) : '') + '\n\n' + _guard;
           }
         }
       } catch(e){}
