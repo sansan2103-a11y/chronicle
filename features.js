@@ -9632,6 +9632,17 @@
 (function v292Dfix118(){
   if (window.__aiAvatar) return;
   function getS(){ try { if (typeof S !== 'undefined') return S; } catch(e){} return window.S || null; }
+  // v292Dfix120: look up a character's description so refreshAll regenerates with the
+  // real appearance/role, not an empty prompt (which produced mismatched AI avatars).
+  function descFor(name){
+    try {
+      var st = getS(); if (!st || !st.cast) return '';
+      if (st.cast.hero && st.cast.hero.name === name) return st.cast.hero.desc || '';
+      var arr = st.cast.npcs || [];
+      for (var i = 0; i < arr.length; i++){ if (arr[i] && arr[i].name === name) return arr[i].desc || ''; }
+    } catch(e){}
+    return '';
+  }
   var cache = Object.create(null);
   var pending = Object.create(null);
   function hash(s){ var h = 0; s = String(s || ''); for (var i = 0; i < s.length; i++){ h = ((h << 5) - h + s.charCodeAt(i)) | 0; } return Math.abs(h); }
@@ -9704,7 +9715,7 @@
           if (!nm || nm === '???' || seen[nm]) continue;
           seen[nm] = 1;
           if (cache[nm]) swapAvatar(nm);
-          else if (!pending[nm]){ pending[nm] = true; genAsync(nm, ''); }
+          else if (!pending[nm]){ pending[nm] = true; genAsync(nm, descFor(nm)); }
         }
       } catch(e){}
     }

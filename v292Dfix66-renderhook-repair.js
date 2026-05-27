@@ -210,13 +210,27 @@
     try { if (url && window.__aiAvatar && window.__aiAvatar.enabled && window.__aiAvatar.enabled()) return window.__aiAvatar.urlFor(name, url, desc || ''); } catch(e){}
     return url;
   }
+  // v292Dfix120: resolve a character's description (gender/appearance/role) for the
+  // AI-avatar prompt. Without this, the dfix15 cache branch passed an EMPTY desc and
+  // the LLM invented a mismatched look (おしん: "アイコンが設定とあってない").
+  function castDescFor(name){
+    try {
+      var st = getState();
+      if (st && st.cast){
+        if (st.cast.hero && st.cast.hero.name === name) return st.cast.hero.desc || '';
+        var arr = st.cast.npcs || [];
+        for (var i = 0; i < arr.length; i++){ if (arr[i] && arr[i].name === name) return arr[i].desc || ''; }
+      }
+    } catch(e){}
+    return '';
+  }
   function lookupAvatar(name){
     if (!name) return '';
     try {
       if (window.__v292 && window.__v292.dfix15 &&
           typeof window.__v292.dfix15.getAvatar === 'function'){
         var v = window.__v292.dfix15.getAvatar(name);
-        if (v) return aiHook(name, v, '');
+        if (v) return aiHook(name, v, castDescFor(name) || ncAppearance(name, NC_NARR));
       }
     } catch(e){}
     try {
