@@ -9480,6 +9480,8 @@
   var REACT_LABELS = ['控えめ','標準','濃いめ'];
   function curReaction(){ var c = getCfg(); var v = c && c.reactionLevel; return (v == null) ? 1 : (+v); }
   function curDialogue(){ var c = getCfg(); var v = c && c.dialogueLevel; return (v == null) ? 1 : (+v); }
+  // v292Dfix121: art-style index for AI avatars (0=アニメ default / 1=リアル / 2=水彩)
+  function curStyle(){ var c = getCfg(); var v = c && c.artStyle; return (v == null) ? 0 : (+v); }
   function mkSel(id, labelText, title, labels, curVal, cfgKey, onAfter){
     var wrap = document.createElement('span');
     wrap.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin-right:6px;font-size:12px;color:var(--dim,#888);';
@@ -9510,10 +9512,12 @@
       var w3 = mkSel('v292-dlg-sel', '🗨 セリフ', 'セリフのキャラ立ち・中身（控えめ ←→ 濃いめ）', REACT_LABELS, curDialogue(), 'dialogueLevel');
       var curAv = (function(){ var c = getCfg(); return (c && c.aiAvatar != null) ? +c.aiAvatar : 0; })();
       var w4 = mkSel('v292-avatar-sel', '🎨 アイコン', 'アバター生成（標準テンプレ / AIがキャラに合わせて生成）', ['標準','AI'], curAv, 'aiAvatar', function(v){ try { if (v === 1 && window.__aiAvatar && window.__aiAvatar.refreshAll) window.__aiAvatar.refreshAll(); } catch(e){} });
+      var w5 = mkSel('v292-style-sel', '🖌 画風', 'AIアイコンの絵柄（アニメ / リアル / 水彩）。切替で全キャラ即反映・作り直し不要', ['アニメ','リアル','水彩'], curStyle(), 'artStyle', function(v){ try { if (window.__aiAvatar && window.__aiAvatar.refreshAll) window.__aiAvatar.refreshAll(); } catch(e){} });
       setBtn.parentNode.insertBefore(w1, setBtn);
       setBtn.parentNode.insertBefore(w2, setBtn);
       setBtn.parentNode.insertBefore(w3, setBtn);
       setBtn.parentNode.insertBefore(w4, setBtn);
+      setBtn.parentNode.insertBefore(w5, setBtn);
       return true;
     } catch(e){ return false; }
   }
@@ -9645,9 +9649,25 @@
   }
   var cache = Object.create(null);
   var pending = Object.create(null);
+  // v292Dfix121: persist the (style-NEUTRAL) character description prompt per name so
+  // the avatar is STABLE across reloads (おしん: アイコンが毎回変わって"迷走"). The art
+  // style is applied separately at buildUrl time, so switching 画風 restyles every
+  // avatar instantly with NO regeneration. Key is style-neutral + versioned (v3).
+  var LSP = 'chrAiAv3:';
+  function loadCache(name){ try { if (cache[name]) return; var v = localStorage.getItem(LSP + name); if (v) cache[name] = v; } catch(e){} }
+  function saveCache(name, prompt){ try { localStorage.setItem(LSP + name, prompt); } catch(e){} }
+  // art-style selector (S.cfg.artStyle index → fixed style suffix appended to every prompt)
+  var STYLE_LIST = ['anime', 'realistic', 'watercolor'];
+  var STYLE_SUFFIX = {
+    anime: ', high quality anime art style, clean detailed anime illustration, vibrant',
+    realistic: ', realistic digital painting, cinematic lighting, highly detailed',
+    watercolor: ', soft watercolor illustration, delicate brushwork, artistic'
+  };
+  function styleKey(){ var st = getS(); var i = (st && st.cfg && st.cfg.artStyle != null) ? (+st.cfg.artStyle) : 0; return STYLE_LIST[i] || 'anime'; }
   function hash(s){ var h = 0; s = String(s || ''); for (var i = 0; i < s.length; i++){ h = ((h << 5) - h + s.charCodeAt(i)) | 0; } return Math.abs(h); }
   function buildUrl(prompt, name){
-    return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt)
+    var full = prompt + (STYLE_SUFFIX[styleKey()] || STYLE_SUFFIX.anime);
+    return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(full)
       + '?width=384&height=384&seed=' + (hash(name) % 1000000) + '&nologo=true&model=flux';
   }
   function speakerOfCard(c){
@@ -9675,8 +9695,8 @@
     var st = getS(); var cfg = (st && st.cfg) || {};
     if (cfg.provider !== 'openrouter' || !cfg.orKey){ delete pending[name]; return; }
     var tone = ''; try { if (st && st.scene && st.scene.tone) tone = String(st.scene.tone).trim(); } catch(e){}
-    var sys = 'You write ONE concise English image-generation prompt for a single-character square portrait. Vary the art style, mood, framing, lighting and expression to fit the character described. Output ONLY the prompt text — no quotes, no preamble, no explanation.';
-    var user = 'Character name: ' + name + '\nAppearance / role: ' + (desc || 'unknown figure') + '\nStory tone: ' + (tone || 'neutral') + '\nWrite the portrait prompt now.';
+    var sys = 'You write ONE concise English description of a single character for a square portrait: their gender, age, hair, build, clothing, and a fitting facial expression. Be faithful to the stated gender and appearance. Do NOT mention art style, medium, rendering, lighting or camera — only the character. Output ONLY the description, no quotes or preamble.';
+    var user = 'Character name: ' + name + '\nAppearance / role: ' + (desc || 'unknown figure') + '\nMood/tone (for expression only): ' + (tone || 'neutral') + '\nWrite the character description now.';
     try {
       var xhr = new XMLHttpRequest();
       xhr.open('POST', 'https://openrouter.ai/api/v1/chat/completions', true);
@@ -9689,19 +9709,20 @@
           var j = JSON.parse(xhr.responseText);
           var t = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
           t = String(t).replace(/^[\s"'`]+|[\s"'`]+$/g, '').replace(/\s+/g, ' ').slice(0, 400);
-          if (t){ cache[name] = t; swapAvatar(name); }
+          if (t){ cache[name] = t; saveCache(name, t); swapAvatar(name); }
         } catch(e){}
         delete pending[name];
       };
       xhr.onerror = function(){ delete pending[name]; };
       xhr.ontimeout = function(){ delete pending[name]; };
-      xhr.send(JSON.stringify({ model: cfg.orModel || 'nousresearch/hermes-4-405b', temperature: 0.9, max_tokens: 160, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] }));
+      xhr.send(JSON.stringify({ model: cfg.orModel || 'nousresearch/hermes-4-405b', temperature: 0.5, max_tokens: 160, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] }));
     } catch(e){ delete pending[name]; }
   }
   window.__aiAvatar = {
     enabled: function(){ var st = getS(); return !!(st && st.cfg && (+st.cfg.aiAvatar) === 1); },
     urlFor: function(name, fallbackUrl, desc){
       if (!name) return fallbackUrl;
+      if (!cache[name]) loadCache(name);
       if (cache[name]) return buildUrl(cache[name], name);
       if (!pending[name]){ pending[name] = true; genAsync(name, desc); }
       return fallbackUrl;
@@ -9714,6 +9735,7 @@
           var nm = speakerOfCard(cards[i]);
           if (!nm || nm === '???' || seen[nm]) continue;
           seen[nm] = 1;
+          if (!cache[nm]) loadCache(nm);
           if (cache[nm]) swapAvatar(nm);
           else if (!pending[nm]){ pending[nm] = true; genAsync(nm, descFor(nm)); }
         }
@@ -9737,6 +9759,7 @@
         if (src.indexOf('/prompt/') < 0) continue;          // only generated-portrait imgs
         var nm = (img.getAttribute('alt') || '').trim();
         if (!nm) continue;
+        if (!cache[nm]) loadCache(nm);
         if (cache[nm]){
           var url = buildUrl(cache[nm], nm);
           if (src !== url) img.src = url;
