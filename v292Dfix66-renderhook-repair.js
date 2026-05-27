@@ -594,7 +594,7 @@
         var kids = blocks[b].children;
         var hit = -1;
         for (var c = 0; c < kids.length; c++){
-          if (/【[^】]{0,8}ルール監査】/.test(kids[c].textContent || '')){ hit = c; break; }
+          if (/【[^】\n]{0,30}(?:物語の進行|物語の推進|物語の展開|キャラの反応|反応=|セリフ|反復|ルール監査|出力の鉄則|登場キャラ|内部指示|最重要)[^】\n]{0,30}】/.test(kids[c].textContent || '')){ hit = c; break; }
         }
         if (hit < 0) continue;
         for (var d = kids.length - 1; d >= hit; d--){
@@ -820,9 +820,12 @@
   // narrative so it never shows (right panel + conv-log) AND never feeds back
   // into recentHistory (which would reinforce the model repeating it). The
   // marker is highly specific, so false-positives on real prose are negligible.
+  // v292Dfix115b: broadened from just 【…ルール監査】 to ALL of our appended
+  // rule-block headers (and the model's paraphrases like 【物語の進行】) that can
+  // leak into prose. Matches a 【…】 containing a rule keyword + everything after.
   function stripRuleAudit(s){
     if (!s || typeof s !== 'string') return s;
-    return s.replace(/【[^】\n]{0,8}ルール監査】[\s\S]*$/, '').replace(/[\s　]+$/, '');
+    return s.replace(/【[^】\n]{0,30}(?:物語の進行|物語の推進|物語の展開|キャラの反応|反応=|セリフ|反復|ルール監査|出力の鉄則|登場キャラ|内部指示|最重要)[^】\n]{0,30}】[\s\S]*$/, '').replace(/[\s　]+$/, '');
   }
 
   // ---------- main: render-hook repair ----------
