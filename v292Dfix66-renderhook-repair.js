@@ -821,6 +821,17 @@
           var __nm = __c.querySelector('.dlg-name');
           var __tx = __c.querySelector('.dlg-text');
           if (!__tx) continue;
+          // v292Dfix110: fix a doubled speaker name ("AはA" -> "A") in-place on
+          // ANY existing card (incl. ones built by earlier render hooks), so the
+          // surviving card after dedup shows the clean name.
+          if (__nm){
+            var __fcn = __nm.firstChild;
+            if (__fcn && __fcn.nodeType === 3){
+              var __raw = __fcn.textContent || '';
+              var __dd = __raw.replace(/^(\s*)(.+?)(?:は|が|も|と)\2(\s*)$/, '$1$2$3');
+              if (__dd !== __raw) __fcn.textContent = __dd;
+            }
+          }
           // v292Dfix91c: 会話ログは「発言ログ」。STORY(展開)/DO(行動) の入力echoカード
           // (fix56 製) はセリフではないので除去する。SAY(発話) は主人公の発言なので残す。
           if (__c.className.indexOf('v292Dfix56-input-card') !== -1 &&
