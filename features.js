@@ -1,3 +1,21 @@
+/* v292Dfix108 (early placement): install the console-noise filter FIRST,
+ * before any other v292 module logs, so it also silences the one-time
+ * startup "[v292DfixNN] installed" lines — not just runtime churn. The
+ * duplicate fix108 IIFE at the end of this file no-ops via the window flag.
+ * console.warn / console.error are deliberately untouched. */
+(function v292Dfix108early(){
+  if (window.__v292Dfix108) return;
+  window.__v292Dfix108 = true;
+  var origLog = console.log.bind(console);
+  console.log = function(){
+    try {
+      var first = (arguments.length && typeof arguments[0] === 'string') ? arguments[0] : '';
+      if (/^\s*\[v292/.test(first)) return;   // hide all v292 framework status/churn logs
+    } catch(e){}
+    return origLog.apply(console, arguments);
+  };
+})();
+
 // =====================================================================
 // Chronicle v292 features (Phase 4-B) — 10 features + v292Dfix17 patches
 // =====================================================================
