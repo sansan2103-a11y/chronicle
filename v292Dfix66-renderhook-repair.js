@@ -283,7 +283,12 @@
         if (!name || name === '???') continue;
         var url = lookupAvatar(name);
         if (url){
-          av.innerHTML = '<img src="' + escHtml(url) + '" alt="' + escHtml(name) + '" loading="lazy"'
+          // v292Dfix109: cache-bust each retry so a transient Pollinations 402
+          // (rate-limit) isn't reused from cache — forces a genuinely fresh
+          // request. The image's seed stays in the URL so content is identical;
+          // Pollinations ignores the extra _r param.
+          var fresh = url + (url.indexOf('?') > -1 ? '&' : '?') + '_r=' + Date.now();
+          av.innerHTML = '<img src="' + escHtml(fresh) + '" alt="' + escHtml(name) + '" loading="lazy"'
             + ' onerror="this.parentNode.textContent=String.fromCharCode(63)">';
         }
       }
@@ -929,7 +934,10 @@
   // Pollinations image is generated on first request (~30-40s); the first <img>
   // load can fail → onerror → "?". These delayed repairs re-insert the <img> for
   // any "?" card once the image has had time to warm up, with no user reload needed.
-  [4000, 10000, 20000, 35000].forEach(function(ms){
+  // v292Dfix109: extended retry windows (was 4/10/20/35s) so transient
+  // Pollinations 402 (rate-limit) spells that last longer than 35s still
+  // recover the avatar on their own — no user reload needed. 8 attempts to 180s.
+  [4000, 10000, 20000, 35000, 60000, 90000, 120000, 180000].forEach(function(ms){
     setTimeout(function(){
       try {
         var s = document.getElementById('dialogue-stream');
