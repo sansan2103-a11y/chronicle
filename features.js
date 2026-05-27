@@ -9685,9 +9685,15 @@
         if (speakerOfCard(cards[i]) !== name) continue;
         var av = cards[i].querySelector('.dlg-av');
         if (!av) continue;
+        // v292Dfix121b: apply each URL to a given avatar slot AT MOST ONCE. Without this,
+        // the 1.2s sweep kept re-setting src; when Pollinations 402/503'd, onerror swapped
+        // in "?", the next sweep re-created the <img>, it failed again → flicker loop. It
+        // also fought fix66/fix109's cache-bust retry (&_r=). data-aiav marks "done".
+        if (av.getAttribute('data-aiav') === url) continue;
         var img = av.querySelector('img');
         if (img){ if (img.getAttribute('src') !== url) img.src = url; }
         else av.innerHTML = '<img src="' + url + '" alt="' + name + '" loading="lazy" onerror="if(this.parentNode)this.parentNode.textContent=String.fromCharCode(63)">';
+        av.setAttribute('data-aiav', url);
       }
     } catch(e){}
   }
@@ -9762,7 +9768,8 @@
         if (!cache[nm]) loadCache(nm);
         if (cache[nm]){
           var url = buildUrl(cache[nm], nm);
-          if (src !== url) img.src = url;
+          // apply once per URL per img (idempotent) — stops repeat requests / flicker
+          if (img.getAttribute('data-aiav') !== url){ if (src !== url) img.src = url; img.setAttribute('data-aiav', url); }
         } else if (!pending[nm]){ pending[nm] = true; genAsync(nm, descFor(nm)); }
       }
     } catch(e){}
