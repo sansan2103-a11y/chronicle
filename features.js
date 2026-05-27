@@ -9776,20 +9776,40 @@
       try { console.log('[v292Dfix119] symbol-order corrected', sorted.length, 'cards'); } catch(_){}
     } catch(e){}
   }
-  function install(){
+  // NOTE: do NOT wrap __v292Dfix66.repair — later fixes (dedup) re-assign it on a
+  // timer and clobber the wrap (the classic "timing war"). Instead observe the
+  // stream directly: a MutationObserver fires reorderFixed after any card change,
+  // and a low-frequency interval re-attaches the observer if the stream node is
+  // replaced and acts as a safety net. reorderFixed is idempotent (no DOM op when
+  // already sorted) so it can't loop on its own mutations.
+  var scheduled = false;
+  function schedule(){
+    if (scheduled) return;
+    scheduled = true;
+    var raf = window.requestAnimationFrame || function(cb){ return setTimeout(cb, 16); };
+    raf(function(){ scheduled = false; reorderFixed(); });
+  }
+  var observed = null, mo = null;
+  function attach(){
+    var stream = document.getElementById('dialogue-stream');
+    if (!stream) return false;
+    if (stream === observed && mo) return true;   // already watching this node
+    try { if (mo) mo.disconnect(); } catch(e){}
+    observed = stream;
     try {
-      if (window.__v292Dfix119) return;
-      if (!window.__v292Dfix66 || typeof window.__v292Dfix66.repair !== 'function'){ return setTimeout(install, 300); }
-      window.__v292Dfix119 = true;
-      var prev = window.__v292Dfix66.repair;
-      window.__v292Dfix66.repair = function(){
-        var r;
-        try { r = prev.apply(this, arguments); } catch(e){}
-        reorderFixed();
-        return r;
-      };
-      try { console.log('[v292Dfix119] symbol-only order repair installed'); } catch(_){}
-    } catch(e){}
+      mo = new MutationObserver(function(){ schedule(); });
+      mo.observe(stream, { childList: true });
+    } catch(e){ mo = null; }
+    reorderFixed();
+    return true;
+  }
+  function install(){
+    if (window.__v292Dfix119) return;
+    window.__v292Dfix119 = true;
+    attach();
+    // safety net + re-attach if #dialogue-stream gets recreated
+    setInterval(function(){ attach(); reorderFixed(); }, 700);
+    try { console.log('[v292Dfix119] symbol-only order repair active (observer)'); } catch(_){}
   }
   if (document.readyState === 'complete') install();
   else window.addEventListener('load', install);
