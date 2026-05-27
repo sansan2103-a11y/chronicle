@@ -9590,8 +9590,14 @@
     if (cfg.provider !== 'openrouter' || !cfg.orKey){ fallback(); return; }
     var filled = {};
     [['主人公名','cfgHName'],['主人公の説明','cfgHDesc'],['世界観','cfgLore'],['場所','cfgLoc'],['目的','cfgObj'],['雰囲気','cfgTone']].forEach(function(p){ var e = $(p[1]); if (e && e.value.trim()) filled[p[0]] = e.value.trim(); });
-    var sys = 'あなたはTRPGのシナリオ設計者。整合した1つのシナリオ設定を作る。多様なジャンル（ダークファンタジー/ホラー/SF/現代/歴史/ミステリ/和風怪異 等）からランダムに選び、毎回違う題材にする。日本語で。JSONのみ返す。';
-    var user = '既に決まっている項目（あれば矛盾しないように）:\n' + JSON.stringify(filled) + '\n\n空の項目を創作し、次の形式のJSONのみで返せ:\n{"hero":{"name":"","desc":""},"npcs":[{"name":"","desc":"","personality":"","coreDesire":"","coreFear":"","wound":""}],"scene":{"lore":"","loc":"","obj":"","tone":""}}\nNPCは2〜3人。descは外見・立場。各項目は簡潔に1〜2文。';
+    // v292Dfix117b: 世界観(lore)が入力済みなら、それを最優先の前提にして登場人物・場所・
+    // 雰囲気を「その世界の住人」として深く根ざして創作する（勝手に別ジャンルにしない）。
+    // 世界観が空のときだけ、ジャンルをランダムに選ぶ。おしん要望=世界観を汲み取った設定生成。
+    var hasLore = !!filled['世界観'];
+    var sys = hasLore
+      ? 'あなたはTRPGのシナリオ設計者。日本語で、整合した1つのシナリオ設定を作りJSONのみ返す。【最重要】既に与えられた「世界観」を絶対の前提とし、登場人物・場所・雰囲気をその世界に深く根ざした形で創作する。世界観のジャンル・時代・文化・空気感に必ず合わせ、勝手に別ジャンルや無関係な題材にしない。キャラの名前・外見・服装・立場・価値観・恐怖は、その世界観から自然に導けるものにする。'
+      : 'あなたはTRPGのシナリオ設計者。日本語で、整合した1つのシナリオ設定を作りJSONのみ返す。多様なジャンル（ダークファンタジー/ホラー/SF/現代/歴史/ミステリ/和風怪異 等）からランダムに選び、毎回違う題材にする。世界観・登場人物・場所・雰囲気を一つの世界として整合させる。';
+    var user = '既に決まっている項目（' + (hasLore ? '特に「世界観」を最優先の前提とし、矛盾させず、むしろそこから発想する' : 'あれば矛盾しないように') + '）:\n' + JSON.stringify(filled) + '\n\n空の項目だけを創作し、次の形式のJSONのみで返せ:\n{"hero":{"name":"","desc":""},"npcs":[{"name":"","desc":"","personality":"","coreDesire":"","coreFear":"","wound":""}],"scene":{"lore":"","loc":"","obj":"","tone":""}}\nNPCは2〜3人。descは外見・立場（' + (hasLore ? 'その世界観に合った服装・種族・職業で' : '') + '簡潔に1〜2文）。各項目は簡潔に。';
     setStatus('🎲 AIで生成中…（数秒）');
     try {
       var xhr = new XMLHttpRequest();
