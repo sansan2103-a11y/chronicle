@@ -9685,7 +9685,9 @@
   }
   function saveCache(name, prompt){ var h = hashDesc(name); cacheHash[name] = h; try { localStorage.setItem(LSP + name + '::' + h, prompt); } catch(e){} }
   // v292Dfix121e: force a regenerate for a character (used by the ↻ button / desc edit).
-  function invalidate(name){ try { delete cache[name]; delete cacheHash[name]; delete pending[name]; } catch(e){} }
+  // v292Dfix121g: ALSO remove the persisted entry — otherwise have() just reloads it from
+  // localStorage and nothing regenerates (↻ appeared to do nothing for the AI icon).
+  function invalidate(name){ try { localStorage.removeItem(LSP + name + '::' + hashDesc(name)); } catch(e){} try { delete cache[name]; delete cacheHash[name]; delete pending[name]; } catch(e){} }
   // art-style selector (S.cfg.artStyle index → fixed style suffix appended to every prompt)
   // v292Dfix121c: おしんが「以前の絵柄(標準テンプレのダークファンタジー調)が好み」→
   // 'darkfantasy' を選択肢に追加し既定にする。元テンプレの style tail を再現。
