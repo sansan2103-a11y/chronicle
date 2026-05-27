@@ -10,7 +10,9 @@
   console.log = function(){
     try {
       var first = (arguments.length && typeof arguments[0] === 'string') ? arguments[0] : '';
-      if (/^\s*\[v292/.test(first)) return;   // hide all v292 framework status/churn logs
+      // hide framework status/churn logs: "[v292...]", bare "v292Dfix... ",
+      // "[v100...]", and per-call "[OpenRouter] ..." chatter. warn/error untouched.
+      if (/^\s*\[?v\d/i.test(first) || /^\s*\[OpenRouter\]/.test(first)) return;
     } catch(e){}
     return origLog.apply(console, arguments);
   };
@@ -9178,8 +9180,15 @@
     P.build = function(){
       var r = orig.apply(this, arguments);
       try {
-        if (r && typeof r.sys === 'string' && r.sys.indexOf(MARK) < 0){
-          r.sys = r.sys + '\n\n' + BLOCK;
+        if (r && typeof r.sys === 'string'){
+          if (r.sys.indexOf(MARK) < 0){ r.sys = r.sys + '\n\n' + BLOCK; }
+          // v292Dfix108b: scrub the hardcoded sample names in fix58's <say>
+          // format example (repo-only file). Targets the full example phrases
+          // so it never touches user-chosen NPC names. Idempotent.
+          r.sys = r.sys
+            .split('<say who="ミリア">走れ！振り向くな！</say> ミリアはナイフを構えた。').join('<say who="相手">走れ！振り向くな！</say> 相手はナイフを構えた。')
+            .split('<say who="フィオナ">置いていけない</say>').join('<say who="主人公">置いていけない</say>')
+            .split('サクラは小さく頷いた。').join('相手は小さく頷いた。');
         }
       } catch(e){}
       return r;
