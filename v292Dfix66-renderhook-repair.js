@@ -295,8 +295,23 @@
     } catch(e){}
   }
 
+  // v292Dfix110: the same line often recurs across turns and gets resolved with
+  // slightly different speaker labels — a resolver name-doubling glitch
+  // ("人体模型は人体模型") or an inner-monologue suffix ("マリア(心)"). The exact
+  // (speaker|text) dedup then misses them and the SAME line shows twice.
+  // cleanSpeakerName fixes the doubling for DISPLAY; dedupSpeaker further drops
+  // the (心) suffix for the dedup KEY only, so spoken+inner of one line collapse.
+  function cleanSpeakerName(s){
+    s = (s || '').trim();
+    var m = s.match(/^(.+?)(?:は|が|も|と)\1$/);   // "AはA" / "AがA" ... -> "A"
+    if (m) s = m[1];
+    return s;
+  }
+  function dedupSpeaker(s){
+    return cleanSpeakerName(s).replace(/[（(]\s*心\s*[）)]$/, '').trim();
+  }
   function dialogueKey(speaker, text){
-    return (speaker || '') + '|' + (text || '');
+    return dedupSpeaker(speaker) + '|' + (text || '');
   }
 
   // 既存 stream 内のカードを (speaker|text) のみで集計
@@ -832,10 +847,12 @@
         for (var j = 0; j < ds.length; j++){
           var d = ds[j];
           if (isSayEcho(t, d, hero)) continue;
-          var k = dialogueKey(d.speaker, d.text);
+          // v292Dfix110: clean the doubled-name glitch for display + dedup key.
+          var sp = cleanSpeakerName(d.speaker);
+          var k = dialogueKey(sp, d.text);
           if (existing[k]) continue;
-          var isHeroFlag = !!d.isHero || (d.speaker && d.speaker === hero);
-          var card = buildCard(d.speaker, d.text, isHeroFlag);
+          var isHeroFlag = !!d.isHero || (sp && sp === hero);
+          var card = buildCard(sp, d.text, isHeroFlag);
           stream.appendChild(card);
           existing[k] = true;
           added++;
