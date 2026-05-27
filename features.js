@@ -9065,7 +9065,9 @@
     '・キャラが痛み・損傷・強い恐怖を受けた瞬間、その本人は必ずその場で声を上げる。実際の発声をそのまま文字で書く（例: 「ぎっ……！」「あ……っ——」「ひ、ぁ……」）。涙・血・身体描写“だけ”で済ませ、声を省略することは禁止。',
     '・「呻いた」「悲鳴を上げた」「声を漏らした」等の要約表現は禁止。声そのものを文字にすること。',
     '・声は刺激の強度で段階を変える（息を呑む → 短い呻き → 引き裂くような悲鳴 → 声にならない絶叫）。毎回変化させ、同じ音を使い回さない。',
-    '・被害・苦痛を受けた本人の声を最優先で書き、その後に喉・呼吸・震えなどの身体描写を短く添える（声が主役、描写は脇役）。抽象的・俯瞰的な書き方で声を回避しない。'
+    '・被害・苦痛を受けた本人の声を最優先で書き、その後に喉・呼吸・震えなどの身体描写を短く添える（声が主役、描写は脇役）。抽象的・俯瞰的な書き方で声を回避しない。',
+    '・【強化・最優先】声はより生々しく、原始的に書く。整った言葉になる前に喉から漏れる音をそのまま文字化する（濁音・促音・長音で肉声の崩れを表現。例:「づ……あぁっ」「ぐ、ぅ……ひっ」「あ———……っ」）。',
+    '・痛み・恐怖・衝撃の瞬間は、要約も上品な省略も一切せず、その場の生の発声を最低1つ（可能なら途切れながら連続で）書く。気絶・口を塞がれる等で物理的に不可能な時以外、必ず声を立てる。'
   ].join('\n');
 
   // NOTE: a Planner._extensions sysExt was tried first but a later sysExt
@@ -9304,4 +9306,31 @@
     var n = 0;
     var iv = setInterval(function(){ n++; if (arm() || n > 200) clearInterval(iv); }, 200);
   }
+})();
+
+/* =====================================================================
+ * v292Dfix108: quiet the console (hide v292 framework status/churn logs)
+ * ---------------------------------------------------------------------
+ * おしん 2026-05-27: the console is noisy — startup "[v292DfixNN] installed"
+ * lines plus per-render/per-turn repeats ("[v292Dfix70:dialogue-order]
+ * wrapped fix66.repair", "[v292Dfix58] hooks ensured at array tail",
+ * "[v292Dfix66...] repaired N dialogue cards", state-memory/avatar-fix/
+ * rescued chatter). These are harmless dev logs (the reinstaller SPAM
+ * itself was already fixed by fix94). Silence them by filtering console.log
+ * for messages whose first arg starts with a [v292...] tag. console.warn
+ * and console.error are deliberately UNTOUCHED so real problems still
+ * surface. Idempotent.
+ * ===================================================================== */
+(function v292Dfix108(){
+  if (window.__v292Dfix108) return;
+  window.__v292Dfix108 = true;
+  var origLog = console.log.bind(console);
+  console.log = function(){
+    try {
+      var first = (arguments.length && typeof arguments[0] === 'string') ? arguments[0] : '';
+      if (/^\s*\[v292/.test(first)) return;   // hide all v292 framework status/churn logs
+    } catch(e){}
+    return origLog.apply(console, arguments);
+  };
+  try { origLog('[v292Dfix108-init] console noise filter active — v292 dev logs hidden; warn/error untouched'); } catch(e){}
 })();
