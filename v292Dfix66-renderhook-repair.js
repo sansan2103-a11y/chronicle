@@ -795,6 +795,17 @@
     return String(turn.playerText).trim() === String(d.text).trim();
   }
 
+  // v292Dfix113b: the model sometimes appends a "【…ルール監査】" self-audit
+  // block (echoing the prompt's rules) to the narrative. The prompt guard
+  // reduces but can't 100% stop it. Strip it physically from the stored
+  // narrative so it never shows (right panel + conv-log) AND never feeds back
+  // into recentHistory (which would reinforce the model repeating it). The
+  // marker is highly specific, so false-positives on real prose are negligible.
+  function stripRuleAudit(s){
+    if (!s || typeof s !== 'string') return s;
+    return s.replace(/【[^】\n]{0,8}ルール監査】[\s\S]*$/, '').replace(/[\s　]+$/, '');
+  }
+
   // ---------- main: render-hook repair ----------
   function repair(){
     try {
@@ -805,6 +816,14 @@
       var st = getState();
       var turns = st.turns || [];
       if (!turns.length) return 0;
+      // v292Dfix113b: scrub any leaked 【…ルール監査】 block from stored turns
+      // (clears display + conv-log + future recentHistory in one shot). Idempotent.
+      for (var _ti = 0; _ti < turns.length; _ti++){
+        if (turns[_ti] && typeof turns[_ti].narrative === 'string'){
+          var _cl = stripRuleAudit(turns[_ti].narrative);
+          if (_cl !== turns[_ti].narrative) turns[_ti].narrative = _cl;
+        }
+      }
       var hero = getHero(st);
       var existing = collectExistingKeys(stream);
       // v292Dfix89: fix66 runs last, so remove non-speech cards that EARLIER
