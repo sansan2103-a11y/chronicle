@@ -9480,7 +9480,7 @@
   var REACT_LABELS = ['控えめ','標準','濃いめ'];
   function curReaction(){ var c = getCfg(); var v = c && c.reactionLevel; return (v == null) ? 1 : (+v); }
   function curDialogue(){ var c = getCfg(); var v = c && c.dialogueLevel; return (v == null) ? 1 : (+v); }
-  function mkSel(id, labelText, title, labels, curVal, cfgKey){
+  function mkSel(id, labelText, title, labels, curVal, cfgKey, onAfter){
     var wrap = document.createElement('span');
     wrap.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin-right:6px;font-size:12px;color:var(--dim,#888);';
     var lab = document.createElement('span'); lab.textContent = labelText;
@@ -9494,6 +9494,7 @@
       var c = getCfg(); if (!c) return;
       c[cfgKey] = +sel.value;
       try { if (typeof S !== 'undefined' && typeof S.save === 'function') S.save(); } catch(e){}
+      try { if (typeof onAfter === 'function') onAfter(+sel.value); } catch(e){}
     });
     wrap.appendChild(lab); wrap.appendChild(sel);
     return wrap;
@@ -9507,9 +9508,12 @@
       var w1 = mkSel('v292-drama-sel', '📖 進行', '物語の進行の強さ（オフ=雰囲気漂流 ←→ 強め=ドラマ重視）', LABELS, curLevel(), 'dramaLevel');
       var w2 = mkSel('v292-react-sel', '💬 反応', 'キャラの反応の濃さ（控えめ ←→ 濃いめ）', REACT_LABELS, curReaction(), 'reactionLevel');
       var w3 = mkSel('v292-dlg-sel', '🗨 セリフ', 'セリフのキャラ立ち・中身（控えめ ←→ 濃いめ）', REACT_LABELS, curDialogue(), 'dialogueLevel');
+      var curAv = (function(){ var c = getCfg(); return (c && c.aiAvatar != null) ? +c.aiAvatar : 0; })();
+      var w4 = mkSel('v292-avatar-sel', '🎨 アイコン', 'アバター生成（標準テンプレ / AIがキャラに合わせて生成）', ['標準','AI'], curAv, 'aiAvatar', function(v){ try { if (v === 1 && window.__aiAvatar && window.__aiAvatar.refreshAll) window.__aiAvatar.refreshAll(); } catch(e){} });
       setBtn.parentNode.insertBefore(w1, setBtn);
       setBtn.parentNode.insertBefore(w2, setBtn);
       setBtn.parentNode.insertBefore(w3, setBtn);
+      setBtn.parentNode.insertBefore(w4, setBtn);
       return true;
     } catch(e){ return false; }
   }
@@ -9612,4 +9616,98 @@
     return true;
   }
   if (!arm()){ var n2 = 0; var iv2 = setInterval(function(){ n2++; if (arm() || n2 > 200) clearInterval(iv2); }, 200); }
+})();
+
+/* =====================================================================
+ * v292Dfix118: switchable AI-generated avatar prompts
+ * ---------------------------------------------------------------------
+ * Avatars used a fixed template (cast="anime portrait of young woman… dark
+ * fantasy", non-cast="dark eerie horror creature") → samey. When S.cfg.aiAvatar
+ * is on (header "🎨 アイコン" = AI), the LLM writes ONE tailored English image
+ * prompt per character (varying art style/mood/framing by appearance/personality/
+ * scene tone), cached per name, and the rendered avatar is swapped in place when
+ * ready. fix66's lookupAvatar routes its built URL through window.__aiAvatar.urlFor
+ * when enabled. No key / disabled / failure → keep the standard template (safe).
+ * ===================================================================== */
+(function v292Dfix118(){
+  if (window.__aiAvatar) return;
+  function getS(){ try { if (typeof S !== 'undefined') return S; } catch(e){} return window.S || null; }
+  var cache = Object.create(null);
+  var pending = Object.create(null);
+  function hash(s){ var h = 0; s = String(s || ''); for (var i = 0; i < s.length; i++){ h = ((h << 5) - h + s.charCodeAt(i)) | 0; } return Math.abs(h); }
+  function buildUrl(prompt, name){
+    return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt)
+      + '?width=384&height=384&seed=' + (hash(name) % 1000000) + '&nologo=true&model=flux';
+  }
+  function speakerOfCard(c){
+    var nm = c.querySelector('.dlg-name');
+    if (!nm) return '';
+    var fc = nm.firstChild;
+    return (fc && fc.nodeType === 3) ? (fc.textContent || '').trim() : (nm.textContent || '').trim();
+  }
+  function swapAvatar(name){
+    try {
+      if (!cache[name]) return;
+      var url = buildUrl(cache[name], name);
+      var cards = document.querySelectorAll('.v292-dlg-card');
+      for (var i = 0; i < cards.length; i++){
+        if (speakerOfCard(cards[i]) !== name) continue;
+        var av = cards[i].querySelector('.dlg-av');
+        if (!av) continue;
+        var img = av.querySelector('img');
+        if (img) img.src = url;
+        else av.innerHTML = '<img src="' + url + '" alt="' + name + '" loading="lazy" onerror="if(this.parentNode)this.parentNode.textContent=String.fromCharCode(63)">';
+      }
+    } catch(e){}
+  }
+  function genAsync(name, desc){
+    var st = getS(); var cfg = (st && st.cfg) || {};
+    if (cfg.provider !== 'openrouter' || !cfg.orKey){ delete pending[name]; return; }
+    var tone = ''; try { if (st && st.scene && st.scene.tone) tone = String(st.scene.tone).trim(); } catch(e){}
+    var sys = 'You write ONE concise English image-generation prompt for a single-character square portrait. Vary the art style, mood, framing, lighting and expression to fit the character described. Output ONLY the prompt text — no quotes, no preamble, no explanation.';
+    var user = 'Character name: ' + name + '\nAppearance / role: ' + (desc || 'unknown figure') + '\nStory tone: ' + (tone || 'neutral') + '\nWrite the portrait prompt now.';
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', 'https://openrouter.ai/api/v1/chat/completions', true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('Authorization', 'Bearer ' + cfg.orKey);
+      xhr.timeout = 60000;
+      xhr.onload = function(){
+        try {
+          if (xhr.status !== 200) throw new Error('http ' + xhr.status);
+          var j = JSON.parse(xhr.responseText);
+          var t = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+          t = String(t).replace(/^[\s"'`]+|[\s"'`]+$/g, '').replace(/\s+/g, ' ').slice(0, 400);
+          if (t){ cache[name] = t; swapAvatar(name); }
+        } catch(e){}
+        delete pending[name];
+      };
+      xhr.onerror = function(){ delete pending[name]; };
+      xhr.ontimeout = function(){ delete pending[name]; };
+      xhr.send(JSON.stringify({ model: cfg.orModel || 'nousresearch/hermes-4-405b', temperature: 0.9, max_tokens: 160, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] }));
+    } catch(e){ delete pending[name]; }
+  }
+  window.__aiAvatar = {
+    enabled: function(){ var st = getS(); return !!(st && st.cfg && (+st.cfg.aiAvatar) === 1); },
+    urlFor: function(name, fallbackUrl, desc){
+      if (!name) return fallbackUrl;
+      if (cache[name]) return buildUrl(cache[name], name);
+      if (!pending[name]){ pending[name] = true; genAsync(name, desc); }
+      return fallbackUrl;
+    },
+    refreshAll: function(){
+      try {
+        var cards = document.querySelectorAll('.v292-dlg-card');
+        var seen = {};
+        for (var i = 0; i < cards.length; i++){
+          var nm = speakerOfCard(cards[i]);
+          if (!nm || nm === '???' || seen[nm]) continue;
+          seen[nm] = 1;
+          if (cache[nm]) swapAvatar(nm);
+          else if (!pending[nm]){ pending[nm] = true; genAsync(nm, ''); }
+        }
+      } catch(e){}
+    }
+  };
+  try { console.log('[v292Dfix118] AI avatar prompt system ready'); } catch(e){}
 })();

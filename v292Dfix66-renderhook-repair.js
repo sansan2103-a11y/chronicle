@@ -204,31 +204,37 @@
   }
 
   // ---------- avatar lookup (fix62 と協調) ----------
+  // v292Dfix118: when the AI-avatar toggle is on, route the resolved URL through
+  // window.__aiAvatar (LLM-written prompt, cached per name). Off/no-key → unchanged.
+  function aiHook(name, url, desc){
+    try { if (url && window.__aiAvatar && window.__aiAvatar.enabled && window.__aiAvatar.enabled()) return window.__aiAvatar.urlFor(name, url, desc || ''); } catch(e){}
+    return url;
+  }
   function lookupAvatar(name){
     if (!name) return '';
     try {
       if (window.__v292 && window.__v292.dfix15 &&
           typeof window.__v292.dfix15.getAvatar === 'function'){
         var v = window.__v292.dfix15.getAvatar(name);
-        if (v) return v;
+        if (v) return aiHook(name, v, '');
       }
     } catch(e){}
     try {
       var st = getState();
       if (st && st.cast){
         if (st.cast.hero && st.cast.hero.name === name && st.cast.hero.avatar){
-          return st.cast.hero.avatar;
+          return aiHook(name, st.cast.hero.avatar, st.cast.hero.desc);
         }
         var arr = st.cast.npcs || [];
         for (var i = 0; i < arr.length; i++){
-          if (arr[i] && arr[i].name === name && arr[i].avatar) return arr[i].avatar;
+          if (arr[i] && arr[i].name === name && arr[i].avatar) return aiHook(name, arr[i].avatar, arr[i].desc);
         }
       }
     } catch(e){}
     // v292Dfix99: not a cast member → auto-generate an avatar from the prose
     try {
       var nc = ncBuildAvatar(name);
-      if (nc) return nc;
+      if (nc) return aiHook(name, nc, ncAppearance(name, NC_NARR));
     } catch(e){}
     return '';
   }
