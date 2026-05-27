@@ -9826,7 +9826,10 @@
         var img = imgs[i];
         if (img.closest('.v292-dlg-card')) continue;        // conv-log handled by refreshAll
         var src = img.getAttribute('src') || '';
-        if (src.indexOf('/prompt/') < 0) continue;          // only generated-portrait imgs
+        // process generated-portrait imgs AND our 生成中 spinner imgs (data-gen=1) — the
+        // latter is a data: URI, so without this it'd be skipped and stay stuck on spinner
+        // forever even after generation finishes (v292Dfix121h).
+        if (src.indexOf('/prompt/') < 0 && img.getAttribute('data-gen') !== '1') continue;
         var nm = (img.getAttribute('alt') || '').trim();
         if (!nm) continue;
         if (have(nm)){
