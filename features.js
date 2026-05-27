@@ -9189,6 +9189,34 @@
             .split('<say who="ミリア">走れ！振り向くな！</say> ミリアはナイフを構えた。').join('<say who="相手">走れ！振り向くな！</say> 相手はナイフを構えた。')
             .split('<say who="フィオナ">置いていけない</say>').join('<say who="主人公">置いていけない</say>')
             .split('サクラは小さく頷いた。').join('相手は小さく頷いた。');
+          // v292Dfix111: anti-repetition (always) + drama engine scaled by
+          // S.cfg.dramaLevel (0 off / 1 弱 / 2 標準 / 3 強, default 2), chosen via
+          // the topbar "進行" selector. Re-read each build so changes take effect.
+          if (r.sys.indexOf('【反復の禁止') < 0){
+            var _rep = [
+              '【反復の禁止（厳守）】',
+              '・recentHistory（直近ターン）に既出の文・言い回し・比喩・同じ動作描写を、そのまま／言い換えただけで繰り返さない。毎ターン新しい言葉と新しい絵で書く。',
+              '・同じ対象に同じ行為を再描写しない。動作・対象・視点のいずれかを必ず変える。'
+            ].join('\n');
+            var _lvl = 2;
+            try { var _c = (typeof S !== 'undefined' && S.cfg) ? S.cfg : ((window.S && window.S.cfg) || {}); if (_c && _c.dramaLevel != null) _lvl = +_c.dramaLevel; } catch(_e){}
+            var _drama = '';
+            if (_lvl === 1){
+              _drama = ['【物語の推進（弱め）】',
+                '・時々でよいので、目的・賭け・緊張を思い出させ、単調な繰り返しを避けて変化をつける。プレイヤーの自由と雰囲気を最優先。'].join('\n');
+            } else if (_lvl >= 3){
+              _drama = ['【物語の推進（強め・ドラマ重視）】',
+                '・毎ターン明確な前進を起こす: 転換点／新事実の判明／状況の急変／賭け(stakes)の上昇のいずれか。停滞を厳禁。',
+                '・緊張のうねりを作る（緊張→急変→一息→再上昇）。ビートの種類を回す（事件/反応/発見/決断/悪化/好転/裏切り/救い）。同種を連続させない。',
+                '・場にいる者に目的と障害を与え、選択や対立を生む。ただしプレイヤー入力は最優先で尊重し、主人公を勝手に動かさない。'].join('\n');
+            } else if (_lvl === 2){
+              _drama = ['【物語の推進（標準）】',
+                '・毎ターン、物語を目的（scene.objective）へ少し近づけるか、または脅かす方向へ動かす。',
+                '・障害・複雑化を1つ入れ、ビートの種類（事件/反応/発見/決断/悪化/好転/転換）を回して単調さを避ける。',
+                '・プレイヤーの自由・入力尊重・描写の濃さは保つ。'].join('\n');
+            }
+            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '');
+          }
         }
       } catch(e){}
       return r;
@@ -9360,4 +9388,63 @@
     return origLog.apply(console, arguments);
   };
   try { origLog('[v292Dfix108-init] console noise filter active — v292 dev logs hidden; warn/error untouched'); } catch(e){}
+})();
+
+/* =====================================================================
+ * v292Dfix111: topbar "進行" (drama-strength) selector + hide unused buttons
+ * ---------------------------------------------------------------------
+ * おしん 2026-05-27: she doesn't use the topbar "📚 シナリオ" (fix41 template
+ * loader) and "🧬 キャラ生成" (fix42 wizard) buttons, and wants the story-
+ * progression strength adjustable right there in the header. So: hide those
+ * two buttons (display:none — reversible, code untouched) and inject a small
+ * <select> bound to S.cfg.dramaLevel (0 オフ /1 弱め /2 標準 /3 強め, default 2).
+ * The fix105 build-wrap reads S.cfg.dramaLevel each turn (see above), so the
+ * choice takes effect on the next generation. Persisted via S.save().
+ * ===================================================================== */
+(function v292Dfix111(){
+  if (window.__v292Dfix111) return;
+  window.__v292Dfix111 = true;
+  var LABELS = ['オフ','弱め','標準','強め'];
+  function getCfg(){ try { if (typeof S !== 'undefined' && S.cfg) return S.cfg; } catch(e){} return (window.S && window.S.cfg) || null; }
+  function curLevel(){ var c = getCfg(); var v = c && c.dramaLevel; return (v == null) ? 2 : (+v); }
+  function hideUnwanted(){
+    try {
+      var btns = document.querySelectorAll('button');
+      for (var i = 0; i < btns.length; i++){
+        var t = (btns[i].textContent || '');
+        if ((t.indexOf('シナリオ') > -1 || t.indexOf('キャラ生成') > -1) && btns[i].style.display !== 'none'){
+          btns[i].style.display = 'none';
+        }
+      }
+    } catch(e){}
+  }
+  function injectSelector(){
+    try {
+      if (document.getElementById('v292-drama-sel')) return true;
+      var setBtn = null, btns = document.querySelectorAll('button');
+      for (var i = 0; i < btns.length; i++){ if ((btns[i].textContent || '').indexOf('設定') > -1){ setBtn = btns[i]; break; } }
+      if (!setBtn || !setBtn.parentNode) return false;
+      var wrap = document.createElement('span');
+      wrap.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin-right:6px;font-size:12px;color:var(--dim,#888);';
+      var lab = document.createElement('span'); lab.textContent = '📖 進行';
+      var sel = document.createElement('select');
+      sel.id = 'v292-drama-sel';
+      sel.title = '物語の進行の強さ（オフ=雰囲気漂流 ←→ 強め=ドラマ重視）';
+      sel.style.cssText = 'background:var(--s2,#222);color:var(--tx,#eee);border:1px solid var(--border,#444);border-radius:6px;padding:3px 6px;font-size:12px;cursor:pointer;';
+      for (var k = 0; k < LABELS.length; k++){ var o = document.createElement('option'); o.value = String(k); o.textContent = LABELS[k]; sel.appendChild(o); }
+      sel.value = String(curLevel());
+      sel.addEventListener('change', function(){
+        var c = getCfg(); if (!c) return;
+        c.dramaLevel = +sel.value;
+        try { if (typeof S !== 'undefined' && typeof S.save === 'function') S.save(); } catch(e){}
+      });
+      wrap.appendChild(lab); wrap.appendChild(sel);
+      setBtn.parentNode.insertBefore(wrap, setBtn);
+      return true;
+    } catch(e){ return false; }
+  }
+  function arm(){ hideUnwanted(); injectSelector(); }
+  arm();
+  var n = 0;
+  var iv = setInterval(function(){ n++; arm(); if (n > 40) clearInterval(iv); }, 250);
 })();
