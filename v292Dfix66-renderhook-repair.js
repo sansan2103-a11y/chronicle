@@ -237,7 +237,7 @@
     var av = lookupAvatar(speaker);
     var avHtml = av
       ? '<img src="' + escHtml(av) + '" alt="' + escHtml(speaker) + '" loading="lazy"'
-        + ' onerror="this.parentNode.textContent=String.fromCharCode(63)">'
+        + ' onerror="if(this.parentNode)this.parentNode.textContent=String.fromCharCode(63)">'
       : '?';
     var card = document.createElement('div');
     card.className = 'v292-dlg-card' + (isHeroFlag ? ' hero-card' : '') +
@@ -289,7 +289,7 @@
           // Pollinations ignores the extra _r param.
           var fresh = url + (url.indexOf('?') > -1 ? '&' : '?') + '_r=' + Date.now();
           av.innerHTML = '<img src="' + escHtml(fresh) + '" alt="' + escHtml(name) + '" loading="lazy"'
-            + ' onerror="this.parentNode.textContent=String.fromCharCode(63)">';
+            + ' onerror="if(this.parentNode)this.parentNode.textContent=String.fromCharCode(63)">';
         }
       }
     } catch(e){}
