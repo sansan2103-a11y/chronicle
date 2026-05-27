@@ -585,6 +585,25 @@
         var cleaned = sanitizeNarrHtml(h);
         if (cleaned !== h) el.innerHTML = cleaned;
       }
+      // v292Dfix113b: remove a leaked 【…ルール監査】 self-audit block from the
+      // right panel. It renders as trailing <p> children ("【重要ルール監査】" then
+      // "・…" bullets) before the ✎編集 button. Within EACH narr-block, drop the
+      // marker <p> and the following audit <p>s, but keep buttons and the prose.
+      var blocks = story.querySelectorAll('.narr-block');
+      for (var b = 0; b < blocks.length; b++){
+        var kids = blocks[b].children;
+        var hit = -1;
+        for (var c = 0; c < kids.length; c++){
+          if (/【[^】]{0,8}ルール監査】/.test(kids[c].textContent || '')){ hit = c; break; }
+        }
+        if (hit < 0) continue;
+        for (var d = kids.length - 1; d >= hit; d--){
+          var k = kids[d];
+          if (k.tagName === 'BUTTON') continue;
+          if (k.querySelector && k.querySelector('button')) continue;
+          if (k.parentNode) k.parentNode.removeChild(k);
+        }
+      }
     } catch(e){}
   }
 
@@ -824,6 +843,22 @@
           if (_cl !== turns[_ti].narrative) turns[_ti].narrative = _cl;
         }
       }
+      // Also scrub the LIVE lexical state (getState() above returns a localStorage
+      // copy when window.S is absent, so the real S.turns — which feeds the next
+      // turn's recentHistory — would keep the leak and re-trigger it). Strip it at
+      // the source and persist, so the model never sees the audit block again.
+      try {
+        if (typeof S !== 'undefined' && S && S.turns){
+          var _liveChanged = false;
+          for (var _si = 0; _si < S.turns.length; _si++){
+            if (S.turns[_si] && typeof S.turns[_si].narrative === 'string'){
+              var _sc = stripRuleAudit(S.turns[_si].narrative);
+              if (_sc !== S.turns[_si].narrative){ S.turns[_si].narrative = _sc; _liveChanged = true; }
+            }
+          }
+          if (_liveChanged && typeof S.save === 'function'){ try { S.save(); } catch(e){} }
+        }
+      } catch(e){}
       var hero = getHero(st);
       var existing = collectExistingKeys(stream);
       // v292Dfix89: fix66 runs last, so remove non-speech cards that EARLIER
