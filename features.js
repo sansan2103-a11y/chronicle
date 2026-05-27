@@ -9662,13 +9662,30 @@
   }
   var cache = Object.create(null);
   var pending = Object.create(null);
-  // v292Dfix121: persist the (style-NEUTRAL) character description prompt per name so
-  // the avatar is STABLE across reloads (おしん: アイコンが毎回変わって"迷走"). The art
-  // style is applied separately at buildUrl time, so switching 画風 restyles every
-  // avatar instantly with NO regeneration. Key is style-neutral + versioned (v3).
-  var LSP = 'chrAiAv3:';
-  function loadCache(name){ try { if (cache[name]) return; var v = localStorage.getItem(LSP + name); if (v) cache[name] = v; } catch(e){} }
-  function saveCache(name, prompt){ try { localStorage.setItem(LSP + name, prompt); } catch(e){} }
+  var cacheHash = Object.create(null);   // name -> description-hash that cache[name] was built from
+  // v292Dfix121: persist the (style-NEUTRAL) character description prompt so the avatar
+  // is STABLE across reloads (おしん: 毎回変わる"迷走"). Art style is applied separately at
+  // buildUrl time → switching 画風 restyles instantly, no regen.
+  // v292Dfix121e: KEY the cache by name + a hash of the character's 説明(desc). So when
+  // おしん rewrites a character's description, the key changes → the old avatar is dropped
+  // and a NEW one is generated from the new description (previously the avatar stayed
+  // frozen on the first description). Bumped to v4 for the new key format.
+  var LSP = 'chrAiAv4:';
+  function hashDesc(name){ return hash(descFor(name) || ''); }
+  function lsKey(name){ return LSP + name + '::' + hashDesc(name); }
+  // have(): is a prompt cached for this name AT ITS CURRENT description? If the desc
+  // changed, drop the stale in-memory entry so a fresh generation kicks in.
+  function have(name){
+    var h = hashDesc(name);
+    if (cache[name] && cacheHash[name] === h) return true;
+    var v = null; try { v = localStorage.getItem(LSP + name + '::' + h); } catch(e){}
+    if (v){ cache[name] = v; cacheHash[name] = h; return true; }
+    if (cache[name] && cacheHash[name] !== h){ delete cache[name]; delete pending[name]; }
+    return false;
+  }
+  function saveCache(name, prompt){ var h = hashDesc(name); cacheHash[name] = h; try { localStorage.setItem(LSP + name + '::' + h, prompt); } catch(e){} }
+  // v292Dfix121e: force a regenerate for a character (used by the ↻ button / desc edit).
+  function invalidate(name){ try { delete cache[name]; delete cacheHash[name]; delete pending[name]; } catch(e){} }
   // art-style selector (S.cfg.artStyle index → fixed style suffix appended to every prompt)
   // v292Dfix121c: おしんが「以前の絵柄(標準テンプレのダークファンタジー調)が好み」→
   // 'darkfantasy' を選択肢に追加し既定にする。元テンプレの style tail を再現。
@@ -9762,11 +9779,11 @@
     enabled: function(){ var st = getS(); return !!(st && st.cfg && (+st.cfg.aiAvatar) === 1); },
     urlFor: function(name, fallbackUrl, desc){
       if (!name) return fallbackUrl;
-      if (!cache[name]) loadCache(name);
-      if (cache[name]) return buildUrl(cache[name], name);
+      if (have(name)) return buildUrl(cache[name], name);
       if (!pending[name]){ pending[name] = true; genAsync(name, desc); }
       return fallbackUrl;
     },
+    regen: function(name){ if (name) invalidate(name); },
     refreshAll: function(){
       try {
         var cards = document.querySelectorAll('.v292-dlg-card');
@@ -9775,8 +9792,7 @@
           var nm = speakerOfCard(cards[i]);
           if (!nm || nm === '???' || seen[nm]) continue;
           seen[nm] = 1;
-          if (!cache[nm]) loadCache(nm);
-          if (cache[nm]) swapAvatar(nm);
+          if (have(nm)) swapAvatar(nm);
           else if (!pending[nm]){ pending[nm] = true; genAsync(nm, descFor(nm)); }
         }
       } catch(e){}
@@ -9799,8 +9815,7 @@
         if (src.indexOf('/prompt/') < 0) continue;          // only generated-portrait imgs
         var nm = (img.getAttribute('alt') || '').trim();
         if (!nm) continue;
-        if (!cache[nm]) loadCache(nm);
-        if (cache[nm]){
+        if (have(nm)){
           var url = buildUrl(cache[nm], nm);
           // replace template with AI image; leave it if already our AI image (path match) — retries via onerror
           if (aiPathOf(src) !== aiPathOf(url)){ img.removeAttribute('data-r'); attachRetry(img, url); img.src = url; }
@@ -9808,6 +9823,30 @@
       }
     } catch(e){}
   }
+  // v292Dfix121e: the settings "↻ で再生成" button regenerates the v100 template avatar,
+  // but our AI cache is keyed separately, so it didn't refresh the AI icon. Capture clicks
+  // on a regenerate control, find the character (alt of the card's avatar img, or its 名前
+  // field), and invalidate its AI cache → the sweep then regenerates from the CURRENT
+  // description (おしん: 説明を細かく書き換えてもアイコンが変わらない). Editing the desc and
+  // pressing 保存 also regenerates automatically via the desc-hash key.
+  try {
+    document.addEventListener('click', function(ev){
+      try {
+        var t = ev.target; if (!t || !t.closest) return;
+        var probe = t.closest('button,[role="button"],a') || t;
+        var txt = (probe.textContent || '') + ' ' + ((probe.getAttribute && (probe.getAttribute('title') || probe.getAttribute('aria-label'))) || '');
+        // only a small control (not a big wrapper that merely CONTAINS the regen button)
+        if (txt.length > 40) return;
+        if (!/再生成|↻|↺|⟳|🔄/.test(txt)) return;
+        var card = t.closest('.npc-card') || t.closest('.v100-clean') || t.closest('[class*="card"]') || t.parentNode;
+        var nm = '';
+        var img = card && card.querySelector ? card.querySelector('img[alt]') : null;
+        if (img) nm = (img.getAttribute('alt') || '').trim();
+        if (!nm && card && card.querySelector){ var ni = card.querySelector('input[type="text"]'); if (ni) nm = (ni.value || '').trim(); }
+        if (nm) invalidate(nm);
+      } catch(e){}
+    }, true);
+  } catch(e){}
   // v292Dfix120b: the LLM prompt finishes async; the single swapAvatar at onload can
   // miss a card that rendered (or got re-rendered by fix66/fix110/fix119) on another
   // tick — so the icon stays stuck on the fallback template. A low-frequency sweep
