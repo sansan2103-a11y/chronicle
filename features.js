@@ -9721,15 +9721,43 @@
     }
   };
   try { console.log('[v292Dfix118] AI avatar prompt system ready'); } catch(e){}
+  // v292Dfix120c: the SETTINGS panel renders its own avatars (.v100-img for the hero,
+  // .v100-npc-img for NPCs) from the STORED standard-template URL — it does NOT go
+  // through __aiAvatar. So with AI mode on, the same character showed the anime
+  // template in settings but an AI-tailored portrait in the conv-log (おしん: "設定と
+  // アイコンが違う"). Sync them: any generated-portrait <img> outside a dialogue card
+  // carries the character name in alt → swap to the AI-tailored URL (kick gen if needed).
+  function sweepSettingsAvatars(){
+    try {
+      var imgs = document.querySelectorAll('img');
+      for (var i = 0; i < imgs.length; i++){
+        var img = imgs[i];
+        if (img.closest('.v292-dlg-card')) continue;        // conv-log handled by refreshAll
+        var src = img.getAttribute('src') || '';
+        if (src.indexOf('/prompt/') < 0) continue;          // only generated-portrait imgs
+        var nm = (img.getAttribute('alt') || '').trim();
+        if (!nm) continue;
+        if (cache[nm]){
+          var url = buildUrl(cache[nm], nm);
+          if (src !== url) img.src = url;
+        } else if (!pending[nm]){ pending[nm] = true; genAsync(nm, descFor(nm)); }
+      }
+    } catch(e){}
+  }
   // v292Dfix120b: the LLM prompt finishes async; the single swapAvatar at onload can
   // miss a card that rendered (or got re-rendered by fix66/fix110/fix119) on another
-  // tick — so the icon stays stuck on the fallback template (おしん: "設定とアイコン違う").
-  // A low-frequency sweep re-applies cached prompts to whatever cards are visible.
-  // Idempotent: swapAvatar only writes when the src differs; refreshAll only kicks
-  // generation for uncached speakers (so failed gens also retry). No-op when AI off.
+  // tick — so the icon stays stuck on the fallback template. A low-frequency sweep
+  // re-applies cached prompts to conv-log cards AND settings avatars. Idempotent:
+  // src is only rewritten when different; gen is only kicked for uncached names
+  // (so failed gens also retry). No-op when AI off.
   try {
     setInterval(function(){
-      try { if (window.__aiAvatar && window.__aiAvatar.enabled && window.__aiAvatar.enabled()) window.__aiAvatar.refreshAll(); } catch(e){}
+      try {
+        if (window.__aiAvatar && window.__aiAvatar.enabled && window.__aiAvatar.enabled()){
+          window.__aiAvatar.refreshAll();
+          sweepSettingsAvatars();
+        }
+      } catch(e){}
     }, 1200);
   } catch(e){}
 })();
