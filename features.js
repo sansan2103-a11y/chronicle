@@ -9726,12 +9726,20 @@
       setTimeout(function(){ try { img.src = url + '&r=' + Date.now(); } catch(e){} }, 1800 * (n + 1));
     };
   }
+  // v292Dfix121f: a small spinning SVG (data-URI) shown WHILE a character's avatar is
+  // being generated, so おしん can see it's working (and it replaces the old/template
+  // icon, removing the "一瞬以前のアイコンが出る" flash when settings opens).
+  var GEN_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='15' fill='none' stroke='%23b39ddb' stroke-width='4' stroke-linecap='round' stroke-dasharray='71' stroke-dashoffset='30'%3E%3CanimateTransform attributeName='transform' type='rotate' from='0 24 24' to='360 24 24' dur='0.9s' repeatCount='indefinite'/%3E%3C/circle%3E%3C/svg%3E";
+  function showGen(img){ if (!img) return; if (img.getAttribute('data-gen') === '1') return; try { img.onerror = null; } catch(e){} img.removeAttribute('data-r'); img.setAttribute('data-gen', '1'); img.title = '生成中…'; img.src = GEN_SVG; }
+  function showGenAv(av, name){ var img = av.querySelector('img'); if (!img){ av.innerHTML = '<img alt="' + name + '" loading="lazy">'; img = av.querySelector('img'); } showGen(img); }
   function applyAvatar(av, name, url, aiPath){
     var img = av.querySelector('img');
-    if (img && aiPathOf(img.getAttribute('src') || '') === aiPath) return; // already our AI image (maybe retrying) — leave it
+    if (img && img.getAttribute('data-gen') !== '1' && aiPathOf(img.getAttribute('src') || '') === aiPath) return; // already our AI image (maybe retrying) — leave it
     if (!img){ av.innerHTML = '<img alt="' + name + '" loading="lazy">'; img = av.querySelector('img'); }
     if (!img) return;
     img.removeAttribute('data-r');
+    img.removeAttribute('data-gen');
+    img.title = '';
     attachRetry(img, url);
     img.src = url;
   }
@@ -9793,7 +9801,11 @@
           if (!nm || nm === '???' || seen[nm]) continue;
           seen[nm] = 1;
           if (have(nm)) swapAvatar(nm);
-          else if (!pending[nm]){ pending[nm] = true; genAsync(nm, descFor(nm)); }
+          else {
+            if (!pending[nm]){ pending[nm] = true; genAsync(nm, descFor(nm)); }
+            // show 生成中 spinner on this speaker's cards while generating
+            for (var k = 0; k < cards.length; k++){ if (speakerOfCard(cards[k]) === nm){ var gav = cards[k].querySelector('.dlg-av'); if (gav) showGenAv(gav, nm); } }
+          }
         }
       } catch(e){}
     }
@@ -9817,9 +9829,12 @@
         if (!nm) continue;
         if (have(nm)){
           var url = buildUrl(cache[nm], nm);
-          // replace template with AI image; leave it if already our AI image (path match) — retries via onerror
-          if (aiPathOf(src) !== aiPathOf(url)){ img.removeAttribute('data-r'); attachRetry(img, url); img.src = url; }
-        } else if (!pending[nm]){ pending[nm] = true; genAsync(nm, descFor(nm)); }
+          // replace template/spinner with AI image; leave it if already our AI image (path match)
+          if (img.getAttribute('data-gen') === '1' || aiPathOf(src) !== aiPathOf(url)){ img.removeAttribute('data-r'); img.removeAttribute('data-gen'); img.title = ''; attachRetry(img, url); img.src = url; }
+        } else {
+          if (!pending[nm]){ pending[nm] = true; genAsync(nm, descFor(nm)); }
+          showGen(img);   // 生成中スピナー（テンプレ/旧アイコンのチラ見えも防ぐ）
+        }
       }
     } catch(e){}
   }
@@ -9846,6 +9861,27 @@
         if (nm) invalidate(nm);
       } catch(e){}
     }, true);
+  } catch(e){}
+  // v292Dfix121f: apply AI avatars the INSTANT the settings panel / new cards render,
+  // rather than waiting up to 1.2s for the next sweep tick — this removes the flash of
+  // the old/template icon when おしん opens 設定 (cached avatars apply immediately; not-
+  // yet-ready ones show the 生成中 spinner instead of the old icon).
+  try {
+    var moPend = false;
+    function moRun(){ moPend = false; try { if (window.__aiAvatar && window.__aiAvatar.enabled && window.__aiAvatar.enabled()){ window.__aiAvatar.refreshAll(); sweepSettingsAvatars(); } } catch(e){} }
+    function moSchedule(){ if (moPend) return; moPend = true; (window.requestAnimationFrame || function(cb){ setTimeout(cb, 16); })(moRun); }
+    var mo2 = new MutationObserver(function(muts){
+      for (var i = 0; i < muts.length; i++){
+        var a = muts[i].addedNodes; if (!a) continue;
+        for (var j = 0; j < a.length; j++){
+          var n = a[j]; if (!n || n.nodeType !== 1) continue;
+          var hit = (n.matches && n.matches('.settingsPanel,.npc-card,.v292-dlg-card,.v100-img,.v100-npc-img,img'))
+                 || (n.querySelector && n.querySelector('.settingsPanel,.npc-card,.v292-dlg-card,.v100-img,.v100-npc-img,img'));
+          if (hit){ moSchedule(); return; }
+        }
+      }
+    });
+    if (document.body) mo2.observe(document.body, { childList: true, subtree: true });
   } catch(e){}
   // v292Dfix120b: the LLM prompt finishes async; the single swapAvatar at onload can
   // miss a card that rendered (or got re-rendered by fix66/fix110/fix119) on another
