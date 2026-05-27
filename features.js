@@ -9265,6 +9265,13 @@
                 }
               }
             } catch(_ev){}
+            // v292Dfix122: liveliness — おしん「機会あっても会話が弾まない」=発言数が少ない
+            // ／掛け合いがない／展開が動かない。簡潔な常時ブロックで①1ターンの発話数②互いに
+            // 噛み合う往復③次を誘う締め を底上げ（重くしすぎると進まなくなるので最小限）。
+            var _banter = ['【掛け合い・テンポ（会話を弾ませる）】',
+              '・1ターンに最低2人が喋り、<say>を2〜4個入れる（全員沈黙が自然な場面・発話不能時は除く）。',
+              '・各セリフは直前の誰かの発言や行動に噛み合わせる（問い→応答、挑発→反発、提案→同意/拒否）。独白の羅列にしない。',
+              '・短い往復のやり取りで会話を前へ転がし、最後は次の発言や行動を誘う一言・問いで締める。'].join('\n');
             // v292Dfix112b: re-assert the output guard as the VERY LAST thing,
             // AFTER the drama/reaction rules — otherwise the model echoes those
             // strong structured rules into the prose as a "【重要ルール監査】" block.
@@ -9273,7 +9280,7 @@
               '・ここまでの全ルール（進行・反応・反復禁止など）は「あなたへの内部指示」。物語の本文には絶対に出力しない。',
               '・「【重要ルール監査】」「〜順守」「〜起点」「〜追加」のような、ルールの列挙・自己点検・チェックリスト・メモを本文に書くことを固く禁じる。【】で囲んだ管理用ブロックを本文に出さない。',
               '・出力は物語の地の文と登場人物のセリフ（「」/ <say>）だけ。'].join('\n');
-            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_react ? ('\n\n' + _react) : '') + (_dlg ? ('\n\n' + _dlg) : '') + (_voice ? ('\n\n' + _voice) : '') + '\n\n' + _guard;
+            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_react ? ('\n\n' + _react) : '') + (_dlg ? ('\n\n' + _dlg) : '') + (_voice ? ('\n\n' + _voice) : '') + '\n\n' + _banter + '\n\n' + _guard;
           }
         }
       } catch(e){}
