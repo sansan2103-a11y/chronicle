@@ -9686,24 +9686,42 @@
     var fc = nm.firstChild;
     return (fc && fc.nodeType === 3) ? (fc.textContent || '').trim() : (nm.textContent || '').trim();
   }
+  // v292Dfix121d: the path (before '?') identifies "our AI image for this name+style",
+  // ignoring the &r= cache-bust used on retries. Comparing the PATH (not the full URL)
+  // means: (a) a card still showing the crude v100 TEMPLATE gets replaced with the AI
+  // image (おしん: テンプレでなく生成版を使いたい), but (b) an AI image that's merely
+  // retrying (same path, different &r=) is left alone → no flicker, no churn.
+  function aiPathOf(u){ return String(u || '').split('?')[0]; }
+  // On Pollinations 402/503 (intermittent free-tier limit) retry the SAME AI image with
+  // a cache-bust (flux regenerates on each request, so a retry usually 200s). Never fall
+  // back to the template. After several tries, show "?" rather than loop forever.
+  function attachRetry(img, url){
+    img.onerror = function(){
+      var n = +(img.getAttribute('data-r') || 0);
+      if (n >= 6){ try { if (img.parentNode) img.parentNode.textContent = String.fromCharCode(63); } catch(e){} return; }
+      img.setAttribute('data-r', String(n + 1));
+      setTimeout(function(){ try { img.src = url + '&r=' + Date.now(); } catch(e){} }, 1800 * (n + 1));
+    };
+  }
+  function applyAvatar(av, name, url, aiPath){
+    var img = av.querySelector('img');
+    if (img && aiPathOf(img.getAttribute('src') || '') === aiPath) return; // already our AI image (maybe retrying) — leave it
+    if (!img){ av.innerHTML = '<img alt="' + name + '" loading="lazy">'; img = av.querySelector('img'); }
+    if (!img) return;
+    img.removeAttribute('data-r');
+    attachRetry(img, url);
+    img.src = url;
+  }
   function swapAvatar(name){
     try {
       if (!cache[name]) return;
       var url = buildUrl(cache[name], name);
+      var aiPath = aiPathOf(url);
       var cards = document.querySelectorAll('.v292-dlg-card');
       for (var i = 0; i < cards.length; i++){
         if (speakerOfCard(cards[i]) !== name) continue;
         var av = cards[i].querySelector('.dlg-av');
-        if (!av) continue;
-        // v292Dfix121b: apply each URL to a given avatar slot AT MOST ONCE. Without this,
-        // the 1.2s sweep kept re-setting src; when Pollinations 402/503'd, onerror swapped
-        // in "?", the next sweep re-created the <img>, it failed again → flicker loop. It
-        // also fought fix66/fix109's cache-bust retry (&_r=). data-aiav marks "done".
-        if (av.getAttribute('data-aiav') === url) continue;
-        var img = av.querySelector('img');
-        if (img){ if (img.getAttribute('src') !== url) img.src = url; }
-        else av.innerHTML = '<img src="' + url + '" alt="' + name + '" loading="lazy" onerror="if(this.parentNode)this.parentNode.textContent=String.fromCharCode(63)">';
-        av.setAttribute('data-aiav', url);
+        if (av) applyAvatar(av, name, url, aiPath);
       }
     } catch(e){}
   }
@@ -9778,8 +9796,8 @@
         if (!cache[nm]) loadCache(nm);
         if (cache[nm]){
           var url = buildUrl(cache[nm], nm);
-          // apply once per URL per img (idempotent) — stops repeat requests / flicker
-          if (img.getAttribute('data-aiav') !== url){ if (src !== url) img.src = url; img.setAttribute('data-aiav', url); }
+          // replace template with AI image; leave it if already our AI image (path match) — retries via onerror
+          if (aiPathOf(src) !== aiPathOf(url)){ img.removeAttribute('data-r'); attachRetry(img, url); img.src = url; }
         } else if (!pending[nm]){ pending[nm] = true; genAsync(nm, descFor(nm)); }
       }
     } catch(e){}
