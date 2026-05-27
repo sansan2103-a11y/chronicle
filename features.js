@@ -9487,8 +9487,8 @@
   var REACT_LABELS = ['控えめ','標準','濃いめ'];
   function curReaction(){ var c = getCfg(); var v = c && c.reactionLevel; return (v == null) ? 1 : (+v); }
   function curDialogue(){ var c = getCfg(); var v = c && c.dialogueLevel; return (v == null) ? 1 : (+v); }
-  // v292Dfix121: art-style index for AI avatars (0=アニメ default / 1=リアル / 2=水彩)
-  function curStyle(){ var c = getCfg(); var v = c && c.artStyle; return (v == null) ? 0 : (+v); }
+  // v292Dfix121: art-style index for AI avatars (0=アニメ/1=リアル/2=水彩/3=従来 既定)
+  function curStyle(){ var c = getCfg(); var v = c && c.artStyle; return (v == null) ? 3 : (+v); }
   function mkSel(id, labelText, title, labels, curVal, cfgKey, onAfter){
     var wrap = document.createElement('span');
     wrap.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin-right:6px;font-size:12px;color:var(--dim,#888);';
@@ -9519,7 +9519,7 @@
       var w3 = mkSel('v292-dlg-sel', '🗨 セリフ', 'セリフのキャラ立ち・中身（控えめ ←→ 濃いめ）', REACT_LABELS, curDialogue(), 'dialogueLevel');
       var curAv = (function(){ var c = getCfg(); return (c && c.aiAvatar != null) ? +c.aiAvatar : 0; })();
       var w4 = mkSel('v292-avatar-sel', '🎨 アイコン', 'アバター生成（標準テンプレ / AIがキャラに合わせて生成）', ['標準','AI'], curAv, 'aiAvatar', function(v){ try { if (v === 1 && window.__aiAvatar && window.__aiAvatar.refreshAll) window.__aiAvatar.refreshAll(); } catch(e){} });
-      var w5 = mkSel('v292-style-sel', '🖌 画風', 'AIアイコンの絵柄（アニメ / リアル / 水彩）。切替で全キャラ即反映・作り直し不要', ['アニメ','リアル','水彩'], curStyle(), 'artStyle', function(v){ try { if (window.__aiAvatar && window.__aiAvatar.refreshAll) window.__aiAvatar.refreshAll(); } catch(e){} });
+      var w5 = mkSel('v292-style-sel', '🖌 画風', 'AIアイコンの絵柄（アニメ / リアル / 水彩 / 従来=以前のダークファンタジー調）。切替で全キャラ即反映・作り直し不要', ['アニメ','リアル','水彩','従来'], curStyle(), 'artStyle', function(v){ try { if (window.__aiAvatar && window.__aiAvatar.refreshAll) window.__aiAvatar.refreshAll(); } catch(e){} });
       setBtn.parentNode.insertBefore(w1, setBtn);
       setBtn.parentNode.insertBefore(w2, setBtn);
       setBtn.parentNode.insertBefore(w3, setBtn);
@@ -9664,13 +9664,16 @@
   function loadCache(name){ try { if (cache[name]) return; var v = localStorage.getItem(LSP + name); if (v) cache[name] = v; } catch(e){} }
   function saveCache(name, prompt){ try { localStorage.setItem(LSP + name, prompt); } catch(e){} }
   // art-style selector (S.cfg.artStyle index → fixed style suffix appended to every prompt)
-  var STYLE_LIST = ['anime', 'realistic', 'watercolor'];
+  // v292Dfix121c: おしんが「以前の絵柄(標準テンプレのダークファンタジー調)が好み」→
+  // 'darkfantasy' を選択肢に追加し既定にする。元テンプレの style tail を再現。
+  var STYLE_LIST = ['anime', 'realistic', 'watercolor', 'darkfantasy'];
   var STYLE_SUFFIX = {
     anime: ', high quality anime art style, clean detailed anime illustration, vibrant',
     realistic: ', realistic digital painting, cinematic lighting, highly detailed',
-    watercolor: ', soft watercolor illustration, delicate brushwork, artistic'
+    watercolor: ', soft watercolor illustration, delicate brushwork, artistic',
+    darkfantasy: ', anime portrait, detailed face, dark fantasy, dramatic lighting, high quality'
   };
-  function styleKey(){ var st = getS(); var i = (st && st.cfg && st.cfg.artStyle != null) ? (+st.cfg.artStyle) : 0; return STYLE_LIST[i] || 'anime'; }
+  function styleKey(){ var st = getS(); var i = (st && st.cfg && st.cfg.artStyle != null) ? (+st.cfg.artStyle) : 3; return STYLE_LIST[i] || 'darkfantasy'; }
   function hash(s){ var h = 0; s = String(s || ''); for (var i = 0; i < s.length; i++){ h = ((h << 5) - h + s.charCodeAt(i)) | 0; } return Math.abs(h); }
   function buildUrl(prompt, name){
     var full = prompt + (STYLE_SUFFIX[styleKey()] || STYLE_SUFFIX.anime);
