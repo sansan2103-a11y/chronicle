@@ -9234,7 +9234,14 @@
               _react = ['【キャラの反応（標準）】',
                 '・場にいるキャラは毎ターン、出来事に感情・身体・声のいずれかで具体的に反応する。淡々とした要約で流さない。'].join('\n');
             }
-            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_react ? ('\n\n' + _react) : '');
+            // v292Dfix112b: re-assert the output guard as the VERY LAST thing,
+            // AFTER the drama/reaction rules — otherwise the model echoes those
+            // strong structured rules into the prose as a "【重要ルール監査】" block.
+            var _guard = ['【最重要・出力の鉄則（最後に必ず確認）】',
+              '・ここまでの全ルール（進行・反応・反復禁止など）は「あなたへの内部指示」。物語の本文には絶対に出力しない。',
+              '・「【重要ルール監査】」「〜順守」「〜起点」「〜追加」のような、ルールの列挙・自己点検・チェックリスト・メモを本文に書くことを固く禁じる。【】で囲んだ管理用ブロックを本文に出さない。',
+              '・出力は物語の地の文と登場人物のセリフ（「」/ <say>）だけ。'].join('\n');
+            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_react ? ('\n\n' + _react) : '') + '\n\n' + _guard;
           }
         }
       } catch(e){}
