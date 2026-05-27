@@ -9215,7 +9215,26 @@
                 '・障害・複雑化を1つ入れ、ビートの種類（事件/反応/発見/決断/悪化/好転/転換）を回して単調さを避ける。',
                 '・プレイヤーの自由・入力尊重・描写の濃さは保つ。'].join('\n');
             }
-            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '');
+            // v292Dfix112: character REACTION intensity, scaled by S.cfg.reactionLevel
+            // (0 控えめ / 1 標準 / 2 濃いめ, default 1), chosen via the topbar "反応"
+            // selector. Controls how vividly/immediately characters react.
+            var _rl = 1;
+            try { var _c2 = (typeof S !== 'undefined' && S.cfg) ? S.cfg : ((window.S && window.S.cfg) || {}); if (_c2 && _c2.reactionLevel != null) _rl = +_c2.reactionLevel; } catch(_e2){}
+            var _react = '';
+            if (_rl <= 0){
+              _react = ['【キャラの反応（控えめ）】',
+                '・反応は抑制的に。声や身体反応は最小限にし、淡々と描く。'].join('\n');
+            } else if (_rl >= 2){
+              _react = ['【キャラの反応（濃いめ・厳守）】',
+                '・出来事に対し、場にいる各キャラを「濃く・即座に・具体的に」反応させる。淡白な要約（「驚いた」「怖がった」等）で済ませない。',
+                '・1つの反応に、(1)感情の動き＋(2)身体反応（呼吸・震え・視線・筋肉・手足）＋(3)声や短い台詞、を重ねて描く。',
+                '・複数キャラがいるなら、それぞれの性格・立場で違う反応を見せる（同じ反応を共有させない）。',
+                '・反応はその瞬間に起こす（後回し・伝聞にしない）。'].join('\n');
+            } else {
+              _react = ['【キャラの反応（標準）】',
+                '・場にいるキャラは毎ターン、出来事に感情・身体・声のいずれかで具体的に反応する。淡々とした要約で流さない。'].join('\n');
+            }
+            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_react ? ('\n\n' + _react) : '');
           }
         }
       } catch(e){}
@@ -9418,28 +9437,37 @@
       }
     } catch(e){}
   }
+  // v292Dfix112: reaction-intensity selector alongside the drama one.
+  var REACT_LABELS = ['控えめ','標準','濃いめ'];
+  function curReaction(){ var c = getCfg(); var v = c && c.reactionLevel; return (v == null) ? 1 : (+v); }
+  function mkSel(id, labelText, title, labels, curVal, cfgKey){
+    var wrap = document.createElement('span');
+    wrap.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin-right:6px;font-size:12px;color:var(--dim,#888);';
+    var lab = document.createElement('span'); lab.textContent = labelText;
+    var sel = document.createElement('select');
+    sel.id = id;
+    sel.title = title;
+    sel.style.cssText = 'background:var(--s2,#222);color:var(--tx,#eee);border:1px solid var(--border,#444);border-radius:6px;padding:3px 6px;font-size:12px;cursor:pointer;';
+    for (var k = 0; k < labels.length; k++){ var o = document.createElement('option'); o.value = String(k); o.textContent = labels[k]; sel.appendChild(o); }
+    sel.value = String(curVal);
+    sel.addEventListener('change', function(){
+      var c = getCfg(); if (!c) return;
+      c[cfgKey] = +sel.value;
+      try { if (typeof S !== 'undefined' && typeof S.save === 'function') S.save(); } catch(e){}
+    });
+    wrap.appendChild(lab); wrap.appendChild(sel);
+    return wrap;
+  }
   function injectSelector(){
     try {
       if (document.getElementById('v292-drama-sel')) return true;
       var setBtn = null, btns = document.querySelectorAll('button');
       for (var i = 0; i < btns.length; i++){ if ((btns[i].textContent || '').indexOf('設定') > -1){ setBtn = btns[i]; break; } }
       if (!setBtn || !setBtn.parentNode) return false;
-      var wrap = document.createElement('span');
-      wrap.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin-right:6px;font-size:12px;color:var(--dim,#888);';
-      var lab = document.createElement('span'); lab.textContent = '📖 進行';
-      var sel = document.createElement('select');
-      sel.id = 'v292-drama-sel';
-      sel.title = '物語の進行の強さ（オフ=雰囲気漂流 ←→ 強め=ドラマ重視）';
-      sel.style.cssText = 'background:var(--s2,#222);color:var(--tx,#eee);border:1px solid var(--border,#444);border-radius:6px;padding:3px 6px;font-size:12px;cursor:pointer;';
-      for (var k = 0; k < LABELS.length; k++){ var o = document.createElement('option'); o.value = String(k); o.textContent = LABELS[k]; sel.appendChild(o); }
-      sel.value = String(curLevel());
-      sel.addEventListener('change', function(){
-        var c = getCfg(); if (!c) return;
-        c.dramaLevel = +sel.value;
-        try { if (typeof S !== 'undefined' && typeof S.save === 'function') S.save(); } catch(e){}
-      });
-      wrap.appendChild(lab); wrap.appendChild(sel);
-      setBtn.parentNode.insertBefore(wrap, setBtn);
+      var w1 = mkSel('v292-drama-sel', '📖 進行', '物語の進行の強さ（オフ=雰囲気漂流 ←→ 強め=ドラマ重視）', LABELS, curLevel(), 'dramaLevel');
+      var w2 = mkSel('v292-react-sel', '💬 反応', 'キャラの反応の濃さ（控えめ ←→ 濃いめ）', REACT_LABELS, curReaction(), 'reactionLevel');
+      setBtn.parentNode.insertBefore(w1, setBtn);
+      setBtn.parentNode.insertBefore(w2, setBtn);
       return true;
     } catch(e){ return false; }
   }
