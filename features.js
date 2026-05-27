@@ -9711,3 +9711,86 @@
   };
   try { console.log('[v292Dfix118] AI avatar prompt system ready'); } catch(e){}
 })();
+
+/* =====================================================================
+ * v292Dfix119: symbol-only dialogue order repair
+ * ---------------------------------------------------------------------
+ * おしん 2026-05-27「ちょっと会話ログおかしいんよね」：会話ログのカードが
+ * 物語と逆順に並ぶ。原因は fix70(dialogue-order) の norm() が「」『』（）…⋯。、
+ * 等を全部除去するため、「………」のような記号だけのセリフ（無言・沈黙）が
+ * 空文字に正規化される点。fix70 は空文字を順序indexから除外し、さらにカードを
+ * その空キーで照合できず fallback(=末尾)に飛ばすので、記号セリフだけが会話ログの
+ * 一番下に落ちて順序が崩れる。
+ *
+ * 本fixは __v292Dfix66.repair を（全スクリプトのwrap後＝window load後に）最外周で
+ * もう一度wrapし、fix70 のリオーダー後に「補正リオーダー」を最後に走らせる。
+ * キーは key(t)=norm(t) が空なら §sym§+生テキスト(空白除去) をフォールバックに使う
+ * ので、記号のみセリフでも物語内の正しい位置を保持して照合できる。物語側
+ * (S.turns の narrative / playerText) とカード側で同じ key() を使うため一致する。
+ * 既に整列済みなら DOM 操作をスキップ（冪等・flicker防止）。fix70 自体は無改変
+ * （repo専用ファイルのため）。fix70→本fix の二重整列だが最終DOMは本fixが決める。
+ * ===================================================================== */
+(function v292Dfix119(){
+  if (window.__v292Dfix119) return;
+  function norm(t){ return String(t == null ? '' : t).replace(/[「」『』（）\(\)\s　…⋯。、！？!.,]/g, ''); }
+  function key(t){ var n = norm(t); if (n) return n; return '§sym§' + String(t == null ? '' : t).replace(/\s+/g, ''); }
+  function getTurns(){
+    try { if (typeof S !== 'undefined' && S && S.turns) return S.turns; } catch(e){}
+    try { var r = localStorage.getItem('chr6'); if (r){ var p = JSON.parse(r); if (p && p.turns) return p.turns; } } catch(e){}
+    return [];
+  }
+  function extractOrdered(narr){
+    if (!narr) return [];
+    var s = String(narr), out = [], m;
+    var re = /<say\s+who="[^"]*"\s*>([\s\S]*?)<\/say>/g;
+    while ((m = re.exec(s)) !== null) out.push({ pos: m.index, text: m[1].trim() });
+    var re2 = /[「（(]([^「」（）()]{1,60})[」）)]/g;
+    while ((m = re2.exec(s)) !== null) out.push({ pos: m.index, text: m[1].trim() });
+    out.sort(function(a, b){ return a.pos - b.pos; });
+    var seen = {}, res = [];
+    out.forEach(function(x){ var k = key(x.text); if (!seen[k]){ seen[k] = 1; res.push(x.text); } });
+    return res;
+  }
+  function buildOI(){
+    var turns = getTurns(), oi = {}, idx = 0;
+    turns.forEach(function(t){
+      if (t && t.playerText){ var k = key(t.playerText); if (!(k in oi)) oi[k] = idx++; }
+      extractOrdered(t && t.narrative).forEach(function(dt){ var k = key(dt); if (!(k in oi)) oi[k] = idx++; });
+    });
+    return oi;
+  }
+  function cardKey(c){ var e = c.querySelector('.dlg-text'); return key(e ? e.textContent : ''); }
+  function reorderFixed(){
+    try {
+      var stream = document.getElementById('dialogue-stream');
+      if (!stream) return;
+      var oi = buildOI();
+      var cards = Array.prototype.slice.call(stream.querySelectorAll('.v292-dlg-card'));
+      if (cards.length < 2) return;
+      var dec = cards.map(function(c, di){ var k = cardKey(c); return { c: c, o: (k in oi) ? oi[k] : (10000 + di), di: di }; });
+      var sorted = dec.slice().sort(function(a, b){ return a.o !== b.o ? a.o - b.o : a.di - b.di; });
+      var changed = false;
+      for (var i = 0; i < sorted.length; i++){ if (sorted[i].di !== dec[i].di){ changed = true; break; } }
+      if (!changed) return;
+      sorted.forEach(function(d){ stream.appendChild(d.c); });
+      try { console.log('[v292Dfix119] symbol-order corrected', sorted.length, 'cards'); } catch(_){}
+    } catch(e){}
+  }
+  function install(){
+    try {
+      if (window.__v292Dfix119) return;
+      if (!window.__v292Dfix66 || typeof window.__v292Dfix66.repair !== 'function'){ return setTimeout(install, 300); }
+      window.__v292Dfix119 = true;
+      var prev = window.__v292Dfix66.repair;
+      window.__v292Dfix66.repair = function(){
+        var r;
+        try { r = prev.apply(this, arguments); } catch(e){}
+        reorderFixed();
+        return r;
+      };
+      try { console.log('[v292Dfix119] symbol-only order repair installed'); } catch(_){}
+    } catch(e){}
+  }
+  if (document.readyState === 'complete') install();
+  else window.addEventListener('load', install);
+})();
