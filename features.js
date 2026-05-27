@@ -9666,7 +9666,7 @@
         var av = cards[i].querySelector('.dlg-av');
         if (!av) continue;
         var img = av.querySelector('img');
-        if (img) img.src = url;
+        if (img){ if (img.getAttribute('src') !== url) img.src = url; }
         else av.innerHTML = '<img src="' + url + '" alt="' + name + '" loading="lazy" onerror="if(this.parentNode)this.parentNode.textContent=String.fromCharCode(63)">';
       }
     } catch(e){}
@@ -9721,6 +9721,17 @@
     }
   };
   try { console.log('[v292Dfix118] AI avatar prompt system ready'); } catch(e){}
+  // v292Dfix120b: the LLM prompt finishes async; the single swapAvatar at onload can
+  // miss a card that rendered (or got re-rendered by fix66/fix110/fix119) on another
+  // tick — so the icon stays stuck on the fallback template (おしん: "設定とアイコン違う").
+  // A low-frequency sweep re-applies cached prompts to whatever cards are visible.
+  // Idempotent: swapAvatar only writes when the src differs; refreshAll only kicks
+  // generation for uncached speakers (so failed gens also retry). No-op when AI off.
+  try {
+    setInterval(function(){
+      try { if (window.__aiAvatar && window.__aiAvatar.enabled && window.__aiAvatar.enabled()) window.__aiAvatar.refreshAll(); } catch(e){}
+    }, 1200);
+  } catch(e){}
 })();
 
 /* =====================================================================
