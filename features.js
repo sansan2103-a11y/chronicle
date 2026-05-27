@@ -9518,3 +9518,98 @@
   var n = 0;
   var iv = setInterval(function(){ n++; arm(); if (n > 40) clearInterval(iv); }, 250);
 })();
+
+/* =====================================================================
+ * v292Dfix117: AI-generated random fill (replaces hardcoded array picks)
+ * ---------------------------------------------------------------------
+ * おしん 2026-05-27: the 🎲 random-fill repeats from small fixed arrays.
+ * Have the LLM invent a coherent, genre-varied scenario instead — far more
+ * variety + internally consistent (hero + NPCs + world/loc/obj/tone). Fills
+ * ONLY empty fields (typed fields preserved, per おしん). XHR to OpenRouter
+ * (same key/model as fix104, high temperature for variety). Falls back to the
+ * original array-based randomFill when no OpenRouter key or on any failure.
+ * ===================================================================== */
+(function v292Dfix117(){
+  if (window.__v292Dfix117) return;
+  function getUI(){ try { if (typeof UI !== 'undefined') return UI; } catch(e){} return window.UI || null; }
+  function getS(){ try { if (typeof S !== 'undefined') return S; } catch(e){} return window.S || null; }
+  function $(id){ return document.getElementById(id); }
+  function setVal(id, v){ var e = $(id); if (e && !e.value.trim() && v) e.value = String(v); }
+  function setStatus(msg, err){ try { var U = getUI(); if (U && U.setStatus) U.setStatus(msg, err); } catch(e){} }
+
+  function applyScenario(sc){
+    try {
+      if (!sc) return;
+      if (sc.hero){ setVal('cfgHName', sc.hero.name); setVal('cfgHDesc', sc.hero.desc); }
+      if (sc.scene){ setVal('cfgLore', sc.scene.lore); setVal('cfgLoc', sc.scene.loc); setVal('cfgObj', sc.scene.obj); setVal('cfgTone', sc.scene.tone); }
+      var U = getUI();
+      var npcs = Array.isArray(sc.npcs) ? sc.npcs : [];
+      var cards = document.querySelectorAll('#npcList .npc-card');
+      if (cards.length === 0 && U && typeof U.addNpc === 'function'){
+        for (var a = 0; a < npcs.length; a++){ U.addNpc(); }
+        cards = document.querySelectorAll('#npcList .npc-card');
+      }
+      var fields = ['name','desc','personality','coreDesire','coreFear','wound'];
+      for (var i = 0; i < cards.length && i < npcs.length; i++){
+        var nd = npcs[i] || {};
+        for (var j = 0; j < fields.length; j++){
+          var el = cards[i].querySelector('[data-f="' + fields[j] + '"]');
+          if (el && !el.value.trim() && nd[fields[j]]) el.value = String(nd[fields[j]]);
+        }
+      }
+      setStatus('🎲 AIでシナリオを生成しました。内容を確認して保存してください。');
+    } catch(e){}
+  }
+
+  function parseJson(t){
+    if (!t) return null;
+    var m = String(t).match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    try { return JSON.parse(m[0]); } catch(e){ return null; }
+  }
+
+  function fallback(){ var U = getUI(); if (U && typeof U.__origRandomFill === 'function') U.__origRandomFill(); }
+
+  function aiGenerate(){
+    var st = getS(); var cfg = (st && st.cfg) || {};
+    if (cfg.provider !== 'openrouter' || !cfg.orKey){ fallback(); return; }
+    var filled = {};
+    [['主人公名','cfgHName'],['主人公の説明','cfgHDesc'],['世界観','cfgLore'],['場所','cfgLoc'],['目的','cfgObj'],['雰囲気','cfgTone']].forEach(function(p){ var e = $(p[1]); if (e && e.value.trim()) filled[p[0]] = e.value.trim(); });
+    var sys = 'あなたはTRPGのシナリオ設計者。整合した1つのシナリオ設定を作る。多様なジャンル（ダークファンタジー/ホラー/SF/現代/歴史/ミステリ/和風怪異 等）からランダムに選び、毎回違う題材にする。日本語で。JSONのみ返す。';
+    var user = '既に決まっている項目（あれば矛盾しないように）:\n' + JSON.stringify(filled) + '\n\n空の項目を創作し、次の形式のJSONのみで返せ:\n{"hero":{"name":"","desc":""},"npcs":[{"name":"","desc":"","personality":"","coreDesire":"","coreFear":"","wound":""}],"scene":{"lore":"","loc":"","obj":"","tone":""}}\nNPCは2〜3人。descは外見・立場。各項目は簡潔に1〜2文。';
+    setStatus('🎲 AIで生成中…（数秒）');
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', 'https://openrouter.ai/api/v1/chat/completions', true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('Authorization', 'Bearer ' + cfg.orKey);
+      xhr.timeout = 60000;
+      xhr.onload = function(){
+        try {
+          if (xhr.status !== 200) throw new Error('HTTP ' + xhr.status);
+          var j = JSON.parse(xhr.responseText);
+          var txt = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+          var sc = parseJson(txt);
+          if (!sc) throw new Error('parse');
+          applyScenario(sc);
+        } catch(e){ setStatus('AI生成に失敗→固定ランダムで埋めます', true); fallback(); }
+      };
+      xhr.onerror = function(){ setStatus('通信失敗→固定ランダムで埋めます', true); fallback(); };
+      xhr.ontimeout = function(){ setStatus('生成タイムアウト→固定ランダムで埋めます', true); fallback(); };
+      xhr.send(JSON.stringify({ model: cfg.orModel || 'nousresearch/hermes-4-405b', temperature: 1.05, max_tokens: 1200, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] }));
+    } catch(e){ fallback(); }
+  }
+
+  function arm(){
+    var U = getUI();
+    if (!U || typeof U.randomFill !== 'function') return false;
+    if (U.__v292Dfix117) return true;
+    U.__origRandomFill = U.randomFill.bind(U);
+    U.randomFill = aiGenerate;
+    U.__v292Dfix117 = true;
+    window.__v292Dfix117 = true;
+    try { console.log('[v292Dfix117] AI random-fill armed'); } catch(e){}
+    return true;
+  }
+  if (!arm()){ var n2 = 0; var iv2 = setInterval(function(){ n2++; if (arm() || n2 > 200) clearInterval(iv2); }, 200); }
+})();
