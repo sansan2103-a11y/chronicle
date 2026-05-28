@@ -168,22 +168,30 @@
   // Pull the entity's appearance from its FIRST mention: the sentence containing the
   // name plus up to 2 following sentences (intros usually describe looks right after),
   // with any 「dialogue」 stripped so speech doesn't pollute the image prompt.
+  // v292Dfix123: give the LLM a GENEROUS, stable context window so it can infer what the
+  // entity IS (person / creature / spirit / object) and depict it faithfully — instead of
+  // the old 1-3 sentence scrape forced into a "horror creature" template.
   function ncAppearance(name, narr){
     if (!name || !narr) return '';
-    var pos = narr.indexOf(name);
-    if (pos < 0) return '';
+    var pos = (name === '???' || name === '?') ? -1 : narr.indexOf(name);
+    if (pos < 0){
+      // unnamed / not found by name → best-effort: use the most recent narrative as context
+      var tail = String(narr).slice(-450).replace(/<[^>]+>/g, ' ').replace(/[「『〝][^」』〟]*[」』〟]/g, ' ').replace(/\s+/g, ' ').trim();
+      return tail.slice(-320);
+    }
     var s1 = narr.lastIndexOf('。', pos), s2 = narr.lastIndexOf('\n', pos);
     var start = Math.max(s1, s2) + 1;
-    var chunk = narr.slice(start, start + 200);
-    var m = chunk.match(/^(?:[^。\n]*[。\n]){1,3}/);
+    var chunk = narr.slice(start, start + 400);
+    var m = chunk.match(/^(?:[^。\n]*[。\n]){1,5}/);
     var appear = (m ? m[0] : chunk);
+    appear = appear.replace(/<[^>]+>/g, ' ');                  // drop any tags
     appear = appear.replace(/[「『〝][^」』〟]*[」』〟]/g, ' ');  // drop quoted speech
     appear = appear.replace(/\s+/g, ' ').trim();
-    if (appear.length > 150) appear = appear.slice(0, 150);
+    if (appear.length > 300) appear = appear.slice(0, 300);
     return appear;
   }
   function ncBuildAvatar(name){
-    if (!name || name === '???' ) return '';
+    if (!name) return '';   // v292Dfix123: allow '???'/unnamed too (best-effort from context)
     if (NC_AVATARS[name]) return NC_AVATARS[name];
     var appear = ncAppearance(name, NC_NARR);
     // v292Dfix103: non-cast entities are usually creatures/threats, not pretty cast
@@ -970,6 +978,10 @@
     repair: repair,
     preprocessNarrative: preprocessNarrative,
     lookupAvatar: lookupAvatar,
+    // v292Dfix123: expose the entity context so fix118's generator can describe non-cast
+    // entities (creatures/people/etc.) from the story prose, not a fixed horror template.
+    isCast: function(name){ try { var st = getState(); if (st && st.cast){ if (st.cast.hero && st.cast.hero.name === name) return true; var a = st.cast.npcs || []; for (var i = 0; i < a.length; i++){ if (a[i] && a[i].name === name) return true; } } } catch(e){} return false; },
+    ncAppearanceFor: function(name){ try { return ncAppearance(name, NC_NARR); } catch(e){} return ''; },
     // v292Dfix104: manual extraction trigger (also bypasses any repair() wrapper,
     // so it can be invoked directly to (re)build the LLM dialogue cache).
     runExtraction: function(){

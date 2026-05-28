@@ -9758,12 +9758,33 @@
       }
     } catch(e){}
   }
+  // v292Dfix123: is this a registered cast member (has a desc) or an unregistered story
+  // entity (creature / mob / spirit)? Cast → person-centric prompt; non-cast → let the
+  // LLM infer the entity TYPE from the story context and depict it faithfully.
+  function isCast(name){
+    try { var f = window.__v292Dfix66; if (f && typeof f.isCast === 'function') return f.isCast(name); } catch(e){}
+    try { var st = getS(); if (st && st.cast){ if (st.cast.hero && st.cast.hero.name === name) return true; var a = st.cast.npcs || []; for (var i = 0; i < a.length; i++){ if (a[i] && a[i].name === name) return true; } } } catch(e){}
+    return false;
+  }
+  function entityContext(name){
+    try { var f = window.__v292Dfix66; if (f && typeof f.ncAppearanceFor === 'function') return f.ncAppearanceFor(name) || ''; } catch(e){}
+    return '';
+  }
   function genAsync(name, desc){
     var st = getS(); var cfg = (st && st.cfg) || {};
     if (cfg.provider !== 'openrouter' || !cfg.orKey){ delete pending[name]; return; }
     var tone = ''; try { if (st && st.scene && st.scene.tone) tone = String(st.scene.tone).trim(); } catch(e){}
-    var sys = 'You write ONE concise English description of a single character for a square portrait: their gender, age, hair, build, clothing, and a fitting facial expression. Be faithful to the stated gender and appearance. Do NOT mention art style, medium, rendering, lighting or camera — only the character. Output ONLY the description, no quotes or preamble.';
-    var user = 'Character name: ' + name + '\nAppearance / role: ' + (desc || 'unknown figure') + '\nMood/tone (for expression only): ' + (tone || 'neutral') + '\nWrite the character description now.';
+    var cast = isCast(name);
+    var sys, user;
+    if (cast){
+      sys = 'You write ONE concise English description of a single character for a square portrait: their gender, age, hair, build, clothing, and a fitting facial expression. Be faithful to the stated gender and appearance. Do NOT mention art style, medium, rendering, lighting or camera — only the character. Output ONLY the description, no quotes or preamble.';
+      user = 'Character name: ' + name + '\nAppearance / role: ' + (desc || 'unknown figure') + '\nMood/tone (for expression only): ' + (tone || 'neutral') + '\nWrite the character description now.';
+    } else {
+      // unregistered story entity — infer what it IS from the context, then depict it
+      var ctx = (typeof desc === 'string' && desc.trim()) ? desc : entityContext(name);
+      sys = 'You write ONE concise English image prompt for an entity that appears in a story. FIRST infer from the context what it is — an ordinary person, a creature/monster, a ghost/spirit, or an object/phenomenon — then describe its appearance faithfully and appropriately for that type: a person becomes a character portrait; a creature is depicted as that creature; a spirit/object as fitting. Do NOT force it to be human, and do NOT force it to be a monster — follow the context. Do NOT mention art style, medium, rendering or camera. Output ONLY the description, no quotes or preamble.';
+      user = 'Entity name/label: ' + name + '\nStory context describing THIS entity: ' + (ctx || 'an unknown presence in the scene') + '\nStory tone: ' + (tone || 'neutral') + '\nWrite the appearance description now.';
+    }
     try {
       var xhr = new XMLHttpRequest();
       xhr.open('POST', 'https://openrouter.ai/api/v1/chat/completions', true);
