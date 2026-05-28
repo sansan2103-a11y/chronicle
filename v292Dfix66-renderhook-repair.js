@@ -853,7 +853,13 @@
   // leak into prose. Matches a 【…】 containing a rule keyword + everything after.
   function stripRuleAudit(s){
     if (!s || typeof s !== 'string') return s;
-    return s.replace(/【[^】\n]{0,30}(?:物語の進行|物語の推進|物語の展開|キャラの反応|反応=|セリフ|反復|ルール監査|出力の鉄則|登場キャラ|内部指示|最重要|掛け合い|テンポ)[^】\n]{0,30}】[\s\S]*$/, '').replace(/[\s　]+$/, '');
+    return s
+      .replace(/【[^】\n]{0,30}(?:物語の進行|物語の推進|物語の展開|キャラの反応|反応=|セリフ|反復|ルール監査|出力の鉄則|登場キャラ|内部指示|最重要|掛け合い|テンポ)[^】\n]{0,30}】[\s\S]*$/, '')
+      // v292Dfix124: also cut a trailing PLAIN-TEXT self-audit block (no 【】), e.g.
+      // "フィードバック：…正しく機能している点 ・…（進行ルール準拠）（初対面セリフ禁止規則対応）".
+      // Anchored on an audit header at line start + ：/: so real prose isn't touched.
+      .replace(/(?:^|\n)[\s　]*(?:フィードバック|フィードバック評価|評価|総評|講評|自己点検|自己評価|チェック(?:項目|リスト)?|補足説明|内部メモ|ルール(?:確認|準拠|チェック))[\s　]*[：:][\s\S]*$/, '')
+      .replace(/[\s　]+$/, '');
   }
 
   // ---------- main: render-hook repair ----------
