@@ -769,6 +769,39 @@
     bProcess();
   }
 
+  // v292Dfix125: heuristic-path quality (used when the LLM extraction isn't cached).
+  // (a) a quote that's an onomatopoeia/sound ("カサッ" + という音/物音/声) is NOT speech.
+  function isOnomatopoeiaQuote(pre, text){
+    if (!text) return false;
+    try {
+      var i = pre.indexOf('「' + text + '」');
+      if (i >= 0){
+        var after = pre.slice(i + text.length + 2, i + text.length + 16);
+        if (/^という[^。]{0,8}(?:音|物音|声|響き|轟き|悲鳴|うなり|軋み)/.test(after)) return true;
+      }
+    } catch(e){}
+    var t = String(text).replace(/[…⋯。、！!？?\s　]/g, '');
+    if (t.length <= 6 && /^[ァ-ヶ゛゜ー]+$/.test(t) && /[ッーッ]/.test(text)) return true;  // 短い純カタカナ擬音
+    return false;
+  }
+  // (b) when a quote got attributed to the only cast member but the clause AFTER it names a
+  // NON-cast entity with a speech verb ("「ここにおいで」 …骸骨は静かに告げる" → 骸骨, not ミリア),
+  // re-attribute to that entity. Only overrides to a NON-cast name → safe for cast-cast cases.
+  function postQuoteNonCastSpeaker(pre, text, names){
+    try {
+      var i = pre.indexOf('「' + text + '」');
+      if (i < 0) return '';
+      var after = pre.slice(i + text.length + 2, i + text.length + 2 + 60);
+      after = after.split('「')[0];  // stay within this attribution clause
+      var m = after.match(/([一-龯ァ-ヶ][^\s、。「」（）]{0,6})(?:は|が)[^。「」]{0,14}(?:告げ|言っ|言う|呟|囁|叫|応え|返し|呻|嗤|笑っ|尋ね|問う|怒鳴|名乗|ささや|つぶや|声を)/);
+      if (!m) return '';
+      var ent = m[1].replace(/^(?:その|この|あの|新たな|新しい|例の|件の|低い|高い|青白い|赤黒い|不気味な|小さな|大きな|黒い|白い|一つの|一体の)/, '').trim();
+      if (ent.length < 2) return '';
+      if (names && names.indexOf(ent) >= 0) return '';   // a cast name → leave to other resolvers
+      return ent;
+    } catch(e){}
+    return '';
+  }
   function extractFromTurn(turn){
     var narr = turn && turn.narrative;
     if (!narr) return [];
@@ -803,6 +836,8 @@
           if (!d || !d.text) continue;
           // v292Dfix89: skip non-speech quotes (citation/concept, not dialogue)
           if (isNonSpeechQuote(preprocessed, String(d.text))) continue;
+          // v292Dfix125: skip onomatopoeia/sound quotes ("カサッ"→という鈍い音)
+          if (isOnomatopoeiaQuote(preprocessed, String(d.text))) continue;
           // v292Dfix97: resolve post-positioned speaker (「…」と、◯◯の悲鳴…)
           if (!d.speaker){
             var rs = resolvePostQuoteSpeaker(preprocessed, String(d.text), _names);
@@ -817,6 +852,10 @@
             var pc = resolvePreSpeaker(preprocessed, String(d.text));
             if (pc) d.speaker = pc;
           }
+          // v292Dfix125: a non-cast entity named right after the quote ("…骸骨は告げる")
+          // overrides a wrong only-cast proximity guess.
+          var pqo = postQuoteNonCastSpeaker(preprocessed, String(d.text), _names);
+          if (pqo && pqo !== d.speaker) d.speaker = pqo;
           var k = dialogueKey(d.speaker, d.text);
           if (seen[k]) continue;
           seen[k] = true;
