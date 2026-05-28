@@ -802,6 +802,15 @@
     } catch(e){}
     return '';
   }
+  // v292Dfix125b: is `text` an actual spoken line (inside 「」/『』) in the narrative?
+  // Used to drop STORY/DO scene-direction echo cards (narration, not in quotes) while
+  // keeping real spoken lines (SAY / character dialogue, which the prose puts in 「」).
+  function quotedInNarr(narr, text){
+    if (!narr || !text) return false;
+    if (narr.indexOf('「' + text + '」') >= 0 || narr.indexOf('『' + text + '』') >= 0) return true;
+    try { var re = /[「『]([^「」『』]{1,120})[」』]/g, m; while ((m = re.exec(narr)) !== null){ if (m[1].indexOf(text) >= 0 || text.indexOf(m[1]) >= 0) return true; } } catch(e){}
+    return false;
+  }
   function extractFromTurn(turn){
     var narr = turn && turn.narrative;
     if (!narr) return [];
@@ -973,11 +982,24 @@
             __c.parentNode.removeChild(__c);
             continue;
           }
+          // v292Dfix125b: also drop STORY/DO scene-direction echo cards that have NO visible
+          // 展開/行動 badge (they slip past the rule above) — narration, not dialogue. A real
+          // spoken line appears inside 「」 in the narrative; scene-direction doesn't.
+          if (__c.className.indexOf('v292Dfix56-input-card') !== -1 && __c.parentNode){
+            var __itx = (__tx.textContent || '').trim();
+            if (__itx && !quotedInNarr(__allNarr, __itx)){ __c.parentNode.removeChild(__c); continue; }
+          }
           // skip input/STORY badge cards (📖 展開 等) — only plain dialogue cards
           if (__nm && /📖|⚔|💭|🎭|✨|展開/.test(__nm.textContent || '')) continue;
           var __ct = (__tx.textContent || '').trim();
           if (__ct && isNonSpeechQuote(__allNarr, __ct) && __c.parentNode){
             __c.parentNode.removeChild(__c);
+            continue;
+          }
+          // v292Dfix125: drop onomatopoeia/sound cards ("カサッ"→という鈍い音) — not speech.
+          if (__ct && isOnomatopoeiaQuote(__allNarr, __ct) && __c.parentNode){
+            __c.parentNode.removeChild(__c);
+            continue;
           }
         }
       } catch(__e){}
