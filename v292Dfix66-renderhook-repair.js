@@ -802,6 +802,29 @@
     } catch(e){}
     return '';
   }
+  // v292Dfix126: collect texts the model explicitly tagged as ANONYMOUS speakers
+  // (<say who="？"> / <say who="?"> / <say who="???">). The model uses ？ deliberately
+  // to mark a mysterious/unknown voice; downstream resolvers (resolveNonCastSpeaker /
+  // postQuoteNonCastSpeaker / fix65 proximity guess) sometimes overwrite it with the
+  // nearest cast member (e.g. ミリア). This helper builds a set so we can restore the
+  // intentional anonymity AFTER resolvers run.
+  function anonymousTexts(narr){
+    var map = Object.create(null);
+    if (!narr) return map;
+    try {
+      var re = /<say\s+who="(\?|？|\?{2,}|？{2,})"\s*>([\s\S]*?)<\/say>/g, m;
+      while ((m = re.exec(narr)) !== null){
+        var t = (m[2] || '').trim();
+        if (t) map[t] = true;
+      }
+    } catch(e){}
+    return map;
+  }
+  function isAnonSpeakerLabel(s){
+    if (!s) return false;
+    var t = String(s).trim();
+    return t === '？' || t === '?' || t === '???' || t === '？？？' || /^[?？]+$/.test(t);
+  }
   // v292Dfix125b: is `text` an actual spoken line (inside 「」/『』) in the narrative?
   // Used to drop STORY/DO scene-direction echo cards (narration, not in quotes) while
   // keeping real spoken lines (SAY / character dialogue, which the prose puts in 「」).
@@ -815,6 +838,8 @@
     var narr = turn && turn.narrative;
     if (!narr) return [];
     var preprocessed = preprocessNarrative(narr);
+    // v292Dfix126: per-turn map of texts the model tagged as anonymous (<say who="？">)
+    var _anonMap = anonymousTexts(narr);
     // v292Dfix104: prefer the LLM extraction for this turn if we have it
     var bres = bGet(preprocessed);
     if (bres){
@@ -865,6 +890,9 @@
           // overrides a wrong only-cast proximity guess.
           var pqo = postQuoteNonCastSpeaker(preprocessed, String(d.text), _names);
           if (pqo && pqo !== d.speaker) d.speaker = pqo;
+          // v292Dfix126: if the model explicitly tagged this line as anonymous
+          // (<say who="？">), restore '？' even if resolvers overwrote it to a cast name.
+          try { if (_anonMap[String(d.text).trim()]) d.speaker = '？'; } catch(e){}
           var k = dialogueKey(d.speaker, d.text);
           if (seen[k]) continue;
           seen[k] = true;
@@ -1073,7 +1101,14 @@
       if (!stream) return;
       var st = getState(); var turns = (st && st.turns) || []; if (!turns.length) return;
       var allNarr = '';
-      for (var i = 0; i < turns.length; i++){ if (turns[i]) allNarr += '\n' + preprocessNarrative(turns[i].narrative || ''); }
+      // v292Dfix126: aggregate anonymity map across all turns (model-tagged <say who="？">)
+      var anonAll = Object.create(null);
+      for (var i = 0; i < turns.length; i++){
+        if (!turns[i]) continue;
+        var rawN = turns[i].narrative || '';
+        allNarr += '\n' + preprocessNarrative(rawN);
+        try { var am = anonymousTexts(rawN); for (var amk in am){ anonAll[amk] = true; } } catch(_){}
+      }
       var cards = stream.querySelectorAll('.v292-dlg-card');
       for (var c = 0; c < cards.length; c++){
         var __c = cards[c];
@@ -1091,6 +1126,19 @@
           if (__c.parentNode) __c.parentNode.removeChild(__c);
           continue;
         }
+        // v292Dfix126: restore '？' for cards whose text was tagged anonymous in narrative
+        try {
+          if (anonAll[__t]){
+            var __nm = __c.querySelector('.dlg-name');
+            if (__nm){
+              var __cur = (__nm.textContent || '').trim();
+              if (__cur && !isAnonSpeakerLabel(__cur)){
+                __nm.textContent = '？';
+                __nm.setAttribute('data-anon', '1');
+              }
+            }
+          }
+        } catch(_){}
       }
     } catch(e){}
   }
