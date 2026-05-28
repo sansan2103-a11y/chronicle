@@ -622,7 +622,11 @@
         var kids = blocks[b].children;
         var hit = -1;
         for (var c = 0; c < kids.length; c++){
-          if (/【[^】\n]{0,30}(?:物語の進行|物語の推進|物語の展開|キャラの反応|反応=|セリフ|反復|ルール監査|出力の鉄則|登場キャラ|内部指示|最重要|掛け合い|テンポ)[^】\n]{0,30}】/.test(kids[c].textContent || '')){ hit = c; break; }
+          var _kt = kids[c].textContent || '';
+          // v292Dfix124b: also catch the PLAIN-TEXT self-audit header (no 【】), e.g. a
+          // <p> starting with "フィードバック：…". Removes it + the following bullet <p>s.
+          if (/【[^】\n]{0,30}(?:物語の進行|物語の推進|物語の展開|キャラの反応|反応=|セリフ|反復|ルール監査|出力の鉄則|登場キャラ|内部指示|最重要|掛け合い|テンポ)[^】\n]{0,30}】/.test(_kt)
+              || /^[\s　]*(?:フィードバック|評価|総評|講評|自己点検|自己評価|チェック(?:項目|リスト)?|補足説明|内部メモ|ルール(?:確認|準拠|チェック))[\s　]*[：:]/.test(_kt)){ hit = c; break; }
         }
         if (hit < 0) continue;
         for (var d = kids.length - 1; d >= hit; d--){
