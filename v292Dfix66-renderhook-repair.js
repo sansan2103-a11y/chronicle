@@ -847,9 +847,14 @@
       for (var bi = 0; bi < bres.length; bi++){
         var be = bres[bi];
         if (!be || !be.text) continue;
-        var bk = dialogueKey(be.speaker, be.text);
+        // v292Dfix126b: also enforce anonymity restoration in the LLM-extraction path.
+        // bGet's prompt allows "???" for unknown speakers; cached extractions may also
+        // attribute mystery lines to a nearby cast. Pin to '？' if the model tagged it.
+        var beSp = be.speaker;
+        try { if (_anonMap[String(be.text).trim()]) beSp = '？'; } catch(e){}
+        var bk = dialogueKey(beSp, be.text);
         if (bseen[bk]) continue; bseen[bk] = true;
-        bout.push({ speaker: be.speaker, text: be.text });
+        bout.push({ speaker: beSp, text: be.text });
       }
       bout.sort(function(a, b){
         var ia = preprocessed.indexOf(a.text); if (ia === -1) ia = Number.MAX_SAFE_INTEGER;
@@ -1127,12 +1132,14 @@
           continue;
         }
         // v292Dfix126: restore '？' for cards whose text was tagged anonymous in narrative
+        // v292Dfix126b: normalize ANY anon marker (?/???/？？？) to canonical '？' so the
+        // user sees a consistent label across turns (model + bGet sometimes pick '???').
         try {
           if (anonAll[__t]){
             var __nm = __c.querySelector('.dlg-name');
             if (__nm){
               var __cur = (__nm.textContent || '').trim();
-              if (__cur && !isAnonSpeakerLabel(__cur)){
+              if (__cur !== '？'){
                 __nm.textContent = '？';
                 __nm.setAttribute('data-anon', '1');
               }
