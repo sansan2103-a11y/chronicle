@@ -1063,6 +1063,39 @@
   // Manual re-trigger shortcut
   window.regenerateConvLogV66 = function(){ return repair(); };
 
+  // v292Dfix125c: standalone conv-log sweep on an interval — guarantees the cleanup
+  // (drop STORY/DO scene-direction echo cards + onomatopoeia cards) wins the timing war
+  // with fix56/64's restore, even if they add cards AFTER repair's last run. Idempotent:
+  // once removed cards stay gone; real dialogue is untouched (text appears in 「」).
+  function sweepConvLogCards(){
+    try {
+      var stream = document.getElementById('dialogue-stream');
+      if (!stream) return;
+      var st = getState(); var turns = (st && st.turns) || []; if (!turns.length) return;
+      var allNarr = '';
+      for (var i = 0; i < turns.length; i++){ if (turns[i]) allNarr += '\n' + preprocessNarrative(turns[i].narrative || ''); }
+      var cards = stream.querySelectorAll('.v292-dlg-card');
+      for (var c = 0; c < cards.length; c++){
+        var __c = cards[c];
+        var __tx = __c.querySelector('.dlg-text');
+        if (!__tx) continue;
+        var __t = (__tx.textContent || '').trim();
+        if (!__t) continue;
+        // STORY/DO scene-direction echo input card whose text isn't a quoted utterance → drop
+        if (__c.className.indexOf('v292Dfix56-input-card') !== -1 && !quotedInNarr(allNarr, __t)){
+          if (__c.parentNode) __c.parentNode.removeChild(__c);
+          continue;
+        }
+        // onomatopoeia/sound card → drop
+        if (isOnomatopoeiaQuote(allNarr, __t)){
+          if (__c.parentNode) __c.parentNode.removeChild(__c);
+          continue;
+        }
+      }
+    } catch(e){}
+  }
+  try { setInterval(sweepConvLogCards, 1200); } catch(e){}
+
   // ---------- render hook (uses live binding) ----------
   // フック内で window.__v292Dfix66.repair を呼ぶ -> 再注入時も最新版を使う
   function v292Dfix66RenderHook(){
