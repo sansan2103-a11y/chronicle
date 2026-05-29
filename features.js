@@ -9679,15 +9679,35 @@
       var U = getUI();
       var npcs = Array.isArray(sc.npcs) ? sc.npcs : [];
       var cards = document.querySelectorAll('#npcList .npc-card');
-      if (cards.length === 0 && U && typeof U.addNpc === 'function'){
-        for (var a = 0; a < npcs.length; a++){ U.addNpc(); }
-        cards = document.querySelectorAll('#npcList .npc-card');
-      }
+      // v292Dfix147: when ALL existing cards already have a name (i.e. the user is mid-play
+      // and added NPCs in advance OR clicked random AFTER adding a fresh blank NPC),
+      // we need to TARGET THE EMPTY CARDS. Previously this loop tried to fill the first
+      // min(cards, npcs) cards which mapped LLM output onto already-filled cards → setVal
+      // refused (value not empty) → empty new card never reached. Fix: scan for cards
+      // whose name field is empty and only fill those; if none exist AND no cards exist,
+      // add npcs.length blank cards first (initial-creation case).
       var fields = ['name','desc','personality','coreDesire','coreFear','wound'];
-      for (var i = 0; i < cards.length && i < npcs.length; i++){
+      function emptyCardList(){
+        var arr = [];
+        var cs = document.querySelectorAll('#npcList .npc-card');
+        for (var i = 0; i < cs.length; i++){
+          var nameEl = cs[i].querySelector('[data-f="name"]');
+          if (nameEl && !nameEl.value.trim()) arr.push(cs[i]);
+        }
+        return arr;
+      }
+      var emptyCards = emptyCardList();
+      if (emptyCards.length === 0 && U && typeof U.addNpc === 'function'){
+        // initial-creation case or no empty slots — add fresh cards to receive npcs
+        var need = npcs.length - emptyCards.length;
+        for (var a = 0; a < need; a++){ U.addNpc(); }
+        emptyCards = emptyCardList();
+      }
+      // Now fill each EMPTY card with the next npcs entry in order
+      for (var i = 0; i < emptyCards.length && i < npcs.length; i++){
         var nd = npcs[i] || {};
         for (var j = 0; j < fields.length; j++){
-          var el = cards[i].querySelector('[data-f="' + fields[j] + '"]');
+          var el = emptyCards[i].querySelector('[data-f="' + fields[j] + '"]');
           if (el && !el.value.trim() && nd[fields[j]]) el.value = String(nd[fields[j]]);
         }
       }

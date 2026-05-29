@@ -978,6 +978,12 @@
       // v292Dfix141: cut a leaked "--- 内部メモ：xxx ---" block (echoed verbatim by the model
       // from the longmem-injection format). Matches both proper closure and unclosed trail.
       .replace(/(?:^|\n)\s*-{2,}\s*内部メモ[\s\S]*$/, '')
+      // v292Dfix146: INLINE strip of psychological-label tags (【本能】【こころ】etc.) that
+      // the model invents to subdivide internal states. Unlike audit headers, these tags
+      // appear in the MIDDLE of sentences, so we just delete the tag itself and keep prose.
+      // Whitelist of canonical psychological labels (1-4 chars between 【】); 'real' onomatopoeia
+      // like 【ドンッ】【ガタッ】are 1-5 katakana so won't match this character-class.
+      .replace(/【(?:本能|こころ|心理|思考|記憶|感覚|反応|内面|内心|感情|心境|心情|状態|意識|無意識|衝動|理性|本心|本音|建前|認識|印象|直感|予感|恐怖|怒り|悲しみ|喜び|嫌悪|驚き|不安|焦燥|絶望)】/g, '')
       .replace(/[\s　]+$/, '');
   }
 
