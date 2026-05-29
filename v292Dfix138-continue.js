@@ -99,15 +99,29 @@
   }
 
   // ---------- submission helper ----------
+  // v292Dfix140d: G.submit() takes NO arguments — it reads textarea#inp + current mode.
+  // Correct flow: set textarea value → set mode → call G.submit().
   function submitAsStory(text){
     try {
       var t = String(text || '').trim();
       if (!t) return false;
-      if (typeof G !== 'undefined' && G && typeof G.submit === 'function'){
-        G.submit('STORY', t);
-        return true;
+      var ta = document.getElementById('inp');
+      if (!ta) return false;
+      ta.value = t;
+      try { ta.dispatchEvent(new Event('input', { bubbles: true })); } catch(_){}
+      try { ta.dispatchEvent(new Event('change', { bubbles: true })); } catch(_){}
+      if (typeof G !== 'undefined' && G){
+        if (typeof G.setMode === 'function'){
+          try { G.setMode('STORY'); } catch(_){}
+        }
+        if (typeof G.submit === 'function'){
+          G.submit();
+          return true;
+        }
       }
-    } catch(e){}
+    } catch(e){
+      try { console.warn(TAG, 'submitAsStory err:', e && e.message); } catch(_){}
+    }
     return false;
   }
 
@@ -135,7 +149,7 @@
         try { ev.preventDefault(); ev.stopImmediatePropagation && ev.stopImmediatePropagation(); ev.stopPropagation && ev.stopPropagation(); } catch(_){}
         b.__v292Dfix139Busy = true;
         b.disabled = true;
-        b.textContent = '✨提案を生成中…';
+        b.textContent = '📝続きを生成中…';
         // v292Dfix140c: hard safety net — force-restore button after 25s no matter what
         var restored = false;
         var restore = function(){
