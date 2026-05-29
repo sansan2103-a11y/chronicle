@@ -47,7 +47,7 @@
       xhr.open('POST', ENDPOINT, true);
       xhr.setRequestHeader('Content-Type', 'application/json');
       xhr.setRequestHeader('Authorization', 'Bearer ' + key);
-      xhr.timeout = 30000;
+      xhr.timeout = 20000;
       xhr.onload = function(){
         if (xhr.status >= 200 && xhr.status < 300){
           try {
@@ -136,19 +136,29 @@
         b.__v292Dfix139Busy = true;
         b.disabled = true;
         b.textContent = '✨提案を生成中…';
-        var prompt = buildProposalPrompt(false);
-        if (!prompt){
+        // v292Dfix140c: hard safety net — force-restore button after 25s no matter what
+        var restored = false;
+        var restore = function(){
+          if (restored) return; restored = true;
           b.disabled = false;
           b.__v292Dfix139Busy = false;
           b.textContent = origOriginalText;
-          // fallback: trigger original
+        };
+        var hardTimer = setTimeout(function(){
+          if (!restored){
+            restore();
+            try { console.warn(TAG, 'fix139 hard timeout — restored button, calling original G.cont'); } catch(_){}
+            try { if (typeof G !== 'undefined' && G && typeof G.cont === 'function') G.cont(); } catch(_){}
+          }
+        }, 25000);
+        var prompt = buildProposalPrompt(false);
+        if (!prompt){
+          clearTimeout(hardTimer); restore();
           try { if (typeof G !== 'undefined' && G && typeof G.cont === 'function') G.cont(); } catch(_){}
           return;
         }
         llmCall(prompt, 0.85, 500, function(content){
-          b.disabled = false;
-          b.__v292Dfix139Busy = false;
-          b.textContent = origOriginalText;
+          clearTimeout(hardTimer); restore();
           var proposal = content ? String(content).split('\n').filter(function(l){return l.trim();})[0] : '';
           proposal = proposal.replace(/^[\d\.\)：:\-\*\s]+/, '').trim().slice(0, 120);
           if (proposal && submitAsStory(proposal)){
@@ -179,12 +189,25 @@
         nb.disabled = true;
         var origText = nb.textContent;
         nb.textContent = '✨3案を生成中…';
-        var prompt = buildProposalPrompt(true);
-        if (!prompt){ nb.disabled = false; nb.textContent = origText; return; }
-        llmCall(prompt, 0.95, 700, function(content){
+        // v292Dfix140c: hard safety net — always restore button after 25s
+        var restored140 = false;
+        var restore140 = function(){
+          if (restored140) return; restored140 = true;
           nb.disabled = false;
           nb.textContent = origText;
-          if (!content){ alert('提案の取得に失敗しました'); return; }
+        };
+        var hardT = setTimeout(function(){
+          if (!restored140){
+            restore140();
+            alert('提案の生成がタイムアウトしました。もう一度お試しください。');
+            try { console.warn(TAG, 'fix140 hard timeout'); } catch(_){}
+          }
+        }, 25000);
+        var prompt = buildProposalPrompt(true);
+        if (!prompt){ clearTimeout(hardT); restore140(); return; }
+        llmCall(prompt, 0.95, 700, function(content){
+          clearTimeout(hardT); restore140();
+          if (!content){ alert('提案の取得に失敗しました（ネットワーク or APIキー確認）'); return; }
           var options = parseOptions(content);
           if (!options.length){ alert('提案を解析できませんでした: ' + String(content).substring(0, 80)); return; }
           showCandidates(options);
@@ -218,33 +241,51 @@
     return chunks.slice(0, 3).map(function(c){return c.slice(0, 150);});
   }
 
+  // v292Dfix140c: modal with backdrop (guaranteed visible, never hidden behind anything)
   function closePopup(){
-    var p = document.querySelector('.v292Dfix140-popup');
+    var p = document.querySelector('.v292Dfix140-backdrop');
     if (p && p.parentNode) p.parentNode.removeChild(p);
+    var p2 = document.querySelector('.v292Dfix140-popup');
+    if (p2 && p2.parentNode) p2.parentNode.removeChild(p2);
   }
   function showCandidates(options){
     closePopup();
+    // Backdrop (full-screen semi-transparent overlay) — z-index max-1
+    var bd = document.createElement('div');
+    bd.className = 'v292Dfix140-backdrop';
+    bd.style.cssText = [
+      'position:fixed', 'top:0', 'left:0', 'right:0', 'bottom:0',
+      'background:rgba(0,0,0,0.55)', 'z-index:2147483646', 'cursor:pointer'
+    ].join(';');
+    bd.onclick = closePopup;  // click outside → close
+    document.body.appendChild(bd);
+    // Centered modal popup — z-index max
     var pop = document.createElement('div');
     pop.className = 'v292Dfix140-popup';
     pop.style.cssText = [
-      'position:fixed', 'left:50%', 'bottom:140px', 'transform:translateX(-50%)',
-      'background:#1a1a2a', 'border:1px solid #6a6aaa', 'padding:14px 18px',
-      'border-radius:10px', 'z-index:99999', 'max-width:600px', 'width:90vw',
-      'box-shadow:0 6px 24px rgba(0,0,0,0.6)', 'color:#e0e0e0', 'font-size:14px',
-      'line-height:1.6'
+      'position:fixed', 'left:50%', 'top:50%', 'transform:translate(-50%, -50%)',
+      'background:#1a1a2a', 'border:2px solid #8a8aff', 'padding:18px 22px',
+      'border-radius:12px', 'z-index:2147483647', 'max-width:640px', 'width:90vw',
+      'max-height:80vh', 'overflow-y:auto',
+      'box-shadow:0 12px 48px rgba(0,0,0,0.8), 0 0 32px rgba(138,138,255,0.3)',
+      'color:#e0e0e0', 'font-size:14px', 'line-height:1.65',
+      'font-family:inherit'
     ].join(';');
+    pop.onclick = function(e){ e.stopPropagation(); };  // clicks inside don't close
     var hdr = document.createElement('div');
-    hdr.style.cssText = 'margin-bottom:10px; opacity:0.75; font-size:12px;';
+    hdr.style.cssText = 'margin-bottom:12px; opacity:0.85; font-size:13px; color:#a0a0ff;';
     hdr.textContent = '💡 次の展開の候補（クリックで採用）';
     pop.appendChild(hdr);
-    var marks = ['①', '②', '③'];
+    var marks = ['①', '②', '③', '④', '⑤'];
     options.forEach(function(opt, idx){
       var item = document.createElement('div');
-      item.style.cssText = 'background:#2a2a3a; border:1px solid #444; padding:10px 12px; margin-bottom:6px; border-radius:6px; cursor:pointer; transition:background 0.15s;';
-      item.textContent = (marks[idx] || ('④⑤⑥'[idx-3] || (idx+1))) + ' ' + opt;
-      item.onmouseover = function(){ item.style.background = '#3a3a4f'; };
-      item.onmouseout  = function(){ item.style.background = '#2a2a3a'; };
-      item.onclick = function(){
+      item.className = 'v292Dfix140-item';
+      item.style.cssText = 'background:#2a2a3a; border:1px solid #555; padding:12px 14px; margin-bottom:8px; border-radius:7px; cursor:pointer; transition:background 0.15s, border-color 0.15s;';
+      item.textContent = (marks[idx] || (idx+1) + '.') + ' ' + opt;
+      item.onmouseover = function(){ item.style.background = '#3a3a4f'; item.style.borderColor = '#8a8aff'; };
+      item.onmouseout  = function(){ item.style.background = '#2a2a3a'; item.style.borderColor = '#555'; };
+      item.onclick = function(e){
+        e.stopPropagation();
         closePopup();
         submitAsStory(opt);
       };
@@ -252,10 +293,17 @@
     });
     var close = document.createElement('button');
     close.textContent = '✕ 閉じる（提案を採用しない）';
-    close.style.cssText = 'margin-top:8px; background:#3a3a4a; border:1px solid #555; color:#ccc; padding:6px 14px; border-radius:5px; cursor:pointer; font-size:12px; width:100%;';
-    close.onclick = closePopup;
+    close.style.cssText = 'margin-top:10px; background:#3a3a4a; border:1px solid #666; color:#ddd; padding:8px 14px; border-radius:6px; cursor:pointer; font-size:13px; width:100%; transition:background 0.15s;';
+    close.onmouseover = function(){ close.style.background = '#4a4a5f'; };
+    close.onmouseout  = function(){ close.style.background = '#3a3a4a'; };
+    close.onclick = function(e){ e.stopPropagation(); closePopup(); };
     pop.appendChild(close);
     document.body.appendChild(pop);
+    // ESC key closes
+    var escHandler = function(e){
+      if (e.key === 'Escape'){ closePopup(); document.removeEventListener('keydown', escHandler); }
+    };
+    document.addEventListener('keydown', escHandler);
   }
 
   // ---------- install: poll for buttons every 2s (UI may re-render) ----------
