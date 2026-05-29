@@ -9272,16 +9272,63 @@
               '・1ターンに最低2人が喋り、<say>を2〜4個入れる（全員沈黙が自然な場面・発話不能時は除く）。',
               '・各セリフは直前の誰かの発言や行動に噛み合わせる（問い→応答、挑発→反発、提案→同意/拒否）。独白の羅列にしない。',
               '・短い往復のやり取りで会話を前へ転がし、最後は次の発言や行動を誘う一言・問いで締める。'].join('\n');
+            // v292Dfix131: 描写スタイル改善（没入感UP）。婉曲・短文連発・神視点を抑え、
+            // 主人公の五感を必ず混ぜ、STORY/DOで指示された事象は冒頭で具体動詞で描く。
+            var _depict = ['【描写・没入（毎ターン必ず守る）】',
+              '・STORY/DOで指示された事象（誰が・何を・どうした）は、本文の冒頭1〜2文以内に必ず具体動詞で直接描く。結果（音・反応・血・声）だけで察させない。',
+              '・主人公の五感（視覚／聴覚／触覚／痛覚／嗅覚／胃や胸の内感のいずれか）を毎ターン最低1つ本文に混ぜる。三人称神視点で外側から眺める描写ばかりにしない。',
+              '・婉曲動詞（〜が起きる／〜があった／〜のような声／〜が漏れた／〜が響いた等）を抑え、具体動詞（突き刺す／引き抜く／押し込む／噛み砕く／滴る 等）を優先。',
+              '・短文連発（「〜した。〜した。〜した。」）を避け、動作→直後の感覚→反応 の順で1〜2文ずつ流れを繋ぐ。'].join('\n');
+            // v292Dfix132: 文脈継承（記憶喪失対策）。直前ターンの状況・負傷・拘束・所持・
+            // 感情・場所を必ず引き継ぎ、突然リセットや矛盾を生まない。
+            var _continuity = ['【継承（前ターンを忘れない）】',
+              '・直前ターンの状況（場所・拘束・負傷・所持品・感情・登場人物の位置）を必ず引き継ぎ、矛盾なく次の動作を始める。負傷したキャラは怪我を抱えたまま動く（普通に走らせない）。捕まったキャラは拘束を抜ける描写なしに自由にしない。',
+              '・場所や時間を急に飛ばさない（廃校→突然森、夜→突然昼 等の不連続を禁じる）。場面転換が必要なら、移動の1文を必ず挟む。',
+              '・直前ターンで起きた重要事象（殺害／脱出／登場／退場／決定的セリフ）の影響を、本ターンの描写・セリフ・反応に必ず反映する。'].join('\n');
+            // v292Dfix133: 直近キャラ状態の自動注入（軽量版・heuristic抽出）。
+            // 過去N=5ターンの narrative から各キャラの最終登場文を拾い、「現在の状態」として
+            // sys に同梱する。LLM extraction を使わないので追加コストゼロ。
+            var _charState = '';
+            try {
+              var _ssH = st;
+              if (_ssH && _ssH.cast){
+                var _names133 = [];
+                if (_ssH.cast.hero && _ssH.cast.hero.name) _names133.push(_ssH.cast.hero.name);
+                if (Array.isArray(_ssH.cast.npcs)) _ssH.cast.npcs.forEach(function(n){ if (n && n.name) _names133.push(n.name); });
+                _names133 = _names133.filter(function(n,i,a){ return n && a.indexOf(n) === i; });
+                var _turns133 = (_ssH.turns || []).slice(-5);
+                var _lastSentFor = {};
+                for (var _ti133 = _turns133.length - 1; _ti133 >= 0; _ti133--){
+                  var _n133 = (_turns133[_ti133] && _turns133[_ti133].narrative) || '';
+                  if (!_n133) continue;
+                  var _sents = _n133.replace(/<[^>]+>/g, ' ').split(/[。\n]/).map(function(s){ return s.trim(); }).filter(Boolean);
+                  for (var _si = _sents.length - 1; _si >= 0; _si--){
+                    var _s = _sents[_si];
+                    for (var _ni = 0; _ni < _names133.length; _ni++){
+                      var _nm = _names133[_ni];
+                      if (!_lastSentFor[_nm] && _s.indexOf(_nm) >= 0 && _s.length <= 80){
+                        _lastSentFor[_nm] = _s.length > 60 ? _s.slice(-60) : _s;
+                      }
+                    }
+                  }
+                }
+                var _stateLines = [];
+                _names133.forEach(function(nm){ if (_lastSentFor[nm]) _stateLines.push('・' + nm + '：' + _lastSentFor[nm] + '。'); });
+                if (_stateLines.length){
+                  _charState = ['【現在のキャラ状態（直近の登場文・必ず引き継ぐ）】'].concat(_stateLines).join('\n');
+                }
+              }
+            } catch(_e133){}
             // v292Dfix112b: re-assert the output guard as the VERY LAST thing,
             // AFTER the drama/reaction rules — otherwise the model echoes those
             // strong structured rules into the prose as a "【重要ルール監査】" block.
             var _guard = ['【最重要・出力の鉄則（最後に必ず確認）】',
               '・日本語の質: 自然で文法的に正しい日本語で書く。意味の通らない文・不自然な言い回し・位置関係の矛盾・主述のねじれを避ける。凝った長文より、読んで意味が明確に通る文を優先する。',
-              '・ここまでの全ルール（進行・反応・反復禁止など）は「あなたへの内部指示」。物語の本文には絶対に出力しない。',
+              '・ここまでの全ルール（進行・反応・反復禁止・描写・継承など）は「あなたへの内部指示」。物語の本文には絶対に出力しない。',
               '・「【重要ルール監査】」「〜順守」「〜起点」「〜追加」のような、ルールの列挙・自己点検・チェックリスト・メモを本文に書くことを固く禁じる。【】で囲んだ管理用ブロックを本文に出さない。',
               '・「フィードバック：」「評価：」「総評：」や「〜規則対応」「〜ルール準拠」「正しく機能している」等、自分の出力への講評・ルール遵守の注記を本文末尾などに一切書かない。物語だけを書く。',
               '・出力は物語の地の文と登場人物のセリフ（「」/ <say>）だけ。'].join('\n');
-            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_react ? ('\n\n' + _react) : '') + (_dlg ? ('\n\n' + _dlg) : '') + (_voice ? ('\n\n' + _voice) : '') + '\n\n' + _banter + '\n\n' + _guard;
+            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_react ? ('\n\n' + _react) : '') + (_dlg ? ('\n\n' + _dlg) : '') + (_voice ? ('\n\n' + _voice) : '') + '\n\n' + _banter + '\n\n' + _depict + '\n\n' + _continuity + (_charState ? ('\n\n' + _charState) : '') + '\n\n' + _guard;
           }
         }
       } catch(e){}
