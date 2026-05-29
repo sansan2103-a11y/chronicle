@@ -65,10 +65,11 @@
     return -1;
   }
   function getStateForName(name, turns, npcDesc, worldDesc){
-    // Priority:
-    //   1. Recent narrative mention (sentence containing name in last 5 turns)
-    //   2. worldinfo desc (auto-extracted) or npc.desc (registered)
-    if (!name || !turns || !turns.length) return npcDesc || worldDesc || '';
+    // v292Dfix145b: "状態" should be the CURRENT in-story state (what they're doing now),
+    // NOT a dump of the registration description. If we can't find a recent mention,
+    // show a short "not yet appeared" placeholder — the full desc is accessible via the
+    // ✏️編集 button's prompt.
+    if (!name || !turns || !turns.length) return '（まだ物語に登場していません）';
     var recent = turns.slice(-5);
     var foundSent = '';
     for (var ti = recent.length - 1; ti >= 0 && !foundSent; ti--){
@@ -84,7 +85,7 @@
         }
       }
     }
-    return foundSent || worldDesc || npcDesc || '(状態情報なし)';
+    return foundSent || '（まだ物語に登場していません）';
   }
   function turnDelta(lastTurn, curTurnCount){
     if (lastTurn < 0) return '未登場';
