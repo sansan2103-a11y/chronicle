@@ -199,11 +199,10 @@
       nb.textContent = '✨展開を提案';
       nb.onclick = function(){
         if (nb.disabled) return;
-        if (!getKey()){ alert('OpenRouter APIキーが必要です（設定で登録してください）'); return; }
+        if (!getKey()){ showToast('OpenRouter APIキーが必要です（設定で登録）'); return; }
         nb.disabled = true;
         var origText = nb.textContent;
         nb.textContent = '✨3案を生成中…';
-        // v292Dfix140c: hard safety net — always restore button after 25s
         var restored140 = false;
         var restore140 = function(){
           if (restored140) return; restored140 = true;
@@ -213,19 +212,35 @@
         var hardT = setTimeout(function(){
           if (!restored140){
             restore140();
-            alert('提案の生成がタイムアウトしました。もう一度お試しください。');
-            try { console.warn(TAG, 'fix140 hard timeout'); } catch(_){}
+            showToast('提案の生成がタイムアウトしました。もう一度お試しください');
           }
         }, 25000);
         var prompt = buildProposalPrompt(true);
         if (!prompt){ clearTimeout(hardT); restore140(); return; }
-        llmCall(prompt, 0.95, 700, function(content){
-          clearTimeout(hardT); restore140();
-          if (!content){ alert('提案の取得に失敗しました（ネットワーク or APIキー確認）'); return; }
-          var options = parseOptions(content);
-          if (!options.length){ alert('提案を解析できませんでした: ' + String(content).substring(0, 80)); return; }
-          showCandidates(options);
-        });
+        // v292Dfix141: silent auto-retry once on transient failure, toast (not alert) on UI
+        var attempt = function(retry){
+          llmCall(prompt, 0.95, 700, function(content){
+            if (!content && retry > 0){
+              try { console.warn(TAG, 'fix140 retry (transient fail), remaining:', retry); } catch(_){}
+              setTimeout(function(){ attempt(retry - 1); }, 1500);
+              return;
+            }
+            clearTimeout(hardT); restore140();
+            if (!content){ showToast('提案を取得できませんでした（数秒後にもう一度押してみてください）'); return; }
+            var options = parseOptions(content);
+            if (!options.length){
+              if (retry > 0){
+                try { console.warn(TAG, 'fix140 parse retry'); } catch(_){}
+                setTimeout(function(){ attempt(retry - 1); }, 800);
+                return;
+              }
+              showToast('提案を解析できませんでした');
+              return;
+            }
+            showCandidates(options);
+          });
+        };
+        attempt(1);  // 1 silent retry
       };
       // INSERT TO THE LEFT of 続きを書く
       anchor.parentNode.insertBefore(nb, anchor);
@@ -253,6 +268,19 @@
     // Pattern B: fallback — split by sentence/paragraph, take first 3 chunks
     var chunks = s.split(/[\n。\.]/).map(function(c){return c.trim();}).filter(function(c){return c.length >= 8;});
     return chunks.slice(0, 3).map(function(c){return c.slice(0, 150);});
+  }
+
+  // v292Dfix141: toast (replaces alert() — non-blocking, auto-fades after 3s)
+  function showToast(msg){
+    try {
+      var t = document.createElement('div');
+      t.className = 'v292Dfix141-toast';
+      t.style.cssText = 'position:fixed; left:50%; bottom:120px; transform:translateX(-50%); background:rgba(40,40,60,0.95); border:1px solid #6a6aaa; color:#e0e0e0; padding:10px 18px; border-radius:8px; z-index:2147483647; font-size:13px; max-width:80vw; box-shadow:0 4px 16px rgba(0,0,0,0.5); opacity:0; transition:opacity 0.25s;';
+      t.textContent = String(msg || '');
+      document.body.appendChild(t);
+      requestAnimationFrame(function(){ t.style.opacity = '1'; });
+      setTimeout(function(){ t.style.opacity = '0'; setTimeout(function(){ if (t.parentNode) t.parentNode.removeChild(t); }, 300); }, 3000);
+    } catch(e){ try { console.warn(TAG, 'toast err:', msg); } catch(_){} }
   }
 
   // v292Dfix140c: modal with backdrop (guaranteed visible, never hidden behind anything)

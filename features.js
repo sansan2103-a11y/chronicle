@@ -9352,11 +9352,16 @@
             // v292Dfix135+136+137: long-term memory blocks (summary / world info / events).
             // Powered by v292Dfix135-longmem.js — rebuilds every 5 turns via LLM, persists
             // to localStorage, exposed via window.__longmem.
+            // v292Dfix141: switched from 【〜】 headers to plain "--- ---" delimiters with
+            // an explicit "本文に絶対書かない" marker, because the model was paraphrasing
+            // the bracketed headers and writing them into the prose (e.g. 【物語の現在地まとめ】).
+            // Plain "---" delimiters don't fit the model's 【】-quote pattern, so they're
+            // far less likely to get echoed into the narrative.
             var _summary = '', _worldInfo = '', _events = '';
             try {
               if (window.__longmem){
                 var _sum = window.__longmem.getSummary();
-                if (_sum) _summary = '【これまでの物語（あらすじ）】\n' + _sum;
+                if (_sum) _summary = '--- 内部メモ：あらすじ（本文に絶対書かない・参考のみ） ---\n' + _sum + '\n--- 内部メモここまで ---';
                 var _lastN = '';
                 try {
                   var _stL = (typeof S !== 'undefined' && S) ? S : window.S;
@@ -9365,11 +9370,11 @@
                 } catch(_eL){}
                 var _wi = window.__longmem.getWorldInfoFor(_lastN);
                 if (_wi && _wi.length){
-                  _worldInfo = '【登場人物・場所・物（関連分のみ抜粋）】\n' + _wi.map(function(w){ return '・' + w.name + '（' + w.type + '）：' + w.desc; }).join('\n');
+                  _worldInfo = '--- 内部メモ：登場人物・場所・物（本文に絶対書かない・整合性維持用） ---\n' + _wi.map(function(w){ return '・' + w.name + '（' + w.type + '）：' + w.desc; }).join('\n') + '\n--- 内部メモここまで ---';
                 }
                 var _ev = window.__longmem.getKeyEvents();
                 if (_ev && _ev.length){
-                  _events = '【物語の重要事象（節目・必ず引き継ぐ）】\n' + _ev.map(function(e){ return '・T' + e.turnIdx + '：' + e.event; }).join('\n');
+                  _events = '--- 内部メモ：重要事象（本文に絶対書かない・必ず引き継ぐ） ---\n' + _ev.map(function(e){ return '・T' + e.turnIdx + '：' + e.event; }).join('\n') + '\n--- 内部メモここまで ---';
                 }
               }
             } catch(_e135){}
