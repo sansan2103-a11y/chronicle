@@ -65,10 +65,16 @@
     return -1;
   }
   function getStateForName(name, turns, npcDesc, worldDesc){
-    // v292Dfix145b: "状態" should be the CURRENT in-story state (what they're doing now),
-    // NOT a dump of the registration description. If we can't find a recent mention,
-    // show a short "not yet appeared" placeholder — the full desc is accessible via the
-    // ✏️編集 button's prompt.
+    // v292Dfix145c: priority order for "状態" display:
+    //   1. longmem worldinfo desc (LLM updates this every 5 turns — captures dynamic
+    //      state like "right eye gouged out", "captured by skeleton", "mentally broken")
+    //   2. Most recent narrative sentence mentioning the character (last 5 turns)
+    //   3. "（まだ物語に登場していません）" placeholder
+    // worldDesc is passed in from collectChars() = longmem desc OR npc desc.
+    // We treat longmem (passed as worldDesc) as the highest-fidelity STATE source.
+    if (worldDesc && String(worldDesc).trim()){
+      return String(worldDesc).slice(0, 120);
+    }
     if (!name || !turns || !turns.length) return '（まだ物語に登場していません）';
     var recent = turns.slice(-5);
     var foundSent = '';
@@ -101,6 +107,21 @@
     var out = { hero: null, npcs: [], story: [] };
     if (!st) return out;
     var turns = (st.turns || []);
+    // v292Dfix145c: build a name→longmem-worldinfo map up front so EVERY character
+    // (hero / npcs / story-extracted) can use the LLM-curated dynamic state desc.
+    var wiByName = {};
+    try {
+      if (window.__longmem && window.__longmem.raw){
+        var allWi = window.__longmem.raw.loadWorldInfo();
+        allWi.forEach(function(w){
+          if (w && w.name && w.type === 'character') wiByName[w.name] = w;
+        });
+      }
+    } catch(e){}
+    function lmDescFor(name){
+      var w = wiByName[name];
+      return (w && w.desc) ? w.desc : '';
+    }
     var registered = {};
     if (st.cast){
       if (st.cast.hero && st.cast.hero.name){
@@ -110,7 +131,7 @@
         out.hero = {
           name: h.name,
           desc: h.desc || '',
-          state: getStateForName(h.name, turns, h.desc, ''),
+          state: getStateForName(h.name, turns, h.desc, lmDescFor(h.name)),
           lastTurn: lt,
           lastTurnLabel: turnDelta(lt, turns.length),
           isHero: true
@@ -124,7 +145,7 @@
           out.npcs.push({
             name: n.name,
             desc: n.desc || '',
-            state: getStateForName(n.name, turns, n.desc, ''),
+            state: getStateForName(n.name, turns, n.desc, lmDescFor(n.name)),
             lastTurn: lt,
             lastTurnLabel: turnDelta(lt, turns.length),
             npcIdx: idx
@@ -133,24 +154,19 @@
       }
     }
     // Story-appeared characters (worldinfo type=character not already in cast)
-    try {
-      if (window.__longmem && window.__longmem.raw){
-        var wi = window.__longmem.raw.loadWorldInfo();
-        wi.forEach(function(w){
-          if (!w || !w.name || w.type !== 'character') return;
-          if (registered[w.name]) return;
-          var lt = findLastTurnForName(w.name, turns);
-          out.story.push({
-            name: w.name,
-            desc: w.desc || '',
-            state: getStateForName(w.name, turns, '', w.desc),
-            lastTurn: lt,
-            lastTurnLabel: turnDelta(lt, turns.length),
-            isStory: true
-          });
-        });
-      }
-    } catch(e){}
+    Object.keys(wiByName).forEach(function(nm){
+      if (registered[nm]) return;
+      var w = wiByName[nm];
+      var lt = findLastTurnForName(nm, turns);
+      out.story.push({
+        name: nm,
+        desc: w.desc || '',
+        state: getStateForName(nm, turns, '', w.desc),
+        lastTurn: lt,
+        lastTurnLabel: turnDelta(lt, turns.length),
+        isStory: true
+      });
+    });
     // sort story by lastTurn desc (most recent first)
     out.story.sort(function(a, b){ return b.lastTurn - a.lastTurn; });
     return out;
