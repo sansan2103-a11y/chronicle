@@ -163,19 +163,16 @@
   }
 
   // ---------- fix140: "✨展開を提案" button + 3-candidate popup ----------
+  // v292Dfix140b: place ON THE LEFT of 「続きを書く」, inherit its class for visual parity
   function injectProposeButton(){
     try {
       if (document.querySelector('.v292Dfix140-propose-btn')) return;
       var anchor = findContinueButton();
       if (!anchor || !anchor.parentNode) return;
       var nb = document.createElement('button');
-      nb.className = 'v292Dfix140-propose-btn';
+      // inherit anchor's CSS class so layout/font/padding match exactly
+      nb.className = (anchor.className || '') + ' v292Dfix140-propose-btn';
       nb.textContent = '✨展開を提案';
-      // mimic the anchor button's style
-      try {
-        var cs = window.getComputedStyle(anchor);
-        nb.style.cssText = 'margin-left:6px; padding:' + cs.padding + '; background:' + cs.backgroundColor + '; color:' + cs.color + '; border:' + cs.border + '; border-radius:' + cs.borderRadius + '; font:' + cs.font + '; cursor:pointer;';
-      } catch(_){ nb.style.cssText = 'margin-left:6px; padding:6px 12px; cursor:pointer;'; }
       nb.onclick = function(){
         if (nb.disabled) return;
         if (!getKey()){ alert('OpenRouter APIキーが必要です（設定で登録してください）'); return; }
@@ -188,23 +185,37 @@
           nb.disabled = false;
           nb.textContent = origText;
           if (!content){ alert('提案の取得に失敗しました'); return; }
-          var lines = String(content).split('\n');
-          var options = [];
-          for (var li = 0; li < lines.length && options.length < 3; li++){
-            var m = lines[li].match(/^\s*(?:\d+[\.\)：:]|\-|\*)\s*(.+)$/);
-            if (m && m[1].trim()){ options.push(m[1].trim().slice(0, 140)); }
-          }
-          if (!options.length){
-            // fallback: split by newline, take any non-empty
-            options = lines.map(function(l){return l.trim();}).filter(function(l){return l && l.length > 5;}).slice(0, 3);
-          }
-          if (!options.length){ alert('提案を解析できませんでした'); return; }
+          var options = parseOptions(content);
+          if (!options.length){ alert('提案を解析できませんでした: ' + String(content).substring(0, 80)); return; }
           showCandidates(options);
         });
       };
-      anchor.parentNode.insertBefore(nb, anchor.nextSibling);
-      try { console.log(TAG, 'fix140 ✨展開を提案 button injected'); } catch(_){}
+      // INSERT TO THE LEFT of 続きを書く
+      anchor.parentNode.insertBefore(nb, anchor);
+      try { console.log(TAG, 'fix140 ✨展開を提案 button injected (left of 続きを書く)'); } catch(_){}
     } catch(e){}
+  }
+
+  // v292Dfix140b: robust parser handling multiple bullet/number formats
+  function parseOptions(content){
+    var s = String(content || '').trim();
+    if (!s) return [];
+    var lines = s.split(/\r?\n/);
+    var options = [];
+    // Pattern A: numbered/bulleted lines (1./2)/①/-/・/* etc.)
+    for (var i = 0; i < lines.length && options.length < 3; i++){
+      var L = lines[i].trim();
+      if (!L) continue;
+      // Match many leading markers: 1. 1) 1： 1: ①②③ - ・ * • > 」 「
+      var m = L.match(/^[\s>「]*(?:\d+[\.\)、：:]?|[①②③④⑤⑥⑦⑧⑨⑩]|[\-\*・•])\s*[「]?\s*(.+?)\s*[」]?\s*$/);
+      if (m && m[1] && m[1].length >= 5){
+        options.push(m[1].slice(0, 150));
+      }
+    }
+    if (options.length >= 1) return options.slice(0, 3);
+    // Pattern B: fallback — split by sentence/paragraph, take first 3 chunks
+    var chunks = s.split(/[\n。\.]/).map(function(c){return c.trim();}).filter(function(c){return c.length >= 8;});
+    return chunks.slice(0, 3).map(function(c){return c.slice(0, 150);});
   }
 
   function closePopup(){
