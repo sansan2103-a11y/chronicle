@@ -840,9 +840,25 @@
     var preprocessed = preprocessNarrative(narr);
     // v292Dfix126: per-turn map of texts the model tagged as anonymous (<say who="？">)
     var _anonMap = anonymousTexts(narr);
-    // v292Dfix104: prefer the LLM extraction for this turn if we have it
+    // v292Dfix129: estimate dialogue count from the preprocessed narrative — number of
+    // 「...」 quotes (excluding obvious onomatopoeia/citation). Used to decide whether the
+    // bGet cache is COMPLETE enough to trust, or if we should fall through to heuristic
+    // extraction. Without this, an under-extracted cached entry (LLM only returned 1 of N
+    // lines) would silently drop the missing dialogues forever, even after repair() runs.
+    var _quoteEstimate = 0;
+    try {
+      var qre = /「([^「」\n]{1,120})」/g, qm;
+      while ((qm = qre.exec(preprocessed)) !== null){
+        var qt = qm[1];
+        if (!isOnomatopoeiaQuote(preprocessed, qt) && !isNonSpeechQuote(preprocessed, qt)) _quoteEstimate++;
+      }
+    } catch(_){}
+    // v292Dfix104: prefer the LLM extraction for this turn if we have it.
+    // v292Dfix129: only when it covers at least the expected number of lines — otherwise
+    // fall through to heuristic and merge bGet's speaker labels onto what heuristic finds.
     var bres = bGet(preprocessed);
-    if (bres){
+    var _bresUseFull = !!(bres && bres.length >= _quoteEstimate);
+    if (_bresUseFull){
       var bout = [], bseen = Object.create(null);
       for (var bi = 0; bi < bres.length; bi++){
         var be = bres[bi];
@@ -863,6 +879,11 @@
       });
       return bout;
     }
+    // v292Dfix129: build a text→speaker map from the (incomplete) bGet cache so we can
+    // still benefit from its speaker resolution for any line that's in both. Heuristic
+    // path picks up the missing ones; if a line is in bMap, prefer that speaker.
+    var _bMap = Object.create(null);
+    try { if (bres) for (var _bi = 0; _bi < bres.length; _bi++){ var _be = bres[_bi]; if (_be && _be.text) _bMap[String(_be.text).trim()] = _be.speaker || ''; } } catch(_){}
     var out = [];
     var seen = Object.create(null);
     var _names = castNameList();
@@ -898,6 +919,13 @@
           // v292Dfix126: if the model explicitly tagged this line as anonymous
           // (<say who="？">), restore '？' even if resolvers overwrote it to a cast name.
           try { if (_anonMap[String(d.text).trim()]) d.speaker = '？'; } catch(e){}
+          // v292Dfix129: if bGet's incomplete cache has a speaker for this exact line, prefer it
+          // (LLM extraction is generally more accurate than heuristic proximity guessing).
+          // Anonymous pin from above wins — don't override '？' with a cached cast name.
+          try {
+            var _bsp = _bMap[String(d.text).trim()];
+            if (_bsp && d.speaker !== '？' && !_anonMap[String(d.text).trim()]) d.speaker = _bsp;
+          } catch(e){}
           var k = dialogueKey(d.speaker, d.text);
           if (seen[k]) continue;
           seen[k] = true;
