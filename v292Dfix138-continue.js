@@ -125,7 +125,14 @@
     return false;
   }
 
-  // ---------- fix139: wrap 「続きを書く」button ----------
+  // ---------- fix139: DISABLED (v292Dfix142) ----------
+  // Original idea: "続きを書く" presses → LLM proposes next step → submit as playerText.
+  // User feedback: this hijacks the simple "let AI continue" UX — the LLM-injected
+  // proposal becomes the STORY title and shapes the prose direction, which feels
+  // unexpected ("勝手に方向誘導される"). Reverted to original behavior: "続きを書く"
+  // sends "続きを自然に進めてください" as before, and fix138 (drama boost on detection
+  // of that phrase) still kicks in transparently. Users who DO want LLM-driven
+  // direction can use the "✨展開を提案" button (fix140) instead.
   function findContinueButton(){
     var btns = document.querySelectorAll('button');
     for (var i = 0; i < btns.length; i++){
@@ -135,55 +142,8 @@
     return null;
   }
   function wrapContinueButton(){
-    try {
-      var b = findContinueButton();
-      if (!b || b.__v292Dfix139Wrapped) return;
-      b.__v292Dfix139Wrapped = true;
-      var origOnClick = b.onclick;
-      var origOriginalText = (b.textContent || '').trim();
-      b.addEventListener('click', function(ev){
-        // If LLM key missing → fall through to original behavior
-        if (!getKey()){ return; }
-        // Don't double-trigger if already busy
-        if (b.__v292Dfix139Busy) return;
-        try { ev.preventDefault(); ev.stopImmediatePropagation && ev.stopImmediatePropagation(); ev.stopPropagation && ev.stopPropagation(); } catch(_){}
-        b.__v292Dfix139Busy = true;
-        b.disabled = true;
-        b.textContent = '📝続きを生成中…';
-        // v292Dfix140c: hard safety net — force-restore button after 25s no matter what
-        var restored = false;
-        var restore = function(){
-          if (restored) return; restored = true;
-          b.disabled = false;
-          b.__v292Dfix139Busy = false;
-          b.textContent = origOriginalText;
-        };
-        var hardTimer = setTimeout(function(){
-          if (!restored){
-            restore();
-            try { console.warn(TAG, 'fix139 hard timeout — restored button, calling original G.cont'); } catch(_){}
-            try { if (typeof G !== 'undefined' && G && typeof G.cont === 'function') G.cont(); } catch(_){}
-          }
-        }, 25000);
-        var prompt = buildProposalPrompt(false);
-        if (!prompt){
-          clearTimeout(hardTimer); restore();
-          try { if (typeof G !== 'undefined' && G && typeof G.cont === 'function') G.cont(); } catch(_){}
-          return;
-        }
-        llmCall(prompt, 0.85, 500, function(content){
-          clearTimeout(hardTimer); restore();
-          var proposal = content ? String(content).split('\n').filter(function(l){return l.trim();})[0] : '';
-          proposal = proposal.replace(/^[\d\.\)：:\-\*\s]+/, '').trim().slice(0, 120);
-          if (proposal && submitAsStory(proposal)){
-            try { console.log(TAG, 'fix139 proposal submitted:', proposal.slice(0, 40)); } catch(_){}
-          } else {
-            // fallback to original G.cont
-            try { if (typeof G !== 'undefined' && G && typeof G.cont === 'function') G.cont(); } catch(_){}
-          }
-        });
-      }, true);  // capture phase so we run before any built-in handler
-    } catch(e){}
+    // intentionally no-op — original "続きを書く" behavior preserved
+    return;
   }
 
   // ---------- fix140: "✨展開を提案" button + 3-candidate popup ----------
