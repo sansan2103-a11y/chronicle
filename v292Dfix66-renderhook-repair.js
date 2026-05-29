@@ -1100,11 +1100,31 @@
   // (drop STORY/DO scene-direction echo cards + onomatopoeia cards) wins the timing war
   // with fix56/64's restore, even if they add cards AFTER repair's last run. Idempotent:
   // once removed cards stay gone; real dialogue is untouched (text appears in 「」).
+  // v292Dfix127: track turn-count so sweep can force-repair when a new turn arrives
+  // (covers the case where the render hook didn't fire — e.g. SAY input where the
+  // narrative was written but the conv-log wasn't updated). Idempotent: repair()'s
+  // existing-key dedup means re-runs cost nothing if cards are already up to date.
+  var _lastSweepTurnCount = -1;
+  var _lastSweepNarrLen = 0;
   function sweepConvLogCards(){
     try {
       var stream = document.getElementById('dialogue-stream');
       if (!stream) return;
       var st = getState(); var turns = (st && st.turns) || []; if (!turns.length) return;
+      // v292Dfix127: detect "new turn" or "narrative grew" since last sweep, and trigger
+      // repair() to add any missing dialogue cards. Bounded — only fires on actual change.
+      try {
+        var _curTC = turns.length;
+        var _curLastN = (turns[_curTC - 1] && turns[_curTC - 1].narrative) ? String(turns[_curTC - 1].narrative).length : 0;
+        if (_curTC !== _lastSweepTurnCount || _curLastN !== _lastSweepNarrLen){
+          _lastSweepTurnCount = _curTC;
+          _lastSweepNarrLen = _curLastN;
+          var _ns = window.__v292Dfix66;
+          if (_ns && typeof _ns.repair === 'function'){
+            try { _ns.repair(); } catch(_){}
+          }
+        }
+      } catch(_){}
       var allNarr = '';
       // v292Dfix126: aggregate anonymity map across all turns (model-tagged <say who="？">)
       var anonAll = Object.create(null);
