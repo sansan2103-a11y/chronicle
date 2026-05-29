@@ -9297,11 +9297,29 @@
                 if (Array.isArray(_stF.cast.npcs) && _stF.cast.npcs[0] && _stF.cast.npcs[0].name) _rN134 = _stF.cast.npcs[0].name;
               }
             } catch(_e134){}
-            var _fewshot = ['【目指す描写の例（このスタイル・密度・視点を参考にする。コピーせず状況に合わせて作る）】',
-              '例1（グロ・痛覚）：怪異の指が、' + _rN134 + 'の瞼を押し開いた。爪先が眼窩の奥へ沈み込む湿った音が、廊下に響く。' + _hN134 + 'の胃の底が、氷を呑むように冷たくなった。鼻腔を血の匂いが刺し、震える手の中で懐中電灯の光円が壁の上を頼りなく揺れる。引き抜かれた眼球が、骨の指の間で揺れた。視神経の細い糸が、ぶつりと音を立てて千切れる。',
-              '例2（静か・心理）：' + _rN134 + 'の手が、' + _hN134 + 'の袖を掴んだ。指先が震えていた。「ねえ……これ、本当に大丈夫なの」。廊下の埃が、懐中電灯の光の中で舞う。' + _hN134 + 'は黙って首を振った。返事の代わりに、靴底が床板を踏む乾いた音だけが響いた。',
-              '例3（移動・場面転換）：' + _hN134 + 'は懐中電灯を握り直し、' + _rN134 + 'の手を引いて廊下を駆けた。古い木の床が悲鳴を上げる。曲がり角を抜けた先には、開け放たれた階段室が口を開けていた。背後で扉が軋み、何かが擦れる音が追ってくる。冷たい空気が、二人の肌を撫でた。',
-              '例4（官能・接触）：' + _rN134 + 'の指が、' + _hN134 + 'の頬に触れた。冷たいはずの指先が、なぜか熱を帯びている。息が混じり合い、唇のすぐ手前で止まった。' + _hN134 + 'の胸が、内側から鈍く跳ねる。' + _rN134 + 'の瞳が揺れた。睫毛の影が、頬に薄く落ちる。「……いい？」と、囁くような声。'].join('\n');
+            // v292Dfix143: scene-adaptive few-shot. Compression mode → 2 examples that match
+            // the current scene tone (gore/quiet/move/intimate); normal mode → all 4.
+            var _ex1 = '例1（グロ・痛覚）：怪異の指が、' + _rN134 + 'の瞼を押し開いた。爪先が眼窩の奥へ沈み込む湿った音が、廊下に響く。' + _hN134 + 'の胃の底が、氷を呑むように冷たくなった。鼻腔を血の匂いが刺し、震える手の中で懐中電灯の光円が壁の上を頼りなく揺れる。引き抜かれた眼球が、骨の指の間で揺れた。視神経の細い糸が、ぶつりと音を立てて千切れる。';
+            var _ex2 = '例2（静か・心理）：' + _rN134 + 'の手が、' + _hN134 + 'の袖を掴んだ。指先が震えていた。「ねえ……これ、本当に大丈夫なの」。廊下の埃が、懐中電灯の光の中で舞う。' + _hN134 + 'は黙って首を振った。返事の代わりに、靴底が床板を踏む乾いた音だけが響いた。';
+            var _ex3 = '例3（移動・場面転換）：' + _hN134 + 'は懐中電灯を握り直し、' + _rN134 + 'の手を引いて廊下を駆けた。古い木の床が悲鳴を上げる。曲がり角を抜けた先には、開け放たれた階段室が口を開けていた。背後で扉が軋み、何かが擦れる音が追ってくる。冷たい空気が、二人の肌を撫でた。';
+            var _ex4 = '例4（官能・接触）：' + _rN134 + 'の指が、' + _hN134 + 'の頬に触れた。冷たいはずの指先が、なぜか熱を帯びている。息が混じり合い、唇のすぐ手前で止まった。' + _hN134 + 'の胸が、内側から鈍く跳ねる。' + _rN134 + 'の瞳が揺れた。睫毛の影が、頬に薄く落ちる。「……いい？」と、囁くような声。';
+            var _exHdr = '【目指す描写の例（このスタイル・密度・視点を参考にする。コピーせず状況に合わせて作る）】';
+            var _fewshotList;
+            if (_compress143){
+              // pick 2 examples scoring against the recent narrative tone
+              var _toneText = _lastN143 || '';
+              var _scores = [
+                { ex: _ex1, score: (_toneText.match(/[血肉裂突刺抜砕折痛斬切刃骨咆嗚]/g) || []).length * 3 + 1 },
+                { ex: _ex2, score: (_toneText.match(/[震囁沈黙息恐怖不安怯尋ねためら]/g) || []).length * 3 + 1 },
+                { ex: _ex3, score: (_toneText.match(/[走逃移動階段廊下道扉開抜駆]/g) || []).length * 3 + 0.5 },
+                { ex: _ex4, score: (_toneText.match(/[触熱濡濃胸唇肌髪重抱寄背]/g) || []).length * 3 + 0.5 }
+              ];
+              _scores.sort(function(a, b){ return b.score - a.score; });
+              _fewshotList = [_exHdr, _scores[0].ex, _scores[1].ex];
+            } else {
+              _fewshotList = [_exHdr, _ex1, _ex2, _ex3, _ex4];
+            }
+            var _fewshot = _fewshotList.join('\n');
             // v292Dfix132: 継承（圧縮版）。直前ターンの状況/負傷/拘束/所持/場所を引き継ぐ。
             var _continuity = '【継承】直前ターンの場所・拘束・負傷・所持・感情・位置を必ず引き継ぎ矛盾なし。負傷者は怪我を抱えたまま動かす、拘束者は脱出描写なしに自由にしない。場所/時間を急に飛ばさない（移動の1文を必ず挟む）。直前の重要事象（殺害/脱出/登場/決定的セリフ）の影響を必ず反映。';
             // v292Dfix133: 直近キャラ状態の自動注入（軽量版・heuristic抽出）。
@@ -9350,29 +9368,32 @@
               '・「フィードバック：」「評価：」「総評：」や「〜規則対応」「〜ルール準拠」「正しく機能している」等、自分の出力への講評・ルール遵守の注記を本文末尾などに一切書かない。物語だけを書く。',
               '・出力は物語の地の文と登場人物のセリフ（「」/ <say>）だけ。'].join('\n');
             // v292Dfix135+136+137: long-term memory blocks (summary / world info / events).
-            // Powered by v292Dfix135-longmem.js — rebuilds every 5 turns via LLM, persists
-            // to localStorage, exposed via window.__longmem.
-            // v292Dfix141: switched from 【〜】 headers to plain "--- ---" delimiters with
-            // an explicit "本文に絶対書かない" marker, because the model was paraphrasing
-            // the bracketed headers and writing them into the prose (e.g. 【物語の現在地まとめ】).
-            // Plain "---" delimiters don't fit the model's 【】-quote pattern, so they're
-            // far less likely to get echoed into the narrative.
+            // v292Dfix141: switched 【〜】 headers to plain "--- ---" to avoid model paraphrasing.
+            // v292Dfix143: compression mode — when sys is bloated (long-term play accumulates
+            // worldinfo/events), shrink limits 8→3 / 6→2 so sysLen stays under fix115's 9282
+            // "stuck-loop" threshold. Decision: if estimated baseline sysLen > 8500, compress.
+            // Recent-text scoring inside __longmem also keeps the MOST RELEVANT entries.
             var _summary = '', _worldInfo = '', _events = '';
+            var _lastN143 = '';
+            try {
+              var _stL = (typeof S !== 'undefined' && S) ? S : window.S;
+              var _tL = _stL && _stL.turns && _stL.turns[_stL.turns.length - 1];
+              if (_tL) _lastN143 = (_tL.playerText || '') + ' ' + (_tL.narrative || '');
+            } catch(_eL){}
+            // Compression mode: estimate sysLen so far + expected longmem & few-shot, decide.
+            var _baseSysLen143 = (r.sys || '').length;  // baseline before any append
+            var _compress143 = _baseSysLen143 > 5500;   // empirically tuned: pre-append ~5500+ likely overflows
+            var _wiLimit = _compress143 ? 3 : 8;
+            var _evLimit = _compress143 ? 2 : 6;
             try {
               if (window.__longmem){
                 var _sum = window.__longmem.getSummary();
                 if (_sum) _summary = '--- 内部メモ：あらすじ（本文に絶対書かない・参考のみ） ---\n' + _sum + '\n--- 内部メモここまで ---';
-                var _lastN = '';
-                try {
-                  var _stL = (typeof S !== 'undefined' && S) ? S : window.S;
-                  var _tL = _stL && _stL.turns && _stL.turns[_stL.turns.length - 1];
-                  if (_tL) _lastN = (_tL.playerText || '') + ' ' + (_tL.narrative || '');
-                } catch(_eL){}
-                var _wi = window.__longmem.getWorldInfoFor(_lastN);
+                var _wi = window.__longmem.getWorldInfoFor(_lastN143, _wiLimit);
                 if (_wi && _wi.length){
                   _worldInfo = '--- 内部メモ：登場人物・場所・物（本文に絶対書かない・整合性維持用） ---\n' + _wi.map(function(w){ return '・' + w.name + '（' + w.type + '）：' + w.desc; }).join('\n') + '\n--- 内部メモここまで ---';
                 }
-                var _ev = window.__longmem.getKeyEvents();
+                var _ev = window.__longmem.getKeyEvents(_evLimit);
                 if (_ev && _ev.length){
                   _events = '--- 内部メモ：重要事象（本文に絶対書かない・必ず引き継ぐ） ---\n' + _ev.map(function(e){ return '・T' + e.turnIdx + '：' + e.event; }).join('\n') + '\n--- 内部メモここまで ---';
                 }

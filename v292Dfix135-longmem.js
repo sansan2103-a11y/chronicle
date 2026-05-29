@@ -153,20 +153,76 @@
     try { localStorage.removeItem(LSP_LASTBUILD); } catch(e){}
   }
 
+  // v292Dfix143: stronger scene-relevance scoring for B. Uses last 3 turns' narrative
+  // + playerText to extract referenced names, then scores worldinfo by:
+  //   +5 if name appears in recent text  +3 if active hero  +2 if active NPC  +1 type=place
+  // Returns top N by score (filter score>0 unless caller wants baseline).
+  function recentTextForRelevance(){
+    try {
+      var st = (typeof S !== 'undefined' && S) ? S : window.S;
+      if (!st || !st.turns) return '';
+      var n = Math.min(3, st.turns.length);
+      var slice = st.turns.slice(-n);
+      return slice.map(function(t){ return (t.playerText || '') + ' ' + (t.narrative || ''); }).join(' ');
+    } catch(e){ return ''; }
+  }
+  function activeCastNames(){
+    var heroName = '', npcNames = [];
+    try {
+      var st = (typeof S !== 'undefined' && S) ? S : window.S;
+      if (st && st.cast){
+        if (st.cast.hero && st.cast.hero.name) heroName = st.cast.hero.name;
+        if (Array.isArray(st.cast.npcs)) npcNames = st.cast.npcs.map(function(n){ return n && n.name; }).filter(Boolean);
+      }
+    } catch(e){}
+    return { hero: heroName, npcs: npcNames };
+  }
+
   // ---------- public API ----------
   window.__longmem = {
     getSummary: function(){ return loadSummary(); },
-    getWorldInfoFor: function(text){
+    // v292Dfix143: limit defaults to 8; pass smaller for compression mode (A)
+    getWorldInfoFor: function(text, limit){
       var wi = loadWorldInfo();
       if (!wi.length) return [];
-      if (!text) return wi.slice(0, 5);
-      var rel = wi.filter(function(w){ return w.name && String(text).indexOf(w.name) >= 0; });
-      // Always also include characters (active cast) since they often matter
-      var chars = wi.filter(function(w){ return w.type === 'character' && rel.indexOf(w) < 0; });
-      return rel.concat(chars).slice(0, 8);
+      limit = (typeof limit === 'number' && limit > 0) ? limit : 8;
+      // Build relevance text = explicit `text` + recent 3-turn context
+      var relText = (text || '') + ' ' + recentTextForRelevance();
+      var cast = activeCastNames();
+      var scored = wi.map(function(w){
+        var score = 0;
+        if (w.name){
+          if (relText.indexOf(w.name) >= 0) score += 5;
+          if (cast.hero && cast.hero === w.name) score += 3;
+          if (cast.npcs.indexOf(w.name) >= 0) score += 2;
+        }
+        if (w.type === 'character' && score === 0) score += 0.5;  // baseline floor for any char
+        return { w: w, score: score };
+      });
+      scored.sort(function(a, b){ return b.score - a.score; });
+      return scored.filter(function(s){ return s.score > 0; }).map(function(s){ return s.w; }).slice(0, limit);
     },
-    getKeyEvents: function(){
-      return loadEvents().filter(function(e){ return e.importance >= 2; }).slice(0, 6);
+    // v292Dfix143: limit defaults to 6; pass smaller for compression mode (A).
+    // Scoring: importance×2 + recency_bonus(closer turn=+) + mention_in_recent_text(+3).
+    getKeyEvents: function(limit){
+      limit = (typeof limit === 'number' && limit > 0) ? limit : 6;
+      var ev = loadEvents().filter(function(e){ return e.importance >= 2; });
+      if (!ev.length) return [];
+      var relText = recentTextForRelevance();
+      var maxTurn = ev.reduce(function(m, e){ return Math.max(m, e.turnIdx || 0); }, 0);
+      var scored = ev.map(function(e){
+        var score = (e.importance || 0) * 2;
+        // recency: events from last 5 turns get up to +3
+        if (typeof e.turnIdx === 'number' && maxTurn > 0){
+          var dist = maxTurn - e.turnIdx;
+          if (dist <= 5) score += 3 - (dist * 0.5);
+        }
+        // mention in recent narrative: +3
+        if (e.event && relText.indexOf(String(e.event).substring(0, 10)) >= 0) score += 3;
+        return { e: e, score: score };
+      });
+      scored.sort(function(a, b){ return b.score - a.score; });
+      return scored.map(function(s){ return s.e; }).slice(0, limit);
     },
     rebuild: maybeRebuild,
     reset: reset,
