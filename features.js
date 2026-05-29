@@ -9340,7 +9340,31 @@
               '・「【重要ルール監査】」「〜順守」「〜起点」「〜追加」のような、ルールの列挙・自己点検・チェックリスト・メモを本文に書くことを固く禁じる。【】で囲んだ管理用ブロックを本文に出さない。',
               '・「フィードバック：」「評価：」「総評：」や「〜規則対応」「〜ルール準拠」「正しく機能している」等、自分の出力への講評・ルール遵守の注記を本文末尾などに一切書かない。物語だけを書く。',
               '・出力は物語の地の文と登場人物のセリフ（「」/ <say>）だけ。'].join('\n');
-            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_react ? ('\n\n' + _react) : '') + (_dlg ? ('\n\n' + _dlg) : '') + (_voice ? ('\n\n' + _voice) : '') + '\n\n' + _banter + '\n\n' + _depict + '\n\n' + _continuity + (_charState ? ('\n\n' + _charState) : '') + '\n\n' + _fewshot + '\n\n' + _guard;
+            // v292Dfix135+136+137: long-term memory blocks (summary / world info / events).
+            // Powered by v292Dfix135-longmem.js — rebuilds every 5 turns via LLM, persists
+            // to localStorage, exposed via window.__longmem.
+            var _summary = '', _worldInfo = '', _events = '';
+            try {
+              if (window.__longmem){
+                var _sum = window.__longmem.getSummary();
+                if (_sum) _summary = '【これまでの物語（あらすじ）】\n' + _sum;
+                var _lastN = '';
+                try {
+                  var _stL = (typeof S !== 'undefined' && S) ? S : window.S;
+                  var _tL = _stL && _stL.turns && _stL.turns[_stL.turns.length - 1];
+                  if (_tL) _lastN = (_tL.playerText || '') + ' ' + (_tL.narrative || '');
+                } catch(_eL){}
+                var _wi = window.__longmem.getWorldInfoFor(_lastN);
+                if (_wi && _wi.length){
+                  _worldInfo = '【登場人物・場所・物（関連分のみ抜粋）】\n' + _wi.map(function(w){ return '・' + w.name + '（' + w.type + '）：' + w.desc; }).join('\n');
+                }
+                var _ev = window.__longmem.getKeyEvents();
+                if (_ev && _ev.length){
+                  _events = '【物語の重要事象（節目・必ず引き継ぐ）】\n' + _ev.map(function(e){ return '・T' + e.turnIdx + '：' + e.event; }).join('\n');
+                }
+              }
+            } catch(_e135){}
+            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_react ? ('\n\n' + _react) : '') + (_dlg ? ('\n\n' + _dlg) : '') + (_voice ? ('\n\n' + _voice) : '') + '\n\n' + _banter + '\n\n' + _depict + '\n\n' + _continuity + (_charState ? ('\n\n' + _charState) : '') + (_summary ? ('\n\n' + _summary) : '') + (_worldInfo ? ('\n\n' + _worldInfo) : '') + (_events ? ('\n\n' + _events) : '') + '\n\n' + _fewshot + '\n\n' + _guard;
           }
         }
       } catch(e){}
