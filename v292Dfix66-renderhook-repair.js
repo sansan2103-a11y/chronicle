@@ -947,12 +947,13 @@
 
   // SAY echo: hero speaker のみに限定
   // (NPC 発話が偶然 player text と一致した場合の誤除外を防ぐ)
+  // v292Dfix130: per おしん preference (2026-05-29), SAY input lines are now KEPT in
+  // the conv-log so the player's spoken line and the NPC reply form a natural pair.
+  // Disabled by always returning false. Dedup still prevents true duplicates because
+  // dialogueKey is (speaker|text)-based — fix64-restore's card and repair()'s card
+  // for the same line collapse into one entry.
   function isSayEcho(turn, d, hero){
-    if (!turn || turn.inputType !== 'SAY' || !turn.playerText || !d || !d.text){
-      return false;
-    }
-    if (!d.speaker || d.speaker !== hero) return false;
-    return String(turn.playerText).trim() === String(d.text).trim();
+    return false;
   }
 
   // v292Dfix113b: the model sometimes appends a "【…ルール監査】" self-audit
