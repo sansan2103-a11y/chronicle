@@ -9205,6 +9205,15 @@
             } else if (_lvl === 2){
               _drama = '【物語の推進=標準・最重要】毎ターン状況を必ず一歩進め、新しい展開要素を1つ加える（場所・状況・登場人物・時間のどれかを動かす）。前ターンと同じ局面の足踏み・同じ行為の再描写を避ける。';
             }
+            // v292Dfix138: 「続きを書く」(playerText が「続きを進めて」「続きを自然に〜」「続きを書〜」)
+            // 検知時、進行ブロックを最強モードに上書き。ボタンを押した時だけ大きな展開を強制し、
+            // 自由入力ターンでは通常レベルを維持する。fix105/111 のセレクタとは独立。
+            try {
+              var _pt138 = arguments[1] ? String(arguments[1]) : '';
+              if (/続きを(?:自然に)?進めて/.test(_pt138) || /^続きを書/.test(_pt138)){
+                _drama = '【物語の推進=最強・続きを書く強化】今ターンは必ず**新しい大きな展開**を1つ起こす（場所転換／新キャラ登場／状況急変／重要事実発覚／時間経過／関係性の大きな変化 のいずれか）。前ターンの場面の続きを淡々と描かず、明確に物語を一段階前へ進める。停滞・足踏み・微小変化のみ厳禁。';
+              }
+            } catch(_e138){}
             // v292Dfix112: character REACTION intensity, scaled by S.cfg.reactionLevel
             // (0 控えめ / 1 標準 / 2 濃いめ, default 1), chosen via the topbar "反応"
             // selector. Controls how vividly/immediately characters react.
