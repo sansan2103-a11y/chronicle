@@ -9290,7 +9290,9 @@
             // sys に同梱する。LLM extraction を使わないので追加コストゼロ。
             var _charState = '';
             try {
-              var _ssH = st;
+              var _ssH = null;
+              try { if (typeof S !== 'undefined' && S) _ssH = S; } catch(_es){}
+              if (!_ssH) _ssH = window.S || null;
               if (_ssH && _ssH.cast){
                 var _names133 = [];
                 if (_ssH.cast.hero && _ssH.cast.hero.name) _names133.push(_ssH.cast.hero.name);
@@ -9306,8 +9308,8 @@
                     var _s = _sents[_si];
                     for (var _ni = 0; _ni < _names133.length; _ni++){
                       var _nm = _names133[_ni];
-                      if (!_lastSentFor[_nm] && _s.indexOf(_nm) >= 0 && _s.length <= 80){
-                        _lastSentFor[_nm] = _s.length > 60 ? _s.slice(-60) : _s;
+                      if (!_lastSentFor[_nm] && _s.indexOf(_nm) >= 0 && _s.length <= 120){
+                        _lastSentFor[_nm] = _s.length > 90 ? _s.slice(-90) : _s;
                       }
                     }
                   }
