@@ -1106,6 +1106,12 @@
   // existing-key dedup means re-runs cost nothing if cards are already up to date.
   var _lastSweepTurnCount = -1;
   var _lastSweepNarrLen = 0;
+  // v292Dfix128: track the high-water mark of conv-log card count so we can detect a
+  // drop (some other feature — fix64-restore etc. — cleared/rebuilt the stream) and
+  // immediately repair, stopping the visible "ピコピコ" appear/disappear loop that
+  // emerges when another feature periodically wipes cards faster than our 1.2s sweep
+  // can re-add them. Reset to 0 on turn-count change (legit deletion via undo/retry).
+  var _peakCardCount = 0;
   function sweepConvLogCards(){
     try {
       var stream = document.getElementById('dialogue-stream');
@@ -1117,6 +1123,7 @@
         var _curTC = turns.length;
         var _curLastN = (turns[_curTC - 1] && turns[_curTC - 1].narrative) ? String(turns[_curTC - 1].narrative).length : 0;
         if (_curTC !== _lastSweepTurnCount || _curLastN !== _lastSweepNarrLen){
+          if (_curTC !== _lastSweepTurnCount) _peakCardCount = 0;  // v292Dfix128: legit turn add/remove → reset
           _lastSweepTurnCount = _curTC;
           _lastSweepNarrLen = _curLastN;
           var _ns = window.__v292Dfix66;
@@ -1124,6 +1131,20 @@
             try { _ns.repair(); } catch(_){}
           }
         }
+      } catch(_){}
+      // v292Dfix128: card-count regression detector — another feature wiped cards →
+      // re-run repair() immediately so the conv-log doesn't visibly flicker between
+      // "all cards" and "partial cards" while our 1.2s loop catches up.
+      try {
+        var _curCC = stream.querySelectorAll('.v292-dlg-card').length;
+        if (_curCC < _peakCardCount){
+          var _ns2 = window.__v292Dfix66;
+          if (_ns2 && typeof _ns2.repair === 'function'){
+            try { _ns2.repair(); } catch(_){}
+            _curCC = stream.querySelectorAll('.v292-dlg-card').length;
+          }
+        }
+        if (_curCC > _peakCardCount) _peakCardCount = _curCC;
       } catch(_){}
       var allNarr = '';
       // v292Dfix126: aggregate anonymity map across all turns (model-tagged <say who="？">)
@@ -1170,6 +1191,40 @@
     } catch(e){}
   }
   try { setInterval(sweepConvLogCards, 1200); } catch(e){}
+
+  // v292Dfix128b: MutationObserver on #dialogue-stream — catches stream wipes and new
+  // card insertions faster than the 1.2s sweep (sub-50ms reaction). On REMOVAL → run
+  // sweep (which calls repair() via the peak-detector path → restore missing cards in
+  // one tick, killing the visible ピコピコ flicker). On ADDITION → kick __aiAvatar.refreshAll
+  // so any cached AI URL is swapped in immediately, eliminating the fallback-template
+  // flash that otherwise shows for ~1.2s before the next refreshAll tick.
+  var _v128MO = null, _v128Schedule = false;
+  function installStreamObserverV128(){
+    try {
+      var stream = document.getElementById('dialogue-stream');
+      if (!stream || _v128MO) return;
+      _v128MO = new MutationObserver(function(muts){
+        var rem = 0, add = 0;
+        for (var i = 0; i < muts.length; i++){
+          if (muts[i].removedNodes) rem += muts[i].removedNodes.length;
+          if (muts[i].addedNodes)   add += muts[i].addedNodes.length;
+        }
+        if ((rem > 0 || add > 0) && !_v128Schedule){
+          _v128Schedule = true;
+          setTimeout(function(){
+            _v128Schedule = false;
+            try { sweepConvLogCards(); } catch(_){}
+            // avatar flicker kill: refresh AI URLs for any freshly inserted card
+            try { if (window.__aiAvatar && window.__aiAvatar.refreshAll) window.__aiAvatar.refreshAll(); } catch(_){}
+          }, 40);
+        }
+      });
+      _v128MO.observe(stream, { childList: true });
+    } catch(e){}
+  }
+  setTimeout(installStreamObserverV128, 800);
+  setTimeout(installStreamObserverV128, 2500);
+  setTimeout(installStreamObserverV128, 6000);
 
   // ---------- render hook (uses live binding) ----------
   // フック内で window.__v292Dfix66.repair を呼ぶ -> 再注入時も最新版を使う
