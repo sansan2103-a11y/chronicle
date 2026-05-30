@@ -9775,6 +9775,60 @@
 })();
 
 /* =====================================================================
+ * v292Dfix149: auto-clean empty NPCs on settings save/close
+ * ---------------------------------------------------------------------
+ * User added an NPC via "+NPC追加" but typed nothing → S.cast.npcs gets an
+ * empty {name:'', desc:'', ...} that lingers forever (and shows up the next
+ * time settings are opened). We clean these up after saveSettings & before
+ * closeSettings — name-empty entries get filtered out + S.save() persists.
+ * Original wraps in fix11 / GR / etc. all run first; this is the final pass.
+ * ===================================================================== */
+(function v292Dfix149(){
+  if (window.__v292Dfix149) return;
+  function getUI(){ try { if (typeof UI !== 'undefined') return UI; } catch(e){} return window.UI || null; }
+  function getS(){ try { if (typeof S !== 'undefined') return S; } catch(e){} return window.S || null; }
+  function cleanEmpty(){
+    var st = getS();
+    if (!st || !st.cast || !Array.isArray(st.cast.npcs)) return 0;
+    var before = st.cast.npcs.length;
+    st.cast.npcs = st.cast.npcs.filter(function(n){
+      return n && n.name && String(n.name).trim();
+    });
+    var removed = before - st.cast.npcs.length;
+    if (removed > 0){
+      try { if (typeof st.save === 'function') st.save(); } catch(e){}
+      try { console.log('[v292Dfix149] removed', removed, 'empty NPC(s)'); } catch(e){}
+    }
+    return removed;
+  }
+  function arm(){
+    var U = getUI();
+    if (!U) return false;
+    if (U.__v292Dfix149) return true;
+    if (typeof U.saveSettings === 'function'){
+      var origSS = U.saveSettings.bind(U);
+      U.saveSettings = function(){
+        var r = origSS.apply(this, arguments);
+        try { cleanEmpty(); } catch(e){}
+        return r;
+      };
+    }
+    if (typeof U.closeSettings === 'function'){
+      var origCS = U.closeSettings.bind(U);
+      U.closeSettings = function(){
+        try { cleanEmpty(); } catch(e){}
+        return origCS.apply(this, arguments);
+      };
+    }
+    U.__v292Dfix149 = true;
+    window.__v292Dfix149 = true;
+    try { console.log('[v292Dfix149] empty-NPC auto-cleanup armed'); } catch(e){}
+    return true;
+  }
+  if (!arm()){ var n149 = 0; var iv149 = setInterval(function(){ n149++; if (arm() || n149 > 200) clearInterval(iv149); }, 200); }
+})();
+
+/* =====================================================================
  * v292Dfix118: switchable AI-generated avatar prompts
  * ---------------------------------------------------------------------
  * Avatars used a fixed template (cast="anime portrait of young woman… dark
