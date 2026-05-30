@@ -209,7 +209,20 @@
       var ev = loadEvents().filter(function(e){ return e.importance >= 2; });
       if (!ev.length) return [];
       var relText = recentTextForRelevance();
+      // v292Dfix153a(2026-05-30): 圧縮guard。fix150 緊急圧縮は getKeyEvents(1) を呼ぶため、
+      //   直前ターンで起きた重要事象（キャラ死亡/負傷/拘束など）が limit に押し出されて
+      //   sys から消え、次ターンで連続性が壊れる（おしん指摘「ミホ死亡→生存扱い」型）。
+      //   そこで「直近 PROTECT_RECENT(=3) ターンの重要事象は limit に関わらず必ず含める」guard
+      //   を追加する。保護分を先頭に置き、残り枠を従来のスコア順で埋める。
+      var PROTECT_RECENT = 3;
+      // curTurn 基準（イベントの最大 turnIdx ではなく現在のターン番号）で「直近」を判定する。
+      var curTurn = 0;
+      try {
+        var st = (typeof S !== 'undefined' && S) ? S : window.S;
+        if (st && st.turns && st.turns.length) curTurn = st.turns.length - 1;
+      } catch(_e){}
       var maxTurn = ev.reduce(function(m, e){ return Math.max(m, e.turnIdx || 0); }, 0);
+      var recentRef = Math.max(curTurn, maxTurn);
       var scored = ev.map(function(e){
         var score = (e.importance || 0) * 2;
         // v292Dfix152-C: stronger recency weight so "what just happened" is prioritized.
@@ -226,7 +239,19 @@
         return { e: e, score: score };
       });
       scored.sort(function(a, b){ return b.score - a.score; });
-      return scored.map(function(s){ return s.e; }).slice(0, limit);
+      // 圧縮guard: 直近 PROTECT_RECENT ターン内の事象を必ず確保（時系列順で先頭に固定）。
+      var protectedEv = scored
+        .filter(function(s){ return typeof s.e.turnIdx === 'number' && (recentRef - s.e.turnIdx) <= (PROTECT_RECENT - 1); })
+        .map(function(s){ return s.e; })
+        .sort(function(a, b){ return (a.turnIdx || 0) - (b.turnIdx || 0); });
+      var protectedSet = protectedEv.slice();   // copy for membership test
+      var rest = scored
+        .map(function(s){ return s.e; })
+        .filter(function(e){ return protectedSet.indexOf(e) < 0; });
+      // 保護分が limit を超える場合でも、保護分は全て残す（直近3ターンは絶対削らない）。
+      var out = protectedEv.concat(rest);
+      var keep = (protectedEv.length >= limit) ? protectedEv : out.slice(0, limit);
+      return keep;
     },
     rebuild: maybeRebuild,
     reset: reset,
