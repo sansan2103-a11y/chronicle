@@ -24,7 +24,7 @@
   var LSP_EVENTS    = 'chr6_v292Dfix137_ev';
   var LSP_LASTBUILD = 'chr6_v292Dfix135_last';
 
-  var REBUILD_INTERVAL = 5;          // rebuild every N new turns
+  var REBUILD_INTERVAL = 3;          // v292Dfix152-A: 5→3 for fresher char state (death/injury reflected within 3 turns)
   var ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 
   function getModel(){
@@ -212,10 +212,14 @@
       var maxTurn = ev.reduce(function(m, e){ return Math.max(m, e.turnIdx || 0); }, 0);
       var scored = ev.map(function(e){
         var score = (e.importance || 0) * 2;
-        // recency: events from last 5 turns get up to +3
+        // v292Dfix152-C: stronger recency weight so "what just happened" is prioritized.
+        // 直近2ターン=+5 / 5ターン=+3 / 10ターン=+1 (previously max +3 across 5 turns).
+        // これでミホ死亡みたいな最新事象が確実に sys に入る。
         if (typeof e.turnIdx === 'number' && maxTurn > 0){
           var dist = maxTurn - e.turnIdx;
-          if (dist <= 5) score += 3 - (dist * 0.5);
+          if (dist <= 2) score += 5;
+          else if (dist <= 5) score += 3;
+          else if (dist <= 10) score += 1;
         }
         // mention in recent narrative: +3
         if (e.event && relText.indexOf(String(e.event).substring(0, 10)) >= 0) score += 3;
