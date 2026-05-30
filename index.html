@@ -1619,12 +1619,36 @@ const G = {
   resetStory() {
     if (!confirm('物語をリセットしますか？\n設定・APIキー・NPC設定は保持されます。')) return;
     S.turns = []; S.scene.branches = [];
-    S.save(); UI.renderAll(); UI.renderBranches([]); UI._showIntro(); UI.setStatus('物語をリセットしました');
+    S.save();
+    this._clearDerivedState();   // v292Dfix154: wipe character-state stores so the previous game doesn't bleed in
+    location.reload();           // rebuild every in-memory module state from a clean slate
   },
 
   resetAll() {
     if (!confirm('すべてのデータ（APIキー・設定を含む）を削除しますか？\nこの操作は取り消せません。')) return;
+    this._clearDerivedState();   // v292Dfix154: SS.del(KEY) only removed chr6; derived stores survived
     SS.del(KEY); location.reload();
+  },
+
+  // v292Dfix154(2026-05-30): reset-hygiene. おしん「物語リセットしてもキャラ状態がリセットされない」。
+  //   原因: resetStory は S.turns を空にするだけで、派生キャラ状態ストアが残り次のゲームに漏れていた。
+  //   特に fix77(state-memory) の `v292Dfix77States`（各キャラの体/心/本能トラッカー）には reset hook が
+  //   一切無く、localStorage と in-memory `window.__v292Dfix77Store` の両方に前ゲームのキャラ状態が永続。
+  //   longmem(worldinfo/summary/events) も 4秒ポーラ頼みでレース条件があった。ここで全て同期的に消す。
+  _clearDerivedState() {
+    // longmem: あらすじ・キャラDB(worldinfo)・重要事象
+    try { if (window.__longmem && window.__longmem.reset) window.__longmem.reset(); } catch (e) {}
+    try {
+      ['chr6_v292Dfix135_sum','chr6_v292Dfix136_wi','chr6_v292Dfix137_ev','chr6_v292Dfix135_last']
+        .forEach(function (k) { try { localStorage.removeItem(k); } catch (_) {} });
+    } catch (e) {}
+    // fix77 structured character-state tracker (体/心/本能) — localStorage + in-memory
+    try { localStorage.removeItem('v292Dfix77States'); } catch (e) {}
+    try {
+      if (window.__v292Dfix77Store) {
+        Object.keys(window.__v292Dfix77Store).forEach(function (k) { delete window.__v292Dfix77Store[k]; });
+      }
+    } catch (e) {}
   }
 };
 
