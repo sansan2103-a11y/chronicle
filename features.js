@@ -9208,10 +9208,15 @@
             // v292Dfix138: 「続きを書く」(playerText が「続きを進めて」「続きを自然に〜」「続きを書〜」)
             // 検知時、進行ブロックを最強モードに上書き。ボタンを押した時だけ大きな展開を強制し、
             // 自由入力ターンでは通常レベルを維持する。fix105/111 のセレクタとは独立。
+            // v292Dfix138A(2026-05-30): 続きを書く連発で本文がsummary風要約に劣化する件
+            //   (「〜寸前まで追い込まれる」「〜が忍び込んできた」みたいな短い説明文)
+            //   → _continueHint ブロックで「転換点6選 + 主人公五感で密度高く描く + 要約口調禁止」を明示。
+            var _continueHint138 = '';
             try {
               var _pt138 = arguments[1] ? String(arguments[1]) : '';
               if (/続きを(?:自然に)?進めて/.test(_pt138) || /^続きを書/.test(_pt138)){
                 _drama = '【物語の推進=最強・続きを書く強化】今ターンは必ず**新しい大きな展開**を1つ起こす（場所転換／新キャラ登場／状況急変／重要事実発覚／時間経過／関係性の大きな変化 のいずれか）。前ターンの場面の続きを淡々と描かず、明確に物語を一段階前へ進める。停滞・足踏み・微小変化のみ厳禁。';
+                _continueHint138 = '【続きの転換点と描写の濃さ】今ターン以下のいずれかを必ず起こす：(1)場所が変わる/移動 (2)新人物・存在・物が登場 (3)時間経過(数分後/朝/夕方/翌日) (4)状況急変(逃走・拘束変化・負傷・治療等) (5)重要事実が判明 (6)関係性が大きく変化。その瞬間を**主人公の五感**(視覚/聴覚/触覚/痛覚/嗅覚/内感)で**密度高く**描く。「〜寸前まで追い込まれる」「〜が忍び込んできた」のようなsummary風要約口調を禁止し、「今その瞬間に何が見え/聞こえ/触れ/匂うか」を具体動詞で描く。';
               }
             } catch(_e138){}
             // v292Dfix112: character REACTION intensity, scaled by S.cfg.reactionLevel
@@ -9399,7 +9404,39 @@
                 }
               }
             } catch(_e135){}
-            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_react ? ('\n\n' + _react) : '') + (_dlg ? ('\n\n' + _dlg) : '') + (_voice ? ('\n\n' + _voice) : '') + '\n\n' + _banter + '\n\n' + _depict + '\n\n' + _continuity + (_charState ? ('\n\n' + _charState) : '') + (_summary ? ('\n\n' + _summary) : '') + (_worldInfo ? ('\n\n' + _worldInfo) : '') + (_events ? ('\n\n' + _events) : '') + '\n\n' + _fewshot + '\n\n' + _guard;
+            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_continueHint138 ? ('\n\n' + _continueHint138) : '') + (_react ? ('\n\n' + _react) : '') + (_dlg ? ('\n\n' + _dlg) : '') + (_voice ? ('\n\n' + _voice) : '') + '\n\n' + _banter + '\n\n' + _depict + '\n\n' + _continuity + (_charState ? ('\n\n' + _charState) : '') + (_summary ? ('\n\n' + _summary) : '') + (_worldInfo ? ('\n\n' + _worldInfo) : '') + (_events ? ('\n\n' + _events) : '') + '\n\n' + _fewshot + '\n\n' + _guard;
+
+            // v292Dfix150(2026-05-30): post-assembly safety net. fix143 の圧縮判定は
+            // `r.sys.length > 5500` で base prompt のみ見てたので、長期プレイで longmem
+            // 追加後の最終 sys が 10000+ 字になっても圧縮モード未発動だった。ここでは
+            // 完成した sys の長さを見て、9000 字超なら更に worldinfo/events/few-shot
+            // を絞り込んで再構築する（緊急圧縮）。これで turn 数や cast 数に依存せず
+            // 最終 sysLen を fix115 閾値以下に保てる。
+            try {
+              if (r.sys.length > 9000){
+                // emergency shrink: worldinfo 1件、events 1件、few-shot 2例
+                var _wi150 = (window.__longmem && window.__longmem.getWorldInfoFor) ? window.__longmem.getWorldInfoFor(_lastN143, 1) : [];
+                var _ev150 = (window.__longmem && window.__longmem.getKeyEvents) ? window.__longmem.getKeyEvents(1) : [];
+                var _worldInfo2 = (_wi150 && _wi150.length) ? '--- 内部メモ：登場人物・場所・物（本文に絶対書かない・整合性維持用） ---\n' + _wi150.map(function(w){ return '・' + w.name + '（' + w.type + '）：' + w.desc; }).join('\n') + '\n--- 内部メモここまで ---' : '';
+                var _events2 = (_ev150 && _ev150.length) ? '--- 内部メモ：重要事象（本文に絶対書かない・必ず引き継ぐ） ---\n' + _ev150.map(function(e){ return '・T' + e.turnIdx + '：' + e.event; }).join('\n') + '\n--- 内部メモここまで ---' : '';
+                // shrink few-shot to 2 (scene-aware: keep top 2 by tone score from fix143)
+                var _fewshot2;
+                try {
+                  if (_scores && _scores.length >= 2){
+                    _fewshot2 = [_exHdr, _scores[0].ex, _scores[1].ex].join('\n');
+                  } else {
+                    _fewshot2 = [_exHdr, _ex1, _ex2].join('\n');
+                  }
+                } catch(_e){ _fewshot2 = _fewshot; }
+                // re-assemble with tighter blocks (drop summary on extreme overflow)
+                var _summary2 = (r.sys.length > 11000) ? '' : _summary;
+                r.sys = r.sys.replace(_fewshot, _fewshot2);
+                if (_worldInfo && _worldInfo2 && _worldInfo !== _worldInfo2) r.sys = r.sys.replace(_worldInfo, _worldInfo2);
+                if (_events && _events2 && _events !== _events2) r.sys = r.sys.replace(_events, _events2);
+                if (_summary && _summary2 === '' && r.sys.indexOf(_summary) >= 0) r.sys = r.sys.replace('\n\n' + _summary, '');
+                try { console.log('[v292Dfix150] emergency shrink applied, sysLen now', r.sys.length); } catch(_){}
+              }
+            } catch(_e150){}
           }
         }
       } catch(e){}
