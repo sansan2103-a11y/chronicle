@@ -4813,10 +4813,10 @@
         '- user message 内 currentInput.type === "STORY" の場合、その text に含まれる\n' +
         '  「…」はナレーションの一部であり、新規 dialogue として抽出しない\n' +
         '- STORY 内の「」内テキストや任意フレーズを speaker name に昇格させてはならない\n' +
-        '- speaker が cast.hero/npcs.name のいずれにも一致しない値になる場合は dialogue を作らず prose に流す\n' +
+        '- speaker が cast.hero/npcs.name のいずれにも一致しない場合でも、名無しの存在(怪物/異形/正体不明の声/謎の人物)が喋るなら「異形」「謎の声」「何か」等その存在の呼称を speaker にしてよい(人間キャラに無理に割り当てない)。それ以外で speaker が定まらないときのみ prose に流す\n' +  // v292Dfix160
         '【pronoun 禁止 (fix27 M-1)】\n' +
         '- dialogue.speaker フィールドには代名詞(彼/彼女/少女/少年/あの男/あの女 等)を入れない\n' +
-        '- 必ず cast に登録された固有名詞を入れる\n' +
+        '- 既存キャラのセリフには cast 登録名を使う。ただし登録外の名無しの存在のセリフは「異形」「謎の声」等その存在の呼称でよい\n' +  // v292Dfix160
         '- 地の文で代名詞を使った直後の dialogue は、直前文の動作主体(主語)と一致させる\n' +
         '【cliche 強化 (fix27 M-3)】\n' +
         '- 次の慣用表現は使用禁止: 鼓動が速[くまっ]/息を呑[んみ]/身体が冷え/体が冷え/\n' +
@@ -9604,6 +9604,15 @@
               '・掛け合いを歓迎（誰かの声や行動に噛み合わせる：呼びかけ→応答、悲鳴→駆け寄り、自責→制止）。独白の羅列にしない。',
               '・<voice> タグは本文（地の文）には混ぜず、必ず本文の後にまとめて置く。',
               '・主人公（プレイヤー操作キャラ）の<voice>は、プレイヤー入力と矛盾しない範囲の内心・短い反応に留める。'].join('\n');
+            // v292Dfix160(2026-05-30): 名無しの存在(怪物/異形/謎の声)のセリフが、近くの人間cast
+            //   (カエデ/ミリア等)の発言として会話ログに誤割り当てされる問題。原因=別ファイル(fix74)の
+            //   「who には必ず cast に登録された名前を入れる（??? や代名詞は不可）」制約。ここで例外を
+            //   明示して上書きし、モデルが文脈通りに正しい話者を出せるようにする。
+            var _speakerExc = ['【話者ラベルの例外＝最優先（先の「who は登録名のみ」より優先）】',
+              'セリフの話者(<say who="…">)は、原則として登場している登録キャラ（' +
+                (function(){ try { var c=(typeof S!=='undefined'&&S.cast)?S.cast:(window.S&&window.S.cast); var ns=[]; if(c){ if(c.hero&&c.hero.name)ns.push(c.hero.name); if(Array.isArray(c.npcs))c.npcs.forEach(function(n){if(n&&n.name)ns.push(n.name);}); } return ns.join('、'); } catch(e){ return '登録キャラ'; } })() + '）の名前を使う。',
+              'ただし、登録キャラに存在しない"名無しの存在"（怪物・異形・正体不明の声・まだ名前のない人物など）が喋るときは、人間キャラの名前を絶対に当てず、その存在を表す呼称（例:「異形」「謎の声」「何か」「？」）を who に使う。',
+              '文脈から「このセリフは誰のものか」を判断し、登場人物でない存在のセリフを登場人物（特に主人公）に割り当てない。冷静な人物が怪物の残酷な宣告を喋るような不一致を避ける。'].join('\n');
             var _guard = ['【最重要・出力の鉄則（最後に必ず確認）】',
               '・日本語の質: 自然で文法的に正しい日本語で書く。意味の通らない文・不自然な言い回し・位置関係の矛盾・主述のねじれを避ける。凝った長文より、読んで意味が明確に通る文を優先する。',
               '・ここまでの全ルール（進行・反応・反復禁止・描写・継承など）は「あなたへの内部指示」。物語の本文には絶対に出力しない。',
@@ -9652,7 +9661,7 @@
                 }
               }
             } catch(_e135){}
-            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_continueHint138 ? ('\n\n' + _continueHint138) : '') + (_react ? ('\n\n' + _react) : '') + (_dlg ? ('\n\n' + _dlg) : '') + (_voice ? ('\n\n' + _voice) : '') + '\n\n' + _banter + '\n\n' + _depict + '\n\n' + _continuity + (_continuityNeo ? ('\n\n' + _continuityNeo) : '') /* v292Dfix155③: _charState(fix133)はfix77状態ブロック+点呼と重複しsysを膨らませる主因なのでassemblyから除外 */ + (_summary ? ('\n\n' + _summary) : '') + (_worldInfo ? ('\n\n' + _worldInfo) : '') + (_events ? ('\n\n' + _events) : '') + '\n\n' + _fewshot + '\n\n' + _reactVoice + '\n\n' + _guard;
+            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_continueHint138 ? ('\n\n' + _continueHint138) : '') + (_react ? ('\n\n' + _react) : '') + (_dlg ? ('\n\n' + _dlg) : '') + (_voice ? ('\n\n' + _voice) : '') + '\n\n' + _banter + '\n\n' + _depict + '\n\n' + _continuity + (_continuityNeo ? ('\n\n' + _continuityNeo) : '') /* v292Dfix155③: _charState(fix133)はfix77状態ブロック+点呼と重複しsysを膨らませる主因なのでassemblyから除外 */ + (_summary ? ('\n\n' + _summary) : '') + (_worldInfo ? ('\n\n' + _worldInfo) : '') + (_events ? ('\n\n' + _events) : '') + '\n\n' + _fewshot + '\n\n' + _reactVoice + '\n\n' + _speakerExc + '\n\n' + _guard;
 
             // v292Dfix150(2026-05-30): post-assembly safety net. fix143 の圧縮判定は
             // `r.sys.length > 5500` で base prompt のみ見てたので、長期プレイで longmem
