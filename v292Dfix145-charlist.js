@@ -357,6 +357,18 @@
         btnRow.appendChild(mkBtn('✏️ 編集', '#5a5a8a', function(){ editNpc(c.npcIdx, c.name, c.desc); }));
       }
       btnRow.appendChild(mkBtn('→ 入力に追加', '#4a4a6a', function(){ addToInput(c.name); }));
+      // v292Dfix151: ↻ アイコン再生成 — invalidates AI avatar cache + regenerates from
+      // current desc/context (handy when fix66 ncAppearance picked wrong context, e.g.
+      // a human rescuer got generated as a skeleton because they appeared mid-skeleton-scene).
+      btnRow.appendChild(mkBtn('↻ アイコン再生成', '#6a4a5a', function(){
+        try {
+          if (window.__aiAvatar && typeof window.__aiAvatar.regen === 'function'){
+            window.__aiAvatar.regen(c.name);
+            // re-render modal after a short delay so the new avatar URL appears
+            setTimeout(renderModal, 1500);
+          }
+        } catch(e){}
+      }));
       col.appendChild(btnRow);
       card.appendChild(col);
       return card;

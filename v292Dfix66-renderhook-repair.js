@@ -171,9 +171,34 @@
   // v292Dfix123: give the LLM a GENEROUS, stable context window so it can infer what the
   // entity IS (person / creature / spirit / object) and depict it faithfully — instead of
   // the old 1-3 sentence scrape forced into a "horror creature" template.
+  // v292Dfix151(2026-05-30): the old "surrounding chunk" approach picks up nearby OTHER
+  // characters' descriptions, so a human rescuer showing up in a skeleton-infested hallway
+  // would inherit skeleton imagery → human got generated as a horror creature.
+  // NEW: prefer sentences that contain `name` itself. Fall back to the chunk approach only
+  // when no sentences mention the name. This isolates the entity's own description from
+  // adjacent characters/scenery.
   function ncAppearance(name, narr){
     if (!name || !narr) return '';
-    var pos = (name === '???' || name === '?') ? -1 : narr.indexOf(name);
+    var src = String(narr).replace(/<[^>]+>/g, ' ').replace(/[「『〝][^」』〟]*[」』〟]/g, ' ');
+    // v292Dfix151: try name-bearing sentences first
+    if (name !== '???' && name !== '?' && name !== '？'){
+      try {
+        var sentences = src.split(/[。\n]/).map(function(s){return s.trim();}).filter(Boolean);
+        var mine = [];
+        for (var i = 0; i < sentences.length; i++){
+          if (sentences[i].indexOf(name) >= 0) mine.push(sentences[i]);
+        }
+        if (mine.length){
+          // join 1-5 of the entity's own sentences, max 300 chars
+          var joined = mine.slice(0, 5).join('。');
+          joined = joined.replace(/\s+/g, ' ').trim();
+          if (joined.length > 300) joined = joined.slice(0, 300);
+          if (joined.length >= 8) return joined;  // need a minimal context to be useful
+        }
+      } catch(e){}
+    }
+    // Fallback: original chunk-based logic (initial mention + surrounding)
+    var pos = (name === '???' || name === '?' || name === '？') ? -1 : narr.indexOf(name);
     if (pos < 0){
       // unnamed / not found by name → best-effort: use the most recent narrative as context
       var tail = String(narr).slice(-450).replace(/<[^>]+>/g, ' ').replace(/[「『〝][^」』〟]*[」』〟]/g, ' ').replace(/\s+/g, ' ').trim();
