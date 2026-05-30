@@ -2877,6 +2877,59 @@
   })();
 
   // ====================================================================
+  // 14d. meta_strip (v292Dfix159 2026-05-30)
+  // 目的: 本文へのメタ/構造漏れを除去。実機で2種確認:
+  //   (1) メタ前置き「（この物語は…という展開です／…として位置付けられています）」
+  //       = モデルが物語でなく作品解説を括弧書きで出す(特に新ゲーム1ターン目)。
+  //   (2) 構造ラベル「（身体）…（頭）…（心）…」= fix77(からだ/こころ/本能) や
+  //       fix157(心/声) の構造を <state>/<voice> タグにせず日本語ラベルで地の文に漏らす。
+  //   narrative から両方を除去する（タグ漏れは fix157/strip が別途処理）。
+  // ====================================================================
+  (function metaStrip159(){
+    var TAG = '[v292Dfix159:metastrip]';
+    var LABELS = /[（(]\s*(?:身体|頭|心|からだ|こころ|本能|声|思考|感情|内心|状態)\s*[）)]\s*/g;
+    var LEAD_META = /^\s*[（(][^）)]*?(?:この物語は|プレイヤーが入力した|として位置付け|という(?:不可解な)?(?:時間軸の)?展開|を踏まえた展開)[\s\S]*?[）)]\s*/;
+    function stripLine(s){
+      s = String(s).replace(LABELS, '');           // 構造ラベル除去
+      s = s.replace(LEAD_META, '');                 // 行頭メタ前置き括弧を除去
+      return s.trim();
+    }
+    function isPureMeta(s){
+      if (/^(?:この物語は|プレイヤーが入力した「)/.test(s)) return true;
+      if (/として位置付けられています[。\.]?$/.test(s) && s.length > 25) return true;
+      if (/という(?:不可解な)?(?:時間軸の)?展開です[。\.]?$/.test(s) && s.length > 25) return true;
+      return false;
+    }
+    function register(){
+      if (typeof Planner !== 'object' || !Planner || !Array.isArray(Planner._parseExtensions)) return false;
+      if (Planner.__metastrip159) return true;
+      Planner._parseExtensions.push(function metaStripExt(plan){
+        try {
+          if (!plan || !Array.isArray(plan.narrative)) return plan;
+          var out = [], removed = 0;
+          for (var i = 0; i < plan.narrative.length; i++){
+            var s = stripLine(plan.narrative[i]);
+            if (!s){ removed++; continue; }
+            if (isPureMeta(s)){ removed++; continue; }
+            out.push(s);
+          }
+          if (out.length) plan.narrative = out;   // 全消ししない安全策
+          if (removed) { try { console.log(TAG, 'stripped', removed, 'meta/label fragments'); } catch(_){} }
+        } catch(e){ try { console.warn(TAG, e && e.message); } catch(_){} }
+        return plan;
+      });
+      Planner.__metastrip159 = true;
+      try { console.log(TAG, 'meta-strip extension registered'); } catch(_){}
+      return true;
+    }
+    if (!register()){
+      var n = 0, iv = setInterval(function(){ if (register() || ++n > 80) clearInterval(iv); }, 100);
+    }
+    window.__v292 = window.__v292 || {};
+    window.__v292.metaStrip159 = { stripLine: stripLine, isPureMeta: isPureMeta };
+  })();
+
+  // ====================================================================
   // 15. avatar_autofill (v292-D fix11)
   // 目的: ランダム生成 / saveSettings / addNpc 後、c.avatar が未設定なら
   //       Pollinations URL を自動生成して S.cast.*.avatar に格納する。
@@ -9557,7 +9610,11 @@
               //   と順序を固定して本文を守る。
               '・本文として出力してよいのは物語の地の文と登場人物のセリフ（「」/ <say>）だけ。',
               '・まず物語の本文を必ず最初に、十分な分量で書き切る。次にキャラ反応 <voice .../>、最後に状態メモ <state>…</state> の順で、いずれも本文を書き終えた後に置く（本文より前に置かない・本文をタグで置き換えない）。',
-              '・<summary> や、その他のメモ用タグ・見出し・要約ブロックは本文中に一切出力しない。'].join('\n');
+              '・<summary> や、その他のメモ用タグ・見出し・要約ブロックは本文中に一切出力しない。',
+              // v292Dfix159(2026-05-30): 「（この物語は…という展開です）」型のメタ前置き・作品解説と、
+              //   「（身体）（頭）（心）」型の構造ラベルを地の文に書く漏れを禁止。
+              '・「（この物語は…）」「（…として位置付けられています）」のような作品解説・前置き・時間軸の説明を本文（特に冒頭）に書かない。いきなり物語の場面から始める。',
+              '・キャラの状態や反応は地の文と<voice>で描く。「（身体）」「（頭）」「（心）」「（からだ）」のような括弧ラベルで状態を箇条書きにしない。'].join('\n');
             // v292Dfix135+136+137: long-term memory blocks (summary / world info / events).
             // v292Dfix141: switched 【〜】 headers to plain "--- ---" to avoid model paraphrasing.
             // v292Dfix143: compression mode — when sys is bloated (long-term play accumulates
