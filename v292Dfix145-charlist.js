@@ -64,14 +64,30 @@
     }
     return -1;
   }
+  // v292Dfix156(2026-05-30): format fix77 state-memory (体/心/本能) into a one-liner.
+  // fix77 (window.__v292Dfix77Store[name] = {karada,kokoro,honno,turn}) is the state the
+  // MODEL actually references and is updated EVERY turn — so it's fresher than longmem
+  // worldinfo (rebuilt every 3 turns). Returns '' if no fix77 entry for this name.
+  function fix77StateFor(name){
+    try {
+      var store = window.__v292Dfix77Store;
+      if (!store || !name || !store[name]) return '';
+      var s = store[name];
+      var bits = [];
+      if (s.karada) bits.push('からだ: ' + String(s.karada).slice(0, 48));
+      if (s.kokoro) bits.push('こころ: ' + String(s.kokoro).slice(0, 40));
+      if (s.honno)  bits.push('本能: ' + String(s.honno).slice(0, 40));
+      return bits.length ? bits.join(' ／ ') : '';
+    } catch(e){ return ''; }
+  }
   function getStateForName(name, turns, npcDesc, worldDesc){
-    // v292Dfix145c: priority order for "状態" display:
-    //   1. longmem worldinfo desc (LLM updates this every 5 turns — captures dynamic
-    //      state like "right eye gouged out", "captured by skeleton", "mentally broken")
-    //   2. Most recent narrative sentence mentioning the character (last 5 turns)
-    //   3. "（まだ物語に登場していません）" placeholder
-    // worldDesc is passed in from collectChars() = longmem desc OR npc desc.
-    // We treat longmem (passed as worldDesc) as the highest-fidelity STATE source.
+    // v292Dfix156: priority order for "状態" display:
+    //   1. fix77 state-memory 体/心/本能 (updated EVERY turn — what the model references)
+    //   2. longmem worldinfo desc (LLM-curated, rebuilt every 3 turns)
+    //   3. Most recent narrative sentence mentioning the character (last 5 turns)
+    //   4. "（まだ物語に登場していません）" placeholder
+    var s77 = fix77StateFor(name);
+    if (s77) return s77;
     if (worldDesc && String(worldDesc).trim()){
       return String(worldDesc).slice(0, 120);
     }
