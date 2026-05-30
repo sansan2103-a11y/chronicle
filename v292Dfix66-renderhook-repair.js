@@ -367,6 +367,35 @@
     return dedupSpeaker(speaker) + '|' + (text || '');
   }
 
+  // v292Dfix158(2026-05-30): おしんA＝会話ログは「口に出したセリフ」だけ。内心独白
+  //   (<say who="X(心)">… / X(心)「…」) は会話ログから除外し、右の「展開の描写」にだけ残す。
+  //   会話ログのカード表示名は (心) が剥がれて "X" になるため名前では判定できない。よって
+  //   narrative 側で (心) 話者に紐づくテキスト集合を作り、カードのテキストが一致したら除去する。
+  //   括弧は半角(心)/全角（心）両対応。
+  function innerMonologueTexts(rawConcat){
+    var set = Object.create(null);
+    if (!rawConcat) return set;
+    try {
+      var m;
+      var rx1 = /<say\b[^>]*\bwho\s*=\s*["'][^"']*[（(]\s*心\s*[）)][^"']*["'][^>]*>([\s\S]*?)<\/say>/gi;
+      while ((m = rx1.exec(rawConcat)) !== null){
+        var t = (m[1] || '').replace(/<[^>]+>/g, '').trim();
+        if (t) set[t] = true;
+      }
+      var rx2 = /[^\s「」<>()（）]{1,12}[（(]\s*心\s*[）)]\s*「([^」]{1,160})」/g;
+      while ((m = rx2.exec(rawConcat)) !== null){
+        var t2 = (m[1] || '').trim();
+        if (t2) set[t2] = true;
+      }
+    } catch(e){}
+    return set;
+  }
+  function rawNarrConcat(turns){
+    var s = '';
+    try { for (var i = 0; i < turns.length; i++){ if (turns[i]) s += '\n' + (turns[i].narrative || ''); } } catch(e){}
+    return s;
+  }
+
   // 既存 stream 内のカードを (speaker|text) のみで集計
   // (bare-key '|text' は廃止: NPC text と hero text 衝突時の取りこぼし防止)
   function collectExistingKeys(stream){
@@ -1056,12 +1085,18 @@
         for (var __ti = 0; __ti < turns.length; __ti++){
           if (turns[__ti]) __allNarr += '\n' + preprocessNarrative(turns[__ti].narrative);
         }
+        var __innerSet = innerMonologueTexts(rawNarrConcat(turns));   // v292Dfix158
         var __cards = stream.querySelectorAll('.v292-dlg-card');
         for (var __ci = 0; __ci < __cards.length; __ci++){
           var __c = __cards[__ci];
           var __nm = __c.querySelector('.dlg-name');
           var __tx = __c.querySelector('.dlg-text');
           if (!__tx) continue;
+          // v292Dfix158: 内心独白カードは会話ログから除外（右の展開には残る）
+          if (__innerSet[(__tx.textContent || '').trim()] && __c.parentNode){
+            __c.parentNode.removeChild(__c);
+            continue;
+          }
           // v292Dfix110: fix a doubled speaker name ("AはA" -> "A") in-place on
           // ANY existing card (incl. ones built by earlier render hooks), so the
           // surviving card after dedup shows the clean name.
@@ -1220,6 +1255,7 @@
         allNarr += '\n' + preprocessNarrative(rawN);
         try { var am = anonymousTexts(rawN); for (var amk in am){ anonAll[amk] = true; } } catch(_){}
       }
+      var __innerSet2 = innerMonologueTexts(rawNarrConcat(turns));   // v292Dfix158
       var cards = stream.querySelectorAll('.v292-dlg-card');
       for (var c = 0; c < cards.length; c++){
         var __c = cards[c];
@@ -1227,6 +1263,8 @@
         if (!__tx) continue;
         var __t = (__tx.textContent || '').trim();
         if (!__t) continue;
+        // v292Dfix158: 内心独白カードは会話ログから除外（右の展開には残る）
+        if (__innerSet2[__t] && __c.parentNode){ __c.parentNode.removeChild(__c); continue; }
         // STORY/DO scene-direction echo input card whose text isn't a quoted utterance → drop
         if (__c.className.indexOf('v292Dfix56-input-card') !== -1 && !quotedInNarr(allNarr, __t)){
           if (__c.parentNode) __c.parentNode.removeChild(__c);
