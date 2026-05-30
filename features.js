@@ -2822,6 +2822,61 @@
   })();
 
   // ====================================================================
+  // 14c. reaction_voice (v292Dfix157① 2026-05-30・案A)
+  // 目的: セリフ/反応の淡白さ対策。本文の後にモデルが出力する
+  //   <voice who="名前" 心="内心" 声="セリフ"/> を解析し、会話ログ用に
+  //   <say who="名前">声</say> と <say who="名前(心)">心</say> へ展開して
+  //   narrative 末尾に注入する（既存の会話ログ抽出 fix66 がそのまま拾う）。
+  //   禁止リストで縛らず「この展開を受けて何を思い何を言うか」を生成させる方式。
+  // ====================================================================
+  (function reactionVoice157(){
+    var TAG = '[v292Dfix157:voice]';
+    function attrOf(s, name){
+      try { var mm = s.match(new RegExp(name + '\\s*=\\s*["’”\'"]?([^"’”\'>]*)["’”\'"]?')); return mm ? String(mm[1]).trim() : ''; }
+      catch(e){ return ''; }
+    }
+    function register(){
+      if (typeof Planner !== 'object' || !Planner || !Array.isArray(Planner._parseExtensions)) return false;
+      if (Planner.__voice157) return true;
+      Planner._parseExtensions.push(function reactionVoiceExt(plan, ctx){
+        try {
+          var raw = (ctx && ctx.raw) ? String(ctx.raw) : '';
+          if (!raw || raw.indexOf('<voice') < 0) return plan;
+          if (!plan || !Array.isArray(plan.narrative)) return plan;
+          // strip any <voice ...> that leaked into the narrative body (本文には出さない)
+          plan.narrative = plan.narrative
+            .map(function(line){ return String(line).replace(/<voice\b[^>]*?>/gi, '').trim(); })
+            .filter(function(line){ return line && line.length > 0; });
+          // extract each <voice who 心 声> from raw → conv-log <say> lines
+          var rx = /<voice\b([^>]*?)\/?>/gi, m, adds = [], seen = {};
+          while ((m = rx.exec(raw)) !== null){
+            var body = m[1] || '';
+            var who = attrOf(body, 'who') || attrOf(body, '誰');
+            if (!who) continue;
+            var koe = attrOf(body, '声') || attrOf(body, 'koe') || attrOf(body, 'say');
+            var kokoro = attrOf(body, '心') || attrOf(body, 'kokoro');
+            var key = who + '|' + koe + '|' + kokoro;
+            if (seen[key]) continue; seen[key] = 1;
+            if (koe) adds.push('<say who="' + who + '">' + koe + '</say>');
+            if (kokoro) adds.push('<say who="' + who + '(心)">' + kokoro + '</say>');
+          }
+          if (adds.length){
+            plan.narrative = plan.narrative.concat(adds);
+            try { console.log(TAG, 'injected', adds.length, 'reaction lines'); } catch(_){}
+          }
+        } catch(e){ try { console.warn(TAG, e && e.message); } catch(_){} }
+        return plan;
+      });
+      Planner.__voice157 = true;
+      try { console.log(TAG, 'reaction-voice extension registered'); } catch(_){}
+      return true;
+    }
+    if (!register()){
+      var n = 0, iv = setInterval(function(){ if (register() || ++n > 80) clearInterval(iv); }, 100);
+    }
+  })();
+
+  // ====================================================================
   // 15. avatar_autofill (v292-D fix11)
   // 目的: ランダム生成 / saveSettings / addNpc 後、c.avatar が未設定なら
   //       Pollinations URL を自動生成して S.cast.*.avatar に格納する。
@@ -9478,6 +9533,19 @@
             // v292Dfix112b: re-assert the output guard as the VERY LAST thing,
             // AFTER the drama/reaction rules — otherwise the model echoes those
             // strong structured rules into the prose as a "【重要ルール監査】" block.
+            // v292Dfix157①(2026-05-30・案A): セリフ/反応の淡白さ対策。おしん案＝禁止リストで縛らず
+            //   「この展開を受けてキャラは何を思い何を言うか」をポジティブに生成させる。本文の後に
+            //   各登場キャラの反応を <voice who="名前" 心="内心" 声="セリフ"/> で出力させ、parse側(reactionVoiceExt)
+            //   で <say who="名前">声</say> と <say who="名前(心)">心</say> に展開して会話ログに反映する。
+            //   この反応ブロックには fix69 の感情命名禁止を適用しない＝痛み/恐怖/絶望/呼びかけを率直に。
+            var _reactVoice = ['【キャラの反応＝本文の後に必ず出力（会話ログ用・率直に）】',
+              '本文（地の文）を書き終えたら、その展開を受けて、今この瞬間に各登場キャラが「内心で思うこと」と「口に出す言葉」を出力する。形式（本文の後・<state>の前に置く）：',
+              '<voice who="名前" 心="一人称の内心。断片でよい" 声="口に出すセリフ。声を発しないなら空でよい"/>',
+              '・いま場にいて反応しうるキャラは全員ぶん出す（最低でも直近に登場したキャラ）。各キャラの性格と現在の状態（体・心・本能）に即して。',
+              '・痛み・恐怖・絶望・安堵・怒りは、身体感覚や声で率直に出してよい。**ここでは感情の直接表現を禁止しない**——怖い・痛い・助けて、と思い/言わせてよい。',
+              '・掛け合いを歓迎（誰かの声や行動に噛み合わせる：呼びかけ→応答、悲鳴→駆け寄り、自責→制止）。独白の羅列にしない。',
+              '・<voice> タグは本文（地の文）には混ぜず、必ず本文の後にまとめて置く。',
+              '・主人公（プレイヤー操作キャラ）の<voice>は、プレイヤー入力と矛盾しない範囲の内心・短い反応に留める。'].join('\n');
             var _guard = ['【最重要・出力の鉄則（最後に必ず確認）】',
               '・日本語の質: 自然で文法的に正しい日本語で書く。意味の通らない文・不自然な言い回し・位置関係の矛盾・主述のねじれを避ける。凝った長文より、読んで意味が明確に通る文を優先する。',
               '・ここまでの全ルール（進行・反応・反復禁止・描写・継承など）は「あなたへの内部指示」。物語の本文には絶対に出力しない。',
@@ -9488,7 +9556,7 @@
               //   必要とするので禁止はせず、「本文を必ず先に書き切る／<state>は末尾に1回だけ／<summary>は禁止」
               //   と順序を固定して本文を守る。
               '・本文として出力してよいのは物語の地の文と登場人物のセリフ（「」/ <say>）だけ。',
-              '・まず物語の本文を必ず最初に、十分な分量で書き切る。状態メモ <state>…</state> を使う場合は本文を書き終えた後に1回だけ末尾に置く（本文より前に置かない・本文を<state>で置き換えない）。',
+              '・まず物語の本文を必ず最初に、十分な分量で書き切る。次にキャラ反応 <voice .../>、最後に状態メモ <state>…</state> の順で、いずれも本文を書き終えた後に置く（本文より前に置かない・本文をタグで置き換えない）。',
               '・<summary> や、その他のメモ用タグ・見出し・要約ブロックは本文中に一切出力しない。'].join('\n');
             // v292Dfix135+136+137: long-term memory blocks (summary / world info / events).
             // v292Dfix141: switched 【〜】 headers to plain "--- ---" to avoid model paraphrasing.
@@ -9522,7 +9590,7 @@
                 }
               }
             } catch(_e135){}
-            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_continueHint138 ? ('\n\n' + _continueHint138) : '') + (_react ? ('\n\n' + _react) : '') + (_dlg ? ('\n\n' + _dlg) : '') + (_voice ? ('\n\n' + _voice) : '') + '\n\n' + _banter + '\n\n' + _depict + '\n\n' + _continuity + (_continuityNeo ? ('\n\n' + _continuityNeo) : '') /* v292Dfix155③: _charState(fix133)はfix77状態ブロック+点呼と重複しsysを膨らませる主因なのでassemblyから除外 */ + (_summary ? ('\n\n' + _summary) : '') + (_worldInfo ? ('\n\n' + _worldInfo) : '') + (_events ? ('\n\n' + _events) : '') + '\n\n' + _fewshot + '\n\n' + _guard;
+            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_continueHint138 ? ('\n\n' + _continueHint138) : '') + (_react ? ('\n\n' + _react) : '') + (_dlg ? ('\n\n' + _dlg) : '') + (_voice ? ('\n\n' + _voice) : '') + '\n\n' + _banter + '\n\n' + _depict + '\n\n' + _continuity + (_continuityNeo ? ('\n\n' + _continuityNeo) : '') /* v292Dfix155③: _charState(fix133)はfix77状態ブロック+点呼と重複しsysを膨らませる主因なのでassemblyから除外 */ + (_summary ? ('\n\n' + _summary) : '') + (_worldInfo ? ('\n\n' + _worldInfo) : '') + (_events ? ('\n\n' + _events) : '') + '\n\n' + _fewshot + '\n\n' + _reactVoice + '\n\n' + _guard;
 
             // v292Dfix150(2026-05-30): post-assembly safety net. fix143 の圧縮判定は
             // `r.sys.length > 5500` で base prompt のみ見てたので、長期プレイで longmem
