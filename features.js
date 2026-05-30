@@ -2753,6 +2753,75 @@
   })();
 
   // ====================================================================
+  // 14b. narrative_salvage (v292Dfix155① 2026-05-30)
+  // 目的: 空応答bug #77 の救済。実機調査で判明:
+  //   (1) 上の fix10 narrativeRecovery は (rawResponse) 前提だが、現行 parsePlan は
+  //       extension を (plan, ctx) で呼ぶため plan を rawResponse 扱いして不発（死コード）。
+  //   (2) 現行出力は prose + fix77 の <state> タグ形式で、モデルは本文を書けているのに
+  //       parse/strip 過程で本文ごと捨てられ narrative=[] になるケースが3回中2回発生。
+  //   対策: parsePlan をラップし、全 extension 適用後に narrative が空/フォールバックなら
+  //   raw 応答から <state>/<summary>/各種タグを除去して prose を救済する（<say>中身は保持）。
+  //   正常ターン（narrative非空）には一切触れないので副作用なし。
+  // ====================================================================
+  (function narrativeSalvage155(){
+    var TAG = '[v292Dfix155:salvage]';
+    function rescueFromRaw(raw){
+      if (!raw || typeof raw !== 'string') return null;
+      var s = raw;
+      s = s.replace(/```[\s\S]*?```/g, ' ');
+      // <say ...>TEXT</say> の中身は会話本文なので 「TEXT」 として温存
+      s = s.replace(/<say\b[^>]*>([\s\S]*?)<\/say>/gi, '「$1」');
+      // fix77 の状態プロトコル <state>…</state> と、モデルが勝手に出す <summary> を除去
+      s = s.replace(/<state\b[\s\S]*?<\/state>/gi, ' ')
+           .replace(/<state\b[^>]*>/gi, ' ')
+           .replace(/<summary\b[\s\S]*?<\/summary>/gi, ' ')
+           .replace(/<summary\b[^>]*>/gi, ' ');
+      // 残りのタグを除去
+      s = s.replace(/<\/?[A-Za-z][^>]*>/g, ' ');
+      // JSON っぽいキー（"narrative": 等）を除去
+      s = s.replace(/"[A-Za-z_][A-Za-z0-9_]*"\s*:/g, ' ');
+      // 文・行に分割して日本語の地の文だけ残す
+      var parts;
+      try { parts = s.split(/\n+|(?<=[。！？」])/); }
+      catch(_re){ parts = s.split(/\n+/); }   // 古い環境で lookbehind 不可なら行分割のみ
+      parts = parts.map(function(x){ return x.replace(/\s+/g, ' ').trim(); })
+        .filter(function(x){ return x && x.length >= 2 && /[぀-ゟ゠-ヿ一-龥]/.test(x); });
+      var out = [];
+      for (var i = 0; i < parts.length; i++){ if (parts[i] !== out[out.length - 1]) out.push(parts[i]); }
+      return out.length ? out.slice(0, 8) : null;
+    }
+    function install(){
+      var P = (typeof Planner !== 'undefined') ? Planner : (window.Planner || null);
+      if (!P || typeof P.parsePlan !== 'function') return false;
+      if (P.__salvage155) return true;
+      var orig = P.parsePlan.bind(P);
+      P.parsePlan = function(rawText, inputType){
+        var plan = orig(rawText, inputType);
+        try {
+          var narr = (plan && Array.isArray(plan.narrative)) ? plan.narrative.join('').trim() : '';
+          var emptyish = !narr || /^(…|物語が続く…|物語が続く)$/.test(narr);
+          if (emptyish){
+            var resc = rescueFromRaw(rawText);
+            if (resc && resc.length){
+              plan.narrative = resc;
+              try { console.log(TAG, 'salvaged', resc.length, 'lines from raw (#77 rescue)'); } catch(_){}
+            }
+          }
+        } catch(e){ try { console.warn(TAG, e && e.message); } catch(_){} }
+        return plan;
+      };
+      P.__salvage155 = true;
+      try { console.log(TAG, 'parsePlan salvage installed'); } catch(_){}
+      return true;
+    }
+    if (!install()){
+      var n = 0, iv = setInterval(function(){ if (install() || ++n > 80) clearInterval(iv); }, 100);
+    }
+    window.__v292 = window.__v292 || {};
+    window.__v292.narrativeSalvage155 = { rescueFromRaw: rescueFromRaw };
+  })();
+
+  // ====================================================================
   // 15. avatar_autofill (v292-D fix11)
   // 目的: ランダム生成 / saveSettings / addNpc 後、c.avatar が未設定なら
   //       Pollinations URL を自動生成して S.cast.*.avatar に格納する。
@@ -9362,9 +9431,9 @@
                 '・対話の糸：直前ターン最後の発言・動作に反応する形で今ターンを始める。'
               ];
               if (_rollNames.length){
-                _neoLines.push('【キャラ点呼＝最重要・消失禁止】直近2〜3ターンに登場した次のキャラを、今ターンで最低1回は現在の状態を描写する（沈黙・気絶でも「今どうしているか」を必ず示す）：' + _rollNames.join('、') + '。一人も取りこぼさない。');
+                _neoLines.push('【キャラ点呼＝最重要・消失禁止】直近2〜3ターンに登場した次のキャラを、今ターンで最低1回、内部メモ（各キャラの体・心・本能＝現在の状態）を踏まえて状態を描写する（沈黙・気絶でも「今どうしているか」を必ず示す）：' + _rollNames.join('、') + '。一人も取りこぼさない。');
               } else {
-                _neoLines.push('【キャラ点呼＝最重要・消失禁止】直近2〜3ターンに登場した全キャラを、今ターンで最低1回は現在の状態を描写する（消失・無言フェードアウト禁止）。');
+                _neoLines.push('【キャラ点呼＝最重要・消失禁止】直近2〜3ターンに登場した全キャラを、今ターンで最低1回、内部メモの体・心・本能の状態を踏まえて描写する（消失・無言フェードアウト禁止）。');
               }
               _neoLines.push('【状態詳細度の維持】各キャラの描写は前ターンと同等以上の具体度を保つ。「うつろな瞳→何も読み取れない顔→言及なし」のような描写の漸進的フェードアウトを禁止する。');
               _neoLines.push('【既登場キャラの再導入禁止】すでに登場・命名済みのキャラを「???」「謎の少女」「見知らぬ人物」等の新キャラ扱いで再登場させない。必ず名前で扱う。');
@@ -9414,7 +9483,13 @@
               '・ここまでの全ルール（進行・反応・反復禁止・描写・継承など）は「あなたへの内部指示」。物語の本文には絶対に出力しない。',
               '・「【重要ルール監査】」「〜順守」「〜起点」「〜追加」のような、ルールの列挙・自己点検・チェックリスト・メモを本文に書くことを固く禁じる。【】で囲んだ管理用ブロックを本文に出さない。',
               '・「フィードバック：」「評価：」「総評：」や「〜規則対応」「〜ルール準拠」「正しく機能している」等、自分の出力への講評・ルール遵守の注記を本文末尾などに一切書かない。物語だけを書く。',
-              '・出力は物語の地の文と登場人物のセリフ（「」/ <say>）だけ。'].join('\n');
+              // v292Dfix155②(2026-05-30): 出力順序の明確化。#77空応答の主因は、状態メモ<state>と
+              //   本文が混在し、本文が薄い/後ろに回って parse で捨てられること。fix77は<state>出力を
+              //   必要とするので禁止はせず、「本文を必ず先に書き切る／<state>は末尾に1回だけ／<summary>は禁止」
+              //   と順序を固定して本文を守る。
+              '・本文として出力してよいのは物語の地の文と登場人物のセリフ（「」/ <say>）だけ。',
+              '・まず物語の本文を必ず最初に、十分な分量で書き切る。状態メモ <state>…</state> を使う場合は本文を書き終えた後に1回だけ末尾に置く（本文より前に置かない・本文を<state>で置き換えない）。',
+              '・<summary> や、その他のメモ用タグ・見出し・要約ブロックは本文中に一切出力しない。'].join('\n');
             // v292Dfix135+136+137: long-term memory blocks (summary / world info / events).
             // v292Dfix141: switched 【〜】 headers to plain "--- ---" to avoid model paraphrasing.
             // v292Dfix143: compression mode — when sys is bloated (long-term play accumulates
@@ -9447,7 +9522,7 @@
                 }
               }
             } catch(_e135){}
-            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_continueHint138 ? ('\n\n' + _continueHint138) : '') + (_react ? ('\n\n' + _react) : '') + (_dlg ? ('\n\n' + _dlg) : '') + (_voice ? ('\n\n' + _voice) : '') + '\n\n' + _banter + '\n\n' + _depict + '\n\n' + _continuity + (_continuityNeo ? ('\n\n' + _continuityNeo) : '') + (_charState ? ('\n\n' + _charState) : '') + (_summary ? ('\n\n' + _summary) : '') + (_worldInfo ? ('\n\n' + _worldInfo) : '') + (_events ? ('\n\n' + _events) : '') + '\n\n' + _fewshot + '\n\n' + _guard;
+            r.sys = r.sys + '\n\n' + _rep + (_drama ? ('\n\n' + _drama) : '') + (_continueHint138 ? ('\n\n' + _continueHint138) : '') + (_react ? ('\n\n' + _react) : '') + (_dlg ? ('\n\n' + _dlg) : '') + (_voice ? ('\n\n' + _voice) : '') + '\n\n' + _banter + '\n\n' + _depict + '\n\n' + _continuity + (_continuityNeo ? ('\n\n' + _continuityNeo) : '') /* v292Dfix155③: _charState(fix133)はfix77状態ブロック+点呼と重複しsysを膨らませる主因なのでassemblyから除外 */ + (_summary ? ('\n\n' + _summary) : '') + (_worldInfo ? ('\n\n' + _worldInfo) : '') + (_events ? ('\n\n' + _events) : '') + '\n\n' + _fewshot + '\n\n' + _guard;
 
             // v292Dfix150(2026-05-30): post-assembly safety net. fix143 の圧縮判定は
             // `r.sys.length > 5500` で base prompt のみ見てたので、長期プレイで longmem
