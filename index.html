@@ -396,6 +396,17 @@ const S = {
   mode: 'DO',
   inFlight: false, reqId: 0, editIdx: -1,
   save() {
+    // v292Dfix170D: 多タブclobberガード。別タブがreset(=chr6_epoch更新)していたら、この
+    //   タブは古い在メモリ状態のまま→保存すると相手のresetを巻き戻す(モナリザ化け物復活の元)。
+    //   その場合は保存せずリロードし、クリーンな状態を読み直す。
+    try {
+      const _ep = +(localStorage.getItem('chr6_epoch') || 0);
+      if (window.__chrEpoch && _ep > window.__chrEpoch) {
+        console.warn('[v292Dfix170D] stale tab (epoch ' + window.__chrEpoch + ' < ' + _ep + ') — skip save & reload');
+        location.reload();
+        return;
+      }
+    } catch (e) {}
     SS.set(KEY, { cfg: this.cfg, cast: this.cast, scene: this.scene, turns: this.turns, mode: this.mode });
   },
   load() {
@@ -409,6 +420,30 @@ const S = {
     return true;
   }
 };
+
+// ─────────────────────────────────────────────────────────────
+// v292Dfix170D: 多タブ世代トークン(epoch)。リセットしたタブがepochを更新し、
+//   他の古いタブは①保存時にepoch比較でclobber阻止(S.save) ②storageイベントで
+//   即リロード、の二段で「古いタブがリセットを巻き戻す」事故を防ぐ。
+// ─────────────────────────────────────────────────────────────
+(function v292Dfix170D_epoch(){
+  try {
+    let ep = +(localStorage.getItem('chr6_epoch') || 0);
+    if (!ep) { ep = Date.now(); try { localStorage.setItem('chr6_epoch', String(ep)); } catch(_){} }
+    window.__chrEpoch = ep;
+    window.addEventListener('storage', function(e){
+      try {
+        if (e.key === 'chr6_epoch') {
+          const nv = +(e.newValue || 0);
+          if (nv > (window.__chrEpoch || 0)) {
+            console.warn('[v292Dfix170D] another tab reset (epoch ' + nv + ') — reloading this stale tab');
+            location.reload();
+          }
+        }
+      } catch(_){}
+    });
+  } catch(e){}
+})();
 
 // ─────────────────────────────────────────────────────────────
 // PsychEngine — NPC 心理状態の追跡・更新
@@ -1683,6 +1718,9 @@ const G = {
   //   一切無く、localStorage と in-memory `window.__v292Dfix77Store` の両方に前ゲームのキャラ状態が永続。
   //   longmem(worldinfo/summary/events) も 4秒ポーラ頼みでレース条件があった。ここで全て同期的に消す。
   _clearDerivedState() {
+    // v292Dfix170D: epochを更新して他タブにresetを通知（他タブはstorageイベントでリロード／
+    //   保存時にclobber阻止）。これで「古いタブがリセットを書き戻す」事故を防ぐ。
+    try { const _ne = Date.now(); localStorage.setItem('chr6_epoch', String(_ne)); window.__chrEpoch = _ne; } catch (e) {}
     // longmem: あらすじ・キャラDB(worldinfo)・重要事象
     try { if (window.__longmem && window.__longmem.reset) window.__longmem.reset(); } catch (e) {}
     try {
