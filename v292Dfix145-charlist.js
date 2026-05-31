@@ -87,9 +87,18 @@
     //   3. Most recent narrative sentence mentioning the character (last 5 turns)
     //   4. "（まだ物語に登場していません）" placeholder
     var s77 = fix77StateFor(name);
-    if (s77) return s77;
-    if (worldDesc && String(worldDesc).trim()){
-      return String(worldDesc).slice(0, 120);
+    var _wd = (worldDesc && String(worldDesc).trim()) ? String(worldDesc).trim() : '';
+    if (s77){
+      // v292Dfix172: fix77(体/心/本能)は重大な恒久損傷(眼球喪失/欠損等)を取りこぼしたり
+      //   古いターンで止まることがある。longmem worldinfo(物語から抽出した要約)に
+      //   損傷・状況が入っていれば〔記録〕として併記し、状態欄の見落としを防ぐ。
+      if (_wd && s77.indexOf(_wd.slice(0, 8)) < 0){
+        return s77 + '  ／ 〔記録〕' + _wd.slice(0, 60);
+      }
+      return s77;
+    }
+    if (_wd){
+      return _wd.slice(0, 120);
     }
     if (!name || !turns || !turns.length) return '（まだ物語に登場していません）';
     var recent = turns.slice(-5);
