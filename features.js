@@ -2930,6 +2930,7 @@
       if (/という(?:不可解な)?(?:時間軸の)?展開です[。\.]?$/.test(s) && s.length > 25) return true;
       if (WORK_REPORT.test(s)) return true;   // 作業報告・自己説明メタ
       if (/模擬シミュレーション|シミュレーション的|思考実験|メタ認知|思考ループ|思考ルーブ/.test(s)) return true;   // v292Dfix163: メタ認知的暴走（反応フィールド由来）
+      if (/戦術記憶|収容開始|敵性存在|状態へ移行|「観察中」|次なる動作へシフト|関心ゼロ|情報として処理|解析に入った/.test(s)) return true;   // v292Dfix169: 状態機械的メタ漏れ（fix77状態の本文漏れ）
       return false;
     }
     function register(){

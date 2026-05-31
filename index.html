@@ -1541,6 +1541,36 @@ const G = {
     document.getElementById('inp').placeholder = phs[m] || '';
   },
 
+  // v292Dfix169(案B): 会話ログ専用の2段階生成。本文(展開)を入力に、各キャラが実際に口に
+  //   出した発話だけを軽量プロンプト＋小max_tokensで生成する。状態描写・内心は出させない。
+  async genConvLog(narr) {
+    try {
+      const c = S.cast || {};
+      const names = [];
+      if (c.hero && c.hero.name) names.push(c.hero.name);
+      if (Array.isArray(c.npcs)) c.npcs.forEach(n => { if (n && n.name) names.push(n.name); });
+      const sys2 = [
+        'あなたはホラーTRPGの会話ログ生成器です。以下の「今ターンの展開」を読み、登場キャラがこの瞬間に実際に声に出した言葉だけをJSON配列で返してください。',
+        '・出力するのは口から出た発話のみ：叫び・悲鳴・呻き・命乞い・短いセリフなど、その瞬間に漏れた生の言葉。',
+        '・状態描写・内心・地の文・「〜する」「〜した」「〜を見つめる」のような描写文は絶対に含めない。',
+        '・実際に発話していないキャラは含めない（無言なら出さない）。誰も発話していなければ空配列 [] を返す。',
+        '・名無しの存在（怪物・異形・謎の声）が言葉を発した場合は who を「異形」「謎の声」等にしてよい。地の文の主語が状態描写しているだけなら発話ではない。',
+        '・各 say は短く、口から出た言葉そのまま（説明や要約をしない）。',
+        '登場キャラ: ' + (names.join('、') || '(不明)'),
+        '出力はJSON配列のみ（前後に説明やコードフェンスを書かない）: [{"who":"名前","say":"実際に口に出した言葉"}]'
+      ].join('\n');
+      const user2 = '今ターンの展開:\n' + String(narr || '').replace(/<[^>]+>/g, '').slice(0, 1800);
+      const r2 = await Api.call(sys2, user2, 500);
+      const txt = (r2 && r2.text) || '';
+      let arr = [];
+      try { const mi = txt.indexOf('['), mj = txt.lastIndexOf(']'); if (mi >= 0 && mj > mi) arr = JSON.parse(txt.slice(mi, mj + 1)); } catch(e){}
+      if (!Array.isArray(arr)) arr = [];
+      return arr.filter(x => x && x.who && x.say && String(x.say).trim())
+                .map(x => ({ who: String(x.who).trim().slice(0, 24), say: String(x.say).trim().slice(0, 80) }))
+                .slice(0, 8);
+    } catch(e) { try { console.warn('[v292Dfix169] genConvLog err:', e && e.message); } catch(_){} return []; }
+  },
+
   async submit() {
     if (S.inFlight) return;
     const inputEl = document.getElementById('inp');
@@ -1574,11 +1604,21 @@ const G = {
 
       const narr = plan.narrative.join('\n');
 
+      // v292Dfix169(案B): 会話ログを本文から切り離し、専用の2段階生成で「実際に口に出した
+      //   発話だけ」を作る。これで状態描写・メタが会話ログに構造的に入らず、空にもならない。
+      let _convSays = [];
+      try { _convSays = await this.genConvLog(narr); } catch(e){ _convSays = []; }
+      // SAY入力は主人公の実発話なので会話ログ先頭に必ず入れる
+      if (S.mode === 'SAY' && text && S.cast && S.cast.hero && S.cast.hero.name){
+        _convSays.unshift({ who: S.cast.hero.name, say: String(text).replace(/^[「『]|[」』]$/g,'').slice(0,80) });
+      }
+
       const turn = {
         inputType:       S.mode,
         playerText:      text,
         narrative:       narr,
         plan,
+        _convSays:       _convSays,   // v292Dfix169: 会話ログ専用の発話リスト
         dbg: S.cfg.debug ? { sys, user, raw: result.text } : null
       };
 
@@ -2246,7 +2286,7 @@ G.init();
 })();
 </script>
 <!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
-<script src="features.js?cb=v292Dfix150m"></script>
+<script src="features.js?cb=v292Dfix150n"></script>
 <script src="v292Dfix135-longmem.js?cb=v292Dfix135d"></script>
 <script src="v292Dfix138-continue.js?cb=v292Dfix142"></script>
 <script src="v292Dfix145-charlist.js?cb=v292Dfix145e"></script>
@@ -2265,7 +2305,7 @@ G.init();
   <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix64"></script>
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=v292Dfix74"></script>
-  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix168"></script>
+  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix169"></script>
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
     <script src="v292Dfix70-dialogue-order.js?cb=v292Dfix70"></script>

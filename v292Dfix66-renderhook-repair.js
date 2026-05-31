@@ -1165,22 +1165,25 @@
       for (var i = 0; i < turns.length; i++){
         var t = turns[i];
         if (!t) continue;
-        var ds = extractFromTurn(t);
-        // v292Dfix168: 会話ログのセリフ源を「反応生成の声」だけに一本化する。
-        //   turn.plan._rvVoices(反応生成が出した声の集合)があれば、その声＋プレイヤーSAY発話だけを
-        //   会話ログに残し、本文中の「」(状態描写・行動描写を含む地の文)は会話ログに出さない。
-        //   _rvVoices が無い旧ターンは従来通り(全抽出)で互換。
-        try {
-          var _rv = (t && t.plan && Array.isArray(t.plan._rvVoices)) ? t.plan._rvVoices : null;
-          if (_rv){
-            var _rvSet = {}; for (var _ri = 0; _ri < _rv.length; _ri++){ _rvSet[String(_rv[_ri]).trim()] = true; }
-            var _sayT = (t.inputType === 'SAY' && t.playerText) ? String(t.playerText).trim() : null;
-            ds = ds.filter(function(_d){
-              var _x = String(_d.text || '').trim();
-              return _rvSet[_x] || (_sayT && _x === _sayT);
-            });
-          }
-        } catch(_e168){}
+        // v292Dfix169(案B): 会話ログのセリフ源を本文から切り離す。turn._convSays(専用の2段階生成で
+        //   作った「実際に口に出した発話」リスト)があれば、それだけで会話ログを作り、本文の「」抽出は
+        //   一切使わない。これで状態描写・メタが構造的に会話ログに入らない。
+        var ds;
+        if (t && Array.isArray(t._convSays)){
+          ds = t._convSays.map(function(c){ return { speaker: String(c.who||'').trim(), text: String(c.say||'').trim(), isHero: false }; })
+                          .filter(function(d){ return d.text; });
+        } else {
+          ds = extractFromTurn(t);
+          // v292Dfix168(旧ターン互換): plan._rvVoices があればその声＋SAYだけ、無ければ全抽出。
+          try {
+            var _rv = (t && t.plan && Array.isArray(t.plan._rvVoices)) ? t.plan._rvVoices : null;
+            if (_rv){
+              var _rvSet = {}; for (var _ri = 0; _ri < _rv.length; _ri++){ _rvSet[String(_rv[_ri]).trim()] = true; }
+              var _sayT = (t.inputType === 'SAY' && t.playerText) ? String(t.playerText).trim() : null;
+              ds = ds.filter(function(_d){ var _x = String(_d.text || '').trim(); return _rvSet[_x] || (_sayT && _x === _sayT); });
+            }
+          } catch(_e168){}
+        }
         for (var j = 0; j < ds.length; j++){
           var d = ds[j];
           if (isSayEcho(t, d, hero)) continue;
