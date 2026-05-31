@@ -1282,7 +1282,9 @@
         if (!__t) continue;
         // v292Dfix158: 内心独白カードは会話ログから除外（右の展開には残る）
         if (__innerSet2[__t] && __c.parentNode){ __c.parentNode.removeChild(__c); continue; }
-        if (looksStateDescriptionCard(__t) && __c.parentNode){ __c.parentNode.removeChild(__c); continue; }  // v292Dfix164
+        // v292Dfix165: 状態描写カードの除去はsweepから外す（メインcleanup=repair内で実施）。
+        //   sweepで除去するとカード数がfix128のpeakを下回り→regression検知→repair()再追加→
+        //   除去…の1.2秒ループになり会話ログが再描画され続けてスクロール不能になるため。
         // STORY/DO scene-direction echo input card whose text isn't a quoted utterance → drop
         if (__c.className.indexOf('v292Dfix56-input-card') !== -1 && !quotedInNarr(allNarr, __t)){
           if (__c.parentNode) __c.parentNode.removeChild(__c);
