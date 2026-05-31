@@ -396,6 +396,18 @@
     return s;
   }
 
+  // v292Dfix164: 会話ログから「状態描写（地の文）がセリフ化されたカード」を除外する。
+  //   モデルが「全裸にされたまま…身体が震える」「眼窩を貫かれて…苦痛に身悶える」のような
+  //   ナレーション的状態記述を発話扱いで出すと、キャラがそれを声に出したように見えて不自然。
+  //   実際の叫び・命乞い（短い・呼びかけ）は誤除外しないよう長さと語尾で判定する。
+  function looksStateDescriptionCard(t){
+    t = String(t || '').trim().replace(/[。、！？…\s]+$/,'');
+    if (!t || t.length < 14) return false;
+    if (/(震え[るた]|身悶え[るた]|崩れ落ち[るた]|木霊し?た|途切れ[るた]|していた|だった|滲[むんだ]|溢れ[るた]|竦[むんだ]|凍[るっ]た?|見つめ[るた]|揺れ[るた]|感じ(?:る|た|ている))$/.test(t)) return true;
+    if (/(自分の(?:無力|身体|意識|存在)|彼女の(?:身体|声|顔|意識)|その身体|肉体が|裸の身体)/.test(t)) return true;
+    return false;
+  }
+
   // 既存 stream 内のカードを (speaker|text) のみで集計
   // (bare-key '|text' は廃止: NPC text と hero text 衝突時の取りこぼし防止)
   function collectExistingKeys(stream){
@@ -1097,6 +1109,11 @@
             __c.parentNode.removeChild(__c);
             continue;
           }
+          // v292Dfix164: 状態描写がセリフ化されたカードを会話ログから除外
+          if (looksStateDescriptionCard(__tx.textContent || '') && __c.parentNode){
+            __c.parentNode.removeChild(__c);
+            continue;
+          }
           // v292Dfix110: fix a doubled speaker name ("AはA" -> "A") in-place on
           // ANY existing card (incl. ones built by earlier render hooks), so the
           // surviving card after dedup shows the clean name.
@@ -1265,6 +1282,7 @@
         if (!__t) continue;
         // v292Dfix158: 内心独白カードは会話ログから除外（右の展開には残る）
         if (__innerSet2[__t] && __c.parentNode){ __c.parentNode.removeChild(__c); continue; }
+        if (looksStateDescriptionCard(__t) && __c.parentNode){ __c.parentNode.removeChild(__c); continue; }  // v292Dfix164
         // STORY/DO scene-direction echo input card whose text isn't a quoted utterance → drop
         if (__c.className.indexOf('v292Dfix56-input-card') !== -1 && !quotedInNarr(allNarr, __t)){
           if (__c.parentNode) __c.parentNode.removeChild(__c);
