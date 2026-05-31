@@ -442,6 +442,19 @@ const S = {
         }
       } catch(_){}
     });
+    // v292Dfix170D2: タブを前面に戻した瞬間にも鮮度チェック。背景中に別タブがresetして
+    //   いたら（storageイベントを取りこぼしていても）、書き込む前にリロードしてクリーンな
+    //   状態を読み直す。single-writer設計＝書くのは前面かつ最新epochのタブだけ。
+    document.addEventListener('visibilitychange', function(){
+      try {
+        if (document.hidden) return;
+        const ep = +(localStorage.getItem('chr6_epoch') || 0);
+        if (window.__chrEpoch && ep > window.__chrEpoch) {
+          console.warn('[v292Dfix170D2] became visible while stale (epoch ' + window.__chrEpoch + ' < ' + ep + ') — reloading');
+          location.reload();
+        }
+      } catch(_){}
+    });
   } catch(e){}
 })();
 
@@ -2332,7 +2345,7 @@ G.init();
 </script>
 <!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
 <script src="features.js?cb=v292Dfix150o"></script>
-<script src="v292Dfix135-longmem.js?cb=v292Dfix135d"></script>
+<script src="v292Dfix135-longmem.js?cb=v292Dfix135e"></script>
 <script src="v292Dfix138-continue.js?cb=v292Dfix142"></script>
 <script src="v292Dfix145-charlist.js?cb=v292Dfix145e"></script>
 <script src="v292Dfix52-readability.js?cb=v292Dfix52"></script>

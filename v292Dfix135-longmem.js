@@ -38,15 +38,28 @@
     return window.S || null;
   }
 
+  // ---------- v292Dfix170D2: single-writer ガード ----------
+  // 背景(非表示)タブ・古い世代(epoch)のタブは longmem を書かない。これで「裏で開いた
+  // 古い状態のタブのポーラが worldinfo を書き戻してリセットを巻き戻す」clobberを防ぐ。
+  // 書くのは前面かつ最新epochのタブだけ＝single-writer。読み込みは常に許可。
+  function _lmCanWrite(){
+    try {
+      if (typeof document !== 'undefined' && document.hidden) return false;        // 背景タブは書かない
+      var ep = +(localStorage.getItem('chr6_epoch') || 0);
+      if (window.__chrEpoch && ep > window.__chrEpoch) return false;               // 別タブがreset済=stale
+    } catch(e){}
+    return true;
+  }
+
   // ---------- storage ----------
   function loadSummary(){ try { return localStorage.getItem(LSP_SUMMARY) || ''; } catch(e){ return ''; } }
-  function saveSummary(s){ try { localStorage.setItem(LSP_SUMMARY, String(s || '').slice(0, 800)); } catch(e){} }
+  function saveSummary(s){ if(!_lmCanWrite())return; try { localStorage.setItem(LSP_SUMMARY, String(s || '').slice(0, 800)); } catch(e){} }
   function loadWorldInfo(){ try { return JSON.parse(localStorage.getItem(LSP_WORLDINFO) || '[]') || []; } catch(e){ return []; } }
-  function saveWorldInfo(arr){ try { localStorage.setItem(LSP_WORLDINFO, JSON.stringify((arr || []).slice(0, 40))); } catch(e){} }
+  function saveWorldInfo(arr){ if(!_lmCanWrite())return; try { localStorage.setItem(LSP_WORLDINFO, JSON.stringify((arr || []).slice(0, 40))); } catch(e){} }
   function loadEvents(){ try { return JSON.parse(localStorage.getItem(LSP_EVENTS) || '[]') || []; } catch(e){ return []; } }
-  function saveEvents(arr){ try { localStorage.setItem(LSP_EVENTS, JSON.stringify((arr || []).slice(0, 20))); } catch(e){} }
+  function saveEvents(arr){ if(!_lmCanWrite())return; try { localStorage.setItem(LSP_EVENTS, JSON.stringify((arr || []).slice(0, 20))); } catch(e){} }
   function loadLastBuild(){ try { return parseInt(localStorage.getItem(LSP_LASTBUILD) || '-1', 10); } catch(e){ return -1; } }
-  function saveLastBuild(idx){ try { localStorage.setItem(LSP_LASTBUILD, String(idx)); } catch(e){} }
+  function saveLastBuild(idx){ if(!_lmCanWrite())return; try { localStorage.setItem(LSP_LASTBUILD, String(idx)); } catch(e){} }
 
   // ---------- LLM call ----------
   function buildPrompt(prevSummary, prevWorldInfo, prevEvents, newTurns, startIdx){
