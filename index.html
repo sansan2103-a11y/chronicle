@@ -662,10 +662,13 @@ const Api = {
 
       // v292 Tier 1.5 Fix G: also retry on incomplete Hermes responses
       // (response missing narrative key, or contains "省略" laziness marker)
-      // v292Dfix170A: opts.allowShort=true のコール(genConvLog等の設計上短い出力)は
-      //   text.length<200 の不完全判定を免除。短いJSON配列で毎回2回リトライ(=3コール)していた
-      //   レスポンス遅延/コンソールのRetry連発を根治。外国語混入チェックは残す。
-      const isIncomplete = (!opts.allowShort && text.length < 200) || /以下省略|（省略|省略\)/.test(text);
+      // v292Dfix170A: opts.allowShort=true のコール(genConvLog等の設計上短い出力)は不完全判定を免除。
+      // v292Dfix170C: 「短い」だけでリトライせず、タグ(<state>/<react>/<say>等)と記号を除いた
+      //   実質の地の文が極端に少ない時だけ不完全とみなす。#77はproseが書けてるのにタグ混在で
+      //   parseが捨てるケース=raw にproseは在る→salvage155が後で救済するのでリトライ不要。
+      //   これでsysサイズ起因の不要リトライ(=毎ターン裏で再生成→遅延)を削減。
+      const _proseLen = String(text).replace(/<[^>]+>/g, '').replace(/[「」『』\s　\[\]{}",:|]/g, '').length;
+      const isIncomplete = (!opts.allowShort && _proseLen < 40) || /以下省略|（省略|省略\)/.test(text);
       if (attempt < maxRetries && (this._hasForeignGarbage(text) || isIncomplete)) {
         const reason = isIncomplete ? '不完全な出力' : '外国語混入';
         console.warn(`[Retry ${attempt+1}/${maxRetries}] ${reason}を検出、再生成します`);
@@ -1553,10 +1556,11 @@ const G = {
       if (c.hero && c.hero.name) names.push(c.hero.name);
       if (Array.isArray(c.npcs)) c.npcs.forEach(n => { if (n && n.name) names.push(n.name); });
       const sys2 = [
-        'あなたはホラーTRPGの会話ログ生成器です。以下の「今ターンの展開」を読み、登場キャラがこの瞬間に実際に声に出した言葉だけをJSON配列で返してください。',
-        '・出力するのは口から出た発話のみ：叫び・悲鳴・呻き・命乞い・短いセリフなど、その瞬間に漏れた生の言葉。',
+        'あなたはホラーTRPGの会話ログ生成器です。以下の「今ターンの展開」を読み、登場キャラがこの瞬間に実際に声に出したものだけをJSON配列で返してください。',
+        '・出力するのは口から出たもの：言葉・呼びかけ・会話・短いセリフを最優先に、加えて意味や感情のこもった叫び・命乞い・呻きも含めてよい。',
+        '・ただし純粋な息遣い・呼吸音だけのもの（「ハァッ」「フー」「ぜぇ」「……っク…サ…」等のあえぎだけで言葉も感情の叫びでもないもの）は会話ログに出さない（地の文に属する）。',
         '・状態描写・内心・地の文・「〜する」「〜した」「〜を見つめる」のような描写文は絶対に含めない。',
-        '・実際に発話していないキャラは含めない（無言なら出さない）。誰も発話していなければ空配列 [] を返す。',
+        '・実際に発話していないキャラは含めない（無言なら出さない）。誰も発話していなければ空配列 [] を返す。沈黙は正しい結果。',
         '・名無しの存在（怪物・異形・謎の声）が言葉を発した場合は who を「異形」「謎の声」等にしてよい。地の文の主語が状態描写しているだけなら発話ではない。',
         '・各 say は短く、口から出た言葉そのまま（説明や要約をしない）。',
         '登場キャラ: ' + (names.join('、') || '(不明)'),
