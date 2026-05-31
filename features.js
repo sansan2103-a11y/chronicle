@@ -2841,20 +2841,22 @@
       Planner._parseExtensions.push(function reactionVoiceExt(plan, ctx){
         try {
           var raw = (ctx && ctx.raw) ? String(ctx.raw) : '';
-          if (!raw || raw.indexOf('<voice') < 0) return plan;
+          // v292Dfix162: <react who 反応 声>(新・因果順) と 旧<voice who 心 声> の両対応。
+          if (!raw || (raw.indexOf('<voice') < 0 && raw.indexOf('<react') < 0)) return plan;
           if (!plan || !Array.isArray(plan.narrative)) return plan;
-          // strip any <voice ...> that leaked into the narrative body (本文には出さない)
+          // strip any <voice>/<react> that leaked into the narrative body (本文には出さない)
           plan.narrative = plan.narrative
-            .map(function(line){ return String(line).replace(/<voice\b[^>]*?>/gi, '').trim(); })
+            .map(function(line){ return String(line).replace(/<(?:voice|react)\b[^>]*?>/gi, '').trim(); })
             .filter(function(line){ return line && line.length > 0; });
-          // extract each <voice who 心 声> from raw → conv-log <say> lines
-          var rx = /<voice\b([^>]*?)\/?>/gi, m, adds = [], seen = {};
+          // extract each <voice|react who 反応/心 声> from raw → conv-log <say> lines
+          var rx = /<(?:voice|react)\b([^>]*?)\/?>/gi, m, adds = [], seen = {};
           while ((m = rx.exec(raw)) !== null){
             var body = m[1] || '';
             var who = attrOf(body, 'who') || attrOf(body, '誰');
             if (!who) continue;
             var koe = attrOf(body, '声') || attrOf(body, 'koe') || attrOf(body, 'say');
-            var kokoro = attrOf(body, '心') || attrOf(body, 'kokoro');
+            // v292Dfix162: 反応(身体+感情+内心)は (心) カード扱い＝会話ログから除外され右の展開に残る。
+            var kokoro = attrOf(body, '反応') || attrOf(body, '心') || attrOf(body, 'kokoro') || attrOf(body, 'react');
             var key = who + '|' + koe + '|' + kokoro;
             if (seen[key]) continue; seen[key] = 1;
             if (koe) adds.push('<say who="' + who + '">' + koe + '</say>');
@@ -9573,11 +9575,16 @@
             //   で <say who="名前">声</say> と <say who="名前(心)">心</say> に展開して会話ログに反映する。
             //   この反応ブロックには fix69 の感情命名禁止を適用しない＝痛み/恐怖/絶望/呼びかけを率直に。
             // v292Dfix161: 軽量化圧縮（趣旨保持）。
-            var _reactVoice = ['【キャラの反応＝本文の後に必ず出力（会話ログ用・率直に）】',
-              '本文を書き終えたら、その展開を受けて各登場キャラの内心と発言を出力（本文の後・<state>の前）：<voice who="名前" 心="一人称の内心・断片可" 声="セリフ・無ければ空"/>',
-              '・いま場にいて反応しうるキャラは全員ぶん（最低でも直近登場キャラ）。各キャラの性格と現在状態(体・心・本能)に即して。',
-              '・痛み・恐怖・絶望・怒りは身体感覚や声で率直に出してよい（ここでは感情の直接表現を禁止しない＝怖い・痛い・助けて と言わせてよい）。掛け合い歓迎（呼びかけ→応答、悲鳴→駆け寄り、自責→制止）。独白の羅列にしない。',
-              '・<voice>は本文に混ぜず必ず後にまとめる。主人公の<voice>はプレイヤー入力と矛盾しない範囲の内心・短い反応に留める。'].join('\n');
+            // v292Dfix162(2026-05-30): おしん設計＝人間の自然な順「展開→反応→声」でキャラの反応を作る。
+            //   「声」を"考えた末の独白"でなく"反応として口から漏れたもの"に定義し直す。整った抽象的独白
+            //   (後悔/選択/存在 等)は「反応」(内心)に回し、声は生の発声(悲鳴/呻き/嗚咽/断片)に寄せる。
+            //   ルールで細かく縛らず、出力の順序(反応→声)で自然に導く。reactionVoiceExt が <react> を解析。
+            var _reactVoice = ['【キャラの反応＝本文の後に必ず出力（会話ログ用）】',
+              '本文を書き終えたら、各登場キャラについて「展開→反応→声」の順に考えて出力する（本文の後・<state>の前）：',
+              '<react who="名前" 反応="この展開で身体と心がどう動いたか＝竦む/涙/息が詰まる/震え/視線が泳ぐ 等の身体反応＋恐怖・絶望・安堵などの感情。考えた末の分析や独白もここに書く" 声="その反応として実際に口から漏れた音・言葉。悲鳴・呻き・嗚咽・荒い息・途切れた断片・短い生のセリフ。言葉にならない音でよい。何も発さないなら空"/>',
+              '・最重要: 「声」は"反応として口から漏れたもの"であり、頭で整理した独白ではない。「後悔」「選択」「存在」のような抽象的で整った文は声に書かず必ず「反応」に回す。声は短く生々しく、途切れてよい。',
+              '・恐怖・激痛・絶望の瞬間は、冷静な性格のキャラでも、まず身体が反応し本能的な声（悲鳴/呻き/泣き）が先に漏れる。整った言葉より生の発声を優先する。',
+              '・いま場にいて反応しうるキャラは全員ぶん。掛け合い歓迎（悲鳴→駆け寄り、自責→制止）。<react>は本文に混ぜず必ず後にまとめる。主人公の声はプレイヤー入力と矛盾しない範囲に留める。'].join('\n');
             // v292Dfix160(2026-05-30): 名無しの存在(怪物/異形/謎の声)のセリフが、近くの人間cast
             //   (カエデ/ミリア等)の発言として会話ログに誤割り当てされる問題。原因=別ファイル(fix74)の
             //   「who には必ず cast に登録された名前を入れる（??? や代名詞は不可）」制約。ここで例外を
@@ -9590,7 +9597,7 @@
             var _guard = ['【最重要・出力の鉄則（最後に必ず確認）】',
               '・自然で文法的に正しい日本語で書く（主述のねじれ・位置関係の矛盾・意味の通らない文を避け、凝るより明確に通る文を優先）。',
               '・ここまでの全ルールは内部指示であり本文に出力しない。ルールの列挙・自己点検・チェックリスト・メモ・【】管理ブロック・自己講評（「フィードバック：」「評価：」「〜準拠」「正しく機能している」等）を本文に書かない。',
-              '・本文として出すのは物語の地の文と登場人物のセリフ（「」/<say>）だけ。まず本文を十分な分量で書き切り、次にキャラ反応<voice .../>、最後に<state>…</state> の順で本文の後に置く（本文より前に置かない・本文をタグで置き換えない）。<summary>等のメモ用タグは本文に書かない。',
+              '・本文として出すのは物語の地の文と登場人物のセリフ（「」/<say>）だけ。まず本文を十分な分量で書き切り、次にキャラ反応<react .../>、最後に<state>…</state> の順で本文の後に置く（本文より前に置かない・本文をタグで置き換えない）。<summary>等のメモ用タグは本文に書かない。',
               '・「（この物語は…）」「（…として位置付けられています）」型の作品解説・前置き・時間軸説明を本文（特に冒頭）に書かず、いきなり場面から始める。状態や反応は地の文と<voice>で描き、「（身体）」「（頭）」「（心）」のような括弧ラベルで箇条書きにしない。'].join('\n');
             // v292Dfix135+136+137: long-term memory blocks (summary / world info / events).
             // v292Dfix141: switched 【〜】 headers to plain "--- ---" to avoid model paraphrasing.
