@@ -2868,7 +2868,7 @@
           // extract each <voice|react who 反応/心 声> from raw → conv-log <say> lines
           // v292Dfix163: 値長をキャップ（暴走した超長文がカード化されないように）。
           function cap(s, n){ s = String(s||'').trim(); return s.length > n ? s.slice(0, n) : s; }
-          var rx = /<(?:voice|react)\b([^>]*?)\/?>/gi, m, adds = [], seen = {};
+          var rx = /<(?:voice|react)\b([^>]*?)\/?>/gi, m, adds = [], seen = {}, rvKoe = [];
           while ((m = rx.exec(raw)) !== null){
             var body = m[1] || '';
             var who = attrOf(body, 'who') || attrOf(body, '誰');
@@ -2880,9 +2880,12 @@
             if (koe && looksStateDescription(koe)){ if (!kokoro) kokoro = koe; koe = ''; }
             var key = who + '|' + koe + '|' + kokoro;
             if (seen[key]) continue; seen[key] = 1;
-            if (koe) adds.push('<say who="' + who + '">' + koe + '</say>');
+            if (koe){ adds.push('<say who="' + who + '">' + koe + '</say>'); rvKoe.push(koe); }
             if (kokoro) adds.push('<say who="' + who + '(心)">' + kokoro + '</say>');
           }
+          // v292Dfix168: 会話ログ一本化用に、反応生成の「声」テキスト集合を turn(plan) に記録する。
+          //   fix66 はこれを使い、本文の「」(状態描写含む)を会話ログから外して反応の声だけ表示する。
+          try { plan._rvVoices = (Array.isArray(plan._rvVoices) ? plan._rvVoices : []).concat(rvKoe); } catch(_rv){}
           if (adds.length){
             plan.narrative = plan.narrative.concat(adds);
             try { console.log(TAG, 'injected', adds.length, 'reaction lines'); } catch(_){}
