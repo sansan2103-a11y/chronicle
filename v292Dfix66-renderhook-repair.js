@@ -402,9 +402,11 @@
   //   実際の叫び・命乞い（短い・呼びかけ）は誤除外しないよう長さと語尾で判定する。
   function looksStateDescriptionCard(t){
     t = String(t || '').trim().replace(/[。、！？…\s]+$/,'');
-    if (!t || t.length < 14) return false;
-    if (/(震え[るた]|身悶え[るた]|崩れ落ち[るた]|木霊し?た|途切れ[るた]|していた|だった|滲[むんだ]|溢れ[るた]|竦[むんだ]|凍[るっ]た?|見つめ[るた]|揺れ[るた]|感じ(?:る|た|ている))$/.test(t)) return true;
-    if (/(自分の(?:無力|身体|意識|存在)|彼女の(?:身体|声|顔|意識)|その身体|肉体が|裸の身体)/.test(t)) return true;
+    if (!t || t.length < 12) return false;
+    // ナレーション的な描写の語尾（人がセリフで言わない形）— v292Dfix166で痙攣/こわばる等を追加
+    if (/(震え[るた]|震わせ[るた]?|身悶え[るた]|崩れ落ち[るた]|木霊し?た|途切れ[るた]|していた|だった|滲[むんだ]|溢れ[るた]|竦[むんだ]|凍[るっ]た?|見つめ[るた]|揺れ[るた]|痙攣させ[るた]|痙攣す[るた]|こわば[るっ]た?|強ば[るっ]た?|引きつ[るった]|喘[ぐいだ]|感じ(?:る|た|ている))$/.test(t)) return true;
+    // 三人称的な状態記述・体の描写
+    if (/(自分の(?:無力|身体|意識|存在)|彼女の(?:身体|声|顔|意識)|その身体|肉体が|裸の身体|全裸のまま|体を[^」]{0,20}(?:させ|痙攣|震わせ|縮))/.test(t)) return true;
     return false;
   }
 
@@ -966,6 +968,9 @@
           if (isNonSpeechQuote(preprocessed, String(d.text))) continue;
           // v292Dfix125: skip onomatopoeia/sound quotes ("カサッ"→という鈍い音)
           if (isOnomatopoeiaQuote(preprocessed, String(d.text))) continue;
+          // v292Dfix166: 状態描写(地の文)がセリフ化されたものはカードを作らない（＝会話ログに出さない）。
+          //   抽出段階で弾くのでDOM除去が不要＝fix128 regression detectorと衝突せずスクロールも安定。
+          if (looksStateDescriptionCard(String(d.text))) continue;
           // v292Dfix97: resolve post-positioned speaker (「…」と、◯◯の悲鳴…)
           if (!d.speaker){
             var rs = resolvePostQuoteSpeaker(preprocessed, String(d.text), _names);
