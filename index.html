@@ -532,7 +532,7 @@ const Api = {
     return s;
   },
 
-  async call(system, userContent, maxTok = 1400) {
+  async call(system, userContent, maxTok = 1400, opts = {}) {
     // v292 pre-call hook: features can mutate { system, userContent, maxTok } before send.
     let _system = system, _userContent = userContent, _maxTok = maxTok;
     if (Array.isArray(this._preCallHooks)) {
@@ -550,12 +550,12 @@ const Api = {
       }
     }
     const prov = S.cfg.provider || 'anthropic';
-    if (prov === 'novelai')     return this._callNovelAI(_system, _userContent, _maxTok);
-    if (prov === 'openrouter')  return this._callOpenRouter(_system, _userContent, _maxTok);
-    return this._callAnthropic(_system, _userContent, _maxTok);
+    if (prov === 'novelai')     return this._callNovelAI(_system, _userContent, _maxTok, opts);
+    if (prov === 'openrouter')  return this._callOpenRouter(_system, _userContent, _maxTok, opts);
+    return this._callAnthropic(_system, _userContent, _maxTok, opts);
   },
 
-  async _callAnthropic(system, userContent, maxTok) {
+  async _callAnthropic(system, userContent, maxTok, opts = {}) {
     const key = this.normalize(S.cfg.key);
     if (!key) throw new Error('AnthropicのAPIキーが設定されていません（sk-ant-... 形式）');
     if (!key.startsWith('sk-')) throw new Error(`キー形式が違います: "${key.slice(0,8)}..." → sk-ant- で始まる必要があります`);
@@ -607,7 +607,7 @@ const Api = {
     return enMatches >= 3 || zhMatches >= 2;
   },
 
-  async _callOpenRouter(system, userContent, maxTok) {
+  async _callOpenRouter(system, userContent, maxTok, opts = {}) {
     const key = this.normalize(S.cfg.orKey);
     if (!key) throw new Error('OpenRouter APIキーが設定されていません（sk-or-... 形式）');
     const model = S.cfg.orModel || 'sao10k/l3.3-euryale-70b';
@@ -662,7 +662,10 @@ const Api = {
 
       // v292 Tier 1.5 Fix G: also retry on incomplete Hermes responses
       // (response missing narrative key, or contains "省略" laziness marker)
-      const isIncomplete = text.length < 200 || /以下省略|（省略|省略\)/.test(text);
+      // v292Dfix170A: opts.allowShort=true のコール(genConvLog等の設計上短い出力)は
+      //   text.length<200 の不完全判定を免除。短いJSON配列で毎回2回リトライ(=3コール)していた
+      //   レスポンス遅延/コンソールのRetry連発を根治。外国語混入チェックは残す。
+      const isIncomplete = (!opts.allowShort && text.length < 200) || /以下省略|（省略|省略\)/.test(text);
       if (attempt < maxRetries && (this._hasForeignGarbage(text) || isIncomplete)) {
         const reason = isIncomplete ? '不完全な出力' : '外国語混入';
         console.warn(`[Retry ${attempt+1}/${maxRetries}] ${reason}を検出、再生成します`);
@@ -673,7 +676,7 @@ const Api = {
     return lastResult;
   },
 
-  async _callNovelAI(system, userContent, maxTok) {
+  async _callNovelAI(system, userContent, maxTok, opts = {}) {
     const token = this.normalize(S.cfg.naiKey);
     if (!token) throw new Error('NovelAIトークンが設定されていません（pst-... 形式）');
     if (!token.startsWith('pst-')) throw new Error('トークン形式が違います → pst- で始まる必要があります');
@@ -1560,7 +1563,7 @@ const G = {
         '出力はJSON配列のみ（前後に説明やコードフェンスを書かない）: [{"who":"名前","say":"実際に口に出した言葉"}]'
       ].join('\n');
       const user2 = '今ターンの展開:\n' + String(narr || '').replace(/<[^>]+>/g, '').slice(0, 1800);
-      const r2 = await Api.call(sys2, user2, 500);
+      const r2 = await Api.call(sys2, user2, 500, { allowShort: true });
       const txt = (r2 && r2.text) || '';
       let arr = [];
       try { const mi = txt.indexOf('['), mj = txt.lastIndexOf(']'); if (mi >= 0 && mj > mi) arr = JSON.parse(txt.slice(mi, mj + 1)); } catch(e){}
