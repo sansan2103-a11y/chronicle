@@ -1169,6 +1169,10 @@
         for (var j = 0; j < ds.length; j++){
           var d = ds[j];
           if (isSayEcho(t, d, hero)) continue;
+          // v292Dfix166b: 状態描写(地の文)がセリフ化されたものは、ここ(可視カードの実追加パス
+          //   =repair内 extractFromTurn ループ)でカード化をスキップする。DOM除去でなく未生成なので
+          //   fix128 regression detectorと衝突せずスクロールも安定。
+          if (looksStateDescriptionCard(String(d.text || ''))) continue;
           // v292Dfix110: clean the doubled-name glitch for display + dedup key.
           var sp = cleanSpeakerName(d.speaker);
           var k = dialogueKey(sp, d.text);
