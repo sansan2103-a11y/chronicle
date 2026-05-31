@@ -2844,19 +2844,28 @@
           // v292Dfix162: <react who 反応 声>(新・因果順) と 旧<voice who 心 声> の両対応。
           if (!raw || (raw.indexOf('<voice') < 0 && raw.indexOf('<react') < 0)) return plan;
           if (!plan || !Array.isArray(plan.narrative)) return plan;
-          // strip any <voice>/<react> that leaked into the narrative body (本文には出さない)
-          plan.narrative = plan.narrative
-            .map(function(line){ return String(line).replace(/<(?:voice|react)\b[^>]*?>/gi, '').trim(); })
-            .filter(function(line){ return line && line.length > 0; });
+          // v292Dfix163: 反応タグは本文の後にまとめて置かれる設計なので、本文側は「最初の
+          //   <react>/<voice> マーカー以降を全部カット」する。これで閉じていない/複数行に
+          //   またがった暴走タグ（fix162で反応に超長文メタ分析を書いてタグが閉じない事故）も
+          //   確実に本文から除去できる。<state>等も後ろにあるが内部用なので消えてよい。
+          var _joined = plan.narrative.join('\n');
+          var _cut = _joined.search(/<(?:voice|react)\b/i);
+          if (_cut >= 0){
+            plan.narrative = _joined.slice(0, _cut).split('\n')
+              .map(function(l){ return String(l).trim(); })
+              .filter(function(l){ return l && l.length > 0; });
+          }
           // extract each <voice|react who 反応/心 声> from raw → conv-log <say> lines
+          // v292Dfix163: 値長をキャップ（暴走した超長文がカード化されないように）。
+          function cap(s, n){ s = String(s||'').trim(); return s.length > n ? s.slice(0, n) : s; }
           var rx = /<(?:voice|react)\b([^>]*?)\/?>/gi, m, adds = [], seen = {};
           while ((m = rx.exec(raw)) !== null){
             var body = m[1] || '';
             var who = attrOf(body, 'who') || attrOf(body, '誰');
             if (!who) continue;
-            var koe = attrOf(body, '声') || attrOf(body, 'koe') || attrOf(body, 'say');
+            var koe = cap(attrOf(body, '声') || attrOf(body, 'koe') || attrOf(body, 'say'), 60);
             // v292Dfix162: 反応(身体+感情+内心)は (心) カード扱い＝会話ログから除外され右の展開に残る。
-            var kokoro = attrOf(body, '反応') || attrOf(body, '心') || attrOf(body, 'kokoro') || attrOf(body, 'react');
+            var kokoro = cap(attrOf(body, '反応') || attrOf(body, '心') || attrOf(body, 'kokoro') || attrOf(body, 'react'), 80);
             var key = who + '|' + koe + '|' + kokoro;
             if (seen[key]) continue; seen[key] = 1;
             if (koe) adds.push('<say who="' + who + '">' + koe + '</say>');
@@ -2905,6 +2914,7 @@
       if (/として位置付けられています[。\.]?$/.test(s) && s.length > 25) return true;
       if (/という(?:不可解な)?(?:時間軸の)?展開です[。\.]?$/.test(s) && s.length > 25) return true;
       if (WORK_REPORT.test(s)) return true;   // 作業報告・自己説明メタ
+      if (/模擬シミュレーション|シミュレーション的|思考実験|メタ認知|思考ループ|思考ルーブ/.test(s)) return true;   // v292Dfix163: メタ認知的暴走（反応フィールド由来）
       return false;
     }
     function register(){
@@ -9580,11 +9590,12 @@
             //   (後悔/選択/存在 等)は「反応」(内心)に回し、声は生の発声(悲鳴/呻き/嗚咽/断片)に寄せる。
             //   ルールで細かく縛らず、出力の順序(反応→声)で自然に導く。reactionVoiceExt が <react> を解析。
             var _reactVoice = ['【キャラの反応＝本文の後に必ず出力（会話ログ用）】',
-              '本文を書き終えたら、各登場キャラについて「展開→反応→声」の順に考えて出力する（本文の後・<state>の前）：',
-              '<react who="名前" 反応="この展開で身体と心がどう動いたか＝竦む/涙/息が詰まる/震え/視線が泳ぐ 等の身体反応＋恐怖・絶望・安堵などの感情。考えた末の分析や独白もここに書く" 声="その反応として実際に口から漏れた音・言葉。悲鳴・呻き・嗚咽・荒い息・途切れた断片・短い生のセリフ。言葉にならない音でよい。何も発さないなら空"/>',
-              '・最重要: 「声」は"反応として口から漏れたもの"であり、頭で整理した独白ではない。「後悔」「選択」「存在」のような抽象的で整った文は声に書かず必ず「反応」に回す。声は短く生々しく、途切れてよい。',
-              '・恐怖・激痛・絶望の瞬間は、冷静な性格のキャラでも、まず身体が反応し本能的な声（悲鳴/呻き/泣き）が先に漏れる。整った言葉より生の発声を優先する。',
-              '・いま場にいて反応しうるキャラは全員ぶん。掛け合い歓迎（悲鳴→駆け寄り、自責→制止）。<react>は本文に混ぜず必ず後にまとめる。主人公の声はプレイヤー入力と矛盾しない範囲に留める。'].join('\n');
+              '本文を書き終えたら、各登場キャラについて「展開→反応→声」の順に、1行で短く出力する（本文の後・<state>の前）：',
+              '<react who="名前" 反応="身体反応＋感情を1文で短く（竦む/涙/息が詰まる/震え＋恐怖・絶望など）" 声="反応として口から漏れた音・言葉。悲鳴・呻き・嗚咽・断片。何も発さないなら空"/>',
+              '・最重要: 各属性は**短く1文以内**。「反応」に長い分析・思考ループ・自問自答を延々書かない。メタ認知/思考実験/シミュレーション/深層心理のような語や説明は禁止。必ず `/>` で閉じる。',
+              '・「声」は"反応として口から漏れたもの"であり整った独白ではない。「後悔」「選択」「存在」のような抽象的な文は声に書かず「反応」へ（その反応も短く）。声は短く生々しく途切れてよい。',
+              '・恐怖・激痛・絶望の瞬間は、冷静な性格のキャラでも、まず身体が反応し本能的な声（悲鳴/呻き/泣き）が先に漏れる。',
+              '・場にいて反応しうるキャラは全員ぶん（1人1行）。<react>は本文に混ぜず後にまとめる。主人公の声はプレイヤー入力と矛盾しない範囲に。'].join('\n');
             // v292Dfix160(2026-05-30): 名無しの存在(怪物/異形/謎の声)のセリフが、近くの人間cast
             //   (カエデ/ミリア等)の発言として会話ログに誤割り当てされる問題。原因=別ファイル(fix74)の
             //   「who には必ず cast に登録された名前を入れる（??? や代名詞は不可）」制約。ここで例外を
