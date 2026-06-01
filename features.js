@@ -2880,10 +2880,13 @@
             if (koe && looksStateDescription(koe)){ if (!kokoro) kokoro = koe; koe = ''; }
             var key = who + '|' + koe + '|' + kokoro;
             if (seen[key]) continue; seen[key] = 1;
-            if (koe){ adds.push('<say who="' + who + '">' + koe + '</say>'); rvKoe.push(koe); }
-            // v292Dfix170B: 反応(心)を本文に <say(心)>=「」で注入していたのが状態描写のセリフ偽装の元。
-            //   fix169で会話ログはgenConvLog由来になり、反応は本文に出す必要が無い。本文への注入を停止。
-            //   (反応値の算出は残す＝モデルに反応を考えさせるプロンプト効果は維持、表示だけ止める)
+            // v292Dfix175: 声(koe)を本文に <say> で注入するのを停止。fix169で会話ログはgenConvLog
+            //   由来になり本文のsay-tagは不要。モデルのreact声属性が途中で切れると
+            //   `<say who="X"><say who=\</say>` のような不完全タグが本文に注入され表示に漏れていた
+            //   (「<say who=¥」)。声は既に地の文の「」に入っているので本文側は不要。rvKoeは旧ターン
+            //   互換(fix66 fallback)で記録のみ残す。
+            if (koe){ rvKoe.push(koe); }
+            // v292Dfix170B: 反応(心)も同様に本文へ注入しない(状態描写のセリフ偽装の元だった)。
           }
           // v292Dfix168: 会話ログ一本化用に、反応生成の「声」テキスト集合を turn(plan) に記録する。
           //   fix66 はこれを使い、本文の「」(状態描写含む)を会話ログから外して反応の声だけ表示する。

@@ -1663,7 +1663,7 @@ const G = {
       // 心理エンジンで NPC 状態を更新
       PsychEngine.process(plan);
 
-      const narr = plan.narrative.join('\n');
+      let narr = plan.narrative.join('\n');
 
       // v292Dfix169(案B): 会話ログを本文から切り離し、専用の2段階生成で「実際に口に出した
       //   発話だけ」を作る。これで状態描写・メタが会話ログに構造的に入らず、空にもならない。
@@ -1673,6 +1673,22 @@ const G = {
       if (S.mode === 'SAY' && text && S.cast && S.cast.hero && S.cast.hero.name){
         _convSays.unshift({ who: S.cast.hero.name, say: String(text).replace(/^[「『]|[」』]$/g,'').slice(0,80) });
       }
+
+      // v292Dfix175: 本文から <say> タグを除去する（会話ログは上の genConvLog で取得済なので本文の
+      //   say-tag はもう不要）。モデルや旧拡張が出す不完全な say-tag が「<say who=¥」のように表示へ
+      //   漏れる/「」が二重になるのを根治。well-formed は中身（セリフ）を「」付きで残し、壊れた断片は捨てる。
+      try {
+        narr = narr
+          .replace(/<say\b[^>]*>\s*([\s\S]*?)\s*<\/say>/gi, function(_m, c){
+            c = String(c || '').trim();
+            if (!c) return '';
+            return /^[「『]/.test(c) ? c : ('「' + c + '」');
+          })
+          .replace(/<\/?say\b[^>]*>?/gi, '')   // 残り/不完全な say 断片を除去
+          .replace(/「\s*」/g, '')
+          .replace(/[ \t]*\n{3,}/g, '\n\n')
+          .trim();
+      } catch(_e175){}
 
       const turn = {
         inputType:       S.mode,
@@ -2350,7 +2366,7 @@ G.init();
 })();
 </script>
 <!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
-<script src="features.js?cb=v292Dfix150q"></script>
+<script src="features.js?cb=v292Dfix150r"></script>
 <script src="v292Dfix135-longmem.js?cb=v292Dfix135e"></script>
 <script src="v292Dfix138-continue.js?cb=v292Dfix142"></script>
 <script src="v292Dfix145-charlist.js?cb=v292Dfix145f"></script>
