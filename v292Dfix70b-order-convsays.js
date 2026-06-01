@@ -24,6 +24,21 @@
   'use strict';
   var TAG = '[v292Dfix70b:order-convsays]';
 
+  // ---------------------------------------------------------------------
+  // v292Dfix64(conversation-log-restore)の停止:
+  //   fix64 は会話ログを独自に「復元」し、最新ターンの発話カードを先頭(最上部)に
+  //   再追加し続ける旧世代レンダラー。現在は fix66(renderhook-repair)+ genConvLog
+  //   が会話ログを完全に賄っており、fix64 の復元は冗長。むしろ fix64 が独立サイクルで
+  //   最新カードを先頭へ戻すため、時系列の並べ替えと毎秒競合し「最新が上に来る」状態と
+  //   チラつきの原因になっている。fix64 が公開する停止フラグを落として復元を止める
+  //   (= 引き算)。fix64 のファイル自体は読み込んだままなので avatar/preprocess 等の
+  //   ユーティリティ参照は維持される。
+  // ---------------------------------------------------------------------
+  function disableFix64(){
+    try { if (window.__v292Dfix64Active !== false) window.__v292Dfix64Active = false; } catch(e){}
+  }
+  disableFix64();
+
   function norm(s){
     return String(s == null ? '' : s)
       .replace(/<[^>]+>/g, '')
@@ -114,6 +129,7 @@
   // 既に正しければ reorder() は DOM を触らない(フリッカー無し)。
   // また repair が別パッチで差し替えられてラップが外れた場合は再装着。
   setInterval(function(){
+    disableFix64();
     try {
       if (window.__v292Dfix66 && typeof window.__v292Dfix66.repair === 'function' &&
           !window.__v292Dfix66.repair.__fix70b){
