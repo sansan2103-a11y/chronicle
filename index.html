@@ -1685,7 +1685,9 @@ const G = {
             return /^[「『]/.test(c) ? c : ('「' + c + '」');
           })
           .replace(/<\/?say\b[^>]*>?/gi, '')   // 残り/不完全な say 断片を除去
-          .replace(/「\s*」/g, '')
+          .replace(/「\s*」/g, '')              // 空の「」
+          .replace(/[「『]\s*$/g, '')           // 末尾の閉じ忘れ開き括弧（壊れたsay-tag由来の孤立「）
+          .replace(/^\s*[」』]/g, '')           // 行頭の孤立閉じ括弧
           .replace(/[ \t]*\n{3,}/g, '\n\n')
           .trim();
       } catch(_e175){}
