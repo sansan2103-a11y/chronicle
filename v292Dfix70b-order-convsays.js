@@ -74,7 +74,10 @@
   }
 
   // 既に時系列順なら何もしない(=DOM を触らない=フリッカー無し)。
+  // _busy: 自身の appendChild が MutationObserver を再発火させて再帰するのを防ぐ。
+  var _busy = false;
   function reorder(){
+    if (_busy) return 0;
     try {
       var stream = document.getElementById('dialogue-stream');
       if (!stream) return 0;
@@ -92,14 +95,39 @@
         if (dec[i].o < dec[i - 1].o){ needs = true; break; }
       }
       if (!needs) return 0;
+      _busy = true;
       dec.sort(function(a, b){ return a.o !== b.o ? a.o - b.o : a.di - b.di; });
       dec.forEach(function(d){ stream.appendChild(d.c); });
+      _busy = false;
       return dec.length;
     } catch(e){
+      _busy = false;
       try { console.warn(TAG, 'reorder err:', e && e.message); } catch(_){}
       return 0;
     }
   }
+
+  // ---------------------------------------------------------------------
+  // MutationObserver: 会話ログの DOM が変わる度に(別パッチ — v292Dfix70 本体の
+  //   2秒インターバルや fix64 の復元等 — が誤順へ並べ替えても)即座に正順へ戻す。
+  //   Observer はミューテーション直後(マイクロタスク)に走るので、誤順の状態は
+  //   1フレーム未満しか存在せず、見た目のチラつきが出ない。_busy ガードと
+  //   「既に正順なら何もしない」ガードで自己再帰・無限ループを防ぐ。
+  // ---------------------------------------------------------------------
+  function attachObserver(){
+    var stream = document.getElementById('dialogue-stream');
+    if (!stream){ setTimeout(attachObserver, 300); return; }
+    if (stream.__fix70bObserved) return;
+    stream.__fix70bObserved = true;
+    try {
+      var obs = new MutationObserver(function(){ reorder(); });
+      obs.observe(stream, { childList: true });
+      window.__v292Dfix70bObserver = obs;
+      reorder();
+      try { console.log(TAG, 'observer attached'); } catch(_){}
+    } catch(e){}
+  }
+  attachObserver();
 
   // __v292Dfix66.repair を最外でラップ。内側(fix70 の並べ替え含む)実行後に正順へ収束。
   function install(){
