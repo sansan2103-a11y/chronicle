@@ -1620,8 +1620,13 @@ const G = {
       let arr = [];
       try { const mi = txt.indexOf('['), mj = txt.lastIndexOf(']'); if (mi >= 0 && mj > mi) arr = JSON.parse(txt.slice(mi, mj + 1)); } catch(e){}
       if (!Array.isArray(arr)) arr = [];
+      // v292Dfix173: 幻覚した話者を除外。登録キャラ名なのに今ターンの本文に一度も出てこない
+      //   = その場にいない者(未登場NPC等)を話者にした幻覚 → 捨てる。本文に出てくる名前や
+      //   名無しの存在(異形/謎の声等)は通す。空応答ターンで未登場キャラが湧くのを根治。
+      const _cn = String(narr || '').replace(/<[^>]+>/g, '');
       return arr.filter(x => x && x.who && x.say && String(x.say).trim())
                 .map(x => ({ who: String(x.who).trim().slice(0, 24), say: String(x.say).trim().slice(0, 80) }))
+                .filter(x => !(names.indexOf(x.who) >= 0 && _cn.indexOf(x.who) < 0))
                 .slice(0, 8);
     } catch(e) { try { console.warn('[v292Dfix169] genConvLog err:', e && e.message); } catch(_){} return []; }
   },
