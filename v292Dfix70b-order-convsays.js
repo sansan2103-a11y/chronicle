@@ -114,13 +114,28 @@
   //   1フレーム未満しか存在せず、見た目のチラつきが出ない。_busy ガードと
   //   「既に正順なら何もしない」ガードで自己再帰・無限ループを防ぐ。
   // ---------------------------------------------------------------------
+  // v292Dfix179b: observer は1ミューテーション毎でなく requestAnimationFrame で
+  //   デバウンスして1フレーム1回に集約する。理由: 取消(undo)/renderAll のように他レンダラーが
+  //   ストリームを一括再構築する時、childList ミューテーションが数百件バースト発生する。
+  //   都度 reorder() すると reorder の再appendが更にミューテーションを生み、連鎖で
+  //   数千件に膨張→長いゲームでページフリーズの一因になっていた(実測: undo時 fix70b有=2406 /
+  //   無=424 ミューテーション。fix70bが増幅源)。rAF集約でバースト中の reorder を
+  //   フレーム単位に抑え、フリッカー防止(<16msで即補正)は維持する。
+  var _raf = 0;
+  var _rafFn = (typeof window.requestAnimationFrame === 'function')
+      ? window.requestAnimationFrame.bind(window)
+      : function(f){ return setTimeout(f, 16); };
+  function scheduleReorder(){
+    if (_raf) return;
+    _raf = _rafFn(function(){ _raf = 0; reorder(); });
+  }
   function attachObserver(){
     var stream = document.getElementById('dialogue-stream');
     if (!stream){ setTimeout(attachObserver, 300); return; }
     if (stream.__fix70bObserved) return;
     stream.__fix70bObserved = true;
     try {
-      var obs = new MutationObserver(function(){ reorder(); });
+      var obs = new MutationObserver(function(){ scheduleReorder(); });
       obs.observe(stream, { childList: true });
       window.__v292Dfix70bObserver = obs;
       reorder();
