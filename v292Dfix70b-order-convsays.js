@@ -114,20 +114,28 @@
   //   1フレーム未満しか存在せず、見た目のチラつきが出ない。_busy ガードと
   //   「既に正順なら何もしない」ガードで自己再帰・無限ループを防ぐ。
   // ---------------------------------------------------------------------
-  // v292Dfix179b: observer は1ミューテーション毎でなく requestAnimationFrame で
-  //   デバウンスして1フレーム1回に集約する。理由: 取消(undo)/renderAll のように他レンダラーが
-  //   ストリームを一括再構築する時、childList ミューテーションが数百件バースト発生する。
-  //   都度 reorder() すると reorder の再appendが更にミューテーションを生み、連鎖で
-  //   数千件に膨張→長いゲームでページフリーズの一因になっていた(実測: undo時 fix70b有=2406 /
-  //   無=424 ミューテーション。fix70bが増幅源)。rAF集約でバースト中の reorder を
-  //   フレーム単位に抑え、フリッカー防止(<16msで即補正)は維持する。
-  var _raf = 0;
-  var _rafFn = (typeof window.requestAnimationFrame === 'function')
-      ? window.requestAnimationFrame.bind(window)
-      : function(f){ return setTimeout(f, 16); };
-  function scheduleReorder(){
-    if (_raf) return;
-    _raf = _rafFn(function(){ _raf = 0; reorder(); });
+  // v292Dfix179d: observer は「即時 reorder ＋ バースト・サーキットブレーカー」。
+  //   背景の経緯:
+  //   ・即時(1ミューテーション毎)reorder は順序が常に正しい(fix70本体の2秒tickが誤順へ
+  //     並べ替えても同じマイクロタスクで必ず正順へ戻す＝最後の一手を必ず取る)。これが
+  //     ユーザーに見える「正しい時系列」を保証する唯一の方法。
+  //   ・ただし取消(undo)/renderAll の一括再構築では、他レンダラーが数百ミューテーションを
+  //     多数のマイクロタスクに分けて発生させ、その都度 fix70b が全カードを再append→更に
+  //     ミューテーション…と連鎖し、数千件に膨張して長いゲームでフリーズの一因になる
+  //     (実測: undo時 即時=2406 / 無し=424)。
+  //   ・rAF/スロットル等の「遅延」方式は連鎖は止まるが、遅延中に fix70 が最後の一手を取り
+  //     順序がちらつく/誤順固着する(検証で確認)。
+  //   →そこで「即時」を保ちつつ、短い時間窓(WIN)内の reorder 回数に上限(CAP)を設ける。
+  //     定常時は1スクランブルにつき1〜2回で十分上限内＝即時に正順。undoの連鎖時のみ上限に
+  //     当たって fix70b の参加回数が抑えられ、連鎖が膨張しない。窓を超えれば自動リセットし、
+  //     残った誤順は次のミューテーション/1.5sインターバルで補正される。
+  var WIN = 200, CAP = 10, _winStart = 0, _winRuns = 0;
+  function guardedReorder(){
+    var now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    if (now - _winStart > WIN){ _winStart = now; _winRuns = 0; }
+    if (_winRuns >= CAP) return;   // バースト連鎖検知 → この窓ではこれ以上 reorder しない
+    _winRuns++;
+    reorder();
   }
   function attachObserver(){
     var stream = document.getElementById('dialogue-stream');
@@ -135,7 +143,7 @@
     if (stream.__fix70bObserved) return;
     stream.__fix70bObserved = true;
     try {
-      var obs = new MutationObserver(function(){ scheduleReorder(); });
+      var obs = new MutationObserver(function(){ guardedReorder(); });
       obs.observe(stream, { childList: true });
       window.__v292Dfix70bObserver = obs;
       reorder();
