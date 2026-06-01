@@ -412,9 +412,13 @@
 
   // 既存 stream 内のカードを (speaker|text) のみで集計
   // (bare-key '|text' は廃止: NPC text と hero text 衝突時の取りこぼし防止)
+  // v292Dfix178c: 重複判定は「fix66自身が出したカード」だけを対象にする。base/fix64(repo-only)が
+  //   出したカードまで既存扱いすると、fix66が自分のカードを追加せず、結果 base/fix64 の
+  //   (最新ターンを最上部に置く等の)誤った順序のカードがそのまま残る。fix66が常に自分のカードを
+  //   ターン順で追加し、base/fix64 の重複は dedup パス(下)で隠す方針。
   function collectExistingKeys(stream){
     var set = Object.create(null);
-    var cards = stream.querySelectorAll('.v292-dlg-card');
+    var cards = stream.querySelectorAll('.v292Dfix66-restored');
     for (var i = 0; i < cards.length; i++){
       var c = cards[i];
       var nameEl = c.querySelector('.dlg-name');
@@ -1481,19 +1485,30 @@
       var stream = document.getElementById('dialogue-stream');
       if (!stream) return;
       var cards = stream.querySelectorAll('.v292-dlg-card');
+      var i, c, nm, tx;
+      // fix66が出したカードの (speaker|text) キー、及び テキスト→実話者の有無
+      var fix66Keys = Object.create(null);
       var realByText = Object.create(null);
-      for (var i = 0; i < cards.length; i++){
-        var nm0 = ((cards[i].querySelector('.dlg-name') || {}).textContent || '').trim();
-        var tx0 = ((cards[i].querySelector('.dlg-text') || {}).textContent || '').trim();
-        if (tx0 && !isAnonSpeakerLabel(nm0)) realByText[tx0] = true;
+      for (i = 0; i < cards.length; i++){
+        c = cards[i];
+        nm = ((c.querySelector('.dlg-name') || {}).textContent || '').trim();
+        tx = ((c.querySelector('.dlg-text') || {}).textContent || '').trim();
+        if (!tx) continue;
+        if (c.className.indexOf('v292Dfix66-restored') >= 0) fix66Keys[dialogueKey(nm, tx)] = true;
+        if (!isAnonSpeakerLabel(nm)) realByText[tx] = true;
       }
-      for (var j = 0; j < cards.length; j++){
-        var c = cards[j];
-        var name = ((c.querySelector('.dlg-name') || {}).textContent || '').trim();
-        var text = ((c.querySelector('.dlg-text') || {}).textContent || '').trim();
-        if (isAnonSpeakerLabel(name) && text && realByText[text]){
-          if (c.style.display !== 'none') c.style.display = 'none';
-        }
+      for (i = 0; i < cards.length; i++){
+        c = cards[i];
+        nm = ((c.querySelector('.dlg-name') || {}).textContent || '').trim();
+        tx = ((c.querySelector('.dlg-text') || {}).textContent || '').trim();
+        if (!tx) continue;
+        var isFix66 = c.className.indexOf('v292Dfix66-restored') >= 0;
+        var hide = false;
+        // (A) base/fix64 のカードで、fix66 が同じ(speaker|text)を持つ → fix66側(ターン正順)を残しこれを隠す
+        if (!isFix66 && fix66Keys[dialogueKey(nm, tx)]) hide = true;
+        // (B) ??? カードで、同テキストの実話者カードが在る → 隠す
+        if (isAnonSpeakerLabel(nm) && realByText[tx]) hide = true;
+        if (hide && c.style.display !== 'none') c.style.display = 'none';
       }
     } catch(e){}
   }
