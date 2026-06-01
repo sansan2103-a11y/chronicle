@@ -138,6 +138,15 @@
     if (!st || !st.turns || !st.turns.length) return;
     var curTurn = st.turns.length - 1;
     var lastBuild = loadLastBuild();
+    // v292Dfix177: ターン数が前回ビルド時より減った = 物語リセット/新ゲーム開始。
+    //   longmemは累積方式(前のworldinfo/eventsをLLMに渡して更新)なので、検出せずに放置すると
+    //   前ゲームのキャラ・出来事(例: 白い手/ミリアが襲われる/存在しないT2のevent)が引き継がれ続け、
+    //   キャラ一覧にリセット前の残骸が出る。縮小を検出したら前データをクリアして新ゲームから作り直す。
+    if (lastBuild >= 0 && curTurn < lastBuild && _lmCanWrite()){
+      try { console.log(TAG, 'turn count regressed (cur ' + curTurn + ' < built ' + lastBuild + ') — reset/new game detected, clearing stale long-mem'); } catch(_){}
+      reset();
+      lastBuild = -1;
+    }
     if (curTurn < 2) return;                                  // need at least 3 turns
     if (lastBuild >= 0 && curTurn - lastBuild < REBUILD_INTERVAL) return;
     BUSY = true;
