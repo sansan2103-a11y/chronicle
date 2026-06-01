@@ -299,17 +299,28 @@
     maybeRebuild();
   }, 3000);
 
-  // Reset hook: if story turns drop to 0 (new story / reset), clear long-mem
-  var prevTC = -1;
+  // Reset hook: 物語のターンが無い(turns=0)のに長期記憶ストアが残っていたら消す。
+  // v292Dfix180: 旧フックは「prevTC>0→0 の遷移を同一セッションで観測した時だけ」発火した
+  //   ため、別タブ(特に旧ビルドの resetStory が長期記憶を消さない)でリセット→このビルドが
+  //   turns=0 の状態でロードされるケースを取りこぼし、worldinfo/summary/events が残って
+  //   キャラ一覧に前ゲームのゴースト(例: ミリア「眼球を失った」/自動抽出の妖怪)が出ていた。
+  //   遷移観測に依らず「turns=0 かつ 長期記憶にデータ有り」を毎チェックで掃除する(=ロード時も
+  //   最初のtickで自己修復)。turns>0 の進行中ゲームや、turns=0かつ長期記憶も空の新規には無干渉。
+  function _hasStaleLongMem(){
+    try {
+      return (loadWorldInfo().length > 0) || !!loadSummary() ||
+             (loadEvents().length > 0) || (loadLastBuild() >= 0);
+    } catch(e){ return false; }
+  }
   setInterval(function(){
     var st = getState();
     if (!st || !st.turns) return;
-    var tc = st.turns.length;
-    if (prevTC > 0 && tc === 0){
+    if (st.turns.length === 0 && _hasStaleLongMem()){
       reset();
-      try { console.log(TAG, 'story reset detected — long-mem cleared'); } catch(_){}
+      try { localStorage.removeItem('v292Dfix77States'); } catch(_){}
+      try { if (window.__v292Dfix77Store){ Object.keys(window.__v292Dfix77Store).forEach(function(k){ delete window.__v292Dfix77Store[k]; }); } } catch(_){}
+      try { console.log(TAG, 'no turns but stale long-mem — cleared'); } catch(_){}
     }
-    prevTC = tc;
   }, 4000);
 
   try { console.log(TAG, 'long-term memory active (fix135+136+137)'); } catch(_){}
