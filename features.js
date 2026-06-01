@@ -4045,6 +4045,11 @@
     for (var i = 0; i < turns.length; i++){
       var t = turns[i];
       if (!t) continue;
+      // v292Dfix178: fix169対象ターン(t._convSaysが配列=会話ログはgenConvLog由来)は、
+      //   このbaseレンダラーで本文「」から抽出してカードを作らない。fix66が_convSaysから描く。
+      //   baseが本文「」を拾うと、解決不能な発話を???話者にしたり、fix66の正規カードと二重になる。
+      //   旧ターン(_convSays無し)は従来通りbaseが描く(互換)。生成スキップなのでカード削除は起きずfix128ループ無し。
+      if (Array.isArray(t._convSays)) continue;
       if (t.playerText && t.inputType === 'SAY'){
         var __heroName1 = (st && st.cast && st.cast.hero && st.cast.hero.name) ? st.cast.hero.name : '主人公';
         addCard(__heroName1, t.playerText, true);
