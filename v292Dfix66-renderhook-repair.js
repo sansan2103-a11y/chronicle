@@ -1470,5 +1470,34 @@
     } catch(e){}
   }, 2000);
 
+  // ---------- v292Dfix178b: ???(解決不能な話者)カードのデデュープ ----------
+  // 別レンダラー(repo-onlyのfix64-restore等)が本文「」から作る「???」カードが、fix66が
+  //   _convSays(genConvLog由来)から出した実話者カードと同じテキストで二重に出ることがある
+  //   (例: 眼球を抜かれた悲鳴「…ぁ」が ??? と ミリア の2枚)。同じテキストの実話者カードが
+  //   在れば ??? カードを display:none で隠す。DOM削除でなく非表示なのでカード数は変わらず
+  //   fix128 regression detector を誘発しない(=フリーズ無し)。
+  function v292Dfix178bDedupAnon(){
+    try {
+      var stream = document.getElementById('dialogue-stream');
+      if (!stream) return;
+      var cards = stream.querySelectorAll('.v292-dlg-card');
+      var realByText = Object.create(null);
+      for (var i = 0; i < cards.length; i++){
+        var nm0 = ((cards[i].querySelector('.dlg-name') || {}).textContent || '').trim();
+        var tx0 = ((cards[i].querySelector('.dlg-text') || {}).textContent || '').trim();
+        if (tx0 && !isAnonSpeakerLabel(nm0)) realByText[tx0] = true;
+      }
+      for (var j = 0; j < cards.length; j++){
+        var c = cards[j];
+        var name = ((c.querySelector('.dlg-name') || {}).textContent || '').trim();
+        var text = ((c.querySelector('.dlg-text') || {}).textContent || '').trim();
+        if (isAnonSpeakerLabel(name) && text && realByText[text]){
+          if (c.style.display !== 'none') c.style.display = 'none';
+        }
+      }
+    } catch(e){}
+  }
+  try { setInterval(v292Dfix178bDedupAnon, 1500); } catch(e){}
+
   try { console.log(TAG, 'loaded'); } catch(_){}
 })();
