@@ -2992,6 +2992,92 @@
   })();
 
   // ====================================================================
+  // 14e. NPC humanity — 永続state (傷/関係/未解決) on top of fix77  v292Dfix190
+  // 目的(おしんのnpc_humanity_system): NPCを「傷つき・覚え・迷い・それでも動く存在」に。
+  //   fix77(からだ/こころ/本能=毎ターン上書きの瞬間状態)に、消えない【永続】フィールドを
+  //   相乗りさせる(captureStateがmerge=cur読み→該当属性だけ更新→書き戻し なので安全に共存):
+  //     傷       … 損傷/ショックの記録(部位・重症度・原因・治療状況)。治療まで残る。
+  //     関係     … 主人公/他キャラへの信頼・警戒。
+  //     未解決   … 抱えた感情の負債。
+  //   反応のダメージ別変化・話す理由・掛け合いは "ルールを足さず" この state から駆動する。
+  //   保存は fix77 と同じ window.__v292Dfix77Store / localStorage 'v292Dfix77States'(=①相乗り)。
+  // ====================================================================
+  (function npcHumanity190(){
+    var TAG = '[v292Dfix190:npc-state]';
+    var LSKEY = 'v292Dfix77States';
+    var FIELDS = [['傷','kizu'], ['関係','kankei'], ['未解決','mikaiketsu']];
+    function store(){ try { window.__v292Dfix77Store = window.__v292Dfix77Store || {}; return window.__v292Dfix77Store; } catch(e){ return {}; } }
+    function attrOf(tag, name){ try { var m = String(tag).match(new RegExp(name + '\\s*=\\s*"([^"]*)"')); return m ? m[1].trim() : ''; } catch(e){ return ''; } }
+    function persist(){ try { localStorage.setItem(LSKEY, JSON.stringify(store())); } catch(e){} }
+
+    // --- 捕捉: ctx.raw の <state> から 傷/関係/未解決 を読み store[who] に merge ---
+    //   ctx.raw から読むので、fix77 が plan.narrative の <state> を strip する順序に依存しない。
+    function captureExt(plan, ctx){
+      try {
+        var raw = (ctx && typeof ctx.raw === 'string') ? ctx.raw : '';
+        if (!raw && plan && Array.isArray(plan.narrative)) raw = plan.narrative.join('\n');
+        if (!raw || raw.indexOf('<state') < 0) return plan;
+        var st = store(), found = 0, re = /<state\b[^>]*?\/?>/g, m;
+        while ((m = re.exec(raw)) !== null){
+          var tag = m[0], who = attrOf(tag, 'who'); if (!who) continue;
+          var cur = st[who] || {};
+          FIELDS.forEach(function(f){ var v = attrOf(tag, f[0]); if (v) cur[f[1]] = v; });  // 該当があった時だけ更新=永続
+          st[who] = cur; found++;
+        }
+        if (found) persist();
+      } catch(e){ try { console.warn(TAG, e && e.message); } catch(_){} }
+      return plan;
+    }
+
+    // --- 注入: 出力指示(永続フィールド) + 現在の永続state ---
+    var EMIT = [
+      '', '',
+      '【状態の出力・拡張（永続フィールド／fix190）】',
+      '<state> には からだ/こころ/本能 に加え、内容が生じた・変わったキャラだけ次も付ける（無ければ省略可）:',
+      '傷="損傷やショックの記録。部位・重症度・原因・治療状況を簡潔に。例: 左眼球摘出(重傷)/妖怪が原因/未治療"',
+      '関係="主人公や他キャラへの今の関係・信頼/警戒。例: カエデ:命を握られ警戒 ／ ミリア:庇いたい"',
+      '未解決="抱えている感情の負債。例: ミリアを救えなかった負い目"',
+      '・傷/関係/未解決は【永続】。治療・和解・解消などの出来事が起きるまで毎ターン保持し、勝手に消さない（からだ/こころ/本能は今この瞬間の状態として毎ターン上書きでよい）。'
+    ].join('\n');
+    function buildBlock(){
+      try {
+        var st = store(), names = Object.keys(st), lines = [];
+        names.forEach(function(n){
+          var s = st[n]; if (!s) return;
+          var parts = [];
+          if (s.kizu) parts.push('傷:' + s.kizu);
+          if (s.kankei) parts.push('関係:' + s.kankei);
+          if (s.mikaiketsu) parts.push('未解決:' + s.mikaiketsu);
+          if (parts.length) lines.push(n + '｜' + parts.join(' ／ '));
+        });
+        var cur = lines.length ? (
+          '\n\n【各キャラの永続状態（傷・関係・未解決／必ず踏まえる）】\n' +
+          lines.join('\n') +
+          '\n・傷の重症度に応じて反応・行動・発言を自然に変える（軽傷は堪える、重傷は声が途切れ動作が制限される等。型に嵌めず、その人物・その傷に固有の出方で）。' +
+          '\n・関係・未解決は各キャラが自分から動く/話す動機になる。NPCは入力待ちでなく、傷・恐怖・対立・助けを求める場面で自発的に発言・掛け合いする。話しかける理由はこれらの状態から生まれる。'
+        ) : '';
+        return EMIT + cur;
+      } catch(e){ return ''; }
+    }
+    function sysExt(ctx){ try { if (ctx && typeof ctx.sys === 'string') return ctx.sys + buildBlock(); } catch(e){} return ctx && ctx.sys; }
+
+    function install(){
+      try {
+        var P = window.Planner; if (!P || !Array.isArray(P._extensions) || !Array.isArray(P._parseExtensions)) { setTimeout(install, 250); return; }
+        if (P.__v292Dfix190) return;
+        P.__v292Dfix190 = true;
+        sysExt.__v292Dfix190 = true; captureExt.__v292Dfix190 = true;
+        P._extensions.push(sysExt);
+        P._parseExtensions.push(captureExt);
+        try { console.log(TAG, 'installed (傷/関係/未解決 on fix77 store)'); } catch(_){}
+      } catch(e){}
+    }
+    install();
+    setInterval(function(){ try { var P = window.Planner; if (P && !P.__v292Dfix190) install(); } catch(e){} }, 2500);
+    window.__v292Dfix190 = { store: store, buildBlock: buildBlock };
+  })();
+
+  // ====================================================================
   // 15. avatar_autofill (v292-D fix11)
   // 目的: ランダム生成 / saveSettings / addNpc 後、c.avatar が未設定なら
   //       Pollinations URL を自動生成して S.cast.*.avatar に格納する。
