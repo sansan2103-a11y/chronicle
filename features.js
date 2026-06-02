@@ -10568,10 +10568,14 @@
   function install(){
     if (window.__v292Dfix119) return;
     window.__v292Dfix119 = true;
-    attach();
-    // safety net + re-attach if #dialogue-stream gets recreated
-    setInterval(function(){ attach(); reorderFixed(); }, 700);
-    try { console.log('[v292Dfix119] symbol-only order repair active (observer)'); } catch(_){}
+    // v292Dfix189b: fix119 を停止。fix119 は narrative(本文)から順序を抽出して会話ログを
+    //   並べ替える旧実装だが、これは fix70b(_convSays 由来＝正しい時系列) とは別ソースで、
+    //   両者が互いの並べ替えに MutationObserver で反応し合い、毎秒数十回カードを付け替えて
+    //   会話ログが「点滅」する(実測 16〜48 mutations/秒の無限churn)。しかも本文ベースの順序は
+    //   fix70 と同じく誤り(時系列バグの元)。順序は fix70b に一本化し、fix119 は observer/interval
+    //   を張らずに停止する(install を no-op)。フラグは立てて再installも抑止。
+    try { console.log('[v292Dfix119] disabled by fix189b — ordering unified to fix70b'); } catch(_){}
+    return;
   }
   if (document.readyState === 'complete') install();
   else window.addEventListener('load', install);
