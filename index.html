@@ -716,9 +716,24 @@ const Api = {
       //   parseが捨てるケース=raw にproseは在る→salvage155が後で救済するのでリトライ不要。
       //   これでsysサイズ起因の不要リトライ(=毎ターン裏で再生成→遅延)を削減。
       const _proseLen = String(text).replace(/<[^>]+>/g, '').replace(/[「」『』\s　\[\]{}",:|]/g, '').length;
-      const isIncomplete = (!opts.allowShort && _proseLen < 40) || /以下省略|（省略|省略\)/.test(text);
+      // v292Dfix186: 直前ターンとほぼ同一の生成（「続きを書く」等でモデルが前ターン本文を
+      //   そのままコピー／再記述する現象）を検出してリトライする。短い生成は _proseLen<40 で
+      //   既に弾けるが、長いコピーはすり抜けるのでここで前ターンとの類似度を見る。
+      let _isCopy = false;
+      try {
+        if (!opts.allowShort && S.turns && S.turns.length) {
+          const _pn = (function(t){ const n = t && t.narrative; return Array.isArray(n) ? n.join('') : String(n || ''); })(S.turns[S.turns.length - 1]).replace(/<[^>]+>/g, '').replace(/\s+/g, '');
+          const _nn = String(text).replace(/<[^>]+>/g, '').replace(/\s+/g, '');
+          if (_pn.length > 40 && _nn.length > 40) {
+            const _L = Math.min(_pn.length, _nn.length);
+            let _m = 0; for (let _k = 0; _k < _L; _k++) { if (_pn[_k] === _nn[_k]) _m++; }
+            if (_m / Math.max(_pn.length, _nn.length) > 0.8) _isCopy = true;
+          }
+        }
+      } catch (_e) {}
+      const isIncomplete = (!opts.allowShort && _proseLen < 40) || /以下省略|（省略|省略\)/.test(text) || _isCopy;
       if (attempt < maxRetries && (this._hasForeignGarbage(text) || isIncomplete)) {
-        const reason = isIncomplete ? '不完全な出力' : '外国語混入';
+        const reason = _isCopy ? '前ターンのコピー' : (isIncomplete ? '不完全な出力' : '外国語混入');
         console.warn(`[Retry ${attempt+1}/${maxRetries}] ${reason}を検出、再生成します`);
         continue;
       }
