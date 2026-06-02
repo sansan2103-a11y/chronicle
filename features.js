@@ -3059,21 +3059,34 @@
         return EMIT + cur;
       } catch(e){ return ''; }
     }
-    function sysExt(ctx){ try { if (ctx && typeof ctx.sys === 'string') return ctx.sys + buildBlock(); } catch(e){} return ctx && ctx.sys; }
-
+    var MARK190 = '状態の出力・拡張（永続フィールド／fix190）';
+    // 注入は build を wrap して最終 sys に追記する（fix105 と同方式＝確実）。
+    //   _extensions への遅延 push は反映されない実装なので避ける。捕捉は _parseExtensions のまま。
     function install(){
       try {
-        var P = window.Planner; if (!P || !Array.isArray(P._extensions) || !Array.isArray(P._parseExtensions)) { setTimeout(install, 250); return; }
-        if (P.__v292Dfix190) return;
+        var P = window.Planner; if (!P || typeof P.build !== 'function') { setTimeout(install, 250); return; }
+        // capture (parse側・実submitで発火、fix77と同じ仕組み)。
+        if (Array.isArray(P._parseExtensions) && !P._parseExtensions.some(function(f){ return f && f.__v292Dfix190; })){
+          captureExt.__v292Dfix190 = true; P._parseExtensions.push(captureExt);
+        }
+        // inject (build wrap)。二重 wrap 防止。
+        if (!P.build.__v292Dfix190){
+          var orig = P.build.bind(P);
+          var wrapped = function(){
+            var r = orig.apply(this, arguments);
+            try { if (r && typeof r.sys === 'string' && r.sys.indexOf(MARK190) < 0){ r.sys = r.sys + buildBlock(); } } catch(e){}
+            return r;
+          };
+          wrapped.__v292Dfix190 = true;
+          P.build = wrapped;
+        }
         P.__v292Dfix190 = true;
-        sysExt.__v292Dfix190 = true; captureExt.__v292Dfix190 = true;
-        P._extensions.push(sysExt);
-        P._parseExtensions.push(captureExt);
-        try { console.log(TAG, 'installed (傷/関係/未解決 on fix77 store)'); } catch(_){}
+        try { console.log(TAG, 'installed (build-wrap inject + parse capture)'); } catch(_){}
       } catch(e){}
     }
     install();
-    setInterval(function(){ try { var P = window.Planner; if (P && !P.__v292Dfix190) install(); } catch(e){} }, 2500);
+    // selfHeal: build が他fixで再wrapされて自分のwrapが外れたら入れ直す。
+    setInterval(function(){ try { var P = window.Planner; if (P && P.build && !P.build.__v292Dfix190) install(); } catch(e){} }, 2500);
     window.__v292Dfix190 = { store: store, buildBlock: buildBlock };
   })();
 
