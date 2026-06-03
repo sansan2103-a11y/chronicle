@@ -1688,14 +1688,15 @@ const G = {
       //     who="…"(二重引用)だけ拾うこの正規表現には掛からず、本文の発話のみ抽出される。
       let _convSays = [];
       try {
-        var _sayRe = /<say\s+who="([^"]*)"\s*>([^<]*)<\/say>/g, _sm, _seenSay = {};
-        while ((_sm = _sayRe.exec(result.text))) {
-          var _sw = String(_sm[1] || '').trim().slice(0, 24);
-          var _ss = String(_sm[2] || '').trim().slice(0, 80);
-          if (!_sw || !_ss) continue;
+        var _body = String(result.text || '').split(/<react|<state/)[0]; var _heroNm = (S.cast && S.cast.hero && S.cast.hero.name) || ''; var _names = []; if (_heroNm) _names.push(_heroNm); if (S.cast && Array.isArray(S.cast.npcs)) S.cast.npcs.forEach(function(n){ if (n && n.name) _names.push(n.name); });
+        var _sayRe = /<say\s+who="([^"]*)"\s*>([^<]*)<\/say>|「([^」]*)」/g, _sm, _seenSay = {};
+        while ((_sm = _sayRe.exec(_body))) {
+          var _ss2 = String((_sm[1] != null ? _sm[2] : _sm[3]) || '').trim().slice(0, 80);
+          var _sw; if (_sm[1] != null){ _sw = String(_sm[1] || '').trim().slice(0, 24); } else { var _pre = _body.slice(0, _sm.index), _bi = -1; _sw = _heroNm; _names.forEach(function(n){ var p = _pre.lastIndexOf(n); if (p > _bi){ _bi = p; _sw = n; } }); }
+          var _ss = _ss2; if (!_ss2) continue;
           var _sk = _sw + '' + _ss;
           if (_seenSay[_sk]) continue; _seenSay[_sk] = 1;
-          _convSays.push({ who: _sw, say: _ss });
+          _convSays.push({ who: _sw || _heroNm || '???', say: _ss2 });
         }
       } catch(e) { _convSays = []; }
       // v292Dfix169(案B): <say>タグが1つも無いとき（沈黙・裸引用のみ等）だけ、従来の2段階
