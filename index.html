@@ -1681,10 +1681,28 @@ const G = {
 
       let narr = plan.narrative.join('\n');
 
-      // v292Dfix169(案B): 会話ログを本文から切り離し、専用の2段階生成で「実際に口に出した
-      //   発話だけ」を作る。これで状態描写・メタが会話ログに構造的に入らず、空にもならない。
+      // v292Dfix195: 会話ログをモデル自身の <say who="名前"> タグから作る（話者＝その台詞を
+      //   書いた本人＝正解）。genConvLog の話者推測は誤割り当ての温床だったため、<say>タグが
+      //   1つも無いときだけのフォールバックに格下げ。新エンジンは全セリフを<say>で囲む契約。
+      //   ※ <react ... 声="<say who='X'>…</say>"> の入れ子は who='…'(単引用)なので
+      //     who="…"(二重引用)だけ拾うこの正規表現には掛からず、本文の発話のみ抽出される。
       let _convSays = [];
-      try { _convSays = await this.genConvLog(narr); } catch(e){ _convSays = []; }
+      try {
+        var _sayRe = /<say\s+who="([^"]*)"\s*>([^<]*)<\/say>/g, _sm, _seenSay = {};
+        while ((_sm = _sayRe.exec(result.text))) {
+          var _sw = String(_sm[1] || '').trim().slice(0, 24);
+          var _ss = String(_sm[2] || '').trim().slice(0, 80);
+          if (!_sw || !_ss) continue;
+          var _sk = _sw + '' + _ss;
+          if (_seenSay[_sk]) continue; _seenSay[_sk] = 1;
+          _convSays.push({ who: _sw, say: _ss });
+        }
+      } catch(e) { _convSays = []; }
+      // v292Dfix169(案B): <say>タグが1つも無いとき（沈黙・裸引用のみ等）だけ、従来の2段階
+      //   生成（実際に口に出した発話だけを作る）にフォールバックする。
+      if (!_convSays.length) {
+        try { _convSays = await this.genConvLog(narr); } catch(e){ _convSays = []; }
+      }
       // SAY入力は主人公の実発話なので会話ログ先頭に必ず入れる
       if (S.mode === 'SAY' && text && S.cast && S.cast.hero && S.cast.hero.name){
         var _sayClean = String(text).replace(/^[「『]|[」』]$/g,'').slice(0,80);
@@ -2438,7 +2456,7 @@ G.init();
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
-  <script src="v292Dfix192-newengine.js?cb=v292Dfix194"></script>
+  <script src="v292Dfix192-newengine.js?cb=v292Dfix195"></script>
 </body>
 </html>
 
