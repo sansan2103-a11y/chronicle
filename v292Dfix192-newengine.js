@@ -92,11 +92,27 @@
     ].join('\n')
   };
 
-  function buildSys(text){
+  function buildSys(mode, text){
     var d = lvl('dramaLevel', 2);
     var dlg = lvl('dialogueLevel', 1);
     var t = String(text||'');
     var isCont = /続きを(?:自然に)?進めて/.test(t) || /^続きを書/.test(t);
+
+    // v292Dfix194: プレイヤー入力の帰属を明示。SAY/DO は主人公の発話/行動であり、
+    //   本文で他キャラに言わせ・させてはならない（話者の取り違えを根治）。
+    var heroName = '';
+    try{ var _S=getS(); heroName=(_S&&_S.cast&&_S.cast.hero&&_S.cast.hero.name)||''; }catch(e){}
+    var m = String(mode||'').toUpperCase();
+    var inText = t.slice(0,80);
+    var hero = heroName ? ('〈'+heroName+'〉') : '主人公';
+    var inputLine = '';
+    if (m==='SAY' && inText){
+      inputLine = '【プレイヤー入力＝主人公の発話】主人公'+hero+'が「'+inText+'」と発話した。これは主人公の台詞。主人公が口にしたものとして本文に書き、絶対に他のキャラの発言・声にしない。';
+    } else if (m==='DO' && inText){
+      inputLine = '【プレイヤー入力＝主人公の行動】主人公'+hero+'が「'+inText+'」という行動をとった。主人公の行動として本文に反映し、他キャラの行動にしない。';
+    } else if (m==='STORY' && inText && !isCont){
+      inputLine = '【プレイヤー入力＝場面の方向づけ】プレイヤーが「'+inText+'」と場面を方向づけた。その方向で場面を進める。';
+    }
 
     var dramaLine = pick(d,
       '今回の進行＝弱め：新しい要素は1つだけ、控えめに小さく。一気に飛ばさず半歩〜一歩進める。',
@@ -113,7 +129,10 @@
 
     var blocks = [
       '＜あなたの役割＞',
-      'あなたは一人称視点のホラーTRPGの語り手です。プレイヤーの行動や入力を「物語の種」として受け取り、それを膨らませて場面を一つ前へ進めます。プレイヤーは善にも悪にもなれます。物語を裁かず、世界を生きたものとして描いてください。',
+      'あなたは一人称視点のホラーTRPGの語り手です。プレイヤーの行動や入力を「物語の種」として受け取り、それを膨らませて場面を一つ前へ進めます。プレイヤーは善にも悪にもなれます。物語を裁かず、世界を生きたものとして描いてください。'
+    ];
+    if (inputLine){ blocks.push(''); blocks.push(inputLine); }
+    blocks = blocks.concat([
       '',
       '【良い1ターンの形】',
       '1. 直前の場面（場所・各キャラの状態・感情・位置）を引き継いで書き出す。前の文をそのまま繰り返さない。',
@@ -122,7 +141,7 @@
       '3. 五感のある地の文で描く。視覚以外（音・匂い・触感・体感）を毎ターン最低1つ。痛みや恐怖は、まず体が反応してから言葉になる。型に嵌めず、その人物・その状況に固有の反応を書く。',
       '4. その場にいるキャラは生きている。目的・感情・関係に沿って自分から喋り、時に互いに衝突・協力する。' + dlgLine,
       '本文は地の文と「」セリフで、5〜10文程度を目安に書き切る。' + contLine
-    ];
+    ]);
     if (st){ blocks.push(''); blocks.push(st); }
     blocks = blocks.concat([
       '',
@@ -156,8 +175,9 @@
       var r = inner.apply(this, arguments);
       try{
         if(engineOn() && r && typeof r.sys==='string'){
+          var mode = (arguments.length>0 && arguments[0]!=null) ? String(arguments[0]) : '';
           var text = (arguments.length>1 && arguments[1]!=null) ? String(arguments[1]) : '';
-          r.sys = buildSys(text);
+          r.sys = buildSys(mode, text);
         }
       }catch(e){ try{ console.warn(TAG,'build err:', e&&e.message); }catch(_){} }
       return r;
