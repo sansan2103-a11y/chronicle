@@ -10403,7 +10403,7 @@
   function showGenAv(av, name){ var img = av.querySelector('img'); if (!img){ av.innerHTML = '<img alt="' + name + '" loading="lazy">'; img = av.querySelector('img'); } showGen(img); }
   function applyAvatar(av, name, url, aiPath){
     var img = av.querySelector('img');
-    if (img && img.getAttribute('data-gen') !== '1' && (aiPathOf(img.getAttribute('src') || '') === aiPath || /api\.dicebear\.com/.test(img.getAttribute('src') || ''))) return; // already our AI image, OR fix197 fell back to DiceBear (402嵐防止: 再適用しない) — leave it
+    if (img && img.getAttribute('data-gen') !== '1' && (aiPathOf(img.getAttribute('src') || '') === aiPath || /api\.dicebear\.com|^data:|^blob:/.test(img.getAttribute('src') || ''))) return; // already our AI image, OR fix197/199が貼ったDiceBear/生成画像(data:|blob:)(402嵐防止: 再適用しない) — leave it
     if (!img){ av.innerHTML = '<img alt="' + name + '" loading="lazy">'; img = av.querySelector('img'); }
     if (!img) return;
     img.removeAttribute('data-r');
@@ -10523,7 +10523,7 @@
         if (have(nm)){
           var url = buildUrl(cache[nm], nm);
           // replace template/spinner with AI image; leave it if already our AI image (path match)
-          if (img.getAttribute('data-gen') === '1' || (aiPathOf(src) !== aiPathOf(url) && !/api\.dicebear\.com/.test(src))){ img.removeAttribute('data-r'); img.removeAttribute('data-gen'); img.title = ''; attachRetry(img, url); img.src = url; }
+          if (img.getAttribute('data-gen') === '1' || (aiPathOf(src) !== aiPathOf(url) && !/api\.dicebear\.com|^data:|^blob:/.test(src))){ img.removeAttribute('data-r'); img.removeAttribute('data-gen'); img.title = ''; attachRetry(img, url); img.src = url; }
         } else {
           if (!pending[nm]){ pending[nm] = true; genAsync(nm, descFor(nm)); }
           showGen(img);   // 生成中スピナー（テンプレ/旧アイコンのチラ見えも防ぐ）
