@@ -1687,7 +1687,16 @@ const G = {
       try { _convSays = await this.genConvLog(narr); } catch(e){ _convSays = []; }
       // SAY入力は主人公の実発話なので会話ログ先頭に必ず入れる
       if (S.mode === 'SAY' && text && S.cast && S.cast.hero && S.cast.hero.name){
-        _convSays.unshift({ who: S.cast.hero.name, say: String(text).replace(/^[「『]|[」』]$/g,'').slice(0,80) });
+        var _sayClean = String(text).replace(/^[「『]|[」』]$/g,'').slice(0,80);
+        // v292Dfix193: genConvLog がプレイヤーの SAY 発話を別キャラに誤割り当てして
+        //   会話ログを二重化する件の根治。SAY入力と同一内容の抽出結果は who を問わず捨てる
+        //   （その台詞は主人公のものと確定しており、直後に先頭へ追加する）。
+        var _sayNorm = _sayClean.replace(/[\s　。、！？!?…・「」『』]/g,'');
+        _convSays = _convSays.filter(function(c){
+          var cn = String((c && c.say) || '').replace(/[\s　。、！？!?…・「」『』]/g,'');
+          return cn !== _sayNorm;
+        });
+        _convSays.unshift({ who: S.cast.hero.name, say: _sayClean });
       }
 
       // v292Dfix175: 本文から <say> タグを除去する（会話ログは上の genConvLog で取得済なので本文の
