@@ -39,9 +39,15 @@
   function fixImg(img){
     var src = img.getAttribute('src') || '';
     if (src.indexOf('image.pollinations.ai') < 0) return;
+    var name = img.getAttribute('alt') || (/[?&]seed=([^&]+)/.exec(src) || [])[1] || 'character';
     var k = pollKey();
     if (k){
-      // キーあり → AI生成を維持。&key= 未付与なら付ける（冪等）。
+      // キーあり → AI生成を試みる。ただし正方形アバターは、生成失敗（残高不足=402等）時に
+      //   DiceBear へ確実に落ちるよう onerror を毎回上書き（features.jsの再試行/"?"クラッシュより優先）。
+      if (isSquareAvatar(src)){
+        img.onerror = function(){ try{ img.onerror = null; img.src = diceUrl(name); }catch(e){} };
+      }
+      // &key= 未付与なら付ける（冪等）。
       if (src.indexOf('key=') < 0){
         try{ img.src = src + (src.indexOf('?') < 0 ? '?' : '&') + 'key=' + encodeURIComponent(k); }catch(e){}
       }
@@ -49,7 +55,6 @@
     }
     // キー無し → 正方形アバターだけ DiceBear に差し替え。
     if (!isSquareAvatar(src)) return;
-    var name = img.getAttribute('alt') || (/[?&]seed=([^&]+)/.exec(src) || [])[1] || 'character';
     var d = diceUrl(name);
     if (src !== d){
       try{ img.onerror = null; }catch(e){}
