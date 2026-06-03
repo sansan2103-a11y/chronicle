@@ -309,6 +309,11 @@ body {
         </div>
       </div>
       <div class="fld">
+        <label>Pollinations APIキー（AIアイコン用・<code>pk_</code> で始まる publishable key）</label>
+        <input type="password" id="cfgPollKey" placeholder="pk_...（未入力ならイラストアイコンを使用）">
+        <div style="font-size:11px;color:var(--dim);margin-top:4px;line-height:1.5">AIアイコン（pollinations）を使うには enter.pollinations.ai で無料登録し publishable key（pk_）を取得して貼り付け。未入力時は DiceBear のイラストアイコンを表示します。</div>
+      </div>
+      <div class="fld">
         <label class="chk-row"><input type="checkbox" id="cfgDbg"> デバッグ表示</label>
       </div>
       <div class="fld">
@@ -381,7 +386,7 @@ const KEY = 'chr6';
 // ─────────────────────────────────────────────────────────────
 const S = {
   cfg: {
-    provider: 'anthropic', key: '', naiKey: '', orKey: '',
+    provider: 'anthropic', key: '', naiKey: '', orKey: '', pollKey: '',
     model: 'claude-haiku-4-5-20251001', orModel: 'mistralai/mistral-nemo',
     debug: false, showInner: true
   },
@@ -1348,6 +1353,7 @@ const UI = {
     document.getElementById('cfgProvider').value  = S.cfg.provider || 'anthropic';
     document.getElementById('cfgKey').value       = S.cfg.key      || '';
     document.getElementById('cfgOrKey').value     = S.cfg.orKey    || '';
+    { var _pk = document.getElementById('cfgPollKey'); if (_pk) _pk.value = S.cfg.pollKey || ''; }
     document.getElementById('cfgOrModel').value   = S.cfg.orModel  || 'meta-llama/llama-3.3-70b-instruct';
     document.getElementById('cfgNaiKey').value    = S.cfg.naiKey   || '';
     document.getElementById('cfgModel').value     = S.cfg.model    || 'claude-haiku-4-5-20251001';
@@ -1516,6 +1522,7 @@ const UI = {
     S.cfg.provider = document.getElementById('cfgProvider').value;
     S.cfg.key      = (document.getElementById('cfgKey').value    || '').replace(/[\s\u200B\uFEFF\u00A0]/g, '');
     S.cfg.orKey    = (document.getElementById('cfgOrKey').value  || '').replace(/[\s\u200B\uFEFF\u00A0]/g, '');
+    { var _pkS = document.getElementById('cfgPollKey'); if (_pkS) S.cfg.pollKey = (_pkS.value || '').replace(/[\s\u200B\uFEFF\u00A0]/g, ''); }
     S.cfg.orModel  = document.getElementById('cfgOrModel').value;
     S.cfg.naiKey   = (document.getElementById('cfgNaiKey').value || '').replace(/[\s\u200B\uFEFF\u00A0]/g, '');
     S.cfg.model    = document.getElementById('cfgModel').value;
@@ -2458,6 +2465,9 @@ G.init();
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
   <script src="v292Dfix192-newengine.js?cb=v292Dfix195"></script>
+  <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
+       無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
+  <script src="v292Dfix197-avatar-key.js?cb=v292Dfix197"></script>
 </body>
 </html>
 
