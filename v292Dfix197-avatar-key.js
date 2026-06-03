@@ -77,7 +77,7 @@
     if(c!=='pending'){
       var pe=persistGet(pk);
       if(pe && pe.indexOf('data:')===0){ cache[pk]=pe; if(img.getAttribute('src')!==pe){ img.onerror=null; img.src=pe; } return; }
-      cache[pk]='pending'; queue.push(pk); pump();
+      if(info.prompt){ cache[pk]='pending'; queue.push(pk); pump(); }  // promptが無いキーは生成しない（legacy URL待ち）
     }
     // pending中: legacy pollinations を読ませない（DiceBearを仮表示）
     var dp=diceUrl(name);
@@ -87,6 +87,23 @@
 
   function fixImg(img){
     var src = img.getAttribute('src') || '';
+    // v292Dfix199c: 会話ログはimg要素を使い回すため、altが変わったらタグを付け替える
+    //   （旧: ミリアのタグが残ったimgがカエデに再利用され、カエデのカードにミリアの絵が出た）
+    var alt0 = img.getAttribute('alt') || '';
+    var pk0 = img.getAttribute('data-avpk');
+    if(pk0 && alt0){
+      var expect = keyFor(alt0);
+      if(pk0 !== expect){
+        img.setAttribute('data-avpk', expect);
+        if(!jobInfo[expect]){
+          if(src.indexOf('image.pollinations.ai')>=0 && isSquareAvatar(src)){
+            jobInfo[expect] = { prompt: promptOf(src), model: modelOf(src), seed: seedOf(src), name: alt0 };
+          } else {
+            jobInfo[expect] = { name: alt0 };   // prompt未取得: legacy URL が来るまで生成しない
+          }
+        }
+      }
+    }
     if(img.getAttribute('data-avpk')){
       // 新しいlegacy URLが再適用された場合は jobInfo を更新（↻再生成後の新プロンプト反映）
       if(src.indexOf('image.pollinations.ai')>=0){
