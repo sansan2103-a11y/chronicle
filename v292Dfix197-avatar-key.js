@@ -66,7 +66,25 @@
       .catch(function(){ cache[pk]='dice'; })
       .then(function(){ active--; applyAll(); pump(); });
   }
-  function pump(){ while(active<1 && queue.length){ var pk=queue.shift(); if(cache[pk]==='pending'){ active++; genOne(pk); } } }
+  // v292Dfix199f: 暴走防止の遮断器。生成は直列・最小間隔つき・セッション上限あり。
+  //   万一どこかが無限再生成ループに陥っても、上限で自動停止して DiceBear に退避し、
+  //   pollen を燃やし続けない（嵐クラスの不具合の最終ブレーキ）。
+  var GEN_BUDGET = 15;      // 1ページセッションの生成上限（通常はキャラ数回で足りる）
+  var MIN_INTERVAL = 1500;  // 生成と生成の最小間隔(ms)
+  var genCount = 0, lastGenAt = 0, pumpTimer = null;
+  function pump(){
+    if(active >= 1 || !queue.length || pumpTimer) return;
+    if(genCount >= GEN_BUDGET){
+      while(queue.length){ var pkx = queue.shift(); if(cache[pkx]==='pending') cache[pkx]='dice'; }
+      try{ console.warn(TAG, 'generation budget ('+GEN_BUDGET+') exceeded — DiceBearに退避（暴走防止）'); }catch(e){}
+      applyAll(); return;
+    }
+    var pk = queue.shift();
+    if(cache[pk] !== 'pending'){ pump(); return; }
+    active++;
+    var wait = Math.max(0, MIN_INTERVAL - (Date.now() - lastGenAt));
+    pumpTimer = setTimeout(function(){ pumpTimer = null; lastGenAt = Date.now(); genCount++; genOne(pk); }, wait);
+  }
 
   function applyOne(img){
     var pk = img.getAttribute('data-avpk'); if(!pk) return;
@@ -105,14 +123,10 @@
       }
     }
     if(img.getAttribute('data-avpk')){
-      // 新しいlegacy URLが再適用された場合は jobInfo を更新（↻再生成後の新プロンプト反映）
-      if(src.indexOf('image.pollinations.ai')>=0){
-        var pk0=img.getAttribute('data-avpk');
-        if(jobInfo[pk0] && promptOf(src) && jobInfo[pk0].prompt!==promptOf(src) && cache[pk0]!=='pending'){
-          jobInfo[pk0]={prompt:promptOf(src), model:modelOf(src), seed:seedOf(src), name:img.getAttribute('alt')||jobInfo[pk0].name};
-          delete cache[pk0]; persistDel(pk0);
-        }
-      }
+      // v292Dfix199f: 「プロンプト変化で自動再生成」は廃止。
+      //   主人公アバターは2系統のコードが【別々のプロンプト】を出すため、自動再生成が
+      //   A↔Bの無限ループになり（点滅・402嵐・pollen消費）危険だった。
+      //   説明変更後の作り直しは ↻ボタン（regenFor）だけで行う。
       applyOne(img); return;
     }
     if(src.indexOf('image.pollinations.ai') < 0) return;
