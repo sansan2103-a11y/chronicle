@@ -10197,7 +10197,8 @@
       var U = getUI();
       var npcs = Array.isArray(sc.npcs) ? sc.npcs : [];
       // v292Dfix201(第2弁): LLMが指示人数を超えて返しても上限を強制（一括4人追加バグの根治）
-      if (capN && npcs.length > capN) npcs = npcs.slice(0, capN);
+      // v292Dfix202: capN=0(全カード入力済み=新キャラ禁止)も有効にする
+      if (typeof capN === 'number' && npcs.length > capN) npcs = npcs.slice(0, capN);
       var cards = document.querySelectorAll('#npcList .npc-card');
       // v292Dfix147: when ALL existing cards already have a name (i.e. the user is mid-play
       // and added NPCs in advance OR clicked random AFTER adding a fresh blank NPC),
@@ -10263,8 +10264,13 @@
       var __ne201 = __cards201[__ci].querySelector('[data-f="name"]');
       if (__ne201 && !__ne201.value.trim()) __empty201++;
     }
-    var capN = __cards201.length === 0 ? 3 : (__empty201 > 0 ? __empty201 : 1);
-    var npcCountTxt = __cards201.length === 0 ? 'NPCは2〜3人' : ('NPCはちょうど' + capN + '人だけ。絶対に' + capN + '人を超えない');
+    // v292Dfix202: 全カード入力済みなら新キャラは一人も作らない。ボタンの約束は
+    //   「未入力の欄を埋める」であり、キャラ追加ではない(おしん報告: 作った覚えのないシモン出現)。
+    //   キャラを増やしたい時は「＋NPC追加」で空カードを作ってから🎲(空カードの数だけ生成)。
+    var capN = __cards201.length === 0 ? 3 : __empty201;
+    var npcCountTxt = __cards201.length === 0 ? 'NPCは2〜3人'
+      : (capN === 0 ? 'NPCは一人も作らない。"npcs"は必ず空配列[]で返す'
+                    : ('NPCはちょうど' + capN + '人だけ。絶対に' + capN + '人を超えない'));
     var sys = hasLore
       ? 'あなたはTRPGのシナリオ設計者。日本語で、整合した1つのシナリオ設定を作りJSONのみ返す。【最重要】既に与えられた「世界観」を絶対の前提とし、登場人物・場所・雰囲気をその世界に深く根ざした形で創作する。世界観のジャンル・時代・文化・空気感に必ず合わせ、勝手に別ジャンルや無関係な題材にしない。キャラの名前・外見・服装・立場・価値観・恐怖は、その世界観から自然に導けるものにする。'
       : 'あなたはTRPGのシナリオ設計者。日本語で、整合した1つのシナリオ設定を作りJSONのみ返す。多様なジャンル（ダークファンタジー/ホラー/SF/現代/歴史/ミステリ/和風怪異 等）からランダムに選び、毎回違う題材にする。世界観・登場人物・場所・雰囲気を一つの世界として整合させる。';
