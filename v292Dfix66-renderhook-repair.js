@@ -76,14 +76,25 @@
       .replace(/"/g, '&quot;');
   }
 
+  // v292Dfix205b: アクティブスロット(fix30)対応のストレージキー。
+  //   保存はfix30がアクティブスロットへ書くのに、ここのLSフォールバックは常に'chr6'を
+  //   読んでいた＝スロットa使用時、window.S確立前の初回repairがデフォルトスロットの
+  //   旧物語から会話カードを作ってしまう(リセット不全の残党・実測)。
+  function activeStoreKey(){
+    try {
+      var act = JSON.parse(localStorage.getItem('chr6_active_slot') || 'null');
+      if (act && act !== 'default') return 'chr6_slot_' + act;
+    } catch(e){}
+    return 'chr6';
+  }
   function getState(){
     // 1) IIFE-local S が window 経由で見えれば使う (旧パッチで漏らしたケース)
     try {
       if (window.S && window.S.turns) return window.S;
     } catch(e){}
-    // 2) features.js IIFE-local S は外から見えないので LS fallback
+    // 2) features.js IIFE-local S は外から見えないので LS fallback（スロット対応）
     try {
-      var raw = localStorage.getItem('chr6');
+      var raw = localStorage.getItem(activeStoreKey());
       if (raw){
         var parsed = JSON.parse(raw);
         if (parsed && parsed.turns) return parsed;
@@ -1253,7 +1264,7 @@
       if (changed){
         try {
           if (window.S && window.S.turns === turns && typeof window.S.save === 'function'){ window.S.save(); }
-          else if (!(window.S && window.S.turns)){ localStorage.setItem('chr6', JSON.stringify(st)); }
+          else if (!(window.S && window.S.turns)){ localStorage.setItem(activeStoreKey(), JSON.stringify(st)); }   // v292Dfix205b
         } catch(e){}
         // 既に古い話者で描画済みのカードを一掃して正しい話者で再構築(一回きり)
         try {
