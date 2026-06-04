@@ -597,8 +597,20 @@
     if (idx >= 0){ idx += text.length + 2; }
     else { idx = narr.indexOf(text); if (idx < 0) return ''; idx += text.length; }
     var tail = narr.slice(idx, idx + 60);
+    // v292Dfix206: 「…っ！」\nミリアの金切り声が、… のような【改行を挟む後置話者】に対応。
+    //   先頭の空白/改行/孤立閉じ括弧をスキップしてから文末判定する（実例: カエデに誤割当された悲鳴）。
+    tail = tail.replace(/^[\s\u3000」』]+/, '');
     var stop = tail.search(/[「。\n]/);
     if (stop >= 0) tail = tail.slice(0, stop);
+    // v292Dfix206: 引用助詞「と」が無い後置型「Xの金切り声が／Xの悲鳴が」: 名前が文頭で
+    //   直後に「の＋声系名詞」が続く時だけ採用（誤爆防止に文頭限定・6字以内）。
+    for (var j = 0; j < names.length; j++){
+      var nmj = names[j];
+      if (tail.indexOf(nmj) === 0){
+        var esc = nmj.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (new RegExp('^' + esc + 'の[^。「」]{0,6}(声|悲鳴|金切|叫|呟|囁|うめ|絶叫|嗚咽)').test(tail)) return nmj;
+      }
+    }
     if (!/^\s*[とっ、]*と/.test(tail)) return '';   // require quotative と right after the quote
     if (!SPEECH_WORD_RX.test(tail)) return '';        // require a speech/voice word
     for (var i = 0; i < names.length; i++){ if (tail.indexOf(names[i]) >= 0) return names[i]; }
