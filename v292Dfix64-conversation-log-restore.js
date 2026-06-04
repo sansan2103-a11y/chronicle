@@ -257,6 +257,7 @@
 
   // ---------- main: post-render repair ----------
   function repair(reason){
+    if (window.__v292ConvlogSolo) return 0;   // v292Dfix200: fix66 が唯一の書き手
     var stream = document.getElementById('dialogue-stream');
     if (!stream) return 0;
     var st = getState();

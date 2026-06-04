@@ -77,6 +77,7 @@
   // _busy: 自身の appendChild が MutationObserver を再発火させて再帰するのを防ぐ。
   var _busy = false;
   function reorder(){
+    if (window.__v292ConvlogSolo) return 0;   // v292Dfix200: fix66単独描画なら順序は構築時に正しい
     if (_busy) return 0;
     try {
       var stream = document.getElementById('dialogue-stream');

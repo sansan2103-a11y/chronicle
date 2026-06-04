@@ -249,6 +249,9 @@
 
       // 2) DO/STORY のユーザー入力を可視化するため、stream 内のカードを turn 順で
       //    走査して、各 DO/STORY turn の playerText カードが無ければ補完挿入する。
+      // v292Dfix200: 単一権威モードでは入力echoカードを作らない(fix66がfix91c/125bで
+      //   除去する対象をそもそも生成しない=生成⇄削除の綱引きを構造から絶つ)。
+      if (window.__v292ConvlogSolo) return;
       try {
         var stream = document.getElementById('dialogue-stream');
         if (!stream) return;

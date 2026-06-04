@@ -3,6 +3,17 @@
  * startup "[v292DfixNN] installed" lines — not just runtime churn. The
  * duplicate fix108 IIFE at the end of this file no-ops via the window flag.
  * console.warn / console.error are deliberately untouched. */
+/* v292Dfix200: 会話ログ単一権威レンダラ(fix66)モード。
+ * 点滅の真因 = 多重レンダラの綱引き(実測: fix73が重複削除→fix66 peak検知が再追加→
+ * fix70bが全カード並べ替え→新カード毎にlegacy avatar fetch=402嵐)。
+ * この旗が立つと base renderStream / fix56入力カード / fix64restore / fix70b並べ替え /
+ * fix73dedup は会話ログDOMに一切触れず、fix66だけが書く。
+ * ロールバック: localStorage.setItem('v292ConvlogSoloOff','1') してリロード。 */
+(function v292Dfix200soloFlag(){
+  try { window.__v292ConvlogSolo = (localStorage.getItem('v292ConvlogSoloOff') === '1') ? false : true; }
+  catch(e){ window.__v292ConvlogSolo = true; }
+})();
+
 (function v292Dfix108early(){
   if (window.__v292Dfix108) return;
   window.__v292Dfix108 = true;
@@ -2190,6 +2201,7 @@
 
     /* --- 全 turns を回して dialogue-stream を再構築 --- */
     function renderStream(){
+      if (window.__v292ConvlogSolo) return;   // v292Dfix200: fix66 が唯一の書き手
       var stream = document.getElementById('dialogue-stream');
       if (!stream) return;
       stream.innerHTML = '';
@@ -4165,6 +4177,11 @@
   }
 
   function renderStreamV15(){
+    // v292Dfix200: 単一権威モードでは base は描かない(wipeもしない)。fix66 が全責任を持つ。
+    if (window.__v292ConvlogSolo){
+      try { var __ns66 = window.__v292Dfix66; if (__ns66 && typeof __ns66.repair === 'function') __ns66.repair(); } catch(__e200){}
+      return;
+    }
     var stream = document.getElementById('dialogue-stream');
     if (!stream) return;
     stream.innerHTML = '';

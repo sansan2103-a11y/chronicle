@@ -1225,6 +1225,55 @@
     }
   }
 
+  // ---------- v292Dfix200b: 保存済み _convSays の後置話者を修正 ----------
+  // index.html fix196 の裸「」近接判定は引用の【前方】しか見ないため、日本語の後置話者
+  // 「『…』と、カエデは冷静に呟いた」で誤割当が保存される(実例: カエデの台詞がミリアに)。
+  // 既存の resolvePostQuoteSpeaker(fix97) を保存データに起動時一回適用して決定的に修正。
+  // 冪等(再実行しても同じ結果)。SAY入力ターンの先頭エントリ(=主人公の実発話, fix193確定)は触らない。
+  function migrateConvSaysPostfix(){
+    try {
+      var st = getState();
+      var turns = (st && st.turns) || [];
+      if (!turns.length) return 0;
+      var names = castNameList();
+      if (!names.length) return 0;
+      var changed = 0;
+      for (var i = 0; i < turns.length; i++){
+        var t = turns[i];
+        if (!t || !Array.isArray(t._convSays) || !t.narrative) continue;
+        var pn = preprocessNarrative(t.narrative);
+        for (var j = 0; j < t._convSays.length; j++){
+          if (t.inputType === 'SAY' && j === 0) continue;   // fix193: 主人公の確定発話
+          var c = t._convSays[j];
+          if (!c || !c.say) continue;
+          var rs = resolvePostQuoteSpeaker(pn, String(c.say), names);
+          if (rs && rs !== c.who){ c.who = rs; changed++; }
+        }
+      }
+      if (changed){
+        try {
+          if (window.S && window.S.turns === turns && typeof window.S.save === 'function'){ window.S.save(); }
+          else if (!(window.S && window.S.turns)){ localStorage.setItem('chr6', JSON.stringify(st)); }
+        } catch(e){}
+        // 既に古い話者で描画済みのカードを一掃して正しい話者で再構築(一回きり)
+        try {
+          var stream = document.getElementById('dialogue-stream');
+          if (stream){
+            var olds = stream.querySelectorAll('.v292-dlg-card');
+            for (var k = olds.length - 1; k >= 0; k--){ if (olds[k].parentNode) olds[k].parentNode.removeChild(olds[k]); }
+          }
+          repair();
+        } catch(e){}
+        try { console.warn(TAG, 'v292Dfix200b: postfix-speaker migration fixed', changed, 'convSays entr(y/ies)'); } catch(e){}
+      }
+      return changed;
+    } catch(e){ try { console.warn(TAG, 'v292Dfix200b err:', e && e.message); } catch(_){} return 0; }
+  }
+  // S/localStorage が整う前に走ると0件で終わるだけなので、初回即時+遅延リトライ(冪等)。
+  try { migrateConvSaysPostfix(); } catch(e){}
+  setTimeout(migrateConvSaysPostfix, 800);
+  setTimeout(migrateConvSaysPostfix, 2500);
+
   // ---------- public API (live binding for hot-swap) ----------
   window.__v292Dfix66 = {
     repair: repair,

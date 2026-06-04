@@ -1699,7 +1699,7 @@ const G = {
         var _sayRe = /<say\s+who="([^"]*)"\s*>([^<]*)<\/say>|「([^」]*)」/g, _sm, _seenSay = {};
         while ((_sm = _sayRe.exec(_body))) {
           var _ss2 = String((_sm[1] != null ? _sm[2] : _sm[3]) || '').trim().slice(0, 80);
-          var _sw; if (_sm[1] != null){ _sw = String(_sm[1] || '').trim().slice(0, 24); } else { var _pre = _body.slice(0, _sm.index), _bi = -1; _sw = _heroNm; _names.forEach(function(n){ var p = _pre.lastIndexOf(n); if (p > _bi){ _bi = p; _sw = n; } }); }
+          var _sw; if (_sm[1] != null){ _sw = String(_sm[1] || '').trim().slice(0, 24); } else { var _pre = _body.slice(0, _sm.index), _bi = -1; _sw = _heroNm; _names.forEach(function(n){ var p = _pre.lastIndexOf(n); if (p > _bi){ _bi = p; _sw = n; } }); /* v292Dfix200b: 後置話者「『…』と、Xは呟いた」は前方近接より優先 */ var _post = _body.slice(_sm.index + _sm[0].length, _sm.index + _sm[0].length + 50); var _pst = _post.search(/[「。\n]/); if (_pst >= 0) _post = _post.slice(0, _pst); if (/^\s*[とっ、]*と/.test(_post) && /(言|呟|囁|尋|問|答|叫|返|応|漏|告|呼|続|笑|声|呻|唸)/.test(_post)){ _names.forEach(function(n){ if (_post.indexOf(n) >= 0) _sw = n; }); } }
           var _ss = _ss2; if (!_ss2) continue;
           var _sk = _sw + '' + _ss;
           if (_seenSay[_sk]) continue; _seenSay[_sk] = 1;
@@ -2419,7 +2419,7 @@ G.init();
 })();
 </script>
 <!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
-<script src="features.js?cb=v292Dfix199e"></script>
+<script src="features.js?cb=v292Dfix200"></script>
 <script src="v292Dfix135-longmem.js?cb=v292Dfix135g"></script>
 <script src="v292Dfix138-continue.js?cb=v292Dfix142"></script>
 <script src="v292Dfix145-charlist.js?cb=v292Dfix145f"></script>
@@ -2427,7 +2427,7 @@ G.init();
 <script src="v292Dfix53-readability-v2.js?cb=v292Dfix53"></script>
 <script src="v292Dfix54-gender-pronoun.js?cb=v292Dfix54"></script>
 <script src="v292Dfix55-gm-mode.js?cb=v292Dfix55c"></script>
-  <script src="v292Dfix56-conversation-log-fix.js?cb=v292Dfix56"></script>
+  <script src="v292Dfix56-conversation-log-fix.js?cb=v292Dfix200"></script>
   <script src="v292Dfix57-script-style-dialogue.js?cb=v292Dfix57"></script>
   <script src="v292Dfix58-prompt-rebuild.js?cb=v292Dfix58"></script>
   <script src="v292Dfix60-display-pipeline.js?cb=v292Dfix60"></script>
@@ -2435,10 +2435,10 @@ G.init();
   <script src="v292Dfix61-alpha-strip-protect.js?cb=v292Dfix61v3"></script>
   <script src="v292Dfix62-avatar-fix.js?cb=v292Dfix62"></script>
   <script src="v292Dfix63-avatar-style.js?cb=v292Dfix63"></script>
-  <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix64"></script>
+  <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script>
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=v292Dfix74"></script>
-  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix171"></script>
+  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix200b"></script>
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
     <!-- v292Dfix189c: fix70(dialogue-order, 本文ベースの並べ替え)を無効化。fix70bが
@@ -2447,8 +2447,8 @@ G.init();
          並べ替えはfix70bに集約。 (旧: v292Dfix70-dialogue-order.js?cb=v292Dfix70) -->
     <script src="v292Dfix71-anti-recap.js?cb=v292Dfix71"></script>
     <script src="v292Dfix72-within-turn-dedup.js?cb=v292Dfix72"></script>
-    <script src="v292Dfix73-card-dedup.js?cb=v292Dfix73"></script>
-    <script src="v292Dfix70b-order-convsays.js?cb=v292Dfix70b5"></script>
+    <script src="v292Dfix73-card-dedup.js?cb=v292Dfix200"></script>
+    <script src="v292Dfix70b-order-convsays.js?cb=v292Dfix200"></script>
   <script src="v292Dfix75-history-dedup.js?cb=v292Dfix75"></script>
 <script src="v292Dfix76-human-foundation.js?cb=v292Dfix76b"></script>  <script src="v292Dfix77-state-memory.js?cb=v292Dfix77"></script>
   <script src="v292Dfix78-tag-case-normalize.js?cb=v292Dfix78"></script>

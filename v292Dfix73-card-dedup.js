@@ -15,6 +15,7 @@
   function cardText(c){ var e=c.querySelector('.dlg-text'); return e?e.textContent:''; }
   function isUnknown(sp){ return !sp || sp==='???' || sp==='?'; }
   function dedup(){
+    if (window.__v292ConvlogSolo) return 0;   // v292Dfix200: fix66の(speaker|text)キーdedupで十分
     try {
       var stream = document.getElementById('dialogue-stream');
       if (!stream) return 0;
@@ -49,6 +50,7 @@
   }
   window.__v292Dfix73Dedup = dedup;
   function wrapFix66(){
+    if (window.__v292ConvlogSolo) return false;   // v292Dfix200
     try {
       var ns = window.__v292Dfix66;
       if (ns && typeof ns.repair==='function' && !ns.repair.__v292Dfix73Wrapped){
