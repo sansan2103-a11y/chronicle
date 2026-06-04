@@ -2429,7 +2429,15 @@
             s.cast.hero = s.cast.hero || {};
             s.cast.hero.gender = r.value;
           } else {
+            // v292Dfix201b: index は記名時の値でなく変更時のDOM位置から取る（カード削除でズレるため）
             var i = parseInt(target.replace('npc', ''), 10);
+            try {
+              var __card = r.closest('.npc-card');
+              if (__card){
+                var __all = document.querySelectorAll('#npcList .npc-card');
+                for (var __k = 0; __k < __all.length; __k++){ if (__all[__k] === __card){ i = __k; break; } }
+              }
+            } catch(__e){}
             s.cast.npcs = s.cast.npcs || [];
             if (!s.cast.npcs[i]) s.cast.npcs[i] = {};
             s.cast.npcs[i].gender = r.value;
@@ -2473,19 +2481,38 @@
           // v292-D fix8: form の性別ラジオから gender を読んで S.cast に入れる。
           //   原本 saveSettings は cast.hero.name/desc と NPC name/desc/psych のみ書き込み、
           //   gender を touch しないので、ラジオ checked が失われていた。
+          // v292Dfix201b: 性別が勝手に「未設定」へ戻るバグの根治。
+          //   旧実装は (1) ラジオを v108g_npc{idx} の記名で引くため、カード削除/fix149自動掃除で
+          //   indexがずれると null → '' 上書き＝未設定化 (2) origSSがnpcs配列を再構築するので
+          //   ラジオ不在時の保険も無かった。新設計＝非破壊: チェック済みラジオが実在する時だけ
+          //   その値を書く。無ければ保存前の名前→gender スナップショットから復元する。
+          //   ユーザーが「未設定」を選んだ場合はそのラジオ(value='')がchecked＝意図として尊重される。
+          var __gsnap = {};
+          try {
+            if (typeof S !== 'undefined' && S.cast){
+              (S.cast.npcs || []).forEach(function(n){ if (n && n.name && n.gender !== undefined) __gsnap[n.name] = n.gender; });
+              if (S.cast.hero && S.cast.hero.gender !== undefined) __gsnap['\u0000hero'] = S.cast.hero.gender;
+            }
+          } catch(e){}
           try {
             var hg = document.querySelector('input[name="v108g_hero"]:checked');
-            if (typeof S !== 'undefined' && S.cast && S.cast.hero){
-              S.cast.hero.gender = hg ? hg.value : '';
+            if (typeof S !== 'undefined' && S.cast && S.cast.hero && hg){
+              S.cast.hero.gender = hg.value;
             }
           } catch(e){}
           var r = origSS.apply(this, arguments);
           // origSS が S.cast.npcs を rebuild した後、NPC ごとの gender を入れる
           try {
+            if (typeof S !== 'undefined' && S.cast && S.cast.hero && S.cast.hero.gender === undefined && __gsnap['\u0000hero'] !== undefined){
+              S.cast.hero.gender = __gsnap['\u0000hero'];
+            }
             document.querySelectorAll('#npcList .npc-card').forEach(function(card, idx){
               if (typeof S !== 'undefined' && S.cast && S.cast.npcs && S.cast.npcs[idx]){
-                var ng = card.querySelector('input[name="v108g_npc' + idx + '"]:checked');
-                S.cast.npcs[idx].gender = ng ? ng.value : '';
+                var __gv = null;
+                var __rads = card.querySelectorAll('.v292-grow input[type="radio"]');
+                for (var __ri = 0; __ri < __rads.length; __ri++){ if (__rads[__ri].checked){ __gv = __rads[__ri].value; break; } }
+                if (__gv !== null){ S.cast.npcs[idx].gender = __gv; }
+                else if (__gsnap[S.cast.npcs[idx].name] !== undefined){ S.cast.npcs[idx].gender = __gsnap[S.cast.npcs[idx].name]; }
               }
             });
             if (typeof S !== 'undefined' && typeof S.save === 'function') S.save();
@@ -10162,13 +10189,15 @@
   function setVal(id, v){ var e = $(id); if (e && !e.value.trim() && v) e.value = String(v); }
   function setStatus(msg, err){ try { var U = getUI(); if (U && U.setStatus) U.setStatus(msg, err); } catch(e){} }
 
-  function applyScenario(sc){
+  function applyScenario(sc, capN){
     try {
       if (!sc) return;
       if (sc.hero){ setVal('cfgHName', sc.hero.name); setVal('cfgHDesc', sc.hero.desc); }
       if (sc.scene){ setVal('cfgLore', sc.scene.lore); setVal('cfgLoc', sc.scene.loc); setVal('cfgObj', sc.scene.obj); setVal('cfgTone', sc.scene.tone); }
       var U = getUI();
       var npcs = Array.isArray(sc.npcs) ? sc.npcs : [];
+      // v292Dfix201(第2弁): LLMが指示人数を超えて返しても上限を強制（一括4人追加バグの根治）
+      if (capN && npcs.length > capN) npcs = npcs.slice(0, capN);
       var cards = document.querySelectorAll('#npcList .npc-card');
       // v292Dfix147: when ALL existing cards already have a name (i.e. the user is mid-play
       // and added NPCs in advance OR clicked random AFTER adding a fresh blank NPC),
@@ -10224,10 +10253,22 @@
     // 雰囲気を「その世界の住人」として深く根ざして創作する（勝手に別ジャンルにしない）。
     // 世界観が空のときだけ、ジャンルをランダムに選ぶ。おしん要望=世界観を汲み取った設定生成。
     var hasLore = !!filled['世界観'];
+    // v292Dfix201(第1弁): 生成人数をUIの実態から決める。
+    //   カード0枚(初期作成)=従来通り2〜3人 / 空カードあり=その数だけ / 全カード入力済み=1人だけ追加。
+    //   おしん報告「一人追加しようとランダム入力したら一気に増えた」の根治: 旧実装は常に
+    //   「2〜3人」を要求し、空カード0なら返ってきた人数分(超過4人でも)addNpcしていた。
+    var __cards201 = document.querySelectorAll('#npcList .npc-card');
+    var __empty201 = 0;
+    for (var __ci = 0; __ci < __cards201.length; __ci++){
+      var __ne201 = __cards201[__ci].querySelector('[data-f="name"]');
+      if (__ne201 && !__ne201.value.trim()) __empty201++;
+    }
+    var capN = __cards201.length === 0 ? 3 : (__empty201 > 0 ? __empty201 : 1);
+    var npcCountTxt = __cards201.length === 0 ? 'NPCは2〜3人' : ('NPCはちょうど' + capN + '人だけ。絶対に' + capN + '人を超えない');
     var sys = hasLore
       ? 'あなたはTRPGのシナリオ設計者。日本語で、整合した1つのシナリオ設定を作りJSONのみ返す。【最重要】既に与えられた「世界観」を絶対の前提とし、登場人物・場所・雰囲気をその世界に深く根ざした形で創作する。世界観のジャンル・時代・文化・空気感に必ず合わせ、勝手に別ジャンルや無関係な題材にしない。キャラの名前・外見・服装・立場・価値観・恐怖は、その世界観から自然に導けるものにする。'
       : 'あなたはTRPGのシナリオ設計者。日本語で、整合した1つのシナリオ設定を作りJSONのみ返す。多様なジャンル（ダークファンタジー/ホラー/SF/現代/歴史/ミステリ/和風怪異 等）からランダムに選び、毎回違う題材にする。世界観・登場人物・場所・雰囲気を一つの世界として整合させる。';
-    var user = '既に決まっている項目（' + (hasLore ? '特に「世界観」を最優先の前提とし、矛盾させず、むしろそこから発想する' : 'あれば矛盾しないように') + '）:\n' + JSON.stringify(filled) + '\n\n空の項目だけを創作し、次の形式のJSONのみで返せ:\n{"hero":{"name":"","desc":""},"npcs":[{"name":"","desc":"","personality":"","coreDesire":"","coreFear":"","wound":""}],"scene":{"lore":"","loc":"","obj":"","tone":""}}\nNPCは2〜3人。descは外見・立場（' + (hasLore ? 'その世界観に合った服装・種族・職業で' : '') + '簡潔に1〜2文）。各項目は簡潔に。';
+    var user = '既に決まっている項目（' + (hasLore ? '特に「世界観」を最優先の前提とし、矛盾させず、むしろそこから発想する' : 'あれば矛盾しないように') + '）:\n' + JSON.stringify(filled) + '\n\n空の項目だけを創作し、次の形式のJSONのみで返せ:\n{"hero":{"name":"","desc":""},"npcs":[{"name":"","desc":"","personality":"","coreDesire":"","coreFear":"","wound":""}],"scene":{"lore":"","loc":"","obj":"","tone":""}}\n' + npcCountTxt + '。descは外見・立場（' + (hasLore ? 'その世界観に合った服装・種族・職業で' : '') + '簡潔に1〜2文）。各項目は簡潔に。';
     setStatus('🎲 AIで生成中…（数秒）');
     try {
       var xhr = new XMLHttpRequest();
@@ -10242,7 +10283,7 @@
           var txt = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
           var sc = parseJson(txt);
           if (!sc) throw new Error('parse');
-          applyScenario(sc);
+          applyScenario(sc, capN);
         } catch(e){ setStatus('AI生成に失敗→固定ランダムで埋めます', true); fallback(); }
       };
       xhr.onerror = function(){ setStatus('通信失敗→固定ランダムで埋めます', true); fallback(); };
