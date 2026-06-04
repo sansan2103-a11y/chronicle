@@ -37,28 +37,34 @@
     try {
       if (!plan || !Array.isArray(plan.narrative)) return plan;
       var re = /<state\b[^>]*?\/?>/g;
-      var found = 0;
+      var found = 0, m;
+      // v292Dfix203: 読み元を ctx.raw（生テキスト）に変更。reactionVoiceExt(fix157①・
+      //   _parseExtensions#3)が<react>処理時に<state>行ごとnarrativeから除去するため、
+      //   narrative読みでは3軸(からだ/こころ/本能)が一度も保存されなかった
+      //   （実測: 全キャラ3軸空・<react>共存rawで再現・拡張二分探索で犯人確定）。
+      //   fix190(傷/関係/未解決)と同方式のraw読みなら上流の除去に影響されない。
+      var src = (ctx && typeof ctx.raw === 'string' && ctx.raw) ? ctx.raw : plan.narrative.join('\n');
+      re.lastIndex = 0;
+      while ((m = re.exec(src)) !== null){
+        var tag = m[0];
+        var who = attr(tag,'who');
+        if (who){
+          var cur = store[who] || {};
+          var ka = attr(tag,'からだ'), ko = attr(tag,'こころ'), ho = attr(tag,'本能');
+          if (ka) cur.karada = ka;
+          if (ko) cur.kokoro = ko;
+          if (ho) cur.honno = ho;
+          cur.turn = (function(){ try{ var S=(0,eval)('typeof S!=="undefined"?S:null'); return (S&&S.turns)?S.turns.length:0; }catch(e){ return 0; } })();
+          store[who] = cur;
+          found++;
+        }
+      }
+      // narrativeからの<state>除去は安全網として従来通り（表示漏れ防止）
       plan.narrative = plan.narrative.map(function(line){
         if (typeof line !== 'string') return line;
-        var m;
-        re.lastIndex = 0;
-        while ((m = re.exec(line)) !== null){
-          var tag = m[0];
-          var who = attr(tag,'who');
-          if (who){
-            var cur = store[who] || {};
-            var ka = attr(tag,'からだ'), ko = attr(tag,'こころ'), ho = attr(tag,'本能');
-            if (ka) cur.karada = ka;
-            if (ko) cur.kokoro = ko;
-            if (ho) cur.honno = ho;
-            cur.turn = (function(){ try{ var S=(0,eval)('typeof S!=="undefined"?S:null'); return (S&&S.turns)?S.turns.length:0; }catch(e){ return 0; } })();
-            store[who] = cur;
-            found++;
-          }
-        }
-        return line.replace(re, '').trim();   // 本文からタグ除去（表示漏れ防止）
+        return line.replace(re, '').trim();
       }).filter(function(l){ return l && String(l).trim().length > 0; });
-      if (found > 0){ persist(); try { console.log(TAG,'captured',found,'state(s)'); } catch(_){} }
+      if (found > 0){ persist(); try { console.log(TAG,'captured',found,'state(s) [raw]'); } catch(_){} }
     } catch(e){ try { console.warn(TAG,'capture err:', e && e.message); } catch(_){} }
     return plan;
   }
