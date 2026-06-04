@@ -105,6 +105,11 @@
 
   function fixImg(img){
     var src = img.getAttribute('src') || '';
+    // v292Dfix209: legacy URLは src でなく data-av-legacy 属性でも運べる（ブラウザにfetchさせず
+    //   プロンプト/seedだけ受け取る＝ロード時402の根絶。書き手側はfix66 buildCard等）。
+    var legacy209 = img.getAttribute('data-av-legacy') || '';
+    var carrier = (src.indexOf('image.pollinations.ai') >= 0) ? src
+                : (legacy209.indexOf('image.pollinations.ai') >= 0 ? legacy209 : '');
     // v292Dfix199c: 会話ログはimg要素を使い回すため、altが変わったらタグを付け替える
     //   （旧: ミリアのタグが残ったimgがカエデに再利用され、カエデのカードにミリアの絵が出た）
     var alt0 = img.getAttribute('alt') || '';
@@ -114,8 +119,8 @@
       if(pk0 !== expect){
         img.setAttribute('data-avpk', expect);
         if(!jobInfo[expect]){
-          if(src.indexOf('image.pollinations.ai')>=0 && isSquareAvatar(src)){
-            jobInfo[expect] = { prompt: promptOf(src), model: modelOf(src), seed: seedOf(src), name: alt0 };
+          if(carrier && isSquareAvatar(carrier)){
+            jobInfo[expect] = { prompt: promptOf(carrier), model: modelOf(carrier), seed: seedOf(carrier), name: alt0 };
           } else {
             jobInfo[expect] = { name: alt0 };   // prompt未取得: legacy URL が来るまで生成しない
           }
@@ -129,11 +134,11 @@
       //   説明変更後の作り直しは ↻ボタン（regenFor）だけで行う。
       applyOne(img); return;
     }
-    if(src.indexOf('image.pollinations.ai') < 0) return;
-    if(!isSquareAvatar(src)) return;
+    if(!carrier) return;
+    if(!isSquareAvatar(carrier)) return;
     var name = img.getAttribute('alt') || 'character';
     var pk = keyFor(name);
-    if(!jobInfo[pk]) jobInfo[pk] = { prompt: promptOf(src), model: modelOf(src), seed: seedOf(src), name: name };
+    if(!jobInfo[pk]) jobInfo[pk] = { prompt: promptOf(carrier), model: modelOf(carrier), seed: seedOf(carrier), name: name };
     img.setAttribute('data-avpk', pk);
     applyOne(img);
   }
@@ -201,6 +206,9 @@
   if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', start); } else { start(); }
 
   window.__v292Dfix197 = { sweep: sweep, fixImg: fixImg, diceUrl: diceUrl, pollKey: pollKey, regenFor: regenFor,
+    // v292Dfix209: 書き手(fix66等)が初期srcに使うキャッシュ済みdata:URLの取得口
+    keyFor: keyFor,
+    cachedFor: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; if(typeof c==='string'&&c.indexOf('data:')===0) return c; var p=persistGet(pk); return (p&&p.indexOf('data:')===0)?p:''; }catch(e){ return ''; } },
     clearCache: function(){ try{ Object.keys(localStorage).forEach(function(k){ if(k.indexOf('v292av')===0) localStorage.removeItem(k); }); }catch(e){} cache={}; jobInfo={}; } };
   window.__v292Dfix199 = window.__v292Dfix197;
 })();

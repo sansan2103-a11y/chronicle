@@ -297,12 +297,29 @@
     return '';
   }
 
+  // v292Dfix209: legacy pollinations URL を初期srcに入れない（挿入と同時にブラウザが
+  //   fetch=ロード時402嵐の最後の発生源だった）。キャッシュ済みAIアイコン(data:)があれば
+  //   それを、無ければDiceBearを初期srcにし、legacy URLは data-av-legacy 属性で運ぶ
+  //   （fix197がそこからプロンプト/seedを読んで課金API生成→data:に差し替える）。
+  function avatarImgHtml(name, url){
+    if (!url) return '';
+    var attr = '';
+    if (url.indexOf('image.pollinations.ai') >= 0){
+      var f197 = window.__v292Dfix197;
+      var cached = '';
+      try { if (f197 && typeof f197.cachedFor === 'function') cached = f197.cachedFor(name) || ''; } catch(e){}
+      var dice = 'https://api.dicebear.com/9.x/lorelei/svg?seed=' + encodeURIComponent(String(name||'character'));
+      try { if (f197 && typeof f197.diceUrl === 'function') dice = f197.diceUrl(name); } catch(e){}
+      attr = ' data-av-legacy="' + escHtml(url) + '"';
+      url = cached || dice;
+    }
+    return '<img src="' + escHtml(url) + '" alt="' + escHtml(name) + '"' + attr + ' loading="lazy"'
+      + ' onerror="if(this.parentNode)this.parentNode.textContent=String.fromCharCode(63)">';
+  }
+
   function buildCard(speaker, text, isHeroFlag){
     var av = lookupAvatar(speaker);
-    var avHtml = av
-      ? '<img src="' + escHtml(av) + '" alt="' + escHtml(speaker) + '" loading="lazy"'
-        + ' onerror="if(this.parentNode)this.parentNode.textContent=String.fromCharCode(63)">'
-      : '?';
+    var avHtml = avatarImgHtml(speaker, av) || '?';
     var card = document.createElement('div');
     card.className = 'v292-dlg-card' + (isHeroFlag ? ' hero-card' : '') +
                      ' v292Dfix66-restored';
@@ -352,8 +369,8 @@
           // request. The image's seed stays in the URL so content is identical;
           // Pollinations ignores the extra _r param.
           var fresh = url + (url.indexOf('?') > -1 ? '&' : '?') + '_r=' + Date.now();
-          av.innerHTML = '<img src="' + escHtml(fresh) + '" alt="' + escHtml(name) + '" loading="lazy"'
-            + ' onerror="if(this.parentNode)this.parentNode.textContent=String.fromCharCode(63)">';
+          av.innerHTML = avatarImgHtml(name, fresh)
+            || ('<img src="' + escHtml(fresh) + '" alt="' + escHtml(name) + '" loading="lazy" onerror="if(this.parentNode)this.parentNode.textContent=String.fromCharCode(63)">');
         }
       }
     } catch(e){}
