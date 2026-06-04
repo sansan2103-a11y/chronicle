@@ -6368,14 +6368,26 @@
       if (typeof S === 'undefined' || !S) return false;
       var act = getActive();
       if (!act || act === 'default') return true;   // デフォルトは従来通り(S.loadが読み済み)
+      var ok;
       if (!slotHasData(act)){
         // スロットにデータが無い＝空の新規スロット。デフォルトの内容を引きずらないよう
         // turns だけ空にする（cfg/cast はスロット作成時の状態を尊重して残す）。
         S.turns = []; if (S.scene) S.scene.branches = [];
         try { triggerReRender(); } catch(e){}
-        return true;
+        ok = true;
+      } else {
+        ok = loadSlot(act);
       }
-      return loadSlot(act);
+      // v292Dfix205c: スロット読込後に起動時の振り分けを再実行。index.htmlのinitは
+      //   デフォルトスロットの中身で welcome/「▶物語を始める」を判定し終えているため、
+      //   スロット切替で0ターンになった場合は _showIntro を呼び直す（ボタン消失の修正）。
+      try {
+        if ((!S.turns || !S.turns.length) && typeof UI !== 'undefined' && UI && typeof UI._showIntro === 'function'){
+          var hasKey205 = S.cfg && (S.cfg.key || S.cfg.naiKey || S.cfg.orKey);
+          if (hasKey205) UI._showIntro();
+        }
+      } catch(e){}
+      return ok;
     } catch(e){ return false; }
   }
   function init(){
