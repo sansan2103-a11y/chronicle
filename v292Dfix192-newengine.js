@@ -59,6 +59,15 @@
     try{ localStorage.setItem('v292Tone', k); }catch(e){}
   }
 
+  // v292Dfix211: 📏長さ。既存の v100_outputLen（設定パネルの出力長・max_tokensキャップ
+  //   short=900/standard=1600/long=2500 に連動）へ相乗りし、トップバーから切替できるようにする。
+  //   long時は本文の文数目安も引き上げ（AIダンジョン参考: 情景を厚く描く長文モード）。
+  function lenKey(){
+    try{ var v=localStorage.getItem('v100_outputLen'); if(v==='short'||v==='long') return v; }catch(e){}
+    return 'standard';
+  }
+  function setLen(v){ try{ localStorage.setItem('v100_outputLen', v); }catch(e){} }
+
   // ライブのキャラ状態を fix77 ストアから構造化データとして注入。
   // （旧 sys の【各キャラの現在の状態】＋fix190 永続フィールドの置き換え）
   function stateBlock(){
@@ -212,7 +221,11 @@
       '   ' + dramaLine,
       '3. 五感のある地の文で描く。視覚以外（音・匂い・触感・体感）を毎ターン最低1つ。痛みや恐怖は、まず体が反応してから言葉になる。型に嵌めず、その人物・その状況に固有の反応を書く。',
       '4. その場にいるキャラは生きている。目的・感情・関係に沿って自分から喋り、時に互いに衝突・協力する。主人公しかいない場面では、独白・つぶやき・心の声で内面を見せてよい。' + dlgLine,
-      '本文は地の文と「」セリフで、5〜10文程度を目安に書き切る。' + contLine
+      (lenKey()==='long'
+        ? '本文は地の文と「」セリフで、12〜20文。一つの場面を急がず、情景→身体感覚→感情→行動の順に層を重ねて厚く描く。段落を分けてよい。ただし同じ内容の言い換え・繰り返しで水増ししない。'
+        : lenKey()==='short'
+          ? '本文は地の文と「」セリフで、3〜6文程度に絞って書き切る。'
+          : '本文は地の文と「」セリフで、5〜10文程度を目安に書き切る。') + contLine
     ]);
     if (st){ blocks.push(''); blocks.push(st); }
     blocks = blocks.concat([
@@ -281,6 +294,16 @@
       var sel = span.querySelector('#v292-engine-sel');
       sel.value = engineOn() ? '1' : '0';
       sel.addEventListener('change', function(){ setEngine(sel.value); });
+      // v292Dfix211: 📏長さセレクタ（既存v100_outputLenのトップバー昇格。max_tokensも連動）
+      if(!document.getElementById('v292-len-sel')){
+        var span3 = document.createElement('span');
+        span3.style.cssText = 'margin-left:8px;font-size:12px;display:inline-flex;align-items:center;gap:4px;';
+        span3.innerHTML = '📏長さ<select id="v292-len-sel" style="font-size:12px;"><option value="short">短</option><option value="standard">標準</option><option value="long">長文</option></select>';
+        tb.appendChild(span3);
+        var lsel = span3.querySelector('#v292-len-sel');
+        lsel.value = lenKey();
+        lsel.addEventListener('change', function(){ setLen(lsel.value); });
+      }
       // v292Dfix208: 🎭トーンセレクタ（新βの見本registerを切替。従来エンジンには影響しない）
       if(!document.getElementById('v292-tone-sel')){
         var span2 = document.createElement('span');
@@ -296,6 +319,6 @@
   }
   injectToggle();
 
-  window.__v292NewEngine = { buildSys: buildSys, engineOn: engineOn, setEngine: setEngine, stateBlock: stateBlock, toneKey: toneKey, setTone: setTone };
+  window.__v292NewEngine = { buildSys: buildSys, engineOn: engineOn, setEngine: setEngine, stateBlock: stateBlock, toneKey: toneKey, setTone: setTone, lenKey: lenKey, setLen: setLen };
   try{ console.log(TAG, 'loaded'); }catch(_){}
 })();
