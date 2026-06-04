@@ -9286,6 +9286,12 @@
             if (typeof _S.save === 'function') _S.save();
           }
         } catch(e){}
+        // v292Dfix204: このwrapがfix154版resetStoryを丸ごと置換していたため、
+        //   chr6_epoch更新(=多タブclobberガードfix170Dの起動スイッチ)とlongmem消去が
+        //   死んでいた。→開きっぱなしの古いタブがreloadも保存ブロックもされず、
+        //   古い物語を表示し続け/保存し直して「リセットが効かない」(実測確認)。
+        //   index.html側の G._clearDerivedState(epoch bump+longmem+fix77同期クリア)を必ず呼ぶ。
+        try { if (typeof G._clearDerivedState === 'function') G._clearDerivedState(); } catch(e){}
         try { clearScenarioStores(); } catch(e){}
         location.reload();
       };
@@ -9296,7 +9302,10 @@
     if (typeof G.resetAll === 'function' && !G.__v292Dfix93RA){
       G.resetAll = function(){
         if (!confirm('すべてのデータ（APIキー・設定を含む）を削除しますか？\nこの操作は取り消せません。')) return;
+        try { if (typeof G._clearDerivedState === 'function') G._clearDerivedState(); } catch(e){}   // v292Dfix204
         try { removeKeys(allAppKeys()); } catch(e){}
+        // v292Dfix204: allAppKeysでchr6_epochも消えるので、再bumpして古いタブの保存をブロック
+        try { localStorage.setItem('chr6_epoch', String(Date.now())); } catch(e){}
         try { location.reload(); } catch(e){}
       };
       G.__v292Dfix93RA = true;
