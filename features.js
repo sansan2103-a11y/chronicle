@@ -2008,7 +2008,7 @@
         var d = String(desc).replace(/^性別:\s*[男女][性]?[。、]?/, '').slice(0, 60);
         prompt += d + ', ';
       }
-      prompt += 'detailed face, dark fantasy, dramatic lighting, high quality';
+      prompt += 'detailed face, dark fantasy, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality';
       var seed = 0;
       for (var i = 0; i < name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) & 0x7fffffff;
       return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
@@ -3113,7 +3113,7 @@
         var d = String(desc).replace(/^性別:\s*[男女][性]?[。、]?/, '').slice(0, 60);
         prompt += d + ', ';
       }
-      prompt += 'detailed face, dark fantasy, dramatic lighting, high quality';
+      prompt += 'detailed face, dark fantasy, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality';
       var seed = 0;
       for (var i = 0; i < name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) & 0x7fffffff;
       return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
@@ -3824,7 +3824,7 @@
       var d = String(desc).replace(/^性別:\s*[男女][性]?[。、]?/, '').slice(0, 60);
       prompt += d + ', ';
     }
-    prompt += 'detailed face, dark fantasy, dramatic lighting, high quality';
+    prompt += 'detailed face, dark fantasy, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality';
     var seed = 0;
     for (var i = 0; i < name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) & 0x7fffffff;
     return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
@@ -4638,7 +4638,7 @@
       d = d.trim().slice(0, 80);
       if (d) prompt += d + ', ';
     }
-    prompt += 'detailed face, dark fantasy, dramatic lighting, high quality';
+    prompt += 'detailed face, dark fantasy, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality';
     var seed = 0;
     for (var i = 0; i < name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) & 0x7fffffff;
     return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +

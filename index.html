@@ -2183,7 +2183,7 @@ G.init();
       var d = desc.replace(/^性別:\s*[男女][性]?[。、]?/, '').slice(0, 60);
       prompt += d + ', ';
     }
-    prompt += 'detailed face, dark fantasy, dramatic lighting, high quality';
+    prompt += 'detailed face, dark fantasy, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality';
     var seed = 0;
     for (var i=0; i<name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) & 0x7fffffff;
     return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
@@ -2419,7 +2419,7 @@ G.init();
 })();
 </script>
 <!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
-<script src="features.js?cb=v292Dfix199d"></script>
+<script src="features.js?cb=v292Dfix199e"></script>
 <script src="v292Dfix135-longmem.js?cb=v292Dfix135g"></script>
 <script src="v292Dfix138-continue.js?cb=v292Dfix142"></script>
 <script src="v292Dfix145-charlist.js?cb=v292Dfix145f"></script>
