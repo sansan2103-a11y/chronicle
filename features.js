@@ -6357,9 +6357,31 @@
   function escAttr(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   function escHtml(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
+  // v292Dfix205: 起動ロードのスロット対応（保存と読込の対称性回復）。
+  //   fix30は S.save だけをラップし、ページロード時の S.load() は常にデフォルトキー
+  //   'chr6' を読む非対称だった。アクティブスロットが a/b/c のユーザーでは
+  //   「物語リセット→slot_aは空になるのに、リロードでデフォルトの旧物語が画面に蘇る」
+  //   ＝リセットが効かないように見える（おしん実報告・slot_a=0ターン/chr6=7ターンを実測確認）。
+  //   起動時にアクティブスロットのデータを読み直して表示・メモリを一致させる。
+  function bootLoadActiveSlot(){
+    try {
+      if (typeof S === 'undefined' || !S) return false;
+      var act = getActive();
+      if (!act || act === 'default') return true;   // デフォルトは従来通り(S.loadが読み済み)
+      if (!slotHasData(act)){
+        // スロットにデータが無い＝空の新規スロット。デフォルトの内容を引きずらないよう
+        // turns だけ空にする（cfg/cast はスロット作成時の状態を尊重して残す）。
+        S.turns = []; if (S.scene) S.scene.branches = [];
+        try { triggerReRender(); } catch(e){}
+        return true;
+      }
+      return loadSlot(act);
+    } catch(e){ return false; }
+  }
   function init(){
     var wrapped = wrapSave();
     var injected = injectTopbarButton();
+    if (wrapped) { try { bootLoadActiveSlot(); } catch(e){} }   // v292Dfix205
     if (wrapped && injected){
       window.__v292Dfix30Active = true;
       console.log(TAG, 'installed - multi-slot save + JSON export/import active');
@@ -6370,6 +6392,7 @@
       tries++;
       if (wrapSave() && injectTopbarButton()){
         clearInterval(iv);
+        try { bootLoadActiveSlot(); } catch(e){}   // v292Dfix205
         window.__v292Dfix30Active = true;
         console.log(TAG, 'installed (deferred ' + tries + ' tries)');
       } else if (tries > 80){
