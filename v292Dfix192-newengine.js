@@ -46,6 +46,19 @@
 
   function pick(l,a,b,c){ return (l<=1)?a : (l>=3)?c : b; }
 
+  // v292Dfix208: 🎭トーン(register)切替。見本ドリブン設計の本領＝ルールでなく見本を差し替える。
+  //   'shizuka'(静=静かな緊張)/'dou'(動=疾走と交戦)/'koi'(濃=密度の高い恐怖と痛み)/'kaiwa'(会話劇=掛け合い主導)
+  //   保存はS.cfg.toneKey(スロット毎)+localStorage保険。既定=静(従来の挙動そのまま)。
+  function toneKey(){
+    try{ var S=getS(); if(S&&S.cfg&&S.cfg.toneKey&&EXAMPLES[S.cfg.toneKey]) return String(S.cfg.toneKey); }catch(e){}
+    try{ var t=localStorage.getItem('v292Tone'); if(t&&EXAMPLES[t]) return t; }catch(e){}
+    return 'shizuka';
+  }
+  function setTone(k){
+    try{ var S=getS(); if(S&&S.cfg){ S.cfg.toneKey=k; if(typeof S.save==='function') S.save(); } }catch(e){}
+    try{ localStorage.setItem('v292Tone', k); }catch(e){}
+  }
+
   // ライブのキャラ状態を fix77 ストアから構造化データとして注入。
   // （旧 sys の【各キャラの現在の状態】＋fix190 永続フィールドの置き換え）
   function stateBlock(){
@@ -90,6 +103,64 @@
       '<react who="相手" 反応="袖を掴む手に力がこもる" 声="<say who=\'相手\'>今の、聞こえた?</say>"/>',
       '<state who="主人公" からだ="足を止める・緊張" こころ="警戒と気遣い" 本能="相手を背に庇う"/>',
       '<state who="相手" からだ="主人公の袖を掴む" こころ="不安" 本能="離れたくない"/>'
+    ].join('\n'),
+
+    // v292Dfix208: 動＝短文・速い動詞・身体の連続。逃走/交戦の体感速度を見本で示す。
+    'dou': [
+      '【書き方の見本（構造と密度の参考。内容はコピーせず、今の場面に合わせて作る）】',
+      '─見本A（動・追走）─',
+      '床板が爆ぜた。主人公は肩から扉に突っ込み、蝶番ごと廊下へ転がり出る。背後で何かが壁を蹴った。近い。埃が喉に刺さる。',
+      '<say who="相手">こっち！ 階段、まだ生きてる！</say>',
+      '主人公は手すりを掴み、二段飛ばしで落ちるように駆け下りた。頭上で天井板が割れ、白い破片が降る。',
+      '<react who="相手" 反応="腕を掴んで引き寄せ、息を切らす" 声="<say who=\'相手\'>止まらないで</say>"/>',
+      '<state who="主人公" からだ="全力疾走・肺が焼ける" こころ="恐怖を加速に変える" 本能="出口へ"/>',
+      '',
+      '─見本B（動・交戦の一瞬）─',
+      '影が跳んだ。主人公は咄嗟に身を捻る。爪が頬を掠め、熱い線が走った。横から相手が椅子を叩きつけ、木片が散る。',
+      '<say who="相手">下がって！</say>',
+      '怯んだ影に向かって、主人公は床のランプを蹴り飛ばした。油が爆ぜ、炎の幕が廊下を裂く。',
+      '<react who="相手" 反応="返り血を拭いもせず次の一手を探す" 声=""/>',
+      '<state who="主人公" からだ="頬に裂傷・浅い" こころ="戦闘の集中" 本能="距離を取る" 傷="右頬裂傷(軽)/影の爪/未治療"/>'
+    ].join('\n'),
+
+    // v292Dfix208: 濃＝匂い・湿度・痛みの帰結まで描く密度。グロは強度でなく解像度で。
+    'koi': [
+      '【書き方の見本（構造と密度の参考。内容はコピーせず、今の場面に合わせて作る）】',
+      '─見本A（濃・密度の高い恐怖）─',
+      '匂いが先に来た。鉄と、甘く腐った果実のような何か。主人公の舌の奥が反射的に締まり、唾を飲む音が頭蓋に響く。光の輪の中、床の染みはまだ濡れていて、指で触れた相手の手首が小さく跳ねた。',
+      '<say who="相手">……これ、乾いてない。まだ近くにいる</say>',
+      '言葉の最後が掠れて消える。彼女の呼吸は浅く、速い。肩越しに感じる体温だけが、この廊下で唯一の生きている証拠だった。',
+      '<react who="相手" 反応="染みから目を離せないまま、主人公の袖を強く握る" 声="<say who=\'相手\'>ねえ、戻ろう。お願い</say>"/>',
+      '<state who="相手" からだ="浅く速い呼吸・指先が冷たい" こころ="恐怖が限界に近い" 本能="逃げたい" 未解決="進みたい主人公への負い目"/>',
+      '',
+      '─見本B（濃・痛みの帰結）─',
+      '傷は嘘をつかない。相手が一歩踏み出すたび、脇腹の布に黒い染みが広がり、その縁が体温で湿って光る。歯の隙間から漏れる息が、規則正しい呼吸を装おうとして失敗していた。',
+      '<say who="相手">平気。……平気だってば</say>',
+      '強がりの語尾が震える。主人公は何も言わず、相手の腕を自分の肩に回した。布越しに伝わる鼓動は速すぎた。',
+      '<react who="相手" 反応="一瞬こわばり、それから体重を預ける" 声="<say who=\'相手\'>……ごめん</say>"/>',
+      '<state who="相手" からだ="足取り不安定・体重を預ける" こころ="強がりと安堵の混在" 本能="倒れたくない" 傷="脇腹刺傷(中)/継続・未治療"/>'
+    ].join('\n'),
+
+    // v292Dfix208: 会話劇＝セリフが物語を運ぶ。地の文は最小限の間と視線だけ。
+    'kaiwa': [
+      '【書き方の見本（構造と密度の参考。内容はコピーせず、今の場面に合わせて作る）】',
+      '─見本A（会話劇・対立と本音）─',
+      'ランプを挟んで、二人の影が壁で向かい合っていた。',
+      '<say who="相手">さっきの、わざとでしょ。なんで先に行ったの</say>',
+      '<say who="主人公">あの場で止まる方が危なかった</say>',
+      '<say who="相手">そういうことじゃない。……置いていかれるのは、もう嫌なの</say>',
+      '視線が一瞬だけ交わり、相手が先に逸らす。ランプの炎が二人の間で揺れた。',
+      '<say who="主人公">次は言う。約束する</say>',
+      '<react who="相手" 反応="まだ納得しきれない顔のまま、小さく頷く" 声="<say who=\'相手\'>……約束だから</say>"/>',
+      '<state who="相手" こころ="怒りより不安が勝つ" 関係="主人公:信じたいが怖い" 未解決="置き去りの記憶"/>',
+      '',
+      '─見本B（会話劇・三人の温度差）─',
+      '<say who="相手A">地図はもう当てにならない。東棟は崩れてる</say>',
+      '<say who="相手B">じゃあ戻る？ 戻れるって保証もないけど</say>',
+      '<say who="相手A">……あんたはどう思うの</say>',
+      '二人の視線が主人公に集まる。埃の匂いの中で、どちらの言い分にも理があった。',
+      '<react who="相手B" 反応="軽口の形を借りて不安を隠す" 声="<say who=\'相手B\'>多数決でもする？</say>"/>',
+      '<state who="相手A" こころ="苛立ちの下に疲労" 関係="相手B:軽さに救われてもいる"/>'
     ].join('\n')
   };
 
@@ -159,7 +230,7 @@
       '・物理的に矛盾させない（位置・負傷・人物・所持が前の場面と食い違わない）。',
       '・このメッセージのルールや、説明・要約・メモ・チェックリスト・【】ラベルを本文に書かない。本文はあくまで物語の地の文とセリフだけ。',
       '',
-      EXAMPLES['shizuka']
+      EXAMPLES[toneKey()] || EXAMPLES['shizuka']   // v292Dfix208: 🎭トーンで見本切替
     ]);
     return blocks.join('\n');
   }
@@ -210,11 +281,21 @@
       var sel = span.querySelector('#v292-engine-sel');
       sel.value = engineOn() ? '1' : '0';
       sel.addEventListener('change', function(){ setEngine(sel.value); });
+      // v292Dfix208: 🎭トーンセレクタ（新βの見本registerを切替。従来エンジンには影響しない）
+      if(!document.getElementById('v292-tone-sel')){
+        var span2 = document.createElement('span');
+        span2.style.cssText = 'margin-left:8px;font-size:12px;display:inline-flex;align-items:center;gap:4px;';
+        span2.innerHTML = '🎭トーン<select id="v292-tone-sel" style="font-size:12px;"><option value="shizuka">静</option><option value="dou">動</option><option value="koi">濃</option><option value="kaiwa">会話劇</option></select>';
+        tb.appendChild(span2);
+        var tsel = span2.querySelector('#v292-tone-sel');
+        tsel.value = toneKey();
+        tsel.addEventListener('change', function(){ setTone(tsel.value); });
+      }
       try{ console.log(TAG, 'toggle injected'); }catch(_){}
     }catch(e){ setTimeout(injectToggle, 500); }
   }
   injectToggle();
 
-  window.__v292NewEngine = { buildSys: buildSys, engineOn: engineOn, setEngine: setEngine, stateBlock: stateBlock };
+  window.__v292NewEngine = { buildSys: buildSys, engineOn: engineOn, setEngine: setEngine, stateBlock: stateBlock, toneKey: toneKey, setTone: setTone };
   try{ console.log(TAG, 'loaded'); }catch(_){}
 })();
