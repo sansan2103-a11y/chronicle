@@ -1677,11 +1677,31 @@ const G = {
 
     try {
       const { sys, user } = Planner.build(S.mode, text);
-      const result = await Api.call(sys, user);
+      let result = await Api.call(sys, user);
       if (!result) return;
 
-      const plan = Planner.parsePlan(result.text, S.mode);
+      let plan = Planner.parsePlan(result.text, S.mode);
       if (!plan) throw new Error('AIの応答をJSONとして解析できませんでした。\nデバッグをONにして確認してください。\n\n' + result.text.slice(0,300));
+
+      /* v292Dfix216: 丸ごと再掲ターンの品質ゲート。実測: モデルが「続き」で直前場面をほぼ同文で
+         再描写することがあり、fix71のdedupで全文消える→fix155のraw救済が丸ごと復元＝重複が蘇る
+         (slot b 16ターン自動デバッグで3ターン連続の再掲ループを確認・合成rawで復元経路も実証)。
+         検知したら1回だけ「時間を前へ進めろ」のフィードバック付きで書き直させる(根治=出力品質側)。 */
+      try {
+        const _rNorm216 = (s) => String(s||'').replace(/[「」『』（）()\s　…⋯。、！？!?.,<>\/="]/g,'');
+        const _prev216 = {};
+        S.turns.slice(-3).forEach(pt => { String((pt&&pt.narrative)||'').split(/(?<=[。！？\n])/).forEach(x => { const k = _rNorm216(x); if (k.length >= 8) _prev216[k] = 1; }); });
+        const _sents216 = String((plan.narrative||[]).join('\n')).split(/(?<=[。！？\n])/).filter(x => _rNorm216(x).length >= 8);
+        const _dup216 = _sents216.filter(x => _prev216[_rNorm216(x)]).length;
+        if (_sents216.length >= 3 && _dup216 / _sents216.length > 0.6){
+          UI.setStatus('前ターンの再掲を検知 → 書き直し中…');
+          const result2 = await Api.call(sys, user + '\n\n【重要・書き直し】直前のあなたの出力は前ターンの内容のほぼ再掲だった。同じ場面・同じ文を繰り返さず、時間と状況を必ず前へ進めて、新しい出来事・発見・行動を描くこと。');
+          if (result2 && result2.text){
+            const plan2 = Planner.parsePlan(result2.text, S.mode);
+            if (plan2 && Array.isArray(plan2.narrative) && plan2.narrative.join('').length > 40){ plan = plan2; result = result2; }
+          }
+        }
+      } catch(_e216){}
 
       // 心理エンジンで NPC 状態を更新
       PsychEngine.process(plan);
@@ -1748,6 +1768,7 @@ const G = {
           .replace(/「\s*」/g, '')              // 空の「」
           .replace(/[「『]\s*$/g, '')           // 末尾の閉じ忘れ開き括弧（壊れたsay-tag由来の孤立「）
           .replace(/^[\s　]*[」』](?=[とた、。\s　]|$)/gm, '')   // 行頭の孤立閉じ括弧(v292Dfix215: 全行対象に。重複除去の切り残し「」と…」対策)
+          .replace(/(^|\n)([「『][^」』\n]{2,})(?=\n|$)/g, '$1$2」')   // v292Dfix216: 閉じ忘れセリフ行を行末で自動クローズ(「ミリアさん、大丈夫ですか？␊ 型)
           .replace(/[ \t]*\n{3,}/g, '\n\n')
           .trim();
       } catch(_e175){}
