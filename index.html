@@ -1724,6 +1724,14 @@ const G = {
         });
         _convSays.unshift({ who: S.cast.hero.name, say: _sayClean });
       }
+      /* v292Dfix215: ターン跨ぎのセリフ重複を遮断。モデルが直前ターンの締めセリフを次ターン冒頭で再掲する癖があり、再掲側は近接判定で話者が裏返って「同じセリフが別話者で2枚」になる(実測)。直近2ターンの_convSaysに同じ正規化テキストがあれば新ターン側を捨てる(初出が権威)。プレイヤーのSAY入力(意図的な繰り返し)は対象外。 */
+      try {
+        var _norm215 = function(s){ return String(s||'').replace(/[\s　。、！？!?…・「」『』]/g,''); };
+        var _prev215 = {};
+        S.turns.slice(-2).forEach(function(pt){ ((pt && pt._convSays) || []).forEach(function(pc){ var n = _norm215(pc.say); if (n) _prev215[n] = 1; }); });
+        var _heroSay215 = (S.mode === 'SAY' && text) ? _norm215(text) : null;
+        _convSays = _convSays.filter(function(c){ var n = _norm215(c.say); if (!n) return false; if (_heroSay215 && n === _heroSay215 && S.cast && S.cast.hero && c.who === S.cast.hero.name) return true; return !_prev215[n]; });
+      } catch(_e215){}
 
       // v292Dfix175: 本文から <say> タグを除去する（会話ログは上の genConvLog で取得済なので本文の
       //   say-tag はもう不要）。モデルや旧拡張が出す不完全な say-tag が「<say who=¥」のように表示へ
@@ -1739,7 +1747,7 @@ const G = {
           .replace(/<\/?say\b[^>]*>?/gi, '')   // 残り/不完全な say 断片を除去
           .replace(/「\s*」/g, '')              // 空の「」
           .replace(/[「『]\s*$/g, '')           // 末尾の閉じ忘れ開き括弧（壊れたsay-tag由来の孤立「）
-          .replace(/^\s*[」』]/g, '')           // 行頭の孤立閉じ括弧
+          .replace(/^[\s　]*[」』](?=[とた、。\s　]|$)/gm, '')   // 行頭の孤立閉じ括弧(v292Dfix215: 全行対象に。重複除去の切り残し「」と…」対策)
           .replace(/[ \t]*\n{3,}/g, '\n\n')
           .trim();
       } catch(_e175){}
@@ -2439,7 +2447,7 @@ G.init();
   <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script>
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=v292Dfix74"></script>
-  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix210"></script>
+  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix215"></script>
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
     <!-- v292Dfix189c: fix70(dialogue-order, 本文ベースの並べ替え)を無効化。fix70bが
@@ -2465,7 +2473,7 @@ G.init();
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
-  <script src="v292Dfix192-newengine.js?cb=v292Dfix213"></script>
+  <script src="v292Dfix192-newengine.js?cb=v292Dfix215"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
   <script src="v292Dfix197-avatar-key.js?cb=v292Dfix209"></script>

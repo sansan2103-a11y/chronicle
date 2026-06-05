@@ -1089,7 +1089,7 @@
       // v292Dfix124: also cut a trailing PLAIN-TEXT self-audit block (no 【】), e.g.
       // "フィードバック：…正しく機能している点 ・…（進行ルール準拠）（初対面セリフ禁止規則対応）".
       // Anchored on an audit header at line start + ：/: so real prose isn't touched.
-      .replace(/(?:^|\n)[\s　]*(?:フィードバック|フィードバック評価|評価|総評|講評|自己点検|自己評価|チェック(?:項目|リスト)?|補足説明|内部メモ|ルール(?:確認|準拠|チェック)|未解決事項|懸念事項|判断ポイント|GM(?:メモ|ノート|コメント)|ゲームマスター(?:メモ|ノート)|運営(?:メモ|コメント)|今後の方針|次ターンの方針)[\s　]*[：:][\s\S]*$/, '')
+      .replace(/(?:^|\n)[\s　]*[※＊*]?[\s　]*(?:フィードバック|フィードバック評価|評価|総評|講評|自己点検|自己評価|チェック(?:項目|リスト)?|補足説明|内部メモ|ルール(?:確認|準拠|チェック)|未解決事項|懸念事項|判断ポイント|GM(?:メモ|ノート|コメント)|ゲームマスター(?:メモ|ノート)|運営(?:メモ|コメント)|今後の方針|次ターンの方針|編集箇所|削除調整|修正箇所|編集ノート)[\s　]*[：:][\s\S]*$/, '')
       // v292Dfix141: cut a leaked "--- 内部メモ：xxx ---" block (echoed verbatim by the model
       // from the longmem-injection format). Matches both proper closure and unclosed trail.
       .replace(/(?:^|\n)\s*-{2,}\s*内部メモ[\s\S]*$/, '')
