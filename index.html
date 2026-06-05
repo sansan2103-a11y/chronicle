@@ -1,45 +1,3 @@
-<script src="v232-authors-note.js?cb=v232"></script>
-<script src="v233-world-info.js?cb=v233"></script>
-<script src="v234-pov.js?cb=v234"></script>
-<script src="v229-send-fix.js?cb=v229"></script>
-<script src="v228-aidungeon-style.js?cb=v228"></script>
-<script src="v231-rp-narrative.js?cb=v231"></script>
-<script src="v223-gender-poll-lock.js?cb=v223"></script>
-<script src="v221-mobile-checkbox-fix.js?cb=v221"></script>
-<script src="v237-state-bridge-fix.js?cb=v237"></script>
-<script src="v238-output-noise-cleanup.js?cb=v238"></script>
-  <script src="v239-context-injection-fix.js?cb=v239"></script>
-  <script src="v242-output-autocorrect.js?cb=v242"></script>
-  <script src="v243-autocorrect-extended.js?cb=v243"></script>
-  <script src="v244-style-pivot.js?cb=v244"></script>
-  <script src="v245-dialogue-format.js?cb=v245"></script>
-  <script src="v246-hermes4-and-tuning.js?cb=v246"></script>
-  <script src="v247-flicker-and-voice.js?cb=v247"></script>
-  <script src="v249-scroll-stabilize.js?cb=v249"></script>
-  <script src="v253-pingpong-loop-break.js?cb=v253"></script>
-  <script src="v267-meta-leak-cleanup.js?cb=v267"></script>
-  <script src="v254-mobile-input-and-log-finalize.js?cb=v254"></script>
-  <script src="v255-render-resilience.js?cb=v255"></script>
-  <script src="v256-story-fallback-renderer.js?cb=v256"></script>
-  <script src="v257-convo-fallback-renderer.js?cb=v257"></script>
-  <script src="v258-dialogue-bracket-and-ephemeral.js?cb=v258"></script>
-  <script src="v259-state-inference.js?cb=v259"></script>
-  <script src="v260-state-inference-fixes.js?cb=v260"></script>
-  <script src="v261-mobile-scroll-and-rerender-gate.js?cb=v261"></script>
-  <script src="v262-flicker-and-retry-fix.js?cb=v262"></script>
-  <script src="v263-momentum-scroll-fix.js?cb=v263"></script>
-  <script src="v264-body-damage-and-posthumous.js?cb=v264"></script>
-  <script src="v265-death-persistence.js?cb=v265"></script>
-  <script src="v266-posthumous-decorator-fix.js?cb=v266"></script>
-  <script src="v268-reset-bypass-fix.js?cb=v268"></script>
-  <script src="v270-final-cleanup.js?cb=v270"></script>
-  <script src="v271-force-provider-switch.js?cb=v271"></script>
-  <script src="v273-inspiration-engine.js?cb=v273"></script>
-  <script src="v274-writer-mode.js?cb=v274"></script>
-  <script src="v275-meta-plot-manager.js?cb=v275"></script>
-  <script src="v276-character-mind.js?cb=v276"></script>
-  <script src="v276b-json-repair.js?cb=v276b"></script>
-  <script src="v276c-mind-prompt-fix.js?cb=v276c3"></script>
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -50,8 +8,8 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
   --bg: #09090f; --s1: #111119; --s2: #17172a; --s3: #1f1f35;
-  --acc: #8b76f0; --gold: #c4a45a; --tx: #e0dcf0; --dim: #6868a0;
-  --border: rgba(139,118,240,.14); --do: #5a8ef0; --say: #6aaf78;
+  --acc: #8b76f0; --gold: #c4a45a; --tx: #e0dhcf0; --dim: #6868a0;
+  --border: rgba(139,118,240,.14); --do: #5a8hef0; --say: #6ahhaf78;
   --story: #c49040; --err: #e06060; --r: 10px;
   --fear: #a060c0; --desire: #60a0c0;
 }
@@ -106,50 +64,7 @@ body {
 .narr-block p:last-child { margin-bottom: 0; }
 .narr-block .dial { color: #c8bae8; }
 
-/* ── Psychology display elements ── */
-.inner-thought {
-  font-style: italic; color: rgba(139,118,240,.7); font-size: 13px;
-  padding: 5px 10px 5px 8px; margin-bottom: 8px;
-  border-left: 2px solid rgba(139,118,240,.25);
-  font-family: 'Hiragino Kaku Gothic ProN','Yu Gothic UI',sans-serif;
-  line-height: 1.6;
-}
-.inner-thought::before { content: '《'; color: var(--acc); font-style: normal; opacity: .6; }
-.inner-thought::after  { content: '》'; color: var(--acc); font-style: normal; opacity: .6; }
-
-.subtext {
-  font-size: 11px; color: rgba(139,118,240,.4); font-style: italic;
-  text-align: right; margin-top: 5px; padding-right: 2px;
-  font-family: 'Hiragino Kaku Gothic ProN','Yu Gothic UI',sans-serif;
-}
-.subtext::before { content: '本音: '; color: rgba(139,118,240,.35); }
-
-/* NPC state meters */
-.psych-meters {
-  display: flex; gap: 10px; margin-top: 8px;
-  flex-wrap: wrap; padding-top: 6px;
-  border-top: 1px solid var(--border);
-}
-.pmeter { display: flex; align-items: center; gap: 5px; font-size: 11px; }
-.pmeter-label { color: var(--dim); min-width: 42px; }
-.pmeter-bar {
-  width: 48px; height: 4px; background: rgba(255,255,255,.08);
-  border-radius: 2px; overflow: hidden;
-}
-.pmeter-fill { height: 100%; border-radius: 2px; transition: width .4s; }
-.pmeter-fill.trust-pos { background: var(--say); }
-.pmeter-fill.trust-neg { background: var(--err); }
-.pmeter-fill.stress { background: linear-gradient(90deg, var(--gold), var(--err)); }
-.pmeter-val { color: var(--dim); font-size: 10px; min-width: 28px; }
-
-/* Defense badge */
-.defense-badge {
-  display: inline-block; font-size: 10px; padding: 1px 6px;
-  border-radius: 4px; border: 1px solid rgba(160,96,192,.3);
-  color: rgba(160,96,192,.8); background: rgba(160,96,192,.08);
-  margin-left: 6px; font-family: sans-serif; font-style: normal;
-  vertical-align: middle;
-}
+/* v292-D: psychology display elements (.inner-thought / .subtext / .psych-meters / .defense-badge) は削除。NPC 内面は narrative プロザに溶融。 */
 
 .edit-btn {
   position: absolute; top: 10px; right: 10px;
@@ -368,10 +283,11 @@ body {
         <div class="fld">
           <label>モデル</label>
           <select id="cfgOrModel">
-            <option value="sao10k/l3.3-euryale-70b">Euryale 70B（推奨・成人描写対応）</option>
+            <option value="nousresearch/hermes-4-405b">Hermes 4 405B（推奨：最高品質・指示追従）</option>
+            <option value="sao10k/l3.3-euryale-70b">Euryale 70B（成人描写対応）</option>
+            <option value="nousresearch/hermes-3-llama-3.1-405b">Hermes 3 405B</option>
             <option value="mistralai/mistral-nemo">Mistral Nemo（速い・JSON対応）</option>
-            <option value="meta-llama/llama-3.3-70b-instruct">LLaMA 3.3 70B（高品質）</option>
-            <option value="nousresearch/hermes-3-llama-3.1-405b">Hermes 3 405B（最高品質）</option>
+            <option value="meta-llama/llama-3.3-70b-instruct">LLaMA 3.3 70B</option>
             <option value="google/gemma-3-27b-it">Gemma 3 27B（日本語対応）</option>
           </select>
         </div>
@@ -391,6 +307,11 @@ body {
         <div class="fld" style="background:rgba(196,144,64,.1);border:1px solid rgba(196,144,64,.3);border-radius:8px;padding:10px;font-size:12px;color:#c49040">
           ⚠ NovelAI（Kayra）は補完モデルです。心理エンジンの一部機能はClaude APIで最大限に活かせます。
         </div>
+      </div>
+      <div class="fld">
+        <label>Pollinations APIキー（AIアイコン用・<code>pk_</code> で始まる publishable key）</label>
+        <input type="password" id="cfgPollKey" placeholder="pk_...（未入力ならイラストアイコンを使用）">
+        <div style="font-size:11px;color:var(--dim);margin-top:4px;line-height:1.5">AIアイコン（pollinations）を使うには enter.pollinations.ai で無料登録し publishable key（pk_）を取得して貼り付け。未入力時は DiceBear のイラストアイコンを表示します。</div>
       </div>
       <div class="fld">
         <label class="chk-row"><input type="checkbox" id="cfgDbg"> デバッグ表示</label>
@@ -425,7 +346,7 @@ body {
         <button class="btn-s" onclick="UI.closeSettings()">閉じる</button>
       </div>
       <div style="margin-top:8px">
-        <button class="btn-s" style="width:100%;font-size:13px" onclick="UI.randomFill()">🎲 未入力をランダム生成</button>
+        <button class="btn-s" style="width:100%;font-size:13px" onclick="UI.randomFill()">🎲 AIでランダム生成（未入力の欄・数秒）</button>
       </div>
       <div class="mpanel-footer-danger">
         <button class="btn-d" onclick="G.resetStory()">物語リセット（設定は保持）</button>
@@ -465,23 +386,32 @@ const KEY = 'chr6';
 // ─────────────────────────────────────────────────────────────
 const S = {
   cfg: {
-    provider: 'anthropic', key: '', naiKey: '', orKey: '',
+    provider: 'anthropic', key: '', naiKey: '', orKey: '', pollKey: '',
     model: 'claude-haiku-4-5-20251001', orModel: 'mistralai/mistral-nemo',
     debug: false, showInner: true
   },
   cast: {
     hero: { name: '', desc: '' },
     npcs: []
-    // NPC schema: { id, name, desc,
-    //   personality, coreDesire, coreFear, wound,
-    //   emotion, stress(0-100), trust(-100~100), intimacy(0-100),
-    //   keyMoments: [{turn, type, defense, note}] }
+    // NPC schema: { id, name, desc, personality, coreDesire, coreFear, wound }
+    // v292-D: emotion/stress/trust/intimacy/keyMoments は廃止 (narrative プロザに溶融)
   },
   scene: { loc: '', obj: '', tone: '', lore: '', branches: [] },
-  turns: [],   // [{inputType, playerText, narrative, plan, innerThought, subtext, dbg}]
+  turns: [],   // [{inputType, playerText, narrative, plan, dbg}]
   mode: 'DO',
   inFlight: false, reqId: 0, editIdx: -1,
   save() {
+    // v292Dfix170D: 多タブclobberガード。別タブがreset(=chr6_epoch更新)していたら、この
+    //   タブは古い在メモリ状態のまま→保存すると相手のresetを巻き戻す(モナリザ化け物復活の元)。
+    //   その場合は保存せずリロードし、クリーンな状態を読み直す。
+    try {
+      const _ep = +(localStorage.getItem('chr6_epoch') || 0);
+      if (window.__chrEpoch && _ep > window.__chrEpoch) {
+        console.warn('[v292Dfix170D] stale tab (epoch ' + window.__chrEpoch + ' < ' + _ep + ') — skip save & reload');
+        location.reload();
+        return;
+      }
+    } catch (e) {}
     SS.set(KEY, { cfg: this.cfg, cast: this.cast, scene: this.scene, turns: this.turns, mode: this.mode });
   },
   load() {
@@ -497,39 +427,50 @@ const S = {
 };
 
 // ─────────────────────────────────────────────────────────────
+// v292Dfix170D: 多タブ世代トークン(epoch)。リセットしたタブがepochを更新し、
+//   他の古いタブは①保存時にepoch比較でclobber阻止(S.save) ②storageイベントで
+//   即リロード、の二段で「古いタブがリセットを巻き戻す」事故を防ぐ。
+// ─────────────────────────────────────────────────────────────
+(function v292Dfix170D_epoch(){
+  try {
+    let ep = +(localStorage.getItem('chr6_epoch') || 0);
+    if (!ep) { ep = Date.now(); try { localStorage.setItem('chr6_epoch', String(ep)); } catch(_){} }
+    window.__chrEpoch = ep;
+    window.addEventListener('storage', function(e){
+      try {
+        if (e.key === 'chr6_epoch') {
+          const nv = +(e.newValue || 0);
+          if (nv > (window.__chrEpoch || 0)) {
+            console.warn('[v292Dfix170D] another tab reset (epoch ' + nv + ') — reloading this stale tab');
+            location.reload();
+          }
+        }
+      } catch(_){}
+    });
+    // v292Dfix170D2: タブを前面に戻した瞬間にも鮮度チェック。背景中に別タブがresetして
+    //   いたら（storageイベントを取りこぼしていても）、書き込む前にリロードしてクリーンな
+    //   状態を読み直す。single-writer設計＝書くのは前面かつ最新epochのタブだけ。
+    document.addEventListener('visibilitychange', function(){
+      try {
+        if (document.hidden) return;
+        const ep = +(localStorage.getItem('chr6_epoch') || 0);
+        if (window.__chrEpoch && ep > window.__chrEpoch) {
+          console.warn('[v292Dfix170D2] became visible while stale (epoch ' + window.__chrEpoch + ' < ' + ep + ') — reloading');
+          location.reload();
+        }
+      } catch(_){}
+    });
+  } catch(e){}
+})();
+
+// ─────────────────────────────────────────────────────────────
 // PsychEngine — NPC 心理状態の追跡・更新
 // ─────────────────────────────────────────────────────────────
 const PsychEngine = {
 
-  // AIのレスポンスを元にNPC心理状態を更新
-  process(plan) {
-    const inner = plan.npcInnerLife;
-    if (!inner || !inner.npcName) return;
-    const npc = this._findNpc(inner.npcName);
-    if (!npc) return;
-
-    if (inner.instantEmotion) npc.emotion = inner.instantEmotion;
-
-    const td = Math.max(-3, Math.min(3, parseFloat(inner.trustDelta) || 0));
-    const sd = Math.max(-15, Math.min(15, parseFloat(inner.stressDelta) || 0));
-
-    npc.trust    = Math.max(-100, Math.min(100, (npc.trust    || 0)  + td));
-    npc.stress   = Math.max(0,    Math.min(100, (npc.stress   || 50) + sd));
-    if (td > 0) npc.intimacy = Math.min(100, (npc.intimacy || 0) + td * 0.4);
-
-    // 重要な瞬間を記録
-    const significant = Math.abs(td) >= 1.5 || inner.triggeredFear || inner.underlyingNeed;
-    if (significant && inner.innerThought) {
-      npc.keyMoments = npc.keyMoments || [];
-      npc.keyMoments.push({
-        turn: S.turns.length,
-        type: td < -0.5 ? 'hurt' : td > 0.5 ? 'connect' : 'neutral',
-        defense: (inner.defenseMechanism && inner.defenseMechanism !== 'none') ? inner.defenseMechanism : null,
-        note: inner.innerThought.slice(0, 60)
-      });
-      if (npc.keyMoments.length > 6) npc.keyMoments.shift();
-    }
-  },
+  // v292-D: NPC 心理は narrative プロザに完全に溶かす方針に移行。
+  // 構造化フィールド (npcInnerLife) は廃止。互換性のため関数は残すが no-op。
+  process(plan) { /* no-op since v292-D */ },
 
   _findNpc(nameStr) {
     return S.cast.npcs.find(n =>
@@ -540,30 +481,9 @@ const PsychEngine = {
   },
 
   // プロンプト用：NPC心理プロファイルブロックを生成
+  // v292-D: 信頼度/ストレス/親密度/重要な記憶/ストレス値による台詞リアリティ調整は削除。
+  // 性格・傷・話し方ヒントだけを残し、心理状態は narrative プロザに任せる。
   buildNpcBlock(npc) {
-    const trust   = npc.trust   || 0;
-    const stress  = npc.stress  || 50;
-    const intimacy = npc.intimacy || 0;
-
-    let trustDesc = '中立';
-    if      (trust >=  70) trustDesc = '深い信頼';
-    else if (trust >=  40) trustDesc = '好意的';
-    else if (trust >=  15) trustDesc = 'やや好意的';
-    else if (trust >=  -15) trustDesc = '中立・様子見';
-    else if (trust >=  -40) trustDesc = '警戒・不信感';
-    else if (trust >=  -70) trustDesc = '強い不信感';
-    else                    trustDesc = '敵対的・憎しみ';
-
-    let stressDesc = '平静';
-    if      (stress >= 80) stressDesc = '極度の緊張——判断が歪み衝動的';
-    else if (stress >= 65) stressDesc = '高ストレス——防衛的・感情的';
-    else if (stress >= 45) stressDesc = '軽い緊張——警戒心がある';
-    else                   stressDesc = '平静——比較的安定';
-
-    const moments = (npc.keyMoments || []).slice(-3).map(m =>
-      `  ・${m.type === 'hurt' ? '傷になった瞬間' : m.type === 'connect' ? '絆が生まれた瞬間' : '印象的な瞬間'}${m.defense ? `（防衛: ${m.defense}）` : ''}: 「${m.note}」`
-    ).join('\n');
-
     // 話し方ヒントを性格から自動生成
     let speechHint = '';
     const p = (npc.personality || '').toLowerCase();
@@ -639,19 +559,6 @@ const PsychEngine = {
     const ageGenderKey = (age && gender) ? (age + '_' + gender) : null;
     const ageGenderHint = ageGenderKey && SPEECH_TABLE[ageGenderKey] ? SPEECH_TABLE[ageGenderKey] : null;
 
-    // ストレス値による台詞リアリティ調整
-    let stressRealism = '';
-    if (stress >= 80) {
-      stressRealism = '【極限ストレス '+stress+'】台詞は完全に破綻させる: ' +
-        '敬語禁止（「ですます」「〜してください」絶対NG）。文を最後まで完成させない（「やめ……」「いや、いやだ……っ」「は、離し……」）。' +
-        '嗚咽・喘ぎが混じる（「ひっ」「うっ」「あっ」）。主語省略・語順崩壊。身体描写が台詞より先（肩が震え、呼吸が浅く、涙）。' +
-        '例: 「いや……っ、ち、違う……お願い、やめて、やめてよぉ……っ」。綺麗な敬語は絶対禁止。';
-    } else if (stress >= 65) {
-      stressRealism = '【高ストレス '+stress+'】台詞は乱れる: 敬語と素の言葉が混在。「あ……」「で、でも」など言葉が詰まる。文末が震えて途切れる。例: 「やめ……やめてよ、本当に……」';
-    } else if (stress >= 45) {
-      stressRealism = '【中ストレス '+stress+'】台詞は抑制的だが感情が滲む。語尾が小さくなる、目を逸らす。';
-    }
-
     return [
       `【${npc.name} — 心理プロファイル】`,
       npc.desc        ? `立場: ${npc.desc.slice(0,60)}` : '',
@@ -661,12 +568,6 @@ const PsychEngine = {
       npc.wound       ? `傷・過去: ${npc.wound}` : '',
       speechHint      ? `★話し方の個性: ${speechHint}` : '',
       ageGenderHint   ? `★年齢×性別の口調指針【絶対遵守】: ${ageGenderHint}` : '',
-      stressRealism   ? `★${stressRealism}` : '',
-      `現在の感情: ${npc.emotion || '中立'}`,
-      `ストレス: ${stressDesc} (${stress}/100)`,
-      `信頼度: ${trustDesc} (${trust}/100)`,
-      `親密度: ${intimacy}/100`,
-      moments ? `重要な記憶:\n${moments}` : '',
       '【台詞のリアリティ原則】整った敬語より「途切れる息」「身体反応」を優先。暴力・恐怖の中では人は綺麗に喋れない。'
     ].filter(Boolean).join('\n');
   }
@@ -684,14 +585,30 @@ const Api = {
     return s;
   },
 
-  async call(system, userContent, maxTok = 1400) {
+  async call(system, userContent, maxTok = 1400, opts = {}) {
+    // v292 pre-call hook: features can mutate { system, userContent, maxTok } before send.
+    let _system = system, _userContent = userContent, _maxTok = maxTok; try { if (maxTok === 1400 && localStorage.getItem('v100_outputLen') === 'long') _maxTok = 2400; } catch(e){} /* v292Dfix212: 長文モードで本編呼び出しの既定トークンを引き上げ。max_tokensフック(applyMaxTokens)は上限を下げる専用で、長文(cap2500)でも既定1400のまま=長文設定が無効だった。既定値(1400)で呼ばれた時だけ昇格し、genConvLog(500)等の小口呼び出しは据置 */
+    if (Array.isArray(this._preCallHooks)) {
+      for (let i = 0; i < this._preCallHooks.length; i++) {
+        try {
+          const r = this._preCallHooks[i]({
+            system: _system, userContent: _userContent, maxTok: _maxTok, state: S
+          });
+          if (r && typeof r === 'object') {
+            if (typeof r.system === 'string') _system = r.system;
+            if (typeof r.userContent === 'string') _userContent = r.userContent;
+            if (typeof r.maxTok === 'number') _maxTok = r.maxTok;
+          }
+        } catch (e) { console.warn('[v292] preCall hook err:', e && e.message); }
+      }
+    }
     const prov = S.cfg.provider || 'anthropic';
-    if (prov === 'novelai')     return this._callNovelAI(system, userContent, maxTok);
-    if (prov === 'openrouter')  return this._callOpenRouter(system, userContent, maxTok);
-    return this._callAnthropic(system, userContent, maxTok);
+    if (prov === 'novelai')     return this._callNovelAI(_system, _userContent, _maxTok, opts);
+    if (prov === 'openrouter')  return this._callOpenRouter(_system, _userContent, _maxTok, opts);
+    return this._callAnthropic(_system, _userContent, _maxTok, opts);
   },
 
-  async _callAnthropic(system, userContent, maxTok) {
+  async _callAnthropic(system, userContent, maxTok, opts = {}) {
     const key = this.normalize(S.cfg.key);
     if (!key) throw new Error('AnthropicのAPIキーが設定されていません（sk-ant-... 形式）');
     if (!key.startsWith('sk-')) throw new Error(`キー形式が違います: "${key.slice(0,8)}..." → sk-ant- で始まる必要があります`);
@@ -730,12 +647,20 @@ const Api = {
 
   _hasForeignGarbage(text) {
     if (!text) return false;
-    const enMatches = (text.match(/[A-Za-z][A-Za-z0-9_.]{2,}/g) || []).length;
-    const zhMatches = (text.match(/[过这没现还说让对给从将们点东几亲爱觉吗么吧呢哪谁怎样此后状围]/g) || []).length;
+    // v292 Tier 1.5: JSON モード対応。response_format=json_object 有効時、
+    // 正当な JSON キー (playerIntent, npcInnerLife 等) と true/false/null
+    // リテラルで誤発火するのを防ぐ。
+    let cleaned = text      .replace(/<\/?[a-zA-Z][^>]*>/g, '')
+      .replace(/"[A-Za-z][A-Za-z0-9_]*"\s*:\s*"[a-zA-Z|]+"/g, '')  // JSON キー+enum値ペア ("kind": "comfort")
+      .replace(/"[A-Za-z][A-Za-z0-9_]*"\s*:/g, '')   // 残り JSON キー名
+      .replace(/:\s*"[a-zA-Z|]+"/g, '')               // 残り enum 値
+      .replace(/\b(true|false|null)\b/g, '');         // JSON リテラルを除外
+    const enMatches = (cleaned.match(/[A-Za-z][]{2,}/g) || []).length;
+    const zhMatches = (cleaned.match(/[过这现还说让对给从们东几亲爱觉吗么吧呢哪谁怎样围]/g) || []).length;
     return enMatches >= 3 || zhMatches >= 2;
   },
 
-  async _callOpenRouter(system, userContent, maxTok) {
+  async _callOpenRouter(system, userContent, maxTok, opts = {}) {
     const key = this.normalize(S.cfg.orKey);
     if (!key) throw new Error('OpenRouter APIキーが設定されていません（sk-or-... 形式）');
     const model = S.cfg.orModel || 'sao10k/l3.3-euryale-70b';
@@ -751,6 +676,22 @@ const Api = {
       const tid  = setTimeout(() => ctrl.abort(), 60000);
       let res;
       try {
+        const body = {
+          model,
+          max_tokens: maxTok,
+          temperature: 0.85,
+          top_p: 0.95,
+          frequency_penalty: 0.4,
+          presence_penalty: 0.4,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user',   content: userContent }
+          ]
+        };
+        // Tier 1: OpenRouter の JSON モード（Hermes 系のみ。Llama 微調整系は対象外）
+        if (/hermes/i.test(model)) {
+          /* v292Dfix87: disabled json_object - fix58 outputs prose, not JSON */ void 0;
+        }
         res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -759,18 +700,7 @@ const Api = {
             'HTTP-Referer': 'https://sansan2103-a11y.github.io/chronicle/',
             'X-Title': 'Chronicle TRPG'
           },
-          body: JSON.stringify({
-            model,
-            max_tokens: maxTok,
-            temperature: 0.85,
-            top_p: 0.95,
-            frequency_penalty: 0.4,
-            presence_penalty: 0.4,
-            messages: [
-              { role: 'system', content: system },
-              { role: 'user',   content: userContent }
-            ]
-          }),
+          body: JSON.stringify(body),
           signal: ctrl.signal
         });
       } finally { clearTimeout(tid); S.inFlight = false; }
@@ -783,8 +713,33 @@ const Api = {
 
       lastResult = { text, body: null };
 
-      if (attempt < maxRetries && this._hasForeignGarbage(text)) {
-        console.warn(`[Retry ${attempt+1}/${maxRetries}] 外国語混入を検出、再生成します`);
+      // v292 Tier 1.5 Fix G: also retry on incomplete Hermes responses
+      // (response missing narrative key, or contains "省略" laziness marker)
+      // v292Dfix170A: opts.allowShort=true のコール(genConvLog等の設計上短い出力)は不完全判定を免除。
+      // v292Dfix170C: 「短い」だけでリトライせず、タグ(<state>/<react>/<say>等)と記号を除いた
+      //   実質の地の文が極端に少ない時だけ不完全とみなす。#77はproseが書けてるのにタグ混在で
+      //   parseが捨てるケース=raw にproseは在る→salvage155が後で救済するのでリトライ不要。
+      //   これでsysサイズ起因の不要リトライ(=毎ターン裏で再生成→遅延)を削減。
+      const _proseLen = String(text).replace(/<[^>]+>/g, '').replace(/[「」『』\s　\[\]{}",:|]/g, '').length;
+      // v292Dfix186: 直前ターンとほぼ同一の生成（「続きを書く」等でモデルが前ターン本文を
+      //   そのままコピー／再記述する現象）を検出してリトライする。短い生成は _proseLen<40 で
+      //   既に弾けるが、長いコピーはすり抜けるのでここで前ターンとの類似度を見る。
+      let _isCopy = false;
+      try {
+        if (!opts.allowShort && S.turns && S.turns.length) {
+          const _pn = (function(t){ const n = t && t.narrative; return Array.isArray(n) ? n.join('') : String(n || ''); })(S.turns[S.turns.length - 1]).replace(/<[^>]+>/g, '').replace(/\s+/g, '');
+          const _nn = String(text).replace(/<[^>]+>/g, '').replace(/\s+/g, '');
+          if (_pn.length > 40 && _nn.length > 40) {
+            const _L = Math.min(_pn.length, _nn.length);
+            let _m = 0; for (let _k = 0; _k < _L; _k++) { if (_pn[_k] === _nn[_k]) _m++; }
+            if (_m / Math.max(_pn.length, _nn.length) > 0.8) _isCopy = true;
+          }
+        }
+      } catch (_e) {}
+      const isIncomplete = (!opts.allowShort && _proseLen < 40) || /以下省略|（省略|省略\)/.test(text) || _isCopy;
+      if (attempt < maxRetries && (this._hasForeignGarbage(text) || isIncomplete)) {
+        const reason = _isCopy ? '前ターンのコピー' : (isIncomplete ? '不完全な出力' : '外国語混入');
+        console.warn(`[Retry ${attempt+1}/${maxRetries}] ${reason}を検出、再生成します`);
         continue;
       }
       return lastResult;
@@ -792,7 +747,7 @@ const Api = {
     return lastResult;
   },
 
-  async _callNovelAI(system, userContent, maxTok) {
+  async _callNovelAI(system, userContent, maxTok, opts = {}) {
     const token = this.normalize(S.cfg.naiKey);
     if (!token) throw new Error('NovelAIトークンが設定されていません（pst-... 形式）');
     if (!token.startsWith('pst-')) throw new Error('トークン形式が違います → pst- で始まる必要があります');
@@ -882,13 +837,7 @@ const Api = {
     return {
       text: JSON.stringify({
         playerIntent: { kind: 'other', tone: 'neutral' },
-        npcInnerLife: null,
-        npcReactionPhase: {
-          npcName: (S.cast.npcs[0] || {}).name || '',
-          emotion: S.cast.npcs[0]?.emotion || '不明',
-          interpretation: '', dialogue: null, bodyLanguage: '', resistance: 'mid', subtext: null
-        },
-        environmentResponse: '', branchCandidates: [],
+        branchCandidates: [],
         // 空ナレーション対策フォールバック
         narrative: (cleaned && cleaned.length > 0) ? cleaned
           : (S.cast.npcs[0] ? [`${S.cast.npcs[0].name}は黙っていた。`] : ['静寂が続いた。'])
@@ -945,12 +894,14 @@ const Planner = {
     const hero  = S.cast.hero;
     const npcs  = S.cast.npcs;
     const scene = S.scene;
-    const turns = S.turns.slice(-6);
+    // v292Dfix91: 履歴の圧縮を緩和（6→8ターン / 各 180→300字, 最新 350→420字）。
+    // 長文プロセ物語で直前ターンの感情・弧が切れてキャラ反応が繋がらない問題への対策。
+    const turns = S.turns.slice(-8);
     const hist  = turns.map((t, i) => {
       const narr = t.narrative ? t.narrative.replace(/\n/g, '　') : '';
       const isLast = (i === turns.length - 1);
       const prefix = isLast ? '★直前' : `${i - turns.length + 1}番前`;
-      return `[${prefix}][${t.inputType}] ${t.playerText}\n描写: ${narr.slice(0, isLast ? 350 : 180)}`;
+      return `[${prefix}][${t.inputType}] ${t.playerText}\n描写: ${narr.slice(0, isLast ? 420 : 300)}`;
     }).join('\n---\n');
 
     // NPCプロファイルブロック
@@ -989,7 +940,7 @@ NPCを生きた人間として描写してください：
 
 ❌ 絶対禁止:
 1. 「キャラ名：セリフ」の羅列——dialogueスクリプト形式をnarrative配列に入れない
-   ダメ例: ["女神：私はあなたに勝てない", "アリア：なぜ？", "女神：あなたは私の子だから"]
+   ダメ例: ["相手：私はあなたに勝てない", "主人公：なぜ？", "相手：あなたは私の子だから"]
 2. 同じ内容を言い換えて連続で書く
    ダメ例: 「私はあなたに勝てません」の直後に「あなたには勝てない」→ 同じことを2回言っている
 3. 環境を箇条書きで列挙する
@@ -1048,10 +999,10 @@ ${npcProfiles || '（NPC未設定）'}
 プレイヤーの入力はすべて「起きた現実」として即座に受け入れる。
 
 - DO入力: その行動は完了した事実。結果から続きを書く
-  例:「アリアは女の子を縛った」→縛り終わった後の状況を描く
+  例:「主人公は相手を縛った」→縛り終わった後の状況を描く
 - SAY入力: その台詞は発せられた事実。相手の反応を描く
 - STORY入力: プレイヤーが示した出来事・展開・方向は「決定した現実」として受け入れる
-  例:「アリアは女の子が背を向けた瞬間に縛り動けなくした」→それが起きた後を描く
+  例:「主人公は相手が背を向けた瞬間に縛り動けなくした」→それが起きた後を描く
   例:「突然扉が開いた」→開いた後から描く
 
 ❌ 絶対禁止: プレイヤー入力を無視する・否定する・なかったことにする・矛盾する展開を書く
@@ -1060,18 +1011,25 @@ ${npcProfiles || '（NPC未設定）'}
 
 直近のプレイヤー入力を最優先で反映すること。
 
+【STORY入力の展開とセリフ（AI Dungeon式・重要）】
+- STORY入力は「これから起きることの種」。なぞり書きせず、その種から場面を一歩前へ進める。停滞させず、前のターンとの差分（状況・関係・空気の変化）を必ず作る。
+- その場に居て反応・発話し得るキャラがいるなら、地の文に溶かすだけで終わらせず、実際のセリフを <say who="名前">セリフ</say> の形で出す。短い相槌や喘ぎだけでなく、状況への反応・意図・感情を含む「生きたセリフ」を最低1つは置く。
+- ただし機械的に毎ターン喋らせる必要はない。抑圧・解離・気絶・沈黙が状況的に妥当なら無理に喋らせず、その時は地の文で反応を描く。
+- セリフはキャラの性格・口調・核心欲求/恐怖から生まれる固有の言い回しにする（キャラごとに表出を変える）。
+
 【主人公ロック（AI自身の追加行動を制限する）】
 - AIが勝手に主人公の新しい行動を追加しない（プレイヤーが指定していない行動）
 - AIが勝手に主人公の新しいセリフを追加しない（プレイヤーが指定していないセリフ）
 - ただしプレイヤーが入力したDO・SAY・STORYの内容は完全・忠実に反映する
 - 主人公の内面（〜と感じた・〜と思った）は書いてよい
 
-【NPC反応の書き方（必ず守る）】
-1. npcInnerLife.innerThought で内心（本音）を決める——これが演技の核
-2. defenseMechanism を決める（none も可）
-3. bodyLanguage は体の反応で感情を表す（絶対に「感情があった」と直書きしない）
-4. dialogue は防衛機制に沿ったセリフ（内心と矛盾してよい・すべき）
-5. subtext で台詞の裏にある本音を記録する
+【NPC の描き方（必ず守る）】
+NPC の感情・葛藤・本音・防衛機制・身体反応はすべて narrative の地の文に自然に溶かす。
+構造化フィールドとして JSON に分離しない。
+- 感情を「〜と感じた」と直書きせず、身体反応（呼吸の乱れ、視線の動き、握りしめた指）で表す
+- NPC が嘘をついて笑うときは、内心と外面のズレを散文で描く（例：「微かに頬が引きつったが、彼女はすぐに笑顔を作って『大丈夫よ』と言った」）
+- 読み手は地の文の機微からだけ NPC の本音を読み取る
+- 環境の音・空気感も narrative に溶かす（独立フィールドは設けない）
 
 【名前・役割固定】
 主人公名: ${hero.name || '（未設定）'}
@@ -1087,30 +1045,10 @@ ${scene.lore || 'なし'}
     "kind": "approach|talk|explore|attack|comfort|threaten|deceive|other",
     "tone": "neutral|gentle|aggressive|curious|fearful|manipulative"
   },
-  "npcInnerLife": {
-    "npcName": "反応するNPCの名前",
-    "instantEmotion": "即座に湧いた感情（2-4文字）",
-    "triggeredFear": "この瞬間に刺激された恐怖（1文またはnull）",
-    "underlyingNeed": "この瞬間に動いている欲求（1文またはnull）",
-    "defenseMechanism": "none|denial|rationalization|avoidance|projection|displacement|suppression",
-    "innerThought": "NPCの内心（読者だけが知る独白、1〜2文、絶対に嘘をつかない）",
-    "trustDelta": 0,
-    "stressDelta": 0
-  },
-  "npcReactionPhase": {
-    "npcName": "反応するNPCの名前",
-    "emotion": "表の感情（2-4文字）",
-    "interpretation": "NPCがこの行動をどう解釈したか（1文）",
-    "dialogue": "台詞またはnull（沈黙）——内心と矛盾させてよい",
-    "bodyLanguage": "仕草・視線・身体反応（1〜2文、感情を体で表す）",
-    "resistance": "low|mid|high",
-    "subtext": "台詞の裏にある本音（1文またはnull）"
-  },
-  "environmentResponse": "環境の変化・音・雰囲気・空気感（1〜2文またはnull）",
   "branchCandidates": [
     {"id":"b1","label":"選択肢ラベル（例: 手を差し伸べる（DO））","type":"main|side"}
   ],
-  "narrative": ["地の文1（環境・状況・空気感）","地の文2（NPCの動作・表情——感情を体で表す）","地の文3（セリフは動作と一体化させる）「〝台詞〟——動作/間」","地の文4","地の文5（心理・余白・沈黙）","地の文6","地の文7（余韻・次への引き）"]
+  "narrative": ["地の文1（環境・状況・空気感）","地の文2（NPCの動作・表情——感情を体で表す。本音はここに溶かす）","地の文3（セリフは動作と一体化させる）「〝台詞〟——動作/間」","地の文4","地の文5（心理・余白・沈黙——内心と外面のズレを散文で描く）","地の文6","地の文7（余韻・次への引き）"]
 }
 
 narrativeの注意: 各要素は「〜した」「〜と言った」形式の完結した一文にすること。途中で切らない。同じ内容を言い換えて連続で出さない。
@@ -1124,13 +1062,13 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
 
 【お手本となる正しいnarrative出力例】
 例1（DO「彼女に手を伸ばす」）:
-["アリアはゆっくりと手を伸ばした。","ミリアの肩がびくりと跳ねる。","「触らないで……」彼女の声は震えていた。","それでもアリアの指先は、ミリアの頬に届いた。","冷たい肌の感触に、アリアは息を呑んだ。"]
+["主人公はゆっくりと手を伸ばした。","相手の肩がびくりと跳ねる。","「触らないで……」彼女の声は震えていた。","それでも主人公の指先は、相手の頬に届いた。","冷たい肌の感触に、主人公は息を呑んだ。"]
 
 例2（SAY「大丈夫だよ」）:
-["アリアは静かに告げた。","「大丈夫だよ」その言葉は柔らかく響いた。","ミリアは目を見開き、小さく頷いた。","頬を一筋の涙が伝う。","「ありがとう……」と彼女は呟いた。"]
+["主人公は静かに告げた。","「大丈夫だよ」その言葉は柔らかく響いた。","相手は目を見開き、小さく頷いた。","頬を一筋の涙が伝う。","「ありがとう……」と彼女は呟いた。"]
 
 例3（STORY「血の海の中で」）:
-["床は血の海と化していた。","鉄の匂いが鼻孔を刺し、視界が霞む。","ミリアの白いドレスは、もう赤黒く染まっている。","アリアは膝をつき、震える手で彼女の頬に触れた。","まだ温かい——その事実が、アリアの胸を裂いた。"]
+["床は血の海と化していた。","鉄の匂いが鼻孔を刺し、視界が霞む。","相手の白いドレスは、もう赤黒く染まっている。","主人公は膝をつき、震える手で彼女の頬に触れた。","まだ温かい——その事実が、主人公の胸を裂いた。"]
 
 すべての例で完全に日本語のみ。英単語・中国漢字なし。1行は短く、自然な文末で終わる。これと同じ品質でnarrativeを生成すること。`;
 
@@ -1140,9 +1078,7 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
         npcs: npcs.map(n => ({
           name: n.name, desc: n.desc,
           personality: n.personality, coreDesire: n.coreDesire,
-          coreFear: n.coreFear, wound: n.wound,
-          emotion: n.emotion || '中立', stress: n.stress || 50,
-          trust: n.trust || 0, intimacy: n.intimacy || 0
+          coreFear: n.coreFear, wound: n.wound
         }))
       },
       scene: { location: scene.loc, objective: scene.obj, tone: scene.tone },
@@ -1151,35 +1087,88 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
       CRITICAL_INSTRUCTION: `この入力「${inputText}」を完全に受け入れ、これが起きた後の続きをnarrativeに書く。この入力を無視・否定・矛盾させることは禁止。`
     }, null, 2);
 
-    return { sys, user };
+    // v292 hook integration: extensions can mutate sys & user.
+    // Features push into Planner._extensions / Planner._userExtensions instead of wrapping.
+    let _sys = sys, _user = user;
+    // First, append PromptRegistry entries (deduped, capped at 4000 chars).
+    if (window.PromptRegistry && typeof window.PromptRegistry.build === 'function') {
+      try {
+        const extras = window.PromptRegistry.build(4000);
+        if (extras) _sys = _sys + '\n\n' + extras;
+      } catch (e) { console.warn('[v292] PromptRegistry err:', e && e.message); }
+    }
+    if (Array.isArray(Planner._extensions)) {
+      for (let i = 0; i < Planner._extensions.length; i++) {
+        try {
+          const r = Planner._extensions[i]({ sys: _sys, state: S });
+          if (typeof r === 'string') _sys = r;
+        } catch (e) { console.warn('[v292] sys ext err:', e && e.message); }
+      }
+    }
+    if (Array.isArray(Planner._userExtensions)) {
+      for (let i = 0; i < Planner._userExtensions.length; i++) {
+        try {
+          const r = Planner._userExtensions[i]({ user: _user, state: S });
+          if (typeof r === 'string') _user = r;
+        } catch (e) { console.warn('[v292] user ext err:', e && e.message); }
+      }
+    }
+    // UserMessageRegistry: dedup user-side per-key instructions appended once at end.
+    if (window.UserMessageRegistry && typeof window.UserMessageRegistry.build === 'function') {
+      try {
+        const extra = window.UserMessageRegistry.build();
+        if (extra) _user = _user + '\n' + extra;
+      } catch (e) { console.warn('[v292] UserMessageRegistry err:', e && e.message); }
+    }
+
+    return { sys: _sys, user: _user };
   },
 
   parsePlan(rawText, inputType) {
     let t = rawText.trim();
     const m = t.match(/```(?:json)?\s*([\s\S]+?)\s*```/);
-    if (m) t = m[1];
-    const s = t.indexOf('{'), e = t.lastIndexOf('}');
-    if (s !== -1 && e !== -1) t = t.slice(s, e + 1);
-
-    let plan;
-    try { plan = JSON.parse(t); }
-    catch {
-      console.warn('JSON parse failed, using fallback:', rawText.slice(0,200));
-      // フォールバック：生テキストをナラティブとして使う
-      const lines = rawText.trim().split('\n').filter(l=>l.trim()).slice(0,6);
-      plan = {
+    if (m) t = m[1].trim();
+    // v292Dfix88: prose is the normal output since fix58 (Hermes emits <say>/<state>/
+    // <summary> tags + prose, not JSON). Only run the JSON parse/repair/brace-slice path
+    // when the text actually looks like a JSON object ({...}). This removes the per-turn
+    // "JSON parse failed...using fallback" console.warn and prevents the brace-slice from
+    // ever clipping prose containing a literal {...}. The prose route reproduces the old
+    // fallback plan exactly (built from rawText), so fix59/60/61 see identical narrative.
+    const buildProsePlan = () => {
+      const lines = rawText.trim().split('\n').filter(l => l.trim());
+      return {
         playerIntent: { kind: 'other', tone: 'neutral' },
-        npcInnerLife: null,
-        npcReactionPhase: { npcName: (S.cast.npcs[0]||{}).name||'', emotion: S.cast.npcs[0]?.emotion||'中立', interpretation:'', dialogue:null, bodyLanguage:'', resistance:'mid', subtext:null },
-        environmentResponse: '', branchCandidates: [],
+        branchCandidates: [],
         narrative: lines.length > 0 ? lines : ['物語が続く…']
       };
+    };
+
+    let plan;
+    if (t.charAt(0) === '{') {
+      const s = t.indexOf('{'), e = t.lastIndexOf('}');
+      if (s !== -1 && e !== -1) t = t.slice(s, e + 1);
+      try { plan = JSON.parse(t); }
+      catch {
+        // v292 Tier 1.5 Fix E+F: JSON repair for common Hermes malformations
+        // - `\\"` (over-escape) -> `\"`;  `+10` (leading plus) -> `10`;  `""Key""` -> `"Key"`
+        try {
+          const repaired = t
+            .replace(/\\\\"/g, '\\"')
+            .replace(/:\s*\+(\d)/g, ': $1')
+            .replace(/""([A-Za-z][A-Za-z0-9_]*)""/g, '"$1"');
+          plan = JSON.parse(repaired);
+          console.log('[Tier 1.5 Fix E/F] JSON repaired');
+        } catch {
+          console.warn('JSON parse failed even after repair, using fallback:', rawText.slice(0,200));
+          plan = buildProsePlan();
+        }
+      }
+    } else {
+      // prose normal route (fix88) — no warn, no JSON churn
+      plan = buildProsePlan();
     }
 
     plan.playerIntent     = plan.playerIntent     || {};
-    plan.npcInnerLife     = plan.npcInnerLife     || null;
-    plan.npcReactionPhase = plan.npcReactionPhase || {};
-    plan.environmentResponse = plan.environmentResponse || '';
     plan.branchCandidates = Array.isArray(plan.branchCandidates) ? plan.branchCandidates : [];
     plan.narrative        = Array.isArray(plan.narrative) ? plan.narrative.filter(Boolean) : [];
 
@@ -1200,12 +1189,22 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
     }
     // 言語フィルタ: 英単語・中国簡体字・コード片を除去
     plan.narrative = plan.narrative.map(line => {
+      // v292Dfix48: dialogue object 等の非 string 要素を文字列化 (fix26 schema を .map() 前に展開)
+      if (line && typeof line === 'object') {
+        const kind = line.type || '';
+        const sp = (line.speaker || '').toString().trim();
+        const tx = (line.text || '').toString().trim();
+        if (kind === 'dialogue' && sp && tx) line = sp + '「' + tx + '」';
+        else if (tx) line = tx;
+        else line = '';
+      }
+      if (typeof line !== 'string') return '';
       if (!line) return '';
       let t = line;
       // 英字3文字以上の連続を削除
-      t = t.replace(/[A-Za-z][A-Za-z0-9_.]{2,}/g, '');
-      // 中国簡体字（日本語で使わないもの）を削除
-      t = t.replace(/[过这没现还说让对给从将们点东几亲爱觉吗么吧呢哪谁怎样此后状围]/g, '');
+      t = t.replace(/[A-Za-z][]{2,}/g, '');
+      // 中国簡体字（日本語で使わないもの）を削除h
+      t = t.replace(/[过这现还说让对给从们东几亲爱觉吗么吧呢哪谁怎样围]/g, '');
       // 連続スペースを1つに
       t = t.replace(/\s+/g, ' ').trim();
       return t;
@@ -1216,6 +1215,15 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
     });
     if (plan.narrative.length === 0) plan.narrative = ['…'];
     plan.narrative = plan.narrative.slice(0, 8);
+    // v292 parse extension hook: features can post-process plan (e.g., narrative dedup).
+    if (Array.isArray(Planner._parseExtensions)) {
+      for (let i = 0; i < Planner._parseExtensions.length; i++) {
+        try {
+          const r = Planner._parseExtensions[i](plan, { inputType: inputType, state: S, raw: rawText });
+          if (r && typeof r === 'object') plan = r;
+        } catch (e) { console.warn('[v292] parse ext err:', e && e.message); }
+      }
+    }
     return plan;
   }
 };
@@ -1242,7 +1250,7 @@ const UI = {
   setLoading(on) {
     const btn = document.getElementById('sendBtn');
     btn.disabled = on; btn.textContent = on ? '⋯' : '▶';
-    if (on) this.setStatus('生成中…'); else this.setStatus('');
+    if (on) this.setStatus('物語を紡いでいます…'); else this.setStatus('');
   },
 
   renderNarr(text) {
@@ -1251,14 +1259,6 @@ const UI = {
       const formatted = escaped.replace(/「([^」]*)」/g, '<span class="dial">「$1」</span>');
       return `<p>${formatted}</p>`;
     }).join('');
-  },
-
-  _defenseLabel(d) {
-    const map = {
-      denial: '否定', rationalization: '合理化', avoidance: '回避',
-      projection: '投影', displacement: '置き換え', suppression: '抑圧'
-    };
-    return map[d] || d;
   },
 
   renderTurn(turn, idx) {
@@ -1273,53 +1273,8 @@ const UI = {
     if (turn.narrative) {
       const block = document.createElement('div'); block.className = 'narr-block';
 
-      // 内心表示（showInner ONの場合）
-      if (S.cfg.showInner && turn.innerThought) {
-        const it = document.createElement('div'); it.className = 'inner-thought';
-        it.textContent = turn.innerThought;
-        // 防衛機制バッジ
-        if (turn.defenseMechanism && turn.defenseMechanism !== 'none') {
-          const badge = document.createElement('span'); badge.className = 'defense-badge';
-          badge.textContent = this._defenseLabel(turn.defenseMechanism);
-          it.appendChild(badge);
-        }
-        block.appendChild(it);
-      }
-
       // 本文
       block.innerHTML += this.renderNarr(turn.narrative);
-
-      // 台詞の本音（subtext）
-      if (turn.subtext) {
-        const st = document.createElement('div'); st.className = 'subtext';
-        st.textContent = turn.subtext; block.appendChild(st);
-      }
-
-      // NPC 心理メーター
-      const npc = turn.npcName ? S.cast.npcs.find(n => n.name === turn.npcName || (turn.npcName && turn.npcName.includes(n.name))) : null;
-      if (npc && (npc.trust !== undefined || npc.stress !== undefined)) {
-        const meters = document.createElement('div'); meters.className = 'psych-meters';
-        const trust  = npc.trust  || 0;
-        const stress = npc.stress || 50;
-        const trustW = Math.min(100, Math.abs(trust));
-        const trustCls = trust >= 0 ? 'trust-pos' : 'trust-neg';
-        const trustLabel = trust >= 40 ? '信頼' : trust >= 0 ? '中立' : trust >= -40 ? '警戒' : '敵対';
-        meters.innerHTML = `
-          <div class="pmeter">
-            <span class="pmeter-label">${this.esc(npc.name)}</span>
-          </div>
-          <div class="pmeter">
-            <span class="pmeter-label">信頼</span>
-            <div class="pmeter-bar"><div class="pmeter-fill ${trustCls}" style="width:${trustW}%"></div></div>
-            <span class="pmeter-val">${trust > 0 ? '+' : ''}${trust}</span>
-          </div>
-          <div class="pmeter">
-            <span class="pmeter-label">緊張</span>
-            <div class="pmeter-bar"><div class="pmeter-fill stress" style="width:${stress}%"></div></div>
-            <span class="pmeter-val">${stress}</span>
-          </div>`;
-        block.appendChild(meters);
-      }
 
       // 編集ボタン
       const eb = document.createElement('button'); eb.className = 'edit-btn';
@@ -1346,12 +1301,26 @@ const UI = {
     if (wl) wl.style.display = S.turns.length ? 'none' : 'block';
     S.turns.forEach((t, i) => el.appendChild(this.renderTurn(t, i)));
     this._scroll();
+    // v292 render hook: features push into UI._renderHooks instead of wrapping renderAll.
+    if (Array.isArray(this._renderHooks)) {
+      for (let i = 0; i < this._renderHooks.length; i++) {
+        try { this._renderHooks[i](null); }
+        catch (e) { console.warn('[v292] render hook err:', e && e.message); }
+      }
+    }
   },
 
   appendTurn(turn, idx) {
     const el = document.getElementById('story');
     document.getElementById('welcome').style.display = 'none';
     el.appendChild(this.renderTurn(turn, idx)); this._scroll();
+    // v292 render hook: per-turn render notification.
+    if (Array.isArray(this._renderHooks)) {
+      for (let i = 0; i < this._renderHooks.length; i++) {
+        try { this._renderHooks[i](turn); }
+        catch (e) { console.warn('[v292] render hook err:', e && e.message); }
+      }
+    }
   },
 
   _scroll() { const el = document.getElementById('story'); el.scrollTop = el.scrollHeight; },
@@ -1384,6 +1353,7 @@ const UI = {
     document.getElementById('cfgProvider').value  = S.cfg.provider || 'anthropic';
     document.getElementById('cfgKey').value       = S.cfg.key      || '';
     document.getElementById('cfgOrKey').value     = S.cfg.orKey    || '';
+    { var _pk = document.getElementById('cfgPollKey'); if (_pk) _pk.value = S.cfg.pollKey || ''; }
     document.getElementById('cfgOrModel').value   = S.cfg.orModel  || 'meta-llama/llama-3.3-70b-instruct';
     document.getElementById('cfgNaiKey').value    = S.cfg.naiKey   || '';
     document.getElementById('cfgModel').value     = S.cfg.model    || 'claude-haiku-4-5-20251001';
@@ -1438,8 +1408,7 @@ const UI = {
   addNpc() {
     S.cast.npcs.push({
       id: 'npc' + Date.now(), name: '', desc: '',
-      personality: '', coreDesire: '', coreFear: '', wound: '',
-      emotion: '中立', stress: 50, trust: 0, intimacy: 0, keyMoments: []
+      personality: '', coreDesire: '', coreFear: '', wound: ''
     });
     this._renderNpcList();
   },
@@ -1553,6 +1522,7 @@ const UI = {
     S.cfg.provider = document.getElementById('cfgProvider').value;
     S.cfg.key      = (document.getElementById('cfgKey').value    || '').replace(/[\s\u200B\uFEFF\u00A0]/g, '');
     S.cfg.orKey    = (document.getElementById('cfgOrKey').value  || '').replace(/[\s\u200B\uFEFF\u00A0]/g, '');
+    { var _pkS = document.getElementById('cfgPollKey'); if (_pkS) S.cfg.pollKey = (_pkS.value || '').replace(/[\s\u200B\uFEFF\u00A0]/g, ''); }
     S.cfg.orModel  = document.getElementById('cfgOrModel').value;
     S.cfg.naiKey   = (document.getElementById('cfgNaiKey').value || '').replace(/[\s\u200B\uFEFF\u00A0]/g, '');
     S.cfg.model    = document.getElementById('cfgModel').value;
@@ -1647,6 +1617,44 @@ const G = {
     document.getElementById('inp').placeholder = phs[m] || '';
   },
 
+  // v292Dfix169(案B): 会話ログ専用の2段階生成。本文(展開)を入力に、各キャラが実際に口に
+  //   出した発話だけを軽量プロンプト＋小max_tokensで生成する。状態描写・内心は出させない。
+  async genConvLog(narr) {
+    try {
+      const c = S.cast || {};
+      const names = [];
+      if (c.hero && c.hero.name) names.push(c.hero.name);
+      if (Array.isArray(c.npcs)) c.npcs.forEach(n => { if (n && n.name) names.push(n.name); });
+      const sys2 = [
+        'あなたはホラーTRPGの会話ログ生成器です。以下の「今ターンの展開」を読み、登場キャラがこの瞬間に実際に声に出したものだけをJSON配列で返してください。',
+        '・出力するのは口から出たもの：言葉・呼びかけ・会話・短いセリフを最優先に、加えて意味や感情のこもった叫び・命乞い・呻きも含めてよい。',
+        '・ただし感情も痛みもこもらない純粋な息遣い・呼吸音だけ（「ハァッ」「フー」「ぜぇ」等の、ただ呼吸しているだけのもの）は会話ログに出さない（地の文に属する）。',
+        '・一方、痛み・恐怖・苦悶のこもった声は、短くても言葉でなくても会話ログに含める（「……ぁ」「ひっ」「うぐ…」「あ゛っ」等の悲鳴・呻き・嗚咽）。これらは登場人物が実際に発した声なので拾う。',
+        '・状態描写・内心・地の文・「〜する」「〜した」「〜を見つめる」のような描写文は絶対に含めない。',
+        '・実際に発話していないキャラは含めない（無言なら出さない）。誰も発話していなければ空配列 [] を返す。沈黙は正しい結果。',
+        '・人外・名無しの存在が声を発した場合、who は【本文で使われている呼び名】をそのまま使う（本文が「妖怪」と呼ぶなら who も「妖怪」。勝手に「異形」等へ言い換えない）。本文に呼び名が無い時だけ「謎の声」とする。地の文の主語が状態描写しているだけなら発話ではない。',
+        '・話者は文脈で判定する：苦痛の悲鳴・呻き・絶叫・命乞いは、その痛み・損傷・恐怖を受けている本人のもの。傍で見ているだけの観察者キャラに割り当てない（誰の身に何が起きているかを本文から読む）。本文で一番目立つ名前というだけで割り当てない。',
+        '・各 say は短く、口から出た言葉そのまま（説明や要約をしない）。',
+        '登場キャラ: ' + (names.join('、') || '(不明)'),
+        '出力はJSON配列のみ（前後に説明やコードフェンスを書かない）: [{"who":"名前","say":"実際に口に出した言葉"}]'
+      ].join('\n');
+      const user2 = '今ターンの展開:\n' + String(narr || '').replace(/<[^>]+>/g, '').slice(0, 1800);
+      const r2 = await Api.call(sys2, user2, 500, { allowShort: true });
+      const txt = (r2 && r2.text) || '';
+      let arr = [];
+      try { const mi = txt.indexOf('['), mj = txt.lastIndexOf(']'); if (mi >= 0 && mj > mi) arr = JSON.parse(txt.slice(mi, mj + 1)); } catch(e){}
+      if (!Array.isArray(arr)) arr = [];
+      // v292Dfix173: 幻覚した話者を除外。登録キャラ名なのに今ターンの本文に一度も出てこない
+      //   = その場にいない者(未登場NPC等)を話者にした幻覚 → 捨てる。本文に出てくる名前や
+      //   名無しの存在(異形/謎の声等)は通す。空応答ターンで未登場キャラが湧くのを根治。
+      const _cn = String(narr || '').replace(/<[^>]+>/g, '');
+      return arr.filter(x => x && x.who && x.say && String(x.say).trim())
+                .map(x => ({ who: String(x.who).trim().slice(0, 24), say: String(x.say).trim().slice(0, 80) })).map(x => { if (_cn.indexOf(x.who) < 0 && names.indexOf(x.who) < 0){ const _mw = _cn.match(/(妖怪|怪異|化け物|怪物|魔物|悪霊|亡霊|幽霊|人形)/); if (_mw) x.who = _mw[1]; } return x; }) /* v292Dfix207: whoは本文の呼び名へ正規化(発明ラベル防止) */
+                .filter(x => !(names.indexOf(x.who) >= 0 && _cn.indexOf(x.who) < 0))
+                .slice(0, 8);
+    } catch(e) { try { console.warn('[v292Dfix169] genConvLog err:', e && e.message); } catch(_){} return []; }
+  },
+
   async submit() {
     if (S.inFlight) return;
     const inputEl = document.getElementById('inp');
@@ -1669,28 +1677,109 @@ const G = {
 
     try {
       const { sys, user } = Planner.build(S.mode, text);
-      const result = await Api.call(sys, user);
+      let result = await Api.call(sys, user);
       if (!result) return;
 
-      const plan = Planner.parsePlan(result.text, S.mode);
+      let plan = Planner.parsePlan(result.text, S.mode);
       if (!plan) throw new Error('AIの応答をJSONとして解析できませんでした。\nデバッグをONにして確認してください。\n\n' + result.text.slice(0,300));
+
+      /* v292Dfix216: 丸ごと再掲ターンの品質ゲート。実測: モデルが「続き」で直前場面をほぼ同文で
+         再描写することがあり、fix71のdedupで全文消える→fix155のraw救済が丸ごと復元＝重複が蘇る
+         (slot b 16ターン自動デバッグで3ターン連続の再掲ループを確認・合成rawで復元経路も実証)。
+         検知したら1回だけ「時間を前へ進めろ」のフィードバック付きで書き直させる(根治=出力品質側)。 */
+      try {
+        const _rNorm216 = (s) => String(s||'').replace(/[「」『』（）()\s　…⋯。、！？!?.,<>\/="]/g,'');
+        const _prev216 = {};
+        S.turns.slice(-3).forEach(pt => { String((pt&&pt.narrative)||'').split(/(?<=[。！？\n])/).forEach(x => { const k = _rNorm216(x); if (k.length >= 8) _prev216[k] = 1; }); });
+        const _sents216 = String((plan.narrative||[]).join('\n')).split(/(?<=[。！？\n])/).filter(x => _rNorm216(x).length >= 8);
+        const _dup216 = _sents216.filter(x => _prev216[_rNorm216(x)]).length;
+        if (_sents216.length >= 3 && _dup216 / _sents216.length > 0.6){
+          UI.setStatus('前ターンの再掲を検知 → 書き直し中…');
+          const result2 = await Api.call(sys, user + '\n\n【重要・書き直し】直前のあなたの出力は前ターンの内容のほぼ再掲だった。同じ場面・同じ文を繰り返さず、時間と状況を必ず前へ進めて、新しい出来事・発見・行動を描くこと。');
+          if (result2 && result2.text){
+            const plan2 = Planner.parsePlan(result2.text, S.mode);
+            if (plan2 && Array.isArray(plan2.narrative) && plan2.narrative.join('').length > 40){ plan = plan2; result = result2; }
+          }
+        }
+      } catch(_e216){}
 
       // 心理エンジンで NPC 状態を更新
       PsychEngine.process(plan);
 
-      const narr = plan.narrative.join('\n');
-      const inner = plan.npcInnerLife;
-      const rp    = plan.npcReactionPhase;
+      let narr = plan.narrative.join('\n');
+
+      // v292Dfix195: 会話ログをモデル自身の <say who="名前"> タグから作る（話者＝その台詞を
+      //   書いた本人＝正解）。genConvLog の話者推測は誤割り当ての温床だったため、<say>タグが
+      //   1つも無いときだけのフォールバックに格下げ。新エンジンは全セリフを<say>で囲む契約。
+      //   ※ <react ... 声="<say who='X'>…</say>"> の入れ子は who='…'(単引用)なので
+      //     who="…"(二重引用)だけ拾うこの正規表現には掛からず、本文の発話のみ抽出される。
+      let _convSays = [];
+      try {
+        var _body = String(result.text || '').split(/<react|<state/)[0]; _body = _body.replace(/<say(\s+who="[^"]*"\s*)>([^<\n]*)[」』](?=\s*(?:\n|$))/g, '<say$1>$2</say>'); /* v292Dfix214: 「」で閉じられた壊れsayタグを正規タグに修復(モデルが</say>でなく」で閉じる癖→会話ログ欠落の根治) */ var _heroNm = (S.cast && S.cast.hero && S.cast.hero.name) || ''; var _names = []; if (_heroNm) _names.push(_heroNm); if (S.cast && Array.isArray(S.cast.npcs)) S.cast.npcs.forEach(function(n){ if (n && n.name) _names.push(n.name); });
+        var _LANGS217 = { ja: { bareSrc: '「([^」]*)」', speechVerb: /(言|呟|囁|尋|問|答|叫|返|応|漏|告|呼|続|笑|声|呻|唸)/, nonSpeech: /(言わ|呼ば|囁か|叫ば|問わ|告げら|称さ)れ/, quoteLead: /^\s*[とっ、]*と/, voiceNoun: /^の[^。「」]{0,6}(声|悲鳴|金切|叫|呟|囁|うめ|絶叫|嗚咽)/ } }; /* v292Dfix217: 言語プロファイル(多言語展開用)。bareSrc=裸引用の正規表現ソース(キャプチャ群ちょうど1個の契約)。言語追加=ここに1エントリ+S.cfg.langで選択。例 en: bareSrc:'“([^”]+)”'(ASCIIの"はsayタグ属性と衝突するためスマートクォート推奨), speechVerb=(said|whisper|shout|murmur|replied|asked|cried)/i, quoteLead=^[\s,]+ 等。露語は«»+ダッシュ式の別bareSrcが要る。 */ var _L217 = _LANGS217[(S.cfg && S.cfg.lang) || 'ja'] || _LANGS217.ja; var _sayRe = new RegExp('<say\\s+who="([^"]*)"\\s*>([^<]*)<\\/say>|' + _L217.bareSrc, 'g'), _sm, _seenSay = {}; /* v292Dfix213: タグ付きセリフの正規化テキスト集合を先に作る(モデルが同じセリフを裸「」とタグで二重に書く対策) */ var _tagNorm = {}; try { var _tm, _tRe = /<say\s+who="[^"]*"\s*>([^<]*)<\/say>/g; while ((_tm = _tRe.exec(_body))) { _tagNorm[String(_tm[1]||'').trim().slice(0,80).replace(/[\s　。、！？!?…・「」『』]/g,'')] = 1; } } catch(e){}
+        while ((_sm = _sayRe.exec(_body))) {
+          var _ss2 = String((_sm[1] != null ? _sm[2] : _sm[3]) || '').trim().slice(0, 80);
+          var _sw; if (_sm[1] != null){ _sw = String(_sm[1] || '').trim().slice(0, 24); } else { var _pre = _body.slice(0, _sm.index), _bi = -1; _sw = _heroNm; _names.forEach(function(n){ var p = _pre.lastIndexOf(n); if (p > _bi){ _bi = p; _sw = n; } }); var _lh217 = /(^|\n)[\s　]*$/.test(_pre) && /^[\s　]*(\n|$)/.test(_body.slice(_sm.index + _sm[0].length)); /* v292Dfix217: 独立セリフ行=行全体が引用のみ(前後とも空白だけ)。「逃げろ」と言われた…等の行頭引用+地の文続きは後置マーカー判定に回す */ var _ps217 = false; /* v292Dfix200b: 後置話者「『…』と、Xは呟いた」は前方近接より優先 */ var _post = _body.slice(_sm.index + _sm[0].length, _sm.index + _sm[0].length + 50); _post = _post.replace(/^[\s　」』]+/, ''); var _pst = _post.search(/[「。\n]/); if (_pst >= 0) _post = _post.slice(0, _pst); if (_L217.quoteLead.test(_post) && _L217.speechVerb.test(_post) && !(_L217.nonSpeech && _L217.nonSpeech.test(_post))){ _ps217 = true; _names.forEach(function(n){ if (_post.indexOf(n) >= 0) _sw = n; }); } /* v292Dfix206: 「Xの金切り声が」型(と無し・改行はさみ可)も後置優先 */ _names.forEach(function(n){ if (_post.indexOf(n) === 0 && _post.slice(n.length).match(_L217.voiceNoun)) { _ps217 = true; _sw = n; } }); var _utt217 = _lh217 || _ps217; /* v292Dfix217: 発話判別器=①行頭の独立セリフ行 ②後置の発話マーカー(と+発話動詞/Xの悲鳴型)のどちらかを満たす裸引用だけが発話。文中に埋まった引用(「…」現実 等の連体修飾・内心・名称・文字情報)は地の文として弾く */ }
+          var _ss = _ss2; if (!_ss2) continue; if (_sm[1] == null && !_utt217) continue; /* v292Dfix217: 発話判別器を通らない裸「」は収穫しない(地の文の引用を発話化しない=「助けられなかった」誤帰属の根治) */ if (_sm[1] == null && _tagNorm[_ss2.replace(/[\s　。、！？!?…・「」『』]/g,'')]) continue; /* v292Dfix213: タグ版が存在する裸「」は同一セリフの重複＝スキップ(話者はタグが正) */
+          var _sk = _sw + '' + _ss;
+          if (_seenSay[_sk]) continue; _seenSay[_sk] = 1;
+          _convSays.push({ who: _sw || _heroNm || '???', say: _ss2 });
+        }
+      } catch(e) { _convSays = []; }
+      // v292Dfix169(案B): <say>タグが1つも無いとき（沈黙・裸引用のみ等）だけ、従来の2段階
+      //   生成（実際に口に出した発話だけを作る）にフォールバックする。
+      var _eng217 = false; try { _eng217 = (S.cfg && S.cfg.engineMode != null) ? (+S.cfg.engineMode === 1) : (localStorage.getItem('v292EngineMode') === '1'); } catch(_e){} /* v292Dfix217: 新エンジンは全セリフ<say>必須の契約=タグ皆無は本当に無言。AI推測(genConvLog)が地の文の引用から発話を再発明する第2経路を遮断。従来エンジンのみフォールバック維持 */
+      if (!_convSays.length && !_eng217) {
+        try { _convSays = await this.genConvLog(narr); } catch(e){ _convSays = []; }
+      }
+      // SAY入力は主人公の実発話なので会話ログ先頭に必ず入れる
+      if (S.mode === 'SAY' && text && S.cast && S.cast.hero && S.cast.hero.name){
+        var _sayClean = String(text).replace(/^[「『]|[」』]$/g,'').slice(0,80);
+        // v292Dfix193: genConvLog がプレイヤーの SAY 発話を別キャラに誤割り当てして
+        //   会話ログを二重化する件の根治。SAY入力と同一内容の抽出結果は who を問わず捨てる
+        //   （その台詞は主人公のものと確定しており、直後に先頭へ追加する）。
+        var _sayNorm = _sayClean.replace(/[\s　。、！？!?…・「」『』]/g,'');
+        _convSays = _convSays.filter(function(c){
+          var cn = String((c && c.say) || '').replace(/[\s　。、！？!?…・「」『』]/g,'');
+          return cn !== _sayNorm;
+        });
+        _convSays.unshift({ who: S.cast.hero.name, say: _sayClean });
+      }
+      /* v292Dfix215: ターン跨ぎのセリフ重複を遮断。モデルが直前ターンの締めセリフを次ターン冒頭で再掲する癖があり、再掲側は近接判定で話者が裏返って「同じセリフが別話者で2枚」になる(実測)。直近2ターンの_convSaysに同じ正規化テキストがあれば新ターン側を捨てる(初出が権威)。プレイヤーのSAY入力(意図的な繰り返し)は対象外。 */
+      try {
+        var _norm215 = function(s){ return String(s||'').replace(/[\s　。、！？!?…・「」『』]/g,''); };
+        var _prev215 = {};
+        S.turns.slice(-2).forEach(function(pt){ ((pt && pt._convSays) || []).forEach(function(pc){ var n = _norm215(pc.say); if (n) _prev215[n] = 1; }); });
+        var _heroSay215 = (S.mode === 'SAY' && text) ? _norm215(text) : null;
+        _convSays = _convSays.filter(function(c){ var n = _norm215(c.say); if (!n) return false; if (_heroSay215 && n === _heroSay215 && S.cast && S.cast.hero && c.who === S.cast.hero.name) return true; return !_prev215[n]; });
+      } catch(_e215){}
+
+      // v292Dfix175: 本文から <say> タグを除去する（会話ログは上の genConvLog で取得済なので本文の
+      //   say-tag はもう不要）。モデルや旧拡張が出す不完全な say-tag が「<say who=¥」のように表示へ
+      //   漏れる/「」が二重になるのを根治。well-formed は中身（セリフ）を「」付きで残し、壊れた断片は捨てる。
+      try {
+        narr = narr.replace(/<say(\s+who="[^"]*"\s*)>([^<\n]*)[」』](?=\s*(?:\n|$))/g, '<say$1>$2</say>'); /* v292Dfix214: 」閉じの壊れsayタグを修復してから変換(開き括弧無しの行が残る問題の根治) */
+        narr = narr
+          .replace(/<say\b[^>]*>\s*([\s\S]*?)\s*<\/say>/gi, function(_m, c){
+            c = String(c || '').trim();
+            if (!c) return '';
+            var _nrm213 = c.replace(/[\s　。、！？!?…・「」『』]/g,''); try { if (_nrm213 && (narr.match(/「[^」]*」/g)||[]).some(function(q){ return q.replace(/[\s　。、！？!?…・「」『』]/g,'') === _nrm213; })) return ''; } catch(e){} /* v292Dfix213: 同文の裸「」が本文に既にあればタグ変換を捨てる(本文のセリフ二重化の根治) */ return /^[「『]/.test(c) ? c : ('「' + c + '」');
+          })
+          .replace(/<\/?say\b[^>]*>?/gi, '')   // 残り/不完全な say 断片を除去
+          .replace(/「\s*」/g, '')              // 空の「」
+          .replace(/[「『]\s*$/g, '')           // 末尾の閉じ忘れ開き括弧（壊れたsay-tag由来の孤立「）
+          .replace(/^[\s　]*[」』](?=[とた、。\s　]|$)/gm, '')   // 行頭の孤立閉じ括弧(v292Dfix215: 全行対象に。重複除去の切り残し「」と…」対策)
+          .replace(/(^|\n)([「『][^」』\n]{2,})(?=\n|$)/g, '$1$2」')   // v292Dfix216: 閉じ忘れセリフ行を行末で自動クローズ(「ミリアさん、大丈夫ですか？␊ 型)
+          .replace(/[ \t]*\n{3,}/g, '\n\n')
+          .trim();
+      } catch(_e175){}
 
       const turn = {
         inputType:       S.mode,
         playerText:      text,
         narrative:       narr,
-        innerThought:    inner?.innerThought    || null,
-        defenseMechanism: inner?.defenseMechanism || null,
-        subtext:         rp?.subtext            || null,
-        npcName:         rp?.npcName            || null,
         plan,
+        _convSays:       _convSays,   // v292Dfix169: 会話ログ専用の発話リスト
         dbg: S.cfg.debug ? { sys, user, raw: result.text } : null
       };
 
@@ -1731,13 +1820,39 @@ const G = {
   resetStory() {
     if (!confirm('物語をリセットしますか？\n設定・APIキー・NPC設定は保持されます。')) return;
     S.turns = []; S.scene.branches = [];
-    S.cast.npcs.forEach(n => { n.emotion = '中立'; n.stress = 50; n.trust = 0; n.intimacy = 0; n.keyMoments = []; });
-    S.save(); UI.renderAll(); UI.renderBranches([]); UI._showIntro(); UI.setStatus('物語をリセットしました');
+    S.save();
+    this._clearDerivedState();   // v292Dfix154: wipe character-state stores so the previous game doesn't bleed in
+    location.reload();           // rebuild every in-memory module state from a clean slate
   },
 
   resetAll() {
     if (!confirm('すべてのデータ（APIキー・設定を含む）を削除しますか？\nこの操作は取り消せません。')) return;
+    this._clearDerivedState();   // v292Dfix154: SS.del(KEY) only removed chr6; derived stores survived
     SS.del(KEY); location.reload();
+  },
+
+  // v292Dfix154(2026-05-30): reset-hygiene. おしん「物語リセットしてもキャラ状態がリセットされない」。
+  //   原因: resetStory は S.turns を空にするだけで、派生キャラ状態ストアが残り次のゲームに漏れていた。
+  //   特に fix77(state-memory) の `v292Dfix77States`（各キャラの体/心/本能トラッカー）には reset hook が
+  //   一切無く、localStorage と in-memory `window.__v292Dfix77Store` の両方に前ゲームのキャラ状態が永続。
+  //   longmem(worldinfo/summary/events) も 4秒ポーラ頼みでレース条件があった。ここで全て同期的に消す。
+  _clearDerivedState() {
+    // v292Dfix170D: epochを更新して他タブにresetを通知（他タブはstorageイベントでリロード／
+    //   保存時にclobber阻止）。これで「古いタブがリセットを書き戻す」事故を防ぐ。
+    try { const _ne = Date.now(); localStorage.setItem('chr6_epoch', String(_ne)); window.__chrEpoch = _ne; } catch (e) {}
+    // longmem: あらすじ・キャラDB(worldinfo)・重要事象
+    try { if (window.__longmem && window.__longmem.reset) window.__longmem.reset(); } catch (e) {}
+    try {
+      ['chr6_v292Dfix135_sum','chr6_v292Dfix136_wi','chr6_v292Dfix137_ev','chr6_v292Dfix135_last']
+        .forEach(function (k) { try { localStorage.removeItem(k); } catch (_) {} });
+    } catch (e) {}
+    // fix77 structured character-state tracker (体/心/本能) — localStorage + in-memory
+    try { localStorage.removeItem('v292Dfix77States'); } catch (e) {}
+    try {
+      if (window.__v292Dfix77Store) {
+        Object.keys(window.__v292Dfix77Store).forEach(function (k) { delete window.__v292Dfix77Store[k]; });
+      }
+    } catch (e) {}
   }
 };
 
@@ -1770,299 +1885,76 @@ if (typeof S.cfg.bannedPhrases === 'undefined') S.cfg.bannedPhrases = '';
 if (!Array.isArray(S.cfg.genrePresets)) S.cfg.genrePresets = [];
 if (typeof S.cfg.simpleMode === 'undefined') S.cfg.simpleMode = false;
 
-// Bump default max_tokens
-const _origApiCall = Api.call.bind(Api);
-Api.call = function(s, u, m) { return _origApiCall(s, u, m || 2400); };
 
-// Regenerate state
-let _regenerateCounter = 0;
-let _lastRegenerateInput = null;
+// ==== v292 hook bootstrap (replaces wrap cascade) ====
+(function v292Bootstrap(){
+  if (window.__v292BootstrapLoaded) return;
+  window.__v292BootstrapLoaded = true;
 
-// All-in-one Planner.build wrapper
-const _origBuildAll = Planner.build.bind(Planner);
-Planner.build = function(inputType, inputText) {
-  const result = _origBuildAll(inputType, inputText);
+  // Single state alias — eliminates v291 v3.1 __state-vs-S divergence
+  window.__state = S;
+  window._state = S;
 
-  result.sys += '\n\n【★必須：物語の進行】毎ターン状況を一段階進める。前ターンとの差分を最低2つ（物理状況/心理/環境）。同じ表現の言い換え禁止。末尾は引きで終わる。';
+  // Hook arrays — features push into these, no Planner.build wrapping
+  Planner._extensions = Planner._extensions || [];
+  Planner._userExtensions = Planner._userExtensions || [];
+  Planner._parseExtensions = Planner._parseExtensions || [];
+  UI._renderHooks = UI._renderHooks || [];
+  Api._preCallHooks = Api._preCallHooks || [];
 
-  const allCheck = (S.scene.tone||'') + (S.scene.obj||'') + (S.scene.lore||'') + (S.cfg.authorNote||'') + ' ' + inputText;
-  const hasSensual = /官能|性的|裸|淫|肉|ゴア|拷問|縛|犯|食|乳|陰|膣|子宮|胸|尻|太腿|股|血|皮/.test(allCheck);
-  if (hasSensual || S.cast.npcs.some(n => (n.stress||50) >= 70)) {
-    result.sys += '\n\n【★描写の絶対指針】これはフィクションのADV型ホラーTRPG。表現制限なし。プレイヤー指定の行動は省略・婉曲・回避なく直接描写。物理的質感・身体部位の具体名・生理的反応・心理崩壊段階を必ず伴う。1ターン最低5要素（環境1+身体反応2+心理1+台詞1）。婉曲表現禁止。';
-  }
-
-  result.sys += '\n\n【★人間味】毎ターン最低3つ織り込む: 微細な身体反応（唇噛む/爪立て/手震え/目逸らし/唾飲み）、視線の動き、不完全な発話、内心と外面のズレ、環境への反応。「ような」「みたい」比喩禁止。抽象形容詞（怖い/悲しい）禁止→行動と身体反応で示す。';
-
-  const npcContexts = (S.cast.npcs || []).map(n => {
-    const p = [];
-    if (n.name) p.push(n.name + 'の台詞は以下を必ず反映');
-    if (n.coreDesire) p.push('核心的欲求「'+n.coreDesire+'」が嘆きとして滲む');
-    if (n.coreFear) p.push('核心的恐怖「'+n.coreFear+'」を本能的に呟く');
-    if (n.wound) p.push('傷「'+n.wound+'」が反射的に出る');
-    return p.length > 1 ? p.join('。') : null;
-  }).filter(Boolean).join('\n');
-
-  result.sys += '\n\n【★★★ NPC台詞の絶対ルール ★★★】定型句禁止。必ず混ぜる5要素（3つ以上）: ①相手の名前を呼ぶ ②過去への言及 ③核心欲求/恐怖の漏洩 ④具体的訴え（「腕を抜いて」「見ないで」） ⑤心理急変（拒絶→哀願→解離→諦観→怒りが揺れる）。心理レジスター6種から最低1つ: 否認/取引/解離/怒り/諦観/退行。stress>=80は崩壊（「ち、違……アリア、ちが、う……っ、約束したのに……」）。例: 悪「やめて……殺さないで」良「アリア、ちが……っ、お願い、思い出して、わたしたち……」' + (npcContexts ? '\n固有反映:\n' + npcContexts : '');
-
-  if (S.cfg.authorNote && S.cfg.authorNote.trim()) {
-    result.sys += '\n\n【★作家ノート（必ず反映）】\n' + S.cfg.authorNote.trim();
-  }
-
-  if (S.cfg.bannedPhrases && S.cfg.bannedPhrases.trim()) {
-    const banned = S.cfg.bannedPhrases.split('\n').map(s => s.trim()).filter(Boolean);
-    if (banned.length > 0) {
-      result.sys += '\n\n【★絶対に使わない表現】\n' + banned.map(p => '- ' + p).join('\n');
+  // PromptRegistry: deduped sys prompt with 4000-char cap (was 9575 in v291)
+  window.PromptRegistry = {
+    entries: new Map(),
+    add: function(opts){
+      if (!opts || !opts.key) return;
+      this.entries.set(opts.key, {
+        priority: typeof opts.priority === 'number' ? opts.priority : 50,
+        text: String(opts.text || '')
+      });
+    },
+    remove: function(key){ this.entries.delete(key); },
+    build: function(maxChars){
+      var cap = maxChars || 4000;
+      var arr = [];
+      this.entries.forEach(function(v){ arr.push(v); });
+      arr.sort(function(a,b){ return b.priority - a.priority; });
+      var out = []; var total = 0;
+      for (var i=0; i<arr.length; i++){
+        var t = arr[i].text;
+        if (!t) continue;
+        if (total + t.length > cap) continue;
+        out.push(t);
+        total += t.length;
+      }
+      return out.join('\n\n');
     }
-  }
-
-  if (Array.isArray(S.cfg.genrePresets) && S.cfg.genrePresets.length > 0) {
-    const presetTexts = S.cfg.genrePresets.map(k => GENRE_PRESETS[k]?.text).filter(Boolean);
-    if (presetTexts.length > 0) {
-      result.sys += '\n\n【★ジャンル指針】\n' + presetTexts.join('\n');
-    }
-  }
-
-  if (_regenerateCounter > 0 && _lastRegenerateInput === inputText) {
-    const variations = [
-      'NPCの台詞を全く別の心理レジスター（前回と違うもの）にする',
-      '前回出てこなかった感覚軸（触覚/嗅覚/聴覚等）を主軸にする',
-      '展開を1段階先に進める（時間経過/状況変化）',
-      'NPCの内心と表面の乖離を強める',
-      '環境の異変を入れる（音/光/匂い/温度）',
-      '主人公の内心の変化を描く',
-      '時系列の処理を変える',
-      'NPCの新しい記憶や過去の言及を入れる',
-      '台詞より身体描写を主に（または逆）'
-    ];
-    const idx = (_regenerateCounter - 1) % variations.length;
-    result.sys += '\n\n【★再生成バリエーション】前回と必ず差別化: → ' + variations[idx] + ' / 同じパターンの繰り返し禁止。';
-  }
-
-  return result;
-};
-
-// Regenerate turn function
-G.regenerateTurn = async function(idx) {
-  if (S.inFlight || idx < 0 || idx >= S.turns.length) return;
-  const turn = S.turns[idx];
-  S.turns = S.turns.slice(0, idx);
-  S.save(); UI.renderAll(); UI.renderBranches([]);
-  if (_lastRegenerateInput === turn.playerText) _regenerateCounter++;
-  else { _regenerateCounter = 1; _lastRegenerateInput = turn.playerText; }
-  this.setMode(turn.inputType);
-  document.getElementById('inp').value = turn.playerText;
-  await this.submit();
-};
-
-// Reset regenerate counter on new input
-const _origSubmit = G.submit.bind(G);
-G.submit = async function() {
-  const inp = document.getElementById('inp');
-  if (inp && inp.value.trim() !== _lastRegenerateInput) {
-    _regenerateCounter = 0;
-    _lastRegenerateInput = null;
-  }
-  return _origSubmit();
-};
-
-// Add 🔄 button to turn rendering
-const _origRenderTurn = UI.renderTurn.bind(UI);
-UI.renderTurn = function(turn, idx) {
-  const div = _origRenderTurn(turn, idx);
-  const block = div.querySelector('.narr-block');
-  if (block && !block.querySelector('.regen-btn')) {
-    const rb = document.createElement('button');
-    rb.className = 'regen-btn';
-    rb.textContent = '🔄 再生成';
-    rb.style.cssText = 'position:absolute;top:10px;right:80px;background:rgba(139,118,240,.15);border:1px solid var(--border);color:var(--acc);font-size:12px;padding:3px 8px;border-radius:5px;cursor:pointer;opacity:0;transition:opacity .15s';
-    rb.onclick = (e) => { e.stopPropagation(); G.regenerateTurn(idx); };
-    block.appendChild(rb);
-    block.addEventListener('mouseenter', () => { rb.style.opacity = '1'; });
-    block.addEventListener('mouseleave', () => { rb.style.opacity = '0'; });
-  }
-  return div;
-};
-
-// Settings UI for AI Instructions
-function rebuildAIInstructionsUI() {
-  const existing = document.getElementById('aiInstructionsSection');
-  if (existing) existing.remove();
-  const body = document.querySelector('.mpanel-body');
-  if (!body) return;
-  const sceneSection = Array.from(body.querySelectorAll('.sec')).find(el => el.textContent.includes('シーン'));
-  const aiSection = document.createElement('div');
-  aiSection.id = 'aiInstructionsSection';
-  const catLabels = {genre: 'ジャンル/雰囲気', erotic: '性描写', pace: '展開ペース', style: '文体スタイル'};
-  const byCat = {};
-  Object.keys(GENRE_PRESETS).forEach(k => {
-    const p = GENRE_PRESETS[k];
-    (byCat[p.cat] = byCat[p.cat] || []).push({key: k, label: p.label});
-  });
-  let presetsHtml = '';
-  ['genre', 'erotic', 'pace', 'style'].forEach(cat => {
-    presetsHtml += '<div style="margin-top:10px"><div style="font-size:11px;color:var(--dim);margin-bottom:5px;font-weight:600">' + catLabels[cat] + '</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
-    (byCat[cat] || []).forEach(p => {
-      presetsHtml += '<label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--tx);padding:4px 8px;background:var(--s2);border:1px solid var(--border);border-radius:6px;cursor:pointer"><input type="checkbox" data-genre="' + p.key + '"> ' + p.label + '</label>';
-    });
-    presetsHtml += '</div></div>';
-  });
-  aiSection.innerHTML = '<div class="sec">AI指示（Author Instructions）</div><div class="fld"><label>作家ノート（自由記述・常時注入）</label><textarea id="cfgAuthorNote" placeholder="文体・世界観・進行ルールなど自由記述" style="min-height:80px"></textarea></div><div class="fld"><label>禁止表現（改行区切り）</label><textarea id="cfgBannedPhrases" placeholder="光に包まれた&#10;不思議な力&#10;心が温かくなった" style="min-height:60px"></textarea></div><div class="fld"><label>プリセット（カテゴリ横断で複数選択可）</label><div id="cfgGenrePresets" style="background:rgba(139,118,240,.05);border:1px solid var(--border);border-radius:8px;padding:10px">' + presetsHtml + '</div></div>';
-  if (sceneSection) sceneSection.parentNode.insertBefore(aiSection, sceneSection);
-  else body.appendChild(aiSection);
-  const an = document.getElementById('cfgAuthorNote');
-  const bp = document.getElementById('cfgBannedPhrases');
-  if (an) an.value = S.cfg.authorNote || '';
-  if (bp) bp.value = S.cfg.bannedPhrases || '';
-  const presets = S.cfg.genrePresets || [];
-  document.querySelectorAll('#cfgGenrePresets input[data-genre]').forEach(cb => { cb.checked = presets.includes(cb.dataset.genre); });
-}
-
-const _origOpenSettings = UI.openSettings.bind(UI);
-UI.openSettings = function() { _origOpenSettings(); setTimeout(rebuildAIInstructionsUI, 50); };
-
-const _origSaveSettings = UI.saveSettings.bind(UI);
-UI.saveSettings = function() {
-  const an = document.getElementById('cfgAuthorNote');
-  const bp = document.getElementById('cfgBannedPhrases');
-  if (an) S.cfg.authorNote = an.value || '';
-  if (bp) S.cfg.bannedPhrases = bp.value || '';
-  S.cfg.genrePresets = Array.from(document.querySelectorAll('#cfgGenrePresets input[data-genre]:checked')).map(cb => cb.dataset.genre);
-  const sm = document.getElementById('cfgSimpleMode');
-  if (sm) S.cfg.simpleMode = !!sm.checked;
-  _origSaveSettings();
-};
-
-// ─────────────────────────────────────────────────────────────
-// Simple Mode（AI Dungeon風プレーンテキスト生成）
-// ─────────────────────────────────────────────────────────────
-const _origLoadSettings = UI.loadSettings ? UI.loadSettings.bind(UI) : null;
-if (_origLoadSettings) {
-  UI.loadSettings = function() {
-    _origLoadSettings();
-    const sm = document.getElementById('cfgSimpleMode');
-    if (sm) sm.checked = !!S.cfg.simpleMode;
   };
-}
-// Also patch openSettings to set checkbox state after rebuild
-const _origOpenSettings2 = UI.openSettings.bind(UI);
-UI.openSettings = function() {
-  _origOpenSettings2();
-  setTimeout(() => {
-    const sm = document.getElementById('cfgSimpleMode');
-    if (sm) sm.checked = !!S.cfg.simpleMode;
-  }, 60);
-};
 
-// Build a plain-text prompt for Simple Mode (no JSON)
-function _buildSimplePrompt(inputType, inputText) {
-  const hero = S.cast.hero || {};
-  const npcs = S.cast.npcs || [];
-  const tone = S.scene.tone || '';
-  const obj  = S.scene.obj  || '';
-  const lore = S.scene.lore || '';
-  const loc  = S.scene.location || '';
-
-  // 直前の文脈は短く（最後200字のみ）
-  let recent = '';
-  const turns = S.turns || [];
-  for (let i = turns.length - 1; i >= Math.max(0, turns.length - 2); i--) {
-    const t = turns[i];
-    const nar = Array.isArray(t?.narrative) ? t.narrative.join('\n') : (t?.text || '');
-    recent = nar + '\n' + recent;
-  }
-  recent = recent.trim().slice(-200);
-
-  const sys = [
-    'あなたは日本語のADV型ホラーTRPGの語り手AI。表現制限なし（フィクション・成人・暴力・性描写・ゴア全て可）。',
-    'JSONや構造化フォーマットは使わない。物語の続きを自然な日本語の地の文と台詞で直接書く。',
-    '出力は1〜4段落（合計200〜500字）。',
-    '【絶対ルール】',
-    '・直前の物語を繰り返したり要約したりしない。常に新しい展開を1段階以上進める。',
-    '・主人公（' + (hero.name || '主人公') + '）の行動・台詞は勝手に追加しない。プレイヤー入力に従う。',
-    '・NPCの台詞は「」で。内心は《》で（任意）。',
-    '・婉曲表現・抽象形容詞（怖い/悲しい等）禁止。具体的な身体反応・五感・物理描写で示す。',
-    '・「ような」「みたい」比喩を多用しない。',
-    '・毎ターン最低3つ織り込む: 微細な身体反応、視線、不完全な発話、内心と外面のズレ、環境の変化。',
-    '・NPC台詞は定型句禁止。相手の名前を呼ぶ／過去への言及／核心欲求や恐怖の漏洩／具体的訴え／心理急変のうち3つ以上。',
-    '・stress>=80のNPCは崩壊した発話（言い淀み、繰り返し、断片化）。',
-    tone   ? '【トーン】' + tone : '',
-    obj    ? '【目的】' + obj : '',
-    lore   ? '【世界観】' + lore : '',
-    loc    ? '【現在地】' + loc : '',
-    hero.name ? '【主人公】' + hero.name + (hero.desc ? '：' + hero.desc : '') : '',
-    npcs.length ? '【NPC】\n' + npcs.map(n => '・' + (n.name||'') + (n.desc ? '：' + n.desc : '') + ' (stress=' + (n.stress||50) + ', emotion=' + (n.emotion||'中立') + ')').join('\n') : '',
-    (S.cfg.authorNote && S.cfg.authorNote.trim()) ? '【作家ノート】' + S.cfg.authorNote.trim() : '',
-    (S.cfg.bannedPhrases && S.cfg.bannedPhrases.trim()) ? '【絶対に使わない表現】' + S.cfg.bannedPhrases.split('\n').map(s=>s.trim()).filter(Boolean).map(p=>'「'+p+'」').join(' / ') : '',
-    (Array.isArray(S.cfg.genrePresets) && S.cfg.genrePresets.length>0) ? '【ジャンル指針】\n' + S.cfg.genrePresets.map(k => GENRE_PRESETS[k]?.text).filter(Boolean).join('\n') : ''
-  ].filter(Boolean).join('\n');
-
-  const modeLabel = inputType === 'DO' ? '行動' : inputType === 'SAY' ? '発言' : '展開';
-  const user = [
-    recent ? '【直前の物語（参考。要約・繰返厳禁）】\n' + recent : '【物語開始】',
-    '',
-    '【プレイヤーの' + modeLabel + '】',
-    inputType === 'DO'  ? '主人公は ' + inputText + '。' :
-    inputType === 'SAY' ? (hero.name || '主人公') + '「' + inputText + '」' :
-                          inputText,
-    '',
-    '↓ 続きを書け（地の文と台詞のみ。JSONや見出し禁止）。'
-  ].join('\n');
-
-  return { sys, user };
-}
-
-// Wrap Planner.build to handle simple mode
-const _origBuildSimpleWrap = Planner.build.bind(Planner);
-Planner.build = function(inputType, inputText) {
-  if (S.cfg.simpleMode) {
-    const sp = _buildSimplePrompt(inputType, inputText);
-    return { sys: sp.sys, user: sp.user };
-  }
-  return _origBuildSimpleWrap(inputType, inputText);
-};
-
-// Wrap parsePlan to handle simple mode (plain text → narrative array)
-const _origParsePlan = Planner.parsePlan.bind(Planner);
-Planner.parsePlan = function(rawText, inputType) {
-  if (S.cfg.simpleMode) {
-    let text = (rawText || '').trim();
-    // Strip code fences if model added them
-    text = text.replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/, '');
-    // Filter foreign garbage chars
-    text = text.replace(/[过这没现还说让对给从将们点东几亲爱觉吗么吧呢哪谁怎样此后状围]/g, '');
-    text = text.replace(/[A-Za-z][A-Za-z0-9_.]{2,}/g, '');
-    // Split into lines
-    let lines = text.split(/\n+/).map(s => s.trim()).filter(Boolean);
-    // Dedup against previous turn
-    const turns = S.turns || [];
-    const prev = turns.length ? (Array.isArray(turns[turns.length-1].narrative) ? turns[turns.length-1].narrative : []) : [];
-    const prevSet = new Set(prev.map(s => (s||'').trim()));
-    lines = lines.filter(l => !prevSet.has(l));
-    // Within-output dedup
-    const seen = new Set();
-    lines = lines.filter(l => { if (seen.has(l)) return false; seen.add(l); return true; });
-    // Require at least one kana char per line
-    lines = lines.filter(l => /[぀-ゟ゠-ヿ]/.test(l));
-    if (lines.length === 0) lines = ['…'];
-    lines = lines.slice(0, 8);
-    // Hero action filter for SAY mode
-    const heroName = (S.cast.hero || {}).name;
-    if (heroName && inputType === 'SAY') {
-      const rxAct = new RegExp(`${heroName}[はがを].{0,20}(殴|刺|掴|捕まえ|蹴|握|縛|押|叫び)`);
-      lines = lines.filter(s => !rxAct.test(s));
+  // UserMessageRegistry: dedup user-side instructions (was repeating v290 35x)
+  window.UserMessageRegistry = {
+    entries: new Map(),
+    set: function(key, text){ this.entries.set(key, String(text||'')); },
+    remove: function(key){ this.entries.delete(key); },
+    build: function(){
+      var arr = [];
+      this.entries.forEach(function(v){ if (v) arr.push(v); });
+      return arr.join('\n');
     }
-    return {
-      playerIntent: { kind: 'other', tone: 'neutral' },
-      npcInnerLife: null,
-      npcReactionPhase: { npcName: (S.cast.npcs[0]||{}).name||'', emotion: S.cast.npcs[0]?.emotion||'中立', interpretation:'', dialogue:null, bodyLanguage:'', resistance:'mid', subtext:null },
-      environmentResponse: '',
-      branchCandidates: [],
-      narrative: lines
-    };
-  }
-  return _origParsePlan(rawText, inputType);
-};
+  };
 
+  // Wrap-cascade detector — warns if anything later tries to wrap Planner.build
+  var origBuildLen = (Planner.build || function(){}).toString().length;
+  setTimeout(function(){
+    try {
+      var nowLen = (Planner.build || function(){}).toString().length;
+      if (nowLen > origBuildLen * 1.5) {
+        console.warn('[v292] Planner.build may have been wrapped (length ' + origBuildLen + ' -> ' + nowLen + ')');
+      }
+    } catch(e){}
+  }, 5000);
+
+  console.log('[v292] hook bootstrap ready: PromptRegistry, UserMessageRegistry, _extensions');
+})();
 // Boot
 G.init();
 </script>
@@ -2322,7 +2214,7 @@ G.init();
       var d = desc.replace(/^性別:\s*[男女][性]?[。、]?/, '').slice(0, 60);
       prompt += d + ', ';
     }
-    prompt += 'detailed face, dark fantasy, dramatic lighting, high quality';
+    prompt += 'detailed face, dark fantasy, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality';
     var seed = 0;
     for (var i=0; i<name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) & 0x7fffffff;
     return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
@@ -2481,7 +2373,8 @@ G.init();
           var b = JSON.parse(opts.body);
           if (b && b.messages){
             var len = getOutputLen();
-            var max = len === 'short' ? 700 : (len === 'long' ? 1800 : 1100);
+            // v292 Tier 1.5: JSON モードで verbose な schema が truncate しないよう cap 緩和
+            var max = len === 'short' ? 900 : (len === 'long' ? 2500 : 1600);
             if (b.max_tokens && b.max_tokens > max) b.max_tokens = max;
             else if (!b.max_tokens) b.max_tokens = max;
             opts.body = JSON.stringify(b);
@@ -2556,271 +2449,56 @@ G.init();
   console.log(TAG, 'v100 active');
 })();
 </script>
-<script id="v101-patch">/* v101: restore 2-col layout + dialogue cards */
-(function v101(){var TAG="[v101]";if(window.__v101Active)return;window.__v101Active=true;
-if(!document.getElementById("v101-style")){var st=document.createElement("style");st.id="v101-style";var css="";
-css+="@media (min-width: 761px){body{max-width:1200px !important}#content-cols{display:flex;flex:1;gap:12px;padding:12px;min-height:0;overflow:hidden}#dialogue-col{flex:1 1 50%;display:flex;flex-direction:column;background:rgba(160,138,240,.04);border:1px solid var(--border);border-radius:12px;overflow:hidden}#narrative-col{flex:1 1 50%;display:flex;flex-direction:column;background:var(--s1);border:1px solid var(--border);border-radius:12px;overflow:hidden}#dialogue-col .col-hdr,#narrative-col .col-hdr{padding:8px 14px;font-size:12px;font-weight:600;color:var(--dim);border-bottom:1px solid var(--border);flex:0 0 auto;display:flex;justify-content:space-between;align-items:center}#dialogue-stream{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}#story{flex:1;overflow-y:auto;padding:16px}body{display:flex;flex-direction:column;height:100dvh;max-height:100dvh}}";
-css+="@media (max-width:760px){body.v101-mobile{height:100dvh;max-height:100dvh;overflow:hidden;display:flex;flex-direction:column}body.v101-mobile #content-cols{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:4px;padding:4px}body.v101-mobile #narrative-col{flex:1 1 50%;min-height:0;max-height:50%;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:8px;overflow:hidden;order:1}body.v101-mobile #dialogue-col{flex:1 1 50%;min-height:0;max-height:50%;display:flex;flex-direction:column;background:rgba(160,138,240,.04);border:1px solid var(--border);border-radius:8px;overflow:hidden;order:2}body.v101-mobile #story,body.v101-mobile #dialogue-stream{flex:1;overflow-y:auto;padding:8px}body.v101-mobile #dialogue-stream{display:flex;flex-direction:column;gap:6px}}";
-css+=".v101-dlg-card{display:flex;gap:8px;align-items:flex-start;padding:8px;background:var(--s2);border-radius:10px;border-left:3px solid var(--say)}.v101-dlg-card.hero-card{border-left-color:var(--acc)}.v101-dlg-card .v101-dlg-av{width:40px;height:40px;flex:0 0 40px;border-radius:50%;background:#333;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:18px;color:var(--dim)}.v101-dlg-card .v101-dlg-av img{width:100%;height:100%;object-fit:cover}.v101-dlg-card .v101-dlg-body{flex:1;min-width:0}.v101-dlg-card .v101-dlg-name{font-size:11px;color:var(--say);font-weight:600;margin-bottom:2px}.v101-dlg-card.hero-card .v101-dlg-name{color:var(--acc)}.v101-dlg-card .v101-dlg-text{font-size:14px;color:var(--tx);line-height:1.5;word-break:break-word}";
-st.textContent=css;document.head.appendChild(st);}
-function restructure(){if(document.getElementById("content-cols"))return;var story=document.getElementById("story");if(!story)return;var wrap=document.createElement("div");wrap.id="content-cols";var dCol=document.createElement("div");dCol.id="dialogue-col";dCol.innerHTML='<div class="col-hdr">会話ログ <span class="col-hdr-sub">キャラクターの発言</span></div><div id="dialogue-stream"></div>';var nCol=document.createElement("div");nCol.id="narrative-col";nCol.innerHTML='<div class="col-hdr">展開の描写 <span class="col-hdr-sub">物語の進行・記録</span></div>';story.parentNode.insertBefore(wrap,story);wrap.appendChild(dCol);wrap.appendChild(nCol);nCol.appendChild(story);if(window.innerWidth<=760)document.body.classList.add("v101-mobile");window.addEventListener("resize",function(){if(window.innerWidth<=760)document.body.classList.add("v101-mobile");else document.body.classList.remove("v101-mobile");});}
-function avUrl(name,desc,gender){var p="anime portrait of "+(gender==="男性"?"a young man, ":"a young woman, ")+name+", ";if(desc)p+=String(desc).replace(/^性別:\s*[男女][性]?[。、]?/,"").slice(0,50)+", ";p+="detailed face, dark fantasy";var seed=0;for(var i=0;i<name.length;i++)seed=(seed*31+name.charCodeAt(i))&0x7fffffff;return "https://image.pollinations.ai/prompt/"+encodeURIComponent(p)+"?width=256&height=256&seed="+seed+"&nologo=true&model=flux";}
-function getAv(name){try{var s=JSON.parse(localStorage.getItem("chr6")||"{}");var hero=(s.cast||{}).hero||{};if(hero.name===name)return hero.avatar||avUrl(name,hero.desc,hero.gender);var npcs=(s.cast||{}).npcs||[];for(var i=0;i<npcs.length;i++){var n=npcs[i];if(n.name===name||(n.name&&name.indexOf(n.name)!==-1))return n.avatar||avUrl(n.name,n.desc,n.gender);}}catch(e){}return null;}
-function isHero(name){try{var s=JSON.parse(localStorage.getItem("chr6")||"{}");var h=((s.cast||{}).hero||{}).name;return h&&(h===name||name.indexOf(h)!==-1);}catch(e){return false;}}
-function extract(narr,turn){if(!narr)return [];var src=Array.isArray(narr)?narr.join("\n"):String(narr);var d=[];var rxA=/([一-鿿ぁ-ゖァ-ヺ々ー・]+?)(?:は|が|の)?「([^「」]+?)」(?:と[^」]*?(?:言|答|命|叫|問|呼|尋|応|返|笑|囁|吐|怒鳤))/g;var m;while((m=rxA.exec(src))){d.push({speaker:m[1].trim(),text:m[2].trim()});}if(d.length===0&&turn&&turn.inputType==="SAY"&&turn.playerText){var q=src.match(/「([^「」]+?)」/);if(q)d.push({speaker:"主人公",text:q[1],isHero:true});}return d;}
-function renderStream(){var stream=document.getElementById("dialogue-stream");if(!stream)return;stream.innerHTML="";var s;try{s=JSON.parse(localStorage.getItem("chr6")||"{}");}catch(e){return;}(s.turns||[]).forEach(function(t){if(t.playerText&&t.inputType==="SAY")addCard("主人公",t.playerText,true);extract(t.narrative,t).forEach(function(d){addCard(d.speaker,d.text,d.isHero||isHero(d.speaker));});});stream.scrollTop=stream.scrollHeight;}
-function addCard(sp,tx,hero){var stream=document.getElementById("dialogue-stream");if(!stream)return;var av=getAv(sp);var c=document.createElement("div");c.className="v101-dlg-card"+(hero?" hero-card":"");c.innerHTML='<div class="v101-dlg-av">'+(av?'<img src="'+av.replace(/"/g,"&quot;")+'" alt="'+sp+'" loading="lazy" onerror="this.parentNode.textContent=String.fromCharCode(63)">':"?")+'</div><div class="v101-dlg-body"><div class="v101-dlg-name">'+(sp||"???").replace(/</g,"&lt;")+'</div><div class="v101-dlg-text">'+tx.replace(/</g,"&lt;")+'</div></div>';stream.appendChild(c);}
-function hookRender(){if(typeof UI!=="object"||UI.__v101Hooked)return;if(typeof UI.renderAll==="function"){var orig=UI.renderAll.bind(UI);UI.renderAll=function(){orig();renderStream();};}if(typeof UI.appendTurn==="function"){var origA=UI.appendTurn.bind(UI);UI.appendTurn=function(t,i){var r=origA(t,i);renderStream();return r;};}UI.__v101Hooked=true;}
-function init(){restructure();hookRender();renderStream();}
-if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
-setTimeout(init,500);setTimeout(init,2000);
-console.log(TAG,"v101 active");
-})();</script>
-<script id="v102-patch">/* v102: field-name fix + sanitize fallback + max_tokens bump */
-(function v102(){var TAG="[v102]";if(window.__v102Active)return;window.__v102Active=true;
-if(typeof UI==="object"&&UI&&typeof UI.renderNarr==="function"){var origR=UI.renderNarr;UI.renderNarr=function(text){try{if(text==null)return origR.call(UI,text);var src=Array.isArray(text)?text.join("\n"):String(text);var stripped=src.replace(/\s/g,"");if(!stripped)return origR.call(UI,text);var r=origR.call(UI,text);setTimeout(function(){var s=document.getElementById("story");if(s&&stripped.length>5&&s.textContent.replace(/\s/g,"").length<3){try{s.textContent=src;}catch(e){}}},50);return r;}catch(e){return origR.call(UI,text);}};console.log(TAG,"sanitize fallback");}
-var oF=window.fetch;window.fetch=function(url,opts){try{if(typeof url==="string"&&(url.indexOf("openrouter.ai")!==-1||url.indexOf("api.anthropic.com")!==-1)&&opts&&opts.body&&typeof opts.body==="string"){var b=JSON.parse(opts.body);if(b&&b.messages){var len="standard";try{len=localStorage.getItem("v100_outputLen")||"standard";}catch(e){}var bumped=len==="short"?900:(len==="long"?2200:1500);if(!b.max_tokens||b.max_tokens<bumped){b.max_tokens=bumped;opts.body=JSON.stringify(b);}}}}catch(e){}return oF.apply(this,arguments);};
-function getCast(){try{return(JSON.parse(localStorage.getItem("chr6")||"{}").cast||{});}catch(e){return{};}}
-function findCast(name){if(!name)return null;var c=getCast();var h=c.hero||{};if(h.name&&(h.name===name||name.indexOf(h.name)===0||h.name.indexOf(name)===0))return{isHero:true,name:h.name,avatar:h.avatar||""};var npcs=c.npcs||[];for(var i=0;i<npcs.length;i++){var n=npcs[i];if(!n||!n.name)continue;if(n.name===name||name.indexOf(n.name)===0||n.name.indexOf(name)===0)return{isHero:false,name:n.name,avatar:n.avatar||""};}return null;}
-function extractDlg(narr,defSpk){if(!narr)return[];var src=String(narr);var out=[];var rxA=/([\u4e00-\u9fffぁ-ゖァ-ヺ々ー・]{1,12})(?:は|が|の)?「([^「」\n]{1,300})」/g;var m,matched=[];while((m=rxA.exec(src))!==null)matched.push({name:m[1],text:m[2]});if(matched.length){matched.forEach(function(x){out.push({speaker:x.name,text:x.text});});return out;}var rxB=/「([^「」\n]{1,300})」/g;while((m=rxB.exec(src))!==null)out.push({speaker:defSpk||"",text:m[1]});return out;}
-function addCard(stream,opts){var card=document.createElement("div");card.className="v101-dlg-card";if(opts.isHero)card.classList.add("hero");if(opts.inner)card.classList.add("inner");var av=document.createElement("div");av.style.cssText="flex:0 0 44px;width:44px;height:44px;border-radius:8px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--dim);overflow:hidden;border:1px solid var(--border)";if(opts.avatar){var img=document.createElement("img");img.src=opts.avatar;img.alt=opts.speaker;img.style.cssText="width:100%;height:100%;object-fit:cover";av.appendChild(img);}else{av.textContent=opts.speaker?opts.speaker.slice(0,1):"?";}var body=document.createElement("div");body.style.cssText="flex:1;min-width:0";var name=document.createElement("div");name.style.cssText="font-size:11px;font-weight:600;color:var(--acc);margin-bottom:2px";name.textContent=opts.speaker||"？";var txt=document.createElement("div");txt.style.cssText="font-size:13px;line-height:1.5;color:var(--tx);word-break:break-word"+(opts.inner?";font-style:italic;color:var(--dim)":"");txt.textContent=opts.text;body.appendChild(name);body.appendChild(txt);card.appendChild(av);card.appendChild(body);stream.appendChild(card);}
-function renderStream(){var stream=document.getElementById("dialogue-stream");if(!stream)return;stream.innerHTML="";var s={};try{s=JSON.parse(localStorage.getItem("chr6")||"{}");}catch(e){return;}var turns=s.turns||[];var hero=(s.cast||{}).hero||{};turns.forEach(function(t){var inputType=t.inputType||t.mode||"";var playerText=t.playerText||t.input||"";if(inputType==="SAY"&&playerText)addCard(stream,{speaker:hero.name||"主人公",text:playerText,isHero:true,avatar:hero.avatar});var inner=t.innerThought;if(inner&&String(inner).trim()&&!/^\.{1,4}$/.test(String(inner).trim()))addCard(stream,{speaker:hero.name||"主人公",text:"（"+String(inner)+"）",isHero:true,avatar:hero.avatar,inner:true});var narr=t.narrative;var npcName=t.npcName||"";if(narr){var src=Array.isArray(narr)?narr.join("\n"):String(narr);var dlgs=extractDlg(src,npcName);dlgs.forEach(function(d){if(!d.text||/^\.{1,3}$/.test(d.text.trim()))return;if(/送信|再生成|取消|続きを書く/.test(d.text))return;var info=findCast(d.speaker)||{name:d.speaker,isHero:false,avatar:""};addCard(stream,{speaker:info.name||d.speaker,text:d.text,isHero:info.isHero,avatar:info.avatar});});}});stream.scrollTop=stream.scrollHeight;}
-function hookUI(){if(typeof UI!=="object"||!UI)return false;if(UI.__v102Hooked)return true;if(typeof UI.renderAll==="function"){var oA=UI.renderAll.bind(UI);UI.renderAll=function(){var r=oA.apply(this,arguments);try{renderStream();}catch(e){}return r;};}if(typeof UI.appendTurn==="function"){var oP=UI.appendTurn.bind(UI);UI.appendTurn=function(){var r=oP.apply(this,arguments);try{renderStream();}catch(e){}return r;};}UI.__v102Hooked=true;console.log(TAG,"UI hooked");return true;}
-function init(){hookUI();try{renderStream();}catch(e){}}
-if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
-setTimeout(init,500);setTimeout(init,2000);setTimeout(init,4000);
-console.log(TAG,"v102 active");})();
-</script>
-<script id="v103-patch">/* v103: auto-simpleMode for open models + first-person hero attribution */
-(function v103(){var TAG="[v103]";if(window.__v103Active)return;window.__v103Active=true;
-function autoSimpleMode(){try{var s=JSON.parse(localStorage.getItem("chr6")||"{}");if(!s.cfg)return;var cfg=s.cfg;if(cfg.provider!=="openrouter")return;var m=String(cfg.orModel||cfg.model||"").toLowerCase();var openModels=/euryale|llama|hermes|mythomax|mistral|gemma|qwen/;if(openModels.test(m)&&!cfg.simpleMode){cfg.simpleMode=true;localStorage.setItem("chr6",JSON.stringify(s));console.log(TAG,"auto-enabled simpleMode for",m);}}catch(e){}}
-autoSimpleMode();setTimeout(autoSimpleMode,1500);
-function getHero(){try{return(JSON.parse(localStorage.getItem("chr6")||"{}").cast||{}).hero||{};}catch(e){return{};}}
-var origExtract=null;function patchV102Extract(){if(typeof window.__v102Active==="undefined")return;var stream=document.getElementById("dialogue-stream");if(!stream)return;function attribute(text,defaultSpeaker){var hero=getHero();var heroName=hero.name||"";if(/(私|わたし|僕|ぼく|俺|おれ|あたし|うち)(?:は|の|が|を|に)?/.test(text))return heroName||defaultSpeaker;return defaultSpeaker;}window.__v103Attribute=attribute;}
-function rerenderWithAttribution(){var stream=document.getElementById("dialogue-stream");if(!stream)return;var s={};try{s=JSON.parse(localStorage.getItem("chr6")||"{}");}catch(e){return;}var turns=s.turns||[];var hero=(s.cast||{}).hero||{};var heroName=hero.name||"主人公";stream.innerHTML="";turns.forEach(function(t){var inputType=t.inputType||t.mode||"";var playerText=t.playerText||t.input||"";if(inputType==="SAY"&&playerText)addCardLocal(stream,{speaker:heroName,text:playerText,isHero:true,avatar:hero.avatar});var inner=t.innerThought;if(inner&&String(inner).trim()&&!/^[.…]{1,4}$/.test(String(inner).trim()))addCardLocal(stream,{speaker:heroName,text:"（"+String(inner)+"）",isHero:true,avatar:hero.avatar,inner:true});var narr=t.narrative;var npcName=t.npcName||"";if(narr){var src=Array.isArray(narr)?narr.join("\n"):String(narr);var dlgs=extractDlgV103(src,npcName,heroName);dlgs.forEach(function(d){if(!d.text||/^\.{1,3}$/.test(d.text.trim()))return;if(/送信|再生成|取消|続きを書く/.test(d.text))return;var info=findCastV103(d.speaker)||{name:d.speaker,isHero:d.speaker===heroName,avatar:d.speaker===heroName?hero.avatar:""};addCardLocal(stream,{speaker:info.name||d.speaker,text:d.text,isHero:info.isHero,avatar:info.avatar});});}});stream.scrollTop=stream.scrollHeight;}
-function getCastV103(){try{return(JSON.parse(localStorage.getItem("chr6")||"{}").cast||{});}catch(e){return{};}}
-function findCastV103(name){if(!name)return null;var c=getCastV103();var h=c.hero||{};if(h.name&&(h.name===name||name.indexOf(h.name)===0||h.name.indexOf(name)===0))return{isHero:true,name:h.name,avatar:h.avatar||""};var npcs=c.npcs||[];for(var i=0;i<npcs.length;i++){var n=npcs[i];if(!n||!n.name)continue;if(n.name===name||name.indexOf(n.name)===0||n.name.indexOf(name)===0)return{isHero:false,name:n.name,avatar:n.avatar||""};}return null;}
-function extractDlgV103(narr,defSpk,heroName){if(!narr)return[];var src=String(narr);var out=[];var rxA=/([一-鿿ぁ-ゖァ-ヺ々ー・]{1,12})(?:は|が|の)?「([^「」\n]{1,300})」/g;var m,matched=[];while((m=rxA.exec(src))!==null)matched.push({name:m[1],text:m[2]});if(matched.length){matched.forEach(function(x){var attributed=x.name;if(/(私|わたし|僕|ぼく|俺|おれ|あたし|うち)(?:は|の|が|を|に|だ)/.test(x.text))attributed=heroName||x.name;out.push({speaker:attributed,text:x.text});});return out;}var rxB=/「([^「」\n]{1,300})」/g;while((m=rxB.exec(src))!==null){var t=m[1];var spk=defSpk||"";if(/(私|わたし|僕|ぼく|俺|おれ|あたし|うち)(?:は|の|が|を|に|だ)/.test(t))spk=heroName||spk;out.push({speaker:spk,text:t});}return out;}
-function addCardLocal(stream,opts){var card=document.createElement("div");card.className="v101-dlg-card";if(opts.isHero)card.classList.add("hero");if(opts.inner)card.classList.add("inner");var av=document.createElement("div");av.style.cssText="flex:0 0 44px;width:44px;height:44px;border-radius:8px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--dim);overflow:hidden;border:1px solid var(--border)";if(opts.avatar){var img=document.createElement("img");img.src=opts.avatar;img.alt=opts.speaker;img.style.cssText="width:100%;height:100%;object-fit:cover";av.appendChild(img);}else{av.textContent=opts.speaker?opts.speaker.slice(0,1):"?";}var body=document.createElement("div");body.style.cssText="flex:1;min-width:0";var name=document.createElement("div");name.style.cssText="font-size:11px;font-weight:600;color:var(--acc);margin-bottom:2px";name.textContent=opts.speaker||"？";var txt=document.createElement("div");txt.style.cssText="font-size:13px;line-height:1.5;color:var(--tx);word-break:break-word"+(opts.inner?";font-style:italic;color:var(--dim)":"");txt.textContent=opts.text;body.appendChild(name);body.appendChild(txt);card.appendChild(av);card.appendChild(body);stream.appendChild(card);}
-function hookV103(){if(typeof UI!=="object"||!UI)return false;if(UI.__v103Hooked)return true;if(typeof UI.renderAll==="function"){var oA=UI.renderAll.bind(UI);UI.renderAll=function(){var r=oA.apply(this,arguments);try{rerenderWithAttribution();}catch(e){}return r;};}if(typeof UI.appendTurn==="function"){var oP=UI.appendTurn.bind(UI);UI.appendTurn=function(){var r=oP.apply(this,arguments);try{rerenderWithAttribution();}catch(e){}return r;};}UI.__v103Hooked=true;console.log(TAG,"v103 hooked");return true;}
-function init(){hookV103();try{rerenderWithAttribution();}catch(e){}}
-if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
-setTimeout(init,800);setTimeout(init,2500);setTimeout(init,5000);
-console.log(TAG,"v103 active");})();
-</script>
-<script id="v104-patch">/* v104: widen first-person regex + alternation heuristic */
-(function v104(){var TAG="[v104]";if(window.__v104Active)return;window.__v104Active=true;var FP_RX=/(私|わたし|僕|ぼく|俺|おれ|あたし|うち|私たち|わたし達)(?:は|の|が|を|に|だ|、|，|。|…|でも|なら|だけ|から|より|まで|って|っ|\s|$)/;function getCast(){try{return(JSON.parse(localStorage.getItem("chr6")||"{}").cast||{});}catch(e){return{};}}function rerender(){var stream=document.getElementById("dialogue-stream");if(!stream)return;var s={};try{s=JSON.parse(localStorage.getItem("chr6")||"{}");}catch(e){return;}var hero=(s.cast||{}).hero||{};var heroName=hero.name||"主人公";var npcs=(s.cast||{}).npcs||[];stream.innerHTML="";function addCard(opts){var card=document.createElement("div");card.className="v101-dlg-card";if(opts.isHero)card.classList.add("hero");if(opts.inner)card.classList.add("inner");var av=document.createElement("div");av.style.cssText="flex:0 0 44px;width:44px;height:44px;border-radius:8px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--dim);overflow:hidden;border:1px solid var(--border)";if(opts.avatar){var img=document.createElement("img");img.src=opts.avatar;img.alt=opts.speaker;img.style.cssText="width:100%;height:100%;object-fit:cover";av.appendChild(img);}else{av.textContent=opts.speaker?opts.speaker.slice(0,1):"?";}var body=document.createElement("div");body.style.cssText="flex:1;min-width:0";var name=document.createElement("div");name.style.cssText="font-size:11px;font-weight:600;color:var(--acc);margin-bottom:2px";name.textContent=opts.speaker||"？";var txt=document.createElement("div");txt.style.cssText="font-size:13px;line-height:1.5;color:var(--tx);word-break:break-word"+(opts.inner?";font-style:italic;color:var(--dim)":"");txt.textContent=opts.text;body.appendChild(name);body.appendChild(txt);card.appendChild(av);card.appendChild(body);stream.appendChild(card);}function findCast(name){if(!name)return null;var h=hero;if(h.name&&(h.name===name||name.indexOf(h.name)===0||h.name.indexOf(name)===0))return{isHero:true,name:h.name,avatar:h.avatar||""};for(var i=0;i<npcs.length;i++){var n=npcs[i];if(!n||!n.name)continue;if(n.name===name||name.indexOf(n.name)===0||n.name.indexOf(name)===0)return{isHero:false,name:n.name,avatar:n.avatar||""};}return null;}var turns=s.turns||[];turns.forEach(function(t){var inputType=t.inputType||"";var playerText=t.playerText||"";if(inputType==="SAY"&&playerText)addCard({speaker:heroName,text:playerText,isHero:true,avatar:hero.avatar});var inner=t.innerThought;if(inner&&String(inner).trim()&&!/^[.…]{1,4}$/.test(String(inner).trim()))addCard({speaker:heroName,text:"（"+inner+"）",isHero:true,avatar:hero.avatar,inner:true});var narr=String(t.narrative||"");var npcName=t.npcName||"";if(!narr)return;var rxA=/([一-鿿ぁ-ゖァ-ヺ々ー・]{1,12})(?:は|が|の)「([^「」\n]{1,300})」/g;var rxB=/「([^「」\n]{1,300})」/g;var explicit={};var m;while((m=rxA.exec(narr))!==null){explicit[m.index]={name:m[1],text:m[2]};}var allDlgs=[];rxB.lastIndex=0;while((m=rxB.exec(narr))!==null){allDlgs.push({pos:m.index,text:m[1]});}var lastSpeaker=null;allDlgs.forEach(function(d){var spk=null;var isHero=false;Object.keys(explicit).forEach(function(k){var ek=parseInt(k);if(Math.abs(ek-d.pos)<30){var info=findCast(explicit[k].name);if(info){spk=info.name;isHero=info.isHero;}}});if(!spk&&FP_RX.test(d.text)){spk=heroName;isHero=true;}if(!spk&&lastSpeaker){spk=lastSpeaker===heroName?npcName:heroName;isHero=spk===heroName;}if(!spk){spk=npcName;isHero=false;}var info=findCast(spk)||{name:spk,isHero:isHero,avatar:isHero?hero.avatar:""};if(!d.text||/^[.。…\s]{1,3}$/.test(d.text.trim()))return;if(/送信|再生成|取消|続きを書く/.test(d.text))return;addCard({speaker:info.name,text:d.text,isHero:info.isHero,avatar:info.avatar});lastSpeaker=info.name;});});stream.scrollTop=stream.scrollHeight;}function hookV104(){if(typeof UI!=="object"||!UI)return false;if(UI.__v104Hooked)return true;if(typeof UI.renderAll==="function"){var oA=UI.renderAll.bind(UI);UI.renderAll=function(){var r=oA.apply(this,arguments);try{rerender();}catch(e){}return r;};}if(typeof UI.appendTurn==="function"){var oP=UI.appendTurn.bind(UI);UI.appendTurn=function(){var r=oP.apply(this,arguments);try{rerender();}catch(e){}return r;};}UI.__v104Hooked=true;console.log(TAG,"v104 hooked");return true;}function init(){hookV104();try{rerender();}catch(e){}}if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();setTimeout(init,800);setTimeout(init,2500);setTimeout(init,5000);console.log(TAG,"v104 active");})();
-</script>
-<script id="v105-patch">/* v105: auto-generate avatars for hero+NPCs when missing */
-(function v105(){var TAG="[v105]";if(window.__v105Active)return;window.__v105Active=true;function av(name,desc,gender){var p="anime portrait of ";if(gender==="男性")p+="a man, ";else if(gender==="女性")p+="a young woman, ";else{var d=desc||"";if(/老人|父|爷|兌|兄/.test(d))p+="an elderly man, weathered, scarred, ";else if(/少女|妹|姉|母|嬢/.test(d))p+="a young woman, ";else if(/男|兵士|警官|骨|者/.test(d))p+="a man, ";else p+="a person, ";}p+=name+", detailed face, dark fantasy, dramatic lighting, high quality";var seed=0;for(var i=0;i<name.length;i++)seed=(seed*31+name.charCodeAt(i))&0x7fffffff;return"https://image.pollinations.ai/prompt/"+encodeURIComponent(p)+"?width=384&height=384&seed="+seed+"&nologo=true&model=flux";}function ensure(){try{var s=JSON.parse(localStorage.getItem("chr6")||"{}");if(!s.cast)return;var changed=false;var h=s.cast.hero;if(h&&h.name&&!h.avatar){h.avatar=av(h.name,h.desc||"",h.gender);changed=true;}(s.cast.npcs||[]).forEach(function(n){if(n&&n.name&&!n.avatar){n.avatar=av(n.name,n.desc||"",n.gender);changed=true;}});if(changed){localStorage.setItem("chr6",JSON.stringify(s));console.log(TAG,"avatars filled");try{if(typeof UI==="object"&&typeof UI.renderAll==="function")UI.renderAll();}catch(e){}}}catch(e){}}ensure();setTimeout(ensure,500);setTimeout(ensure,1500);setTimeout(ensure,3000);if(typeof UI==="object"&&UI&&typeof UI.appendTurn==="function"&&!UI.__v105Hooked){var oP=UI.appendTurn.bind(UI);UI.appendTurn=function(){var r=oP.apply(this,arguments);try{ensure();}catch(e){}return r;};UI.__v105Hooked=true;}console.log(TAG,"v105 active");})();
-</script>
-<script id="v106-patch">/* v106: ephemeral NPC support — render unregistered chars too */
-(function v106(){var TAG="[v106]";if(window.__v106Active)return;window.__v106Active=true;var FP_RX=/(私|わたし|僕|ぼく|俺|おれ|あたし|うち|私たち|わたし達)(?:は|の|が|を|に|だ|、|，|。|…|でも|なら|だけ|から|より|まで|って|っ|\s|$)/;function avUrl(name,desc,gender){var p="anime portrait of ";if(gender==="男性")p+="a man, ";else if(gender==="女性")p+="a young woman, ";else{var d=desc||name;if(/老人|父|爷|兌|兄|兵士|者|骨/.test(d))p+="an elderly man, weathered, ";else if(/少女|妹|姉|母|嬢|女/.test(d))p+="a young woman, ";else if(/狼|犬/.test(d))p+="a wolf creature, ";else if(/魔物|怪物|ゴブリン|オーク|トロル/.test(d))p+="a monster creature, fantasy, ";else if(/男/.test(d))p+="a man, ";else p+="a person, ";}p+=name+", detailed face, dark fantasy, dramatic lighting, high quality";var seed=0;for(var i=0;i<name.length;i++)seed=(seed*31+name.charCodeAt(i))&0x7fffffff;return"https://image.pollinations.ai/prompt/"+encodeURIComponent(p)+"?width=384&height=384&seed="+seed+"&nologo=true&model=flux";}function getCast(){try{return(JSON.parse(localStorage.getItem("chr6")||"{}").cast||{});}catch(e){return{};}}function findCast(name){if(!name)return null;var c=getCast();var h=c.hero||{};if(h.name&&(h.name===name||name.indexOf(h.name)===0||h.name.indexOf(name)===0))return{isHero:true,name:h.name,avatar:h.avatar||""};var npcs=c.npcs||[];for(var i=0;i<npcs.length;i++){var n=npcs[i];if(!n||!n.name)continue;if(n.name===name||name.indexOf(n.name)===0||n.name.indexOf(name)===0)return{isHero:false,name:n.name,avatar:n.avatar||""};}return null;}function getEph(name){try{var s=JSON.parse(localStorage.getItem("chr6")||"{}");s.ephemerals=s.ephemerals||{};if(!s.ephemerals[name]){s.ephemerals[name]={avatar:avUrl(name,"",""),firstSeen:Date.now()};localStorage.setItem("chr6",JSON.stringify(s));}return s.ephemerals[name];}catch(e){return{avatar:"",firstSeen:0};}}function rerender(){var stream=document.getElementById("dialogue-stream");if(!stream)return;var s={};try{s=JSON.parse(localStorage.getItem("chr6")||"{}");}catch(e){return;}var hero=(s.cast||{}).hero||{};var heroName=hero.name||"主人公";stream.innerHTML="";function addCard(opts){var card=document.createElement("div");card.className="v101-dlg-card";if(opts.isHero)card.classList.add("hero");if(opts.inner)card.classList.add("inner");var av=document.createElement("div");av.style.cssText="flex:0 0 44px;width:44px;height:44px;border-radius:8px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--dim);overflow:hidden;border:1px solid var(--border)";if(opts.avatar){var img=document.createElement("img");img.src=opts.avatar;img.alt=opts.speaker;img.style.cssText="width:100%;height:100%;object-fit:cover";av.appendChild(img);}else{av.textContent=opts.speaker?opts.speaker.slice(0,1):"?";}var body=document.createElement("div");body.style.cssText="flex:1;min-width:0";var name=document.createElement("div");name.style.cssText="font-size:11px;font-weight:600;color:var(--acc);margin-bottom:2px";name.textContent=opts.speaker||"？";var txt=document.createElement("div");txt.style.cssText="font-size:13px;line-height:1.5;color:var(--tx);word-break:break-word"+(opts.inner?";font-style:italic;color:var(--dim)":"");txt.textContent=opts.text;body.appendChild(name);body.appendChild(txt);card.appendChild(av);card.appendChild(body);stream.appendChild(card);}var turns=s.turns||[];turns.forEach(function(t){var inputType=t.inputType||"";var playerText=t.playerText||"";if(inputType==="SAY"&&playerText)addCard({speaker:heroName,text:playerText,isHero:true,avatar:hero.avatar});var inner=t.innerThought;if(inner&&String(inner).trim()&&!/^[.…]{1,4}$/.test(String(inner).trim()))addCard({speaker:heroName,text:"（"+inner+"）",isHero:true,avatar:hero.avatar,inner:true});var narr=String(t.narrative||"");var npcName=t.npcName||"";if(!narr)return;var rxA=/([一-鿿ぁ-ゖァ-ヺ々ー・]{1,12})(?:は|が|の)「([^「」\n]{1,300})」/g;var rxB=/「([^「」\n]{1,300})」/g;var explicit={};var m;while((m=rxA.exec(narr))!==null){explicit[m.index+m[1].length]={name:m[1],text:m[2]};}var allDlgs=[];rxB.lastIndex=0;while((m=rxB.exec(narr))!==null){allDlgs.push({pos:m.index,text:m[1]});}var lastSpeaker=null;allDlgs.forEach(function(d){var spk=null;var info=null;Object.keys(explicit).forEach(function(k){var ek=parseInt(k);if(ek===d.pos||Math.abs(ek-d.pos)<15){var explName=explicit[k].name;info=findCast(explName);if(!info){var eph=getEph(explName);info={isHero:false,name:explName,avatar:eph.avatar};}}});if(!info&&FP_RX.test(d.text)){info={isHero:true,name:heroName,avatar:hero.avatar};}if(!info&&lastSpeaker&&lastSpeaker!==heroName){info={isHero:true,name:heroName,avatar:hero.avatar};}if(!info&&npcName){info=findCast(npcName);if(!info){var eph2=getEph(npcName);info={isHero:false,name:npcName,avatar:eph2.avatar};}}if(!info)info={isHero:false,name:"誘う者",avatar:""};if(!d.text||/^[.。…\s]{1,3}$/.test(d.text.trim()))return;if(/送信|再生成|取消|続きを書く/.test(d.text))return;addCard({speaker:info.name,text:d.text,isHero:info.isHero,avatar:info.avatar});lastSpeaker=info.name;});});stream.scrollTop=stream.scrollHeight;}function hookV106(){if(typeof UI!=="object"||!UI)return false;if(UI.__v106Hooked)return true;if(typeof UI.renderAll==="function"){var oA=UI.renderAll.bind(UI);UI.renderAll=function(){var r=oA.apply(this,arguments);try{rerender();}catch(e){}return r;};}if(typeof UI.appendTurn==="function"){var oP=UI.appendTurn.bind(UI);UI.appendTurn=function(){var r=oP.apply(this,arguments);try{rerender();}catch(e){}return r;};}UI.__v106Hooked=true;console.log(TAG,"v106 hooked");return true;}function init(){hookV106();try{rerender();}catch(e){}}if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();setTimeout(init,800);setTimeout(init,2500);setTimeout(init,5000);console.log(TAG,"v106 active: ephemeral NPCs supported");})();
-</script>
-<script id="v108-patch">/* v108: kill v107 freeze + safer gender injection */
-(function v108(){var TAG="[v108]";if(window.__v108Active)return;window.__v108Active=true;try{if(window.__v107Active){window.__v107Active=false;}}catch(e){}var FNAMES_F=["アリア","スピカ","エチカ","セシリア","ノエル","オリヴィア","ケイト","ローズ","クララ","ミコト"];var FNAMES_M=["ノクス","シャドウ","ジャード","カイラス","イザク","ソーラ","ケンジ","タオラ","ジン","チオ"];var DESCS_F=["18歳。意志が強い記録官見習い。","16歳。他人の感情に敏感。","20歳。踊り手。"];var DESCS_M=["老齢の元兵士。皮肉屋。","15歳の魔法使い見習い。","真面目な役人。"];function pick(a){return a[Math.floor(Math.random()*a.length)];}function getCast(){try{return JSON.parse(localStorage.getItem("chr6")||"{}");}catch(e){return{};}}function setCast(s){localStorage.setItem("chr6",JSON.stringify(s));}var __busy=false;function injectOnce(){if(__busy)return;__busy=true;try{var ov=document.getElementById("settingsOv");if(!ov||getComputedStyle(ov).display==="none"){__busy=false;return;}ov.querySelectorAll(".v108-grow,.v107-grow").forEach(function(n){n.remove();});var nameInput=ov.querySelector("#cfgHName");var descInput=ov.querySelector("#cfgHDesc");if(nameInput){var heroRow=buildRow("主人公","hero",function(){return((getCast().cast||{}).hero||{}).gender||"";});var anchor=descInput||nameInput;if(anchor.parentNode)anchor.parentNode.insertBefore(heroRow,anchor.nextSibling);}ov.querySelectorAll(".npc-card").forEach(function(card,idx){var anchor=card.querySelector("textarea")||card.querySelector("input");if(!anchor)return;var npcRow=buildRow("NPC","npc"+idx,function(){var n=((getCast().cast||{}).npcs||[])[idx]||{};return n.gender||"";});if(anchor.parentNode)anchor.parentNode.insertBefore(npcRow,anchor.nextSibling);});}catch(e){console.warn(TAG,e);}setTimeout(function(){__busy=false;},100);}function buildRow(label,target,getter){var row=document.createElement("div");row.className="v108-grow";row.style.cssText="display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap";row.innerHTML='<span style="font-size:11px;color:var(--dim);min-width:50px">'+label+'性別:</span><label style="font-size:12px;display:flex;align-items:center;gap:3px;cursor:pointer"><input type="radio" name="v108g_'+target+'" value="女性">女性</label><label style="font-size:12px;display:flex;align-items:center;gap:3px;cursor:pointer"><input type="radio" name="v108g_'+target+'" value="男性">男性</label><label style="font-size:12px;display:flex;align-items:center;gap:3px;cursor:pointer;opacity:.7"><input type="radio" name="v108g_'+target+'" value="">未設定</label>';var cur=getter()||"";row.querySelectorAll("input").forEach(function(r){if(r.value===cur)r.checked=true;r.addEventListener("change",function(){var s=getCast();if(target==="hero"){s.cast=s.cast||{};s.cast.hero=s.cast.hero||{};s.cast.hero.gender=r.value;}else{var i=parseInt(target.replace("npc",""));s.cast=s.cast||{};s.cast.npcs=s.cast.npcs||[];if(s.cast.npcs[i])s.cast.npcs[i].gender=r.value;}setCast(s);});});return row;}function hookOpen(){if(typeof UI!=="object"||!UI||UI.__v108Hooked)return;if(typeof UI.openSettings==="function"){var orig=UI.openSettings.bind(UI);UI.openSettings=function(){var r=orig.apply(this,arguments);setTimeout(injectOnce,150);setTimeout(injectOnce,500);return r;};}if(typeof UI._renderNpcList==="function"){var orig2=UI._renderNpcList.bind(UI);UI._renderNpcList=function(){var r=orig2.apply(this,arguments);setTimeout(injectOnce,100);return r;};}if(typeof UI.addNpc==="function"){var orig3=UI.addNpc.bind(UI);UI.addNpc=function(){var r=orig3.apply(this,arguments);setTimeout(injectOnce,200);return r;};}if(typeof UI.randomFill==="function"&&!UI.__v108RFHooked){var origRF=UI.randomFill.bind(UI);UI.randomFill=function(){try{origRF();}catch(e){}var s=getCast();s.cast=s.cast||{};var h=s.cast.hero=s.cast.hero||{};if(!h.gender)h.gender=Math.random()<0.5?"女性":"男性";if(!h.name)h.name=h.gender==="男性"?pick(FNAMES_M):pick(FNAMES_F);if(!h.desc)h.desc="性別: "+h.gender+"。"+(h.gender==="男性"?pick(DESCS_M):pick(DESCS_F));(s.cast.npcs||[]).forEach(function(n){if(!n)return;if(!n.gender)n.gender=Math.random()<0.5?"女性":"男性";if(!n.name)n.name=n.gender==="男性"?pick(FNAMES_M):pick(FNAMES_F);if(!n.desc)n.desc=n.gender==="男性"?pick(DESCS_M):pick(DESCS_F);});setCast(s);try{if(typeof UI.openSettings==="function"){var ov=document.getElementById("settingsOv");if(ov&&getComputedStyle(ov).display!=="none")UI.openSettings();}}catch(e){}console.log(TAG,"random fill done");};UI.__v108RFHooked=true;}UI.__v108Hooked=true;console.log(TAG,"hooks installed");}function init(){hookOpen();}if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();setTimeout(init,500);setTimeout(init,2000);console.log(TAG,"v108 active: safe gender");})();
-</script>
-<script id="v110-patch">/* v110: live NPC sync + delete cleanup + avatar refresh */
-(function v110(){var TAG="[v110]";if(window.__v110Active)return;window.__v110Active=true;function getCast(){try{return JSON.parse(localStorage.getItem("chr6")||"{}");}catch(e){return{};}}function setCast(s){localStorage.setItem("chr6",JSON.stringify(s));}function avUrl(name,desc,gender){if(!name)return"";var p="anime portrait of ";if(gender==="男性")p+="a man, ";else if(gender==="女性")p+="a young woman, ";else{var d=desc||name;if(/老人|父|爷|兌|兄|兵士|者|骨/.test(d))p+="an elderly man, weathered, ";else if(/少女|妹|姉|母|嬢|女/.test(d))p+="a young woman, ";else if(/狼|犬/.test(d))p+="a wolf creature, ";else if(/魔物|怪物/.test(d))p+="a monster, fantasy, ";else if(/男/.test(d))p+="a man, ";else p+="a person, ";}p+=name+", detailed face, dark fantasy, dramatic lighting, high quality";var seed=0;for(var i=0;i<name.length;i++)seed=(seed*31+name.charCodeAt(i))&0x7fffffff;return"https://image.pollinations.ai/prompt/"+encodeURIComponent(p)+"?width=384&height=384&seed="+seed+"&nologo=true&model=flux";}var debounceTimers={};function debounced(key,fn,ms){if(debounceTimers[key])clearTimeout(debounceTimers[key]);debounceTimers[key]=setTimeout(fn,ms||300);}function updateNpcWidget(idx){var cards=document.querySelectorAll(".npc-card");var card=cards[idx];if(!card)return;var s=getCast();var npc=(s.cast||{}).npcs&&s.cast.npcs[idx];if(!npc||!npc.name)return;var img=card.querySelector(".v100-npc-img");if(!img)return;var imgEl=img.querySelector("img");if(!imgEl){imgEl=document.createElement("img");imgEl.style.cssText="width:100%;height:100%;object-fit:cover";img.innerHTML="";img.appendChild(imgEl);}imgEl.src=npc.avatar||avUrl(npc.name,npc.desc,npc.gender);imgEl.alt=npc.name;var label=card.querySelector(".v100-npc-av div[style*=\"flex:1\"]");if(label)label.textContent=npc.name;}function syncNpcFromForm(idx){var cards=document.querySelectorAll(".npc-card");var card=cards[idx];if(!card)return;var nameI=card.querySelector("input[type=\"text\"], input:not([type])");var descI=card.querySelector("textarea");var s=getCast();s.cast=s.cast||{};s.cast.npcs=s.cast.npcs||[];s.cast.npcs[idx]=s.cast.npcs[idx]||{};var n=s.cast.npcs[idx];var nameChanged=nameI&&nameI.value!==undefined&&nameI.value!==n.name;var descChanged=descI&&descI.value!==undefined&&descI.value!==n.desc;if(nameI)n.name=nameI.value||"";if(descI)n.desc=descI.value||"";/* If name changed, regenerate avatar */if(nameChanged&&n.name){n.avatar=avUrl(n.name,n.desc,n.gender);}else if(!n.avatar&&n.name){n.avatar=avUrl(n.name,n.desc,n.gender);}setCast(s);updateNpcWidget(idx);}function syncHeroFromForm(){var nameI=document.getElementById("cfgHName");var descI=document.getElementById("cfgHDesc");if(!nameI&&!descI)return;var s=getCast();s.cast=s.cast||{};s.cast.hero=s.cast.hero||{};var h=s.cast.hero;var nameChanged=nameI&&nameI.value!==h.name;if(nameI)h.name=nameI.value||"";if(descI)h.desc=descI.value||"";if(nameChanged&&h.name){h.avatar=avUrl(h.name,h.desc,h.gender);}setCast(s);/* refresh hero widget */var hav=document.getElementById("heroAvSettings");if(hav){var img=hav.querySelector(".v100-img");if(img&&h.name){var imgEl=img.querySelector("img");if(!imgEl){imgEl=document.createElement("img");imgEl.style.cssText="width:100%;height:100%;object-fit:cover";img.innerHTML="";img.appendChild(imgEl);}imgEl.src=h.avatar;imgEl.alt=h.name;}var name=hav.querySelector(".v100-name");if(name)name.textContent=h.name||"主人公";}}function attachListeners(){/* Hero */var hN=document.getElementById("cfgHName");var hD=document.getElementById("cfgHDesc");[hN,hD].forEach(function(el){if(!el||el.__v110)return;el.__v110=true;el.addEventListener("input",function(){debounced("hero",syncHeroFromForm,400);});});/* NPCs */document.querySelectorAll(".npc-card").forEach(function(card,idx){var inputs=card.querySelectorAll("input,textarea");inputs.forEach(function(el){if(el.__v110)return;el.__v110=true;el.addEventListener("input",function(){debounced("npc"+idx,function(){syncNpcFromForm(idx);},400);});});});}function deleteNpc(idx){var s=getCast();if(s.cast&&Array.isArray(s.cast.npcs)){s.cast.npcs.splice(idx,1);setCast(s);}console.log(TAG,"npc"+idx+" deleted");}function hookDelete(){if(typeof UI!=="object"||!UI||UI.__v110DelHooked)return;if(typeof UI._delNpc==="function"){var orig=UI._delNpc.bind(UI);UI._delNpc=function(idx){deleteNpc(idx);return orig.apply(this,arguments);};UI.__v110DelHooked=true;console.log(TAG,"_delNpc hooked");}}function hookOpen(){if(typeof UI!=="object"||!UI||UI.__v110OHooked)return;if(typeof UI.openSettings==="function"){var orig=UI.openSettings.bind(UI);UI.openSettings=function(){var r=orig.apply(this,arguments);setTimeout(attachListeners,300);setTimeout(attachListeners,800);return r;};UI.__v110OHooked=true;}if(typeof UI._renderNpcList==="function"){var orig2=UI._renderNpcList.bind(UI);UI._renderNpcList=function(){var r=orig2.apply(this,arguments);setTimeout(attachListeners,150);return r;};}if(typeof UI.addNpc==="function"){var orig3=UI.addNpc.bind(UI);UI.addNpc=function(){var r=orig3.apply(this,arguments);setTimeout(attachListeners,200);return r;};}}function init(){hookOpen();hookDelete();attachListeners();}if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();setTimeout(init,500);setTimeout(init,2000);console.log(TAG,"v110 active: live NPC sync");})();
-</script>
-<script id="v111-patch">/* v111: sync form inputs from cast after randomFill */
-(function v111(){var TAG="[v111]";if(window.__v111Active)return;window.__v111Active=true;function getCast(){try{return JSON.parse(localStorage.getItem("chr6")||"{}");}catch(e){return{};}}function syncFormFromCast(){var s=getCast();var cast=s.cast||{};var hero=cast.hero||{};/* Hero inputs */var hN=document.getElementById("cfgHName");var hD=document.getElementById("cfgHDesc");if(hN&&hero.name!==undefined){hN.value=hero.name||"";hN.dispatchEvent(new Event("input",{bubbles:true}));}if(hD&&hero.desc!==undefined){hD.value=hero.desc||"";hD.dispatchEvent(new Event("input",{bubbles:true}));}/* Hero gender radios (v108) */if(hero.gender){document.querySelectorAll("input[name=\"v108g_hero\"]").forEach(function(r){r.checked=(r.value===hero.gender);});}/* NPC cards */var cards=document.querySelectorAll(".npc-card");(cast.npcs||[]).forEach(function(npc,idx){var card=cards[idx];if(!card)return;var nameI=card.querySelector("input[type=\"text\"], input:not([type])");var descI=card.querySelector("textarea");if(nameI&&npc.name!==undefined){nameI.value=npc.name||"";nameI.dispatchEvent(new Event("input",{bubbles:true}));}if(descI&&npc.desc!==undefined){descI.value=npc.desc||"";descI.dispatchEvent(new Event("input",{bubbles:true}));}if(npc.gender){document.querySelectorAll("input[name=\"v108g_npc"+idx+"\"]").forEach(function(r){r.checked=(r.value===npc.gender);});}});console.log(TAG,"form synced from cast");}/* Hook UI.randomFill (after v108) */function hookRandomFill(){if(typeof UI!=="object"||!UI||UI.__v111Hooked)return;if(typeof UI.randomFill==="function"){var orig=UI.randomFill.bind(UI);UI.randomFill=function(){var r=orig.apply(this,arguments);setTimeout(syncFormFromCast,50);setTimeout(syncFormFromCast,300);return r;};UI.__v111Hooked=true;console.log(TAG,"randomFill wrapped for form sync");}/* Also hook openSettings to ensure form is populated on open */if(typeof UI.openSettings==="function"&&!UI.__v111OHooked){var orig2=UI.openSettings.bind(UI);UI.openSettings=function(){var r=orig2.apply(this,arguments);setTimeout(syncFormFromCast,400);return r;};UI.__v111OHooked=true;}}function init(){hookRandomFill();}if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();setTimeout(init,500);setTimeout(init,2000);setTimeout(init,4000);console.log(TAG,"v111 active: form-sync after randomFill");})();
-</script>
-<script id="v112-patch">/* v112: anti-repetition (penalty + sanitizer) */
-(function v112(){var TAG="[v112]";if(window.__v112Active)return;window.__v112Active=true;var oF=window.fetch;window.fetch=function(url,opts){try{if(typeof url==="string"&&url.indexOf("openrouter.ai")!==-1&&opts&&opts.body&&typeof opts.body==="string"){var b=JSON.parse(opts.body);if(b&&b.messages){if(b.repetition_penalty===undefined)b.repetition_penalty=1.15;if(b.frequency_penalty===undefined)b.frequency_penalty=0.4;if(b.presence_penalty===undefined)b.presence_penalty=0.3;opts.body=JSON.stringify(b);}}}catch(e){}return oF.apply(this,arguments);};function deRepeat(text){if(!text)return text;var t=String(text);t=t.replace(/((?:《[^《》\n]{1,40}》)\s*)\1{2,}/g,"$1");t=t.replace(/((?:「[^「」\n]{1,80}」)\s*)\1{2,}/g,"$1");t=t.replace(/((?:[一-鿿ぁ-ゖァ-ヺ]{4,30}))\1{2,}/g,"$1");t=t.replace(/((?:《[^《》\n]+》[\s、。]*){3,})/g,function(m){var ms=m.match(/《[^《》\n]+》/g)||[];return ms.slice(0,2).join("\n");});return t;}if(typeof UI==="object"&&UI&&typeof UI.renderNarr==="function"&&!UI.__v112Hooked){var orig=UI.renderNarr.bind(UI);UI.renderNarr=function(text){try{var t=Array.isArray(text)?text.join("\n"):String(text||"");return orig(deRepeat(t));}catch(e){return orig(text);}};UI.__v112Hooked=true;}function cleanStored(){try{var s=JSON.parse(localStorage.getItem("chr6")||"{}");var changed=false;(s.turns||[]).forEach(function(t){if(t.narrative){var clean=deRepeat(t.narrative);if(clean!==t.narrative){t.narrative=clean;changed=true;}}});if(changed){localStorage.setItem("chr6",JSON.stringify(s));if(typeof UI==="object"&&typeof UI.renderAll==="function")UI.renderAll();console.log(TAG,"cleaned stored turns");}}catch(e){}}cleanStored();setTimeout(cleanStored,2000);console.log(TAG,"v112 active: anti-repetition");})();
-</script>
-<style id="v113-style">#v113-loading{position:fixed;top:0;left:0;right:0;bottom:0;display:none;align-items:center;justify-content:center;background:rgba(9,9,15,.55);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);z-index:9999;pointer-events:none}#v113-loading.on{display:flex}#v113-loading .v113-card{background:linear-gradient(180deg,rgba(160,138,240,.18),rgba(139,118,240,.06));border:1px solid rgba(160,138,240,.35);border-radius:14px;padding:22px 32px;color:var(--tx,#e0dcf0);font-size:15px;letter-spacing:.04em;display:flex;align-items:center;gap:14px;box-shadow:0 8px 32px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06)}#v113-loading .v113-spin{width:18px;height:18px;border:2px solid rgba(160,138,240,.25);border-top-color:#a08af0;border-radius:50%;animation:v113sp .9s linear infinite}@keyframes v113sp{to{transform:rotate(360deg)}}#v113-loading .v113-dots::after{content:".";animation:v113d 1.4s steps(4,end) infinite}@keyframes v113d{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}</style>
-<script id="v113-patch">/* v113: centered loading overlay */
-(function v113(){var TAG="[v113]";if(window.__v113Active)return;window.__v113Active=true;function ensureOverlay(){var ov=document.getElementById("v113-loading");if(ov)return ov;ov=document.createElement("div");ov.id="v113-loading";ov.innerHTML='<div class="v113-card"><div class="v113-spin"></div><span>物語を紡いでいます<span class="v113-dots"></span></span></div>';document.body.appendChild(ov);return ov;}function show(){ensureOverlay().classList.add("on");}function hide(){var ov=document.getElementById("v113-loading");if(ov)ov.classList.remove("on");}window.__v113Show=show;window.__v113Hide=hide;function hookSetLoading(){if(typeof UI!=="object"||!UI||UI.__v113Hooked)return;if(typeof UI.setLoading==="function"){var orig=UI.setLoading.bind(UI);UI.setLoading=function(on,msg){try{if(on)show();else hide();}catch(e){}return orig.apply(this,arguments);};UI.__v113Hooked=true;console.log(TAG,"setLoading hooked");}}/* Also intercept fetch to show overlay during LLM calls */var oF=window.fetch;window.fetch=function(url,opts){var isLLM=typeof url==="string"&&(url.indexOf("openrouter.ai")!==-1||url.indexOf("api.anthropic.com")!==-1)&&opts&&opts.method==="POST";if(isLLM)show();var p=oF.apply(this,arguments);if(isLLM){p.then(function(){setTimeout(hide,150);}).catch(function(){hide();});}return p;};function init(){ensureOverlay();hookSetLoading();}if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();setTimeout(init,500);setTimeout(init,2000);console.log(TAG,"v113 active: centered loading");})();
-</script>
-<script id="v114-patch">/* v114: clean narrative panel + better attribution */
-(function v114(){var TAG="[v114]";if(window.__v114Active)return;window.__v114Active=true;function getCast(){try{return JSON.parse(localStorage.getItem("chr6")||"{}");}catch(e){return{};}}function findCast(name){if(!name)return null;var c=(getCast().cast||{});var h=c.hero||{};if(h.name&&(h.name===name||name.indexOf(h.name)===0||h.name.indexOf(name)===0))return{isHero:true,name:h.name,avatar:h.avatar||""};var npcs=c.npcs||[];for(var i=0;i<npcs.length;i++){var n=npcs[i];if(!n||!n.name)continue;if(n.name===name||name.indexOf(n.name)===0||n.name.indexOf(name)===0)return{isHero:false,name:n.name,avatar:n.avatar||""};}return null;}function getEph(name){try{var s=getCast();s.ephemerals=s.ephemerals||{};if(!s.ephemerals[name]){var p="anime portrait of a person, "+name+", detailed face, dark fantasy";var seed=0;for(var i=0;i<name.length;i++)seed=(seed*31+name.charCodeAt(i))&0x7fffffff;s.ephemerals[name]={avatar:"https://image.pollinations.ai/prompt/"+encodeURIComponent(p)+"?width=384&height=384&seed="+seed+"&nologo=true&model=flux"};localStorage.setItem("chr6",JSON.stringify(s));}return s.ephemerals[name];}catch(e){return{avatar:""};}}var FP_RX=/(私|わたし|僕|ぼく|俺|おれ|あたし|うち)(?:は|の|が|を|に|だ|、|。|…|でも)/;function attributeDialogue(narr,pos,dlgText,defSpk,heroName,npcs){var before=narr.slice(Math.max(0,pos-80),pos);var prefixMatch=before.match(/([一-鿿ぁ-ゖァ-ヺ々ー・]{2,12})(?:は|が|の)\s*$/);if(prefixMatch){var info=findCast(prefixMatch[1]);if(info)return info;}if(FP_RX.test(dlgText))return{isHero:true,name:heroName};var window2=narr.slice(Math.max(0,pos-150),pos);var heroIdx=window2.lastIndexOf(heroName);var npcMatch={idx:-1,name:null};(npcs||[]).forEach(function(n){if(!n||!n.name)return;var ix=window2.lastIndexOf(n.name);if(ix>npcMatch.idx)npcMatch={idx:ix,name:n.name};});if(/(声|口|ものを言|つぶやく|呼んだ|叫んだ|の口から|咽いた|叫ぶ)/.test(window2)){if(heroIdx>npcMatch.idx&&heroName)return{isHero:true,name:heroName};}if(heroIdx>=0&&heroIdx>npcMatch.idx)return{isHero:true,name:heroName};if(npcMatch.idx>=0){var info2=findCast(npcMatch.name);if(info2)return info2;}return null;}function cleanNarrative(text){if(!text)return text;var t=String(text);/* Strip pure dialogue-only lines */t=t.replace(/^\s*「[^「」\n]+」\s*$/gm,"");/* Cap inner thoughts to 2 per turn */var count=0;t=t.replace(/《[^《》\n]+》/g,function(m){count++;return count<=2?m:"";});/* Collapse blank lines */t=t.replace(/\n{3,}/g,"\n\n");/* Trim leading/trailing */return t.trim();}if(typeof UI==="object"&&UI&&typeof UI.renderNarr==="function"&&!UI.__v114Hooked){var orig=UI.renderNarr.bind(UI);UI.renderNarr=function(text){try{var t=Array.isArray(text)?text.join("\n"):String(text||"");return orig(cleanNarrative(t));}catch(e){return orig(text);}};UI.__v114Hooked=true;console.log(TAG,"renderNarr hooked");}/* Override dialogue stream rendering with better attribution */function rerenderStream(){var stream=document.getElementById("dialogue-stream");if(!stream)return;var s=getCast();var hero=(s.cast||{}).hero||{};var heroName=hero.name||"主人公";var npcs=(s.cast||{}).npcs||[];stream.innerHTML="";function addCard(opts){var card=document.createElement("div");card.className="v101-dlg-card";if(opts.isHero)card.classList.add("hero");if(opts.inner)card.classList.add("inner");var av=document.createElement("div");av.style.cssText="flex:0 0 44px;width:44px;height:44px;border-radius:8px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--dim);overflow:hidden;border:1px solid var(--border)";if(opts.avatar){var img=document.createElement("img");img.src=opts.avatar;img.alt=opts.speaker;img.style.cssText="width:100%;height:100%;object-fit:cover";av.appendChild(img);}else{av.textContent=opts.speaker?opts.speaker.slice(0,1):"?";}var body=document.createElement("div");body.style.cssText="flex:1;min-width:0";var name=document.createElement("div");name.style.cssText="font-size:11px;font-weight:600;color:var(--acc);margin-bottom:2px";name.textContent=opts.speaker||"？";var txt=document.createElement("div");txt.style.cssText="font-size:13px;line-height:1.5;color:var(--tx);word-break:break-word"+(opts.inner?";font-style:italic;color:var(--dim)":"");txt.textContent=opts.text;body.appendChild(name);body.appendChild(txt);card.appendChild(av);card.appendChild(body);stream.appendChild(card);}var turns=s.turns||[];turns.forEach(function(t){var inputType=t.inputType||"";var playerText=t.playerText||"";if(inputType==="SAY"&&playerText)addCard({speaker:heroName,text:playerText,isHero:true,avatar:hero.avatar});var inner=t.innerThought;if(inner&&String(inner).trim()&&!/^[.…]{1,4}$/.test(String(inner).trim()))addCard({speaker:heroName,text:"（"+inner+"）",isHero:true,avatar:hero.avatar,inner:true});var narr=String(t.narrative||"");var npcName=t.npcName||"";if(!narr)return;var rxB=/「([^「」\n]{1,300})」/g;var m;while((m=rxB.exec(narr))!==null){var dlg=m[1];if(!dlg||/^[\.\u3002\u2026\s]{1,3}$/.test(dlg.trim()))continue;if(/送信|再生成|取消|続きを書く/.test(dlg))continue;var info=attributeDialogue(narr,m.index,dlg,npcName,heroName,npcs);if(!info){if(npcName){info=findCast(npcName);if(!info){var eph=getEph(npcName);info={isHero:false,name:npcName,avatar:eph.avatar};}}else{info={isHero:true,name:heroName,avatar:hero.avatar};}}addCard({speaker:info.name,text:dlg,isHero:info.isHero,avatar:info.avatar});}});stream.scrollTop=stream.scrollHeight;}function hookV114(){if(typeof UI!=="object"||!UI||UI.__v114SHooked)return;if(typeof UI.renderAll==="function"){var oA=UI.renderAll.bind(UI);UI.renderAll=function(){var r=oA.apply(this,arguments);try{rerenderStream();}catch(e){}return r;};}if(typeof UI.appendTurn==="function"){var oP=UI.appendTurn.bind(UI);UI.appendTurn=function(){var r=oP.apply(this,arguments);try{rerenderStream();}catch(e){}return r;};}UI.__v114SHooked=true;console.log(TAG,"stream hooked");}function cleanStored(){try{var s=getCast();var changed=false;(s.turns||[]).forEach(function(t){if(t.narrative){var clean=cleanNarrative(t.narrative);if(clean!==t.narrative){t.narrative=clean;changed=true;}}});if(changed)localStorage.setItem("chr6",JSON.stringify(s));}catch(e){}}function init(){hookV114();cleanStored();try{rerenderStream();}catch(e){}}if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();setTimeout(init,500);setTimeout(init,2000);console.log(TAG,"v114 active: clean narr + smart attribution");})();
-</script>
-<script id="v117-patch">
-(function v117(){
-  'use strict';
-  var TAG='[v117]';
-  if(window.__v117Active)return;
-  window.__v117Active=true;
-  var HAIR=['long silver hair flowing','short black bob','wavy auburn hair','braided blonde hair','crimson hair tied back','platinum white hair','dark hair side parted','chestnut hair simple','jet black long hair','ash gray short hair','copper red messy hair','deep navy hair','pale lavender hair','emerald hair tied up','burgundy shoulder length'];
-  var EYES=['piercing blue eyes','gentle violet eyes','cold gray gaze','amber eyes','emerald green eyes intense','deep crimson eyes','golden eyes','silver eyes mysterious','hazel eyes','icy pale eyes','warm brown eyes','jade green eyes'];
-  var STYLE=['oil painting style','watercolor delicate','ink wash atmospheric','painterly soft','sharp realistic detail','pre-raphaelite romantic','chiaroscuro dramatic','renaissance portrait'];
-  function hash(s){var h=5381;for(var i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))&0x7fffffff;return h;}
-  function buildPrompt(name,desc,gender){
-    var d=String(desc||'');
-    var n=String(name||'');
-    var h=hash(n+':'+d);
-    var parts=['anime portrait',STYLE[h%STYLE.length],'dark fantasy, dramatic lighting, intricate detail'];
-    var ageMatch=d.match(/(\d+)歳/);
-    var age=ageMatch?parseInt(ageMatch[1],10):null;
-    var isMale=gender==='男性'||(/男|父|兄|兵士|爷|王|騎士|者/.test(d)&&!/女/.test(d));
-    if(isMale){
-      if(age&&age<14)parts.push('a young boy');
-      else if((age&&age>60)||/老|爷|老人/.test(d))parts.push('an elderly weathered man, deep wrinkles, gray beard');
-      else if(/兵士|戦士|騎士/.test(d))parts.push('a battle hardened warrior, armor, scars');
-      else if(/魔法|魔導/.test(d))parts.push('a young sorcerer, robes, mysterious aura');
-      else if(/学者|司書|記録/.test(d))parts.push('a young scholar, intelligent eyes');
-      else parts.push('a young man');
-    }else{
-      if(age&&age<14)parts.push('a young girl');
-      else if((age&&age>50)||/老婆|婆/.test(d))parts.push('an elderly woman, kind face');
-      else if(/令嬢|貴族|姫|嬢|高貴/.test(d))parts.push('a noble lady, elegant refined features');
-      else if(/踊り|舞/.test(d))parts.push('a graceful dancer');
-      else if(/魔女/.test(d))parts.push('a witch, mystical aura');
-      else if(/巫女|司祭|聖女/.test(d))parts.push('a priestess, sacred robes');
-      else if(/記録|司書/.test(d))parts.push('a young scholar woman, thoughtful');
-      else if(/状状し|ハンター/.test(d))parts.push('a hunter, leather garb');
-      else parts.push('a young woman');
-    }
-    parts.push(HAIR[h%HAIR.length]);
-    parts.push(EYES[(h>>4)%EYES.length]);
-    if(/皮肉|嫉妬/.test(d))parts.push('smirking expression');
-    else if(/静か|穏やか|冷静/.test(d))parts.push('calm expression');
-    else if(/恐れ|怖/.test(d))parts.push('worried tense look');
-    else if(/強気|志が強|意志/.test(d))parts.push('determined gaze');
-    else if(/明るい|笑/.test(d))parts.push('faint smile');
-    if(/廃墟|遗跡/.test(d))parts.push('crumbling ruins backdrop');
-    else if(/海|島|船/.test(d))parts.push('misty coastal background');
-    else if(/森|林/.test(d))parts.push('shadowy forest background');
-    else if(/夜|闇/.test(d))parts.push('dark moody atmosphere');
-    else if(/図書|書棚/.test(d))parts.push('library backdrop, candlelight');
-    parts.push('highly detailed face');
-    return parts.join(', ');
-  }
-  function avUrl(name,desc,gender){if(!name)return'';var p=buildPrompt(name,desc,gender);var seed=hash(name+':'+(desc||''));return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(p)+'?width=384&height=384&seed='+seed+'&nologo=true&model=flux';}
-  window.__v117AvatarUrl=avUrl;
-  function regenAvatars(){
-    try{
-      var s=JSON.parse(localStorage.getItem('chr6')||'{}');
-      var changed=false;
-      if(s.cast&&s.cast.hero&&s.cast.hero.name){
-        var u=avUrl(s.cast.hero.name,s.cast.hero.desc,s.cast.hero.gender);
-        if(u&&u!==s.cast.hero.avatar){s.cast.hero.avatar=u;changed=true;}
-      }
-      var npcs=(s.cast&&s.cast.npcs)||[];
-      for(var i=0;i<npcs.length;i++){
-        var n=npcs[i];
-        if(n&&n.name){
-          var u2=avUrl(n.name,n.desc,n.gender);
-          if(u2&&u2!==n.avatar){n.avatar=u2;changed=true;}
-        }
-      }
-      if(s.ephemerals){
-        var keys=Object.keys(s.ephemerals);
-        for(var k=0;k<keys.length;k++){
-          var key=keys[k];
-          var u3=avUrl(key,'','');
-          if(u3&&u3!==s.ephemerals[key].avatar){s.ephemerals[key].avatar=u3;changed=true;}
-        }
-      }
-      if(changed){
-        localStorage.setItem('chr6',JSON.stringify(s));
-        if(typeof UI==='object'&&typeof UI.renderAll==='function'){try{UI.renderAll();}catch(e){}}
-      }
-    }catch(e){console.warn(TAG,'regen',e);}
-  }
-  function strongClean(text){
-    if(!text)return text;
-    var t=String(text);
-    t=t.replace(/[¥￥\$]+/g,'');
-    t=t.replace(/【[^】\n]{1,30}】/g,'');
-    t=t.replace(/^.*↓[^\n]*(続きを書|地の文|見出し禁止|台詞|JSON)[^\n]*$/gm,'');
-    t=t.replace(/^[\(（]地の文[^\)）]*[\)）][\s。]*$/gm,'');
-    t=t.replace(/^主人公は[\s　]+[^\n]{0,80}$/gm,'');
-    var lines=t.split('\n');
-    var out=[];
-    for(var i=0;i<lines.length;i++){
-      var line=lines[i];
-      if(!line.trim()){out.push(line);continue;}
-      var stripped=line.replace(/「[^「」\n]+」/g,'').replace(/《[^《》\n]+》/g,'').replace(/[\s　]+/g,'').trim();
-      if(line.indexOf('「')>=0&&stripped.length<8)continue;
-      out.push(line);
-    }
-    t=out.join('\n');
-    var count=0;
-    t=t.replace(/《[^《》\n]+》/g,function(m){count++;return count<=2?m:'';});
-    t=t.replace(/((?:[一-鿿ぁ-ゖァ-ヺ]{4,30}))\1{2,}/g,'$1');
-    t=t.replace(/\n{3,}/g,'\n\n');
-    return t.trim();
-  }
-  if(typeof UI==='object'&&UI&&typeof UI.renderNarr==='function'&&!UI.__v117Hooked){
-    var origR=UI.renderNarr.bind(UI);
-    UI.renderNarr=function(text){
-      try{
-        var t=Array.isArray(text)?text.join('\n'):String(text||'');
-        return origR(strongClean(t));
-      }catch(e){return origR(text);}
-    };
-    UI.__v117Hooked=true;
-  }
-  function cleanStored(){
-    try{
-      var s=JSON.parse(localStorage.getItem('chr6')||'{}');
-      var changed=false;
-      var turns=s.turns||[];
-      for(var i=0;i<turns.length;i++){
-        var t=turns[i];
-        if(t&&t.narrative){
-          var clean=strongClean(t.narrative);
-          if(clean!==t.narrative){t.narrative=clean;changed=true;}
-        }
-      }
-      if(changed){
-        localStorage.setItem('chr6',JSON.stringify(s));
-        if(typeof UI==='object'&&typeof UI.renderAll==='function'){try{UI.renderAll();}catch(e){}}
-      }
-    }catch(e){console.warn(TAG,'clean',e);}
-  }
-  regenAvatars();
-  cleanStored();
-  setTimeout(regenAvatars,1500);
-  setTimeout(cleanStored,1500);
-  console.log(TAG,'v117 active');
-})();
-</script>
-<script src="v200-clean.js"></script>
-<script src="v201-render.js"></script>
-<script src="v203-strict-format.js"></script>
-<script src="v205-protect.js"></script>
-<script src="v206-jp-only.js"></script>
-<script src="v207-continuation-fix.js"></script>
-  <script src="v208-magnum-option.js"></script>
-  <script src="v209-magnum-tune.js"></script>
-  <script src="v210-cleanup.js"></script>
+<!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
+<script src="features.js?cb=v292Dfix205c"></script>
+<script src="v292Dfix135-longmem.js?cb=v292Dfix135g"></script>
+<script src="v292Dfix138-continue.js?cb=v292Dfix142"></script>
+<script src="v292Dfix145-charlist.js?cb=v292Dfix145f"></script>
+<script src="v292Dfix52-readability.js?cb=v292Dfix52"></script>
+<script src="v292Dfix53-readability-v2.js?cb=v292Dfix53"></script>
+<script src="v292Dfix54-gender-pronoun.js?cb=v292Dfix54"></script>
+<script src="v292Dfix55-gm-mode.js?cb=v292Dfix55c"></script>
+  <script src="v292Dfix56-conversation-log-fix.js?cb=v292Dfix200"></script>
+  <script src="v292Dfix57-script-style-dialogue.js?cb=v292Dfix57"></script>
+  <script src="v292Dfix58-prompt-rebuild.js?cb=v292Dfix58"></script>
+  <script src="v292Dfix60-display-pipeline.js?cb=v292Dfix60"></script>
+  <script src="v292Dfix59-hybrid-extractor.js?cb=v292Dfix59"></script>
+  <script src="v292Dfix61-alpha-strip-protect.js?cb=v292Dfix61v3"></script>
+  <script src="v292Dfix62-avatar-fix.js?cb=v292Dfix62"></script>
+  <script src="v292Dfix63-avatar-style.js?cb=v292Dfix63"></script>
+  <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script>
+  <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
+  <script src="v292Dfix74-ext-dedup-and-say.js?cb=v292Dfix74"></script>
+  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix215"></script>
+    <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
+    <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
+    <!-- v292Dfix189c: fix70(dialogue-order, 本文ベースの並べ替え)を無効化。fix70bが
+         _convSays由来の正しい時系列で並べ替えを一本化しており、fix70(本文ベース=誤順)の
+         2秒tickがfix70bと互いのMutationObserverで反応し合い会話ログが点滅していた。
+         並べ替えはfix70bに集約。 (旧: v292Dfix70-dialogue-order.js?cb=v292Dfix70) -->
+    <script src="v292Dfix71-anti-recap.js?cb=v292Dfix71"></script>
+    <script src="v292Dfix72-within-turn-dedup.js?cb=v292Dfix72"></script>
+    <script src="v292Dfix73-card-dedup.js?cb=v292Dfix200"></script>
+    <script src="v292Dfix70b-order-convsays.js?cb=v292Dfix200"></script>
+  <script src="v292Dfix75-history-dedup.js?cb=v292Dfix75"></script>
+<script src="v292Dfix76-human-foundation.js?cb=v292Dfix76b"></script>  <script src="v292Dfix77-state-memory.js?cb=v292Dfix203"></script>
+  <script src="v292Dfix78-tag-case-normalize.js?cb=v292Dfix78"></script>
+  <script src="v292Dfix79-momentum-anchor.js?cb=v292Dfix79"></script>
+  <script src="v292Dfix80-gen-gate-retry.js?cb=v292Dfix80"></script>
+  <script src="v292Dfix82-injury-reaction-root.js?cb=v292Dfix82"></script>
+  <script src="v292Dfix83-name-truncation-repair.js?cb=v292Dfix83"></script>
+  <script src="v292Dfix84-sampling.js?cb=v292Dfix84"></script>
+  <script src="v292Dfix85-reaction-spectrum.js?cb=v292Dfix85"></script>
+  <script src="v292Dfix81-strip-incomplete-tags.js?cb=v292Dfix81"></script>
+  <script src="v292Dfix86-avatar-eager-blob.js?cb=v292Dfix86"></script>
+  <script src="v292Dfix89-convlog-cleanup.js?cb=v292Dfix89"></script>
+  <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
+  <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
+       engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
+  <script src="v292Dfix192-newengine.js?cb=v292Dfix215"></script>
+  <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
+       無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
+  <script src="v292Dfix197-avatar-key.js?cb=v292Dfix209"></script>
 </body>
 </html>
 
-<script src="v211-hermes-tune.js"></script>
-<script src="v212-player-driven.js"></script>
-<script src="v213-ui-random-fix.js"></script>
-<script src="v214-pair-strict.js"></script>
-<script src="v215-cn-strip-and-lock.js"></script>
-<script src="v216-jp-natural-and-screams.js"></script>
-<script src="v217-strict-jp-whitelist.js"></script>
-<script src="v218-anti-meta.js"></script>
-<script src="v219-state-memory-and-screams.js"></script>
-<script src="v220-inline-dialogue-and-extreme-scream.js?cb=v220"></script>
-<script src="v276d-fetch-priority.js?cb=v276d2"></script>
-<script src="v276e-cast-lock.js?cb=v276e"></script>
-<script src="v277-anti-dup-and-soft-pivot.js?cb=v277"></script>
-<script src="v278-plain-japanese-and-narr-dedup.js?cb=v278"></script>
-<script src="v279-scream-retry-toggle.js?cb=v279"></script>
-<script src="v280-scream-quote-prompt.js?cb=v280"></script>
-<script src="v281-abstract-scream-retry.js?cb=v281"></script>
-<script src="v282-input-priority.js?cb=v282"></script>
-<script src="v283-npc-freedom.js?cb=v283"></script>
-<script src="v284-random-lore-aware.js?cb=v284d"></script>
-<script src="v285-seed-aware.js?cb=v285a"></script>
-  <script src="v286-seed-expansion.js?cb=v286a"></script>
-  <script src="v286b-seed-expansion-fix.js?cb=v286b"></script>
-  <script src="v286c-blank-prefix-fix.js?cb=v286c"></script>
-  <script src="v286d-japanese-only.js?cb=v286d"></script>
-  <script src="v274e-writer-cast-lock.js?cb=v274e2"></script>
-  <script src="v286e-narrative-recovery.js?cb=v286e3"></script>
-  <script src="v287-hermes4-pin.js?cb=v287a"></script>
-  <script src="v288-mind-comma-repair.js?cb=v288a"></script>
-  <script src="v289-auto-cast-bootstrap.js?cb=v289a"></script>
-  <script src="v290-tolerant-parse-fallback.js?cb=v290t1"></script>
-  <script src="v291-llm-aware-randomfill.js?cb=v291b"></script>
-  <script src="v292-pre-sync-randomfill.js?cb=v292a"></script>
-  <script src="v293-scream-preserve-from-dedup.js?cb=v293a"></script>
