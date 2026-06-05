@@ -1695,7 +1695,7 @@ const G = {
       //     who="…"(二重引用)だけ拾うこの正規表現には掛からず、本文の発話のみ抽出される。
       let _convSays = [];
       try {
-        var _body = String(result.text || '').split(/<react|<state/)[0]; var _heroNm = (S.cast && S.cast.hero && S.cast.hero.name) || ''; var _names = []; if (_heroNm) _names.push(_heroNm); if (S.cast && Array.isArray(S.cast.npcs)) S.cast.npcs.forEach(function(n){ if (n && n.name) _names.push(n.name); });
+        var _body = String(result.text || '').split(/<react|<state/)[0]; _body = _body.replace(/<say(\s+who="[^"]*"\s*)>([^<\n]*)[」』](?=\s*(?:\n|$))/g, '<say$1>$2</say>'); /* v292Dfix214: 「」で閉じられた壊れsayタグを正規タグに修復(モデルが</say>でなく」で閉じる癖→会話ログ欠落の根治) */ var _heroNm = (S.cast && S.cast.hero && S.cast.hero.name) || ''; var _names = []; if (_heroNm) _names.push(_heroNm); if (S.cast && Array.isArray(S.cast.npcs)) S.cast.npcs.forEach(function(n){ if (n && n.name) _names.push(n.name); });
         var _sayRe = /<say\s+who="([^"]*)"\s*>([^<]*)<\/say>|「([^」]*)」/g, _sm, _seenSay = {}; /* v292Dfix213: タグ付きセリフの正規化テキスト集合を先に作る(モデルが同じセリフを裸「」とタグで二重に書く対策) */ var _tagNorm = {}; try { var _tm, _tRe = /<say\s+who="[^"]*"\s*>([^<]*)<\/say>/g; while ((_tm = _tRe.exec(_body))) { _tagNorm[String(_tm[1]||'').trim().slice(0,80).replace(/[\s　。、！？!?…・「」『』]/g,'')] = 1; } } catch(e){}
         while ((_sm = _sayRe.exec(_body))) {
           var _ss2 = String((_sm[1] != null ? _sm[2] : _sm[3]) || '').trim().slice(0, 80);
@@ -1729,6 +1729,7 @@ const G = {
       //   say-tag はもう不要）。モデルや旧拡張が出す不完全な say-tag が「<say who=¥」のように表示へ
       //   漏れる/「」が二重になるのを根治。well-formed は中身（セリフ）を「」付きで残し、壊れた断片は捨てる。
       try {
+        narr = narr.replace(/<say(\s+who="[^"]*"\s*)>([^<\n]*)[」』](?=\s*(?:\n|$))/g, '<say$1>$2</say>'); /* v292Dfix214: 」閉じの壊れsayタグを修復してから変換(開き括弧無しの行が残る問題の根治) */
         narr = narr
           .replace(/<say\b[^>]*>\s*([\s\S]*?)\s*<\/say>/gi, function(_m, c){
             c = String(c || '').trim();
