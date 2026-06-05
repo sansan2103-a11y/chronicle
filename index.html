@@ -1696,11 +1696,11 @@ const G = {
       let _convSays = [];
       try {
         var _body = String(result.text || '').split(/<react|<state/)[0]; var _heroNm = (S.cast && S.cast.hero && S.cast.hero.name) || ''; var _names = []; if (_heroNm) _names.push(_heroNm); if (S.cast && Array.isArray(S.cast.npcs)) S.cast.npcs.forEach(function(n){ if (n && n.name) _names.push(n.name); });
-        var _sayRe = /<say\s+who="([^"]*)"\s*>([^<]*)<\/say>|「([^」]*)」/g, _sm, _seenSay = {};
+        var _sayRe = /<say\s+who="([^"]*)"\s*>([^<]*)<\/say>|「([^」]*)」/g, _sm, _seenSay = {}; /* v292Dfix213: タグ付きセリフの正規化テキスト集合を先に作る(モデルが同じセリフを裸「」とタグで二重に書く対策) */ var _tagNorm = {}; try { var _tm, _tRe = /<say\s+who="[^"]*"\s*>([^<]*)<\/say>/g; while ((_tm = _tRe.exec(_body))) { _tagNorm[String(_tm[1]||'').trim().slice(0,80).replace(/[\s　。、！？!?…・「」『』]/g,'')] = 1; } } catch(e){}
         while ((_sm = _sayRe.exec(_body))) {
           var _ss2 = String((_sm[1] != null ? _sm[2] : _sm[3]) || '').trim().slice(0, 80);
           var _sw; if (_sm[1] != null){ _sw = String(_sm[1] || '').trim().slice(0, 24); } else { var _pre = _body.slice(0, _sm.index), _bi = -1; _sw = _heroNm; _names.forEach(function(n){ var p = _pre.lastIndexOf(n); if (p > _bi){ _bi = p; _sw = n; } }); /* v292Dfix200b: 後置話者「『…』と、Xは呟いた」は前方近接より優先 */ var _post = _body.slice(_sm.index + _sm[0].length, _sm.index + _sm[0].length + 50); _post = _post.replace(/^[\s　」』]+/, ''); var _pst = _post.search(/[「。\n]/); if (_pst >= 0) _post = _post.slice(0, _pst); if (/^\s*[とっ、]*と/.test(_post) && /(言|呟|囁|尋|問|答|叫|返|応|漏|告|呼|続|笑|声|呻|唸)/.test(_post)){ _names.forEach(function(n){ if (_post.indexOf(n) >= 0) _sw = n; }); } /* v292Dfix206: 「Xの金切り声が」型(と無し・改行はさみ可)も後置優先 */ _names.forEach(function(n){ if (_post.indexOf(n) === 0 && _post.slice(n.length).match(/^の[^。「」]{0,6}(声|悲鳴|金切|叫|呟|囁|うめ|絶叫|嗚咽)/)) _sw = n; }); }
-          var _ss = _ss2; if (!_ss2) continue;
+          var _ss = _ss2; if (!_ss2) continue; if (_sm[1] == null && _tagNorm[_ss2.replace(/[\s　。、！？!?…・「」『』]/g,'')]) continue; /* v292Dfix213: タグ版が存在する裸「」は同一セリフの重複＝スキップ(話者はタグが正) */
           var _sk = _sw + '' + _ss;
           if (_seenSay[_sk]) continue; _seenSay[_sk] = 1;
           _convSays.push({ who: _sw || _heroNm || '???', say: _ss2 });
@@ -1733,7 +1733,7 @@ const G = {
           .replace(/<say\b[^>]*>\s*([\s\S]*?)\s*<\/say>/gi, function(_m, c){
             c = String(c || '').trim();
             if (!c) return '';
-            return /^[「『]/.test(c) ? c : ('「' + c + '」');
+            var _nrm213 = c.replace(/[\s　。、！？!?…・「」『』]/g,''); try { if (_nrm213 && (narr.match(/「[^」]*」/g)||[]).some(function(q){ return q.replace(/[\s　。、！？!?…・「」『』]/g,'') === _nrm213; })) return ''; } catch(e){} /* v292Dfix213: 同文の裸「」が本文に既にあればタグ変換を捨てる(本文のセリフ二重化の根治) */ return /^[「『]/.test(c) ? c : ('「' + c + '」');
           })
           .replace(/<\/?say\b[^>]*>?/gi, '')   // 残り/不完全な say 断片を除去
           .replace(/「\s*」/g, '')              // 空の「」
@@ -2464,7 +2464,7 @@ G.init();
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
-  <script src="v292Dfix192-newengine.js?cb=v292Dfix212"></script>
+  <script src="v292Dfix192-newengine.js?cb=v292Dfix213"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
   <script src="v292Dfix197-avatar-key.js?cb=v292Dfix209"></script>
