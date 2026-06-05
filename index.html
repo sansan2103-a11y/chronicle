@@ -1655,6 +1655,33 @@ const G = {
     } catch(e) { try { console.warn('[v292Dfix169] genConvLog err:', e && e.message); } catch(_){} return []; }
   },
 
+  /* v292Dfix218 第2層: 不確信引用の発話帰属をモデルに照会。who必須=本文中の呼び名、発話でなければnull。幻覚ガード=whoが本文かキャスト名に実在しなければ捨てる(fix173/207方式) */
+  async attribQuotes218(body, quotes) {
+    try {
+      var clean = String(body || '').replace(/<[^>]+>/g, '').slice(0, 1800);
+      var qs = (quotes || []).slice(0, 6);
+      if (!qs.length) return {};
+      var sys2 = ['あなたは発話帰属の判定器です。本文と引用リストを読み、各引用について「本文中でそれを実際に声に出した者」を答えてください。', '・who は本文で使われている呼び名そのまま（登場していない名前を作らない・言い換えない）。', '・誰も声に出していない引用（回想・呼び名・看板や文字・比喩・内心）は who を null にする。', '出力はJSON配列のみ（説明・コードフェンス禁止）。引用リストと同順・全件: [{"q":"引用","who":"呼び名またはnull"}]'].join('\n');
+      var user2 = '本文:\n' + clean + '\n\n引用リスト:\n' + qs.map(function(q, i){ return (i + 1) + '. 「' + q + '」'; }).join('\n');
+      var r2 = await Api.call(sys2, user2, 400, { allowShort: true });
+      var txt = (r2 && r2.text) || '';
+      var arr = []; var mi = txt.indexOf('['), mj = txt.lastIndexOf(']');
+      if (mi >= 0 && mj > mi) { try { arr = JSON.parse(txt.slice(mi, mj + 1)); } catch(e){} }
+      if (!Array.isArray(arr)) arr = [];
+      var names = []; try { var c = S.cast || {}; if (c.hero && c.hero.name) names.push(c.hero.name); (Array.isArray(c.npcs) ? c.npcs : []).forEach(function(n){ if (n && n.name) names.push(n.name); }); } catch(e){}
+      var out = {};
+      qs.forEach(function(q, i){
+        var a = arr[i] && arr[i].who;
+        if (typeof a !== 'string') return;
+        a = a.trim().slice(0, 24);
+        if (!a || a === 'null' || a === 'なし' || a === '不明') return;
+        if (clean.indexOf(a) < 0 && names.indexOf(a) < 0) return;
+        out[q] = a;
+      });
+      return out;
+    } catch(e) { try { console.warn('[v292Dfix218] attribQuotes err:', e && e.message); } catch(_){} return {}; }
+  },
+
   async submit() {
     if (S.inFlight) return;
     const inputEl = document.getElementById('inp');
@@ -1716,16 +1743,19 @@ const G = {
       let _convSays = [];
       try {
         var _body = String(result.text || '').split(/<react|<state/)[0]; _body = _body.replace(/<say(\s+who="[^"]*"\s*)>([^<\n]*)[」』](?=\s*(?:\n|$))/g, '<say$1>$2</say>'); /* v292Dfix214: 「」で閉じられた壊れsayタグを正規タグに修復(モデルが</say>でなく」で閉じる癖→会話ログ欠落の根治) */ var _heroNm = (S.cast && S.cast.hero && S.cast.hero.name) || ''; var _names = []; if (_heroNm) _names.push(_heroNm); if (S.cast && Array.isArray(S.cast.npcs)) S.cast.npcs.forEach(function(n){ if (n && n.name) _names.push(n.name); });
-        var _LANGS217 = { ja: { bareSrc: '「([^」]*)」', speechVerb: /(言|呟|囁|尋|問|答|叫|返|応|漏|告|呼|続|笑|声|呻|唸)/, nonSpeech: /(言わ|呼ば|囁か|叫ば|問わ|告げら|称さ)れ/, quoteLead: /^\s*[とっ、]*と/, voiceNoun: /^の[^。「」]{0,6}(声|悲鳴|金切|叫|呟|囁|うめ|絶叫|嗚咽)/ } }; /* v292Dfix217: 言語プロファイル(多言語展開用)。bareSrc=裸引用の正規表現ソース(キャプチャ群ちょうど1個の契約)。言語追加=ここに1エントリ+S.cfg.langで選択。例 en: bareSrc:'“([^”]+)”'(ASCIIの"はsayタグ属性と衝突するためスマートクォート推奨), speechVerb=(said|whisper|shout|murmur|replied|asked|cried)/i, quoteLead=^[\s,]+ 等。露語は«»+ダッシュ式の別bareSrcが要る。 */ var _L217 = _LANGS217[(S.cfg && S.cfg.lang) || 'ja'] || _LANGS217.ja; var _sayRe = new RegExp('<say\\s+who="([^"]*)"\\s*>([^<]*)<\\/say>|' + _L217.bareSrc, 'g'), _sm, _seenSay = {}; /* v292Dfix213: タグ付きセリフの正規化テキスト集合を先に作る(モデルが同じセリフを裸「」とタグで二重に書く対策) */ var _tagNorm = {}; try { var _tm, _tRe = /<say\s+who="[^"]*"\s*>([^<]*)<\/say>/g; while ((_tm = _tRe.exec(_body))) { _tagNorm[String(_tm[1]||'').trim().slice(0,80).replace(/[\s　。、！？!?…・「」『』]/g,'')] = 1; } } catch(e){}
+        var _LANGS217 = { ja: { bareSrc: '「([^」]*)」', speechVerb: /(言|呟|囁|尋|問|答|叫|返|応|漏|告|呼|続|笑|声|呻|唸)/, nonSpeech: /(呼ば|称さ)れ/, quoteLead: /^\s*[とっ、]*と/, voiceNoun: /^の[^。「」]{0,6}(声|悲鳴|金切|叫|呟|囁|うめ|絶叫|嗚咽)/, entityNouns: '(妖怪|怪異|化け物|怪物|魔物|悪霊|亡霊|幽霊|人形)', subjAfter: /^[\s　]*[がは]/, voiceAfter: /^の[^。、\n]{0,2}(声|喉|口|唇|悲鳴|叫)/, namingPre: /を[\s　]*$/ } }; /* v292Dfix217: 言語プロファイル(多言語展開用)。bareSrc=裸引用の正規表現ソース(キャプチャ群ちょうど1個の契約)。言語追加=ここに1エントリ+S.cfg.langで選択。例 en: bareSrc:'“([^”]+)”'(ASCIIの"はsayタグ属性と衝突するためスマートクォート推奨), speechVerb=(said|whisper|shout|murmur|replied|asked|cried)/i, quoteLead=^[\s,]+ 等。露語は«»+ダッシュ式の別bareSrcが要る。 */ var _L217 = _LANGS217[(S.cfg && S.cfg.lang) || 'ja'] || _LANGS217.ja; var _sayRe = new RegExp('<say\\s+who="([^"]*)"\\s*>([^<]*)<\\/say>|' + _L217.bareSrc, 'g'), _sm, _seenSay = {}; /* v292Dfix218: 話者候補=キャスト+本文中の人外実体(fix207語彙)。確信のみ採用・不確信は保留して第2層(モデル帰属照会)へ */ var _cands218 = _names.slice(); try { var _em218, _entRe218 = new RegExp(_L217.entityNouns, 'g'); while ((_em218 = _entRe218.exec(_body))) { if (_cands218.indexOf(_em218[0]) < 0) _cands218.push(_em218[0]); } } catch(e){} var _pend218 = []; /* v292Dfix213: タグ付きセリフの正規化テキスト集合を先に作る(モデルが同じセリフを裸「」とタグで二重に書く対策) */ var _tagNorm = {}; try { var _tm, _tRe = /<say\s+who="[^"]*"\s*>([^<]*)<\/say>/g; while ((_tm = _tRe.exec(_body))) { _tagNorm[String(_tm[1]||'').trim().slice(0,80).replace(/[\s　。、！？!?…・「」『』]/g,'')] = 1; } } catch(e){}
         while ((_sm = _sayRe.exec(_body))) {
           var _ss2 = String((_sm[1] != null ? _sm[2] : _sm[3]) || '').trim().slice(0, 80);
-          var _sw; if (_sm[1] != null){ _sw = String(_sm[1] || '').trim().slice(0, 24); } else { var _pre = _body.slice(0, _sm.index), _bi = -1; _sw = _heroNm; _names.forEach(function(n){ var p = _pre.lastIndexOf(n); if (p > _bi){ _bi = p; _sw = n; } }); var _lh217 = /(^|\n)[\s　]*$/.test(_pre) && /^[\s　]*(\n|$)/.test(_body.slice(_sm.index + _sm[0].length)); /* v292Dfix217: 独立セリフ行=行全体が引用のみ(前後とも空白だけ)。「逃げろ」と言われた…等の行頭引用+地の文続きは後置マーカー判定に回す */ var _ps217 = false; /* v292Dfix200b: 後置話者「『…』と、Xは呟いた」は前方近接より優先 */ var _post = _body.slice(_sm.index + _sm[0].length, _sm.index + _sm[0].length + 50); _post = _post.replace(/^[\s　」』]+/, ''); var _pst = _post.search(/[「。\n]/); if (_pst >= 0) _post = _post.slice(0, _pst); if (_L217.quoteLead.test(_post) && _L217.speechVerb.test(_post) && !(_L217.nonSpeech && _L217.nonSpeech.test(_post))){ _ps217 = true; _names.forEach(function(n){ if (_post.indexOf(n) >= 0) _sw = n; }); } /* v292Dfix206: 「Xの金切り声が」型(と無し・改行はさみ可)も後置優先 */ _names.forEach(function(n){ if (_post.indexOf(n) === 0 && _post.slice(n.length).match(_L217.voiceNoun)) { _ps217 = true; _sw = n; } }); var _utt217 = _lh217 || _ps217; /* v292Dfix217: 発話判別器=①行頭の独立セリフ行 ②後置の発話マーカー(と+発話動詞/Xの悲鳴型)のどちらかを満たす裸引用だけが発話。文中に埋まった引用(「…」現実 等の連体修飾・内心・名称・文字情報)は地の文として弾く */ }
+          var _sw, _conf218 = false; if (_sm[1] != null){ _sw = String(_sm[1] || '').trim().slice(0, 24); _conf218 = true; } else { var _pre = _body.slice(0, _sm.index); var _after218 = _body.slice(_sm.index + _sm[0].length); var _lh217 = /(^|\n)[\s　]*$/.test(_pre) && /^[\s　]*(\n|$)/.test(_after218); /* v292Dfix217: 独立セリフ行=行全体が引用のみ */ var _nm218 = _L217.namingPre.test(_pre); /* v292Dfix218: 「Xを「…」と呼ぶ」命名構文=発話でない */ var _post = _after218.slice(0, 50).replace(/^[\s　」』]+/, ''); var _pst = _post.search(/[「。\n]/); if (_pst >= 0) _post = _post.slice(0, _pst); var _mk218 = false; _sw = null; if (_L217.quoteLead.test(_post) && _L217.speechVerb.test(_post) && !(_L217.nonSpeech && _L217.nonSpeech.test(_post))){ _mk218 = true; var _vm218 = _post.match(_L217.speechVerb); var _seg218 = _vm218 ? _post.slice(0, _vm218.index + 1) : _post; _cands218.forEach(function(n){ if (_seg218.indexOf(n) >= 0) _sw = n; }); if (!_sw){ var _cm218 = _post.match(/のは([^。、\s　]{1,24})/); if (_cm218){ _cands218.forEach(function(n){ if (_cm218[1].indexOf(n) === 0) _sw = n; }); } } } /* v292Dfix200b改: 後置話者は「と〜発話動詞」区間内の名前だけ(次節の主語「…と呟いた刹那、妖怪は」を拾わない)+「呼んだのはX」のは構文 */ _cands218.forEach(function(n){ if (_post.indexOf(n) === 0 && _post.slice(n.length).match(_L217.voiceNoun)) { _mk218 = true; _sw = n; } }); /* v292Dfix206: 「Xの金切り声が」型 */ var _utt217 = !_nm218 && (_lh217 || _mk218); if (_utt217 && _mk218 && !_sw){ var _bs218 = -1; _cands218.forEach(function(n){ var p = _pre.indexOf(n); while (p >= 0){ var _tl = _pre.slice(p + n.length, p + n.length + 8); if ((_L217.subjAfter.test(_tl) || _L217.voiceAfter.test(_tl)) && p > _bs218){ _bs218 = p; _sw = n; } p = _pre.indexOf(n, p + 1); } }); } /* v292Dfix218: 文中型の前方解決=「が/は」主語か「の声」型のみ(「カエデへ」等の目的語を話者にしない) */ if (_sw){ _conf218 = true; } else if (_utt217 && _lh217){ var _w218 = _pre.slice(-200), _list218 = [], _near218 = null, _ni218 = -1, _subj218 = null, _si218 = -1; _cands218.forEach(function(n){ var p2 = _w218.lastIndexOf(n); if (p2 >= 0){ _list218.push(n); if (p2 > _ni218){ _ni218 = p2; _near218 = n; } } var q2 = _w218.indexOf(n); while (q2 >= 0){ var _t2 = _w218.slice(q2 + n.length, q2 + n.length + 8); if ((_L217.subjAfter.test(_t2) || _L217.voiceAfter.test(_t2)) && q2 > _si218){ _si218 = q2; _subj218 = n; } q2 = _w218.indexOf(n, q2 + 1); } }); if (!_list218.length){ _sw = _heroNm; _conf218 = true; } else if (_list218.length === 1){ _sw = _list218[0]; _conf218 = true; } else if (_subj218 && _subj218 === _near218){ _sw = _subj218; _conf218 = true; } } /* v292Dfix218: 独立セリフ行=直近200字の登場者が0人なら主人公(単独独白)/1人ならその人/複数なら主語判定と近接が一致した時だけ確信。不一致(妖怪が主語だが被害者が近い等)は保留→第2層が意味で判定 */ }
           var _ss = _ss2; if (!_ss2) continue; if (_sm[1] == null && !_utt217) continue; /* v292Dfix217: 発話判別器を通らない裸「」は収穫しない(地の文の引用を発話化しない=「助けられなかった」誤帰属の根治) */ if (_sm[1] == null && _tagNorm[_ss2.replace(/[\s　。、！？!?…・「」『』]/g,'')]) continue; /* v292Dfix213: タグ版が存在する裸「」は同一セリフの重複＝スキップ(話者はタグが正) */
-          var _sk = _sw + '' + _ss;
+          var _sk = (_sw || '?') + '' + _ss;
           if (_seenSay[_sk]) continue; _seenSay[_sk] = 1;
-          _convSays.push({ who: _sw || _heroNm || '???', say: _ss2 });
+          if (_conf218){ _convSays.push({ who: _sw || _heroNm || '???', say: _ss2 }); } else { var _ph218 = { who: null, say: _ss2 }; _convSays.push(_ph218); _pend218.push(_ph218); } /* v292Dfix218: 不確信は保留(第2層で帰属照会)。文書順は維持 */
         }
       } catch(e) { _convSays = []; }
+      /* v292Dfix218 第2層: 判別器が確信できなかった引用の帰属を、本文を書いたモデル自身に1回のJSON呼び出しで照会(タグ漏れ時のみ発生)。発話を「探させる」のではなく与えた引用の帰属だけを答えさせる=発明の余地なし */
+      try { if (typeof _pend218 !== 'undefined' && _pend218.length) { var _amap218 = await this.attribQuotes218(_body, _pend218.map(function(p){ return p.say; })); _pend218.forEach(function(p){ if (_amap218 && _amap218[p.say]) p.who = _amap218[p.say]; }); } } catch(_e218){}
+      _convSays = _convSays.filter(function(c){ return c && c.who && c.say; }); /* 帰属不能の保留は載せない(誤帰属より欠落が安全) */
       // v292Dfix169(案B): <say>タグが1つも無いとき（沈黙・裸引用のみ等）だけ、従来の2段階
       //   生成（実際に口に出した発話だけを作る）にフォールバックする。
       var _eng217 = false; try { _eng217 = (S.cfg && S.cfg.engineMode != null) ? (+S.cfg.engineMode === 1) : (localStorage.getItem('v292EngineMode') === '1'); } catch(_e){} /* v292Dfix217: 新エンジンは全セリフ<say>必須の契約=タグ皆無は本当に無言。AI推測(genConvLog)が地の文の引用から発話を再発明する第2経路を遮断。従来エンジンのみフォールバック維持 */
@@ -2495,7 +2525,7 @@ G.init();
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
-  <script src="v292Dfix192-newengine.js?cb=v292Dfix215"></script>
+  <script src="v292Dfix192-newengine.js?cb=v292Dfix218"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
   <script src="v292Dfix197-avatar-key.js?cb=v292Dfix209"></script>
