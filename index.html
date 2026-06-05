@@ -587,7 +587,7 @@ const Api = {
 
   async call(system, userContent, maxTok = 1400, opts = {}) {
     // v292 pre-call hook: features can mutate { system, userContent, maxTok } before send.
-    let _system = system, _userContent = userContent, _maxTok = maxTok;
+    let _system = system, _userContent = userContent, _maxTok = maxTok; try { if (maxTok === 1400 && localStorage.getItem('v100_outputLen') === 'long') _maxTok = 2400; } catch(e){} /* v292Dfix212: 長文モードで本編呼び出しの既定トークンを引き上げ。max_tokensフック(applyMaxTokens)は上限を下げる専用で、長文(cap2500)でも既定1400のまま=長文設定が無効だった。既定値(1400)で呼ばれた時だけ昇格し、genConvLog(500)等の小口呼び出しは据置 */
     if (Array.isArray(this._preCallHooks)) {
       for (let i = 0; i < this._preCallHooks.length; i++) {
         try {
@@ -2464,7 +2464,7 @@ G.init();
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
-  <script src="v292Dfix192-newengine.js?cb=v292Dfix211"></script>
+  <script src="v292Dfix192-newengine.js?cb=v292Dfix212"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
   <script src="v292Dfix197-avatar-key.js?cb=v292Dfix209"></script>
