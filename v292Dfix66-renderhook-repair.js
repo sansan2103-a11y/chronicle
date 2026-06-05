@@ -1605,3 +1605,46 @@
 
   try { console.log(TAG, 'loaded'); } catch(_){}
 })();
+
+/* ============================================================================
+ * v292Dfix220: 会話ログの自動スクロール暴走を根治(ユーザー位置尊重)。
+ *   症状: 上にスクロールしても、カード追加/修復のたびに各所の
+ *         `stream.scrollTop = stream.scrollHeight`(fix66 repair / features.js
+ *         renderAll 等)が最下部へ強制送還する=「スクロールできない」。
+ *   根治: snap箇所を個別に直すのではなく、#dialogue-stream 要素の scrollTop
+ *         セッターを要素インスタンスで上書きし、「底へのスナップ要求は
+ *         ユーザーが既に下端付近(80px以内)にいる時だけ通す」を一点で強制。
+ *         チャットUIの標準作法。ユーザー操作のネイティブスクロールは
+ *         プロパティを経由しないので無傷。新カードはユーザーが底にいれば
+ *         従来通り追従、読み返し中は位置を維持する。
+ *   ロールバック: localStorage v292ScrollGuardOff='1' で無効化。
+ * ========================================================================== */
+(function(){
+  var NEAR = 200; /* 底からこの距離以内なら「追従中」とみなし snap を通す(カード1〜2枚分の余裕) */
+  try { if (localStorage.getItem('v292ScrollGuardOff') === '1') return; } catch(e){}
+  function arm(){
+    try {
+      var s = document.getElementById('dialogue-stream');
+      if (!s || s.__v220) return;
+      var desc = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
+      if (!desc || !desc.set || !desc.get) return;
+      s.__v220 = 1;
+      /* scrollイベントに依存せず、snap要求が来た瞬間の現在位置で判定する(イベントは
+         非表示タブで凍結する等の罠があるため。この方式はどの経路のスクロールでも正確)。 */
+      Object.defineProperty(s, 'scrollTop', {
+        configurable: true,
+        get: function(){ return desc.get.call(s); },
+        set: function(v){
+          try {
+            var max = s.scrollHeight - s.clientHeight;
+            if (v >= max - 2 && max > NEAR && (max - desc.get.call(s)) > NEAR) return; /* 読み返し中(底からNEAR超)の底スナップ要求は無視 */
+          } catch(e){}
+          desc.set.call(s, v);
+        }
+      });
+      try { console.log('[v292Dfix220]', 'scroll guard armed on #dialogue-stream'); } catch(e){}
+    } catch(e){}
+  }
+  arm();
+  try { setInterval(arm, 1500); } catch(e){} /* レイアウト再構築で要素が作り直された時に再装着 */
+})();
