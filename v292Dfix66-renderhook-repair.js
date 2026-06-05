@@ -1620,31 +1620,35 @@
  *   ロールバック: localStorage v292ScrollGuardOff='1' で無効化。
  * ========================================================================== */
 (function(){
-  var NEAR = 200; /* 底からこの距離以内なら「追従中」とみなし snap を通す(カード1〜2枚分の余裕) */
+  /* v292Dfix220b: インスタンス装着(setInterval 1.5s)だと、レイアウト再構築で
+     #dialogue-stream が作り直された直後に無防備窓ができ「たまに」スナップが
+     すり抜ける(実プレイで再現)。Element.prototype の scrollTop セッターを
+     id 条件付きで一点上書きし、装着窓を完全に無くす。さらに要素誕生から3秒は
+     底スナップを許可(再構築/初期表示の直後は底に置くのが正しい挙動のため)。 */
+  var NEAR = 200;   /* 底からこの距離以内なら「追従中」とみなし snap を通す */
+  var BOOT = 3000;  /* 要素誕生からこのms間は snap 無条件許可(初期描画/再構築) */
   try { if (localStorage.getItem('v292ScrollGuardOff') === '1') return; } catch(e){}
-  function arm(){
-    try {
-      var s = document.getElementById('dialogue-stream');
-      if (!s || s.__v220) return;
-      var desc = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
-      if (!desc || !desc.set || !desc.get) return;
-      s.__v220 = 1;
-      /* scrollイベントに依存せず、snap要求が来た瞬間の現在位置で判定する(イベントは
-         非表示タブで凍結する等の罠があるため。この方式はどの経路のスクロールでも正確)。 */
-      Object.defineProperty(s, 'scrollTop', {
-        configurable: true,
-        get: function(){ return desc.get.call(s); },
-        set: function(v){
-          try {
-            var max = s.scrollHeight - s.clientHeight;
-            if (v >= max - 2 && max > NEAR && (max - desc.get.call(s)) > NEAR) return; /* 読み返し中(底からNEAR超)の底スナップ要求は無視 */
-          } catch(e){}
-          desc.set.call(s, v);
-        }
-      });
-      try { console.log('[v292Dfix220]', 'scroll guard armed on #dialogue-stream'); } catch(e){}
-    } catch(e){}
-  }
-  arm();
-  try { setInterval(arm, 1500); } catch(e){} /* レイアウト再構築で要素が作り直された時に再装着 */
+  try {
+    if (window.__v220proto) return; /* 二重定義防止 */
+    var desc = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
+    if (!desc || !desc.set || !desc.get) return;
+    window.__v220proto = 1;
+    Object.defineProperty(Element.prototype, 'scrollTop', {
+      configurable: true,
+      get: function(){ return desc.get.call(this); },
+      set: function(v){
+        try {
+          if (this && this.id === 'dialogue-stream'){
+            if (!this.__v220born) this.__v220born = Date.now();
+            if (Date.now() - this.__v220born > BOOT){
+              var max = this.scrollHeight - this.clientHeight;
+              if (v >= max - 2 && max > NEAR && (max - desc.get.call(this)) > NEAR) return; /* 読み返し中の底スナップ要求は無視 */
+            }
+          }
+        } catch(e){}
+        desc.set.call(this, v);
+      }
+    });
+    try { console.log('[v292Dfix220b]', 'prototype scroll guard active'); } catch(e){}
+  } catch(e){}
 })();
