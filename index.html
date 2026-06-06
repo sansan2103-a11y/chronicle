@@ -2529,6 +2529,10 @@ G.init();
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
   <script src="v292Dfix197-avatar-key.js?cb=v292Dfix209"></script>
+  <!-- v292Dfix221: モデル文脈の直近会話(recentDialogues)を、表示と同じ権威データ
+       _convSays に一本化。fix58の壊れた本文再抽出(speakerに地の文が混入→過去セリフ
+       がモデルへ誤供給され全キャラが同じセリフを言う)を発生源から断つ。 -->
+  <script src="v292Dfix221-recent-dialogues-authoritative.js?cb=v292Dfix221"></script>
 </body>
 </html>
 
