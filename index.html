@@ -2487,7 +2487,8 @@ G.init();
 <script src="v292Dfix135-longmem.js?cb=v292Dfix225"></script>
 <script src="v292Dfix138-continue.js?cb=v292Dfix225"></script>
 <script src="v292Dfix145-charlist.js?cb=v292Dfix145f"></script>
-<script src="v292Dfix52-readability.js?cb=v292Dfix52"></script>
+<!-- v292Dfix226(P1): fix52(可読性v1)はfix53(包括v2)に内包されるため退役。問題があれば下行のコメントを外す
+<script src="v292Dfix52-readability.js?cb=v292Dfix52"></script> -->
 <script src="v292Dfix53-readability-v2.js?cb=v292Dfix53"></script>
 <script src="v292Dfix54-gender-pronoun.js?cb=v292Dfix54"></script>
 <script src="v292Dfix55-gm-mode.js?cb=v292Dfix55c"></script>
@@ -2524,7 +2525,8 @@ G.init();
   <script src="v292Dfix85-reaction-spectrum.js?cb=v292Dfix85"></script>
   <script src="v292Dfix81-strip-incomplete-tags.js?cb=v292Dfix81"></script>
   <script src="v292Dfix86-avatar-eager-blob.js?cb=v292Dfix86"></script>
-  <script src="v292Dfix89-convlog-cleanup.js?cb=v292Dfix89"></script>
+  <!-- v292Dfix226(P1): fix89はヘッダー自称NO-OP STUB=純粋死コードのため退役
+  <script src="v292Dfix89-convlog-cleanup.js?cb=v292Dfix89"></script> -->
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
@@ -2536,6 +2538,9 @@ G.init();
        _convSays に一本化。fix58の壊れた本文再抽出(speakerに地の文が混入→過去セリフ
        がモデルへ誤供給され全キャラが同じセリフを言う)を発生源から断つ。 -->
   <script src="v292Dfix221-recent-dialogues-authoritative.js?cb=v292Dfix221"></script>
+  <!-- v292Dfix226: エンジン一本化(旧sys注入パッチをマーカー保持スタブで退役)。おしん決定2026-06-06。
+       ロールバック=localStorage v292EngineUnifyOff='1' -->
+  <script src="v292Dfix226-engine-unify.js?cb=v292Dfix226"></script>
 </body>
 </html>
 
