@@ -1607,48 +1607,67 @@
 })();
 
 /* ============================================================================
- * v292Dfix220: 会話ログの自動スクロール暴走を根治(ユーザー位置尊重)。
- *   症状: 上にスクロールしても、カード追加/修復のたびに各所の
- *         `stream.scrollTop = stream.scrollHeight`(fix66 repair / features.js
- *         renderAll 等)が最下部へ強制送還する=「スクロールできない」。
- *   根治: snap箇所を個別に直すのではなく、#dialogue-stream 要素の scrollTop
- *         セッターを要素インスタンスで上書きし、「底へのスナップ要求は
- *         ユーザーが既に下端付近(80px以内)にいる時だけ通す」を一点で強制。
- *         チャットUIの標準作法。ユーザー操作のネイティブスクロールは
- *         プロパティを経由しないので無傷。新カードはユーザーが底にいれば
- *         従来通り追従、読み返し中は位置を維持する。
- *   ロールバック: localStorage v292ScrollGuardOff='1' で無効化。
+ * v292Dfix222: 会話ログ自動スクロールを「単一の意図フラグ」で根治(fix220/220b置換)。
+ *
+ * 経緯: fix220(インスタンス装着)→fix220b(プロトタイプ装着+誕生3秒許可)と
+ *   重ねたが、会話ログは頻繁に再構築され、そのたびBOOT許可窓が開いてsnapが
+ *   すり抜けた=ヒューリスティックの積み重ね(対症)。
+ *
+ * 根底設計(チャットUIの標準作法・要素再構築に不依存):
+ *   ・唯一の真実 = window.__convPinned「ユーザーは末尾に張り付いているか」。
+ *     既定 true(=新着に追従)。これを**本物のユーザー操作でだけ**更新する。
+ *   ・全ての自動 snap(scrollTop=scrollHeight 等)は __convPinned を見るだけ。
+ *     張り付いていれば追従、読み返し中(false)なら一切動かさない。
+ *   ・ユーザー操作の検知 = document capture の 'scroll'。プログラム的 set の
+ *     最中(__convProgUntil の時間窓)に来た scroll は無視し、それ以外=ユーザー
+ *     (ホイール/タッチ/スクロールバー/キー全部)として __convPinned を再判定。
+ *   ・チョークポイント = Element.prototype.scrollTop セッター一点(#dialogue-stream
+ *     だけ介入)。底へのsnap要求は __convPinned が true の時だけ通す。
+ *   要素が作り直されても window フラグと document リスナーは生き続けるので
+ *   無防備窓が原理的に存在しない(BOOT窓・born時刻ヒューリスティック廃止)。
+ *
+ * ロールバック: localStorage v292ScrollGuardOff='1' で無効化。
  * ========================================================================== */
 (function(){
-  /* v292Dfix220b: インスタンス装着(setInterval 1.5s)だと、レイアウト再構築で
-     #dialogue-stream が作り直された直後に無防備窓ができ「たまに」スナップが
-     すり抜ける(実プレイで再現)。Element.prototype の scrollTop セッターを
-     id 条件付きで一点上書きし、装着窓を完全に無くす。さらに要素誕生から3秒は
-     底スナップを許可(再構築/初期表示の直後は底に置くのが正しい挙動のため)。 */
-  var NEAR = 200;   /* 底からこの距離以内なら「追従中」とみなし snap を通す */
-  var BOOT = 3000;  /* 要素誕生からこのms間は snap 無条件許可(初期描画/再構築) */
+  var NEAR = 60;           /* 末尾からこの距離以内なら「張り付き中」 */
+  var PROG_WINDOW = 180;   /* プログラム的setの直後この msは scroll を自前扱い */
   try { if (localStorage.getItem('v292ScrollGuardOff') === '1') return; } catch(e){}
   try {
-    if (window.__v220proto) return; /* 二重定義防止 */
+    if (window.__v222) return;
     var desc = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
     if (!desc || !desc.set || !desc.get) return;
-    window.__v220proto = 1;
+    window.__v222 = 1;
+    if (window.__convPinned == null) window.__convPinned = true; /* 既定=追従 */
+    window.__convProgUntil = 0;
+
+    function isStream(el){ return el && el.id === 'dialogue-stream'; }
+    function atBottom(el){ try { return (el.scrollHeight - el.clientHeight - desc.get.call(el)) <= NEAR; } catch(e){ return true; } }
+
+    /* ユーザー操作の検知: capture で全 scroll を拾い、プログラム窓外なら意図更新。
+       wheel/touch/scrollbar/キー すべてがネイティブ scroll を発火するので一網打尽。 */
+    document.addEventListener('scroll', function(e){
+      try {
+        if (!isStream(e.target)) return;
+        if (performance.now() < window.__convProgUntil) return; /* 自前のsnap由来は無視 */
+        window.__convPinned = atBottom(e.target);
+      } catch(_){}
+    }, true);
+
     Object.defineProperty(Element.prototype, 'scrollTop', {
       configurable: true,
       get: function(){ return desc.get.call(this); },
       set: function(v){
         try {
-          if (this && this.id === 'dialogue-stream'){
-            if (!this.__v220born) this.__v220born = Date.now();
-            if (Date.now() - this.__v220born > BOOT){
-              var max = this.scrollHeight - this.clientHeight;
-              if (v >= max - 2 && max > NEAR && (max - desc.get.call(this)) > NEAR) return; /* 読み返し中の底スナップ要求は無視 */
-            }
+          if (isStream(this)){
+            var max = this.scrollHeight - this.clientHeight;
+            var isBottomSnap = (v >= max - 2);
+            if (isBottomSnap && !window.__convPinned) return; /* 読み返し中は底snap拒否 */
+            window.__convProgUntil = performance.now() + PROG_WINDOW; /* このsetが生むscrollは自前扱い */
           }
         } catch(e){}
         desc.set.call(this, v);
       }
     });
-    try { console.log('[v292Dfix220b]', 'prototype scroll guard active'); } catch(e){}
+    try { console.log('[v292Dfix222]', 'pinned-intent scroll guard active'); } catch(e){}
   } catch(e){}
 })();
