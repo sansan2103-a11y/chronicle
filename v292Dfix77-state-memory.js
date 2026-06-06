@@ -24,6 +24,17 @@
 
   // ---- store（キャラ名 -> {karada,kokoro,honno,turn}）localStorage 永続 ----
   var store = (function(){ try { return JSON.parse(localStorage.getItem(LSKEY)||'{}') || {}; } catch(e){ return {}; } })();
+  // v292Dfix223f: 既存ストアの値頭タグ断片(「<関係:」等)を一度だけ浄化(過去ターンの捕捉残骸)
+  (function sanitize223f(){
+    try{
+      var changed=false;
+      var clean=function(v){ if(v==null) return v; var x=String(v).replace(/^[\s　]*<\/?[^>\s:：]{1,12}[:：]?\s*/,'').replace(/[<>]/g,'').replace(/\s+/g,' ').trim(); if(x!==v) changed=true; return x; };
+      Object.keys(store).forEach(function(n){ var s=store[n]; if(!s||typeof s!=='object') return;
+        ['karada','kokoro','honno','mokuteki','kizu','kankei','mikaiketsu'].forEach(function(k){ if(s[k]!=null) s[k]=clean(s[k]); });
+      });
+      if(changed){ localStorage.setItem(LSKEY, JSON.stringify(store)); }
+    }catch(e){}
+  })();
   function persist(){ try { localStorage.setItem(LSKEY, JSON.stringify(store)); } catch(e){} }
   window.__v292Dfix77Store = store;
 

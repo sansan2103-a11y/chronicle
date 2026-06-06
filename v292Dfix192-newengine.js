@@ -70,6 +70,19 @@
 
   // ライブのキャラ状態を fix77 ストアから構造化データとして注入。
   // （旧 sys の【各キャラの現在の状態】＋fix190 永続フィールドの置き換え）
+  // v292Dfix223f: 状態値のサニタイズ。fix190等の捕捉で値頭に「<関係:」「<state…」等の
+  //   タグ断片が混入することがある(実測: store.kank="<関係: ...")。注入時に除去して
+  //   プロンプト汚染と話者/状態の誤読を防ぐ。表示・保存データには触れない読み取り側の浄化。
+  function clean223(v){
+    try{
+      v = String(v==null?'':v);
+      v = v.replace(/^[\s　]*<\/?[^>\s:：]{1,12}[:：]?\s*/,''); /* 先頭の<関係: / <state 等の断片 */
+      v = v.replace(/[<>]/g,'');                                 /* 残った山括弧 */
+      v = v.replace(/\s+/g,' ').trim();
+      return v;
+    }catch(e){ return String(v==null?'':v); }
+  }
+
   function stateBlock(){
     try{
       var store = window.__v292Dfix77Store; if(!store) return '';
@@ -77,9 +90,9 @@
       Object.keys(store).forEach(function(n){
         var s=store[n]||{}; if(!s || typeof s!=='object') return;
         var parts=[];
-        var ka=s.karada||s['からだ'], ko=s.kokoro||s['こころ'], ho=s.honno||s['本能'];
-        var ki=s.kizu||s['傷'], kn=s.kankei||s['関係'], mi=s.mikaiketsu||s['未解決'];
-        var mo=s.mokuteki||s['目的']; /* v292Dfix223b */
+        var ka=clean223(s.karada||s['からだ']), ko=clean223(s.kokoro||s['こころ']), ho=clean223(s.honno||s['本能']);
+        var ki=clean223(s.kizu||s['傷']), kn=clean223(s.kankei||s['関係']), mi=clean223(s.mikaiketsu||s['未解決']);
+        var mo=clean223(s.mokuteki||s['目的']); /* v292Dfix223b */
         if(ka) parts.push('からだ:'+ka);
         if(ko) parts.push('こころ:'+ko);
         if(ho) parts.push('本能:'+ho);
@@ -109,10 +122,10 @@
       Object.keys(store).forEach(function(n){
         var s=store[n]||{};
         if (cur && s.turn!=null && (cur - s.turn) > 3) return; /* 在場=直近に状態が動いたキャラ */
-        var mi=s.mikaiketsu||s['未解決'], ki=s.kizu||s['傷'], kn=s.kankei||s['関係'];
-        if (mi) cands.push({n:n, w:3, t:n+'の未解決「'+String(mi).slice(0,40)+'」が、今ターンの言動の下に流れている'});
-        if (ki && /未治療|重|中/.test(String(ki))) cands.push({n:n, w:2, t:n+'の傷('+String(ki).slice(0,30)+')が行動を縛り、周囲の目と空気を変える'});
-        if (kn) cands.push({n:n, w:1, t:n+'の関係('+String(kn).slice(0,40)+')が距離感・口調に出る'});
+        var mi=clean223(s.mikaiketsu||s['未解決']), ki=clean223(s.kizu||s['傷']), kn=clean223(s.kankei||s['関係']);
+        if (mi) cands.push({n:n, w:3, t:n+'の未解決「'+mi.slice(0,40)+'」が、今ターンの言動の下に流れている'});
+        if (ki && /未治療|重|中/.test(ki)) cands.push({n:n, w:2, t:n+'の傷('+ki.slice(0,30)+')が行動を縛り、周囲の目と空気を変える'});
+        if (kn) cands.push({n:n, w:1, t:n+'の関係('+kn.slice(0,40)+')が距離感・口調に出る'});
       });
       if(!cands.length) return '';
       cands.sort(function(a,b){ return b.w-a.w; });
