@@ -28,10 +28,10 @@
   var ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 
   function getModel(){
-    try { var c = JSON.parse(localStorage.getItem('chr6') || '{}').cfg || {}; return c.orModel || 'nousresearch/hermes-4-405b'; } catch(e){ return 'nousresearch/hermes-4-405b'; }
+    try { var c = JSON.parse(localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6') || '{}').cfg || {}; return c.orModel || 'nousresearch/hermes-4-405b'; } catch(e){ return 'nousresearch/hermes-4-405b'; }
   }
   function getKey(){
-    try { var c = JSON.parse(localStorage.getItem('chr6') || '{}').cfg || {}; return c.orKey || ''; } catch(e){ return ''; }
+    try { var c = JSON.parse(localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6') || '{}').cfg || {}; return c.orKey || ''; } catch(e){ return ''; }
   }
   function getState(){
     try { if (typeof S !== 'undefined' && S) return S; } catch(e){}

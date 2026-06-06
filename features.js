@@ -1999,7 +1999,7 @@
     function getState(){
       try {
         if (typeof S !== 'undefined' && S) return S;
-        return JSON.parse(localStorage.getItem('chr6') || '{}');
+        return JSON.parse(localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6') || '{}');
       } catch(e){ return {}; }
     }
 
@@ -2376,8 +2376,8 @@
     var DESCS_F = ['18歳。意志が強い記録官見習い。','16歳。他人の感情に敏感。','20歳。踊り手。','17歳。天才的だが壊れやすい魔法使い。','少女のような外見の珍財ハンター。'];
     var DESCS_M = ['老齢の元兵士。皮肉屋。','15歳の魔法使い見習い。','真面目な役人。','無口だが仲間思いの元傭兵。'];
     function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
-    function getCast(){ try { return JSON.parse(localStorage.getItem('chr6') || '{}'); } catch(e){ return {}; } }
-    function setCast(s){ try { localStorage.setItem('chr6', JSON.stringify(s)); } catch(e){} }
+    function getCast(){ try { return JSON.parse(localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6') || '{}'); } catch(e){ return {}; } }
+    function setCast(s){ try { localStorage.setItem(window.__chr6Key ? window.__chr6Key() : 'chr6', JSON.stringify(s)); } catch(e){} }
 
     var __busy = false;
     function injectOnce(){
@@ -3835,7 +3835,7 @@
     try {
       if (typeof S !== 'undefined' && S) return S;
       if (typeof window !== 'undefined' && window.S) return window.S;
-      return JSON.parse(localStorage.getItem('chr6') || '{}');
+      return JSON.parse(localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6') || '{}');
     } catch(e){ return {}; }
   }
 
@@ -10726,7 +10726,7 @@
   function key(t){ var n = norm(t); if (n) return n; return '§sym§' + String(t == null ? '' : t).replace(/\s+/g, ''); }
   function getTurns(){
     try { if (typeof S !== 'undefined' && S && S.turns) return S.turns; } catch(e){}
-    try { var r = localStorage.getItem('chr6'); if (r){ var p = JSON.parse(r); if (p && p.turns) return p.turns; } } catch(e){}
+    try { var r = localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6'); if (r){ var p = JSON.parse(r); if (p && p.turns) return p.turns; } } catch(e){}
     return [];
   }
   function extractOrdered(narr){

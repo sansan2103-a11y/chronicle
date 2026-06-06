@@ -380,6 +380,9 @@ const SS = {
   del(k)    { try { localStorage.removeItem(k); } catch {} }
 };
 const KEY = 'chr6';
+/* v292Dfix225: スロット対応の共有キー解決。chr6直アクセス散在(fix205の残債)の根治用。
+   全パッチのLSフォールバックはこれを経由し、アクティブスロット使用時に旧デフォルトストアを読まない。 */
+window.__chr6Key = function(){ try { var a = JSON.parse(localStorage.getItem('chr6_active_slot') || 'null'); if (a && a !== 'default') return 'chr6_slot_' + a; } catch(e){} return 'chr6'; };
 
 // ─────────────────────────────────────────────────────────────
 // State
@@ -2057,7 +2060,7 @@ G.init();
   /* ─── 2. PROVIDER CONFIG HYGIENE (v18+v72 essence) ─────────────── */
   function fixProviderCfg(){
     try {
-      var raw = localStorage.getItem('chr6');
+      var raw = localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6');
       if (!raw) return;
       var s = JSON.parse(raw);
       if (!s.cfg) return;
@@ -2091,7 +2094,7 @@ G.init();
         changed = true;
       }
       if (changed){
-        localStorage.setItem('chr6', JSON.stringify(s));
+        localStorage.setItem(window.__chr6Key ? window.__chr6Key() : 'chr6', JSON.stringify(s));
         console.log(TAG, 'cfg cleaned');
       }
     } catch(e){}
@@ -2182,7 +2185,7 @@ G.init();
   /* ─── 5. HERO/NPC GENDER + NAME FIXES (v70+v73+v76 essence) ───── */
   function fixGenderAndNames(){
     try {
-      var raw = localStorage.getItem('chr6');
+      var raw = localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6');
       if (!raw) return;
       var s = JSON.parse(raw);
       var changed = false;
@@ -2204,14 +2207,14 @@ G.init();
           }
         }
       });
-      if (changed) localStorage.setItem('chr6', JSON.stringify(s));
+      if (changed) localStorage.setItem(window.__chr6Key ? window.__chr6Key() : 'chr6', JSON.stringify(s));
     } catch(e){}
   }
 
   /* ─── 6. UI-TEXT DIALOGUE PURGER (v77 essence) ─────────────────── */
   function purgeBadDialogues(){
     try {
-      var raw = localStorage.getItem('chr6');
+      var raw = localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6');
       if (!raw) return;
       var s = JSON.parse(raw);
       var changed = false;
@@ -2226,7 +2229,7 @@ G.init();
         }
       });
       if (changed){
-        localStorage.setItem('chr6', JSON.stringify(s));
+        localStorage.setItem(window.__chr6Key ? window.__chr6Key() : 'chr6', JSON.stringify(s));
         if (typeof UI === 'object' && typeof UI.renderAll === 'function'){
           try { UI.renderAll(); } catch(e){}
         }
@@ -2253,27 +2256,27 @@ G.init();
 
   function generateHeroAvatar(){
     try {
-      var raw = localStorage.getItem('chr6');
+      var raw = localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6');
       if (!raw) return;
       var s = JSON.parse(raw);
       var hero = (s.cast||{}).hero;
       if (!hero || !hero.name){ alert('主人公の名前を先に設定してください'); return; }
       var url = avatarUrl(hero.name, hero.desc||'', hero.gender||'');
       hero.avatar = url;
-      localStorage.setItem('chr6', JSON.stringify(s));
+      localStorage.setItem(window.__chr6Key ? window.__chr6Key() : 'chr6', JSON.stringify(s));
       buildHeroWidget(); /* re-render */
     } catch(e){ console.warn(TAG, 'hero avatar', e); }
   }
 
   function generateNpcAvatar(idx){
     try {
-      var raw = localStorage.getItem('chr6');
+      var raw = localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6');
       if (!raw) return;
       var s = JSON.parse(raw);
       var npc = (s.cast||{}).npcs && s.cast.npcs[idx];
       if (!npc || !npc.name){ alert('NPCの名前を先に設定してください'); return; }
       npc.avatar = avatarUrl(npc.name, npc.desc||'', npc.gender||'');
-      localStorage.setItem('chr6', JSON.stringify(s));
+      localStorage.setItem(window.__chr6Key ? window.__chr6Key() : 'chr6', JSON.stringify(s));
       buildAllNpcAvatars();
     } catch(e){ console.warn(TAG, 'npc avatar', e); }
   }
@@ -2286,7 +2289,7 @@ G.init();
     });
     if (!heroSec) return;
     var hero = (function(){
-      try { return (JSON.parse(localStorage.getItem('chr6')||'{}').cast||{}).hero || {}; }
+      try { return (JSON.parse(localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6')||'{}').cast||{}).hero || {}; }
       catch(e){ return {}; }
     })();
     var name = hero.name || '主人公';
@@ -2314,7 +2317,7 @@ G.init();
   function buildAllNpcAvatars(){
     document.querySelectorAll('.npc-card').forEach(function(card, idx){
       var npc = (function(){
-        try { return ((JSON.parse(localStorage.getItem('chr6')||'{}').cast||{}).npcs||[])[idx] || {}; }
+        try { return ((JSON.parse(localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6')||'{}').cast||{}).npcs||[])[idx] || {}; }
         catch(e){ return {}; }
       })();
       if (!npc.name) return;
@@ -2480,9 +2483,9 @@ G.init();
 })();
 </script>
 <!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
-<script src="features.js?cb=v292Dfix205c"></script>
-<script src="v292Dfix135-longmem.js?cb=v292Dfix135g"></script>
-<script src="v292Dfix138-continue.js?cb=v292Dfix142"></script>
+<script src="features.js?cb=v292Dfix225"></script>
+<script src="v292Dfix135-longmem.js?cb=v292Dfix225"></script>
+<script src="v292Dfix138-continue.js?cb=v292Dfix225"></script>
 <script src="v292Dfix145-charlist.js?cb=v292Dfix145f"></script>
 <script src="v292Dfix52-readability.js?cb=v292Dfix52"></script>
 <script src="v292Dfix53-readability-v2.js?cb=v292Dfix53"></script>
@@ -2499,7 +2502,7 @@ G.init();
   <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script>
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=v292Dfix74"></script>
-  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix222b"></script>
+  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix225"></script>
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
     <!-- v292Dfix189c: fix70(dialogue-order, 本文ベースの並べ替え)を無効化。fix70bが

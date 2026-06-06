@@ -25,8 +25,8 @@
   var ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
   var CONTINUE_TRIGGER = /続きを(?:自然に)?進めて|^続きを書/;
 
-  function getKey(){ try { var c = JSON.parse(localStorage.getItem('chr6') || '{}').cfg || {}; return c.orKey || ''; } catch(e){ return ''; } }
-  function getModel(){ try { var c = JSON.parse(localStorage.getItem('chr6') || '{}').cfg || {}; return c.orModel || 'nousresearch/hermes-4-405b'; } catch(e){ return 'nousresearch/hermes-4-405b'; } }
+  function getKey(){ try { var c = JSON.parse(localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6') || '{}').cfg || {}; return c.orKey || ''; } catch(e){ return ''; } }
+  function getModel(){ try { var c = JSON.parse(localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6') || '{}').cfg || {}; return c.orModel || 'nousresearch/hermes-4-405b'; } catch(e){ return 'nousresearch/hermes-4-405b'; } }
   function getState(){ try { if (typeof S !== 'undefined' && S) return S; } catch(e){} return window.S || null; }
 
   // ---------- LLM call (XHR, async) ----------

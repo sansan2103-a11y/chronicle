@@ -766,7 +766,7 @@
   // right (天狗) and honestly returns ??? only when truly ambiguous. Extraction input is
   // one small turn, so 405B here is still cheap (~0.2 yen/turn).
   function bModel(){
-    try { var c = JSON.parse(localStorage.getItem('chr6') || '{}').cfg || {}; if (c.orModel) return c.orModel; } catch(e){}
+    try { var c = JSON.parse(localStorage.getItem(activeStoreKey()) || '{}').cfg || {}; if (c.orModel) return c.orModel; } catch(e){}
     return 'nousresearch/hermes-4-405b';
   }
   var B_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
@@ -785,7 +785,7 @@
   function bEnabled(){
     try {
       if (localStorage.getItem(B_OFF_KEY)) return false;
-      var c = (JSON.parse(localStorage.getItem('chr6') || '{}').cfg) || {};
+      var c = (JSON.parse(localStorage.getItem(activeStoreKey()) || '{}').cfg) || {};
       return c.provider === 'openrouter' && !!c.orKey;
     } catch(e){ return false; }
   }
@@ -820,7 +820,7 @@
   }
   function bCall(narr, names, cb){
     var key = '';
-    try { var c = JSON.parse(localStorage.getItem('chr6') || '{}'); key = (c.cfg && c.cfg.orKey) || ''; } catch(e){}
+    try { var c = JSON.parse(localStorage.getItem(activeStoreKey()) || '{}'); key = (c.cfg && c.cfg.orKey) || ''; } catch(e){}
     if (!key){ cb(null); return; }
     var body;
     try { body = JSON.stringify({ model: bModel(), temperature: 0, max_tokens: 900,
