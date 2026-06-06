@@ -1618,19 +1618,25 @@
  *     既定 true(=新着に追従)。これを**本物のユーザー操作でだけ**更新する。
  *   ・全ての自動 snap(scrollTop=scrollHeight 等)は __convPinned を見るだけ。
  *     張り付いていれば追従、読み返し中(false)なら一切動かさない。
- *   ・ユーザー操作の検知 = document capture の 'scroll'。プログラム的 set の
- *     最中(__convProgUntil の時間窓)に来た scroll は無視し、それ以外=ユーザー
- *     (ホイール/タッチ/スクロールバー/キー全部)として __convPinned を再判定。
  *   ・チョークポイント = Element.prototype.scrollTop セッター一点(#dialogue-stream
  *     だけ介入)。底へのsnap要求は __convPinned が true の時だけ通す。
  *   要素が作り直されても window フラグと document リスナーは生き続けるので
  *   無防備窓が原理的に存在しない(BOOT窓・born時刻ヒューリスティック廃止)。
  *
+ * v292Dfix222b(根本修正): 意図検知を 'scroll' イベントから **wheel/touch/キー**
+ *   へ移す。実測で #dialogue-stream の 'scroll' は再構築churn/環境により取りこぼし、
+ *   上スクロールしても __convPinned が false にならず snap が戻していた。wheel/
+ *   touchmove/キーは「ユーザー操作でしか発火しない」ので、自前snapと原理的に
+ *   混ざらず PROG_WINDOW のような時間窓ヒューリスティックも不要。
+ *   ・上方向(wheel deltaY<0 / PageUp/Home/ArrowUp)→ 即 pinned=false(位置読取不要=堅牢)
+ *   ・下方向操作 / touchmove → 次tickで現在位置を測り atBottom なら pinned=true
+ *   pinned は「ユーザーが自分で末尾へ戻る」まで sticky に false を保つ(再構築churnで
+ *   勝手に true へ戻らない)。
+ *
  * ロールバック: localStorage v292ScrollGuardOff='1' で無効化。
  * ========================================================================== */
 (function(){
   var NEAR = 60;           /* 末尾からこの距離以内なら「張り付き中」 */
-  var PROG_WINDOW = 180;   /* プログラム的setの直後この msは scroll を自前扱い */
   try { if (localStorage.getItem('v292ScrollGuardOff') === '1') return; } catch(e){}
   try {
     if (window.__v222) return;
@@ -1638,19 +1644,35 @@
     if (!desc || !desc.set || !desc.get) return;
     window.__v222 = 1;
     if (window.__convPinned == null) window.__convPinned = true; /* 既定=追従 */
-    window.__convProgUntil = 0;
 
-    function isStream(el){ return el && el.id === 'dialogue-stream'; }
+    function streamOf(node){ try { for (var el = node; el; el = el.parentElement){ if (el.id === 'dialogue-stream') return el; } } catch(e){} return null; }
     function atBottom(el){ try { return (el.scrollHeight - el.clientHeight - desc.get.call(el)) <= NEAR; } catch(e){ return true; } }
+    function recheck(el){ try { window.__convPinned = atBottom(el); } catch(e){} }
 
-    /* ユーザー操作の検知: capture で全 scroll を拾い、プログラム窓外なら意図更新。
-       wheel/touch/scrollbar/キー すべてがネイティブ scroll を発火するので一網打尽。 */
+    /* ユーザー操作の検知(自動スクロールでは絶対に発火しない信号だけを使う) */
+    document.addEventListener('wheel', function(e){
+      var s = streamOf(e.target); if (!s) return;
+      if (e.deltaY < 0){ window.__convPinned = false; }      /* 上へ=読み返し開始(位置読取不要で確実) */
+      else { setTimeout(function(){ recheck(s); }, 0); }      /* 下へ=移動後に末尾到達か再判定 */
+    }, true);
+
+    document.addEventListener('touchmove', function(e){
+      var s = streamOf(e.target); if (!s) return;
+      setTimeout(function(){ recheck(s); }, 0);
+    }, true);
+
+    document.addEventListener('keydown', function(e){
+      var s = streamOf(e.target); if (!s) return;
+      if (e.key === 'PageUp' || e.key === 'Home' || e.key === 'ArrowUp'){ window.__convPinned = false; }
+      else if (e.key === 'PageDown' || e.key === 'End' || e.key === 'ArrowDown'){ setTimeout(function(){ recheck(s); }, 0); }
+    }, true);
+
+    /* scrollbar ドラッグ等の保険(wheel/touch/キー以外の手段)。'scroll' は取りこぼす
+       ことがあるので主役にはしないが、来たら pinned を false 方向にだけ更新する
+       (末尾から離れていれば追従解除。勝手に true へ戻すのは上の明示操作だけ)。 */
     document.addEventListener('scroll', function(e){
-      try {
-        if (!isStream(e.target)) return;
-        if (performance.now() < window.__convProgUntil) return; /* 自前のsnap由来は無視 */
-        window.__convPinned = atBottom(e.target);
-      } catch(_){}
+      var s = streamOf(e.target); if (!s) return;
+      try { if (!atBottom(s)) window.__convPinned = false; } catch(_){}
     }, true);
 
     Object.defineProperty(Element.prototype, 'scrollTop', {
@@ -1658,16 +1680,14 @@
       get: function(){ return desc.get.call(this); },
       set: function(v){
         try {
-          if (isStream(this)){
+          if (this && this.id === 'dialogue-stream'){
             var max = this.scrollHeight - this.clientHeight;
-            var isBottomSnap = (v >= max - 2);
-            if (isBottomSnap && !window.__convPinned) return; /* 読み返し中は底snap拒否 */
-            window.__convProgUntil = performance.now() + PROG_WINDOW; /* このsetが生むscrollは自前扱い */
+            if (v >= max - 2 && !window.__convPinned) return; /* 読み返し中は底snap拒否 */
           }
         } catch(e){}
         desc.set.call(this, v);
       }
     });
-    try { console.log('[v292Dfix222]', 'pinned-intent scroll guard active'); } catch(e){}
+    try { console.log('[v292Dfix222b]', 'input-driven pinned scroll guard active'); } catch(e){}
   } catch(e){}
 })();
