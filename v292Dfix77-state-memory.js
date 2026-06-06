@@ -54,6 +54,7 @@
           if (ka) cur.karada = ka;
           if (ko) cur.kokoro = ko;
           if (ho) cur.honno = ho;
+          var mo = attr(tag,'目的'); if (mo) cur.mokuteki = mo; /* v292Dfix223b: いまの目的(瞬間・毎ターン更新可) */
           cur.turn = (function(){ try{ var S=(0,eval)('typeof S!=="undefined"?S:null'); return (S&&S.turns)?S.turns.length:0; }catch(e){ return 0; } })();
           store[who] = cur;
           found++;

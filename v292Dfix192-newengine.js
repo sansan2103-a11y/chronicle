@@ -79,9 +79,11 @@
         var parts=[];
         var ka=s.karada||s['からだ'], ko=s.kokoro||s['こころ'], ho=s.honno||s['本能'];
         var ki=s.kizu||s['傷'], kn=s.kankei||s['関係'], mi=s.mikaiketsu||s['未解決'];
+        var mo=s.mokuteki||s['目的']; /* v292Dfix223b */
         if(ka) parts.push('からだ:'+ka);
         if(ko) parts.push('こころ:'+ko);
         if(ho) parts.push('本能:'+ho);
+        if(mo) parts.push('目的:'+mo);
         if(ki) parts.push('傷:'+ki);
         if(kn) parts.push('関係:'+kn);
         if(mi) parts.push('未解決:'+mi);
@@ -89,9 +91,80 @@
       });
       if(!lines.length) return '';
       return '【各キャラの現在の状態（引き継ぐ。傷/関係/未解決は治療・和解まで保持し勝手に消さない）】\n'+lines.join('\n')
-        +'\n・関係・未解決は各キャラが自分から動き、主人公や他キャラに話しかける動機になる。傷・恐怖・対立・依頼の場面では、入力を待たずNPCの側から言葉を発してよい。';
+        +'\n・関係・未解決は各キャラが自分から動き、主人公や他キャラに話しかける動機になる。傷・恐怖・対立・依頼の場面では、入力を待たずNPCの側から言葉を発してよい。'
+        +'\n・各キャラは自分の「目的」に向かって、入力を待たず自分から動いてよい（目的が衝突するキャラ同士は自然に対立する）。'; /* v292Dfix223b */
     }catch(e){ return ''; }
   }
+
+  // v292Dfix223a: 演出家レイヤー「今ターンの種」。状態ストアから最も張力のある1〜2個を
+  //   決定的に選び、「一覧」でなく「焦点」として注入する。ルールを足さずデータを選別する設計。
+  //   選別: 直近3ターン以内に動いたキャラ(=在場)の 未解決(3点) > 未治療/中重の傷(2点) > 関係(1点)。
+  //   同点はターン数でローテし固着を防ぐ。OFF: localStorage v292SeedOff='1'
+  function seedBlock(){
+    try{
+      if (localStorage.getItem('v292SeedOff')==='1') return '';
+      var store = window.__v292Dfix77Store; if(!store) return '';
+      var S=getS(); var cur=(S&&S.turns)?S.turns.length:0;
+      var cands=[];
+      Object.keys(store).forEach(function(n){
+        var s=store[n]||{};
+        if (cur && s.turn!=null && (cur - s.turn) > 3) return; /* 在場=直近に状態が動いたキャラ */
+        var mi=s.mikaiketsu||s['未解決'], ki=s.kizu||s['傷'], kn=s.kankei||s['関係'];
+        if (mi) cands.push({n:n, w:3, t:n+'の未解決「'+String(mi).slice(0,40)+'」が、今ターンの言動の下に流れている'});
+        if (ki && /未治療|重|中/.test(String(ki))) cands.push({n:n, w:2, t:n+'の傷('+String(ki).slice(0,30)+')が行動を縛り、周囲の目と空気を変える'});
+        if (kn) cands.push({n:n, w:1, t:n+'の関係('+String(kn).slice(0,40)+')が距離感・口調に出る'});
+      });
+      if(!cands.length) return '';
+      cands.sort(function(a,b){ return b.w-a.w; });
+      var top=cands.filter(function(c){ return c.w===cands[0].w; });
+      var first=top[cur % top.length];
+      var rest=cands.filter(function(c){ return c!==first && c.n!==first.n; });
+      var second=rest.length?rest[cur % rest.length]:null;
+      var lines=['・'+first.t]; if(second) lines.push('・'+second.t);
+      return '【この場面の種（説明はせず、言動と展開に滲ませる）】\n'+lines.join('\n');
+    }catch(e){ return ''; }
+  }
+
+  // v292Dfix223c: 展開スパイス(停滞ブレーカー)。「続き」系入力が2連続した時だけ、
+  //   複雑化の種を1個だけ注入して物語を横に動かす。クールダウン4ターン・決定的選択。
+  //   OFF: localStorage v292SpiceOff='1'
+  var SPICE223 = [
+    '遠くで何かが倒れる音がする——偶然ではない',
+    '真新しい痕跡（足跡・体温・落とし物）が見つかる',
+    '第三者の気配がこの場面に近づいてくる',
+    'その場の誰かが、隠していたことを口にしかける',
+    '照明・足場・出口など、環境が一段悪化する',
+    'どこかで「時間切れ」が近いことを示す変化が起きる',
+    '見過ごせない発見物（鍵・手記・写真・道具）が目に入る',
+    '仲間の一人の様子が、それまでと明らかに違う'
+  ];
+  function spiceLine(isCont){
+    try{
+      if (localStorage.getItem('v292SpiceOff')==='1') return '';
+      if (!isCont) return '';
+      var S=getS(); if(!S||!Array.isArray(S.turns)||!S.turns.length) return '';
+      var pt=String((S.turns[S.turns.length-1]||{}).playerText||'');
+      if (!(/続きを(?:自然に)?進めて/.test(pt) || /^続きを書/.test(pt))) return ''; /* 「続き」2連続時のみ */
+      var cur=S.turns.length;
+      if (S.cfg && S.cfg._spiceT!=null && (cur - S.cfg._spiceT) < 4) return ''; /* クールダウン */
+      if (S.cfg) S.cfg._spiceT = cur;
+      var pick=SPICE223[cur % SPICE223.length];
+      return '【展開の種（この世界観に合う形で自然に織り込む。唐突なご都合にしない）】'+pick;
+    }catch(e){ return ''; }
+  }
+
+  // v292Dfix223d: 自発の掛け合いミニ見本(トーン共通)。「NPC同士が衝突し、入力を待たず
+  //   主人公へ詰め寄る」を見本で示す(見本ドリブン=ルール積み増しをしない)。
+  //   OFF: localStorage v292MiniExOff='1'
+  var MINI223 = [
+    '',
+    '─ミニ見本（自発の掛け合い：入力を待たずキャラ同士が動く）─',
+    '<say who="相手A">手当てが先よ。歩かせる気？</say>',
+    '<say who="相手B">ここに居る方が危ない。……ねえ、あんたが決めて</say>',
+    '二人の視線が主人公を挟む。相手Aは布を裂く手を止めない。',
+    '<react who="相手A" 反応="返事を待たず止血を続ける" 声="<say who=\'相手A\'>決まるまで、手は止めない</say>"/>'
+  ].join('\n');
+  function miniEx(){ try{ if(localStorage.getItem('v292MiniExOff')==='1') return ''; }catch(e){} return '\n'+MINI223; }
 
   // register 見本（静）。将来 toneLevel で差し替え可能にするためマップ化。
   var EXAMPLES = {
@@ -207,6 +280,8 @@
       ? '（プレイヤーは「続きを書く」を押した。あなたが物語を一歩進める番。受け身で待たず、上の進行レベルに従って能動的に動かす。グロや痛みの強度を上げるだけ＝"縦"は前進ではない。新しい要素＝"横"で世界を広げる。）'
       : '';
     var st = stateBlock();
+    var seed = seedBlock();          /* v292Dfix223a */
+    var spice = spiceLine(isCont);   /* v292Dfix223c */
 
     var blocks = [
       '＜あなたの役割＞',
@@ -228,12 +303,14 @@
           : '本文は地の文と「」セリフで、5〜10文程度を目安に書き切る。') + contLine
     ]);
     if (st){ blocks.push(''); blocks.push(st); }
+    if (seed){ blocks.push(''); blocks.push(seed); }     /* v292Dfix223a */
+    if (spice){ blocks.push(''); blocks.push(spice); }   /* v292Dfix223c */
     blocks = blocks.concat([
       '',
       '【出力の形式（これだけは形式として守る）】',
       '本文を書き切ったあと、登場した各キャラについて次の2種のタグを本文の後ろに置く（本文より前や本文の途中に置かない）：',
       '<react who="名前" 反応="身体反応＋感情を1文で短く" 声="口から漏れた音・言葉。無ければ空"/>',
-      '<state who="名前" からだ="今この瞬間の身体" こころ="今の感情" 本能="体が今したいこと" 傷="負傷した瞬間だけ記入・治るまで保持" 関係="主人公や他者への今の関係" 未解決="抱えた感情の負債"/>',
+      '<state who="名前" からだ="今この瞬間の身体" こころ="今の感情" 本能="体が今したいこと" 目的="今この場面で本人が望む小さなこと" 傷="負傷した瞬間だけ記入・治るまで保持" 関係="主人公や他者への今の関係" 未解決="抱えた感情の負債"/>',
       '・登場キャラが声に出すセリフは【必ず】<say who="名前">…</say> で囲む（who は実際に喋った本人の名前）。地の文に裸の「」だけのセリフを置かず、誰の声か必ず明示する。主人公が話しかけたら、相手のキャラはその場で <say who="名前"> で返事する。同じセリフを地の文の「」とsayタグとで二重に書かない（各セリフは本文中で一度だけ、sayタグで書く）。',
       '・名前の無い存在（妖怪・怪異・敵・謎の声など）が喋った時も同じ。地の文に埋め込まず、本文で使っている呼び名で <say who="妖怪">お前も同族だ</say> のように必ずタグで囲む。文の途中のセリフ（〜と告げた、〜と言い残した等）もタグにする。逆に、セリフでない「」（回想・呼び名・看板の文字・比喩の引用）はタグで囲まない。',
       '・傷/関係/未解決は中身がある時だけ書く（空なら省く）。一度書いた傷は治療されるまで毎ターン保持する。',
@@ -245,7 +322,7 @@
       '・物理的に矛盾させない（位置・負傷・人物・所持が前の場面と食い違わない）。',
       '・このメッセージのルールや、説明・要約・メモ・チェックリスト・【】ラベルを本文に書かない。「未解決事項:」のようなGM的な運営コメント・判断の独り言も本文ではない。本文はあくまで物語の地の文とセリフだけ。',
       '',
-      EXAMPLES[toneKey()] || EXAMPLES['shizuka']   // v292Dfix208: 🎭トーンで見本切替
+      (EXAMPLES[toneKey()] || EXAMPLES['shizuka']) + miniEx()   // v292Dfix208: 🎭トーンで見本切替 / fix223d: 自発掛け合いミニ見本を共通追加
     ]);
     return blocks.join('\n');
   }
