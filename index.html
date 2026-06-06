@@ -1779,9 +1779,9 @@ const G = {
       try {
         var _norm215 = function(s){ return String(s||'').replace(/[\s　。、！？!?…・「」『』]/g,''); };
         var _prev215 = {};
-        S.turns.slice(-2).forEach(function(pt){ ((pt && pt._convSays) || []).forEach(function(pc){ var n = _norm215(pc.say); if (n) _prev215[n] = 1; }); });
+        S.turns.slice(-2).forEach(function(pt){ ((pt && pt._convSays) || []).forEach(function(pc){ var n = _norm215(pc.say); if (n) _prev215[String(pc.who||'') + '|' + n] = 1; }); }); /* v292Dfix224b: キーを話者+本文に(同文でも話者が違えば別物) */
         var _heroSay215 = (S.mode === 'SAY' && text) ? _norm215(text) : null;
-        _convSays = _convSays.filter(function(c){ var n = _norm215(c.say); if (!n) return false; if (_heroSay215 && n === _heroSay215 && S.cast && S.cast.hero && c.who === S.cast.hero.name) return true; return !_prev215[n]; });
+        _convSays = _convSays.filter(function(c){ var n = _norm215(c.say); if (!n) return false; if (_heroSay215 && n === _heroSay215 && S.cast && S.cast.hero && c.who === S.cast.hero.name) return true; return !_prev215[String(c.who||'') + '|' + n]; }); /* v292Dfix224b: 同一話者の再掲だけ遮断。別話者の同文(怪異のオウム返し等)は演出として通す(fix218で話者帰属が正確になったため安全) */
       } catch(_e215){}
 
       // v292Dfix175: 本文から <say> タグを除去する（会話ログは上の genConvLog で取得済なので本文の
@@ -2525,7 +2525,7 @@ G.init();
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
-  <script src="v292Dfix192-newengine.js?cb=v292Dfix223f"></script>
+  <script src="v292Dfix192-newengine.js?cb=v292Dfix224"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
   <script src="v292Dfix197-avatar-key.js?cb=v292Dfix209"></script>
