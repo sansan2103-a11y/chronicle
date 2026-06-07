@@ -1757,7 +1757,7 @@ const G = {
           var _ss = _ss2; if (!_ss2) continue; if (_sm[1] == null && !_utt217) continue; /* v292Dfix217: 発話判別器を通らない裸「」は収穫しない(地の文の引用を発話化しない=「助けられなかった」誤帰属の根治) */ if (_sm[1] == null && _tagNorm[_ss2.replace(/[\s　。、！？!?…・「」『』]/g,'')]) continue; /* v292Dfix213: タグ版が存在する裸「」は同一セリフの重複＝スキップ(話者はタグが正) */
           var _sk = (_sw || '?') + '' + _ss;
           if (_seenSay[_sk]) continue; _seenSay[_sk] = 1;
-          if (_conf218){ _convSays.push({ who: _sw || _heroNm || '???', say: _ss2 }); } else if (_ss2.replace(/[\s　。、！？!?…・ッぁぃぅぇぉ「」『』]/g,'')) { var _ph218 = { who: null, say: _ss2 }; _convSays.push(_ph218); _pend218.push(_ph218); } /* v292Dfix218: 不確信は保留(第2層で帰属照会)。文書順は維持。記号/息だけの引用(「……」「…ッ」等)は照会の価値なし=API節約で捨てる */
+          if (_conf218){ _convSays.push({ who: _sw || _heroNm || '???', say: _ss2, _b: (_sm[1] == null ? 1 : undefined) }); } else if (_ss2.replace(/[\s　。、！？!?…・ッぁぃぅぇぉ「」『』]/g,'')) { var _ph218 = { who: null, say: _ss2 }; _convSays.push(_ph218); _pend218.push(_ph218); } /* v292Dfix218: 不確信は保留(第2層で帰属照会)。文書順は維持。記号/息だけの引用は照会せず捨てる。_b=裸引用解決マーカー(fix234用・undefinedなら保存に乗らない) */
         }
         /* v292Dfix231: react属性「声」の実セリフ収穫。実測: ミリア「さっきからずっと…誰かに見られている気がしてた」が
            react声にだけ存在し、本文にもログにも出ず消失していた。whoが明示された一次情報=誤帰属リスクなし。
@@ -1804,6 +1804,14 @@ const G = {
         });
         _convSays.unshift({ who: S.cast.hero.name, say: _sayClean });
       }
+      /* v292Dfix234: 再掲の話者裏返り矯正(初出が権威)。裸引用解決(_b)のセリフが直近4ターンに
+         別話者で存在する場合、低確信の近接解決より初出話者を信じる(実測: T3カエデ「今ここで…」が
+         T5再掲時にミリアへ裏返った)。タグ付き発話は対象外=オウム返し演出はタグが権威のまま生きる。 */
+      try {
+        var _hist234 = {};
+        S.turns.slice(-4).forEach(function(pt){ ((pt && pt._convSays) || []).forEach(function(pc){ var n = String((pc && pc.say) || '').replace(/[\s　。、！？!?…・「」『』]/g, ''); if (n && !_hist234[n]) _hist234[n] = String(pc.who || ''); }); });
+        _convSays.forEach(function(c){ if (!c) return; if (c._b){ var n = String(c.say || '').replace(/[\s　。、！？!?…・「」『』]/g, ''); var ow = _hist234[n]; if (ow && ow !== c.who){ try { console.log('[v292Dfix234]', 'speaker-flip corrected:', c.who, '->', ow); } catch(e){} c.who = ow; } } delete c._b; });
+      } catch(_e234){}
       /* v292Dfix215: ターン跨ぎのセリフ重複を遮断。モデルが直前ターンの締めセリフを次ターン冒頭で再掲する癖があり、再掲側は近接判定で話者が裏返って「同じセリフが別話者で2枚」になる(実測)。直近2ターンの_convSaysに同じ正規化テキストがあれば新ターン側を捨てる(初出が権威)。プレイヤーのSAY入力(意図的な繰り返し)は対象外。 */
       try {
         var _norm215 = function(s){ return String(s||'').replace(/[\s　。、！？!?…・「」『』]/g,''); };
@@ -1829,6 +1837,7 @@ const G = {
           .replace(/[「『]\s*$/g, '')           // 末尾の閉じ忘れ開き括弧（壊れたsay-tag由来の孤立「）
           .replace(/^[\s　]*[」』](?=[とた、。\s　]|$)/gm, '')   // 行頭の孤立閉じ括弧(v292Dfix215: 全行対象に。重複除去の切り残し「」と…」対策)
           .replace(/(^|\n)([「『][^」』\n]{2,})(?=\n|$)/g, '$1$2」')   // v292Dfix216: 閉じ忘れセリフ行を行末で自動クローズ(「ミリアさん、大丈夫ですか？␊ 型)
+          .replace(/^[\s　]*[（(]?※[^\n]*$/gm, '')   /* v292Dfix234b: 「※注記:」型のメタ漏れ行を除去(実測: モデルがルール言及の注記を本文に書いた) */
           .replace(/[ \t]*\n{3,}/g, '\n\n')
           .trim();
       } catch(_e175){}
@@ -2561,7 +2570,7 @@ G.init();
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
-  <script src="v292Dfix192-newengine.js?cb=v292Dfix227"></script>
+  <script src="v292Dfix192-newengine.js?cb=v292Dfix234b"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
   <script src="v292Dfix197-avatar-key.js?cb=v292Dfix209"></script>
