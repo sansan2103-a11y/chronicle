@@ -415,10 +415,14 @@ const S = {
         return;
       }
     } catch (e) {}
-    SS.set(KEY, { cfg: this.cfg, cast: this.cast, scene: this.scene, turns: this.turns, mode: this.mode });
+    SS.set((window.__chr6Key ? window.__chr6Key() : KEY), { cfg: this.cfg, cast: this.cast, scene: this.scene, turns: this.turns, mode: this.mode }); /* v292Dfix230: 保存も発生源からスロット対応(fix30 wrapへの依存を排除) */
   },
   load() {
-    const d = SS.get(KEY);
+    /* v292Dfix230: クロバー構造窓の根治。従来はここが常にデフォルト'chr6'を読み、
+       bootLoadActiveSlot(fix205)が後からスロットへ差し替える非対称だった。その間の
+       一瞬「別の物語がメモリに載った状態」で保存が走るとアクティブスロットを別物語で
+       上書きする(2026-06-06のスロットa消失事故の構造窓)。初手から正しいスロットを読む。 */
+    const d = SS.get(window.__chr6Key ? window.__chr6Key() : KEY);
     if (!d) return false;
     Object.assign(this.cfg, d.cfg || {});
     Object.assign(this.cast, d.cast || {});
@@ -2498,7 +2502,9 @@ G.init();
   <script src="v292Dfix60-display-pipeline.js?cb=v292Dfix60"></script>
   <script src="v292Dfix59-hybrid-extractor.js?cb=v292Dfix59"></script>
   <script src="v292Dfix61-alpha-strip-protect.js?cb=v292Dfix61v3"></script>
-  <script src="v292Dfix62-avatar-fix.js?cb=v292Dfix62"></script>
+  <!-- v292Dfix230(判定テスト): fix62はfix66(fix102修復)+fix197スイープと役割重複の疑い。退役試験中。
+       アバターに「?」が出る場合はコメント解除で復活
+  <script src="v292Dfix62-avatar-fix.js?cb=v292Dfix62"></script> -->
   <script src="v292Dfix63-avatar-style.js?cb=v292Dfix63"></script>
   <!-- v292Dfix229(P3): solo執行をfix66に内蔵したためfix64(抑制器)退役。復活=コメント解除
   <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script> -->
