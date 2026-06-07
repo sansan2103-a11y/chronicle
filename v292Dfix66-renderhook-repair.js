@@ -1717,3 +1717,46 @@
   arm();
   try { setInterval(arm, 1200); } catch(e){}
 })();
+
+/* ============================================================================
+ * v292Dfix233: 孤児カードのreconcile(やり直し/取消の会話ログ反映)。
+ *   実測(2026-06-07): やり直しでターンが差し替わると、保存データ(_convSays)は
+ *   正しく更新されるが、レンダラは「足りないカードの追加」しかしないため、
+ *   破棄された旧世代のカード(ミリア「ふざけないで！」等)が画面に残留する。
+ *   修正: 全ターンの正データ(各_convSaysの話者|正規化テキスト + 主人公|playerText)
+ *   と突合し、どこにも属さないカードを除去する。S.inFlight中はスキップ(描画レース回避)。
+ *   OFF: localStorage v292ReconcileOff='1'
+ * ========================================================================== */
+(function(){
+  try { if (localStorage.getItem('v292ReconcileOff') === '1') return; } catch(e){}
+  var norm233 = function(s){ return String(s || '').replace(/[\s　。、！？!?…・「」『』]/g, ''); };
+  function getStateSafe(){ try { return window.S || (0,eval)('typeof S!=="undefined"?S:null'); } catch(e){ return null; } }
+  function reconcile(){
+    try {
+      var S = getStateSafe(); if (!S || !Array.isArray(S.turns)) return;
+      if (S.inFlight) return;
+      var stream = document.getElementById('dialogue-stream'); if (!stream) return;
+      var valid = {};
+      var heroN = (S.cast && S.cast.hero && S.cast.hero.name) || '';
+      S.turns.forEach(function(t){
+        if (!t) return;
+        ((t._convSays) || []).forEach(function(c){ if (c && c.who) valid[String(c.who) + '|' + norm233(c.say)] = 1; });
+        if (heroN && t.playerText) valid[heroN + '|' + norm233(t.playerText)] = 1;
+      });
+      var cards = stream.querySelectorAll('.v292-dlg-card');
+      var removed = 0;
+      for (var i = 0; i < cards.length; i++){
+        var card = cards[i];
+        var nameEl = card.querySelector('.dlg-name'), textEl = card.querySelector('.dlg-text');
+        if (!nameEl || !textEl) continue;
+        var name = (nameEl.textContent || '').trim().split(/\s|📖|⚔|💭|🎭|✨/)[0];
+        if (!name) continue;
+        var key = name + '|' + norm233(textEl.textContent);
+        if (!valid[key]){ try { card.remove(); removed++; } catch(e){} }
+      }
+      if (removed){ try { console.log('[v292Dfix233]', 'removed', removed, 'orphan card(s) (retry/undo reconcile)'); } catch(e){} }
+    } catch(e){}
+  }
+  try { setInterval(reconcile, 2500); } catch(e){}
+  setTimeout(reconcile, 1500);
+})();
