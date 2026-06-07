@@ -1727,9 +1727,14 @@ const G = {
         S.turns.slice(-3).forEach(pt => { String((pt&&pt.narrative)||'').split(/(?<=[。！？\n])/).forEach(x => { const k = _rNorm216(x); if (k.length >= 8) _prev216[k] = 1; }); });
         const _sents216 = String((plan.narrative||[]).join('\n')).split(/(?<=[。！？\n])/).filter(x => _rNorm216(x).length >= 8);
         const _dup216 = _sents216.filter(x => _prev216[_rNorm216(x)]).length;
-        if (_sents216.length >= 3 && _dup216 / _sents216.length > 0.6){
-          UI.setStatus('前ターンの再掲を検知 → 書き直し中…');
-          const result2 = await Api.call(sys, user + '\n\n【重要・書き直し】直前のあなたの出力は前ターンの内容のほぼ再掲だった。同じ場面・同じ文を繰り返さず、時間と状況を必ず前へ進めて、新しい出来事・発見・行動を描くこと。');
+        /* v292Dfix235: 超短文ゲート。実測: 2文だけ・しかも全文が前ターンの使い回し、という退化応答が
+           「3文以上」条件をすり抜けた。短文モード以外で4文未満なら再掲と同様に1回書き直させる。
+           OFF: localStorage v292ShortGateOff='1' */
+        const _recap235 = (_sents216.length >= 2 && _dup216 / _sents216.length > 0.6);
+        const _short235 = (function(){ try { if (localStorage.getItem('v292ShortGateOff') === '1') return false; const lk = localStorage.getItem('v100_outputLen') || 'standard'; return lk !== 'short' && _sents216.length > 0 && _sents216.length < 4; } catch(e){ return false; } })();
+        if (_recap235 || _short235){
+          UI.setStatus((_recap235 ? '前ターンの再掲' : '短すぎる応答') + 'を検知 → 書き直し中…');
+          const result2 = await Api.call(sys, user + '\n\n【重要・書き直し】直前のあなたの出力は' + (_recap235 ? '前ターンの内容のほぼ再掲だった。' : '') + (_short235 ? '短すぎた(数文で切り上げていた)。最低でも8文以上で場面を最後まで描き切ること。' : '') + '同じ場面・同じ文を繰り返さず、時間と状況を必ず前へ進めて、新しい出来事・発見・反応を描くこと。');
           if (result2 && result2.text){
             const plan2 = Planner.parsePlan(result2.text, S.mode);
             if (plan2 && Array.isArray(plan2.narrative) && plan2.narrative.join('').length > 40){ plan = plan2; result = result2; }
