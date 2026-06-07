@@ -1808,9 +1808,9 @@ const G = {
       try {
         var _norm215 = function(s){ return String(s||'').replace(/[\s　。、！？!?…・「」『』]/g,''); };
         var _prev215 = {};
-        S.turns.slice(-2).forEach(function(pt){ ((pt && pt._convSays) || []).forEach(function(pc){ var n = _norm215(pc.say); if (n) _prev215[String(pc.who||'') + '|' + n] = 1; }); }); /* v292Dfix224b: キーを話者+本文に(同文でも話者が違えば別物) */
+        S.turns.slice(-1).forEach(function(pt){ ((pt && pt._convSays) || []).forEach(function(pc){ var n = _norm215(pc.say); if (n) _prev215[String(pc.who||'') + '|' + n] = 1; }); }); /* v292Dfix232: 窓を直前1ターンに縮小(2ターン前の再演=意味のある反復として許可) */
         var _heroSay215 = (S.mode === 'SAY' && text) ? _norm215(text) : null;
-        _convSays = _convSays.filter(function(c){ var n = _norm215(c.say); if (!n) return false; if (_heroSay215 && n === _heroSay215 && S.cast && S.cast.hero && c.who === S.cast.hero.name) return true; return !_prev215[String(c.who||'') + '|' + n]; }); /* v292Dfix224b: 同一話者の再掲だけ遮断。別話者の同文(怪異のオウム返し等)は演出として通す(fix218で話者帰属が正確になったため安全) */
+        _convSays = _convSays.filter(function(c, _i232){ var n = _norm215(c.say); if (!n) return false; if (_heroSay215 && n === _heroSay215 && S.cast && S.cast.hero && c.who === S.cast.hero.name) return true; if (_i232 <= 1 && _prev215[String(c.who||'') + '|' + n]) return false; return true; }); /* v292Dfix232(おしん要望): 遮断は「直前ターンの同文を新ターンの冒頭(先頭2件)で再掲」=モデルの再掲癖の署名だけに限定。ターン中盤以降の同文再演(念押し・連呼・意味のある繰り返し)は会話ログに残す */
       } catch(_e215){}
 
       // v292Dfix175: 本文から <say> タグを除去する（会話ログは上の genConvLog で取得済なので本文の
