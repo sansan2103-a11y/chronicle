@@ -1759,6 +1759,28 @@ const G = {
           if (_seenSay[_sk]) continue; _seenSay[_sk] = 1;
           if (_conf218){ _convSays.push({ who: _sw || _heroNm || '???', say: _ss2 }); } else if (_ss2.replace(/[\s　。、！？!?…・ッぁぃぅぇぉ「」『』]/g,'')) { var _ph218 = { who: null, say: _ss2 }; _convSays.push(_ph218); _pend218.push(_ph218); } /* v292Dfix218: 不確信は保留(第2層で帰属照会)。文書順は維持。記号/息だけの引用(「……」「…ッ」等)は照会の価値なし=API節約で捨てる */
         }
+        /* v292Dfix231: react属性「声」の実セリフ収穫。実測: ミリア「さっきからずっと…誰かに見られている気がしてた」が
+           react声にだけ存在し、本文にもログにも出ず消失していた。whoが明示された一次情報=誤帰属リスクなし。
+           息・記号だけ(……/…ッ等)は従来通り除外。本文の同文セリフとはdedup。OFF: localStorage v292ReactVoiceOff='1' */
+        try {
+          if (localStorage.getItem('v292ReactVoiceOff') !== '1') {
+            var _rvRe = /<react\b[^>]*?who="([^"]+)"[^>]*?声="<say[^>]*>([\s\S]*?)<\/say>"/g, _rvm;
+            var _rvAll = String(result.text || '');
+            while ((_rvm = _rvRe.exec(_rvAll))) {
+              var _rvWho = String(_rvm[1] || '').trim().slice(0, 24);
+              var _rvSay = String(_rvm[2] || '').trim().slice(0, 80);
+              var _rvN = _rvSay.replace(/[\s　。、！？!?…・ッぁぃぅぇぉ「」『』]/g, '');
+              if (!_rvWho || _rvN.length < 3) continue;
+              var _rvNorm = _rvSay.replace(/[\s　。、！？!?…・「」『』]/g, '');
+              /* 包含判定: react声は本文セリフの言い換え変種のことが多い(実測:「大丈夫……かな？」vs「大丈夫か？」)。
+                 どちらかがどちらかを含めば同一発話とみなしスキップ */
+              var _rvDup = _convSays.some(function(c){ var cn = String((c && c.say) || '').replace(/[\s　。、！？!?…・「」『』]/g, ''); return cn && (_rvNorm.indexOf(cn) >= 0 || cn.indexOf(_rvNorm) >= 0); });
+              if (_rvDup) continue;
+              var _rvK = _rvWho + '' + _rvSay; if (_seenSay[_rvK]) continue; _seenSay[_rvK] = 1;
+              _convSays.push({ who: _rvWho, say: _rvSay });
+            }
+          }
+        } catch(_e231){}
       } catch(e) { _convSays = []; }
       /* v292Dfix218 第2層: 判別器が確信できなかった引用の帰属を、本文を書いたモデル自身に1回のJSON呼び出しで照会(タグ漏れ時のみ発生)。発話を「探させる」のではなく与えた引用の帰属だけを答えさせる=発明の余地なし */
       try { if (typeof _pend218 !== 'undefined' && _pend218.length) { var _amap218 = await this.attribQuotes218(_body, _pend218.map(function(p){ return p.say; })); _pend218.forEach(function(p){ if (_amap218 && _amap218[p.say]) p.who = _amap218[p.say]; }); } } catch(_e218){}
