@@ -1691,3 +1691,29 @@
     try { console.log('[v292Dfix222b]', 'input-driven pinned scroll guard active'); } catch(e){}
   } catch(e){}
 })();
+
+/* ============================================================================
+ * v292Dfix229(P3): solo旗の執行を fix66 自身に内蔵 — 会話ログ統合。
+ *   従来、solo時のbaseレンダラ停止は fix64 の wrap が担っていた(=「死んで見える
+ *   抑制器」)。P3でこの執行を会話ログのオーナーである fix66 に移設し、
+ *   fix64/70b/73 の3ファイルを退役する(全棚卸し分析の工程表どおり)。
+ *   ・dl.renderStream を最外で wrap し、solo時は描かない(fix66 が唯一の書き手)
+ *   ・interval 再装着: 他パッチが renderStream を差し替えても常に最外を維持
+ *   ロールバック: 退役3ファイルのscriptタグはコメントアウト(index.html)=1行で復活可
+ * ========================================================================== */
+(function(){
+  function arm(){
+    try {
+      var dl = window.__v292 && window.__v292.dialogueLayout;
+      if (!dl || typeof dl.renderStream !== 'function' || dl.renderStream.__v229) return;
+      var orig = dl.renderStream;
+      var w = function(){ if (window.__v292ConvlogSolo) return 0; return orig.apply(this, arguments); };
+      w.__v229 = 1;
+      try { Object.keys(orig).forEach(function(k){ if (k.indexOf('__') === 0) w[k] = orig[k]; }); } catch(e){}
+      dl.renderStream = w;
+      try { console.log('[v292Dfix229]', 'solo gate installed on dl.renderStream (fix64/70b/73 retired)'); } catch(e){}
+    } catch(e){}
+  }
+  arm();
+  try { setInterval(arm, 1200); } catch(e){}
+})();

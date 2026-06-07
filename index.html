@@ -2500,10 +2500,11 @@ G.init();
   <script src="v292Dfix61-alpha-strip-protect.js?cb=v292Dfix61v3"></script>
   <script src="v292Dfix62-avatar-fix.js?cb=v292Dfix62"></script>
   <script src="v292Dfix63-avatar-style.js?cb=v292Dfix63"></script>
-  <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script>
+  <!-- v292Dfix229(P3): solo執行をfix66に内蔵したためfix64(抑制器)退役。復活=コメント解除
+  <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=v292Dfix74"></script>
-  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix225"></script>
+  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix229"></script>
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
     <!-- v292Dfix189c: fix70(dialogue-order, 本文ベースの並べ替え)を無効化。fix70bが
@@ -2512,8 +2513,9 @@ G.init();
          並べ替えはfix70bに集約。 (旧: v292Dfix70-dialogue-order.js?cb=v292Dfix70) -->
     <script src="v292Dfix71-anti-recap.js?cb=v292Dfix71"></script>
     <script src="v292Dfix72-within-turn-dedup.js?cb=v292Dfix72"></script>
+    <!-- v292Dfix229(P3): solo時no-opのためfix73/70b退役。復活=コメント解除
     <script src="v292Dfix73-card-dedup.js?cb=v292Dfix200"></script>
-    <script src="v292Dfix70b-order-convsays.js?cb=v292Dfix200"></script>
+    <script src="v292Dfix70b-order-convsays.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix75-history-dedup.js?cb=v292Dfix75"></script>
 <script src="v292Dfix76-human-foundation.js?cb=v292Dfix76b"></script>  <script src="v292Dfix77-state-memory.js?cb=v292Dfix223f"></script>
   <script src="v292Dfix78-tag-case-normalize.js?cb=v292Dfix78"></script>
@@ -2524,7 +2526,8 @@ G.init();
   <script src="v292Dfix84-sampling.js?cb=v292Dfix84"></script>
   <script src="v292Dfix85-reaction-spectrum.js?cb=v292Dfix85"></script>
   <script src="v292Dfix81-strip-incomplete-tags.js?cb=v292Dfix81"></script>
-  <script src="v292Dfix86-avatar-eager-blob.js?cb=v292Dfix86"></script>
+  <!-- v292Dfix229(P4): アバターは全てfix199系のdata:URL化済みでblob変換の出番が消滅(実測: 全カードdata:)。fix86退役。復活=コメント解除
+  <script src="v292Dfix86-avatar-eager-blob.js?cb=v292Dfix86"></script> -->
   <!-- v292Dfix226(P1): fix89はヘッダー自称NO-OP STUB=純粋死コードのため退役
   <script src="v292Dfix89-convlog-cleanup.js?cb=v292Dfix89"></script> -->
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
