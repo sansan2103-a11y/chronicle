@@ -236,10 +236,15 @@
     // scene's tone (e.g. 不気味) so the mood matches the story.
     var tone = '';
     try { var st = getState(); if (st && st.scene && st.scene.tone) tone = String(st.scene.tone).trim(); } catch(e){}
-    var subject = appear ? (name + ', ' + appear) : (name + ', unknown ominous entity');
-    var prompt = 'dark eerie horror creature art of ' + subject
+    // v292Dfix239: 旧fix103の「dark eerie horror creature art of...」固定枠は、未登録の
+    // 人間(少女/通行人/店主)まで怪物として描かせていた。さらにこのURLは運搬(carrier)として
+    // fix197/199に捕捉され、genAsync(fix123のAI型判定)が答える前に怪物像がキャッシュ確定する
+    // レースの燃料でもあった。→ 型を強制しない中立枠に変更。実体の性質(怪異/人間/物)は
+    // appear(本文文脈)とtoneが運ぶ。怪異は文脈が怪異と言っていれば怪異として描かれる。
+    var subject = appear ? (name + ', ' + appear) : (name + ', a figure appearing in the scene');
+    var prompt = 'detailed depiction of ' + subject
                + (tone ? ', ' + tone : '')
-               + ', ominous, sinister, unsettling, grim dark atmosphere, dramatic shadows, detailed';
+               + ', faithful to the description, atmospheric, detailed';
     var seed = ncHash(name) % 1000000;
     var url = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt)
             + '?width=384&height=384&seed=' + seed + '&nologo=true&model=flux';
