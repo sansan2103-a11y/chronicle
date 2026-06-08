@@ -64,6 +64,24 @@
     setVal(getF(card,'coreDesire'),  des);
     setVal(getF(card,'coreFear'),    fear);
     setVal(getF(card,'wound'),       wnd);
+    card.__f244sig = fieldsSig(card); /* v292Dfix244b: 自分で書いた直後の署名を記録(逆同期の誤発火防止) */
+  }
+
+  /* v292Dfix244b: 隠した4フィールドの内容署名。AI生成(applyScenario)は el.value= で
+     直接書く(イベント無し)ので、ポーリングで差分検知し統合欄へ反映する。 */
+  function fieldsSig(card){
+    return ['personality','coreDesire','coreFear','wound'].map(function(f){ return (getF(card,f)||{}).value || ''; }).join('');
+  }
+  /* 裏フィールドが外部(AIランダム生成等)で変わったら統合textareaを作り直して見せる。
+     ユーザーが統合欄を編集中(focus)なら触らない。 */
+  function resyncCard(card){
+    var ta = card.__f244ta;
+    if (!ta) return;
+    if (document.activeElement === ta) return;
+    var sig = fieldsSig(card);
+    if (sig === card.__f244sig) return;
+    ta.value = buildInitial(card);
+    card.__f244sig = sig;
   }
 
   function mergeCard(card){
@@ -90,6 +108,7 @@
     ta.placeholder = '例:\n寡黙で忠誠心が強い武人気質。\n欲求: 故郷を取り戻す\n恐怖: 過去が暴かれること\n過去: 孤児院で厳しく管理された幼少期';
     ta.value = buildInitial(card);
     ta.addEventListener('input', function(){ parseAndSync(card, ta.value); });
+    card.__f244ta = ta; /* v292Dfix244b: 逆同期用にtextarea参照を保持 */
     wrap.appendChild(lbl); wrap.appendChild(ta);
 
     var divider = card.querySelector('.psych-divider');
@@ -111,7 +130,7 @@
       // カード= coreDesire を含む最寄りの、personality/coreFear も含むコンテナ
       var c = inp;
       for (var i=0;i<6 && c;i++){ c = c.parentNode; if (c && c.querySelector && c.querySelector('[data-f="coreFear"]') && c.querySelector('[data-f="personality"]')) break; }
-      if (c && seen.indexOf(c) < 0){ seen.push(c); mergeCard(c); }
+      if (c && seen.indexOf(c) < 0){ seen.push(c); if (c.__fix244) resyncCard(c); else mergeCard(c); }
     });
   }
 
