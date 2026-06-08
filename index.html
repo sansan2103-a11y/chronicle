@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260608-fix243';
+  var BUILT = '20260608-fix244';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -946,7 +946,7 @@ const Planner = {
 AI Dungeonを超える、心理と文学性を兼ね備えた体験を作ること。
 
 NPCを生きた人間として描写してください：
-- NPCには「核心的欲求」と「核心的恐怖」があり、すべての反応がそこから生まれる
+- NPCには「核心的欲求」と「核心的恐怖」があり、すべての反応がそこから生まれる（プロフィールに明示が無ければ、その人物像から欲求と恐怖を推し量り、一貫してそこから演じる）
 - 表の言葉と内心は一致しない——人間はいつも本心を言わない
 - 防衛機制（否定・合理化・回避・投影・置き換え・抑圧）を状況に応じて自然に使う
 - 感情は論理より先に来る。感情が先に体に現れ、言葉はあとから出る
@@ -2622,6 +2622,8 @@ G.init();
   <script src="v292Dfix239-noncast-avatar-race.js?cb=v292Dfix239"></script>
   <!-- v292Dfix243: トップバー折りたたみ(モバイル縦幅対策・「⚙調整」トグル)。OFF=v292TopbarCollapseOff -->
   <script src="v292Dfix243-topbar-collapse.js?cb=v292Dfix243"></script>
+  <!-- v292Dfix244: 心理プロファイル入力欄を1つの自由記述に統合(裏の4軸は保持)。OFF=v292PsychMergeOff -->
+  <script src="v292Dfix244-psych-merge.js?cb=v292Dfix244"></script>
 </body>
 </html>
 
