@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260608-fix242';
+  var BUILT = '20260608-fix243';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2620,6 +2620,8 @@ G.init();
   <script src="v292Dfix237-avatar-carrier-guard.js?cb=v292Dfix237"></script>
   <!-- v292Dfix239: 未登録キャラ(少女/店主等)のアイコン怪物化根治(genAsync判定待ちのレース封じ)。OFF=v292NcAvRaceOff -->
   <script src="v292Dfix239-noncast-avatar-race.js?cb=v292Dfix239"></script>
+  <!-- v292Dfix243: トップバー折りたたみ(モバイル縦幅対策・「⚙調整」トグル)。OFF=v292TopbarCollapseOff -->
+  <script src="v292Dfix243-topbar-collapse.js?cb=v292Dfix243"></script>
 </body>
 </html>
 
