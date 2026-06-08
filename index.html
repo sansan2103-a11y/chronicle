@@ -3,7 +3,32 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>Chronicle</title>
+<script>
+/* v292Dfix242: iOS Safari の古いHTMLキャッシュ脱出。`.js`は?cb=でキャッシュ破棄できるが
+   index.html本体は破棄できず、iOSはbfcache+ヒューリスティックで古いHTMLを長く保持する
+   →古い?cb→古い.js→「修正が反映されない/リセットが効かない(古いコードが動く)」。
+   対策: version.txt を no-store で取得し、このHTMLのBUILTと食い違えば一度だけ新URL
+   (?vr=1&v=最新)へ置換リロード=新URL扱いでHTMLを必ずネットワーク再取得。最新時は何もしない
+   (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
+   デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
+(function(){
+  var BUILT = '20260608-fix242';
+  try {
+    if (/[?&]vr=1/.test(location.search)) return;
+    fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
+      .then(function(r){ return r.ok ? r.text() : ''; })
+      .then(function(v){
+        v = (v || '').trim().slice(0, 40);
+        if (!v || v === BUILT) return;
+        var sep = location.search ? '&' : '?';
+        location.replace(location.pathname + location.search + sep + 'vr=1&v=' + encodeURIComponent(v));
+      })
+      .catch(function(){});
+  } catch(e){}
+})();
+</script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
