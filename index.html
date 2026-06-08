@@ -1773,9 +1773,11 @@ const G = {
             var _rvAll = String(result.text || '');
             while ((_rvm = _rvRe.exec(_rvAll))) {
               var _rvWho = String(_rvm[1] || '').trim().slice(0, 24);
-              var _rvSay = String(_rvm[2] || '').trim().slice(0, 80);
+              var _rvSay = String(_rvm[2] || '').split(/\r?\n/)[0].trim().slice(0, 80); /* v292Dfix241a: 声属性が地の文を飲み込む実測対策(改行以降を切除。実測:T17「…ですか？\nカエデは声を潜め…」) */
               var _rvN = _rvSay.replace(/[\s　。、！？!?…・ッぁぃぅぇぉ「」『』]/g, '');
               if (!_rvWho || _rvN.length < 3) continue;
+              if (_rvSay.indexOf(_rvWho) === 0) continue; /* v292Dfix241b: 自分の名前で始まる声=「相手から聞いた呼びかけ」の誤格納(実測:ミリア|ミリアさん、大丈夫ですか？)。真の話者は特定不能なので採らない(誤帰属より欠落が安全) */
+              try { var _pin241 = String(text || '').replace(/[\s　。、！？!?…・ッぁぃぅぇぉ「」『』]/g, ''); if (_pin241.length >= 4 && _rvN.indexOf(_pin241) >= 0) continue; } catch(_e241){} /* v292Dfix241c: プレイヤー入力のエコー遮断(実測:ミリア|続きを自然に進めてください。) */
               var _rvNorm = _rvSay.replace(/[\s　。、！？!?…・「」『』]/g, '');
               /* 包含判定: react声は本文セリフの言い換え変種のことが多い(実測:「大丈夫……かな？」vs「大丈夫か？」)。
                  どちらかがどちらかを含めば同一発話とみなしスキップ */
