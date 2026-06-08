@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260608-fix245';
+  var BUILT = '20260608-fix246';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2549,8 +2549,10 @@ G.init();
   console.log(TAG, 'v100 active');
 })();
 </script>
+<!-- v292Dfix246: per-storyストア(fix77状態/longmem/会話キャッシュ)をスロット単位に分離。features.js等の前に設置。OFF=v292StoreSlotIsoOff -->
+<script src="v292Dfix246-store-slot-isolation.js?cb=v292Dfix246"></script>
 <!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
-<script src="features.js?cb=v292Dfix225"></script>
+<script src="features.js?cb=v292Dfix246"></script>
 <script src="v292Dfix135-longmem.js?cb=v292Dfix245"></script>
 <script src="v292Dfix138-continue.js?cb=v292Dfix225"></script>
 <script src="v292Dfix145-charlist.js?cb=v292Dfix145f"></script>

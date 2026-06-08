@@ -9275,6 +9275,10 @@
         }
       }
     } catch(e){}
+    // v292Dfix246: fix77状態はスロット分離(実キー=v292Dfix77States_slot_x)になり上の
+    //   スキャン完全一致では拾えない。base名を明示追加すると fix246ラッパーが remove を
+    //   activeスロットへリダイレクト=正しいスロットだけクリアされる(OFF時はbaseを直接削除)。
+    try { if (out.indexOf('v292Dfix77States') < 0) out.push('v292Dfix77States'); } catch(e){}
     return out;
   }
   // Everything this app owns (for 完全リセット).
