@@ -68,8 +68,21 @@
       var nr = (t.narrative || '').slice(0, 1500);
       return '[Turn ' + (startIdx + i) + '] PLAYER: ' + pt + '\nNARR: ' + nr;
     }).join('\n\n');
+    // v292Dfix245: セリフのタグ(_convSays.who)で既に確定している話者名を権威名として渡す。
+    //   要約LLMが地の文から独自に別名(例:「黒髪の少女」)を coin するのを防ぎ、会話ログと
+    //   キャラ一覧の名前を一致させる(同一人物に名前が2つ付く根本原因の解消)。
+    var _authNames245 = {};
+    try {
+      (newTurns || []).forEach(function(t){ ((t && t._convSays) || []).forEach(function(c){ if (c && c.who && String(c.who).length <= 24) _authNames245[c.who] = 1; }); });
+      (prevWorldInfo || []).forEach(function(w){ if (w && w.type === 'character' && w.name) _authNames245[w.name] = 1; });
+    } catch(e){}
+    var _authList245 = Object.keys(_authNames245);
+    var _authBlock245 = 'AUTHORITATIVE CHARACTER NAMES (these exact names already identify characters in this story — dialogue speakers and known cast):\n' +
+      (_authList245.length ? _authList245.map(function(n){ return '- ' + n; }).join('\n') : '(none)') + '\n' +
+      'When a person in the narration is one of these, you MUST use that EXACT name. NEVER coin a new descriptive label (e.g. 黒髪の少女, 白いワンピースの少女) for someone already named above. One physical character = exactly ONE name.\n\n';
     return 'You analyze a Japanese ongoing horror TRPG to maintain long-term memory.\n\n' +
       'PREVIOUS SUMMARY:\n' + (prevSummary || '(none)') + '\n\n' +
+      _authBlock245 +
       'KNOWN WORLD INFO:\n' + (prevWorldInfo.length ? prevWorldInfo.map(function(w){return '- ' + w.name + ' (' + w.type + '): ' + w.desc;}).join('\n') : '(none)') + '\n\n' +
       'KEY EVENTS:\n' + (prevEvents.length ? prevEvents.map(function(e){return '- T' + e.turnIdx + ' (importance ' + e.importance + '): ' + e.event;}).join('\n') : '(none)') + '\n\n' +
       'NEW TURNS:\n' + newText + '\n\n' +
@@ -79,7 +92,7 @@
       '  "worldinfo": [ { "name": "Japanese name", "type": "character|place|object|concept", "desc": "1 sentence Japanese: who/what" } ],\n' +
       '  "events": [ { "turnIdx": number, "event": "1 line Japanese: a major event (death/escape/encounter/loss/key decision)", "importance": 1-3 (3=critical) } ]\n' +
       '}\n' +
-      'Rules: Output ONLY the JSON. Update/replace previous summary entirely. Merge new worldinfo entries with old (no duplicates by name). Keep worldinfo <= 30 (drop least relevant). Keep events <= 15 (drop low-importance old ones). Use turnIdx values from the [Turn N] markers above.';
+      'Rules: Output ONLY the JSON. Update/replace previous summary entirely. Merge new worldinfo entries with old (no duplicates by name; reuse AUTHORITATIVE CHARACTER NAMES verbatim — do not create a second entry under a different label for the same person). Keep worldinfo <= 30 (drop least relevant). Keep events <= 15 (drop low-importance old ones). Use turnIdx values from the [Turn N] markers above.';
   }
 
   function call(prompt, cb){
