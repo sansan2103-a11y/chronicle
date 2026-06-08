@@ -1782,7 +1782,7 @@ const G = {
               var _rvDup = _convSays.some(function(c){ var cn = String((c && c.say) || '').replace(/[\s　。、！？!?…・「」『』]/g, ''); return cn && (_rvNorm.indexOf(cn) >= 0 || cn.indexOf(_rvNorm) >= 0); });
               if (_rvDup) continue;
               var _rvK = _rvWho + '' + _rvSay; if (_seenSay[_rvK]) continue; _seenSay[_rvK] = 1;
-              _convSays.push({ who: _rvWho, say: _rvSay });
+              _convSays.push({ who: _rvWho, say: _rvSay, _rv: 1 }); /* v292Dfix240: react声由来マーカー。次ターンで本文として実演されたら実演側を正とし、この予告カードを引っ越し撤去する(時系列ずれ防止) */
             }
           }
         } catch(_e231){}
@@ -1821,9 +1821,9 @@ const G = {
       try {
         var _norm215 = function(s){ return String(s||'').replace(/[\s　。、！？!?…・「」『』]/g,''); };
         var _prev215 = {};
-        S.turns.slice(-1).forEach(function(pt){ ((pt && pt._convSays) || []).forEach(function(pc){ var n = _norm215(pc.say); if (n) _prev215[String(pc.who||'') + '|' + n] = 1; }); }); /* v292Dfix232: 窓を直前1ターンに縮小(2ターン前の再演=意味のある反復として許可) */
+        S.turns.slice(-1).forEach(function(pt){ ((pt && pt._convSays) || []).forEach(function(pc){ var n = _norm215(pc.say); if (n) _prev215[String(pc.who||'') + '|' + n] = { pt: pt, pc: pc, rv: !!(pc && pc._rv), who: String(pc.who||'') }; }); }); /* v292Dfix232: 窓を直前1ターンに縮小(2ターン前の再演=意味のある反復として許可)。v292Dfix240: 値を参照オブジェクト化(react声予告の引っ越しに使う) */
         var _heroSay215 = (S.mode === 'SAY' && text) ? _norm215(text) : null;
-        _convSays = _convSays.filter(function(c, _i232){ var n = _norm215(c.say); if (!n) return false; if (_heroSay215 && n === _heroSay215 && S.cast && S.cast.hero && c.who === S.cast.hero.name) return true; if (_i232 <= 1 && _prev215[String(c.who||'') + '|' + n]) return false; return true; }); /* v292Dfix232(おしん要望): 遮断は「直前ターンの同文を新ターンの冒頭(先頭2件)で再掲」=モデルの再掲癖の署名だけに限定。ターン中盤以降の同文再演(念押し・連呼・意味のある繰り返し)は会話ログに残す */
+        _convSays = _convSays.filter(function(c, _i232){ var n = _norm215(c.say); if (!n) return false; if (_heroSay215 && n === _heroSay215 && S.cast && S.cast.hero && c.who === S.cast.hero.name) return true; var _h240 = _prev215[String(c.who||'') + '|' + n]; if (_h240 && _h240.rv){ try { var _arr240 = (_h240.pt && _h240.pt._convSays) || []; var _ix240 = _arr240.indexOf(_h240.pc); if (_ix240 >= 0) _arr240.splice(_ix240, 1); if (_h240.who) c.who = _h240.who; delete c._rv; console.log('[v292Dfix240]', 'react-voice precast relocated to prose turn:', c.who); } catch(_e240){} return true; } if (_i232 <= 1 && _h240) return false; return true; }); /* v292Dfix232(おしん要望): 遮断は「直前ターンの同文を新ターンの冒頭(先頭2件)で再掲」=モデルの再掲癖の署名だけに限定。ターン中盤以降の同文再演(念押し・連呼・意味のある繰り返し)は会話ログに残す */
       } catch(_e215){}
 
       // v292Dfix175: 本文から <say> タグを除去する（会話ログは上の genConvLog で取得済なので本文の
