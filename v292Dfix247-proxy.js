@@ -124,5 +124,24 @@
   else injectUI();
   setTimeout(injectUI, 3000); // 後着保険
 
+  /* ─── fix248: プロキシON時はAPI関連欄を自動で隠す(公開モードの設定簡素化) ───
+   * 削除ではなく非表示(loadCfg/saveCfgのgetElementById配線を壊さない)。
+   * 欄を空にして直叩きに戻せば再表示される。OFFスイッチはfix247と共通(v292ProxyOff)。 */
+  var HIDE_IDS_248 = ['cfgProvider','cfgKey','cfgModel','cfgOrKey','cfgOrModel','cfgNaiKey','cfgPollKey'];
+  function fldOf(el){ try { return (el.closest && el.closest('.fld')) || el.parentNode; } catch(e){ return null; } }
+  function applyVis248(){
+    try {
+      var hide = on();
+      HIDE_IDS_248.forEach(function(id){
+        var el = document.getElementById(id);
+        if (!el) return;
+        var fld = fldOf(el);
+        if (fld && fld.style) fld.style.display = hide ? 'none' : '';
+      });
+    } catch(e){}
+  }
+  setInterval(applyVis248, 2000);
+  setTimeout(applyVis248, 1600);
+
   console.log(TAG, 'loaded — proxy ' + (on() ? 'ON → ' + purl() : 'off (BYOK direct)'));
 })();

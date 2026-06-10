@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260610-fix247';
+  var BUILT = '20260610-fix248';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2552,7 +2552,7 @@ G.init();
 <!-- v292Dfix246: per-storyストア(fix77状態/longmem/会話キャッシュ)をスロット単位に分離。features.js等の前に設置。OFF=v292StoreSlotIsoOff -->
 <script src="v292Dfix246-store-slot-isolation.js?cb=v292Dfix246"></script>
 <!-- v292Dfix247: APIプロキシ切替(公開化PoC)。設定のプロキシURL+合言葉が入っていれば全API(本文/longmem/🎲/アバター)をWorker経由へ。空=従来BYOK直叩き。OFF=v292ProxyOff -->
-<script src="v292Dfix247-proxy.js?cb=v292Dfix247"></script>
+<script src="v292Dfix247-proxy.js?cb=v292Dfix248"></script>
 <!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
 <script src="features.js?cb=v292Dfix246"></script>
 <script src="v292Dfix135-longmem.js?cb=v292Dfix245"></script>
