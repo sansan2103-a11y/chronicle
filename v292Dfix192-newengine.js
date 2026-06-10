@@ -188,6 +188,46 @@
   //   原料=新しい欄は作らない: cast心理欄の欲求(coreDesire)/傷(wound)、無ければfix77の目的/未解決。
   //   どれも無ければそのキャラには注入しない(発明させない)。
   //   OFF: localStorage v292AgendaOff='1'
+  /* v292Dfix254b: 登場検出のタグ権威化。実機T9実測=モデルは地の文で「三人」と書き
+     名前を出さないことがある(名前スキャン漏れ)。一方<state who>タグは契約上
+     「登場した各キャラ」全員分が毎ターン出る(実測4/4)→rawのタグが登場の権威。
+     parsePlanを最外ラップし、say/react/stateタグのwho+本文名をplan._v254whoへ収穫
+     (planは既存のturn保存に相乗り=新キーなし)。旧ターン(収穫なし)はnarrativeスキャンに
+     フォールバック。 */
+  function harvest254(raw, names){
+    try{
+      var found={}, txt=String(raw||'');
+      var re=/<(?:say|react|state)\b[^>]*?who="([^"]{1,24})"/g, m;
+      while((m=re.exec(txt))){ var w=m[1].trim(); if(names.indexOf(w)>=0) found[w]=1; }
+      /* 本文の名前も拾う(タグ漏れ保険)。長い他名を先に潰して部分文字列衝突を防ぐ */
+      var body=txt.split(/<react|<state/)[0];
+      var sorted=names.slice().sort(function(a,b){ return b.length-a.length; });
+      var masked=body;
+      sorted.forEach(function(n){ if(masked.indexOf(n)>=0){ found[n]=1; masked=masked.split(n).join('〓'); } });
+      return Object.keys(found);
+    }catch(e){ return []; }
+  }
+  function installParse254(){
+    try{
+      var P=window.Planner||(typeof Planner!=='undefined'?Planner:null);
+      if(!P||typeof P.parsePlan!=='function'||P.parsePlan.__v254) return !!(P&&P.parsePlan&&P.parsePlan.__v254);
+      var inner=P.parsePlan.bind(P);
+      var wrapped=function(rawText, inputType){
+        var plan=inner(rawText, inputType);
+        try{
+          var S=getS();
+          var names=(S&&S.cast)?[].concat(S.cast.hero&&S.cast.hero.name?[String(S.cast.hero.name)]:[], (S.cast.npcs||[]).map(function(n){return n&&n.name?String(n.name):'';}).filter(Boolean)):[];
+          if(plan&&typeof plan==='object'&&names.length) plan._v254who=harvest254(rawText, names);
+        }catch(e){}
+        return plan;
+      };
+      wrapped.__v254=true;
+      P.parsePlan=wrapped;
+      return true;
+    }catch(e){ return false; }
+  }
+  (function waitP254(){ if(installParse254()) return; setTimeout(waitP254, 400); })();
+
   function agendaPressures(){
     try{
       var S=getS(); if(!S||!Array.isArray(S.turns)||!S.turns.length) return null;
@@ -195,11 +235,17 @@
       if(!npcs.length) return null;
       var names=npcs.map(function(n){return String(n.name);});
       /* 部分文字列衝突対策(実キャスト例: リナ⊂カリナ): 判定前に、対象名を含むより長い他名を潰す */
-      function appeared(narr, name){
+      function narrHas(narr, name){
         if(!narr) return false;
         var t=narr;
         for(var i=0;i<names.length;i++){ var o=names[i]; if(o!==name && o.length>name.length && o.indexOf(name)>=0){ t=t.split(o).join('〓'); } }
         return t.indexOf(name)>=0;
+      }
+      /* v292Dfix254b: 収穫済みターンはタグ権威(_v254who)・無ければnarrativeフォールバック */
+      function appeared(t, name){
+        if(!t) return false;
+        if(t.plan && Array.isArray(t.plan._v254who)) return t.plan._v254who.indexOf(name)>=0;
+        return narrHas(String(t.narrative||''), name);
       }
       var turns=S.turns, out={}, win=turns.slice(-2); /* 在場判定窓=直近2ターン */
       npcs.forEach(function(n){
@@ -208,9 +254,9 @@
           var t=turns[i]||{};
           var spoke=((t._convSays)||[]).some(function(c){ return c && c.who===name; });
           if(spoke) break; /* 喋った時点で打ち切り=リセット相当 */
-          if(appeared(String(t.narrative||''), name)) p++; /* 登場したのに無言=+1 / 不在=凍結 */
+          if(appeared(t, name)) p++; /* 登場したのに無言=+1 / 不在=凍結 */
         }
-        var present=win.some(function(t){ return appeared(String((t&&t.narrative)||''), name); });
+        var present=win.some(function(t){ return appeared(t, name); });
         out[name]={ pressure:p, present:present };
       });
       return out;
