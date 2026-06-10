@@ -178,6 +178,72 @@
   ].join('\n');
   function miniEx(){ try{ if(localStorage.getItem('v292MiniExOff')==='1') return ''; }catch(e){} return '\n'+MINI223; }
 
+  // v292Dfix254: NPCアジェンダ(自発性)。状況トリガー+内圧蓄積(おしん設計合意 2026-06-10)。
+  //   反応(fix77/react)は受け身の人間味——これは「こちらが何もしなくても自分の目的で動く」深い人間味。
+  //   内圧=「本文に登場したのに喋らなかった」連続ターン数。喋ったら0にリセット。
+  //   登場しなかったターンは増えない(凍結)——おしん決定: 不在のキャラの思いは溜まらない。
+  //   保存しない設計: 毎ビルド時に S.turns(narrative+_convSays)から導出する。
+  //   カウンタ永続が不要=fix246スロット分離にも保存スキーマにも触れない(配線リスクゼロ)。
+  //   候補=場面内(直近2ターンの本文に登場)かつ内圧2以上。上位2人だけ【自発】を注入(標準ノブ)。
+  //   原料=新しい欄は作らない: cast心理欄の欲求(coreDesire)/傷(wound)、無ければfix77の目的/未解決。
+  //   どれも無ければそのキャラには注入しない(発明させない)。
+  //   OFF: localStorage v292AgendaOff='1'
+  function agendaPressures(){
+    try{
+      var S=getS(); if(!S||!Array.isArray(S.turns)||!S.turns.length) return null;
+      var npcs=(S.cast&&Array.isArray(S.cast.npcs))?S.cast.npcs.filter(function(n){return n&&n.name;}):[];
+      if(!npcs.length) return null;
+      var names=npcs.map(function(n){return String(n.name);});
+      /* 部分文字列衝突対策(実キャスト例: リナ⊂カリナ): 判定前に、対象名を含むより長い他名を潰す */
+      function appeared(narr, name){
+        if(!narr) return false;
+        var t=narr;
+        for(var i=0;i<names.length;i++){ var o=names[i]; if(o!==name && o.length>name.length && o.indexOf(name)>=0){ t=t.split(o).join('〓'); } }
+        return t.indexOf(name)>=0;
+      }
+      var turns=S.turns, out={}, win=turns.slice(-2); /* 在場判定窓=直近2ターン */
+      npcs.forEach(function(n){
+        var name=String(n.name), p=0;
+        for(var i=turns.length-1; i>=0 && i>turns.length-13; i--){
+          var t=turns[i]||{};
+          var spoke=((t._convSays)||[]).some(function(c){ return c && c.who===name; });
+          if(spoke) break; /* 喋った時点で打ち切り=リセット相当 */
+          if(appeared(String(t.narrative||''), name)) p++; /* 登場したのに無言=+1 / 不在=凍結 */
+        }
+        var present=win.some(function(t){ return appeared(String((t&&t.narrative)||''), name); });
+        out[name]={ pressure:p, present:present };
+      });
+      return out;
+    }catch(e){ return null; }
+  }
+  function agendaBlock(){
+    try{
+      try{ if(localStorage.getItem('v292AgendaOff')==='1') return ''; }catch(e){}
+      var S=getS(); if(!S||!S.cast||!Array.isArray(S.cast.npcs)) return '';
+      var pr=agendaPressures(); if(!pr) return '';
+      var npcs=S.cast.npcs.filter(function(n){return n&&n.name;});
+      var cur=(S.turns||[]).length;
+      var st77=window.__v292Dfix77Store||{};
+      var cands=[];
+      npcs.forEach(function(n,i){
+        var info=pr[n.name]; if(!info||!info.present||info.pressure<2) return;
+        var s=st77[n.name]||{};
+        var desire=clean223(n.coreDesire||'')||clean223(s.mokuteki||s['目的']||'')||clean223(s.mikaiketsu||s['未解決']||'');
+        var wound=clean223(n.wound||'')||clean223(s.kizu||s['傷']||'');
+        if(!desire&&!wound) return; /* 原料なし=注入しない */
+        cands.push({ name:n.name, p:info.pressure, d:desire, w:wound, r:(i+cur)%(npcs.length||1) });
+      });
+      if(!cands.length) return '';
+      cands.sort(function(a,b){ return (b.p-a.p)||(a.r-b.r); }); /* 内圧降順・同点は決定的ローテで固着防止 */
+      var lines=cands.slice(0,2).map(function(c){
+        var core=c.d?('内心『'+c.d.slice(0,40)+'』を抱え続けている'):('傷('+c.w.slice(0,30)+')が言動の下に燻り続けている');
+        var sub=(c.d&&c.w)?('傷('+c.w.slice(0,30)+')もその下に流れている。'):'';
+        return '・'+c.name+'は'+core+'。'+sub+'場面がそれに触れた時、または行動の区切り(静かな間)が来たら、'+c.name+'の方から小さな一歩(発言・行動)を起こす。唐突な暴走はしない。';
+      });
+      return '【自発(黙り続けている人ほど、内側が動いている)】\n'+lines.join('\n');
+    }catch(e){ return ''; }
+  }
+
   // register 見本（静）。将来 toneLevel で差し替え可能にするためマップ化。
   var EXAMPLES = {
     'shizuka': [
@@ -402,6 +468,7 @@
     var st = stateBlock();
     var seed = seedBlock();          /* v292Dfix223a */
     var spice = spiceLine(isCont);   /* v292Dfix223c */
+    var agenda = agendaBlock();      /* v292Dfix254 */
 
     var blocks = [
       '＜あなたの役割＞',
@@ -428,6 +495,7 @@
     if (st){ blocks.push(''); blocks.push(st); }
     if (seed){ blocks.push(''); blocks.push(seed); }     /* v292Dfix223a */
     if (spice){ blocks.push(''); blocks.push(spice); }   /* v292Dfix223c */
+    if (agenda){ blocks.push(''); blocks.push(agenda); } /* v292Dfix254 */
     blocks = blocks.concat([
       '',
       '【出力の形式（これだけは形式として守る）】',
@@ -527,6 +595,6 @@
   }
   injectToggle();
 
-  window.__v292NewEngine = { buildSys: buildSys, engineOn: engineOn, setEngine: setEngine, stateBlock: stateBlock, toneKey: toneKey, setTone: setTone, lenKey: lenKey, setLen: setLen };
+  window.__v292NewEngine = { buildSys: buildSys, engineOn: engineOn, setEngine: setEngine, stateBlock: stateBlock, toneKey: toneKey, setTone: setTone, lenKey: lenKey, setLen: setLen, agendaBlock: agendaBlock, agendaPressures: agendaPressures /* v292Dfix254 */ };
   try{ console.log(TAG, 'loaded'); }catch(_){}
 })();
