@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260610-fix249';
+  var BUILT = '20260610-fix251';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -689,7 +689,17 @@ const Api = {
       .replace(/\b(true|false|null)\b/g, '');         // JSON リテラルを除外
     const enMatches = (cleaned.match(/[A-Za-z][]{2,}/g) || []).length;
     const zhMatches = (cleaned.match(/[过这现还说让对给从们东几亲爱觉吗么吧呢哪谁怎样围]/g) || []).length;
-    return enMatches >= 3 || zhMatches >= 2;
+    // v292Dfix250: 多言語対応の許可セット方式。「今のプレイ言語で正当な文字」以外を外れ値として数える。
+    //   ja許可 = ASCII/一般句読点・記号/かな/カナ/CJK漢字/全半角形/空白。越語のような
+    //   ダイアクリティカル付きラテン(ã,đ,ạ…)・ハングル・キリル等は許可外=検出される。
+    //   言語追加時は LANG250 に1行足すだけ(将来の多言語対応フック: localStorage v292Lang)。
+    //   ※簡体字は日本語と同じCJKブロック内のため許可セットでは捕れない→上のzhMatchesが受け持つ。
+    const LANG250 = {
+      ja: /[^ - -⁯℀-⋿①-⓿─-◿☀-➿　-ヿㇰ-ㇿ㐀-䶿一-鿿豈-﫿＀-￯\s]/g
+    };
+    let _lang250 = 'ja'; try { _lang250 = localStorage.getItem('v292Lang') || 'ja'; } catch (e) {}
+    const outChars = (cleaned.match(LANG250[_lang250] || LANG250.ja) || []).length;
+    return outChars >= 3 || enMatches >= 3 || zhMatches >= 2; /* v292Dfix250: outChars=許可セット外(越語等)。enMatchesは既存正規表現が空クラスで常に0=実質死文だが互換のため残置 */
   },
 
   async _callOpenRouter(system, userContent, maxTok, opts = {}) {
@@ -773,6 +783,17 @@ const Api = {
         const reason = _isCopy ? '前ターンのコピー' : (isIncomplete ? '不完全な出力' : '外国語混入');
         console.warn(`[Retry ${attempt+1}/${maxRetries}] ${reason}を検出、再生成します`);
         continue;
+      }
+      // v292Dfix250: リトライを使い切ってもなお外国語が混入している場合の救済——
+      //   許可セット外の文字だけを除去して採用(再生成より文意の保全を優先。簡体字は
+      //   CJK共有ブロックのため削らない=破損リスク回避)。
+      if (lastResult && lastResult.text && attempt >= maxRetries && this._hasForeignGarbage(lastResult.text)) {
+        try {
+          const _re250 = new RegExp('[^\\u0000-\\u007F\\u2000-\\u206F\\u2100-\\u22FF\\u2460-\\u24FF\\u2500-\\u25FF\\u2600-\\u27BF\\u3000-\\u30FF\\u31F0-\\u31FF\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF\\uFF00-\\uFFEF\\s]', 'g');
+          const _before250 = lastResult.text.length;
+          lastResult.text = lastResult.text.replace(_re250, '');
+          console.warn('[v292Dfix250] リトライ枯渇→許可外文字を除去して採用 (' + (_before250 - lastResult.text.length) + '文字)');
+        } catch (_e) {}
       }
       return lastResult;
     }
@@ -2606,7 +2627,7 @@ G.init();
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
-  <script src="v292Dfix192-newengine.js?cb=v292Dfix249"></script>
+  <script src="v292Dfix192-newengine.js?cb=v292Dfix251"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
   <script src="v292Dfix197-avatar-key.js?cb=v292Dfix209"></script>
