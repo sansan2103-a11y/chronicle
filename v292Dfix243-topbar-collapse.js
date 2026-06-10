@@ -85,7 +85,8 @@
     var open = isOpen();
     bar.classList.toggle('v243-collapsed', !open);
     var n = bar.querySelectorAll('.v243-foldable').length;
-    tg.innerHTML = '⚙ 調整 <span class="v243-caret">' + (open ? '▴' : '▾ ' + n) + '</span>';
+    /* v292Dfix253: ⚙→🎛 (設定ボタンの⚙と紛らわしいため・おしん要望) */
+    tg.innerHTML = '🎛 調整 <span class="v243-caret">' + (open ? '▴' : '▾ ' + n) + '</span>';
     tg.title = open ? '調整コントロールを隠す' : (n + '個の調整コントロールを開く');
   }
 
