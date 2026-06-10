@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260610-fix251b';
+  var BUILT = '20260610-fix252';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -1666,7 +1666,9 @@ const G = {
   startScene() {
     const h = S.cast.hero.name || '主人公';
     const l = S.scene.loc || 'その場所';
-    document.getElementById('inp').value = `${l}で${h}は目を開けた`;
+    /* v292Dfix252: 目覚めテンプレ廃止(おしん要望)。AIダンジョン型のコールドオープン=
+       遠景→ズームインで開幕し、主人公を冒頭から無理に出さない(ターン内に行動可能な位置へ)。 */
+    document.getElementById('inp').value = `物語の幕開け。${l}の景色と空気を遠景から描き、ゆっくり${h}のいる場面へズームインする（冒頭から${h}を出さなくてよい）`;
     this.setMode('STORY'); this.submit();
   },
 
