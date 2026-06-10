@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260610-fix251';
+  var BUILT = '20260610-fix251b';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -694,9 +694,16 @@ const Api = {
     //   ダイアクリティカル付きラテン(ã,đ,ạ…)・ハングル・キリル等は許可外=検出される。
     //   言語追加時は LANG250 に1行足すだけ(将来の多言語対応フック: localStorage v292Lang)。
     //   ※簡体字は日本語と同じCJKブロック内のため許可セットでは捕れない→上のzhMatchesが受け持つ。
-    const LANG250 = {
+    /* v292Dfix250b: 旧実装(文字リテラル正規表現)はソース中のNUL文字がGitHubアップロード時に
+       U+FFFDへ置換され「Range out of order」の構文エラー→インラインscript全死(S/UI未定義)を起こした。
+       実機実証済み。正規表現は必ず\uエスケープのRegExp構築で書く。旧行は下のテンプレート文字列に封印
+       (パース対象から外す。Editツールで NUL 行を直接触れないための墓標)。 */
+    const LANG250 = {};
+    LANG250.ja = new RegExp('[^\\u0020-\\u007E\\u2000-\\u206F\\u2100-\\u22FF\\u2460-\\u24FF\\u2500-\\u25FF\\u2600-\\u27BF\\u3000-\\u30FF\\u31F0-\\u31FF\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF\\uFF00-\\uFFEF\\s]', 'g');
+    const LANG250_sealed = String.raw`
       ja: /[^ - -⁯℀-⋿①-⓿─-◿☀-➿　-ヿㇰ-ㇿ㐀-䶿一-鿿豈-﫿＀-￯\s]/g
-    };
+    `;
+    void LANG250_sealed; /* 未使用警告避け */
     let _lang250 = 'ja'; try { _lang250 = localStorage.getItem('v292Lang') || 'ja'; } catch (e) {}
     const outChars = (cleaned.match(LANG250[_lang250] || LANG250.ja) || []).length;
     return outChars >= 3 || enMatches >= 3 || zhMatches >= 2; /* v292Dfix250: outChars=許可セット外(越語等)。enMatchesは既存正規表現が空クラスで常に0=実質死文だが互換のため残置 */
