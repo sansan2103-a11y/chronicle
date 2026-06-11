@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260611-fix259';
+  var BUILT = '20260611-fix260';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -1827,8 +1827,9 @@ const G = {
             var _rvRe = /<react\b[^>]*?who="([^"]+)"[^>]*?声="<say[^>]*>([\s\S]*?)<\/say>"/g, _rvm;
             var _rvAll = String(result.text || '');
             while ((_rvm = _rvRe.exec(_rvAll))) {
+              if ((String(_rvm[0] || '').match(/<say/g) || []).length >= 2) continue; /* v292Dfix260: モデルが1つのreact声属性に複数<say>を詰め込む異常(実測:声="<say>暇つぶしにはなる</say><say>行く</say><say>行かない</say>"=選択肢の羅列)を構造的に弾く。複数=どれが本当の発話か不明+矛盾するので会話ログに採らない。fix259(プロンプトで「声は短い反応1つ」)の構造バックアップ */
               var _rvWho = String(_rvm[1] || '').trim().slice(0, 24);
-              var _rvSay = String(_rvm[2] || '').split(/\r?\n/)[0].trim().slice(0, 80); /* v292Dfix241a: 声属性が地の文を飲み込む実測対策(改行以降を切除。実測:T17「…ですか？\nカエデは声を潜め…」) */
+              var _rvSay = String(_rvm[2] || '').replace(/<\/?say[^>]*>/g, '').split(/\r?\n/)[0].trim().slice(0, 80); /* v292Dfix241a: 声属性が地の文を飲み込む実測対策(改行以降を切除) / v292Dfix260: 万一すり抜けた残存sayタグ片も除去 */
               var _rvN = _rvSay.replace(/[\s　。、！？!?…・ッぁぃぅぇぉ「」『』]/g, '');
               if (!_rvWho || _rvN.length < 3) continue;
               if (_rvSay.indexOf(_rvWho) === 0) continue; /* v292Dfix241b: 自分の名前で始まる声=「相手から聞いた呼びかけ」の誤格納(実測:ミリア|ミリアさん、大丈夫ですか？)。真の話者は特定不能なので採らない(誤帰属より欠落が安全) */
