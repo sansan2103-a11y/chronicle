@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260611-fix255c';
+  var BUILT = '20260611-fix256';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2658,6 +2658,8 @@ G.init();
   <script src="v292Dfix243-topbar-collapse.js?cb=v292Dfix253"></script>
   <!-- v292Dfix244: 心理プロファイル入力欄を1つの自由記述に統合(裏の4軸は保持)。OFF=v292PsychMergeOff -->
   <script src="v292Dfix244-psych-merge.js?cb=v292Dfix244b"></script>
+  <!-- v292Dfix256: 🧠モデル切替セレクタ(cfg.orModel・スロット毎保存)。A/B実測でDS V4 Flash推奨。OFF=v292ModelSelOff -->
+  <script src="v292Dfix256-model-select.js?cb=v292Dfix256"></script>
 </body>
 </html>
 
