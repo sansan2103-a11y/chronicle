@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260611-fix260';
+  var BUILT = '20260611-fix261';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -258,7 +258,7 @@ body {
   </div>
   <div class="inp-row">
     <textarea id="inp" rows="1" placeholder="行動を入力..."
-      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();G.submit()}"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing&&event.keyCode!==229){event.preventDefault();G.submit()}"
       oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
     <button id="sendBtn" onclick="G.submit()">送信 ▶</button>
   </div>
