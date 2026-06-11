@@ -85,3 +85,51 @@
   tick();
   try { console.log(TAG, 'slot generation backup armed (3 gens, 2s watch)'); } catch(e){}
 })();
+
+
+/* v292Dfix264b: quota自己回復。物語データの保存(setItem)がQuotaExceededで失敗したら、世代バックアップ(__gen_*)を古い順に間引き→残骸(__bak*)削除→保存リトライ。優先順位=現在の保存>過去のバックアップ。OFF: v292QuotaGuardOff='1' */
+(function(){
+  var TAG='[v292Dfix264b]';
+  try { if (localStorage.getItem('v292QuotaGuardOff')==='1') return; } catch(e){}
+  if (window.__v292QuotaGuard) return; window.__v292QuotaGuard=1;
+  var prev = localStorage.setItem.bind(localStorage);
+  function isQuota(e){ return !!e && (e.name==='QuotaExceededError' || e.code===22 || /quota/i.test(String(e))); }
+  function shrinkOnce(){
+    var gks=[]; try{ for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k && k.indexOf('__gen_')===0) gks.push(k); } }catch(e){}
+    var did=false;
+    for(var j=0;j<gks.length;j++){
+      try{
+        var g=JSON.parse(localStorage.getItem(gks[j])||'[]');
+        if(Array.isArray(g) && g.length>0){ g.pop(); did=true;
+          if(g.length===0){ localStorage.removeItem(gks[j]); }
+          else { try{ prev(gks[j], JSON.stringify(g)); }catch(e2){ try{ localStorage.removeItem(gks[j]); }catch(_){} } }
+        }
+      }catch(e3){ try{ localStorage.removeItem(gks[j]); }catch(_){} did=true; }
+    }
+    if(!did){
+      var bks=[]; try{ for(var i2=0;i2<localStorage.length;i2++){ var k2=localStorage.key(i2); if(k2 && k2.indexOf('__bak')===0) bks.push(k2); } }catch(e){}
+      for(var j2=0;j2<bks.length;j2++){ try{ localStorage.removeItem(bks[j2]); did=true; }catch(e){} }
+    }
+    return did;
+  }
+  localStorage.setItem = function(k, v){
+    try { return prev(k, v); }
+    catch(e){
+      if(!isQuota(e) || String(k).indexOf('__gen_')===0) throw e;
+      for(var n=0;n<8;n++){
+        if(!shrinkOnce()) break;
+        try { var r=prev(k, v); try{ console.warn(TAG,'quota回復: 世代を間引いて保存成功 ('+k+')'); }catch(_){} return r; } catch(e2){ if(!isQuota(e2)) throw e2; }
+      }
+      try { console.error(TAG,'⚠ 容量不足で保存失敗: '+k); } catch(_){}
+      try {
+        var t=document.getElementById('v264toast'); if(t) t.remove();
+        t=document.createElement('div'); t.id='v264toast';
+        t.style.cssText='position:fixed;left:50%;bottom:140px;transform:translateX(-50%);z-index:99999;background:#3a2a14;color:#ffe9c9;border:1px solid #a07c40;border-radius:10px;padding:10px 14px;font-size:13px;max-width:86vw';
+        t.textContent='⚠ ブラウザ保存領域が満杯で保存できません。バックアップ削除や不要スロット整理が必要です。';
+        document.body.appendChild(t); setTimeout(function(){ try{ t.remove(); }catch(_){} }, 15000);
+      } catch(_){}
+      throw e;
+    }
+  };
+  try { console.log(TAG, 'quota guard armed'); } catch(e){}
+})();

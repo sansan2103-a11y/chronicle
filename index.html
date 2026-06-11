@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260611-fix263';
+  var BUILT = '20260611-fix264';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -1713,7 +1713,7 @@ const G = {
       return arr.filter(x => x && x.who && x.say && String(x.say).trim())
                 .map(x => ({ who: String(x.who).trim().slice(0, 24), say: String(x.say).trim().slice(0, 80) })).map(x => { if (_cn.indexOf(x.who) < 0 && names.indexOf(x.who) < 0){ const _mw = _cn.match(/(妖怪|怪異|化け物|怪物|魔物|悪霊|亡霊|幽霊|人形)/); if (_mw) x.who = _mw[1]; } return x; }) /* v292Dfix207: whoは本文の呼び名へ正規化(発明ラベル防止) */
                 .filter(x => !(names.indexOf(x.who) >= 0 && _cn.indexOf(x.who) < 0))
-                .slice(0, 8);
+                .slice(0, 24) /* v292Dfix264c: 会話ログ収穫キャップ8→24(6NPC賑やか場面の取りこぼし保険) */;
     } catch(e) { try { console.warn('[v292Dfix169] genConvLog err:', e && e.message); } catch(_){} return []; }
   },
 
@@ -1766,7 +1766,7 @@ const G = {
 
     try {
       const { sys, user } = Planner.build(S.mode, text);
-      let result = await Api.call(sys, user);
+      let result; try { result = await Api.call(sys, user); } catch(_e265) { if (/HTTP 5\d\d|Failed to fetch|NetworkError|load failed/i.test(String((_e265 && _e265.message) || _e265))) { UI.setStatus('一時エラー。2秒後に自動再試行…'); await new Promise(function(_r){ setTimeout(_r, 2000); }); result = await Api.call(sys, user); } else { throw _e265; } } /* v292Dfix265: 5xx/ネットワーク一過性エラーは1回だけ透過リトライ。2回目失敗はfix263aトーストへ */
       if (!result) { try { if (text && !inputEl.value.trim()) inputEl.value = text; UI.setStatus('応答が得られませんでした。もう一度お試しください', true); } catch(_){} return; } /* v292Dfix263a2 */
 
       let plan = Planner.parsePlan(result.text, S.mode);
@@ -2654,7 +2654,7 @@ G.init();
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
-  <script src="v292Dfix192-newengine.js?cb=v292Dfix259"></script>
+  <script src="v292Dfix192-newengine.js?cb=v292Dfix266"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
   <script src="v292Dfix197-avatar-key.js?cb=v292Dfix209"></script>
@@ -2667,7 +2667,7 @@ G.init();
   <script src="v292Dfix226-engine-unify.js?cb=v292Dfix226"></script>
   <!-- v292Dfix228: スロット自動世代バックアップ(直近3世代)。2026-06-06のクロバー消失事故の恒久保険。
        復元= console で window.__v292Restore() / 一覧= window.__v292Gens() -->
-  <script src="v292Dfix228-slot-generations.js?cb=v292Dfix228"></script>
+  <script src="v292Dfix228-slot-generations.js?cb=v292Dfix264"></script>
   <!-- v292Dfix237: 別キャラ同一アイコンの根治(運搬URLのalt/seed整合ガード)。OFF=v292AvCarrierGuardOff -->
   <script src="v292Dfix237-avatar-carrier-guard.js?cb=v292Dfix237"></script>
   <!-- v292Dfix239: 未登録キャラ(少女/店主等)のアイコン怪物化根治(genAsync判定待ちのレース封じ)。OFF=v292NcAvRaceOff -->
