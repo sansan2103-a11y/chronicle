@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260611-fix262';
+  var BUILT = '20260611-fix263';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -1767,7 +1767,7 @@ const G = {
     try {
       const { sys, user } = Planner.build(S.mode, text);
       let result = await Api.call(sys, user);
-      if (!result) return;
+      if (!result) { try { if (text && !inputEl.value.trim()) inputEl.value = text; UI.setStatus('応答が得られませんでした。もう一度お試しください', true); } catch(_){} return; } /* v292Dfix263a2 */
 
       let plan = Planner.parsePlan(result.text, S.mode);
       if (!plan) throw new Error('AIの応答をJSONとして解析できませんでした。\nデバッグをONにして確認してください。\n\n' + result.text.slice(0,300));
@@ -1817,6 +1817,7 @@ const G = {
           var _ss = _ss2; if (!_ss2) continue; if (_sm[1] == null && !_utt217) continue; /* v292Dfix217: 発話判別器を通らない裸「」は収穫しない(地の文の引用を発話化しない=「助けられなかった」誤帰属の根治) */ if (_sm[1] == null && _tagNorm[_ss2.replace(/[\s　。、！？!?…・「」『』]/g,'')]) continue; /* v292Dfix213: タグ版が存在する裸「」は同一セリフの重複＝スキップ(話者はタグが正) */
           var _sk = (_sw || '?') + '' + _ss;
           if (_seenSay[_sk]) continue; _seenSay[_sk] = 1;
+          if (_sm[1] == null && _ss2.length <= 12 && _convSays.some(function(_c){ return _c && !_c._b && _c.say && String(_c.say).indexOf(_ss2) >= 0; })) continue; /* v292Dfix263b: 強調引用の断片dup(「普通」と言い切った型)を採らない */
           if (_conf218){ _convSays.push({ who: _sw || _heroNm || '???', say: _ss2, _b: (_sm[1] == null ? 1 : undefined) }); } else if (_ss2.replace(/[\s　。、！？!?…・ッぁぃぅぇぉ「」『』]/g,'')) { var _ph218 = { who: null, say: _ss2 }; _convSays.push(_ph218); _pend218.push(_ph218); } /* v292Dfix218: 不確信は保留(第2層で帰属照会)。文書順は維持。記号/息だけの引用は照会せず捨てる。_b=裸引用解決マーカー(fix234用・undefinedなら保存に乗らない) */
         }
         /* v292Dfix231: react属性「声」の実セリフ収穫。実測: ミリア「さっきからずっと…誰かに見られている気がしてた」が
@@ -1922,6 +1923,22 @@ const G = {
       UI.setStatus('');
     } catch(e) {
       UI.setStatus('エラー: ' + e.message, true); console.error(e);
+      /* v292Dfix263a: 失敗の可視化+入力復元+再試行(503等のサイレントターン消滅根治。#storyのerr-msgはレンダラに拭われるためbody直付けトースト) */
+      try {
+        if (text && !inputEl.value.trim()) inputEl.value = text;
+        var _t263 = document.getElementById('v263toast'); if (_t263) _t263.remove();
+        _t263 = document.createElement('div'); _t263.id = 'v263toast';
+        _t263.style.cssText = 'position:fixed;left:50%;bottom:90px;transform:translateX(-50%);z-index:99999;background:#3a1418;color:#ffd9d9;border:1px solid #a04040;border-radius:10px;padding:10px 14px;font-size:13px;max-width:86vw;box-shadow:0 4px 16px rgba(0,0,0,.5);display:flex;gap:10px;align-items:center';
+        var _tm263 = document.createElement('span'); _tm263.textContent = '⚠ 生成に失敗しました(' + String((e && e.message) || e).slice(0, 90) + ')。入力は残してあります。'; _t263.appendChild(_tm263);
+        var _tb263 = document.createElement('button'); _tb263.textContent = '再試行'; _tb263.style.cssText = 'background:#a04040;color:#fff;border:0;border-radius:8px;padding:5px 12px;cursor:pointer;flex:none';
+        var _g263 = this; _tb263.onclick = function(){ try { _t263.remove(); } catch(_){} _g263.submit(); };
+        _t263.appendChild(_tb263);
+        var _tx263 = document.createElement('button'); _tx263.textContent = '✕'; _tx263.style.cssText = 'background:none;color:#caa;border:0;cursor:pointer;flex:none;font-size:14px';
+        _tx263.onclick = function(){ try { _t263.remove(); } catch(_){} };
+        _t263.appendChild(_tx263);
+        document.body.appendChild(_t263);
+        setTimeout(function(){ try { _t263.remove(); } catch(_){} }, 60000);
+      } catch(_e263) {}
     } finally { UI.setLoading(false); }
   },
 
