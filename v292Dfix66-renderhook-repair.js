@@ -1240,6 +1240,8 @@
           //   =repair内 extractFromTurn ループ)でカード化をスキップする。DOM除去でなく未生成なので
           //   fix128 regression detectorと衝突せずスクロールも安定。
           if (looksStateDescriptionCard(String(d.text || ''))) continue;
+      // v292Dfix257c: 足す側ゲート再適用(fix257コミット不発の修理)。消す側line1204と同関数・同引数で判定統一
+      if (typeof __allNarr === 'string' && isOnomatopoeiaQuote(__allNarr, String(d.text || ''))) continue;
           // v292Dfix110: clean the doubled-name glitch for display + dedup key.
           var sp = cleanSpeakerName(d.speaker);
           var k = dialogueKey(sp, d.text);

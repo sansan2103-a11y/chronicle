@@ -2827,7 +2827,7 @@
         .filter(function(x){ return x && x.length >= 2 && /[぀-ゟ゠-ヿ一-龥]/.test(x); });
       var out = [];
       for (var i = 0; i < parts.length; i++){ if (parts[i] !== out[out.length - 1]) out.push(parts[i]); }
-      return out.length ? out.slice(0, 8) : null;
+      return out.length ? out.slice(0, 40) : null;
     }
     function install(){
       var P = (typeof Planner !== 'undefined') ? Planner : (window.Planner || null);
@@ -3262,7 +3262,7 @@
       const extracted = JSON.parse(arrStr.replace(/,\s*$/, ''));
       const cleaned = extracted
         .filter(s => typeof s === 'string' && isJapaneseValid(s))
-        .slice(0, 8);
+        .slice(0, 40);
       if (cleaned.length > 0) {
         plan.narrative = cleaned;
         console.log('[v292Dfix12] narrative recovered from raw, lines:', cleaned.length);
@@ -3516,7 +3516,7 @@
         var cleaned = arr
           .filter(function(s){ return typeof s === 'string' && isJapaneseValid(s); })
           .map(function(s){ return s.trim(); })
-          .slice(0, 8);
+          .slice(0, 40);
         if (cleaned.length > 0) return cleaned;
       } catch(e){}
     }
@@ -10841,3 +10841,5 @@
   if (document.readyState === 'complete') install();
   else window.addEventListener('load', install);
 })();
+
+// v292Dfix262: narrative救済キャップ8→40 (fix155/12/14のslice(0,8)。DeepSeek長文=毎ターン11〜18段落で本文後半欠落の真因) 2026-06-11
