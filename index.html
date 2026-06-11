@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260611-fix257b';
+  var BUILT = '20260611-fix258';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2584,7 +2584,7 @@ G.init();
 <!-- v292Dfix247: APIプロキシ切替(公開化PoC)。設定のプロキシURL+合言葉が入っていれば全API(本文/longmem/🎲/アバター)をWorker経由へ。空=従来BYOK直叩き。OFF=v292ProxyOff -->
 <script src="v292Dfix247-proxy.js?cb=v292Dfix248"></script>
 <!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
-<script src="features.js?cb=v292Dfix246"></script>
+<script src="features.js?cb=v292Dfix258"></script>
 <script src="v292Dfix135-longmem.js?cb=v292Dfix245"></script>
 <script src="v292Dfix138-continue.js?cb=v292Dfix225"></script>
 <script src="v292Dfix145-charlist.js?cb=v292Dfix145f"></script>

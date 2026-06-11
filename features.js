@@ -9304,14 +9304,43 @@
   // expose for manual / diagnostic use
   window.__v292Dfix93 = { clearScenarioStores: clearScenarioStores, scenarioStoreKeys: scenarioStoreKeys, allAppKeys: allAppKeys };
 
+  // ---------- v292Dfix258: confirm非依存のリセット確認(iOS Chrome/Brave=WebKit対策) ----------
+  //   真因: iOS Safari/WebKit(=iOSのChrome/Braveも中身はWebKit)は、サイトが何度かダイアログを
+  //   出すと「このサイトのダイアログを表示しない」抑制が効き、以降 window.confirm() が即 false を
+  //   返す。resetStory/resetAll は先頭が `if(!confirm())return` なので、confirmが抑制されると
+  //   ボタンを押しても1行も実行されず「リセットが発動しない」(おしん実報告)。
+  //   対策: confirm を使わず、タップで操作する独自モーダルで確認。DOM生成失敗時のみ従来confirmへ。
+  //   OFF(従来confirmに戻す): localStorage v292ResetModalOff='1'
+  function __v292ResetConfirm(msg, onYes){
+    try { if (localStorage.getItem('v292ResetModalOff') === '1'){ if (confirm(msg)) onYes && onYes(); return; } } catch(e){}
+    try {
+      var ov = document.createElement('div');
+      ov.setAttribute('data-v292-reset-modal','1');
+      ov.style.cssText = 'position:fixed;inset:0;z-index:2147483600;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center;padding:20px;-webkit-tap-highlight-color:transparent;';
+      var box = document.createElement('div');
+      box.style.cssText = 'background:#17172a;color:#e0dcf0;border:1px solid #8b76f0;border-radius:12px;padding:20px;max-width:340px;width:100%;font-size:14px;line-height:1.7;box-shadow:0 8px 40px rgba(0,0,0,.5);';
+      var p = document.createElement('div'); p.textContent = msg; p.style.cssText = 'white-space:pre-wrap;margin-bottom:18px;';
+      var row = document.createElement('div'); row.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;';
+      var no = document.createElement('button'); no.textContent = 'キャンセル'; no.style.cssText = 'padding:10px 16px;border-radius:8px;border:1px solid #6868a0;background:transparent;color:#e0dcf0;font-size:14px;';
+      var yes = document.createElement('button'); yes.textContent = 'リセット'; yes.style.cssText = 'padding:10px 18px;border-radius:8px;border:none;background:#8b76f0;color:#fff;font-size:14px;font-weight:bold;';
+      function close(){ try { ov.parentNode && ov.parentNode.removeChild(ov); } catch(e){} }
+      no.addEventListener('click', function(){ close(); });
+      yes.addEventListener('click', function(){ close(); try { onYes && onYes(); } catch(e){} });
+      ov.addEventListener('click', function(ev){ if (ev.target === ov) close(); });
+      row.appendChild(no); row.appendChild(yes); box.appendChild(p); box.appendChild(row); ov.appendChild(box);
+      (document.body || document.documentElement).appendChild(ov);
+    } catch(e){ try { if (confirm(msg)) onYes && onYes(); } catch(_){} }
+  }
+  try { window.__v292ResetConfirm = __v292ResetConfirm; } catch(e){}
+
   function wrapReset(){
     if (typeof G === 'undefined' || !G) return false;
 
     // 物語リセット（設定は保持）: clear turns + ALL per-scenario stores, then reload
     // so in-memory caches (e.g. window.__v292Dfix77Store) re-init empty.
     if (typeof G.resetStory === 'function' && !G.__v292Dfix93RS){
-      G.resetStory = function(){
-        if (!confirm('物語をリセットしますか？\n設定・APIキー・NPC設定は保持されます。\n（蓄積された旧シナリオの状態も消去します）')) return;
+      G.resetStory = function(force){
+        if (!force){ __v292ResetConfirm('物語をリセットしますか？\n設定・APIキー・NPC設定は保持されます。\n（蓄積された旧シナリオの状態も消去します）', function(){ try { G.resetStory(true); } catch(e){} }); return; } /* v292Dfix258: confirm非依存(iOS抑制回避) */
         // NOTE: S is a top-level const, NOT on window — must use the lexical binding,
         // not window.S (which is undefined → would skip clearing turns → reset no-op).
         var _S = (typeof S !== 'undefined' && S) ? S : (window.S || null);
@@ -9339,8 +9368,8 @@
 
     // 完全リセット: wipe every app-owned key, then reload.
     if (typeof G.resetAll === 'function' && !G.__v292Dfix93RA){
-      G.resetAll = function(){
-        if (!confirm('すべてのデータ（APIキー・設定を含む）を削除しますか？\nこの操作は取り消せません。')) return;
+      G.resetAll = function(force){
+        if (!force){ __v292ResetConfirm('すべてのデータ（APIキー・設定を含む）を削除しますか？\nこの操作は取り消せません。', function(){ try { G.resetAll(true); } catch(e){} }); return; } /* v292Dfix258: confirm非依存(iOS抑制回避) */
         try { if (typeof G._clearDerivedState === 'function') G._clearDerivedState(); } catch(e){}   // v292Dfix204
         try { removeKeys(allAppKeys()); } catch(e){}
         // v292Dfix204: allAppKeysでchr6_epochも消えるので、再bumpして古いタブの保存をブロック
