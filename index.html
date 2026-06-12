@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260612-fix272';
+  var BUILT = '20260612-fix274';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2680,6 +2680,7 @@ G.init();
   <!-- v292Dfix256: 🧠モデル切替セレクタ(cfg.orModel・スロット毎保存)。A/B実測でDS V4 Flash推奨。OFF=v292ModelSelOff -->
   <script src="v292Dfix256-model-select.js?cb=v292Dfix256"></script>
 <script src="v292Dfix270-topbar-ui.js?cb=v292Dfix270"></script>
+<script src="v292Dfix274-build-flag-guard.js?cb=v292Dfix274"></script>
 </body>
 </html>
 
