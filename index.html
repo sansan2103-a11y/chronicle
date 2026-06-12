@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260611-fix264';
+  var BUILT = '20260612-fix268';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -649,7 +649,7 @@ const Api = {
     const id = ++S.reqId;
     S.inFlight = true;
     const ctrl = new AbortController();
-    const tid  = setTimeout(() => ctrl.abort(), 60000);
+    const tid  = setTimeout(() => ctrl.abort(), 150000) /* v292Dfix268: 60s→150s(DeepSeek長文+プロキシ+内部リトライで60s天井に当たる実測) */;
     let res;
     try {
       res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -722,7 +722,7 @@ const Api = {
       const id = ++S.reqId;
       S.inFlight = true;
       const ctrl = new AbortController();
-      const tid  = setTimeout(() => ctrl.abort(), 60000);
+      const tid  = setTimeout(() => ctrl.abort(), 150000) /* v292Dfix268: 60s→150s(DeepSeek長文+プロキシ+内部リトライで60s天井に当たる実測) */;
       let res;
       try {
         const body = {
@@ -1929,7 +1929,7 @@ const G = {
         var _t263 = document.getElementById('v263toast'); if (_t263) _t263.remove();
         _t263 = document.createElement('div'); _t263.id = 'v263toast';
         _t263.style.cssText = 'position:fixed;left:50%;bottom:90px;transform:translateX(-50%);z-index:99999;background:#3a1418;color:#ffd9d9;border:1px solid #a04040;border-radius:10px;padding:10px 14px;font-size:13px;max-width:86vw;box-shadow:0 4px 16px rgba(0,0,0,.5);display:flex;gap:10px;align-items:center';
-        var _tm263 = document.createElement('span'); _tm263.textContent = '⚠ 生成に失敗しました(' + String((e && e.message) || e).slice(0, 90) + ')。入力は残してあります。'; _t263.appendChild(_tm263);
+        var _tm263 = document.createElement('span'); var _m268 = String((e && e.message) || e); if (/abort/i.test(_m268)) _m268 = '生成がタイムアウトしました（時間切れ）'; /* v292Dfix268 */ _tm263.textContent = '⚠ 生成に失敗しました(' + _m268.slice(0, 90) + ')。入力は残してあります。'; _t263.appendChild(_tm263);
         var _tb263 = document.createElement('button'); _tb263.textContent = '再試行'; _tb263.style.cssText = 'background:#a04040;color:#fff;border:0;border-radius:8px;padding:5px 12px;cursor:pointer;flex:none';
         var _g263 = this; _tb263.onclick = function(){ try { _t263.remove(); } catch(_){} _g263.submit(); };
         _t263.appendChild(_tb263);
