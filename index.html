@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260612-fix269';
+  var BUILT = '20260612-fix271';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -1195,7 +1195,8 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
     // ever clipping prose containing a literal {...}. The prose route reproduces the old
     // fallback plan exactly (built from rawText), so fix59/60/61 see identical narrative.
     const buildProsePlan = () => {
-      const lines = rawText.trim().split('\n').filter(l => l.trim());
+      const _rt271 = String(rawText).replace(/<(state|react|summary)\b[\s\S]*?\/>/gi, ' ').replace(/<(state|react|summary)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<(state|react|summary)\b[^>]*>/gi, ' ').replace(/^[ \t]*[A-Za-z_][A-Za-z0-9_]*="[^"\n]*"?[ \t]*$/gm, ' '); /* v292Dfix271: 複数行<state>亜種(from_body=等)の属性行が本文へ漏れるのを根治(行分割前にブロック除去) */
+      const lines = _rt271.trim().split('\n').filter(l => l.trim());
       return {
         playerIntent: { kind: 'other', tone: 'neutral' },
         branchCandidates: [],
@@ -2678,6 +2679,7 @@ G.init();
   <script src="v292Dfix244-psych-merge.js?cb=v292Dfix244b"></script>
   <!-- v292Dfix256: 🧠モデル切替セレクタ(cfg.orModel・スロット毎保存)。A/B実測でDS V4 Flash推奨。OFF=v292ModelSelOff -->
   <script src="v292Dfix256-model-select.js?cb=v292Dfix256"></script>
+<script src="v292Dfix270-topbar-ui.js?cb=v292Dfix270"></script>
 </body>
 </html>
 
