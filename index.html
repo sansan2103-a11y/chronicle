@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260612-fix271';
+  var BUILT = '20260612-fix272';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -712,7 +712,7 @@ const Api = {
   async _callOpenRouter(system, userContent, maxTok, opts = {}) {
     const key = this.normalize(S.cfg.orKey);
     if (!key) throw new Error('OpenRouter APIキーが設定されていません（sk-or-... 形式）');
-    const model = S.cfg.orModel || 'sao10k/l3.3-euryale-70b';
+    const model = S.cfg.orModel || 'deepseek/deepseek-v4-flash'; /* v292Dfix272: 空時フォールバックをEuryale遺物→DS Flash(orModel消失時の意図外モデル課金防止) */
     console.log('[OpenRouter] model:', model);
 
     const maxRetries = 2;
@@ -1415,7 +1415,7 @@ const UI = {
     document.getElementById('cfgKey').value       = S.cfg.key      || '';
     document.getElementById('cfgOrKey').value     = S.cfg.orKey    || '';
     { var _pk = document.getElementById('cfgPollKey'); if (_pk) _pk.value = S.cfg.pollKey || ''; }
-    document.getElementById('cfgOrModel').value   = S.cfg.orModel  || 'meta-llama/llama-3.3-70b-instruct';
+    document.getElementById('cfgOrModel').value   = S.cfg.orModel  || 'deepseek/deepseek-v4-flash';
     document.getElementById('cfgNaiKey').value    = S.cfg.naiKey   || '';
     document.getElementById('cfgModel').value     = S.cfg.model    || 'claude-haiku-4-5-20251001';
     document.getElementById('cfgDbg').checked     = S.cfg.debug    || false;
@@ -1584,7 +1584,7 @@ const UI = {
     S.cfg.key      = (document.getElementById('cfgKey').value    || '').replace(/[\s\u200B\uFEFF\u00A0]/g, '');
     S.cfg.orKey    = (document.getElementById('cfgOrKey').value  || '').replace(/[\s\u200B\uFEFF\u00A0]/g, '');
     { var _pkS = document.getElementById('cfgPollKey'); if (_pkS) S.cfg.pollKey = (_pkS.value || '').replace(/[\s\u200B\uFEFF\u00A0]/g, ''); }
-    S.cfg.orModel  = document.getElementById('cfgOrModel').value;
+    var _om272 = document.getElementById('cfgOrModel').value; if (String(_om272||'').trim()) S.cfg.orModel = _om272; /* v292Dfix272: 空値でorModelを上書きしない */
     S.cfg.naiKey   = (document.getElementById('cfgNaiKey').value || '').replace(/[\s\u200B\uFEFF\u00A0]/g, '');
     S.cfg.model    = document.getElementById('cfgModel').value;
     S.cfg.debug    = document.getElementById('cfgDbg').checked;
