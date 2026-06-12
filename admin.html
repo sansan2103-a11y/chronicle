@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chronicle 管理</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px 16px 60px; background:#0d0d1a; color:#d6d7ee; font:14px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .wrap { max-width:860px; margin:0 auto; }
+  h1 { font-size:18px; letter-spacing:1px; margin:0 0 18px; }
+  h2 { font-size:14px; opacity:.7; margin:26px 0 10px; border-bottom:1px solid #2d2d49; padding-bottom:6px; }
+  .card { background:#15152a; border:1px solid #2d2d49; border-radius:12px; padding:14px 16px; margin-bottom:14px; }
+  label { display:block; font-size:11px; opacity:.65; margin:8px 0 3px; }
+  input[type=text], input[type=password], input[type=number] { width:100%; background:#0f0f20; color:#d6d7ee; border:1px solid #34344f; border-radius:8px; padding:8px 10px; font-size:13px; }
+  input:focus { outline:none; border-color:#7a7ac0; }
+  button { background:#3a3a5e; color:#e7e7f7; border:1px solid #4a4a72; border-radius:8px; padding:7px 14px; font-size:13px; cursor:pointer; }
+  button:hover { border-color:#7a7ac0; }
+  button.primary { background:#534ab7; border-color:#6a62cf; }
+  button.danger { background:#5e2a2a; border-color:#8a4040; }
+  button.small { padding:3px 9px; font-size:12px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid #26263e; }
+  th { font-size:11px; opacity:.6; font-weight:normal; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .muted { opacity:.55; }
+  .off { color:#e08a8a; }
+  .on { color:#8ad0a0; }
+  #status { margin:10px 0; min-height:20px; font-size:13px; }
+  #status.err { color:#ffb0b0; }
+  #status.ok { color:#9fe1cb; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+  .row > div { flex:1; min-width:140px; }
+  .codechip { font-family:ui-monospace,monospace; background:#0f0f20; padding:2px 7px; border-radius:6px; border:1px solid #34344f; }
+  .killon { background:#3a1418 !important; border-color:#a04040 !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>◈ CHRONICLE 管理</h1>
+
+  <div class="card">
+    <div class="row">
+      <div style="flex:2">
+        <label>Worker URL</label>
+        <input type="text" id="wurl" value="https://novel-proxy.sansan2103.workers.dev">
+      </div>
+      <div style="flex:2">
+        <label>管理トークン(この端末に記憶されます)</label>
+        <input type="password" id="wtok" placeholder="ADMIN_TOKEN">
+      </div>
+      <div style="flex:0">
+        <button class="primary" onclick="load()">読み込み</button>
+      </div>
+    </div>
+    <div id="status"></div>
+  </div>
+
+  <h2>合言葉の台帳</h2>
+  <div class="card">
+    <table id="tbl">
+      <thead><tr><th>名前</th><th>合言葉</th><th>今月使用</th><th>回数</th><th>上限$</th><th>状態</th><th></th></tr></thead>
+      <tbody id="tbody"><tr><td colspan="7" class="muted">「読み込み」を押してください</td></tr></tbody>
+    </table>
+  </div>
+
+  <h2>新しい合言葉を発行</h2>
+  <div class="card">
+    <div class="row">
+      <div><label>名前(誰用か)</label><input type="text" id="nName" placeholder="例: ともだちA"></div>
+      <div><label>合言葉(空欄=自動生成)</label><input type="text" id="nCode" placeholder="例: yume-abc123"></div>
+      <div><label>月の上限$(0=無制限)</label><input type="number" id="nLimit" value="2" step="0.5" min="0"></div>
+      <div style="flex:0"><button class="primary" onclick="createCode()">発行</button></div>
+    </div>
+  </div>
+
+  <h2>全体設定</h2>
+  <div class="card">
+    <label>許可モデル(カンマ区切り・空=制限なし)</label>
+    <input type="text" id="cModels" placeholder="deepseek/deepseek-v4-flash, deepseek/deepseek-v4-pro">
+    <div class="row" style="margin-top:12px">
+      <div style="flex:0"><button onclick="saveConfig()">設定を保存</button></div>
+      <div style="flex:0"><button class="danger" id="killBtn" onclick="toggleKill()">緊急停止: OFF</button></div>
+    </div>
+    <div class="muted" style="margin-top:8px;font-size:12px">緊急停止ONの間、全員の生成が止まります(管理APIは生きています)</div>
+  </div>
+</div>
+
+<script>
+let CONFIG = {};
+const $ = id => document.getElementById(id);
+const tok = localStorage.getItem('chrAdminTok'); if (tok) $('wtok').value = tok;
+const wu = localStorage.getItem('chrAdminUrl'); if (wu) $('wurl').value = wu;
+
+function setStatus(msg, cls) { const s = $('status'); s.textContent = msg; s.className = cls || ''; }
+
+async function api(payload) {
+  const url = $('wurl').value.replace(/\/+$/, '');
+  const token = $('wtok').value.trim();
+  if (!token) { setStatus('管理トークンを入れてください', 'err'); throw new Error('no token'); }
+  localStorage.setItem('chrAdminTok', token);
+  localStorage.setItem('chrAdminUrl', url);
+  const r = await fetch(url + '/admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+    body: JSON.stringify(payload),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { setStatus('エラー: ' + (j.error || r.status), 'err'); throw new Error(j.error || r.status); }
+  return j;
+}
+
+async function load() {
+  setStatus('読み込み中…');
+  const j = await api({ action: 'list' });
+  CONFIG = j.config || {};
+  $('cModels').value = (CONFIG.allowedModels || []).join(', ');
+  renderKill();
+  const tb = $('tbody');
+  tb.innerHTML = '';
+  if (!j.codes.length) tb.innerHTML = '<tr><td colspan="7" class="muted">まだ合言葉がありません(マスターは初回利用後に現れます)</td></tr>';
+  j.codes.sort((a, b) => (b.usedUsd || 0) - (a.usedUsd || 0)).forEach(c => {
+    const tr = document.createElement('tr');
+    const isMaster = c.code === 'master';
+    tr.innerHTML =
+      '<td>' + esc(c.name || (isMaster ? 'マスター' : '')) + '</td>' +
+      '<td><span class="codechip">' + esc(isMaster ? '(ACCESS_CODE)' : c.code) + '</span></td>' +
+      '<td class="num">$' + (+c.usedUsd || 0).toFixed(4) + '</td>' +
+      '<td class="num">' + (c.reqs || 0) + '</td>' +
+      '<td class="num">' + (+c.limitUsd > 0 ? (+c.limitUsd).toFixed(2) : '∞') + '</td>' +
+      '<td class="' + (c.active ? 'on' : 'off') + '">' + (c.active ? '稼働' : '停止') + '</td>' +
+      '<td></td>';
+    const td = tr.lastElementChild;
+    if (!isMaster) {
+      td.appendChild(btn(c.active ? '停止' : '再開', () => upd(c.code, { active: !c.active })));
+      td.appendChild(btn('上限', () => { const v = prompt('月の上限$(0=無制限)', c.limitUsd || 0); if (v != null) upd(c.code, { limitUsd: +v }); }));
+      td.appendChild(btn('削除', () => { if (confirm('「' + c.code + '」を削除しますか？')) del(c.code); }, 'danger'));
+    }
+    tb.appendChild(tr);
+  });
+  setStatus('読み込み完了 (' + j.codes.length + '件)', 'ok');
+}
+
+function btn(label, fn, cls) {
+  const b = document.createElement('button');
+  b.textContent = label; b.className = 'small' + (cls ? ' ' + cls : ''); b.style.marginRight = '5px';
+  b.onclick = fn; return b;
+}
+
+async function createCode() {
+  const j = await api({ action: 'create', name: $('nName').value, code: $('nCode').value, limitUsd: +$('nLimit').value });
+  setStatus('発行しました: ' + j.code + ' (この合言葉を相手に渡してください)', 'ok');
+  $('nName').value = ''; $('nCode').value = '';
+  load();
+}
+
+async function upd(code, patch) { await api(Object.assign({ action: 'update', code }, patch)); load(); }
+async function del(code) { await api({ action: 'delete', code }); load(); }
+
+async function saveConfig() {
+  const j = await api({ action: 'config-set', allowedModels: $('cModels').value });
+  CONFIG = j.config; renderKill(); setStatus('設定を保存しました', 'ok');
+}
+
+async function toggleKill() {
+  const next = !CONFIG.killSwitch;
+  if (next && !confirm('全員の生成を止めます。いいですか？')) return;
+  const j = await api({ action: 'config-set', killSwitch: next });
+  CONFIG = j.config; renderKill();
+  setStatus(next ? '緊急停止ON' : '緊急停止を解除しました', 'ok');
+}
+
+function renderKill() {
+  const b = $('killBtn');
+  b.textContent = '緊急停止: ' + (CONFIG.killSwitch ? 'ON(全員停止中)' : 'OFF');
+  b.classList.toggle('killon', !!CONFIG.killSwitch);
+}
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+</script>
+</body>
+</html>
