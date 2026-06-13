@@ -26,6 +26,17 @@
   function pollKey(){ try{ var S=getS(); var k=(S&&S.cfg&&S.cfg.pollKey)||''; return String(k).trim(); }catch(e){ return ''; } }
   function getApi(){ try{ return window.Api || (0,eval)('Api'); }catch(e){ return null; } } /* v292Dfix283b: Apiはindex.htmlのconst(window非公開)→S同様eval経由で取得 */
   function artStyle(){ try{ var S=getS(); return String((S&&S.cfg&&S.cfg.artStyle)!=null ? S.cfg.artStyle : 0); }catch(e){ return '0'; } }
+  /* v292Dfix284: 登録キャラと画風を完全統一するため、features.jsのSTYLE_SUFFIX/STYLE_LISTを同値で複製。
+     自動抽出キャラのアイコンも「外見+この画風サフィックス」=登録キャラと同じ式で生成する。
+     (features.js側 STYLE_SUFFIX を変更したらここも合わせること) */
+  var STYLE_LIST_284 = ['anime', 'realistic', 'watercolor', 'darkfantasy'];
+  var STYLE_SUFFIX_284 = {
+    anime: ', high quality anime art style, clean detailed anime illustration, vibrant',
+    realistic: ', realistic digital painting, cinematic lighting, highly detailed',
+    watercolor: ', soft watercolor illustration, delicate brushwork, artistic',
+    darkfantasy: ', dark fantasy anime portrait, detailed face, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality'
+  };
+  function styleSuffix284(){ try{ var i = +artStyle(); var k = STYLE_LIST_284[i] || 'darkfantasy'; return STYLE_SUFFIX_284[k] || STYLE_SUFFIX_284.darkfantasy; }catch(e){ return STYLE_SUFFIX_284.darkfantasy; } }
   function diceUrl(name){ return 'https://api.dicebear.com/9.x/' + DICE_STYLE + '/svg?seed=' + encodeURIComponent(String(name||'character')); }
   function isSquareAvatar(src){ var m=/[?&]width=(\d+)&height=(\d+)/.exec(src); if(!m) return true; return m[1]===m[2]; }
 
@@ -113,7 +124,10 @@
           var f66x = window.__v292Dfix66;
           if (f66x && typeof f66x.isCast === 'function' && !f66x.isCast(info.name)){
             var base281 = (appr || desc || String(prompt280)).slice(0, appr ? 110 : 80);
-            prompt280 = 'アニメ調のキャラクターイラスト、一人の人物のバストアップ（胸から上）、顔を大きくはっきり描く、' + base281 + '、単独、無地の暗い背景。背景に風景や群衆を描かない。写真ではなくアニメのイラスト。anime illustration, not photo';
+            /* v292Dfix284: 画風を登録キャラと完全統一(おしんFB:雰囲気が違いすぎる→登録の有料経路に合わせる)。
+               独自のアニメ調/バストアップ文言を廃し、features.jsと同一のSTYLE_SUFFIX[画風]を付ける
+               =登録キャラと同じ式(外見+画風)。AI抽出外見(fix283b)で外見のみになったので素直に同じ雰囲気の人物画になる。 */
+            prompt280 = base281 + styleSuffix284();
           }
         }
       } catch(e280){}
