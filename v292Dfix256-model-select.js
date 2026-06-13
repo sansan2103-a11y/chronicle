@@ -24,10 +24,8 @@
 
   var MODELS = [
     { id: 'deepseek/deepseek-v4-flash',    label: 'DS V4 Flash' },
-    { id: 'deepseek/deepseek-v4-pro',      label: 'DS V4 Pro' },
-    { id: 'nousresearch/hermes-4-405b',    label: 'Hermes 4 405B' },
-    { id: 'nousresearch/hermes-4-70b',     label: 'Hermes 4 70B' }
-  ];
+    { id: 'deepseek/deepseek-v4-pro',      label: 'DS V4 Pro' }
+  ]; /* v292Dfix279: おしん指示(2026-06-13)「モデルはDSだけ・Hermesはもう使わない」→Hermes 2種を除去。cfgにリスト外IDが残っている場合は下のopts.unshiftが従来通り温存表示する */
 
   function currentModel(){
     try{ var S=getS(); return (S && S.cfg && S.cfg.orModel) || ''; }catch(e){ return ''; }
