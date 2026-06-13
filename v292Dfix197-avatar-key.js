@@ -76,8 +76,11 @@
             (wi281 || []).forEach(function(w){ if (w && w.name === info.name && !d281) d281 = String(w.desc || w.description || ''); });
             if (!d281) (wi281 || []).forEach(function(w){ if (w && w.name && !d281 && (String(w.name).indexOf(info.name) >= 0 || info.name.indexOf(String(w.name)) >= 0)) d281 = String(w.desc || w.description || ''); });
           } catch(ew281){}
-          var base281 = (d281 || String(prompt280)).slice(0, 120);
-          prompt280 = base281 + '、人物のポートレート、顔と上半身、正面、無地の暗い背景、anime style, solo portrait, no scenery, no landscape';
+          var base281 = (d281 || String(prompt280)).slice(0, 80);
+          /* v292Dfix282: 構図を「アニメ・バストアップ」で安定化(実機A/B)。英語のheadshot/studio/photo系は
+             実写スタジオ写真を誘発しアニメ調+人種+髪型を上書きした(実測:長い黒髪少女→実写西洋人)→排除。
+             アニメ調を先頭で強制+外見(日本語)を尊重+バストアップ+風景/群衆禁止。 */
+          prompt280 = 'アニメ調のキャラクターイラスト、一人の人物のバストアップ（胸から上）、顔を大きくはっきり描く、' + base281 + '、単独、無地の暗い背景。背景に風景や群衆を描かない。写真ではなくアニメのイラスト。anime illustration, not photo';
         }
       }
     } catch(e280){}
