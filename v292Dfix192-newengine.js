@@ -548,6 +548,21 @@
     var agenda = agendaBlock();      /* v292Dfix254 */
     var suspense = '';               /* v292Dfix287 */
     try { if (toneKey() === 'suspense' && localStorage.getItem('v292SuspenseOff') !== '1') suspense = SUSPENSE_BLOCK; } catch(e){}
+    var reform293 = '';              /* v292Dfix293: 自己模倣カット(劣化スパイラル予防) */
+    try {
+      if (localStorage.getItem('v292SelfMimicOff') !== '1' && window.__v292Health && typeof window.__v292Health.scoreText === 'function'){
+        var _S293 = getS();
+        if (_S293 && Array.isArray(_S293.turns) && _S293.turns.length){
+          var _pt293 = _S293.turns[_S293.turns.length - 1] || {};
+          var _pn293 = (_pt293.narrative || (_pt293.plan && _pt293.plan.narrative) || []);
+          if (Array.isArray(_pn293)) _pn293 = _pn293.join('\n');
+          var _sc293 = window.__v292Health.scoreText(_pn293);
+          if (_sc293.level === 'danger' || _sc293.level === 'warn'){
+            reform293 = '【文体の立て直し（最優先）】直前のあなたの出力は文体が硬くなりかけている（句読点が少ない／状態や数値を機械的に実況する調子／同じ語の繰り返し）。今回は必ず、句読点を適切に打った自然な小説の地の文に戻す。状態や数値を羅列せず、情景・身体の感覚・感情を通して描く。直前の硬い言い回しや無機質な調子を真似しない。';
+          }
+        }
+      }
+    } catch(e){}
 
     var blocks = [
       '＜あなたの役割＞',
@@ -576,6 +591,7 @@
     if (spice){ blocks.push(''); blocks.push(spice); }   /* v292Dfix223c */
     if (agenda){ blocks.push(''); blocks.push(agenda); } /* v292Dfix254 */
     if (suspense){ blocks.push(''); blocks.push(suspense); } /* v292Dfix287 */
+    if (reform293){ blocks.push(''); blocks.push(reform293); } /* v292Dfix293: 直前が劣化した時だけ文体立て直しを最優先注入 */
     blocks = blocks.concat([
       '',
       '【出力の形式（これだけは形式として守る）】',

@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260613-fix291';
+  var BUILT = '20260613-fix294';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2690,7 +2690,7 @@ G.init();
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
-  <script src="v292Dfix192-newengine.js?cb=v292Dfix289"></script>
+  <script src="v292Dfix192-newengine.js?cb=v292Dfix293"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
   <script src="v292Dfix197-avatar-key.js?cb=v292Dfix286"></script>
@@ -2720,7 +2720,8 @@ G.init();
 <script src="v292Dfix277-quasi-pack.js?cb=v292Dfix277b"></script>
 <script src="v292Dfix288-tooltips.js?cb=v292Dfix288"></script>
 <script src="v292Dfix290-mobile.js?cb=v292Dfix290"></script>
-<script src="v292Dfix291-saveexport.js?cb=v292Dfix291"></script>
+<script src="v292Dfix291-saveexport.js?cb=v292Dfix294"></script>
+<script src="v292Dfix292-health.js?cb=v292Dfix292"></script>
 </body>
 </html>
 
