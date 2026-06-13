@@ -8,7 +8,7 @@
 //   ・ユーザーのscroll位置と「最下部にいたか」を常時記録。ただし【再描画(childList)の直後
 //     350msのscroll変化は記録しない】= 再描画に伴うブラウザの自動スクロール(ユーザー操作で
 //     はない)で記録が汚れるのを防ぐ(295/295bはここが甘く、トップに飛んだ値を拾っていた)。
-//   ・childList検知→requestAnimationFrame で「記録済みのユーザー位置」へ復元
+//   ・childList検知→setTimeout(0) で「記録済みのユーザー位置」へ復元(バックグラウンドタブでも動く)
 //     (最下部にいた=新ターン追従で最下部へ / 途中=読書位置を維持して飛ばさない)。
 //   ・同時に fix197.sweep() を即実行して alt↔src(アイコン)を即同期=ズレ窓を潰す。
 // OFF: localStorage v292ConvStabilityOff='1'
@@ -56,7 +56,7 @@
     lastCL = Date.now();              // 以降 GUARD_MS の scroll変化は記録しない
     if (pending) return;
     pending = true;
-    requestAnimationFrame(restore);
+    setTimeout(restore, 0);   // v292Dfix295d: rAFはバックグラウンドタブで止まる→setTimeoutで確実に復元
   }
 
   var obs = null;
@@ -77,5 +77,5 @@
   try { setInterval(function(){ var s = document.getElementById('dialogue-stream'); if (s && s !== stream) attach(); }, 2000); } catch(e){}
 
   window.__v292ConvStability = { attach: attach, restore: restore, peek: function(){ return { lastTop: lastTop, atBottom: atBottom, sinceCL: Date.now()-lastCL }; } };
-  try { console.log(TAG, 'loaded (c: 時間窓)'); } catch(e){}
+  try { console.log(TAG, 'loaded (d: 時間窓+setTimeout)'); } catch(e){}
 })();
