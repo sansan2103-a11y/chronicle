@@ -307,7 +307,18 @@
       return true;
     } catch(e){ return false; }
   }
-  (function waitP(){ var a = installParse(), b = installBuild(); if (a && b) return; setTimeout(waitP, 500); })();
+  (function waitP(){
+    var a = installParse();
+    /* buildラップは「fix192(新エンジン)のラップ装着後」まで待つ: 先に装着するとfix192が後から外側に来て
+       r.sys=buildSys()がsurgery結果を上書きする(実機で実証)。fix274セッターがフラグを継承するため
+       見かけ上は装着済みに見える罠。__v292NewEngineフラグの出現=fix192装着済みの権威。30秒で諦め装着(旧エンジン運用等)。 */
+    var P = window.Planner || (typeof Planner !== 'undefined' ? Planner : null);
+    waitP._n = (waitP._n || 0) + 1;
+    var ready = P && typeof P.build === 'function' && (P.build.__v292NewEngine || waitP._n > 60);
+    var b = ready ? installBuild() : false;
+    if (a && b) return;
+    setTimeout(waitP, 500);
+  })();
 
   // ---- fix278: キャラ一覧アイコンの会話ログ統一 + fix277b別名カード統合 ----
   function unifyCards(){
