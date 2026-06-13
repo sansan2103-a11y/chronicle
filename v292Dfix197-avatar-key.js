@@ -57,7 +57,20 @@
     var info = jobInfo[pk] || {};
     var key = pollKey();
     if(!key){ cache[pk]='dice'; active--; applyAll(); pump(); return; }
-    var body = { model: info.model||'flux', prompt: info.prompt||'portrait', n:1, size:'384x384' };
+    var prompt280 = info.prompt || 'portrait';
+    try {
+      /* v292Dfix280: 非キャスト(自動抽出キャラ)のアイコンが風景画になる根治。
+         真因=プロンプトがncAppearance(場面の説明文:「担がれて教室へ運ばれる」等)のため
+         fluxが情景を描く(実測: サクラギミオ=緑の寺/裸の少女=ランタンの人物)。
+         キャスト(desc=外見文)は従来通り無加工=回帰ゼロ。OFF: v292PortraitAnchorOff */
+      if (localStorage.getItem('v292PortraitAnchorOff') !== '1' && info.name){
+        var f66x = window.__v292Dfix66;
+        if (f66x && typeof f66x.isCast === 'function' && !f66x.isCast(info.name)){
+          prompt280 = 'close-up character portrait of one person, face and upper body, looking at viewer, ' + String(prompt280).slice(0, 160) + ', solo, single character only, centered face, simple dark plain background, no landscape, no scenery';
+        }
+      }
+    } catch(e280){}
+    var body = { model: info.model||'flux', prompt: prompt280, n:1, size:'384x384' };
     if(info.seed != null) body.seed = info.seed;   // 同seed＝同一画像（旧絵柄の再現）
     fetch(API, { method:'POST', headers:{ 'Authorization':'Bearer '+key, 'Content-Type':'application/json' }, body: JSON.stringify(body) })
       .then(function(r){ if(!r.ok) throw r.status; return r.json(); })
