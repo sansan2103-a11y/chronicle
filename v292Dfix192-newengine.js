@@ -291,6 +291,16 @@
   }
 
   // register 見本（静）。将来 toneLevel で差し替え可能にするためマップ化。
+  /* v292Dfix287: 🎭サスペンス時に注入する「緊張の4本柱」。OFF=localStorage v292SuspenseOff='1'。
+     おしんFB(恐怖の接近/キャラの危機/謎/たまの突発)を設計化。突発は理不尽な即死を避け対処余地を残す。 */
+  var SUSPENSE_BLOCK = [
+    '【この物語は緊迫（サスペンス）で進める】',
+    '・脅威や危険を物語に常駐させ、五感（音・気配・におい・温度・視界の端）で段階的に近づける。安全な場所や安心を少しずつ侵食し、緊張を緩ませきらない。',
+    '・行動・探索・会話のたびに、手掛かり・違和感・新事実を最低1つ開示する。ただし全ては明かさず、新たな疑問を必ず一つ残す（謎を前進させつつ深める）。',
+    '・緊張は登場キャラの傷・恐怖・大切なものを刺激する。大事なキャラが危険にさらされうる切迫を、説明でなく心理と身体反応で描く。',
+    '・場面が弛緩したと感じたら、入力を待たず予期せぬ異変・接近・物音・襲撃を起こしてよい。ただし理不尽な即死や逃げ場のない展開は避け、必ずプレイヤーが対処・反応できる余地を残す。'
+  ].join('\n');
+
   var EXAMPLES = {
     'shizuka': [
       '【書き方の見本（構造と密度の参考。内容はコピーせず、今の場面に合わせて作る。見本の雰囲気が今の物語のジャンルと違っても、ジャンルは今の物語に従う）】',
@@ -367,6 +377,26 @@
       '二人の視線が主人公に集まる。埃の匂いの中で、どちらの言い分にも理があった。',
       '<react who="相手B" 反応="軽口の形を借りて不安を隠す" 声="<say who=\'相手B\'>多数決でもする？</say>"/>',
       '<state who="相手A" こころ="苛立ちの下に疲労" 関係="相手B:軽さに救われてもいる"/>'
+    ].join('\n'),
+
+    // v292Dfix287: サスペンス＝静かな緊張＋脅威の接近＋謎の小出し。恐怖は段階で。
+    'suspense': [
+      '【書き方の見本（構造と密度の参考。内容はコピーせず、今の場面に合わせて作る。見本の雰囲気が今の物語のジャンルと違っても、ジャンルは今の物語に従う）】',
+      '─見本A（サスペンス・脅威の接近と謎）─',
+      '音が、さっきより近い。床板のきしみが一定の間隔で——歩幅のように——闇の奥から寄ってくる。主人公は息を殺し、壁の冷たさに背中を貼りつけた。',
+      '埃の積もった棚に、真新しい指の跡が一本。ここに、つい先刻まで誰かがいた。',
+      '<say who="相手">……今の、聞こえた？</say>',
+      '相手の声が、語尾でほどけて消える。答える前に、廊下の電球が一度だけ瞬いた。',
+      '<react who="相手" 反応="指の跡から目を離せず、主人公の袖を掴む" 声="<say who=\'相手\'>動かないで</say>"/>',
+      '<state who="相手" からだ="浅い呼吸・指先が冷たい" こころ="恐怖と好奇心の綱引き" 本能="確かめたいが逃げたい" 未解決="指の跡の主は誰か"/>',
+      '',
+      '─見本B（サスペンス・弛緩を破る突発）─',
+      'ようやく開けた部屋は、不自然なほど静かだった。窓から差す光に埃が漂い、ここだけ時間が止まったように見える。張りつめていた肩から、わずかに力が抜けた——その瞬間。',
+      '背後で、何かが床に落ちる乾いた音。振り返ると、さっきまで閉じていたはずの引き出しが、半分だけ開いていた。',
+      '<say who="相手">私、触ってない。……ほんとに、触ってない</say>',
+      '声が震えている。安全だと思った場所が、もう安全ではないと、二人とも気づいてしまった。',
+      '<react who="相手" 反応="半歩あとずさり、主人公の方へ寄る" 声="<say who=\'相手\'>ここ、出よう</say>"/>',
+      '<state who="相手" からだ="こわばり・後退" こころ="安堵が崩れた動揺" 本能="この部屋から離れたい"/>'
     ].join('\n')
   };
 
@@ -515,6 +545,8 @@
     var seed = seedBlock();          /* v292Dfix223a */
     var spice = spiceLine(isCont);   /* v292Dfix223c */
     var agenda = agendaBlock();      /* v292Dfix254 */
+    var suspense = '';               /* v292Dfix287 */
+    try { if (toneKey() === 'suspense' && localStorage.getItem('v292SuspenseOff') !== '1') suspense = SUSPENSE_BLOCK; } catch(e){}
 
     var blocks = [
       '＜あなたの役割＞',
@@ -542,6 +574,7 @@
     if (seed){ blocks.push(''); blocks.push(seed); }     /* v292Dfix223a */
     if (spice){ blocks.push(''); blocks.push(spice); }   /* v292Dfix223c */
     if (agenda){ blocks.push(''); blocks.push(agenda); } /* v292Dfix254 */
+    if (suspense){ blocks.push(''); blocks.push(suspense); } /* v292Dfix287 */
     blocks = blocks.concat([
       '',
       '【出力の形式（これだけは形式として守る）】',
@@ -630,7 +663,7 @@
       if(!document.getElementById('v292-tone-sel')){
         var span2 = document.createElement('span');
         span2.style.cssText = 'margin-left:8px;font-size:12px;display:inline-flex;align-items:center;gap:4px;';
-        span2.innerHTML = '🎭トーン<select id="v292-tone-sel" style="font-size:12px;"><option value="shizuka">静</option><option value="dou">動</option><option value="koi">濃</option><option value="kaiwa">会話劇</option></select>';
+        span2.innerHTML = '🎭トーン<select id="v292-tone-sel" style="font-size:12px;"><option value="shizuka">静</option><option value="dou">動</option><option value="koi">濃</option><option value="kaiwa">会話劇</option><option value="suspense">緊迫</option></select>'; /* v292Dfix287: サスペンス追加 */
         tb.appendChild(span2);
         var tsel = span2.querySelector('#v292-tone-sel');
         tsel.value = toneKey();
