@@ -59,14 +59,25 @@
     if(!key){ cache[pk]='dice'; active--; applyAll(); pump(); return; }
     var prompt280 = info.prompt || 'portrait';
     try {
-      /* v292Dfix280: 非キャスト(自動抽出キャラ)のアイコンが風景画になる根治。
-         真因=プロンプトがncAppearance(場面の説明文:「担がれて教室へ運ばれる」等)のため
-         fluxが情景を描く(実測: サクラギミオ=緑の寺/裸の少女=ランタンの人物)。
-         キャスト(desc=外見文)は従来通り無加工=回帰ゼロ。OFF: v292PortraitAnchorOff */
+      /* v292Dfix281(fix280改): 非キャスト(自動抽出キャラ)のアイコンが風景画/別人になる根治。
+         真因2段=①プロンプト元のncAppearanceが「外見」でなく場面文(「カエデに担がれて運ばれる」)
+         →fluxが情景を描く ②英語のportrait指示を前置すると日本語の外見が打ち消され人種/性別が
+         デフォルト(西洋人男性)に化ける(実機実証: 長い黒髪の少女→西洋人男性)。
+         修正=longmem worldinfo desc(キャラ一覧の説明文=「三年前に失踪した長い黒髪の少女」等
+         外見を含む)を最優先の外見ソースにし、日本語の外見記述を「先頭」に置く(人種/性別/髪を尊重)。
+         英語の制御語は最小限後置。キャスト(desc=外見文)は従来通り無加工=回帰ゼロ。
+         OFF: v292PortraitAnchorOff */
       if (localStorage.getItem('v292PortraitAnchorOff') !== '1' && info.name){
         var f66x = window.__v292Dfix66;
         if (f66x && typeof f66x.isCast === 'function' && !f66x.isCast(info.name)){
-          prompt280 = 'close-up character portrait of one person, face and upper body, looking at viewer, ' + String(prompt280).slice(0, 160) + ', solo, single character only, centered face, simple dark plain background, no landscape, no scenery';
+          var d281 = '';
+          try {
+            var wi281 = (window.__longmem && window.__longmem.raw && typeof window.__longmem.raw.loadWorldInfo === 'function') ? window.__longmem.raw.loadWorldInfo() : [];
+            (wi281 || []).forEach(function(w){ if (w && w.name === info.name && !d281) d281 = String(w.desc || w.description || ''); });
+            if (!d281) (wi281 || []).forEach(function(w){ if (w && w.name && !d281 && (String(w.name).indexOf(info.name) >= 0 || info.name.indexOf(String(w.name)) >= 0)) d281 = String(w.desc || w.description || ''); });
+          } catch(ew281){}
+          var base281 = (d281 || String(prompt280)).slice(0, 120);
+          prompt280 = base281 + '、人物のポートレート、顔と上半身、正面、無地の暗い背景、anime style, solo portrait, no scenery, no landscape';
         }
       }
     } catch(e280){}
