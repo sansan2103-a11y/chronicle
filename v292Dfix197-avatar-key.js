@@ -36,7 +36,14 @@
     watercolor: ', soft watercolor illustration, head and shoulders, visible clothing, delicate brushwork, artistic',
     darkfantasy: ', dark fantasy anime character portrait, head and shoulders, visible clothing, detailed face, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality'
   }; /* v292Dfix285: features.js STYLE_SUFFIX と同値(顔アップ緩和+服見せ) */
-  function styleSuffix284(){ try{ var i = +artStyle(); var k = STYLE_LIST_284[i] || 'darkfantasy'; return STYLE_SUFFIX_284[k] || STYLE_SUFFIX_284.darkfantasy; }catch(e){ return STYLE_SUFFIX_284.darkfantasy; } }
+  function styleSuffix284(isCreature){ try{ var i = +artStyle(); var k = STYLE_LIST_284[i] || 'darkfantasy'; var s = STYLE_SUFFIX_284[k] || STYLE_SUFFIX_284.darkfantasy;
+    if (isCreature){ /* v292Dfix286: 人外は人型強制語(顔/肩/青白い肌/portrait/服)を除去しcreature向けに差し替え。色調・雰囲気(暗さ/画風)は維持。 */
+      s = s.replace(/character portrait/g, 'creature concept art').replace(/, head and shoulders/g, ', full creature body visible').replace(/, visible clothing/g, '').replace(/, detailed face/g, ', highly detailed').replace(/, pale skin/g, '').replace(/portrait/g, 'creature art');
+      s += ', non-human creature, monster design, no human face, no human body';
+    }
+    return s; }catch(e){ return STYLE_SUFFIX_284.darkfantasy; } }
+  /* v292Dfix286: 外見抽出文の先頭 [人外]/[人間] タグを解釈。clean=タグ除去本文, creature=人外フラグ */
+  function parseAppr286(raw){ var t = String(raw||''); var m = /^\s*[\[【]\s*(人外|人間|非人間|怪異|妖怪)\s*[\]】]\s*/.exec(t); var cre = !!(m && m[1] !== '人間'); var clean = t.replace(/^\s*[\[【][^\]】]{1,8}[\]】]\s*/, '').trim(); return { clean: clean, creature: cre }; }
   function diceUrl(name){ return 'https://api.dicebear.com/9.x/' + DICE_STYLE + '/svg?seed=' + encodeURIComponent(String(name||'character')); }
   function isSquareAvatar(src){ var m=/[?&]width=(\d+)&height=(\d+)/.exec(src); if(!m) return true; return m[1]===m[2]; }
 
@@ -86,48 +93,49 @@
     try {
       var f66x = window.__v292Dfix66;
       var nonCast = info.name && f66x && typeof f66x.isCast === 'function' && !f66x.isCast(info.name);
-      if (localStorage.getItem('v292PortraitAnchorOff') === '1' || !nonCast){ cb('', ''); return; }
+      if (localStorage.getItem('v292PortraitAnchorOff') === '1' || !nonCast){ cb('', '', false); return; }
     } catch(e){ cb('', ''); return; }
     var desc = descFor283(info.name);
     // 外見キャッシュ(別キー)
     var cachedAppr = null; try { cachedAppr = localStorage.getItem('v292appr_' + pk); } catch(e){}
-    if (cachedAppr){ cb(cachedAppr, desc); return; }
+    if (cachedAppr){ var pc286 = parseAppr286(cachedAppr); cb(pc286.clean, desc, pc286.creature); return; }
     // AI抽出OFF / Api不在 / desc無し → descフォールバック
     var _api = getApi(); var apiOk = _api && typeof _api.call === 'function';
-    if (localStorage.getItem('v292AppearanceAIOff') === '1' || !apiOk || !desc){ cb('', desc); return; }
-    if (apprPending[pk]){ cb('', desc); return; } // 抽出中は今回descで描く(次回キャッシュ反映)
+    if (localStorage.getItem('v292AppearanceAIOff') === '1' || !apiOk || !desc){ cb('', desc, false); return; }
+    if (apprPending[pk]){ cb('', desc, false); return; } // 抽出中は今回descで描く(次回キャッシュ反映)
     apprPending[pk] = true;
-    var sysA = ['キャラクター/存在の容姿を画像生成プロンプト用に日本語一文で書き出してください。', '・人間なら: 髪(色/長さ/型)、目、年齢層、性別、肌、服装、際立つ身体的特徴。', '・人外(妖怪/怪異/化け物/精霊/亡霊/動物/人形/物体など)なら: その姿形・色・質感・大きさ・異形の特徴を具体的に書く(無理に人型・髪・年齢・性別に当てはめない)。', '・物語の出来事/動作/場所/他の人物/心情/比喩は一切書かない。', '・名詞句中心で簡潔に。出力は一文のみ(説明や記号で囲まない)。'].join('\n'); /* v292Dfix285: 人外(怪異/妖怪等)も認識して異形として描けるよう拡張 */
+    var sysA = ['キャラクター/存在の容姿を画像生成プロンプト用に日本語一文で書き出してください。', '・最初に種別を判定し、文頭に必ず [人間] または [人外] と付ける(人外=妖怪/怪異/化け物/精霊/亡霊/動物/人形/物体など人型でない存在)。', '・[人間]なら: 髪(色/長さ/型)、目、年齢層、性別、肌、服装、際立つ身体的特徴。', '・[人外]なら: その姿形・色・質感・大きさ・異形の特徴を具体的に(無理に人型・髪・年齢・性別に当てはめない)。', '・物語の出来事/動作/場所/他の人物/心情/比喩は一切書かない。', '・名詞句中心で簡潔に。出力は「[種別]容姿」の一文のみ。'].join('\n'); /* v292Dfix286: 文頭に[人間]/[人外]の種別タグを付けさせる */ /* v292Dfix285: 人外(怪異/妖怪等)も認識して異形として描けるよう拡張 */
     var userA = 'キャラ名: ' + info.name + '\n説明文:\n' + String(desc).slice(0, 300) + '\n\nこのキャラの容姿(一文):';
     var done = false;
-    var to = setTimeout(function(){ if (done) return; done = true; apprPending[pk] = false; cb('', desc); }, 20000); // 保険: 20秒で諦めdescへ
+    var to = setTimeout(function(){ if (done) return; done = true; apprPending[pk] = false; cb('', desc, false); }, 20000); // 保険: 20秒で諦めdescへ
     try {
       _api.call(sysA, userA, 200, { allowShort: true }).then(function(r){
         if (done) return; done = true; clearTimeout(to); apprPending[pk] = false;
-        var t = (((r && r.text) || '')).replace(/<[^>]+>/g, '').trim().split(/\r?\n/)[0].replace(/^["「『\s]+|["」』\s]+$/g, '').slice(0, 110);
-        if (t && t.length >= 3){ try { localStorage.setItem('v292appr_' + pk, t); } catch(e){} cb(t, desc); }
-        else cb('', desc);
-      }).catch(function(){ if (done) return; done = true; clearTimeout(to); apprPending[pk] = false; cb('', desc); });
-    } catch(e){ if (!done){ done = true; clearTimeout(to); apprPending[pk] = false; cb('', desc); } }
+        var t = (((r && r.text) || '')).replace(/<[^>]+>/g, '').trim().split(/\r?\n/)[0].replace(/^["「『\s]+|["」』\s]+$/g, '').slice(0, 120);
+        var pr286 = parseAppr286(t);
+        if (pr286.clean && pr286.clean.length >= 3){ try { localStorage.setItem('v292appr_' + pk, t); } catch(e){} cb(pr286.clean, desc, pr286.creature); }
+        else cb('', desc, false);
+      }).catch(function(){ if (done) return; done = true; clearTimeout(to); apprPending[pk] = false; cb('', desc, false); });
+    } catch(e){ if (!done){ done = true; clearTimeout(to); apprPending[pk] = false; cb('', desc, false); } }
   }
 
   function genOne(pk){
     var info = jobInfo[pk] || {};
     var key = pollKey();
     if(!key){ cache[pk]='dice'; active--; applyAll(); pump(); return; }
-    resolveAppearance(pk, info, function(appr, desc){
+    resolveAppearance(pk, info, function(appr, desc, isCreature){
       var prompt280 = info.prompt || 'portrait';
       try {
         /* v292Dfix283: 非キャストは「AI抽出した外見一文」を最優先ソースに(無ければdesc→info.prompt)。
-           アニメ調+バストアップ構図(fix282)で包む。キャスト(desc=外見文)は無加工=回帰ゼロ。 */
+           fix286: 人外(isCreature)は画風の人型強制語をcreature向けに差し替え。キャスト(登録)は無加工=回帰ゼロ。 */
         if (localStorage.getItem('v292PortraitAnchorOff') !== '1' && info.name){
           var f66x = window.__v292Dfix66;
           if (f66x && typeof f66x.isCast === 'function' && !f66x.isCast(info.name)){
-            var base281 = (appr || desc || String(prompt280)).slice(0, appr ? 110 : 80);
+            var base281 = (appr || desc || String(prompt280)).slice(0, appr ? 120 : 80);
             /* v292Dfix284: 画風を登録キャラと完全統一(おしんFB:雰囲気が違いすぎる→登録の有料経路に合わせる)。
                独自のアニメ調/バストアップ文言を廃し、features.jsと同一のSTYLE_SUFFIX[画風]を付ける
                =登録キャラと同じ式(外見+画風)。AI抽出外見(fix283b)で外見のみになったので素直に同じ雰囲気の人物画になる。 */
-            prompt280 = base281 + styleSuffix284();
+            prompt280 = base281 + styleSuffix284(isCreature);
           }
         }
       } catch(e280){}
