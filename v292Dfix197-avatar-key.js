@@ -31,11 +31,11 @@
      (features.js側 STYLE_SUFFIX を変更したらここも合わせること) */
   var STYLE_LIST_284 = ['anime', 'realistic', 'watercolor', 'darkfantasy'];
   var STYLE_SUFFIX_284 = {
-    anime: ', high quality anime art style, clean detailed anime illustration, vibrant',
-    realistic: ', realistic digital painting, cinematic lighting, highly detailed',
-    watercolor: ', soft watercolor illustration, delicate brushwork, artistic',
-    darkfantasy: ', dark fantasy anime portrait, detailed face, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality'
-  };
+    anime: ', high quality anime art style, clean detailed anime illustration, head and shoulders, visible clothing, vibrant',
+    realistic: ', realistic digital painting, head and shoulders, visible clothing, cinematic lighting, highly detailed',
+    watercolor: ', soft watercolor illustration, head and shoulders, visible clothing, delicate brushwork, artistic',
+    darkfantasy: ', dark fantasy anime character portrait, head and shoulders, visible clothing, detailed face, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality'
+  }; /* v292Dfix285: features.js STYLE_SUFFIX と同値(顔アップ緩和+服見せ) */
   function styleSuffix284(){ try{ var i = +artStyle(); var k = STYLE_LIST_284[i] || 'darkfantasy'; return STYLE_SUFFIX_284[k] || STYLE_SUFFIX_284.darkfantasy; }catch(e){ return STYLE_SUFFIX_284.darkfantasy; } }
   function diceUrl(name){ return 'https://api.dicebear.com/9.x/' + DICE_STYLE + '/svg?seed=' + encodeURIComponent(String(name||'character')); }
   function isSquareAvatar(src){ var m=/[?&]width=(\d+)&height=(\d+)/.exec(src); if(!m) return true; return m[1]===m[2]; }
@@ -97,7 +97,7 @@
     if (localStorage.getItem('v292AppearanceAIOff') === '1' || !apiOk || !desc){ cb('', desc); return; }
     if (apprPending[pk]){ cb('', desc); return; } // 抽出中は今回descで描く(次回キャッシュ反映)
     apprPending[pk] = true;
-    var sysA = ['キャラクターの容姿を画像生成プロンプト用に日本語一文で書き出してください。', '・髪(色/長さ/型)、目、年齢層、性別、肌、服装、際立つ身体的特徴のみ。', '・物語の出来事/動作/場所/他の人物/心情/比喩は一切書かない。', '・「〜が〜する」のような文でなく、名詞句中心で簡潔に。出力は一文のみ(説明や記号で囲まない)。'].join('\n');
+    var sysA = ['キャラクター/存在の容姿を画像生成プロンプト用に日本語一文で書き出してください。', '・人間なら: 髪(色/長さ/型)、目、年齢層、性別、肌、服装、際立つ身体的特徴。', '・人外(妖怪/怪異/化け物/精霊/亡霊/動物/人形/物体など)なら: その姿形・色・質感・大きさ・異形の特徴を具体的に書く(無理に人型・髪・年齢・性別に当てはめない)。', '・物語の出来事/動作/場所/他の人物/心情/比喩は一切書かない。', '・名詞句中心で簡潔に。出力は一文のみ(説明や記号で囲まない)。'].join('\n'); /* v292Dfix285: 人外(怪異/妖怪等)も認識して異形として描けるよう拡張 */
     var userA = 'キャラ名: ' + info.name + '\n説明文:\n' + String(desc).slice(0, 300) + '\n\nこのキャラの容姿(一文):';
     var done = false;
     var to = setTimeout(function(){ if (done) return; done = true; apprPending[pk] = false; cb('', desc); }, 20000); // 保険: 20秒で諦めdescへ

@@ -2019,7 +2019,7 @@
         var d = String(desc).replace(/^性別:\s*[男女][性]?[。、]?/, '').slice(0, 60);
         prompt += d + ', ';
       }
-      prompt += 'detailed face, dark fantasy, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality';
+      prompt += 'character portrait, head and shoulders, visible clothing, detailed face, dark fantasy, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality'; /* v292Dfix285: 顔アップ緩和+服が見える(リナ基準) */
       var seed = 0;
       for (var i = 0; i < name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) & 0x7fffffff;
       return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
@@ -3152,7 +3152,7 @@
         var d = String(desc).replace(/^性別:\s*[男女][性]?[。、]?/, '').slice(0, 60);
         prompt += d + ', ';
       }
-      prompt += 'detailed face, dark fantasy, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality';
+      prompt += 'character portrait, head and shoulders, visible clothing, detailed face, dark fantasy, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality'; /* v292Dfix285: 顔アップ緩和+服が見える(リナ基準) */
       var seed = 0;
       for (var i = 0; i < name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) & 0x7fffffff;
       return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
@@ -3863,7 +3863,7 @@
       var d = String(desc).replace(/^性別:\s*[男女][性]?[。、]?/, '').slice(0, 60);
       prompt += d + ', ';
     }
-    prompt += 'detailed face, dark fantasy, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality';
+    prompt += 'character portrait, head and shoulders, visible clothing, detailed face, dark fantasy, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality'; /* v292Dfix285: 顔アップ緩和+服が見える(リナ基準) */
     var seed = 0;
     for (var i = 0; i < name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) & 0x7fffffff;
     return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
@@ -4682,7 +4682,7 @@
       d = d.trim().slice(0, 80);
       if (d) prompt += d + ', ';
     }
-    prompt += 'detailed face, dark fantasy, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality';
+    prompt += 'character portrait, head and shoulders, visible clothing, detailed face, dark fantasy, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality'; /* v292Dfix285: 顔アップ緩和+服が見える(リナ基準) */
     var seed = 0;
     for (var i = 0; i < name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) & 0x7fffffff;
     return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
@@ -10501,11 +10501,11 @@
   // 'darkfantasy' を選択肢に追加し既定にする。元テンプレの style tail を再現。
   var STYLE_LIST = ['anime', 'realistic', 'watercolor', 'darkfantasy'];
   var STYLE_SUFFIX = {
-    anime: ', high quality anime art style, clean detailed anime illustration, vibrant',
-    realistic: ', realistic digital painting, cinematic lighting, highly detailed',
-    watercolor: ', soft watercolor illustration, delicate brushwork, artistic',
-    darkfantasy: ', dark fantasy anime portrait, detailed face, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality'
-  };
+    anime: ', high quality anime art style, clean detailed anime illustration, head and shoulders, visible clothing, vibrant',
+    realistic: ', realistic digital painting, head and shoulders, visible clothing, cinematic lighting, highly detailed',
+    watercolor: ', soft watercolor illustration, head and shoulders, visible clothing, delicate brushwork, artistic',
+    darkfantasy: ', dark fantasy anime character portrait, head and shoulders, visible clothing, detailed face, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality'
+  }; /* v292Dfix285: 全画風に head and shoulders + visible clothing を追加(顔アップ緩和・服が見える・リナ基準) */
   function styleKey(){ var st = getS(); var i = (st && st.cfg && st.cfg.artStyle != null) ? (+st.cfg.artStyle) : 3; return STYLE_LIST[i] || 'darkfantasy'; }
   function hash(s){ var h = 0; s = String(s || ''); for (var i = 0; i < s.length; i++){ h = ((h << 5) - h + s.charCodeAt(i)) | 0; } return Math.abs(h); }
   function buildUrl(prompt, name){
