@@ -24,6 +24,7 @@
 
   function getS(){ try{ return window.S || (0,eval)('S'); }catch(e){ return null; } }
   function pollKey(){ try{ var S=getS(); var k=(S&&S.cfg&&S.cfg.pollKey)||''; return String(k).trim(); }catch(e){ return ''; } }
+  function getApi(){ try{ return window.Api || (0,eval)('Api'); }catch(e){ return null; } } /* v292Dfix283b: Apiはindex.htmlのconst(window非公開)→S同様eval経由で取得 */
   function artStyle(){ try{ var S=getS(); return String((S&&S.cfg&&S.cfg.artStyle)!=null ? S.cfg.artStyle : 0); }catch(e){ return '0'; } }
   function diceUrl(name){ return 'https://api.dicebear.com/9.x/' + DICE_STYLE + '/svg?seed=' + encodeURIComponent(String(name||'character')); }
   function isSquareAvatar(src){ var m=/[?&]width=(\d+)&height=(\d+)/.exec(src); if(!m) return true; return m[1]===m[2]; }
@@ -81,7 +82,7 @@
     var cachedAppr = null; try { cachedAppr = localStorage.getItem('v292appr_' + pk); } catch(e){}
     if (cachedAppr){ cb(cachedAppr, desc); return; }
     // AI抽出OFF / Api不在 / desc無し → descフォールバック
-    var apiOk = window.Api && typeof window.Api.call === 'function';
+    var _api = getApi(); var apiOk = _api && typeof _api.call === 'function';
     if (localStorage.getItem('v292AppearanceAIOff') === '1' || !apiOk || !desc){ cb('', desc); return; }
     if (apprPending[pk]){ cb('', desc); return; } // 抽出中は今回descで描く(次回キャッシュ反映)
     apprPending[pk] = true;
@@ -90,7 +91,7 @@
     var done = false;
     var to = setTimeout(function(){ if (done) return; done = true; apprPending[pk] = false; cb('', desc); }, 20000); // 保険: 20秒で諦めdescへ
     try {
-      window.Api.call(sysA, userA, 200, { allowShort: true }).then(function(r){
+      _api.call(sysA, userA, 200, { allowShort: true }).then(function(r){
         if (done) return; done = true; clearTimeout(to); apprPending[pk] = false;
         var t = (((r && r.text) || '')).replace(/<[^>]+>/g, '').trim().split(/\r?\n/)[0].replace(/^["「『\s]+|["」』\s]+$/g, '').slice(0, 110);
         if (t && t.length >= 3){ try { localStorage.setItem('v292appr_' + pk, t); } catch(e){} cb(t, desc); }
