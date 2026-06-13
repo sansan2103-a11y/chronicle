@@ -53,45 +53,78 @@
   var queue = [];
   var active = 0;
 
+  // v292Dfix283: 非キャスト(自動抽出キャラ)の「外見だけ」をAI(本文と同じモデル)に一文抽出させてから
+  //   画像生成する。longmem descは場面文混じり(「カエデに担がれて運ばれる」「四人並んで」)で、
+  //   そのまま渡すとfluxが全身/群衆/情景を描く(fix282の不安定の真因)。外見一文に純化して安定化。
+  //   ・抽出結果は別キー localStorage 'v292appr_'+pk に永続(各キャラ初回1回のみAI呼び出し)=非破壊
+  //   ・AI不可/失敗時は longmem desc(fix281/282相当)にフォールバック=退行しない
+  //   OFF: v292AppearanceAIOff (AI抽出だけ止めてfix282挙動へ) / v292PortraitAnchorOff (全体OFF)
+  function descFor283(name){
+    var d = '';
+    try {
+      var wi = (window.__longmem && window.__longmem.raw && typeof window.__longmem.raw.loadWorldInfo === 'function') ? window.__longmem.raw.loadWorldInfo() : [];
+      (wi || []).forEach(function(w){ if (w && w.name === name && !d) d = String(w.desc || w.description || ''); });
+      if (!d) (wi || []).forEach(function(w){ if (w && w.name && !d && (String(w.name).indexOf(name) >= 0 || name.indexOf(String(w.name)) >= 0)) d = String(w.desc || w.description || ''); });
+    } catch(e){}
+    return d;
+  }
+  var apprPending = {};   // pk -> true (AI抽出の二重起動防止)
+  function resolveAppearance(pk, info, cb){
+    // キャスト or 全体OFF: AI抽出しない(従来 info.prompt 経路へ)
+    try {
+      var f66x = window.__v292Dfix66;
+      var nonCast = info.name && f66x && typeof f66x.isCast === 'function' && !f66x.isCast(info.name);
+      if (localStorage.getItem('v292PortraitAnchorOff') === '1' || !nonCast){ cb('', ''); return; }
+    } catch(e){ cb('', ''); return; }
+    var desc = descFor283(info.name);
+    // 外見キャッシュ(別キー)
+    var cachedAppr = null; try { cachedAppr = localStorage.getItem('v292appr_' + pk); } catch(e){}
+    if (cachedAppr){ cb(cachedAppr, desc); return; }
+    // AI抽出OFF / Api不在 / desc無し → descフォールバック
+    var apiOk = window.Api && typeof window.Api.call === 'function';
+    if (localStorage.getItem('v292AppearanceAIOff') === '1' || !apiOk || !desc){ cb('', desc); return; }
+    if (apprPending[pk]){ cb('', desc); return; } // 抽出中は今回descで描く(次回キャッシュ反映)
+    apprPending[pk] = true;
+    var sysA = ['キャラクターの容姿を画像生成プロンプト用に日本語一文で書き出してください。', '・髪(色/長さ/型)、目、年齢層、性別、肌、服装、際立つ身体的特徴のみ。', '・物語の出来事/動作/場所/他の人物/心情/比喩は一切書かない。', '・「〜が〜する」のような文でなく、名詞句中心で簡潔に。出力は一文のみ(説明や記号で囲まない)。'].join('\n');
+    var userA = 'キャラ名: ' + info.name + '\n説明文:\n' + String(desc).slice(0, 300) + '\n\nこのキャラの容姿(一文):';
+    var done = false;
+    var to = setTimeout(function(){ if (done) return; done = true; apprPending[pk] = false; cb('', desc); }, 20000); // 保険: 20秒で諦めdescへ
+    try {
+      window.Api.call(sysA, userA, 200, { allowShort: true }).then(function(r){
+        if (done) return; done = true; clearTimeout(to); apprPending[pk] = false;
+        var t = (((r && r.text) || '')).replace(/<[^>]+>/g, '').trim().split(/\r?\n/)[0].replace(/^["「『\s]+|["」』\s]+$/g, '').slice(0, 110);
+        if (t && t.length >= 3){ try { localStorage.setItem('v292appr_' + pk, t); } catch(e){} cb(t, desc); }
+        else cb('', desc);
+      }).catch(function(){ if (done) return; done = true; clearTimeout(to); apprPending[pk] = false; cb('', desc); });
+    } catch(e){ if (!done){ done = true; clearTimeout(to); apprPending[pk] = false; cb('', desc); } }
+  }
+
   function genOne(pk){
     var info = jobInfo[pk] || {};
     var key = pollKey();
     if(!key){ cache[pk]='dice'; active--; applyAll(); pump(); return; }
-    var prompt280 = info.prompt || 'portrait';
-    try {
-      /* v292Dfix281(fix280改): 非キャスト(自動抽出キャラ)のアイコンが風景画/別人になる根治。
-         真因2段=①プロンプト元のncAppearanceが「外見」でなく場面文(「カエデに担がれて運ばれる」)
-         →fluxが情景を描く ②英語のportrait指示を前置すると日本語の外見が打ち消され人種/性別が
-         デフォルト(西洋人男性)に化ける(実機実証: 長い黒髪の少女→西洋人男性)。
-         修正=longmem worldinfo desc(キャラ一覧の説明文=「三年前に失踪した長い黒髪の少女」等
-         外見を含む)を最優先の外見ソースにし、日本語の外見記述を「先頭」に置く(人種/性別/髪を尊重)。
-         英語の制御語は最小限後置。キャスト(desc=外見文)は従来通り無加工=回帰ゼロ。
-         OFF: v292PortraitAnchorOff */
-      if (localStorage.getItem('v292PortraitAnchorOff') !== '1' && info.name){
-        var f66x = window.__v292Dfix66;
-        if (f66x && typeof f66x.isCast === 'function' && !f66x.isCast(info.name)){
-          var d281 = '';
-          try {
-            var wi281 = (window.__longmem && window.__longmem.raw && typeof window.__longmem.raw.loadWorldInfo === 'function') ? window.__longmem.raw.loadWorldInfo() : [];
-            (wi281 || []).forEach(function(w){ if (w && w.name === info.name && !d281) d281 = String(w.desc || w.description || ''); });
-            if (!d281) (wi281 || []).forEach(function(w){ if (w && w.name && !d281 && (String(w.name).indexOf(info.name) >= 0 || info.name.indexOf(String(w.name)) >= 0)) d281 = String(w.desc || w.description || ''); });
-          } catch(ew281){}
-          var base281 = (d281 || String(prompt280)).slice(0, 80);
-          /* v292Dfix282: 構図を「アニメ・バストアップ」で安定化(実機A/B)。英語のheadshot/studio/photo系は
-             実写スタジオ写真を誘発しアニメ調+人種+髪型を上書きした(実測:長い黒髪少女→実写西洋人)→排除。
-             アニメ調を先頭で強制+外見(日本語)を尊重+バストアップ+風景/群衆禁止。 */
-          prompt280 = 'アニメ調のキャラクターイラスト、一人の人物のバストアップ（胸から上）、顔を大きくはっきり描く、' + base281 + '、単独、無地の暗い背景。背景に風景や群衆を描かない。写真ではなくアニメのイラスト。anime illustration, not photo';
+    resolveAppearance(pk, info, function(appr, desc){
+      var prompt280 = info.prompt || 'portrait';
+      try {
+        /* v292Dfix283: 非キャストは「AI抽出した外見一文」を最優先ソースに(無ければdesc→info.prompt)。
+           アニメ調+バストアップ構図(fix282)で包む。キャスト(desc=外見文)は無加工=回帰ゼロ。 */
+        if (localStorage.getItem('v292PortraitAnchorOff') !== '1' && info.name){
+          var f66x = window.__v292Dfix66;
+          if (f66x && typeof f66x.isCast === 'function' && !f66x.isCast(info.name)){
+            var base281 = (appr || desc || String(prompt280)).slice(0, appr ? 110 : 80);
+            prompt280 = 'アニメ調のキャラクターイラスト、一人の人物のバストアップ（胸から上）、顔を大きくはっきり描く、' + base281 + '、単独、無地の暗い背景。背景に風景や群衆を描かない。写真ではなくアニメのイラスト。anime illustration, not photo';
+          }
         }
-      }
-    } catch(e280){}
-    var body = { model: info.model||'flux', prompt: prompt280, n:1, size:'384x384' };
-    if(info.seed != null) body.seed = info.seed;   // 同seed＝同一画像（旧絵柄の再現）
-    fetch(API, { method:'POST', headers:{ 'Authorization':'Bearer '+key, 'Content-Type':'application/json' }, body: JSON.stringify(body) })
-      .then(function(r){ if(!r.ok) throw r.status; return r.json(); })
-      .then(function(j){ var b=j&&j.data&&j.data[0]&&j.data[0].b64_json; if(!b) throw 'nob64';
-        var d=b64ToDataUrl(b); cache[pk]=d; persistSet(pk,d); })
-      .catch(function(){ cache[pk]='dice'; })
-      .then(function(){ active--; applyAll(); pump(); });
+      } catch(e280){}
+      var body = { model: info.model||'flux', prompt: prompt280, n:1, size:'384x384' };
+      if(info.seed != null) body.seed = info.seed;   // 同seed＝同一画像（旧絵柄の再現）
+      fetch(API, { method:'POST', headers:{ 'Authorization':'Bearer '+key, 'Content-Type':'application/json' }, body: JSON.stringify(body) })
+        .then(function(r){ if(!r.ok) throw r.status; return r.json(); })
+        .then(function(j){ var b=j&&j.data&&j.data[0]&&j.data[0].b64_json; if(!b) throw 'nob64';
+          var d=b64ToDataUrl(b); cache[pk]=d; persistSet(pk,d); })
+        .catch(function(){ cache[pk]='dice'; })
+        .then(function(){ active--; applyAll(); pump(); });
+    });
   }
   // v292Dfix199f: 暴走防止の遮断器。生成は直列・最小間隔つき・セッション上限あり。
   //   万一どこかが無限再生成ループに陥っても、上限で自動停止して DiceBear に退避し、
@@ -193,6 +226,7 @@
     if(!name) return;
     var pk=keyFor(name);
     delete cache[pk]; delete jobInfo[pk]; persistDel(pk);
+    try{ localStorage.removeItem('v292appr_'+pk); }catch(e){} /* v292Dfix283: ↻時はAI外見キャッシュも破棄して再抽出 */
     try{
       var imgs=document.querySelectorAll('img[data-avpk]');
       for(var i=0;i<imgs.length;i++){ if((imgs[i].getAttribute('alt')||'')===name){ imgs[i].removeAttribute('data-avpk'); try{ imgs[i].src=''; }catch(e){} } }
@@ -236,6 +270,7 @@
     // v292Dfix209: 書き手(fix66等)が初期srcに使うキャッシュ済みdata:URLの取得口
     keyFor: keyFor,
     cachedFor: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; if(typeof c==='string'&&c.indexOf('data:')===0) return c; var p=persistGet(pk); return (p&&p.indexOf('data:')===0)?p:''; }catch(e){ return ''; } },
-    clearCache: function(){ try{ Object.keys(localStorage).forEach(function(k){ if(k.indexOf('v292av')===0) localStorage.removeItem(k); }); }catch(e){} cache={}; jobInfo={}; } };
+    clearAppearance: function(name){ try{ localStorage.removeItem('v292appr_'+keyFor(name)); }catch(e){} }, /* v292Dfix283: AI外見キャッシュ破棄(↻で外見も引き直す用) */
+    clearCache: function(){ try{ Object.keys(localStorage).forEach(function(k){ if(k.indexOf('v292av')===0||k.indexOf('v292appr_')===0) localStorage.removeItem(k); }); }catch(e){} cache={}; jobInfo={}; } };
   window.__v292Dfix199 = window.__v292Dfix197;
 })();
