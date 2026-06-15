@@ -5,6 +5,7 @@
 //   保存=スロット毎 / 上限1500字(肥大=Pro劣化予防) / 空なら無効。
 //   OFF: localStorage v292AiInstrOff='1'
 //   注入は高優先だが「物理的整合・前場面との連続性・破綻禁止は超えない」と添えて暴走防止。
+//   fix297b(2026-06-15): settingsOv=fixedでoffsetParent常にnull→可視判定をdisplay/高さに変更。アンカーを.mpanel-bodyへ。
 // =====================================================================
 (function(){
   'use strict';
@@ -50,16 +51,17 @@
   })();
 
   // ---- 設定モーダルへUI差し込み ----
+  // settingsOvはposition:fixed → offsetParentは常にnull。display/高さで可視判定する(fix297b)
+  function settingsVisible(ov){ try{ if(getComputedStyle(ov).display==='none') return false; return ov.getBoundingClientRect().height>0; }catch(e){ return ov.offsetParent!==null; } }
   function injectUI(){
     try{
       if(localStorage.getItem('v292AiInstrOff')==='1') return;
       var ov=document.getElementById('settingsOv');
-      if(!ov||ov.offsetParent===null) return;
+      if(!ov||!settingsVisible(ov)) return;
       if(document.getElementById('v292-ai-instr')) return;
-      var anchorField=null;
-      var cm=ov.querySelector('#cfgOrModel')||ov.querySelector('#cfgModel');
-      if(cm){ anchorField=cm.closest('.fld')||cm.parentElement; }
-      var panel=anchorField?anchorField.parentElement:(ov.querySelector('.v100-settings, .settings-panel, [class*="settings"]')||ov);
+      var panel=null;
+      try{ var bodies=ov.querySelectorAll('.mpanel-body, #settingsPanel'); for(var i=0;i<bodies.length;i++){ if(bodies[i].getBoundingClientRect().height>0){ panel=bodies[i]; break; } } }catch(e){}
+      if(!panel) panel=ov.querySelector('#settingsPanel')||ov.querySelector('.mpanel-body')||ov;
       if(!panel) return;
       var wrap=document.createElement('div'); wrap.className='fld'; wrap.id='v292-ai-instr-wrap'; wrap.style.cssText='margin-top:10px;';
       var lbl=document.createElement('label'); lbl.innerHTML='🛠 AIへの追加指示（上級者向け・任意）';
@@ -72,8 +74,7 @@
       ta.addEventListener('input',function(){ if(ta.value.length>MAX) ta.value=ta.value.slice(0,MAX); setInstr(ta.value); updHint(); });
       updHint();
       wrap.appendChild(lbl); wrap.appendChild(ta); wrap.appendChild(hint);
-      if(anchorField&&anchorField.nextSibling) panel.insertBefore(wrap,anchorField.nextSibling);
-      else panel.appendChild(wrap);
+      panel.appendChild(wrap);
       try{ console.log(TAG,'UI injected'); }catch(e){}
     }catch(e){}
   }
