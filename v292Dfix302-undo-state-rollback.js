@@ -7,6 +7,7 @@
 //     G.undo/G.retryの直前に、巻き戻る先のターン数のスナップに状態を復元する。
 //     これで「ターンも状態も」一緒に戻る。fix77/本体は不触・キルスイッチ付き。
 //   注: スナップはメモリ保持(リロードで消える)。1セッション内の取消→続行を想定。
+//   fix302b: wrap()の var G が巻き上げで素のグローバルGを隠す不具合を修正(実機でwindow.G未定義のため顕在化)。
 //   OFF: localStorage v292Dfix302Off='1'
 // =====================================================================
 (function(){
@@ -41,19 +42,20 @@
   }
 
   function wrap(){
-    var G=window.G||(typeof G!=='undefined'?G:null);
-    if(!G) return false;
-    if(G.__v292Dfix302) return true;
+    // 注意: var G にすると巻き上げで typeof G が未定義のローカルを指す→素のグローバルGを取れない(fix302b)
+    var g=window.G||(typeof G!=='undefined'?G:null);
+    if(!g) return false;
+    if(g.__v292Dfix302) return true;
     ['undo','retry'].forEach(function(fn){
-      if(typeof G[fn]!=='function') return;
-      var orig=G[fn].bind(G);
-      G[fn]=function(){
+      if(typeof g[fn]!=='function') return;
+      var orig=g[fn].bind(g);
+      g[fn]=function(){
         // popされる前に「巻き戻り先=現ターン数-1」の状態へ先に復元(retryの再生成にも効く)
         try{ if(!off()){ var s=getS(); if(s && !s.inFlight && Array.isArray(s.turns) && s.turns.length>0){ restoreTo(s.turns.length-1); } } }catch(e){}
         return orig.apply(this,arguments);
       };
     });
-    G.__v292Dfix302=true;
+    g.__v292Dfix302=true;
     try{ console.log('[v292Dfix302] undo/retry state-rollback wired'); }catch(e){}
     return true;
   }
