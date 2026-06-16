@@ -12,6 +12,9 @@
 //
 //   Designed to match (and arguably surpass) AI Dungeon's World Info /
 //   Memory mechanics by being fully AUTOMATIC — no manual user upkeep.
+//   fix299(2026-06-16): longmemが全スロット未永続化の根治。①保存ゲートからdocument.hidden除去
+//     (前面で始めた要約を背景化後も保存) ②初回バックログ上限12T(巨大プロンプトのtimeout回避)
+//     ③timeout 45s→90s ④要約モデルをFlash固定(速/安) ⑤focus/visibilitychangeでcatch-up
 // =====================================================================
 (function v292Dfix135(){
   'use strict';
@@ -28,7 +31,8 @@
   var ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 
   function getModel(){
-    try { var c = JSON.parse(localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6') || '{}').cfg || {}; return c.orModel || 'nousresearch/hermes-4-405b'; } catch(e){ return 'nousresearch/hermes-4-405b'; }
+    // fix299: 要約は背景タスク。軽量・高速・安価な Flash を優先(物語モデルがProでも要約はFlashで速く確実に)。
+    return 'deepseek/deepseek-v4-flash';
   }
   function getKey(){
     try { var c = JSON.parse(localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6') || '{}').cfg || {}; return c.orKey || ''; } catch(e){ return ''; }
@@ -50,16 +54,23 @@
     } catch(e){}
     return true;
   }
+  // fix299: 保存専用ゲート。epoch(単一writer)だけを見る。document.hiddenは見ない
+  //   = 前面で始めた要約の結果を、応答到着時にタブが背景化していても保存できる
+  //   (ユーザーが20-40秒の生成中に別タブへ移ると結果が捨てられていた根本問題の解消)。
+  function _lmCanSave(){
+    try { var ep = +(localStorage.getItem('chr6_epoch') || 0); if (window.__chrEpoch && ep > window.__chrEpoch) return false; } catch(e){}
+    return true;
+  }
 
   // ---------- storage ----------
   function loadSummary(){ try { return localStorage.getItem(LSP_SUMMARY) || ''; } catch(e){ return ''; } }
-  function saveSummary(s){ if(!_lmCanWrite())return; try { localStorage.setItem(LSP_SUMMARY, String(s || '').slice(0, 800)); } catch(e){} }
+  function saveSummary(s){ if(!_lmCanSave())return; try { localStorage.setItem(LSP_SUMMARY, String(s || '').slice(0, 800)); } catch(e){} }
   function loadWorldInfo(){ try { return JSON.parse(localStorage.getItem(LSP_WORLDINFO) || '[]') || []; } catch(e){ return []; } }
-  function saveWorldInfo(arr){ if(!_lmCanWrite())return; try { localStorage.setItem(LSP_WORLDINFO, JSON.stringify((arr || []).slice(0, 40))); } catch(e){} }
+  function saveWorldInfo(arr){ if(!_lmCanSave())return; try { localStorage.setItem(LSP_WORLDINFO, JSON.stringify((arr || []).slice(0, 40))); } catch(e){} }
   function loadEvents(){ try { return JSON.parse(localStorage.getItem(LSP_EVENTS) || '[]') || []; } catch(e){ return []; } }
-  function saveEvents(arr){ if(!_lmCanWrite())return; try { localStorage.setItem(LSP_EVENTS, JSON.stringify((arr || []).slice(0, 20))); } catch(e){} }
+  function saveEvents(arr){ if(!_lmCanSave())return; try { localStorage.setItem(LSP_EVENTS, JSON.stringify((arr || []).slice(0, 20))); } catch(e){} }
   function loadLastBuild(){ try { return parseInt(localStorage.getItem(LSP_LASTBUILD) || '-1', 10); } catch(e){ return -1; } }
-  function saveLastBuild(idx){ if(!_lmCanWrite())return; try { localStorage.setItem(LSP_LASTBUILD, String(idx)); } catch(e){} }
+  function saveLastBuild(idx){ if(!_lmCanSave())return; try { localStorage.setItem(LSP_LASTBUILD, String(idx)); } catch(e){} }
 
   // ---------- LLM call ----------
   function buildPrompt(prevSummary, prevWorldInfo, prevEvents, newTurns, startIdx){
@@ -112,7 +123,7 @@
       xhr.open('POST', ENDPOINT, true);
       xhr.setRequestHeader('Content-Type', 'application/json');
       xhr.setRequestHeader('Authorization', 'Bearer ' + key);
-      xhr.timeout = 45000;
+      xhr.timeout = 90000;
       xhr.onload = function(){
         if (xhr.status >= 200 && xhr.status < 300){
           try {
@@ -167,11 +178,16 @@
     var prevWI  = loadWorldInfo();
     var prevEv  = loadEvents();
     var startIdx = lastBuild + 1;
+    // fix299: 初回(lastBuild<0)に大量ターンが溜まっていると全要約で巨大プロンプト→タイムアウト永久失敗。
+    //   直近FIRST_CAPターンだけに絞り、以降は増分(REBUILD_INTERVAL)で進める。
+    var FIRST_CAP = 12;
+    if (lastBuild < 0 && (curTurn + 1) > FIRST_CAP) startIdx = curTurn - FIRST_CAP + 1;
     var newTurns = st.turns.slice(startIdx, curTurn + 1);
     var prompt = buildPrompt(prevSum, prevWI, prevEv, newTurns, startIdx);
     call(prompt, function(result){
       BUSY = false;
-      if (!result) return;
+      if (!result){ try { console.log(TAG, 'rebuild returned null (timeout/parse-fail)'); } catch(_){} return; }
+      if (!_lmCanSave()){ try { console.log(TAG, 'rebuild OK but save blocked (stale epoch)'); } catch(_){} }
       if (result.summary) saveSummary(result.summary);
       if (result.worldinfo && result.worldinfo.length) saveWorldInfo(result.worldinfo);
       if (result.events && result.events.length) saveEvents(result.events);
@@ -311,6 +327,12 @@
     if (st && st.turns) lastTurnCount = st.turns.length;
     maybeRebuild();
   }, 3000);
+
+  // fix299: タブが前面化したら即チェック(背景中に溜まった分を catch-up)。
+  try {
+    window.addEventListener('focus', function(){ try { maybeRebuild(); } catch(e){} });
+    document.addEventListener('visibilitychange', function(){ if (!document.hidden){ try { maybeRebuild(); } catch(e){} } });
+  } catch(e){}
 
   // Reset hook: 物語のターンが無い(turns=0)のに長期記憶ストアが残っていたら消す。
   // v292Dfix180: 旧フックは「prevTC>0→0 の遷移を同一セッションで観測した時だけ」発火した
