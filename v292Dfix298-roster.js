@@ -12,6 +12,7 @@
 //     - quasi名は「last <= 現ターン-1」で現ゲーム整合フィルタ(リセット後の旧キャラ漏れ防止)。
 //     - 単一書き込みガード(_lmCanWrite相当: 前面 & 最新epochのタブのみ書く)。
 //   保存: localStorage 'v292Dfix298'+スロット接尾辞 = {epoch,hwTurns,dismissed} 物語と別キー(消しても無傷)
+//   fix298b: window.S非露出環境向けに cast/turns をスロットblob(chr6+接尾辞)からも読む。
 //   OFF: localStorage v292Dfix298Off='1'
 // =====================================================================
 (function(){
@@ -24,7 +25,10 @@
   function SK(){ return 'v292Dfix298'+slotSfx(); }
   function curEpoch(){ try{ return +(localStorage.getItem('chr6_epoch')||0); }catch(e){ return 0; } }
   function getS(){ try{ return window.S || (typeof S!=='undefined'?S:null); }catch(e){ return null; } }
-  function curTurns(){ var s=getS(); return (s&&Array.isArray(s.turns))?s.turns.length:0; }
+  function getSlot(){ try{ return JSON.parse(localStorage.getItem('chr6'+slotSfx())||'null'); }catch(e){ return null; } }
+  // cast/turns は window.S が露出しない環境があるのでスロットblobもフォールバック参照(fix298b)
+  function getCast(){ var s=getS(); if(s&&s.cast) return s.cast; var sl=getSlot(); return (sl&&sl.cast)?sl.cast:null; }
+  function curTurns(){ var s=getS(); if(s&&Array.isArray(s.turns)) return s.turns.length; var sl=getSlot(); return (sl&&Array.isArray(sl.turns))?sl.turns.length:0; }
 
   // ---- 永続store(リセット安全) ----
   function save(st){
@@ -101,9 +105,9 @@
   function statusFor(name){
     // 1. cast state(v264/265が永続管理する権威データ)
     try{
-      var s=getS();
-      if(s&&s.cast){
-        var list=[].concat(s.cast.hero?[s.cast.hero]:[], Array.isArray(s.cast.npcs)?s.cast.npcs:[]);
+      var cast=getCast();
+      if(cast){
+        var list=[].concat(cast.hero?[cast.hero]:[], Array.isArray(cast.npcs)?cast.npcs:[]);
         for(var i=0;i<list.length;i++){ var c=list[i];
           if(c&&c.name===name&&c.state){
             var stt=c.state;
