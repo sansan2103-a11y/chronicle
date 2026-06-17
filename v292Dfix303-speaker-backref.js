@@ -2,17 +2,18 @@
 // Chronicle TRPG - v292Dfix303: 話者帰属の後方参照コレクタ
 //   問題(おしん実証): モデルがセリフを<say>タグ無しの裸引用で書くと、裸引用帰属器(fix218)が
 //     「引用の直前にいた名前付きキャラ」を話者に推測する。だが引用の直後が
-//     「カエデは…その声には平坦さがある」のように後方参照で話者を示している場合、
-//     直前話者(レナ)に誤帰属する(実測: 「お前らもか」=カエデ → レナに誤割当)。
-//   修正方針(おしん要望=根治寄り+他不具合が出にくい):
-//     既存の帰属器(fix217/218等)には一切触らず、帰属後の独立コレクタとして、
-//     「最強の後方参照」だけで話者を付け替える。手掛かりが弱い/無ければ一切触らない。
-//   ルール(高精度・node単体で真陽性3/偽陽性5検証済):
-//     R1: 引用直後が「[名前]の声(は|が|で|に|を)」→ その名前
-//     R2: 引用直後が「[名前]は/が … その声には」(間に別の「声」が無い=反応文脈を除外)→ その名前
-//     ※cast内の名前 & 既存whoと異なる時だけ上書き。「その声に」(反応)は対象外。
-//   配線: UI.appendTurnをラップ(新ターンを描画前に補正)+設置時に既存ターンを遡及補正+
-//     idempotentなポーリング(安全網)。OFF: localStorage v292Dfix303Off='1'
+//     「[名前]が…彼女の声は低く」「[名前]は…その声には平坦さ」のように後方参照で話者を示す場合、
+//     直前話者に誤帰属する(実測: お前らもか=カエデ→レナ / 怪談=リナ→レナ)。
+//   修正方針(おしん要望=根治寄り+他不具合が出にくい): 既存帰属器は不触。帰属後の独立コレクタで
+//     「最強の後方参照」だけ補正。手掛かりが弱い/無ければ一切触らない。
+//   ルール(node単体11/11検証=真陽性5/偽陽性6):
+//     R1: 引用直後「[名前]の声(は|が|で|に|を)」→ その名前
+//     R2: 引用直後「[名前]は/が … (彼女|彼)の声(は|が) | その声(には|は|が)」(間に別の声/引用境界が無い
+//         =反応文脈・別話者を除外。「その声に」(反応・に)は は/が/には が無いので不一致) → その名前
+//     ※名前キャプチャはlazy(最初のは/がで止める)。cast名 & 既存whoと異なる時だけ上書き。
+//   fix303b: 「彼女の声は」「その声は/が」型を追加(R2拡張)+名前lazy化(貪欲で名前が壊れる不具合修正)。
+//   配線: UI.appendTurnラップ(描画前補正)+設置時に既存ターンを遡及補正+idempotentなポーリング(安全網)。
+//   OFF: localStorage v292Dfix303Off='1'
 // =====================================================================
 (function(){
   'use strict';
@@ -25,7 +26,6 @@
     try{ if(s&&s.cast){ if(s.cast.hero&&s.cast.hero.name) out.push(s.cast.hero.name); if(Array.isArray(s.cast.npcs)) s.cast.npcs.forEach(function(n){ if(n&&n.name) out.push(n.name); }); } }catch(e){}
     return out;
   }
-  // ---- 補正ロジック(高精度・後方参照のみ) ----
   function correctConvSays(convSays, narrative, cast){
     var changed=0;
     var n=String(narrative||''); if(!n||!Array.isArray(convSays)) return 0;
@@ -34,12 +34,12 @@
       if(!c||!c.say) return;
       var say=String(c.say), idx=n.indexOf(say);
       if(idx<0){ var bare=say.replace(/^[「『]+|[」』]+$/g,''); idx=n.indexOf(bare); if(idx<0) return; say=bare; }
-      var after=n.slice(idx+say.length, idx+say.length+50);
+      var after=n.slice(idx+say.length, idx+say.length+60);
       var name=null;
-      var m1=after.match(/^[\s\n「」』『]*?([^\s\n、。！？!?「」]{1,8})の声(?:は|が|で|に|を)/);
+      var m1=after.match(/^[\s\n「」』『]*?([^\s\n、。！？!?「」]{1,8}?)の声(?:は|が|で|に|を)/);
       if(m1 && castHas(m1[1])) name=m1[1];
       if(!name){
-        var m2=after.match(/^[\s\n「」』『]*?([^\s\n、。！？!?「」]{1,8})(?:は|が)(?:(?!声)[\s\S]){0,28}?その声には/);
+        var m2=after.match(/^[\s\n「」』『]*?([^\s\n、。！？!?「」]{1,8}?)(?:は|が)(?:(?!声|「|」)[\s\S]){0,42}?(?:(?:彼女|彼)の声|その声)(?:には|は|が)/);
         if(m2 && castHas(m2[1])) name=m2[1];
       }
       if(name && name!==c.who){ c.who=name; changed++; }
@@ -48,22 +48,18 @@
   }
   function processTurn(t){ try{ if(!t||!Array.isArray(t._convSays)||off()) return 0; return correctConvSays(t._convSays, t.narrative, castNames()); }catch(e){ return 0; } }
 
-  // ---- 配線 ----
   function install(){
     var UI=getUI();
     if(!UI) return false;
     if(UI.__v292Dfix303) return true;
-    // (1) appendTurn ラップ: 新ターンを描画前に補正(チラ直り回避)
     try{ if(typeof UI.appendTurn==='function'){ var oa=UI.appendTurn.bind(UI); UI.appendTurn=function(turn,idx){ try{ processTurn(turn); }catch(e){} return oa(turn,idx); }; } }catch(e){}
     UI.__v292Dfix303=true;
-    // (2) 既存ターンを遡及補正 + 1回だけ再描画
     try{ var s=getS(); if(s&&Array.isArray(s.turns)){ var ch=0; s.turns.forEach(function(t){ ch+=processTurn(t); }); if(ch>0){ try{ s.save&&s.save(); }catch(e){} try{ UI.renderAll&&UI.renderAll(); }catch(e){} try{ console.log('[v292Dfix303] retroactively corrected', ch, 'speaker(s)'); }catch(e){} } } }catch(e){}
-    try{ console.log('[v292Dfix303] speaker back-ref corrector wired'); }catch(e){}
+    try{ console.log('[v292Dfix303] speaker back-ref corrector wired (b)'); }catch(e){}
     return true;
   }
   (function w(){ w._n=(w._n||0)+1; if(install()) return; if(w._n>120) return; setTimeout(w,500); })();
 
-  // (3) idempotentなポーリング安全網(appendTurn以外の経路で追加されたターンも拾う・冪等なのでループしない)
   try{ setInterval(function(){
     if(off()) return;
     var s=getS(); if(!s||!Array.isArray(s.turns)) return;
