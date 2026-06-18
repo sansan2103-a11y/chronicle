@@ -15,6 +15,8 @@
 //   fix307b(2026-06-18): アイコンが怪物化する不具合修正。原因=descの「怪異」語で
 //     外見抽出(fix197/286)が[人外]判定→モンスター化。対策=(1)descに怪異/妖怪等の語を
 //     入れない(2)抽出時に容姿一文「外見」も取得しdescに使う→本来の姿でアイコン生成。
+//   fix307c(2026-06-18): 再抽出で(a)呼称が毎回変わり同一存在が二重登録(b)現象/水滴等まで登録、
+//     の2不具合修正。対策=既存台帳の呼称を渡して同一存在に再利用(呼称固定)＋現象/物/場所をkindで除外。
 // =====================================================================
 (function(){
   'use strict';
@@ -57,11 +59,12 @@
     '各要素:{"呼称":安定した短い呼称(固有名or外見の核8字以内・例「黒髪の女」「顔のない男」),"種別":"人物"|"怪異"|"動物"等,"重要度":"高"|"中","外見":画像生成用に容姿を日本語一文で(人型なら髪・年齢層・性別・肌・服装・特徴/人型でない存在なら姿形・色・質感・異形の特徴。物語の出来事や場所や心情は書かない),"理由":簡潔に}。'+
     '載せる基準=再登場した/再登場しそう・物語の脅威や鍵となる存在。'+
     '載せない=一度きりで以後出ない脅かし・通行人・背景・単なる物音や影・主役。'+
-    '一度しか出ておらず再登場が読み取れない存在は載せない(保留)。同一存在は描写が違っても1件に名寄せ統合する。該当無しは[]。JSONのみ出力。';
+    '一度しか出ておらず再登場が読み取れない存在は載せない(保留)。人・怪異・動物・霊など"存在"のみ対象とし、単なる現象・物体・場所・水滴・物音は載せない。既存台帳の呼称が与えられたら、同一の存在には新しい名前を作らず既存の呼称をそのまま使う(呼称は固定)。同一存在は描写が違っても1件に名寄せ統合する。該当無しは[]。JSONのみ出力。';
 
   function callLLM(transcript, cb){
     var key=getKey(); if(!key){ cb(null); return; }
-    var user='主役(以下)は絶対に載せない: '+(castNames().join('、')||'(不明)')+'\n\n--- 物語 ---\n'+transcript;
+    var existing=(loadRoster()||[]).map(function(r){return r&&r.handle;}).filter(Boolean);
+    var user='主役(以下)は絶対に載せない: '+(castNames().join('、')||'(不明)')+'\n既存台帳の呼称(同一存在には必ずこれを再利用・新しい名前を作らない): '+(existing.join('、')||'(なし)')+'\n\n--- 物語 ---\n'+transcript;
     var body=JSON.stringify({ model:MODEL, temperature:0.2, max_tokens:600, messages:[{role:'system',content:SYS},{role:'user',content:user}] });
     try{
       var xhr=new XMLHttpRequest();
@@ -93,6 +96,7 @@
       if(!h || h.length>24) return;
       if(cast.indexOf(h)>=0) return;
       var kind=String((it['種別']!=null?it['種別']:it.kind)||'人物');
+      if(/現象|物体|場所|風景|景色|液体|物音|背景/.test(kind)) return; // 存在でないものは載せない(fix307c)
       var imp=String((it['重要度']!=null?it['重要度']:it.importance)||'中');
       var appr=String((it['外見']!=null?it['外見']:it.appr)||'').trim().slice(0,120);
       if(byKey[h]){ byKey[h].kind=kind; byKey[h].importance=imp; if(appr) byKey[h].appr=appr; byKey[h].lastTurn=ct; }
