@@ -6,13 +6,15 @@
 //   解決(おしん案=文章から呼称を取る・実機6/6パス):
 //     要約LLMに弧の文脈を渡し、散らばった描写から呼称生成(「濡れた黒髪の女」)+
 //     弧の文脈で重要度判定+「一度きりは載せない(保留)」+名寄せ。
-//     → 過剰登録を防ぎつつ重要な再登場存在だけ一覧に。
 //   実装方針(他の不具合が出にくい独立設計):
 //     - longmem(fix135)本体は不触。独自の周期LLM呼び出しで抽出し、独自ストアに
 //       追記マージ(置換しない=呼称固定)。
 //     - 表示は loadWorldInfo に"もう一段"シムを重ねてロスター項目を追記(fix298の上)。
 //     - リセット安全(turns=0でクリア・stale lastTurnは非表示)。
 //   OFF: localStorage v292Dfix307Off='1'
+//   fix307b(2026-06-18): アイコンが怪物化する不具合修正。原因=descの「怪異」語で
+//     外見抽出(fix197/286)が[人外]判定→モンスター化。対策=(1)descに怪異/妖怪等の語を
+//     入れない(2)抽出時に容姿一文「外見」も取得しdescに使う→本来の姿でアイコン生成。
 // =====================================================================
 (function(){
   'use strict';
@@ -52,7 +54,7 @@
   }
 
   var SYS='あなたは長編物語の登場人物台帳を維持するAI。物語(複数ターン)を読み、主役以外の存在のうち【一覧に載せるべき重要な存在】だけをJSON配列で返す。'+
-    '各要素:{"呼称":安定した短い呼称(固有名or外見の核8字以内・例「黒髪の女」「顔のない男」),"種別":"人物"|"怪異"|"動物"等,"重要度":"高"|"中","理由":簡潔に}。'+
+    '各要素:{"呼称":安定した短い呼称(固有名or外見の核8字以内・例「黒髪の女」「顔のない男」),"種別":"人物"|"怪異"|"動物"等,"重要度":"高"|"中","外見":画像生成用に容姿を日本語一文で(人型なら髪・年齢層・性別・肌・服装・特徴/人型でない存在なら姿形・色・質感・異形の特徴。物語の出来事や場所や心情は書かない),"理由":簡潔に}。'+
     '載せる基準=再登場した/再登場しそう・物語の脅威や鍵となる存在。'+
     '載せない=一度きりで以後出ない脅かし・通行人・背景・単なる物音や影・主役。'+
     '一度しか出ておらず再登場が読み取れない存在は載せない(保留)。同一存在は描写が違っても1件に名寄せ統合する。該当無しは[]。JSONのみ出力。';
@@ -60,7 +62,7 @@
   function callLLM(transcript, cb){
     var key=getKey(); if(!key){ cb(null); return; }
     var user='主役(以下)は絶対に載せない: '+(castNames().join('、')||'(不明)')+'\n\n--- 物語 ---\n'+transcript;
-    var body=JSON.stringify({ model:MODEL, temperature:0.2, max_tokens:500, messages:[{role:'system',content:SYS},{role:'user',content:user}] });
+    var body=JSON.stringify({ model:MODEL, temperature:0.2, max_tokens:600, messages:[{role:'system',content:SYS},{role:'user',content:user}] });
     try{
       var xhr=new XMLHttpRequest();
       xhr.open('POST', ENDPOINT, true);
@@ -80,7 +82,7 @@
     try{ var a=JSON.parse(m[0]); return Array.isArray(a)?a:null; }catch(e){ return null; }
   }
 
-  // 追記マージ: 既存呼称は維持(固定)・新規は追加・重要度は更新・削除しない
+  // 追記マージ: 既存呼称は維持(固定)・新規は追加・重要度/外見は更新・削除しない
   function mergeRoster(existing, incoming){
     existing=existing||[];
     var byKey={}; existing.forEach(function(e){ if(e&&e.handle) byKey[e.handle]=e; });
@@ -92,8 +94,9 @@
       if(cast.indexOf(h)>=0) return;
       var kind=String((it['種別']!=null?it['種別']:it.kind)||'人物');
       var imp=String((it['重要度']!=null?it['重要度']:it.importance)||'中');
-      if(byKey[h]){ byKey[h].kind=kind; byKey[h].importance=imp; byKey[h].lastTurn=ct; }
-      else { var o={handle:h, kind:kind, importance:imp, firstTurn:ct, lastTurn:ct}; byKey[h]=o; existing.push(o); }
+      var appr=String((it['外見']!=null?it['外見']:it.appr)||'').trim().slice(0,120);
+      if(byKey[h]){ byKey[h].kind=kind; byKey[h].importance=imp; if(appr) byKey[h].appr=appr; byKey[h].lastTurn=ct; }
+      else { var o={handle:h, kind:kind, importance:imp, appr:appr, firstTurn:ct, lastTurn:ct}; byKey[h]=o; existing.push(o); }
     });
     return existing;
   }
@@ -143,8 +146,10 @@
           loadRoster().forEach(function(r){
             if(!r||!r.handle||have[r.handle]) return;
             if(typeof r.lastTurn==='number' && ct>=0 && r.lastTurn>ct) return; // stale(別ゲーム)
-            var label=(r.kind==='怪異')?'怪異':(r.kind==='動物')?'存在':'人物';
-            base.push({ name:r.handle, type:'character', desc:'（物語に登場した'+(r.importance==='高'?'重要な':'')+label+'）' });
+            // 外見(appr)があればそれをdescに=アイコン外見抽出が正しい姿を作る。
+            // 無い時は中立ラベル(「怪異/妖怪/化け物」等の語は避ける=外見抽出が[人外]に誤分類しモンスター化するため)。
+            var desc=(r.appr&&r.appr.length>=3)?r.appr:('（物語に登場した'+(r.importance==='高'?'重要な':'')+'存在）');
+            base.push({ name:r.handle, type:'character', desc:desc });
             have[r.handle]=1;
           });
         }catch(e){}
