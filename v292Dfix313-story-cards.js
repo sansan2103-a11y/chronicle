@@ -6,8 +6,9 @@
 //   設計(コア不触):
 //     - 保存: S.scene.cards[] に持つ → 既存セーブ機構(fix205/225/230)でスロット分離＋
 //       JSON書出/読込/まるごと書出に自動で乗る。
-//     - 注入: Planner._extensions に後処理を push(fix305と同じ機構)。組み上がったsysの末尾へ
+//     - 注入: Planner.build を最外ラップ(fix309/300/304と同型)。組み上がったsys末尾へ
 //       【設定カード】ブロックを足す(常時＋直近トリガー命中のみ・冪等)。
+//       ※当初Planner._extensionsを使ったが現行送信経路で適用されず実機傍受で発覚→build wrapに変更。
 //     - UI: トップバーに「🗂 カード」ボタン→管理モーダル(一覧/追加/編集/削除/常時トグル)。
 //   OFF: localStorage v292Dfix313Off='1' で注入停止(データは保持)。
 // =====================================================================
@@ -37,21 +38,28 @@
       if(hit) lines.push('■ '+(c.name||'無題')+(c.always?'（常時）':'')+'：'+String(c.entry).trim());
     });
     if(!lines.length) return '';
-    return '\n\n【設定カード（常に効く確定設定・事典。参照用。本文に説明書きを混ぜない）】\n'+lines.join('\n');
+    return '\n\n'+MARK+'（常に効く確定設定・事典。参照用。本文に説明書きを混ぜない）】\n'+lines.join('\n');
   }
-  function ext(ctx){
-    try{ if(ctx&&typeof ctx.sys==='string'){ if(ctx.sys.indexOf(MARK)>=0) return ctx.sys; var b=buildBlock(); if(b) return ctx.sys+b; } }catch(e){}
-    return ctx?ctx.sys:undefined;
+  // 注入はfix309/300/304と同型のPlanner.build最外ラップで行う。
+  // (Planner._extensionsは現行の送信経路で適用されないことを実機傍受で確認したため不採用。)
+  function installBuild(){
+    try{
+      var P=window.Planner||(typeof Planner!=='undefined'?Planner:null);
+      if(!P||typeof P.build!=='function') return false;
+      if(P.build._v292f313===true) return true; // 既に最外
+      var inner=P.build.bind(P);
+      var wrapped=function(){
+        var r=inner.apply(this,arguments);
+        try{ if(r&&typeof r.sys==='string'){ var b=buildBlock(); if(b && r.sys.indexOf(MARK)<0) r.sys=r.sys+b; } }catch(e){}
+        return r;
+      };
+      try{ Object.keys(P.build).forEach(function(k){ if(k.indexOf('__')===0) wrapped[k]=P.build[k]; }); }catch(e){}
+      wrapped._v292f313=true;
+      P.build=wrapped;
+      return true;
+    }catch(e){ return false; }
   }
-  ext.__v292Dfix313=true;
-  function install(){
-    var P=window.Planner||(typeof Planner!=='undefined'?Planner:null);
-    if(!P) return false; if(!Array.isArray(P._extensions)) P._extensions=[];
-    for(var i=P._extensions.length-1;i>=0;i--){ if(P._extensions[i]&&P._extensions[i].__v292Dfix313) P._extensions.splice(i,1); }
-    P._extensions.push(ext);
-    return true;
-  }
-  install(); try{ setInterval(install, 2500); }catch(e){}
+  installBuild(); try{ setInterval(installBuild, 2500); }catch(e){}
 
   // ---- UI ----
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
