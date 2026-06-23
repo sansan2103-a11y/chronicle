@@ -68,7 +68,10 @@
       '.v313-del{background:transparent;border:1px solid rgba(224,96,96,.4);color:var(--err,#e06060);border-radius:6px;padding:5px 9px;font-size:12px;cursor:pointer}',
       '.v313-add{background:var(--acc,#8b76f0);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer}',
       '.v313-hint{font-size:11.5px;color:var(--dim,#888);line-height:1.7;margin:4px 0 12px}',
-      '.v313-empty{color:var(--dim,#888);font-size:13px;padding:18px 0;text-align:center}'
+      '.v313-empty{color:var(--dim,#888);font-size:13px;padding:18px 0;text-align:center}',
+      // v243フォールド機構に隠されないよう高詳細度で常時表示を強制
+      '#topbar.v243-collapsed #v313-btn{display:inline-flex !important}',
+      '#v313-btn{display:inline-flex;align-items:center}'
     ].join('');
     var st=document.createElement('style'); st.id='v313-style'; st.textContent=css; document.head.appendChild(st);
   }
@@ -126,26 +129,36 @@
 
   // ---- トップバーにボタン ----
   function topbarAnchor(){
-    // 最優先=📁セーブ(v30-topbar-btn)。無ければ可視トップバー(y<70)の「設定」「キャラ」ボタン。
+    // 最優先=可視トップバーの「⚙設定」ボタン(右端・常時表示)。無ければ「キャラ」「📁セーブ」。
+    var bar=document.getElementById('topbar');
+    if(bar){
+      var kids=Array.prototype.slice.call(bar.children);
+      var gear=kids.filter(function(c){return /^⚙?設定$/.test((c.textContent||'').replace(/\s+/g,''));})[0];
+      if(gear) return gear;
+      var chara=kids.filter(function(c){return /^👥?キャラ$/.test((c.textContent||'').replace(/\s+/g,''));})[0];
+      if(chara) return chara;
+    }
     var a=document.getElementById('v30-topbar-btn');
     if(a&&a.getBoundingClientRect().width>0) return a;
-    var btns=document.querySelectorAll('button');
-    for(var i=0;i<btns.length;i++){ var b=btns[i],r=b.getBoundingClientRect();
-      if(r.top<70&&r.width>0&&/設定|キャラ/.test(b.textContent||'')) return b; }
     return null;
   }
   function ensureBtn(){
+    ensureStyles(); // 可視化CSS(v243フォールド対策)を常に効かせる
     var anchor=topbarAnchor(); if(!anchor||!anchor.parentNode) return;
     var b=document.getElementById('v313-btn');
-    if(b){ // 既存=正しい場所(アンカーと同じ親)に居なければ移動
+    if(b){
       if(b.parentNode!==anchor.parentNode){ try{ anchor.parentNode.insertBefore(b, anchor.nextSibling); }catch(e){} }
+      // v243が毎回foldable化するので念のため外す(CSSが本命の保険)
+      try{ b.classList.remove('v243-foldable'); }catch(e){}
       return;
     }
     b=document.createElement('button'); b.id='v313-btn'; b.textContent='🗂 カード';
-    b.className=anchor.className.indexOf('v30-topbar-btn')>=0?'v30-topbar-btn':(anchor.className||'top-btn');
+    // 設定/キャラと同じ見た目(top-btn)に寄せる
+    b.className='top-btn';
     b.title='設定カード（トリガー式の確定設定・事典）';
     b.addEventListener('click', open);
     anchor.parentNode.insertBefore(b, anchor.nextSibling);
+    try{ b.classList.remove('v243-foldable'); }catch(e){}
   }
   try{ setInterval(ensureBtn, 1500); }catch(e){} ensureBtn();
 
