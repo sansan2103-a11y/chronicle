@@ -8,7 +8,7 @@
 //     カバーに敷く。生成失敗時はPhase1のグラデ＋頭文字がそのまま残る(遮断器)。
 //     seedはスロットIDをキーに含めて保存(v292cover_seed_<id>=本質的にスロット分離)。
 //     右上↻で再生成(seed更新)。初回はカードごとに少しずらして生成＋失敗時は自動リトライ(無料pollinationsのrate-limit対策)。世界観が無い空スロットは生成しない。
-//   Phase3: ＋新規カードでN枚の動的セーブ(chr6_slots_meta登録簿に追加・reload)/⋯に「セーブごと削除」。
+//   Phase3: ＋新規カードでN枚の動的セーブ(chr6_slots_meta登録簿に追加・reload)/⋯の削除は「セーブを削除」1つに統合(旧clearは非表示)。
 //   不変: 保存コア(fix205/225/230)/スロット分離(fix246)/自己更新(fix242)。
 // =====================================================================
 (function(){
@@ -180,8 +180,8 @@
       var mw=document.createElement('div'); mw.className='v310-menuwrap';
       var dots=document.createElement('div'); dots.className='v310-dots'; dots.textContent='⋯';
       var menu=document.createElement('div'); menu.className='v310-menu';
-      Array.prototype.forEach.call(actionBtns, function(b){ menu.appendChild(b); });
-      if(id!=='default'){ var del=document.createElement('button'); del.className='v30-btn v30-btn-danger'; del.textContent='\ud83d\uddd1 \u30bb\u30fc\u30d6\u3054\u3068\u524a\u9664'; del.addEventListener('click', function(e){ e.stopPropagation(); deleteSave(id, card); }); menu.appendChild(del); }
+      Array.prototype.forEach.call(actionBtns, function(b){ if(b.getAttribute('data-act')==='clear') return; menu.appendChild(b); }); // 旧「削除(空にする)」は統合のため非表示
+      if(id!=='default'){ var del=document.createElement('button'); del.className='v30-btn v30-btn-danger'; del.textContent='\ud83d\uddd1 \u30bb\u30fc\u30d6\u3092\u524a\u9664'; del.addEventListener('click', function(e){ e.stopPropagation(); deleteSave(id, card); }); menu.appendChild(del); }
       dots.addEventListener('click', function(e){ e.stopPropagation(); document.querySelectorAll('.v310-menu.open').forEach(function(m){ if(m!==menu) m.classList.remove('open'); }); menu.classList.toggle('open'); });
       mw.appendChild(dots); mw.appendChild(menu); card.appendChild(mw);
 
