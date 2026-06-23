@@ -8,6 +8,7 @@
 //     カバーに敷く。生成失敗時はPhase1のグラデ＋頭文字がそのまま残る(遮断器)。
 //     seedはスロットIDをキーに含めて保存(v292cover_seed_<id>=本質的にスロット分離)。
 //     右上↻で再生成(seed更新)。初回はカードごとに少しずらして生成＋失敗時は自動リトライ(無料pollinationsのrate-limit対策)。世界観が無い空スロットは生成しない。
+//   Phase3: ＋新規カードでN枚の動的セーブ(chr6_slots_meta登録簿に追加・reload)/⋯に「セーブごと削除」。
 //   不変: 保存コア(fix205/225/230)/スロット分離(fix246)/自己更新(fix242)。
 // =====================================================================
 (function(){
@@ -56,6 +57,10 @@
       '.v310-menu{display:none;position:absolute;top:32px;right:0;background:var(--s1,#15152a);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:10px;padding:6px;min-width:170px;box-shadow:0 8px 24px rgba(0,0,0,.5);flex-direction:column;gap:4px}',
       '.v310-menu.open{display:flex}',
       '.v310-menu .v30-btn{width:100%;text-align:left;border-radius:7px}',
+      '.v310-newcard{display:flex;align-items:center;justify-content:center;border:2px dashed var(--border,rgba(139,118,240,.4));background:transparent;min-height:230px;cursor:pointer;color:var(--dim,#9aa0c8)}',
+      '.v310-newcard:hover{border-color:var(--acc,#8b76f0);color:var(--acc,#a78bfa);transform:translateY(-2px)}',
+      '.v310-newinner{text-align:center}',
+      '.v310-plus{font-size:38px;line-height:1;margin-bottom:8px}',
       '@media(max-width:600px){.v310-grid{grid-template-columns:1fr}.v30-modal.v310{width:100vw;height:100vh;max-height:100vh;border-radius:0}}'
     ].join('');
     var st=document.createElement('style'); st.id='v310-style'; st.textContent=css; document.head.appendChild(st);
@@ -113,6 +118,31 @@
     if((m=t.match(/(\d+)\s*turn/)))o.turn=m[1]; return o; }
   function parseTs(t){ if(!t)return''; var m=t.replace(/\(空\)/,'').match(/更新:\s*(.+)$/); return m?m[1].trim():''; }
 
+  // ── Phase3: N枚動的セーブ(保存系のchr6_slots_meta登録簿を直接操作・コア不触) ──
+  function readMeta(){ try{ return JSON.parse(lsg('chr6_slots_meta')||'[]')||[]; }catch(e){ return []; } }
+  function writeMeta(m){ try{ localStorage.setItem('chr6_slots_meta', JSON.stringify(m)); }catch(e){} }
+  function reopenManager(){ try{ var b=document.querySelector('[title^="\u30bb\u30fc\u30d6\u7ba1\u7406"]')||document.getElementById('v30-topbar-btn'); if(b) b.click(); }catch(e){} }
+  function createSave(){
+    var meta=readMeta();
+    var id='s'+Date.now().toString(36)+Math.floor(Math.random()*1296).toString(36);
+    meta.push({id:id, name:'\u65b0\u3057\u3044\u7269\u8a9e', key:'chr6_slot_'+id, updatedAt:null});
+    writeMeta(meta);
+    try{ if(window.S && typeof window.S.save==='function') window.S.save(); }catch(e){} // 現在のゲームを今のスロットへ退避
+    try{ localStorage.setItem('chr6_active_slot', JSON.stringify(id)); }catch(e){}     // 新スロットをactiveに
+    try{ location.reload(); }catch(e){}                                                // 空スロット→初期画面(既存init経路)
+  }
+  function deleteSave(id, card){
+    if(id==='default') return;
+    if(!confirm('\u3053\u306e\u30bb\u30fc\u30d6\u3092\u5b8c\u5168\u306b\u524a\u9664\u3057\u307e\u3059\u304b\uff1f\uff08\u4e2d\u8eab\u3082\u6d88\u3048\u307e\u3059\uff09')) return;
+    writeMeta(readMeta().filter(function(x){ return x.id!==id; }));
+    try{ localStorage.removeItem('chr6_slot_'+id); }catch(e){}
+    try{ localStorage.removeItem('v292cover_seed_'+id); }catch(e){}
+    try{ Object.keys(localStorage).forEach(function(k){ if(k.indexOf('_slot_'+id)>=0) localStorage.removeItem(k); }); }catch(e){} // fix246のper-storyキー
+    var a=null; try{ a=JSON.parse(localStorage.getItem('chr6_active_slot')||'null'); }catch(e){}
+    if(a===id){ try{ localStorage.setItem('chr6_active_slot', JSON.stringify('default')); location.reload(); }catch(e){} return; }
+    if(card&&card.parentNode) card.parentNode.removeChild(card);
+  }
+
   function transform(modal){
     if(!modal||modal.__v310done) return;
     var slots=modal.querySelectorAll('.v30-slot');
@@ -151,6 +181,7 @@
       var dots=document.createElement('div'); dots.className='v310-dots'; dots.textContent='⋯';
       var menu=document.createElement('div'); menu.className='v310-menu';
       Array.prototype.forEach.call(actionBtns, function(b){ menu.appendChild(b); });
+      if(id!=='default'){ var del=document.createElement('button'); del.className='v30-btn v30-btn-danger'; del.textContent='\ud83d\uddd1 \u30bb\u30fc\u30d6\u3054\u3068\u524a\u9664'; del.addEventListener('click', function(e){ e.stopPropagation(); deleteSave(id, card); }); menu.appendChild(del); }
       dots.addEventListener('click', function(e){ e.stopPropagation(); document.querySelectorAll('.v310-menu.open').forEach(function(m){ if(m!==menu) m.classList.remove('open'); }); menu.classList.toggle('open'); });
       mw.appendChild(dots); mw.appendChild(menu); card.appendChild(mw);
 
@@ -166,6 +197,12 @@
       card.appendChild(body);
       grid.appendChild(card);
     });
+
+    // ＋新規セーブカード
+    var nc=document.createElement('div'); nc.className='v310-card v310-newcard';
+    nc.innerHTML='<div class="v310-newinner"><div class="v310-plus">＋</div><div>新しい物語を始める</div></div>';
+    nc.addEventListener('click', function(){ createSave(); });
+    grid.appendChild(nc);
 
     var h3=null,nodes=modal.childNodes,i;
     for(i=0;i<nodes.length;i++){ if(nodes[i].tagName==='H3'){ h3=nodes[i]; break; } }
