@@ -1,15 +1,14 @@
 // =====================================================================
-// Chronicle TRPG - v292Dfix310: セーブ管理をカードギャラリー化(Phase1)
-//   目的: 「📁セーブ管理」のテキスト羅列を、AIダンジョン風のカバー付きカード
-//         グリッドに見せ替える。一目でどの物語か分かるようにする。
-//   方式: 非破壊の"再スキン"。features.jsのrenderManager(=.v30-overlay)が出る度に
-//         MutationObserverで捕捉し、.v30-modalの中身をカードグリッドへ変換。
-//         既存の data-act ボタン(load/saveto/import/clear/rename)は**要素ごと再利用**
-//         (modalへのイベント委譲がそのまま効く)ので保存コアに一切触れない。
-//   Phase1: カバーは世界観ハッシュ由来のテーマ別グラデーション(画像生成なし)。
-//           Phase2で世界観メモからの画像生成を載せる予定。
-//   非対象/不変: 保存コア(fix205/225/230)・スロット分離(fix246)・自己更新(fix242)。
-//   OFF: localStorage v292Dfix310Off='1' で従来のリスト表示に戻る。
+// Chronicle TRPG - v292Dfix310: セーブ管理をカードギャラリー化
+//   Phase1(済): v30セーブモーダルをカードグリッドへ再スキン(MutationObserver・
+//     data-actボタン要素再利用で保存コア不触)。OFF=v292Dfix310Off。
+//   Phase2(本版・cb=v292Dfix311): ①モーダルを全画面サイズに ②カバー画像を
+//     その物語の世界観メモ(scene.lore)＋場所(scene.loc)＋トーン(scene.tone)から
+//     pollinations(無料GET image.pollinations.ai・proxy予算を消費しない)で生成し
+//     カバーに敷く。生成失敗時はPhase1のグラデ＋頭文字がそのまま残る(遮断器)。
+//     seedはスロットIDをキーに含めて保存(v292cover_seed_<id>=本質的にスロット分離)。
+//     右上↻で再生成(seed更新)。世界観が無い空スロットは生成しない。
+//   不変: 保存コア(fix205/225/230)/スロット分離(fix246)/自己更新(fix242)。
 // =====================================================================
 (function(){
   'use strict';
@@ -17,21 +16,31 @@
   if(window.__v292Dfix310) return; window.__v292Dfix310=true;
 
   function isOff(){ try{ return localStorage.getItem('v292Dfix310Off')==='1'; }catch(e){ return false; } }
+  function lsg(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  function lss(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
 
   function ensureStyles(){
     if(document.getElementById('v310-style')) return;
     var css=[
-      '.v30-modal.v310{width:min(900px,95vw)}',
-      '.v310-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;margin:4px 0 6px}',
+      // 全画面サイズ
+      '.v30-modal.v310{width:96vw;max-width:none;height:92vh;max-height:92vh;display:flex;flex-direction:column}',
+      '.v30-modal.v310 .v310-grid{flex:1;align-content:start}',
+      '.v310-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:18px;margin:6px 0 10px;overflow:auto}',
       '.v310-card{position:relative;background:var(--s1,#111119);border:1px solid var(--border,rgba(139,118,240,.25));border-radius:14px;overflow:hidden;transition:.16s}',
       '.v310-card:hover{transform:translateY(-2px);border-color:var(--acc,#8b76f0);box-shadow:0 8px 24px rgba(0,0,0,.45)}',
       '.v310-card.active{border-color:var(--acc,#8b76f0)}',
-      '.v310-cover{position:relative;aspect-ratio:16/10;cursor:pointer;display:flex;align-items:center;justify-content:center}',
-      '.v310-cover .v310-ini{font-size:40px;font-weight:800;color:rgba(255,255,255,.85);text-shadow:0 2px 12px rgba(0,0,0,.5)}',
-      '.v310-cover .v310-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 45%,rgba(8,8,15,.78) 100%)}',
-      '.v310-badge{position:absolute;top:9px;left:9px;background:var(--acc,#8b76f0);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;letter-spacing:.04em;z-index:2}',
-      '.v310-empty{position:absolute;top:9px;left:9px;background:rgba(8,8,15,.6);color:var(--dim,#888);font-size:10px;padding:3px 8px;border-radius:20px;z-index:2}',
-      '.v310-play{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;padding:10px;opacity:0;transition:.16s;z-index:2}',
+      '.v310-cover{position:relative;aspect-ratio:16/10;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden}',
+      '.v310-cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .45s}',
+      '.v310-cover img.on{opacity:1}',
+      '.v310-cover .v310-ini{font-size:42px;font-weight:800;color:rgba(255,255,255,.85);text-shadow:0 2px 12px rgba(0,0,0,.5);z-index:1}',
+      '.v310-cover .v310-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 42%,rgba(8,8,15,.8) 100%);z-index:2}',
+      '.v310-badge{position:absolute;top:9px;left:9px;background:var(--acc,#8b76f0);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;letter-spacing:.04em;z-index:3}',
+      '.v310-empty{position:absolute;top:9px;left:9px;background:rgba(8,8,15,.6);color:var(--dim,#888);font-size:10px;padding:3px 8px;border-radius:20px;z-index:3}',
+      '.v310-regen{position:absolute;top:9px;right:9px;width:30px;height:30px;border-radius:50%;background:rgba(8,8,15,.6);border:1px solid var(--border,rgba(139,118,240,.3));color:#fff;cursor:pointer;font-size:15px;line-height:28px;text-align:center;opacity:0;transition:.16s;z-index:4}',
+      '.v310-card:hover .v310-regen{opacity:1}',
+      '.v310-regen.spin{animation:v310sp .8s linear infinite}',
+      '@keyframes v310sp{to{transform:rotate(360deg)}}',
+      '.v310-play{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;padding:10px;opacity:0;transition:.16s;z-index:3}',
       '.v310-card:hover .v310-play{opacity:1}',
       '.v310-play b{background:var(--acc,#8b76f0);color:#fff;padding:6px 18px;border-radius:20px;font-size:12.5px;font-weight:700}',
       '.v310-body{padding:11px 13px 13px}',
@@ -40,43 +49,75 @@
       '.v310-meta{font-size:12px;color:var(--dim,#9aa0c8);line-height:1.7}',
       '.v310-meta .k{color:var(--acc,#a78bfa)}',
       '.v310-foot{display:flex;align-items:center;gap:8px;margin-top:7px;font-size:11px;color:var(--dim,#888)}',
-      '.v310-menuwrap{position:absolute;top:7px;right:7px;z-index:3}',
-      '.v310-dots{width:28px;height:28px;border-radius:8px;background:rgba(8,8,15,.6);border:1px solid var(--border,rgba(139,118,240,.25));color:var(--tx,#e0dcf0);cursor:pointer;font-size:15px;line-height:26px;text-align:center}',
+      '.v310-menuwrap{position:absolute;top:44px;right:9px;z-index:5}',
+      '.v310-dots{width:28px;height:28px;border-radius:8px;background:rgba(8,8,15,.6);border:1px solid var(--border,rgba(139,118,240,.25));color:var(--tx,#e0dcf0);cursor:pointer;font-size:15px;line-height:26px;text-align:center;opacity:0;transition:.16s}',
+      '.v310-card:hover .v310-dots{opacity:1}',
       '.v310-menu{display:none;position:absolute;top:32px;right:0;background:var(--s1,#15152a);border:1px solid var(--border,rgba(139,118,240,.3));border-radius:10px;padding:6px;min-width:170px;box-shadow:0 8px 24px rgba(0,0,0,.5);flex-direction:column;gap:4px}',
       '.v310-menu.open{display:flex}',
       '.v310-menu .v30-btn{width:100%;text-align:left;border-radius:7px}',
-      '@media(max-width:600px){.v310-grid{grid-template-columns:1fr}}'
+      '@media(max-width:600px){.v310-grid{grid-template-columns:1fr}.v30-modal.v310{width:100vw;height:100vh;max-height:100vh;border-radius:0}}'
     ].join('');
     var st=document.createElement('style'); st.id='v310-style'; st.textContent=css; document.head.appendChild(st);
   }
 
-  function hashHue(s){ var h=0,i; s=s||''; for(i=0;i<s.length;i++){ h=(h*31+s.charCodeAt(i))>>>0; } return h%360; }
-  function coverStyle(name){ var h=hashHue(name); return 'background:linear-gradient(160deg,hsl('+h+',42%,24%),hsl('+((h+28)%360)+',46%,9%))'; }
-  function ini(name){ name=(name||'?').trim(); return name ? name.charAt(0) : '◆'; }
+  function hashN(s){ var h=0,i; s=String(s||''); for(i=0;i<s.length;i++){ h=(h*31+s.charCodeAt(i))>>>0; } return h; }
+  function coverStyle(name){ var h=hashN(name)%360; return 'background:linear-gradient(160deg,hsl('+h+',42%,24%),hsl('+((h+28)%360)+',46%,9%))'; }
+  function ini(name){ name=String(name||'?').trim(); return name?name.charAt(0):'◆'; }
+  function escH(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 
-  // "主: X / 場: Y / N turn" → {hero, loc, turn}
-  function parsePreview(t){
-    var o={hero:'',loc:'',turn:''};
-    if(!t) return o;
-    var m;
-    if((m=t.match(/主:\s*([^\/]+?)\s*(?:\/|$)/))) o.hero=m[1].trim();
-    if((m=t.match(/場:\s*([^\/]+?)\s*(?:\/|$)/))) o.loc=m[1].trim();
-    if((m=t.match(/(\d+)\s*turn/))) o.turn=m[1];
-    return o;
+  // スロットのscene(世界観メモ/場所/トーン)を取得
+  function getScene(id){
+    try{ var raw=lsg(id==='default'?'chr6':'chr6_slot_'+id); if(!raw) return null; var d=JSON.parse(raw); return d&&d.scene||null; }catch(e){ return null; }
   }
-  function parseTs(t){ if(!t) return ''; var m=t.replace(/\(空\)/,'').match(/更新:\s*(.+)$/); return m?m[1].trim():''; }
+  function buildPrompt(scene){
+    if(!scene) return '';
+    var loc=(scene.loc||'').trim();
+    var lore=(scene.lore||'').replace(/【[^】]*】/g,' ').replace(/\s+/g,' ').trim().slice(0,90);
+    var tone=(scene.tone||'').trim();
+    var parts=[loc, lore, tone, 'cinematic key art, atmospheric lighting, detailed, no text, no people, no watermark'];
+    var p=parts.filter(Boolean).join(', ');
+    return p.slice(0,210);
+  }
+  function coverUrl(prompt,seed){
+    return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=600&height=375&nologo=true&model=flux&seed='+seed;
+  }
+  function getSeed(id,prompt){ var s=lsg('v292cover_seed_'+id); if(s) return s; return String(hashN(prompt)%100000); }
+
+  function attachCover(cover, id, scene){
+    var prompt=buildPrompt(scene);
+    if(!prompt) return; // 空スロット=グラデのまま
+    var seed=getSeed(id,prompt);
+    var img=document.createElement('img'); img.alt='';
+    img.addEventListener('load', function(){ img.classList.add('on'); });
+    img.src=coverUrl(prompt,seed);
+    cover.insertBefore(img, cover.firstChild);
+    // ↻再生成
+    var rg=document.createElement('div'); rg.className='v310-regen'; rg.textContent='↻'; rg.title='カバー再生成';
+    rg.addEventListener('click', function(e){
+      e.stopPropagation();
+      var ns=String(Math.floor(Math.random()*100000));
+      lss('v292cover_seed_'+id, ns);
+      rg.classList.add('spin'); img.classList.remove('on');
+      img.onload=function(){ img.classList.add('on'); rg.classList.remove('spin'); };
+      img.src=coverUrl(prompt,ns);
+    });
+    cover.appendChild(rg);
+  }
+
+  function parsePreview(t){ var o={hero:'',loc:'',turn:''},m; if(!t)return o;
+    if((m=t.match(/主:\s*([^\/]+?)\s*(?:\/|$)/)))o.hero=m[1].trim();
+    if((m=t.match(/場:\s*([^\/]+?)\s*(?:\/|$)/)))o.loc=m[1].trim();
+    if((m=t.match(/(\d+)\s*turn/)))o.turn=m[1]; return o; }
+  function parseTs(t){ if(!t)return''; var m=t.replace(/\(空\)/,'').match(/更新:\s*(.+)$/); return m?m[1].trim():''; }
 
   function transform(modal){
-    if(!modal || modal.__v310done) return;
+    if(!modal||modal.__v310done) return;
     var slots=modal.querySelectorAll('.v30-slot');
     if(!slots.length) return;
     modal.__v310done=true;
-    ensureStyles();
-    modal.classList.add('v310');
+    ensureStyles(); modal.classList.add('v310');
 
     var grid=document.createElement('div'); grid.className='v310-grid';
-    var firstSlot=slots[0];
-    // 各スロット→カード
     Array.prototype.forEach.call(slots, function(slot){
       var id=slot.getAttribute('data-id')||'';
       var active=slot.classList.contains('active');
@@ -86,76 +127,56 @@
       var metaTxt=(slot.querySelector('.v30-slot-meta')||{}).textContent||'';
       var prevTxt=(slot.querySelector('.v30-slot-preview')||{}).textContent||'';
       var hasData=metaTxt.indexOf('(空)')<0;
-      var pv=parsePreview(prevTxt);
-      var ts=parseTs(metaTxt);
-      // 既存アクションボタン(要素ごと再利用)
+      var pv=parsePreview(prevTxt), ts=parseTs(metaTxt);
       var actionBtns=slot.querySelectorAll('.v30-slot-actions [data-act]');
       var loadBtn=slot.querySelector('[data-act="load"]');
 
-      var card=document.createElement('div');
-      card.className='v310-card'+(active?' active':'');
-
-      // cover
-      var cover=document.createElement('div');
-      cover.className='v310-cover'; cover.setAttribute('style', coverStyle(nm));
-      cover.innerHTML='<div class="v310-shade"></div><div class="v310-ini">'+ (ini(nm)).replace(/[<>&]/g,'') +'</div>'+
+      var card=document.createElement('div'); card.className='v310-card'+(active?' active':'');
+      var cover=document.createElement('div'); cover.className='v310-cover'; cover.setAttribute('style',coverStyle(nm));
+      cover.innerHTML='<div class="v310-ini">'+escH(ini(nm))+'</div><div class="v310-shade"></div>'+
         (active?'<div class="v310-badge">▶ プレイ中</div>':(hasData?'':'<div class="v310-empty">空</div>'))+
         (hasData?'<div class="v310-play"><b>'+(active?'閉じて続ける':'▶ 続きから')+'</b></div>':'');
       cover.addEventListener('click', function(){
         if(active){ var cb=modal.querySelector('[data-act="close"]'); if(cb) cb.click(); return; }
-        if(loadBtn && !loadBtn.disabled){ loadBtn.click(); }
+        if(loadBtn&&!loadBtn.disabled) loadBtn.click();
       });
       card.appendChild(cover);
+      // カバー画像(世界観から生成)
+      if(hasData){ try{ attachCover(cover, id, getScene(id)); }catch(e){} }
 
-      // ⋯ menu (move existing action buttons in)
       var mw=document.createElement('div'); mw.className='v310-menuwrap';
       var dots=document.createElement('div'); dots.className='v310-dots'; dots.textContent='⋯';
       var menu=document.createElement('div'); menu.className='v310-menu';
-      Array.prototype.forEach.call(actionBtns, function(b){ menu.appendChild(b); }); // 要素ごと移動(委譲は維持)
+      Array.prototype.forEach.call(actionBtns, function(b){ menu.appendChild(b); });
       dots.addEventListener('click', function(e){ e.stopPropagation(); document.querySelectorAll('.v310-menu.open').forEach(function(m){ if(m!==menu) m.classList.remove('open'); }); menu.classList.toggle('open'); });
       mw.appendChild(dots); mw.appendChild(menu); card.appendChild(mw);
 
-      // body
       var body=document.createElement('div'); body.className='v310-body';
-      if(nameWrap) body.appendChild(nameWrap); // rename input をそのまま
+      if(nameWrap) body.appendChild(nameWrap);
       var meta=document.createElement('div'); meta.className='v310-meta';
       meta.innerHTML=(pv.loc?'<span class="k">📍</span> '+escH(pv.loc)+'　':'')+(pv.hero?'<span class="k">👤</span> '+escH(pv.hero):'');
-      if(!pv.loc && !pv.hero) meta.innerHTML='<span style="opacity:.6">（空のスロット）</span>';
+      if(!pv.loc&&!pv.hero) meta.innerHTML='<span style="opacity:.6">（空のスロット）</span>';
       body.appendChild(meta);
       var foot=document.createElement('div'); foot.className='v310-foot';
       foot.innerHTML=(hasData?'<span>📜 '+(pv.turn||'0')+'ターン</span><span style="opacity:.4">・</span>':'')+'<span>⏱ '+escH(ts||'—')+'</span>';
       body.appendChild(foot);
       card.appendChild(body);
-
       grid.appendChild(card);
     });
 
-    // 旧スロット列を撤去してグリッド差し込み
-    var h3=null; var nodes=modal.childNodes, i;
+    var h3=null,nodes=modal.childNodes,i;
     for(i=0;i<nodes.length;i++){ if(nodes[i].tagName==='H3'){ h3=nodes[i]; break; } }
-    var ref = (slots[0] && slots[0].parentNode===modal) ? slots[0] : (h3?h3.nextSibling:null);
+    var ref=(slots[0]&&slots[0].parentNode===modal)?slots[0]:(h3?h3.nextSibling:null);
     modal.insertBefore(grid, ref);
     Array.prototype.forEach.call(slots, function(s){ if(s.parentNode) s.parentNode.removeChild(s); });
 
-    // メニュー外クリックで閉じる
     if(!modal.__v310docclick){ modal.__v310docclick=true; document.addEventListener('click', function(){ document.querySelectorAll('.v310-menu.open').forEach(function(m){ m.classList.remove('open'); }); }); }
   }
 
-  function escH(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
-
-  function scan(){
-    if(isOff()) return;
-    var ov=document.getElementById('v30-overlay'); if(!ov) return;
-    var modal=ov.querySelector('.v30-modal'); if(modal) transform(modal);
-  }
-
-  try{
-    var mo=new MutationObserver(function(){ try{ scan(); }catch(e){} });
-    mo.observe(document.body||document.documentElement,{childList:true,subtree:true});
-  }catch(e){}
-  try{ setInterval(scan, 600); }catch(e){} // 保険
+  function scan(){ if(isOff()) return; var ov=document.getElementById('v30-overlay'); if(!ov) return; var modal=ov.querySelector('.v30-modal'); if(modal) transform(modal); }
+  try{ new MutationObserver(function(){ try{ scan(); }catch(e){} }).observe(document.body||document.documentElement,{childList:true,subtree:true}); }catch(e){}
+  try{ setInterval(scan, 600); }catch(e){}
   scan();
-
-  window.__v292Dfix310api={ transform:transform, scan:scan };
-  try{ console.log(TAG,'loaded'); }catch(e){}
+  window.__v292Dfix310api={ transform:transform, scan:scan, buildPrompt:buildPrompt };
+  try{ console.log(TAG,'loaded (phase2 covers)'); }catch(e){}
 })();
