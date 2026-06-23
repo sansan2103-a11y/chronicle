@@ -32,6 +32,7 @@
       '.v310-cover{position:relative;aspect-ratio:16/10;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden}',
       '.v310-cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .45s}',
       '.v310-cover img.on{opacity:1}',
+      '.v310-cover img.on ~ .v310-ini{opacity:0;transition:opacity .45s}',
       '.v310-cover .v310-ini{font-size:42px;font-weight:800;color:rgba(255,255,255,.85);text-shadow:0 2px 12px rgba(0,0,0,.5);z-index:1}',
       '.v310-cover .v310-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 42%,rgba(8,8,15,.8) 100%);z-index:2}',
       '.v310-badge{position:absolute;top:9px;left:9px;background:var(--acc,#8b76f0);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;letter-spacing:.04em;z-index:3}',
