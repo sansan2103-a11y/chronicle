@@ -23,6 +23,41 @@
   function getS(){ try{ return window.S||(typeof S!=='undefined'?S:null); }catch(e){ return null; } }
   function activeKey(){ try{ return (typeof window.__chr6Key==='function')?window.__chr6Key():'chr6'; }catch(e){ return 'chr6'; } }
   function blobScene(){ try{ var d=JSON.parse(localStorage.getItem(activeKey())||'{}'); return (d&&d.scene)||null; }catch(e){ return null; } }
+  function blobCfg(){ try{ var d=JSON.parse(localStorage.getItem(activeKey())||'{}'); return (d&&d.cfg)||null; }catch(e){ return null; } }
+
+  // スロット毎セレクタ(S.cfgに保存)。切替時にDOM値が前スロットのまま残る＋blobにキーが無いと
+  // 前スロット値が漏れる(Object.assign統合)ので、読み込んだスロットのcfgに合わせて両方直す。
+  // 注: 📏長さ(v100_outputLen)・👻怪異(v292Dfix308Mode)はlocalStorageのグローバル設計→対象外。
+  var SELS=[
+    {dom:'v292-drama-sel',  key:'dramaLevel',    def:2, num:true},
+    {dom:'v292-react-sel',  key:'reactionLevel', def:1, num:true},
+    {dom:'v292-dlg-sel',    key:'dialogueLevel', def:1, num:true},
+    {dom:'v292-avatar-sel', key:'aiAvatar',      def:0, num:true},
+    {dom:'v292-style-sel',  key:'artStyle',      def:3, num:true},
+    {dom:'v292-engine-sel', key:'engineMode',    def:1, num:true},
+    {dom:'v292-tone-sel',   key:'toneKey',       def:'shizuka', num:false},
+    {dom:'v292-model-sel',  key:'orModel',       def:null, num:false}
+  ];
+  function syncSelectors(){
+    var s=getS(); var bc=blobCfg(); if(!s||!s.cfg) return;
+    SELS.forEach(function(m){
+      try{
+        var el=document.getElementById(m.dom);
+        var has=bc && Object.prototype.hasOwnProperty.call(bc, m.key);
+        var v=has?bc[m.key]:m.def;
+        if(m.dom==='v292-model-sel' && v==null){ v=(el&&el.options&&el.options.length)?el.options[0].value:(s.cfg.orModel||''); }
+        // (1)S.cfgを読み込んだスロットに合わせる(blobに無いキーの前スロット漏れを断つ)
+        if(v!=null) s.cfg[m.key]= m.num?(+v):v;
+        // (2)ドロップダウンの表示を合わせる
+        if(el && v!=null){ var sv=m.num?String(+v):String(v);
+          // 該当optionがある時だけ設定(model等で未知値を防ぐ)
+          var ok=false; for(var i=0;i<el.options.length;i++){ if(el.options[i].value===sv){ ok=true; break; } }
+          if(ok) el.value=sv;
+        }
+      }catch(e){}
+    });
+  }
+
   function hashN(s){ var h=0,i; s=String(s||''); for(i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; } return h; }
 
   // 物語シグネチャ: スロットキー＋場所＋世界観メモ。プレイ中(ターン追加)では変わらず、
@@ -40,6 +75,9 @@
     try{ var s=getS(), bs=blobScene();
       if(s&&s.scene&&bs){ Object.keys(s.scene).forEach(function(k){ if(!(k in bs)) { try{ delete s.scene[k]; }catch(_){} } }); }
     }catch(e){}
+    // (B2) スロット毎セレクタ(進行/反応/セリフ/アイコン/画風/エンジン/トーン/モデル)を
+    //      読み込んだスロットのcfgに合わせて表示＋値を再同期(切替desync＆漏れの根治)
+    try{ syncSelectors(); }catch(e){}
     // (C) fix66に会話ログを再構築させる
     setTimeout(function(){
       try{
@@ -61,6 +99,6 @@
   try{ setInterval(check, 600); }catch(e){}
   check();
 
-  window.__v292Dfix317api={ sig:sig, onStoryChange:onStoryChange };
+  window.__v292Dfix317api={ sig:sig, onStoryChange:onStoryChange, syncSelectors:syncSelectors };
   try{ console.log(TAG,'loaded'); }catch(e){}
 })();
