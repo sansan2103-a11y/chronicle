@@ -78,14 +78,20 @@
     // (B2) スロット毎セレクタ(進行/反応/セリフ/アイコン/画風/エンジン/トーン/モデル)を
     //      読み込んだスロットのcfgに合わせて表示＋値を再同期(切替desync＆漏れの根治)
     try{ syncSelectors(); }catch(e){}
-    // (C) fix66に会話ログを再構築させる
-    setTimeout(function(){
+    // (C) 会話ログを「wipe→fix66 repairで再構築」を複数回行う。
+    //   理由: fix66はアバター温め用に遅延repair()を予約しており、前スロット期に予約された
+    //   遅延repairが切替後に発火して前物語のカードを再追加する(stale snapshot)。1回のwipeでは
+    //   負けるので、fix66の遅延が収まる~1.5s窓を複数passでカバーする。repairは現ターンから
+    //   作り直す(キャッシュavatar使用=ちらつき最小)ので何度走っても最終状態は現物語で正しい。
+    function rebuild(){
+      try{ var st2=document.getElementById('dialogue-stream'); if(st2) st2.innerHTML=''; }catch(e){}
       try{
         if(typeof window.regenerateConvLogV66==='function') window.regenerateConvLogV66();
         else if(window.__v292Dfix66 && typeof window.__v292Dfix66.repair==='function') window.__v292Dfix66.repair();
       }catch(e){}
-    }, 60);
-    try{ console.log(TAG,'story switch detected → conv-log wiped & scene cleaned'); }catch(e){}
+    }
+    [80,450,900,1500].forEach(function(ms){ setTimeout(rebuild, ms); });
+    try{ console.log(TAG,'story switch detected → conv-log wiped(x4) & scene/selectors synced'); }catch(e){}
   }
 
   var last=null, primed=false;
