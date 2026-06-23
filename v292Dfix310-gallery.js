@@ -7,7 +7,7 @@
 //     pollinations(無料GET image.pollinations.ai・proxy予算を消費しない)で生成し
 //     カバーに敷く。生成失敗時はPhase1のグラデ＋頭文字がそのまま残る(遮断器)。
 //     seedはスロットIDをキーに含めて保存(v292cover_seed_<id>=本質的にスロット分離)。
-//     右上↻で再生成(seed更新)。世界観が無い空スロットは生成しない。
+//     右上↻で再生成(seed更新)。初回はカードごとに少しずらして生成＋失敗時は自動リトライ(無料pollinationsのrate-limit対策)。世界観が無い空スロットは生成しない。
 //   不変: 保存コア(fix205/225/230)/スロット分離(fix246)/自己更新(fix242)。
 // =====================================================================
 (function(){
@@ -83,13 +83,15 @@
   }
   function getSeed(id,prompt){ var s=lsg('v292cover_seed_'+id); if(s) return s; return String(hashN(prompt)%100000); }
 
-  function attachCover(cover, id, scene){
+  function attachCover(cover, id, scene, idx){
     var prompt=buildPrompt(scene);
     if(!prompt) return; // 空スロット=グラデのまま
     var seed=getSeed(id,prompt);
-    var img=document.createElement('img'); img.alt='';
-    img.addEventListener('load', function(){ img.classList.add('on'); });
-    img.src=coverUrl(prompt,seed);
+    var img=document.createElement('img'); img.alt=''; var tries=0;
+    img.addEventListener('load', function(){ if(img.naturalWidth>0) img.classList.add('on'); });
+    img.addEventListener('error', function(){ if(tries<3){ tries++; setTimeout(function(){ img.classList.remove('on'); img.src=coverUrl(prompt,seed)+'&r='+tries+'_'+Date.now(); }, 1400*tries+Math.random()*900); } });
+    // 同時リクエストでpollinationsがrate-limitするのを避け、カードごとに少しずらして発火
+    setTimeout(function(){ img.src=coverUrl(prompt,seed); }, (idx||0)*650);
     cover.insertBefore(img, cover.firstChild);
     // ↻再生成
     var rg=document.createElement('div'); rg.className='v310-regen'; rg.textContent='↻'; rg.title='カバー再生成';
@@ -142,7 +144,7 @@
       });
       card.appendChild(cover);
       // カバー画像(世界観から生成)
-      if(hasData){ try{ attachCover(cover, id, getScene(id)); }catch(e){} }
+      if(hasData){ try{ attachCover(cover, id, getScene(id), grid.children.length); }catch(e){} }
 
       var mw=document.createElement('div'); mw.className='v310-menuwrap';
       var dots=document.createElement('div'); dots.className='v310-dots'; dots.textContent='⋯';
