@@ -125,12 +125,23 @@
   window.__v292Dfix313api={ open:open, buildBlock:buildBlock, getCards:getCards };
 
   // ---- トップバーにボタン ----
+  function topbarAnchor(){
+    // 最優先=📁セーブ(v30-topbar-btn)。無ければ可視トップバー(y<70)の「設定」「キャラ」ボタン。
+    var a=document.getElementById('v30-topbar-btn');
+    if(a&&a.getBoundingClientRect().width>0) return a;
+    var btns=document.querySelectorAll('button');
+    for(var i=0;i<btns.length;i++){ var b=btns[i],r=b.getBoundingClientRect();
+      if(r.top<70&&r.width>0&&/設定|キャラ/.test(b.textContent||'')) return b; }
+    return null;
+  }
   function ensureBtn(){
-    if(document.getElementById('v313-btn')) return;
-    var anchor=document.getElementById('v30-topbar-btn'); // セーブ管理ボタンの隣
-    if(!anchor){ var btns=document.querySelectorAll('button'); for(var i=0;i<btns.length;i++){ if((btns[i].textContent||'').indexOf('設定')>=0){ anchor=btns[i]; break; } } }
-    if(!anchor||!anchor.parentNode) return;
-    var b=document.createElement('button'); b.id='v313-btn'; b.textContent='🗂 カード';
+    var anchor=topbarAnchor(); if(!anchor||!anchor.parentNode) return;
+    var b=document.getElementById('v313-btn');
+    if(b){ // 既存=正しい場所(アンカーと同じ親)に居なければ移動
+      if(b.parentNode!==anchor.parentNode){ try{ anchor.parentNode.insertBefore(b, anchor.nextSibling); }catch(e){} }
+      return;
+    }
+    b=document.createElement('button'); b.id='v313-btn'; b.textContent='🗂 カード';
     b.className=anchor.className.indexOf('v30-topbar-btn')>=0?'v30-topbar-btn':(anchor.className||'top-btn');
     b.title='設定カード（トリガー式の確定設定・事典）';
     b.addEventListener('click', open);
