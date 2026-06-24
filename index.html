@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260624-fix315b';
+  var BUILT = '20260624-fix315b2';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2705,7 +2705,7 @@ G.init();
        復元= console で window.__v292Restore() / 一覧= window.__v292Gens() -->
   <script src="v292Dfix228-slot-generations.js?cb=v292Dfix264"></script>
   <!-- v292Dfix237: 別キャラ同一アイコンの根治(運搬URLのalt/seed整合ガード)。OFF=v292AvCarrierGuardOff -->
-  <script src="v292Dfix237-avatar-carrier-guard.js?cb=v292Dfix237"></script>
+  <script src="v292Dfix237-avatar-carrier-guard.js?cb=v292Dfix237b"></script>
   <!-- v292Dfix239: 未登録キャラ(少女/店主等)のアイコン怪物化根治(genAsync判定待ちのレース封じ)。OFF=v292NcAvRaceOff -->
   <script src="v292Dfix239-noncast-avatar-race.js?cb=v292Dfix239"></script>
   <!-- v292Dfix243: トップバー折りたたみ(モバイル縦幅対策・「🎛調整」トグル。fix253で⚙→🎛)。OFF=v292TopbarCollapseOff -->
@@ -2737,7 +2737,7 @@ G.init();
 <script src="v292Dfix310-gallery.js?cb=v292Dfix312b"></script>
 <script src="v292Dfix313-story-cards.js?cb=v292Dfix313d"></script>
 <script src="v292Dfix314-memory.js?cb=v292Dfix314"></script>
-<script src="v292Dfix315-see.js?cb=v292Dfix315b"></script>
+<script src="v292Dfix315-see.js?cb=v292Dfix315b2"></script>
 <script src="v292Dfix316-gallery-search.js?cb=v292Dfix316"></script>
 <script src="v292Dfix317-slot-leak.js?cb=v292Dfix319"></script>
 <script src="v292Dfix318-perslot-len-creepy.js?cb=v292Dfix320"></script>

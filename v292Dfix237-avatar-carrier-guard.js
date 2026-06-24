@@ -30,6 +30,9 @@
   function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined"?S:null'); } catch(e){ return null; } }
   function hash31(s){ var h = 0; s = String(s || ''); for (var i = 0; i < s.length; i++){ h = ((h << 5) - h + s.charCodeAt(i)) | 0; } return Math.abs(h); }
   function seedOf(src){ var m = /[?&]seed=(\d+)/.exec(String(src || '')); return m ? +m[1] : null; }
+  /* v292Dfix237b: 運搬整合はアバター(正方形384)だけが対象。SEE(fix315)等の非正方形
+     画像(例 768x512)は別機能の絵なので絶対に書き換えない。fix197と同じ判定。 */
+  function isSquareCarrier(src){ var m=/[?&]width=(\d+)&height=(\d+)/.exec(String(src||'')); if(!m) return true; return m[1]===m[2]; }
   function styleSuffix(){ try { var S = getS(); var i = (S && S.cfg && S.cfg.artStyle != null) ? (+S.cfg.artStyle) : 3; return STYLE_SUFFIX[STYLE_LIST[i] || 'darkfantasy']; } catch(e){ return STYLE_SUFFIX.darkfantasy; } }
   function descFor(name){
     try {
@@ -55,6 +58,7 @@
         if (!name) continue;
         var s = seedOf(img.src);
         if (s == null) continue;
+        if (!isSquareCarrier(img.src)) continue; /* v292Dfix237b: 非正方形(SEE等)は対象外 */
         var h = hash31(name);
         if (s === h || s === (h % 1000000)) continue; /* 正しい運搬 */
         /* ズレた運搬: 別キャラのprompt+seedを背負っている → 本人の正規URLへ書き直し */

@@ -170,7 +170,7 @@
     var s=getS(); var turnN=(s&&s.turns)?s.turns.length:0;
     var seed=(hashN(prompt)%100000)+turnN*7+_seedBump;
     stage.innerHTML='<div class="v315-spin">いまの場面を描いています…</div>'+
-      '<img class="v315-img" id="v315-img" alt="scene">'+
+      '<img class="v315-img" id="v315-img" alt="">'+
       '<div class="v315-fallback" id="v315-fb"><div class="t">絵の生成に失敗しました。<br>通信が混んでいるかもしれません。<br>「↻ 描き直す」でもう一度お試しください。</div></div>';
     var img=stage.querySelector('#v315-img');
     var fb=stage.querySelector('#v315-fb');
@@ -238,5 +238,5 @@
   }
   try{ setInterval(ensureBtn, 1500); }catch(e){} ensureBtn();
 
-  try{ console.log(TAG,'loaded (fix315b person-centric)'); }catch(e){}
+  try{ console.log(TAG,'loaded (fix315b2 person-centric, alt-guard)'); }catch(e){}
 })();
