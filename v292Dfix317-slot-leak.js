@@ -67,8 +67,10 @@
     return activeKey()+'|'+(sc.loc||'')+'|'+hashN((sc.lore||'')+''+(sc.tone||''));
   }
 
+  var _lastSwitchT=0;
   function onStoryChange(){
     if(off()) return;
+    _lastSwitchT=Date.now();
     // (0) 展開の描写(#story)を現スロットのS.turnsで作り直す。
     //   ★loadSlotはUI.renderAllを呼ばず弱いtriggerReRenderだけなので、右の物語パネル(#story)が
     //   前スロットのまま残る(おしん報告)。UI.renderAllは#storyの.turnを全消去しS.turnsから再構築
@@ -135,22 +137,10 @@
       }
     }catch(e){}
   }
-  var _obsArmed=false, _cfScheduled=false;
-  function scheduleClean(){ if(_cfScheduled) return; _cfScheduled=true; setTimeout(function(){ _cfScheduled=false; cleanForeign(); }, 0); }
-  function armObserver(){
-    if(_obsArmed) return; var st=document.getElementById('dialogue-stream'); if(!st) return;
-    try{ new MutationObserver(function(muts){ for(var i=0;i<muts.length;i++){ if(muts[i].addedNodes&&muts[i].addedNodes.length){ scheduleClean(); return; } } }).observe(st,{childList:true}); _obsArmed=true; }catch(e){}
-  }
-  try{ setInterval(armObserver, 1000); }catch(e){} armObserver();
+  // ★会話ログのMutationObserverは廃止(fix66との綱引きで高速点滅した)。350msポーリングのcleanForeignで掃除する。
 
   // ── 常駐: #story が S.turns とズレた瞬間に作り直す(切替レースの収束を即時化) ──
-  var _soArmed=false, _esScheduled=false;
-  function scheduleEnsureStory(){ if(_esScheduled) return; _esScheduled=true; setTimeout(function(){ _esScheduled=false; ensureStory(); }, 0); }
-  function armStoryObserver(){
-    if(_soArmed) return; var story=document.getElementById('story'); if(!story) return;
-    try{ new MutationObserver(function(muts){ for(var i=0;i<muts.length;i++){ if(muts[i].addedNodes&&muts[i].addedNodes.length){ scheduleEnsureStory(); return; } } }).observe(story,{childList:true}); _soArmed=true; }catch(e){}
-  }
-  try{ setInterval(armStoryObserver, 1000); }catch(e){} armStoryObserver();
+  // ★#storyのMutationObserverも廃止(renderAll→fix66 hook→再描画の再帰ループで点滅源だった)。350msポーリングのensureStoryで収束させる。
 
   // ── 常駐: 展開の描写(#story)が現スロットのS.turnsと食い違っていたら作り直す ──
   //   loadSlotのrenderAllレース(切替直後に前スロット表示で固着)を恒久的に自己修復する。
@@ -169,9 +159,10 @@
       return got.indexOf(fn)>=0;
     }catch(e){ return true; }
   }
+  var _renderingStory=false;
   function ensureStory(){
-    if(off()) return;
-    if(!storyMatches()){ try{ var _UI=(0,eval)('typeof UI!=="undefined"?UI:null'); if(_UI&&typeof _UI.renderAll==='function') _UI.renderAll(); }catch(e){} }
+    if(off()||_renderingStory) return;
+    if(!storyMatches()){ _renderingStory=true; try{ var _UI=(0,eval)('typeof UI!=="undefined"?UI:null'); if(_UI&&typeof _UI.renderAll==='function') _UI.renderAll(); }catch(e){} _renderingStory=false; }
   }
 
   var last=null, primed=false;
@@ -181,7 +172,8 @@
     var cur=sig();
     if(!primed){ last=cur; primed=true; return; }  // 初回は基準化のみ(誤wipe防止)
     if(cur!==last){ last=cur; onStoryChange(); }
-    try{ ensureStory(); }catch(e){}   // 展開の描写の食い違いを常時自己修復(切替レース対策)
+    try{ ensureStory(); }catch(e){}   // 展開の描写の食い違いを常時自己修復(切替レース対策・350ms毎)
+    try{ if(Date.now()-_lastSwitchT < 8000) cleanForeign(); }catch(e){}  // 会話ログの他物語カード掃除は切替後~8sだけ(常駐observer廃止=点滅しない/プレイ中は不発)
   }
   try{ setInterval(check, 350); }catch(e){}
   check();
