@@ -45,7 +45,11 @@
         if(el){ for(var i=0;i<el.options.length;i++){ if(el.options[i].value===String(v)){ el.value=String(v); break; } } }
       }catch(e){}
     });
-    persist();
+    // ★persist()は呼ばない。applyForSlotはグローバルキー＋DOM＋S.cfg(メモリ)を合わせるだけ。
+    //   理由: 起動時の初回検知でS.save()すると、コアがアクティブスロットを読み込む前の
+    //   既定スロットのS(=別物語)をアクティブスロットへ上書きしてセーブ破損を起こした(実機確認)。
+    //   値はスロットblobに既にあり、fix192/fix308はグローバルキーを読むので保存は不要。
+    //   変更時はbindChangeがそのスロットへ正しく保存する(その時S=アクティブで一致)。
   }
 
   // 変更時: そのスロットの値として保存(S.cfg＋グローバル＋save)。
@@ -69,7 +73,12 @@
   function check(){
     if(off()) return; var s=getS(); if(!s||!s.scene) return;
     var cur=sig();
-    if(!primed){ last=cur; primed=true; applyForSlot(); return; }  // 初回も現スロットへ適用(migration)
+    if(!primed){ last=cur; primed=true;
+      // ★初回は「S.sceneがアクティブスロットのblobと一致(=コアの読込完了)」を確認してからだけ適用。
+      //   不一致なら触らない(起動中の中間状態でglobal/DOMをいじらない)。persistは元から呼ばない。
+      try{ var bs=(JSON.parse(localStorage.getItem(activeKey())||'{}').scene)||{}; if(s.scene&&bs.loc&&s.scene.loc===bs.loc) applyForSlot(); }catch(e){}
+      return;
+    }
     if(cur!==last){ last=cur; applyForSlot(); }
   }
   try{ setInterval(check, 350); }catch(e){} check();
