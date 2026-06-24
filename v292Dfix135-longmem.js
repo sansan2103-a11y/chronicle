@@ -20,6 +20,7 @@
   'use strict';
   if (window.__v292Dfix135) return;
   window.__v292Dfix135 = true;
+  /* fix299b: cross-slot summarize guard active */
 
   var TAG = '[v292Dfix135:longmem]';
   var LSP_SUMMARY   = 'chr6_v292Dfix135_sum';
@@ -41,6 +42,9 @@
     try { if (typeof S !== 'undefined' && S) return S; } catch(e){}
     return window.S || null;
   }
+  // ★fix299b: スロット厳密化用ヘルパ(fix307eと同型)。
+  function slotSfx(){ try { if (typeof window.__chr6Key === 'function'){ var k = window.__chr6Key(); return (k && k !== 'chr6') ? k.replace(/^chr6/, '') : ''; } } catch(e){} return ''; }
+  function slotBlobLoc(sfx){ try { var b = JSON.parse(localStorage.getItem('chr6' + sfx) || 'null'); return (b && b.scene) ? (b.scene.loc || null) : null; } catch(e){ return null; } }
 
   // ---------- v292Dfix170D2: single-writer ガード ----------
   // 背景(非表示)タブ・古い世代(epoch)のタブは longmem を書かない。これで「裏で開いた
@@ -161,6 +165,15 @@
     var st = getState();
     if (!st || !st.turns || !st.turns.length) return;
     var curTurn = st.turns.length - 1;
+    // ★fix299b: スロット厳密化。要約の保存先キーは fix246 が「書込時のアクティブスロット」へ
+    //   リダイレクトする。切替/起動の中間状態(キー=新スロット・S=前の物語)で要約を走らせ
+    //   コールバックで保存すると、別スロットの longmem(あらすじ/worldinfo/events)に前の物語が
+    //   混入する(fix307と同型・キャラ一覧とモデル文脈の両方を汚染)。開始時に「Sが今のスロットの
+    //   物語か」を固定検証し、コールバックでも再確認する。
+    var startSfx = slotSfx();
+    var startLoc = (st.scene && st.scene.loc) || null;
+    var startBlobLoc = slotBlobLoc(startSfx);
+    if (startBlobLoc && startLoc && startBlobLoc !== startLoc) return; // 中間状態(S≠このスロット) → 触らない
     var lastBuild = loadLastBuild();
     // v292Dfix177: ターン数が前回ビルド時より減った = 物語リセット/新ゲーム開始。
     //   longmemは累積方式(前のworldinfo/eventsをLLMに渡して更新)なので、検出せずに放置すると
@@ -187,6 +200,10 @@
     call(prompt, function(result){
       BUSY = false;
       if (!result){ try { console.log(TAG, 'rebuild returned null (timeout/parse-fail)'); } catch(_){} return; }
+      // ★fix299b: 要約中(最大90s)にスロット切替/物語差替が起きていたら、このスロットには保存しない。
+      var s2 = getState();
+      if (!s2 || !s2.scene || (s2.scene.loc || null) !== startLoc){ try { console.log(TAG, 'story changed during summarize — discarded (no cross-slot write)'); } catch(_){} return; }
+      if (slotSfx() !== startSfx){ try { console.log(TAG, 'active slot changed during summarize — discarded'); } catch(_){} return; }
       if (!_lmCanSave()){ try { console.log(TAG, 'rebuild OK but save blocked (stale epoch)'); } catch(_){} }
       if (result.summary) saveSummary(result.summary);
       if (result.worldinfo && result.worldinfo.length) saveWorldInfo(result.worldinfo);
