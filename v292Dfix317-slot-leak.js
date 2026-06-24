@@ -142,6 +142,28 @@
   }
   try{ setInterval(armObserver, 1000); }catch(e){} armObserver();
 
+  // ── 常駐: 展開の描写(#story)が現スロットのS.turnsと食い違っていたら作り直す ──
+  //   loadSlotのrenderAllレース(切替直後に前スロット表示で固着)を恒久的に自己修復する。
+  //   S.turnsは常に正しい(実機確認済)ので、#storyの.turn数＋先頭ターン本文と突き合わせ、
+  //   ずれていればUI.renderAllで現物語に収束させる(冪等)。プレイ中は一致するので空振り。
+  function storyMatches(){
+    try{
+      var s=getS(); if(!s||!Array.isArray(s.turns)) return true;
+      var story=document.getElementById('story'); if(!story) return true;
+      var turns=story.querySelectorAll(':scope > .turn');
+      if(turns.length!==s.turns.length) return false;
+      if(s.turns.length===0) return true;
+      var fn=String((s.turns[0]&&s.turns[0].narrative)||'').replace(/<[^>]*>/g,'').replace(/\s+/g,'').slice(0,14);
+      if(!fn) return true;
+      var got=(turns[0].textContent||'').replace(/\s+/g,'');
+      return got.indexOf(fn)>=0;
+    }catch(e){ return true; }
+  }
+  function ensureStory(){
+    if(off()) return;
+    if(!storyMatches()){ try{ var _UI=(0,eval)('typeof UI!=="undefined"?UI:null'); if(_UI&&typeof _UI.renderAll==='function') _UI.renderAll(); }catch(e){} }
+  }
+
   var last=null, primed=false;
   function check(){
     if(off()) return;
@@ -149,10 +171,11 @@
     var cur=sig();
     if(!primed){ last=cur; primed=true; return; }  // 初回は基準化のみ(誤wipe防止)
     if(cur!==last){ last=cur; onStoryChange(); }
+    try{ ensureStory(); }catch(e){}   // 展開の描写の食い違いを常時自己修復(切替レース対策)
   }
   try{ setInterval(check, 600); }catch(e){}
   check();
 
-  window.__v292Dfix317api={ sig:sig, onStoryChange:onStoryChange, syncSelectors:syncSelectors, cleanForeign:cleanForeign };
+  window.__v292Dfix317api={ sig:sig, onStoryChange:onStoryChange, syncSelectors:syncSelectors, cleanForeign:cleanForeign, ensureStory:ensureStory, storyMatches:storyMatches };
   try{ console.log(TAG,'loaded'); }catch(e){}
 })();
