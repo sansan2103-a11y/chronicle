@@ -78,11 +78,12 @@
     // (B2) スロット毎セレクタ(進行/反応/セリフ/アイコン/画風/エンジン/トーン/モデル)を
     //      読み込んだスロットのcfgに合わせて表示＋値を再同期(切替desync＆漏れの根治)
     try{ syncSelectors(); }catch(e){}
-    // (C) 会話ログを「wipe→fix66 repairで再構築」を複数回行う。
+    // (C) 会話ログを現物語で作り直す＋数秒間「他物語のカード」を掃除し続ける。
     //   理由: fix66はアバター温め用に遅延repair()を予約しており、前スロット期に予約された
-    //   遅延repairが切替後に発火して前物語のカードを再追加する(stale snapshot)。1回のwipeでは
-    //   負けるので、fix66の遅延が収まる~1.5s窓を複数passでカバーする。repairは現ターンから
-    //   作り直す(キャッシュavatar使用=ちらつき最小)ので何度走っても最終状態は現物語で正しい。
+    //   遅延repairが切替後に発火して前物語のカードをstale snapshotから再追加する。単発wipeでは
+    //   負ける。そこで(1)即wipe+repairで現物語を再構築し、(2)~5秒間ジャニター(300ms毎)で
+    //   「現スロットのcastにもnarrativeにも居ない話者」のカードだけ外科的に除去する。
+    //   現物語の正規カードは触らないのでちらつきなし、fix66の遅延再追加にも勝つ。
     function rebuild(){
       try{ var st2=document.getElementById('dialogue-stream'); if(st2) st2.innerHTML=''; }catch(e){}
       try{
@@ -90,8 +91,31 @@
         else if(window.__v292Dfix66 && typeof window.__v292Dfix66.repair==='function') window.__v292Dfix66.repair();
       }catch(e){}
     }
-    [80,450,900,1500].forEach(function(ms){ setTimeout(rebuild, ms); });
-    try{ console.log(TAG,'story switch detected → conv-log wiped(x4) & scene/selectors synced'); }catch(e){}
+    function allowedNames(){
+      var set={}; try{
+        var d=JSON.parse(localStorage.getItem(activeKey())||'{}');
+        if(d.cast){ var h=(d.cast.protagonist||d.cast.hero||{}).name; if(h)set[h]=1; (d.cast.npcs||[]).forEach(function(n){ if(n&&n.name)set[n.name]=1; }); }
+        set.__narr=(d.turns||[]).map(function(t){return String(t.narrative||'');}).join('\n');
+      }catch(e){ set.__narr=''; }
+      return set;
+    }
+    function removeForeign(){
+      try{
+        var st3=document.getElementById('dialogue-stream'); if(!st3) return;
+        var al=allowedNames(); var narr=al.__narr||'';
+        var cards=st3.querySelectorAll('.v292-dlg-card');
+        for(var i=0;i<cards.length;i++){ var nm=cards[i].querySelector('.dlg-name'); if(!nm) continue;
+          var who=(nm.textContent||'').trim();
+          if(who==='主人公'||who==='???'||who==='') continue;
+          if(!al[who] && narr.indexOf(who)<0){ if(cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]); }
+        }
+      }catch(e){}
+    }
+    rebuild();
+    setTimeout(rebuild, 120);
+    // ジャニター: ~5秒間、他物語のカードを掃除し続ける(fix66の遅延再追加対策)
+    var jn=0, jiv=setInterval(function(){ removeForeign(); if(++jn>=17){ clearInterval(jiv); } }, 300);
+    try{ console.log(TAG,'story switch → rebuilt + foreign-card janitor armed; scene/selectors synced'); }catch(e){}
   }
 
   var last=null, primed=false;
