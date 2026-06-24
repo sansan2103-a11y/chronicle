@@ -78,12 +78,8 @@
     // (B2) スロット毎セレクタ(進行/反応/セリフ/アイコン/画風/エンジン/トーン/モデル)を
     //      読み込んだスロットのcfgに合わせて表示＋値を再同期(切替desync＆漏れの根治)
     try{ syncSelectors(); }catch(e){}
-    // (C) 会話ログを現物語で作り直す＋数秒間「他物語のカード」を掃除し続ける。
-    //   理由: fix66はアバター温め用に遅延repair()を予約しており、前スロット期に予約された
-    //   遅延repairが切替後に発火して前物語のカードをstale snapshotから再追加する。単発wipeでは
-    //   負ける。そこで(1)即wipe+repairで現物語を再構築し、(2)~5秒間ジャニター(300ms毎)で
-    //   「現スロットのcastにもnarrativeにも居ない話者」のカードだけ外科的に除去する。
-    //   現物語の正規カードは触らないのでちらつきなし、fix66の遅延再追加にも勝つ。
+    // (C) 会話ログを現物語で作り直す。残った前物語のカードは常駐オブザーバ(下)が
+    //   追加された瞬間に除去するので、ここでは初期再構築だけ行う。
     function rebuild(){
       try{ var st2=document.getElementById('dialogue-stream'); if(st2) st2.innerHTML=''; }catch(e){}
       try{
@@ -91,32 +87,51 @@
         else if(window.__v292Dfix66 && typeof window.__v292Dfix66.repair==='function') window.__v292Dfix66.repair();
       }catch(e){}
     }
-    function allowedNames(){
-      var set={}; try{
-        var d=JSON.parse(localStorage.getItem(activeKey())||'{}');
-        if(d.cast){ var h=(d.cast.protagonist||d.cast.hero||{}).name; if(h)set[h]=1; (d.cast.npcs||[]).forEach(function(n){ if(n&&n.name)set[n.name]=1; }); }
-        set.__narr=(d.turns||[]).map(function(t){return String(t.narrative||'');}).join('\n');
-      }catch(e){ set.__narr=''; }
-      return set;
-    }
-    function removeForeign(){
-      try{
-        var st3=document.getElementById('dialogue-stream'); if(!st3) return;
-        var al=allowedNames(); var narr=al.__narr||'';
-        var cards=st3.querySelectorAll('.v292-dlg-card');
-        for(var i=0;i<cards.length;i++){ var nm=cards[i].querySelector('.dlg-name'); if(!nm) continue;
-          var who=(nm.textContent||'').trim();
-          if(who==='主人公'||who==='???'||who==='') continue;
-          if(!al[who] && narr.indexOf(who)<0){ if(cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]); }
-        }
-      }catch(e){}
-    }
-    rebuild();
-    setTimeout(rebuild, 120);
-    // ジャニター: ~5秒間、他物語のカードを掃除し続ける(fix66の遅延再追加対策)
-    var jn=0, jiv=setInterval(function(){ removeForeign(); if(++jn>=17){ clearInterval(jiv); } }, 300);
-    try{ console.log(TAG,'story switch → rebuilt + foreign-card janitor armed; scene/selectors synced'); }catch(e){}
+    rebuild(); setTimeout(rebuild, 120);
+    try{ cleanForeign(); }catch(e){}
+    try{ console.log(TAG,'story switch → rebuilt; scene/selectors synced; foreign-observer active'); }catch(e){}
   }
+
+  // ── 常駐: 他物語(前スロット等)の発言カードを「追加された瞬間」に除去する ──
+  //   会話ログfix66はアバター温め用に遅延repairを予約しており、切替後も前スロットの
+  //   stale snapshotからカードを散発的に再追加する。タイマー掃除では取り切れない窓が残る
+  //   ため、MutationObserverで常時監視し、現在の物語(live S.cast＋S.turnsのnarrative)に
+  //   居ない話者のカードを即除去する。liveを使うので生成直後の正規カードは誤除去しない。
+  function liveAllowed(){
+    var set={}, narr='';
+    try{ var s=getS();
+      if(s){
+        var c=s.cast||{}; var h=c.hero||c.protagonist; if(h&&h.name) set[h.name]=1;
+        (c.npcs||[]).forEach(function(n){ if(n&&n.name) set[n.name]=1; });
+        if(Array.isArray(s.turns)) narr=s.turns.map(function(t){return String(t&&t.narrative||'');}).join('\n');
+      } else {
+        var d=JSON.parse(localStorage.getItem(activeKey())||'{}');
+        if(d.cast){ var h2=(d.cast.protagonist||d.cast.hero||{}); if(h2.name) set[h2.name]=1; (d.cast.npcs||[]).forEach(function(n){if(n&&n.name)set[n.name]=1;}); }
+        narr=(d.turns||[]).map(function(t){return String(t&&t.narrative||'');}).join('\n');
+      }
+    }catch(e){}
+    return {set:set, narr:narr};
+  }
+  function cleanForeign(){
+    if(off()) return;
+    try{
+      var st=document.getElementById('dialogue-stream'); if(!st) return;
+      var al=liveAllowed(); var set=al.set, narr=al.narr;
+      var cards=st.querySelectorAll('.v292-dlg-card');
+      for(var i=0;i<cards.length;i++){ var nm=cards[i].querySelector('.dlg-name'); if(!nm) continue;
+        var who=(nm.textContent||'').trim();
+        if(!who||who==='主人公'||who==='???') continue;
+        if(!set[who] && narr.indexOf(who)<0){ if(cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]); }
+      }
+    }catch(e){}
+  }
+  var _obsArmed=false, _cfScheduled=false;
+  function scheduleClean(){ if(_cfScheduled) return; _cfScheduled=true; (window.requestAnimationFrame||window.setTimeout)(function(){ _cfScheduled=false; cleanForeign(); },0); }
+  function armObserver(){
+    if(_obsArmed) return; var st=document.getElementById('dialogue-stream'); if(!st) return;
+    try{ new MutationObserver(function(muts){ for(var i=0;i<muts.length;i++){ if(muts[i].addedNodes&&muts[i].addedNodes.length){ scheduleClean(); return; } } }).observe(st,{childList:true}); _obsArmed=true; }catch(e){}
+  }
+  try{ setInterval(armObserver, 1000); }catch(e){} armObserver();
 
   var last=null, primed=false;
   function check(){
@@ -129,6 +144,6 @@
   try{ setInterval(check, 600); }catch(e){}
   check();
 
-  window.__v292Dfix317api={ sig:sig, onStoryChange:onStoryChange, syncSelectors:syncSelectors };
+  window.__v292Dfix317api={ sig:sig, onStoryChange:onStoryChange, syncSelectors:syncSelectors, cleanForeign:cleanForeign };
   try{ console.log(TAG,'loaded'); }catch(e){}
 })();
