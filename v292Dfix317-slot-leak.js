@@ -142,6 +142,15 @@
   }
   try{ setInterval(armObserver, 1000); }catch(e){} armObserver();
 
+  // ── 常駐: #story が S.turns とズレた瞬間に作り直す(切替レースの収束を即時化) ──
+  var _soArmed=false, _esScheduled=false;
+  function scheduleEnsureStory(){ if(_esScheduled) return; _esScheduled=true; setTimeout(function(){ _esScheduled=false; ensureStory(); }, 0); }
+  function armStoryObserver(){
+    if(_soArmed) return; var story=document.getElementById('story'); if(!story) return;
+    try{ new MutationObserver(function(muts){ for(var i=0;i<muts.length;i++){ if(muts[i].addedNodes&&muts[i].addedNodes.length){ scheduleEnsureStory(); return; } } }).observe(story,{childList:true}); _soArmed=true; }catch(e){}
+  }
+  try{ setInterval(armStoryObserver, 1000); }catch(e){} armStoryObserver();
+
   // ── 常駐: 展開の描写(#story)が現スロットのS.turnsと食い違っていたら作り直す ──
   //   loadSlotのrenderAllレース(切替直後に前スロット表示で固着)を恒久的に自己修復する。
   //   S.turnsは常に正しい(実機確認済)ので、#storyの.turn数＋先頭ターン本文と突き合わせ、
@@ -173,7 +182,7 @@
     if(cur!==last){ last=cur; onStoryChange(); }
     try{ ensureStory(); }catch(e){}   // 展開の描写の食い違いを常時自己修復(切替レース対策)
   }
-  try{ setInterval(check, 600); }catch(e){}
+  try{ setInterval(check, 350); }catch(e){}
   check();
 
   window.__v292Dfix317api={ sig:sig, onStoryChange:onStoryChange, syncSelectors:syncSelectors, cleanForeign:cleanForeign, ensureStory:ensureStory, storyMatches:storyMatches };
