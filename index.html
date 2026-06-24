@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260624-fix299b';
+  var BUILT = '20260624-fix321';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -1983,6 +1983,7 @@ const G = {
     document.getElementById('inp').value = '続きを自然に進めてください。';
     const prev = S.mode; this.setMode('STORY');
     await this.submit(); this.setMode(prev);
+    try { const _ic = document.getElementById('inp'); if (_ic){ _ic.value = ''; _ic.style.height = 'auto'; } } catch(e){}  /* v292Dfix321: 続きを書く後はsentinelを入力欄に残さない */
   },
 
   async retry() {
