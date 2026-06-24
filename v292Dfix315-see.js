@@ -6,6 +6,16 @@
 //     (proxy予算を消費しない)。失敗時は自動リトライ3回→グラデ+文言フォールバック(遮断器)。
 //     ↻で再生成。場面が無い(新規ゲーム)時は生成しない。
 //   注: モデルへのプロンプト送信や課金経路は一切使わない。純粋に表示専用。
+//
+//   ★fix315b（画像精度改善・おしん承認の無料案1+2）:
+//     [1] プロンプトの作り方を「人物中心」に変更。直近描写の生コピーをやめ、
+//         「いま登場中の人物(cast)＋場所＋雰囲気」を主語に組む。
+//         人物の外見は features.js のアバター生成が作る英語の appearance 文
+//         (localStorage 'chrAiAv4:<名前>::<hash>') を流用 → 顔/服/年齢が安定。
+//         登場中の判定は直近2ターンの本文に cast 名が出たか。
+//     [2] 画風を 🖌画風セレクタ(S.cfg.artStyle)に連動。アバターと絵柄が揃う。
+//         pollinations の enhance=true を付与(無料・プロンプト自動補強)。
+//     上限: 無料fluxなので「正しい人物・場所・雰囲気」までが狙い(顔の完全一致は不可)。
 // =====================================================================
 (function(){
   'use strict';
@@ -14,8 +24,84 @@
 
   function getS(){ try{ return window.S||(typeof S!=='undefined'?S:null); }catch(e){ return null; } }
   function hashN(s){ var h=0,i; s=String(s||''); for(i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; } return Math.abs(h); }
+  function lsg(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
 
-  // 直近の展開描写を一文に蒸留（タグ/話者記号を除去）
+  // ---- [1] 人物中心の素材集め ----
+  // cast = { hero:{name,desc}, npcs:[{name,desc}...] }（features.jsの定義）
+  function castList(){
+    var s=getS(), out=[];
+    try{
+      if(s&&s.cast){
+        if(s.cast.hero&&s.cast.hero.name) out.push({name:String(s.cast.hero.name), desc:String(s.cast.hero.desc||''), hero:true});
+        (s.cast.npcs||[]).forEach(function(n){ if(n&&n.name) out.push({name:String(n.name), desc:String(n.desc||''), hero:false}); });
+      }
+    }catch(e){}
+    return out;
+  }
+  // 直近2ターンの本文（セリフ含む生テキスト）
+  function recentText(){
+    var s=getS(); if(!s||!Array.isArray(s.turns)||!s.turns.length) return '';
+    var n=s.turns.length, buf=[];
+    for(var i=Math.max(0,n-2);i<n;i++){
+      var t=s.turns[i]; if(!t) continue;
+      var nar=t.narrative; if(Array.isArray(nar)) nar=nar.join(' ');
+      buf.push(String(nar||'')); buf.push(String(t.text||''));
+    }
+    return buf.join(' ');
+  }
+  // いま登場中の人物（直近本文に名前が出た cast）。空なら主人公だけ。最大3人。
+  function presentCast(){
+    var list=castList(); if(!list.length) return [];
+    var txt=recentText();
+    var hit=list.filter(function(c){ return c.name && txt.indexOf(c.name)>=0; });
+    if(!hit.length){ var hero=list.filter(function(c){return c.hero;}); hit=hero.length?hero:list.slice(0,1); }
+    // 主人公を先頭に寄せる＋3人まで
+    hit.sort(function(a,b){ return (b.hero?1:0)-(a.hero?1:0); });
+    return hit.slice(0,3);
+  }
+  // features.jsのアバター生成が保存した英語の外見文を流用（顔/服/年齢が安定）。
+  // キーは 'chrAiAv4:<名前>::<descハッシュ>'。名前一致の最初の1件を採用。無ければdescを使う。
+  function appearanceOf(c){
+    try{
+      var pre='chrAiAv4:'+c.name+'::';
+      for(var i=0;i<localStorage.length;i++){
+        var k=localStorage.key(i);
+        if(k&&k.indexOf(pre)===0){ var v=lsg(k); if(v) return String(v).replace(/\s+/g,' ').trim().slice(0,160); }
+      }
+    }catch(e){}
+    // フォールバック: 日本語descから外見っぽい一文（先頭句）を短く
+    var d=String(c.desc||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+    return d.slice(0,60);
+  }
+
+  // ---- [2] 画風連動 ----
+  // S.cfg.artStyle: 0=アニメ 1=リアル 2=水彩 3=従来(ダークファンタジー) 既定3
+  function artStyleIdx(){ var s=getS(); try{ var v=s&&s.cfg&&s.cfg.artStyle; return (v==null)?3:(+v); }catch(e){ return 3; } }
+  function styleTail(){
+    switch(artStyleIdx()){
+      case 0: return 'high quality anime illustration, clean detailed anime art, cinematic composition';
+      case 1: return 'realistic digital painting, cinematic lighting, photorealistic detail';
+      case 2: return 'soft watercolor illustration, delicate brushwork, artistic';
+      default: return 'dark fantasy illustration, dim moody lighting, muted desaturated colors, gothic horror atmosphere';
+    }
+  }
+  // 日本語トーン→英語の雰囲気語（簡易キーワード抽出・無料）。
+  function toneWords(tone){
+    var t=String(tone||''), w=[], dark=false;
+    if(/不気味|怪異|恐怖|ホラー|戦慄|薄暗/.test(t)){ w.push('eerie, unsettling, ominous'); dark=true; }
+    if(/緊迫|緊張|危機|サスペンス/.test(t)){ w.push('tense, suspenseful'); dark=true; }
+    if(/陰鬱|疑心|陰|憂/.test(t)){ w.push('gloomy, somber'); dark=true; }
+    if(/閉塞|密閉|閉ざ/.test(t)){ w.push('claustrophobic, oppressive'); dark=true; }
+    // 明るい/穏やかな雰囲気はダーク系が無いときだけ（矛盾語の混入を防ぐ）
+    if(!dark){
+      if(/高揚|驚き|希望|明る/.test(t)) w.push('uplifting, bright');
+      if(/日常|静か|穏やか/.test(t)) w.push('calm, quiet');
+    }
+    if(!w.length) w.push('atmospheric, cinematic mood');
+    return w.join(', ');
+  }
+
+  // 直近の展開描写を一文に蒸留（タグ/セリフ/記号を除去）。動きの手掛かりに短く使う。
   function latestScene(){
     var s=getS(); if(!s||!Array.isArray(s.turns)||!s.turns.length) return '';
     var t=s.turns[s.turns.length-1]; if(!t) return '';
@@ -27,16 +113,28 @@
            .replace(/\s+/g,' ').trim();
     return nar.slice(0,140);
   }
+
+  // ★人物中心プロンプト。people(英語の外見) → 場所 → 雰囲気 → 画風。
   function buildPrompt(){
     var s=getS(); var sc=(s&&s.scene)||{};
     var loc=(sc.loc||'').trim();
     var tone=(sc.tone||'').trim();
-    var moment=latestScene();
-    var parts=[loc, moment, tone, 'cinematic film still, atmospheric lighting, highly detailed illustration, dramatic mood'];
-    return parts.filter(Boolean).join(', ').slice(0,260);
+    var people=presentCast().map(appearanceOf).filter(Boolean);
+    var moment=latestScene().slice(0,60); // 動きの軽い手掛かり（短く）
+    var parts=[];
+    if(people.length){
+      var lead=(people.length===1)?'a single character — ':'characters together — ';
+      parts.push(lead+people.join('; '));
+    }
+    if(loc) parts.push('in a scene set at '+loc);
+    if(moment) parts.push(moment);
+    parts.push(toneWords(tone));
+    parts.push(styleTail());
+    parts.push('detailed environment, atmospheric, no text, no watermark, no caption');
+    return parts.filter(Boolean).join(', ').slice(0,360);
   }
   function imgUrl(prompt,seed){
-    return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=768&height=512&nologo=true&model=flux&seed='+seed;
+    return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=768&height=512&nologo=true&enhance=true&model=flux&seed='+seed;
   }
 
   // ---- UI ----
@@ -110,7 +208,7 @@
     ov.appendChild(modal); document.body.appendChild(ov);
     render(modal);
   }
-  window.__v292Dfix315api={ open:open, buildPrompt:buildPrompt, latestScene:latestScene, imgUrl:imgUrl };
+  window.__v292Dfix315api={ open:open, buildPrompt:buildPrompt, latestScene:latestScene, imgUrl:imgUrl, presentCast:presentCast, appearanceOf:appearanceOf, styleTail:styleTail };
 
   // ---- トップバーにボタン（🧠記憶の隣） ----
   function topbarAnchor(){
@@ -140,5 +238,5 @@
   }
   try{ setInterval(ensureBtn, 1500); }catch(e){} ensureBtn();
 
-  try{ console.log(TAG,'loaded'); }catch(e){}
+  try{ console.log(TAG,'loaded (fix315b person-centric)'); }catch(e){}
 })();
