@@ -45,6 +45,15 @@
   function saveRoster(a){ if(!canSave())return; try{ localStorage.setItem(STORE(), JSON.stringify((a||[]).slice(0,CAP))); }catch(e){} }
   function loadLast(){ try{ return parseInt(localStorage.getItem(LASTK())||'-1',10); }catch(e){ return -1; } }
   function saveLast(i){ if(!canSave())return; try{ localStorage.setItem(LASTK(), String(i)); }catch(e){} }
+  // ★fix307e: スロット厳密化用のキー固定版。run()開始時に決めたキーへ書く(切替で揺れない)。
+  function rosterKey(sfx){ return 'v292Dfix307Roster'+sfx; }
+  function lastKey(sfx){ return 'v292Dfix307Last'+sfx; }
+  function loadRosterK(k){ try{ return JSON.parse(localStorage.getItem(k)||'[]')||[]; }catch(e){ return []; } }
+  function saveRosterK(k,a){ if(!canSave())return; try{ localStorage.setItem(k, JSON.stringify((a||[]).slice(0,CAP))); }catch(e){} }
+  function loadLastK(k){ try{ return parseInt(localStorage.getItem(k)||'-1',10); }catch(e){ return -1; } }
+  function saveLastK(k,i){ if(!canSave())return; try{ localStorage.setItem(k, String(i)); }catch(e){} }
+  // そのスロットのセーブ本体(blob)が保持する物語のloc。Sが指す物語と一致確認に使う。
+  function slotBlobLoc(sfx){ try{ var b=JSON.parse(localStorage.getItem('chr6'+sfx)||'null'); return (b&&b.scene)?(b.scene.loc||null):null; }catch(e){ return null; } }
 
   function curTurn(){ var s=getS(); return (s&&Array.isArray(s.turns))?s.turns.length-1:-1; }
   function castNames(){
@@ -111,27 +120,44 @@
     if(off()) return;
     var s=getS(); if(!s||!Array.isArray(s.turns)||s.turns.length<2) return;
     if(!canSave()) return;                  // 単一writerだけがLLMを叩く
+    // ★fix307e: 保存先スロットと、いまSが保持する物語の一致をここで固定/検証する。
+    //   起動/切替の中間状態(キーは新スロット・Sはまだ前の物語)で書くと、別スロットの
+    //   ロスターに前物語のキャラが混入する(=今回のキャラ一覧混入バグ)。fix320と同型の根治。
+    var sfx=slotSfx();
+    var storeK=rosterKey(sfx), lastK=lastKey(sfx);
+    var curLoc=(s.scene&&s.scene.loc)||null;
+    var blobLoc=slotBlobLoc(sfx);
+    if(blobLoc && curLoc && blobLoc!==curLoc) return; // Sがこのスロットの物語と不一致=中間状態→書かない
     var ct=s.turns.length-1;
-    var last=loadLast();
-    if(last>ct){ saveLast(-1); last=-1; }   // 別ゲーム/リセット由来のstale lastを自己修復
+    var last=loadLastK(lastK);
+    if(last>ct){ saveLastK(lastK,-1); last=-1; }   // 別ゲーム/リセット由来のstale lastを自己修復
     if(ct<=last) return;                     // 新ターン無し
     if(last>=0 && (ct-last)<INTERVAL) return; // INTERVALターン待つ
     var tr=recentTranscript(); if(!tr) return;
-    saveLast(ct);                            // 呼び出し前に進めて二重発火防止
+    saveLastK(lastK, ct);                     // 呼び出し前に進めて二重発火防止
     callLLM(tr, function(out){
+      // ★再確認: LLM(最大90s)中にスロット切替/物語差替が起きていたら、このスロットには書かない。
+      var s2=getS();
+      if(!s2 || !s2.scene || (s2.scene.loc||null)!==curLoc) return; // 物語が差し替わった
+      if(slotSfx()!==sfx) return;                                   // アクティブスロットが変わった
       var arr=parseArr(out);
       if(!arr) return;                       // 失敗時は次INTERVALで再試行
-      var merged=mergeRoster(loadRoster(), arr);
-      saveRoster(merged);
-      try{ console.log(TAG,'roster updated, count=', merged.length); }catch(e){}
+      var merged=mergeRoster(loadRosterK(storeK), arr);
+      saveRosterK(storeK, merged);
+      try{ console.log(TAG,'roster updated, count=', merged.length, 'slot=', sfx||'(default)'); }catch(e){}
     });
   }
 
   // リセット安全: turns=0なのにロスターが残ってたらクリア
   function resetCheck(){
     var s=getS(); if(!s||!Array.isArray(s.turns)) return;
-    if(s.turns.length===0 && (loadRoster().length || loadLast()>=0)){
-      try{ localStorage.removeItem(STORE()); localStorage.removeItem(LASTK()); }catch(e){}
+    // ★fix307e: 中間状態での誤クリア防止。Sが空(新規)でも、保存先スロットのblobが別物語を
+    //   持っているなら切替中なので触らない。blobも空/一致の時だけクリアする。
+    var sfx=slotSfx(); var storeK=rosterKey(sfx), lastK=lastKey(sfx);
+    var blobLoc=slotBlobLoc(sfx); var curLoc=(s.scene&&s.scene.loc)||null;
+    if(blobLoc && curLoc && blobLoc!==curLoc) return;
+    if(s.turns.length===0 && (loadRosterK(storeK).length || loadLastK(lastK)>=0)){
+      try{ localStorage.removeItem(storeK); localStorage.removeItem(lastK); }catch(e){}
       try{ console.log(TAG,'no turns — roster cleared'); }catch(e){}
     }
   }
@@ -175,5 +201,5 @@
   try{ window.addEventListener('focus', function(){ try{ run(); }catch(e){} }); }catch(e){}
 
   window.__v292Dfix307api={ loadRoster:loadRoster, saveRoster:saveRoster, run:run, mergeRoster:mergeRoster, parseArr:parseArr, recentTranscript:recentTranscript, installWiShim:installWiShim };
-  try{ console.log(TAG,'loaded'); }catch(e){}
+  try{ console.log(TAG,'loaded (fix307e slot-strict)'); }catch(e){}
 })();
