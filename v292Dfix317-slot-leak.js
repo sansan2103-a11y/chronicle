@@ -73,7 +73,10 @@
     //   ★loadSlotはUI.renderAllを呼ばず弱いtriggerReRenderだけなので、右の物語パネル(#story)が
     //   前スロットのまま残る(おしん報告)。UI.renderAllは#storyの.turnを全消去しS.turnsから再構築
     //   する(非additive=漏れない)。UIはconst非公開なのでeval経由で取得。
-    try{ var _UI=(0,eval)('typeof UI!=="undefined"?UI:null'); if(_UI&&typeof _UI.renderAll==='function') _UI.renderAll(); }catch(e){}
+    //   ★単発だと切替直後のレース(前スロット表示で固着)に負けるので、renderAllは現S.turnsから
+    //   毎回作り直す冪等処理＝複数passで確実に現物語へ収束させる(setTimeout=背景タブでも動く)。
+    function _renderStory(){ try{ var _UI=(0,eval)('typeof UI!=="undefined"?UI:null'); if(_UI&&typeof _UI.renderAll==='function') _UI.renderAll(); }catch(e){} }
+    [0,250,600,1300,2500].forEach(function(ms){ setTimeout(_renderStory, ms); });
     // (A) 会話ログをwipe → fix66(追加専用)が新物語で全カードを作り直せるようにする
     try{ var st=document.getElementById('dialogue-stream'); if(st) st.innerHTML=''; }catch(e){}
     // (B) S.sceneの迷子キーを掃除(前スロットのcards/memoryNote等の漏れ防止)
