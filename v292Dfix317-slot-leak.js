@@ -88,8 +88,9 @@
       }catch(e){}
     }
     rebuild(); setTimeout(rebuild, 120);
-    try{ cleanForeign(); }catch(e){}
-    try{ console.log(TAG,'story switch → rebuilt; scene/selectors synced; foreign-observer active'); }catch(e){}
+    // 直後の保険掃除(setTimeoutはバックグラウンドでも動く。observerと二重で漏れを断つ)
+    [0,200,500,1000,2000,3500].forEach(function(ms){ setTimeout(cleanForeign, ms); });
+    try{ console.log(TAG,'story switch → rebuilt; scene/selectors synced; foreign-observer+sweeps active'); }catch(e){}
   }
 
   // ── 常駐: 他物語(前スロット等)の発言カードを「追加された瞬間」に除去する ──
@@ -126,7 +127,7 @@
     }catch(e){}
   }
   var _obsArmed=false, _cfScheduled=false;
-  function scheduleClean(){ if(_cfScheduled) return; _cfScheduled=true; (window.requestAnimationFrame||window.setTimeout)(function(){ _cfScheduled=false; cleanForeign(); },0); }
+  function scheduleClean(){ if(_cfScheduled) return; _cfScheduled=true; setTimeout(function(){ _cfScheduled=false; cleanForeign(); }, 0); }
   function armObserver(){
     if(_obsArmed) return; var st=document.getElementById('dialogue-stream'); if(!st) return;
     try{ new MutationObserver(function(muts){ for(var i=0;i<muts.length;i++){ if(muts[i].addedNodes&&muts[i].addedNodes.length){ scheduleClean(); return; } } }).observe(st,{childList:true}); _obsArmed=true; }catch(e){}
