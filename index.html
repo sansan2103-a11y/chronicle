@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260624-fix324';
+  var BUILT = '20260624-fix325';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2745,6 +2745,7 @@ G.init();
 <script src="v292Dfix322-state-line-strip.js?cb=v292Dfix322c"></script>
 <script src="v292Dfix323-boundary-guards.js?cb=v292Dfix323"></script>
 <script src="v292Dfix324-show-dont-tell.js?cb=v292Dfix324"></script>
+<script src="v292Dfix325-state-rederive.js?cb=v292Dfix325"></script>
 <script src="v292Dfix298-roster.js?cb=v292Dfix298b"></script>
 </body>
 </html>
