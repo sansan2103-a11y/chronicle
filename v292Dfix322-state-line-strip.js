@@ -1,6 +1,6 @@
 // =====================================================================
 // Chronicle TRPG - v292Dfix322: 状態スキーマ「生行漏れ」の根治
-//   症状(おしん報告・2026-06-24): 「展開の描写」に内部のキャラ状態が漏れる。
+//   症状(おしん報告・2026-06-24): 「展開の描写」に内部のキャラ状態＋アシスタント作業報告が漏れる。
 //     例: こころ=“怒り／依存拒否反射” / 傷=“左肩口〜胴部…” / 未解決=“…”
 //   真因: 本来モデルは状態を <state who="…" からだ="…" こころ="…" …/> タグで
 //     本文の後に出力し、parse時に除去される設計。しかし DS V4 Flash 等が稀に
@@ -23,19 +23,31 @@
 
   // fix77/fix190 の6スキーマ語の直後に「=引用符」が来る=内部状態の生漏れ。
   // 引用符は全角” “ / 半角" ' / 和文「『 を許容。値内部の「原因:」「発生:」等は=引用符でないので不一致。
-  var LEAK = /(?:からだ|こころ|本能|傷|関係|未解決)\s*=\s*[”“"'「『]/;
-  function isLeak(s){ return LEAK.test(String(s || '')); }
+  var STATE = /(?:からだ|こころ|本能|傷|関係|未解決)\s*=\s*[”“"'「『]/;
+  // メタ漏れ(アシスタント作業報告)。本文末尾に付く運営口調ブロック。地の文(常体小説)には絶対出ない語のみ。
+  var META = /(逐語反映|入力をどうぞ|お好きなタイミング|上記描写|次ターン以降|物語を進行させ|進行させました|描写しました|プレイヤーからの\s*SAY|SAY\s*\/\s*DO)/;
+  function isLeak(s){ s = String(s || ''); return STATE.test(s) || META.test(s); }
   function cleanArr(arr){
     if (!Array.isArray(arr)) return { arr: arr, removed: 0 };
-    var removed = 0;
-    var out = arr.filter(function(e){ if (isLeak(e)){ removed++; return false; } return true; });
-    if (!out.length) return { arr: arr, removed: 0 };   // 安全網: 全消えは避ける(異常入力では触らない)
+    // (a) 末尾のメタ報告ブロックを切り落とす(最初のMETA行以降を全削除=報告は本文の後に付くため)
+    var cut = arr.length;
+    for (var i = 0; i < arr.length; i++){ if (META.test(String(arr[i] || ''))){ cut = i; break; } }
+    var work = arr.slice(0, cut);
+    var metaRemoved = arr.length - cut;
+    // (b) 生の状態行を除去
+    var out = [], stateRemoved = 0;
+    work.forEach(function(e){ if (STATE.test(String(e || ''))){ stateRemoved++; } else out.push(e); });
+    var removed = metaRemoved + stateRemoved;
+    if (!out.length && removed > 0) return { arr: arr, removed: 0 };   // 安全網: 全消えは避ける
     return { arr: out, removed: removed };
   }
   function cleanStr(s){
-    s = String(s || ''); if (s.indexOf('=') < 0) return s;
+    s = String(s || ''); if (s.indexOf('=') < 0 && !META.test(s)) return s;
     var lines = s.split('\n');
-    var kept = lines.filter(function(l){ return !isLeak(l); });
+    var cut = lines.length;
+    for (var i = 0; i < lines.length; i++){ if (META.test(lines[i])){ cut = i; break; } }
+    var work = lines.slice(0, cut);
+    var kept = work.filter(function(l){ return !STATE.test(l); });
     return kept.length ? kept.join('\n') : s;
   }
 
