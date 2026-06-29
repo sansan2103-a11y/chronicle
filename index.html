@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260629-fix328c';
+  var BUILT = '20260630-fix329';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2453,7 +2453,7 @@ G.init();
       hav.id = 'heroAvSettings';
       heroSec.parentNode.insertBefore(hav, heroSec.nextSibling);
     }
-    hav.className = 'v100-clean';
+    hav.classList.add('v100-clean'); /* fix329: className丸ごと上書きをやめ、fix275のv275-hideガードを温存（システムタブへの漏れ根治） */
     var imgInner = url ? '<img src="' + url.replace(/"/g,'&quot;') + '" alt="' + name + '">' : '?';
     hav.innerHTML =
       '<div class="v100-img" data-v100-act="hero-regen">' + imgInner + '</div>' +
