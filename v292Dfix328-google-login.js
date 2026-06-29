@@ -128,29 +128,62 @@
     } catch(e){}
   }
 
-  /* ─── ログインUI（設定パネル内＋トップバーのピル） ─── */
+  /* ─── ログインUI（設定パネル内・カード型） ─── */
   function renderUI(){
     if (!enabled() || !workerReady) return;
-    // 設定パネル内
     try {
       var anchor = document.getElementById('cfgProxyPass247') || document.getElementById('cfgPollKey');
-      if (anchor){
-        var fld = (anchor.closest && (anchor.closest('.fld')||anchor.parentNode)) || anchor.parentNode;
-        var box = document.getElementById('g250-settings');
-        if (!box){
-          box = document.createElement('div'); box.id='g250-settings'; box.className='fld';
-          fld.parentNode.insertBefore(box, fld);
-        }
-        box.innerHTML = valid()
-          ? '<label>Googleログイン</label><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
-            + (T.pic?'<img src="'+T.pic+'" style="width:24px;height:24px;border-radius:50%">':'')
-            + '<span style="font-size:13px">'+esc(T.email)+'</span>'
-            + '<button id="g250-out" type="button" style="font-size:12px;padding:3px 10px">ログアウト</button></div>'
-          : '<label>Googleログイン</label><div id="g250-btn-s"></div><div style="font-size:12px;opacity:.7;margin-top:4px">Googleアカウントでログインすると遊べます</div>';
-        var ob = document.getElementById('g250-out'); if (ob) ob.onclick = signOut;
-        var bs = document.getElementById('g250-btn-s');
-        if (bs && !valid()) initGis(function(){ try{ window.google.accounts.id.renderButton(bs,{theme:'filled_blue',size:'medium',text:'signin_with',shape:'pill'}); }catch(e){} });
+      if (!anchor) return;
+      var fld = (anchor.closest && (anchor.closest('.fld')||anchor.parentNode)) || anchor.parentNode;
+      var box = document.getElementById('g250-settings');
+      if (!box){
+        box = document.createElement('div'); box.id='g250-settings'; box.className='fld';
+        fld.parentNode.insertBefore(box, fld);
       }
+      /* 状態が変わった時だけ描き直す（チラつき・GISボタン再生成の防止） */
+      var sig = valid() ? ('in:'+(T.email||'')) : 'out';
+      if (box.getAttribute('data-sig') === sig){ syncPassNote(); return; }
+      box.setAttribute('data-sig', sig);
+      if (valid()){
+        box.innerHTML =
+          '<label>Googleログイン</label>'
+          + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;border:1px solid rgba(127,127,160,.35);border-radius:8px;background:rgba(127,127,160,.08)">'
+          + (T.pic?'<img src="'+T.pic+'" referrerpolicy="no-referrer" style="width:30px;height:30px;border-radius:50%;flex:0 0 auto">':'')
+          + '<div style="flex:1;min-width:120px;line-height:1.35;overflow:hidden">'
+          +   (T.name?'<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(T.name)+'</div>':'')
+          +   '<div style="font-size:11px;opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(T.email)+'</div>'
+          + '</div>'
+          + '<span style="font-size:11px;color:#2e9e6b;font-weight:600;flex:0 0 auto">✓ ログイン中</span>'
+          + '<button id="g250-out" type="button" style="font-size:12px;padding:4px 12px;border:1px solid rgba(127,127,160,.55);border-radius:6px;background:transparent;color:inherit;cursor:pointer;flex:0 0 auto">ログアウト</button>'
+          + '</div>';
+        var ob = document.getElementById('g250-out'); if (ob) ob.onclick = signOut;
+      } else {
+        box.innerHTML =
+          '<label>Googleログイン</label>'
+          + '<div id="g250-btn-s"></div>'
+          + '<div style="font-size:12px;opacity:.7;margin-top:6px">Googleアカウントでログインするだけで遊べます（合言葉は不要）</div>';
+        var bs = document.getElementById('g250-btn-s');
+        if (bs) initGis(function(){ try{ window.google.accounts.id.renderButton(bs,{theme:'filled_blue',size:'large',text:'signin_with',shape:'pill',width:260}); }catch(e){} });
+      }
+      syncPassNote();
+    } catch(e){}
+  }
+
+  /* アクセスコード欄に「ログイン中は不要」の注記を出す/消す */
+  function syncPassNote(){
+    try {
+      var pass = document.getElementById('cfgProxyPass247');
+      if (!pass) return;
+      var pf = (pass.closest && (pass.closest('.fld')||pass.parentNode)) || pass.parentNode;
+      var note = document.getElementById('g250-pass-note');
+      if (valid()){
+        if (!note){
+          note = document.createElement('div'); note.id='g250-pass-note';
+          note.style.cssText='font-size:11px;opacity:.65;margin-top:3px';
+          note.textContent='Googleログイン中はアクセスコード不要です（空でOK）。';
+          pf.appendChild(note);
+        }
+      } else if (note){ note.remove(); }
     } catch(e){}
   }
 
