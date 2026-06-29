@@ -29,7 +29,9 @@
   function off(){ try{ return localStorage.getItem('v292ProxyOff')==='1'; }catch(e){ return false; } }
   function purl(){ try{ return (localStorage.getItem('v292ProxyUrl')||'').trim().replace(/\/+$/,''); }catch(e){ return ''; } }
   function ppass(){ try{ return (localStorage.getItem('v292ProxyPass')||'').trim(); }catch(e){ return ''; } }
-  function on(){ return !off() && !!(purl() && ppass()); }
+  /* fix328連携: Googleログインの有効なIDトークン(無ければ空)。合言葉と排他でない。 */
+  function gid(){ try{ return (window.__chronicleGoogleId && window.__chronicleGoogleId()) || ''; }catch(e){ return ''; } }
+  function on(){ return !off() && !!(purl() && (ppass() || gid())); }
 
   /* ─── URL書き換え表 ─── */
   function mapUrl(u){
@@ -50,7 +52,10 @@
       if (m){
         url = m;
         opts = Object.assign({}, opts || {});
-        opts.headers = { 'Content-Type': 'application/json', 'x-chronicle-pass': ppass() };
+        var h = { 'Content-Type': 'application/json' };
+        var g = gid(); if (g) h['x-google-id'] = g;
+        var p = ppass(); if (p) h['x-chronicle-pass'] = p;
+        opts.headers = h;
       }
     } catch(e){}
     return _fetch.call(this, url, opts);
@@ -76,7 +81,11 @@
   };
   XMLHttpRequest.prototype.send = function(){
     try {
-      if (this.__p247 && !this.__p247h){ this.__p247h = true; _setH.call(this, 'x-chronicle-pass', ppass()); }
+      if (this.__p247 && !this.__p247h){
+        this.__p247h = true;
+        var g = gid(); if (g) _setH.call(this, 'x-google-id', g);
+        var p = ppass(); if (p) _setH.call(this, 'x-chronicle-pass', p);
+      }
     } catch(e){}
     return _send.apply(this, arguments);
   };

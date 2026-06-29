@@ -75,6 +75,25 @@
     </div>
   </div>
 
+  <h2>許可メール（Googleログイン）</h2>
+  <div class="card">
+    <table id="atbl">
+      <thead><tr><th>名前</th><th>メール</th><th>今月使用</th><th>回数</th><th>上限$</th><th>状態</th><th></th></tr></thead>
+      <tbody id="atbody"><tr><td colspan="7" class="muted">「読み込み」を押してください</td></tr></tbody>
+    </table>
+  </div>
+
+  <h2>新しい許可メールを追加</h2>
+  <div class="card">
+    <div class="row">
+      <div><label>名前(誰用か)</label><input type="text" id="aName" placeholder="例: ともだちA"></div>
+      <div style="flex:2"><label>Googleアカウントのメール</label><input type="text" id="aEmail" placeholder="例: friend@gmail.com"></div>
+      <div><label>月の上限$(0=無制限)</label><input type="number" id="aLimit" value="2" step="0.5" min="0"></div>
+      <div style="flex:0"><button class="primary" onclick="createAllow()">許可に追加</button></div>
+    </div>
+    <div class="muted" style="margin-top:8px;font-size:12px">相手はこのメールのGoogleアカウントでログインするだけで遊べます（合言葉の配布は不要）。配布リンク: <span class="codechip">https://sansan2103-a11y.github.io/chronicle/</span></div>
+  </div>
+
   <h2>全体設定</h2>
   <div class="card">
     <label>許可モデル(カンマ区切り・空=制限なし)</label>
@@ -140,8 +159,43 @@ async function load() {
     }
     tb.appendChild(tr);
   });
-  setStatus('読み込み完了 (' + j.codes.length + '件)', 'ok');
+  renderAllows(j.allows || []);
+  setStatus('読み込み完了 (合言葉' + j.codes.length + '件 / 許可メール' + ((j.allows || []).length) + '件)', 'ok');
 }
+
+function renderAllows(allows) {
+  const tb = $('atbody');
+  tb.innerHTML = '';
+  if (!allows.length) { tb.innerHTML = '<tr><td colspan="7" class="muted">まだ許可メールがありません</td></tr>'; return; }
+  allows.sort((a, b) => (b.usedUsd || 0) - (a.usedUsd || 0)).forEach(c => {
+    const email = c.key;
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>' + esc(c.name || '') + '</td>' +
+      '<td><span class="codechip">' + esc(email) + '</span></td>' +
+      '<td class="num">$' + (+c.usedUsd || 0).toFixed(4) + '</td>' +
+      '<td class="num">' + (c.reqs || 0) + '</td>' +
+      '<td class="num">' + (+c.limitUsd > 0 ? (+c.limitUsd).toFixed(2) : '\u221e') + '</td>' +
+      '<td class="' + (c.active ? 'on' : 'off') + '">' + (c.active ? '稼働' : '停止') + '</td>' +
+      '<td></td>';
+    const td = tr.lastElementChild;
+    td.appendChild(btn(c.active ? '停止' : '再開', () => updAllow(email, { active: !c.active })));
+    td.appendChild(btn('上限', () => { const v = prompt('月の上限$(0=無制限)', c.limitUsd || 0); if (v != null) updAllow(email, { limitUsd: +v }); }));
+    td.appendChild(btn('削除', () => { if (confirm('「' + email + '」を許可から削除しますか？')) delAllow(email); }, 'danger'));
+    tb.appendChild(tr);
+  });
+}
+
+async function createAllow() {
+  const email = $('aEmail').value.trim();
+  if (!email || email.indexOf('@') === -1) { setStatus('メールを正しく入れてください', 'err'); return; }
+  await api({ action: 'allow-create', name: $('aName').value, email, limitUsd: +$('aLimit').value });
+  setStatus('許可に追加しました: ' + email, 'ok');
+  $('aName').value = ''; $('aEmail').value = '';
+  load();
+}
+async function updAllow(email, patch) { await api(Object.assign({ action: 'allow-update', email }, patch)); load(); }
+async function delAllow(email) { await api({ action: 'allow-delete', email }); load(); }
 
 function btn(label, fn, cls) {
   const b = document.createElement('button');
