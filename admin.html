@@ -135,6 +135,7 @@ async function load() {
     if (!isMaster) {
       td.appendChild(btn(c.active ? '停止' : '再開', () => upd(c.code, { active: !c.active })));
       td.appendChild(btn('上限', () => { const v = prompt('月の上限$(0=無制限)', c.limitUsd || 0); if (v != null) upd(c.code, { limitUsd: +v }); }));
+      td.appendChild(btn('🔗リンク', () => { const link = 'https://sansan2103-a11y.github.io/chronicle/?code=' + encodeURIComponent(c.code); if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(link).then(() => setStatus('共有リンクをコピーしました: ' + link, 'ok'), () => prompt('コピー失敗。手動でコピーしてください', link)); } else { prompt('共有リンク（コピーして相手に送ってください）', link); } }));
       td.appendChild(btn('削除', () => { if (confirm('「' + c.code + '」を削除しますか？')) del(c.code); }, 'danger'));
     }
     tb.appendChild(tr);
