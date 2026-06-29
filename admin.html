@@ -141,6 +141,7 @@ async function load() {
   if (!j.codes.length) tb.innerHTML = '<tr><td colspan="7" class="muted">まだ合言葉がありません(マスターは初回利用後に現れます)</td></tr>';
   j.codes.sort((a, b) => (b.usedUsd || 0) - (a.usedUsd || 0)).forEach(c => {
     const tr = document.createElement('tr');
+    c.code = c.code || c.key; // worker v4 unified list field key→code 互換
     const isMaster = c.code === 'master';
     tr.innerHTML =
       '<td>' + esc(c.name || (isMaster ? 'マスター' : '')) + '</td>' +
