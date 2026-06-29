@@ -142,7 +142,7 @@
       }
       /* 状態が変わった時だけ描き直す（チラつき・GISボタン再生成の防止） */
       var sig = valid() ? ('in:'+(T.email||'')) : 'out';
-      if (box.getAttribute('data-sig') === sig){ syncPassNote(); return; }
+      if (box.getAttribute('data-sig') === sig){ managePassField(); return; }
       box.setAttribute('data-sig', sig);
       if (valid()){
         box.innerHTML =
@@ -165,25 +165,31 @@
         var bs = document.getElementById('g250-btn-s');
         if (bs) initGis(function(){ try{ window.google.accounts.id.renderButton(bs,{theme:'filled_blue',size:'large',text:'signin_with',shape:'pill',width:260}); }catch(e){} });
       }
-      syncPassNote();
+      managePassField();
     } catch(e){}
   }
 
-  /* アクセスコード欄に「ログイン中は不要」の注記を出す/消す */
-  function syncPassNote(){
+  /* アクセスコード欄を既定で非表示（Googleログインが主・コードは上級者/予備）。
+     ?code=リンクの自動入力は引き続き有効。上級者は明示トグルで復活可。
+     削除ではなくdisplay:none（loadCfg/saveCfgの配線を壊さない）。 */
+  function managePassField(){
     try {
       var pass = document.getElementById('cfgProxyPass247');
       if (!pass) return;
       var pf = (pass.closest && (pass.closest('.fld')||pass.parentNode)) || pass.parentNode;
-      var note = document.getElementById('g250-pass-note');
-      if (valid()){
-        if (!note){
-          note = document.createElement('div'); note.id='g250-pass-note';
-          note.style.cssText='font-size:11px;opacity:.65;margin-top:3px';
-          note.textContent='Googleログイン中はアクセスコード不要です（空でOK）。';
-          pf.appendChild(note);
+      var reveal = lsGet('v292ShowAccessCode') === '1';
+      pf.style.display = reveal ? '' : 'none';
+      var box = document.getElementById('g250-settings');
+      if (box){
+        var link = document.getElementById('g250-code-toggle');
+        if (!link){
+          link = document.createElement('div'); link.id = 'g250-code-toggle';
+          link.style.cssText = 'font-size:11px;opacity:.6;margin-top:8px;cursor:pointer;text-decoration:underline;display:inline-block';
+          link.onclick = function(){ var cur = lsGet('v292ShowAccessCode') === '1'; lsSet('v292ShowAccessCode', cur ? '0' : '1'); managePassField(); };
+          box.appendChild(link);
         }
-      } else if (note){ note.remove(); }
+        link.textContent = reveal ? '🔑 アクセスコード欄を隠す' : '🔑 コードで入る（上級者向け）';
+      }
     } catch(e){}
   }
 
