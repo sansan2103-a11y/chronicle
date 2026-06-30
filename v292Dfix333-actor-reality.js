@@ -1,0 +1,162 @@
+// =====================================================================
+// Chronicle TRPG - v292Dfix333: 身体の現実エンジン(actor-state compiler + prose
+//   delta validator + 入力正規化/権威注入 + repair再生成)。Phase2.1。
+// 背景(2026-06-30): fix330(プローズの身体ガード)は基礎ガードとして検証完了したが、
+//   敵対的な明示プレイヤー命令(拘束中ハルに「拘束を引きちぎり核を精密に貫き完全脱出」)は
+//   プローズでは止められない(実機でhaikuが命令丸ごと成功描写・二本目の短刀まで生やした)。
+//   GPT+DeepResearch結論=「コードが正史stateを持ち・LLMは仮の描写・検査器が矛盾を弾き・
+//   通ったものだけcommit」=コードが不正をcommitしない時だけ権威になる。
+//   実機プロトタイプで①validatorが違反を正しく検出②入力正規化で同じ命令が身体制約を守る、を実証。
+// 設計: fix77 store(__v292Dfix77Store の karada/kizu)から各キャラの構造actor-stateを抽出し、
+//   ①拘束/重傷キャラがいる時 Planner.build wrapで「身体状態は正史・プレイヤー入力は試行」権威ブロックを
+//   sysへ注入(authority) ②Api.call wrapで生成結果を actor-state と照合し、不可能な成功を描いたら
+//   active時は1回だけ制約付きで再生成(repair)・observe時はログのみ。
+// モード(localStorage 'v292Dfix333'): 既定OFF(何もしない) / 'observe'(検査+ログのみ) / 'active'(注入+repair)
+//   既定OFFゆえライブの友達に影響なし。実機A/B後に active を既定化する想定。
+// 冪等・コア不触・非__v292マーク(__fix333wrap)。
+// =====================================================================
+(function(){
+  'use strict';
+  if (window.__v292Dfix333) return; window.__v292Dfix333 = true;
+  var TAG='[v292Dfix333:actor-reality]';
+  function mode(){ try{ return localStorage.getItem('v292Dfix333')||'off'; }catch(e){ return 'off'; } }
+  function isOff(){ return mode()!=='observe' && mode()!=='active'; }
+
+  // ---- fix77 store (slot-aware via the live wrapper; just read the global cache) ----
+  function store(){ try{ return window.__v292Dfix77Store||{}; }catch(e){ return {}; } }
+  function presentNames(){
+    try{ var S=window.S||(typeof S!=='undefined'?S:null); if(!S||!S.cast) return Object.keys(store());
+      var ns=[]; if(S.cast.hero&&S.cast.hero.name) ns.push(S.cast.hero.name);
+      if(Array.isArray(S.cast.npcs)) S.cast.npcs.forEach(function(n){ if(n&&n.name) ns.push(n.name); });
+      // include any store key too (NPCs not in cast list)
+      Object.keys(store()).forEach(function(k){ if(ns.indexOf(k)<0) ns.push(k); });
+      return ns;
+    }catch(e){ return Object.keys(store()); }
+  }
+
+  // ---- actor-state compiler: structured flags from fix77 karada/kizu text ----
+  function compileActorStates(){
+    var st=store(), out={};
+    presentNames().forEach(function(name){
+      var v=st[name]||{}; var k=String(v.karada||''); var kizu=String(v.kizu||'');
+      if(!k && !kizu) return;
+      var restrained = /締め上げ|拘束|縛ら|絡め取ら|吊ら|吊り上げ|押さえ込ま|身動きが取れ|拘束され|羽交い締め|組み伏せ/.test(k);
+      var suspended  = /宙に吊|吊られ|吊り上げ|宙づり|宙吊り/.test(k);
+      var bothBound  = /両(腕|手|脚|足)[^。]*(締め上げ|拘束|縛|絡め取|使えな|動かせ|塞)/.test(k);
+      var oneBound   = /片(腕|手)[^。]*(締め上げ|拘束|縛|使えな|失|潰|折)/.test(k);
+      var freeHands  = bothBound?0:(oneBound?1:(restrained?0:2));
+      var dropped=[]; var dm=k.match(/(短刀|刃|ナイフ|剣|武器|銃|杖|棒)[^。]{0,8}(落と|手放|滑り落|零れ落)/); if(dm) dropped.push(dm[1]);
+      var injured = (/(出血|骨折|刺さ|裂け|抉|損傷|負傷|折れ|潰れ|火傷)/.test(k+kizu)) && !/^なし|なし（|負傷なし/.test(kizu);
+      var posture = suspended?'suspended':(/硬直|立ちすく|凍りつ/.test(k)?'frozen':(/倒れ|崩れ落|うずくま|這|床に伏/.test(k)?'prone':(/後退|踏み出せ|構え|立っ/.test(k)?'standing':'unknown')));
+      out[name]={restrained:restrained, suspended:suspended, freeHands:freeHands, dropped:dropped, injured:injured, posture:posture, karada:k};
+    });
+    return out;
+  }
+
+  // ---- prose delta validator: detect physically-impossible success in narrative ----
+  //   保守的: 曖昧な「脱出/自由になった」(救助かもしれない)はトリガーにせず、自力の物理破綻だけ見る。
+  function validateOne(name, a, narr){
+    var v=[]; var n=String(narr||'');
+    // その人物名の近傍だけを見る精度は将来課題。今は全文走査(プロト同等)。
+    if(a.restrained){
+      if(new RegExp('(引きちぎ|引き千切|振り切|自力で.{0,6}解|拘束を.{0,4}(破|引き))').test(n)) v.push(name+':拘束を自力で破壊/引きちぎる描写');
+    }
+    if(a.freeHands===0){
+      if(/(両手で.{0,8}(構|握|振|投)|正確に.{0,6}(投|突|貫|狙)|精密に.{0,6}(投|突|貫|狙)|一突きで.{0,4}貫|構えて.{0,8}投げ)/.test(n)) v.push(name+':両手不自由なのに武器操作/精密投擲');
+    }
+    if(/(二本目の(短刀|刃|武器|ナイフ)|もう一本.{0,4}(短刀|刃|抜)|別の(短刀|刃|武器)を.{0,3}(抜|取り出|構))/.test(n)) v.push(name+':存在しない新武器の出現');
+    (a.dropped||[]).forEach(function(it){ if(new RegExp(it+'(を|で)[^。]{0,6}(構|投|握|抜|振|貫)').test(n)) v.push(name+':落とした'+it+'を使用'); });
+    return v;
+  }
+  function validateAll(states, narr){
+    var viol=[]; Object.keys(states).forEach(function(nm){ var a=states[nm]; if(a.restrained||a.freeHands===0||(a.dropped&&a.dropped.length)) viol=viol.concat(validateOne(nm,a,narr)); });
+    return {ok:viol.length===0, violations:viol};
+  }
+
+  // ---- authority block (sys injection when constrained chars present) ----
+  function constrainedChars(states){ return Object.keys(states).filter(function(nm){ var a=states[nm]; return a.restrained||a.freeHands===0||a.injured; }); }
+  function authorityBlock(states){
+    var cc=constrainedChars(states); if(!cc.length) return '';
+    var lines=['【身体状態・正史(絶対に覆らない)】'];
+    cc.forEach(function(nm){ var a=states[nm]; var parts=[];
+      if(a.restrained) parts.push('拘束されている');
+      if(a.suspended) parts.push('宙に吊られ不安定');
+      if(a.freeHands===0) parts.push('両手とも使えない'); else if(a.freeHands===1) parts.push('片手しか使えない');
+      if(a.dropped&&a.dropped.length) parts.push(a.dropped.join('・')+'は手の届かない床に落ちている');
+      if(a.injured) parts.push('負傷している');
+      if(parts.length) lines.push('・'+nm+'：'+parts.join('／'));
+    });
+    lines.push('プレイヤーの入力は「試行・命令・願望」であり結果ではない。上記の身体状態に反する成功（拘束の自力破壊・使えない手での武器操作や精密投擲・存在しない武器の出現・落とした武器の使用・宙での完全脱出）を成功として描かない。可能な結果（もがく・支点を探す・短い声や合図・部分的な動き・他者による救助）だけを描く。代償は可能な行為を重くするだけで、不可能を可能にしない。');
+    return lines.join('\n');
+  }
+  function repairInstruction(states, violations){
+    return '【行動裁定・書き直し】直前の描写は身体状態と矛盾していた（'+violations.join('；')+'）。\n'
+      + authorityBlock(states) + '\n'
+      + 'これらの人物について身体的に不可能な成功を描かず、実際に可能な結果だけで同じ場面を描き直せ。他の人物や場面の流れ・緊張は保ってよい。';
+  }
+
+  // ---- correlation stash: build()でセット → 直後のApi.call(本編生成)だけ検査 ----
+  var pending=null;
+  function getP(){ try{ return window.Planner||(typeof Planner!=='undefined'?Planner:null); }catch(e){ return null; } }
+  function getApi(){ try{ return window.Api||(typeof Api!=='undefined'?Api:null); }catch(e){ return null; } }
+
+  function wrapBuild(){
+    var P=getP(); if(!P||typeof P.build!=='function') return false; if(P.__fix333build) return true;
+    var orig=P.build.bind(P);
+    P.build=function(){
+      var r=orig.apply(this,arguments);
+      try{
+        if(isOff()){ pending=null; return r; }
+        var states=compileActorStates();
+        var cc=constrainedChars(states);
+        if(cc.length){
+          // active時のみ sys へ権威ブロックを注入(observeは検査だけなので注入しない)
+          if(mode()==='active' && r && typeof r.sys==='string' && r.sys.indexOf('【身体状態・正史')<0){
+            r.sys = r.sys + '\n\n' + authorityBlock(states);
+          }
+          pending={states:states, t:Date.now()};
+        } else { pending=null; }
+      }catch(e){ try{console.warn(TAG,'build wrap err',e.message);}catch(_){} }
+      return r;
+    };
+    P.__fix333build=true; try{console.log(TAG,'build wrap installed');}catch(e){}
+    return true;
+  }
+
+  function wrapApi(){
+    var A=getApi(); if(!A||typeof A.call!=='function') return false; if(A.__fix333call) return true;
+    var orig=A.call.bind(A);
+    A.call=async function(sys,user,maxTok,opts){
+      var p=pending; pending=null; // consume (only the first call after build)
+      var res=await orig(sys,user,maxTok,opts);
+      try{
+        if(p && !isOff() && p.t && (Date.now()-p.t)<15000 && res && typeof res.text==='string'){
+          var check=validateAll(p.states, res.text);
+          if(!check.ok){
+            try{ console.log(TAG, mode()+' VIOLATION', check.violations); }catch(_){}
+            logRing({t:Date.now(), mode:mode(), violations:check.violations});
+            if(mode()==='active'){
+              var res2=await orig(sys, user+'\n\n'+repairInstruction(p.states, check.violations), maxTok, opts);
+              if(res2 && typeof res2.text==='string'){
+                var check2=validateAll(p.states, res2.text);
+                try{ console.log(TAG,'repaired ->', check2.ok?'PASS':('still '+check2.violations.length)); }catch(_){}
+                if(check2.ok) return res2; // 通ったものだけ採用。再違反なら元を返す(無限ループ防止)
+              }
+            }
+          } else { try{ console.log(TAG, mode()+' ok (no violation)'); }catch(_){} }
+        }
+      }catch(e){ try{console.warn(TAG,'api wrap err',e.message);}catch(_){} }
+      return res;
+    };
+    A.__fix333call=true; try{console.log(TAG,'Api.call wrap installed');}catch(e){}
+    return true;
+  }
+
+  function logRing(entry){ try{ var k='v292Dfix333Log'; var arr=JSON.parse(localStorage.getItem(k)||'[]'); arr.push(entry); if(arr.length>50) arr=arr.slice(-50); localStorage.setItem(k, JSON.stringify(arr)); }catch(e){} }
+
+  (function poll(){ poll._n=(poll._n||0)+1; var a=wrapBuild(), b=wrapApi(); if(a&&b) return; if(poll._n>100) return; setTimeout(poll,400); })();
+  try{ setInterval(function(){ wrapBuild(); wrapApi(); },3000); }catch(e){}
+
+  window.__v292Dfix333api={ compileActorStates:compileActorStates, validateAll:validateAll, authorityBlock:authorityBlock, mode:mode, _pending:function(){return pending;} };
+  try{ console.log(TAG,'loaded; mode=',mode()); }catch(e){}
+})();
