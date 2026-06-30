@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Chronicle を起動中…</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d0d1a;color:#d6d7ee;
+    font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;
+    display:flex;align-items:center;justify-content:center;text-align:center}
+  .box{opacity:.85}
+  .sp{width:30px;height:30px;margin:0 auto 14px;border:3px solid #2d2d49;
+    border-top-color:#7a7ac0;border-radius:50%;animation:spin .9s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  a{color:#9a9ae0}
+</style>
+<script>
+  /* 常に最新版へ: version.txt(no-store)を読み、その値をクエリにしてindex.htmlへ。
+     同じビルドの間はindex.html?v=<build>がキャッシュされ高速、新ビルドが出た瞬間だけ取り直す。
+     iOSの強キャッシュもクエリが変わるので確実に回避できる。 */
+  (function(){
+    function go(v){ try{ location.replace('index.html?v=' + encodeURIComponent(v)); }catch(e){ location.href='index.html?v='+encodeURIComponent(v); } }
+    try{
+      fetch('version.txt?_=' + Date.now(), { cache:'no-store' })
+        .then(function(r){ return r.text(); })
+        .then(function(t){ var v=(t||'').trim() || ('t'+Date.now()); go(v); })
+        .catch(function(){ go('t'+Date.now()); });
+    }catch(e){ go('t'+Date.now()); }
+    /* 保険: 4秒たっても飛ばなければ手動リンク表示 */
+    setTimeout(function(){ var m=document.getElementById('fallback'); if(m) m.style.display='block'; }, 4000);
+  })();
+</script>
+</head>
+<body>
+  <div class="box">
+    <div class="sp"></div>
+    <div>Chronicle を起動しています…</div>
+    <div id="fallback" style="display:none;margin-top:12px">
+      自動で開かない場合は <a href="index.html">こちらをタップ</a>
+    </div>
+  </div>
+</body>
+</html>
