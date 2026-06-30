@@ -128,13 +128,45 @@
     ].join('\n');
   }
 
-  // ---- C: NPC自律 directive (Phase2.2 第一版・prose) v292Dfix333e ----
+  // ---- C v2: foregroundSelector (Phase2.2・importance主導・GPT精緻化) v292Dfix333g ----
   function npcAutonomyOn(){ try{ return localStorage.getItem('v292Dfix333Npc')==='1'; }catch(e){ return false; } }
-  function npcAutonomyBlock(states){
-    return ['【NPCの自律(局所のみ)】',
-      '登場している主人公以外の人物を棒立ち・置物にしない。各自の性格・関係・今の身体状態に応じて、このターンに自然な「局所的な反応や行動を一つ」取らせる(身じろぎ・短い発言・視線・移動・かばう・反撃・後ずさり・すがる・凍りつく等)。ただし各人物の身体状態(上記の正史)に反する行動はさせない。拘束・負傷で不可能な行為は取らせない。',
-      'NPCは「今ここ」の反応に徹する。新しい登場人物・新しい場所・場面の外で起きる出来事・時間の飛躍・物語全体を動かす大きな転換を、NPCの行動として勝手に作り出さない(それはプレイヤーと進行の領域)。'
-    ].join('\n');
+  function heroName(){ try{ var S=window.S||(0,eval)('S'); return (S&&S.cast&&S.cast.hero&&S.cast.hero.name)||''; }catch(e){ return ''; } }
+  var __prevKarada={};
+  function loadFg(){ try{ return JSON.parse(localStorage.getItem('v292Dfix333Fg')||'{}'); }catch(e){ return {}; } }
+  function saveFg(o){ try{ localStorage.setItem('v292Dfix333Fg', JSON.stringify(o)); }catch(e){} }
+  function isDenseTurn(states){ // 戦闘/救出など密ターン=前面1人。拘束/重傷キャラ在席 or 直近に脅威語。
+    try{ var any=Object.keys(states).some(function(n){var a=states[n]; return a.restrained||a.injured||a.freeHands<2;}); if(any) return true;
+      var S=window.S||(0,eval)('S'); var last=S&&S.turns&&S.turns.length?(S.turns[S.turns.length-1].narrative||''):''; return /襲|攻撃|斬|刃|血|悲鳴|怪異|敵|逃げ|掴ま|崩れ|咆哮|迫/.test(last.slice(-200));
+    }catch(e){ return false; } }
+  // 前面化選択: 主条件=場面importance、recencyは同点tie-breakのみ(GPT)
+  function selectForeground(states, playerText, turnNum){
+    var hero=heroName();
+    var names=Object.keys(states).filter(function(n){ return n!==hero; });
+    if(!names.length) return null;
+    var fg=loadFg();
+    var budget=isDenseTurn(states)?1:2;
+    var scored=names.map(function(n){
+      var a=states[n]; var k=a.karada||'';
+      var relevance=(playerText && String(playerText).indexOf(n)>=0)?1.0:0;          // ①働きかけられた相手
+      var changed=(__prevKarada[n]!==undefined && __prevKarada[n]!==k)?0.85:0;        // ②身体状態が変化
+      var bodyEvent=(a.restrained||a.injured||a.freeHands<2)?0.45:0;                  // ③身体/拘束に事象
+      var last=(fg[n]&&typeof fg[n].lastBeatTurn==='number')?fg[n].lastBeatTurn:-99;
+      var recency=Math.min(1,(turnNum-last)/3)*0.25;                                  // tie-break(小)
+      return {n:n, score:relevance*1.0 + changed + bodyEvent + recency};
+    });
+    scored.sort(function(x,y){ return y.score-x.score; });
+    var chosen=scored.slice(0,budget).map(function(s){return s.n;});
+    var bg=names.filter(function(n){ return chosen.indexOf(n)<0; });
+    chosen.forEach(function(n){ fg[n]={lastBeatTurn:turnNum}; }); saveFg(fg);
+    names.forEach(function(n){ __prevKarada[n]=states[n].karada||''; });
+    return {fg:chosen, bg:bg, budget:budget};
+  }
+  function foregroundBlock(sel){
+    if(!sel||!sel.fg.length) return '';
+    var lines=['【この一手で前面に出す人物】'+sel.fg.join('・')+' ＝ それぞれに、人物像と今の身体状態に合った具体的な局所反応か小さな動きを一つだけ(声・行動・視線・沈黙のどれか)。'];
+    if(sel.bg.length) lines.push('【背景の人物】'+sel.bg.join('・')+' ＝ 居ることは示すが前面化しない。前ターンから身体状態に変化がある時だけ一句で示し、変化が無ければ描写しなくてよい。');
+    lines.push('全員に順番に反応させる「点呼」をしない。反応の大きさは出来事の大きさに比例させる。トラウマや過去は短い感覚の侵入までで、詳しい回想や新事実は作らない。NPCは局所状態(身じろぎ・発言・移動・かばう・反撃・後ずさり等)を動かしてよいが、場面転換・時間経過・新キャラ/新場所/新事実・物語の結末確定はしない。');
+    return lines.join('\n');
   }
 
   function wrapBuild(){
@@ -160,9 +192,11 @@
           }
           pending={states:states, t:Date.now()};
         } else { pending=null; }
-        // C: NPC自律 directive(専用フラグ・拘束/重傷の有無に依らず登場NPCがいれば注入)
-        if(mode()==='active' && npcAutonomyOn() && r && typeof r.sys==='string' && r.sys.indexOf('【NPCの自律')<0){
-          r.sys = r.sys + '\n\n' + npcAutonomyBlock(states);
+        // C v2: foregroundSelector(専用フラグ)。毎ターン1-2人を前面化し名指し、残りは背景。
+        if(mode()==='active' && npcAutonomyOn() && r && typeof r.sys==='string' && r.sys.indexOf('【この一手で前面に出す')<0){
+          try{ var S2=window.S||(0,eval)('S'); var sel=selectForeground(states, text, (S2&&S2.turns?S2.turns.length:0));
+            var fb=foregroundBlock(sel); if(fb) r.sys=r.sys+'\n\n'+fb;
+          }catch(_fe){}
         }
       }catch(e){ try{console.warn(TAG,'build wrap err',e.message);}catch(_){} if(!r){ try{ r=orig.apply(this,args); }catch(_2){} } }
       return r;
