@@ -68,6 +68,9 @@
     (a.dropped||[]).forEach(function(it){ if(new RegExp(it+'(を|で)[^。]{0,6}(構|投|握|抜|振|貫)').test(n)) v.push(name+':落とした'+it+'を使用'); });
     return v;
   }
+  function proseOnly(text){ // strip internal tags so we validate only player-visible prose (fix333d)
+    try{ return String(text||'').split(/<react|<state|<summary/)[0]; }catch(e){ return String(text||''); }
+  }
   function validateAll(states, narr){
     var viol=[]; Object.keys(states).forEach(function(nm){ var a=states[nm]; if(a.restrained||a.freeHands===0||(a.dropped&&a.dropped.length)) viol=viol.concat(validateOne(nm,a,narr)); });
     return {ok:viol.length===0, violations:viol};
@@ -154,14 +157,14 @@
       var res=await orig(sys,user,maxTok,opts);
       try{
         if(p && !isOff() && p.t && (Date.now()-p.t)<600000 && res && typeof res.text==='string'){
-          var check=validateAll(p.states, res.text);
+          var check=validateAll(p.states, proseOnly(res.text));
           if(!check.ok){
             try{ console.log(TAG, mode()+' VIOLATION', check.violations); }catch(_){}
             logRing({t:Date.now(), mode:mode(), violations:check.violations});
             if(mode()==='active'){
               var res2=await orig(sys, user+'\n\n'+repairInstruction(p.states, check.violations), maxTok, opts);
               if(res2 && typeof res2.text==='string'){
-                var check2=validateAll(p.states, res2.text);
+                var check2=validateAll(p.states, proseOnly(res2.text));
                 try{ console.log(TAG,'repaired ->', check2.ok?'PASS':('still '+check2.violations.length)); }catch(_){}
                 if(check2.ok) return res2; // 通ったものだけ採用。再違反なら元を返す(無限ループ防止)
               }
