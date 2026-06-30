@@ -45,7 +45,7 @@
       var bothBound  = /両(腕|手|脚|足)[^。]*(締め上げ|拘束|縛|絡め取|使えな|動かせ|塞)/.test(k);
       var oneBound   = /片(腕|手)[^。]*(締め上げ|拘束|縛|使えな|失|潰|折)/.test(k);
       var freeHands  = bothBound?0:(oneBound?1:(restrained?0:2));
-      var dropped=[]; var dm=k.match(/(短刀|刃|ナイフ|剣|武器|銃|杖|棒)[^。]{0,8}(落と|手放|滑り落|零れ落)/); if(dm) dropped.push(dm[1]);
+      var dropped=[]; var dm=k.match(/(短刀|刃|ナイフ|剣|武器|銃|杖|棒)[^。]{0,8}(落と|落ち|手放|滑り落|零れ落)/); if(dm) dropped.push(dm[1]);
       var injured = (/(出血|骨折|刺さ|裂け|抉|損傷|負傷|折れ|潰れ|火傷)/.test(k+kizu)) && !/^なし|なし（|負傷なし/.test(kizu);
       var posture = suspended?'suspended':(/硬直|立ちすく|凍りつ/.test(k)?'frozen':(/倒れ|崩れ落|うずくま|這|床に伏/.test(k)?'prone':(/後退|踏み出せ|構え|立っ/.test(k)?'standing':'unknown')));
       out[name]={restrained:restrained, suspended:suspended, freeHands:freeHands, dropped:dropped, injured:injured, posture:posture, karada:k};
@@ -130,7 +130,7 @@
       var p=pending; pending=null; // consume (only the first call after build)
       var res=await orig(sys,user,maxTok,opts);
       try{
-        if(p && !isOff() && p.t && (Date.now()-p.t)<15000 && res && typeof res.text==='string'){
+        if(p && !isOff() && p.t && (Date.now()-p.t)<600000 && res && typeof res.text==='string'){
           var check=validateAll(p.states, res.text);
           if(!check.ok){
             try{ console.log(TAG, mode()+' VIOLATION', check.violations); }catch(_){}
