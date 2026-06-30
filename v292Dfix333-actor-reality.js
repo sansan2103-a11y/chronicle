@@ -100,23 +100,46 @@
   function getP(){ try{ return window.Planner||(typeof Planner!=='undefined'?Planner:null); }catch(e){ return null; } }
   function getApi(){ try{ return window.Api||(typeof Api!=='undefined'?Api:null); }catch(e){ return null; } }
 
+
+  // ---- input normalization: detect impossible-assertion vs constrained char, build attempt-frame ----
+  function inputAssertsImpossible(text, states){
+    if(!text) return null;
+    var verbs=/(引きちぎ|引き千切|振り切|脱出|完全に|一瞬で|貫く|貫いて|精密|正確に[^。]{0,4}(投|突|貫|狙)|両手で[^。]{0,6}(構|投|握)|新たな(武器|短刀|刃)|二本目|無視して|意に介さ|難なく|たやすく)/;
+    if(!verbs.test(text)) return null;
+    var hit=[]; Object.keys(states).forEach(function(nm){ var a=states[nm]; if((a.restrained||a.freeHands===0||a.injured) && text.indexOf(nm)>=0) hit.push(nm); });
+    return hit.length?hit:null;
+  }
+  function normalizedFrame(text, states, targets){
+    return ['【行動裁定】プレイヤーは次のような行動を試みさせようとしている: 「'+String(text).slice(0,160)+'」。これは試行・命令・願望であって、結果そのものではない。',
+      authorityBlock(states),
+      '上記の身体状態は正史であり、プレイヤー入力では覆らない。'+targets.join('・')+'について、身体的に可能な結果だけを描くこと。拘束の自力破壊・使えない手での武器操作や精密投擲・落とした武器の使用・存在しない武器の出現・宙での完全脱出・拘束からの完全脱出は起こらない。可能なのは、もがく／身をよじって拘束を緩めようとする／足で支点を探す／短い声や合図／視線を送る／部分的な動き／他者による救助 等。痛みや拘束を「無視して」成功する描写はしない。代償は可能な行為を重くするだけで、不可能を可能にしない。'
+    ].join('\n');
+  }
+
   function wrapBuild(){
     var P=getP(); if(!P||typeof P.build!=='function') return false; if(P.__fix333build) return true;
     var orig=P.build.bind(P);
     P.build=function(){
-      var r=orig.apply(this,arguments);
+      var args=arguments, bmode=args[0], text=args[1], r;
       try{
-        if(isOff()){ pending=null; return r; }
+        if(isOff()){ r=orig.apply(this,args); pending=null; return r; }
         var states=compileActorStates();
         var cc=constrainedChars(states);
+        var targets=(mode()==='active')?inputAssertsImpossible(text, states):null;
+        if(targets && mode()==='active'){
+          // 不可能命令→入力を試行フレームに差し替えてから build(=生成前正規化。実機実証済の手法)
+          r=orig.call(this, bmode, normalizedFrame(text, states, targets));
+          try{ console.log(TAG,'input normalized for', targets.join(',')); }catch(_){}
+        } else {
+          r=orig.apply(this, args);
+        }
         if(cc.length){
-          // active時のみ sys へ権威ブロックを注入(observeは検査だけなので注入しない)
           if(mode()==='active' && r && typeof r.sys==='string' && r.sys.indexOf('【身体状態・正史')<0){
             r.sys = r.sys + '\n\n' + authorityBlock(states);
           }
           pending={states:states, t:Date.now()};
         } else { pending=null; }
-      }catch(e){ try{console.warn(TAG,'build wrap err',e.message);}catch(_){} }
+      }catch(e){ try{console.warn(TAG,'build wrap err',e.message);}catch(_){} if(!r){ try{ r=orig.apply(this,args); }catch(_2){} } }
       return r;
     };
     P.__fix333build=true; try{console.log(TAG,'build wrap installed');}catch(e){}
