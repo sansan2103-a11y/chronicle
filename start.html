@@ -20,7 +20,8 @@
      同じビルドの間はindex.html?v=<build>がキャッシュされ高速、新ビルドが出た瞬間だけ取り直す。
      iOSの強キャッシュもクエリが変わるので確実に回避できる。 */
   (function(){
-    function go(v){ try{ location.replace('index.html?v=' + encodeURIComponent(v)); }catch(e){ location.href='index.html?v='+encodeURIComponent(v); } }
+    var extra = location.search ? location.search.replace(/^\?/, '&') : ''; /* ?code= 等を温存 */
+    function go(v){ var u='index.html?v=' + encodeURIComponent(v) + extra; try{ location.replace(u); }catch(e){ location.href=u; } }
     try{
       fetch('version.txt?_=' + Date.now(), { cache:'no-store' })
         .then(function(r){ return r.text(); })
