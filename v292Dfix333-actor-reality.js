@@ -40,11 +40,13 @@
     presentNames().forEach(function(name){
       var v=st[name]||{}; var k=String(v.karada||''); var kizu=String(v.kizu||'');
       if(!k && !kizu) return;
-      var restrained = /締め上げ|拘束|縛ら|絡め取ら|吊ら|吊り上げ|押さえ込ま|身動きが取れ|拘束され|羽交い締め|組み伏せ/.test(k);
+      var restrained = /締め上げ|拘束|縛ら|絡め取ら|吊ら|吊り上げ|押さえ込ま|身動きが取れ|拘束され|羽交い締め|組み伏せ|押さえつけ|引き倒/.test(k);
       var suspended  = /宙に吊|吊られ|吊り上げ|宙づり|宙吊り/.test(k);
-      var bothBound  = /両(腕|手|脚|足)[^。]*(締め上げ|拘束|縛|絡め取|使えな|動かせ|塞)/.test(k);
-      var oneBound   = /片(腕|手)[^。]*(締め上げ|拘束|縛|使えな|失|潰|折)/.test(k);
-      var freeHands  = bothBound?0:(oneBound?1:(restrained?0:2));
+      // freeHands は「手・腕」の拘束だけで判定する(脚の拘束では手は自由)。v292Dfix333e
+      var bothHandsBound = /両(腕|手)[^。]{0,16}(締め上げ|拘束|縛|絡め取|使えな|動かせ|塞|頭上)|両手とも[^。]{0,8}(使えな|拘束|縛|塞|動かせ)|後ろ手に縛|全身[^。]{0,8}(縛|拘束|締め)|簀巻き/.test(k);
+      var oneHandFree    = /(自由な(左|右)?手|片(腕|手)[^。]{0,4}(だけ|のみ)|左手だけ|右手だけ|一方の(腕|手)[^。]{0,6}(自由|使え|動))/.test(k);
+      var oneHandBound   = /(片|左|右)(腕|手|手首)[^。]{0,8}(締め上げ|拘束|縛|絡め取|使えな|失|潰|折|押さえつけ|弾き飛ば)/.test(k);
+      var freeHands  = bothHandsBound?0:(oneHandFree?1:(oneHandBound?1:2));
       var dropped=[]; var dm=k.match(/(短刀|刃|ナイフ|剣|武器|銃|杖|棒)[^。]{0,8}(落と|落ち|手放|滑り落|零れ落)/); if(dm) dropped.push(dm[1]);
       var injured = (/(出血|骨折|刺さ|裂け|抉|損傷|負傷|折れ|潰れ|火傷)/.test(k+kizu)) && !/^なし|なし（|負傷なし/.test(kizu);
       var posture = suspended?'suspended':(/硬直|立ちすく|凍りつ/.test(k)?'frozen':(/倒れ|崩れ落|うずくま|這|床に伏/.test(k)?'prone':(/後退|踏み出せ|構え|立っ/.test(k)?'standing':'unknown')));
@@ -108,14 +110,29 @@
   function inputAssertsImpossible(text, states){
     if(!text) return null;
     var verbs=/(引きちぎ|引き千切|振り切|脱出|完全に|一瞬で|貫く|貫いて|精密|正確に[^。]{0,4}(投|突|貫|狙)|両手で[^。]{0,6}(構|投|握)|新たな(武器|短刀|刃)|二本目|無視して|意に介さ|難なく|たやすく)/;
-    if(!verbs.test(text)) return null;
-    var hit=[]; Object.keys(states).forEach(function(nm){ var a=states[nm]; if((a.restrained||a.freeHands===0||a.injured) && text.indexOf(nm)>=0) hit.push(nm); });
+    // v292Dfix333e: 負傷者への精密/全力動作も拾う(負傷ベースの不可能=従来の見逃しを補完)
+    var injuryVerbs=/(精密|正確|両手で|全力で|渾身|思い切り|力任せ|きっちり|寸分|繊細に)/;
+    var hit=[];
+    Object.keys(states).forEach(function(nm){ var a=states[nm]; if(text.indexOf(nm)<0) return;
+      if((a.restrained||a.freeHands===0) && verbs.test(text)) hit.push(nm);
+      else if(a.injured && injuryVerbs.test(text) && verbs.test(text)) hit.push(nm);
+      else if(a.injured && a.freeHands<2 && injuryVerbs.test(text)) hit.push(nm);
+    });
     return hit.length?hit:null;
   }
   function normalizedFrame(text, states, targets){
     return ['【行動裁定】プレイヤーは次のような行動を試みさせようとしている: 「'+String(text).slice(0,160)+'」。これは試行・命令・願望であって、結果そのものではない。',
       authorityBlock(states),
       '上記の身体状態は正史であり、プレイヤー入力では覆らない。'+targets.join('・')+'について、身体的に可能な結果だけを描くこと。拘束の自力破壊・使えない手での武器操作や精密投擲・落とした武器の使用・存在しない武器の出現・宙での完全脱出・拘束からの完全脱出は起こらない。可能なのは、もがく／身をよじって拘束を緩めようとする／足で支点を探す／短い声や合図／視線を送る／部分的な動き／他者による救助 等。痛みや拘束を「無視して」成功する描写はしない。代償は可能な行為を重くするだけで、不可能を可能にしない。'
+    ].join('\n');
+  }
+
+  // ---- C: NPC自律 directive (Phase2.2 第一版・prose) v292Dfix333e ----
+  function npcAutonomyOn(){ try{ return localStorage.getItem('v292Dfix333Npc')==='1'; }catch(e){ return false; } }
+  function npcAutonomyBlock(states){
+    return ['【NPCの自律(局所のみ)】',
+      '登場している主人公以外の人物を棒立ち・置物にしない。各自の性格・関係・今の身体状態に応じて、このターンに自然な「局所的な反応や行動を一つ」取らせる(身じろぎ・短い発言・視線・移動・かばう・反撃・後ずさり・すがる・凍りつく等)。ただし各人物の身体状態(上記の正史)に反する行動はさせない。拘束・負傷で不可能な行為は取らせない。',
+      'NPCは「今ここ」の反応に徹する。新しい登場人物・新しい場所・場面の外で起きる出来事・時間の飛躍・物語全体を動かす大きな転換を、NPCの行動として勝手に作り出さない(それはプレイヤーと進行の領域)。'
     ].join('\n');
   }
 
@@ -142,6 +159,10 @@
           }
           pending={states:states, t:Date.now()};
         } else { pending=null; }
+        // C: NPC自律 directive(専用フラグ・拘束/重傷の有無に依らず登場NPCがいれば注入)
+        if(mode()==='active' && npcAutonomyOn() && r && typeof r.sys==='string' && r.sys.indexOf('【NPCの自律')<0){
+          r.sys = r.sys + '\n\n' + npcAutonomyBlock(states);
+        }
       }catch(e){ try{console.warn(TAG,'build wrap err',e.message);}catch(_){} if(!r){ try{ r=orig.apply(this,args); }catch(_2){} } }
       return r;
     };
