@@ -19,7 +19,8 @@
   'use strict';
   if (window.__v292Dfix333) return; window.__v292Dfix333 = true;
   var TAG='[v292Dfix333:actor-reality]';
-  function mode(){ try{ return localStorage.getItem('v292Dfix333')||'off'; }catch(e){ return 'off'; } }
+  // 既定ON(active)。OFFは緊急退避: v292Dfix333Off='1' か v292Dfix333='off'。observeも明示時のみ。v292Dfix333f
+  function mode(){ try{ if(localStorage.getItem('v292Dfix333Off')==='1') return 'off'; var m=localStorage.getItem('v292Dfix333'); if(m==='off') return 'off'; if(m==='observe') return 'observe'; return 'active'; }catch(e){ return 'active'; } }
   function isOff(){ return mode()!=='observe' && mode()!=='active'; }
 
   // ---- fix77 store (slot-aware via the live wrapper; just read the global cache) ----
