@@ -101,10 +101,16 @@
       return /襲(い|う|っ)|攻撃|斬りかか|斬りつけ|斬り(下ろ|上げ)|刃を(振|突|向)|悲鳴|絶叫|咆哮|迫っ(て|た)|掴みかか|飛びかか|振り下ろ|突進|交戦|殴りかか|喰らいつ|牙を|爪を(振|立)/.test(last.slice(-220));
     }catch(e){ return false; } }
   function lastBeat(fg,n){ return (fg[n]&&typeof fg[n].lastBeatTurn==='number')?fg[n].lastBeatTurn:-99; }
+  // Phase2.2 ①: eligibility候補制約(DeepResearch 3回目)。反応できないNPC(意識なし/死亡/不在)を前面化候補から外す物理ゲート。矯正再生成はしない・背景としては残る。OFF退避=v292Dfix333Elig='0'
+  function eligOff(){ try{ return localStorage.getItem('v292Dfix333Elig')==='0'; }catch(e){ return false; } }
+  function isEligible(a){ var k=(a&&a.karada)||''; if(/気絶|失神|意識を失|昏倒|気を失|昏睡|生き絶え|絶命|事切れ|死亡|死んで/.test(k)) return false; if(/その場にいない|立ち去っ|退場|姿を消し|去っていっ|不在/.test(k)) return false; return true; }
   function selectForeground(states, playerText, turnNum){
     var hero=heroName();
-    var names=Object.keys(states).filter(function(n){ return n!==hero; });
-    if(!names.length) return null;
+    var allNames=Object.keys(states).filter(function(n){ return n!==hero; });
+    if(!allNames.length) return null;
+    // eligibility候補制約: 反応可能なNPCだけを前面化候補に(全滅時は全員にフォールバック)。bgは全present。
+    var names = eligOff() ? allNames : allNames.filter(function(n){ return isEligible(states[n]); });
+    if(!names.length) names = allNames;
     var fg=loadFg();
     var dense=isDenseTurn(states);
     var budget=dense?1:2;
@@ -134,7 +140,7 @@
     }
     var backstopN = dense ? N+2 : N;
     names.forEach(function(n){ if(chosen.indexOf(n)<0 && (turnNum-lastBeat(fg,n))>=backstopN && chosen.length<budget+1) chosen.push(n); });
-    var bg=names.filter(function(n){ return chosen.indexOf(n)<0; });
+    var bg=allNames.filter(function(n){ return chosen.indexOf(n)<0; });
     chosen.forEach(function(n){ fg[n]=fg[n]||{}; fg[n].lastBeatTurn=turnNum; }); saveFg(fg);
     names.forEach(function(n){ __prevKarada[n]=states[n].karada||''; });
     logRotation(chosen, names, turnNum);
@@ -265,19 +271,19 @@
       }
       if(named.length) lastOwner=owner;
     });
-    var beats={}, fullN=0, charShare={}, total=0, seenN=0;
+    var beats={}, fullN=0, seenN=0, fullShare={}, fullTotal=0;
     npcNames.forEach(function(n){
       var a=acc[n]; if(!a.seen){ beats[n]='absent'; return; }
       seenN++;
       var full = a.speech || a.quote || (a.actor && a.clauses>=2);            // full=発話/引用 or 能動的身体反応+複数節。背景一句/静的状態はcompressed
-      var cls= full?'full':'compressed'; beats[n]=cls; if(cls==='full') fullN++;
-      charShare[n]=a.chars; total+=a.chars;
+      var cls= full?'full':'compressed'; beats[n]=cls; if(cls==='full'){ fullN++; fullShare[n]=a.chars; fullTotal+=a.chars; }
     });
     var lowSignal = seenN<=1;                                                  // 主人公焦点/希薄ターン=点呼統計から除外(DeepResearch)
     var cats={}; npcNames.forEach(function(n){ Object.keys(acc[n].melo||{}).forEach(function(c){ (cats[c]=cats[c]||[]).push(n); }); });
     var meloFlags=[]; Object.keys(cats).forEach(function(c){ if(cats[c].length>=2) meloFlags.push(c+':'+cats[c].join('/')); });
-    var maxShare=0; Object.keys(charShare).forEach(function(n){ if(charShare[n]>maxShare) maxShare=charShare[n]; });
-    var monopoly= total>0 && (maxShare/total)>0.75 && Object.keys(charShare).length>=2;
+    // monopoly再定義(DeepResearch3): fullCount>=2で1人がfull反応内容の>65%を占める時のみ。fullCount<=1では発火させない(背景言及の文字数偏りでの誤発火を除去)。
+    var maxFull=0; Object.keys(fullShare).forEach(function(n){ if(fullShare[n]>maxFull) maxFull=fullShare[n]; });
+    var monopoly= fullN>=2 && fullTotal>0 && (maxFull/fullTotal)>0.65;
     return { beats:beats, fullCount:fullN, budget:budget, rollcall:(fullN>budget && !lowSignal), melodrama:meloFlags, monopoly:monopoly, lowSignal:lowSignal };
   }
   function logQuality(entry){ try{ var k='v292Dfix333Qual'; var arr=JSON.parse(localStorage.getItem(k)||'[]'); arr.push(entry); if(arr.length>60) arr=arr.slice(-60); localStorage.setItem(k, JSON.stringify(arr)); }catch(e){} }
