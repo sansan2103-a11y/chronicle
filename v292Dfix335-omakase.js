@@ -168,6 +168,14 @@
       // ★既入力を先にスナップショット(保存済み/入力途中を問わず、ユーザーの値を必ず残す)
       var FIELD_IDS=['cfgHName','cfgHDesc','cfgLore','cfgLoc','cfgObj','cfgTone'];
       var snap={}; FIELD_IDS.forEach(function(id){ var e=document.getElementById(id); if(e && e.value && e.value.trim()) snap[id]=e.value; });
+      // v292Dfix339: openSettings()のNPCリスト再描画は保存前のDOM編集(新規追加NPC含む)を
+      //   S.cast由来で作り直して消す(fix107と同根)。再描画前にDOM→S.castへ確定して保全。
+      try{ var _st=window.S||(0,eval)('S');
+        if(_st&&_st.cast){ if(!_st.cast.npcs) _st.cast.npcs=[];
+          var _F=['name','desc','personality','coreDesire','coreFear','wound'];
+          var _cs=document.querySelectorAll('#npcList .npc-card');
+          for(var _i=0;_i<_cs.length;_i++){ if(!_st.cast.npcs[_i]) _st.cast.npcs[_i]={};
+            for(var _j=0;_j<_F.length;_j++){ var _el=_cs[_i].querySelector('[data-f="'+_F[_j]+'"]'); if(_el) _st.cast.npcs[_i][_F[_j]]=_el.value; } } } }catch(_){}
       try{ if(typeof UI!=='undefined' && UI.openSettings) UI.openSettings(); }catch(_){}
       setTimeout(function(){ fillFields(f);
         // openSettingsの再描画やfillで変わった既入力を元に戻す=ユーザーの種を尊重
