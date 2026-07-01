@@ -165,7 +165,9 @@
       if(err||!BANK){ try{ UI.setStatus('おまかせ生成: 種データの読込に失敗しました'); }catch(_){}; return; }
       var pick=drawStartPack();
       var f=mapToFields(pick);
-      try{ if(typeof UI!=='undefined' && UI.openSettings) UI.openSettings(); }catch(_){}
+      // 設定フォームが既に開いていれば openSettings を呼ばない(保存済み設定でユーザーの現入力を上書きしないため)
+      var fieldsVisible=(function(){ var e=document.getElementById('cfgHName'); return !!(e && e.offsetParent!==null); })();
+      try{ if(!fieldsVisible && typeof UI!=='undefined' && UI.openSettings) UI.openSettings(); }catch(_){}
       setTimeout(function(){ fillFields(f);
         try{ UI.setStatus('🎲 おまかせで空欄を埋めました（'+GLABEL[f.genre]+'）。書いた内容はそのまま残ります。内容を見て「保存してゲーム開始」を'); }catch(_){}
       }, 120);
