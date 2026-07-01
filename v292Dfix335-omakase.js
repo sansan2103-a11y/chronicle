@@ -114,13 +114,15 @@
       desc:ns.text+'。主人公とは「'+pick.relationship.text+'」という間柄。',
       personality:moodToTraits(pick.mood_tone),
       coreDesire:d.want||'自分の居場所を守ること',
-      coreFear:(d.wound? d.wound.replace(/。$/,'')+'の再来':'すべてを失うこと'),
+      coreFear:(d.need? 'ふたたび'+d.wound.replace(/。$/,'').replace(/^.*?、/,'')+'こと':'すべてを失うこと'),
       wound:d.wound||'語られない過去の傷を抱えている。' };
     return { genre:g, lore:lore, loc:loc, obj:obj, tone:tone, hero:hero, npc:npc };
   }
   function heroStanceShort(a){ return a.text.split('。')[0]; }
   function lackShort(a){ return a.text.split('。')[0]; }
-  function moodToTraits(m){ return (m.mood||'')+'な空気をまとう。'+(m.register||'')+'な物言い。'; }
+  var MOODJP={uneasy:'落ち着かない',foreboding:'不吉な予感を漂わせる',eerie:'どこか無気味な',melancholy:'物憂げな',serene:'穏やかな',suspenseful:'張り詰めた',brutal:'苛烈な',grim:'陰鬱な',hopeful:'かすかな希望を抱く',claustrophobic:'息苦しさをまとう',nostalgic:'懐かしさを帯びた',paranoid:'疑い深い',tender:'優しく脆い',dreamlike:'夢うつつのような',cathartic:'切なさを抱えた',reverent:'畏まった',restless:'焦れた',uncanny:'底知れない'};
+  var REGJP={restrained:'言葉少な',tense:'緊張した',understated:'控えめな',lyrical:'詩的な',gentle:'柔らかな',clipped:'短く鋭い',blunt:'ぶっきらぼうな',heavy:'重い',warm:'温かな',tight:'切り詰めた',soft:'穏やかな',jittery:'落ち着かない',intimate:'親密な',hazy:'とりとめのない',bittersweat:'ほろ苦い',bittersweet:'ほろ苦い',solemn:'厳かな',agitated:'苛立った',flat:'平坦な'};
+  function moodToTraits(m){ var mo=MOODJP[m.mood]||'独特な'; var re=REGJP[m.register]||'落ち着いた'; return mo+'雰囲気で、'+re+'物言いをする。'; }
 
   // --- 設定フィールドへ書き込む ---
   function setVal(id,v){ var el=document.getElementById(id); if(el){ el.value=v; try{ el.dispatchEvent(new Event('input',{bubbles:true})); }catch(_){} } }
