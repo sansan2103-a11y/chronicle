@@ -33,9 +33,9 @@
 
   // ------- 5画風(append-only=既存セーブのindex 0-3を保持) -------
   // 0 anime / 1 realistic / 2 watercolor / 3 dark(旧darkfantasy=「従来」) / 4 sf(新)
-  var LABELS=['アニメ','リアル','水彩','ダーク','SF'];
+  var LABELS=['アニメ','リアル','水彩','ダーク','SF','リアルアニメ'];
   var STYLE_TITLE='AIアイコンの絵柄。アニメ=明るいセル / リアル=暖色の写実 / 水彩=淡く優しい / '
-    +'ダーク=退色ゴシック(怪異・ダークファンタジー向き) / SF=寒色シネマティック。'
+    +'ダーク=退色ゴシック(怪異・ダークファンタジー向き) / SF=寒色シネマティック / リアルアニメ=柔らかい半実写アニメ(なめらか肌・くすんだ自然色)。'
     +'切替で全キャラ作り直し。世界のジャンルから自動で既定が選ばれ、ここでいつでも上書きできます';
   // 人物ポートレート用プレフィックス(前置き=Fluxで最も強い位置・hexでパレット固定)
   var PREFIX=[
@@ -43,7 +43,8 @@
     /*realistic*/  'Realistic digital painting, soft natural window light, warm muted palette hex #C89B7B hex #6B7A8F, gentle catch-lights, grounded semi-realism, head-and-shoulders character portrait, visible clothing, highly detailed',
     /*watercolor*/ 'Soft watercolor illustration, delicate transparent washes, gentle bleeding edges, pale low-saturation palette hex #D9C9B0 hex #A9B7C6, tender nostalgic mood, head-and-shoulders character portrait, visible clothing',
     /*dark*/       'Dark painterly character portrait, desaturated muted palette hex #2B2B33 hex #6E5A5A, deep shadows and dim moody lighting, pale skin, somber gothic horror atmosphere, dark shadowy background, head-and-shoulders, visible clothing, high quality',
-    /*sf*/         'Cinematic science-fiction character portrait, cool teal and cyan palette hex #1B3B4B hex #3FB0C8, rim light with subtle underlight, sleek high-tech materials, dark high-contrast background, head-and-shoulders, visible clothing, highly detailed'
+    /*sf*/         'Cinematic science-fiction character portrait, cool teal and cyan palette hex #1B3B4B hex #3FB0C8, rim light with subtle underlight, sleek high-tech materials, dark high-contrast background, head-and-shoulders, visible clothing, highly detailed',
+    /*realanime*/  'Soft semi-realistic anime portrait, delicate smooth rendering, pale luminous porcelain skin, fine detailed silky hair, gentle soft shading, natural muted palette, realistic facial features with subtle anime influence, soft diffused lighting, 2.5D, head-and-shoulders character portrait, visible clothing, highly detailed'
   ];
   // 人外(怪異/怪物)用=人型強制語を外し、色調・雰囲気だけ継ぐ
   var PREFIX_CREATURE=[
@@ -51,8 +52,14 @@
     /*realistic*/  'Realistic creature concept art, cinematic lighting, muted palette hex #6B7A8F, highly detailed, non-human creature, no human face',
     /*watercolor*/ 'Soft watercolor creature illustration, delicate washes, pale palette hex #A9B7C6, ethereal, non-human creature',
     /*dark*/       'Dark creature concept art, desaturated palette hex #2B2B33, deep shadows, dim moody lighting, somber gothic horror atmosphere, non-human creature, monster design, no human face',
-    /*sf*/         'Cinematic sci-fi creature concept art, cool teal palette hex #1B3B4B, rim light, biomechanical detail, dark background, non-human creature, no human face'
+    /*sf*/         'Cinematic sci-fi creature concept art, cool teal palette hex #1B3B4B, rim light, biomechanical detail, dark background, non-human creature, no human face',
+    /*realanime*/  'Soft semi-realistic creature concept art, delicate smooth detailed rendering, natural muted palette, soft diffused lighting, non-human creature, no human face'
   ];
+  // v292Dfix344: 「見る」(fix315b2)画像=768x512。fix315b2のstyleTailはindex0-3のみ対応で4/5は
+  //   default(ダークファンタジー)に落ちる。ここでartStyle 4/5の時だけSEE画像のdarkタグを差し替える。
+  var SEE_OLD_DARK='dark fantasy illustration, dim moody lighting, muted desaturated colors, gothic horror atmosphere';
+  var SEE_TAIL={ 4:'cinematic science-fiction illustration, cool teal and cyan palette, rim lighting, sleek high-tech materials, dramatic dark atmosphere',
+                 5:'soft semi-realistic anime illustration, delicate smooth rendering, pale luminous skin, natural muted palette, soft diffused lighting, 2.5D, highly detailed' };
 
   // ------- プロンプト整形 -------
   // 旧suffixの開始点(features.js STYLE_SUFFIX / fix197 STYLE_SUFFIX_284 の先頭語)。
@@ -77,7 +84,7 @@
 
   function transformPrompt(raw){
     try{
-      var idx=artIdx(); if(idx<0||idx>4) idx=3;
+      var idx=artIdx(); if(idx<0||idx>=PREFIX.length) idx=3;
       var s=String(raw||''); if(!s) return raw;
       var creature=isCreaturePrompt(s);
       s=stripOwnPrefix(s);
@@ -103,6 +110,7 @@
         return false;
       }
       if(u.indexOf('image.pollinations.ai/prompt/')>=0 && /width=384&height=384/.test(u)) return 'get';
+      if(u.indexOf('image.pollinations.ai/prompt/')>=0 && /width=768&height=512/.test(u)) return 'see';
     }catch(e){}
     return false;
   }
@@ -119,6 +127,16 @@
             var np=transformPrompt(dec);
             url=String(url).slice(0,mm.index)+'/prompt/'+encodeURIComponent(np)+mm[2];
           }
+        } else if(kind==='see'){
+          // v292Dfix344: 「見る」画像=artStyle 4/5の時だけfix315bのdarkタグを新画風tailへ差し替え(0-3は正しいので不触)
+          var idx=artIdx();
+          if((idx===4||idx===5) && SEE_TAIL[idx]){
+            var ms=/\/prompt\/([^?]+)(\?.*)$/.exec(String(url));
+            if(ms){ var ds=''; try{ ds=decodeURIComponent(ms[1]); }catch(_e){ ds=ms[1]; }
+              if(ds.indexOf(SEE_OLD_DARK)>=0){ ds=ds.replace(SEE_OLD_DARK, SEE_TAIL[idx]);
+                url=String(url).slice(0,ms.index)+'/prompt/'+encodeURIComponent(ds)+ms[2]; }
+            }
+          }
         }
       }
     }catch(e){ try{ console.warn(TAG,'wrap error',e); }catch(_){} }
@@ -129,14 +147,13 @@
   function patchSelector(){
     try{
       var sel=document.getElementById('v292-style-sel'); if(!sel) return;
-      // option 3 のラベルを「ダーク」に
-      var o3=sel.querySelector('option[value="3"]'); if(o3 && o3.textContent!=='ダーク') o3.textContent='ダーク';
-      // SF(value 4)を追加
-      if(!sel.querySelector('option[value="4"]')){
-        var o=document.createElement('option'); o.value='4'; o.textContent='SF'; sel.appendChild(o);
+      // v292Dfix344: LABELS全件をセレクタに反映(既存0-2はラベル一致・3ダーク改称・4SF/5リアルアニメ追加)
+      for(var i=0;i<LABELS.length;i++){
+        var o=sel.querySelector('option[value="'+i+'"]');
+        if(!o){ o=document.createElement('option'); o.value=String(i); sel.appendChild(o); }
+        if(o.textContent!==LABELS[i]) o.textContent=LABELS[i];
       }
       sel.title=STYLE_TITLE;
-      // 現在値を反映(index4等)
       try{ var c=getCfg(); if(c&&c.artStyle!=null) sel.value=String(+c.artStyle); }catch(_){}
     }catch(e){}
   }
