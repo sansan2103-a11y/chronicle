@@ -157,11 +157,26 @@
 
   // ------- ジャンル→既定画風(おまかせから呼ばれる・上書き可) -------
   var GENRE_STYLE={ mh:3 /*現代怪異→ダーク*/, df:3 /*DF→ダーク*/, sf:4 /*SF→SF*/, hd:1 /*人間ドラマ→リアル*/ };
+  // v292Dfix343: 現キャストに生成済みアイコンが1枚でもあるか(fix197キャッシュ照会)
+  function hasAnyIcon(){
+    try{
+      var f=window.__v292Dfix197||window.__v292Dfix199; if(!f||typeof f.cachedFor!=='function') return false;
+      var S=getS(); var names=[];
+      if(S&&S.cast){ if(S.cast.hero&&S.cast.hero.name) names.push(S.cast.hero.name); (S.cast.npcs||[]).forEach(function(n){ if(n&&n.name) names.push(n.name); }); }
+      for(var i=0;i<names.length;i++){ if(f.cachedFor(names[i])) return true; }
+    }catch(e){}
+    return false;
+  }
   function onGenre(g){
     try{
       if(!on()) return;
       var idx=GENRE_STYLE[g]; if(idx==null) return;
       var c=getCfg(); if(!c) return;
+      if(+c.artStyle===idx) return; // 既に同じ画風=何もしない(無駄な保存/再描画回避)
+      // v292Dfix343: 既にアイコン生成済みのキャラが居れば画風を変えない=全アイコン再生成による
+      //   トークン浪費を回避(おしん指摘)。まっさら(まだ絵が無い)新規のときだけジャンル既定を適用。
+      //   画風変更は🖌セレクタで手動＝意図した再生成だけにする。
+      if(hasAnyIcon()){ try{ console.log(TAG,'genre',g,'→ 既存アイコンあり: 画風据え置き(再生成しない)'); }catch(_){} return; }
       c.artStyle=idx;
       try{ var S=getS(); if(S&&typeof S.save==='function') S.save(); }catch(_){}
       patchSelector();
