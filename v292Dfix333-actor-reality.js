@@ -151,9 +151,17 @@
     try{ var k='v292Dfix333Rot'; var r=JSON.parse(localStorage.getItem(k)||'{"win":[]}');
       r.win.push({t:turnNum, fg:chosen}); if(r.win.length>14) r.win=r.win.slice(-14);
       var streak={}; names.forEach(function(n){ var last=-1; r.win.forEach(function(w,i){ if(w.fg.indexOf(n)>=0) last=i; }); streak[n]=(r.win.length-1)-last; });
-      r.streak=streak; localStorage.setItem(k, JSON.stringify(r));
+      r.streak=streak;
+      // ★品質の主軸指標(DeepResearch): 前面化回数のJain公平指数 + 最長沈黙streak。個別full/compressedより信頼できる配分均等性の数学的指標。
+      var cnt={}; names.forEach(function(n){ cnt[n]=0; }); r.win.forEach(function(w){ w.fg.forEach(function(n){ if(cnt[n]!=null) cnt[n]++; }); });
+      var vals=names.map(function(n){ return cnt[n]||0; }); var sum=0,sq=0; vals.forEach(function(x){ sum+=x; sq+=x*x; });
+      r.jain = (sq>0 && names.length>0) ? +((sum*sum)/(names.length*sq)).toFixed(3) : 1;   // 1=完全均等・低い=偏り
+      r.maxStreak = Math.max.apply(null, names.map(function(n){ return streak[n]; }).concat([0]));
+      r.counts = cnt;
+      localStorage.setItem(k, JSON.stringify(r));
     }catch(e){}
   }
+  function rotSnapshot(){ try{ var r=JSON.parse(localStorage.getItem('v292Dfix333Rot')||'{}'); return {jain:r.jain, maxStreak:r.maxStreak}; }catch(e){ return {}; } }
   var pending=null;
   function getP(){ try{ return window.Planner||(typeof Planner!=='undefined'?Planner:null); }catch(e){ return null; } }
   function getApi(){ try{ return window.Api||(typeof Api!=='undefined'?Api:null); }catch(e){ return null; } }
@@ -214,7 +222,7 @@
           var _hero=heroName();
           var _npcs=presentNames().filter(function(n){ return n && n!==_hero; });
           var _qa=analyzeEnsemble(proseOnly(res.text), _npcs, _budget);
-          _qa.t=Date.now(); _qa.turn=p.turnNum; _qa.fg=_sel2?_sel2.fg:null;
+          _qa.t=Date.now(); _qa.turn=p.turnNum; _qa.fg=_sel2?_sel2.fg:null; var _rs=rotSnapshot(); _qa.jain=_rs.jain; _qa.maxStreak=_rs.maxStreak;
           logQuality(_qa);
           if(_qa.rollcall||_qa.melodrama.length||_qa.monopoly){ try{ console.log(TAG,'QUAL flags', JSON.stringify({rollcall:_qa.rollcall, melo:_qa.melodrama.length, mono:_qa.monopoly, turn:_qa.turn})); }catch(_){} }
         }
@@ -234,11 +242,13 @@
   };
   var SPEECH_VERB=/(答え|言っ|返し|呟|囁|叫ん|絞り出|漏らし|口を開)/;
   var NEG_ANSWER=/(答える代わり|答えず|答えなかった|答えない|答えられ(ず|ない)|返す代わり|口を開(かず|かない))/;
+  // 能動的な身体/知覚反応(静的状態は含めない)=発話が無くても実質的な反応ビートの3つ目シグナル(DeepResearch: Action/Interiority動詞句)
+  var ACTIVE_BODY=/(捻っ|よじ|後ずさ|うずくま|崩れ落|震わせ|見開|踏み(出|込)|振り(向|返)|立ち上が|飛び(退|の|かか|込)|身を(引|伏|投|乗)|手を(伸|かけ|突)|かばっ|息を(呑|詰|止)|うめ|呻|喘|爪を(立|かけ)|噤|睨みつけ|振り絞|抱え込|突き(飛|放))/;
   function _splitSents(t){ try{ return String(t||'').split(/(?<=[。！？\n])/).filter(function(x){return x&&x.trim().length;}); }catch(e){ return [String(t||'')]; } }
   function _stripQuotes(s){ return String(s||'').replace(/[「『][^」』]*[」』]/g,''); }
   function analyzeEnsemble(prose, npcNames, budget){
     var sents=_splitSents(prose);
-    var acc={}; npcNames.forEach(function(n){ acc[n]={speech:false,quote:false,clauses:0,chars:0,melo:{},seen:false}; });
+    var acc={}; npcNames.forEach(function(n){ acc[n]={speech:false,quote:false,actor:false,clauses:0,chars:0,melo:{},seen:false}; });
     var lastOwner=null;
     sents.forEach(function(sen){
       var bare=_stripQuotes(sen);
@@ -248,24 +258,27 @@
         acc[owner].seen=true;
         if(SPEECH_VERB.test(bare) && !NEG_ANSWER.test(bare)) acc[owner].speech=true;
         if(/[「『][^」』]{2,}[」』]/.test(sen)) acc[owner].quote=true;
+        if(named.length){ var n0=named[0]; var after=bare.slice(bare.indexOf(n0)); if(new RegExp(n0+'(は|が|も|、|——|の)').test(bare) && ACTIVE_BODY.test(after)) acc[owner].actor=true; }
         acc[owner].clauses += (bare.match(/[、](?=.)/g)||[]).length + 1;
         acc[owner].chars += sen.length;
         Object.keys(MELO_CLUSTERS).forEach(function(cat){ if(new RegExp(MELO_CLUSTERS[cat].join('|')).test(bare)) acc[owner].melo[cat]=true; });
       }
       if(named.length) lastOwner=owner;
     });
-    var beats={}, fullN=0, charShare={}, total=0;
+    var beats={}, fullN=0, charShare={}, total=0, seenN=0;
     npcNames.forEach(function(n){
       var a=acc[n]; if(!a.seen){ beats[n]='absent'; return; }
-      var sc=0; if(a.speech||a.quote) sc+=1.5; if(a.clauses>=3) sc+=1.0;       // full=発話/引用+複数節。ジェスチャーのみはcompressed
-      var cls= sc>=2?'full':'compressed'; beats[n]=cls; if(cls==='full') fullN++;
+      seenN++;
+      var full = a.speech || a.quote || (a.actor && a.clauses>=2);            // full=発話/引用 or 能動的身体反応+複数節。背景一句/静的状態はcompressed
+      var cls= full?'full':'compressed'; beats[n]=cls; if(cls==='full') fullN++;
       charShare[n]=a.chars; total+=a.chars;
     });
+    var lowSignal = seenN<=1;                                                  // 主人公焦点/希薄ターン=点呼統計から除外(DeepResearch)
     var cats={}; npcNames.forEach(function(n){ Object.keys(acc[n].melo||{}).forEach(function(c){ (cats[c]=cats[c]||[]).push(n); }); });
     var meloFlags=[]; Object.keys(cats).forEach(function(c){ if(cats[c].length>=2) meloFlags.push(c+':'+cats[c].join('/')); });
     var maxShare=0; Object.keys(charShare).forEach(function(n){ if(charShare[n]>maxShare) maxShare=charShare[n]; });
     var monopoly= total>0 && (maxShare/total)>0.75 && Object.keys(charShare).length>=2;
-    return { beats:beats, fullCount:fullN, budget:budget, rollcall:(fullN>budget), melodrama:meloFlags, monopoly:monopoly };
+    return { beats:beats, fullCount:fullN, budget:budget, rollcall:(fullN>budget && !lowSignal), melodrama:meloFlags, monopoly:monopoly, lowSignal:lowSignal };
   }
   function logQuality(entry){ try{ var k='v292Dfix333Qual'; var arr=JSON.parse(localStorage.getItem(k)||'[]'); arr.push(entry); if(arr.length>60) arr=arr.slice(-60); localStorage.setItem(k, JSON.stringify(arr)); }catch(e){} }
   function logRing(entry){ try{ var k='v292Dfix333Log'; var arr=JSON.parse(localStorage.getItem(k)||'[]'); arr.push(entry); if(arr.length>50) arr=arr.slice(-50); localStorage.setItem(k, JSON.stringify(arr)); }catch(e){} }
