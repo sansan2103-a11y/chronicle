@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260630-fix340';
+  var BUILT = '20260630-fix341';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -367,8 +367,10 @@ body {
         <button class="btn-s" onclick="UI.closeSettings()">閉じる</button>
       </div>
       <div style="margin-top:8px">
+        <button class="btn-s" id="v292-omakase-settings-btn" style="width:100%;font-size:13px;display:none;margin-bottom:6px" onclick="window.__v334Omakase&&window.__v334Omakase()">🎲 おまかせで埋める（種で・数秒）</button>
         <button class="btn-s" style="width:100%;font-size:13px" onclick="UI.randomFill()">🎲 AIでランダム生成（未入力の欄・数秒）</button>
       </div>
+      <script>try{if(localStorage.getItem('v292Dfix335')==='1'){var _ob=document.getElementById('v292-omakase-settings-btn');if(_ob)_ob.style.display='';}}catch(e){}</script>
       <div class="mpanel-footer-danger">
         <button class="btn-d" onclick="G.resetStory()">物語リセット（設定は保持）</button>
         <button class="btn-d" onclick="G.resetAll()">完全リセット</button>
