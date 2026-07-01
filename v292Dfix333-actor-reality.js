@@ -96,8 +96,9 @@
   function loadFg(){ try{ return JSON.parse(localStorage.getItem('v292Dfix333Fg')||'{}'); }catch(e){ return {}; } }
   function saveFg(o){ try{ localStorage.setItem('v292Dfix333Fg', JSON.stringify(o)); }catch(e){} }
   function isDenseTurn(states){
-    try{ var any=Object.keys(states).some(function(n){var a=states[n]; return a.restrained||a.injured||a.freeHands<2;}); if(any) return true;
-      var S=getS(); var last=S&&S.turns&&S.turns.length?(S.turns[S.turns.length-1].narrative||''):''; return /襲|攻撃|斬|刃|血|悲鳴|怪異|敵|逃げ|掴ま|崩れ|咆哮|迫/.test(last.slice(-200));
+    // dense=戦闘/救出の「今まさに動いている」状態=能動的な脅威語のみ(拘束/負傷が在るだけではdenseにしない=緊張の休止でローテを殺さない・DeepResearch)。
+    try{ var S=getS(); var last=S&&S.turns&&S.turns.length?(S.turns[S.turns.length-1].narrative||''):'';
+      return /襲(い|う|っ)|攻撃|斬りかか|斬りつけ|斬り(下ろ|上げ)|刃を(振|突|向)|悲鳴|絶叫|咆哮|迫っ(て|た)|掴みかか|飛びかか|振り下ろ|突進|交戦|殴りかか|喰らいつ|牙を|爪を(振|立)/.test(last.slice(-220));
     }catch(e){ return false; } }
   function lastBeat(fg,n){ return (fg[n]&&typeof fg[n].lastBeatTurn==='number')?fg[n].lastBeatTurn:-99; }
   function selectForeground(states, playerText, turnNum){
@@ -131,7 +132,8 @@
       scored.sort(function(x,y){return y.imp-x.imp;});
       chosen=scored.slice(0,budget).map(function(s){return s.n;});
     }
-    if(!dense){ names.forEach(function(n){ if(chosen.indexOf(n)<0 && (turnNum-lastBeat(fg,n))>=N && chosen.length<budget+1) chosen.push(n); }); }
+    var backstopN = dense ? N+2 : N;
+    names.forEach(function(n){ if(chosen.indexOf(n)<0 && (turnNum-lastBeat(fg,n))>=backstopN && chosen.length<budget+1) chosen.push(n); });
     var bg=names.filter(function(n){ return chosen.indexOf(n)<0; });
     chosen.forEach(function(n){ fg[n]=fg[n]||{}; fg[n].lastBeatTurn=turnNum; }); saveFg(fg);
     names.forEach(function(n){ __prevKarada[n]=states[n].karada||''; });
