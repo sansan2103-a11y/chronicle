@@ -173,6 +173,8 @@
         // openSettingsの再描画やfillで変わった既入力を元に戻す=ユーザーの種を尊重
         Object.keys(snap).forEach(function(id){ var e=document.getElementById(id); if(e){ e.value=snap[id]; try{ e.dispatchEvent(new Event('input',{bubbles:true})); }catch(_){} } });
         try{ UI.setStatus('🎲 おまかせで空欄を埋めました（'+GLABEL[f.genre]+'）。書いた内容はそのまま残ります。内容を見て「保存してゲーム開始」を'); }catch(_){}
+        // v292Dfix338: ジャンル→既定画風を自動セット(上書き可)。fix338が無ければ無害。
+        try{ window.__v292Dfix335_lastGenre=f.genre; if(window.__v292Dfix338&&window.__v292Dfix338.onGenre) window.__v292Dfix338.onGenre(f.genre); }catch(_){}
       }, 150);
       try{ console.log(TAG,'omakase drawn:',JSON.stringify(Object.keys(pick).reduce(function(o,k){o[k]=pick[k]&&pick[k].id;return o;},{}))); }catch(_){}
     });
