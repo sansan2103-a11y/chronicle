@@ -13,11 +13,12 @@
   function mode(){ try{ if(localStorage.getItem('v292Dfix333Off')==='1') return 'off'; var m=localStorage.getItem('v292Dfix333'); if(m==='off') return 'off'; if(m==='observe') return 'observe'; return 'active'; }catch(e){ return 'active'; } }
   function isOff(){ return mode()==='off'; }
   function npcAutonomyOn(){ try{ return localStorage.getItem('v292Dfix333Npc')==='1'; }catch(e){ return false; } }
+  function getS(){ try{ return window.S || (0,eval)('S') || null; }catch(e){ return null; } }
   function store(){ try{ return window.__v292Dfix77Store||{}; }catch(e){ return {}; } }
-  function heroName(){ try{ var S=window.S||(typeof S!=='undefined'?S:null); return (S&&S.cast&&S.cast.hero&&S.cast.hero.name)||''; }catch(e){ return ''; } }
-  function turnNow(){ try{ var S=window.S||(0,eval)('S'); return (S&&S.turns)?S.turns.length:0; }catch(e){ return 0; } }
+  function heroName(){ try{ var S=getS(); return (S&&S.cast&&S.cast.hero&&S.cast.hero.name)||''; }catch(e){ return ''; } }
+  function turnNow(){ try{ var S=getS(); return (S&&S.turns)?S.turns.length:0; }catch(e){ return 0; } }
   function presentNames(){
-    try{ var S=window.S||(typeof S!=='undefined'?S:null); if(!S||!S.cast) return Object.keys(store());
+    try{ var S=getS(); if(!S||!S.cast) return Object.keys(store());
       var ns=[]; if(S.cast.hero&&S.cast.hero.name) ns.push(S.cast.hero.name);
       if(Array.isArray(S.cast.npcs)) S.cast.npcs.forEach(function(n){ if(n&&n.name) ns.push(n.name); });
       Object.keys(store()).forEach(function(k){ if(ns.indexOf(k)<0) ns.push(k); });
@@ -96,7 +97,7 @@
   function saveFg(o){ try{ localStorage.setItem('v292Dfix333Fg', JSON.stringify(o)); }catch(e){} }
   function isDenseTurn(states){
     try{ var any=Object.keys(states).some(function(n){var a=states[n]; return a.restrained||a.injured||a.freeHands<2;}); if(any) return true;
-      var S=window.S||(0,eval)('S'); var last=S&&S.turns&&S.turns.length?(S.turns[S.turns.length-1].narrative||''):''; return /襲|攻撃|斬|刃|血|悲鳴|怪異|敵|逃げ|掴ま|崩れ|咆哮|迫/.test(last.slice(-200));
+      var S=getS(); var last=S&&S.turns&&S.turns.length?(S.turns[S.turns.length-1].narrative||''):''; return /襲|攻撃|斬|刃|血|悲鳴|怪異|敵|逃げ|掴ま|崩れ|咆哮|迫/.test(last.slice(-200));
     }catch(e){ return false; } }
   function lastBeat(fg,n){ return (fg[n]&&typeof fg[n].lastBeatTurn==='number')?fg[n].lastBeatTurn:-99; }
   function selectForeground(states, playerText, turnNum){
