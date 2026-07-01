@@ -12,7 +12,7 @@
   var TAG='[v292Dfix333:actor-reality]';
   function mode(){ try{ if(localStorage.getItem('v292Dfix333Off')==='1') return 'off'; var m=localStorage.getItem('v292Dfix333'); if(m==='off') return 'off'; if(m==='observe') return 'observe'; return 'active'; }catch(e){ return 'active'; } }
   function isOff(){ return mode()==='off'; }
-  function npcAutonomyOn(){ try{ return localStorage.getItem('v292Dfix333Npc')==='1'; }catch(e){ return false; } }
+  function npcAutonomyOn(){ try{ var v=localStorage.getItem('v292Dfix333Npc'); return v!=='0' && v!=='off'; }catch(e){ return true; } }
   function getS(){ try{ return window.S || (0,eval)('S') || null; }catch(e){ return null; } }
   function store(){ try{ return window.__v292Dfix77Store||{}; }catch(e){ return {}; } }
   function heroName(){ try{ var S=getS(); return (S&&S.cast&&S.cast.hero&&S.cast.hero.name)||''; }catch(e){ return ''; } }
