@@ -138,7 +138,8 @@
   function moodToTraits(m){ var mo=MOODJP[m.mood]||'独特な'; var re=REGJP[m.register]||'落ち着いた'; return mo+'雰囲気で、'+re+'物言いをする。'; }
 
   // --- 設定フィールドへ書き込む ---
-  function setVal(id,v){ var el=document.getElementById(id); if(el){ el.value=v; try{ el.dispatchEvent(new Event('input',{bubbles:true})); }catch(_){} } }
+  // 既に入力がある欄は上書きしない(種を尊重・空欄だけ埋める)
+  function setVal(id,v){ var el=document.getElementById(id); if(el && !(el.value&&el.value.trim())){ el.value=v; try{ el.dispatchEvent(new Event('input',{bubbles:true})); }catch(_){} } }
   function fillFields(f){
     setVal('cfgHName',f.hero.name); setVal('cfgHDesc',f.hero.desc);
     setVal('cfgLore',f.lore); setVal('cfgLoc',f.loc); setVal('cfgObj',f.obj); setVal('cfgTone',f.tone);
@@ -153,7 +154,7 @@
   }
   function fillNpcCard(npc, card){
     card=card||document.querySelector('#npcList .npc-card'); if(!card) return;
-    var set=function(fld,v){ var el=card.querySelector('[data-f="'+fld+'"]'); if(el){ el.value=v; try{el.dispatchEvent(new Event('input',{bubbles:true}));}catch(_){}} };
+    var set=function(fld,v){ var el=card.querySelector('[data-f="'+fld+'"]'); if(el && !(el.value&&el.value.trim())){ el.value=v; try{el.dispatchEvent(new Event('input',{bubbles:true}));}catch(_){}} };
     set('name',npc.name); set('desc',npc.desc); set('personality',npc.personality);
     set('coreDesire',npc.coreDesire); set('coreFear',npc.coreFear); set('wound',npc.wound);
   }
@@ -166,7 +167,7 @@
       var f=mapToFields(pick);
       try{ if(typeof UI!=='undefined' && UI.openSettings) UI.openSettings(); }catch(_){}
       setTimeout(function(){ fillFields(f);
-        try{ UI.setStatus('🎲 おまかせで世界を用意しました（'+GLABEL[f.genre]+'）。内容を見て「保存してゲーム開始」を押してください'); }catch(_){}
+        try{ UI.setStatus('🎲 おまかせで空欄を埋めました（'+GLABEL[f.genre]+'）。書いた内容はそのまま残ります。内容を見て「保存してゲーム開始」を'); }catch(_){}
       }, 120);
       try{ console.log(TAG,'omakase drawn:',JSON.stringify(Object.keys(pick).reduce(function(o,k){o[k]=pick[k]&&pick[k].id;return o;},{}))); }catch(_){}
     });
