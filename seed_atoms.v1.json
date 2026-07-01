@@ -1,0 +1,4673 @@
+{
+ "schemaVersion": 1,
+ "meta": {
+  "name": "Chronicle Seed Atom Bank",
+  "version": "v1",
+  "createdAt": "2026-07-01",
+  "count": 218,
+  "axes": {
+   "setting": 30,
+   "era_tech": 14,
+   "stance": 26,
+   "lack_desire": 18,
+   "relationship": 24,
+   "opening_pressure": 38,
+   "secret": 28,
+   "world_rule": 22,
+   "mood_tone": 18
+  },
+  "genres": {
+   "mh": 133,
+   "df": 128,
+   "hd": 86,
+   "sf": 102
+  },
+  "genreLegend": {
+   "mh": "現代怪異",
+   "df": "ダークファンタジー",
+   "sf": "SF",
+   "hd": "人間ドラマ"
+  },
+  "notes": "全てoriginal authored(license:internal)。プレイヤー非表示の裏側部品。1回のStartPackは各軸から1つ抽選し直近と2軸以上違える(seed_anti_cliche参照)。stanceはdepth(Wound→Lie→Want→Need)、opening_pressureはfocus(pc/npc/world)を持つ。",
+  "design": "SeedSourcePack_v1参照。Compton oatmeal回避=ユニークさ予算は主人公/中心対立/場所フックに集中。反復回避はbag-draw+recency窓が本体。"
+ },
+ "atoms": [
+  {
+   "id": "setting.tidal_port_undercity",
+   "axis": "setting",
+   "text": "雨で潮位が上がると水没する、港の下に広がる旧市街",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "water",
+    "claustrophobic",
+    "urban"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.closed_ward_hospital",
+   "axis": "setting",
+   "text": "面会謝絶の札が今も貼られたまま閉鎖された病棟",
+   "genre": [
+    "mh"
+   ],
+   "tags": [
+    "decay",
+    "medical",
+    "claustrophobic"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.snowbound_company_town",
+   "axis": "setting",
+   "text": "閉山後も社員寮だけが残された、雪に埋もれる山間の町",
+   "genre": [
+    "mh",
+    "hd"
+   ],
+   "tags": [
+    "cold",
+    "isolation",
+    "industrial"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.night_freight_platform",
+   "axis": "setting",
+   "text": "夜間にだけ貨物のために開く、時刻表にない駅のホーム",
+   "genre": [
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "liminal",
+    "transit",
+    "night"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.underground_arcade",
+   "axis": "setting",
+   "text": "半分がシャッターで閉ざされた、地下商店街の奥",
+   "genre": [
+    "mh",
+    "hd"
+   ],
+   "tags": [
+    "urban",
+    "decay",
+    "liminal"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.generation_ship_quarter",
+   "axis": "setting",
+   "text": "何世代も航行を続ける宇宙船の、忘れられた居住区画",
+   "genre": [
+    "sf"
+   ],
+   "tags": [
+    "enclosed",
+    "decay",
+    "space"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.terraform_frontier",
+   "axis": "setting",
+   "text": "大気改造の途中で放棄された、赤い砂に埋もれる入植地",
+   "genre": [
+    "sf"
+   ],
+   "tags": [
+    "frontier",
+    "desolate",
+    "harsh"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.festival_village",
+   "axis": "setting",
+   "text": "祭りの三日間だけ、決して名を呼んではいけない集落",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "ritual",
+    "rural",
+    "taboo"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.flooded_cathedral",
+   "axis": "setting",
+   "text": "水位が胸まで上がった、聖歌がまだ反響する大聖堂",
+   "genre": [
+    "df"
+   ],
+   "tags": [
+    "water",
+    "sacred",
+    "ruin"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.mag_lev_sleeper",
+   "axis": "setting",
+   "text": "三日三晩走り続ける、目的地を誰も覚えていない寝台列車",
+   "genre": [
+    "sf",
+    "mh"
+   ],
+   "tags": [
+    "transit",
+    "liminal",
+    "enclosed"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.tower_archive",
+   "axis": "setting",
+   "text": "禁書だけを集め、階が上がるほど古くなる螺旋の書庫",
+   "genre": [
+    "df"
+   ],
+   "tags": [
+    "knowledge",
+    "vertical",
+    "sacred"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.reclaimed_school",
+   "axis": "setting",
+   "text": "廃校になり、地域の集会所として半分だけ使われる旧校舎",
+   "genre": [
+    "mh",
+    "hd"
+   ],
+   "tags": [
+    "nostalgia",
+    "rural",
+    "liminal"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.tide_shrine",
+   "axis": "setting",
+   "text": "干潮の数時間だけ参道が現れる、海に沈む鳥居の社",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "water",
+    "sacred",
+    "timed"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.orbital_market",
+   "axis": "setting",
+   "text": "無重力で商品が漂う、法の届かない軌道ステーションの市場",
+   "genre": [
+    "sf"
+   ],
+   "tags": [
+    "space",
+    "lawless",
+    "commerce"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.silent_sanatorium",
+   "axis": "setting",
+   "text": "結核療養所だった、風がいつも回廊を吹き抜ける高原の建物",
+   "genre": [
+    "mh",
+    "hd"
+   ],
+   "tags": [
+    "medical",
+    "wind",
+    "isolation"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.buried_subway",
+   "axis": "setting",
+   "text": "震災で埋もれ、非常灯だけが今も灯る地下鉄の区間",
+   "genre": [
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "underground",
+    "disaster",
+    "dark"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.moor_toll_house",
+   "axis": "setting",
+   "text": "霧が晴れる時だけ渡し賃を取る、湿原の渡し小屋",
+   "genre": [
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "fog",
+    "liminal",
+    "rural"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.deadmall",
+   "axis": "setting",
+   "text": "噴水だけが動き続ける、閉店したショッピングモール",
+   "genre": [
+    "mh",
+    "hd"
+   ],
+   "tags": [
+    "urban",
+    "decay",
+    "liminal"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.lighthouse_relay",
+   "axis": "setting",
+   "text": "三日ごとにしか船が来ない、灯台守が交代で守る孤島",
+   "genre": [
+    "hd",
+    "mh"
+   ],
+   "tags": [
+    "water",
+    "isolation",
+    "duty"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.clockwork_district",
+   "axis": "setting",
+   "text": "歯車で時刻が街全体を動かす、時計仕掛けの旧市街",
+   "genre": [
+    "df",
+    "sf"
+   ],
+   "tags": [
+    "mechanical",
+    "urban",
+    "ordered"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.refugee_arcology",
+   "axis": "setting",
+   "text": "難民で膨れ上がった、上層と下層で言葉が違う巨大居住塔",
+   "genre": [
+    "sf",
+    "hd"
+   ],
+   "tags": [
+    "vertical",
+    "crowded",
+    "divided"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.ossuary_chapel",
+   "axis": "setting",
+   "text": "壁も天井も骨で飾られた、村はずれの納骨堂",
+   "genre": [
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "death",
+    "sacred",
+    "claustrophobic"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.paddy_terraces",
+   "axis": "setting",
+   "text": "水面に空を映す、限界集落の棚田と朽ちた見張り小屋",
+   "genre": [
+    "hd",
+    "mh"
+   ],
+   "tags": [
+    "rural",
+    "water",
+    "nostalgia"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.derelict_theme_park",
+   "axis": "setting",
+   "text": "着ぐるみが片付けられないまま閉園した、湖畔の遊園地",
+   "genre": [
+    "mh",
+    "hd"
+   ],
+   "tags": [
+    "decay",
+    "liminal",
+    "water"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.deepwater_rig",
+   "axis": "setting",
+   "text": "補給が止まって半年、外海に取り残された海上採掘施設",
+   "genre": [
+    "sf",
+    "mh"
+   ],
+   "tags": [
+    "water",
+    "isolation",
+    "industrial"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.plague_quarter",
+   "axis": "setting",
+   "text": "封鎖の縄がまだ張られたままの、疫病で見捨てられた街区",
+   "genre": [
+    "df"
+   ],
+   "tags": [
+    "disease",
+    "decay",
+    "urban"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.memory_clinic",
+   "axis": "setting",
+   "text": "記憶を預けて管理する、白すぎる待合室のある診療所",
+   "genre": [
+    "sf",
+    "hd"
+   ],
+   "tags": [
+    "medical",
+    "clean",
+    "uncanny"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.abandoned_dam",
+   "axis": "setting",
+   "text": "放水路の底に沈んだ村が、渇水の年だけ姿を現すダム湖",
+   "genre": [
+    "mh",
+    "hd"
+   ],
+   "tags": [
+    "water",
+    "ruin",
+    "timed"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.border_checkpoint",
+   "axis": "setting",
+   "text": "どちらの国も管理を放棄した、緩衝地帯の検問所",
+   "genre": [
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "liminal",
+    "lawless",
+    "tense"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "setting.winter_greenhouse",
+   "axis": "setting",
+   "text": "雪の下でだけ咲く花を育てる、灯りの絶えない温室",
+   "genre": [
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "cold",
+    "growth",
+    "refuge"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "era.present_day",
+   "axis": "era_tech",
+   "text": "現代。スマートフォンと監視カメラが日常に溶けている",
+   "genre": [
+    "mh",
+    "hd"
+   ],
+   "tags": [
+    "modern",
+    "surveillance"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "era.near_future_scarcity",
+   "axis": "era_tech",
+   "text": "近未来。水と電力が配給制になった都市",
+   "genre": [
+    "sf"
+   ],
+   "tags": [
+    "future",
+    "scarcity"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "era.post_collapse",
+   "axis": "era_tech",
+   "text": "大崩壊後。かつての技術は遺物として掘り出される",
+   "genre": [
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "ruin",
+    "salvage"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "era.magic_bureaucracy",
+   "axis": "era_tech",
+   "text": "魔法が免許制になり、役所が呪文を管理する社会",
+   "genre": [
+    "df"
+   ],
+   "tags": [
+    "magic",
+    "ordered",
+    "bureaucratic"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "era.showa_retro",
+   "axis": "era_tech",
+   "text": "高度成長の裏で、古い因習がまだ息づく昭和の地方",
+   "genre": [
+    "mh",
+    "hd"
+   ],
+   "tags": [
+    "retro",
+    "rural",
+    "nostalgia"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "era.deep_space_transit",
+   "axis": "era_tech",
+   "text": "恒星間を何世代もかけて渡る、長い航行の時代",
+   "genre": [
+    "sf"
+   ],
+   "tags": [
+    "space",
+    "generational"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "era.reconstruction",
+   "axis": "era_tech",
+   "text": "戦後の復興期。焼け跡に新しい街が重ねて建つ",
+   "genre": [
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "rebuild",
+    "scarcity"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "era.plague_century",
+   "axis": "era_tech",
+   "text": "疫病が数十年ごとに戻ってくる、検疫が常態化した世界",
+   "genre": [
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "disease",
+    "fearful"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "era.augmented_now",
+   "axis": "era_tech",
+   "text": "現実に情報の層が重なる、拡張現実が当たり前の今",
+   "genre": [
+    "sf",
+    "mh"
+   ],
+   "tags": [
+    "ar",
+    "modern",
+    "uncanny"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "era.frontier_colonization",
+   "axis": "era_tech",
+   "text": "新天地の入植初期。制度も法もまだ薄い",
+   "genre": [
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "frontier",
+    "lawless"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "era.late_empire",
+   "axis": "era_tech",
+   "text": "制度が形骸化し、辺境から綻び始めた古い帝国の末期",
+   "genre": [
+    "df"
+   ],
+   "tags": [
+    "decline",
+    "political"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "era.memory_market",
+   "axis": "era_tech",
+   "text": "記憶を売買できるようになった、少し先の社会",
+   "genre": [
+    "sf",
+    "hd"
+   ],
+   "tags": [
+    "future",
+    "memory",
+    "uncanny"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "era.isolated_island_edo",
+   "axis": "era_tech",
+   "text": "鎖国下の島。外の技術も噂だけが届く",
+   "genre": [
+    "df",
+    "hd"
+   ],
+   "tags": [
+    "isolation",
+    "historical"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "era.climate_altered",
+   "axis": "era_tech",
+   "text": "気候が変わり、季節の意味が失われた世界",
+   "genre": [
+    "sf",
+    "hd"
+   ],
+   "tags": [
+    "climate",
+    "altered"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "stance.fugitive",
+   "axis": "stance",
+   "text": "追われている。何をしたのか、自分でも半分しか思い出せない逃亡者",
+   "genre": [
+    "mh",
+    "df",
+    "sf"
+   ],
+   "tags": [
+    "hunted",
+    "secret"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "かつて誰かを見捨てて生き延びた",
+    "lie": "立ち止まれば必ず捕まる",
+    "want": "安全な場所へ逃げ切ること",
+    "need": "立ち止まって向き合うこと"
+   }
+  },
+  {
+   "id": "stance.apprentice",
+   "axis": "stance",
+   "text": "半人前。師の背中を追うが、その師を信じきれない見習い",
+   "genre": [
+    "df",
+    "hd"
+   ],
+   "tags": [
+    "novice",
+    "doubt"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "幼い頃に大人に裏切られた",
+    "lie": "力さえ身につければ誰にも頼らずに済む",
+    "want": "一人前と認められること",
+    "need": "誰かを信じて頼ること"
+   }
+  },
+  {
+   "id": "stance.former_perpetrator",
+   "axis": "stance",
+   "text": "かつて加害の側にいた。償いのつもりで動いている",
+   "genre": [
+    "hd",
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "guilt",
+    "atonement"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "命令に従い取り返しのつかないことをした",
+    "lie": "償い続ければいつか赦される",
+    "want": "被害者に赦されること",
+    "need": "自分で自分を赦すこと"
+   }
+  },
+  {
+   "id": "stance.impostor",
+   "axis": "stance",
+   "text": "別人になりすまして生きている。素性がばれれば終わる偽者",
+   "genre": [
+    "mh",
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "identity",
+    "fear"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "本当の自分では誰にも必要とされなかった",
+    "lie": "偽りの顔だけが自分を守る",
+    "want": "偽装を保ち続けること",
+    "need": "本当の自分を受け入れられること"
+   }
+  },
+  {
+   "id": "stance.protectee",
+   "axis": "stance",
+   "text": "守られる側。なぜ狙われるのか、周囲は教えてくれない保護対象",
+   "genre": [
+    "sf",
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "passive",
+    "mystery"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "自分のせいで誰かが傷つくのを見た",
+    "lie": "守られている限り無力なままでいい",
+    "want": "真実を知らされること",
+    "need": "自分の足で立つこと"
+   }
+  },
+  {
+   "id": "stance.guardian",
+   "axis": "stance",
+   "text": "誰かを守るために立っている。守る相手の方が強いと薄々気づいている",
+   "genre": [
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "duty",
+    "protective"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "守れなかった過去がある",
+    "lie": "守り抜くことだけが自分の価値",
+    "want": "相手を守り切ること",
+    "need": "相手を手放し信じること"
+   }
+  },
+  {
+   "id": "stance.amnesiac",
+   "axis": "stance",
+   "text": "目覚めたら記憶がない。手がかりだけが体に刻まれている記憶喪失者",
+   "genre": [
+    "sf",
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "memory",
+    "mystery"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "思い出したくない何かを自ら消した",
+    "lie": "過去がなければ罪もない",
+    "want": "失った記憶を取り戻すこと",
+    "need": "思い出しても前に進むこと"
+   }
+  },
+  {
+   "id": "stance.debtor",
+   "axis": "stance",
+   "text": "返せない負債を負い、危険な相手に飼われている債務者",
+   "genre": [
+    "mh",
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "debt",
+    "bound"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "大切な人を助けるために身を売った",
+    "lie": "借りを返せば自由になれる",
+    "want": "負債から解放されること",
+    "need": "自由の意味を選び直すこと"
+   }
+  },
+  {
+   "id": "stance.returnee",
+   "axis": "stance",
+   "text": "長く離れた土地へ戻ってきた。故郷は自分を覚えていない帰還者",
+   "genre": [
+    "hd",
+    "mh"
+   ],
+   "tags": [
+    "return",
+    "estranged"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "逃げるように故郷を捨てた",
+    "lie": "戻ればすべて元に戻る",
+    "want": "居場所を取り戻すこと",
+    "need": "変わった自分を受け入れること"
+   }
+  },
+  {
+   "id": "stance.survivor",
+   "axis": "stance",
+   "text": "災厄をひとり生き延びた。なぜ自分だけが、と問い続ける生存者",
+   "genre": [
+    "mh",
+    "sf",
+    "hd"
+   ],
+   "tags": [
+    "survivor",
+    "guilt"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "隣にいた人が死に自分は生きた",
+    "lie": "生き延びたことに理由がなければならない",
+    "want": "失われた意味を見つけること",
+    "need": "生きていること自体を赦すこと"
+   }
+  },
+  {
+   "id": "stance.heir",
+   "axis": "stance",
+   "text": "継ぎたくない立場を継がされた、気の進まない後継者",
+   "genre": [
+    "df",
+    "hd"
+   ],
+   "tags": [
+    "duty",
+    "reluctant"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "親の期待に応え続けて自分を失った",
+    "lie": "役割を果たせば認められる",
+    "want": "重荷を降ろすこと",
+    "need": "自分の望みを口にすること"
+   }
+  },
+  {
+   "id": "stance.infiltrator",
+   "axis": "stance",
+   "text": "味方のふりをして潜り込んでいる。情が移り始めている潜入者",
+   "genre": [
+    "sf",
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "spy",
+    "divided"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "組織にしか居場所がなかった",
+    "lie": "任務が自分の存在理由だ",
+    "want": "任務を完遂すること",
+    "need": "本当に守りたいものを選ぶこと"
+   }
+  },
+  {
+   "id": "stance.caretaker",
+   "axis": "stance",
+   "text": "誰かの世話に縛られている。その相手なしでは自分も立てない介護者",
+   "genre": [
+    "hd",
+    "mh"
+   ],
+   "tags": [
+    "bound",
+    "devotion"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "見捨てられた記憶がある",
+    "lie": "尽くすことでしか愛されない",
+    "want": "相手を守り続けること",
+    "need": "自分の人生を取り戻すこと"
+   }
+  },
+  {
+   "id": "stance.deserter",
+   "axis": "stance",
+   "text": "抜けてきた。裏切り者と呼ばれることに慣れきった脱走者",
+   "genre": [
+    "df",
+    "sf"
+   ],
+   "tags": [
+    "betrayal",
+    "hunted"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "信じた大義が嘘だと知った",
+    "lie": "もう何も信じない方が傷つかない",
+    "want": "静かに消えること",
+    "need": "もう一度何かを信じること"
+   }
+  },
+  {
+   "id": "stance.last_of_kind",
+   "axis": "stance",
+   "text": "同じ存在がもういない。自分で自分の意味を決めるしかない最後の一人",
+   "genre": [
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "lonely",
+    "unique"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "自分の同族が消えるのを見届けた",
+    "lie": "自分が終われば全部終わる",
+    "want": "仲間の記憶を守ること",
+    "need": "新しい繋がりを結ぶこと"
+   }
+  },
+  {
+   "id": "stance.marked_one",
+   "axis": "stance",
+   "text": "体に消えない印がある。選ばれたのか呪われたのか分からない者",
+   "genre": [
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "chosen",
+    "cursed"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "印のせいで普通の暮らしを奪われた",
+    "lie": "印から逃げれば普通に戻れる",
+    "want": "印の意味を知ること",
+    "need": "印ごと自分を引き受けること"
+   }
+  },
+  {
+   "id": "stance.investigator",
+   "axis": "stance",
+   "text": "真相を追う者。真相が自分を壊すかもしれないと知っている調査者",
+   "genre": [
+    "mh",
+    "sf",
+    "hd"
+   ],
+   "tags": [
+    "seeker",
+    "obsession"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "身近な謎を解けずに大切な人を失った",
+    "lie": "真実さえ分かれば救える",
+    "want": "事件の核心に届くこと",
+    "need": "知った上でどう生きるか選ぶこと"
+   }
+  },
+  {
+   "id": "stance.captive",
+   "axis": "stance",
+   "text": "囚われている。牢の外より内側の方が安全だと感じ始めた囚人",
+   "genre": [
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "prison",
+    "conflicted"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "自由だった頃にひどい目に遭った",
+    "lie": "囚われている方が守られている",
+    "want": "自由を取り戻すこと",
+    "need": "恐れずに外へ踏み出すこと"
+   }
+  },
+  {
+   "id": "stance.double_agent",
+   "axis": "stance",
+   "text": "二つの側に忠誠を誓い、どちらも裏切っている板挟みの者",
+   "genre": [
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "divided",
+    "tension"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "どちらの側にも本当の居場所がなかった",
+    "lie": "両方に属せばどこにも捨てられない",
+    "want": "破綻を先延ばしにすること",
+    "need": "一つを選んで立つこと"
+   }
+  },
+  {
+   "id": "stance.newcomer",
+   "axis": "stance",
+   "text": "来たばかりの余所者。土地の理を何も知らない新参者",
+   "genre": [
+    "mh",
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "outsider",
+    "naive"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "前の場所で拒まれた",
+    "lie": "馴染めば受け入れてもらえる",
+    "want": "この土地の一員になること",
+    "need": "余所者のままでも繋がれると知ること"
+   }
+  },
+  {
+   "id": "stance.avenger",
+   "axis": "stance",
+   "text": "奪われたものへの復讐だけで動いている者",
+   "genre": [
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "revenge",
+    "driven"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "理不尽に大切なものを奪われた",
+    "lie": "復讐だけが失ったものに報いる",
+    "want": "仇を討つこと",
+    "need": "復讐の先の自分を見つけること"
+   }
+  },
+  {
+   "id": "stance.reluctant_healer",
+   "axis": "stance",
+   "text": "癒す力を持つが、使うたびに何かを差し出す治療者",
+   "genre": [
+    "df",
+    "sf"
+   ],
+   "tags": [
+    "healer",
+    "sacrifice"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "救えなかった相手がいる",
+    "lie": "力を使い続ければ罪滅ぼしになる",
+    "want": "目の前の命を救うこと",
+    "need": "自分の限界を認めること"
+   }
+  },
+  {
+   "id": "stance.washed_up",
+   "axis": "stance",
+   "text": "かつては名を知られた。今は落ちぶれ、過去にすがる者",
+   "genre": [
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "has_been",
+    "pride"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "頂点から転がり落ちた",
+    "lie": "過去の栄光が今も自分を証明する",
+    "want": "もう一度返り咲くこと",
+    "need": "今の自分に価値を見出すこと"
+   }
+  },
+  {
+   "id": "stance.witness",
+   "axis": "stance",
+   "text": "見てはいけないものを見てしまった目撃者",
+   "genre": [
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "witness",
+    "threat"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "口をつぐんだせいで誰かが傷ついた",
+    "lie": "黙っていれば巻き込まれない",
+    "want": "無事にやり過ごすこと",
+    "need": "声を上げる勇気を持つこと"
+   }
+  },
+  {
+   "id": "stance.replacement",
+   "axis": "stance",
+   "text": "失われた誰かの代わりとして迎えられた者",
+   "genre": [
+    "hd",
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "substitute",
+    "identity"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "自分自身として愛された記憶がない",
+    "lie": "代わりを演じれば居場所がもらえる",
+    "want": "期待に応え続けること",
+    "need": "自分として在ることを選ぶこと"
+   }
+  },
+  {
+   "id": "stance.oathbound",
+   "axis": "stance",
+   "text": "破れば災いが来る誓いに縛られている者",
+   "genre": [
+    "df"
+   ],
+   "tags": [
+    "oath",
+    "bound"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "depth": {
+    "wound": "軽い気持ちで交わした約束が呪いになった",
+    "lie": "誓いを守り抜けば罰は来ない",
+    "want": "誓いを果たすこと",
+    "need": "誓いの奴隷でなく主人になること"
+   }
+  },
+  {
+   "id": "lack.home",
+   "axis": "lack_desire",
+   "text": "帰る場所を失っている。どこにいても仮住まいの感覚が抜けない",
+   "genre": [
+    "hd",
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "belonging",
+    "loss"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "lack.memory",
+   "axis": "lack_desire",
+   "text": "記憶の一部が欠けている。その空白が疼き続ける",
+   "genre": [
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "memory",
+    "void"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "lack.name",
+   "axis": "lack_desire",
+   "text": "本当の名を奪われ、呼ばれるたびに他人になる感覚がある",
+   "genre": [
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "identity",
+    "erasure"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "lack.debt_freedom",
+   "axis": "lack_desire",
+   "text": "返済に人生を握られ、自由という言葉が遠い",
+   "genre": [
+    "hd",
+    "mh"
+   ],
+   "tags": [
+    "debt",
+    "bound"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "lack.recognition",
+   "axis": "lack_desire",
+   "text": "誰にも認められず、存在を証明したい飢えがある",
+   "genre": [
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "recognition",
+    "hunger"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "lack.revenge",
+   "axis": "lack_desire",
+   "text": "奪われたものへの落とし前だけが、生きる理由になっている",
+   "genre": [
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "revenge",
+    "driven"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "lack.redemption",
+   "axis": "lack_desire",
+   "text": "過去の罪を雪ぎたい。赦しを、あるいは罰を求めている",
+   "genre": [
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "atonement",
+    "guilt"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "lack.someone",
+   "axis": "lack_desire",
+   "text": "失った一人を取り戻したい。無理だと分かっていても",
+   "genre": [
+    "hd",
+    "mh"
+   ],
+   "tags": [
+    "loss",
+    "longing"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "lack.answer",
+   "axis": "lack_desire",
+   "text": "ずっと問い続けている答えが、ひとつだけ欲しい",
+   "genre": [
+    "mh",
+    "sf",
+    "hd"
+   ],
+   "tags": [
+    "truth",
+    "obsession"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "lack.rest",
+   "axis": "lack_desire",
+   "text": "もう休みたい。だが休むことが許されない状況にある",
+   "genre": [
+    "hd",
+    "sf"
+   ],
+   "tags": [
+    "exhaustion",
+    "duty"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "lack.warmth",
+   "axis": "lack_desire",
+   "text": "誰かに触れられた記憶が遠く、温もりに飢えている",
+   "genre": [
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "intimacy",
+    "longing"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "lack.control",
+   "axis": "lack_desire",
+   "text": "自分の人生を自分で決めたい。ずっと誰かに決められてきた",
+   "genre": [
+    "hd",
+    "sf"
+   ],
+   "tags": [
+    "agency",
+    "autonomy"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "lack.proof_innocence",
+   "axis": "lack_desire",
+   "text": "無実を証明したい。誰も信じてくれない",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "justice",
+    "isolation"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "lack.purpose",
+   "axis": "lack_desire",
+   "text": "役割を失い、何のために動けばいいのか分からない",
+   "genre": [
+    "hd",
+    "sf"
+   ],
+   "tags": [
+    "purpose",
+    "drift"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "lack.escape",
+   "axis": "lack_desire",
+   "text": "この土地から、この関係から、とにかく抜け出したい",
+   "genre": [
+    "hd",
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "escape",
+    "confinement"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "lack.forgiveness_self",
+   "axis": "lack_desire",
+   "text": "他人はもういい。自分で自分を赦せる日が欲しい",
+   "genre": [
+    "hd"
+   ],
+   "tags": [
+    "self",
+    "atonement"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "lack.legacy",
+   "axis": "lack_desire",
+   "text": "消える前に、何かを遺したい",
+   "genre": [
+    "df",
+    "sf",
+    "hd"
+   ],
+   "tags": [
+    "legacy",
+    "mortality"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "lack.reunion",
+   "axis": "lack_desire",
+   "text": "離ればなれになった相手と、もう一度会いたい",
+   "genre": [
+    "hd",
+    "sf"
+   ],
+   "tags": [
+    "reunion",
+    "longing"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.ex_lovers",
+   "axis": "relationship",
+   "text": "かつて愛し合い、今は口をきかない元恋人同士",
+   "genre": [
+    "hd",
+    "mh"
+   ],
+   "tags": [
+    "ex",
+    "tension"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.mentor_apprentice",
+   "axis": "relationship",
+   "text": "教える者と教わる者。どちらかが嘘をついている",
+   "genre": [
+    "df",
+    "hd"
+   ],
+   "tags": [
+    "mentor",
+    "doubt"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.handler_agent",
+   "axis": "relationship",
+   "text": "指示を出す者と従う者。信頼と監視が同居している",
+   "genre": [
+    "sf",
+    "mh"
+   ],
+   "tags": [
+    "control",
+    "tension"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.guardian_charge",
+   "axis": "relationship",
+   "text": "守る者と守られる者。立場がいつ逆転してもおかしくない",
+   "genre": [
+    "df",
+    "hd"
+   ],
+   "tags": [
+    "protection",
+    "dependence"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.debtor_creditor",
+   "axis": "relationship",
+   "text": "貸した者と借りた者。返済が人間関係を縛っている",
+   "genre": [
+    "mh",
+    "hd"
+   ],
+   "tags": [
+    "debt",
+    "power"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.captor_captive",
+   "axis": "relationship",
+   "text": "囚える者と囚われる者。奇妙な情が芽生えつつある",
+   "genre": [
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "captivity",
+    "conflicted"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.pursuer_fugitive",
+   "axis": "relationship",
+   "text": "追う者と追われる者。互いの事情を知り始めている",
+   "genre": [
+    "mh",
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "chase",
+    "tension"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.estranged_siblings",
+   "axis": "relationship",
+   "text": "同じ血を分けた、長く憎み合ってきた兄妹",
+   "genre": [
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "family",
+    "estranged"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.rivals",
+   "axis": "relationship",
+   "text": "同じものを奪い合う好敵手。認め合ってはいる",
+   "genre": [
+    "df",
+    "sf"
+   ],
+   "tags": [
+    "rivalry",
+    "respect"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.reluctant_allies",
+   "axis": "relationship",
+   "text": "反りが合わないのに、共通の敵のために組む二人",
+   "genre": [
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "alliance",
+    "friction"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.betrayer_betrayed",
+   "axis": "relationship",
+   "text": "裏切った者と裏切られた者が、再び顔を合わせる",
+   "genre": [
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "betrayal",
+    "reckoning"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.patron_client",
+   "axis": "relationship",
+   "text": "金を出す者と請け負う者。利害だけの繋がりのはずが",
+   "genre": [
+    "hd",
+    "sf"
+   ],
+   "tags": [
+    "transaction",
+    "drift"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.parent_estranged_child",
+   "axis": "relationship",
+   "text": "わだかまりを抱えたまま再会する、親と子",
+   "genre": [
+    "hd"
+   ],
+   "tags": [
+    "family",
+    "reconciliation"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.master_servant",
+   "axis": "relationship",
+   "text": "仕える者と仕えられる者。忠誠がほころび始めている",
+   "genre": [
+    "df"
+   ],
+   "tags": [
+    "service",
+    "loyalty"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.codependent",
+   "axis": "relationship",
+   "text": "互いに依存し合い、離れられなくなった二人",
+   "genre": [
+    "hd",
+    "mh"
+   ],
+   "tags": [
+    "dependence",
+    "enmeshed"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.doctor_patient",
+   "axis": "relationship",
+   "text": "診る者と診られる者。治療の名目で境界が曖昧になる",
+   "genre": [
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "medical",
+    "boundary"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.witness_perpetrator",
+   "axis": "relationship",
+   "text": "見た者と見られた者。沈黙が取引になっている",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "secret",
+    "leverage"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.replacement_bereaved",
+   "axis": "relationship",
+   "text": "失われた誰かの代わりと、それを求める遺された者",
+   "genre": [
+    "hd",
+    "mh"
+   ],
+   "tags": [
+    "substitute",
+    "grief"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.old_friends_diverged",
+   "axis": "relationship",
+   "text": "かつての親友が、今は違う道の端と端にいる",
+   "genre": [
+    "hd",
+    "sf"
+   ],
+   "tags": [
+    "friendship",
+    "divergence"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.stranger_who_knows",
+   "axis": "relationship",
+   "text": "こちらを知っているのに、こちらは知らない相手",
+   "genre": [
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "asymmetry",
+    "unease"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.rescuer_rescued",
+   "axis": "relationship",
+   "text": "救った者と救われた者。恩が重荷に変わりつつある",
+   "genre": [
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "debt_of_life",
+    "weight"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.doppelganger",
+   "axis": "relationship",
+   "text": "同じ顔を持つ二人。どちらが本物か決着がついていない",
+   "genre": [
+    "sf",
+    "mh"
+   ],
+   "tags": [
+    "double",
+    "identity"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.believer_apostate",
+   "axis": "relationship",
+   "text": "同じ信仰から、信じ続ける者と捨てた者",
+   "genre": [
+    "df"
+   ],
+   "tags": [
+    "faith",
+    "schism"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rel.caretaker_dependent",
+   "axis": "relationship",
+   "text": "世話をする者とされる者。愛情と疲弊が入り混じる",
+   "genre": [
+    "hd"
+   ],
+   "tags": [
+    "care",
+    "fatigue"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "pressure.stranger_knows_secret",
+   "axis": "opening_pressure",
+   "text": "主人公しか知らないはずの過去を、初対面の人物が口にする",
+   "genre": [
+    "mh",
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "identity",
+    "threat"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "pc"
+  },
+  {
+   "id": "pressure.disappearance",
+   "axis": "opening_pressure",
+   "text": "昨日まで確かにいた人物が、痕跡ごと消えている",
+   "genre": [
+    "mh",
+    "hd",
+    "sf"
+   ],
+   "tags": [
+    "missing",
+    "mystery"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "npc"
+  },
+  {
+   "id": "pressure.deadline",
+   "axis": "opening_pressure",
+   "text": "期限が切られた。過ぎれば取り返しがつかないと告げられる",
+   "genre": [
+    "df",
+    "sf",
+    "mh"
+   ],
+   "tags": [
+    "clock",
+    "stakes"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "pc"
+  },
+  {
+   "id": "pressure.body_found",
+   "axis": "opening_pressure",
+   "text": "開けてはいけなかった場所で、ひとつの死体が見つかる",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "death",
+    "crime"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "world"
+  },
+  {
+   "id": "pressure.betrayal_revealed",
+   "axis": "opening_pressure",
+   "text": "信じていた相手の裏切りが、動かぬ形で露見する",
+   "genre": [
+    "df",
+    "hd",
+    "sf"
+   ],
+   "tags": [
+    "betrayal",
+    "shock"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "npc"
+  },
+  {
+   "id": "pressure.pursuer_arrives",
+   "axis": "opening_pressure",
+   "text": "逃げてきたはずの追っ手が、この土地まで来ている",
+   "genre": [
+    "mh",
+    "df",
+    "sf"
+   ],
+   "tags": [
+    "chase",
+    "danger"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "pc"
+  },
+  {
+   "id": "pressure.abduction",
+   "axis": "opening_pressure",
+   "text": "目の前で、守るべき誰かがさらわれる",
+   "genre": [
+    "df",
+    "sf",
+    "mh"
+   ],
+   "tags": [
+    "kidnap",
+    "urgent"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "npc"
+  },
+  {
+   "id": "pressure.message_from_past",
+   "axis": "opening_pressure",
+   "text": "もう関わらないはずだった過去から、一通の連絡が届く",
+   "genre": [
+    "hd",
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "past",
+    "summons"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "pc"
+  },
+  {
+   "id": "pressure.debt_called",
+   "axis": "opening_pressure",
+   "text": "猶予が終わり、負債の取り立てが今日やってくる",
+   "genre": [
+    "mh",
+    "hd"
+   ],
+   "tags": [
+    "debt",
+    "threat"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "pc"
+  },
+  {
+   "id": "pressure.death_of_patron",
+   "axis": "opening_pressure",
+   "text": "後ろ盾だった人物が急死し、庇護が消える",
+   "genre": [
+    "df",
+    "hd"
+   ],
+   "tags": [
+    "loss",
+    "exposure"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "world"
+  },
+  {
+   "id": "pressure.false_accusation",
+   "axis": "opening_pressure",
+   "text": "やっていない罪を着せられ、逃げ場を失いつつある",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "injustice",
+    "hunted"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "pc"
+  },
+  {
+   "id": "pressure.sealed_opens",
+   "axis": "opening_pressure",
+   "text": "長く封じられていた場所への道が、突然ひらく",
+   "genre": [
+    "df",
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "forbidden",
+    "opportunity"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "world"
+  },
+  {
+   "id": "pressure.deliver_object",
+   "axis": "opening_pressure",
+   "text": "運ばねばならない物を託される。中身は知らされない",
+   "genre": [
+    "sf",
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "escort",
+    "mystery"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "pc"
+  },
+  {
+   "id": "pressure.return_changed",
+   "axis": "opening_pressure",
+   "text": "戻ってきた場所が、記憶とまるで違ってしまっている",
+   "genre": [
+    "mh",
+    "hd",
+    "sf"
+   ],
+   "tags": [
+    "uncanny",
+    "estranged"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "world"
+  },
+  {
+   "id": "pressure.oath_broken",
+   "axis": "opening_pressure",
+   "text": "破るはずのなかった誓いが、破られてしまった",
+   "genre": [
+    "df"
+   ],
+   "tags": [
+    "oath",
+    "consequence"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "npc"
+  },
+  {
+   "id": "pressure.monster_manifest",
+   "axis": "opening_pressure",
+   "text": "日常の裂け目から、あってはならないものが現れる",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "threat",
+    "break"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "world"
+  },
+  {
+   "id": "pressure.sudden_windfall",
+   "axis": "opening_pressure",
+   "text": "理由のわからない幸運が、誰かの犠牲と引き換えに転がり込む",
+   "genre": [
+    "df",
+    "hd",
+    "sf"
+   ],
+   "tags": [
+    "reversal",
+    "suspicion"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "pc"
+  },
+  {
+   "id": "pressure.impostor_exposed",
+   "axis": "opening_pressure",
+   "text": "偽っていた素性が、あと一歩で暴かれそうになる",
+   "genre": [
+    "mh",
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "identity",
+    "risk"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "pc"
+  },
+  {
+   "id": "pressure.rescue_needed",
+   "axis": "opening_pressure",
+   "text": "助けを求める声が届く。応えれば自分も危うい",
+   "genre": [
+    "df",
+    "hd",
+    "mh"
+   ],
+   "tags": [
+    "rescue",
+    "risk"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "npc"
+  },
+  {
+   "id": "pressure.forbidden_attraction",
+   "axis": "opening_pressure",
+   "text": "近づいてはいけない相手に、心が動いてしまう",
+   "genre": [
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "taboo",
+    "desire"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "pc"
+  },
+  {
+   "id": "pressure.omen_in_ordinary",
+   "axis": "opening_pressure",
+   "text": "ありふれた日常に、ひとつだけ理に合わない異変が混じる",
+   "genre": [
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "anomaly",
+    "dread"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "world"
+  },
+  {
+   "id": "pressure.confession_demanded",
+   "axis": "opening_pressure",
+   "text": "誰かが、こちらに償いか告白を迫ってくる",
+   "genre": [
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "reckoning",
+    "guilt"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "pc"
+  },
+  {
+   "id": "pressure.summons_authority",
+   "axis": "opening_pressure",
+   "text": "逆らえない権力から、名指しで呼び出される",
+   "genre": [
+    "df",
+    "sf"
+   ],
+   "tags": [
+    "authority",
+    "tension"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "pc"
+  },
+  {
+   "id": "pressure.supply_cut",
+   "axis": "opening_pressure",
+   "text": "補給や連絡が断たれ、孤立が始まる",
+   "genre": [
+    "sf",
+    "mh"
+   ],
+   "tags": [
+    "isolation",
+    "scarcity"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "world"
+  },
+  {
+   "id": "pressure.recognition_denied",
+   "axis": "opening_pressure",
+   "text": "顔見知りのはずの相手に、他人として扱われる",
+   "genre": [
+    "mh",
+    "sf",
+    "hd"
+   ],
+   "tags": [
+    "erasure",
+    "uncanny"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "npc"
+  },
+  {
+   "id": "pressure.inheritance_burden",
+   "axis": "opening_pressure",
+   "text": "継ぎたくなかった立場が、突然肩に乗せられる",
+   "genre": [
+    "df",
+    "hd"
+   ],
+   "tags": [
+    "duty",
+    "reluctance"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "pc"
+  },
+  {
+   "id": "pressure.contagion",
+   "axis": "opening_pressure",
+   "text": "触れた者から広がる何かが、この場所に入り込んでいる",
+   "genre": [
+    "mh",
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "infection",
+    "spread"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "world"
+  },
+  {
+   "id": "pressure.ultimatum_from_kin",
+   "axis": "opening_pressure",
+   "text": "身内から、二つに一つの選択を突きつけられる",
+   "genre": [
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "family",
+    "dilemma"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "npc"
+  },
+  {
+   "id": "pressure.witness_hunted",
+   "axis": "opening_pressure",
+   "text": "見てしまったせいで、口封じの手が伸びてくる",
+   "genre": [
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "witness",
+    "danger"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "pc"
+  },
+  {
+   "id": "pressure.ritual_interrupted",
+   "axis": "opening_pressure",
+   "text": "続けねばならない儀式が、何者かに中断される",
+   "genre": [
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "ritual",
+    "disruption"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "world"
+  },
+  {
+   "id": "pressure.double_appears",
+   "axis": "opening_pressure",
+   "text": "自分と同じ顔の何者かが、街で目撃される",
+   "genre": [
+    "sf",
+    "mh"
+   ],
+   "tags": [
+    "double",
+    "identity"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "npc"
+  },
+  {
+   "id": "pressure.evacuation",
+   "axis": "opening_pressure",
+   "text": "この土地を今すぐ離れろと、理由も告げず急かされる",
+   "genre": [
+    "sf",
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "flee",
+    "urgency"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "world"
+  },
+  {
+   "id": "pressure.old_enemy_returns",
+   "axis": "opening_pressure",
+   "text": "終わったはずの因縁が、姿を変えて戻ってくる",
+   "genre": [
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "nemesis",
+    "reckoning"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "npc"
+  },
+  {
+   "id": "pressure.promise_to_dying",
+   "axis": "opening_pressure",
+   "text": "死にゆく者から、果たせるとは思えない約束を託される",
+   "genre": [
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "promise",
+    "weight"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "pc"
+  },
+  {
+   "id": "pressure.tampered_memory",
+   "axis": "opening_pressure",
+   "text": "自分の記憶に、誰かが手を加えた痕跡を見つける",
+   "genre": [
+    "sf",
+    "mh"
+   ],
+   "tags": [
+    "memory",
+    "violation"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "pc"
+  },
+  {
+   "id": "pressure.faction_at_door",
+   "axis": "opening_pressure",
+   "text": "対立する勢力が、同時にこちらへ接触してくる",
+   "genre": [
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "politics",
+    "squeeze"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "pc"
+  },
+  {
+   "id": "pressure.child_alone",
+   "axis": "opening_pressure",
+   "text": "身寄りのない子どもが、こちらを頼って現れる",
+   "genre": [
+    "hd",
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "dependent",
+    "responsibility"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "npc"
+  },
+  {
+   "id": "pressure.signal_from_dark",
+   "axis": "opening_pressure",
+   "text": "届くはずのない場所から、助けを求める信号が来る",
+   "genre": [
+    "sf",
+    "mh"
+   ],
+   "tags": [
+    "distress",
+    "mystery"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "focus": "world"
+  },
+  {
+   "id": "secret.false_memory",
+   "axis": "secret",
+   "text": "主人公の大切な記憶のひとつが、植え付けられた偽物である",
+   "genre": [
+    "sf",
+    "mh"
+   ],
+   "tags": [
+    "memory",
+    "identity"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.split_self",
+   "axis": "secret",
+   "text": "主人公の中に、本人の知らないもう一つの人格が同居している",
+   "genre": [
+    "mh",
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "dual",
+    "hidden"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.false_world",
+   "axis": "secret",
+   "text": "この世界そのものが、誰かに用意された偽りの舞台である",
+   "genre": [
+    "sf",
+    "mh"
+   ],
+   "tags": [
+    "simulation",
+    "reveal"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.hidden_kinship",
+   "axis": "secret",
+   "text": "敵対する相手が、実は血を分けた身内である",
+   "genre": [
+    "df",
+    "hd"
+   ],
+   "tags": [
+    "family",
+    "irony"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.already_dead",
+   "axis": "secret",
+   "text": "主人公は、自分が生きていると思い込んでいるだけかもしれない",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "death",
+    "denial"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.contagion_carrier",
+   "axis": "secret",
+   "text": "救おうとしている相手こそが、災いの源である",
+   "genre": [
+    "mh",
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "infection",
+    "irony"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.staged_rescue",
+   "axis": "secret",
+   "text": "助けに来た者が、そもそも危機を仕組んだ張本人である",
+   "genre": [
+    "sf",
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "betrayal",
+    "setup"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.borrowed_face",
+   "axis": "secret",
+   "text": "仲間の一人が、別の何かに顔を貸しているだけの存在である",
+   "genre": [
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "impostor",
+    "uncanny"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.sacrifice_pact",
+   "axis": "secret",
+   "text": "この土地の平穏は、誰かを定期的に差し出す契約で保たれている",
+   "genre": [
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "ritual",
+    "cost"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.erased_crime",
+   "axis": "secret",
+   "text": "皆が忘れている事件を、主人公だけが覚えている",
+   "genre": [
+    "mh",
+    "hd"
+   ],
+   "tags": [
+    "memory",
+    "guilt"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.inverted_roles",
+   "axis": "secret",
+   "text": "被害者だと思っていた者が、本当の加害者である",
+   "genre": [
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "reversal",
+    "moral"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.machine_heart",
+   "axis": "secret",
+   "text": "人間だと信じていた誰かが、そうではない",
+   "genre": [
+    "sf"
+   ],
+   "tags": [
+    "android",
+    "identity"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.debt_is_love",
+   "axis": "secret",
+   "text": "冷たい取引の裏に、口にできない情がある",
+   "genre": [
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "hidden_love",
+    "warmth"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.time_loop",
+   "axis": "secret",
+   "text": "この事態は初めてではない。何度も繰り返されている",
+   "genre": [
+    "sf",
+    "mh"
+   ],
+   "tags": [
+    "loop",
+    "repetition"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.false_savior",
+   "axis": "secret",
+   "text": "救世主とされる存在が、破滅の引き金である",
+   "genre": [
+    "df",
+    "sf"
+   ],
+   "tags": [
+    "prophecy",
+    "irony"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.living_building",
+   "axis": "secret",
+   "text": "舞台となる場所そのものが、意思を持って動いている",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "place",
+    "alive"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.swapped_child",
+   "axis": "secret",
+   "text": "育てられてきた素性が、取り違えられたものである",
+   "genre": [
+    "hd",
+    "mh"
+   ],
+   "tags": [
+    "identity",
+    "family"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.voluntary_captive",
+   "axis": "secret",
+   "text": "囚われの相手は、自ら望んでそこに留まっている",
+   "genre": [
+    "mh",
+    "df",
+    "hd"
+   ],
+   "tags": [
+    "captivity",
+    "choice"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.dead_still_speak",
+   "axis": "secret",
+   "text": "失われたはずの人物の意思が、まだ関与し続けている",
+   "genre": [
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "ghost",
+    "influence"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.poisoned_gift",
+   "axis": "secret",
+   "text": "恵みとして受け取ったものが、ゆっくり蝕んでいる",
+   "genre": [
+    "df",
+    "sf"
+   ],
+   "tags": [
+    "curse",
+    "slow"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.two_factions_one_hand",
+   "axis": "secret",
+   "text": "争う二つの勢力を、裏で同じ者が操っている",
+   "genre": [
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "conspiracy",
+    "control"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.protector_is_jailer",
+   "axis": "secret",
+   "text": "守り手が、実は逃がさないための番人である",
+   "genre": [
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "control",
+    "betrayal"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.name_is_seal",
+   "axis": "secret",
+   "text": "主人公の名そのものが、何かを封じる鍵になっている",
+   "genre": [
+    "df"
+   ],
+   "tags": [
+    "name",
+    "seal"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.memory_market_leak",
+   "axis": "secret",
+   "text": "売ったはずの記憶が、他人の中で生き続けている",
+   "genre": [
+    "sf",
+    "hd"
+   ],
+   "tags": [
+    "memory",
+    "leak"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.village_all_know",
+   "axis": "secret",
+   "text": "よそ者を除く全員が、ある事実を共有し黙っている",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "complicity",
+    "isolation"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.cure_needs_victim",
+   "axis": "secret",
+   "text": "救いの手立てには、別の誰かの犠牲が必要である",
+   "genre": [
+    "df",
+    "sf"
+   ],
+   "tags": [
+    "cost",
+    "dilemma"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.hero_caused_it",
+   "axis": "secret",
+   "text": "解決しようとしている災いを、過去の自分が招いていた",
+   "genre": [
+    "hd",
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "guilt",
+    "causality"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "secret.clock_is_lying",
+   "axis": "secret",
+   "text": "刻まれている期限そのものが、偽られている",
+   "genre": [
+    "sf",
+    "mh"
+   ],
+   "tags": [
+    "deadline",
+    "deception"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.night_only_platform",
+   "axis": "world_rule",
+   "text": "そのホームは夜間の一時間だけ現れ、時間を過ぎると消える",
+   "genre": [
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "timed",
+    "liminal"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.no_names_at_dusk",
+   "axis": "world_rule",
+   "text": "日没後に本名を呼ぶと、呼ばれた者に良くないことが起きる",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "taboo",
+    "name"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.tide_seals_passage",
+   "axis": "world_rule",
+   "text": "豪雨や満潮になると、地下通路は水没して通れなくなる",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "water",
+    "access"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.floor_gives_way",
+   "axis": "world_rule",
+   "text": "東棟は床が脆く、二人以上で同時に走ると抜ける",
+   "genre": [
+    "mh"
+   ],
+   "tags": [
+    "physical",
+    "fragile"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.stairs_blocked_above",
+   "axis": "world_rule",
+   "text": "非常階段は三階から上が封鎖され、迂回するしかない",
+   "genre": [
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "access",
+    "blocked"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.mirrors_lie",
+   "axis": "world_rule",
+   "text": "この場所の鏡は、映すものを少しだけ違えて返す",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "mirror",
+    "uncanny"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.debt_of_speech",
+   "axis": "world_rule",
+   "text": "交わした約束は文字通り効力を持ち、破ると代償が来る",
+   "genre": [
+    "df"
+   ],
+   "tags": [
+    "oath",
+    "binding"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.no_light_after_bell",
+   "axis": "world_rule",
+   "text": "鐘が鳴った後は灯りを点けてはいけない決まりがある",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "taboo",
+    "dark"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.memory_fades_here",
+   "axis": "world_rule",
+   "text": "この土地に長くいると、外での記憶が薄れていく",
+   "genre": [
+    "sf",
+    "mh"
+   ],
+   "tags": [
+    "memory",
+    "erosion"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.gravity_shifts",
+   "axis": "world_rule",
+   "text": "区画によって重力の向きが変わり、上下の感覚が狂う",
+   "genre": [
+    "sf"
+   ],
+   "tags": [
+    "gravity",
+    "disorient"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.one_way_doors",
+   "axis": "world_rule",
+   "text": "一度くぐった扉は、二度と同じ側へは開かない",
+   "genre": [
+    "mh",
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "oneway",
+    "trap"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.count_the_guests",
+   "axis": "world_rule",
+   "text": "客の数を数え間違えると、余分な一人が紛れ込む",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "counting",
+    "uncanny"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.fog_takes_direction",
+   "axis": "world_rule",
+   "text": "霧が出ると方角の意味が失われ、来た道へは戻れない",
+   "genre": [
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "fog",
+    "lost"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.payment_in_years",
+   "axis": "world_rule",
+   "text": "この場所での取引は、金ではなく寿命や記憶で支払う",
+   "genre": [
+    "df",
+    "sf"
+   ],
+   "tags": [
+    "cost",
+    "trade"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.dead_hours",
+   "axis": "world_rule",
+   "text": "丑三つ時だけ、いないはずの住人が廊下を歩く",
+   "genre": [
+    "mh"
+   ],
+   "tags": [
+    "timed",
+    "haunt"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.no_running_east",
+   "axis": "world_rule",
+   "text": "東の回廊では決して走ってはいけないと皆が守っている",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "taboo",
+    "physical"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.reflection_ages",
+   "axis": "world_rule",
+   "text": "水面に映った姿だけが、本人より早く老いていく",
+   "genre": [
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "reflection",
+    "time"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.sound_summons",
+   "axis": "world_rule",
+   "text": "大きな音を立てると、闇の奥の何かが近づいてくる",
+   "genre": [
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "sound",
+    "threat"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.locked_at_dawn",
+   "axis": "world_rule",
+   "text": "夜明けと同時に建物が施錠され、日暮れまで出られない",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "confinement",
+    "timed"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.names_carved_come",
+   "axis": "world_rule",
+   "text": "壁に名を刻まれた者は、やがて必ず訪ねて来られる",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "name",
+    "summon"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.machines_dream",
+   "axis": "world_rule",
+   "text": "古い機械が夜だけ勝手に動き、何かを繰り返している",
+   "genre": [
+    "sf",
+    "mh"
+   ],
+   "tags": [
+    "machine",
+    "uncanny"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "rule.oath_marks_skin",
+   "axis": "world_rule",
+   "text": "誓いを立てると印が肌に浮かび、破れば印が焼ける",
+   "genre": [
+    "df"
+   ],
+   "tags": [
+    "oath",
+    "body"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   }
+  },
+  {
+   "id": "mood.uneasy",
+   "axis": "mood_tone",
+   "text": "静けさの底に、名づけられない不安が澱んでいる",
+   "genre": [
+    "mh",
+    "hd"
+   ],
+   "tags": [
+    "uneasy",
+    "restrained"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "uneasy",
+   "register": "restrained"
+  },
+  {
+   "id": "mood.foreboding",
+   "axis": "mood_tone",
+   "text": "何かが起きる前の、息を詰めるような予感が漂う",
+   "genre": [
+    "mh",
+    "df"
+   ],
+   "tags": [
+    "foreboding",
+    "tense"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "foreboding",
+   "register": "tense"
+  },
+  {
+   "id": "mood.eerie",
+   "axis": "mood_tone",
+   "text": "見慣れたものが、ほんの少しだけ間違っている無気味さ",
+   "genre": [
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "eerie",
+    "understated"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "eerie",
+   "register": "understated"
+  },
+  {
+   "id": "mood.melancholy",
+   "axis": "mood_tone",
+   "text": "過ぎ去ったものへの、静かで甘い痛み",
+   "genre": [
+    "hd"
+   ],
+   "tags": [
+    "melancholy",
+    "lyrical"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "melancholy",
+   "register": "lyrical"
+  },
+  {
+   "id": "mood.serene",
+   "axis": "mood_tone",
+   "text": "嵐の合間の、傷を舐めるような穏やかさ",
+   "genre": [
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "serene",
+    "gentle"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "serene",
+   "register": "gentle"
+  },
+  {
+   "id": "mood.suspense",
+   "axis": "mood_tone",
+   "text": "糸が張りつめ、一手の間違いが命取りになる緊張",
+   "genre": [
+    "mh",
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "suspenseful",
+    "clipped"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "suspenseful",
+   "register": "clipped"
+  },
+  {
+   "id": "mood.brutal",
+   "axis": "mood_tone",
+   "text": "痛みも死も飾らずに、そのまま突きつける苛烈さ",
+   "genre": [
+    "df"
+   ],
+   "tags": [
+    "brutal",
+    "blunt"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "brutal",
+   "register": "blunt"
+  },
+  {
+   "id": "mood.grim",
+   "axis": "mood_tone",
+   "text": "救いの見えない、灰色に沈んだ重さ",
+   "genre": [
+    "df",
+    "sf"
+   ],
+   "tags": [
+    "grim",
+    "heavy"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "grim",
+   "register": "heavy"
+  },
+  {
+   "id": "mood.hopeful",
+   "axis": "mood_tone",
+   "text": "暗がりの中に、消えない小さな灯が残る",
+   "genre": [
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "hopeful",
+    "warm"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "hopeful",
+   "register": "warm"
+  },
+  {
+   "id": "mood.claustrophobic",
+   "axis": "mood_tone",
+   "text": "逃げ場のない、壁が迫ってくるような閉塞",
+   "genre": [
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "claustrophobic",
+    "tight"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "claustrophobic",
+   "register": "tight"
+  },
+  {
+   "id": "mood.nostalgic",
+   "axis": "mood_tone",
+   "text": "もう戻れない日々の匂いが、ふと立ちのぼる",
+   "genre": [
+    "hd",
+    "mh"
+   ],
+   "tags": [
+    "nostalgic",
+    "soft"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "nostalgic",
+   "register": "soft"
+  },
+  {
+   "id": "mood.paranoid",
+   "axis": "mood_tone",
+   "text": "誰も信じられない、視線を疑い続ける張り詰め",
+   "genre": [
+    "mh",
+    "sf",
+    "df"
+   ],
+   "tags": [
+    "paranoid",
+    "jittery"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "paranoid",
+   "register": "jittery"
+  },
+  {
+   "id": "mood.tender",
+   "axis": "mood_tone",
+   "text": "壊れやすいものを、そっと両手で包むような優しさ",
+   "genre": [
+    "hd"
+   ],
+   "tags": [
+    "tender",
+    "intimate"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "tender",
+   "register": "intimate"
+  },
+  {
+   "id": "mood.dreamlike",
+   "axis": "mood_tone",
+   "text": "輪郭が溶け、現実と夢の境が曖昧になる浮遊感",
+   "genre": [
+    "sf",
+    "df",
+    "mh"
+   ],
+   "tags": [
+    "dreamlike",
+    "hazy"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "dreamlike",
+   "register": "hazy"
+  },
+  {
+   "id": "mood.cathartic",
+   "axis": "mood_tone",
+   "text": "痛みの果てに、涙とともに何かが解ける切なさ",
+   "genre": [
+    "hd",
+    "df"
+   ],
+   "tags": [
+    "cathartic",
+    "bittersweet"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "cathartic",
+   "register": "bittersweet"
+  },
+  {
+   "id": "mood.reverent",
+   "axis": "mood_tone",
+   "text": "畏れと敬いが入り混じる、静かで厳かな空気",
+   "genre": [
+    "df"
+   ],
+   "tags": [
+    "reverent",
+    "solemn"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "reverent",
+   "register": "solemn"
+  },
+  {
+   "id": "mood.restless",
+   "axis": "mood_tone",
+   "text": "じっとしていられない、焦れと苛立ちが滲む落ち着かなさ",
+   "genre": [
+    "hd",
+    "sf"
+   ],
+   "tags": [
+    "restless",
+    "agitated"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "restless",
+   "register": "agitated"
+  },
+  {
+   "id": "mood.uncanny_calm",
+   "axis": "mood_tone",
+   "text": "何もかもが穏やかすぎて、それ自体が恐ろしい静けさ",
+   "genre": [
+    "mh",
+    "sf"
+   ],
+   "tags": [
+    "uncanny",
+    "flat"
+   ],
+   "compatibleWith": [],
+   "avoidWith": [],
+   "provenance": {
+    "origin": "authored",
+    "license": "internal",
+    "derivation": "authored"
+   },
+   "mood": "uncanny",
+   "register": "flat"
+  }
+ ]
+}

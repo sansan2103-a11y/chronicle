@@ -1,0 +1,61 @@
+{
+ "schemaVersion": 1,
+ "recentWindow": {
+  "perAxis": 8,
+  "combination": 15,
+  "minAxisDiff": 2
+ },
+ "banCombinations": [
+  {
+   "id": "ban.orphan_revenge_chosen",
+   "atoms": [
+    "lack.revenge",
+    "stance.marked_one"
+   ],
+   "withTags": [
+    "revenge"
+   ],
+   "reason": "復讐+選ばれし者+孤児の三点は既視感が強く主人公が受け身になりやすい"
+  },
+  {
+   "id": "ban.amnesia_false_world",
+   "axesTogether": [
+    "stance.amnesiac",
+    "secret.false_world"
+   ],
+   "reason": "記憶喪失×偽の世界は使い古された二重どんでん返し"
+  },
+  {
+   "id": "ban.double_double",
+   "atoms": [
+    "secret.split_self",
+    "secret.machine_heart",
+    "pressure.double_appears"
+   ],
+   "maxOfThese": 1,
+   "reason": "アイデンティティ系の秘密を複数重ねると散らかる"
+  }
+ ],
+ "softPenalties": [
+  {
+   "whenTags": [
+    "identity"
+   ],
+   "acrossAxes": [
+    "stance",
+    "secret",
+    "opening_pressure"
+   ],
+   "maxCount": 2,
+   "reason": "アイデンティティ主題の過積載を避ける(0にはしない)"
+  },
+  {
+   "whenTags": [
+    "water"
+   ],
+   "maxCount": 2,
+   "reason": "水モチーフの反復を緩く抑制"
+  }
+ ],
+ "positivePromptRule": "禁止はこのコード層で除外し、AIプロンプトには渡さない。AIには肯定形で『この場所でこの人物のこの目的の、具体的な感覚と行動で開幕せよ』と与える(pink elephant回避)。"
+}

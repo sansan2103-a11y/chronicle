@@ -1,0 +1,75 @@
+{
+ "schemaVersion": 1,
+ "verifiedAt": "2026-07-01",
+ "principle": "事実を抽出し型レベルに抽象化+自作の行動制約。本文コピー禁止・体系的なデータ全体再構成禁止(Feist+idea/expression分離+OSM substantial閾値未満)。帰属不要でもprovenanceは必ず記録。",
+ "sources": [
+  {
+   "id": "authored",
+   "license": "internal",
+   "attribution": "none",
+   "use": "v1は全てこれ(オリジナル創作)",
+   "status": "active"
+  },
+  {
+   "id": "wikidata",
+   "license": "CC0",
+   "attribution": "none_required",
+   "use": "型/subclass語彙(地形/職業/建築/神話/制度)を抽象材料に",
+   "endpoint": "https://query.wikidata.org/sparql",
+   "note": "instanceでなくwdt:P279*で型を引く・Accept:text/csv・60s/query・descriptive UA",
+   "status": "planned"
+  },
+  {
+   "id": "aozora_metadata",
+   "license": "CC-BY-2.1-JP",
+   "attribution": "required",
+   "use": "作品リストCSV(初出年/NDC/舞台モチーフ)を発想素材に",
+   "file": "list_person_all_extended_utf8.zip",
+   "ndcFilter": [
+    "913",
+    "388",
+    "913.8"
+   ],
+   "note": "本文でなくメタのみ・著作権フラグ行は除外",
+   "status": "planned"
+  },
+  {
+   "id": "aozora_public_domain_text",
+   "license": "public_domain_JP",
+   "attribution": "requested",
+   "use": "満了作品の舞台/対立/感情構造を抽象化して再構成(本文コピー禁止)",
+   "note": "翻訳者権利は別・図書カード確認",
+   "status": "planned"
+  },
+  {
+   "id": "jp_gov_opendata",
+   "license": "PDL1.0(CC-BY相当)",
+   "attribution": "required",
+   "use": "地域の祭事/災害/廃線/産業史の手触り",
+   "note": "肖像権等は別",
+   "status": "future"
+  },
+  {
+   "id": "wikimedia_commons",
+   "license": "per_file",
+   "attribution": "only_if_derivative",
+   "use": "ムードボード/描写参考(閲覧のみなら義務なし)",
+   "status": "future"
+  },
+  {
+   "id": "osm",
+   "license": "ODbL",
+   "attribution": "if_data_used",
+   "use": "地形/導線の発想参考のみ(非体系・型のみ)",
+   "note": "体系的抽出はsubstantial=義務発生。salami禁止",
+   "status": "future"
+  },
+  {
+   "id": "project_gutenberg",
+   "license": "US_PD_branded",
+   "attribution": "none_if_stripped",
+   "use": "初期は非推奨",
+   "status": "declined"
+  }
+ ]
+}

@@ -1,0 +1,71 @@
+{
+ "schemaVersion": 1,
+ "genreMoodWeights": {
+  "mh": {
+   "uneasy": 3,
+   "foreboding": 3,
+   "eerie": 3,
+   "claustrophobic": 2,
+   "paranoid": 2,
+   "uncanny": 2,
+   "nostalgic": 1,
+   "melancholy": 1
+  },
+  "df": {
+   "grim": 3,
+   "brutal": 2,
+   "foreboding": 2,
+   "reverent": 2,
+   "cathartic": 2,
+   "serene": 1,
+   "hopeful": 1,
+   "eerie": 1
+  },
+  "sf": {
+   "dreamlike": 2,
+   "paranoid": 2,
+   "claustrophobic": 2,
+   "suspenseful": 2,
+   "uncanny": 2,
+   "restless": 1,
+   "grim": 1,
+   "hopeful": 1
+  },
+  "hd": {
+   "melancholy": 3,
+   "tender": 3,
+   "nostalgic": 3,
+   "cathartic": 2,
+   "hopeful": 2,
+   "restless": 1,
+   "serene": 1,
+   "uneasy": 1
+  }
+ },
+ "axisDrawOrder": [
+  "setting",
+  "era_tech",
+  "stance",
+  "relationship",
+  "lack_desire",
+  "opening_pressure",
+  "secret",
+  "world_rule",
+  "mood_tone"
+ ],
+ "derivations": [
+  {
+   "rule": "relationship_from_stance",
+   "note": "stanceがpursuer/protectee等を含む時、対の関係(rel.pursuer_fugitive等)を優先示唆・上書き可"
+  },
+  {
+   "rule": "world_rule_to_constraints",
+   "note": "抽選したworld_ruleのtextをStartPack.world.constraintsへ写し、fix333身体エンジンに渡す"
+  }
+ ],
+ "coherence": {
+  "method": "soft_weighted_prefer_over_hard_reject",
+  "note": "compatibleWith一致で加点/avoidWith一致で減点。ハード除外はban層のみ。過剰制約は平均(クリシェ)へ収束するので大半はソフト。",
+  "validation": "Expressive Range Analysis: 100回生成しaxis分布とgenre分布をヒートマップ化、塊(oatmeal)と穴を検出。制約調整の前後で比較。"
+ }
+}
