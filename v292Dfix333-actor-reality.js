@@ -207,11 +207,67 @@
           }
         }
       }catch(e){ try{console.warn(TAG,'api wrap err',e.message);}catch(_){} }
+      try{
+        if(p && npcAutonomyOn() && res && typeof res.text==='string'){
+          var _sel2=null; try{ _sel2=selectForeground(p.states, p.text, p.turnNum); }catch(_s){}
+          var _budget=_sel2?_sel2.budget:2;
+          var _hero=heroName();
+          var _npcs=presentNames().filter(function(n){ return n && n!==_hero; });
+          var _qa=analyzeEnsemble(proseOnly(res.text), _npcs, _budget);
+          _qa.t=Date.now(); _qa.turn=p.turnNum; _qa.fg=_sel2?_sel2.fg:null;
+          logQuality(_qa);
+          if(_qa.rollcall||_qa.melodrama.length||_qa.monopoly){ try{ console.log(TAG,'QUAL flags', JSON.stringify({rollcall:_qa.rollcall, melo:_qa.melodrama.length, mono:_qa.monopoly, turn:_qa.turn})); }catch(_){} }
+        }
+      }catch(_q){ try{console.warn(TAG,'qual err',_q.message);}catch(_){} }
       return res;
     };
     A.__fix333call=true; try{console.log(TAG,'Api.call wrap installed');}catch(e){}
     return true;
   }
+  // ---- Phase2.2 ①: アンサンブル品質検出器 (LOGGING ONLY・resは改変しない・DeepResearch 2026-07-01) ----
+  // 文単位で帰属(BookNLP的)=文字数窓の隣接NPC食い込みを回避。台詞別ストリーム構造ゆえ発話動詞を主シグナルに。
+  var MELO_CLUSTERS = {
+    tremble:['震え','戦慄','わなな','身震い','ぶるっ','ふるえ','慄然'],
+    tears:['涙','嗚咽','泣き','しゃくり','目頭','咽び'],
+    scream:['悲鳴','絶叫','叫ん','喚'],
+    heart:['鼓動','心臓','動悸','脈打']
+  };
+  var SPEECH_VERB=/(答え|言っ|返し|呟|囁|叫ん|絞り出|漏らし|口を開)/;
+  var NEG_ANSWER=/(答える代わり|答えず|答えなかった|答えない|答えられ(ず|ない)|返す代わり|口を開(かず|かない))/;
+  function _splitSents(t){ try{ return String(t||'').split(/(?<=[。！？\n])/).filter(function(x){return x&&x.trim().length;}); }catch(e){ return [String(t||'')]; } }
+  function _stripQuotes(s){ return String(s||'').replace(/[「『][^」』]*[」』]/g,''); }
+  function analyzeEnsemble(prose, npcNames, budget){
+    var sents=_splitSents(prose);
+    var acc={}; npcNames.forEach(function(n){ acc[n]={speech:false,quote:false,clauses:0,chars:0,melo:{},seen:false}; });
+    var lastOwner=null;
+    sents.forEach(function(sen){
+      var bare=_stripQuotes(sen);
+      var named=npcNames.filter(function(n){ return bare.indexOf(n)>=0; });   // 引用符の外で名指しされたNPC
+      var owner = named.length? named[0] : lastOwner;                          // 無名文は直前の主体の継続
+      if(owner && acc[owner]){
+        acc[owner].seen=true;
+        if(SPEECH_VERB.test(bare) && !NEG_ANSWER.test(bare)) acc[owner].speech=true;
+        if(/[「『][^」』]{2,}[」』]/.test(sen)) acc[owner].quote=true;
+        acc[owner].clauses += (bare.match(/[、](?=.)/g)||[]).length + 1;
+        acc[owner].chars += sen.length;
+        Object.keys(MELO_CLUSTERS).forEach(function(cat){ if(new RegExp(MELO_CLUSTERS[cat].join('|')).test(bare)) acc[owner].melo[cat]=true; });
+      }
+      if(named.length) lastOwner=owner;
+    });
+    var beats={}, fullN=0, charShare={}, total=0;
+    npcNames.forEach(function(n){
+      var a=acc[n]; if(!a.seen){ beats[n]='absent'; return; }
+      var sc=0; if(a.speech||a.quote) sc+=1.5; if(a.clauses>=3) sc+=1.0;       // full=発話/引用+複数節。ジェスチャーのみはcompressed
+      var cls= sc>=2?'full':'compressed'; beats[n]=cls; if(cls==='full') fullN++;
+      charShare[n]=a.chars; total+=a.chars;
+    });
+    var cats={}; npcNames.forEach(function(n){ Object.keys(acc[n].melo||{}).forEach(function(c){ (cats[c]=cats[c]||[]).push(n); }); });
+    var meloFlags=[]; Object.keys(cats).forEach(function(c){ if(cats[c].length>=2) meloFlags.push(c+':'+cats[c].join('/')); });
+    var maxShare=0; Object.keys(charShare).forEach(function(n){ if(charShare[n]>maxShare) maxShare=charShare[n]; });
+    var monopoly= total>0 && (maxShare/total)>0.75 && Object.keys(charShare).length>=2;
+    return { beats:beats, fullCount:fullN, budget:budget, rollcall:(fullN>budget), melodrama:meloFlags, monopoly:monopoly };
+  }
+  function logQuality(entry){ try{ var k='v292Dfix333Qual'; var arr=JSON.parse(localStorage.getItem(k)||'[]'); arr.push(entry); if(arr.length>60) arr=arr.slice(-60); localStorage.setItem(k, JSON.stringify(arr)); }catch(e){} }
   function logRing(entry){ try{ var k='v292Dfix333Log'; var arr=JSON.parse(localStorage.getItem(k)||'[]'); arr.push(entry); if(arr.length>50) arr=arr.slice(-50); localStorage.setItem(k, JSON.stringify(arr)); }catch(e){} }
   (function poll(){ poll._n=(poll._n||0)+1; var a=wrapBuild(), b=wrapApi(); if(a&&b) return; if(poll._n>100) return; setTimeout(poll,400); })();
   try{ setInterval(function(){ wrapBuild(); wrapApi(); },3000); }catch(e){}
