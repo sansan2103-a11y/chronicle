@@ -105,7 +105,7 @@
     var loc=pick.setting.text;
     var obj=pick.opening_pressure.text+'。'
       +'主人公は'+heroStanceShort(pick.stance)+'として、'+lackShort(pick.lack_desire)+'。';
-    var tone=GLABEL[g]+'。'+pick.mood_tone.text+'（'+(pick.mood_tone.register||'')+'）。心理描写重視・会話多め。';
+    var tone=GLABEL[g]+'。'+pick.mood_tone.text+'。心理描写重視・会話多め。';
     var hero={ name:drawName(),
       desc:pick.stance.text+'。'+lackShort(pick.lack_desire)+'。' };
     // NPC: 関係とNPC用stanceから
