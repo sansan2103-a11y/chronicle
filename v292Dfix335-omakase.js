@@ -165,12 +165,15 @@
       if(err||!BANK){ try{ UI.setStatus('おまかせ生成: 種データの読込に失敗しました'); }catch(_){}; return; }
       var pick=drawStartPack();
       var f=mapToFields(pick);
-      // 設定フォームが既に開いていれば openSettings を呼ばない(保存済み設定でユーザーの現入力を上書きしないため)
-      var fieldsVisible=(function(){ var e=document.getElementById('cfgHName'); return !!(e && e.offsetParent!==null); })();
-      try{ if(!fieldsVisible && typeof UI!=='undefined' && UI.openSettings) UI.openSettings(); }catch(_){}
+      // ★既入力を先にスナップショット(保存済み/入力途中を問わず、ユーザーの値を必ず残す)
+      var FIELD_IDS=['cfgHName','cfgHDesc','cfgLore','cfgLoc','cfgObj','cfgTone'];
+      var snap={}; FIELD_IDS.forEach(function(id){ var e=document.getElementById(id); if(e && e.value && e.value.trim()) snap[id]=e.value; });
+      try{ if(typeof UI!=='undefined' && UI.openSettings) UI.openSettings(); }catch(_){}
       setTimeout(function(){ fillFields(f);
+        // openSettingsの再描画やfillで変わった既入力を元に戻す=ユーザーの種を尊重
+        Object.keys(snap).forEach(function(id){ var e=document.getElementById(id); if(e){ e.value=snap[id]; try{ e.dispatchEvent(new Event('input',{bubbles:true})); }catch(_){} } });
         try{ UI.setStatus('🎲 おまかせで空欄を埋めました（'+GLABEL[f.genre]+'）。書いた内容はそのまま残ります。内容を見て「保存してゲーム開始」を'); }catch(_){}
-      }, 120);
+      }, 150);
       try{ console.log(TAG,'omakase drawn:',JSON.stringify(Object.keys(pick).reduce(function(o,k){o[k]=pick[k]&&pick[k].id;return o;},{}))); }catch(_){}
     });
   }
