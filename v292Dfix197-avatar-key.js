@@ -141,8 +141,12 @@
       } catch(e280){}
       var body = { model: info.model||'flux', prompt: prompt280, n:1, size:'384x384' };
       if(info.seed != null) body.seed = info.seed;   // 同seed＝同一画像（旧絵柄の再現）
-      fetch(API, { method:'POST', headers:{ 'Authorization':'Bearer '+key, 'Content-Type':'application/json' }, body: JSON.stringify(body) })
-        .then(function(r){ if(!r.ok) throw r.status; return r.json(); })
+      /* v292Dfix337b: 課金APIがハング/停止(412)しても確実に無料経路へ落ちるよう10秒タイムアウト。
+         課金アカウント停止時に/imageがpendingのまま返らずフォールバックが起動しない件の対処。 */
+      var _ac = (typeof AbortController!=='undefined') ? new AbortController() : null;
+      var _to = _ac ? setTimeout(function(){ try{ _ac.abort(); }catch(e){} }, 10000) : null;
+      fetch(API, { method:'POST', headers:{ 'Authorization':'Bearer '+key, 'Content-Type':'application/json' }, body: JSON.stringify(body), signal: _ac?_ac.signal:undefined })
+        .then(function(r){ if(_to){ clearTimeout(_to); } if(!r.ok) throw r.status; return r.json(); })
         .then(function(j){ var b=j&&j.data&&j.data[0]&&j.data[0].b64_json; if(!b) throw 'nob64';
           var d=b64ToDataUrl(b); cache[pk]=d; persistSet(pk,d); })
         .catch(function(){
