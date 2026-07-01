@@ -250,7 +250,10 @@
   var NEG_ANSWER=/(答える代わり|答えず|答えなかった|答えない|答えられ(ず|ない)|返す代わり|口を開(かず|かない))/;
   // 能動的な身体/知覚反応(静的状態は含めない)=発話が無くても実質的な反応ビートの3つ目シグナル(DeepResearch: Action/Interiority動詞句)
   var ACTIVE_BODY=/(捻っ|よじ|後ずさ|うずくま|崩れ落|震わせ|見開|踏み(出|込)|振り(向|返)|立ち上が|飛び(退|の|かか|込)|身を(引|伏|投|乗)|手を(伸|かけ|突)|かばっ|息を(呑|詰|止)|うめ|呻|喘|爪を(立|かけ)|噤|睨みつけ|振り絞|抱え込|突き(飛|放))/;
-  function _splitSents(t){ try{ return String(t||'').split(/(?<=[。！？\n])/).filter(function(x){return x&&x.trim().length;}); }catch(e){ return [String(t||'')]; } }
+  function _splitSents(t){ try{ var str=String(t||''); var out=[], buf='', depth=0;
+      for(var i=0;i<str.length;i++){ var c=str[i]; buf+=c; if(c==='「'||c==='『') depth++; else if(c==='」'||c==='』'){ if(depth>0) depth--; } else if((c==='。'||c==='！'||c==='？'||c==='\n') && depth===0){ if(buf.trim()) out.push(buf); buf=''; } }
+      if(buf.trim()) out.push(buf); return out.length?out:[str];
+    }catch(e){ return [String(t||'')]; } }
   function _stripQuotes(s){ return String(s||'').replace(/[「『][^」』]*[」』]/g,''); }
   function analyzeEnsemble(prose, npcNames, budget){
     var sents=_splitSents(prose);
@@ -287,10 +290,15 @@
     return { beats:beats, fullCount:fullN, budget:budget, rollcall:(fullN>budget && !lowSignal), melodrama:meloFlags, monopoly:monopoly, lowSignal:lowSignal };
   }
   // Phase2.2: シーン層タグ付け(層別データ収集・DeepResearch3の運用ルール)。層内で点呼/独占率を追うため。
+  var __combatTTL=0;   // sticky scene: 戦闘は数ターン持続(空入力continueがcalm誤分類→層別統計汚染を防ぐ・DeepResearch)
   function classifyScene(playerText, states, prose){
     try{
       var pt=String(playerText||''); var text=pt+' '+String(prose||'');
-      if(/襲(い|う|っ|わ)|斬りかか|斬りつけ|斬り(下ろ|上げ)|飛びかか|掴みかか|殴りかか|振り下ろ|突進|咆哮|噛みつ|喰らいつ|牙を|爪を(振|立)|銃(を|口)|爆発|刃を(振|突|向)|迫っ(て|た)くる/.test(text)) return 'threat';
+      var threat=/襲(い|う|っ|わ)|斬りかか|斬りつけ|斬り(下ろ|上げ)|飛びかか|掴みかか|殴りかか|振り下ろ|突進|咆哮|噛みつ|喰らいつ|牙を|爪を(振|立)|銃(を|口)|爆発|刃を(振|突|向)|迫っ(て|た)くる|刃を交え|応戦|反撃|受け流|叩きつけ|弾き|薙ぐ|殴|蹴/.test(text);
+      var deescalate=/立ち去っ|静けさが戻|危機は去|その場を後に|脅威は(去|消)|戦いは終わ|振り返ると誰も|息をつ(く|いた)|安全(を確保|な場所)/.test(text);
+      if(threat){ __combatTTL=3; return 'threat'; }
+      if(__combatTTL>0 && !deescalate){ __combatTTL--; return 'threat'; }   // 戦闘継続(TTL中の空入力continue等)
+      if(deescalate) __combatTTL=0;
       var hero=heroName(); var npcs=Object.keys(states||{}).filter(function(n){return n!==hero;});
       var addressed=npcs.filter(function(n){ return pt.indexOf(n)>=0; });
       if(addressed.length>=2) return 'multi_address';
@@ -304,8 +312,13 @@
   try{ setInterval(function(){ wrapBuild(); wrapApi(); },3000); }catch(e){}
   function qualStats(){
     try{ var arr=JSON.parse(localStorage.getItem('v292Dfix333Qual')||'[]'); var by={};
-      arr.forEach(function(e){ if(e.lowSignal) return; var sc=e.scene||'calm'; var b=by[sc]||(by[sc]={n:0,rollcall:0,monopoly:0,melodrama:0,jainSum:0}); b.n++; if(e.rollcall)b.rollcall++; if(e.monopoly)b.monopoly++; if(e.melodrama&&e.melodrama.length)b.melodrama++; b.jainSum+=(e.jain||1); });
-      Object.keys(by).forEach(function(sc){ var b=by[sc]; b.rollcallRate=+(b.rollcall/b.n).toFixed(2); b.monopolyRate=+(b.monopoly/b.n).toFixed(2); b.melodramaRate=+(b.melodrama/b.n).toFixed(2); b.avgJain=+(b.jainSum/b.n).toFixed(3); delete b.jainSum; });
+      arr.forEach(function(e){ if(e.lowSignal) return; var sc=e.scene||'calm'; var b=by[sc]||(by[sc]={n:0,rollcall:0,monopoly:0,melodrama:0,jainSum:0,streakMax:0,streakSum:0}); b.n++; if(e.rollcall)b.rollcall++; if(e.monopoly)b.monopoly++; if(e.melodrama&&e.melodrama.length)b.melodrama++; b.jainSum+=(e.jain||1); var ms=e.maxStreak||0; b.streakSum+=ms; if(ms>b.streakMax)b.streakMax=ms; });
+      Object.keys(by).forEach(function(sc){ var b=by[sc];
+        // ★主軸=avgJain(公平度)/streak(可視性)/melodramaRate(頑健). rollcall/monopolyは補助(2値beat分類は過小カウントしうる=DeepResearch)
+        b.avgJain=+(b.jainSum/b.n).toFixed(3); b.maxStreak=b.streakMax; b.avgStreak=+(b.streakSum/b.n).toFixed(2);
+        b.melodramaRate=+(b.melodrama/b.n).toFixed(2);
+        b.aux_rollcallRate=+(b.rollcall/b.n).toFixed(2); b.aux_monopolyRate=+(b.monopoly/b.n).toFixed(2);
+        delete b.jainSum; delete b.streakSum; delete b.streakMax; delete b.rollcall; delete b.monopoly; delete b.melodrama; });
       return {total:arr.length, byScene:by};
     }catch(e){ return {err:e.message}; }
   }
