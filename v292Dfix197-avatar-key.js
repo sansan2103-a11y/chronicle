@@ -145,7 +145,20 @@
         .then(function(r){ if(!r.ok) throw r.status; return r.json(); })
         .then(function(j){ var b=j&&j.data&&j.data[0]&&j.data[0].b64_json; if(!b) throw 'nob64';
           var d=b64ToDataUrl(b); cache[pk]=d; persistSet(pk,d); })
-        .catch(function(){ cache[pk]='dice'; })
+        .catch(function(){
+          /* v292Dfix337: 課金API失敗(例: HTTP412 アカウント停止/請求上限)時は無料経路
+             image.pollinations.ai へフォールバック→b64化して既存表示経路に載せる。無料も
+             ダメな時だけdice。おしんのPollinations課金停止でアイコンが出なくなった件の緩和。 */
+          try{
+            var _seed = (info.seed!=null) ? info.seed : Math.floor(Math.random()*1e6);
+            var _free = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt280)
+                      + '?width=384&height=384&seed=' + _seed + '&nologo=true&model=' + (info.model||'flux');
+            return fetch(_free).then(function(r){ if(!r.ok) throw r.status; return r.blob(); })
+              .then(function(blob){ return new Promise(function(res,rej){ var fr=new FileReader(); fr.onload=function(){ res(fr.result); }; fr.onerror=rej; fr.readAsDataURL(blob); }); })
+              .then(function(dataUrl){ if(dataUrl && dataUrl.indexOf('data:image')===0){ cache[pk]=dataUrl; persistSet(pk,dataUrl); } else { cache[pk]='dice'; } })
+              .catch(function(){ cache[pk]='dice'; });
+          }catch(_e){ cache[pk]='dice'; }
+        })
         .then(function(){ active--; applyAll(); pump(); });
     });
   }
