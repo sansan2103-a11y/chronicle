@@ -34,15 +34,22 @@
 
   function byAxis(ax){ return BANK.atoms.filter(function(a){return a.axis===ax;}); }
 
-  // --- bag-draw with recency: 各軸ごとに袋を持ち、使い切ったら再シャッフル ---
+  // --- 二段stratified bag-draw(DeepResearch: RimWorld Cassandra方式) ---
+  // カテゴリ(ジャンル)を先に引き、spine軸はそのジャンルへ寄せる(soft p=0.7)。
+  // ジャンル別の袋を持ち、使い切ったら再シャッフル。空なら全体袋へフォールバック。
+  var GENRES=['mh','df','sf','hd'];
+  var SPINE={setting:1,stance:1,mood_tone:1,era_tech:1};
   var bags={};
-  function drawFromBag(ax){
-    if(!bags[ax] || bags[ax].length===0){
-      var pool=byAxis(ax).slice();
-      for(var i=pool.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=pool[i];pool[i]=pool[j];pool[j]=t; }
-      bags[ax]=pool;
+  function shuffle(a){ for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t;} return a; }
+  function drawFromBag(ax,genre){
+    var key=ax+'|'+(genre||'ALL');
+    if(!bags[key] || bags[key].length===0){
+      var pool=byAxis(ax);
+      if(genre){ pool=pool.filter(function(a){ return (a.genre||[]).indexOf(genre)>=0; }); }
+      if(!pool.length){ key=ax+'|ALL'; if(!bags[key]||!bags[key].length) bags[key]=shuffle(byAxis(ax).slice()); }
+      else bags[key]=shuffle(pool.slice());
     }
-    return bags[ax].pop();
+    return bags[key].pop();
   }
 
   function lastTrace(){ try{ return JSON.parse(localStorage.getItem('v292Dfix335_lastTrace')||'null'); }catch(e){ return null; } }
@@ -71,11 +78,16 @@
 
   function drawStartPack(){
     var axesWanted=['setting','era_tech','stance','lack_desire','relationship','opening_pressure','secret','world_rule','mood_tone'];
-    var pick, tries=0;
+    var pick, tries=0, target;
     do{
+      target=GENRES[Math.floor(Math.random()*GENRES.length)]; // カテゴリを先に(均等)
       pick={};
-      axesWanted.forEach(function(ax){ pick[ax]=drawFromBag(ax); });
-      pick.npcStance=drawFromBag('stance'); // NPC用に2人目のstance
+      axesWanted.forEach(function(ax){
+        var lean = SPINE[ax] && Math.random()<0.7;   // spine軸は70%そのジャンルへ・残りは自由(=productive clashを温存)
+        pick[ax]=drawFromBag(ax, lean?target:null);
+      });
+      pick.npcStance=drawFromBag('stance', Math.random()<0.5?target:null);
+      pick.__target=target;
       tries++;
     } while((violatesBan(pick) || !axisDiffOK(pick)) && tries<12);
     // trace保存
@@ -93,6 +105,7 @@
 
   var GLABEL={mh:'現代怪異',df:'ダークファンタジー',sf:'SF',hd:'人間ドラマ'};
   function primaryGenre(pick){
+    if(pick.__target) return pick.__target;  // 二段stratifiedで選んだカテゴリを世界のジャンルとする(均等化)
     var c={}; ['setting','stance','opening_pressure','secret','mood_tone'].forEach(function(ax){ (pick[ax].genre||[]).forEach(function(g){ c[g]=(c[g]||0)+1; }); });
     var best='mh',bv=0; Object.keys(c).forEach(function(g){ if(c[g]>bv){bv=c[g];best=g;} }); return best;
   }
