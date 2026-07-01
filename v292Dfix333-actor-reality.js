@@ -228,7 +228,7 @@
           var _hero=heroName();
           var _npcs=presentNames().filter(function(n){ return n && n!==_hero; });
           var _qa=analyzeEnsemble(proseOnly(res.text), _npcs, _budget);
-          _qa.t=Date.now(); _qa.turn=p.turnNum; _qa.fg=_sel2?_sel2.fg:null; var _rs=rotSnapshot(); _qa.jain=_rs.jain; _qa.maxStreak=_rs.maxStreak;
+          _qa.t=Date.now(); _qa.turn=p.turnNum; _qa.fg=_sel2?_sel2.fg:null; var _rs=rotSnapshot(); _qa.jain=_rs.jain; _qa.maxStreak=_rs.maxStreak; _qa.scene=classifyScene(p.text, p.states, proseOnly(res.text));
           logQuality(_qa);
           if(_qa.rollcall||_qa.melodrama.length||_qa.monopoly){ try{ console.log(TAG,'QUAL flags', JSON.stringify({rollcall:_qa.rollcall, melo:_qa.melodrama.length, mono:_qa.monopoly, turn:_qa.turn})); }catch(_){} }
         }
@@ -286,10 +286,29 @@
     var monopoly= fullN>=2 && fullTotal>0 && (maxFull/fullTotal)>0.65;
     return { beats:beats, fullCount:fullN, budget:budget, rollcall:(fullN>budget && !lowSignal), melodrama:meloFlags, monopoly:monopoly, lowSignal:lowSignal };
   }
+  // Phase2.2: シーン層タグ付け(層別データ収集・DeepResearch3の運用ルール)。層内で点呼/独占率を追うため。
+  function classifyScene(playerText, states, prose){
+    try{
+      var pt=String(playerText||''); var text=pt+' '+String(prose||'');
+      if(/襲(い|う|っ|わ)|斬りかか|斬りつけ|斬り(下ろ|上げ)|飛びかか|掴みかか|殴りかか|振り下ろ|突進|咆哮|噛みつ|喰らいつ|牙を|爪を(振|立)|銃(を|口)|爆発|刃を(振|突|向)|迫っ(て|た)くる/.test(text)) return 'threat';
+      var hero=heroName(); var npcs=Object.keys(states||{}).filter(function(n){return n!==hero;});
+      var addressed=npcs.filter(function(n){ return pt.indexOf(n)>=0; });
+      if(addressed.length>=2) return 'multi_address';
+      if(addressed.length===1) return 'single_address';
+      return 'calm';
+    }catch(e){ return 'calm'; }
+  }
   function logQuality(entry){ try{ var k='v292Dfix333Qual'; var arr=JSON.parse(localStorage.getItem(k)||'[]'); arr.push(entry); if(arr.length>60) arr=arr.slice(-60); localStorage.setItem(k, JSON.stringify(arr)); }catch(e){} }
   function logRing(entry){ try{ var k='v292Dfix333Log'; var arr=JSON.parse(localStorage.getItem(k)||'[]'); arr.push(entry); if(arr.length>50) arr=arr.slice(-50); localStorage.setItem(k, JSON.stringify(arr)); }catch(e){} }
   (function poll(){ poll._n=(poll._n||0)+1; var a=wrapBuild(), b=wrapApi(); if(a&&b) return; if(poll._n>100) return; setTimeout(poll,400); })();
   try{ setInterval(function(){ wrapBuild(); wrapApi(); },3000); }catch(e){}
-  window.__v292Dfix333api={ compileActorStates:compileActorStates, validateAll:validateAll, authorityBlock:authorityBlock, foregroundBlock:foregroundBlock, selectForeground:selectForeground, mode:mode, _pending:function(){return pending;} };
+  function qualStats(){
+    try{ var arr=JSON.parse(localStorage.getItem('v292Dfix333Qual')||'[]'); var by={};
+      arr.forEach(function(e){ if(e.lowSignal) return; var sc=e.scene||'calm'; var b=by[sc]||(by[sc]={n:0,rollcall:0,monopoly:0,melodrama:0,jainSum:0}); b.n++; if(e.rollcall)b.rollcall++; if(e.monopoly)b.monopoly++; if(e.melodrama&&e.melodrama.length)b.melodrama++; b.jainSum+=(e.jain||1); });
+      Object.keys(by).forEach(function(sc){ var b=by[sc]; b.rollcallRate=+(b.rollcall/b.n).toFixed(2); b.monopolyRate=+(b.monopoly/b.n).toFixed(2); b.melodramaRate=+(b.melodrama/b.n).toFixed(2); b.avgJain=+(b.jainSum/b.n).toFixed(3); delete b.jainSum; });
+      return {total:arr.length, byScene:by};
+    }catch(e){ return {err:e.message}; }
+  }
+  window.__v292Dfix333api={ compileActorStates:compileActorStates, validateAll:validateAll, authorityBlock:authorityBlock, foregroundBlock:foregroundBlock, selectForeground:selectForeground, analyzeEnsemble:analyzeEnsemble, classifyScene:classifyScene, qualStats:qualStats, mode:mode, _pending:function(){return pending;} };
   try{ console.log(TAG,'loaded (v2/fix333h); mode=',mode()); }catch(e){}
 })();
