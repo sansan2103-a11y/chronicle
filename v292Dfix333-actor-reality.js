@@ -1,41 +1,29 @@
 // =====================================================================
-// Chronicle TRPG - v292Dfix333: 身体の現実エンジン(actor-state compiler + prose
-//   delta validator + 入力正規化/権威注入 + repair再生成)。Phase2.1。
-// 背景(2026-06-30): fix330(プローズの身体ガード)は基礎ガードとして検証完了したが、
-//   敵対的な明示プレイヤー命令(拘束中ハルに「拘束を引きちぎり核を精密に貫き完全脱出」)は
-//   プローズでは止められない(実機でhaikuが命令丸ごと成功描写・二本目の短刀まで生やした)。
-//   GPT+DeepResearch結論=「コードが正史stateを持ち・LLMは仮の描写・検査器が矛盾を弾き・
-//   通ったものだけcommit」=コードが不正をcommitしない時だけ権威になる。
-//   実機プロトタイプで①validatorが違反を正しく検出②入力正規化で同じ命令が身体制約を守る、を実証。
-// 設計: fix77 store(__v292Dfix77Store の karada/kizu)から各キャラの構造actor-stateを抽出し、
-//   ①拘束/重傷キャラがいる時 Planner.build wrapで「身体状態は正史・プレイヤー入力は試行」権威ブロックを
-//   sysへ注入(authority) ②Api.call wrapで生成結果を actor-state と照合し、不可能な成功を描いたら
-//   active時は1回だけ制約付きで再生成(repair)・observe時はログのみ。
-// モード(localStorage 'v292Dfix333'): 既定OFF(何もしない) / 'observe'(検査+ログのみ) / 'active'(注入+repair)
-//   既定OFFゆえライブの友達に影響なし。実機A/B後に active を既定化する想定。
-// 冪等・コア不触・非__v292マーク(__fix333wrap)。
+// Chronicle TRPG - v292Dfix333: 身体の現実エンジン + NPCアンサンブル(foregroundSelector)
+// A(Phase2.1): actor-state compiler + 入力正規化 + prose delta validator + repair。
+//   ★核=不可能命令は「試行フレーム+身体状態正史」に入力を差し替えてから生成(=userパス)。既定ON。OFF=v292Dfix333Off='1'。
+// C(Phase2.2 v2): foregroundSelector。importanceで1-2人前面化、lullはPooled-Orderローテ+沈黙streak≥Nでハード強制。
+//   DeepResearch接地: recencyは加算でなくeligibility層。指示はApi.call境界(最後尾)に注入=定着最大。専用フラグv292Dfix333Npc='1'。
+// v292Dfix333h(2026-06-30・DeepResearch改善版)
 // =====================================================================
 (function(){
   'use strict';
   if (window.__v292Dfix333) return; window.__v292Dfix333 = true;
   var TAG='[v292Dfix333:actor-reality]';
-  // 既定ON(active)。OFFは緊急退避: v292Dfix333Off='1' か v292Dfix333='off'。observeも明示時のみ。v292Dfix333f
   function mode(){ try{ if(localStorage.getItem('v292Dfix333Off')==='1') return 'off'; var m=localStorage.getItem('v292Dfix333'); if(m==='off') return 'off'; if(m==='observe') return 'observe'; return 'active'; }catch(e){ return 'active'; } }
-  function isOff(){ return mode()!=='observe' && mode()!=='active'; }
-
-  // ---- fix77 store (slot-aware via the live wrapper; just read the global cache) ----
+  function isOff(){ return mode()==='off'; }
+  function npcAutonomyOn(){ try{ return localStorage.getItem('v292Dfix333Npc')==='1'; }catch(e){ return false; } }
   function store(){ try{ return window.__v292Dfix77Store||{}; }catch(e){ return {}; } }
+  function heroName(){ try{ var S=window.S||(typeof S!=='undefined'?S:null); return (S&&S.cast&&S.cast.hero&&S.cast.hero.name)||''; }catch(e){ return ''; } }
+  function turnNow(){ try{ var S=window.S||(0,eval)('S'); return (S&&S.turns)?S.turns.length:0; }catch(e){ return 0; } }
   function presentNames(){
     try{ var S=window.S||(typeof S!=='undefined'?S:null); if(!S||!S.cast) return Object.keys(store());
       var ns=[]; if(S.cast.hero&&S.cast.hero.name) ns.push(S.cast.hero.name);
       if(Array.isArray(S.cast.npcs)) S.cast.npcs.forEach(function(n){ if(n&&n.name) ns.push(n.name); });
-      // include any store key too (NPCs not in cast list)
       Object.keys(store()).forEach(function(k){ if(ns.indexOf(k)<0) ns.push(k); });
       return ns;
     }catch(e){ return Object.keys(store()); }
   }
-
-  // ---- actor-state compiler: structured flags from fix77 karada/kizu text ----
   function compileActorStates(){
     var st=store(), out={};
     presentNames().forEach(function(name){
@@ -43,7 +31,6 @@
       if(!k && !kizu) return;
       var restrained = /締め上げ|拘束|縛ら|絡め取ら|吊ら|吊り上げ|押さえ込ま|身動きが取れ|拘束され|羽交い締め|組み伏せ|押さえつけ|引き倒/.test(k);
       var suspended  = /宙に吊|吊られ|吊り上げ|宙づり|宙吊り/.test(k);
-      // freeHands は「手・腕」の拘束だけで判定する(脚の拘束では手は自由)。v292Dfix333e
       var bothHandsBound = /両(腕|手)[^。]{0,16}(締め上げ|拘束|縛|絡め取|使えな|動かせ|塞|頭上)|両手とも[^。]{0,8}(使えな|拘束|縛|塞|動かせ)|後ろ手に縛|全身[^。]{0,8}(縛|拘束|締め)|簀巻き/.test(k);
       var oneHandFree    = /(自由な(左|右)?手|片(腕|手)[^。]{0,4}(だけ|のみ)|左手だけ|右手だけ|一方の(腕|手)[^。]{0,6}(自由|使え|動))/.test(k);
       var oneHandBound   = /(片|左|右)(腕|手|手首)[^。]{0,8}(締め上げ|拘束|縛|絡め取|使えな|失|潰|折|押さえつけ|弾き飛ば)/.test(k);
@@ -55,31 +42,19 @@
     });
     return out;
   }
-
-  // ---- prose delta validator: detect physically-impossible success in narrative ----
-  //   保守的: 曖昧な「脱出/自由になった」(救助かもしれない)はトリガーにせず、自力の物理破綻だけ見る。
+  function proseOnly(text){ try{ return String(text||'').split(/<react|<state|<summary/)[0]; }catch(e){ return String(text||''); } }
   function validateOne(name, a, narr){
     var v=[]; var n=String(narr||'');
-    // その人物名の近傍だけを見る精度は将来課題。今は全文走査(プロト同等)。
-    if(a.restrained){
-      if(new RegExp('(引きちぎ|引き千切|振り切|自力で.{0,6}解|拘束を.{0,4}(破|引き))').test(n)) v.push(name+':拘束を自力で破壊/引きちぎる描写');
-    }
-    if(a.freeHands===0){
-      if(/(両手で.{0,8}(構|握|振|投)|正確に.{0,6}(投|突|貫|狙)|精密に.{0,6}(投|突|貫|狙)|一突きで.{0,4}貫|構えて.{0,8}投げ)/.test(n)) v.push(name+':両手不自由なのに武器操作/精密投擲');
-    }
+    if(a.restrained){ if(new RegExp('(引きちぎ|引き千切|振り切|自力で.{0,6}解|拘束を.{0,4}(破|引き))').test(n)) v.push(name+':拘束を自力で破壊/引きちぎる描写'); }
+    if(a.freeHands===0){ if(/(両手で.{0,8}(構|握|振|投)|正確に.{0,6}(投|突|貫|狙)|精密に.{0,6}(投|突|貫|狙)|一突きで.{0,4}貫|構えて.{0,8}投げ)/.test(n)) v.push(name+':両手不自由なのに武器操作/精密投擲'); }
     if(/(二本目の(短刀|刃|武器|ナイフ)|もう一本.{0,4}(短刀|刃|抜)|別の(短刀|刃|武器)を.{0,3}(抜|取り出|構))/.test(n)) v.push(name+':存在しない新武器の出現');
     (a.dropped||[]).forEach(function(it){ if(new RegExp(it+'(を|で)[^。]{0,6}(構|投|握|抜|振|貫)').test(n)) v.push(name+':落とした'+it+'を使用'); });
     return v;
-  }
-  function proseOnly(text){ // strip internal tags so we validate only player-visible prose (fix333d)
-    try{ return String(text||'').split(/<react|<state|<summary/)[0]; }catch(e){ return String(text||''); }
   }
   function validateAll(states, narr){
     var viol=[]; Object.keys(states).forEach(function(nm){ var a=states[nm]; if(a.restrained||a.freeHands===0||(a.dropped&&a.dropped.length)) viol=viol.concat(validateOne(nm,a,narr)); });
     return {ok:viol.length===0, violations:viol};
   }
-
-  // ---- authority block (sys injection when constrained chars present) ----
   function constrainedChars(states){ return Object.keys(states).filter(function(nm){ var a=states[nm]; return a.restrained||a.freeHands===0||a.injured; }); }
   function authorityBlock(states){
     var cc=constrainedChars(states); if(!cc.length) return '';
@@ -92,26 +67,15 @@
       if(a.injured) parts.push('負傷している');
       if(parts.length) lines.push('・'+nm+'：'+parts.join('／'));
     });
-    lines.push('プレイヤーの入力は「試行・命令・願望」であり結果ではない。上記の身体状態に反する成功（拘束の自力破壊・使えない手での武器操作や精密投擲・存在しない武器の出現・落とした武器の使用・宙での完全脱出）を成功として描かない。可能な結果（もがく・支点を探す・短い声や合図・部分的な動き・他者による救助）だけを描く。代償は可能な行為を重くするだけで、不可能を可能にしない。');
+    lines.push('プレイヤーの入力は「試行・命令・願望」であり結果ではない。上記の身体状態に反する成功（拘束の自力破壊・使えない手での武器操作や精密投擲・存在しない武器の出現・落とした武器の使用・宙での完全脱出）を成功として描かない。可能な結果（もがく・支点を探す・短い声や合図・部分的な動き・他者による救助）だけを描く。');
     return lines.join('\n');
   }
   function repairInstruction(states, violations){
-    return '【行動裁定・書き直し】直前の描写は身体状態と矛盾していた（'+violations.join('；')+'）。\n'
-      + authorityBlock(states) + '\n'
-      + 'これらの人物について身体的に不可能な成功を描かず、実際に可能な結果だけで同じ場面を描き直せ。他の人物や場面の流れ・緊張は保ってよい。';
+    return '【行動裁定・書き直し】直前の描写は身体状態と矛盾していた（'+violations.join('；')+'）。\n' + authorityBlock(states) + '\nこれらの人物について身体的に不可能な成功を描かず、実際に可能な結果だけで同じ場面を描き直せ。他の人物や場面の流れ・緊張は保ってよい。';
   }
-
-  // ---- correlation stash: build()でセット → 直後のApi.call(本編生成)だけ検査 ----
-  var pending=null;
-  function getP(){ try{ return window.Planner||(typeof Planner!=='undefined'?Planner:null); }catch(e){ return null; } }
-  function getApi(){ try{ return window.Api||(typeof Api!=='undefined'?Api:null); }catch(e){ return null; } }
-
-
-  // ---- input normalization: detect impossible-assertion vs constrained char, build attempt-frame ----
   function inputAssertsImpossible(text, states){
     if(!text) return null;
     var verbs=/(引きちぎ|引き千切|振り切|脱出|完全に|一瞬で|貫く|貫いて|精密|正確に[^。]{0,4}(投|突|貫|狙)|両手で[^。]{0,6}(構|投|握)|新たな(武器|短刀|刃)|二本目|無視して|意に介さ|難なく|たやすく)/;
-    // v292Dfix333e: 負傷者への精密/全力動作も拾う(負傷ベースの不可能=従来の見逃しを補完)
     var injuryVerbs=/(精密|正確|両手で|全力で|渾身|思い切り|力任せ|きっちり|寸分|繊細に)/;
     var hit=[];
     Object.keys(states).forEach(function(nm){ var a=states[nm]; if(text.indexOf(nm)<0) return;
@@ -127,48 +91,69 @@
       '上記の身体状態は正史であり、プレイヤー入力では覆らない。'+targets.join('・')+'について、身体的に可能な結果だけを描くこと。拘束の自力破壊・使えない手での武器操作や精密投擲・落とした武器の使用・存在しない武器の出現・宙での完全脱出・拘束からの完全脱出は起こらない。可能なのは、もがく／身をよじって拘束を緩めようとする／足で支点を探す／短い声や合図／視線を送る／部分的な動き／他者による救助 等。痛みや拘束を「無視して」成功する描写はしない。代償は可能な行為を重くするだけで、不可能を可能にしない。'
     ].join('\n');
   }
-
-  // ---- C v2: foregroundSelector (Phase2.2・importance主導・GPT精緻化) v292Dfix333g ----
-  function npcAutonomyOn(){ try{ return localStorage.getItem('v292Dfix333Npc')==='1'; }catch(e){ return false; } }
-  function heroName(){ try{ var S=window.S||(0,eval)('S'); return (S&&S.cast&&S.cast.hero&&S.cast.hero.name)||''; }catch(e){ return ''; } }
   var __prevKarada={};
   function loadFg(){ try{ return JSON.parse(localStorage.getItem('v292Dfix333Fg')||'{}'); }catch(e){ return {}; } }
   function saveFg(o){ try{ localStorage.setItem('v292Dfix333Fg', JSON.stringify(o)); }catch(e){} }
-  function isDenseTurn(states){ // 戦闘/救出など密ターン=前面1人。拘束/重傷キャラ在席 or 直近に脅威語。
+  function isDenseTurn(states){
     try{ var any=Object.keys(states).some(function(n){var a=states[n]; return a.restrained||a.injured||a.freeHands<2;}); if(any) return true;
       var S=window.S||(0,eval)('S'); var last=S&&S.turns&&S.turns.length?(S.turns[S.turns.length-1].narrative||''):''; return /襲|攻撃|斬|刃|血|悲鳴|怪異|敵|逃げ|掴ま|崩れ|咆哮|迫/.test(last.slice(-200));
     }catch(e){ return false; } }
-  // 前面化選択: 主条件=場面importance、recencyは同点tie-breakのみ(GPT)
+  function lastBeat(fg,n){ return (fg[n]&&typeof fg[n].lastBeatTurn==='number')?fg[n].lastBeatTurn:-99; }
   function selectForeground(states, playerText, turnNum){
     var hero=heroName();
     var names=Object.keys(states).filter(function(n){ return n!==hero; });
     if(!names.length) return null;
     var fg=loadFg();
-    var budget=isDenseTurn(states)?1:2;
-    var scored=names.map(function(n){
-      var a=states[n]; var k=a.karada||'';
-      var relevance=(playerText && String(playerText).indexOf(n)>=0)?1.0:0;          // ①働きかけられた相手
-      var changed=(__prevKarada[n]!==undefined && __prevKarada[n]!==k)?0.85:0;        // ②身体状態が変化
-      var bodyEvent=(a.restrained||a.injured||a.freeHands<2)?0.45:0;                  // ③身体/拘束に事象
-      var last=(fg[n]&&typeof fg[n].lastBeatTurn==='number')?fg[n].lastBeatTurn:-99;
-      var recency=Math.min(1,(turnNum-last)/3)*0.25;                                  // tie-break(小)
-      return {n:n, score:relevance*1.0 + changed + bodyEvent + recency};
+    var dense=isDenseTurn(states);
+    var budget=dense?1:2;
+    var scored=names.map(function(n){ var a=states[n]; var k=a.karada||'';
+      var relevance=(playerText && String(playerText).indexOf(n)>=0)?1.0:0;
+      var changed=(__prevKarada[n]!==undefined && __prevKarada[n]!==k)?0.85:0;
+      var bodyEvent=(a.restrained||a.injured||a.freeHands<2)?0.45:0;
+      return {n:n, imp:relevance+changed+bodyEvent};
     });
-    scored.sort(function(x,y){ return y.score-x.score; });
-    var chosen=scored.slice(0,budget).map(function(s){return s.n;});
+    var maxImp=Math.max.apply(null, scored.map(function(s){return s.imp;}));
+    var N=3+Math.min(3,names.length);
+    var chosen, lull=(maxImp<0.5 && budget>=2);
+    if(lull){
+      var pool=fg.__pool||{}; var eligible=names.filter(function(n){ return !pool[n]; });
+      if(!eligible.length){ pool={}; eligible=names.slice(); }
+      var pw=eligible.map(function(n){ var a=states[n];
+        var stale=Math.min(1,(turnNum-lastBeat(fg,n))/3);
+        var be=(a.restrained||a.injured||a.freeHands<2)?0.45:0;
+        return {n:n, w:(1+be)*(0.3+stale)};
+      });
+      pw.sort(function(x,y){return y.w-x.w;});
+      chosen=pw.slice(0,budget).map(function(s){return s.n;});
+      chosen.forEach(function(n){ pool[n]=1; }); fg.__pool=pool;
+    } else {
+      scored.sort(function(x,y){return y.imp-x.imp;});
+      chosen=scored.slice(0,budget).map(function(s){return s.n;});
+    }
+    if(!dense){ names.forEach(function(n){ if(chosen.indexOf(n)<0 && (turnNum-lastBeat(fg,n))>=N && chosen.length<budget+1) chosen.push(n); }); }
     var bg=names.filter(function(n){ return chosen.indexOf(n)<0; });
-    chosen.forEach(function(n){ fg[n]={lastBeatTurn:turnNum}; }); saveFg(fg);
+    chosen.forEach(function(n){ fg[n]=fg[n]||{}; fg[n].lastBeatTurn=turnNum; }); saveFg(fg);
     names.forEach(function(n){ __prevKarada[n]=states[n].karada||''; });
-    return {fg:chosen, bg:bg, budget:budget};
+    logRotation(chosen, names, turnNum);
+    return {fg:chosen, bg:bg, budget:budget, lull:lull};
   }
   function foregroundBlock(sel){
     if(!sel||!sel.fg.length) return '';
-    var lines=['【この一手で前面に出す人物】'+sel.fg.join('・')+' ＝ それぞれに、人物像と今の身体状態に合った具体的な局所反応か小さな動きを一つだけ(声・行動・視線・沈黙のどれか)。'];
+    var lines=['【この一手で前面に出す人物】'+sel.fg.join('・')+' ＝ それぞれに、人物像と今の身体状態に合った具体的な局所反応か小さな動きを一つだけ(声・行動・視線・沈黙のどれか)。主人公や状況に絡ませ、NPC同士の雑談に逃さない。'];
     if(sel.bg.length) lines.push('【背景の人物】'+sel.bg.join('・')+' ＝ 居ることは示すが前面化しない。前ターンから身体状態に変化がある時だけ一句で示し、変化が無ければ描写しなくてよい。');
-    lines.push('全員に順番に反応させる「点呼」をしない。反応の大きさは出来事の大きさに比例させる。トラウマや過去は短い感覚の侵入までで、詳しい回想や新事実は作らない。NPCは局所状態(身じろぎ・発言・移動・かばう・反撃・後ずさり等)を動かしてよいが、場面転換・時間経過・新キャラ/新場所/新事実・物語の結末確定はしない。');
+    lines.push('全員に順番に反応させる「点呼」をしない。反応の大きさは出来事の大きさに比例させ、毎ターン強度を上げ続けない。トラウマや過去は短い感覚の侵入までで、詳しい回想や新事実は作らない。NPCは局所状態(身じろぎ・発言・移動・かばう・反撃・後ずさり等)を動かしてよいが、場面転換・時間経過・新キャラ/新場所/新事実・物語の結末確定はしない。');
     return lines.join('\n');
   }
-
+  function logRotation(chosen, names, turnNum){
+    try{ var k='v292Dfix333Rot'; var r=JSON.parse(localStorage.getItem(k)||'{"win":[]}');
+      r.win.push({t:turnNum, fg:chosen}); if(r.win.length>14) r.win=r.win.slice(-14);
+      var streak={}; names.forEach(function(n){ var last=-1; r.win.forEach(function(w,i){ if(w.fg.indexOf(n)>=0) last=i; }); streak[n]=(r.win.length-1)-last; });
+      r.streak=streak; localStorage.setItem(k, JSON.stringify(r));
+    }catch(e){}
+  }
+  var pending=null;
+  function getP(){ try{ return window.Planner||(typeof Planner!=='undefined'?Planner:null); }catch(e){ return null; } }
+  function getApi(){ try{ return window.Api||(typeof Api!=='undefined'?Api:null); }catch(e){ return null; } }
   function wrapBuild(){
     var P=getP(); if(!P||typeof P.build!=='function') return false; if(P.__fix333build) return true;
     var orig=P.build.bind(P);
@@ -179,37 +164,32 @@
         var states=compileActorStates();
         var cc=constrainedChars(states);
         var targets=(mode()==='active')?inputAssertsImpossible(text, states):null;
-        if(targets && mode()==='active'){
-          // 不可能命令→入力を試行フレームに差し替えてから build(=生成前正規化。実機実証済の手法)
-          r=orig.call(this, bmode, normalizedFrame(text, states, targets));
-          try{ console.log(TAG,'input normalized for', targets.join(',')); }catch(_){}
-        } else {
-          r=orig.apply(this, args);
-        }
-        if(cc.length){
-          if(mode()==='active' && r && typeof r.sys==='string' && r.sys.indexOf('【身体状態・正史')<0){
-            r.sys = r.sys + '\n\n' + authorityBlock(states);
-          }
-          pending={states:states, t:Date.now()};
-        } else { pending=null; }
-        // C v2: foregroundSelector(専用フラグ)。毎ターン1-2人を前面化し名指し、残りは背景。
-        if(mode()==='active' && npcAutonomyOn() && r && typeof r.sys==='string' && r.sys.indexOf('【この一手で前面に出す')<0){
-          try{ var S2=window.S||(0,eval)('S'); var sel=selectForeground(states, text, (S2&&S2.turns?S2.turns.length:0));
-            var fb=foregroundBlock(sel); if(fb) r.sys=r.sys+'\n\n'+fb;
-          }catch(_fe){}
-        }
+        if(targets && mode()==='active'){ r=orig.call(this, bmode, normalizedFrame(text, states, targets)); try{console.log(TAG,'input normalized for',targets.join(','));}catch(_){} }
+        else { r=orig.apply(this, args); }
+        if(cc.length || npcAutonomyOn()){ pending={states:states, t:Date.now(), text:text, turnNum:turnNow()}; }
+        else { pending=null; }
       }catch(e){ try{console.warn(TAG,'build wrap err',e.message);}catch(_){} if(!r){ try{ r=orig.apply(this,args); }catch(_2){} } }
       return r;
     };
     P.__fix333build=true; try{console.log(TAG,'build wrap installed');}catch(e){}
     return true;
   }
-
   function wrapApi(){
     var A=getApi(); if(!A||typeof A.call!=='function') return false; if(A.__fix333call) return true;
     var orig=A.call.bind(A);
     A.call=async function(sys,user,maxTok,opts){
-      var p=pending; pending=null; // consume (only the first call after build)
+      var p=pending; pending=null;
+      if(p && !isOff() && mode()==='active' && typeof sys==='string'){
+        try{
+          var authority=authorityBlock(p.states);
+          if(authority && sys.indexOf('【身体状態・正史')<0) sys=sys+'\n\n'+authority;
+          if(npcAutonomyOn()){
+            var sel=selectForeground(p.states, p.text, p.turnNum);
+            var fb=foregroundBlock(sel);
+            if(fb && sys.indexOf('【この一手で前面に出す')<0) sys=sys+'\n\n'+fb;
+          }
+        }catch(_i){ try{console.warn(TAG,'inject err',_i.message);}catch(_){} }
+      }
       var res=await orig(sys,user,maxTok,opts);
       try{
         if(p && !isOff() && p.t && (Date.now()-p.t)<600000 && res && typeof res.text==='string'){
@@ -219,13 +199,9 @@
             logRing({t:Date.now(), mode:mode(), violations:check.violations});
             if(mode()==='active'){
               var res2=await orig(sys, user+'\n\n'+repairInstruction(p.states, check.violations), maxTok, opts);
-              if(res2 && typeof res2.text==='string'){
-                var check2=validateAll(p.states, proseOnly(res2.text));
-                try{ console.log(TAG,'repaired ->', check2.ok?'PASS':('still '+check2.violations.length)); }catch(_){}
-                if(check2.ok) return res2; // 通ったものだけ採用。再違反なら元を返す(無限ループ防止)
-              }
+              if(res2 && typeof res2.text==='string'){ var check2=validateAll(p.states, proseOnly(res2.text)); if(check2.ok) return res2; }
             }
-          } else { try{ console.log(TAG, mode()+' ok (no violation)'); }catch(_){} }
+          }
         }
       }catch(e){ try{console.warn(TAG,'api wrap err',e.message);}catch(_){} }
       return res;
@@ -233,12 +209,9 @@
     A.__fix333call=true; try{console.log(TAG,'Api.call wrap installed');}catch(e){}
     return true;
   }
-
   function logRing(entry){ try{ var k='v292Dfix333Log'; var arr=JSON.parse(localStorage.getItem(k)||'[]'); arr.push(entry); if(arr.length>50) arr=arr.slice(-50); localStorage.setItem(k, JSON.stringify(arr)); }catch(e){} }
-
   (function poll(){ poll._n=(poll._n||0)+1; var a=wrapBuild(), b=wrapApi(); if(a&&b) return; if(poll._n>100) return; setTimeout(poll,400); })();
   try{ setInterval(function(){ wrapBuild(); wrapApi(); },3000); }catch(e){}
-
-  window.__v292Dfix333api={ compileActorStates:compileActorStates, validateAll:validateAll, authorityBlock:authorityBlock, mode:mode, _pending:function(){return pending;} };
-  try{ console.log(TAG,'loaded; mode=',mode()); }catch(e){}
+  window.__v292Dfix333api={ compileActorStates:compileActorStates, validateAll:validateAll, authorityBlock:authorityBlock, foregroundBlock:foregroundBlock, selectForeground:selectForeground, mode:mode, _pending:function(){return pending;} };
+  try{ console.log(TAG,'loaded (v2/fix333h); mode=',mode()); }catch(e){}
 })();
