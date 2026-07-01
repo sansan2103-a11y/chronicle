@@ -143,13 +143,19 @@
   function fillFields(f){
     setVal('cfgHName',f.hero.name); setVal('cfgHDesc',f.hero.desc);
     setVal('cfgLore',f.lore); setVal('cfgLoc',f.loc); setVal('cfgObj',f.obj); setVal('cfgTone',f.tone);
-    // v292Dfix340: 「最初のカード」でなく「最初の空きNPCカード(名前が空)」を埋める。
-    //   既存NPCがあると cards[0] は埋まっていて何も入らず「おまかせで入力されない」に見えた。
-    //   空きが無ければ新規追加して最後のカードを埋める。
+    // v292Dfix342: 「名前が空のカード」でなく「未完成カード(6欄のどれかが空)」を対象に、その空欄だけ埋める。
+    //   おしん報告: 名前だけ先に入れたNPC(例ジーン)がスキップされ残り欄が埋まらなかった
+    //   (fix340は名前有り=対象外と誤判定)。fillNpcCardは空欄のみ埋めるので既入力(名前等)は保持。
+    //   未完成カードが無ければ新規追加して埋める。
     try{
       var cards=document.querySelectorAll('#npcList .npc-card');
+      var NF=['name','desc','personality','coreDesire','coreFear','wound'];
       var target=null;
-      for(var i=0;i<cards.length;i++){ var ne=cards[i].querySelector('[data-f="name"]'); if(ne && !(ne.value&&ne.value.trim())){ target=cards[i]; break; } }
+      for(var i=0;i<cards.length;i++){
+        var incomplete=false;
+        for(var k=0;k<NF.length;k++){ var fe=cards[i].querySelector('[data-f="'+NF[k]+'"]'); if(fe && !(fe.value&&fe.value.trim())){ incomplete=true; break; } }
+        if(incomplete){ target=cards[i]; break; }
+      }
       if(target){ fillNpcCard(f.npc, target); }
       else if(typeof UI!=='undefined' && UI.addNpc){
         UI.addNpc();
