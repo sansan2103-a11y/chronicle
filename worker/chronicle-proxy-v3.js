@@ -1,29 +1,38 @@
 // ============================================================
-// Chronicle APIプロキシ (Cloudflare Worker) — v3
-// v2からの追加: KV台帳(合言葉の個別発行/使用量記帳/上限) + 管理API(/admin)
+// Chronicle APIプロキシ (Cloudflare Worker) — v4
+// v3からの追加: Googleログイン(IDトークン=JWT検証) + メール許可台帳(allow:<email>)
+//   → 合言葉の配布が不要に。許可リストにメールを足すだけでアクセス可。
+//   合言葉(x-chronicle-pass)も後方互換で従来どおり動く。
 //
 // ルート:
-//   GET  /        … 生存確認 {"ok":true,"v":3}
+//   GET  /        … 生存確認 {"ok":true,"v":4}
 //   POST /        … 本文生成 → OpenRouter (使用量を台帳に記帳)
 //   POST /image   … アイコン生成 → pollinations
 //   POST /admin   … 管理API (x-admin-tokenヘッダ必須)
 //
+// 認証ヘッダ(POST /, /image):
+//   x-google-id      … Google Identity ServicesのIDトークン(JWT)。優先。
+//   x-chronicle-pass … 従来の合言葉(Googleヘッダが無いときのフォールバック)
+//
 // シークレット(設定→変数とシークレット):
 //   OPENROUTER_KEY   … OpenRouterのAPIキー(sk-or-...)
-//   ACCESS_CODE      … マスター合言葉(従来のもの。台帳に'master'として記帳)
+//   ACCESS_CODE      … マスター合言葉(任意・従来互換)
 //   POLLINATIONS_KEY … pollinationsのキー ※/image用
-//   ADMIN_TOKEN      … 管理API用トークン(★v3で新規)
+//   ADMIN_TOKEN      … 管理API用トークン
+//   GOOGLE_CLIENT_ID … ★v4で新規。GCPで発行したWebクライアントID(...apps.googleusercontent.com)
 //
 // バインディング(設定→バインディング):
-//   LEDGER … KVネームスペース「CHRONICLE_LEDGER」(★v3で新規)
+//   LEDGER … KVネームスペース「CHRONICLE_LEDGER」
 //
 // KVの中身:
-//   code:<合言葉> … {name,active,limitUsd,usedUsd,reqs,tokens,month,created,lastUsed}
-//   config        … {allowedModels:[], killSwitch:false}
+//   code:<合言葉>  … {name,active,limitUsd,usedUsd,reqs,tokens,month,created,lastUsed}
+//   allow:<email>  … {name,active,limitUsd,usedUsd,reqs,tokens,month,created,lastUsed}  ★v4
+//   config         … {allowedModels:[], killSwitch:false}
 // ============================================================
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const POLLINATIONS_URL = 'https://gen.pollinations.ai/v1/images/generations';
+const GOOGLE_CERTS_URL = 'https://www.googleapis.com/oauth2/v3/certs';
 
 export default {
   async fetch(request, env, ctx) {
@@ -31,7 +40,7 @@ export default {
       return new Response(null, { status: 204, headers: cors(request) });
     }
     if (request.method === 'GET') {
-      return json({ ok: true, service: 'chronicle-proxy', v: 3, ledger: !!env.LEDGER }, 200, request);
+      return json({ ok: true, service: 'chronicle-proxy', v: 4, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID }, 200, request);
     }
     if (request.method !== 'POST') {
       return json({ error: 'POST only' }, 405, request);
@@ -46,7 +55,7 @@ export default {
 
     const path = new URL(request.url).pathname;
 
-    // ---------- /admin : 管理API (トークン必須・合言葉とは別系統) ----------
+    // ---------- /admin : 管理API ----------
     if (path === '/admin') {
       const tok = request.headers.get('x-admin-token') || '';
       if (!env.ADMIN_TOKEN || tok !== env.ADMIN_TOKEN) {
@@ -58,9 +67,8 @@ export default {
       return admin(body, env, request);
     }
 
-    // ---------- 合言葉ガード(台帳照合) ----------
-    const pass = request.headers.get('x-chronicle-pass') || '';
-    const gate = await checkPass(pass, env);
+    // ---------- 認証(Google優先・合言葉フォールバック) ----------
+    const gate = await checkAuth(request, env);
     if (!gate.ok) return json({ error: gate.error }, gate.status, request);
 
     // 緊急停止スイッチ
@@ -69,9 +77,38 @@ export default {
     }
 
     // ---------- /image : アイコン生成 ----------
+    // v337c: FIREWORKS_KEY があれば Fireworks 直叩き(Pollinationsの共有アカウント停止に依存しない)。
+    //   Fireworks は返却がバイナリ画像なので b64_json 形式に正規化して返す(クライアントfix197は無変更)。
+    //   FIREWORKS_KEY 未設定 or Fireworks 失敗時は従来の Pollinations へ自動フォールバック=無停止移行。
     if (path === '/image') {
+      if (env.FIREWORKS_KEY) {
+        try {
+          const model = env.FIREWORKS_IMAGE_MODEL || 'flux-1-schnell-fp8';
+          let w = 384, h = 384;
+          const mm = /^(\d+)x(\d+)$/.exec(String(body.size || ''));
+          if (mm) { w = +mm[1]; h = +mm[2]; }
+          const fwBody = { prompt: String(body.prompt || 'portrait'), width: w, height: h };
+          if (body.seed != null) fwBody.seed = body.seed;
+          const fwUrl = 'https://api.fireworks.ai/inference/v1/workflows/accounts/fireworks/models/' + model + '/text_to_image';
+          const up = await fetch(fwUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'image/jpeg', 'Authorization': 'Bearer ' + env.FIREWORKS_KEY },
+            body: JSON.stringify(fwBody),
+          });
+          if (up.ok) {
+            const buf = await up.arrayBuffer();
+            const bytes = new Uint8Array(buf);
+            let bin = ''; const CH = 0x8000;
+            for (let i = 0; i < bytes.length; i += CH) { bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH)); }
+            const b64 = btoa(bin);
+            return json({ data: [ { b64_json: b64 } ], provider: 'fireworks' }, 200, request);
+          }
+          // Fireworks 失敗 → 下の Pollinations フォールバックへ
+        } catch (e) { /* フォールバックへ */ }
+      }
+      // Pollinations フォールバック(従来経路)
       if (!env.POLLINATIONS_KEY) {
-        return json({ error: 'POLLINATIONS_KEY not set' }, 503, request);
+        return json({ error: 'no image provider (FIREWORKS_KEY / POLLINATIONS_KEY 未設定)' }, 503, request);
       }
       const upstream = await fetch(POLLINATIONS_URL, {
         method: 'POST',
@@ -87,7 +124,6 @@ export default {
     }
 
     // ---------- / : 本文生成 ----------
-    // モデル許可リスト: KVのconfigが優先、無ければ環境変数ALLOWED_MODELS
     const allowed = (gate.config && Array.isArray(gate.config.allowedModels) && gate.config.allowedModels.length > 0)
       ? gate.config.allowedModels
       : (env.ALLOWED_MODELS ? env.ALLOWED_MODELS.split(',').map(s => s.trim()) : null);
@@ -95,7 +131,6 @@ export default {
       return json({ error: 'model not allowed: ' + body.model }, 403, request);
     }
 
-    // 使用量計測: 非ストリーム時のみOpenRouterにコスト返却を要求してバッファ記帳
     const wantStream = !!body.stream;
     if (!wantStream) body.usage = { include: true };
 
@@ -109,14 +144,12 @@ export default {
       body: JSON.stringify(body),
     });
 
-    // ストリーム時/台帳なし時は素通し(v2と同じ)
     if (wantStream || !env.LEDGER || !gate.codeKey) {
       const headers = new Headers(cors(request));
       headers.set('Content-Type', upstream.headers.get('Content-Type') || 'application/json');
       return new Response(upstream.body, { status: upstream.status, headers });
     }
 
-    // 非ストリーム: 全文バッファ→使用量を台帳へ(応答はそのまま返す)
     const text = await upstream.text();
     if (upstream.ok) ctx.waitUntil(record(env, gate.codeKey, text));
     const headers = new Headers(cors(request));
@@ -124,6 +157,75 @@ export default {
     return new Response(text, { status: upstream.status, headers });
   },
 };
+
+// ---------- 認証: Google(x-google-id) を優先、無ければ合言葉(x-chronicle-pass) ----------
+async function checkAuth(request, env) {
+  const gid = request.headers.get('x-google-id') || '';
+  if (gid) {
+    let payload;
+    try {
+      payload = await verifyGoogleIdToken(gid, env.GOOGLE_CLIENT_ID);
+    } catch (e) {
+      return { ok: false, status: 401, error: 'Googleログインの検証に失敗しました(' + (e && e.message || e) + ')。ログインし直してください' };
+    }
+    if (!env.LEDGER) return { ok: false, status: 503, error: 'LEDGER(KV)が未バインドです' };
+    const email = String(payload.email || '').toLowerCase();
+    if (!email) return { ok: false, status: 401, error: 'メールが取得できませんでした' };
+    const config = await getJSON(env, 'config', {});
+    const rec = await getJSON(env, 'allow:' + email, null);
+    if (!rec || !rec.active) {
+      return { ok: false, status: 403, error: 'このGoogleアカウント(' + email + ')はまだ許可されていません。管理者に連絡してください' };
+    }
+    const m = month();
+    const used = (rec.month === m) ? (+rec.usedUsd || 0) : 0;
+    if (+rec.limitUsd > 0 && used >= +rec.limitUsd) {
+      return { ok: false, status: 402, error: '今月の利用上限に達しました(管理者に連絡してください)' };
+    }
+    return { ok: true, codeKey: 'allow:' + email, config, email };
+  }
+  const pass = request.headers.get('x-chronicle-pass') || '';
+  return checkPass(pass, env);
+}
+
+// ---------- Google IDトークン(JWT/RS256)の検証 ----------
+async function verifyGoogleIdToken(idToken, clientId) {
+  const parts = String(idToken).split('.');
+  if (parts.length !== 3) throw new Error('malformed token');
+  const header = JSON.parse(b64urlToStr(parts[0]));
+  const payload = JSON.parse(b64urlToStr(parts[1]));
+  if (header.alg !== 'RS256') throw new Error('alg!=RS256');
+  const certsResp = await fetch(GOOGLE_CERTS_URL, { cf: { cacheTtl: 3600, cacheEverything: true } });
+  const jwks = await certsResp.json();
+  const jwk = (jwks.keys || []).find(k => k.kid === header.kid);
+  if (!jwk) throw new Error('signing key not found');
+  const key = await crypto.subtle.importKey(
+    'jwk', jwk, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']
+  );
+  const data = new TextEncoder().encode(parts[0] + '.' + parts[1]);
+  const sig = b64urlToBytes(parts[2]);
+  const valid = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, sig, data);
+  if (!valid) throw new Error('bad signature');
+  const now = Math.floor(Date.now() / 1000);
+  if (payload.exp && now >= payload.exp) throw new Error('expired');
+  if (payload.nbf && now < payload.nbf) throw new Error('not yet valid');
+  if (payload.iss !== 'https://accounts.google.com' && payload.iss !== 'accounts.google.com') throw new Error('bad iss');
+  if (clientId && payload.aud !== clientId) throw new Error('bad aud');
+  if (!payload.email) throw new Error('no email');
+  if (payload.email_verified === false) throw new Error('email not verified');
+  return payload;
+}
+
+function b64urlToBytes(s) {
+  s = String(s).replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+function b64urlToStr(s) {
+  return new TextDecoder().decode(b64urlToBytes(s));
+}
 
 // 合言葉の照合: マスター(ACCESS_CODE) or KV台帳のコード
 async function checkPass(pass, env) {
@@ -144,7 +246,7 @@ async function checkPass(pass, env) {
   return { ok: true, codeKey: 'code:' + pass, config };
 }
 
-// 使用量の記帳(月が変わったら自動リセット)
+// 使用量の記帳(月が変わったら自動リセット) — code: / allow: 両対応
 async function record(env, codeKey, text) {
   try {
     let cost = 0, pt = 0, ct = 0;
@@ -172,18 +274,10 @@ async function admin(body, env, request) {
   const act = body.action || '';
 
   if (act === 'list') {
-    const out = [];
-    let cursor;
-    do {
-      const r = await env.LEDGER.list({ prefix: 'code:', cursor });
-      for (const k of r.keys) {
-        const rec = await getJSON(env, k.name, {});
-        out.push({ code: k.name.slice(5), ...rec });
-      }
-      cursor = r.list_complete ? null : r.cursor;
-    } while (cursor);
+    const codes = await listPrefix(env, 'code:');
+    const allows = await listPrefix(env, 'allow:');
     const config = await getJSON(env, 'config', {});
-    return json({ codes: out, config }, 200, request);
+    return json({ codes, allows, config }, 200, request);
   }
 
   if (act === 'create') {
@@ -191,14 +285,7 @@ async function admin(body, env, request) {
     if (!code) code = genCode();
     const key = 'code:' + code;
     if (await env.LEDGER.get(key)) return json({ error: 'その合言葉は既に存在します' }, 409, request);
-    const rec = {
-      name: String(body.name || '').slice(0, 40),
-      active: true,
-      limitUsd: +body.limitUsd || 0,
-      usedUsd: 0, reqs: 0, tokens: 0,
-      month: month(),
-      created: new Date().toISOString(),
-    };
+    const rec = newRec(body);
     await env.LEDGER.put(key, JSON.stringify(rec));
     return json({ ok: true, code, rec }, 200, request);
   }
@@ -207,15 +294,43 @@ async function admin(body, env, request) {
     const key = 'code:' + String(body.code || '');
     const rec = await getJSON(env, key, null);
     if (!rec) return json({ error: 'not found' }, 404, request);
-    if (typeof body.active === 'boolean') rec.active = body.active;
-    if (body.limitUsd != null) rec.limitUsd = +body.limitUsd || 0;
-    if (body.name != null) rec.name = String(body.name).slice(0, 40);
+    applyUpdate(rec, body);
     await env.LEDGER.put(key, JSON.stringify(rec));
     return json({ ok: true, rec }, 200, request);
   }
 
   if (act === 'delete') {
     await env.LEDGER.delete('code:' + String(body.code || ''));
+    return json({ ok: true }, 200, request);
+  }
+
+  // ---- ★v4: メール許可台帳(allow:<email>) ----
+  if (act === 'allow-list') {
+    return json({ allows: await listPrefix(env, 'allow:') }, 200, request);
+  }
+
+  if (act === 'allow-create') {
+    const email = normEmail(body.email);
+    if (!email) return json({ error: 'emailが不正です' }, 400, request);
+    const key = 'allow:' + email;
+    if (await env.LEDGER.get(key)) return json({ error: 'そのメールは既に許可済みです' }, 409, request);
+    const rec = newRec(body);
+    await env.LEDGER.put(key, JSON.stringify(rec));
+    return json({ ok: true, email, rec }, 200, request);
+  }
+
+  if (act === 'allow-update') {
+    const email = normEmail(body.email);
+    const key = 'allow:' + email;
+    const rec = await getJSON(env, key, null);
+    if (!rec) return json({ error: 'not found' }, 404, request);
+    applyUpdate(rec, body);
+    await env.LEDGER.put(key, JSON.stringify(rec));
+    return json({ ok: true, rec }, 200, request);
+  }
+
+  if (act === 'allow-delete') {
+    await env.LEDGER.delete('allow:' + normEmail(body.email));
     return json({ ok: true }, 200, request);
   }
 
@@ -233,6 +348,36 @@ async function admin(body, env, request) {
 
   return json({ error: 'unknown action: ' + act }, 400, request);
 }
+
+function newRec(body) {
+  return {
+    name: String(body.name || '').slice(0, 40),
+    active: true,
+    limitUsd: +body.limitUsd || 0,
+    usedUsd: 0, reqs: 0, tokens: 0,
+    month: month(),
+    created: new Date().toISOString(),
+  };
+}
+function applyUpdate(rec, body) {
+  if (typeof body.active === 'boolean') rec.active = body.active;
+  if (body.limitUsd != null) rec.limitUsd = +body.limitUsd || 0;
+  if (body.name != null) rec.name = String(body.name).slice(0, 40);
+}
+async function listPrefix(env, prefix) {
+  const out = [];
+  let cursor;
+  do {
+    const r = await env.LEDGER.list({ prefix, cursor });
+    for (const k of r.keys) {
+      const rec = await getJSON(env, k.name, {});
+      out.push({ key: k.name.slice(prefix.length), ...rec });
+    }
+    cursor = r.list_complete ? null : r.cursor;
+  } while (cursor);
+  return out;
+}
+function normEmail(e) { return String(e || '').trim().toLowerCase(); }
 
 function month() { return new Date().toISOString().slice(0, 7); }
 
@@ -254,7 +399,7 @@ function cors(request) {
   return {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, x-chronicle-pass, x-admin-token',
+    'Access-Control-Allow-Headers': 'Content-Type, x-chronicle-pass, x-admin-token, x-google-id',
     'Access-Control-Max-Age': '86400',
   };
 }
@@ -265,3 +410,6 @@ function json(obj, status, request) {
     headers: { 'Content-Type': 'application/json', ...cors(request) },
   });
 }
+
+// テスト用エクスポート(Workers実行時は未使用)
+export { verifyGoogleIdToken, b64urlToBytes, b64urlToStr };
