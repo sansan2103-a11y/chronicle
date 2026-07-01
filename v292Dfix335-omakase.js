@@ -143,12 +143,17 @@
   function fillFields(f){
     setVal('cfgHName',f.hero.name); setVal('cfgHDesc',f.hero.desc);
     setVal('cfgLore',f.lore); setVal('cfgLoc',f.loc); setVal('cfgObj',f.obj); setVal('cfgTone',f.tone);
-    // NPC: 0件なら1件追加して埋める(既存UI.addNpc/_fillNpcRandom流用)
+    // v292Dfix340: 「最初のカード」でなく「最初の空きNPCカード(名前が空)」を埋める。
+    //   既存NPCがあると cards[0] は埋まっていて何も入らず「おまかせで入力されない」に見えた。
+    //   空きが無ければ新規追加して最後のカードを埋める。
     try{
       var cards=document.querySelectorAll('#npcList .npc-card');
-      if(cards.length===0 && typeof UI!=='undefined' && UI.addNpc){
+      var target=null;
+      for(var i=0;i<cards.length;i++){ var ne=cards[i].querySelector('[data-f="name"]'); if(ne && !(ne.value&&ne.value.trim())){ target=cards[i]; break; } }
+      if(target){ fillNpcCard(f.npc, target); }
+      else if(typeof UI!=='undefined' && UI.addNpc){
         UI.addNpc();
-        setTimeout(function(){ fillNpcCard(f.npc); },60);
+        setTimeout(function(){ var cs=document.querySelectorAll('#npcList .npc-card'); fillNpcCard(f.npc, cs[cs.length-1]); },60);
       } else if(cards.length){ fillNpcCard(f.npc, cards[0]); }
     }catch(_){}
   }
@@ -176,7 +181,10 @@
           var _cs=document.querySelectorAll('#npcList .npc-card');
           for(var _i=0;_i<_cs.length;_i++){ if(!_st.cast.npcs[_i]) _st.cast.npcs[_i]={};
             for(var _j=0;_j<_F.length;_j++){ var _el=_cs[_i].querySelector('[data-f="'+_F[_j]+'"]'); if(_el) _st.cast.npcs[_i][_F[_j]]=_el.value; } } } }catch(_){}
-      try{ if(typeof UI!=='undefined' && UI.openSettings) UI.openSettings(); }catch(_){}
+      // v292Dfix340: 設定が既に開いている時は openSettings() を呼ばない=画面を作り直さない
+      //   →テキスト欄も性別ラジオも全カードも保全(再描画リセットの根治)。閉じている時だけ開く。
+      try{ var _ov=document.getElementById('settingsOv'); var _isOpen=_ov&&_ov.classList&&_ov.classList.contains('open');
+        if(!_isOpen && typeof UI!=='undefined' && UI.openSettings) UI.openSettings(); }catch(_){}
       setTimeout(function(){ fillFields(f);
         // openSettingsの再描画やfillで変わった既入力を元に戻す=ユーザーの種を尊重
         Object.keys(snap).forEach(function(id){ var e=document.getElementById(id); if(e){ e.value=snap[id]; try{ e.dispatchEvent(new Event('input',{bubbles:true})); }catch(_){} } });
