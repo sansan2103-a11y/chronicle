@@ -85,14 +85,14 @@
       .replace(/アニメ調|アニメ風|アニメ絵|漫画風|漫画調|劇画調|劇画|ちびキャラ|デフォルメ調/g,'')
       .replace(/\s{2,}/g,' ').replace(/(^|[\s、])[,，]+/g,'$1').trim();
   }
-  function isCreaturePrompt(raw){ return /creature concept art|non-human creature|monster design|no human face|no human body/i.test(raw); }
+  function isCreaturePrompt(raw){ return /creature concept art|non-human creature|monster design|no human face|no human body|silhouette|faceless|no face|devoid of (?:any )?(?:face|features|detail)|apparition|wraith|specter|spectre|shadowy figure|made of (?:pure )?darkness|shadow (?:stretching|rising|standing|creeping|looming)|人影|亡霊|幽霊|化け物|怪物|異形|人の形をし/i.test(raw); } // v292Dfix358: 影/亡霊/シルエット系を人外判定に追加
 
   function transformPrompt(raw){
     try{
       var idx=artIdx(); if(idx<0||idx>=PREFIX.length) idx=3;
       var s=String(raw||''); if(!s) return raw;
+      s=stripOwnPrefix(s); /* v292Dfix358: 判定は自前prefix除去後(dark shadowy background等の誤検出防止) */
       var creature=isCreaturePrompt(s);
-      s=stripOwnPrefix(s);
       var m=OLD_SUFFIX_START.exec(s);
       if(m) s=s.slice(0,m.index);
       // 我々のcreature語が本文に混ざっていたら除去(旧creature suffix由来)

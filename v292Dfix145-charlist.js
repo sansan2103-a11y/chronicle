@@ -189,7 +189,8 @@
       return false;
     }
     Object.keys(wiByName).forEach(function(nm){
-      if (registered[nm] || __isAliasOfRegistered(nm)) return;
+      function __isVariantOfPeer(nm){ try{ var pool=Object.keys(wiByName); for(var i=0;i<pool.length;i++){ var b=pool[i]; if(b===nm) continue; if(nm.length>b.length && nm.slice(-b.length)===b) return true; } }catch(e){} return false; } // v292Dfix358: 「間延びした影」→「影」等、修飾語+既出名詞は同一として非表示
+    if (registered[nm] || __isAliasOfRegistered(nm) || __isVariantOfPeer(nm)) return;
       var w = wiByName[nm];
       var lt = findLastTurnForName(nm, turns);
       out.story.push({
