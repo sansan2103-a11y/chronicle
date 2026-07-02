@@ -179,8 +179,17 @@
       }
     }
     // Story-appeared characters (worldinfo type=character not already in cast)
+    // v292Dfix350: 登録キャラの短縮呼び(例「スピカ」←「スピカ・ヴァレン」)を別人として
+    //   表示しない別名ガード。長さ2以上で一方が他方を完全包含=同一人物とみなす。
+    var __regNames = Object.keys(registered);
+    function __isAliasOfRegistered(nm){
+      if(!nm || nm.length<2) return false;
+      for(var _i=0;_i<__regNames.length;_i++){ var _r=__regNames[_i]; if(!_r||_r===nm) continue;
+        if((_r.length>=2 && nm.indexOf(_r)>=0) || (nm.length>=2 && _r.indexOf(nm)>=0)) return true; }
+      return false;
+    }
     Object.keys(wiByName).forEach(function(nm){
-      if (registered[nm]) return;
+      if (registered[nm] || __isAliasOfRegistered(nm)) return;
       var w = wiByName[nm];
       var lt = findLastTurnForName(nm, turns);
       out.story.push({
