@@ -33,9 +33,9 @@
 
   // ------- 5画風(append-only=既存セーブのindex 0-3を保持) -------
   // 0 anime / 1 realistic / 2 watercolor / 3 dark(旧darkfantasy=「従来」) / 4 sf(新)
-  var LABELS=['アニメ','リアル','水彩','ダーク','SF','リアルアニメ','ダークアニメ'];
+  var LABELS=['アニメ','リアル','水彩','ダーク','SF','リアルアニメ','ダークアニメ','ダークアニメ旧'];
   var STYLE_TITLE='AIアイコンの絵柄。アニメ=明るいセル / リアル=暖色の写実 / 水彩=淡く優しい / '
-    +'ダーク=退色ゴシック(怪異・ダークファンタジー向き) / SF=寒色シネマティック / リアルアニメ=柔らかい半実写アニメ(なめらか肌・くすんだ自然色) / ダークアニメ=暗く儚い半実写アニメ(青白い肌・退色・ゴシック寄り)。'
+    +'ダーク=退色ゴシック(怪異・ダークファンタジー向き) / SF=寒色シネマティック / リアルアニメ=柔らかい半実写アニメ(なめらか肌・くすんだ自然色) / ダークアニメ=暗く儚い半実写アニメ(青白い肌・退色・ゴシック寄り) / ダークアニメ旧=初期の暗い半実写アニメ(旧レシピ・キャラの外見を最優先)。'
     +'切替で全キャラ作り直し。世界のジャンルから自動で既定が選ばれ、ここでいつでも上書きできます';
   // 人物ポートレート用プレフィックス(前置き=Fluxで最も強い位置・hexでパレット固定)
   var PREFIX=[
@@ -45,7 +45,10 @@
     /*dark*/       'Dark painterly character portrait, desaturated muted palette hex #2B2B33 hex #6E5A5A, deep shadows and dim moody lighting, pale skin, somber gothic horror atmosphere, dark shadowy background, head-and-shoulders, visible clothing, high quality',
     /*sf*/         'Cinematic science-fiction character portrait, cool teal and cyan palette hex #1B3B4B hex #3FB0C8, rim light with subtle underlight, sleek high-tech materials, dark high-contrast background, head-and-shoulders, visible clothing, highly detailed',
     /*realanime*/  'Soft semi-realistic anime portrait, delicate smooth rendering, pale luminous porcelain skin, fine detailed silky hair, gentle soft shading, natural muted palette, realistic facial features with subtle anime influence, soft diffused lighting, 2.5D, head-and-shoulders character portrait, visible clothing, highly detailed',
-    /*darkanime*/  'Dark fantasy anime character portrait, semi-realistic anime rendering, pale porcelain skin, dim moody dramatic lighting, muted desaturated palette hex #262430 hex #4A3A44, dark shadowy background, delicate detailed face, elegant somber gothic atmosphere, head-and-shoulders, visible clothing, high quality'
+    /*darkanime*/  'Dark fantasy anime character portrait, semi-realistic anime rendering, pale porcelain skin, dim moody dramatic lighting, muted desaturated palette hex #262430 hex #4A3A44, dark shadowy background, delicate detailed face, elegant somber gothic atmosphere, head-and-shoulders, visible clothing, high quality',
+    /*darkanime-classic v292Dfix349: 旧STYLE_SUFFIX完全再現(@TAIL=外見を先頭・スタイルを末尾に置く旧式)。
+      廃校キャストのお気に入りアイコンと同じ式=Flux schnellで同じ画風が出る */
+    /*darkanime旧*/ '@TAIL dark fantasy anime character portrait, head and shoulders, visible clothing, detailed face, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality'
   ];
   // 人外(怪異/怪物)用=人型強制語を外し、色調・雰囲気だけ継ぐ
   var PREFIX_CREATURE=[
@@ -55,7 +58,8 @@
     /*dark*/       'Dark creature concept art, desaturated palette hex #2B2B33, deep shadows, dim moody lighting, somber gothic horror atmosphere, non-human creature, monster design, no human face',
     /*sf*/         'Cinematic sci-fi creature concept art, cool teal palette hex #1B3B4B, rim light, biomechanical detail, dark background, non-human creature, no human face',
     /*realanime*/  'Soft semi-realistic creature concept art, delicate smooth detailed rendering, natural muted palette, soft diffused lighting, non-human creature, no human face',
-    /*darkanime*/  'Dark fantasy creature concept art, semi-realistic detailed rendering, muted desaturated palette hex #262430, dim moody lighting, dark shadowy background, somber atmosphere, non-human creature, monster design, no human face'
+    /*darkanime*/  'Dark fantasy creature concept art, semi-realistic detailed rendering, muted desaturated palette hex #262430, dim moody lighting, dark shadowy background, somber atmosphere, non-human creature, monster design, no human face',
+    /*darkanime旧*/ '@TAIL dark fantasy anime creature concept art, full creature body visible, highly detailed, dim moody lighting, muted desaturated colors, dark shadowy background, somber gothic horror atmosphere, high quality, non-human creature, monster design, no human face, no human body'
   ];
   // v292Dfix344: 「見る」(fix315b2)画像=768x512。fix315b2のstyleTailはindex0-3のみ対応で4/5は
   //   default(ダークファンタジー)に落ちる。ここでartStyle 4/5の時だけSEE画像のdarkタグを差し替える。
@@ -98,6 +102,7 @@
       var core=stripStyleWords(s).replace(/[\s,，、]+$/,'').trim();
       if(!core) core='character';
       var pre=(creature?PREFIX_CREATURE:PREFIX)[idx];
+      if(pre.indexOf('@TAIL ')===0){ return core+', '+pre.slice(6); } /* v292Dfix349: 旧式=外見先頭+末尾スタイル */
       return pre+'. '+core;
     }catch(e){ return raw; }
   }
