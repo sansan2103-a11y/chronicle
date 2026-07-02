@@ -1,5 +1,10 @@
 // ============================================================
-// Chronicle APIプロキシ (Cloudflare Worker) — v4
+// Chronicle APIプロキシ (Cloudflare Worker) — v5
+// v4からの追加(2026-07-02):
+//   ① /image のFireworks失敗時、エラー内容(status+本文)を握りつぶさず返す
+//      → 旧pollinationsの412に埋もれて原因不明になる問題を根治
+//   ② FIREWORKS_KEYを自動trim(貼り付け時の空白/改行/全角空白事故を無害化)
+//   ③ 管理API action:'fw-test' … キーが有効かを無料で自己診断(モデル一覧GET)
 // v3からの追加: Googleログイン(IDトークン=JWT検証) + メール許可台帳(allow:<email>)
 //   → 合言葉の配布が不要に。許可リストにメールを足すだけでアクセス可。
 //   合言葉(x-chronicle-pass)も後方互換で従来どおり動く。
@@ -40,7 +45,7 @@ export default {
       return new Response(null, { status: 204, headers: cors(request) });
     }
     if (request.method === 'GET') {
-      return json({ ok: true, service: 'chronicle-proxy', v: 4, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID }, 200, request);
+      return json({ ok: true, service: 'chronicle-proxy', v: 5, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID }, 200, request);
     }
     if (request.method !== 'POST') {
       return json({ error: 'POST only' }, 405, request);
@@ -81,9 +86,11 @@ export default {
     //   Fireworks は返却がバイナリ画像なので b64_json 形式に正規化して返す(クライアントfix197は無変更)。
     //   FIREWORKS_KEY 未設定 or Fireworks 失敗時は従来の Pollinations へ自動フォールバック=無停止移行。
     if (path === '/image') {
-      if (env.FIREWORKS_KEY) {
+      let fwErr = null; // ★v5: Fireworks失敗の詳細を保持(原因の見える化)
+      const fwKey = String(env.FIREWORKS_KEY || '').trim(); // ★v5: 貼り付け事故(空白/改行)を自動無害化
+      if (fwKey) {
         try {
-          const model = env.FIREWORKS_IMAGE_MODEL || 'flux-1-schnell-fp8';
+          const model = String(env.FIREWORKS_IMAGE_MODEL || 'flux-1-schnell-fp8').trim();
           let w = 384, h = 384;
           const mm = /^(\d+)x(\d+)$/.exec(String(body.size || ''));
           if (mm) { w = +mm[1]; h = +mm[2]; }
@@ -92,7 +99,7 @@ export default {
           const fwUrl = 'https://api.fireworks.ai/inference/v1/workflows/accounts/fireworks/models/' + model + '/text_to_image';
           const up = await fetch(fwUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'image/jpeg', 'Authorization': 'Bearer ' + env.FIREWORKS_KEY },
+            headers: { 'Content-Type': 'application/json', 'Accept': 'image/jpeg', 'Authorization': 'Bearer ' + fwKey },
             body: JSON.stringify(fwBody),
           });
           if (up.ok) {
@@ -103,12 +110,15 @@ export default {
             const b64 = btoa(bin);
             return json({ data: [ { b64_json: b64 } ], provider: 'fireworks' }, 200, request);
           }
-          // Fireworks 失敗 → 下の Pollinations フォールバックへ
-        } catch (e) { /* フォールバックへ */ }
+          // Fireworks 失敗 → 詳細を保持して下の Pollinations フォールバックへ
+          let detail = '';
+          try { detail = (await up.text()).slice(0, 300); } catch (e2) {}
+          fwErr = { status: up.status, detail };
+        } catch (e) { fwErr = { status: 0, detail: String(e && e.message || e).slice(0, 300) }; }
       }
       // Pollinations フォールバック(従来経路)
       if (!env.POLLINATIONS_KEY) {
-        return json({ error: 'no image provider (FIREWORKS_KEY / POLLINATIONS_KEY 未設定)' }, 503, request);
+        return json({ error: 'image provider failed', fireworks: fwErr || 'FIREWORKS_KEY未設定' }, 502, request);
       }
       const upstream = await fetch(POLLINATIONS_URL, {
         method: 'POST',
@@ -118,6 +128,16 @@ export default {
         },
         body: JSON.stringify(body),
       });
+      // ★v5: フォールバックも失敗したら、Fireworks側の本当の失敗理由をJSONで返す
+      if (!upstream.ok) {
+        let pDetail = '';
+        try { pDetail = (await upstream.text()).slice(0, 200); } catch (e3) {}
+        return json({
+          error: 'image providers failed',
+          fireworks: fwErr || '未試行(FIREWORKS_KEY未設定)',
+          pollinations: { status: upstream.status, detail: pDetail },
+        }, 502, request);
+      }
       const headers = new Headers(cors(request));
       headers.set('Content-Type', upstream.headers.get('Content-Type') || 'application/json');
       return new Response(upstream.body, { status: upstream.status, headers });
@@ -332,6 +352,36 @@ async function admin(body, env, request) {
   if (act === 'allow-delete') {
     await env.LEDGER.delete('allow:' + normEmail(body.email));
     return json({ ok: true }, 200, request);
+  }
+
+  // ---- ★v5: Fireworksキー自己診断(無料・モデル一覧GETで認証だけ確認) ----
+  if (act === 'fw-test') {
+    const raw = String(env.FIREWORKS_KEY || '');
+    if (!raw) return json({ ok: false, reason: 'FIREWORKS_KEYが未設定です' }, 200, request);
+    const key = raw.trim();
+    const hygiene = {
+      length: raw.length,
+      trimmedLength: key.length,
+      hadWhitespace: raw !== key,
+      head: key.slice(0, 5),
+      looksLikeFwKey: /^fw_[A-Za-z0-9]+$/.test(key),
+    };
+    let r, detail = '';
+    try {
+      r = await fetch('https://api.fireworks.ai/inference/v1/models', {
+        headers: { 'Authorization': 'Bearer ' + key },
+      });
+      try { detail = (await r.text()).slice(0, 200); } catch (e2) {}
+    } catch (e) {
+      return json({ ok: false, reason: 'fetch失敗: ' + String(e && e.message || e), hygiene }, 200, request);
+    }
+    return json({
+      ok: r.ok,
+      status: r.status,
+      hint: r.ok ? 'キーは有効です' : (r.status === 401 ? 'キーが無効です(Fireworksで新しいキーを作って登録し直してください)' : '認証以外の問題の可能性(status参照)'),
+      hygiene,
+      detail: r.ok ? '(省略)' : detail,
+    }, 200, request);
   }
 
   if (act === 'config-set') {
