@@ -4,65 +4,131 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chronicle 管理</title>
+<!-- admin v2 (2026-07-02): 残高ダッシュボード(OpenRouter/Together)+補充リンク+使用率バー+検索+自動読込。worker v8のaction:balancesを使用 -->
 <style>
-  :root { color-scheme: dark; }
+  :root { color-scheme: dark;
+    --bg:#0d0d1a; --card:#15152a; --line:#2d2d49; --ink:#d6d7ee;
+    --ok:#8ad0a0; --warn:#e8c46a; --bad:#ff9d9d; --accent:#8f86e8;
+  }
   * { box-sizing: border-box; }
-  body { margin:0; padding:24px 16px 60px; background:#0d0d1a; color:#d6d7ee; font:14px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
-  .wrap { max-width:860px; margin:0 auto; }
-  h1 { font-size:18px; letter-spacing:1px; margin:0 0 18px; }
-  h2 { font-size:14px; opacity:.7; margin:26px 0 10px; border-bottom:1px solid #2d2d49; padding-bottom:6px; }
-  .card { background:#15152a; border:1px solid #2d2d49; border-radius:12px; padding:14px 16px; margin-bottom:14px; }
+  body { margin:0; padding:20px 14px 60px; background:var(--bg); color:var(--ink); font:14px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .wrap { max-width:960px; margin:0 auto; }
+  h1 { font-size:18px; letter-spacing:1px; margin:0; }
+  h2 { font-size:14px; opacity:.7; margin:26px 0 10px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:14px; }
   label { display:block; font-size:11px; opacity:.65; margin:8px 0 3px; }
-  input[type=text], input[type=password], input[type=number] { width:100%; background:#0f0f20; color:#d6d7ee; border:1px solid #34344f; border-radius:8px; padding:8px 10px; font-size:13px; }
+  input[type=text], input[type=password], input[type=number] { width:100%; background:#0f0f20; color:var(--ink); border:1px solid #34344f; border-radius:8px; padding:8px 10px; font-size:13px; }
   input:focus { outline:none; border-color:#7a7ac0; }
   button { background:#3a3a5e; color:#e7e7f7; border:1px solid #4a4a72; border-radius:8px; padding:7px 14px; font-size:13px; cursor:pointer; }
   button:hover { border-color:#7a7ac0; }
   button.primary { background:#534ab7; border-color:#6a62cf; }
   button.danger { background:#5e2a2a; border-color:#8a4040; }
   button.small { padding:3px 9px; font-size:12px; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid #26263e; }
+  a.linkbtn { display:inline-block; background:#3a3a5e; color:#e7e7f7; border:1px solid #4a4a72; border-radius:8px; padding:6px 12px; font-size:12px; cursor:pointer; text-decoration:none; margin:4px 6px 0 0; }
+  a.linkbtn:hover { border-color:#7a7ac0; }
+  a.linkbtn.hot { background:#534ab7; border-color:#6a62cf; }
+  table { width:100%; border-collapse:collapse; font-size:13px; min-width:640px; }
+  .tablewrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid #26263e; white-space:nowrap; }
   th { font-size:11px; opacity:.6; font-weight:normal; }
   td.num { text-align:right; font-variant-numeric:tabular-nums; }
   .muted { opacity:.55; }
-  .off { color:#e08a8a; }
-  .on { color:#8ad0a0; }
-  #status { margin:10px 0; min-height:20px; font-size:13px; }
+  .off { color:var(--bad); }
+  .on { color:var(--ok); }
+  #status { margin:10px 0 0; min-height:20px; font-size:13px; }
   #status.err { color:#ffb0b0; }
   #status.ok { color:#9fe1cb; }
   .row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
   .row > div { flex:1; min-width:140px; }
   .codechip { font-family:ui-monospace,monospace; background:#0f0f20; padding:2px 7px; border-radius:6px; border:1px solid #34344f; }
   .killon { background:#3a1418 !important; border-color:#a04040 !important; }
+
+  /* ---- ダッシュボード ---- */
+  .topbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+  .topbar .spacer { flex:1; }
+  .chip { font-size:11px; padding:3px 10px; border-radius:999px; border:1px solid var(--line); background:#0f0f20; opacity:.85; }
+  .chip.bad { color:var(--bad); border-color:#8a4040; }
+  .chip.good { color:var(--ok); border-color:#3f6a4e; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
+  .bcard { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; position:relative; }
+  .bcard.warn { border-color:#8a7340; }
+  .bcard.bad { border-color:#a04040; box-shadow:0 0 0 1px #a0404055; }
+  .bcard h3 { margin:0 0 2px; font-size:13px; letter-spacing:.5px; }
+  .bcard .sub { font-size:11px; opacity:.55; margin-bottom:8px; }
+  .big { font-size:24px; font-weight:600; font-variant-numeric:tabular-nums; margin:2px 0; }
+  .big small { font-size:12px; font-weight:normal; opacity:.6; }
+  .gauge { height:8px; background:#0f0f20; border:1px solid #34344f; border-radius:99px; overflow:hidden; margin:8px 0 6px; }
+  .gauge > i { display:block; height:100%; border-radius:99px; background:var(--ok); transition:width .4s; }
+  .gauge.warn > i { background:var(--warn); }
+  .gauge.bad > i { background:var(--bad); }
+  .kv { font-size:12px; opacity:.75; margin:2px 0; }
+  .alertline { font-size:12px; color:var(--bad); margin:6px 0 2px; font-weight:600; }
+  .bar { display:inline-block; vertical-align:middle; width:52px; height:5px; background:#0f0f20; border-radius:99px; overflow:hidden; margin-left:6px; }
+  .bar > i { display:block; height:100%; background:var(--ok); }
+  .bar.warn > i { background:var(--warn); }
+  .bar.bad > i { background:var(--bad); }
+  details.conn summary { cursor:pointer; font-size:13px; opacity:.8; }
+  .foot { margin-top:30px; font-size:11px; opacity:.4; text-align:center; }
+  @media (max-width:520px) { body { padding:14px 8px 50px; } .big { font-size:21px; } }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>◈ CHRONICLE 管理</h1>
-
-  <div class="card">
-    <div class="row">
-      <div style="flex:2">
-        <label>Worker URL</label>
-        <input type="text" id="wurl" value="https://novel-proxy.sansan2103.workers.dev">
-      </div>
-      <div style="flex:2">
-        <label>管理トークン(この端末に記憶されます)</label>
-        <input type="password" id="wtok" placeholder="ADMIN_TOKEN">
-      </div>
-      <div style="flex:0">
-        <button class="primary" onclick="load()">読み込み</button>
-      </div>
-    </div>
-    <div id="status"></div>
+  <div class="topbar">
+    <h1>◈ CHRONICLE 管理</h1>
+    <span class="chip" id="wver">worker: -</span>
+    <span class="chip bad" id="killchip" style="display:none">緊急停止中</span>
+    <span class="spacer"></span>
+    <button class="primary" onclick="load()">⟳ 再読込</button>
   </div>
 
-  <h2>合言葉の台帳</h2>
+  <details class="conn" id="connbox" open>
+    <summary>接続設定（Worker URL / 管理トークン）</summary>
+    <div class="card" style="margin-top:10px">
+      <div class="row">
+        <div style="flex:2">
+          <label>Worker URL</label>
+          <input type="text" id="wurl" value="https://novel-proxy.sansan2103.workers.dev">
+        </div>
+        <div style="flex:2">
+          <label>管理トークン(この端末に記憶されます)</label>
+          <input type="password" id="wtok" placeholder="ADMIN_TOKEN">
+        </div>
+        <div style="flex:0">
+          <button class="primary" onclick="load()">読み込み</button>
+        </div>
+      </div>
+    </div>
+  </details>
+  <div id="status"></div>
+
+  <h2>残高・使用状況</h2>
+  <div class="grid" id="balgrid">
+    <div class="bcard" id="orCard"><h3>OpenRouter（本文生成）</h3><div class="sub muted">読み込み中…</div></div>
+    <div class="bcard" id="tgCard"><h3>Together AI（アイコン生成）</h3><div class="sub muted">読み込み中…</div></div>
+    <div class="bcard" id="sumCard"><h3>今月のまとめ</h3><div class="sub muted">読み込み中…</div></div>
+  </div>
+
+  <h2>台帳 <input type="text" id="q" placeholder="🔍 名前・合言葉・メールで絞り込み" oninput="filterRows()" style="display:inline-block;width:240px;margin-left:10px;font-weight:normal"></h2>
+
+  <div class="muted" style="font-size:12px;margin-bottom:4px">合言葉</div>
   <div class="card">
+    <div class="tablewrap">
     <table id="tbl">
-      <thead><tr><th>名前</th><th>合言葉</th><th>今月使用</th><th>回数</th><th>上限$</th><th>状態</th><th></th></tr></thead>
-      <tbody id="tbody"><tr><td colspan="7" class="muted">「読み込み」を押してください</td></tr></tbody>
+      <thead><tr><th>名前</th><th>合言葉</th><th>今月使用</th><th>回数</th><th>上限$</th><th>最終利用</th><th>状態</th><th></th></tr></thead>
+      <tbody id="tbody"><tr><td colspan="8" class="muted">読み込み中…</td></tr></tbody>
     </table>
+    </div>
+  </div>
+
+  <div class="muted" style="font-size:12px;margin-bottom:4px">許可メール（Googleログイン）</div>
+  <div class="card">
+    <div class="tablewrap">
+    <table id="atbl">
+      <thead><tr><th>名前</th><th>メール</th><th>今月使用</th><th>回数</th><th>上限$</th><th>最終利用</th><th>状態</th><th></th></tr></thead>
+      <tbody id="atbody"><tr><td colspan="8" class="muted">読み込み中…</td></tr></tbody>
+    </table>
+    </div>
   </div>
 
   <h2>新しい合言葉を発行</h2>
@@ -73,14 +139,6 @@
       <div><label>月の上限$(0=無制限)</label><input type="number" id="nLimit" value="2" step="0.5" min="0"></div>
       <div style="flex:0"><button class="primary" onclick="createCode()">発行</button></div>
     </div>
-  </div>
-
-  <h2>許可メール（Googleログイン）</h2>
-  <div class="card">
-    <table id="atbl">
-      <thead><tr><th>名前</th><th>メール</th><th>今月使用</th><th>回数</th><th>上限$</th><th>状態</th><th></th></tr></thead>
-      <tbody id="atbody"><tr><td colspan="7" class="muted">「読み込み」を押してください</td></tr></tbody>
-    </table>
   </div>
 
   <h2>新しい許可メールを追加</h2>
@@ -104,6 +162,8 @@
     </div>
     <div class="muted" style="margin-top:8px;font-size:12px">緊急停止ONの間、全員の生成が止まります(管理APIは生きています)</div>
   </div>
+
+  <div class="foot">Chronicle admin v2 (2026-07-02)</div>
 </div>
 
 <script>
@@ -112,12 +172,21 @@ const $ = id => document.getElementById(id);
 const tok = localStorage.getItem('chrAdminTok'); if (tok) $('wtok').value = tok;
 const wu = localStorage.getItem('chrAdminUrl'); if (wu) $('wurl').value = wu;
 
+// 補充・管理ページ(サービス側のURL)
+const LINKS = {
+  orCredits: 'https://openrouter.ai/settings/credits',
+  orKeys: 'https://openrouter.ai/settings/keys',
+  orActivity: 'https://openrouter.ai/activity',
+  tgBilling: 'https://api.together.ai/settings/billing',
+  tgKeys: 'https://api.together.ai/settings/api-keys',
+};
+
 function setStatus(msg, cls) { const s = $('status'); s.textContent = msg; s.className = cls || ''; }
 
 async function api(payload) {
   const url = $('wurl').value.replace(/\/+$/, '');
   const token = $('wtok').value.trim();
-  if (!token) { setStatus('管理トークンを入れてください', 'err'); throw new Error('no token'); }
+  if (!token) { setStatus('管理トークンを入れてください（接続設定を開いて入力）', 'err'); $('connbox').open = true; throw new Error('no token'); }
   localStorage.setItem('chrAdminTok', token);
   localStorage.setItem('chrAdminUrl', url);
   const r = await fetch(url + '/admin', {
@@ -130,25 +199,174 @@ async function api(payload) {
   return j;
 }
 
+// ---------- 残高ダッシュボード ----------
+const fmt$ = v => '$' + (+v || 0).toFixed(2);
+const fmt$4 = v => '$' + (+v || 0).toFixed(4);
+const yen = v => '約' + Math.round((+v || 0) * 150) + '円';
+function gaugeCls(pct) { return pct <= 10 ? 'bad' : (pct <= 30 ? 'warn' : ''); }
+
+async function loadBalances() {
+  let b;
+  try {
+    b = await api({ action: 'balances' });
+  } catch (e) {
+    const msg = String(e && e.message || e);
+    const hint = msg.indexOf('unknown action') >= 0 ? 'worker v8がまだデプロイされていません' : msg;
+    $('orCard').innerHTML = '<h3>OpenRouter（本文生成）</h3><div class="alertline">取得失敗: ' + esc(hint) + '</div>';
+    $('tgCard').innerHTML = '<h3>Together AI（アイコン生成）</h3><div class="alertline">取得失敗</div>';
+    $('sumCard').innerHTML = '<h3>今月のまとめ</h3><div class="alertline">取得失敗</div>';
+    return;
+  }
+  renderOR(b);
+  renderTG(b);
+  renderSum(b);
+  $('killchip').style.display = b.killSwitch ? '' : 'none';
+}
+
+function renderOR(b) {
+  const el = $('orCard');
+  const o = b.openrouter || {};
+  let html = '<h3>OpenRouter（本文生成）</h3>';
+  let cls = '';
+  if (!o.keySet) {
+    html += '<div class="alertline">OPENROUTER_KEYが未設定です</div>';
+    cls = 'bad';
+  } else if (!o.ok) {
+    html += '<div class="alertline">⚠ 残高の取得に失敗 (status ' + esc(o.status) + ')</div>' +
+      '<div class="kv">' + esc(o.detail || '') + '</div>' +
+      '<div class="kv">キーが失効している可能性 → 下のボタンで確認を</div>';
+    cls = 'bad';
+  } else {
+    const cr = b.openrouterCredits;
+    let remain = null, total = null, label = '';
+    if (o.limit != null && o.limit > 0) {
+      total = o.limit;
+      remain = (o.limitRemaining != null) ? o.limitRemaining : (o.limit - o.usage);
+      label = 'キー上限';
+    } else if (cr && cr.totalCredits > 0) {
+      total = cr.totalCredits;
+      remain = cr.totalCredits - cr.totalUsage;
+      label = '購入クレジット';
+    }
+    if (remain != null) {
+      const pct = Math.max(0, Math.min(100, remain / total * 100));
+      const g = gaugeCls(pct);
+      cls = g;
+      html += '<div class="sub">' + esc(o.label || '') + (o.isFreeTier ? ' / 無料枠' : '') + '</div>' +
+        '<div class="big">残り ' + fmt$(remain) + ' <small>/ ' + label + ' ' + fmt$(total) + '</small></div>' +
+        '<div class="gauge ' + g + '"><i style="width:' + pct.toFixed(1) + '%"></i></div>' +
+        '<div class="kv">使用済み: ' + fmt$(o.usage) + (cr ? '（口座全体: ' + fmt$(cr.totalUsage) + ' / ' + fmt$(cr.totalCredits) + '）' : '') + '</div>';
+      if (pct <= 10) html += '<div class="alertline">⚠ 残りわずか！下のボタンから補充してください</div>';
+      else if (pct <= 30) html += '<div class="alertline" style="color:var(--warn)">そろそろ補充の検討を</div>';
+    } else {
+      html += '<div class="sub">' + esc(o.label || '') + '</div>' +
+        '<div class="big">使用済み ' + fmt$(o.usage) + '</div>' +
+        '<div class="kv">上限未設定のキーです（残りはOpenRouterのページで確認）</div>';
+    }
+  }
+  html += '<div><a class="linkbtn hot" target="_blank" rel="noopener" href="' + LINKS.orCredits + '">💳 残高を補充/確認 ↗</a>' +
+    '<a class="linkbtn" target="_blank" rel="noopener" href="' + LINKS.orKeys + '">🔑 キー管理 ↗</a>' +
+    '<a class="linkbtn" target="_blank" rel="noopener" href="' + LINKS.orActivity + '">📈 利用履歴 ↗</a></div>';
+  el.className = 'bcard ' + cls;
+  el.innerHTML = html;
+}
+
+function renderTG(b) {
+  const el = $('tgCard');
+  const t = b.together || {};
+  let html = '<h3>Together AI（アイコン生成）</h3>';
+  let cls = '';
+  if (!t.keySet) {
+    html += '<div class="alertline">TOGETHER_KEYが未設定です（アイコン生成が止まります）</div>';
+    cls = 'bad';
+  } else {
+    html += '<div class="sub">' + esc(String(t.model || '').replace('black-forest-labs/', '')) + '</div>' +
+      '<div class="big">今月 ' + (t.images || 0) + '枚 <small>≒ ' + fmt$4(t.estUsd) + '（' + yen(t.estUsd) + '）</small></div>' +
+      '<div class="kv">単価推計: ' + fmt$4(t.unitUsd) + '/枚' + (t.lastAt ? ' ・ 最終生成: ' + rel(t.lastAt) : '') + '</div>' +
+      '<div class="kv muted">※Togetherは残高APIが無いため推計値。正確な残高は請求ページで</div>' +
+      '<div class="kv"><button class="small" onclick="tgTest()">🔌 キー接続テスト</button> <span id="tgTestOut" class="muted"></span></div>';
+  }
+  html += '<div><a class="linkbtn hot" target="_blank" rel="noopener" href="' + LINKS.tgBilling + '">💳 残高・請求ページ ↗</a>' +
+    '<a class="linkbtn" target="_blank" rel="noopener" href="' + LINKS.tgKeys + '">🔑 キー管理 ↗</a></div>';
+  el.className = 'bcard ' + cls;
+  el.innerHTML = html;
+}
+
+function renderSum(b) {
+  const el = $('sumCard');
+  const L = b.ledger || {};
+  const t = b.together || {};
+  const totalEst = (+L.usd || 0) + (+t.estUsd || 0);
+  let html = '<h3>今月のまとめ <span class="muted" style="font-weight:normal;font-size:11px">(' + esc(b.month || '') + ')</span></h3>' +
+    '<div class="big">' + fmt$(totalEst) + ' <small>（' + yen(totalEst) + '）</small></div>' +
+    '<div class="kv">内訳: 本文 ' + fmt$4(L.usd) + ' ＋ 画像推計 ' + fmt$4(t.estUsd) + '</div>' +
+    '<div class="kv">生成 ' + (L.reqs || 0) + '回 ・ トークン ' + fmtTok(L.tokens) + ' ・ 画像 ' + (t.images || 0) + '枚</div>' +
+    '<div class="kv">稼働ユーザー: ' + (L.activeUsers || 0) + '人（登録 ' + (L.entries || 0) + '件）</div>';
+  if (b.killSwitch) html += '<div class="alertline">⚠ 緊急停止ON（全員の生成が止まっています）</div>';
+  el.className = 'bcard' + (b.killSwitch ? ' bad' : '');
+  el.innerHTML = html;
+}
+
+async function tgTest() {
+  $('tgTestOut').textContent = 'テスト中…';
+  try {
+    const j = await api({ action: 'tg-test' });
+    $('tgTestOut').textContent = (j.ok ? '✅ ' : '❌ ') + (j.hint || j.reason || ('status ' + j.status));
+  } catch (e) { $('tgTestOut').textContent = '❌ ' + String(e && e.message || e); }
+}
+
+function fmtTok(n) {
+  n = +n || 0;
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(0) + 'k';
+  return String(n);
+}
+function rel(iso) {
+  try {
+    const d = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (!isFinite(d)) return '';
+    if (d < 90) return 'たった今';
+    if (d < 3600) return Math.floor(d / 60) + '分前';
+    if (d < 86400) return Math.floor(d / 3600) + '時間前';
+    return Math.floor(d / 86400) + '日前';
+  } catch (e) { return ''; }
+}
+
+// ---------- worker生存/バージョン ----------
+async function pingWorker() {
+  try {
+    const url = $('wurl').value.replace(/\/+$/, '');
+    const r = await fetch(url + '/?t=' + Date.now());
+    const j = await r.json();
+    $('wver').textContent = 'worker: v' + j.v + (j.v < 8 ? ' (v8未デプロイ)' : '');
+    $('wver').className = 'chip' + (j.v >= 8 ? ' good' : ' bad');
+  } catch (e) { $('wver').textContent = 'worker: 応答なし'; $('wver').className = 'chip bad'; }
+}
+
+// ---------- 台帳 ----------
 async function load() {
   setStatus('読み込み中…');
+  pingWorker();
+  const p = loadBalances(); // 並行して残高も取得
   const j = await api({ action: 'list' });
   CONFIG = j.config || {};
   $('cModels').value = (CONFIG.allowedModels || []).join(', ');
   renderKill();
   const tb = $('tbody');
   tb.innerHTML = '';
-  if (!j.codes.length) tb.innerHTML = '<tr><td colspan="7" class="muted">まだ合言葉がありません(マスターは初回利用後に現れます)</td></tr>';
+  if (!j.codes.length) tb.innerHTML = '<tr><td colspan="8" class="muted">まだ合言葉がありません(マスターは初回利用後に現れます)</td></tr>';
   j.codes.sort((a, b) => (b.usedUsd || 0) - (a.usedUsd || 0)).forEach(c => {
     const tr = document.createElement('tr');
     c.code = c.code || c.key; // worker v4 unified list field key→code 互換
     const isMaster = c.code === 'master';
+    tr.dataset.search = ((c.name || '') + ' ' + c.code).toLowerCase();
     tr.innerHTML =
       '<td>' + esc(c.name || (isMaster ? 'マスター' : '')) + '</td>' +
       '<td><span class="codechip">' + esc(isMaster ? '(ACCESS_CODE)' : c.code) + '</span></td>' +
-      '<td class="num">$' + (+c.usedUsd || 0).toFixed(4) + '</td>' +
+      '<td class="num">' + usedCell(c) + '</td>' +
       '<td class="num">' + (c.reqs || 0) + '</td>' +
       '<td class="num">' + (+c.limitUsd > 0 ? (+c.limitUsd).toFixed(2) : '∞') + '</td>' +
+      '<td class="muted">' + (c.lastUsed ? rel(c.lastUsed) : '-') + '</td>' +
       '<td class="' + (c.active ? 'on' : 'off') + '">' + (c.active ? '稼働' : '停止') + '</td>' +
       '<td></td>';
     const td = tr.lastElementChild;
@@ -161,22 +379,39 @@ async function load() {
     tb.appendChild(tr);
   });
   renderAllows(j.allows || []);
+  filterRows();
   setStatus('読み込み完了 (合言葉' + j.codes.length + '件 / 許可メール' + ((j.allows || []).length) + '件)', 'ok');
+  $('connbox').open = false;
+  await p;
+}
+
+// 今月使用セル: 金額+上限に対する使用率バー
+function usedCell(c) {
+  const used = +c.usedUsd || 0;
+  let bar = '';
+  if (+c.limitUsd > 0) {
+    const pct = Math.max(0, Math.min(100, used / +c.limitUsd * 100));
+    const cls = pct >= 90 ? 'bad' : (pct >= 70 ? 'warn' : '');
+    bar = '<span class="bar ' + cls + '"><i style="width:' + pct.toFixed(0) + '%"></i></span>';
+  }
+  return '$' + used.toFixed(4) + bar;
 }
 
 function renderAllows(allows) {
   const tb = $('atbody');
   tb.innerHTML = '';
-  if (!allows.length) { tb.innerHTML = '<tr><td colspan="7" class="muted">まだ許可メールがありません</td></tr>'; return; }
+  if (!allows.length) { tb.innerHTML = '<tr><td colspan="8" class="muted">まだ許可メールがありません</td></tr>'; return; }
   allows.sort((a, b) => (b.usedUsd || 0) - (a.usedUsd || 0)).forEach(c => {
     const email = c.key;
     const tr = document.createElement('tr');
+    tr.dataset.search = ((c.name || '') + ' ' + email).toLowerCase();
     tr.innerHTML =
       '<td>' + esc(c.name || '') + '</td>' +
       '<td><span class="codechip">' + esc(email) + '</span></td>' +
-      '<td class="num">$' + (+c.usedUsd || 0).toFixed(4) + '</td>' +
+      '<td class="num">' + usedCell(c) + '</td>' +
       '<td class="num">' + (c.reqs || 0) + '</td>' +
-      '<td class="num">' + (+c.limitUsd > 0 ? (+c.limitUsd).toFixed(2) : '\u221e') + '</td>' +
+      '<td class="num">' + (+c.limitUsd > 0 ? (+c.limitUsd).toFixed(2) : '∞') + '</td>' +
+      '<td class="muted">' + (c.lastUsed ? rel(c.lastUsed) : '-') + '</td>' +
       '<td class="' + (c.active ? 'on' : 'off') + '">' + (c.active ? '稼働' : '停止') + '</td>' +
       '<td></td>';
     const td = tr.lastElementChild;
@@ -184,6 +419,16 @@ function renderAllows(allows) {
     td.appendChild(btn('上限', () => { const v = prompt('月の上限$(0=無制限)', c.limitUsd || 0); if (v != null) updAllow(email, { limitUsd: +v }); }));
     td.appendChild(btn('削除', () => { if (confirm('「' + email + '」を許可から削除しますか？')) delAllow(email); }, 'danger'));
     tb.appendChild(tr);
+  });
+}
+
+function filterRows() {
+  const q = $('q').value.trim().toLowerCase();
+  ['tbody', 'atbody'].forEach(id => {
+    Array.prototype.forEach.call($(id).children, tr => {
+      if (!tr.dataset || tr.dataset.search == null) return;
+      tr.style.display = (!q || tr.dataset.search.indexOf(q) >= 0) ? '' : 'none';
+    });
   });
 }
 
@@ -231,9 +476,13 @@ function renderKill() {
   const b = $('killBtn');
   b.textContent = '緊急停止: ' + (CONFIG.killSwitch ? 'ON(全員停止中)' : 'OFF');
   b.classList.toggle('killon', !!CONFIG.killSwitch);
+  $('killchip').style.display = CONFIG.killSwitch ? '' : 'none';
 }
 
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+// トークン保存済みなら自動で読み込み
+if (tok) { load().catch(() => {}); } else { $('connbox').open = true; setStatus('管理トークンを入れて「読み込み」を押してください'); }
 </script>
 </body>
 </html>
