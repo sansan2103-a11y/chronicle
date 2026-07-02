@@ -58,6 +58,25 @@
   function persistSet(pk,v){ try{ localStorage.setItem(LS_PREFIX+pk, v); }catch(e){} }
   function persistDel(pk){ try{ localStorage.removeItem(LS_PREFIX+pk); }catch(e){} }
 
+  /* v292Dfix347: 生成失敗時に「既にある良い絵」を守るガード。
+     ・↻/画風切替で消した直前の絵を退避しておき、上流(課金API)失敗時は低品質フォールバックで
+       上書きせず元の絵へ復元する(おしんFB: 作り直しが走ると良い絵が壊れる)。
+     ・新キー(画風切替後)で失敗した時は、同名キャラの他画風キャッシュがあればそれを使う。
+     OFF: v292Dfix347Off='1' で従来動作(無料GET→dice)。 */
+  var prevGood347 = {};
+  function guard347Off(){ try{ return localStorage.getItem('v292Dfix347Off')==='1'; }catch(e){ return false; } }
+  function sameNameCache347(name){
+    try{
+      if(!name) return '';
+      for(var st=0; st<10; st++){
+        var pk2='n'+hash(String(name)+'|'+st);
+        var v=persistGet(pk2);
+        if(v && v.indexOf('data:')===0) return v;
+      }
+    }catch(e){}
+    return '';
+  }
+
   function b64ToDataUrl(b64){
     var mime='image/png';
     if(b64.charAt(0)==='/') mime='image/jpeg';
@@ -148,8 +167,15 @@
       fetch(API, { method:'POST', headers:{ 'Authorization':'Bearer '+key, 'Content-Type':'application/json' }, body: JSON.stringify(body), signal: _ac?_ac.signal:undefined })
         .then(function(r){ if(_to){ clearTimeout(_to); } if(!r.ok) throw r.status; return r.json(); })
         .then(function(j){ var b=j&&j.data&&j.data[0]&&j.data[0].b64_json; if(!b) throw 'nob64';
-          var d=b64ToDataUrl(b); cache[pk]=d; persistSet(pk,d); })
+          var d=b64ToDataUrl(b); cache[pk]=d; persistSet(pk,d); delete prevGood347[pk]; })
         .catch(function(){
+          /* v292Dfix347: 上流失敗時、まず既存の良い絵を復元(低品質上書き防止) */
+          try{
+            if(!guard347Off()){
+              var _prev347 = prevGood347[pk] || sameNameCache347(info.name);
+              if(_prev347){ cache[pk]=_prev347; persistSet(pk,_prev347); delete prevGood347[pk]; try{ console.warn(TAG,'v292Dfix347: 生成失敗→既存の絵で復元 ('+(info.name||pk)+')'); }catch(_e0){} return; }
+            }
+          }catch(_e347){}
           /* v292Dfix337: 課金API失敗(例: HTTP412 アカウント停止/請求上限)時は無料経路
              image.pollinations.ai へフォールバック→b64化して既存表示経路に載せる。無料も
              ダメな時だけdice。おしんのPollinations課金停止でアイコンが出なくなった件の緩和。 */
@@ -265,6 +291,7 @@
   function regenFor(name){
     if(!name) return;
     var pk=keyFor(name);
+    try{ var _pg347=persistGet(pk); if(_pg347 && _pg347.indexOf('data:')===0) prevGood347[pk]=_pg347; }catch(e){} /* v292Dfix347: 破棄前に退避 */
     delete cache[pk]; delete jobInfo[pk]; persistDel(pk);
     try{ localStorage.removeItem('v292appr_'+pk); }catch(e){} /* v292Dfix283: ↻時はAI外見キャッシュも破棄して再抽出 */
     try{
