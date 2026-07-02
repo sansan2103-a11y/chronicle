@@ -25,7 +25,7 @@
   'use strict';
   if (window.__v292Dfix338) return; window.__v292Dfix338 = {};
   var TAG='[v292Dfix338:artstyle]';
-  function on(){ try{ return localStorage.getItem('v292Dfix338')==='1'; }catch(e){ return false; } }
+  function on(){ try{ return localStorage.getItem('v292Dfix338Off')!=='1'; }catch(e){ return true; } } // v292Dfix356: 既定ON化(画風統一を全員に)
 
   function getS(){ try{ return window.S || (0,eval)('S'); }catch(e){ return null; } }
   function getCfg(){ try{ var S=getS(); return (S&&S.cfg)||null; }catch(e){ return null; } }
