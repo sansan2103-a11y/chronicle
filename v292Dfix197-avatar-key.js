@@ -221,7 +221,15 @@
     if(c!=='pending'){
       var pe=persistGet(pk);
       if(pe && pe.indexOf('data:')===0){ cache[pk]=pe; if(img.getAttribute('src')!==pe){ img.onerror=null; img.src=pe; } return; }
-      if(info.prompt){ cache[pk]='pending'; queue.push(pk); pump(); }  // promptが無いキーは生成しない（legacy URL待ち）
+      if(info.prompt){
+        /* v292Dfix348: fix346のIDB水和完了前は生成を予約しない。
+           水和前はpersistGetがnull=キャッシュ有りキャラにも再生成が走り、生成失敗時に
+           低品質フォールバックで上書きされていた(リロード毎に絵が壊れる主犯=水和レース)。
+           readyは失敗時もtrueになるためデッドロックしない。fix346不在なら従来通り。 */
+        var f346=window.__v292Dfix346;
+        if(f346 && typeof f346.ready==='function' && !f346.ready()) return;
+        cache[pk]='pending'; queue.push(pk); pump();
+      }  // promptが無いキーは生成しない（legacy URL待ち）
     }
     // pending中: legacy pollinations を読ませない（DiceBearを仮表示）
     var dp=diceUrl(name);
