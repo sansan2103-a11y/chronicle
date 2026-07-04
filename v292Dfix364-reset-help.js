@@ -16,8 +16,12 @@
   var TAG = '[v292Dfix364:resetHelp]';
   function off(){ try{ return localStorage.getItem('v292Dfix364Off')==='1'; }catch(e){ return false; } }
 
-  var HELP_STORY = '📖 会話ログと展開だけ消して最初の場面に戻ります。世界観・キャラ・設定・APIキーはそのまま残ります。';
-  var HELP_FULL  = '⚠️ 世界観・キャラ・設定・APIキーまで全部消してまっさらにします（取り消せません）。';
+  // v292Dfix365: 配布版はAPIキーを持たない(プロキシ方式・合言葉/Googleログイン)。
+  //   完全リセット(chr6_epoch)は世界観/キャラ/スロット/設定を消すが、ログイン系
+  //   (v292ProxyPass/v292GoogleToken)はepoch外で残る=ログイン維持。よって「APIキー削除」は
+  //   配布版には不正確→「ログインはそのまま」に修正。
+  var HELP_STORY = '📖 会話ログと展開だけ消して、最初の場面に戻ります。世界観・キャラ・設定・ログインはそのまま残ります。';
+  var HELP_FULL  = '⚠️ 世界観・キャラ・すべてのスロット・設定を消してまっさらにします（取り消せません）。ログイン（合言葉／Googleログイン）はそのまま使えます。';
 
   function mkNote(text){
     var d = document.createElement('div');
