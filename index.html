@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260630-fix365';
+  var BUILT = '20260630-fix367';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2005,7 +2005,7 @@ const G = {
   },
 
   resetStory() {
-    if (!confirm('物語をリセットしますか？\n設定・APIキー・NPC設定は保持されます。')) return;
+    if (!confirm('物語をリセットしますか？\n世界観・キャラ・設定・ログインは保持されます。')) return;
     S.turns = []; S.scene.branches = [];
     S.save();
     this._clearDerivedState();   // v292Dfix154: wipe character-state stores so the previous game doesn't bleed in
@@ -2013,7 +2013,7 @@ const G = {
   },
 
   resetAll() {
-    if (!confirm('すべてのデータ（APIキー・設定を含む）を削除しますか？\nこの操作は取り消せません。')) return;
+    if (!confirm('すべてのデータ（世界観・キャラ・設定）を削除しますか？ログイン（合言葉／Google）はそのまま使えます。\nこの操作は取り消せません。')) return;
     this._clearDerivedState();   // v292Dfix154: SS.del(KEY) only removed chr6; derived stores survived
     SS.del(KEY); location.reload();
   },
@@ -2769,6 +2769,7 @@ G.init();
 <script src="v292Dfix361-phaseb-preview.js?cb=v292Dfix361"></script>
 <script src="v292Dfix363-player-seed.js?cb=v292Dfix363"></script>
 <script src="v292Dfix364-reset-help.js?cb=v292Dfix365"></script>
+<script src="v292Dfix366-cast-gender.js?cb=v292Dfix366"></script>
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=v292Dfix336"></script>
 <script src="v292Dfix338-artstyle.js?cb=v292Dfix350"></script>
 <script src="v292Dfix346-idb-avatars.js?cb=v292Dfix346"></script>
