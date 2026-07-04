@@ -53,7 +53,7 @@
       try{ console.log(TAG, 'artStyle 7 -> 6 on fresh story'); }catch(_){}
     } catch(e){}
   }
-  tick();
-  setInterval(tick, 2000);
+  /* v2: boot時のslot切替ウィンドウを避け、6秒後からチェック開始 */
+  setTimeout(function(){ tick(); setInterval(tick, 2000); }, 6000);
   try{ console.log(TAG, 'loaded', off()?'OFF':'ON'); }catch(_){}
 })();
