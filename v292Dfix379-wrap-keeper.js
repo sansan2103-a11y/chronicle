@@ -1,14 +1,15 @@
 // =====================================================================
 // Chronicle TRPG - v292Dfix379: wrap-keeper（build wrap喪失レースの根治）
+// v2(fix381同時): ブロックレジストリ化。以後のsys注入fixは window.__f379reg に
+//   {off:'OFFキー', marker:'冪等マーカー', text:function(){return '\n【…】…';}} を
+//   push するだけで、喪失レースを気にせず毎ターン確実に注入される。
 // ---------------------------------------------------------------------
 // 真因(2026-07-04実測): boot後にPlanner.buildが差し替えられるタイミング次第で、
 //   fix363(種)/fix366(キャラ属性)/fix376(話者厳守)/fix377(口調)のbuildラップが
 //   まるごと失われるロードがある（各fixの再試行は30秒で打ち切り＝差し替えを検知できない）。
-//   実測: 傍受で4ブロック全滅のロードを確認。話者厳守が消えたターンで誤帰属再発の疑い。
 // 対策: 2秒ポーリングで P.build.__f379 マーカーを監視し、消えていたら再ラップ。
-//   ラップは4ブロックをまとめて復元（各ブロックは元fixと同一文言・同一マーカー冪等・
-//   各fixのOFFスイッチをそのまま尊重）。元fixのラップが生きていれば sys マーカーで
-//   二重追加は起きない（共存安全）。
+//   各ブロックは元fixと同一文言・同一マーカー冪等・各fixのOFFスイッチを尊重。
+//   元fixのラップが生きていれば sys マーカーで二重追加は起きない（共存安全）。
 // OFF: localStorage v292Dfix379Off='1'（keeperのみ停止。各fix本体のOFFは従来どおり）
 // =====================================================================
 (function(){
@@ -16,7 +17,7 @@
   if (window.__f379done) return; window.__f379done = 1;
   var TAG = '[v292Dfix379:wrap-keeper]';
   function off(){ try { return localStorage.getItem('v292Dfix379Off') === '1'; } catch(e){ return false; } }
-  function offK(k){ try { return localStorage.getItem(k) === '1'; } catch(e){ return false; } }
+  function offK(k){ try { return !!k && localStorage.getItem(k) === '1'; } catch(e){ return false; } }
   function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined" ? S : null'); } catch(e){ return null; } }
 
   var SEED = '\n【プレイヤーの種】プレイヤーがDO/SAY/STORYで書き込む内容は、この物語の種である。入力に現れた固有名詞・場所・小道具・意図・思いつきは使い捨てにせず物語の記憶として拾い上げ、のちの展開で芽吹かせて意味を持たせる。入力を素通りさせたり打ち消したりせず、その方向へ世界を確かに動かして応える。';
@@ -32,6 +33,16 @@
       return '\n【キャラ属性】' + parts.join('、') + '。各キャラの一人称・言葉遣い・地の文の代名詞(彼/彼女)は、この性別と人物像に必ず一致させる。';
     } catch(e){ return ''; }
   }
+  // ---- ブロックレジストリ（fix381以降もここに登録するだけで喪失レース知らず） ----
+  window.__f379reg = window.__f379reg || [];
+  var reg = window.__f379reg;
+  reg.push({ off: 'v292Dfix363Off', marker: '【プレイヤーの種】', text: function(){ return SEED; } });
+  reg.push({ off: 'v292Dfix366Off', marker: '【キャラ属性】', text: genderBlock });
+  reg.push({ off: 'v292Dfix376Off', marker: '【話者厳守】', text: function(){ return SPK; } });
+  reg.push({ off: 'v292Dfix377Off', marker: '【口調】', text: function(){
+    try { return (window.__v292Dfix377x && window.__v292Dfix377x.block) ? window.__v292Dfix377x.block() : ''; } catch(e){ return ''; }
+  } });
+
   function ensure(){
     if (off()) return;
     try {
@@ -42,12 +53,14 @@
         var r = ob.apply(this, arguments);
         try {
           if (off() || !r || typeof r.sys !== 'string') return r;
-          if (!offK('v292Dfix363Off') && r.sys.indexOf('【プレイヤーの種】') < 0) r.sys += SEED;
-          if (!offK('v292Dfix366Off') && r.sys.indexOf('【キャラ属性】') < 0){ var g = genderBlock(); if (g) r.sys += g; }
-          if (!offK('v292Dfix376Off') && r.sys.indexOf('【話者厳守】') < 0) r.sys += SPK;
-          if (!offK('v292Dfix377Off') && r.sys.indexOf('【口調】') < 0 && window.__v292Dfix377x && window.__v292Dfix377x.block){
-            var b = window.__v292Dfix377x.block();
-            if (b) r.sys += b;
+          for (var i = 0; i < reg.length; i++){
+            var en = reg[i];
+            try {
+              if (!en || offK(en.off)) continue;
+              if (en.marker && r.sys.indexOf(en.marker) >= 0) continue;
+              var t = en.text ? en.text() : '';
+              if (t) r.sys += t;
+            } catch(e2){}
           }
         } catch(e){}
         return r;
@@ -55,10 +68,10 @@
       w.__f379 = 1;
       try { w._f363mark = true; } catch(e){} // fix363のarmWrapに二重ラップさせない
       P.build = w;
-      try { console.log(TAG, 're-armed Planner.build (seed/gender/speaker/voice)'); } catch(e){}
+      try { console.log(TAG, 're-armed Planner.build (' + reg.length + ' blocks)'); } catch(e){}
     } catch(e){}
   }
   ensure();
   setInterval(ensure, 2000);
-  try { console.log(TAG, 'loaded (off=' + (off() ? '1' : '0') + ')'); } catch(e){}
+  try { console.log(TAG, 'loaded v2 (off=' + (off() ? '1' : '0') + ')'); } catch(e){}
 })();
