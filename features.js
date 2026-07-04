@@ -5048,7 +5048,7 @@
       var obj = JSON.parse(user);
       var ci = obj.currentInput || {};
       var text = ci.text || '';
-      var type = (ci.type || '').toUpperCase();
+      var type = String(ci.type || '').toUpperCase();
       if (type === 'STORY' && /「[^」]*」/.test(text)) {
         obj.storyQuoteNote = {
           warning: 'currentInput.text は STORY 種別。内部の「…」はナレーションの一部であり、新規 dialogue speaker として抽出してはならない。speaker は必ず cast 既存名と一致させること。'
