@@ -25,7 +25,8 @@
 //     - 注入は「直近2ターンの地の文に名前が出た」キャラに限定（プロンプト肥大防止）。
 //     - S.cast(人間入力)に同名がいればカルテは注入しない。
 // ---------------------------------------------------------------------
-// 既定: プレビューOFF。localStorage v292Dfix377='1' で有効化（体感→承認後に既定化）。
+// 既定: ON（fix377b 2026-07-04 おしん承認「問題ないからオンにして」で既定化。
+//        旧プレビューflag v292Dfix377 は不要になった=残っていても無視・無害）。
 // OFF: v292Dfix377Off='1'（全体）/ v292Dfix377COff='1'（C=推定注入のみ切る）
 //      ※一度ONでsysに乗った後のOFFはリロード後に有効（fix363と同じ返却オブジェクト共有仕様）
 // ロールバック: OFFスイッチ + S.cast[].voice(autoのみ)残置は無害 + fix277 aliは消しても無傷
@@ -37,8 +38,7 @@
   var TAG = '[v292Dfix377:voice-anchor]';
 
   function offAll(){ try { return localStorage.getItem('v292Dfix377Off') === '1'; } catch(e){ return false; } }
-  function previewOn(){ try { return localStorage.getItem('v292Dfix377') === '1'; } catch(e){ return false; } }
-  function on(){ return previewOn() && !offAll(); }
+  function on(){ return !offAll(); } // fix377b: 既定ON（旧プレビューflagは廃止・無視）
   function cOff(){ try { return localStorage.getItem('v292Dfix377COff') === '1'; } catch(e){ return false; } }
   function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined" ? S : null'); } catch(e){ return null; } }
 
@@ -472,5 +472,5 @@
       return out;
     }
   };
-  try { console.log(TAG, 'loaded (preview=' + (previewOn() ? 'ON' : 'OFF') + ')'); } catch(e){}
+  try { console.log(TAG, 'loaded (fix377b: default ON, off=' + (offAll() ? '1' : '0') + ')'); } catch(e){}
 })();
