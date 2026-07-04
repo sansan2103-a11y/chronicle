@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260630-fix378';
+  var BUILT = '20260630-fix380';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2694,7 +2694,7 @@ G.init();
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
-  <script src="v292Dfix192-newengine.js?cb=v292Dfix293"></script>
+  <script src="v292Dfix192-newengine.js?cb=v292Dfix380"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
   <script src="v292Dfix197-avatar-key.js?cb=v292Dfix337b"></script>
@@ -2777,6 +2777,7 @@ G.init();
 <script src="v292Dfix376-speaker-guard.js?cb=v292Dfix376"></script>
 <script src="v292Dfix377-voice-anchor.js?cb=v292Dfix377b"></script>
 <script src="v292Dfix378-species-judge.js?cb=v292Dfix378"></script>
+<script src="v292Dfix379-wrap-keeper.js?cb=v292Dfix379"></script>
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=v292Dfix336"></script>
 <script src="v292Dfix338-artstyle.js?cb=v292Dfix350"></script>
 <script src="v292Dfix346-idb-avatars.js?cb=v292Dfix346"></script>
