@@ -18,6 +18,16 @@
 // OFF: 既定プレビューOFF。localStorage v292Dfix386==='1' の時だけ収穫・注入とも動く。
 //      全OFF: v292Dfix386Off==='1'（プレビューONでも停止）。
 // 検証: window.__v292Dfix386x = { harvest, block, status }。node単体テストあり。
+// ---------------------------------------------------------------------
+// 2026-07-05 追補（Fable実機検証で発覚したNPC→主人公関係の脱落を修正）:
+//   実測: モデルは関係の相手を主人公の実名でなく「主人公」トークンで書く
+//         （例: セイラの関係="主人公:信頼できそうだがまだ試したい／ミア:守らねば"）。
+//   旧実装の脱落: ①canonが「主人公」を実名化しない ②主人公は地の文で二人称参照が多く
+//     sceneNamesに載らない → NPC→主人公の関係が block() で丸ごと落ちていた。
+//   修正: ①canonにHERO_TOKENS（主人公/プレイヤー）→実名の正名化を追加
+//         ②sceneNamesに主人公を常時場面内として追加（主人公は必ず場面に居る）。
+//   これでNPC視点の対主人公関係も1行注入される（設計の本来意図どおり）。
+//   個別OFF: v292Dfix386HeroOff==='1'（この追補分だけ無効化＝ロールバック手段）。
 // =====================================================================
 (function(){
   'use strict';
@@ -33,9 +43,21 @@
   function active(){ return preview() && !off(); }
   function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined" ? S : null'); } catch(e){ return null; } }
 
-  // 相手名を正名化（AliasFixがあれば使う）。
+  // 主人公を指す一般トークン（実測: モデルは関係の相手を主人公名でなく「主人公」と書く）。
+  // ここに挙げた語は主人公の実名へ正名化する。あいまいな「あなた/君」は誤爆回避のため入れない。
+  var HERO_TOKENS = { '主人公': 1, 'プレイヤー': 1, 'ﾌﾟﾚｲﾔｰ': 1 };
+  function heroOff(){ try { return localStorage.getItem('v292Dfix386HeroOff') === '1'; } catch(e){ return false; } }
+  // 主人公トークンなら実名を返す（該当しない/OFF/実名不明なら ''）。
+  function heroCanon(name){
+    if (heroOff()) return '';
+    if (HERO_TOKENS[name]){ var h = heroName(); if (h) return h; }
+    return '';
+  }
+
+  // 相手名を正名化（主人公トークン→実名 → AliasFix の順）。
   function canon(name){
     name = String(name || '').replace(/^[\s　]+|[\s　]+$/g, '');
+    var hc = heroCanon(name); if (hc) return hc;
     try {
       var A = window.__v292AliasFix;
       if (A){
@@ -190,6 +212,11 @@
       for (var n = 0; n < cands.length; n++){
         var nm = cands[n];
         if (nm && text.indexOf(nm) >= 0) set[nm] = true;
+      }
+      // 主人公は物語に必ず居る。地の文は二人称で主人公名を出さないことが多く、
+      // 名前検出に頼るとNPC→主人公の関係が丸ごと落ちる（実測）。常に場面内とみなす。
+      if (!heroOff()){
+        var h = heroName(); if (h) set[h] = true;
       }
     } catch(e){}
     return set;
