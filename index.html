@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260630-fix399f';
+  var BUILT = '20260630-fix399g';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2748,7 +2748,7 @@ G.init();
 <script src="v292Dfix325-state-rederive.js?cb=v292Dfix325"></script>
 <script src="v292Dfix326-story-scroll.js?cb=v292Dfix326"></script>
 <script src="v292Dfix327-turn-counter.js?cb=v292Dfix327"></script>
-<script src="v292Dfix328-google-login.js?cb=v292Dfix328c"></script>
+<script src="v292Dfix328-google-login.js?cb=v292Dfix328d"></script>
 <script src="v292Dfix298-roster.js?cb=v292Dfix298b"></script>
 <script src="v292Dfix330-somatic-guard.js?cb=v292Dfix330"></script>
 <script src="v292Dfix332-uifold.js?cb=v292Dfix332"></script>
@@ -2787,7 +2787,7 @@ G.init();
 <script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=v292Dfix396"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix398"></script>
-<script src="v292Dfix399-cloudsync.js?cb=v292Dfix399f"></script>
+<script src="v292Dfix399-cloudsync.js?cb=v292Dfix399g"></script>
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=v292Dfix336"></script>
 <script src="v292Dfix338-artstyle.js?cb=v292Dfix396"></script>
 <script src="v292Dfix346-idb-avatars.js?cb=v292Dfix346"></script>

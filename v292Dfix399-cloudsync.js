@@ -287,6 +287,17 @@
   function cleanupOldWrap(){ try { var old = document.querySelector('.v292Dfix399-wrap'); if (old && old.parentNode) old.parentNode.removeChild(old); } catch(e){} }
   setInterval(cleanupOldWrap, 2000);
 
+  // ---- 同期先(ログイン方式)の判定: Google優先(Workerと同じ) ----
+  function syncIdentity(){
+    try {
+      var api = window.__v292Dfix328api;
+      if (api && api.valid && api.valid()){ return { kind: 'google', label: 'Googleアカウント（' + (api.email() || '') + '）' }; }
+      var pass = (localStorage.getItem('v292ProxyPass') || '').trim();
+      if (pass){ return { kind: 'pass', label: '合言葉' }; }
+      return { kind: 'none', label: '未ログイン' };
+    } catch(e){ return { kind: 'none', label: '未ログイン' }; }
+  }
+
   // ---- 📁セーブ管理パネルに自動同期の説明を出す(おしん要望: セーブのところに簡単な説明) ----
   function injectSaveHelp(){
     if (off()) return;
@@ -311,6 +322,24 @@
       btnRow.appendChild(mkSyncBtn('☁️ いま上げる', onUp));
       btnRow.appendChild(mkSyncBtn('⬇️ いま取り込む', onDown));
       box.insertAdjacentElement('afterend', btnRow);
+      // ★同期先の表示 + Googleログイン導線(iPhone共有の要): PC↔iPhoneは同じGoogleに揃えるのが確実
+      var idn = syncIdentity();
+      var idBox = document.createElement('div');
+      idBox.className = 'v292Dfix399-idbox';
+      idBox.style.cssText = 'margin:2px 0 6px; font-size:12px; color:#9cc;';
+      idBox.innerHTML = '同期先: <b>' + idn.label + '</b>' + (idn.kind === 'google' ? ' ✓（この端末とPCが同じGoogleなら共有OK）' : '');
+      btnRow.insertAdjacentElement('afterend', idBox);
+      if (idn.kind !== 'google'){
+        var api = window.__v292Dfix328api;
+        if (api && api.enabled && api.enabled()){
+          var gBtn = document.createElement('button');
+          gBtn.className = 'v292Dfix399-glogin';
+          gBtn.textContent = '🔑 Googleでログイン（PCと同じアカウントで共有）';
+          gBtn.style.cssText = 'display:block; width:100%; box-sizing:border-box; margin:2px 0 8px; padding:9px 12px; font-size:13px; border-radius:6px; border:1px solid #4a7ad0; background:#2a4a8a; color:#fff; cursor:pointer;';
+          gBtn.onclick = function(){ try { api.login(); } catch(e){} };
+          idBox.insertAdjacentElement('afterend', gBtn);
+        }
+      }
     } catch(e){}
   }
   setInterval(injectSaveHelp, 800);

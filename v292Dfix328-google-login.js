@@ -237,6 +237,15 @@
   setInterval(ensureSentinel, 4000);
   setInterval(renderUI, 3000);
 
+  /* ─── 外部(fix399の同期UI等)からログインを促すAPI ─── */
+  window.__v292Dfix328api = {
+    login: function(){ try { if (!enabled()) return; var g=document.getElementById('g250-gate'); if(g) g.remove(); checkWorker(function(){ initGis(function(){ showGate(); }); }); } catch(e){} },
+    email: function(){ return (T && T.email) || ''; },
+    valid: function(){ return valid(); },
+    enabled: function(){ return enabled(); },
+    workerReady: function(){ return workerReady; }
+  };
+
   /* ─── 起動 ─── */
   function boot(){
     if (!enabled()){ console.log(TAG,'disabled (off or no CLIENT_ID)'); return; }
