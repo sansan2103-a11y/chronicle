@@ -265,28 +265,13 @@
   }
   (function wpoll(){ wpoll._n=(wpoll._n||0)+1; if (wrapSave()) return; if (wpoll._n>120) return; setTimeout(wpoll, 500); })();
 
-  // ---- UI: 設定→キャラ欄のボタン(手動・常時) ----
-  function injectButtons(){
-    if (off()) return;
-    try {
-      if (document.querySelector('.v292Dfix399-wrap')) return;
-      var host = document.getElementById('npcList');
-      if (!host || !host.parentNode) return;
-      var wrap = document.createElement('div');
-      wrap.className = 'v292Dfix399-wrap';
-      wrap.style.cssText = 'margin:4px 0 12px; padding:8px; border:1px solid #3a5a5a; border-radius:8px; background:rgba(60,120,120,.08);';
-      var label = document.createElement('div');
-      label.textContent = '☁️ 端末間セーブ同期' + (autoOff() ? '（自動オフ）' : '（自動オン）') + (isLoggedIn() ? '' : '・要ログイン');
-      label.style.cssText = 'font-size:12px; color:#9cc; margin-bottom:6px;';
-      wrap.appendChild(label);
-      function mkBtn(txt, fn){ var b=document.createElement('button'); b.textContent=txt; b.style.cssText='margin-right:6px;margin-bottom:4px;padding:6px 10px;font-size:13px;border-radius:6px;border:1px solid #4a7;background:#274;color:#dfe;cursor:pointer;'; b.onclick=fn; return b; }
-      var upBtn = mkBtn('☁️ いま上げる', function(){ upBtn.disabled=true; toast('アップロード中…'); push(true).then(function(r){ toast('☁️ 保存しました'); }).catch(function(e){ toast('失敗: '+(e&&e.message), true); }).then(function(){ upBtn.disabled=false; }); });
-      var dnBtn = mkBtn('⬇️ いま取り込む', function(){ if(!confirm('クラウドのセーブを取り込みます。今の端末は上書きされます（自動バックアップあり）。よろしいですか？')) return; dnBtn.disabled=true; toast('取り込み中…'); pullData().then(function(pkg){ if(!pkg) throw new Error('クラウドにセーブがありません'); return applySave(pkg); }).then(function(){ toast('⬇️ 取り込みました。再読み込みします…'); setTimeout(function(){ location.reload(); }, 800); }).catch(function(e){ toast('失敗: '+(e&&e.message), true); dnBtn.disabled=false; }); });
-      wrap.appendChild(upBtn); wrap.appendChild(dnBtn);
-      host.parentNode.insertBefore(wrap, host);
-    } catch(e){ try { console.warn(TAG, e); } catch(_){} }
-  }
-  setTimeout(injectButtons, 1200); setTimeout(injectButtons, 3000); setInterval(injectButtons, 4000);
+  // ---- 手動同期ボタンの共通生成(置き場所=📁セーブ管理パネル) ----
+  function mkSyncBtn(txt, fn){ var b=document.createElement('button'); b.textContent=txt; b.style.cssText='margin-right:6px;margin-bottom:4px;padding:6px 12px;font-size:13px;border-radius:6px;border:1px solid #4a7;background:#274;color:#dfe;cursor:pointer;'; b.onclick=function(){ fn(b); }; return b; }
+  function onUp(b){ b.disabled=true; toast('アップロード中…'); push(true).then(function(){ toast('☁️ 保存しました'); }).catch(function(e){ toast('失敗: '+(e&&e.message), true); }).then(function(){ b.disabled=false; }); }
+  function onDown(b){ if(!confirm('クラウドのセーブを取り込みます。今の端末は上書きされます（自動バックアップあり）。よろしいですか？')) return; b.disabled=true; toast('取り込み中…'); pullData().then(function(pkg){ if(!pkg) throw new Error('クラウドにセーブがありません'); return applySave(pkg); }).then(function(){ toast('⬇️ 取り込みました。再読み込みします…'); setTimeout(function(){ location.reload(); }, 800); }).catch(function(e){ toast('失敗: '+(e&&e.message), true); b.disabled=false; }); }
+  // 旧: キャラ欄に置いていた同期ボタンを撤去(セーブ管理パネルへ移動したため)
+  function cleanupOldWrap(){ try { var old = document.querySelector('.v292Dfix399-wrap'); if (old && old.parentNode) old.parentNode.removeChild(old); } catch(e){} }
+  setInterval(cleanupOldWrap, 2000);
 
   // ---- 📁セーブ管理パネルに自動同期の説明を出す(おしん要望: セーブのところに簡単な説明) ----
   function injectSaveHelp(){
@@ -301,10 +286,17 @@
       box.className = 'v292Dfix399-savehelp';
       box.style.cssText = 'margin:8px 0; padding:10px; border:1px solid #3a5a5a; border-radius:8px; background:rgba(60,120,120,.10); font-size:12px; line-height:1.6; color:#bde;';
       box.innerHTML = '☁️ <b>端末間で自動同期しています</b><br>'
-        + '同じ合言葉でログインすれば、<b>開いた時に最新を自動で取り込み</b>／<b>遊ぶと自動でクラウド保存</b>されます（PC⇔iPhone）。ふだんはボタン操作は不要です。<br>'
-        + '「今すぐ上げる／取り込む」を手動でやりたい時は <b>⚙設定 → キャラ欄</b> にボタンがあります。'
-        + (isLoggedIn() ? '' : '<br>※ 同期にはログイン（合言葉）が必要です。');
+        + '同じログイン（合言葉 または 同じGoogleアカウント）にすれば、<b>開いた時に最新を自動で取り込み</b>／<b>遊ぶと自動でクラウド保存</b>されます（PC⇔iPhone）。ふだんはボタン操作は不要です。<br>'
+        + '下のボタンで「今すぐ」手動同期もできます。'
+        + (isLoggedIn() ? '' : '<br>※ 同期にはログイン（合言葉／Google）が必要です。');
       h2.insertAdjacentElement('afterend', box);
+      // 手動ボタンも同じセーブ管理パネルに置く(おしん要望: キャラ欄→セーブのところへ移動)
+      var btnRow = document.createElement('div');
+      btnRow.className = 'v292Dfix399-savebtns';
+      btnRow.style.cssText = 'margin:4px 0 8px;';
+      btnRow.appendChild(mkSyncBtn('☁️ いま上げる', onUp));
+      btnRow.appendChild(mkSyncBtn('⬇️ いま取り込む', onDown));
+      box.insertAdjacentElement('afterend', btnRow);
     } catch(e){}
   }
   setInterval(injectSaveHelp, 800);
