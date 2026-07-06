@@ -41,6 +41,15 @@
   }
   function isLoggedIn(){ var h = authHeaders(); return !!(h['x-google-id'] || h['x-chronicle-pass']); }
   function activeSlot(){ try { return JSON.parse(localStorage.getItem('chr6_active_slot') || '"chr6"'); } catch(e){ return 'chr6'; } }
+  function hasLocalGame(){   // このスロットに実際の進行(turns)があるか(データ保護判定)
+    try {
+      var slot = activeSlot();
+      var raw = localStorage.getItem(slot === 'chr6' ? 'chr6' : ('chr6_slot_' + slot));
+      if (!raw) return false;
+      var d = JSON.parse(raw);
+      return !!(d && Array.isArray(d.turns) && d.turns.length > 0);
+    } catch(e){ return false; }
+  }
 
   // ---- 同期状態(端末ローカル) ----
   function getNum(k){ try { return +(localStorage.getItem(k) || 0) || 0; } catch(e){ return 0; } }
@@ -209,6 +218,12 @@
       var serverTs = meta ? (+meta.updatedAt || 0) : 0;
       if (!serverTs) return;                       // クラウド空
       if (serverTs <= baseTs()) return;            // 既に持っている
+      // ★初回同期(この端末で未同期)かつローカルに既存ゲームがある→勝手に上書きしない(データ保護)。手動取り込みに委ねる。
+      if (baseTs() === 0 && localTs() === 0 && hasLocalGame()){
+        setNum('v292Dfix399_baseTs', serverTs);
+        toast('☁️ クラウドに別端末のセーブがあります。取り込むには設定→キャラ欄の「⬇️ いま取り込む」を押してください。');
+        return;
+      }
       var hasLocalChanges = localTs() > baseTs();
       if (!hasLocalChanges){
         // 手元に未同期変更なし → 静かに取り込み
