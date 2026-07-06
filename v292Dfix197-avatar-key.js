@@ -21,6 +21,8 @@
   var DICE_STYLE = 'lorelei';
   var API = 'https://gen.pollinations.ai/v1/images/generations';
   var LS_PREFIX = 'v292av2_';
+  function _rec391S(pk,p,s,m){try{if(localStorage.getItem('v292Dfix391Off')!=='1')localStorage.setItem('v292avrec_'+pk,JSON.stringify({p:p,s:(s!=null?s:null),m:m||'flux'}));}catch(e){}}
+  function _rec391L(pk,jo){try{if(localStorage.getItem('v292Dfix391')==='1'&&jo){var r=localStorage.getItem('v292avrec_'+pk);if(r){var R=JSON.parse(r);if(R){if(R.p)jo.prompt=R.p;if(R.s!=null)jo.seed=R.s;if(R.m)jo.model=R.m;}}}}catch(e){}}
 
   function getS(){ try{ return window.S || (0,eval)('S'); }catch(e){ return null; } }
   function pollKey(){ try{ var S=getS(); var k=(S&&S.cfg&&S.cfg.pollKey)||''; return String(k).trim(); }catch(e){ return ''; } }
@@ -167,7 +169,7 @@
       fetch(API, { method:'POST', headers:{ 'Authorization':'Bearer '+key, 'Content-Type':'application/json' }, body: JSON.stringify(body), signal: _ac?_ac.signal:undefined })
         .then(function(r){ if(_to){ clearTimeout(_to); } if(!r.ok) throw r.status; return r.json(); })
         .then(function(j){ var b=j&&j.data&&j.data[0]&&j.data[0].b64_json; if(!b) throw 'nob64';
-          var d=b64ToDataUrl(b); cache[pk]=d; persistSet(pk,d); delete prevGood347[pk]; })
+          var d=b64ToDataUrl(b); cache[pk]=d; persistSet(pk,d); _rec391S(pk,prompt280,(body&&body.seed!=null?body.seed:null),(body&&body.model)); delete prevGood347[pk]; })
         .catch(function(){
           /* v292Dfix347: 上流失敗時、まず既存の良い絵を復元(低品質上書き防止) */
           try{
@@ -185,7 +187,7 @@
                       + '?width=384&height=384&seed=' + _seed + '&nologo=true&model=' + (info.model||'flux');
             return fetch(_free).then(function(r){ if(!r.ok) throw r.status; return r.blob(); })
               .then(function(blob){ return new Promise(function(res,rej){ var fr=new FileReader(); fr.onload=function(){ res(fr.result); }; fr.onerror=rej; fr.readAsDataURL(blob); }); })
-              .then(function(dataUrl){ if(dataUrl && dataUrl.indexOf('data:image')===0){ cache[pk]=dataUrl; persistSet(pk,dataUrl); } else { cache[pk]='dice'; } })
+              .then(function(dataUrl){ if(dataUrl && dataUrl.indexOf('data:image')===0){ cache[pk]=dataUrl; persistSet(pk,dataUrl); _rec391S(pk,prompt280,(typeof _seed!=='undefined'?_seed:null),(info&&info.model)); } else { cache[pk]='dice'; } })
               .catch(function(){ cache[pk]='dice'; });
           }catch(_e){ cache[pk]='dice'; }
         })
@@ -254,7 +256,7 @@
         img.setAttribute('data-avpk', expect);
         if(!jobInfo[expect]){
           if(carrier && isSquareAvatar(carrier)){
-            jobInfo[expect] = { prompt: promptOf(carrier), model: modelOf(carrier), seed: seedOf(carrier), name: alt0 };
+            jobInfo[expect] = { prompt: promptOf(carrier), model: modelOf(carrier), seed: seedOf(carrier), name: alt0 }; _rec391L(expect,jobInfo[expect]);
           } else {
             jobInfo[expect] = { name: alt0 };   // prompt未取得: legacy URL が来るまで生成しない
           }
@@ -272,7 +274,7 @@
     if(!isSquareAvatar(carrier)) return;
     var name = img.getAttribute('alt') || 'character';
     var pk = keyFor(name);
-    if(!jobInfo[pk]) jobInfo[pk] = { prompt: promptOf(carrier), model: modelOf(carrier), seed: seedOf(carrier), name: name };
+    if(!jobInfo[pk]) jobInfo[pk] = { prompt: promptOf(carrier), model: modelOf(carrier), seed: seedOf(carrier), name: name }; _rec391L(pk,jobInfo[pk]);
     img.setAttribute('data-avpk', pk);
     applyOne(img);
   }
