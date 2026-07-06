@@ -1,18 +1,17 @@
 // =====================================================================
-// Chronicle TRPG - v292Dfix399: クロスデバイス・セーブ同期（Phase A=手動）
+// Chronicle TRPG - v292Dfix399: クロスデバイス・セーブ同期
+//   Phase A(手動ボタン) + Phase B(自動: 起動プル + 保存デバウンスpush + 楽観ロック)
 // ---------------------------------------------------------------------
-// 毎ターンの自動保存(S.save)に相乗り可能な土台。まずは手動ボタン方式で安全に。
-//   ・「☁️クラウドに上げる」= 現在のセーブ(localStorageのスロット関連キー群 +
-//       IndexedDB chr6av の全アイコン画像)を1パッケージにまとめ、Worker v10 の
-//       POST /save {op:'put'} でKVへ保存。
-//   ・「☁️取り込む」= GET相当(POST {op:'get'}) で取得 → 復元前に必ずバックアップ →
-//       localStorageへ書き戻し + IndexedDBへ画像投入 → リロードで反映。
-//   ・認証は既存のプロキシ経路と同じ x-google-id / x-chronicle-pass を送る(fix247)。
-//   ・アイコンは再生成せず画像そのものを運ぶ=完全に同じ絵。
-// 設計: 設計_クロスデバイス自動同期_2026-07-06.md
-// 前提: Worker が v10 以上(/save 対応)。ログイン済み(Google or 合言葉)必須。
-// OFF: localStorage v292Dfix399Off='1'。★Phase A は手動なので既定でボタン表示。
-// 検証API: window.__v292Dfix399x = { collect, sizeOf, push, pull, status }
+// 前提: Worker v11 以上（/save が本文/画像を分割保存。GETで合成して返す）。
+//   ・自動アップ = S.save に相乗り。通常は「本文(ls, 約65KB)」だけをデバウンス送信。
+//     画像はキー集合が変わった時だけ full 送信（モバイル通信を軽く）。
+//   ・起動プル = 起動時、クラウドが自分の基準(baseTs)より新しく、かつ手元に未同期の
+//     変更が無ければ自動で取り込み。両方進んでいたら盲目上書きせず選ばせる(楽観ロック)。
+//   ・取り込み前は必ずローカルをバックアップ(chr6_bk_cloudsync_*)。
+// 認証: 既存プロキシと同じ x-google-id / x-chronicle-pass(fix247)。ログイン必須。
+// スイッチ: 全体OFF=v292Dfix399Off / 自動だけOFF=v292Dfix399AutoOff。手動ボタンは常時。
+// 同期状態(端末ローカル・同期対象外): v292Dfix399_baseTs / _localTs / _imgHash
+// 検証: window.__v292Dfix399x = { collectLight, push, pull, bootPull, status, syncState }
 // =====================================================================
 (function(){
   'use strict';
@@ -20,8 +19,12 @@
   var TAG = '[v292Dfix399:cloudsync]';
   var IDB_DB = 'chr6av', IDB_STORE = 'imgs';
   var SCHEMA = 1;
+  var DEBOUNCE_MS = 15000;   // 保存後この時間まとめて1回だけ送る(KVの1書込/秒/キー制約に余裕)
+  var workerVer = 0;         // Workerのv。v11未満は分割保存が無い→常にfull送信(v10互換・画像喪失防止)
+  function detectWorkerVer(){ try { fetch(proxyUrl() + '/', { method: 'GET' }).then(function(r){ return r.json(); }).then(function(j){ workerVer = +(j && j.v) || 0; }).catch(function(){}); } catch(e){} }
 
   function off(){ try { return localStorage.getItem('v292Dfix399Off') === '1'; } catch(e){ return false; } }
+  function autoOff(){ try { return localStorage.getItem('v292Dfix399AutoOff') === '1'; } catch(e){ return false; } }
   function proxyUrl(){
     try {
       var u = (localStorage.getItem('v292ProxyUrl') || '').trim();
@@ -39,7 +42,15 @@
   function isLoggedIn(){ var h = authHeaders(); return !!(h['x-google-id'] || h['x-chronicle-pass']); }
   function activeSlot(){ try { return JSON.parse(localStorage.getItem('chr6_active_slot') || '"chr6"'); } catch(e){ return 'chr6'; } }
 
-  // ---- localStorage: このスロットに属するキー + グローバル(レシピ/承認/メタ) ----
+  // ---- 同期状態(端末ローカル) ----
+  function getNum(k){ try { return +(localStorage.getItem(k) || 0) || 0; } catch(e){ return 0; } }
+  function setNum(k,v){ try { localStorage.setItem(k, String(v)); } catch(e){} }
+  function baseTs(){ return getNum('v292Dfix399_baseTs'); }
+  function localTs(){ return getNum('v292Dfix399_localTs'); }
+  function imgHashStored(){ try { return localStorage.getItem('v292Dfix399_imgHash') || ''; } catch(e){ return ''; } }
+  function hash(s){ var h=0; s=String(s||''); for(var i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; } return String(h>>>0); }
+
+  // ---- localStorage収集(このスロット + グローバル) ----
   function isGlobalKey(k){
     return /^v292avrec_/.test(k) || /^v292appr_/.test(k)
         || k === 'chr6_slots_meta' || k === 'chr6_active_slot' || k === 'chr6_epoch'
@@ -50,17 +61,17 @@
     for (var i = 0; i < localStorage.length; i++){
       var k = localStorage.key(i);
       if (!k) continue;
-      if (/^__gen_/.test(k)) continue;          // 一時状態は運ばない
-      if (/^chr6_bk_/.test(k)) continue;         // バックアップは運ばない
+      if (/^__gen_/.test(k)) continue;
+      if (/^chr6_bk_/.test(k)) continue;
+      if (/^v292Dfix399_/.test(k)) continue;     // 同期状態は運ばない
       var isSlot = slotId && slotId !== 'chr6' && k.indexOf(slotId) >= 0;
-      // 既定スロット(chr6)対策: 本体'chr6'と、slot_chr6付随キー
       if (slotId === 'chr6' && (k === 'chr6' || /_slot_chr6$|genderMap_"?chr6"?$/.test(k))) isSlot = true;
       if (isSlot || isGlobalKey(k)) out[k] = localStorage.getItem(k);
     }
     return out;
   }
 
-  // ---- IndexedDB(chr6av/imgs): 全アイコン画像を読む/書く ----
+  // ---- IndexedDB ----
   function idbOpen(){
     return new Promise(function(res, rej){
       try {
@@ -70,6 +81,18 @@
         r.onerror = function(){ rej(r.error); };
       } catch(e){ rej(e); }
     });
+  }
+  function idbReadKeys(){   // 画像のキーだけ(軽い) → ハッシュ用
+    return idbOpen().then(function(db){
+      return new Promise(function(res){
+        var keys = [];
+        try {
+          var cur = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).openKeyCursor();
+          cur.onsuccess = function(e){ var c = e.target.result; if (c){ keys.push(c.key); c.continue(); } else { db.close(); res(keys); } };
+          cur.onerror = function(){ db.close(); res(keys); };
+        } catch(e){ try { db.close(); } catch(_){}; res(keys); }
+      });
+    }).catch(function(){ return []; });
   }
   function idbReadAll(){
     return idbOpen().then(function(db){
@@ -84,13 +107,11 @@
     }).catch(function(){ return {}; });
   }
   function idbWriteAll(map){
-    if (!map) return Promise.resolve(0);
+    if (!map || !Object.keys(map).length) return Promise.resolve(0);
     return idbOpen().then(function(db){
       return new Promise(function(res){
         try {
-          var tx = db.transaction(IDB_STORE, 'readwrite');
-          var st = tx.objectStore(IDB_STORE);
-          var n = 0;
+          var tx = db.transaction(IDB_STORE, 'readwrite'); var st = tx.objectStore(IDB_STORE); var n = 0;
           Object.keys(map).forEach(function(k){ try { st.put(map[k], k); n++; } catch(_){} });
           tx.oncomplete = function(){ db.close(); res(n); };
           tx.onerror = function(){ db.close(); res(n); };
@@ -99,50 +120,64 @@
     }).catch(function(){ return 0; });
   }
 
-  // ---- パッケージ作成 ----
-  function collect(){
-    var slot = activeSlot();
-    return idbReadAll().then(function(imgs){
-      return {
-        schema: SCHEMA,
-        updatedAt: Date.now(),
-        device: (navigator.userAgent || '').slice(0, 60),
-        activeSlot: slot,
-        ls: collectLS(slot),
-        idb: imgs
-      };
-    });
-  }
-  function sizeOf(pkg){ try { return JSON.stringify(pkg).length; } catch(e){ return -1; } }
-
   // ---- サーバー通信 ----
   function callSave(bodyObj){
     return fetch(proxyUrl() + '/save', { method: 'POST', headers: authHeaders(), body: JSON.stringify(bodyObj) })
       .then(function(r){ return r.json().then(function(j){ return { status: r.status, json: j }; }); });
   }
-  function push(){
-    if (!isLoggedIn()) return Promise.reject(new Error('ログインが必要です(Google または 合言葉)'));
-    return collect().then(function(pkg){
-      var sz = sizeOf(pkg);
-      if (sz > 24 * 1024 * 1024) return Promise.reject(new Error('セーブが大きすぎます(' + Math.round(sz/1048576) + 'MB)'));
-      return callSave({ op: 'put', pkg: pkg }).then(function(r){
-        if (r.status !== 200 || !r.json || !r.json.ok) throw new Error((r.json && r.json.error) || ('HTTP ' + r.status));
-        return { size: sz, serverSize: r.json.size };
-      });
-    });
+  function getMeta(){ return callSave({ op: 'meta' }).then(function(r){ return (r.json && r.json.meta) || null; }).catch(function(){ return null; }); }
+
+  // ---- 収集(light/full) ----
+  function collectLight(ts){
+    var slot = activeSlot();
+    return { schema: SCHEMA, updatedAt: ts || Date.now(), device: (navigator.userAgent||'').slice(0,60), activeSlot: slot, ls: collectLS(slot) };
   }
-  function pull(){
-    if (!isLoggedIn()) return Promise.reject(new Error('ログインが必要です(Google または 合言葉)'));
+  function collectFull(ts){
+    var pkg = collectLight(ts);
+    return idbReadAll().then(function(imgs){ pkg.idb = imgs; return pkg; });
+  }
+
+  // ---- push(自動/手動共通) ----
+  //   force=true: 必ずfull送信(手動ボタン用)。それ以外はキー集合が変わった時だけfull。
+  var pushing = false;
+  function push(force){
+    if (!isLoggedIn()) return Promise.reject(new Error('ログインが必要です'));
+    if (pushing) return Promise.reject(new Error('同期中'));
+    pushing = true;
+    var ts = Date.now();
+    return getMeta().then(function(meta){
+      var serverTs = meta ? (+meta.updatedAt || 0) : 0;
+      // 楽観ロック: 別端末が基準より先に進んでいたら盲目上書きしない
+      if (serverTs > baseTs() && !force){
+        var e = new Error('CONFLICT'); e.conflict = true; e.serverTs = serverTs; e.device = meta && meta.device; throw e;
+      }
+      return idbReadKeys();
+    }).then(function(imgKeys){
+      var curHash = hash(imgKeys.slice().sort().join('|'));
+      var needFull = force || (curHash !== imgHashStored()) || (workerVer < 11); // v11未満/未検出は安全側でfull
+      var build = needFull ? collectFull(ts) : Promise.resolve(collectLight(ts));
+      return build.then(function(pkg){ return { pkg: pkg, needFull: needFull, curHash: curHash }; });
+    }).then(function(o){
+      return callSave({ op: 'put', pkg: o.pkg }).then(function(r){
+        if (r.status !== 200 || !r.json || !r.json.ok) throw new Error((r.json && r.json.error) || ('HTTP ' + r.status));
+        setNum('v292Dfix399_baseTs', ts); setNum('v292Dfix399_localTs', ts);
+        if (o.needFull) { try { localStorage.setItem('v292Dfix399_imgHash', o.curHash); } catch(e){} }
+        return { lsSize: r.json.lsSize, imgUpdated: r.json.imgUpdated };
+      });
+    }).then(function(res){ pushing = false; return res; }, function(err){ pushing = false; throw err; });
+  }
+
+  // ---- pull(取得のみ・適用は別) ----
+  function pullData(){
+    if (!isLoggedIn()) return Promise.reject(new Error('ログインが必要です'));
     return callSave({ op: 'get' }).then(function(r){
       if (r.status !== 200 || !r.json || !r.json.ok) throw new Error((r.json && r.json.error) || ('HTTP ' + r.status));
-      if (!r.json.data) throw new Error('クラウドにセーブがありません');
       return r.json.data;
     });
   }
 
   // ---- 復元(取り込み) ----
   function backupBeforeApply(pkg){
-    // 上書き対象のlocalStorageキーを1つのバックアップにまとめて退避
     try {
       var snap = {};
       Object.keys(pkg.ls || {}).forEach(function(k){ var v = localStorage.getItem(k); if (v != null) snap[k] = v; });
@@ -155,16 +190,67 @@
     try { Object.keys(pkg.ls || {}).forEach(function(k){ localStorage.setItem(k, pkg.ls[k]); }); } catch(e){ return Promise.reject(e); }
     return idbWriteAll(pkg.idb || {}).then(function(){
       try { if (pkg.activeSlot) localStorage.setItem('chr6_active_slot', JSON.stringify(pkg.activeSlot)); } catch(e){}
+      // 取り込んだ版を基準にする(ループ防止)
+      var ts = +pkg.updatedAt || Date.now();
+      setNum('v292Dfix399_baseTs', ts); setNum('v292Dfix399_localTs', ts);
+      idbReadKeys().then(function(keys){ try { localStorage.setItem('v292Dfix399_imgHash', hash(keys.slice().sort().join('|'))); } catch(e){} });
       return true;
     });
   }
 
-  // ---- UI: 設定→キャラ欄の近くにボタン ----
-  function toast(msg, isErr){
-    try { if (window.UI && UI.setStatus) { UI.setStatus(msg); return; } } catch(e){}
-    try { console.log(TAG, msg); } catch(e){}
-    if (isErr) { try { alert(msg); } catch(e){} }
+  function toast(msg, isErr){ try { if (window.UI && UI.setStatus) UI.setStatus(msg); } catch(e){} try { console.log(TAG, msg); } catch(e){} if (isErr){ try { alert(msg); } catch(e){} } }
+
+  // ---- 起動プル(自動) ----
+  var bootPullDone = false;
+  function bootPull(){
+    if (off() || autoOff() || bootPullDone || !isLoggedIn()) return;
+    bootPullDone = true;
+    getMeta().then(function(meta){
+      var serverTs = meta ? (+meta.updatedAt || 0) : 0;
+      if (!serverTs) return;                       // クラウド空
+      if (serverTs <= baseTs()) return;            // 既に持っている
+      var hasLocalChanges = localTs() > baseTs();
+      if (!hasLocalChanges){
+        // 手元に未同期変更なし → 静かに取り込み
+        pullData().then(function(pkg){ if (!pkg) return; return applySave(pkg).then(function(){ toast('☁️ 最新のセーブを取り込みました。再読み込みします…'); setTimeout(function(){ location.reload(); }, 900); }); }).catch(function(e){ console.warn(TAG,'bootPull',e); });
+      } else {
+        // 両方進んでいる → 選ばせる(盲目上書き禁止)
+        if (confirm('クラウド(別の端末)に新しいセーブがあります。\nこの端末にも未同期の変更があります。\n\n「OK」= クラウドを取り込む（この端末の未同期変更は破棄）\n「キャンセル」= この端末を保持（次の保存でクラウドへ）')){
+          pullData().then(function(pkg){ if (!pkg) return; return applySave(pkg).then(function(){ toast('☁️ 取り込みました。再読み込みします…'); setTimeout(function(){ location.reload(); }, 900); }); }).catch(function(e){ toast('取り込み失敗: '+(e&&e.message), true); });
+        } else {
+          // この端末優先 → baseTsをserverTsに上げて次のpushで上書きできるようにする
+          setNum('v292Dfix399_baseTs', serverTs);
+          toast('この端末を保持します。次の保存でクラウドへ反映されます。');
+        }
+      }
+    });
   }
+
+  // ---- S.save に相乗り(自動push・デバウンス) ----
+  var pushTimer = null;
+  function scheduleAutoPush(){
+    if (off() || autoOff() || !isLoggedIn()) return;
+    setNum('v292Dfix399_localTs', Date.now());     // ローカル変更あり
+    if (pushTimer) clearTimeout(pushTimer);
+    pushTimer = setTimeout(function(){
+      push(false).then(function(r){ try { console.log(TAG,'auto-pushed', r); } catch(e){} })
+        .catch(function(e){ if (e && e.conflict){ toast('⚠️ 別端末で更新あり。自動アップを保留しました（設定から手動同期）。'); } else { console.warn(TAG,'auto-push',e); } });
+    }, DEBOUNCE_MS);
+  }
+  function wrapSave(){
+    try {
+      var S = window.S || (function(){ try { return (0,eval)('S'); } catch(e){ return null; } })();
+      if (!S || typeof S.save !== 'function' || S.__f399wrapped) return !!(S && S.__f399wrapped);
+      var os = S.save.bind(S);
+      S.save = function(){ var r = os.apply(this, arguments); try { scheduleAutoPush(); } catch(e){} return r; };
+      S.__f399wrapped = true;
+      try { console.log(TAG, 'S.save wrapped (auto-push on)'); } catch(e){}
+      return true;
+    } catch(e){ return false; }
+  }
+  (function wpoll(){ wpoll._n=(wpoll._n||0)+1; if (wrapSave()) return; if (wpoll._n>120) return; setTimeout(wpoll, 500); })();
+
+  // ---- UI: 設定→キャラ欄のボタン(手動・常時) ----
   function injectButtons(){
     if (off()) return;
     try {
@@ -175,38 +261,26 @@
       wrap.className = 'v292Dfix399-wrap';
       wrap.style.cssText = 'margin:4px 0 12px; padding:8px; border:1px solid #3a5a5a; border-radius:8px; background:rgba(60,120,120,.08);';
       var label = document.createElement('div');
-      label.textContent = '☁️ 端末間セーブ同期' + (isLoggedIn() ? '' : '（ログインが必要）');
+      label.textContent = '☁️ 端末間セーブ同期' + (autoOff() ? '（自動オフ）' : '（自動オン）') + (isLoggedIn() ? '' : '・要ログイン');
       label.style.cssText = 'font-size:12px; color:#9cc; margin-bottom:6px;';
       wrap.appendChild(label);
-      function mkBtn(txt, fn){
-        var b = document.createElement('button');
-        b.textContent = txt;
-        b.style.cssText = 'margin-right:6px; padding:6px 10px; font-size:13px; border-radius:6px; border:1px solid #4a7; background:#274; color:#dfe; cursor:pointer;';
-        b.onclick = fn;
-        return b;
-      }
-      var upBtn = mkBtn('☁️ クラウドに上げる', function(){
-        upBtn.disabled = true; toast('アップロード中…');
-        push().then(function(r){ toast('☁️ 保存しました（' + Math.round(r.size/1024) + 'KB）'); })
-              .catch(function(e){ toast('アップロード失敗: ' + (e && e.message), true); })
-              .then(function(){ upBtn.disabled = false; });
-      });
-      var dnBtn = mkBtn('⬇️ クラウドから取り込む', function(){
-        if (!confirm('クラウドのセーブを取り込みます。\n今の端末の内容は上書きされます（直前バックアップは自動で残します）。\nよろしいですか？')) return;
-        dnBtn.disabled = true; toast('取り込み中…');
-        pull().then(function(pkg){ return applySave(pkg); })
-              .then(function(){ toast('⬇️ 取り込みました。再読み込みします…'); setTimeout(function(){ location.reload(); }, 800); })
-              .catch(function(e){ toast('取り込み失敗: ' + (e && e.message), true); dnBtn.disabled = false; });
-      });
+      function mkBtn(txt, fn){ var b=document.createElement('button'); b.textContent=txt; b.style.cssText='margin-right:6px;margin-bottom:4px;padding:6px 10px;font-size:13px;border-radius:6px;border:1px solid #4a7;background:#274;color:#dfe;cursor:pointer;'; b.onclick=fn; return b; }
+      var upBtn = mkBtn('☁️ いま上げる', function(){ upBtn.disabled=true; toast('アップロード中…'); push(true).then(function(r){ toast('☁️ 保存しました'); }).catch(function(e){ toast('失敗: '+(e&&e.message), true); }).then(function(){ upBtn.disabled=false; }); });
+      var dnBtn = mkBtn('⬇️ いま取り込む', function(){ if(!confirm('クラウドのセーブを取り込みます。今の端末は上書きされます（自動バックアップあり）。よろしいですか？')) return; dnBtn.disabled=true; toast('取り込み中…'); pullData().then(function(pkg){ if(!pkg) throw new Error('クラウドにセーブがありません'); return applySave(pkg); }).then(function(){ toast('⬇️ 取り込みました。再読み込みします…'); setTimeout(function(){ location.reload(); }, 800); }).catch(function(e){ toast('失敗: '+(e&&e.message), true); dnBtn.disabled=false; }); });
       wrap.appendChild(upBtn); wrap.appendChild(dnBtn);
       host.parentNode.insertBefore(wrap, host);
     } catch(e){ try { console.warn(TAG, e); } catch(_){} }
   }
   setTimeout(injectButtons, 1200); setTimeout(injectButtons, 3000); setInterval(injectButtons, 4000);
 
+  // Workerバージョン検出(v11未満なら常にfull送信) + 起動プル(ログイン確定を少し待つ)
+  detectWorkerVer();
+  setTimeout(bootPull, 2500); setTimeout(bootPull, 6000);
+
   window.__v292Dfix399x = {
-    collect: collect, sizeOf: sizeOf, push: push, pull: pull, applySave: applySave,
-    status: function(){ return { off: off(), loggedIn: isLoggedIn(), proxy: proxyUrl(), activeSlot: activeSlot() }; }
+    collectLight: collectLight, push: push, pull: pullData, applySave: applySave, bootPull: function(){ bootPullDone=false; bootPull(); },
+    syncState: function(){ return { baseTs: baseTs(), localTs: localTs(), imgHash: imgHashStored() }; },
+    status: function(){ return { off: off(), autoOff: autoOff(), loggedIn: isLoggedIn(), proxy: proxyUrl(), activeSlot: activeSlot() }; }
   };
-  try { console.log(TAG, 'loaded', off() ? 'OFF' : 'ON', '(login=' + isLoggedIn() + ')'); } catch(e){}
+  try { console.log(TAG, 'loaded', off()?'OFF':(autoOff()?'manual-only':'AUTO'), '(login='+isLoggedIn()+')'); } catch(e){}
 })();
