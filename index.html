@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260630-fix396';
+  var BUILT = '20260630-fix397';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -311,9 +311,6 @@ body {
             <option value="deepseek/deepseek-v4-flash">DeepSeek V4 Flash（推奨：高速・高品質・安価）</option>
             <option value="deepseek/deepseek-v4-pro">DeepSeek V4 Pro（濃い場面・長文向け）</option><!-- v292Dfix279: おしん指示(2026-06-13)でDS専用化(Hermes/Euryale等を除去。既存cfgのリスト外IDはfix256セレクタが温存表示) -->
           </select>
-        </div>
-        <div class="fld" style="background:rgba(139,118,240,.08);border:1px solid rgba(139,118,240,.25);border-radius:8px;padding:10px;font-size:12px;color:#a090d0">
-          ✦ 指示追従モデル。心理エンジン・ホラー・成人描写など表現制限なし。
         </div>
         <div class="fld">
           <label class="chk-row"><input type="checkbox" id="cfgSimpleMode"> シンプルモード（AI Dungeon風・JSON無し直接生成）</label>
@@ -2763,7 +2760,6 @@ G.init();
 <script src="v292Dfix353-omakase-fill-rest.js?cb=v292Dfix353"></script>
 <script src="v292Dfix354-default-model.js?cb=v292Dfix354"></script>
 <script src="v292Dfix355-selector-cleanup.js?cb=v292Dfix355"></script>
-<script src="v292Dfix356-style-unify-button.js?cb=v292Dfix356"></script>
 <script src="v292Dfix359-gender-avatar.js?cb=v292Dfix359"></script>
 <script src="v292Dfix360-seed-ux.js?cb=v292Dfix360"></script>
 <script src="v292Dfix361-phaseb-preview.js?cb=v292Dfix361"></script>
@@ -2788,7 +2784,7 @@ G.init();
 <script src="v292Dfix388-first-person-speaker.js?cb=v292Dfix388"></script>
 <script src="v292Dfix389-npc-relations.js?cb=v292Dfix389"></script>
 <script src="v292Dfix390-speaker-fullname.js?cb=v292Dfix390"></script>
-<script src="v292Dfix393-restyle-unify.js?cb=v292Dfix394"></script>
+<script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=v292Dfix396"></script>
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=v292Dfix336"></script>
 <script src="v292Dfix338-artstyle.js?cb=v292Dfix396"></script>

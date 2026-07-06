@@ -156,21 +156,20 @@
     }));
   }
 
-  // ---- ボタン注入（画風セレクタ横）----
+  // ---- ボタン注入（設定→キャラ欄・v292Dfix397でツールバーから移動）----
   function injectBtn(){
     try {
       if (off()) return;   // ボタンは既定表示（押す=確認ダイアログ+生成なので安全・iPhoneでもスイッチ不要）
       if (document.querySelector('.v292Dfix393-btn')) return;
-      var sel=document.getElementById('v292-style-sel');
-      var anchor=sel ? (sel.closest('label')||sel.parentNode) : null;
-      if (!anchor || !anchor.parentNode) return;
+      var host=document.getElementById('npcList');   // v292Dfix397: 設定→キャラ欄へ移動(ツールバー撤去)
+      if (!host || !host.parentNode) return;
       var b=document.createElement('button');
       b.className='v292Dfix393-btn';
       b.textContent='🎨 絵柄をそろえ直す';
       b.title='全キャラの似顔絵を同じ形・同じ画風で描き直して統一します（押した時だけ生成）';
-      b.style.cssText='margin:0 4px; padding:6px 10px; background:#5a3a5a; border:1px solid #916; color:#fde; border-radius:6px; cursor:pointer; font-size:13px;';
+      b.style.cssText='display:block; width:100%; box-sizing:border-box; margin:4px 0 10px; padding:8px 10px; background:#5a3a5a; border:1px solid #916; color:#fde; border-radius:6px; cursor:pointer; font-size:13px;';
       b.onclick=function(e){ e.preventDefault(); unifyAll(); };
-      anchor.parentNode.insertBefore(b, anchor.nextSibling);
+      host.parentNode.insertBefore(b, host);   // キャラ一覧の直前
       try { console.log(TAG, 'button injected'); } catch(e){}
     } catch(e){}
   }
