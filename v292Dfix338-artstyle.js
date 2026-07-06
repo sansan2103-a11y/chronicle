@@ -26,6 +26,9 @@
   if (window.__v292Dfix338) return; window.__v292Dfix338 = {};
   var TAG='[v292Dfix338:artstyle]';
   function on(){ try{ return localStorage.getItem('v292Dfix338Off')!=='1'; }catch(e){ return true; } } // v292Dfix356: 既定ON化(画風統一を全員に)
+  // v292Dfix396: 闇アニメ(初代)=7 をセレクタから撤去(不安定な@TAIL式)。OFFで復活。
+  function off396(){ try{ return localStorage.getItem('v292Dfix396Off')==='1'; }catch(e){ return false; } }
+  function curArt(){ try{ var c=getCfg(); return (c&&c.artStyle!=null)?Number(c.artStyle):null; }catch(e){ return null; } }
 
   function getS(){ try{ return window.S || (0,eval)('S'); }catch(e){ return null; } }
   function getCfg(){ try{ var S=getS(); return (S&&S.cfg)||null; }catch(e){ return null; } }
@@ -34,7 +37,7 @@
   // ------- 5画風(append-only=既存セーブのindex 0-3を保持) -------
   // 0 anime / 1 realistic / 2 watercolor / 3 dark(旧darkfantasy=「従来」) / 4 sf(新)
   var LABELS=['アニメ','写実','水彩','ダーク幻想','SF','半写実アニメ','闇アニメ','闇アニメ(初代)'];
-  var STYLE_TITLE='AIアイコンの絵柄。アニメ=明るいセル画 / 写実=暖色の写実画 / 水彩=淡く優しい / ダーク幻想=退色ゴシック(怪異・DF向き) / SF=寒色シネマティック / 半写実アニメ=なめらかな2.5D / 闇アニメ=青白い肌の暗い半実写アニメ / 闇アニメ(初代)=初期レシピ(キャラの外見を最優先・廃校の絵と同じ式)。切替で全キャラ作り直し。世界のジャンルから自動で既定が選ばれ、ここでいつでも上書きできます';
+  var STYLE_TITLE='AIアイコンの絵柄。アニメ=明るいセル画 / 写実=暖色の写実画 / 水彩=淡く優しい / ダーク幻想=退色ゴシック(怪異・DF向き) / SF=寒色シネマティック / 半写実アニメ=なめらかな2.5D / 闇アニメ=青白い肌の暗い半実写アニメ。切替で全キャラ作り直し。世界のジャンルから自動で既定が選ばれ、ここでいつでも上書きできます';
   // 人物ポートレート用プレフィックス(前置き=Fluxで最も強い位置・hexでパレット固定)
   var PREFIX=[
     /*anime*/      'High-quality anime illustration, clean cel shading, crisp linework, vibrant saturated palette, head-and-shoulders character portrait, visible clothing',
@@ -154,8 +157,13 @@
     try{
       var sel=document.getElementById('v292-style-sel'); if(!sel) return;
       // v292Dfix344: LABELS全件をセレクタに反映(既存0-2はラベル一致・3ダーク改称・4SF/5リアルアニメ追加)
+      // v292Dfix396: 初代(7)は既定で撤去。OFF時 or 現slotが既に7の時だけ残す(廃校等の既存slot保護)。
+      var vis396 = off396() ? LABELS.length : 7;
+      var cur396 = curArt();
       for(var i=0;i<LABELS.length;i++){
         var o=sel.querySelector('option[value="'+i+'"]');
+        var show396 = (i<vis396) || (i===7 && cur396===7);
+        if(!show396){ if(o&&o.parentNode) o.parentNode.removeChild(o); continue; }
         if(!o){ o=document.createElement('option'); o.value=String(i); sel.appendChild(o); }
         if(o.textContent!==LABELS[i]) o.textContent=LABELS[i];
       }

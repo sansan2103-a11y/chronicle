@@ -23,7 +23,7 @@
     try{
       if (!el || el.tagName!=='SELECT') return false;
       var os=el.options; if(!os||os.length<6) return false;
-      for(var i=0;i<os.length;i++){ if(/初代/.test(os[i].text)) return true; }
+      for(var i=0;i<os.length;i++){ if(/闇アニメ/.test(os[i].text)) return true; }
       return false;
     }catch(e){ return false; }
   }
