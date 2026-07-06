@@ -1,0 +1,30 @@
+// =====================================================================
+// Chronicle TRPG - v292Dfix398: 悲鳴・うめきの話者帰属ルール
+// ---------------------------------------------------------------------
+// 背景(おしん実観察 2026-07-06): カエデが怪異に首を掴まれ「喉が締まった」直後の
+//   悲鳴を、モデルが本文で <say who="ノア">っ——！</say> と誤帰属した。
+//   原因=モデルが悲鳴の直後に出る名前(「ノアのランタン…」)に引っ張られた。
+//   現行の『悲鳴・絶叫ルール』は「引用形式で出せ」とは言うが「声の主＝被害者に
+//   付けよ」という帰属指示が無い(features.js buildScreamQuoteBlock)。
+// → 本modは fix379 レジストリ(実live経路・keeper v2/v3)に帰属ルールを1本登録する
+//   だけ。Planner.build wrap が毎ターン予算内でsys末尾へ注入し、Network傍受で
+//   実sysに乗るのを確認できる(_extensions等の死に経路は使わない)。
+// prio 2(標準)。冪等マーカー=先頭の【…】。既定ON・OFF: v292Dfix398Off='1'。
+// index.html は fix379 の後(順不同でも __f379reg は || [] で共有)。
+// =====================================================================
+(function(){
+  'use strict';
+  if (window.__v292Dfix398) return; window.__v292Dfix398 = true;
+  var TAG = '[v292Dfix398:scream-attribution]';
+  var MARK = '【悲鳴・うめきの話者帰属】';
+  var TEXT = '\n' + MARK +
+    '悲鳴・絶叫・うめき・嗚咽・短い叫び（「っ——！」「ひっ」「ぐ…」「あ゛っ」等）を<say who>で出すときは、' +
+    'その声を実際に発した本人＝いま攻撃・拘束・苦痛・危機に瀕している当人に付ける。' +
+    '直前に別のキャラが襲われている／首を絞められている／刺されている等の描写があれば、その被害者に付ける。' +
+    '悲鳴の直後にたまたま名前が出るだけの、近くにいる第三者の名前を付けない。';
+  try {
+    window.__f379reg = window.__f379reg || [];
+    window.__f379reg.push({ off: 'v292Dfix398Off', marker: MARK, prio: 2, text: function(){ return TEXT; } });
+    try { console.log(TAG, 'registered (scream speaker = victim rule)'); } catch(e){}
+  } catch(e){ try { console.warn(TAG, e); } catch(_){} }
+})();

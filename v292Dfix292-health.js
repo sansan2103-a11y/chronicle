@@ -47,7 +47,7 @@
 
   // ---- トップバーのバッジ ----
   var COLORS = { ok:'#5fb87a', warn:'#d6a435', danger:'#e06060' };
-  var LABEL = { ok:'文体 ✓', warn:'⚠ 文体やや硬め', danger:'⚠ 文体が硬化' };
+  var LABEL = { ok:'文体：良好', warn:'⚠ 文体やや硬め', danger:'⚠ 文体が硬化' }; // v292Dfix398: ✓→良好(状態表示と分かる文言に)
   function tip(sc){
     if (sc.level === 'ok') return '文体は健全です（句読点・描写ともに自然）。\n（Proは40ターンを超えると徐々に機械的な実況調に崩れやすいので、このメーターで見張っています）';
     var why = [];
