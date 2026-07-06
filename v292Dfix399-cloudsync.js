@@ -288,6 +288,27 @@
   }
   setTimeout(injectButtons, 1200); setTimeout(injectButtons, 3000); setInterval(injectButtons, 4000);
 
+  // ---- 📁セーブ管理パネルに自動同期の説明を出す(おしん要望: セーブのところに簡単な説明) ----
+  function injectSaveHelp(){
+    if (off()) return;
+    try {
+      var closeX = document.getElementById('v30-close-x');
+      if (!closeX) return;                             // セーブ管理パネルが開いていない
+      var h2 = closeX.closest ? closeX.closest('h2') : (closeX.parentNode && closeX.parentNode.tagName === 'H2' ? closeX.parentNode : null);
+      if (!h2 || !h2.parentNode) return;
+      if (h2.parentNode.querySelector('.v292Dfix399-savehelp')) return; // 冪等
+      var box = document.createElement('div');
+      box.className = 'v292Dfix399-savehelp';
+      box.style.cssText = 'margin:8px 0; padding:10px; border:1px solid #3a5a5a; border-radius:8px; background:rgba(60,120,120,.10); font-size:12px; line-height:1.6; color:#bde;';
+      box.innerHTML = '☁️ <b>端末間で自動同期しています</b><br>'
+        + '同じ合言葉でログインすれば、<b>開いた時に最新を自動で取り込み</b>／<b>遊ぶと自動でクラウド保存</b>されます（PC⇔iPhone）。ふだんはボタン操作は不要です。<br>'
+        + '「今すぐ上げる／取り込む」を手動でやりたい時は <b>⚙設定 → キャラ欄</b> にボタンがあります。'
+        + (isLoggedIn() ? '' : '<br>※ 同期にはログイン（合言葉）が必要です。');
+      h2.insertAdjacentElement('afterend', box);
+    } catch(e){}
+  }
+  setInterval(injectSaveHelp, 800);
+
   // Workerバージョン検出(v11未満なら常にfull送信) + 起動プル(ログイン確定を少し待つ)
   detectWorkerVer();
   setTimeout(bootPull, 2500); setTimeout(bootPull, 6000);
