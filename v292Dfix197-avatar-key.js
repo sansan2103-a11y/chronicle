@@ -22,7 +22,7 @@
   var API = 'https://gen.pollinations.ai/v1/images/generations';
   var LS_PREFIX = 'v292av2_';
   function _rec391S(pk,p,s,m){try{if(localStorage.getItem('v292Dfix391Off')!=='1')localStorage.setItem('v292avrec_'+pk,JSON.stringify({p:p,s:(s!=null?s:null),m:m||'flux'}));}catch(e){}}
-  function _rec391L(pk,jo){try{if(localStorage.getItem('v292Dfix391')==='1'&&jo){var r=localStorage.getItem('v292avrec_'+pk);if(r){var R=JSON.parse(r);if(R){if(R.p)jo.prompt=R.p;if(R.s!=null)jo.seed=R.s;if(R.m)jo.model=R.m;}}}}catch(e){}}
+  function _rec391L(pk,jo){try{if(localStorage.getItem('v292Dfix391Off')!=='1'&&jo){var r=localStorage.getItem('v292avrec_'+pk);if(r){var R=JSON.parse(r);if(R){if(R.p)jo.prompt=R.p;if(R.s!=null)jo.seed=R.s;if(R.m)jo.model=R.m;}}}}catch(e){}}
 
   function getS(){ try{ return window.S || (0,eval)('S'); }catch(e){ return null; } }
   function pollKey(){ try{ var S=getS(); var k=(S&&S.cfg&&S.cfg.pollKey)||''; return String(k).trim(); }catch(e){ return ''; } }
