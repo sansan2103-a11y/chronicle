@@ -146,6 +146,28 @@
     return idbReadAll().then(function(imgs){ pkg.idb = imgs; return pkg; });
   }
 
+  // ---- スロット整合ヘルパー(データ保護) ----
+  function activeSlotTurns(){
+    try { var slot = activeSlot(); var raw = localStorage.getItem(slot === 'chr6' ? 'chr6' : ('chr6_slot_' + slot)); if (!raw) return 0; var d = JSON.parse(raw); return (d && Array.isArray(d.turns)) ? d.turns.length : 0; } catch(e){ return 0; }
+  }
+  // ★根本修復: ターンがあるのに登録簿(chr6_slots_meta)に無いアクティブスロットを登録する。
+  //   これが無いと fix30 の activeSlot()=findSlot()||meta[0] が default に化けてスロットが崩れる(今回のデータ消失の芯)。
+  function healSlotMeta(){
+    try {
+      var slot = activeSlot();
+      if (!slot || slot === 'default' || slot === 'chr6') return;
+      var raw = localStorage.getItem('chr6_slot_' + slot); if (!raw) return;
+      var d; try { d = JSON.parse(raw); } catch(e){ return; }
+      if (!(d && Array.isArray(d.turns) && d.turns.length > 0)) return;      // 中身がある時だけ
+      var meta; try { meta = JSON.parse(localStorage.getItem('chr6_slots_meta') || '[]'); } catch(e){ meta = []; }
+      if (!Array.isArray(meta)) meta = [];
+      if (meta.some(function(s){ return s && s.id === slot; })) return;      // 既に登録済み
+      meta.push({ id: slot, name: 'マイ物語', key: 'chr6_slot_' + slot, updatedAt: new Date().toISOString() });
+      localStorage.setItem('chr6_slots_meta', JSON.stringify(meta));
+      try { console.log(TAG, 'healed slots_meta: registered', slot); } catch(e){}
+    } catch(e){}
+  }
+
   // ---- push(自動/手動共通) ----
   //   force=true: 必ずfull送信(手動ボタン用)。それ以外はキー集合が変わった時だけfull。
   var pushing = false;
@@ -159,6 +181,10 @@
       // 楽観ロック: 別端末が基準より先に進んでいたら盲目上書きしない
       if (serverTs > baseTs() && !force){
         var e = new Error('CONFLICT'); e.conflict = true; e.serverTs = serverTs; e.device = meta && meta.device; throw e;
+      }
+      // ★空ガード: ローカルが0ターンなのにクラウドに本物のセーブがある→潰さない(空でクラウドを上書きしない)
+      if (activeSlotTurns() === 0 && meta && (+meta.lsSize || +meta.size || 0) > 3000){
+        var eg = new Error('EMPTY_LOCAL_GUARD'); eg.emptyGuard = true; throw eg;
       }
       return idbReadKeys();
     }).then(function(imgKeys){
@@ -218,25 +244,13 @@
       var serverTs = meta ? (+meta.updatedAt || 0) : 0;
       if (!serverTs) return;                       // クラウド空
       if (serverTs <= baseTs()) return;            // 既に持っている
-      // ★初回同期(この端末で未同期)かつローカルに既存ゲームがある→勝手に上書きしない(データ保護)。手動取り込みに委ねる。
-      if (baseTs() === 0 && localTs() === 0 && hasLocalGame()){
-        setNum('v292Dfix399_baseTs', serverTs);
-        toast('☁️ クラウドに別端末のセーブがあります。取り込むには設定→キャラ欄の「⬇️ いま取り込む」を押してください。');
-        return;
-      }
-      var hasLocalChanges = localTs() > baseTs();
-      if (!hasLocalChanges){
-        // 手元に未同期変更なし → 静かに取り込み
-        pullData().then(function(pkg){ if (!pkg) return; return applySave(pkg).then(function(){ toast('☁️ 最新のセーブを取り込みました。再読み込みします…'); setTimeout(function(){ location.reload(); }, 900); }); }).catch(function(e){ console.warn(TAG,'bootPull',e); });
+      // ★おしん選択: 取り込みは必ず確認(黙って上書きしない)。クラウドが新しい時だけ聞く。
+      var dev = (meta && meta.device) ? ('（' + String(meta.device).slice(0, 20) + '）') : '';
+      if (confirm('☁️ クラウド' + dev + 'に新しいセーブがあります。\nこの端末に取り込みますか？\n\n「OK」= 取り込む（今のこの端末の内容は上書き・自動バックアップあり）\n「キャンセル」= この端末を保持')){
+        pullData().then(function(pkg){ if (!pkg) return; return applySave(pkg).then(function(){ toast('☁️ 取り込みました。再読み込みします…'); setTimeout(function(){ location.reload(); }, 900); }); }).catch(function(e){ toast('取り込み失敗: '+(e&&e.message), true); });
       } else {
-        // 両方進んでいる → 選ばせる(盲目上書き禁止)
-        if (confirm('クラウド(別の端末)に新しいセーブがあります。\nこの端末にも未同期の変更があります。\n\n「OK」= クラウドを取り込む（この端末の未同期変更は破棄）\n「キャンセル」= この端末を保持（次の保存でクラウドへ）')){
-          pullData().then(function(pkg){ if (!pkg) return; return applySave(pkg).then(function(){ toast('☁️ 取り込みました。再読み込みします…'); setTimeout(function(){ location.reload(); }, 900); }); }).catch(function(e){ toast('取り込み失敗: '+(e&&e.message), true); });
-        } else {
-          // この端末優先 → baseTsをserverTsに上げて次のpushで上書きできるようにする
-          setNum('v292Dfix399_baseTs', serverTs);
-          toast('この端末を保持します。次の保存でクラウドへ反映されます。');
-        }
+        setNum('v292Dfix399_baseTs', serverTs);   // この端末優先 → 次のpushでクラウドへ反映
+        toast('この端末を保持します。');
       }
     });
   }
@@ -267,7 +281,7 @@
 
   // ---- 手動同期ボタンの共通生成(置き場所=📁セーブ管理パネル) ----
   function mkSyncBtn(txt, fn){ var b=document.createElement('button'); b.textContent=txt; b.style.cssText='margin-right:6px;margin-bottom:4px;padding:6px 12px;font-size:13px;border-radius:6px;border:1px solid #4a7;background:#274;color:#dfe;cursor:pointer;'; b.onclick=function(){ fn(b); }; return b; }
-  function onUp(b){ b.disabled=true; toast('アップロード中…'); push(true).then(function(){ toast('☁️ 保存しました'); }).catch(function(e){ toast('失敗: '+(e&&e.message), true); }).then(function(){ b.disabled=false; }); }
+  function onUp(b){ b.disabled=true; toast('アップロード中…'); push(true).then(function(){ toast('☁️ 保存しました'); }).catch(function(e){ if(e&&e.emptyGuard){ toast('この端末は空なのでアップしません（クラウドの本物を守ります）。', true); } else { toast('失敗: '+(e&&e.message), true); } }).then(function(){ b.disabled=false; }); }
   function onDown(b){ if(!confirm('クラウドのセーブを取り込みます。今の端末は上書きされます（自動バックアップあり）。よろしいですか？')) return; b.disabled=true; toast('取り込み中…'); pullData().then(function(pkg){ if(!pkg) throw new Error('クラウドにセーブがありません'); return applySave(pkg); }).then(function(){ toast('⬇️ 取り込みました。再読み込みします…'); setTimeout(function(){ location.reload(); }, 800); }).catch(function(e){ toast('失敗: '+(e&&e.message), true); b.disabled=false; }); }
   // 旧: キャラ欄に置いていた同期ボタンを撤去(セーブ管理パネルへ移動したため)
   function cleanupOldWrap(){ try { var old = document.querySelector('.v292Dfix399-wrap'); if (old && old.parentNode) old.parentNode.removeChild(old); } catch(e){} }
@@ -301,9 +315,23 @@
   }
   setInterval(injectSaveHelp, 800);
 
+  // ★fix399f: 起動時に登録簿を修復(データ消失の芯を根治) + 事故時の安全OFFを一度だけ解除(安全ガード実装済みのため自動を復活)
+  function healAndMigrate(){
+    try { healSlotMeta(); } catch(e){}
+    try {
+      if (localStorage.getItem('v292Dfix399f_migrated') !== '1'){
+        localStorage.removeItem('v292Dfix399Off');
+        localStorage.removeItem('v292Dfix399AutoOff');
+        localStorage.setItem('v292Dfix399f_migrated', '1');
+        try { console.log(TAG, 'fix399f: 安全ガード実装済み → 自動同期を復活'); } catch(_){}
+      }
+    } catch(e){}
+  }
+  setTimeout(healAndMigrate, 700); setTimeout(healAndMigrate, 2200);
+
   // Workerバージョン検出(v11未満なら常にfull送信) + 起動プル(ログイン確定を少し待つ)
   detectWorkerVer();
-  setTimeout(bootPull, 2500); setTimeout(bootPull, 6000);
+  setTimeout(bootPull, 3000); setTimeout(bootPull, 6500);
 
   window.__v292Dfix399x = {
     collectLight: collectLight, push: push, pull: pullData, applySave: applySave, bootPull: function(){ bootPullDone=false; bootPull(); },
