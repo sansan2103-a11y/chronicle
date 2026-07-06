@@ -78,6 +78,17 @@
     });
   }
 
+  // 見た目の元ネタ: descが空なら既存レシピのプロンプト(v292avrec_)を使う（そこに実際の見た目が入っている）。
+  //   AI抽出側が画風語を除去するので、レシピの荒いプロンプトをそのまま渡してよい。
+  function bestSource(name, desc){
+    if (desc && String(desc).trim().length >= 5) return desc;
+    try {
+      var f=fix197(); var pk=f&&f.keyFor?f.keyFor(name):null;
+      if (pk){ var rec=localStorage.getItem(LS_REC+pk); if (rec){ var R=JSON.parse(rec); if (R && R.p) return String(R.p); } }
+    } catch(e){}
+    return desc||'';
+  }
+
   // 統一プロンプトを組み立て
   function buildPrompt(apprEn, name){
     var head = apprEn && apprEn.length>=3 ? apprEn : ('a character named '+name);
@@ -86,7 +97,7 @@
 
   // 1キャラを統一プロンプトで生成 → キャッシュ+レシピ保存
   function genOne(name, desc, onProgress){
-    return extractAppearance(name, desc).then(function(apprEn){
+    return extractAppearance(name, bestSource(name, desc)).then(function(apprEn){
       var pk=keyFor(name);
       var prompt=buildPrompt(apprEn, name);
       var seed=seedFor(name);
@@ -141,7 +152,7 @@
   function dryRun(){
     var cast=castList();
     return Promise.all(cast.map(function(c){
-      return extractAppearance(c.name, c.desc).then(function(a){ return { name:c.name, pk:keyFor(c.name), seed:seedFor(c.name), promptLen: buildPrompt(a,c.name).length, apprOk: !!(a&&a.length>=3) }; });
+      return extractAppearance(c.name, bestSource(c.name, c.desc)).then(function(a){ return { name:c.name, pk:keyFor(c.name), seed:seedFor(c.name), promptLen: buildPrompt(a,c.name).length, apprOk: !!(a&&a.length>=3) }; });
     }));
   }
 
