@@ -13,6 +13,7 @@
 // 同期状態(端末ローカル・同期対象外): v292Dfix399_baseTs / _localTs / _imgHash
 // 検証: window.__v292Dfix399x = { collectLight, push, pull, bootPull, verify, status, syncState }
 //   fix399j(2026-07-07): iOS向け再設計。WebKit推奨=短い1txで全put+起動時selfHealで不足補充。多パス/reload前sweepは廃止(フリーズ/画風崩れの原因)。verify/selfHeal口あり。
+//   fix399k(2026-07-07): selfHeal自動pullがiPhoneフリーズ誘発→既定OFF(opt-in=v292Dfix399SelfHealOn)。書込は1txのまま。exact-matchは別方式(Cache API)検討中。
 // =====================================================================
 (function(){
   'use strict';
@@ -428,6 +429,9 @@
   function expectedImgKeys(){ try { return JSON.parse(localStorage.getItem('v292Dfix399_imgKeys') || '[]') || []; } catch(e){ return []; } }
   function selfHeal(){
     try {
+      // ★fix399k(2026-07-07): fix399jのselfHeal自動pull(読込時にクラウド全体をfetch&parse)がiPhoneでフリーズを誘発。
+      //   iOSのIDB地雷が未解決のため、確実な代替(Cache API)へ移すまで既定OFF。opt-in=v292Dfix399SelfHealOn=1。
+      if (localStorage.getItem('v292Dfix399SelfHealOn') !== '1') return;
       if (off() || !isLoggedIn()) return;
       var now = Date.now(); if (now - lastHealTs < 30000) return; lastHealTs = now;
       var expected = expectedImgKeys(); if (!expected.length) return;
