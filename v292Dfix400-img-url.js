@@ -10,7 +10,7 @@
 //   ・fix197.applyOne が window.__v292Dfix400.urlFor(pk) を最優先で <img src> に。
 //     読めなければ(ns無し/404/オフライン) fix197側のonerrorが「再生成させずに」
 //     ローカル(cache/persist)→DiceBearへ後方互換フォールバック(fix400c)。
-// スイッチ: 既定ON。全体OFF = localStorage v292Dfix400Off = '1' (従来のIDB/生成表示)。
+// スイッチ: 既定ON。全体OFF = localStorage v292Dfix400Off = '1'。★fix400d: 画像キーは v292av2_ 付きで要求(実データで200確認済)。
 // 検証: window.__v292Dfix400 = { enabled, urlFor, ns, ensureNs, status }
 // =====================================================================
 (function(){
@@ -54,7 +54,7 @@
   window.__v292Dfix400 = {
     __real: true,
     enabled: function(){ return !off() && !!getNs(); },
-    urlFor: function(pk){ var ns = getNs(); if (off() || !ns || !pk) return ''; return proxyUrl() + '/img?ns=' + encodeURIComponent(ns) + '&k=' + encodeURIComponent(pk); },
+    urlFor: function(pk){ var ns = getNs(); if (off() || !ns || !pk) return ''; var k = /^v292av2_/.test(pk) ? pk : ('v292av2_' + pk); return proxyUrl() + '/img?ns=' + encodeURIComponent(ns) + '&k=' + encodeURIComponent(k); },  // ★fix400d: 画像キーは実データ上 v292av2_ プレフィックス付き(pkg.idb/IDB store keyに一致)。無しだと404。
     ns: getNs,
     ensureNs: ensureNs,
     status: function(){ return { off: off(), loggedIn: isLoggedIn(), ns: getNs() ? 'set' : 'none', proxy: proxyUrl() }; }
