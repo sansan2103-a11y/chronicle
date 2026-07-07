@@ -115,18 +115,41 @@
       });
     }).catch(function(){ return {}; });
   }
-  function idbWriteAll(map){
-    if (!map || !Object.keys(map).length) return Promise.resolve(0);
+  // ★iOS Safari対策(DeepResearch 2026-07-07): IndexedDBは大量(160件・5MB)を1トランザクションで
+  //   書くとサイレント失敗/停止する(oncomplete不発・"Connection to IDB server lost")。
+  //   → 小分け(20件/tx)で書き、読み戻して不足分を1回再試行(検証付き)。
+  function idbWriteChunks(map, keys){
     return idbOpen().then(function(db){
       return new Promise(function(res){
-        try {
-          var tx = db.transaction(IDB_STORE, 'readwrite'); var st = tx.objectStore(IDB_STORE); var n = 0;
-          Object.keys(map).forEach(function(k){ try { st.put(map[k], k); n++; } catch(_){} });
-          tx.oncomplete = function(){ db.close(); res(n); };
-          tx.onerror = function(){ db.close(); res(n); };
-        } catch(e){ try { db.close(); } catch(_){}; res(0); }
+        var i = 0, CHUNK = 20;
+        function nextChunk(){
+          if (i >= keys.length){ try { db.close(); } catch(_){}; res(); return; }
+          var done = false;
+          function go(){ if (done) return; done = true; nextChunk(); }
+          try {
+            var tx = db.transaction(IDB_STORE, 'readwrite'); var st = tx.objectStore(IDB_STORE);
+            var end = Math.min(i + CHUNK, keys.length);
+            for (; i < end; i++){ try { st.put(map[keys[i]], keys[i]); } catch(_){} }
+            tx.oncomplete = go; tx.onerror = go; tx.onabort = go;
+            setTimeout(go, 3000);   // iOS Safari: oncomplete不発の保険
+          } catch(e){ go(); }
+        }
+        nextChunk();
       });
-    }).catch(function(){ return 0; });
+    }).catch(function(){ return; });
+  }
+  function idbWriteAll(map){
+    if (!map || !Object.keys(map).length) return Promise.resolve(0);
+    var allKeys = Object.keys(map);
+    return idbWriteChunks(map, allKeys)
+      .then(function(){ return idbReadKeys(); })
+      .then(function(present){
+        var set = {}; present.forEach(function(k){ set[k] = 1; });
+        var missing = allKeys.filter(function(k){ return !set[k]; });
+        if (missing.length){ return idbWriteChunks(map, missing).then(function(){ return allKeys.length - missing.length; }); }
+        return allKeys.length;
+      })
+      .catch(function(){ return -1; });
   }
 
   // ---- サーバー通信 ----
@@ -357,6 +380,8 @@
     } catch(e){}
   }
   setTimeout(healAndMigrate, 700); setTimeout(healAndMigrate, 2200);
+  // ★永続化を要求(退避対策・研究推奨)。iOS Safariでは許可されないこともあるが無害。
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().then(function(g){ try { console.log(TAG, 'storage.persist granted=' + g); } catch(_){} }); } catch(e){}
 
   // Workerバージョン検出(v11未満なら常にfull送信) + 起動プル(ログイン確定を少し待つ)
   detectWorkerVer();
