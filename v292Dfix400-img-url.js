@@ -10,7 +10,7 @@
 //   ・ns は op:meta の応答から取得(認証必須)して localStorage に保持。
 //   ・fix197.applyOne が window.__v292Dfix400.urlFor(pk) を最優先で <img src> に使う。
 //     読めなければ(ns無し/404/オフライン) onerror で従来のローカル表示へ後方互換フォールバック。
-// スイッチ: 全体OFF = localStorage v292Dfix400Off = '1' (従来のIDB/生成表示に戻る)
+// スイッチ: ★既定OFF(fix400b)。有効化は localStorage v292Dfix400On = '1'。全体OFF = v292Dfix400Off = '1'。
 // 検証: window.__v292Dfix400 = { enabled, urlFor, ns, ensureNs, status }
 // =====================================================================
 (function(){
@@ -19,6 +19,8 @@
   var TAG = '[v292Dfix400:img-url]';
 
   function off(){ try { return localStorage.getItem('v292Dfix400Off') === '1'; } catch(e){ return false; } }
+  // ★fix400b(2026-07-07): 実データPC検証で退行(サーバー404→再生成で絵柄変化)。原因調査まで既定OFF=opt-in化。
+  function on(){ try { return localStorage.getItem('v292Dfix400On') === '1'; } catch(e){ return false; } }
   function proxyUrl(){
     try {
       var u = (localStorage.getItem('v292ProxyUrl') || '').trim();
@@ -40,7 +42,7 @@
   var fetchingNs = false;
   function ensureNs(){
     try {
-      if (off() || !isLoggedIn() || getNs() || fetchingNs) return;
+      if (!on() || off() || !isLoggedIn() || getNs() || fetchingNs) return;
       fetchingNs = true;
       fetch(proxyUrl() + '/save', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ op: 'meta' }) })
         .then(function(r){ return r.json(); })
@@ -53,8 +55,8 @@
 
   window.__v292Dfix400 = {
     __real: true,
-    enabled: function(){ return !off() && !!getNs(); },
-    urlFor: function(pk){ var ns = getNs(); if (off() || !ns || !pk) return ''; return proxyUrl() + '/img?ns=' + encodeURIComponent(ns) + '&k=' + encodeURIComponent(pk); },
+    enabled: function(){ return on() && !off() && !!getNs(); },
+    urlFor: function(pk){ var ns = getNs(); if (!on() || off() || !ns || !pk) return ''; return proxyUrl() + '/img?ns=' + encodeURIComponent(ns) + '&k=' + encodeURIComponent(pk); },
     ns: getNs,
     ensureNs: ensureNs,
     status: function(){ return { off: off(), loggedIn: isLoggedIn(), ns: getNs() ? 'set' : 'none', proxy: proxyUrl() }; }
