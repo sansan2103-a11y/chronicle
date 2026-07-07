@@ -11,7 +11,8 @@
 // 認証: 既存プロキシと同じ x-google-id / x-chronicle-pass(fix247)。ログイン必須。
 // スイッチ: 全体OFF=v292Dfix399Off / 自動だけOFF=v292Dfix399AutoOff。手動ボタンは常時。
 // 同期状態(端末ローカル・同期対象外): v292Dfix399_baseTs / _localTs / _imgHash
-// 検証: window.__v292Dfix399x = { collectLight, push, pull, bootPull, status, syncState }
+// 検証: window.__v292Dfix399x = { collectLight, push, pull, bootPull, verify, status, syncState }
+//   fix399i(2026-07-07): iOSの1枚取りこぼし根治。不足キーを1件ずつ単独txで最大5パス再試行+verify口+取込後fix197 sweep。
 // =====================================================================
 (function(){
   'use strict';
@@ -138,18 +139,46 @@
       });
     }).catch(function(){ return; });
   }
+  // ★fix399i: iOS Safariが「1レコードだけ取りこぼす」現象の根治。
+  //   1件を単独トランザクション(新規接続)で書くのがiOSでは最も確実。oncomplete待ち+タイムアウト保険。
+  function idbWriteOne(key, val){
+    return idbOpen().then(function(db){
+      return new Promise(function(res){
+        var done=false; function go(){ if(done)return; done=true; try{ db.close(); }catch(_){} res(); }
+        try {
+          var tx = db.transaction(IDB_STORE, 'readwrite');
+          tx.objectStore(IDB_STORE).put(val, key);
+          tx.oncomplete = go; tx.onerror = go; tx.onabort = go;
+          setTimeout(go, 3000);   // iOS Safari: oncomplete不発の保険
+        } catch(e){ go(); }
+      });
+    }).catch(function(){});
+  }
   function idbWriteAll(map){
     if (!map || !Object.keys(map).length) return Promise.resolve(0);
     var allKeys = Object.keys(map);
-    return idbWriteChunks(map, allKeys)
-      .then(function(){ return idbReadKeys(); })
-      .then(function(present){
-        var set = {}; present.forEach(function(k){ set[k] = 1; });
-        var missing = allKeys.filter(function(k){ return !set[k]; });
-        if (missing.length){ return idbWriteChunks(map, missing).then(function(){ return allKeys.length - missing.length; }); }
-        return allKeys.length;
-      })
-      .catch(function(){ return -1; });
+    var MAXPASS = 5;
+    // ①まず小分けchunkで一括投入(速い)。②読み戻して不足キーを「1件ずつ単独tx」で最大5パス再試行。
+    return idbWriteChunks(map, allKeys).then(function(){
+      function pass(n){
+        return idbReadKeys().then(function(present){
+          var set = {}; present.forEach(function(k){ set[k] = 1; });
+          var missing = allKeys.filter(function(k){ return !set[k]; });
+          if (!missing.length) return { total: allKeys.length, missing: [] };
+          if (n >= MAXPASS) return { total: allKeys.length - missing.length, missing: missing };
+          try { console.log(TAG, 'idbWriteAll retry pass', n + 1, 'missing', missing); } catch(e){}
+          // 逐次(並列にするとiOSでtx競合しやすい): 1件ずつ単独txで書き直す
+          return missing.reduce(function(p, k){
+            return p.then(function(){ return idbWriteOne(k, map[k]); });
+          }, Promise.resolve()).then(function(){ return pass(n + 1); });
+        });
+      }
+      return pass(0);
+    }).then(function(r){
+      try { console.log(TAG, 'idbWriteAll done total=' + (r && r.total) + ' missing=' + JSON.stringify(r && r.missing)); } catch(e){}
+      if (r && r.missing && r.missing.length) return -(r.missing.length);   // 負値=まだ不足している枚数
+      return r ? r.total : 0;
+    }).catch(function(){ return -1; });
   }
 
   // ---- サーバー通信 ----
@@ -245,14 +274,20 @@
   function applySave(pkg){
     if (!pkg || pkg.schema !== SCHEMA) return Promise.reject(new Error('セーブ形式が不明です'));
     backupBeforeApply(pkg);
+    var expectedIdb = Object.keys(pkg.idb || {});   // fix399i: 検証用に期待キーを控える
     try { Object.keys(pkg.ls || {}).forEach(function(k){ localStorage.setItem(k, pkg.ls[k]); }); } catch(e){ return Promise.reject(e); }
-    return idbWriteAll(pkg.idb || {}).then(function(){
+    return idbWriteAll(pkg.idb || {}).then(function(writeResult){
+      try { window.__v292Dfix399_lastApply = { expected: expectedIdb, writeResult: writeResult, ts: Date.now() }; } catch(e){}
       try { if (pkg.activeSlot) localStorage.setItem('chr6_active_slot', JSON.stringify(pkg.activeSlot)); } catch(e){}
-      // 取り込んだ版を基準にする(ループ防止)
+      // 取り込んだ版を基準にする(ループ防止)。imgHashは全書き込み完了後の実在庫で計算(不足0前提)。
       var ts = +pkg.updatedAt || Date.now();
       setNum('v292Dfix399_baseTs', ts); setNum('v292Dfix399_localTs', ts);
-      idbReadKeys().then(function(keys){ try { localStorage.setItem('v292Dfix399_imgHash', hash(keys.slice().sort().join('|'))); } catch(e){} });
-      return true;
+      return idbReadKeys().then(function(keys){
+        try { localStorage.setItem('v292Dfix399_imgHash', hash(keys.slice().sort().join('|'))); } catch(e){}
+        // ★fix399i: 全バイト書き込み完了後にfix197のアイコン上書きを走らせ、表示を最新(PCと同一)へ。
+        try { var f = window.__v292Dfix197 || window.__v292Dfix199; if (f && typeof f.sweep === 'function') { f.sweep(); setTimeout(function(){ try { f.sweep(); } catch(_){} }, 1200); } } catch(e){}
+        return true;
+      });
     });
   }
 
@@ -387,8 +422,30 @@
   detectWorkerVer();
   setTimeout(bootPull, 3000); setTimeout(bootPull, 6500);
 
+  // ★fix399i: 取り込み後に「アイコンが全枚数そろったか」を実機コンソールで確認する検証口。
+  //   使い方: __v292Dfix399x.verify().then(r=>console.log(r))  → allPresent:true / missing:[] を確認。
+  function verify(){
+    var la = null; try { la = window.__v292Dfix399_lastApply; } catch(e){}
+    var exp = (la && la.expected) || null;
+    return idbReadKeys().then(function(keys){
+      var set = {}; keys.forEach(function(k){ set[k] = 1; });
+      var missing = exp ? exp.filter(function(k){ return !set[k]; }) : [];
+      var r = {
+        idbCount: keys.length,
+        keys: keys,
+        expected: exp ? exp.length : null,
+        missing: missing,
+        allPresent: exp ? (missing.length === 0) : null,
+        lastWriteResult: (la && la.writeResult),
+        lastApplyTs: (la && la.ts) || null
+      };
+      try { console.log(TAG, 'verify', 'idbCount=' + r.idbCount, 'expected=' + r.expected, 'allPresent=' + r.allPresent, 'missing=' + JSON.stringify(r.missing)); } catch(e){}
+      return r;
+    });
+  }
   window.__v292Dfix399x = {
     collectLight: collectLight, push: push, pull: pullData, applySave: applySave, bootPull: function(){ bootPullDone=false; bootPull(); },
+    verify: verify,
     syncState: function(){ return { baseTs: baseTs(), localTs: localTs(), imgHash: imgHashStored() }; },
     status: function(){ return { off: off(), autoOff: autoOff(), loggedIn: isLoggedIn(), proxy: proxyUrl(), activeSlot: activeSlot() }; }
   };
