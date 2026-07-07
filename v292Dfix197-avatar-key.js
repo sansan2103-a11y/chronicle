@@ -98,7 +98,7 @@
         var ss = f400.urlFor(pk);
         if (ss) {
           if (img.getAttribute('src') !== ss) {
-            img.onerror = function(){ this.onerror = null; this.__av400fail = 1; try { applyOne(this); } catch(e){} };
+            img.onerror = function(){ this.onerror = null; this.__av400fail = 1; try { var nm2 = this.getAttribute('alt') || (jobInfo[pk] && jobInfo[pk].name) || 'character'; var loc2 = cache[pk]; if (!(typeof loc2 === 'string' && loc2.indexOf('data:') === 0)) { var pe2 = persistGet(pk); loc2 = (pe2 && pe2.indexOf('data:') === 0) ? pe2 : ''; } this.src = loc2 || diceUrl(nm2); } catch(e){} };  // ★fix400c: 生成経路に落とさずローカル(cache/persist)→DiceBearへ。再生成による絵柄変化を防止。
             img.src = ss;
           }
           return;

@@ -1,16 +1,16 @@
 // =====================================================================
 // Chronicle TRPG - v292Dfix400: アイコンをサーバーURLで配信して表示する
 // ---------------------------------------------------------------------
-// 背景(Deep Research 2026-07-07): iOS SafariのIndexedDBは未修正のWebKitバグ
-//   (bug273827/282093/202705)で書き込み取りこぼし・フリーズ・接続喪失を起こす。
-//   → 画像をローカルに書くのをやめ、Workerが配信するURLを<img src>にして
-//     ブラウザのHTTPキャッシュに任せる(HTTPキャッシュはquota/eviction/7日削除の対象外=安定)。
+// 背景(Deep Research 2026-07-07): iOS SafariのIndexedDBは未修正のWebKitバグで
+//   書き込み取りこぼし・フリーズ・接続喪失を起こす。→ 画像をローカルに書くのを
+//   やめ、Workerが配信するURLを<img src>にしてブラウザのHTTPキャッシュに任せる。
 // 仕組み:
-//   ・Worker v11 が GET /img?ns=<名前空間>&k=<画像キー> で画像1枚をbytesで返す。
+//   ・Worker v11+ が GET /img?ns=<名前空間>&k=<画像キー> で画像1枚をbytesで返す。
 //   ・ns は op:meta の応答から取得(認証必須)して localStorage に保持。
-//   ・fix197.applyOne が window.__v292Dfix400.urlFor(pk) を最優先で <img src> に使う。
-//     読めなければ(ns無し/404/オフライン) onerror で従来のローカル表示へ後方互換フォールバック。
-// スイッチ: ★既定OFF(fix400b)。有効化は localStorage v292Dfix400On = '1'。全体OFF = v292Dfix400Off = '1'。
+//   ・fix197.applyOne が window.__v292Dfix400.urlFor(pk) を最優先で <img src> に。
+//     読めなければ(ns無し/404/オフライン) fix197側のonerrorが「再生成させずに」
+//     ローカル(cache/persist)→DiceBearへ後方互換フォールバック(fix400c)。
+// スイッチ: 既定ON。全体OFF = localStorage v292Dfix400Off = '1' (従来のIDB/生成表示)。
 // 検証: window.__v292Dfix400 = { enabled, urlFor, ns, ensureNs, status }
 // =====================================================================
 (function(){
@@ -19,8 +19,6 @@
   var TAG = '[v292Dfix400:img-url]';
 
   function off(){ try { return localStorage.getItem('v292Dfix400Off') === '1'; } catch(e){ return false; } }
-  // ★fix400b(2026-07-07): 実データPC検証で退行(サーバー404→再生成で絵柄変化)。原因調査まで既定OFF=opt-in化。
-  function on(){ try { return localStorage.getItem('v292Dfix400On') === '1'; } catch(e){ return false; } }
   function proxyUrl(){
     try {
       var u = (localStorage.getItem('v292ProxyUrl') || '').trim();
@@ -42,7 +40,7 @@
   var fetchingNs = false;
   function ensureNs(){
     try {
-      if (!on() || off() || !isLoggedIn() || getNs() || fetchingNs) return;
+      if (off() || !isLoggedIn() || getNs() || fetchingNs) return;
       fetchingNs = true;
       fetch(proxyUrl() + '/save', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ op: 'meta' }) })
         .then(function(r){ return r.json(); })
@@ -55,14 +53,13 @@
 
   window.__v292Dfix400 = {
     __real: true,
-    enabled: function(){ return on() && !off() && !!getNs(); },
-    urlFor: function(pk){ var ns = getNs(); if (!on() || off() || !ns || !pk) return ''; return proxyUrl() + '/img?ns=' + encodeURIComponent(ns) + '&k=' + encodeURIComponent(pk); },
+    enabled: function(){ return !off() && !!getNs(); },
+    urlFor: function(pk){ var ns = getNs(); if (off() || !ns || !pk) return ''; return proxyUrl() + '/img?ns=' + encodeURIComponent(ns) + '&k=' + encodeURIComponent(pk); },
     ns: getNs,
     ensureNs: ensureNs,
     status: function(){ return { off: off(), loggedIn: isLoggedIn(), ns: getNs() ? 'set' : 'none', proxy: proxyUrl() }; }
   };
 
-  // ログイン確定を待ってnsを取得(fix399の起動プルと同様に少し待つ)
   setTimeout(ensureNs, 2500); setTimeout(ensureNs, 6000);
   try { document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') ensureNs(); }); } catch(e){}
   try { console.log(TAG, 'loaded', off() ? 'OFF' : 'ON', '(login=' + isLoggedIn() + ', ns=' + (getNs()?'set':'none') + ')'); } catch(e){}
