@@ -12,7 +12,7 @@
 // スイッチ: 全体OFF=v292Dfix399Off / 自動だけOFF=v292Dfix399AutoOff。手動ボタンは常時。
 // 同期状態(端末ローカル・同期対象外): v292Dfix399_baseTs / _localTs / _imgHash
 // 検証: window.__v292Dfix399x = { collectLight, push, pull, bootPull, verify, status, syncState }
-//   fix399i(2026-07-07): iOSの1枚取りこぼし根治。不足キーを1件ずつ単独txで最大5パス再試行+verify口+取込後fix197 sweep。
+//   fix399j(2026-07-07): iOS向け再設計。WebKit推奨=短い1txで全put+起動時selfHealで不足補充。多パス/reload前sweepは廃止(フリーズ/画風崩れの原因)。verify/selfHeal口あり。
 // =====================================================================
 (function(){
   'use strict';
@@ -119,65 +119,41 @@
   // ★iOS Safari対策(DeepResearch 2026-07-07): IndexedDBは大量(160件・5MB)を1トランザクションで
   //   書くとサイレント失敗/停止する(oncomplete不発・"Connection to IDB server lost")。
   //   → 小分け(20件/tx)で書き、読み戻して不足分を1回再試行(検証付き)。
-  function idbWriteChunks(map, keys){
-    return idbOpen().then(function(db){
-      return new Promise(function(res){
-        var i = 0, CHUNK = 20;
-        function nextChunk(){
-          if (i >= keys.length){ try { db.close(); } catch(_){}; res(); return; }
-          var done = false;
-          function go(){ if (done) return; done = true; nextChunk(); }
-          try {
-            var tx = db.transaction(IDB_STORE, 'readwrite'); var st = tx.objectStore(IDB_STORE);
-            var end = Math.min(i + CHUNK, keys.length);
-            for (; i < end; i++){ try { st.put(map[keys[i]], keys[i]); } catch(_){} }
-            tx.oncomplete = go; tx.onerror = go; tx.onabort = go;
-            setTimeout(go, 3000);   // iOS Safari: oncomplete不発の保険
-          } catch(e){ go(); }
-        }
-        nextChunk();
-      });
-    }).catch(function(){ return; });
-  }
-  // ★fix399i: iOS Safariが「1レコードだけ取りこぼす」現象の根治。
-  //   1件を単独トランザクション(新規接続)で書くのがiOSでは最も確実。oncomplete待ち+タイムアウト保険。
-  function idbWriteOne(key, val){
+  // ★fix399j(2026-07-07・Deep Research裏取り): iOSは「時間分散した多tx書き込み」に最も弱い
+  //   (WebKit bug202705: background suspendで進行中txを強制abort+JS凍結)。→ WebKit推奨に沿い
+  //   「1回の短いtxで全put(await挟まず同期発行)→oncomplete待ち+短timeout保険」。多パス/長timeoutは廃止。
+  function idbPutAllOneTx(map, keys){
     return idbOpen().then(function(db){
       return new Promise(function(res){
         var done=false; function go(){ if(done)return; done=true; try{ db.close(); }catch(_){} res(); }
         try {
-          var tx = db.transaction(IDB_STORE, 'readwrite');
-          tx.objectStore(IDB_STORE).put(val, key);
+          var tx = db.transaction(IDB_STORE, 'readwrite'); var st = tx.objectStore(IDB_STORE);
+          for (var i=0;i<keys.length;i++){ try { st.put(map[keys[i]], keys[i]); } catch(_){} }  // 全putを同一スタックで同期発行(Safari auto-commit対策)
           tx.oncomplete = go; tx.onerror = go; tx.onabort = go;
-          setTimeout(go, 3000);   // iOS Safari: oncomplete不発の保険
+          setTimeout(go, 2000);   // iOS: oncomplete不発の保険(短め)
         } catch(e){ go(); }
       });
     }).catch(function(){});
   }
+  // 期待画像キー集合を永続化(起動時の自己修復=idempotent replayの基準)。
+  function saveExpectedImgKeys(keys){ try { localStorage.setItem('v292Dfix399_imgKeys', JSON.stringify(keys.slice().sort())); } catch(e){} }
   function idbWriteAll(map){
     if (!map || !Object.keys(map).length) return Promise.resolve(0);
     var allKeys = Object.keys(map);
-    var MAXPASS = 5;
-    // ①まず小分けchunkで一括投入(速い)。②読み戻して不足キーを「1件ずつ単独tx」で最大5パス再試行。
-    return idbWriteChunks(map, allKeys).then(function(){
-      function pass(n){
-        return idbReadKeys().then(function(present){
-          var set = {}; present.forEach(function(k){ set[k] = 1; });
-          var missing = allKeys.filter(function(k){ return !set[k]; });
-          if (!missing.length) return { total: allKeys.length, missing: [] };
-          if (n >= MAXPASS) return { total: allKeys.length - missing.length, missing: missing };
-          try { console.log(TAG, 'idbWriteAll retry pass', n + 1, 'missing', missing); } catch(e){}
-          // 逐次(並列にするとiOSでtx競合しやすい): 1件ずつ単独txで書き直す
-          return missing.reduce(function(p, k){
-            return p.then(function(){ return idbWriteOne(k, map[k]); });
-          }, Promise.resolve()).then(function(){ return pass(n + 1); });
-        });
-      }
-      return pass(0);
-    }).then(function(r){
-      try { console.log(TAG, 'idbWriteAll done total=' + (r && r.total) + ' missing=' + JSON.stringify(r && r.missing)); } catch(e){}
-      if (r && r.missing && r.missing.length) return -(r.missing.length);   // 負値=まだ不足している枚数
-      return r ? r.total : 0;
+    // ①1回の短いtxで全部書く(時間分散しない=iOSでabortされにくい)。
+    return idbPutAllOneTx(map, allKeys).then(function(){ return idbReadKeys(); }).then(function(present){
+      var set = {}; present.forEach(function(k){ set[k] = 1; });
+      var missing = allKeys.filter(function(k){ return !set[k]; });
+      saveExpectedImgKeys(allKeys);   // 何が揃うべきかを記録(不足があっても起動時selfHealが拾う)
+      if (!missing.length) return allKeys.length;
+      // ②不足は「もう1回だけ」短いtxで再試行(多パス廃止=フリーズ回避)。残りは次回起動のselfHealが補充。
+      try { console.log(TAG, 'idbWriteAll missing after 1st tx', missing); } catch(e){}
+      return idbPutAllOneTx(map, missing).then(function(){ return idbReadKeys(); }).then(function(p2){
+        var s2 = {}; p2.forEach(function(k){ s2[k] = 1; });
+        var still = allKeys.filter(function(k){ return !s2[k]; });
+        try { console.log(TAG, 'idbWriteAll still-missing (selfHealに委譲)', still); } catch(e){}
+        return still.length ? -(still.length) : allKeys.length;
+      });
     }).catch(function(){ return -1; });
   }
 
@@ -284,8 +260,8 @@
       setNum('v292Dfix399_baseTs', ts); setNum('v292Dfix399_localTs', ts);
       return idbReadKeys().then(function(keys){
         try { localStorage.setItem('v292Dfix399_imgHash', hash(keys.slice().sort().join('|'))); } catch(e){}
-        // ★fix399i: 全バイト書き込み完了後にfix197のアイコン上書きを走らせ、表示を最新(PCと同一)へ。
-        try { var f = window.__v292Dfix197 || window.__v292Dfix199; if (f && typeof f.sweep === 'function') { f.sweep(); setTimeout(function(){ try { f.sweep(); } catch(_){} }, 1200); } } catch(e){}
+        // ★fix399j: reload前のsweepは旧cfgで誤上書き(画風崩れの原因)なので廃止。取り込み後はcallerがreload→fix197が正cfgで再描画。
+        //   不足キーは起動時selfHeal(idempotent replay)がクラウドから補充する。
         return true;
       });
     });
@@ -421,6 +397,9 @@
   // Workerバージョン検出(v11未満なら常にfull送信) + 起動プル(ログイン確定を少し待つ)
   detectWorkerVer();
   setTimeout(bootPull, 3000); setTimeout(bootPull, 6500);
+  // ★fix399j: 起動時とforeground復帰時に、ローカルIDBが期待集合に足りているか点検し不足だけ静かに補充。
+  setTimeout(selfHeal, 4500); setTimeout(selfHeal, 9500);
+  try { document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') selfHeal(); }); } catch(e){}
 
   // ★fix399i: 取り込み後に「アイコンが全枚数そろったか」を実機コンソールで確認する検証口。
   //   使い方: __v292Dfix399x.verify().then(r=>console.log(r))  → allPresent:true / missing:[] を確認。
@@ -443,9 +422,35 @@
       return r;
     });
   }
+  // ★fix399j: 自己修復(idempotent replay)。ローカルIDBが期待集合(v292Dfix399_imgKeys)に足りない時だけ、
+  //   クラウドから不足キーのみ1短txで補充→fix197.sweepで表示反映。iOSがtxをabort/1枚落とした時の受け皿。
+  var lastHealTs = 0;
+  function expectedImgKeys(){ try { return JSON.parse(localStorage.getItem('v292Dfix399_imgKeys') || '[]') || []; } catch(e){ return []; } }
+  function selfHeal(){
+    try {
+      if (off() || !isLoggedIn()) return;
+      var now = Date.now(); if (now - lastHealTs < 30000) return; lastHealTs = now;
+      var expected = expectedImgKeys(); if (!expected.length) return;
+      idbReadKeys().then(function(keys){
+        var set = {}; keys.forEach(function(k){ set[k] = 1; });
+        var missing = expected.filter(function(k){ return !set[k]; });
+        if (!missing.length) return;
+        try { console.log(TAG, 'selfHeal: missing', missing, '-> pull&refill'); } catch(e){}
+        pullData().then(function(pkg){
+          if (!pkg || !pkg.idb) return;
+          var map = {}; missing.forEach(function(k){ if (pkg.idb[k] != null) map[k] = pkg.idb[k]; });
+          var mk = Object.keys(map); if (!mk.length) return;
+          return idbPutAllOneTx(map, mk).then(function(){
+            try { var f = window.__v292Dfix197 || window.__v292Dfix199; if (f && typeof f.sweep === 'function') { f.sweep(); setTimeout(function(){ try { f.sweep(); } catch(_){} }, 1000); } } catch(e){}
+            try { console.log(TAG, 'selfHeal: refilled', mk); } catch(e){}
+          });
+        }).catch(function(e){ try { console.warn(TAG, 'selfHeal', e && e.message); } catch(_){} });
+      });
+    } catch(e){}
+  }
   window.__v292Dfix399x = {
     collectLight: collectLight, push: push, pull: pullData, applySave: applySave, bootPull: function(){ bootPullDone=false; bootPull(); },
-    verify: verify,
+    verify: verify, selfHeal: selfHeal,
     syncState: function(){ return { baseTs: baseTs(), localTs: localTs(), imgHash: imgHashStored() }; },
     status: function(){ return { off: off(), autoOff: autoOff(), loggedIn: isLoggedIn(), proxy: proxyUrl(), activeSlot: activeSlot() }; }
   };
