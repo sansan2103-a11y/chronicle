@@ -23,7 +23,7 @@
   if (window.__v292Dfix402) return; window.__v292Dfix402 = { __boot: true };
   var TAG = '[v292Dfix402:invisible-sync]';
   var SCHEMA = 1;
-  var DEFAULT_ON = false;          // ★fix402b(実機検証後)で true に既定化
+  var DEFAULT_ON = true;           // ★fix402b(2026-07-10): PC実機検証済→既定ON(全体OFF=v292Dfix402Off)
   var DEBOUNCE_MS = 12000;         // 保存後まとめ送りの待ち
   var MAXWAIT_MS  = 45000;         // 連続プレイ中でもこの間隔では必ず送る
   var IMG_DEBOUNCE_MS = 3500;
