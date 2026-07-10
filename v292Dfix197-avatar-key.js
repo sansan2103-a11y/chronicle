@@ -1,6 +1,10 @@
 // =====================================================================
 // Chronicle TRPG - v292Dfix199b: AIアイコンを課金版APIで生成（seed固定・キャラ単位統一）
 // ★fix400(2026-07-07): applyOneにサーバーURL優先を追加(window.__v292Dfix400連携)。iOS IDB回避の根本対策。OFF/ns未取得なら従来通り。
+// ★fix403(2026-07-10): ↻再生成の根治。①このセッションで作った新画像(cache=data:)はサーバーURLより優先表示
+//   (fix400のサーバー優先が新画像を隠す分断の解消。サーバー側はfix402が自動アップ→次回ロードから配信で一致)
+//   ②明示的な↻はレシピの見た目文+【新しいseed】で本当に作り直す(自動経路は従来どおり同seed=誤再生成保護は維持)
+//   ③作り直し成功時はレシピ(v292avrec_)のseedも更新(復元/画風切替で旧絵に戻らないように)。OFF=v292Dfix403Off='1'。
 // ---------------------------------------------------------------------
 // fix199 からの改良（おしんFB: 場所ごとに絵が違う／絵柄が前と違う）:
 //   ・キャッシュを【キャラ名＋画風】単位に統一 → 会話ログ/設定/キャラ一覧で同じ1枚を共有。
@@ -50,6 +54,7 @@
   }
 
   var cache = {};     // pk -> dataURL / 'pending' / 'dice'
+  var freshSeed403 = {};   // ★fix403: 明示↻されたpk(次の生成だけ新seed)
   var jobInfo = {};   // pk -> {prompt, model, seed, name}
   var queue = [];
   var active = 0;
@@ -60,10 +65,19 @@
     if(!key){ cache[pk]='dice'; active--; applyAll(); pump(); return; }
     var body = { model: info.model||'flux', prompt: info.prompt||'portrait', n:1, size:'384x384' };
     if(info.seed != null) body.seed = info.seed;   // 同seed＝同一画像（旧絵柄の再現）
+    var fresh403 = false;   // ★fix403: 明示↻は「レシピの見た目文＋新seed」で本当に作り直す
+    if (freshSeed403[pk]) {
+      delete freshSeed403[pk];
+      fresh403 = true;
+      try { var rec403 = JSON.parse(localStorage.getItem('v292avrec_'+pk) || 'null'); if (rec403 && rec403.p) { body.prompt = rec403.p; if (rec403.m) body.model = rec403.m; } } catch(e){}
+      body.seed = Math.floor(Math.random()*1000000000);
+    }
     fetch(API, { method:'POST', headers:{ 'Authorization':'Bearer '+key, 'Content-Type':'application/json' }, body: JSON.stringify(body) })
       .then(function(r){ if(!r.ok) throw r.status; return r.json(); })
       .then(function(j){ var b=j&&j.data&&j.data[0]&&j.data[0].b64_json; if(!b) throw 'nob64';
-        var d=b64ToDataUrl(b); cache[pk]=d; persistSet(pk,d); })
+        var d=b64ToDataUrl(b); cache[pk]=d; persistSet(pk,d);
+        // ★fix403: 作り直し成功→レシピのseed/prompt/modelを実際に使った値へ(復元で旧絵に戻さない)
+        try { if (fresh403) { var rk403='v292avrec_'+pk, ro403=JSON.parse(localStorage.getItem(rk403)||'null'); if (ro403) { ro403.s=body.seed; ro403.p=body.prompt; ro403.m=body.model; localStorage.setItem(rk403, JSON.stringify(ro403)); } } } catch(e){} })
       .catch(function(){ cache[pk]='dice'; })
       .then(function(){ active--; applyAll(); pump(); });
   }
@@ -94,7 +108,9 @@
     //   <img src>=配信URL。読めなければonerrorで従来のローカル表示(cache/DiceBear)へ後方互換フォールバック。
     try {
       var f400 = window.__v292Dfix400;
-      if (f400 && f400.enabled() && !img.__av400fail) {
+      // ★fix403: このセッションで作った新画像(cache=data:)はサーバーURLより優先(↻の結果が即見える)
+      var fresh403v = (typeof cache[pk]==='string' && cache[pk].indexOf('data:')===0) && (function(){ try { return localStorage.getItem('v292Dfix403Off')!=='1'; } catch(e){ return true; } })();
+      if (f400 && f400.enabled() && !img.__av400fail && !fresh403v) {
         var ss = f400.urlFor(pk);
         if (ss) {
           if (img.getAttribute('src') !== ss) {
@@ -181,6 +197,7 @@
   function regenFor(name){
     if(!name) return;
     var pk=keyFor(name);
+    try { if (localStorage.getItem('v292Dfix403Off')!=='1') freshSeed403[pk]=1; } catch(e){}   // ★fix403: 明示↻は新seed
     delete cache[pk]; delete jobInfo[pk]; persistDel(pk);
     try{
       var imgs=document.querySelectorAll('img[data-avpk]');
