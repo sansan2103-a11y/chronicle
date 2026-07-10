@@ -40,6 +40,12 @@
 // ★fix402d(2026-07-11・mutationSeq状態機械): 同期レース根治。push飛行中の新規保存を誤clean化
 //   しない/pull適用直前に飛行中の変異を再確認して中止/ローカルturns>remoteのsilent applyを拒否
 //   してforkへ委譲。明示pull(force)はガード迂回。OFFスイッチ=v292Dfix402dOff='1'(既定ONで従来動作)。
+// ★fix402e(2026-07-11・GPT-5.6監査第2弾/OFFはv292Dfix402dOffに相乗り): applyPkg/forceputの世代化で
+//   飛行中のユーザー保存を誤clean化しない/callSaveにAbortタイムアウト(本文25s・画像40s)でフラグ解除保証/
+//   local-aheadを全スロット比較に拡張/空ガードでpushedTsを進めisDirtyの永続trueを解消。
+// ★fix411 per-key世代照合(2026-07-11・OFF=v292Dfix411Off): putimg応答を現在LS値で再検証し三者一致
+//   (送信hash=現在hash=台帳h)でのみ台帳消去(送信中の再生成は新世代を再queue)/dead台帳を{ts,h,errorCode,
+//   status}化+上限50/online復帰でpending全再送/5xx・ネットワーク一時失敗はキー毎1回だけ60秒後に自動再queue。
 // =====================================================================
 (function(){
   'use strict';
@@ -57,6 +63,8 @@
     if (lsGet('v292Dfix402Off') === '1') return false;
     return DEFAULT_ON || lsGet('v292Dfix402On') === '1';
   }
+  // ★fix402e(2026-07-11): OFFは既存の v292Dfix402dOff に相乗り(402dOff時は402eの全ガードも無効)
+  function f402eOn(){ return lsGet('v292Dfix402dOff') !== '1'; }
   function proxyUrl(){
     try {
       var u = (lsGet('v292ProxyUrl') || '').trim();
@@ -72,9 +80,17 @@
     return h;
   }
   function isLoggedIn(){ var h = authHeaders(); return !!(h['x-google-id'] || h['x-chronicle-pass']); }
-  function callSave(bodyObj){
-    return fetch(proxyUrl() + '/save', { method: 'POST', headers: authHeaders(), body: JSON.stringify(bodyObj) })
-      .then(function(r){ return r.json().then(function(j){ return { status: r.status, json: j }; }); });
+  // ★fix402e A-4: AbortタイムアウトつきcallSave(本文既定25s・画像は呼び出し側で40s)。
+  //   タイムアウト/例外時はrejectして呼び出し側のフラグ(pushing/pulling/applying/imgSending)を解除させる。
+  function callSave(bodyObj, timeoutMs){
+    var ctrl = null, timer = null;
+    try { if (typeof AbortController !== 'undefined') ctrl = new AbortController(); } catch(e){ ctrl = null; }
+    var opts = { method: 'POST', headers: authHeaders(), body: JSON.stringify(bodyObj) };
+    if (ctrl) { opts.signal = ctrl.signal; timer = setTimeout(function(){ try { ctrl.abort(); } catch(e){} }, timeoutMs || 25000); }
+    var clear = function(){ if (timer) { clearTimeout(timer); timer = null; } };
+    return fetch(proxyUrl() + '/save', opts)
+      .then(function(r){ return r.json().then(function(j){ return { status: r.status, json: j }; }); })
+      .then(function(res){ clear(); return res; }, function(err){ clear(); throw err; });
   }
   function hash(s){ var h=0; s=String(s||''); for(var i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; } return String(h>>>0); }
   function lsHash(s){ s = String(s || ''); return String(s.length) + ':' + hash(s); }   // ★fix402c堅牢化: length接頭で衝突耐性
@@ -180,7 +196,13 @@
     //   (parse不能スロットありなら従来のactiveSlotTurnsガードにフォールバック)
     var ti = pkgTurnsInfo(pkg);
     var emptyGuard = ti.parseFail ? (activeSlotTurns() === 0 && baseRev() > 0) : (ti.total === 0 && baseRev() > 0);
-    if (emptyGuard) { dirtySince = 0; return Promise.resolve('empty-guard'); }
+    if (emptyGuard) {
+      dirtySince = 0;
+      // ★fix402e A-5: 空ガードでもpushedTsを進め、isDirty()が永続trueにならないようにする(dirtySince=0は現行どおり)。
+      //   注: メタに変化がある正当な空pushを止めてしまう問題は今回スコープ外(現状維持)。
+      if (f402eOn()) setNum('v292Dfix402_pushedTs', Date.now());
+      return Promise.resolve('empty-guard');
+    }
     // ★fix402d: 性能計測フック(例外安全)
     var t0 = (window.performance && performance.now) ? performance.now() : Date.now();
     var str = JSON.stringify(pkg.ls);
@@ -226,11 +248,21 @@
   var pulling = false, lastPullCheck = 0, applying = false;
   function applyPkg(pkg, rev){
     var api = window.__v292Dfix399x;
+    var applySeq = mutationSeq;   // ★fix402e A-1: applySave(非同期)飛行中のユーザー保存を検出する基準
     var doApply = (api && api.applySave) ? api.applySave(pkg) : Promise.reject(new Error('fix399 applySave不在'));
     return doApply.then(function(){
       setNum('v292Dfix402_baseRev', +rev || 0);
-      try { lsSet('v292Dfix402_lastHash', lsHash(JSON.stringify(pkg.ls || {}))); } catch(e){}   // ★fix402c堅牢化: length接頭
-      var now = Date.now(); setNum('v292Dfix402_pushedTs', now); setNum('v292Dfix402_dirtyTs', 0); dirtySince = 0;
+      try { lsSet('v292Dfix402_lastHash', lsHash(JSON.stringify(pkg.ls || {}))); } catch(e){}   // ★fix402c堅牢化: length接頭(baseRev/lastHashは常に更新)
+      if (f402eOn() && mutationSeq !== applySeq) {
+        // ★fix402e A-1: applySave中にユーザー保存(markDirty)が入った→pushedTs/dirtyTsをclean化しない。
+        //   dirtyを維持し3秒後flushを予約。直後にlocation.reload()が走るが、dirtyTs(LS永続)が残れば
+        //   reload後のboot(pullCheck→dirty→push)が確実に回収する(reload自体は維持)。
+        if (pushTimer) clearTimeout(pushTimer);
+        pushTimer = setTimeout(function(){ flush('post-apply'); }, 3000);
+        try { console.log(TAG, 'applyPkg: applySave中に変異検出(seq' + applySeq + '→' + mutationSeq + ')→dirty維持'); } catch(e){}
+      } else {
+        var now = Date.now(); setNum('v292Dfix402_pushedTs', now); setNum('v292Dfix402_dirtyTs', 0); dirtySince = 0;
+      }
     });
   }
   // ★fix402d: opts.force=true(明示pull=forkBanner「別端末のつづき」等)はturns/conflictガードを迂回。
@@ -250,23 +282,30 @@
         flush('conflict-probe');
         return;
       }
-      // ★fix402d turnsガード: silent applyでローカルturns>remote turnsなら被せずforkへ(明示forceは迂回)
+      // ★fix402d/★fix402e A-3 turnsガード: silent applyで、remote pkg内のいずれかのslotについて
+      //   ローカルturns>remote turnsなら被せずforkへ委譲(明示forceは迂回)。全 chr6/chr6_slot_* を比較。
       if (f402dOn && !force) {
         var localAhead = false;
         try {
-          var slot = activeSlot();
-          var slotKey = (slot === 'chr6') ? 'chr6' : ('chr6_slot_' + slot);
           var rls = (r.json.data && r.json.data.ls) || {};
-          var rraw = rls[slotKey];
-          if (typeof rraw === 'string' && rraw) {
-            var rd = JSON.parse(rraw);   // parse失敗→catchでガード不発(従来どおり適用へ進む)
-            var remoteTurns = (rd && Array.isArray(rd.turns)) ? rd.turns.length : 0;
-            if (activeSlotTurns() > remoteTurns) localAhead = true;
+          for (var rk in rls){ if (!Object.prototype.hasOwnProperty.call(rls, rk)) continue;
+            if (!(rk === 'chr6' || /^chr6_slot_/.test(rk))) continue;
+            var rraw = rls[rk];
+            if (typeof rraw !== 'string' || !rraw) continue;
+            var remoteTurns;
+            try { var rd = JSON.parse(rraw); remoteTurns = (rd && Array.isArray(rd.turns)) ? rd.turns.length : 0; }
+            catch(e){ continue; }                       // ★A-3: remote parse失敗slotは比較対象外(スキップ)
+            var lraw = lsGet(rk);
+            if (typeof lraw !== 'string' || !lraw) continue;
+            var localTurns;
+            try { var ld = JSON.parse(lraw); localTurns = (ld && Array.isArray(ld.turns)) ? ld.turns.length : 0; }
+            catch(e){ continue; }                       // ★A-3: local parse失敗slotもスキップ
+            if (localTurns > remoteTurns) { localAhead = true; break; }
           }
         } catch(e){ localAhead = false; }
         if (localAhead) {
           applying = false;
-          try { console.log(TAG, 'pull中止(local-ahead)→forkへ委譲'); } catch(e){}
+          try { console.log(TAG, 'pull中止(local-ahead:全スロット比較)→forkへ委譲'); } catch(e){}
           flush('local-ahead');
           return;
         }
@@ -335,6 +374,32 @@
     }).catch(function(){ pulling = false; });
   }
 
+  // ★fix402e A-2: forceput(この端末で統一)を世代化+共通化。連打防止・飛行中の新規保存の誤clean防止。
+  //   __v292Dfix402.forcePut として公開。onDone(ok)で完了通知(fork bannerのトースト表示に使用)。
+  function doForcePut(onDone){
+    if (pushing) { if (onDone) onDone(false); return; }   // ★連打/多重防止(flightは常に1本)
+    pushing = true;
+    var forceSeq = mutationSeq;                            // ★開始時のseqを記録
+    var finished = false;
+    var done = function(ok){ if (finished) return; finished = true; pushing = false; if (onDone) onDone(ok); };   // ★finally相当: 必ずpushing解除
+    var pkg = collectLight(Date.now());
+    return callSave({ op: 'forceput', pkg: pkg }).then(function(r){
+      if (r.status === 200 && r.json && r.json.ok) {
+        if (r.json.rev != null) setNum('v292Dfix402_baseRev', +r.json.rev || 0);
+        try { lsSet('v292Dfix402_lastHash', ''); } catch(e){}   // 次flushで必ず再push(現行維持)
+        if (!f402eOn() || forceSeq === mutationSeq) {
+          setNum('v292Dfix402_pushedTs', Date.now()); dirtySince = 0;   // seq一致=飛行中に新規保存なし→clean化
+        } else {
+          // ★fix402e A-2: 飛行中に新規保存→clean化せず3秒後flushを予約(新世代を回収)
+          if (pushTimer) clearTimeout(pushTimer);
+          pushTimer = setTimeout(function(){ flush('post-forceput'); }, 3000);
+          try { console.log(TAG, 'forceput: 飛行中に変異(seq' + forceSeq + '→' + mutationSeq + ')→再送予約'); } catch(e){}
+        }
+        done(true);
+      } else { done(false); }
+    }).catch(function(){ done(false); });
+  }
+
   // ---- 真の分岐(fork)だけ出す非モーダル選択UI(confirm不使用) ----
   var bannerEl = null;
   function forkBanner(server){
@@ -351,15 +416,11 @@
     var bX = mkBtn('あとで', false);
     bLocal.onclick = function(){
       el.textContent = '☁️ この端末のつづきで統一しています…';
-      callSave({ op: 'forceput', pkg: collectLight(Date.now()) }).then(function(r){
-        if (r.status === 200 && r.json && r.json.ok) {
-          if (r.json.rev != null) setNum('v292Dfix402_baseRev', +r.json.rev || 0);
-          setNum('v292Dfix402_pushedTs', Date.now()); dirtySince = 0;
-          try { lsSet('v292Dfix402_lastHash', ''); } catch(e){}
-          toast('☁️ この端末のつづきで統一しました(相手側はバックアップ保存)');
-        } else { toast('☁️ 統一に失敗しました。あとで自動再試行します'); }
+      doForcePut(function(ok){   // ★fix402e A-2: 世代化・連打防止つきの共通forceputへ集約
+        if (ok) toast('☁️ この端末のつづきで統一しました(相手側はバックアップ保存)');
+        else toast('☁️ 統一に失敗しました。あとで自動再試行します');
         rm();
-      }).catch(function(){ toast('☁️ 統一に失敗しました。あとで自動再試行します'); rm(); });
+      });
     };
     bCloud.onclick = function(){ rm(); pullApplyReload('別端末のつづき', { force: true }); };   // ★fix402d: 明示pull=ガード迂回
     bX.onclick = function(){ rm(); };
@@ -398,9 +459,15 @@
     try {
       var m = pimgAll();
       var ex = m[k];
-      var ts = (ex && typeof ex === 'object' && ex.ts) ? ex.ts : Date.now();
-      if (h) m[k] = { ts: ts, h: h };
-      else if (!(ex && typeof ex === 'object')) m[k] = { ts: ts };   // hなし&既存object=そのまま保持
+      var exTs = (ex && typeof ex === 'object' && ex.ts) ? ex.ts : 0;
+      var exH  = (ex && typeof ex === 'object') ? ex.h : null;
+      if (h) {
+        // ★fix411/C-2: hashが変わった(新世代)ならts=Date.now()に更新。evictで新画像が最古扱いされる誤爆防止
+        var ts = (exTs && exH === h) ? exTs : Date.now();
+        m[k] = { ts: ts, h: h };
+      } else if (!(ex && typeof ex === 'object')) {
+        m[k] = { ts: exTs || Date.now() };   // hなし&新規=作成 / hなし&既存object=そのまま保持
+      }
       var keys = Object.keys(m);
       while (keys.length > 50) {                                      // 上限50件: 超過したら最古から削除
         var oldestK = null, oldestTs = Infinity;
@@ -413,7 +480,33 @@
     } catch(e){}
   }
   function pimgDel(k){ try { var m = pimgAll(); if (k in m){ delete m[k]; lsSet('v292Dfix402_pimg', JSON.stringify(m)); } } catch(e){} }
-  function pimgDeadSet(k){ try { var m = JSON.parse(lsGet('v292Dfix402_pimg_dead') || '{}') || {}; m[k] = Date.now(); lsSet('v292Dfix402_pimg_dead', JSON.stringify(m)); } catch(e){} }   // ★fix411強化: 隔離台帳(無限再送防止)
+  // ★fix411/C-3: 隔離(dead)台帳。値を{ts,h,errorCode,status}に強化。上限50・最古evict。無限再送防止
+  function pimgDeadAll(){ try { return JSON.parse(lsGet('v292Dfix402_pimg_dead') || '{}') || {}; } catch(e){ return {}; } }
+  function pimgDeadTs(e){ return (typeof e === 'number') ? e : ((e && e.ts) || 0); }   // 後方互換: 旧エントリ=数値
+  function pimgDeadSet(k, status, j){
+    try {
+      var m = pimgDeadAll();
+      var h = null; try { var dv = localStorage.getItem(k); if (typeof dv === 'string' && dv.indexOf('data:image') === 0) h = imgHash(dv); } catch(e){}
+      m[k] = { ts: Date.now(), h: h, errorCode: (j && (j.error || j.code)) || null, status: (status == null ? null : status) };
+      var keys = Object.keys(m);
+      while (keys.length > 50) {                                      // 上限50件: 超過したら最古(ts最小)からevict
+        var oldestK = null, oldestTs = Infinity;
+        for (var i = 0; i < keys.length; i++){ var t = pimgDeadTs(m[keys[i]]); if (t < oldestTs) { oldestTs = t; oldestK = keys[i]; } }
+        if (oldestK == null) break;
+        delete m[oldestK]; keys = Object.keys(m);
+      }
+      lsSet('v292Dfix402_pimg_dead', JSON.stringify(m));
+    } catch(e){}
+  }
+  function pimgDeadDel(k){ try { var m = pimgDeadAll(); if (k in m){ delete m[k]; lsSet('v292Dfix402_pimg_dead', JSON.stringify(m)); } } catch(e){} }
+  // ★fix411/C-4: 一時失敗(5xx/ネットワーク)のセッション内1回だけ自動再queue(キー毎1回・無限ループ不可)
+  var imgRetried = {};
+  function scheduleRetryOnce(k){
+    if (f411off()) return;
+    if (imgRetried[k]) return;
+    imgRetried[k] = 1;
+    setTimeout(function(){ try { if (!f411off() && (k in pimgAll())) scheduleImgPush(k); } catch(e){} }, 60000);
+  }
   function scheduleImgPush(k){
     imgQueue[k] = Date.now();
     pimgSet(k);                                   // ★fix411
@@ -438,23 +531,46 @@
       if (!k) { imgSending = false; return; }     // 全完了→single-flight解除
       var v = null; try { v = localStorage.getItem(k); } catch(e){}
       if (typeof v === 'string' && v.indexOf('data:image') === 0 && v.length < 2*1024*1024) {
-        var h = imgHash(v);
-        try { pimgSet(k, h); } catch(e){}          // ★fix411強化: 送信直前に実データからh計算→台帳更新
-        callSave({ op: 'putimg', k: k, data: v, hash: h }).then(function(r){
-          try {
-            var j = r && r.json;
-            if (r && r.status === 200 && j && j.ok && (j.hash == null || j.hash === h)) {
-              pimgDel(k);                            // ★fix411強化: 成功(hash一致 or hash無し=旧Worker)で消す
-            } else if (r && r.status === 200 && j && j.ok) {
-              console.warn(TAG, 'img hash不一致→pending保持', k, j.hash, h);   // 内容不一致=保持して再送
-            } else if (r && (r.status === 413 || (j && j.retryable === false))) {
-              pimgDeadSet(k); pimgDel(k);            // ★fix411強化: 隔離(無限再送防止)
-            }
-            // それ以外の失敗→pending保持(何もしない)
-          } catch(e){}
-          try { console.log(TAG, 'img pushed', k, r && r.status); } catch(e){}
-          next();
-        }).catch(function(e){ try { console.warn(TAG, 'img push failed (pending保持・次回再送)', k, e && e.message); } catch(_){} next(); });
+        var h = imgHash(v);                          // sentHash(送信時の実データhash)
+        try { pimgSet(k, h); } catch(e){}            // ★fix411強化: 送信直前に実データからh計算→台帳更新(C-2でts整合)
+        try {
+          callSave({ op: 'putimg', k: k, data: v, hash: h }, 40000).then(function(r){   // ★fix402e A-4: 画像は40s
+            try {
+              var j = r && r.json;
+              var ok200 = !!(r && r.status === 200 && j && j.ok);
+              var serverHashOk = ok200 && (j.hash == null || j.hash === h);   // Worker v15 hash契約(旧Worker=hash無し)
+              if (ok200 && serverHashOk) {
+                // ★fix411/C-1: 応答を再検証。現在のLS値でcurHashを再計算し、三者一致でのみ台帳から消す
+                var curV = null; try { curV = localStorage.getItem(k); } catch(e){}
+                var curHash = imgHash(curV);
+                var pend = pimgAll()[k];
+                var pendH = (pend && typeof pend === 'object') ? pend.h : null;
+                if (h === curHash && pendH === h) {
+                  pimgDel(k);                          // 送信内容=現在値=台帳=一致→確実に最新配信済み
+                  pimgDeadDel(k);                       // ★C-3: 同キー新画像成功で旧deadエントリ削除
+                } else {
+                  // ★C-1: 送信中に再生成(またはより新しい世代)→pending更新+再queue(新世代を後で再送)
+                  pimgSet(k, curHash);                  // ★C-2: hash変化→ts更新
+                  scheduleImgPush(k);
+                  try { console.log(TAG, 'img送信中に再生成→新世代を再queue', k); } catch(e){}
+                }
+              } else if (ok200) {
+                console.warn(TAG, 'img hash不一致(server)→pending保持', k, j.hash, h);   // 内容不一致=保持して再送
+              } else if (r && (r.status === 413 || (j && j.retryable === false))) {
+                pimgDeadSet(k, r.status, j); pimgDel(k);   // ★C-3: 隔離(無限再送防止)
+              } else if (r && r.status >= 500) {
+                scheduleRetryOnce(k);                  // ★C-4: 5xx一時失敗→60秒後1回だけ再queue(pending保持)
+              }
+              // それ以外(4xx等)→pending保持(boot/online再送に委ねる)
+            } catch(e){}
+            try { console.log(TAG, 'img pushed', k, r && r.status); } catch(e){}
+            next();
+          }).catch(function(e){
+            try { scheduleRetryOnce(k); } catch(_){}   // ★C-4: ネットワーク例外=一時失敗扱い
+            try { console.warn(TAG, 'img push failed (pending保持・次回再送)', k, e && e.message); } catch(_){}
+            next();
+          });
+        } catch(e){ next(); }   // ★fix402e A-4: 同期例外でもsingle-flight(imgSending)解除を保証
       } else { pimgDel(k); next(); }
     })();
   }
@@ -492,7 +608,11 @@
     setTimeout(function(){ try { if (!f411off()){ var pm = pimgAll(); Object.keys(pm).forEach(function(k){ scheduleImgPush(k); }); } } catch(e){} }, 5000);
     try { window.addEventListener('pagehide', function(){ if (isDirty() || dirtySince) flush('pagehide'); }); } catch(e){}
     try { window.addEventListener('pageshow', function(ev){ if (ev && ev.persisted) { lastPullCheck = 0; pullCheck('bfcache'); } }); } catch(e){}
-    try { window.addEventListener('online', function(){ if (isDirty()) flush('online'); }); } catch(e){}
+    try { window.addEventListener('online', function(){
+      if (isDirty()) flush('online');
+      // ★fix411/C-4: オンライン復帰でpending全件を再queue(送信し損ねの回収)
+      if (!f411off()) { try { var pm = pimgAll(); Object.keys(pm).forEach(function(k){ scheduleImgPush(k); }); } catch(e){} }
+    }); } catch(e){}
   }
 
   window.__v292Dfix402 = {
@@ -504,7 +624,11 @@
     pullCheck: function(){ lastPullCheck = 0; pullCheck('manual'); },
     pullApply: function(force){ lastPullCheck = 0; return pullApplyReload('手動取込', { force: !!force }); },   // ★fix402d: 明示pull(forceでturns/conflictガード迂回)
     forkBanner: forkBanner,
-    imgHash: imgHash, sendImgs: sendImgs, scheduleImgPush: scheduleImgPush   // ★fix411強化: 検証フック
+    forcePut: doForcePut,   // ★fix402e A-2: 世代化forceput
+    imgHash: imgHash, sendImgs: sendImgs, scheduleImgPush: scheduleImgPush,   // ★fix411強化: 検証フック
+    retryDead: function(k){ try { var m = pimgDeadAll(); if (k in m){ pimgDeadDel(k); scheduleImgPush(k); return true; } } catch(e){} return false; },   // ★fix411/C-3検証口
+    clearDead: function(k){ pimgDeadDel(k); },
+    deadAll: function(){ return pimgDeadAll(); }
   };
 
   if (on()) boot();

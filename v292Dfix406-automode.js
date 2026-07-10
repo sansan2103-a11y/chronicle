@@ -123,6 +123,46 @@
     } catch(e){}
   }
 
+  // ★fix406(2026-07-11 F-2a): オート中は入力欄でのEnter送信を capture 段でブロック(合成発火は素通し)。
+  //   対象は入力欄(input/textarea/contenteditable)のみ=⏹停止等のボタンには一切干渉しない。
+  function isTextEntry(el){
+    try {
+      if (!el) return false;
+      var tag = (el.tagName || '').toUpperCase();
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return true;
+      if (el.isContentEditable) return true;
+      if (el.getAttribute && el.getAttribute('contenteditable') === 'true') return true;
+      return false;
+    } catch(e){ return false; }
+  }
+  function guardManualKeydown(ev){
+    try {
+      if (!running) return;        // オート中でなければ何もしない
+      if (autoFiring) return;      // オート自身の合成入力は素通し
+      var k = (ev && ev.key) || '';
+      var code = (ev && (ev.keyCode || ev.which)) || 0;
+      if (k !== 'Enter' && code !== 13) return;
+      var el = ev && ev.target;
+      if (!isTextEntry(el)) return;                 // 入力欄以外のEnterは通す
+      try { if (el.closest && el.closest('.v292Dfix406-panel')) return; } catch(_){}   // オート自身のパネル入力は対象外
+      try { if (ev.stopImmediatePropagation) ev.stopImmediatePropagation(); } catch(_){}
+      try { ev.stopPropagation(); } catch(_){}
+      try { ev.preventDefault(); } catch(_){}
+      toast('⏩ オート中です（⏹ 停止で解除できます）');
+    } catch(e){}
+  }
+  // ★fix406(2026-07-11 F-2b): オート中の form submit も capture 段でブロック(合成発火は素通し)。
+  function guardManualSubmit(ev){
+    try {
+      if (!running) return;
+      if (autoFiring) return;
+      try { if (ev.stopImmediatePropagation) ev.stopImmediatePropagation(); } catch(_){}
+      try { ev.stopPropagation(); } catch(_){}
+      try { ev.preventDefault(); } catch(_){}
+      toast('⏩ オート中です（⏹ 停止で解除できます）');
+    } catch(e){}
+  }
+
   function insertAfter(ref, node){
     try {
       var p = ref.parentNode;
@@ -312,15 +352,23 @@
     runIteration();
   }
 
+  // ★fix406(2026-07-11 F-1/F-3): 実行中の中断条件を集約。OFF→無音停止、スロット変化→通知停止。停止したらtrue。
+  function shouldAbort(){
+    try {
+      if (off()){ doStop(false); return true; }   // F-3: 実行中にOFFされたら停止
+      if (lockedSlot !== null && activeSlot() !== lockedSlot){   // F-1/既存: 開始時スロットと変わったら停止
+        try { console.log(TAG, 'slot changed (' + lockedSlot + '->' + activeSlot() + ') - auto stopped'); } catch(_){}
+        doStop(false);
+        toast('⏩ スロットが変わったのでオートを停止しました');
+        return true;
+      }
+    } catch(e){}
+    return false;
+  }
+
   function runIteration(){
     if (!running) return;
-    // ★fix406: 開始時のスロットと変わっていたら即停止(既存の停止経路でUIも戻す)
-    if (lockedSlot !== null && activeSlot() !== lockedSlot){
-      try { console.log(TAG, 'slot changed (' + lockedSlot + '->' + activeSlot() + ') - auto stopped'); } catch(_){}
-      doStop(false);
-      toast('⏩ スロットが変わったのでオートを停止しました');
-      return;
-    }
+    if (shouldAbort()) return;   // ★fix406(F-1/F-3): OFF・スロット変化なら停止
     if (done >= target){ finishOk(); return; }
     var turns0;
     try { turns0 = turnsLen(); } catch(e){ stopErr(); return; }
@@ -332,6 +380,7 @@
     var waited = 0;
     var poll = function(){
       if (!running) return; // 停止済み: 送信済みの1ターンには触れない
+      if (shouldAbort()) return;   // ★fix406(F-1/F-3): poll中もOFF・スロット変化を監視
       var len;
       try { len = turnsLen(); } catch(e){ stopErr(); return; }
       if (len < turns0){ stopErr(); return; }      // turns減少 → 即停止
@@ -365,10 +414,14 @@
     activeSlot: activeSlot,
     isBlockedManualBtn: isBlockedManualBtn,
     guardManualClick: guardManualClick,
+    guardManualKeydown: guardManualKeydown,
+    guardManualSubmit: guardManualSubmit,
+    isTextEntry: isTextEntry,
+    shouldAbort: shouldAbort,
     runIteration: runIteration,
     doStop: doStop,
     _getState: function(){ return { running: running, lockedSlot: lockedSlot, target: target, done: done, autoFiring: autoFiring }; },
-    _setState: function(o){ if (o){ if ('running' in o) running = o.running; if ('lockedSlot' in o) lockedSlot = o.lockedSlot; if ('target' in o) target = o.target; if ('done' in o) done = o.done; } }
+    _setState: function(o){ if (o){ if ('running' in o) running = o.running; if ('lockedSlot' in o) lockedSlot = o.lockedSlot; if ('target' in o) target = o.target; if ('done' in o) done = o.done; if ('autoFiring' in o) autoFiring = o.autoFiring; } }
   };
 
   // ---- 起動: 冪等挿入(初回 + MutationObserver + ポーリング) ----
@@ -383,6 +436,9 @@
 
   // ★fix406: 手動操作ガードを capture 段で常設(running中のみ作用)。
   try { document.addEventListener('click', guardManualClick, true); } catch(e){}
+  // ★fix406(F-2): Enter送信(入力欄)/form submit もオート中は capture 段でブロック。
+  try { document.addEventListener('keydown', guardManualKeydown, true); } catch(e){}
+  try { document.addEventListener('submit', guardManualSubmit, true); } catch(e){}
 
   try { console.log(TAG, 'loaded (off=' + (off() ? '1' : '0') + ')'); } catch(_){}
 })();

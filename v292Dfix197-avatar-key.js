@@ -62,6 +62,7 @@
 
   var cache = {};     // pk -> dataURL / 'pending' / 'dice'
   var freshSeed403 = {};   // ★fix403: 明示↻されたpk(次の生成だけ新seed)
+  var regenPrev = {};      // ★fix197 H-3(2026-07-11): 明示↻直前の旧画像(生成失敗時の復元用)
   var jobInfo = {};   // pk -> {prompt, model, seed, name}
   var queue = [];
   var active = 0;
@@ -69,9 +70,10 @@
   // ★fix412: 明示↻用プロンプト合成=「現在のキャラ設定+世界観」。設定が無ければ''(従来のレシピ文へ)。
   // ★fix412正規化(2026-07-11): 素材の優先順位を ①ロスターappr ②cast descの外見節 ③desc短縮 の順に。
   //   descの先頭にキャラ名そのものや「外見:」「外見：」ラベルが付いていたら剥がす。
-  function buildPrompt412(name){
+  // ★fix197 H-2(2026-07-11): 素材合成の本体をスイッチ非依存の buildCurrentAppearancePrompt に分離。
+  //   fix403c(レシピ無し↻)はこれを直接使う=v292Dfix412Off でも403cは生きる。
+  function buildCurrentAppearancePrompt(name){
     try{
-      if (localStorage.getItem('v292Dfix412Off')==='1') return '';
       if (!name) return '';
       var S=null; try{ S=window.S||(0,eval)('typeof S!=="undefined"?S:null'); }catch(e){}
       function stripLabel(t){
@@ -103,6 +105,12 @@
     }catch(e){ return ''; }
   }
 
+  // ★fix412ラッパ: v292Dfix412Off==='1' なら''(従来=レシピ文+新seedへ)。それ以外は素材合成本体へ委譲。
+  function buildPrompt412(name){
+    try{ if (localStorage.getItem('v292Dfix412Off')==='1') return ''; }catch(e){}
+    return buildCurrentAppearancePrompt(name);
+  }
+
   function genOne(pk){
     var info = jobInfo[pk] || {};
     var key = pollKey();
@@ -123,8 +131,12 @@
         var d=b64ToDataUrl(b); cache[pk]=d; persistSet(pk,d);
         // ★fix403: 作り直し成功→レシピのseed/prompt/modelを実際に使った値へ(復元で旧絵に戻さない)
         try { if (fresh403) { var rk403='v292avrec_'+pk, ro403=JSON.parse(localStorage.getItem(rk403)||'null'); if (ro403) { ro403.s=body.seed; ro403.p=body.prompt; ro403.m=body.model; localStorage.setItem(rk403, JSON.stringify(ro403)); } else { localStorage.setItem(rk403, JSON.stringify({ s:body.seed, p:body.prompt, m:body.model })); } } } catch(e){} })  // ★fix403c: レシピ未存在なら初回レシピを新規保存(復元/画風切替で新絵を保持)
-      .catch(function(){ cache[pk]='dice'; })
-      .then(function(){ active--; applyAll(); pump(); });
+      .catch(function(){
+        // ★fix197 H-3: 明示↻の生成失敗時は旧画像へ復元(DiceBearに落とさない)
+        if (regenPrev[pk]){ cache[pk]=regenPrev[pk]; try{ persistSet(pk, regenPrev[pk]); }catch(e){} }
+        else { cache[pk]='dice'; }
+      })
+      .then(function(){ delete regenPrev[pk]; active--; applyAll(); pump(); });
   }
   // v292Dfix199f: 暴走防止の遮断器。生成は直列・最小間隔つき・セッション上限あり。
   //   万一どこかが無限再生成ループに陥っても、上限で自動停止して DiceBear に退避し、
@@ -246,7 +258,9 @@
     var pk=keyFor(name);
     try { if (localStorage.getItem('v292Dfix403Off')!=='1') freshSeed403[pk]=1; } catch(e){}   // ★fix403: 明示↻は新seed
     var rec=null; try { rec=JSON.parse(localStorage.getItem('v292avrec_'+pk)||'null'); } catch(e){}  // ★fix403b: レシピ取得
-    delete cache[pk]; delete jobInfo[pk]; persistDel(pk);
+    // ★fix197 H-3(2026-07-11): 旧画像を生成成功まで保持(生成失敗時に復元)。persistDelは即時に行わない。
+    try { var _pv=persistGet(pk); if(_pv && _pv.indexOf('data:')===0) regenPrev[pk]=_pv; } catch(e){}
+    delete cache[pk]; delete jobInfo[pk];
     if (rec && rec.p && localStorage.getItem('v292Dfix403Off')!=='1') {
       // ★fix403b: レシピがあればcarrier(legacy URL)を待たずに直接生成キューへ(キャラ一覧からの↻の根治)
       jobInfo[pk] = { prompt: rec.p, model: rec.m||'flux', seed: (rec.s!=null?rec.s:null), name: name };
@@ -256,15 +270,17 @@
     // ★fix403c(2026-07-11): レシピが無いキャラの一覧↻。buildPrompt412で現在のキャラ設定+世界観から
     //   プロンプトを合成できたら、carrier(legacy URL)を待たず直接生成キューへ(新seed=先頭で立てたfreshSeed403)。
     //   成功時 genOne が初回レシピ(v292avrec_)を新規保存する。OFF=v292Dfix403cOff='1'(=従来どおりcarrier待ちで不発)。
-    if (localStorage.getItem('v292Dfix403cOff')!=='1') {
-      var p412c=''; try { p412c=buildPrompt412(name)||''; } catch(e){}
+    if (localStorage.getItem('v292Dfix403Off')!=='1' && localStorage.getItem('v292Dfix403cOff')!=='1') {   // ★fix197 H-1: 親(403)OFFで子(403c)も止める
+      var p412c=''; try { p412c=buildCurrentAppearancePrompt(name)||''; } catch(e){}   // ★fix197 H-2: 412Offでも403cは生きる(素材合成本体を直接)
       if (p412c) {
         jobInfo[pk] = { prompt: p412c, model: 'flux', seed: null, name: name };
         cache[pk] = 'pending'; queue.push(pk); pump();
         return;
       }
     }
-    // レシピが無くbuildPrompt412も空: 従来どおりimgのdata-avpk除去+src=''(carrier待ち=不発)
+    // ★fix197 H-3: 生成しない経路(carrier待ち=不発)は旧挙動どおり旧画像を破棄。
+    try { persistDel(pk); delete regenPrev[pk]; } catch(e){}
+    // レシピが無くbuildCurrentAppearancePromptも空: 従来どおりimgのdata-avpk除去+src=''(carrier待ち=不発)
     try{
       var imgs=document.querySelectorAll('img[data-avpk]');
       for(var i=0;i<imgs.length;i++){ if((imgs[i].getAttribute('alt')||'')===name){ imgs[i].removeAttribute('data-avpk'); try{ imgs[i].src=''; }catch(e){} } }
@@ -304,7 +320,7 @@
   }
   if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', start); } else { start(); }
 
-  window.__v292Dfix197 = { sweep: sweep, fixImg: fixImg, diceUrl: diceUrl, pollKey: pollKey, regenFor: regenFor, buildPrompt412: buildPrompt412,
+  window.__v292Dfix197 = { sweep: sweep, fixImg: fixImg, diceUrl: diceUrl, pollKey: pollKey, regenFor: regenFor, buildPrompt412: buildPrompt412, buildCurrentAppearancePrompt: buildCurrentAppearancePrompt,
     // v292Dfix209: 書き手(fix66等)が初期srcに使うキャッシュ済みdata:URLの取得口
     keyFor: keyFor,
     __test_state: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; return { pk:pk, pending:(c==='pending'), dice:(c==='dice'), dataUrl:(typeof c==='string'&&c.indexOf('data:')===0), queued:(queue.indexOf(pk)>=0), hasJob:!!jobInfo[pk], jobPrompt:(jobInfo[pk]&&jobInfo[pk].prompt)||'' }; }catch(e){ return null; } },

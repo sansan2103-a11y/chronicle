@@ -38,7 +38,7 @@
 //       chr6_bk_fix409_<digits> を新しい順3件だけ残して古いものを削除(既存の無印
 //       chr6_bk_fix409 キーは触らず残置)。統合ログ v292Dfix409_log にJSON配列で
 //       {ts,turn,from,to} をappend(上限50件・古い順evict)。
-//   (c) inFlight延期: repair()冒頭で S.inFlight(生成飛行中)なら実行を延期し、lastLenを-1へ
+//   (c) inFlight延期: repair()冒頭で S.inFlight(生成飛行中)なら実行を延期し、lastSigをnullへ
 //       戻して次tickで再評価させる(生成完了直後の暫定状態への適用を避ける)。
 //       ※採用フラグ根拠: index.html本体エンジンが Api.call の前に S.inFlight=true、finally で
 //         false に戻す唯一の飛行中フラグ。S.submit/cont/retry も if(S.inFlight)return で
@@ -191,21 +191,29 @@
     try { if (typeof window.__chr6Key === 'function') ak = window.__chr6Key() || 'chr6'; } catch(e){}
     return ak;
   }
+  // ★fix409b D-4(2026-07-11): 書込後read-backで検証しboolean返却。失敗ならfalse(呼び出し側は適用を中止)。
   function backupBefore(){
     try {
       var ak = activeSlotKey();
       var blob = '';
       try { blob = localStorage.getItem(ak) || ''; } catch(e){}
       if (off409b()){
-        // 従来fix409: 無印キーへ退避(セッション毎上書き)。
-        try { localStorage.setItem('chr6_bk_fix409', blob); } catch(e){}
-        return;
+        // 従来fix409: 無印キーへ退避(セッション毎上書き)。read-back検証つき。
+        try { localStorage.setItem('chr6_bk_fix409', blob); } catch(e){ return false; }
+        try { return localStorage.getItem('chr6_bk_fix409') === blob; } catch(e){ return false; }
       }
       // fix409b: タイムスタンプ付きバックアップ(無印キーは触らない)。
       var ts = Date.now(); if (ts <= lastBkTs) ts = lastBkTs + 1; lastBkTs = ts;
-      try { localStorage.setItem('chr6_bk_fix409_' + ts, JSON.stringify({ key: ak, blob: blob, ts: ts })); } catch(e){}
+      var key = 'chr6_bk_fix409_' + ts;
+      var payload = JSON.stringify({ key: ak, blob: blob, ts: ts });
+      try { localStorage.setItem(key, payload); } catch(e){ return false; }
+      // read-back検証: JSON.parseして key/blob 一致を確認。
+      var ok = false;
+      try { var rb = localStorage.getItem(key); if (rb){ var o = JSON.parse(rb); ok = !!(o && o.key === ak && o.blob === blob); } } catch(e){ ok = false; }
+      if (!ok){ try { localStorage.removeItem(key); } catch(e){} return false; }
       pruneBackups(3);
-    } catch(e){}
+      return true;
+    } catch(e){ return false; }
   }
   // chr6_bk_fix409_<digits> を新しい順 keep 件だけ残す(無印/…_wi 等は正規表現で除外)。
   function pruneBackups(keep){
@@ -248,18 +256,28 @@
     if (off()) return { changed: false };
     var S = getS();
     if (!S || !Array.isArray(S.turns) || !S.turns.length) return { changed: false };
-    // fix409b(c): 生成飛行中は適用を延期し、次tickで再評価させる(lastLenを-1へ)。
-    if (!off409b() && S.inFlight){ lastLen = -1; return { changed: false, deferred: true }; }
+    // fix409b(c): 生成飛行中は適用を延期し、次tickで再評価させる(lastSigをnullへ)。
+    if (!off409b() && S.inFlight){ lastSig = null; return { changed: false, deferred: true }; }
     var names = canonNames();
     if (!names.length) return { changed: false };
     var ctx = off409b() ? null : { apprSet: rosterApprSet(), castSet: castNameSet(), turns: S.turns };  // fix409b(a): 統合ゲート文脈
-    var anyChange = false, log = [], backedUp = false;
+    // ★fix409b D-4(2026-07-11): まずdryRun(コピーに対して・副作用なし)で「実適用される変更があるか」確認。
+    var willApply = false;
+    for (var di = 0; di < S.turns.length; di++){
+      var dcopy = { _convSays: ((S.turns[di] && S.turns[di]._convSays) || []).map(function(x){ return x ? { who: x.who, say: x.say, _rv: x._rv } : x; }) };
+      var dplan = planTurn(dcopy, names, di, ctx);
+      if (dplan.changed){ willApply = true; break; }
+    }
+    if (!willApply) return { changed: false, log: [] };
+    // ★fix409b D-4: 適用前にバックアップ(read-back検証)。失敗なら一切適用しない(planTurn副作用の前に中止)。
+    if (!backupBefore()){ try { console.warn(TAG, 'backup verify failed - repair aborted (no changes applied)'); } catch(e){} return { changed: false, backupFailed: true }; }
+    // 本適用(バックアップ検証OK後にだけ S.turns を書き換える)。
+    var anyChange = false, log = [];
     for (var ti = 0; ti < S.turns.length; ti++){
       var plan = planTurn(S.turns[ti], names, ti, ctx);
       var appliedHere = false;
       if (plan.changes){ for (var ci = 0; ci < plan.changes.length; ci++){ if (!plan.changes[ci].skipped){ appliedHere = true; break; } } }
       if (appliedHere){
-        if (!backedUp){ backupBefore(); backedUp = true; }   // fix409b(b): 適用前退避(タイムスタンプ付き)
         anyChange = true;
         log.push({ turn: ti + 1, changes: plan.changes });
         appendMergeLog(ti + 1, plan.changes);                // fix409b(b): 統合ログ
@@ -268,7 +286,13 @@
       }
     }
     if (anyChange){
-      try { if (!document.hidden && S.save) S.save(); } catch(e){}
+      // ★fix409b D-3(2026-07-11): hidden中は保存を延期(pendingSave)し、可視化時にflush。
+      try {
+        if (S.save){
+          if (!document.hidden){ S.save(); }
+          else { pendingSave = true; lastSig = null; }
+        }
+      } catch(e){}
       try {
         var cards = document.querySelectorAll('.v292-dlg-card');
         for (var i = 0; i < cards.length; i++){ if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]); }
@@ -280,18 +304,52 @@
   }
 
   // 起動7秒後に全ターン走査 → 以後2秒ポーリング(新ターン追従)。fix390と同型。
-  var lastLen = -1;
+  // ★fix409b D-5(2026-07-11): 軽量署名で変化検知(turns.length単独より鋭敏=編集・_convSays増減・cast/appr変化も拾う)。
+  var lastSig = null;
+  var pendingSave = false;   // ★fix409b D-3: hidden中に延期した保存(可視化時にflush)
+  function hashStr(x){ var h=0; x=String(x); for(var i=0;i<x.length;i++){ h=((h<<5)-h+x.charCodeAt(i))|0; } return h; }
+  function computeSig(){
+    try {
+      var S = getS();
+      if (!S || !Array.isArray(S.turns)) return 'n';
+      var turns = S.turns, len = turns.length;
+      var last = turns[len - 1] || null;
+      var csLen = (last && Array.isArray(last._convSays)) ? last._convSays.length : 0;
+      var head = '';
+      try { var lt = last ? (last.text || last.narrative || last.body || '') : ''; head = String(lt).slice(0, 64); } catch(e){}
+      var castJoin = '';
+      try { castJoin = castNames().join(','); } catch(e){}
+      var rosterSig = '';
+      try {
+        var ro = loadRoster(), parts = [];
+        for (var i = 0; i < ro.length; i++){ if (ro[i] && ro[i].handle){ parts.push(String(ro[i].handle) + ':' + String(ro[i].appr != null ? ro[i].appr : '')); } }
+        rosterSig = String(hashStr(parts.join('|')));
+      } catch(e){}
+      return len + '|' + csLen + '|' + hashStr(head) + '|' + hashStr(castJoin) + '|' + rosterSig;
+    } catch(e){ return 'e'; }
+  }
   function tick(){
     try {
       if (off()) return;
-      var S = getS();
-      var len = (S && Array.isArray(S.turns)) ? S.turns.length : -1;
-      if (len === lastLen) return;
-      lastLen = len;
-      repair();   // fix409b(c): inFlight中なら repair 内で lastLen=-1 に戻り次tickで再評価
+      var sig = computeSig();
+      if (sig === lastSig) return;
+      lastSig = sig;
+      repair();   // fix409b(c): inFlight中なら repair 内で lastSig=null に戻り次tickで再評価
     } catch(e){}
   }
   setTimeout(function(){ tick(); setInterval(tick, 2000); }, 7000);
+  // ★fix409b D-3: hidden中に延期した保存を、可視化時にflush。
+  try {
+    document.addEventListener('visibilitychange', function(){
+      try {
+        if (!document.hidden && pendingSave){
+          var S = getS();
+          if (S && S.save){ S.save(); }
+          pendingSave = false;
+        }
+      } catch(e){}
+    });
+  } catch(e){}
 
   // ---- (b) keeper注入(__f379reg・prio3): 台帳呼称を正式呼称として毎ターン明示 ----
   //   台帳呼称(ロスターhandle上位5件+登録NPC名)。空なら空文字を返し注入しない。
@@ -342,6 +400,9 @@
       return res;
     },
     repair: repair,
+    computeSig: function(){ return computeSig(); },   // ★fix409b D-5テスト口
+    backupBefore: function(){ return backupBefore(); },   // ★fix409b D-4テスト口
+    _pendingSave: function(){ return pendingSave; },
     resolve: function(who, names){ return resolveCanon(who, names || canonNames()); },
     // fix409b: 内部関数の検証口。
     canApply: function(from, to, ti){
