@@ -67,19 +67,36 @@
   var active = 0;
 
   // ★fix412: 明示↻用プロンプト合成=「現在のキャラ設定+世界観」。設定が無ければ''(従来のレシピ文へ)。
+  // ★fix412正規化(2026-07-11): 素材の優先順位を ①ロスターappr ②cast descの外見節 ③desc短縮 の順に。
+  //   descの先頭にキャラ名そのものや「外見:」「外見：」ラベルが付いていたら剥がす。
   function buildPrompt412(name){
     try{
       if (localStorage.getItem('v292Dfix412Off')==='1') return '';
       if (!name) return '';
       var S=null; try{ S=window.S||(0,eval)('typeof S!=="undefined"?S:null'); }catch(e){}
-      var desc='';
-      if (S && S.cast){
-        if (S.cast.hero && S.cast.hero.name===name) desc=String(S.cast.hero.desc||'');
-        if (!desc){ var ns=S.cast.npcs||[]; for(var i=0;i<ns.length;i++){ if(ns[i]&&ns[i].name===name){ desc=String(ns[i].desc||''); break; } } }
+      function stripLabel(t){
+        t=String(t||'').trim();
+        if (name){ var re=new RegExp('^\\s*'+String(name).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s*[：:はがのを、,]?\\s*'); t=t.replace(re,''); }
+        t=t.replace(/^\s*(外見|容姿|見た目|姿|ルックス)\s*[：:]\s*/,'');
+        return t.trim();
       }
-      if (!desc){ try{ var ro=(window.__v292Dfix307api&&window.__v292Dfix307api.loadRoster())||[]; for(var j=0;j<ro.length;j++){ if(ro[j]&&ro[j].handle===name){ desc=String(ro[j].appr||''); break; } } }catch(e){} }
+      var desc='';
+      // ① ロスターappr(外見に特化した自動抽出=portrait素材として最優先)
+      try{ var ro=(window.__v292Dfix307api&&window.__v292Dfix307api.loadRoster())||[]; for(var j=0;j<ro.length;j++){ if(ro[j]&&ro[j].handle===name){ desc=String(ro[j].appr||''); break; } } }catch(e){}
+      // ②/③ cast desc(②外見節を優先抽出・無ければ③desc全体を短縮)
+      if (!desc && S && S.cast){
+        var cdesc='';
+        if (S.cast.hero && S.cast.hero.name===name) cdesc=String(S.cast.hero.desc||'');
+        if (!cdesc){ var ns=S.cast.npcs||[]; for(var i=0;i<ns.length;i++){ if(ns[i]&&ns[i].name===name){ cdesc=String(ns[i].desc||''); break; } } }
+        if (cdesc){
+          var mSec=cdesc.match(/(?:外見|容姿|見た目|ルックス)\s*[：:]\s*([^\n。]+)/);
+          desc = mSec ? mSec[1] : cdesc;   // 外見節が無ければdesc全体(下で短縮)
+        }
+      }
       if (!desc) return '';
+      desc=stripLabel(desc);
       desc=desc.replace(/【[^】]*】/g,' ').replace(/\s+/g,' ').trim().slice(0,180);
+      if (!desc) return '';
       var world='';
       try{ if(S&&S.scene){ var tone=String(S.scene.tone||'').trim(); var lore=String(S.scene.lore||'').replace(/【[^】]*】/g,' ').replace(/\s+/g,' ').trim().slice(0,60); world=[tone,lore].filter(Boolean).join('、'); } }catch(e){}
       return name+', '+desc+(world?('、世界観: '+world):'')+', portrait';
@@ -105,7 +122,7 @@
       .then(function(j){ var b=j&&j.data&&j.data[0]&&j.data[0].b64_json; if(!b) throw 'nob64';
         var d=b64ToDataUrl(b); cache[pk]=d; persistSet(pk,d);
         // ★fix403: 作り直し成功→レシピのseed/prompt/modelを実際に使った値へ(復元で旧絵に戻さない)
-        try { if (fresh403) { var rk403='v292avrec_'+pk, ro403=JSON.parse(localStorage.getItem(rk403)||'null'); if (ro403) { ro403.s=body.seed; ro403.p=body.prompt; ro403.m=body.model; localStorage.setItem(rk403, JSON.stringify(ro403)); } } } catch(e){} })
+        try { if (fresh403) { var rk403='v292avrec_'+pk, ro403=JSON.parse(localStorage.getItem(rk403)||'null'); if (ro403) { ro403.s=body.seed; ro403.p=body.prompt; ro403.m=body.model; localStorage.setItem(rk403, JSON.stringify(ro403)); } else { localStorage.setItem(rk403, JSON.stringify({ s:body.seed, p:body.prompt, m:body.model })); } } } catch(e){} })  // ★fix403c: レシピ未存在なら初回レシピを新規保存(復元/画風切替で新絵を保持)
       .catch(function(){ cache[pk]='dice'; })
       .then(function(){ active--; applyAll(); pump(); });
   }
@@ -236,7 +253,18 @@
       cache[pk] = 'pending'; queue.push(pk); pump();
       return;   // imgのdata-avpk/srcは触らない(生成完了時のapplyAllが差し替える。fix403で新画像がサーバーURLより優先表示)
     }
-    // レシピが無い場合のみ従来どおりimgのdata-avpk除去+src=''(carrier待ち)
+    // ★fix403c(2026-07-11): レシピが無いキャラの一覧↻。buildPrompt412で現在のキャラ設定+世界観から
+    //   プロンプトを合成できたら、carrier(legacy URL)を待たず直接生成キューへ(新seed=先頭で立てたfreshSeed403)。
+    //   成功時 genOne が初回レシピ(v292avrec_)を新規保存する。OFF=v292Dfix403cOff='1'(=従来どおりcarrier待ちで不発)。
+    if (localStorage.getItem('v292Dfix403cOff')!=='1') {
+      var p412c=''; try { p412c=buildPrompt412(name)||''; } catch(e){}
+      if (p412c) {
+        jobInfo[pk] = { prompt: p412c, model: 'flux', seed: null, name: name };
+        cache[pk] = 'pending'; queue.push(pk); pump();
+        return;
+      }
+    }
+    // レシピが無くbuildPrompt412も空: 従来どおりimgのdata-avpk除去+src=''(carrier待ち=不発)
     try{
       var imgs=document.querySelectorAll('img[data-avpk]');
       for(var i=0;i<imgs.length;i++){ if((imgs[i].getAttribute('alt')||'')===name){ imgs[i].removeAttribute('data-avpk'); try{ imgs[i].src=''; }catch(e){} } }
@@ -279,6 +307,7 @@
   window.__v292Dfix197 = { sweep: sweep, fixImg: fixImg, diceUrl: diceUrl, pollKey: pollKey, regenFor: regenFor, buildPrompt412: buildPrompt412,
     // v292Dfix209: 書き手(fix66等)が初期srcに使うキャッシュ済みdata:URLの取得口
     keyFor: keyFor,
+    __test_state: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; return { pk:pk, pending:(c==='pending'), dice:(c==='dice'), dataUrl:(typeof c==='string'&&c.indexOf('data:')===0), queued:(queue.indexOf(pk)>=0), hasJob:!!jobInfo[pk], jobPrompt:(jobInfo[pk]&&jobInfo[pk].prompt)||'' }; }catch(e){ return null; } },
     cachedFor: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; if(typeof c==='string'&&c.indexOf('data:')===0) return c; var p=persistGet(pk); return (p&&p.indexOf('data:')===0)?p:''; }catch(e){ return ''; } },
     clearCache: function(){ try{ Object.keys(localStorage).forEach(function(k){ if(k.indexOf('v292av')===0) localStorage.removeItem(k); }); }catch(e){} cache={}; jobInfo={}; } };
   window.__v292Dfix199 = window.__v292Dfix197;

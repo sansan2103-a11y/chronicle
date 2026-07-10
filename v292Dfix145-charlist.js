@@ -54,6 +54,19 @@
     } catch(e){}
     return '';
   }
+  // ★fix410ガード(2026-07-11): fix197.diceUrl() が空文字/例外の場合に備え、ハードコードの
+  //   DiceBearフォールバックを最終手段として温存する(旧コードは空文字で上書きし src が空になる穴があった)。
+  function diceHardFallback(name){
+    return 'https://api.dicebear.com/9.x/lorelei/svg?seed=' + encodeURIComponent(String(name || 'character'));
+  }
+  function diceUrlSafe(name){
+    var d = diceHardFallback(name);
+    try {
+      var f197 = window.__v292Dfix197;
+      if (f197 && typeof f197.diceUrl === 'function'){ var du = f197.diceUrl(name); if (du) return du; }
+    } catch(e){}
+    return d;   // diceUrlが空/例外 → ハードコードDiceBearへ
+  }
   function findLastTurnForName(name, turns){
     if (!name || !turns || !turns.length) return -1;
     for (var i = turns.length - 1; i >= 0; i--){
@@ -365,8 +378,7 @@
           var f197 = window.__v292Dfix197;
           var cached410 = '';
           try { if (f197 && typeof f197.cachedFor === 'function') cached410 = f197.cachedFor(c.name) || ''; } catch(e){}
-          var dice410 = 'https://api.dicebear.com/9.x/lorelei/svg?seed=' + encodeURIComponent(String(c.name || 'character'));
-          try { if (f197 && typeof f197.diceUrl === 'function') dice410 = f197.diceUrl(c.name); } catch(e){}
+          var dice410 = diceUrlSafe(c.name);   // ★fix410ガード: diceUrlが空/例外でもハードコードDiceBearを温存
           img.setAttribute('data-av-legacy', avUrl);
           img.src = cached410 || dice410;
         } else {
@@ -518,7 +530,7 @@
   setInterval(injectHeaderButton, 4000);
 
   // ---------- public API ----------
-  window.__charlist = { open: renderModal, close: closeModal };
+  window.__charlist = { open: renderModal, close: closeModal, diceUrlSafe: diceUrlSafe, diceHardFallback: diceHardFallback };
 
   try { console.log(TAG, 'character list active'); } catch(_){}
 })();
