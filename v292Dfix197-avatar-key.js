@@ -111,10 +111,21 @@
     return buildCurrentAppearancePrompt(name);
   }
 
+  // ★fix197 F-2/F-3(2026-07-11): 明示↻の旧画像復元を1関数に集約。
+  //   regenPrev[pk]があればcache/persistへ復元(DiceBearに落とさない)、無ければ'dice'。
+  //   最後に必ずregenPrev[pk]を掃除(復元は1回限り)。3経路(APIキーなし早期return・
+  //   GEN_BUDGET到達・生成失敗catch)すべてでこれを通す。
+  function restorePreviousOrDice(pk){
+    try {
+      if (regenPrev[pk]){ cache[pk]=regenPrev[pk]; try{ persistSet(pk, regenPrev[pk]); }catch(e){} }
+      else { cache[pk]='dice'; }
+    } catch(e){ try{ cache[pk]='dice'; }catch(_){} }
+    try { delete regenPrev[pk]; } catch(e){}
+  }
   function genOne(pk){
     var info = jobInfo[pk] || {};
     var key = pollKey();
-    if(!key){ cache[pk]='dice'; active--; applyAll(); pump(); return; }
+    if(!key){ restorePreviousOrDice(pk); active--; applyAll(); pump(); return; }   // ★fix197 F-2: キー無しでも明示↻の旧画像を保持
     var body = { model: info.model||'flux', prompt: info.prompt||'portrait', n:1, size:'384x384' };
     if(info.seed != null) body.seed = info.seed;   // 同seed＝同一画像（旧絵柄の再現）
     var fresh403 = false;   // ★fix403: 明示↻は「レシピの見た目文＋新seed」で本当に作り直す
@@ -132,11 +143,10 @@
         // ★fix403: 作り直し成功→レシピのseed/prompt/modelを実際に使った値へ(復元で旧絵に戻さない)
         try { if (fresh403) { var rk403='v292avrec_'+pk, ro403=JSON.parse(localStorage.getItem(rk403)||'null'); if (ro403) { ro403.s=body.seed; ro403.p=body.prompt; ro403.m=body.model; localStorage.setItem(rk403, JSON.stringify(ro403)); } else { localStorage.setItem(rk403, JSON.stringify({ s:body.seed, p:body.prompt, m:body.model })); } } } catch(e){} })  // ★fix403c: レシピ未存在なら初回レシピを新規保存(復元/画風切替で新絵を保持)
       .catch(function(){
-        // ★fix197 H-3: 明示↻の生成失敗時は旧画像へ復元(DiceBearに落とさない)
-        if (regenPrev[pk]){ cache[pk]=regenPrev[pk]; try{ persistSet(pk, regenPrev[pk]); }catch(e){} }
-        else { cache[pk]='dice'; }
+        // ★fix197 F-2: 明示↻の生成失敗時は共通関数で旧画像へ復元(DiceBearに落とさない)
+        restorePreviousOrDice(pk);
       })
-      .then(function(){ delete regenPrev[pk]; active--; applyAll(); pump(); });
+      .then(function(){ delete regenPrev[pk]; active--; applyAll(); pump(); });   // 成功時のregenPrev掃除も維持(二重deleteは無害)
   }
   // v292Dfix199f: 暴走防止の遮断器。生成は直列・最小間隔つき・セッション上限あり。
   //   万一どこかが無限再生成ループに陥っても、上限で自動停止して DiceBear に退避し、
@@ -147,7 +157,7 @@
   function pump(){
     if(active >= 1 || !queue.length || pumpTimer) return;
     if(genCount >= GEN_BUDGET){
-      while(queue.length){ var pkx = queue.shift(); if(cache[pkx]==='pending') cache[pkx]='dice'; }
+      while(queue.length){ var pkx = queue.shift(); if(cache[pkx]==='pending') restorePreviousOrDice(pkx); }   // ★fix197 F-3: 上限到達でも明示↻の旧画像を保持
       try{ console.warn(TAG, 'generation budget ('+GEN_BUDGET+') exceeded — DiceBearに退避（暴走防止）'); }catch(e){}
       applyAll(); return;
     }
@@ -320,7 +330,7 @@
   }
   if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', start); } else { start(); }
 
-  window.__v292Dfix197 = { sweep: sweep, fixImg: fixImg, diceUrl: diceUrl, pollKey: pollKey, regenFor: regenFor, buildPrompt412: buildPrompt412, buildCurrentAppearancePrompt: buildCurrentAppearancePrompt,
+  window.__v292Dfix197 = { sweep: sweep, fixImg: fixImg, diceUrl: diceUrl, pollKey: pollKey, regenFor: regenFor, buildPrompt412: buildPrompt412, buildCurrentAppearancePrompt: buildCurrentAppearancePrompt, restorePreviousOrDice: restorePreviousOrDice,
     // v292Dfix209: 書き手(fix66等)が初期srcに使うキャッシュ済みdata:URLの取得口
     keyFor: keyFor,
     __test_state: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; return { pk:pk, pending:(c==='pending'), dice:(c==='dice'), dataUrl:(typeof c==='string'&&c.indexOf('data:')===0), queued:(queue.indexOf(pk)>=0), hasJob:!!jobInfo[pk], jobPrompt:(jobInfo[pk]&&jobInfo[pk].prompt)||'' }; }catch(e){ return null; } },

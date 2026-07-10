@@ -308,6 +308,28 @@
   var lastSig = null;
   var pendingSave = false;   // ★fix409b D-3: hidden中に延期した保存(可視化時にflush)
   function hashStr(x){ var h=0; x=String(x); for(var i=0;i<x.length;i++){ h=((h<<5)-h+x.charCodeAt(i))|0; } return h; }
+  // ★fix409(2026-07-11 D-3): 直近3ターンの who+say+本文(narrative)のhash。
+  //   turns.length不変でも who変更・say編集・本文差替を検知させる(2秒tick再評価のトリガ)。
+  function recentTurnsSig(turns){
+    try {
+      if (!Array.isArray(turns)) return '';
+      var len = turns.length, start = (len > 3) ? (len - 3) : 0, parts = [];
+      for (var i = start; i < len; i++){
+        var t = turns[i] || {};
+        var narr = String(t.narrative || t.text || t.body || '');
+        var seg = 'N:' + narr;
+        var cs = t._convSays;
+        if (Array.isArray(cs)){
+          for (var j = 0; j < cs.length; j++){
+            var c = cs[j] || {};
+            seg += '|' + String(c.who || '') + '=' + String(c.say || '');
+          }
+        }
+        parts.push(seg);
+      }
+      return String(hashStr(parts.join('\u241f')));
+    } catch(e){ return ''; }
+  }
   function computeSig(){
     try {
       var S = getS();
@@ -325,7 +347,7 @@
         for (var i = 0; i < ro.length; i++){ if (ro[i] && ro[i].handle){ parts.push(String(ro[i].handle) + ':' + String(ro[i].appr != null ? ro[i].appr : '')); } }
         rosterSig = String(hashStr(parts.join('|')));
       } catch(e){}
-      return len + '|' + csLen + '|' + hashStr(head) + '|' + hashStr(castJoin) + '|' + rosterSig;
+      return len + '|' + csLen + '|' + hashStr(head) + '|' + hashStr(castJoin) + '|' + rosterSig + '|' + recentTurnsSig(turns);   // ★D-3: 直近3ターンwho+say+本文を追加
     } catch(e){ return 'e'; }
   }
   function tick(){

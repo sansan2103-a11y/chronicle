@@ -135,6 +135,18 @@
       return false;
     } catch(e){ return false; }
   }
+  // ★fix406(2026-07-11 C2/E-4): 物語入力欄の限定判定。本文composer(#composer)内の入力欄
+  //   (テキスト送信欄 #inp 等)のみを対象とし、設定画面・キャラ編集など他フォームの入力は妨げない。
+  //   オート自身のパネル(.v292Dfix406-panel)も対象外。
+  function isStoryComposerInput(el){
+    try {
+      if (!isTextEntry(el)) return false;
+      if (el.closest && el.closest('.v292Dfix406-panel')) return false;   // オート自身のパネル入力
+      if (el.id === 'inp') return true;                                   // 本文composerの入力欄
+      if (el.closest && el.closest('#composer')) return true;             // composer配下の入力欄
+      return false;
+    } catch(e){ return false; }
+  }
   function guardManualKeydown(ev){
     try {
       if (!running) return;        // オート中でなければ何もしない
@@ -143,19 +155,29 @@
       var code = (ev && (ev.keyCode || ev.which)) || 0;
       if (k !== 'Enter' && code !== 13) return;
       var el = ev && ev.target;
-      if (!isTextEntry(el)) return;                 // 入力欄以外のEnterは通す
-      try { if (el.closest && el.closest('.v292Dfix406-panel')) return; } catch(_){}   // オート自身のパネル入力は対象外
+      if (!isStoryComposerInput(el)) return;        // ★C2/E-4: 物語composer以外の入力欄は通す(設定・キャラ編集等を妨げない)
       try { if (ev.stopImmediatePropagation) ev.stopImmediatePropagation(); } catch(_){}
       try { ev.stopPropagation(); } catch(_){}
       try { ev.preventDefault(); } catch(_){}
       toast('⏩ オート中です（⏹ 停止で解除できます）');
     } catch(e){}
   }
-  // ★fix406(2026-07-11 F-2b): オート中の form submit も capture 段でブロック(合成発火は素通し)。
+  // ★fix406(2026-07-11 F-2b/C2/E-4): オート中の form submit も capture 段でブロック(合成発火は素通し)。
+  //   ただし物語composer(#composer)配下のformに限定=設定画面等のform送信は妨げない。
+  function isStoryForm(el){
+    try {
+      var f = (el && el.tagName === 'FORM') ? el : ((el && el.closest) ? el.closest('form') : null);
+      if (!f) return false;
+      if (f.id === 'composer') return true;
+      if (f.closest && f.closest('#composer')) return true;
+      return false;
+    } catch(e){ return false; }
+  }
   function guardManualSubmit(ev){
     try {
       if (!running) return;
       if (autoFiring) return;
+      if (!isStoryForm(ev && ev.target)) return;   // ★C2/E-4: 物語composer以外のformは妨げない
       try { if (ev.stopImmediatePropagation) ev.stopImmediatePropagation(); } catch(_){}
       try { ev.stopPropagation(); } catch(_){}
       try { ev.preventDefault(); } catch(_){}
@@ -417,6 +439,8 @@
     guardManualKeydown: guardManualKeydown,
     guardManualSubmit: guardManualSubmit,
     isTextEntry: isTextEntry,
+    isStoryComposerInput: isStoryComposerInput,
+    isStoryForm: isStoryForm,
     shouldAbort: shouldAbort,
     runIteration: runIteration,
     doStop: doStop,

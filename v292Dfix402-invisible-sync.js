@@ -46,6 +46,12 @@
 // ★fix411 per-key世代照合(2026-07-11・OFF=v292Dfix411Off): putimg応答を現在LS値で再検証し三者一致
 //   (送信hash=現在hash=台帳h)でのみ台帳消去(送信中の再生成は新世代を再queue)/dead台帳を{ts,h,errorCode,
 //   status}化+上限50/online復帰でpending全再送/5xx・ネットワーク一時失敗はキー毎1回だけ60秒後に自動再queue。
+// ★OFFスイッチの意味(2026-07-11・C1-4 明文化):
+//   v292Dfix402Off  = 同期機能まるごとOFF(push/pull/putimg全停止)。
+//   v292Dfix402dOff = fix402d/402e/mid世代ガードのみOFF。誤clean防止・conflict-probe・local-ahead(和集合)・
+//                     put/forceputのmid付与を無効化する。ただしcallSaveのAbortタイムアウト(本文25s/画像40s)は残る。
+//   v292Dfix411Off  = fix411のpending台帳・retry台帳(v292Dfix402_pimg/_dead・imgRetried)のみOFF。
+//                     画像のputimg送信自体は継続する(取りこぼしの自己修復だけを止める。putimg midは常時付与)。
 // =====================================================================
 (function(){
   'use strict';
@@ -219,7 +225,10 @@
       return Promise.resolve('noop');
     }
     pushing = true;
-    return callSave({ op: 'put', baseRev: baseRev(), pkg: pkg }).then(function(r){
+    // ★C1-1(fix402d idempotency): midに送信pkgのhash(既存のhを流用・新規計算なし)を付与。
+    //   Worker v17のidem表で同一midの再送は同一応答を返し二重fork/二重revを防ぐ(旧Worker=mid無視で後方互換)。
+    var _putMid = f402dOn ? h : undefined;
+    return callSave({ op: 'put', baseRev: baseRev(), pkg: pkg, mid: _putMid }).then(function(r){
       pushing = false;
       if (r.status === 200 && r.json && r.json.ok && r.json.fork) { forkBanner(r.json.server || {}); return 'fork'; }   // fork応答はclean化しない(現行維持)
       if (r.status !== 200 || !r.json || !r.json.ok) throw new Error((r.json && r.json.error) || ('HTTP ' + r.status));
@@ -287,20 +296,27 @@
       if (f402dOn && !force) {
         var localAhead = false;
         try {
+          // ★C1-2(B-4): remoteキーのみ→local/remoteスロットキーの和集合で比較。
+          //   localにのみ存在しturns>0のslot(remoteTurns=0)もlocal-ahead扱いにして被せ消しを防ぐ。
           var rls = (r.json.data && r.json.data.ls) || {};
-          for (var rk in rls){ if (!Object.prototype.hasOwnProperty.call(rls, rk)) continue;
-            if (!(rk === 'chr6' || /^chr6_slot_/.test(rk))) continue;
-            var rraw = rls[rk];
-            if (typeof rraw !== 'string' || !rraw) continue;
-            var remoteTurns;
-            try { var rd = JSON.parse(rraw); remoteTurns = (rd && Array.isArray(rd.turns)) ? rd.turns.length : 0; }
-            catch(e){ continue; }                       // ★A-3: remote parse失敗slotは比較対象外(スキップ)
-            var lraw = lsGet(rk);
-            if (typeof lraw !== 'string' || !lraw) continue;
-            var localTurns;
-            try { var ld = JSON.parse(lraw); localTurns = (ld && Array.isArray(ld.turns)) ? ld.turns.length : 0; }
-            catch(e){ continue; }                       // ★A-3: local parse失敗slotもスキップ
-            if (localTurns > remoteTurns) { localAhead = true; break; }
+          var allKeys = {};
+          for (var rk in rls){ if (Object.prototype.hasOwnProperty.call(rls, rk) && (rk === 'chr6' || /^chr6_slot_/.test(rk))) allKeys[rk] = 1; }
+          try { for (var li = 0; li < localStorage.length; li++){ var lk = localStorage.key(li); if (lk === 'chr6' || /^chr6_slot_/.test(lk)) allKeys[lk] = 1; } } catch(e){}
+          for (var key in allKeys){ if (!Object.prototype.hasOwnProperty.call(allKeys, key)) continue;
+            var remoteTurns = 0, localTurns = 0, skipKey = false;
+            var rraw = rls[key];
+            if (typeof rraw === 'string' && rraw){
+              try { var rd = JSON.parse(rraw); remoteTurns = (rd && Array.isArray(rd.turns)) ? rd.turns.length : 0; }
+              catch(e){ skipKey = true; }               // ★A-3: remote parse失敗slotは比較対象外
+            }
+            if (!skipKey){
+              var lraw = lsGet(key);
+              if (typeof lraw === 'string' && lraw){
+                try { var ld = JSON.parse(lraw); localTurns = (ld && Array.isArray(ld.turns)) ? ld.turns.length : 0; }
+                catch(e){ skipKey = true; }             // ★A-3: local parse失敗slotもスキップ
+              }
+            }
+            if (!skipKey && localTurns > remoteTurns) { localAhead = true; break; }
           }
         } catch(e){ localAhead = false; }
         if (localAhead) {
@@ -383,7 +399,10 @@
     var finished = false;
     var done = function(ok){ if (finished) return; finished = true; pushing = false; if (onDone) onDone(ok); };   // ★finally相当: 必ずpushing解除
     var pkg = collectLight(Date.now());
-    return callSave({ op: 'forceput', pkg: pkg }).then(function(r){
+    // ★C1-1: forceputにもmid付与。put mid(素のhash)との衝突を避けるため 'fp:' 接頭を付ける。
+    //   f402dOff時は世代ガードごとOFF=mid無し(後方互換)。連投で内容同一ならidemで単一化。
+    var _fpMid = (lsGet('v292Dfix402dOff') !== '1') ? ('fp:' + lsHash(JSON.stringify(pkg.ls || {}))) : undefined;
+    return callSave({ op: 'forceput', pkg: pkg, mid: _fpMid }).then(function(r){
       if (r.status === 200 && r.json && r.json.ok) {
         if (r.json.rev != null) setNum('v292Dfix402_baseRev', +r.json.rev || 0);
         try { lsSet('v292Dfix402_lastHash', ''); } catch(e){}   // 次flushで必ず再push(現行維持)
@@ -480,6 +499,13 @@
     } catch(e){}
   }
   function pimgDel(k){ try { var m = pimgAll(); if (k in m){ delete m[k]; lsSet('v292Dfix402_pimg', JSON.stringify(m)); } } catch(e){} }
+  // ★fix411/C-5: dead隔離するのは too-large / bad-request / unsupported のみ(再送しても無駄なもの)。
+  //   auth/no-binding/maintenance/429/5xx/networkは一時失敗としてpending維持(既存バックオフ)。
+  function isImgDead(status, errCode){
+    if (status === 413 || status === 400 || status === 415) return true;   // payload-too-large / bad-request / unsupported-media
+    var c = String(errCode || '').toLowerCase();
+    return /too[-_ ]?large|payload[-_ ]?too[-_ ]?large|bad[-_ ]?request|unsupported|invalid[-_ ]?image|malformed|unprocessable/.test(c);
+  }
   // ★fix411/C-3: 隔離(dead)台帳。値を{ts,h,errorCode,status}に強化。上限50・最古evict。無限再送防止
   function pimgDeadAll(){ try { return JSON.parse(lsGet('v292Dfix402_pimg_dead') || '{}') || {}; } catch(e){ return {}; } }
   function pimgDeadTs(e){ return (typeof e === 'number') ? e : ((e && e.ts) || 0); }   // 後方互換: 旧エントリ=数値
@@ -487,7 +513,7 @@
     try {
       var m = pimgDeadAll();
       var h = null; try { var dv = localStorage.getItem(k); if (typeof dv === 'string' && dv.indexOf('data:image') === 0) h = imgHash(dv); } catch(e){}
-      m[k] = { ts: Date.now(), h: h, errorCode: (j && (j.error || j.code)) || null, status: (status == null ? null : status) };
+      m[k] = { ts: Date.now(), h: h, errorCode: (j && (j.errorCode || j.code || j.error)) || null, status: (status == null ? null : status) };
       var keys = Object.keys(m);
       while (keys.length > 50) {                                      // 上限50件: 超過したら最古(ts最小)からevict
         var oldestK = null, oldestTs = Infinity;
@@ -500,12 +526,26 @@
   }
   function pimgDeadDel(k){ try { var m = pimgDeadAll(); if (k in m){ delete m[k]; lsSet('v292Dfix402_pimg_dead', JSON.stringify(m)); } } catch(e){} }
   // ★fix411/C-4: 一時失敗(5xx/ネットワーク)のセッション内1回だけ自動再queue(キー毎1回・無限ループ不可)
-  var imgRetried = {};
+  var imgRetried = {};   // ★fix411/C-3: hash単位(値={h}) — 世代が変われば再度1回だけ再送を許可
+  function curImgHash(k){ var v = null; try { v = localStorage.getItem(k); } catch(e){} return (typeof v === 'string' && v.indexOf('data:image') === 0) ? imgHash(v) : null; }
   function scheduleRetryOnce(k){
     if (f411off()) return;
-    if (imgRetried[k]) return;
-    imgRetried[k] = 1;
-    setTimeout(function(){ try { if (!f411off() && (k in pimgAll())) scheduleImgPush(k); } catch(e){} }, 60000);
+    var ch = curImgHash(k);
+    var ex = imgRetried[k];
+    if (ex && ex.h != null && ch != null && ex.h === ch) return;   // ★C-3: この世代は既に1回再送予約済み
+    imgRetried[k] = { h: ch };
+    setTimeout(function(){
+      try {
+        if (f411off()) return;
+        if (imgSending) return;                          // ★C-4(c): 送信中は見送り(次のsendImgs/自然トリガが拾う)
+        var pend = pimgAll()[k];
+        if (!pend) return;                               // ★C-4(c): pending消滅(成功等)→再送しない
+        var pendH = (pend && typeof pend === 'object') ? pend.h : null;
+        var nowH = curImgHash(k);
+        if (pendH != null && nowH != null && pendH !== nowH) return;   // ★C-4(c): hash不一致(別世代を他経路が処理中)→送らない
+        scheduleImgPush(k);
+      } catch(e){}
+    }, 60000);
   }
   function scheduleImgPush(k){
     imgQueue[k] = Date.now();
@@ -534,9 +574,10 @@
         var h = imgHash(v);                          // sentHash(送信時の実データhash)
         try { pimgSet(k, h); } catch(e){}            // ★fix411強化: 送信直前に実データからh計算→台帳更新(C-2でts整合)
         try {
-          callSave({ op: 'putimg', k: k, data: v, hash: h }, 40000).then(function(r){   // ★fix402e A-4: 画像は40s
+          callSave({ op: 'putimg', k: k, data: v, hash: h, mid: (k + ':' + h) }, 40000).then(function(r){   // ★fix402e A-4: 画像は40s / ★C1-1: mid=k:hash(同一画像の再送はidemで単一化)
             try {
               var j = r && r.json;
+              var errCode = (j && (j.errorCode || j.code || j.error)) || null;   // ★C-6: errorCodeの優先順
               var ok200 = !!(r && r.status === 200 && j && j.ok);
               var serverHashOk = ok200 && (j.hash == null || j.hash === h);   // Worker v15 hash契約(旧Worker=hash無し)
               if (ok200 && serverHashOk) {
@@ -548,20 +589,22 @@
                 if (h === curHash && pendH === h) {
                   pimgDel(k);                          // 送信内容=現在値=台帳=一致→確実に最新配信済み
                   pimgDeadDel(k);                       // ★C-3: 同キー新画像成功で旧deadエントリ削除
+                  delete imgRetried[k];                 // ★C-3: 成功でretry解除
                 } else {
                   // ★C-1: 送信中に再生成(またはより新しい世代)→pending更新+再queue(新世代を後で再送)
                   pimgSet(k, curHash);                  // ★C-2: hash変化→ts更新
+                  delete imgRetried[k];                 // ★C-3: 新世代でretry解除(再度1回再送可)
                   scheduleImgPush(k);
                   try { console.log(TAG, 'img送信中に再生成→新世代を再queue', k); } catch(e){}
                 }
               } else if (ok200) {
                 console.warn(TAG, 'img hash不一致(server)→pending保持', k, j.hash, h);   // 内容不一致=保持して再送
-              } else if (r && (r.status === 413 || (j && j.retryable === false))) {
-                pimgDeadSet(k, r.status, j); pimgDel(k);   // ★C-3: 隔離(無限再送防止)
-              } else if (r && r.status >= 500) {
-                scheduleRetryOnce(k);                  // ★C-4: 5xx一時失敗→60秒後1回だけ再queue(pending保持)
+              } else if (isImgDead(r && r.status, errCode)) {
+                pimgDeadSet(k, r && r.status, j); pimgDel(k);   // ★C-5: too-large/bad-request/unsupportedのみ隔離(無限再送防止)
+              } else if (r && (r.status >= 500 || r.status === 429)) {
+                scheduleRetryOnce(k);                  // ★C-5: 5xx/429一時失敗→60秒後1回だけ再queue(pending保持・既存バックオフ)
               }
-              // それ以外(4xx等)→pending保持(boot/online再送に委ねる)
+              // ★C-5: それ以外(auth/no-binding/maintenance/その他4xx/network)→pending保持(boot/online/visible再送に委ねる)
             } catch(e){}
             try { console.log(TAG, 'img pushed', k, r && r.status); } catch(e){}
             next();
@@ -579,8 +622,14 @@
       var prev = localStorage.setItem;
       if (prev.__f402) return;
       var wrapped = function(k, v){
-        try { if (on() && typeof k === 'string' && k.indexOf('v292av2_') === 0 && typeof v === 'string' && v.indexOf('data:image') === 0) scheduleImgPush(k); } catch(e){}
-        return prev.apply(localStorage, arguments);
+        var r = prev.apply(localStorage, arguments);   // ★C1-3(C-2): 本来のsetItemを先に実行(Quota等で失敗したら例外を伝播しscheduleしない)
+        try {
+          if (on() && typeof k === 'string' && k.indexOf('v292av2_') === 0 && typeof v === 'string' && v.indexOf('data:image') === 0) {
+            scheduleImgPush(k);
+            if (!f411off()) { try { pimgSet(k, imgHash(v)); delete imgRetried[k]; } catch(e){} }   // ★C-2: 台帳hashを即時に新世代へ更新 / ★C-3: 再生成でretry解除
+          }
+        } catch(e){}
+        return r;
       };
       wrapped.__f402 = true;
       localStorage.setItem = wrapped;
@@ -626,7 +675,7 @@
     forkBanner: forkBanner,
     forcePut: doForcePut,   // ★fix402e A-2: 世代化forceput
     imgHash: imgHash, sendImgs: sendImgs, scheduleImgPush: scheduleImgPush,   // ★fix411強化: 検証フック
-    retryDead: function(k){ try { var m = pimgDeadAll(); if (k in m){ pimgDeadDel(k); scheduleImgPush(k); return true; } } catch(e){} return false; },   // ★fix411/C-3検証口
+    retryDead: function(k){ try { var m = pimgDeadAll(); if (k in m){ pimgDeadDel(k); try { delete imgRetried[k]; } catch(e){} scheduleImgPush(k); return true; } } catch(e){} return false; },   // ★fix411/C-3検証口(retryDeadでretry解除)
     clearDead: function(k){ pimgDeadDel(k); },
     deadAll: function(){ return pimgDeadAll(); }
   };
