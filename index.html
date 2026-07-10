@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260711-fix415b';
+  var BUILT = '20260711-fix416';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2800,6 +2800,7 @@ G.init();
 <script src="v292Dfix409-handle-merge.js?cb=v292Dfix415b"></script>
 <script src="v292Dfix414-constraint-engine.js?cb=v292Dfix415b"></script>
 <script src="v292Dfix415-opening-mask.js?cb=v292Dfix415b"></script>
+<script src="v292Dfix416-pain-style.js?cb=v292Dfix416"></script>
 </body>
 </html>
 
