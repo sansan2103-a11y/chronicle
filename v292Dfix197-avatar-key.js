@@ -5,6 +5,11 @@
 //   (fix400のサーバー優先が新画像を隠す分断の解消。サーバー側はfix402が自動アップ→次回ロードから配信で一致)
 //   ②明示的な↻はレシピの見た目文+【新しいseed】で本当に作り直す(自動経路は従来どおり同seed=誤再生成保護は維持)
 //   ③作り直し成功時はレシピ(v292avrec_)のseedも更新(復元/画風切替で旧絵に戻らないように)。OFF=v292Dfix403Off='1'。
+// ★fix411(2026-07-10深夜): サーバー未反映のローカル新画像(fix402のpending台帳あり)はサーバーURLより
+//   優先表示=「再生成→リロードで旧画像に戻る」の根治(putimg失敗/取りこぼし中でも新画像を見せ続ける)。
+// ★fix412(2026-07-10深夜): 明示↻のプロンプトを「現在のキャラ設定(cast desc/ロスターappr)+世界観(tone/lore)」
+//   から組み直す(固定レシピ文の使い回しをやめる)。画風PREFIXはfix338がfetch層で自動付与。
+//   OFF=v292Dfix412Off='1'(従来=レシピ文+新seed)。
 // ★fix403b(2026-07-10): キャラ一覧の↻根治。regenForでレシピ(v292avrec_)があれば carrier(legacy URL)を
 //   待たずに直接生成キューへ積む(従来はモーダルのimgにcarrierが無くjobInfo.promptが埋まらず永遠に生成が始まらなかった)。
 // ---------------------------------------------------------------------
@@ -61,6 +66,26 @@
   var queue = [];
   var active = 0;
 
+  // ★fix412: 明示↻用プロンプト合成=「現在のキャラ設定+世界観」。設定が無ければ''(従来のレシピ文へ)。
+  function buildPrompt412(name){
+    try{
+      if (localStorage.getItem('v292Dfix412Off')==='1') return '';
+      if (!name) return '';
+      var S=null; try{ S=window.S||(0,eval)('typeof S!=="undefined"?S:null'); }catch(e){}
+      var desc='';
+      if (S && S.cast){
+        if (S.cast.hero && S.cast.hero.name===name) desc=String(S.cast.hero.desc||'');
+        if (!desc){ var ns=S.cast.npcs||[]; for(var i=0;i<ns.length;i++){ if(ns[i]&&ns[i].name===name){ desc=String(ns[i].desc||''); break; } } }
+      }
+      if (!desc){ try{ var ro=(window.__v292Dfix307api&&window.__v292Dfix307api.loadRoster())||[]; for(var j=0;j<ro.length;j++){ if(ro[j]&&ro[j].handle===name){ desc=String(ro[j].appr||''); break; } } }catch(e){} }
+      if (!desc) return '';
+      desc=desc.replace(/【[^】]*】/g,' ').replace(/\s+/g,' ').trim().slice(0,180);
+      var world='';
+      try{ if(S&&S.scene){ var tone=String(S.scene.tone||'').trim(); var lore=String(S.scene.lore||'').replace(/【[^】]*】/g,' ').replace(/\s+/g,' ').trim().slice(0,60); world=[tone,lore].filter(Boolean).join('、'); } }catch(e){}
+      return name+', '+desc+(world?('、世界観: '+world):'')+', portrait';
+    }catch(e){ return ''; }
+  }
+
   function genOne(pk){
     var info = jobInfo[pk] || {};
     var key = pollKey();
@@ -72,6 +97,7 @@
       delete freshSeed403[pk];
       fresh403 = true;
       try { var rec403 = JSON.parse(localStorage.getItem('v292avrec_'+pk) || 'null'); if (rec403 && rec403.p) { body.prompt = rec403.p; if (rec403.m) body.model = rec403.m; } } catch(e){}
+      try { var p412 = buildPrompt412(info.name||''); if (p412) body.prompt = p412; } catch(e){}   // ★fix412: 現在の設定+世界観を優先
       body.seed = Math.floor(Math.random()*1000000000);
     }
     fetch(API, { method:'POST', headers:{ 'Authorization':'Bearer '+key, 'Content-Type':'application/json' }, body: JSON.stringify(body) })
@@ -112,6 +138,8 @@
       var f400 = window.__v292Dfix400;
       // ★fix403: このセッションで作った新画像(cache=data:)はサーバーURLより優先(↻の結果が即見える)
       var fresh403v = (typeof cache[pk]==='string' && cache[pk].indexOf('data:')===0) && (function(){ try { return localStorage.getItem('v292Dfix403Off')!=='1'; } catch(e){ return true; } })();
+      // ★fix411: サーバー未反映のローカル新画像(pending台帳)もサーバーURLより優先(リロード後の巻き戻り防止)
+      if (!fresh403v) { try { if (localStorage.getItem('v292Dfix411Off')!=='1'){ var pm411=JSON.parse(localStorage.getItem('v292Dfix402_pimg')||'{}'); if (pm411 && pm411[LS_PREFIX+pk]) { var pe411=persistGet(pk); if (pe411 && pe411.indexOf('data:')===0){ cache[pk]=pe411; fresh403v=true; } } } } catch(e){} }
       if (f400 && f400.enabled() && !img.__av400fail && !fresh403v) {
         var ss = f400.urlFor(pk);
         if (ss) {
@@ -248,7 +276,7 @@
   }
   if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', start); } else { start(); }
 
-  window.__v292Dfix197 = { sweep: sweep, fixImg: fixImg, diceUrl: diceUrl, pollKey: pollKey, regenFor: regenFor,
+  window.__v292Dfix197 = { sweep: sweep, fixImg: fixImg, diceUrl: diceUrl, pollKey: pollKey, regenFor: regenFor, buildPrompt412: buildPrompt412,
     // v292Dfix209: 書き手(fix66等)が初期srcに使うキャッシュ済みdata:URLの取得口
     keyFor: keyFor,
     cachedFor: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; if(typeof c==='string'&&c.indexOf('data:')===0) return c; var p=persistGet(pk); return (p&&p.indexOf('data:')===0)?p:''; }catch(e){ return ''; } },

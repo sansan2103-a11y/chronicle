@@ -18,6 +18,9 @@
 //   fix399の手動ボタン(☁️/⬇️)とバックアップ(chr6_bk_cloudsync_*)はそのまま生きる。
 // 検証: window.__v292Dfix402 = { status, flush, pullCheck, state }
 // ---------------------------------------------------------------------
+// ★fix411(2026-07-10深夜): putimg取りこぼしの根治。pending台帳(v292Dfix402_pimg)に記録し
+//   成功時に消す。boot時に残があれば再送(リロードでデバウンスタイマーが消えた分・Worker/KV
+//   予算枯渇で失敗した分を自己修復)。hidden時は即時送信。OFF=v292Dfix411Off='1'。
 // ★fix402c(2026-07-10): 全物語まるごと常時同期。
 //   ・collectLS を「アクティブスロットのみ」→「chr6_slots_meta の全スロット+base(chr6)
 //     +既存グローバル」に拡張(allSlotIds)。端末Aにしかない物語も端末Bに出る。
@@ -272,8 +275,14 @@
   //   fix197(genOne)→persistSet→localStorage.setItem('v292av2_...', dataURL)→(fix346がIDBへ)。
   //   その呼び出しを最外殻で検知して、その1枚だけをサーバーへ(全端末のfix400表示が即揃う)。
   var imgQueue = {}, imgTimer = null;
+  // ★fix411: pending台帳(送信し損ねの自己修復用。v292Dfix402_はcollectLS除外済みで同期に混入しない)
+  function f411off(){ return lsGet('v292Dfix411Off') === '1'; }
+  function pimgAll(){ try { return JSON.parse(lsGet('v292Dfix402_pimg') || '{}') || {}; } catch(e){ return {}; } }
+  function pimgSet(k){ if (f411off()) return; try { var m = pimgAll(); m[k] = Date.now(); lsSet('v292Dfix402_pimg', JSON.stringify(m)); } catch(e){} }
+  function pimgDel(k){ try { var m = pimgAll(); if (k in m){ delete m[k]; lsSet('v292Dfix402_pimg', JSON.stringify(m)); } } catch(e){} }
   function scheduleImgPush(k){
     imgQueue[k] = Date.now();
+    pimgSet(k);                                   // ★fix411
     if (imgTimer) clearTimeout(imgTimer);
     imgTimer = setTimeout(sendImgs, IMG_DEBOUNCE_MS);
   }
@@ -286,10 +295,11 @@
       var v = null; try { v = localStorage.getItem(k); } catch(e){}
       if (typeof v === 'string' && v.indexOf('data:image') === 0 && v.length < 2*1024*1024) {
         callSave({ op: 'putimg', k: k, data: v }).then(function(r){
+          try { if (r && r.status === 200 && r.json && r.json.ok) pimgDel(k); } catch(e){}   // ★fix411: 成功時だけ台帳から消す
           try { console.log(TAG, 'img pushed', k, r.status); } catch(e){}
           next();
-        }).catch(function(){ next(); });
-      } else next();
+        }).catch(function(e){ try { console.warn(TAG, 'img push failed (pending保持・次回再送)', k, e && e.message); } catch(_){} next(); });
+      } else { pimgDel(k); next(); }
     })();
   }
   function wrapSetItem(){
@@ -315,10 +325,15 @@
     setInterval(muteFix399, 60000);
     try {
       document.addEventListener('visibilitychange', function(){
-        if (document.visibilityState === 'hidden') { if (isDirty() || dirtySince) flush('hidden'); }
+        if (document.visibilityState === 'hidden') {
+          if (isDirty() || dirtySince) flush('hidden');
+          if (!f411off()) { try { if (imgTimer){ clearTimeout(imgTimer); imgTimer = null; } sendImgs(); } catch(e){} }   // ★fix411: 画像は隠れた瞬間に即送
+        }
         else { pullCheck('visible'); }
       });
     } catch(e){}
+    // ★fix411: 前セッションで送信し損ねたアイコンの再送(putimg失敗/リロードでタイマー消滅の自己修復)
+    setTimeout(function(){ try { if (!f411off()){ var pm = pimgAll(); Object.keys(pm).forEach(function(k){ scheduleImgPush(k); }); } } catch(e){} }, 5000);
     try { window.addEventListener('pagehide', function(){ if (isDirty() || dirtySince) flush('pagehide'); }); } catch(e){}
     try { window.addEventListener('pageshow', function(ev){ if (ev && ev.persisted) { lastPullCheck = 0; pullCheck('bfcache'); } }); } catch(e){}
     try { window.addEventListener('online', function(){ if (isDirty()) flush('online'); }); } catch(e){}
