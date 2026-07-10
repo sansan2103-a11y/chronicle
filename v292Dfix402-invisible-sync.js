@@ -17,6 +17,16 @@
 //   有効時はfix399の自動系(bootPull confirm/自動push)を停止(v292Dfix399AutoOff='1'を維持)。
 //   fix399の手動ボタン(☁️/⬇️)とバックアップ(chr6_bk_cloudsync_*)はそのまま生きる。
 // 検証: window.__v292Dfix402 = { status, flush, pullCheck, state }
+// ---------------------------------------------------------------------
+// ★fix402c(2026-07-10): 全物語まるごと常時同期。
+//   ・collectLS を「アクティブスロットのみ」→「chr6_slots_meta の全スロット+base(chr6)
+//     +既存グローバル」に拡張(allSlotIds)。端末Aにしかない物語も端末Bに出る。
+//   ・削除の伝播: 取り込んだ pkg の chr6_slots_meta を唯一の権威とし、metaに無いスロットの
+//     ローカル本体(chr6_slot_<id>)を、chr6_bk_cloudsync_del_* に退避してから削除(復活防止)。
+//     本体キーの有無ではなくメタ基準。metaが空/破損の pkg では絶対に削除しない(安全弁)。
+//   ・Worker v14/D1/rev/fork/forceput/applySave(fix399)/isGlobalKey は一切変更しない。
+//   ・OFFスイッチ: v292Dfix402cOff='1' で従来(アクティブのみ収集+削除伝播無効)へ即戻し。
+//     既定ON。全体OFF(v292Dfix402Off)配下でもある。
 // =====================================================================
 (function(){
   'use strict';
@@ -69,7 +79,17 @@
         || k === 'chr6_slots_meta' || k === 'chr6_active_slot' || k === 'chr6_epoch'
         || /genderMap_"?default"?$/.test(k);
   }
-  function collectLS(slotId){
+  // ★fix402c: 同期対象スロットの列挙(chr6_slots_meta 全件 + アクティブ保険 + base 'chr6')
+  function allSlotIds(){
+    var ids = [];
+    try { var meta = JSON.parse(lsGet('chr6_slots_meta')||'[]')||[]; meta.forEach(function(s){ if(s&&s.id) ids.push(String(s.id)); }); } catch(e){}
+    var act = activeSlot(); if (act && ids.indexOf(act)<0) ids.push(act);   // メタ未登録のアクティブも拾う(healSlotMeta前の保険)
+    if (ids.indexOf('chr6')<0) ids.push('chr6');                            // base物語
+    return ids;
+  }
+  // ★fix402c: slotId(単体) → slotIds(配列)。判定式は現行と同一のものをスロット毎に評価。
+  function collectLS(slotIds){
+    if (!Array.isArray(slotIds)) slotIds = (slotIds == null) ? [] : [slotIds];
     var out = {};
     for (var i = 0; i < localStorage.length; i++){
       var k = localStorage.key(i);
@@ -78,15 +98,21 @@
       if (/^chr6_bk_/.test(k)) continue;
       if (/^v292Dfix399_/.test(k)) continue;
       if (/^v292Dfix402_/.test(k)) continue;
-      var isSlot = slotId && slotId !== 'chr6' && k.indexOf(slotId) >= 0;
-      if (slotId === 'chr6' && (k === 'chr6' || /_slot_chr6$|genderMap_"?chr6"?$/.test(k))) isSlot = true;
+      var isSlot = false;
+      for (var j = 0; j < slotIds.length; j++){
+        var slotId = slotIds[j];
+        if (slotId && slotId !== 'chr6' && k.indexOf(slotId) >= 0) { isSlot = true; break; }
+        if (slotId === 'chr6' && (k === 'chr6' || /_slot_chr6$|genderMap_"?chr6"?$/.test(k))) { isSlot = true; break; }
+      }
       if (isSlot || isGlobalKey(k)) out[k] = localStorage.getItem(k);
     }
     return out;
   }
   function collectLight(ts){
     var slot = activeSlot();
-    return { schema: SCHEMA, updatedAt: ts || Date.now(), device: (navigator.userAgent||'').slice(0,60), activeSlot: slot, ls: collectLS(slot) };
+    // ★fix402c: 既定は全スロット収集。OFF(402cOff)時のみ従来どおりアクティブのみ=完全互換。
+    var slotIds = (lsGet('v292Dfix402cOff') === '1') ? [slot] : allSlotIds();
+    return { schema: SCHEMA, updatedAt: ts || Date.now(), device: (navigator.userAgent||'').slice(0,60), activeSlot: slot, ls: collectLS(slotIds) };
   }
 
   // ---- fix399の自動系を停止(confirm bootPull/自動pushの二重走行防止) ----
@@ -155,6 +181,24 @@
     return callSave({ op: 'get' }).then(function(r){
       if (r.status !== 200 || !r.json || !r.json.ok || !r.json.data) throw new Error((r.json && r.json.error) || ('HTTP ' + r.status));
       return applyPkg(r.json.data, r.json.rev).then(function(){
+        // ★fix402c: メタが権威。取り込んだmetaに無いスロットのローカル本体を、退避してから削除(復活防止)
+        try {
+          if (lsGet('v292Dfix402cOff') !== '1') {
+            var pkg = r.json.data || {};
+            var inMeta = {}; (JSON.parse((pkg.ls && pkg.ls['chr6_slots_meta']) || '[]') || []).forEach(function(s){ if (s && s.id) inMeta[String(s.id)] = 1; });
+            if (Object.keys(inMeta).length) {                       // メタが空のpkgでは絶対に削除しない(安全弁)
+              var doomed = [];
+              for (var di = 0; di < localStorage.length; di++){ var dk = localStorage.key(di);
+                var dm = /^chr6_slot_(.+)$/.exec(dk || '');
+                if (dm && !inMeta[dm[1]]) doomed.push(dk); }
+              if (doomed.length) {
+                var snap = {}; doomed.forEach(function(dk){ snap[dk] = localStorage.getItem(dk); });
+                lsSet('chr6_bk_cloudsync_del_' + Date.now(), JSON.stringify({ ls: snap }));   // 必ず退避
+                doomed.forEach(function(dk){ try { localStorage.removeItem(dk); } catch(e){} });
+              }
+            }
+          }
+        } catch(e){}
         toast('☁️ ' + (label || '別端末のつづき') + 'を取り込みました。再読み込みします…');
         setTimeout(function(){ try { location.reload(); } catch(e){} }, 700);
       });
