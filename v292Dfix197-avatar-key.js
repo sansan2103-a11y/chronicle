@@ -5,6 +5,8 @@
 //   (fix400のサーバー優先が新画像を隠す分断の解消。サーバー側はfix402が自動アップ→次回ロードから配信で一致)
 //   ②明示的な↻はレシピの見た目文+【新しいseed】で本当に作り直す(自動経路は従来どおり同seed=誤再生成保護は維持)
 //   ③作り直し成功時はレシピ(v292avrec_)のseedも更新(復元/画風切替で旧絵に戻らないように)。OFF=v292Dfix403Off='1'。
+// ★fix403b(2026-07-10): キャラ一覧の↻根治。regenForでレシピ(v292avrec_)があれば carrier(legacy URL)を
+//   待たずに直接生成キューへ積む(従来はモーダルのimgにcarrierが無くjobInfo.promptが埋まらず永遠に生成が始まらなかった)。
 // ---------------------------------------------------------------------
 // fix199 からの改良（おしんFB: 場所ごとに絵が違う／絵柄が前と違う）:
 //   ・キャッシュを【キャラ名＋画風】単位に統一 → 会話ログ/設定/キャラ一覧で同じ1枚を共有。
@@ -198,7 +200,15 @@
     if(!name) return;
     var pk=keyFor(name);
     try { if (localStorage.getItem('v292Dfix403Off')!=='1') freshSeed403[pk]=1; } catch(e){}   // ★fix403: 明示↻は新seed
+    var rec=null; try { rec=JSON.parse(localStorage.getItem('v292avrec_'+pk)||'null'); } catch(e){}  // ★fix403b: レシピ取得
     delete cache[pk]; delete jobInfo[pk]; persistDel(pk);
+    if (rec && rec.p && localStorage.getItem('v292Dfix403Off')!=='1') {
+      // ★fix403b: レシピがあればcarrier(legacy URL)を待たずに直接生成キューへ(キャラ一覧からの↻の根治)
+      jobInfo[pk] = { prompt: rec.p, model: rec.m||'flux', seed: (rec.s!=null?rec.s:null), name: name };
+      cache[pk] = 'pending'; queue.push(pk); pump();
+      return;   // imgのdata-avpk/srcは触らない(生成完了時のapplyAllが差し替える。fix403で新画像がサーバーURLより優先表示)
+    }
+    // レシピが無い場合のみ従来どおりimgのdata-avpk除去+src=''(carrier待ち)
     try{
       var imgs=document.querySelectorAll('img[data-avpk]');
       for(var i=0;i<imgs.length;i++){ if((imgs[i].getAttribute('alt')||'')===name){ imgs[i].removeAttribute('data-avpk'); try{ imgs[i].src=''; }catch(e){} } }

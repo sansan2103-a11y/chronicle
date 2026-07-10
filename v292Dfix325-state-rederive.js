@@ -61,6 +61,8 @@
     var s = getS(); if (!s || !Array.isArray(s.turns)) return false;
     var store = getStore(); if (!store) return false;
     var fresh = deriveFromTurns(s.turns);
+    // ★fix405: 現エンジンは turn.dbg.raw を保持しない→derive常に空。空でstoreを消す潜在バグの安全弁。
+    if (!Object.keys(fresh).length && s.turns.length > 0) { try{ console.warn(TAG,'rederive skipped: no <state> raw in turns(現エンジンはdbg.raw非保持)'); }catch(_){}; return false; }
     // 参照を保ったまま中身差し替え(buildStatesBlockが読む実体・fix302と同方式)
     try {
       Object.keys(store).forEach(function(k){ delete store[k]; });
