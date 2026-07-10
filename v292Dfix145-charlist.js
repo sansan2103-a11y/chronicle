@@ -120,10 +120,11 @@
   }
   function turnDelta(lastTurn, curTurnCount){
     if (lastTurn < 0) return '未登場';
-    if (curTurnCount <= 0) return 'T' + lastTurn;
+    var tn = lastTurn + 1;   // ★fix413: lastTurnは0始まりのturns index。表示は1始まり(旧表示はT0等のoff-by-one)
+    if (curTurnCount <= 0) return 'T' + tn;
     var d = curTurnCount - 1 - lastTurn;
-    if (d === 0) return 'T' + lastTurn + '（最新）';
-    return 'T' + lastTurn + '（' + d + 'ターン前）';
+    if (d === 0) return 'T' + tn + '（最新）';
+    return 'T' + tn + '（' + d + 'ターン前）';
   }
 
   // ---------- data aggregation ----------
