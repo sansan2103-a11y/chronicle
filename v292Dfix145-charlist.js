@@ -351,7 +351,26 @@
       var avUrl = avatarUrlFor(c.name);
       if (avUrl){
         var img = document.createElement('img');
-        img.src = avUrl;
+        // ★fix410: 従来 fix145 は lookupAvatar の返す生 pollinations URL を直接 img.src に入れて
+        //   おり、モーダルを開くたびブラウザが一斉fetch=429嵐の発生源だった。会話ログ側
+        //   (fix209/fix66 avatarImgHtml)と同じ carrier 方式へ寄せる: pollinations URL の時は
+        //   キャッシュ済みAI画像(data:)かDiceBearを初期srcにし、元URLは data-av-legacy で運搬
+        //   (fix197 がそこからプロンプト/seedを読んで課金API生成→data:へ差し替える)。
+        //   pollinations を含まないURL(登録キャラの data:/サーバーURL)は従来どおり直接src。
+        //   OFF: localStorage v292Dfix410Off='1' で従来動作(直src)。
+        var f410off = false;
+        try { f410off = (localStorage.getItem('v292Dfix410Off') === '1'); } catch(e){}
+        if (!f410off && avUrl.indexOf('image.pollinations.ai') >= 0){
+          var f197 = window.__v292Dfix197;
+          var cached410 = '';
+          try { if (f197 && typeof f197.cachedFor === 'function') cached410 = f197.cachedFor(c.name) || ''; } catch(e){}
+          var dice410 = 'https://api.dicebear.com/9.x/lorelei/svg?seed=' + encodeURIComponent(String(c.name || 'character'));
+          try { if (f197 && typeof f197.diceUrl === 'function') dice410 = f197.diceUrl(c.name); } catch(e){}
+          img.setAttribute('data-av-legacy', avUrl);
+          img.src = cached410 || dice410;
+        } else {
+          img.src = avUrl;
+        }
         img.alt = c.name;
         img.style.cssText = 'width:100%; height:100%; object-fit:cover;';
         img.onerror = function(){ if (avWrap){ avWrap.textContent = '?'; } };
