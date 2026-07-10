@@ -19,6 +19,30 @@
 // 既定ON(明確なバグ修正)。OFF: localStorage v292Dfix409Off='1'。
 // バックアップ: 補正直前のchr6を chr6_bk_fix409 に保存(セッション毎上書き)。
 // 検証: window.__v292Dfix409x = { dryRun, repair, resolve }。
+// ---------------------------------------------------------------------
+// ★fix409b(2026-07-11・GPT-5.6レビュー統合/おしん決定=fix409はON維持で安全ゲート追加):
+//   実績事故: ロスターに重複エントリ(「怪異」→重複「孤児院の怪異」)があると誤統合した。
+//   GPTは一時OFF推奨だったが、ブランケット除外は本来目的(省略呼称の統一)を壊す=不採用。
+//   代わりに実適用の直前に安全ゲートを課す。OFF: localStorage v292Dfix409bOff='1'(=従来fix409挙動)。
+//   (a) 統合ゲート canApply(from,to,ti): 次の両方を満たす時だけ振替を実適用する。
+//       条件1: 統合先to が「fix307ロスターに handle===to でappr(外見)が非空のエントリがある」
+//              または「登録cast名(castNames)に含まれる」こと(存在しない/情報の薄い呼称への
+//              吸い込みを防ぐ)。
+//       条件2(同場面共起): 変更対象ターンtiの前後1ターン(ti-1..ti+1)いずれかのテキスト
+//              (narrative/playerText/text/body と _convSays[].say の連結)に to が出現すること
+//              (別場面の台帳エントリへの誤統合を防ぐ)。
+//       どちらか欠けたらそのchangeはスキップ(dryRun/logには reason 付きで残す)。
+//       dryRun経路(planTurnをコピーに対して呼ぶ)でも同じゲートが効くよう、planTurnに
+//       ti(ターンindex)と ctx(apprSet/castSet/turns=実S.turns参照) を渡す。
+//   (b) バックアップ強化: 適用前blobを chr6_bk_fix409_<Date.now()> にJSON{key,blob,ts}で退避し、
+//       chr6_bk_fix409_<digits> を新しい順3件だけ残して古いものを削除(既存の無印
+//       chr6_bk_fix409 キーは触らず残置)。統合ログ v292Dfix409_log にJSON配列で
+//       {ts,turn,from,to} をappend(上限50件・古い順evict)。
+//   (c) inFlight延期: repair()冒頭で S.inFlight(生成飛行中)なら実行を延期し、lastLenを-1へ
+//       戻して次tickで再評価させる(生成完了直後の暫定状態への適用を避ける)。
+//       ※採用フラグ根拠: index.html本体エンジンが Api.call の前に S.inFlight=true、finally で
+//         false に戻す唯一の飛行中フラグ。S.submit/cont/retry も if(S.inFlight)return で
+//         これを見張っている。fix409の getS() が返す同一 S 上のプロパティ。
 // =====================================================================
 (function(){
   'use strict';
@@ -26,6 +50,7 @@
   var TAG = '[v292Dfix409:handle-merge]';
 
   function off(){ try { return localStorage.getItem('v292Dfix409Off') === '1'; } catch(e){ return false; } }
+  function off409b(){ try { return localStorage.getItem('v292Dfix409bOff') === '1'; } catch(e){ return false; } }  // fix409b: 新ゲートのみ無効化(=従来fix409挙動)
   function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined" ? S : null'); } catch(e){ return null; } }
 
   // fix307ロスターの取得(未ロード時は空配列)。
@@ -82,8 +107,63 @@
     return '';
   }
 
-  // 1ターン分の _convSays を検査(副作用なし)。
-  function planTurn(t, names){
+  // ---- fix409b(a): 統合ゲート ----
+  // ロスターで appr(外見) が非空の handle 集合。
+  function rosterApprSet(){
+    var set = {}, roster = loadRoster();
+    for (var i = 0; i < roster.length; i++){
+      var r = roster[i]; if (!r || !r.handle) continue;
+      var h = String(r.handle).trim();
+      var a = String(r.appr != null ? r.appr : '').trim();
+      if (h && a) set[h] = true;
+    }
+    return set;
+  }
+  // 登録cast名の集合。
+  function castNameSet(){
+    var set = {}, ns = castNames();
+    for (var i = 0; i < ns.length; i++){ set[ns[i]] = true; }
+    return set;
+  }
+  // 1ターン分の全テキスト(narrative/playerText/text/body + _convSays[].say)を連結。
+  function turnText(t){
+    if (!t) return '';
+    var parts = [];
+    if (t.narrative)  parts.push(String(t.narrative));
+    if (t.playerText) parts.push(String(t.playerText));
+    if (t.text)       parts.push(String(t.text));
+    if (t.body)       parts.push(String(t.body));
+    var cs = t._convSays;
+    if (Array.isArray(cs)){
+      for (var i = 0; i < cs.length; i++){ if (cs[i] && cs[i].say) parts.push(String(cs[i].say)); }
+    }
+    return parts.join('\n');
+  }
+  // 条件2: ti-1..ti+1 のいずれかのテキストに to が出現するか。
+  function coOccurs(to, ti, turns){
+    if (!Array.isArray(turns)) return true;   // 実行時にturns参照が無い異常系はcond1のみで防御(fail-open)
+    for (var d = -1; d <= 1; d++){
+      var tj = ti + d;
+      if (tj < 0 || tj >= turns.length) continue;
+      if (turnText(turns[tj]).indexOf(to) >= 0) return true;
+    }
+    return false;
+  }
+  // 統合可否。off409b時は常に許可(=従来fix409挙動)。
+  //   ctx = { apprSet, castSet, turns }。返り値 { ok:bool, reason? }。
+  function canApply(from, to, ti, ctx){
+    if (off409b()) return { ok: true };
+    if (!ctx) return { ok: true };            // 現行の呼び出し元は必ずctxを渡す(保険でfail-open)
+    var cond1 = !!(ctx.apprSet[to] || ctx.castSet[to]);
+    if (!cond1) return { ok: false, reason: 'no-appr-no-cast' };
+    var cond2 = coOccurs(to, ti, ctx.turns);
+    if (!cond2) return { ok: false, reason: 'no-cooccurrence' };
+    return { ok: true };
+  }
+
+  // 1ターン分の _convSays を検査。ctx(fix409b)があれば canApply ゲートを課す。
+  //   changes: 適用は {from,to,say}、スキップは {from,to,say,skipped:true,reason}。
+  function planTurn(t, names, ti, ctx){
     var cs = t && t._convSays;
     if (!Array.isArray(cs)) return { changed: false };
     var changes = [], changed = false;
@@ -92,11 +172,75 @@
       var who = String(s.who || '').trim();
       var full = resolveCanon(who, names);
       if (full && full !== who){
-        s.who = full; changed = true;
-        changes.push({ from: who, to: full, say: String(s.say || '').slice(0, 16) });
+        var gate = canApply(who, full, ti, ctx);
+        if (gate.ok){
+          s.who = full; changed = true;
+          changes.push({ from: who, to: full, say: String(s.say || '').slice(0, 16) });
+        } else {
+          changes.push({ from: who, to: full, say: String(s.say || '').slice(0, 16), skipped: true, reason: gate.reason });
+        }
       }
     }
     return { changed: changed, changes: changes };
+  }
+
+  // ---- fix409b(b): バックアップ強化 + 統合ログ ----
+  var lastBkTs = 0;   // 同一ms内の連続退避でもキー衝突しないよう単調増加を保証。
+  function activeSlotKey(){
+    var ak = 'chr6';
+    try { if (typeof window.__chr6Key === 'function') ak = window.__chr6Key() || 'chr6'; } catch(e){}
+    return ak;
+  }
+  function backupBefore(){
+    try {
+      var ak = activeSlotKey();
+      var blob = '';
+      try { blob = localStorage.getItem(ak) || ''; } catch(e){}
+      if (off409b()){
+        // 従来fix409: 無印キーへ退避(セッション毎上書き)。
+        try { localStorage.setItem('chr6_bk_fix409', blob); } catch(e){}
+        return;
+      }
+      // fix409b: タイムスタンプ付きバックアップ(無印キーは触らない)。
+      var ts = Date.now(); if (ts <= lastBkTs) ts = lastBkTs + 1; lastBkTs = ts;
+      try { localStorage.setItem('chr6_bk_fix409_' + ts, JSON.stringify({ key: ak, blob: blob, ts: ts })); } catch(e){}
+      pruneBackups(3);
+    } catch(e){}
+  }
+  // chr6_bk_fix409_<digits> を新しい順 keep 件だけ残す(無印/…_wi 等は正規表現で除外)。
+  function pruneBackups(keep){
+    try {
+      var keys = [];
+      for (var i = 0; i < localStorage.length; i++){
+        var k = localStorage.key(i);
+        if (k && /^chr6_bk_fix409_\d+$/.test(k)) keys.push(k);
+      }
+      var PFX = 'chr6_bk_fix409_';
+      keys.sort(function(a, b){
+        var na = parseInt(a.slice(PFX.length), 10) || 0;
+        var nb = parseInt(b.slice(PFX.length), 10) || 0;
+        return nb - na;   // 新しい順
+      });
+      for (var j = keep; j < keys.length; j++){ try { localStorage.removeItem(keys[j]); } catch(e){} }
+    } catch(e){}
+  }
+  // 統合ログ v292Dfix409_log(適用分のみ・上限50件・古い順evict)。
+  function appendMergeLog(turnNo, changes){
+    try {
+      if (off409b()) return;   // 従来fix409はログ無し
+      var applied = [];
+      for (var i = 0; i < changes.length; i++){ if (changes[i] && !changes[i].skipped) applied.push(changes[i]); }
+      if (!applied.length) return;
+      var arr = [];
+      try { var raw = localStorage.getItem('v292Dfix409_log'); if (raw) arr = JSON.parse(raw) || []; } catch(e){ arr = []; }
+      if (!Array.isArray(arr)) arr = [];
+      var now = Date.now();
+      for (var j = 0; j < applied.length; j++){
+        arr.push({ ts: now, turn: turnNo, from: applied[j].from, to: applied[j].to });
+      }
+      while (arr.length > 50) arr.shift();   // 古い順evict
+      try { localStorage.setItem('v292Dfix409_log', JSON.stringify(arr)); } catch(e){}
+    } catch(e){}
   }
 
   // 全ターン検査＆適用(変更時のみ save + 再描画)。
@@ -104,15 +248,23 @@
     if (off()) return { changed: false };
     var S = getS();
     if (!S || !Array.isArray(S.turns) || !S.turns.length) return { changed: false };
+    // fix409b(c): 生成飛行中は適用を延期し、次tickで再評価させる(lastLenを-1へ)。
+    if (!off409b() && S.inFlight){ lastLen = -1; return { changed: false, deferred: true }; }
     var names = canonNames();
     if (!names.length) return { changed: false };
+    var ctx = off409b() ? null : { apprSet: rosterApprSet(), castSet: castNameSet(), turns: S.turns };  // fix409b(a): 統合ゲート文脈
     var anyChange = false, log = [], backedUp = false;
     for (var ti = 0; ti < S.turns.length; ti++){
-      var plan = planTurn(S.turns[ti], names);
-      if (plan.changed){
-        if (!backedUp){ try { var ak='chr6'; try{ if(typeof window.__chr6Key==='function') ak=window.__chr6Key()||'chr6'; }catch(e2){} localStorage.setItem('chr6_bk_fix409', localStorage.getItem(ak) || ''); } catch(e){} backedUp = true; }  // fix409: 退避はアクティブスロットのblob(chr6固定だと slot使用時に実物語を退避できない)
+      var plan = planTurn(S.turns[ti], names, ti, ctx);
+      var appliedHere = false;
+      if (plan.changes){ for (var ci = 0; ci < plan.changes.length; ci++){ if (!plan.changes[ci].skipped){ appliedHere = true; break; } } }
+      if (appliedHere){
+        if (!backedUp){ backupBefore(); backedUp = true; }   // fix409b(b): 適用前退避(タイムスタンプ付き)
         anyChange = true;
         log.push({ turn: ti + 1, changes: plan.changes });
+        appendMergeLog(ti + 1, plan.changes);                // fix409b(b): 統合ログ
+      } else if (plan.changes && plan.changes.length){
+        log.push({ turn: ti + 1, changes: plan.changes });   // スキップのみのターンもlogに残す(reason付き)
       }
     }
     if (anyChange){
@@ -136,7 +288,7 @@
       var len = (S && Array.isArray(S.turns)) ? S.turns.length : -1;
       if (len === lastLen) return;
       lastLen = len;
-      repair();
+      repair();   // fix409b(c): inFlight中なら repair 内で lastLen=-1 に戻り次tickで再評価
     } catch(e){}
   }
   setTimeout(function(){ tick(); setInterval(tick, 2000); }, 7000);
@@ -179,16 +331,23 @@
   window.__v292Dfix409x = {
     dryRun: function(){
       var S = getS(); if (!S || !S.turns) return null;
-      var names = canonNames(); var res = [];
+      var names = canonNames();
+      var ctx = off409b() ? null : { apprSet: rosterApprSet(), castSet: castNameSet(), turns: S.turns };  // fix409b: dryRunでも実turns参照でゲート
+      var res = [];
       for (var i = 0; i < S.turns.length; i++){
         var copy = { _convSays: (S.turns[i]._convSays || []).map(function(x){ return x ? { who: x.who, say: x.say, _rv: x._rv } : x; }) };
-        var p = planTurn(copy, names);
-        if (p.changed) res.push({ turn: i + 1, changes: p.changes });
+        var p = planTurn(copy, names, i, ctx);
+        if (p.changed || (p.changes && p.changes.length)) res.push({ turn: i + 1, changes: p.changes });
       }
       return res;
     },
     repair: repair,
-    resolve: function(who, names){ return resolveCanon(who, names || canonNames()); }
+    resolve: function(who, names){ return resolveCanon(who, names || canonNames()); },
+    // fix409b: 内部関数の検証口。
+    canApply: function(from, to, ti){
+      var S = getS();
+      return canApply(from, to, ti, { apprSet: rosterApprSet(), castSet: castNameSet(), turns: (S && S.turns) || [] });
+    }
   };
-  try { console.log(TAG, 'loaded (off=' + (off() ? '1' : '0') + ')'); } catch(e){}
+  try { console.log(TAG, 'loaded (off=' + (off() ? '1' : '0') + ' 409b=' + (off409b() ? 'off' : 'on') + ')'); } catch(e){}
 })();

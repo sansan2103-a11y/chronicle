@@ -36,6 +36,12 @@
   var pollTimer = null, gapTimer = null;
   var floatingEl = null, panelEl = null;
 
+  // ★fix406スロット固定(2026-07-11): オート開始時のスロットを固定し、途中でスロットが変わったら即停止(別スロット誤爆防止)。
+  //   オート実行中は手動の「続きを書く」「送信」も無効化(⏹停止は常に有効)。
+  function activeSlot(){ try { return JSON.parse(localStorage.getItem('chr6_active_slot') || '"chr6"'); } catch(e){ return 'chr6'; } }
+  var lockedSlot = null;    // 開始時に固定するスロット
+  var autoFiring = false;   // 真=オート自身の合成クリック中(手動ガードを素通しする)
+
   function clampTarget(n){
     n = parseInt(n, 10);
     if (isNaN(n) || n < 1) n = 1;
@@ -76,6 +82,7 @@
 
   // ---- 「続きを書く」相当を1回だけ発火(送信・リセットには触れない) ----
   function fireContinue(){
+    autoFiring = true;   // ★fix406: オート自身のクリックは手動ガードを素通しさせる
     try {
       var btn = findContinueBtn();
       if (btn && typeof btn.click === 'function'){ btn.click(); return true; }
@@ -85,6 +92,35 @@
       if (G && typeof G.cont === 'function'){ G.cont(); return true; }
       return false;
     } catch(e){ return false; }
+    finally { autoFiring = false; }
+  }
+
+  // ★fix406: オート実行中の手動「続きを書く」「送信」クリックを無効化(⏹停止ボタンは必ず生かす)。
+  function isBlockedManualBtn(el){
+    try {
+      var b = (el && el.closest) ? el.closest('button,[role="button"],a') : null;
+      if (!b) return false;
+      var cls = (b.className != null) ? String(b.className) : '';
+      if (cls.indexOf('v292Dfix406-floating') >= 0) return false;   // ⏹停止は通す
+      if (cls.indexOf('v292Dfix406-btn') >= 0) return false;        // ⏩オート自身は通す
+      var t = (b.textContent || '');
+      if (t.indexOf('⏹') >= 0) return false;                        // 停止は通す
+      if (t.indexOf('続きを書く') >= 0) return true;
+      if (t.indexOf('送信') >= 0) return true;
+      return false;
+    } catch(e){ return false; }
+  }
+  function guardManualClick(ev){
+    try {
+      if (!running) return;        // オート中でなければ何もしない
+      if (autoFiring) return;      // オート自身の合成クリックは素通し
+      if (isBlockedManualBtn(ev && ev.target)){
+        try { if (ev.stopImmediatePropagation) ev.stopImmediatePropagation(); } catch(_){}
+        try { ev.stopPropagation(); } catch(_){}
+        try { ev.preventDefault(); } catch(_){}
+        toast('⏩ オート中です（⏹ 停止で解除できます）');
+      }
+    } catch(e){}
   }
 
   function insertAfter(ref, node){
@@ -268,6 +304,7 @@
     target = clampTarget(n);
     done = 0;
     running = true;
+    lockedSlot = activeSlot();   // ★fix406: 開始時のスロットを固定
     try { console.log(TAG, 'start target=' + target); } catch(_){}
     closePanel();
     removeAutoBtn();
@@ -277,6 +314,13 @@
 
   function runIteration(){
     if (!running) return;
+    // ★fix406: 開始時のスロットと変わっていたら即停止(既存の停止経路でUIも戻す)
+    if (lockedSlot !== null && activeSlot() !== lockedSlot){
+      try { console.log(TAG, 'slot changed (' + lockedSlot + '->' + activeSlot() + ') - auto stopped'); } catch(_){}
+      doStop(false);
+      toast('⏩ スロットが変わったのでオートを停止しました');
+      return;
+    }
     if (done >= target){ finishOk(); return; }
     var turns0;
     try { turns0 = turnsLen(); } catch(e){ stopErr(); return; }
@@ -317,7 +361,14 @@
   window.__v292Dfix406_internal = {
     scan: scanInsert,
     findContinueBtn: findContinueBtn,
-    fireContinue: fireContinue
+    fireContinue: fireContinue,
+    activeSlot: activeSlot,
+    isBlockedManualBtn: isBlockedManualBtn,
+    guardManualClick: guardManualClick,
+    runIteration: runIteration,
+    doStop: doStop,
+    _getState: function(){ return { running: running, lockedSlot: lockedSlot, target: target, done: done, autoFiring: autoFiring }; },
+    _setState: function(o){ if (o){ if ('running' in o) running = o.running; if ('lockedSlot' in o) lockedSlot = o.lockedSlot; if ('target' in o) target = o.target; if ('done' in o) done = o.done; } }
   };
 
   // ---- 起動: 冪等挿入(初回 + MutationObserver + ポーリング) ----
@@ -329,6 +380,9 @@
     }
   } catch(e){}
   try { setInterval(function(){ try { scanInsert(); } catch(_){} }, SCAN_MS()); } catch(e){}
+
+  // ★fix406: 手動操作ガードを capture 段で常設(running中のみ作用)。
+  try { document.addEventListener('click', guardManualClick, true); } catch(e){}
 
   try { console.log(TAG, 'loaded (off=' + (off() ? '1' : '0') + ')'); } catch(_){}
 })();

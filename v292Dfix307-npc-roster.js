@@ -73,13 +73,30 @@
     '各要素:{"呼称":安定した短い呼称(固有名or外見の核8字以内・例「黒髪の女」「顔のない男」),"種別":"人物"|"怪異"|"動物"等,"重要度":"高"|"中","外見":画像生成用に容姿を日本語一文で。姿が人の形の存在(少女・男・人影など)は霊や怪異であっても【人物】として書く(髪・年齢層・性別・肌・服・表情。「霊体」「半透明」「姿が定かでない」「首がない」等の曖昧・異形の語は避け人として描く)。本当に人型でない存在(形のない影・塊・獣・物)だけ異形として姿形・色・質感を書く。物語の出来事や場所や心情は書かない,"理由":簡潔に}。'+
     '載せる基準=再登場した/再登場しそう・物語の脅威や鍵となる存在。'+
     '載せない=一度きりで以後出ない脅かし・通行人・背景・単なる物音や影・主役。回想・過去の説明・記録・写真・比喩・他者の背景説明の中にだけ出てくる存在は、現在の場面に実体として登場していない限り載せない(fix408)。'+
-    '一度しか出ておらず再登場が読み取れない存在は載せない(保留)。人・怪異・動物・霊など"存在"のみ対象とし、単なる現象・物体・場所・水滴・物音は載せない。既存台帳の呼称が与えられたら、同一の存在には新しい名前を作らず既存の呼称をそのまま使う(呼称は固定)。同一存在は描写が違っても1件に名寄せ統合する。該当無しは[]。JSONのみ出力。';
+    '一度しか出ておらず再登場が読み取れない存在は載せない(保留)。人・怪異・動物・霊など"存在"のみ対象とし、単なる現象・物体・場所・水滴・物音は載せない。既存台帳の呼称が与えられたら、同一の存在には新しい名前を作らず既存の呼称をそのまま使う(呼称は固定)。同一存在は描写が違っても1件に名寄せ統合する。外見だけでなく役割・場面・関係が複数一致する場合も同一存在と判断し、新しい呼称を作らない(fix408強化)。該当無しは[]。JSONのみ出力。';
+
+  // ★fix408強化(2026-07-11): 既存台帳を「呼称: 外見」の行形式でLLMへ渡す(新呼称乱立の抑止=二重登録防止)。
+  //   量は件数でなく総文字数2,800字上限(超えたら新しい順=lastTurn降順を優先して古い行を切る)。apprの改行は1行化(→「/」)。
+  function buildExistingLines(){
+    var rs=(loadRoster()||[]).filter(function(r){return r&&r.handle;});
+    rs.sort(function(a,b){ var la=(typeof a.lastTurn==='number'?a.lastTurn:-1), lb=(typeof b.lastTurn==='number'?b.lastTurn:-1); return lb-la; });
+    var lines=[], total=0, CAPC=2800;
+    for(var i=0;i<rs.length;i++){
+      var a=String(rs[i].appr!=null?rs[i].appr:'').replace(/[\r\n]+/g,'/').trim().slice(0,80);
+      var line='- '+rs[i].handle+(a?(': '+a):'');
+      if(total+line.length>CAPC && lines.length>0) break; // 総文字数上限=新しい順に残す
+      lines.push(line); total+=line.length+1;
+    }
+    return lines;
+  }
+  function buildUserPrompt(transcript){
+    var existingLines=buildExistingLines();
+    return '主役(以下)は絶対に載せない: '+(castNames().join('、')||'(不明)')+'\n既存台帳(同一存在には必ずこの呼称を再利用・外見や特徴が一致する存在に新しい呼称を作らない):\n'+(existingLines.join('\n')||'(なし)')+'\n\n--- 物語 ---\n'+transcript;
+  }
 
   function callLLM(transcript, cb){
     var key=getKey(); if(!key){ cb(null); return; }
-    // ★fix408: 既存台帳を「呼称: 外見」の行形式で渡し、外見や特徴が一致する存在への新呼称乱立を抑止(同一存在の二重登録防止)。
-    var existingLines=(loadRoster()||[]).filter(function(r){return r&&r.handle;}).map(function(r){ var a=String(r.appr!=null?r.appr:'').trim().slice(0,80); return '- '+r.handle+(a?(': '+a):''); });
-    var user='主役(以下)は絶対に載せない: '+(castNames().join('、')||'(不明)')+'\n既存台帳(同一存在には必ずこの呼称を再利用・外見や特徴が一致する存在に新しい呼称を作らない):\n'+(existingLines.join('\n')||'(なし)')+'\n\n--- 物語 ---\n'+transcript;
+    var user=buildUserPrompt(transcript);   // ★fix408強化: 総文字数上限+改行1行化(buildExistingLines)
     var body=JSON.stringify({ model:MODEL, temperature:0.2, max_tokens:600, messages:[{role:'system',content:SYS},{role:'user',content:user}] });
     try{
       var xhr=new XMLHttpRequest();
@@ -204,6 +221,6 @@
   installWiShim();
   try{ window.addEventListener('focus', function(){ try{ run(); }catch(e){} }); }catch(e){}
 
-  window.__v292Dfix307api={ loadRoster:loadRoster, saveRoster:saveRoster, run:run, mergeRoster:mergeRoster, parseArr:parseArr, recentTranscript:recentTranscript, installWiShim:installWiShim };
+  window.__v292Dfix307api={ loadRoster:loadRoster, saveRoster:saveRoster, run:run, mergeRoster:mergeRoster, parseArr:parseArr, recentTranscript:recentTranscript, installWiShim:installWiShim, SYS:SYS, buildExistingLines:buildExistingLines, buildUserPrompt:buildUserPrompt };
   try{ console.log(TAG,'loaded (fix307e slot-strict)'); }catch(e){}
 })();
