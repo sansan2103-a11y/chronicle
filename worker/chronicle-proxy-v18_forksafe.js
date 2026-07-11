@@ -145,7 +145,7 @@ export default {
     if (request.method === 'GET') {
       const gp = new URL(request.url).pathname;
       if (gp === '/img') return handleImg(request, env, ctx);   // ★v11: 画像URL配信(<img src>用・認証不要のcapability URL)
-      return json({ ok: true, service: 'chronicle-proxy', v: 18, d1: !!env.DB, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID, img: true }, 200, request);
+      return json({ ok: true, service: 'chronicle-proxy', v: 18, lora420: true, d1: !!env.DB, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID, img: true }, 200, request);
     }
     if (request.method !== 'POST') {
       return json({ error: 'POST only' }, 405, request);
@@ -202,12 +202,27 @@ export default {
       const tgKey = String(env.TOGETHER_KEY || '').trim();
       if (tgKey) {
         try {
-          const tgModel = String(env.TOGETHER_IMAGE_MODEL || 'black-forest-labs/FLUX.1-schnell-Free').trim();
+          let tgModel = String(env.TOGETHER_IMAGE_MODEL || 'black-forest-labs/FLUX.1-schnell-Free').trim();
           let tw = 384, th = 384;
           const tm = /^(\d+)x(\d+)$/.exec(String(body.size || ''));
           if (tm) { tw = +tm[1]; th = +tm[2]; }
           const tgBody = { model: tgModel, prompt: String(body.prompt || 'portrait'), width: tw, height: th, steps: 4, n: 1, response_format: 'b64_json' };
           if (body.seed != null) tgBody.seed = body.seed;
+          // ★fix420(プレビュー): クライアント指定のスタイルLoRA。s420={path,scale,steps,trigger}
+          //   認証ゲート通過済みユーザーのみ到達。コストは$0.035/MP(384px=1MP切上げ)なので記帳USDを別建て。
+          let lora420 = false;
+          try {
+            const s420 = body.style420;
+            if (s420 && typeof s420 === 'object' && typeof s420.path === 'string' && /^https:\/\/(huggingface\.co|civitai\.com|replicate\.com)\//.test(s420.path)) {
+              tgModel = String(env.TOGETHER_LORA_MODEL || 'black-forest-labs/FLUX.1-dev-lora').trim();
+              tgBody.model = tgModel;
+              tgBody.steps = Math.min(50, Math.max(1, +s420.steps || 28));
+              tgBody.image_loras = [ { path: s420.path.slice(0, 300), scale: Math.min(1.5, Math.max(0.1, +s420.scale || 0.8)) } ];
+              const trig = String(s420.trigger || '').slice(0, 80).trim();
+              if (trig) tgBody.prompt = trig + ', ' + tgBody.prompt;
+              lora420 = true;
+            }
+          } catch (e420) {}
           const tgResp = await fetch('https://api.together.xyz/v1/images/generations', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tgKey },
@@ -217,7 +232,7 @@ export default {
             const tgJ = await tgResp.json();
             const tb64 = tgJ && tgJ.data && tgJ.data[0] && (tgJ.data[0].b64_json || tgJ.data[0].base64);
             if (tb64) {
-              ctx.waitUntil(recordImg(env, 'together')); ctx.waitUntil(recordImgUser(env, gate.codeKey, (+env.TOGETHER_IMG_USD||0.0007))); // ★v8: 枚数記帳
+              ctx.waitUntil(recordImg(env, 'together')); ctx.waitUntil(recordImgUser(env, gate.codeKey, lora420 ? (+env.TOGETHER_LORA_USD||0.035) : (+env.TOGETHER_IMG_USD||0.0007))); // ★v8: 枚数記帳(fix420はLoRA単価)
               return json({ data: [ { b64_json: tb64 } ], provider: 'together' }, 200, request);
             }
             tgErr = { status: 200, detail: 'no b64 in response: ' + JSON.stringify(tgJ).slice(0, 200) };
