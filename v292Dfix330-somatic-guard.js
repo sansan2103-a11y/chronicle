@@ -35,6 +35,7 @@
     var orig = P.build.bind(P);
     P.build = function(){
       var r = orig.apply(this, arguments);
+      if (window.__v292ReactUnified) return r; // fix417: 反応統合時はこのガードを注入しない
       try {
         if (!off() && r && typeof r.sys === 'string' && r.sys.indexOf(MARK) < 0){
           r.sys = r.sys + '\n' + GUARD;

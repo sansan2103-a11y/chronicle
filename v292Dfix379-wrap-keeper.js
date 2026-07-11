@@ -23,9 +23,12 @@
   'use strict';
   if (window.__f379done) return; window.__f379done = 1;
   var TAG = '[v292Dfix379:wrap-keeper]';
-  // 注入予算（文字数）。実測sys6.5k + 緊急圧縮9k基準に対し、注入ブロック合計の上限を
-  // 保守的に1200字へ据える。prio1(必須)は予算外で常に注入、prio2/3が予算内で競合する。
-  var BUDGET = 1200;
+  // 注入予算（文字数）。v4(Phase2 S1): prio1(必須)は【真の予算外】＝remainから引かない。
+  //   BUDGET_V4=1500 は prio2/3 のみを対象にする。旧v3は prio1込み1200で prio2/3を締め出す
+  //   逆転構造だった（実測KI-11）。v292Dfix379V4Off='1' で旧意味論(1200・prio1込み・superseded無効)へ復帰。
+  var BUDGET_V4 = 1500;      // v4: prio2/3 のみ対象
+  var BUDGET_LEGACY = 1200;  // 旧: prio1込み
+  function v4on(){ try { return localStorage.getItem('v292Dfix379V4Off') !== '1'; } catch(e){ return true; } }
   function off(){ try { return localStorage.getItem('v292Dfix379Off') === '1'; } catch(e){ return false; } }
   function offK(k){ try { return !!k && localStorage.getItem(k) === '1'; } catch(e){ return false; } }
   function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined" ? S : null'); } catch(e){ return null; } }
@@ -57,7 +60,9 @@
   // 予算に基づいて採用/除外を決める。返り値は「採用する候補の配列（レジストリ順）」。
   // cands = [{ idx, entry, text, prio, size }]（レジストリ順で渡すこと）。
   function budgetSelect(cands){
-    // prio1 は無条件採用。残りの予算 = BUDGET - Σ(prio1 size)。
+    // prio1 は無条件採用。v4: prio1は真の予算外(remainから引かない)。旧: remain=BUDGET-Σ(prio1)。
+    var useV4 = v4on();
+    var BUDGET = useV4 ? BUDGET_V4 : BUDGET_LEGACY;
     var i, c;
     var used = 0;
     var dropped = {}; // idx -> true
@@ -65,7 +70,7 @@
       c = cands[i];
       if (c.prio === 1) used += c.size;
     }
-    var remain = BUDGET - used;
+    var remain = useV4 ? BUDGET : (BUDGET - used);
     if (remain < 0) remain = 0;
     // prio2/3 を積む。合計が remain を超える場合、prio の大きい方(3→2)から、
     // かつレジストリ登録の逆順で除外していく。
@@ -115,6 +120,8 @@
             var en = reg[i];
             try {
               if (!en || offK(en.off)) continue;
+              // fix417: superseded マーカーは注入もサイズ消費もしない（v4時のみ有効）
+              if (v4on() && en.marker && window.__v292SupersededMarkers && window.__v292SupersededMarkers[en.marker]) continue;
               if (en.marker && r.sys.indexOf(en.marker) >= 0) continue; // 冪等: 既に乗っていればスキップ
               var t = en.text ? en.text() : '';
               if (!t) continue;
@@ -139,7 +146,7 @@
   }
   ensure();
   setInterval(ensure, 2000);
-  try { console.log(TAG, 'loaded v3 (off=' + (off() ? '1' : '0') + ', budget=' + BUDGET + ')'); } catch(e){}
+  try { console.log(TAG, 'loaded v4 (off=' + (off() ? '1' : '0') + ', v4=' + (v4on() ? '1' : '0') + ', budget=' + (v4on() ? BUDGET_V4 : BUDGET_LEGACY) + ')'); } catch(e){}
   // 検証用（node単体テストからも参照可能）
-  try { window.__f379x = { budgetSelect: budgetSelect, BUDGET: BUDGET, reg: reg }; } catch(e){}
+  try { window.__f379x = { budgetSelect: budgetSelect, v4on: v4on, BUDGET_V4: BUDGET_V4, BUDGET_LEGACY: BUDGET_LEGACY, reg: reg }; } catch(e){}
 })();

@@ -22,6 +22,11 @@
   var TAG = '[v292Dfix405:state-freshness]';
   function off(){ try { return localStorage.getItem('v292Dfix405Off') === '1'; } catch(e){ return false; } }
   function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined"?S:null'); } catch(e){ return null; } }
+  // Phase2 S1b: keeper登録テキスト痩身。<state>出力契約(EMIT405)＋前提1行のみに縮め、
+  //   fix192 stateBlock と二重掲載だった「全キャラ現在状態一覧」(statesBlock405)を除去する。
+  //   v292Dfix405SlimOff='1' で旧テキスト(一覧つき)へ復帰（statesBlock405は分岐で温存）。
+  function slim(){ try { return localStorage.getItem('v292Dfix405SlimOff') !== '1'; } catch(e){ return true; } }
+  var SLIM_LINE = '\n・【各キャラの現在の状態】節を反応の前提にする。回復イベント無しに改善・平常化させない。';
 
   // ---- EMIT405: fix77 の EMIT と同一文言(複製・fix77本体は不触) ----
   var EMIT405 =
@@ -61,7 +66,7 @@
       var reg = window.__f379reg;
       var MARKER = '【状態の出力';
       for (var i = 0; i < reg.length; i++){ if (reg[i] && reg[i].marker === MARKER) return; } // 二重登録回避
-      reg.push({ off: 'v292Dfix405Off', marker: MARKER, prio: 1, text: function(){ return EMIT405 + statesBlock405(); } });
+      reg.push({ off: 'v292Dfix405Off', marker: MARKER, prio: 1, text: function(){ return slim() ? (EMIT405 + SLIM_LINE) : (EMIT405 + statesBlock405()); } });
       try { console.log(TAG, 'registered to __f379reg (prio1)'); } catch(_){}
     } catch(e){}
   })();
