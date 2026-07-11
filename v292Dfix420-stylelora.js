@@ -8,7 +8,7 @@
 //   モデル切替+LoRA適用+trigger前置を行う(本番実証済み・A/B画像で品質向上確認)。
 //
 // 本fix: アイコン生成リクエスト(/image系)のbodyに style420 を注入するだけ。
-//   既定OFF。ON= localStorage v292Dfix420On='1' / 強制OFF= v292Dfix420Off='1'
+//   fix422で既定ON。OFF= v292Dfix420Off='1'(v292Dfix420Onは不要になった・残っていても無害)
 //   LoRA差し替え= v292Dfix420Cfg にJSON {path,scale,steps,trigger}
 //   (Worker側はhuggingface.co/civitai.com/replicate.comのみ許可)
 //
@@ -31,10 +31,8 @@
   };
 
   function on(){
-    try {
-      if (localStorage.getItem('v292Dfix420Off') === '1') return false;
-      return localStorage.getItem('v292Dfix420On') === '1';
-    } catch(e){ return false; }
+    // fix422: 既定ON化(おしん承認2026-07-11深夜・E2E全合格後)。OFF=v292Dfix420Off='1'
+    try { return localStorage.getItem('v292Dfix420Off') !== '1'; } catch(e){ return true; }
   }
   function cfg(){
     try {
