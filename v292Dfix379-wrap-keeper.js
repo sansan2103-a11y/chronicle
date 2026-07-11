@@ -141,7 +141,7 @@
       /* fix419b: 内側関数のフラグを継承(__v292NewEngine等)。これが無いとkeeper再装着のたびに
          fix192自己修復が「自分が消えた」と誤認して全置換→keeper再装着→…の永久ダンスになる
          (2026-07-11実機で実測。GPT5.6監査#1の深部) */
-      try { Object.keys(ob).forEach(function(k){ if (k.indexOf('__') === 0 || k.indexOf('_v292f') === 0 || k === '_f363mark') w[k] = ob[k]; }); } catch(e){}
+      try { Object.keys(ob).forEach(function(k){ w[k] = ob[k]; }); } catch(e){} /* fix419c: 全プロパティ継承 */
       w.__f379 = 1;
       try { w._f363mark = true; } catch(e){} // fix363のarmWrapに二重ラップさせない
       P.build = w;

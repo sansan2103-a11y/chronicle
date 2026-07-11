@@ -42,7 +42,7 @@
       } catch(e){}
       return r;
     };
-    try { Object.keys(P.build).forEach(function(k){ if (k.indexOf('__') === 0 || k.indexOf('_v292f') === 0) wrapped[k] = P.build[k]; /* fix419: _v292f*相互継承=奪還タイマー相互ラップ増殖の根治(GPT5.6監査#1) */ }); } catch(e){}
+    try { Object.keys(P.build).forEach(function(k){ wrapped[k] = P.build[k]; /* fix419c: 全プロパティ継承(9者ダンス根治) */ }); } catch(e){}
     wrapped._v292f323 = true;
     P.build = wrapped;
     P.__fix323wrap = true; // 互換(旧フラグ参照コード用・ガードには使わない)

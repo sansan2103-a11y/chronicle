@@ -53,7 +53,7 @@
         try{ if(r&&typeof r.sys==='string'){ var b=buildBlock(); if(b && r.sys.indexOf(MARK)<0) r.sys=r.sys+b; } }catch(e){}
         return r;
       };
-      try{ Object.keys(P.build).forEach(function(k){ if(k.indexOf('__')===0) wrapped[k]=P.build[k]; }); }catch(e){}
+      try{ Object.keys(P.build).forEach(function(k){ wrapped[k]=P.build[k]; }) /* fix419c: 全プロパティ継承(9者相互ラップダンスの根治) */; }catch(e){}
       wrapped._v292f313=true;
       P.build=wrapped;
       return true;
