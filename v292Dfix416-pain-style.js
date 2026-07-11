@@ -138,18 +138,27 @@
     try { return styleInjection(level(), offAll()); } catch(e){ return ''; }
   }
 
+  // ---- fix416c: 本文形式ガード(既定ON・OFF=v292Dfix416Off) ----------------
+  //   T23事故の再発防止: モデルが本文に見出し「直前までの状況」を混ぜ、人物名を空の《》で
+  //   伏せ、句読点ごとに断片改行する乱れが実際に発生(2026-07-11)。データ側の異常ではなく
+  //   モデル出力の劣化パターンのため、恒常の短い形式ルールで抑止する。
+  var FORM_MARK = '【本文形式】';
+  var FORM_TEXT = '\n' + FORM_MARK + '地の文に「直前までの状況」等の見出し・要約ヘッダを書かない。人物名を《》や空欄で伏せず、必ず名前か自然な代名詞で書く。読点ごとの断片的な改行をせず、通常の段落で書く。';
+
   // ---- keeper 登録(__f379reg・A=prio2 / B=prio3・marker冪等) -----------
   function register(){
     try {
       G.__f379reg = G.__f379reg || [];
       var reg = G.__f379reg;
-      var haveP = false, haveS = false;
+      var haveP = false, haveS = false, haveF = false;
       for (var i = 0; i < reg.length; i++){
         if (reg[i] && reg[i].marker === PAIN_MARK)  haveP = true;
         if (reg[i] && reg[i].marker === STYLE_MARK) haveS = true;
+        if (reg[i] && reg[i].marker === FORM_MARK)  haveF = true;
       }
       if (!haveP) reg.push({ off: 'v292Dfix416Off', marker: PAIN_MARK,  prio: 2, text: painTextFn });
       if (!haveS) reg.push({ off: 'v292Dfix416Off', marker: STYLE_MARK, prio: 3, text: styleTextFn });
+      if (!haveF) reg.push({ off: 'v292Dfix416Off', marker: FORM_MARK,  prio: 2, text: function(){ return FORM_TEXT; } });   // 416c: 既定ON(416On不要)・本文形式ガード
       try { console.log(TAG, 'registered to __f379reg (pain prio2 / style prio3)'); } catch(_){}
     } catch(e){}
   }
