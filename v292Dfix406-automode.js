@@ -220,11 +220,20 @@
       if (running) return;
       var btn = findContinueBtn();
       if (!btn) return;
-      if (btn.getAttribute && btn.getAttribute('__v292f406done') === '1') return;
-      if (document.querySelector && document.querySelector('.v292Dfix406-btn')){
+      // fix417d: 既に挿入済みでも「展開を提案」の左に居なければ毎スキャン移動(挿入時に提案ボタン未生成だったレースの根治)
+      var exist = document.querySelector ? document.querySelector('.v292Dfix406-btn') : null;
+      if (exist){
         try { btn.setAttribute('__v292f406done', '1'); } catch(_){}
+        try {
+          var tb = findTeianBtn();
+          if (tb && tb.parentNode && tb.previousElementSibling !== exist){
+            exist.style.marginLeft = '0'; exist.style.marginRight = '6px';
+            tb.parentNode.insertBefore(exist, tb);
+          }
+        } catch(_){}
         return;
       }
+      if (btn.getAttribute && btn.getAttribute('__v292f406done') === '1') return;
       var auto = document.createElement('button');
       auto.className = 'v292Dfix406-btn';
       auto.textContent = '⏩ オート';
