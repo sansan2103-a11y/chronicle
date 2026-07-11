@@ -34,9 +34,9 @@
   function getPlanner(){ try { return window.Planner || (typeof Planner !== 'undefined' ? Planner : null); } catch(e){ return null; } }
   function wrap(){
     var P = getPlanner(); if (!P || typeof P.build !== 'function') return false;
-    if (P.__fix324wrap) return true;                 // 非__v292マーク(fix274継承回避)
+    if (P.build._v292f324 === true) return true;    // fix417b: 関数上フラグ(非__v292=非継承)。最外を奪われたら再装着できる(旧P.__fix324wrapは奪還不能の永久ロックだった)
     var orig = P.build.bind(P);
-    P.build = function(){
+    var wrapped = function(){
       var r = orig.apply(this, arguments);
       try {
         if (!off() && r && typeof r.sys === 'string' && r.sys.indexOf(MARK) < 0){
@@ -45,12 +45,16 @@
       } catch(e){}
       return r;
     };
-    P.__fix324wrap = true;
+    try { Object.keys(P.build).forEach(function(k){ if (k.indexOf('__') === 0) wrapped[k] = P.build[k]; }); } catch(e){}
+    wrapped._v292f324 = true;
+    P.build = wrapped;
+    P.__fix324wrap = true; // 互換(旧フラグ参照コード用・ガードには使わない)
     try { console.log(TAG, 'build wrap installed'); } catch(_){}
     return true;
   }
   (function poll(){ poll._n = (poll._n || 0) + 1; if (wrap()) return; if (poll._n > 80) return; setTimeout(poll, 400); })();
+  try { setInterval(wrap, 2500); } catch(e){} // fix417b: 最外奪還(sys追記はMARK冪等で二重化しない)
 
-  window.__v292Dfix324api = { wrapped: function(){ var P = getPlanner(); return !!(P && P.__fix324wrap); }, MARK: MARK };
+  window.__v292Dfix324api = { wrapped: function(){ var P = getPlanner(); return !!(P && P.build && P.build._v292f324 === true); }, MARK: MARK };
   try { console.log(TAG, 'loaded'); } catch(_){}
 })();

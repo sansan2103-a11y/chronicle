@@ -31,9 +31,9 @@
   function getPlanner(){ try { return window.Planner || (typeof Planner !== 'undefined' ? Planner : null); } catch(e){ return null; } }
   function wrap(){
     var P = getPlanner(); if (!P || typeof P.build !== 'function') return false;
-    if (P.__fix330wrap) return true;                 // 非__v292マーク(fix274継承回避)
+    if (P.build._v292f330 === true) return true;    // fix417b: 関数上フラグ(非__v292=非継承)。最外を奪われたら再装着できる(旧P.__fix330wrapは奪還不能の永久ロックだった)
     var orig = P.build.bind(P);
-    P.build = function(){
+    var wrapped = function(){
       var r = orig.apply(this, arguments);
       if (window.__v292ReactUnified) return r; // fix417: 反応統合時はこのガードを注入しない
       try {
@@ -43,13 +43,16 @@
       } catch(e){}
       return r;
     };
-    P.__fix330wrap = true;
+    try { Object.keys(P.build).forEach(function(k){ if (k.indexOf('__') === 0) wrapped[k] = P.build[k]; }); } catch(e){}
+    wrapped._v292f330 = true;
+    P.build = wrapped;
+    P.__fix330wrap = true; // 互換(旧フラグ参照コード用・ガードには使わない)
     try { console.log(TAG, 'build wrap installed; bodyRealityGuard:', off()?'off':'on'); } catch(_){}
     return true;
   }
   (function poll(){ poll._n = (poll._n || 0) + 1; if (wrap()) return; if (poll._n > 80) return; setTimeout(poll, 400); })();
   try { setInterval(wrap, 2500); } catch(e){}
 
-  window.__v292Dfix330api = { wrapped: function(){ var P = getPlanner(); return !!(P && P.__fix330wrap); }, off: off, MARK: MARK, GUARD: GUARD };
+  window.__v292Dfix330api = { wrapped: function(){ var P = getPlanner(); return !!(P && P.build && P.build._v292f330 === true); }, off: off, MARK: MARK, GUARD: GUARD };
   try { console.log(TAG, 'loaded'); } catch(_){}
 })();
