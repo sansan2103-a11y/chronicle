@@ -10,6 +10,9 @@
 // ★fix412(2026-07-10深夜): 明示↻のプロンプトを「現在のキャラ設定(cast desc/ロスターappr)+世界観(tone/lore)」
 //   から組み直す(固定レシピ文の使い回しをやめる)。画風PREFIXはfix338がfetch層で自動付与。
 //   OFF=v292Dfix412Off='1'(従来=レシピ文+新seed)。
+// ★fix424(2026-07-12): 会話ログとキャラ一覧でアイコンが別になる根治。keyFor()の手前で呼称→正名の
+//   名寄せ(cast登録名へ末尾/先頭一致・一意なときだけ振替)。alt="澪"とcast"白石澪"が同一キーになる。
+//   OFF=v292Dfix424Off='1'。
 // ★fix403b(2026-07-10): キャラ一覧の↻根治。regenForでレシピ(v292avrec_)があれば carrier(legacy URL)を
 //   待たずに直接生成キューへ積む(従来はモーダルのimgにcarrierが無くjobInfo.promptが埋まらず永遠に生成が始まらなかった)。
 // ---------------------------------------------------------------------
@@ -44,8 +47,62 @@
   function modelOf(src){ var m=/[?&]model=([^&]+)/.exec(src); return m?m[1]:'flux'; }
   function seedOf(src){ var m=/[?&]seed=(\d+)/.exec(src); return m? +m[1] : null; }
   function hash(s){ var h=0; s=String(s); for(var i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; } return Math.abs(h).toString(36); }
-  // キャッシュキー＝キャラ名＋画風（場所が違っても同キャラは同じ1枚）
-  function keyFor(name){ return 'n' + hash(String(name||'') + '|' + artStyle()); }
+
+  // ===== ★fix424(2026-07-12): 呼称→正名の名寄せ（会話ログとキャラ一覧でアイコンが別になる根治） =====
+  //   真因: keyFor()が「話者名の文字列そのもの」からキーを作るため、会話ログの alt="澪"（本文中の
+  //     呼び名）と キャラ一覧の "白石澪"（cast登録名）が【別キー】になり、別画像として生成・
+  //     キャッシュされていた（本ファイル冒頭の「場所が違っても同キャラは同じ1枚」という設計意図の穴）。
+  //   修正: キーを作る前に cast(hero+npcs) の登録名へ寄せる。
+  //     条件（fix409 resolveCanon と同じ思想＝誤統合を避ける）:
+  //       ・2文字以上 ・cast名そのものなら不触 ・cast名の末尾or先頭に完全一致 ・【一意なときだけ】振替
+  //     曖昧（複数一致）なら振替しない。cast外の存在（怪異・ロスターのみの呼称）も不触。
+  //   OFF: localStorage v292Dfix424Off='1'（従来の素の文字列キーへ復帰）
+  //   注: 旧キー（"澪"由来）の画像は孤児になるが破棄はしない（データ損失なし・不要になるだけ）。
+  var _c424 = { at: 0, names: [], map: {} };
+  function off424(){ try{ return localStorage.getItem('v292Dfix424Off') === '1'; }catch(e){ return false; } }
+  function castNames424(){
+    var out = [];
+    try{
+      var S = getS(); if(!S || !S.cast) return out;
+      var h = S.cast.hero;
+      if (h && h.name) out.push(String(h.name).trim());
+      var ns = S.cast.npcs || [];
+      for (var i=0; i<ns.length; i++){ if (ns[i] && ns[i].name) out.push(String(ns[i].name).trim()); }
+    }catch(e){}
+    return out.filter(function(x){ return !!x; });
+  }
+  // 1字の呼称は日本語の下の名前として実在する（澪・蓮・葵…）ので許可するが、
+  //   一般名詞（「男」「女」等）が cast名の末尾に含まれる場合（例:「顔のない男」）の誤統合を防ぐ。
+  var GENERIC424 = { '男':1,'女':1,'人':1,'子':1,'声':1,'影':1,'者':1,'客':1,'僕':1,'私':1,'俺':1 };
+  function canonName(name){
+    var who = String(name||'').trim();
+    if (!who || off424()) return String(name||'');
+    if (GENERIC424[who]) return who;                // 一般名詞は不触（誤統合防止）
+    // キャッシュ（keyForはsweepで毎周期・全img分呼ばれるため）: cast署名が変わるまで再利用
+    var now = Date.now();
+    if (now - _c424.at > 1000){
+      _c424.at = now;
+      var ns = castNames424(), sig = ns.join('\u0001');
+      if (sig !== _c424.sig){ _c424.sig = sig; _c424.names = ns; _c424.map = {}; }
+    }
+    if (Object.prototype.hasOwnProperty.call(_c424.map, who)) return _c424.map[who];
+    var names = _c424.names, res = who;
+    var exact = false, matches = [];
+    for (var i=0; i<names.length; i++){
+      var n = names[i];
+      if (n === who){ exact = true; break; }        // 既に正名＝不触
+      if (n.length <= who.length) continue;
+      var suf = (n.slice(n.length - who.length) === who);              // 末尾一致（下の名前呼び: 澪→白石澪）
+      var pre = (who.length >= 2) && (n.slice(0, who.length) === who); // 先頭一致（姓呼び: 中島→中島ゆか）※2字以上のみ
+      if (suf || pre) matches.push(n);
+    }
+    if (!exact && matches.length === 1) res = matches[0];   // 一意なときだけ振替（曖昧は見送り）
+    _c424.map[who] = res;
+    return res;
+  }
+
+  // キャッシュキー＝キャラ名（正名へ名寄せ）＋画風（場所が違っても同キャラは同じ1枚）
+  function keyFor(name){ return 'n' + hash(canonName(name) + '|' + artStyle()); }
 
   function persistGet(pk){ try{ return localStorage.getItem(LS_PREFIX+pk); }catch(e){ return null; } }
   function persistSet(pk,v){ try{ localStorage.setItem(LS_PREFIX+pk, v); }catch(e){} }
@@ -359,6 +416,7 @@
   window.__v292Dfix197 = { sweep: sweep, fixImg: fixImg, diceUrl: diceUrl, pollKey: pollKey, regenFor: regenFor, buildPrompt412: buildPrompt412, buildCurrentAppearancePrompt: buildCurrentAppearancePrompt, restorePreviousOrDice: restorePreviousOrDice,
     // v292Dfix209: 書き手(fix66等)が初期srcに使うキャッシュ済みdata:URLの取得口
     keyFor: keyFor,
+    canonName: canonName,   // ★fix424: 検証口(呼称→正名)
     __test_state: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; return { pk:pk, pending:(c==='pending'), dice:(c==='dice'), dataUrl:(typeof c==='string'&&c.indexOf('data:')===0), queued:(queue.indexOf(pk)>=0), hasJob:!!jobInfo[pk], jobPrompt:(jobInfo[pk]&&jobInfo[pk].prompt)||'' }; }catch(e){ return null; } },
     cachedFor: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; if(typeof c==='string'&&c.indexOf('data:')===0) return c; var p=persistGet(pk); return (p&&p.indexOf('data:')===0)?p:''; }catch(e){ return ''; } },
     clearCache: function(){ try{ Object.keys(localStorage).forEach(function(k){ if(k.indexOf('v292av')===0) localStorage.removeItem(k); }); }catch(e){} cache={}; jobInfo={}; } };
