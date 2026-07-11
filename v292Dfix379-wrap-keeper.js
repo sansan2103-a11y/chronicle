@@ -26,7 +26,7 @@
   // 注入予算（文字数）。v4(Phase2 S1): prio1(必須)は【真の予算外】＝remainから引かない。
   //   BUDGET_V4=1500 は prio2/3 のみを対象にする。旧v3は prio1込み1200で prio2/3を締め出す
   //   逆転構造だった（実測KI-11）。v292Dfix379V4Off='1' で旧意味論(1200・prio1込み・superseded無効)へ復帰。
-  var BUDGET_V4 = 1500;      // v4: prio2/3 のみ対象
+  var BUDGET_V4 = 1600;      // v4: prio2/3 のみ対象 (fix419: 1500→1600。監査#7=最悪1495で残余5字だったのを解消。417本文+陰性ガード1文の余裕込み)
   var BUDGET_LEGACY = 1200;  // 旧: prio1込み
   function v4on(){ try { return localStorage.getItem('v292Dfix379V4Off') !== '1'; } catch(e){ return true; } }
   function off(){ try { return localStorage.getItem('v292Dfix379Off') === '1'; } catch(e){ return false; } }
