@@ -185,6 +185,18 @@
     } catch(e){}
   }
 
+  // fix417c(2026-07-11おしん要望): ⏩オートは「展開を提案」の左(行頭)に置く
+  function findTeianBtn(){
+    try {
+      var btns = document.querySelectorAll ? document.querySelectorAll('button') : [];
+      for (var i = 0; i < btns.length; i++){
+        var t = (btns[i].textContent || '');
+        if (t.indexOf('展開を提案') >= 0) return btns[i];
+      }
+    } catch(e){}
+    return null;
+  }
+
   function insertAfter(ref, node){
     try {
       var p = ref.parentNode;
@@ -218,7 +230,13 @@
       auto.textContent = '⏩ オート';
       styleAuto(auto);
       auto.addEventListener('click', onAutoClick);
-      insertAfter(btn, auto);
+      var teian = findTeianBtn();
+      if (teian && teian.parentNode){
+        auto.style.marginLeft = '0'; auto.style.marginRight = '6px';
+        teian.parentNode.insertBefore(auto, teian);   // fix417c: 行頭(展開を提案の左)
+      } else {
+        insertAfter(btn, auto);                        // fallback: 従来位置(続きを書くの右)
+      }
       try { btn.setAttribute('__v292f406done', '1'); } catch(_){}
     } catch(e){}
   }
