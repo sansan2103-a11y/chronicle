@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260711-fix416e';
+  var BUILT = '20260711-fix417';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -962,7 +962,8 @@ const Planner = {
     // NPCプロファイルブロック
     const npcProfiles = npcs.map(n => PsychEngine.buildNpcBlock(n)).join('\n\n');
 
-    const sys = `あなたはADV型シナリオゲームのゲームマスターです。プレイヤーが主人公を操作します。
+    const __v292skipBase = (window.__v292EngineNew === true && (function(){ try { return localStorage.getItem('v292Dfix417cOff') !== '1'; } catch(e){ return true; } })());
+    const sys = __v292skipBase ? '' : `あなたはADV型シナリオゲームのゲームマスターです。プレイヤーが主人公を操作します。
 必ず以下の全制約を守り、JSONのみを返してください。余分なテキストは一切出力禁止。
 
 【このゲームの核心：生きた人間を描く文学的RPG】
@@ -1146,6 +1147,7 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
     // Features push into Planner._extensions / Planner._userExtensions instead of wrapping.
     let _sys = sys, _user = user;
     // First, append PromptRegistry entries (deduped, capped at 4000 chars).
+    if (!__v292skipBase) { // Phase2 S3: 新βでは base sys組み立て(テンプレ+PromptRegistry+_extensions)をスキップ
     if (window.PromptRegistry && typeof window.PromptRegistry.build === 'function') {
       try {
         const extras = window.PromptRegistry.build(4000);
@@ -1160,6 +1162,7 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
         } catch (e) { console.warn('[v292] sys ext err:', e && e.message); }
       }
     }
+    } // __v292skipBase end (user側は不触)
     if (Array.isArray(Planner._userExtensions)) {
       for (let i = 0; i < Planner._userExtensions.length; i++) {
         try {
@@ -2691,7 +2694,7 @@ G.init();
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
-  <script src="v292Dfix192-newengine.js?cb=v292Dfix380"></script>
+  <script src="v292Dfix192-newengine.js?cb=v292Dfix417"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
   <script src="v292Dfix197-avatar-key.js?cb=v292Dfix415b"></script>
@@ -2729,7 +2732,7 @@ G.init();
 <script src="v292Dfix301-longmem-stale-guard.js?cb=v292Dfix301"></script>
 <script src="v292Dfix302-undo-state-rollback.js?cb=v292Dfix302b"></script>
 <script src="v292Dfix303-speaker-backref.js?cb=v292Dfix303b"></script>
-<script src="v292Dfix304-emotion.js?cb=v292Dfix304"></script>
+<script src="v292Dfix304-emotion.js?cb=v292Dfix417"></script>
 <script src="v292Dfix305-trigger-states.js?cb=v292Dfix305"></script>
 <script src="v292Dfix306-npc-liveliness.js?cb=v292Dfix306"></script>
 <script src="v292Dfix307-npc-roster.js?cb=v292Dfix414"></script>
@@ -2750,7 +2753,7 @@ G.init();
 <script src="v292Dfix327-turn-counter.js?cb=v292Dfix327"></script>
 <script src="v292Dfix328-google-login.js?cb=v292Dfix328d"></script>
 <script src="v292Dfix298-roster.js?cb=v292Dfix298b"></script>
-<script src="v292Dfix330-somatic-guard.js?cb=v292Dfix330"></script>
+<script src="v292Dfix330-somatic-guard.js?cb=v292Dfix417"></script>
 <script src="v292Dfix332-uifold.js?cb=v292Dfix332"></script>
 <script src="v292Dfix333-actor-reality.js?cb=v292Dfix333p"></script>
 <script src="v292Dfix334-entryhub.js?cb=v292Dfix334"></script>
@@ -2773,7 +2776,7 @@ G.init();
 <script src="v292Dfix376-speaker-guard.js?cb=v292Dfix376"></script>
 <script src="v292Dfix377-voice-anchor.js?cb=v292Dfix377b"></script>
 <script src="v292Dfix378-species-judge.js?cb=v292Dfix378"></script>
-<script src="v292Dfix379-wrap-keeper.js?cb=v292Dfix379c"></script>
+<script src="v292Dfix379-wrap-keeper.js?cb=v292Dfix417"></script>
 <script src="v292Dfix381-reaction.js?cb=v292Dfix381"></script>
 <script src="v292Dfix382-auto-dial.js?cb=v292Dfix382"></script>
 <script src="v292Dfix383-vocative-fix.js?cb=v292Dfix383"></script>
@@ -2794,13 +2797,14 @@ G.init();
 <script src="v292Dfix346-idb-avatars.js?cb=v292Dfix346"></script>
 <script src="v292Dfix356-avatar-eager.js?cb=v292Dfix356"></script>
 <script src="v292Dfix402-invisible-sync.js?cb=v292Dfix415b"></script>
-<script src="v292Dfix405-state-freshness.js?cb=v292Dfix405"></script>
+<script src="v292Dfix405-state-freshness.js?cb=v292Dfix417"></script>
 <script src="v292Dfix406-automode.js?cb=v292Dfix415b"></script>
 <script src="v292Dfix407-load-noconfirm.js?cb=v292Dfix407"></script>
 <script src="v292Dfix409-handle-merge.js?cb=v292Dfix415b"></script>
 <script src="v292Dfix414-constraint-engine.js?cb=v292Dfix415b"></script>
 <script src="v292Dfix415-opening-mask.js?cb=v292Dfix415b"></script>
 <script src="v292Dfix416-pain-style.js?cb=v292Dfix416e"></script>
+<script src="v292Dfix417-reaction-unified.js?cb=v292Dfix417"></script>
 </body>
 </html>
 

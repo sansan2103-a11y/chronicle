@@ -630,6 +630,9 @@
     if(P.build.__v292NewEngine) return true;
     var inner = P.build.bind(P);
     var wrapped = function(){
+      // Phase2 S3: 新βのとき base sys 組み立てをスキップさせるフラグ。inner.apply(=base build)が
+      //   読むため、必ず inner 呼び出し前にセットする。engineOn()判定を流用（fix355で新β固定）。
+      try{ if(engineOn()) window.__v292EngineNew = true; }catch(_){}
       var r = inner.apply(this, arguments);
       try{
         if(engineOn() && r && typeof r.sys==='string'){

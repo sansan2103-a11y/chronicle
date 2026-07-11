@@ -23,6 +23,7 @@
       var inner=P.build.bind(P);
       var wrapped=function(){
         var r=inner.apply(this,arguments);
+        if(window.__v292ReactUnified) return r; // fix417: 反応統合時はこのガードを注入しない
         try{ if(r&&typeof r.sys==='string'){ var b=block(); if(b && r.sys.indexOf(MARKER)<0) r.sys=r.sys+b; } }catch(e){}
         return r;
       };
