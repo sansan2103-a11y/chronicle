@@ -101,7 +101,22 @@
       if (!desc) return '';
       var world='';
       try{ if(S&&S.scene){ var tone=String(S.scene.tone||'').trim(); var lore=String(S.scene.lore||'').replace(/【[^】]*】/g,' ').replace(/\s+/g,' ').trim().slice(0,60); world=[tone,lore].filter(Boolean).join('、'); } }catch(e){}
-      return name+', '+desc+(world?('、世界観: '+world):'')+', portrait';
+      // ★fix421: 性別トークン(男性キャラが女性で生成される問題の根治)。
+      //   ①S.cast[].gender(fix366と同じ正)→②desc語彙から推定→③不明なら付けない
+      var gen421='';
+      try{
+        if (S && S.cast){
+          if (S.cast.hero && S.cast.hero.name===name) gen421=String(S.cast.hero.gender||'');
+          if (!gen421){ var ns421=S.cast.npcs||[]; for(var g4=0;g4<ns421.length;g4++){ if(ns421[g4]&&ns421[g4].name===name){ gen421=String(ns421[g4].gender||''); break; } } }
+        }
+      }catch(e){}
+      if (gen421!=='男性' && gen421!=='女性'){
+        var fH421=(desc.match(/(少女|娘|女性|彼女(?!ら)|巫女|シスター|王女|魔女|美女|老婆)/g)||[]).length;
+        var mH421=(desc.match(/(少年|青年|男性|男子|王子|老人|紳士|髭|彼(?!女)|息子|父親|兄|弟)/g)||[]).length;
+        if (mH421>fH421) gen421='男性'; else if (fH421>mH421) gen421='女性';
+      }
+      var gtok421 = gen421==='男性' ? ', male, 1boy, handsome man' : (gen421==='女性' ? ', female, 1girl' : '');
+      return name+', '+desc+(world?('、世界観: '+world):'')+gtok421+', portrait';
     }catch(e){ return ''; }
   }
 
@@ -246,6 +261,17 @@
 
   function applyAll(){
     try{ var imgs=document.getElementsByTagName('img'); for(var i=0;i<imgs.length;i++){ if(imgs[i].getAttribute('data-avpk')) applyOne(imgs[i]); } }catch(e){}
+    // ★fix421: 会話ログのアバター(src焼き込み・data-avpk無し)にも再生成結果を即時反映。
+    //   条件を「ログカード内のimg+alt一致+cacheに新data:URLあり」に絞り、他モジュールの画像に触れない。
+    try{
+      var logs=document.querySelectorAll('.v292-dlg-card img[alt], .dlg-av img[alt]');
+      for(var L=0; L<logs.length; L++){
+        var im=logs[L]; if (im.getAttribute('data-avpk')) continue;
+        var al=im.getAttribute('alt')||''; if(!al) continue;
+        var pkL=keyFor(al); var cv=cache[pkL];
+        if (cv && typeof cv==='string' && cv.indexOf('data:')===0 && im.src!==cv) im.src=cv;
+      }
+    }catch(e){}
   }
   var lastStyle = artStyle();
   function sweep(){
