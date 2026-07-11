@@ -25,7 +25,7 @@
     var css=[
       // 全画面サイズ
       '.v30-modal.v310{width:96vw;max-width:none;height:92vh;max-height:92vh;display:flex;flex-direction:column}',
-      '.v30-modal.v310 .v310-grid{flex:1;align-content:start}',
+      '.v30-modal.v310 .v310-grid{flex:1;align-content:start;min-height:240px}', // fix417e: flex潰れ(高さ0)防止
       '.v310-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:18px;margin:6px 0 10px;overflow:auto}',
       '.v310-card{position:relative;background:var(--s1,#111119);border:1px solid var(--border,rgba(139,118,240,.25));border-radius:14px;overflow:hidden;transition:.16s}',
       '.v310-card:hover{transform:translateY(-2px);border-color:var(--acc,#8b76f0);box-shadow:0 8px 24px rgba(0,0,0,.45)}',
@@ -61,7 +61,7 @@
       '.v310-newcard:hover{border-color:var(--acc,#8b76f0);color:var(--acc,#a78bfa);transform:translateY(-2px)}',
       '.v310-newinner{text-align:center}',
       '.v310-plus{font-size:38px;line-height:1;margin-bottom:8px}',
-      '@media(max-width:600px){.v310-grid{grid-template-columns:1fr}.v30-modal.v310{width:100vw;height:100vh;max-height:100vh;border-radius:0}}'
+      '@media(max-width:600px){.v310-grid{grid-template-columns:1fr}.v30-modal.v310{width:100vw;height:100vh;max-height:100vh;border-radius:0;display:block;overflow-y:auto;-webkit-overflow-scrolling:touch}.v30-modal.v310 .v310-grid{flex:none;overflow:visible;min-height:0}}' // fix417e: iPhoneでグリッドが高さ0に潰れてセーブUIが見えない問題の根治(モーダル全体を縦スクロール化)
     ].join('');
     var st=document.createElement('style'); st.id='v310-style'; st.textContent=css; document.head.appendChild(st);
   }
