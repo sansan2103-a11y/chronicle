@@ -22,6 +22,17 @@
   var TAG = '[v292Dfix417:reaction-unified]';
   function ls(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function enabled(){ return ls('v292Dfix417On') === '1' && ls('v292Dfix417Off') !== '1'; } // 既定OFF・Off優先
+  // ★fix425(2026-07-12): 監査#5/#6の根治。
+  //   #5: 旧実装は enabled() を【読み込み時に1回だけ】評価していた。
+  //       ONで読み込み→後からOFFにすると superseded だけが残り、fix381【キャラの反応】と
+  //       fix416a【痛覚】まで道連れで消える（反応系が全部落ちる）。→ 毎ターン評価に変更。
+  //   #6: keeper v4 を切る(v292Dfix379V4Off='1')と keeper が superseded を無視するため、
+  //       417の統合ブロックと 381/416a が【二重に】乗る。→ v4無効時は417自体を出さない。
+  function v4on(){ return ls('v292Dfix379V4Off') !== '1'; }
+  function off425(){ return ls('v292Dfix425Off') === '1'; }
+  // 実効判定: 425がOFFなら旧動作(読み込み時評価)に復帰
+  function eff(){ return off425() ? _loadEnabled : (enabled() && v4on()); }
+  var _loadEnabled = enabled();
 
   var MARKER = '【反応と身体（統合・最優先）】'; // 本文ヘッダ全文=keeper冪等がBLOCK自身に必ず命中する(二重ラップ時の二重注入防止)
 
@@ -34,20 +45,35 @@
     '・身体行為は、支え・実効的拘束・使える手足・距離・向き・遮蔽と矛盾させない。主人公には身体上の制約だけを適用し、内面・台詞・意図は決めない。指示名や内部語を本文・台詞に出さない。\n' +
     '・受傷・恐怖・拘束の根拠が本文や状態に無い場合、それらを新たに仮定して制約を強めない。';
 
-  if (!enabled()){
-    G.__v292Dfix417 = true;                  // ガードだけ立てて何もしない（既定OFF）
-    try { console.log(TAG, 'inactive (v292Dfix417On!=1 or Off=1)'); } catch(e){}
+  // ★fix425: 旧OFF時は「何もせず return」だったため、フラグを後から変えてもリロードするまで
+  //   効かなかった(#5)。425では常に登録し、eff() が false のあいだ全ての効果を無効化する
+  //   （superseded=false / __v292ReactUnified=false / 統合ブロック本文='' ）。
+  //   → リロード不要でON/OFFが切り替わる。425をOFFにすると従来の読み込み時評価に戻る。
+  if (off425() && !_loadEnabled){
+    G.__v292Dfix417 = true;                  // 旧動作: ガードだけ立てて何もしない
+    try { console.log(TAG, 'inactive (legacy: v292Dfix425Off=1 & 417 off at load)'); } catch(e){}
     return;
   }
   G.__v292Dfix417 = true;
 
-  // (1) superseded設定: keeper v4 が fix381【キャラの反応】/fix416a【痛覚】をスキップ（両ファイル不触）
-  G.__v292SupersededMarkers = Object.assign(G.__v292SupersededMarkers || {}, {
-    '【キャラの反応】': 1, // 【キャラの反応】(fix381)
-    '【痛覚】': 1                          // 【痛覚】(fix416a)
+  // (1) superseded設定(動的): keeper v4 が fix381【キャラの反応】/fix416a【痛覚】をスキップ。
+  //     keeper は毎ターン window.__v292SupersededMarkers[marker] を読むので、getter で live 評価する。
+  G.__v292SupersededMarkers = G.__v292SupersededMarkers || {};
+  ['【キャラの反応】', '【痛覚】'].forEach(function(mk){
+    try {
+      Object.defineProperty(G.__v292SupersededMarkers, mk, {
+        configurable: true, enumerable: true,
+        get: function(){ return eff() ? 1 : 0; }
+      });
+    } catch(e){ G.__v292SupersededMarkers[mk] = eff() ? 1 : 0; }   // defineProperty不可なら静的
   });
-  // (2) fix330 / fix304 の直ラップに注入スキップさせる
-  G.__v292ReactUnified = true;
+  // (2) fix330 / fix304 の直ラップに注入スキップさせる(動的)
+  try {
+    Object.defineProperty(G, '__v292ReactUnified', {
+      configurable: true, enumerable: true,
+      get: function(){ return eff(); }
+    });
+  } catch(e){ G.__v292ReactUnified = eff(); }
 
   // (3) keeperレジストリへ統合ブロックを登録（prio2・marker冪等）
   (function register(){
@@ -55,7 +81,8 @@
       G.__f379reg = G.__f379reg || [];
       var reg = G.__f379reg;
       for (var i = 0; i < reg.length; i++){ if (reg[i] && reg[i].marker === MARKER) return; } // 二重登録回避
-      reg.push({ off: 'v292Dfix417Off', marker: MARKER, prio: 2, text: function(){ return BLOCK; } });
+      // ★fix425: eff() が false のあいだは空文字を返す＝keeperが採用しない(サイズも消費しない)。
+      reg.push({ off: 'v292Dfix417Off', marker: MARKER, prio: 2, text: function(){ return eff() ? BLOCK : ''; } });
       try { console.log(TAG, 'registered to __f379reg (prio2)'); } catch(_){}
     } catch(e){}
   })();

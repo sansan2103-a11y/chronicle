@@ -36,8 +36,37 @@
   var SEVERE_SRC = '(断裂|切断|骨折|裂傷|深い傷|大量出血|大出血|多量出血|失血|貫通|抉れ|抉ら|えぐれ|えぐら|えぐり取|千切れ|ちぎれ|引き裂|切り落と|もぎ取|もげ|噛み千切|串刺し|刺し貫|射抜)';
   var LIGHT_NEAR = /(浅|軽|かすり|掠り|小さ|擦り傷|かすり傷|かする|軽傷)/;
 
+  // ★fix425(2026-07-12): 監査#12の根治。急性判定が「否定文・回想・仮定」で誤発火していた。
+  //   例: 「骨折はしていない」「切断されずに済んだ」(否定) / 「かつて父は腕を切断された」(回想)
+  //       「骨折したらどうする」(仮定) → いずれも【今この瞬間の受傷】ではないのに急性フラグが立つ。
+  //   対策: 一致語を含む【文】を切り出し、否定(語の後方)・回想/仮定(文中)なら不採用にする。
+  //   OFF: v292Dfix425Off='1' で従来動作(ガードなし)。
+  var NEG_AFTER  = /(ない|無い|なかった|ぬ|ず[にはもの、。\s]|ずに|免れ|回避|せずに済|ないで済|わけでは|ものの)/;
+  var RECALL_IN  = /(かつて|昔|以前|あの日|あの時|幼い頃|子供の頃|子どもの頃|記憶|思い出|回想|過去に|夢の中|少年の頃|少女の頃)/;
+  var HYPO_IN    = /(もし|たら|れば|なら|かもしれ|だろうか|想像|仮に|としたら|ようとし|そうになっ|寸前|危うく)/;
+  function off425(){ try { return localStorage.getItem('v292Dfix425Off') === '1'; } catch(e){ return false; } }
+  // 一致位置を含む「文」を返す(句点・改行・！？で区切る)
+  function sentenceAt(text, idx){
+    var SEP = /[。．.!！?？\n]/;
+    var st = 0, en = text.length;
+    for (var i = idx; i >= 0; i--){ if (SEP.test(text.charAt(i))){ st = i + 1; break; } }
+    for (var j = idx; j < text.length; j++){ if (SEP.test(text.charAt(j))){ en = j; break; } }
+    return { s: text.slice(st, en), rel: idx - st };
+  }
+  // 否定/回想/仮定なら true(=急性ではない)
+  function isNonAcuteContext(text, idx, w){
+    var o = sentenceAt(text, idx);
+    var sent = o.s;
+    if (RECALL_IN.test(sent)) return true;                  // 回想
+    if (HYPO_IN.test(sent))   return true;                  // 仮定・未遂
+    var after = sent.slice(o.rel + w.length, o.rel + w.length + 12);
+    if (NEG_AFTER.test(after)) return true;                 // 否定(語の直後)
+    return false;
+  }
+
   function scanSevereText(text){
     text = String(text || '');
+    var guard = !off425();
     var re = new RegExp(SEVERE_SRC, 'g'), m, out = [];
     while ((m = re.exec(text))){
       var w = m[0];
@@ -46,6 +75,8 @@
         var ctx = text.slice(Math.max(0, m.index - 8), m.index + w.length + 4);
         if (LIGHT_NEAR.test(ctx)){ if (re.lastIndex === m.index) re.lastIndex++; continue; }
       }
+      // ★fix425: 否定・回想・仮定の文脈は急性としない(#12)
+      if (guard && isNonAcuteContext(text, m.index, w)){ if (re.lastIndex === m.index) re.lastIndex++; continue; }
       out.push(w);
       if (re.lastIndex === m.index) re.lastIndex++;   // ゼロ幅ループ回避
     }
@@ -195,7 +226,10 @@
     lastEvents: function(){ try { return detectLive(); } catch(e){ return []; } }, // 検出イベント一覧
     styleText:  function(){ return styleTextFn(); },
     level:      function(){ return level(); },
-    status:     function(){ return { off: offAll(), on: onPain(), level: level(), names: Object.keys(store()) }; }
+    status:     function(){ return { off: offAll(), on: onPain(), level: level(), names: Object.keys(store()) }; },
+    // ★fix425: 急性判定ガードの検証口
+    scanSevereText: scanSevereText,
+    isNonAcuteContext: isNonAcuteContext
   };
 
   // ---- node単体テスト用エクスポート(browserでは module 未定義→skip) ----
@@ -206,6 +240,7 @@
       painInjection: painInjection,
       styleInjection: styleInjection,
       PAIN_TEXT: PAIN_TEXT, STYLE_EASY: STYLE_EASY, STYLE_LIT: STYLE_LIT,
+      isNonAcuteContext: isNonAcuteContext,   // ★fix425
       SEVERE_SRC: SEVERE_SRC, WINDOW: WINDOW
     };
   }

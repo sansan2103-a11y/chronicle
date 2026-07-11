@@ -633,7 +633,22 @@
       // Phase2 S3: 新βのとき base sys 組み立てをスキップさせるフラグ。inner.apply(=base build)が
       //   読むため、必ず inner 呼び出し前にセットする。engineOn()判定を流用（fix355で新β固定）。
       try{ if(engineOn()) window.__v292EngineNew = true; }catch(_){}
-      var r = inner.apply(this, arguments);
+      var r;
+      try {
+        r = inner.apply(this, arguments);
+      } finally {
+        // ★fix425(2026-07-12): 監査#8の根治。旧実装は __v292EngineNew を立てっぱなしにしていた。
+        //   index.html の base sys は「このフラグが真なら sys を組み立てずに '' を返す」ので、
+        //   万一このラップが失われた状態で base build が直接呼ばれると【sysが空のまま】APIへ行く。
+        //   フラグを「inner(=base build)を呼ぶこの一回だけ」に限定する(per-callハンドシェイク)。
+        //   → ラップが生きている時だけスキップが起き、失われたら自動的に base sys へ安全側フォールバック。
+        //   OFF: v292Dfix425Off='1' で従来動作(立てっぱなし)。
+        try{
+          var _off425 = false;
+          try { _off425 = (localStorage.getItem('v292Dfix425Off') === '1'); } catch(_e){}
+          if (!_off425) window.__v292EngineNew = false;
+        }catch(_){}
+      }
       try{
         if(engineOn() && r && typeof r.sys==='string'){
           var mode = (arguments.length>0 && arguments[0]!=null) ? String(arguments[0]) : '';
