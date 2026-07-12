@@ -62,6 +62,36 @@
     /*darkanime*/  'Dark fantasy creature concept art, semi-realistic detailed rendering, muted desaturated palette hex #262430, dim moody lighting, dark shadowy background, somber atmosphere, non-human creature, monster design, no human face',
     /*darkanime旧*/ '@TAIL dark fantasy anime creature concept art, full creature body visible, highly detailed, dim moody lighting, muted desaturated colors, dark shadowy background, somber gothic horror atmosphere, high quality, non-human creature, monster design, no human face, no human body'
   ];
+  // ===== v292Dfix429(2026-07-12): 絵柄「案C」を既定化 + index6 のラベルを「デフォルト」へ =====
+  //   おしん指示: 既定画風(index6=闇アニメ)の中身を「案C」へ差し替え、ライトユーザーに意味が
+  //   分かるようラベルも「デフォルト」に改名する。
+  //   ★index も配列長も変えない → 既存セーブの cfg.artStyle=6 がそのまま新絵柄になる(データ不触・
+  //     fix395/fix374 の既定=6 もそのまま生きる)。
+  //   ★旧・闇アニメPREFIXは LEGACY_PREFIX として保持し stripOwnPrefix の剥がし対象に残す
+  //     (これをしないと旧プロンプトが剥がれず新PREFIXが二重前置される)。
+  //   OFF: localStorage v292Dfix429Off='1' → 旧・闇アニメPREFIX/ラベル/説明文へ復帰(live評価)。
+  function off429(){ try{ return localStorage.getItem('v292Dfix429Off')==='1'; }catch(e){ return false; } }
+  var ART6_OLD  = PREFIX[6];            // 旧・闇アニメ(人物)
+  var ART6C_OLD = PREFIX_CREATURE[6];   // 旧・闇アニメ(人外)
+  var LBL6_OLD  = LABELS[6];            // '闇アニメ'
+  var TITLE_OLD = STYLE_TITLE;
+  var ART6_NEW  = 'Soft semi-realistic anime portrait, clean lineless digital painting, luminous natural skin with subtle blush, large detailed glossy eyes, fine individual hair strands, soft even daylight, gentle pastel color grading, pale neutral desaturated background, calm delicate atmosphere, head-and-shoulders character portrait, visible clothing, highly detailed, high quality';
+  // 人外用=案Cの色調・雰囲気を継ぎ、人型強制語(head-and-shoulders / visible clothing)は入れない
+  var ART6C_NEW = 'Soft semi-realistic creature concept art, clean lineless digital painting, luminous natural surfaces with subtle sheen, fine individual detail, soft even daylight, gentle pastel color grading, pale neutral desaturated background, calm delicate atmosphere, highly detailed, high quality, non-human creature, monster design, no human face';
+  var LBL6_NEW  = 'デフォルト';
+  var TITLE_NEW = TITLE_OLD.replace('闇アニメ=青白い肌の暗い半実写アニメ', 'デフォルト=明るく柔らかい半写実アニメ');
+  // 新旧どちらが有効でも、もう片方は「剥がすべき自前PREFIX」として残す(冪等化)
+  var LEGACY_PREFIX = [ART6_OLD, ART6C_OLD, ART6_NEW, ART6C_NEW];
+  function apply429(){
+    var o = off429();
+    PREFIX[6]          = o ? ART6_OLD  : ART6_NEW;
+    PREFIX_CREATURE[6] = o ? ART6C_OLD : ART6C_NEW;
+    LABELS[6]          = o ? LBL6_OLD  : LBL6_NEW;
+    STYLE_TITLE        = o ? TITLE_OLD : TITLE_NEW;
+    return !o;
+  }
+  apply429();   // 読み込み時に一度。以後 transformPrompt / patchSelector の入口で毎回 live 再評価する。
+
   // v292Dfix344: 「見る」(fix315b2)画像=768x512。fix315b2のstyleTailはindex0-3のみ対応で4/5は
   //   default(ダークファンタジー)に落ちる。ここでartStyle 4/5の時だけSEE画像のdarkタグを差し替える。
   var SEE_OLD_DARK='dark fantasy illustration, dim moody lighting, muted desaturated colors, gothic horror atmosphere';
@@ -77,6 +107,9 @@
   function stripOwnPrefix(s){
     for(var k=0;k<PREFIX.length;k++){ if(s.indexOf(PREFIX[k])===0) return s.slice(PREFIX[k].length).replace(/^[.\s,]+/,''); }
     for(var j=0;j<PREFIX_CREATURE.length;j++){ if(s.indexOf(PREFIX_CREATURE[j])===0) return s.slice(PREFIX_CREATURE[j].length).replace(/^[.\s,]+/,''); }
+    /* v292Dfix429: 旧・闇アニメPREFIX(および OFF 時の新PREFIX)も剥がす。index6 を差し替えたため、
+       これが無いと過去プロンプト/OFF切替後のプロンプトが剥がれず二重前置になる。 */
+    for(var g=0;g<LEGACY_PREFIX.length;g++){ if(LEGACY_PREFIX[g] && s.indexOf(LEGACY_PREFIX[g])===0) return s.slice(LEGACY_PREFIX[g].length).replace(/^[.\s,]+/,''); }
     return s;
   }
   // 外見コアからスタイル示唆語(=画風を勝手に上書きする犯人)を除去。物理的特徴は残す。
@@ -92,6 +125,7 @@
 
   function transformPrompt(raw){
     try{
+      apply429();   /* v292Dfix429: OFFスイッチをlive評価(リロード不要) */
       var idx=artIdx(); if(idx<0||idx>=PREFIX.length) idx=3;
       var s=String(raw||''); if(!s) return raw;
       s=stripOwnPrefix(s); /* v292Dfix358: 判定は自前prefix除去後(dark shadowy background等の誤検出防止) */
@@ -108,6 +142,11 @@
     }catch(e){ return raw; }
   }
   window.__v292Dfix338.transformPrompt=transformPrompt; // test用
+  /* v292Dfix429 検証口(node/実機共通・pure) */
+  window.__v292Dfix429={ apply:apply429, off:off429, stripOwnPrefix:stripOwnPrefix,
+    LABELS:LABELS, PREFIX:PREFIX, PREFIX_CREATURE:PREFIX_CREATURE, LEGACY_PREFIX:LEGACY_PREFIX,
+    ART6_NEW:ART6_NEW, ART6_OLD:ART6_OLD, ART6C_NEW:ART6C_NEW, ART6C_OLD:ART6C_OLD,
+    title:function(){ return STYLE_TITLE; } };
 
   // ------- 画像生成fetchをラップ(avatar=384x384 のみ整形) -------
   var _fetch=window.fetch;
@@ -156,6 +195,7 @@
   function patchSelector(){
     try{
       var sel=document.getElementById('v292-style-sel'); if(!sel) return;
+      apply429();   /* v292Dfix429: ラベル/説明文もlive評価 */
       // v292Dfix344: LABELS全件をセレクタに反映(既存0-2はラベル一致・3ダーク改称・4SF/5リアルアニメ追加)
       // v292Dfix396: 初代(7)は既定で撤去。OFF時 or 現slotが既に7の時だけ残す(廃校等の既存slot保護)。
       var vis396 = off396() ? LABELS.length : 7;

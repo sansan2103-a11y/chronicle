@@ -5,7 +5,7 @@
 //   A(fix416a 痛覚リアクション): 受傷の「瞬間」の不随意反応(悲鳴/凍結/解離+身体徴候)を
 //     促す。fix414(持続する機能制約)とは別軸。直近1〜2ターンの本文 + fix77 store差分から
 //     新規重傷イベントを検出し、受傷から2ターン以内だけ急性フラグを立てる(ステートレス・
-//     turn番号ベース・保存なし)。keeper(__f379reg・prio2)へ短文を注入。既定OFF(v292Dfix416On)。
+//     turn番号ベース・保存なし)。keeper(__f379reg・prio2)へ短文を注入。既定ON(fix428でON化・OFF=v292Dfix416Off)。
 //   B(fix416b 文体ノブ): 調整パネル(トップバー・fix308と同方式)に「文体 やさしい/標準/文学的」
 //     セレクタを追加(保存キー v292StyleLevel)。やさしい/文学的のときだけ keeper(prio3)へ
 //     文体指示を注入。標準は注入ゼロ(現行不変)。
@@ -23,7 +23,10 @@
   // ---- 設定アクセサ ---------------------------------------------------
   function ls(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function offAll(){ return ls('v292Dfix416Off') === '1'; }     // 最優先で全停止
-  function onPain(){ return ls('v292Dfix416On') === '1'; }      // A(痛覚)は既定OFF・Onで有効
+  // ★fix428(2026-07-12): A(痛覚)を【既定ON化】(おしん承認)。fix426がfix417にしたのと同じ手口。
+  //   旧: v292Dfix416On==='1' のときだけ有効。新: 既定ON、v292Dfix416Off==='1' で全停止(従来)。
+  //   ※ painTextFn から毎ターン呼ばれる=live評価(fix425 #5の教訓)。旧キー v292Dfix416On の残存は無害。
+  function onPain(){ return !offAll(); }                        // fix428: 既定ON・Off優先・毎回評価
   function level(){ var v = ls('v292StyleLevel'); return (v === 'easy' || v === 'lit') ? v : 'std'; }
   function setLevel(v){ try { localStorage.setItem('v292StyleLevel', v); } catch(e){} }
 

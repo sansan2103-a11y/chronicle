@@ -7,7 +7,7 @@
 //   毎ターン store から導出し直すステートレス設計(蓄積・重複保存なし・新LSキーなし)。
 // 責務: fix77=瞬間状態 / fix190=永続状態 / fix297=反応モード焼込 を維持し、fix414は
 //   「導出と注入」のみ。fix333/77/297のファイル・関数は不触。Planner._extensionsは使わない。
-// 既定=プレビューOFF。先行ON=localStorage v292Dfix414On='1'。全体OFF=v292Dfix414Off='1'。
+// 既定ON(fix428/2026-07-12でON化)。全体OFF=v292Dfix414Off='1'。旧キv292Dfix414Onは不要(残存しても無害)。
 // 検証口: window.__v292Dfix414x = { derive(name), preview(), status(), lastText() }。
 //
 // 2026-07-11 GPT-5.6監査E節根治(Opus4.8):
@@ -33,7 +33,12 @@
   if (window.__v292Dfix414) return; window.__v292Dfix414 = true;
   var TAG = '[v292Dfix414:constraint-engine]';
 
-  function on(){ try { return localStorage.getItem('v292Dfix414On') === '1'; } catch(e){ return false; } }
+  // ★fix428(2026-07-12): 【既定ON化】(おしん承認)。fix426がfix417にしたのと同じ手口。
+  //   旧: v292Dfix414On==='1' のときだけ有効(既定OFFプレビュー)。
+  //   新: 既定ON。v292Dfix414Off==='1' で従来(注入なし)へ復帰。
+  //   ※毎ターン textFn から呼ばれる=live評価(fix425 #5の教訓: 読込時に1回だけ評価しない)。
+  //   ※旧キー v292Dfix414On が localStorage に残っていても無害(冗長なだけ)。
+  function on(){ return !off(); }   // 既定ON・Off優先・毎回評価
   function off(){ try { return localStorage.getItem('v292Dfix414Off') === '1'; } catch(e){ return false; } }
   function store(){ try { return window.__v292Dfix77Store || {}; } catch(e){ return {}; } }
   function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined" ? S : null'); } catch(e){ return null; } }
@@ -252,11 +257,11 @@
   }
 
   // ---- keeper text 関数(ステートレス・毎回 store から導出) ------------
-  //   既定OFF先行: v292Dfix414On!=='1' なら '' を返す。全体OFF も '' 。
+  //   fix428: 既定ON。v292Dfix414Off==='1' のときだけ '' を返す。
   function textFn(){
     try {
       if (off()) return '';
-      if (!on()) return '';   // 既定=プレビューOFF
+      if (!on()) return '';   // fix428: 既定ON(on()=!off())。従来の二重ガードはそのまま残す
       return buildBlock();
     } catch(e){ return ''; }
   }
