@@ -32,6 +32,19 @@
 //   S.save をラップし、**ターン確定後**にだけ実行(抽出→状態遷移→発動判定)。
 //   ラッパーは内側関数の own props を全継承(fix419c 教訓)。
 //
+// ★v292Dfix451(2026-07-13): 自動詞タブー(ルールD)の追加。
+//   実測: 世界観「海沿いの古いトンネルでは、名前を呼ばれても振り返ってはいけないと
+//   言い伝えられている。」で extractLaws() が [] を返していた。
+//   真因: mkLaw の「対象(obj)が取れない掟は採らない」ガード。伝承の禁忌はむしろ
+//   自動詞(振り返る/答える/立ち止まる/見る/声を出す)が中核(オルフェウス型・黄泉型)。
+//   対策: ①「〜てはいけない」で目的語を伴わない禁止文を ルールD として抽出
+//         (対象動詞は TABOO_VERB_TE ホワイトリスト限定 = 誤爆防止の第一ゲート)
+//         ②mkLaw の obj 必須ガードを src==='taboo-intrans' のときだけ緩和
+//           (A/B/B2/C は従来どおり obj 必須)
+//         ③cond が行為だけになる分、発動判定に「否定・回避 / 回想・仮定」ガードを追加
+//           (fix425 の isNonAcuteContext と同じ流儀: 一致語を含む【文】で判定)
+//   OFF : localStorage v292Dfix451Off='1' → ルールDを無効化(= fix444 従来動作)
+//
 // 冪等: window.__v292Dfix444
 // OFF : localStorage v292Dfix444Off='1'(live評価。注入も台帳更新も完全素通し)
 // UI  : 作らない(不可視の自動化)。デバッグは window.__v292Dfix444.dump()
@@ -51,6 +64,8 @@
   var SHOW_IDLE = 2;     // 平常時に思い出させる掟の件数
 
   function off(){ try { return localStorage.getItem('v292Dfix444Off') === '1'; } catch(e){ return false; } }
+  // ★fix451: ルールD(自動詞タブー)だけを切るスイッチ。live評価。
+  function off451(){ try { return localStorage.getItem('v292Dfix451Off') === '1'; } catch(e){ return false; } }
   function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined" ? S : null'); } catch(e){ return null; } }
   function trim(v){ return String(v == null ? '' : v).replace(/^[\s　]+|[\s　]+$/g, ''); }
   function clamp(s, n){ s = String(s == null ? '' : s); return s.length > n ? s.slice(0, n) : s; }
@@ -107,6 +122,49 @@
   function hasAny(text, list){
     if (!text) return false;
     for (var i = 0; i < list.length; i++){ if (text.indexOf(list[i]) >= 0) return true; }
+    return false;
+  }
+
+  // ===================================================================
+  // ★fix451: 誤爆防止ガード(fix425 の isNonAcuteContext と同じ流儀)
+  //   自動詞タブーは cond が行為だけなので、本文の何気ない一文で誤発動しやすい。
+  //   一致語を含む【文】(句点・改行・！？で区切る)を切り出して判定する。
+  //   - 否定・回避: 一致語の【直後】(語尾)＋近傍窓で見る。文全体で「ず」を探すと
+  //     「思わず振り返ってしまう」(=発動すべき)を殺してしまうため位置を見る。
+  //   - 回想・仮定: 文全体で見る(fix425 と同じ)。
+  // ===================================================================
+  var SENT_SEP   = /[。．.!！?？\n\r]/;
+  var NEG_DIRECT = /^[ぁ-ん]{0,3}(?:ない|無い|なかった|ず|ぬ|まい|なく|ません|ませんでした)/;   // 振り返らず/振り返らない/振り返っていない
+  var AVOID_NEAR = /(?:のを|ことを|衝動を|のは)[^。]{0,6}(?:我慢|こらえ|堪え|辛抱|抑え)|(?:せずに|しないで|ずに済|ないで済|免れ)/; // 振り返るのを我慢した
+  var RECALL_IN  = /(かつて|昔|以前|あの日|あの時|幼い頃|子供の頃|子どもの頃|記憶|思い出|回想|過去に|夢の中|夢で)/;
+  var HYPO_IN    = /(もし|たら|なら|れば|かもしれ|想像|仮に|としたら|だろうか|ようとし|そうになっ|寸前|危うく)/;
+  var NEAR_WIN   = 14;   // 一致語の直後をこの文字数だけ見る(回避表現の窓)
+
+  // 一致位置を含む「文」と、その文内での相対位置を返す(fix425 sentenceAt と同型)
+  function sentenceAt(text, idx){
+    var st = 0, en = text.length, i, j;
+    for (i = idx; i >= 0; i--){ if (SENT_SEP.test(text.charAt(i))){ st = i + 1; break; } }
+    for (j = idx; j < text.length; j++){ if (SENT_SEP.test(text.charAt(j))){ en = j; break; } }
+    return { s: text.slice(st, en), rel: idx - st };
+  }
+  // 行為キーが「実際に行われた」形で現れているか(否定・回避・回想・仮定を除外)
+  function guardedActHit(actKeys, text){
+    var i, k, idx, o, sent, tail;
+    if (!actKeys || !actKeys.length || !text) return false;
+    for (i = 0; i < actKeys.length; i++){
+      k = actKeys[i];
+      if (!k || k.length < 2) continue;              // 1字キー(例「見」)は誤爆源 → 使わない
+      idx = text.indexOf(k);
+      while (idx >= 0){
+        o = sentenceAt(text, idx);
+        sent = o.s;
+        if (!RECALL_IN.test(sent) && !HYPO_IN.test(sent)){          // 回想・仮定は不採用
+          tail = sent.slice(o.rel + k.length, o.rel + k.length + NEAR_WIN);
+          if (!NEG_DIRECT.test(tail) && !AVOID_NEAR.test(tail)) return true;   // 否定・回避も不採用
+        }
+        idx = text.indexOf(k, idx + 1);
+      }
+    }
     return false;
   }
 
@@ -179,9 +237,14 @@
     text = clamp(trim(text), LIM_TEXT);
     if (!cond || !text) return null;
     var k = keysOf(cond);
+    if (!k.act.length) return null;
     // ★対象(obj)が取れない掟は採らない。行為語だけの掟は本文の何気ない一文に
     //   当たって誤爆する(例: cond='触れた' が「手が壁に触れた」で発動する)。
-    if (!k.obj.length || !k.act.length) return null;
+    // ★fix451: ただしルールD(自動詞タブー)だけは obj 無しを許す。
+    //   「〜てはいけない」という禁止マーカーが文中にあること自体が強いゲートであり、
+    //   さらに発動側に 否定・回避 / 回想・仮定 ガード(guardedActHit)を入れてある。
+    //   A/B/B2/C は従来どおり obj 必須(誤爆防止の設計を壊さない)。
+    if (!k.obj.length && src !== 'taboo-intrans') return null;
     return { text: text, cond: cond, cost: cost, keys: k, src: src || 'lore' };
   }
 
@@ -198,6 +261,31 @@
   var RE_B2 = new RegExp('([^、\\s「」『』]{1,16})(を|に|へ)(' + TABOO_VERB_DIC.join('|') + ')(?:ことは|ことが|のは|のが)(?:固く)?(?:禁じ|禁止|タブー|禁忌)', '');
   // 条件-結果ルールC
   var RE_C = /([^、\s「」『』]{2,18}?)(すると|すれば|したら|た者は|た者には|を破ると|[うくぐすつぬぶむる]と)、?([^、]{2,30})/;
+  // ★禁忌ルールD(fix451): 「振り返ってはいけない」= 目的語(を/に/へ)を取らない自動詞タブー
+  //   対象動詞は TABOO_VERB_TE ホワイトリストに限定。直前が を/に/へ ならルールBの領分なので採らない。
+  var TE_ALT = (function(){
+    var a = [], i;
+    for (i = 0; i < TABOO_VERB_TE.length; i++) a.push(TABOO_VERB_TE[i][0]);
+    return a.join('|');
+  })();
+  var RE_D = new RegExp('(' + TE_ALT + ')ては(?:いけない|ならない|ならぬ|いけません|なりません|駄目|ダメ)', '');
+  // スコープ(場所)「海沿いの古いトンネルでは」→「トンネル」
+  var RE_SCOPE = /([^、。\s「」『』]{2,16})では/g;
+  var RE_ADJ   = /^(?:[ぁ-んァ-ヶ一-龥]{1,4}い|[ぁ-んァ-ヶ一-龥]{1,4}な)(?=[ぁ-んァ-ヶ一-龥]{2,})/;   // 「古いトンネル」→「トンネル」
+  function scopeOf(sent, idx){
+    var head = sent.slice(0, idx), m, last = '', parts, tail, red;
+    RE_SCOPE.lastIndex = 0;
+    while ((m = RE_SCOPE.exec(head))){
+      last = trim(m[1]);
+      if (RE_SCOPE.lastIndex === m.index) RE_SCOPE.lastIndex++;
+    }
+    if (!last) return '';
+    parts = last.split('の');
+    tail  = trim(parts[parts.length - 1]) || last;
+    red   = tail.replace(RE_ADJ, '');
+    if (red.length >= 2) tail = red;
+    return (tail.length >= 2) ? tail : '';
+  }
 
   function objAfter(sent, from){
     var rest = sent.slice(from);
@@ -258,6 +346,27 @@
       }
     }
 
+    // --- D(fix451): 「振り返ってはいけない」= 目的語を取らない自動詞タブー
+    if (!off451()){
+      m = RE_D.exec(sent);
+      if (m){
+        var prev = (m.index > 0) ? sent.charAt(m.index - 1) : '';
+        if (prev !== 'を' && prev !== 'に' && prev !== 'へ'){    // 目的語つきは ルールB の領分
+          verb = '';
+          for (i = 0; i < TABOO_VERB_TE.length; i++){
+            if (TABOO_VERB_TE[i][0] === m[1]){ verb = TABOO_VERB_TE[i][1]; break; }
+          }
+          if (verb){
+            var sc = scopeOf(sent, m.index);
+            // cond は【行為だけ】(本文検出は行為で行う)。text にだけ場所を載せる。
+            var body = (sc ? sc + 'では' : '') + m[1] + 'てはいけない';
+            pushLaw(out, seen, mkLaw(verb, '', body, 'taboo-intrans'));
+            return;
+          }
+        }
+      }
+    }
+
     // --- C: 条件-結果(結果らしさゲートあり)
     m = RE_C.exec(sent);
     if (m){
@@ -298,6 +407,12 @@
   function detectIn(law, text){
     if (!law || !text) return '';
     var k = (law.keys && law.keys.act) ? law.keys : keysOf(law.cond || '');
+    // ★fix451: 自動詞タブー(obj無し)は【行為】だけで判定する。
+    //   ただし cond が行為だけの分だけ誤爆しやすいので、否定・回避 / 回想・仮定を除外する。
+    //   OFF(v292Dfix451Off='1')のときは従来動作(cond の完全一致が要る = 実質不発)に戻る。
+    if (!off451() && ((law.src === 'taboo-intrans') || !k.obj.length)){
+      return guardedActHit(k.act, text) ? 'fire' : '';
+    }
     var objHit = k.obj.length ? hasAny(text, k.obj) : true;
     var actHit = k.act.length ? hasAny(text, k.act) : false;
     if (!k.obj.length){
@@ -564,6 +679,10 @@
     armSave: armSave,
     armKeeper: armKeeper,
     off: off,
+    off451: off451,
+    guardedActHit: guardedActHit,
+    sentenceAt: sentenceAt,
+    scopeOf: scopeOf,
     MARKER: MARKER,
     MAX_SYS: MAX_SYS,
     COOLDOWN: COOLDOWN,

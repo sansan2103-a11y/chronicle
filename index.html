@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260712-fix449';
+  var BUILT = '20260713-fix452';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2795,7 +2795,7 @@ G.init();
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=v292Dfix336"></script>
 <script src="v292Dfix338-artstyle.js?cb=v292Dfix435"></script>
 <script src="v292Dfix346-idb-avatars.js?cb=v292Dfix346"></script>
-<script src="v292Dfix356-avatar-eager.js?cb=v292Dfix356"></script>
+<script src="v292Dfix356-avatar-eager.js?cb=v292Dfix450"></script>
 <script src="v292Dfix402-invisible-sync.js?cb=v292Dfix415b"></script>
 <script src="v292Dfix405-state-freshness.js?cb=v292Dfix417"></script>
 <script src="v292Dfix406-automode.js?cb=v292Dfix417d"></script>
@@ -2813,11 +2813,11 @@ G.init();
 <script src="v292Dfix437-regen-instant.js?cb=v292Dfix437"></script>
 <script src="v292Dfix438-inline-dialogue.js?cb=v292Dfix438"></script>
 <script src="v292Dfix439-readability.js?cb=v292Dfix439"></script>
-<script src="v292Dfix440-block-rescue.js?cb=v292Dfix440"></script>
+<script src="v292Dfix440-block-rescue.js?cb=v292Dfix452"></script>
 <script src="v292Dfix441-sys-at-send.js?cb=v292Dfix441"></script>
 <script src="v292Dfix442-folklore.js?cb=v292Dfix442"></script>
 <script src="v292Dfix443-drama-rescue.js?cb=v292Dfix443"></script>
-<script src="v292Dfix444-world-law.js?cb=v292Dfix444"></script>
+<script src="v292Dfix444-world-law.js?cb=v292Dfix451"></script>
 <script src="v292Dfix445-handle-lock.js?cb=v292Dfix445"></script>
 <script src="v292Dfix446-fill-robust.js?cb=v292Dfix446"></script>
 <script src="v292Dfix447-json-force.js?cb=v292Dfix447"></script>
