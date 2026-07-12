@@ -21,7 +21,10 @@
   if (G.__v292Dfix417) return;               // 冪等（二重実行回避）
   var TAG = '[v292Dfix417:reaction-unified]';
   function ls(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
-  function enabled(){ return ls('v292Dfix417On') === '1' && ls('v292Dfix417Off') !== '1'; } // 既定OFF・Off優先
+  // ★fix426(2026-07-12): 【既定ON化】(おしん承認)。fix425で #5(動的評価) と #6(V4Off併存) が閉じ、
+  //   既定ONの前提が整ったため。以後は v292Dfix417Off='1' で従来(fix304/330/381/416aが個別に動く)へ復帰。
+  //   旧: On='1' のときだけ有効(既定OFF)。移行のため On='1' は引き続き有効(冗長だが無害)。
+  function enabled(){ return ls('v292Dfix417Off') !== '1'; } // 既定ON・Off優先
   // ★fix425(2026-07-12): 監査#5/#6の根治。
   //   #5: 旧実装は enabled() を【読み込み時に1回だけ】評価していた。
   //       ONで読み込み→後からOFFにすると superseded だけが残り、fix381【キャラの反応】と
