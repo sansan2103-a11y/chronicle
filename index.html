@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260712-fix448';
+  var BUILT = '20260712-fix449';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2256,7 +2256,7 @@ G.init();
   fixProviderCfg();
 
   /* ─── 3. PROMPT SIZE CAP (v71 essence) ──────────────────────────── */
-  var MAX_PROMPT_CHARS = 12000;
+  var MAX_PROMPT_CHARS = (function(){ try { var _v = parseInt(localStorage.getItem('v292MaxPromptChars'), 10); if (_v >= 4000) return _v; } catch(_e){} return 40000; })();   /* v292Dfix449: 12000 は v71 時代の名残。実測 sys 9.6k + 履歴 3.9k = 14.1k が恒常的にトリムされ、sys 中間40%（口調・キャラ設定・見本）が消えていた（一人称の崩壊・sys断片の本文流出の真因）。40000 へ引き上げ。localStorage v292MaxPromptChars で上書き可 */
   var origFetch = window.fetch;
   window.fetch = function(url, opts){
     try {
