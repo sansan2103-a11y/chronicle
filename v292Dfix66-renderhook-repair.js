@@ -397,7 +397,15 @@
     return cleanSpeakerName(s).replace(/[（(]\s*心\s*[）)]$/, '').trim();
   }
   function dialogueKey(speaker, text){
-    return dedupSpeaker(speaker) + '|' + (text || '');
+    /* ★v292Dfix456b(2026-07-13): 重複カードの無限増殖の根治。
+     *   fix456でラベル正規化が効き始めた結果、DOM側のラベルは「桐生 悠真」(正名)、
+     *   データ側の who は「桐生悠真」(空白なし) となり、既存キーの照合が外れて
+     *   **repairが同じセリフのカードを毎回足し続けた**（実測: 15ターンでカード401枚）。
+     *   dialogueKey は【重複判定のキー】専用（表示には使わない）ので、空白を落として
+     *   両者を同じキーに畳む。OFF: v292Dfix456Off で従来キーに戻す。 */
+    var sp = dedupSpeaker(speaker);
+    try { if (localStorage.getItem('v292Dfix456Off') !== '1') sp = sp.replace(/[\s　]/g, ''); } catch(e){}
+    return sp + '|' + (text || '');
   }
 
   // v292Dfix158(2026-05-30): おしんA＝会話ログは「口に出したセリフ」だけ。内心独白
