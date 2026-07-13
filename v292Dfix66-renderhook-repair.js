@@ -1750,16 +1750,44 @@
         ((t._convSays) || []).forEach(function(c){ if (c && c.who) valid[String(c.who) + '|' + norm233(c.say)] = 1; });
         if (heroN && t.playerText) valid[heroN + '|' + norm233(t.playerText)] = 1;
       });
+      /* ★v292Dfix455(2026-07-13): 会話ログの点滅の真因。
+       *   旧実装は話者ラベルを /\s|📖.../ で split して [0] を採用していた。
+       *   → 名前に半角/全角スペースを含む話者（例「湊 海斗」「水島 朱里」）は
+       *      「湊」に切り詰められ、valid（who|say から作った正当キー）に一致せず
+       *      **正当なカードが毎2.5秒すべて削除** → fix66 repair が約1秒後に足し直す
+       *      → 追加/削除の無限戦争 ＝ 会話ログが「湊 海斗」と「女」で交互に点滅。
+       *   実測(本番・25ターン): 30枚中21枚(＝フルネーム話者の全カード)を毎回削除していた。
+       *   修正: (a) スペースで切らない。バッジ絵文字以降だけを落とす。
+       *         (b) 話者名の表記ゆれ(fix445のラベル正規化等)で消さないよう、
+       *            本文テキストが _convSays のどれかに一致すれば残す（孤児カード
+       *            ＝やり直し/取消で消えたターンの本文、は依然として除去される）。
+       *   OFF: localStorage v292Dfix455Off='1' で旧挙動に戻す。
+       */
+      var f455 = true;
+      try { f455 = (localStorage.getItem('v292Dfix455Off') !== '1'); } catch(e){}
+      var validText = {};
+      if (f455){
+        S.turns.forEach(function(t){
+          if (!t) return;
+          ((t._convSays) || []).forEach(function(c){ if (c && c.say) validText[norm233(c.say)] = 1; });
+          if (t.playerText) validText[norm233(t.playerText)] = 1;
+        });
+      }
       var cards = stream.querySelectorAll('.v292-dlg-card');
       var removed = 0;
       for (var i = 0; i < cards.length; i++){
         var card = cards[i];
         var nameEl = card.querySelector('.dlg-name'), textEl = card.querySelector('.dlg-text');
         if (!nameEl || !textEl) continue;
-        var name = (nameEl.textContent || '').trim().split(/\s|📖|⚔|💭|🎭|✨/)[0];
+        var raw233 = (nameEl.textContent || '').trim();
+        var name = f455 ? raw233.replace(/[📖⚔💭🎭✨].*$/, '').trim()
+                        : raw233.split(/\s|📖|⚔|💭|🎭|✨/)[0];
         if (!name) continue;
-        var key = name + '|' + norm233(textEl.textContent);
-        if (!valid[key]){ try { card.remove(); removed++; } catch(e){} }
+        var ntext = norm233(textEl.textContent);
+        var key = name + '|' + ntext;
+        if (valid[key]) continue;
+        if (f455 && ntext && validText[ntext]) continue;   // 話者表記ゆれは許容（本文が正なら残す）
+        try { card.remove(); removed++; } catch(e){}
       }
       if (removed){ try { console.log('[v292Dfix233]', 'removed', removed, 'orphan card(s) (retry/undo reconcile)'); } catch(e){} }
     } catch(e){}
