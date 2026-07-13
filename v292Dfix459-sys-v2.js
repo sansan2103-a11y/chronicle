@@ -109,6 +109,28 @@
     return m[1].split(/[、,]/).map(function(s){ return s.trim(); }).filter(function(s){ return s; });
   }
 
+  // ---- ★fix459c: 役割名 → 登録名 の対応表を作る（実測: sys v2 だけだと
+  //   モデルが登録NPCを <say who="看護師"> のように役割名で呼ぶことがあった）。
+  //   各NPCの説明文に出てくる役割語のうち、**cast全体で1人にしか出てこない語**だけを対応表にする。
+  var ROLE_WORDS = ['看護師','医師','医者','女将','店主','主人','老人','湯守','灯台守','漁師','船長','刑事','警官','教師','先生','記者','学者','民俗学者','司書','巫女','神主','僧侶','運転手','料理人','受付','執事','メイド','村長','町長','駅員','郵便配達員','配達員','若女将','看板娘','店員','マスター','バーテンダー','住職','宮司','管理人','大家','社長','部長','課長','秘書','弁護士','看守','兵士','傭兵','騎士','魔女','占い師'];
+  function roleMap(){
+    try {
+      var S = window.S || (0,eval)('typeof S!=="undefined"?S:null');
+      if (!S || !S.cast) return [];
+      var list = [];
+      if (S.cast.hero && S.cast.hero.name) list.push({ n: String(S.cast.hero.name).trim(), d: String(S.cast.hero.desc || '') });
+      (S.cast.npcs || []).forEach(function(x){ if (x && x.name) list.push({ n: String(x.name).trim(), d: String(x.desc || '') }); });
+      var pairs = [];
+      for (var i = 0; i < ROLE_WORDS.length; i++){
+        var w = ROLE_WORDS[i], hit = [];
+        for (var j = 0; j < list.length; j++){ if (list[j].d.indexOf(w) >= 0) hit.push(list[j].n); }
+        if (hit.length === 1) pairs.push(w + '＝' + hit[0]);
+        if (pairs.length >= 6) break;
+      }
+      return pairs;
+    } catch(e){ return []; }
+  }
+
   // ===================== 新ブロック =====================
   function blockA(oldTexts){
     var cast = castNames();
@@ -121,6 +143,8 @@
       + (cast.length ? '：' + cast.join('／') : '') + '。\n'
       + '・登録キャラを「女」「男」「老人」「民俗学者」などの役割名・属性名や、名字だけ・空白を抜いた表記で who に書かない（地の文でそう呼ぶのは自由）。\n'
       + '・主人公が話しかけた直後の返答は、返答した本人の<say>で書く（主人公のタグに入れない）。\n';
+    var rm = roleMap();
+    if (rm.length) t += '・次の人物を役割名で who に書かない（本人の登録名で書く）：' + rm.join('／') + '。\n';
     if (known.length) t += '・既に出ている名前の無い存在は、この呼び名のまま呼ぶ（新しい呼び名を作らない）：' + known.slice(0, 12).join('／') + '。\n';
     t += '・悲鳴・うめき・嗚咽は、いま痛み・危機・拘束にある当人に付ける。近くにいるだけの第三者に付けない。「彼」「彼女」は直前に行動・負傷した人物を指す。\n'
       + '・地の文で「Xの口から」「Xの喉から」「Xの息が」と出る声は、必ずXに帰属する。';
