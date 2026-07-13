@@ -33,23 +33,45 @@
   function off(){ try { return localStorage.getItem('v292Dfix470Off') === '1'; } catch(e){ return false; } }
   function style(){ try { return localStorage.getItem('v292Dfix470Style') || STYLE_DEFAULT; } catch(e){ return STYLE_DEFAULT; } }
 
-  // ---- ①fix338 の画風PREFIXを差し替える（配列は同一参照なので要素書換で効く） ----
+  // ---- ①fix338(旧・闇アニメ画風)を止めて、画風は本fixが一手に決める ----
+  //   ※fix338のPREFIX配列を書き換える方法は不可（transformPromptの入口でapply429()が毎回上書きするため実測で無効）。
+  //     よって fix338 自体をOFFにし、プロンプトの最終形は本fix（最外側のfetchラッパ）が作る。
   var applied = false;
   function apply(){
     try {
-      if (off()) return false;
-      var f429 = window.__v292Dfix429;
-      if (!f429 || !f429.PREFIX || !f429.PREFIX_CREATURE) return false;
-      var tail = '@TAIL ' + style();
-      var tailC = '@TAIL ' + STYLE_CREATURE;
-      for (var i = 0; i < f429.PREFIX.length; i++){ f429.PREFIX[i] = tail; }
-      for (var j = 0; j < f429.PREFIX_CREATURE.length; j++){ f429.PREFIX_CREATURE[j] = tailC; }
-      if (!applied){ applied = true; try { console.log(TAG, '画風PREFIXをお手本スタイルへ差し替え'); } catch(e){} }
+      if (off()){
+        // 本fixをOFFにしたら、旧画風(fix338)を元に戻す
+        try { if (localStorage.getItem('v292Dfix338Off') === '1' && localStorage.getItem('v292Dfix470WasOn') === '1'){ localStorage.removeItem('v292Dfix338Off'); localStorage.removeItem('v292Dfix470WasOn'); } } catch(e){}
+        return false;
+      }
+      if (localStorage.getItem('v292Dfix338Off') !== '1'){
+        localStorage.setItem('v292Dfix338Off', '1');      // 旧画風PREFIXを止める
+        localStorage.setItem('v292Dfix470WasOn', '1');    // 元に戻せるように印を残す
+      }
+      if (!applied){ applied = true; try { console.log(TAG, '旧画風(fix338)を停止。画風は本fixが付与'); } catch(e){} }
       return true;
     } catch(e){ return false; }
   }
-  (function poll(){ poll._n = (poll._n || 0) + 1; if (apply()) return; if (poll._n > 60) return; setTimeout(poll, 500); })();
-  try { setInterval(apply, 5000); } catch(e){}   // fix429がライブ再適用しても奪い返す
+  apply();
+  try { setInterval(apply, 5000); } catch(e){}
+
+  // 既存プロンプトに残っている旧スタイル文を剥がす（fix429の純関数を借りる）
+  function stripOld(p){
+    var s = String(p || '');
+    try { if (window.__v292Dfix429 && window.__v292Dfix429.stripOwnPrefix) s = window.__v292Dfix429.stripOwnPrefix(s); } catch(e){}
+    // 旧@TAILスタイル(末尾)の除去: 我々が過去に付けた文言・旧スタイル語
+    s = s.replace(/,?\s*(dark anime[^,]*|highly detailed, high quality|simple dark atmospheric background[^,]*|chest-up bust[^,]*|not a close-up)/gi, '');
+    return s.replace(/[\s,、]+$/,'').trim();
+  }
+
+  // 人外か（fix463の判定器を借りる）
+  function isCreature(p){
+    try {
+      var g = window.__v292Dfix463;
+      if (g && g.wouldCreature && g.isHuman) return g.wouldCreature(p) && !g.isHuman(p);
+    } catch(e){}
+    return false;
+  }
 
   // ---- ②モデル/ステップを固定（style420を先に置く。fix420は既にあれば触らない） ----
   function isAvatarGen(url, init){
@@ -64,8 +86,11 @@
     try {
       if (!off() && isAvatarGen(url, init)){
         var b = JSON.parse(String(init.body));
-        if (b && b.prompt != null && !b.style420){
-          b.style420 = { path: HF_ANCHOR, no_lora: 1, steps: 28, trigger: '', model: MODEL };
+        if (b && b.prompt != null){
+          var core = stripOld(b.prompt);
+          var tail = isCreature(core) ? STYLE_CREATURE : style();
+          if (core.indexOf(tail.slice(0, 30)) < 0) b.prompt = core + ', ' + tail;     // 画風は必ず末尾（@TAIL方式）
+          if (!b.style420) b.style420 = { path: HF_ANCHOR, no_lora: 1, steps: 28, trigger: '', model: MODEL };
           init = Object.assign({}, init, { body: JSON.stringify(b) });
         }
       }
