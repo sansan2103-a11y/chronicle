@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260713-fix468';
+  var BUILT = '20260713-fix469';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2828,13 +2828,14 @@ G.init();
 <script src="v292Dfix459-sys-v2.js?cb=v292Dfix459c"></script>
 <script src="v292Dfix460-slotgrid.js?cb=v292Dfix460"></script>
 <script src="v292Dfix461-appearance-en.js?cb=v292Dfix461"></script>
-<script src="v292Dfix462-bare-speaker.js?cb=v292Dfix463b"></script>
+<script src="v292Dfix462-bare-speaker.js?cb=v292Dfix469"></script>
 <script src="v292Dfix463-human-guard.js?cb=v292Dfix463"></script>
 <script src="v292Dfix464-say-promote.js?cb=v292Dfix465"></script>
 <script src="v292Dfix465-role-who.js?cb=v292Dfix465"></script>
 <script src="v292Dfix466-dup-say.js?cb=v292Dfix466"></script>
 <script src="v292Dfix467-readability-rules.js?cb=v292Dfix468"></script>
 <script src="v292Dfix468-gen-timing.js?cb=v292Dfix468"></script>
+<script src="v292Dfix469-speaker-score.js?cb=v292Dfix469"></script>
 <script src="v292Dfix456-name-space.js?cb=v292Dfix456"></script>
 </body>
 </html>

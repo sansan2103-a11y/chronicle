@@ -204,6 +204,11 @@
 
   function repair(){
     if (off()) return { changed: false };
+    // ★fix469(2026-07-13): 話者同定は fix469(点数制＋否定証拠＋棄権)に一本化した。
+    //   補正器が2つあると互いの結果を上書きし合う(GPT-5.6指摘)。fix469 が生きていれば本fixは何もしない。
+    try {
+      if (window.__v292Dfix469 && window.__v292Dfix469.__armed && localStorage.getItem('v292Dfix469Off') !== '1') return { changed: false, ceded: true };
+    } catch(e){}
     var S = getS();
     if (!S || !Array.isArray(S.turns) || !S.turns.length) return { changed: false };
     var ns = names(S);
