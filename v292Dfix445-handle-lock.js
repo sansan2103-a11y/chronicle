@@ -681,8 +681,32 @@
   // ===================================================================
   // 検証口
   // ===================================================================
+  /* ★v292Dfix457(2026-07-13): 「正名の唯一の窓口」。
+   *   これまでは (1) 会話ログのラベル表示 (2) 重複カードの判定キー (3) 孤児カードの判定キー
+   *   (4) アイコンのキー が **それぞれ別の名前解決** を持っていたため、
+   *   ラベルだけが「杏子」→「氷川 杏子」に直り、キー側は「杏子」のままで照合が外れ、
+   *   孤児判定が消す → repair が「杏子」で足し直す、の追加/削除ループ（＝残っていた点滅）に
+   *   なっていた（実測: 15秒で RM[氷川 杏子]×12 / ADD[杏子]×12）。
+   *   本関数を全員が使う「唯一の正名解決」にする。1秒キャッシュ（毎レンダー呼ばれるため）。 */
+  var _cl457 = { at: 0, sig: '', map: null };
+  function canonLive(name){
+    var n = trim(name);
+    if (!n) return '';
+    try {
+      if (off()) return n;
+      var now = (typeof Date !== 'undefined') ? Date.now() : 0;
+      if (!_cl457.map || (now - _cl457.at) > 1000){
+        _cl457.at = now;
+        var src = collectSources(getS(), loadRoster(), rawWiChars());
+        _cl457.map = buildCanonMap(src.cast, src.nonCast) || {};
+      }
+      return _cl457.map[n] || n;
+    } catch(e){ return n; }
+  }
+
   G.__v292Dfix445 = {
     __armed: true,
+    canonLive:        canonLive,   // ★fix457: 正名解決の唯一の窓口
     // pure
     canonHandle:      canonHandle,
     buildCanonMap:    buildCanonMap,

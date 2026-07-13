@@ -313,8 +313,9 @@
       var f197 = window.__v292Dfix197;
       var cached = '';
       try { if (f197 && typeof f197.cachedFor === 'function') cached = f197.cachedFor(name) || ''; } catch(e){}
-      var dice = 'https://api.dicebear.com/9.x/lorelei/svg?seed=' + encodeURIComponent(String(name||'character'));
-      try { if (f197 && typeof f197.diceUrl === 'function') dice = f197.diceUrl(name); } catch(e){}
+      var dice = '';
+      try { if (f197 && typeof f197.diceUrl === 'function') dice = f197.diceUrl(name); } catch(e){}   // ★fix457b: ローカルSVG(CORS/429ゼロ)
+      if (!dice) dice = 'https://api.dicebear.com/9.x/lorelei/svg?seed=' + encodeURIComponent(String(name||'character'));
       attr = ' data-av-legacy="' + escHtml(url) + '"';
       url = cached || dice;
     }
@@ -323,15 +324,19 @@
   }
 
   function buildCard(speaker, text, isHeroFlag){
-    var av = lookupAvatar(speaker);
-    var avHtml = avatarImgHtml(speaker, av) || '?';
+    /* ★fix457: カードは最初から【正名】で生まれる（後からラベルを書き換えない＝churn 0）。
+     *   同一性は data-spk（正名・空白除去）に持たせ、以後は表示文字列を解析しない。 */
+    var disp = canon457(speaker) || speaker;
+    var av = lookupAvatar(disp) || lookupAvatar(speaker);
+    var avHtml = avatarImgHtml(disp, av) || '?';
     var card = document.createElement('div');
     card.className = 'v292-dlg-card' + (isHeroFlag ? ' hero-card' : '') +
                      ' v292Dfix66-restored';
+    try { card.setAttribute('data-spk', idKey457(speaker)); } catch(e){}
     card.innerHTML =
       '<div class="dlg-av">' + avHtml + '</div>'
       + '<div class="dlg-body">'
-      +   '<div class="dlg-name">' + escHtml(speaker || '???') + '</div>'
+      +   '<div class="dlg-name">' + escHtml(disp || '???') + '</div>'
       +   '<div class="dlg-text">' + escHtml(text) + '</div>'
       + '</div>';
     return card;
@@ -396,6 +401,22 @@
   function dedupSpeaker(s){
     return cleanSpeakerName(s).replace(/[（(]\s*心\s*[）)]$/, '').trim();
   }
+  /* ★v292Dfix457(2026-07-13): 話者の「同一性」を1本化する。
+   *   表示ラベル・重複判定キー・孤児判定キー・アイコンキーが別々の名前解決を持っていたため、
+   *   ラベルだけ「杏子」→「氷川 杏子」に直ってキーが外れ、消す→足し直すの追加/削除ループ
+   *   （＝残っていた点滅）になっていた。以後は canon457() が唯一の窓口。
+   *   OFF: localStorage v292Dfix457Off='1' */
+  function canon457(n){
+    var raw = String(n == null ? '' : n).trim();
+    try {
+      if (localStorage.getItem('v292Dfix457Off') === '1') return raw;
+      var f = window.__v292Dfix445;
+      if (f && typeof f.canonLive === 'function'){ var c = f.canonLive(raw); if (c) return c; }
+    } catch(e){}
+    return raw;
+  }
+  function idKey457(n){ return canon457(n).replace(/[\s\u3000]/g, ''); }
+
   function dialogueKey(speaker, text){
     /* ★v292Dfix456b(2026-07-13): 重複カードの無限増殖の根治。
      *   fix456でラベル正規化が効き始めた結果、DOM側のラベルは「桐生 悠真」(正名)、
@@ -403,9 +424,7 @@
      *   **repairが同じセリフのカードを毎回足し続けた**（実測: 15ターンでカード401枚）。
      *   dialogueKey は【重複判定のキー】専用（表示には使わない）ので、空白を落として
      *   両者を同じキーに畳む。OFF: v292Dfix456Off で従来キーに戻す。 */
-    var sp = dedupSpeaker(speaker);
-    try { if (localStorage.getItem('v292Dfix456Off') !== '1') sp = sp.replace(/[\s　]/g, ''); } catch(e){}
-    return sp + '|' + (text || '');
+    return idKey457(dedupSpeaker(speaker)) + '|' + (text || '');   // ★fix457: 正名→空白除去で同一性キー
   }
 
   // v292Dfix158(2026-05-30): おしんA＝会話ログは「口に出したセリフ」だけ。内心独白
@@ -1756,7 +1775,7 @@
       /* ★v292Dfix456c: 空白ゆれ（データ側 who「桐生悠真」／表示ラベル「桐生 悠真」）で
        *   孤児と誤判定して削除→repairが再追加、の小さな追加/削除ループが残っていた。
        *   valid に「空白を抜いた話者名」のキーも登録し、照合側も空白を抜いて突き合わせる。 */
-      var WS456 = /[\s　]/g;
+      var WS456 = /[\s\u3000]/g;
       S.turns.forEach(function(t){
         if (!t) return;
         ((t._convSays) || []).forEach(function(c){
@@ -1764,11 +1783,13 @@
           var w = String(c.who), nt = norm233(c.say);
           valid[w + '|' + nt] = 1;
           valid[w.replace(WS456, '') + '|' + nt] = 1;
+          valid[idKey457(w) + '|' + nt] = 1;              // ★fix457: 正名の同一性キー
         });
         if (heroN && t.playerText){
           var pt = norm233(t.playerText);
           valid[heroN + '|' + pt] = 1;
           valid[heroN.replace(WS456, '') + '|' + pt] = 1;
+          valid[idKey457(heroN) + '|' + pt] = 1;
         }
       });
       /* ★v292Dfix455(2026-07-13): 会話ログの点滅の真因。
@@ -1805,6 +1826,10 @@
                         : raw233.split(/\s|📖|⚔|💭|🎭|✨/)[0];
         if (!name) continue;
         var ntext = norm233(textEl.textContent);
+        var spk457 = '';
+        try { spk457 = card.getAttribute('data-spk') || ''; } catch(e){}
+        if (!spk457) spk457 = idKey457(name);                                  // ★fix457: 表示名を解析しない
+        if (valid[spk457 + '|' + ntext]) continue;
         if (valid[name + '|' + ntext]) continue;
         if (f455 && valid[name.replace(WS456, '') + '|' + ntext]) continue;   // ★fix456c: 空白ゆれ
         // 話者表記ゆれは許容（本文が正なら残す）。ただし「はい」等の短い共通台詞は

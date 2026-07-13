@@ -40,7 +40,33 @@
   function getS(){ try{ return window.S || (0,eval)('S'); }catch(e){ return null; } }
   function pollKey(){ try{ var S=getS(); var k=(S&&S.cfg&&S.cfg.pollKey)||''; return String(k).trim(); }catch(e){ return ''; } }
   function artStyle(){ try{ var S=getS(); return String((S&&S.cfg&&S.cfg.artStyle)!=null ? S.cfg.artStyle : 0); }catch(e){ return '0'; } }
-  function diceUrl(name){ return 'https://api.dicebear.com/9.x/' + DICE_STYLE + '/svg?seed=' + encodeURIComponent(String(name||'character')); }
+  /* ★v292Dfix457b(2026-07-13): DiceBear(外部CDN)をやめ、**ローカル生成のSVG**を仮アイコンにする。
+   *   真因: fix356 が CDN画像を fetch→blob 化しようとするが、DiceBearは CORS を許さないため必ず失敗し、
+   *     blobCacheに載らない → **毎スキャンで再fetch** → api.dicebear.com が 429(Too Many Requests) を返し、
+   *     コンソールが CORS/429 のエラーで埋まる（おしんの画面で実測: 53 issues / 73 errors）。
+   *   これは仮表示（AI生成が終われば置き換わる）なので、外部依存を捨てて data: の SVG を作る。
+   *   名前から色を決めるので、同じ人物は毎回同じ仮アイコンになる。ネットワーク0・CORS0・429ゼロ。
+   *   OFF: localStorage v292Dfix457Off='1' で旧DiceBearに戻す。 */
+  function diceUrl(name){
+    var n = String(name || 'character');
+    try { if (localStorage.getItem('v292Dfix457Off') === '1'){ return 'https://api.dicebear.com/9.x/' + DICE_STYLE + '/svg?seed=' + encodeURIComponent(n); } } catch(e){}
+    var h = 0, i;
+    for (i = 0; i < n.length; i++) h = ((h << 5) - h + n.charCodeAt(i)) | 0;
+    h = Math.abs(h);
+    var hue = h % 360;
+    var hue2 = (hue + 40) % 360;
+    var ch = n.charAt(0) || '?';
+    if (ch === '<' || ch === '&' || ch === '"') ch = '?';
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
+            + '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
+            + '<stop offset="0" stop-color="hsl(' + hue + ',38%,34%)"/>'
+            + '<stop offset="1" stop-color="hsl(' + hue2 + ',34%,20%)"/>'
+            + '</linearGradient></defs>'
+            + '<rect width="64" height="64" rx="32" fill="url(#g)"/>'
+            + '<text x="32" y="43" text-anchor="middle" font-size="30" font-family="sans-serif" fill="rgba(255,255,255,.82)">' + ch + '</text>'
+            + '</svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
   function isSquareAvatar(src){ var m=/[?&]width=(\d+)&height=(\d+)/.exec(src); if(!m) return true; return m[1]===m[2]; }
 
   function promptOf(src){ var m=/\/prompt\/([^?]+)/.exec(src); try{ return m?decodeURIComponent(m[1]):''; }catch(e){ return m?m[1]:''; } }

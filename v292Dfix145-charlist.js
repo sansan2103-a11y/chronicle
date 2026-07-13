@@ -57,6 +57,11 @@
   // ★fix410ガード(2026-07-11): fix197.diceUrl() が空文字/例外の場合に備え、ハードコードの
   //   DiceBearフォールバックを最終手段として温存する(旧コードは空文字で上書きし src が空になる穴があった)。
   function diceHardFallback(name){
+    /* ★fix457b: 外部CDN(DiceBear)は CORS+429 の嵐になるため、fix197 のローカルSVGを最優先。 */
+    try {
+      var f = window.__v292Dfix197;
+      if (f && typeof f.diceUrl === 'function'){ var u = f.diceUrl(name); if (u) return u; }
+    } catch(e){}
     return 'https://api.dicebear.com/9.x/lorelei/svg?seed=' + encodeURIComponent(String(name || 'character'));
   }
   function diceUrlSafe(name){
