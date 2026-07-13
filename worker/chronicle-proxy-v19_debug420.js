@@ -145,7 +145,7 @@ export default {
     if (request.method === 'GET') {
       const gp = new URL(request.url).pathname;
       if (gp === '/img') return handleImg(request, env, ctx);   // ★v11: 画像URL配信(<img src>用・認証不要のcapability URL)
-      return json({ ok: true, service: 'chronicle-proxy', v: 19, lora420: true, debug420: true, d1: !!env.DB, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID, img: true }, 200, request);
+      return json({ ok: true, service: 'chronicle-proxy', v: 19, sub: 'b', lora420: true, debug420: true, d1: !!env.DB, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID, img: true }, 200, request);
     }
     if (request.method !== 'POST') {
       return json({ error: 'POST only' }, 405, request);
@@ -218,12 +218,23 @@ export default {
           try {
             const s420 = body.style420;
             if (s420 && typeof s420 === 'object' && typeof s420.path === 'string' && /^https:\/\/(huggingface\.co|civitai\.com|replicate\.com)\//.test(s420.path)) {
-              tgModel = String(env.TOGETHER_LORA_MODEL || 'black-forest-labs/FLUX.1-dev-lora').trim();
+              // ★v19b(2026-07-13): モデル名をクライアントから指定できるようにする(診断・移行用)。
+              //   FLUX.1-dev-lora は「専用エンドポイント専用(non-serverless)」でTogetherに400で拒否されることが実測で判明したため、
+              //   サーバーレスで image_loras が通るモデルを探せるようにする。許可は black-forest-labs/ 配下のみ。
+              const m19 = (typeof s420.model === 'string' && /^black-forest-labs\/[A-Za-z0-9._-]{1,60}$/.test(s420.model)) ? s420.model : '';
+              tgModel = (m19 || String(env.TOGETHER_LORA_MODEL || 'black-forest-labs/FLUX.1-dev-lora')).trim();
               tgBody.model = tgModel;
               tgBody.steps = Math.min(50, Math.max(1, +s420.steps || 28));
               tgBody.image_loras = [ { path: s420.path.slice(0, 300), scale: Math.min(1.5, Math.max(0.1, +s420.scale || 0.8)) } ];
               const trig = String(s420.trigger || '').slice(0, 80).trim();
               if (trig) tgBody.prompt = trig + ', ' + tgBody.prompt;
+              // ★v19b: スタイル参照画像(FLUX.2系)。https のURL配列のみ許可。
+              if (Array.isArray(s420.reference_images)) {
+                const refs = s420.reference_images.filter(function (x) { return typeof x === 'string' && /^https:\/\//.test(x); }).slice(0, 4);
+                if (refs.length) tgBody.reference_images = refs;
+              }
+              // ★v19b: LoRAを使わない検証用に image_loras を外せるようにする
+              if (s420.no_lora === 1) { delete tgBody.image_loras; }
               lora420 = true;
             }
           } catch (e420) {}
