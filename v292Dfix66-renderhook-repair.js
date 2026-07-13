@@ -1753,10 +1753,23 @@
       var stream = document.getElementById('dialogue-stream'); if (!stream) return;
       var valid = {};
       var heroN = (S.cast && S.cast.hero && S.cast.hero.name) || '';
+      /* ★v292Dfix456c: 空白ゆれ（データ側 who「桐生悠真」／表示ラベル「桐生 悠真」）で
+       *   孤児と誤判定して削除→repairが再追加、の小さな追加/削除ループが残っていた。
+       *   valid に「空白を抜いた話者名」のキーも登録し、照合側も空白を抜いて突き合わせる。 */
+      var WS456 = /[\s　]/g;
       S.turns.forEach(function(t){
         if (!t) return;
-        ((t._convSays) || []).forEach(function(c){ if (c && c.who) valid[String(c.who) + '|' + norm233(c.say)] = 1; });
-        if (heroN && t.playerText) valid[heroN + '|' + norm233(t.playerText)] = 1;
+        ((t._convSays) || []).forEach(function(c){
+          if (!c || !c.who) return;
+          var w = String(c.who), nt = norm233(c.say);
+          valid[w + '|' + nt] = 1;
+          valid[w.replace(WS456, '') + '|' + nt] = 1;
+        });
+        if (heroN && t.playerText){
+          var pt = norm233(t.playerText);
+          valid[heroN + '|' + pt] = 1;
+          valid[heroN.replace(WS456, '') + '|' + pt] = 1;
+        }
       });
       /* ★v292Dfix455(2026-07-13): 会話ログの点滅の真因。
        *   旧実装は話者ラベルを /\s|📖.../ で split して [0] を採用していた。
@@ -1792,8 +1805,8 @@
                         : raw233.split(/\s|📖|⚔|💭|🎭|✨/)[0];
         if (!name) continue;
         var ntext = norm233(textEl.textContent);
-        var key = name + '|' + ntext;
-        if (valid[key]) continue;
+        if (valid[name + '|' + ntext]) continue;
+        if (f455 && valid[name.replace(WS456, '') + '|' + ntext]) continue;   // ★fix456c: 空白ゆれ
         // 話者表記ゆれは許容（本文が正なら残す）。ただし「はい」等の短い共通台詞は
         // 別話者・別ターンで衝突しうるため、6文字以上の本文に限る（GPT-5.6監査の指摘）。
         if (f455 && ntext && ntext.length >= 6 && validText[ntext]) continue;
