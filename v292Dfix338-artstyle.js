@@ -99,12 +99,27 @@
   var TITLE_NEW = TITLE_OLD.replace('闇アニメ=青白い肌の暗い半実写アニメ', 'デフォルト=明るく柔らかい半写実アニメ');
   // 新旧どちらが有効でも、もう片方は「剥がすべき自前PREFIX」として残す(冪等化)
   var LEGACY_PREFIX = [ART6_OLD, ART6C_OLD, ART6_V1, ART6C_V1, ART6_V2, ART6C_V2, ART6_V3, ART6C_V3, ART6_V4, ART6C_V4, ART6_V5, ART6C_V5, ART6_NEW, ART6C_NEW];   // ★fix435   // ★fix434: fix433版(V4)も剥がし対象に追加   // ★fix433: fix432版(V3)も剥がし対象に追加   // ★fix432: fix431版(V2)も剥がし対象に追加   // ★fix431: fix429版(V1)も剥がし対象に追加（二重前置の防止）
+  /* ★v292Dfix461(2026-07-13・GPT-5.6監査): スタイル接頭辞を **短くして被写体の後ろへ** 移す。
+   *   旧: 長いスタイル文が先頭 → anime/JRPG の若い顔バイアスが人物属性(70代・痩身・皺)を押し潰していた。
+   *   新: 被写体（英語の外見文）が先頭、スタイルは末尾（fix349の '@TAIL ' 機構を再利用）。
+   *   ・メタ指示（"age ... exactly as described"）は効かないので削除
+   *   ・否定（avoid a generic idol face）は肯定形（mature asymmetrical features）へ
+   *   OFF: localStorage.v292Dfix461Off='1' で従来（長い接頭辞・先頭）に戻る。 */
+  var ART6_TAIL  = '@TAIL Dark fantasy visual-novel illustration, semi-realistic anime rendering, textured mature facial features, individual asymmetrical face, dim cinematic lighting with soft shadows, muted desaturated cold palette, simple dark atmospheric background, chest-up bust with space around, not a close-up, highly detailed, high quality';
+  var ART6C_TAIL = '@TAIL Dark fantasy creature concept art, JRPG bestiary portrait, semi-realistic rendering, dim cinematic lighting, muted desaturated palette, dark atmospheric background, upper body framing with space around, not a close-up, highly detailed, high quality, non-human creature, monster design, no human face';
+  function off461(){ try { return localStorage.getItem('v292Dfix461Off') === '1'; } catch(e){ return false; } }
+  try { LEGACY_PREFIX.push(ART6_TAIL.slice(6), ART6C_TAIL.slice(6)); } catch(e){}   // ★fix461: 二重前置の防止（剥がし対象に追加）
+
   function apply429(){
     var o = off429();
     PREFIX[6]          = o ? ART6_OLD  : ART6_NEW;
     PREFIX_CREATURE[6] = o ? ART6C_OLD : ART6C_NEW;
     LABELS[6]          = o ? LBL6_OLD  : LBL6_NEW;
     STYLE_TITLE        = o ? TITLE_OLD : TITLE_NEW;
+    if (!o && !off461()){          // ★fix461: 被写体先頭・スタイル末尾
+      PREFIX[6]          = ART6_TAIL;
+      PREFIX_CREATURE[6] = ART6C_TAIL;
+    }
     return !o;
   }
   apply429();   // 読み込み時に一度。以後 transformPrompt / patchSelector の入口で毎回 live 再評価する。

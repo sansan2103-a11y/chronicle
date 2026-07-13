@@ -212,7 +212,24 @@
         var mH421=(desc.match(/(少年|青年|男性|男子|王子|老人|紳士|髭|彼(?!女)|息子|父親|兄|弟)/g)||[]).length;
         if (mH421>fH421) gen421='男性'; else if (fH421>mH421) gen421='女性';
       }
-      var gtok421 = gen421==='男性' ? ', male, 1boy, handsome man' : (gen421==='女性' ? ', female, 1girl' : '');
+      var gtok421 = gen421==='男性' ? ', male, 1boy' : (gen421==='女性' ? ', female, 1girl' : '');
+      /* ★v292Dfix461(2026-07-13): 外見の忠実度（年齢・体格・肌・服装が絵に出ない）の根治。
+       *   旧: 日本語の説明文（性格・生い立ち込み）をそのまま画像モデルへ渡していた
+       *       → FLUXは日本語をほぼ解さず、英語のスタイル接頭辞だけが効いて全員「若いアニメ美形」に。
+       *   新: fix461 が用意した **英語の外見タグ**（年齢を先頭に明示）があればそれを使う。
+       *   ⚠ 'handsome man' は年齢を若く引き戻すので男性トークンから外した。
+       *   OFF: v292Dfix461Off='1' で従来の日本語プロンプトに戻る。 */
+      try {
+        var f461 = window.__v292Dfix461;
+        if (f461 && typeof f461.tagsFor === 'function'){
+          var en = f461.tagsFor(name);
+          if (en){
+            /* 英文の中に年齢・性別・民族が入っている。1boy/1girl は「少年/少女」を強く示し
+               70代男性と衝突するため付けない（GPT-5.6監査）。名前も付けない（絵に文字が出る事故防止）。 */
+            return en;
+          }
+        }
+      } catch(e){}
       return name+', '+desc+(world?('、世界観: '+world):'')+gtok421+', portrait';
     }catch(e){ return ''; }
   }
