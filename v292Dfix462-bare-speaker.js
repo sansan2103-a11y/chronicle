@@ -118,8 +118,11 @@
       if (i < 0) continue;
       var l = String(lines[i] || '');
       if (/^[\s　]*[「『]/.test(l.trim())) continue;                  // セリフ行は手がかりにしない
-      var r = scanLine(l, tokens, { voice: 4, verb: 4, subj: 1 });    // 裸の主語だけでは決めない
-      if (r && r.score >= 4 && (!best || r.score >= best.score)) best = r;   // 後ろの行を優先
+      // 「Xの声が」(voice=5) は「Xは…言う」(verb=4)より強い。
+      // ★実測(おしんT4): 「澪はもう一度…自分が次に何を言うかで」の“言う”が発話動詞に誤ヒットし、
+      //   本物の手がかり「ゆかの声が」に競り勝って主人公のままになった → voice を上に置いて根治。
+      var r = scanLine(l, tokens, { voice: 5, verb: 4, subj: 1 });    // 裸の主語だけでは決めない
+      if (r && r.score >= 4 && (!best || r.score > best.score || (r.score === best.score))) best = r;   // 強い手がかり優先・同点は後ろの行
     }
     return best;
   }
