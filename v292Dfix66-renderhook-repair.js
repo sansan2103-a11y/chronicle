@@ -1786,7 +1786,9 @@
         var ntext = norm233(textEl.textContent);
         var key = name + '|' + ntext;
         if (valid[key]) continue;
-        if (f455 && ntext && validText[ntext]) continue;   // 話者表記ゆれは許容（本文が正なら残す）
+        // 話者表記ゆれは許容（本文が正なら残す）。ただし「はい」等の短い共通台詞は
+        // 別話者・別ターンで衝突しうるため、6文字以上の本文に限る（GPT-5.6監査の指摘）。
+        if (f455 && ntext && ntext.length >= 6 && validText[ntext]) continue;
         try { card.remove(); removed++; } catch(e){}
       }
       if (removed){ try { console.log('[v292Dfix233]', 'removed', removed, 'orphan card(s) (retry/undo reconcile)'); } catch(e){} }

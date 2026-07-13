@@ -91,6 +91,19 @@
     var n = trim(name);
     if (!n || GENERIC[n]) return '';
     var hit = [], i;
+    /* ★v292Dfix456(2026-07-13): 空白ゆれ（「桐生悠真」⇔「桐生 悠真」）は同一人物。
+     *   前方/後方一致では中央の空白を吸収できず同一人物が分裂していた。OFF=v292Dfix456Off */
+    try {
+      if (localStorage.getItem('v292Dfix456Off') !== '1'){
+        var ws456 = /[\s\u3000]/g, n456 = n.replace(ws456, '');
+        for (i = 0; i < (castNames || []).length; i++){
+          var c456 = trim(castNames[i]);
+          if (!c456) continue;
+          if (c456 === n) return '';                       // 既に正名＝不触
+          if (c456.replace(ws456, '') === n456) return c456;
+        }
+      }
+    } catch(e){}
     for (i = 0; i < (castNames || []).length; i++){
       var c = trim(castNames[i]);
       if (!c) continue;

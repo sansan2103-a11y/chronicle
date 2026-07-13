@@ -87,6 +87,20 @@
     }
     if (Object.prototype.hasOwnProperty.call(_c424.map, who)) return _c424.map[who];
     var names = _c424.names, res = who;
+    /* ★v292Dfix456(2026-07-13): 空白ゆれの吸収。
+     *   モデルは「桐生 悠真」を「桐生悠真」と空白なしで書くことが多い（実測: 24T中 who に
+     *   両表記が混在）。旧の前方/後方一致では中央に空白があると一致せず、**同一人物が
+     *   2人に分裂**（アイコンが2枚・話者帰属が乱れる）。空白だけの差は同一人物と断定できる。
+     *   OFF: localStorage v292Dfix456Off='1' */
+    try {
+      if (localStorage.getItem('v292Dfix456Off') !== '1'){
+        var ws = /[\s\u3000]/g;
+        var w0 = who.replace(ws, '');
+        for (var q = 0; q < names.length; q++){
+          if (names[q] !== who && names[q].replace(ws, '') === w0){ _c424.map[who] = names[q]; return names[q]; }
+        }
+      }
+    } catch(e){}
     var exact = false, matches = [];
     for (var i=0; i<names.length; i++){
       var n = names[i];

@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260713-fix455';
+  var BUILT = '20260713-fix456';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2697,7 +2697,7 @@ G.init();
   <script src="v292Dfix192-newengine.js?cb=v292Dfix425"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
-  <script src="v292Dfix197-avatar-key.js?cb=v292Dfix424"></script>
+  <script src="v292Dfix197-avatar-key.js?cb=v292Dfix456"></script>
   <!-- v292Dfix221: モデル文脈の直近会話(recentDialogues)を、表示と同じ権威データ
        _convSays に一本化。fix58の壊れた本文再抽出(speakerに地の文が混入→過去セリフ
        がモデルへ誤供給され全キャラが同じセリフを言う)を発生源から断つ。 -->
@@ -2818,12 +2818,13 @@ G.init();
 <script src="v292Dfix442-folklore.js?cb=v292Dfix442"></script>
 <script src="v292Dfix443-drama-rescue.js?cb=v292Dfix443"></script>
 <script src="v292Dfix444-world-law.js?cb=v292Dfix451"></script>
-<script src="v292Dfix445-handle-lock.js?cb=v292Dfix445"></script>
+<script src="v292Dfix445-handle-lock.js?cb=v292Dfix456"></script>
 <script src="v292Dfix446-fill-robust.js?cb=v292Dfix446"></script>
 <script src="v292Dfix447-json-force.js?cb=v292Dfix447"></script>
 <script src="v292Dfix448-genloading.js?cb=v292Dfix448"></script>
 <script src="v292Dfix453-src-coalesce.js?cb=v292Dfix453"></script>
 <script src="v292Dfix454-dash.js?cb=v292Dfix454"></script>
+<script src="v292Dfix456-name-space.js?cb=v292Dfix456"></script>
 </body>
 </html>
 
