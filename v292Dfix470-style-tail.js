@@ -25,12 +25,17 @@
   if (window.__f470done) return; window.__f470done = 1;
   var TAG = '[v292Dfix470:style-tail]';
 
-  var STYLE_DEFAULT = 'soft semi-realistic korean webtoon illustration, smooth airbrushed shading, delicate thin linework, muted desaturated palette, pale light grey background, gentle rim light, subtle blush on cheeks, glossy dark eyes, matte finish, clean anime-realism hybrid';
-  var STYLE_CREATURE = 'soft semi-realistic korean webtoon illustration, smooth airbrushed shading, delicate thin linework, muted desaturated palette, pale light grey background, eerie non-human creature concept art, no human face, unsettling silhouette, matte finish';
+  // ★fix470c: 'semi-realistic' は FLUX.2-dev で**写実写真**に振れることが実測で判明（リサ/カナが実写風になった）。
+  //   イラストであることを明示的に固定し、写真表現を否定語で締め出す。
+  var STYLE_DEFAULT = 'korean webtoon anime illustration, hand-drawn digital painting, clean thin linework, soft airbrushed cel shading, muted desaturated palette, pale light grey background, subtle blush, glossy dark anime eyes, not photorealistic, not a photograph, no 3d render, no realistic skin texture';
+  var STYLE_CREATURE = 'korean webtoon anime illustration, hand-drawn digital painting, smooth airbrushed shading, delicate thin linework, muted desaturated palette, pale light grey background, eerie non-human creature concept art, no human face, unsettling silhouette, matte finish';
   var MODEL = 'black-forest-labs/FLUX.2-dev';
   var HF_ANCHOR = 'https://huggingface.co/black-forest-labs/FLUX.2-dev';   // Worker側のモデル指定を通すための鍵(LoRAは使わない)
 
-  function off(){ try { return localStorage.getItem('v292Dfix470Off') === '1'; } catch(e){ return false; } }
+  // ★fix470c(2026-07-14): **既定OFF(オプトイン)** に変更。
+  //   理由: 既存アイコンと混在して統一感が下がり、おしんの判断で「前の方がいい」となったため。
+  //   ONにする = localStorage.v292Dfix470On='1'（そのうえで全アイコンを一括再生成して初めて統一される）
+  function off(){ try { if (localStorage.getItem('v292Dfix470Off') === '1') return true; return localStorage.getItem('v292Dfix470On') !== '1'; } catch(e){ return true; } }
   function style(){ try { return localStorage.getItem('v292Dfix470Style') || STYLE_DEFAULT; } catch(e){ return STYLE_DEFAULT; } }
 
   // ---- ①fix338(旧・闇アニメ画風)を止めて、画風は本fixが一手に決める ----
@@ -90,7 +95,7 @@
           var core = stripOld(b.prompt);
           var tail = isCreature(core) ? STYLE_CREATURE : style();
           if (core.indexOf(tail.slice(0, 30)) < 0) b.prompt = core + ', ' + tail;     // 画風は必ず末尾（@TAIL方式）
-          if (!b.style420) b.style420 = { path: HF_ANCHOR, no_lora: 1, steps: 28, trigger: '', model: MODEL };
+          if (!b.style420) b.style420 = { path: HF_ANCHOR, no_lora: 1, steps: 20, trigger: '', model: MODEL };   // ★fix470c: 28stepsは生成が遅くアイコン再生成がタイムアウトしていた(実測ログ)
           init = Object.assign({}, init, { body: JSON.stringify(b) });
         }
       }
