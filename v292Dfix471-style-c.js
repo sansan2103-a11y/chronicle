@@ -49,7 +49,9 @@
 
   var CFG_DEFAULT = { model: 'black-forest-labs/FLUX.2-dev', steps: 28, upsample: 0 };
 
-  function off(){ try { return localStorage.getItem('v292Dfix471Off') === '1'; } catch(e){ return false; } }
+  // ★fix472(2026-07-14・おしん指示): 案Cは決定稿ではない → **既定OFF(オプトイン)** に戻す。
+  //   ON にする = localStorage.v292Dfix471On='1'。OFF のときは旧画風(fix338)へ自動復帰する。
+  function off(){ try { if (localStorage.getItem('v292Dfix471Off') === '1') return true; return localStorage.getItem('v292Dfix471On') !== '1'; } catch(e){ return true; } }
   function styleHuman(){ try { return localStorage.getItem('v292Dfix471Style') || STYLE_HUMAN; } catch(e){ return STYLE_HUMAN; } }
   function styleCreature(){ try { return localStorage.getItem('v292Dfix471StyleCreature') || STYLE_CREATURE; } catch(e){ return STYLE_CREATURE; } }
   function cfg(){
