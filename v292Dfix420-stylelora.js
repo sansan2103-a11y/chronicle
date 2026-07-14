@@ -8,7 +8,7 @@
 //   モデル切替+LoRA適用+trigger前置を行う(本番実証済み・A/B画像で品質向上確認)。
 //
 // 本fix: アイコン生成リクエスト(/image系)のbodyに style420 を注入するだけ。
-//   fix422で既定ON。OFF= v292Dfix420Off='1'(v292Dfix420Onは不要になった・残っていても無害)
+//   ★fix473で **既定OFF**。ONにする = v292Dfix420OnV2='1'（旧 v292Dfix420On は無効・再利用しない）
 //   LoRA差し替え= v292Dfix420Cfg にJSON {path,scale,steps,trigger}
 //   (Worker側はhuggingface.co/civitai.com/replicate.comのみ許可)
 //
@@ -31,8 +31,15 @@
   };
 
   function on(){
-    // fix422: 既定ON化(おしん承認2026-07-11深夜・E2E全合格後)。OFF=v292Dfix420Off='1'
-    try { return localStorage.getItem('v292Dfix420Off') !== '1'; } catch(e){ return true; }
+    // ★fix473(2026-07-14・おしん指示 / Codex監査): **既定OFF**へ戻す。
+    //   理由: TogetherのサーバーレスではLoRA(image_loras)が使えず、本fixがLoRAを付けると
+    //   Togetherが400 → Workerが黙って別プロバイダへフォールバックしていた（＝効いていないのに絵は出る）。
+    //   ⚠️ 旧キー `v292Dfix420On` は **再利用しない**（=1 が残っている端末があるため）。
+    //      新しい versioned opt-in key: `v292Dfix420OnV2`='1' のときだけ有効。
+    try {
+      if (localStorage.getItem('v292Dfix420Off') === '1') return false;
+      return localStorage.getItem('v292Dfix420OnV2') === '1';
+    } catch(e){ return false; }
   }
   function cfg(){
     try {
@@ -73,5 +80,5 @@
     w._f420w = true;
     window.fetch = w;
   }
-  try { console.log(TAG, 'loaded', on() ? '(ON)' : '(OFF・v292Dfix420On=1で有効)'); } catch(e){}
+  try { console.log(TAG, 'loaded', on() ? '(ON)' : '(OFF・v292Dfix420OnV2=1で有効。旧v292Dfix420Onは無効)'); } catch(e){}
 })();
