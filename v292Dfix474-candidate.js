@@ -133,6 +133,28 @@
     });
   }
 
+  // ---- サーバー確認（GPT-5.6監査: putimg成功＋サーバー再取得SHA一致 まで確認してから COMMITTED）----
+  function proxyUrl(){ try { var S=getS(); var u=(S&&S.cfg&&S.cfg.proxyUrl)||localStorage.getItem('v292ProxyUrl')||''; return String(u).replace(/\/$/,''); } catch(e){ return ''; } }
+  function proxyPass(){ try { return (localStorage.getItem('v292ProxyPass')||'').trim(); } catch(e){ return ''; } }
+  function ns(){ try { return localStorage.getItem('v292Dfix400_ns')||''; } catch(e){ return ''; } }
+  // 差し替え可能（node テストではスタブを注入）
+  var _remoteConfirm = function(pk, dataUrl, expectedSha){
+    var base=proxyUrl(); var pass=proxyPass(); var n=ns();
+    if(!base) { var f4=window.__v292Dfix400; try { if(f4&&f4.proxyUrl) base=f4.proxyUrl().replace(/\/$/,''); } catch(e){} }
+    if(!base || !pass) return Promise.reject(new Error('remote confirm: proxy/pass 未設定'));
+    // putimg（本キーの画像をサーバーへ確実にアップ）
+    return fetch(base+'/save',{method:'POST',headers:{'Content-Type':'application/json','x-chronicle-pass':pass},body:JSON.stringify({op:'putimg',k:LS_IMG+pk,data:dataUrl,mid:'fix474-'+pk+'-'+Date.now()})})
+      .then(function(r){ if(!r.ok) throw new Error('putimg http '+r.status); return r.json(); })
+      .then(function(){
+        // サーバーから再取得して SHA 照合
+        if(!n) return true; // ns未確立なら putimg 成功のみで可（capability URL不明）
+        return fetch(base+'/img?ns='+encodeURIComponent(n)+'&k='+encodeURIComponent(LS_IMG+pk)+'&_='+Date.now(),{cache:'no-store'})
+          .then(function(r2){ if(!r2.ok) throw new Error('img http '+r2.status); return r2.arrayBuffer(); })
+          .then(function(buf){ return sha256Hex(buf); })
+          .then(function(sha){ if(sha!==expectedSha) throw new Error('remote sha mismatch'); return true; });
+      });
+  };
+
   // ---- 採用（journal付き疑似トランザクション）----
   function adopt(candId){
     if (onV1()===false) return Promise.reject(new Error('fix474 OFF'));
@@ -160,11 +182,16 @@
             try { localStorage.setItem(LS_REC+rec.pk, recipe); } catch(e){ throw new Error('recipe write failed: '+e); }
             jrn.state='RECIPE_WRITTEN'; return put('journal', jrn);
           }).then(function(){
-            // VERIFIED: 通常経路が反映されたか（cache/persist を close→reopen で再読込）
+            // LOCAL_VERIFIED: 通常経路が反映されたか（保存値のSHAを再照合）
             var cur=''; try { cur = localStorage.getItem(LS_IMG+rec.pk)||''; } catch(e){}
             return sha256Hex(dataUrlToBuf(cur)).then(function(sha2){
-              if(sha2!==rec.sha256) throw new Error('verify failed: stored image sha != candidate');
-              jrn.state='VERIFIED'; return put('journal', jrn);
+              if(sha2!==rec.sha256) throw new Error('local verify failed: stored image sha != candidate');
+              jrn.state='LOCAL_VERIFIED'; return put('journal', jrn);
+            });
+          }).then(function(){
+            // REMOTE_UPLOADED: putimg成功＋サーバー再取得SHA一致まで確認（GPT-5.6監査）
+            return _remoteConfirm(rec.pk, dataUrl, rec.sha256).then(function(){
+              jrn.state='REMOTE_UPLOADED'; return put('journal', jrn);
             });
           }).then(function(){
             jrn.state='COMMITTED'; jrn.committedAt=Date.now(); return put('journal', jrn);
@@ -283,6 +310,7 @@
     snapshotBaseline:snapshotBaseline, adopt:adopt, discard:discard, restore:restore,
     pkOf:pkOf, fingerprint:fingerprint, sessionId:sessionId,
     _openDB:openDB, _get:get, _put:put, _del:del, openModal:openModal, injectBtn:injectBtn,
+    setRemoteConfirm:function(fn){ if(typeof fn==='function') _remoteConfirm=fn; }, _remoteConfirm:function(){ return _remoteConfirm.apply(null,arguments); },
     status:function(){ return { onV1:onV1(), sessionId:sessionId(), slot:activeSlot() }; }
   };
   if (onV1()) { try { recoverJournals(); } catch(e){} try { console.log(TAG,'armed (opt-in ON)'); } catch(e){} }
