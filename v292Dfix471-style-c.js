@@ -27,11 +27,19 @@
   var TAG = '[v292Dfix471:style-c]';
 
   // ---- 案C（闇アニメ整理版）: 矛盾語(semi-realistic/cinematic/painterly)なし・品質語の水増しなし ----
+  // ★fix471b(2026-07-14・おしん報告「横を向く」「澚が男っぽい」):
+  //   ①旧スタイル文にあった構図の指定(正面を向く)を、矛盾語の掃除と一緒に落としてしまった
+  //     → FLUX.2は指定が無いと横顔・斜め後ろを選ぶ。**正面・顔が見えることを明示**する。
+  //   ②性別は外見の英文の**冒頭にしか無い**ため、長い外見文の後半で薄まり、
+  //     中性的〜男性寄りの顔になる(GPT-5.6: 年齢・性別は可視特徴に展開しないと事前分布に負ける)。
+  //     → **末尾で性別を1回だけ言い直す**(元の文に明示されている場合だけ)。
   var STYLE_HUMAN =
     'Style: dark fantasy anime illustration, hand-drawn digital painting, crisp clean linework, ' +
     'cel shading with soft gradients, muted desaturated cold palette, deep charcoal atmospheric background, ' +
     'dim rim light, matte finish. ' +
-    'Composition: chest-up bust portrait, the subject centered with space around, the outfit and collar visible.';
+    'Composition: chest-up bust portrait, the character faces the viewer in a front view or a slight three-quarter turn, ' +
+    'the whole face clearly visible with both eyes visible, never a profile view and never a back view, ' +
+    'the subject centered with space around, the outfit and collar visible.';
   var STYLE_CREATURE =
     'Style: dark fantasy anime illustration, hand-drawn digital painting, crisp clean linework, ' +
     'cel shading with soft gradients, muted desaturated cold palette, deep charcoal atmospheric background, ' +
@@ -127,11 +135,25 @@
     } catch(e){ return false; }
   }
 
+  // ★fix471b: 性別の言い直し。元の外見文に**明示されている語**だけを使う(推測しない)。
+  function genderLine(core){
+    try {
+      var s = String(core || '');
+      var f = s.search(/\b(girl|woman|female|lady)\b/i);
+      var m = s.search(/\b(boy|man|male|gentleman)\b/i);
+      if (f < 0 && m < 0) return '';                    // 性別が書かれていない → 触らない
+      if (f >= 0 && (m < 0 || f <= m)) return 'The subject is clearly female, with feminine facial features. ';
+      return 'The subject is clearly male, with masculine facial features. ';
+    } catch(e){ return ''; }
+  }
+
   function buildPrompt(raw){
     var core = stripOld(raw);
-    var tail = isCreature(core) ? styleCreature() : styleHuman();
+    var creature = isCreature(core);
+    var tail = creature ? styleCreature() : styleHuman();
     if (core.indexOf(tail.slice(0, 40)) >= 0) return core;   // 冪等（既に付いている）
-    return core + ' ' + tail;
+    var g = creature ? '' : genderLine(core);                // 人外に性別は付けない
+    return core + ' ' + g + tail;
   }
 
   var of = window.fetch;
