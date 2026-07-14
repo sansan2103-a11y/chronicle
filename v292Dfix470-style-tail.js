@@ -27,15 +27,17 @@
 
   // ★fix470c: 'semi-realistic' は FLUX.2-dev で**写実写真**に振れることが実測で判明（リサ/カナが実写風になった）。
   //   イラストであることを明示的に固定し、写真表現を否定語で締め出す。
-  var STYLE_DEFAULT = 'korean webtoon anime illustration, hand-drawn digital painting, clean thin linework, soft airbrushed cel shading, muted desaturated palette, pale light grey background, subtle blush, glossy dark anime eyes, not photorealistic, not a photograph, no 3d render, no realistic skin texture';
-  var STYLE_CREATURE = 'korean webtoon anime illustration, hand-drawn digital painting, smooth airbrushed shading, delicate thin linework, muted desaturated palette, pale light grey background, eerie non-human creature concept art, no human face, unsettling silhouette, matte finish';
+  var STYLE_DEFAULT = 'korean webtoon anime illustration, hand-drawn digital painting, clean thin linework, soft airbrushed cel shading, muted desaturated palette, near-black charcoal background, faint smoky texture, subtle rim light, subtle blush, glossy dark anime eyes, not photorealistic, not a photograph, no 3d render, no realistic skin texture';
+  var STYLE_CREATURE = 'korean webtoon anime illustration, hand-drawn digital painting, smooth airbrushed shading, delicate thin linework, muted desaturated palette, near-black charcoal background, faint smoky texture, eerie non-human creature concept art, no human face, unsettling silhouette, matte finish';
   var MODEL = 'black-forest-labs/FLUX.2-dev';
   var HF_ANCHOR = 'https://huggingface.co/black-forest-labs/FLUX.2-dev';   // Worker側のモデル指定を通すための鍵(LoRAは使わない)
 
   // ★fix470c(2026-07-14): **既定OFF(オプトイン)** に変更。
   //   理由: 既存アイコンと混在して統一感が下がり、おしんの判断で「前の方がいい」となったため。
   //   ONにする = localStorage.v292Dfix470On='1'（そのうえで全アイコンを一括再生成して初めて統一される）
-  function off(){ try { if (localStorage.getItem('v292Dfix470Off') === '1') return true; return localStorage.getItem('v292Dfix470On') !== '1'; } catch(e){ return true; } }
+  // ★fix470d(2026-07-14): おしん承認（絵柄=韓国ウェブトゥーン調イラスト / 背景=黒に近い墨）→ **既定ON**。
+  //   OFF = v292Dfix470Off='1'（旧・闇アニメ画風へ即復帰）
+  function off(){ try { return localStorage.getItem('v292Dfix470Off') === '1'; } catch(e){ return false; } }
   function style(){ try { return localStorage.getItem('v292Dfix470Style') || STYLE_DEFAULT; } catch(e){ return STYLE_DEFAULT; } }
 
   // ---- ①fix338(旧・闇アニメ画風)を止めて、画風は本fixが一手に決める ----
