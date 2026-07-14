@@ -218,6 +218,13 @@
       try { if(b.rec==null) localStorage.removeItem(LS_REC+pk); else localStorage.setItem(LS_REC+pk, b.rec); } catch(e){}
       try { var S=getS(); if(S&&S.cast){ if(S.cast.hero&&S.cast.hero.name===name) S.cast.hero.avatar=b.avatar; else { var a=S.cast.npcs||[]; for(var i=0;i<a.length;i++){ if(a[i]&&a[i].name===name){ a[i].avatar=b.avatar; break; } } } } } catch(e){}
       try { var f=window.__v292Dfix197||window.__v292Dfix199; if(f&&f.sweep) f.sweep(); } catch(e){}
+      // ★GPT-5.6監査: 元へ戻すでも **サーバー側を baseline 画像へ戻す**（putimg + 再取得SHA照合）。
+      //   失敗しても表示は既に baseline なので致命ではない（best-effort・例外は握り潰す）。
+      if (b.img && b.img.indexOf('data:')===0) {
+        return sha256Hex(dataUrlToBuf(b.img)).then(function(sha){
+          return _remoteConfirm(pk, b.img, sha).then(function(){ return true; }, function(){ return true; });
+        });
+      }
       return true;
     });
   }
