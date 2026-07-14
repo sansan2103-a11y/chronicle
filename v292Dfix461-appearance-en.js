@@ -32,7 +32,8 @@
   if (window.__v292Dfix461 && window.__v292Dfix461.__armed) return;
   var TAG = '[v292Dfix461:appearance-en]';
   var PFX = 'v292en_';
-  var VER = 'v1';
+  // ★C(2026-07-14): SYS を変えたので **キャッシュVERを上げる**（旧 v292en_* を再利用しない）
+  var VER = 'v2-noinvent';
   var TIMEOUT_MS = 45000;
   var stats = { made: 0, cached: 0, failed: 0, lastErr: '' };
   var inflight = {};
@@ -72,22 +73,22 @@
    *   ・年齢は数字＋**視覚的な証拠**（deep forehead lines / sagging eyelids / sparse gray hair …）
    *   ・"exactly as described" のようなメタ指示は弱い。実際に描くものを書く
    *   ・否定（avoid generic idol face）ではなく肯定（mature asymmetrical features …） */
+  // ★C(2026-07-14・おしん指示 / GPT-5.6監査):
+  //   「必ず明示せよ」系の強制（年齢・性別・民族の必須 / 年齢cue最低3つ / 体格・肌・髪・目・服の必須列挙 /
+  //   不足特徴の創作）を **全部やめる**。設定に書かれた属性だけを出し、書かれていない項目は **行ごと省略**する。
   var SYS = 'You rewrite a Japanese character description into a SHORT English image prompt for FLUX.\n'
-    + 'Output ONLY the English prompt. 3 to 5 short lines. No Japanese, no quotes, no tags like 1boy, no explanation, no character name.\n'
-    + 'Structure, in this order:\n'
-    + '1) One opening sentence with count + explicit age (a number) + sex + ethnicity. e.g. "A single 74-year-old Japanese man, a retired lighthouse keeper."\n'
-    + '2) Build and posture in visual terms (lean narrow build, bony shoulders, stooped posture).\n'
-    + '3) Face and ageing evidence (deep forehead lines, sagging eyelids, hollow cheeks, gray stubble) and skin (sun-damaged rough skin, liver spots).\n'
-    + '4) Hair and eyes (sparse gray hair; one clouded milky-white blind left eye).\n'
-    + '5) Clothing, then: "Chest-up, three-quarter view."\n'
-    + 'Rules: the age must be unmistakable and supported by at least three visual ageing or youth cues. '
-    + 'Do not use 1boy/1girl/handsome/beautiful/idol. Ignore personality, backstory and relationships unless they change the look. '
-    + 'If a trait is missing, invent one concrete plausible trait that fits the description.';
+    + 'Output ONLY the English prompt. No Japanese, no quotes, no tags like 1boy, no explanation, no character name.\n'
+    + 'Write only what the description states. Never invent, guess or add anything that is not written.\n'
+    + 'If an attribute (age, sex, ethnicity, build, skin, hair, eyes, clothing, accessories) is not stated, omit that item entirely.\n'
+    + 'Keep the order: subject, build/posture, face, hair and eyes, clothing. Skip any item with no source in the description.\n'
+    + 'Do not use 1boy/1girl/handsome/beautiful/idol. Do not describe personality, backstory or relationships unless they are visible.\n'
+    + 'Do not add art style, lighting, camera or quality words. Those are added later by application code.';
 
   function ask(m, cb){
     var S = getS(), cfg = (S && S.cfg) || {};
+    // ★C: **世界観(scene.lore)を入力から外す**。疎なキャラ説明のとき、世界観から服・装飾を
+    //   「補完」してしまう余地を断つ（設定に無いものは出さない）。
     var world = '';
-    try { if (S && S.scene) world = String(S.scene.lore || '').replace(/\s+/g, ' ').slice(0, 80); } catch(e){}
     var user = '説明文:\n' + m.desc.slice(0, 400)
              + (m.gender ? ('\n性別: ' + m.gender) : '')
              + (world ? ('\n世界観: ' + world) : '')
