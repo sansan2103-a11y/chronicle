@@ -35,9 +35,9 @@
   // ★fix470c(2026-07-14): **既定OFF(オプトイン)** に変更。
   //   理由: 既存アイコンと混在して統一感が下がり、おしんの判断で「前の方がいい」となったため。
   //   ONにする = localStorage.v292Dfix470On='1'（そのうえで全アイコンを一括再生成して初めて統一される）
-  // ★fix470d(2026-07-14): おしん承認（絵柄=韓国ウェブトゥーン調イラスト / 背景=黒に近い墨）→ **既定ON**。
-  //   OFF = v292Dfix470Off='1'（旧・闇アニメ画風へ即復帰）
-  function off(){ try { return localStorage.getItem('v292Dfix470Off') === '1'; } catch(e){ return false; } }
+  // ★fix470e(2026-07-14): おしん判断で**差し戻し**（実機で見て「ダメ」）。**既定OFF(オプトイン)**に戻す。
+  //   絵柄・画風は次セッションで改めて相談する。ON = localStorage.v292Dfix470On='1'
+  function off(){ try { if (localStorage.getItem('v292Dfix470Off') === '1') return true; return localStorage.getItem('v292Dfix470On') !== '1'; } catch(e){ return true; } }
   function style(){ try { return localStorage.getItem('v292Dfix470Style') || STYLE_DEFAULT; } catch(e){ return STYLE_DEFAULT; } }
 
   // ---- ①fix338(旧・闇アニメ画風)を止めて、画風は本fixが一手に決める ----
