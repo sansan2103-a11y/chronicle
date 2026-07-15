@@ -1,0 +1,27 @@
+{
+  "note": "採用済みの承認アイコン記録（事故復旧用）。コードからは参照しない。",
+  "icons": [
+    {
+      "id": "mio",
+      "name": "白石澪",
+      "canonicalPk": "nich187",
+      "artStyleAtAdopt": 1,
+      "file": "mio_seed101.jpg",
+      "bytes": 29954,
+      "sha256": "11ad38f70947e87c7a4002ef368a062532c5e8da7dafb7a030f01790fa05bd8f",
+      "width": 384,
+      "height": 384,
+      "mime": "image/jpeg",
+      "seed": 101,
+      "provider": "together",
+      "fallback": false,
+      "steps": 4,
+      "promptVersion": "v2-noinvent",
+      "styleVersion": "style6",
+      "appearancePrompt": "A high school girl, pale skin, long black hair, slender with good posture, quiet expression.",
+      "adoptedAt": "2026-07-15",
+      "preAdoptImageSha256": "8f6c3de49cacaf43610c31c0f1886e89a3a254541d6ddeacf01931c95e7d50da",
+      "preAdoptBackupFile": "mio_backup_before_seed101_2026-07-15.jpg"
+    }
+  ]
+}
