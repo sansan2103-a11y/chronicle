@@ -102,10 +102,13 @@
       if (meta.sha256 && meta.sha256 !== sha) throw new Error('sha mismatch');
       var mime = (String(dataUrl).match(/^data:([^;]+)/)||[])[1] || 'image/jpeg';
       var blob = new Blob([buf], {type:mime});
+      var _fp = fingerprint(name);
       var rec = {
         id: 'cand_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,6),
         sessionId: sessionId(), slotId: activeSlot(), pk: pkOf(name), characterName: canonName(name),
-        characterFingerprint: fingerprint(name),
+        characterFingerprint: _fp,
+        // ★P0(GPT-5.6): 採用先を候補作成時に**固定**する（後から artStyle 等が変わっていたら採用拒否）
+        targetArtStyle: _fp.artStyle, targetPk: _fp.pk, targetSlotId: _fp.slot, targetName: _fp.name, targetDescHash: _fp.descHash,
         blob: blob, sha256: sha, bytes: buf.byteLength, width: 384, height: 384, mime: mime,
         appearancePrompt: meta.appearancePrompt||'', fullPrompt: meta.fullPrompt||'',
         promptVersion: meta.promptVersion||'', styleVersion: meta.styleVersion||'',
@@ -162,9 +165,12 @@
     return get('records', candId).then(function(r){
       if(!r) throw new Error('candidate not found');
       rec=r;
-      // fingerprint 一致確認（別スロット/改名/設定変更後の候補は拒否）
-      var fp=fingerprint(rec.characterName);
-      if(!fpEqual(fp, rec.characterFingerprint)) throw new Error('fingerprint mismatch (slot/pk/name/desc/style changed)');
+      // ★P0(GPT-5.6): 採用先の**完全一致**を要求（現在artStyle/pk/slot/名前/説明hash が候補作成時と一致すること）
+      var cur=fingerprint(rec.characterName);
+      var tgt={ slot:rec.targetSlotId, pk:rec.targetPk, name:rec.targetName, artStyle:rec.targetArtStyle, descHash:rec.targetDescHash };
+      if(!fpEqual(cur, tgt)){
+        throw new Error('採用先が変わっています(現在 artStyle='+cur.artStyle+'/pk='+cur.pk+' ⇔ 候補 artStyle='+tgt.artStyle+'/pk='+tgt.pk+')。現在の条件で候補を作り直してください。');
+      }
       if(rec.provider!=='together' || rec.fallback===true) throw new Error('non-together/fallback candidate cannot be adopted');
       return snapshotBaseline(rec.characterName);
     }).then(function(baseline){
@@ -255,8 +261,11 @@
     ov.id='v292Dfix474-ov'; ov.onclick=function(e){ if(e.target===ov) closeModal(); };
     var mo=el('div','background:#14151c;color:#eee;max-width:900px;width:92%;max-height:88vh;overflow:auto;border-radius:10px;padding:16px;font:13px sans-serif');
     mo.onclick=function(e){ e.stopPropagation(); };
-    var h=el('div','font-size:16px;color:#a0a0ff;margin-bottom:8px', '🎨 アイコン候補: '+name);
+    var h=el('div','font-size:16px;color:#a0a0ff;margin-bottom:4px', '🎨 アイコン候補: '+name);
     mo.appendChild(h);
+    // ★P0(GPT-5.6): 採用先を明示（別キーに入る事故の防止）
+    var tinfo=el('div','font-size:12px;color:#9aa;margin-bottom:8px', '採用先: '+canonName(name)+' / artStyle='+artStyle()+' / pk='+pkOf(name));
+    mo.appendChild(tinfo);
     var body=el('div'); mo.appendChild(body);
     ov.appendChild(mo); document.body.appendChild(ov);
     render(name, body);
@@ -311,6 +320,10 @@
   }
   try { if(onV1()){ setTimeout(injectBtn,1500); setInterval(injectBtn,4000); } } catch(e){}
 
+  // ★P1(GPT-5.6): 画風統一レシピ iconRecipeV3（全キャラ共通・seedのみ個別）
+  var STYLE6_TAIL = 'dark fantasy anime character portrait, head and shoulders, visible clothing, detailed face, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality';
+  var ICON_RECIPE_V3 = { promptVersion:'fix461-v2-noinvent', styleVersion:'style6', styleTail:STYLE6_TAIL, provider:'together', fallback:false, model:'flux', steps:4, size:'384x384' };
+
   window.__v292Dfix474 = {
     __armed:true, onV1:onV1,
     importCandidate:importCandidate, listCandidates:listCandidates,
@@ -318,6 +331,7 @@
     pkOf:pkOf, fingerprint:fingerprint, sessionId:sessionId,
     _openDB:openDB, _get:get, _put:put, _del:del, openModal:openModal, injectBtn:injectBtn,
     setRemoteConfirm:function(fn){ if(typeof fn==='function') _remoteConfirm=fn; }, _remoteConfirm:function(){ return _remoteConfirm.apply(null,arguments); },
+    ICON_RECIPE_V3:ICON_RECIPE_V3, STYLE6_TAIL:STYLE6_TAIL,
     status:function(){ return { onV1:onV1(), sessionId:sessionId(), slot:activeSlot() }; }
   };
   if (onV1()) { try { recoverJournals(); } catch(e){} try { console.log(TAG,'armed (opt-in ON)'); } catch(e){} }
