@@ -1396,6 +1396,7 @@ function buildInspectPrompt(kind, desc, n) {
     + 'You do NOT make aesthetic judgments. For EACH of the ' + cnt + ' image(s) provided, evaluate these boolean checks: '
     + checklist + '. '
     + extra + ' '
+    + 'Judge ONLY what is visible in the image: if an attribute or clothing item cannot be seen because of the framing (e.g. items at or below the waist, gloves or shoes outside a chest-up crop), return null for that check instead of false. '
     + 'Each value MUST be exactly true, false, or null. '
     + 'Respond ONLY with a JSON object of the form {"results":[{...}]} containing exactly ' + cnt + ' objects, in image order. '
     + 'No prose, no markdown, no code fences.';
