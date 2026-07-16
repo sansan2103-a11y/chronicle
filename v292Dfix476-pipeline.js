@@ -41,17 +41,27 @@
       return !!(init && init.method === 'POST' && typeof init.body === 'string');
     } catch(e){ return false; }
   }
-  // パイプラインは workers.dev の /image 限定（/inspect の同一オリジンが必要）。
-  function workersImage(url){
+  // ★v476.1(2026-07-17実機発見): 実ゲームの入口URLは gen.pollinations.ai のまま
+  //   （fix247プロキシが内側でworkers.devへ書換+認証ヘッダ再構築）。fix476は最外殻なので
+  //   workers.dev判定では一生発動しない。→ /inspect の宛先と認証は fix247 と同じ情報源
+  //   (localStorage v292ProxyUrl / v292ProxyPass / window.__chronicleGoogleId) から構築する。
+  function proxyBase(){
     try {
-      var u = String((url && url.url) || url || '');
-      return /workers\.dev/.test(u) && u.indexOf('/image') >= 0;
-    } catch(e){ return false; }
+      if (localStorage.getItem('v292ProxyOff') === '1') return '';
+      return (localStorage.getItem('v292ProxyUrl') || '').trim().replace(/\/+$/, '');
+    } catch(e){ return ''; }
   }
   function inspectUrlFor(url){
-    var u = String((url && url.url) || url || '');
-    var m = /^(https?:\/\/[^\/]+)/.exec(u);
-    return (m ? m[1] : '') + '/inspect';
+    // 入口が直接 workers.dev/image ならその origin、それ以外(pollinations入口)は proxyBase()。
+    try {
+      var u = String((url && url.url) || url || '');
+      if (/workers\.dev/.test(u) && u.indexOf('/image') >= 0){
+        var m = /^(https?:\/\/[^\/]+)/.exec(u);
+        if (m) return m[1] + '/inspect';
+      }
+    } catch(e){}
+    var b = proxyBase();
+    return b ? (b + '/inspect') : '';
   }
 
   // ---------- fix475 アクセサ ----------
@@ -83,22 +93,13 @@
     return [randSeed(), randSeed(), randSeed()];
   }
 
-  // ---------- /inspect 用ヘッダ（入口initから必要な3つだけコピー） ----------
+  // ---------- /inspect 用ヘッダ（★v476.1: fix247と同一の構築方式） ----------
+  //   入口initのヘッダは Authorization Bearer <key> だけで、x-google-id/x-chronicle-pass は
+  //   fix247が内側で付ける。/inspect は fix247 の書換表に無いので、ここで同じ材料から作る。
   function copyInspectHeaders(init){
-    var out = {};
-    try {
-      var h = init && init.headers;
-      function get(name){
-        if (!h) return null;
-        if (typeof h.get === 'function'){ try { return h.get(name); } catch(e){ return null; } }
-        for (var k in h){ if (k.toLowerCase() === name.toLowerCase()) return h[k]; }
-        return null;
-      }
-      ['x-google-id', 'x-chronicle-pass', 'Content-Type'].forEach(function(name){
-        var v = get(name); if (v != null) out[name] = v;
-      });
-    } catch(e){}
-    if (!out['Content-Type']) out['Content-Type'] = 'application/json';
+    var out = { 'Content-Type': 'application/json' };
+    try { var g = (W.__chronicleGoogleId && W.__chronicleGoogleId()) || ''; if (g) out['x-google-id'] = g; } catch(e){}
+    try { var p = (localStorage.getItem('v292ProxyPass') || '').trim(); if (p) out['x-chronicle-pass'] = p; } catch(e){}
     return out;
   }
 
@@ -378,7 +379,7 @@
       return _origFetch.apply(this, arguments);   // 順序異常時は常に完全素通し
     }
     try {
-      if (on() && isAvatarGen(url, init) && workersImage(url)){
+      if (on() && isAvatarGen(url, init) && inspectUrlFor(url)){   // ★v476.1: pollinations入口でも発動(検品先=proxyBase)
         var f = f475();
         if (f && f.__armed && typeof f.detect === 'function'){
           var qb = null;
