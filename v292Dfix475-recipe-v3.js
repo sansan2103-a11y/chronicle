@@ -1,5 +1,6 @@
 // =====================================================================
 // Chronicle TRPG - v292Dfix475: iconRecipeV3 標準化（新キャラの絵柄を7人と一致させる）
+// v475.2: fix471 transient defuse 追加（実チェーン fix475(外)→fix471(内)→fetch の順対策）
 // ---------------------------------------------------------------------
 // 背景(2026-07-16・設計=Fable5 / 監査=GPT-5.6):
 //   2026-07-15に全7人のアイコンを iconRecipeV3(外見英文 + STYLE6_TAIL / together /
@@ -90,7 +91,7 @@
 
   var _warnedUnknown = false, _warned471 = false;   // 1セッション1回だけの警告
   function warnUnknownOnce(){ if (_warnedUnknown) return; _warnedUnknown = true; try { console.warn(TAG, 'unknown avatar prompt (no art6 marker) — passing through unchanged'); } catch(e){} }
-  function warn471Once(){ if (_warned471) return; _warned471 = true; try { console.warn(TAG, 'fix471 is ON but artStyle=6 request detected — fix475 takes precedence (schnell/4, STYLE6_TAIL)'); } catch(e){} }
+  function warn471Once(){ if (_warned471) return; _warned471 = true; try { console.warn(TAG, 'artStyle=6生成のためfix471を一時無効化（fix475が画風を最終決定）'); } catch(e){} }
 
   // 末尾/先頭の余分な句読点・空白を掃除
   function coreOf(T){ return T.replace(/[\s.,;]+$/, ''); }
@@ -209,7 +210,6 @@
           delete b.style420;                 // fix471がONでも強制上書き＝最終決定権
           delete b.image_loras;
           b.size = '384x384';                 // model と n は不触
-          if (fix471On()) warn471Once();
           // テスト専用シーム（本番では未設定）: assert失敗を人工的に起こす
           try { var c = window.__v292Dfix475 && window.__v292Dfix475.__test_corrupt; if (typeof c === 'function') b.prompt = c(b.prompt); } catch(e){}
           var err = assertBody(b);
@@ -218,6 +218,27 @@
             return Promise.reject(new Error(TAG + ' send-time assert failed: ' + err));
           }
           init = Object.assign({}, init, { body: JSON.stringify(b) });   // art6のみ再構築（非対象はbyte-equivalentで素通し）
+          // ---- transient defuse（v475.2）: 実チェーンは fix475(外)→fix471(内)→実fetch。
+          //   fix471はラッパ入口で off() を live評価するため、この1リクエストの委譲中だけ
+          //   v292Dfix471Off='1' にすれば内側fix471が確実に素通しする（=art6ではfix475が画風の最終決定権）。
+          //   委譲直後(finally)に元値へ復元。非art6/artStyle0〜5でのfix471のユーザー選択は尊重する。
+          if (fix471On()){
+            warn471Once();
+            var __had471 = false, __prev471 = null;
+            try { __prev471 = localStorage.getItem('v292Dfix471Off'); __had471 = true; } catch(e){}
+            try { localStorage.setItem('v292Dfix471Off', '1'); } catch(e){}
+            try {
+              return _origFetch.apply(this, [url, init]);   // 委譲（この間だけfix471は素通し）
+            } finally {
+              if (__had471){
+                try {
+                  if (__prev471 == null) localStorage.removeItem('v292Dfix471Off');
+                  else localStorage.setItem('v292Dfix471Off', __prev471);
+                } catch(e){}
+              }
+            }
+          }
+          return _origFetch.apply(this, [url, init]);   // fix471非ON: そのまま委譲（fix471には一切触らない）
         }
       }
     } catch(e){ try { console.warn(TAG, 'wrap error', e); } catch(_){} }
