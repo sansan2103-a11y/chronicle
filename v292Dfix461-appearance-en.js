@@ -25,7 +25,20 @@
 //
 // 冪等: window.__v292Dfix461
 // OFF : localStorage.v292Dfix461Off = '1'（従来の日本語プロンプトに戻る）
-// 検証口: window.__v292Dfix461.tagsFor('名前') / .ensure() / .stats()
+// 検証口: window.__v292Dfix461.tagsFor('名前') / .ensure() / .stats() / .verNow() / .sysNow()
+// ---------------------------------------------------------------------
+// ★v2.1(2026-07-16・GPT-5.6監査済 / 設計書_V4アイコン品質パイプライン): v2-noinventの副作用
+//   （外見文の情報量まで痩せ、画像モデルの事前分布に負ける＝金髪+革ジャンの少女が女性顔に
+//   ならない）を是正。方針=「指定あり項目の完全抽出 + 未指定項目の完全省略 + 弱い文頭アンカー」。
+//   ・完全抽出: シートに書かれた属性は**あれば必ず**外見文へ（v2の『省略』は維持しつつ『書かれて
+//     いるのに落とす』を禁止）
+//   ・完全省略: 書かれていない項目は一切書かない・推測しない・創作しない（v2原則を維持）
+//   ・弱い文頭アンカー: 先頭に `Anime portrait of a <性別×年齢帯>.`。媒体+性別表現+年齢帯のみ。
+//     exact age・民族・老化cue・価値語(beautiful/handsome)・画風語(semi-realistic)は禁止。
+//     性別・年齢帯の**明記がある場合のみ**、欠けたら書ける方だけ、両方不明ならアンカー省略、人外には付けない。
+//   ・キャッシュVERは v21-extract（旧 v2-noinvent とキーが衝突しない）
+//   ・**opt-in**: localStorage.v292Dfix461V21On==='1' のときだけ v2.1。無ければ従来の v2 のまま。
+//     v292Dfix461V21Off==='1' で v2.1を無効化して v2へ戻す（Offが優先・live評価）。ON/OFFでVERも切替。
 // =====================================================================
 (function(){
   'use strict';
@@ -33,7 +46,17 @@
   var TAG = '[v292Dfix461:appearance-en]';
   var PFX = 'v292en_';
   // ★C(2026-07-14): SYS を変えたので **キャッシュVERを上げる**（旧 v292en_* を再利用しない）
-  var VER = 'v2-noinvent';
+  // ★v2.1(2026-07-16): opt-inフラグで VER/SYS を切替。ON/OFFでVERも変え、キャッシュ混線を防ぐ。
+  var VER_V2 = 'v2-noinvent';
+  var VER_V21 = 'v21-extract';
+  function v21on(){
+    try {
+      if (localStorage.getItem('v292Dfix461V21Off') === '1') return false; // Offが最優先（v2へ戻す）
+      return localStorage.getItem('v292Dfix461V21On') === '1';             // opt-in: Onのときだけv2.1
+    } catch(e){ return false; }
+  }
+  function verOf(){ return v21on() ? VER_V21 : VER_V2; }
+  function sysNow(){ return v21on() ? SYS_V21 : SYS_V2; }
   var TIMEOUT_MS = 45000;
   var stats = { made: 0, cached: 0, failed: 0, lastErr: '' };
   var inflight = {};
@@ -53,7 +76,7 @@
     } catch(e){}
     return out.filter(function(m){ return m.name && m.desc; });
   }
-  function keyOf(m){ return PFX + hash(VER + '|' + m.name + '|' + m.desc + '|' + m.gender); }
+  function keyOf(m){ return PFX + hash(verOf() + '|' + m.name + '|' + m.desc + '|' + m.gender); }
 
   function tagsFor(name){
     if (off()) return '';
@@ -76,11 +99,24 @@
   // ★C(2026-07-14・おしん指示 / GPT-5.6監査):
   //   「必ず明示せよ」系の強制（年齢・性別・民族の必須 / 年齢cue最低3つ / 体格・肌・髪・目・服の必須列挙 /
   //   不足特徴の創作）を **全部やめる**。設定に書かれた属性だけを出し、書かれていない項目は **行ごと省略**する。
-  var SYS = 'You rewrite a Japanese character description into a SHORT English image prompt for FLUX.\n'
+  var SYS_V2 = 'You rewrite a Japanese character description into a SHORT English image prompt for FLUX.\n'
     + 'Output ONLY the English prompt. No Japanese, no quotes, no tags like 1boy, no explanation, no character name.\n'
     + 'Write only what the description states. Never invent, guess or add anything that is not written.\n'
     + 'If an attribute (age, sex, ethnicity, build, skin, hair, eyes, clothing, accessories) is not stated, omit that item entirely.\n'
     + 'Keep the order: subject, build/posture, face, hair and eyes, clothing. Skip any item with no source in the description.\n'
+    + 'Do not use 1boy/1girl/handsome/beautiful/idol. Do not describe personality, backstory or relationships unless they are visible.\n'
+    + 'Do not add art style, lighting, camera or quality words. Those are added later by application code.';
+
+  // ★v2.1 SYS: 完全抽出 + 完全省略 + 弱い文頭アンカー（GPT-5.6監査済）
+  var SYS_V21 = 'You rewrite a Japanese character description into a SHORT English image prompt for FLUX.\n'
+    + 'Output ONLY the English prompt. No Japanese, no quotes, no tags like 1boy, no explanation, no character name.\n'
+    + 'Write only what the description states. Never invent, guess or add anything that is not written.\n'
+    + 'If an attribute (age, sex, ethnicity, build, skin, hair, eyes, clothing, accessories) is not stated, omit that item entirely.\n'
+    + 'But every attribute that IS stated (age, sex, ethnicity, eye colour, skin, expression, build, posture, hair, clothing) MUST appear in the prompt. Never drop an attribute that the description states.\n'
+    + 'Begin the prompt with a short anchor line of the form "Anime portrait of a <SEX> <AGE-BAND>." only when the description states them. Examples: "Anime portrait of a teenage girl.", "Anime portrait of an elderly man.", "Anime portrait of a middle-aged woman.".\n'
+    + 'If only one of sex or age band is stated, write just that one (e.g. "Anime portrait of a woman."). If neither is stated, omit the anchor line entirely. If the subject is not human (a creature, monster, spirit, robot, etc.), omit the anchor line.\n'
+    + 'The anchor may contain ONLY the medium (Anime portrait), a sex word and an age band. Never put an exact age number, ethnicity, ageing cues, value words (beautiful, handsome, idol) or style words (semi-realistic) inside the anchor.\n'
+    + 'After the anchor, keep the order: subject, build/posture, face, hair and eyes, clothing. Skip any item with no source in the description.\n'
     + 'Do not use 1boy/1girl/handsome/beautiful/idol. Do not describe personality, backstory or relationships unless they are visible.\n'
     + 'Do not add art style, lighting, camera or quality words. Those are added later by application code.';
 
@@ -97,7 +133,7 @@
       model: cfg.orModel || 'deepseek/deepseek-v4-flash',
       temperature: 0.2,
       max_tokens: 260,
-      messages: [{ role: 'system', content: SYS }, { role: 'user', content: user }]
+      messages: [{ role: 'system', content: sysNow() }, { role: 'user', content: user }]
     };
     try {
       var xhr = new XMLHttpRequest();
@@ -163,7 +199,10 @@
     ensure: ensure,
     members: members,
     stats: function(){ return stats; },
-    isOff: off
+    isOff: off,
+    v21on: v21on,
+    verNow: verOf,
+    sysNow: sysNow
   };
   try { console.log(TAG, 'armed'); } catch(e){}
 })();
