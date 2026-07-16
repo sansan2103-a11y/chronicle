@@ -226,6 +226,18 @@
           if (en){
             /* 英文の中に年齢・性別・民族が入っている。1boy/1girl は「少年/少女」を強く示し
                70代男性と衝突するため付けない（GPT-5.6監査）。名前も付けない（絵に文字が出る事故防止）。 */
+            /* ★fix480(2026-07-17): fix461英文をそのまま返すと画風タグが一切付かず、
+             *   fix475(V3標準化)もfix476(3候補検品)も「art6マーカー無し」で素通しになっていた
+             *   （2026-07-13以降の再生成が画風タグ無しで飛んでいた真因）。
+             *   artStyle=6 のときだけ STYLE6_TAIL(fix475と同一文字列)を末尾に付与。冪等。
+             *   OFF: localStorage.v292Dfix480Off='1' */
+            try {
+              if (localStorage.getItem('v292Dfix480Off') !== '1'){
+                var as480 = String((S && S.cfg && S.cfg.artStyle) != null ? S.cfg.artStyle : '') === '6';
+                var T480 = 'dark fantasy anime character portrait, head and shoulders, visible clothing, detailed face, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality';
+                if (as480 && en.indexOf(T480) < 0) return en.replace(/[\s.,;]+$/, '') + ', ' + T480;
+              }
+            } catch(e480){}
             return en;
           }
         }
