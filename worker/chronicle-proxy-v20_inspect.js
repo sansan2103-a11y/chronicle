@@ -145,7 +145,10 @@ export default {
     if (request.method === 'GET') {
       const gp = new URL(request.url).pathname;
       if (gp === '/img') return handleImg(request, env, ctx);   // ★v11: 画像URL配信(<img src>用・認証不要のcapability URL)
-      return json({ ok: true, service: 'chronicle-proxy', v: 22, inspect: true, lora420: true, debug420: true, style420: true, strict: String(env.ALLOW_IMAGE_FALLBACK||'') !== '1', d1: !!env.DB, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID, img: true }, 200, request);
+      // ★v23: 生成遮断器の上限(管理者設定)をクライアントへ公開(非秘匿・fix483が起動時に同期)
+      let gb23 = null;
+      try { if (env.LEDGER) { const c23 = await getJSON(env, 'config', {}); if (c23 && c23.genBudget != null) gb23 = +c23.genBudget; } } catch (e) {}
+      return json({ ok: true, service: 'chronicle-proxy', v: 23, genBudget: gb23, inspect: true, lora420: true, debug420: true, style420: true, strict: String(env.ALLOW_IMAGE_FALLBACK||'') !== '1', d1: !!env.DB, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID, img: true }, 200, request);
     }
     if (request.method !== 'POST') {
       return json({ error: 'POST only' }, 405, request);
@@ -745,6 +748,7 @@ async function admin(body, env, request) {
     const config = await getJSON(env, 'config', {});
     out.killSwitch = !!config.killSwitch;
     out.imgProvider = (config.imgProvider === 'pollinations') ? 'pollinations' : 'together';   // ★v22
+    out.genBudget = (config.genBudget != null) ? +config.genBudget : null;   // ★v23
     return json(out, 200, request);
   }
 
@@ -863,6 +867,10 @@ async function admin(body, env, request) {
     }
     if (typeof body.killSwitch === 'boolean') config.killSwitch = body.killSwitch;
     if (body.imgProvider === 'pollinations' || body.imgProvider === 'together') config.imgProvider = body.imgProvider;   // ★v22: アイコン生成経路の全体切替
+    if (body.genBudget !== undefined) {   // ★v23: 生成遮断器の上限。''/null=既定(30)に戻す、0=無制限、1..999=その回数
+      if (body.genBudget === '' || body.genBudget === null) { delete config.genBudget; }
+      else { const gb = parseInt(body.genBudget, 10); if (isFinite(gb) && gb >= 0) config.genBudget = Math.min(999, gb); }
+    }
     await env.LEDGER.put('config', JSON.stringify(config));
     return json({ ok: true, config }, 200, request);
   }
