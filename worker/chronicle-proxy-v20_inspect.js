@@ -1396,6 +1396,7 @@ function buildInspectPrompt(kind, desc, n) {
     + 'You do NOT make aesthetic judgments. For EACH of the ' + cnt + ' image(s) provided, evaluate these boolean checks: '
     + checklist + '. '
     + extra + ' '
+    + 'anime_style / anime_or_concept_art means the image is a stylized illustration, drawing or painterly concept art (anime, manga, semi-realistic or dark-fantasy illustration all count as true) - it is false ONLY for a photograph or photorealistic 3D render. '
     + 'Judge ONLY what is visible in the image: if an attribute or clothing item cannot be seen because of the framing (e.g. items at or below the waist, gloves or shoes outside a chest-up crop), return null for that check instead of false. '
     + 'Each value MUST be exactly true, false, or null. '
     + 'Respond ONLY with a JSON object of the form {"results":[{...}]} containing exactly ' + cnt + ' objects, in image order. '
@@ -1508,7 +1509,7 @@ async function handleInspect(request, body, env, ctx, gate) {
   {
     const rk = 'rl:insp:' + gate.codeKey + ':' + Math.floor(Date.now() / 60000);
     const cur = +(await env.LEDGER.get(rk)) || 0;
-    if (cur >= (+env.INSP_RATE_PER_MIN || 12)) {
+    if (cur >= (+env.INSP_RATE_PER_MIN || 30)) {
       return json({ error: '検品が混み合っています。少し待って再試行してください', errorCode: 'inspect-rate-limit' }, 429, request);
     }
     ctx.waitUntil(env.LEDGER.put(rk, String(cur + 1), { expirationTtl: 120 }));
