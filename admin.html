@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chronicle 管理</title>
-<!-- admin v2 (2026-07-02): 残高ダッシュボード(OpenRouter/Together)+補充リンク+使用率バー+検索+自動読込。worker v8のaction:balancesを使用 -->
+<!-- admin v3 (2026-07-17): v2 + Pollinationsカード + アイコン生成経路トグル(imgProvider) + ヘッダ経路chip + 台帳偶数行/カード見やすさ改善。worker v22のbalances(pollinations,imgProvider)/config-set(imgProvider)を使用 -->
 <style>
   :root { color-scheme: dark;
     --bg:#0d0d1a; --card:#15152a; --line:#2d2d49; --ink:#d6d7ee;
@@ -69,7 +69,16 @@
   .bar.bad > i { background:var(--bad); }
   details.conn summary { cursor:pointer; font-size:13px; opacity:.8; }
   .foot { margin-top:30px; font-size:11px; opacity:.4; text-align:center; }
-  @media (max-width:520px) { body { padding:14px 8px 50px; } .big { font-size:21px; } }
+  @media (max-width:520px) { body { padding:14px 8px 50px; } .big { font-size:22px; } }
+  /* ---- v3 追加 ---- */
+  .big { font-size:26px; }
+  .usebadge { font-size:10px; padding:1px 8px; border-radius:999px; background:#2f6a4a; border:1px solid #4e9a70; color:#eafff2; font-weight:600; vertical-align:middle; margin-left:6px; }
+  button.provbtn { margin-right:6px; }
+  button.provbtn.active { background:#2f6a4a; border-color:#4e9a70; color:#eafff2; font-weight:600; }
+  #tbl tbody tr:nth-child(even) td, #atbl tbody tr:nth-child(even) td { background:#101024; }
+  #tbl tbody tr:hover td, #atbl tbody tr:hover td { background:#181834; }
+  .chip.img { color:var(--accent); border-color:#4a4a72; }
+  @media (max-width:520px) { .grid { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -77,6 +86,7 @@
   <div class="topbar">
     <h1>◈ CHRONICLE 管理</h1>
     <span class="chip" id="wver">worker: -</span>
+    <span class="chip img" id="imgchip" style="display:none">🎨 アイコン: -</span>
     <span class="chip bad" id="killchip" style="display:none">緊急停止中</span>
     <span class="spacer"></span>
     <button class="primary" onclick="load()">⟳ 再読込</button>
@@ -106,6 +116,7 @@
   <div class="grid" id="balgrid">
     <div class="bcard" id="orCard"><h3>OpenRouter（本文生成）</h3><div class="sub muted">読み込み中…</div></div>
     <div class="bcard" id="tgCard"><h3>Together AI（アイコン生成）</h3><div class="sub muted">読み込み中…</div></div>
+    <div class="bcard" id="plCard"><h3>Pollinations（アイコン生成）</h3><div class="sub muted">読み込み中…</div></div>
     <div class="bcard" id="sumCard"><h3>今月のまとめ</h3><div class="sub muted">読み込み中…</div></div>
   </div>
 
@@ -156,6 +167,14 @@
   <div class="card">
     <label>許可モデル(カンマ区切り・空=制限なし)</label>
     <input type="text" id="cModels" placeholder="deepseek/deepseek-v4-flash, deepseek/deepseek-v4-pro">
+    <label style="margin-top:14px">アイコン生成の経路</label>
+    <div class="row" style="margin-top:2px">
+      <div style="flex:0">
+        <button class="provbtn" id="provTgBtn" onclick="setProvider('together')">Together</button>
+        <button class="provbtn" id="provPlBtn" onclick="setProvider('pollinations')">Pollinations</button>
+      </div>
+    </div>
+    <div class="muted" style="margin-top:6px;font-size:12px">現在の経路が押下（緑）状態です。切替は全ユーザーへ即時反映されます（優先度: リクエスト明示 ＞ この設定 ＞ 既定Together）。</div>
     <div class="row" style="margin-top:12px">
       <div style="flex:0"><button onclick="saveConfig()">設定を保存</button></div>
       <div style="flex:0"><button class="danger" id="killBtn" onclick="toggleKill()">緊急停止: OFF</button></div>
@@ -163,11 +182,12 @@
     <div class="muted" style="margin-top:8px;font-size:12px">緊急停止ONの間、全員の生成が止まります(管理APIは生きています)</div>
   </div>
 
-  <div class="foot">Chronicle admin v2 (2026-07-02)</div>
+  <div class="foot">Chronicle admin v3 (2026-07-17)</div>
 </div>
 
 <script>
 let CONFIG = {};
+let CURRENT_IMG_PROVIDER = 'together';
 const $ = id => document.getElementById(id);
 const tok = localStorage.getItem('chrAdminTok'); if (tok) $('wtok').value = tok;
 const wu = localStorage.getItem('chrAdminUrl'); if (wu) $('wurl').value = wu;
@@ -179,6 +199,7 @@ const LINKS = {
   orActivity: 'https://openrouter.ai/activity',
   tgBilling: 'https://api.together.ai/settings/billing',
   tgKeys: 'https://api.together.ai/settings/api-keys',
+  plDash: 'https://enter.pollinations.ai',
 };
 
 function setStatus(msg, cls) { const s = $('status'); s.textContent = msg; s.className = cls || ''; }
@@ -214,12 +235,19 @@ async function loadBalances() {
     const hint = msg.indexOf('unknown action') >= 0 ? 'worker v8がまだデプロイされていません' : msg;
     $('orCard').innerHTML = '<h3>OpenRouter（本文生成）</h3><div class="alertline">取得失敗: ' + esc(hint) + '</div>';
     $('tgCard').innerHTML = '<h3>Together AI（アイコン生成）</h3><div class="alertline">取得失敗</div>';
-    $('sumCard').innerHTML = '<h3>今月のまとめ</h3><div class="alertline">取得失敗</div>';
+    $('plCard').innerHTML = '<h3>Pollinations（アイコン生成）</h3><div class="alertline">取得失敗</div>';
+    $('sumCard').innerHTML = '<h3>今月のまとめ</h3><div class="alertline">取得失敗</div><div style="margin-top:8px"><button class="small" onclick="loadBalances()">🔄 再試行</button></div>';
     return;
   }
+  CURRENT_IMG_PROVIDER = (b.imgProvider === 'pollinations') ? 'pollinations' : 'together';
   renderOR(b);
   renderTG(b);
+  renderPL(b);
   renderSum(b);
+  renderProvider();
+  const plabel = CURRENT_IMG_PROVIDER === 'pollinations' ? 'Pollinations' : 'Together';
+  $('imgchip').textContent = '🎨 アイコン: ' + plabel;
+  $('imgchip').style.display = '';
   $('killchip').style.display = b.killSwitch ? '' : 'none';
 }
 
@@ -274,7 +302,8 @@ function renderOR(b) {
 function renderTG(b) {
   const el = $('tgCard');
   const t = b.together || {};
-  let html = '<h3>Together AI（アイコン生成）</h3>';
+  const inUse = CURRENT_IMG_PROVIDER === 'together';
+  let html = '<h3>Together AI（アイコン生成）' + (inUse ? ' <span class="usebadge">✅ 使用中</span>' : '') + '</h3>';
   let cls = '';
   if (!t.keySet) {
     html += '<div class="alertline">TOGETHER_KEYが未設定です（アイコン生成が止まります）</div>';
@@ -290,6 +319,60 @@ function renderTG(b) {
     '<a class="linkbtn" target="_blank" rel="noopener" href="' + LINKS.tgKeys + '">🔑 キー管理 ↗</a></div>';
   el.className = 'bcard ' + cls;
   el.innerHTML = html;
+}
+
+function renderPL(b) {
+  const el = $('plCard');
+  const p = b.pollinations || {};
+  const inUse = CURRENT_IMG_PROVIDER === 'pollinations';
+  let html = '<h3>Pollinations（アイコン生成）' + (inUse ? ' <span class="usebadge">✅ 使用中</span>' : '') + '</h3>';
+  let cls = '';
+  if (!p.keySet) {
+    html += '<div class="alertline">Pollinationsのキーが未設定です（この経路では生成できません）</div>';
+    cls = 'bad';
+  } else if (!p.ok) {
+    html += '<div class="alertline">⚠ 残高の取得に失敗' + (p.status != null ? ' (status ' + esc(p.status) + ')' : '') + '</div>' +
+      (p.detail ? '<div class="kv">' + esc(p.detail) + '</div>' : '') +
+      '<div class="kv">今月 ' + (p.images || 0) + '枚生成</div>';
+    cls = 'bad';
+  } else {
+    const bal = (p.balance != null && isFinite(+p.balance)) ? +p.balance : null;
+    if (bal != null) {
+      const low = bal < 5;
+      cls = low ? 'bad' : (bal < 15 ? 'warn' : '');
+      html += '<div class="sub">残Pollen（$1≒1Pollen）</div>' +
+        '<div class="big">' + bal.toFixed(2) + ' <small>Pollen（約' + Math.round(bal * 150) + '円）</small></div>' +
+        '<div class="kv">今月の生成: ' + (p.images || 0) + '枚</div>';
+      if (low) html += '<div class="alertline">⚠ 残りわずか！下のボタンから補充してください</div>';
+    } else {
+      html += '<div class="sub muted">残Pollenは取得できませんでした</div>' +
+        '<div class="big">今月 ' + (p.images || 0) + '枚</div>' +
+        '<div class="kv muted">正確な残高はダッシュボードで確認してください</div>';
+    }
+  }
+  html += '<div><a class="linkbtn hot" target="_blank" rel="noopener" href="' + LINKS.plDash + '">💳 補充・ダッシュボード ↗</a></div>';
+  el.className = 'bcard ' + cls;
+  el.innerHTML = html;
+}
+
+function renderProvider() {
+  const tg = $('provTgBtn'), pl = $('provPlBtn');
+  if (!tg || !pl) return;
+  const isPl = CURRENT_IMG_PROVIDER === 'pollinations';
+  tg.classList.toggle('active', !isPl);
+  pl.classList.toggle('active', isPl);
+}
+
+async function setProvider(p) {
+  if (p !== 'together' && p !== 'pollinations') return;
+  if (p === CURRENT_IMG_PROVIDER) { setStatus('すでに' + (p === 'pollinations' ? 'Pollinations' : 'Together') + 'です', 'ok'); return; }
+  const label = p === 'pollinations' ? 'Pollinations' : 'Together';
+  if (!confirm('アイコン生成を' + label + 'に切り替えます。全ユーザーに即時反映されます。よろしいですか？')) return;
+  try {
+    await api({ action: 'config-set', imgProvider: p });
+    setStatus('アイコン生成を' + label + 'に切り替えました', 'ok');
+    loadBalances();
+  } catch (e) { /* api() が status を表示 */ }
 }
 
 function renderSum(b) {
