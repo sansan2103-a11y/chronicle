@@ -166,47 +166,51 @@
     });
   }
 
-  // ---------- 検品（/inspect へ POST・12sタイムアウト）→ 各候補に pass/score を付与 ----------
-  //   戻り値: 検品成功=candidates(スコア付与済) / 失敗(非200・タイムアウト・壊れ応答)=null
-  // ---------- hard 失敗数（item1・r.hard の値が false の個数 / hard無ければ pass?0:99） ----------
+  // ---------- 検品（★v476.2: 1枚ずつ個別に /inspect・12sタイムアウト） ----------
+  //   実測(2026-07-17): 3枚まとめ検品だと軽量VLMが anime_style を全画像falseにする
+  //   (同一画像でも単発なら合格)。→ 候補ごとに1リクエストへ変更。全滅時のみ null(=検品不能)。
+  // ---------- ハード判定の失格数（r.hard の false 値の個数・item1で使用） ----------
   function hardFailCount(r){
-    var h = r && r.hard;
-    if (h && typeof h === 'object'){
+    try {
+      if (!r || !r.hard || typeof r.hard !== 'object') return 0;
       var n = 0;
-      for (var k in h){ if (Object.prototype.hasOwnProperty.call(h, k) && h[k] === false) n++; }
+      for (var k in r.hard){
+        if (Object.prototype.hasOwnProperty.call(r.hard, k) && r.hard[k] === false) n++;
+      }
       return n;
-    }
-    return (r && r.pass) ? 0 : 99;
+    } catch(e){ return 0; }
   }
-
-  function inspectAndScore(url, init, kind, desc, cands){
-    var images = cands.slice(0, 4).map(function(c){ return c.b64; });
-    var payload = { images: images, kind: kind, desc: desc };
-    var headers = copyInspectHeaders(init);
-    var iurl = inspectUrlFor(url);
+  function inspectOne(iurl, headers, kind, desc, cand){
     var ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     var timer = null;
-    if (ac){
-      timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, 12000);
-      if (timer && typeof timer.unref === 'function') timer.unref();
-    }
-    var opt = { method: 'POST', headers: headers, body: JSON.stringify(payload) };
+    if (ac){ timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, 12000); }
+    var opt = { method: 'POST', headers: headers, body: JSON.stringify({ images: [cand.b64], kind: kind, desc: desc }) };
     if (ac) opt.signal = ac.signal;
-    // item6: タイマー解除は json() 解析完了後（ヘッダ受信時では解除しない）。
     return _origFetch.call(W, iurl, opt).then(function(resp){
-      if (!resp || !resp.ok){ if (timer) clearTimeout(timer); return null; }
+      if (!resp || !resp.ok){ if (timer) clearTimeout(timer); return false; }
       return resp.json().then(function(j){
         if (timer) clearTimeout(timer);
-        if (!j || !Array.isArray(j.results)) return null;   // 壊れ応答=検品なし扱い
+        var r = j && Array.isArray(j.results) && j.results[0];
+        if (!r) return false;
+        cand.pass = !!r.pass;
+        cand.score = (typeof r.score === 'number') ? r.score : (r.pass ? 100 : 0);
+        cand.hardFails = hardFailCount(r);
+        return true;
+      }, function(){ if (timer) clearTimeout(timer); return false; });
+    }, function(){ if (timer) clearTimeout(timer); return false; });
+  }
+  function inspectAndScore(url, init, kind, desc, cands){
+    var headers = copyInspectHeaders(init);
+    var iurl = inspectUrlFor(url);
+    return Promise.all(cands.map(function(c){ return inspectOne(iurl, headers, kind, desc, c); }))
+      .then(function(oks){
+        var any = false;
         for (var i = 0; i < cands.length; i++){
-          var r = j.results[i] || {};
-          cands[i].pass = !!r.pass;
-          cands[i].score = (typeof r.score === 'number') ? r.score : (r.pass ? 100 : 0);
-          cands[i].hardFails = hardFailCount(r);
+          if (oks[i]){ any = true; }
+          else { cands[i].pass = false; cands[i].score = 0; cands[i].hardFails = 98; }   // 検品不能候補は劣後
         }
-        return cands;
-      }, function(){ if (timer) clearTimeout(timer); return null; });
-    }, function(){ if (timer) clearTimeout(timer); return null; });
+        return any ? cands : null;   // 全滅=検品サービス不能 → fail-open(呼び出し側)
+      });
   }
 
   function bestPass(cands){
