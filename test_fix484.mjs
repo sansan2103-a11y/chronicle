@@ -63,15 +63,29 @@ console.log('== 1) STYLE6_TAIL 定義の一元性検証（fix475 / fix197(fix480
   load(sb, 'v292Dfix484-style-canon.js');
   const f475 = sb.window.__v292Dfix475, f484 = sb.window.__v292Dfix484;
   ok(!!f475?.__armed && !!f484?.__armed, 'fix475/fix484 両方 arm');
-  ok(f484.STYLE6_TAIL === f475.STYLE6_TAIL, 'STYLE6_TAIL が fix475 と同一文字列');
+  ok(f484.STYLE6_TAIL === f475.STYLE6_TAIL, 'STYLE6_TAIL(=v2) が fix475 と同一文字列');
   ok(f484.STYLE6_TAIL_CREATURE === f475.STYLE6_TAIL_CREATURE, 'STYLE6_TAIL_CREATURE が fix475 と同一文字列');
-  // fix197(fix480) の T480 リテラルとの一致（ソースから抽出）
+  // ★fix486(style6-v2): canonicalは pale skin を含まない
+  ok(!f484.STYLE6_TAIL.includes('pale skin'), '★v2 canonical末尾に pale skin を含まない');
+  ok(f484.CANON_VERSION === 'style6-v2', '★CANON_VERSION=style6-v2');
+  // 旧v1(pale skin有)は剥がし対象として保持されている
+  ok(!!f484.STYLE6_TAIL_V1 && f484.STYLE6_TAIL_V1.includes('pale skin'), '★STYLE6_TAIL_V1(pale skin有)を保持');
+  ok(f484.STYLE6_TAIL_V1 === f475.STYLE6_TAIL_V1, 'STYLE6_TAIL_V1 が fix475 と同一文字列');
+  const hasEnd = (list, str) => list.some(e => e.s === str);
+  ok(hasEnd(f484.END_TAILS, f484.STYLE6_TAIL_V1), '★v1 が END_TAILS に剥がし対象として存在');
+  ok(hasEnd(f484.END_TAILS, f484.STYLE6_TAIL), '★v2 も END_TAILS に存在(冪等)');
+  // v1タグのプロンプトは canonicalize で v2 へ正規化される(pale skin除去・本文保持)
+  const _v1p = 'anime portrait of a young woman, dark brown skin, silver hair, ' + f484.STYLE6_TAIL_V1;
+  const _v1r = f484.canonicalize(_v1p);
+  ok(!_v1r.prompt.includes('pale skin') && _v1r.prompt.endsWith(f484.STYLE6_TAIL), '★v1タグ→v2へ正規化(pale skin除去)');
+  ok(_v1r.prompt.includes('dark brown skin'), '★人物本文(dark brown skin)は保持');
+  // fix197(fix480) の T480 リテラル= v2(pale skin無し)と一致
   const src197 = readFileSync('v292Dfix197-avatar-key.js', 'utf8');
   const m480 = src197.match(/var T480 = '([^']+)'/);
-  ok(!!m480 && m480[1] === f484.STYLE6_TAIL, 'fix480(fix197内 T480) と同一文字列');
-  // 採用7人manifestのstyleTailとの一致
+  ok(!!m480 && m480[1] === f484.STYLE6_TAIL, 'fix480(fix197内 T480) が v2 と同一文字列');
+  // ★採用7人manifestは【履歴】=v1(pale skin有)のまま。ライブcanonical(v2)とは意図的に異なる。
   const manifest = JSON.parse(readFileSync('icons/approved/adopted_manifest_2026-07-15.json', 'utf8'));
-  ok(manifest.recipe_iconRecipeV3.styleTail === f484.STYLE6_TAIL, '採用manifest(iconRecipeV3) styleTail と同一文字列');
+  ok(manifest.recipe_iconRecipeV3.styleTail === f484.STYLE6_TAIL_V1, '採用manifest(履歴)は v1(=STYLE6_TAIL_V1)と一致・既存画像は不変');
   const has = (list, s) => list.some(e => e.s === s);
   ok(f475.END_TAILS.every(e => has(f484.END_TAILS, e.s)), 'fix475 END_TAILS を全て包含');
   ok(f475.FRONT_PREFIXES.every(e => has(f484.FRONT_PREFIXES, e.s)), 'fix475 FRONT_PREFIXES を全て包含');
@@ -221,7 +235,7 @@ console.log('== 6) 診断（既定OFF・秘密なし）と __diag484 除去 ==')
   ok(!!dl, '診断ONで1行出力');
   if (dl) {
     const j = JSON.parse(dl.slice(dl.indexOf('{')));
-    ok(j.mode === 'regen' && j.seed === 101 && j.canonicalStyleVersion === 'style6-v1' && typeof j.promptHash === 'string', '診断内容(mode/seed/canonVer/promptHash)');
+    ok(j.mode === 'regen' && j.seed === 101 && j.canonicalStyleVersion === 'style6-v2' && typeof j.promptHash === 'string', '診断内容(mode/seed/canonVer/promptHash)');
     ok(!dl.includes('clouded blind') && !dl.includes('test-pass'), '診断にprompt本文・合言葉が含まれない');
   }
   const c = run({ v292Dfix484Off: '1' });

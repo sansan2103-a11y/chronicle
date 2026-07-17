@@ -21,9 +21,14 @@
   var TAG = '[v292Dfix475:recipe-v3]';
 
   // ---------- V3 の正body（fix338 PREFIX[7] / PREFIX_CREATURE[7] の '@TAIL ' 除去後） ----------
-  var STYLE6_TAIL =
+  // ★fix486(style6-v2): pale skin除去(fix484と同期)。v1はEND_TAILSに保持。
+  var STYLE6_TAIL_V1 =
     'dark fantasy anime character portrait, head and shoulders, visible clothing, detailed face, ' +
     'dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, ' +
+    'somber gothic horror atmosphere, high quality';
+  var STYLE6_TAIL =
+    'dark fantasy anime character portrait, head and shoulders, visible clothing, detailed face, ' +
+    'dim moody lighting, muted desaturated colors, dark shadowy background, ' +
     'somber gothic horror atmosphere, high quality';
   var STYLE6_TAIL_CREATURE =
     'dark fantasy anime creature concept art, full creature body visible, highly detailed, ' +
@@ -38,8 +43,10 @@
     // fix338 ART6_TAIL / ART6C_TAIL 本文（'@TAIL ' 除去後）＝現行の既定スタイル
     { s: 'Dark fantasy visual-novel illustration, semi-realistic anime rendering, textured mature facial features, individual asymmetrical face, dim cinematic lighting with soft shadows, muted desaturated cold palette, simple dark atmospheric background, chest-up bust with space around, not a close-up, highly detailed, high quality', k: H },
     { s: 'Dark fantasy creature concept art, JRPG bestiary portrait, semi-realistic rendering, dim cinematic lighting, muted desaturated palette, dark atmospheric background, upper body framing with space around, not a close-up, highly detailed, high quality, non-human creature, monster design, no human face', k: C },
-    // STYLE6_TAIL 自身 / creature 自身（冪等：既にV3ならno-op）
+    // STYLE6_TAIL(=v2) 自身 / creature 自身（冪等：既にV3ならno-op）
     { s: STYLE6_TAIL, k: H },
+    // ★fix486: 旧canonical(v1・pale skin有)も剥がし対象
+    { s: STYLE6_TAIL_V1, k: H },
     { s: STYLE6_TAIL_CREATURE, k: C },
     // fix471 STYLE_HUMAN / STYLE_CREATURE（案C・FLUX.2-dev端末の産物）
     { s: 'Style: dark fantasy anime illustration, hand-drawn digital painting, crisp clean linework, cel shading with soft gradients, muted desaturated cold palette, deep charcoal atmospheric background, dim rim light, matte finish. Composition: chest-up bust portrait, the character faces the viewer in a front view or a slight three-quarter turn, the whole face clearly visible with both eyes visible, never a profile view and never a back view, the subject centered with space around, the outfit and collar visible.', k: H },
@@ -262,6 +269,7 @@
     canonicalize: canonicalizeArt6Prompt,
     detect: detect,
     STYLE6_TAIL: STYLE6_TAIL,
+    STYLE6_TAIL_V1: STYLE6_TAIL_V1,
     STYLE6_TAIL_CREATURE: STYLE6_TAIL_CREATURE,
     END_TAILS: END_TAILS,
     FRONT_PREFIXES: FRONT_PREFIXES,

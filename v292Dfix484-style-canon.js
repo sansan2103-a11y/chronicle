@@ -51,12 +51,19 @@
   var W = (typeof window !== 'undefined') ? window : this;
   if (W.__v292Dfix484 && W.__v292Dfix484.__armed) return;   // 二重arm禁止
   var TAG = '[v292Dfix484:style-canon]';
-  var CANON_VERSION = 'style6-v1';
+  var CANON_VERSION = 'style6-v2';   // ★fix486: pale skin除去
 
   // ---------- canonical（fix475 STYLE6_TAIL と同一文字列。テストで同一性を検証） ----------
-  var STYLE6_TAIL =
+  // ★fix486(style6-v2・2026-07-17 GPT承認): canonical末尾から 'pale skin,' を無条件削除。
+  //   pale skinは画風でなく人物属性(褐色肌/日焼け/民族設定と競合)→A/Bで肌色以外の画風ドリフト無しを実測確認。
+  //   STYLE6_TAIL_V1(pale skin有)はEND_TAILSに剥がし対象として保持(v1タグのプロンプトをv2へ正規化)。
+  var STYLE6_TAIL_V1 =
     'dark fantasy anime character portrait, head and shoulders, visible clothing, detailed face, ' +
     'dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, ' +
+    'somber gothic horror atmosphere, high quality';
+  var STYLE6_TAIL =
+    'dark fantasy anime character portrait, head and shoulders, visible clothing, detailed face, ' +
+    'dim moody lighting, muted desaturated colors, dark shadowy background, ' +
     'somber gothic horror atmosphere, high quality';
   var STYLE6_TAIL_CREATURE =
     'dark fantasy anime creature concept art, full creature body visible, highly detailed, ' +
@@ -70,8 +77,10 @@
     // fix338 ART6_TAIL / ART6C_TAIL 本文（'@TAIL ' 除去後）＝fix338既定のsemi-realistic系
     { s: 'Dark fantasy visual-novel illustration, semi-realistic anime rendering, textured mature facial features, individual asymmetrical face, dim cinematic lighting with soft shadows, muted desaturated cold palette, simple dark atmospheric background, chest-up bust with space around, not a close-up, highly detailed, high quality', k: H },
     { s: 'Dark fantasy creature concept art, JRPG bestiary portrait, semi-realistic rendering, dim cinematic lighting, muted desaturated palette, dark atmospheric background, upper body framing with space around, not a close-up, highly detailed, high quality, non-human creature, monster design, no human face', k: C },
-    // STYLE6_TAIL 自身 / creature 自身（冪等：既にcanonicalならno-op）
+    // STYLE6_TAIL(=v2) 自身 / creature 自身（冪等：既にcanonicalならno-op）
     { s: STYLE6_TAIL, k: H },
+    // ★fix486: 旧canonical(v1・pale skin有)も剥がし対象=v1タグ末尾をv2へ正規化
+    { s: STYLE6_TAIL_V1, k: H },
     { s: STYLE6_TAIL_CREATURE, k: C },
     // features.js legacy初回経路（avatarUrlLocal / genUrl / autofill系 v292Dfix285文言・完全ブロック）
     { s: 'character portrait, head and shoulders, visible clothing, detailed face, dark fantasy, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality', k: H },
@@ -296,6 +305,7 @@
     __armed: true,
     CANON_VERSION: CANON_VERSION,
     STYLE6_TAIL: STYLE6_TAIL,
+    STYLE6_TAIL_V1: STYLE6_TAIL_V1,
     STYLE6_TAIL_CREATURE: STYLE6_TAIL_CREATURE,
     END_TAILS: END_TAILS,
     FRONT_PREFIXES: FRONT_PREFIXES,

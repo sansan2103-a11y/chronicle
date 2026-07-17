@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260717-fix485';
+  var BUILT = '20260717-fix486';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2639,7 +2639,7 @@ G.init();
 <!-- v292Dfix246: per-storyストア(fix77状態/longmem/会話キャッシュ)をスロット単位に分離。features.js等の前に設置。OFF=v292StoreSlotIsoOff -->
 <script src="v292Dfix246-store-slot-isolation.js?cb=v292Dfix246"></script>
 <!-- v292Dfix484: 画風決定権の一本化。fix247の【直前】に読み込むこと(=fetchチェーン最内側・実送信直前でstyle6正規化)。既定ON・緊急OFF=v292Dfix484Off・診断=v292Dfix484Diag -->
-<script src="v292Dfix484-style-canon.js?cb=v292Dfix484"></script>
+<script src="v292Dfix484-style-canon.js?cb=v292Dfix486"></script>
 <!-- v292Dfix247: APIプロキシ切替(公開化PoC)。設定のプロキシURL+合言葉が入っていれば全API(本文/longmem/🎲/アバター)をWorker経由へ。空=従来BYOK直叩き。OFF=v292ProxyOff -->
 <script src="v292Dfix247-proxy.js?cb=v292Dfix248"></script>
 <script src="v292Dfix247b-proxy-admin.js?cb=v292Dfix247b"></script>
@@ -2699,7 +2699,7 @@ G.init();
   <script src="v292Dfix192-newengine.js?cb=v292Dfix457"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
-  <script src="v292Dfix197-avatar-key.js?cb=v292Dfix484"></script>
+  <script src="v292Dfix197-avatar-key.js?cb=v292Dfix486"></script>
   <!-- v292Dfix221: モデル文脈の直近会話(recentDialogues)を、表示と同じ権威データ
        _convSays に一本化。fix58の壊れた本文再抽出(speakerに地の文が混入→過去セリフ
        がモデルへ誤供給され全キャラが同じセリフを言う)を発生源から断つ。 -->
@@ -2810,7 +2810,7 @@ G.init();
 <script src="v292Dfix418-genkeep.js?cb=v292Dfix418"></script>
 <script src="v292Dfix420-stylelora.js?cb=v292Dfix420v2"></script>
 <script src="v292Dfix474-candidate.js?cb=v292Dfix474d"></script>
-<script src="v292Dfix475-recipe-v3.js?cb=v292Dfix475b"></script>
+<script src="v292Dfix475-recipe-v3.js?cb=v292Dfix486"></script>
 <script src="v292Dfix477-autocomplete-off.js?cb=v292Dfix477"></script>
 <script src="v292Dfix478-imggen-retry.js?cb=v292Dfix478"></script>
 <script src="v292Dfix476-pipeline.js?cb=v292Dfix485"></script>

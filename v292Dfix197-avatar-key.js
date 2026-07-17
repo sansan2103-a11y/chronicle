@@ -234,7 +234,7 @@
             try {
               if (localStorage.getItem('v292Dfix480Off') !== '1'){
                 var as480 = String((S && S.cfg && S.cfg.artStyle) != null ? S.cfg.artStyle : '') === '6';
-                var T480 = 'dark fantasy anime character portrait, head and shoulders, visible clothing, detailed face, dim moody lighting, muted desaturated colors, dark shadowy background, pale skin, somber gothic horror atmosphere, high quality';
+                var T480 = 'dark fantasy anime character portrait, head and shoulders, visible clothing, detailed face, dim moody lighting, muted desaturated colors, dark shadowy background, somber gothic horror atmosphere, high quality';
                 if (as480 && en.indexOf(T480) < 0) return en.replace(/[\s.,;]+$/, '') + ', ' + T480;
               }
             } catch(e480){}
