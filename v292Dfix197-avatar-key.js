@@ -277,6 +277,9 @@
       try { var p412 = buildPrompt412(info.name||''); if (p412) body.prompt = p412; } catch(e){}   // ★fix412: 現在の設定+世界観を優先
       body.seed = Math.floor(Math.random()*1000000000);
     }
+    // ★fix484: 診断タグ(mode=auto|regen)。fix484が有効なときだけ付与し、fix484が送信直前に必ず除去する
+    //   （fix484不在/OFFなら付けない=外部APIへ内部フィールドを漏らさない）。秘密情報は含まない。
+    try { var d484 = window.__v292Dfix484; if (d484 && d484.__armed && d484.active && d484.active()) body.__diag484 = { m: fresh403 ? 'regen' : 'auto' }; } catch(e){}
     fetch(API, { method:'POST', headers:{ 'Authorization':'Bearer '+key, 'Content-Type':'application/json' }, body: JSON.stringify(body) })
       .then(function(r){ if(!r.ok) throw r.status; return r.json(); })
       .then(function(j){ var b=j&&j.data&&j.data[0]&&j.data[0].b64_json; if(!b) throw 'nob64';

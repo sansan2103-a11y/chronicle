@@ -199,8 +199,16 @@
       if(on()){
         var kind=isAvatarGen(url,init);
         if(kind==='post' && init && typeof init.body==='string'){
-          var j=JSON.parse(init.body);
-          if(j && j.prompt){ j.prompt=transformPrompt(j.prompt); init=Object.assign({},init,{body:JSON.stringify(j)}); }
+          /* ★fix484(2026-07-17): artStyle=6 の POST 生成は最終送信境界(fix484)が画風を一本化する。
+             ここでの変換(transformPrompt)はコア本文からも語を削る不可逆処理のため、fix484が
+             有効な art6 ではスキップして素材をそのまま内側へ渡す(端末フラグ非依存の収束のため)。
+             fix484 不在/OFF(v292Dfix484Off='1')なら従来どおり変換する。'get'/'see' は不変。 */
+          var skip484=false;
+          try{ var f484=window.__v292Dfix484; skip484=!!(f484 && f484.__armed && f484.active && f484.active() && artIdx()===6); }catch(e){}
+          if(!skip484){
+            var j=JSON.parse(init.body);
+            if(j && j.prompt){ j.prompt=transformPrompt(j.prompt); init=Object.assign({},init,{body:JSON.stringify(j)}); }
+          }
         } else if(kind==='get'){
           var mm=/\/prompt\/([^?]+)(\?.*)$/.exec(String(url));
           if(mm){ var dec=''; try{ dec=decodeURIComponent(mm[1]); }catch(_e){ dec=mm[1]; }

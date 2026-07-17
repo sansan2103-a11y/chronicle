@@ -137,10 +137,19 @@
   // ---------- 候補生成（seedだけ替えて内側チェーンへ並列発行） ----------
   //   resp は clone().json() で読み、元Response は未consumeのまま温存（勝者返却用）。
   //   各候補は candTimeoutMs() の Promise.race で包み、時間切れは {ok:false}（AbortControllerがあれば中断も試行）。
-  function genCandidates(url, init, baseBody, seeds){
+  function genCandidates(url, init, baseBody, seeds, batch){
     var TO = candTimeoutMs();
-    var reqs = seeds.map(function(seed){
+    var reqs = seeds.map(function(seed, candIdx){
       var b = Object.assign({}, baseBody, { seed: seed });
+      // ★fix484: 診断タグ(pipeline/候補index/バッチ)。fix484が有効なときだけ付与し、
+      //   fix484が送信直前に必ず除去する。秘密情報は含まない。
+      try {
+        var d484 = W.__v292Dfix484;
+        if (d484 && d484.__armed && d484.active && d484.active()){
+          var m0 = (baseBody.__diag484 && baseBody.__diag484.m) || 'auto';
+          b.__diag484 = { m: m0, p: 1, c: candIdx, b: (batch || 0) };
+        }
+      } catch(e){}
       var ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
       var init2 = Object.assign({}, init, { body: JSON.stringify(b) });   // 入口initを破壊しない複製
       if (ac) init2.signal = ac.signal;
@@ -311,7 +320,7 @@
     var seeds1 = mkSeeds(baseSeed, 0);
     lastRun.seeds = seeds1.slice();
 
-    return genCandidates(url, init, baseBody, seeds1).then(function(cands){
+    return genCandidates(url, init, baseBody, seeds1, 0).then(function(cands){
       if (!cands.length){
         // 成功0枚 → 入口リクエストを1回だけ素通し(fail-open)
         lastRun.fallback = 'no-candidates';
@@ -341,7 +350,7 @@
         var seeds2 = mkSeeds(baseSeed, 1);
         lastRun.rebatched = true;
         lastRun.seeds = lastRun.seeds.concat(seeds2);
-        return genCandidates(url, init, baseBody, seeds2).then(function(cands2){
+        return genCandidates(url, init, baseBody, seeds2, 1).then(function(cands2){
           var afterInspect = cands2.length
             ? inspectAndScore(url, init, kind, desc, cands2)
             : Promise.resolve(null);
