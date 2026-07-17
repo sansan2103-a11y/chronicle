@@ -148,7 +148,7 @@ export default {
       // ★v23: 生成遮断器の上限(管理者設定)をクライアントへ公開(非秘匿・fix483が起動時に同期)
       let gb23 = null;
       try { if (env.LEDGER) { const c23 = await getJSON(env, 'config', {}); if (c23 && c23.genBudget != null) gb23 = +c23.genBudget; } } catch (e) {}
-      return json({ ok: true, service: 'chronicle-proxy', v: 24, genBudget: gb23, inspect: true, inspectSpec: 'v20.3', lora420: true, debug420: true, style420: true, strict: String(env.ALLOW_IMAGE_FALLBACK||'') !== '1', d1: !!env.DB, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID, img: true }, 200, request);
+      return json({ ok: true, service: 'chronicle-proxy', v: 24, genBudget: gb23, inspect: true, inspectSpec: 'v20.4', lora420: true, debug420: true, style420: true, strict: String(env.ALLOW_IMAGE_FALLBACK||'') !== '1', d1: !!env.DB, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID, img: true }, 200, request);
     }
     if (request.method !== 'POST') {
       return json({ error: 'POST only' }, 405, request);
@@ -1536,11 +1536,15 @@ function scoreInspect(results, kind) {
     const hard = {};
     const soft = {};
     let pass = true;
+    let hardFails = 0;
     spec.hard.forEach(function (key) {
       const v = item[key];
-      hard[key] = v;
+      // ★v20.4(GPT-5.6監査2026-07-17): 未返却(undefined)は「欠損失敗」= false として応答へ正規化。
+      //   undefinedはJSON化で欠落し、クライアント(fix476)のhardFail計数から漏れて
+      //   「判定不能候補が全滅時に最優先」という逆転(判定不能優遇)を生んでいた。
+      hard[key] = (v === true) ? true : (v === null ? null : false);
       if (v === null) return;        // descに明記が無い項目は除外
-      if (v !== true) pass = false;  // undefined/false/その他 = 不適合
+      if (v !== true) { pass = false; hardFails += 1; }  // undefined/false/その他 = 不適合(欠損も計上)
     });
     let score = 0;
     spec.soft.forEach(function (key) {
@@ -1549,7 +1553,7 @@ function scoreInspect(results, kind) {
       if (v === true) score += 1;
     });
     if (pass) score += 100;
-    return { hard: hard, soft: soft, pass: pass, score: score };
+    return { hard: hard, soft: soft, pass: pass, score: score, hardFails: hardFails };  // ★v20.4: hardFailsをサーバ計算で返す
   });
 }
 
