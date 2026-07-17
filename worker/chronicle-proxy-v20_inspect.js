@@ -145,7 +145,7 @@ export default {
     if (request.method === 'GET') {
       const gp = new URL(request.url).pathname;
       if (gp === '/img') return handleImg(request, env, ctx);   // ★v11: 画像URL配信(<img src>用・認証不要のcapability URL)
-      return json({ ok: true, service: 'chronicle-proxy', v: 21, inspect: true, lora420: true, debug420: true, style420: true, strict: String(env.ALLOW_IMAGE_FALLBACK||'') !== '1', d1: !!env.DB, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID, img: true }, 200, request);
+      return json({ ok: true, service: 'chronicle-proxy', v: 22, inspect: true, lora420: true, debug420: true, style420: true, strict: String(env.ALLOW_IMAGE_FALLBACK||'') !== '1', d1: !!env.DB, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID, img: true }, 200, request);
     }
     if (request.method !== 'POST') {
       return json({ error: 'POST only' }, 405, request);
@@ -202,7 +202,11 @@ export default {
       // ---- ★v21(2026-07-17): 明示指定で Pollinations 直行（画風A/B・切替スイッチ用） ----
       //   body.imgProvider==='pollinations' のときだけ。ユーザーの明示選択なので
       //   strict(黙ったfallback禁止)とは無関係。失敗は他プロバイダへ落とさず素直にエラーを返す。
-      if (body && body.imgProvider === 'pollinations') {
+      // ★v22: 経路選択 = ①リクエスト明示(imgProvider) > ②管理者config(imgProvider) > ③既定(together)
+      const provSel22 = (body && (body.imgProvider === 'pollinations' || body.imgProvider === 'together'))
+        ? body.imgProvider
+        : ((gate.config && gate.config.imgProvider === 'pollinations') ? 'pollinations' : 'together');
+      if (provSel22 === 'pollinations') {
         if (!env.POLLINATIONS_KEY) return json({ error: 'POLLINATIONS_KEY未設定', errorCode: 'poll-no-key' }, 503, request);
         const pBody = Object.assign({}, body); delete pBody.imgProvider;
         let up21;
@@ -710,7 +714,23 @@ async function admin(body, env, request) {
       note: 'Togetherは残高APIを公開していないため今月枚数×単価の推計です',
     };
     out.fireworks = { keySet: !!String(env.FIREWORKS_KEY || '').trim() };
-    out.pollinations = { keySet: !!env.POLLINATIONS_KEY };
+    // ★v22: Pollinationsは残高API(GET /account/balance)がある。残Pollen($1≒1 Pollen)+今月枚数。
+    {
+      const plKey = String(env.POLLINATIONS_KEY || '').trim();
+      if (!plKey) {
+        out.pollinations = { keySet: false };
+      } else {
+        const plN = +bp.pollinations || 0;
+        try {
+          const rp = await fetch('https://gen.pollinations.ai/account/balance', { headers: { 'Authorization': 'Bearer ' + plKey } });
+          const jp = await rp.json().catch(() => ({}));
+          if (rp.ok) out.pollinations = { keySet: true, ok: true, balance: (jp.balance == null ? null : +jp.balance), images: plN };
+          else out.pollinations = { keySet: true, ok: false, status: rp.status, detail: JSON.stringify(jp).slice(0, 200), images: plN };
+        } catch (ep) {
+          out.pollinations = { keySet: true, ok: false, status: 0, detail: String((ep && ep.message) || ep).slice(0, 200), images: plN };
+        }
+      }
+    }
     // 台帳の今月合計
     try {
       const codes = await listPrefix(env, 'code:');
@@ -724,6 +744,7 @@ async function admin(body, env, request) {
     } catch (e) {}
     const config = await getJSON(env, 'config', {});
     out.killSwitch = !!config.killSwitch;
+    out.imgProvider = (config.imgProvider === 'pollinations') ? 'pollinations' : 'together';   // ★v22
     return json(out, 200, request);
   }
 
@@ -841,6 +862,7 @@ async function admin(body, env, request) {
         : String(body.allowedModels).split(',').map(s => s.trim()).filter(Boolean);
     }
     if (typeof body.killSwitch === 'boolean') config.killSwitch = body.killSwitch;
+    if (body.imgProvider === 'pollinations' || body.imgProvider === 'together') config.imgProvider = body.imgProvider;   // ★v22: アイコン生成経路の全体切替
     await env.LEDGER.put('config', JSON.stringify(config));
     return json({ ok: true, config }, 200, request);
   }
