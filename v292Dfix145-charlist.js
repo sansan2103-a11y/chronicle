@@ -221,6 +221,41 @@
         isStory: true
       });
     });
+    // v292Dfix487: 直近ターンの未登録話者を即時表示（ロスター待ちしない・表示のみ／モデルには渡さない）
+    try {
+      if (localStorage.getItem('v292Dfix487OnV1') === '1' && localStorage.getItem('v292Dfix487ListOff') !== '1'){
+        var __f487gen = (window.__v292Dfix487 && window.__v292Dfix487.isGeneric) ? window.__v292Dfix487.isGeneric
+          : function(x){ x=String(x==null?'':x).trim(); return !x || /^[?\uFF1F]+$/.test(x) || /^(\u5F7C|\u5F7C\u5973|\u305D\u308C|\u81EA\u5206|\u79C1|\u50D5|\u4FFA|\u5974|\u3084\u3064|\u8B0E\u306E.*|\u6B63\u4F53\u4E0D\u660E.*|\u8AB0\u304B|\u4F55\u8005\u304B|\u4F55\u304B|\u4EBA\u5F71|\u7570\u5F62|\u5316\u3051?\u7269|\u602A\u7269|\u5996\u602A|\u4EA1\u970A)$/.test(x); };
+        var __f487nh = (window.__v292Dfix487 && window.__v292Dfix487.isNonhumanGeneric) ? window.__v292Dfix487.isNonhumanGeneric
+          : function(x){ return /^(\u7570\u5F62|\u5316\u3051?\u7269|\u602A\u7269|\u602A\u7570|\u5996\u602A|\u4EA1\u970A|\u5E7D\u9B3C)/.test(String(x||'').trim()); };
+        function __f487label(handle, turn){
+          if (!__f487gen(handle)) return handle;
+          var narr = (turn && turn.narrative) ? String(turn.narrative).replace(/<[^>]+>/g,' ') : '';
+          var m = narr.match(/(\u82E5\u3044|\u5E7C\u3044|\u5E74\u8001\u3044\u305F|\u80CC\u306E\u9AD8\u3044|\u5C0F\u67C4\u306A|\u9577\u8EAB\u306E|\u75E9\u305B\u305F|\u5927\u67C4\u306A)?(\u7537\u6027|\u5973\u6027|\u7537|\u5973|\u5C11\u5E74|\u5C11\u5973|\u9752\u5E74|\u8001\u4EBA|\u8001\u5A46|\u5973\u306E\u5B50|\u7537\u306E\u5B50|\u5B50\u4F9B)/);
+          if (m) return m[0] + '\uFF08\u672A\u78BA\u8A8D\uFF09';
+          return __f487nh(handle) ? '\uFF08\u6B63\u4F53\u4E0D\u660E\u306E\u5B58\u5728\uFF09' : '\uFF08\u6B63\u4F53\u4E0D\u660E\u306E\u4EBA\u7269\uFF09';
+        }
+        var __f487have = {};
+        out.story.forEach(function(s){ if(s&&s.name) __f487have[s.name]=1; });
+        var __f487recent = turns.slice(-8);
+        for (var __ti = __f487recent.length - 1; __ti >= 0; __ti--){
+          var __t = __f487recent[__ti];
+          var __says = (__t && __t._convSays) || [];
+          if (!Array.isArray(__says)) continue;
+          var __gidx = turns.length - __f487recent.length + __ti;
+          for (var __si = 0; __si < __says.length; __si++){
+            var __who = __says[__si] && __says[__si].who;
+            var __h = String(__who == null ? '' : __who).trim();
+            if (!__h) continue;
+            if (registered[__h] || __isAliasOfRegistered(__h)) continue;
+            var __label = __f487label(__h, __t);
+            if (__f487have[__label]) continue;
+            __f487have[__label] = 1;
+            out.story.push({ name: __label, desc: '', state: '\uFF08\u7269\u8A9E\u306B\u767B\u5834\u30FB\u672A\u767B\u9332\uFF09', lastTurn: __gidx, lastTurnLabel: turnDelta(__gidx, turns.length), isStory: true, provisional: true, rawHandle: __h });
+          }
+        }
+      }
+    } catch(e){}
     // sort story by lastTurn desc (most recent first)
     out.story.sort(function(a, b){ return b.lastTurn - a.lastTurn; });
     return out;
@@ -424,7 +459,15 @@
         return b;
       }
       if (kind === 'story'){
-        btnRow.appendChild(mkBtn('⭐ NPCに昇格', '#5a5a9a', function(){ promoteToNpc(c.name, c.desc); }));
+        if (c.provisional){
+          btnRow.appendChild(mkBtn('⭐ 名前を付けて登録', '#5a5a9a', function(){
+            var __nm = prompt('この人物に名前を付けて登録します\n名前を入力：', (c.rawHandle && !/^[?？]/.test(c.rawHandle) && !/^[（(]/.test(c.rawHandle)) ? c.rawHandle : '');
+            if (__nm === null) return; __nm = String(__nm).trim(); if (!__nm) return;
+            promoteToNpc(__nm, '');
+          }));
+        } else {
+          btnRow.appendChild(mkBtn('⭐ NPCに昇格', '#5a5a9a', function(){ promoteToNpc(c.name, c.desc); }));
+        }
       } else if (kind === 'npc'){
         btnRow.appendChild(mkBtn('✏️ 編集', '#5a5a8a', function(){ editNpc(c.npcIdx, c.name, c.desc); }));
       }
