@@ -148,7 +148,7 @@ export default {
       // ★v23: 生成遮断器の上限(管理者設定)をクライアントへ公開(非秘匿・fix483が起動時に同期)
       let gb23 = null;
       try { if (env.LEDGER) { const c23 = await getJSON(env, 'config', {}); if (c23 && c23.genBudget != null) gb23 = +c23.genBudget; } } catch (e) {}
-      return json({ ok: true, service: 'chronicle-proxy', v: 23, genBudget: gb23, inspect: true, lora420: true, debug420: true, style420: true, strict: String(env.ALLOW_IMAGE_FALLBACK||'') !== '1', d1: !!env.DB, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID, img: true }, 200, request);
+      return json({ ok: true, service: 'chronicle-proxy', v: 24, genBudget: gb23, inspect: true, inspectSpec: 'v20.3', lora420: true, debug420: true, style420: true, strict: String(env.ALLOW_IMAGE_FALLBACK||'') !== '1', d1: !!env.DB, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID, img: true }, 200, request);
     }
     if (request.method !== 'POST') {
       return json({ error: 'POST only' }, 405, request);
@@ -1426,13 +1426,29 @@ function d1FirstRev(r, fallback) {
 // ★VLM検品のハード/ソフト項目定義(SPEC パートA準拠)。
 //   hard = 仕様適合(全てtrueで pass。descに明記が無く null の項目は除外)。
 //   soft = 加点のみ(true 1個=+1点)。pass時は +100点。
+// ★v20.3(2026-07-17・Codex方針「VLMは明確な破綻除外のみ」): hard failを
+//   「写真/実写3D・人物条件(性別/年齢/髪/服装)の重大不一致・横顔/後ろ姿・顔欠損・
+//    文字/透かし・手などの明白な破綻」に限定。
+//   - chest_up_bust は hard→soft へ（構図の好みは破綻ではない）
+//   - front_or_three_quarter は soft→hard へ（横顔/後ろ姿の除外）
+//   - no_text_or_watermark / no_severe_artifacts を hard に追加
+//   応答API形状（hard/soft/pass/score）は不変。soft は palette/構図の好みのみで、
+//   semi-realistic 優遇や一般的な beauty/high quality 加点は行わない。
+//   【未返却キーの実運用挙動（重要・意図的）】
+//   - null   = 「判定不能/構図外/descに明記なし」→ 判定から【除外】(passに影響しない)。
+//   - undefined(VLMがキーごと返し忘れ) = 【不合格側】(fail-closed・v20設計の「黙って通さない」を維持)。
+//     軽量VLMが新hardキー(no_text_or_watermark等)を返し忘れると当該候補は pass=false になるが、
+//     クライアント fix476 の hardFailCount は「false の個数」だけを数えるため undefined は
+//     hardFails に計上されず、全候補passなし時の best-effort 選抜(hardFails昇順→score降順)では
+//     不利にならない=採用自体は止まらない。プロンプト側で全キー返却を明示指示しており、
+//     返し忘れが常態化する場合は INSPECT_MODEL を返却が安定するモデルへ変更する運用とする。
 const INSPECT_KEYS = {
   human: {
-    hard: ['single_person', 'face_clear', 'chest_up_bust', 'anime_style', 'desc_match_gender', 'desc_match_age_band', 'desc_match_hair', 'desc_match_clothing'],
-    soft: ['dark_background', 'muted_colors', 'front_or_three_quarter'],
+    hard: ['single_person', 'face_clear', 'anime_style', 'desc_match_gender', 'desc_match_age_band', 'desc_match_hair', 'desc_match_clothing', 'front_or_three_quarter', 'no_text_or_watermark', 'no_severe_artifacts'],
+    soft: ['chest_up_bust', 'dark_background', 'muted_colors'],
   },
   creature: {
-    hard: ['single_creature', 'non_human', 'clearly_visible', 'anime_or_concept_art', 'desc_match_form'],
+    hard: ['single_creature', 'non_human', 'clearly_visible', 'anime_or_concept_art', 'desc_match_form', 'no_text_or_watermark', 'no_severe_artifacts'],
     soft: ['dark_background', 'muted_colors'],
   },
 };
@@ -1445,11 +1461,18 @@ function buildInspectPrompt(kind, desc, n) {
   const d = String(desc == null ? '' : desc);
   let checklist, extra;
   if (k === 'human') {
-    checklist = 'single_person, face_clear, chest_up_bust, anime_style, desc_match_gender, desc_match_age_band, desc_match_hair, desc_match_clothing, dark_background, muted_colors, front_or_three_quarter';
-    extra = 'For the desc_match_* checks, return null (not false) when the description does not specify that attribute. dark_background, muted_colors and front_or_three_quarter are soft preferences.';
+    checklist = 'single_person, face_clear, anime_style, desc_match_gender, desc_match_age_band, desc_match_hair, desc_match_clothing, front_or_three_quarter, no_text_or_watermark, no_severe_artifacts, chest_up_bust, dark_background, muted_colors';
+    extra = 'For the desc_match_* checks, return null (not false) when the description does not specify that attribute. '
+      + 'front_or_three_quarter is true for a front view or a three-quarter view; it is false ONLY when the face is clearly in profile (side view) or the subject is turned away (back view); return null if uncertain. '
+      + 'no_text_or_watermark is true when the image contains no visible text, letters, logos, signatures or watermarks; false when any are clearly visible. '
+      + 'no_severe_artifacts is true when there is no obvious generation failure such as extra or malformed hands or fingers, a broken, melted or duplicated face, or heavily distorted anatomy; false ONLY for clear failures - stylization is not a failure; return null if uncertain. '
+      + 'chest_up_bust, dark_background and muted_colors are soft preferences.';
   } else {
-    checklist = 'single_creature, non_human, clearly_visible, anime_or_concept_art, desc_match_form, dark_background, muted_colors';
-    extra = 'non_human means there is no human face. Return null for desc_match_form when the description does not specify the form. dark_background and muted_colors are soft preferences.';
+    checklist = 'single_creature, non_human, clearly_visible, anime_or_concept_art, desc_match_form, no_text_or_watermark, no_severe_artifacts, dark_background, muted_colors';
+    extra = 'non_human means there is no human face. Return null for desc_match_form when the description does not specify the form. '
+      + 'no_text_or_watermark is true when the image contains no visible text, letters, logos, signatures or watermarks; false when any are clearly visible. '
+      + 'no_severe_artifacts is true when there is no obvious generation failure such as duplicated or broken limbs or heavily corrupted rendering; false ONLY for clear failures; return null if uncertain. '
+      + 'dark_background and muted_colors are soft preferences.';
   }
   const system = 'You are a strict specification-compliance inspector for character avatar images. '
     + 'You do NOT make aesthetic judgments. For EACH of the ' + cnt + ' image(s) provided, evaluate these boolean checks: '
