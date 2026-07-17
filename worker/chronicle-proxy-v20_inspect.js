@@ -145,7 +145,7 @@ export default {
     if (request.method === 'GET') {
       const gp = new URL(request.url).pathname;
       if (gp === '/img') return handleImg(request, env, ctx);   // ★v11: 画像URL配信(<img src>用・認証不要のcapability URL)
-      return json({ ok: true, service: 'chronicle-proxy', v: 20, inspect: true, lora420: true, debug420: true, style420: true, strict: String(env.ALLOW_IMAGE_FALLBACK||'') !== '1', d1: !!env.DB, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID, img: true }, 200, request);
+      return json({ ok: true, service: 'chronicle-proxy', v: 21, inspect: true, lora420: true, debug420: true, style420: true, strict: String(env.ALLOW_IMAGE_FALLBACK||'') !== '1', d1: !!env.DB, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID, img: true }, 200, request);
     }
     if (request.method !== 'POST') {
       return json({ error: 'POST only' }, 405, request);
@@ -198,6 +198,35 @@ export default {
         if (cap9 > 0) { const st9 = await getJSON(env, 'imgstats', {}); const n9 = (st9.month === month()) ? (+st9.total || 0) : 0; if (n9 >= cap9) return json({ error: '今月の画像生成が上限に達しました(管理者に連絡してください)' }, 402, request); }
         const rpm9 = +env.IMG_RATE_PER_MIN || 0;
         if (rpm9 > 0 && gate.codeKey) { const rk9 = 'rl:img:' + gate.codeKey + ':' + Math.floor(Date.now()/60000); const cur9 = +(await env.LEDGER.get(rk9)) || 0; if (cur9 >= rpm9) return json({ error: '画像生成が混み合っています。少し待って再試行してください' }, 429, request); ctx.waitUntil(env.LEDGER.put(rk9, String(cur9+1), { expirationTtl: 120 })); }
+      }
+      // ---- ★v21(2026-07-17): 明示指定で Pollinations 直行（画風A/B・切替スイッチ用） ----
+      //   body.imgProvider==='pollinations' のときだけ。ユーザーの明示選択なので
+      //   strict(黙ったfallback禁止)とは無関係。失敗は他プロバイダへ落とさず素直にエラーを返す。
+      if (body && body.imgProvider === 'pollinations') {
+        if (!env.POLLINATIONS_KEY) return json({ error: 'POLLINATIONS_KEY未設定', errorCode: 'poll-no-key' }, 503, request);
+        const pBody = Object.assign({}, body); delete pBody.imgProvider;
+        let up21;
+        try {
+          up21 = await fetch(POLLINATIONS_URL, { method: 'POST', headers: { 'Authorization': 'Bearer ' + env.POLLINATIONS_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(pBody) });
+        } catch (e21) {
+          return json({ error: 'pollinations fetch failed', errorCode: 'poll-upstream', detail: String((e21 && e21.message) || e21).slice(0, 200) }, 502, request);
+        }
+        if (!up21.ok) { let d21 = ''; try { d21 = (await up21.text()).slice(0, 300); } catch (e) {} return json({ error: 'pollinations error', errorCode: 'poll-upstream', status: up21.status, detail: d21 }, 502, request); }
+        const ct21 = String(up21.headers.get('Content-Type') || '');
+        const raw21 = await up21.arrayBuffer();
+        if (/^image\//i.test(ct21)) {
+          const by21 = new Uint8Array(raw21); let bin21 = ''; const CH21 = 0x8000;
+          for (let i21 = 0; i21 < by21.length; i21 += CH21) { bin21 += String.fromCharCode.apply(null, by21.subarray(i21, i21 + CH21)); }
+          ctx.waitUntil(recordImg(env, 'pollinations')); ctx.waitUntil(recordImgUser(env, gate.codeKey, (+env.POLLINATIONS_IMG_USD || 0)));
+          return json({ data: [ { b64_json: btoa(bin21) } ], provider: 'pollinations', fallback: false }, 200, request, imgProviderHeaders('pollinations', false));
+        }
+        if (/json/i.test(ct21)) {
+          let pj21 = null; try { pj21 = JSON.parse(new TextDecoder().decode(raw21)); } catch (e) { pj21 = null; }
+          if (pj21 && typeof pj21 === 'object') { pj21.provider = 'pollinations'; pj21.fallback = false; ctx.waitUntil(recordImg(env, 'pollinations')); ctx.waitUntil(recordImgUser(env, gate.codeKey, (+env.POLLINATIONS_IMG_USD || 0))); return json(pj21, 200, request, imgProviderHeaders('pollinations', false)); }
+          return json({ error: 'pollinations応答が壊れています(JSON解釈不能)', errorCode: 'poll-bad-body' }, 502, request);
+        }
+        let db21 = ''; try { db21 = new TextDecoder().decode(raw21).slice(0, 200); } catch (e) {}
+        return json({ error: 'pollinationsが画像でない応答を返しました', errorCode: 'poll-bad-content-type', contentType: ct21, detail: db21 }, 502, request);
       }
       let fwErr = null; // ★v5: Fireworks失敗の詳細を保持(原因の見える化)
       let tgErr = null; // ★v7: Together失敗の詳細
