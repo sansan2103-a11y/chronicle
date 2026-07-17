@@ -146,9 +146,9 @@ export default {
       const gp = new URL(request.url).pathname;
       if (gp === '/img') return handleImg(request, env, ctx);   // ★v11: 画像URL配信(<img src>用・認証不要のcapability URL)
       // ★v23: 生成遮断器の上限(管理者設定)をクライアントへ公開(非秘匿・fix483が起動時に同期)
-      let gb23 = null;
-      try { if (env.LEDGER) { const c23 = await getJSON(env, 'config', {}); if (c23 && c23.genBudget != null) gb23 = +c23.genBudget; } } catch (e) {}
-      return json({ ok: true, service: 'chronicle-proxy', v: 25, genBudget: gb23, inspect: true, inspectSpec: 'v20.5', lora420: true, debug420: true, style420: true, strict: String(env.ALLOW_IMAGE_FALLBACK||'') !== '1', d1: !!env.DB, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID, img: true }, 200, request);
+      let gb23 = null, cfg23 = null;
+      try { if (env.LEDGER) { cfg23 = await getJSON(env, 'config', {}); if (cfg23 && cfg23.genBudget != null) gb23 = +cfg23.genBudget; } } catch (e) {}
+      return json({ ok: true, service: 'chronicle-proxy', v: 26, genBudget: gb23, inspect: true, inspectSpec: 'v20.5', imgKeyMode: ((cfg23 && (cfg23.imgKeyMode === 'reserve' || cfg23.imgKeyMode === 'auto')) ? cfg23.imgKeyMode : 'primary'), paidKeySet: !!String(env.POLLINATIONS_KEY_PAID||'').trim(), lora420: true, debug420: true, style420: true, strict: String(env.ALLOW_IMAGE_FALLBACK||'') !== '1', d1: !!env.DB, ledger: !!env.LEDGER, google: !!env.GOOGLE_CLIENT_ID, img: true }, 200, request);
     }
     if (request.method !== 'POST') {
       return json({ error: 'POST only' }, 405, request);
@@ -210,15 +210,28 @@ export default {
         ? body.imgProvider
         : ((gate.config && gate.config.imgProvider === 'pollinations') ? 'pollinations' : 'together');
       if (provSel22 === 'pollinations') {
-        if (!env.POLLINATIONS_KEY) return json({ error: 'POLLINATIONS_KEY未設定', errorCode: 'poll-no-key' }, 503, request);
+        // ★v26(2026-07-17・GPT承認): アイコン生成キーの二段構え primary/reserve。
+        //   config.imgKeyMode = 'primary'(既定・従来POLLINATIONS_KEY) / 'reserve'(有料キーPOLLINATIONS_KEY_PAID固定) /
+        //   'auto'(primaryで叩き HTTP 402=予算切れのときだけ1回reserveへ)。429/timeout/5xxではキー切替しない。reserve未設定なら常にprimary。
+        const kPrimary26 = String(env.POLLINATIONS_KEY || '').trim();
+        const kReserve26 = String(env.POLLINATIONS_KEY_PAID || '').trim();
+        const mode26 = (gate.config && (gate.config.imgKeyMode === 'reserve' || gate.config.imgKeyMode === 'auto')) ? gate.config.imgKeyMode : 'primary';
+        let useKey26 = (mode26 === 'reserve' && kReserve26) ? kReserve26 : kPrimary26;
+        let useWhich26 = (kReserve26 && useKey26 === kReserve26) ? 'reserve' : 'primary';
+        if (!useKey26) return json({ error: 'POLLINATIONS_KEY未設定', errorCode: 'poll-no-key', keyMode: mode26 }, 503, request);
         const pBody = Object.assign({}, body); delete pBody.imgProvider;
+        const _pollFetch26 = function (k) { return fetch(POLLINATIONS_URL, { method: 'POST', headers: { 'Authorization': 'Bearer ' + k, 'Content-Type': 'application/json' }, body: JSON.stringify(pBody) }); };
         let up21;
         try {
-          up21 = await fetch(POLLINATIONS_URL, { method: 'POST', headers: { 'Authorization': 'Bearer ' + env.POLLINATIONS_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(pBody) });
+          up21 = await _pollFetch26(useKey26);
         } catch (e21) {
-          return json({ error: 'pollinations fetch failed', errorCode: 'poll-upstream', detail: String((e21 && e21.message) || e21).slice(0, 200) }, 502, request);
+          return json({ error: 'pollinations fetch failed', errorCode: 'poll-upstream', detail: String((e21 && e21.message) || e21).slice(0, 200), keyUsed: useWhich26 }, 502, request);
         }
-        if (!up21.ok) { let d21 = ''; try { d21 = (await up21.text()).slice(0, 300); } catch (e) {} return json({ error: 'pollinations error', errorCode: 'poll-upstream', status: up21.status, detail: d21 }, 502, request); }
+        if (mode26 === 'auto' && useWhich26 === 'primary' && up21.status === 402 && kReserve26) {
+          try { up21 = await _pollFetch26(kReserve26); useWhich26 = 'reserve'; }
+          catch (e26) { return json({ error: 'pollinations fetch failed (reserve)', errorCode: 'poll-upstream', detail: String((e26 && e26.message) || e26).slice(0, 200), keyUsed: 'reserve' }, 502, request); }
+        }
+        if (!up21.ok) { let d21 = ''; try { d21 = (await up21.text()).slice(0, 300); } catch (e) {} return json({ error: 'pollinations error', errorCode: 'poll-upstream', status: up21.status, detail: d21, keyUsed: useWhich26, keyMode: mode26 }, 502, request); }
         const ct21 = String(up21.headers.get('Content-Type') || '');
         const raw21 = await up21.arrayBuffer();
         if (/^image\//i.test(ct21)) {
@@ -756,6 +769,22 @@ async function admin(body, env, request) {
           out.pollinationsKey = { ok: false, status: 0, detail: String((ek && ek.message) || ek).slice(0, 200) };
         }
       }
+      // ★v26: 予備(有料)キー POLLINATIONS_KEY_PAID の残高/予算
+      const plKeyPaid = String(env.POLLINATIONS_KEY_PAID || '').trim();
+      if (plKeyPaid) {
+        try {
+          const rpp = await fetch('https://gen.pollinations.ai/account/balance', { headers: { 'Authorization': 'Bearer ' + plKeyPaid } });
+          const jpp = await rpp.json().catch(() => ({}));
+          out.pollinationsPaid = rpp.ok ? { keySet: true, ok: true, balance: (jpp.balance == null ? null : +jpp.balance) } : { keySet: true, ok: false, status: rpp.status };
+        } catch (epp) { out.pollinationsPaid = { keySet: true, ok: false, status: 0, detail: String((epp && epp.message) || epp).slice(0, 120) }; }
+        try {
+          const rpk = await fetch('https://gen.pollinations.ai/account/key', { headers: { 'Authorization': 'Bearer ' + plKeyPaid } });
+          const jpk = await rpk.json().catch(() => ({}));
+          if (rpk.ok) out.pollinationsPaidKey = { ok: true, valid: (jpk.valid != null ? jpk.valid : null), name: (jpk.name != null ? String(jpk.name).slice(0, 60) : null), pollenBudget: (jpk.pollenBudget != null ? jpk.pollenBudget : null) };
+        } catch (epk) {}
+      } else {
+        out.pollinationsPaid = { keySet: false };
+      }
     }
     // 台帳の今月合計
     try {
@@ -772,6 +801,8 @@ async function admin(body, env, request) {
     out.killSwitch = !!config.killSwitch;
     out.imgProvider = (config.imgProvider === 'pollinations') ? 'pollinations' : 'together';   // ★v22
     out.genBudget = (config.genBudget != null) ? +config.genBudget : null;   // ★v23
+    out.imgKeyMode = (config.imgKeyMode === 'reserve' || config.imgKeyMode === 'auto') ? config.imgKeyMode : 'primary';   // ★v26
+    out.pollinationsPaidKeySet = !!String(env.POLLINATIONS_KEY_PAID || '').trim();   // ★v26
     return json(out, 200, request);
   }
 
@@ -890,6 +921,7 @@ async function admin(body, env, request) {
     }
     if (typeof body.killSwitch === 'boolean') config.killSwitch = body.killSwitch;
     if (body.imgProvider === 'pollinations' || body.imgProvider === 'together') config.imgProvider = body.imgProvider;   // ★v22: アイコン生成経路の全体切替
+    if (body.imgKeyMode === 'primary' || body.imgKeyMode === 'reserve' || body.imgKeyMode === 'auto') config.imgKeyMode = body.imgKeyMode;   // ★v26: 通常/予備キー切替
     if (body.genBudget !== undefined) {   // ★v23: 生成遮断器の上限。''/null=既定(30)に戻す、0=無制限、1..999=その回数
       if (body.genBudget === '' || body.genBudget === null) { delete config.genBudget; }
       else { const gb = parseInt(body.genBudget, 10); if (isFinite(gb) && gb >= 0) config.genBudget = Math.min(999, gb); }
