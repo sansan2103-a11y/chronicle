@@ -1,5 +1,9 @@
 // =====================================================================
-// Chronicle TRPG - v292Dfix476: 3候補生成 → VLM検品 → 選抜パイプライン
+// Chronicle TRPG - v292Dfix476: 3候補生成 → VLM検品 → 選抜パイプライン (v476.3)
+// ★v476.3(2026-07-17 GPT-5.6監査反映): ①hardFailCountが未返却(undefined)も欠損失敗として計上
+//   (Worker v20.4のr.hardFails優先) ②全滅時のbest-effort採用を廃止=自動採用しない(502返却)
+//   ③softスコアは表示専用(合格中の勝者は生成順で先頭) ④不合格候補はlastRun.failedCandidatesに保持
+//   → __v292Dfix476.showFailed() で人間比較。
 // ---------------------------------------------------------------------
 // 背景(2026-07-16・設計=Fable5 / 監査=GPT-5.6):
 //   新キャラのアイコン生成1回(POST /image, artStyle=6)を fetch境界(最外殻)で横取りし、
@@ -180,14 +184,22 @@
   //   (同一画像でも単発なら合格)。→ 候補ごとに1リクエストへ変更。全滅時のみ null(=検品不能)。
   // ---------- ハード判定の失格数（r.hard の false 値の個数・item1で使用） ----------
   function hardFailCount(r){
+    // ★v476.3(GPT-5.6監査2026-07-17): 未返却(undefined)も「欠損失敗」として数える。
+    //   優先: サーバ計算 r.hardFails(数値・Worker v20.4以降)。無ければ hard の
+    //   true/null 以外(false等)を数える。hardが無い/空(=判定不能)は 99 で最劣後。
     try {
-      if (!r || !r.hard || typeof r.hard !== 'object') return 0;
-      var n = 0;
+      if (r && typeof r.hardFails === 'number' && isFinite(r.hardFails) && r.hardFails >= 0) return r.hardFails;
+      if (!r || !r.hard || typeof r.hard !== 'object') return 99;
+      var n = 0, keys = 0;
       for (var k in r.hard){
-        if (Object.prototype.hasOwnProperty.call(r.hard, k) && r.hard[k] === false) n++;
+        if (!Object.prototype.hasOwnProperty.call(r.hard, k)) continue;
+        keys++;
+        var v = r.hard[k];
+        if (v !== true && v !== null) n++;
       }
+      if (keys === 0) return 99;   // 全項目未返却(JSON化で欠落) = 判定不能
       return n;
-    } catch(e){ return 0; }
+    } catch(e){ return 99; }
   }
   function inspectOne(iurl, headers, kind, desc, cand){
     var ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
@@ -222,25 +234,24 @@
       });
   }
 
+  // ★v476.3(GPT-5.6監査): softスコアは表示・記録専用。自動勝者決定へ使わない。
+  //   合格(pass)候補のうち生成順(seed列先頭寄り)で最初の1枚を採用する。
   function bestPass(cands){
-    var best = null;
     for (var i = 0; i < cands.length; i++){
-      if (cands[i].pass){ if (!best || (cands[i].score || 0) > (best.score || 0)) best = cands[i]; }
+      if (cands[i] && cands[i].pass) return cands[i];
     }
-    return best;
+    return null;
   }
-  // item1: hardFails 昇順 → score 降順で選ぶ。
-  function bestScore(cands){
-    var best = null;
-    for (var i = 0; i < cands.length; i++){
-      var c = cands[i];
-      if (!c) continue;
-      if (!best){ best = c; continue; }
-      var chf = (c.hardFails == null) ? 99 : c.hardFails;
-      var bhf = (best.hardFails == null) ? 99 : best.hardFails;
-      if (chf < bhf || (chf === bhf && (c.score || 0) > (best.score || 0))) best = c;
-    }
-    return best;
+  // ★v476.3: 全滅時の best-effort 採用(旧bestScore)は廃止。
+  //   「評価未返却候補(hardFails未計上)が全滅時に最優先」という判定不能優遇の温床だった。
+  function mkFailResponse(){
+    var payload = JSON.stringify({ error: 'v292Dfix476: all candidates failed inspection (no auto-adopt)' });
+    try {
+      if (typeof Response === 'function') return new Response(payload, { status: 502, headers: { 'Content-Type': 'application/json' } });
+    } catch(e){}
+    return { ok: false, status: 502,
+             json: function(){ return Promise.resolve(JSON.parse(payload)); },
+             text: function(){ return Promise.resolve(payload); } };
   }
 
   // ---------- 落選候補の body 解放（item5・勝者の body には絶対触れない） ----------
@@ -308,7 +319,7 @@
 
   // ---------- パイプライン本体 ----------
   function pipelineCore(url, init){
-    var lastRun = { seeds: [], scores: [], picked: null, rebatched: false, inspected: false, fallback: null, error: null };
+    var lastRun = { seeds: [], scores: [], picked: null, rebatched: false, inspected: false, fallback: null, error: null, failedCandidates: null };
     API.lastRun = lastRun;
 
     var baseBody = JSON.parse(String(init.body));
@@ -359,11 +370,16 @@
             lastRun.scores = all.map(function(c){ return c.score || 0; });
             var w2 = bestPass(all);
             if (!w2){
-              w2 = bestScore(all);
-              warn('[fix476] all candidates failed inspection; adopting best-effort');
+              // ★v476.3(GPT-5.6監査): 2バッチ後も pass===true が0件 → 自動採用・本画像書込みをしない。
+              //   候補は lastRun.failedCandidates に保持し、__v292Dfix476.showFailed() で人間が比較できる。
+              lastRun.fallback = 'all-fail-no-adopt';
+              lastRun.failedCandidates = all.map(function(c){
+                return { seed: c.seed, score: (c.score || 0), hardFails: (c.hardFails == null ? 99 : c.hardFails), pass: !!c.pass, b64: c.b64 };
+              });
+              releaseLosers(all, null);
+              warn('[fix476] all candidates failed inspection; NOT adopting (v476.3). __v292Dfix476.showFailed() で候補を比較できます');
+              return mkFailResponse();
             }
-            // 全滅かつ全候補脱落(w2なし)は理論上ここに来ない(cands非空)が安全側で最初の候補
-            if (!w2) w2 = cands[0];
             releaseLosers(all, w2);
             lastRun.picked = w2.seed;
             correctRecipeSeedDeferred(baseBody, w2.seed);
@@ -417,6 +433,40 @@
   } catch(e){}
   wrapped.__v292Dfix476 = true;    // 冪等フラグはラッパ関数上にも立てる
   W.fetch = wrapped;
+
+  // ---------- ★v476.3: 不合格候補の人間比較UI（診断用・DOM不可環境では何もしない） ----------
+  function showFailed(){
+    try {
+      var fc = API.lastRun && API.lastRun.failedCandidates;
+      if (!fc || !fc.length){ warn('showFailed: 不合格候補なし'); return 0; }
+      var doc = W.document; if (!doc || !doc.createElement || !doc.body) return fc.length;
+      var old = doc.getElementById && doc.getElementById('v292Dfix476Failed');
+      if (old && old.remove) old.remove();
+      var box = doc.createElement('div');
+      box.id = 'v292Dfix476Failed';
+      box.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:rgba(10,10,14,.96);border:1px solid #555;border-radius:8px;padding:8px;display:flex;gap:8px;overflow-x:auto;';
+      for (var i = 0; i < fc.length; i++){
+        (function(c){
+          var cell = doc.createElement('div');
+          cell.style.cssText = 'text-align:center;color:#ccc;font:11px/1.4 sans-serif;flex:0 0 auto;';
+          var img = doc.createElement('img');
+          img.src = 'data:image/jpeg;base64,' + c.b64;
+          img.style.cssText = 'width:96px;height:96px;object-fit:cover;border-radius:6px;display:block;margin:0 auto 4px;';
+          cell.appendChild(img);
+          cell.appendChild(doc.createTextNode('seed ' + c.seed + ' / hardFail ' + c.hardFails + ' / soft ' + c.score));
+          box.appendChild(cell);
+        })(fc[i]);
+      }
+      var close = doc.createElement('button');
+      close.textContent = '閉じる';
+      close.onclick = function(){ try { box.remove(); } catch(e){} };
+      box.appendChild(close);
+      doc.body.appendChild(box);
+      return fc.length;
+    } catch(e){ warn('showFailed error'); return 0; }
+  }
+  API.showFailed = showFailed;
+  API.__test = { hardFailCount: hardFailCount, bestPass: bestPass, mkFailResponse: mkFailResponse };
 
   try { console.log(TAG, 'armed; active:', on() ? 'on' : 'off(preview)'); } catch(e){}
 })();
