@@ -732,6 +732,29 @@ async function admin(body, env, request) {
         } catch (ep) {
           out.pollinations = { keySet: true, ok: false, status: 0, detail: String((ep && ep.message) || ep).slice(0, 200), images: plN };
         }
+        // ★keyinfo診断(GPT-5.6提案・2026-07-17): キーが属するアカウント/予算上限/種別を確認。
+        //   秘密値(キー文字列)は返さない。permissions.account=アカウント識別 / pollenBudget=キー予算上限。
+        try {
+          const rk = await fetch('https://gen.pollinations.ai/account/key', { headers: { 'Authorization': 'Bearer ' + plKey } });
+          const jk = await rk.json().catch(() => ({}));
+          if (rk.ok) {
+            const perm = jk.permissions || {};
+            out.pollinationsKey = {
+              ok: true,
+              valid: jk.valid != null ? jk.valid : null,
+              type: jk.type != null ? String(jk.type) : null,
+              name: jk.name != null ? String(jk.name).slice(0, 60) : null,
+              account: (perm.account != null ? String(perm.account).slice(0, 80) : (jk.account != null ? String(jk.account).slice(0, 80) : null)),
+              pollenBudget: (jk.pollenBudget != null ? jk.pollenBudget : (jk.budget != null ? jk.budget : null)),
+              expiresAt: jk.expiresAt != null ? String(jk.expiresAt).slice(0, 40) : null,
+              keys: Object.keys(jk).slice(0, 20)
+            };
+          } else {
+            out.pollinationsKey = { ok: false, status: rk.status, detail: JSON.stringify(jk).slice(0, 200) };
+          }
+        } catch (ek) {
+          out.pollinationsKey = { ok: false, status: 0, detail: String((ek && ek.message) || ek).slice(0, 200) };
+        }
       }
     }
     // 台帳の今月合計
