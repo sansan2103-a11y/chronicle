@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chronicle 管理</title>
-<!-- admin v3.2 (2026-07-17): +生成キー切替(通常/予備/自動)+キー予算上限の可視化(worker v26)。 v3.1: +生成遮断器の上限設定(config.genBudget)。 v3: v2 + Pollinationsカード + アイコン生成経路トグル(imgProvider) + ヘッダ経路chip + 台帳偶数行/カード見やすさ改善。worker v22のbalances(pollinations,imgProvider)/config-set(imgProvider)を使用 -->
+<!-- admin v3.3 (2026-07-17): +アイコン標準ONトグル(config.fix476Guard・worker v27)。 v3.2: +生成キー切替(通常/予備/自動)+キー予算上限の可視化(worker v26)。 v3.1: +生成遮断器の上限設定(config.genBudget)。 v3: v2 + Pollinationsカード + アイコン生成経路トグル(imgProvider) + ヘッダ経路chip + 台帳偶数行/カード見やすさ改善。worker v22のbalances(pollinations,imgProvider)/config-set(imgProvider)を使用 -->
 <style>
   :root { color-scheme: dark;
     --bg:#0d0d1a; --card:#15152a; --line:#2d2d49; --ink:#d6d7ee;
@@ -180,6 +180,11 @@
       <div style="flex:0;width:160px"><input type="number" id="cGenBudget" min="0" max="999" placeholder="空=既定30"></div>
     </div>
     <div class="muted" style="margin-top:6px;font-size:12px">空=既定30。<b>0=無制限（遮断器オフ・暴走防止が切れるので非推奨）</b>。各プレイヤーには次回リロード時に反映。</div>
+    <label style="margin-top:14px">アイコン標準ON（fix476: 3候補→検品→自動選抜を全員に）</label>
+    <div class="row" style="margin-top:2px">
+      <div style="flex:0"><button class="danger" id="fix476Btn" onclick="toggleFix476()">アイコン標準ON: OFF</button></div>
+    </div>
+    <div class="muted" style="margin-top:6px;font-size:12px">ONで全プレイヤーの新規アイコン生成が「3候補→検品→自動選抜」になります。問題があればここでOFFに戻せます（次回リロードで反映）。まず自分の端末で試してから全体ONを推奨。</div>
     <div class="row" style="margin-top:12px">
       <div style="flex:0"><button onclick="saveConfig()">設定を保存</button></div>
       <div style="flex:0"><button class="danger" id="killBtn" onclick="toggleKill()">緊急停止: OFF</button></div>
@@ -248,6 +253,7 @@ async function loadBalances() {
   CURRENT_IMG_PROVIDER = (b.imgProvider === 'pollinations') ? 'pollinations' : 'together';
   CURRENT_IMG_KEYMODE = (b.imgKeyMode === 'reserve' || b.imgKeyMode === 'auto') ? b.imgKeyMode : 'primary';   // ★v26
   window.__PAID_KEY_SET = !!(b.pollinationsPaid && b.pollinationsPaid.keySet);   // ★v26
+  CURRENT_FIX476 = (b.fix476Guard === true); renderFix476();   // ★v27
   renderOR(b);
   renderTG(b);
   renderPL(b);
@@ -606,6 +612,23 @@ function renderKill() {
   b.textContent = '緊急停止: ' + (CONFIG.killSwitch ? 'ON(全員停止中)' : 'OFF');
   b.classList.toggle('killon', !!CONFIG.killSwitch);
   $('killchip').style.display = CONFIG.killSwitch ? '' : 'none';
+}
+
+// ★v27: fix476標準ON トグル
+let CURRENT_FIX476 = false;
+function renderFix476() {
+  const el = $('fix476Btn'); if (!el) return;
+  el.textContent = 'アイコン標準ON: ' + (CURRENT_FIX476 ? 'ON(全員)' : 'OFF');
+  el.classList.toggle('killon', !!CURRENT_FIX476);
+}
+async function toggleFix476() {
+  const next = !CURRENT_FIX476;
+  if (next && !confirm('全プレイヤーの新規アイコン生成を新経路（3候補→検品→自動選抜）に切り替えます。よいですか？')) return;
+  try {
+    await api({ action: 'config-set', fix476Guard: next });
+    CURRENT_FIX476 = next; renderFix476();
+    setStatus(next ? 'アイコン標準ON（全員）' : 'アイコン標準OFFに戻しました', 'ok');
+  } catch (e) { setStatus('切替に失敗: ' + (e.message || e), 'bad'); }
 }
 
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }

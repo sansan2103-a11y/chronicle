@@ -1,5 +1,8 @@
 // =====================================================================
-// Chronicle TRPG - v292Dfix476: 3候補生成 → VLM検品 → 選抜パイプライン (v476.3)
+// Chronicle TRPG - v292Dfix476: 3候補生成 → VLM検品 → 選抜パイプライン (v476.4)
+// ★v476.4(2026-07-17 Stage3): サーバ標準ON(Worker v27 GET / avatarGuard)のときだけ run経路
+//   (/avatar-run reserve → /image に runId/slot → /avatar-inspect → /avatar-run commit)。
+//   サーバ未ガード/予約不可なら従来の v476.3 経路へ完全フォールバック(挙動不変)。
 // ★v476.3(2026-07-17 GPT-5.6監査反映): ①hardFailCountが未返却(undefined)も欠損失敗として計上
 //   (Worker v20.4のr.hardFails優先) ②全滅時のbest-effort採用を廃止=自動採用しない(502返却)
 //   ③softスコアは表示専用(合格中の勝者は生成順で先頭) ④不合格候補はlastRun.failedCandidatesに保持
@@ -29,10 +32,15 @@
   var W = (typeof window !== 'undefined') ? window : this;
 
   // ---------- 有効条件（live評価・opt-in・既定OFF） ----------
+  // ★v476.4: 端末canary。この端末だけ run経路を試す(サーバ側 fix476GuardUsers 名簿と併用)。
+  function canaryRun(){ try { return localStorage.getItem('v292Dfix476RunV1') === '1'; } catch(e){ return false; } }
   function on(){
     try {
       if (localStorage.getItem('v292Dfix476Off') === '1') return false;
-      return localStorage.getItem('v292Dfix476OnV1') === '1';
+      if (localStorage.getItem('v292Dfix476OnV1') === '1') return true;
+      if (typeof API !== 'undefined' && API && API.__serverGuard === true) return true;   // ★v476.4: サーバ標準ON
+      if (canaryRun()) return true;   // ★v476.4: 端末canary
+      return false;
     } catch(e){ return false; }
   }
 
@@ -80,9 +88,28 @@
     __armed: true,
     lastRun: null,
     __rng: null,            // テストで差替（本番はnull=Math.random）
-    status: function(){ return { on: on(), armed: true, unsafeChain: unsafeChain }; }
+    __serverGuard: null,    // ★v476.4: null=未取得 / true=サーバ標準ON / false=未ガード
+    status: function(){ return { on: on(), armed: true, runMode: runMode(), serverGuard: API.__serverGuard, unsafeChain: unsafeChain }; }
   };
   W.__v292Dfix476 = API;
+
+  // ---------- ★v476.4: サーバ標準ON判定(Worker v27 GET / avatarGuard) ----------
+  function runMode(){ return !!(API && (API.__serverGuard === true || canaryRun())); }
+  function serverBase(){ try { return proxyBase() || ''; } catch(e){ return ''; } }
+  function refreshServerGuard(){
+    try {
+      var base = serverBase();
+      if (!base) { if (API.__serverGuard == null) API.__serverGuard = false; return; }
+      _origFetch.call(W, base + '/', { method: 'GET' }).then(function(r){ return r.json(); })
+        .then(function(j){ API.__serverGuard = !!(j && j.avatarGuard); },
+              function(){ if (API.__serverGuard == null) API.__serverGuard = false; });
+    } catch(e){ if (API.__serverGuard == null) API.__serverGuard = false; }
+  }
+  function scheduleGuardRefresh(){
+    refreshServerGuard();
+    try { setTimeout(refreshServerGuard, 2500); } catch(e){}
+    try { setTimeout(refreshServerGuard, 8000); } catch(e){}
+  }
 
   // ---------- seed 生成 ----------
   function randSeed(){
@@ -317,6 +344,145 @@
     } catch(e){}
   }
 
+  // ---------- ★v476.4: run経路のヘルパ ----------
+  function genUuid(){
+    try { if (W.crypto && W.crypto.randomUUID) return W.crypto.randomUUID(); } catch(e){}
+    return 'c' + Date.now() + '-' + Math.floor(Math.random() * 1e9);
+  }
+  function quickHash(str){
+    var t = String(str == null ? '' : str), h = 5381;
+    for (var i = 0; i < t.length; i++){ h = ((h << 5) + h + t.charCodeAt(i)) | 0; }
+    return (h >>> 0).toString(36);
+  }
+  function canonVersion(){ try { var f = f475(); return (f && f.CANON_VERSION) || ''; } catch(e){ return ''; } }
+  function postJsonRun(base, path, headers, obj){
+    return _origFetch.call(W, base + path, { method: 'POST', headers: headers, body: JSON.stringify(obj) })
+      .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, status: r.status, j: j }; },
+                                              function(){ return { ok: false, status: r.status, j: null }; }); },
+            function(){ return { ok: false, status: 0, j: null }; });
+  }
+  // slots[i] と seeds[i] が対応。各候補を /image に runId/slot 付きで発行し candidateId を得る。
+  function genRunCandidates(url, init, baseBody, runId, slots, seeds){
+    var TO = candTimeoutMs();
+    var reqs = slots.map(function(slot, idx){
+      var seed = seeds[idx];
+      var b = Object.assign({}, baseBody, { seed: seed, runId: runId, slot: slot });
+      try {
+        var d484 = W.__v292Dfix484;
+        if (d484 && d484.__armed && d484.active && d484.active()){
+          var m0 = (baseBody.__diag484 && baseBody.__diag484.m) || 'auto';
+          b.__diag484 = { m: m0, p: 1, c: idx, b: (slot >= 3 ? 1 : 0) };
+        }
+      } catch(e){}
+      var ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      var init2 = Object.assign({}, init, { body: JSON.stringify(b) });
+      if (ac) init2.signal = ac.signal;
+      var timer = null;
+      var timeout = new Promise(function(resolve){ timer = setTimeout(function(){ try { if (ac) ac.abort(); } catch(e){} resolve({ ok: false, slot: slot, seed: seed }); }, TO); });
+      var real = _origFetch.call(W, url, init2).then(function(resp){
+        return resp.clone().json().then(function(j){
+          var b64 = j && j.data && j.data[0] && j.data[0].b64_json;
+          var cid = j && j.candidateId;
+          if (resp && resp.ok && b64 && cid) return { ok: true, slot: slot, seed: seed, resp: resp, b64: b64, candidateId: cid, imageSha256: (j.imageSha256 || null) };
+          return { ok: false, slot: slot, seed: seed };
+        }, function(){ return { ok: false, slot: slot, seed: seed }; });
+      }, function(){ return { ok: false, slot: slot, seed: seed }; });
+      return Promise.race([real, timeout]).then(function(v){ if (timer) clearTimeout(timer); return v; });
+    });
+    return Promise.allSettled(reqs).then(function(settled){
+      return settled.map(function(x){ return x.status === 'fulfilled' ? x.value : { ok: false }; })
+                    .filter(function(c){ return c && c.ok; });
+    });
+  }
+  // 各候補を /avatar-inspect(runId+candidateId+image)で検品。any=1件でも検品成立。
+  function inspectRunCandidates(base, headers, runId, cands){
+    return Promise.all(cands.map(function(c){
+      return postJsonRun(base, '/avatar-inspect', headers, { runId: runId, candidateId: c.candidateId, image: c.b64 })
+        .then(function(res){
+          if (res.ok && res.j && res.j.result){
+            c.pass = !!res.j.result.pass;
+            c.score = (typeof res.j.result.score === 'number') ? res.j.result.score : (c.pass ? 100 : 0);
+            c.hardFails = (typeof res.j.result.hardFails === 'number') ? res.j.result.hardFails : (c.pass ? 0 : 99);
+            return true;
+          }
+          c.pass = false; c.score = 0; c.hardFails = 98;   // 検品不能候補は劣後
+          return false;
+        });
+    })).then(function(oks){ for (var i = 0; i < oks.length; i++){ if (oks[i]) return true; } return false; });
+  }
+  function releaseRun(base, headers, runId){ try { postJsonRun(base, '/avatar-run', headers, { op: 'release', runId: runId }); } catch(e){} }
+  function commitAndReturn(base, headers, runId, cands, winner, baseBody, lastRun){
+    releaseLosers(cands, winner);
+    lastRun.picked = winner.seed;
+    // commit(採用確定)。台帳更新が失敗しても画像は返す(UX優先)。
+    return postJsonRun(base, '/avatar-run', headers, { op: 'commit', runId: runId, candidateId: winner.candidateId })
+      .then(function(){ correctRecipeSeedDeferred(baseBody, winner.seed); return winner.resp; },
+            function(){ correctRecipeSeedDeferred(baseBody, winner.seed); return winner.resp; });
+  }
+
+  // ---------- ★v476.4: run経路パイプライン ----------
+  function pipelineRun(url, init){
+    var lastRun = { mode: 'run', seeds: [], scores: [], picked: null, rebatched: false, inspected: false, fallback: null, error: null, runId: null, failedCandidates: null };
+    API.lastRun = lastRun;
+    var baseBody = JSON.parse(String(init.body));
+    var kind = detectKind(baseBody.prompt) || 'human';
+    var desc = buildDesc(baseBody.prompt, kind);
+    var bs = baseBody.seed;
+    var baseSeed = (bs != null && isFinite(+bs)) ? +bs : null;
+    var iurl = inspectUrlFor(url);
+    var base = String(iurl || '').replace(/\/inspect$/, '');
+    var headers = copyInspectHeaders(init);
+    if (!base) return pipelineCore(url, init);   // ベース不明 → legacy
+    var clientReqId = genUuid();
+    return postJsonRun(base, '/avatar-run', headers, {
+      op: 'reserve', clientRequestId: clientReqId, kind: kind,
+      promptHash: quickHash(baseBody.prompt), desc: desc, canonicalVersion: canonVersion(),
+      provider: (baseBody.imgProvider === 'pollinations' || baseBody.imgProvider === 'together') ? baseBody.imgProvider : null
+    }).then(function(rv){
+      if (!rv.ok || !rv.j || rv.j.guard === false || !rv.j.runId){
+        lastRun.fallback = 'reserve-declined';
+        return pipelineCore(url, init);   // サーバ未ガード/予約不可 → 従来経路(挙動不変)
+      }
+      var runId = rv.j.runId; lastRun.runId = runId;
+      var seeds1 = mkSeeds(baseSeed, 0);
+      lastRun.seeds = seeds1.slice();
+      return genRunCandidates(url, init, baseBody, runId, [0, 1, 2], seeds1).then(function(cands){
+        if (!cands.length){
+          lastRun.fallback = 'no-candidates';
+          releaseRun(base, headers, runId);
+          return _origFetch.call(W, url, init);   // 生成0枚 → 最後の砦として素通し1回(アイコン0を避ける)
+        }
+        return inspectRunCandidates(base, headers, runId, cands).then(function(){
+          lastRun.inspected = true;
+          lastRun.scores = cands.map(function(c){ return c.score || 0; });
+          var winner = bestPass(cands);
+          if (winner) return commitAndReturn(base, headers, runId, cands, winner, baseBody, lastRun);
+          // pass 0件 → 再バッチ slot3-5(Workerが 0-2 全fail検品後に解放)
+          lastRun.rebatched = true;
+          var seeds2 = mkSeeds(baseSeed, 1);
+          lastRun.seeds = lastRun.seeds.concat(seeds2);
+          return genRunCandidates(url, init, baseBody, runId, [3, 4, 5], seeds2).then(function(c2){
+            var after = c2.length ? inspectRunCandidates(base, headers, runId, c2) : Promise.resolve(false);
+            return after.then(function(){
+              var all = cands.concat(c2);
+              lastRun.scores = all.map(function(c){ return c.score || 0; });
+              var w2 = bestPass(all);
+              if (!w2){
+                lastRun.fallback = 'all-fail-no-adopt';
+                lastRun.failedCandidates = all.map(function(c){ return { seed: c.seed, score: (c.score || 0), hardFails: (c.hardFails == null ? 99 : c.hardFails), pass: !!c.pass, b64: c.b64 }; });
+                releaseLosers(all, null);
+                releaseRun(base, headers, runId);
+                warn('[fix476:run] all candidates failed; NOT adopting');
+                return mkFailResponse();
+              }
+              return commitAndReturn(base, headers, runId, all, w2, baseBody, lastRun);
+            });
+          });
+        });
+      });
+    });
+  }
+
   // ---------- パイプライン本体 ----------
   function pipelineCore(url, init){
     var lastRun = { seeds: [], scores: [], picked: null, rebatched: false, inspected: false, fallback: null, error: null, failedCandidates: null };
@@ -393,7 +559,7 @@
   // ---------- fail-open ラッパ：pipeline内のあらゆる例外→console.warn 1回+入口素通し1回 ----------
   function runPipeline(url, init){
     var p;
-    try { p = pipelineCore(url, init); } catch(e){ p = Promise.reject(e); }
+    try { p = runMode() ? pipelineRun(url, init) : pipelineCore(url, init); } catch(e){ p = Promise.reject(e); }
     return p.catch(function(e){
       try { if (API.lastRun) API.lastRun.error = String((e && e.message) || e); } catch(_){}
       warn('pipeline error; failing open');
@@ -468,5 +634,6 @@
   API.showFailed = showFailed;
   API.__test = { hardFailCount: hardFailCount, bestPass: bestPass, mkFailResponse: mkFailResponse };
 
+  try { scheduleGuardRefresh(); } catch(e){}   // ★v476.4: サーバ標準ONフラグを取得
   try { console.log(TAG, 'armed; active:', on() ? 'on' : 'off(preview)'); } catch(e){}
 })();
