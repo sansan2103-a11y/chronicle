@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chronicle 管理</title>
-<!-- admin v3.1 (2026-07-17): +生成遮断器の上限設定(config.genBudget)。 v3: v2 + Pollinationsカード + アイコン生成経路トグル(imgProvider) + ヘッダ経路chip + 台帳偶数行/カード見やすさ改善。worker v22のbalances(pollinations,imgProvider)/config-set(imgProvider)を使用 -->
+<!-- admin v3.2 (2026-07-17): +生成キー切替(通常/予備/自動)+キー予算上限の可視化(worker v26)。 v3.1: +生成遮断器の上限設定(config.genBudget)。 v3: v2 + Pollinationsカード + アイコン生成経路トグル(imgProvider) + ヘッダ経路chip + 台帳偶数行/カード見やすさ改善。worker v22のbalances(pollinations,imgProvider)/config-set(imgProvider)を使用 -->
 <style>
   :root { color-scheme: dark;
     --bg:#0d0d1a; --card:#15152a; --line:#2d2d49; --ink:#d6d7ee;
@@ -193,6 +193,7 @@
 <script>
 let CONFIG = {};
 let CURRENT_IMG_PROVIDER = 'together';
+let CURRENT_IMG_KEYMODE = 'primary';   // ★v26
 const $ = id => document.getElementById(id);
 const tok = localStorage.getItem('chrAdminTok'); if (tok) $('wtok').value = tok;
 const wu = localStorage.getItem('chrAdminUrl'); if (wu) $('wurl').value = wu;
@@ -245,6 +246,8 @@ async function loadBalances() {
     return;
   }
   CURRENT_IMG_PROVIDER = (b.imgProvider === 'pollinations') ? 'pollinations' : 'together';
+  CURRENT_IMG_KEYMODE = (b.imgKeyMode === 'reserve' || b.imgKeyMode === 'auto') ? b.imgKeyMode : 'primary';   // ★v26
+  window.__PAID_KEY_SET = !!(b.pollinationsPaid && b.pollinationsPaid.keySet);   // ★v26
   renderOR(b);
   renderTG(b);
   renderPL(b);
@@ -355,9 +358,44 @@ function renderPL(b) {
         '<div class="kv muted">正確な残高はダッシュボードで確認してください</div>';
     }
   }
+  // ★v26: キー予算上限の可視化(残高が財布と食い違う原因の説明)
+  const ki = b.pollinationsKey || {};
+  if (ki.ok) {
+    html += '<div class="kv muted">キー「' + esc(ki.name || '?') + '」の予算上限: ' + (ki.pollenBudget != null ? esc((+ki.pollenBudget).toFixed(3)) + ' Pollen' : '未取得') + '</div>';
+    html += '<div class="kv muted" style="font-size:10px">※このキーは予算上限まで（財布全体ではない）。上限を上げるかキー再発行で課金分が使えます</div>';
+  }
+  const paid = b.pollinationsPaid || {};
+  const pk = b.pollinationsPaidKey || {};
+  if (paid.keySet) {
+    const pb = (paid.balance != null && isFinite(+paid.balance)) ? +paid.balance : null;
+    html += '<div class="sub" style="margin-top:6px">予備（有料）キー' + (pk.name ? '「' + esc(pk.name) + '」' : '') + '</div>';
+    html += '<div class="kv">残Pollen: ' + (pb != null ? esc(pb.toFixed(2)) : '?') + (pk.pollenBudget != null ? ' / 予算上限 ' + esc((+pk.pollenBudget).toFixed(2)) : '') + '</div>';
+  } else {
+    html += '<div class="kv muted" style="margin-top:6px">予備（有料）キー未設定（POLLINATIONS_KEY_PAID）</div>';
+  }
+  const km = CURRENT_IMG_KEYMODE;
+  const kmBtn = (v, lab) => '<button class="provbtn' + (km === v ? ' active' : '') + '" onclick="setKeyMode(\'' + v + '\')">' + lab + '</button>';
+  html += '<div class="sub" style="margin-top:8px">生成に使うキー</div>';
+  html += '<div style="margin-top:2px">' + kmBtn('primary', '通常（無料）') + kmBtn('reserve', '予備（有料）') + kmBtn('auto', '自動') + '</div>';
+  html += '<div class="kv muted" style="font-size:10px">自動＝通常キーが予算切れ(402)のときだけ有料キーへ切替。混雑や一時失敗では切替えません</div>';
   html += '<div><a class="linkbtn hot" target="_blank" rel="noopener" href="' + LINKS.plDash + '">💳 補充・ダッシュボード ↗</a></div>';
   el.className = 'bcard ' + cls;
   el.innerHTML = html;
+}
+
+async function setKeyMode(m) {
+  if (m !== 'primary' && m !== 'reserve' && m !== 'auto') return;
+  if (m === CURRENT_IMG_KEYMODE) { setStatus('すでにこのモードです', 'ok'); return; }
+  const labels = { primary: '通常（無料キー）', reserve: '予備（有料キー）', auto: '自動（予算切れで有料へ）' };
+  if ((m === 'reserve' || m === 'auto') && !window.__PAID_KEY_SET) {
+    if (!confirm('予備（有料）キー POLLINATIONS_KEY_PAID がまだ未設定です。設定するまでこのモードは通常キーで動作します。続けますか？')) return;
+  }
+  if (!confirm('生成キーを「' + labels[m] + '」に切り替えます。全ユーザーに即時反映されます。よろしいですか？')) return;
+  try {
+    await api({ action: 'config-set', imgKeyMode: m });
+    setStatus('生成キーを「' + labels[m] + '」に切り替えました', 'ok');
+    loadBalances();
+  } catch (e) { /* api() が status を表示 */ }
 }
 
 function renderProvider() {
