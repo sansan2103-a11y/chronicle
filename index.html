@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260717-fix476on';
+  var BUILT = '20260718-fix483';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2686,7 +2686,7 @@ G.init();
   <script src="v292Dfix80-gen-gate-retry.js?cb=v292Dfix80"></script>
   <script src="v292Dfix82-injury-reaction-root.js?cb=v292Dfix82"></script>
   <script src="v292Dfix83-name-truncation-repair.js?cb=v292Dfix83"></script>
-  <script src="v292Dfix84-sampling.js?cb=v292Dfix84"></script>
+  <script src="v292Dfix84-sampling.js?cb=v292Dfix482"></script>
   <script src="v292Dfix85-reaction-spectrum.js?cb=v292Dfix85"></script>
   <script src="v292Dfix81-strip-incomplete-tags.js?cb=v292Dfix81"></script>
   <!-- v292Dfix229(P4): アバターは全てfix199系のdata:URL化済みでblob変換の出番が消滅(実測: 全カードdata:)。fix86退役。復活=コメント解除
@@ -2826,6 +2826,7 @@ G.init();
 <script src="v292Dfix441-sys-at-send.js?cb=v292Dfix441"></script>
 <script src="v292Dfix442-folklore.js?cb=v292Dfix442"></script>
 <script src="v292Dfix443-drama-rescue.js?cb=v292Dfix443"></script>
+<script src="v292Dfix483-beat-director.js?cb=v292Dfix483"></script>
 <script src="v292Dfix444-world-law.js?cb=v292Dfix451"></script>
 <script src="v292Dfix445-handle-lock.js?cb=v292Dfix457"></script>
 <script src="v292Dfix446-fill-robust.js?cb=v292Dfix446"></script>
@@ -2849,6 +2850,7 @@ G.init();
 <script src="v292Dfix471-style-c.js?cb=v292Dfix472"></script>
 <script src="v292Dfix472-icon-protect.js?cb=v292Dfix472"></script>
 <script src="v292Dfix456-name-space.js?cb=v292Dfix456"></script>
+<script src="v292Dfix482-output-quality.js?cb=v292Dfix482"></script>
 </body>
 </html>
 
