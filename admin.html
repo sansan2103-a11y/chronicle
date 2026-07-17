@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chronicle 管理</title>
-<!-- admin v3 (2026-07-17): v2 + Pollinationsカード + アイコン生成経路トグル(imgProvider) + ヘッダ経路chip + 台帳偶数行/カード見やすさ改善。worker v22のbalances(pollinations,imgProvider)/config-set(imgProvider)を使用 -->
+<!-- admin v3.1 (2026-07-17): +生成遮断器の上限設定(config.genBudget)。 v3: v2 + Pollinationsカード + アイコン生成経路トグル(imgProvider) + ヘッダ経路chip + 台帳偶数行/カード見やすさ改善。worker v22のbalances(pollinations,imgProvider)/config-set(imgProvider)を使用 -->
 <style>
   :root { color-scheme: dark;
     --bg:#0d0d1a; --card:#15152a; --line:#2d2d49; --ink:#d6d7ee;
@@ -175,6 +175,11 @@
       </div>
     </div>
     <div class="muted" style="margin-top:6px;font-size:12px">現在の経路が押下（緑）状態です。切替は全ユーザーへ即時反映されます（優先度: リクエスト明示 ＞ この設定 ＞ 既定Together）。</div>
+    <label style="margin-top:14px">アイコン生成の回数上限（1画面あたり・暴走防止の遮断器）</label>
+    <div class="row" style="margin-top:2px">
+      <div style="flex:0;width:160px"><input type="number" id="cGenBudget" min="0" max="999" placeholder="空=既定30"></div>
+    </div>
+    <div class="muted" style="margin-top:6px;font-size:12px">空=既定30。<b>0=無制限（遮断器オフ・暴走防止が切れるので非推奨）</b>。各プレイヤーには次回リロード時に反映。</div>
     <div class="row" style="margin-top:12px">
       <div style="flex:0"><button onclick="saveConfig()">設定を保存</button></div>
       <div style="flex:0"><button class="danger" id="killBtn" onclick="toggleKill()">緊急停止: OFF</button></div>
@@ -434,6 +439,7 @@ async function load() {
   const j = await api({ action: 'list' });
   CONFIG = j.config || {};
   $('cModels').value = (CONFIG.allowedModels || []).join(', ');
+  try { $('cGenBudget').value = (CONFIG.genBudget != null) ? CONFIG.genBudget : ''; } catch(e){}
   renderKill();
   const tb = $('tbody');
   tb.innerHTML = '';
@@ -543,7 +549,9 @@ async function upd(code, patch) { await api(Object.assign({ action: 'update', co
 async function del(code) { await api({ action: 'delete', code }); load(); }
 
 async function saveConfig() {
-  const j = await api({ action: 'config-set', allowedModels: $('cModels').value });
+  const payload = { action: 'config-set', allowedModels: $('cModels').value };
+  payload.genBudget = $('cGenBudget').value.trim();   // ''=既定(30)へ戻す / 0=無制限 / 1..999
+  const j = await api(payload);
   CONFIG = j.config; renderKill(); setStatus('設定を保存しました', 'ok');
 }
 

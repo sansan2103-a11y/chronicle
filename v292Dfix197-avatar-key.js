@@ -293,13 +293,22 @@
   //   万一どこかが無限再生成ループに陥っても、上限で自動停止して DiceBear に退避し、
   //   pollen を燃やし続けない（嵐クラスの不具合の最終ブレーキ）。
   var GEN_BUDGET = 30;      // 1ページセッションの生成上限（★fix482: 15→30。検品パイプライン時代はテスト・作り直しで15では窮屈。暴走防止の役目は維持）
+  // ★fix483: 管理者画面の設定(Worker config→fix483が起動時にlocalStorageへ同期)を優先。
+  //   v292GenBudget: '0'=無制限(遮断器オフ)・正の整数=その回数・未設定/不正=既定(GEN_BUDGET)。
+  function liveGenBudget(){
+    try {
+      var raw = localStorage.getItem('v292GenBudget');
+      if (raw != null && raw !== ''){ var v = parseInt(raw, 10); if (v === 0) return Infinity; if (v > 0) return v; }
+    } catch(e){}
+    return GEN_BUDGET;
+  }
   var MIN_INTERVAL = 1500;  // 生成と生成の最小間隔(ms)
   var genCount = 0, lastGenAt = 0, pumpTimer = null;
   function pump(){
     if(active >= 1 || !queue.length || pumpTimer) return;
-    if(genCount >= GEN_BUDGET){
+    if(genCount >= liveGenBudget()){
       while(queue.length){ var pkx = queue.shift(); if(cache[pkx]==='pending') restorePreviousOrDice(pkx); }   // ★fix197 F-3: 上限到達でも明示↻の旧画像を保持
-      try{ console.warn(TAG, 'generation budget ('+GEN_BUDGET+') exceeded — DiceBearに退避（暴走防止）'); }catch(e){}
+      try{ console.warn(TAG, 'generation budget ('+liveGenBudget()+') exceeded — DiceBearに退避（暴走防止）'); }catch(e){}
       applyAll(); return;
     }
     var pk = queue.shift();
