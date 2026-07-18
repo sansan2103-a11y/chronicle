@@ -1,5 +1,5 @@
 // =====================================================================
-// Chronicle TRPG - v292Dfix489: 会話ログの入場審査（非発話引用の拒否＋表示整形）
+// Chronicle TRPG - v292Dfix489 (489b): 会話ログの入場審査（非発話引用の拒否）
 // ---------------------------------------------------------------------
 // 症状(おしん実プレイ 2026-07-18・slot smrnk1iqwek T6):
 //   ・「認識した」who=リカ … 本文『「認識した」という小さな呼吸音だった』=発話でなくメンション
@@ -119,26 +119,21 @@
     return { changed: any, log: log };
   }
 
-  // --- 3) 表示整形: カード先頭の約物(、。)を表示層でのみ除去(データ不触・過去カードも対象) ---
-  function tidyCards(){
-    try {
-      var els = document.querySelectorAll('.v292-dlg-card .dlg-text');
-      for (var i = 0; i < els.length; i++){
-        var el = els[i], t = el.textContent || '';
-        var t2 = t.replace(/^[\s　]*[、。，．]+/, '');
-        if (t2 !== t) el.textContent = t2;
-      }
-    } catch(e){}
-  }
+  // --- 3) [489bで撤去] 表示層の先頭約物除去は廃止 ---
+  // 理由: .dlg-text の書き換えで fix66 の「データ⇔DOM」照合が外れ、2.5秒毎に同一カードが
+  //   再追加される無限ループを実機で誘発した(fix458→fix466 と同じ地雷。表示文字列=同一性キー)。
+  //   先頭の読点はモデルの書き癖でありコスメ問題のみ → 触らない。直すなら将来、カード生成前の
+  //   データ整形(norm系キーに影響しない形)で行う。
+  function tidyCards(){ /* no-op (489b) */ }
 
   function tick(){
     try {
       if (off()) return;
-      repair(); tidyCards();
+      repair();
     } catch(e){}
   }
   try { setTimeout(tick, 4500); setInterval(tick, 2500); } catch(e){}
 
   window.__v292Dfix489 = { __armed: true, isMention: isMention, planTurn: planTurn, repair: repair, tidyCards: tidyCards };
-  try { console.log(TAG, 'loaded'); } catch(e){}
+  try { console.log(TAG, 'loaded 489b'); } catch(e){}
 })();
