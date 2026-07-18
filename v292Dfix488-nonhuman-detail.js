@@ -44,8 +44,12 @@
             var m = ms[i];
             if (m && typeof m.content === 'string' && m.content.indexOf(MARK) >= 0){
               m.content += ADD;
+              // ★fix488b: DeepSeek V4 Flash等の推論型モデルは、推論でトークンを使い切ると
+              //   contentが空になる(finish=length)→外見が静かに保存されない(no-new-imageの真犯人)。
+              //   外見判定リクエストは max_tokens を700まで引き上げて推論+本文の両方を確保。
+              try { if (!(+j.max_tokens >= 700)) j.max_tokens = 700; } catch(e){}
               body = JSON.stringify(j);
-              try { console.log(TAG, 'nonhuman detail rule injected'); } catch(e){}
+              try { console.log(TAG, 'nonhuman detail rule injected (max_tokens>=700)'); } catch(e){}
               break;
             }
           }
