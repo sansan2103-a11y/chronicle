@@ -425,8 +425,10 @@
             var __au = '';
             try {
               if (!window.__f487kick) window.__f487kick = {};
-              if (window.__f487kick[c.name]){ __au = ''; }  // ★fix487f: 生成キックはnameごと1回(二重生成/429防止)
-              else { window.__f487kick[c.name] = 1; __au = window.__aiAvatar.urlFor(c.name, '', c.desc || '') || ''; }
+              var __kt = window.__f487kick[c.name] || 0;
+              var __now = Date.now();
+              if (__kt && (__now - __kt) < 45000){ __au = ''; }  // ★fix487g: 45秒以内は再キックしない(二重生成/429防止)。失敗時は45秒後に自動再試行可
+              else { window.__f487kick[c.name] = __now; __au = window.__aiAvatar.urlFor(c.name, '', c.desc || '') || ''; }
             } catch(e){}
             avUrl = __au || diceUrlSafe(c.name);   // ★fix487e: 担ぎ手URL(pollinations)→fix410分岐でfix197が本画像生成。無ければ中立仮
           } else {
@@ -508,6 +510,7 @@
       // a human rescuer got generated as a skeleton because they appeared mid-skeleton-scene).
       btnRow.appendChild(mkBtn('↻ アイコン再生成', '#6a4a5a', function(){
         try {
+          try { if (window.__f487kick) delete window.__f487kick[c.name]; } catch(_){}  // ★fix487g: 手動↻は即再キック許可
           if (window.__aiAvatar && typeof window.__aiAvatar.regen === 'function'){
             window.__aiAvatar.regen(c.name);
             // re-render modal after a short delay so the new avatar URL appears
