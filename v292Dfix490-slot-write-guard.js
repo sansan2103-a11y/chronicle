@@ -168,8 +168,9 @@
       setTimeout(function(){ if (t.parentNode) t.parentNode.removeChild(t); }, 3200);
     } catch(e){}
   }
+  function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined"?S:null'); } catch(e){ return null; } }
   function buildPayloadRaw(){
-    var S = window.S;
+    var S = getS();
     if (!S) return null;
     try { return JSON.stringify({ cfg: S.cfg, cast: S.cast, scene: S.scene, turns: S.turns, mode: S.mode }); } catch(e){ return null; }
   }
@@ -190,7 +191,7 @@
     // (1) activeカード = 従来どおり「今を保存」
     if (id === activeId){
       stats.savetoActive++;
-      try { if (window.S && typeof window.S.save === 'function') window.S.save(); } catch(err){}
+      try { var Sa = getS(); if (Sa && typeof Sa.save === 'function') Sa.save(); } catch(err){}
       toast('保存しました');
       return;
     }
@@ -217,7 +218,7 @@
       writeMetaTouch(id);
       stats.savetoSafe++;
       // クラウド同期に載せる(fix402はS.save相乗り。activeへの通常保存で全スロット収集pushが走る)
-      try { if (window.S && typeof window.S.save === 'function') window.S.save(); } catch(err){}
+      try { var Sb = getS(); if (Sb && typeof Sb.save === 'function') Sb.save(); } catch(err){}
       toast('このスロットへ保存しました' + (o && o.turns > 0 ? '(元の内容は自動控えあり)' : ''));
       reopenManager();
     } catch(err){
