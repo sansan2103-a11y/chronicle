@@ -1,21 +1,20 @@
 // =====================================================================
-// Chronicle TRPG - v292Dfix469: 話者同定を「点数制＋否定証拠＋棄権」に作り直す
+// Chronicle TRPG - v292Dfix469: 話者同定「点数制＋否定証拠＋棄権」 v2
 // ---------------------------------------------------------------------
-// 背景(GPT-5.6 設計レビュー 2026-07-13):
-//   「推理ルールを足す道は限界。『分からない→主人公』は、誤りを欠落として残さず
-//     **確定情報に偽装する**処理。捕捉率95%で誤り0 の方が、99%捕捉で数%誤帰属より優れている。」
-//
-// 実測の失敗例(おしんT9): 「……私も」が朝比奈ひなた(関西弁・一人称ウチ)に付いた。正解=中島ゆか。
-//   ・前後の地の文の行動主体はゆか
-//   ・一人称「私」はひなたの口調と矛盾（＝否定証拠）
-//
-// 本fixの3点:
-//   ①**点数制**: 候補ごとに加点/減点し、1位が90点以上 かつ 1位-2位≥35 のときだけ採用（GPTの設計）
-//   ②**否定証拠**: 一人称・方言の矛盾は減点に使う（「私だからゆか」のような**正の同定には使わない**。
-//      「私」は複数キャラが共有するため同定力が低い＝GPT指摘）
-//   ③**棄権**: 決められない台詞は**会話ログにカードを出さない**（本文には残る）。
-//      ★過去ターンは触らない(表示が変わると破損に見える=GPT指摘)。棄権は**読み込み後の新ターンのみ**。
-//      過去ターンは「明確な誤りの振替」だけ行う（カード削除はしない）。
+// v1(2026-07-13): GPT-5.6設計の点数制。候補=登録キャストのみ。
+// v2(2026-07-18): 実プレイで会話ログ誤り多発 → 実データ診断+GPT-5.6再レビューで作り直し。
+//   実測した破壊例: 未登録話者「若い男」が候補に入らないため、正しい who=若い男 のカードを
+//   「リカの声は震えていなかった」(直前行・完結した描写文)の105点で リカ へ"高確度"flipしていた。
+//   GPT判定の要点:
+//     ①originalWho(現在の割当)は必ず候補化し +60(タグ保護)。未登録whoも登録キャストと同格。
+//     ②汎用人物ラベル(若い男等)は発話帰属構文に現れた場合だけ候補化。1文字ラベル(男/女)は禁止
+//       (彼女/少女に部分一致して大事故=実測)。
+//     ③声の証拠を分離: 台詞直後の「Xの声が低くなる」+115 / 直前の導入形「Xの声がした」+90 /
+//       直前の完結した描写文「Xの声は震えていなかった。」+25(前も台詞行なら0=前の台詞への反応)。
+//     ④flipは強い反証時だけ(挑戦者に局所ハード証拠 かつ 差55以上)。
+//       拮抗した強い競合は【新ターンのみ】カード非表示(誤表示より欠落)。過去ターンは振替のみ。
+//     ⑤確定後は凍結。全過去ターンの永続再採点を廃止(新ターンを最大3回評価して凍結)。
+//   ※エコー反問(−25)とレジスタ矛盾(−15)は条件が厳格なため今回は未実装(GPT: 直後の声で足りる)。
 //
 // 既定ON。OFF: localStorage v292Dfix469Off='1'
 // 検証口: window.__v292Dfix469 = { profiles, score, decide, planTurn, repair, dryRun }
@@ -23,7 +22,7 @@
 // =====================================================================
 (function(){
   'use strict';
-  if (window.__f469done) return; window.__f469done = 1;
+  if (window.__f469done) return; window.__f469done = 2;
   var TAG = '[v292Dfix469:speaker-score]';
 
   function off(){ try { return localStorage.getItem('v292Dfix469Off') === '1'; } catch(e){ return false; } }
@@ -31,12 +30,11 @@
   function norm(s){ return String(s || '').replace(/[\s　。、，．！？!?…‥・「」『』]/g, ''); }
   function nospace(s){ return String(s || '').replace(/[\s　]/g, ''); }
 
-  // ---------- キャラの口調カルテ（usual / allowed の考え方・GPT設計） ----------
+  // ---------- キャラの口調カルテ（v1のまま・否定証拠専用） ----------
   var PRONOUNS = ['ウチ','うち','あたし','あたい','わたくし','わたし','私','俺','おれ','オレ','僕','ぼく','ボク','わし','儂','自分'];
   var KANSAI = /(やろ|やん|やで|せや|へん(?![どに])|ちゃう|やねん|なんや|あかん|ええ(?:で|わ|やん)|とる|しとん|おる(?:んか|で|やろ)|ちゃうか|ほんま)/;
   var POLITE_STD = /(です|ます|ですね|でしょう|ください)/;
 
-  // cast の desc/口調から「いつもの一人称」と「方言」を推定する（確定できないものは持たない）
   function profiles(S){
     var out = [];
     try {
@@ -48,7 +46,6 @@
       list.forEach(function(c){
         var d = String((c.desc || '') + ' ' + (c.tone || '') + ' ' + (c.voice || ''));
         var p = { name: String(c.name).trim(), fp: '', kansai: false };
-        // 「一人称は「ウチ」」「一人称:私」などを最優先、無ければ desc 中の代名詞出現
         var m = d.match(/一人称[はは:：]?\s*[「『"]?([^\s」』"、。]{1,4})/);
         if (m && PRONOUNS.indexOf(m[1]) >= 0) p.fp = m[1];
         if (!p.fp){
@@ -88,49 +85,84 @@
     return out;
   }
 
-  // ---------- 点数（GPTの表を実装） ----------
-  var SPEECH = /(言っ|言う|言い|呟|囁|尋ね|問い|問う|答え|叫|返し|応じ|漏らし|告げ|呼ん|続け|笑っ)/;
-  var VOICE  = /^の[^。、\n]{0,4}(声|言葉|囁き|呟き|悲鳴|叫び)/;
-  var SUBJ   = /^[はが]/;
-  var SUBJ_ACT = /^[はがも]/;                 // 行動主体（「ゆかも前に出た」型）。「も」は反応文では使わない
-  // ★反応文の先頭語: この行の人物は「聞いた側」＝話者ではない（「言われて、澪も鼻を動かす」）
-  var REACT_LEAD = /^[\s　]*(言われて|それを聞い|その言葉|その声|聞いて|返事を|問われ)/;
-
-  // 1行の中で name(tok) がどう出てくるかを見て、証拠の種類を返す
-  function evidenceIn(line, tok, isNext){
-    var s = String(line || '');
-    if (isNext && REACT_LEAD.test(s)) return null;      // 反応文=聞いた側。証拠にしない
-    var best = null, p = s.indexOf(tok);
-    while (p >= 0){
-      var tail = s.slice(p + tok.length, p + tok.length + 12);
-      var kind = null;
-      if (VOICE.test(tail)) kind = 'voice';
-      else if (SUBJ.test(tail) && SPEECH.test(s)) kind = 'subjSpeech';
-      else if (SUBJ.test(tail)) kind = 'subj';
-      else if (isNext && SUBJ_ACT.test(tail)) kind = 'subj';   // 直後の行動主体(「ゆかも前に出た」)
-      if (kind && (!best || (kind === 'voice') || (kind === 'subjSpeech' && best !== 'voice'))) best = kind;
-      p = s.indexOf(tok, p + 1);
-    }
-    return best;
+  // ---------- v2: 未登録話者の候補化 ----------
+  // ①ターン内_convSaysの既存who(=originalWho含む)は無条件で候補(GPT: 絶対に落とさない)
+  // ②汎用ラベルは「発話帰属構文」で本文に現れた場合だけ候補化(地の文の一般名詞を拾わない)
+  // ★1文字ラベル(男/女)は禁止: 彼女/少女/長男 等に部分一致して大事故になる(実測)
+  var GENERIC_LABELS = ['若い男','若い女','若者','青年','老人','老婆','老爺','少年','少女','子供','男性','女性','人影','黒衣の男','黒衣の女'];
+  var ATTR_CONSTRUCT = '(の(?:声|口調|言葉|囁き|呟き|悲鳴|叫び)|[はが](?:[^。、\\n]{0,6})?(?:言|口を開|続け|答え|尋ね|叫|呟|囁|告げ|問い|返し|吐き捨て))';
+  function extraTokens(t, names, narr){
+    var known = {}, out = [], cand = {};
+    names.forEach(function(n){ known[nospace(n)] = 1; });
+    try {
+      ((t && t._convSays) || []).forEach(function(c){
+        var w = c && c.who ? String(c.who).trim() : '';
+        if (!w || w === '???' || known[nospace(w)]) return;
+        cand[w] = 1;
+      });
+      GENERIC_LABELS.forEach(function(g){
+        if (known[g] || cand[g]) return;
+        try { if (new RegExp(g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ATTR_CONSTRUCT).test(String(narr || ''))) cand[g] = 1; } catch(e){}
+      });
+      var ks = Object.keys(cand);
+      ks.forEach(function(k){
+        for (var j = 0; j < ks.length; j++){
+          if (ks[j] !== k && ks[j].indexOf(k) >= 0) return;   // 男性⊂若い男性 → 短い方を捨てる
+        }
+        for (var n2 in known){ if (n2.indexOf(k) >= 0 || k.indexOf(n2) >= 0) return; } // 登録名と衝突
+        out.push({ canon: k, tok: k });
+      });
+    } catch(e){}
+    return out;
   }
 
-  // say=台詞本文, prev/next=前後の地の文, prof=口調カルテ
-  function score(say, prev, next, tokens, profs){
-    var sc = {};
+  // ---------- 証拠検出 ----------
+  var SPEECH = /(言っ|言う|言い|呟|囁|尋ね|問い|問う|答え|叫|返し|応じ|漏らし|告げ|呼ん|続け|笑っ|吐き捨て|口を開)/;
+  var VOICE  = /^の[^。、\n]{0,4}(声|言葉|囁き|呟き|悲鳴|叫び)/;
+  // 導入形: 「Xの声がした」→次(または直結する)台詞の話者。描写形: 「Xの声は震えていなかった」=完結した描写。
+  var VOICE_INTRO = /^の[^。、\n]{0,4}(?:声|言葉|囁き|呟き|悲鳴|叫び)(?:が(?:した|して|する|響|聞こえ|上がっ|飛ん|割り込)|で(?:言|尋|囁|呟|叫|告げ|続け))/;
+  var SUBJ   = /^[はが]/;
+  var SUBJ_ACT = /^[はがも]/;
+  var REACT_LEAD = /^[\s　]*(言われて|それを聞い|その言葉|その声|聞いて|返事を|問われ)/;
+
+  // 1行の中で tok がどう出てくるか。isNext=台詞の直後行 / sandwiched=直前行だがその前も台詞行
+  function evidenceIn(line, tok, isNext, sandwiched){
+    var s = String(line || '');
+    if (isNext && REACT_LEAD.test(s)) return null;
+    var best = null, bestPt = -1, p = s.indexOf(tok);
+    function offer(kind, pt){ if (pt > bestPt){ best = kind; bestPt = pt; } }
+    while (p >= 0){
+      var tail = s.slice(p + tok.length, p + tok.length + 14);
+      if (VOICE.test(tail)){
+        if (isNext) offer('voiceAfter', 115);
+        else if (VOICE_INTRO.test(tail)) offer('voiceIntro', 90);
+        else if (!sandwiched) offer('voiceDesc', 25);
+      }
+      if (SUBJ.test(tail) && SPEECH.test(s)) offer(isNext ? 'speechAfter' : 'speechBefore', isNext ? 140 : 115);
+      else if (SUBJ.test(tail)) offer('subj', isNext ? 40 : 20);
+      else if (isNext && SUBJ_ACT.test(tail)) offer('subj', 40);
+      p = s.indexOf(tok, p + 1);
+    }
+    return best ? { kind: best, pts: bestPt } : null;
+  }
+
+  var PTS = { voiceAfter: 115, speechAfter: 140, voiceIntro: 90, voiceDesc: 25, speechBefore: 115 };
+  var HARD = 90;   // 局所ハード証拠の下限(単一証拠で)
+
+  // say=台詞本文, prev/next=前後の地の文, prevSand=直前行のさらに前も台詞行
+  // 返り値: { sc: {name:点}, hard: {name:最大単一証拠点} }
+  function score(say, prev, next, tokens, profs, prevSand){
+    var sc = {}, hard = {};
     function add(n, v){ sc[n] = (sc[n] || 0) + v; }
+    function markHard(n, v){ if (!hard[n] || v > hard[n]) hard[n] = v; }
     tokens.forEach(function(t){
-      var e1 = evidenceIn(next, t.tok, true);
-      if (e1 === 'voice') add(t.canon, 95);
-      else if (e1 === 'subjSpeech') add(t.canon, 110);
-      else if (e1 === 'subj') add(t.canon, 65);          // 直後の行動主体
-      var e0 = evidenceIn(prev, t.tok, false);
-      if (e0 === 'voice') add(t.canon, 105);
-      else if (e0 === 'subjSpeech') add(t.canon, 100);
-      else if (e0 === 'subj') add(t.canon, 45);          // 直前の明示主語
-      // 呼びかけ: 台詞の中に相手の名前が出る = その人は話者ではない
-      if (String(say || '').indexOf(t.tok) >= 0) add(t.canon, -35);
+      var e1 = evidenceIn(next, t.tok, true, false);
+      if (e1){ add(t.canon, e1.pts); if (e1.pts >= HARD) markHard(t.canon, e1.pts); }
+      var e0 = evidenceIn(prev, t.tok, false, !!prevSand);
+      if (e0){ add(t.canon, e0.pts); if (e0.pts >= HARD) markHard(t.canon, e0.pts); }
+      if (String(say || '').indexOf(t.tok) >= 0) add(t.canon, -35);   // 呼びかけ=話者でない
     });
-    // 口調の否定証拠（正の同定には使わない）
+    // 口調の否定証拠（正の同定には使わない・v1のまま）
     var text = String(say || '');
     var fps = PRONOUNS.filter(function(p){ return text.indexOf(p) >= 0; });
     profs.forEach(function(p){
@@ -138,34 +170,41 @@
       if (p.fp && fps.length){
         var usesOther = fps.some(function(f){ return f !== p.fp; });
         var usesOwn = fps.indexOf(p.fp) >= 0;
-        if (usesOther && !usesOwn) add(p.name, -50);      // ★一人称の明白な矛盾
-        else if (usesOwn) add(p.name, 20);                // 自分の一人称と一致(弱い加点)
+        if (usesOther && !usesOwn) add(p.name, -50);
+        else if (usesOwn) add(p.name, 20);
       }
       if (p.kansai){
         if (KANSAI.test(text)) add(p.name, 15);
-        else if (POLITE_STD.test(text) && text.length >= 8) add(p.name, -35);   // 方言キャラが丁寧な標準語
+        else if (POLITE_STD.test(text) && text.length >= 8) add(p.name, -35);
       }
     });
-    return sc;
+    return { sc: sc, hard: hard };
   }
 
-  // 採用条件(GPT): 1位>=90 かつ 1位-2位>=35。
-  // 追加条件: **今の割当が明らかに劣る**とき(現在<=0点)は、1位が60点以上で60点差あれば振り替える
-  //   （旧実装の「登場者0人→主人公」で機械的に主人公が入っているカードを救うため）
-  function decide(sc, current){
-    var arr = Object.keys(sc).map(function(k){ return { who: k, score: sc[k] }; });
-    arr.sort(function(a,b){ return b.score - a.score; });
-    var first = arr[0], second = arr[1] || { score: -Infinity };
-    if (!first) return { who: null, top: null, conf: 'unknown' };
-    if (first.score >= 90 && (first.score - second.score) >= 35) return { who: first.who, score: first.score, conf: 'high' };
-    if (current != null && current !== first.who){
-      var cs = (sc[current] != null) ? sc[current] : 0;
-      if (cs <= 0 && first.score >= 60 && (first.score - cs) >= 60) return { who: first.who, score: first.score, conf: 'mid' };
-    }
-    return { who: null, top: first, conf: 'unknown' };
+  var TAG_BONUS = 60;    // originalWho保護(GPT: +60。+1000にすると誤タグを直せない)
+  var FLIP_MARGIN = 55;  // flip条件: 挑戦者にハード証拠 かつ 差55以上
+
+  // v2判定。isNew=読み込み後の新ターン(拮抗時の非表示を許可)
+  // 返り値: {act:'keep'|'flip'|'drop', to?, score?}
+  function decide(res, current, isNew){
+    var sc = res.sc || res;            // 後方互換(旧API: scマップ直渡し)
+    var hard = res.hard || {};
+    var cur = String(current || '');
+    var curScore = (sc[cur] || 0) + TAG_BONUS;
+    var challenger = null;
+    Object.keys(sc).forEach(function(k){
+      if (k === cur) return;
+      if (!challenger || sc[k] > challenger.score) challenger = { who: k, score: sc[k] };
+    });
+    if (!challenger || challenger.score <= 0) return { act: 'keep' };
+    var challengerHard = !!hard[challenger.who];
+    if (challengerHard && (challenger.score - curScore) >= FLIP_MARGIN)
+      return { act: 'flip', to: challenger.who, score: challenger.score };
+    if (isNew && challengerHard && challenger.score > curScore)
+      return { act: 'drop', score: challenger.score };   // 拮抗した強い競合 → 誤表示より欠落
+    return { act: 'keep' };
   }
 
-  // 本文から台詞の行位置を探す
   function findLine(lines, quote){
     var q = norm(quote); if (!q) return -1;
     for (var i = 0; i < lines.length; i++){
@@ -177,43 +216,41 @@
   }
 
   // ---------- 1ターンの計画 ----------
-  // allowDrop = true のときだけ「棄権(カード削除)」を行う（=読み込み後の新ターンのみ）
+  // allowDrop=true は「読み込み後の新ターン」のみ(拮抗時のカード非表示を許可)
   function planTurn(t, names, tokens, profs, allowDrop){
     var cs = t && t._convSays;
     if (!Array.isArray(cs) || !cs.length) return { changed: false, changes: [], arr: cs };
     var narr = String((t && (t.narrative || t.text || t.body)) || '');
     var lines = narr.split('\n');
+    var allTokens = tokens.concat(extraTokens(t, names, narr));   // v2: 未登録話者も候補に
     var pText = norm((t && t.playerText) || '');
     var out = [], changes = [], changed = false;
     for (var i = 0; i < cs.length; i++){
       var c = cs[i];
       if (!c || !c.say){ continue; }
-      if (c._rv === 1 || (pText && norm(c.say) === pText)){ out.push(c); continue; }  // react声/SAY入力は不触
+      if (c._rv === 1 || (pText && norm(c.say) === pText)){ out.push(c); continue; }
       var at = findLine(lines, c.say);
+      if (at < 0){ out.push(c); continue; }                       // 本文に無い=判断材料なし→不触
       var prev = at > 0 ? lines[at - 1] : '';
-      var next = (at >= 0 && at + 1 < lines.length) ? lines[at + 1] : '';
-      if (at < 0){ out.push(c); continue; }                                  // 本文に無い=判断材料なし→不触
+      var next = (at + 1 < lines.length) ? lines[at + 1] : '';
+      var prevSand = at >= 2 && /^[「『]/.test(String(lines[at - 2] || '').trim());
       var cur = String(c.who || '');
-      var sc = score(c.say, prev, next, tokens, profs);
-      var d = decide(sc, cur);
-      if (d.who && d.who !== cur){
-        changes.push({ act: 'fix', from: cur, to: d.who, score: d.score, say: String(c.say).slice(0, 14) });
-        c.who = d.who; changed = true; out.push(c); continue;
+      var res = score(c.say, prev, next, allTokens, profs, prevSand);
+      var d = decide(res, cur, !!allowDrop);
+      if (d.act === 'flip' && d.to !== cur){
+        changes.push({ act: 'fix', from: cur, to: d.to, score: d.score, say: String(c.say).slice(0, 14) });
+        c.who = d.to; changed = true; out.push(c); continue;
       }
-      if (!d.who){
-        // 棄権: 現在の話者に**明白な否定証拠**があるときだけカードを落とす（新ターンのみ）
-        var neg = (sc[cur] != null && sc[cur] <= -30);
-        if (allowDrop && neg){
-          changes.push({ act: 'drop', from: cur, say: String(c.say).slice(0, 14), score: sc[cur] });
-          changed = true; continue;                                          // カードを作らない
-        }
+      if (d.act === 'drop'){
+        changes.push({ act: 'drop', from: cur, say: String(c.say).slice(0, 14), score: d.score });
+        changed = true; continue;
       }
       out.push(c);
     }
     return { changed: changed, changes: changes, arr: out };
   }
 
-  // ---------- 適用 ----------
+  // ---------- 適用（v2: 凍結方式。全過去ターンの永続再採点を廃止） ----------
   function names(S){
     var out = [];
     try {
@@ -225,24 +262,56 @@
     return out.filter(Boolean);
   }
 
-  var baseTurns = -1;      // 読み込み時のターン数。これ以降のターンだけ「棄権」を許す
+  function sigOf(t){
+    var cs = (t && t._convSays) || [];
+    var s = cs.length + '';
+    for (var i = 0; i < cs.length; i++){ s += '|' + String(cs[i] && cs[i].who || '') + ':' + String(cs[i] && cs[i].say || '').length; }
+    return s;
+  }
+
+  var baseTurns = -1;
   var backedUp = false;
+  var evalReg = {};        // turnIndex -> { sig, evals, frozen } (メモリのみ・セーブ不触)
+  var MAX_EVALS = 3;
+
+  function applyTurn(S, ti, allowDrop, tokens, profs, ns){
+    var p = planTurn(S.turns[ti], ns, tokens, profs, allowDrop);
+    if (p.changed){
+      if (!backedUp){ try { localStorage.setItem('chr6_bk_fix469', localStorage.getItem('chr6') || ''); } catch(e){} backedUp = true; }
+      S.turns[ti]._convSays = p.arr;
+    }
+    return p;
+  }
+
   function repair(){
     if (off()) return { changed: false };
     var S = getS();
     if (!S || !Array.isArray(S.turns) || !S.turns.length) return { changed: false };
-    if (baseTurns < 0) baseTurns = S.turns.length;
-    var ns = names(S); if (ns.length < 2) return { changed: false };
+    var firstRun = (baseTurns < 0);
+    if (firstRun) baseTurns = S.turns.length;
+    var ns = names(S); if (ns.length < 1) return { changed: false };
     var tokens = tokensOf(ns), profs = profiles(S);
     var any = false, log = [];
     for (var ti = 0; ti < S.turns.length; ti++){
-      var allowDrop = (ti >= baseTurns);                                     // 過去ターンは削除しない
-      var p = planTurn(S.turns[ti], ns, tokens, profs, allowDrop);
-      if (p.changed){
-        if (!backedUp){ try { localStorage.setItem('chr6_bk_fix469', localStorage.getItem('chr6') || ''); } catch(e){} backedUp = true; }
-        S.turns[ti]._convSays = p.arr;
-        any = true; log.push({ turn: ti + 1, changes: p.changes });
+      var isNew = (ti >= baseTurns);
+      var reg = evalReg[ti];
+      if (reg && reg.frozen) continue;
+      var sig = sigOf(S.turns[ti]);
+      if (!isNew){
+        // 過去ターン: 読み込み時に1回だけ「明確な誤りの振替」。以後凍結。
+        if (reg) continue;
+        var p0 = applyTurn(S, ti, false, tokens, profs, ns);
+        evalReg[ti] = { sig: sigOf(S.turns[ti]), evals: 1, frozen: true };
+        if (p0.changed){ any = true; log.push({ turn: ti + 1, changes: p0.changes }); }
+        continue;
       }
+      // 新ターン: シグネチャが変わったときだけ再評価。最大3回で凍結。
+      if (reg && reg.sig === sig) continue;
+      var p = applyTurn(S, ti, true, tokens, profs, ns);
+      var nsig = sigOf(S.turns[ti]);
+      var evals = (reg ? reg.evals : 0) + 1;
+      evalReg[ti] = { sig: nsig, evals: evals, frozen: evals >= MAX_EVALS };
+      if (p.changed){ any = true; log.push({ turn: ti + 1, changes: p.changes }); }
     }
     if (any){
       try { if (S.save && !document.hidden) S.save(); } catch(e){}
@@ -263,7 +332,7 @@
       var S = getS(); if (!S || !Array.isArray(S.turns)) return;
       if (baseTurns < 0) baseTurns = S.turns.length;
       var last = S.turns[S.turns.length - 1];
-      var sig = S.turns.length + ':' + ((last && Array.isArray(last._convSays)) ? last._convSays.length : 0);
+      var sig = S.turns.length + ':' + ((last && Array.isArray(last._convSays)) ? sigOf(last) : '');
       if (sig === lastSig) return;
       lastSig = sig; repair();
     } catch(e){}
@@ -271,11 +340,11 @@
   try { setTimeout(tick, 4000); setInterval(tick, 2500); } catch(e){}
 
   window.__v292Dfix469 = {
-    __armed: true, profiles: profiles, tokensOf: tokensOf, score: score, decide: decide,
-    planTurn: planTurn, repair: repair,
+    __armed: true, __v: 2, profiles: profiles, tokensOf: tokensOf, extraTokens: extraTokens,
+    score: score, decide: decide, planTurn: planTurn, repair: repair,
     dryRun: function(){
       var S = getS(); if (!S || !S.turns) return null;
-      var ns = names(S); if (ns.length < 2) return null;
+      var ns = names(S); if (!ns.length) return null;
       var tokens = tokensOf(ns), profs = profiles(S), res = [];
       for (var i = 0; i < S.turns.length; i++){
         var t = S.turns[i];
@@ -287,5 +356,5 @@
       return res;
     }
   };
-  try { console.log(TAG, 'loaded'); } catch(e){}
+  try { console.log(TAG, 'loaded v2'); } catch(e){}
 })();

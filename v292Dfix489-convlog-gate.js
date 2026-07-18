@@ -1,0 +1,144 @@
+// =====================================================================
+// Chronicle TRPG - v292Dfix489: 会話ログの入場審査（非発話引用の拒否＋表示整形）
+// ---------------------------------------------------------------------
+// 症状(おしん実プレイ 2026-07-18・slot smrnk1iqwek T6):
+//   ・「認識した」who=リカ … 本文『「認識した」という小さな呼吸音だった』=発話でなくメンション
+//   ・「伝言」who=リカ … 本文『「伝言」と言うために来たはずなのに』=来訪目的への言及
+//   ・T7「、はは。なんだ…」… モデルが先頭読点付きで生成→カードにそのまま
+//
+// 設計(GPT-5.6レビュー 2026-07-18・採用):
+//   ・fix469=誰が話したか / fix489=そもそも発話カードか・どう表示するか(責務分離)
+//   ・★「」という を一律除去するのは禁止。実発話ホワイトリストを【先に】判定:
+//       「助けて」という声 / 「帰る」と言った / 「やめろ」と言って は本物の発話 → 残す
+//     その後で高確度の非発話(目的・メタ言語・呼称)だけ落とす。曖昧は残す(安全側)。
+//   ・対象は読み込み後の新ターンのみ(過去ターンの表示変化=破損に見える)。
+//   ・先頭の約物(、。)は表示層でのみ除去。保存データは不触。
+//
+// 既定ON。OFF: localStorage v292Dfix489Off='1'
+// 検証口: window.__v292Dfix489 = { isMention, planTurn, repair }
+// バックアップ: 最初の変更前に chr6 → chr6_bk_fix489
+// =====================================================================
+(function(){
+  'use strict';
+  if (window.__f489done) return; window.__f489done = 1;
+  var TAG = '[v292Dfix489:convlog-gate]';
+
+  function off(){ try { return localStorage.getItem('v292Dfix489Off') === '1'; } catch(e){ return false; } }
+  function getS(){ try { return (0,eval)('typeof S!=="undefined" ? S : null'); } catch(e){ return null; } }
+  function norm(s){ return String(s || '').replace(/[\s　。、，．！？!?…‥・「」『』]/g, ''); }
+
+  // --- 1) 実発話ホワイトリスト(先に判定・GPT指定) ---
+  var SPEECH_TAILS = [
+    /^[\s　]*と(?:言っ|答え|尋ね|叫ん|呟い|囁い|告げ|吐き捨て|続け|返し|漏らし|繰り返し)/,
+    /^[\s　]*と(?:言う|言い)(?:と|ながら|かけ)/,
+    /^[\s　]*という(?:声|叫び|悲鳴|囁き|呟き|怒鳴り声)/,
+    /^[\s　]*と[^。！？!?\n]{0,20}[がは](?:言っ|答え|叫ん|尋ね|呟い|囁い|告げ)/
+  ];
+  // --- 2) 高確度の非発話(後に判定) ---
+  var MENTION_TAILS = [
+    /^[\s　]*と(?:言う|いう|伝える)(?:ため|つもり|予定|必要|はず)/,                                  // 目的・予定
+    /^[\s　]*と(?:いう|呼ばれる|称される|名付けられ)[^。、」\n]{0,8}(?:言葉|単語|語|表現|名称|名前|呼び名|意味|概念|文言|符丁|呼吸音|音|響き|文字|名)/,  // メタ言語
+    /^[\s　]*と(?:呼ば|称さ|名付け|書か|書い|記さ)/                                                  // 呼称・記載
+  ];
+
+  // narrative の中で say が「非発話の言及」としてのみ現れるか
+  function isMention(narr, say){
+    var s = String(say || ''); if (!s || s.length > 40) return false;
+    var n = String(narr || '');
+    var q = '「' + s + '」';
+    var p = n.indexOf(q);
+    if (p < 0) return false;
+    var mentionHit = false, speechHit = false;
+    while (p >= 0){
+      var tail = n.slice(p + q.length, p + q.length + 30);
+      var atLineStart = (p === 0) || /\n[\s　]*$/.test(n.slice(0, p));
+      var isSpeech = atLineStart || SPEECH_TAILS.some(function(re){ return re.test(tail); });
+      if (isSpeech) speechHit = true;
+      else if (MENTION_TAILS.some(function(re){ return re.test(tail); })) mentionHit = true;
+      else speechHit = true;    // 曖昧は発話扱い(安全側)
+      p = n.indexOf(q, p + 1);
+    }
+    return mentionHit && !speechHit;
+  }
+
+  function planTurn(t){
+    var cs = t && t._convSays;
+    if (!Array.isArray(cs) || !cs.length) return { changed: false, drops: [], arr: cs };
+    var narr = String((t && (t.narrative || t.text || t.body)) || '');
+    var pText = norm((t && t.playerText) || '');
+    var out = [], drops = [], changed = false;
+    for (var i = 0; i < cs.length; i++){
+      var c = cs[i];
+      if (!c || !c.say){ continue; }
+      if (c._rv === 1 || (pText && norm(c.say) === pText)){ out.push(c); continue; }   // react声/SAY入力は不触
+      if (isMention(narr, c.say)){
+        drops.push({ who: String(c.who || ''), say: String(c.say).slice(0, 14) });
+        changed = true; continue;
+      }
+      out.push(c);
+    }
+    return { changed: changed, drops: drops, arr: out };
+  }
+
+  var baseTurns = -1;
+  var backedUp = false;
+  var doneReg = {};        // turnIndex -> sig (処理済みは再処理しない)
+  function sigOf(t){
+    var cs = (t && t._convSays) || [];
+    var s = cs.length + '';
+    for (var i = 0; i < cs.length; i++){ s += '|' + String(cs[i] && cs[i].say || '').length; }
+    return s;
+  }
+
+  function repair(){
+    if (off()) return { changed: false };
+    var S = getS();
+    if (!S || !Array.isArray(S.turns) || !S.turns.length) return { changed: false };
+    if (baseTurns < 0) baseTurns = S.turns.length;
+    var any = false, log = [];
+    for (var ti = baseTurns; ti < S.turns.length; ti++){       // ★新ターンのみ
+      var sig = sigOf(S.turns[ti]);
+      if (doneReg[ti] === sig) continue;
+      var p = planTurn(S.turns[ti]);
+      if (p.changed){
+        if (!backedUp){ try { localStorage.setItem('chr6_bk_fix489', localStorage.getItem('chr6') || ''); } catch(e){} backedUp = true; }
+        S.turns[ti]._convSays = p.arr;
+        any = true; log.push({ turn: ti + 1, drops: p.drops });
+      }
+      doneReg[ti] = sigOf(S.turns[ti]);
+    }
+    if (any){
+      try { if (S.save && !document.hidden) S.save(); } catch(e){}
+      try {
+        var cards = document.querySelectorAll('.v292-dlg-card');
+        for (var i = 0; i < cards.length; i++){ if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]); }
+        if (window.__v292Dfix66 && window.__v292Dfix66.repair) window.__v292Dfix66.repair();
+      } catch(e){}
+      try { console.log(TAG, JSON.stringify(log)); } catch(e){}
+    }
+    return { changed: any, log: log };
+  }
+
+  // --- 3) 表示整形: カード先頭の約物(、。)を表示層でのみ除去(データ不触・過去カードも対象) ---
+  function tidyCards(){
+    try {
+      var els = document.querySelectorAll('.v292-dlg-card .dlg-text');
+      for (var i = 0; i < els.length; i++){
+        var el = els[i], t = el.textContent || '';
+        var t2 = t.replace(/^[\s　]*[、。，．]+/, '');
+        if (t2 !== t) el.textContent = t2;
+      }
+    } catch(e){}
+  }
+
+  function tick(){
+    try {
+      if (off()) return;
+      repair(); tidyCards();
+    } catch(e){}
+  }
+  try { setTimeout(tick, 4500); setInterval(tick, 2500); } catch(e){}
+
+  window.__v292Dfix489 = { __armed: true, isMention: isMention, planTurn: planTurn, repair: repair, tidyCards: tidyCards };
+  try { console.log(TAG, 'loaded'); } catch(e){}
+})();
