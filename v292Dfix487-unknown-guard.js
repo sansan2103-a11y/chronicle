@@ -47,6 +47,7 @@
     if (isPronoun(n)) return true;
     if (NONHUMAN_RE.test(n)) return true;
     if (HUMANUNK_RE.test(n)) return true;
+    if (/）\s*$/.test(n) && /(未確認|正体不明)/.test(n)) return true;  // ★fix487c: 仮ラベル(女（未確認）/（正体不明の人物）)もシルエット対象
     return false;
   }
   function isNonhumanGeneric(name){ return NONHUMAN_RE.test(normLabel(name)); }

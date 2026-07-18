@@ -231,8 +231,13 @@
         function __f487label(handle, turn){
           if (!__f487gen(handle)) return handle;
           var narr = (turn && turn.narrative) ? String(turn.narrative).replace(/<[^>]+>/g,' ') : '';
-          var m = narr.match(/(\u82E5\u3044|\u5E7C\u3044|\u5E74\u8001\u3044\u305F|\u80CC\u306E\u9AD8\u3044|\u5C0F\u67C4\u306A|\u9577\u8EAB\u306E|\u75E9\u305B\u305F|\u5927\u67C4\u306A)?(\u7537\u6027|\u5973\u6027|\u7537|\u5973|\u5C11\u5E74|\u5C11\u5973|\u9752\u5E74|\u8001\u4EBA|\u8001\u5A46|\u5973\u306E\u5B50|\u7537\u306E\u5B50|\u5B50\u4F9B)/);
-          if (m) return m[0] + '\uFF08\u672A\u78BA\u8A8D\uFF09';
+          // ★fix487c: 「声は若い男」等、話者に直結する記述を最優先
+          var mv = narr.match(/声(?:は|が)\s*(若い|幼い|年老いた|小柄な|長身の|大柄な|中年の|初老の)?(男性|女性|少年|少女|青年|老人|老婆|男|女)/);
+          if (mv) return (mv[1]||'') + mv[2] + '（未確認）';
+          // 一般検出。「彼女/彼」の男/女を誤検出しないよう除去してから探す
+          var narr2 = narr.replace(/彼女|彼/g, ' ');
+          var m = narr2.match(/(若い|幼い|年老いた|背の高い|小柄な|長身の|痩せた|大柄な|中年の|初老の)?(男性|女性|少年|少女|青年|老人|老婆|男の子|女の子|男|女|子供)/);
+          if (m) return m[0] + '（未確認）';
           return __f487nh(handle) ? '\uFF08\u6B63\u4F53\u4E0D\u660E\u306E\u5B58\u5728\uFF09' : '\uFF08\u6B63\u4F53\u4E0D\u660E\u306E\u4EBA\u7269\uFF09';
         }
         var __f487have = {};
@@ -403,6 +408,7 @@
       var avWrap = document.createElement('div');
       avWrap.style.cssText = 'flex-shrink:0; width:56px; height:56px; border-radius:6px; overflow:hidden; background:#333; display:flex; align-items:center; justify-content:center; font-size:22px; color:#888;';
       var avUrl = avatarUrlFor(c.name);
+      try { if (c.provisional && window.__v292Dfix487 && typeof window.__v292Dfix487.silhouetteFor === 'function'){ var __sv = window.__v292Dfix487.silhouetteFor(c.name); if (__sv) avUrl = __sv; } } catch(e){}  // ★fix487c: 未登録の仮エントリはシルエット
       if (avUrl){
         var img = document.createElement('img');
         // ★fix410: 従来 fix145 は lookupAvatar の返す生 pollinations URL を直接 img.src に入れて
