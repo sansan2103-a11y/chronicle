@@ -259,7 +259,7 @@
             if (registered[__h] || __isAliasOfRegistered(__h)) continue;
             var __label = __f487label(__h, __t);
             // ★fix487d: 汎用未識別(???)は、その核(例「若い男」)が具体呼称として既出なら畳む(生成側を残す)
-            if (__f487gen(__h)){ var __core = __coreOf(__label); if (__core && __specific[__core]) continue; }
+            if (__f487gen(__h)){ var __core = __coreOf(__label); if (__core && __specific[__core] && Object.keys(__specific).length === 1) continue; }  // ★fix487f: 具体候補が1つの時だけ畳む(複数=別人の恐れ→畳まない)
             if (__f487have[__label]) continue;
             __f487have[__label] = 1;
             out.story.push({ name: __label, desc: '', state: '\uFF08\u7269\u8A9E\u306B\u767B\u5834\u30FB\u672A\u767B\u9332\uFF09', lastTurn: __gidx, lastTurnLabel: turnDelta(__gidx, turns.length), isStory: true, provisional: true, rawHandle: __h });
@@ -423,8 +423,12 @@
           if (__cc){ avUrl = __cc; }
           else if (window.__aiAvatar && typeof window.__aiAvatar.urlFor === 'function'){
             var __au = '';
-            try { __au = window.__aiAvatar.urlFor(c.name, '', c.desc || '') || ''; } catch(e){}
-            avUrl = __au || diceUrlSafe(c.name);   // ★fix487e: 生成器の担ぎ手URL(pollinations)を渡す→fix410分岐でfix197が本画像を生成。無ければ中立仮アイコン
+            try {
+              if (!window.__f487kick) window.__f487kick = {};
+              if (window.__f487kick[c.name]){ __au = ''; }  // ★fix487f: 生成キックはnameごと1回(二重生成/429防止)
+              else { window.__f487kick[c.name] = 1; __au = window.__aiAvatar.urlFor(c.name, '', c.desc || '') || ''; }
+            } catch(e){}
+            avUrl = __au || diceUrlSafe(c.name);   // ★fix487e: 担ぎ手URL(pollinations)→fix410分岐でfix197が本画像生成。無ければ中立仮
           } else {
             avUrl = diceUrlSafe(c.name);
           }
