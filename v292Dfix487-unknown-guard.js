@@ -17,8 +17,9 @@
 // =====================================================================
 (function(){
   'use strict';
-  if (window.__v292Dfix487) return; window.__v292Dfix487i = 1;
+  if (window.__v292Dfix487boot) return; window.__v292Dfix487boot = 1;
   var TAG = '[v292Dfix487:unknown-guard]';
+  try { console.log(TAG, 'boot v487b'); } catch(e){}
   function on(){ try { return localStorage.getItem('v292Dfix487OnV1') === '1'; } catch(e){ return false; } }
   function iconOff(){ try { return localStorage.getItem('v292Dfix487IconOff') === '1'; } catch(e){ return false; } }
   function active(){ return on() && !iconOff(); }
@@ -50,7 +51,7 @@
   }
   function isNonhumanGeneric(name){ return NONHUMAN_RE.test(normLabel(name)); }
   function silIndex(name){ return ihash(normLabel(name)) % SILH_URLS.length; }
-  function silhouetteFor(name){ var i = silIndex(name); return silCache[i] || SILH_URLS[i]; }
+  function silhouetteFor(name){ var i = silIndex(name); return silCache[i] || SIL_FALLBACK; }  // ★fix487b: 生成URLを直接imgに渡さない(fix197がcarrier誤認→骸骨上書きを防ぐ)。未キャッシュ時はSVG、warm後にdataURLへ差替。
 
   // ---- 端末キャッシュ: 4枚を1回だけ取得しdataURL化して保存（以後オフライン） ----
   function loadSilCache(i){
@@ -76,9 +77,12 @@
       if (img.getAttribute('data-gensil') === '1' && img.getAttribute('src') === sil) return true;
       img.removeAttribute('data-avpk');
       img.removeAttribute('data-av-legacy');
+      img.removeAttribute('srcset');      // ★fix487b: srcset/data-srcも除去(他モジュールの再解決を断つ・GPT条件)
+      img.removeAttribute('data-src');
       img.removeAttribute('data-r');
       img.removeAttribute('data-gen');
       img.setAttribute('data-gensil', '1');
+      img.setAttribute('data-av-placeholder', 'unidentified');   // ★fix487b: 未識別マーカー(fix197/fix400が早期returnする目印)
       img.title = '（まだ姿がはっきり見えていない）';
       img.onerror = function(){ this.onerror = null; if (this.getAttribute('src') !== SIL_FALLBACK) this.src = SIL_FALLBACK; };
       if (img.getAttribute('src') !== sil) img.src = sil;
