@@ -243,6 +243,10 @@
         var __f487have = {};
         out.story.forEach(function(s){ if(s&&s.name) __f487have[s.name]=1; });
         var __f487recent = turns.slice(-8);
+        // ★fix487d: 具体呼称(非generic)の未登録who一覧を先に集める(汎用未識別を畳む先・GPT: 一方向のみ)
+        var __specific = {};
+        __f487recent.forEach(function(tt){ var ss=(tt&&tt._convSays)||[]; if(Array.isArray(ss)) ss.forEach(function(cc){ var w=String((cc&&cc.who)||'').trim(); if(w && !registered[w] && !__isAliasOfRegistered(w) && !__f487gen(w)) __specific[w]=1; }); });
+        function __coreOf(label){ var x=String(label||'').replace(/（未確認）\s*$/,''); if(/^（.*）$/.test(x)) return ''; return x.trim(); }
         for (var __ti = __f487recent.length - 1; __ti >= 0; __ti--){
           var __t = __f487recent[__ti];
           var __says = (__t && __t._convSays) || [];
@@ -254,6 +258,8 @@
             if (!__h) continue;
             if (registered[__h] || __isAliasOfRegistered(__h)) continue;
             var __label = __f487label(__h, __t);
+            // ★fix487d: 汎用未識別(???)は、その核(例「若い男」)が具体呼称として既出なら畳む(生成側を残す)
+            if (__f487gen(__h)){ var __core = __coreOf(__label); if (__core && __specific[__core]) continue; }
             if (__f487have[__label]) continue;
             __f487have[__label] = 1;
             out.story.push({ name: __label, desc: '', state: '\uFF08\u7269\u8A9E\u306B\u767B\u5834\u30FB\u672A\u767B\u9332\uFF09', lastTurn: __gidx, lastTurnLabel: turnDelta(__gidx, turns.length), isStory: true, provisional: true, rawHandle: __h });
@@ -409,6 +415,18 @@
       avWrap.style.cssText = 'flex-shrink:0; width:56px; height:56px; border-radius:6px; overflow:hidden; background:#333; display:flex; align-items:center; justify-content:center; font-size:22px; color:#888;';
       var avUrl = avatarUrlFor(c.name);
       try { if (c.provisional && window.__v292Dfix487 && typeof window.__v292Dfix487.silhouetteFor === 'function'){ var __sv = window.__v292Dfix487.silhouetteFor(c.name); if (__sv) avUrl = __sv; } } catch(e){}  // ★fix487c: 未登録の仮エントリはシルエット
+      // ★fix487d: 未登録の生成済み/人外キャラは会話ログと同じ生成画像を使う。無ければ生成をキック(species判定でnon-human)。文字化け回避。
+      if (!avUrl && c.isStory && !c.provisional){
+        try {
+          var __f197b = window.__v292Dfix197;
+          var __cc = (__f197b && typeof __f197b.cachedFor === 'function') ? (__f197b.cachedFor(c.name) || '') : '';
+          if (__cc){ avUrl = __cc; }
+          else {
+            try { if (window.__aiAvatar && typeof window.__aiAvatar.urlFor === 'function') window.__aiAvatar.urlFor(c.name, '', c.desc || ''); } catch(e){}
+            avUrl = diceUrlSafe(c.name);   // 生成完了までの中立プレースホルダ(次にモーダルを開くと生成画像に差し替わる)
+          }
+        } catch(e){}
+      }
       if (avUrl){
         var img = document.createElement('img');
         // ★fix410: 従来 fix145 は lookupAvatar の返す生 pollinations URL を直接 img.src に入れて
