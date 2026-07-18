@@ -421,9 +421,12 @@
           var __f197b = window.__v292Dfix197;
           var __cc = (__f197b && typeof __f197b.cachedFor === 'function') ? (__f197b.cachedFor(c.name) || '') : '';
           if (__cc){ avUrl = __cc; }
-          else {
-            try { if (window.__aiAvatar && typeof window.__aiAvatar.urlFor === 'function') window.__aiAvatar.urlFor(c.name, '', c.desc || ''); } catch(e){}
-            avUrl = diceUrlSafe(c.name);   // 生成完了までの中立プレースホルダ(次にモーダルを開くと生成画像に差し替わる)
+          else if (window.__aiAvatar && typeof window.__aiAvatar.urlFor === 'function'){
+            var __au = '';
+            try { __au = window.__aiAvatar.urlFor(c.name, '', c.desc || '') || ''; } catch(e){}
+            avUrl = __au || diceUrlSafe(c.name);   // ★fix487e: 生成器の担ぎ手URL(pollinations)を渡す→fix410分岐でfix197が本画像を生成。無ければ中立仮アイコン
+          } else {
+            avUrl = diceUrlSafe(c.name);
           }
         } catch(e){}
       }
