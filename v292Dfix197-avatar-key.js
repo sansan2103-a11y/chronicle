@@ -15,6 +15,12 @@
 //   OFF=v292Dfix424Off='1'。
 // ★fix403b(2026-07-10): キャラ一覧の↻根治。regenForでレシピ(v292avrec_)があれば carrier(legacy URL)を
 //   待たずに直接生成キューへ積む(従来はモーダルのimgにcarrierが無くjobInfo.promptが埋まらず永遠に生成が始まらなかった)。
+// ★fix493(2026-07-19): 汎用ラベル(「人影」「謎の影」等=未識別キャラ)のアイコンキーだけをセーブ
+//   スロット単位に分離(opt-in)。従来 keyFor はキャラ名+画風で全スロット共有のため、別セーブの
+//   同名汎用ラベルが画像を共有してしまう穴があった(GPT監査指摘)。有効時のみ generic 名に
+//   '_s'+hash(slotId) を付加。generic判定は window.__v292Dfix487.isGeneric を live 参照、slotIdは
+//   chr6_active_slot を【読取のみ】(引用符付きJSONは正規化)。非generic名/フラグOFF時はキー完全不変。
+//   有効条件: localStorage.v292Dfix493OnV1==='1' かつ v292Dfix493Off!=='1'。
 // ---------------------------------------------------------------------
 // fix199 からの改良（おしんFB: 場所ごとに絵が違う／絵柄が前と違う）:
 //   ・キャッシュを【キャラ名＋画風】単位に統一 → 会話ログ/設定/キャラ一覧で同じ1枚を共有。
@@ -142,7 +148,23 @@
   }
 
   // キャッシュキー＝キャラ名（正名へ名寄せ）＋画風（場所が違っても同キャラは同じ1枚）
-  function keyFor(name){ return 'n' + hash(canonName(name) + '|' + artStyle()); }
+  // ★fix493(2026-07-19): 汎用ラベルのアイコンキーをslotスコープ化(opt-in)。詳細ヘッダ参照
+  //   従来キー(base)は1バイトも変えない。有効条件(live評価)・generic判定(live参照)・slot取得が
+  //   全て揃った場合だけ base に '_s'+hash(slotId) を付加。isGeneric/localStorage例外は従来動作へ。
+  function keyFor(name){
+    var base = 'n' + hash(canonName(name) + '|' + artStyle());
+    try {
+      if (localStorage.getItem('v292Dfix493OnV1') === '1' && localStorage.getItem('v292Dfix493Off') !== '1') {
+        var f487 = window.__v292Dfix487;   // live参照(fix487はfix197より後にロード＝固定禁止)
+        if (f487 && typeof f487.isGeneric === 'function' && f487.isGeneric(name)) {
+          var raw = localStorage.getItem('chr6_active_slot');   // 読取のみ(書込は絶対禁止)
+          var slotId = String(raw || '').replace(/^"|"$/g, '');  // 引用符付きJSON文字列を正規化
+          if (slotId) return base + '_s' + hash(slotId);
+        }
+      }
+    } catch(e){}
+    return base;
+  }
 
   function persistGet(pk){ try{ return localStorage.getItem(LS_PREFIX+pk); }catch(e){ return null; } }
   function persistSet(pk,v){ try{ localStorage.setItem(LS_PREFIX+pk, v); }catch(e){} }

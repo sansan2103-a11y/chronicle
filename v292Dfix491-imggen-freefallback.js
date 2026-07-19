@@ -31,6 +31,13 @@
 //      run最後の砦/旧経路)では、フォールバック画像を自前で /inspect に掛け、
 //      pass時のみ採用。検品不能/不合格なら破棄(未検品画像はキャッシュへ入れない)。
 //      親signalのある呼び出し(fix476旧経路の候補)は下流のfix476が検品するため二重検品しない。
+// ★v3(2026-07-19): Worker v28(freeFallback:true)検知で自動退避。arm後に proxyBase()+'/' を
+//   GETし root JSON の freeFallback===true なら serverFb=true=以後サーバ側へ委譲
+//   (サーバ側フォールバック最長30sが自前18sより遅いための衝突回避)。
+// ★v4(2026-07-19・GPT監査③): (重大1)serverFb時は対象POSTに fbOwner:'server' を付与(run有無問わず)。
+//   サーバはfbOwner有りだけフォールバックし全分岐でfbOwnerを削除=上流に漏らさない。serverFb=falseでは付けない。
+//   (重大2)serverFb時も非run(runId無し)のフォールバック応答(pollinations-free)は完全素通しにせず、
+//   親signal無し(=下流に検品が無い)なら自前inspectFallbackに掛け、fail/検品不能は502で旧画像へ復帰させる。
 // ---------------------------------------------------------------------
 // 有効化(opt-in・既定OFF): localStorage.v292Dfix491OnV1==='1' かつ v292Dfix491Off!=='1'
 // 冪等ガード: window.__v292Dfix491.__armed
@@ -108,8 +115,10 @@
   }
 
   var stats = { fallbacks: 0, fallbackOk: 0, fallbackFail: 0, postTimeouts: 0, post5xx: 0,
-                postNetErr: 0, parentAborts: 0, dupImages: 0, breakerTrips: 0, skippedRunMode: 0, skippedNoBudget: 0, inspectPass: 0, inspectFail: 0 };
+                postNetErr: 0, parentAborts: 0, dupImages: 0, breakerTrips: 0, skippedRunMode: 0, skippedNoBudget: 0, inspectPass: 0, inspectFail: 0,
+                serverFbGuarded: 0, serverFbInspectFail: 0 };   // ★v4: サーバ委譲時の非run事後検品カウンタ
   var breaker = 0;
+  var serverFb = false;   // ★v3: Worker v28検知フラグ。true=サーバ側フォールバックへ委譲(素通し)
   function breakerOpen(){ return breaker >= (API.__breakerMax || BREAKER_MAX); }
   function tripBreaker(why){
     breaker++;
@@ -309,11 +318,49 @@
     });
   }
 
+  // ---------- ★v4: サーバ委譲(serverFb=true)経路 ----------
+  //   条件: fbOwner:'server' を付けて送る(run有無問わず)。応答は
+  //   ・runId付き → 不触(サーバ側 avatarFinalize + /avatar-inspect が検品を担う)
+  //   ・非run + フォールバック応答(pollinations-free) + 親signal無し → 自前検品(pass=原本/fail=502)
+  //   ・非run + フォールバック応答 + 親signalあり → 下流fix476が検品するので素通し
+  //   ・json解釈不能 / 非fallback応答 → 素通し
+  function serverYield(self, url, init){
+    var body = null;
+    try { body = JSON.parse(init.body); } catch(e){ body = null; }
+    if (!body) return _origFetch.apply(self, [url, init]);   // パース不能 → 素通し(fbOwner付けない)
+    body.fbOwner = 'server';
+    var init2 = Object.assign({}, init);
+    init2.body = JSON.stringify(body);
+    var parentSignal = init && init.signal;
+    var isRun = (body.runId != null);
+    var p = _origFetch.apply(self, [url, init2]);
+    if (isRun) return p;   // run経路: fbOwner付与のみ・応答不触(条件: サーバ側検品が担う)
+    return p.then(function(resp){
+      if (!resp || !resp.ok) return resp;
+      var cl;
+      try { cl = resp.clone(); } catch(e){ return resp; }
+      return cl.json().then(function(j){
+        if (!(j && j.provider === 'pollinations-free' && j.fallback === true && j.data && j.data[0] && j.data[0].b64_json)) return resp;   // 非fallback → 素通し
+        if (parentSignal) return resp;   // 下流fix476が検品 → 素通し
+        stats.serverFbGuarded++;
+        return inspectFallback(j.data[0].b64_json, body.prompt).then(function(){
+          return resp;   // pass → 原本を返す
+        }, function(){
+          stats.serverFbInspectFail++;
+          try { console.info(TAG, 'server fallback image failed self-inspect -> 502'); } catch(e){}
+          return new Response(JSON.stringify({ error: 'fallback-inspect-fail', errorCode: 'fb-inspect-fail' }),
+            { status: 502, statusText: 'Bad Gateway', headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+        });
+      }, function(){ return resp; });   // json解釈不能 → 素通し
+    });
+  }
+
   // ---------- fetch ラッパ ----------
   var wrapped = function(url, init){
     try {
       if (on() && isAvatarGen(url, init)){
-        return fetchWithFallback(this, url, init);
+        if (serverFb) return serverYield(this, url, init);   // ★v4: サーバ委譲(fbOwner付与+非run事後検品)
+        return fetchWithFallback(this, url, init);           // 従来(v2): クライアント側タイムアウト+無料GET
       }
     } catch(e){ try { console.warn(TAG, 'wrap error', e); } catch(_){} }
     return _origFetch.apply(this, arguments);
@@ -339,7 +386,28 @@
     __postTimeoutMs: POST_TIMEOUT_MS,
     __getTimeoutMs: GET_TIMEOUT_MS,
     __breakerMax: BREAKER_MAX,
-    status: function(){ return { on: on(), armed: true, breaker: breaker, stats: stats }; }
+    status: function(){ return { on: on(), armed: true, breaker: breaker, serverFb: serverFb, stats: stats }; }
   };
+
+  // ---------- ★v3: Worker v28検知(root JSON の freeFallback:true で自動退避) ----------
+  function probeServerFb(){
+    try {
+      var base = proxyBase();
+      if (!base) return;   // proxy未設定 → 後続タイマーで再試行(serverFb維持)
+      _origFetch.call(window, base + '/', { method: 'GET' })
+        .then(function(r){ return (r && r.ok) ? r.json() : null; })
+        .then(function(j){
+          if (j && j.freeFallback === true){
+            serverFb = true;
+            try { console.info(TAG, 'server v28 freeFallback detected -> yielding to server'); } catch(e){}
+          }
+        })
+        .catch(function(){});   // 失敗時は serverFb 維持(初期値false)
+    } catch(e){}
+  }
+  probeServerFb();                                   // arm時
+  try { setTimeout(probeServerFb, 2500); } catch(e){}  // +2.5秒後
+  try { setTimeout(probeServerFb, 8000); } catch(e){}  // +8秒後
+
   try { console.log(TAG, 'armed; on:', on()); } catch(e){}
 })();

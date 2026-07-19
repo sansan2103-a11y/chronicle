@@ -79,26 +79,36 @@
     var h = 0; for (var i = 0; i < src.length; i++){ h = ((h << 5) - h + src.charCodeAt(i)) | 0; }
     return 'f' + (h >>> 0).toString(36) + '_' + d.length;
   }
+  // ★fix487h v4(GPT監査③②反映・2026-07-19): allow_/pend_/keepn_ を「名前」でなく fix197 の最終pk
+  //   (=fix493 ON時はslot+名前+画風でスコープ化される)へ紐付ける。これにより別スロットで同一指紋の
+  //   画像が返っても、別pk=別allowキーなので明示↻無しに解除されない(GPT重大②)。fix197不在時のみ名前へ退避。
+  function scopeSuffix(name){
+    try {
+      var f = f197h();
+      if (f && typeof f.keyFor === 'function'){ var pk = f.keyFor(name); if (pk) return pk; }
+    } catch(e){}
+    return normLabel(name);
+  }
   function allowFpOf(name){
-    try { return localStorage.getItem('v292Dfix487allow_' + normLabel(name)) || ''; } catch(e){ return ''; }
+    try { return localStorage.getItem('v292Dfix487allow_' + scopeSuffix(name)) || ''; } catch(e){ return ''; }
   }
   function getPending(name){
-    try { return JSON.parse(localStorage.getItem('v292Dfix487pend_' + normLabel(name)) || 'null'); } catch(e){ return null; }
+    try { return JSON.parse(localStorage.getItem('v292Dfix487pend_' + scopeSuffix(name)) || 'null'); } catch(e){ return null; }
   }
   function setPending(name){
     try {
       var nm = normLabel(name); if (!nm) return;
       var f = f197h();
       var cur = (f && typeof f.cachedFor === 'function') ? (f.cachedFor(nm) || '') : '';
-      localStorage.setItem('v292Dfix487pend_' + nm, JSON.stringify({ t: Date.now(), prev: fpOf(cur) }));
+      localStorage.setItem('v292Dfix487pend_' + scopeSuffix(name), JSON.stringify({ t: Date.now(), prev: fpOf(cur) }));
       try { console.info('[v292Dfix487h] ↻明示指示を受付(新画像が検品を通れば表示):', nm); } catch(e){}
     } catch(e){}
   }
   function promote(name, fp){
     try {
-      var nm = normLabel(name);
-      localStorage.setItem('v292Dfix487allow_' + nm, fp);
-      localStorage.removeItem('v292Dfix487pend_' + nm);
+      var nm = normLabel(name), suf = scopeSuffix(name);
+      localStorage.setItem('v292Dfix487allow_' + suf, fp);
+      localStorage.removeItem('v292Dfix487pend_' + suf);
       try { console.info('[v292Dfix487h] 新画像を承認 → シルエット解除:', nm); } catch(e){}
     } catch(e){}
   }
@@ -113,8 +123,8 @@
   }
   function markKeep(name){
     try {
-      var nm = normLabel(name);
-      if (localStorage.getItem('v292Dfix487keepn_' + nm) !== '1') localStorage.setItem('v292Dfix487keepn_' + nm, '1');
+      var suf = scopeSuffix(name);
+      if (localStorage.getItem('v292Dfix487keepn_' + suf) !== '1') localStorage.setItem('v292Dfix487keepn_' + suf, '1');
     } catch(e){}
   }
   function unneutralizeImg(img, name){
@@ -221,9 +231,10 @@
         if (isGeneric(nm)){
           // ★fix487h: 実画像を表示済みの名前(keepn_)や一度退避済みのキーは再隔離しない
           //   (退避は「旧・骸骨時代キャッシュの一回限りの掃除」。以後の生成物と外見文は尊重)
-          try { if (localStorage.getItem('v292Dfix487keepn_' + nm) === '1') return; } catch(e){}
-          try { if (localStorage.getItem('v292Dfix487allow_' + nm) != null) return; } catch(e){}
-          try { if (localStorage.getItem('v292Dfix487pend_' + nm) != null) return; } catch(e){}
+          var suf1 = scopeSuffix(nm);   // ★fix487h v4: pkスコープ(fix493でslot単位)へ統一
+          try { if (localStorage.getItem('v292Dfix487keepn_' + suf1) === '1') return; } catch(e){}
+          try { if (localStorage.getItem('v292Dfix487allow_' + suf1) != null) return; } catch(e){}
+          try { if (localStorage.getItem('v292Dfix487pend_' + suf1) != null) return; } catch(e){}
           try { if (localStorage.getItem('__f487bk_' + k) != null) return; } catch(e){}
           genericNames[nm] = 1; try { var v = localStorage.getItem(k); localStorage.setItem('__f487bk_' + k, v); localStorage.removeItem(k); moved++; } catch(e){}
         }
@@ -231,9 +242,10 @@
       if (keyFor){
         Object.keys(genericNames).forEach(function(nm){
           try {
-            if (localStorage.getItem('v292Dfix487keepn_' + nm) === '1') return;   // ★fix487h
-            if (localStorage.getItem('v292Dfix487allow_' + nm) != null) return;    // ★fix487h
-            if (localStorage.getItem('v292Dfix487pend_' + nm) != null) return;     // ★fix487h
+            var suf2 = scopeSuffix(nm);   // ★fix487h v4: pkスコープ
+            if (localStorage.getItem('v292Dfix487keepn_' + suf2) === '1') return;   // ★fix487h
+            if (localStorage.getItem('v292Dfix487allow_' + suf2) != null) return;    // ★fix487h
+            if (localStorage.getItem('v292Dfix487pend_' + suf2) != null) return;     // ★fix487h
             var ik = 'v292av2_' + keyFor(nm); var iv = localStorage.getItem(ik);
             if (localStorage.getItem('__f487bk_' + ik) != null) return;           // ★fix487h: 一度退避済み
             if (iv != null){ localStorage.setItem('__f487bk_' + ik, iv); localStorage.removeItem(ik); moved++; }
