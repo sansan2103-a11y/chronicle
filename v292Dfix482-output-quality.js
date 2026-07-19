@@ -198,7 +198,16 @@
   // fetch境界(ブラウザ実行時のみ)
   // ===================================================================
   var stats = { checked: 0, degenerate: 0, retried: 0, retryFixed: 0,
-                rubyFixed: 0, collapsed: 0, rateLimitSkips: 0, errors: 0 };
+                rubyFixed: 0, collapsed: 0, rateLimitSkips: 0, budgetSkips: 0, errors: 0 };
+  // ★fix494(2026-07-19): fix80との共通リトライ予算。物理送信の実境界(このwrapperのinner.call)で
+  //   1消費し、1論理ターンの物理送信を最大3回に固定。init上の非送信プロパティ(JSON bodyには入れない)。
+  var BUDGET_KEY = '__chronicleAttemptBudget', BUDGET_MAX = 3;
+  function getBudget(init, create){
+    if (!init || typeof init !== 'object') return null;
+    var b = init[BUDGET_KEY];
+    if (!b && create){ b = init[BUDGET_KEY] = { remaining: BUDGET_MAX }; }
+    return b || null;
+  }
   var last = null;
   var lastRetryAt = 0;
   var RETRY_COOLDOWN_MS = 60000;   // 課金暴発ガード: 再生成は60秒に1回まで
@@ -251,11 +260,20 @@
     if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
     if (window.fetch._f482 === true) return;
     var inner = window.fetch;
+    // ★fix494(GPT再監査): inner が native(=最内層)の時だけ物理送信を計上。多重ラップ順序に非依存。
+    var innerIsNative = !(inner && (inner.__fix80 || inner._f482));
 
     var wrapped = async function(input, init){
       var url = (input && input.url) || String(input || '');
-      if (off() || !isChronicleNarrative(url, init)) return inner.apply(this, arguments);
+      if (off() || !isChronicleNarrative(url, init)){
+        var bpass = getBudget(init, false);   // ★fix494: 非対象は既存予算のみ消費(作成しない)
+        if (innerIsNative && bpass) bpass.remaining--;   // 最内層の時だけ計上
+        return inner.apply(this, arguments);
+      }
 
+      // ★fix494: 物語生成=対象。予算を用意し初回送信を1消費(実境界=このinner.call)。
+      var budget = getBudget(init, true);
+      if (innerIsNative && budget) budget.remaining--;   // ★fix494: 最内層の時だけ初回送信を計上
       var res = await inner.call(this, input, init);
 
       try {
@@ -272,13 +290,16 @@
 
         if (aFirst.degenerate && res.ok && retryOn()){
           var now = Date.now();
-          if (now - lastRetryAt < RETRY_COOLDOWN_MS){
+          if (budget && budget.remaining <= 0){
+            stats.budgetSkips++;                    // ★fix494: 共通予算切れ→再生成しない(物理送信の暴発根絶)
+          } else if (now - lastRetryAt < RETRY_COOLDOWN_MS){
             stats.rateLimitSkips++;                 // 課金暴発ガード(60秒レートリミット)
           } else {
             var init2 = makeRetryInit(init);
             if (init2){
               lastRetryAt = now;
               stats.retried++;
+              if (innerIsNative && budget) budget.remaining--;   // ★fix494: 最内層の時だけ再生成送信を計上
               try {
                 var res2 = await inner.call(this, input, init2);
                 if (res2 && res2.ok){               // 再生成品はokの時だけ採用候補(中1)

@@ -10,6 +10,12 @@
 'use strict';
 var MAX = 3;
 var ENDPOINT = "openrouter.ai/api/v1/chat/completions";
+// ★fix494(2026-07-19): fix482(品質再生成)との共通リトライ予算。1論理ターンの物理API送信を
+//   最大 MAX 回に固定(従来はfix80×fix482で最大MAX×2=6回になり得た)。予算は init 上の
+//   非送信プロパティ __chronicleAttemptBudget={remaining} に持たせ、物理送信の実境界(fix482の
+//   inner.call)で消費。fix80は各リトライ前に残量を確認し0なら追加送信しない。両者とも
+//   予算が無ければ生成する(ラップ順序に非依存)。JSON bodyには一切入れない=ネットワーク非送出。
+var BUDGET_KEY = '__chronicleAttemptBudget';
 
 function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
 
@@ -43,14 +49,34 @@ function gatePass(content){
 }
 
 function makeWrapper(orig){
+  // ★fix494(GPT再監査): 自分の inner が native(=最内層)の時だけ予算を減算する。
+  //   fix80/fix482 は実行時に多重ラップされ順序が変わる(fix80(外)→fix482→fix80(内)→native 等)。
+  //   最内層(inner が別ラッパでない)だけが物理送信を計上すれば、順序に依らず1ターン最大3回に収束。
+  var innerIsNative = !(orig && (orig.__fix80 || orig._f482));
   var wrapped = async function(){
     var args = arguments;
     var url = (args[0] && args[0].url) || args[0];
     var isCompletion = (typeof url === "string") && url.indexOf(ENDPOINT) !== -1;
     if(!isCompletion) return orig.apply(this, args);
 
+    // ★fix494: 共通リトライ予算を init に用意(無ければ生成=順序非依存)。init欠如時はスキップ。
+    var init = args[1];
+    var budget = (init && typeof init === "object") ? init[BUDGET_KEY] : null;
+    if(init && typeof init === "object" && !budget){ budget = init[BUDGET_KEY] = { remaining: MAX }; }
+
     var last = null;
     for(var attempt = 0; attempt < MAX; attempt++){
+      if(budget){
+        if(innerIsNative){
+          // 最内層=物理送信の実境界。予算切れなら送らない/送るなら1消費。
+          if(budget.remaining <= 0){ try{ console.log("[v292Dfix80] budget exhausted (native), stop at #" + attempt); }catch(e){} break; }
+          budget.remaining--;
+        } else if(attempt > 0 && budget.remaining <= 0){
+          // 下流(fix482/内側fix80)が消費済み=自分は確認のみ。初回送信後に予算切れなら追加しない。
+          try{ console.log("[v292Dfix80] downstream budget exhausted, stop at #" + attempt); }catch(e){}
+          break;
+        }
+      }
       var resp;
       try{
         resp = await orig.apply(this, args);
