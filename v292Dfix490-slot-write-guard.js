@@ -60,7 +60,8 @@
   function check(oldRaw, newRaw){
     if (typeof oldRaw !== 'string' || !oldRaw || oldRaw === newRaw) return false;
     var o = summarize(oldRaw), n = summarize(newRaw);
-    if (!o || o.turns < 3) return false;          // 確立した物語(3ターン以上)だけ守る
+    if (!o) return true;                          // fix495(C6): 旧値がparse不能=破損でも手作業復元の望みがあるため控えを取る
+    if (o.turns < 3) return false;                // 確立した物語(3ターン以上)だけ守る
     if (!n) return true;                          // parse不能なもので潰す=危険
     if (n.turns <= 1) return true;                // ほぼ空で潰す(リセット含む=控えだけ取る)
     if (n.t1 && o.t1 && n.t1 !== o.t1) return true; // 1ターン目が別物=別の物語で潰す
@@ -74,7 +75,7 @@
       var ks = [];
       for (var i = 0; i < localStorage.length; i++){
         var k = localStorage.key(i);
-        if (k && k.indexOf(prefix) === 0) ks.push(k);
+        if (k && k.indexOf(prefix) === 0 && /^\d+$/.test(k.slice(prefix.length))) ks.push(k); // fix495(C6): '_'を含む別slot idの控えを誤算入しない
       }
       ks.sort();                                   // 末尾ts昇順
       while (ks.length > keep){ var old = ks.shift(); try { localStorage.removeItem(old); } catch(e){} }
@@ -88,7 +89,7 @@
         if (k && (k.indexOf('chr6_bk_guard_') === 0 || k.indexOf('chr6_bk_saveto_') === 0)) ks.push(k);
       }
       if (!ks.length) return false;
-      ks.sort(function(a,b){ return (a.split('_').pop()|0) - (b.split('_').pop()|0); });
+      ks.sort(function(a,b){ return (+a.split('_').pop()||0) - (+b.split('_').pop()||0); }); // fix495(C6): |0はint32折返しで13桁msが壊れ最新を削除しうる
       localStorage.removeItem(ks[0]);
       return true;
     } catch(e){ return false; }

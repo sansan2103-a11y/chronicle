@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260719-fix490b-i494';
+  var BUILT = '20260719-fix495';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2709,7 +2709,7 @@ G.init();
   <script src="v292Dfix226-engine-unify.js?cb=v292Dfix226"></script>
   <!-- v292Dfix228: スロット自動世代バックアップ(直近3世代)。2026-06-06のクロバー消失事故の恒久保険。
        復元= console で window.__v292Restore() / 一覧= window.__v292Gens() -->
-  <script src="v292Dfix228-slot-generations.js?cb=v292Dfix264"></script>
+  <script src="v292Dfix228-slot-generations.js?cb=v292Dfix495"></script>
   <!-- v292Dfix237: 別キャラ同一アイコンの根治(運搬URLのalt/seed整合ガード)。OFF=v292AvCarrierGuardOff -->
   <script src="v292Dfix237-avatar-carrier-guard.js?cb=v292Dfix237b"></script>
   <!-- v292Dfix239: 未登録キャラ(少女/店主等)のアイコン怪物化根治(genAsync判定待ちのレース封じ)。OFF=v292NcAvRaceOff -->
@@ -2740,7 +2740,7 @@ G.init();
 <script src="v292Dfix307-npc-roster.js?cb=v292Dfix414"></script>
 <script src="v292Dfix308-creepy-toggle.js?cb=v292Dfix308"></script>
 <script src="v292Dfix309-progression.js?cb=v292Dfix419c"></script>
-<script src="v292Dfix310-gallery.js?cb=v292Dfix417e"></script>
+<script src="v292Dfix310-gallery.js?cb=v292Dfix495"></script>
 <script src="v292Dfix313-story-cards.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix314-memory.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix315-see.js?cb=v292Dfix315b2"></script>
@@ -2775,7 +2775,7 @@ G.init();
 <script src="v292Dfix371-reset-dialog-text.js?cb=v292Dfix371"></script>
 <script src="v292Dfix372-gender-radio-guard.js?cb=v292Dfix372"></script>
 <script src="v292Dfix374-default-style-guard.js?cb=v292Dfix396"></script>
-<script src="v292Dfix376-speaker-guard.js?cb=v292Dfix376"></script>
+<script src="v292Dfix376-speaker-guard.js?cb=v292Dfix495"></script>
 <script src="v292Dfix377-voice-anchor.js?cb=v292Dfix377b"></script>
 <script src="v292Dfix378-species-judge.js?cb=v292Dfix378"></script>
 <script src="v292Dfix379-wrap-keeper.js?cb=v292Dfix419c"></script>
@@ -2792,7 +2792,7 @@ G.init();
 <script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=v292Dfix396"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix416b"></script>
-<script src="v292Dfix399-cloudsync.js?cb=v292Dfix399k"></script>
+<script src="v292Dfix399-cloudsync.js?cb=v292Dfix495"></script>
   <script src="v292Dfix400-img-url.js?cb=v292Dfix400d"></script>
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=v292Dfix336"></script>
 <script src="v292Dfix338-artstyle.js?cb=v292Dfix484"></script>
@@ -2816,7 +2816,7 @@ G.init();
 <script src="v292Dfix491-imggen-freefallback.js?cb=v292Dfix491v4"></script>
 <script src="v292Dfix476-pipeline.js?cb=v292Dfix476on"></script>
 <script src="v292Dfix481-provider-switch.js?cb=v292Dfix481"></script>
-<script src="v292Dfix483-genbudget-sync.js?cb=v292Dfix483"></script>
+<script src="v292Dfix483-genbudget-sync.js?cb=v292Dfix495"></script>
 <script src="v292Dfix427-output-sanitize.js?cb=v292Dfix427"></script>
 <script src="v292Dfix430-carrier-block.js?cb=v292Dfix430"></script>
 <script src="v292Dfix436-seed-expand.js?cb=v292Dfix436"></script>
@@ -2835,7 +2835,7 @@ G.init();
 <script src="v292Dfix448-genloading.js?cb=v292Dfix448"></script>
 <script src="v292Dfix453-src-coalesce.js?cb=v292Dfix453"></script>
 <script src="v292Dfix454-dash.js?cb=v292Dfix457"></script>
-<script src="v292Dfix458-dash-post.js?cb=v292Dfix458"></script>
+<script src="v292Dfix458-dash-post.js?cb=v292Dfix495"></script>
 <script src="v292Dfix459-sys-v2.js?cb=v292Dfix459c"></script>
 <script src="v292Dfix460-slotgrid.js?cb=v292Dfix460"></script>
 <script src="v292Dfix461-appearance-en.js?cb=v292Dfix461v21"></script>
@@ -2846,7 +2846,7 @@ G.init();
 <script src="v292Dfix466-dup-say.js?cb=v292Dfix466"></script>
 <script src="v292Dfix467-readability-rules.js?cb=v292Dfix468"></script>
 <script src="v292Dfix468-gen-timing.js?cb=v292Dfix468"></script>
-<script src="v292Dfix469-speaker-score.js?cb=v292Dfix469v2"></script>
+<script src="v292Dfix469-speaker-score.js?cb=v292Dfix495"></script>
 <script src="v292Dfix470-style-tail.js?cb=v292Dfix470e"></script>
 <script src="v292Dfix471-style-c.js?cb=v292Dfix472"></script>
 <script src="v292Dfix472-icon-protect.js?cb=v292Dfix472"></script>
@@ -2854,8 +2854,8 @@ G.init();
 <script src="v292Dfix488-nonhuman-detail.js?cb=v292Dfix488b"></script>
 <script src="v292Dfix456-name-space.js?cb=v292Dfix456"></script>
 <script src="v292Dfix482-output-quality.js?cb=v292Dfix494"></script>
-<script src="v292Dfix489-convlog-gate.js?cb=v292Dfix489b"></script>
-<script src="v292Dfix490-slot-write-guard.js?cb=v292Dfix490b"></script>
+<script src="v292Dfix489-convlog-gate.js?cb=v292Dfix495"></script>
+<script src="v292Dfix490-slot-write-guard.js?cb=v292Dfix495"></script>
 <script src="v292Dfix492-genfail-toast.js?cb=v292Dfix492"></script>
 </body>
 </html>

@@ -68,14 +68,27 @@
   }
 
   function backupOnce(){
-    if (backedUp) return;
-    backedUp = true;
+    if (backedUp) return true;   // fix495(C2): 成功時のみtrue/backedUp化(fail-closed用)
     try {
+      // fix495(C2): activeが未設定/defaultの実体は'chr6'キー(従来はchr6_slot_defaultを読んで
+      // 空振り=defaultスロットでは控えゼロのまま本文書換していた)。控えは新しい順2件にtrim。
       var slot = JSON.parse(localStorage.getItem('chr6_active_slot') || '""');
-      if (!slot) return;
-      var blob = localStorage.getItem('chr6_slot_' + slot);
-      if (blob) localStorage.setItem('chr6_bk_fix458_' + slot + '_' + Date.now(), blob);
-    } catch(e){}
+      var key = (slot && slot !== 'default') ? ('chr6_slot_' + slot) : 'chr6';
+      var tag = (slot && slot !== 'default') ? slot : 'default';
+      var blob = localStorage.getItem(key);
+      if (blob) localStorage.setItem('chr6_bk_fix458_' + tag + '_' + Date.now(), blob);
+      backedUp = true;
+      try {
+        var bks = [];
+        for (var bi = 0; bi < localStorage.length; bi++){
+          var bk = localStorage.key(bi);
+          if (bk && bk.indexOf('chr6_bk_fix458_' + tag + '_') === 0 && /_\d+$/.test(bk)) bks.push(bk);
+        }
+        bks.sort(function(a,b){ return (+a.split('_').pop()||0) - (+b.split('_').pop()||0); });
+        while (bks.length > 2) { var oldk = bks.shift(); try { localStorage.removeItem(oldk); } catch(e){} }
+      } catch(e){}
+    } catch(e){ return false; }
+    return backedUp;
   }
 
   function narrText(t){
@@ -92,12 +105,12 @@
     var n = t.narrative;
     if (typeof n === 'string'){
       var v = cleanStr(n, st);
-      if (v !== n){ t.narrative = v; changed = 1; }
+      if (v !== n){ if (!backupOnce()){ return 0; } t.narrative = v; changed = 1; }   // fix495(C2): 控え不能なら書換中止(fail-closed)
     } else if (n && typeof n === 'object'){
       ['text', 'body', 'content'].forEach(function(k){
         if (typeof n[k] === 'string'){
           var v2 = cleanStr(n[k], st);
-          if (v2 !== n[k]){ n[k] = v2; changed = 1; }
+          if (v2 !== n[k]){ if (!backupOnce()) return; n[k] = v2; changed = 1; }   // fix495(C2)
         }
       });
     }
@@ -106,12 +119,12 @@
         var c = t._convSays[i];
         if (c && typeof c.say === 'string'){
           var v3 = cleanStr(c.say, st);
-          if (v3 !== c.say){ c.say = v3; changed = 1; }
+          if (v3 !== c.say){ if (!backupOnce()) break; c.say = v3; changed = 1; }   // fix495(C2)
         }
       }
     }
     try { Object.defineProperty(t, '__f458', { value: 1, enumerable: false, configurable: true }); } catch(e){ t.__f458 = 1; }
-    if (changed){ backupOnce(); stats.replaced += st.replaced; }
+    if (changed){ stats.replaced += st.replaced; }   // fix495(C2): 控えは書換前に取得済み
     stats.turns++;
     return st.replaced;
   }

@@ -115,7 +115,7 @@
   localStorage.setItem = function(k, v){
     try { return prev(k, v); }
     catch(e){
-      if(!isQuota(e) || String(k).indexOf('__gen_')===0) throw e;
+      if(!isQuota(e) || String(k).indexOf('__gen_')===0 || String(k).indexOf('chr6_bk_')===0) throw e; // fix495(C3): 控え(chr6_bk_*)のために__gen_世代(事故復元の主力)を食い潰さない。fix490側の自前quota処理に委ねる
       for(var n=0;n<8;n++){
         if(!shrinkOnce()) break;
         try { var r=prev(k, v); try{ console.warn(TAG,'quota回復: 世代を間引いて保存成功 ('+k+')'); }catch(_){} return r; } catch(e2){ if(!isQuota(e2)) throw e2; }

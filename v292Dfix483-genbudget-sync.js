@@ -5,14 +5,14 @@
 // 起動時に GET <proxy>/ から読み取り、localStorage v292GenBudget へ保存する。
 // fix197(fix199f遮断器)が liveGenBudget() でこれをライブ参照する。
 //   '0'=無制限(遮断器オフ・非推奨) / 正の整数=その回数 / 未設定=既定30。
-// OFF: localStorage.v292Dfix483Off='1'
-// 冪等: window.__v292Dfix483
+// OFF: localStorage.v292Dfix483gbOff='1' (fix495: beat-director(同番号483)とOFFスイッチ/冪等フラグが衝突していたため gb 接尾辞へ分離。ビート停止のつもりで予算同期まで止まる事故の根治)
+// 冪等: window.__v292Dfix483gb
 // =====================================================================
 (function(){
   'use strict';
-  if (window.__v292Dfix483) return; window.__v292Dfix483 = true;
+  if (window.__v292Dfix483gb) return; window.__v292Dfix483gb = true;   // fix495: 483衝突分離
   var TAG = '[v292Dfix483:genbudget-sync]';
-  function off(){ try { return localStorage.getItem('v292Dfix483Off') === '1'; } catch(e){ return true; } }
+  function off(){ try { return localStorage.getItem('v292Dfix483gbOff') === '1' || localStorage.getItem('v292Dfix483Off') === '1'; } catch(e){ return true; } }   // fix495: 483衝突分離(旧キーv292Dfix483Offは1リリースの間 後方互換で尊重=GPT裁定)
   try {
     if (off()) return;
     var purl = '';

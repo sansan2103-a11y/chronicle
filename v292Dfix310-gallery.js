@@ -123,11 +123,16 @@
   function writeMeta(m){ try{ localStorage.setItem('chr6_slots_meta', JSON.stringify(m)); }catch(e){} }
   function reopenManager(){ try{ var b=document.querySelector('[title^="\u30bb\u30fc\u30d6\u7ba1\u7406"]')||document.getElementById('v30-topbar-btn'); if(b) b.click(); }catch(e){} }
   function createSave(){
+    // fix495(C5): 順序をfail-closed化(GPT裁定)。①Sを解決(evalフォールバック=Sはwindowに居ない
+    // letグローバル。従来のwindow.S参照は常時no-opで、直近進行が未保存のままreloadしていた)
+    // ②現物語をsave ③成功時のみmeta追加→active切替→reload。save不能ならreloadせず中止。
+    var _S=null; try{ _S=window.S||(0,eval)('typeof S!=="undefined"?S:null'); }catch(e){}
+    if(!_S || typeof _S.save!=='function'){ try{ alert('現在の物語の退避に失敗したため、新規作成を中止しました。ページを再読込してからもう一度お試しください。'); }catch(e){} return; }
+    try{ _S.save(); }catch(e){ try{ alert('現在の物語の保存に失敗したため、新規作成を中止しました(容量不足の可能性)。'); }catch(_){} return; }
     var meta=readMeta();
     var id='s'+Date.now().toString(36)+Math.floor(Math.random()*1296).toString(36);
     meta.push({id:id, name:'\u65b0\u3057\u3044\u7269\u8a9e', key:'chr6_slot_'+id, updatedAt:null});
     writeMeta(meta);
-    try{ if(window.S && typeof window.S.save==='function') window.S.save(); }catch(e){} // 現在のゲームを今のスロットへ退避
     try{ localStorage.setItem('chr6_active_slot', JSON.stringify(id)); }catch(e){}     // 新スロットをactiveに
     try{ location.reload(); }catch(e){}                                                // 空スロット→初期画面(既存init経路)
   }

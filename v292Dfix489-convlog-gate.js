@@ -15,7 +15,7 @@
 //   ・先頭の約物(、。)は表示層でのみ除去。保存データは不触。
 //
 // 既定ON。OFF: localStorage v292Dfix489Off='1'
-// 検証口: window.__v292Dfix489 = { isMention, planTurn, repair }
+// 検証口: window.__v292Dfix489 = { stats, isMention, planTurn, repair }
 // バックアップ: 最初の変更前に chr6 → chr6_bk_fix489
 // =====================================================================
 (function(){
@@ -52,9 +52,12 @@
     while (p >= 0){
       var tail = n.slice(p + q.length, p + q.length + 30);
       var atLineStart = (p === 0) || /\n[\s　]*$/.test(n.slice(0, p));
-      var isSpeech = atLineStart || SPEECH_TAILS.some(function(re){ return re.test(tail); });
+      // fix495(B8): 行頭でもメンション構文(「…」という呼吸音 等)が続くなら自動speech扱いしない。
+      // 明示のSPEECH_TAILS(発話ホワイトリスト)は従来どおり最優先。
+      var _ment = MENTION_TAILS.some(function(re){ return re.test(tail); });
+      var isSpeech = SPEECH_TAILS.some(function(re){ return re.test(tail); }) || (atLineStart && !_ment);
       if (isSpeech) speechHit = true;
-      else if (MENTION_TAILS.some(function(re){ return re.test(tail); })) mentionHit = true;
+      else if (_ment) mentionHit = true;
       else speechHit = true;    // 曖昧は発話扱い(安全側)
       p = n.indexOf(q, p + 1);
     }
@@ -69,7 +72,8 @@
     var out = [], drops = [], changed = false;
     for (var i = 0; i < cs.length; i++){
       var c = cs[i];
-      if (!c || !c.say){ continue; }
+      if (!c) continue;
+      if (!c.say){ out.push(c); continue; }   // fix495(F12): say欠落は不触で素通し
       if (c._rv === 1 || (pText && norm(c.say) === pText)){ out.push(c); continue; }   // react声/SAY入力は不触
       if (isMention(narr, c.say)){
         drops.push({ who: String(c.who || ''), say: String(c.say).slice(0, 14) });
@@ -83,6 +87,26 @@
   var baseTurns = -1;
   var backedUp = false;
   var doneReg = {};        // turnIndex -> sig (処理済みは再処理しない)
+  function _dropOn(){ try { return localStorage.getItem('v292Dfix489DropOn') === '1'; } catch(e){ return false; } }  // fix495(B5)
+  var _stats = { wouldDrop: 0, backupFail: 0 };
+  // fix495(B2): スロット切替検知(469と同型)。持ち越すと新スロットの過去ターンを新ターン扱いで審査してしまう。
+  function _activeStoreKey(){
+    try { var a = JSON.parse(localStorage.getItem('chr6_active_slot') || 'null');
+          if (a && a !== 'default') return 'chr6_slot_' + a; } catch(e){}
+    return 'chr6';
+  }
+  var _lastSlotKey = null, _lastTurnsRef = null, _lastT0 = null;
+  function _t0fp(S){ try { var t0 = S.turns[0]; return String((t0 && (t0.narrative || t0.text || '')) || '').slice(0, 80); } catch(e){ return ''; } }
+  function _slotGate(S){
+    var k = _activeStoreKey(), fp = _t0fp(S);
+    var changed = (_lastSlotKey !== null && k !== _lastSlotKey) ||
+                  (_lastTurnsRef !== null && S.turns !== _lastTurnsRef) ||
+                  (_lastT0 !== null && fp !== _lastT0);       // fix495(B2): 3重検知(GPT裁定)
+    if (changed){ baseTurns = -1; doneReg = {}; backedUp = false;
+      try { console.log(TAG, 'slot/story switch detected -> state reset'); } catch(e){} }
+    _lastSlotKey = k; _lastTurnsRef = S.turns; _lastT0 = fp;
+    return changed;
+  }
   function sigOf(t){
     var cs = (t && t._convSays) || [];
     var s = cs.length + '';
@@ -94,16 +118,27 @@
     if (off()) return { changed: false };
     var S = getS();
     if (!S || !Array.isArray(S.turns) || !S.turns.length) return { changed: false };
+    _slotGate(S);   // fix495(B2)
     if (baseTurns < 0) baseTurns = S.turns.length;
     var any = false, log = [];
     for (var ti = baseTurns; ti < S.turns.length; ti++){       // ★新ターンのみ
       var sig = sigOf(S.turns[ti]);
       if (doneReg[ti] === sig) continue;
       var p = planTurn(S.turns[ti]);
-      if (p.changed){
-        if (!backedUp){ try { localStorage.setItem('chr6_bk_fix489', localStorage.getItem('chr6') || ''); } catch(e){} backedUp = true; }
-        S.turns[ti]._convSays = p.arr;
-        any = true; log.push({ turn: ti + 1, drops: p.drops });
+      if (p.changed && !_dropOn()){
+        // fix495(B5): 物理drop(データ削除)は既定OFF(GPT裁定)。診断ログのみ残し、データ・保存は不触。
+        _stats.wouldDrop += p.drops.length;
+        try { console.log(TAG, '[wouldDrop]', JSON.stringify(p.drops)); } catch(e){}
+      } else if (p.changed){
+        // fix495(B3): 控えはアクティブスロットの実キーから・スロット別キーへ。書けなければ中止(fail-closed)。
+        var _bkOk = backedUp;
+        if (!_bkOk){
+          try { var _ak = _activeStoreKey(); localStorage.setItem('chr6_bk_fix489_' + _ak, localStorage.getItem(_ak) || ''); _bkOk = true; backedUp = true; } catch(e){ _stats.backupFail++; }
+        }
+        if (_bkOk){
+          S.turns[ti]._convSays = p.arr;
+          any = true; log.push({ turn: ti + 1, drops: p.drops });
+        } else { try { console.warn(TAG, 'backup failed -> drop中止(fail-closed)'); } catch(e){} }
       }
       doneReg[ti] = sigOf(S.turns[ti]);
     }
@@ -134,6 +169,6 @@
   }
   try { setTimeout(tick, 4500); setInterval(tick, 2500); } catch(e){}
 
-  window.__v292Dfix489 = { __armed: true, isMention: isMention, planTurn: planTurn, repair: repair, tidyCards: tidyCards };
+  window.__v292Dfix489 = { __armed: true, stats: _stats, isMention: isMention, planTurn: planTurn, repair: repair, tidyCards: tidyCards };
   try { console.log(TAG, 'loaded 489b'); } catch(e){}
 })();

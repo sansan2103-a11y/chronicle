@@ -72,6 +72,12 @@
     return changed;
   }
   function pass(dry){
+    // fix495(B6): 話者補正はfix469(点数制)に一本化(fix462と同型のcede)。本fixは証拠なしで
+    // 全ターンを振替え、469の凍結済みターンも上書きしてしまうため、469稼働時は退譲する。
+    // sys注入([1]hookSys)は従来どおり生かす。
+    try {
+      if (window.__v292Dfix469 && window.__v292Dfix469.__armed && localStorage.getItem('v292Dfix469Off') !== '1') return 0;
+    } catch(e){}
     var S = getS();
     if (!S || !S.cast || !S.cast.hero || !S.cast.hero.name || !Array.isArray(S.turns)) return 0;
     var hero = S.cast.hero.name;

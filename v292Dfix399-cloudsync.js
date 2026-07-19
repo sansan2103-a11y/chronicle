@@ -242,15 +242,31 @@
 
   // ---- 復元(取り込み) ----
   function backupBeforeApply(pkg){
+    // fix495(C1): ①先に世代trim(新しい順2件) ②控えを書く ③quotaなら同系統をもう1つ削って1回再試行
+    // ④それでも書けなければ false(=取り込み中止・fail-closed)。従来は無制限に溜まり(1個~全スロット
+    // 合計サイズ)十数回のpullでquota飽和→保存失敗連鎖の温床だった。_del_退避(5世代管理)は対象外。
+    function listBk(){
+      var bks = [];
+      try { for (var bi = 0; bi < localStorage.length; bi++){ var bk = localStorage.key(bi); if (/^chr6_bk_cloudsync_\d+$/.test(bk || '')) bks.push(bk); } } catch(e){}
+      bks.sort(); return bks;
+    }
     try {
       var snap = {};
       Object.keys(pkg.ls || {}).forEach(function(k){ var v = localStorage.getItem(k); if (v != null) snap[k] = v; });
-      localStorage.setItem('chr6_bk_cloudsync_' + Date.now(), JSON.stringify({ activeSlot: activeSlot(), ls: snap }));
-    } catch(e){}
+      var payload = JSON.stringify({ activeSlot: activeSlot(), ls: snap });
+      var bks = listBk();
+      while (bks.length > 1) { try { localStorage.removeItem(bks.shift()); } catch(e){} }   // 書込後に最大2件になるよう先に1件へ
+      try { localStorage.setItem('chr6_bk_cloudsync_' + Date.now(), payload); return true; }
+      catch(e1){
+        var bks2 = listBk();
+        if (bks2.length){ try { localStorage.removeItem(bks2[0]); } catch(e){} }
+        try { localStorage.setItem('chr6_bk_cloudsync_' + Date.now(), payload); return true; } catch(e2){ return false; }
+      }
+    } catch(e){ return false; }
   }
   function applySave(pkg){
     if (!pkg || pkg.schema !== SCHEMA) return Promise.reject(new Error('セーブ形式が不明です'));
-    backupBeforeApply(pkg);
+    if (!backupBeforeApply(pkg)) return Promise.reject(new Error('安全バックアップを作成できないため取り込みを中止しました(端末の保存容量不足)'));   // fix495(C1): fail-closed(GPT裁定)
     var expectedIdb = Object.keys(pkg.idb || {});   // fix399i: 検証用に期待キーを控える
     try { Object.keys(pkg.ls || {}).forEach(function(k){ localStorage.setItem(k, pkg.ls[k]); }); } catch(e){ return Promise.reject(e); }
     return idbWriteAll(pkg.idb || {}).then(function(writeResult){

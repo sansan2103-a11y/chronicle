@@ -17,7 +17,7 @@
 //   ※エコー反問(−25)とレジスタ矛盾(−15)は条件が厳格なため今回は未実装(GPT: 直後の声で足りる)。
 //
 // 既定ON。OFF: localStorage v292Dfix469Off='1'
-// 検証口: window.__v292Dfix469 = { profiles, score, decide, planTurn, repair, dryRun }
+// 検証口: window.__v292Dfix469 = { stats, profiles, score, decide, planTurn, repair, dryRun }
 // バックアップ: 最初の変更前に chr6 → chr6_bk_fix469
 // =====================================================================
 (function(){
@@ -89,6 +89,9 @@
   // ①ターン内_convSaysの既存who(=originalWho含む)は無条件で候補(GPT: 絶対に落とさない)
   // ②汎用ラベルは「発話帰属構文」で本文に現れた場合だけ候補化(地の文の一般名詞を拾わない)
   // ★1文字ラベル(男/女)は禁止: 彼女/少女/長男 等に部分一致して大事故になる(実測)
+  var PRONOUN_WHO = ['私','俺','僕','彼','彼女','あなた','お前','君','誰か','自分']; // fix495(B1)
+  function _dropOn(){ try { return localStorage.getItem('v292Dfix469DropOn') === '1'; } catch(e){ return false; } }  // fix495(B5)
+  var _stats = { wouldDrop: 0, backupFail: 0 };
   var GENERIC_LABELS = ['若い男','若い女','若者','青年','老人','老婆','老爺','少年','少女','子供','男性','女性','人影','黒衣の男','黒衣の女'];
   var ATTR_CONSTRUCT = '(の(?:声|口調|言葉|囁き|呟き|悲鳴|叫び)|[はが](?:[^。、\\n]{0,6})?(?:言|口を開|続け|答え|尋ね|叫|呟|囁|告げ|問い|返し|吐き捨て))';
   function extraTokens(t, names, narr){
@@ -98,6 +101,9 @@
       ((t && t._convSays) || []).forEach(function(c){
         var w = c && c.who ? String(c.who).trim() : '';
         if (!w || w === '???' || known[nospace(w)]) return;
+        // fix495(B1): 1文字ラベル・代名詞whoを候補トークンにしない(「女」が「彼女の声…」に
+        // 部分一致してvoiceAfter+115を取り、正しいwho(+60)を55差でflipする実測事故の遮断)
+        if (w.length < 2 || PRONOUN_WHO.indexOf(w) >= 0) return;
         cand[w] = 1;
       });
       GENERIC_LABELS.forEach(function(g){
@@ -227,7 +233,8 @@
     var out = [], changes = [], changed = false;
     for (var i = 0; i < cs.length; i++){
       var c = cs[i];
-      if (!c || !c.say){ continue; }
+      if (!c) continue;
+      if (!c.say){ out.push(c); continue; }   // fix495(F12): say欠落は不触で素通し(黙殺削除しない)
       if (c._rv === 1 || (pText && norm(c.say) === pText)){ out.push(c); continue; }
       var at = findLine(lines, c.say);
       if (at < 0){ out.push(c); continue; }                       // 本文に無い=判断材料なし→不触
@@ -236,7 +243,11 @@
       var prevSand = at >= 2 && /^[「『]/.test(String(lines[at - 2] || '').trim());
       var cur = String(c.who || '');
       var res = score(c.say, prev, next, allTokens, profs, prevSand);
-      var d = decide(res, cur, !!allowDrop);
+      var d = decide(res, cur, !!allowDrop && _dropOn());
+      // fix495(B5): 物理drop(データ削除)は既定OFF(GPT裁定)。OFF時はwouldDropとして診断のみ。
+      if (allowDrop && !_dropOn()){
+        try { var dd = decide(res, cur, true); if (dd.act === 'drop'){ _stats.wouldDrop++; console.log(TAG, '[wouldDrop]', cur, String(c.say).slice(0,14), dd.score); } } catch(e){}
+      }
       if (d.act === 'flip' && d.to !== cur){
         changes.push({ act: 'fix', from: cur, to: d.to, score: d.score, say: String(c.say).slice(0, 14) });
         c.who = d.to; changed = true; out.push(c); continue;
@@ -273,11 +284,42 @@
   var backedUp = false;
   var evalReg = {};        // turnIndex -> { sig, evals, frozen } (メモリのみ・セーブ不触)
   var MAX_EVALS = 3;
+  // fix495(B2): スロット切替の検知(chr6_active_slot値 or S.turns配列の同一性が変わったら
+  // baseTurns/evalReg/backedUpをリセット)。持ち越すと新スロットの過去ターンが「新ターン」
+  // 扱いになり、拮抗カードのdrop(データ削除)が過去ターンに及ぶ実測事故があった。
+  function _activeStoreKey(){
+    try { var a = JSON.parse(localStorage.getItem('chr6_active_slot') || 'null');
+          if (a && a !== 'default') return 'chr6_slot_' + a; } catch(e){}
+    return 'chr6';
+  }
+  var _lastSlotKey = null, _lastTurnsRef = null, _lastT0 = null;
+  function _t0fp(S){ try { var t0 = S.turns[0]; return String((t0 && (t0.narrative || t0.text || '')) || '').slice(0, 80); } catch(e){ return ''; } }
+  function _slotGate(S){
+    var k = _activeStoreKey(), fp = _t0fp(S);
+    var changed = (_lastSlotKey !== null && k !== _lastSlotKey) ||
+                  (_lastTurnsRef !== null && S.turns !== _lastTurnsRef) ||
+                  (_lastT0 !== null && fp !== _lastT0);       // fix495(B2): 同一配列の中身差替(インポート/初期化)も検知(GPT: 3重検知)
+    if (changed){ baseTurns = -1; evalReg = {}; backedUp = false; try { lastSig = ''; } catch(e){}
+      try { console.log(TAG, 'slot/story switch detected -> state reset'); } catch(e){} }
+    _lastSlotKey = k; _lastTurnsRef = S.turns; _lastT0 = fp;
+    return changed;
+  }
 
   function applyTurn(S, ti, allowDrop, tokens, profs, ns){
     var p = planTurn(S.turns[ti], ns, tokens, profs, allowDrop);
     if (p.changed){
-      if (!backedUp){ try { localStorage.setItem('chr6_bk_fix469', localStorage.getItem('chr6') || ''); } catch(e){} backedUp = true; }
+      // fix495(B3): 控えは「アクティブスロットの実キー」から取り、控えキーもスロット別。
+      // 控えが書けない場合は破壊的変更を中止(fail-closed・GPT裁定)。
+      if (!backedUp){
+        var _bkOk = false;
+        try {
+          var _ak = _activeStoreKey();
+          localStorage.setItem('chr6_bk_fix469_' + _ak, localStorage.getItem(_ak) || '');
+          _bkOk = true;
+        } catch(e){ _stats.backupFail++; }
+        if (!_bkOk){ try { console.warn(TAG, 'backup failed -> 変更中止(fail-closed)'); } catch(e){} return { changed: false, changes: [], arr: S.turns[ti]._convSays }; }
+        backedUp = true;
+      }
       S.turns[ti]._convSays = p.arr;
     }
     return p;
@@ -287,6 +329,7 @@
     if (off()) return { changed: false };
     var S = getS();
     if (!S || !Array.isArray(S.turns) || !S.turns.length) return { changed: false };
+    _slotGate(S);   // fix495(B2)
     var firstRun = (baseTurns < 0);
     if (firstRun) baseTurns = S.turns.length;
     var ns = names(S); if (ns.length < 1) return { changed: false };
@@ -339,7 +382,7 @@
   }
   try { setTimeout(tick, 4000); setInterval(tick, 2500); } catch(e){}
 
-  window.__v292Dfix469 = {
+  window.__v292Dfix469 = { stats: _stats,
     __armed: true, __v: 2, profiles: profiles, tokensOf: tokensOf, extraTokens: extraTokens,
     score: score, decide: decide, planTurn: planTurn, repair: repair,
     dryRun: function(){
