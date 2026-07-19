@@ -120,7 +120,7 @@
     + 'Do not use 1boy/1girl/handsome/beautiful/idol. Do not describe personality, backstory or relationships unless they are visible.\n'
     + 'Do not add art style, lighting, camera or quality words. Those are added later by application code.';
 
-  function ask(m, cb){
+  function ask(m, cb, _retry){
     var S = getS(), cfg = (S && S.cfg) || {};
     // ★C: **世界観(scene.lore)を入力から外す**。疎なキャラ説明のとき、世界観から服・装飾を
     //   「補完」してしまう余地を断つ（設定に無いものは出さない）。
@@ -132,7 +132,10 @@
     var body = {
       model: cfg.orModel || 'deepseek/deepseek-v4-flash',
       temperature: 0.2,
-      max_tokens: 260,
+      // fix497(D3): 推論型モデル(deepseek/hermes等)が外見判定でmax_tokensを推論に使い切り
+      //   content空(finish=length)になる根治。初回260、空/length時のみ700で1回だけ再試行
+      //   (blanket700を避け、通常成功時のトークン枠拡大を最小化=GPT裁定)。
+      max_tokens: _retry ? 700 : 260,
       messages: [{ role: 'system', content: sysNow() }, { role: 'user', content: user }]
     };
     try {
@@ -145,7 +148,15 @@
         try {
           if (xhr.status !== 200) return cb(new Error('HTTP ' + xhr.status));
           var j = JSON.parse(xhr.responseText);
-          var txt = (j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+          var ch0 = (j && j.choices && j.choices[0]) || {};
+          var txt = (ch0.message && ch0.message.content) || '';
+          var finish = ch0.finish_reason || '';
+          if (!txt && !_retry && (finish === 'length' || finish === '' || finish == null)){
+            try { console.warn(TAG, (m && m.name), 'appearance empty (finish=' + finish + ') → max_tokens700で1回再試行'); } catch(e){}
+            try { stats.retried = (stats.retried || 0) + 1; } catch(e){}
+            return ask(m, cb, true);   // fix497(D3): 1回だけ700で再試行
+          }
+          if (!txt){ try { console.warn(TAG, (m && m.name), 'appearance still empty after retry (finish=' + finish + ')'); } catch(e){} }
           cb(txt ? null : new Error('empty'), txt);
         } catch(e){ cb(e); }
       };
