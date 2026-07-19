@@ -54,6 +54,85 @@
   function silIndex(name){ return ihash(normLabel(name)) % SILH_URLS.length; }
   function silhouetteFor(name){ var i = silIndex(name); return silCache[i] || SIL_FALLBACK; }  // ★fix487b: 生成URLを直接imgに渡さない(fix197がcarrier誤認→骸骨上書きを防ぐ)。未キャッシュ時はSVG、warm後にdataURLへ差替。
 
+  // ---- ★fix487h(2026-07-19): 検品を通った実画像がある汎用ラベルはシルエット固定を解除 ----
+  //   初期状態(外見不明・画像なし)のシルエットは維持(骸骨対策)。ↇで生成→
+  //   fix476検品合格→v292av2_に実画像が保存されたときだけ表示を切替える。
+  //   表示した名前は keepn_ マーカで記録し、isolateCachesの再隔離対象から外す。
+  function f197h(){ return window.__v292Dfix197 || window.__v292Dfix199 || null; }
+  function hasRealIcon(name){
+    try {
+      var f = f197h();
+      if (!f || typeof f.cachedFor !== 'function') return false;
+      var c = f.cachedFor(name) || '';
+      if (typeof c !== 'string' || c.indexOf('data:image') !== 0) return false;
+      if (c === SIL_FALLBACK) return false;
+      for (var i = 0; i < SILH_URLS.length; i++){ if (silCache[i] && c === silCache[i]) return false; }
+      return true;
+    } catch(e){ return false; }
+  }
+  // ★fix487h v2(GPT再監査反映): 許可は「名前に永続」ではなく「↻1回で作られた画像インスタンス」に紐付ける。
+  //   ↻クリック → pend_(直前画像の指紋を記録) → 新しい実画像が届いたら allow_=新画像の指紋 に昇格。
+  //   表示解除は「現キャッシュの指紋 === allow_ の指紋」の間だけ。画像が変われば再↻が必要。
+  function fpOf(d){
+    if (typeof d !== 'string' || !d) return '';
+    var head = d.slice(0, 96), tail = d.slice(-64), src = d.length + '|' + head + '|' + tail;
+    var h = 0; for (var i = 0; i < src.length; i++){ h = ((h << 5) - h + src.charCodeAt(i)) | 0; }
+    return 'f' + (h >>> 0).toString(36) + '_' + d.length;
+  }
+  function allowFpOf(name){
+    try { return localStorage.getItem('v292Dfix487allow_' + normLabel(name)) || ''; } catch(e){ return ''; }
+  }
+  function getPending(name){
+    try { return JSON.parse(localStorage.getItem('v292Dfix487pend_' + normLabel(name)) || 'null'); } catch(e){ return null; }
+  }
+  function setPending(name){
+    try {
+      var nm = normLabel(name); if (!nm) return;
+      var f = f197h();
+      var cur = (f && typeof f.cachedFor === 'function') ? (f.cachedFor(nm) || '') : '';
+      localStorage.setItem('v292Dfix487pend_' + nm, JSON.stringify({ t: Date.now(), prev: fpOf(cur) }));
+      try { console.info('[v292Dfix487h] ↻明示指示を受付(新画像が検品を通れば表示):', nm); } catch(e){}
+    } catch(e){}
+  }
+  function promote(name, fp){
+    try {
+      var nm = normLabel(name);
+      localStorage.setItem('v292Dfix487allow_' + nm, fp);
+      localStorage.removeItem('v292Dfix487pend_' + nm);
+      try { console.info('[v292Dfix487h] 新画像を承認 → シルエット解除:', nm); } catch(e){}
+    } catch(e){}
+  }
+  // 手動用(検証口): その名前の現画像を即承認
+  function allowName(name){
+    try {
+      var f = f197h();
+      var cur = (f && typeof f.cachedFor === 'function') ? (f.cachedFor(normLabel(name)) || '') : '';
+      if (cur && cur.indexOf('data:image') === 0) promote(name, fpOf(cur));
+      else setPending(name);
+    } catch(e){}
+  }
+  function markKeep(name){
+    try {
+      var nm = normLabel(name);
+      if (localStorage.getItem('v292Dfix487keepn_' + nm) !== '1') localStorage.setItem('v292Dfix487keepn_' + nm, '1');
+    } catch(e){}
+  }
+  function unneutralizeImg(img, name){
+    try {
+      if (img.getAttribute('data-gensil') === '1'){
+        img.removeAttribute('data-gensil');
+        img.removeAttribute('data-av-placeholder');
+        try { img.title = ''; } catch(e){}
+      }
+      var f = f197h();
+      var c = (f && typeof f.cachedFor === 'function') ? (f.cachedFor(name) || '') : '';
+      if (c && c.indexOf('data:image') === 0 && img.getAttribute('src') !== c) img.src = c;
+      markKeep(name);
+      return true;
+    } catch(e){ return false; }
+  }
+
+
   // ---- 端末キャッシュ: 4枚を1回だけ取得しdataURL化して保存（以後オフライン） ----
   function loadSilCache(i){
     if (silCache[i]) return;
@@ -74,6 +153,16 @@
       if (!img || img.tagName !== 'IMG') return false;
       var alt = img.getAttribute('alt') || '';
       if (!isGeneric(alt)) return false;
+      // ★fix487h: ↻由来の新画像だけ解除(指紋一致)。キャッシュ存在だけでは解除しない(GPT条件)
+      if (hasRealIcon(alt)){
+        var __f = f197h();
+        var __cur = (__f && __f.cachedFor) ? (__f.cachedFor(alt) || '') : '';
+        var __cfp = fpOf(__cur);
+        var __afp = allowFpOf(alt);
+        if (__afp && __afp === __cfp) return unneutralizeImg(img, alt);
+        var __pend = getPending(alt);
+        if (__pend && __pend.prev !== __cfp){ promote(alt, __cfp); return unneutralizeImg(img, alt); }
+      }
       var sil = silhouetteFor(alt);
       if (img.getAttribute('data-gensil') === '1' && img.getAttribute('src') === sil) return true;
       img.removeAttribute('data-avpk');
@@ -129,11 +218,26 @@
       Object.keys(localStorage).forEach(function(k){
         if (k.indexOf('chrAiAv4:') !== 0) return;
         var nm = k.slice('chrAiAv4:'.length).split('::')[0];
-        if (isGeneric(nm)){ genericNames[nm] = 1; try { var v = localStorage.getItem(k); localStorage.setItem('__f487bk_' + k, v); localStorage.removeItem(k); moved++; } catch(e){} }
+        if (isGeneric(nm)){
+          // ★fix487h: 実画像を表示済みの名前(keepn_)や一度退避済みのキーは再隔離しない
+          //   (退避は「旧・骸骨時代キャッシュの一回限りの掃除」。以後の生成物と外見文は尊重)
+          try { if (localStorage.getItem('v292Dfix487keepn_' + nm) === '1') return; } catch(e){}
+          try { if (localStorage.getItem('v292Dfix487allow_' + nm) != null) return; } catch(e){}
+          try { if (localStorage.getItem('v292Dfix487pend_' + nm) != null) return; } catch(e){}
+          try { if (localStorage.getItem('__f487bk_' + k) != null) return; } catch(e){}
+          genericNames[nm] = 1; try { var v = localStorage.getItem(k); localStorage.setItem('__f487bk_' + k, v); localStorage.removeItem(k); moved++; } catch(e){}
+        }
       });
       if (keyFor){
         Object.keys(genericNames).forEach(function(nm){
-          try { var ik = 'v292av2_' + keyFor(nm); var iv = localStorage.getItem(ik); if (iv != null){ localStorage.setItem('__f487bk_' + ik, iv); localStorage.removeItem(ik); moved++; } } catch(e){}
+          try {
+            if (localStorage.getItem('v292Dfix487keepn_' + nm) === '1') return;   // ★fix487h
+            if (localStorage.getItem('v292Dfix487allow_' + nm) != null) return;    // ★fix487h
+            if (localStorage.getItem('v292Dfix487pend_' + nm) != null) return;     // ★fix487h
+            var ik = 'v292av2_' + keyFor(nm); var iv = localStorage.getItem(ik);
+            if (localStorage.getItem('__f487bk_' + ik) != null) return;           // ★fix487h: 一度退避済み
+            if (iv != null){ localStorage.setItem('__f487bk_' + ik, iv); localStorage.removeItem(ik); moved++; }
+          } catch(e){}
         });
       }
     } catch(e){}
@@ -161,11 +265,33 @@
     } catch(e){}
     try { console.log(TAG, 'loaded (on=' + (on() ? '1' : '0') + ', iconOff=' + (iconOff() ? '1' : '0') + ')'); } catch(e){}
   }
+  // ---- ★fix487h: ↻アイコン再生成クリックの捕捉(fix437と同一の判定・genericなら表示許可を付与) ----
+  try {
+    document.addEventListener('click', function(ev){
+      try {
+        if (!active()) return;
+        var t = ev.target; if (!t || !t.closest) return;
+        var probe = t.closest('button,[role="button"],a') || t;
+        var txt = (probe.textContent || '') + ' ' + ((probe.getAttribute && (probe.getAttribute('title') || probe.getAttribute('aria-label'))) || '');
+        if (txt.length > 40) return;
+        if (!/再生成|↻|↺|⟳|🔄/.test(txt)) return;
+        var card = t.closest('.npc-card') || t.closest('.v100-clean') || t.closest('[class*="card"]') || t.parentNode;
+        var nm = '';
+        var img = (card && card.querySelector) ? card.querySelector('img[alt]') : null;
+        if (img) nm = (img.getAttribute('alt') || '').trim();
+        if (!nm && card && card.querySelector){ var ni = card.querySelector('input[type="text"]'); if (ni) nm = (ni.value || '').trim(); }
+        if (nm && isGeneric(nm)) setPending(nm);
+      } catch(e){}
+    }, true);
+  } catch(e){}
+
   if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', start); } else { start(); }
 
   window.__v292Dfix487 = {
     isGeneric: isGeneric, isNonhumanGeneric: isNonhumanGeneric, silIndex: silIndex,
     silhouetteFor: silhouetteFor, neutralizeImg: neutralizeImg, sweep: sweep,
-    isolateCaches: isolateCaches, warmSilCache: warmSilCache, SILH_URLS: SILH_URLS, SIL_FALLBACK: SIL_FALLBACK
+    isolateCaches: isolateCaches, warmSilCache: warmSilCache, SILH_URLS: SILH_URLS, SIL_FALLBACK: SIL_FALLBACK,
+    hasRealIcon: hasRealIcon, unneutralizeImg: unneutralizeImg, allowName: allowName,
+    fpOf: fpOf, allowFpOf: allowFpOf, setPending: setPending, getPending: getPending   // ★fix487h
   };
 })();

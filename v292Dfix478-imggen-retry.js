@@ -76,6 +76,10 @@
           return resp;                        // 成功 or 非対象status or 再試行上限 → そのまま返す
         }, function(err){
           hadResp = false; lastErr = err;
+          // ★fix478b(2026-07-19): 呼び出し元のAbort(fix476候補タイムアウト等)は再試行しない。
+          //   abort済みsignalを持つ同一initの再送は即rejectされるだけでログを汚す(実測)。
+          if (err && err.name === 'AbortError') throw err;
+          if (init && init.signal && init.signal.aborted) throw err;
           if (attempt < MAX_RETRY) return step(attempt + 1);
           throw err;                          // 再試行上限 → 最後の例外をそのまま投げる
         });

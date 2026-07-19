@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260719-fix490b';
+  var BUILT = '20260719-fix490b-i491';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2812,7 +2812,8 @@ G.init();
 <script src="v292Dfix474-candidate.js?cb=v292Dfix474d"></script>
 <script src="v292Dfix475-recipe-v3.js?cb=v292Dfix486"></script>
 <script src="v292Dfix477-autocomplete-off.js?cb=v292Dfix477"></script>
-<script src="v292Dfix478-imggen-retry.js?cb=v292Dfix478"></script>
+<script src="v292Dfix478-imggen-retry.js?cb=v292Dfix478b"></script>
+<script src="v292Dfix491-imggen-freefallback.js?cb=v292Dfix491"></script>
 <script src="v292Dfix476-pipeline.js?cb=v292Dfix476on"></script>
 <script src="v292Dfix481-provider-switch.js?cb=v292Dfix481"></script>
 <script src="v292Dfix483-genbudget-sync.js?cb=v292Dfix483"></script>
@@ -2849,7 +2850,7 @@ G.init();
 <script src="v292Dfix470-style-tail.js?cb=v292Dfix470e"></script>
 <script src="v292Dfix471-style-c.js?cb=v292Dfix472"></script>
 <script src="v292Dfix472-icon-protect.js?cb=v292Dfix472"></script>
-<script src="v292Dfix487-unknown-guard.js?cb=v292Dfix487c"></script>
+<script src="v292Dfix487-unknown-guard.js?cb=v292Dfix487h"></script>
 <script src="v292Dfix488-nonhuman-detail.js?cb=v292Dfix488b"></script>
 <script src="v292Dfix456-name-space.js?cb=v292Dfix456"></script>
 <script src="v292Dfix482-output-quality.js?cb=v292Dfix482"></script>
