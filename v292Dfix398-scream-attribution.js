@@ -26,7 +26,7 @@
     '「彼女」「彼」は直前に行動・負傷した人物を指すと解釈し、直前に発言しただけの別人物へ引きずられない。';
   try {
     window.__f379reg = window.__f379reg || [];
-    window.__f379reg.push({ off: 'v292Dfix398Off', marker: MARK, prio: 2, text: function(){ return TEXT; } });
+    window.__f379reg.push({ off: 'v292Dfix398Off', marker: MARK, prio: 1, text: function(){ return TEXT; } }); // fix496: prio1化(GPT裁定・動的スキップ撤回)。通常はfix459 dropAが【悲鳴…】を統合削除、fix459 OFF/失敗時のみfallbackとして残す
     try { console.log(TAG, 'registered (scream speaker = victim rule)'); } catch(e){}
   } catch(e){ try { console.warn(TAG, e); } catch(_){} }
 })();

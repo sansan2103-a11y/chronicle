@@ -365,8 +365,8 @@
       G.__f379reg = G.__f379reg || [];
       var reg = G.__f379reg;
       for (var i = 0; i < reg.length; i++){ if (reg[i] && reg[i].marker === MARKER) return; }
-      reg.push({ off: 'v292Dfix482Off', marker: MARKER, prio: 2, text: function(){ return TEXT; } });
-      try { console.log(TAG, 'keeper registered (prio2, ' + TEXT.length + ' chars)'); } catch(e){}
+      reg.push({ off: 'v292Dfix482Off', marker: MARKER, prio: 1, text: function(){ return TEXT; } }); // fix496(A2): prio1化(71字・予算超過で後登録から脱落していた実測への対処。予算は拡大しない=GPT裁定)
+      try { console.log(TAG, 'keeper registered (prio1, ' + TEXT.length + ' chars)'); } catch(e){}
     } catch(e){}
   })();
 
