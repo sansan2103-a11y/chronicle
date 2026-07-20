@@ -70,6 +70,13 @@
         out = f512.rewrite(out);
       }
     } catch(e){ try { console.warn(TAG, 'fix512.rewrite failed', e && e.message); } catch(_){} }
+    // ★fix514(2026-07-20): 話者タグ徹底ブロックを末尾追記（全登録名/全ての声に付与/実際の話者/鏡・憑依・独白の扱い・裸禁止）純粋transform・fail-open・OFF=v292Dfix514Off
+    try {
+      var f514 = window.__v292Dfix514;
+      if (f514 && typeof f514.rewrite === 'function' && !(f514.isOff && f514.isOff())) {
+        out = f514.rewrite(out);
+      }
+    } catch(e){ try { console.warn(TAG, 'fix514.rewrite failed', e && e.message); } catch(_){} }
     return out;
   }
 
