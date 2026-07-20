@@ -226,6 +226,25 @@
   //   heroタグ・非入力・直後行が名前なしの代名詞声・直前地の文に非heroが1人だけ明記・直前カードと一致・
   //   性別明示一致 の全AND成立時のみ wouldPronounFlip を記録する。書換・保存・カード変更は一切しない。
   var _PRON_G = { '女':'彼女', '男':'彼' };
+  // ---------- fix508: 代名詞ブリッジ shadow診断の「追加専用」永続ログ ----------
+  //   目的: 普段のプレイで wouldPronounFlip 検知例を貯め、後で全件を人間レビュー→自動flip解禁の材料にする。
+  //   安全: 専用キー(v292Dfix469_pshadow)のみ書く。chr6/セーブ/カード/S.turns は一切触らない。
+  //         slot|turnFp|i|from|cand|say で dedup(再読込で同一例を重複追記しない)。上限リングで最新200件保持。
+  //         書込失敗(quota等)は握りつぶし=ゲーム/セーブ経路へ波及させない(fail-closed)。
+  var _PLOG_KEY = 'v292Dfix469_pshadow', _PLOG_CAP = 200;
+  function _plogKey(r){ return [r.slot, r.turnFp, r.i, r.from, r.cand, r.say].join('|'); }
+  function _pshadowLog(r){
+    try {
+      var raw = localStorage.getItem(_PLOG_KEY);
+      var db = raw ? JSON.parse(raw) : null;
+      if (!db || db.v !== 1 || !Array.isArray(db.recs)) db = { v: 1, recs: [] };
+      var k = _plogKey(r);
+      for (var j = 0; j < db.recs.length; j++){ if (db.recs[j] && db.recs[j].k === k) return; }  // dedup: 既出は追記しない
+      r.k = k; db.recs.push(r);
+      if (db.recs.length > _PLOG_CAP) db.recs.splice(0, db.recs.length - _PLOG_CAP);              // リング: 古い順に落とす
+      localStorage.setItem(_PLOG_KEY, JSON.stringify(db));
+    } catch(e){}   // fail-closed
+  }
   //   allTokens=[{canon(登録名), tok(短縮含む)}]。本文照合はtokで行い canon に写す(短縮名対応)。
   function pronounShadow(cs, i, lines, at, heroName, profs, allTokens){
     try {
@@ -256,6 +275,19 @@
       if (_PRON_G[cg] !== pron){ _stats.pronounNoGender++; return; }  // 男候補+彼女/女候補+彼→棄権
       _stats.wouldPronounFlip++;                             // ★全条件成立: 記録のみ(flipしない)
       try { console.log(TAG, '[wouldPronounFlip(shadow)]', String(c.who), '→', cand, String(c.say).slice(0,14)); } catch(e){}
+      // fix508: 追加専用の永続ログへ(dedup・fail-closed・chr6/セーブ非破壊)
+      try {
+        _pshadowLog({
+          ts: Date.now(),
+          slot: _activeStoreKey(),
+          turnFp: (String(lines[0]||'') + String(lines[1]||'')).slice(0, 40),
+          i: i,
+          from: String(c.who||''),
+          cand: cand,
+          say: String(c.say||'').slice(0, 40),
+          voice: nextLine.slice(0, 40)
+        });
+      } catch(e){}
     } catch(e){}
   }
 
@@ -437,7 +469,11 @@
         if (p.changes && p.changes.length) res.push({ turn: i + 1, changes: p.changes });
       }
       return res;
-    }
+    },
+    // fix508: 診断ログの読出/件数/消去(いずれもchr6・セーブ非破壊)
+    pshadowDump: function(){ try { var raw = localStorage.getItem('v292Dfix469_pshadow'); var db = raw ? JSON.parse(raw) : null; return (db && db.recs) || []; } catch(e){ return []; } },
+    pshadowCount: function(){ try { var raw = localStorage.getItem('v292Dfix469_pshadow'); var db = raw ? JSON.parse(raw) : null; return (db && db.recs && db.recs.length) || 0; } catch(e){ return 0; } },
+    pshadowClear: function(){ try { localStorage.removeItem('v292Dfix469_pshadow'); return true; } catch(e){ return false; } }
   };
   try { console.log(TAG, 'loaded v2'); } catch(e){}
 })();
