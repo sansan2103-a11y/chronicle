@@ -19,6 +19,19 @@ var BUDGET_KEY = '__chronicleAttemptBudget';
 
 function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
 
+/* ★fix502(2026-07-20): ネット不安定/共通予算(fix494)切れで内側ラッパが空(null)を返した時に
+ *   外側が resp.ok を読んで「Cannot read properties of null」で落ちるのを防ぐ。null応答を
+ *   合成失敗レスポンス(503)に変換し、通常の「生成に失敗しました(再試行可)」経路へ流す。
+ *   ★再送回数・予算・ゲート判定の挙動は一切変更しない(fix494のGPT監査結果を保持)。"落ちない"のみ追加。 */
+function failResp(){
+  try {
+    return new Response(JSON.stringify({ error: '生成に失敗しました(通信が不安定でした)', errorCode: 'fix502-null' }),
+      { status: 503, statusText: 'Service Unavailable', headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+  } catch(e){
+    return { ok:false, status:503, clone:function(){ return this; }, text:function(){ return Promise.resolve('{}'); }, json:function(){ return Promise.resolve('{}'); } };
+  }
+}
+
 function extractContent(text){
   try{
     var i = text.indexOf("{");
@@ -84,10 +97,10 @@ function makeWrapper(orig){
         if(attempt < MAX - 1){ await sleep(1500 * (attempt + 1)); continue; }
         throw e;
       }
-      if(!resp.ok){
-        last = resp;
-        if(attempt < MAX - 1){ await sleep(resp.status === 429 ? 2500 * (attempt + 1) : 1200); continue; }
-        return resp;
+      if(!resp || !resp.ok){                          /* ★fix502: null(予算切れ等)でも落ちない */
+        last = resp || last;
+        if(attempt < MAX - 1){ await sleep((resp && resp.status === 429) ? 2500 * (attempt + 1) : 1200); continue; }
+        return resp || failResp();
       }
       var text = "";
       try{ text = await resp.clone().text(); }catch(e){ return resp; }
@@ -99,7 +112,7 @@ function makeWrapper(orig){
       last = resp;
       if(attempt < MAX - 1){ try{ console.log("[v292Dfix80] gate fail, regenerating (" + (attempt + 1) + ")"); }catch(e){} await sleep(600); continue; }
     }
-    return last;
+    return last || failResp();                        /* ★fix502: 予算切れ等でlastがnullでも合成失敗を返す(nullを外へ出さない) */
   };
   wrapped.__fix80 = true;
   return wrapped;
