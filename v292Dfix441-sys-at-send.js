@@ -49,6 +49,13 @@
         out = f440.transform(out);
       }
     } catch(e){ try { console.warn(TAG, 'fix440.transform failed', e && e.message); } catch(_){} }
+    // ★fix509(2026-07-20 GPT案3): メタ漏れ禁止3系統の統合を最終sysへ確実に適用（純粋transform・fail-open・OFF=v292Dfix509Off）
+    try {
+      var f509 = window.__v292Dfix509;
+      if (f509 && typeof f509.rewrite === 'function' && !(f509.isOff && f509.isOff())) {
+        out = f509.rewrite(out);
+      }
+    } catch(e){ try { console.warn(TAG, 'fix509.rewrite failed', e && e.message); } catch(_){} }
     return out;
   }
 
