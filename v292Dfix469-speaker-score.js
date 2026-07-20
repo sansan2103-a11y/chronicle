@@ -45,7 +45,8 @@
       }
       list.forEach(function(c){
         var d = String((c.desc || '') + ' ' + (c.tone || '') + ' ' + (c.voice || ''));
-        var p = { name: String(c.name).trim(), fp: '', kansai: false };
+        var _g = String(c.gender||''); var gnorm = /女/.test(_g)?'女':(/男/.test(_g)?'男':'');
+        var p = { name: String(c.name).trim(), fp: '', kansai: false, gender: gnorm };   // fix498: 明示genderのみ(代名詞からの逆算はしない)
         var m = d.match(/一人称[はは:：]?\s*[「『"]?([^\s」』"、。]{1,4})/);
         if (m && PRONOUNS.indexOf(m[1]) >= 0) p.fp = m[1];
         if (!p.fp){
@@ -91,7 +92,7 @@
   // ★1文字ラベル(男/女)は禁止: 彼女/少女/長男 等に部分一致して大事故になる(実測)
   var PRONOUN_WHO = ['私','俺','僕','彼','彼女','あなた','お前','君','誰か','自分']; // fix495(B1)
   function _dropOn(){ try { return localStorage.getItem('v292Dfix469DropOn') === '1'; } catch(e){ return false; } }  // fix495(B5)
-  var _stats = { wouldDrop: 0, backupFail: 0 };
+  var _stats = { wouldDrop: 0, backupFail: 0, wouldPronounFlip: 0, pronounAmbiguous: 0, pronounNoGender: 0 };  // fix498: 代名詞ブリッジ診断
   var GENERIC_LABELS = ['若い男','若い女','若者','青年','老人','老婆','老爺','少年','少女','子供','男性','女性','人影','黒衣の男','黒衣の女'];
   var ATTR_CONSTRUCT = '(の(?:声|口調|言葉|囁き|呟き|悲鳴|叫び)|[はが](?:[^。、\\n]{0,6})?(?:言|口を開|続け|答え|尋ね|叫|呟|囁|告げ|問い|返し|吐き捨て))';
   function extraTokens(t, names, narr){
@@ -221,6 +222,43 @@
     return -1;
   }
 
+  // ---------- fix498(C+): 代名詞ブリッジ shadow診断(自動flipしない・記録のみ・GPT裁定) ----------
+  //   heroタグ・非入力・直後行が名前なしの代名詞声・直前地の文に非heroが1人だけ明記・直前カードと一致・
+  //   性別明示一致 の全AND成立時のみ wouldPronounFlip を記録する。書換・保存・カード変更は一切しない。
+  var _PRON_G = { '女':'彼女', '男':'彼' };
+  //   allTokens=[{canon(登録名), tok(短縮含む)}]。本文照合はtokで行い canon に写す(短縮名対応)。
+  function pronounShadow(cs, i, lines, at, heroName, profs, allTokens){
+    try {
+      var c = cs[i];
+      if (i === 0) return;                                   // card0(実発話)保護
+      if (!c || c._rv === 1) return;
+      if (String(c.who||'') !== heroName) return;            // heroタグのみ
+      var nextLine = String(lines[at+1]||'').trim();
+      var pm = nextLine.match(/^[\s　「」]*(彼女|彼)の(声|言葉|囁き|呟き|叫び|悲鳴|息|手|指|足|体|身体|喉|唇|口|視線|目)/);
+      if (!pm) return;                                       // 直後が名前なしの代名詞声でなければ対象外
+      var pron = pm[1];
+      // 直後行に(hero含む)いずれかの名前トークンが明記→既存の名前ベース判定に任せる
+      for (var a=0;a<allTokens.length;a++){ if (allTokens[a].tok && nextLine.indexOf(allTokens[a].tok)>=0) return; }
+      // 直前の地の文(sayの前1〜2行)に非heroが「1人だけ」明記されているか(トークン照合→canon)
+      var prevText = String(lines[at-1]||'') + ' ' + String(lines[at-2]||'');
+      var named = [];
+      allTokens.forEach(function(tt){
+        if (!tt.tok || tt.canon === heroName) return;
+        if (prevText.indexOf(tt.tok) >= 0 && named.indexOf(tt.canon) < 0) named.push(tt.canon);
+      });
+      if (named.length > 1){ _stats.pronounAmbiguous++; return; }   // 複数明記→棄権(直近だけで推測しない)
+      if (named.length !== 1) return;
+      var cand = named[0];
+      var prevCardWho = String((cs[i-1] && cs[i-1].who) || '');
+      if (cand !== prevCardWho) return;                      // 直前カードのwhoと一致必須
+      var cg = ''; profs.forEach(function(p){ if (p.name===cand) cg=p.gender; });
+      if (!cg){ _stats.pronounNoGender++; return; }          // 性別未登録→棄権(代名詞からの逆算禁止)
+      if (_PRON_G[cg] !== pron){ _stats.pronounNoGender++; return; }  // 男候補+彼女/女候補+彼→棄権
+      _stats.wouldPronounFlip++;                             // ★全条件成立: 記録のみ(flipしない)
+      try { console.log(TAG, '[wouldPronounFlip(shadow)]', String(c.who), '→', cand, String(c.say).slice(0,14)); } catch(e){}
+    } catch(e){}
+  }
+
   // ---------- 1ターンの計画 ----------
   // allowDrop=true は「読み込み後の新ターン」のみ(拮抗時のカード非表示を許可)
   function planTurn(t, names, tokens, profs, allowDrop){
@@ -256,6 +294,8 @@
         changes.push({ act: 'drop', from: cur, say: String(c.say).slice(0, 14), score: d.score });
         changed = true; continue;
       }
+      // fix498(C+): keep判定のheroタグカードに代名詞ブリッジのshadow診断(記録のみ・書換なし)
+      if (d.act === 'keep' && names && names.length) { pronounShadow(cs, i, lines, at, String(names[0]||''), profs, allTokens); }
       out.push(c);
     }
     return { changed: changed, changes: changes, arr: out };
