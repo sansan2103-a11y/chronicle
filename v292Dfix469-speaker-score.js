@@ -355,6 +355,28 @@
     return { to: to, reasons: owners[to] };
   }
 
+  // ---------- 根治(2): 「先輩」呼び文脈ブリッジ ----------
+  //   主人公は「先輩」と呼ばれる側で、自分を「先輩」と呼ばない。主人公タグのセリフが
+  //   「先輩」呼びかけなら話者は非主人公。ただし誰かは口調では決まらない→
+  //   直前後カードの非主人公が"1人だけ"に絞れる時だけその人へ振替、絞れなければ棄権。
+  //   ※口調ブリッジ(toneOwner)が手がかりを出せなかった時の補完。既定ON・OFF共通。
+  function callsSenpai(say){
+    var s = String(say || '');
+    return /先輩[！!？?…。、\s]*」?\s*$/.test(s) || /[、,]\s*先輩/.test(s) || /^\s*「?先輩[！!？?、]/.test(s);
+  }
+  function senpaiContext(cs, i, cur, heroName){
+    if (!heroName || String(cur || '') !== String(heroName)) return null;   // 主人公タグのみ
+    if (!cs || !cs[i] || !callsSenpai(cs[i].say)) return null;              // 先輩呼びのみ
+    var cand = {};
+    [cs[i-1], cs[i+1]].forEach(function(c){
+      var w = c && c.who ? String(c.who).trim() : '';
+      if (w && w !== String(heroName)) cand[w] = 1;
+    });
+    var ks = Object.keys(cand);
+    if (ks.length !== 1) return null;                                       // 0 or 2+ → 棄権
+    return { to: ks[0], reasons: ['senpai-context'] };
+  }
+
   // 口調ブリッジ shadow の永続ログ(pshadowと同型・専用キー・dedup・fail-closed・chr6非破壊)
   var _TLOG_KEY = 'v292Dfix469_toneshadow', _TLOG_CAP = 200;
   function _toneShadowLog(r){
@@ -405,17 +427,18 @@
         changes.push({ act: 'drop', from: cur, say: String(c.say).slice(0, 14), score: d.score });
         changed = true; continue;
       }
-      // 根治: 口調ブリッジ。名前トークンのハード証拠が皆無の keep のときだけ検討。
-      //   既定 shadow(記録のみ)。v292Dfix469ToneFlipOn='1' で実flip。
+      // 根治: 口調ブリッジ(+先輩文脈)。名前トークンのハード証拠が皆無の keep のときだけ検討。
+      //   既定ON(振替)。停止は v292Dfix469ToneFlipOff='1'。常にshadowログに記録。
       if (d.act === 'keep' && (!res.hard || Object.keys(res.hard).length === 0)){
-        var tb = toneOwner(c.say, profs, cur, allTokens);
-        if (tb){
+        var pick = toneOwner(c.say, profs, cur, allTokens);          // ①口調(方言/一人称)
+        if (!pick) pick = senpaiContext(cs, i, cur, String((names && names[0]) || ''));  // ②先輩呼び文脈
+        if (pick){
           _stats.wouldToneFlip++;
-          try { console.log(TAG, '[wouldToneFlip' + (_toneFlipOn() ? '(FLIP)' : '(shadow)') + ']', cur, '→', tb.to, '(' + tb.reasons.join(',') + ')', String(c.say).slice(0, 16)); } catch(e){}
-          try { _toneShadowLog({ ts: Date.now(), slot: _activeStoreKey(), turnFp: (String(lines[0]||'') + String(lines[1]||'')).slice(0, 40), i: i, from: cur, to: tb.to, why: tb.reasons.join(','), say: String(c.say||'').slice(0, 40) }); } catch(e){}
+          try { console.log(TAG, '[wouldToneFlip' + (_toneFlipOn() ? '(FLIP)' : '(shadow)') + ']', cur, '→', pick.to, '(' + pick.reasons.join(',') + ')', String(c.say).slice(0, 16)); } catch(e){}
+          try { _toneShadowLog({ ts: Date.now(), slot: _activeStoreKey(), turnFp: (String(lines[0]||'') + String(lines[1]||'')).slice(0, 40), i: i, from: cur, to: pick.to, why: pick.reasons.join(','), say: String(c.say||'').slice(0, 40) }); } catch(e){}
           if (_toneFlipOn()){
-            changes.push({ act: 'toneFix', from: cur, to: tb.to, why: tb.reasons.join(','), say: String(c.say).slice(0, 14) });
-            c.who = tb.to; changed = true; out.push(c); continue;
+            changes.push({ act: 'toneFix', from: cur, to: pick.to, why: pick.reasons.join(','), say: String(c.say).slice(0, 14) });
+            c.who = pick.to; changed = true; out.push(c); continue;
           }
         }
       }
