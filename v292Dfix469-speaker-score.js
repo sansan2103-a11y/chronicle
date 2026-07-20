@@ -44,11 +44,25 @@
         (S.cast.npcs || []).forEach(function(n){ if (n && n.name) list.push(n); });
       }
       list.forEach(function(c){
-        var d = String((c.desc || '') + ' ' + (c.tone || '') + ' ' + (c.voice || ''));
+        // 根治: voiceは文字列とは限らず {raw:"ウチ", fp:"私", ...} のオブジェクト登録がある。
+        //   String(c.voice)="[object Object]" で一人称を取り逃していた(実測: ひなた voice.raw="ウチ")。
+        var voiceStr = (c.voice && typeof c.voice === 'object')
+          ? String((c.voice.fp || '') + ' ' + (c.voice.raw || '') + ' ' + (c.voice.tone || c.voice.desc || ''))
+          : String(c.voice || '');
+        var d = String((c.desc || '') + ' ' + (c.tone || '') + ' ' + voiceStr);
         var _g = String(c.gender||''); var gnorm = /女/.test(_g)?'女':(/男/.test(_g)?'男':'');
         var p = { name: String(c.name).trim(), fp: '', kansai: false, gender: gnorm };   // fix498: 明示genderのみ(代名詞からの逆算はしない)
-        var m = d.match(/一人称[はは:：]?\s*[「『"]?([^\s」』"、。]{1,4})/);
-        if (m && PRONOUNS.indexOf(m[1]) >= 0) p.fp = m[1];
+        // 根治: voiceオブジェクトに登録された一人称(fp/raw)を最優先で採用(PRONOUNS照合)
+        try {
+          if (c.voice && typeof c.voice === 'object'){
+            var vr = String(c.voice.fp || c.voice.raw || '').trim();
+            if (vr && PRONOUNS.indexOf(vr) >= 0) p.fp = vr;
+          }
+        } catch(e){}
+        if (!p.fp){
+          var m = d.match(/一人称[はは:：]?\s*[「『"]?([^\s」』"、。]{1,4})/);
+          if (m && PRONOUNS.indexOf(m[1]) >= 0) p.fp = m[1];
+        }
         if (!p.fp){
           for (var i = 0; i < PRONOUNS.length; i++){
             if (d.indexOf('「' + PRONOUNS[i] + '」') >= 0){ p.fp = PRONOUNS[i]; break; }
