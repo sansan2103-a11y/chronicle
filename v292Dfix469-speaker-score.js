@@ -92,7 +92,7 @@
   // ★1文字ラベル(男/女)は禁止: 彼女/少女/長男 等に部分一致して大事故になる(実測)
   var PRONOUN_WHO = ['私','俺','僕','彼','彼女','あなた','お前','君','誰か','自分']; // fix495(B1)
   function _dropOn(){ try { return localStorage.getItem('v292Dfix469DropOn') === '1'; } catch(e){ return false; } }  // fix495(B5)
-  var _stats = { wouldDrop: 0, backupFail: 0, wouldPronounFlip: 0, pronounAmbiguous: 0, pronounNoGender: 0 };  // fix498: 代名詞ブリッジ診断
+  var _stats = { wouldDrop: 0, backupFail: 0, wouldPronounFlip: 0, pronounAmbiguous: 0, pronounNoGender: 0, wouldToneFlip: 0, toneConflict: 0 };  // fix498: 代名詞ブリッジ診断 / 根治: 口調ブリッジ
   var GENERIC_LABELS = ['若い男','若い女','若者','青年','老人','老婆','老爺','少年','少女','子供','男性','女性','人影','黒衣の男','黒衣の女'];
   var ATTR_CONSTRUCT = '(の(?:声|口調|言葉|囁き|呟き|悲鳴|叫び)|[はが](?:[^。、\\n]{0,6})?(?:言|口を開|続け|答え|尋ね|叫|呟|囁|告げ|問い|返し|吐き捨て))';
   function extraTokens(t, names, narr){
@@ -291,6 +291,71 @@
     } catch(e){}
   }
 
+  // ---------- 根治: 口調ブリッジ（方言・特徴的一人称で名前無しセリフの話者を当てる） ----------
+  //   背景: fix469は名前トークンの証拠(声115〜発話140)中心。名前の無いセリフは口調(方言/一人称)
+  //     が弱み(+15〜+20)でタグ保護(+60)を超えられず、モデルの誤タグ(例: ひなたの関西弁→主人公)が
+  //     残る=「丸ごと別人」振替ミスの温床。ここを"特徴的口調が単一話者に一意所属"の時だけ埋める。
+  //   安全設計(このモジュールの実績パターンに準拠):
+  //     ①名前トークンのハード証拠が皆無の時だけ検討(名前判定を上書きしない)。
+  //     ②特徴的口調(方言 or 非汎用の一人称)が"登録キャストで唯一その口調を持つ者"に一致した時だけ。
+  //     ③現whoがその口調を自分の口調として使っているなら棄権(=正しい関西弁を別人化する誤爆を封鎖)。
+  //     ④owner名がセリフ内に出る=引用/呼びかけの疑い→棄権。
+  //     ⑤実flipが既定ON(ユーザ選択2026-07-20)。振替を止めるなら v292Dfix469ToneFlipOff='1'。
+  //       常にshadowログにも記録するので、後から toneDump() で全振替を追跡・検証できる。
+  //       (モジュール全体を止めるなら従来どおり v292Dfix469Off='1')
+  //   ※私/わたし/僕/あたし は汎用すぎるので flip 起点にしない(引用誤爆防止)。方言と非汎用一人称のみ。
+  var DISTINCTIVE_FP = ['ウチ','うち','あたい','わっち','わし','儂','おいら','オイラ','拙者','某','わたくし','俺','おれ','オレ','ボク'];
+  function _toneFlipOn(){ try { return localStorage.getItem('v292Dfix469ToneFlipOff') !== '1'; } catch(e){ return true; } }  // 既定ON
+
+  function toneOwner(say, profs, cur, tokens){
+    var text = String(say || '');
+    if (!text || !profs || !profs.length) return null;
+    var owners = {};   // name -> reasons[]
+    // (1) 特徴的一人称: テキストに現れ、登録キャストで唯一その fp を持つ者
+    for (var f = 0; f < DISTINCTIVE_FP.length; f++){
+      var fp = DISTINCTIVE_FP[f];
+      if (text.indexOf(fp) < 0) continue;
+      var holders = [];
+      for (var p = 0; p < profs.length; p++){ if (profs[p].fp && profs[p].fp === fp) holders.push(profs[p].name); }
+      if (holders.length === 1){ (owners[holders[0]] = owners[holders[0]] || []).push('fp:' + fp); }
+    }
+    // (2) 関西弁: テキストが関西弁 かつ 登録キャストで唯一 kansai の者
+    if (KANSAI.test(text)){
+      var kh = [];
+      for (var q = 0; q < profs.length; q++){ if (profs[q].kansai) kh.push(profs[q].name); }
+      if (kh.length === 1){ (owners[kh[0]] = owners[kh[0]] || []).push('kansai'); }
+    }
+    var ns = Object.keys(owners);
+    if (ns.length === 0) return null;                 // 手がかりなし
+    if (ns.length > 1){ _stats.toneConflict++; return null; }   // 競合(別々の口調が別人を指す)→棄権
+    var to = ns[0];
+    if (to === String(cur || '')) return null;        // 現whoが所有=確定 → flipしない(誤爆防止)
+    // 現whoが「自分の特徴的口調」をこのセリフで使っているなら競合 → 棄権
+    var curP = null; for (var i2 = 0; i2 < profs.length; i2++){ if (profs[i2].name === String(cur || '')){ curP = profs[i2]; break; } }
+    if (curP){
+      if (curP.fp && DISTINCTIVE_FP.indexOf(curP.fp) >= 0 && text.indexOf(curP.fp) >= 0) return null;
+      if (curP.kansai && KANSAI.test(text)) return null;
+    }
+    // owner名がセリフ内にある=呼びかけ/引用の可能性 → 棄権
+    if (tokens){ for (var j = 0; j < tokens.length; j++){ if (tokens[j].canon === to && tokens[j].tok && text.indexOf(tokens[j].tok) >= 0) return null; } }
+    return { to: to, reasons: owners[to] };
+  }
+
+  // 口調ブリッジ shadow の永続ログ(pshadowと同型・専用キー・dedup・fail-closed・chr6非破壊)
+  var _TLOG_KEY = 'v292Dfix469_toneshadow', _TLOG_CAP = 200;
+  function _toneShadowLog(r){
+    try {
+      var raw = localStorage.getItem(_TLOG_KEY);
+      var db = raw ? JSON.parse(raw) : null;
+      if (!db || db.v !== 1 || !Array.isArray(db.recs)) db = { v: 1, recs: [] };
+      var k = [r.slot, r.turnFp, r.i, r.from, r.to, r.say].join('|');
+      for (var j = 0; j < db.recs.length; j++){ if (db.recs[j] && db.recs[j].k === k) return; }
+      r.k = k; db.recs.push(r);
+      if (db.recs.length > _TLOG_CAP) db.recs.splice(0, db.recs.length - _TLOG_CAP);
+      localStorage.setItem(_TLOG_KEY, JSON.stringify(db));
+    } catch(e){}
+  }
+
   // ---------- 1ターンの計画 ----------
   // allowDrop=true は「読み込み後の新ターン」のみ(拮抗時のカード非表示を許可)
   function planTurn(t, names, tokens, profs, allowDrop){
@@ -325,6 +390,20 @@
       if (d.act === 'drop'){
         changes.push({ act: 'drop', from: cur, say: String(c.say).slice(0, 14), score: d.score });
         changed = true; continue;
+      }
+      // 根治: 口調ブリッジ。名前トークンのハード証拠が皆無の keep のときだけ検討。
+      //   既定 shadow(記録のみ)。v292Dfix469ToneFlipOn='1' で実flip。
+      if (d.act === 'keep' && (!res.hard || Object.keys(res.hard).length === 0)){
+        var tb = toneOwner(c.say, profs, cur, allTokens);
+        if (tb){
+          _stats.wouldToneFlip++;
+          try { console.log(TAG, '[wouldToneFlip' + (_toneFlipOn() ? '(FLIP)' : '(shadow)') + ']', cur, '→', tb.to, '(' + tb.reasons.join(',') + ')', String(c.say).slice(0, 16)); } catch(e){}
+          try { _toneShadowLog({ ts: Date.now(), slot: _activeStoreKey(), turnFp: (String(lines[0]||'') + String(lines[1]||'')).slice(0, 40), i: i, from: cur, to: tb.to, why: tb.reasons.join(','), say: String(c.say||'').slice(0, 40) }); } catch(e){}
+          if (_toneFlipOn()){
+            changes.push({ act: 'toneFix', from: cur, to: tb.to, why: tb.reasons.join(','), say: String(c.say).slice(0, 14) });
+            c.who = tb.to; changed = true; out.push(c); continue;
+          }
+        }
       }
       // fix498(C+): keep判定のheroタグカードに代名詞ブリッジのshadow診断(記録のみ・書換なし)
       if (d.act === 'keep' && names && names.length) { pronounShadow(cs, i, lines, at, String(names[0]||''), profs, allTokens); }
@@ -473,7 +552,14 @@
     // fix508: 診断ログの読出/件数/消去(いずれもchr6・セーブ非破壊)
     pshadowDump: function(){ try { var raw = localStorage.getItem('v292Dfix469_pshadow'); var db = raw ? JSON.parse(raw) : null; return (db && db.recs) || []; } catch(e){ return []; } },
     pshadowCount: function(){ try { var raw = localStorage.getItem('v292Dfix469_pshadow'); var db = raw ? JSON.parse(raw) : null; return (db && db.recs && db.recs.length) || 0; } catch(e){ return 0; } },
-    pshadowClear: function(){ try { localStorage.removeItem('v292Dfix469_pshadow'); return true; } catch(e){ return false; } }
+    pshadowClear: function(){ try { localStorage.removeItem('v292Dfix469_pshadow'); return true; } catch(e){ return false; } },
+    // 根治: 口調ブリッジの診断ログ / 実flip解禁トグル(いずれもchr6・セーブ非破壊)
+    toneOwner: toneOwner,
+    toneFlipOn: _toneFlipOn,
+    toneDump: function(){ try { var raw = localStorage.getItem('v292Dfix469_toneshadow'); var db = raw ? JSON.parse(raw) : null; return (db && db.recs) || []; } catch(e){ return []; } },
+    toneCount: function(){ try { var raw = localStorage.getItem('v292Dfix469_toneshadow'); var db = raw ? JSON.parse(raw) : null; return (db && db.recs && db.recs.length) || 0; } catch(e){ return 0; } },
+    toneClear: function(){ try { localStorage.removeItem('v292Dfix469_toneshadow'); return true; } catch(e){ return false; } },
+    toneFlipEnable: function(on){ try { if (on === false){ localStorage.setItem('v292Dfix469ToneFlipOff','1'); return false; } localStorage.removeItem('v292Dfix469ToneFlipOff'); return true; } catch(e){ return on !== false; } }
   };
   try { console.log(TAG, 'loaded v2'); } catch(e){}
 })();
