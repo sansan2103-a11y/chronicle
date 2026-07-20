@@ -56,6 +56,13 @@
         out = f509.rewrite(out);
       }
     } catch(e){ try { console.warn(TAG, 'fix509.rewrite failed', e && e.message); } catch(_){} }
+    // ★fix510(2026-07-20): プロンプト作風調整P1（文数目安/焦点1〜2人/説明台詞禁止/中心変化一つ/確定事実優先）純粋transform・fail-open・OFF=v292Dfix510Off
+    try {
+      var f510 = window.__v292Dfix510;
+      if (f510 && typeof f510.rewrite === 'function' && !(f510.isOff && f510.isOff())) {
+        out = f510.rewrite(out);
+      }
+    } catch(e){ try { console.warn(TAG, 'fix510.rewrite failed', e && e.message); } catch(_){} }
     return out;
   }
 
