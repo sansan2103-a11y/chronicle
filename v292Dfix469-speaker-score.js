@@ -392,6 +392,25 @@
     } catch(e){}
   }
 
+  // ---------- 分裂防止: 名前正規化（短縮名→一意なフル登録名） ----------
+  //   同一人物が「澪」「白石澪」など複数表記で別話者に分裂するのを防ぐ。
+  //   ・既にフル登録名ならそのまま。特殊ラベル(不明な声/群衆/???/誰か)は触らない。
+  //   ・w がちょうど1つのフル登録名の"部分(短縮)"に一致する時だけフル名へ寄せる。
+  //   ・複数一致(曖昧)・未登録の別名は触らない＝別キャラを融合しない（過剰統合の事故防止）。
+  function canonicalWho(who, fullNames){
+    var w = String(who || '').trim();
+    if (!w || !fullNames || !fullNames.length) return who;
+    for (var i = 0; i < fullNames.length; i++){ if (fullNames[i] === w) return w; }   // 既にフル名
+    if (w === '不明な声' || w === '群衆' || w === '???' || w === '誰か') return who;
+    var hits = [];
+    for (var j = 0; j < fullNames.length; j++){
+      var f = String(fullNames[j] || '');
+      if (f && w.length < f.length && f.indexOf(w) >= 0){ if (hits.indexOf(f) < 0) hits.push(f); } // 短縮→フル(部分一致)
+    }
+    if (hits.length === 1) return hits[0];   // 一意な短縮のみ正規化
+    return who;
+  }
+
   // ---------- 1ターンの計画 ----------
   // allowDrop=true は「読み込み後の新ターン」のみ(拮抗時のカード非表示を許可)
   function planTurn(t, names, tokens, profs, allowDrop){
@@ -412,7 +431,13 @@
       var prev = at > 0 ? lines[at - 1] : '';
       var next = (at + 1 < lines.length) ? lines[at + 1] : '';
       var prevSand = at >= 2 && /^[「『]/.test(String(lines[at - 2] || '').trim());
-      var cur = String(c.who || '');
+      // 分裂防止: 短縮名→一意なフル登録名へ正規化（別キャラ融合はしない）
+      var cur0 = String(c.who || '');
+      var cur = canonicalWho(cur0, names);
+      if (cur !== cur0){
+        changes.push({ act: 'canon', from: cur0, to: cur, say: String(c.say).slice(0, 14) });
+        c.who = cur; changed = true;
+      }
       var res = score(c.say, prev, next, allTokens, profs, prevSand);
       var d = decide(res, cur, !!allowDrop && _dropOn());
       // fix495(B5): 物理drop(データ削除)は既定OFF(GPT裁定)。OFF時はwouldDropとして診断のみ。
