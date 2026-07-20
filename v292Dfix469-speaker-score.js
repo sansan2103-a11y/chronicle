@@ -392,6 +392,38 @@
     } catch(e){}
   }
 
+  // ---------- 感情主ブリッジ（手がかりゼロの声を、地の文の反応主で当てる） ----------
+  //   背景(2026-07-20 実測): 拷問/苦痛の場面で「ひ、ひっ…！」等の手がかりゼロの悲鳴が
+  //     主人公に吸われる(モデル誤タグ)。地の文「ひなたの体が弓なりに反った」等、直前後で
+  //     "非主人公の身体/声が[反応]"(が=主語)が唯一1人だけ示される時、その人へ。
+  //   ★安全設計(過去のリカ大事故を回避):
+  //     ①主人公タグのカードだけ対象(登録NPCの正しいタグは動かさない)。
+  //     ②「Xの<身体/声>が<反応動詞>」= が(主語)のみ。は/を(主題/目的語)は対象外
+  //       (「リカの声は震えていなかった」=は の完結描写型を除外)。
+  //     ③該当する非主人公が"1人だけ"の時のみ(複数/0=棄権)。
+  //     ④名前の発話ハード証拠が既にある時は呼ばれない(呼び出し側 res.hard 空ガード)。
+  var EMO_BODY = '(?:体|身体|全身|肩|背中|喉|唇|口|息|呼吸|胸|指|手|腕|腰|足|太腿|膝|頬|睫毛|まつげ|声|悲鳴|呻き|嗚咽)';
+  var EMO_REACT = '(?:反っ|反り|震え|震わ|痙攣|強張|こわば|跳ね|びく|くずお|崩れ|漏れ|漏らし|掻き|軋|よじ|捩じ|引き攣|ひきつ|止ま|波打|上ず|裏返|詰ま|こぼれ|ひくつ|わなな)';
+  //   ※地の文は短縮名(ひなた)で書かれるので、tokens(短縮形→canon)で照合する。
+  //     1文字トークンは部分一致事故(「男」→彼女等)防止のため除外。
+  function narrationEmoter(prev, next, heroName, tokens){
+    if (!heroName || !tokens || !tokens.length) return null;
+    var text = String(prev || '') + '\n' + String(next || '');
+    if (!text) return null;
+    var found = {};
+    for (var i = 0; i < tokens.length; i++){
+      var canon = tokens[i] && tokens[i].canon, tk = tokens[i] && tokens[i].tok;
+      if (!canon || !tk || canon === heroName || tk.length < 2) continue;   // 主人公・1文字は除外
+      var re;
+      try { re = new RegExp(tk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + 'の' + EMO_BODY + 'が[^。、」』\\n]{0,14}?' + EMO_REACT); }
+      catch(e){ continue; }
+      if (re.test(text)) found[canon] = 1;
+    }
+    var ks = Object.keys(found);
+    if (ks.length === 1) return { to: ks[0], reasons: ['narration-emoter'] };
+    return null;   // 0 or 2+ → 棄権
+  }
+
   // ---------- 分裂防止: 名前正規化（短縮名→一意なフル登録名） ----------
   //   同一人物が「澪」「白石澪」など複数表記で別話者に分裂するのを防ぐ。
   //   ・既にフル登録名ならそのまま。特殊ラベル(不明な声/群衆/???/誰か)は触らない。
@@ -462,6 +494,8 @@
         var curIsRegisteredNPC = (cur !== heroName) && names && names.indexOf(cur) >= 0;
         var pick = curIsRegisteredNPC ? null : toneOwner(c.say, profs, cur, allTokens); // ①口調(方言/一人称)=主人公/未登録のみ
         if (!pick) pick = senpaiContext(cs, i, cur, heroName);  // ②先輩呼び文脈(元々hero限定)
+        // ③感情主ブリッジ: 主人公タグの手がかりゼロの声を、地の文の「Xの体/声が[反応]」で当てる(hero限定)
+        if (!pick && cur === heroName) pick = narrationEmoter(prev, next, heroName, allTokens);
         if (pick){
           _stats.wouldToneFlip++;
           try { console.log(TAG, '[wouldToneFlip' + (_toneFlipOn() ? '(FLIP)' : '(shadow)') + ']', cur, '→', pick.to, '(' + pick.reasons.join(',') + ')', String(c.say).slice(0, 16)); } catch(e){}
