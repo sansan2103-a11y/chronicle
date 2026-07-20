@@ -75,15 +75,18 @@ function makeWrapper(orig){
     // ★fix494: 共通リトライ予算を init に用意(無ければ生成=順序非依存)。init欠如時はスキップ。
     var init = args[1];
     var budget = (init && typeof init === "object") ? init[BUDGET_KEY] : null;
-    if(init && typeof init === "object" && !budget){ budget = init[BUDGET_KEY] = { remaining: MAX }; }
+    if(init && typeof init === "object" && !budget){ budget = init[BUDGET_KEY] = { remaining: MAX, sent: 0, limit: MAX }; }
 
     var last = null;
     for(var attempt = 0; attempt < MAX; attempt++){
       if(budget){
         if(innerIsNative){
+          // ★fix503(GPT監査 条件付きGO): 二重減算の残骸検知。sent===0で残量0=誰かが送信せず予算を減らした=予算破損。
+          //   補充で救済せず失敗にする(4回目送信を防ぐ=fix494不変条件「最大3送信」を厳守)。
+          if((budget.sent||0) === 0 && budget.remaining <= 0){ try{ console.error("[v292Dfix503] budget invariant violation", { limit: budget.limit, sent: budget.sent, remaining: budget.remaining }); }catch(e){} return failResp(); }
           // 最内層=物理送信の実境界。予算切れなら送らない/送るなら1消費。
           if(budget.remaining <= 0){ try{ console.log("[v292Dfix80] budget exhausted (native), stop at #" + attempt); }catch(e){} break; }
-          budget.remaining--;
+          budget.remaining--; budget.sent = (budget.sent||0) + 1;   // ★fix503: 物理送信を1計上(sent)。予算所有はfix80のこの経路のみ。
         } else if(attempt > 0 && budget.remaining <= 0){
           // 下流(fix482/内側fix80)が消費済み=自分は確認のみ。初回送信後に予算切れなら追加しない。
           try{ console.log("[v292Dfix80] downstream budget exhausted, stop at #" + attempt); }catch(e){}

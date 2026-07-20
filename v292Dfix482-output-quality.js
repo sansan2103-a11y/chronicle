@@ -205,7 +205,7 @@
   function getBudget(init, create){
     if (!init || typeof init !== 'object') return null;
     var b = init[BUDGET_KEY];
-    if (!b && create){ b = init[BUDGET_KEY] = { remaining: BUDGET_MAX }; }
+    if (!b && create){ b = init[BUDGET_KEY] = { remaining: BUDGET_MAX, sent: 0, limit: BUDGET_MAX }; }
     return b || null;
   }
   var last = null;
@@ -267,13 +267,13 @@
       var url = (input && input.url) || String(input || '');
       if (off() || !isChronicleNarrative(url, init)){
         var bpass = getBudget(init, false);   // ★fix494: 非対象は既存予算のみ消費(作成しない)
-        if (innerIsNative && bpass) bpass.remaining--;   // 最内層の時だけ計上
+        /* ★fix503: fix482は予算非所有(読むだけ)。減算はfix80の送信経路のみ=二重減算の根治(GPT監査) */
         return inner.apply(this, arguments);
       }
 
       // ★fix494: 物語生成=対象。予算を用意し初回送信を1消費(実境界=このinner.call)。
       var budget = getBudget(init, true);
-      if (innerIsNative && budget) budget.remaining--;   // ★fix494: 最内層の時だけ初回送信を計上
+      /* ★fix503: fix482は予算非所有。初回送信の計上は内側fix80が行う(二重減算の根治) */
       var res = await inner.call(this, input, init);
 
       try {
@@ -299,7 +299,7 @@
             if (init2){
               lastRetryAt = now;
               stats.retried++;
-              if (innerIsNative && budget) budget.remaining--;   // ★fix494: 最内層の時だけ再生成送信を計上
+              /* ★fix503: fix482は予算非所有。再生成送信の計上も内側fix80が行う(二重減算の根治) */
               try {
                 var res2 = await inner.call(this, input, init2);
                 if (res2 && res2.ok){               // 再生成品はokの時だけ採用候補(中1)
