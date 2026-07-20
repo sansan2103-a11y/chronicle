@@ -455,8 +455,13 @@
       // 根治: 口調ブリッジ(+先輩文脈)。名前トークンのハード証拠が皆無の keep のときだけ検討。
       //   既定ON(振替)。停止は v292Dfix469ToneFlipOff='1'。常にshadowログに記録。
       if (d.act === 'keep' && (!res.hard || Object.keys(res.hard).length === 0)){
-        var pick = toneOwner(c.say, profs, cur, allTokens);          // ①口調(方言/一人称)
-        if (!pick) pick = senpaiContext(cs, i, cur, String((names && names[0]) || ''));  // ②先輩呼び文脈
+        var heroName = String((names && names[0]) || '');
+        // ★誤爆防止(2026-07-20 実測): 口調ブリッジは「主人公 or 未登録ラベル」のカードだけ対象。
+        //   既に登録NPCに付いているセリフを方言/一人称だけで別NPCへ飛ばさない
+        //   (例: ナナミ(非関西)の「…やない」を 関西=ひなた へ誤flipした事故の遮断)。
+        var curIsRegisteredNPC = (cur !== heroName) && names && names.indexOf(cur) >= 0;
+        var pick = curIsRegisteredNPC ? null : toneOwner(c.say, profs, cur, allTokens); // ①口調(方言/一人称)=主人公/未登録のみ
+        if (!pick) pick = senpaiContext(cs, i, cur, heroName);  // ②先輩呼び文脈(元々hero限定)
         if (pick){
           _stats.wouldToneFlip++;
           try { console.log(TAG, '[wouldToneFlip' + (_toneFlipOn() ? '(FLIP)' : '(shadow)') + ']', cur, '→', pick.to, '(' + pick.reasons.join(',') + ')', String(c.say).slice(0, 16)); } catch(e){}
