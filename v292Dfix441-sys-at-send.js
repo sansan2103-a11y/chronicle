@@ -63,6 +63,13 @@
         out = f510.rewrite(out);
       }
     } catch(e){ try { console.warn(TAG, 'fix510.rewrite failed', e && e.message); } catch(_){} }
+    // ★fix512(2026-07-20): 話者タグ付け補強（口調/一人称/呼称で who を特定・自分を先輩と呼ばない）純粋transform・fail-open・OFF=v292Dfix512Off
+    try {
+      var f512 = window.__v292Dfix512;
+      if (f512 && typeof f512.rewrite === 'function' && !(f512.isOff && f512.isOff())) {
+        out = f512.rewrite(out);
+      }
+    } catch(e){ try { console.warn(TAG, 'fix512.rewrite failed', e && e.message); } catch(_){} }
     return out;
   }
 
