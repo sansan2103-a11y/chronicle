@@ -29,7 +29,7 @@
 
   function lsg(k){ try { return W.localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix519Off') === '1'; }
-  function on(){ if (off()) return false; return lsg('v292Dfix519OnV1') === '1'; }
+  function on(){ return !off(); }   // ★fix519c: 既定ON(Offのみ無効)。iPhoneはopt-inフラグ設定が困難なため全端末で有効化。
   function proxyUrl(){
     try { var u = (W.localStorage.getItem('v292ProxyUrl') || '').trim(); if (u) return u.replace(/\/+$/, ''); } catch(e){}
     try { if (W.__v292Dfix247bapi && W.__v292Dfix247bapi.DEFAULT_PROXY_URL) return W.__v292Dfix247bapi.DEFAULT_PROXY_URL; } catch(e){}
