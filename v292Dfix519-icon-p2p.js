@@ -84,8 +84,14 @@
     } catch(e){}
   })();
 
-  // ---------- 受信: 表示中キーだけ If-None-Match で最新化 ----------
+  // ---------- 受信: 表示中キーだけ「素のGET＋中身比較」で最新化 ----------
+  // ★If-None-Match はクロスオリジンでCORSプリフライト(OPTIONS)を誘発し、Workerの
+  //   Allow-Headers(Content-Type,x-chronicle-pass,x-admin-token,x-google-id)に無いため弾かれる。
+  //   → カスタムヘッダを付けない「単純GET」にし、取得画像を再構成して local と文字列比較→差分時だけ更新。
+  //   304最適化は無いが、対象は表示中の最大12キーのみ＋per-keyスロットル(60s)でiOS負荷を抑える。
   var recvBusy = false;
+  var lastChk = {};                 // pk -> ts(最終確認)。同一キーの過剰再取得を抑止。
+  var CHK_TTL = 60000;
   function pendingKeys(){ try { return JSON.parse(lsg('v292Dfix402_pimg') || '{}') || {}; } catch(e){ return {}; } }
   function visibleKeys(){
     var out = {}; try { var imgs = document.querySelectorAll('img[data-avpk]'); for (var i = 0; i < imgs.length; i++){ var pk = imgs[i].getAttribute('data-avpk'); if (pk) out[pk] = 1; } } catch(e){}
@@ -94,18 +100,19 @@
   function recvSweep(){
     if (recvBusy || !on() || !loggedIn() || !_fetch || typeof document === 'undefined') return;
     var ns = nsGet(); if (!ns) return;
-    var pend = pendingKeys();
-    var ks = visibleKeys().filter(function(pk){ return !((PREFIX + pk) in pend); });   // 送信pending中は触らない
+    var pend = pendingKeys(); var now = Date.now();
+    var ks = visibleKeys().filter(function(pk){ return !((PREFIX + pk) in pend) && (now - (lastChk[pk] || 0) > CHK_TTL); });   // 送信pending中/最近確認済は除外
     if (!ks.length) return;
     recvBusy = true; var i = 0;
     (function next(){
       if (i >= ks.length){ recvBusy = false; return; }
-      var pk = ks[i++]; var loc = null; try { loc = W.localStorage.getItem(PREFIX + pk); } catch(e){}
-      var headers = {}; var lb = loc ? b64Of(loc) : null; if (lb) headers['If-None-Match'] = etagOf(lb.b64);
-      _fetch(proxyUrl() + '/img?ns=' + encodeURIComponent(ns) + '&k=' + encodeURIComponent(PREFIX + pk), { headers: headers, cache: 'no-store' })
-        .then(function(r){ if (r.status === 304 || !r.ok) return null; var ct = r.headers.get('Content-Type') || 'image/png'; return r.arrayBuffer().then(function(buf){ return { ct: ct, buf: buf }; }); })
+      var pk = ks[i++]; lastChk[pk] = Date.now();
+      var loc = null; try { loc = W.localStorage.getItem(PREFIX + pk); } catch(e){}
+      // ★カスタムヘッダ無しの単純GET(プリフライト回避)
+      _fetch(proxyUrl() + '/img?ns=' + encodeURIComponent(ns) + '&k=' + encodeURIComponent(PREFIX + pk), { cache: 'no-store' })
+        .then(function(r){ if (!r.ok) return null; var ct = r.headers.get('Content-Type') || 'image/png'; return r.arrayBuffer().then(function(buf){ return { ct: ct, buf: buf }; }); })
         .then(function(o){
-          if (o){
+          if (o && o.buf && o.buf.byteLength){
             try {
               var arr = new Uint8Array(o.buf), bin = ''; for (var j = 0; j < arr.length; j++) bin += String.fromCharCode(arr[j]);
               var durl = 'data:' + o.ct + ';base64,' + btoa(bin);
