@@ -29,7 +29,7 @@
 // ローカル有無の判定: localStorage.getItem('v292av2_'+pk)。fix346のラッパにより
 //   v292av2_* キーは mem(IDB由来)から同期返却される＝実dataURLが取れる。
 //
-// 有効化(opt-in・既定OFF): localStorage.v292Dfix517OnV1==='1' かつ v292Dfix517Off!=='1'
+// 有効化(★fix517bで既定ON): v292Dfix517Off!=='1' で全端末有効(旧v292Dfix517OnV1は不要・残っても無害)
 //   ※ONにすると fix516b(凍結pk限定)を包含する(P1 ⊇ fix516b)。fix516bはそのままでも
 //     二重に'' を返すだけで無害(冪等)。既定ON化・fix516b/515撤去はローカルgit整理の回に。
 // 冪等ガード: window.__v292Dfix517.__armed(fix400ラップは urlFor 上の __f517 で二重防止)
@@ -44,7 +44,7 @@
   var PREFIX = 'v292av2_';
 
   function off(){ try { return W.localStorage.getItem('v292Dfix517Off') === '1'; } catch(e){ return false; } }
-  function on(){ try { if (off()) return false; return W.localStorage.getItem('v292Dfix517OnV1') === '1'; } catch(e){ return false; } }
+  function on(){ try { return !off(); } catch(e){ return true; } }   // ★fix517b: 既定ON(v292Dfix517Off!=='1' で有効)。opt-in判定は撤去し全端末で有効化。
 
   // pk のローカル実画像(data:)を返す。無ければ ''。fix346ラッパでmem/IDBから同期取得。
   function localImgFor(pk){
