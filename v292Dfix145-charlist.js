@@ -135,6 +135,18 @@
         }
       }
     }
+    if (!foundSent){   // ★fix521: 状態が無くても会話ログ(_convSays)に発言があれば最近のセリフを状態に(姓付き登録名でも「未登場」表示を解消)
+      try {
+        for (var ci = turns.length - 1; ci >= 0 && !foundSent; ci--){
+          var cs = turns[ci] && turns[ci]._convSays;
+          if (!cs || !cs.length) continue;
+          for (var cj = cs.length - 1; cj >= 0; cj--){
+            var ce = cs[cj];
+            if (ce && ce.who === name && ce.say){ foundSent = '「' + String(ce.say).slice(0, 70) + '」'; break; }
+          }
+        }
+      } catch(e){}
+    }
     return foundSent || '（まだ物語に登場していません）';
   }
   function turnDelta(lastTurn, curTurnCount){
