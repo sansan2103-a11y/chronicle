@@ -78,6 +78,7 @@
       var t = turns[i];
       if (!t) continue;
       var n = (t.narrative || '') + ' ' + (t.playerText || '');
+      if (t._convSays){ try { n += ' ' + JSON.stringify(t._convSays); } catch(e){} }   // ★fix520: 会話ログの確定話者(フルネーム名寄せ済)も登場判定に含める(narrative本文は下の名前で書かれ姓付き登録名がヒットしない件の修正)
       if (n.indexOf(name) >= 0) return i;
     }
     return -1;
