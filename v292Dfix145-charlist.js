@@ -175,6 +175,12 @@
         });
       }
     } catch(e){}
+    // ★fix522: 実行時 loadWorldInfo が拾えていない時の保険=保存済長期記憶(fix136 worldinfo)を直読して状態メモを補う
+    try {
+      var _sid=''; try { var _as=JSON.parse(localStorage.getItem('chr6_active_slot')||'null'); _sid=(typeof _as==='string')?_as:((_as&&_as.id)||''); } catch(e){}
+      var _cands=[]; if(_sid) _cands.push('chr6_v292Dfix136_wi_slot_'+_sid); _cands.push('chr6_v292Dfix136_wi_slot_chr6'); _cands.push('chr6_v292Dfix136_wi');
+      for (var _ci=0; _ci<_cands.length; _ci++){ var _raw=null; try{ _raw=localStorage.getItem(_cands[_ci]); }catch(e){} if(!_raw) continue; var _arr=null; try{ _arr=JSON.parse(_raw); }catch(e){} if(!Array.isArray(_arr)) continue; _arr.forEach(function(w){ if(w&&w.name&&w.type==='character'&&(!wiByName[w.name]||!wiByName[w.name].desc)) wiByName[w.name]=w; }); if(_arr.length) break; }
+    } catch(e){}
     function lmDescFor(name){
       var w = wiByName[name];
       return (w && w.desc) ? w.desc : '';
