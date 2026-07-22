@@ -29,7 +29,7 @@
 
   function lsg(k){ try { return W.localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix519Off') === '1'; }
-  function on(){ return !off(); }   // ★fix519c: 既定ON(Offのみ無効)。iPhoneはopt-inフラグ設定が困難なため全端末で有効化。
+  function on(){ if (off()) return false; return lsg('v292Dfix519OnV1') === '1'; }   // ★fix519e: 既定OFF(opt-in)へ差し戻し(受信の巻き戻りリスク対策)。
   function proxyUrl(){
     try { var u = (W.localStorage.getItem('v292ProxyUrl') || '').trim(); if (u) return u.replace(/\/+$/, ''); } catch(e){}
     try { if (W.__v292Dfix247bapi && W.__v292Dfix247bapi.DEFAULT_PROXY_URL) return W.__v292Dfix247bapi.DEFAULT_PROXY_URL; } catch(e){}
@@ -90,8 +90,9 @@
   //   → カスタムヘッダを付けない「単純GET」にし、取得画像を再構成して local と文字列比較→差分時だけ更新。
   //   304最適化は無いが、対象は表示中の最大12キーのみ＋per-keyスロットル(60s)でiOS負荷を抑える。
   var recvBusy = false;
-  var lastChk = {};                 // pk -> ts(最終確認)。同一キーの過剰再取得を抑止。
-  var CHK_TTL = 60000;
+  var miss = {};                    // pk -> ts(404時刻)。サーバーに無い鍵を再要求しない(404スパム防止)。
+  var MISS_TTL = 1800000;           // 30分
+  function hasLocalData(pk){ try { var v = W.localStorage.getItem(PREFIX + pk); return typeof v === 'string' && v.indexOf('data:') === 0; } catch(e){ return false; } }
   function pendingKeys(){ try { return JSON.parse(lsg('v292Dfix402_pimg') || '{}') || {}; } catch(e){ return {}; } }
   function visibleKeys(){
     var out = {}; try { var imgs = document.querySelectorAll('img[data-avpk]'); for (var i = 0; i < imgs.length; i++){ var pk = imgs[i].getAttribute('data-avpk'); if (pk) out[pk] = 1; } } catch(e){}
@@ -101,16 +102,16 @@
     if (recvBusy || !on() || !loggedIn() || !_fetch || typeof document === 'undefined') return;
     var ns = nsGet(); if (!ns) return;
     var pend = pendingKeys(); var now = Date.now();
-    var ks = visibleKeys().filter(function(pk){ return !((PREFIX + pk) in pend) && (now - (lastChk[pk] || 0) > CHK_TTL); });   // 送信pending中/最近確認済は除外
+    var ks = visibleKeys().filter(function(pk){ return !((PREFIX + pk) in pend) && !hasLocalData(pk) && (now - (miss[pk] || 0) > MISS_TTL); });   // ★fix519e: ローカルに実画像がある鍵は絶対に触らない(巻き戻り防止)。送信pending/404済も除外
     if (!ks.length) return;
     recvBusy = true; var i = 0;
     (function next(){
       if (i >= ks.length){ recvBusy = false; return; }
-      var pk = ks[i++]; lastChk[pk] = Date.now();
+      var pk = ks[i++];
       var loc = null; try { loc = W.localStorage.getItem(PREFIX + pk); } catch(e){}
       // ★カスタムヘッダ無しの単純GET(プリフライト回避)
       _fetch(proxyUrl() + '/img?ns=' + encodeURIComponent(ns) + '&k=' + encodeURIComponent(PREFIX + pk), { cache: 'no-store' })
-        .then(function(r){ if (!r.ok) return null; var ct = r.headers.get('Content-Type') || 'image/png'; return r.arrayBuffer().then(function(buf){ return { ct: ct, buf: buf }; }); })
+        .then(function(r){ if (!r.ok){ miss[pk] = Date.now(); return null; } var ct = r.headers.get('Content-Type') || 'image/png'; return r.arrayBuffer().then(function(buf){ return { ct: ct, buf: buf }; }); })
         .then(function(o){
           if (o && o.buf && o.buf.byteLength){
             try {
