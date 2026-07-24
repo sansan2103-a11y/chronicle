@@ -10692,7 +10692,20 @@
         var img = card && card.querySelector ? card.querySelector('img[alt]') : null;
         if (img) nm = (img.getAttribute('alt') || '').trim();
         if (!nm && card && card.querySelector){ var ni = card.querySelector('input[type="text"]'); if (ni) nm = (ni.value || '').trim(); }
-        if (nm) invalidate(nm);
+        if (nm){
+          // v292Dfix524: ↻一本化。fix197がv292av2_(データ画像=fix517bローカル優先の権威)を持つキャラは
+          //   同じ↻でfix197.regenForが権威画像を作り直すため、fix118側(OpenRouter prompt + pollinations)の
+          //   二重生成(二重課金)を抑止。権威画像が無いキャラはfix118が唯一のアバターなので従来どおり再生成(退行なし)。
+          var __f524skip = false;
+          try {
+            var __f197c = window.__v292Dfix197;
+            if (__f197c && typeof __f197c.keyFor === 'function'){
+              var __av524 = localStorage.getItem('v292av2_' + __f197c.keyFor(nm));
+              if (typeof __av524 === 'string' && __av524.indexOf('data:') === 0) __f524skip = true;
+            }
+          } catch(e){}
+          if (!__f524skip) invalidate(nm);
+        }
       } catch(e){}
     }, true);
   } catch(e){}

@@ -452,6 +452,8 @@
   function regenFor(name){
     if(!name) return;
     var pk=keyFor(name);
+    // v292Dfix524: フライトロック。同一キャラの↻連打/多重発火を2秒デバウンス(二重生成・二重課金防止・persist/putimg一回)。
+    try { var _n524=Date.now(); if(!regenFor.__lock524) regenFor.__lock524={}; if(regenFor.__lock524[pk] && (_n524 - regenFor.__lock524[pk] < 2000)){ try{ console.log('[v292Dfix524] regen debounced', pk); }catch(e){} return; } regenFor.__lock524[pk]=_n524; } catch(e){}
     try { if (localStorage.getItem('v292Dfix403Off')!=='1') freshSeed403[pk]=1; } catch(e){}   // ★fix403: 明示↻は新seed
     var rec=null; try { rec=JSON.parse(localStorage.getItem('v292avrec_'+pk)||'null'); } catch(e){}  // ★fix403b: レシピ取得
     // ★fix197 H-3(2026-07-11): 旧画像を生成成功まで保持(生成失敗時に復元)。persistDelは即時に行わない。

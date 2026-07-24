@@ -696,7 +696,84 @@ const Api = {
     const LANG250 = {};
     LANG250.ja = new RegExp('[^\\u0020-\\u007E\\u2000-\\u206F\\u2100-\\u22FF\\u2460-\\u24FF\\u2500-\\u25FF\\u2600-\\u27BF\\u3000-\\u30FF\\u31F0-\\u31FF\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF\\uFF00-\\uFFEF\\s]', 'g');
     const LANG250_sealed = String.raw`
-      ja: /[^.length > 40) {
+      ja: /[^ - -⁯℀-⋿①-⓿─-◿☀-➿　-ヿㇰ-ㇿ㐀-䶿一-鿿豈-﫿＀-￯\s]/g
+    `;
+    void LANG250_sealed; /* 未使用警告避け */
+    let _lang250 = 'ja'; try { _lang250 = localStorage.getItem('v292Lang') || 'ja'; } catch (e) {}
+    const outChars = (cleaned.match(LANG250[_lang250] || LANG250.ja) || []).length;
+    return outChars >= 3 || enMatches >= 3 || zhMatches >= 2; /* v292Dfix250: outChars=許可セット外(越語等)。enMatchesは既存正規表現が空クラスで常に0=実質死文だが互換のため残置 */
+  },
+
+  async _callOpenRouter(system, userContent, maxTok, opts = {}) {
+    const key = this.normalize(S.cfg.orKey);
+    if (!key) throw new Error('OpenRouter APIキーが設定されていません（sk-or-... 形式）');
+    const model = S.cfg.orModel || 'deepseek/deepseek-v4-flash'; /* v292Dfix272: 空時フォールバックをEuryale遺物→DS Flash(orModel消失時の意図外モデル課金防止) */
+    console.log('[OpenRouter] model:', model);
+
+    const maxRetries = 2;
+    let lastResult = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const id = ++S.reqId;
+      S.inFlight = true;
+      const ctrl = new AbortController();
+      const tid  = setTimeout(() => ctrl.abort(), 150000) /* v292Dfix268: 60s→150s(DeepSeek長文+プロキシ+内部リトライで60s天井に当たる実測) */;
+      let res;
+      try {
+        const body = {
+          model,
+          max_tokens: maxTok,
+          temperature: 0.85,
+          top_p: 0.95,
+          frequency_penalty: 0.4,
+          presence_penalty: 0.4,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user',   content: userContent }
+          ]
+        };
+        // Tier 1: OpenRouter の JSON モード（Hermes 系のみ。Llama 微調整系は対象外）
+        if (/hermes/i.test(model)) {
+          /* v292Dfix87: disabled json_object - fix58 outputs prose, not JSON */ void 0;
+        }
+        res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${key}`,
+            'HTTP-Referer': 'https://sansan2103-a11y.github.io/chronicle/',
+            'X-Title': 'Chronicle TRPG'
+          },
+          body: JSON.stringify(body),
+          signal: ctrl.signal
+        });
+      } finally { clearTimeout(tid); S.inFlight = false; }
+
+      if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(`OpenRouter HTTP ${res.status}: ${t.slice(0,200)}`); }
+      const json = await res.json();
+      if (id !== S.reqId) return null;
+      const text = (json.choices?.[0]?.message?.content || '').trim();
+      if (!text) throw new Error('OpenRouterから出力がありませんでした');
+
+      lastResult = { text, body: null };
+
+      // v292 Tier 1.5 Fix G: also retry on incomplete Hermes responses
+      // (response missing narrative key, or contains "省略" laziness marker)
+      // v292Dfix170A: opts.allowShort=true のコール(genConvLog等の設計上短い出力)は不完全判定を免除。
+      // v292Dfix170C: 「短い」だけでリトライせず、タグ(<state>/<react>/<say>等)と記号を除いた
+      //   実質の地の文が極端に少ない時だけ不完全とみなす。#77はproseが書けてるのにタグ混在で
+      //   parseが捨てるケース=raw にproseは在る→salvage155が後で救済するのでリトライ不要。
+      //   これでsysサイズ起因の不要リトライ(=毎ターン裏で再生成→遅延)を削減。
+      const _proseLen = String(text).replace(/<[^>]+>/g, '').replace(/[「」『』\s　\[\]{}",:|]/g, '').length;
+      // v292Dfix186: 直前ターンとほぼ同一の生成（「続きを書く」等でモデルが前ターン本文を
+      //   そのままコピー／再記述する現象）を検出してリトライする。短い生成は _proseLen<40 で
+      //   既に弾けるが、長いコピーはすり抜けるのでここで前ターンとの類似度を見る。
+      let _isCopy = false;
+      try {
+        if (!opts.allowShort && S.turns && S.turns.length) {
+          const _pn = (function(t){ const n = t && t.narrative; return Array.isArray(n) ? n.join('') : String(n || ''); })(S.turns[S.turns.length - 1]).replace(/<[^>]+>/g, '').replace(/\s+/g, '');
+          const _nn = String(text).replace(/<[^>]+>/g, '').replace(/\s+/g, '');
+          if (_pn.length > 40 && _nn.length > 40) {
             const _L = Math.min(_pn.length, _nn.length);
             let _m = 0; for (let _k = 0; _k < _L; _k++) { if (_pn[_k] === _nn[_k]) _m++; }
             if (_m / Math.max(_pn.length, _nn.length) > 0.8) _isCopy = true;
