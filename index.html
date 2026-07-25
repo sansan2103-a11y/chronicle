@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260725-fix553c';
+  var BUILT = '20260725-fix553d';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2732,7 +2732,7 @@ G.init();
      ★fetchラッパを持つ他のfix(80/464/476/482)より【前】に置くこと。
      それらは new Response で応答を作り直すので、後から読み込むと「出口ガード後の本文」しか見えず
      モデルの生出力が取れない。本文は1文字も書き換えない。OFF=v292Dfix553Off -->
-<script src="v292Dfix553-punct-probe.js?cb=v292Dfix553c"></script>
+<script src="v292Dfix553-punct-probe.js?cb=v292Dfix553d"></script>
 <!-- v292Dfix484: 画風決定権の一本化。fix247の【直前】に読み込むこと(=fetchチェーン最内側・実送信直前でstyle6正規化)。既定ON・緊急OFF=v292Dfix484Off・診断=v292Dfix484Diag -->
 <script src="v292Dfix499-freeget-style-canon.js?cb=v292Dfix499"></script>
 <script src="v292Dfix484-style-canon.js?cb=v292Dfix486"></script>

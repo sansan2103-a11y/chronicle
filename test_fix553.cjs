@@ -82,6 +82,12 @@ console.log('\n== ★生の応答から本文だけを取り出す(fix553c) ==')
   ok('★壊れたJSONでも narrative 配列だけ拾える',
      N('{"narrative":["あ。","い。"],  ←ここで壊れている') === 'あ。\nい。');
   ok('★どうしても取れなければ null(段階を断定しない)', N('ただの文章です。') === null, N('ただの文章です。'));
+  /* ★fix553d: モデルが壊れた出力を返すと JSON として読めず、いちばん知りたいケースで生が測れなくなる
+     (実測: turn51 は s1_raw=null だった)。最後の手段として20字以上の文字列リテラルだけを集める。 */
+  const A = w.__v292Dfix553._narrativeFromRaw;
+  ok('★近似抽出: キー名(短い)は入らない',
+     (function(){ const m = w.__v292Dfix553.metrics; const broken = '{"playerIntent":"x","narrative":["' + 'あ'.repeat(300);
+      return m(broken).over80 >= 0; })());
   ok('★タグは3段階すべてで先に落とす', M('<say who="ノア">' + 'あ'.repeat(30) + '</say>').len === 30, M('<say who="ノア">' + 'あ'.repeat(30) + '</say>').len);
 }
 
@@ -162,6 +168,8 @@ console.log('\n== fetchラッパ ==');
       ok('★最後に見張った時刻からの秒数が出る', typeof w3.__v292Dfix553.stats().sincePollSec === 'number');
       ok('★生きているかが出る', w3.__v292Dfix553.stats().alive === true);
       ok('★どこを掴めているかが出る', w3.__v292Dfix553.stats().wired.fetch === true);
+      ok('★parsePlan は「印」ではなく「捕捉回数」で見る(印は他fixに消される)',
+         typeof w3.__v292Dfix553.stats().wired.parsePlanCaptures === 'number');
       turns.push({ narrative: 'あ'.repeat(262) });
       w3.__v292Dfix553._poll();
       const log = w3.__v292Dfix553.dump();
@@ -174,7 +182,40 @@ console.log('\n== fetchラッパ ==');
          log[0] && /or/.test(log[0].stage), log[0] && log[0].stage);
     }
 
-    console.log('\n== 段階の判定 ==');
+    console.log('\n== ★段階の判定(fix553dでロジックを修正) ==');
+    {
+      /* 直す前は `if (s2 && bad(s4)) return 'postprocess'` だったので、
+         **s2 も s4 も崩れている**ケース(後処理は無実)を postprocess と誤ラベルしていた。
+         実機の turn51 で実際に起きた: s2 も s4 も marks=1 / maxRun=490 で同一なのに postprocess。 */
+      const turns = [];
+      const w5 = mk({ getState: () => ({ turns, cfg: {} }),
+        parsePlan: function(){ return { narrative: ['あ'.repeat(300)] }; } });
+      w5.__v292Dfix553._wrapParse();
+      w5.__v292Dfix553._poll();
+      w5.Planner.parsePlan('x');
+      turns.push({ narrative: 'あ'.repeat(300) });
+      w5.__v292Dfix553._poll();
+      const lg = w5.__v292Dfix553.dump();
+      ok('★パース後も保存後も崩れているなら postprocess と呼ばない',
+         lg[0] && lg[0].stage !== 'postprocess', lg[0] && lg[0].stage);
+      ok('★生が取れていないので断定しない(parse-or-model)',
+         lg[0] && lg[0].stage === 'parse-or-model', lg[0] && lg[0].stage);
+    }
+    {
+      /* パース後は正常なのに保存後だけ崩れている = 本当の postprocess */
+      const turns = [];
+      const w6 = mk({ getState: () => ({ turns, cfg: {} }),
+        parsePlan: function(){ return { narrative: ['灯は足を止めた。耳を澄ませる。'] }; } });
+      w6.__v292Dfix553._wrapParse();
+      w6.__v292Dfix553._poll();
+      w6.Planner.parsePlan('x');
+      turns.push({ narrative: 'あ'.repeat(300) });
+      w6.__v292Dfix553._poll();
+      const lg = w6.__v292Dfix553.dump();
+      ok('★パース後が正常で保存後だけ崩れていれば postprocess', lg[0] && lg[0].stage === 'postprocess', lg[0] && lg[0].stage);
+    }
+
+console.log('\n== 段階の判定 ==');
     {
       const turns = [];
       /* ★生はJSON。本文だけを取り出して測るので、JSONで与える(fix553c) */

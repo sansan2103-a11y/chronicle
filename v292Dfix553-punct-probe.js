@@ -76,12 +76,17 @@
   var stats = { turns: 0, flagged: 0, polls: 0, lastPollTs: 0,
                 byStage: { model: 0, parse: 0, postprocess: 0, unknown: 0 } };
 
+  /* ★fix553d(2026-07-25・実機で誤ラベルしたので修正):
+     「前の段階が**正常だったのに**次の段階で崩れた」ときだけ、その段階を犯人と呼ぶ。
+     直す前は `if (s2 && bad(s4)) return 'postprocess'` だったので、
+     **s2 も s4 も崩れている**ケース(=後処理は無実)を postprocess と呼んでいた。
+     実際に turn51 でそれが起きた(s2 も s4 も marks=1 / maxRun=490 で同一なのに postprocess と出た)。 */
   function stageOf(s1, s2, s4){
-    if (bad(s1)) return 'model';
-    if (s1 && bad(s2)) return 'parse';
-    if (s2 && bad(s4)) return 'postprocess';
-    if (bad(s2)) return 'parse-or-model';   /* 生を取れなかったとき */
-    if (bad(s4)) return 'postprocess-or-earlier';
+    if (bad(s1)) return 'model';                                  /* 生の時点で崩れている */
+    if (s1 && !bad(s1) && bad(s2)) return 'parse';                /* 生は正常 → パース段で崩れた */
+    if (s2 && !bad(s2) && bad(s4)) return 'postprocess';          /* パース後は正常 → 後段で崩れた */
+    if (!s1 && bad(s2)) return 'parse-or-model';                  /* 生が取れていない */
+    if (!s2 && bad(s4)) return 'postprocess-or-earlier';          /* パース後が取れていない */
     return 'unknown';
   }
 
@@ -138,6 +143,22 @@
     }
     return null;
   }
+  /* ★fix553d: モデルが壊れた出力を返すと JSON として読めず、上の2手が両方失敗して
+     **いちばん知りたいケースで生が測れなくなる**(実測: turn51 は s1_raw=null だった)。
+     最後の手段として「20字以上の文字列リテラルだけ」を集める。キー名は短いので入らず、
+     構造記号も入らないので、JSONそのものを測る誤検出は起きない。近似なので approx を立てる。 */
+  function narrativeApprox(t){
+    var s = String(t == null ? '' : t);
+    var lits = s.match(/"(?:[^"\\]|\\.)*"/g);
+    if (!lits) return null;
+    var out = [];
+    for (var i = 0; i < lits.length; i++){
+      var v = null;
+      try { v = JSON.parse(lits[i]); } catch(e){ v = lits[i].slice(1, -1); }
+      if (typeof v === 'string' && v.length >= 20) out.push(v);
+    }
+    return out.length ? out.join('\n') : null;
+  }
 
   function pickFinish(json){
     try {
@@ -171,9 +192,11 @@
                 try {
                   var t = pickText(j);
                   if (t && t.length > 200){        /* 会話ログ(短いJSON配列)は拾わない */
-                    var body = narrativeFromRaw(t);
+                    var body = narrativeFromRaw(t), approx = false;
+                    if (body == null){ body = narrativeApprox(t); approx = (body != null); }
                     lastRaw = { metrics: body == null ? null : metrics(body),
                                 bodyLen: body == null ? null : body.length,
+                                approx: approx,
                                 finish: pickFinish(j), model: pickModel(j), ts: Date.now() };
                   }
                 } catch(e){}
@@ -195,7 +218,13 @@
 
   /* ---- ②パース直後をとる(Planner.parsePlan を包む) --------------------- */
   var lastParsed = null;
+  var parsedCaptures = 0;
 
+  /* ★fix553d: parsePlan は他のfix(fix155/159/427など)が後から包み直すことがあり、
+     そのとき own props を継承しないので `__f553` が消える。fetch と違って
+     **parsePlan は最外殻の方が正しい**(submit() が実際に受け取る plan を測りたいため)。
+     よって消えていたら包み直してよい。ただし「掴めているか」は
+     __f553 の有無ではなく **実際に捕捉した回数** で見る(印だけ見ると false negative になる)。 */
   function wrapParse(){
     try {
       var P = window.Planner || (function(){ try { return (0,eval)('typeof Planner!=="undefined"?Planner:null'); } catch(e){ return null; } })();
@@ -206,6 +235,7 @@
         try {
           if (!off() && r && Array.isArray(r.narrative)){
             lastParsed = { metrics: metrics(r.narrative.join('\n')), n: r.narrative.length, ts: Date.now() };
+            parsedCaptures++;
           }
         } catch(e){}
         return r;
@@ -249,6 +279,7 @@
         stage: stageOf(s1, s2, s4),
         s1_raw: s1, s2_parsed: s2, s4_saved: s4,
         rawBodyLen: lastRaw ? lastRaw.bodyLen : null,
+        rawApprox: lastRaw ? !!lastRaw.approx : null,
         finish: lastRaw ? lastRaw.finish : null,
         model: (lastRaw && lastRaw.model) || (st.cfg && (st.cfg.orModel || st.cfg.model)) || null,
         outLen: (function(){ try { return lsg('v100_outputLen') || (st.cfg && st.cfg.outLen) || null; } catch(e){ return null; } })(),
@@ -264,9 +295,10 @@
     /* Planner は index.html の読み込み後に出来るので、出来るまで待つ(最大60秒) */
     (function tryParse(n){
       if (off()) return;
-      if (wrapParse()) { try { console.log(TAG, 'parsePlan wrapped'); } catch(e){} return; }
-      if (n > 120) return;
-      setTimeout(function(){ tryParse(n + 1); }, 500);
+      if (wrapParse()) { try { console.log(TAG, 'parsePlan wrapped'); } catch(e){} }
+      else if (n > 120) return;
+      /* ★包めても止めない: 他のfixが包み直して外れることがあるので見張り続ける */
+      setTimeout(function(){ tryParse(n + 1); }, n > 120 ? 5000 : 500);
     })(0);
     setInterval(poll, 3000);
     try { console.log(TAG, 'ready (読み取り専用・本文は書き換えない)'); } catch(e){}
@@ -281,7 +313,10 @@
                polls: stats.polls,
                sincePollSec: stats.lastPollTs ? Math.round((Date.now() - stats.lastPollTs) / 1000) : null,
                alive: !!stats.lastPollTs && (Date.now() - stats.lastPollTs) < 120000,
-               wired: { fetch: installed, parsePlan: !!(function(){ try { var P = window.Planner; return P && P.parsePlan && P.parsePlan.__f553; } catch(e){ return false; } })() } };
+               /* ★印(__f553)の有無ではなく「実際に捕捉した回数」で見る。
+                  他のfixが包み直すと印は消えるが、こちらのラッパは鎖の中で生きている。 */
+               wired: { fetch: installed, parsePlanCaptures: parsedCaptures,
+                        parsePlanMarked: !!(function(){ try { var P = window.Planner; return P && P.parsePlan && P.parsePlan.__f553; } catch(e){ return false; } })() } };
     },
     clear: function(){ try { localStorage.removeItem(LOG); } catch(e){} return true; },
     off: off,
