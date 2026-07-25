@@ -227,6 +227,59 @@
 
   // say=台詞本文, prev/next=前後の地の文, prevSand=直前行のさらに前も台詞行
   // 返り値: { sc: {name:点}, hard: {name:最大単一証拠点} }
+  /* ★fix542(2026-07-25・GPT裁定): 引用の**直前の地の文**を構文タイプへ分類し、
+       「Xの声が掠れた/響いた/落ちた」型だけを**次の1件限りの発話アンカー**として扱う。
+     由来(実データ・離島17T T8 #2): 直前が「大浦の声が掠れている。」なのに、
+       prev側の証拠は 25点・hardなし で、台詞が涼太のまま残った(next側なら voiceAfter=115)。
+       **前後で重みが極端に非対称**なのが直接原因。
+     GPTが一律hard化を却下した理由(そのまま採用):
+       ・「Xの声に、Yは〜」     → X は**聞かれた側**。次の話者候補は Y
+       ・「Xの声を遮ってYが〜」 → 次の話者候補は Y
+       ・「Xの声を思い出した」   → 現在の話者証拠ではない
+       単なる文字列一致ではなく、この4型を分けてから使う。
+     この版は **分類器と診断だけ**。得点・判定には一切影響させない(GPTの出荷順①)。
+     読出: window.__v292Dfix469.preQuoteAnchor(prevLine, names) */
+  var PQ_SELF  = /(の(?:声|囁き|呟き|返事|問い)が)[^。]{0,12}?(掠れ|震え|響|落ち|上が|漏れ|飛|続|重な|割り込|滑り出|零れ|こぼれ|走|届)/;
+  var PQ_TO    = /(の(?:声|囁き|呟き|問い|言葉|質問|発言))(?:に|へ)(?:対して)?[、,]/;
+  var PQ_CUT   = /(の(?:声|言葉|話))を(?:遮|さえぎ|かき消|押しのけ)/;
+  var PQ_RECAL = /(の(?:声|言葉))を(?:思い出|反芻|反復|覚え)/;
+  /* 「大浦は門のプレートから指を離さないまま、口を開いた」のように主語と述語が離れるので
+     助詞との隣接は要求しない。直前に出てくる**最も近い登場人物名**を主体とみなす。
+     「Xの声に、Yは口を開いた」型は PQ_TO が先に use:false を返すので安全側に倒れる。 */
+  var PQ_OPEN  = /(?:口を開|口を切|声を(?:上げ|あげ|出し|落と|潜め|ひそめ))/;
+  function preQuoteAnchor(prevLine, names){
+    var line = String(prevLine || '');
+    if (!line) return null;
+    function whoAt(re){
+      var m = line.match(re); if (!m) return null;
+      var head = line.slice(0, m.index);
+      var best = null;
+      for (var i = 0; i < names.length; i++){
+        var n = names[i]; if (!n) continue;
+        var cands = [n];
+        if (n.indexOf(' ') > 0){ var pp = n.split(/[\s　]+/); cands = cands.concat(pp); }
+        for (var j = 0; j < cands.length; j++){
+          var pos = head.lastIndexOf(cands[j]);
+          if (pos >= 0 && (!best || pos > best.pos)) best = { name: n, pos: pos };
+        }
+      }
+      return best ? best.name : null;
+    }
+    /* 「Xの声を思い出した」= 証拠ではない。最優先で除外 */
+    if (PQ_RECAL.test(line)) return { kind: 'recalled', name: null, use: false };
+    /* 「Xの声を遮ってYが〜」= 次の話者は Y(遮った側) */
+    if (PQ_CUT.test(line)) return { kind: 'interrupted', name: null, use: false };
+    /* 「Xの声に、Yは〜」= X は聞かれた側 */
+    if (PQ_TO.test(line)) return { kind: 'addressed-to', name: null, use: false };
+    /* 「Xの声が掠れた/響いた/落ちた」= X が話し手 */
+    var w = whoAt(PQ_SELF);
+    if (w) return { kind: 'pre-quote-voice', name: w, use: true, confidence: 'hard' };
+    /* 「Xは口を開いた」= 発話開始アンカー */
+    w = whoAt(PQ_OPEN);
+    if (w) return { kind: 'pre-quote-open', name: w, use: true, confidence: 'hard' };
+    return null;
+  }
+
   function score(say, prev, next, tokens, profs, prevSand){
     var sc = {}, hard = {};
     function add(n, v){ sc[n] = (sc[n] || 0) + v; }
@@ -702,6 +755,7 @@
   try { setTimeout(tick, 4000); setInterval(tick, 2500); } catch(e){}
 
   window.__v292Dfix469 = { stats: _stats,
+    preQuoteAnchor: preQuoteAnchor,   /* ★fix542 分類器(診断のみ・判定には未接続) */
     __armed: true, __v: 2, profiles: profiles, tokensOf: tokensOf, extraTokens: extraTokens,
     score: score, decide: decide, planTurn: planTurn, repair: repair,
     dryRun: function(){
