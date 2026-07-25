@@ -62,6 +62,7 @@
         }
         unsaved.count++;
         showBanner();
+        enforceSendDisabled();   /* ★fix546 */
       }
     } catch(e){}
   }
@@ -84,9 +85,27 @@
   var unsaved = { active: false, key: '', since: 0, count: 0 };
   var bannerEl = null;
 
+  /* ★fix546: 未保存の間は送信ボタンを押せなくする(見た目)。実際の関門は index.html の G.submit 側。
+     setLoading() が毎回 disabled を書き戻すので、未保存の間は定期的に押し直す。 */
+  function enforceSendDisabled(){
+    try {
+      if (off()) return;
+      var b = document.getElementById('sendBtn'); if (!b) return;
+      if (unsaved.active){ if (!b.disabled) b.disabled = true; }
+    } catch(e){}
+  }
+  function releaseSend(){
+    try {
+      var b = document.getElementById('sendBtn'); if (!b) return;
+      /* 生成中(inFlight)の disabled まで解除しないよう、本文が「送信」表記のときだけ戻す */
+      if (b.disabled && /送信/.test(b.textContent || '')) b.disabled = false;
+    } catch(e){}
+  }
+
   function clearUnsaved(){
     try {
       unsaved.active = false; unsaved.key = ''; unsaved.count = 0;
+      releaseSend();
       if (bannerEl && bannerEl.parentNode) bannerEl.parentNode.removeChild(bannerEl);
       bannerEl = null;
       try { console.log(TAG, '保存に成功したので未保存表示を解除'); } catch(e){}
@@ -210,6 +229,7 @@
   wrap();
   try { setTimeout(wrap, 800); setTimeout(wrap, 3000); setInterval(wrap, 5000); } catch(e){}
   try { setTimeout(checkLowWater, 6000); setInterval(checkLowWater, 5 * 60 * 1000); } catch(e){}
+  try { setInterval(function(){ if (unsaved.active) enforceSendDisabled(); }, 700); } catch(e){}   /* ★fix546 */
 
   window.__v292Dfix543 = {
     stats: function(){ try { return JSON.parse(JSON.stringify(stats)); } catch(e){ return null; } },

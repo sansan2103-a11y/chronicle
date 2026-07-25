@@ -180,6 +180,52 @@ console.log('\n== fix545: 物語の保存失敗は常設の「未保存」表示
      w.__v292Dfix543.unsaved());
 }
 
+console.log('\n== fix546: 未保存の間は次のターンを作らせない ==');
+{
+  const w = mk({ quota: 200 });
+  const btn = { id:'sendBtn', disabled:false, textContent:'送信 ▶' };
+  w.__nodes['sendBtn'] = btn;
+  try { w.localStorage.setItem('chr6_slot_a', new Array(500).join('x')); } catch (e) {}
+  ok('★未保存になると送信ボタンが押せなくなる', btn.disabled === true, btn);
+}
+{
+  const w = mk({ quota: 1000 });
+  const btn = { id:'sendBtn', disabled:false, textContent:'送信 ▶' };
+  w.__nodes['sendBtn'] = btn;
+  try { w.localStorage.setItem('chr6_slot_a', new Array(2000).join('x')); } catch (e) {}
+  ok('前提: 押せない', btn.disabled === true);
+  w.localStorage.setItem('chr6_slot_a', 'small');
+  ok('★保存に成功したら押せるようになる', btn.disabled === false, btn);
+}
+{
+  /* 生成中の disabled まで解除しない(本文が「送信」のときだけ戻す) */
+  const w = mk({ quota: 1000 });
+  const btn = { id:'sendBtn', disabled:false, textContent:'送信 ▶' };
+  w.__nodes['sendBtn'] = btn;
+  try { w.localStorage.setItem('chr6_slot_a', new Array(2000).join('x')); } catch (e) {}
+  btn.textContent = '生成中…';
+  w.localStorage.setItem('chr6_slot_a', 'small');
+  ok('★生成中のボタンは勝手に有効化しない', btn.disabled === true, btn);
+}
+{
+  const w = mk({ quota: 200, off: true });
+  const btn = { id:'sendBtn', disabled:false, textContent:'送信 ▶' };
+  w.__nodes['sendBtn'] = btn;
+  try { w.localStorage.setItem('chr6_slot_a', new Array(500).join('x')); } catch (e) {}
+  ok('★OFFならボタンも塞がない', btn.disabled === false, btn);
+}
+{
+  /* index.html 側の関門(G.submit の入口)が入っていること */
+  const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'latin1');
+  const u8 = Buffer.from(html, 'latin1').toString('utf8');
+  const i = u8.indexOf('async submit() {');
+  const head = u8.slice(i, i + 900);
+  ok('★G.submit の入口で未保存を見ている', /__v292Dfix543[\s\S]{0,200}unsaved\(\)/.test(head), head.slice(0,120));
+  ok('★未保存なら return して生成させない', /_u\.active[\s\S]{0,220}return;/.test(head));
+  ok('★fix543 が読めない環境では通す(遊べなくしない)', /if \(_g && typeof _g\.unsaved === 'function'/.test(head));
+  ok('★OFFスイッチを尊重する', /!_g\.off\(\)/.test(head));
+}
+
 console.log('\n== fix543b: 空き測定のプローブを自分で数えない ==');
 {
   const w = mk({ quota: 100000 });
