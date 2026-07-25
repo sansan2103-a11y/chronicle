@@ -66,7 +66,9 @@
         transition:transform .12s,border-color .12s;position:relative}
   .card:hover{transform:translateY(-2px);border-color:rgba(139,118,240,.5)}
   .card.sel{border-color:var(--acc)}
-  .cover{height:132px;background:#161628;background-size:cover;background-position:center;position:relative}
+  .cover{height:132px;background:#161628;background-size:cover;background-position:center;position:relative;overflow:hidden}
+  .cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .45s}
+  .cover img.on{opacity:1}
   .cover .badge{position:absolute;top:8px;left:8px;font-size:10px;padding:3px 8px;border-radius:5px;
         background:rgba(8,8,16,.72);color:var(--tx);letter-spacing:.06em}
   .cbody{padding:11px 13px 13px}
@@ -189,7 +191,31 @@
       favorite: !!m.favorite, scene: d.scene || null, meta: m
     };
   }
-  function all(){ return readMeta().filter(function(m){ return m && m.id; }).map(story); }
+  // 互換用の内部スロット 'default'(chr6) は、中身が無い限り一覧に出さない
+  function all(){
+    return readMeta().filter(function(m){ return m && m.id; }).map(story)
+      .filter(function(x){ return x.id !== 'default' || x.turns > 0; });
+  }
+
+  // 表紙は無料GET(image.pollinations.ai)。同時に殺到するとrate-limitされるので
+  // カードごとに少しずらして読み、失敗したら間隔を空けて2回まで再試行する(fix310と同じ作法)。
+  function mountCovers(root){
+    var cs = (root||document).querySelectorAll('.cover[data-cover]');
+    for (var i=0;i<cs.length;i++){
+      (function(c, idx){
+        var url = c.getAttribute('data-cover'); if(!url) return;
+        c.removeAttribute('data-cover');
+        var img = new Image(), tries = 0;
+        img.alt='';
+        img.addEventListener('load', function(){ if(img.naturalWidth>0) img.classList.add('on'); });
+        img.addEventListener('error', function(){
+          if(tries<2){ tries++; setTimeout(function(){ img.src = url+'&r='+tries+'_'+Date.now(); }, 1500*tries + Math.random()*800); }
+        });
+        c.appendChild(img);
+        setTimeout(function(){ img.src = url; }, idx*420);
+      })(cs[i], i);
+    }
+  }
 
   function ago(ms){
     if(!ms) return '—';
@@ -259,9 +285,8 @@
         var u = coverUrl(x.id, x.scene);
         var chars = [].concat(x.hero?[x.hero]:[], x.npcs).filter(Boolean).slice(0,4);
         return '<div class="card'+(SEL===x.id?' sel':'')+'" data-id="'+esc(x.id)+'">'+
-          '<div class="cover" style="background-image:'+(u?"url('"+u+"')":'none')+';background-color:transparent;'+
-            (u?'':'background:'+gradient(x.name)+';')+'">'+
-            '<div class="badge">'+(x.turns>0?'進行中':'未開始')+'</div></div>'+
+          '<div class="cover" style="background:'+gradient(x.name)+'"'+(u?' data-cover="'+esc(u)+'"':'')+'>'+
+            '<div class="badge" style="z-index:2">'+(x.turns>0?'進行中':'未開始')+'</div></div>'+
           '<div class="cbody"><div class="ctitle">'+esc(x.name)+'</div>'+
           '<div class="csum">'+esc(x.summary||'')+'</div>'+
           '<div class="cchars">'+chars.map(function(c,i){ return avatar(c.name,i); }).join('')+
@@ -270,6 +295,7 @@
       }).join('') + '<div class="newcard" id="newCard"><div class="plus">＋</div>新しい物語を始める<div style="font-size:11px;margin-top:4px;opacity:.7">空の世界から始める</div></div>';
     }
     renderDetail(full);
+    mountCovers(document);
   }
 
   function renderDetail(full){
