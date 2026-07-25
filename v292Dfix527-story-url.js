@@ -126,30 +126,35 @@
       }
     } catch(e){}
   }
+  // ★おしん要望(2026-07-25): トップバーの「セーブ」を「ホーム」に置き換える。
+  //   物語の一覧・読込・新規作成・削除・書き出し/取り込み・同期は すべてホームへ集約したため、
+  //   物語画面にセーブ管理を残す理由が無い(元のボタンは display:none で残す＝他fixのanchor探索を壊さない)。
   function injectHomeButton(){
     try {
-      if (document.getElementById('v527-home')) return true;
       var anchor = document.querySelector('[title^="セーブ管理"]') || document.getElementById('v30-topbar-btn');
       if (!anchor || !anchor.parentNode) return false;
+      if (document.getElementById('v527-home')){ anchor.style.display = 'none'; return true; }
       var b = document.createElement('button');
       b.id = 'v527-home';
       b.type = 'button';
-      b.textContent = '← ホーム';
+      b.textContent = '🏠 ホーム';
       b.title = 'ホームへ戻る（今の物語は自動保存されます）';
       try { b.className = anchor.className || ''; } catch(e){}
-      b.style.cssText = 'margin-right:8px;cursor:pointer';
+      b.style.cssText = (anchor.getAttribute('style') || '') + ';cursor:pointer';
       b.addEventListener('click', function(){
         try { var S = window.S || (0,eval)('typeof S!=="undefined"?S:null'); if (S && typeof S.save === 'function') S.save(); } catch(e){}
-        setTimeout(function(){ try { location.href = HOME; } catch(e){} }, 120);
+        setTimeout(function(){ try { location.href = HOME; } catch(e){} }, 150);
       });
       anchor.parentNode.insertBefore(b, anchor);
+      anchor.style.display = 'none';                 // 「セーブ」を隠して同じ位置に「ホーム」を置く
+      try { console.log(TAG, 'topbar: セーブ → ホーム'); } catch(e){}
       return true;
     } catch(e){ return false; }
   }
   function watchUI(){
     try {
       hideLoadButtons(document);
-      var mo = new MutationObserver(function(){ hideLoadButtons(document); });
+      var mo = new MutationObserver(function(){ hideLoadButtons(document); injectHomeButton(); });
       mo.observe(document.body, { childList: true, subtree: true });
     } catch(e){}
     (function poll(){
@@ -161,11 +166,18 @@
   }
 
   // ---- boot -------------------------------------------------------------
+  function bootUI(){
+    // ★UI(セーブ→ホーム / 読込を隠す)は ?story= の有無にかかわらず出す。
+    //   旧URLで開いたままのタブからもホームへ戻れるようにするため。
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchUI, { once: true });
+    else watchUI();
+  }
+
   function boot(){
     if (off()) { try { console.log(TAG, 'off'); } catch(e){} return; }
     var q = param();
-    if (!q) { try { console.log(TAG, 'no ?story= → 旧互換モード'); } catch(e){} return; }
-    if (!metaIds()[q]) { try { console.warn(TAG, 'unknown story id in URL → 旧互換モード'); } catch(e){} return; }
+    if (!q) { try { console.log(TAG, 'no ?story= → 旧互換モード(UIのみ適用)'); } catch(e){} bootUI(); return; }
+    if (!metaIds()[q]) { try { console.warn(TAG, 'unknown story id in URL → 旧互換モード(UIのみ適用)'); } catch(e){} bootUI(); return; }
 
     storyId = q;
     window.__chronicleStoryId = storyId;
@@ -189,8 +201,7 @@
       setTimeout(poll, 500);
     })();
 
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchUI, { once: true });
-    else watchUI();
+    bootUI();
 
     try { console.log(TAG, 'story=' + storyId + ' (URL authoritative)'); } catch(e){}
   }
