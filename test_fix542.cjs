@@ -81,6 +81,32 @@ console.log('\n== fix542: 発話開始アンカー ==');
   ok('名だけの表記でも正名へ寄る', r && r.name === '大浦 源蔵', r);
 }
 
+console.log('\n== fix542: ★post-quote帰属の実データ並びを固定する(GPT指定) ==');
+{
+  /* 実データ(廃墟遊園地38ターン・ターン20)。この物語は**引用のあとに話者を書く**型。
+     「カエデの声が、後ろから届く。」は**1つ前の引用**の帰属文であって、
+     次の引用「棚、まだ……」(ノア)の証拠ではない。
+     ここを取り違えると**正しいカードを壊す**ので、判定へ接続しないことを本テストで保証する。 */
+  const seq = [
+    '「……何を見てる」',
+    'カエデの声が、後ろから届く。彼女の足音はない。アリアの視線の先を、探るようにして見ている。',
+    '「棚、まだ……」',
+    'ノアの声が震えている。彼女は棚を支えたまま、アリアの背中を見ている。',
+    '「……鏡が、動いてない」',
+    'アリアの声は、掠れていた。'
+  ];
+  const names = ['アリア・リュミエール', 'カエデ', 'ノア', 'ヒナ'];
+  const anchorFor = (quoteIdx) => w.__v292Dfix469.preQuoteAnchor(seq[quoteIdx - 1], names);
+  const a2 = anchorFor(2);   /* 「棚、まだ……」の直前 = カエデの帰属文 */
+  ok('分類器は「カエデの声が…」を pre-quote-voice と読む(分類自体は正しい)',
+     a2 && a2.kind === 'pre-quote-voice' && a2.name === 'カエデ', a2);
+  const src = fs.readFileSync(path.join(__dirname, 'v292Dfix469-speaker-score.js'), 'utf8');
+  ok('★だが判定へ接続していないので「棚、まだ……」はノアのまま(壊さない)',
+     src.slice(src.indexOf('function score('), src.indexOf('function decide(')).indexOf('preQuoteAnchor') < 0);
+  ok('★接続する場合は「直前行が前の引用の帰属文でない」判定が先に要る(未実装であることを明示)',
+     src.indexOf('preQuoteAnchorWired') < 0);
+}
+
 console.log('\n== fix542: 判定へ影響していないこと(この版は診断のみ) ==');
 {
   const src = fs.readFileSync(path.join(__dirname, 'v292Dfix469-speaker-score.js'), 'utf8');
