@@ -77,9 +77,12 @@
   (function castLock(){
     function getCastRoster(){
       try {
-        var st = (typeof S !== 'undefined' && S) ? S
+        /* ★fix551(2026-07-25・features.js 分類1「純粋な状態取得」): 正式API(fix539)を先頭に。
+           以降の経路(lexical S → window.S)はそのまま。**追加のみ**で挙動は変わらない。 */
+        var st = (function(){ try { var a = window.__chronicleGetState ? window.__chronicleGetState('features') : null; if (a) return a; } catch(e){} return null; })()
+               || ((typeof S !== 'undefined' && S) ? S
                : (typeof window !== 'undefined' && window.S) ? window.S
-               : null;
+               : null);
         if (!st || !st.cast) return [];
         var names = [];
         if (st.cast.hero && st.cast.hero.name){
@@ -2091,9 +2094,12 @@
       var cast = {};
       var names = [];
       try {
-        var st = (typeof S !== 'undefined' && S) ? S
+        /* ★fix551(2026-07-25・features.js 分類1「純粋な状態取得」): 正式API(fix539)を先頭に。
+           以降の経路(lexical S → window.S)はそのまま。**追加のみ**で挙動は変わらない。 */
+        var st = (function(){ try { var a = window.__chronicleGetState ? window.__chronicleGetState('features') : null; if (a) return a; } catch(e){} return null; })()
+               || ((typeof S !== 'undefined' && S) ? S
                : (typeof window !== 'undefined' && window.S) ? window.S
-               : null;
+               : null);
         if (st && st.cast) cast = st.cast;
         if (cast.hero && cast.hero.name) names.push(cast.hero.name);
         if (Array.isArray(cast.npcs)) {
@@ -3833,6 +3839,10 @@
 
   function getState(){
     try {
+      /* ★fix551: 正式API(fix539)を先頭に。以降の経路は従来どおり(追加のみ)。 */
+      var a = window.__chronicleGetState ? window.__chronicleGetState('features') : null; if (a) return a;
+    } catch(e){}
+    try {
       if (typeof S !== 'undefined' && S) return S;
       if (typeof window !== 'undefined' && window.S) return window.S;
       return JSON.parse(localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6') || '{}');
@@ -4352,6 +4362,10 @@
   var TAG = '[v292:Dfix16]';
 
   function getState(){
+    try {
+      /* ★fix551: 正式API(fix539)を先頭に。以降の経路は従来どおり(追加のみ)。 */
+      var a = window.__chronicleGetState ? window.__chronicleGetState('features') : null; if (a) return a;
+    } catch(e){}
     try {
       if (typeof S !== 'undefined' && S) return S;
       if (typeof window !== 'undefined' && window.S) return window.S;

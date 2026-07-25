@@ -180,6 +180,25 @@ console.log('\n== バッチ3: 1件ずつ判断したもの(fix376 / fix445 / fix
      /else if \(!\(window\.S && window\.S\.turns\)\)\{ localStorage\.setItem/.test(s66));
 }
 
+console.log('\n== features.js 分類1「純粋な状態取得」だけを移行 ==');
+{
+  const f = fs.readFileSync(path.join(__dirname, 'features.js'), 'utf8');
+  ok('★分類1を4箇所だけ移行した', (f.match(/__chronicleGetState\('features'\)/g) || []).length === 4,
+     (f.match(/__chronicleGetState\('features'\)/g) || []).length);
+  ok('★従来の経路(lexical S → window.S)を全部残している',
+     /typeof S !== 'undefined' && S\) \? S/.test(f) && /typeof window !== 'undefined' && window\.S\) \? window\.S/.test(f));
+  ok('★localStorage フォールバックも残っている',
+     /JSON\.parse\(localStorage\.getItem\(window\.__chr6Key \? window\.__chr6Key\(\) : 'chr6'\)/.test(f));
+  /* ★分類5「window.S の有無で分岐する休眠ガード」は**1つも触らない**(GPT裁定) */
+  ok('★休眠ガード if(!window.S) は10箇所のまま(1つも触っていない)',
+     (f.match(/if \(!window\.S/g) || []).length === 10, (f.match(/if \(!window\.S/g) || []).length);
+  ok('★window.S を機能フラグとして使う分岐も残っている',
+     /if \(window\.S && window\.S\.cast\) return window\.S;/.test(f));
+  /* 残りの取得箇所は次スライス。今回触っていないことを固定する */
+  ok('★9002行型(var S = ... window.S ...)はまだ触っていない',
+     /var S = \(typeof window !== 'undefined' && window\.S\) \? window\.S : null;/.test(f));
+}
+
 console.log('\n== 台帳の更新（移行済みの数） ==');
 {
   const fs2 = fs;
@@ -192,7 +211,9 @@ console.log('\n== 台帳の更新（移行済みの数） ==');
   /* コア5 + バッチ1の8 + fix543 + バッチ2Aのfix192 = 15 */
   /* コア5 + バッチ1の8 + fix543 + fix192 + 保存ラッパ組3 = 18 */
   /* コア5 + バッチ1の8 + fix543 + fix192 + 保存ラッパ組3 + バッチ3の3 = 21 */
-  ok('★__chronicleGetState を参照するのは21ファイル', migrated === 21, migrated);
+  ok('★__chronicleGetState を参照するのは21ファイル(+features.js)', migrated === 21, migrated);
+  ok('★features.js も分類1だけ移行済み',
+     fs2.readFileSync(path.join(__dirname, 'features.js'), 'utf8').indexOf('__chronicleGetState') > 0);
 }
 
 console.log('\n---------------------------------------------');
