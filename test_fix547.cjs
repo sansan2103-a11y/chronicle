@@ -123,7 +123,32 @@ console.log('\n== バッチ2A: fix192（プロンプト生成）==');
   ok('★fix402 は localStorage.setItem をラップするので単独バッチへ回す',
      /localStorage\.setItem\s*=/.test(s3));
   ok('★fix402 は S.save もラップする(実行順に依存する)', /S\.save = function/.test(s3));
-  ok('★fix402 はまだ移行していない', s3.indexOf('__chronicleGetState') < 0);
+  /* fix402 はバッチ2A(単純取得)から外し、**保存ラッパ組(バッチ2B)**として移行した。
+     除外理由(setItemラップ / S.saveラップ)は上の2件で固定済み。 */
+  ok('★fix402 は保存ラッパ組として移行済み', s3.indexOf("__chronicleGetState('fix402')") > 0);
+}
+
+console.log('\n== バッチ2B: 保存ラッパ組(fix399 / fix402 / fix490) ==');
+{
+  const cases = [
+    ['v292Dfix399-cloudsync.js', 'fix399', "window.S \\|\\| \\(0,eval\\)\\('S'\\)"],
+    ['v292Dfix402-invisible-sync.js', 'fix402', "window.S \\|\\| \\(0,eval\\)\\('S'\\)"],
+    ['v292Dfix490-slot-write-guard.js', 'fix490', "window.S \\|\\| \\(0,eval\\)\\('typeof S"]
+  ];
+  cases.forEach(function (c) {
+    const s2 = fs.readFileSync(path.join(__dirname, c[0]), 'utf8');
+    ok(c[1] + ': 正式APIを第一経路にしている', s2.indexOf("__chronicleGetState('" + c[1] + "')") > 0);
+    ok(c[1] + ': ★従来の式をそのまま残す', new RegExp(c[2]).test(s2));
+  });
+  const s399 = fs.readFileSync(path.join(__dirname, 'v292Dfix399-cloudsync.js'), 'utf8');
+  const s402 = fs.readFileSync(path.join(__dirname, 'v292Dfix402-invisible-sync.js'), 'utf8');
+  const s490 = fs.readFileSync(path.join(__dirname, 'v292Dfix490-slot-write-guard.js'), 'utf8');
+  ok('★fix399: S.save のラップと冪等フラグに触れていない', /S\.__f399wrapped = true/.test(s399) && /S\.save = function/.test(s399));
+  ok('★fix402: S.save のラップと冪等フラグに触れていない', /S\.__f402wrapped = true/.test(s402) && /S\.save = function/.test(s402));
+  ok('★fix490: setItem ラッパの構造と __f490 に触れていない', /wrapped\.__f490 = true/.test(s490) && /localStorage\.setItem = wrapped/.test(s490));
+  ok('★fix399: 世代trimの形が保たれている', /while \(bks\.length > 1\)/.test(s399));
+  ok('★fix399: quota時の1回再試行が保たれている', /bks2\[0\]/.test(s399));
+  ok('★fix399: 控えが取れなければ false のまま', /catch\(e2\)\{ return false; \}/.test(s399));
 }
 
 console.log('\n== 台帳の更新（移行済みの数） ==');
@@ -136,7 +161,8 @@ console.log('\n== 台帳の更新（移行済みの数） ==');
   });
   /* コア5(fix277/469/409/145/77) + バッチ1の8 + fix543(再保存で状態を取りに行くため参照) = 14 */
   /* コア5 + バッチ1の8 + fix543 + バッチ2Aのfix192 = 15 */
-  ok('★__chronicleGetState を参照するのは15ファイル', migrated === 15, migrated);
+  /* コア5 + バッチ1の8 + fix543 + fix192 + 保存ラッパ組3 = 18 */
+  ok('★__chronicleGetState を参照するのは18ファイル', migrated === 18, migrated);
 }
 
 console.log('\n---------------------------------------------');

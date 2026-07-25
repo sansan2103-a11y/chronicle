@@ -169,7 +169,14 @@
       setTimeout(function(){ if (t.parentNode) t.parentNode.removeChild(t); }, 3200);
     } catch(e){}
   }
-  function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined"?S:null'); } catch(e){ return null; } }
+  /* ★fix549(2026-07-25): S の取得は index.html の正式API(fix539)を第一経路にする。
+     このファイルは localStorage.setItem をラップする(fix543 と同じ層)ので、
+     **取得経路だけ**を差し替え、ラッパの構造・順序・__f490 フラグには一切触れていない。
+     第二経路は従来の式をそのまま残す。 */
+  function getS(){
+    try { var a = window.__chronicleGetState ? window.__chronicleGetState('fix490') : null; if (a) return a; } catch(e){}
+    try { return window.S || (0,eval)('typeof S!=="undefined"?S:null'); } catch(e){ return null; }
+  }
   function buildPayloadRaw(){
     var S = getS();
     if (!S) return null;

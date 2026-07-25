@@ -452,7 +452,14 @@
   // ---- S.saveに相乗り(自前wrap・fix399のAutoOff結合と独立) ----
   function wrapSave(){
     try {
-      var S = window.S || (function(){ try { return (0,eval)('S'); } catch(e){ return null; } })();
+      /* ★fix549(2026-07-25): S の取得は index.html の正式API(fix539)を第一経路にする。
+         この関数は S.save をラップする(=実行順に依存する)ので、**取得経路だけ**を差し替え、
+         ラップの仕組み・順序・冪等フラグ(__f402wrapped)には一切触れていない。
+         第二経路は従来の式をそのまま残す(index.htmlが古いキャッシュでも挙動不変)。 */
+      var S = (function(){
+        try { var a = window.__chronicleGetState ? window.__chronicleGetState('fix402') : null; if (a) return a; } catch(e){}
+        try { return window.S || (0,eval)('S'); } catch(e){ return null; }
+      })();
       if (!S || typeof S.save !== 'function' || S.__f402wrapped) return !!(S && S.__f402wrapped);
       var os = S.save.bind(S);
       S.save = function(){ var r = os.apply(this, arguments); try { markDirty(); } catch(e){} return r; };
