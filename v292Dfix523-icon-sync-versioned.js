@@ -89,6 +89,9 @@
   }
 
   // ---------- PUSH（ローカルをサーバーへ・条件付きputimg・409ならPULL） ----------
+  // ★fix525(2026-07-25): 409(image-conflict)→GET /img が404だと rev を採らないまま同じ
+  //   baseImageRev で再送し続ける無限ループになっていた(実機コンソールで 409/404 が連続)。
+  var conflictN = {}, CONFLICT_MAX = 3;
   function pushOne(pk, done){
     var v = localAv(pk); if (!v || !_fetch){ if (done) done(false); return; }
     sending[pk] = true;
@@ -99,7 +102,16 @@
         if (res.status === 409 || (res.j && res.j.errorCode === 'image-conflict')){
           var sr = (res.j && res.j.serverRev != null) ? res.j.serverRev : null;
           try { console.log(TAG, 'push-conflict→pull', pk); } catch(e){}
-          pullOne(pk, sr, function(){ if (done) done(true); });
+          pullOne(pk, sr, function(ok){
+            if (ok){ conflictN[pk] = 0; }
+            else {
+              // サーバーに実体が無い(404)以上「サーバーが新しい」は維持できない。revを採って打ち切る。
+              if (sr != null) revSet(pk, sr);
+              conflictN[pk] = (conflictN[pk] || 0) + 1;
+              if (conflictN[pk] === CONFLICT_MAX){ try { console.warn(TAG, 'give up pushing', pk, '(server image unavailable)'); } catch(e){} }
+            }
+            if (done) done(true);
+          });
           return;
         }
         if (res.j && res.j.ok && res.j.imageRev != null){ revSet(pk, res.j.imageRev); try { console.log(TAG, 'push', pk, 'rev', res.j.imageRev); } catch(e){} }
@@ -114,7 +126,10 @@
   function flushSend(){
     sendTimer = null; if (!on() || !loggedIn() || !_fetch){ sendQ = {}; return; }
     var ks = Object.keys(sendQ); sendQ = {};
-    ks.forEach(function(pk){ if (localAv(pk)) pushOne(pk); });
+    ks.forEach(function(pk){
+      if ((conflictN[pk] || 0) >= CONFLICT_MAX) return;   // ★fix525: 連続409のキーは送信を止める
+      if (localAv(pk)) pushOne(pk);
+    });
   }
   (function(){
     try {
