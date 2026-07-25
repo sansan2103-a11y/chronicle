@@ -147,21 +147,45 @@
   var REACT_LEAD = /^[\s　]*(言われて|それを聞い|その言葉|その声|聞いて|返事を|問われ)/;
 
   // 1行の中で tok がどう出てくるか。isNext=台詞の直後行 / sandwiched=直前行だがその前も台詞行
+  /* ★fix535(2026-07-25・実プレイで捕獲→オフラインで真因確定→GPT監査で設計確定):
+     真因: 引用直後の証拠が `SUBJ.test(tail) && SPEECH.test(s)` で、**発話動詞を行全体から探していた**。
+       そのため「『はず』という【言葉】に、アリアは引っかかりを覚える」の「言葉」1語だけで
+       「発話動詞あり」と誤判定し、反応しているだけの人物へ speechAfter=140(ハード証拠)を与えていた。
+       実測(実機プレイ・テスト物語 sms063dyz8l T2): 正しくカエデに付いていたカードが
+       アリア・リュミエールへ score140 で反転。候補8fixを単独実行して fix469 のみが再現した。
+     修正(GPTレビュー反映・**next方向だけ**。prev方向は不触):
+       (a) 発話動詞は**名前の直後(tail)に結び付いている時だけ**ハード証拠にする
+           →「『行こう』アリアは言った」は従来どおり140。
+       (b) 名前が**反応フレーム**の中にある(「〜という言葉に、Xは」「その声に、Xは」「〜に対して、Xは」)、
+           または**反応・認知・感情の述語**が直後に続く(引っかかる/驚く/気づく/振り返る…)場合は
+           **話者証拠にしない(0点)**。聞き手として減点まではしない
+           (自分の発言に自分で驚く場合があるため、判断は明示話者・タグ・直前カード等へ委ねる)。
+       (c) 裸の「名前＋は/が」は従来どおり subj=40。HARD(90)未満なので単独では flip を起こせない。
+     OFF: localStorage v292Dfix535Off='1' (=従来の行全体判定へ戻る) */
+  var REACT_FRAME = /(?:言葉|台詞|セリフ|科白|声|問い|問いかけ|質問|返事|返答|発言|一言|話|指摘)に(?:対して)?[、,]?[\s　]*$/;
+  var REACT_PRED  = /(思|感じ|気づ|気付|覚え|引っかか|引っ掛か|驚|見つめ|見返|振り返|振り向|考え|迷|眉|息を呑|息をの|戸惑|首をかし|首を傾|目を見開|見開|眉根|訝|怪訝|唖然|絶句|理解|悟|察|納得|違和感)/;
+  function off535(){ try { return localStorage.getItem('v292Dfix535Off') === '1'; } catch(e){ return false; } }
   function evidenceIn(line, tok, isNext, sandwiched){
     var s = String(line || '');
     if (isNext && REACT_LEAD.test(s)) return null;
     var best = null, bestPt = -1, p = s.indexOf(tok);
+    var strict = !off535();
     function offer(kind, pt){ if (pt > bestPt){ best = kind; bestPt = pt; } }
     while (p >= 0){
       var tail = s.slice(p + tok.length, p + tok.length + 14);
+      var head = s.slice(Math.max(0, p - 20), p);
       if (VOICE.test(tail)){
         if (isNext) offer('voiceAfter', 115);
         else if (VOICE_INTRO.test(tail)) offer('voiceIntro', 90);
         else if (!sandwiched) offer('voiceDesc', 25);
       }
-      if (SUBJ.test(tail) && SPEECH.test(s)) offer(isNext ? 'speechAfter' : 'speechBefore', isNext ? 140 : 115);
-      else if (SUBJ.test(tail)) offer('subj', isNext ? 40 : 20);
-      else if (isNext && SUBJ_ACT.test(tail)) offer('subj', 40);
+      var reacting = strict && isNext && (REACT_FRAME.test(head) || REACT_PRED.test(tail));
+      if (SUBJ.test(tail) && !reacting){
+        var speechNear = isNext ? SPEECH.test(strict ? tail : s) : SPEECH.test(s);
+        if (speechNear) offer(isNext ? 'speechAfter' : 'speechBefore', isNext ? 140 : 115);
+        else offer('subj', isNext ? 40 : 20);
+      }
+      else if (isNext && SUBJ_ACT.test(tail) && !reacting) offer('subj', 40);
       p = s.indexOf(tok, p + 1);
     }
     return best ? { kind: best, pts: bestPt } : null;
