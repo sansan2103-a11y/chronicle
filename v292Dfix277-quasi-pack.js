@@ -144,6 +144,12 @@
      事実上使われないため、実在の人名を巻き込まない(★1字の「と」「の」等はハルト/ヤマト等を巻き込むので対象外)。
      OFF: localStorage v292Dfix528Off='1' */
   var FRAGMENT_TAIL = /(から|まで|より|へと)$/;
+  /* ★fix536a(2026-07-25・30ターン実機で捕獲): プレースホルダ表記を人物として登録しない。
+     実測: 30ターン走行後の準登録カルテに **「主人公（仮）」** が1件入り、fix77状態ストアにも
+     空の状態エントリが作られていた(モデルが who="主人公（仮）" と書いた)。
+     BAD は「主人公」の完全一致しか見ておらず、括弧つきの仮ラベルが素通りしていた。
+     対策: 括弧を含む呼称と、仮ラベル語を弾く。実在の人名に括弧は使われないため巻き込みは無い。 */
+  var PLACEHOLDER = /[（）()]|^(仮|仮称|未設定|名前未設定|不明な声|名無し)$|(（仮）|\(仮\))/;
   function off528(){ try { return localStorage.getItem('v292Dfix528Off') === '1'; } catch(e){ return false; } }
   function validName(n){
     n = String(n || '').trim();
@@ -151,6 +157,7 @@
     if (/[\s　0-9０-９a-zA-Z。、！？!?…・「」『』<>="'\/\\]/.test(n)) return '';
     if (BAD.test(n)) return '';
     if (!off528() && FRAGMENT_TAIL.test(n)) return '';
+    if (!off528() && PLACEHOLDER.test(n)) return '';   // ★fix536a
     return n;
   }
   /* ★fix528b(2026-07-25・実データ再現で確定): 登録キャラの「名だけ呼び」を別人物として台帳登録しない。

@@ -205,7 +205,18 @@
       if (e1){ add(t.canon, e1.pts); if (e1.pts >= HARD) markHard(t.canon, e1.pts); }
       var e0 = evidenceIn(prev, t.tok, false, !!prevSand);
       if (e0){ add(t.canon, e0.pts); if (e0.pts >= HARD) markHard(t.canon, e0.pts); }
-      if (String(say || '').indexOf(t.tok) >= 0) add(t.canon, -35);   // 呼びかけ=話者でない
+      /* ★fix536b(2026-07-25・30ターン実機で捕獲): 自己紹介を「呼びかけ」と誤判定しない。
+         実測(T9): 少女が『シオンっていうんだ……たぶん』と名乗った直後、
+         この -35 が シオン に効いて話者から外れ、カードが シオン→少女 へ書き換わった。
+         台詞の中の名前が「っていう/という/と呼/です/だ」等の**名乗り**に続く場合は
+         呼びかけではなく自己紹介なので減点しない。OFF: v292Dfix536Off='1' */
+      var sayS = String(say || ''), tp = sayS.indexOf(t.tok);
+      if (tp >= 0){
+        var after = sayS.slice(tp + t.tok.length, tp + t.tok.length + 8);
+        var naming = (function(){ try { return localStorage.getItem('v292Dfix536Off') !== '1'; } catch(e){ return true; } })()
+                     && /^(?:って(?:いう|言う)|という|と言う|と呼|です|だ[。、！\s]?|——|、|・)/.test(after);
+        if (!naming) add(t.canon, -35);   // 呼びかけ=話者でない
+      }
     });
     // 口調の否定証拠（正の同定には使わない・v1のまま）
     var text = String(say || '');
