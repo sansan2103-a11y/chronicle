@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260725-fix551';
+  var BUILT = '20260725-fix552';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -1137,7 +1137,21 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
           coreFear: n.coreFear, wound: n.wound
         }))
       },
-      scene: { location: scene.loc, objective: scene.obj, tone: scene.tone },
+      /* ★fix552(2026-07-25・現在地A/Bの実験用スイッチ): user payload の scene の**キー名だけ**を切り替える。
+         ■背景: `scene.loc` は物語開始時の設定文が**永久に固定**で送られ続ける
+           (例「離島の漁港、真夏の昼下がり」を17ターン後も送信)。名前が `location`(現在地)なので、
+           モデルが「いまここにいる」と解釈して開始地点へ引き戻される疑いがある。
+         ■ただし30ターンの自然プレイでは巻き戻りは**0件**だった。よって
+           **出荷前提ではなく実験**として扱う(GPT裁定)。判定は次の3通り:
+             Bが明確に改善・悪化なし → 採用 / 差がない → 出荷しない / 初期設定の保持が弱くなる → 却下
+         ■A/Bの差分を「キー名だけ」に固定するため、**同じビルドをスイッチで切り替える**方式にした。
+           既定はOFF = 従来どおり `location`。ONで `openingSetting`。
+         ON: localStorage v292Dfix552OpeningSetting='1' */
+      scene: (function(){
+        var _ab = false; try { _ab = localStorage.getItem('v292Dfix552OpeningSetting') === '1'; } catch(e){}
+        return _ab ? { openingSetting: scene.loc, objective: scene.obj, tone: scene.tone }
+                   : { location: scene.loc, objective: scene.obj, tone: scene.tone };
+      })(),
       recentHistory: hist || '（ゲーム開始）',
       currentInput: { type: inputType, text: inputText },
       CRITICAL_INSTRUCTION: `この入力「${inputText}」を完全に受け入れ、これが起きた後の続きをnarrativeに書く。この入力を無視・否定・矛盾させることは禁止。`
