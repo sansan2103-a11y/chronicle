@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260725-fix549';
+  var BUILT = '20260725-fix550';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2745,7 +2745,7 @@ G.init();
   <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=v292Dfix74"></script>
-  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix457"></script>
+  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix550"></script>
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
     <!-- v292Dfix189c: fix70(dialogue-order, 本文ベースの並べ替え)を無効化。fix70bが
@@ -2853,7 +2853,7 @@ G.init();
 <script src="v292Dfix371-reset-dialog-text.js?cb=v292Dfix371"></script>
 <script src="v292Dfix372-gender-radio-guard.js?cb=v292Dfix372"></script>
 <script src="v292Dfix374-default-style-guard.js?cb=v292Dfix396"></script>
-<script src="v292Dfix376-speaker-guard.js?cb=v292Dfix495"></script>
+<script src="v292Dfix376-speaker-guard.js?cb=v292Dfix550"></script>
 <script src="v292Dfix377-voice-anchor.js?cb=v292Dfix377b"></script>
 <script src="v292Dfix378-species-judge.js?cb=v292Dfix378"></script>
 <script src="v292Dfix379-wrap-keeper.js?cb=v292Dfix419c"></script>
@@ -2912,7 +2912,7 @@ G.init();
 <script src="v292Dfix443-drama-rescue.js?cb=v292Dfix443"></script>
 <script src="v292Dfix483-beat-director.js?cb=v292Dfix483"></script>
 <script src="v292Dfix444-world-law.js?cb=v292Dfix451"></script>
-<script src="v292Dfix445-handle-lock.js?cb=v292Dfix457"></script>
+<script src="v292Dfix445-handle-lock.js?cb=v292Dfix550"></script>
 <script src="v292Dfix446-fill-robust.js?cb=v292Dfix446"></script>
 <script src="v292Dfix447-json-force.js?cb=v292Dfix447"></script>
 <script src="v292Dfix448-genloading.js?cb=v292Dfix448"></script>

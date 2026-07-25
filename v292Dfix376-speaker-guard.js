@@ -22,7 +22,13 @@
   var TAG = '[v292Dfix376:speakerGuard]';
   var MARK = '【話者厳守】';
   function off(){ try{ return localStorage.getItem('v292Dfix376Off')==='1'; }catch(e){ return false; } }
-  function getS(){ try{ if (window.S) return window.S; return (0,eval)('S'); }catch(e){ return null; } }
+  /* ★fix550(2026-07-25・バッチ3): 台帳では『getSを持たない』と分類していたが**誤り**で、
+     普通の getS を持っていた(台帳は正規表現による推定なので、移行前に必ず中身を見る)。
+     正式API(fix539)を第一経路にし、従来の式はそのまま第二経路に残す。 */
+  function getS(){
+    try { var a = window.__chronicleGetState ? window.__chronicleGetState('fix376') : null; if (a) return a; } catch(e){}
+    try{ if (window.S) return window.S; return (0,eval)('S'); }catch(e){ return null; }
+  }
   function norm(s){ return String(s||'').replace(/[「」\s]/g,''); }
 
   // ---- [1] sys強化 ----

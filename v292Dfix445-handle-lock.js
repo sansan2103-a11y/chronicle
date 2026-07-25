@@ -55,7 +55,18 @@
   function offWi(){ return ls('v292Dfix445WiOff') === '1'; }             // b1のみ
   function offSpk(){ return ls('v292Dfix445SpkOff') === '1'; }           // Cのみ
   function mergeOn(){ return ls('v292Dfix445Merge') === '1'; }           // データ書換(既定OFF)
-  function getS(){ try { return G.S || (0,eval)('typeof S!=="undefined" ? S : null'); } catch(e){ return null; } }
+  /* ★fix550(2026-07-25・バッチ3): 元は `G.S || (0,eval)(...)` の1文だった。
+     ■実測: **`G.S` はどこからも代入されていない**(全ファイル走査で `G.S =` が0件)。
+     ■危険: 1つの try で囲っていたため、`G` が解決できない環境では `G.S` が ReferenceError を投げ、
+       **eval のフォールバックへ到達せず必ず null** になる = fix538 と同じ『無言の空振り』の型。
+     ■対処: (a) 経路ごとに try を分ける (b) 正式API(fix539)を G.S の次に置く
+       (GPT裁定: G.S がテスト用の注入点である可能性を考え、**G.S は先頭のまま**にする。
+        正式APIを先に置くと、モック検証が本物のSに負ける fix539c 型が再発するため)。 */
+  function getS(){
+    try { if (G && G.S) return G.S; } catch(e){}
+    try { var a = window.__chronicleGetState ? window.__chronicleGetState('fix445') : null; if (a) return a; } catch(e){}
+    try { return window.S || (0,eval)('typeof S!=="undefined" ? S : null'); } catch(e){ return null; }
+  }
 
   // ===================================================================
   // 0. 語彙（一般名詞の芯）

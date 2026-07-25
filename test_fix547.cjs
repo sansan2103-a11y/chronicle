@@ -25,11 +25,9 @@ const BATCH = {
   'v292Dfix303-speaker-backref.js': 'fix303'
 };
 /* このバッチに入れてはいけないもの（理由つきで固定する） */
-const EXCLUDED = {
-  'v292Dfix66-renderhook-repair.js': 'window.S の有無で分岐する箇所を複数含む(単純置換できない)',
-  'v292Dfix445-handle-lock.js': 'G.S 経由で形が違う',
-  'v292Dfix376-speaker-guard.js': 'getSを持たず bare S.save を使う'
-};
+/* バッチ1の時点で「機械移行してはいけない」と判断したもの。
+   バッチ3で**1件ずつ中身を見て**移行した(下の専用セクション参照)。 */
+const EXCLUDED = {};
 
 console.log('\n== バッチ1: 8ファイルが正式APIを第一経路にしている ==');
 Object.keys(BATCH).forEach(function (f) {
@@ -51,12 +49,11 @@ Object.keys(EXCLUDED).forEach(function (f) {
      s.indexOf('__chronicleGetState') < 0, f);
 });
 {
-  /* fix66 は window.S の有無そのもので分岐する箇所を複数持つ(93行 / 1329行 / 1330行)。
-     ここを機械置換すると「window.S が無いときの別経路」が消える。次バッチで1件ずつ判断する。 */
+  /* fix66 は window.S の有無そのもので分岐する箇所を持つので、バッチ1では機械移行しなかった。
+     バッチ3で「取得関数(getState / getStateSafe)だけ」を移行し、持ち主判定の分岐は残した。 */
   const s = fs.readFileSync(path.join(__dirname, 'v292Dfix66-renderhook-repair.js'), 'utf8');
   const branches = (s.match(/window\.S && window\.S/g) || []).length;
-  ok('★fix66 は window.S の有無で分岐する箇所を持つ(単純置換禁止)', branches >= 2, branches);
-  ok('★fix66 はまだ触っていない', s.indexOf('__chronicleGetState') < 0);
+  ok('★fix66 は window.S の有無で分岐する箇所を持つ(だから一括置換しなかった)', branches >= 2, branches);
 }
 
 console.log('\n== 読み込んでも壊れない / 正式APIが優先される ==');
@@ -151,6 +148,38 @@ console.log('\n== バッチ2B: 保存ラッパ組(fix399 / fix402 / fix490) ==')
   ok('★fix399: 控えが取れなければ false のまま', /catch\(e2\)\{ return false; \}/.test(s399));
 }
 
+console.log('\n== バッチ3: 1件ずつ判断したもの(fix376 / fix445 / fix66) ==');
+{
+  const s376 = fs.readFileSync(path.join(__dirname, 'v292Dfix376-speaker-guard.js'), 'utf8');
+  ok('fix376: 正式APIを第一経路にしている', s376.indexOf("__chronicleGetState('fix376')") > 0);
+  ok('fix376: ★従来の式をそのまま残す', /if \(window\.S\) return window\.S; return \(0,eval\)\('S'\)/.test(s376));
+  ok('★fix376 は「getSを持たない」という台帳の分類が誤りだった(中身を見て確認)',
+     (s376.match(/function getS\(\)/g) || []).length === 1);
+}
+{
+  const s445 = fs.readFileSync(path.join(__dirname, 'v292Dfix445-handle-lock.js'), 'utf8');
+  ok('fix445: ★G.S を先頭のまま残す(モックが本物に負けないように=GPT裁定)',
+     s445.indexOf('if (G && G.S) return G.S;') > 0);
+  const iG = s445.indexOf('G && G.S'), iA = s445.indexOf("__chronicleGetState('fix445')");
+  ok('fix445: ★G.S → 正式API → 従来式 の順', iG > 0 && iA > iG, [iG, iA]);
+  ok('fix445: ★経路ごとに try を分けた(G が解決できなくても後段へ進む)',
+     /try \{ if \(G && G\.S\) return G\.S; \} catch\(e\)\{\}/.test(s445));
+  /* 元は1つの try だったので、G が未解決だと ReferenceError で eval へ到達せず必ず null になった */
+  ok('★fix445: 元の「1つのtryで全部囲う」形は残っていない',
+     !/return G\.S \|\| \(0,eval\)/.test(s445));
+}
+{
+  const s66 = fs.readFileSync(path.join(__dirname, 'v292Dfix66-renderhook-repair.js'), 'utf8');
+  ok('fix66: getState が正式APIを最初に試す', /a0 = window\.__chronicleGetState/.test(s66));
+  ok('fix66: getStateSafe も正式APIを最初に試す', s66.indexOf("__chronicleGetState('fix66')") > 0);
+  ok('fix66: ★window.S フォールバックを残している(追加のみ)',
+     /if \(window\.S && window\.S\.turns\) return window\.S;/.test(s66));
+  /* ★ここが本題: 「メモリ上の状態がこの turns の持ち主か」を見る分岐は**触らない** */
+  ok('★fix66: 1338/1339行の分岐(turns の持ち主判定)は手つかず',
+     (s66.match(/window\.S && window\.S\.turns === turns/g) || []).length === 1 &&
+     /else if \(!\(window\.S && window\.S\.turns\)\)\{ localStorage\.setItem/.test(s66));
+}
+
 console.log('\n== 台帳の更新（移行済みの数） ==');
 {
   const fs2 = fs;
@@ -162,7 +191,8 @@ console.log('\n== 台帳の更新（移行済みの数） ==');
   /* コア5(fix277/469/409/145/77) + バッチ1の8 + fix543(再保存で状態を取りに行くため参照) = 14 */
   /* コア5 + バッチ1の8 + fix543 + バッチ2Aのfix192 = 15 */
   /* コア5 + バッチ1の8 + fix543 + fix192 + 保存ラッパ組3 = 18 */
-  ok('★__chronicleGetState を参照するのは18ファイル', migrated === 18, migrated);
+  /* コア5 + バッチ1の8 + fix543 + fix192 + 保存ラッパ組3 + バッチ3の3 = 21 */
+  ok('★__chronicleGetState を参照するのは21ファイル', migrated === 21, migrated);
 }
 
 console.log('\n---------------------------------------------');

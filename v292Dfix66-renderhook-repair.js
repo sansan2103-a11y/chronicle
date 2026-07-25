@@ -88,6 +88,15 @@
     return 'chr6';
   }
   function getState(){
+    /* ★fix550(2026-07-25・バッチ3): 正式API(fix539)を最初に試す。**追加のみ**で、
+       以降の経路(window.S / localStorage フォールバック)は一切変えていない。
+       なお下方(1338/1339行)にある「turns の持ち主かどうか」を見る分岐は
+       「メモリ上の状態がこの turns の持ち主かどうか」を見る**別の判断**なので、
+       ここでは触らない(機械置換すると LS 直書きの経路が消える)。 */
+    try {
+      var a0 = window.__chronicleGetState ? window.__chronicleGetState('fix66') : null;
+      if (a0 && a0.turns) return a0;
+    } catch(e){}
     // 1) IIFE-local S が window 経由で見えれば使う (旧パッチで漏らしたケース)
     try {
       if (window.S && window.S.turns) return window.S;
@@ -1764,7 +1773,10 @@
 (function(){
   try { if (localStorage.getItem('v292ReconcileOff') === '1') return; } catch(e){}
   var norm233 = function(s){ return String(s || '').replace(/[\s　。、！？!?…・「」『』]/g, ''); };
-  function getStateSafe(){ try { return window.S || (0,eval)('typeof S!=="undefined"?S:null'); } catch(e){ return null; } }
+  function getStateSafe(){
+    try { var a = window.__chronicleGetState ? window.__chronicleGetState('fix66') : null; if (a) return a; } catch(e){}
+    try { return window.S || (0,eval)('typeof S!=="undefined"?S:null'); } catch(e){ return null; }
+  }
   function reconcile(){
     try {
       var S = getStateSafe(); if (!S || !Array.isArray(S.turns)) return;
