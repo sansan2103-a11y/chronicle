@@ -231,6 +231,20 @@
     if (registered[nm] || __isAliasOfRegistered(nm) || __isVariantOfPeer(nm)) return;
       var w = wiByName[nm];
       var lt = findLastTurnForName(nm, turns);
+      /* ★fix529(2026-07-25・おしん報告「別の物語のキャラが混ざってる」の実データ修正):
+           この物語の本文・プレイヤー入力・会話ログのどこにも名前が現れない人物は表示しない。
+         真因: キャラ一覧の「物語に登場」欄は長期記憶(fix136 worldinfo)から作られる。この台帳は
+           fix525/fix527 以前の共有ポインタ経由で他物語のものが混入する上、fix522 の保険読みは
+           スロット無しキー(chr6_v292Dfix136_wi)まで見に行くため、別物語の人物が入り込む。
+           台帳側を後から名寄せしても「この物語に居た証拠」は復元できない。
+         判定: findLastTurnForName は narrative + playerText + _convSays(話者と台詞)を全ターン走査し、
+           一度も出てこなければ -1 を返す。**-1 = この物語に存在した痕跡がゼロ**なので、
+           これを唯一の除外条件にする(推測ゼロ・登録キャストは対象外で必ず表示)。
+         実測(smr8p8wfr8b=離島16ターン): 準登録7件・ロスター2件・状態5件が全件この判定で -1、
+           内容も廃墟遊園地の物語の人物(アリア/カエデ/ノア/ヒナ/観覧車の少女/顔のない男)だった。
+         非破壊: 台帳は消さない。名前が本文に出た瞬間から自動的に表示へ戻る。
+         OFF: localStorage v292Dfix529Off='1' */
+      try { if (localStorage.getItem('v292Dfix529Off') !== '1' && lt < 0) return; } catch(e){}
       out.story.push({
         name: nm,
         desc: w.desc || '',
@@ -632,6 +646,8 @@
 
   // ---------- public API ----------
   window.__charlist = { open: renderModal, close: closeModal, diceUrlSafe: diceUrlSafe, diceHardFallback: diceHardFallback };
+  /* ★fix529: 検証口(node/実機どちらからでも一覧の中身をアサートできるようにする。表示には影響しない) */
+  window.__v292Dfix145x = { collectChars: collectChars, findLastTurnForName: findLastTurnForName };
 
   try { console.log(TAG, 'character list active'); } catch(_){}
 })();
