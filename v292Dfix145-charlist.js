@@ -83,6 +83,39 @@
     }
     return -1;
   }
+  /* ★fix533(2026-07-25・GPT監査の指摘): 短縮名の存在判定に素の indexOf を使うと
+       「杏子」が『杏子色の空』に、「少女」が『少女像』に、「アン」が『アンテナ』に当たり、
+       **その人物が出ていないのに存在証拠になる**。fix529b で短縮名を証拠へ加えたことで
+       この誤爆が実害化した(=別物語のキャラが一覧へ戻る)。
+     対策(短縮名の判定にだけ適用。完全名の判定 findLastTurnForName は従来どおり):
+       (a) 会話ログの話者 who と**完全一致**なら無条件で採用(最も強い証拠)
+       (b) 本文・入力中の出現は、**直後の文字が漢字・カタカナ・長音でない**ことを要求する
+           (助詞・句読点・空白・行末なら人物名として使われたとみなす)。
+           杏子色/少女像/アンテナ は直後が漢字orカタカナなので落ちる。
+           杏子は/杏子、/アンが は通る。「杏子先生」型は落ちるが、取りこぼし側は安全なので許容する。 */
+  function findLastTurnAsPerson(name, turns){
+    if (!name || !turns || !turns.length) return -1;
+    var CONT = /[一-鿿゠-ヿｦ-ﾝー]/;   // 漢字・カタカナ・長音=語の続き
+    function usedAsPerson(text){
+      if (!text) return false;
+      var s = String(text), i = s.indexOf(name);
+      while (i >= 0){
+        var after = s.charAt(i + name.length);
+        if (after === '' || !CONT.test(after)) return true;
+        i = s.indexOf(name, i + 1);
+      }
+      return false;
+    }
+    for (var i = turns.length - 1; i >= 0; i--){
+      var t = turns[i]; if (!t) continue;
+      var cs = t._convSays;
+      if (Array.isArray(cs)){
+        for (var j = 0; j < cs.length; j++){ if (cs[j] && String(cs[j].who || '').trim() === name) return i; }
+      }
+      if (usedAsPerson(t.narrative) || usedAsPerson(t.playerText)) return i;
+    }
+    return -1;
+  }
   // v292Dfix156(2026-05-30): format fix77 state-memory (体/心/本能) into a one-liner.
   // fix77 (window.__v292Dfix77Store[name] = {karada,kokoro,honno,turn}) is the state the
   // MODEL actually references and is updated EVERY turn — so it's fresher than longmem
@@ -265,7 +298,7 @@
           if (/[\s　・]/.test(nm)) String(nm).split(/[\s　・]+/).forEach(function(p){ if (p && p.length >= 2) alt529.push(p); });
           var lt529 = -1;
           for (var i529 = 0; i529 < alt529.length; i529++){
-            var v529 = findLastTurnForName(alt529[i529], turns);
+            var v529 = findLastTurnAsPerson(alt529[i529], turns);
             if (v529 > lt529) lt529 = v529;
           }
           if (lt529 < 0) return;      // どの呼び名でもこの物語に現れない = 別物語のもの

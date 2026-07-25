@@ -84,6 +84,31 @@ console.log('\n== fix529b: 表示用の存在証拠を別名・区切り構成�
   ok('別名で見つかった最終登場ターンが採用される', a && a.lastTurn===0, a && a.lastTurn);
 }
 
+console.log('\n== fix533: 短縮名の部分文字列誤爆を止める(GPT監査) ==');
+{
+  function run3(narr, extraCS){
+    const w=makeEnv();
+    w.__longmem={raw:{loadWorldInfo:()=>[
+      {name:'氷川 杏子',type:'character',desc:'民俗学者'},
+      {name:'アン・マリー',type:'character',desc:'旅人'},
+      {name:'白鷺 少女',type:'character',desc:'謎の人物'}
+    ]}};
+    load(w,'v292Dfix145-charlist.js');
+    w.S={cast:{hero:{name:'霧 涼太',desc:''},npcs:[]},
+      turns:[{narrative:narr,playerText:'',_convSays:extraCS||[]}],save(){}};
+    return w.__v292Dfix145x.collectChars().story.map(s=>s.name);
+  }
+  ok('★「杏子色の空」では氷川 杏子を存在扱いしない', run3('杏子色の空が広がる。').indexOf('氷川 杏子')<0, run3('杏子色の空が広がる。'));
+  ok('★「アンテナ」ではアン・マリーを存在扱いしない', run3('錆びたアンテナが立っている。').indexOf('アン・マリー')<0, run3('錆びたアンテナが立っている。'));
+  ok('★「少女像」では白鷺 少女を存在扱いしない', run3('苔むした少女像がある。').indexOf('白鷺 少女')<0, run3('苔むした少女像がある。'));
+  ok('「杏子は…」なら存在扱いする', run3('杏子は記録を繰った。').indexOf('氷川 杏子')>=0, run3('杏子は記録を繰った。'));
+  ok('「アンが…」なら存在扱いする', run3('アンが振り返る。').indexOf('アン・マリー')>=0, run3('アンが振り返る。'));
+  ok('会話ログの話者と完全一致なら無条件で存在扱いする',
+     run3('誰かが囁いた。',[{who:'杏子',say:'ここにいる'}]).indexOf('氷川 杏子')>=0,
+     run3('誰かが囁いた。',[{who:'杏子',say:'ここにいる'}]));
+  ok('行末の出現も存在扱いする', run3('振り返るとそこにいたのは杏子').indexOf('氷川 杏子')>=0, run3('振り返るとそこにいたのは杏子'));
+}
+
 console.log('\n---------------------------------------------');
 console.log('PASS '+pass+' / FAIL '+fail);
 process.exit(fail?1:0);
