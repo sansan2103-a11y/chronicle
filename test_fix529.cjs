@@ -132,6 +132,26 @@ console.log('\n== fix533b: 前後両方の境界を見る(GPT監査の残り穴3
   ok('「ひなたさん」なら存在扱いする(敬称)', run4('ひなたさんが来た。').indexOf('朝比奈 ひなた')>=0, run4('ひなたさんが来た。'));
 }
 
+console.log('\n== fix537b: 名乗りで確定した別名は一覧に出さない ==');
+{
+  function run5(alias){
+    const w=makeEnv();
+    if(alias) w.__v292AliasFix=(n)=>(n==='少女'?'シオン':n);
+    w.__longmem={raw:{loadWorldInfo:()=>[
+      {name:'少女',type:'character',desc:'白いワンピースの少女'},
+      {name:'シオン',type:'character',desc:'名乗った少女'}
+    ]}};
+    load(w,'v292Dfix145-charlist.js');
+    w.S={cast:{hero:{name:'アリア・リュミエール',desc:''},npcs:[]},
+      turns:[{narrative:'少女が座っている。シオンと名乗った。',playerText:'',_convSays:[]}],save(){}};
+    return w.__v292Dfix145x.collectChars().story.map(s=>s.name);
+  }
+  const withAlias=run5(true), without=run5(false);
+  ok('★別名が確定していれば「少女」は一覧から消える', withAlias.indexOf('少女')<0, withAlias);
+  ok('正名「シオン」は残る', withAlias.indexOf('シオン')>=0, withAlias);
+  ok('別名が無ければ両方出る(従来どおり)', without.indexOf('少女')>=0 && without.indexOf('シオン')>=0, without);
+}
+
 console.log('\n---------------------------------------------');
 console.log('PASS '+pass+' / FAIL '+fail);
 process.exit(fail?1:0);

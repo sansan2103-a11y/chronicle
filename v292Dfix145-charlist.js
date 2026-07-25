@@ -281,6 +281,15 @@
     Object.keys(wiByName).forEach(function(nm){
       function __isVariantOfPeer(nm){ try{ var pool=Object.keys(wiByName); for(var i=0;i<pool.length;i++){ var b=pool[i]; if(b===nm) continue; if(nm.length>b.length && nm.slice(-b.length)===b) return true; } }catch(e){} return false; } // v292Dfix358: 「間延びした影」→「影」等、修飾語+既出名詞は同一として非表示
     if (registered[nm] || __isAliasOfRegistered(nm) || __isVariantOfPeer(nm)) return;
+      /* ★fix537b(2026-07-25・実機30ターンで判明): 別名台帳で正名が確定している呼称は一覧に出さない。
+         fix537 が「名乗り」で 少女=シオン を確定させ、会話ログの who も fix77 の状態も
+         シオンへ統合されるのに、**キャラ一覧だけが両方を並べていた**(データ層で別名を見ていなかった)。
+         aliasFix(nm) !== nm は「nm は別名で、正名が別にある」という意味なので、その行は出さない。
+         正名側の行に統合されるだけで、データは何も消さない。 OFF: v292Dfix529Off='1' と同じ扱い。 */
+      try {
+        if (localStorage.getItem('v292Dfix529Off') !== '1' &&
+            typeof window.__v292AliasFix === 'function' && window.__v292AliasFix(nm) !== nm) return;
+      } catch(e){}
       var w = wiByName[nm];
       var lt = findLastTurnForName(nm, turns);
       /* ★fix529(2026-07-25・おしん報告「別の物語のキャラが混ざってる」の実データ修正):
