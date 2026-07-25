@@ -117,6 +117,16 @@ console.log('\n== fix543: 他fixのラップを壊さない(fix419cの教訓) ==
      fs.readFileSync(path.join(__dirname, 'v292Dfix543-save-guard.js'), 'utf8').indexOf('prev.__f543') > 0);
 }
 
+console.log('\n== fix543b: 空き測定のプローブを自分で数えない ==');
+{
+  const w = mk({ quota: 100000 });
+  w.__v292Dfix543.headroom(true);
+  const st = w.__v292Dfix543.stats();
+  ok('★プローブの失敗を保存失敗として数えない', st.failures === 0, st);
+  ok('★プローブが記録を埋めない', w.__v292Dfix543.recent().length === 0, w.__v292Dfix543.recent().length);
+  ok('★プローブでトーストを出さない', w.__toasts.length === 0, w.__toasts);
+}
+
 console.log('\n== fix543: 空き容量の推定 ==');
 {
   const w = mk({ quota: 100000 });

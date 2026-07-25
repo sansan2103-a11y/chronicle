@@ -33,8 +33,13 @@
   var warned = {};
   var lowWarnedAt = 0;
 
+  var PROBE_KEY = '__v543hp';
   function note(key, size, err){
     try {
+      /* ★fix543b(実機で発覚): 空き容量の推定は setItem を意図的に失敗させて測るので、
+         そのプローブ自身の失敗を数えてしまっていた(実測: failures=34 が全部プローブ)。
+         自分のノイズで診断が埋まると、本物の保存失敗に気づけない。除外する。 */
+      if (key === PROBE_KEY) return;
       stats.failures++;
       if (isStoryKey(key)) stats.storyFailures++;
       var rec = { key: String(key).slice(0, 48), bytes: size,
@@ -69,8 +74,8 @@
     if (!force && lastHeadroom >= 0 && (now - lastProbe) < 60000) return lastHeadroom;
     var lo = 0, hi = 4 * 1024 * 1024, ok = 0;
     function probe(n){
-      try { localStorage.setItem('__v543hp', new Array(n + 1).join('x')); localStorage.removeItem('__v543hp'); return true; }
-      catch(e){ try { localStorage.removeItem('__v543hp'); } catch(_){} return false; }
+      try { localStorage.setItem(PROBE_KEY, new Array(n + 1).join('x')); localStorage.removeItem(PROBE_KEY); return true; }
+      catch(e){ try { localStorage.removeItem(PROBE_KEY); } catch(_){} return false; }
     }
     for (var i = 0; i < 22 && lo <= hi; i++){
       var mid = Math.floor((lo + hi) / 2);
