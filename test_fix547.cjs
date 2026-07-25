@@ -99,6 +99,33 @@ Object.keys(BATCH).forEach(function (f) {
   ok('★正式APIが無くても読み込める(古いindex.htmlでも壊れない)', err === null, err);
 }
 
+console.log('\n== バッチ2A: fix192（プロンプト生成）==');
+{
+  const f = 'v292Dfix192-newengine.js';
+  const s2 = fs.readFileSync(path.join(__dirname, f), 'utf8');
+  const i = s2.indexOf('function getS()');
+  const body = s2.slice(i, i + 420);
+  ok('fix192: 正式APIを第一経路にしている', body.indexOf("window.__chronicleGetState('fix192')") > 0, body.slice(0,120));
+  ok('fix192: ★従来の式をそのまま残す(旧式は eval(\'S\') 形)',
+     /window\.S \|\| \(0,eval\)\('S'\)/.test(body), body.slice(0,220));
+  ok('fix192: localStorage.setItem をラップしていない(単独移行の条件)',
+     !/localStorage\.setItem\s*=/.test(s2));
+  ok('fix192: window.S の有無で分岐していない(単独移行の条件)',
+     !/window\.S && window\.S|if \(!window\.S\)/.test(s2));
+  const w = mkWin(REAL, FAKE);
+  let err = null;
+  try { vm.runInContext(s2, vm.createContext(w), { filename: 'fix192' }); } catch (e) { err = e.message; }
+  ok('fix192: 読み込みで例外が出ない', err === null, err);
+}
+{
+  /* ★fix402 はバッチ2Aの条件を満たさない(GPTの条件で自分で弾いた) */
+  const s3 = fs.readFileSync(path.join(__dirname, 'v292Dfix402-invisible-sync.js'), 'utf8');
+  ok('★fix402 は localStorage.setItem をラップするので単独バッチへ回す',
+     /localStorage\.setItem\s*=/.test(s3));
+  ok('★fix402 は S.save もラップする(実行順に依存する)', /S\.save = function/.test(s3));
+  ok('★fix402 はまだ移行していない', s3.indexOf('__chronicleGetState') < 0);
+}
+
 console.log('\n== 台帳の更新（移行済みの数） ==');
 {
   const fs2 = fs;
@@ -108,7 +135,8 @@ console.log('\n== 台帳の更新（移行済みの数） ==');
     if (s.indexOf('__chronicleGetState') > 0) migrated++;
   });
   /* コア5(fix277/469/409/145/77) + バッチ1の8 + fix543(再保存で状態を取りに行くため参照) = 14 */
-  ok('★__chronicleGetState を参照するのは14ファイル', migrated === 14, migrated);
+  /* コア5 + バッチ1の8 + fix543 + バッチ2Aのfix192 = 15 */
+  ok('★__chronicleGetState を参照するのは15ファイル', migrated === 15, migrated);
 }
 
 console.log('\n---------------------------------------------');

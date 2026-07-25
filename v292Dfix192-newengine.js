@@ -27,7 +27,17 @@
   'use strict';
   var TAG = '[v292Dfix192:newengine]';
 
-  function getS(){ try{ return window.S || (0,eval)('S'); }catch(e){ return null; } }
+  /* ★fix548(2026-07-25・バッチ2A): S の取得は index.html の正式API(fix539)を第一経路にする。
+     このファイルは**プロンプト生成**(S.cfg / S.turns の読み取りが中心)で、
+     localStorage.setItem のラップも window.S の有無による分岐も持たないため単独移行できる。
+     ※台帳では「重大(会話ログ書換)」に分類されていたが、実体は**プロンプト生成**だった。
+       台帳の危険度は正規表現による推定なので、移行前に必ず中身を見ること。
+     第二経路は従来の式をそのまま残す(index.htmlが古いキャッシュでも挙動不変)。
+     なお旧式は (0,eval)('S') で、S が未初期化なら ReferenceError → catch → null になる型。 */
+  function getS(){
+    try { var a = window.__chronicleGetState ? window.__chronicleGetState('fix192') : null; if (a) return a; } catch(e){}
+    try { return window.S || (0,eval)('S'); } catch(e){ return null; }
+  }
 
   function lvl(name, def){
     try{ var S=getS(); var v=(S&&S.cfg)?S.cfg[name]:null; return (v==null)?def:(+v); }catch(e){ return def; }
