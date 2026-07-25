@@ -118,6 +118,9 @@ console.log('\n== fetchラッパ ==');
       const w2 = mk({ off: true });
       ok('★OFFなら fetch を包まない', w2.fetch.__f553 !== true);
       ok('★OFFでも API は生えている(読出しはできる)', typeof w2.__v292Dfix553.dump === 'function');
+      ok('★OFFなら見張りも動かない(pollsが増えない)',
+         (function(){ w2.__v292Dfix553._poll(); return w2.__v292Dfix553.stats().polls === 0; })(),
+         w2.__v292Dfix553.stats().polls);
       ok('★OFF判定が効いている', w2.__v292Dfix553.off() === true);
     }
 
@@ -130,6 +133,12 @@ console.log('\n== fetchラッパ ==');
       w3.__v292Dfix553._poll();
       ok('★正常ターンは記録しない(容量を食わない)', w3.__v292Dfix553.dump().length === 0, w3.__v292Dfix553.dump());
       ok('★正常ターンもターン数には数える', w3.__v292Dfix553.stats().turns === 1, w3.__v292Dfix553.stats());
+      /* ★fix553b: 記録0のとき「本当に0」なのか「見張りが死んでいる」のかを区別できること。
+         これが無いと、今日ずっと潰してきた『無言の空振り』を検出器自身がやることになる。 */
+      ok('★見張りの実行回数が出る', w3.__v292Dfix553.stats().polls === 2, w3.__v292Dfix553.stats().polls);
+      ok('★最後に見張った時刻からの秒数が出る', typeof w3.__v292Dfix553.stats().sincePollSec === 'number');
+      ok('★生きているかが出る', w3.__v292Dfix553.stats().alive === true);
+      ok('★どこを掴めているかが出る', w3.__v292Dfix553.stats().wired.fetch === true);
       turns.push({ narrative: 'あ'.repeat(262) });
       w3.__v292Dfix553._poll();
       const log = w3.__v292Dfix553.dump();

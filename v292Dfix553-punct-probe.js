@@ -66,7 +66,12 @@
        診断の書込み失敗でユーザの物語を止めない)。ただし自分のキーは fix543 の集計に混ぜない。 */
     try { localStorage.setItem(LOG, JSON.stringify(a.slice(-MAX))); } catch(e){}
   }
-  var stats = { turns: 0, flagged: 0, byStage: { model: 0, parse: 0, postprocess: 0, unknown: 0 } };
+  /* ★fix553b: 見張り自身が止まっていても気づけるように polls/lastPollTs を出す。
+     この検出器は「異常が無ければ何も記録しない」設計なので、記録0のとき
+     「本当に0なのか、見張りが死んでいるのか」を区別できないと今日ずっと潰してきた
+     『無言の空振り』を自分でやることになる。 */
+  var stats = { turns: 0, flagged: 0, polls: 0, lastPollTs: 0,
+                byStage: { model: 0, parse: 0, postprocess: 0, unknown: 0 } };
 
   function stageOf(s1, s2, s4){
     if (bad(s1)) return 'model';
@@ -192,6 +197,7 @@
 
   function poll(){
     if (off()) return;
+    stats.polls++; stats.lastPollTs = Date.now();
     var st = getS(); if (!st || !Array.isArray(st.turns)) return;
     var n = st.turns.length;
     if (lastLen < 0){ lastLen = n; return; }
@@ -242,7 +248,14 @@
   window.__v292Dfix553 = {
     metrics: metrics,
     dump: function(){ return read(); },
-    stats: function(){ return { turns: stats.turns, flagged: stats.flagged, byStage: stats.byStage, logged: read().length }; },
+    stats: function(){
+      return { turns: stats.turns, flagged: stats.flagged, byStage: stats.byStage, logged: read().length,
+               /* ★見張りの生死。polls が増えない = 検出器が死んでいる(記録0の意味が変わる) */
+               polls: stats.polls,
+               sincePollSec: stats.lastPollTs ? Math.round((Date.now() - stats.lastPollTs) / 1000) : null,
+               alive: !!stats.lastPollTs && (Date.now() - stats.lastPollTs) < 120000,
+               wired: { fetch: installed, parsePlan: !!(function(){ try { var P = window.Planner; return P && P.parsePlan && P.parsePlan.__f553; } catch(e){ return false; } })() } };
+    },
     clear: function(){ try { localStorage.removeItem(LOG); } catch(e){} return true; },
     off: off,
     _wrapFetch: wrapFetch, _wrapParse: wrapParse, _poll: poll,
