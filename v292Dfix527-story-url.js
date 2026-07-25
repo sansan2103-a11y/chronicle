@@ -151,10 +151,34 @@
       return true;
     } catch(e){ return false; }
   }
+  // ★fix527c: fix402 の分岐(fork)バナーの「別端末のつづき」は pull なので、物語画面では
+  //   [3] の applySave ガードに阻まれて失敗する。押せない選択肢を出したままにせず、
+  //   「ホームで取り込む」に付け替えてホームへ誘導する(取り込みはホームで安全に行える)。
+  function fixForkBanner(){
+    try {
+      var el = document.getElementById('v292Dfix402-fork');
+      if (!el || el.__f527) return;
+      el.__f527 = 1;
+      var bs = el.querySelectorAll('button');
+      for (var i = 0; i < bs.length; i++){
+        var b = bs[i];
+        if (String(b.textContent || '').indexOf('別端末') < 0) continue;
+        var nb = b.cloneNode(false);                 // 元のリスナーを落とす
+        nb.textContent = '🏠 ホームで取り込む';
+        nb.addEventListener('click', function(){
+          try { var S = window.S || (0,eval)('typeof S!=="undefined"?S:null'); if (S && typeof S.save === 'function') S.save(); } catch(e){}
+          setTimeout(function(){ try { location.href = HOME; } catch(e){} }, 150);
+        });
+        b.parentNode.replaceChild(nb, b);
+        try { console.log(TAG, 'fork banner: 別端末のつづき → ホームで取り込む'); } catch(e){}
+      }
+    } catch(e){}
+  }
+
   function watchUI(){
     try {
-      hideLoadButtons(document);
-      var mo = new MutationObserver(function(){ hideLoadButtons(document); injectHomeButton(); });
+      hideLoadButtons(document); fixForkBanner();
+      var mo = new MutationObserver(function(){ hideLoadButtons(document); injectHomeButton(); fixForkBanner(); });
       mo.observe(document.body, { childList: true, subtree: true });
     } catch(e){}
     (function poll(){
