@@ -16,12 +16,20 @@
   a{color:#9a9ae0}
 </style>
 <script>
-  /* 常に最新版へ: version.txt(no-store)を読み、その値をクエリにしてindex.htmlへ。
+  /* 常に最新版へ: version.txt(no-store)を読み、その値をクエリにして home.html へ(★P2-b/案A)。
+     ?story= が付いて来たときだけ index.html へ直行する。
      同じビルドの間はindex.html?v=<build>がキャッシュされ高速、新ビルドが出た瞬間だけ取り直す。
      iOSの強キャッシュもクエリが変わるので確実に回避できる。 */
   (function(){
-    var extra = location.search ? location.search.replace(/^\?/, '&') : ''; /* ?code= 等を温存 */
-    function go(v){ var u='index.html?v=' + encodeURIComponent(v) + extra; try{ location.replace(u); }catch(e){ location.href=u; } }
+    var qs = location.search || '';
+    var extra = qs ? qs.replace(/^\?/, '&') : '';        /* ?code= 等を温存 */
+    var hasStory = /[?&]story=/.test(qs);
+    function go(v){
+      var u = hasStory
+        ? ('index.html?v=' + encodeURIComponent(v) + extra)
+        : ('home.html?v=' + encodeURIComponent(v) + extra);
+      try{ location.replace(u); }catch(e){ location.href = u; }
+    }
     try{
       fetch('version.txt?_=' + Date.now(), { cache:'no-store' })
         .then(function(r){ return r.text(); })
@@ -30,15 +38,14 @@
     }catch(e){ go('t'+Date.now()); }
     /* 保険: 4秒たっても飛ばなければ手動リンク表示 */
     setTimeout(function(){ var m=document.getElementById('fallback'); if(m) m.style.display='block'; }, 4000);
-  })();
-</script>
+  })();</script>
 </head>
 <body>
   <div class="box">
     <div class="sp"></div>
     <div>Chronicle を起動しています…</div>
     <div id="fallback" style="display:none;margin-top:12px">
-      自動で開かない場合は <a href="index.html">こちらをタップ</a>
+      自動で開かない場合は <a href="home.html">こちらをタップ</a>
     </div>
   </div>
 </body>

@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>CHRONICLE — ホーム</title>
+<!--
+  P2-b/P2-d ホーム画面 (2026-07-25)
+  設計書「P2: ホーム画面 + 物語ID(URL)方式」§4/§6.5/§8.1 に対応。
+  ★重要な設計上の約束:
+    1) このページは features.js / S を一切読み込まない。保存済みJSONを"読むだけ"。
+       → ホームを開いただけでセーブが書き換わることが原理的に起こらない。
+    2) 取り込み(pull)はこのページでだけ行う。物語がメモリに載っていないので衝突しない。
+       ただし「この端末の方がターン数が多い物語」は上書きしない(local-ahead保護)。
+    3) chr6_active_slot は書かない。物語は index.html?story=<id> で開く(URLが真実)。
+-->
+<style>
+  :root{
+    --bg:#080810; --bg2:#0d0d18; --panel:#11111f; --line:rgba(139,118,240,.18);
+    --tx:#e2e0f2; --dim:#8f93bb; --acc:#c9a44c; --acc2:#8b76f0;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--tx);font:14px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif;
+       display:flex;flex-direction:column;overflow:hidden}
+  button{font-family:inherit}
+  a{color:inherit}
+
+  header{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid var(--line);
+         background:linear-gradient(180deg,#0b0b16,#080810)}
+  .logo{font:600 17px/1 "Georgia",serif;letter-spacing:.16em;color:var(--tx)}
+  .logo small{display:block;font:400 9px/1.6 system-ui;letter-spacing:.3em;color:var(--dim);margin-top:3px}
+  .spacer{flex:1}
+  .sync{font-size:12px;color:var(--dim);white-space:nowrap}
+  .sync.err{color:#e08a8a}
+
+  main{flex:1;display:flex;min-height:0}
+  aside{width:210px;flex:none;padding:18px 14px;border-right:1px solid var(--line);overflow:auto}
+  .newbtn{width:100%;padding:12px;border-radius:10px;border:1px solid var(--acc);
+          background:linear-gradient(180deg,#d8b45c,#b8923c);color:#1a1408;font-weight:700;font-size:14px;cursor:pointer}
+  .newbtn:hover{filter:brightness(1.07)}
+  .navttl{margin:22px 0 8px;font-size:11px;letter-spacing:.12em;color:var(--dim)}
+  .nav{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:8px;
+       cursor:pointer;color:var(--tx);font-size:13px}
+  .nav:hover{background:rgba(139,118,240,.10)}
+  .nav.on{background:rgba(139,118,240,.18)}
+  .nav b{font-weight:400;color:var(--dim);font-size:12px}
+  .recent{margin-top:6px}
+  .recent .r{display:flex;gap:9px;align-items:center;padding:7px 8px;border-radius:8px;cursor:pointer}
+  .recent .r:hover{background:rgba(139,118,240,.10)}
+  .recent .rc{width:34px;height:26px;border-radius:5px;flex:none;background:#1a1a2c;background-size:cover;background-position:center}
+  .recent .rt{font-size:12px;line-height:1.35;overflow:hidden}
+  .recent .rt span{display:block;color:var(--dim);font-size:11px}
+
+  section.mid{flex:1;min-width:0;padding:18px 20px;overflow:auto}
+  .bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .h1{font-size:17px;font-weight:600;margin-right:auto}
+  input.search,select.sort{background:var(--bg2);color:var(--tx);border:1px solid var(--line);
+       border-radius:9px;padding:8px 12px;font-size:13px;font-family:inherit}
+  input.search{min-width:180px}
+  input.search:focus,select.sort:focus{outline:none;border-color:var(--acc2)}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(238px,1fr));gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer;
+        transition:transform .12s,border-color .12s;position:relative}
+  .card:hover{transform:translateY(-2px);border-color:rgba(139,118,240,.5)}
+  .card.sel{border-color:var(--acc)}
+  .cover{height:132px;background:#161628;background-size:cover;background-position:center;position:relative}
+  .cover .badge{position:absolute;top:8px;left:8px;font-size:10px;padding:3px 8px;border-radius:5px;
+        background:rgba(8,8,16,.72);color:var(--tx);letter-spacing:.06em}
+  .cbody{padding:11px 13px 13px}
+  .ctitle{font-size:14px;font-weight:600;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .csum{font-size:11.5px;color:var(--dim);height:32px;overflow:hidden;line-height:1.4}
+  .cchars{display:flex;align-items:center;gap:5px;margin:9px 0 8px;font-size:11px;color:var(--dim)}
+  .av{width:21px;height:21px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;
+      font-size:10px;color:#0c0c14;font-weight:700}
+  .cfoot{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);
+         border-top:1px solid rgba(139,118,240,.12);padding-top:8px}
+  .newcard{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:236px;
+           border:1px dashed rgba(139,118,240,.32);border-radius:12px;color:var(--dim);cursor:pointer;background:transparent}
+  .newcard:hover{border-color:var(--acc);color:var(--tx)}
+  .newcard .plus{font-size:26px;margin-bottom:8px;opacity:.75}
+
+  .detail{width:308px;flex:none;border-left:1px solid var(--line);padding:18px;overflow:auto}
+  .dcover{height:150px;border-radius:10px;background:#161628;background-size:cover;background-position:center;margin-bottom:14px}
+  .dtitle{font-size:17px;font-weight:600;margin-bottom:12px}
+  .drow{display:flex;justify-content:space-between;font-size:12px;padding:5px 0;color:var(--dim)}
+  .drow b{font-weight:400;color:var(--tx)}
+  .play{width:100%;margin:16px 0 8px;padding:13px;border-radius:10px;border:1px solid var(--acc);
+        background:linear-gradient(180deg,#d8b45c,#b8923c);color:#1a1408;font-weight:700;font-size:14px;cursor:pointer}
+  .play:hover{filter:brightness(1.07)}
+  .mini{display:flex;gap:8px;margin-top:6px}
+  .mini button{flex:1;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg2);
+        color:var(--dim);font-size:12px;cursor:pointer}
+  .mini button:hover{color:var(--tx);border-color:var(--acc2)}
+  .mini button.danger:hover{color:#e08a8a;border-color:#a05a5a}
+  .dsec{margin-top:18px;font-size:11px;letter-spacing:.1em;color:var(--dim);border-top:1px solid var(--line);padding-top:12px}
+  .ch{display:flex;gap:9px;margin-top:10px}
+  .ch .nm{font-size:12.5px;font-weight:600}
+  .ch .rl{font-size:10.5px;color:var(--acc2);margin-left:5px}
+  .ch .ds{font-size:11px;color:var(--dim);line-height:1.45}
+  .empty{color:var(--dim);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1}
+  .note{margin-top:12px;padding:10px 12px;border-radius:8px;background:rgba(224,138,138,.10);
+        border:1px solid rgba(224,138,138,.3);font-size:12px;color:#e6b4b4}
+  @media(max-width:980px){ .detail{display:none} aside{width:168px} }
+  @media(max-width:640px){ aside{display:none} section.mid{padding:14px} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">CHRONICLE<small>Third Universe</small></div>
+  <div class="spacer"></div>
+  <div class="sync" id="sync"></div>
+</header>
+
+<main>
+  <aside>
+    <button class="newbtn" id="newBtn">＋ 新しい物語を始める</button>
+    <div class="navttl">ライブラリ</div>
+    <div id="navs"></div>
+    <div class="navttl">最近プレイした物語</div>
+    <div class="recent" id="recent"></div>
+  </aside>
+
+  <section class="mid">
+    <div class="bar">
+      <div class="h1" id="listTitle">すべての物語</div>
+      <select class="sort" id="sort">
+        <option value="updated">並べ替え：更新日時</option>
+        <option value="turns">ターン数</option>
+        <option value="name">名前</option>
+        <option value="created">作成日</option>
+      </select>
+      <input class="search" id="q" placeholder="検索（名前・場所・主人公）">
+    </div>
+    <div class="grid" id="grid"></div>
+    <div id="note"></div>
+  </section>
+
+  <div class="detail" id="detail"></div>
+</main>
+
+<script>
+(function(){
+  'use strict';
+  var LS = window.localStorage;
+  function g(k){ try { return LS.getItem(k); } catch(e){ return null; } }
+  function s(k,v){ try { LS.setItem(k,v); return true; } catch(e){ return false; } }
+  function J(v,d){ try { return JSON.parse(v); } catch(e){ return d; } }
+  function el(id){ return document.getElementById(id); }
+  function esc(t){ return String(t==null?'':t).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  // ---------- データ読み取り（読むだけ・書き換えない） ----------
+  function readMeta(){ var m = J(g('chr6_slots_meta'),[]); return Array.isArray(m)?m:[]; }
+  function writeMeta(m){ return s('chr6_slots_meta', JSON.stringify(m)); }
+  function slotKey(id){ return (id==='default'||id==='chr6') ? 'chr6' : ('chr6_slot_'+id); }
+  function slotData(id){ var raw=g(slotKey(id)); return raw?J(raw,null):null; }
+  function clean(t){ return String(t||'').replace(/【[^】]*】/g,' ').replace(/\s+/g,' ').trim(); }
+
+  function hashN(t){ var h=0,x=String(t||''); for(var i=0;i<x.length;i++){ h=((h<<5)-h+x.charCodeAt(i))|0; } return Math.abs(h); }
+  function coverPrompt(sc){
+    if(!sc) return '';
+    var parts=[clean(sc.loc), clean(sc.lore).slice(0,90), clean(sc.tone),
+      'cinematic key art, atmospheric lighting, detailed, no text, no people, no watermark'];
+    return parts.filter(Boolean).join(', ').slice(0,210);
+  }
+  function coverUrl(id, sc){
+    var p = coverPrompt(sc); if(!p) return '';
+    var seed = g('v292cover_seed_'+id) || String(hashN(p)%100000);   // 決定的＝毎回同じ絵＝ブラウザキャッシュが効く
+    return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(p)+
+           '?width=600&height=375&nologo=true&model=flux&seed='+seed;   // 無料GET(Pollen非消費)
+  }
+  function gradient(t){ var h=hashN(t)%360; return 'linear-gradient(160deg,hsl('+h+',40%,22%),hsl('+((h+30)%360)+',44%,8%))'; }
+
+  function story(m){
+    var d = slotData(m.id) || {};
+    var turns = (d.turns && d.turns.length) || 0;
+    var hero = (d.cast && d.cast.hero) || null;
+    var npcs = (d.cast && Array.isArray(d.cast.npcs)) ? d.cast.npcs : [];
+    var upd = m.updatedAt ? Date.parse(m.updatedAt) : 0;
+    return {
+      id: String(m.id), name: String(m.name||'（無題）'),
+      summary: m.summary || clean(d.scene && d.scene.lore).slice(0,44) || clean(d.scene && d.scene.loc),
+      loc: clean(d.scene && d.scene.loc), hero: hero, npcs: npcs, turns: turns,
+      updated: upd || 0, created: m.createdAt ? Date.parse(m.createdAt) : 0,
+      opened: m.lastOpenedAt ? Date.parse(m.lastOpenedAt) : (upd||0),
+      favorite: !!m.favorite, scene: d.scene || null, meta: m
+    };
+  }
+  function all(){ return readMeta().filter(function(m){ return m && m.id; }).map(story); }
+
+  function ago(ms){
+    if(!ms) return '—';
+    var d = Date.now()-ms;
+    if(d < 60000) return 'たった今';
+    if(d < 3600000) return Math.floor(d/60000)+'分前';
+    if(d < 86400000) return Math.floor(d/3600000)+'時間前';
+    if(d < 172800000) return '昨日';
+    if(d < 2592000000) return Math.floor(d/86400000)+'日前';
+    return new Date(ms).toLocaleDateString('ja-JP');
+  }
+  function dt(ms){ return ms ? new Date(ms).toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'; }
+
+  // ---------- 状態 ----------
+  var VIEW='all', SEL=null, BUILD='';
+  var views = {
+    all:    { label:'すべての物語', f:function(){ return true; } },
+    active: { label:'進行中',       f:function(x){ return x.turns>0; } },
+    recent: { label:'最近プレイ',   f:function(x){ return !!x.opened; }, sort:'opened', limit:8 },
+    fav:    { label:'お気に入り',   f:function(x){ return x.favorite; } }
+  };
+
+  // ---------- 描画 ----------
+  function avatar(name, i){
+    var h=hashN(name)%360;
+    return '<div class="av" style="background:hsl('+h+',52%,62%)" title="'+esc(name)+'">'+esc(String(name||'?').slice(0,1))+'</div>';
+  }
+  function render(){
+    var list = all();
+    var v = views[VIEW];
+    list = list.filter(v.f);
+    var q = (el('q').value||'').trim().toLowerCase();
+    if(q){ list = list.filter(function(x){
+      return (x.name+' '+x.summary+' '+x.loc+' '+((x.hero&&x.hero.name)||'')).toLowerCase().indexOf(q)>=0; }); }
+    var sort = v.sort || el('sort').value;
+    list.sort(function(a,b){
+      if(sort==='turns') return b.turns-a.turns;
+      if(sort==='name')  return String(a.name).localeCompare(String(b.name),'ja');
+      if(sort==='created') return b.created-a.created;
+      if(sort==='opened')  return b.opened-a.opened;
+      return b.updated-a.updated;
+    });
+    if(v.limit) list = list.slice(0,v.limit);
+
+    el('listTitle').textContent = v.label;
+
+    // サイドバー
+    var full = all();
+    var navs = Object.keys(views).map(function(k){
+      var n = full.filter(views[k].f).length;
+      return '<div class="nav'+(k===VIEW?' on':'')+'" data-v="'+k+'"><span>'+esc(views[k].label)+'</span><b>'+n+'</b></div>';
+    }).join('');
+    el('navs').innerHTML = navs;
+
+    var rec = full.slice().sort(function(a,b){ return b.opened-a.opened; }).slice(0,6);
+    el('recent').innerHTML = rec.map(function(x){
+      var u = coverUrl(x.id, x.scene);
+      return '<div class="r" data-open="'+esc(x.id)+'"><div class="rc" style="background-image:'+(u?"url('"+u+"')":gradient(x.name))+'"></div>'+
+             '<div class="rt">'+esc(x.name)+'<span>'+ago(x.opened)+'</span></div></div>';
+    }).join('') || '<div style="font-size:12px;color:var(--dim);padding:4px 8px">まだありません</div>';
+
+    // カード
+    if(!list.length){
+      el('grid').innerHTML = '<div class="empty">'+(q?'見つかりませんでした':'物語がありません。「＋ 新しい物語を始める」から作成してください。')+'</div>';
+    } else {
+      el('grid').innerHTML = list.map(function(x){
+        var u = coverUrl(x.id, x.scene);
+        var chars = [].concat(x.hero?[x.hero]:[], x.npcs).filter(Boolean).slice(0,4);
+        return '<div class="card'+(SEL===x.id?' sel':'')+'" data-id="'+esc(x.id)+'">'+
+          '<div class="cover" style="background-image:'+(u?"url('"+u+"')":'none')+';background-color:transparent;'+
+            (u?'':'background:'+gradient(x.name)+';')+'">'+
+            '<div class="badge">'+(x.turns>0?'進行中':'未開始')+'</div></div>'+
+          '<div class="cbody"><div class="ctitle">'+esc(x.name)+'</div>'+
+          '<div class="csum">'+esc(x.summary||'')+'</div>'+
+          '<div class="cchars">'+chars.map(function(c,i){ return avatar(c.name,i); }).join('')+
+            '<span>'+(chars.length?chars.length+'人のキャラクター':'キャラクター未設定')+'</span></div>'+
+          '<div class="cfoot"><span>更新：'+ago(x.updated)+'</span><span>ターン '+x.turns+'</span></div></div></div>';
+      }).join('') + '<div class="newcard" id="newCard"><div class="plus">＋</div>新しい物語を始める<div style="font-size:11px;margin-top:4px;opacity:.7">空の世界から始める</div></div>';
+    }
+    renderDetail(full);
+  }
+
+  function renderDetail(full){
+    var x = null;
+    for(var i=0;i<full.length;i++){ if(full[i].id===SEL){ x=full[i]; break; } }
+    if(!x){ full = full.slice().sort(function(a,b){ return b.opened-a.opened; }); x = full[0] || null; SEL = x?x.id:null; }
+    if(!x){ el('detail').innerHTML=''; return; }
+    var u = coverUrl(x.id, x.scene);
+    var chars = [].concat(x.hero?[{c:x.hero,role:'主人公'}]:[], x.npcs.map(function(n){ return {c:n,role:'NPC'}; })).slice(0,6);
+    el('detail').innerHTML =
+      '<div class="dcover" style="'+(u?"background-image:url('"+u+"')":'background:'+gradient(x.name))+'"></div>'+
+      '<div class="dtitle">'+esc(x.name)+'</div>'+
+      '<div class="drow"><span>作成日</span><b>'+dt(x.created)+'</b></div>'+
+      '<div class="drow"><span>最終更新</span><b>'+dt(x.updated)+'</b></div>'+
+      '<div class="drow"><span>総ターン数</span><b>'+x.turns+'</b></div>'+
+      '<div class="drow"><span>場所</span><b>'+esc(x.loc||'—')+'</b></div>'+
+      '<button class="play" id="playBtn">'+(x.turns>0?'続きから始める':'この物語を始める')+'</button>'+
+      '<div class="mini"><button id="favBtn">'+(x.favorite?'★ お気に入り解除':'☆ お気に入り')+'</button>'+
+      '<button id="renBtn">名前を変更</button>'+
+      '<button class="danger" id="delBtn">削除</button></div>'+
+      '<div class="dsec">この物語のキャラクター</div>'+
+      (chars.length ? chars.map(function(o){
+        return '<div class="ch">'+avatar(o.c.name)+'<div><div class="nm">'+esc(o.c.name||'')+
+          '<span class="rl">'+o.role+'</span></div><div class="ds">'+esc(clean(o.c.desc||o.c.personality||'').slice(0,70))+'</div></div></div>';
+      }).join('') : '<div style="font-size:12px;color:var(--dim);margin-top:8px">まだいません</div>');
+  }
+
+  // ---------- 操作 ----------
+  function openStory(id){
+    var u = 'index.html' + (BUILD ? ('?v='+encodeURIComponent(BUILD)+'&story=') : '?story=') + encodeURIComponent(id);
+    location.href = u;
+  }
+  function newStory(){
+    var meta = readMeta();
+    var id = 's'+Date.now().toString(36)+Math.floor(Math.random()*1296).toString(36);
+    meta.push({ id:id, name:'新しい物語', key:'chr6_slot_'+id, updatedAt:null,
+                createdAt:new Date().toISOString(), lastOpenedAt:new Date().toISOString() });
+    if(!writeMeta(meta)){ alert('保存容量が不足しています。設定から不要なデータを整理してください。'); return; }
+    var u = 'index.html' + (BUILD ? ('?v='+encodeURIComponent(BUILD)+'&story=') : '?story=') + encodeURIComponent(id) + '&new=1';
+    location.href = u;
+  }
+  function delStory(id){
+    var m = readMeta().filter(function(x){ return x && String(x.id)===id; })[0];
+    if(!m) return;
+    var d = slotData(id); var t = (d&&d.turns&&d.turns.length)||0;
+    if(!confirm('「'+(m.name||id)+'」（'+t+'ターン）を削除します。\nこの物語は一覧から消えます。よろしいですか？')) return;
+    // P2-d: 削除直前の自動控え（UI無し・2世代）
+    try {
+      var raw = g(slotKey(id));
+      if(raw){
+        var ks=[]; for(var i=0;i<LS.length;i++){ var k=LS.key(i); if(k && k.indexOf('chr6_bk_del_')===0) ks.push(k); }
+        ks.sort(); while(ks.length>=2){ try{ LS.removeItem(ks.shift()); }catch(e){} }
+        s('chr6_bk_del_'+id+'_'+Date.now(), raw);
+      }
+    } catch(e){}
+    writeMeta(readMeta().filter(function(x){ return String(x.id)!==id; }));
+    try { LS.removeItem(slotKey(id)); } catch(e){}
+    try { LS.removeItem('v292cover_seed_'+id); } catch(e){}
+    try {
+      var rm=[]; for(var j=0;j<LS.length;j++){ var kk=LS.key(j); if(kk && kk.indexOf(id)>=0 && kk.indexOf('chr6_bk_')!==0 && kk.indexOf('__gen_')!==0) rm.push(kk); }
+      rm.forEach(function(k){ try{ LS.removeItem(k); }catch(e){} });
+    } catch(e){}
+    if(SEL===id) SEL=null;
+    render();
+  }
+  function renameStory(id){
+    var meta = readMeta();
+    for(var i=0;i<meta.length;i++){
+      if(meta[i] && String(meta[i].id)===id){
+        var v = prompt('新しい名前', meta[i].name || '');
+        if(v==null) return;
+        v = String(v).trim().slice(0,40); if(!v) return;
+        meta[i].name = v; writeMeta(meta); render(); return;
+      }
+    }
+  }
+  function favStory(id){
+    var meta = readMeta();
+    for(var i=0;i<meta.length;i++){ if(meta[i] && String(meta[i].id)===id){ meta[i].favorite = !meta[i].favorite; writeMeta(meta); render(); return; } }
+  }
+
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    var nav = t.closest && t.closest('[data-v]');       if(nav){ VIEW = nav.getAttribute('data-v'); render(); return; }
+    var rec = t.closest && t.closest('[data-open]');    if(rec){ openStory(rec.getAttribute('data-open')); return; }
+    if(t.id==='newBtn' || (t.closest && t.closest('#newCard'))){ newStory(); return; }
+    if(t.id==='playBtn'){ if(SEL) openStory(SEL); return; }
+    if(t.id==='delBtn'){ if(SEL) delStory(SEL); return; }
+    if(t.id==='renBtn'){ if(SEL) renameStory(SEL); return; }
+    if(t.id==='favBtn'){ if(SEL) favStory(SEL); return; }
+    var card = t.closest && t.closest('.card');
+    if(card){
+      var id = card.getAttribute('data-id');
+      if(SEL===id){ openStory(id); return; }             // 2回目のクリックで開く
+      SEL = id; render(); return;
+    }
+  });
+  el('q').addEventListener('input', render);
+  el('sort').addEventListener('change', render);
+
+  // ---------- クラウド取り込み（このページでだけ・local-ahead保護つき） ----------
+  function proxyUrl(){ var u=(g('v292ProxyUrl')||'').trim(); return (u||'https://novel-proxy.sansan2103.workers.dev').replace(/\/+$/,''); }
+  function authHeaders(){
+    var h={'Content-Type':'application/json'};
+    var p=(g('v292ProxyPass')||'').trim(); if(p) h['x-chronicle-pass']=p;
+    var t=J(g('v292GoogleToken'),null);
+    if(t && t.token && (!t.exp || t.exp*1 > Date.now())) h['x-google-id']=t.token;
+    return h;
+  }
+  function loggedIn(){ var h=authHeaders(); return !!(h['x-google-id']||h['x-chronicle-pass']); }
+  function call(body, ms){
+    var ctrl = (typeof AbortController!=='undefined') ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function(){ try{ctrl.abort();}catch(e){} }, ms||25000) : null;
+    var o={ method:'POST', headers:authHeaders(), body:JSON.stringify(body) };
+    if(ctrl) o.signal = ctrl.signal;
+    return fetch(proxyUrl()+'/save', o).then(function(r){ if(timer) clearTimeout(timer); return r.json(); });
+  }
+  function turnsOf(raw){ var d=J(raw,null); return (d && Array.isArray(d.turns)) ? d.turns.length : -1; }
+
+  function pull(){
+    if(!loggedIn()){ el('sync').textContent=''; return; }
+    el('sync').textContent = '☁ 確認中…';
+    call({op:'meta'}, 15000).then(function(m){
+      if(!m || !m.ok){ throw new Error('meta'); }
+      var serverRev = +m.rev||0, base = +(g('v292Dfix402_baseRev')||0)||0;
+      if(serverRev <= base){ el('sync').textContent='☁ 最新です'; return; }
+      el('sync').textContent = '☁ 取り込み中…';
+      return call({op:'get'}, 40000).then(function(r){
+        if(!r || !r.ok || !r.data || !r.data.ls) throw new Error('get');
+        var ls = r.data.ls, wrote=0, skipped=[];
+        // 控え(軽量): 登録簿だけ。物語本体は local-ahead 保護で守る。
+        try { s('chr6_bk_home_meta_'+Date.now(), g('chr6_slots_meta')||'[]'); } catch(e){}
+        for(var k in ls){
+          if(!Object.prototype.hasOwnProperty.call(ls,k)) continue;
+          if(k==='chr6_active_slot') continue;                       // ★端末の"開いている物語"は持ち込まない
+          if(k==='chr6' || k.indexOf('chr6_slot_')===0){
+            var lt = turnsOf(g(k)), rt = turnsOf(ls[k]);
+            if(lt > rt){ skipped.push(k); continue; }                // ★この端末の方が進んでいる→上書きしない
+          }
+          if(g(k) !== ls[k]){ if(s(k, ls[k])) wrote++; }
+        }
+        s('v292Dfix402_baseRev', String(serverRev));
+        if(r.data.updatedAt){ s('v292Dfix399_baseTs', String(+r.data.updatedAt||0)); s('v292Dfix399_localTs', String(+r.data.updatedAt||0)); }
+        el('sync').textContent = '☁ 取り込みました（'+wrote+'件）';
+        el('note').innerHTML = skipped.length
+          ? '<div class="note">この端末の方が進んでいる物語が '+skipped.length+' 件あったので、上書きしませんでした。次にその物語を遊ぶと自動でクラウドへ反映されます。</div>' : '';
+        render();
+      });
+    }).catch(function(e){
+      el('sync').className='sync err';
+      el('sync').textContent = '☁ 同期できませんでした（後で自動再試行）';
+    });
+  }
+
+  // ---------- 起動 ----------
+  fetch('version.txt?_='+Date.now(), {cache:'no-store'})
+    .then(function(r){ return r.text(); })
+    .then(function(t){ BUILD = (t||'').trim(); })
+    .catch(function(){})
+    .then(function(){ render(); pull(); });
+  render();
+})();
+</script>
+</body>
+</html>
