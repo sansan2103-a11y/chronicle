@@ -31,7 +31,14 @@
   var STRIP = /[ー－—―─\-‐-‒–—〜～…‥・、。，．！？!?,.:：;；「」『』（）()\[\]｛｝【】〈〉《》\sぁぃぅぇぉっゃゅょァィゥェォッャュョ゛-ゞ♪★☆‥※]/g;
 
   function off(){ try { return localStorage.getItem('v292Dfix388Off') === '1'; } catch(e){ return false; } }
-  function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined" ? S : null'); } catch(e){ return null; } }
+  /* ★fix547(2026-07-25): S の取得は index.html の正式API(fix539)を第一経路にする。
+     間接eval 頼みの取得は実機で無言のまま null を返し、判定が丸ごと空振りした前歴がある。
+     **第二経路は従来の式をそのまま残す**ので、index.html が古いキャッシュでも挙動は変わらない。
+     判定ロジックには一切触れていない(取得経路だけの差し替え)。 */
+  function getS(){
+    try { var a = window.__chronicleGetState ? window.__chronicleGetState('fix388') : null; if (a) return a; } catch(e){}
+    try { return window.S || (0,eval)('typeof S!=="undefined"?S:null') || null; } catch(e){ return null; }
+  }
   function heroName(){
     try { var S = getS(); if (S && S.cast && S.cast.hero && S.cast.hero.name) return String(S.cast.hero.name); } catch(e){}
     return '';

@@ -1,0 +1,116 @@
+/* 回帰テスト: v292Dfix547 — S取得の移行バッチ1（会話ログ書換系8ファイル）
+ * 方針: **判定ロジックには一切触れない。取得経路だけ**を「正式API優先」へ差し替える。
+ *   第二経路は従来の式をそのまま残すので、index.html が古いキャッシュでも挙動は変わらない。
+ * GPT指定の合格条件のうち、オフラインで固定できるものをここで押さえる。
+ *   (1) 人工的な既知1件を必ず検出する → 各fixに検出口が無いので「同じSを見ていること」で代替
+ *   (2) 無変更ケースは0件 → 同上
+ *   (3) 実セーブの前後dryRun一致 → **APIと従来式が同一オブジェクトを返す**ことで論理的に保証
+ *   (4) state取得成功回数が0でない → 実機で byFeature に出ることを確認（別途・実機ログ）
+ *   (5) misses/rescued/errors が増えていない → 実機で確認（別途）
+ * 対象は「取得のみ・休眠ガード無し・単一関数」の8件。
+ * fix66(休眠ガード3件を含む) / fix445(G.S 経由) / fix376(bare S.save) は**このバッチに入れない**。 */
+'use strict';
+const fs = require('fs'), path = require('path'), vm = require('vm');
+let pass = 0, fail = 0;
+const ok = (n, c, x) => { if (c) { pass++; console.log('  PASS  ' + n); } else { fail++; console.log('  FAIL  ' + n + (x !== undefined ? ('  >> ' + JSON.stringify(x)) : '')); } };
+
+const BATCH = {
+  'v292Dfix489-convlog-gate.js': 'fix489',
+  'v292Dfix465-role-who.js': 'fix465',
+  'v292Dfix462-bare-speaker.js': 'fix462',
+  'v292Dfix458-dash-post.js': 'fix458',
+  'v292Dfix390-speaker-fullname.js': 'fix390',
+  'v292Dfix388-first-person-speaker.js': 'fix388',
+  'v292Dfix383-vocative-fix.js': 'fix383',
+  'v292Dfix303-speaker-backref.js': 'fix303'
+};
+/* このバッチに入れてはいけないもの（理由つきで固定する） */
+const EXCLUDED = {
+  'v292Dfix66-renderhook-repair.js': 'window.S の有無で分岐する箇所を複数含む(単純置換できない)',
+  'v292Dfix445-handle-lock.js': 'G.S 経由で形が違う',
+  'v292Dfix376-speaker-guard.js': 'getSを持たず bare S.save を使う'
+};
+
+console.log('\n== バッチ1: 8ファイルが正式APIを第一経路にしている ==');
+Object.keys(BATCH).forEach(function (f) {
+  const s = fs.readFileSync(path.join(__dirname, f), 'utf8');
+  const fx = BATCH[f];
+  const i = s.indexOf('function getS()');
+  const body = s.slice(i, i + 420);
+  ok(fx + ': 正式APIを第一経路にしている',
+     body.indexOf("window.__chronicleGetState('" + fx + "')") > 0, body.slice(0, 100));
+  ok(fx + ': ★従来の式を第二経路としてそのまま残す(挙動不変の担保)',
+     /window\.S \|\| \(0,eval\)\('typeof S!=="undefined"\?S:null'\)/.test(body), body.slice(0, 200));
+  ok(fx + ': getS は1つだけ(取り違えが起きない)', (s.match(/function getS\(\)/g) || []).length === 1);
+});
+
+console.log('\n== このバッチに入れてはいけないものを固定する ==');
+Object.keys(EXCLUDED).forEach(function (f) {
+  const s = fs.readFileSync(path.join(__dirname, f), 'utf8');
+  ok(f.slice(9, 22) + ': 未移行のまま(' + EXCLUDED[f] + ')',
+     s.indexOf('__chronicleGetState') < 0, f);
+});
+{
+  /* fix66 は window.S の有無そのもので分岐する箇所を複数持つ(93行 / 1329行 / 1330行)。
+     ここを機械置換すると「window.S が無いときの別経路」が消える。次バッチで1件ずつ判断する。 */
+  const s = fs.readFileSync(path.join(__dirname, 'v292Dfix66-renderhook-repair.js'), 'utf8');
+  const branches = (s.match(/window\.S && window\.S/g) || []).length;
+  ok('★fix66 は window.S の有無で分岐する箇所を持つ(単純置換禁止)', branches >= 2, branches);
+  ok('★fix66 はまだ触っていない', s.indexOf('__chronicleGetState') < 0);
+}
+
+console.log('\n== 読み込んでも壊れない / 正式APIが優先される ==');
+function mkWin(apiState, windowState){
+  const store = {};
+  const ls = { getItem: k => Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null,
+    setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; },
+    key: i => Object.keys(store)[i], get length(){ return Object.keys(store).length; } };
+  const el = { querySelectorAll: () => [], querySelector: () => null, addEventListener(){}, appendChild(){}, setAttribute(){}, style: {}, remove(){}, insertBefore(){}, classList:{add(){},remove(){},contains:()=>false} };
+  const doc = { hidden: false, visibilityState: 'visible', readyState: 'complete', documentElement: el, body: el,
+    querySelectorAll: () => [], querySelector: () => null, getElementById: () => null, addEventListener(){},
+    createElement: () => ({ style: {}, setAttribute(){}, addEventListener(){}, appendChild(){}, remove(){}, classList:{add(){},remove(){}} }) };
+  const calls = [];
+  const w = { localStorage: ls, document: doc, console: { log(){}, warn(){}, error(){} },
+    setTimeout: () => 0, setInterval: () => 0, clearTimeout(){}, clearInterval(){},
+    MutationObserver: function(){ return { observe(){}, disconnect(){} }; },
+    navigator: { userAgent: 'node' }, location: { href: 'x', search: '' },
+    addEventListener(){}, removeEventListener(){}, fetch: () => Promise.reject(new Error('x')) };
+  if (apiState !== undefined) w.__chronicleGetState = function(feature){ calls.push(feature); return apiState; };
+  if (windowState !== undefined) w.S = windowState;
+  w.window = w; w.__calls = calls;
+  return w;
+}
+const REAL = { cast: { hero: { name: '本物' }, npcs: [] }, turns: [], save(){} };
+const FAKE = { cast: { hero: { name: 'ニセ' }, npcs: [] }, turns: [{}, {}], save(){} };
+Object.keys(BATCH).forEach(function (f) {
+  const fx = BATCH[f];
+  const w = mkWin(REAL, FAKE);
+  let err = null;
+  try { vm.runInContext(fs.readFileSync(path.join(__dirname, f), 'utf8'), vm.createContext(w), { filename: fx }); }
+  catch (e) { err = e.message; }
+  ok(fx + ': 読み込みで例外が出ない', err === null, err);
+});
+{
+  /* 正式APIが無い環境（index.htmlが古いキャッシュ）でも動く＝移行期の後方互換 */
+  const w = mkWin(undefined, FAKE);
+  let err = null;
+  try { vm.runInContext(fs.readFileSync(path.join(__dirname, 'v292Dfix489-convlog-gate.js'), 'utf8'), vm.createContext(w), { filename: 'fix489' }); }
+  catch (e) { err = e.message; }
+  ok('★正式APIが無くても読み込める(古いindex.htmlでも壊れない)', err === null, err);
+}
+
+console.log('\n== 台帳の更新（移行済みの数） ==');
+{
+  const fs2 = fs;
+  let migrated = 0;
+  fs2.readdirSync(__dirname).filter(x => /^v292Dfix\d+.*\.js$/.test(x)).forEach(function (f) {
+    const s = fs2.readFileSync(path.join(__dirname, f), 'utf8');
+    if (s.indexOf('__chronicleGetState') > 0) migrated++;
+  });
+  /* コア5(fix277/469/409/145/77) + バッチ1の8 + fix543(再保存で状態を取りに行くため参照) = 14 */
+  ok('★__chronicleGetState を参照するのは14ファイル', migrated === 14, migrated);
+}
+
+console.log('\n---------------------------------------------');
+console.log('PASS ' + pass + ' / FAIL ' + fail);
+process.exit(fail ? 1 : 0);
