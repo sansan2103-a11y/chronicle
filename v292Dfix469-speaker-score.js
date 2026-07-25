@@ -44,8 +44,14 @@
     /* ここから下は index.html が fix539 より古いキャッシュのときだけ通る移行期の後方互換。
        ★fix539b(GPT裁定): 正式APIが失敗したのにフォールバックが救えた場合は必ず記録する
        (「getterは失敗するのに旧経路は成功する」が再捕獲できれば機序特定の決定打になる)。 */
-    try { if (typeof S !== 'undefined' && S){ note539('fix469', 'rescued-by-lexical'); return S; } } catch(e){}
+    /* ★fix539c: window.S を lexical S より先に見る。理由は2つ:
+         (1) GPTが示した統一形もこの順序。(2) **読取専用フォレンジックの土台**。
+         配信JSを new Function へ流してモックwindowを渡す検証手法では、bare S は
+         **本物のページの const S へ解決してしまう**(実測: モック7ターンのはずが本物38ターンを返した)。
+         window.S を先に見れば、モックを渡した時にモックが勝つ。本番では window.S は
+         undefined なので、この順序変更で本番の挙動は変わらない。 */
     try { if (window.S){ note539('fix469', 'rescued-by-window'); return window.S; } } catch(e){}
+    try { if (typeof S !== 'undefined' && S){ note539('fix469', 'rescued-by-lexical'); return S; } } catch(e){}
     try { var u = (0,eval)('typeof S!=="undefined"?S:null');
           if (u){ note539('fix469', 'rescued-by-eval'); return u; }
           note539('fix469', 'legacy-eval-null'); }
