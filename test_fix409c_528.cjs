@@ -253,6 +253,99 @@ section('fix528d: 別物語/巻き戻しの残骸を sys 注入から外す');
   ok('OFF時は従来どおり両方登録される(退行できる)', names.indexOf('涼太') >= 0 && names.indexOf('鏡の奥から') >= 0, names);
 }
 
+section('fix528d-b: 未来lastは「再観測まで注入禁止」(自動復活しない)');
+{
+  const KEY='v292Dfix277Quasi';
+  function envWith(turnCount, ledger, off){
+    const win = makeEnv();
+    if (off) win.localStorage.setItem('v292Dfix528Off','1');
+    win.localStorage.setItem(KEY, JSON.stringify(ledger));
+    win.S = {
+      cast: { hero:{name:'マリア'}, npcs:[{name:'リカ'},{name:'レオン'},{name:'ミカ'}] },
+      turns: new Array(turnCount).fill(0).map(()=>({narrative:'',_convSays:[]})),
+      save(){}
+    };
+    load(win, 'v292Dfix277-quasi-pack.js');
+    return win;
+  }
+  // 実セーブ smriifzelrt 相当: 8ターン物語に last12/13 の別物語キャラが混入
+  const ledger = () => ({
+    '桐生悠真': { seen:[1,2,3,4,5,6,7,8,9,10,11,12,13], last:13, ali:[] },
+    '氷川杏子': { seen:[4,5,6,7,8,9,10,11,12], last:12, ali:[] },
+    '若い男':   { seen:[3,4,5], last:5, ali:[] }
+  });
+
+  // (1) 8ターン時点: 除外され、sf が立つ
+  const w8 = envWith(8, ledger());
+  const r8 = w8.__v292QuasiPack.quasiRecent().map(r=>r.name);
+  ok('8ターン時点で別物語キャラは注入されない', r8.indexOf('桐生悠真')<0 && r8.indexOf('氷川杏子')<0, r8);
+  ok('正当な準登録は残る', r8.indexOf('若い男')>=0, r8);
+  const after8 = JSON.parse(w8.localStorage.getItem(KEY));
+  ok('sf フラグが台帳へ永続化される', after8['桐生悠真'].sf===2 && after8['氷川杏子'].sf===2, Object.keys(after8).map(k=>k+':'+(after8[k].sf||0)));
+  ok('データは削除されていない(退避先 sfSeen に全登場実績が残る)', after8['桐生悠真'].sfSeen.length===13 && after8['桐生悠真'].seen.length===0, after8['桐生悠真']);
+
+  // (2) ★再発条件: 現在ターンが last に追いついても自動復活しない
+  const w14 = envWith(14, after8);
+  const r14 = w14.__v292QuasiPack.quasiRecent().map(r=>r.name);
+  ok('★14ターンへ進んでも自動復活しない(桐生悠真)', r14.indexOf('桐生悠真')<0, r14);
+  ok('★14ターンへ進んでも自動復活しない(氷川杏子)', r14.indexOf('氷川杏子')<0, r14);
+
+  // (3) 新しい本文でその人物を再観測したときだけ復活する
+  const w14b = envWith(14, after8);
+  w14b.__v292QuasiPack.noteAppear('桐生悠真', 13);   // この物語の実在ターンで観測
+  const e = w14b.__v292QuasiPack.store()['桐生悠真'];
+  ok('再観測で sf が解除される', !e.sf, e);
+  ok('別物語の登場実績は seen へ戻らない(即時に準登録化しない)', e.seen.length===1 && e.seen[0]===13, e.seen);
+  ok('外した番号は sfSeen へ退避され消えていない', Array.isArray(e.sfSeen) && e.sfSeen.length===13, e.sfSeen && e.sfSeen.length);
+  const r14c = w14b.__v292QuasiPack.quasiRecent().map(r=>r.name);
+  ok('再観測直後はまだ3ターン未達なので注入されない', r14c.indexOf('桐生悠真')<0, r14c);
+  w14b.__v292QuasiPack.noteAppear('桐生悠真', 12);
+  w14b.__v292QuasiPack.noteAppear('桐生悠真', 11);
+  const r14d = w14b.__v292QuasiPack.quasiRecent().map(r=>r.name);
+  ok('この物語で3ターン観測されたら正常に注入対象へ戻る', r14d.indexOf('桐生悠真')>=0, r14d);
+
+  // (4) 未来ターンでの観測では解除しない
+  const w8b = envWith(8, after8);
+  w8b.__v292QuasiPack.noteAppear('桐生悠真', 13);   // 8ターン物語に turn13 は存在しない
+  const e2 = w8b.__v292QuasiPack.store()['桐生悠真'];
+  ok('この物語に無いターン番号での観測では解除しない', e2.sf===2, e2);
+
+  // (5) 起動直後(turns=0)で誤って全件 sf を立てない
+  const w0 = envWith(0, ledger());
+  w0.__v292QuasiPack.quasiRecent();
+  const after0 = w0.__v292QuasiPack.store();
+  ok('物語未ロード(0ターン)では sf を立てない', !after0['若い男'].sf && !after0['桐生悠真'].sf, Object.keys(after0).map(k=>k+':'+(after0[k].sf||0)));
+
+
+  // (7) 正当な巻き戻し(本文にその人物が実在する)は実績を保持する
+  {
+    const win = makeEnv();
+    win.localStorage.setItem(KEY, JSON.stringify({
+      '民宿の女将': { seen:[2,3,4,15,16,17], last:17, ali:[] }
+    }));
+    win.S = {
+      cast: { hero:{name:'霧 涼太'}, npcs:[] },
+      turns: new Array(10).fill(0).map((_,i)=>({ narrative: i<5 ? '民宿の女将が茶を置いた。' : '波が高い。', _convSays: [] })),
+      save(){}
+    };
+    load(win, 'v292Dfix277-quasi-pack.js');
+    const rec = win.__v292QuasiPack.quasiRecent().map(r=>r.name);
+    const e3 = win.__v292QuasiPack.store()['民宿の女将'];
+    ok('巻き戻し: 未来ターンなので一旦は注入停止', rec.indexOf('民宿の女将')<0, rec);
+    ok('巻き戻し: 別物語ではないと判定される(sf=1)', e3.sf===1, e3.sf);
+    ok('巻き戻し: この物語に実在するターンの実績は保持される', JSON.stringify(e3.seen)===JSON.stringify([2,3,4]), e3.seen);
+    ok('巻き戻し: 存在しない番号だけ退避される', JSON.stringify(e3.sfSeen)===JSON.stringify([15,16,17]), e3.sfSeen);
+    win.__v292QuasiPack.noteAppear('民宿の女将', 9);
+    const rec2 = win.__v292QuasiPack.quasiRecent().map(r=>r.name);
+    ok('巻き戻し: 再登場した瞬間に実績を保ったまま復帰する', rec2.indexOf('民宿の女将')>=0, rec2);
+  }
+
+  // (6) OFF スイッチ
+  const wOff = envWith(14, ledger(), true);
+  const rOff = wOff.__v292QuasiPack.quasiRecent().map(r=>r.name);
+  ok('OFF時は従来どおり(退行できる)', rOff.indexOf('桐生悠真')>=0, rOff);
+}
+
 console.log('\n---------------------------------------------');
 console.log('PASS ' + pass + ' / FAIL ' + fail);
 process.exit(fail ? 1 : 0);

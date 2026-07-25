@@ -165,6 +165,43 @@
        (2) 区切りを除いた文字列の末尾に候補が完全一致し、(3) 残りの姓部分が1〜4字、(4) 候補が一意。
        → 「朝比奈ひなた」(区切り無し)の「ひなた」等は対象外にして巻き込みを避ける。
      OFF: localStorage v292Dfix528Off='1' */
+  /* この物語の現在ターン数。0 は「まだ物語がメモリに載っていない」を意味するので判定に使わない。 */
+  function storyTurnCount(){ try { var S = getS(); return (S && Array.isArray(S.turns)) ? S.turns.length : 0; } catch(e){ return 0; } }
+  /* ★fix528d-b: その名前がこの物語の本文・入力・会話ログのどこかに現れるか。
+     fix529(キャラ一覧)と同じ判定基準。「別物語からの混入」と「正当な巻き戻し」を区別する唯一の証拠。 */
+  function appearsInStory(name){
+    try {
+      var S = getS(); if (!S || !Array.isArray(S.turns)) return false;
+      for (var i = 0; i < S.turns.length; i++){
+        var t = S.turns[i]; if (!t) continue;
+        if (String(t.narrative || '').indexOf(name) >= 0) return true;
+        if (String(t.playerText || '').indexOf(name) >= 0) return true;
+        var cs = t._convSays;
+        if (Array.isArray(cs)){
+          for (var j = 0; j < cs.length; j++){
+            var c = cs[j]; if (!c) continue;
+            if (String(c.who || '').indexOf(name) >= 0) return true;
+            if (String(c.say || '').indexOf(name) >= 0) return true;
+          }
+        }
+      }
+    } catch(e){}
+    return false;
+  }
+  /* sf(suspended-future)を立てる。同時に「この物語の証拠にならない登場実績」を sfSeen へ退避する。
+     ・本文に一度も出ない = 別物語からの混入 → seen を全部退避(この物語での実績はゼロが正しい)
+     ・本文に出る        = 正当な巻き戻し等  → 存在しないターン番号だけ退避(実績は残す)
+     どちらも削除ではなく退避。復帰は noteAppear の再観測だけが行う。 */
+  function suspendFuture(e, name, cur){
+    var foreign = !appearsInStory(name);
+    var keep = [], drop = [];
+    (e.seen || []).forEach(function(x){ (!foreign && x <= cur - 1 ? keep : drop).push(x); });
+    if (drop.length) e.sfSeen = (e.sfSeen || []).concat(drop).slice(-60);
+    e.seen = keep;
+    e.last = keep.length ? Math.max.apply(Math, keep) : 0;
+    e.sf = foreign ? 2 : 1;   // 2=別物語由来 / 1=巻き戻し等。どちらも再観測まで注入禁止
+    try { console.log(TAG, 'fix528d: 注入停止(' + (foreign ? '別物語由来' : '未来ターン') + '):', name); } catch(_){}
+  }
   function castPartOwner(name){
     try {
       var cs = castNames(), hit = null, n2;
@@ -196,6 +233,25 @@
     if (!off528() && castPartOwner(name)) return;   // ★fix528b: 登録キャラの名だけ呼び=別人物にしない
     var qs = loadQ();
     var e = qs[name] || { seen: [], ali: [] };
+    /* ★fix528d-b(2026-07-25・おしん指摘の再発条件を潰す):
+         「未来のターン番号」を持つ残骸は sf(suspended-future) で【再観測まで注入禁止】にする。
+       なぜ一時除外では足りないか: 旧実装は quasiRecent で `last > cur-1` を弾くだけだったので、
+         物語が進んで現在ターンが last に追いつくと、別物語由来の残骸がそのまま
+         「最近登場した人物」として復活してしまう(例: 8ターン物語 + last=13 → 13ターン目で復活)。
+       解除条件は「この物語で実際に再観測されたこと」だけ。ここ(noteAppear)は
+         <say|react|state who=> と _convSays の話者からしか呼ばれない＝実観測そのもの。
+       解除時に seen を「この物語に実在するターン番号」だけへ絞る。別物語の登場実績を
+         引き継いだまま復活すると、初回観測で即 seen>=3 を満たして誤って準登録化するため。
+         捨てる番号は削除せず e.sfSeen へ退避する(非破壊・形式追加は1キーのみ)。
+       正当な巻き戻しでも、その人物が新しい進行で再登場すれば同じ経路で自動解除される。
+       OFF: v292Dfix528Off='1' */
+    if (!off528() && e.sf){
+      var curN = storyTurnCount();
+      if (!(curN > 0 && turnIdx >= 0 && turnIdx <= curN - 1)) return;   // この物語に実在するターンでの観測でなければ解除しない
+      delete e.sf;
+      qDirty = true;
+      try { console.log(TAG, 'fix528d: 再観測により復帰:', name, '@turn', turnIdx); } catch(_){}
+    }
     if (e.seen.indexOf(turnIdx) < 0){
       e.seen.push(turnIdx);
       if (e.seen.length > 40) e.seen = e.seen.slice(-40);
@@ -235,6 +291,7 @@
   function quasiRecent(){
     /* 準登録(累計3ターン登場)かつ直近5ターンに登場した名前を、最終登場が新しい順で返す */
     var out = [];
+    var sfMarked = false;
     try {
       var S = getS(); var cur = (S && S.turns) ? S.turns.length : 0;
       var qs = loadQ();
@@ -255,12 +312,22 @@
            ★fix528b の分身も同時に注入対象から外す(既存物語の台帳を書き換えずに効かせるため)。
            OFF: localStorage v292Dfix528Off='1' */
         if (!off528()){
-          if ((e.last || 0) > cur - 1) return;      // この物語に無いターン番号=別物語/巻き戻しの残骸
+          /* ★fix528d-b: 一時除外ではなく「再観測まで注入禁止」。cur===0(起動直後で物語未ロード)では
+               全件が未来扱いになってしまうので、必ず cur>0 のときだけ判定する。 */
+          if (cur > 0 && !e.sf && (e.last || 0) > cur - 1){
+            suspendFuture(e, n, cur);                 // この物語に無いターン番号=別物語/巻き戻しの残骸
+            qDirty = true; sfMarked = true;
+            return;
+          }
+          if (e.sf) return;                         // 再観測(noteAppear)されるまで自動復活させない
           if (castPartOwner(n)) return;             // 登録キャラの名だけ呼び=分身
         }
         if (e.seen.length >= 3 && (cur - (e.last || 0)) <= 5) out.push({ name: n, last: e.last || 0 });
       });
       out.sort(function(a, b){ return b.last - a.last; });
+      /* sf を立てたら永続化する(次回起動でも「再観測まで注入禁止」を維持するため)。
+         台帳は物語データではない別キーなのでここでの書き込みは安全。 */
+      if (sfMarked) saveQ();
     } catch(e){}
     return out;
   }
