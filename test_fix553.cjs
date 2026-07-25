@@ -81,7 +81,18 @@ console.log('\n== ★生の応答から本文だけを取り出す(fix553c) ==')
   ok('★コードフェンス付きでも取り出せる', N('```json\n' + raw + '\n```') !== null);
   ok('★壊れたJSONでも narrative 配列だけ拾える',
      N('{"narrative":["あ。","い。"],  ←ここで壊れている') === 'あ。\nい。');
-  ok('★どうしても取れなければ null(段階を断定しない)', N('ただの文章です。') === null, N('ただの文章です。'));
+  /* ★★fix553f: 実応答を覗いたら**JSONではなかった**。新エンジン(fix192)の応答は
+     「素の本文 + <say>/<state>/<react> タグ」。JSON前提の抽出が全ターンで失敗し、
+     rawUsable が 8ターン中0 = 生を一度も使えていなかった。 */
+  const REAL = 'アリアの声が、崩れた壁の隙間を抜けて夜気に溶ける。\n\n返事はない。\n\n' +
+               '<say who="アリア">……誰かいるの</say>\n\nゴンドラの揺れが止まった。\n' +
+               '<state who="アリア" karada="右拳に裂傷" kokoro="警戒" />\n<react who="カエデ" 声="…" />';
+  ok('★タグ形式の応答から本文だけ取れる(fix553f)',
+     N(REAL) !== null && N(REAL).indexOf('<state') < 0 && N(REAL).indexOf('<react') < 0, N(REAL));
+  ok('★本文に <say> は残る(metricsがタグを落とす)', N(REAL).indexOf('<say') >= 0);
+  ok('★<state>の属性値を本文として数えない',
+     w.__v292Dfix553.metrics(N(REAL)).len < REAL.length, w.__v292Dfix553.metrics(N(REAL)).len);
+  ok('★どうしても取れなければ null(段階を断定しない)', N('短い。') === null, N('短い。'));
   /* ★fix553d: モデルが壊れた出力を返すと JSON として読めず、いちばん知りたいケースで生が測れなくなる
      (実測: turn51 は s1_raw=null だった)。最後の手段として20字以上の文字列リテラルだけを集める。 */
   const A = w.__v292Dfix553._narrativeFromRaw;

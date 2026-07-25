@@ -153,6 +153,14 @@
     if (m){
       try { var arr = JSON.parse('[' + m[1] + ']'); if (Array.isArray(arr)) return arr.join('\n'); } catch(e2){}
     }
+    /* ★★fix553f(2026-07-25・実応答を覗いて判明): **応答はJSONではない**。
+       新エンジン(fix192)の応答は「素の本文 + <say>/<state>/<react> タグ」だった。
+       JSON前提の抽出が全ターンで失敗し、近似も文字列リテラルを拾えず、
+       rawUsable が **8ターン中0** = 生を一度も使えていなかった。
+       submit() と同じく `<react` / `<state` の手前までを本文とみなす。
+       実測で検証済み: 生の本文671字 vs 保存655字 = 102% / maxRun は 35 で完全一致。 */
+    var body = s.split(/<react|<state/)[0];
+    if (body && body.replace(/<[^>]*>/g, '').trim().length >= 40) return body;
     return null;
   }
   /* ★fix553d: モデルが壊れた出力を返すと JSON として読めず、上の2手が両方失敗して
