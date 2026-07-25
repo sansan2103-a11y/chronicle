@@ -86,6 +86,53 @@ console.log('\n== fix537: 統合してはいけないケース ==');
   ok('「私はシオン」型も拾う', (q.store()['シオン'].ali||[]).indexOf('少女')>=0, q.store()['シオン']);
 }
 
+console.log('\n== fix538: 別名確定後、保存済みの会話ログも正名へ寄せる ==');
+function mkTurns(ledger, cards, off538){
+  const store={}; if(off538) store['v292Dfix538Off']='1';
+  if(ledger) store['v292Dfix277Quasi']=JSON.stringify(ledger);
+  const ls={getItem:k=>Object.prototype.hasOwnProperty.call(store,k)?store[k]:null,
+    setItem:(k,v)=>{store[k]=String(v);},removeItem:k=>{delete store[k];},
+    key:i=>Object.keys(store)[i],get length(){return Object.keys(store).length;}};
+  const el={querySelectorAll:()=>[],addEventListener(){},appendChild(){},setAttribute(){},style:{}};
+  const doc={hidden:false,documentElement:el,body:el,querySelectorAll:()=>[],addEventListener(){},
+    createElement:()=>({style:{},setAttribute(){},addEventListener(){}})};
+  const w={localStorage:ls,document:doc,console:{log(){},warn(){}},setTimeout:()=>0,setInterval:()=>0,
+    clearTimeout(){},clearInterval(){},MutationObserver:function(){return{observe(){},disconnect(){}};},
+    navigator:{userAgent:'node'}};
+  w.window=w;
+  w.__chr6Key=()=>'chr6';
+  w.S={cast:{hero:{name:'アリア・リュミエール'},npcs:[{name:'カエデ'}]},
+       turns:cards.map(cs=>({narrative:'',_convSays:cs.map(c=>({who:c[0],say:c[1]}))})),
+       save(){ this.__saved=(this.__saved||0)+1; }};
+  ls.setItem('chr6', JSON.stringify({turns:w.S.turns}));
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'v292Dfix277-quasi-pack.js'),'utf8'),vm.createContext(w),{filename:'fix277'});
+  return w;
+}
+{
+  const w=mkTurns({'シオン':{seen:[5,8],last:8,ali:['少女']}},
+    [[['少女','まだ回るの'],['カエデ','行こう']],[['少女','こっち'],['シオン','シオンっていうんだ']]]);
+  const q=w.__v292QuasiPack;
+  const n=q.normalizeConvWho('test');
+  const who=w.S.turns.map(t=>t._convSays.map(c=>c.who));
+  ok('★保存済みカードの「少女」が「シオン」へ統一される', n===2 && who[0][0]==='シオン' && who[1][0]==='シオン', {n,who});
+  ok('無関係な話者は触らない', who[0][1]==='カエデ', who);
+  let bkKeys=[]; for(let i=0;i<w.localStorage.length;i++){const k=w.localStorage.key(i); if(/^chr6_bk_fix538_\d+$/.test(k)) bkKeys.push(k);}
+  ok('適用前のバックアップが取られる', bkKeys.length===1, bkKeys);
+  ok('ログが残る', !!w.localStorage.getItem('v292Dfix538_log'), (w.localStorage.getItem('v292Dfix538_log')||'').slice(0,60));
+  ok('セーブが呼ばれる', w.S.__saved>=1, w.S.__saved);
+  ok('2回目は変更0件(冪等)', q.normalizeConvWho('again')===0, 'ok');
+}
+{
+  const w=mkTurns({'シオン':{seen:[5,8],last:8,ali:['少女']}},
+    [[['少女','まだ回るの']]], true);
+  const q=w.__v292QuasiPack;
+  ok('OFF時は何もしない(退行できる)', q.normalizeConvWho('test')===0 && w.S.turns[0]._convSays[0].who==='少女', w.S.turns[0]._convSays[0].who);
+}
+{
+  const w=mkTurns({},[[['少女','まだ回るの']]]);
+  ok('別名が無ければ触らない', w.__v292QuasiPack.normalizeConvWho('test')===0);
+}
+
 console.log('\n---------------------------------------------');
 console.log('PASS '+pass+' / FAIL '+fail);
 process.exit(fail?1:0);

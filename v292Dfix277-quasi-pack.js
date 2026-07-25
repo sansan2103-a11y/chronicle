@@ -380,8 +380,66 @@
           localStorage.setItem('v292Dfix537_log', JSON.stringify(lg.slice(-30)));
         } catch(e2){}
         try { console.log(TAG, 'fix537: 名乗りで同一性確定:', L1, '=', W); } catch(e3){}
+        try { saveQ(); normalizeConvWho('fix537:' + L1 + '=' + W); } catch(e4){}   // ★fix538
       }
     } catch(e){}
+  }
+
+
+  /* ★fix538(2026-07-25): 別名が確定したら、**保存済みの会話ログの話者も**正名へ寄せる。
+     実測(30ターン試験): fix537 が 少女=シオン を確定させると、キャラ一覧と fix77 の状態は統合されるのに
+     **保存済みカードは旧呼称のまま**だった(会話ログに2つの名前・keyForが名前ハッシュなので2つのアイコン)。
+     やり方は fix409 と同じ流儀: 適用前に丸ごとバックアップを取り、ログを残し、OFFで止められる。
+     対象は「明示的に宣言された別名」だけ = fix537(本人の名乗り) と キャラ説明の「別名:」行。
+     推測による統合は一切しない。 OFF: localStorage v292Dfix538Off='1' */
+  function off538(){ try { return localStorage.getItem('v292Dfix538Off') === '1'; } catch(e){ return false; } }
+  var _bk538 = false;
+  function normalizeConvWho(reason){
+    try {
+      if (off538()) return 0;
+      var S = getS(); if (!S || !Array.isArray(S.turns)) return 0;
+      var map = aliasMap(); var keys = Object.keys(map);
+      if (!keys.length) return 0;
+      /* 何件変わるか先に数える(0なら一切触らない=保存もバックアップもしない) */
+      var n = 0;
+      S.turns.forEach(function(t){
+        ((t && t._convSays) || []).forEach(function(c){
+          if (c && c.who && map[c.who] && map[c.who] !== c.who) n++;
+        });
+      });
+      if (!n) return 0;
+      if (!_bk538){
+        try {
+          var k = (typeof window.__chr6Key === 'function') ? window.__chr6Key() : 'chr6';
+          var blob = localStorage.getItem(k);
+          if (blob) localStorage.setItem('chr6_bk_fix538_' + Date.now(), JSON.stringify({ key: k, blob: blob, ts: Date.now() }));
+          /* 新しい順3件だけ残す */
+          var bks = Object.keys(localStorage).filter(function(x){ return /^chr6_bk_fix538_\d+$/.test(x); }).sort();
+          while (bks.length > 3){ localStorage.removeItem(bks.shift()); }
+          _bk538 = true;
+        } catch(e){ return 0; }   /* 控えが取れないなら書き換えない(fail-closed) */
+      }
+      var changed = [];
+      S.turns.forEach(function(t, ti){
+        ((t && t._convSays) || []).forEach(function(c){
+          if (c && c.who && map[c.who] && map[c.who] !== c.who){
+            changed.push({ turn: ti + 1, from: c.who, to: map[c.who], say: String(c.say || '').slice(0, 14) });
+            c.who = map[c.who];
+          }
+        });
+      });
+      if (changed.length){
+        try { if (typeof S.save === 'function') S.save(); } catch(e){}
+        try {
+          var lg = JSON.parse(localStorage.getItem('v292Dfix538_log') || '[]');
+          lg.push({ ts: Date.now(), reason: reason || '', n: changed.length, sample: changed.slice(0, 5) });
+          localStorage.setItem('v292Dfix538_log', JSON.stringify(lg.slice(-20)));
+        } catch(e){}
+        try { if (window.__v292Dfix66 && typeof window.__v292Dfix66.repair === 'function') window.__v292Dfix66.repair(); } catch(e){}
+        try { console.log(TAG, 'fix538: 会話ログの話者を正名へ統一:', changed.length, '件'); } catch(e){}
+      }
+      return changed.length;
+    } catch(e){ return 0; }
   }
 
   function syncConv(){
@@ -617,6 +675,7 @@
     store: loadQ, key: QK, surgery: surgery, aliasMap: aliasMap, aliasFix: aliasFix,
     noteAppear: noteAppear, quasiRecent: quasiRecent, syncConv: syncConv, unifyCards: unifyCards,
     detectSelfNaming: detectSelfNaming, /* ★fix537 検証口(実経路はparsePlanラップ) */
+    normalizeConvWho: normalizeConvWho,   /* ★fix538 検証口 */
     _dropCache: function(){ qStore = null; qKeyLoaded = ''; aliasCache = null; }, /* 検証用 */
     addAlias: function(canonical, alias){
       try { var qs = loadQ(); var e = qs[canonical] || { seen: [], ali: [] }; if ((e.ali = e.ali || []).indexOf(alias) < 0) e.ali.push(alias); qs[canonical] = e; qDirty = true; saveQ(); aliasCache = null; return true; } catch(e2){ return false; }
