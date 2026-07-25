@@ -303,6 +303,87 @@
       while ((m = re2.exec(txt))) noteAppear(m[1], turnIdx, { source: 'current-parse' });
     } catch(e){}
   }
+
+  /* ★fix537(2026-07-25・30ターン実機で捕獲): 「名乗り」で同一性が確定した時だけ、記述的な呼称を新しい名前へ紐づける。
+     実測: 30ターン後、同一人物が4つの台帳すべてで別人のまま残っていた。
+       会話カード(少女5枚 / シオン12枚) / 準登録カルテ(少女#3 / シオン#6) /
+       ロスター(白いワンピースの少女 / シオン) / キャラ一覧(少女@29 と シオン@17)。
+       本文には <say who="シオン">シオンっていうんだ……たぶん</say> という**決定的証拠**がある。
+     設計原則(GPT監査): 「女将が出たから民宿の女将を表示」ではなく
+       「**民宿の女将＝女将と既に確定しているから**表示」。名乗りは、その"確定"にあたる最強の証拠。
+     したがって外見の類似や部分一致では一切統合せず、**本人が名乗った時だけ**別名として記録する。
+     成立条件(すべて満たす時だけ・1つでも欠けたら何もしない):
+       (1) そのターンに who=W のカードがあり、W が**この物語で初出**(台帳に無い or 今ターンが初seen)
+       (2) その台詞が **W 自身の名乗り**である(「Wっていうんだ」「Wという」「名前はW」「私はWだ」等)
+       (3) 直近3ターンに、**記述的な仮呼称 L**(少女/少年/男/女/子供/影/人影 で終わる呼称)が台帳にあり、
+           その L がちょうど1つに定まる(2つ以上あれば曖昧なので見送り)
+       (4) L も W も登録キャスト名ではない(登録キャラ同士は絶対に統合しない)
+     やること: 既存の別名機構へ addAlias(W, L) を1件足すだけ。以降 aliasFix が who を W へ正規化し、
+       fix77の状態も mergeAliasStates が W へ寄せ、キャラ一覧の重複表示も消える(全部既存の仕組み)。
+     可逆性: 台帳の ali 配列に1要素増えるだけ。消せば元に戻る。ログは v292Dfix537_log。
+     OFF: localStorage v292Dfix537Off='1' */
+  var DESCRIPTIVE_TAIL = /(少女|少年|女|男|子供|子ども|娘|息子|影|人影|老人|老婆|青年|婦人)$/;
+  function off537(){ try { return localStorage.getItem('v292Dfix537Off') === '1'; } catch(e){ return false; } }
+  function namingOf(text, who){
+    var t = String(text || ''), w = String(who || '');
+    if (!w || w.length < 2) return false;
+    var i = t.indexOf(w);
+    while (i >= 0){
+      var after = t.slice(i + w.length, i + w.length + 8);
+      var before = t.slice(Math.max(0, i - 6), i);
+      if (/^(?:って(?:いう|言う)|という|と言う|と呼(?:んで|ばれ)|です|だ(?:よ|けど)?[。、！\s]?$|だ[。、！])/.test(after)) return true;
+      if (/(名前は|名は|わたしは|私は|僕は|俺は|あたしは)[\s　]*$/.test(before)) return true;
+      i = t.indexOf(w, i + 1);
+    }
+    return false;
+  }
+  function detectSelfNaming(raw, turnIdx){
+    try {
+      if (off537() || offQ()) return;
+      var txt = String(raw || ''), m, cast = castNames();
+      var re = /<say\s+who="([^"]{2,24})"\s*>([\s\S]{0,200}?)<\/say>/g;
+      var qs = loadQ();
+      while ((m = re.exec(txt))){
+        var W = validName(String(m[1] || '').trim());
+        if (!W || cast.indexOf(W) >= 0) continue;                 // (4) 登録キャストは対象外
+        var e = qs[W];
+        var firstTime = !e || !Array.isArray(e.seen) || e.seen.length === 0 ||
+                        (e.seen.length === 1 && e.seen[0] === turnIdx);
+        if (!firstTime) continue;                                  // (1) この物語で初出のときだけ
+        if (!namingOf(m[2], W)) continue;                          // (2) 本人の名乗り
+        /* (3) 直近3ターンの記述的な仮呼称をちょうど1つ探す */
+        var cands = [];
+        Object.keys(qs).forEach(function(L){
+          if (L === W || cast.indexOf(L) >= 0) return;
+          if (!DESCRIPTIVE_TAIL.test(L)) return;
+          var le = qs[L]; if (!le) return;
+          var last = le.last || 0;
+          if (turnIdx - last > 3) return;
+          if ((le.ali || []).indexOf(W) >= 0) return;
+          cands.push(L);
+        });
+        if (cands.length !== 1) continue;                          // 曖昧なら見送り
+        var L1 = cands[0];
+        var ent = qs[W] || { seen: [], ali: [] };
+        ent.ali = ent.ali || [];
+        if (ent.ali.indexOf(L1) < 0) ent.ali.push(L1);
+        /* L 側の登場実績を W へ引き継ぐ(同一人物なので実績も同一人物のもの) */
+        var le2 = qs[L1];
+        if (le2 && Array.isArray(le2.seen)){
+          le2.seen.forEach(function(x){ if ((ent.seen = ent.seen || []).indexOf(x) < 0) ent.seen.push(x); });
+          if ((ent.last || 0) < (le2.last || 0)) ent.last = le2.last;
+        }
+        qs[W] = ent; qDirty = true; aliasCache = null;
+        try {
+          var lg = JSON.parse(localStorage.getItem('v292Dfix537_log') || '[]');
+          lg.push({ ts: Date.now(), turn: turnIdx, alias: L1, canonical: W });
+          localStorage.setItem('v292Dfix537_log', JSON.stringify(lg.slice(-30)));
+        } catch(e2){}
+        try { console.log(TAG, 'fix537: 名乗りで同一性確定:', L1, '=', W); } catch(e3){}
+      }
+    } catch(e){}
+  }
+
   function syncConv(){
     try {
       var S = getS(); if (!S || !Array.isArray(S.turns)) return;
@@ -423,6 +504,7 @@
           if (!offQ()){
             var S = getS();
             harvestRaw(rawText, (S && S.turns) ? S.turns.length : 0);
+            detectSelfNaming(rawText, (S && S.turns) ? S.turns.length : 0);   // ★fix537
             saveQ();
           }
         } catch(e){}
@@ -534,6 +616,7 @@
   window.__v292QuasiPack = {
     store: loadQ, key: QK, surgery: surgery, aliasMap: aliasMap, aliasFix: aliasFix,
     noteAppear: noteAppear, quasiRecent: quasiRecent, syncConv: syncConv, unifyCards: unifyCards,
+    detectSelfNaming: detectSelfNaming, /* ★fix537 検証口(実経路はparsePlanラップ) */
     _dropCache: function(){ qStore = null; qKeyLoaded = ''; aliasCache = null; }, /* 検証用 */
     addAlias: function(canonical, alias){
       try { var qs = loadQ(); var e = qs[canonical] || { seen: [], ali: [] }; if ((e.ali = e.ali || []).indexOf(alias) < 0) e.ali.push(alias); qs[canonical] = e; qDirty = true; saveQ(); aliasCache = null; return true; } catch(e2){ return false; }
