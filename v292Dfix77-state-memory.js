@@ -56,6 +56,7 @@
   }
   function off532(){ try { return localStorage.getItem('v292Dfix532Off') === '1'; } catch(e){ return false; } }
   var loadedSfx = curSfx();
+  var stats = { slotMismatchReloads: 0, stateUpdatesDroppedOnReload: 0 };
   function persist(){
     try {
       if (!off532()){
@@ -63,10 +64,16 @@
         if (now !== loadedSfx){
           var fresh = {};
           try { fresh = JSON.parse(localStorage.getItem(LSKEY) || '{}') || {}; } catch(e2){ fresh = {}; }
+          var dropped = Object.keys(store).length;
           Object.keys(store).forEach(function(k){ delete store[k]; });
           Object.keys(fresh).forEach(function(k){ store[k] = fresh[k]; });
           loadedSfx = now;
-          try { console.log(TAG, 'fix532: 物語切替を検出 → 前の物語の状態を書かずにストアを読み直した', now); } catch(_){}
+          /* ★fix532b(GPT非阻止指摘): 切替直後に捕捉した最初の<state>は、この読み直しで一緒に破棄されうる。
+             データ混入より安全なので許容するが、B-2(状態候補選択)を出す前に実測できるよう診断値を残す。
+             読出: window.__v292Dfix532.stats() */
+          stats.slotMismatchReloads++;
+          stats.stateUpdatesDroppedOnReload += dropped;
+          try { console.log(TAG, 'fix532: 物語切替を検出 → 前の物語の状態を書かずにストアを読み直した', now, stats); } catch(_){}
           return;
         }
       }
@@ -74,7 +81,8 @@
     } catch(e){}
   }
   window.__v292Dfix77Store = store;
-  window.__v292Dfix532 = { loadedSfx: function(){ return loadedSfx; }, curSfx: curSfx, off: off532 };
+  window.__v292Dfix532 = { loadedSfx: function(){ return loadedSfx; }, curSfx: curSfx, off: off532,
+    stats: function(){ return { slotMismatchReloads: stats.slotMismatchReloads, stateUpdatesDroppedOnReload: stats.stateUpdatesDroppedOnReload }; } };
 
   function attr(tag, name){
     var m = tag.match(new RegExp(name + '\\s*=\\s*"([^"]*)"'));

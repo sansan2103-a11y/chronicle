@@ -109,6 +109,29 @@ console.log('\n== fix533: 短縮名の部分文字列誤爆を止める(GPT監�
   ok('行末の出現も存在扱いする', run3('振り返るとそこにいたのは杏子').indexOf('氷川 杏子')>=0, run3('振り返るとそこにいたのは杏子'));
 }
 
+console.log('\n== fix533b: 前後両方の境界を見る(GPT監査の残り穴3件) ==');
+{
+  function run4(narr){
+    const w=makeEnv();
+    w.__longmem={raw:{loadWorldInfo:()=>[
+      {name:'朝比奈 ひなた',type:'character',desc:'同級生'},
+      {name:'アン・マリー',type:'character',desc:'旅人'},
+      {name:'氷川 杏子',type:'character',desc:'民俗学者'}
+    ]}};
+    load(w,'v292Dfix145-charlist.js');
+    w.S={cast:{hero:{name:'霧 涼太',desc:''},npcs:[]},
+      turns:[{narrative:narr,playerText:'',_convSays:[]}],save(){}};
+    return w.__v292Dfix145x.collectChars().story.map(s=>s.name);
+  }
+  ok('★「ひなたぼっこ」で朝比奈 ひなたを存在扱いしない', run4('縁側でひなたぼっこをしている。').indexOf('朝比奈 ひなた')<0, run4('縁側でひなたぼっこをしている。'));
+  ok('★「マリアン」でアン・マリーを存在扱いしない(直前境界)', run4('看板にはマリアン').indexOf('アン・マリー')<0, run4('看板にはマリアン'));
+  ok('★「佐々木杏子」で氷川 杏子を存在扱いしない(別人)', run4('佐々木杏子は振り返った。').indexOf('氷川 杏子')<0, run4('佐々木杏子は振り返った。'));
+  ok('「ひなたは…」なら存在扱いする', run4('ひなたは黙って頷いた。').indexOf('朝比奈 ひなた')>=0, run4('ひなたは黙って頷いた。'));
+  ok('「、杏子。」なら存在扱いする', run4('振り返った、杏子。').indexOf('氷川 杏子')>=0, run4('振り返った、杏子。'));
+  ok('「「アン」」なら存在扱いする', run4('声がした。「アン」と誰かが呼ぶ。').indexOf('アン・マリー')>=0, run4('声がした。「アン」と誰かが呼ぶ。'));
+  ok('「ひなたさん」なら存在扱いする(敬称)', run4('ひなたさんが来た。').indexOf('朝比奈 ひなた')>=0, run4('ひなたさんが来た。'));
+}
+
 console.log('\n---------------------------------------------');
 console.log('PASS '+pass+' / FAIL '+fail);
 process.exit(fail?1:0);
