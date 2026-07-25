@@ -46,6 +46,9 @@
   var SPLIT = /[、。！？!?\n…]|——|──|―――|、/;
   function metrics(text){
     var s = String(text == null ? '' : text);
+    /* ★fix553c: タグは3段階すべてで先に落とす。plan.narrative には <say who="…">…</say> が
+       要素として入るので、落とさないと段階間で土俵が揃わない。 */
+    s = s.replace(/<[^>]*>/g, '');
     var parts = s.split(new RegExp(SPLIT.source, 'g'));
     var max = 0, o80 = 0, o55 = 0;
     for (var i = 0; i < parts.length; i++){
@@ -116,6 +119,26 @@
     } catch(e){}
     return null;
   }
+  /* ★fix553c(2026-07-25・実機で誤検出したので追加): 生の応答文字列をそのまま測ってはいけない。
+     モデルはJSONを返す契約なので、`{"playerIntent":"…","branchCandidates":[…]` のような
+     **構造そのもの**が「句読点の無い長い区間」に化け、正常なターンを stage=model と誤判定した
+     (実測: 生 maxRun=110/over80=2 なのに、パース後も保存後も maxRun=34/over80=0)。
+     → 生からも**本文(narrative)だけ**を取り出し、②③と同じ土俵で測る。
+     取り出せなければ null を返し、**段階を断定しない**。 */
+  function narrativeFromRaw(t){
+    var s = String(t == null ? '' : t).trim();
+    s = s.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+    try {
+      var j = JSON.parse(s);
+      if (j && Array.isArray(j.narrative)) return j.narrative.join('\n');
+    } catch(e){}
+    var m = s.match(/"narrative"\s*:\s*\[([\s\S]*?)\]/);
+    if (m){
+      try { var arr = JSON.parse('[' + m[1] + ']'); if (Array.isArray(arr)) return arr.join('\n'); } catch(e2){}
+    }
+    return null;
+  }
+
   function pickFinish(json){
     try {
       if (json && json.choices && json.choices[0]) return json.choices[0].finish_reason || json.choices[0].stop_reason || null;
@@ -148,7 +171,10 @@
                 try {
                   var t = pickText(j);
                   if (t && t.length > 200){        /* 会話ログ(短いJSON配列)は拾わない */
-                    lastRaw = { text: t, metrics: metrics(t), finish: pickFinish(j), model: pickModel(j), ts: Date.now() };
+                    var body = narrativeFromRaw(t);
+                    lastRaw = { metrics: body == null ? null : metrics(body),
+                                bodyLen: body == null ? null : body.length,
+                                finish: pickFinish(j), model: pickModel(j), ts: Date.now() };
                   }
                 } catch(e){}
               }, function(){});
@@ -222,6 +248,7 @@
         turn: n - 1,
         stage: stageOf(s1, s2, s4),
         s1_raw: s1, s2_parsed: s2, s4_saved: s4,
+        rawBodyLen: lastRaw ? lastRaw.bodyLen : null,
         finish: lastRaw ? lastRaw.finish : null,
         model: (lastRaw && lastRaw.model) || (st.cfg && (st.cfg.orModel || st.cfg.model)) || null,
         outLen: (function(){ try { return lsg('v100_outputLen') || (st.cfg && st.cfg.outLen) || null; } catch(e){ return null; } })(),
@@ -258,7 +285,7 @@
     },
     clear: function(){ try { localStorage.removeItem(LOG); } catch(e){} return true; },
     off: off,
-    _wrapFetch: wrapFetch, _wrapParse: wrapParse, _poll: poll,
+    _wrapFetch: wrapFetch, _wrapParse: wrapParse, _poll: poll, _narrativeFromRaw: narrativeFromRaw,
     _peek: function(){ return { hasRaw: !!lastRaw, hasParsed: !!lastParsed, lastLen: lastLen }; }
   };
 

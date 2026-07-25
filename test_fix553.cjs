@@ -62,6 +62,29 @@ console.log('\n== 指標(metrics) ==');
   ok('★空文字でも壊れない', M('').len === 0 && M(null).len === 0);
 }
 
+console.log('\n== ★生の応答から本文だけを取り出す(fix553c) ==');
+{
+  /* 2026-07-25 実機で誤検出した: 生の応答文字列をそのまま測ると、JSONの構造が
+     「句読点の無い長い区間」に化けて、正常なターンを stage=model と誤判定する。
+     実測値: 生 maxRun=110 / over80=2 なのに、パース後も保存後も maxRun=34 / over80=0 だった。 */
+  const w = mk();
+  const N = w.__v292Dfix553._narrativeFromRaw;
+  const M = w.__v292Dfix553.metrics;
+  const raw = JSON.stringify({
+    playerIntent: 'あたりを見回す',
+    branchCandidates: ['奥へ進む', '引き返す', '声をかける'],
+    narrative: ['灯は足を止めた。', '耳を澄ませる。', '<say who="ノア">……割った</say>']
+  });
+  ok('★JSONから narrative だけを取り出す', N(raw) === '灯は足を止めた。\n耳を澄ませる。\n<say who="ノア">……割った</say>', N(raw));
+  ok('★構造(キー名や他の配列)は測定対象に入らない', M(N(raw)).over80 === 0, M(N(raw)));
+  ok('★生をそのまま測ると誤検出することを固定(だからやらない)', M(raw).over80 > 0, M(raw));
+  ok('★コードフェンス付きでも取り出せる', N('```json\n' + raw + '\n```') !== null);
+  ok('★壊れたJSONでも narrative 配列だけ拾える',
+     N('{"narrative":["あ。","い。"],  ←ここで壊れている') === 'あ。\nい。');
+  ok('★どうしても取れなければ null(段階を断定しない)', N('ただの文章です。') === null, N('ただの文章です。'));
+  ok('★タグは3段階すべてで先に落とす', M('<say who="ノア">' + 'あ'.repeat(30) + '</say>').len === 30, M('<say who="ノア">' + 'あ'.repeat(30) + '</say>').len);
+}
+
 console.log('\n== ★本文を書き換えないこと(いちばん大事) ==');
 {
   const w = mk({ parsePlan: function(){ return { narrative: ['壊れた文' + 'あ'.repeat(200)] }; } });
@@ -154,7 +177,9 @@ console.log('\n== fetchラッパ ==');
     console.log('\n== 段階の判定 ==');
     {
       const turns = [];
-      const raw = 'あ'.repeat(300);
+      /* ★生はJSON。本文だけを取り出して測るので、JSONで与える(fix553c) */
+      const broken = 'あ'.repeat(300);
+      const raw = JSON.stringify({ playerIntent: 'x', branchCandidates: ['a','b'], narrative: [broken] });
       const w4 = mk({
         getState: () => ({ turns, cfg: {} }),
         fetch: function(){ return Promise.resolve({ ok: true,
@@ -164,10 +189,11 @@ console.log('\n== fetchラッパ ==');
       w4.__v292Dfix553._poll();
       await w4.fetch('u');
       await new Promise(r => setImmediate(r));
-      turns.push({ narrative: raw });
+      turns.push({ narrative: broken });
       w4.__v292Dfix553._poll();
       const log = w4.__v292Dfix553.dump();
       ok('★生出力の時点で崩れていれば stage=model', log[0] && log[0].stage === 'model', log[0] && log[0].stage);
+      ok('★生の本文の長さを残す(構造ではなく本文を測った証拠)', log[0] && log[0].rawBodyLen === 300, log[0] && log[0].rawBodyLen);
       ok('★finish_reason を残す', log[0] && log[0].finish === 'length', log[0] && log[0].finish);
     }
 
