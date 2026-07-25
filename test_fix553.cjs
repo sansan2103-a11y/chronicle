@@ -170,6 +170,12 @@ console.log('\n== fetchラッパ ==');
       ok('★どこを掴めているかが出る', w3.__v292Dfix553.stats().wired.fetch === true);
       ok('★parsePlan は「印」ではなく「捕捉回数」で見る(印は他fixに消される)',
          typeof w3.__v292Dfix553.stats().wired.parsePlanCaptures === 'number');
+      /* ★fix553e(GPT指定): 異常ログ0件は単体では何の証明にもならない。
+         「1ターンについて3段階が揃った件数(all3)」が生存証明になる。 */
+      ok('★段階ごとの捕捉件数が出る',
+         (function(){ var c = w3.__v292Dfix553.stats().capture; return c && typeof c.raw==='number' && typeof c.parsed==='number' && typeof c.saved==='number' && typeof c.all3==='number'; })());
+      ok('★保存段階は必ず捕捉できている', w3.__v292Dfix553.stats().capture.saved === 1, w3.__v292Dfix553.stats().capture);
+      ok('★生もパースも取れていなければ all3 は増えない', w3.__v292Dfix553.stats().capture.all3 === 0, w3.__v292Dfix553.stats().capture);
       turns.push({ narrative: 'あ'.repeat(262) });
       w3.__v292Dfix553._poll();
       const log = w3.__v292Dfix553.dump();
@@ -215,6 +221,73 @@ console.log('\n== fetchラッパ ==');
       ok('★パース後が正常で保存後だけ崩れていれば postprocess', lg[0] && lg[0].stage === 'postprocess', lg[0] && lg[0].stage);
     }
 
+console.log('\n== ★生が部分的にしか取れていないときは断定しない(fix553e) ==');
+    {
+      /* 実測(turn92): 生が99字しか取れていないのに、パース後は776字あった。
+         その99字が「きれい」だからといって「生は正常だった」とは言えないのに parse と断定していた。 */
+      const turns = [];
+      const shortRaw = JSON.stringify({ narrative: ['短い正常な文です。これだけ取れました。'] });
+      const w7 = mk({
+        getState: () => ({ turns, cfg: {} }),
+        parsePlan: function(){ return { narrative: ['あ'.repeat(700)] }; },
+        fetch: function(){ return Promise.resolve({ ok: true,
+          clone(){ return { json(){ return Promise.resolve({ choices: [{ message: { content: shortRaw + ' '.repeat(200) } }] }); } }; },
+          json(){ return Promise.resolve({}); } }); }
+      });
+      w7.__v292Dfix553._wrapParse();
+      w7.__v292Dfix553._poll();
+      return w7.fetch('u').then(() => new Promise(r => setImmediate(r))).then(() => {
+        w7.Planner.parsePlan('x');
+        turns.push({ narrative: 'あ'.repeat(700) });
+        w7.__v292Dfix553._poll();
+        const lg = w7.__v292Dfix553.dump();
+        ok('★生が後段より大幅に短いときは parse と断定しない', lg[0] && lg[0].stage !== 'parse', lg[0] && lg[0].stage);
+        ok('★生が使えなかったことを記録する', lg[0] && lg[0].rawUsable === false, lg[0] && lg[0].rawUsable);
+        ok('★使えた生の件数を別に数える', w7.__v292Dfix553.stats().capture.rawUsable === 0, w7.__v292Dfix553.stats().capture);
+        return rest();
+      });
+    }
+
+async function rest(){
+console.log('\n== ★★1ターンに fetch が2回走る問題(fix553e) ==');
+    {
+      /* 順番は 本文fetch → parsePlan → 会話ログfetch → 保存 → poll。
+         poll の時点で lastRaw は**会話ログの応答**に上書きされている。
+         実測(turn92): 生が99字しか無いのに本文は776字あった = 別の応答を掴んでいた。
+         → parsePlan が走った瞬間の lastRaw を本文の生としてペアにする。 */
+      const turns = [];
+      const bodyRaw  = JSON.stringify({ narrative: ['あ'.repeat(400)] });
+      const convRaw  = JSON.stringify([{ who: 'ノア', say: 'これは会話ログの応答です。長さを稼ぐための文章。' }]);
+      let which = 0;
+      const w8 = mk({
+        getState: () => ({ turns, cfg: {} }),
+        parsePlan: function(){ return { narrative: ['あ'.repeat(400)] }; },
+        fetch: function(){
+          const payload = (which++ === 0) ? bodyRaw : (convRaw + ' '.repeat(300));
+          return Promise.resolve({ ok: true,
+            clone(){ return { json(){ return Promise.resolve({ choices: [{ message: { content: payload } }] }); } }; },
+            json(){ return Promise.resolve({}); } });
+        }
+      });
+      w8.__v292Dfix553._wrapParse();
+      w8.__v292Dfix553._poll();
+      return w8.fetch('body').then(() => new Promise(r => setImmediate(r))).then(() => {
+        w8.Planner.parsePlan('x');                       // ここで本文の生とペアになる
+        ok('★parsePlan の瞬間に生をペアにする', w8.__v292Dfix553._peekPair().paired === true, w8.__v292Dfix553._peekPair());
+        return w8.fetch('convlog');                      // 会話ログが lastRaw を上書きする
+      }).then(() => new Promise(r => setImmediate(r))).then(() => {
+        turns.push({ narrative: 'あ'.repeat(400) });
+        w8.__v292Dfix553._poll();
+        const lg = w8.__v292Dfix553.dump();
+        ok('★会話ログに上書きされても本文の生を使う', lg[0] && lg[0].rawBodyLen === 400, lg[0] && lg[0].rawBodyLen);
+        ok('★ペア済みであることを記録する', lg[0] && lg[0].rawPaired === true, lg[0] && lg[0].rawPaired);
+        ok('★正しくペアが取れれば stage=model と断定できる', lg[0] && lg[0].stage === 'model', lg[0] && lg[0].stage);
+        ok('★3段階が揃った件数(生存証明)が増える', w8.__v292Dfix553.stats().capture.all3 === 1, w8.__v292Dfix553.stats().capture);
+        return rest2();
+      });
+    }
+
+async function rest2(){
 console.log('\n== 段階の判定 ==');
     {
       const turns = [];
@@ -235,6 +308,7 @@ console.log('\n== 段階の判定 ==');
       const log = w4.__v292Dfix553.dump();
       ok('★生出力の時点で崩れていれば stage=model', log[0] && log[0].stage === 'model', log[0] && log[0].stage);
       ok('★生の本文の長さを残す(構造ではなく本文を測った証拠)', log[0] && log[0].rawBodyLen === 300, log[0] && log[0].rawBodyLen);
+      ok('★生を捕捉した件数が増える', w4.__v292Dfix553.stats().capture.raw === 1, w4.__v292Dfix553.stats().capture);
       ok('★finish_reason を残す', log[0] && log[0].finish === 'length', log[0] && log[0].finish);
     }
 
@@ -275,5 +349,7 @@ console.log('\n== 段階の判定 ==');
     console.log('\n---------------------------------------------');
     console.log('PASS ' + pass + ' / FAIL ' + fail);
     process.exit(fail ? 1 : 0);
+}
+}
   })();
 }

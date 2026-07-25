@@ -74,14 +74,26 @@
      「本当に0なのか、見張りが死んでいるのか」を区別できないと今日ずっと潰してきた
      『無言の空振り』を自分でやることになる。 */
   var stats = { turns: 0, flagged: 0, polls: 0, lastPollTs: 0,
-                byStage: { model: 0, parse: 0, postprocess: 0, unknown: 0 } };
+                byStage: { model: 0, parse: 0, postprocess: 0, unknown: 0 },
+                /* ★fix553e(GPT指定): 異常ログ0件は**それだけでは何の証明にもならない**。
+                   「1ターンについて3段階が揃った件数」が生存証明になる。 */
+                capture: { raw: 0, rawUsable: 0, parsed: 0, saved: 0, all3: 0, rawApprox: 0 } };
 
   /* ★fix553d(2026-07-25・実機で誤ラベルしたので修正):
      「前の段階が**正常だったのに**次の段階で崩れた」ときだけ、その段階を犯人と呼ぶ。
      直す前は `if (s2 && bad(s4)) return 'postprocess'` だったので、
      **s2 も s4 も崩れている**ケース(=後処理は無実)を postprocess と呼んでいた。
      実際に turn51 でそれが起きた(s2 も s4 も marks=1 / maxRun=490 で同一なのに postprocess と出た)。 */
-  function stageOf(s1, s2, s4){
+  /* ★fix553e(2026-07-25・実機で誤ラベルしたので追加): 生の抽出は**部分的にしか取れないことがある**。
+     実測: turn92 は生が99字しか取れていないのに、パース後は776字あった(=別のfetchを拾ったか抽出失敗)。
+     その99字が「きれい」だからといって「生は正常だった」とは言えないのに、`parse` と断定していた。
+     → 生が後段の6割の長さに届かないときは**生は無かったことにして、段階を断定しない**。 */
+  function usable(s1, ref){
+    if (!s1 || !ref) return false;
+    return s1.len >= Math.floor(ref.len * 0.6);
+  }
+  function stageOf(s1raw, s2, s4){
+    var s1 = usable(s1raw, s2 || s4) ? s1raw : null;
     if (bad(s1)) return 'model';                                  /* 生の時点で崩れている */
     if (s1 && !bad(s1) && bad(s2)) return 'parse';                /* 生は正常 → パース段で崩れた */
     if (s2 && !bad(s2) && bad(s4)) return 'postprocess';          /* パース後は正常 → 後段で崩れた */
@@ -218,6 +230,7 @@
 
   /* ---- ②パース直後をとる(Planner.parsePlan を包む) --------------------- */
   var lastParsed = null;
+  var pairedRaw = null;        /* parsePlan が走った瞬間の lastRaw = 本文の生 */
   var parsedCaptures = 0;
 
   /* ★fix553d: parsePlan は他のfix(fix155/159/427など)が後から包み直すことがあり、
@@ -236,6 +249,13 @@
           if (!off() && r && Array.isArray(r.narrative)){
             lastParsed = { metrics: metrics(r.narrative.join('\n')), n: r.narrative.length, ts: Date.now() };
             parsedCaptures++;
+            /* ★★fix553e(いちばん大事な修正): 1ターンの中で fetch は2回以上走る。
+               順番は 本文fetch → parsePlan → 会話ログfetch → 保存 → poll。
+               つまり poll の時点で lastRaw は**会話ログの応答**に上書きされている。
+               実測: turn92 は生が99字しか無いのに本文は776字あった(= 別の応答を掴んでいた)。
+               → parsePlan が走った**この瞬間**の lastRaw を本文の生としてペアにする。 */
+            pairedRaw = lastRaw;
+            lastRaw = null;
           }
         } catch(e){}
         return r;
@@ -263,8 +283,17 @@
 
     var t = st.turns[n - 1] || {};
     var s4 = metrics(t.narrative);
-    var s1 = lastRaw ? lastRaw.metrics : null;
+    /* ★生は「parsePlanと対になったもの」を使う。lastRaw をそのまま使うと会話ログの応答を掴む */
+    var raw = pairedRaw || lastRaw;
+    var s1 = raw ? raw.metrics : null;
     var s2 = lastParsed ? lastParsed.metrics : null;
+
+    if (s1) stats.capture.raw++;
+    if (usable(s1, s2 || s4)) stats.capture.rawUsable++;
+    if (raw && raw.approx) stats.capture.rawApprox++;
+    if (s2) stats.capture.parsed++;
+    if (s4) stats.capture.saved++;
+    if (s1 && s2 && s4) stats.capture.all3++;
 
     if (bad(s1) || bad(s2) || bad(s4)){
       var sample = '';
@@ -278,16 +307,19 @@
         turn: n - 1,
         stage: stageOf(s1, s2, s4),
         s1_raw: s1, s2_parsed: s2, s4_saved: s4,
-        rawBodyLen: lastRaw ? lastRaw.bodyLen : null,
-        rawApprox: lastRaw ? !!lastRaw.approx : null,
-        finish: lastRaw ? lastRaw.finish : null,
-        model: (lastRaw && lastRaw.model) || (st.cfg && (st.cfg.orModel || st.cfg.model)) || null,
+        rawBodyLen: raw ? raw.bodyLen : null,
+        rawApprox: raw ? !!raw.approx : null,
+        rawPaired: !!pairedRaw,
+        /* 生が後段と比べて短すぎないか(短ければ段階の断定に使っていない) */
+        rawUsable: usable(s1, s2 || s4),
+        finish: raw ? raw.finish : null,
+        model: (raw && raw.model) || (st.cfg && (st.cfg.orModel || st.cfg.model)) || null,
         outLen: (function(){ try { return lsg('v100_outputLen') || (st.cfg && st.cfg.outLen) || null; } catch(e){ return null; } })(),
-        rawAgeMs: lastRaw ? (Date.now() - lastRaw.ts) : null,
+        rawAgeMs: raw ? (Date.now() - raw.ts) : null,
         sample: sample
       });
     }
-    lastRaw = null; lastParsed = null;
+    lastRaw = null; lastParsed = null; pairedRaw = null;
   }
 
   /* ---- boot ----------------------------------------------------------- */
@@ -309,6 +341,8 @@
     dump: function(){ return read(); },
     stats: function(){
       return { turns: stats.turns, flagged: stats.flagged, byStage: stats.byStage, logged: read().length,
+               /* ★3段階が揃った件数(all3)が「見張りが生きている」証明。異常0件はそれ単体では証明にならない */
+               capture: stats.capture,
                /* ★見張りの生死。polls が増えない = 検出器が死んでいる(記録0の意味が変わる) */
                polls: stats.polls,
                sincePollSec: stats.lastPollTs ? Math.round((Date.now() - stats.lastPollTs) / 1000) : null,
@@ -321,6 +355,7 @@
     clear: function(){ try { localStorage.removeItem(LOG); } catch(e){} return true; },
     off: off,
     _wrapFetch: wrapFetch, _wrapParse: wrapParse, _poll: poll, _narrativeFromRaw: narrativeFromRaw,
+    _peekPair: function(){ return { paired: !!pairedRaw, pairedLen: pairedRaw ? pairedRaw.bodyLen : null }; },
     _peek: function(){ return { hasRaw: !!lastRaw, hasParsed: !!lastParsed, lastLen: lastLen }; }
   };
 
