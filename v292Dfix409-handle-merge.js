@@ -140,6 +140,18 @@
     }
     return parts.join('\n');
   }
+  /* ★fix409d: from が to の「区切りで分かれた構成要素」か。
+     to に空白または中黒が含まれ、それで分割した要素のどれかと from が完全一致するときだけ true。
+     「観覧車の少女」のような区切りの無い名詞句は常に false になる(=誤統合の入口を塞ぐ)。 */
+  function isSeparatedNamePart(from, to){
+    try {
+      from = String(from || '').trim(); to = String(to || '');
+      if (from.length < 2 || !/[\s　・]/.test(to)) return false;
+      var parts = to.split(/[\s　・]+/);
+      for (var i = 0; i < parts.length; i++){ if (parts[i] === from) return true; }
+      return false;
+    } catch(e){ return false; }
+  }
   // 条件2: ti-1..ti+1 のいずれかのテキストに to が出現するか。
   function coOccurs(to, ti, turns){
     if (!Array.isArray(turns)) return true;   // 実行時にturns参照が無い異常系はcond1のみで防御(fail-open)
@@ -169,7 +181,19 @@
        安全性: resolveCanon が「末尾完全一致 かつ 候補が一意 かつ who自身がcast名でない」を既に要求
          しているため、同名衝突(例 cast に「霧 涼太」と「南 涼太」)は matches.length>=2 で不成立。
        OFF: localStorage v292Dfix409cOff='1' (=fix409b挙動へ戻る)。 */
-    if (!off409c() && ctx.castSet[to]) return { ok: true, via: 'cast-exempt-409c' };
+    /* ★fix409d(2026-07-25・GPT監査の指摘を受けて狭める):
+       fix409c は「統合先が登録cast名なら共起免除」だったが、これは広すぎた。
+       反例(GPT): 登録NPCに「観覧車の少女」が居ると、後の別場面に出た**本当に別人の「少女」**まで
+         共起確認なしで強制統合され、会話ログ・アイコン・状態・登場履歴が同一人物になる。
+         これはおしんの明示制約「類似している別個体まで強制統合しない」に真正面から反する。
+       実測の裏付け: 今回の実害9カードは全て**主人公の姓名分割**(涼太→霧 涼太)であり、
+         登録NPC宛の免除を必要とする証拠は1件も無かった。
+       よって免除は「from が to の**区切り(空白/中黒)で分かれた構成要素そのもの**であるとき」だけに限定する。
+         霧 涼太 → 涼太      : 区切りあり・構成要素 → 免除する
+         アリア・リュミエール → リュミエール : 免除する
+         観覧車の少女 → 少女 : **区切りが無い**ので構成要素ではない → 従来どおり共起必須
+       OFF: v292Dfix409cOff='1'(fix409b挙動へ) */
+    if (!off409c() && ctx.castSet[to] && isSeparatedNamePart(from, to)) return { ok: true, via: 'cast-namepart-409d' };
     var cond2 = coOccurs(to, ti, ctx.turns);
     if (!cond2) return { ok: false, reason: 'no-cooccurrence' };
     return { ok: true };

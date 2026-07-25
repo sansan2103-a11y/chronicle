@@ -244,7 +244,34 @@
            内容も廃墟遊園地の物語の人物(アリア/カエデ/ノア/ヒナ/観覧車の少女/顔のない男)だった。
          非破壊: 台帳は消さない。名前が本文に出た瞬間から自動的に表示へ戻る。
          OFF: localStorage v292Dfix529Off='1' */
-      try { if (localStorage.getItem('v292Dfix529Off') !== '1' && lt < 0) return; } catch(e){}
+      /* ★fix529b(2026-07-25・GPT監査): 完全名だけを存在証拠にすると、正当な人物まで消える。
+         反例(GPT): 台帳名「氷川 杏子」だが本文は常に「杏子」→ findLastTurnForName は -1 → 一覧から消える。
+         そこで**表示用の存在証拠だけ**を次まで広げる（統合はしない・データも触らない）:
+           (a) キャラ説明の「別名: …」で明示された別名
+           (b) 空白/中黒で区切られた名前の構成要素(2字以上)
+         区切りの無い名詞句(「観覧車の少女」→「少女」)は**意図的に対象外**。ここを許すと
+         「孤児院の怪異」→「怪異」のような一般語で別物語のキャラが再び湧くため。
+         この取りこぼしは既知の制約として残す(おしんの判断待ち)。 */
+      try {
+        if (localStorage.getItem('v292Dfix529Off') !== '1' && lt < 0){
+          var alt529 = [];
+          try {
+            var qp529 = window.__v292QuasiPack;
+            if (qp529 && typeof qp529.aliasMap === 'function'){
+              var am529 = qp529.aliasMap() || {};
+              Object.keys(am529).forEach(function(a){ if (am529[a] === nm && a && a !== nm) alt529.push(a); });
+            }
+          } catch(e529a){}
+          if (/[\s　・]/.test(nm)) String(nm).split(/[\s　・]+/).forEach(function(p){ if (p && p.length >= 2) alt529.push(p); });
+          var lt529 = -1;
+          for (var i529 = 0; i529 < alt529.length; i529++){
+            var v529 = findLastTurnForName(alt529[i529], turns);
+            if (v529 > lt529) lt529 = v529;
+          }
+          if (lt529 < 0) return;      // どの呼び名でもこの物語に現れない = 別物語のもの
+          lt = lt529;                 // 別名で見つかった最終登場ターンを採用
+        }
+      } catch(e){}
       out.story.push({
         name: nm,
         desc: w.desc || '',

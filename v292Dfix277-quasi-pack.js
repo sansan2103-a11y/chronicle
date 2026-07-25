@@ -216,8 +216,14 @@
         /* (2) 末尾完全一致(和名「霧 涼太」→「涼太」) または 先頭完全一致(洋名「アリア・リュミエール」→「アリア」)。
            (3) 残り(姓 or 名字側)は1〜6字。実測: 「アリア」seen1 が主人公アリア・リュミエールとは別人物として
                台帳に居た(smrrcv21iph)。末尾一致だけでは洋名順(名+姓)を救えないため両方向を見る。 */
+        /* ★fix528e(2026-07-25・GPT監査): 先頭一致を「中黒区切り(洋名)」だけに限定する。
+           旧実装は空白区切りでも先頭一致を許したため、反例(GPT):
+             登録キャラ「佐藤 太郎」が居ると、**別人の「佐藤」**まで「登録キャラの別呼び」と誤判定され、
+             準登録カルテに載らなくなる(＝存在が薄くなる)。日本語の空白区切りは 姓+名 なので
+             先頭は姓＝他人と衝突しやすい。中黒区切りは 名+姓(洋名)で、先頭は個人名なので衝突しにくい。
+           よって: 空白区切り → 末尾一致のみ / 中黒区切り → 先頭・末尾どちらも可。 */
         var tailHit = (n2.slice(n2.length - name.length) === name);
-        var headHit = (n2.slice(0, name.length) === name);
+        var headHit = (n2.slice(0, name.length) === name) && (off528() || /・/.test(c));
         if (!tailHit && !headHit) continue;
         if (rest < 1 || rest > 6) continue;
         if (hit && hit !== c) return null;                 // (4) 一意でなければ見送り
@@ -246,8 +252,17 @@
        正当な巻き戻しでも、その人物が新しい進行で再登場すれば同じ経路で自動解除される。
        OFF: v292Dfix528Off='1' */
     if (!off528() && e.sf){
+      /* ★fix528f(2026-07-25・GPT監査で判明した実装ミス):
+           解除条件を `turnIdx <= curN - 1` にしていたが、生応答からの収穫 harvestRaw は
+           **まだ S.turns へ push される前**に `turnIdx = S.turns.length`(=curN) を渡す構造なので、
+           この条件は**必ず外れる**。その結果 <state>/<react> にだけ出た人物は永久に解除されず、
+           正当に再登場しても復活しない経路が残っていた(会話ログ話者は後追いの syncConv で
+           有効な番号が渡るため偶然解除できていた＝実行順依存)。
+           → 進行中ターンの index(=curN)も「この物語の実在ターン」として許可する。
+           別物語の残骸(例: 8ターン物語に last=13)は harvest からは curN 以下しか渡らないので
+           これで誤解除は起きない。 */
       var curN = storyTurnCount();
-      if (!(curN > 0 && turnIdx >= 0 && turnIdx <= curN - 1)) return;   // この物語に実在するターンでの観測でなければ解除しない
+      if (!(curN > 0 && turnIdx >= 0 && turnIdx <= curN)) return;   // この物語に実在する(または進行中の)ターンでの観測でなければ解除しない
       delete e.sf;
       qDirty = true;
       try { console.log(TAG, 'fix528d: 再観測により復帰:', name, '@turn', turnIdx); } catch(_){}

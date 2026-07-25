@@ -62,6 +62,28 @@ const off=run(true);
 const offNames=off.story.map(s=>s.name);
 ok('OFF時は従来どおり別物語のキャラも出る(退行できる)', offNames.indexOf('ノア')>=0 && offNames.indexOf('観覧車の少女')>=0, offNames);
 
+console.log('\n== fix529b: 表示用の存在証拠を別名・区切り構成要素まで広げる ==');
+{
+  function run2(){
+    const w=makeEnv();
+    w.__longmem={raw:{loadWorldInfo:()=>[
+      {name:'氷川 杏子',type:'character',desc:'民俗学者'},      // 本文は「杏子」だけ
+      {name:'観覧車の少女',type:'character',desc:'色白の少女'},  // 区切り無し=対象外(既知の制約)
+      {name:'ノア',type:'character',desc:'別物語の少年'}          // 完全な別物語
+    ]}};
+    load(w,'v292Dfix145-charlist.js');
+    w.S={cast:{hero:{name:'霧 涼太',desc:''},npcs:[]},
+      turns:[{narrative:'杏子は古い記録を繰った。少女が柵の上にいる。',playerText:'',_convSays:[]}],save(){}};
+    return w.__v292Dfix145x.collectChars();
+  }
+  const r=run2(); const names=r.story.map(s=>s.name);
+  ok('★空白区切りの名だけで書かれた人物は一覧に残る(氷川 杏子)', names.indexOf('氷川 杏子')>=0, names);
+  ok('別物語のキャラは消えたまま(ノア)', names.indexOf('ノア')<0, names);
+  ok('区切りの無い名詞句は既知の制約どおり非表示(観覧車の少女)', names.indexOf('観覧車の少女')<0, names);
+  const a=r.story.filter(s=>s.name==='氷川 杏子')[0];
+  ok('別名で見つかった最終登場ターンが採用される', a && a.lastTurn===0, a && a.lastTurn);
+}
+
 console.log('\n---------------------------------------------');
 console.log('PASS '+pass+' / FAIL '+fail);
 process.exit(fail?1:0);

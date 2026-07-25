@@ -86,7 +86,7 @@ section('fix409c: 統合ゲート');
   ok('resolveCanon 霧 涼太 自身は不触', x.resolve('霧 涼太') === '');
   const g = x.canApply('涼太', '霧 涼太', 0);
   ok('cast宛は共起なしでも許可(fix409c本体)', g && g.ok === true, g);
-  ok('許可理由が cast-exempt-409c', g && g.via === 'cast-exempt-409c', g);
+  ok('許可理由が cast-namepart-409d', g && g.via === 'cast-namepart-409d', g);
 
   // dryRun で実際に全ターン分の変更が計画されること
   const dr = x.dryRun();
@@ -344,6 +344,84 @@ section('fix528d-b: 未来lastは「再観測まで注入禁止」(自動復活�
   const wOff = envWith(14, ledger(), true);
   const rOff = wOff.__v292QuasiPack.quasiRecent().map(r=>r.name);
   ok('OFF時は従来どおり(退行できる)', rOff.indexOf('桐生悠真')>=0, rOff);
+}
+
+section('fix409d/528e/528f: GPT監査で指摘された退行の修正');
+{
+  // (1) fix409d: 区切りの無い登録NPC名への強制統合を止める(GPTの反例)
+  const win = makeEnv();
+  load(win, 'v292Dfix409-handle-merge.js');
+  win.S = {
+    cast: { hero: { name: 'アリア' }, npcs: [ { name: '観覧車の少女' } ] },
+    turns: [ { narrative: '少女が柵の上に座っている。', _convSays: [ { who: '少女', say: 'まだ回るの' } ] } ],
+    save(){}
+  };
+  const x = win.__v292Dfix409x;
+  ok('resolveCanon 少女 -> 観覧車の少女 は依然として成立する', x.resolve('少女') === '観覧車の少女', x.resolve('少女'));
+  const g = x.canApply('少女', '観覧車の少女', 0);
+  ok('★区切りの無い登録NPC名へは共起免除しない(別個体を守る)', g && g.ok === false && g.reason === 'no-cooccurrence', g);
+  const dr = x.dryRun();
+  ok('実適用0件', [].concat.apply([], dr.map(r => r.changes)).filter(c => !c.skipped).length === 0);
+}
+{
+  // fix409d: 主人公の姓名分割は従来どおり免除される
+  const win = makeEnv();
+  load(win, 'v292Dfix409-handle-merge.js');
+  win.S = islandState();
+  const g = win.__v292Dfix409x.canApply('涼太', '霧 涼太', 0);
+  ok('主人公の姓名分割は共起なしでも許可', g && g.ok === true && g.via === 'cast-namepart-409d', g);
+  const applied = [].concat.apply([], win.__v292Dfix409x.dryRun().map(r => r.changes)).filter(c => !c.skipped);
+  ok('実データ形状で3カード統合される', applied.length === 3, applied.length);
+}
+{
+  // fix409d: 中黒区切りの登録NPCの姓も免除される
+  const win = makeEnv();
+  load(win, 'v292Dfix409-handle-merge.js');
+  win.S = { cast: { hero: { name: 'アリア・リュミエール' }, npcs: [] },
+    turns: [ { narrative: 'リュミエールは杖を握った。', _convSays: [ { who: 'リュミエール', say: '行くわ' } ] } ], save(){} };
+  const g = win.__v292Dfix409x.canApply('リュミエール', 'アリア・リュミエール', 0);
+  ok('中黒区切りの構成要素も免除される', g && g.ok === true && g.via === 'cast-namepart-409d', g);
+}
+{
+  // (2) fix528e: 空白区切りの「姓だけ」を別人として抑止しない(GPTの反例)
+  const win = quasiEnv({ S: {
+    cast: { hero: { name: '霧 涼太' }, npcs: [ { name: '佐藤 太郎' }, { name: 'アン・マリー' } ] }, turns: [], save(){}
+  } });
+  const q = win.__v292QuasiPack;
+  q.noteAppear('佐藤', 2);        // 別人の佐藤さん
+  q.noteAppear('太郎', 2);        // 佐藤 太郎 の名だけ呼び
+  q.noteAppear('涼太', 2);        // 主人公の名だけ呼び
+  q.noteAppear('アン', 2);        // 中黒区切りの先頭 = 抑止される
+  const names = Object.keys(q.store());
+  ok('★空白区切りの姓「佐藤」は別人として登録される(抑止しない)', names.indexOf('佐藤') >= 0, names);
+  ok('空白区切りの名「太郎」は従来どおり抑止', names.indexOf('太郎') < 0, names);
+  ok('主人公の名だけ呼びは従来どおり抑止', names.indexOf('涼太') < 0, names);
+  ok('中黒区切りの先頭「アン」は従来どおり抑止', names.indexOf('アン') < 0, names);
+}
+{
+  // (3) fix528f: 進行中ターンの index でも sf を解除できる
+  const KEY = 'v292Dfix277Quasi';
+  const win = makeEnv();
+  win.localStorage.setItem(KEY, JSON.stringify({ '桐生悠真': { seen: [], sfSeen: [1,2,3], last: 0, sf: 2, ali: [] } }));
+  win.S = { cast: { hero: { name: 'マリア' }, npcs: [] },
+    turns: new Array(8).fill(0).map(() => ({ narrative: '', _convSays: [] })), save(){} };
+  load(win, 'v292Dfix277-quasi-pack.js');
+  // harvestRaw は push 前に turnIdx = S.turns.length(=8) を渡す
+  win.__v292QuasiPack.noteAppear('桐生悠真', 8);
+  const e = win.__v292QuasiPack.store()['桐生悠真'];
+  ok('★進行中ターン(turns.length)での観測でも解除される', !e.sf, e);
+  ok('その観測が実績として積まれる', e.seen.indexOf(8) >= 0, e.seen);
+}
+{
+  // fix528f: それでも「この物語に無い番号」では解除しない
+  const KEY = 'v292Dfix277Quasi';
+  const win = makeEnv();
+  win.localStorage.setItem(KEY, JSON.stringify({ '桐生悠真': { seen: [], sfSeen: [1,2,3], last: 0, sf: 2, ali: [] } }));
+  win.S = { cast: { hero: { name: 'マリア' }, npcs: [] },
+    turns: new Array(8).fill(0).map(() => ({ narrative: '', _convSays: [] })), save(){} };
+  load(win, 'v292Dfix277-quasi-pack.js');
+  win.__v292QuasiPack.noteAppear('桐生悠真', 13);
+  ok('存在しないターン番号では解除しない', win.__v292QuasiPack.store()['桐生悠真'].sf === 2);
 }
 
 console.log('\n---------------------------------------------');
