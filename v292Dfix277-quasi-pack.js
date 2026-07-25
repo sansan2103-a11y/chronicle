@@ -135,9 +135,49 @@
         ((qs[n] && qs[n].ali) || []).forEach(function(a){ if (a && a !== n) map[a] = n; });
       });
     } catch(e){}
+    /* ★fix540(2026-07-25・実セーブ12物語のフォレンジックで捕獲): 別名台帳の**壊れた向き**を遮断する。
+       実測(離島17T `smrisv41ho7`): 台帳に `涼太.ali=["霧 涼太"]` と `霧 涼太.ali=["涼太"]` の
+       **相互別名(循環)**が入っていた。しかも `霧 涼太` は**この物語の主人公(登録キャスト)**。
+       これが起こす実害(いずれも実測・未適用):
+         (a) unifyCards: 互いに相手の正名カードが在るので、**主人公のカードも相手のカードも消える**
+         (b) normalizeConvWho: 同じ1回で 霧 涼太→涼太 を36件、涼太→霧 涼太 を7件 = **総入れ替え**。
+             しかも冪等でない(次に走らせるとまた入れ替わる)
+         (c) noteAppear: aliasFix で主人公が `涼太` に化け、**主人公が準登録カルテに登録される**
+       規則(2段・この順):
+         A. **登録キャスト名は別名側に立てない**(キャスト名は常に正名)。fix537の成立条件(4)と同じ原則。
+         B. Aの適用後もなお相互参照が残るものは**循環として両方落とす**(fail-closed)。
+       12物語の実測での影響範囲: **離島17T の1件だけ**。他6物語にある「連鎖」(白いワンピースの少女→少女→シオン等)は
+       **一切触らない**(連鎖の解決は別問題として保留・GPTと相談する)。
+       OFF: localStorage v292Dfix540Off='1' / 記録: window.__v292Dfix540.dropped() */
+    if (!off540()){
+      try {
+        var cast540 = castNames();
+        Object.keys(map).forEach(function(a){
+          if (cast540.indexOf(a) >= 0){ drop540(a, map[a], 'cast-is-canonical'); delete map[a]; }
+        });
+        /* 循環判定は**削除前のスナップショット**で行う(片方を先に消すと、もう片方が
+           「循環でない」ように見えて生き残り、どちらが残るかがキー順に依存してしまう) */
+        var snap = {}; Object.keys(map).forEach(function(a){ snap[a] = map[a]; });
+        Object.keys(snap).forEach(function(a){
+          if (snap[snap[a]] === a){ drop540(a, snap[a], 'cycle'); delete map[a]; }
+        });
+      } catch(e){}
+    }
     aliasCache = map; aliasAt = now;
     return map;
   }
+  function off540(){ try { return localStorage.getItem('v292Dfix540Off') === '1'; } catch(e){ return false; } }
+  var _dropped540 = [];
+  function drop540(from, to, why){
+    try {
+      var k = from + '>' + to + ':' + why;
+      for (var i=0;i<_dropped540.length;i++){ if (_dropped540[i].k === k) return; }
+      _dropped540.push({ k: k, from: from, to: to, why: why });
+      while (_dropped540.length > 20) _dropped540.shift();
+      console.warn(TAG, 'fix540: 壊れた別名を無効化', from, '->', to, '(' + why + ')');
+    } catch(e){}
+  }
+  window.__v292Dfix540 = { dropped: function(){ return _dropped540.slice(); }, off: off540 };
   function aliasFix(name){
     try { if (offA()) return name; var m = aliasMap(); return m[name] || name; } catch(e){ return name; }
   }
