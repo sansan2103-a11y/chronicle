@@ -38,11 +38,25 @@
      (実測: normalizeConvWho が 0 件。詳細は index.html の fix539 コメント)。
      fix538b の「一度取れた S を覚える」永続キャッシュは、別スロットの S を握り続ける危険があるため撤去。
      以降の3経路は index.html が古いキャッシュのときだけ使う移行期の後方互換。 */
+  function note539(feature, reason, err){
+    try { if (window.__chronicleState && typeof window.__chronicleState.note === 'function')
+            window.__chronicleState.note(feature, reason, err); } catch(e){}
+  }
   function getS(){
-    try { var a = (typeof window.__chronicleGetState === 'function') ? window.__chronicleGetState('fix277') : null; if (a) return a; } catch(e){}
-    try { if (typeof S !== 'undefined' && S) return S; } catch(e){}
-    try { var w = window.S; if (w) return w; } catch(e){}
-    try { return (0,eval)('typeof S!=="undefined"?S:null') || null; } catch(e){}
+    var g = null;
+    try { g = window.__chronicleGetState; } catch(e){}
+    if (typeof g === 'function'){
+      try { var a = g('fix277'); if (a) return a; } catch(e){ note539('fix277', 'getter-threw', e); }
+    } else { note539('fix277', 'getter-missing'); }
+    /* ここから下は index.html が fix539 より古いキャッシュのときだけ通る移行期の後方互換。
+       ★fix539b(GPT裁定): 正式APIが失敗したのにフォールバックが救えた場合は必ず記録する
+       (「getterは失敗するのに旧経路は成功する」が再捕獲できれば機序特定の決定打になる)。 */
+    try { if (typeof S !== 'undefined' && S){ note539('fix277', 'rescued-by-lexical'); return S; } } catch(e){}
+    try { if (window.S){ note539('fix277', 'rescued-by-window'); return window.S; } } catch(e){}
+    try { var u = (0,eval)('typeof S!=="undefined"?S:null');
+          if (u){ note539('fix277', 'rescued-by-eval'); return u; }
+          note539('fix277', 'legacy-eval-null'); }
+    catch(e){ note539('fix277', 'legacy-eval-threw', e); }
     return null;
   }
   function offQ(){ try { return localStorage.getItem('v292QuasiCastOff') === '1'; } catch(e){ return false; } }
