@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260725-fix538b';
+  var BUILT = '20260725-fix539';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2142,6 +2142,45 @@ if (typeof S.cfg.simpleMode === 'undefined') S.cfg.simpleMode = false;
 
   console.log('[v292] hook bootstrap ready: PromptRegistry, UserMessageRegistry, _extensions');
 })();
+
+/* ★fix539(2026-07-25・GPT監査 P0「S取得問題」): 状態 S の正式な取得経路を1本だけ用意する。
+   ■ 実測(30ターン物語 sms063dyz8l): fix277 の normalizeConvWho() が 0 件を返した。
+     同じ瞬間、注入コンテキストからの間接eval では S が取れており、別名マップも5件一致していた
+     (手動カウント=5)。早期returnの候補は off538() / aliasMap 空 / S 不正 の3つで、
+     前2つは同時刻の実測で否定されたため、**モジュール内の getS() が null を返した**と確定。
+     ただし **機序そのものは未特定**(TDZ / eval拒否 / 実行world のいずれか)。
+   ■ 方針: 機序を推測で決め打ちせず、**間接eval に依存する経路自体を無くす**。
+     index.html は const S と同じスコープなので、ここから直接返せば eval も window も要らない。
+   ■ window.S を生やす案は実測に基づき却下:
+     features.js 等に `if (!window.S) return;` 形が約30箇所あり、現在は**常に早期return**している。
+     window.S を有効化すると休眠コードが一斉に動き出す = 無関係な大規模挙動変化。
+     (features.js:9345 には「window.S は undefined」を前提とするコメントまである)
+   ■ S は const(この上の宣言が唯一の宣言・代入)なので、この関数は常にライブの最新を返す。
+     読み取り専用。書き込み口は作らない。
+   診断: window.__chronicleState.stats() = feature別の取得回数/失敗回数。無言の空振りを禁止する。 */
+(function v292Dfix539(){
+  var stats = { calls: 0, misses: 0, byFeature: {} };
+  var warned = {};
+  function bucket(f){ return stats.byFeature[f] || (stats.byFeature[f] = { calls: 0, misses: 0 }); }
+  window.__chronicleGetState = function(feature){
+    var s = null;
+    try { s = S; } catch(e){ s = null; }          /* 初期化前(TDZ)なら null */
+    var f = feature || '?';
+    stats.calls++; bucket(f).calls++;
+    if (!s){
+      stats.misses++; bucket(f).misses++;
+      if (!warned[f]){ warned[f] = 1; try { console.warn('[v292Dfix539] state unavailable for', f); } catch(_){} }
+    }
+    return s || null;
+  };
+  window.__chronicleGetStateContext = function(feature){
+    return { state: window.__chronicleGetState(feature),
+             slotKey: (typeof window.__chr6Key === 'function') ? window.__chr6Key() : 'chr6' };
+  };
+  window.__chronicleState = { stats: function(){ try { return JSON.parse(JSON.stringify(stats)); } catch(e){ return null; } } };
+  try { console.log('[v292Dfix539] state accessor installed'); } catch(e){}
+})();
+
 // Boot
 G.init();
 </script>
@@ -2649,7 +2688,7 @@ G.init();
 <script src="features.js?cb=v292Dfix524"></script>
 <script src="v292Dfix135-longmem.js?cb=v292Dfix299b"></script>
 <script src="v292Dfix138-continue.js?cb=v292Dfix225"></script>
-<script src="v292Dfix145-charlist.js?cb=v292Dfix537"></script>
+<script src="v292Dfix145-charlist.js?cb=v292Dfix539"></script>
 <!-- v292Dfix226(P1): fix52(可読性v1)はfix53(包括v2)に内包されるため退役。問題があれば下行のコメントを外す
 <script src="v292Dfix52-readability.js?cb=v292Dfix52"></script> -->
 <script src="v292Dfix53-readability-v2.js?cb=v292Dfix53"></script>
@@ -2682,7 +2721,7 @@ G.init();
     <script src="v292Dfix73-card-dedup.js?cb=v292Dfix200"></script>
     <script src="v292Dfix70b-order-convsays.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix75-history-dedup.js?cb=v292Dfix75"></script>
-<script src="v292Dfix76-human-foundation.js?cb=v292Dfix76b"></script>  <script src="v292Dfix77-state-memory.js?cb=v292Dfix534"></script>
+<script src="v292Dfix76-human-foundation.js?cb=v292Dfix76b"></script>  <script src="v292Dfix77-state-memory.js?cb=v292Dfix539"></script>
   <script src="v292Dfix78-tag-case-normalize.js?cb=v292Dfix78"></script>
   <script src="v292Dfix79-momentum-anchor.js?cb=v292Dfix79"></script>
   <script src="v292Dfix80-gen-gate-retry.js?cb=v292Dfix504"></script>
@@ -2725,7 +2764,7 @@ G.init();
 <script src="v292Dfix270-topbar-ui.js?cb=v292Dfix270"></script>
 <script src="v292Dfix274-build-flag-guard.js?cb=v292Dfix274"></script>
 <script src="v292Dfix275-settings-tabs.js?cb=v292Dfix275"></script>
-<script src="v292Dfix277-quasi-pack.js?cb=v292Dfix538b"></script>
+<script src="v292Dfix277-quasi-pack.js?cb=v292Dfix539"></script>
 <script src="v292Dfix288-tooltips.js?cb=v292Dfix288"></script>
 <script src="v292Dfix290-mobile.js?cb=v292Dfix290"></script>
 <script src="v292Dfix291-saveexport.js?cb=v292Dfix294"></script>
@@ -2804,7 +2843,7 @@ G.init();
 <script src="v292Dfix405-state-freshness.js?cb=v292Dfix417"></script>
 <script src="v292Dfix406-automode.js?cb=v292Dfix417d"></script>
 <script src="v292Dfix407-load-noconfirm.js?cb=v292Dfix407"></script>
-<script src="v292Dfix409-handle-merge.js?cb=v292Dfix531"></script>
+<script src="v292Dfix409-handle-merge.js?cb=v292Dfix539"></script>
 <script src="v292Dfix414-constraint-engine.js?cb=v292Dfix428"></script>
 <script src="v292Dfix415-opening-mask.js?cb=v292Dfix415b"></script>
 <script src="v292Dfix416-pain-style.js?cb=v292Dfix428"></script>
@@ -2853,7 +2892,7 @@ G.init();
 <script src="v292Dfix466-dup-say.js?cb=v292Dfix466"></script>
 <script src="v292Dfix467-readability-rules.js?cb=v292Dfix468"></script>
 <script src="v292Dfix468-gen-timing.js?cb=v292Dfix468"></script>
-<script src="v292Dfix469-speaker-score.js?cb=v292Dfix536"></script>
+<script src="v292Dfix469-speaker-score.js?cb=v292Dfix539"></script>
 <script src="v292Dfix470-style-tail.js?cb=v292Dfix470e"></script>
 <script src="v292Dfix471-style-c.js?cb=v292Dfix472"></script>
 <script src="v292Dfix472-icon-protect.js?cb=v292Dfix472"></script>

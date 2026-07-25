@@ -52,7 +52,18 @@
   function off(){ try { return localStorage.getItem('v292Dfix409Off') === '1'; } catch(e){ return false; } }
   function off409b(){ try { return localStorage.getItem('v292Dfix409bOff') === '1'; } catch(e){ return false; } }  // fix409b: 新ゲートのみ無効化(=従来fix409挙動)
   function off409c(){ try { return localStorage.getItem('v292Dfix409cOff') === '1'; } catch(e){ return false; } }  // fix409c: 登録cast宛の共起免除 + 主人公の正式呼称注入 のみ無効化(=fix409b挙動)
-  function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined" ? S : null'); } catch(e){ return null; } }
+  /* ★fix539(2026-07-25・GPT監査P0): S の取得は index.html が提供する正式APIを第一経路にする。
+     背景: 間接eval 頼みの取得が実機で無言のまま null を返し、判定が丸ごと空振りした
+     (実測: normalizeConvWho が 0 件。詳細は index.html の fix539 コメント)。
+     fix538b の「一度取れた S を覚える」永続キャッシュは、別スロットの S を握り続ける危険があるため撤去。
+     以降の3経路は index.html が古いキャッシュのときだけ使う移行期の後方互換。 */
+  function getS(){
+    try { var a = (typeof window.__chronicleGetState === 'function') ? window.__chronicleGetState('fix409') : null; if (a) return a; } catch(e){}
+    try { if (typeof S !== 'undefined' && S) return S; } catch(e){}
+    try { var w = window.S; if (w) return w; } catch(e){}
+    try { return (0,eval)('typeof S!=="undefined"?S:null') || null; } catch(e){}
+    return null;
+  }
 
   // fix307ロスターの取得(未ロード時は空配列)。
   function loadRoster(){

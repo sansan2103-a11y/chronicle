@@ -26,7 +26,18 @@
   var TAG = '[v292Dfix469:speaker-score]';
 
   function off(){ try { return localStorage.getItem('v292Dfix469Off') === '1'; } catch(e){ return false; } }
-  function getS(){ try { return (0,eval)('typeof S!=="undefined" ? S : null'); } catch(e){ return null; } }
+  /* ★fix539(2026-07-25・GPT監査P0): S の取得は index.html が提供する正式APIを第一経路にする。
+     背景: 間接eval 頼みの取得が実機で無言のまま null を返し、判定が丸ごと空振りした
+     (実測: normalizeConvWho が 0 件。詳細は index.html の fix539 コメント)。
+     fix538b の「一度取れた S を覚える」永続キャッシュは、別スロットの S を握り続ける危険があるため撤去。
+     以降の3経路は index.html が古いキャッシュのときだけ使う移行期の後方互換。 */
+  function getS(){
+    try { var a = (typeof window.__chronicleGetState === 'function') ? window.__chronicleGetState('fix469') : null; if (a) return a; } catch(e){}
+    try { if (typeof S !== 'undefined' && S) return S; } catch(e){}
+    try { var w = window.S; if (w) return w; } catch(e){}
+    try { return (0,eval)('typeof S!=="undefined"?S:null') || null; } catch(e){}
+    return null;
+  }
   function norm(s){ return String(s || '').replace(/[\s　。、，．！？!?…‥・「」『』]/g, ''); }
   function nospace(s){ return String(s || '').replace(/[\s　]/g, ''); }
 

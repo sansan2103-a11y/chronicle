@@ -36,9 +36,17 @@
   var TAG = '[v292Dfix145:charlist]';
 
   // ---------- helpers ----------
+  /* ★fix539(2026-07-25・GPT監査P0): S の取得は index.html が提供する正式APIを第一経路にする。
+     背景: 間接eval 頼みの取得が実機で無言のまま null を返し、判定が丸ごと空振りした
+     (実測: normalizeConvWho が 0 件。詳細は index.html の fix539 コメント)。
+     fix538b の「一度取れた S を覚える」永続キャッシュは、別スロットの S を握り続ける危険があるため撤去。
+     以降の3経路は index.html が古いキャッシュのときだけ使う移行期の後方互換。 */
   function getState(){
+    try { var a = (typeof window.__chronicleGetState === 'function') ? window.__chronicleGetState('fix145') : null; if (a) return a; } catch(e){}
     try { if (typeof S !== 'undefined' && S) return S; } catch(e){}
-    return window.S || null;
+    try { var w = window.S; if (w) return w; } catch(e){}
+    try { return (0,eval)('typeof S!=="undefined"?S:null') || null; } catch(e){}
+    return null;
   }
   function escHtml(s){
     return String(s == null ? '' : s)

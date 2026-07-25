@@ -20,6 +20,18 @@
   window.__v292Dfix77Active = true;
   var TAG = '[v292Dfix77:state-memory]';
   var LSKEY = 'v292Dfix77States';
+  /* ★fix539(2026-07-25・GPT監査P0): S の取得は index.html が提供する正式APIを第一経路にする。
+     背景: 間接eval 頼みの取得が実機で無言のまま null を返し、判定が丸ごと空振りした
+     (実測: normalizeConvWho が 0 件。詳細は index.html の fix539 コメント)。
+     fix538b の「一度取れた S を覚える」永続キャッシュは、別スロットの S を握り続ける危険があるため撤去。
+     以降の3経路は index.html が古いキャッシュのときだけ使う移行期の後方互換。 */
+  function getS77(){
+    try { var a = (typeof window.__chronicleGetState === 'function') ? window.__chronicleGetState('fix77') : null; if (a) return a; } catch(e){}
+    try { if (typeof S !== 'undefined' && S) return S; } catch(e){}
+    try { var w = window.S; if (w) return w; } catch(e){}
+    try { return (0,eval)('typeof S!=="undefined"?S:null') || null; } catch(e){}
+    return null;
+  }
   function getPlanner(){ try { return (0,eval)('typeof Planner!=="undefined"?Planner:null'); } catch(e){ return null; } }
 
   // ---- store（キャラ名 -> {karada,kokoro,honno,turn}）localStorage 永続 ----
@@ -112,7 +124,7 @@
           if (ko) cur.kokoro = ko;
           if (ho) cur.honno = ho;
           var mo = attr(tag,'目的'); if (mo) cur.mokuteki = mo; /* v292Dfix223b: いまの目的(瞬間・毎ターン更新可) */
-          cur.turn = (function(){ try{ var S=(0,eval)('typeof S!=="undefined"?S:null'); return (S&&S.turns)?S.turns.length:0; }catch(e){ return 0; } })();
+          cur.turn = (function(){ var st=getS77(); return (st&&st.turns)?st.turns.length:0; })();   /* ★fix539 */
           store[who] = cur;
           found++;
         }

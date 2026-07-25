@@ -33,21 +33,18 @@
   if (window.__v292Dfix277Pack) return;
   window.__v292Dfix277Pack = true;
 
-  /* ★fix538b(2026-07-25・実機で判明): S の解決が不安定で、取れないと fix277 の判定が丸ごと空振りする。
-     実測: 30ターンの物語で normalizeConvWho が0件を返し、`window.S` を手で立てた直後に5件統合された。
-     S は index.html の `let` グローバルなので `window.S` には載らず、間接eval頼みになっている。
-     対策: **一度でも取れた S を覚えておく**(単調・追加のみ)。取れた時は従来どおりそれを返し、
-     取れなかった時だけ直近の既知 S へ降りる。物語が切り替わればページごと読み直されるので古いSは残らない。 */
-  var _lastS = null;
+  /* ★fix539(2026-07-25・GPT監査P0): S の取得は index.html が提供する正式APIを第一経路にする。
+     背景: 間接eval 頼みの取得が実機で無言のまま null を返し、判定が丸ごと空振りした
+     (実測: normalizeConvWho が 0 件。詳細は index.html の fix539 コメント)。
+     fix538b の「一度取れた S を覚える」永続キャッシュは、別スロットの S を握り続ける危険があるため撤去。
+     以降の3経路は index.html が古いキャッシュのときだけ使う移行期の後方互換。 */
   function getS(){
-    try {
-      var s = window.S || (0,eval)('typeof S!=="undefined"?S:null');
-      if (s) { _lastS = s; return s; }
-    } catch(e){}
-    return _lastS;
+    try { var a = (typeof window.__chronicleGetState === 'function') ? window.__chronicleGetState('fix277') : null; if (a) return a; } catch(e){}
+    try { if (typeof S !== 'undefined' && S) return S; } catch(e){}
+    try { var w = window.S; if (w) return w; } catch(e){}
+    try { return (0,eval)('typeof S!=="undefined"?S:null') || null; } catch(e){}
+    return null;
   }
-  /* 起動直後に一度だけ捕まえに行く(以後 _lastS が保険になる) */
-  try { setTimeout(function(){ try { getS(); } catch(e){} }, 1200); } catch(e){}
   function offQ(){ try { return localStorage.getItem('v292QuasiCastOff') === '1'; } catch(e){ return false; } }
   function offA(){ try { return localStorage.getItem('v292AliasOff') === '1'; } catch(e){ return false; } }
   function offI(){ try { return localStorage.getItem('v292IconUnifyOff') === '1'; } catch(e){ return false; } }
