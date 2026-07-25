@@ -407,10 +407,18 @@ section('fix409d/528e/528f: GPT監査で指摘された退行の修正');
     turns: new Array(8).fill(0).map(() => ({ narrative: '', _convSays: [] })), save(){} };
   load(win, 'v292Dfix277-quasi-pack.js');
   // harvestRaw は push 前に turnIdx = S.turns.length(=8) を渡す
-  win.__v292QuasiPack.noteAppear('桐生悠真', 8);
+  win.__v292QuasiPack.noteAppear('桐生悠真', 8, { source: 'current-parse' });
   const e = win.__v292QuasiPack.store()['桐生悠真'];
-  ok('★進行中ターン(turns.length)での観測でも解除される', !e.sf, e);
+  ok('★進行中ターン(turns.length)での観測でも解除される(生応答経路)', !e.sf, e);
   ok('その観測が実績として積まれる', e.seen.indexOf(8) >= 0, e.seen);
+  // fix528g: source を付けない呼出元は進行中ターンで解除できない
+  const win2 = makeEnv();
+  win2.localStorage.setItem(KEY, JSON.stringify({ '桐生悠真': { seen: [], sfSeen: [1,2,3], last: 0, sf: 2, ali: [] } }));
+  win2.S = { cast: { hero: { name: 'マリア' }, npcs: [] },
+    turns: new Array(8).fill(0).map(() => ({ narrative: '', _convSays: [] })), save(){} };
+  load(win2, 'v292Dfix277-quasi-pack.js');
+  win2.__v292QuasiPack.noteAppear('桐生悠真', 8);
+  ok('★source未指定では進行中ターンでの解除を許さない(契約の明示)', win2.__v292QuasiPack.store()['桐生悠真'].sf === 2);
 }
 {
   // fix528f: それでも「この物語に無い番号」では解除しない

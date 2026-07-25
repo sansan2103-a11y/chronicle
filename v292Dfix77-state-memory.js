@@ -35,8 +35,46 @@
       if(changed){ localStorage.setItem(LSKEY, JSON.stringify(store)); }
     }catch(e){}
   })();
-  function persist(){ try { localStorage.setItem(LSKEY, JSON.stringify(store)); } catch(e){} }
+  /* ★fix532(2026-07-25・GPT監査がB-2の前提条件として先行を指名):
+       このストアは**ページ読み込み時に1回だけ**読まれ `store` の参照が固定される。
+       一方 fix246 は setItem のたびに 'v292Dfix77States' へ**その時点のアクティブスロット接尾辞**を付ける。
+       つまり読み込み後にアクティブスロットが変わると、**前の物語の状態が丸ごと新しい物語のキーへ書かれる**。
+       (features.js:5970 loadSlot は location.reload() しないため、この経路が成立しうる)
+       実測の裏付け: 離島16ターンの物語の状態ストアに、廃墟遊園地の物語の5人だけが入っていた。
+     現状 fix527(物語IDをURLで持つ)が「別idへの chr6_active_slot 書換」を遮断しているので**通常は休眠**だが、
+     コードとしては残っているため、状態収穫を強化する前にここで塞ぐ(GPTの指名どおり)。
+     方式: 読み込み時の接尾辞を覚え、**書き込み直前に食い違いを検出したら、書かずに新しい接尾辞のストアを
+       読み直す**(自己修復)。前の物語のメモリ内容は破棄する = 別物語のものなのでそれが正しい。
+     非破壊: 消すのはメモリ上の中身だけで localStorage は一切消さない。参照は保つ(他fixが掴んでいるため)。
+     OFF: localStorage v292Dfix532Off='1' */
+  function curSfx(){
+    try {
+      if (typeof window.__chr6Key === 'function'){ var k = window.__chr6Key(); return (k && k !== 'chr6') ? k.replace(/^chr6/, '') : ''; }
+      var a = JSON.parse(localStorage.getItem('chr6_active_slot') || 'null');
+      return (a && a !== 'default') ? ('_slot_' + a) : '';
+    } catch(e){ return ''; }
+  }
+  function off532(){ try { return localStorage.getItem('v292Dfix532Off') === '1'; } catch(e){ return false; } }
+  var loadedSfx = curSfx();
+  function persist(){
+    try {
+      if (!off532()){
+        var now = curSfx();
+        if (now !== loadedSfx){
+          var fresh = {};
+          try { fresh = JSON.parse(localStorage.getItem(LSKEY) || '{}') || {}; } catch(e2){ fresh = {}; }
+          Object.keys(store).forEach(function(k){ delete store[k]; });
+          Object.keys(fresh).forEach(function(k){ store[k] = fresh[k]; });
+          loadedSfx = now;
+          try { console.log(TAG, 'fix532: 物語切替を検出 → 前の物語の状態を書かずにストアを読み直した', now); } catch(_){}
+          return;
+        }
+      }
+      localStorage.setItem(LSKEY, JSON.stringify(store));
+    } catch(e){}
+  }
   window.__v292Dfix77Store = store;
+  window.__v292Dfix532 = { loadedSfx: function(){ return loadedSfx; }, curSfx: curSfx, off: off532 };
 
   function attr(tag, name){
     var m = tag.match(new RegExp(name + '\\s*=\\s*"([^"]*)"'));

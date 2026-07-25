@@ -232,7 +232,10 @@
       return hit;
     } catch(e){ return null; }
   }
-  function noteAppear(name, turnIdx){
+  /* ★fix528g(2026-07-25・GPT監査の非阻止指摘): `turnIdx === cur`(進行中ターン)での解除を許すのは
+       **生応答の現在parse経路(harvestRaw)だけ**に限定する。将来ほかの呼出元が cur を渡すと
+       「未確定ターンでも解除できる」契約になってしまうため、source で明示する。 */
+  function noteAppear(name, turnIdx, opts){
     name = validName(aliasFix(name));
     if (!name) return;
     if (castNames().indexOf(name) >= 0) return;
@@ -262,7 +265,8 @@
            別物語の残骸(例: 8ターン物語に last=13)は harvest からは curN 以下しか渡らないので
            これで誤解除は起きない。 */
       var curN = storyTurnCount();
-      if (!(curN > 0 && turnIdx >= 0 && turnIdx <= curN)) return;   // この物語に実在する(または進行中の)ターンでの観測でなければ解除しない
+      var maxOk = (opts && opts.source === 'current-parse') ? curN : (curN - 1);   // ★fix528g: curを許すのは生応答の現在parse経路だけ
+      if (!(curN > 0 && turnIdx >= 0 && turnIdx <= maxOk)) return;   // この物語に実在する(進行中を含む)ターンでの観測でなければ解除しない
       delete e.sf;
       qDirty = true;
       try { console.log(TAG, 'fix528d: 再観測により復帰:', name, '@turn', turnIdx); } catch(_){}
@@ -287,9 +291,9 @@
     try {
       var txt = String(raw || ''); var m;
       var re1 = /<(?:say|react|state)\b[^>]*?who="([^"]{1,24})"/g;
-      while ((m = re1.exec(txt))) noteAppear(m[1], turnIdx);
+      while ((m = re1.exec(txt))) noteAppear(m[1], turnIdx, { source: 'current-parse' });
       var re2 = /<say\s+who='([^']{1,24})'/g; /* react声の入れ子(単引用) */
-      while ((m = re2.exec(txt))) noteAppear(m[1], turnIdx);
+      while ((m = re2.exec(txt))) noteAppear(m[1], turnIdx, { source: 'current-parse' });
     } catch(e){}
   }
   function syncConv(){
