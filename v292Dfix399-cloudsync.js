@@ -470,6 +470,13 @@
   }
   window.__v292Dfix399x = {
     collectLight: collectLight, push: push, pull: pullData, applySave: applySave, bootPull: function(){ bootPullDone=false; bootPull(); },
+    /* ★fix544(2026-07-25・GPT指定): 世代trimを単体で検証できるようにする。
+       実データで chr6_bk_cloudsync_* が11世代溜まっていたので原因を調べた結果、
+       **全部 fix495(C1・2世代trim) が入った 2026-07-19 より前**に作られたもので、
+       それ以降に pull が一度も走っていないため trim が実行されていなかっただけだった
+       (= trim の不具合ではない)。それでも「コードが本当に2世代へ落とすか」を
+       回帰テストで固定しておくために検証口を出す。副作用は従来どおり(呼べば控えを1件書く)。 */
+    backupBeforeApply: backupBeforeApply,
     verify: verify, selfHeal: selfHeal,
     syncState: function(){ return { baseTs: baseTs(), localTs: localTs(), imgHash: imgHashStored() }; },
     status: function(){ return { off: off(), autoOff: autoOff(), loggedIn: isLoggedIn(), proxy: proxyUrl(), activeSlot: activeSlot() }; }

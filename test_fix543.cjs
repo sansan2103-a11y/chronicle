@@ -28,10 +28,22 @@ function mk(opts){
   };
   if (opts.off) { store['v292Dfix543Off'] = '1'; used += 20; }
   const warns = [], toasts = [];
-  const w = { localStorage: ls, document: { readyState: 'complete', addEventListener(){}, createElement: () => ({ style: {}, setAttribute(){}, appendChild(){}, remove(){} }), body: { appendChild(){} } },
+  const nodes = {};
+  const mkNode = () => { const n = { style:{ cssText:'' }, children:[], textContent:'', id:'', parentNode:null,
+    setAttribute(k,v){ if(k==='id') n.id=v; }, appendChild(c){ n.children.push(c); c.parentNode=n; if(c.id) nodes[c.id]=c; return c; },
+    removeChild(c){ const i=n.children.indexOf(c); if(i>=0) n.children.splice(i,1); c.parentNode=null; if(c.id) delete nodes[c.id]; },
+    remove(){}, onclick:null }; return n; };
+  const body = mkNode();
+  const unloadHandlers = [];
+  const w = { localStorage: ls,
+    document: { readyState: 'complete', addEventListener(){},
+      createElement: () => mkNode(), body,
+      getElementById: (id) => nodes[id] || null },
     console: { log(){}, warn: (...a) => warns.push(a.join(' ')), error(){} },
     setTimeout: () => 0, setInterval: () => 0, clearTimeout(){}, clearInterval(){},
+    addEventListener: (t, f) => { if (t === 'beforeunload') unloadHandlers.push(f); },
     showToast: (m, e) => toasts.push(String(m)) };
+  w.__body = body; w.__nodes = nodes; w.__unload = unloadHandlers;
   w.window = w; w.__warns = warns; w.__toasts = toasts; w.__native = nativeCalls; w.__store = store;
   vm.runInContext(fs.readFileSync(path.join(__dirname, 'v292Dfix543-save-guard.js'), 'utf8'),
     vm.createContext(w), { filename: 'fix543' });
@@ -115,6 +127,57 @@ console.log('\n== fix543: 他fixのラップを壊さない(fix419cの教訓) ==
      fs.readFileSync(path.join(__dirname, 'v292Dfix543-save-guard.js'), 'utf8').indexOf('hasOwnProperty.call(prev, p)') > 0);
   ok('★二重ラップを防ぐフラグがある',
      fs.readFileSync(path.join(__dirname, 'v292Dfix543-save-guard.js'), 'utf8').indexOf('prev.__f543') > 0);
+}
+
+console.log('\n== fix545: 物語の保存失敗は常設の「未保存」表示にする ==');
+{
+  const w = mk({ quota: 200 });
+  try { w.localStorage.setItem('chr6_slot_a', new Array(500).join('x')); } catch (e) {}
+  ok('★未保存状態になる', w.__v292Dfix543.unsaved().active === true, w.__v292Dfix543.unsaved());
+  ok('★バナーが出る', !!w.__nodes['v292-fix545-unsaved'], Object.keys(w.__nodes));
+  ok('★本文には触らない(新しい要素を1つ足すだけ)', w.__body.children.length === 1, w.__body.children.length);
+  const msg = w.__nodes['v292-fix545-msg'];
+  ok('★「保存できていません」と出る', msg && /保存できていません/.test(msg.textContent), msg && msg.textContent);
+  ok('★トーストは1回', w.__toasts.filter(x => /保存できませんでした/.test(x)).length === 1, w.__toasts);
+}
+{
+  const w = mk({ quota: 200 });
+  for (let i = 0; i < 4; i++){ try { w.localStorage.setItem('chr6_slot_a', new Array(500).join('x')); } catch (e) {} }
+  ok('★同じエピソード中はトーストを増やさない',
+     w.__toasts.filter(x => /保存できませんでした/.test(x)).length === 1, w.__toasts.length);
+  ok('失敗回数は数える', w.__v292Dfix543.unsaved().count === 4, w.__v292Dfix543.unsaved());
+  ok('★離脱警告が登録される', w.__unload.length === 1, w.__unload.length);
+  const ev = { preventDefault(){ ev.__p = true; }, returnValue: undefined };
+  w.__unload[0](ev);
+  ok('★未保存なら離脱を止める', ev.__p === true, ev);
+}
+{
+  /* ★同じ物語キーの保存が成功したときだけ解除する */
+  const w = mk({ quota: 1000 });
+  try { w.localStorage.setItem('chr6_slot_a', new Array(2000).join('x')); } catch (e) {}
+  ok('前提: 未保存になっている', w.__v292Dfix543.unsaved().active === true);
+  w.localStorage.setItem('chr6_slot_b', 'ok');
+  ok('★別の物語キーの成功では解除しない', w.__v292Dfix543.unsaved().active === true, w.__v292Dfix543.unsaved());
+  w.localStorage.setItem('v292Dfix469_pshadow', 'ok');
+  ok('★診断キーの成功でも解除しない', w.__v292Dfix543.unsaved().active === true, w.__v292Dfix543.unsaved());
+  w.localStorage.setItem('chr6_slot_a', 'small');
+  ok('★同じ物語キーの成功で解除する', w.__v292Dfix543.unsaved().active === false, w.__v292Dfix543.unsaved());
+  ok('★バナーも消える', !w.__nodes['v292-fix545-unsaved'], Object.keys(w.__nodes));
+}
+{
+  /* 解除後にまた失敗したら、もう一度知らせる(一生に1回ではない) */
+  const w = mk({ quota: 1000 });
+  try { w.localStorage.setItem('chr6_slot_a', new Array(2000).join('x')); } catch (e) {}
+  w.localStorage.setItem('chr6_slot_a', 'small');
+  try { w.localStorage.setItem('chr6_slot_a', new Array(2000).join('x')); } catch (e) {}
+  ok('★2回目の失敗エピソードでもう一度トーストが出る',
+     w.__toasts.filter(x => /保存できませんでした/.test(x)).length === 2, w.__toasts);
+}
+{
+  const w = mk({ quota: 200, off: true });
+  try { w.localStorage.setItem('chr6_slot_a', new Array(500).join('x')); } catch (e) {}
+  ok('★OFFならバナーも出さない', !w.__nodes['v292-fix545-unsaved'] && w.__v292Dfix543.unsaved().active === false,
+     w.__v292Dfix543.unsaved());
 }
 
 console.log('\n== fix543b: 空き測定のプローブを自分で数えない ==');
