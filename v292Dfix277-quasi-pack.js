@@ -742,11 +742,76 @@
     }).observe(document.documentElement || document.body, { childList: true, subtree: true });
   } catch(e){}
 
+  /* ★fix541(2026-07-25・GPT裁定の第2段階): 「別個体を1つのハブへ束ねた疑いのある台帳エントリ」を
+       **検出だけ**する。**削除も統合停止もしない**(この版は読取専用の診断)。
+     由来: 実セーブ 廃墟21T `smrrcv21iph` の `怪異.ali = ["長身の怪異","孤児院の怪異"]`。
+       別々に描写された2体を1つの「怪異」へ束ねている疑いがある。
+       おしんの明示指示「**類似している別個体まで強制統合しない**」に直結する。
+     GPTの警告: 「一般名詞で終わる正名 + 修飾つき別名が2つ以上」は**候補抽出には有効だが
+       自動削除条件としては乱暴**(少女/白い服の少女/門前にいた少女 は普通に同一人物)。
+       よって2段階に分け、第2段階の「別個体の証拠」で危険度を上げるだけにする。
+     読出: window.__v292QuasiPack.ambiguousHubs() */
+  var GENERIC_HUB = /(怪異|少女|少年|女|男|子供|子ども|影|人影|老人|老婆|青年|婦人|女将|店主|主人|店員|医者|警官|教師|生徒|客|男性|女性)$/;
+  function ambiguousHubs(){
+    var out = [];
+    try {
+      var qs = loadQ(), cast = castNames();
+      var S = getS(), turns = (S && Array.isArray(S.turns)) ? S.turns : [];
+      Object.keys(qs).forEach(function(canon){
+        var e = qs[canon]; if (!e) return;
+        var ali = (e.ali || []).filter(function(a){ return a && a !== canon; });
+        /* --- 第1段階: 構造的な疑わしさ --- */
+        if (ali.length < 2) return;                         /* 入ってくる別名が2件以上 */
+        if (cast.indexOf(canon) >= 0) return;               /* 登録キャストは対象外 */
+        if (!GENERIC_HUB.test(canon)) return;               /* 正名が一般呼称・役割名 */
+        if (canon.length > 6) return;                       /* 「短い」の目安 */
+        var modified = ali.filter(function(a){ return a.length > canon.length && a.indexOf(canon) >= 0; });
+        if (modified.length < 2) return;                    /* 別名がそれぞれ修飾語付き */
+        /* --- 第2段階: 別個体の証拠(あれば危険度を上げる。無くても候補には残す) --- */
+        var ev = [];
+        /* (1) 2つの呼称が同一ターンで別々に会話カードの話者として並存する */
+        for (var i = 0; i < turns.length; i++){
+          var who = {};
+          ((turns[i] && turns[i]._convSays) || []).forEach(function(c){ if (c && c.who) who[c.who] = 1; });
+          var n = 0; ali.forEach(function(a){ if (who[a]) n++; });
+          if (n >= 2){ ev.push('same-turn-both-speak:T' + (i + 1)); break; }
+        }
+        /* (2) 明示的な分離表現が本文にある */
+        for (var j = 0; j < turns.length; j++){
+          var txt = String((turns[j] && turns[j].narrative && turns[j].narrative.join)
+                    ? turns[j].narrative.join('\n') : ((turns[j] && turns[j].narrative) || ''));
+          if (!txt) continue;
+          var hitA = 0; ali.forEach(function(a){ if (txt.indexOf(a) >= 0) hitA++; });
+          if (hitA >= 2 && /(もう一(体|人|匹)|別の|二(体|人)|片方|双方|それぞれ|両方)/.test(txt)){
+            ev.push('explicit-separation:T' + (j + 1)); break;
+          }
+        }
+        /* (3) 登場ターンが重なる(各々が別々に継続観測される) */
+        var spans = {};
+        ali.forEach(function(a){ var ae = qs[a]; if (ae && Array.isArray(ae.seen) && ae.seen.length) spans[a] = ae.seen; });
+        var keys = Object.keys(spans);
+        if (keys.length >= 2){
+          for (var x = 0; x < keys.length; x++) for (var y = x + 1; y < keys.length; y++){
+            var A = spans[keys[x]], B = spans[keys[y]];
+            var overlap = A.filter(function(v){ return B.indexOf(v) >= 0; });
+            if (overlap.length){ ev.push('overlapping-turns:' + keys[x] + '/' + keys[y]); x = keys.length; break; }
+          }
+        }
+        out.push({ status: 'ambiguous-hub', canonical: canon, aliases: ali,
+                   modifiedAliases: modified, evidence: ev,
+                   risk: ev.length ? 'high' : 'suspect',
+                   action: 'review-only' });   /* この版では停止措置は取らない */
+      });
+    } catch(e){}
+    return out;
+  }
+
   window.__v292QuasiPack = {
     store: loadQ, key: QK, surgery: surgery, aliasMap: aliasMap, aliasFix: aliasFix,
     noteAppear: noteAppear, quasiRecent: quasiRecent, syncConv: syncConv, unifyCards: unifyCards,
     detectSelfNaming: detectSelfNaming, /* ★fix537 検証口(実経路はparsePlanラップ) */
     normalizeConvWho: normalizeConvWho,   /* ★fix538 検証口 */
+    ambiguousHubs: ambiguousHubs,         /* ★fix541 検出のみ・停止措置なし */
     _dropCache: function(){ qStore = null; qKeyLoaded = ''; aliasCache = null; }, /* 検証用 */
     addAlias: function(canonical, alias){
       try { var qs = loadQ(); var e = qs[canonical] || { seen: [], ali: [] }; if ((e.ali = e.ali || []).indexOf(alias) < 0) e.ali.push(alias); qs[canonical] = e; qDirty = true; saveQ(); aliasCache = null; return true; } catch(e2){ return false; }
