@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260725-fix527c';
+  var BUILT = '20260725-fix528';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2725,7 +2725,7 @@ G.init();
 <script src="v292Dfix270-topbar-ui.js?cb=v292Dfix270"></script>
 <script src="v292Dfix274-build-flag-guard.js?cb=v292Dfix274"></script>
 <script src="v292Dfix275-settings-tabs.js?cb=v292Dfix275"></script>
-<script src="v292Dfix277-quasi-pack.js?cb=v292Dfix277b"></script>
+<script src="v292Dfix277-quasi-pack.js?cb=v292Dfix528"></script>
 <script src="v292Dfix288-tooltips.js?cb=v292Dfix288"></script>
 <script src="v292Dfix290-mobile.js?cb=v292Dfix290"></script>
 <script src="v292Dfix291-saveexport.js?cb=v292Dfix294"></script>
@@ -2804,7 +2804,7 @@ G.init();
 <script src="v292Dfix405-state-freshness.js?cb=v292Dfix417"></script>
 <script src="v292Dfix406-automode.js?cb=v292Dfix417d"></script>
 <script src="v292Dfix407-load-noconfirm.js?cb=v292Dfix407"></script>
-<script src="v292Dfix409-handle-merge.js?cb=v292Dfix415b"></script>
+<script src="v292Dfix409-handle-merge.js?cb=v292Dfix528"></script>
 <script src="v292Dfix414-constraint-engine.js?cb=v292Dfix428"></script>
 <script src="v292Dfix415-opening-mask.js?cb=v292Dfix415b"></script>
 <script src="v292Dfix416-pain-style.js?cb=v292Dfix428"></script>

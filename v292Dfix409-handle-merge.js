@@ -51,6 +51,7 @@
 
   function off(){ try { return localStorage.getItem('v292Dfix409Off') === '1'; } catch(e){ return false; } }
   function off409b(){ try { return localStorage.getItem('v292Dfix409bOff') === '1'; } catch(e){ return false; } }  // fix409b: 新ゲートのみ無効化(=従来fix409挙動)
+  function off409c(){ try { return localStorage.getItem('v292Dfix409cOff') === '1'; } catch(e){ return false; } }  // fix409c: 登録cast宛の共起免除 + 主人公の正式呼称注入 のみ無効化(=fix409b挙動)
   function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined" ? S : null'); } catch(e){ return null; } }
 
   // fix307ロスターの取得(未ロード時は空配列)。
@@ -156,6 +157,19 @@
     if (!ctx) return { ok: true };            // 現行の呼び出し元は必ずctxを渡す(保険でfail-open)
     var cond1 = !!(ctx.apprSet[to] || ctx.castSet[to]);
     if (!cond1) return { ok: false, reason: 'no-appr-no-cast' };
+    /* ★fix409c(2026-07-25・実データ再現で確定): 統合先が「登録cast名」のときは条件2(同場面共起)を免除する。
+       真因: 条件2は「別場面の台帳(ロスター)エントリへの誤統合」を防ぐために入れたが、登録castは
+         場面スコープの存在ではないので、その risk が構造的に存在しない。一方で日本語の地の文は
+         主人公をフルネーム(例「霧 涼太」)で書かないため、共起は事実上ほぼ成立しない。
+         結果、主人公の省略呼称(例「涼太」)が永久に別人物として会話ログ・アイコン(keyFor=名前hash)・
+         準登録カルテに残り続けていた。
+       実測(2026-07-25・おしんの実セーブ10スロットを読取専用で走査): 統合が阻止された15カードは
+         全件が cond1=OK / cond2=NG。内訳 = 涼太->霧 涼太 x9(3スロット) / 少女->観覧車の少女 x6。
+         前者(cast宛)だけを解禁し、後者(ロスターhandle宛=別個体の可能性が残る)は従来どおり阻止する。
+       安全性: resolveCanon が「末尾完全一致 かつ 候補が一意 かつ who自身がcast名でない」を既に要求
+         しているため、同名衝突(例 cast に「霧 涼太」と「南 涼太」)は matches.length>=2 で不成立。
+       OFF: localStorage v292Dfix409cOff='1' (=fix409b挙動へ戻る)。 */
+    if (!off409c() && ctx.castSet[to]) return { ok: true, via: 'cast-exempt-409c' };
     var cond2 = coOccurs(to, ti, ctx.turns);
     if (!cond2) return { ok: false, reason: 'no-cooccurrence' };
     return { ok: true };
@@ -383,6 +397,11 @@
     try {
       var S = getS();
       if (S && S.cast){
+        /* ★fix409c: 主人公(hero)が正式呼称リストから抜けていた(上流の発生源)。
+           そのためモデルは主人公だけ省略呼称(「涼太」)を自由に作れ、fix409のデータ層repairが
+           後追いで直す構図になっていた。ここに足すのは「発生自体の抑止」= 上流修正。
+           OFF: v292Dfix409cOff='1' */
+        if (!off409c() && S.cast.hero && S.cast.hero.name) add(S.cast.hero.name);
         var ns = S.cast.npcs || [];
         for (var j = 0; j < ns.length; j++){ if (ns[j] && ns[j].name) add(ns[j].name); }
       }

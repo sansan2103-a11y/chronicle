@@ -137,17 +137,63 @@
 
   // ---- fix277: 登場の記帳 ----
   var BAD = /^(それ|これ|あれ|どれ|誰か|何か|彼|彼女|自分|皆|みんな|全員|二人|三人|私|俺|僕|お前|あなた|主人公|名前|不明|\?+|？+)$/;
+  /* ★fix528a(2026-07-25): 文の断片が人物名として台帳登録されるのを止める。
+     実測(おしんの実セーブ smrg85jwsn6): 準登録カルテに「鏡の奥から」が1件登録されていた。
+     これは人物名ではなく地の文の断片で、モデルが who 属性に句を書いた時に validName を通ってしまう。
+     対策: 多字の格助詞で終わる呼称だけを弾く。「から/まで/より/へと」は日本語の人名の語尾として
+     事実上使われないため、実在の人名を巻き込まない(★1字の「と」「の」等はハルト/ヤマト等を巻き込むので対象外)。
+     OFF: localStorage v292Dfix528Off='1' */
+  var FRAGMENT_TAIL = /(から|まで|より|へと)$/;
+  function off528(){ try { return localStorage.getItem('v292Dfix528Off') === '1'; } catch(e){ return false; } }
   function validName(n){
     n = String(n || '').trim();
     if (n.length < 2 || n.length > 12) return '';
     if (/[\s　0-9０-９a-zA-Z。、！？!?…・「」『』<>="'\/\\]/.test(n)) return '';
     if (BAD.test(n)) return '';
+    if (!off528() && FRAGMENT_TAIL.test(n)) return '';
     return n;
+  }
+  /* ★fix528b(2026-07-25・実データ再現で確定): 登録キャラの「名だけ呼び」を別人物として台帳登録しない。
+     真因: noteAppear のキャスト除外は完全一致のみ。姓名を空白/中黒で分けて登録した名前
+       (例「霧 涼太」「大浦 源蔵」「アリア・リュミエール」)は、地の文・セリフでは名だけ(「涼太」)で
+       書かれるため、その名だけが「未登録キャラ」として準登録カルテに入る。
+       さらに準登録は sys に「これらの人物も登場中は<say who=名前>を必ず出す」と注入されるので、
+       モデルへ分身の使用を促す正のフィードバックになっていた(=分身が消えない構造的理由)。
+     実測: smrisv41ho7 で「涼太」が seen 8ターン・会話ログ7カードを占め、主人公「霧 涼太」と
+       別アイコン・別状態カードに分裂していた(fix409cはデータ層の後始末、本fixは発生源の遮断)。
+     判定は極めて保守的に: (1) キャスト名が空白または中黒を含む(=姓名を分けて登録している)場合だけ、
+       (2) 区切りを除いた文字列の末尾に候補が完全一致し、(3) 残りの姓部分が1〜4字、(4) 候補が一意。
+       → 「朝比奈ひなた」(区切り無し)の「ひなた」等は対象外にして巻き込みを避ける。
+     OFF: localStorage v292Dfix528Off='1' */
+  function castPartOwner(name){
+    try {
+      var cs = castNames(), hit = null, n2;
+      for (var i = 0; i < cs.length; i++){
+        var c = String(cs[i] || '');
+        if (c === name) return null;                       // 候補自身がキャスト名=判定不要
+        if (!/[\s　・]/.test(c)) continue;                 // (1) 姓名を分けて登録していない名前は対象外
+        n2 = c.replace(/[\s　・]/g, '');
+        if (n2 === name) return c;                         // 区切りを除くと完全一致=同一人物(fix456と同じ流儀)
+        if (n2.length <= name.length) continue;
+        var rest = n2.length - name.length;
+        /* (2) 末尾完全一致(和名「霧 涼太」→「涼太」) または 先頭完全一致(洋名「アリア・リュミエール」→「アリア」)。
+           (3) 残り(姓 or 名字側)は1〜6字。実測: 「アリア」seen1 が主人公アリア・リュミエールとは別人物として
+               台帳に居た(smrrcv21iph)。末尾一致だけでは洋名順(名+姓)を救えないため両方向を見る。 */
+        var tailHit = (n2.slice(n2.length - name.length) === name);
+        var headHit = (n2.slice(0, name.length) === name);
+        if (!tailHit && !headHit) continue;
+        if (rest < 1 || rest > 6) continue;
+        if (hit && hit !== c) return null;                 // (4) 一意でなければ見送り
+        hit = c;
+      }
+      return hit;
+    } catch(e){ return null; }
   }
   function noteAppear(name, turnIdx){
     name = validName(aliasFix(name));
     if (!name) return;
     if (castNames().indexOf(name) >= 0) return;
+    if (!off528() && castPartOwner(name)) return;   // ★fix528b: 登録キャラの名だけ呼び=別人物にしない
     var qs = loadQ();
     var e = qs[name] || { seen: [], ali: [] };
     if (e.seen.indexOf(turnIdx) < 0){
@@ -194,6 +240,24 @@
       var qs = loadQ();
       Object.keys(qs).forEach(function(n){
         var e = qs[n]; if (!e || !Array.isArray(e.seen)) return;
+        /* ★fix528d(2026-07-25・実データで確定): 「この物語に存在しないターン番号」を最終登場に持つ
+             エントリを sys 注入から外す。
+           真因: 台帳キーは v292Dfix277Quasi<スロット接尾辞> だが、接尾辞は chr6_active_slot 由来。
+             fix525/fix527 以前は active ポインタが全タブ共有だったため、別の物語を開いている間に
+             書かれた台帳が他スロットのキーへ混入した(=別物語の登場人物が残っている)。
+             さらに quasiRecent の窓判定は (cur - last) <= 5 なので、last が cur より大きい
+             (=未来のターン番号を持つ残骸)と差が負になり【必ず窓内】と判定され、毎ターン
+             「この人物も登場中」として sys に注入され続けていた。
+           実測: smriifzelrt(8ターン)へ 桐生悠真(last13)・氷川杏子(last12)・杏子(last12)、
+             smr8p8wfr8b(16ターン)へ 少女(last24) が現在も注入対象になっていた。
+           対処は非破壊(注入から外すだけ・台帳は消さない)。巻き戻し直後に一時的に last>cur となる
+             正当なケースでも、ターンが進めば自然に復帰する。
+           ★fix528b の分身も同時に注入対象から外す(既存物語の台帳を書き換えずに効かせるため)。
+           OFF: localStorage v292Dfix528Off='1' */
+        if (!off528()){
+          if ((e.last || 0) > cur - 1) return;      // この物語に無いターン番号=別物語/巻き戻しの残骸
+          if (castPartOwner(n)) return;             // 登録キャラの名だけ呼び=分身
+        }
         if (e.seen.length >= 3 && (cur - (e.last || 0)) <= 5) out.push({ name: n, last: e.last || 0 });
       });
       out.sort(function(a, b){ return b.last - a.last; });
