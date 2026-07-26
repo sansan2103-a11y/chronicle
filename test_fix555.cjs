@@ -288,6 +288,34 @@ async function more(){
     ok('★棄却した理由がコードに残っている', /実測で棄却/.test(SRC) && /二重生成の新しい危険/.test(SRC));
   }
 
+console.log('\n== ★fix557: 校正だけ推論を止める ==');
+  {
+    /* 実測で「推論型モデルが推論で出力枠を使い切り本文が空」が3件出た。
+       OpenRouter公式では reasoning:{effort:'none'} が推論の完全無効化。
+       exclude:true は推論を止めないので対策にならない。 */
+    const body = [OK_LINE, BROKEN, OK_LINE2].join('\n') + TAIL;
+    let opts = null, n = 0;
+    const w = mk({ body: body, call: function(sys, user, maxTok, o){
+      n++; if (n === 1) return Promise.resolve({ text: body });
+      opts = o; return Promise.resolve({ text: JSON.stringify({ 'seg-1': FIXED }) });
+    } });
+    w.__v292Dfix555._install();
+    await w.Api.call('sys', 'user');
+    ok('★★校正だけ reasoning.effort="none" を渡す',
+       opts && opts.extraBody && opts.extraBody.reasoning && opts.extraBody.reasoning.effort === 'none', opts);
+    ok('★指定が無視されないよう require_parameters を付ける',
+       opts && opts.extraBody.provider && opts.extraBody.provider.require_parameters === true, opts && opts.extraBody);
+    ok('★校正のときだけ内部再試行を止める', opts && opts.noRetry === true, opts);
+    ok('★requestKind を付ける(診断・再帰防止の手掛かり)', opts && opts.requestKind === 'punctuation-repair', opts);
+    ok('★★Api.call 経由のまま(S.inFlight を立てて二重生成を防ぐ)',
+       /var reqP = prev\.call\(this, p\.sys, p\.user, 1200, \{/.test(SRC));
+    /* コメントでは exclude:true に触れている(使わない理由の説明)ので、
+       ソース文字列ではなく**実際に送るオプション**で確かめる。 */
+    ok('★exclude:true は送らない(推論を止めないので対策にならない)',
+       opts && opts.extraBody && opts.extraBody.reasoning && opts.extraBody.reasoning.exclude === undefined,
+       opts && opts.extraBody && opts.extraBody.reasoning);
+  }
+
 console.log('\n== ★タイムアウト(fix555d) ==');
   {
     ok('★上限は30秒(20秒だと実測15秒に近すぎて正常な修復まで切る)',

@@ -278,7 +278,22 @@
              → **効果が無く危険だけ増えるので採用しない**。実装は repairRequest() として残すが呼ばない。
              (仮説自体は筋が通っていたが、実データが支持しなかった。推測で入れない。) */
           stats.viaApiCall++;
-          var reqP = prev.call(this, p.sys, p.user, 1200);
+          /* ★fix557(GPT裁定・OpenRouter公式仕様を確認済み):
+             校正は**推論が要らない**タスクなのに、推論型モデル(deepseek-v4-flash)が
+             推論で出力枠を使い切り「出力がありませんでした」で返る失敗が実測3件あった。
+             `reasoning:{effort:'none'}` が公式の「推論を完全に無効化」。
+             (`exclude:true` は推論を止めず応答に含めないだけなので対策にならない。
+              `enabled:false` という指定は存在しない。)
+             `provider:{require_parameters:true}` は、指定を無視するプロバイダへ回されて
+             **「指定したのに実は無視された」という検証事故**が起きるのを防ぐ。
+             `noRetry` は Api.call 内部の3回再試行を校正のときだけ止める(失敗が60〜80秒に伸びるため)。
+             ★あえて Api.call 経由のままにしている: 専用fetchにすると S.inFlight が立たず、
+             　校正中(最大30秒)に送信ボタンが押せて二重生成が起きる(fix556bで棄却済み)。 */
+          var reqP = prev.call(this, p.sys, p.user, 1200, {
+            requestKind: 'punctuation-repair',
+            noRetry: true,
+            extraBody: { reasoning: { effort: 'none' }, provider: { require_parameters: true } }
+          });
           out = await Promise.race([
             reqP,
             new Promise(function(res){ setTimeout(function(){ timedOut = true; res(null); }, TIMEOUT_MS); })

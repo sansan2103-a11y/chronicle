@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260726-fix556b';
+  var BUILT = '20260726-fix557';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -710,7 +710,9 @@ const Api = {
     const model = S.cfg.orModel || 'deepseek/deepseek-v4-flash'; /* v292Dfix272: 空時フォールバックをEuryale遺物→DS Flash(orModel消失時の意図外モデル課金防止) */
     console.log('[OpenRouter] model:', model);
 
-    const maxRetries = 2;
+    /* ★v292Dfix557: 校正(fix555)のような「推論が要らない」呼び出しだけ、
+       追加パラメータと"再試行なし"を許す。既定は従来どおり(maxRetries=2・追加なし)。 */
+    const maxRetries = (opts && opts.noRetry) ? 0 : 2;
     let lastResult = null;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -732,6 +734,11 @@ const Api = {
             { role: 'user',   content: userContent }
           ]
         };
+        /* ★v292Dfix557: 呼び出し側が指定したパラメータを本文へ足す。
+           校正では reasoning:{effort:'none'}(推論を完全に無効化) と
+           provider:{require_parameters:true}(指定を無視するプロバイダへ回さない)を渡す。
+           既定の本文生成には opts.extraBody を渡さないので挙動は変わらない。 */
+        try { if (opts && opts.extraBody && typeof opts.extraBody === 'object') Object.assign(body, opts.extraBody); } catch(e){}
         // Tier 1: OpenRouter の JSON モード（Hermes 系のみ。Llama 微調整系は対象外）
         if (/hermes/i.test(model)) {
           /* v292Dfix87: disabled json_object - fix58 outputs prose, not JSON */ void 0;
@@ -2736,7 +2743,7 @@ G.init();
 <!-- v292Dfix555: 句読点だけを直す校正専用の1回修復。Api.call の直後・Planner.parsePlan の前で、
      崩れた区間だけを直す。句読点・空白・改行以外を1文字でも変えられたら元を採用(fail-closed)。
      タグを含む区間は触らない。<state>/<react> はモデルへ渡さない。OFF=v292Dfix555Off -->
-<script src="v292Dfix555-punct-repair.js?cb=v292Dfix556b"></script>
+<script src="v292Dfix555-punct-repair.js?cb=v292Dfix557"></script>
 <!-- v292Dfix484: 画風決定権の一本化。fix247の【直前】に読み込むこと(=fetchチェーン最内側・実送信直前でstyle6正規化)。既定ON・緊急OFF=v292Dfix484Off・診断=v292Dfix484Diag -->
 <script src="v292Dfix499-freeget-style-canon.js?cb=v292Dfix499"></script>
 <script src="v292Dfix484-style-canon.js?cb=v292Dfix486"></script>
