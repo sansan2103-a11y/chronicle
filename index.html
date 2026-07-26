@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>Chronicle</title>
+<!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
+     ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
+     捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
+<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix570"></script>
 <script>
 /* v292Dfix242: iOS Safari の古いHTMLキャッシュ脱出。`.js`は?cb=でキャッシュ破棄できるが
    index.html本体は破棄できず、iOSはbfcache+ヒューリスティックで古いHTMLを長く保持する
@@ -14,7 +18,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260726-fix569b';
+  var BUILT = '20260726-fix570';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2721,10 +2725,6 @@ G.init();
   console.log(TAG, 'v100 active');
 })();
 </script>
-<!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
-     ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
-     捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
-<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix569b"></script>
 <!-- v292Dfix246: per-storyストア(fix77状態/longmem/会話キャッシュ)をスロット単位に分離。features.js等の前に設置。OFF=v292StoreSlotIsoOff -->
 <script src="v292Dfix246-store-slot-isolation.js?cb=v292Dfix246"></script>
 <script src="v292Dfix543-save-guard.js?cb=v292Dfix546"></script>

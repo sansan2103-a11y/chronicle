@@ -182,13 +182,15 @@ console.log('\n=========== 総合：7経路すべてが「観測済み」にな�
                     : ('localStorage.removeItem(' + JSON.stringify(k) + ');');
     vm.runInContext(code, vm.createContext(w), { filename: file });
   });
-  const sc = w.__v292Dfix569.stats().observedScope;
-  ok('★7経路すべてが観測済み（pathsNeverSeen が空）', sc.pathsNeverSeen.length === 0, sc);
-  ok('★分母も出ている（innerCalls / outerCalls）', sc.innerCalls >= 7 && sc.outerCalls >= 7, sc);
-  ok('★迂回は0件（すべて最外殻を通った）', sc.bypassedOuter === 0, sc);
   const st = w.__v292Dfix569.stats();
-  ok('★requested === downstream === postChecks', st.requestedCalls === st.downstreamCalls && st.downstreamCalls === st.postChecks,
-     [st.requestedCalls, st.downstreamCalls, st.postChecks]);
+  const sc = st.observedScope;
+  ok('★7経路すべてが観測済み（pathsNeverSeen が空）', sc.pathsNeverSeen.length === 0, sc);
+  ok('★分母も出ている（outerRequests / innerCalls）', st.outerRequests >= 7 && st.innerCalls >= 7,
+     [st.outerRequests, st.innerCalls]);
+  ok('★迂回0件（正式指標 innerWithoutOuter）', st.innerWithoutOuter === 0, st.counters);
+  ok('★カウンタ整合（inner/outer とも）', st.counters.innerOk && st.counters.outerOk, st.counters);
+  ok('★postChecks === outerRequests', st.postChecks === st.outerRequests, [st.postChecks, st.outerRequests]);
+  ok('★ロード順は検証済み', st.loadOrderVerified === true, st.markersAtLoad);
 }
 
 console.log('\n---------------------------------------------');
