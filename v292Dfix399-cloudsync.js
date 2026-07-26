@@ -250,18 +250,100 @@
       try { for (var bi = 0; bi < localStorage.length; bi++){ var bk = localStorage.key(bi); if (/^chr6_bk_cloudsync_\d+$/.test(bk || '')) bks.push(bk); } } catch(e){}
       bks.sort(); return bks;
     }
+    /* ★fix568(2026-07-26・GPT裁定「案B」): ここは以前「書く前に必ず既存を1件まで削る」だった。
+       ところが cloudsync の丸ごと控えは、**サイドストアまで運べる唯一の控え**であり、
+       棚卸し(fix562)では最優先の保護対象になっている。
+       つまり「絶対に消すな」と決めた対象を、pull のたびに自分で削っていた。
+       これは同日 fix490/fix565 で踏んだ「多重所有」とまったく同じ型。
+
+       直した順序(GPT指定):
+         ①旧完全控え(最新の、読めて展開できるもの)を**保護**する
+         ②保護対象ではない余剰世代だけを整理する
+         ③新しい控えを書く
+         ④**読み戻して完全性を確認**する
+         ⑤成功して初めて、旧控えを削除対象へ降格する
+       容量確保に失敗したら、pull を通す fail-open ではなく **pull を中止する fail-closed**。
+       クラウドのデータは残っているので、取り込みを諦める方が安全。
+       削除・中止の理由は必ず記録する(無言にしない)。 */
+    function readableFullDump(k){
+      /* 「読めて展開できる」= JSONとして読めて ls を持ち、本体が1つ以上入っていること。
+         ここを緩めると、壊れた控えを保護してしまい本物を消すことになる。 */
+      try {
+        var o = JSON.parse(localStorage.getItem(k) || 'null');
+        if (!o || !o.ls || typeof o.ls !== 'object') return false;
+        /* ★本体セーブは `chr6_slot_<id>` だけでなく、既定枠の **`chr6`** もある。
+           `chr6_slot_` だけを見ると既定枠だけの控えを「不完全」と誤判定し、
+           書いた直後の検証に落ちて pull が通らなくなる(実装時に回帰テストで踏んだ)。 */
+        return Object.keys(o.ls).some(function(x){ return x === 'chr6' || /^chr6_slot_/.test(x); });
+      } catch(e){ return false; }
+    }
+    function note(rec){
+      try {
+        var a = JSON.parse(localStorage.getItem('v292Dfix399_bkLog') || '[]');
+        if (!Array.isArray(a)) a = [];
+        a.push(rec);
+        localStorage.setItem('v292Dfix399_bkLog', JSON.stringify(a.slice(-20)));
+      } catch(e){}
+    }
     try {
       var snap = {};
       Object.keys(pkg.ls || {}).forEach(function(k){ var v = localStorage.getItem(k); if (v != null) snap[k] = v; });
       var payload = JSON.stringify({ activeSlot: activeSlot(), ls: snap });
-      var bks = listBk();
-      while (bks.length > 1) { try { localStorage.removeItem(bks.shift()); } catch(e){} }   // 書込後に最大2件になるよう先に1件へ
-      try { localStorage.setItem('chr6_bk_cloudsync_' + Date.now(), payload); return true; }
-      catch(e1){
-        var bks2 = listBk();
-        if (bks2.length){ try { localStorage.removeItem(bks2[0]); } catch(e){} }
-        try { localStorage.setItem('chr6_bk_cloudsync_' + Date.now(), payload); return true; } catch(e2){ return false; }
+
+      /* ① 保護対象 = 読める完全控えのうち最新1件(listBk はキー昇順=時刻昇順) */
+      var readable = listBk().filter(readableFullDump);
+      var keep = readable.length ? readable[readable.length - 1] : null;
+
+      /* ② 保護対象**以外**だけを整理する。保護対象は絶対に触らない。 */
+      function dropOneSpare(){
+        var cur = listBk();
+        for (var i = 0; i < cur.length; i++){
+          if (cur[i] === keep) continue;
+          try { localStorage.removeItem(cur[i]); } catch(e){ return false; }
+          note({ at: Date.now(), act: 'dropSpare', key: cur[i], kept: keep });
+          return true;
+        }
+        return false;   /* 消せる余剰が無い = 保護対象しか残っていない */
       }
+      /* 書く前は「保護対象＋余剰1件」までに減らしておく。書いた直後に3件へ膨らませない。 */
+      while (listBk().length > (keep ? 1 : 1)) {
+        if (!dropOneSpare()) break;
+      }
+
+      /* ③④ 新しい控えを書き、読み戻して完全性を確認する */
+      var newKey = 'chr6_bk_cloudsync_' + Date.now();
+      function writeAndVerify(){
+        try { localStorage.setItem(newKey, payload); } catch(e){ return 'quota'; }
+        if (!readableFullDump(newKey)){
+          try { localStorage.removeItem(newKey); } catch(e){}
+          return 'verify';
+        }
+        return 'ok';
+      }
+      var r = writeAndVerify();
+      while (r === 'quota'){
+        /* 容量が足りない。**保護対象は犠牲にしない**。余剰が無ければ諦める。 */
+        if (!dropOneSpare()){
+          note({ at: Date.now(), act: 'abortPull', why: '容量不足。唯一の完全控えを守るため取り込みを中止', kept: keep });
+          return false;
+        }
+        r = writeAndVerify();
+      }
+      if (r !== 'ok'){
+        note({ at: Date.now(), act: 'abortPull', why: '新しい控えの読み戻し検証に失敗', kept: keep });
+        return false;
+      }
+
+      /* ⑤ 新しい控えが完成して初めて、旧控えを「削除してよい」側へ降格する。
+         ★降格 = 即削除ではない。fix495(C1)で決めた **2世代**の約束は守る
+         (1世代しか持たないと、新しい控え自体が壊れていたときに戻れない)。
+         ここで初めて、保護を解いた状態で古い順に2件まで落とす。 */
+      var fin = listBk();
+      while (fin.length > 2){
+        var oldest = fin.shift();
+        try { localStorage.removeItem(oldest); note({ at: Date.now(), act: 'demoteOld', key: oldest, newKey: newKey }); } catch(e){}
+      }
+      return true;
     } catch(e){ return false; }
   }
   function applySave(pkg){
