@@ -207,7 +207,9 @@ console.log('== 11. ★正式な bypassedOuter = innerWithoutOuter ==');
   eq('実際には消える', e.ls.getItem('v292av2_nXXXX'), null);
   eq('outerRequests=0', s.outerRequests, 0);
   eq('★innerWithoutOuter=1', s.innerWithoutOuter, 1);
-  eq('★bypassedOuter は innerWithoutOuter と同じ', s.bypassedOuter, 1);
+  eq('★outer設置後なので確認済みの迂回として数える', s.counters.innerWithoutOuterAfterInstall, 1);
+  eq('★bypassedOuter=1', s.bypassedOuter, 1);
+  eq('outer設置前の削除は0件', s.innerBeforeOuterInstall, 0);
   eq('画像として分類', s.observedScope.innerByFamily.image, 1);
   ok('カウンタ整合', s.counters.innerOk && s.counters.outerOk, s.counters);
 }
@@ -299,6 +301,44 @@ console.log('== 16. observedScope が「まだ観測していない経路」を�
   eq('7経路すべてが未観測として並ぶ', sc.pathsNeverSeen.length, 7);
   ok('注意書きがある', /無事故の証拠にはならない/.test(sc.note));
   ok('ロード順の結果が出ている', sc.loadOrderVerified === true, sc.loadOrderNote);
+}
+
+console.log('== 17. ★outer設置前の削除は「迂回」に数えない（2026-07-26 実機で判明） ==');
+{
+  /* 実機で `v292Dfix516names` が 1件 innerWithoutOuter に立っていた。調べると fix516 の migrate() が
+     読込時(IIFE)に消していたもので、outer は DOMContentLoaded まで設置されない。**迂回ではない**。
+     これを迂回と数えると「捕捉済み参照からの迂回が実在する」と誤読する。 */
+  const e = makeEnv();
+  stubFix562(e.win, []);
+  e.ls.setItem('v292Dfix516names', 'v');
+  e.ls.removeItem('v292Dfix516names');        /* outer 未設置のまま削除 */
+  let s = e.f.stats();
+  eq('innerWithoutOuter=1', s.innerWithoutOuter, 1);
+  eq('★内訳は outer設置前=1', s.innerBeforeOuterInstall, 1);
+  eq('★確認済みの迂回=0', s.counters.innerWithoutOuterAfterInstall, 0);
+  eq('★bypassedOuter=0（迂回と数えない）', s.bypassedOuter, 0);
+  ok('内訳の整合', s.counters.splitOk, s.counters);
+  /* outer を設置してから捕捉済み参照で消すと、今度は確認済みの迂回になる */
+  const captured = e.ls.removeItem.bind(e.ls);
+  e.f.install();
+  e.ls.setItem('v292av2_zz', 'img');
+  captured('v292av2_zz');
+  s = e.f.stats();
+  eq('★確認済みの迂回=1', s.bypassedOuter, 1);
+  eq('outer設置前=1のまま', s.innerBeforeOuterInstall, 1);
+}
+
+console.log('== 18. ★ロード順マーカーに localStorage 由来のものを使わない ==');
+{
+  /* fix346 は `localStorage.__v346raw = _get` と書くが、Storage への代入は
+     **localStorage のキーとして永続する**。前の読込の痕跡を「fix346が先に走った」と誤読していた。 */
+  const e = makeEnv();
+  e.ls.setItem('__v346raw', 'function getItem(){}');   /* 前回の読込で残った痕跡を再現 */
+  const e2 = makeEnv();
+  e2.ls.setItem('__v346raw', 'function getItem(){}');
+  const s = e2.f.stats();
+  eq('★localStorage の __v346raw では false にならない', s.loadOrderVerified, true);
+  eq('マーカーは空', s.markersAtLoad.length, 0);
 }
 
 console.log('');

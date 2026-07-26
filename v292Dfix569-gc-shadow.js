@@ -59,10 +59,14 @@
 
   /* ★ロード順の動的証明: fix569 が走った時点で、後続fixの起動マーカーが1つも無いこと。
      1つでもあれば「fix569 が最初ではない」＝ inner が迂回されうる。 */
+  /* ★★2026-07-26 実機で踏んだ: fix346 は `localStorage.__v346raw = _get` と書くが、
+     Storage への代入は**localStorage のキーとして永続する**（実測: 29字の文字列キー）。
+     つまり「前のページ読込の痕跡」であって、いま fix346 が先に走った証拠ではない。
+     これを見て loadOrderVerified=false と誤判定していた。**window 上の実行時マーカーだけを見る**。
+     fix346 は window にマーカーを出さないので、順序は静的検査(test_fix569_loadorder.cjs)で保証する。 */
   function laterFixMarkers(){
     var seen = [];
     try { if (window.__v292Dfix246) seen.push('fix246'); } catch(e){}
-    try { if (localStorage.__v346raw) seen.push('fix346'); } catch(e){}
     try { if (window.__v292Dfix472) seen.push('fix472'); } catch(e){}
     try { if (window.__v292Dfix490) seen.push('fix490'); } catch(e){}
     try { if (window.__v292Dfix562) seen.push('fix562'); } catch(e){}
@@ -85,6 +89,9 @@
     outerRequests:0,
     outerWithOneInner:0, outerWithoutInner:0, outerFanout:0,
     innerCalls:0, innerWithOuter:0, innerWithoutOuter:0,
+    /* ★outer が設置される前(=DOMContentLoaded前)の削除は「迂回」ではない。分けて数える。
+       実測: fix516 の migrate() が読込時に `v292Dfix516names` を消すのがこれに当たる。 */
+    innerBeforeOuterInstall:0, innerWithoutOuterAfterInstall:0,
     rewrittenKeys:0,
     /* 保護判定 */
     wouldAllow:0, wouldDeny:0, unknown:0, postChecks:0,
@@ -123,9 +130,16 @@
             S.innerWithOuter++;
             if (key !== op.requestedKey){ S.rewrittenKeys++; S.fix246ObservedBetweenLayers = true; op.rewritten = true; op.effectiveKey = key; }
           } else {
-            /* ★確認済みの outer 迂回（捕捉済み参照からの削除など）。正式な bypassedOuter はこれ。 */
             S.innerWithoutOuter++;
-            push({ at: 0, key: key, kind: 'innerWithoutOuter', why: 'outerの操作IDを持たずにinnerへ到達' });
+            if (!S.outerInstalled){
+              /* outer 未設置の間＝読込中の削除。迂回ではない。 */
+              S.innerBeforeOuterInstall++;
+              push({ at: 0, key: key, kind: 'innerBeforeOuterInstall', why: 'outer設置前の削除(迂回ではない)' });
+            } else {
+              /* ★★outer 設置後に outer を通らずに来た＝**確認済みの迂回**。正式な bypassedOuter はこれ。 */
+              S.innerWithoutOuterAfterInstall++;
+              push({ at: 0, key: key, kind: 'innerWithoutOuterAfterInstall', why: '★outerの操作IDを持たずにinnerへ到達(確認済みの迂回)' });
+            }
           }
           var fam = key.indexOf('chr6_bk_') === 0 ? 'backup'
                   : (key.indexOf('chr6_snapd_') === 0 || key.indexOf('chr6_snap_') === 0) ? 'snapshot'
@@ -285,12 +299,12 @@
                      innerWithOuter:S.innerWithOuter-i0, innerWithoutOuter:S.innerWithoutOuter-j0,
                      outerWithOneInner:S.outerWithOneInner-o0, gone:(rawGet(kA)==null) });
       /* ③迂回canary: 捕捉済み参照から直接消す → outer 0 / innerWithoutOuter 1 */
-      var i1 = S.outerRequests, j1 = S.innerWithoutOuter;
+      var i1 = S.outerRequests, j1 = S.innerWithoutOuterAfterInstall;
       localStorage.setItem(kB, 'probe');
       S.bypassProbeSeen++;
       if (innerShadow) innerShadow.call(localStorage, kB); else if (nativeRemove) nativeRemove.call(localStorage, kB);
-      r.steps.push({ name:'bypass', outerDelta:S.outerRequests-i1, innerWithoutOuter:S.innerWithoutOuter-j1,
-                     gone:(rawGet(kB)==null) });
+      r.steps.push({ name:'bypass', outerDelta:S.outerRequests-i1,
+                     innerWithoutOuter:S.innerWithoutOuterAfterInstall-j1, gone:(rawGet(kB)==null) });
     } catch(e){ r.error = String(e && e.message || e).slice(0,80); }
     finally {
       try { delete extraProtected[kP]; } catch(e){}
@@ -305,7 +319,7 @@
          && s1.innerWithOuter === 1 && s1.innerWithoutOuter === 0 && s1.outerWithOneInner === 1
          && s2.outerDelta === 0 && s2.innerWithoutOuter === 1 && s2.gone === true
          && r.probePathDelta === 2   /* outer を通ったのは protected と normal の2件 */
-         && r.counters.innerOk === true && r.counters.outerOk === true);
+         && r.counters.innerOk === true && r.counters.outerOk === true && r.counters.splitOk === true);
     if (!r.ok && !r.classifierAvailable) r.why = 'fix562(保護判定)が未ロード。ラッパは生きているが分類はできていない';
     return r;
   }
@@ -314,8 +328,11 @@
   function consistency(){
     return {
       innerOk: (S.innerCalls === S.innerWithOuter + S.innerWithoutOuter),
+      splitOk: (S.innerWithoutOuter === S.innerBeforeOuterInstall + S.innerWithoutOuterAfterInstall),
       outerOk: (S.outerRequests === S.outerWithOneInner + S.outerWithoutInner + S.outerFanout),
       innerCalls:S.innerCalls, innerWithOuter:S.innerWithOuter, innerWithoutOuter:S.innerWithoutOuter,
+      innerBeforeOuterInstall:S.innerBeforeOuterInstall,
+      innerWithoutOuterAfterInstall:S.innerWithoutOuterAfterInstall,
       outerRequests:S.outerRequests, outerWithOneInner:S.outerWithOneInner,
       outerWithoutInner:S.outerWithoutInner, outerFanout:S.outerFanout
     };
@@ -329,9 +346,11 @@
     try { out.isOutermost = (localStorage.removeItem === outerShadow); } catch(e){ out.isOutermost = null; }
     out.protectedKnown = !!protectedKeys(false);
     out.ringSize = RING.length;
-    /* ★正式な bypassedOuter は「outer操作IDを持たずに inner へ到達した件数」（GPT裁定）。
+    /* ★正式な bypassedOuter は「**outer設置後に**outer操作IDを持たずに inner へ到達した件数」。
+       outer設置前(読込中)の削除を含めると、迂回でないものまで迂回に数えてしまう(2026-07-26に実測で判明)。
        単純な引き算は参考値にすぎないので、別名で併記する。 */
-    out.bypassedOuter = S.innerWithoutOuter;
+    out.bypassedOuter = S.innerWithoutOuterAfterInstall;
+    out.innerBeforeOuterInstall = S.innerBeforeOuterInstall;
     out.naiveDelta = S.innerCalls - S.outerRequests;
     out.counters = consistency();
     out.observedScope = {
@@ -339,8 +358,11 @@
       loadOrderVerified: S.loadOrderVerified,
       loadOrderNote: S.loadOrderVerified ? 'fix569 の時点で後続fixの起動マーカーは0件'
                                          : ('★fix569 より前に起動していたfix: ' + S.markersAtLoad.join(',')),
-      bypassedOuter: S.innerWithoutOuter,
-      bypassNote: 'fix346/fix472 は読込時に removeItem 参照を捕捉するため outer を迂回しうる(静的検査で確認済)',
+      bypassedOuter: S.innerWithoutOuterAfterInstall,
+      innerBeforeOuterInstall: S.innerBeforeOuterInstall,
+      bypassNote: '★実機実測(2026-07-26): fix346/fix472 の bind は**自分のラッパの下流**として使われており迂回していない。'
+                + 'outer設置前の削除(fix516 migrate の v292Dfix516names など)を迂回と数えないこと。'
+                + 'ただし fix346 の migrate ループだけは _del を直接呼ぶので、LSに v292av2_ が残っていれば迂回しうる。',
       innerByFamily: JSON.parse(JSON.stringify(S.innerByFamily)),
       pathsSeen: Object.keys(S.byPath).filter(function(p){ return S.byPath[p] > 0; }),
       pathsNeverSeen: ['fix490Trim','fix490Quota','fix264b','fix399','fix402Doomed','fix402Retention','fix277']
