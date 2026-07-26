@@ -46,16 +46,31 @@
      消えた1件は文法自体が壊れた文(「壁肌覆いつほこりの様子」)で、句読点の問題ではないため
      校正では直せず **3回とも内容変更で拒否**されていた = 誤検出を外すのが正しい。
      `；`(U+FF1B) も区切りとして扱う。 */
-  var SPLIT = /[、。！？!?\n…；]|——|──|―――|――|―/;
+  /* ★fix560(GPT裁定): 単独の「―」を無条件で区切りにすると、**本物の長文崩れを途中で分断して見逃す**。
+     実データの用法は「文章―挿入部分―文章」の**対**なので、段落ごとに次の3段で扱う:
+       ・連続した ―― / ――― … 常に区切り
+       ・同じ段落に単独の ― が2個以上 … 対になった挿入区切りとして区切る
+       ・単独の ― が1個だけ … 区切りにしない(=長文崩れとして拾う)
+     fix553 と**まったく同じ実装**にしておくこと(土俵がずれると発動判定と診断が食い違う)。 */
+  var SPLIT = /[、。！？!?…；\u0001]/;
+  var SEP = '\u0001';
+  function normalizeSeparators(line){
+    var s = String(line == null ? '' : line);
+    s = s.replace(/——+/g, SEP).replace(/──+/g, SEP).replace(/―{2,}/g, SEP);
+    var singles = (s.match(/―/g) || []).length;
+    if (singles >= 2) s = s.replace(/―/g, SEP);
+    return s;
+  }
   function metricsLocal(text){
     var s = String(text == null ? '' : text).replace(/<[^>]*>/g, '');
-    var parts = s.split(new RegExp(SPLIT.source, 'g'));
     var max = 0, o80 = 0;
-    for (var i = 0; i < parts.length; i++){
-      var n = parts[i].trim().length;
-      if (n > max) max = n;
-      if (n >= OVER) o80++;
-    }
+    s.split('\n').forEach(function(line){
+      normalizeSeparators(line).split(new RegExp(SPLIT.source, 'g')).forEach(function(p){
+        var n = p.trim().length;
+        if (n > max) max = n;
+        if (n >= OVER) o80++;
+      });
+    });
     return { len: s.length, marks: (s.match(/[、。！？!?…]/g) || []).length, maxRun: max, over80: o80 };
   }
   function metrics(t){
