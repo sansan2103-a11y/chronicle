@@ -108,9 +108,13 @@ console.log('\n== (1) ソース: baseRev を送っている / 時刻を認可に
   ok('★★時刻比較は Coordinator が無いときだけ（認可に使わない）',
      /if \(!c && serverTs > baseTs\(\) && !force\)/.test(body));
   ok('★push前に meta を取得している', /getMeta\(\)\.then/.test(body));
-  ok('★再試行は attempt(true) で最大1回', /attempt\(true\)/.test(body) && /!isRetry/.test(body));
-  ok('★★再試行するのは同端末の同時発火のときだけ',
-     /sameDeviceRace/.test(body) && /c\.rev\(\) !== baseAtStart/.test(body));
+  /* ★fix585(GPT裁定): 「共有revの変化だけで自端末競合と判断する再試行も安全ではない」。
+     revが動いた理由が本当に自端末の別経路かは rev の変化だけでは区別できない
+     （別端末のpush成功をこちらのpull/metaが拾って進めた場合も同じ見え方になる）。
+     現段階では**forkはすべて fail-closed**。 */
+  ok('★★再試行のコードが残っていない（全forkがfail-closed）',
+     !/attempt\(true\)/.test(body) && !/isRetry/.test(body) && !/sameDeviceRace/.test(body));
+  ok('★fork時は必ず fail-closed を記録する', /noteFailClosed\('fork。/.test(body));
   ok('★fork時に dirty(localTs) を残す', /ef\.fork = true/.test(body) && /v292Dfix399_localTs/.test(body));
   ok('★★サーバのrevを baseRev として勝手に採用していない',
      !/promoteRev\(meta\.rev/.test(body) && !/promoteRev\(m2\.rev/.test(body), 'push直前の採用は無条件上書きと同義');
@@ -161,9 +165,9 @@ function step3(){
 }
 
 function step3b(){
-  console.log('\n== (3b) ★同端末の別経路がrevを進めた場合だけ1回やり直す ==');
-  /* fix402 が同期中に push して rev を進めた状況を作る。
-     同じ端末の同じデータなので、新しい基準で押し直すのが正しい。 */
+  console.log('\n== (3b) ★★同端末で共有revが動いていても、forkなら fail-closed（fix585） ==');
+  /* 以前は「共有revが動いていたら自端末の同時発火とみなして1回押し直す」実装だった。
+     GPT裁定「revの変化だけで自端末競合と判断する再試行も安全ではない」に従い、一律 fail-closed へ。 */
   const server = mkServer(5);
   const w = mkEnv({ server, seed: { 'v292Dfix402_baseRev': '5' } });
   const c = w.__v292Dfix580;
@@ -173,26 +177,27 @@ function step3b(){
     const o = JSON.parse(body);
     if (o.op === 'put' && !bumped){
       bumped = true;
-      server.state.rev = 7;                 /* 別経路が先に押して進んだ */
-      c.promoteRev(7, 'テスト: 同端末の fix402 が push 成功');
-      return origHandle(body);              /* この put は fork になる */
+      server.state.rev = 7;
+      c.promoteRev(7, 'テスト: 別経路のpush成功に見える出来事');
+      return origHandle(body);
     }
     return origHandle(body);
   };
-  return w.__v292Dfix399x.push().then(res => {
-    const st = server.state;
-    ok('★fork が1回起きた', st.forks === 1, st);
-    ok('★★1回だけ押し直した', st.puts.length === 2, st.puts);
-    ok('★★2回目は進んだ共有rev(7)で押している', st.puts[1].baseRev === 7, st.puts);
-    ok('★成功して rev(8) へ昇格', c.rev() === 8, c.rev());
-    ok('再試行を数えている', c.stats().forkRetries === 1, c.stats());
-    ok('★★上書きは0件', st.overwrites === 0, st);
-    return step4();
-  }, err => { ok('★★同端末の同時発火なら成功すべき', false, String(err && err.message)); return step4(); });
+  return w.__v292Dfix399x.push().then(
+    () => { ok('★★共有revが動いていても、forkなら成功させない', false, '成功してしまった'); return step4(); },
+    err => {
+      const st = server.state;
+      ok('★★fail-closed になる', !!err && err.conflict === true && err.fork === true, String(err && err.message));
+      ok('★★押し直していない（put は1回だけ）', st.puts.length === 1, st.puts);
+      ok('★上書きは0件', st.overwrites === 0, st);
+      ok('★dirty が残る', +w.__store['v292Dfix399_localTs'] > 0, w.__store['v292Dfix399_localTs']);
+      ok('fail-closed を数えている', c.stats().failClosed === 1, c.stats());
+      return step4();
+    });
 }
 
 function step4(){
-  console.log('\n== (4) ★★同時発火が続いても再試行は最大1回 ==');
+  console.log('\n== (4) ★★revが動き続けても押し直さない ==');
   /* 毎回 rev が進み続ける状況。無限に押し直さないことを確かめる。 */
   const server = mkServer(5);
   const w = mkEnv({ server, seed: { 'v292Dfix402_baseRev': '5' } });
@@ -208,7 +213,7 @@ function step4(){
     err => {
       const st = server.state;
       ok('★★エラーになる（fail-closed）', !!err && err.conflict === true, String(err && err.message));
-      ok('★★put は2回まで（無限に再試行しない）', st.puts.length === 2, st.puts);
+      ok('★★put は1回だけ（押し直さない）', st.puts.length === 1, st.puts);
       ok('★★dirty が残る（未同期だと分かる）', +w.__store['v292Dfix399_localTs'] > 0, w.__store['v292Dfix399_localTs']);
       ok('★fail-closed を数えている', c.stats().failClosed === 1, c.stats());
       ok('★★データは上書きされていない', st.overwrites === 0, st);

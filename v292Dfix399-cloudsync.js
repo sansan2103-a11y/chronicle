@@ -228,7 +228,7 @@
     pushing = true;
     var ts = Date.now();
     var c = fix582Off() ? null : coord();
-    var baseAtStart = c ? c.rev() : null;   /* ★開始時の自分の基準を控える */
+    var baseAtStart = c ? c.rev() : null;   /* 診断用に控える（判断には使わない・fix585） */
     var lastServerRev = null;
     return getMeta().then(function(meta){
       var serverTs = meta ? (+meta.updatedAt || 0) : 0;
@@ -256,7 +256,7 @@
       var build = needFull ? collectFull(ts) : Promise.resolve(collectLight(ts));
       return build.then(function(pkg){ return { pkg: pkg, needFull: needFull, curHash: curHash }; });
     }).then(function(o){
-      function attempt(isRetry){
+      function attempt(){
         var body = { op: 'put', pkg: o.pkg };
         if (c) body.baseRev = c.rev();          /* ★これが無いとサーバは競合検査をしない */
         return callSave(body).then(function(r){
@@ -270,14 +270,12 @@
                再試行してよいのは**自端末の別経路（fix402）が同期中にrevを進めた場合だけ**。
                この場合は同じ端末の同じデータなので、新しい基準で押し直すのが正しい。
                判定: 開始時に控えた基準と、いまの共有基準が違っていれば同時発火。 */
-            var sameDeviceRace = !!(c && c.rev() !== baseAtStart);
-            if (!isRetry && sameDeviceRace){
-              c.noteForkRetry();
-              return attempt(true);      /* 新しい共有revで1回だけ押し直す */
-            }
-            /* それ以外は**別端末との本物の分岐**。勝手に潰さず fail-closed。
-               dirty を残すので、次の同期やfork解決UIで扱える。 */
-            if (c) c.noteFailClosed(isRetry ? '2回目もfork' : '別端末との分岐。上書きせず中止');
+            /* ★★fix585(GPT裁定): 「共有revの変化だけで自端末競合と判断する再試行も安全ではない」。
+               共有revが動いた理由が本当に自端末の別経路かどうかは、rev の変化だけでは区別できない。
+               （別端末のpush成功を、こちらのpull/metaが拾って共有revを進めた場合も同じ見え方になる）
+               **現段階では、forkはすべて fail-closed** にする。
+               将来 全状態の再マージが実装できた時点で「再取得→再マージ→新payload作成→1回だけ再put」へ格上げする。 */
+            if (c) c.noteFailClosed('fork。上書きせず中止（全状態の再マージが未実装のため一律fail-closed）');
             setNum('v292Dfix399_localTs', Date.now());   /* 未同期であることを残す */
             var ef = new Error('CONFLICT'); ef.conflict = true; ef.fork = true;
             ef.serverRev = (j.server && j.server.rev) != null ? j.server.rev : lastServerRev;
@@ -291,7 +289,7 @@
           return { lsSize: j.lsSize, imgUpdated: j.imgUpdated, rev: j.rev };
         });
       }
-      return attempt(false);
+      return attempt();
     }).then(function(res){ pushing = false; return res; }, function(err){ pushing = false; throw err; });
   }
 
