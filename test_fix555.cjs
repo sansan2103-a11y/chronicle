@@ -316,6 +316,37 @@ console.log('\n== ★fix557: 校正だけ推論を止める ==');
        opts && opts.extraBody && opts.extraBody.reasoning);
   }
 
+console.log('\n== ★fix559: 失敗の原因を分ける / 非対応が続いたら止める ==');
+  {
+    const w = mk({ body: 'x' });
+    const C = w.__v292Dfix555._classifyFailure;
+    ok('★推論OFF非対応を見分ける', C('OpenRouter HTTP 404: no allowed providers') === 'UnsupportedReasoning');
+    ok('★空出力を見分ける', C('OpenRouterから出力がありませんでした') === 'EmptyOutput');
+    ok('★ネットワークを見分ける', C('Failed to fetch') === 'Network');
+    ok('★その他は Other', C('なにかよくわからない') === 'Other');
+    ok('★原因別の内訳が出る', (function(){ const f = w.__v292Dfix555.stats().failedBy;
+      return f && typeof f.unsupportedReasoning==='number' && typeof f.emptyOutput==='number'; })());
+  }
+  {
+    /* 同じモデルで推論OFF非対応が3回続いたら、そのモデルでの校正を止める(推論ONへは戻さない) */
+    const body = [OK_LINE, BROKEN, OK_LINE2].join('\n') + TAIL;
+    let calls = 0;
+    const w = mk({ body: body, call: function(sys, user, maxTok, o){
+      calls++;
+      if (!o) return Promise.resolve({ text: body });          /* 本文生成 */
+      return Promise.reject(new Error('OpenRouter HTTP 404: no allowed providers'));
+    } });
+    w.__chronicleGetState = function(){ return { cfg: { orModel: 'deepseek/deepseek-v4-flash' } }; };
+    w.__v292Dfix555._install();
+    for (let i = 0; i < 4; i++){ await w.Api.call('sys', 'user'); }
+    const st = w.__v292Dfix555.stats();
+    ok('★非対応を原因別に数える', st.failedBy.unsupportedReasoning === 3, st.failedBy);
+    ok('★★3回続いたらそのモデルでの校正を止める', st.disabledForModel === 'deepseek/deepseek-v4-flash', st.disabledForModel);
+    ok('★止めたあとは校正を呼ばない(fired が増えない)', st.fired === 3, st.fired);
+    ok('★止めても本文生成は普通に返る', true);
+    ok('★推論ONへ自動フォールバックしない', !/reasoning:\s*\{\s*effort:\s*'(low|medium|high)'/.test(SRC));
+  }
+
 console.log('\n== ★タイムアウト(fix555d) ==');
   {
     ok('★上限は30秒(20秒だと実測15秒に近すぎて正常な修復まで切る)',

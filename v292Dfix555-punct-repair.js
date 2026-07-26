@@ -100,7 +100,23 @@
   /* ---- 記録 ------------------------------------------------------------ */
   var stats = { fired: 0, repaired: 0, rejectedContent: 0, rejectedNoImprove: 0,
                 failed: 0, timedOut: 0, lateDropped: 0, skippedTagged: 0, calls: 0, ms: 0, msList: [],
-                viaDirect: 0, viaApiCall: 0 };
+                viaDirect: 0, viaApiCall: 0,
+                /* ★fix559(GPT指定): failed を原因別に分ける。将来モデルを変えた直後に
+                   failedUnsupportedReasoning が急増すれば、対応可否をすぐ判断できる。 */
+                failedUnsupportedReasoning: 0, failedProvider: 0, failedEmptyOutput: 0,
+                failedNetwork: 0, failedOther: 0, disabledForModel: null };
+  /* ★fix559: 同じモデルで「推論OFF非対応」が続くなら、そのセッション中は校正を止める。
+     推論ONへ自動フォールバックはしない(従来経路は採用40%・平均21秒・最大80秒と実測で悪いため)。
+     元の本文がそのまま出るので体験は予測可能なまま。 */
+  var unsupportedStreak = 0, disabledModel = null;
+  function classifyFailure(msg){
+    var m = String(msg || '').toLowerCase();
+    if (/require_parameters|no (allowed )?providers|not support|unsupported|reasoning/.test(m)) return 'UnsupportedReasoning';
+    if (/http 4\d\d|http 5\d\d|provider/.test(m)) return 'Provider';
+    if (/出力がありませんでした|empty|no output/.test(m)) return 'EmptyOutput';
+    if (/failed to fetch|networkerror|load failed|abort/.test(m)) return 'Network';
+    return 'Other';
+  }
   /* ★fix555d: Api.call は AbortSignal を受け取らないので通信そのものは止められない。
      代わりに**試行トークン**で囲い、遅れて届いた修復結果を次の生成へ混ぜない。 */
   var attemptSeq = 0;
@@ -264,6 +280,11 @@
           return r;
         }
 
+        /* ★fix559: このモデルでは校正を止めている場合は何もしない */
+        var curModel = (function(){ try { var st2 = getState555(); return (st2 && st2.cfg && (st2.cfg.orModel || st2.cfg.model)) || null; } catch(e){ return null; } })();
+        if (disabledModel && curModel === disabledModel) return r;
+        if (disabledModel && curModel !== disabledModel){ disabledModel = null; unsupportedStreak = 0; stats.disabledForModel = null; }
+
         stats.fired++;
         var t0 = Date.now();
         var p = buildPrompt(pick.picked);
@@ -312,10 +333,19 @@
           }
         } catch(e){
           stats.failed++;
+          var kind = classifyFailure((e && e.message) || e);
+          stats['failed' + kind]++;
+          if (kind === 'UnsupportedReasoning'){
+            unsupportedStreak++;
+            if (unsupportedStreak >= 3 && curModel){
+              disabledModel = curModel; stats.disabledForModel = curModel;
+              try { console.warn(TAG, 'このモデルでは推論OFFが通らないので校正を止めます:', curModel); } catch(_){}
+            }
+          } else { unsupportedStreak = 0; }
           note({ ts: new Date().toISOString(), result: 'call-failed', before: before,
-                 elapsedMs: Date.now() - t0,
+                 failedReason: kind, elapsedMs: Date.now() - t0,
                  error: String((e && e.message) || e).slice(0, 120) });
-          return r;                                        /* 例外時は元のまま(挙動を変えない) */
+          return r;                                        /* 例外時は元のまま。推論ONへは戻さない */
         } finally { inRepair = false; }
 
         /* ★遅れて届いた結果は使わない(別のターンへ混ざるのを防ぐ) */
@@ -401,6 +431,9 @@
                failed: stats.failed, timedOut: stats.timedOut, lateDropped: stats.lateDropped,
                skippedTagged: stats.skippedTagged, calls: stats.calls, timeoutMs: TIMEOUT_MS,
                viaDirect: stats.viaDirect, viaApiCall: stats.viaApiCall,
+               failedBy: { unsupportedReasoning: stats.failedUnsupportedReasoning, provider: stats.failedProvider,
+                           emptyOutput: stats.failedEmptyOutput, network: stats.failedNetwork, other: stats.failedOther },
+               disabledForModel: stats.disabledForModel,
                avgMs: stats.repaired ? Math.round(stats.ms / stats.repaired) : 0,
                /* ★20件ほど貯まったら p95 を見て上限を調整する(GPT) */
                p95Ms: (function(){ var a = stats.msList.slice().sort(function(x,y){ return x-y; });
@@ -415,7 +448,8 @@
     off: off,
     _metrics: metrics, _skeleton: skeleton, _splitTail: splitTail,
     _pickSegments: pickSegments, _buildPrompt: buildPrompt, _parseRepairJSON: parseRepairJSON,
-    _install: install, _timeoutMs: function(){ return TIMEOUT_MS; }, _repairRequest: repairRequest
+    _install: install, _timeoutMs: function(){ return TIMEOUT_MS; }, _repairRequest: repairRequest,
+    _classifyFailure: classifyFailure
   };
 
   /* ★包めても止めない。他のfixが包み直して印が消えたら、また包む。 */
