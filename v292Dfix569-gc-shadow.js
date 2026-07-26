@@ -143,14 +143,25 @@
   /* ================= 呼び出し元の識別（スタックから7経路へ） ======================== */
   /* ★取れないことを理由に記録を落とさない(GPT指摘)。取れなければ unknownPath に計上する。 */
   var PATHS = [
-    { id:'fix569probe',     re:/v292Dfix569/ },
     { id:'fix264b',         re:/v292Dfix228-slot-generations/ },
     { id:'fix399',          re:/v292Dfix399-cloudsync/ },
     { id:'fix277',          re:/v292Dfix277-quasi-pack/ },
     { id:'fix490',          re:/v292Dfix490-slot-write-guard/ },
     { id:'fix402',          re:/v292Dfix402-invisible-sync/ }
   ];
-  function stackOf(){ try { throw new Error('s'); } catch(e){ return String(e && e.stack || ''); } }
+  /* ★★自分自身のフレームを必ず取り除く（2026-07-26、7経路テストで発見したバグ）。
+     スタックには常に本ファイル(v292Dfix569-gc-shadow.js)のフレームが含まれるので、
+     除かないと**すべての削除が自分（canary）由来に見えて**、7経路が1件も数えられない。
+     「経路別の生存証明」を作らなければ、この欠陥は wouldDeny=0 の裏に隠れたままだった。 */
+  function stackOf(){
+    try { throw new Error('s'); } catch(e){
+      var s = String(e && e.stack || '');
+      if (s.indexOf('v292Dfix569') < 0) return s;
+      var out = [], lines = s.split('\n');
+      for (var i = 0; i < lines.length; i++){ if (lines[i].indexOf('v292Dfix569') < 0) out.push(lines[i]); }
+      return out.join('\n');
+    }
+  }
   function pathOf(key, stack){
     /* ★canary は自分のキー形で確定させる。スタックにファイル名が出ない環境(node等)でも
        生存証明が unknownPath へ落ちないようにするため。 */

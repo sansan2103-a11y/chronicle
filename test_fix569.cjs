@@ -258,6 +258,26 @@ console.log('== 15. selfTest の迂回canary ==');
   eq('canary は残らない', Object.keys(e.store).filter(k => k.indexOf('chr6_gc_probe_') === 0).length, 0);
 }
 
+console.log('== 16. ★自分自身のフレームを経路と誤認しない（2026-07-26に踏んだバグ） ==');
+{
+  /* 影監視のスタックには**必ず自分のファイル名**が含まれる。それを除かずに照合すると、
+     すべての削除が「自分（canary）由来」に見えて、7経路が1件も数えられなくなる。
+     この欠陥は wouldDeny の値には表れないので、経路別の生存証明を作るまで気づけなかった。 */
+  const e = makeEnv();
+  stubFix562(e.win, []);
+  e.f.install();
+  e.ls.setItem('chr6_bk_cloudsync_1780000000000', 'v');
+  e.ls.removeItem('chr6_bk_cloudsync_1780000000000');   /* 実スタックから呼ぶ */
+  const s = e.f.stats();
+  eq('★canary 扱いにならない', s.byPath.fix569probe, 0);
+  eq('requestedCalls=1', s.requestedCalls, 1);
+  const ev = e.f.events()[0];
+  ok('経路が canary 以外として記録される', ev && ev.path !== 'fix569probe', ev);
+  /* canary キーは今も canary として数えられること（つぶし過ぎていない） */
+  const r = e.f.selfTest();
+  eq('★canary は今も canary として数える', r.probePathDelta, 3);
+}
+
 console.log('');
 console.log('pass=' + pass + ' fail=' + fail);
 process.exit(fail ? 1 : 0);
