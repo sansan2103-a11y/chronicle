@@ -69,6 +69,9 @@
     keys().forEach(function(k){
       if (k === 'chr6_slot_' + slot) return;      /* 本体 */
       if (k.indexOf('chr6_bk_') === 0) return;    /* 控え */
+      /* ★スナップショット(fix564)自身を除外する。除外しないと、スナップショットを取るたびに
+         前回のスナップショットをサイドストアとして数え、容量が雪だるま式に増える。 */
+      if (k.indexOf('chr6_snap_') === 0 || k.indexOf('chr6_snapd_') === 0) return;
       if (k.indexOf(slot) < 0) return;
       out.push(k);
     });
