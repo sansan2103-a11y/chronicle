@@ -238,7 +238,43 @@ console.log('\n== 校正プロンプト ==');
     ok('★★校正リクエストを自分で校正しない(呼出しは2回まで)', n === 2, n);
   }
 
-  console.log('\n== ★多重ラップされても1回だけ働く(fix555b) ==');
+  console.log('\n== ★タイムアウト(fix555d) ==');
+  {
+    ok('★上限は30秒(20秒だと実測15秒に近すぎて正常な修復まで切る)',
+       (function(){ const w = mk({ body:'x' }); return w.__v292Dfix555._timeoutMs() === 30000; })());
+  }
+  {
+    /* 校正が返ってこないときは元の本文を採用し、再試行しない */
+    const body = [OK_LINE, BROKEN, OK_LINE2].join('\n') + TAIL;
+    let n = 0, timers = [];
+    const w = mk({ body: body, call: function(sys, user){
+      n++;
+      if (n === 1) return Promise.resolve({ text: body });
+      return new Promise(function(){});          /* 永久に返さない */
+    } });
+    w.setTimeout = function(fn, ms){ timers.push({ fn: fn, ms: ms }); return timers.length; };
+    w.__v292Dfix555._install();
+    const pr = w.Api.call('sys', 'user');
+    await new Promise(r => setImmediate(r));
+    const t = timers.filter(x => x.ms === 30000)[0];
+    ok('★30秒のタイマーを仕掛ける', !!t, timers.map(x => x.ms));
+    if (t) t.fn();
+    const r = await pr;
+    ok('★★タイムアウトしたら元の本文を採用する', r.text === body);
+    ok('★timedOut を数える', w.__v292Dfix555.stats().timedOut === 1, w.__v292Dfix555.stats());
+    ok('★再試行しない(呼出しは2回まで)', n === 2, n);
+    ok('★記録に timeout と経過時間を残す',
+       (function(){ const L = w.__v292Dfix555.dump().slice(-1)[0]; return L.result === 'timeout' && L.timeoutMs === 30000 && typeof L.elapsedMs === 'number'; })(),
+       w.__v292Dfix555.dump().slice(-1)[0]);
+  }
+  {
+    ok('★p95 を出す(20件貯まったら上限の見直しに使う)',
+       (function(){ const w = mk({ body:'x' }); return typeof w.__v292Dfix555.stats().p95Ms === 'number'; })());
+    ok('★遅れて届いた結果を落とすカウンタがある',
+       (function(){ const w = mk({ body:'x' }); return typeof w.__v292Dfix555.stats().lateDropped === 'number'; })());
+  }
+
+console.log('\n== ★多重ラップされても1回だけ働く(fix555b) ==');
   {
     /* 実機で判明: 他のfix(fix333など)が Api.call を後から包み直し own props を継承しないので
        __f555 が消える。印が消えたら包み直してよいが、積み上がると校正を何度も走らせてしまう。 */

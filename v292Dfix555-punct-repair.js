@@ -31,6 +31,10 @@
   var MAX = 20;
   var OVER = 80;                 /* この長さ以上の無句読点区間があれば発動 */
   var MAX_SEGS = 6;              /* 1回で送る区間の上限 */
+  /* ★fix555d(GPT裁定): 実測15秒。20秒だと正常な修復まで切ってしまうので30秒。
+     1ターンの本文生成が60〜120秒かかる環境で、異常時だけ最大30秒追加は許容範囲。
+     発生率3.3%・平均15秒なら全ターン平均の追加待ちは 15×0.033 ≒ 0.5秒/ターン。 */
+  var TIMEOUT_MS = 30000;
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix555Off') === '1'; }
@@ -89,7 +93,10 @@
 
   /* ---- 記録 ------------------------------------------------------------ */
   var stats = { fired: 0, repaired: 0, rejectedContent: 0, rejectedNoImprove: 0,
-                failed: 0, skippedTagged: 0, calls: 0, ms: 0 };
+                failed: 0, timedOut: 0, lateDropped: 0, skippedTagged: 0, calls: 0, ms: 0, msList: [] };
+  /* ★fix555d: Api.call は AbortSignal を受け取らないので通信そのものは止められない。
+     代わりに**試行トークン**で囲い、遅れて届いた修復結果を次の生成へ混ぜない。 */
+  var attemptSeq = 0;
   function read(){ try { var a = JSON.parse(lsg(LOG) || '[]'); return Array.isArray(a) ? a : []; } catch(e){ return []; } }
   function write(a){ try { localStorage.setItem(LOG, JSON.stringify(a.slice(-MAX))); } catch(e){} }
   function note(rec){ var a = read(); a.push(rec); write(a); }
@@ -185,16 +192,36 @@
         var t0 = Date.now();
         var p = buildPrompt(pick.picked);
         var out = null;
+        var myAttempt = ++attemptSeq;
         inRepair = true;
         try {
           stats.calls++;
-          out = await prev.call(this, p.sys, p.user, 1200);
+          var timedOut = false;
+          out = await Promise.race([
+            prev.call(this, p.sys, p.user, 1200),
+            new Promise(function(res){ setTimeout(function(){ timedOut = true; res(null); }, TIMEOUT_MS); })
+          ]);
+          if (timedOut){
+            stats.timedOut++;
+            note({ ts: new Date().toISOString(), result: 'timeout', before: before,
+                   timeoutMs: TIMEOUT_MS, elapsedMs: Date.now() - t0 });
+            return r;                                      /* 元の本文を採用。再試行はしない */
+          }
         } catch(e){
           stats.failed++;
           note({ ts: new Date().toISOString(), result: 'call-failed', before: before,
+                 elapsedMs: Date.now() - t0,
                  error: String((e && e.message) || e).slice(0, 120) });
           return r;                                        /* 例外時は元のまま(挙動を変えない) */
         } finally { inRepair = false; }
+
+        /* ★遅れて届いた結果は使わない(別のターンへ混ざるのを防ぐ) */
+        if (myAttempt !== attemptSeq){
+          stats.lateDropped++;
+          note({ ts: new Date().toISOString(), result: 'late-dropped', before: before,
+                 elapsedMs: Date.now() - t0 });
+          return r;
+        }
 
         var map = out && out.text ? parseRepairJSON(out.text) : null;
         if (!map){
@@ -242,6 +269,8 @@
 
         stats.repaired++;
         stats.ms += (Date.now() - t0);
+        stats.msList.push(Date.now() - t0);
+        if (stats.msList.length > 40) stats.msList.shift();
         note({ ts: new Date().toISOString(), result: 'repaired', before: before, after: after,
                segs: pick.picked.length, applied: applied, rejected: rejected,
                overflow: pick.overflow, skippedTagged: pick.skippedTagged, ms: Date.now() - t0 });
@@ -266,8 +295,12 @@
     stats: function(){
       return { fired: stats.fired, repaired: stats.repaired,
                rejectedContent: stats.rejectedContent, rejectedNoImprove: stats.rejectedNoImprove,
-               failed: stats.failed, skippedTagged: stats.skippedTagged, calls: stats.calls,
+               failed: stats.failed, timedOut: stats.timedOut, lateDropped: stats.lateDropped,
+               skippedTagged: stats.skippedTagged, calls: stats.calls, timeoutMs: TIMEOUT_MS,
                avgMs: stats.repaired ? Math.round(stats.ms / stats.repaired) : 0,
+               /* ★20件ほど貯まったら p95 を見て上限を調整する(GPT) */
+               p95Ms: (function(){ var a = stats.msList.slice().sort(function(x,y){ return x-y; });
+                                   return a.length ? a[Math.min(a.length-1, Math.floor(a.length*0.95))] : 0; })(),
                wired: installed,
                /* ★印が生きているか。消えていても包み直すので、ここは参考値 */
                marked: (function(){ try { var a = getApi(); return !!(a && a.call && a.call.__f555); } catch(e){ return false; } })(),
@@ -278,7 +311,7 @@
     off: off,
     _metrics: metrics, _skeleton: skeleton, _splitTail: splitTail,
     _pickSegments: pickSegments, _buildPrompt: buildPrompt, _parseRepairJSON: parseRepairJSON,
-    _install: install
+    _install: install, _timeoutMs: function(){ return TIMEOUT_MS; }
   };
 
   /* ★包めても止めない。他のfixが包み直して印が消えたら、また包む。 */
