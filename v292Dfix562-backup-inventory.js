@@ -255,6 +255,29 @@
     return (r.completeSnapshot ? 1e15 : 0) + (r.restorable ? 1e12 : 0)
          + Math.min(r.turns, 999999) * 1e6 + Math.min(r.createdAt || 0, 1e12) / 1e6;
   }
+  /* fix564 のスナップショットを読む(読むだけ。fix564 が無くても動く) */
+  function snapshotsBySlot(){
+    var out = [];
+    keys().forEach(function(k){
+      if (k.indexOf('chr6_snap_') !== 0) return;
+      var m = null; try { m = JSON.parse(lsg(k) || 'null'); } catch(e){}
+      if (!m || !m.slotId) return;
+      var dataBytes = 0, missing = 0;
+      Object.keys(m.parts || {}).forEach(function(lk){
+        var v = lsg(m.parts[lk].snapKey);
+        if (v == null) missing++; else dataBytes += v.length;
+      });
+      out.push({ id: k, slotId: m.slotId, createdAt: m.createdAt, turns: m.turns,
+                 parts: m.partCount, bytes: dataBytes + (lsg(k) || '').length,
+                 complete: !!m.complete && missing === 0, missing: missing });
+    });
+    /* スロットごとに最新1件だけを代表にする */
+    var best = {};
+    out.sort(function(a, b){ return (b.createdAt || 0) - (a.createdAt || 0); })
+       .forEach(function(s){ if (!best[s.slotId]) best[s.slotId] = s; });
+    return Object.keys(best).map(function(s){ return best[s]; });
+  }
+
   function protectedSet(){
     var live = liveSlots(), best = {}, inv = inventory();
     inv.forEach(function(r){
@@ -267,6 +290,17 @@
       out[s] = { key: best[s].key, bytes: best[s].bytes, turns: best[s].turns,
                  createdAt: best[s].createdAt, complete: best[s].completeSnapshot,
                  reason: '現在存在するスロットの、復元可能な最良の控え1件' };
+    });
+    /* ★fix566: 論理スナップショット(fix564)は chr6_bk_ ではないので inventory() に入らない。
+       数えないと「控えが1件も無いスロット」と誤って警告し、**旧式の本体だけの控えを
+       増やす方向へ人を誘導してしまう**。スナップショットの方が保護として強いので、
+       完全なスナップショットがあればそれを保護対象として採用する。 */
+    snapshotsBySlot().forEach(function(sn){
+      if (live.indexOf(sn.slotId) < 0) return;
+      if (!sn.complete) return;
+      out[sn.slotId] = { key: sn.id, bytes: sn.bytes, turns: sn.turns, createdAt: sn.createdAt,
+                         complete: true, kind: 'snapshot',
+                         reason: 'サイドストア込みの論理スナップショット(fix564)。控えより強い' };
     });
     /* ★丸ごと控え(localStorage全体)は、どれか1つのスロットに属さないので上のループでは守れない。
        しかし**サイドストアを運べる唯一の控え**なので、最新の1件を別枠で保護する。
@@ -369,6 +403,12 @@
       backupUnrestorable: inv.filter(function(r){ return !r.restorable; }).length,
       backupCompleteSnapshot: inv.filter(function(r){ return r.completeSnapshot; }).length,
       protectedCount: Object.keys(prot).length,
+      /* ★fix566: ライブの構成(snapshots)と保存済みの論理スナップショット(logicalSnapshots)は別物。
+         同じ名前にすると後から定義した方に潰される(実際にテストで踏んだ)。 */
+      logicalSnapshots: snapshotsBySlot().map(function(s){
+        return { slot: s.slotId, turns: s.turns, parts: s.parts,
+                 kb: Math.round(s.bytes / 1024), complete: s.complete, missing: s.missing };
+      }),
       byKind: (function(){
         var m = {}; inv.forEach(function(r){
           m[r.kind] = m[r.kind] || { n: 0, kb: 0 };
@@ -400,6 +440,7 @@
     sideStoreKeys: sideStoreKeys,
     liveSlots: liveSlots,
     protectedSet: protectedSet,
+    snapshotsBySlot: snapshotsBySlot,
     dryRun: dryRun,
     _hash: hash, _tsFromKey: tsFromKey, _slotFromKey: slotFromKey, _familyOf: familyOf, _score: score
   };
