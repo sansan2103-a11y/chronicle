@@ -77,7 +77,8 @@
                 byStage: { model: 0, parse: 0, postprocess: 0, unknown: 0 },
                 /* ★fix553e(GPT指定): 異常ログ0件は**それだけでは何の証明にもならない**。
                    「1ターンについて3段階が揃った件数」が生存証明になる。 */
-                capture: { raw: 0, rawUsable: 0, parsed: 0, saved: 0, all3: 0, rawApprox: 0 } };
+                capture: { raw: 0, rawUsable: 0, parsed: 0, saved: 0, all3: 0, rawApprox: 0,
+                           extraFetches: 0, overwritePrevented: 0, pairInvalid: 0, incomplete: 0 } };
 
   /* ★fix553d(2026-07-25・実機で誤ラベルしたので修正):
      「前の段階が**正常だったのに**次の段階で崩れた」ときだけ、その段階を犯人と呼ぶ。
@@ -189,6 +190,37 @@
   }
   function pickModel(json){ try { return (json && json.model) || null; } catch(e){ return null; } }
 
+  /* ★fix554: 応答の種別を中身で判定する(順序依存をやめる)。
+     会話ログ(genConvLog)は [{"who":"…","say":"…"}] のJSON配列を返す契約。
+     本文は素のプロセ+<say>/<state>/<react> タグ、または narrative を含むJSON。 */
+  function kindOf(t){
+    var s = String(t == null ? '' : t).trim();
+    s = s.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+    if (/^\[/.test(s)){
+      try { var a = JSON.parse(s); if (Array.isArray(a) && (!a.length || (a[0] && (a[0].who != null || a[0].say != null)))) return 'convlog'; }
+      catch(e){ if (/"who"\s*:/.test(s) && /"say"\s*:/.test(s)) return 'convlog'; }
+    }
+    if (/"who"\s*:\s*"/.test(s) && /"say"\s*:\s*"/.test(s) && s.indexOf('<state') < 0 && s.indexOf('<react') < 0) return 'convlog';
+    if (s.length < 120) return 'other';
+    return 'narrative';
+  }
+
+  /* ★fix554: 生成単位ID。G.submit の入口で1つ増やす。3段階が「同じ生成のもの」かを見る。 */
+  var genSeq = 0;
+
+  /* ★fix554: 内容の指紋。長さが近いだけでは別の応答を偶然ペアにしうる(GPT指摘)。
+     20文字以上の共通部分があることを確かめる。 */
+  function shareChunk(a, b, n){
+    a = String(a || '').replace(/<[^>]*>/g, '').replace(/\s+/g, '');
+    b = String(b || '').replace(/<[^>]*>/g, '').replace(/\s+/g, '');
+    n = n || 20;
+    if (a.length < n || b.length < n) return false;
+    for (var i = 0; i + n <= a.length; i += 5){
+      if (b.indexOf(a.substr(i, n)) >= 0) return true;
+    }
+    return false;
+  }
+
   /* ★このラッパは「一度だけ・できるだけ内側(nativeに近い側)」に置く。
      理由: fix482/464/476/80 は `new Response(...)` で応答を作り直すので、外側で読むと
      「出口ガードを通したあとの本文」になり、**モデルの生出力ではなくなる**。
@@ -211,14 +243,19 @@
               res.clone().json().then(function(j){
                 try {
                   var t = pickText(j);
-                  if (t && t.length > 200){        /* 会話ログ(短いJSON配列)は拾わない */
-                    var body = narrativeFromRaw(t), approx = false;
-                    if (body == null){ body = narrativeApprox(t); approx = (body != null); }
-                    lastRaw = { metrics: body == null ? null : metrics(body),
-                                bodyLen: body == null ? null : body.length,
-                                approx: approx,
-                                finish: pickFinish(j), model: pickModel(j), ts: Date.now() };
-                  }
+                  if (!t) return;
+                  /* ★fix554(GPT指定): 「最初のfetchだから本文」という**順序依存をやめる**。
+                     応答の中身で本文生成と会話ログ生成を区別する。
+                     会話ログは [{"who":"…","say":"…"}] のJSON配列を返す契約(genConvLog)。 */
+                  if (kindOf(t) !== 'narrative'){ stats.capture.extraFetches++; return; }
+                  var body = narrativeFromRaw(t), approx = false;
+                  if (body == null){ body = narrativeApprox(t); approx = (body != null); }
+                  if (body == null) return;
+                  /* ★上書き防止: 同じ生成単位で本文rawが既にあるなら上書きしない */
+                  if (lastRaw && lastRaw.gen === genSeq){ stats.capture.overwritePrevented++; return; }
+                  lastRaw = { gen: genSeq, metrics: metrics(body), body: body,
+                              bodyLen: body.length, approx: approx,
+                              finish: pickFinish(j), model: pickModel(j), ts: Date.now() };
                 } catch(e){}
               }, function(){});
             }
@@ -264,6 +301,8 @@
                → parsePlan が走った**この瞬間**の lastRaw を本文の生としてペアにする。 */
             pairedRaw = lastRaw;
             lastRaw = null;
+            lastParsed.gen = genSeq;
+            lastParsed.body = r.narrative.join('\n');
           }
         } catch(e){}
         return r;
@@ -271,6 +310,26 @@
       wrapped.__f553 = true;
       try { Object.keys(prev).forEach(function(k){ if (k !== '__f553') wrapped[k] = prev[k]; }); } catch(e){}
       P.parsePlan = wrapped;
+      return true;
+    } catch(e){ return false; }
+  }
+
+  /* ★fix554(GPT指定): 生成単位ID。G.submit の入口で1つ増やすだけ(挙動は変えない)。
+     3段階が「同じ生成のもの」かを見るために使う。 */
+  function getG553(){
+    try { if (window.G) return window.G; } catch(e){}
+    try { if (typeof G !== 'undefined' && G) return G; } catch(e){}
+    try { return (0,eval)('typeof G!=="undefined"?G:null'); } catch(e){ return null; }
+  }
+  function wrapSubmit(){
+    try {
+      var g = getG553();
+      if (!g || typeof g.submit !== 'function' || g.submit.__f553) return !!(g && g.submit && g.submit.__f553);
+      var prev = g.submit;
+      var wrapped = function(){ if (!off()) genSeq++; return prev.apply(this, arguments); };
+      wrapped.__f553 = true;
+      try { Object.keys(prev).forEach(function(k){ if (k !== '__f553') wrapped[k] = prev[k]; }); } catch(e){}
+      g.submit = wrapped;
       return true;
     } catch(e){ return false; }
   }
@@ -293,8 +352,19 @@
     var s4 = metrics(t.narrative);
     /* ★生は「parsePlanと対になったもの」を使う。lastRaw をそのまま使うと会話ログの応答を掴む */
     var raw = pairedRaw || lastRaw;
+    /* ★fix554(GPT指定): 長さが近いだけでは別の応答を偶然ペアにしうる。
+       ①同じ生成単位(gen)であること ②20字以上の共通部分があること を確かめる。
+       どちらか欠ければ **生を無かったことにして段階を断定しない**(前回値へフォールバックしない)。 */
+    var pairOK = true;
+    if (raw){
+      var sameGen = (lastParsed && lastParsed.gen != null && raw.gen != null) ? (raw.gen === lastParsed.gen) : true;
+      var fp = shareChunk(raw.body, (lastParsed && lastParsed.body) || t.narrative, 20);
+      pairOK = sameGen && fp;
+      if (!pairOK){ stats.capture.pairInvalid++; raw = null; }
+    }
     var s1 = raw ? raw.metrics : null;
     var s2 = lastParsed ? lastParsed.metrics : null;
+    if (!s1 || !s2) stats.capture.incomplete++;
 
     if (s1) stats.capture.raw++;
     if (usable(s1, s2 || s4)) stats.capture.rawUsable++;
@@ -320,6 +390,8 @@
         rawPaired: !!pairedRaw,
         /* 生が後段と比べて短すぎないか(短ければ段階の断定に使っていない) */
         rawUsable: usable(s1, s2 || s4),
+        pairOK: pairOK,
+        gen: raw ? raw.gen : null,
         finish: raw ? raw.finish : null,
         model: (raw && raw.model) || (st.cfg && (st.cfg.orModel || st.cfg.model)) || null,
         outLen: (function(){ try { return lsg('v100_outputLen') || (st.cfg && st.cfg.outLen) || null; } catch(e){ return null; } })(),
@@ -335,6 +407,7 @@
     /* Planner は index.html の読み込み後に出来るので、出来るまで待つ(最大60秒) */
     (function tryParse(n){
       if (off()) return;
+      wrapSubmit();
       if (wrapParse()) { try { console.log(TAG, 'parsePlan wrapped'); } catch(e){} }
       else if (n > 120) return;
       /* ★包めても止めない: 他のfixが包み直して外れることがあるので見張り続ける */
@@ -357,12 +430,15 @@
                alive: !!stats.lastPollTs && (Date.now() - stats.lastPollTs) < 120000,
                /* ★印(__f553)の有無ではなく「実際に捕捉した回数」で見る。
                   他のfixが包み直すと印は消えるが、こちらのラッパは鎖の中で生きている。 */
-               wired: { fetch: installed, parsePlanCaptures: parsedCaptures,
+               genSeq: genSeq,
+               wired: { fetch: installed, submit: !!(function(){ try { var g = getG553(); return g && g.submit && g.submit.__f553; } catch(e){ return false; } })(),
+                        parsePlanCaptures: parsedCaptures,
                         parsePlanMarked: !!(function(){ try { var P = window.Planner; return P && P.parsePlan && P.parsePlan.__f553; } catch(e){ return false; } })() } };
     },
     clear: function(){ try { localStorage.removeItem(LOG); } catch(e){} return true; },
     off: off,
-    _wrapFetch: wrapFetch, _wrapParse: wrapParse, _poll: poll, _narrativeFromRaw: narrativeFromRaw,
+    _wrapFetch: wrapFetch, _wrapParse: wrapParse, _wrapSubmit: wrapSubmit, _poll: poll,
+    _narrativeFromRaw: narrativeFromRaw, _kindOf: kindOf, _shareChunk: shareChunk,
     _peekPair: function(){ return { paired: !!pairedRaw, pairedLen: pairedRaw ? pairedRaw.bodyLen : null }; },
     _peek: function(){ return { hasRaw: !!lastRaw, hasParsed: !!lastParsed, lastLen: lastLen }; }
   };

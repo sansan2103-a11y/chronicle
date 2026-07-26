@@ -260,6 +260,36 @@ console.log('\n== ★生が部分的にしか取れていないときは断定�
     }
 
 async function rest(){
+console.log('\n== ★fix554: 応答種別の判定・指紋・上書き防止 ==');
+    {
+      const w9 = mk();
+      const K = w9.__v292Dfix553._kindOf;
+      const SH = w9.__v292Dfix553._shareChunk;
+      ok('★会話ログのJSON配列は convlog と判定',
+         K(JSON.stringify([{who:'ノア',say:'……割った'},{who:'ヒナ',say:'こわい'}])) === 'convlog');
+      ok('★タグつきの本文は narrative と判定',
+         K('アリアの声が夜気に溶ける。'.repeat(12) + '<state who="アリア" karada="裂傷" />') === 'narrative');
+      ok('★短すぎる応答は other(拾わない)', K('はい。') === 'other');
+      ok('★指紋: 同じ本文なら共通部分がある',
+         SH('灯は足を止めた。耳を澄ませる。潮の匂いが強い。遠くで鐘が鳴った。',
+            '灯は足を止めた。耳を澄ませる。潮の匂いが強い。遠くで鐘が鳴った。') === true);
+      ok('★指紋: 別の本文なら共通部分がない',
+         SH('灯は足を止めた。耳を澄ませる。潮の匂いが強い。遠くで鐘が鳴った。',
+            'まったく違う場面の描写がここに続きます。共通する語句はありません。') === false);
+      ok('★指紋: タグと空白は無視する',
+         SH('<say who="A">灯は足を止めた。耳を澄ませる。潮の匂いが強い。</say>',
+            '灯は足を止めた。 耳を澄ませる。 潮の匂いが強い。') === true);
+      ok('★G.submit を包んで生成単位IDを進める(挙動は変えない)',
+         (function(){
+            let called = 0;
+            const g = { submit: function(a){ called++; return 'ret:' + a; } };
+            w9.window.G = g;
+            w9.__v292Dfix553._wrapSubmit();
+            const r = g.submit('x');
+            return r === 'ret:x' && called === 1 && w9.__v292Dfix553.stats().genSeq === 1;
+         })(), w9.__v292Dfix553.stats().genSeq);
+    }
+
 console.log('\n== ★★1ターンに fetch が2回走る問題(fix553e) ==');
     {
       /* 順番は 本文fetch → parsePlan → 会話ログfetch → 保存 → poll。
