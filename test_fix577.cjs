@@ -46,24 +46,37 @@ console.log('\n== (A1) ソース: 時刻を数値で比較している ==');
   const i = HOME.indexOf('function delStory');
   const body = HOME.slice(i, HOME.indexOf('function renameStory'));
   ok('★キー全体の素の sort() を使っていない', !/ks\.sort\(\);/.test(body), body.slice(0,80));
-  ok('★時刻の数値順で並べている', /ks\.sort\(function\(a,b\)\{\s*return a\.ts - b\.ts;\s*\}\)/.test(body));
+  ok('★時刻の数値順で並べている', /ks\.sort\(function\(a,b\)\{\s*return \(a\.ts - b\.ts\)/.test(body));
   ok('★Number() を使う(|0 は13桁で壊れる)', /Number\(m\[2\]\)/.test(body));
   ok('★時刻の切り捨て(|0)で13桁を壊していない',
      !/Number\([^)]*\)\s*\|\s*0/.test(body) && !/m\[2\]\s*\|\s*0/.test(body));
   ok('★時刻が読めないキーは触らない(正規表現で弾く)', /if\(!m\) continue;/.test(body));
   ok('★古い順に落としている', /ks\.shift\(\)/.test(body));
-  ok('★★条件④を適用しない理由がコメントに書いてある(将来の誤修正を防ぐ)',
-     body.indexOf('定義上すべてが') > 0 && body.indexOf('有限のundo枠') > 0);
+  ok('★★同時刻でも決定的な順序になる(キー名でtie-break)',
+     /\(a\.ts - b\.ts\) \|\| \(a\.key < b\.key/.test(body));
+  ok('★★書けたことを読み戻して確認してから整理する', /wrote = \(g\(newKey\) === raw\)/.test(body));
+  ok('★今書いた控えを整理候補にしない', /if\(k===newKey\) continue;/.test(body));
+  ok('★★唯一控え保護を適用しない理由がコメントに書いてある(将来の誤修正を防ぐ)',
+     body.indexOf('定義上すべてが') > 0 && body.indexOf('有限の保持枠') > 0);
+  ok('★「undoではなく退避」と正確に書いてある(復元UIがまだ無いため)',
+     body.indexOf('復元可能性を残した退避') > 0);
 }
 
 /* delStory の控え整理部分だけを切り出して実際に走らせる */
-function runTrim(seedKeys, newId){
+function runTrim(seedKeys, newId, opts){
+  opts = opts || {};
   const store = {};
   seedKeys.forEach(k => { store[k] = 'v_' + k; });
   store['chr6_slot_' + newId] = 'NEWRAW';
   const LS = {
     getItem: k => Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null,
-    setItem: (k, v) => { store[k] = String(v); },
+    setItem: (k, v) => {
+      /* quota:true なら新しい控えの書込だけ失敗させる（既存キーの更新は通す） */
+      if (opts.quota && !Object.prototype.hasOwnProperty.call(store, k)){
+        const e = new Error('q'); e.name = 'QuotaExceededError'; throw e;
+      }
+      store[k] = String(v);
+    },
     removeItem: k => { delete store[k]; },
     key: i => { const a = Object.keys(store); return i < a.length ? a[i] : null; },
     get length(){ return Object.keys(store).length; }
@@ -150,6 +163,31 @@ console.log('\n== (A5) ★2世代の上限が実際に効く(際限なく積み�
 }
 
 /* ================= (B) 削除入口ガード ==================================== */
+console.log('\n== (A6) ★★書込に失敗したら既存の控えを先に減らさない(fix568と同じ型の事故) ==');
+{
+  /* 旧実装は「先に消してから書く」なので、書込に失敗すると控えが1件も無い状態を自分で作る。 */
+  const r = runTrim([
+    'chr6_bk_del_a_1780000000000',
+    'chr6_bk_del_b_1781000000000'
+  ], 'newQ', { quota: true });
+  ok('★★既存の控えが2件とも残っている', r.left.length === 2, r.left);
+  ok('★★具体的に a が残る', r.left.indexOf('chr6_bk_del_a_1780000000000') >= 0, r.left);
+  ok('★★具体的に b が残る', r.left.indexOf('chr6_bk_del_b_1781000000000') >= 0, r.left);
+  ok('★中途半端な新しい控えを残さない',
+     !r.left.some(k => k.indexOf('chr6_bk_del_newQ_') === 0), r.left);
+}
+
+console.log('\n== (A7) 同時刻の控えでも結果が決定的 ==');
+{
+  const run = () => runTrim([
+    'chr6_bk_del_zzz_1780000000000',
+    'chr6_bk_del_aaa_1780000000000'   /* ← 同じ時刻 */
+  ], 'newT').left.filter(k => k.indexOf('chr6_bk_del_newT_') !== 0).sort().join(',');
+  const a = run(), b = run(), c = run();
+  ok('★★3回実行して同じ結果になる', a === b && b === c, { a, b, c });
+  ok('★キー名の小さい方(aaa)が先に落ちる', a.indexOf('chr6_bk_del_aaa_') < 0, a);
+}
+
 console.log('\n== (B1) ソース: B/C が自前で削除していない ==');
 {
   const i = GAL.indexOf('function deleteSave');
@@ -229,7 +267,10 @@ console.log('\n== (B7) index.html への配線 ==');
   ok('★script タグがある', idx.indexOf('v292Dfix577-delete-entry-guard.js') > 0);
   ok('★gallery より先に読み込まれる',
      idx.indexOf('v292Dfix577-delete-entry-guard.js') < idx.indexOf('v292Dfix310-gallery.js'));
-  ok('BUILT が fix577', idx.indexOf('20260726-fix577') > 0);
+  /* ★ビルド番号を直に固定しない。出荷のたびに落ちて、本質と無関係な赤を作るため。
+     見るべきは「BUILT が fix577 以降であること」。 */
+  const m = idx.match(/20260726-fix(\d+)/);
+  ok('BUILT が fix577 以降', !!m && Number(m[1]) >= 577, m && m[0]);
 }
 
 console.log('\n== (B8) ガード自身は localStorage を削除しない ==');

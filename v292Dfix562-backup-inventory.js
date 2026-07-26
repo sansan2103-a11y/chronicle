@@ -443,6 +443,169 @@
     };
   }
 
+  /* ================= fix578(A3.1): classifyKey() — 読取専用の汎用分類器 ==========
+   * ■なぜ protectedSet() を拡張しないのか（GPT裁定）
+   *   protectedSet() は「**控えの中から**保護するものを返す」という意味で既存コードに使われている。
+   *   ここへ生セーブやサイドストアを混ぜると、控え総量・保護控え容量・GC候補数などの意味が変わる。
+   *   したがって **protectedSet() は1バイトも変えず**、別APIとして足す。
+   *
+   * ■このAPIがやること／やらないこと
+   *   やる  : キー1本を見て「これは何で、誰のもので、どれだけ強く守るべきか」を返す。**判断だけ**。
+   *   やらない: 物理削除。localStorageへの書込。protectedSet()の意味を変えること。
+   *
+   * ■保護の段階（GPT指定の保護階層）
+   *   'hard'       … 生セーブ本体・生きているスロットのサイドストア。
+   *                  単なる reclaim / retention では**絶対に消せない**。
+   *                  検証済みのライフサイクル計画(lifecycle-delete)でだけ消せる。
+   *   'protected'  … 完全スナップショットの実体、各スロットの最良の控え。
+   *                  通常は消さない。より強い保護を優先する。
+   *   'releasable' … 余剰控え・キャッシュ・診断ログ・test-fixture。reclaim で消してよい。
+   *   'review'     … 形式不明。**判断できないものは消さない**（fail-closed）。
+   *
+   * ★引用符付きキーへの対応:
+   *   chr6_v292Dfix54_genderMap_"smrg85jwsn6" のように、キー名の中でスロットIDが
+   *   引用符で囲まれる家族が実在する（fix54 が chr6_active_slot を JSON.parse せずに
+   *   連結しているため）。slotFromKey() は部分一致で拾うのでIDは正しく抽出できる。
+   *   ★計画に載せるのは**実際のexact key（引用符込み）**であって、正規化した名前ではない。
+   */
+  var TEST_FIXTURE_RE = /^(ab\d+p\d+[A-Za-z]?|chr6_gc_probe_|__v543|__v292probe)/;
+  var DIAG_RE = /^(v292Dfix\d+_log|v292Dfix\d+_bkLog|v292Dfix\d+_dropped|__v346raw|v292Dfix573_log)/;
+
+  function classifyKey(key, value){
+    var k = String(key == null ? '' : key);
+    var live = liveSlots();
+    var r = { key: k, family: 'unknown', slotId: null, protection: 'review',
+              owner: null, why: '', policyVersion: 1 };
+    if (!k){ r.why = 'キーが空'; return r; }
+
+    /* ①生セーブ本体 ------------------------------------------------------ */
+    if (k === 'chr6' || SLOT_RE.test(k)){
+      r.family = 'live-story';
+      r.slotId = (k === 'chr6') ? 'default' : k.replace('chr6_slot_', '');
+      r.protection = 'hard';
+      r.owner = 'story-lifecycle';
+      r.why = '生セーブ本体。ライフサイクル計画でのみ削除可';
+      return r;
+    }
+    /* ②スロット台帳・現在地 ---------------------------------------------- */
+    if (k === 'chr6_slots_meta' || k === 'chr6_active_slot' || k === 'chr6_epoch'){
+      r.family = 'live-index'; r.protection = 'hard'; r.owner = 'story-lifecycle';
+      r.why = '物語一覧そのもの。消すと全物語が行方不明になる';
+      return r;
+    }
+    /* ③控え（chr6_bk_*） -------------------------------------------------- */
+    if (k.indexOf('chr6_bk_') === 0){
+      r.family = 'story-backup';
+      r.slotId = slotFromKey(k, live);
+      r.owner = 'backup-retention';
+      var ps = null; try { ps = protectedSet(); } catch(e){ ps = null; }
+      if (ps){
+        var isBest = false;
+        Object.keys(ps).forEach(function(sid){ if (ps[sid] && ps[sid].key === k) isBest = true; });
+        if (isBest){
+          r.protection = 'protected';
+          r.why = '現在存在するスロットの、復元可能な最良の控え1件';
+          return r;
+        }
+      } else {
+        /* ★分類器が判断できない状態で「余剰」と言い切らない（fail-closed） */
+        r.protection = 'review';
+        r.why = '控えの棚卸しに失敗したため判断保留';
+        return r;
+      }
+      r.protection = 'releasable';
+      r.why = '余剰の控え（最良の控えではない）';
+      return r;
+    }
+    /* ④論理スナップショット（fix564） ------------------------------------- */
+    if (k.indexOf('chr6_snap_') === 0 || k.indexOf('chr6_snapd_') === 0){
+      r.family = 'story-snapshot';
+      r.slotId = slotFromKey(k, live);
+      r.owner = 'snapshot';
+      r.protection = 'protected';
+      r.why = '完全スナップショットの一部。復元の単位なので通常は消さない';
+      return r;
+    }
+    /* ⑤test-fixture（ユーザーデータより先に回収してよい） ------------------ */
+    if (TEST_FIXTURE_RE.test(k)){
+      r.family = 'test-fixture'; r.protection = 'releasable'; r.owner = 'diagnostics';
+      r.why = '診断・テスト用の残骸。ユーザーデータより先に回収してよい';
+      return r;
+    }
+    /* ⑥診断ログ・キャッシュ ----------------------------------------------- */
+    if (DIAG_RE.test(k)){
+      r.family = 'diagnostic-log'; r.protection = 'releasable'; r.owner = 'diagnostics';
+      r.why = '診断ログ。失っても物語は復元できる';
+      return r;
+    }
+    /* ⑦サイドストア ------------------------------------------------------- */
+    /* ★「生きているスロットのサイドストア」は hard。スロットが既に無いなら孤児で releasable。
+       ここで live を先に見るのが要。生セーブと同じ強さで守らないと、
+       物語は残っているのに登場人物や記憶だけが消える事故になる。 */
+    var sid = null;
+    for (var i = 0; i < live.length; i++){
+      if (k.indexOf(live[i]) >= 0){ sid = live[i]; break; }
+    }
+    if (sid){
+      r.family = 'live-side-store'; r.slotId = sid; r.protection = 'hard'; r.owner = 'story-lifecycle';
+      r.why = '生きているスロットのサイドストア。本体と同じ論理単位';
+      return r;
+    }
+    var orphan = slotFromKey(k, live);
+    if (orphan && live.indexOf(orphan) < 0){
+      r.family = 'orphan-side-store'; r.slotId = orphan; r.protection = 'releasable';
+      r.owner = 'story-lifecycle';
+      r.why = 'もう存在しないスロットのサイドストア（孤児）';
+      return r;
+    }
+    /* ⑧それ以外は判断しない（消さない） ----------------------------------- */
+    r.why = '形式不明。判断できないものは削除対象にしない';
+    return r;
+  }
+
+  /* ================= fix578(A3.1): deletePolicy() — 判断だけを返す ==============
+   * ★物理削除は行わない。allow の真偽と理由コードだけを返す。
+   * ★生セーブの lifecycle-delete は、クラウド側の tombstone(A3.3)が未実装のあいだ
+   *   **常に allow:false / 'lifecycle-delete-not-ready'** にする（GPT裁定）。
+   *   tombstone が無いまま生セーブを消すと、次の bootPull で復活して
+   *   「消したのに戻ってくる」を新たに作るため。
+   */
+  function tombstoneReady(){
+    try { var s = window.__chronicleStoryLifecycle;
+          return !!(s && s.tombstoneBarrierReady === true); } catch(e){ return false; }
+  }
+  function deletePolicy(req){
+    req = req || {};
+    var c = classifyKey(req.key, req.value);
+    var intent = String(req.intent || 'reclaim');
+    var out = { allow: false, code: 'denied', classification: c, policyVersion: 1 };
+
+    if (c.protection === 'review'){ out.code = 'unknown-format-review-only'; return out; }
+    if (c.protection === 'releasable'){
+      if (intent === 'reclaim' || intent === 'retention' || intent === 'lifecycle-delete'){
+        out.allow = true; out.code = 'releasable'; return out;
+      }
+      out.code = 'unknown-intent'; return out;
+    }
+    if (c.protection === 'protected'){
+      /* 最良の控え・スナップショットは reclaim/retention では消さない */
+      out.code = (intent === 'lifecycle-delete') ? 'lifecycle-delete-not-ready' : 'protected';
+      return out;
+    }
+    /* hard = 生セーブ本体・生きているスロットのサイドストア・台帳 */
+    if (intent !== 'lifecycle-delete'){
+      out.code = 'live-data-requires-lifecycle-authorization';
+      return out;
+    }
+    if (!tombstoneReady()){
+      /* ★A3.3(pull側 tombstone barrier)が入るまでは、生セーブの削除を許可しない */
+      out.code = 'lifecycle-delete-not-ready';
+      return out;
+    }
+    out.code = 'lifecycle-delete-requires-verified-plan';
+    return out;   /* 計画の検証は A3.5/A3.6 で実装する。ここではまだ許可しない */
+  }
+
   window.__v292Dfix562 = {
     off: off,
     report: report,
@@ -453,6 +616,9 @@
     protectedSet: protectedSet,
     snapshotsBySlot: snapshotsBySlot,
     dryRun: dryRun,
+    /* fix578(A3.1): 読取専用の汎用分類器。protectedSet() の意味は据え置き。 */
+    classifyKey: classifyKey,
+    deletePolicy: deletePolicy,
     _hash: hash, _tsFromKey: tsFromKey, _slotFromKey: slotFromKey, _familyOf: familyOf, _score: score
   };
   try { if (!off()) console.log(TAG, 'ready (read-only)'); } catch(e){}
