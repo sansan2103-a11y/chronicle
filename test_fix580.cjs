@@ -208,7 +208,39 @@ function step7(){
     ok('★★墓標は5回マージしても解けない', T.isTombstone(m.filter(e => e.id === 'smA')[0]), m);
   }
 
-  console.log('\n== (7) 静的: 観測が副作用を持たない ==');
+  console.log('\n== (7) ★ロード順: fetchをラップする全ファイルより先にいる ==');
+  {
+    const idx = fs.readFileSync(path.join(__dirname, 'index.html'), 'latin1');
+    const tags = (idx.match(/<script src="([^"?]+)/g) || []).map(t => t.replace('<script src="', ''));
+    const pos = n => tags.indexOf(n);
+    const me = pos('v292Dfix580-meta-sync-coordinator.js');
+    ok('★script タグがある', me >= 0, me);
+    /* ★fetch をラップするファイルを実際に走査して、全部より先にいることを確かめる。
+       実測(2026-07-26): 21本あり、fix580を後ろに置くと先行5本に迂回された。 */
+    const wrappers = fs.readdirSync(__dirname)
+      .filter(f => /\.js$/.test(f) && !/^test_/.test(f))
+      .filter(f => /window\.fetch\s*=/.test(read(f)))
+      .filter(f => tags.indexOf(f) >= 0 && f !== 'v292Dfix580-meta-sync-coordinator.js');
+    ok('fetchをラップするファイルを検出できている', wrappers.length >= 10, wrappers.length);
+    const earlier = wrappers.filter(f => pos(f) < me);
+    ok('★★fetchラッパの中で fix580 が最も先にいる', earlier.length === 0,
+       { fix580: me, より先にいるラッパ: earlier.map(f => f + '@' + pos(f)) });
+    ok('★fix569(localStorage監視)の次に置いている（fix569は先頭でなければならない）',
+       pos('v292Dfix569-gc-shadow.js') === 0 && me === 1,
+       { fix569: pos('v292Dfix569-gc-shadow.js'), fix580: me });
+  }
+
+  console.log('\n== (8) native fetch を捕まえたかを記録する ==');
+  {
+    const w = mkEnv();
+    /* モックの fetch は native ではないので false が正しく記録される */
+    ok('★capturedNativeFetch を記録している', w.__v292Dfix580.stats().capturedNativeFetch === false,
+       w.__v292Dfix580.stats().capturedNativeFetch);
+    ok('★nativeでなければ report に警告が出る',
+       /観測できていない/.test(w.__v292Dfix580.report()), w.__v292Dfix580.report());
+  }
+
+  console.log('\n== (9) 静的: 観測が副作用を持たない ==');
   {
     const code = SRC580.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     ok('★★localStorage へ書かない', !/localStorage\.setItem/.test(code));

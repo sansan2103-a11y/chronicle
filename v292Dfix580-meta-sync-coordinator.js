@@ -40,6 +40,12 @@
 
   var S = {
     installed: false,
+    /* ★fix581: 捕まえた fetch が native だったか。
+       native でなければ、fix580 より前に誰かがラップしている＝**その経路は観測できない**。
+       実測(2026-07-26): window.fetch をラップするファイルは**21本**あり、
+       fix580 を後ろに置くと先行5本(fix553/fix247/features.js/fix80/fix84)に迂回された。
+       fix569 と同じく **Chronicle の最初のスクリプト群**へ移して native を捕まえる。 */
+    capturedNativeFetch: null, loadOrderVerified: null,
     puts: 0, putsWithBaseRev: 0, putsWithoutBaseRev: 0,
     byPath: { fix399: 0, fix402: 0, other: 0 },
     baseRevByPath: { fix399: 0, fix402: 0, other: 0 },
@@ -81,6 +87,12 @@
     var orig = null;
     try { orig = window.fetch; } catch(e){ return; }
     if (typeof orig !== 'function') return;
+    /* ★捕まえた時点で native かどうかを記録する（後から検証できるようにする） */
+    try {
+      var src = Function.prototype.toString.call(orig);
+      S.capturedNativeFetch = src.indexOf('[native code]') >= 0;
+      S.loadOrderVerified = S.capturedNativeFetch;
+    } catch(e){ S.capturedNativeFetch = null; S.loadOrderVerified = null; }
 
     var wrapped = function(input, init){
       /* ★観測に失敗しても、必ず元の fetch をそのまま呼ぶ */
@@ -196,6 +208,8 @@
     lines.push('二重発火 ' + S.doubleFire + '件 / fork ' + S.forks + ' / 拒否 ' + S.conflicts +
                ' / 通信エラー ' + S.errors);
     if (S.wrapperErrors) lines.push('★観測側のエラー ' + S.wrapperErrors + '件（観測値は不完全）');
+    if (S.capturedNativeFetch === false)
+      lines.push('★★fix580 より前に fetch をラップした経路がある＝その経路の put は観測できていない');
     return lines.join('\n');
   }
 

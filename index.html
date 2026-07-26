@@ -9,6 +9,12 @@
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
 <script src="v292Dfix569-gc-shadow.js?cb=v292Dfix574"></script>
+<!-- fix581: 同期の中央調停役（★影モード＝観測のみ）。★fetch をラップするファイルは実測21本あり、
+     後ろに置くと先行ラッパ(fix553/fix247/features.js/fix80/fix84)に迂回される。
+     fix569 と同じく最初に置いて native fetch を捕まえる。
+     /save の put を経路別に観測し、baseRev の有無と二重発火を数える。リクエストは1バイトも変えない。
+     OFF=v292Dfix580Off -->
+<script src="v292Dfix580-meta-sync-coordinator.js?cb=v292Dfix580"></script>
 <script>
 /* v292Dfix242: iOS Safari の古いHTMLキャッシュ脱出。`.js`は?cb=でキャッシュ破棄できるが
    index.html本体は破棄できず、iOSはbfcache+ヒューリスティックで古いHTMLを長く保持する
@@ -18,7 +24,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260726-fix580';
+  var BUILT = '20260726-fix581';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2101,7 +2107,6 @@ if (typeof S.cfg.bannedPhrases === 'undefined') S.cfg.bannedPhrases = '';
 if (!Array.isArray(S.cfg.genrePresets)) S.cfg.genrePresets = [];
 if (typeof S.cfg.simpleMode === 'undefined') S.cfg.simpleMode = false;
 
-
 // ==== v292 hook bootstrap (replaces wrap cascade) ====
 (function v292Bootstrap(){
   if (window.__v292BootstrapLoaded) return;
@@ -2852,9 +2857,6 @@ G.init();
 <!-- fix579: tombstone(墓標)のスキーマとマージ規則。純粋関数のみで、**まだ同期へ配線していない**。
      pull barrier と push競合規則は一組で入れる必要があるため、先に形だけ固める。OFF=v292Dfix579Off -->
 <script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix579"></script>
-<!-- fix580: 同期の中央調停役（★影モード＝観測のみ）。fetch境界で /save の put を観測し、
-     経路別に baseRev の有無と二重発火を数える。リクエストは1バイトも変えない。OFF=v292Dfix580Off -->
-<script src="v292Dfix580-meta-sync-coordinator.js?cb=v292Dfix580"></script>
 
 <script src="v292Dfix577-delete-entry-guard.js?cb=v292Dfix577"></script>
 <script src="v292Dfix310-gallery.js?cb=v292Dfix495"></script>
