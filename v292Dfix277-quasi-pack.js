@@ -485,8 +485,16 @@
           var blob = localStorage.getItem(k);
           if (blob) localStorage.setItem('chr6_bk_fix538_' + Date.now(), JSON.stringify({ key: k, blob: blob, ts: Date.now() }));
           /* 新しい順3件だけ残す */
-          var bks = Object.keys(localStorage).filter(function(x){ return /^chr6_bk_fix538_\d+$/.test(x); }).sort();
-          while (bks.length > 3){ localStorage.removeItem(bks.shift()); }
+          /* ★fix579: 削除候補の列挙に Object.keys(localStorage) を使わない（正規の length+key(i) へ）。
+             ラッパが localStorage.removeItem へ代入するため、メソッド名が own property として混ざる。 */
+          var bks = [];
+          for (var bi = 0; bi < localStorage.length; bi++){
+            var bk = localStorage.key(bi);
+            if (bk && /^chr6_bk_fix538_\d+$/.test(bk)) bks.push(bk);
+          }
+          /* 末尾13桁の時刻で数値比較する（キー全体の辞書順だと桁数が違うときに壊れる） */
+          bks.sort(function(a, b){ return Number(a.slice(15)) - Number(b.slice(15)); });
+          while (bks.length > 3){ try { localStorage.removeItem(bks.shift()); } catch(e){} }
           _bk538 = true;
         } catch(e){ return 0; }   /* 控えが取れないなら書き換えない(fail-closed) */
       }

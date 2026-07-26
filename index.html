@@ -18,7 +18,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260726-fix578';
+  var BUILT = '20260726-fix579';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2849,6 +2849,9 @@ G.init();
 <script src="v292Dfix309-progression.js?cb=v292Dfix419c"></script>
 <!-- fix577: 物語削除の入口を1つに寄せる。B(gallery)/C(features clearSlot)の独自削除を停止し、
      正規サービスへ委譲する。未搭載なら削除せず fail-closed（旧経路へは戻さない）。OFF=v292Dfix577Off -->
+<!-- fix579: tombstone(墓標)のスキーマとマージ規則。純粋関数のみで、**まだ同期へ配線していない**。
+     pull barrier と push競合規則は一組で入れる必要があるため、先に形だけ固める。OFF=v292Dfix579Off -->
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix579"></script>
 <script src="v292Dfix577-delete-entry-guard.js?cb=v292Dfix577"></script>
 <script src="v292Dfix310-gallery.js?cb=v292Dfix495"></script>
 <script src="v292Dfix313-story-cards.js?cb=v292Dfix419c"></script>

@@ -470,12 +470,19 @@
    */
   var TEST_FIXTURE_RE = /^(ab\d+p\d+[A-Za-z]?|chr6_gc_probe_|__v543|__v292probe)/;
   var DIAG_RE = /^(v292Dfix\d+_log|v292Dfix\d+_bkLog|v292Dfix\d+_dropped|__v346raw|v292Dfix573_log)/;
+  /* ★fix579(GPT裁定): 画像・外見系は **review のままにせず shared-asset として分類**する。
+     実測(2026-07-26・実データ563キー)で **398件/295KB が review** に落ちており、その大半がこれだった。
+     この家族は**スロットIDを持たず、登場人物の「名前」をキーにして全スロットで共有**される。
+     つまり「どの物語のものか」が原理的に決まらないので、slotId は null のままにする。
+     ★protection は 'protected'。参照カウント（どの物語が使っているか）が無い以上、
+       消してよいと判断できないため。**参照カウントと削除は、まだ実装しない**（GPT指定）。 */
+  var SHARED_ASSET_RE = /^(chrAiAv\d*:|v292av\d*_|v292avrec_|v292avatar)/;
 
   function classifyKey(key, value){
     var k = String(key == null ? '' : key);
     var live = liveSlots();
     var r = { key: k, family: 'unknown', slotId: null, protection: 'review',
-              owner: null, why: '', policyVersion: 1 };
+              owner: null, why: '', completeness: null, policyVersion: 1 };
     if (!k){ r.why = 'キーが空'; return r; }
 
     /* ①生セーブ本体 ------------------------------------------------------ */
@@ -484,7 +491,19 @@
       r.slotId = (k === 'chr6') ? 'default' : k.replace('chr6_slot_', '');
       r.protection = 'hard';
       r.owner = 'story-lifecycle';
-      r.why = '生セーブ本体。ライフサイクル計画でのみ削除可';
+      /* ★fix579(GPT指定): 中身が壊れたJSONでも、**キーだけで生セーブと分かるなら hard のまま**。
+         「壊れているから」を理由に削除可能へ降格させない。
+         壊れた本体こそ手作業復元の対象で、勝手に消されると本当に取り返しがつかない。 */
+      var rawV = (value !== undefined) ? value : lsg(k);
+      if (rawV == null){
+        r.completeness = 'missing';
+      } else {
+        try { JSON.parse(rawV); r.completeness = 'ok'; }
+        catch(e){ r.completeness = 'broken'; }
+      }
+      r.why = (r.completeness === 'broken')
+        ? '生セーブ本体（中身は壊れているが、壊れを理由に削除可能へ降格させない）'
+        : '生セーブ本体。ライフサイクル計画でのみ削除可';
       return r;
     }
     /* ②スロット台帳・現在地 ---------------------------------------------- */
@@ -526,19 +545,28 @@
       r.why = '完全スナップショットの一部。復元の単位なので通常は消さない';
       return r;
     }
-    /* ⑤test-fixture（ユーザーデータより先に回収してよい） ------------------ */
+    /* ⑤画像・外見（スロット横断で共有される資産） -------------------------- */
+    if (SHARED_ASSET_RE.test(k)){
+      r.family = 'shared-asset';
+      r.slotId = null;                 /* ★名前キーなので、どの物語のものかは決まらない */
+      r.protection = 'protected';
+      r.owner = 'asset-store';
+      r.why = '複数の物語で共有されうる画像・外見。参照関係が不明なため削除しない';
+      return r;
+    }
+    /* ⑥test-fixture（ユーザーデータより先に回収してよい） ------------------ */
     if (TEST_FIXTURE_RE.test(k)){
       r.family = 'test-fixture'; r.protection = 'releasable'; r.owner = 'diagnostics';
       r.why = '診断・テスト用の残骸。ユーザーデータより先に回収してよい';
       return r;
     }
-    /* ⑥診断ログ・キャッシュ ----------------------------------------------- */
+    /* ⑦診断ログ・キャッシュ ----------------------------------------------- */
     if (DIAG_RE.test(k)){
       r.family = 'diagnostic-log'; r.protection = 'releasable'; r.owner = 'diagnostics';
       r.why = '診断ログ。失っても物語は復元できる';
       return r;
     }
-    /* ⑦サイドストア ------------------------------------------------------- */
+    /* ⑧サイドストア ------------------------------------------------------- */
     /* ★「生きているスロットのサイドストア」は hard。スロットが既に無いなら孤児で releasable。
        ここで live を先に見るのが要。生セーブと同じ強さで守らないと、
        物語は残っているのに登場人物や記憶だけが消える事故になる。 */
@@ -558,7 +586,7 @@
       r.why = 'もう存在しないスロットのサイドストア（孤児）';
       return r;
     }
-    /* ⑧それ以外は判断しない（消さない） ----------------------------------- */
+    /* ⑨それ以外は判断しない（消さない） ----------------------------------- */
     r.why = '形式不明。判断できないものは削除対象にしない';
     return r;
   }

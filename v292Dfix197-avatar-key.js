@@ -524,6 +524,17 @@
     canonName: canonName,   // ★fix424: 検証口(呼称→正名)
     __test_state: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; return { pk:pk, pending:(c==='pending'), dice:(c==='dice'), dataUrl:(typeof c==='string'&&c.indexOf('data:')===0), queued:(queue.indexOf(pk)>=0), hasJob:!!jobInfo[pk], jobPrompt:(jobInfo[pk]&&jobInfo[pk].prompt)||'' }; }catch(e){ return null; } },
     cachedFor: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; if(typeof c==='string'&&c.indexOf('data:')===0) return c; var p=persistGet(pk); return (p&&p.indexOf('data:')===0)?p:''; }catch(e){ return ''; } },
-    clearCache: function(){ try{ Object.keys(localStorage).forEach(function(k){ if(k.indexOf('v292av')===0) localStorage.removeItem(k); }); }catch(e){} cache={}; jobInfo={}; } };
+    /* ★fix579: 削除候補の列挙に Object.keys(localStorage) を使わない。
+       ラッパが localStorage.removeItem = wrapped と代入するため、**メソッド名が own property として
+       列挙される**（実機で removeItem/getItem/setItem が「キー」として出た）。
+       正規の length + key(i) で列挙する。★列挙してから消す（列挙中に消すと添字がずれる）。 */
+    clearCache: function(){
+      try{
+        var ks=[];
+        for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k && k.indexOf('v292av')===0) ks.push(k); }
+        ks.forEach(function(k){ try{ localStorage.removeItem(k); }catch(e){} });
+      }catch(e){}
+      cache={}; jobInfo={};
+    } };
   window.__v292Dfix199 = window.__v292Dfix197;
 })();
