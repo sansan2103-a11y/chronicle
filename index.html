@@ -18,7 +18,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260726-fix576';
+  var BUILT = '20260726-fix577';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2847,6 +2847,9 @@ G.init();
 <script src="v292Dfix307-npc-roster.js?cb=v292Dfix414"></script>
 <script src="v292Dfix308-creepy-toggle.js?cb=v292Dfix308"></script>
 <script src="v292Dfix309-progression.js?cb=v292Dfix419c"></script>
+<!-- fix577: 物語削除の入口を1つに寄せる。B(gallery)/C(features clearSlot)の独自削除を停止し、
+     正規サービスへ委譲する。未搭載なら削除せず fail-closed（旧経路へは戻さない）。OFF=v292Dfix577Off -->
+<script src="v292Dfix577-delete-entry-guard.js?cb=v292Dfix577"></script>
 <script src="v292Dfix310-gallery.js?cb=v292Dfix495"></script>
 <script src="v292Dfix313-story-cards.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix314-memory.js?cb=v292Dfix419c"></script>

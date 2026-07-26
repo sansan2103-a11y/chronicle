@@ -136,15 +136,21 @@
     try{ localStorage.setItem('chr6_active_slot', JSON.stringify(id)); }catch(e){}     // 新スロットをactiveに
     try{ location.reload(); }catch(e){}                                                // 空スロット→初期画面(既存init経路)
   }
+  /* ★fix577(2026-07-26・GPT裁定): ここは**自前で削除しない**。
+     旧実装は掃き出しが '_slot_'+id 固定だったため、
+     chr6_v292Dfix54_genderMap_"<id>" のような**引用符付きキーを取りこぼして**いた。
+     さらに控えを取らないので、消したら戻せなかった。
+     削除経路が3系統ある状態のまま新しいtombstone方式を足すと移行中に旧経路が新設計を迂回するため、
+     入口を先に塞ぐ。正規サービスが未搭載なら**削除せず fail-closed**（旧実装へは戻さない）。 */
   function deleteSave(id, card){
     if(id==='default') return;
-    if(!confirm('\u3053\u306e\u30bb\u30fc\u30d6\u3092\u5b8c\u5168\u306b\u524a\u9664\u3057\u307e\u3059\u304b\uff1f\uff08\u4e2d\u8eab\u3082\u6d88\u3048\u307e\u3059\uff09')) return;
-    writeMeta(readMeta().filter(function(x){ return x.id!==id; }));
-    try{ localStorage.removeItem('chr6_slot_'+id); }catch(e){}
-    try{ localStorage.removeItem('v292cover_seed_'+id); }catch(e){}
-    try{ Object.keys(localStorage).forEach(function(k){ if(k.indexOf('_slot_'+id)>=0) localStorage.removeItem(k); }); }catch(e){} // fix246のper-storyキー
-    var a=null; try{ a=JSON.parse(localStorage.getItem('chr6_active_slot')||'null'); }catch(e){}
-    if(a===id){ try{ localStorage.setItem('chr6_active_slot', JSON.stringify('default')); location.reload(); }catch(e){} return; }
+    var g=null; try{ g=window.__v292Dfix577; }catch(e){}
+    if(!(g && typeof g.requestDelete==='function')){
+      try{ console.warn('[v292Dfix310] 削除の入口ガード(fix577)が未搭載のため削除しません'); }catch(e){}
+      try{ alert('削除機能を安全な手順へ移行中です。ホーム画面の一覧から削除してください。'); }catch(e){}
+      return;
+    }
+    if(!g.requestDelete(id, { source:'gallery' })) return;   /* 断られたら何もしない */
     if(card&&card.parentNode) card.parentNode.removeChild(card);
   }
 

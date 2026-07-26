@@ -5938,13 +5938,23 @@
     var s = meta.find(function(x){ return x.id === id; });
     if (s && newName){ s.name = String(newName).slice(0, 40); setMeta(meta); }
   }
+  /* ★fix577(2026-07-26・GPT裁定): 本体1キーだけを消す旧実装は危険なので無効化した。
+     旧実装の問題:
+       ・サイドストア(12家族)を1つも消さない
+       ・**metaにエントリを残す**(updatedAt=null)ため、fix402c が「サーバmetaに有る」と判断して
+         doomed にせず、他端末が持つ本体が push→pull で戻ってくる（最悪の復活経路）
+     削除経路を3系統のまま新しいtombstone方式へ移行すると、旧経路が新設計を迂回するため先に塞ぐ。
+     正規サービスが未搭載なら**削除せず fail-closed**（旧実装へは戻さない）。 */
   function clearSlot(id){
     var s = findSlot(id);
-    if (!s) return;
-    lsRemove(s.key);
-    var meta = getMeta();
-    var t = meta.find(function(x){ return x.id === id; });
-    if (t){ t.updatedAt = null; setMeta(meta); }
+    if (!s) return false;
+    var g = null; try { g = window.__v292Dfix577; } catch(e){}
+    if (!(g && typeof g.requestDelete === 'function')){
+      try { console.warn('[features] 削除の入口ガード(fix577)が未搭載のため削除しません'); } catch(e){}
+      try { alert('削除機能を安全な手順へ移行中です。ホーム画面の一覧から削除してください。'); } catch(e){}
+      return false;
+    }
+    return g.requestDelete(id, { source: 'features-clearSlot' }) === true;
   }
   function slotHasData(id){
     var s = findSlot(id);
@@ -6286,7 +6296,8 @@
         var s3 = findSlot(id);
         if (!s3) return;
         if (!confirm('「' + s3.name + '」を完全削除する？ この操作は取り消せない。')) return;
-        clearSlot(id);
+        /* ★fix577: clearSlot は正規サービスへ委譲する。断られたら「削除した」と表示しない。 */
+        if (!clearSlot(id)) return;
         showToast('「' + s3.name + '」を削除');
         renderManager();
         return;

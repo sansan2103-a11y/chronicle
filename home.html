@@ -355,11 +355,36 @@
     var d = slotData(id); var t = (d&&d.turns&&d.turns.length)||0;
     if(!confirm('「'+(m.name||id)+'」（'+t+'ターン）を削除します。\nこの物語は一覧から消えます。よろしいですか？')) return;
     // P2-d: 削除直前の自動控え（UI無し・2世代）
+    /* ★fix577(2026-07-26・GPT裁定): ここの世代整理にバグがあった。
+       キーは chr6_bk_del_<id>_<ts> なので、キー全体を sort() すると **<id> が先に効き**、
+       時刻順にならない。別idの控えが混ざると「最も古いもの」ではなく
+       「idが辞書順で先のもの」が消えていた。
+       直すときの条件(GPT指定):
+         ①異なるslot IDが混在しても時刻順  ②13桁時刻をint32へ折り返さない(|0 を使わない)
+         ③時刻が読めないものは**自動削除しない**
+       ★④「各スロットの唯一の控えは消さない」は、この控えには**適用しない**。
+         chr6_bk_del_ は「削除済みの物語」の控えなので、定義上すべてが『そのスロット唯一の控え』になる。
+         ④を字義どおり当てると2世代の上限が一度も効かず、削除するたびに控えが際限なく積み上がる
+         （実装して回帰テストで踏んだ。1件60KB級なので容量逼迫と正面衝突する）。
+         ここは「直近N件だけ元に戻せる」という有限のundo枠として、古い順に落とすのが正しい。
+         ④が本来効くのは fix565 の chr6_bk_guard_/saveto_（スロットがまだ生きている控え）の方。 */
     try {
       var raw = g(slotKey(id));
       if(raw){
-        var ks=[]; for(var i=0;i<LS.length;i++){ var k=LS.key(i); if(k && k.indexOf('chr6_bk_del_')===0) ks.push(k); }
-        ks.sort(); while(ks.length>=2){ try{ LS.removeItem(ks.shift()); }catch(e){} }
+        var ks=[], perSlot={};
+        for(var i=0;i<LS.length;i++){
+          var k=LS.key(i);
+          if(!(k && k.indexOf('chr6_bk_del_')===0)) continue;
+          var m = /^chr6_bk_del_(.+)_(\d{10,})$/.exec(k);
+          if(!m) continue;                       /* ③時刻が読めない = 触らない */
+          ks.push({ key:k, slot:m[1], ts:Number(m[2]) });   /* ②Number()。|0 は13桁で壊れる */
+          perSlot[m[1]] = (perSlot[m[1]]||0) + 1;
+        }
+        ks.sort(function(a,b){ return a.ts - b.ts; });      /* ①時刻の数値順(古い順) */
+        while(ks.length >= 2){                               /* 新規1件を足して2世代に収める */
+          var v = ks.shift();                                /* 最も古いものから落とす */
+          try{ LS.removeItem(v.key); }catch(e){}
+        }
         s('chr6_bk_del_'+id+'_'+Date.now(), raw);
       }
     } catch(e){}
