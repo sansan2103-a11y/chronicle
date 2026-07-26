@@ -115,6 +115,13 @@
   localStorage.setItem = function(k, v){
     try { return prev(k, v); }
     catch(e){
+      /* ★★fix572(2026-07-26・実機で発覚): `__v543hp` は fix543 が**空き容量を測るために
+         わざと失敗させるプローブ**（二分探索で上限に当たるまで書く）。これを本物の保存失敗として
+         扱っていたため、**測るたびにこの緊急GCが発動し、__gen_ 世代と __bak を削っていた**。
+         実測: おしんの実機で `__gen_` が **0件**（事故復元の主力が食い尽くされていた）。
+         さらに「保存領域が満杯」トーストまで出るので、**空きが2MBあっても満杯に見えていた**。
+         → 診断プローブは削除の引き金にしない（削除意図の分類: probe は reclaim ではない）。 */
+      if(String(k).indexOf('__v543')===0) throw e;
       if(!isQuota(e) || String(k).indexOf('__gen_')===0 || String(k).indexOf('chr6_bk_')===0) throw e; // fix495(C3): 控え(chr6_bk_*)のために__gen_世代(事故復元の主力)を食い潰さない。fix490側の自前quota処理に委ねる
       for(var n=0;n<8;n++){
         if(!shrinkOnce()) break;
