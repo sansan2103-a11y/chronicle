@@ -156,6 +156,17 @@
   <div class="detail" id="detail"></div>
 </main>
 
+<!-- ★fix587: 物語削除の正規サービス一式。home.html は本来スクリプトを読まないページだが、
+     削除だけは「墓標→クラウド反映→ゲート経由でexact削除」の順序を守る必要があるため、
+     必要最小限（削除ゲート→分類器→スナップショット→墓標→サービス）だけを積む。
+     ★fix569 が最初でなければならない（他が localStorage をラップする前に native を捕まえる）。
+     クラウドへのpush(fix399)はここには載せない。反映できないときは
+     「一覧からは消すが実データの削除は保留」となり、アプリ側で自動的に片づく。 -->
+<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix587"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix587"></script>
+<script src="v292Dfix564-snapshot.js?cb=v292Dfix587"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix587"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix587"></script>
 <script>
 (function(){
   'use strict';
@@ -354,68 +365,35 @@
     if(!m) return;
     var d = slotData(id); var t = (d&&d.turns&&d.turns.length)||0;
     if(!confirm('「'+(m.name||id)+'」（'+t+'ターン）を削除します。\nこの物語は一覧から消えます。よろしいですか？')) return;
-    // P2-d: 削除直前の自動控え（UI無し・2世代）
-    /* ★fix577(2026-07-26・GPT裁定): ここの世代整理にバグがあった。
-       キーは chr6_bk_del_<id>_<ts> なので、キー全体を sort() すると **<id> が先に効き**、
-       時刻順にならない。別idの控えが混ざると「最も古いもの」ではなく
-       「idが辞書順で先のもの」が消えていた。
-
-       ★★fix578: さらに「先に消してから書く」順序も直した。
-       これは fix568 で根治したのと**まったく同じ型**の事故で、書込に失敗したときに
-       控えが1件も無い状態を自分で作ってしまう。**書けたことを確認してから**古いものを整理する。
-
-       固定しておく条件(GPT指定):
-         ①末尾13桁を Number で比較（|0 は13桁で壊れる）
-         ②同時刻ならキー名で決定的に順序を固定（実行のたびに結果が変わらないようにする）
-         ③時刻が読めないものは**自動削除しない**（review-only）
-         ④★新しい控えの書込が失敗したら、既存の控えを**先に減らさない**
-         ⑤chr6_bk_del_ 以外の家族を候補に混ぜない
-       ★「各スロットの唯一の控えは消さない」は、この控えには**適用しない**。
-         chr6_bk_del_ は「削除済みの物語」の退避なので、定義上すべてが『そのスロット唯一の控え』になる。
-         字義どおり当てると2世代の上限が一度も効かず、削除するたびに際限なく積み上がる
-         （実装して回帰テストで踏んだ。1件60KB級なので容量逼迫と正面衝突する）。
-         ここは「直近N件だけ戻せる」という**有限の保持枠**として、古い順に落とすのが正しい。
-         唯一の復元点を守る原則が効くのは chr6_bk_guard_/saveto_（物語がまだ生きている控え）の方。
-       ※現状は復元UI・復元コードが無いので、厳密には「undo」ではなく
-         **復元可能性を残した退避**。将来 fix564 の trash-recovery へ移行したら、
-         この chr6_bk_del_ の新規作成は停止する。 */
-    try {
-      var raw = g(slotKey(id));
-      if(raw){
-        /* ④まず書く。書けたことを読み戻して確認してから、古いものを整理する */
-        var newKey = 'chr6_bk_del_'+id+'_'+Date.now();
-        var wrote = false;
-        try { s(newKey, raw); wrote = (g(newKey) === raw); } catch(e){ wrote = false; }
-        if(!wrote){ try{ LS.removeItem(newKey); }catch(e){} }   /* 中途半端な控えを残さない */
-        if(wrote){
-          var ks=[];
-          for(var i=0;i<LS.length;i++){
-            var k=LS.key(i);
-            if(!(k && k.indexOf('chr6_bk_del_')===0)) continue;   /* ⑤他の家族を混ぜない */
-            if(k===newKey) continue;                              /* 今書いたものは候補にしない */
-            var m = /^chr6_bk_del_(.+)_(\d{10,})$/.exec(k);
-            if(!m) continue;                                      /* ③時刻が読めない = 触らない */
-            ks.push({ key:k, ts:Number(m[2]) });                  /* ①Number()。|0 は13桁で壊れる */
-          }
-          /* ①時刻の古い順。②同時刻ならキー名で決定的に */
-          ks.sort(function(a,b){ return (a.ts - b.ts) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0); });
-          while(ks.length >= 2){                                  /* 新規1件と合わせて2世代に収める */
-            var v = ks.shift();
-            try{ LS.removeItem(v.key); }catch(e){}
-          }
-        }
+    /* ★fix587: 削除の実行は**正規サービス**へ委譲する。
+       ここで自前に消していた頃の問題:
+         ・墓標(tombstone)が無いのでクラウドへ削除が伝わらず、次のpullで復活していた
+         ・退避が本体1キーだけで、サイドストア（12家族）が戻せなかった
+         ・idの部分一致で掃いていたので、範囲が経路ごとにバラバラだった
+       正規サービスは「再読込→exact key確定→復元セット作成→検証→墓標→クラウドへ反映確認→
+       ゲート経由でexact削除」の順で行う。**物理削除より先に墓標をクラウドへ確定させる**のが要。
+       未搭載なら**削除しない**（旧実装へは戻さない）。 */
+    var svc = null; try { svc = window.__chronicleStoryLifecycle; } catch(e){}
+    if(!(svc && typeof svc.requestDelete === 'function')){
+      alert('削除機能を安全な手順へ移行中です。少し待ってからもう一度お試しください。');
+      return;
+    }
+    var p = svc.requestDelete(id, { source:'home' });
+    Promise.resolve(p).then(function(r){
+      if(!r || !r.ok){
+        alert('削除できませんでした。データはそのまま残っています。\n理由: ' + ((r && r.code) || '不明'));
+        return;
       }
-    } catch(e){}
-    writeMeta(readMeta().filter(function(x){ return String(x.id)!==id; }));
-    try { LS.removeItem(slotKey(id)); } catch(e){}
-    try { LS.removeItem('v292cover_seed_'+id); } catch(e){}
-    try {
-      var rm=[]; for(var j=0;j<LS.length;j++){ var kk=LS.key(j); if(kk && kk.indexOf(id)>=0 && kk.indexOf('chr6_bk_')!==0 && kk.indexOf('__gen_')!==0) rm.push(kk); }
-      rm.forEach(function(k){ try{ LS.removeItem(k); }catch(e){} });
-    } catch(e){}
-    if(SEL===id) SEL=null;
-    render();
+      if(r.code === 'pending-cloud'){
+        alert('一覧からは消しました。\nただし今はクラウドへ反映できていないため、実データの削除は保留しています。\n通信できるようになったら自動で片づきます。');
+      } else if(r.code === 'partial'){
+        alert('一覧からは消しました。一部のデータが残っています（安全のため無理に消していません）。');
+      }
+      if(SEL===id) SEL=null;
+      render();
+    });
   }
+
   function renameStory(id){
     var meta = readMeta();
     for(var i=0;i<meta.length;i++){

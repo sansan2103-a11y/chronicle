@@ -24,7 +24,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260726-fix585';
+  var BUILT = '20260726-fix587';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2857,6 +2857,11 @@ G.init();
 <!-- fix579: tombstone(墓標)のスキーマとマージ規則。純粋関数のみで、**まだ同期へ配線していない**。
      pull barrier と push競合規則は一組で入れる必要があるため、先に形だけ固める。OFF=v292Dfix579Off -->
 <script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix579"></script>
+<!-- fix587: 物語削除の正規サービス。UIは意思表示を受け取るだけで、認可と手順はここが持つ。
+     削除の順序: 再読込→exact key確定→復元セット作成→検証→墓標→クラウドへ反映確認→ゲート経由でexact削除。
+     ★物理削除より先に墓標をクラウドへ確定させる。OFF=v292Dfix587Off -->
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix587"></script>
+
 
 <script src="v292Dfix577-delete-entry-guard.js?cb=v292Dfix577"></script>
 <script src="v292Dfix310-gallery.js?cb=v292Dfix495"></script>
@@ -2911,7 +2916,7 @@ G.init();
 <script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=v292Dfix396"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
-<script src="v292Dfix399-cloudsync.js?cb=v292Dfix585"></script>
+<script src="v292Dfix399-cloudsync.js?cb=v292Dfix587"></script>
   <script src="v292Dfix400-img-url.js?cb=v292Dfix400d"></script>
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=v292Dfix336"></script>
 <script src="v292Dfix338-artstyle.js?cb=v292Dfix484"></script>

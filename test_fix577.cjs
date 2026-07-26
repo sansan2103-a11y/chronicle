@@ -40,153 +40,43 @@ function mkWin(seed, opts){
   return w;
 }
 
-/* ================= (A) sort バグ ========================================= */
-console.log('\n== (A1) ソース: 時刻を数値で比較している ==');
+/* ================= (A) 旧 chr6_bk_del_ 退避は引退した ===================== */
+/* ★2026-07-26 fix587で置き換わった。
+   ここには元々「chr6_bk_del_ の世代整理(sortバグ)」のテストが13件あった。
+   fix577でsortバグを直したが、fix587で home.html の delStory が**正規サービスへ委譲**され、
+   この退避方式そのものが無くなったため、対象コードが存在しない。
+
+   ★テストを黙って消さない。何がどこへ移ったかを固定する。
+     旧: chr6_bk_del_<id>_<ts>  … 本体1キーだけ・2世代・復元UIなし・サイドストアは戻せない
+     新: fix564 の完全スナップショット … 本体＋サイドストアを一組・hash検証つき・復元経路あり
+   GPTも「将来fix564のtrash-recoveryへ移行後、旧chr6_bk_del_の新規作成を停止する」と指定していた。
+   移った先の検証は test_fix587.cjs（49件）が持っている。 */
+console.log('\n== (A) ★旧 chr6_bk_del_ 退避の引退を固定する ==');
 {
   const i = HOME.indexOf('function delStory');
   const body = HOME.slice(i, HOME.indexOf('function renameStory'));
-  ok('★キー全体の素の sort() を使っていない', !/ks\.sort\(\);/.test(body), body.slice(0,80));
-  ok('★時刻の数値順で並べている', /ks\.sort\(function\(a,b\)\{\s*return \(a\.ts - b\.ts\)/.test(body));
-  ok('★Number() を使う(|0 は13桁で壊れる)', /Number\(m\[2\]\)/.test(body));
-  ok('★時刻の切り捨て(|0)で13桁を壊していない',
-     !/Number\([^)]*\)\s*\|\s*0/.test(body) && !/m\[2\]\s*\|\s*0/.test(body));
-  ok('★時刻が読めないキーは触らない(正規表現で弾く)', /if\(!m\) continue;/.test(body));
-  ok('★古い順に落としている', /ks\.shift\(\)/.test(body));
-  ok('★★同時刻でも決定的な順序になる(キー名でtie-break)',
-     /\(a\.ts - b\.ts\) \|\| \(a\.key < b\.key/.test(body));
-  ok('★★書けたことを読み戻して確認してから整理する', /wrote = \(g\(newKey\) === raw\)/.test(body));
-  ok('★今書いた控えを整理候補にしない', /if\(k===newKey\) continue;/.test(body));
-  ok('★★唯一控え保護を適用しない理由がコメントに書いてある(将来の誤修正を防ぐ)',
-     body.indexOf('定義上すべてが') > 0 && body.indexOf('有限の保持枠') > 0);
-  ok('★「undoではなく退避」と正確に書いてある(復元UIがまだ無いため)',
-     body.indexOf('復元可能性を残した退避') > 0);
-}
-
-/* delStory の控え整理部分だけを切り出して実際に走らせる */
-function runTrim(seedKeys, newId, opts){
-  opts = opts || {};
-  const store = {};
-  seedKeys.forEach(k => { store[k] = 'v_' + k; });
-  store['chr6_slot_' + newId] = 'NEWRAW';
-  const LS = {
-    getItem: k => Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null,
-    setItem: (k, v) => {
-      /* quota:true なら新しい控えの書込だけ失敗させる（既存キーの更新は通す） */
-      if (opts.quota && !Object.prototype.hasOwnProperty.call(store, k)){
-        const e = new Error('q'); e.name = 'QuotaExceededError'; throw e;
-      }
-      store[k] = String(v);
-    },
-    removeItem: k => { delete store[k]; },
-    key: i => { const a = Object.keys(store); return i < a.length ? a[i] : null; },
-    get length(){ return Object.keys(store).length; }
-  };
-  const i = HOME.indexOf('    // P2-d:');
-  const j = HOME.indexOf('    writeMeta(readMeta()', i);
-  const src = HOME.slice(i, j);
-  const ctx = { LS, g: k => LS.getItem(k), s: (k, v) => LS.setItem(k, v),
-                slotKey: id => 'chr6_slot_' + id, id: newId, Date, Number };
-  vm.createContext(ctx);
-  vm.runInContext(src, ctx, { filename: 'home.html' });
-  return { store, left: Object.keys(store).filter(k => k.indexOf('chr6_bk_del_') === 0).sort() };
-}
-
-console.log('\n== (A2) 実挙動: 異なるslot IDが混在しても「最も古い」が消える ==');
-{
-  /* 旧実装なら辞書順で 'aaa' が先に消える。正しくは時刻の古い 'zzz_...000' が消えるべき。 */
-  const r = runTrim([
-    'chr6_bk_del_zzz_1780000000000',   /* ← 最も古い。これが消えるべき */
-    'chr6_bk_del_aaa_1785000000000'    /* ← 新しい。残すべき */
-  ], 'new1');
-  ok('★★時刻の古い方(zzz)が消えた', r.left.indexOf('chr6_bk_del_zzz_1780000000000') < 0, r.left);
-  ok('★★時刻の新しい方(aaa)は残った', r.left.indexOf('chr6_bk_del_aaa_1785000000000') >= 0, r.left);
-  ok('新しい控えが書かれた', r.left.some(k => k.indexOf('chr6_bk_del_new1_') === 0), r.left);
-  ok('2世代に収まっている', r.left.length === 2, r.left);
-}
-
-console.log('\n== (A3) 13桁時刻が壊れない(int32折り返しをしていない) ==');
-{
-  /* |0 を使うと 1780000000000|0 は負の小さい値になり、順序が壊れる */
-  const r = runTrim([
-    'chr6_bk_del_s1_1780000000000',
-    'chr6_bk_del_s1_1785000000000'
-  ], 'new2');
-  ok('★★古い方が消えた(13桁が正しく比較されている)',
-     r.left.indexOf('chr6_bk_del_s1_1780000000000') < 0, r.left);
-  ok('新しい方は残った', r.left.indexOf('chr6_bk_del_s1_1785000000000') >= 0, r.left);
-}
-
-console.log('\n== (A4) 時刻が読めないキーは自動削除しない ==');
-{
-  const r = runTrim([
-    'chr6_bk_del_broken',                 /* 時刻なし */
-    'chr6_bk_del_s1_notanumber',          /* 時刻が数字でない */
-    'chr6_bk_del_s1_1780000000000',
-    'chr6_bk_del_s2_1785000000000'
-  ], 'new3');
-  ok('★★時刻なしは残る', r.left.indexOf('chr6_bk_del_broken') >= 0, r.left);
-  ok('★★時刻が数字でないものは残る', r.left.indexOf('chr6_bk_del_s1_notanumber') >= 0, r.left);
-}
-
-console.log('\n== (A5) ★2世代の上限が実際に効く(際限なく積み上がらない) ==');
-{
-  /* ここは設計判断を固定する。chr6_bk_del_ は「削除済み物語」の控えなので、
-     『各スロットの唯一の控えは消さない』を字義どおり当てると上限が一度も効かず、
-     削除のたびに60KB級の控えが際限なく積み上がる（実装時に回帰テストで踏んだ）。
-     有限のundo枠として、古い順に落とすのが正しい。 */
-  const r = runTrim([
-    'chr6_bk_del_s1_1780000000000',
-    'chr6_bk_del_s2_1781000000000'
-  ], 'new4');
-  ok('★★2世代に収まる(上限が効く)', r.left.length === 2, r.left);
-  ok('★★最も古い s1 が落ちる', r.left.indexOf('chr6_bk_del_s1_1780000000000') < 0, r.left);
-  ok('新しい控えは書かれる', r.left.some(k => k.indexOf('chr6_bk_del_new4_') === 0), r.left);
-}
-{
-  /* 5件溜まっていても2件に収束する */
-  const r = runTrim([
-    'chr6_bk_del_a_1780000000000', 'chr6_bk_del_b_1781000000000',
-    'chr6_bk_del_c_1782000000000', 'chr6_bk_del_d_1783000000000',
-    'chr6_bk_del_e_1784000000000'
-  ], 'new6');
-  ok('★★5件からでも2世代へ収束する', r.left.length === 2, r.left);
-  ok('★残るのは最新の e と新規', r.left.indexOf('chr6_bk_del_e_1784000000000') >= 0, r.left);
-}
-{
-  /* 同じスロットが2件あるなら、古い方は消してよい */
-  const r = runTrim([
-    'chr6_bk_del_s1_1780000000000',
-    'chr6_bk_del_s1_1781000000000'
-  ], 'new5');
-  ok('同一スロットに2件あれば古い方は消える',
-     r.left.indexOf('chr6_bk_del_s1_1780000000000') < 0, r.left);
+  ok('★★home.html が新しい chr6_bk_del_ を作らなくなった', body.indexOf('chr6_bk_del_') < 0, body.slice(0, 300));
+  ok('★★代わりに正規サービスへ委譲している', /requestDelete\(id,\s*\{\s*source:'home'\s*\}\)/.test(body));
+  ok('★delStory 内で自前の removeItem をしていない', body.indexOf('removeItem') < 0);
+  ok('★サービス未搭載なら削除しない（旧実装へ戻さない）',
+     /requestDelete === 'function'/.test(body) && /return;/.test(body));
+  ok('★★移行の理由がコメントに残っている（将来の誤解を防ぐ）',
+     body.indexOf('墓標') > 0 && body.indexOf('サイドストア') > 0, body.slice(0, 200));
+  /* 置き換え先が実在することも確かめる（引退＝機能の穴、にしない） */
+  ok('★★置き換え先(fix587の復元セット)が存在する',
+     fs.existsSync(path.join(__dirname, 'v292Dfix587-story-lifecycle.js')));
+  ok('★★置き換え先のテストが存在する',
+     fs.existsSync(path.join(__dirname, 'test_fix587.cjs')));
 }
 
 /* ================= (B) 削除入口ガード ==================================== */
-console.log('\n== (A6) ★★書込に失敗したら既存の控えを先に減らさない(fix568と同じ型の事故) ==');
-{
-  /* 旧実装は「先に消してから書く」なので、書込に失敗すると控えが1件も無い状態を自分で作る。 */
-  const r = runTrim([
-    'chr6_bk_del_a_1780000000000',
-    'chr6_bk_del_b_1781000000000'
-  ], 'newQ', { quota: true });
-  ok('★★既存の控えが2件とも残っている', r.left.length === 2, r.left);
-  ok('★★具体的に a が残る', r.left.indexOf('chr6_bk_del_a_1780000000000') >= 0, r.left);
-  ok('★★具体的に b が残る', r.left.indexOf('chr6_bk_del_b_1781000000000') >= 0, r.left);
-  ok('★中途半端な新しい控えを残さない',
-     !r.left.some(k => k.indexOf('chr6_bk_del_newQ_') === 0), r.left);
-}
-
-console.log('\n== (A7) 同時刻の控えでも結果が決定的 ==');
-{
-  const run = () => runTrim([
-    'chr6_bk_del_zzz_1780000000000',
-    'chr6_bk_del_aaa_1780000000000'   /* ← 同じ時刻 */
-  ], 'newT').left.filter(k => k.indexOf('chr6_bk_del_newT_') !== 0).sort().join(',');
-  const a = run(), b = run(), c = run();
-  ok('★★3回実行して同じ結果になる', a === b && b === c, { a, b, c });
-  ok('★キー名の小さい方(aaa)が先に落ちる', a.indexOf('chr6_bk_del_aaa_') < 0, a);
-}
+/* ★(A6)(A7) も同じ理由で引退。
+   「書込に失敗したら既存の控えを先に減らさない」「同時刻でも決定的」という**性質そのもの**は
+   捨てていない。fix564のスナップショットは
+     ・作成 → **read-back と hash 一致を検証** → 検証が通らなければ削除しない（＝先に減らさない）
+     ・IDに作成時刻を含み、同一IDは作らない（＝決定的）
+   という形で満たしており、test_fix587.cjs の (2) が
+   「復元セットが作れない/検証に落ちたら絶対に消さない」として固定している。 */
 
 console.log('\n== (B1) ソース: B/C が自前で削除していない ==');
 {

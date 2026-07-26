@@ -483,7 +483,23 @@
     if (!pkg || pkg.schema !== SCHEMA) return Promise.reject(new Error('セーブ形式が不明です'));
     if (!backupBeforeApply(pkg)) return Promise.reject(new Error('安全バックアップを作成できないため取り込みを中止しました(端末の保存容量不足)'));   // fix495(C1): fail-closed(GPT裁定)
     var expectedIdb = Object.keys(pkg.idb || {});   // fix399i: 検証用に期待キーを控える
-    try { Object.keys(pkg.ls || {}).forEach(function(k){ localStorage.setItem(k, pkg.ls[k]); }); } catch(e){ return Promise.reject(e); }
+    /* ★fix587(T2 pull barrier): 墓標が立っているスロットのキーは**書き戻さない**。
+       ここを通さないと「削除したのに、クラウドの古い本体が次のpullで戻ってくる」が残る。
+       正規サービスが居なければ従来どおり全部書き戻す（fail-open。取り込み自体は止めない）。 */
+    var incoming = pkg.ls || {};
+    try {
+      var svc = window.__chronicleStoryLifecycle;
+      if (svc && typeof svc.filterIncoming === 'function'){
+        var f = svc.filterIncoming(incoming);
+        if (f && f.ls){
+          incoming = f.ls;
+          if (f.blocked && f.blocked.length){
+            try { console.warn('[v292Dfix399] 墓標により ' + f.blocked.length + ' キーを書き戻しませんでした'); } catch(e){}
+          }
+        }
+      }
+    } catch(e){}
+    try { Object.keys(incoming).forEach(function(k){ localStorage.setItem(k, incoming[k]); }); } catch(e){ return Promise.reject(e); }
     return idbWriteAll(pkg.idb || {}).then(function(writeResult){
       try { window.__v292Dfix399_lastApply = { expected: expectedIdb, writeResult: writeResult, ts: Date.now() }; } catch(e){}
       try { if (pkg.activeSlot) localStorage.setItem('chr6_active_slot', JSON.stringify(pkg.activeSlot)); } catch(e){}
