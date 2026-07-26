@@ -268,11 +268,24 @@
     return true;
   }
   function arm(){ try { install(); } catch(e){ S.wrapperErrors++; } }
+  /* ★★fix573(2026-07-26・実機で発覚): 保険の `setTimeout(arm, 3000)` が
+     **216本のスクリプトの解析が終わる前に発火**し、fix346(142番目)/fix472(200番目)より
+     **先に** outer を入れてしまっていた。結果 `isOutermost:false` となり、
+     fix472 が握りつぶす削除（保護アイコンの削除）を outer が観測できない状態だった。
+     → 保険は「解析中は待つ」ポーリングにする。最後の砦として60秒で諦めて入れる。 */
+  function armWhenParsed(){
+    if (S.outerInstalled) return;
+    var st = null; try { st = document.readyState; } catch(e){}
+    if (st !== 'loading'){ arm(); return; }
+    if (++lateTries > 120){ arm(); return; }        /* 60秒の保険 */
+    try { setTimeout(armWhenParsed, 500); } catch(e){}
+  }
+  var lateTries = 0;
   try {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arm, { once:true });
     else setTimeout(arm, 0);
     window.addEventListener('load', arm, { once:true });
-    setTimeout(arm, 3000);
+    setTimeout(armWhenParsed, 3000);
   } catch(e){ setTimeout(arm, 0); }
 
   /* ================= canary（生存証明） ========================================= */
