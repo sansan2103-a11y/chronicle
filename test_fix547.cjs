@@ -143,9 +143,16 @@ console.log('\n== バッチ2B: 保存ラッパ組(fix399 / fix402 / fix490) ==')
   ok('★fix399: S.save のラップと冪等フラグに触れていない', /S\.__f399wrapped = true/.test(s399) && /S\.save = function/.test(s399));
   ok('★fix402: S.save のラップと冪等フラグに触れていない', /S\.__f402wrapped = true/.test(s402) && /S\.save = function/.test(s402));
   ok('★fix490: setItem ラッパの構造と __f490 に触れていない', /wrapped\.__f490 = true/.test(s490) && /localStorage\.setItem = wrapped/.test(s490));
-  ok('★fix399: 世代trimの形が保たれている', /while \(bks\.length > 1\)/.test(s399));
-  ok('★fix399: quota時の1回再試行が保たれている', /bks2\[0\]/.test(s399));
-  ok('★fix399: 控えが取れなければ false のまま', /catch\(e2\)\{ return false; \}/.test(s399));
+  /* ★2026-07-26 に書き換えた。ここは元々 fix399 の**旧trimの形**(while(bks.length>1) / bks2[0] /
+     catch(e2){return false} )をソースの正規表現で固定していたが、fix568 が
+     **まさにその形をバグとして根治した**ため、テストが修正を妨げていた。
+     形ではなく fix568 が確立した**契約**を固定する。振る舞いの検証は test_fix544 が持つ。 */
+  ok('★fix399: 書く前に保護対象(読める完全控えの最新1件)を決めている(fix568)',
+     /readableFullDump/.test(s399) && /var keep = readable\.length/.test(s399));
+  ok('★fix399: 保護対象は整理の対象外', /if \(cur\[i\] === keep\) continue;/.test(s399));
+  ok('★fix399: 容量不足なら控えを犠牲にせず取り込みを中止する(fail-closed)',
+     /abortPull/.test(s399) && /return false/.test(s399));
+  ok('★fix399: 2世代の約束は維持されている', /while \(fin\.length > 2\)/.test(s399));
 }
 
 console.log('\n== バッチ3: 1件ずつ判断したもの(fix376 / fix445 / fix66) ==');

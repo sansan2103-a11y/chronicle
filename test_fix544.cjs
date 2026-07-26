@@ -83,15 +83,41 @@ console.log('\n== 実データの棚卸し結果を固定する ==');
 {
   /* 2026-07-25 の実測: 11件すべて 07-06〜07-16 作成 = fix495(07-19)より前。07-19以降は0件。
      つまり「trimが壊れている」のではなく「pullが走っていないので trim が実行されていない」。
-     この結論の前提(trimコードが listBk→shift で古い方から消す形になっていること)を固定する。 */
+     ★2026-07-26 に書き換えた。ここは元々「trimコードが listBk→shift で古い方から消す形か」を
+     **ソースの正規表現で**固定していたが、fix568 がまさにその形(=先に消してから書く)を
+     **バグとして根治した**ため、テストが修正を妨げていた。
+     形ではなく**契約(振る舞い)**を固定する。 */
   const src = fs.readFileSync(path.join(__dirname, 'v292Dfix399-cloudsync.js'), 'utf8');
-  const i = src.indexOf('function backupBeforeApply');
-  const body = src.slice(i, i + 1800);
-  ok('★古い方から消す(sort→shift)形になっている',
-     /bks\.sort\(\)/.test(body) && /while \(bks\.length > 1\)[\s\S]{0,80}bks\.shift\(\)/.test(body));
-  ok('★quota時は同系統をもう1件消して1回だけ再試行する', /bks2\[0\]/.test(body));
-  ok('★それでも書けなければ false', /catch\(e2\)\{ return false; \}/.test(body));
   ok('検証口が出ている(回帰テストできる)', src.indexOf('backupBeforeApply: backupBeforeApply') > 0);
+}
+
+console.log('\n== ★fix568の契約: 唯一の完全控えを先に消さない ==');
+{
+  /* 読める完全控え(=中に本体セーブが入っている丸ごと控え)を1件だけ置く。
+     ここから容量不足で新しい控えが書けない状況を作る。
+     旧実装は「書く前に1件まで削る」ので**この唯一の控えを先に消して**しまい、
+     さらに書き込みにも失敗して**控えが0件**になっていた。 */
+  const only = JSON.stringify({ activeSlot: 'default', ls: { 'chr6': '{"turns":[{},{}]}' } });
+  const K = 'chr6_bk_cloudsync_1780000000000';
+  const w = mk([{ k: K, v: only }], 'tight');
+  ok('前提: 唯一の完全控えがある', listBk(w).length === 1, listBk(w));
+  const r = w.__v292Dfix399x.backupBeforeApply(PKG);
+  ok('★容量不足なら false を返す(取り込みを中止＝fail-closed)', r === false, r);
+  ok('★★唯一の完全控えは残っている(先に消さない)', w.__store[K] === only, listBk(w));
+}
+{
+  /* 余剰があるときは、余剰だけを整理して新しい控えを書けること(整理そのものは止めない) */
+  const full = JSON.stringify({ activeSlot: 'default', ls: { 'chr6': '{"turns":[{},{}]}' } });
+  const seeds = [
+    { k: 'chr6_bk_cloudsync_1780000000000', v: 'junk-old' },
+    { k: 'chr6_bk_cloudsync_1780000001000', v: full }
+  ];
+  const w = mk(seeds);
+  const r = w.__v292Dfix399x.backupBeforeApply(PKG);
+  ok('★余剰があれば控えを書ける', r === true, r);
+  const after = listBk(w);
+  ok('★2世代の約束は維持される', after.length <= 2, after);
+  ok('★新しい控えが実在する', after.some(k => w.__store[k] && w.__store[k].indexOf('"ls"') >= 0), after);
 }
 
 console.log('\n---------------------------------------------');
