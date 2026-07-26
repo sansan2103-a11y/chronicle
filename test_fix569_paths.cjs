@@ -26,20 +26,28 @@ const read = f => fs.readFileSync(path.join(__dirname, f), 'utf8');
    ★vm の filename を実ファイル名にするので、スタックは実機と同じ形になる。 */
 function mkCtx(opts){
   opts = opts || {};
-  const store = Object.assign({}, opts.seed || {});
-  let used = 0; Object.keys(store).forEach(k => used += k.length + store[k].length);
+  const store = {};
+  let used = 0;
   const cap = opts.cap == null ? Infinity : opts.cap;
+  /* ★モックは setItem したキーが `Object.keys(localStorage)` にも見えること（本物の Storage の振る舞い）。
+     忘れると fix562 のように Object.keys で走査するコードが「何も無い」と判断して素通りする。 */
+  function expose(k){
+    if (['getItem','setItem','removeItem','key','length'].indexOf(k) >= 0) return;
+    try { Object.defineProperty(ls, k, { configurable:true, enumerable:true,
+      get(){ return store[k]; }, set(v){ store[k] = String(v); } }); } catch(e){}
+  }
   const ls = {
     getItem: k => Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null,
     setItem(k, v){
       v = String(v);
       const add = k.length + v.length - (store[k] ? store[k].length : 0);
       if (used + add > cap){ const e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; }
-      used += add; store[k] = v;
+      used += add; store[k] = v; expose(k);
     },
-    removeItem(k){ if (store[k] != null){ used -= k.length + store[k].length; delete store[k]; } },
+    removeItem(k){ if (store[k] != null){ used -= k.length + store[k].length; delete store[k]; try { delete ls[k]; } catch(e){} } },
     key: i => Object.keys(store)[i] === undefined ? null : Object.keys(store)[i]
   };
+  Object.keys(opts.seed || {}).forEach(k => { store[k] = String(opts.seed[k]); used += k.length + store[k].length; expose(k); });
   Object.defineProperty(ls, 'length', { get(){ return Object.keys(store).length; } });
   const el = { querySelectorAll: () => [], querySelector: () => null, addEventListener(){}, appendChild(){},
                setAttribute(){}, style: {}, remove(){}, classList: { add(){}, remove(){}, contains: () => false } };
@@ -191,6 +199,74 @@ console.log('\n=========== 総合：7経路すべてが「観測済み」にな�
   ok('★カウンタ整合（inner/outer とも）', st.counters.innerOk && st.counters.outerOk, st.counters);
   ok('★postChecks === outerRequests', st.postChecks === st.outerRequests, [st.postChecks, st.outerRequests]);
   ok('★ロード順は検証済み', st.loadOrderVerified === true, st.markersAtLoad);
+}
+
+console.log('\n=========== ★fix574: 実際に「止まる／止めない」を経路別に確認 ===========');
+{
+  /* 保護対象を作る: 生きているスロット1件＋その唯一の復元可能な控え1件 */
+  function envWithProtected(){
+    const story = JSON.stringify({ turns: [{}, {}, {}] });
+    const seed = { 'chr6_slot_smP': story, 'chr6_bk_fix469_smP_1780000000000': story };
+    const w = mkCtx({ seed, load: ['v292Dfix562-backup-inventory.js'] });
+    return w;
+  }
+  const K = 'chr6_bk_fix469_smP_1780000000000';
+
+  /* ① retention の経路（fix490 trimBackups）→ ★止まる */
+  {
+    const w = envWithProtected();
+    const prot = w.__v292Dfix562.protectedSet();
+    const isProt = Object.keys(prot).some(s2 => prot[s2].key === K);
+    ok('前提: この控えは保護対象', isProt, Object.keys(prot).map(s2 => prot[s2].key));
+    vm.runInContext('function trimBackups(){ localStorage.removeItem(' + JSON.stringify(K) + '); } trimBackups();',
+      vm.createContext(w), { filename: 'v292Dfix490-slot-write-guard.js' });
+    const st = w.__v292Dfix569.stats();
+    ok('★★保護対象の控えが残っている（削除を止めた）', w.__store[K] !== undefined, Object.keys(w.__store));
+    ok('★拒否を1件計上', st.denied === 1, st.denied);
+    ok('経路も記録される', st.deniedByPath.fix490Trim === 1, st.deniedByPath);
+  }
+
+  /* ② ループする経路（fix399）→ ★絶対に止めない（空回りを作らない） */
+  {
+    const w = envWithProtected();
+    vm.runInContext('localStorage.removeItem(' + JSON.stringify(K) + ');',
+      vm.createContext(w), { filename: 'v292Dfix399-cloudsync.js' });
+    const st = w.__v292Dfix569.stats();
+    ok('★★fix399 は止めない（実際に消える）', w.__store[K] === undefined, Object.keys(w.__store));
+    ok('拒否は0件', st.denied === 0, st.denied);
+    ok('★「ループするので止めなかった」と記録される', st.notDeniedBecausePathLoops === 1, st.notDeniedBecausePathLoops);
+  }
+
+  /* ③ quota の経路（fix490 dropOldestGuardBackup）→ ★絶対に止めない */
+  {
+    const w = envWithProtected();
+    vm.runInContext('function dropOldestGuardBackup(){ localStorage.removeItem(' + JSON.stringify(K) + '); } dropOldestGuardBackup();',
+      vm.createContext(w), { filename: 'v292Dfix490-slot-write-guard.js' });
+    const st = w.__v292Dfix569.stats();
+    ok('★fix490Quota は止めない', w.__store[K] === undefined);
+    ok('拒否は0件', st.denied === 0, st.denied);
+  }
+
+  /* ④ 保護対象でない控えは、retention の経路でも普通に消える */
+  {
+    const w = envWithProtected();
+    const SPARE = 'chr6_bk_fix469_smP_1780000000001';
+    w.localStorage.setItem(SPARE, 'spare');
+    vm.runInContext('function trimBackups(){ localStorage.removeItem(' + JSON.stringify(SPARE) + '); } trimBackups();',
+      vm.createContext(w), { filename: 'v292Dfix490-slot-write-guard.js' });
+    ok('★余剰の控えは普通に消える（機能を殺していない）', w.__store[SPARE] === undefined);
+    ok('拒否は0件', w.__v292Dfix569.stats().denied === 0);
+  }
+
+  /* ⑤ 拒否OFFなら止めない */
+  {
+    const w = envWithProtected();
+    w.localStorage.setItem('v292Dfix574DenyOff', '1');
+    vm.runInContext('function trimBackups(){ localStorage.removeItem(' + JSON.stringify(K) + '); } trimBackups();',
+      vm.createContext(w), { filename: 'v292Dfix490-slot-write-guard.js' });
+    ok('★OFF なら従来どおり消える', w.__store[K] === undefined);
+    ok('拒否は0件', w.__v292Dfix569.stats().denied === 0);
+  }
 }
 
 console.log('\n---------------------------------------------');

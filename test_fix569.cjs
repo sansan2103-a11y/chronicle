@@ -341,6 +341,57 @@ console.log('== 18. ★ロード順マーカーに localStorage 由来のもの�
   eq('マーカーは空', s.markersAtLoad.length, 0);
 }
 
+console.log('== 19. ★fix574: retention の経路だけ、保護対象の削除を止める ==');
+{
+  /* スタックにファイル名が無いと unknownPath になるので、_pathOf を通る形で直接検証する */
+  const e = makeEnv();
+  const K = 'chr6_bk_fix469_smA_1780000000000';
+  e.ls.setItem(K, 'the only restore point');
+  stubFix562(e.win, [K]);
+  e.f.install();
+  /* fix490 trimBackups から来た削除を模擬（実ファイル名は node の new Function では出ないので
+     キー形＋関数名でスタックを作れないため、_pathOf の判定と同じ入力で経路を確定させる） */
+  const p = e.f._pathOf(K, 'trimBackups at v292Dfix490-slot-write-guard.js:80');
+  eq('前提: この経路は fix490Trim', p.id, 'fix490Trim');
+  ok('前提: 拒否できる経路に入っている', !!e.f._denyable().fix490Trim);
+  ok('前提: fix399 と fix490Quota は拒否しない側', !!e.f._looping().fix399 && !!e.f._looping().fix490Quota);
+  const s = e.f.stats();
+  eq('拒否は既定で有効', s.denyEnabled, true);
+  ok('止める経路の一覧が出る', s.denyablePaths.length === 4, s.denyablePaths);
+  ok('絶対に止めない経路の一覧が出る', s.neverDeniedPaths.length === 2, s.neverDeniedPaths);
+}
+
+console.log('== 20. ★分類器が居ないときは絶対に拒否しない ==');
+{
+  const e = makeEnv();
+  e.f.install();                                    /* fix562 スタブ無し＝unknown */
+  e.ls.setItem('chr6_bk_x_1', 'v');
+  e.ls.removeItem('chr6_bk_x_1');
+  const s = e.f.stats();
+  eq('unknown として数える', s.unknown, 1);
+  eq('★拒否は0件', s.denied, 0);
+  eq('実際に消えている', e.ls.getItem('chr6_bk_x_1'), null);
+}
+
+console.log('== 21. ★拒否OFFスイッチ ==');
+{
+  const e = makeEnv();
+  e.ls.setItem('v292Dfix574DenyOff', '1');
+  e.f.install();
+  const s = e.f.stats();
+  eq('denyEnabled=false', s.denyEnabled, false);
+}
+
+console.log('== 22. ★canary は拒否されない（生存証明が壊れない） ==');
+{
+  const e = makeEnv();
+  stubFix562(e.win, []);
+  e.f.install();
+  const r = e.f.selfTest();
+  ok('selfTest ok=true（保護canaryも実際に消える）', r.ok === true, r);
+  eq('拒否0件', e.f.stats().denied, 0);
+}
+
 console.log('');
 console.log('pass=' + pass + ' fail=' + fail);
 process.exit(fail ? 1 : 0);

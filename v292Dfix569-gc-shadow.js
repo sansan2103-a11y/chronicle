@@ -32,6 +32,19 @@
  *   wouldDeny=0 が言えるのは「観測できた経路・観測期間で0件だった」だけ。
  *   **分母(outerRequests / byPath)** と **生存証明(canary)** を必ず併記する。
  *
+ * ■★fix574(569b・2026-07-26): 「補助防壁」としての拒否を入れた
+ *   GPT裁定「569b＝既知経路の明示ゲート化。**グローバル拒否は補助防壁**」に沿う。
+ *   ここで拒否するのは **retention（世代整理）の4経路だけ**:
+ *     fix490Trim / fix402Retention / fix277 / fix264b
+ *   これらは「消すのを諦めても、通常処理は続けられる」（GPT I2）。
+ *   ★**fix399 と fix490Quota は絶対に拒否しない**。理由は実コードで確認済み:
+ *     fix399 は `while (r === 'quota'){ if(!dropOneSpare()) return false; ... }` で、
+ *     `dropOneSpare()` は**削除できたかを確認せずに true を返す**。拒否すると同じ候補を
+ *     選び直して**空回りし続ける**（GPTのシナリオ1「拒否が呼び出し元へ伝わらない」の実物）。
+ *     → この2経路は次の段（呼び出し元に明示ゲートを入れる）で扱う。
+ *   分類器（fix562）が居ないときは**絶対に拒否しない**（unknown で止めない）。
+ *   拒否OFF = localStorage['v292Dfix574DenyOff'] = '1'
+ *
  * OFF   = localStorage['v292Dfix569Off'] = '1'
  * 読出  = window.__v292Dfix569.stats() / .events() / .selfTest() / .armed()
  */
@@ -95,6 +108,8 @@
     rewrittenKeys:0,
     /* 保護判定 */
     wouldAllow:0, wouldDeny:0, unknown:0, postChecks:0,
+    /* ★fix574: 実際に拒否した件数（wouldDeny のうち、拒否できる経路だったもの） */
+    denied:0, deniedByPath:{}, notDeniedBecausePathLoops:0,
     protectedProbeSeen:0, allowedProbeSeen:0, rewriteProbeSeen:0, bypassProbeSeen:0,
     classifierErrors:0, wrapperErrors:0,
     byPath:{ fix490Trim:0, fix490Quota:0, fix264b:0, fix399:0, fix402Doomed:0, fix402Retention:0, fix277:0, fix569probe:0, other:0, unknownPath:0 },
@@ -219,6 +234,12 @@
     return { id: hit, fn:null };
   }
 
+  /* ================= fix574: 拒否できる経路（retention のみ） ==================== */
+  /* 「消すのを諦めても通常処理を続けられる」経路だけ。ループする経路は入れない。 */
+  var DENYABLE = { fix490Trim:1, fix402Retention:1, fix277:1, fix264b:1 };
+  var LOOPING  = { fix399:1, fix490Quota:1 };   /* 拒否すると空回りするので触らない */
+  function denyOff(){ return rawGet('v292Dfix574DenyOff') === '1'; }
+
   /* ================= Phase 2: outer shadow を最外殻へ ============================ */
   var outerDown = null, outerShadow = null;
   function install(){
@@ -244,13 +265,34 @@
         if (key.indexOf('chr6_gc_probe_rewrite_')   === 0) S.rewriteProbeSeen++;
       } catch(e){ S.wrapperErrors++; }
 
+      /* ★fix574: 保護対象への削除を、拒否できる経路に限って止める */
+      var deny = false;
+      try {
+        if (verdict && verdict.verdict === 'deny' && !denyOff() && p){
+          if (DENYABLE[p.id]) deny = true;
+          else if (LOOPING[p.id]) S.notDeniedBecausePathLoops++;
+        }
+      } catch(e){ S.wrapperErrors++; }
+
       opStack.push(op);
       var ret;
-      /* ★どんなことがあっても下流を呼び、opStack を必ず戻す。ここが「挙動を変えない」の本体。 */
-      try { ret = outerDown.call(localStorage, k); }
+      try {
+        if (deny){
+          S.denied++;
+          S.deniedByPath[p.id] = (S.deniedByPath[p.id] || 0) + 1;
+          try { console.warn(TAG, '★保護対象の削除を止めた:', key, '経路=' + p.id, verdict.why); } catch(e){}
+          push({ at: now(), key: key, path: p.id, verdict: 'denied', why: verdict.why,
+                 inner: 0, rewritten: false, effectiveKey: null, goneAfter: false });
+          ret = undefined;                     /* removeItem の戻り値と同じ */
+        } else {
+          /* ★拒否しない限り、どんなことがあっても下流を呼ぶ */
+          ret = outerDown.call(localStorage, k);
+        }
+      }
       finally {
         try { opStack.pop(); finishOuterEvent(op); } catch(e){ S.wrapperErrors++; }
       }
+      if (deny) return ret;
 
       try {
         S.postChecks++;
@@ -353,7 +395,7 @@
   function stats(){
     var out = {};
     Object.keys(S).forEach(function(k){
-      out[k] = (k === 'byPath' || k === 'innerByFamily' || k === 'markersAtLoad')
+      out[k] = (k === 'byPath' || k === 'innerByFamily' || k === 'markersAtLoad' || k === 'deniedByPath')
         ? JSON.parse(JSON.stringify(S[k])) : S[k];
     });
     try { out.isOutermost = (localStorage.removeItem === outerShadow); } catch(e){ out.isOutermost = null; }
@@ -363,6 +405,9 @@
        outer設置前(読込中)の削除を含めると、迂回でないものまで迂回に数えてしまう(2026-07-26に実測で判明)。
        単純な引き算は参考値にすぎないので、別名で併記する。 */
     out.bypassedOuter = S.innerWithoutOuterAfterInstall;
+    out.denyEnabled = !denyOff();
+    out.denyablePaths = Object.keys(DENYABLE);
+    out.neverDeniedPaths = Object.keys(LOOPING);
     out.innerBeforeOuterInstall = S.innerBeforeOuterInstall;
     out.naiveDelta = S.innerCalls - S.outerRequests;
     out.counters = consistency();
@@ -395,6 +440,7 @@
     /* テスト専用の内部露出（本番コードからは使わない） */
     _classify: classify, _pathOf: pathOf, _protectedKeys: protectedKeys, _extraProtected: extraProtected,
     _inner: function(){ return innerShadow; }, _rawKeys: rawKeys,
+    _denyable: function(){ return DENYABLE; }, _looping: function(){ return LOOPING; },
     _native: function(){ return { remove: nativeRemove, get: nativeGet }; }
   };
   try { console.log(TAG, 'phase1 native=' + (!!nativeRemove) + ' proto=' + protoPristineAtLoad
