@@ -124,6 +124,12 @@
   /* ---- Api.call を包む -------------------------------------------------- */
   var inRepair = false;         /* 校正リクエスト自身を対象にしない(再帰防止) */
   var installed = false;
+  /* ★fix555b(実機で判明): 他のfix(fix333など)が Api.call を後から包み直し、
+     own props を継承しないため `__f555` が消える。印が消えたら包み直してよい
+     (このfixは Planner.parsePlan の前でありさえすればよく、Api.call の層の内外は問わない)。
+     ただし多重ラップが積み上がると校正を何度も走らせてしまうので、
+     **自分の中に入っていたら素通しする** depth ガードを置く。 */
+  var depth = 0;
 
   function getApi(){
     try { if (window.Api) return window.Api; } catch(e){}
@@ -139,14 +145,17 @@
   }
 
   function install(){
-    if (installed) return false;
     var api = getApi();
     if (!api || typeof api.call !== 'function') return false;
     if (api.call.__f555){ installed = true; return true; }
     var prev = api.call;
 
     var wrapped = async function(){
-      var r = await prev.apply(this, arguments);          /* 例外はそのまま伝播させる */
+      if (depth > 0) return prev.apply(this, arguments);  /* 多重ラップされても1回だけ働く */
+      depth++;
+      var r;
+      try { r = await prev.apply(this, arguments); }      /* 例外はそのまま伝播させる */
+      catch(e){ depth--; throw e; }
       try {
         if (off() || inRepair) return r;
         if (!r || typeof r.text !== 'string') return r;
@@ -235,7 +244,7 @@
       } catch(e){
         try { console.warn(TAG, 'repair skipped', e); } catch(_){}
         return r;                                          /* どんな失敗でも元の応答を返す */
-      }
+      } finally { depth--; }
     };
     wrapped.__f555 = true;
     try { Object.keys(prev).forEach(function(k){ if (k !== '__f555') wrapped[k] = prev[k]; }); } catch(e){}
@@ -251,7 +260,10 @@
                rejectedContent: stats.rejectedContent, rejectedNoImprove: stats.rejectedNoImprove,
                failed: stats.failed, skippedTagged: stats.skippedTagged, calls: stats.calls,
                avgMs: stats.repaired ? Math.round(stats.ms / stats.repaired) : 0,
-               wired: installed, logged: read().length };
+               wired: installed,
+               /* ★印が生きているか。消えていても包み直すので、ここは参考値 */
+               marked: (function(){ try { var a = getApi(); return !!(a && a.call && a.call.__f555); } catch(e){ return false; } })(),
+               logged: read().length };
     },
     dump: function(){ return read(); },
     clear: function(){ try { localStorage.removeItem(LOG); } catch(e){} return true; },
@@ -261,10 +273,11 @@
     _install: install
   };
 
+  /* ★包めても止めない。他のfixが包み直して印が消えたら、また包む。 */
   (function tryInstall(n){
     if (off()) return;
-    if (install()) return;
-    if (n > 120) return;
-    setTimeout(function(){ tryInstall(n + 1); }, 500);
+    install();
+    if (n > 240) return;
+    setTimeout(function(){ tryInstall(n + 1); }, n < 120 ? 500 : 5000);
   })(0);
 })();

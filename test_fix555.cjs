@@ -233,7 +233,30 @@ console.log('\n== 校正プロンプト ==');
     ok('★★校正リクエストを自分で校正しない(呼出しは2回まで)', n === 2, n);
   }
 
-  console.log('\n== 出荷物としての体裁 ==');
+  console.log('\n== ★多重ラップされても1回だけ働く(fix555b) ==');
+  {
+    /* 実機で判明: 他のfix(fix333など)が Api.call を後から包み直し own props を継承しないので
+       __f555 が消える。印が消えたら包み直してよいが、積み上がると校正を何度も走らせてしまう。 */
+    const body = [OK_LINE, BROKEN, OK_LINE2].join('\n') + TAIL;
+    const w = mk({ body: body, repair: { 'seg-1': FIXED } });
+    w.__v292Dfix555._install();
+    delete w.Api.call.__f555;              /* 他のfixが印を消した状況を再現 */
+    w.__v292Dfix555._install();            /* もう一度包む */
+    const r = await w.Api.call('sys', 'user');
+    ok('★★二重に包まれても校正は1回だけ', w.__v292Dfix555.stats().calls === 1, w.__v292Dfix555.stats());
+    ok('★結果は正しく適用される', r.text.indexOf(FIXED) >= 0);
+    ok('★repaired も1回だけ', w.__v292Dfix555.stats().repaired === 1, w.__v292Dfix555.stats());
+  }
+  {
+    /* 印が消えたら包み直す(=常に鎖の中にいる) */
+    const w = mk({ body: 'x' });
+    w.__v292Dfix555._install();
+    ok('★印がある', !!w.Api.call.__f555);
+    delete w.Api.call.__f555;
+    ok('★印が消えていても包み直せる', w.__v292Dfix555._install() === true && !!w.Api.call.__f555);
+  }
+
+console.log('\n== 出荷物としての体裁 ==');
   {
     ok('★OFFスイッチがある', /v292Dfix555Off/.test(SRC));
     ok('★冪等ガードがある', /if \(window\.__v292Dfix555\) return;/.test(SRC));
