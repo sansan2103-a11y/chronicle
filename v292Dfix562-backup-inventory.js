@@ -140,6 +140,68 @@
     return m ? m[1] : rest;
   }
 
+  /* ---- 控えの「形」を読む --------------------------------------------- */
+  /* ★2026-07-26 実測でわかったこと(最初の実装はここを3通り誤読していた)。
+     控えは1つの形式ではなく、少なくとも4つの形がある:
+       ①素の本体セーブ            {turns:[…]}                     … fix469 / guard 系
+       ②1キーを包んだ控え          {key, blob, ts}                  … fix538 / fix409 系
+                                   blob は**文字列**なので、中を開かないとターンが0に見える
+       ③localStorage 丸ごとの控え   {activeSlot, ls:{キー: 値}}      … cloudsync 系(442KB)
+                                   ★サイドストアも入っているので、事実上の完全スナップショット
+       ④部分控え                   配列・素のテキストなど            … roster / 画像プロンプト等
+     最初の実装は ②③を「ターン0」、④を「壊れている」と判定していた。
+     その結果、**622KB の正当な控えが削除順位2位(壊れている)に並んでいた**。
+     読み取り専用のうちに気づけたので実害は無い。以後、形を判定してから中身を数える。 */
+  function turnsIn(o){
+    try {
+      var a = (o && o.turns) || (o && o.state && o.state.turns) || null;
+      return Array.isArray(a) ? a.length : 0;
+    } catch(e){ return 0; }
+  }
+  function classify(raw){
+    var r = { kind: 'unknown', parseable: false, turns: 0, slotsInside: 0, carriesSideStores: false };
+    if (raw == null) return r;
+    var o = null;
+    try { o = JSON.parse(raw); r.parseable = true; }
+    catch(e){
+      /* JSONに見えるのに読めないものだけを「壊れている」とする。
+         素のテキスト(画像プロンプト等)は壊れていない、ただの部分控え。 */
+      var head = raw.replace(/^\s+/, '').charAt(0);
+      r.kind = (head === '{' || head === '[') ? 'broken' : 'partial';
+      return r;
+    }
+    if (o && typeof o === 'object' && o.ls && typeof o.ls === 'object'){
+      /* ③丸ごと控え */
+      r.kind = 'fullDump';
+      var ks = Object.keys(o.ls);
+      ks.forEach(function(k2){
+        if (/^chr6_slot_/.test(k2)){
+          r.slotsInside++;
+          var t = 0;
+          try { t = turnsIn(JSON.parse(String(o.ls[k2]))); } catch(e2){}
+          if (t > r.turns) r.turns = t;
+        }
+      });
+      /* 本体以外のキーも含んでいれば、サイドストアを運べる */
+      r.carriesSideStores = ks.length > r.slotsInside;
+      return r;
+    }
+    if (o && typeof o === 'object' && typeof o.key === 'string' && 'blob' in o){
+      /* ②包まれた控え。blob は文字列なので開いて数える */
+      r.kind = 'wrapped';
+      r.wrappedKey = o.key;
+      var inner = o.blob;
+      if (typeof inner === 'string'){ try { inner = JSON.parse(inner); } catch(e3){ inner = null; } }
+      r.turns = turnsIn(inner);
+      if (r.turns === 0) r.kind = 'partial';
+      return r;
+    }
+    var t2 = turnsIn(o);
+    if (t2 > 0){ r.kind = 'story'; r.turns = t2; return r; }
+    r.kind = 'partial';
+    return r;
+  }
+
   function inventory(){
     var live = liveSlots(), liveSet = {};
     live.forEach(function(s){ liveSet[s] = true; });
@@ -147,18 +209,17 @@
     keys().forEach(function(k){
       if (k.indexOf('chr6_bk_') !== 0) return;
       var raw = lsg(k);
-      var o = null, parseable = true;
-      try { o = JSON.parse(raw == null ? 'null' : raw); } catch(e){ parseable = false; }
-      var turns = 0;
-      try { var a = (o && o.turns) || (o && o.state && o.state.turns) || null;
-            turns = Array.isArray(a) ? a.length : 0; } catch(e){}
+      var c = classify(raw);
+      var o = null; try { o = JSON.parse(raw == null ? 'null' : raw); } catch(e){}
       var slot = slotFromKey(k, live);
+      if (!slot && c.wrappedKey) slot = slotFromKey(c.wrappedKey, live);
       var ts = tsFromKey(k);
       var tsSrc = ts ? 'key' : null;
       if (!ts){ ts = tsFromBody(o); if (ts) tsSrc = 'body'; }
       rows.push({
         key: k,
         family: familyOf(k),
+        kind: c.kind,                 /* story / wrapped / fullDump / partial / broken */
         slotId: slot,
         slotAlive: slot ? !!liveSet[slot] : null,
         createdAt: ts,
@@ -166,15 +227,17 @@
         importedLegacy: !ts,
         bytes: raw == null ? 0 : raw.length,
         hash: raw == null ? null : hash(raw),
-        parseable: parseable,
-        /* 「復元可能」= JSONとして読めて、ターンが1つ以上ある。
-           ここを緩めると壊れた控えを保護してしまうので厳しめにする。 */
-        restorable: parseable && turns > 0,
-        turns: turns,
+        parseable: c.parseable,
+        /* 「そのスロットの物語を復元できる」= ターンを1つ以上運べること。
+           部分控え(ロスターだけ・画像プロンプトだけ)は、物語の復元には使えない。 */
+        restorable: c.turns > 0,
+        turns: c.turns,
+        slotsInside: c.slotsInside,
         /* 「完全」= 本体だけでなくサイドストアも運べるか。
-           現行の控えはどれも本体しか持っていないので、いまは全件 false になるのが正しい。
-           これが false のうちは、控えからの復元は状態・カルテ・ロスターを失う。 */
-        completeSnapshot: !!(o && o.parts && o.parts.story)
+           ★丸ごと控え(cloudsync)だけが現状これを満たす。他は本体のみで、
+           復元すると状態・カルテ・ロスター・長期記憶を失う。 */
+        completeSnapshot: c.kind === 'fullDump' ? c.carriesSideStores
+                        : !!(o && o.parts && o.parts.story)
       });
     });
     return rows.sort(function(a, b){ return b.bytes - a.bytes; });
@@ -190,8 +253,8 @@
          + Math.min(r.turns, 999999) * 1e6 + Math.min(r.createdAt || 0, 1e12) / 1e6;
   }
   function protectedSet(){
-    var live = liveSlots(), best = {};
-    inventory().forEach(function(r){
+    var live = liveSlots(), best = {}, inv = inventory();
+    inv.forEach(function(r){
       if (!r.slotId || live.indexOf(r.slotId) < 0) return;   /* 生きているスロットだけ守る */
       if (!r.restorable) return;
       if (!best[r.slotId] || score(r) > score(best[r.slotId])) best[r.slotId] = r;
@@ -202,6 +265,16 @@
                  createdAt: best[s].createdAt, complete: best[s].completeSnapshot,
                  reason: '現在存在するスロットの、復元可能な最良の控え1件' };
     });
+    /* ★丸ごと控え(localStorage全体)は、どれか1つのスロットに属さないので上のループでは守れない。
+       しかし**サイドストアを運べる唯一の控え**なので、最新の1件を別枠で保護する。
+       これを容量のために消すと、状態・カルテ・ロスターごと復元する手段が完全に消える。 */
+    var dumps = inv.filter(function(r){ return r.kind === 'fullDump' && r.completeSnapshot; })
+                   .sort(function(a, b){ return (b.createdAt || 0) - (a.createdAt || 0) || b.bytes - a.bytes; });
+    if (dumps.length){
+      out['(fullDump)'] = { key: dumps[0].key, bytes: dumps[0].bytes, turns: dumps[0].turns,
+                            createdAt: dumps[0].createdAt, complete: true,
+                            reason: 'サイドストアごと復元できる唯一の控え(localStorage丸ごと)。最新1件' };
+    }
     return out;
   }
 
@@ -235,13 +308,15 @@
     rows.forEach(function(r){
       if (protKeys[r.key]){ kept.push({ key: r.key, bytes: r.bytes, reason: protKeys[r.key] }); return; }
       var rank = null, why = null;
+      /* ★順位は kind を見て決める。restorable(=ターンを持つ)だけで「壊れている」を決めると、
+         ロスターだけ・画像プロンプトだけの**正当な部分控え**が2位に並ぶ(実測で622KB分やらかした)。 */
       if (r.slotId && r.slotAlive === false){ rank = 1; why = ORDER[0].why; }
-      else if (!r.restorable){ rank = 2; why = ORDER[1].why; }
+      else if (r.kind === 'broken'){ rank = 2; why = ORDER[1].why; }
       else if (r._dupOf){ rank = 3; why = ORDER[2].why + '(同内容: ' + r._dupOf + ')'; }
       else if (r.completeSnapshot){ rank = 4; why = ORDER[3].why; }
-      else if (r.createdAt){ rank = 5; why = ORDER[4].why; }
-      else { rank = 6; why = ORDER[5].why + '(作成時刻不明)'; }
-      cands.push({ key: r.key, bytes: r.bytes, rank: rank, why: why,
+      else if (r.kind === 'partial'){ rank = 5; why = ORDER[4].why + (r.createdAt ? '' : '(作成時刻不明)'); }
+      else { rank = 6; why = ORDER[5].why + (r.createdAt ? '' : '(作成時刻不明)'); }
+      cands.push({ key: r.key, bytes: r.bytes, rank: rank, why: why, kind: r.kind,
                    slotId: r.slotId, turns: r.turns, createdAt: r.createdAt });
     });
     /* 同じ rank の中は「古い順 → 大きい順」。時刻不明は最古扱い。 */
@@ -291,12 +366,26 @@
       backupUnrestorable: inv.filter(function(r){ return !r.restorable; }).length,
       backupCompleteSnapshot: inv.filter(function(r){ return r.completeSnapshot; }).length,
       protectedCount: Object.keys(prot).length,
+      byKind: (function(){
+        var m = {}; inv.forEach(function(r){
+          m[r.kind] = m[r.kind] || { n: 0, kb: 0 };
+          m[r.kind].n++; m[r.kind].kb += Math.round(r.bytes / 1024);
+        }); return m;
+      })(),
       snapshots: snaps,
-      /* ★いまの控えは1件も completeSnapshot ではない = 控えから復元すると
-         状態・カルテ・ロスター・長期記憶を失う。これが次に直すべき本丸。 */
-      warning: inv.filter(function(r){ return r.completeSnapshot; }).length === 0
-             ? '控えはすべて本体セーブのみ。サイドストアを含む完全スナップショットは0件。'
-             : null
+      /* ★スロット単位の控え(story/wrapped)は本体セーブしか運ばない。
+         サイドストアまで運べるのは丸ごと控え(fullDump)だけで、しかもそれは
+         「たまたま残っている cloudsync の副産物」であって、意図した設計ではない。
+         各スロットの保存時にサイドストアごとスナップショットを取るのが本丸。 */
+      warnings: [
+        inv.filter(function(r){ return r.completeSnapshot; }).length === 0
+          ? 'サイドストアを含む完全スナップショットが0件。控えから復元すると状態・カルテ・ロスターを失う。' : null,
+        inv.filter(function(r){ return r.kind === 'story' || r.kind === 'wrapped'; })
+           .every(function(r){ return !r.completeSnapshot; })
+          ? 'スロット単位の控えはすべて本体セーブのみ。スロット複製・クラウド復元でサイドストアが運ばれない。' : null,
+        live.filter(function(s){ return !prot[s]; }).length
+          ? '控えが1件も無いスロットがある(上の slotsWithoutBackup)。' : null
+      ].filter(Boolean)
     };
   }
 
