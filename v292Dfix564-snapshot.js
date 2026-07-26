@@ -126,6 +126,13 @@
     var manifest = {
       version: VERSION, id: id, slotId: slot, createdAt: ts,
       reason: String(opts.reason || 'manual'),
+      /* ★fix567(GPT指定): 保護の「階層」を明示する。
+         kind:'user'         … ユーザの物語。最後まで消さない
+         kind:'test-fixture' … 回帰試験用のコーパス。保護はするが、
+                               将来また容量が逼迫したら**ユーザデータより先に**消してよい
+         これを書いておかないと、テスト用データがユーザの物語と同じ重みで守られ続ける。 */
+      kind: String(opts.kind || 'user'),
+      protectedReason: opts.protectedReason ? String(opts.protectedReason) : null,
       complete: true, turns: turns,
       partCount: Object.keys(parts).length, totalBytes: total,
       parts: parts
@@ -217,6 +224,7 @@
         var v = lsg(m.parts[lk].snapKey); if (v != null) dataBytes += v.length;
       });
       out.push({ id: k, slotId: m.slotId, createdAt: m.createdAt, reason: m.reason,
+                 kind: m.kind || 'user', protectedReason: m.protectedReason || null,
                  complete: !!m.complete, turns: m.turns, parts: m.partCount,
                  manifestBytes: (lsg(k) || '').length, dataBytes: dataBytes,
                  totalKB: Math.round(((lsg(k) || '').length + dataBytes) / 1024) });
@@ -239,8 +247,22 @@
     return { ok: true, id: id, removed: removed };
   }
 
+  /* 既存のスナップショットの階層だけを付け替える(実体には触らない)。
+     作り直すと640KBを書き直すことになるので、manifest だけを更新する。 */
+  function retag(id, opts){
+    opts = opts || {};
+    var m = null; try { m = JSON.parse(lsg(id) || 'null'); } catch(e){}
+    if (!m || !m.parts) return { ok: false, error: 'manifestが読めません: ' + id };
+    if (opts.kind) m.kind = String(opts.kind);
+    if ('protectedReason' in opts) m.protectedReason = opts.protectedReason ? String(opts.protectedReason) : null;
+    try { localStorage.setItem(id, JSON.stringify(m)); } catch(e){ return { ok: false, error: e.name || String(e) }; }
+    var back = null; try { back = JSON.parse(lsg(id) || 'null'); } catch(e){}
+    if (!back || back.kind !== m.kind) return { ok: false, error: '読み戻しが一致しません' };
+    return { ok: true, id: id, kind: m.kind, protectedReason: m.protectedReason, parts: m.partCount };
+  }
+
   window.__v292Dfix564 = {
-    off: off, create: create, verify: verify, restore: restore,
+    off: off, create: create, verify: verify, restore: restore, retag: retag,
     list: list, remove: remove, estimate: estimate,
     _partKeys: partKeys, _hash: hash, _isOurs: isOurs, MPRE: MPRE, DPRE: DPRE
   };

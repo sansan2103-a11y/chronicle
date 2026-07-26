@@ -268,6 +268,7 @@
         if (v == null) missing++; else dataBytes += v.length;
       });
       out.push({ id: k, slotId: m.slotId, createdAt: m.createdAt, turns: m.turns,
+                 kind: m.kind || 'user', protectedReason: m.protectedReason || null,
                  parts: m.partCount, bytes: dataBytes + (lsg(k) || '').length,
                  complete: !!m.complete && missing === 0, missing: missing });
     });
@@ -298,9 +299,15 @@
     snapshotsBySlot().forEach(function(sn){
       if (live.indexOf(sn.slotId) < 0) return;
       if (!sn.complete) return;
+      /* ★fix567(GPT指定): 保護には階層がある。test-fixture(回帰コーパス)は保護するが、
+         容量が再び逼迫したら**ユーザデータより先に**消してよい層に置く。
+         これを区別しないと、テスト用データがユーザの物語と同じ重みで守られ続ける。 */
       out[sn.slotId] = { key: sn.id, bytes: sn.bytes, turns: sn.turns, createdAt: sn.createdAt,
-                         complete: true, kind: 'snapshot',
-                         reason: 'サイドストア込みの論理スナップショット(fix564)。控えより強い' };
+                         complete: true, kind: 'snapshot', tier: sn.kind === 'test-fixture' ? 'test-fixture' : 'user',
+                         protectedReason: sn.protectedReason,
+                         reason: sn.kind === 'test-fixture'
+                           ? '回帰コーパスの論理スナップショット。保護するが、容量逼迫時はユーザデータより先に解放してよい'
+                           : 'サイドストア込みの論理スナップショット(fix564)。控えより強い' };
     });
     /* ★丸ごと控え(localStorage全体)は、どれか1つのスロットに属さないので上のループでは守れない。
        しかし**サイドストアを運べる唯一の控え**なので、最新の1件を別枠で保護する。
@@ -406,9 +413,13 @@
       /* ★fix566: ライブの構成(snapshots)と保存済みの論理スナップショット(logicalSnapshots)は別物。
          同じ名前にすると後から定義した方に潰される(実際にテストで踏んだ)。 */
       logicalSnapshots: snapshotsBySlot().map(function(s){
-        return { slot: s.slotId, turns: s.turns, parts: s.parts,
+        return { slot: s.slotId, turns: s.turns, parts: s.parts, kind: s.kind,
                  kb: Math.round(s.bytes / 1024), complete: s.complete, missing: s.missing };
       }),
+      /* 容量が逼迫したとき、ユーザデータに手を付ける前に解放できる量 */
+      releasableFirstKB: Math.round(snapshotsBySlot()
+        .filter(function(s){ return s.kind === 'test-fixture'; })
+        .reduce(function(a, b){ return a + b.bytes; }, 0) / 1024),
       byKind: (function(){
         var m = {}; inv.forEach(function(r){
           m[r.kind] = m[r.kind] || { n: 0, kb: 0 };
