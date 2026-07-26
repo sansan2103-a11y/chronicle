@@ -200,21 +200,55 @@
   // ---- push(自動/手動共通) ----
   //   force=true: 必ずfull送信(手動ボタン用)。それ以外はキー集合が変わった時だけfull。
   var pushing = false;
+  /* ★fix582(2026-07-26・GPT裁定): この push は**サーバの競合検査に参加していなかった**。
+     Worker(v23b:1501) は `hasBase = body.baseRev !== undefined && !== null` で分岐し、
+     hasBase が false なら **fork判定を一切しない**（＝無条件上書きの経路へ進む）。
+     fix402 は baseRev を送っていたが、こちらは送っていなかったため、
+     サーバから見ると「別端末が何を書いていようが上書きする」要求だった。
+
+     直し方(GPT指定):
+       ・fix399 と fix402 が **Coordinator の同じ数値rev** を baseRev として使う
+       ・正本は **Worker の数値rev**。v292Dfix399_baseTs は競合制御から外し**診断値へ降格**
+       ・fork応答なら **再取得→1回だけ再push**。それでも fork なら **fail-closed**（dirtyを残す）
+       ・**成功応答のrevだけ**を正本へ昇格する（fork応答のrevはサーバの現在値であって、
+         自分の書込みが通った証拠ではない）
+
+     ★壊れ方の向きが変わる: 以前は「別端末のセーブが消える」、以後は「pushが本流に入らない(fork)」。
+       forkはサーバが**両方保持**するので失われない。気づけるし戻せる。
+     緊急停止: v292Dfix582Off='1' で旧挙動（baseRevなし）へ戻す。 */
+  function coord(){
+    try { var c = window.__v292Dfix580;
+          return (c && typeof c.rev === 'function') ? c : null; } catch(e){ return null; }
+  }
+  function fix582Off(){ try { return localStorage.getItem('v292Dfix582Off') === '1'; } catch(e){ return false; } }
+
   function push(force){
     if (!isLoggedIn()) return Promise.reject(new Error('ログインが必要です'));
     if (pushing) return Promise.reject(new Error('同期中'));
     pushing = true;
     var ts = Date.now();
+    var c = fix582Off() ? null : coord();
+    var baseAtStart = c ? c.rev() : null;   /* ★開始時の自分の基準を控える */
+    var lastServerRev = null;
     return getMeta().then(function(meta){
       var serverTs = meta ? (+meta.updatedAt || 0) : 0;
-      // 楽観ロック: 別端末が基準より先に進んでいたら盲目上書きしない
-      if (serverTs > baseTs() && !force){
+      /* ★fix582: 数値revが使えるときは、**時刻比較を書込み認可に使わない**（GPT指定）。
+         時刻はサーバとクライアントでずれるうえ、revと二重の判断基準を持つと
+         「どちらを信じるか」で挙動が割れる。時刻は診断としてだけ残す。 */
+      if (!c && serverTs > baseTs() && !force){
         var e = new Error('CONFLICT'); e.conflict = true; e.serverTs = serverTs; e.device = meta && meta.device; throw e;
       }
       // ★空ガード: ローカルが0ターンなのにクラウドに本物のセーブがある→潰さない(空でクラウドを上書きしない)
       if (activeSlotTurns() === 0 && meta && (+meta.lsSize || +meta.size || 0) > 3000){
         var eg = new Error('EMPTY_LOCAL_GUARD'); eg.emptyGuard = true; throw eg;
       }
+      /* ★★ここで meta.rev を自分の基準へ採用してはいけない（実装中に踏んだ設計バグ）。
+         push直前にサーバの現在revを basedRev として採用すると、**必ず一致して fork が起きない**。
+         それは「サーバに何が入っていようが自分で上書きする」という、
+         いま無くそうとしている無条件上書きそのものになる。
+         baseRev は「自分のローカル状態が derive された版」でなければ意味がない。
+         取得した meta は診断（と将来のtombstone合成）にだけ使う。 */
+      lastServerRev = (meta && meta.rev != null) ? (+meta.rev || 0) : null;
       return idbReadKeys();
     }).then(function(imgKeys){
       var curHash = hash(imgKeys.slice().sort().join('|'));
@@ -222,12 +256,42 @@
       var build = needFull ? collectFull(ts) : Promise.resolve(collectLight(ts));
       return build.then(function(pkg){ return { pkg: pkg, needFull: needFull, curHash: curHash }; });
     }).then(function(o){
-      return callSave({ op: 'put', pkg: o.pkg }).then(function(r){
-        if (r.status !== 200 || !r.json || !r.json.ok) throw new Error((r.json && r.json.error) || ('HTTP ' + r.status));
-        setNum('v292Dfix399_baseTs', ts); setNum('v292Dfix399_localTs', ts);
-        if (o.needFull) { try { localStorage.setItem('v292Dfix399_imgHash', o.curHash); } catch(e){} }
-        return { lsSize: r.json.lsSize, imgUpdated: r.json.imgUpdated };
-      });
+      function attempt(isRetry){
+        var body = { op: 'put', pkg: o.pkg };
+        if (c) body.baseRev = c.rev();          /* ★これが無いとサーバは競合検査をしない */
+        return callSave(body).then(function(r){
+          if (r.status !== 200 || !r.json) throw new Error('HTTP ' + r.status);
+          var j = r.json;
+          if (j.fork){
+            /* ★fork = 自分の基準とサーバの版が違った。サーバは**両方保持**しているのでデータは失われていない。
+               ここで「サーバの現在revを採用してもう一度押す」のは**やってはいけない**。
+               それは相手の版を確認せずに自分で塗り替えることであり、無条件上書きと同じになる。
+
+               再試行してよいのは**自端末の別経路（fix402）が同期中にrevを進めた場合だけ**。
+               この場合は同じ端末の同じデータなので、新しい基準で押し直すのが正しい。
+               判定: 開始時に控えた基準と、いまの共有基準が違っていれば同時発火。 */
+            var sameDeviceRace = !!(c && c.rev() !== baseAtStart);
+            if (!isRetry && sameDeviceRace){
+              c.noteForkRetry();
+              return attempt(true);      /* 新しい共有revで1回だけ押し直す */
+            }
+            /* それ以外は**別端末との本物の分岐**。勝手に潰さず fail-closed。
+               dirty を残すので、次の同期やfork解決UIで扱える。 */
+            if (c) c.noteFailClosed(isRetry ? '2回目もfork' : '別端末との分岐。上書きせず中止');
+            setNum('v292Dfix399_localTs', Date.now());   /* 未同期であることを残す */
+            var ef = new Error('CONFLICT'); ef.conflict = true; ef.fork = true;
+            ef.serverRev = (j.server && j.server.rev) != null ? j.server.rev : lastServerRev;
+            throw ef;
+          }
+          if (!j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+          /* ★成功。ここで初めて rev を正本へ昇格する */
+          if (c && j.rev != null) c.promoteRev(j.rev, 'push成功');
+          setNum('v292Dfix399_baseTs', ts); setNum('v292Dfix399_localTs', ts);
+          if (o.needFull) { try { localStorage.setItem('v292Dfix399_imgHash', o.curHash); } catch(e){} }
+          return { lsSize: j.lsSize, imgUpdated: j.imgUpdated, rev: j.rev };
+        });
+      }
+      return attempt(false);
     }).then(function(res){ pushing = false; return res; }, function(err){ pushing = false; throw err; });
   }
 
@@ -639,7 +703,13 @@
     backupBeforeApply: backupBeforeApply,
     bkLog: bkLog,   /* fix575: 削除・中止の理由（容量満杯でも消えないメモリ側を含む） */
     verify: verify, selfHeal: selfHeal,
-    syncState: function(){ return { baseTs: baseTs(), localTs: localTs(), imgHash: imgHashStored() }; },
+    syncState: function(){
+      var c = null; try { c = window.__v292Dfix580; } catch(e){}
+      return { /* ★fix582: baseTs は競合制御から外れ、診断値へ降格した */
+               baseTs_diagnosticOnly: baseTs(), localTs: localTs(), imgHash: imgHashStored(),
+               rev: (c && typeof c.rev === 'function') ? c.rev() : null,
+               casEnabled: !!(c && typeof c.rev === 'function') && !fix582Off() };
+    },
     status: function(){ return { off: off(), autoOff: autoOff(), loggedIn: isLoggedIn(), proxy: proxyUrl(), activeSlot: activeSlot() }; }
   };
   try { console.log(TAG, 'loaded', off()?'OFF':(autoOff()?'manual-only':'AUTO'), '(login='+isLoggedIn()+')'); } catch(e){}

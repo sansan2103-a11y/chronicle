@@ -62,7 +62,11 @@ console.log('\n== (1) 設置と透過性 ==');
   ok('★fetch をラップしている', f.stats().isWrapped === true, f.stats());
   ok('★★まだ何も制御していないことを明示している',
      f.coordinating === false && f.stats().shadowOnly === true, f.stats());
-  ok('★localStorage へ書いていない', Object.keys(w.__store).length === 0, w.__store);
+  /* ★fix582 で役割が増えた: 共有rev台帳の**正本**になったので、この1キーだけは書く。
+     観測だけだった頃の「1バイトも書かない」から契約が変わった箇所なので、
+     「書いてよいのは rev 台帳だけ」に締め直す（何でも書けるようにはしない）。 */
+  ok('★★書くのは共有rev台帳の1キーだけ',
+     Object.keys(w.__store).length === 1 && w.__store['v292Dfix580_rev'] !== undefined, w.__store);
 }
 {
   /* ★リクエストが1バイトも変わらないこと */
@@ -249,7 +253,11 @@ function step7(){
   console.log('\n== (9) 静的: 観測が副作用を持たない ==');
   {
     const code = SRC580.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    ok('★★localStorage へ書かない', !/localStorage\.setItem/.test(code));
+    /* setItem は rev台帳の書込み(lsSet)経由の1箇所だけ。増えていないことを固定する。 */
+    ok('★★localStorage への書込みは1箇所だけ（rev台帳）',
+       (code.match(/localStorage\.setItem/g) || []).length === 1, (code.match(/localStorage\.setItem/g)||[]).length);
+    ok('★★書くキーは rev 台帳だけ', /REV_KEY = 'v292Dfix580_rev'/.test(SRC580) &&
+       (code.match(/lsSet\(/g) || []).length >= 1 && !/lsSet\('(?!REV)/.test(code));
     ok('★★localStorage を消さない', !/localStorage\.removeItem/.test(code));
     ok('★リクエストの body を作り替えていない', !/init\.body\s*=/.test(code) && !/body:\s*JSON\.stringify/.test(code));
     ok('★レスポンスは clone してから読む（元のbodyを消費しない）', /res\.clone\(\)/.test(code));

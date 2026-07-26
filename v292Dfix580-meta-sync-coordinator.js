@@ -54,7 +54,9 @@
     doubleFire: 0, doubleFirePairs: [],
     forks: 0, conflicts: 0, errors: 0,
     metaCalls: 0, gets: 0,
-    wrapperErrors: 0
+    wrapperErrors: 0,
+    /* fix582: 共有rev台帳 */
+    revPromotions: 0, forkRetries: 0, failClosed: 0
   };
   var EV = [], EV_MAX = 60;
   var DOUBLE_MS = 3000;
@@ -176,10 +178,61 @@
                                          rev: j.rev, serverRev: j.server && j.server.rev }); }
           if (j.ok === false){ S.conflicts++; note({ at: now(), kind: 'reject', path: meta.path,
                                                      error: String(j.error || '').slice(0, 60) }); }
-          if (j.rev != null) meta.serverRev = +j.rev || 0;
+          /* ★成功応答のrevだけを正本へ昇格する。fork応答のrevは「サーバの現在値」であって
+             自分の書込みが通った証拠ではないので昇格しない（GPT指定）。 */
+          if (j.rev != null){
+            meta.serverRev = +j.rev || 0;
+            if (j.ok === true && !j.fork) promoteRev(j.rev, 'put成功応答 path=' + meta.path);
+          }
         } catch(e){ S.wrapperErrors++; }
       }, function(){});
     } catch(e){ S.wrapperErrors++; }
+  }
+
+  /* ================= fix582: 共有rev台帳（★ここから制御に入る） ==============
+   * ■なぜ必要か（GPT裁定）
+   *   「fix399へ baseRev を持たせ、fix399／fix402 が Coordinator の**同じ数値rev**を使う形で
+   *     進めてください。正本は Worker の数値rev。v292Dfix399_baseTs は競合制御から外し、
+   *     診断値へ降格します。」
+   *
+   * ■なぜ危険が減るのか（この変更の向き）
+   *   変更前: fix399 は baseRev を送らない → Worker は fork判定を**一切しない** → **無条件上書き**。
+   *           別端末の新しいセーブを黙って踏み潰しうる。
+   *   変更後: baseRev を送る → 不一致なら Worker が fork として**両方保持**（絶対に上書きしない）。
+   *   つまり失敗の向きが「データが消える」から「pushが本流に入らない」へ変わる。
+   *   後者は気づけるし戻せる。前者は戻せない。**壊れ方が安全側になる**。
+   *
+   * ■正本の置き場所
+   *   localStorage 'v292Dfix580_rev'（端末ローカル・同期対象外）。
+   *   ★**成功応答のrevだけを昇格**する。fork応答のrevは「サーバの現在値」であって
+   *     自分の書込みが通った証拠ではないので、正本にしない（GPT指定）。
+   */
+  var REV_KEY = 'v292Dfix580_rev';
+  function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function lsSet(k, v){ try { localStorage.setItem(k, String(v)); return true; } catch(e){ return false; } }
+
+  function rev(){ var n = +(lsGet(REV_KEY) || 0); return (n === n && n >= 0) ? n : 0; }
+  /* 成功応答でのみ昇格。巻き戻さない（古い応答が遅れて届いても下げない）。 */
+  function promoteRev(newRev, why){
+    var n = +newRev;
+    if (!(n === n) || n < 0) return false;
+    var cur = rev();
+    if (n < cur){ note({ at: now(), kind: 'revIgnored', from: cur, to: n, why: why || '' }); return false; }
+    if (n === cur) return true;
+    lsSet(REV_KEY, n);
+    note({ at: now(), kind: 'revPromoted', from: cur, to: n, why: why || '' });
+    S.revPromotions++;
+    return true;
+  }
+  /* fix402 が既に持っている rev を引き継ぐ（初回だけ）。
+     引き継がないと、いきなり baseRev=0 で put して**全端末が fork まみれになる**。 */
+  function adoptExistingRev(){
+    if (lsGet(REV_KEY) != null) return;
+    var v = null;
+    try { v = localStorage.getItem('v292Dfix402_baseRev'); } catch(e){}
+    var n = +(v || 0);
+    if (n === n && n > 0){ lsSet(REV_KEY, n); note({ at: now(), kind: 'revAdopted', to: n, from: 'fix402' }); }
+    else lsSet(REV_KEY, 0);
   }
 
   /* ---- 読み出し -------------------------------------------------------- */
@@ -215,6 +268,7 @@
 
   /* ★fetch はページ内の他コードより先に掴みたいが、遅れて入っても観測できないだけで害は無い。 */
   try { install(); } catch(e){ S.wrapperErrors++; }
+  try { adoptExistingRev(); } catch(e){ S.wrapperErrors++; }
 
   window.__v292Dfix580 = {
     __armed: true,
@@ -222,6 +276,11 @@
     events: events,
     report: report,
     isOff: off,
+    /* fix582: 共有rev台帳。fix399/fix402 はここの rev を baseRev として使う */
+    rev: rev,
+    promoteRev: promoteRev,
+    noteForkRetry: function(){ S.forkRetries++; },
+    noteFailClosed: function(why){ S.failClosed++; note({ at: now(), kind: 'failClosed', why: String(why||'').slice(0,60) }); },
     /* ★まだ同期を制御していないことを明示する。配線は次段。 */
     coordinating: false
   };
