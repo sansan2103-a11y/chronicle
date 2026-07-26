@@ -13,7 +13,15 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 let pass = 0, fail = 0;
 const ok = (n, c, x) => { if (c) { pass++; console.log('  PASS  ' + n); } else { fail++; console.log('  FAIL  ' + n + (x !== undefined ? ('  >> ' + JSON.stringify(x)) : '')); } };
-const SRC = fs.readFileSync(path.join(__dirname, 'worker/chronicle-proxy-v24_tombstone.js'), 'utf8');
+/* ★配布物はリポジトリ直下に置く（GitHub Web の Upload はルートへ入るため）。
+   worker/ 配下にも置いた時期があるので、両方を見る。
+   ★2026-07-26: ここを片方だけにしていたため、出荷後にテストが「サマリ不明」で落ちた。
+   run_all_tests.cjs がそれを**失敗として扱う**設計なので気づけた。 */
+const CANDIDATES = ['chronicle-proxy-v24_tombstone.js', 'worker/chronicle-proxy-v24_tombstone.js'];
+const SRC_PATH = CANDIDATES.map(f => path.join(__dirname, f)).find(p => fs.existsSync(p));
+if (!SRC_PATH){ console.log('  FAIL  Worker配布物が見つからない >> ' + CANDIDATES.join(' / '));
+                console.log('PASS 0 / FAIL 1'); process.exit(1); }
+const SRC = fs.readFileSync(SRC_PATH, 'utf8');
 
 console.log('\n== (1) ソース: 差分が意図どおり ==');
 {
