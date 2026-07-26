@@ -267,11 +267,18 @@
         try {
           stats.calls++;
           var timedOut = false;
-          /* ★fix556: まず専用リクエスト(temperature 0 / penalty 0 / 再試行なし)。
-             作れなければ従来どおり Api.call。 */
-          var reqP = repairRequest(p.sys, p.user, TIMEOUT_MS);
-          if (!reqP){ stats.viaApiCall++; reqP = prev.call(this, p.sys, p.user, 1200); }
-          else { stats.viaDirect++; }
+          /* ★fix556b(2026-07-26・実測で棄却): 「校正が Api.call の創作用パラメータ
+             (temperature 0.85 / frequency_penalty 0.4 / presence_penalty 0.4)で送られているのが
+             内容変更の原因では」という仮説を立て、temperature 0 / penalty 0 の専用リクエストを作って
+             同じ実崩れ10件×3反復で比較した。結果は**改善しなかった**:
+               従来(Api.call): 採用12/30 内容変更4 タイムアウト12
+               専用リクエスト: 採用10/30 内容変更5 タイムアウト12
+             差はn=30の揺らぎの範囲。さらに専用リクエストは **S.inFlight を立てない**ので、
+             校正中(最大30秒)に送信ボタンが押せてしまう=**二重生成の新しい危険**を持ち込む。
+             → **効果が無く危険だけ増えるので採用しない**。実装は repairRequest() として残すが呼ばない。
+             (仮説自体は筋が通っていたが、実データが支持しなかった。推測で入れない。) */
+          stats.viaApiCall++;
+          var reqP = prev.call(this, p.sys, p.user, 1200);
           out = await Promise.race([
             reqP,
             new Promise(function(res){ setTimeout(function(){ timedOut = true; res(null); }, TIMEOUT_MS); })

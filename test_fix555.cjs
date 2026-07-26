@@ -261,6 +261,9 @@ console.log('\n== 校正プロンプト ==');
       ok('★同じモデルを使う(勝手に別モデルへ課金しない)', sent.body.model === 'deepseek/deepseek-v4-flash', sent.body.model);
       ok('★本文をそのまま取り出す', out.text === '{"seg-0":"直した。"}', out.text);
       ok('★再試行しない(fetchは1回)', true);
+      /* ★fix556b: 実測で改善しなかった(採用12→10 / 内容変更4→5 / タイムアウト12→12)うえ、
+         S.inFlight を立てないので校正中に送信ボタンが押せる=二重生成の危険がある。
+         → 実装は残すが**呼ばない**。効果が無く危険だけ増えるものは採用しない。 */
       return more();
     });
   }
@@ -280,6 +283,9 @@ async function more(){
   {
     const w = mk({ body: 'x' });
     ok('★どちらの経路を使ったか数える', (function(){ const st = w.__v292Dfix555.stats(); return typeof st.viaDirect === 'number' && typeof st.viaApiCall === 'number'; })());
+    ok('★★専用リクエストは呼ばれない(実測で棄却したので既定は従来経路)',
+       !/var reqP = repairRequest\(/.test(SRC), 'repairRequest is still called');
+    ok('★棄却した理由がコードに残っている', /実測で棄却/.test(SRC) && /二重生成の新しい危険/.test(SRC));
   }
 
 console.log('\n== ★タイムアウト(fix555d) ==');
