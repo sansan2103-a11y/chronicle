@@ -1,2 +1,7 @@
-2026-07-25T14:31:12Z
-redeploy trigger for fix548 (pages build startup_failure on 5b89a40)
+2026-07-26T14:40:00Z
+redeploy trigger for fix587 (pages build not queued for dfa8e60)
+
+経緯: fix587 をコミットしたが pages-build-deployment が起動せず、
+      #1481(fix586) のまま止まっていた。リポジトリには反映されているのに
+      Pages が旧版(fix585)を配信し、新規JSは404だった。
+      前回(fix548)と同じ現象。このファイルを更新して再デプロイを促す。
