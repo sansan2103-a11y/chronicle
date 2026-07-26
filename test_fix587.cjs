@@ -66,6 +66,12 @@ function mkEnv(opts){
       }
     },
     __v292Dfix562: {
+      /* ★fix588: 物理削除の解禁条件に「分類器が使える」が入ったのでモックにも持たせる
+         （GPT裁定D-5: 通常同期は fail-open、削除後の物理GCは必ず fail-closed） */
+      classifyKey: k => {
+        let m = /^chr6_slot_(.+)$/.exec(k) || /_slot_([^"]+)$/.exec(k) || /genderMap_"([^"]+)"$/.exec(k);
+        return { slotId: m ? m[1] : null };
+      },
       sideStoreKeys: slot => Object.keys(store).filter(k =>
         k !== 'chr6_slot_' + slot && k.indexOf('chr6_bk_') !== 0 &&
         k.indexOf('chr6_snap') !== 0 && k.indexOf(slot) >= 0),

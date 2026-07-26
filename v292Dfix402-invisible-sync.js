@@ -139,18 +139,53 @@
         || k === 'chr6_slots_meta' || k === 'chr6_active_slot' || k === 'chr6_epoch'
         || /genderMap_"?default"?$/.test(k);
   }
+  /* ★fix588(GPT裁定D): 墓標が立ったスロットの**本体・サイドストアは送らない**。
+     meta の中の墓標そのものは送る（削除を伝えるため）。
+     「pull barrier と Worker v24 があるから送ってよい」ではない——最終防御は、
+     削除済みの実体を送り続ける設計を正当化しない。
+     ★判定は fix562 の classifyKey（正規化済み slotId・引用符付きキーも扱える）で行う。
+       文字列の部分一致は使わない（他のidを含むidで誤爆して**生きている物語を送らなくなる**）。
+       分類器が居ないときは従来どおり送る（fail-open。送らない方向へ倒すと同期が欠ける）。 */
+  function tombstonedIds(){
+    var out = {};
+    if (lsGet('v292Dfix588Off') === '1') return out;
+    try { var meta = JSON.parse(lsGet('chr6_slots_meta')||'[]')||[];
+          meta.forEach(function(e){ if (e && e.deleted === true && e.id) out[String(e.id)] = 1; }); } catch(e){}
+    return out;
+  }
+  var filterUnavailableNoted = false;
+  function isDeadSlotKey(k, dead){
+    if (!dead || !k) return false;
+    try {
+      var c = window.__v292Dfix562;
+      if (!c || typeof c.classifyKey !== 'function'){
+        /* ★GPT裁定D-5: fail-open は許容するが、**記録は必ず残す**。
+           この記録は「物理削除を解禁してよいか」の判定に効く（削除側は fail-closed）。 */
+        if (!filterUnavailableNoted){
+          filterUnavailableNoted = true;
+          try { var s = window.__chronicleStoryLifecycle;
+                if (s && typeof s.noteFilterUnavailable === 'function') s.noteFilterUnavailable(); } catch(e2){}
+        }
+        return false;
+      }
+      var r = c.classifyKey(k);
+      return !!(r && r.slotId && dead[String(r.slotId)]);
+    } catch(e){ return false; }
+  }
   // ★fix402c: 同期対象スロットの列挙(chr6_slots_meta 全件 + アクティブ保険 + base 'chr6')
   function allSlotIds(){
-    var ids = [];
-    try { var meta = JSON.parse(lsGet('chr6_slots_meta')||'[]')||[]; meta.forEach(function(s){ if(s&&s.id) ids.push(String(s.id)); }); } catch(e){}
-    var act = activeSlot(); if (act && ids.indexOf(act)<0) ids.push(act);   // メタ未登録のアクティブも拾う(healSlotMeta前の保険)
+    var ids = [], dead = tombstonedIds();
+    try { var meta = JSON.parse(lsGet('chr6_slots_meta')||'[]')||[];
+          meta.forEach(function(s){ if(s&&s.id && !dead[String(s.id)]) ids.push(String(s.id)); }); } catch(e){}
+    var act = activeSlot();
+    if (act && !dead[String(act)] && ids.indexOf(act)<0) ids.push(act);     // メタ未登録のアクティブも拾う(healSlotMeta前の保険)
     if (ids.indexOf('chr6')<0) ids.push('chr6');                            // base物語
     return ids;
   }
   // ★fix402c: slotId(単体) → slotIds(配列)。判定式は現行と同一のものをスロット毎に評価。
   function collectLS(slotIds){
     if (!Array.isArray(slotIds)) slotIds = (slotIds == null) ? [] : [slotIds];
-    var out = {};
+    var out = {}, dead = tombstonedIds();
     for (var i = 0; i < localStorage.length; i++){
       var k = localStorage.key(i);
       if (!k) continue;
@@ -158,6 +193,9 @@
       if (/^chr6_bk_/.test(k)) continue;
       if (/^v292Dfix399_/.test(k)) continue;
       if (/^v292Dfix402_/.test(k)) continue;
+      /* ★fix588: package を組み立てる最後の関門でも、墓標スロットの実体を落とす
+         （slotIdの列挙側だけの除外に頼らない＝GPT指定の二重の防壁） */
+      if (isDeadSlotKey(k, dead)) continue;
       var isSlot = false;
       for (var j = 0; j < slotIds.length; j++){
         var slotId = slotIds[j];

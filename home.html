@@ -165,8 +165,8 @@
 <script src="v292Dfix569-gc-shadow.js?cb=v292Dfix587"></script>
 <script src="v292Dfix562-backup-inventory.js?cb=v292Dfix587"></script>
 <script src="v292Dfix564-snapshot.js?cb=v292Dfix587"></script>
-<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix587"></script>
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix587"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix588"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix588"></script>
 <script>
 (function(){
   'use strict';
@@ -214,9 +214,31 @@
       favorite: !!m.favorite, scene: d.scene || null, meta: m
     };
   }
+  /* ★fix588: 墓標(tombstone)が立った物語は一覧に出さない。
+     ここが抜けていた（fix587で墓標を立て始めたのに、表示側が墓標を知らなかった）:
+       ・物理削除が保留(pending-cloud)のあいだ、本体がまだ残っているので
+         再読込すると削除した物語がカードとして戻って見える
+       ・完全に消えた後も、墓標エントリが「（無題）0ターン」の幽霊カードとして残る
+     判定は fix579 を正本にし、未搭載時も自前で墓標を隠す（安全側）。
+     ★誤って生きた物語を隠さないよう、条件は deleted===true かつ deleteOpId 有りに限る。 */
+  /* OFF = localStorage['v292Dfix588Off']='1' … 一覧の除外と起動遮断だけを止める。
+     ★削除の順序（墓標をクラウドへ確定させてから物理削除）と deleteOpId の再利用は
+       これでは止まらない。「ロールバック設定がデータ削除保護を迂回してはいけない」(GPT)。 */
+  function f588off(){ return g('v292Dfix588Off') === '1'; }
+  /* ★GPT裁定(B): 隠す側は deleteOpId を要求しない。deleteOpId が欠けた「壊れた墓標」も
+     **隠して止める**（ただし削除の再開や物理削除はしない=fix587側の責務）。
+     安全判定に deleteOpId を要求せず、破壊処理には要求する — この非対称が正しい。 */
+  function isTombstoneEntry(m){
+    if (f588off()) return false;
+    try {
+      var T = window.__v292Dfix579;
+      if (T && typeof T.isTombstone === 'function') return !!T.isTombstone(m);
+    } catch(e){}
+    return !!(m && m.deleted === true);
+  }
   // 互換用の内部スロット 'default'(chr6) は、中身が無い限り一覧に出さない
   function all(){
-    return readMeta().filter(function(m){ return m && m.id; }).map(story)
+    return readMeta().filter(function(m){ return m && m.id && !isTombstoneEntry(m); }).map(story)
       .filter(function(x){ return x.id !== 'default' || x.turns > 0; });
   }
 
@@ -559,6 +581,33 @@
   el('impBtn').addEventListener('click', function(){ el('impFile').click(); });
   el('impFile').addEventListener('change', function(e){ var f=e.target.files&&e.target.files[0]; if(f) importFile(f); e.target.value=''; });
 
+  /* ★fix588: 削除済みの物語URLを開くと fix527 がここへ戻す。
+     無言で戻すと「開かないんだけど」になるので、理由を1行だけ出す。
+     ★GPT裁定(A): 理由は**URLに載せない**。端末内の一回限りの通知（sessionStorage）で渡し、
+       表示したら消す。alert は使わない（拡張の自動操作を固める前歴があるため）。 */
+  var NOTICE_KEY = 'chr6_home_notice';
+  function deletedNotice(){
+    try {
+      var msg = null;
+      try { msg = sessionStorage.getItem(NOTICE_KEY); } catch(e){ msg = null; }
+      if (!msg) return;
+      try { sessionStorage.removeItem(NOTICE_KEY); } catch(e){}   /* 一回限り */
+      var b = document.createElement('div');
+      b.id = 'v588-deleted';
+      b.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:9999;padding:10px 14px;'
+        + 'background:#3a2a12;color:#f3e2c7;font-size:13px;line-height:1.5;'
+        + 'border-bottom:1px solid #6b5228;text-align:center';
+      b.textContent = String(msg).slice(0, 160);
+      var x = document.createElement('button');
+      x.type = 'button'; x.textContent = '×';
+      x.style.cssText = 'margin-left:12px;background:transparent;border:0;color:inherit;cursor:pointer;font-size:15px';
+      x.addEventListener('click', function(){ try { b.remove(); } catch(e){} });
+      b.appendChild(x);
+      document.body.appendChild(b);
+      setTimeout(function(){ try { b.remove(); } catch(e){} }, 12000);
+    } catch(e){}
+  }
+
   // ---------- 起動 ----------
   fetch('version.txt?_='+Date.now(), {cache:'no-store'})
     .then(function(r){ return r.text(); })
@@ -566,6 +615,7 @@
     .catch(function(){})
     .then(function(){ render(); pull(); });
   render();
+  deletedNotice();
 })();
 </script>
 </body>

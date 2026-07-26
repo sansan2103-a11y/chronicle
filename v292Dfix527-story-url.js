@@ -30,6 +30,9 @@
   function off(){ return lsg('v292Dfix527Off') === '1'; }
 
   var storyId = null, blocked = 0, pullBlocked = 0, internalWrite = false;
+  /* ★fix588: URLで指定された物語が削除済み(墓標あり)だったときのid。
+     storyId は採用しないが、取り込み(pull)は止めなければならないので別に持つ。 */
+  var deletedStoryId = null;
 
   function param(){
     try {
@@ -42,6 +45,31 @@
     try { (JSON.parse(lsg('chr6_slots_meta') || '[]') || []).forEach(function(s){ if (s && s.id) out[String(s.id)] = 1; }); } catch(e){}
     out['default'] = 1; out['chr6'] = 1;
     return out;
+  }
+  /* ★fix588: 墓標(tombstone)が立った物語は**起動させない**。
+     ここが抜けていた: 墓標は meta の中に居るので metaIds() が「既知のid」として通し、
+     ?story=<削除済みid> でアプリが起動できてしまう。起動すると
+       ・lastOpenedAt を墓標へ書く
+       ・本体が消えている場合は空の物語として作り直され、S.save でローカルへ復活する
+     という2つの復活経路になる。判定は fix579 を正本にし、未搭載時も自前で判定する（安全側）。 */
+  function isDeletedStoryId(id){
+    /* OFF = v292Dfix588Off … 起動遮断だけを止める（pull barrier(fix587)は別途生きている） */
+    if (lsg('v292Dfix588Off') === '1') return false;
+    var meta = null;
+    try { meta = JSON.parse(lsg('chr6_slots_meta') || '[]'); } catch(e){ meta = null; }
+    if (!Array.isArray(meta)) return false;
+    try {
+      var T = window.__v292Dfix579;
+      if (T && typeof T.isTombstonedId === 'function') return !!T.isTombstonedId(id, meta);
+    } catch(e){}
+    /* ★GPT裁定(B): 起動を止める側は deleteOpId を要求しない。
+       deleteOpId が欠けた「壊れた墓標」も**開かせない**（削除の再開はしない=fix587側の責務）。 */
+    var want = String(id == null ? '' : id);
+    for (var i = 0; i < meta.length; i++){
+      var e2 = meta[i];
+      if (e2 && e2.deleted === true && String(e2.id) === want) return true;
+    }
+    return false;
   }
 
   // ---- [2] ミラー固定 ---------------------------------------------------
@@ -80,7 +108,8 @@
       if (api && typeof api.applySave === 'function' && !api.applySave.__f527){
         var inner = api.applySave;
         var w = function(pkg){
-          if (storyId && !off()){
+          /* ★fix588: 削除済み物語のURLで開かれたときも取り込みを止める（storyIdは採用しない） */
+          if ((storyId || deletedStoryId) && !off()){
             pullBlocked++;
             try { console.warn(TAG, 'pull blocked in story page (取り込みはホームで行います)'); } catch(e){}
             return Promise.reject(new Error('取り込みはホーム画面で行います'));
@@ -201,6 +230,22 @@
     if (off()) { try { console.log(TAG, 'off'); } catch(e){} return; }
     var q = param();
     if (!q) { try { console.log(TAG, 'no ?story= → 旧互換モード(UIのみ適用)'); } catch(e){} bootUI(); return; }
+    /* ★fix588: 削除済み(墓標あり)の物語は開かない。ホームへ戻す。
+       ・取り込み(pull)も先に止める … クラウドに残っている古い本体で復活させないため
+       ・ミラー(chr6_active_slot)へ墓標idを書かない … 他fixの読み手が生きた物語だと誤解する
+       ・lastOpenedAt も書かない（墓標を触らない）
+       誤判定でループしないこと: home.html は ?story= を持たないので、戻り先で再判定は起きない。 */
+    if (isDeletedStoryId(q)){
+      deletedStoryId = q;
+      try { blockPull(); } catch(e){}
+      try { console.warn(TAG, 'deleted story in URL → ホームへ戻します: ' + q); } catch(e){}
+      /* ★GPT裁定(A): 理由は**URLに載せず**、端末内の一回限りの通知で渡す。
+         履歴ループを避けるため遷移は location.replace()。 */
+      try { sessionStorage.setItem('chr6_home_notice',
+              'この物語は削除済みのため開けません。復元が必要なときは、削除時の控えから戻せます。'); } catch(e){}
+      try { location.replace(HOME); } catch(e){}
+      return;
+    }
     if (!metaIds()[q]) { try { console.warn(TAG, 'unknown story id in URL → 旧互換モード(UIのみ適用)'); } catch(e){} bootUI(); return; }
 
     storyId = q;
@@ -231,7 +276,9 @@
   }
 
   window.__v292Dfix527 = {
-    state: function(){ return { storyId: storyId, off: off(), blockedWrites: blocked, blockedPulls: pullBlocked, urlParam: param() }; },
+    state: function(){ return { storyId: storyId, deletedStoryId: deletedStoryId, off: off(),
+                                blockedWrites: blocked, blockedPulls: pullBlocked, urlParam: param() }; },
+    isDeletedStoryId: isDeletedStoryId,
     storyId: function(){ return storyId; },
     homeUrl: HOME
   };

@@ -24,7 +24,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260726-fix587';
+  var BUILT = '20260726-fix588';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2755,7 +2755,7 @@ G.init();
 <script src="v292Dfix247-proxy.js?cb=v292Dfix248"></script>
 <script src="v292Dfix247b-proxy-admin.js?cb=v292Dfix247b"></script>
 <!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
-<script src="v292Dfix527-story-url.js?cb=v292Dfix527c"></script>
+<script src="v292Dfix527-story-url.js?cb=v292Dfix588"></script>
 <script src="features.js?cb=v292Dfix551"></script>
 <script src="v292Dfix135-longmem.js?cb=v292Dfix299b"></script>
 <script src="v292Dfix138-continue.js?cb=v292Dfix225"></script>
@@ -2856,11 +2856,11 @@ G.init();
      正規サービスへ委譲する。未搭載なら削除せず fail-closed（旧経路へは戻さない）。OFF=v292Dfix577Off -->
 <!-- fix579: tombstone(墓標)のスキーマとマージ規則。純粋関数のみで、**まだ同期へ配線していない**。
      pull barrier と push競合規則は一組で入れる必要があるため、先に形だけ固める。OFF=v292Dfix579Off -->
-<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix579"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix588"></script>
 <!-- fix587: 物語削除の正規サービス。UIは意思表示を受け取るだけで、認可と手順はここが持つ。
      削除の順序: 再読込→exact key確定→復元セット作成→検証→墓標→クラウドへ反映確認→ゲート経由でexact削除。
      ★物理削除より先に墓標をクラウドへ確定させる。OFF=v292Dfix587Off -->
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix587"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix588"></script>
 
 
 <script src="v292Dfix577-delete-entry-guard.js?cb=v292Dfix577"></script>
@@ -2916,13 +2916,13 @@ G.init();
 <script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=v292Dfix396"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
-<script src="v292Dfix399-cloudsync.js?cb=v292Dfix587"></script>
+<script src="v292Dfix399-cloudsync.js?cb=v292Dfix588"></script>
   <script src="v292Dfix400-img-url.js?cb=v292Dfix400d"></script>
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=v292Dfix336"></script>
 <script src="v292Dfix338-artstyle.js?cb=v292Dfix484"></script>
 <script src="v292Dfix346-idb-avatars.js?cb=v292Dfix346"></script>
 <script src="v292Dfix356-avatar-eager.js?cb=v292Dfix450"></script>
-<script src="v292Dfix402-invisible-sync.js?cb=v292Dfix584"></script>
+<script src="v292Dfix402-invisible-sync.js?cb=v292Dfix588"></script>
 <script src="v292Dfix405-state-freshness.js?cb=v292Dfix417"></script>
 <script src="v292Dfix406-automode.js?cb=v292Dfix417d"></script>
 <script src="v292Dfix407-load-noconfirm.js?cb=v292Dfix407"></script>

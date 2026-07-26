@@ -67,14 +67,44 @@
         || k === 'chr6_slots_meta' || k === 'chr6_active_slot' || k === 'chr6_epoch'
         || /genderMap_"?default"?$/.test(k);
   }
-  function collectLS(slotId){
+  /* ★fix588(GPT裁定D): 墓標が立ったスロットの本体・サイドストアは送らない。
+     meta の中の墓標そのものは送る（削除を伝えるため）。判定は fix562 の classifyKey
+     （正規化済み slotId・引用符付きキーも扱える）。部分一致は使わない＝生きている物語を
+     取りこぼさないため。分類器が居なければ従来どおり送る（fail-open）。 */
+  function deadSlotIds(){
     var out = {};
+    try { if (localStorage.getItem('v292Dfix588Off') === '1') return out; } catch(e){}
+    try { var meta = JSON.parse(localStorage.getItem('chr6_slots_meta') || '[]') || [];
+          meta.forEach(function(e){ if (e && e.deleted === true && e.id) out[String(e.id)] = 1; }); } catch(e){}
+    return out;
+  }
+  var filterUnavailableNoted = false;
+  function isDeadSlotKey(k, dead){
+    if (!dead || !k) return false;
+    try {
+      var c = window.__v292Dfix562;
+      if (!c || typeof c.classifyKey !== 'function'){
+        /* ★GPT裁定D-5: fail-open は許容するが、記録は必ず残す（物理削除側は fail-closed） */
+        if (!filterUnavailableNoted){
+          filterUnavailableNoted = true;
+          try { var s = window.__chronicleStoryLifecycle;
+                if (s && typeof s.noteFilterUnavailable === 'function') s.noteFilterUnavailable(); } catch(e2){}
+        }
+        return false;
+      }
+      var r = c.classifyKey(k);
+      return !!(r && r.slotId && dead[String(r.slotId)]);
+    } catch(e){ return false; }
+  }
+  function collectLS(slotId){
+    var out = {}, dead = deadSlotIds();
     for (var i = 0; i < localStorage.length; i++){
       var k = localStorage.key(i);
       if (!k) continue;
       if (/^__gen_/.test(k)) continue;
       if (/^chr6_bk_/.test(k)) continue;
       if (/^v292Dfix399_/.test(k)) continue;     // 同期状態は運ばない
+      if (isDeadSlotKey(k, dead)) continue;      // ★fix588: 削除済みスロットの実体は送らない
       var isSlot = slotId && slotId !== 'chr6' && k.indexOf(slotId) >= 0;
       if (slotId === 'chr6' && (k === 'chr6' || /_slot_chr6$|genderMap_"?chr6"?$/.test(k))) isSlot = true;
       if (isSlot || isGlobalKey(k)) out[k] = localStorage.getItem(k);

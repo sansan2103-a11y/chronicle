@@ -166,11 +166,27 @@
     return { blocked: false, slotId: null, kind: null, tombstone: null };
   }
 
+  /* ---- ★fix588: 物語IDが墓標かどうか（T1/表示・起動の遮断で使う） -----------
+   * isBlockedByTombstone はキー名で判定するので、id が他のidの部分文字列だと
+   * 誤爆しうる（side-store 判定が部分一致のため）。表示・起動の判定は
+   * **id の完全一致**でなければならないので専用の関数を分ける。 */
+  function isTombstonedId(id, meta){
+    var want = String(id == null ? '' : id);
+    if (!want) return false;
+    if (!Array.isArray(meta)) return false;
+    for (var i = 0; i < meta.length; i++){
+      var e = meta[i];
+      if (isTombstone(e) && String(e.id) === want) return true;
+    }
+    return false;
+  }
+
   window.__v292Dfix579 = {
     __armed: true,
     LIFECYCLE_VERSION: LIFECYCLE_VERSION,
     make: make,
     isTombstone: isTombstone,
+    isTombstonedId: isTombstonedId,
     isRestore: isRestore,
     validate: validate,
     visible: visible,
