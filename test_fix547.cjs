@@ -212,7 +212,8 @@ console.log('\n== 台帳の更新（移行済みの数） ==');
   /* コア5 + バッチ1の8 + fix543 + fix192 + 保存ラッパ組3 = 18 */
   /* コア5 + バッチ1の8 + fix543 + fix192 + 保存ラッパ組3 + バッチ3の3 = 21 */
   /* + fix553(句読点崩れの検出器。保存本文を読むので最初から正式APIを使う) = 22 */
-  ok('★__chronicleGetState を参照するのは22ファイル(+features.js)', migrated === 22, migrated);
+  /* + fix555(校正専用リクエストで cfg のプロバイダ/キー/モデルを読む) = 23 */
+  ok('★__chronicleGetState を参照するのは23ファイル(+features.js)', migrated === 23, migrated);
   ok('★features.js も分類1だけ移行済み',
      fs2.readFileSync(path.join(__dirname, 'features.js'), 'utf8').indexOf('__chronicleGetState') > 0);
 }

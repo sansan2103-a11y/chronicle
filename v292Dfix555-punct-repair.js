@@ -93,7 +93,8 @@
 
   /* ---- 記録 ------------------------------------------------------------ */
   var stats = { fired: 0, repaired: 0, rejectedContent: 0, rejectedNoImprove: 0,
-                failed: 0, timedOut: 0, lateDropped: 0, skippedTagged: 0, calls: 0, ms: 0, msList: [] };
+                failed: 0, timedOut: 0, lateDropped: 0, skippedTagged: 0, calls: 0, ms: 0, msList: [],
+                viaDirect: 0, viaApiCall: 0 };
   /* ★fix555d: Api.call は AbortSignal を受け取らないので通信そのものは止められない。
      代わりに**試行トークン**で囲い、遅れて届いた修復結果を次の生成へ混ぜない。 */
   var attemptSeq = 0;
@@ -134,6 +135,75 @@
     var m = s.match(/\{[\s\S]*\}/);
     if (m){ try { var j2 = JSON.parse(m[0]); return (j2 && typeof j2 === 'object' && !Array.isArray(j2)) ? j2 : null; } catch(e2){} }
     return null;
+  }
+
+  /* ---- ★fix556: 校正だけは専用のリクエストで送る -------------------------
+     実測(2026-07-26)で分かった真因:
+       `Api.call` の OpenRouter 経路は **temperature 0.85 / top_p 0.95 /
+        frequency_penalty 0.4 / presence_penalty 0.4** という**創作用の設定**を使う。
+       frequency/presence penalty は「同じ語を繰り返すな」という圧力なので、
+       **入力をそのまま書き写すのが仕事の校正には最悪**。これが
+       「助詞を足す」「言い換える」の温床だった。
+       さらに空出力のとき Api.call は内部で**3回**まで再試行するので、
+       失敗ケースが 60〜80秒に伸びていた(=「返ってこない」ように見えていた)。
+     → 校正は temperature 0 / penalty 0 / 再試行なし の専用リクエストで送る。
+     プロバイダが分からない場合は従来どおり Api.call へ落とす。 */
+  function normKey(k){ return String(k == null ? '' : k).replace(/[\s\u3000]/g, ''); }
+  function getState555(){ try { return window.__chronicleGetState('fix555'); } catch(e){ return null; } }
+
+  function repairRequest(sys, user, ms){
+    var st = getState555();
+    var cfg = st && st.cfg;
+    if (!cfg) return null;
+    var prov = cfg.provider || 'anthropic';
+    var ctrl = null;
+    try { ctrl = new AbortController(); } catch(e){}
+    if (ctrl) setTimeout(function(){ try { ctrl.abort(); } catch(e){} }, ms || TIMEOUT_MS);
+
+    if (prov === 'openrouter'){
+      var key = normKey(cfg.orKey);
+      if (!key) return null;
+      return fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key,
+                   'HTTP-Referer': 'https://sansan2103-a11y.github.io/chronicle/', 'X-Title': 'Chronicle TRPG' },
+        body: JSON.stringify({
+          model: cfg.orModel || 'deepseek/deepseek-v4-flash',
+          max_tokens: 2000,
+          temperature: 0,          /* ★校正は決定的に */
+          top_p: 1,
+          frequency_penalty: 0,    /* ★入力をそのまま書き写すので繰り返しへの罰はゼロ */
+          presence_penalty: 0,
+          messages: [{ role: 'system', content: sys }, { role: 'user', content: user }]
+        }),
+        signal: ctrl ? ctrl.signal : undefined
+      }).then(function(res){
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      }).then(function(j){
+        var t = (j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+        return { text: String(t).trim() };
+      });
+    }
+    if (prov === 'anthropic'){
+      var akey = normKey(cfg.key);
+      if (!akey) return null;
+      return fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': akey,
+                   'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({ model: cfg.model, max_tokens: 2000, temperature: 0,
+                               system: sys, messages: [{ role: 'user', content: user }] }),
+        signal: ctrl ? ctrl.signal : undefined
+      }).then(function(res){
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      }).then(function(j){
+        var t = ((j && j.content) || []).map(function(c){ return (c && c.text) || ''; }).join('');
+        return { text: String(t).trim() };
+      });
+    }
+    return null;   /* 未知のプロバイダは従来どおり Api.call へ */
   }
 
   /* ---- Api.call を包む -------------------------------------------------- */
@@ -197,8 +267,13 @@
         try {
           stats.calls++;
           var timedOut = false;
+          /* ★fix556: まず専用リクエスト(temperature 0 / penalty 0 / 再試行なし)。
+             作れなければ従来どおり Api.call。 */
+          var reqP = repairRequest(p.sys, p.user, TIMEOUT_MS);
+          if (!reqP){ stats.viaApiCall++; reqP = prev.call(this, p.sys, p.user, 1200); }
+          else { stats.viaDirect++; }
           out = await Promise.race([
-            prev.call(this, p.sys, p.user, 1200),
+            reqP,
             new Promise(function(res){ setTimeout(function(){ timedOut = true; res(null); }, TIMEOUT_MS); })
           ]);
           if (timedOut){
@@ -297,6 +372,7 @@
                rejectedContent: stats.rejectedContent, rejectedNoImprove: stats.rejectedNoImprove,
                failed: stats.failed, timedOut: stats.timedOut, lateDropped: stats.lateDropped,
                skippedTagged: stats.skippedTagged, calls: stats.calls, timeoutMs: TIMEOUT_MS,
+               viaDirect: stats.viaDirect, viaApiCall: stats.viaApiCall,
                avgMs: stats.repaired ? Math.round(stats.ms / stats.repaired) : 0,
                /* ★20件ほど貯まったら p95 を見て上限を調整する(GPT) */
                p95Ms: (function(){ var a = stats.msList.slice().sort(function(x,y){ return x-y; });
@@ -311,7 +387,7 @@
     off: off,
     _metrics: metrics, _skeleton: skeleton, _splitTail: splitTail,
     _pickSegments: pickSegments, _buildPrompt: buildPrompt, _parseRepairJSON: parseRepairJSON,
-    _install: install, _timeoutMs: function(){ return TIMEOUT_MS; }
+    _install: install, _timeoutMs: function(){ return TIMEOUT_MS; }, _repairRequest: repairRequest
   };
 
   /* ★包めても止めない。他のfixが包み直して印が消えたら、また包む。 */

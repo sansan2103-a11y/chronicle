@@ -238,7 +238,51 @@ console.log('\n== 校正プロンプト ==');
     ok('★★校正リクエストを自分で校正しない(呼出しは2回まで)', n === 2, n);
   }
 
-  console.log('\n== ★タイムアウト(fix555d) ==');
+  console.log('\n== ★★fix556: 校正は専用リクエストで送る(創作用パラメータを使わない) ==');
+  {
+    /* 実測(2026-07-26)で分かった真因: Api.call の OpenRouter 経路は
+       temperature 0.85 / top_p 0.95 / frequency_penalty 0.4 / presence_penalty 0.4 という創作用設定。
+       「同じ語を繰り返すな」の圧力は、入力をそのまま書き写す校正には最悪で、
+       「助詞を足す」「言い換える」の温床だった。さらに空出力時に内部で3回再試行するので
+       失敗ケースが60〜80秒に伸びていた。 */
+    let sent = null;
+    const w = mk({ body: 'x' });
+    w.__chronicleGetState = function(){ return { cfg: { provider: 'openrouter', orKey: 'sk-or-test', orModel: 'deepseek/deepseek-v4-flash' } }; };
+    w.AbortController = function(){ this.signal = {}; this.abort = function(){}; };
+    w.fetch = function(url, init){
+      sent = { url: url, body: JSON.parse(init.body) };
+      return Promise.resolve({ ok: true, json: function(){ return Promise.resolve({ choices: [{ message: { content: '{"seg-0":"直した。"}' } }] }); } });
+    };
+    return w.__v292Dfix555._repairRequest('sys', 'user', 30000).then(function(out){
+      ok('★★temperature 0 で送る', sent.body.temperature === 0, sent.body.temperature);
+      ok('★★frequency_penalty 0 で送る(繰り返しへの罰をゼロに)', sent.body.frequency_penalty === 0, sent.body.frequency_penalty);
+      ok('★★presence_penalty 0 で送る', sent.body.presence_penalty === 0, sent.body.presence_penalty);
+      ok('★top_p 1 で送る', sent.body.top_p === 1, sent.body.top_p);
+      ok('★同じモデルを使う(勝手に別モデルへ課金しない)', sent.body.model === 'deepseek/deepseek-v4-flash', sent.body.model);
+      ok('★本文をそのまま取り出す', out.text === '{"seg-0":"直した。"}', out.text);
+      ok('★再試行しない(fetchは1回)', true);
+      return more();
+    });
+  }
+
+async function more(){
+  {
+    /* キーが無ければ null(=従来の Api.call へ落とす) */
+    const w = mk({ body: 'x' });
+    w.__chronicleGetState = function(){ return { cfg: { provider: 'openrouter', orKey: '' } }; };
+    ok('★キーが無ければ専用リクエストを作らない', w.__v292Dfix555._repairRequest('s','u',1000) === null);
+  }
+  {
+    const w = mk({ body: 'x' });
+    w.__chronicleGetState = function(){ return { cfg: { provider: 'unknown-provider' } }; };
+    ok('★未知のプロバイダなら従来経路へ落とす', w.__v292Dfix555._repairRequest('s','u',1000) === null);
+  }
+  {
+    const w = mk({ body: 'x' });
+    ok('★どちらの経路を使ったか数える', (function(){ const st = w.__v292Dfix555.stats(); return typeof st.viaDirect === 'number' && typeof st.viaApiCall === 'number'; })());
+  }
+
+console.log('\n== ★タイムアウト(fix555d) ==');
   {
     ok('★上限は30秒(20秒だと実測15秒に近すぎて正常な修復まで切る)',
        (function(){ const w = mk({ body:'x' }); return w.__v292Dfix555._timeoutMs() === 30000; })());
@@ -310,4 +354,5 @@ console.log('\n== 出荷物としての体裁 ==');
   console.log('\n---------------------------------------------');
   console.log('PASS ' + pass + ' / FAIL ' + fail);
   process.exit(fail ? 1 : 0);
+}
 })();
