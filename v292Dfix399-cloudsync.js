@@ -240,6 +240,18 @@
     });
   }
 
+  /* ★fix575: 中止・削除の理由は**必ず**残す。
+     旧実装は localStorage にだけ書いていたので、**容量が満杯のときは記録そのものが失敗**し、
+     いちばん知りたい「なぜ取り込みを中止したか」が無言で消えていた（回帰テストで発覚）。
+     メモリ側を正本にし、localStorage への永続化は best-effort にする。
+     読み出し: window.__v292Dfix399x.bkLog() */
+  var BKLOG = [], BKLOG_MAX = 20;
+  function bkLog(){
+    var ls = [];
+    try { ls = JSON.parse(localStorage.getItem('v292Dfix399_bkLog') || '[]') || []; } catch(e){ ls = []; }
+    return { mem: BKLOG.slice(), persisted: ls, persistedOk: ls.length > 0 };
+  }
+
   // ---- 復元(取り込み) ----
   function backupBeforeApply(pkg){
     // fix495(C1): ①先に世代trim(新しい順2件) ②控えを書く ③quotaなら同系統をもう1つ削って1回再試行
@@ -278,12 +290,14 @@
       } catch(e){ return false; }
     }
     function note(rec){
+      /* ★まずメモリへ。容量が満杯でも理由が消えないようにする(fix575) */
+      try { BKLOG.push(rec); if (BKLOG.length > BKLOG_MAX) BKLOG.shift(); } catch(e){}
       try {
         var a = JSON.parse(localStorage.getItem('v292Dfix399_bkLog') || '[]');
         if (!Array.isArray(a)) a = [];
         a.push(rec);
         localStorage.setItem('v292Dfix399_bkLog', JSON.stringify(a.slice(-20)));
-      } catch(e){}
+      } catch(e){}   /* 永続化は best-effort。失敗しても mem 側に残る */
     }
     try {
       var snap = {};
@@ -320,17 +334,61 @@
         }
         return 'ok';
       }
+      /* ★fix575(2026-07-26・GPT裁定): 容量回復の削除だけを fix569 の exact-delete ゲートへ通す。
+         **候補の選択は上の dropOneSpare と同じロジックのまま**（最小変更）。変えるのは物理削除の実行だけ。
+         ゲートが見るもの: ①exact key の存在 ②bytes 一致(候補作成時からの変化＝stale を弾く)
+         ③fix562 の保護判定を**その場で**取り直す ④protected／分類器不在なら削除しない
+         ⑤fix569 が最初に捕捉した native removeItem で削除（fix246 のキー書換を迂回）⑥read-back。
+         ★⑤が要。`localStorage.removeItem()` を呼んで後から read-back するだけでは不十分で、
+           fix246 が別キーへ書き換えた場合「候補は残ったまま**別キーが消える**」事故になる。 */
+      function gateOff(){ try { return localStorage.getItem('v292Dfix575Off') === '1'; } catch(e){ return false; } }
+      function gateway(){
+        try {
+          if (gateOff()) return null;
+          var g = window.__v292Dfix569;
+          return (g && typeof g.tryDeleteExact === 'function') ? g : null;
+        } catch(e){ return null; }
+      }
+      function dropOneSpareChecked(){
+        var g = gateway();
+        if (!g) return dropOneSpare();   /* ゲート未搭載 or 明示OFF = 旧挙動(ただし再試行は1回だけ) */
+        var cur = listBk();
+        for (var i = 0; i < cur.length; i++){
+          var k = cur[i];
+          if (k === keep) continue;                       /* 保護対象は呼び出し元でも触らない */
+          var v = null; try { v = localStorage.getItem(k); } catch(e){}
+          if (v == null) continue;                        /* 既に無い候補は数に入れない */
+          var res = g.tryDeleteExact({ key: k, expectedBytes: v.length, intent: 'reclaim',
+                                       path: 'fix399', reason: 'cloudsync-pre-pull-quota' });
+          note({ at: Date.now(), act: 'dropSpareGated', key: k, code: (res && res.code) || 'none', kept: keep });
+          if (res && res.ok && res.deleted){
+            /* ★ゲートの判定を鵜呑みにせず、呼び出し元でも消えたことを確認する(GPT指定) */
+            var back = null; try { back = localStorage.getItem(k); } catch(e){}
+            if (back == null) return true;
+            note({ at: Date.now(), act: 'dropSpareUnverified', key: k, kept: keep });
+          }
+          /* protected / stale / missing / policy-unavailable / delete-failed は
+             **次の候補へ進まない**。候補選択と保護判定が食い違っている合図なので、
+             取り込みを中止する方（fail-closed）が安全。クラウドのデータは残っている。 */
+          return false;
+        }
+        return false;   /* 消せる余剰が無い = 保護対象しか残っていない */
+      }
+
       var r = writeAndVerify();
-      while (r === 'quota'){
-        /* 容量が足りない。**保護対象は犠牲にしない**。余剰が無ければ諦める。 */
-        if (!dropOneSpare()){
-          note({ at: Date.now(), act: 'abortPull', why: '容量不足。唯一の完全控えを守るため取り込みを中止', kept: keep });
+      if (r === 'quota'){
+        /* ★fix575: 以前はここが `while` で、容量が足りない限り控えを**次々に**消し続けられた。
+           GPT裁定の不変条件「1回の容量回復につき、削除は最大1論理単位／書込み再試行も最大1回」。 */
+        if (!dropOneSpareChecked()){
+          note({ at: Date.now(), act: 'abortPull', why: '容量不足。安全に消せる余剰が無いため取り込みを中止(no-safe-space)', kept: keep });
           return false;
         }
         r = writeAndVerify();
       }
       if (r !== 'ok'){
-        note({ at: Date.now(), act: 'abortPull', why: '新しい控えの読み戻し検証に失敗', kept: keep });
+        note({ at: Date.now(), act: 'abortPull',
+               why: (r === 'quota' ? '容量不足。1件回復して再試行しても書けなかった' : '新しい控えの読み戻し検証に失敗'),
+               kept: keep });
         return false;
       }
 
@@ -566,6 +624,7 @@
        (= trim の不具合ではない)。それでも「コードが本当に2世代へ落とすか」を
        回帰テストで固定しておくために検証口を出す。副作用は従来どおり(呼べば控えを1件書く)。 */
     backupBeforeApply: backupBeforeApply,
+    bkLog: bkLog,   /* fix575: 削除・中止の理由（容量満杯でも消えないメモリ側を含む） */
     verify: verify, selfHeal: selfHeal,
     syncState: function(){ return { baseTs: baseTs(), localTs: localTs(), imgHash: imgHashStored() }; },
     status: function(){ return { off: off(), autoOff: autoOff(), loggedIn: isLoggedIn(), proxy: proxyUrl(), activeSlot: activeSlot() }; }

@@ -110,6 +110,8 @@
     wouldAllow:0, wouldDeny:0, unknown:0, postChecks:0,
     /* ★fix574: 実際に拒否した件数（wouldDeny のうち、拒否できる経路だったもの） */
     denied:0, deniedByPath:{}, notDeniedBecausePathLoops:0,
+    /* ★fix575: 明示ゲートの結果内訳（deleted / protected / stale / missing / policy-unavailable / delete-failed） */
+    gate:{},
     protectedProbeSeen:0, allowedProbeSeen:0, rewriteProbeSeen:0, bypassProbeSeen:0,
     classifierErrors:0, wrapperErrors:0,
     byPath:{ fix490Trim:0, fix490Quota:0, fix264b:0, fix399:0, fix402Doomed:0, fix402Retention:0, fix277:0, fix569probe:0, other:0, unknownPath:0 },
@@ -330,6 +332,60 @@
     setTimeout(armWhenParsed, 3000);
   } catch(e){ setTimeout(arm, 0); }
 
+  /* ================= fix575: exact-delete ゲート（GPT裁定・569bの明示ゲート） =====
+   * 呼び出し元（fix399 / fix490Quota など）が「この候補を消したい」と申告し、
+   * **物理削除だけ**をここへ通す。候補の選択は呼び出し元のロジックのまま（最小変更）。
+   * 返却は boolean ではなく**理由を持つ構造体**にする（GPT指定）:
+   *   {ok:true, deleted:true, code:'deleted'}
+   *   {ok:false, deleted:false, code:'protected'|'stale'|'missing'|'policy-unavailable'|'delete-failed'}
+   *
+   * ゲート内部の順序（GPT指定の7段）:
+   *   ①exact key が存在する ②hash・bytes が候補作成時と一致 ③fix562の保護判定を再実行
+   *   ④protected／unknown なら削除しない ⑤**fix569が最初に捕捉した native removeItem** で exact key を削除
+   *   ⑥exact key が消えたことを read-back 確認 ⑦結果を統一ログへ記録
+   *
+   * ★⑤が要。`localStorage.removeItem()` をそのまま呼んで後から read-back するだけでは**不十分**。
+   *   fix246 が別キーへ書き換えた場合、候補は残っていても**別キーが既に消えている**可能性があるため。
+   */
+  var gateLog = [], GATE_LOG_MAX = 40;
+  function fnv(str){
+    var h = 0x811c9dc5;
+    for (var i = 0; i < str.length; i++){ h ^= str.charCodeAt(i);
+      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0; }
+    return h.toString(16) + '-' + str.length;
+  }
+  function gateNote(rec){ try { gateLog.push(rec); if (gateLog.length > GATE_LOG_MAX) gateLog.shift(); } catch(e){} }
+  function tryDeleteExact(req){
+    req = req || {};
+    var key = String(req.key == null ? '' : req.key);
+    var out = function(code, deleted){
+      var r = { ok: code === 'deleted', deleted: !!deleted, code: code, key: key };
+      gateNote({ at: now(), key: key, code: code, intent: req.intent || null,
+                 path: req.path || null, reason: req.reason || null });
+      S.gate[code] = (S.gate[code] || 0) + 1;
+      return r;
+    };
+    try {
+      if (!key) return out('missing', false);
+      /* ① exact key が存在する（native の getItem で見る） */
+      var raw = rawGet(key);
+      if (raw == null) return out('missing', false);
+      /* ② hash・bytes が候補作成時と一致 */
+      if (req.expectedBytes != null && raw.length !== req.expectedBytes) return out('stale', false);
+      if (req.expectedHash != null && fnv(raw) !== req.expectedHash) return out('stale', false);
+      /* ③④ 保護判定を「いま」取り直す。★分類器が居なければ削除しない（明示ゲートは fail-closed） */
+      var m = protectedKeys(true);
+      if (!m) return out('policy-unavailable', false);
+      if (m[key]) return out('protected', false);
+      /* ⑤ fix246 を迂回した exact-delete */
+      if (!nativeRemove) return out('policy-unavailable', false);
+      try { nativeRemove.call(localStorage, key); } catch(e){ return out('delete-failed', false); }
+      /* ⑥ read-back */
+      if (rawGet(key) != null) return out('delete-failed', false);
+      return out('deleted', true);
+    } catch(e){ S.wrapperErrors++; return out('delete-failed', false); }
+  }
+
   /* ================= canary（生存証明） ========================================= */
   function nonce(){ var s=''; for (var i=0;i<8;i++){ s += 'abcdefghijklmnopqrstuvwxyz0123456789'.charAt((i*7+13)%36); } return s + '_' + now(); }
   function selfTest(){
@@ -395,7 +451,7 @@
   function stats(){
     var out = {};
     Object.keys(S).forEach(function(k){
-      out[k] = (k === 'byPath' || k === 'innerByFamily' || k === 'markersAtLoad' || k === 'deniedByPath')
+      out[k] = (k === 'byPath' || k === 'innerByFamily' || k === 'markersAtLoad' || k === 'deniedByPath' || k === 'gate')
         ? JSON.parse(JSON.stringify(S[k])) : S[k];
     });
     try { out.isOutermost = (localStorage.removeItem === outerShadow); } catch(e){ out.isOutermost = null; }
@@ -434,6 +490,9 @@
     armed: function(){ return S.outerInstalled; },
     stats: stats,
     consistency: consistency,
+    /* ★fix575: 明示ゲート。呼び出し元は {ok,deleted,code} を見て自分で fail-closed する */
+    tryDeleteExact: tryDeleteExact,
+    gateLog: function(){ return gateLog.slice(); },
     events: function(){ return RING.slice(); },
     selfTest: selfTest,
     install: arm,
