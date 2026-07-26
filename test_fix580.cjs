@@ -225,6 +225,12 @@ function step7(){
     const earlier = wrappers.filter(f => pos(f) < me);
     ok('★★fetchラッパの中で fix580 が最も先にいる', earlier.length === 0,
        { fix580: me, より先にいるラッパ: earlier.map(f => f + '@' + pos(f)) });
+    /* ★2026-07-26に踏んだ: タグの位置だけ動かして **cbパラメータを据え置いた**ため、
+       ブラウザが旧版のJSをキャッシュから使い続け、実機で新しい計測値が出なかった。
+       ファイルを直したら cb も必ず上げる。 */
+    const cb = (idx.match(/v292Dfix580-meta-sync-coordinator\.js\?cb=v292Dfix(\d+)/) || [])[1];
+    ok('★★cbパラメータが fix581 以降（JSを直したらキャッシュバスターも上げる）',
+       !!cb && Number(cb) >= 581, cb);
     ok('★fix569(localStorage監視)の次に置いている（fix569は先頭でなければならない）',
        pos('v292Dfix569-gc-shadow.js') === 0 && me === 1,
        { fix569: pos('v292Dfix569-gc-shadow.js'), fix580: me });
