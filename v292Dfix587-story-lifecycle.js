@@ -50,6 +50,8 @@
   var stats = { requested: 0, completed: 0, pending: 0, refused: 0, physicalDeleted: 0, gateRefused: 0,
                 /* ★fix588(GPT裁定 B/C/D): 異常系を推測で進めなかった回数を数える */
                 malformedTombstones: 0, resumeRefused: 0, resumeBlocked: 0, classifierUnavailable: 0,
+                /* ★fix589: 墓標をクラウドへ確定できなかった回数（理由は lastPushWhy / log に残す） */
+                pushFailures: 0, autoResumeArmed: 0, autoResumeGaveUp: 0,
                 /* 送信側で墓標スロットを除外できなかった回数（fix402/fix399 が報告する） */
                 tombstonePayloadFilterUnavailable: 0 };
   function note(rec){ try { rec.at = Date.now(); LOG.push(rec); if (LOG.length > LOG_MAX) LOG.shift(); } catch(e){} }
@@ -95,15 +97,37 @@
   }
 
   /* ---- ⑥ tombstone をクラウドへ確定させる ------------------------------- */
-  /* 戻り: Promise<boolean>。true = クラウドへ反映できた */
+  /* 戻り: Promise<boolean>。true = クラウドへ反映できた
+   * ★fix589: **失敗の理由を必ず残す**。
+   *   実機テストで「オフライン」と表示されたが、真因は **fix399 の空ガード**だった
+   *   （0ターンのスロットを開いた状態で push を呼ぶと EMPTY_LOCAL_GUARD で弾かれる）。
+   *   理由を区別しないと、次に同じことが起きたとき原因が追えない。 */
+  var lastPushWhy = null;
+  function whyOf(e){
+    try {
+      if (!e) return 'unknown';
+      if (e.emptyGuard) return 'empty-local-guard(0ターンのスロットを開いている)';
+      if (e.conflict) return 'conflict(サーバが新しい)';
+      var m = String(e.message || e);
+      if (m.indexOf('ログイン') >= 0) return 'not-logged-in';
+      if (m.indexOf('同期中') >= 0) return 'busy(別のpushが進行中)';
+      return m.slice(0, 40);
+    } catch(_){ return 'unknown'; }
+  }
   function pushTombstone(d){
     return new Promise(function(res){
       try {
-        if (!d.sync || typeof d.sync.push !== 'function'){ res(false); return; }
+        if (!d.sync || typeof d.sync.push !== 'function'){
+          lastPushWhy = 'sync-missing(このページにfix399が無い)'; stats.pushFailures++; res(false); return;
+        }
         var p = d.sync.push();
-        if (!p || typeof p.then !== 'function'){ res(false); return; }
-        p.then(function(){ res(true); }, function(){ res(false); });
-      } catch(e){ res(false); }
+        if (!p || typeof p.then !== 'function'){
+          lastPushWhy = 'push-not-promise'; stats.pushFailures++; res(false); return;
+        }
+        p.then(function(){ lastPushWhy = null; res(true); },
+               function(e){ lastPushWhy = whyOf(e); stats.pushFailures++;
+                            note({ act:'push-failed', why: lastPushWhy }); res(false); });
+      } catch(e){ lastPushWhy = whyOf(e); stats.pushFailures++; res(false); }
     });
   }
 
@@ -384,7 +408,9 @@
     var list = readPending();
     if (!list.length) return Promise.resolve({ ok:true, code:'nothing', done:0 });
     return pushTombstone(d).then(function(pushed){
-      if (!pushed) return { ok:false, code:'still-offline', pending:list.length };
+      /* ★fix589: 'still-offline' は誤解を招く名前だった（実際の原因は空ガードでもオフラインと表示された）。
+         コード名を実態に合わせ、**理由を必ず返す**。 */
+      if (!pushed) return { ok:false, code:'push-failed', why: lastPushWhy, pending:list.length };
       var done = 0;
       list.forEach(function(plan){
         var r = executePlan(plan, d);
@@ -424,17 +450,44 @@
      「墓標は立てたが物理削除は保留」になる。アプリ(index.html)が開いたときに続きをやる。
      ★起動直後は同期の初期化が終わっていないので、少し待ってから1回だけ試す。
        失敗しても次回の起動でまた試すので、ここでしつこく再試行しない。 */
+  /* ★★fix589: ここで fix399 の有無を判定してはいけなかった。
+     index.html のスクリプト順は **fix587(2863行) → fix399(2919行)** なので、
+     この関数が走る時点で `window.__v292Dfix399x` は**必ず未定義**。
+     旧実装は `if (!d.sync) return;` で毎回そこで抜けており、
+     **8秒のタイマーすら仕込まれていなかった**＝「次にアプリを開いたら続きを片づける」という
+     fix587 の約束が実機で一度も成立していなかった。
+     （2026-07-27 の実機テストで `log()` が空・`pending` が残り続けることで判明）
+
+     → 「居るようになるまで待つ」ポーリングへ。home.html には fix399 が無いので、
+       一定回数で諦める（そこで何もしないのが正しい）。
+     ★ここで待つのは**参照が現れるのを待つだけ**で、何かを設置するわけではない
+       （fix573 で踏んだ「解析中に発火する遅延設置」とは別物）。 */
+  var RESUME_POLL_MS = 500, RESUME_POLL_MAX = 40;   /* 最大20秒 */
   function autoResume(){
     try {
       if (off()) return;
       if (!readPending().length) return;
-      var d = dep();
-      if (!d.sync || typeof d.sync.push !== 'function') return;   /* home.html 側では何もしない */
-      setTimeout(function(){
-        try { resumePending().then(function(r){
-          try { if (r && r.done) console.log(TAG, '保留していた削除を ' + r.done + '件 片づけました'); } catch(e){}
-        }, function(){}); } catch(e){}
-      }, 8000);
+      var tries = 0;
+      (function waitForSync(){
+        tries++;
+        var d = dep();
+        if (d.sync && typeof d.sync.push === 'function'){
+          stats.autoResumeArmed++;
+          /* 起動直後は同期の初期化が終わっていないので、少し待ってから1回だけ試す。
+             失敗しても次回の起動でまた試すので、ここでしつこく再試行しない。 */
+          setTimeout(function(){
+            try { resumePending().then(function(r){
+              try {
+                if (r && r.done) console.log(TAG, '保留していた削除を ' + r.done + '件 片づけました');
+                else if (r && !r.ok) console.warn(TAG, '保留の削除を片づけられません: ' + (r.code||'?') + ' / ' + (r.why||lastPushWhy||''));
+              } catch(e){}
+            }, function(){}); } catch(e){}
+          }, 8000);
+          return;
+        }
+        if (tries > RESUME_POLL_MAX){ stats.autoResumeGaveUp++; return; }
+        setTimeout(waitForSync, RESUME_POLL_MS);
+      })();
     } catch(e){}
   }
   try { autoResume(); } catch(e){}
@@ -444,6 +497,8 @@
     requestDelete: requestDelete,
     resumePending: resumePending,
     pendingDeletes: readPending,
+    /* ★fix589: 「なぜクラウドへ確定できないのか」を実機で読めるようにする */
+    lastPushWhy: function(){ return lastPushWhy; },
     shouldBlockRestore: shouldBlockRestore,
     filterIncoming: filterIncoming,
     /* ★fix588(GPT裁定D-5): 送信側で分類器が居らず墓標スロットを除外できなかったことを記録する口。

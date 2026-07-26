@@ -159,7 +159,9 @@ console.log('\n== (B7) index.html への配線 ==');
      idx.indexOf('v292Dfix577-delete-entry-guard.js') < idx.indexOf('v292Dfix310-gallery.js'));
   /* ★ビルド番号を直に固定しない。出荷のたびに落ちて、本質と無関係な赤を作るため。
      見るべきは「BUILT が fix577 以降であること」。 */
-  const m = idx.match(/20260726-fix(\d+)/);
+  /* ★2026-07-27 に踏んだ: 日付部分を `20260726-` と固定していたため、**日付が変わった瞬間に落ちた**。
+     ビルド番号を固定しないのと同じ理由で、日付も固定しない。 */
+  const m = idx.match(/20\d{6}-fix(\d+)/);
   ok('BUILT が fix577 以降', !!m && Number(m[1]) >= 577, m && m[0]);
 }
 
