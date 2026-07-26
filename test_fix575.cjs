@@ -144,13 +144,17 @@ console.log('\n== (5) ゲートは fix246 相当のキー書換ラッパを迂�
   ok('★書換ラッパは呼ばれていない', w.__wrapped.indexOf(K) < 0, w.__wrapped);
 }
 
-console.log('\n== (6) ゲート未搭載 / 明示OFF は旧経路（ただし再試行は1回） ==');
+console.log('\n== (6) ゲート未搭載 / 明示OFF ==');
 {
+  /* ★2026-07-26 fix576(GPT裁定)で契約を反転した。
+     ここは元々「ゲートが無ければ旧経路で消して控えを書く」を合格条件にしていたが、
+     **中央保護がロードできなかったことを理由に、いちばん危険な旧削除経路へ自動で戻る**のは
+     不変条件と矛盾する。未搭載は policy-unavailable として**中止**する。 */
   const K = 'chr6_bk_cloudsync_1780000000000';
   const w = mk([{ k: K, v: 'x'.repeat(300) }], 'tight', null);
   const r = w.__v292Dfix399x.backupBeforeApply(PKG);
-  ok('★ゲートが無くても控えは書ける(退行しない)', r === true, r);
-  ok('余剰は整理された', w.__store[K] == null, listBk(w));
+  ok('★★ゲート未搭載なら中止する(旧経路へ自動で戻らない)', r === false, r);
+  ok('★★候補は消えていない', w.__store[K] != null, listBk(w));
 }
 {
   const K = 'chr6_bk_cloudsync_1780000000000';

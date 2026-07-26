@@ -116,13 +116,48 @@ console.log('\n== fix490 dropOldestGuardBackup: 容量不足のとき（fix565�
     'chr6_bk_guard_smA_1780000000001': 'y'.repeat(50)
   };
   let used = 0; Object.keys(seed).forEach(k => used += k.length + seed[k].length);
-  const w = mkCtx({ seed, cap: used + 20, load: ['v292Dfix490-slot-write-guard.js'] });
+  /* ★2026-07-26 fix576(A2)で契約が変わった。
+     fix490Quota の物理削除は fix569 の exact-delete ゲート経由になり、
+     ゲートは fix246 を迂回するため **native removeItem** を使う。
+     つまりこの削除は **影監視(inner/outer)に映らない**（GPT裁定「別経路で計上する方針は正しい」）。
+     したがって「byPath.fix490Quota が増える」を合格条件にし続けると、
+     A2/A3 が進むほど**正しい実装が落ちる**テストになる。
+     見るべきものを byPath から **ゲート側の計上(S.gate)** へ移す。 */
+  const w = mkCtx({ seed, cap: used + 20,
+                    load: ['v292Dfix562-backup-inventory.js', 'v292Dfix490-slot-write-guard.js'] });
   const before = bp(w).fix490Quota;
+  const g0 = JSON.parse(JSON.stringify(w.__v292Dfix569.stats().gate || {}));
   w.localStorage.setItem('chr6_slot_smA', JSON.stringify({ turns: [{}] }));
-  ok('★byPath.fix490Quota が増える', bp(w).fix490Quota > before, { before, after: bp(w).fix490Quota });
+  const g1 = w.__v292Dfix569.stats().gate || {};
   ok('★孤児の控えが消えている', w.__store['chr6_bk_guard_smGONE_1780000000000'] === undefined, Object.keys(w.__store));
   ok('★★生きているスロットの唯一の控えは残っている（fix565の契約）',
      Object.keys(w.__store).some(k => /^chr6_bk_guard_smA_/.test(k)), Object.keys(w.__store));
+  ok('★ゲート側で deleted として計上される(fix576)',
+     (g1.deleted || 0) > (g0.deleted || 0), { before: g0, after: g1 });
+  ok('★★影監視(byPath)には**映らない**のが正しい(nativeで消すため)',
+     bp(w).fix490Quota === before, { before, after: bp(w).fix490Quota });
+}
+
+console.log('\n== ★fix576: 分類器(fix562)が居なければ、fix490Quota は削除せず控えを諦める ==');
+{
+  const story5 = JSON.stringify({ turns: [{}, {}, {}, {}, {}] });
+  const seed = {
+    'chr6_slot_smA': story5, 'chr6_active_slot': '"smA"',
+    'chr6_bk_guard_smGONE_1780000000000': 'x'.repeat(300),
+    'chr6_bk_guard_smA_1780000000001': 'y'.repeat(50)
+  };
+  let used = 0; Object.keys(seed).forEach(k => used += k.length + seed[k].length);
+  /* fix562 を**読み込まない** = 保護判定ができない環境 */
+  const w = mkCtx({ seed, cap: used + 20, load: ['v292Dfix490-slot-write-guard.js'] });
+  w.localStorage.setItem('chr6_slot_smA', JSON.stringify({ turns: [{}] }));
+  ok('★★1件も消えていない(fail-closed)',
+     w.__store['chr6_bk_guard_smGONE_1780000000000'] !== undefined, Object.keys(w.__store));
+  ok('★policy-unavailable として計上される',
+     (w.__v292Dfix569.stats().gate || {})['policy-unavailable'] > 0, w.__v292Dfix569.stats().gate);
+  ok('★理由が dropLog に残る(無言にしない)',
+     w.__v292Dfix490.dropLog().some(x => x.result === 'backup-skipped'), w.__v292Dfix490.dropLog());
+  ok('★本体セーブは通っている(控えの失敗で巻き戻さない)',
+     JSON.parse(w.__store['chr6_slot_smA']).turns.length === 1, w.__store['chr6_slot_smA']);
 }
 
 console.log('\n== fix264b: quota自己回復（__gen_ 世代の間引き） ==');

@@ -34,7 +34,7 @@
   'use strict';
   if (window.__v292Dfix490 && window.__v292Dfix490.__armed) return;
   var TAG = '[v292Dfix490:slot-write-guard]';
-  var stats = { guarded: 0, savetoSafe: 0, savetoActive: 0, backups: 0 };
+  var stats = { guarded: 0, savetoSafe: 0, savetoActive: 0, backups: 0, backupSkipped: 0 };   /* fix576: 控えを諦めた回数 */
   var suppressGuardUntil = 0;   // [A]が自前で控えを取った直後の二重控え抑止(500ms)
 
   function off(){ try { return localStorage.getItem('v292Dfix490Off') === '1'; } catch(e){ return false; } }
@@ -93,6 +93,16 @@
          = 新しい控えより「別の物語の唯一の控え」を優先する
        ④何を消したかを記録する(無言の失敗にしない)
      この関数は容量逼迫時にしか呼ばれないので、走査コストは問題にならない。 */
+  /* ★fix576: 削除・断念の理由は**必ず**残す。
+     旧実装は localStorage にだけ書いていたので、いちばん知りたい容量満杯のときに
+     記録そのものが失敗して無言になっていた（fix399/fix575 で踏んだのと同じ型）。
+     メモリ側を正本にし、localStorage への永続化は best-effort。
+     読み出し: window.__v292Dfix490.dropLog() */
+  var DROPLOG = [], DROPLOG_MAX = 20;
+  function dropNote(rec){
+    try { rec.at = Date.now(); DROPLOG.push(rec); if (DROPLOG.length > DROPLOG_MAX) DROPLOG.shift(); } catch(e){}
+    try { if (rec.result === 'backup-skipped') stats.backupSkipped++; } catch(e){}
+  }
   function backupSlotOf(k){
     var rest = k.replace(/^chr6_bk_(guard|saveto)_/, '').replace(/_\d+$/, '');
     return rest.replace(/^chr6_slot_/, '') || null;
@@ -125,10 +135,48 @@
         }
       }
       // ③消せるものが無い = 全スロットが「唯一の控え」しか持っていない → 諦める
-      if (!pick) return false;
+      if (!pick) { dropNote({ path:'fix490Quota', result:'backup-skipped', reason:'no-safe-candidate' }); return false; }
 
-      localStorage.removeItem(pick.key);
-      // ④記録(容量が無いので失敗しても無視する。控えを消したこと自体は止めない)
+      /* ★fix576(A2・GPT裁定): 候補選択は上のロジックのまま。**物理削除だけ**を
+         fix569 の exact-delete ゲートへ通す。fix399(fix575)と同じ契約:
+           quota → 安全候補を1件だけ選ぶ → tryDeleteExact → 実削除を read-back
+           → 成功時だけ書込みを1回再試行 → 再度quotaなら諦める（追加削除0）
+         **ループで別候補へ進んではいけない**。protected 等はその場で失敗を返す。
+         ここで返す失敗は「新しい guard 控えを作れなかった」という意味であって、
+         **すでに成功している本体セーブは巻き戻さない**（fix565で決めた親処理契約を維持）。 */
+      var raw = null; try { raw = localStorage.getItem(pick.key); } catch(e){}
+      if (raw == null){ dropNote({ path:'fix490Quota', result:'backup-skipped', reason:'missing' }); return false; }
+
+      if (lsg('v292Dfix576Off') === '1'){
+        /* 明示的な緊急ロールバックのときだけ旧経路を使う（記録は残す） */
+        dropNote({ path:'fix490Quota', result:'rollbackModeUsed', key:pick.key });
+        try { localStorage.removeItem(pick.key); } catch(e){ return false; }
+      } else {
+        var gw = null;
+        try { var g569 = window.__v292Dfix569;
+              if (g569 && typeof g569.tryDeleteExact === 'function') gw = g569; } catch(e){}
+        if (!gw){
+          /* ★中央保護がロードできなかったことを理由に、旧削除経路へ自動で戻らない(GPT裁定) */
+          dropNote({ path:'fix490Quota', result:'backup-skipped', reason:'gateway-unavailable' });
+          return false;
+        }
+        var res = gw.tryDeleteExact({ key: pick.key, expectedBytes: raw.length,
+                                      intent: 'reclaim', path: 'fix490Quota',
+                                      reason: 'guard-backup-write-quota' });
+        if (!res || !res.ok || !res.deleted){
+          dropNote({ path:'fix490Quota', result:'backup-skipped', key:pick.key,
+                     reason:(res && res.code) || 'gateway-unavailable' });
+          return false;   /* protected/stale/missing 等では**別候補へ進まない** */
+        }
+        // 呼び出し元でも再確認する（ゲートの ok を鵜呑みにしない）
+        var back = null; try { back = localStorage.getItem(pick.key); } catch(e){}
+        if (back != null){
+          dropNote({ path:'fix490Quota', result:'backup-skipped', key:pick.key, reason:'delete-readback-failed' });
+          return false;
+        }
+      }
+      // ④記録(容量が無いので localStorage 側は失敗しうる。★メモリ側は必ず残す)
+      dropNote({ path:'fix490Quota', result:'dropped', key: pick.key, slot: pick.slot });
       try {
         var log = JSON.parse(lsg('v292Dfix490_dropped') || '[]');
         if (!Array.isArray(log)) log = [];
@@ -294,6 +342,10 @@
     check: check,
     summarize: summarize,
     stats: function(){ return stats; },
+    dropLog: function(){ return DROPLOG.slice(); },   /* fix576: 削除・断念の理由(容量満杯でも残る) */
+    /* fix576の検証口。quota経路は本体書込に埋まっていて外から再現しづらいので、
+       回帰テストが**実物**を叩けるようにする(テスト用のコピーを作ると本物と乖離する)。 */
+    _dropOldestGuardBackup: dropOldestGuardBackup,
     lastGuard: null,
     isOff: off
   };

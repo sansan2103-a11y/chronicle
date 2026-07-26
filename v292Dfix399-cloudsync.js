@@ -341,17 +341,30 @@
          ⑤fix569 が最初に捕捉した native removeItem で削除（fix246 のキー書換を迂回）⑥read-back。
          ★⑤が要。`localStorage.removeItem()` を呼んで後から read-back するだけでは不十分で、
            fix246 が別キーへ書き換えた場合「候補は残ったまま**別キーが消える**」事故になる。 */
+      /* ★fix576(GPT裁定・fix575の修正): 「ゲートが見つからない」を旧経路への自動フォールバックにしない。
+         中央の保護機構がロードできなかったことを理由に、**いちばん危険な旧削除経路へ自動で戻る**のは
+         不変条件と矛盾する。分けるのは次の2つだけ:
+           v292Dfix575Off === '1'  → 明示的な緊急ロールバック。旧経路を使い rollbackModeUsed を記録
+           OFFではないのに tryDeleteExact が無い → policy-unavailable として **pull中止**。旧経路へ戻らない */
       function gateOff(){ try { return localStorage.getItem('v292Dfix575Off') === '1'; } catch(e){ return false; } }
       function gateway(){
         try {
-          if (gateOff()) return null;
           var g = window.__v292Dfix569;
           return (g && typeof g.tryDeleteExact === 'function') ? g : null;
         } catch(e){ return null; }
       }
       function dropOneSpareChecked(){
+        if (gateOff()){
+          note({ at: Date.now(), act: 'rollbackModeUsed', why: 'v292Dfix575Off=1 による明示的な緊急ロールバック', kept: keep });
+          return dropOneSpare();
+        }
         var g = gateway();
-        if (!g) return dropOneSpare();   /* ゲート未搭載 or 明示OFF = 旧挙動(ただし再試行は1回だけ) */
+        if (!g){
+          /* ★旧経路へ戻らない。中央保護が居ないなら消さない。 */
+          note({ at: Date.now(), act: 'dropSpareGated', key: null, code: 'policy-unavailable',
+                 why: 'fix569のexact-deleteゲートが見つからない。旧削除経路へは戻らず取り込みを中止', kept: keep });
+          return false;
+        }
         var cur = listBk();
         for (var i = 0; i < cur.length; i++){
           var k = cur[i];
