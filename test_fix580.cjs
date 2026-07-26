@@ -250,6 +250,36 @@ function step7(){
        /観測できていない/.test(w.__v292Dfix580.report()), w.__v292Dfix580.report());
   }
 
+  console.log('\n== (8b) ★★深いスタックでも呼び出し元を識別できる（実機で踏んだ） ==');
+  {
+    /* fix580 は最内殻なので、呼び出し元は多数の fetch ラッパの下に埋もれる。
+       ブラウザ既定の Error.stackTraceLimit は 10 なので、
+       上限を上げないと**呼び出し元がちょうど切り捨てられて全部 other になる**。
+       実機実測: put 2件・baseRevあり2件なのに byPath は fix399:0 / fix402:0 / other:2 だった。 */
+    ok('★採取のあいだだけ上限を上げている', /Error\.stackTraceLimit = STACK_LIMIT/.test(SRC580));
+    ok('★★必ず元へ戻している', /Error\.stackTraceLimit = prevLimit/.test(SRC580));
+    ok('上限は既定(10)より十分大きい', /STACK_LIMIT = (\d+)/.test(SRC580) &&
+       Number(SRC580.match(/STACK_LIMIT = (\d+)/)[1]) >= 40, SRC580.match(/STACK_LIMIT = (\d+)/));
+    ok('★経路不明のputを数えている', /unattributedPuts\+\+/.test(SRC580));
+    ok('★report で警告する', /経路を特定できなかった put/.test(SRC580));
+
+    /* 実際に深いスタックを作って識別できるか */
+    const w = mkEnv();
+    let depth = 0;
+    const deep = (n, fn) => n <= 0 ? fn() : deep(n - 1, fn);
+    vm.runInContext(
+      'var deep = function(n, fn){ return n <= 0 ? fn() : deep(n-1, fn); };' +
+      'deep(25, function(){ fetch("https://x/save", { method:"POST", body: ' +
+      JSON.stringify(JSON.stringify({ op: 'put', baseRev: 1, pkg: {} })) + ' }); });',
+      w, { filename: 'v292Dfix399-cloudsync.js' });
+    const s2 = w.__v292Dfix580.stats();
+    ok('★★25フレーム下からでも fix399 と識別できる', s2.byPath.fix399 === 1, s2.byPath);
+    ok('★経路不明が0件', s2.unattributedPuts === 0, s2.unattributedPuts);
+    ok('採取フレーム数を記録している', s2.maxStackFrames > 10, s2.maxStackFrames);
+    ok('★★上限は呼び出し後に元へ戻っている', Error.stackTraceLimit === 10 || Error.stackTraceLimit === undefined,
+       Error.stackTraceLimit);
+  }
+
   console.log('\n== (9) 静的: 観測が副作用を持たない ==');
   {
     const code = SRC580.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');

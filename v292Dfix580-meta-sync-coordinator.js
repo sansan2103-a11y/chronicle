@@ -56,7 +56,9 @@
     metaCalls: 0, gets: 0,
     wrapperErrors: 0,
     /* fix582: 共有rev台帳 */
-    revPromotions: 0, forkRetries: 0, failClosed: 0
+    revPromotions: 0, forkRetries: 0, failClosed: 0,
+    /* fix583: 経路識別のためにスタックを何フレーム採れたか（切り捨てを見抜くため） */
+    maxStackFrames: 0, unattributedPuts: 0
   };
   var EV = [], EV_MAX = 60;
   var DOUBLE_MS = 3000;
@@ -65,10 +67,27 @@
   function now(){ try { return Date.now(); } catch(e){ return 0; } }
 
   /* 呼び出し元の識別。fix569 と同じく**自分のフレームを必ず取り除く**。
-     除かないと全部が fix580 由来に見えて、経路が1件も数えられない。 */
+     除かないと全部が fix580 由来に見えて、経路が1件も数えられない。
+
+     ★★fix583(2026-07-26・実機で踏んだ): これだけでは足りなかった。
+     fix581 で fix580 を**最内殻**（＝最初に読み込んで native fetch を捕まえる）にしたが、
+     そうすると呼び出し時のスタックは
+        [fix580のwrapped] → [他のfetchラッパ 約20本] → [callSave(fix399)] → …
+     の形になり、**呼び出し元が20フレーム下に埋もれる**。
+     ブラウザ既定の `Error.stackTraceLimit` は **10**（実機で確認）なので、
+     肝心の呼び出し元がちょうど切り捨てられ、**全部 other に分類されていた**。
+     （実機実測: put 2件・baseRevあり2件だが byPath は fix399:0 / fix402:0 / other:2）
+
+     被覆（最内殻＝誰にも迂回されない）と、識別（呼び出し元が見える）は
+     両立させる必要があるので、**採取のあいだだけ上限を上げて、必ず戻す**。 */
+  var STACK_LIMIT = 80;
   function pathOf(){
     var s = '';
+    var prevLimit;
+    try { prevLimit = Error.stackTraceLimit; Error.stackTraceLimit = STACK_LIMIT; } catch(e){}
     try { throw new Error('s'); } catch(e){ s = String(e && e.stack || ''); }
+    try { if (prevLimit !== undefined) Error.stackTraceLimit = prevLimit; } catch(e){}
+    try { var n = s.split('\n').length - 1; if (n > S.maxStackFrames) S.maxStackFrames = n; } catch(e){}
     if (s.indexOf('v292Dfix580') >= 0){
       var out = [], lines = s.split('\n');
       for (var i = 0; i < lines.length; i++){ if (lines[i].indexOf('v292Dfix580') < 0) out.push(lines[i]); }
@@ -145,6 +164,8 @@
        Worker は body.baseRev が undefined/null なら **fork判定を一切しない**（無条件上書き）。 */
     var hasBase = (o.baseRev !== undefined && o.baseRev !== null);
     S.puts++;
+    /* ★経路が分からなかった put を数える。0でなければ識別が壊れている合図。 */
+    if (path === 'other') S.unattributedPuts++;
     S.byPath[path] = (S.byPath[path] || 0) + 1;
     if (hasBase){ S.putsWithBaseRev++; S.baseRevByPath[path] = (S.baseRevByPath[path] || 0) + 1; }
     else        { S.putsWithoutBaseRev++; S.noBaseRevByPath[path] = (S.noBaseRevByPath[path] || 0) + 1; }
@@ -263,6 +284,9 @@
     if (S.wrapperErrors) lines.push('★観測側のエラー ' + S.wrapperErrors + '件（観測値は不完全）');
     if (S.capturedNativeFetch === false)
       lines.push('★★fix580 より前に fetch をラップした経路がある＝その経路の put は観測できていない');
+    if (S.unattributedPuts > 0)
+      lines.push('★★経路を特定できなかった put が ' + S.unattributedPuts + '件（採取フレーム数 最大' +
+                 S.maxStackFrames + '）。スタックが切り捨てられている可能性');
     return lines.join('\n');
   }
 

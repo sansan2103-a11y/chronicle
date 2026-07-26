@@ -14,7 +14,7 @@
      fix569 と同じく最初に置いて native fetch を捕まえる。
      /save の put を経路別に観測し、baseRev の有無と二重発火を数える。リクエストは1バイトも変えない。
      OFF=v292Dfix580Off -->
-<script src="v292Dfix580-meta-sync-coordinator.js?cb=v292Dfix582"></script>
+<script src="v292Dfix580-meta-sync-coordinator.js?cb=v292Dfix583"></script>
 <script>
 /* v292Dfix242: iOS Safari の古いHTMLキャッシュ脱出。`.js`は?cb=でキャッシュ破棄できるが
    index.html本体は破棄できず、iOSはbfcache+ヒューリスティックで古いHTMLを長く保持する
@@ -24,7 +24,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260726-fix582';
+  var BUILT = '20260726-fix583';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
