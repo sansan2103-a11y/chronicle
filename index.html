@@ -14,7 +14,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260726-fix561';
+  var BUILT = '20260726-fix562';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2729,6 +2729,7 @@ G.init();
      それらは new Response で応答を作り直すので、後から読み込むと「出口ガード後の本文」しか見えず
      モデルの生出力が取れない。本文は1文字も書き換えない。OFF=v292Dfix553Off -->
 <script src="v292Dfix553-punct-probe.js?cb=v292Dfix560"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix562"></script>
 <!-- v292Dfix555: 句読点だけを直す校正専用の1回修復。Api.call の直後・Planner.parsePlan の前で、
      崩れた区間だけを直す。句読点・空白・改行以外を1文字でも変えられたら元を採用(fail-closed)。
      タグを含む区間は触らない。<state>/<react> はモデルへ渡さない。OFF=v292Dfix555Off -->
