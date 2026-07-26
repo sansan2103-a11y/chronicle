@@ -102,7 +102,31 @@
   function lsHash(s){ s = String(s || ''); return String(s.length) + ':' + hash(s); }   // ★fix402c堅牢化: length接頭で衝突耐性
   function getNum(k){ return +(lsGet(k) || 0) || 0; }
   function setNum(k,v){ lsSet(k, String(v)); }
-  function baseRev(){ return getNum('v292Dfix402_baseRev'); }
+  /* ★fix584(2026-07-26・実機の実測で判明): ここは fix402 だけの版番号を見ていた。
+     fix582 で fix399 が Coordinator の共有revを使うようになった結果、
+     **同じ端末なのに2つの版番号が食い違う**状態になった。実測:
+        fix402 が baseRev=415 で put → fork
+        fix399 が baseRev=417 で put → 成功（共有revは418へ）
+        fix402 の自前キーは 415 のまま
+     GPT受け入れ条件「両経路が同じ Coordinator rev を使用」を満たすため、
+     **共有台帳があればそちらを正本にする**。自前キーは後方互換のため書き続ける（読みは共有優先）。 */
+  function sharedRev(){
+    try { var c = window.__v292Dfix580;
+          if (c && typeof c.rev === 'function' && localStorage.getItem('v292Dfix584Off') !== '1') return c.rev();
+    } catch(e){}
+    return null;
+  }
+  function baseRev(){
+    var sr = sharedRev();
+    if (sr != null) return sr;
+    return getNum('v292Dfix402_baseRev');
+  }
+  /* 成功revは**両方**へ書く。共有台帳は巻き戻さない仕様なので、古い値で下げてしまう心配はない。 */
+  function setBaseRev(v){
+    setNum('v292Dfix402_baseRev', +v || 0);
+    try { var c = window.__v292Dfix580;
+          if (c && typeof c.promoteRev === 'function') c.promoteRev(+v || 0, 'fix402の同期成功'); } catch(e){}
+  }
   function toast(msg){ try { if (window.UI && UI.setStatus) UI.setStatus(msg); } catch(e){} try { console.log(TAG, msg); } catch(e){} }
 
   // ---- 収集(fix399と同じ規約・軽量ls onlyのみ) ----
@@ -232,7 +256,7 @@
       pushing = false;
       if (r.status === 200 && r.json && r.json.ok && r.json.fork) { forkBanner(r.json.server || {}); return 'fork'; }   // fork応答はclean化しない(現行維持)
       if (r.status !== 200 || !r.json || !r.json.ok) throw new Error((r.json && r.json.error) || ('HTTP ' + r.status));
-      if (r.json.rev != null) setNum('v292Dfix402_baseRev', +r.json.rev || 0);
+      if (r.json.rev != null) setBaseRev(r.json.rev);
       lsSet('v292Dfix402_lastHash', h);
       if (f402dOn && sentSeq !== mutationSeq) {
         // ★fix402d: 飛行中に新規保存(dirty)あり→誤clean化せず再送予約(pushedTs/dirtyTsは触らない)
@@ -260,7 +284,7 @@
     var applySeq = mutationSeq;   // ★fix402e A-1: applySave(非同期)飛行中のユーザー保存を検出する基準
     var doApply = (api && api.applySave) ? api.applySave(pkg) : Promise.reject(new Error('fix399 applySave不在'));
     return doApply.then(function(){
-      setNum('v292Dfix402_baseRev', +rev || 0);
+      setBaseRev(rev);
       try { lsSet('v292Dfix402_lastHash', lsHash(JSON.stringify(pkg.ls || {}))); } catch(e){}   // ★fix402c堅牢化: length接頭(baseRev/lastHashは常に更新)
       if (f402eOn() && mutationSeq !== applySeq) {
         // ★fix402e A-1: applySave中にユーザー保存(markDirty)が入った→pushedTs/dirtyTsをclean化しない。
@@ -404,7 +428,7 @@
     var _fpMid = (lsGet('v292Dfix402dOff') !== '1') ? ('fp:' + lsHash(JSON.stringify(pkg.ls || {}))) : undefined;
     return callSave({ op: 'forceput', pkg: pkg, mid: _fpMid }).then(function(r){
       if (r.status === 200 && r.json && r.json.ok) {
-        if (r.json.rev != null) setNum('v292Dfix402_baseRev', +r.json.rev || 0);
+        if (r.json.rev != null) setBaseRev(r.json.rev);
         try { lsSet('v292Dfix402_lastHash', ''); } catch(e){}   // 次flushで必ず再push(現行維持)
         if (!f402eOn() || forceSeq === mutationSeq) {
           setNum('v292Dfix402_pushedTs', Date.now()); dirtySince = 0;   // seq一致=飛行中に新規保存なし→clean化
