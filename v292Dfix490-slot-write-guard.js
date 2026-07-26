@@ -81,16 +81,61 @@
       while (ks.length > keep){ var old = ks.shift(); try { localStorage.removeItem(old); } catch(e){} }
     } catch(e){}
   }
+  /* ★fix565(2026-07-26・実データで踏んだ): ここは以前「**全スロットを通じて最も古い控え**を1件消す」
+     だった。容量が逼迫した状態で控えを取ろうとすると、**別の物語の唯一の控え**を消しうる。
+     実際に 2026-07-26、テスト物語の復元(640KB書込)でquotaに達し、
+     `chr6_bk_saveto_smriifzelrt_...`(その物語の唯一の控え)が**無言で消えた**。
+     ログも警告も出ないので、消えたことに誰も気づけない。
+     直し方(最小):
+       ①スロットごとに数え、**残り1件のスロットの控えは消さない**
+       ②もう存在しないスロットの孤児控えを最優先で消す(失って困らない)
+       ③消せるものが無ければ **false を返して控えを諦める**
+         = 新しい控えより「別の物語の唯一の控え」を優先する
+       ④何を消したかを記録する(無言の失敗にしない)
+     この関数は容量逼迫時にしか呼ばれないので、走査コストは問題にならない。 */
+  function backupSlotOf(k){
+    var rest = k.replace(/^chr6_bk_(guard|saveto)_/, '').replace(/_\d+$/, '');
+    return rest.replace(/^chr6_slot_/, '') || null;
+  }
   function dropOldestGuardBackup(){
     try {
-      var ks = [];
+      var ks = [], bySlot = {};
       for (var i = 0; i < localStorage.length; i++){
         var k = localStorage.key(i);
-        if (k && (k.indexOf('chr6_bk_guard_') === 0 || k.indexOf('chr6_bk_saveto_') === 0)) ks.push(k);
+        if (!k) continue;
+        if (k.indexOf('chr6_bk_guard_') !== 0 && k.indexOf('chr6_bk_saveto_') !== 0) continue;
+        var s = backupSlotOf(k);
+        ks.push({ key: k, slot: s, ts: (+String(k).split('_').pop() || 0) });
+        if (s) bySlot[s] = (bySlot[s] || 0) + 1;
       }
       if (!ks.length) return false;
-      ks.sort(function(a,b){ return (+a.split('_').pop()||0) - (+b.split('_').pop()||0); }); // fix495(C6): |0はint32折返しで13桁msが壊れ最新を削除しうる
-      localStorage.removeItem(ks[0]);
+      // fix495(C6): |0 はint32折返しで13桁msが壊れ「最新を消す」ので使わない
+      ks.sort(function(a, b){ return a.ts - b.ts; });
+
+      // ②もう存在しないスロットの孤児を最優先
+      var pick = null;
+      for (var j = 0; j < ks.length; j++){
+        if (ks[j].slot && lsg('chr6_slot_' + ks[j].slot) == null){ pick = ks[j]; break; }
+      }
+      // ①残り1件のスロットは守る
+      if (!pick){
+        for (var j2 = 0; j2 < ks.length; j2++){
+          if (!ks[j2].slot) { pick = ks[j2]; break; }        // スロット不明の控えは守る対象にしない
+          if (bySlot[ks[j2].slot] > 1){ pick = ks[j2]; break; }
+        }
+      }
+      // ③消せるものが無い = 全スロットが「唯一の控え」しか持っていない → 諦める
+      if (!pick) return false;
+
+      localStorage.removeItem(pick.key);
+      // ④記録(容量が無いので失敗しても無視する。控えを消したこと自体は止めない)
+      try {
+        var log = JSON.parse(lsg('v292Dfix490_dropped') || '[]');
+        if (!Array.isArray(log)) log = [];
+        log.push({ key: pick.key, slot: pick.slot, at: Date.now() });
+        localStorage.setItem('v292Dfix490_dropped', JSON.stringify(log.slice(-20)));
+      } catch(e){}
+      try { console.warn(TAG, '容量不足のため古い控えを1件削除: ' + pick.key); } catch(e){}
       return true;
     } catch(e){ return false; }
   }
