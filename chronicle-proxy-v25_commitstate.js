@@ -2015,11 +2015,16 @@ async function idemReqHashV2(o) {
   const payloadHash = (o.payloadHash != null)
     ? String(o.payloadHash)
     : await sha256Utf8v1(o.payloadStr == null ? '' : String(o.payloadStr));
+  // ★v25c: baseRev は「安全な整数のときだけ数値」。そうでなければ null へ倒す。
+  //   Number('abc') は NaN で、JSON.stringify は NaN を **null** にする。
+  //   素の Number() だと「壊れた baseRev」と「baseRev 無し」が同じ hash になってしまう。
+  const canonicalBaseRev = (o.baseRev != null && Number.isSafeInteger(Number(o.baseRev)))
+    ? Number(o.baseRev) : null;
   const canon = JSON.stringify([
     'idem-v2',
     (o.op == null ? null : String(o.op)),
     (o.kind == null ? null : String(o.kind)),
-    (o.baseRev == null ? null : Number(o.baseRev)),
+    canonicalBaseRev,
     (o.commitOpId == null ? null : String(o.commitOpId)),
     payloadHash
   ]);

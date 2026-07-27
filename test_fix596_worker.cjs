@@ -209,7 +209,7 @@ console.log('\n== (11) ★★v25c: 冪等リクエストhash は 型付きJSON�
   ok('★★v2 関数がある', /async function idemReqHashV2\(o\)/.test(SRC));
   ok('★★型を保ったまま JSON.stringify している（null と "null" が別になる）',
      /const canon = JSON\.stringify\(\[/.test(SRC) &&
-     /\(o\.baseRev == null \? null : Number\(o\.baseRev\)\)/.test(SRC) &&
+     /canonicalBaseRev,/.test(SRC) &&
      /\(o\.commitOpId == null \? null : String\(o\.commitOpId\)\)/.test(SRC));
   ok('★★payload は SHA-256 全長（smallHash を使っていない）',
      /await sha256Utf8v1\(o\.payloadStr == null \? '' : String\(o\.payloadStr\)\)/.test(SRC) &&
@@ -251,6 +251,13 @@ console.log('\n== (11) ★★v25c: 冪等リクエストhash は 型付きJSON�
      (await v({ baseRev: 430 })) === (await v({ baseRev: '430' })));
   ok('★★baseRev 0 と null が別hash', (await v({ baseRev: 0 })) !== (await v({ baseRev: null })));
   ok('★出力の形が想定どおり', /^idem-v2:[0-9a-f]{64}$/.test(await v({})));
+  /* ★v25c: Number('abc') は NaN で JSON.stringify は NaN を null にする。
+     素の Number() だと「壊れた baseRev」と「baseRev 無し」が同じ hash になる。 */
+  ok('★★安全な整数のときだけ数値にしている（NaN経由でnullへ潰れない）',
+     /Number\.isSafeInteger\(Number\(o\.baseRev\)\)/.test(SRC));
+  ok('★★壊れた baseRev と baseRev 無しは**同じ**hash（どちらも判定不能として null へ倒す）',
+     (await v({ baseRev: 'abc' })) === (await v({ baseRev: null })));
+  ok('★★巨大すぎる baseRev も null へ倒れる', (await v({ baseRev: 1e30 })) === (await v({ baseRev: null })));
 }
 
 console.log('\n== (12) ★★v25c: forceput の墓標保護は fail-closed ==');
@@ -318,6 +325,25 @@ console.log('\n== (12) ★★v25c: forceput の墓標保護は fail-closed ==');
 
   ok('★★id は完全一致で照合する（部分一致で誤判定しない）',
      g(mk([TOMB]), mk([Object.assign({}, TOMB, { id: 'smDeadX' })])).cleared.join() === 'smDead');
+
+  /* ★★GPT が追加で固定を求めた境界: 墓標が複数あるとき、restoreOfDeleteOpId は
+     一致した1件だけ解除でき、他の墓標は完全一致で維持されなければならない。 */
+  {
+    const TOMB_Y = { id: 'smDeadY', deleted: true, deleteOpId: 'dY', lifecycleVersion: 1, recoverySnapshotId: 'snapY' };
+    const two = mk([{ id: 'smAlive' }, TOMB, TOMB_Y]);
+    ok('★★★restore=d1: X だけ解除し Y は完全維持 → 許可',
+       g(two, mk([{ id: 'smAlive' }, { id: 'smDead', name: '復元' }, TOMB_Y]), 'd1').ok === true);
+    ok('★★★restore=d1: X を解除し **Y も解除** → 拒否（Yだけが挙がる）',
+       (() => { const r = g(two, mk([{ id: 'smAlive' }, { id: 'smDead', name: '復元' }]), 'd1');
+                return r.code === 'tombstone-clear-refused' && r.cleared.join() === 'smDeadY'; })());
+    ok('★★★restore=d1: X を解除し **Y を弱体化**（recoverySnapshotId欠落）→ 拒否',
+       g(two, mk([{ id: 'smAlive' }, { id: 'smDead', name: '復元' },
+                  { id: 'smDeadY', deleted: true, deleteOpId: 'dY', lifecycleVersion: 1 }]), 'd1')
+         .code === 'tombstone-clear-refused');
+  }
+  /* ★incoming が canonical に無い**新しい**墓標を足すのは許可でよい（既存墓標を弱体化せず削除意思を足すだけ） */
+  ok('★新しい墓標の追加は止めない',
+     g(canonical, mk([{ id: 'smAlive' }, TOMB, { id: 'smNew', deleted: true, deleteOpId: 'dN' }])).ok === true);
 }
 
 console.log('\n== (13) ★★v25b: migration は single-flight（GPT デプロイ前指摘3） ==');
