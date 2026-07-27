@@ -110,7 +110,22 @@
   .note{margin-top:12px;padding:10px 12px;border-radius:8px;background:rgba(224,138,138,.10);
         border:1px solid rgba(224,138,138,.3);font-size:12px;color:#e6b4b4}
   @media(max-width:980px){ .detail{display:none} aside{width:168px} }
-  @media(max-width:640px){ aside{display:none} section.mid{padding:14px} }
+  /* ★★fix601(2026-07-27・実機で発覚): ここは `aside{display:none}` だった。
+     左パネルの中に「☁ いま上げる／☁ いま取り込む／＋ 新しい物語を始める」が入っているので、
+     **スマホでは同期ボタンに一切さわれない**状態だった（2台テストが物理的にできない）。
+     → 隠すのをやめ、**上に畳んで横並び**にする。
+       一覧を圧迫しないよう、ライブラリ／最近プレイだけを畳む。 */
+  @media(max-width:640px){
+    main{flex-direction:column}
+    aside{display:block;width:auto;flex:none;border-right:none;border-bottom:1px solid var(--line);
+          padding:10px 12px;overflow:visible}
+    aside #ttlLib, aside #navs, aside #ttlRecent, aside #recent{display:none}
+    aside #ttlData{margin:12px 0 6px}
+    .newbtn{padding:10px;font-size:13px}
+    .data{flex-direction:row;flex-wrap:wrap;gap:8px}
+    .data button{flex:1 1 calc(50% - 4px);text-align:center;padding:10px 8px}
+    section.mid{padding:14px}
+  }
 </style>
 </head>
 <body>
@@ -124,11 +139,11 @@
 <main>
   <aside>
     <button class="newbtn" id="newBtn">＋ 新しい物語を始める</button>
-    <div class="navttl">ライブラリ</div>
+    <div class="navttl" id="ttlLib">ライブラリ</div>
     <div id="navs"></div>
-    <div class="navttl">最近プレイした物語</div>
+    <div class="navttl" id="ttlRecent">最近プレイした物語</div>
     <div class="recent" id="recent"></div>
-    <div class="navttl">データ</div>
+    <div class="navttl" id="ttlData">データ</div>
     <div class="data">
       <button id="upBtn" title="この端末の内容をクラウドの正にします">☁ いま上げる</button>
       <button id="downBtn" title="クラウドの内容をこの端末へ取り込みます（この端末の方が進んでいる物語は守られます）">☁ いま取り込む</button>
@@ -170,7 +185,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260727-fix599';
+  var HOME_BUILT = '20260727-fix601';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -189,7 +204,7 @@
 <script src="v292Dfix562-backup-inventory.js?cb=v292Dfix593"></script>
 <script src="v292Dfix564-snapshot.js?cb=v292Dfix593"></script>
 <script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix593"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix599"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix601"></script>
 <script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix594"></script>
 <script>
 (function(){
@@ -403,6 +418,18 @@
     meta.push({ id:id, name:'新しい物語', key:'chr6_slot_'+id, updatedAt:null,
                 createdAt:new Date().toISOString(), lastOpenedAt:new Date().toISOString() });
     if(!writeMeta(meta)){ alert('保存容量が不足しています。設定から不要なデータを整理してください。'); return; }
+    /* ★★fix600: 新しい物語の**中身を空で先に作る**。
+       これまでは一覧に登録するだけで中身を作っていなかったため、
+       「中身が無い物語」を開くことになり、別タブが開いている物語の状態を
+       そのまま抱えてしまう余地があった（2026-07-27 に実際に起きた）。
+       ★上書きしない。既にあるなら触らない（万一の同一id衝突でデータを消さないため）。 */
+    try {
+      if (localStorage.getItem('chr6_slot_'+id) == null){
+        localStorage.setItem('chr6_slot_'+id, JSON.stringify({ turns: [] }));
+      }
+    } catch(e){}
+    /* ★共有ポインタを先にこの物語へ向けておく（index.html の起動が読むのはこれ）。 */
+    try { localStorage.setItem('chr6_active_slot', JSON.stringify(id)); } catch(e){}
     var u = 'index.html' + (BUILD ? ('?v='+encodeURIComponent(BUILD)+'&story=') : '?story=') + encodeURIComponent(id) + '&new=1';
     location.href = u;
   }
@@ -481,14 +508,32 @@
 
   // ---------- クラウド取り込み（このページでだけ・local-ahead保護つき） ----------
   function proxyUrl(){ var u=(g('v292ProxyUrl')||'').trim(); return (u||'https://novel-proxy.sansan2103.workers.dev').replace(/\/+$/,''); }
+  /* ★★fix601(2026-07-27・実機で発覚): Google の exp は**秒**、Date.now() は**ミリ秒**。
+     ここが `t.exp*1 > Date.now()` と書かれていたため桁が1000倍ずれ、
+     **常に期限切れ扱い**になっていた。結果、home は Google のトークンを一度も使っておらず、
+     「Googleログインだけの端末（iPhone）では、同期ボタンが黙って何もしない」状態だった。
+     ★fix328 の判定（(T.exp*1000) > Date.now()+30000）に揃える。 */
   function authHeaders(){
     var h={'Content-Type':'application/json'};
     var p=(g('v292ProxyPass')||'').trim(); if(p) h['x-chronicle-pass']=p;
     var t=J(g('v292GoogleToken'),null);
-    if(t && t.token && (!t.exp || t.exp*1 > Date.now())) h['x-google-id']=t.token;
+    if(t && t.token && (!t.exp || (t.exp*1000) > (Date.now()+30000))) h['x-google-id']=t.token;
     return h;
   }
   function loggedIn(){ var h=authHeaders(); return !!(h['x-google-id']||h['x-chronicle-pass']); }
+  /* ★★fix601: 「なぜ同期できないのか」を必ず画面に出す。
+     黙って return するのが一番たちが悪い（無反応にしか見えず、原因を追えない）。 */
+  function whyNotLoggedIn(){
+    var p=(g('v292ProxyPass')||'').trim();
+    var t=J(g('v292GoogleToken'),null);
+    if(!p && !t) return 'ログインしていないため同期できません。ゲーム画面からログインしてください。';
+    if(!p && t && t.token) return 'Googleログインの有効期限が切れています。ゲーム画面でログインし直してください。';
+    return 'ログイン情報が読めないため同期できません。';
+  }
+  function noteNotLoggedIn(){
+    try { el('sync').className='sync err'; el('sync').textContent='⚠ '+whyNotLoggedIn(); } catch(e){}
+    try { console.warn('[home] 同期不可:', whyNotLoggedIn()); } catch(e){}
+  }
   function call(body, ms){
     var ctrl = (typeof AbortController!=='undefined') ? new AbortController() : null;
     var timer = ctrl ? setTimeout(function(){ try{ctrl.abort();}catch(e){} }, ms||25000) : null;
@@ -499,7 +544,7 @@
   function turnsOf(raw){ var d=J(raw,null); return (d && Array.isArray(d.turns)) ? d.turns.length : -1; }
 
   function pull(force){
-    if(!loggedIn()){ el('sync').textContent=''; return; }
+    if(!loggedIn()){ noteNotLoggedIn(); return; }
     el('sync').className='sync';
     el('sync').textContent = '☁ 確認中…';
     call({op:'meta'}, 15000).then(function(m){
@@ -678,7 +723,7 @@
     return out;
   }
   function push(){
-    if(!loggedIn()){ alert('ログインしていないため同期できません。'); return; }
+    if(!loggedIn()){ noteNotLoggedIn(); alert(whyNotLoggedIn()); return; }
     if(!confirm('この端末の内容をクラウドの「正」にします。\n他の端末の古い版は控えとして残ります。よろしいですか？')) return;
     el('sync').className='sync'; el('sync').textContent='☁ 上げています…';
     var pkg = { schema:1, updatedAt:Date.now(), device:(navigator.userAgent||'').slice(0,60),
