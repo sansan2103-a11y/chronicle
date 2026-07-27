@@ -170,7 +170,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260727-fix598';
+  var HOME_BUILT = '20260727-fix599';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -189,7 +189,7 @@
 <script src="v292Dfix562-backup-inventory.js?cb=v292Dfix593"></script>
 <script src="v292Dfix564-snapshot.js?cb=v292Dfix593"></script>
 <script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix593"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix598"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix599"></script>
 <script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix594"></script>
 <script>
 (function(){
@@ -520,6 +520,8 @@
            → fix579 の mergeMeta（対称・墓標優先）を通す。使えないときは**上書きしない**（安全側）。 */
         var mergedMeta = null, metaGuarded = false, metaMerged = false, metaAbsent = false;
         var applyErrors = 0, unknownSkips = 0, wroteVals = {};
+        /* ★fix599: 保持したローカル差分の件数（0 のときだけ remote の完全採用と言える） */
+        var retainedLocalDelta = 0;
         try {
           if (!Object.prototype.hasOwnProperty.call(ls, 'chr6_slots_meta')) metaAbsent = true;
           if (Object.prototype.hasOwnProperty.call(ls, 'chr6_slots_meta')){
@@ -529,6 +531,25 @@
             if (T && typeof T.mergeMeta === 'function' && Array.isArray(lm) && Array.isArray(rm)){
               var mg = T.mergeMeta(lm, rm);
               if (Array.isArray(mg)) mergedMeta = JSON.stringify(mg);
+              /* ★★fix599(GPT裁定): 「remote を完全採用したか」は**呼出側が申告してはいけない**。
+                 収束証明が判断できるように、**保持したローカル差分の件数**を数えて渡す。
+                 マージ後の meta が remote と1件でも違えば、ローカル差分を載せた状態＝
+                 未同期の変更が残っている＝dirty を落としてはいけない。 */
+              try {
+                if (Array.isArray(mg) && Array.isArray(rm)){
+                  var rIdx = {};
+                  for (var ri = 0; ri < rm.length; ri++){
+                    var re = rm[ri]; if (re && re.id != null) rIdx[String(re.id)] = re;
+                  }
+                  for (var mi = 0; mi < mg.length; mi++){
+                    var me = mg[mi]; if (!me || me.id == null) continue;
+                    var rr = rIdx[String(me.id)];
+                    if (!rr){ retainedLocalDelta++; continue; }                          /* remote に無い */
+                    if (!!me.deleted !== !!rr.deleted){ retainedLocalDelta++; continue; } /* 墓標の有無が違う */
+                    if ((+me.updatedAt || 0) > (+rr.updatedAt || 0)) retainedLocalDelta++; /* ローカルが新しい */
+                  }
+                }
+              } catch(e){ retainedLocalDelta++; }   /* 数えられないときは安全側（差分ありとみなす） */
             }
             if (mergedMeta == null) metaGuarded = true;   /* マージできない → 触らない */
             else metaMerged = true;
@@ -575,7 +596,10 @@
               metaAbsent: metaAbsent,
               metaMergeFailed: metaGuarded,
               blockedWithoutTombstone: 0,
-              readBackOk: readBackOk
+              readBackOk: readBackOk,
+              /* ★fix599(GPT指定): fullyAdoptedRemote は証明の側で導出させる */
+              retainedLocalDeltaCount: retainedLocalDelta + skipped.length,
+              metaMergedWithLocalDelta: (metaMerged === true && retainedLocalDelta > 0)
             });
             if (proof.ok){
               var pr = L590.promoteSharedRev(+serverRev || 0, 'fix593: pull収束（ローカルを安全に再構成できた）');
@@ -586,8 +610,10 @@
               /* ★★fix597(GPT裁定D3): 解放の意味は「pendingのcommitが成功した」ではなく
                  **「現在のcanonicalを新しい同期基点として正式に採用した」**。
                  なので収束証明そのものを渡す（証明が無い呼び出しは台帳側が拒否する）。
-                 ★このpullはローカル墓標などをmerge保持しているので remote の完全採用ではない。
-                   → fullyAdoptedRemote:false → dirty は落とさない。 */
+                 ★★fix599: 「remote を完全採用したか」は**呼出側が申告してはいけない**。
+                   収束証明が retainedLocalDeltaCount から導出する。
+                   このpullはローカル墓標などをmerge保持しているので完全採用にはならず、
+                   同期は未反映(dirty)のまま残る。 */
               try {
                 if (typeof L590.hasAwaiting === 'function' && L590.hasAwaiting() &&
                     typeof L590.supersedeByPull === 'function'){
@@ -597,10 +623,13 @@
                   var nsNow597 = null;
                   try { nsNow597 = (r && r.data && r.data.ns) ? String(r.data.ns) : null; } catch(e){}
                   /* ★fix597: ns指紋の計算を待ってから解放判定する（同期版だと identity 未確定になる） */
+                  /* ★★fix599: fullyAdoptedRemote は**渡さない**。
+                     呼出側が自由に true を渡せる形だと、将来の別経路が誤って true を渡し、
+                     ローカル差分（墓標など）を抱えたまま dirty を落として未同期の変更を失う。
+                     台帳が proof から導出する。 */
                   var spFn = (typeof L590.supersedeByPullAsync === 'function')
                              ? L590.supersedeByPullAsync : function(a){ return Promise.resolve(L590.supersedeByPull(a)); };
-                  spFn({ remoteRev: +serverRev || 0, proof: proof, ns: nsNow597,
-                         fullyAdoptedRemote: false }).then(function(sp){
+                  spFn({ remoteRev: +serverRev || 0, proof: proof, ns: nsNow597 }).then(function(sp){
                     try { console.log('[home] 保留中の送信記録をpullで解消:', JSON.stringify(sp)); } catch(e){}
                   });
                 }

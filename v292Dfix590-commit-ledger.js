@@ -101,8 +101,17 @@
   var ACCEPT_VERSIONS = [2, 3];
   /* ★fix597(GPT裁定D2): 別アカウントの pending の隔離領域。7日で期限切れ。 */
   var FOREIGN_KEY = 'v292Dfix597_foreign';
-  var FOREIGN_TTL_MS = 7 * 24 * 3600 * 1000;
+  /* ★fix599(GPT裁定): 7日でも安全性は壊れない（TTL切れは証拠を失うだけでサーバデータは消えない）が、
+     最大20件の上限があり容量影響が小さいので**実用上は30日**。
+     長期間アカウントを切り替えたユーザーも自動復帰しやすくなる。 */
+  var FOREIGN_TTL_MS = 30 * 24 * 3600 * 1000;
   var FOREIGN_MAX = 20;
+  /* ★★fix599(GPT裁定・最重要): pending を解放したあとも、決着するまで**通常putを送ってはいけない**。
+     解放した直後に通常putを許すと、**古い appliedRev のまま再び fork する**。
+       needsPull=true → 通常putを遮断 → 正式pull か 明示的forceput だけ許可
+     local-diverged-after-commit も同じ（そのまま通常putを流してはいけない）。
+     pending とは別の状態なので、別のキーに持つ。 */
+  var GATE_KEY = 'v292Dfix599_gate';
   /* ★★fix596(GPT指定6): packageHash の入力の作り方そのものの版。
      hashAlg が同じでも「light の作り方」や「キー挿入順」が変われば値は一致しなくなる。
      Worker v25 の light 生成規則をこの名前で固定する。 */
@@ -128,7 +137,11 @@
                 foreignPendingQuarantined: 0, foreignPendingExpired: 0,
                 identityUnverified: 0, pendingSupersededByRemote: 0,
                 commitConfirmedLocalDiverged: 0, stateEquivalentLocalDiverged: 0,
-                pkgTsReused: 0, nsLearned: 0, pullProofRejected: 0 };
+                pkgTsReused: 0, nsLearned: 0, pullProofRejected: 0,
+                /* ★fix599 */
+                gateBlockedPut: 0, gateOpened: 0, gateClosed: 0,
+                sameCommitOpIdDifferentPkgTs: 0, sameCommitOpIdDifferentPayload: 0,
+                foreignRestored: 0, foreignSupersededByNewer: 0 };
   function note(rec){ try { rec.at = Date.now(); LOG.push(rec); if (LOG.length > LOG_MAX) LOG.shift(); } catch(e){} }
   function bump(why){ try { stats.byReason[why] = (stats.byReason[why] || 0) + 1; } catch(e){} }
 
@@ -297,6 +310,46 @@
   }
   function clear(){ try { localStorage.removeItem(KEY); } catch(e){} }
 
+  /* ---- ★★fix599(GPT裁定): 決着するまで通常putを止める関門 ------------------
+   * fix597 は「不一致が確定したら pending を解放する」を実装したが、
+   * **解放した直後から通常putが素通りになる**という穴が残っていた。
+   * その状態の appliedRev は古いままなので、次の put は必ずまた fork する。
+   * → 解放と同時にこの関門を閉め、次のどちらかでしか開かないようにする:
+   *     ・正式な pull の収束（supersedeByPull / closeGate('pull-converged')）
+   *     ・ユーザーが明示した forceput（この端末をクラウドの正にする）
+   * ★pending とは別物。pending は「結果不明」、関門は「結果は分かったが、まだ足並みが揃っていない」。 */
+  function readGate(){
+    try { var g = JSON.parse(lsg(GATE_KEY) || 'null'); return (g && g.reason) ? g : null; }
+    catch(e){ return null; }
+  }
+  function openGate(o){
+    o = o || {};
+    var g = { reason: String(o.reason || 'needs-pull'),
+              conflictState: o.conflictState || null,
+              remoteRev: (o.remoteRev == null ? null : +o.remoteRev),
+              identity: o.identity || null,
+              since: Date.now() };
+    try { localStorage.setItem(GATE_KEY, JSON.stringify(g)); } catch(e){ stats.persistFailed++; }
+    stats.gateOpened++;
+    note({ act:'gate-opened', reason: g.reason, conflictState: g.conflictState, remoteRev: g.remoteRev });
+    return g;
+  }
+  function closeGate(why){
+    var g = readGate();
+    if (!g) return { ok:false, code:'not-open' };
+    try { localStorage.removeItem(GATE_KEY); } catch(e){}
+    stats.gateClosed++;
+    note({ act:'gate-closed', why: String(why || '').slice(0, 40), heldSec: Math.round((Date.now() - g.since)/1000) });
+    return { ok:true, was: g };
+  }
+  function gateState(){ return readGate(); }
+  /* ★関門が閉じていても通してよいのは「ユーザーが明示した forceput」だけ。
+     fix399 の通常同期は op:'put' なので必ず止まる。home の「☁ いま上げる」は forceput。 */
+  function gateAllows(o){
+    o = o || {};
+    return (o.op === 'forceput');
+  }
+
   /* ---- ★fix597(GPT裁定D2): 別 identity の pending は**捨てずに隔離する** -----
    * 完全削除すると、元のアカウントへ戻ったときに
    *   「応答喪失commitの証拠（commitOpId / payloadHash）」
@@ -352,6 +405,48 @@
     if (!identityTag) return [];
     return foreignPendings().filter(function(r){ return r && String(r.identityTag) === String(identityTag); });
   }
+  /* ★★fix599(GPT裁定): 元のアカウントへ戻ったときの**復帰規則**を固定する。
+       identity確定 → active pending が無い → foreign から同一identityを検索
+       → **最新の未解決1件だけ** active候補へ → 先に reconcile
+       古いものは superseded-by-newer-local-attempt として診断保存する
+     ★同じ identity の foreign が複数あっても**無条件に全部戻してはいけない**（GPT明示）。
+       古い試行を戻すと、より新しい試行の結果を古い証拠で上書きしてしまう。
+     戻り: { ok, restored?:snapshot, superseded:number, code? } */
+  function restoreForeignFor(identityTag){
+    if (!identityTag) return { ok:false, code:'no-identity' };
+    if (hasAwaiting()) return { ok:false, code:'active-pending-exists' };
+    var list = foreignPendings();
+    var mine = [], rest = [];
+    for (var i = 0; i < list.length; i++){
+      if (list[i] && String(list[i].identityTag) === String(identityTag)) mine.push(list[i]);
+      else rest.push(list[i]);
+    }
+    if (!mine.length) return { ok:false, code:'nothing-to-restore' };
+    /* 最新＝createdAt が最大のもの1件だけ */
+    mine.sort(function(a, b){ return (+a.createdAt || 0) - (+b.createdAt || 0); });
+    var newest = mine[mine.length - 1];
+    var older  = mine.slice(0, mine.length - 1);
+    var rec = { v: VERSION, spec: HASH_SPEC, packageSpec: PACKAGE_SPEC,
+                op: newest.op || 'put', commitOpId: newest.commitOpId,
+                pkgTs: (newest.pkgTs == null ? null : +newest.pkgTs),
+                identity: identityTag,
+                baseRev: (newest.baseRev == null ? null : +newest.baseRev),
+                payloadHash: newest.payloadHash,
+                createdAt: +newest.createdAt || Date.now(),
+                status: 'awaiting-result', source: 'restored-from-foreign' };
+    if (!write(rec)) return { ok:false, code:'persist-failed' };
+    /* 古いものは診断として残す（消さない。ただし復帰候補にはしない） */
+    for (var k = 0; k < older.length; k++){
+      older[k].status = 'superseded-by-newer-local-attempt';
+      stats.foreignSupersededByNewer++;
+      rest.push(older[k]);
+    }
+    try { localStorage.setItem(FOREIGN_KEY, JSON.stringify(pruneForeign(rest))); } catch(e){}
+    stats.foreignRestored++;
+    note({ act:'foreign-restored', commitOpId: newest.commitOpId, superseded: older.length });
+    /* ★戻したものは「結果不明」なので、まず reconcile させる。ここでは送信を許可しない。 */
+    return { ok:true, restored: snapshotOf(rec), superseded: older.length, needsReconcile:true };
+  }
   function clearForeign(){ try { localStorage.removeItem(FOREIGN_KEY); } catch(e){} }
 
   /* ---- ① put の直前に呼ぶ ------------------------------------------------
@@ -365,6 +460,19 @@
        呼び出し側は blocked を見たら**送信せず**、ローカル変更を dirty として溜める。 */
     /* ★fix597: ns が渡されていれば、まず指紋を作って identity を確定できるようにする。 */
     return identityOfAsync(o).then(function(meNow){
+    /* ★★fix599(GPT裁定): 決着していない状態で通常putを送らせない。
+       ここを通すと、古い appliedRev のまま送って**また fork する**。 */
+    var gate = readGate();
+    if (gate && !gateAllows(o)){
+      stats.gateBlockedPut++;
+      note({ act:'blocked-by-gate', reason: gate.reason, conflictState: gate.conflictState });
+      return { ok:false, code:'resolution-required', blocked:true, gate: {
+        reason: gate.reason, conflictState: gate.conflictState,
+        remoteRev: gate.remoteRev, since: gate.since,
+        /* ユーザーに出せる選択肢（GPT指定の実処理） */
+        choices: (gate.conflictState === 'local-diverged-after-commit')
+                 ? ['adopt-remote', 'make-this-device-canonical'] : ['adopt-remote'] } };
+    }
     var prev = read();
     if (prev && prev.status === 'awaiting-result'){
       /* ★★fix596c/fix597: 止めてよいのは「**自分の**未解決の保留」だけ。
@@ -388,18 +496,36 @@
       quarantineForeign(prev);
       clear();
     }
-    /* ★★fix597(GPT指定): 1 logical put = 1 pkgTs。
-       同じ pending の reconcile では同じ pkgTs を使い、**新しい論理 put では新しい pkgTs** を出す。
-       前の pending の pkgTs を次の put へ使い回すと、照合が別の送信の内容と一致してしまう。
-       ★ここで送信を止めはしない（同一ミリ秒の連続putで誤検知しうるため）。
-         数と記録を残し、回帰検査で「fix399 が毎回新しい pkgTs を出すこと」を守る。 */
-    if (o.pkgTs != null && lastLogicalPut.pkgTs != null &&
-        +o.pkgTs === +lastLogicalPut.pkgTs &&
-        o.commitOpId && String(o.commitOpId) !== String(lastLogicalPut.commitOpId)){
-      stats.pkgTsReused++;
-      note({ act:'pkgts-reused', pkgTs: +o.pkgTs, prevOpId: lastLogicalPut.commitOpId });
+    /* ★★fix599(GPT裁定): pkgTs に必要なのは**一意性ではない**。
+       「同じ論理putでは、送信時と reconcile 時に同じ値を使う」ことだけが要件。
+       連続した別 put が同じミリ秒になるのは**異常ではない**ので、それで止めてはいけない
+       （fix597 の pkgTsReused はこの誤検知を含んでいた）。
+       正しい不変条件は commitOpId を起点に置く:
+         同じ commitOpId + pkgTs が違う       → **送信停止**
+         同じ commitOpId + payloadHash が違う → **送信停止**
+         違う commitOpId + 偶然 pkgTs が同じ  → 許可（正常）
+       ここが破れていると、照合が「別の送信の内容」と一致してしまう。 */
+    var reuse = null;
+    if (o.commitOpId && lastLogicalPut.commitOpId &&
+        String(o.commitOpId) === String(lastLogicalPut.commitOpId)){
+      if (o.pkgTs != null && lastLogicalPut.pkgTs != null && +o.pkgTs !== +lastLogicalPut.pkgTs){
+        stats.sameCommitOpIdDifferentPkgTs++;
+        reuse = 'same-commit-op-id-different-pkg-ts';
+      }
+    }
+    if (reuse){
+      note({ act:'blocked-invariant', why: reuse, commitOpId: String(o.commitOpId) });
+      return { ok:false, code: reuse, blocked:true };
     }
     return payloadHash(o.pkg).then(function(ph){
+    /* 同じ commitOpId なのに中身が変わっている場合も止める（hash が出てから判定できる） */
+    if (ph != null && o.commitOpId && lastLogicalPut.commitOpId &&
+        String(o.commitOpId) === String(lastLogicalPut.commitOpId) &&
+        lastLogicalPut.payloadHash && ph !== lastLogicalPut.payloadHash){
+      stats.sameCommitOpIdDifferentPayload++;
+      note({ act:'blocked-invariant', why:'same-commit-op-id-different-payload', commitOpId: String(o.commitOpId) });
+      return { ok:false, code:'same-commit-op-id-different-payload', blocked:true };
+    }
       if (ph == null) return { ok:false, code:'no-payload' };
       stats.puts++;
       var op = (o.op === 'forceput') ? 'forceput' : 'put';   /* ★forceput も対象（GPT指定1） */
@@ -417,7 +543,7 @@
                   payloadHash: ph, createdAt: Date.now(), status: 'awaiting-result',
                   source: String(o.source || 'unknown') };
       var persisted = write(rec);
-      lastLogicalPut = { commitOpId: commitOpId, pkgTs: rec.pkgTs };
+      lastLogicalPut = { commitOpId: commitOpId, pkgTs: rec.pkgTs, payloadHash: ph };
       note({ act:'put', op: op, source: rec.source, baseRev: rec.baseRev,
              commitOpId: commitOpId, persisted: persisted });
       return { ok:true, payloadHash: ph, commitOpId: commitOpId, op: op, persisted: persisted,
@@ -425,8 +551,8 @@
     }, function(){ return { ok:false, code:'hash-failed' }; });
     });
   }
-  /* ★fix597: 直近の論理 put（pkgTs の使い回しを見張るため） */
-  var lastLogicalPut = { commitOpId: null, pkgTs: null };
+  /* ★fix597/599: 直近の論理 put（同じ commitOpId で中身がぶれていないかを見張る） */
+  var lastLogicalPut = { commitOpId: null, pkgTs: null, payloadHash: null };
 
   /* 台帳の写し（呼び出し側へ返す用。中身をそのまま渡して書き換えられないようにする） */
   function snapshotOf(rec){
@@ -545,7 +671,17 @@
     }
     clear();
     stats.supersededByPull++;
-    var fully = (o.fullyAdoptedRemote === true);
+    /* ★★fix599(GPT裁定): fullyAdoptedRemote は**呼出側の申告ではなく収束証明から導出**する。
+       呼出側が自由に true を渡せる形だと、将来の別経路が誤って true を渡し、
+       ローカル差分（墓標など）を抱えたまま dirty を落として**未同期の変更を失う**。
+       proof が答えを持っていればそれを使い、無ければ**安全側（false＝dirty維持）**。 */
+    var fully = (o.proof && typeof o.proof.fullyAdoptedRemote === 'boolean')
+                ? o.proof.fullyAdoptedRemote
+                : (o.proof && o.proof.retainedLocalDeltaCount === 0 &&
+                   o.proof.metaMergedWithLocalDelta === false);
+    fully = (fully === true);
+    /* ★正式な pull が収束したので、決着待ちの関門も開ける（GPT指定の adopt-remote 経路） */
+    closeGate('pull-converged');
     note({ act:'superseded-by-pull', ok:true, remoteRev: rRev, fullyAdoptedRemote: fully,
            commitOpId: cur.commitOpId });
     return { ok:true, commitOpId: cur.commitOpId, status:'superseded-by-pull',
@@ -676,7 +812,10 @@
                  resolved: true,
                  commitOutcome: 'unknown',      /* ★通った/通らなかったを断定しない */
                  syncDirty: true,
-                 needsPull: true };
+                 needsPull: true,
+                 /* ★★fix599(GPT裁定): pending を解放しても、**通常putはpull完了まで止める**。
+                    ここを開けたままにすると、古い appliedRev のまま送って再び fork する。 */
+                 openGate: 'needs-pull' };
       }
 
       /* ================= ★fix597 / GPT裁定D1 ケースB =========================
@@ -706,6 +845,10 @@
                    syncDirty: true,
                    needsPull: false,                    /* ★通常の pull 要求にしない */
                    conflictState: 'local-diverged-after-commit',
+                   /* ★★fix599(GPT裁定): この状態のまま通常putを流してはいけない。
+                      adopt-remote（明示的pull）か make-this-device-canonical
+                      （墓標保護付きforceput）でしか進めない。 */
+                   openGate: 'local-diverged-after-commit',
                    choices: ['adopt-remote', 'make-this-device-canonical'] };
         }
         /* lastCommitOpId が一致しない＝中身は同じでも自分の commit の証明にはならない。
@@ -724,6 +867,7 @@
                  syncDirty: true,
                  needsPull: false,
                  conflictState: 'local-diverged-after-commit',
+                 openGate: 'local-diverged-after-commit',
                  choices: ['adopt-remote', 'make-this-device-canonical'] };
       }
 
@@ -740,14 +884,14 @@
                  remoteRev:rRev, canAdvanceAppliedRev:canAdvance, payloadHash: led.payloadHash,
                  /* ★fix597: 戻り値の形を全分類でそろえる（呼び出し側の分岐を減らす） */
                  releasePending:true, resolved:true, commitOutcome:'confirmed',
-                 syncDirty:false, needsPull:false };
+                 syncDirty:false, needsPull:false, openGate:null };
       }
       stats.stateEquivalentRebased++;
       note({ act:'reconcile', ok:true, status:'state-equivalent-rebased', remoteRev:rRev, appliedRev:applied });
       return { status:'state-equivalent-rebased', why:'three-way-match',
                remoteRev:rRev, canAdvanceAppliedRev:canAdvance, payloadHash: led.payloadHash,
                releasePending:true, resolved:true, commitOutcome:'unknown',
-               syncDirty:false, needsPull:false };
+               syncDirty:false, needsPull:false, openGate:null };
     }, function(){ return ng('hash-failed'); });
   }
 
@@ -849,8 +993,17 @@
       if (!checks[i][1]){ bump('pullProof:' + checks[i][0]); note({ act:'pull-proof', ok:false, why:checks[i][0] });
                           return { ok:false, why: checks[i][0] }; }
     }
-    note({ act:'pull-proof', ok:true, remoteRev:+o.remoteRev });
-    return { ok:true, why:'converged' };
+    /* ★★fix599(GPT指定): 「remote を完全採用したか」を**証明の側で**決める。
+       ローカル差分（墓標など）を merge 保持したなら完全採用ではない＝dirty を落とせない。 */
+    var retained = (+o.retainedLocalDeltaCount || 0);
+    var mergedWithLocal = (o.metaMergedWithLocalDelta === true);
+    var fullyAdoptedRemote = (retained === 0 && !mergedWithLocal);
+    note({ act:'pull-proof', ok:true, remoteRev:+o.remoteRev,
+           retainedLocalDeltaCount: retained, fullyAdoptedRemote: fullyAdoptedRemote });
+    return { ok:true, why:'converged',
+             retainedLocalDeltaCount: retained,
+             metaMergedWithLocalDelta: mergedWithLocal,
+             fullyAdoptedRemote: fullyAdoptedRemote };
   }
 
   /* ---- ★fix593: 共有revの昇格（キー名をここで一元管理する） ---------------
@@ -927,6 +1080,13 @@
     hasAwaiting: hasAwaiting,
     supersedeByPull: supersedeByPull,
     supersedeByPullAsync: supersedeByPullAsync,
+    /* ★fix599: 決着するまで通常putを止める関門 */
+    gateState: gateState,
+    openGate: openGate,
+    closeGate: closeGate,
+    gateAllows: gateAllows,
+    /* ★fix599: foreign の復帰規則 */
+    restoreForeignFor: restoreForeignFor,
     /* ★fix593: pull収束証明と共有revの昇格 */
     provePullConvergence: provePullConvergence,
     promoteSharedRev: promoteSharedRev,
@@ -940,7 +1100,7 @@
     /* ★fix596: Worker v25 の commitstate と繋いだので、復帰へ配線済み。 */
     wiredIntoRecovery: true,
     /* ★fix597: GPT裁定 D1〜D3 / ns / pkgTs を反映済み。 */
-    verdictApplied: 'fix597'
+    verdictApplied: 'fix599'
   };
   /* ---- ★fix597: 旧キーに残っている**生の ns** を、どのページからでも必ず片付ける ----
    * 2026-07-27 の実機で見つけた: fix596 が `v292Dfix596_ns` に ns の生値を保存していた。

@@ -431,6 +431,8 @@
                               conflictState: v.conflictState || null };
             var fullMatch = (v.status === 'commit-confirmed' || v.status === 'state-equivalent-rebased');
             if (fullMatch){
+              /* ★fix599: 三者一致まで戻れたなら決着済み。関門も閉じる。 */
+              try { if (typeof led.closeGate === 'function') led.closeGate('three-way-match'); } catch(e){}
               /* ★rev は巻き戻さない。進めてよいと言われたときだけ進める。 */
               if (v.canAdvanceAppliedRev && c && v.remoteRev != null){
                 c.promoteRev(v.remoteRev, 'fix596:' + v.status);
@@ -455,6 +457,13 @@
                      **明示的な競合状態 local-diverged-after-commit** として持つ。 */
             if (!fullMatch && v.releasePending){
               try { led.clear(); } catch(e){}
+              /* ★★fix599(GPT裁定): pending を解放しても、**決着するまで通常putを止める**。
+                 ここを開けたままにすると、古い appliedRev のまま送って**また fork する**。
+                 開けてよいのは 正式pullの収束 か 明示的forceput のときだけ。 */
+              if (v.openGate && typeof led.openGate === 'function'){
+                try { led.openGate({ reason: v.openGate, conflictState: v.conflictState || null,
+                                     remoteRev: v.remoteRev, identity: identityArgs().ns || null }); } catch(e){}
+              }
               setNum('v292Dfix399_localTs', Date.now());     /* 未同期のまま残す */
               if (v.conflictState === 'local-diverged-after-commit'){
                 divergedState = { at: Date.now(), remoteRev: (v.remoteRev == null ? null : +v.remoteRev),
@@ -568,8 +577,23 @@
         }
         return Promise.resolve(prep).then(function(pr){
           if (pr && pr.blocked){
-            /* 前回の送信の結末がまだ分かっていない。まず決着させる。 */
+            /* ★★fix599: 止まる理由は2種類ある。混ぜると原因が読めなくなる。
+                 pending-unresolved      … 前回の送信の**結末が分かっていない**（結果待ち）
+                 resolution-required     … 結末は分かったが、**まだ足並みが揃っていない**（関門）
+                                           解放した直後に通常putを許すと古い appliedRev で再び fork する
+                 same-commit-op-id-*     … 同じ commitOpId なのに中身がぶれている（不変条件違反） */
             setNum('v292Dfix399_localTs', Date.now());   /* 未同期であることを残す */
+            if (pr.code === 'resolution-required'){
+              var eg = new Error('RESOLUTION_REQUIRED');
+              eg.resolutionRequired = true; eg.gate = pr.gate || null;
+              throw eg;
+            }
+            if (pr.code === 'same-commit-op-id-different-pkg-ts' ||
+                pr.code === 'same-commit-op-id-different-payload'){
+              var ei = new Error('COMMIT_INVARIANT_VIOLATED');
+              ei.invariant = pr.code;
+              throw ei;
+            }
             var eb = new Error('PENDING_COMMIT_UNRESOLVED');
             eb.pendingCommit = true; eb.pending = pr.pending || null;
             throw eb;
@@ -641,7 +665,11 @@
          ★pending が未解決で送信を止めた場合も、まず照合させる。 */
       try {
         var isFork = !!(err && err.fork);
-        if (!isFork) setTimeout(function(){ reconcileNow(err && err.pendingCommit ? 'pending-blocked' : 'io-error'); }, 0);
+        /* ★★fix599: 関門で止まった場合は照合しても意味が無い（結末はすでに判明している）。
+           ここで照合を走らせると、決着しないまま通信を繰り返すだけになる。
+           不変条件違反も同じで、直すべきは呼び出し側なので照合対象ではない。 */
+        var noReconcile = isFork || !!(err && (err.resolutionRequired || err.invariant));
+        if (!noReconcile) setTimeout(function(){ reconcileNow(err && err.pendingCommit ? 'pending-blocked' : 'io-error'); }, 0);
       } catch(e){}
       throw err;
     });
@@ -1113,6 +1141,11 @@
     ensureStableNs: ensureStableNs,
     divergedAfterCommit: divergedAfterCommit,
     clearDivergedState: clearDivergedState,
+    /* ★fix599: 関門の状態を実機から読む口 */
+    resolutionGate: function(){
+      var led = ledger();
+      return (led && typeof led.gateState === 'function') ? led.gateState() : null;
+    },
     syncState: function(){
       var c = null; try { c = window.__v292Dfix580; } catch(e){}
       return { /* ★fix582: baseTs は競合制御から外れ、診断値へ降格した */
