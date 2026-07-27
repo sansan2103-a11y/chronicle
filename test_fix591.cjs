@@ -148,7 +148,21 @@ console.log('\n== (5) 出荷の体裁 ==');
   ok('★home.html 側 fix579 の cb がある', !!cbHome, cbHome);
 }
 
+/* ---- fix592: ホームにも古いHTMLキャッシュからの脱出を入れた ---- */
+{
+  console.log('\n== (6) ★★fix592: home.html の古いキャッシュから抜ける ==');
+  const home = read('home.html');
+  ok('★★version.txt を no-store で見ている', /fetch\('version\.txt\?_='[\s\S]{0,80}cache:\s*'no-store'/.test(home));
+  ok('★BUILT と食い違えば置換リロードする', /location\.replace\([\s\S]{0,80}vr=1&v=/.test(home));
+  ok('★★ループ防止がある（?vr=1 で二度目は何もしない）', /\[\?&\]vr=1/.test(home));
+  ok('★HOME_BUILT が version.txt と同値', (() => {
+    const m = home.match(/HOME_BUILT = '([^']+)'/);
+    return !!m && m[1] === read('version.txt').trim();
+  })(), (home.match(/HOME_BUILT = '([^']+)'/) || [])[1]);
+  ok('★index.html 側の同じ仕組み(fix242)は残っている', read('index.html').indexOf('vr=1&v=') > 0);
+}
+
 console.log('\n---------------------------------------------');
-console.log('test_fix591: 合格 ' + pass + ' / 失敗 ' + fail);
+console.log('test_fix591/592: 合格 ' + pass + ' / 失敗 ' + fail);
 console.log('pass=' + pass + ' fail=' + fail);
 if (fail) process.exitCode = 1;

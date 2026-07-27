@@ -162,11 +162,34 @@
      ★fix569 が最初でなければならない（他が localStorage をラップする前に native を捕まえる）。
      クラウドへのpush(fix399)はここには載せない。反映できないときは
      「一覧からは消すが実データの削除は保留」となり、アプリ側で自動的に片づく。 -->
-<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix587"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix587"></script>
-<script src="v292Dfix564-snapshot.js?cb=v292Dfix587"></script>
-<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix591"></script>
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix589"></script>
+<script>
+/* ★fix592: ホーム画面にも「古いHTMLキャッシュからの脱出」を入れる。
+   index.html には fix242 で同じ仕組みが入っていたが、home.html には無かった。
+   2026-07-27 の実機で実際に踏んだ: fix591（取り込みで墓標を消さない修正）を出荷した直後、
+   ブラウザが**古い home.html を使い続け**、修正が効かないまま「削除した物語が一覧に戻る」が再現した。
+   → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
+   ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
+(function(){
+  var HOME_BUILT = '20260727-fix592';
+  try {
+    if (/[?&]vr=1/.test(location.search)) return;
+    fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
+      .then(function(r){ return r.ok ? r.text() : ''; })
+      .then(function(v){
+        v = (v || '').trim().slice(0, 40);
+        if (!v || v === HOME_BUILT) return;
+        var sep = location.search ? '&' : '?';
+        location.replace(location.pathname + location.search + sep + 'vr=1&v=' + encodeURIComponent(v));
+      })
+      .catch(function(){});
+  } catch(e){}
+})();
+</script>
+<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix592"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix592"></script>
+<script src="v292Dfix564-snapshot.js?cb=v292Dfix592"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix592"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix592"></script>
 <script>
 (function(){
   'use strict';
