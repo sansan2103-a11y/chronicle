@@ -336,6 +336,45 @@ console.log('\n== (11) ★home.html への配線 ==');
   ok('★home.html に fix590 が積んである', HOME.indexOf('v292Dfix590-commit-ledger.js') > 0);
 }
 
+console.log('\n== (13) ★★★時刻で hash がぶれない（実機で踏んだ） ==');
+{
+  /* ★★2026-07-27 の実機で踏んだ。collectLight は `updatedAt: ts` を埋めるので、
+     照合のときに**現在時刻で作り直すと、中身が1バイトも変わっていなくても hash が必ず変わる**。
+     その結果 last-sent-vs-current-mismatch が常に成立し、
+     三者一致（＝この仕組みの目的そのもの）が**永久に成立しない**状態だった。
+     送ったときの ts を台帳に控え、照合ではその ts で作り直す。 */
+  const L = mk().__v292Dfix590;
+  const TS = 1785140000000;
+  const pkgAt = t => ({ schema:1, updatedAt:t, device:'PC', activeSlot:'smA', ls:{ 'chr6_slot_smA':'x' } });
+  const r = await L.notePut({ pkg: pkgAt(TS), baseRev: 10, op:'put', pkgTs: TS, identity:'pass:abc' });
+  ok('★★台帳に pkgTs を控えている', L.pendingCommit().pkgTs === TS, L.pendingCommit());
+
+  const sameTs   = await L.payloadHash(pkgAt(TS));
+  const otherTs  = await L.payloadHash(pkgAt(TS + 60000));
+  ok('★★同じ ts で作り直せば同じ hash になる（中身が同じなら一致する）', sameTs === r.payloadHash);
+  ok('★★ts が違うだけで hash は変わる（＝現在時刻で作ると必ず外れる）', otherTs !== r.payloadHash);
+
+  /* 中身が同じなら三者一致が成立することを、実際に classify で確かめる */
+  const v = await L.classify({
+    remote: { rev: 11, packageHash: r.payloadHash, lastCommitOpId: r.commitOpId, hashAlg: 'sha256-utf8-v1' },
+    appliedRev: 10, identity: 'pass:abc', currentHash: sameTs });
+  ok('★★★中身が同じなら commit-confirmed になる（仕組みが機能する）', v.status === 'commit-confirmed', v);
+
+  /* 中身が本当に変わったときはちゃんと外れる */
+  const changed = await L.payloadHash({ schema:1, updatedAt:TS, device:'PC', activeSlot:'smA', ls:{ 'chr6_slot_smA':'y' } });
+  const v2 = await L.classify({
+    remote: { rev: 11, packageHash: r.payloadHash, lastCommitOpId: r.commitOpId, hashAlg: 'sha256-utf8-v1' },
+    appliedRev: 10, identity: 'pass:abc', currentHash: changed });
+  ok('★★中身が変わっていれば rebase しない', v2.why === 'last-sent-vs-current-mismatch', v2);
+
+  /* 配線側 */
+  ok('★★push が pkgTs を渡している', /op: 'put', pkgTs: ts,/.test(SRC399));
+  ok('★★照合は「送ったときの ts」で作り直す',
+     /currentLocalPackageHash\(ctx\.pendingAtStart && ctx\.pendingAtStart\.pkgTs\)/.test(SRC399));
+  ok('★★currentLocalPackageHash が ts を受け取れる', /function currentLocalPackageHash\(ts\)/.test(SRC399));
+  ok('★forceput も pkgTs を渡している', /pkgTs: \(pkg && pkg\.updatedAt\) \|\| null,/.test(HOME));
+}
+
 console.log('\n== (12) ★退行防止 ==');
 {
   ok('★★payloadString は Worker と同じ規則（idbを除いて JSON.stringify）',

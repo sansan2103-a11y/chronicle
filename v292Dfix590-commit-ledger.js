@@ -193,6 +193,12 @@
       var commitOpId = o.commitOpId ? String(o.commitOpId) : newCommitOpId();
       var rec = { v: VERSION, spec: HASH_SPEC, packageSpec: PACKAGE_SPEC,
                   op: op, commitOpId: commitOpId,
+                  /* ★★fix596: 送ったパッケージの updatedAt をそのまま控える。
+                     collectLight は `updatedAt: ts` を埋めるので、あとで**現在時刻で作り直すと
+                     中身が1バイトも変わっていなくてもhashが必ず変わる**。
+                     それでは三者一致が永久に成立せず、照合の仕組みそのものが無意味になる。
+                     照合のときは必ずこの ts で作り直して比べる。 */
+                  pkgTs: (o.pkgTs == null ? null : +o.pkgTs),
                   identity: identityKey(o.identity, o.identityKind || identityKindOf(o.identity)),
                   baseRev: (o.baseRev == null ? null : +o.baseRev),
                   payloadHash: ph, createdAt: Date.now(), status: 'awaiting-result',
@@ -208,7 +214,7 @@
   function snapshotOf(rec){
     if (!rec) return null;
     return { op: rec.op, commitOpId: rec.commitOpId, baseRev: rec.baseRev,
-             payloadHash: rec.payloadHash, createdAt: rec.createdAt,
+             payloadHash: rec.payloadHash, createdAt: rec.createdAt, pkgTs: rec.pkgTs,
              status: rec.status, source: rec.source, identity: rec.identity };
   }
   function pendingCommit(){ var r = read(); return r ? snapshotOf(r) : null; }

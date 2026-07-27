@@ -170,7 +170,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260727-fix596';
+  var HOME_BUILT = '20260727-fix596b';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -648,6 +648,7 @@
       if (!(L596 && typeof L596.notePut === 'function')) return call(body596, 60000);
       var h596 = authHeaders();
       return L596.notePut({ pkg: pkg, baseRev: body596.baseRev, op: 'forceput',
+                            pkgTs: (pkg && pkg.updatedAt) || null,
                             identity: (h596['x-google-id'] || h596['x-chronicle-pass'] || null),
                             identityKind: (h596['x-google-id'] ? 'google' : 'pass'),
                             source: 'home:forceput' })

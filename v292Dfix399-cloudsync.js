@@ -284,11 +284,16 @@
       }, function(){ return { ok:false }; });
   }
 
-  /* 現在のローカル状態の packageHash（送るときと同じ規則で作る） */
-  function currentLocalPackageHash(){
+  /* 現在のローカル状態の packageHash（送るときと**完全に同じ規則**で作る）
+     ★★fix596: ts を渡せるようにしてある。collectLight は `updatedAt: ts` を埋めるので、
+       現在時刻で作り直すと**中身が同じでもhashが必ず変わる**。
+       照合では「送ったときの ts」で作り直し、**中身が変わったときだけ**差が出るようにする。
+       （2026-07-27 の実機で、ここを現在時刻にしていたため三者一致が常に false になっていた） */
+  function currentLocalPackageHash(ts){
     var led = ledger();
     if (!led || typeof led.payloadHash !== 'function') return Promise.resolve(null);
-    try { return led.payloadHash(collectLight(Date.now())); } catch(e){ return Promise.resolve(null); }
+    try { return led.payloadHash(collectLight(ts == null ? Date.now() : +ts)); }
+    catch(e){ return Promise.resolve(null); }
   }
 
   var reconcileLast = { status:'never', at:0, why:null };
@@ -312,7 +317,8 @@
           var j = r.json;
           var c = fix582Off() ? null : coord();
           var applied = c ? c.rev() : 0;
-          return currentLocalPackageHash().then(function(curHash){
+          /* ★送ったときと同じ ts で作り直す（そうしないと必ず不一致になる） */
+          return currentLocalPackageHash(ctx.pendingAtStart && ctx.pendingAtStart.pkgTs).then(function(curHash){
             return led.classify({
               remote: { rev: j.rev, packageHash: j.packageHash, lastCommitOpId: j.lastCommitOpId,
                         hashAlg: j.hashAlg, packageSpec: cap.packageSpec },
@@ -436,7 +442,7 @@
         try { led = window.__v292Dfix590; } catch(e){ led = null; }
         var prep;
         if (led && typeof led.notePut === 'function'){
-          prep = led.notePut({ pkg: o.pkg, baseRev: body.baseRev, op: 'put',
+          prep = led.notePut({ pkg: o.pkg, baseRev: body.baseRev, op: 'put', pkgTs: ts,
                                identity: (authHeaders()['x-google-id'] || authHeaders()['x-chronicle-pass'] || null),
                                identityKind: (authHeaders()['x-google-id'] ? 'google' : 'pass'),
                                source: 'fix399' });
