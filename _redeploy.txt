@@ -5,3 +5,4 @@ redeploy trigger for fix587 (pages build not queued for dfa8e60)
       #1481(fix586) のまま止まっていた。リポジトリには反映されているのに
       Pages が旧版(fix585)を配信し、新規JSは404だった。
       前回(fix548)と同じ現象。このファイルを更新して再デプロイを促す。
+2026-07-27 fix599: Pagesビルドが15分Queuedのまま進まなかったため再デプロイ
