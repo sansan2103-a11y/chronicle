@@ -271,6 +271,23 @@
      ★single-flight: 走っている間の要求は「終わったあと最大1回だけ」やり直す（台帳側で管理） */
   function ledger(){ try { return window.__v292Dfix590 || null; } catch(e){ return null; } }
 
+  /* ★★fix596c: サーバが返す ns（アカウントごとの名前空間）を覚えておく。
+     Google トークンは期限切れで消えるし、取得元も経路によって違うので、
+     ヘッダから作った identity は**同じ人でも時間で変わってしまう**。
+     ns はアカウントに紐づく安定した値なので、これを identity の基準にする。 */
+  var NS_KEY = 'v292Dfix596_ns';
+  function rememberNs(j){
+    try { if (j && j.ns) localStorage.setItem(NS_KEY, String(j.ns)); } catch(e){}
+  }
+  function knownNs(){ try { return localStorage.getItem(NS_KEY) || null; } catch(e){ return null; } }
+  /* 台帳へ渡す識別情報。ns があればそれを使い、無ければ従来どおりヘッダから作る。 */
+  function identityArgs(){
+    var h = authHeaders();
+    return { ns: knownNs(),
+             identity: (h['x-google-id'] || h['x-chronicle-pass'] || null),
+             identityKind: (h['x-google-id'] ? 'google' : 'pass') };
+  }
+
   function workerSupportsCommitState(){
     /* v25 未満では commitstate が無い。root の capabilities で判定する。
        ★「D1が無い環境だから」で能力表示を変えない（実装の有無と利用可否を混ぜない）ので、
@@ -315,6 +332,7 @@
                       .then(function(){ return { status:'remote-read-failed' }; });
           }
           var j = r.json;
+          rememberNs(j);
           var c = fix582Off() ? null : coord();
           var applied = c ? c.rev() : 0;
           /* ★送ったときと同じ ts で作り直す（そうしないと必ず不一致になる） */
@@ -323,8 +341,8 @@
               remote: { rev: j.rev, packageHash: j.packageHash, lastCommitOpId: j.lastCommitOpId,
                         hashAlg: j.hashAlg, packageSpec: cap.packageSpec },
               appliedRev: applied,
-              identity: (authHeaders()['x-google-id'] || authHeaders()['x-chronicle-pass'] || null),
-              identityKind: (authHeaders()['x-google-id'] ? 'google' : 'pass'),
+              ns: identityArgs().ns, identity: identityArgs().identity,
+              identityKind: identityArgs().identityKind,
               currentHash: curHash,
               pendingAtStart: ctx.pendingAtStart
             });
@@ -442,9 +460,9 @@
         try { led = window.__v292Dfix590; } catch(e){ led = null; }
         var prep;
         if (led && typeof led.notePut === 'function'){
+          var ia = identityArgs();
           prep = led.notePut({ pkg: o.pkg, baseRev: body.baseRev, op: 'put', pkgTs: ts,
-                               identity: (authHeaders()['x-google-id'] || authHeaders()['x-chronicle-pass'] || null),
-                               identityKind: (authHeaders()['x-google-id'] ? 'google' : 'pass'),
+                               ns: ia.ns, identity: ia.identity, identityKind: ia.identityKind,
                                source: 'fix399' });
         } else {
           prep = Promise.resolve({ ok:false, code:'no-ledger' });
@@ -490,6 +508,7 @@
             throw ef;
           }
           if (!j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+          rememberNs(j);   /* ★fix596c: 安定した identity の基準にする */
           /* ★★fix596(GPT指定2): 成功応答を `ok:true` だけで信用しない。
              rev / hashAlg / packageHash / lastCommitOpId をすべて突き合わせ、
              **commit-confirmed のときだけ** rev を正本へ昇格し台帳を消す。

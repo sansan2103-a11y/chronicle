@@ -81,7 +81,7 @@
                 commitConfirmed: 0, stateEquivalentRebased: 0, realConflicts: 0,
                 remoteReadFailed: 0, responseIntegrityMismatch: 0,
                 reconcileStale: 0, reconcileUnsupported: 0, pendingBlockedNewPut: 0,
-                supersededByPull: 0 };
+                supersededByPull: 0, foreignPendingDropped: 0 };
   function note(rec){ try { rec.at = Date.now(); LOG.push(rec); if (LOG.length > LOG_MAX) LOG.shift(); } catch(e){} }
   function bump(why){ try { stats.byReason[why] = (stats.byReason[why] || 0) + 1; } catch(e){} }
 
@@ -147,6 +147,22 @@
   }
   function identityTag(raw){ return identityKey(raw, identityKindOf(raw)); }
 
+  /* ★★fix596c: identity は**安定した値**から作らなければならない。
+     2026-07-27 の実機で踏んだ: 保留を作ったときは合言葉から、照合のときは Google トークンから
+     作られたため identity-mismatch になり、**自分の保留を自分で解決できなくなった**。
+     原因は2つ:
+       ・fix399 は `window.__chronicleGoogleId()`、home は localStorage の期限チェック付き、と
+         取得元が違う
+       ・Google トークンは**期限切れになる**ので、同じ端末・同じ人でも時間で種別が変わる
+     → サーバが返す ns（アカウントごとの名前空間）が最も安定しているので、あればそれを使う。
+       ns が分からない場合だけ、従来どおり合言葉/トークンから作る。 */
+  function identityOf(o){
+    o = o || {};
+    if (o.ns) return identityKey(String(o.ns), 'ns');
+    if (o.identity) return identityKey(o.identity, o.identityKind || identityKindOf(o.identity));
+    return null;
+  }
+
   /* ---- commitOpId（この端末が「今回の送信」に付ける一意な名前） ------------
    * ★サーバは絶対に発行しない（架空のIDを作らせない）。ここでだけ作る。 */
   var opSeq = 0;
@@ -182,9 +198,20 @@
        呼び出し側は blocked を見たら**送信せず**、ローカル変更を dirty として溜める。 */
     var prev = read();
     if (prev && prev.status === 'awaiting-result'){
-      stats.pendingBlockedNewPut++;
-      note({ act:'blocked-new-put', pendingOpId: prev.commitOpId, pendingSince: prev.createdAt });
-      return Promise.resolve({ ok:false, code:'pending-unresolved', blocked:true, pending: snapshotOf(prev) });
+      /* ★★fix596c: 止めてよいのは「**自分の**未解決の保留」だけ。
+         別アカウントの保留（この端末を別の人が使った等）は、こちらでは決着させようがない。
+         それで送信を止めると**自分の保存が永久にできなくなる**ので、捨てて先へ進む。
+         ここで捨てても、そのアカウントのデータはサーバ側に残っていて失われない。 */
+      var meNow = identityOf(o);
+      var sameOwner = !prev.identity || !meNow || prev.identity === meNow;
+      if (sameOwner){
+        stats.pendingBlockedNewPut++;
+        note({ act:'blocked-new-put', pendingOpId: prev.commitOpId, pendingSince: prev.createdAt });
+        return Promise.resolve({ ok:false, code:'pending-unresolved', blocked:true, pending: snapshotOf(prev) });
+      }
+      stats.foreignPendingDropped++;
+      note({ act:'foreign-pending-dropped', pendingOpId: prev.commitOpId });
+      clear();
     }
     return payloadHash(o.pkg).then(function(ph){
       if (ph == null) return { ok:false, code:'no-payload' };
@@ -199,7 +226,7 @@
                      それでは三者一致が永久に成立せず、照合の仕組みそのものが無意味になる。
                      照合のときは必ずこの ts で作り直して比べる。 */
                   pkgTs: (o.pkgTs == null ? null : +o.pkgTs),
-                  identity: identityKey(o.identity, o.identityKind || identityKindOf(o.identity)),
+                  identity: identityOf(o),
                   baseRev: (o.baseRev == null ? null : +o.baseRev),
                   payloadHash: ph, createdAt: Date.now(), status: 'awaiting-result',
                   source: String(o.source || 'unknown') };
@@ -352,7 +379,7 @@
     var rSpec = (rm.packageSpec == null) ? PACKAGE_SPEC : String(rm.packageSpec);
     if (rSpec !== (led.packageSpec || PACKAGE_SPEC)) return ng('package-spec-mismatch');
 
-    var idNow = identityKey(o.identity, o.identityKind || identityKindOf(o.identity));
+    var idNow = identityOf(o);
     if (led.identity && idNow && led.identity !== idNow) return ng('identity-mismatch');
 
     var applied = +o.appliedRev || 0;
@@ -528,6 +555,7 @@
     PACKAGE_SPEC: PACKAGE_SPEC,
     identityKey: identityKey,
     identityKindOf: identityKindOf,
+    identityOf: identityOf,
     identityTag: identityTag,
     newCommitOpId: newCommitOpId,
     notePut: notePut,

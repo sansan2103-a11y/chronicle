@@ -328,7 +328,7 @@ console.log('\n== (10) ★fix399 への配線 ==');
 console.log('\n== (11) ★home.html への配線 ==');
 {
   ok('★★forceput にも commitOpId を付ける（GPT指定1）',
-     /op:'forceput'[\s\S]{0,900}body596\.commitOpId = pr596\.commitOpId/.test(HOME));
+     /op:'forceput'[\s\S]{0,1600}body596\.commitOpId = pr596\.commitOpId/.test(HOME));
   ok('★★forceput でも未解決 pending なら中止', /errorCode:'pending-commit-unresolved'/.test(HOME));
   ok('★★forceput の応答も noteResult に検証させる', /L596\.noteResult\(\{ rev: res596\.rev, source:'home:forceput', response: res596 \}\)/.test(HOME));
   ok('★★pull 収束時に pending を用済みにする（詰まらせない）',
@@ -397,6 +397,59 @@ console.log('\n== (14) ★★★キャッシュ破棄(?cb=)を上げ忘れてい
     const hb = (HOME.match(/HOME_BUILT = '([^']+)'/) || [])[1];
     return b === built && hb === built;
   })(), { built });
+}
+
+console.log('\n== (15) ★★★identity は安定した値から作る（実機で踏んだ） ==');
+{
+  /* ★★2026-07-27 の実機で踏んだ。保留を作ったときは合言葉から、照合のときは Google トークンから
+     identity を作ったため identity-mismatch になり、**自分の保留を自分で解決できなくなった**。
+     Google トークンは期限切れで消えるので、同じ端末・同じ人でも時間で種別が変わる。
+     → サーバが返す ns（アカウントの名前空間）を基準にする。 */
+  const L = mk().__v292Dfix590;
+  ok('★★ns があれば ns から作る', L.identityOf({ ns: 'ns_abc', identity: 'pass-value', identityKind: 'pass' })
+     === L.identityOf({ ns: 'ns_abc', identity: 'まったく別のトークン', identityKind: 'google' }));
+  ok('★ns が違えば別の identity', L.identityOf({ ns: 'ns_abc' }) !== L.identityOf({ ns: 'ns_xyz' }));
+  ok('★ns が無ければ従来どおりヘッダから作る',
+     L.identityOf({ identity: 'abc', identityKind: 'pass' }) === L.identityKey('abc', 'pass'));
+  ok('★何も無ければ null', L.identityOf({}) === null);
+
+  /* 保留を作ったあと、認証の種別が変わっても自分の保留として扱える */
+  const L2 = mk().__v292Dfix590;
+  const r = await L2.notePut({ pkg: PKG, baseRev: 10, op:'put', pkgTs: 1, ns: 'ns_abc',
+                               identity: 'pass-value', identityKind: 'pass' });
+  const v = await L2.classify({
+    remote: { rev: 11, packageHash: r.payloadHash, lastCommitOpId: r.commitOpId, hashAlg: 'sha256-utf8-v1' },
+    appliedRev: 10, ns: 'ns_abc', identity: 'googleトークンに変わった', identityKind: 'google',
+    currentHash: r.payloadHash });
+  ok('★★★トークンが変わっても自分の保留として解決できる', v.status === 'commit-confirmed', v);
+}
+
+console.log('\n== (16) ★★★別アカウントの保留で自分の保存を止めない ==');
+{
+  /* ★これが無いと「未解決の保留がある間は送らない」規則が、
+     別の人の残した保留で**自分が永久に保存できない**状態に化ける。 */
+  const L = mk().__v292Dfix590;
+  await L.notePut({ pkg: PKG, baseRev: 10, op:'put', ns: 'ns_ほかの人' });
+  ok('★保留がある', L.hasAwaiting() === true);
+  const r = await L.notePut({ pkg: PKG2, baseRev: 11, op:'put', ns: 'ns_わたし' });
+  ok('★★★別アカウントの保留なら捨てて先へ進む', r.ok === true && r.blocked !== true, r);
+  ok('★捨てたことを数えている', L.stats().foreignPendingDropped === 1);
+  ok('★台帳は自分のものに置き換わる', L.pendingCommit().commitOpId === r.commitOpId);
+
+  /* 同じアカウントならちゃんと止める（本来の目的は失わない） */
+  const L2 = mk().__v292Dfix590;
+  await L2.notePut({ pkg: PKG, baseRev: 10, op:'put', ns: 'ns_わたし' });
+  const r2 = await L2.notePut({ pkg: PKG2, baseRev: 11, op:'put', ns: 'ns_わたし' });
+  ok('★★同じアカウントなら止める', r2.blocked === true, r2);
+}
+
+console.log('\n== (17) ★ns を覚える配線 ==');
+{
+  ok('★★put の応答から ns を覚える', /rememberNs\(j\);\s+\/\* ★fix596c/.test(SRC399));
+  ok('★★commitstate の応答からも覚える', /var j = r\.json;\s*\n\s*rememberNs\(j\);/.test(SRC399));
+  ok('★★台帳へ ns を渡している', /ns: ia\.ns, identity: ia\.identity/.test(SRC399));
+  ok('★★照合でも ns を渡している', /ns: identityArgs\(\)\.ns/.test(SRC399));
+  ok('★home の forceput も ns を渡している', /ns: ns596,/.test(HOME));
 }
 
 console.log('\n== (12) ★退行防止 ==');
