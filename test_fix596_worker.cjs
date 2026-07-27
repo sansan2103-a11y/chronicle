@@ -406,6 +406,43 @@ console.log('\n== (14) ★★★TDZ: 宣言より前に const を使っていな
   }
 }
 
+console.log('\n== (15) ★★★export している名前がすべて実在する（実際に踏んだ） ==');
+{
+  /* ★★2026-07-27 に本当に踏んだバグ。
+     `idemReqHash` を v1/v2 に分けたのに、末尾の `export { ... }` を直し忘れた。
+     関数の中の間違いと違って、これは **モジュールがそもそも読み込めない**（1リクエストも通らない）。
+     `node --check` は構文しか見ないので通ってしまう。
+     Cloudflare の編集画面が「Cannot find name 'idemReqHash'」と出して教えてくれた。 */
+  /* ★ブロックコメントの一括除去は使わない。ソース中にコメント終端記号を含む文字列や
+     正規表現があると、そこまで丸ごと食われて**本物の宣言まで消え、誤検出する**
+     （このテストを書いたときに実際に踏んだ。しかも、その理由をコメントに書こうとして
+       終端記号をそのまま書いたら、今度はこのコメント自身が途中で閉じてしまった）。
+     行単位で「コメント行を除いたコード行」を作る方が安全。 */
+  const codeLines = SRC.split('\n').filter(l => {
+    const t = l.trim();
+    return t && !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*');
+  });
+  const noComment = codeLines.join('\n');
+  const lists = noComment.match(/^export \{([^}]*)\}/gm) || [];
+  ok('★export リストを見つけた', lists.length >= 1, lists.length);
+  const names = [];
+  for (const l of lists){
+    for (const raw of l.replace(/^export \{/, '').replace(/\}$/, '').split(',')){
+      const n = raw.trim().split(/\s+as\s+/)[0].trim();
+      if (n) names.push(n);
+    }
+  }
+  ok('★名前を取り出せた', names.length > 5, names.length);
+  const missing = names.filter(n => !new RegExp(
+    '(function\\s+' + n + '\\b|const\\s+' + n + '\\b|let\\s+' + n + '\\b|var\\s+' + n + '\\b|class\\s+' + n + '\\b)'
+  ).test(noComment));
+  ok('★★★export している名前がすべて実在する（1つでも欠けるとWorkerが読み込めない）',
+     missing.length === 0, missing);
+  ok('★★分割した v1/v2 の両方を export している',
+     names.indexOf('idemReqHashV1') >= 0 && names.indexOf('idemReqHashV2') >= 0, names.filter(n => /idemReqHash/.test(n)));
+  ok('★★旧名 idemReqHash を export していない', names.indexOf('idemReqHash') < 0);
+}
+
 console.log('\n== (10) ★退行防止: v24 で入れた最終防御が残っている ==');
 {
   ok('★★baseRevなし＋墓標ありは今も fork へ回す',

@@ -2506,7 +2506,12 @@ async function handleAvatarInspect(request, body, env, ctx, gate) {
 }
 
 // テスト用エクスポート(Workers実行時は未使用)
-export { verifyGoogleIdToken, b64urlToBytes, b64urlToStr, handleSave, d1PutImg, d1Changed, d1FirstRev, saveIncomingAsFork, lookupIdem, recordIdem, trimForks, idemReqHash, idemReserve, idemDone, idemRelease };
+/* ★★v25c: `idemReqHash` は v1/v2 へ分けたので、ここも直す。
+   直し忘れると **存在しない名前を export することになり、Worker がそもそも読み込めない**
+   （関数の中の間違いと違って、1リクエストも通らなくなる）。
+   2026-07-27、Cloudflare の編集画面が
+   「Cannot find name 'idemReqHash'. Did you mean 'idemReqHashV1'?」と出して教えてくれた。 */
+export { verifyGoogleIdToken, b64urlToBytes, b64urlToStr, handleSave, d1PutImg, d1Changed, d1FirstRev, saveIncomingAsFork, lookupIdem, recordIdem, trimForks, idemReqHashV1, idemReqHashV2, idemReserve, idemDone, idemRelease };
 
 // ★v20: 検品の純粋関数をテストから読むためのexport(Workers実行時は未使用)
 export const __testInspect = { buildInspectPrompt, parseInspectResult, scoreInspect, validB64Image, INSPECT_KEYS, handleInspect };
