@@ -317,7 +317,15 @@
      **pending があり、かつ安定 identity をまだ取れていないときだけ** op:'meta' を1回叩いて ns を得る。
      毎回叩かない。セッション中に取れたらメモリで再利用する。
      （次の Worker 更新で commitstate に ns が入れば、この往復は不要になる） */
-  function ensureStableNs(){
+  function ensureStableNs(cap){
+    /* ★★fix598: Worker v26 以降は commitstate 自身が ns を返すので、この往復は**不要**。
+       同じ read-back 応答から identity を取れる方が、
+         ・通信が1回で済む
+         ・その間に別の書き込みが割り込む余地（race）が小さい
+         ・照合の証拠が1つの応答にまとまる
+         ・一度も成功 put をしていない端末でも安定 identity を得られる
+       という点で優れている（GPT結論）。v25 のときだけ meta を1回叩く。 */
+    if (cap && cap.nsInCommitState) return Promise.resolve(knownNs());
     if (knownNs()) return Promise.resolve(knownNs());
     return callSave({ op:'meta' }).then(function(r){
       if (r && r.status === 200 && r.json && r.json.ok === true) return rememberNs(r.json);
@@ -328,14 +336,24 @@
   function workerSupportsCommitState(){
     /* v25 未満では commitstate が無い。root の capabilities で判定する。
        ★「D1が無い環境だから」で能力表示を変えない（実装の有無と利用可否を混ぜない）ので、
-         クライアント側で d1:true も併せて確かめる（GPT指定）。 */
+         クライアント側で d1:true も併せて確かめる（GPT指定）。
+
+       ★★fix598: 能力の値は**単調増加**する（GPT指定）。
+         commitState: 1 … rev / packageHash / lastCommitOpId / hashAlg を返す（Worker v25）
+         commitState: 2 … 上記に加えて **ns** も返す（Worker v26）
+         ここを `=== 1` で書いていると、**サーバを新しくした瞬間に照合が丸ごと止まる**。
+         能力判定は必ず「その機能が使えるだけの版か」＝ `>=` で書く。 */
     return fetch(proxyUrl() + '/', { method: 'GET' }).then(function(r){ return r.json(); })
       .then(function(j){
         var cap = j && j.capabilities;
-        return { ok: !!(cap && cap.commitState === 1 && j.d1 === true),
+        var cs = (cap && typeof cap.commitState === 'number') ? cap.commitState : 0;
+        return { ok: !!(cs >= 1 && j.d1 === true),
+                 commitStateVersion: cs,
+                 /* ★ns が commitstate 応答に入るのは v26 以降 */
+                 nsInCommitState: cs >= 2,
                  hashAlg: cap && cap.packageHash, packageSpec: cap && cap.packageSpec,
                  workerBuild: j && j.workerBuild };
-      }, function(){ return { ok:false }; });
+      }, function(){ return { ok:false, commitStateVersion: 0, nsInCommitState: false }; });
   }
 
   /* 現在のローカル状態の packageHash（送るときと**完全に同じ規則**で作る）
@@ -374,8 +392,9 @@
           reconcileLast = { status:'unsupported', at: Date.now(), why:'no-commitstate' };
           return { status:'unsupported', needsPull:true };
         }
-        /* ★fix597: 安定 identity（ns）を先に確保する。commitstate に ns が入るまでの暫定。 */
-        return ensureStableNs().then(function(){
+        /* ★fix597/598: 安定 identity（ns）を先に確保する。
+           Worker v26 以降は commitstate 自身が ns を返すので、ここでは何もしない。 */
+        return ensureStableNs(cap).then(function(){
         return callSave({ op:'commitstate' }).then(function(r){
           if (r.status !== 200 || !r.json || r.json.ok !== true){
             reconcileLast = { status:'remote-read-failed', at: Date.now(), why:'http ' + r.status };
@@ -383,6 +402,11 @@
                       .then(function(){ return { status:'remote-read-failed' }; });
           }
           var j = r.json;
+          /* ★★fix598: identity の優先順（GPT指定）
+                 commitstate.ns → meta.ns → 成功put応答.ns → ヘッダ由来（最後の手段）
+             commitstate の ns は「いま読んだ canonical と同じ応答」から来るので最も強い。
+             ★v25 には ns が無い。その場合 rememberNs は何もせず、
+               直前の ensureStableNs が meta から取った値がそのまま使われる。 */
           rememberNs(j);
           var c = fix582Off() ? null : coord();
           var applied = c ? c.rev() : 0;
@@ -392,7 +416,12 @@
               remote: { rev: j.rev, packageHash: j.packageHash, lastCommitOpId: j.lastCommitOpId,
                         hashAlg: j.hashAlg, packageSpec: cap.packageSpec },
               appliedRev: applied,
-              ns: identityArgs().ns, identity: identityArgs().identity,
+              /* ★★fix598: identity は commitstate の ns を最優先で使う。
+                 j.ns はいま読んだ canonical と**同じ応答**から来るので、
+                 別の往復で取った値より強い（間に別の書き込みが入る余地がない）。
+                 v25 には j.ns が無いので identityArgs().ns（meta 由来）へ落ちる。 */
+              ns: (j.ns ? String(j.ns) : identityArgs().ns),
+              identity: identityArgs().identity,
               identityKind: identityArgs().identityKind,
               currentHash: curHash,
               pendingAtStart: ctx.pendingAtStart
