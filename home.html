@@ -170,7 +170,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260727-fix592';
+  var HOME_BUILT = '20260727-fix593';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -185,11 +185,12 @@
   } catch(e){}
 })();
 </script>
-<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix592"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix592"></script>
-<script src="v292Dfix564-snapshot.js?cb=v292Dfix592"></script>
-<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix592"></script>
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix592"></script>
+<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix593"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix593"></script>
+<script src="v292Dfix564-snapshot.js?cb=v292Dfix593"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix593"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix593"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix593"></script>
 <script>
 (function(){
   'use strict';
@@ -513,16 +514,20 @@
            削除した物語が live として一覧に戻った**。
            物語本体には local-ahead 保護があるのに、meta には何の保護も無かった。
            → fix579 の mergeMeta（対称・墓標優先）を通す。使えないときは**上書きしない**（安全側）。 */
-        var mergedMeta = null, metaGuarded = false;
+        var mergedMeta = null, metaGuarded = false, metaMerged = false, metaAbsent = false;
+        var applyErrors = 0, unknownSkips = 0, wroteVals = {};
         try {
+          if (!Object.prototype.hasOwnProperty.call(ls, 'chr6_slots_meta')) metaAbsent = true;
           if (Object.prototype.hasOwnProperty.call(ls, 'chr6_slots_meta')){
             var T = window.__v292Dfix579;
             var lm = J(g('chr6_slots_meta'), null), rm = J(ls['chr6_slots_meta'], null);
+            if (rm == null) metaAbsent = true;
             if (T && typeof T.mergeMeta === 'function' && Array.isArray(lm) && Array.isArray(rm)){
               var mg = T.mergeMeta(lm, rm);
               if (Array.isArray(mg)) mergedMeta = JSON.stringify(mg);
             }
             if (mergedMeta == null) metaGuarded = true;   /* マージできない → 触らない */
+            else metaMerged = true;
           }
         } catch(e){ metaGuarded = true; }
         for(var k in ls){
@@ -530,15 +535,52 @@
           if(k==='chr6_active_slot') continue;                       // ★端末の"開いている物語"は持ち込まない
           if(k==='chr6_slots_meta'){
             if(metaGuarded) continue;                                // ★墓標を消さない側へ倒す
-            if(g(k) !== mergedMeta){ if(s(k, mergedMeta)) wrote++; }
+            if(g(k) !== mergedMeta){ if(s(k, mergedMeta)){ wrote++; wroteVals[k] = mergedMeta; } else applyErrors++; }
             continue;
           }
           if(k==='chr6' || k.indexOf('chr6_slot_')===0){
             var lt = turnsOf(g(k)), rt = turnsOf(ls[k]);
             if(lt > rt){ skipped.push(k); continue; }                // ★この端末の方が進んでいる→上書きしない
           }
-          if(g(k) !== ls[k]){ if(s(k, ls[k])) wrote++; }
+          if(g(k) !== ls[k]){ if(s(k, ls[k])){ wrote++; wroteVals[k] = ls[k]; } else applyErrors++; }
         }
+        /* ★★fix593(GPT裁定a′): 「pull が remoteRev を基点にローカルを安全に再構成できた」と
+           **証明できたときだけ** 共有rev を remoteRev へ更新する。
+           これが無いと、送信は成功したのに応答を取り逃した端末が
+           **以後ずっと fork し続け、二度とクラウドへ保存できない**（2026-07-27 に実際に起きた）。
+           ★「差分0件」や「skipped 0件」だけでは証明にならない（mergeMeta / barrier /
+             ローカル専用キーの除外 / local-aheadスキップ が絡むため）。 */
+        try {
+          var L590 = window.__v292Dfix590;
+          if (L590 && typeof L590.provePullConvergence === 'function'){
+            /* 12) 書いたキーを読み戻して一致を確認する */
+            var readBackOk = true;
+            for (var rk in wroteVals){
+              if (!Object.prototype.hasOwnProperty.call(wroteVals, rk)) continue;
+              if (g(rk) !== wroteVals[rk]){ readBackOk = false; break; }
+            }
+            var proof = L590.provePullConvergence({
+              remoteRev: +serverRev || 0,
+              currentSharedRev: L590.sharedRev(),
+              pullCompleted: true,
+              parsedOk: true,
+              applyErrors: applyErrors,
+              conflictSkips: skipped.length,
+              unknownSkips: unknownSkips,
+              metaMerged: metaMerged,
+              metaAbsent: metaAbsent,
+              metaMergeFailed: metaGuarded,
+              blockedWithoutTombstone: 0,
+              readBackOk: readBackOk
+            });
+            if (proof.ok){
+              var pr = L590.promoteSharedRev(+serverRev || 0, 'fix593: pull収束（ローカルを安全に再構成できた）');
+              try { console.log('[home] 共有revを更新:', JSON.stringify(pr)); } catch(e){}
+            } else {
+              try { console.warn('[home] 共有revは更新しません:', proof.why); } catch(e){}
+            }
+          }
+        } catch(e){}
         s('v292Dfix402_baseRev', String(serverRev));
         if(r.data.updatedAt){ s('v292Dfix399_baseTs', String(+r.data.updatedAt||0)); s('v292Dfix399_localTs', String(+r.data.updatedAt||0)); }
         el('sync').textContent = '☁ 取り込みました（'+wrote+'件）';

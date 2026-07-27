@@ -48,7 +48,7 @@
   /* 記録はメモリを正本にする（容量が満杯でも理由が消えないように・fix575で踏んだ型） */
   var LOG = [], LOG_MAX = 20;
   var stats = { puts: 0, results: 0, forks: 0, ambiguous: 0, persistFailed: 0,
-                reconcileOk: 0, reconcileNg: 0, byReason: {} };
+                reconcileOk: 0, reconcileNg: 0, sharedRevPromoted: 0, byReason: {} };
   function note(rec){ try { rec.at = Date.now(); LOG.push(rec); if (LOG.length > LOG_MAX) LOG.shift(); } catch(e){} }
   function bump(why){ try { stats.byReason[why] = (stats.byReason[why] || 0) + 1; } catch(e){} }
 
@@ -188,6 +188,65 @@
     }, function(){ return ng('hash-failed'); });
   }
 
+  /* ---- ★fix593: pull収束証明（GPT裁定 a′） --------------------------------
+   * 「pull が remoteRev を基点として、ローカル同期状態を**安全に再構成できたと証明できた**
+   *   場合だけ、共有rev を remoteRev へ更新する」。
+   * ★「差分0件」や「skipped 0件」だけでは pull の成功を証明できない（GPT明示）。
+   *   今回の pull には、通常の上書き以外に mergeMeta / tombstone barrier /
+   *   ローカル専用キーの除外 / metaのfail-closed / local-aheadスキップ が絡むため。
+   * ★remote が live meta・local が墓標でも、mergeMeta が承認済みの安全なマージなら
+   *   「remote rev を親として、ローカル墓標という未同期変更を載せた状態」とみなせる。
+   *   → 共有rev = remoteRev / dirty = true にして、次の put で墓標を CAS 送信できる。
+   * 戻り: { ok, why }  （ok のときだけ昇格してよい） */
+  function provePullConvergence(o){
+    o = o || {};
+    var checks = [
+      ['remote-rev-invalid',      typeof o.remoteRev === 'number' && isFinite(o.remoteRev) && o.remoteRev >= 0],
+      ['remote-rev-behind',       (+o.remoteRev || 0) >= (+o.currentSharedRev || 0)],
+      ['identity-mismatch',       !o.identity || !o.pullIdentity || identityKey(o.identity) === identityKey(o.pullIdentity)],
+      ['pull-not-complete',       o.pullCompleted === true],
+      ['parse-failed',            o.parsedOk === true],
+      ['apply-errors',            (+o.applyErrors || 0) === 0],
+      ['conflict-skips',          (+o.conflictSkips || 0) === 0],
+      ['unknown-skips',           (+o.unknownSkips || 0) === 0],
+      ['meta-not-merged',         o.metaMerged === true || o.metaAbsent === true],
+      ['meta-merge-failed',       o.metaMergeFailed !== true],
+      ['barrier-without-tombstone', (+o.blockedWithoutTombstone || 0) === 0],
+      ['readback-failed',         o.readBackOk === true]
+    ];
+    for (var i = 0; i < checks.length; i++){
+      if (!checks[i][1]){ bump('pullProof:' + checks[i][0]); note({ act:'pull-proof', ok:false, why:checks[i][0] });
+                          return { ok:false, why: checks[i][0] }; }
+    }
+    note({ act:'pull-proof', ok:true, remoteRev:+o.remoteRev });
+    return { ok:true, why:'converged' };
+  }
+
+  /* ---- ★fix593: 共有revの昇格（キー名をここで一元管理する） ---------------
+   * fix580 が居ればその API を使い、居なければ台帳キーを直接書く（home.html は fix580 を積まない）。
+   * ★下げない。上げるだけ。 */
+  var SHARED_REV_KEY = 'v292Dfix580_rev';
+  function sharedRev(){
+    try {
+      var c = window.__v292Dfix580;
+      if (c && typeof c.rev === 'function') return +c.rev() || 0;
+    } catch(e){}
+    try { return +(lsg(SHARED_REV_KEY) || 0) || 0; } catch(e){ return 0; }
+  }
+  function promoteSharedRev(rev, reason){
+    rev = +rev || 0;
+    var cur = sharedRev();
+    if (!(rev > cur)) return { ok:false, why:'not-ahead', cur: cur };
+    try {
+      var c = window.__v292Dfix580;
+      if (c && typeof c.promoteRev === 'function'){ c.promoteRev(rev, reason || 'fix593:pull収束'); }
+      else { localStorage.setItem(SHARED_REV_KEY, String(rev)); }
+    } catch(e){ return { ok:false, why:'write-failed' }; }
+    stats.sharedRevPromoted++;
+    note({ act:'promote-shared-rev', from: cur, to: rev, reason: String(reason || '').slice(0, 40) });
+    return { ok:true, from: cur, to: rev };
+  }
+
   /* ---- 実機から読む口 ---------------------------------------------------- */
   function report(){
     var led = read();
@@ -210,6 +269,10 @@
     notePut: notePut,
     noteResult: noteResult,
     reconcile: reconcile,
+    /* ★fix593: pull収束証明と共有revの昇格 */
+    provePullConvergence: provePullConvergence,
+    promoteSharedRev: promoteSharedRev,
+    sharedRev: sharedRev,
     pending: read,
     clear: clear,
     stats: function(){ return JSON.parse(JSON.stringify(stats)); },

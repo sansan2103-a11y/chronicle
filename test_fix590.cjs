@@ -96,8 +96,12 @@ console.log('\n== (4) ★★照合は三者一致。2つだけでは通さない
     const r = await L.reconcile({ remoteHash: H, remoteRev: 430, appliedRev: 429, identity: 'me', currentPkg: PKG });
     ok('★★三者一致なら復帰可能と答える', r.recoverable === true && r.why === 'three-way-match', r);
     ok('★remoteRev を返す（実際に動かすのは次の段）', r.remoteRev === 430);
-    ok('★★この関数は appliedRev を書き換えない（純粋関数）',
-       /wiredIntoRecovery:\s*false/.test(SRC) && SRC.indexOf('promoteRev') < 0);
+    /* ★fix593 で「共有revの昇格」関数が別に増えたので、純粋性の検査は reconcile 本体に限定する */
+    const reconcileBody = SRC.slice(SRC.indexOf('function reconcile('), SRC.indexOf('★fix593'));
+    ok('★★reconcile() は何も書き換えない（純粋関数）',
+       reconcileBody.indexOf('setItem') < 0 && reconcileBody.indexOf('promoteRev') < 0 &&
+       reconcileBody.indexOf('removeItem') < 0, reconcileBody.length);
+    ok('★この段では復帰へ自動で繋いでいない', /wiredIntoRecovery:\s*false/.test(SRC));
   }
   {
     const L = await mk();
@@ -165,8 +169,12 @@ console.log('\n== (6) OFF と、挙動を変えていないことの確認 ==');
   const noComment = s => String(s).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
   const code = noComment(SRC);
   ok('★★この段では復帰へ繋いでいないことを明示している', /wiredIntoRecovery:\s*false/.test(code));
-  ok('★★台帳は localStorage の自分のキー以外を触らない',
-     (code.match(/setItem\(/g) || []).length === 1 && (code.match(/removeItem\(/g) || []).length === 1);
+  /* ★fix593 で「共有rev台帳」への書き込みが1つ増えた。書いてよいのはこの2キーだけ。 */
+  ok('★★台帳が書き込むのは自分のキーと共有rev台帳だけ',
+     (code.match(/setItem\(/g) || []).length === 2 && (code.match(/removeItem\(/g) || []).length === 1,
+     { setItem: (code.match(/localStorage\.setItem\([^,]+/g) || []) });
+  ok('★★共有revは fix580 が居ればその API を使う（キー直書きは fallback）',
+     /promoteRev\(rev/.test(code) && /SHARED_REV_KEY/.test(code));
   ok('★fix399 が put 直前に記録し、成功時だけ消している', (() => {
     const f = read('v292Dfix399-cloudsync.js');
     const i = f.indexOf('function attempt()');
@@ -184,8 +192,67 @@ console.log('\n== (6) OFF と、挙動を変えていないことの確認 ==');
   ok('★BUILT と version.txt が同値', built === read('version.txt').trim(), { built });
 }
 
+
+/* =====================================================================
+ * fix593: pull収束証明（GPT裁定 a′）
+ *   「pull が remoteRev を基点として、ローカル同期状態を安全に再構成できたと
+ *     **証明できた場合だけ** 共有rev を remoteRev へ更新する」
+ *   ★「差分0件」「skipped 0件」だけでは証明にならない（mergeMeta / barrier /
+ *     ローカル専用キーの除外 / local-aheadスキップ が絡むため）
+ * ===================================================================== */
+{
+  console.log('\n== (7) ★★fix593: pull収束証明 ==');
+  const w = mkEnv(); const L = w.__v292Dfix590;
+  const base = { remoteRev: 430, currentSharedRev: 429, pullCompleted: true, parsedOk: true,
+                 applyErrors: 0, conflictSkips: 0, unknownSkips: 0,
+                 metaMerged: true, metaMergeFailed: false, blockedWithoutTombstone: 0, readBackOk: true };
+  ok('★★12条件を満たせば収束と認める', L.provePullConvergence(base).ok === true, L.provePullConvergence(base));
+  const ng = (patch, why) => {
+    const r = L.provePullConvergence(Object.assign({}, base, patch));
+    ok('★' + why + ' → 昇格しない', r.ok === false && r.why === why, r);
+  };
+  ng({ remoteRev: 'x' }, 'remote-rev-invalid');
+  ng({ remoteRev: 428 }, 'remote-rev-behind');
+  ng({ pullCompleted: false }, 'pull-not-complete');
+  ng({ parsedOk: false }, 'parse-failed');
+  ng({ applyErrors: 1 }, 'apply-errors');
+  ng({ conflictSkips: 1 }, 'conflict-skips');          /* ★local-aheadスキップがあれば昇格しない */
+  ng({ unknownSkips: 1 }, 'unknown-skips');
+  ng({ metaMerged: false }, 'meta-not-merged');
+  ng({ metaMergeFailed: true }, 'meta-merge-failed');
+  ng({ blockedWithoutTombstone: 1 }, 'barrier-without-tombstone');
+  ng({ readBackOk: false }, 'readback-failed');
+  ok('★metaがそもそも来ていないなら merged でなくてもよい',
+     L.provePullConvergence(Object.assign({}, base, { metaMerged:false, metaAbsent:true })).ok === true);
+
+  console.log('\n== (8) ★共有revの昇格は「上げるだけ」 ==');
+  {
+    const w2 = mkEnv({ seed: { 'v292Dfix580_rev': '429' } }); const L2 = w2.__v292Dfix590;
+    ok('現在値を読める', L2.sharedRev() === 429);
+    const up = L2.promoteSharedRev(430, 'test');
+    ok('★★前へ進める', up.ok === true && w2.__store['v292Dfix580_rev'] === '430', up);
+    const down = L2.promoteSharedRev(400, 'test');
+    ok('★★下げない', down.ok === false && down.why === 'not-ahead' && w2.__store['v292Dfix580_rev'] === '430');
+    ok('昇格を数えている', L2.stats().sharedRevPromoted === 1);
+  }
+
+  console.log('\n== (9) ★home.html に配線されている ==');
+  {
+    const home = read('home.html');
+    ok('★★fix590 を積んでいる', home.indexOf('v292Dfix590-commit-ledger.js') > 0);
+    ok('★★pull の最後に収束証明を呼んでいる', /provePullConvergence\(\{/.test(home));
+    ok('★★証明が通ったときだけ昇格している', /if\s*\(proof\.ok\)[\s\S]{0,120}promoteSharedRev\(/.test(home));
+    ok('★local-aheadスキップを conflictSkips として渡している', /conflictSkips:\s*skipped\.length/.test(home));
+    ok('★書き戻し検査(readBackOk)を渡している', /readBackOk:\s*readBackOk/.test(home));
+    ok('★mergeMeta の失敗を metaMergeFailed として渡している', /metaMergeFailed:\s*metaGuarded/.test(home));
+    ok('★HOME_BUILT と version.txt が同値',
+       (home.match(/HOME_BUILT = '([^']+)'/) || [])[1] === read('version.txt').trim());
+  }
+
+}
+
 console.log('\n---------------------------------------------');
-console.log('test_fix590: 合格 ' + pass + ' / 失敗 ' + fail);
+console.log('test_fix590/593: 合格 ' + pass + ' / 失敗 ' + fail);
 console.log('pass=' + pass + ' fail=' + fail);
 if (fail) process.exitCode = 1;
 })();
