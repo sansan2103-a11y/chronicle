@@ -942,5 +942,25 @@
     /* ★fix597: GPT裁定 D1〜D3 / ns / pkgTs を反映済み。 */
     verdictApplied: 'fix597'
   };
+  /* ---- ★fix597: 旧キーに残っている**生の ns** を、どのページからでも必ず片付ける ----
+   * 2026-07-27 の実機で見つけた: fix596 が `v292Dfix596_ns` に ns の生値を保存していた。
+   * fix597 で書くのはやめたが、**既に書かれた値は残ったまま**だった。
+   * fix399 の knownNs() や home の forceput を通らないページ（ホームを開くだけ等）では
+   * いつまでも消えないので、台帳の読み込み時に一度だけ移行する。
+   *   生の ns → SHA-256 指紋（v292Dfix597_nsfp）へ移し、生値は削除する。
+   * ★指紋の計算は非同期なので、削除は計算が終わってから行う（失敗したら残す＝情報を失わない）。 */
+  (function migrateRawNs(){
+    try {
+      var LEGACY_NS_KEY = 'v292Dfix596_ns';
+      var raw = lsg(LEGACY_NS_KEY);
+      if (!raw) return;
+      learnNs(String(raw)).then(function(fp){
+        if (!fp) return;                       /* 指紋が作れなければ生値を消さない */
+        try { localStorage.removeItem(LEGACY_NS_KEY); } catch(e){}
+        note({ act:'ns-legacy-migrated' });    /* ★ns も指紋もログに出さない */
+      }, function(){});
+    } catch(e){}
+  })();
+
   try { console.log(TAG, 'loaded', off() ? 'OFF' : 'on'); } catch(e){}
 })();

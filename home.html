@@ -170,7 +170,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260727-fix597';
+  var HOME_BUILT = '20260727-fix597b';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -189,7 +189,7 @@
 <script src="v292Dfix562-backup-inventory.js?cb=v292Dfix593"></script>
 <script src="v292Dfix564-snapshot.js?cb=v292Dfix593"></script>
 <script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix593"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix597"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix597b"></script>
 <script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix594"></script>
 <script>
 (function(){
