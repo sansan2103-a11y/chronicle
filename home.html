@@ -165,7 +165,7 @@
 <script src="v292Dfix569-gc-shadow.js?cb=v292Dfix587"></script>
 <script src="v292Dfix562-backup-inventory.js?cb=v292Dfix587"></script>
 <script src="v292Dfix564-snapshot.js?cb=v292Dfix587"></script>
-<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix588"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix591"></script>
 <script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix589"></script>
 <script>
 (function(){
@@ -484,9 +484,32 @@
         var ls = r.data.ls, wrote=0, skipped=[];
         // 控え(軽量): 登録簿だけ。物語本体は local-ahead 保護で守る。
         try { s('chr6_bk_home_meta_'+Date.now(), g('chr6_slots_meta')||'[]'); } catch(e){}
+        /* ★★fix591: `chr6_slots_meta` を丸ごと上書きしない。
+           2026-07-27 の実機で実際に起きた事故: 墓標を立てた直後に push が fork で失敗し、
+           その後この取り込みで**クラウド側の（墓標が無い）meta が書き戻され、
+           削除した物語が live として一覧に戻った**。
+           物語本体には local-ahead 保護があるのに、meta には何の保護も無かった。
+           → fix579 の mergeMeta（対称・墓標優先）を通す。使えないときは**上書きしない**（安全側）。 */
+        var mergedMeta = null, metaGuarded = false;
+        try {
+          if (Object.prototype.hasOwnProperty.call(ls, 'chr6_slots_meta')){
+            var T = window.__v292Dfix579;
+            var lm = J(g('chr6_slots_meta'), null), rm = J(ls['chr6_slots_meta'], null);
+            if (T && typeof T.mergeMeta === 'function' && Array.isArray(lm) && Array.isArray(rm)){
+              var mg = T.mergeMeta(lm, rm);
+              if (Array.isArray(mg)) mergedMeta = JSON.stringify(mg);
+            }
+            if (mergedMeta == null) metaGuarded = true;   /* マージできない → 触らない */
+          }
+        } catch(e){ metaGuarded = true; }
         for(var k in ls){
           if(!Object.prototype.hasOwnProperty.call(ls,k)) continue;
           if(k==='chr6_active_slot') continue;                       // ★端末の"開いている物語"は持ち込まない
+          if(k==='chr6_slots_meta'){
+            if(metaGuarded) continue;                                // ★墓標を消さない側へ倒す
+            if(g(k) !== mergedMeta){ if(s(k, mergedMeta)) wrote++; }
+            continue;
+          }
           if(k==='chr6' || k.indexOf('chr6_slot_')===0){
             var lt = turnsOf(g(k)), rt = turnsOf(ls[k]);
             if(lt > rt){ skipped.push(k); continue; }                // ★この端末の方が進んでいる→上書きしない

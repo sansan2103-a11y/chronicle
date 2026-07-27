@@ -548,6 +548,34 @@
         }
       }
     } catch(e){}
+    /* ★★fix591: `chr6_slots_meta` を**丸ごと上書きしてはいけない**。
+       2026-07-27 の実機で実際に起きた事故:
+         使い捨て物語#2 の墓標を立てた → クラウドへの push が fork で失敗した →
+         その後の取り込みで**クラウド側の（墓標が無い）meta がローカルへ書き戻され**、
+         墓標が消えて **削除した物語が live として一覧に戻った**。
+       （#1 は墓標の push に成功していたのでクラウドにも墓標があり、無事だった）
+       T2 の barrier は「墓標が立ったスロットの**キー**を書き戻さない」ものなので、
+       meta そのものは global キーとして素通りしていた。
+       → fix579 の mergeMeta（対称・墓標優先・restoreOfDeleteOpId 一致時だけ解除）を通す。
+         GPT指定の「条件A: サーバまたは同期層が tombstone をマージする」に当たる。
+       ★mergeMeta が無い/失敗したときは**ローカルのmetaを残す**（＝墓標を消さない側へ倒す）。 */
+    try {
+      if (Object.prototype.hasOwnProperty.call(incoming, 'chr6_slots_meta')){
+        var T = window.__v292Dfix579;
+        var localMeta = null, remoteMeta = null;
+        try { localMeta = JSON.parse(localStorage.getItem('chr6_slots_meta') || '[]'); } catch(e){ localMeta = null; }
+        try { remoteMeta = JSON.parse(incoming['chr6_slots_meta'] || '[]'); } catch(e){ remoteMeta = null; }
+        if (T && typeof T.mergeMeta === 'function' && Array.isArray(localMeta) && Array.isArray(remoteMeta)){
+          var merged = T.mergeMeta(localMeta, remoteMeta);
+          if (Array.isArray(merged)) incoming['chr6_slots_meta'] = JSON.stringify(merged);
+          else delete incoming['chr6_slots_meta'];
+        } else if (Array.isArray(localMeta) && localMeta.some(function(e){ return e && e.deleted === true; })){
+          /* マージできないのに、ローカルに墓標がある → **上書きしない**（削除を復活させない） */
+          delete incoming['chr6_slots_meta'];
+          try { console.warn('[v292Dfix399] mergeMetaが使えないため、墓標のあるmetaを上書きしませんでした'); } catch(e){}
+        }
+      }
+    } catch(e){}
     try { Object.keys(incoming).forEach(function(k){ localStorage.setItem(k, incoming[k]); }); } catch(e){ return Promise.reject(e); }
     return idbWriteAll(pkg.idb || {}).then(function(writeResult){
       try { window.__v292Dfix399_lastApply = { expected: expectedIdb, writeResult: writeResult, ts: Date.now() }; } catch(e){}
