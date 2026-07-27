@@ -197,21 +197,31 @@ console.log('\n== (9) ★tombstoneOfSlot を実際に動かす ==');
   ok('★slotId が無ければ null', t(blob, null) === null);
 }
 
-console.log('\n== (11) ★★v25b: 冪等リクエストhash を idem-v2 化（GPT デプロイ前指摘1） ==');
+console.log('\n== (11) ★★v25c: 冪等リクエストhash は 型付きJSON配列＋SHA-256 ==');
 {
-  /* ★なぜ必要か: 旧 idemReqHash(op, str) は commitOpId と baseRev を無視する。
+  /* ★なぜ必要か(1): 旧 idemReqHash(op, str) は commitOpId と baseRev を無視する。
      同じ mid で「commitOpId=A/baseRev=430/pkg=P」と「commitOpId=B/baseRev=431/pkg=P」が届くと
-     同一要求と誤認され、**canonicalへ入っていない commit を成功扱いにしてしまう**。 */
-  ok('★★v2 関数がある', /function idemReqHashV2\(o\)/.test(SRC));
-  ok('★★v2 に kind / baseRev / commitOpId を含めている',
-     /String\(o\.kind \|\| ''\)/.test(SRC) && /o\.baseRev == null/.test(SRC) && /o\.commitOpId == null/.test(SRC));
-  ok("★★規格名を先頭に入れている（旧hashと混ざらない）", /'idem-v2'/.test(SRC));
-  ok('★★null と文字列 "null" が衝突しないよう明示している',
-     /\(o\.baseRev == null \? 'null' : String\(o\.baseRev\)\)/.test(SRC));
-  ok('★★put/forceput が v2 で予約する',
-     /idemReserve\(env, user, mid, op,\s*\n\s*idemReqHashV2\(\{ op: op, kind: 'main', baseRev: \(hasBase \? baseRev : null\), commitOpId: commitOpId25/.test(SRC));
+     同一要求と誤認され、**canonicalへ入っていない commit を成功扱いにしてしまう**。
+     ★なぜ必要か(2): v25b で書いた「null を文字列 'null' へ落とすので衝突しない」は**成立していなかった**。
+     null と文字列 "null" が同じ文字列になる（GPT指摘。私の誤り）。型を保った JSON なら別になる。
+     ★なぜ必要か(3): smallHash は非暗号学的な短いhash。冪等判定で衝突すると
+     **別リクエストへ古い成功応答を返す**事故になるので、ここは SHA-256 全長を使う。 */
+  ok('★★v2 関数がある', /async function idemReqHashV2\(o\)/.test(SRC));
+  ok('★★型を保ったまま JSON.stringify している（null と "null" が別になる）',
+     /const canon = JSON\.stringify\(\[/.test(SRC) &&
+     /\(o\.baseRev == null \? null : Number\(o\.baseRev\)\)/.test(SRC) &&
+     /\(o\.commitOpId == null \? null : String\(o\.commitOpId\)\)/.test(SRC));
+  ok('★★payload は SHA-256 全長（smallHash を使っていない）',
+     /await sha256Utf8v1\(o\.payloadStr == null \? '' : String\(o\.payloadStr\)\)/.test(SRC) &&
+     !/smallHash\(String\(o\.payloadStr/.test(SRC));
+  ok('★★最終出力も SHA-256', /return 'idem-v2:' \+ await sha256Utf8v1\(canon\);/.test(SRC));
+  ok("★規格名を先頭に入れている（旧hashと混ざらない）", /'idem-v2',/.test(SRC));
+  ok('★★put は既に計算済みの pkgHash25 を渡す（二重hashしない）',
+     /idemReqHashV2\(\{ op: op, kind: 'main', baseRev: \(hasBase \? baseRev : null\), commitOpId: commitOpId25, payloadHash: pkgHash25 \}\)/.test(SRC));
   ok('★putimg も v2 で予約する', /idemReqHashV2\(\{ op: 'putimg', kind: k/.test(SRC));
-  ok('★★旧v1は照合専用として残す（デプロイ直後24hの再送を409にしない）',
+  ok('★★★v1 fallback は commitOpId が無い要求だけに限る（GPT指摘2）',
+     /\(commitOpId25 == null \? idemReqHashV1\(op, str\) : null\)/.test(SRC));
+  ok('★旧v1は照合専用として残す（デプロイ直後24hの再送を409にしない）',
      /function idemReqHashV1\(op, payloadStr\)/.test(SRC) &&
      /const matches = \(rh === String\(reqHash\)\) \|\| \(legacyHash != null && rh === String\(legacyHash\)\);/.test(SRC));
   ok('★★書き込むのは常に v2（INSERT に渡すのは reqHash）',
@@ -219,64 +229,95 @@ console.log('\n== (11) ★★v25b: 冪等リクエストhash を idem-v2 化（G
   ok('★★旧 idemReqHash( を新規呼び出しで使っていない',
      !/[^12]idemReqHash\(/.test(SRC.replace(/\/\/[^\n]*/g, '')));
 
-  /* 実際に動かして、baseRev/commitOpId 違いが別hashになることを確かめる */
-  const i = SRC.indexOf('function idemReqHashV2');
+  /* 実際に動かす。★hash関数は本物（node crypto と一致することは (2) で確認済み） */
+  const i = SRC.indexOf('async function idemReqHashV2');
   const j = SRC.indexOf('\n}', i) + 2;
-  const ctx = vm.createContext({ String, Object });
-  /* ★スタブの smallHash を自作すると「長さが同じなら同じ」になり、
-     『中身が違えば別hash』が**素通りで落ちる/通る**。必ず本物を使う。 */
-  const smallHashSrc = (SRC.match(/^function smallHash\(s\) \{.*$/m) || [])[0];
-  ok('★本物の smallHash を取り出せた', !!smallHashSrc);
-  vm.runInContext(smallHashSrc + '\n' + SRC.slice(i, j) + '\nthis.__h = idemReqHashV2;', ctx, { filename: 'v25-idem.js' });
+  const hi = SRC.indexOf('async function sha256Utf8v1');
+  const hj = SRC.indexOf('\n}', hi) + 2;
+  const ctx = vm.createContext({ crypto: require('crypto').webcrypto, TextEncoder, Uint8Array, JSON, String, Number, Object });
+  vm.runInContext(SRC.slice(hi, hj) + '\n' + SRC.slice(i, j) + '\nthis.__h = idemReqHashV2;', ctx, { filename: 'v25-idem.js' });
   const h = ctx.__h;
   const base = { op: 'put', kind: 'main', baseRev: 430, commitOpId: 'A', payloadStr: 'P' };
-  ok('★★baseRev が違えば別hash', h(base) !== h(Object.assign({}, base, { baseRev: 431 })));
-  ok('★★commitOpId が違えば別hash', h(base) !== h(Object.assign({}, base, { commitOpId: 'B' })));
-  ok('★★中身が違えば別hash', h(base) !== h(Object.assign({}, base, { payloadStr: 'Q' })));
-  ok('★同一なら同一hash（再送は再送として扱える）', h(base) === h(Object.assign({}, base)));
-  ok('★★commitOpId 無し(旧クライアント)と 文字列"null" が衝突しない',
-     h(Object.assign({}, base, { commitOpId: null })) !== h(Object.assign({}, base, { commitOpId: 'null' })) ||
-     /* 衝突しても baseRev 等で分かれるので、最低限「nullが空文字と同じにならない」ことを見る */
-     h(Object.assign({}, base, { commitOpId: null })) !== h(Object.assign({}, base, { commitOpId: '' })));
+  const v = async (o) => await h(Object.assign({}, base, o));
+  ok('★★baseRev が違えば別hash', (await v({})) !== (await v({ baseRev: 431 })));
+  ok('★★commitOpId が違えば別hash', (await v({})) !== (await v({ commitOpId: 'B' })));
+  ok('★★中身が違えば別hash', (await v({})) !== (await v({ payloadStr: 'Q' })));
+  ok('★★kind が違えば別hash', (await v({})) !== (await v({ kind: 'other' })));
+  ok('★同一なら同一hash（再送は再送として扱える）', (await v({})) === (await v({})));
+  ok('★★★null と 文字列 "null" が別hash（v25b で私が間違えた点）',
+     (await v({ commitOpId: null })) !== (await v({ commitOpId: 'null' })));
+  ok('★★null と 空文字も別hash', (await v({ commitOpId: null })) !== (await v({ commitOpId: '' })));
+  ok('★★数値 430 と 文字列 "430" が同一に潰れる（Number化しているので意図どおり）',
+     (await v({ baseRev: 430 })) === (await v({ baseRev: '430' })));
+  ok('★★baseRev 0 と null が別hash', (await v({ baseRev: 0 })) !== (await v({ baseRev: null })));
+  ok('★出力の形が想定どおり', /^idem-v2:[0-9a-f]{64}$/.test(await v({})));
 }
 
-console.log('\n== (12) ★★v25b: forceput が canonical の墓標を踏み潰せない（GPT デプロイ前指摘2） ==');
+console.log('\n== (12) ★★v25c: forceput の墓標保護は fail-closed ==');
 {
-  /* ★なぜ必要か: v24 の防御は baseRevなしput にしか効かない。
-     forceput は baseRev を見ないので、一般クライアントが呼べる以上そこから墓標が消える。 */
-  ok('★★判定関数がある', /function tombstonesClearedBy\(curBlob, incomingStr\)/.test(SRC));
+  /* ★なぜ必要か: v24 の防御は baseRevなしput にしか効かない。forceput は baseRev を見ない。
+     ★v25b では「incoming に meta が無ければ止めない(fail-open)」にしていたが、GPT に差し戻された。
+     canonical に墓標があるのに incoming に meta が無い forceput は、**墓標を丸ごと消す内容**そのもの。 */
+  ok('★★判定関数がある', /function tombstoneGuardForceput\(curBlob, incomingStr, restoreOfDeleteOpId\)/.test(SRC));
+  ok('★★v25b の fail-open 版は残っていない', SRC.indexOf('function tombstonesClearedBy') < 0);
   ok('★★forceput の本処理より前で判定している',
-     SRC.indexOf('tombstonesClearedBy(cur.blob, str)') < SRC.indexOf("if (op === 'forceput') {\n          // ★v17(1)"));
-  ok('★★拒否コードが専用（原因が追える）', /errorCode: 'tombstone-clear-refused'/.test(SRC));
-  ok('★★409 で返す（retryable:false）', /tombstone-clear-refused', retryable: false[\s\S]{0,200}\}, 409, request\)/.test(SRC));
-  ok('★★どのスロットで止めたかを返す', /tombstones: cleared\.slice\(0, 20\)/.test(SRC));
+     SRC.indexOf('tombstoneGuardForceput(cur.blob, str') < SRC.indexOf("if (op === 'forceput') {\n          // ★v17(1)"));
+  ok('★★拒否コードが原因ごとに分かれている（追える）',
+     /'tombstone-clear-refused'/.test(SRC) && /'incoming-meta-missing'/.test(SRC) && /'canonical-unreadable'/.test(SRC));
+  ok('★★409 で返す', /errorCode: g25\.code, retryable: false[\s\S]{0,160}\}, 409, request\)/.test(SRC));
+  ok('★★どのスロットで止めたかを返す', /tombstones: \(g25\.cleared \|\| \[\]\)\.slice\(0, 20\)/.test(SRC));
   ok('★★拒否時に idem 予約を解放する（同じmidで上げ直せる）',
-     /const cleared = tombstonesClearedBy[\s\S]{0,200}idemRelease\(env, __idemU, __idemMid\)/.test(SRC));
+     /const g25 = tombstoneGuardForceput[\s\S]{0,240}idemRelease\(env, __idemU, __idemMid\)/.test(SRC));
   ok('★★マージではなく拒否（サーバがpayloadを書き換えるとhashが永久に一致しない）',
      !/incoming\['chr6_slots_meta'\] =/.test(SRC) && !/mergeMeta/.test(SRC));
 
   /* 実際に判定を動かす */
-  const i = SRC.indexOf('function metaOfBlob');
-  const j = SRC.indexOf('\n}', SRC.indexOf('catch (e) { return []; }', i)) + 2;
+  const i = SRC.indexOf('function sameTombField');
+  const j = SRC.indexOf('\n}', SRC.indexOf('return { ok: true };\n}', i)) + 2;
   const ctx = vm.createContext({ JSON, String, Array, Object });
-  vm.runInContext(SRC.slice(i, j) + '\nthis.__c = tombstonesClearedBy;', ctx, { filename: 'v25-forceput.js' });
-  const c = ctx.__c;
+  const mi = SRC.indexOf('function metaOfBlob');
+  const mj = SRC.indexOf('\n}', SRC.indexOf('catch (e) { return null; }', mi)) + 2;
+  vm.runInContext(SRC.slice(mi, mj) + '\n' + SRC.slice(i, j) + '\nthis.__g = tombstoneGuardForceput;', ctx, { filename: 'v25-forceput.js' });
+  const g = ctx.__g;
   const mk = (meta) => JSON.stringify({ ls: { 'chr6_slots_meta': JSON.stringify(meta) } });
-  const canonical = mk([{ id: 'smAlive', name: '生きている' }, { id: 'smDead', deleted: true, deleteOpId: 'd1' }]);
+  const TOMB = { id: 'smDead', deleted: true, deleteOpId: 'd1', lifecycleVersion: 1, recoverySnapshotId: 'snap1' };
+  const canonical = mk([{ id: 'smAlive', name: '生きている' }, TOMB]);
 
   ok('★★墓標を live に戻す incoming は止める',
-     JSON.stringify(c(canonical, mk([{ id: 'smAlive' }, { id: 'smDead', name: '復活' }]))) === '["smDead"]');
-  ok('★★墓標ごと消した incoming も止める（消えていれば復活と同じ）',
-     JSON.stringify(c(canonical, mk([{ id: 'smAlive' }]))) === '["smDead"]');
-  ok('★★墓標を保ったままの incoming は通す（普通の「いま上げる」は今までどおり動く）',
-     c(canonical, mk([{ id: 'smAlive' }, { id: 'smDead', deleted: true, deleteOpId: 'd1' }])).length === 0);
-  ok('★canonical に墓標が無ければ常に通す',
-     c(mk([{ id: 'smAlive' }]), mk([{ id: 'smAlive' }, { id: 'smNew' }])).length === 0);
-  ok('★★incoming に meta が無い＝判定できない → 止めない（fail-open）',
-     c(canonical, JSON.stringify({ ls: {} })).length === 0);
-  ok('★★壊れた入力でも例外を投げない', c('{壊れ', canonical).length === 0 && c(canonical, '{壊れ').length === 0);
+     g(canonical, mk([{ id: 'smAlive' }, { id: 'smDead', name: '復活' }])).code === 'tombstone-clear-refused');
+  ok('★★墓標ごと消した incoming も止める',
+     g(canonical, mk([{ id: 'smAlive' }])).code === 'tombstone-clear-refused');
+  ok('★★★incoming に meta が無ければ止める（v25b の fail-open を差し戻した点）',
+     g(canonical, JSON.stringify({ ls: {} })).code === 'incoming-meta-missing');
+  ok('★★★incoming が壊れていても止める',
+     g(canonical, '{壊れ').code === 'incoming-meta-missing');
+  ok('★★★canonical が読めないときも止める（墓標の有無を確かめられない）',
+     g('{壊れ', canonical).code === 'canonical-unreadable');
+  ok('★canonical が空（新規作成）は通す', g(null, canonical).ok === true);
+  ok('★canonical に墓標が無ければ、incoming に meta が無くても通す（従来どおり）',
+     g(mk([{ id: 'smAlive' }]), JSON.stringify({ ls: {} })).ok === true);
+  ok('★★墓標を完全一致で保った incoming は通す（普通の「いま上げる」は動く）',
+     g(canonical, mk([{ id: 'smAlive' }, TOMB])).ok === true);
+
+  /* ★deleted:true だけの比較では不足（GPT指摘4）＝墓標の弱体化を拒否する */
+  ok('★★deleted:true でも deleteOpId が違えば止める',
+     g(canonical, mk([Object.assign({}, TOMB, { deleteOpId: 'd2' })])).code === 'tombstone-clear-refused');
+  ok('★★deleted:true でも lifecycleVersion が違えば止める',
+     g(canonical, mk([Object.assign({}, TOMB, { lifecycleVersion: 2 })])).code === 'tombstone-clear-refused');
+  ok('★★★deleteOpId は同じでも recoverySnapshotId が欠落していれば止める（弱体化）',
+     g(canonical, mk([{ id: 'smDead', deleted: true, deleteOpId: 'd1', lifecycleVersion: 1 }])).code === 'tombstone-clear-refused');
+
+  /* ★正式restore経路 */
+  ok('★★restoreOfDeleteOpId が現在の deleteOpId と一致するときだけ解除できる',
+     g(canonical, mk([{ id: 'smAlive' }, { id: 'smDead', name: '復元' }]), 'd1').ok === true);
+  ok('★★restoreOfDeleteOpId が違えば解除できない',
+     g(canonical, mk([{ id: 'smAlive' }, { id: 'smDead', name: '復元' }]), 'dX').code === 'tombstone-clear-refused');
+  ok('★★restoreOfDeleteOpId 未指定なら解除できない',
+     g(canonical, mk([{ id: 'smAlive' }, { id: 'smDead', name: '復元' }]), null).code === 'tombstone-clear-refused');
+  ok('★restoreOfDeleteOpId は body から渡している', /tombstoneGuardForceput\(cur\.blob, str, \(body && body\.restoreOfDeleteOpId\)\)/.test(SRC));
+
   ok('★★id は完全一致で照合する（部分一致で誤判定しない）',
-     c(mk([{ id: 'smDead', deleted: true }]), mk([{ id: 'smDeadX', deleted: true }])).join() === 'smDead');
+     g(mk([TOMB]), mk([Object.assign({}, TOMB, { id: 'smDeadX' })])).cleared.join() === 'smDead');
 }
 
 console.log('\n== (13) ★★v25b: migration は single-flight（GPT デプロイ前指摘3） ==');
@@ -289,8 +330,18 @@ console.log('\n== (13) ★★v25b: migration は single-flight（GPT デプロ�
   ok('★migration 本体が別関数に分かれている', /async function d1Migrate\(env\)/.test(SRC));
   ok('★★commitstate は d1Ready を通ってからでないと動かない（migration 途中に公開しない）',
      /const d1 = env\.DB \? await d1Ready\(env\) : false;[\s\S]{0,4000}if \(op === 'commitstate'\)/.test(SRC));
-  ok('★★列追加は重複でも落ちない（try/catch で握る）',
-     (SRC.match(/try \{ await env\.DB\.exec\("ALTER TABLE saves ADD COLUMN (package_hash|last_commit_op_id|hash_alg) TEXT"\); \} catch \(e\) \{\}/g) || []).length === 3);
+  /* ★★v25c(GPT指摘6/7): ALTER の catch で全エラーを握り潰すと、失敗した migration を成功と誤認する。 */
+  ok('★★ALTER は addColumnIfMissing 経由（裸の try/catch で握り潰していない）',
+     (SRC.match(/await addColumnIfMissing\(env, "ALTER TABLE saves ADD COLUMN (package_hash|last_commit_op_id|hash_alg) TEXT"\);/g) || []).length === 3 &&
+     !/try \{ await env\.DB\.exec\("ALTER TABLE saves ADD COLUMN/.test(SRC));
+  ok('★★★無視するのは「その列がもう在る」だけ。他は投げ直す',
+     /if \(m\.indexOf\('duplicate column'\) >= 0 \|\| m\.indexOf\('already exists'\) >= 0\) return;/.test(SRC) &&
+     /\n    throw e;\n  \}\n\}/.test(SRC));
+  ok('★★★migration の結果を実際に検証する（例外が出ないことは列が在る証明にならない）',
+     /async function savesHasV25Columns\(env\)/.test(SRC) &&
+     /PRAGMA table_info\(saves\)/.test(SRC));
+  ok('★★★3列が無ければ初期化完了にしない（503で正直に止まる）',
+     /if \(!\(await savesHasV25Columns\(env\)\)\) return false;\n    __d1init = true;/.test(SRC));
 }
 
 console.log('\n== (10) ★退行防止: v24 で入れた最終防御が残っている ==');
