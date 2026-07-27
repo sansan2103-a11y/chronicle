@@ -170,7 +170,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260727-fix596d';
+  var HOME_BUILT = '20260727-fix597';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -189,7 +189,7 @@
 <script src="v292Dfix562-backup-inventory.js?cb=v292Dfix593"></script>
 <script src="v292Dfix564-snapshot.js?cb=v292Dfix593"></script>
 <script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix593"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix596d"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix597"></script>
 <script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix594"></script>
 <script>
 (function(){
@@ -583,11 +583,26 @@
               /* ★★fix596: 収束した pull は、古い pending の結末をもう問題にしない。
                  ここで用済みにしておかないと、**決着できない pending が残り続けて
                  以後の送信が永久に止まる**（fix596 は未解決の pending がある間 put を送らないため）。 */
+              /* ★★fix597(GPT裁定D3): 解放の意味は「pendingのcommitが成功した」ではなく
+                 **「現在のcanonicalを新しい同期基点として正式に採用した」**。
+                 なので収束証明そのものを渡す（証明が無い呼び出しは台帳側が拒否する）。
+                 ★このpullはローカル墓標などをmerge保持しているので remote の完全採用ではない。
+                   → fullyAdoptedRemote:false → dirty は落とさない。 */
               try {
                 if (typeof L590.hasAwaiting === 'function' && L590.hasAwaiting() &&
                     typeof L590.supersedeByPull === 'function'){
-                  var sp = L590.supersedeByPull(+serverRev || 0);
-                  try { console.log('[home] 保留中の送信記録をpullで解消:', JSON.stringify(sp)); } catch(e){}
+                  /* identity: pull応答に ns があればそれを使う。無ければ台帳が持っている
+                     ns指紋へフォールバックする（identityOf が storedNsFp を見る）。
+                     ★どちらも無ければ identity-unverified となり、pending は**消さない**（GPT指定）。 */
+                  var nsNow597 = null;
+                  try { nsNow597 = (r && r.data && r.data.ns) ? String(r.data.ns) : null; } catch(e){}
+                  /* ★fix597: ns指紋の計算を待ってから解放判定する（同期版だと identity 未確定になる） */
+                  var spFn = (typeof L590.supersedeByPullAsync === 'function')
+                             ? L590.supersedeByPullAsync : function(a){ return Promise.resolve(L590.supersedeByPull(a)); };
+                  spFn({ remoteRev: +serverRev || 0, proof: proof, ns: nsNow597,
+                         fullyAdoptedRemote: false }).then(function(sp){
+                    try { console.log('[home] 保留中の送信記録をpullで解消:', JSON.stringify(sp)); } catch(e){}
+                  });
                 }
               } catch(e){}
             } else {
@@ -650,8 +665,12 @@
       /* ★fix596c: identity は ns（アカウントの名前空間）を基準にする。
          Google トークンは期限切れで消えるので、ヘッダから作ると同じ人でも値が変わり、
          **自分の保留を自分で解決できなくなる**（実機で踏んだ）。 */
-      var ns596 = null; try { ns596 = localStorage.getItem('v292Dfix596_ns') || ((m && m.ns) || null); } catch(e){}
-      try { if (m && m.ns) localStorage.setItem('v292Dfix596_ns', String(m.ns)); } catch(e){}
+      /* ★★fix597(GPT指定): ns の**生値を localStorage へ保存しない**。
+         保存するのは台帳が作る SHA-256 指紋だけ（v292Dfix597_nsfp）。生の ns はメモリのみ。
+         この forceput は直前に op:'meta' を叩いているので、m.ns が最も新しい安定 identity。 */
+      var ns596 = (m && m.ns) ? String(m.ns) : null;
+      try { if (ns596 && L596 && typeof L596.learnNs === 'function') L596.learnNs(ns596); } catch(e){}
+      try { localStorage.removeItem('v292Dfix596_ns'); } catch(e){}
       return L596.notePut({ pkg: pkg, baseRev: body596.baseRev, op: 'forceput',
                             pkgTs: (pkg && pkg.updatedAt) || null,
                             ns: ns596,

@@ -50,6 +50,41 @@
 //         state-equivalent-rebased… 中身は同じだが、自分のcommitが通った証明にはならない
 //     (6) hashAlg だけでなく **packageSpec** も一致したときだけ三者照合を有効にする
 //     (7) identity は伏せ字ではなく **fingerprint**（別アカウントの pending を誤適用しない）
+//
+// ---------------------------------------------------------------------
+// ★★fix597 (2026-07-27) = GPT裁定 D1〜D3 に従って**分類を締める**。
+//   fix596 で私が自分の判断で足した3点は、意図はGOだが粒度が粗すぎた。
+//
+//   D1【条件付きGO】「不一致が確定したら pending を解放する」は正しいが、
+//       **2種類の不一致を同じ扱いにしてはいけない**。
+//       A) remoteHash !== lastSentHash
+//          → canonical は少なくとも自分が送った内容ではない。遮断解除・rev不変・dirty・pull要求。
+//          ★ただし「自分のcommitは通らなかった」と**断定してはいけない**。
+//            一度通った後に別端末の後続commitへ置き換わった可能性がある。
+//            分類名は pending-superseded-by-remote（commit-failed ではない）。
+//       B) remoteHash === lastSentHash かつ currentLocalHash !== lastSentHash
+//          → lastCommitOpId も一致するなら **自分の commit は確定成功**。
+//            commit-confirmed-local-diverged。遮断解除・dirty維持・**自動rev昇格はしない**。
+//          ★これを通常の needsPull にしてはいけない。local-ahead 保護で pull がスキップされると
+//            appliedRev が古いまま／ローカルが先、で次の put がまた fork する。
+//            → 明示的な競合状態 local-diverged-after-commit として持つ。
+//
+//   D2【意図はGO・完全削除は非推奨】別アカウントの pending は**捨てずに隔離**する。
+//       捨てると、そのアカウントへ戻ったときに「応答喪失commitの証拠」を失う。
+//       identity 別の隔離領域へ退避し、7日で期限切れにする。
+//
+//   D3【GO】pull収束後の解放は「commitが成功した」ではなく
+//       「現在の canonical を新しい同期基点として正式採用した」。
+//       provePullConvergence が通り、identity が一致したときだけ。
+//
+//   ns【GO】identity は commitstate.ns → meta.ns → 成功put応答.ns → ヘッダ由来 の順。
+//       identity を確定できないときは identity-unverified とし、
+//       **appliedRev変更0 / pending削除0 / 自動再送0**。
+//       ★identity不明を identity不一致として foreign へ捨ててはいけない。
+//       ns は生値を localStorage へ置かず SHA-256('chronicle-ns-v1:'+ns) の指紋だけを保存する。
+//
+//   pkgTs【固定】1 logical put = 1 pkgTs。同じ pending の reconcile では同じ pkgTs。
+//       新しい論理 put では新しい pkgTs。前の pending の pkgTs を使い回さない。
 // 冪等: window.__v292Dfix590 / OFF: localStorage.v292Dfix590Off='1'
 // =====================================================================
 (function(){
@@ -60,7 +95,14 @@
   /* ★fix596: 記録の形が変わったので版を上げる。
      旧版(v1)のレコードは read() が弾く＝「送った記録が無い」として扱われる。
      これは安全側（勝手に解釈して appliedRev を動かすより、照合不能として止める方がよい）。 */
-  var VERSION = 2;
+  var VERSION = 3;
+  /* ★fix597: v2 の記録は形が互換（増えただけ）なので**捨てずに読む**。
+     捨てると「応答喪失commitの証拠」を失う（GPT裁定D2と同じ理由）。 */
+  var ACCEPT_VERSIONS = [2, 3];
+  /* ★fix597(GPT裁定D2): 別アカウントの pending の隔離領域。7日で期限切れ。 */
+  var FOREIGN_KEY = 'v292Dfix597_foreign';
+  var FOREIGN_TTL_MS = 7 * 24 * 3600 * 1000;
+  var FOREIGN_MAX = 20;
   /* ★★fix596(GPT指定6): packageHash の入力の作り方そのものの版。
      hashAlg が同じでも「light の作り方」や「キー挿入順」が変われば値は一致しなくなる。
      Worker v25 の light 生成規則をこの名前で固定する。 */
@@ -81,7 +123,12 @@
                 commitConfirmed: 0, stateEquivalentRebased: 0, realConflicts: 0,
                 remoteReadFailed: 0, responseIntegrityMismatch: 0,
                 reconcileStale: 0, reconcileUnsupported: 0, pendingBlockedNewPut: 0,
-                supersededByPull: 0, foreignPendingDropped: 0 };
+                supersededByPull: 0, foreignPendingDropped: 0,
+                /* ★fix597 */
+                foreignPendingQuarantined: 0, foreignPendingExpired: 0,
+                identityUnverified: 0, pendingSupersededByRemote: 0,
+                commitConfirmedLocalDiverged: 0, stateEquivalentLocalDiverged: 0,
+                pkgTsReused: 0, nsLearned: 0, pullProofRejected: 0 };
   function note(rec){ try { rec.at = Date.now(); LOG.push(rec); if (LOG.length > LOG_MAX) LOG.shift(); } catch(e){} }
   function bump(why){ try { stats.byReason[why] = (stats.byReason[why] || 0) + 1; } catch(e){} }
 
@@ -140,6 +187,44 @@
     var norm = String(raw).trim();
     return 'id_' + k + '_' + shortHash(k + '\u0000' + norm);
   }
+  /* ---- ★fix597: ns の指紋（GPT指定） -------------------------------------
+   * Worker の ns は SHA256(secret salt | codeKey) の先頭32hex で、salt は Worker の秘密。
+   * つまり ns 自体すでに非可逆で非PIIだが、**生値は localStorage へ置かない**方針を明示的に守る。
+   *   保存するもの : SHA-256('chronicle-ns-v1:' + ns)   ← 指紋だけ
+   *   メモリだけ   : 生の ns
+   * 指紋は SHA-256 なので、shortHash と違って衝突を心配しなくてよい。 */
+  var NS_FP_KEY = 'v292Dfix597_nsfp';
+  var NS_RAW = null, NS_FP = null, nsLearning = null;
+  function nsFingerprint(ns){
+    return sha256Hex('chronicle-ns-v1:' + String(ns == null ? '' : ns));
+  }
+  function storedNsFp(){
+    if (NS_FP) return NS_FP;
+    var v = lsg(NS_FP_KEY);
+    if (v && /^[0-9a-f]{64}$/.test(v)) { NS_FP = v; return v; }
+    return null;
+  }
+  /* 生の ns を受け取って指紋を作り、指紋だけ保存する。戻り: Promise<fp|null> */
+  function learnNs(ns){
+    if (!ns) return Promise.resolve(storedNsFp());
+    ns = String(ns);
+    if (NS_RAW === ns && NS_FP) return Promise.resolve(NS_FP);
+    if (nsLearning && nsLearning.ns === ns) return nsLearning.p;
+    var p = nsFingerprint(ns).then(function(fp){
+      NS_RAW = ns; NS_FP = fp;
+      try { localStorage.setItem(NS_FP_KEY, fp); } catch(e){}
+      stats.nsLearned++;
+      note({ act:'ns-learned' });      /* ★ns も指紋もログに出さない */
+      return fp;
+    }, function(){ return null; });
+    nsLearning = { ns: ns, p: p };
+    return p;
+  }
+  /* いまメモリにある生の ns（同じセッション中の再利用用。**保存しない**） */
+  function knownNsRaw(){ return NS_RAW; }
+  function forgetNs(){ NS_RAW = null; NS_FP = null; nsLearning = null;
+                       try { localStorage.removeItem(NS_FP_KEY); } catch(e){} }
+
   /* ★呼び出し側が種別を知らない場合の推定（Google の ID トークンは3つの区切りを持つ JWT） */
   function identityKindOf(raw){
     var s = String(raw == null ? '' : raw);
@@ -156,12 +241,32 @@
        ・Google トークンは**期限切れになる**ので、同じ端末・同じ人でも時間で種別が変わる
      → サーバが返す ns（アカウントごとの名前空間）が最も安定しているので、あればそれを使う。
        ns が分からない場合だけ、従来どおり合言葉/トークンから作る。 */
+  /* ★★fix597(GPT指定): identity の優先順を固定する。
+       commitstate.ns → meta.ns → 成功put応答.ns → ヘッダ由来（最後の手段）
+     ns 由来のときは **SHA-256 指紋**を使う（生値も shortHash も使わない）。
+     ここは同期関数なので、指紋が未計算のときは null を返す＝identity-unverified。
+     呼び出し側は identityOfAsync を使えば、必要なら指紋の計算を待てる。 */
   function identityOf(o){
     o = o || {};
-    if (o.ns) return identityKey(String(o.ns), 'ns');
+    if (o.nsFp) return 'id_ns_' + String(o.nsFp);
+    if (o.ns){
+      var raw = String(o.ns);
+      if (NS_RAW === raw && NS_FP) return 'id_ns_' + NS_FP;
+      return null;                       /* ★指紋が未計算 = まだ確定できない */
+    }
+    var fp = storedNsFp();
+    if (fp && o.useStoredNs !== false && !o.identity) return 'id_ns_' + fp;
     if (o.identity) return identityKey(o.identity, o.identityKind || identityKindOf(o.identity));
     return null;
   }
+  /* ns が渡されていれば指紋を作ってから identity を返す */
+  function identityOfAsync(o){
+    o = o || {};
+    if (o.ns) return learnNs(o.ns).then(function(){ return identityOf(o); });
+    return Promise.resolve(identityOf(o));
+  }
+  /* ★identity を確定できたか（できていないなら何も書き換えてはいけない） */
+  function identityResolvable(o){ return identityOf(o) != null; }
 
   /* ---- commitOpId（この端末が「今回の送信」に付ける一意な名前） ------------
    * ★サーバは絶対に発行しない（架空のIDを作らせない）。ここでだけ作る。 */
@@ -178,14 +283,76 @@
 
   /* ---- 台帳の読み書き（永続化。ページ離脱をまたぐ必要があるため） ---------- */
   function read(){
-    try { var o = JSON.parse(lsg(KEY) || 'null'); return (o && o.v === VERSION) ? o : null; }
-    catch(e){ return null; }
+    try {
+      var o = JSON.parse(lsg(KEY) || 'null');
+      if (!o) return null;
+      /* ★fix597: v2 は形が互換（増えただけ）なので読む。捨てると証拠を失う。 */
+      if (ACCEPT_VERSIONS.indexOf(o.v) === -1) return null;
+      return o;
+    } catch(e){ return null; }
   }
   function write(o){
     try { localStorage.setItem(KEY, JSON.stringify(o)); return true; }
     catch(e){ stats.persistFailed++; note({ act:'persist-failed', why:String(e && e.name) }); return false; }
   }
   function clear(){ try { localStorage.removeItem(KEY); } catch(e){} }
+
+  /* ---- ★fix597(GPT裁定D2): 別 identity の pending は**捨てずに隔離する** -----
+   * 完全削除すると、元のアカウントへ戻ったときに
+   *   「応答喪失commitの証拠（commitOpId / payloadHash）」
+   * を失う。現アカウントの put は遮断しないが、記録は残す。
+   * 理想は pendingCommitsByIdentity[identityTag] だが、初版は短期の診断領域に退避し
+   * 7日で期限切れにする（GPT指定）。 */
+  function readForeign(){
+    try {
+      var a = JSON.parse(lsg(FOREIGN_KEY) || '[]');
+      return Object.prototype.toString.call(a) === '[object Array]' ? a : [];
+    } catch(e){ return []; }
+  }
+  function pruneForeign(list){
+    var now = Date.now(), out = [];
+    for (var i = 0; i < list.length; i++){
+      var r = list[i];
+      if (!r || typeof r !== 'object') continue;
+      var born = +r.quarantinedAt || +r.createdAt || 0;
+      if (born && (now - born) > FOREIGN_TTL_MS){ stats.foreignPendingExpired++; continue; }
+      out.push(r);
+    }
+    if (out.length > FOREIGN_MAX) out = out.slice(out.length - FOREIGN_MAX);
+    return out;
+  }
+  function quarantineForeign(rec){
+    if (!rec) return { ok:false, code:'no-record' };
+    var list = pruneForeign(readForeign());
+    /* 同じ commitOpId を二重に積まない */
+    for (var i = 0; i < list.length; i++){
+      if (list[i] && String(list[i].commitOpId) === String(rec.commitOpId)) { list.splice(i, 1); break; }
+    }
+    list.push({ identityTag: rec.identity || null, status: 'foreign-pending',
+                op: rec.op || null, commitOpId: rec.commitOpId || null,
+                payloadHash: rec.payloadHash || null, baseRev: (rec.baseRev == null ? null : +rec.baseRev),
+                pkgTs: (rec.pkgTs == null ? null : +rec.pkgTs),
+                createdAt: +rec.createdAt || 0, quarantinedAt: Date.now() });
+    list = pruneForeign(list);
+    try { localStorage.setItem(FOREIGN_KEY, JSON.stringify(list)); }
+    catch(e){ stats.persistFailed++; note({ act:'foreign-persist-failed', why:String(e && e.name) });
+              return { ok:false, code:'persist-failed' }; }
+    stats.foreignPendingQuarantined++;
+    note({ act:'foreign-pending-quarantined', commitOpId: rec.commitOpId });
+    return { ok:true, count: list.length };
+  }
+  /* 隔離された pending の一覧（★identityTag は指紋なので中身は伏せられている） */
+  function foreignPendings(){
+    var list = pruneForeign(readForeign());
+    try { localStorage.setItem(FOREIGN_KEY, JSON.stringify(list)); } catch(e){}
+    return list.slice();
+  }
+  /* そのアカウントへ戻ったときに証拠を取り戻す（★台帳へは自動で戻さない。読むだけ） */
+  function foreignPendingsFor(identityTag){
+    if (!identityTag) return [];
+    return foreignPendings().filter(function(r){ return r && String(r.identityTag) === String(identityTag); });
+  }
+  function clearForeign(){ try { localStorage.removeItem(FOREIGN_KEY); } catch(e){} }
 
   /* ---- ① put の直前に呼ぶ ------------------------------------------------
    * 戻り: { ok, payloadHash, persisted }
@@ -196,22 +363,41 @@
     /* ★★fix596(GPT指定3): 未解決の pending を**上書きしない**。
        上書きすると「前回のコミットが通ったのか」の証拠が消える。
        呼び出し側は blocked を見たら**送信せず**、ローカル変更を dirty として溜める。 */
+    /* ★fix597: ns が渡されていれば、まず指紋を作って identity を確定できるようにする。 */
+    return identityOfAsync(o).then(function(meNow){
     var prev = read();
     if (prev && prev.status === 'awaiting-result'){
-      /* ★★fix596c: 止めてよいのは「**自分の**未解決の保留」だけ。
+      /* ★★fix596c/fix597: 止めてよいのは「**自分の**未解決の保留」だけ。
          別アカウントの保留（この端末を別の人が使った等）は、こちらでは決着させようがない。
-         それで送信を止めると**自分の保存が永久にできなくなる**ので、捨てて先へ進む。
-         ここで捨てても、そのアカウントのデータはサーバ側に残っていて失われない。 */
-      var meNow = identityOf(o);
+         それで送信を止めると**自分の保存が永久にできなくなる**ので、先へ進む。
+         ★fix597(GPT裁定D2): ただし**捨てずに隔離する**。捨てると、そのアカウントへ戻ったときに
+           応答喪失commitの証拠（commitOpId / payloadHash）を失う。
+         ★fix597(GPT指定): identity を**確定できない**ときは foreign 扱いにしてはいけない。
+           確定できないなら「自分のかもしれない」ので、安全側＝遮断のまま据え置く。 */
+      if (prev.identity && meNow == null){
+        stats.identityUnverified++;
+        note({ act:'blocked-new-put', why:'identity-unverified', pendingOpId: prev.commitOpId });
+        return { ok:false, code:'identity-unverified', blocked:true, pending: snapshotOf(prev) };
+      }
       var sameOwner = !prev.identity || !meNow || prev.identity === meNow;
       if (sameOwner){
         stats.pendingBlockedNewPut++;
         note({ act:'blocked-new-put', pendingOpId: prev.commitOpId, pendingSince: prev.createdAt });
-        return Promise.resolve({ ok:false, code:'pending-unresolved', blocked:true, pending: snapshotOf(prev) });
+        return { ok:false, code:'pending-unresolved', blocked:true, pending: snapshotOf(prev) };
       }
-      stats.foreignPendingDropped++;
-      note({ act:'foreign-pending-dropped', pendingOpId: prev.commitOpId });
+      quarantineForeign(prev);
       clear();
+    }
+    /* ★★fix597(GPT指定): 1 logical put = 1 pkgTs。
+       同じ pending の reconcile では同じ pkgTs を使い、**新しい論理 put では新しい pkgTs** を出す。
+       前の pending の pkgTs を次の put へ使い回すと、照合が別の送信の内容と一致してしまう。
+       ★ここで送信を止めはしない（同一ミリ秒の連続putで誤検知しうるため）。
+         数と記録を残し、回帰検査で「fix399 が毎回新しい pkgTs を出すこと」を守る。 */
+    if (o.pkgTs != null && lastLogicalPut.pkgTs != null &&
+        +o.pkgTs === +lastLogicalPut.pkgTs &&
+        o.commitOpId && String(o.commitOpId) !== String(lastLogicalPut.commitOpId)){
+      stats.pkgTsReused++;
+      note({ act:'pkgts-reused', pkgTs: +o.pkgTs, prevOpId: lastLogicalPut.commitOpId });
     }
     return payloadHash(o.pkg).then(function(ph){
       if (ph == null) return { ok:false, code:'no-payload' };
@@ -226,16 +412,21 @@
                      それでは三者一致が永久に成立せず、照合の仕組みそのものが無意味になる。
                      照合のときは必ずこの ts で作り直して比べる。 */
                   pkgTs: (o.pkgTs == null ? null : +o.pkgTs),
-                  identity: identityOf(o),
+                  identity: meNow,
                   baseRev: (o.baseRev == null ? null : +o.baseRev),
                   payloadHash: ph, createdAt: Date.now(), status: 'awaiting-result',
                   source: String(o.source || 'unknown') };
       var persisted = write(rec);
+      lastLogicalPut = { commitOpId: commitOpId, pkgTs: rec.pkgTs };
       note({ act:'put', op: op, source: rec.source, baseRev: rec.baseRev,
              commitOpId: commitOpId, persisted: persisted });
-      return { ok:true, payloadHash: ph, commitOpId: commitOpId, op: op, persisted: persisted };
+      return { ok:true, payloadHash: ph, commitOpId: commitOpId, op: op, persisted: persisted,
+               identityResolved: meNow != null };
     }, function(){ return { ok:false, code:'hash-failed' }; });
+    });
   }
+  /* ★fix597: 直近の論理 put（pkgTs の使い回しを見張るため） */
+  var lastLogicalPut = { commitOpId: null, pkgTs: null };
 
   /* 台帳の写し（呼び出し側へ返す用。中身をそのまま渡して書き換えられないようにする） */
   function snapshotOf(rec){
@@ -311,14 +502,64 @@
   /* ---- ★pull が収束したら、古い pending は用済みにする ---------------------
    * これが無いと「解決できない pending が残り続け、以後の送信が永久に止まる」。
    * pull で remote を基点に作り直せたなら、その pending の結果はもう問題にならない。 */
-  function supersedeByPull(remoteRev){
+  /* ★★fix597(GPT裁定D3): 解放してよい条件を締める。
+     意味は「pending の commit が成功した」ではなく
+     **「現在の canonical を新しい同期基点として正式に採用した」**。
+     必須条件（GPT列挙）:
+       identity一致 / pull収束証明成功 / remoteRev有効 / applyErrors=0 /
+       競合スキップ0 / unknownSkips=0 / metaMerge成功 / 再読込検証成功
+     → 収束証明 provePullConvergence がこの全部を見ているので、その結果を要求する。
+     戻り値の syncDirty:
+       remote を完全採用したときだけ false にしてよい。
+       ローカル墓標などを merge 保持した pull は dirty=true のまま（未同期の変更が載っているため）。
+     引数は { remoteRev, proof, identity|ns|nsFp, fullyAdoptedRemote } を推奨。
+     互換のため数値ひとつでも呼べるが、その場合は**証明なし**として拒否する。 */
+  function supersedeByPull(o){
+    if (typeof o === 'number' || typeof o === 'string'){
+      stats.pullProofRejected++;
+      note({ act:'superseded-by-pull', ok:false, why:'proof-required' });
+      return { ok:false, code:'proof-required' };
+    }
+    o = o || {};
     var cur = read();
     if (!cur) return { ok:false, code:'no-ledger' };
+    var proofOk = !!(o.proof && o.proof.ok === true);
+    if (!proofOk){
+      stats.pullProofRejected++;
+      note({ act:'superseded-by-pull', ok:false, why:(o.proof && o.proof.why) || 'no-proof',
+             commitOpId: cur.commitOpId });
+      return { ok:false, code:'pull-not-converged', why:(o.proof && o.proof.why) || 'no-proof' };
+    }
+    var rRev = (o.remoteRev == null) ? null : +o.remoteRev;
+    if (rRev == null || !isFinite(rRev) || rRev < 0) return { ok:false, code:'remote-rev-invalid' };
+    /* ★identity: 確定できないなら pending を消してはいけない（GPT指定）。 */
+    var idNow = identityOf(o);
+    if (cur.identity && idNow == null){
+      stats.identityUnverified++;
+      note({ act:'superseded-by-pull', ok:false, why:'identity-unverified' });
+      return { ok:false, code:'identity-unverified' };
+    }
+    if (cur.identity && idNow && cur.identity !== idNow){
+      note({ act:'superseded-by-pull', ok:false, why:'identity-mismatch' });
+      return { ok:false, code:'identity-mismatch' };
+    }
     clear();
     stats.supersededByPull++;
-    note({ act:'superseded-by-pull', remoteRev: (remoteRev == null ? null : +remoteRev),
+    var fully = (o.fullyAdoptedRemote === true);
+    note({ act:'superseded-by-pull', ok:true, remoteRev: rRev, fullyAdoptedRemote: fully,
            commitOpId: cur.commitOpId });
-    return { ok:true, commitOpId: cur.commitOpId };
+    return { ok:true, commitOpId: cur.commitOpId, status:'superseded-by-pull',
+             remoteRev: rRev,
+             /* ★remote を完全採用した場合のみ dirty を落としてよい */
+             syncDirty: !fully, canAdvanceAppliedRev: true };
+  }
+  /* ★fix597: 生の ns を渡す場合、指紋の計算が終わるまで identity を確定できない。
+     生の ns を持っている呼び出し側はこちらを使う（指紋を作ってから同期版を呼ぶ）。 */
+  function supersedeByPullAsync(o){
+    o = o || {};
+    if (!o.ns) return Promise.resolve(supersedeByPull(o));
+    return learnNs(o.ns).then(function(){ return supersedeByPull(o); },
+                             function(){ return supersedeByPull(o); });
   }
 
   /* ---- ③ 照合（★純粋関数。ここでは何も書き換えない） ---------------------
@@ -340,11 +581,24 @@
    * ★★fix596(GPT指定4): TOCTOU 対策。read-back の最中にローカルや pending が変わりうる。
    *   pendingAtStart（開始時の写し）と、いまの台帳が同じであることを確かめてからでないと適用しない。
    */
+  /* ★fix597: ns を渡された場合、指紋の計算が終わるまで identity を確定できない。
+     ここで一度だけ待ってから本体へ入る（本体は同期的に identityOf を使える）。 */
   function classify(o){
+    o = o || {};
+    if (o.ns && !identityResolvable(o)){
+      return learnNs(o.ns).then(function(){ return classifyInner(o); },
+                               function(){ return classifyInner(o); });
+    }
+    return classifyInner(o);
+  }
+  function classifyInner(o){
     o = o || {};
     function ng(why, extra){
       stats.reconcileNg++; bump(why); note({ act:'reconcile', ok:false, why:why });
-      var r = { status:'no', why:why, canAdvanceAppliedRev:false };
+      var r = { status:'no', why:why, canAdvanceAppliedRev:false,
+                /* ★fix597: 既定は「何も変えない」。解放してよい分類だけが releasePending:true を返す。 */
+                releasePending:false, resolved:false, commitOutcome:'unknown',
+                syncDirty:true, needsPull:true };
       if (extra) for (var k in extra) r[k] = extra[k];
       return Promise.resolve(r);
     }
@@ -379,7 +633,14 @@
     var rSpec = (rm.packageSpec == null) ? PACKAGE_SPEC : String(rm.packageSpec);
     if (rSpec !== (led.packageSpec || PACKAGE_SPEC)) return ng('package-spec-mismatch');
 
+    /* ★★fix597(GPT指定): identity を**確定できない**ことと、identity が**違う**ことを分ける。
+       確定できないのに「違う」として foreign へ捨てるのが一番危ない。
+       identity-unverified のときは appliedRev変更0 / pending削除0 / 自動再送0。 */
     var idNow = identityOf(o);
+    if (led.identity && idNow == null){
+      stats.identityUnverified++;
+      return ng('identity-unverified', { releasePending:false, mutatePending:false, needsIdentity:true });
+    }
     if (led.identity && idNow && led.identity !== idNow) return ng('identity-mismatch');
 
     var applied = +o.appliedRev || 0;
@@ -389,8 +650,82 @@
     var curP = (o.currentHash != null) ? Promise.resolve(String(o.currentHash)) : payloadHash(o.currentPkg);
     return curP.then(function(curHash){
       if (curHash == null) return ng('hash-failed');
-      if (rHash !== led.payloadHash) { stats.realConflicts++; return ng('remote-vs-last-sent-mismatch'); }
-      if (curHash !== led.payloadHash) return ng('last-sent-vs-current-mismatch');
+
+      var opMatchEarly = (rm.lastCommitOpId != null) &&
+                         (String(rm.lastCommitOpId) === String(led.commitOpId));
+
+      /* ================= ★fix597 / GPT裁定D1 ケースA =========================
+         remoteHash !== lastSentHash
+           canonical は「少なくとも pending が指していた送信内容ではない」。
+           pending の曖昧性は**解消している**ので、遮断は解除してよい。
+           ★ただし「自分の commit は通らなかった」と断定してはいけない。
+             一度通った後、別端末の後続 commit に置き換わった可能性がある。
+           分類は pending-superseded-by-remote。commit-failed ではない。
+           appliedRev は動かさない / dirty=true / needsPull=true。 */
+      if (rHash !== led.payloadHash){
+        stats.realConflicts++;
+        stats.pendingSupersededByRemote++;
+        bump('pending-superseded-by-remote');
+        note({ act:'reconcile', ok:true, status:'pending-superseded-by-remote',
+               remoteRev:rRev, appliedRev:applied, opMatch:opMatchEarly });
+        return { status:'pending-superseded-by-remote',
+                 why:'remote-diverged-from-pending',
+                 remoteRev: rRev,
+                 canAdvanceAppliedRev: false,   /* ★rev は進めない */
+                 releasePending: true,          /* ★遮断は解除してよい（曖昧ではない） */
+                 resolved: true,
+                 commitOutcome: 'unknown',      /* ★通った/通らなかったを断定しない */
+                 syncDirty: true,
+                 needsPull: true };
+      }
+
+      /* ================= ★fix597 / GPT裁定D1 ケースB =========================
+         remoteHash === lastSentHash かつ currentLocalHash !== lastSentHash
+           pending の送信結果は canonical に存在するが、その後ローカルが先へ進んだ。
+           lastCommitOpId も一致するなら **pending の commit 自体は確定成功**。
+           遮断解除 / dirty=true / ★自動 rev 昇格はしない。
+           ★通常の needsPull にしてはいけない（GPT明示）。
+             local-ahead 保護で pull がスキップされると
+             appliedRev は古いまま・ローカルは先・次 put でまた fork、になる。
+             → 明示的な競合状態 local-diverged-after-commit として持つ。
+           ★自動 rebase は parentPayloadHash / localGeneration で
+             「ローカルQが送信済みPから派生した」ことを証明できるようになってから。 */
+      if (curHash !== led.payloadHash){
+        if (opMatchEarly){
+          stats.commitConfirmedLocalDiverged++;
+          bump('commit-confirmed-local-diverged');
+          note({ act:'reconcile', ok:true, status:'commit-confirmed-local-diverged',
+                 remoteRev:rRev, appliedRev:applied });
+          return { status:'commit-confirmed-local-diverged',
+                   why:'remote-equals-last-sent+local-advanced',
+                   remoteRev: rRev,
+                   canAdvanceAppliedRev: false,        /* ★証明が無い間は自動昇格しない */
+                   releasePending: true,
+                   resolved: true,
+                   commitOutcome: 'confirmed',
+                   syncDirty: true,
+                   needsPull: false,                    /* ★通常の pull 要求にしない */
+                   conflictState: 'local-diverged-after-commit',
+                   choices: ['adopt-remote', 'make-this-device-canonical'] };
+        }
+        /* lastCommitOpId が一致しない＝中身は同じでも自分の commit の証明にはならない。
+           それでも canonical と「送ったもの」は一致しているので曖昧ではない。 */
+        stats.stateEquivalentLocalDiverged++;
+        bump('state-equivalent-local-diverged');
+        note({ act:'reconcile', ok:true, status:'state-equivalent-local-diverged',
+               remoteRev:rRev, appliedRev:applied });
+        return { status:'state-equivalent-local-diverged',
+                 why:'remote-equals-last-sent+local-advanced+no-opid',
+                 remoteRev: rRev,
+                 canAdvanceAppliedRev: false,
+                 releasePending: true,
+                 resolved: true,
+                 commitOutcome: 'unknown',
+                 syncDirty: true,
+                 needsPull: false,
+                 conflictState: 'local-diverged-after-commit',
+                 choices: ['adopt-remote', 'make-this-device-canonical'] };
+      }
 
       /* ここまで来れば「canonical の中身 = 送ったもの = いまのローカル」。 */
       var opMatch = (rm.lastCommitOpId != null) &&
@@ -402,12 +737,17 @@
         stats.commitConfirmed++;
         note({ act:'reconcile', ok:true, status:'commit-confirmed', remoteRev:rRev, appliedRev:applied });
         return { status:'commit-confirmed', why:'three-way-match+opId',
-                 remoteRev:rRev, canAdvanceAppliedRev:canAdvance, payloadHash: led.payloadHash };
+                 remoteRev:rRev, canAdvanceAppliedRev:canAdvance, payloadHash: led.payloadHash,
+                 /* ★fix597: 戻り値の形を全分類でそろえる（呼び出し側の分岐を減らす） */
+                 releasePending:true, resolved:true, commitOutcome:'confirmed',
+                 syncDirty:false, needsPull:false };
       }
       stats.stateEquivalentRebased++;
       note({ act:'reconcile', ok:true, status:'state-equivalent-rebased', remoteRev:rRev, appliedRev:applied });
       return { status:'state-equivalent-rebased', why:'three-way-match',
-               remoteRev:rRev, canAdvanceAppliedRev:canAdvance, payloadHash: led.payloadHash };
+               remoteRev:rRev, canAdvanceAppliedRev:canAdvance, payloadHash: led.payloadHash,
+               releasePending:true, resolved:true, commitOutcome:'unknown',
+               syncDirty:false, needsPull:false };
     }, function(){ return ng('hash-failed'); });
   }
 
@@ -421,9 +761,13 @@
                       currentHash: o.currentHash, pendingAtStart: o.pendingAtStart,
                       remoteReadFailed: o.remoteReadFailed })
       .then(function(r){
+        /* ★fix597: 「revを進めてよいか」は canAdvanceAppliedRev が単独で表す。
+           local-diverged 系は resolved:true でも canAdvanceAppliedRev:false なので昇格しない。 */
         var okNow = (r.status === 'commit-confirmed' || r.status === 'state-equivalent-rebased');
         return { recoverable: okNow && r.canAdvanceAppliedRev, status: r.status,
-                 why: r.why, remoteRev: r.remoteRev, payloadHash: r.payloadHash };
+                 why: r.why, remoteRev: r.remoteRev, payloadHash: r.payloadHash,
+                 releasePending: !!r.releasePending, resolved: !!r.resolved,
+                 conflictState: r.conflictState || null, needsPull: !!r.needsPull };
       });
   }
 
@@ -557,6 +901,19 @@
     identityKindOf: identityKindOf,
     identityOf: identityOf,
     identityTag: identityTag,
+    /* ★fix597: ns の指紋（生の ns は保存しない） */
+    identityOfAsync: identityOfAsync,
+    identityResolvable: identityResolvable,
+    nsFingerprint: nsFingerprint,
+    learnNs: learnNs,
+    knownNsRaw: knownNsRaw,
+    forgetNs: forgetNs,
+    storedNsFp: storedNsFp,
+    /* ★fix597(GPT裁定D2): 別 identity の pending の隔離領域 */
+    quarantineForeign: quarantineForeign,
+    foreignPendings: foreignPendings,
+    foreignPendingsFor: foreignPendingsFor,
+    clearForeign: clearForeign,
     newCommitOpId: newCommitOpId,
     notePut: notePut,
     noteResult: noteResult,
@@ -569,6 +926,7 @@
     pendingCommit: pendingCommit,
     hasAwaiting: hasAwaiting,
     supersedeByPull: supersedeByPull,
+    supersedeByPullAsync: supersedeByPullAsync,
     /* ★fix593: pull収束証明と共有revの昇格 */
     provePullConvergence: provePullConvergence,
     promoteSharedRev: promoteSharedRev,
@@ -580,7 +938,9 @@
     report: report,
     isOff: off,
     /* ★fix596: Worker v25 の commitstate と繋いだので、復帰へ配線済み。 */
-    wiredIntoRecovery: true
+    wiredIntoRecovery: true,
+    /* ★fix597: GPT裁定 D1〜D3 / ns / pkgTs を反映済み。 */
+    verdictApplied: 'fix597'
   };
   try { console.log(TAG, 'loaded', off() ? 'OFF' : 'on'); } catch(e){}
 })();

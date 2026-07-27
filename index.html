@@ -16,7 +16,7 @@
      OFF=v292Dfix580Off -->
 <script src="v292Dfix580-meta-sync-coordinator.js?cb=v292Dfix583"></script>
 <!-- fix590: コミット台帳（「送ったけど結果を受け取れていない」を記録する。挙動は変えない） -->
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix596d"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix597"></script>
 <script>
 /* v292Dfix242: iOS Safari の古いHTMLキャッシュ脱出。`.js`は?cb=でキャッシュ破棄できるが
    index.html本体は破棄できず、iOSはbfcache+ヒューリスティックで古いHTMLを長く保持する
@@ -26,7 +26,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260727-fix596d';
+  var BUILT = '20260727-fix597';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2918,7 +2918,7 @@ G.init();
 <script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=v292Dfix396"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
-<script src="v292Dfix399-cloudsync.js?cb=v292Dfix596d"></script>
+<script src="v292Dfix399-cloudsync.js?cb=v292Dfix597"></script>
   <script src="v292Dfix400-img-url.js?cb=v292Dfix400d"></script>
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=v292Dfix336"></script>
 <script src="v292Dfix338-artstyle.js?cb=v292Dfix484"></script>

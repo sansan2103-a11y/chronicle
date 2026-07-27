@@ -275,17 +275,54 @@
      Google トークンは期限切れで消えるし、取得元も経路によって違うので、
      ヘッダから作った identity は**同じ人でも時間で変わってしまう**。
      ns はアカウントに紐づく安定した値なので、これを identity の基準にする。 */
-  var NS_KEY = 'v292Dfix596_ns';
+  /* ★★fix597(GPT指定): ns の**生値を localStorage へ保存しない**。
+     Worker の ns は SHA256(secret salt | codeKey) の先頭32hexで、すでに非可逆・非PIIだが、
+     「生値は端末に置かない」を方針として固定する。
+     保存するのは台帳側が作る SHA-256 指紋だけ（v292Dfix597_nsfp）。生の ns はメモリのみ。
+     ★identity の優先順（GPT指定）:
+         commitstate.ns → meta.ns → 成功put応答.ns → ヘッダ由来（最後の手段）
+     ★identity を確定できない場合は identity-unverified とし、
+       appliedRev変更0 / pending削除0 / 自動再送0。foreign へ捨ててはいけない。 */
+  var NS_KEY = 'v292Dfix596_ns';       /* ★旧キー。移行のため読むだけ、書かない */
+  var NS_MEM = null;                   /* このセッション中の生の ns（保存しない） */
   function rememberNs(j){
-    try { if (j && j.ns) localStorage.setItem(NS_KEY, String(j.ns)); } catch(e){}
+    var ns = (j && j.ns) ? String(j.ns) : null;
+    if (!ns) return null;
+    NS_MEM = ns;
+    var led = ledger();
+    try { if (led && typeof led.learnNs === 'function') led.learnNs(ns); } catch(e){}
+    /* ★旧キーに生値が残っていたら消す（fix596 で書いてしまっていたもの） */
+    try { localStorage.removeItem(NS_KEY); } catch(e){}
+    return ns;
   }
-  function knownNs(){ try { return localStorage.getItem(NS_KEY) || null; } catch(e){ return null; } }
+  function knownNs(){
+    if (NS_MEM) return NS_MEM;
+    /* ★移行: 旧キーに生値が残っていたら、一度だけ指紋へ移して生値を消す */
+    try {
+      var old = localStorage.getItem(NS_KEY);
+      if (old){ NS_MEM = String(old); var l = ledger();
+                if (l && typeof l.learnNs === 'function') l.learnNs(NS_MEM);
+                localStorage.removeItem(NS_KEY); return NS_MEM; }
+    } catch(e){}
+    return null;
+  }
   /* 台帳へ渡す識別情報。ns があればそれを使い、無ければ従来どおりヘッダから作る。 */
   function identityArgs(){
     var h = authHeaders();
     return { ns: knownNs(),
              identity: (h['x-google-id'] || h['x-chronicle-pass'] || null),
              identityKind: (h['x-google-id'] ? 'google' : 'pass') };
+  }
+  /* ★★fix597(GPT指定): v25 の commitstate には ns が無い。
+     **pending があり、かつ安定 identity をまだ取れていないときだけ** op:'meta' を1回叩いて ns を得る。
+     毎回叩かない。セッション中に取れたらメモリで再利用する。
+     （次の Worker 更新で commitstate に ns が入れば、この往復は不要になる） */
+  function ensureStableNs(){
+    if (knownNs()) return Promise.resolve(knownNs());
+    return callSave({ op:'meta' }).then(function(r){
+      if (r && r.status === 200 && r.json && r.json.ok === true) return rememberNs(r.json);
+      return null;
+    }, function(){ return null; });
   }
 
   function workerSupportsCommitState(){
@@ -313,7 +350,19 @@
     catch(e){ return Promise.resolve(null); }
   }
 
-  var reconcileLast = { status:'never', at:0, why:null };
+  var reconcileLast = { status:'never', at:0, why:null, conflictState:null };
+  /* ★★fix597(GPT裁定D1ケースB): local-diverged-after-commit は「通常のpullで直る状態」ではない。
+     local-ahead 保護で pull がスキップされると永久に fork し続けるので、
+     **明示的な競合状態**として保持し、解決はユーザーの選択（クラウドを取り込む /
+     この端末をクラウドの正にする＝墓標保護付きforceput）に委ねる。 */
+  var divergedState = null;
+  function divergedAfterCommit(){ return divergedState; }
+  function clearDivergedState(why){
+    if (!divergedState) return { ok:false };
+    divergedState = null;
+    try { console.log(TAG, 'local-diverged 解消:', String(why || '')); } catch(e){}
+    return { ok:true };
+  }
   function reconcileNow(reason){
     var led = ledger();
     if (!led || typeof led.runReconcile !== 'function') return Promise.resolve({ status:'no-ledger' });
@@ -325,6 +374,8 @@
           reconcileLast = { status:'unsupported', at: Date.now(), why:'no-commitstate' };
           return { status:'unsupported', needsPull:true };
         }
+        /* ★fix597: 安定 identity（ns）を先に確保する。commitstate に ns が入るまでの暫定。 */
+        return ensureStableNs().then(function(){
         return callSave({ op:'commitstate' }).then(function(r){
           if (r.status !== 200 || !r.json || r.json.ok !== true){
             reconcileLast = { status:'remote-read-failed', at: Date.now(), why:'http ' + r.status };
@@ -347,9 +398,10 @@
               pendingAtStart: ctx.pendingAtStart
             });
           }).then(function(v){
-            reconcileLast = { status: v.status, at: Date.now(), why: v.why || null };
-            var settled = (v.status === 'commit-confirmed' || v.status === 'state-equivalent-rebased');
-            if (settled){
+            reconcileLast = { status: v.status, at: Date.now(), why: v.why || null,
+                              conflictState: v.conflictState || null };
+            var fullMatch = (v.status === 'commit-confirmed' || v.status === 'state-equivalent-rebased');
+            if (fullMatch){
               /* ★rev は巻き戻さない。進めてよいと言われたときだけ進める。 */
               if (v.canAdvanceAppliedRev && c && v.remoteRev != null){
                 c.promoteRev(v.remoteRev, 'fix596:' + v.status);
@@ -359,28 +411,46 @@
               try { led.clear(); } catch(e){}
               setNum('v292Dfix399_baseTs', Date.now());
             }
-            /* ★★fix596: 「曖昧ではなくなった」なら pending の役目は終わり。
-               ここを消さないと、**未解決の pending が残り続けて以後の送信が永久に止まる**
-               （fix596 は未解決の pending がある間 put を送らないため）。
-                 remote-vs-last-sent-mismatch … canonical は自分が送ったものではない
-                   ＝自分のcommitは canonical になっていない、と**確定した**
-                 last-sent-vs-current-mismatch … canonical は自分が送ったものだが、
-                   そのあとローカルが進んだ。これも結末は確定している
-               どちらも結末が分かったので pending は消す。ただし状態は一致していないので
-               **revは動かさず**、同期は未反映(dirty)のままにして pull を要求する。 */
-            if (!settled && (v.why === 'remote-vs-last-sent-mismatch' ||
-                             v.why === 'last-sent-vs-current-mismatch')){
+            /* ★★fix597(GPT裁定D1): 「曖昧ではなくなった」なら pending の役目は終わり。
+               ここを解放しないと、**未解決の pending が残り続けて以後の送信が永久に止まる**。
+               ただし fix596 のように2種類を同じ扱いにしてはいけない。
+                 pending-superseded-by-remote
+                   canonical は自分が送った内容ではない。遮断解除・rev不変・dirty・pull要求。
+                   ★「自分のcommitは通らなかった」とは断定しない（別端末の後続commitで
+                     置き換わった可能性がある）。
+                 commit-confirmed-local-diverged / state-equivalent-local-diverged
+                   canonical は自分が送ったもの。そのあとローカルが先へ進んだ。
+                   遮断解除・dirty維持・★自動rev昇格なし。
+                   ★通常の needsPull にしない。local-ahead 保護で pull がスキップされると
+                     appliedRev が古いまま・ローカルが先・次putでまた fork になるため、
+                     **明示的な競合状態 local-diverged-after-commit** として持つ。 */
+            if (!fullMatch && v.releasePending){
               try { led.clear(); } catch(e){}
-              setNum('v292Dfix399_localTs', Date.now());
-              try { console.log(TAG, 'pendingを解決済みとして解放:', v.why); } catch(e){}
+              setNum('v292Dfix399_localTs', Date.now());     /* 未同期のまま残す */
+              if (v.conflictState === 'local-diverged-after-commit'){
+                divergedState = { at: Date.now(), remoteRev: (v.remoteRev == null ? null : +v.remoteRev),
+                                  commitOutcome: v.commitOutcome || 'unknown',
+                                  choices: v.choices || ['adopt-remote', 'make-this-device-canonical'] };
+                try { console.log(TAG, '競合状態: local-diverged-after-commit（自動pullでは解決しない）'); } catch(e){}
+              } else {
+                try { console.log(TAG, 'pendingを解放:', v.status); } catch(e){}
+              }
+            }
+            /* ★identity を確定できないときは何も変えない（GPT指定）。 */
+            if (v.why === 'identity-unverified'){
+              try { console.log(TAG, 'identity未確定のため何も変更しません'); } catch(e){}
             }
             return { status: v.status, remoteRev: v.remoteRev, canAdvance: !!v.canAdvanceAppliedRev,
-                     needsPull: !settled };
+                     conflictState: v.conflictState || null,
+                     commitOutcome: v.commitOutcome || 'unknown',
+                     released: !!v.releasePending,
+                     needsPull: (v.needsPull === undefined ? !fullMatch : !!v.needsPull) };
           });
         }, function(e){
           reconcileLast = { status:'remote-read-failed', at: Date.now(), why:String(e && e.message || e).slice(0,60) };
           return { status:'remote-read-failed' };
         });
+        });   /* ensureStableNs */
       });
     }).then(function(r){
       try { console.log(TAG, 'reconcile(' + String(reason || '?') + ') → ' + (r && r.status)); } catch(e){}
@@ -1010,6 +1080,10 @@
     },
     currentLocalPackageHash: currentLocalPackageHash,
     workerSupportsCommitState: workerSupportsCommitState,
+    /* ★fix597 */
+    ensureStableNs: ensureStableNs,
+    divergedAfterCommit: divergedAfterCommit,
+    clearDivergedState: clearDivergedState,
     syncState: function(){
       var c = null; try { c = window.__v292Dfix580; } catch(e){}
       return { /* ★fix582: baseTs は競合制御から外れ、診断値へ降格した */
