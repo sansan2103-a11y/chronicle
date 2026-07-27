@@ -385,7 +385,16 @@
     var led = ledger();
     if (!led || typeof led.runReconcile !== 'function') return Promise.resolve({ status:'no-ledger' });
     if (!isLoggedIn()) return Promise.resolve({ status:'not-logged-in' });
-    return led.runReconcile(function(ctx){
+    /* ★★fix603: 照合を始める**前**に、隔離してあった別アカウント時代の pending を
+       （同一identityかつ active pending が無いときだけ）1件だけ戻す。
+       ★ここで戻さないと、runReconcile が pendingAtStart を採ったあとに台帳が変わり、
+         TOCTOU 判定で reconcile-stale になって、戻した証拠がそのまま使われない。 */
+    var pre = (typeof led.restoreForeignIfIdle === 'function')
+      ? led.restoreForeignIfIdle(identityArgs()).catch(function(){ return null; })
+      : Promise.resolve(null);
+    return pre.then(function(rf){
+      try { if (rf && rf.ok) console.log(TAG, '隔離していた送信記録を1件戻しました（まず照合します）'); } catch(e){}
+      return led.runReconcile(function(ctx){
       return workerSupportsCommitState().then(function(cap){
         if (!cap.ok){
           /* v25未満 or D1なし。ここで appliedRev を動かしてはいけない。pull を要求する。 */
@@ -490,10 +499,11 @@
         });
         });   /* ensureStableNs */
       });
-    }).then(function(r){
-      try { console.log(TAG, 'reconcile(' + String(reason || '?') + ') → ' + (r && r.status)); } catch(e){}
-      return r;
-    });
+      }).then(function(r){
+        try { console.log(TAG, 'reconcile(' + String(reason || '?') + ') → ' + (r && r.status)); } catch(e){}
+        return r;
+      });
+    });   /* fix603: restoreForeignIfIdle */
   }
 
   /* ★契機(1): 起動時に pending が残っていれば1回だけ。**無ければ何もしない**。 */

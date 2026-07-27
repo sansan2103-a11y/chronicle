@@ -112,13 +112,25 @@ console.log('\n== (4) ★★照合は三者一致。2つだけでは通さない
     /* remote は「最後に送ったもの」と一致するが、ローカルはその後 Q へ進んでいる */
     const moved = Object.assign({}, PKG, { updatedAt: 999 });
     const r = await L.reconcile({ remoteHash: H, remoteRev: 430, appliedRev: 429, identity: 'me', currentPkg: moved });
-    ok('★★remote と lastSent の2つが一致しても、ローカルが進んでいたら通さない',
-       r.recoverable === false && r.why === 'last-sent-vs-current-mismatch', r);
+    /* ★fix597: 「2つ一致・ローカルだけ進んだ」は**独立した競合状態**になった。
+       固定したい意味は変わらない = **appliedRev を勝手に進めない**。
+       reconcile() は lastCommitOpId を渡さないので、自分のcommitの証明にはならない側へ落ちる。 */
+    ok('★★remote と lastSent の2つが一致しても、ローカルが進んでいたら appliedRev を進めない',
+       r.recoverable === false && r.status === 'state-equivalent-local-diverged' &&
+       r.conflictState === 'local-diverged-after-commit', r);
+    ok('★★曖昧さは解けたので pending は解放するが、自動 pull では解決しない競合として持つ',
+       r.releasePending === true && r.resolved === true && r.needsPull === false, r);
   }
   {
     const L = await mk();
     const r = await L.reconcile({ remoteHash: 'other', remoteRev: 430, appliedRev: 429, identity: 'me', currentPkg: PKG });
-    ok('★remote が違う（＝本当に別端末が書いた）', r.recoverable === false && r.why === 'remote-vs-last-sent-mismatch', r);
+    /* ★fix597 D1-A: canonical は自分が送った内容ではない。
+       pending は解放してよいが、**appliedRev は動かさず pull を要求する**。 */
+    ok('★remote が違う（＝本当に別端末が書いた）',
+       r.recoverable === false && r.status === 'pending-superseded-by-remote' &&
+       r.needsPull === true, r);
+    ok('★★不一致が確定したので pending は解放する（永久に詰まらせない）',
+       r.releasePending === true && r.resolved === true, r);
   }
   {
     const L = await mk();
@@ -178,10 +190,38 @@ console.log('\n== (6) OFF と、挙動を変えていないことの確認 ==');
   const noComment = s => String(s).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
   const code = noComment(SRC);
   ok('★★fix596: 復帰へ配線済みであることを明示している', /wiredIntoRecovery:\s*true/.test(code));
-  /* ★fix593 で「共有rev台帳」への書き込みが1つ増えた。書いてよいのはこの2キーだけ。 */
-  ok('★★台帳が書き込むのは自分のキーと共有rev台帳だけ',
-     (code.match(/setItem\(/g) || []).length === 2 && (code.match(/removeItem\(/g) || []).length === 1,
-     { setItem: (code.match(/localStorage\.setItem\([^,]+/g) || []) });
+  /* ★fix593/597/599 で台帳が持つキーが増えた（共有rev台帳・ns指紋・関門・foreign隔離）。
+     固定したい契約は**個数ではなく「他モジュールのキーを書かない」**こと。
+     → localStorage への書き込み先が、この台帳が所有すると宣言したキー定数だけであることを見る。
+       ・書き込みは必ず名前付き定数を経由する（リテラル直書き／動的キーを禁止）
+       ・その定数が指す実際のキー名も、台帳の持ち物であることを確かめる */
+  {
+    const ALLOW = {
+      KEY:            'v292Dfix590_pending',   /* 自分の台帳 */
+      SHARED_REV_KEY: 'v292Dfix580_rev',       /* 共有rev台帳（fix593） */
+      NS_FP_KEY:      'v292Dfix597_nsfp',      /* ns指紋（生の ns は置かない） */
+      FOREIGN_KEY:    'v292Dfix597_foreign',   /* 別identityの隔離領域（fix597 D2） */
+      GATE_KEY:       'v292Dfix599_gate',      /* 決着待ちの関門（fix599） */
+      LEGACY_NS_KEY:  'v292Dfix596_ns'         /* 旧キーの掃除。★removeItem のみ許す */
+    };
+    const namesOf = re => (code.match(re) || []).map(s => s.replace(/^.*\(\s*/, ''));
+    const setNames = namesOf(/localStorage\.setItem\(\s*[A-Za-z_$][\w$]*/g);
+    const remNames = namesOf(/localStorage\.removeItem\(\s*[A-Za-z_$][\w$]*/g);
+    const outside = setNames.concat(remNames).filter(n => !Object.prototype.hasOwnProperty.call(ALLOW, n));
+    ok('★★台帳が書き込むのは自分が所有するキーだけ（他モジュールのキーを触らない）',
+       outside.length === 0, { outside, setNames, remNames });
+    ok('★★localStorage への書き込みは必ず名前付きのキー定数を経由する（リテラル直書き禁止）',
+       setNames.length === (code.match(/setItem\(/g) || []).length &&
+       remNames.length === (code.match(/removeItem\(/g) || []).length,
+       { setNames: setNames.length, setAll: (code.match(/setItem\(/g) || []).length,
+         remNames: remNames.length, remAll: (code.match(/removeItem\(/g) || []).length });
+    ok('★★キー定数の実際の値も台帳の持ち物である（命名規約 v292* に沿っている）',
+       Object.keys(ALLOW).every(n => new RegExp('var ' + n + " = '" + ALLOW[n] + "';").test(code)),
+       Object.keys(ALLOW).filter(n => !new RegExp('var ' + n + " = '" + ALLOW[n] + "';").test(code)));
+    ok('★★旧キー(v292Dfix596_ns の生の ns)は掃除するだけで、二度と書かない',
+       setNames.indexOf('LEGACY_NS_KEY') < 0 && remNames.indexOf('LEGACY_NS_KEY') >= 0,
+       { setNames, remNames });
+  }
   ok('★★共有revは fix580 が居ればその API を使う（キー直書きは fallback）',
      /promoteRev\(rev/.test(code) && /SHARED_REV_KEY/.test(code));
   ok('★fix399 が put 直前に記録し、成功時だけ消している', (() => {

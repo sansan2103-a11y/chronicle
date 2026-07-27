@@ -449,6 +449,25 @@
   }
   function clearForeign(){ try { localStorage.removeItem(FOREIGN_KEY); } catch(e){} }
 
+  /* ---- ★★fix603: 隔離した証拠を、元のアカウントへ戻ったときに実際に復帰させる ----
+   * fix599 で restoreForeignFor() は作ったのに、**どこからも呼んでいなかった**。
+   * つまり D2 の目的（アカウントを戻したときに応答喪失commitの証拠を取り戻す）は
+   * 実装されているのに一度も達成されない状態だった。
+   * ★これは「作ったが配線していない」型（fix579 の visible() と同じ）。
+   *   ライブラリを足したら、**呼ぶ側を必ず同じ回で書く**。
+   * 呼ぶ場所は reconcile の**入口**（pendingAtStart を採る前）でなければならない。
+   * あとから戻すと TOCTOU 判定で reconcile-stale になり、せっかく戻した証拠が使われない。 */
+  function restoreForeignIfIdle(o){
+    if (off()) return Promise.resolve({ ok:false, code:'off' });
+    if (hasAwaiting()) return Promise.resolve({ ok:false, code:'active-pending-exists' });
+    if (!foreignPendings().length) return Promise.resolve({ ok:false, code:'nothing-to-restore' });
+    return identityOfAsync(o || {}).then(function(tag){
+      /* identity が確定できないときは何もしない（GPT指定: 未確定を不一致として扱わない） */
+      if (!tag) return { ok:false, code:'identity-unverified' };
+      return restoreForeignFor(tag);
+    }, function(){ return { ok:false, code:'identity-unverified' }; });
+  }
+
   /* ---- ① put の直前に呼ぶ ------------------------------------------------
    * 戻り: { ok, payloadHash, persisted }
    * ★persisted:false のときは「自動照合不能」。fork したら pull を要求する（GPT指定）。 */
@@ -607,10 +626,27 @@
     var allOk = checks.ok && checks.revSafe && checks.revAhead && checks.hashAlg &&
                 checks.packageHash && checks.lastCommitOpId;
     if (allOk){
+      var wasOp = String(cur.op || 'put');
       clear();
       stats.commitConfirmed++;
-      note({ act:'commit-confirmed', rev: rev, commitOpId: cur.commitOpId, source: String(o.source || 'unknown') });
-      return { status:'commit-confirmed', rev: rev, commitOpId: cur.commitOpId };
+      /* ★★fix603: **確定した forceput は関門を閉じる**。
+         2026-07-27 に発見（テストの契約を書き直している最中に見つかった）:
+         関門を閉じるのは fix399 の三者一致と supersedeByPull の2箇所だけで、
+         **`make-this-device-canonical`（＝home の「☁ いま上げる」= forceput）を選んでも閉じなかった**。
+         forceput は成功し pending も消えるので、その後 runReconcile は 'nothing-pending' になり、
+         三者一致の経路にも入らない。結果、**関門が開いたまま残り、以後の通常putが永久に
+         resolution-required でブロックされる**（毎回 forceput を強いられる）。
+         fix599 が塞いだはずのデッドロックと同じ形が、選択肢の側に残っていた。
+         ★GPT裁定: 「make-this-device-canonical → 墓標保護付き forceput」で決着させる、が正。
+         ★閉じるのは **応答の検証を全部通った(allOk)場合だけ**。ok:true だけでは閉じない。 */
+      var closed = null;
+      if (wasOp === 'forceput'){
+        try { if (readGate()) closed = closeGate('forceput-confirmed'); } catch(e){}
+      }
+      note({ act:'commit-confirmed', rev: rev, commitOpId: cur.commitOpId, op: wasOp,
+             gateClosed: !!(closed && closed.ok), source: String(o.source || 'unknown') });
+      return { status:'commit-confirmed', rev: rev, commitOpId: cur.commitOpId, op: wasOp,
+               gateClosed: !!(closed && closed.ok) };
     }
     /* ★lastCommitOpId は一致するのに packageHash が違う＝通常あり得ない。別の数として扱う。 */
     if (checks.lastCommitOpId && !checks.packageHash){
@@ -1087,6 +1123,9 @@
     gateAllows: gateAllows,
     /* ★fix599: foreign の復帰規則 */
     restoreForeignFor: restoreForeignFor,
+    /* ★fix603: reconcile の入口から呼ぶ復帰口（配線済み＝fix399 reconcileNow） */
+    restoreForeignIfIdle: restoreForeignIfIdle,
+    foreignRestoreWired: true,
     /* ★fix593: pull収束証明と共有revの昇格 */
     provePullConvergence: provePullConvergence,
     promoteSharedRev: promoteSharedRev,

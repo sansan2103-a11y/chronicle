@@ -159,17 +159,48 @@ console.log('\n== (4) ★★C5: 2種類の成功を厳密に分ける ==');
     const v = await L.classify({
       remote: { rev: 11, packageHash: 'a'.repeat(64), lastCommitOpId: null, hashAlg: 'sha256-utf8-v1' },
       appliedRev: 10, identity: 'pass:abc', currentHash: r.payloadHash });
-    ok('★★remote の中身が違う → 本物の競合', v.status === 'no' && v.why === 'remote-vs-last-sent-mismatch', v);
+    /* ★fix597 D1-A: canonical は「自分が送った内容」ではない。
+       ただし「自分の commit は通らなかった」と**断定してはいけない**
+       （一度通ったあと別端末の後続 commit に置き換わった可能性がある）。 */
+    ok('★★remote の中身が違う → 本物の競合（pending は remote に追い越された扱い）',
+       v.status === 'pending-superseded-by-remote', v);
     ok('★realConflicts で数える', L.stats().realConflicts === 1);
     ok('★appliedRev は進めない', v.canAdvanceAppliedRev === false);
+    ok('★★自分のcommitの成否は断定しない（commit-failed にしない）',
+       v.commitOutcome === 'unknown', v);
+    ok('★★不一致が確定したので pending は解放するが、pull を要求し dirty のまま残す',
+       v.releasePending === true && v.resolved === true &&
+       v.needsPull === true && v.syncDirty === true, v);
+    ok('★★解放しても決着まで通常putは止める（fix599 の関門を開く）',
+       v.openGate === 'needs-pull', v);
   }
   {
     const { L, r } = await setup();
     const v = await L.classify({
       remote: { rev: 11, packageHash: r.payloadHash, lastCommitOpId: r.commitOpId, hashAlg: 'sha256-utf8-v1' },
       appliedRev: 10, identity: 'pass:abc', currentHash: 'b'.repeat(64) });
+    /* ★fix597 D1-B: remote=lastSent かつ lastCommitOpId も一致 → 自分の commit は確定成功。
+       それでも**ローカルが先へ進んでいるので自動 rebase はしない**（派生の証明が無い）。 */
     ok('★★remote=lastSent だが現在のローカルだけ違う → rebase しない',
-       v.status === 'no' && v.why === 'last-sent-vs-current-mismatch', v);
+       v.canAdvanceAppliedRev === false && v.status === 'commit-confirmed-local-diverged', v);
+    ok('★★自分の commit が通った証明にはなっている（結果不明にしない）',
+       v.commitOutcome === 'confirmed' && v.releasePending === true && v.resolved === true, v);
+    ok('★★通常の needsPull にしない（local-ahead保護でpullがスキップされ再fork するため）',
+       v.needsPull === false && v.conflictState === 'local-diverged-after-commit', v);
+    ok('★★ユーザーが選べる決着手段を明示する（関門は明示操作でしか開かない）',
+       v.openGate === 'local-diverged-after-commit' &&
+       JSON.stringify(v.choices) === JSON.stringify(['adopt-remote', 'make-this-device-canonical']), v);
+  }
+  {
+    /* ★同じ「remote=lastSent・ローカルだけ進んだ」でも、lastCommitOpId が一致しなければ
+       自分の commit が通った証明にはならない。ここを混ぜると成功を捏造することになる。 */
+    const { L, r } = await setup();
+    const v = await L.classify({
+      remote: { rev: 11, packageHash: r.payloadHash, lastCommitOpId: null, hashAlg: 'sha256-utf8-v1' },
+      appliedRev: 10, identity: 'pass:abc', currentHash: 'b'.repeat(64) });
+    ok('★★opId が無ければ「確定成功」とは記録しない（同じ競合状態だが outcome は unknown）',
+       v.status === 'state-equivalent-local-diverged' && v.commitOutcome === 'unknown' &&
+       v.conflictState === 'local-diverged-after-commit' && v.canAdvanceAppliedRev === false, v);
   }
 }
 
@@ -280,10 +311,64 @@ console.log('\n== (8) ★★pull が収束したら pending を用済みにす�
   const L = mk().__v292Dfix590;
   await L.notePut({ pkg: PKG, baseRev: 10, op: 'put', identity: 'pass:abc' });
   ok('★保留がある', L.hasAwaiting() === true);
-  const sp = L.supersedeByPull(430);
-  ok('★★pull収束で解消できる', sp.ok === true && L.hasAwaiting() === false, sp);
+  /* ★★fix597 D3: 解放の意味は「pendingのcommitが成功した」ではなく
+     **「現在の canonical を新しい同期基点として正式に採用した」**。
+     したがって pull の**収束証明**が要る。証明なしの呼び出しでは pending を消してはいけない。 */
+  const mkProof = patch => L.provePullConvergence(Object.assign({
+    remoteRev: 430, currentSharedRev: 10, pullCompleted: true, parsedOk: true,
+    applyErrors: 0, conflictSkips: 0, unknownSkips: 0, metaMerged: true,
+    metaMergeFailed: false, blockedWithoutTombstone: 0, readBackOk: true,
+    retainedLocalDeltaCount: 0, metaMergedWithLocalDelta: false }, patch || {}));
+
+  const bare = L.supersedeByPull(430);
+  ok('★★証明の無い呼び出しでは pending を消さない（revだけ渡す旧呼び出しは拒否）',
+     bare.ok === false && bare.code === 'proof-required' && L.hasAwaiting() === true, bare);
+  const notConverged = L.supersedeByPull({ remoteRev: 430, proof: mkProof({ applyErrors: 1 }), identity: 'pass:abc' });
+  ok('★★収束していない pull でも消さない',
+     notConverged.ok === false && notConverged.code === 'pull-not-converged' && L.hasAwaiting() === true, notConverged);
+
+  const proof = mkProof();
+  ok('★収束証明が通る', proof.ok === true, proof);
+  const sp = L.supersedeByPull({ remoteRev: 430, proof: proof, identity: 'pass:abc' });
+  ok('★★pull収束（証明つき）で解消できる', sp.ok === true && L.hasAwaiting() === false, sp);
   ok('★数えている', L.stats().supersededByPull === 1);
+  ok('★★remote を完全採用したので dirty を落とし、rev を進めてよい',
+     sp.syncDirty === false && sp.canAdvanceAppliedRev === true, sp);
   ok('★★解消後は新しい put を送れる', (await L.notePut({ pkg: PKG2, baseRev: 430, op: 'put', identity: 'pass:abc' })).ok === true);
+}
+{
+  /* ★★fix599: fullyAdoptedRemote は**呼出側の申告ではなく収束証明から導出する**。
+     ここが呼出側任せだと、ローカル差分（墓標など）を抱えたまま dirty を落として
+     **未同期の変更を失う**。 */
+  const L = mk().__v292Dfix590;
+  await L.notePut({ pkg: PKG, baseRev: 10, op: 'put', identity: 'pass:abc' });
+  const proofWithDelta = L.provePullConvergence({
+    remoteRev: 430, currentSharedRev: 10, pullCompleted: true, parsedOk: true,
+    applyErrors: 0, conflictSkips: 0, unknownSkips: 0, metaMerged: true,
+    metaMergeFailed: false, blockedWithoutTombstone: 0, readBackOk: true,
+    retainedLocalDeltaCount: 1, metaMergedWithLocalDelta: true });
+  ok('★収束はしているが remote の完全採用ではない',
+     proofWithDelta.ok === true && proofWithDelta.fullyAdoptedRemote === false, proofWithDelta);
+  const sp = L.supersedeByPull({ remoteRev: 430, proof: proofWithDelta, identity: 'pass:abc',
+                                 fullyAdoptedRemote: true });   /* ★呼出側の嘘 */
+  ok('★★呼出側が fullyAdoptedRemote:true と申告しても、証明が否定すれば dirty を落とさない',
+     sp.ok === true && sp.syncDirty === true, sp);
+}
+{
+  /* ★identity を確定できないなら pending を消してはいけない（証拠を失う） */
+  const L = mk().__v292Dfix590;
+  await L.notePut({ pkg: PKG, baseRev: 10, op: 'put', ns: 'ns_わたし' });
+  const proof = L.provePullConvergence({
+    remoteRev: 430, currentSharedRev: 10, pullCompleted: true, parsedOk: true,
+    applyErrors: 0, conflictSkips: 0, unknownSkips: 0, metaMerged: true,
+    metaMergeFailed: false, blockedWithoutTombstone: 0, readBackOk: true });
+  const sp = await L.supersedeByPullAsync({ remoteRev: 430, proof: proof, ns: 'ns_べつの人' });
+  ok('★★別 identity の pull収束では pending を消さない',
+     sp.ok === false && sp.code === 'identity-mismatch' && L.hasAwaiting() === true, sp);
+  /* ★identity を**確定できない**（指紋が未計算）ときも消さない。「違う」とは別の理由。 */
+  const unv = L.supersedeByPull({ remoteRev: 430, proof: proof, ns: 'ns_まだ計算していない' });
+  ok('★★identity を確定できないときも pending を消さない（identity不明≠identity不一致）',
+     unv.ok === false && unv.code === 'identity-unverified' && L.hasAwaiting() === true, unv);
 }
 
 console.log('\n== (9) ★★旧版(v1)の記録は読まない（勝手に解釈しない） ==');
@@ -291,13 +376,36 @@ console.log('\n== (9) ★★旧版(v1)の記録は読まない（勝手に解釈
   const w = mk({ 'v292Dfix590_pending': JSON.stringify({ v: 1, spec: 'sha256-utf8-v1', payloadHash: 'x' }) });
   const L = w.__v292Dfix590;
   ok('★★v1 のレコードは無効として扱う', L.pendingCommit() === null && L.hasAwaiting() === false);
-  ok('★版が上がっている', L.VERSION === 2);
+  ok('★版が上がっている', L.VERSION >= 3, L.VERSION);
+  /* ★fix597(GPT裁定D2と同じ理由): v2 は形が互換（増えただけ）なので**捨てない**。
+     捨てると「応答喪失commitの証拠」を失う。 */
+  const w2 = mk({ 'v292Dfix590_pending': JSON.stringify({
+    v: 2, spec: 'sha256-utf8-v1', packageSpec: 'chronicle-light-v1', op: 'put',
+    commitOpId: 'op_old_1', payloadHash: 'a'.repeat(64), baseRev: 10,
+    createdAt: Date.now(), status: 'awaiting-result' }) });
+  ok('★★v2 の記録は捨てない（応答喪失commitの証拠を失わない）',
+     w2.__v292Dfix590.hasAwaiting() === true &&
+     w2.__v292Dfix590.pendingCommit().commitOpId === 'op_old_1', w2.__v292Dfix590.pendingCommit());
 }
 
 console.log('\n== (10) ★fix399 への配線 ==');
 {
   ok('★★put に commitOpId を載せる', /if \(pr && pr\.ok && pr\.commitOpId\) body\.commitOpId = pr\.commitOpId;/.test(SRC399));
-  ok('★★pending 未解決なら送信しない', /if \(pr && pr\.blocked\)\{[\s\S]{0,300}throw eb;/.test(SRC399));
+  /* ★fix599 で「送らない理由」が3種類に分かれた。固定したい意味は
+     **blocked が返ったら callSave に到達せず必ず throw する**こと。 */
+  {
+    const blockedBody = SRC399.slice(SRC399.indexOf('if (pr && pr.blocked){'),
+                                     SRC399.indexOf('if (pr && pr.ok && pr.commitOpId)'));
+    ok('★★pending 未解決なら送信しない（blocked の枝から callSave へ落ちない）',
+       blockedBody.length > 0 && /throw eb;/.test(blockedBody) && !/callSave\(/.test(blockedBody),
+       blockedBody.length);
+    ok('★★理由を混ぜない: 結果待ち / 関門 / 不変条件違反 を別のエラーとして投げる',
+       /eb\.pendingCommit = true/.test(blockedBody) &&
+       /eg\.resolutionRequired = true/.test(blockedBody) &&
+       /ei\.invariant = pr\.code/.test(blockedBody), blockedBody.length);
+    ok('★★止めたら未同期として残す（黙って捨てない）',
+       /setNum\('v292Dfix399_localTs', Date\.now\(\)\);/.test(blockedBody));
+  }
   ok('★★成功応答を noteResult に検証させる', /led\.noteResult\(\{ rev: j\.rev, source:'fix399', response: j \}\)/.test(SRC399));
   ok('★★曖昧なら rev を進めない', /if \(verdict\.status === 'ambiguous-response' \|\| verdict\.status === 'response-integrity-mismatch'\)\{[\s\S]{0,400}throw ea;/.test(SRC399));
   ok('★★promoteRev は検証を通ったあとにだけ呼ぶ',
@@ -305,24 +413,77 @@ console.log('\n== (10) ★fix399 への配線 ==');
   ok('★契機(1) 起動時 pending', /function reconcileOnBoot\(\)/.test(SRC399) && /led\.hasAwaiting\(\)\) return;/.test(SRC399));
   ok('★契機(2) fork 直後', /reconcileNow\('fork'\)/.test(SRC399));
   ok('★契機(3) 通信失敗の直後', /reconcileNow\(err && err\.pendingCommit \? 'pending-blocked' : 'io-error'\)/.test(SRC399));
-  ok('★★契機(3) は fork と二重に走らせない', /var isFork = !!\(err && err\.fork\);\s*\n\s*if \(!isFork\)/.test(SRC399));
+  ok('★★契機(3) は fork と二重に走らせない',
+     /var isFork = !!\(err && err\.fork\);[\s\S]{0,800}var noReconcile = isFork[\s\S]{0,400}if \(!noReconcile\) setTimeout\(function\(\)\{ reconcileNow\(/.test(SRC399));
+  /* ★fix599: 関門・不変条件違反で止まったときは結末がもう判明しているので、
+     照合を走らせても決着しないまま通信を繰り返すだけになる。 */
+  ok('★★関門・不変条件違反でも再照合を走らせない',
+     /var noReconcile = isFork \|\| !!\(err && \(err\.resolutionRequired \|\| err\.invariant\)\);/.test(SRC399));
   ok('★契機(4) 復帰時', /visibilitychange/.test(SRC399) && /shouldReconcileOnResume\(\)/.test(SRC399));
   ok('★★起動フックは pending が無ければ何もしない',
      /if \(!led \|\| typeof led\.hasAwaiting !== 'function' \|\| !led\.hasAwaiting\(\)\) return;/.test(SRC399));
   ok('★★capability が無ければ appliedRev を動かさず pull を要求',
      /if \(!cap\.ok\)\{[\s\S]{0,300}return \{ status:'unsupported', needsPull:true \};/.test(SRC399));
-  ok('★★有効化条件は commitState===1 かつ d1===true',
-     /cap\.commitState === 1 && j\.d1 === true/.test(SRC399));
+  /* ★★fix598: 能力の値は単調増加する。`=== 1` で書くと**サーバを新しくした瞬間に照合が丸ごと止まる**。
+     能力判定は「その機能が使えるだけの版か」＝ `>=` でなければならない。 */
+  ok('★★有効化条件は commitState が必要版以上（>=）かつ d1===true',
+     /cs >= 1 && j\.d1 === true/.test(SRC399) && !/cap\.commitState === \d/.test(SRC399));
+  ok('★★ns が commitstate に載るのは v26 以降。ここも >= で判定する',
+     /nsInCommitState: cs >= 2/.test(SRC399));
   ok('★★昇格は canAdvanceAppliedRev のときだけ',
      /if \(v\.canAdvanceAppliedRev && c && v\.remoteRev != null\)\{/.test(SRC399));
   /* ★★永久に詰まらせないための逃げ道。これが無いと「未解決pendingで送信を止める」規則が
      そのまま「二度と保存できない」に化ける。 */
-  ok('★★結末が確定した不一致は pending を解放する',
-     /if \(!settled && \(v\.why === 'remote-vs-last-sent-mismatch' \|\|\s*\n?\s*v\.why === 'last-sent-vs-current-mismatch'\)\)\{/.test(SRC399));
-  ok('★★ただし rev は動かさない（未反映のまま pull を要求する）',
-     /led\.clear\(\); \} catch\(e\)\{\}\s*\n\s*setNum\('v292Dfix399_localTs', Date\.now\(\)\);\s*\n\s*try \{ console\.log\(TAG, 'pendingを解決済みとして解放:'/.test(SRC399));
-  ok('★★緊急停止できる（v292Dfix590Off で台帳ごと止まり、送信はブロックされない）',
-     /if \(off\(\)\) return Promise\.resolve\(\{ ok:false, code:'off' \}\);[\s\S]{0,400}var prev = read\(\);/.test(SRC));
+  /* ★fix597: 解放してよい分類は増えるので、**分類名の列挙ではなく台帳が返す releasePending**
+     で判断していること自体を固定する（分類が増えるたびに配線が漏れる型を禁じる）。 */
+  {
+    const releaseBody = SRC399.slice(SRC399.indexOf('if (!fullMatch && v.releasePending){'),
+                                     SRC399.indexOf("if (v.why === 'identity-unverified')"));
+    ok('★★結末が確定した不一致は pending を解放する（分類名を数え上げない）',
+       releaseBody.length > 0 && /led\.clear\(\);/.test(releaseBody) &&
+       !/v\.why === '/.test(releaseBody), releaseBody.length);
+    ok('★★ただし rev は動かさない（未反映のまま残す）',
+       releaseBody.length > 0 && !/promoteRev\(/.test(releaseBody) &&
+       /setNum\('v292Dfix399_localTs', Date\.now\(\)\);/.test(releaseBody), releaseBody.length);
+    ok('★★解放しても決着まで通常putを止める関門を開く（fix599）',
+       /led\.openGate\(\{ reason: v\.openGate/.test(releaseBody));
+    ok('★★rev 昇格は三者一致のときだけ（解放の枝では絶対に昇格しない）',
+       /if \(v\.canAdvanceAppliedRev && c && v\.remoteRev != null\)\{/.test(SRC399) &&
+       SRC399.indexOf("c.promoteRev(v.remoteRev, 'fix596:'") <
+       SRC399.indexOf('if (!fullMatch && v.releasePending){'));
+  }
+  /* ★緊急停止は**実際に動かして**確かめる（ソース文字列の形ではなく振る舞いを固定する） */
+  {
+    const Loff = mk({ 'v292Dfix590Off': '1' }).__v292Dfix590;
+    const roff = await Loff.notePut({ pkg: PKG, baseRev: 10, op: 'put', identity: 'pass:abc' });
+    ok('★★緊急停止できる（v292Dfix590Off で台帳ごと止まる）',
+       roff.ok === false && roff.code === 'off', roff);
+    ok('★★OFF なら送信はブロックされない（blocked を返さない）', roff.blocked !== true, roff);
+    /* 未解決 pending も関門も残っている状態でも、OFF なら送信を止めてはいけない */
+    const Loff2 = mk({ 'v292Dfix590Off': '1',
+      'v292Dfix599_gate': JSON.stringify({ reason: 'needs-pull', since: Date.now() }),
+      'v292Dfix590_pending': JSON.stringify({ v: 3, spec: 'sha256-utf8-v1', op: 'put',
+        commitOpId: 'op_x', payloadHash: 'a'.repeat(64), status: 'awaiting-result',
+        createdAt: Date.now() }) }).__v292Dfix590;
+    const roff2 = await Loff2.notePut({ pkg: PKG2, baseRev: 10, op: 'put', identity: 'pass:abc' });
+    ok('★★★pending も関門も残っていても、OFF なら送信をブロックしない（緊急停止が効く）',
+       roff2.blocked !== true && roff2.code === 'off', roff2);
+  }
+  /* ★fix599: 関門が開いている間は通常putを止め、明示的な forceput だけ通す */
+  {
+    const L = mk({ 'v292Dfix599_gate': JSON.stringify({ reason: 'needs-pull', since: Date.now() }) }).__v292Dfix590;
+    const rp = await L.notePut({ pkg: PKG, baseRev: 10, op: 'put', identity: 'pass:abc' });
+    ok('★★関門が開いていれば通常putを止める',
+       rp.ok === false && rp.blocked === true && rp.code === 'resolution-required', rp);
+    ok('★★止めた理由と選べる決着手段を返す',
+       !!rp.gate && rp.gate.reason === 'needs-pull' &&
+       JSON.stringify(rp.gate.choices) === JSON.stringify(['adopt-remote']), rp.gate);
+    const rf = await L.notePut({ pkg: PKG, baseRev: 10, op: 'forceput', identity: 'pass:abc' });
+    ok('★★ユーザーが明示した forceput だけは通す（永久に詰まらせない）',
+       rf.ok === true && rf.op === 'forceput', rf);
+    ok('★★関門は正式pullの収束か三者一致でしか閉じない（forceput では閉じない）',
+       L.gateState() !== null && L.gateState().reason === 'needs-pull', L.gateState());
+  }
 }
 
 console.log('\n== (11) ★home.html への配線 ==');
@@ -332,7 +493,16 @@ console.log('\n== (11) ★home.html への配線 ==');
   ok('★★forceput でも未解決 pending なら中止', /errorCode:'pending-commit-unresolved'/.test(HOME));
   ok('★★forceput の応答も noteResult に検証させる', /L596\.noteResult\(\{ rev: res596\.rev, source:'home:forceput', response: res596 \}\)/.test(HOME));
   ok('★★pull 収束時に pending を用済みにする（詰まらせない）',
-     /L590\.supersedeByPull\(\+serverRev \|\| 0\)/.test(HOME));
+     /typeof L590\.hasAwaiting === 'function' && L590\.hasAwaiting\(\)[\s\S]{0,2000}spFn\(\{ remoteRev: \+serverRev \|\| 0, proof: proof/.test(HOME));
+  /* ★★fix597 D3 / fix599: 解放には**収束証明**を渡す。
+     「remote を完全採用したか」を呼出側が申告してはいけない（未同期の変更を失う）。 */
+  ok('★★解放には収束証明そのものを渡す', /spFn\(\{ remoteRev: \+serverRev \|\| 0, proof: proof, ns: nsNow597 \}\)/.test(HOME));
+  ok('★★fullyAdoptedRemote は呼出側から渡さない（証明の側で導出させる）',
+     (HOME.match(/spFn\(\{[^}]*\}\)/g) || []).length === 1 &&
+     !/spFn\(\{[^}]*fullyAdoptedRemote[^}]*\}\)/.test(HOME),
+     (HOME.match(/spFn\(\{[^}]*\}\)/g) || []));
+  ok('★★ns指紋の計算を待ってから解放判定する（同期版だと identity 未確定になる）',
+     /typeof L590\.supersedeByPullAsync === 'function'/.test(HOME));
   ok('★home.html に fix590 が積んである', HOME.indexOf('v292Dfix590-commit-ledger.js') > 0);
 }
 
@@ -365,7 +535,9 @@ console.log('\n== (13) ★★★時刻で hash がぶれない（実機で踏ん
   const v2 = await L.classify({
     remote: { rev: 11, packageHash: r.payloadHash, lastCommitOpId: r.commitOpId, hashAlg: 'sha256-utf8-v1' },
     appliedRev: 10, identity: 'pass:abc', currentHash: changed });
-  ok('★★中身が変わっていれば rebase しない', v2.why === 'last-sent-vs-current-mismatch', v2);
+  ok('★★中身が変わっていれば rebase しない',
+     v2.canAdvanceAppliedRev === false && v2.status === 'commit-confirmed-local-diverged' &&
+     v2.conflictState === 'local-diverged-after-commit', v2);
 
   /* 配線側 */
   ok('★★push が pkgTs を渡している', /op: 'put', pkgTs: ts,/.test(SRC399));
@@ -405,13 +577,33 @@ console.log('\n== (15) ★★★identity は安定した値から作る（実機
      identity を作ったため identity-mismatch になり、**自分の保留を自分で解決できなくなった**。
      Google トークンは期限切れで消えるので、同じ端末・同じ人でも時間で種別が変わる。
      → サーバが返す ns（アカウントの名前空間）を基準にする。 */
-  const L = mk().__v292Dfix590;
-  ok('★★ns があれば ns から作る', L.identityOf({ ns: 'ns_abc', identity: 'pass-value', identityKind: 'pass' })
-     === L.identityOf({ ns: 'ns_abc', identity: 'まったく別のトークン', identityKind: 'google' }));
-  ok('★ns が違えば別の identity', L.identityOf({ ns: 'ns_abc' }) !== L.identityOf({ ns: 'ns_xyz' }));
-  ok('★ns が無ければ従来どおりヘッダから作る',
-     L.identityOf({ identity: 'abc', identityKind: 'pass' }) === L.identityKey('abc', 'pass'));
-  ok('★何も無ければ null', L.identityOf({}) === null);
+  /* ★fix597: ns 由来の identity は SHA-256 指紋になり、指紋の計算が済むまで確定できない。
+     同期版 identityOf は「未確定 = null」を返すので、**両辺 null で偽の合格**にならないよう
+     identityOfAsync（指紋を計算してから返す）で比べ、値が実在することも確かめる。 */
+  {
+    const w = mk(); const L = w.__v292Dfix590;
+    const a = await L.identityOfAsync({ ns: 'ns_abc', identity: 'pass-value', identityKind: 'pass' });
+    const b = await L.identityOfAsync({ ns: 'ns_abc', identity: 'まったく別のトークン', identityKind: 'google' });
+    ok('★★ns があれば ns から作る（認証の種別が変わっても同じ identity）',
+       typeof a === 'string' && /^id_ns_[0-9a-f]{64}$/.test(a) && a === b, { a, b });
+    ok('★★生の ns は localStorage に置かない（指紋だけ）',
+       JSON.stringify(w.__store).indexOf('ns_abc') < 0 &&
+       /^[0-9a-f]{64}$/.test(w.__store['v292Dfix597_nsfp'] || ''), w.__store);
+  }
+  {
+    /* ★別インスタンスで作らないと、片方が「未確定=null」になって null===null の偽合格になる */
+    const x = await mk().__v292Dfix590.identityOfAsync({ ns: 'ns_abc' });
+    const y = await mk().__v292Dfix590.identityOfAsync({ ns: 'ns_xyz' });
+    ok('★ns が違えば別の identity',
+       /^id_ns_[0-9a-f]{64}$/.test(x || '') && /^id_ns_[0-9a-f]{64}$/.test(y || '') && x !== y, { x, y });
+  }
+  {
+    const L = mk().__v292Dfix590;   /* ns をまだ一度も学んでいない台帳 */
+    ok('★ns が無ければ従来どおりヘッダから作る',
+       L.identityOf({ identity: 'abc', identityKind: 'pass' }) === L.identityKey('abc', 'pass') &&
+       !!L.identityKey('abc', 'pass'));
+    ok('★何も無ければ null', L.identityOf({}) === null);
+  }
 
   /* 保留を作ったあと、認証の種別が変わっても自分の保留として扱える */
   const L2 = mk().__v292Dfix590;
@@ -432,9 +624,18 @@ console.log('\n== (16) ★★★別アカウントの保留で自分の保存を
   await L.notePut({ pkg: PKG, baseRev: 10, op:'put', ns: 'ns_ほかの人' });
   ok('★保留がある', L.hasAwaiting() === true);
   const r = await L.notePut({ pkg: PKG2, baseRev: 11, op:'put', ns: 'ns_わたし' });
-  ok('★★★別アカウントの保留なら捨てて先へ進む', r.ok === true && r.blocked !== true, r);
-  ok('★捨てたことを数えている', L.stats().foreignPendingDropped === 1);
+  ok('★★★別アカウントの保留なら先へ進む（自分の保存を永久に止めない）', r.ok === true && r.blocked !== true, r);
+  /* ★★fix597(GPT裁定D2): 別アカウントの pending は**捨てずに隔離する**。
+     捨てると、そのアカウントへ戻ったときに「応答喪失commitの証拠」を失う。 */
+  ok('★隔離したことを数えている', L.stats().foreignPendingQuarantined === 1, L.stats());
   ok('★台帳は自分のものに置き換わる', L.pendingCommit().commitOpId === r.commitOpId);
+  ok('★★証拠は捨てずに隔離領域へ退避している（commitOpId と payloadHash が残る）', (() => {
+    const f = L.foreignPendings();
+    return f.length === 1 && !!f[0].commitOpId && f[0].commitOpId !== r.commitOpId &&
+           /^[0-9a-f]{64}$/.test(f[0].payloadHash || '');
+  })(), L.foreignPendings());
+  ok('★★隔離側にも生の ns を残さない（identityTag は指紋）',
+     JSON.stringify(L.foreignPendings()).indexOf('ns_ほかの人') < 0, L.foreignPendings());
 
   /* 同じアカウントならちゃんと止める（本来の目的は失わない） */
   const L2 = mk().__v292Dfix590;
@@ -446,9 +647,16 @@ console.log('\n== (16) ★★★別アカウントの保留で自分の保存を
 console.log('\n== (17) ★ns を覚える配線 ==');
 {
   ok('★★put の応答から ns を覚える', /rememberNs\(j\);\s+\/\* ★fix596c/.test(SRC399));
-  ok('★★commitstate の応答からも覚える', /var j = r\.json;\s*\n\s*rememberNs\(j\);/.test(SRC399));
+  /* ★★fix598: commitstate の ns は「いま読んだ canonical と同じ応答」から来るので最も強い。
+     照合(classify)へ入る前に必ず覚えていること、を固定する。 */
+  {
+    const rc = SRC399.slice(SRC399.indexOf('var j = r.json;'), SRC399.indexOf('return led.classify({\n'));
+    ok('★★commitstate の応答からも覚える（照合に入る前に）',
+       rc.length > 0 && /rememberNs\(j\);/.test(rc), rc.length);
+  }
   ok('★★台帳へ ns を渡している', /ns: ia\.ns, identity: ia\.identity/.test(SRC399));
-  ok('★★照合でも ns を渡している', /ns: identityArgs\(\)\.ns/.test(SRC399));
+  ok('★★照合でも ns を渡している（commitstate の ns を最優先、無ければ meta 由来へ落とす）',
+     /ns: \(j\.ns \? String\(j\.ns\) : identityArgs\(\)\.ns\)/.test(SRC399));
   ok('★home の forceput も ns を渡している', /ns: ns596,/.test(HOME));
 }
 

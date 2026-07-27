@@ -162,8 +162,30 @@ function step4(){
   return w.__chronicleStoryLifecycle.requestDelete('smA', { source:'home' }).then(r => {
     ok('★code=partial', r.ok === true && r.code === 'partial', r);
     ok('★拒否されたキーを報告する', r.refused && r.refused.length === 1, r.refused);
-    ok('★★保留に回る（あとで再試行できる）',
-       w.__chronicleStoryLifecycle.pendingDeletes().length === 1);
+    /* ★★fix602: protected（＝大切な控えとして保護されている）は**一過性ではない**ので、
+       同じ計画を永久に再試行させない。理由つきの終端状態へ移し、読めるようにする。
+       （GPT裁定: 「永久に片づかない」を防ぐことは必ず物理削除することではない。
+         自動処理不能を理由つき終端状態へ移すことも正しい解決）
+       守るべき性質は「中途半端に消さない」＋「なぜ止まったかが後から必ず分かる」。 */
+    const L602 = w.__chronicleStoryLifecycle;
+    ok('★★永久に再試行し続けない（保留から外れる）', L602.pendingDeletes().length === 0,
+       L602.pendingDeletes());
+    ok('★★理由つきの終端状態として残る', L602.blockedDeletes().length === 1, L602.blockedDeletes());
+    ok('★★理由が protected だと分かる',
+       L602.blockedDeletes()[0].blockedReason === 'blocked-protected', L602.blockedDeletes()[0]);
+    ok('★★どのキーで止まったかが残る',
+       L602.blockedDeletes()[0].keys.length === 1 &&
+       L602.blockedDeletes()[0].keys[0].key === 'chr6_v292Dfix54_genderMap_"smA"' &&
+       L602.blockedDeletes()[0].keys[0].code === 'protected', L602.blockedDeletes()[0].keys);
+    ok('★★拒否理由が再読込しても消えない場所に残る',
+       L602.refusals().length === 1 && L602.refusals()[0].code === 'protected' &&
+       L602.refusals()[0].slotId === 'smA', L602.refusals());
+    ok('★★code 別に数えている', L602.stats().gateRefusedByCode.protected === 1, L602.stats());
+    ok('★★人が読める理由が出る',
+       typeof L602.humanReason('blocked-protected') === 'string' &&
+       L602.humanReason('blocked-protected').indexOf('保護') >= 0);
+    ok('★★画面に出す1行が作れる',
+       (L602.pendingSummary() || {}).blocked === 1, L602.pendingSummary());
     ok('拒否されたキーは残っている', w.__store['chr6_v292Dfix54_genderMap_"smA"'] !== undefined);
     return step5();
   });

@@ -185,7 +185,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260727-fix601';
+  var HOME_BUILT = '20260727-fix602';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -200,12 +200,14 @@
   } catch(e){}
 })();
 </script>
-<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix593"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix593"></script>
-<script src="v292Dfix564-snapshot.js?cb=v292Dfix593"></script>
-<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix593"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix601"></script>
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix594"></script>
+<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix602"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix602"></script>
+<script src="v292Dfix564-snapshot.js?cb=v292Dfix602"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix602"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix602"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix602"></script>
+<!-- ★fix602: 墓標が立ったスロットへの書き込みを影で止める（別途配信） -->
+<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix602"></script>
 <script>
 (function(){
   'use strict';
@@ -543,6 +545,156 @@
   }
   function turnsOf(raw){ var d=J(raw,null); return (d && Array.isArray(d.turns)) ? d.turns.length : -1; }
 
+  /* ================= ★★fix602: ホームにも墓標(tombstone)バリアを配線する =================
+   * ■なぜ必要か（2026-07-27 の実測で確定した真因）
+   *   物語を削除すると `chr6_slots_meta` に墓標が立ち、本体とサイドストアは
+   *   検証済みスナップショットを作ってから物理削除される。
+   *   ところが **home.html の取り込み(pull)と送信(collectLS)にだけ墓標バリアが無かった**。
+   *   fix587.filterIncoming / fix588 の除外は index.html 側（fix399 / fix402）にしか
+   *   配線されておらず、実機では**墓標が立った後に本体へ2ターン書き足されていた**
+   *   （12785B/4ターン → 18132B/6ターン）。つまり home が削除済みの物語を復活させていた。
+   *
+   * ■このブロックがやること
+   *   (1) 取り込み: 墓標スロットのキーを**書き戻さない**
+   *   (2) 送信    : 墓標スロットの本体・サイドストアを**送らない**（meta の墓標は送る）
+   *   どちらも判定は fix587 の filterIncoming / fix562 の classifyKey を正本にする。
+   *
+   * ■文字列の部分一致を使わない理由
+   *   墓標 `sm1` が、生きている `sm12` のキーを巻き込んで止めてしまうため。
+   *   slotId は下の slotIdOfKey() で**正規化して完全一致**で比べる。
+   *   引用符付きキー（chr6_v292Dfix54_genderMap_"smrxxxx"）もここで正しく扱う。
+   *
+   * OFF = localStorage['v292Dfix602Off']='1' … (1)(2)の**除外だけ**を止める。
+   *   ★墓標そのもの・削除の順序（墓標をクラウドへ確定させてから物理削除）は OFF でも壊さない。
+   *     「ロールバック設定がデータ削除保護を迂回してはいけない」(GPT)。
+   * ===================================================================================== */
+  function f602off(){ return g('v292Dfix602Off') === '1'; }
+  function lifecycleSvc(){ try { return window.__chronicleStoryLifecycle; } catch(e){ return null; } }
+
+  /* 互換用の内部スロットは 'chr6' と 'default' の2つの名前で現れる。同じものとして扱う。 */
+  function normSlotId(id){ var s = String(id == null ? '' : id); return (s === 'default') ? 'chr6' : s; }
+
+  /* meta にある墓標 id の集合。★OFF でも「墓標があるかどうか」は正しく答える
+     （表示や中止判定は墓標の存在そのものを見るため）。 */
+  function tombstonedIds(){
+    var out = {};
+    try {
+      readMeta().forEach(function(e){
+        if (e && e.deleted === true && e.id != null) out[normSlotId(e.id)] = 1;
+      });
+    } catch(e){}
+    return out;
+  }
+  function hasTombstone(){ var d = tombstonedIds(); for (var k in d){ if (d.hasOwnProperty(k)) return true; } return false; }
+
+  /* キー名から slotId を**正規化して**求める。決まらなければ null（そこでは判断しない）。
+     ①本体キー ②引用符付きサイドストア(fix54系) ③`..._slot_<id>` 形 ④fix562 の分類器
+     ★①〜③を分類器より先に見るのは、分類器の内部が「生きているスロットIDを含むか」の
+       部分一致を使っており、墓標 sm1 の本体が残っている間は `..._"sm12"` を sm1 と
+       取り違えうるため。形が確定しているキーは形で決める方が安全。 */
+  function slotIdOfKey(k){
+    var key = String(k == null ? '' : k);
+    if (!key) return null;
+    if (key === 'chr6') return 'chr6';
+    var m = /^chr6_slot_([A-Za-z0-9]+)$/.exec(key);
+    if (m) return normSlotId(m[1]);
+    m = /_"([^"]+)"$/.exec(key) || /_'([^']+)'$/.exec(key);
+    if (m) return normSlotId(m[1]);
+    m = /_slot_([A-Za-z0-9]+)$/.exec(key);
+    if (m) return normSlotId(m[1]);
+    try {
+      var c = window.__v292Dfix562;
+      if (c && typeof c.classifyKey === 'function'){
+        var r = c.classifyKey(key);
+        if (r && r.slotId) return normSlotId(r.slotId);
+      }
+    } catch(e){}
+    return null;
+  }
+
+  /* fix562 の分類器が実際に使えるか。使えないことは fix587 へ記録する（fail-open でも黙らない） */
+  var f602NotedUnavailable = false;
+  function classifierReady(){
+    try {
+      var c = window.__v292Dfix562;
+      if (c && typeof c.classifyKey === 'function'){ c.classifyKey('chr6'); return true; }
+    } catch(e){}
+    if (!f602NotedUnavailable){
+      f602NotedUnavailable = true;
+      try { var s = lifecycleSvc();
+            if (s && typeof s.noteFilterUnavailable === 'function') s.noteFilterUnavailable(); } catch(e){}
+    }
+    return false;
+  }
+
+  /* ---- (1) 取り込みの墓標バリア ------------------------------------------
+   * 戻り: { mode, blocked:{key:1}, count, why }
+   *   mode 'off'      … OFFスイッチ。何も止めない
+   *   mode 'none'     … 墓標が無い。何も止めない
+   *   mode 'barrier'  … fix587 の filterIncoming が正本。墓標スロットのキーだけ止める
+   *   mode 'halt'     … 正本が使えない＋墓標あり。**slotスコープのキーは一切適用しない**
+   *                     （曖昧な自前判定で続行しない。global キーと meta の merge は通す）
+   */
+  var PULL_HALT_CODE = 'pull-blocked-tombstone-barrier-unavailable';
+  function incomingBarrier(lsObj){
+    var res = { mode:'none', blocked:{}, count:0, why:'' };
+    if (f602off()){ res.mode = 'off'; res.why = 'v292Dfix602Off'; return res; }
+    var dead = tombstonedIds(), anyDead = false;
+    for (var d in dead){ if (dead.hasOwnProperty(d)) { anyDead = true; break; } }
+    if (!anyDead) return res;
+
+    /* 正本: fix587.filterIncoming（fix579 の判定を使う）。
+       ★分類器(fix562)も一緒に要求する。slotId の正規化にそれが要るからで、
+         欠けたまま filterIncoming の部分一致だけを信じると、墓標 sm1 の巻き添えで
+         生きている sm12 のキーを落としうる。部品が欠けたら判定しない側へ倒す。 */
+    var svc = lifecycleSvc(), blockedList = null;
+    try {
+      if (svc && typeof svc.filterIncoming === 'function' && classifierReady()){
+        var f = svc.filterIncoming(lsObj || {});
+        if (f && Array.isArray(f.blocked)) blockedList = f.blocked;
+      }
+    } catch(e){ blockedList = null; }
+
+    if (blockedList){
+      res.mode = 'barrier';
+      for (var i = 0; i < blockedList.length; i++){
+        var k = blockedList[i];
+        /* global キー（登録簿・共有資産）は slot に属さないので止めない。
+           chr6_slots_meta は墓標を運ぶ本人なので、ここで落とすと削除が伝わらなくなる。 */
+        if (isGlobalKey(k)) continue;
+        /* ★部分一致の巻き添えを外す: そのキーの slotId が確定でき、しかも墓標でないなら止めない
+           （墓標 sm1 が生きている sm12 を止めてしまう事故を防ぐ）。 */
+        var sid = slotIdOfKey(k);
+        if (sid && !dead[sid]) continue;
+        res.blocked[k] = 1; res.count++;
+      }
+      return res;
+    }
+
+    /* 正本が使えない（fix587/fix579/fix562 が無い・例外）かつ墓標がある
+       → 曖昧な自前判定で続行せず、slot に属するデータの適用を止める。
+       ★global キー（v292avrec_ / v292appr_ / chr6_epoch など）と chr6_slots_meta の
+         mergeMeta は従来どおり通す。止めるのは slot に属するキーだけ。 */
+    res.mode = 'halt'; res.why = PULL_HALT_CODE;
+    try {
+      Object.keys(lsObj || {}).forEach(function(k){
+        if (isGlobalKey(k)) return;
+        res.blocked[k] = 1; res.count++;
+      });
+    } catch(e){}
+    return res;
+  }
+
+  /* ---- (2) 送信の墓標フィルタ -------------------------------------------- */
+  /* 墓標スロットのキーか（本体・サイドストアの両方）。判定できないキーは false（送る）。 */
+  function isTombstonedSlotKey(k, dead){
+    if (f602off()) return false;
+    if (!dead || !k) return false;
+    if (isGlobalKey(k)) return false;          /* meta・登録簿・共有資産は常に送る */
+    var sid = slotIdOfKey(k);
+    return !!(sid && dead[sid]);
+  }
+
   function pull(force){
     if(!loggedIn()){ noteNotLoggedIn(); return; }
     el('sync').className='sync';
@@ -555,6 +707,11 @@
       return call({op:'get'}, 40000).then(function(r){
         if(!r || !r.ok || !r.data || !r.data.ls) throw new Error('get');
         var ls = r.data.ls, wrote=0, skipped=[];
+        /* ★★fix602(1): 墓標バリア。削除済みスロットのキーを書き戻さない。
+           ここが無かったせいで、実機では墓標が立った物語の本体が home の取り込みで復活し、
+           さらに2ターン書き足されていた。 */
+        var B602 = incomingBarrier(ls);
+        var tombBlocked = 0, haltBlocked = 0;
         // 控え(軽量): 登録簿だけ。物語本体は local-ahead 保護で守る。
         try { s('chr6_bk_home_meta_'+Date.now(), g('chr6_slots_meta')||'[]'); } catch(e){}
         /* ★★fix591: `chr6_slots_meta` を丸ごと上書きしない。
@@ -603,6 +760,13 @@
         for(var k in ls){
           if(!Object.prototype.hasOwnProperty.call(ls,k)) continue;
           if(k==='chr6_active_slot') continue;                       // ★端末の"開いている物語"は持ち込まない
+          /* ★★fix602(1): 墓標スロットのキーは書き戻さない。
+             'halt'（バリアの正本が使えない＋墓標あり）のときは、slotに属するキーを
+             まとめて止める＝曖昧な自前判定で削除済みデータを復活させない。 */
+          if(B602.blocked[k]){
+            if(B602.mode==='halt') haltBlocked++; else tombBlocked++;
+            continue;
+          }
           if(k==='chr6_slots_meta'){
             if(metaGuarded) continue;                                // ★墓標を消さない側へ倒す
             if(g(k) !== mergedMeta){ if(s(k, mergedMeta)){ wrote++; wroteVals[k] = mergedMeta; } else applyErrors++; }
@@ -636,14 +800,19 @@
               parsedOk: true,
               applyErrors: applyErrors,
               conflictSkips: skipped.length,
-              unknownSkips: unknownSkips,
               metaMerged: metaMerged,
               metaAbsent: metaAbsent,
               metaMergeFailed: metaGuarded,
               blockedWithoutTombstone: 0,
+              /* ★★fix602: バリアの正本が使えず止めた分は「判断できずに飛ばした」＝unknownSkips。
+                 これを混ぜないと、**削除済みデータを適用しなかった pull を「収束した」と誤認**して
+                 共有revを進めてしまう。進めた結果、以後の送信が fork し続ける（fix593 の事故と同型）。 */
+              unknownSkips: unknownSkips + haltBlocked,
               readBackOk: readBackOk,
-              /* ★fix599(GPT指定): fullyAdoptedRemote は証明の側で導出させる */
-              retainedLocalDeltaCount: retainedLocalDelta + skipped.length,
+              /* ★fix599(GPT指定): fullyAdoptedRemote は証明の側で導出させる
+                 ★fix602: 墓標で止めた分は「ローカルの状態を意図して残した」＝ローカル差分。
+                   remote の完全採用ではないので dirty を落とさせない。 */
+              retainedLocalDeltaCount: retainedLocalDelta + skipped.length + tombBlocked,
               metaMergedWithLocalDelta: (metaMerged === true && retainedLocalDelta > 0)
             });
             if (proof.ok){
@@ -687,9 +856,28 @@
         s('v292Dfix402_baseRev', String(serverRev));
         if(r.data.updatedAt){ s('v292Dfix399_baseTs', String(+r.data.updatedAt||0)); s('v292Dfix399_localTs', String(+r.data.updatedAt||0)); }
         el('sync').textContent = '☁ 取り込みました（'+wrote+'件）';
-        el('note').innerHTML = skipped.length
-          ? '<div class="note">この端末の方が進んでいる物語が '+skipped.length+' 件あったので、上書きしませんでした。次にその物語を遊ぶと自動でクラウドへ反映されます。</div>' : '';
+        /* ★★fix602(4): 墓標により除外した件数を**画面とconsoleの両方**に出す。
+           黙って除外すると「取り込んだのに増えない」が原因不明の不具合に見える。 */
+        var notes602 = [];
+        if(skipped.length){
+          notes602.push('この端末の方が進んでいる物語が '+skipped.length+' 件あったので、上書きしませんでした。次にその物語を遊ぶと自動でクラウドへ反映されます。');
+        }
+        if(tombBlocked){
+          notes602.push('削除した物語のデータ '+tombBlocked+' 件は、取り込みから除きました（消した物語は戻しません）。');
+        }
+        if(haltBlocked){
+          notes602.push('削除の記録を確認できないため、物語のデータ '+haltBlocked+' 件の取り込みを見送りました。ページを再読み込みしてからもう一度お試しください。');
+        }
+        el('note').innerHTML = notes602.length
+          ? '<div class="note">'+notes602.map(esc).join('<br>')+'</div>' : '';
+        try {
+          if(tombBlocked || haltBlocked || B602.mode==='halt'){
+            console.warn('[home][v292Dfix602] 取り込みの墓標バリア:',
+              JSON.stringify({ mode:B602.mode, why:B602.why||null, tombBlocked:tombBlocked, haltBlocked:haltBlocked }));
+          }
+        } catch(e){}
         render();
+        pendingDeleteNotice();
       });
     }).catch(function(e){
       el('sync').className='sync err';
@@ -702,16 +890,27 @@
     return /^v292avrec_/.test(k) || /^v292appr_/.test(k) ||
            k==='chr6_slots_meta' || k==='chr6_active_slot' || k==='chr6_epoch' || /genderMap_"?default"?$/.test(k);
   }
+  /* ★★fix602(2): 墓標が立ったスロットの id を送信対象から外す。
+     ここが readMeta() をそのまま使っていたので、home の送信だけが
+     **削除済みの物語の本体を正本として上げ直していた**（実機で確認）。
+     ★meta そのもの（墓標を含む）は isGlobalKey 側で必ず送る＝削除は伝える。 */
   function allSlotIds(){
-    var ids = readMeta().map(function(m){ return String(m.id); });
+    var dead = f602off() ? {} : tombstonedIds();
+    var ids = readMeta().map(function(m){ return String(m.id); })
+                        .filter(function(id){ return !dead[normSlotId(id)]; });
     if(ids.indexOf('chr6')<0) ids.push('chr6');
     return ids;
   }
+  /* 直近の送信で墓標により除いた件数（画面とconsoleへ出すため・fix602(4)） */
+  var lastPayloadDropped = 0;
   function collectLS(){                                  // fix402 collectLS と同じ判定式
-    var ids = allSlotIds(), out = {};
+    var ids = allSlotIds(), out = {}, dead = tombstonedIds(), dropped = 0;
     for(var i=0;i<LS.length;i++){
       var k = LS.key(i); if(!k) continue;
       if(/^__gen_|^chr6_bk_|^v292Dfix399_|^v292Dfix402_/.test(k)) continue;
+      /* ★fix602: 列挙側の除外だけに頼らない。組み立ての最後の関門でも墓標スロットを落とす
+         （fix588 が fix402/fix399 に入れたのと同じ二重の防壁）。 */
+      if(isTombstonedSlotKey(k, dead)){ dropped++; continue; }
       var hit=false;
       for(var j=0;j<ids.length;j++){
         var id=ids[j];
@@ -720,10 +919,26 @@
       }
       if(hit || isGlobalKey(k)) out[k]=g(k);
     }
+    lastPayloadDropped = dropped;
     return out;
   }
   function push(){
     if(!loggedIn()){ noteNotLoggedIn(); alert(whyNotLoggedIn()); return; }
+    /* ★★fix602(2): 「☁ いま上げる」は forceput ＝**明示的な正本上書き**。
+       背景同期の fail-open（分類器が居なければ従来どおり送る）をここへ持ち込むと、
+       削除済みの物語の本体がクラウドの正本として復活し、全端末へ配られる。
+       → 墓標フィルタが使えず、かつローカルに墓標があるなら**送信そのものを中止**する。
+       ★無言で return しない。理由を必ず画面に出す（黙る方が原因を追えない）。 */
+    if(!f602off() && hasTombstone() && !classifierReady()){
+      var why602 = '削除の記録を確認できないため、クラウドへの上書きを中止しました。'
+                 + '削除した物語がほかの端末へ戻ってしまうのを防ぐためです。'
+                 + 'ページを再読み込みしてからもう一度お試しください。';
+      try { el('sync').className='sync err'; el('sync').textContent='⚠ 上げませんでした（削除の記録を確認できません）'; } catch(e){}
+      try { el('note').innerHTML = '<div class="note">'+esc(why602)+'</div>'; } catch(e){}
+      try { console.warn('[home][v292Dfix602] forceput中止:', 'forceput-blocked-tombstone-barrier-unavailable'); } catch(e){}
+      alert(why602);
+      return;
+    }
     if(!confirm('この端末の内容をクラウドの「正」にします。\n他の端末の古い版は控えとして残ります。よろしいですか？')) return;
     el('sync').className='sync'; el('sync').textContent='☁ 上げています…';
     var pkg = { schema:1, updatedAt:Date.now(), device:(navigator.userAgent||'').slice(0,60),
@@ -776,6 +991,13 @@
       s('v292Dfix402_baseRev', String(r.rev));
       s('v292Dfix399_baseTs', String(pkg.updatedAt)); s('v292Dfix399_localTs', String(pkg.updatedAt));
       el('sync').textContent = '☁ 上げました（rev '+r.rev+'）';
+      /* ★★fix602(4): 送信で墓標により除いた件数を画面とconsoleへ出す（黙って減らさない） */
+      try {
+        if(lastPayloadDropped){
+          el('note').innerHTML = '<div class="note">'+esc('削除した物語のデータ '+lastPayloadDropped+' 件は、クラウドへ送っていません（削除の記録だけを送りました）。')+'</div>';
+          console.log('[home][v292Dfix602] 送信から除外:', lastPayloadDropped, '件');
+        }
+      } catch(e){}
     }).catch(function(){ el('sync').className='sync err'; el('sync').textContent='☁ 上げられませんでした'; });
   }
   function exportAll(){
@@ -844,19 +1066,49 @@
      移行中の挙動としては許容できるが、**黙っていると他端末に削除済み物語が残り続ける**。
      保留が1件でもあるあいだは、ホームに常設で状態を出す。
      ここは表示だけで、localStorage へは1バイトも書かない（削除の所有者を増やさない）。 */
+  /* ★★fix602: 「反映待ち」を人が読める言葉で出す。
+     ①正本は fix587 の pendingDeletes() / stats()。localStorage を直接読むのは**保険**。
+     ②止まっている削除（後片づけが進めない状態）も出す。件数が減らないのに理由が無いのが一番困る。
+     ③**表示できない理由も黙らせない**（削除機能がまだ読めていない、等）。
+     ④生の hash や技術用語（tombstone / deleteOpId / rev）は出さない。 */
+  function pendingDeleteText(){
+    var svc = lifecycleSvc();
+    var n = null, st = null, svcMissing = false;
+    try {
+      if (svc && typeof svc.pendingDeletes === 'function'){
+        var list = svc.pendingDeletes();
+        n = Array.isArray(list) ? list.length : null;
+      } else { svcMissing = true; }
+    } catch(e){ n = null; }
+    try { if (svc && typeof svc.stats === 'function') st = svc.stats(); } catch(e){ st = null; }
+    if (n == null){
+      /* 保険: サービスが答えられなくても、保留の記録があるなら件数だけは出す */
+      try { var a = JSON.parse(localStorage.getItem('v292Dfix587_pending') || '[]'); n = Array.isArray(a) ? a.length : 0; } catch(e){ n = 0; }
+    }
+    var lines = [];
+    if (n) lines.push('削除した物語が ' + n + '件、他の端末への反映待ちです。ゲーム画面を一度開くと同期されます。');
+    if (st){
+      var stuck = (+st.resumeBlocked || 0) + (+st.resumeRefused || 0);
+      if (stuck) lines.push('削除の後片づけが' + stuck + '件残っています（内容が更新されたため確認が必要です）。');
+      if (!n && (+st.pushFailures || 0)) lines.push('削除をクラウドへ伝えられませんでした。ゲーム画面を一度開くと、もう一度試します。');
+    }
+    if (svcMissing && (n || hasTombstone())){
+      lines.push('削除の状況を確認できません（この画面の削除機能がまだ読み込めていません）。ページを再読み込みしてください。');
+    }
+    return lines.join(' ');
+  }
   function pendingDeleteNotice(){
     try {
-      var n = 0;
-      try { var a = JSON.parse(localStorage.getItem('v292Dfix587_pending') || '[]'); n = Array.isArray(a) ? a.length : 0; } catch(e){ n = 0; }
+      var msg602 = pendingDeleteText();
       var old = document.getElementById('v595-pending');
-      if (!n){ if (old) { try { old.remove(); } catch(e){} } return; }
-      if (old) { old.firstChild.nodeValue = '削除した物語が ' + n + '件、他の端末への反映待ちです。ゲーム画面を一度開くと同期されます。'; return; }
+      if (!msg602){ if (old) { try { old.remove(); } catch(e){} } return; }
+      if (old) { old.firstChild.nodeValue = msg602; return; }
       var b = document.createElement('div');
       b.id = 'v595-pending';
       b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9998;padding:9px 14px;'
         + 'background:#12283a;color:#cfe4f3;font-size:13px;line-height:1.5;'
         + 'border-top:1px solid #285a7a;text-align:center';
-      b.appendChild(document.createTextNode('削除した物語が ' + n + '件、他の端末への反映待ちです。ゲーム画面を一度開くと同期されます。'));
+      b.appendChild(document.createTextNode(msg602));
       var x = document.createElement('button');
       x.type = 'button'; x.textContent = '×';
       x.style.cssText = 'margin-left:12px;background:transparent;border:0;color:inherit;cursor:pointer;font-size:15px';
@@ -865,6 +1117,25 @@
       document.body.appendChild(b);
     } catch(e){}
   }
+
+  /* ★fix602: 実機とテストから**読むだけ**の口。ここからは1バイトも書かない。
+     判定を外から実際に動かせないと、テストが「実装の文字列」を見るだけになり、
+     振る舞いが変わっても気づけない（fix588/fix591 で踏んだ型）。 */
+  window.__v292Dfix602home = {
+    __armed: true,
+    isOff: f602off,
+    tombstonedIds: tombstonedIds,
+    hasTombstone: hasTombstone,
+    slotIdOfKey: slotIdOfKey,
+    classifierReady: classifierReady,
+    incomingBarrier: incomingBarrier,
+    isTombstonedSlotKey: isTombstonedSlotKey,
+    allSlotIds: allSlotIds,
+    collectLS: collectLS,
+    pendingDeleteText: pendingDeleteText,
+    lastPayloadDropped: function(){ return lastPayloadDropped; },
+    PULL_HALT_CODE: PULL_HALT_CODE
+  };
 
   // ---------- 起動 ----------
   fetch('version.txt?_='+Date.now(), {cache:'no-store'})

@@ -58,7 +58,17 @@
                    physicalDeleted だけを見ると「実際に消した」のか「元から無かった」のか区別できない。
                    端末間試験でこの2つを混ぜると、削除が効いているのか、単に空振りしているのかが分からなくなる。
                    → **実在した計画キーを消した回数** と **既に無かった計画キーの回数** を分けて数える。 */
-                gatewayPhysicalDeletes: 0, alreadyMissingPlannedKeys: 0 };
+                gatewayPhysicalDeletes: 0, alreadyMissingPlannedKeys: 0,
+                /* ★★fix602: 「なぜ片づかないのか」を総数ではなく**分類ごと**に数える。
+                   2026-07-27 の実機で 16件中6件が gateRefused のまま残ったが、
+                   `gateRefused` は総数だけだったので、stale なのか protected なのか
+                   policy-unavailable なのかが**再読込した時点で分からなくなっていた**
+                   （理由はメモリ上の LOG にしか無かった）。また「無言の失敗」。
+                   → code 別カウンタと、理由の永続化(v292Dfix587_refusals)を足す。 */
+                gateRefusedByCode: {}, blockedPlans: 0, blockedByReason: {} };
+  function bumpCode(map, code){
+    try { var k = String(code || 'unknown'); map[k] = (map[k] || 0) + 1; } catch(e){}
+  }
   function note(rec){ try { rec.at = Date.now(); LOG.push(rec); if (LOG.length > LOG_MAX) LOG.shift(); } catch(e){} }
 
   /* ---- 依存（どれか欠けたら削除しない = fail-closed） -------------------- */
@@ -157,9 +167,116 @@
         });
       } catch(e){ r = null; }
       if (r && r.ok && r.deleted && lsg(it.key) == null){ deleted.push(it.key); stats.physicalDeleted++; stats.gatewayPhysicalDeletes++; }
-      else { refused.push({ key: it.key, code: (r && r.code) || 'gate-unavailable' }); stats.gateRefused++; }
+      else {
+        var code = (r && r.code) || 'gate-unavailable';
+        /* ★fix602: 拒否の**内訳**を残す。「期待した値」と「いまの値」を並べて初めて
+           「内容が更新された(stale)」のか「保護されている(protected)」のかが後から分かる。
+           ★生の中身は残さない（容量と個人情報の両方の理由で、長さと指紋だけ）。 */
+        var nowVal = lsg(it.key), hashOf2 = (d.inv && d.inv._hash) ? d.inv._hash : null;
+        refused.push({ key: it.key, code: code,
+                       expectedBytes: (it.bytes == null ? null : it.bytes),
+                       actualBytes: (nowVal == null ? null : nowVal.length),
+                       expectedHash: it.hash || null,
+                       actualHash: (nowVal != null && hashOf2) ? hashOf2(nowVal) : null });
+        stats.gateRefused++; bumpCode(stats.gateRefusedByCode, code);
+      }
     }
+    if (refused.length) noteRefusals(plan, refused);
     return { deleted: deleted, refused: refused };
+  }
+
+  /* ---- ★★fix602: 拒否理由を**再読込しても消えない場所**へ残す -----------------
+   * これまで理由はメモリ上の LOG にしか無かったので、ページを閉じた時点で
+   * 「なぜ片づいていないのか」が誰にも分からなくなっていた。
+   * ring 20件（GPT指定）。生の値は入れない。 */
+  var REFUSAL_KEY = 'v292Dfix587_refusals', REFUSAL_MAX = 20;
+  function readRefusals(){
+    try { var a = JSON.parse(lsg(REFUSAL_KEY) || '[]'); return Array.isArray(a) ? a : []; }
+    catch(e){ return []; }
+  }
+  function noteRefusals(plan, refused){
+    try {
+      var a = readRefusals(), at = Date.now();
+      for (var i = 0; i < refused.length; i++){
+        var f = refused[i];
+        a.push({ at: at, slotId: plan.slotId, deleteOpId: plan.deleteOpId, planId: plan.planId,
+                 key: f.key, code: f.code,
+                 expectedBytes: f.expectedBytes, actualBytes: f.actualBytes,
+                 expectedHash: f.expectedHash, actualHash: f.actualHash });
+      }
+      lss(REFUSAL_KEY, JSON.stringify(a.slice(-REFUSAL_MAX)));
+    } catch(e){}
+  }
+
+  /* ---- ★★fix602: 自動で片づけられない計画は「終端状態」へ移す -------------------
+   * ★GPT裁定: 「**永久に片づかない**を防ぐことは、必ず物理削除することではない。
+   *   自動処理不能を**理由つきの終端状態**へ移すことも正しい解決」。
+   *
+   * なぜ再計画（現在値でスナップショットを作り直して消す）をここでやらないか:
+   *   GPT が具体的な反例を4つ出した。
+   *   A: 同じ slotId で**別の物語**が新規作成されていた場合、生きている物語を消してしまう。
+   *      これを防ぐには物語の実体を識別する不変ID(storyInstanceId)が要るが、既存データには無い。
+   *      タイトルや主人公での推測一致は危険。
+   *   B: 別端末で**正式に復元**されていた場合、ローカルmetaだけでは分からない。
+   *      再計画の前にサーバの墓標を読み直す必要がある。
+   *   C: 今回の計画は11件中6件が既に消えている。**現在値だけ**をスナップショットすると、
+   *      既に消えた6件の復元元が失われる。旧スナップショットと現在値を統合した
+   *      「後継の完全な復元セット」でなければならない。
+   *   D: サーバの墓標が指す復元セットと、物理削除の根拠にした復元セットが食い違う。
+   *   → ここまで作るのは次段。**いまは安全側に倒し、理由を見えるようにして止める**。
+   *      止まっている間の害は「容量が空かない」だけで、表示・起動・同期は既に遮断済み。 */
+  var BLOCKED_KEY = 'v292Dfix587_blocked', BLOCKED_MAX = 10, MAX_ATTEMPTS = 3;
+  function readBlocked(){
+    try { var a = JSON.parse(lsg(BLOCKED_KEY) || '[]'); return Array.isArray(a) ? a : []; }
+    catch(e){ return []; }
+  }
+  function moveToBlocked(plan, reason, refused){
+    var a = readBlocked().filter(function(x){ return x && x.planId !== plan.planId; });
+    a.push({ planId: plan.planId, slotId: plan.slotId, deleteOpId: plan.deleteOpId,
+             at: Date.now(), blockedReason: String(reason),
+             attempts: (+plan.attempts || 0),
+             keys: (refused || []).map(function(f){ return { key: f.key, code: f.code }; }) });
+    lss(BLOCKED_KEY, JSON.stringify(a.slice(-BLOCKED_MAX)));
+    dropPending(plan.planId);
+    stats.blockedPlans = readBlocked().length;
+    bumpCode(stats.blockedByReason, reason);
+    note({ act:'blocked', slotId: plan.slotId, deleteOpId: plan.deleteOpId, why: reason });
+  }
+  /* 拒否の内訳から、この計画をどう扱うかを決める。
+     ★一過性(policy-unavailable / gate-unavailable)は再試行、それ以外は終端。
+     ★再試行回数は**メモリではなく pending へ永続化**する（GPT指定。再起動で0に戻さない）。 */
+  function decideAfterRefusal(plan, refused){
+    var codes = {}, i;
+    for (i = 0; i < refused.length; i++) codes[refused[i].code] = 1;
+    if (codes['protected'])     return { terminal:true,  reason:'blocked-protected' };
+    if (codes['stale'])         return { terminal:true,  reason:'blocked-stale-legacy' };
+    if (codes['delete-failed']) return { terminal:false, reason:'delete-failed' };
+    return { terminal:false, reason:'policy-unavailable' };   /* 分類器/ゲート未準備＝一過性 */
+  }
+  function afterRefusal(plan, refused){
+    var v = decideAfterRefusal(plan, refused);
+    if (v.terminal){ moveToBlocked(plan, v.reason, refused); return v.reason; }
+    plan.attempts = (+plan.attempts || 0) + 1;
+    plan.lastRefusalReason = v.reason;
+    plan.lastAttemptAt = Date.now();
+    if (plan.attempts >= MAX_ATTEMPTS){
+      moveToBlocked(plan, 'blocked-' + v.reason + '-max-attempts', refused);
+      return 'blocked-' + v.reason + '-max-attempts';
+    }
+    addPending(plan);
+    return v.reason;
+  }
+  /* 人が読める理由。★生の hash も専門用語も出さない（おしん向け）。 */
+  function humanReason(reason){
+    var m = {
+      'blocked-stale-legacy':   '内容が更新されたため、消してよいか確認が必要です',
+      'blocked-protected':      '大切な控えとして保護されているため保留しています',
+      'blocked-policy-unavailable-max-attempts': '安全確認の仕組みが動かないため保留しています',
+      'blocked-delete-failed-max-attempts':      '3回試しても片づけられなかったため停止しました',
+      'policy-unavailable':     '安全確認の準備ができるまで待っています',
+      'delete-failed':          '片づけに失敗したので、次に開いたときにもう一度試します'
+    };
+    return m[String(reason)] || '確認が必要です';
   }
 
   /* ---- 保留中の削除（tombstoneは立ったが物理削除がまだ） ----------------- */
@@ -171,7 +288,18 @@
   function writePending(a){ return lss(PENDING_KEY, JSON.stringify(a.slice(-20))); }
   function addPending(plan){
     var a = readPending();
-    if (!a.some(function(x){ return x.planId === plan.planId; })) a.push(plan);
+    /* ★★fix602: 同じ planId が既に載っているときは**置き換える**。
+       旧実装は「載っていなければ push」だったので、`afterRefusal` が
+       `plan.attempts` を増やしても**2回目以降は localStorage の古い方が書き戻され**、
+       再試行回数が永久に 1 のままになっていた（上限3回に一度も到達しない）。
+       ＝ fix602 が防ぐと宣言した「永久に片づかない」が、この経路にだけ残っていた。
+       ★計画の同一性(planId + exact key + hash)は変えていない。増えるのは attempts などの
+         進捗フィールドだけなので、置き換えても計画の同一性は壊れない。 */
+    var replaced = false;
+    for (var i = 0; i < a.length; i++){
+      if (a[i] && a[i].planId === plan.planId){ a[i] = plan; replaced = true; break; }
+    }
+    if (!replaced) a.push(plan);
     writePending(a); stats.pending = a.length;
   }
   function dropPending(planId){
@@ -206,11 +334,14 @@
       /* ⑦⑧ */
       var r = executePlan(plan, d);
       if (r.refused.length){
-        addPending(plan);
+        /* ★fix602: ここで無条件に addPending すると、**同じhashの計画を永久に拒否され続ける**。
+           一過性かどうかを判定し、自動で片づけられないものは理由つきの終端状態へ移す。 */
+        var outcome = afterRefusal(plan, r.refused);
         note({ act:'partial', slotId:slotId, deleteOpId:deleteOpId, deleted:r.deleted.length,
-               refused:r.refused });
+               refused:r.refused, outcome: outcome });
         return { ok:true, code:'partial', deleteOpId:deleteOpId, snapshotId:snapshotId,
-                 deleted:r.deleted.length, refused:r.refused };
+                 deleted:r.deleted.length, refused:r.refused,
+                 outcome: outcome, humanReason: humanReason(outcome) };
       }
       /* 保留に載っていたときだけ外す（載っていないのに書くと、無意味な localStorage 書込みになる） */
       if (readPending().some(function(p){ return p && p.planId === plan.planId; })) dropPending(plan.planId);
@@ -423,13 +554,18 @@
       /* ★fix589: 'still-offline' は誤解を招く名前だった（実際の原因は空ガードでもオフラインと表示された）。
          コード名を実態に合わせ、**理由を必ず返す**。 */
       if (!pushed) return { ok:false, code:'push-failed', why: lastPushWhy, pending:list.length };
-      var done = 0;
+      var done = 0, blocked = [];
       list.forEach(function(plan){
         var r = executePlan(plan, d);
         if (!r.refused.length){ dropPending(plan.planId); done++; stats.completed++;
-          note({ act:'completed(resume)', slotId:plan.slotId, deleteOpId:plan.deleteOpId }); }
+          note({ act:'completed(resume)', slotId:plan.slotId, deleteOpId:plan.deleteOpId }); return; }
+        /* ★fix602: 同じ計画を無限に再試行しない。終端へ移すか、回数を数えて保留する。 */
+        var outcome = afterRefusal(plan, r.refused);
+        if (String(outcome).indexOf('blocked') === 0)
+          blocked.push({ slotId: plan.slotId, reason: outcome, humanReason: humanReason(outcome) });
       });
-      return { ok:true, code:'resumed', done: done, pending: readPending().length };
+      return { ok:true, code:'resumed', done: done, pending: readPending().length,
+               blocked: blocked };
     });
   }
 
@@ -509,6 +645,21 @@
     requestDelete: requestDelete,
     resumePending: resumePending,
     pendingDeletes: readPending,
+    /* ★★fix602: 「なぜ片づいていないのか」を読める口。どれも読むだけで何も書かない。 */
+    blockedDeletes: readBlocked,
+    refusals: readRefusals,
+    humanReason: humanReason,
+    /* 画面に出すための1行。★該当が無ければ null（＝黙るのではなく「無い」と言える形） */
+    pendingSummary: function(){
+      var p = readPending(), b = readBlocked();
+      if (!p.length && !b.length) return null;
+      var out = [];
+      if (p.length) out.push('削除の後片づけが' + p.length + '件残っています');
+      for (var i = 0; i < b.length; i++)
+        out.push('削除の後片づけを停止しました（' + humanReason(b[i].blockedReason) + '）');
+      return { pending: p.length, blocked: b.length, lines: out };
+    },
+    MAX_ATTEMPTS: MAX_ATTEMPTS,
     /* ★fix589: 「なぜクラウドへ確定できないのか」を実機で読めるようにする */
     lastPushWhy: function(){ return lastPushWhy; },
     shouldBlockRestore: shouldBlockRestore,
