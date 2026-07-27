@@ -170,7 +170,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260727-fix595';
+  var HOME_BUILT = '20260727-fix596';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -189,7 +189,7 @@
 <script src="v292Dfix562-backup-inventory.js?cb=v292Dfix593"></script>
 <script src="v292Dfix564-snapshot.js?cb=v292Dfix593"></script>
 <script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix593"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix593"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix596"></script>
 <script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix594"></script>
 <script>
 (function(){
@@ -580,6 +580,16 @@
             if (proof.ok){
               var pr = L590.promoteSharedRev(+serverRev || 0, 'fix593: pull収束（ローカルを安全に再構成できた）');
               try { console.log('[home] 共有revを更新:', JSON.stringify(pr)); } catch(e){}
+              /* ★★fix596: 収束した pull は、古い pending の結末をもう問題にしない。
+                 ここで用済みにしておかないと、**決着できない pending が残り続けて
+                 以後の送信が永久に止まる**（fix596 は未解決の pending がある間 put を送らないため）。 */
+              try {
+                if (typeof L590.hasAwaiting === 'function' && L590.hasAwaiting() &&
+                    typeof L590.supersedeByPull === 'function'){
+                  var sp = L590.supersedeByPull(+serverRev || 0);
+                  try { console.log('[home] 保留中の送信記録をpullで解消:', JSON.stringify(sp)); } catch(e){}
+                }
+              } catch(e){}
             } else {
               try { console.warn('[home] 共有revは更新しません:', proof.why); } catch(e){}
             }
@@ -630,7 +640,37 @@
     var pkg = { schema:1, updatedAt:Date.now(), device:(navigator.userAgent||'').slice(0,60),
                 activeSlot:(J(g('chr6_active_slot'),'chr6')||'chr6'), ls:collectLS(), full:true };
     call({op:'meta'},15000).then(function(m){
-      return call({ op:'forceput', baseRev:(m&&m.rev)||0, pkg:pkg }, 60000);
+      /* ★★fix596(GPT指定1): 「いま上げる」は forceput なので、**曖昧コミットはここでも起きる**。
+         put と同じ commit ledger を通し、commitOpId を付けて送る。
+         未解決の pending が残っているなら、上書きせずに中止する（前回の証拠を消さない）。 */
+      var body596 = { op:'forceput', baseRev:(m&&m.rev)||0, pkg:pkg };
+      var L596 = null; try { L596 = window.__v292Dfix590; } catch(e){}
+      if (!(L596 && typeof L596.notePut === 'function')) return call(body596, 60000);
+      var h596 = authHeaders();
+      return L596.notePut({ pkg: pkg, baseRev: body596.baseRev, op: 'forceput',
+                            identity: (h596['x-google-id'] || h596['x-chronicle-pass'] || null),
+                            identityKind: (h596['x-google-id'] ? 'google' : 'pass'),
+                            source: 'home:forceput' })
+        .then(function(pr596){
+          if (pr596 && pr596.blocked){
+            return { ok:false, error:'前回の送信の結果がまだ確認できていません。一度「いま取り込む」を実行してから、もう一度お試しください。',
+                     errorCode:'pending-commit-unresolved' };
+          }
+          if (pr596 && pr596.ok && pr596.commitOpId) body596.commitOpId = pr596.commitOpId;
+          return call(body596, 60000).then(function(res596){
+            /* ★成功応答を ok:true だけで信用しない。台帳に判定させる。 */
+            try {
+              if (res596 && res596.ok && typeof L596.noteResult === 'function'){
+                var v596 = L596.noteResult({ rev: res596.rev, source:'home:forceput', response: res596 });
+                if (v596 && (v596.status === 'ambiguous-response' || v596.status === 'response-integrity-mismatch')){
+                  return { ok:false, error:'サーバの応答の整合が取れませんでした（' + v596.status + '）。データは変更していません。一度「いま取り込む」を実行してください。',
+                           errorCode: v596.status };
+                }
+              }
+            } catch(e){}
+            return res596;
+          });
+        });
     }).then(function(r){
       if(!r || !r.ok) throw new Error(r&&r.errorCode||'push');
       s('v292Dfix402_baseRev', String(r.rev));

@@ -252,6 +252,142 @@
   }
   function fix582Off(){ try { return localStorage.getItem('v292Dfix582Off') === '1'; } catch(e){ return false; } }
 
+  /* ==================================================================
+     ★★fix596: 送ったのに応答を取り逃したときの決着（Worker v25 の commitstate を使う）
+
+     何のためにあるのか:
+       put の応答を受け取れないまま離脱すると、「サーバは受け取ったのか」が分からない。
+       分からないまま次の put を送ると、前回のコミットの証拠が消えて、
+       rev が食い違ったまま fork し続ける（2026-07-27 に実際に起きた 429/430 デッドロック）。
+       サーバに「いま canonical に入っている中身のhash」と「最後に成功した commit の op id」を
+       聞けば、自分が送ったものと突き合わせて自力で判断できる。
+
+     ★呼ぶ契機（GPT裁定）:
+       (1) 起動時に pending が残っている
+       (2) fork / conflict の直後に1回
+       (3) timeout・通信切断・応答解析失敗の直後に1回
+       (4) スリープ／非表示から復帰したときに pending があり、前回から一定以上経過している
+     ★呼ばない: 正常な成功応答を受け取った push / pending の無い通常起動 / 通常のターンごとの保存
+     ★single-flight: 走っている間の要求は「終わったあと最大1回だけ」やり直す（台帳側で管理） */
+  function ledger(){ try { return window.__v292Dfix590 || null; } catch(e){ return null; } }
+
+  function workerSupportsCommitState(){
+    /* v25 未満では commitstate が無い。root の capabilities で判定する。
+       ★「D1が無い環境だから」で能力表示を変えない（実装の有無と利用可否を混ぜない）ので、
+         クライアント側で d1:true も併せて確かめる（GPT指定）。 */
+    return fetch(proxyUrl() + '/', { method: 'GET' }).then(function(r){ return r.json(); })
+      .then(function(j){
+        var cap = j && j.capabilities;
+        return { ok: !!(cap && cap.commitState === 1 && j.d1 === true),
+                 hashAlg: cap && cap.packageHash, packageSpec: cap && cap.packageSpec,
+                 workerBuild: j && j.workerBuild };
+      }, function(){ return { ok:false }; });
+  }
+
+  /* 現在のローカル状態の packageHash（送るときと同じ規則で作る） */
+  function currentLocalPackageHash(){
+    var led = ledger();
+    if (!led || typeof led.payloadHash !== 'function') return Promise.resolve(null);
+    try { return led.payloadHash(collectLight(Date.now())); } catch(e){ return Promise.resolve(null); }
+  }
+
+  var reconcileLast = { status:'never', at:0, why:null };
+  function reconcileNow(reason){
+    var led = ledger();
+    if (!led || typeof led.runReconcile !== 'function') return Promise.resolve({ status:'no-ledger' });
+    if (!isLoggedIn()) return Promise.resolve({ status:'not-logged-in' });
+    return led.runReconcile(function(ctx){
+      return workerSupportsCommitState().then(function(cap){
+        if (!cap.ok){
+          /* v25未満 or D1なし。ここで appliedRev を動かしてはいけない。pull を要求する。 */
+          reconcileLast = { status:'unsupported', at: Date.now(), why:'no-commitstate' };
+          return { status:'unsupported', needsPull:true };
+        }
+        return callSave({ op:'commitstate' }).then(function(r){
+          if (r.status !== 200 || !r.json || r.json.ok !== true){
+            reconcileLast = { status:'remote-read-failed', at: Date.now(), why:'http ' + r.status };
+            return led.classify({ remoteReadFailed:true, pendingAtStart: ctx.pendingAtStart })
+                      .then(function(){ return { status:'remote-read-failed' }; });
+          }
+          var j = r.json;
+          var c = fix582Off() ? null : coord();
+          var applied = c ? c.rev() : 0;
+          return currentLocalPackageHash().then(function(curHash){
+            return led.classify({
+              remote: { rev: j.rev, packageHash: j.packageHash, lastCommitOpId: j.lastCommitOpId,
+                        hashAlg: j.hashAlg, packageSpec: cap.packageSpec },
+              appliedRev: applied,
+              identity: (authHeaders()['x-google-id'] || authHeaders()['x-chronicle-pass'] || null),
+              identityKind: (authHeaders()['x-google-id'] ? 'google' : 'pass'),
+              currentHash: curHash,
+              pendingAtStart: ctx.pendingAtStart
+            });
+          }).then(function(v){
+            reconcileLast = { status: v.status, at: Date.now(), why: v.why || null };
+            var settled = (v.status === 'commit-confirmed' || v.status === 'state-equivalent-rebased');
+            if (settled){
+              /* ★rev は巻き戻さない。進めてよいと言われたときだけ進める。 */
+              if (v.canAdvanceAppliedRev && c && v.remoteRev != null){
+                c.promoteRev(v.remoteRev, 'fix596:' + v.status);
+              }
+              /* ★三者一致なので、同期対象の中身は remote と同じ＝同期dirtyを解除できる。
+                 端末設定やUI状態の dirty までは触らない（GPT指定）。 */
+              try { led.clear(); } catch(e){}
+              setNum('v292Dfix399_baseTs', Date.now());
+            }
+            /* ★★fix596: 「曖昧ではなくなった」なら pending の役目は終わり。
+               ここを消さないと、**未解決の pending が残り続けて以後の送信が永久に止まる**
+               （fix596 は未解決の pending がある間 put を送らないため）。
+                 remote-vs-last-sent-mismatch … canonical は自分が送ったものではない
+                   ＝自分のcommitは canonical になっていない、と**確定した**
+                 last-sent-vs-current-mismatch … canonical は自分が送ったものだが、
+                   そのあとローカルが進んだ。これも結末は確定している
+               どちらも結末が分かったので pending は消す。ただし状態は一致していないので
+               **revは動かさず**、同期は未反映(dirty)のままにして pull を要求する。 */
+            if (!settled && (v.why === 'remote-vs-last-sent-mismatch' ||
+                             v.why === 'last-sent-vs-current-mismatch')){
+              try { led.clear(); } catch(e){}
+              setNum('v292Dfix399_localTs', Date.now());
+              try { console.log(TAG, 'pendingを解決済みとして解放:', v.why); } catch(e){}
+            }
+            return { status: v.status, remoteRev: v.remoteRev, canAdvance: !!v.canAdvanceAppliedRev,
+                     needsPull: !settled };
+          });
+        }, function(e){
+          reconcileLast = { status:'remote-read-failed', at: Date.now(), why:String(e && e.message || e).slice(0,60) };
+          return { status:'remote-read-failed' };
+        });
+      });
+    }).then(function(r){
+      try { console.log(TAG, 'reconcile(' + String(reason || '?') + ') → ' + (r && r.status)); } catch(e){}
+      return r;
+    });
+  }
+
+  /* ★契機(1): 起動時に pending が残っていれば1回だけ。**無ければ何もしない**。 */
+  function reconcileOnBoot(){
+    try {
+      var led = ledger();
+      if (!led || typeof led.hasAwaiting !== 'function' || !led.hasAwaiting()) return;
+      setTimeout(function(){ try { reconcileNow('boot'); } catch(e){} }, 9000);
+    } catch(e){}
+  }
+  /* ★契機(4): 復帰時。visibilitychange が頻発しても、pending が無ければ何もしない。 */
+  function armVisibilityReconcile(){
+    try {
+      if (!document || !document.addEventListener) return;
+      document.addEventListener('visibilitychange', function(){
+        try {
+          if (document.visibilityState !== 'visible') return;
+          var led = ledger();
+          if (!led || typeof led.shouldReconcileOnResume !== 'function') return;
+          if (!led.shouldReconcileOnResume()) return;
+          reconcileNow('resume');
+        } catch(e){}
+      });
+    } catch(e){}
+  }
+
   function push(force){
     if (!isLoggedIn()) return Promise.reject(new Error('ログインが必要です'));
     if (pushing) return Promise.reject(new Error('同期中'));
@@ -289,19 +425,35 @@
       function attempt(){
         var body = { op: 'put', pkg: o.pkg };
         if (c) body.baseRev = c.rev();          /* ★これが無いとサーバは競合検査をしない */
-        /* ★fix590: 「何を送ったか」を put の**直前に永続化**する（記録だけ・挙動は変えない）。
+        /* ★fix590: 「何を送ったか」を put の**直前に永続化**する。
            2026-07-27 の実機で「サーバでは成功したのに、応答を受け取る前にページを離脱して
-           appliedRev が取り残される」が実際に起きた。ページ離脱をまたぐので、メモリでは足りない。 */
+           appliedRev が取り残される」が実際に起きた。ページ離脱をまたぐので、メモリでは足りない。
+           ★★fix596: ここで commitOpId を発行して body に載せる。Worker v25 がそれを保存し、
+           次に commitstate で読めば「自分の commit が canonical になったか」を自力で判定できる。
+           ★★fix596(GPT指定3): 未解決の pending が残っているなら**送らない**。
+           上書きすると前回コミットの証拠が消える。ローカル変更は dirty のまま溜める。 */
         var led = null;
-        try {
-          led = window.__v292Dfix590;
-          if (led && typeof led.notePut === 'function'){
-            led.notePut({ pkg: o.pkg, baseRev: body.baseRev,
-                          identity: (authHeaders()['x-google-id'] || authHeaders()['x-chronicle-pass'] || null),
-                          source: 'fix399' });
+        try { led = window.__v292Dfix590; } catch(e){ led = null; }
+        var prep;
+        if (led && typeof led.notePut === 'function'){
+          prep = led.notePut({ pkg: o.pkg, baseRev: body.baseRev, op: 'put',
+                               identity: (authHeaders()['x-google-id'] || authHeaders()['x-chronicle-pass'] || null),
+                               identityKind: (authHeaders()['x-google-id'] ? 'google' : 'pass'),
+                               source: 'fix399' });
+        } else {
+          prep = Promise.resolve({ ok:false, code:'no-ledger' });
+        }
+        return Promise.resolve(prep).then(function(pr){
+          if (pr && pr.blocked){
+            /* 前回の送信の結末がまだ分かっていない。まず決着させる。 */
+            setNum('v292Dfix399_localTs', Date.now());   /* 未同期であることを残す */
+            var eb = new Error('PENDING_COMMIT_UNRESOLVED');
+            eb.pendingCommit = true; eb.pending = pr.pending || null;
+            throw eb;
           }
-        } catch(e){}
-        return callSave(body).then(function(r){
+          if (pr && pr.ok && pr.commitOpId) body.commitOpId = pr.commitOpId;
+          return callSave(body);
+        }).then(function(r){
           if (r.status !== 200 || !r.json) throw new Error('HTTP ' + r.status);
           var j = r.json;
           if (j.fork){
@@ -323,23 +475,52 @@
             try { if (led && typeof led.noteResult === 'function')
                     led.noteResult({ fork:true, serverRev: (j.server && j.server.rev), source:'fix399' }); } catch(e){}
             setNum('v292Dfix399_localTs', Date.now());   /* 未同期であることを残す */
+            /* ★fix596 契機(2): fork の直後に1回だけ照合する。
+               fork は「サーバの版が違った」という事実だが、自分の前回コミットが
+               入っていたのかどうかはこれだけでは分からない。 */
+            try { setTimeout(function(){ reconcileNow('fork'); }, 0); } catch(e){}
             var ef = new Error('CONFLICT'); ef.conflict = true; ef.fork = true;
             ef.serverRev = (j.server && j.server.rev) != null ? j.server.rev : lastServerRev;
             throw ef;
           }
           if (!j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+          /* ★★fix596(GPT指定2): 成功応答を `ok:true` だけで信用しない。
+             rev / hashAlg / packageHash / lastCommitOpId をすべて突き合わせ、
+             **commit-confirmed のときだけ** rev を正本へ昇格し台帳を消す。
+             どれかが食い違えば台帳を残したまま appliedRev を動かさず、照合(commitstate)へ回す。 */
+          var verdict = { status:'legacy-ok' };
+          try { if (led && typeof led.noteResult === 'function')
+                  verdict = led.noteResult({ rev: j.rev, source:'fix399', response: j }) || verdict; } catch(e){}
+          if (verdict.status === 'ambiguous-response' || verdict.status === 'response-integrity-mismatch'){
+            /* サーバは 200 を返したが、自分の commit が入った証明にならない。
+               ここで rev を進めると「入っていないものを入った」ことにしてしまう。 */
+            if (c) c.noteFailClosed('応答の整合が取れない(' + verdict.status + ')。revを進めず照合へ回す');
+            setNum('v292Dfix399_localTs', Date.now());
+            var ea = new Error('AMBIGUOUS_RESULT');
+            ea.ambiguous = true; ea.verdict = verdict.status;
+            throw ea;
+          }
           /* ★成功。ここで初めて rev を正本へ昇格する */
           if (c && j.rev != null) c.promoteRev(j.rev, 'push成功');
-          /* ★fix590: 結果が確定したので台帳を消す（**成功応答のときだけ**消す） */
-          try { if (led && typeof led.noteResult === 'function')
-                  led.noteResult({ rev: j.rev, source:'fix399' }); } catch(e){}
           setNum('v292Dfix399_baseTs', ts); setNum('v292Dfix399_localTs', ts);
           if (o.needFull) { try { localStorage.setItem('v292Dfix399_imgHash', o.curHash); } catch(e){} }
           return { lsSize: j.lsSize, imgUpdated: j.imgUpdated, rev: j.rev };
         });
       }
       return attempt();
-    }).then(function(res){ pushing = false; return res; }, function(err){ pushing = false; throw err; });
+    }).then(function(res){ pushing = false; return res; }, function(err){
+      pushing = false;
+      /* ★fix596 契機(3): timeout・通信切断・応答解析失敗の直後に1回だけ照合する。
+         ★即座に何度も read-back しない。失敗したら pending を維持して、
+           次の起動・復帰・ユーザーpull へ回す（GPT指定）。
+         ★fork は上で既に1回呼んでいるので、ここでは呼ばない（二重に走らせない）。
+         ★pending が未解決で送信を止めた場合も、まず照合させる。 */
+      try {
+        var isFork = !!(err && err.fork);
+        if (!isFork) setTimeout(function(){ reconcileNow(err && err.pendingCommit ? 'pending-blocked' : 'io-error'); }, 0);
+      } catch(e){}
+      throw err;
+    });
   }
 
   // ---- pull(取得のみ・適用は別) ----
@@ -794,6 +975,16 @@
     backupBeforeApply: backupBeforeApply,
     bkLog: bkLog,   /* fix575: 削除・中止の理由（容量満杯でも消えないメモリ側を含む） */
     verify: verify, selfHeal: selfHeal,
+    /* ★fix596: 照合を手で叩ける口（実機での確認用） */
+    reconcileNow: reconcileNow,
+    reconcileState: function(){
+      var led = ledger();
+      return { last: reconcileLast,
+               ledger: (led && typeof led.reconcileState === 'function') ? led.reconcileState() : null,
+               pending: (led && typeof led.pendingCommit === 'function') ? led.pendingCommit() : null };
+    },
+    currentLocalPackageHash: currentLocalPackageHash,
+    workerSupportsCommitState: workerSupportsCommitState,
     syncState: function(){
       var c = null; try { c = window.__v292Dfix580; } catch(e){}
       return { /* ★fix582: baseTs は競合制御から外れ、診断値へ降格した */
@@ -804,4 +995,7 @@
     status: function(){ return { off: off(), autoOff: autoOff(), loggedIn: isLoggedIn(), proxy: proxyUrl(), activeSlot: activeSlot() }; }
   };
   try { console.log(TAG, 'loaded', off()?'OFF':(autoOff()?'manual-only':'AUTO'), '(login='+isLoggedIn()+')'); } catch(e){}
+  /* ★★fix596: 照合の契機を仕掛ける。
+     ★どちらも「pending が残っているときだけ」動く。無ければ1バイトも通信しない。 */
+  try { if (!off()) { reconcileOnBoot(); armVisibilityReconcile(); } } catch(e){}
 })();

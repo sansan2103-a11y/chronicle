@@ -80,7 +80,9 @@ console.log('\n== (3) ★★生の個人情報を保存しない ==');
   await L.notePut({ pkg: PKG, baseRev: 1, identity: 'oshin@example.com', source: 'fix399' });
   const raw = w.__store['v292Dfix590_pending'];
   ok('★★メールアドレスがそのまま保存されていない', raw.indexOf('oshin@example.com') < 0, raw.slice(0, 80));
-  ok('★hash化されたidentityは持っている', /"identity":"id_\d+"/.test(raw), raw.slice(0, 80));
+  /* ★fix596: identity は「認証種別 + 正規化した値」の fingerprint になった。
+     表示用の伏せ字は衝突しうるので使わない（GPT指定7）。形は id_<kind>_<数値> */
+  ok('★hash化されたidentityは持っている', /"identity":"id_(google|pass|unknown)_\d+"/.test(raw), raw.slice(0, 80));
   ok('同じ相手なら同じキーになる', L.identityKey('a@b.c') === L.identityKey('a@b.c'));
   ok('違う相手なら違うキーになる', L.identityKey('a@b.c') !== L.identityKey('x@y.z'));
 }
@@ -101,7 +103,9 @@ console.log('\n== (4) ★★照合は三者一致。2つだけでは通さない
     ok('★★reconcile() は何も書き換えない（純粋関数）',
        reconcileBody.indexOf('setItem') < 0 && reconcileBody.indexOf('promoteRev') < 0 &&
        reconcileBody.indexOf('removeItem') < 0, reconcileBody.length);
-    ok('★この段では復帰へ自動で繋いでいない', /wiredIntoRecovery:\s*false/.test(SRC));
+    /* ★fix596 で Worker v25 の commitstate と繋いだので、ここは true になった。
+       この行は「まだ繋いでいない」を固定していたもので、役目を終えている。 */
+    ok('★★fix596: 復帰へ配線済みであることを明示している', /wiredIntoRecovery:\s*true/.test(SRC));
   }
   {
     const L = await mk();
@@ -124,7 +128,12 @@ console.log('\n== (4) ★★照合は三者一致。2つだけでは通さない
   {
     const L = await mk();
     const r = await L.reconcile({ remoteHash: H, remoteRev: 429, appliedRev: 429, identity: 'me', currentPkg: PKG });
-    ok('★remoteRev が進んでいなければ通さない', r.recoverable === false && r.why === 'remote-rev-not-ahead', r);
+    /* ★fix596(GPT指定): remoteRev === appliedRev は「昇格不要」であって「異常」ではない。
+       状態一致は確認できるので pending は解除してよいが、**rev は動かさない**。
+       固定したい契約は「rev を進めない」ことなので、そこを見る。 */
+    ok('★remoteRev が進んでいなければ rev を進めない', r.recoverable === false, r);
+    ok('★★ただし状態一致そのものは確認できている（詰まらせない）',
+       r.status === 'commit-confirmed' || r.status === 'state-equivalent-rebased', r);
   }
   {
     const L = await mk();
@@ -168,7 +177,7 @@ console.log('\n== (6) OFF と、挙動を変えていないことの確認 ==');
 
   const noComment = s => String(s).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
   const code = noComment(SRC);
-  ok('★★この段では復帰へ繋いでいないことを明示している', /wiredIntoRecovery:\s*false/.test(code));
+  ok('★★fix596: 復帰へ配線済みであることを明示している', /wiredIntoRecovery:\s*true/.test(code));
   /* ★fix593 で「共有rev台帳」への書き込みが1つ増えた。書いてよいのはこの2キーだけ。 */
   ok('★★台帳が書き込むのは自分のキーと共有rev台帳だけ',
      (code.match(/setItem\(/g) || []).length === 2 && (code.match(/removeItem\(/g) || []).length === 1,
