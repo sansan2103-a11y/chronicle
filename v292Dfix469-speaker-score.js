@@ -526,21 +526,73 @@
   //   ※地の文は短縮名(ひなた)で書かれるので、tokens(短縮形→canon)で照合する。
   //     1文字トークンは部分一致事故(「男」→彼女等)防止のため除外。
   //     "Xの<身体/声>が …(読点可・最大22字)… <反応/発声/動き動詞>"。が=主語限定(は/を除外)。
+  /* ★★fix604(2026-07-27・おしんの実機で捕獲): 「声の出所」型を追加する。
+     実データ:
+        「……ぇ」
+        ひなたの喉の奥から、引きつったような声が漏れる。
+     ＝**その地の文自身が話者を名指している**のに、会話ログは主人公(白石澪)に振っていた。
+     なぜ既存のブリッジで拾えなかったか:
+       上の EMO_* は「Xの<部位>**が**」＝**主語の「が」限定**。
+       「は」「を」は誤爆事故（「リカの声は震えていなかった」で大事故）を避けるため意図的に除外した。
+       今回の文は「ひなたの喉**の奥から**」＝**起点の「から」**。が でも は でも を でもないので
+       一致せず、モデルの誤タグがそのまま残った。
+     ★「から」は「は」「を」と違い**曖昧ではない**: 「Xの<発声器官>から<声>が<出る>」は
+       *声の出所が X* という意味しか持たない。だから主語の「が」と同格の手がかりとして扱える。
+     ★安全側の作り:
+       ・器官は**発声に関わる部位に限定**（「奥」「記憶」等の一般語は入れない。
+         「Xの記憶の奥から声が蘇る」を拾わないため）
+       ・<声>の直後は **「が」限定**（「Xの喉から漏れた声**を**、Yは聞いた」は拾わない＝棄権側）
+       ・**否定の打ち消しを弾く**（「Xの喉から声が漏れることはなかった」＝X は喋っていない）
+       ・該当が1人だけのときしか使わない（既存の棄権規則をそのまま継承）
+     OFF: v292Dfix604Off='1' で**この追加分だけ**止まる（既存の「が」型は止まらない）。 */
+  var VOICE_ORIFICE = '(?:喉|喉元|口|口元|唇|歯の隙間|歯の間|口の端)';
+  var VOICE_NOUN    = '(?:声|悲鳴|呻き|うめき|嗚咽|吐息|息|囁き|ささやき|呟き|つぶやき|言葉|音)';
+  var VOICE_EMIT    = '(?:漏れ|漏らし|零れ|こぼれ|溢れ|あふれ|ほとばし|飛び出|滑り出|押し出|出る|出た|出て)';
+  /* 打ち消し: 一致した文の続き（同じ文の中）に否定・伝聞・推量・未遂が来たら証拠にしない。
+     ★GPT指定: 「否定・未遂・仮定・回想・模倣・録音表現があれば棄権」。
+       ・未遂  「Xの喉から声が漏れそうになったが、出なかった」
+       ・伝聞  「Xの喉から声が漏れたように聞こえた」
+       ・推量  「〜ようだ」「〜かのようだった」「〜らしい」「〜気がした」
+     ★回想（「思い出した」）と模倣（「真似した」）と録音（「ラジオから」）は、
+       いずれも <声>が<出る> の形にならない（「声を思い出した」＝を、「ラジオから」＝名前+器官が無い）ので
+       構文の側で既に落ちる。テストで固定してある。 */
+  var VOICE_NEG = /(?:なかった|ない|ません|ず(?:に|、|。)|ぬ(?:まま)?|そうにな|かけて(?:止|やめ)|ように(?:聞こえ|思え|感じ)|かのよう|ようだ|ような気|らしかった|気がした)/;
+  function f604off(){ try { return localStorage.getItem('v292Dfix604Off') === '1'; } catch(e){ return false; } }
+  function voiceSourceRe(tk){
+    try {
+      return new RegExp(tk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + 'の' + VOICE_ORIFICE +
+                        '(?:の奥|の奥底|の端)?から[^。」』\\n]{0,24}?' + VOICE_NOUN +
+                        'が[^。」』\\n]{0,14}?' + VOICE_EMIT);
+    } catch(e){ return null; }
+  }
+  /* 一致箇所からその文の終わりまでを見て、打ち消しがあれば証拠にしない */
+  function voiceSourceHit(text, tk){
+    var re = voiceSourceRe(tk); if (!re) return false;
+    var m = re.exec(text); if (!m) return false;
+    var tailStart = m.index + m[0].length;
+    var rest = text.slice(tailStart, tailStart + 24);
+    var stop = rest.search(/[。\n]/);
+    if (stop >= 0) rest = rest.slice(0, stop);
+    return !VOICE_NEG.test(rest);
+  }
   function narrationEmoter(prev, next, heroName, tokens){
     if (!heroName || !tokens || !tokens.length) return null;
     var text = String(prev || '') + '\n' + String(next || '');
     if (!text) return null;
-    var found = {};
+    var found = {}, why = {};
+    var useVoice = !f604off();
     for (var i = 0; i < tokens.length; i++){
       var canon = tokens[i] && tokens[i].canon, tk = tokens[i] && tokens[i].tok;
       if (!canon || !tk || canon === heroName || tk.length < 2) continue;   // 主人公・1文字は除外
       var re;
       try { re = new RegExp(tk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + 'の' + EMO_BODY + 'が[^。」』\\n]{0,22}?' + EMO_REACT); }
-      catch(e){ continue; }
-      if (re.test(text)) found[canon] = 1;
+      catch(e){ re = null; }
+      if (re && re.test(text)){ found[canon] = 1; why[canon] = 'narration-emoter'; continue; }
+      /* ★fix604: 「Xの喉(の奥)から…声が漏れる」型 */
+      if (useVoice && voiceSourceHit(text, tk)){ found[canon] = 1; why[canon] = 'voice-source'; }
     }
     var ks = Object.keys(found);
-    if (ks.length === 1) return { to: ks[0], reasons: ['narration-emoter'] };
+    if (ks.length === 1) return { to: ks[0], reasons: [why[ks[0]] || 'narration-emoter'] };
     return null;   // 0 or 2+ → 棄権
   }
 

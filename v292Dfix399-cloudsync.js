@@ -96,8 +96,39 @@
       return !!(r && r.slotId && dead[String(r.slotId)]);
     } catch(e){ return false; }
   }
+  /* ★★fix605(2026-07-27・GPT裁定の緊急封じ込め): **部分パッケージで canonical を置き換えない**。
+     実測（本番データ・読み取り専用）:
+       サーバ正本 rev452 = 72キー / 物語の本体は**1件だけ**（22ターン）・`full` 印なし
+       同時刻の iPhone の fork rev449 = 191キー / 物語の本体**11件すべて**（同じ物語は23ターン）
+       PCローカルには10本すべて健在
+     ＝**この関数が「いま開いている物語1件」しか集めていないのに、Worker は canonical を
+        丸ごと置き換える**ので、他の9本がクラウドから消えていた。
+     おしんの報告「iPhoneで進めたのにPCに反映されない」の裏側がこれ。
+     ★GPT: 「同じ put という操作に**完全スナップショットと部分パッケージの2種類が混在**し、
+       Worker が両方を全置換として扱うのが根本原因。当面は **canonical を置き換える main put は
+       必ず完全パッケージだけ** に統一するのが最小で安全」。
+     → 収集を**全生存スロット**へ寄せる（fix402c と同じ考え方）。墓標スロットは従来どおり除外。
+     OFF: v292Dfix605Off='1' で従来の単一スロット収集へ戻す（緊急時の逃げ道）。 */
+  function f605off(){ try { return localStorage.getItem('v292Dfix605Off') === '1'; } catch(e){ return false; } }
+  function liveSlotIds(){
+    var ids = [], dead = deadSlotIds();
+    try {
+      var meta = JSON.parse(localStorage.getItem('chr6_slots_meta') || '[]') || [];
+      meta.forEach(function(e){ if (e && e.id && !dead[String(e.id)] && ids.indexOf(String(e.id)) < 0) ids.push(String(e.id)); });
+    } catch(e){}
+    if (ids.indexOf('chr6') < 0) ids.push('chr6');          /* 既定枠(base物語)を取りこぼさない */
+    return ids;
+  }
+  function slotKeyMatch(k, slotId){
+    if (slotId === 'chr6') return (k === 'chr6' || /_slot_chr6$|genderMap_"?chr6"?$/.test(k));
+    return !!(slotId && k.indexOf(slotId) >= 0);
+  }
   function collectLS(slotId){
     var out = {}, dead = deadSlotIds();
+    /* ★fix605: 既定は「全生存スロット」。呼び出し側の引数は互換のため受けるが、
+       完全パッケージを作るときは liveSlotIds() を使う。 */
+    var ids = f605off() ? [slotId] : liveSlotIds();
+    if (f605off() && slotId && ids.indexOf(slotId) < 0) ids.push(slotId);
     for (var i = 0; i < localStorage.length; i++){
       var k = localStorage.key(i);
       if (!k) continue;
@@ -105,11 +136,26 @@
       if (/^chr6_bk_/.test(k)) continue;
       if (/^v292Dfix399_/.test(k)) continue;     // 同期状態は運ばない
       if (isDeadSlotKey(k, dead)) continue;      // ★fix588: 削除済みスロットの実体は送らない
-      var isSlot = slotId && slotId !== 'chr6' && k.indexOf(slotId) >= 0;
-      if (slotId === 'chr6' && (k === 'chr6' || /_slot_chr6$|genderMap_"?chr6"?$/.test(k))) isSlot = true;
+      var isSlot = false;
+      for (var j = 0; j < ids.length; j++){ if (slotKeyMatch(k, ids[j])){ isSlot = true; break; } }
       if (isSlot || isGlobalKey(k)) out[k] = localStorage.getItem(k);
     }
     return out;
+  }
+  /* ★fix605: 「完全パッケージか」を送信前に自分で確かめる。
+     meta が live と言っている物語の本体が pkg に入っていなければ**完全ではない**。
+     ★GPT: 「slot本数とターン合計は診断専用。クライアントガードだけに依存しない」。
+       ここは診断＋自衛であって、これだけを安全の根拠にはしない。 */
+  function completeness(ls){
+    var missing = [], live = liveSlotIds();
+    for (var i = 0; i < live.length; i++){
+      var id = live[i], bodyKey = (id === 'chr6') ? 'chr6' : ('chr6_slot_' + id);
+      /* ローカルに本体が無い物語（0ターンの枠など）は欠落とみなさない */
+      var localHas = false;
+      try { localHas = localStorage.getItem(bodyKey) != null; } catch(e){}
+      if (localHas && !Object.prototype.hasOwnProperty.call(ls || {}, bodyKey)) missing.push(bodyKey);
+    }
+    return { full: missing.length === 0, missing: missing, liveCount: live.length };
   }
 
   // ---- IndexedDB ----
@@ -198,8 +244,19 @@
   // ---- 収集(light/full) ----
   function collectLight(ts){
     var slot = activeSlot();
-    return { schema: SCHEMA, updatedAt: ts || Date.now(), device: (navigator.userAgent||'').slice(0,60), activeSlot: slot, ls: collectLS(slot) };
+    var ls = collectLS(slot);
+    var pkg = { schema: SCHEMA, updatedAt: ts || Date.now(), device: (navigator.userAgent||'').slice(0,60), activeSlot: slot, ls: ls };
+    /* ★★fix605: 完全パッケージであることを印として明示する（fix402c と同じ `full` を使う）。
+       canonical を全置換してよいのは完全パッケージだけ、という契約を作る第一歩。
+       ★**パッケージへ新しいフィールドを増やさない**。packageHash は
+         `chronicle-light-v1` の形の上で計算されるので、勝手に足すと照合の前提が変わる。
+         判定結果はパッケージの外（lastCompleteness）に置く。 */
+    var cp = completeness(ls);
+    if (cp.full) pkg.full = true;
+    lastCompleteness = { at: Date.now(), full: cp.full, liveCount: cp.liveCount, missing: cp.missing.slice(0, 6) };
+    return pkg;
   }
+  var lastCompleteness = null;
   function collectFull(ts){
     var pkg = collectLight(ts);
     return idbReadAll().then(function(imgs){ pkg.idb = imgs; return pkg; });
@@ -564,6 +621,19 @@
       var build = needFull ? collectFull(ts) : Promise.resolve(collectLight(ts));
       return build.then(function(pkg){ return { pkg: pkg, needFull: needFull, curHash: curHash }; });
     }).then(function(o){
+      /* ★★fix605(GPT裁定の緊急封じ込め): **不完全なパッケージで canonical を置き換えない**。
+         これが無いと、いま開いている物語しか入っていない put が
+         **他の物語の本体をクラウドから消す**（本番で実際に起きた）。
+         ★通常putだけを止める。ユーザーが明示した forceput は別経路（home）なので影響しない。
+         ★止めたことを黙らせない（無言の失敗が最悪）。理由を投げ直す。 */
+      if (!f605off() && lastCompleteness && lastCompleteness.full === false){
+        /* pushing の解除は末尾の then/catch が必ずやるので、ここでは触らない
+           （二重解除で「同期中」の判定がずれるのを避ける） */
+        var ep = new Error('INCOMPLETE_PACKAGE');
+        ep.incomplete = true; ep.missing = lastCompleteness.missing;
+        try { console.warn(TAG, '不完全なパッケージなので送信しません（他の物語をクラウドから消さないため）', lastCompleteness); } catch(e){}
+        throw ep;
+      }
       function attempt(){
         var body = { op: 'put', pkg: o.pkg };
         if (c) body.baseRev = c.rev();          /* ★これが無いとサーバは競合検査をしない */
@@ -1128,6 +1198,9 @@
   }
   window.__v292Dfix399x = {
     collectLight: collectLight, push: push, pull: pullData, applySave: applySave, bootPull: function(){ bootPullDone=false; bootPull(); },
+    /* ★fix605: 「送ろうとしたパッケージが完全だったか」を読める口（診断専用・書き込みなし） */
+    completeness: function(){ return lastCompleteness ? JSON.parse(JSON.stringify(lastCompleteness)) : null; },
+    liveSlotIds: liveSlotIds,
     /* ★fix544(2026-07-25・GPT指定): 世代trimを単体で検証できるようにする。
        実データで chr6_bk_cloudsync_* が11世代溜まっていたので原因を調べた結果、
        **全部 fix495(C1・2世代trim) が入った 2026-07-19 より前**に作られたもので、

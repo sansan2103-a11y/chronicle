@@ -439,10 +439,19 @@ console.log('\n== (8) 出荷の体裁（配線・キャッシュバスター） 
      HOME.indexOf('v292Dfix602-tombstone-write-shadow.js') >
      HOME.indexOf('v292Dfix587-story-lifecycle.js') &&
      !/v292Dfix587-story-lifecycle\.js[\s\S]*?<script src="v292Dfix(?!602)/.test(HOME));
+  /* ★★出荷のたびに壊れないように、**リテラルではなく BUILT と突き合わせる**。
+     固定したいのは「fix602 という文字列」ではなく
+     「配信物を変えたら cb も一緒に上がっている（上げ忘れていない）」という契約。
+     ★fix596 の同種テストと同じ考え方。実測: cb の上げ忘れで
+       「新版を出したのにブラウザは古いJSを使い続ける」が実際に起きた。 */
+  const HOME_BUILT_TOKEN = (HOME.match(/HOME_BUILT\s*=\s*'\d{8}-fix(\d+)'/) || [])[1];
+  ok('★★home.html から HOME_BUILT を読めている（読めないと以下が偽の合格になる）',
+     /^\d+$/.test(String(HOME_BUILT_TOKEN)), HOME_BUILT_TOKEN);
   for (const f of ['v292Dfix579-tombstone-schema.js', 'v292Dfix587-story-lifecycle.js',
                    'v292Dfix562-backup-inventory.js', 'v292Dfix602-tombstone-write-shadow.js']){
     const cb = (HOME.match(new RegExp(f.replace(/\./g, '\\.') + '\\?cb=v292Dfix(\\d+)')) || [])[1];
-    ok('★home.html の ' + f + ' の cb が fix602', cb === '602', cb);
+    ok('★home.html の ' + f + ' の cb が HOME_BUILT と一致（上げ忘れていない）',
+       /^\d+$/.test(String(cb)) && cb === HOME_BUILT_TOKEN, { cb: cb, built: HOME_BUILT_TOKEN });
   }
   ok('★HOME_BUILT と version.txt が同値',
      (HOME.match(/HOME_BUILT = '([^']+)'/) || [])[1] === read('version.txt').trim(),
