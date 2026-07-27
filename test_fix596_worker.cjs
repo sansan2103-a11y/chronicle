@@ -370,6 +370,42 @@ console.log('\n== (13) ★★v25b: migration は single-flight（GPT デプロ�
      /if \(!\(await savesHasV25Columns\(env\)\)\) return false;\n    __d1init = true;/.test(SRC));
 }
 
+console.log('\n== (14) ★★★TDZ: 宣言より前に const を使っていない（実際に踏んだ） ==');
+{
+  /* ★★2026-07-27 に本当に踏んだバグ。
+     idem-v2 は baseRev を含むので、冪等キーの計算で `hasBase` / `baseRev` を使う。
+     ところが元の実装ではこの2つが**その下**で `const` 宣言されていた。
+     `const` は巻き上げられるが初期化前は参照できない（TDZ）ので、
+     **mid 付きの put が全部 ReferenceError で落ちる**。
+     `node --check` は構文しか見ないので通ってしまい、静的な文字列検査でも見つからなかった。
+     Cloudflare の編集画面が赤線で教えてくれた。
+     ★ここでは put/forceput ブロックを取り出し、宣言と使用の**位置関係**を直接見る。 */
+  const i = SRC.indexOf("if (op === 'put' || op === 'forceput') {");
+  const j = SRC.indexOf("    if (op === 'forks') {", i);
+  ok('★put/forceput ブロックを取り出せた', i > 0 && j > i);
+  const blk = SRC.slice(i, j);
+  for (const name of ['hasBase', 'baseRev']){
+    const decl = blk.indexOf('const ' + name + ' =');
+    const use  = blk.indexOf('idemReqHashV2({ op: op');
+    ok('★★★' + name + ' は冪等キーの計算より**前**に宣言されている（TDZで落ちない）',
+       decl > 0 && use > 0 && decl < use, { decl, use });
+  }
+  ok('★★同じブロックで二重宣言していない',
+     (blk.match(/const hasBase =/g) || []).length === 1 &&
+     (blk.match(/const baseRev =/g) || []).length === 1);
+  ok('★pkgHash25 / commitOpId25 も冪等キーの計算より前にある',
+     blk.indexOf('const pkgHash25 =') < blk.indexOf('idemReqHashV2({ op: op') &&
+     blk.indexOf('const commitOpId25 =') < blk.indexOf('idemReqHashV2({ op: op'));
+  /* ★同型の再発防止: putimg 側も同じ関係を見る */
+  {
+    const pi = SRC.indexOf("if (op === 'putimg') {");
+    const pblk = SRC.slice(pi, SRC.indexOf('return okJson({ ok: true, ns: ns, k: k', pi));
+    ok('★putimg も参照する値が先に宣言されている',
+       pblk.indexOf('const data =') < pblk.indexOf('idemReqHashV2({ op:') &&
+       pblk.indexOf('const k =') < pblk.indexOf('idemReqHashV2({ op:'));
+  }
+}
+
 console.log('\n== (10) ★退行防止: v24 で入れた最終防御が残っている ==');
 {
   ok('★★baseRevなし＋墓標ありは今も fork へ回す',

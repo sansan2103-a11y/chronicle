@@ -1753,6 +1753,12 @@ async function handleSave(request, env, ctx) {
         // ★クライアントが送ってきた commit の識別子。**来なければ null**。サーバは架空のIDを発行しない。
         const commitOpId25 = (body && body.commitOpId != null && body.commitOpId !== '')
           ? String(body.commitOpId).slice(0, 128) : null;
+        // ★★v25c: baseRev の確定は**冪等キーの計算より前**に置く。
+        //   idem-v2 は baseRev を含むので、下（従来の位置）で宣言したままだと
+        //   `const` の巻き上げ（TDZ）で **ReferenceError** になり、mid付きの put が全部落ちる。
+        //   2026-07-27、Cloudflare の編集画面で赤線が出ているのを見て気づいた（node --check では出ない型）。
+        const hasBase = !!(body && body.baseRev !== undefined && body.baseRev !== null);
+        const baseRev = hasBase ? (+body.baseRev || 0) : null;
         if (str.length > 4 * 1024 * 1024) return json({ ok: false, error: 'セーブが大きすぎます(4MB超)', errorCode: 'too-large', retryable: false, requestId }, 413, request);
         else if (str.length > 1.3 * 1024 * 1024) { if (new TextEncoder().encode(str).length > 4 * 1024 * 1024) return json({ ok: false, error: 'セーブが大きすぎます(4MB超)', errorCode: 'too-large', retryable: false, requestId }, 413, request); }
         // ★v18(3): idem予約(処理前にprocessing予約→完了でdone/失敗でrelease)。mid無し=従来動作。
@@ -1770,8 +1776,7 @@ async function handleSave(request, env, ctx) {
         }
         const now = +pkg.updatedAt || Date.now();
         const dev = String(pkg.device || '');
-        const hasBase = !!(body && body.baseRev !== undefined && body.baseRev !== null);
-        const baseRev = hasBase ? (+body.baseRev || 0) : null;
+        /* ★v25c: hasBase / baseRev は上（冪等キー計算の前）へ移した。ここでは再宣言しない。 */
 
         const cur = await env.DB.prepare('SELECT rev, baseRev, updatedAt, device, size, blob FROM saves WHERE u=?1 AND kind=?2').bind(user, 'main').first();
         const curRev = cur ? (+cur.rev || 0) : 0;
