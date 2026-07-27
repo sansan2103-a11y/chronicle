@@ -289,6 +289,18 @@
       function attempt(){
         var body = { op: 'put', pkg: o.pkg };
         if (c) body.baseRev = c.rev();          /* ★これが無いとサーバは競合検査をしない */
+        /* ★fix590: 「何を送ったか」を put の**直前に永続化**する（記録だけ・挙動は変えない）。
+           2026-07-27 の実機で「サーバでは成功したのに、応答を受け取る前にページを離脱して
+           appliedRev が取り残される」が実際に起きた。ページ離脱をまたぐので、メモリでは足りない。 */
+        var led = null;
+        try {
+          led = window.__v292Dfix590;
+          if (led && typeof led.notePut === 'function'){
+            led.notePut({ pkg: o.pkg, baseRev: body.baseRev,
+                          identity: (authHeaders()['x-google-id'] || authHeaders()['x-chronicle-pass'] || null),
+                          source: 'fix399' });
+          }
+        } catch(e){}
         return callSave(body).then(function(r){
           if (r.status !== 200 || !r.json) throw new Error('HTTP ' + r.status);
           var j = r.json;
@@ -306,6 +318,10 @@
                **現段階では、forkはすべて fail-closed** にする。
                将来 全状態の再マージが実装できた時点で「再取得→再マージ→新payload作成→1回だけ再put」へ格上げする。 */
             if (c) c.noteFailClosed('fork。上書きせず中止（全状態の再マージが未実装のため一律fail-closed）');
+            /* ★fix590: fork も「応答を受け取れた」＝結果は確定している。台帳は消さずに残す
+               （次段で read-back と突き合わせるため）。 */
+            try { if (led && typeof led.noteResult === 'function')
+                    led.noteResult({ fork:true, serverRev: (j.server && j.server.rev), source:'fix399' }); } catch(e){}
             setNum('v292Dfix399_localTs', Date.now());   /* 未同期であることを残す */
             var ef = new Error('CONFLICT'); ef.conflict = true; ef.fork = true;
             ef.serverRev = (j.server && j.server.rev) != null ? j.server.rev : lastServerRev;
@@ -314,6 +330,9 @@
           if (!j.ok) throw new Error(j.error || ('HTTP ' + r.status));
           /* ★成功。ここで初めて rev を正本へ昇格する */
           if (c && j.rev != null) c.promoteRev(j.rev, 'push成功');
+          /* ★fix590: 結果が確定したので台帳を消す（**成功応答のときだけ**消す） */
+          try { if (led && typeof led.noteResult === 'function')
+                  led.noteResult({ rev: j.rev, source:'fix399' }); } catch(e){}
           setNum('v292Dfix399_baseTs', ts); setNum('v292Dfix399_localTs', ts);
           if (o.needFull) { try { localStorage.setItem('v292Dfix399_imgHash', o.curHash); } catch(e){} }
           return { lsSize: j.lsSize, imgUpdated: j.imgUpdated, rev: j.rev };
