@@ -162,7 +162,28 @@ console.log('\n== (5) 出荷の体裁 ==');
   ok('★index.html 側の同じ仕組み(fix242)は残っている', read('index.html').indexOf('vr=1&v=') > 0);
 }
 
+/* ---- fix595: ホームに「他端末への反映待ち」を常設表示する ---- */
+{
+  console.log('\n== (7) ★★fix595: homeで削除しただけでは他端末へ伝わらないことを黙らない ==');
+  const home = read('home.html');
+  ok('★★保留件数を見る表示関数がある', /function pendingDeleteNotice\(\)/.test(home));
+  ok('★★起動時に呼んでいる', /pendingDeleteNotice\(\);\s*\n\}\)\(\);/.test(home) || home.indexOf('deletedNotice();\n  pendingDeleteNotice();') > 0);
+  ok('★削除の直後にも呼んでいる（件数が即座に出る）', /render\(\);\s*pendingDeleteNotice\(\);/.test(home));
+  ok('★★文言が「ゲーム画面を一度開く」を案内している',
+     home.indexOf('ゲーム画面を一度開くと同期されます') > 0);
+  /* ★コメント内の引用（なぜ直したかの説明）は残ってよい。**実際に出す文言**に無いことを見る。 */
+  ok("★★旧文言『通信できるようになったら自動で片づきます』を alert では出さない（原因を誤解させる）", (() => {
+    const noComment = home.replace(/\/\*[\s\S]*?\*\//g, ' ');
+    return noComment.indexOf('通信できるようになったら自動で片づきます') < 0;
+  })());
+  ok('★★表示だけで localStorage へ書かない（削除の所有者を増やさない）', (() => {
+    const i = home.indexOf('function pendingDeleteNotice()');
+    const body = home.slice(i, home.indexOf('// ---------- 起動 ----------', i));
+    return !/localStorage\.(setItem|removeItem)/.test(body);
+  })());
+}
+
 console.log('\n---------------------------------------------');
-console.log('test_fix591/592: 合格 ' + pass + ' / 失敗 ' + fail);
+console.log('test_fix591/592/595: 合格 ' + pass + ' / 失敗 ' + fail);
 console.log('pass=' + pass + ' fail=' + fail);
 if (fail) process.exitCode = 1;

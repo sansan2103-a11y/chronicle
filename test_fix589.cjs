@@ -163,6 +163,22 @@ console.log('\n== (3b) ★fix594: もう存在しないキーは成功扱い（�
   ok('★★保留が片づく（永久に残らない）', r.ok === true && r.done === 1, r);
   ok('★保留の記録が消える', svc.pendingDeletes().length === 0);
   ok('★ゲートを呼んでいない（消すものが無いので）', w.__gate.length === 0, w.__gate);
+  /* ★★fix595(GPT裁定): 「元から無かった」を physicalDeleted に混ぜると、
+     端末間試験で「削除が効いた」のか「空振りした」のか区別できなくなる。 */
+  ok('★★fix595: 既に無かった計画キーとして数える', svc.stats().alreadyMissingPlannedKeys === 1, svc.stats());
+  ok('★★fix595: ゲート経由の物理削除には数えない', svc.stats().gatewayPhysicalDeletes === 0, svc.stats());
+}
+
+console.log('\n== (3c) ★★fix595: 実在したキーは gatewayPhysicalDeletes に数える（2つの数が混ざらない） ==');
+{
+  const w = mkEnv({ syncFromStart: () => Promise.resolve({rev:1}) });
+  const svc = w.__chronicleStoryLifecycle;
+  const r = await svc.resumePending();
+  ok('保留が片づく', r.ok === true && r.done === 1, r);
+  ok('★★実在したキーはゲート経由の物理削除として数える', svc.stats().gatewayPhysicalDeletes === 1, svc.stats());
+  ok('★★「元から無かった」は0件', svc.stats().alreadyMissingPlannedKeys === 0, svc.stats());
+  ok('★従来の physicalDeleted も維持（退行していない）', svc.stats().physicalDeleted === 1, svc.stats());
+  ok('★ゲートを1回だけ呼んでいる', w.__gate.length === 1, w.__gate);
 }
 
 console.log('\n== (4) 退行防止（旧実装の形が復活していないこと） ==');

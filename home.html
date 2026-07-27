@@ -170,7 +170,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260727-fix594';
+  var HOME_BUILT = '20260727-fix595';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -430,13 +430,17 @@
         alert('削除できませんでした。データはそのまま残っています。\n理由: ' + ((r && r.code) || '不明'));
         return;
       }
+      /* ★★fix595(GPT裁定 Q2): ホームは fix399(クラウド同期)を積んでいないので、
+         ここでの削除は**必ず**「墓標は立てたがクラウドへ未反映」で終わる。
+         旧文言「通信できるようになったら自動で片づきます」は、通信の問題だと誤解させる。
+         実際に必要な行動は**ゲーム画面を一度開くこと**なので、そう書く。 */
       if(r.code === 'pending-cloud'){
-        alert('一覧からは消しました。\nただし今はクラウドへ反映できていないため、実データの削除は保留しています。\n通信できるようになったら自動で片づきます。');
+        alert('一覧からは消しました。\nこの削除はまだ他の端末へ反映されていません。\nゲーム画面を一度開くと同期されます。');
       } else if(r.code === 'partial'){
         alert('一覧からは消しました。一部のデータが残っています（安全のため無理に消していません）。');
       }
       if(SEL===id) SEL=null;
-      render();
+      render(); pendingDeleteNotice();
     });
   }
 
@@ -696,6 +700,32 @@
     } catch(e){}
   }
 
+  /* ★★fix595(GPT裁定 Q2): 「homeで削除 → アプリを開くまでクラウド未反映」は、
+     移行中の挙動としては許容できるが、**黙っていると他端末に削除済み物語が残り続ける**。
+     保留が1件でもあるあいだは、ホームに常設で状態を出す。
+     ここは表示だけで、localStorage へは1バイトも書かない（削除の所有者を増やさない）。 */
+  function pendingDeleteNotice(){
+    try {
+      var n = 0;
+      try { var a = JSON.parse(localStorage.getItem('v292Dfix587_pending') || '[]'); n = Array.isArray(a) ? a.length : 0; } catch(e){ n = 0; }
+      var old = document.getElementById('v595-pending');
+      if (!n){ if (old) { try { old.remove(); } catch(e){} } return; }
+      if (old) { old.firstChild.nodeValue = '削除した物語が ' + n + '件、他の端末への反映待ちです。ゲーム画面を一度開くと同期されます。'; return; }
+      var b = document.createElement('div');
+      b.id = 'v595-pending';
+      b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9998;padding:9px 14px;'
+        + 'background:#12283a;color:#cfe4f3;font-size:13px;line-height:1.5;'
+        + 'border-top:1px solid #285a7a;text-align:center';
+      b.appendChild(document.createTextNode('削除した物語が ' + n + '件、他の端末への反映待ちです。ゲーム画面を一度開くと同期されます。'));
+      var x = document.createElement('button');
+      x.type = 'button'; x.textContent = '×';
+      x.style.cssText = 'margin-left:12px;background:transparent;border:0;color:inherit;cursor:pointer;font-size:15px';
+      x.addEventListener('click', function(){ try { b.remove(); } catch(e){} });
+      b.appendChild(x);
+      document.body.appendChild(b);
+    } catch(e){}
+  }
+
   // ---------- 起動 ----------
   fetch('version.txt?_='+Date.now(), {cache:'no-store'})
     .then(function(r){ return r.text(); })
@@ -704,6 +734,7 @@
     .then(function(){ render(); pull(); });
   render();
   deletedNotice();
+  pendingDeleteNotice();
 })();
 </script>
 </body>

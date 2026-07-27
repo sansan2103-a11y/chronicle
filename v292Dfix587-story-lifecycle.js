@@ -53,7 +53,12 @@
                 /* ★fix589: 墓標をクラウドへ確定できなかった回数（理由は lastPushWhy / log に残す） */
                 pushFailures: 0, autoResumeArmed: 0, autoResumeGaveUp: 0,
                 /* 送信側で墓標スロットを除外できなかった回数（fix402/fix399 が報告する） */
-                tombstonePayloadFilterUnavailable: 0 };
+                tombstonePayloadFilterUnavailable: 0,
+                /* ★★fix595(GPT裁定): fix594 で「もう無いキー」を成功扱いにしたので、
+                   physicalDeleted だけを見ると「実際に消した」のか「元から無かった」のか区別できない。
+                   端末間試験でこの2つを混ぜると、削除が効いているのか、単に空振りしているのかが分からなくなる。
+                   → **実在した計画キーを消した回数** と **既に無かった計画キーの回数** を分けて数える。 */
+                gatewayPhysicalDeletes: 0, alreadyMissingPlannedKeys: 0 };
   function note(rec){ try { rec.at = Date.now(); LOG.push(rec); if (LOG.length > LOG_MAX) LOG.shift(); } catch(e){} }
 
   /* ---- 依存（どれか欠けたら削除しない = fail-closed） -------------------- */
@@ -141,7 +146,8 @@
          次の resumePending が「存在しないキー」をゲートへ渡し、ゲートが拒否 →
          partial 扱いで **永久に保留から外れない**（容量は空いているのに片づかない）。
          消す目的は既に達成されているので、ここは成功として数える。 */
-      if (lsg(it.key) == null){ deleted.push(it.key); continue; }
+      /* ★fix595: 「元から無かった」は成功だが**物理削除ではない**。別の数として数える。 */
+      if (lsg(it.key) == null){ deleted.push(it.key); stats.alreadyMissingPlannedKeys++; continue; }
       var r = null;
       try {
         r = d.gate.tryDeleteExact({
@@ -150,7 +156,7 @@
           reason: 'story-delete plan=' + plan.planId
         });
       } catch(e){ r = null; }
-      if (r && r.ok && r.deleted && lsg(it.key) == null){ deleted.push(it.key); stats.physicalDeleted++; }
+      if (r && r.ok && r.deleted && lsg(it.key) == null){ deleted.push(it.key); stats.physicalDeleted++; stats.gatewayPhysicalDeletes++; }
       else { refused.push({ key: it.key, code: (r && r.code) || 'gate-unavailable' }); stats.gateRefused++; }
     }
     return { deleted: deleted, refused: refused };
