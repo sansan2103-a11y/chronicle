@@ -19,6 +19,15 @@
 //     ・getraw を足さない（数百KBを新経路で返す価値がない）
 //     ・fork 経路で canonical の rev/hash/opId を触らない
 //     ・commitOpId が来なければ last_commit_op_id は null のまま。**サーバが架空のIDを発行しない**
+//   ★★v25b (同日・GPT の「デプロイ前に閉じる3点」への対応):
+//     (6) 冪等リクエストhashを **idem-v2** 化。旧 `idemReqHash(op, str)` は commitOpId と baseRev を
+//         無視するため、「同じ mid・同じ pkg・違う baseRev/commitOpId」の2回が**同一要求と誤認**され、
+//         1回目のキャッシュ応答が2回目へ返る＝**canonicalへ入っていない commit を成功扱いにしてしまう**。
+//         v2 は op / kind / baseRev / commitOpId / str をすべて含める。
+//         ★旧v1のhashも**照合時だけ**受け付ける（デプロイ直後24時間の再送を 409 にしないため）。書くのは常にv2。
+//     (7) forceput が canonical の墓標を踏み潰せないようにした。
+//         baseRevなしputだけ守っても、一般クライアントが forceput を呼べるなら保護は迂回される（GPT指摘）。
+//         **拒否**にしてある（マージすると保存する文字列が変わり、クライアントが計算したhashと永久に一致しなくなる）。
 // ------------------------------------------------------------
 // v28: Pollinations上流障害の無料GETフォールバック(既存経路は1バイトも不変)。
 //   1) GET / の root JSON に v:28 と freeFallback:true(クライアントが対応検知に使う)。
@@ -1160,8 +1169,24 @@ function imgProviderHeaders(provider, fallback) {
 
 // ★v14: D1・名寄せヘルパー -----------------------------------------------------
 let __d1init = false;
+// ★★v25b(GPT デプロイ前指摘3): migration を single-flight にする。
+//   旧実装は `if (__d1init) return true;` を抜けたあと素通りなので、同じ isolate へ同時に来た
+//   複数リクエストが**それぞれ migration を走らせる**。個々の文は IF NOT EXISTS / try-catch なので
+//   壊れはしないが、「migration の途中で commitstate に答えてしまう」窓が開く
+//   （package_hash 列がまだ無い状態で SELECT すると例外になる）。
+//   1本だけ走らせ、他は同じ Promise を待つ。失敗したら次のリクエストで再試行できるようにする。
+let __d1initPromise = null;
 async function d1Ready(env) {
   if (__d1init) return true;
+  if (__d1initPromise) return await __d1initPromise;
+  __d1initPromise = (async function () {
+    const r = await d1Migrate(env);
+    if (!r) __d1initPromise = null;
+    return r;
+  })();
+  return await __d1initPromise;
+}
+async function d1Migrate(env) {
   try {
     await env.DB.exec("CREATE TABLE IF NOT EXISTS saves (u TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'main', rev INTEGER NOT NULL DEFAULT 0, baseRev INTEGER DEFAULT 0, updatedAt INTEGER, device TEXT, size INTEGER, blob TEXT, PRIMARY KEY (u, kind))");
     await env.DB.exec("CREATE TABLE IF NOT EXISTS images (ns TEXT NOT NULL, k TEXT NOT NULL, rev INTEGER NOT NULL DEFAULT 0, hash TEXT, updatedAt INTEGER, data TEXT, PRIMARY KEY (ns,k))");   // ★v15: 画像のD1移行
@@ -1399,6 +1424,43 @@ function tombstoneOfSlot(blob, slotId) {
   } catch (e) { return null; }
 }
 
+// ★★v25b(GPT指摘): forceput は「この端末の内容をクラウドの正にする」操作なので、
+//   baseRev を見ない＝**baseRevなしput への防御(v24)を素通りする**。
+//   一般クライアントから呼べる以上、ここを塞がないと墓標が1回の forceput で消え、
+//   全端末で削除済みの物語が復活する。
+//   返すのは「canonical にある墓標のうち、incoming が live に戻してしまう slotId の一覧」。
+//   ★マージではなく**拒否**にする理由: サーバが payload を書き換えると、保存される文字列が
+//     クライアントの計算した packageHash と永久に一致しなくなる（三者一致が成立しない）。
+//   ★判定できないときは空配列（fail-open）。判定不能を理由に通常の forceput を止める方が害が大きい。
+function metaOfBlob(blob) {
+  try {
+    const o = JSON.parse(String(blob));
+    const raw = o && o.ls && o.ls['chr6_slots_meta'];
+    if (!raw) return null;
+    const meta = (typeof raw === 'string') ? JSON.parse(raw) : raw;
+    return Array.isArray(meta) ? meta : null;
+  } catch (e) { return null; }
+}
+function tombstonesClearedBy(curBlob, incomingStr) {
+  try {
+    const cur = metaOfBlob(curBlob);
+    if (!cur) return [];
+    const inc = metaOfBlob(incomingStr);
+    if (!inc) return [];               // incoming に meta が無い＝判定できない → 止めない
+    const incById = Object.create(null);
+    for (let i = 0; i < inc.length; i++) { const e = inc[i]; if (e && e.id != null) incById[String(e.id)] = e; }
+    const out = [];
+    for (let i = 0; i < cur.length; i++) {
+      const e = cur[i];
+      if (!(e && e.deleted === true && e.id != null)) continue;
+      const t = incById[String(e.id)];
+      // incoming に居ない or deleted でない ＝ この forceput は削除の事実を消す
+      if (!t || t.deleted !== true) out.push(String(e.id));
+    }
+    return out;
+  } catch (e) { return []; }
+}
+
 function blobHasTombstone(blob) {
   try {
     if (!blob) return false;
@@ -1620,7 +1682,9 @@ async function handleSave(request, env, ctx) {
         else if (str.length > 1.3 * 1024 * 1024) { if (new TextEncoder().encode(str).length > 4 * 1024 * 1024) return json({ ok: false, error: 'セーブが大きすぎます(4MB超)', errorCode: 'too-large', retryable: false, requestId }, 413, request); }
         // ★v18(3): idem予約(処理前にprocessing予約→完了でdone/失敗でrelease)。mid無し=従来動作。
         if (mid && d1) {
-          const rz = await idemReserve(env, user, mid, op, idemReqHash(op, str));
+          const rz = await idemReserve(env, user, mid, op,
+            idemReqHashV2({ op: op, kind: 'main', baseRev: (hasBase ? baseRev : null), commitOpId: commitOpId25, payloadStr: str }),
+            idemReqHashV1(op, str));
           if (rz.replay) return json(rz.replay, 200, request);
           if (rz.conflict) return json({ ok: false, error: 'idempotency key reused with different payload', errorCode: 'idem-key-reuse', retryable: false, requestId }, 409, request);
           if (!rz.owned) return json({ ok: false, error: 'request already in progress', errorCode: 'idem-processing', retryable: true, requestId }, 409, request);
@@ -1652,6 +1716,19 @@ async function handleSave(request, env, ctx) {
         //   判定に失敗したら何もしない(fail-open)。ここで例外を投げて通常のpushを止める方が害が大きい。
         if (op === 'put' && !hasBase && cur && blobHasTombstone(cur.blob)) {
           return await saveIncomingAsFork(request, env, ctx, { user, pkg, str, baseRev: null, curRev, curUpdatedAt: (+cur.updatedAt || 0), curDevice: String(cur.device || ''), ns, requestId, mid });
+        }
+
+        // ★★v25b: forceput による墓標の踏み潰しを止める。
+        //   ここで拒否しても**データは1バイトも消えない**（canonical も incoming も無傷。クライアントが
+        //   pull して墓標を取り込んでから上げ直せば通る）。
+        if (op === 'forceput' && cur) {
+          const cleared = tombstonesClearedBy(cur.blob, str);
+          if (cleared.length) {
+            if (__idemMid && env.DB) { try { ctx.waitUntil(idemRelease(env, __idemU, __idemMid)); } catch (e2) {} }
+            return json({ ok: false, error: '削除済みの物語を復活させる内容だったので中止しました。一度「いま取り込む」を実行してから、もう一度お試しください。',
+                          errorCode: 'tombstone-clear-refused', retryable: false,
+                          tombstones: cleared.slice(0, 20), rev: curRev, requestId }, 409, request);
+          }
         }
 
         if (op === 'forceput') {
@@ -1749,7 +1826,9 @@ async function handleSave(request, env, ctx) {
       if (data.length > 2 * 1024 * 1024) return json({ ok: false, error: 'image too large', errorCode: 'too-large', retryable: false, requestId }, 413, request);
       // ★v18(3): idem予約(reqHash=putimg:k+':'+data)。
       if (mid && d1) {
-        const rz = await idemReserve(env, user, mid, 'putimg', idemReqHash('putimg', k + ':' + data));
+        const rz = await idemReserve(env, user, mid, 'putimg',
+          idemReqHashV2({ op: 'putimg', kind: k, baseRev: ((body && body.baseImageRev != null) ? body.baseImageRev : null), commitOpId: null, payloadStr: k + ':' + data }),
+          idemReqHashV1('putimg', k + ':' + data));
         if (rz.replay) return json(rz.replay, 200, request);
         if (rz.conflict) return json({ ok: false, error: 'idempotency key reused with different payload', errorCode: 'idem-key-reuse', retryable: false, requestId }, 409, request);
         if (!rz.owned) return json({ ok: false, error: 'request already in progress', errorCode: 'idem-processing', retryable: true, requestId }, 409, request);
@@ -1834,11 +1913,32 @@ function recordIdem(env, ctx, user, mid, respObj) {
 }
 
 // ★v18(3): idem予約方式のヘルパー(put/forceput/putimg で使用。旧lookupIdem/recordIdemは読取フォールバックのみ残置)。
-function idemReqHash(op, payloadStr) { return String(op) + ':' + smallHash(String(payloadStr == null ? '' : payloadStr)); }
+// ★v18(3)の旧式。**新規には使わない**。デプロイ直後の再送を 409 にしないため、照合時のみ受け付ける。
+function idemReqHashV1(op, payloadStr) { return String(op) + ':' + smallHash(String(payloadStr == null ? '' : payloadStr)); }
+// ★★v25b: 書込み系の冪等リクエストhash。**op と str だけでは足りない**（GPT指摘）。
+//   同じ mid で
+//     1回目: commitOpId=A / baseRev=430 / pkg=P
+//     2回目: commitOpId=B / baseRev=431 / pkg=P
+//   が届くと、op と str だけの比較では同一要求と見なされ、
+//   ・Aのキャッシュ応答をBへ返す
+//   ・BのcommitOpIdがcanonicalに入っていないのに成功扱いする
+//   ・baseRevが違うのに同一要求とみなす
+//   が起こりうる。kind/baseRev/commitOpId を必ず含める。
+function idemReqHashV2(o) {
+  const parts = [
+    'idem-v2', String(o.op || ''), String(o.kind || ''),
+    (o.baseRev == null ? 'null' : String(o.baseRev)),
+    (o.commitOpId == null ? 'null' : String(o.commitOpId)),
+    smallHash(String(o.payloadStr == null ? '' : o.payloadStr))
+  ];
+  return parts.join('/');
+}
 function maybeGcIdem2(env, now) {
   if (Math.random() < 0.02) { try { env.DB.prepare('DELETE FROM idem2 WHERE ts < ?1').bind(now - 86400000).run().catch(function () {}); } catch (e) {} }   // 24h超をGC(best-effort)
 }
-async function idemReserve(env, user, mid, op, reqHash) {
+// ★v25b: legacyHash は「旧v1形式で記録された既存行」を 409 にしないための**照合専用**の第2候補。
+//   新しく書くのは常に reqHash(v2)。
+async function idemReserve(env, user, mid, op, reqHash, legacyHash) {
   if (!mid || !env.DB) return { owned: true };
   const now = Date.now();
   const tryInsert = async () => {
@@ -1851,7 +1951,9 @@ async function idemReserve(env, user, mid, op, reqHash) {
   let row = null;
   try { row = await env.DB.prepare('SELECT op, reqHash, status, res, ts FROM idem2 WHERE u=?1 AND mid=?2').bind(user, mid).first(); } catch (e) {}
   if (!row) return { owned: false, retry: true };                               // レース(直後にDELETE等)
-  if (String(row.op || '') !== String(op) || String(row.reqHash || '') !== String(reqHash)) return { conflict: true };   // 同一midで別内容
+  const rh = String(row.reqHash || '');
+  const matches = (rh === String(reqHash)) || (legacyHash != null && rh === String(legacyHash));
+  if (String(row.op || '') !== String(op) || !matches) return { conflict: true };   // 同一midで別内容
   const st = String(row.status || '');
   if (st === 'done') {
     if ((+row.ts || 0) >= now - 86400000) {
