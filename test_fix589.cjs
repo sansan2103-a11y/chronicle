@@ -154,6 +154,17 @@ console.log('\n== (3) ★★push 失敗の理由を区別して記録する ==')
   }
 }
 
+console.log('\n== (3b) ★fix594: もう存在しないキーは成功扱い（保留が永久に残らない） ==');
+{
+  const w = mkEnv({ syncFromStart: () => Promise.resolve({rev:1}) });
+  const svc = w.__chronicleStoryLifecycle;
+  delete w.__store['chr6_slot_smA'];        /* 物理削除は済んでいるが保留だけ残った状態 */
+  const r = await svc.resumePending();
+  ok('★★保留が片づく（永久に残らない）', r.ok === true && r.done === 1, r);
+  ok('★保留の記録が消える', svc.pendingDeletes().length === 0);
+  ok('★ゲートを呼んでいない（消すものが無いので）', w.__gate.length === 0, w.__gate);
+}
+
 console.log('\n== (4) 退行防止（旧実装の形が復活していないこと） ==');
 {
   const noComment = s => String(s).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');

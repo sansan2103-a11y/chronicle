@@ -136,6 +136,12 @@
     var deleted = [], refused = [];
     for (var i = 0; i < plan.keys.length; i++){
       var it = plan.keys[i];
+      /* ★fix594: **もう存在しないキーは成功扱い**にする。
+         2026-07-27 の実機で踏んだ: 物理削除が済んだ後も保留(pending)が残っていると、
+         次の resumePending が「存在しないキー」をゲートへ渡し、ゲートが拒否 →
+         partial 扱いで **永久に保留から外れない**（容量は空いているのに片づかない）。
+         消す目的は既に達成されているので、ここは成功として数える。 */
+      if (lsg(it.key) == null){ deleted.push(it.key); continue; }
       var r = null;
       try {
         r = d.gate.tryDeleteExact({
