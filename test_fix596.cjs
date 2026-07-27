@@ -375,6 +375,30 @@ console.log('\n== (13) ★★★時刻で hash がぶれない（実機で踏ん
   ok('★forceput も pkgTs を渡している', /pkgTs: \(pkg && pkg\.updatedAt\) \|\| null,/.test(HOME));
 }
 
+console.log('\n== (14) ★★★キャッシュ破棄(?cb=)を上げ忘れていない（実機で踏んだ） ==');
+{
+  /* ★★2026-07-27 の実機で踏んだ。BUILT と version.txt は上げたのに、
+     変更した .js の `?cb=` を上げ忘れた。その結果、**新しい版を出したのに
+     ブラウザは古い .js を使い続け**、直したはずの不具合がそのまま残った。
+     見た目の版番号だけが新しくなるので、直っていないことに気づきにくい。
+     ★fix596 で中身を変えたファイルは、cb がいまのBUILTのfix札と一致していなければならない。 */
+  const built = read('version.txt').trim();
+  const token = (built.match(/-(fix[\w]+)$/) || [])[1];
+  ok('★version.txt から fix札を取り出せた', !!token, built);
+  const idx = read('index.html');
+  for (const f of ['v292Dfix590-commit-ledger.js', 'v292Dfix399-cloudsync.js']){
+    const cb = (idx.match(new RegExp(f.replace(/\./g, '\\.') + '\\?cb=v292D(\\w+)')) || [])[1];
+    ok('★★' + f + ' の cb がいまのBUILTと一致（上げ忘れていない）', cb === token, { cb, token });
+  }
+  const cbHome = (HOME.match(/v292Dfix590-commit-ledger\.js\?cb=v292D(\w+)/) || [])[1];
+  ok('★★home.html 側の cb も一致', cbHome === token, { cbHome, token });
+  ok('★BUILT と HOME_BUILT と version.txt が同値', (() => {
+    const b = (idx.match(/var BUILT = '([^']+)'/) || [])[1];
+    const hb = (HOME.match(/HOME_BUILT = '([^']+)'/) || [])[1];
+    return b === built && hb === built;
+  })(), { built });
+}
+
 console.log('\n== (12) ★退行防止 ==');
 {
   ok('★★payloadString は Worker と同じ規則（idbを除いて JSON.stringify）',
