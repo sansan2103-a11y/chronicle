@@ -47,7 +47,7 @@ function load(lsInit, withProvenance) {
   return { api: W.__v292Dfix611, prov: W.__v292Dfix606, ls, W };
 }
 
-const CAST = ['霧 涼太', '真鍋 ひかり', '藤堂 志乃', '戸波源蔵', 'ノア', 'カエデ', 'ひなた', '火村レイナ'];
+const CAST = ['霧 涼太', '真鍋 ひかり', '藤堂 志乃', '戸波源蔵', 'ノア', 'カエデ', 'ひなた', '火村レイナ', '大浦 源蔵', '白石澪'];
 const C = (text, extra) => Object.assign({ cast: CAST, evidenceText: text, tagMappingHighConfidence: true, uniqueCandidateCount: 1 }, extra || {});
 const P = (from, to, extra) => Object.assign({ from, to, sourceKind: 'say-tag' }, extra || {});
 
@@ -141,12 +141,15 @@ console.log('\n--- 6. identityRelation の規律 ---');
   const { api } = load();
   eq('完全一致', api.identityRelation('ノア', 'ノア', CAST), 'exact');
   eq('包含かつ一意 → 同一人物', api.identityRelation('真鍋', '真鍋 ひかり', CAST), 'same-entity');
-  /* ★GPTの否定例。「涼」は別人物として存在しうるので **same-entity にしない**。
-     cross-cast に落として直接証拠を要求するのが安全側（unknown でも安全だが、
-     「登録キャストへの変更」であることは事実なので cross-cast と呼ぶ）。 */
-  eq('★1文字の包含は同一人物にしない（涼→霧 涼太）', api.identityRelation('涼', '霧 涼太', CAST), 'cross-cast');
+  /* ★GPTの否定例「涼→霧 涼太」。**登録キャストに『涼』が居るなら**別人物として扱う。
+     居ないなら、そもそも同一性の根拠が弱い名前なので登録キャストへ寄せる（名寄せ）。 */
+  eq('★登録キャストに「涼」が居るなら別人物', api.identityRelation('涼', '霧 涼太', CAST.concat(['涼'])), 'cross-cast');
   ok('  → 直接証拠が無ければ通らない',
-    api.decide(P('涼', '霧 涼太'), C('涼太は、一段一段、上がり続けた。')).act === 'deny');
+    api.decide(P('涼', '霧 涼太'), Object.assign(C('涼太は、一段一段、上がり続けた。'), { cast: CAST.concat(['涼']) })).act === 'deny');
+  eq('登録キャストに居なければ名寄せ', api.identityRelation('涼', '霧 涼太', CAST), 'same-entity');
+  /* ★逆向き（登録キャスト → 未登録ラベル）は劣化。通さない。実データ: カエデ→少女 */
+  eq('★カエデ→少女 は劣化なので別人物扱い', api.identityRelation('カエデ', '少女', CAST), 'cross-cast');
+  eq('★未登録の仮ラベル（男A）→ 登録キャスト は名寄せ', api.identityRelation('男A', '霧 涼太', CAST), 'same-entity');
   eq('別々の登録キャスト', api.identityRelation('ノア', 'カエデ', CAST), 'cross-cast');
   /* ★同じ断片を含むキャストが複数いるときは同一人物と断定しない */
   const dup = ['佐藤 花', '佐藤 実'];

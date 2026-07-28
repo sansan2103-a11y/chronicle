@@ -41,6 +41,13 @@
 //   window.__v292Dfix611.decide(p, c)  … 1件の判定（純関数）
 //   window.__v292Dfix611.selfTest()    … ★生存証明。実データ由来の肯定例・否定例が全部立つか
 //
+// ■★fix612（2026-07-28・影の一斉判定を実データへ当てて直した点）
+//   560カードへ当てたところ **17件が cross-cast 判定** になったが、中身を読むと
+//   **「男A」→「霧 涼太」のような仮ラベルの解決**まで別人物扱いになっていた。
+//   固定の役割語リストでは足りない。**登録キャストに無い名前 → 登録キャストへ**は名寄せとする。
+//   逆向き（登録キャスト →「少女」のような未登録ラベル）は**劣化**なので通さない（実データ: カエデ→少女）。
+//   ★GPTの否定例「涼→霧 涼太」は、**登録キャストに『涼』が居るとき**に別人物として落ちる。
+//
 // OFF: localStorage v292Dfix611SpeakerGateOff='1'（判定を止め、stats は disabled を返す）
 // =====================================================================
 (function () {
@@ -169,6 +176,7 @@
        「涼」→「霧 涼太」は、別人物「涼」が存在しうる（GPTの否定例）。
        包含で same-entity と認めるのは **2文字以上** かつ **キャスト中で一意** のときだけ。
      ===================================================================== */
+  /* 参考: よく出る役割語（判定には使わない。上の一般規則で足りる） */
   var ROLE_WORDS = /^(?:少女|少年|若い男|若い女|若者|青年|老人|老婆|老爺|子供|男性|女性|人影|怪異|影|声|誰か|男|女|店員|店主|医師|看護師|警官|運転手|司会|少年少女)$/;
 
   function identityRelation(from, to, cast) {
@@ -178,20 +186,35 @@
     var C = (cast || []).map(nrm).filter(Boolean);
     var fIn = C.indexOf(f) >= 0, tIn = C.indexOf(t) >= 0;
 
-    // 役割語 → 登録キャスト は名寄せ（fix465/487 の正当な仕事）
-    if (!fIn && ROLE_WORDS.test(f) && tIn) return 'same-entity';
-
-    // 包含関係（短縮名 → フルネーム）。★2文字以上・キャスト中で一意 のときだけ
+    /* ①まず**曖昧な包含**を落とす（GPTの否定例）。
+       「佐藤」は 佐藤 花 / 佐藤 実 のどちらにも当たる → 同一人物と断定してはいけない。
+       ★GPTが挙げた「涼」→「霧 涼太」は、**登録キャストに『涼』が居る場合**にこれで落ちる
+         （その場合 fIn=true なので ③④を通らず ⑥で cross-cast になる）。 */
     var shorter = f.length <= t.length ? f : t;
     var longer = f.length <= t.length ? t : f;
-    if (shorter.length >= 2 && longer.indexOf(shorter) >= 0) {
+    var contained = shorter.length >= 2 && longer.indexOf(shorter) >= 0;
+    if (contained) {
       var hits = 0;
       for (var i = 0; i < C.length; i++) if (C[i].indexOf(shorter) >= 0) hits++;
-      if (hits <= 1) return 'same-entity';
-      return 'cross-cast';           // 同じ断片を含むキャストが複数 → 別人の可能性がある
+      if (hits > 1) return 'cross-cast';
     }
-    if (fIn && tIn) return 'cross-cast';
+
+    /* ②登録キャスト → 未登録ラベル は**劣化**（実データ: 「カエデ」→「少女」）。通さない。 */
+    if (fIn && !tIn) return 'cross-cast';
+
+    /* ③未登録ラベル → 登録キャスト は名寄せ（fix465/487 の正当な仕事）。
+       ★固定の役割語リストでは足りなかった（実データ: 「男A」→「霧 涼太」を別人物扱いにしていた）。
+         **登録キャストに存在しない名前**は、そもそも同一性の根拠として弱い。
+         そこへ差し戻すより、登録キャストへ寄せる方が正しい。 */
+    if (!fIn && tIn) return 'same-entity';
+
+    /* ④包含が一意なら同一人物（短縮名→フルネーム） */
+    if (contained) return 'same-entity';
+
+    /* ⑤どちらも未登録なら判断できない */
     if (!fIn && !tIn) return 'unknown';
+
+    /* ⑥どちらも登録キャスト＝別人物への付け替え */
     return 'cross-cast';
   }
 
