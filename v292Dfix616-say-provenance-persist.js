@@ -13,7 +13,8 @@
 //
 // ■設計（GPT指定の形。カード本体ではなく**並行配列**）
 //   turn._convSayMeta = [
-//     { sourceKind, sourceWhoRaw, paragraphIndex, tagOrdinal, tagMappingConfidence, speakerRevision }
+//     { sourceKind, sourceWhoRaw, charOffset, paragraphIndex, tagOrdinal, tagMappingConfidence, speakerRevision }
+//   ★charOffset = 段落を連結した本文中の文字位置 / paragraphIndex = 何段落目か（fix621 で分離）
 //   ]
 //   ★`_convSays[i]` と**同じ添字**で対応する。カードの中身は**1文字も変えない**。
 //   ★`say` も `.dlg-text` も触らない（表示文字列＝同一性キー）。
@@ -46,7 +47,7 @@
   var MAX_CARDS = 40;        // これより多いターンは付けない（容量の暴走防止）
   var MAX_META_CHARS = 8000; // 1ターンの meta がこれを超えたら付けない
 
-  var stats = { attached: 0, skippedNoProv: 0, skippedTooMany: 0, skippedTooBig: 0, skippedNoCards: 0, alreadyHad: 0, errors: 0 };
+  var stats = { attached: 0, migrated: 0, skippedNoProv: 0, skippedTooMany: 0, skippedTooBig: 0, skippedNoCards: 0, alreadyHad: 0, errors: 0 };
 
   function off() { try { return localStorage.getItem('v292Dfix616Off') === '1'; } catch (e) { return false; } }
 
@@ -103,12 +104,26 @@
           if (tl && sb && (tl === sb || tl.indexOf(sb) >= 0)) { ord = j; break; }
         }
       }
+      /* ★★fix621（実機の1ターン目で自分の誤りを見つけた）
+         ここは元々 `paragraphIndex` に `r.evidence.at` を入れていたが、
+         `at` は `listSayTags()` が返す **連結後の文字位置**であって段落番号ではない。
+         実測: plan.narrative が 6段落（長さ 85/32/36/51/36/24）のターンで
+         paragraphIndex が 102/172/224 になっていた（＝段落番号ではありえない値）。
+         挙動には影響しないが、**後から来歴を追う人を確実に誤解させる**ので直す。
+         → `charOffset`（連結後の文字位置）と `paragraphIndex`（真の段落番号）を**両方**残す。
+         ★段落番号は fix606 の partsOf/paraIndexOf に一任する（同じ抽出規則を2箇所に書かない）。 */
+      var evAt = (r.evidence && r.evidence.at != null) ? r.evidence.at : -1;
+      var paraIx = -1;
+      try {
+        if (typeof prov.paraIndexOf === 'function' && es && es.parts) paraIx = prov.paraIndexOf(es.parts, evAt);
+      } catch (e) {}
       meta.push({
         sourceKind: promoted ? 'say-tag-promoted' : r.source,
         promotedBy: promoted ? 'fix464' : null,
         promoteScore: promoted ? (promoted.score || null) : null,
         sourceWhoRaw: r.tagWho != null ? String(r.tagWho) : null,
-        paragraphIndex: r.evidence && r.evidence.at != null ? r.evidence.at : -1,
+        charOffset: evAt,
+        paragraphIndex: paraIx,
         tagOrdinal: ord,
         tagMappingConfidence: r.matchConfidence || 'none',
         speakerRevision: 0
@@ -120,12 +135,27 @@
     return { ok: true, meta: meta };
   }
 
+  /* fix621 より前の形か（＝`charOffset` を1つも持たない）。空配列は旧形扱いしない。 */
+  function isStaleMeta(m) {
+    if (!Array.isArray(m) || !m.length) return false;
+    for (var i = 0; i < m.length; i++) {
+      if (m[i] && typeof m[i] === 'object' && Object.prototype.hasOwnProperty.call(m[i], 'charOffset')) return false;
+    }
+    return true;
+  }
+
   /* ---------- ターンへ付ける（★_convSays には触らない） ---------- */
   function attach(turn, hero) {
     if (off()) return false;
     try {
       if (!turn || typeof turn !== 'object') return false;
-      if (Array.isArray(turn._convSayMeta)) { stats.alreadyHad++; return false; }
+      /* ★fix621: 既に meta があれば触らない。ただし `charOffset` を持たない**旧形**だけは作り直す
+         （fix621 より前に付いた meta は paragraphIndex の意味が違うため。★対象はこのターンだけで、
+           過去ターンへ遡る動きにはならない＝「新しいターンだけ」の約束は保たれる）。 */
+      if (Array.isArray(turn._convSayMeta)) {
+        if (!isStaleMeta(turn._convSayMeta)) { stats.alreadyHad++; return false; }
+        stats.migrated++;
+      }
       var r = buildMeta(turn, hero);
       if (!r.ok) {
         if (r.why === 'no-prov') stats.skippedNoProv++;
@@ -202,6 +232,8 @@
       sourceKind: m && m[0] && m[0].sourceKind,
       sourceWhoRaw: m && m[0] && m[0].sourceWhoRaw,
       tagOrdinal: m && m[0] && m[0].tagOrdinal,
+      charOffset: m && m[0] && m[0].charOffset,
+      paragraphIndex: m && m[0] && m[0].paragraphIndex,
       mapConf: m && m[0] && m[0].tagMappingConfidence,
       cardsUntouched: JSON.stringify(turn._convSays) === before,
       idempotent: attach(turn, '白石澪') === false
@@ -209,6 +241,7 @@
     var ok = detail.attached === true && detail.hasArray && detail.sameLength &&
       detail.sourceKind === 'say-tag' && detail.sourceWhoRaw === 'ひなた' &&
       detail.tagOrdinal === 0 && detail.mapConf === 'exact' &&
+      detail.charOffset === 15 && detail.paragraphIndex === 0 &&   /* ★fix621: 15=「おはよう」の文字位置 / 0=1段落目 */
       detail.cardsUntouched && detail.idempotent;
     return { ok: ok, detail: detail };
   }
@@ -217,6 +250,7 @@
     buildMeta: buildMeta,
     attach: attach,
     coverage: coverage,
+    isStaleMeta: isStaleMeta,
     purge: purge,
     stats: function () { var o = {}; for (var k in stats) o[k] = stats[k]; o.disabled = off(); o.selfTestPassed = selfTest().ok; return o; },
     selfTest: selfTest,

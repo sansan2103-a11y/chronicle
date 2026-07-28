@@ -186,8 +186,12 @@
      fix607 では `typeof === 'string'` で弾いてしまい、証拠を1件も読めていなかった
      （`evidenceField` を足しておいたおかげで `narrative-notag:165` として即座に見えた）。
      ★型を推測で決めない。文字列／文字列配列／{text}の配列 のどれでも受ける。 */
-  function textOf(v) {
-    if (typeof v === 'string') return v;
+  /* ★fix621: 段落の配列そのものを取り出す（textOf と**同じ抽出規則**を1箇所に置く）。
+     これを分けた理由: `listSayTags().at` は**連結後の文字位置**なので、
+     「何段落目のタグか」を知るには元の配列の区切りが必要。
+     ★textOf と partsOf が食い違うと位置計算が静かに狂うので、textOf は必ず partsOf 経由にする。 */
+  function partsOf(v) {
+    if (typeof v === 'string') return [v];
     if (Array.isArray(v)) {
       var a = [];
       for (var i = 0; i < v.length; i++) {
@@ -198,19 +202,35 @@
           else if (typeof e.say === 'string') a.push(e.say);
         }
       }
-      return a.join('\n');
+      return a;
     }
-    return '';
+    return [];
+  }
+  var JOIN = '\n';
+  function textOf(v) { return partsOf(v).join(JOIN); }
+
+  /* 連結後の文字位置 `at` が、元の配列の何番目の要素に入るか。
+     ★要素の中に改行が含まれていても正しく出したいので、'\n' を数える方式は使わず
+       要素の長さを積み上げる（+1 は join の区切り1文字ぶん）。 */
+  function paraIndexOf(parts, at) {
+    if (!Array.isArray(parts) || !(at >= 0)) return -1;
+    var pos = 0;
+    for (var i = 0; i < parts.length; i++) {
+      var len = String(parts[i] == null ? '' : parts[i]).length;
+      if (at < pos + len) return i;
+      pos += len + JOIN.length;
+    }
+    return -1;
   }
 
   function evidenceSource(turn) {
     var p = turn && turn.plan;
-    var pn = p ? textOf(p.narrative) : '';
-    var tn = turn ? textOf(turn.narrative) : '';
-    if (pn && pn.indexOf('<say') >= 0) return { text: pn, field: 'plan' };
-    if (tn && tn.indexOf('<say') >= 0) return { text: tn, field: 'narrative' };
-    if (pn) return { text: pn, field: 'plan-notag' };
-    return { text: tn, field: 'narrative-notag' };
+    var pp = p ? partsOf(p.narrative) : [], tp = turn ? partsOf(turn.narrative) : [];
+    var pn = pp.join(JOIN), tn = tp.join(JOIN);
+    if (pn && pn.indexOf('<say') >= 0) return { text: pn, field: 'plan', parts: pp };
+    if (tn && tn.indexOf('<say') >= 0) return { text: tn, field: 'narrative', parts: tp };
+    if (pn) return { text: pn, field: 'plan-notag', parts: pp };
+    return { text: tn, field: 'narrative-notag', parts: tp };
   }
 
   /* ---------- 本文中でこのセリフが出てくる位置 ---------- */
@@ -500,6 +520,8 @@
     evidenceSource: evidenceSource,
     turnMapping: turnMapping,
     textOf: textOf,
+    partsOf: partsOf,
+    paraIndexOf: paraIndexOf,
     loose: loose,
     looseHas: looseHas,
     analyze: analyze,

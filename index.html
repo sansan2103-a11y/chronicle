@@ -16,7 +16,7 @@
      OFF=v292Dfix580Off -->
 <script src="v292Dfix580-meta-sync-coordinator.js?cb=v292Dfix583"></script>
 <!-- fix590: コミット台帳（「送ったけど結果を受け取れていない」を記録する。挙動は変えない） -->
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix620"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix621"></script>
 <script>
 /* v292Dfix242: iOS Safari の古いHTMLキャッシュ脱出。`.js`は?cb=でキャッシュ破棄できるが
    index.html本体は破棄できず、iOSはbfcache+ヒューリスティックで古いHTMLを長く保持する
@@ -26,7 +26,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260728-fix620';
+  var BUILT = '20260728-fix621';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2925,7 +2925,7 @@ G.init();
 <script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=v292Dfix396"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
-<script src="v292Dfix399-cloudsync.js?cb=v292Dfix620"></script>
+<script src="v292Dfix399-cloudsync.js?cb=v292Dfix621"></script>
   <script src="v292Dfix400-img-url.js?cb=v292Dfix400d"></script>
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=v292Dfix336"></script>
 <script src="v292Dfix338-artstyle.js?cb=v292Dfix484"></script>
@@ -2984,25 +2984,25 @@ G.init();
 <script src="v292Dfix466-dup-say.js?cb=v292Dfix466"></script>
 <script src="v292Dfix467-readability-rules.js?cb=v292Dfix468"></script>
 <script src="v292Dfix468-gen-timing.js?cb=v292Dfix468"></script>
-<script src="v292Dfix469-speaker-score.js?cb=v292Dfix620"></script>
+<script src="v292Dfix469-speaker-score.js?cb=v292Dfix621"></script>
 <!-- fix606: 話者帰属の来歴アナライザ。**読み取り専用**（whoもDOMもlocalStorageも触らない）。
      「どのカードの話者が何を根拠に決まっているか」の分母を出すためだけの層。
      読出=window.__v292Dfix606.stats()/.review(n)/.selfTest() / OFF=v292Dfix606Off -->
-<script src="v292Dfix606-speaker-provenance.js?cb=v292Dfix620"></script>
+<script src="v292Dfix606-speaker-provenance.js?cb=v292Dfix621"></script>
 <!-- fix611: 話者変更の中央ゲート。**影モード**（判定するだけ・適用しない）。
      読出=window.__v292Dfix611.shadowRun()/.decide()/.selfTest() / OFF=v292Dfix611SpeakerGateOff
      ★fix606 の後に置くこと（shadowRun が __v292Dfix606 を使う） -->
-<script src="v292Dfix611-speaker-gate.js?cb=v292Dfix620"></script>
+<script src="v292Dfix611-speaker-gate.js?cb=v292Dfix621"></script>
 <!-- fix620: 突き合わせの**適用**層（GPT実装順⑨）。動かすのは who だけ・本文は不変。
      新ターンは確定時に自動。過去ターンは __v292Dfix620.repairPast({apply:true}) を呼んだときだけ。
      復元=__v292Dfix620.undoPast() / OFF=v292Dfix620ApplyOff（fix619側のOFFでも止まる）
      ★fix611 の後に置くこと -->
-<script src="v292Dfix620-speaker-apply.js?cb=v292Dfix620"></script>
+<script src="v292Dfix620-speaker-apply.js?cb=v292Dfix621"></script>
 <!-- fix616: 話者の由来をターンへ記録（GPT実装順②）。並行配列 turn._convSayMeta に書き、
      _convSays / who / say / DOM は触らない。**新ターンだけ**・自分から保存しない。
      読出=window.__v292Dfix616.stats()/.coverage()/.purge() / OFF=v292Dfix616Off
      ★fix606・fix611 の後に置くこと -->
-<script src="v292Dfix616-say-provenance-persist.js?cb=v292Dfix620"></script>
+<script src="v292Dfix616-say-provenance-persist.js?cb=v292Dfix621"></script>
 <script src="v292Dfix470-style-tail.js?cb=v292Dfix470e"></script>
 <script src="v292Dfix471-style-c.js?cb=v292Dfix472"></script>
 <script src="v292Dfix472-icon-protect.js?cb=v292Dfix472"></script>
