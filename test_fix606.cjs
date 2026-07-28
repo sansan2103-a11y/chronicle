@@ -325,6 +325,42 @@ console.log('\n--- 4d. ★fix614: タグ対応の確かさ（matchConfidence） 
   ok('analyze が matchConfidence の内訳を返す', !!a.byMatchConfidence && a.byMatchConfidence.exact >= 2, a.byMatchConfidence);
 }
 
+console.log('\n--- 4e. ★fix617: 短い叫び声を無関係なタグに結び付けない ---');
+{
+  /* 実データ v21iph T13: カード「——ッ！」は記号を落とすと「ッ」1文字になり、
+     タグ「ひっ……あ゛……ッ！！」に包含で当たっていた（＝ヒナのセリフだと誤って対応づけ）。
+     しかも私はそれを normalized（確かな対応）とラベルし、ゲートが「タグを守る」判定をしていた。
+     ★1〜2文字の悲鳴で包含照合しない。候補が複数なら ambiguous＝ロックしない。 */
+  const { api } = load();
+  const H = { hero: 'アリア・リュミエール' };
+
+  const scream = { inputType: 'STORY',
+    narrative: '——ッ！',
+    plan: { narrative: ['<say who="ヒナ">「ひっ……あ゛……ッ！！」</say>', '<say who="ノア">「このーーーーっ！！」</say>'] } };
+  const r = api.classifyCard(scream, { who: '孤児院の怪異', say: '「——ッ！」' }, 0, H);
+  ok('★短い叫び声を無関係なタグに結び付けない', r.source !== 'say-tag-renamed' || r.matchConfidence !== 'normalized',
+    { source: r.source, mc: r.matchConfidence });
+  eq('  タグロックを掛けない', r.tagMappingHighConfidence, false);
+
+  eq('★1文字は包含照合しない', api.classifyCard({ narrative: 'x', plan: { narrative: ['<say who="A">「あーーっ！」</say>'] } },
+    { who: 'B', say: '「っ」' }, 0, H).matchConfidence, 'none');
+  eq('★2文字も包含照合しない', api.classifyCard({ narrative: 'x', plan: { narrative: ['<say who="A">「もう行こうか」</say>'] } },
+    { who: 'B', say: '「行こ」' }, 0, H).matchConfidence, 'none');
+  eq('3文字以上なら包含を許す', api.classifyCard({ narvative: 'x', narrative: 'x', plan: { narrative: ['<say who="A">「もう行こうか、ね」</say>'] } },
+    { who: 'B', say: '「もう行こ」' }, 0, H).matchConfidence, 'contains');
+
+  /* ★候補が複数なら ambiguous（＝ロックしない） */
+  const dup = { narrative: 'x', plan: { narrative: ['<say who="A">「うん」</say>', '<say who="B">「うん」</say>'] } };
+  const rd = api.classifyCard(dup, { who: 'C', say: '「うん」' }, 0, H);
+  eq('★同じ本文のタグが2つ → ambiguous', rd.matchConfidence, 'ambiguous');
+  eq('  ロックしない', rd.tagMappingHighConfidence, false);
+
+  /* 段階の優先順: 完全一致 > 記号を落とした一致 > 包含 */
+  const tiers = { narrative: 'x', plan: { narrative: ['<say who="A">「もう、行こう」</say>', '<say who="B">「もう行こう」</say>'] } };
+  eq('完全一致が最優先', api.classifyCard(tiers, { who: 'C', say: '「もう行こう」' }, 0, H).matchConfidence, 'exact');
+  eq('  そのとき who は完全一致した側', api.classifyCard(tiers, { who: 'C', say: '「もう行こう」' }, 0, H).tagWho, 'B');
+}
+
 console.log('\n--- 5. analyze(): 分母と内訳 ---');
 {
   const { api } = load();

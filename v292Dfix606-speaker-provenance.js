@@ -261,24 +261,35 @@
     if (card && card._rv === 1) {
       source = 'react-voice'; confidence = 'high';
     } else {
+      /* ★★fix617（実データで見つけた重大な取り違え）
+         短い叫び声（「——ッ！」「——っ」）が、記号を落とすと **1文字** になり、
+         **無関係なタグに包含で当たっていた**。
+         実例: カード「——ッ！」→ 記号除去で「ッ」→ タグ「ひっ……あ゛……ッ！！」に含まれるので
+         「ヒナのセリフ」と誤って対応づけていた。しかも私はそれを **normalized（確かな対応）**と
+         ラベルしていたので、ゲートが「タグを守る」判定を下していた。
+         ★GPTが最初に警告していた「同じ本文の引用が複数ある」「後段でカードが増える」の実例。
+         直し方（段階を分け、どの段でも**一意でなければ ambiguous**）:
+           ① そのままの完全一致
+           ② 記号を落とした完全一致
+           ③ 包含（★中身が3文字以上のときだけ許す。1〜2文字の悲鳴で包含照合しない）
+         いずれも候補が2つ以上あれば ambiguous＝**タグロックを掛けない**。 */
       var tags = ctx.tags || listSayTags(narrative);
-      var sb = bare(say), hit = null;
+      var sb = bare(say), sl = loose(say), hit = null;
+      var exactHits = [], looseHits = [], containHits = [];
       for (var i = 0; i < tags.length; i++) {
-        // 完全一致を優先し、無ければ包含（タグ内に地の文が混じる形がある）
-        if (tags[i].bare === sb) { hit = tags[i]; break; }
-        if (!hit && sb && tags[i].bare.indexOf(sb) >= 0) hit = tags[i];
+        var tb = tags[i].bare, tl = loose(tags[i].text);
+        if (sb && tb === sb) { exactHits.push(tags[i]); continue; }
+        if (sl && tl && tl === sl) { looseHits.push(tags[i]); continue; }
+        if (sl && sl.length >= 3 && tl && tl.indexOf(sl) >= 0) containHits.push(tags[i]);
       }
-      /* ★fix609: それでも当たらないときだけ、記号を落として再照合する（句読点の校正でずれる分）。 */
-      if (!hit) {
-        var sl = loose(say);
-        for (var i2 = 0; i2 < tags.length; i2++) {
-          var tl = loose(tags[i2].text);
-          if (sl && tl && (tl === sl || tl.indexOf(sl) >= 0)) { hit = tags[i2]; looseUsed = true; flags.push('punct-normalized'); break; }
-        }
-      }
+      if (exactHits.length === 1) { hit = exactHits[0]; matchConfidence = 'exact'; }
+      else if (exactHits.length > 1) { hit = exactHits[0]; matchConfidence = 'ambiguous'; }
+      else if (looseHits.length === 1) { hit = looseHits[0]; matchConfidence = 'normalized'; looseUsed = true; flags.push('punct-normalized'); }
+      else if (looseHits.length > 1) { hit = looseHits[0]; matchConfidence = 'ambiguous'; looseUsed = true; flags.push('punct-normalized'); }
+      else if (containHits.length === 1) { hit = containHits[0]; matchConfidence = 'contains'; }
+      else if (containHits.length > 1) { hit = containHits[0]; matchConfidence = 'ambiguous'; }
       if (hit) {
         tagWho = hit.who;
-        matchConfidence = looseUsed ? 'normalized' : (bare(hit.text) === sb ? 'exact' : 'contains');
         if (bare(hit.who) === bare(who)) { source = 'say-tag'; confidence = 'high'; }
         else { source = 'say-tag-renamed'; confidence = 'medium'; flags.push('evidence-conflict'); }
       } else if (locate(narrative, say) < 0 && !looseHas(narrative, say)) {
