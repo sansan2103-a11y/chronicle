@@ -26,10 +26,15 @@
   'use strict';
   if (window.__v292Dfix458 && window.__v292Dfix458.__armed) return;
   var TAG = '[v292Dfix458:dash-post]';
-  var stats = { turns: 0, replaced: 0 };
+  var stats = { turns: 0, replaced: 0, collided: 0 };
   var backedUp = false;
 
   function off(){ try { return localStorage.getItem('v292Dfix458Off') === '1'; } catch(e){ return false; } }
+  /* ★fix625: 句読点の重なりを避ける処理だけを個別に止められる逃げ道。
+     （fix458 全体を止めるとダッシュが野放しになるので、切り分けを分けている） */
+  function f625off(){ try { return localStorage.getItem('v292Dfix625Off') === '1'; } catch(e){ return false; } }
+  /* 前後がこれらなら `、` を足さない。★閉じ括弧は含めない（`」` は別分岐で `……` にする） */
+  var PUNCT_RE = /[、。，．！？!?…‥]/;
   /* ★fix547(2026-07-25): S の取得は index.html の正式API(fix539)を第一経路にする。
      間接eval 頼みの取得は実機で無言のまま null を返し、判定が丸ごと空振りした前歴がある。
      **第二経路は従来の式をそのまま残す**ので、index.html が古いキャッシュでも挙動は変わらない。
@@ -56,6 +61,27 @@
           var nx = s.charAt(j);
           if (nx === '' || nx === '\n' || nx === '」' || nx === '』' || nx === '"'){
             out += '……';                                // 中断・言いよどみ
+          } else if (f625off()){
+            out += '、';                                 // 従来どおり（逃げ道）
+          } else if (PUNCT_RE.test(out.charAt(out.length - 1)) && PUNCT_RE.test(nx)){
+            /* ★fix625b: 両側が句読点。ダッシュを落とすだけだと
+               `。——、` が `。、` になって**新しい重なりを作ってしまう**
+               （総当たり検査で5通り見つけた。落としただけでは足りない）。
+               → 前の記号を活かし、**後ろの記号を1つだけ吸収する**。
+               例: 「。——、終わり」→「。終わり」 */
+            j++;
+            state.collided++;
+          } else if (PUNCT_RE.test(out.charAt(out.length - 1)) || PUNCT_RE.test(nx)){
+            /* ★★fix625（実機の画面で見つけた）
+               ここは元々「文中の切断なら必ず `、` を足す」だった。
+               ところが**ダッシュの前後をまったく見ていない**ので、
+               すでに句読点がある場所に `、` を重ねて**画面に見える壊れ方**をしていた。
+               実測した2例（どちらも実データ）:
+                 「言ってたな。——独り身でな」 → 「言ってたな。、独り身でな」  ← 直前が `。`
+                 「書類か、それとも——。」     → 「書類か、それとも、。」      ← 直後が `。`
+               → 前後どちらかが既に句読点なら、**何も足さずにダッシュを落とす**。
+               ★`……` へ倒す案も考えたが、`。……` という別の重なりを作るのでやめた。 */
+            state.collided++;
           } else {
             out += '、';                                 // 文中の切断
           }
@@ -70,7 +96,7 @@
   }
 
   function clean(text){
-    var st = { seen: 0, keep: 1, replaced: 0 };
+    var st = { seen: 0, keep: 1, replaced: 0, collided: 0 };
     return cleanStr(String(text || ''), st);
   }
 
@@ -106,7 +132,7 @@
 
   function processTurn(t){
     if (!t || t.__f458) return 0;
-    var st = { seen: 0, keep: 1, replaced: 0 };
+    var st = { seen: 0, keep: 1, replaced: 0, collided: 0 };
     var changed = 0;
 
     var n = t.narrative;
@@ -131,7 +157,7 @@
       }
     }
     try { Object.defineProperty(t, '__f458', { value: 1, enumerable: false, configurable: true }); } catch(e){ t.__f458 = 1; }
-    if (changed){ stats.replaced += st.replaced; }   // fix495(C2): 控えは書換前に取得済み
+    if (changed){ stats.replaced += st.replaced; stats.collided += st.collided; }   // fix495(C2): 控えは書換前に取得済み
     stats.turns++;
     return st.replaced;
   }

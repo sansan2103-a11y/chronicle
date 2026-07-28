@@ -228,7 +228,8 @@ console.log('\n== 台帳の更新（移行済みの数） ==');
   /* + fix611(話者変更の中央ゲート。影モードで S.turns を読む) = 25 */
   /* + fix616(話者の由来を記録。cast.hero を取るため) = 26 */
   /* + fix620(突き合わせの適用層。cast と turns を取るため) = 27 */
-  ok('★__chronicleGetState を参照するのは27ファイル(+features.js)', migrated === 27, migrated);
+  /* + fix624(生成の崩壊を測る探り。読み取り専用で S.turns を走査する) = 28 */
+  ok('★__chronicleGetState を参照するのは28ファイル(+features.js)', migrated === 28, migrated);
   ok('★features.js も分類1だけ移行済み',
      fs2.readFileSync(path.join(__dirname, 'features.js'), 'utf8').indexOf('__chronicleGetState') > 0);
 }

@@ -118,11 +118,26 @@
     if (m.selfTalk >= 2) hit('自問自答', 2, m.selfTalk);
     if (m.personMix >= 2) hit('人称混在', 1, m.personMix);
 
-    /* (B) 語調崩壊型 */
+    /* (B) 語調崩壊型
+       ★★fix626（GPTの反証で判明）: 「意識の流れ」の一文が誤検出された。
+         文が1〜2個しかない段落では **最長文と平均文長は同じ事実**であり、
+         両方に加点するのは**同じ証拠の二重計上**だった。
+         GPTの反証文（1文・115字・助詞17.2%）が、この二重計上で5点に達していた。 */
+    var oneSentence = m.sentences <= 2;
     if (m.maxSentenceLen >= 120) hit('長すぎる文', 3, m.maxSentenceLen);
     else if (m.maxSentenceLen >= 80) hit('長すぎる文', 1, m.maxSentenceLen);
-    if (m.avgSentenceLen >= 40) hit('平均文長', 2, m.avgSentenceLen);
+    if (m.avgSentenceLen >= 40 && !oneSentence) hit('平均文長', 2, m.avgSentenceLen);
     if (m.particleRate <= 7.5 && m.len >= 200) hit('助詞が少ない', 3, m.particleRate);
+
+    /* ★fix626: 助詞が**多い**のは日本語として流暢な証拠。
+       語調崩壊(B型)は助詞が落ちるのが本質なので、助詞が豊富なら
+       「文が長い」だけで崩壊と言ってはいけない（実測: 崩壊側は 6.2〜10.9%）。 */
+    if (m.particleRate >= 14) {
+      for (var z = hits.length - 1; z >= 0; z--) {
+        if (hits[z].w === '長すぎる文' || hits[z].w === '平均文長') { score -= hits[z].pts; hits.splice(z, 1); }
+      }
+      hits.push({ w: '(流暢なので長文減点を取消)', pts: 0, detail: m.particleRate });
+    }
 
     /* 両方に効く */
     if (m.commaRate <= 2.0 && m.len >= 200) hit('読点が少ない', 2, m.commaRate);
@@ -140,7 +155,15 @@
     var m = measure(body);
     var cards = (turn && turn._convSays && turn._convSays.length) || 0;
     var j = judge(m, cards, opts.cardAvg == null ? 0 : opts.cardAvg);
-    return { metrics: m, cards: cards, score: j.score, hits: j.hits, suspect: j.score >= 5 };
+    /* ★★fix626（GPT裁定）: 1つの閾値で「疑い」と「処置」を兼ねてはいけない。
+       誤検出のたびに60〜120秒の再生成が挟まると、崩壊そのものより体験を壊す。
+         0〜3点 … 通常採用
+         4〜6点 … soft（★記録だけ。再生成しない）
+         7点以上 … hard（★ここだけ処置の対象）
+       実測: 崩壊3件は 7/11/12点、正常側の最高は3点、GPTの反証文は5点＝soft に落ちる。 */
+    var level = j.score >= 7 ? 'hard' : (j.score >= 4 ? 'soft' : 'ok');
+    return { metrics: m, cards: cards, score: j.score, hits: j.hits,
+             level: level, hard: level === 'hard', suspect: level === 'hard' };
   }
 
   /* いまの物語の全ターン。★読むだけ。 */
@@ -171,11 +194,16 @@
       '《闇夜》だから？じゃあもう少し詳しいところ、《暗黒物質》？《そこ》？《あるべき姿》？' +
       'もうなんでも構わなくなっていました……本当ですか？はい！そうです！' +
       '私は俺たち彼女はいまここにあいつをもっと深遠なる領域《夜陰》とはまた別種だからして',
+    /* ★fix626: ここは元々**実物を縮めた見本**にしていたが、縮めたせいで
+       文の数が減り、実物とは別の点数（4点＝soft）になっていた。
+       実物は7点＝hard。**見本を短くすると、守っているつもりの性質が守られなくなる。**
+       → 実データの本文をそのまま使う。 */
     registerCollapse: '私は両手同時存在証明のように、右半分挙上途中停止状態維持していて、' +
       '左胸近接保持封筒握り締めたままであり、対峙者側老眼鏡奥眼光固定不動維持、' +
-      '書類載せ机脇置き続け姿勢変更一切確認されていない状態継続中であると言える状況において、' +
+      '書類載せ机脇置き続け姿勢変更一切確認されていない。一方第三者隣立姿勢崩しかけており、' +
+      '口元覆う手指降ろしかけてまた戻しかけ迷走中観測される最中のことであると言える状況において、' +
       '今私発しようとする問いかけそれ自体発生直前時点での出来事でありました為、' +
-      '必然的に次なる事態発生順序確定されていく契機形成されていくものであったといっても過言ではないと考えられますため以下の通り推移致します',
+      '必然的に次なる事態発生順序確定されていく契機形成されていくものであったといっても過言ではないと考えられますため、以下の通り推移致します',
     normalA: '「あ、うん。佐伯ミナ。ミナでいいよ」\n彼女は右手を軽く上げる。' +
       'グリスの残る指先が裸電球の灯りで鈍く光る。革ジャケット越しに冷えた空気が這う。' +
       'ミナの立つ奥から、ガレージに閉じ込められた埃と油と金属の匂いが流れてくる。鼻の奥がひりつく。' +
@@ -186,18 +214,35 @@
       '低く短く返すと、主人の指が湯呑みの縁をなぞった。'
   };
 
+  /* ★fix626: GPT の反証で「意識の流れ」が誤検出されたので、
+     生存証明にも**通すべき文**として入れる（偽陽性を固定しないと、また同じ穴を空ける）。 */
+  FIX.streamOfConsciousness =
+    '私はまだここにいるはずだと考えるけれどここがどこなのかは分からないし彼女が私なのか' +
+    '私が彼女なのかも分からないまま鏡の向こうで笑っている私を見ている彼女の目だけが' +
+    'やけに鮮明でその瞬間だけ私は自分がもう戻れない場所へ来たのだと理解した。';
+  FIX.tenseShortLines =
+    '足音が止まった。\n灯りが消えた。\n誰も動かない。\n廊下の奥で何かが鳴った。\n近い。\n' +
+    'また鳴る。\n今度は扉のすぐ向こうだ。\n澪は息を殺した。\n指先が冷たい。\n動けない。';
+
   function selfTest() {
     var a = scoreTurn({ narrative: FIX.repLoop, _convSays: [] }, { cardAvg: 4 });
     var b = scoreTurn({ narrative: FIX.registerCollapse, _convSays: [{ who: 'x', say: 'y' }] }, { cardAvg: 4 });
     var c = scoreTurn({ narrative: FIX.normalA, _convSays: [1, 2, 3, 4] }, { cardAvg: 4 });
     var d = scoreTurn({ narrative: FIX.normalB, _convSays: [1, 2, 3] }, { cardAvg: 4 });
+    var e = scoreTurn({ narrative: FIX.streamOfConsciousness, _convSays: [] }, { cardAvg: 4 });
+    var f = scoreTurn({ narrative: FIX.tenseShortLines, _convSays: [] }, { cardAvg: 4 });
     var detail = {
-      repLoopScore: a.score, repLoopCaught: a.suspect,
-      registerScore: b.score, registerCaught: b.suspect,
-      normalAScore: c.score, normalAPassed: !c.suspect,
-      normalBScore: d.score, normalBPassed: !d.suspect
+      repLoopScore: a.score, repLoopCaught: a.hard,
+      registerScore: b.score, registerCaught: b.hard,
+      normalAScore: c.score, normalAPassed: !c.hard,
+      normalBScore: d.score, normalBPassed: !d.hard,
+      /* ★意図的な文体は hard にしてはいけない（soft までは許す） */
+      streamScore: e.score, streamNotHard: !e.hard,
+      shortLinesScore: f.score, shortLinesNotHard: !f.hard
     };
-    var ok = detail.repLoopCaught && detail.registerCaught && detail.normalAPassed && detail.normalBPassed;
+    var ok = detail.repLoopCaught && detail.registerCaught &&
+             detail.normalAPassed && detail.normalBPassed &&
+             detail.streamNotHard && detail.shortLinesNotHard;
     return { ok: ok, detail: detail };
   }
 
