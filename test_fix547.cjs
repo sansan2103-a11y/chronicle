@@ -225,7 +225,8 @@ console.log('\n== 台帳の更新（移行済みの数） ==');
        **新しく S を読むモジュールを足したら、必ず正式API(fix539)経由にする**という契約。
        fix606 は第一経路が __chronicleGetState なのでここへ足す。
        間接eval だけで S を取るモジュールを足した場合は、この数は増えず**別の意味で落ちる**。 */
-  ok('★__chronicleGetState を参照するのは24ファイル(+features.js)', migrated === 24, migrated);
+  /* + fix611(話者変更の中央ゲート。影モードで S.turns を読む) = 25 */
+  ok('★__chronicleGetState を参照するのは25ファイル(+features.js)', migrated === 25, migrated);
   ok('★features.js も分類1だけ移行済み',
      fs2.readFileSync(path.join(__dirname, 'features.js'), 'utf8').indexOf('__chronicleGetState') > 0);
 }
