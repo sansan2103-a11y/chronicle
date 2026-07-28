@@ -51,6 +51,7 @@ function load(opts) {
   const UI = { appendTurn(t, i) { appended.push([t, i]); }, renderAll() {}, _renderHooks: [] };
   const repairs = { n: 0 };
   const W = { localStorage: ls, UI, __chronicleGetState: () => S, __v292Dfix66: { repair() { repairs.n++; } } };
+  if (opts.slot) W.__chr6Key = () => 'chr6_slot_' + opts.slot;   // ★fix623: 物語ごとのキーを試すため
   const ctx = { window: W, localStorage: ls, console: { log() {}, warn() {}, error() {} },
     JSON, Math, Object, Array, String, Number, RegExp, Date,
     setInterval: () => 1, setTimeout: (fn) => { try { fn(); } catch (e) {} return 1; } };
@@ -191,6 +192,47 @@ console.log('\n--- 6. repairPast({apply:true}) と復元 ---');
   api.repairPast({ apply: true });
   const rec2 = api.restoreInfo();
   eq('復元記録は上書きしない', rec2.ts, rec.ts);
+}
+
+console.log('\n--- 6b. ★fix623: 復元用の記録は物語ごとに分ける ---');
+{
+  /* ■実機で踏んだ（2026-07-28・過去9枚を5物語に分けて直している途中）
+     復元用のキーが1つしかなく、記録は「1回だけ・上書きしない」設計だったため、
+     **1つ目の物語を直した時点でキーが埋まり、2つ目以降は記録が残らない**＝戻せない。
+     「いつでも戻せる」がこの層の安全性の根拠なので、黙って壊れていては困る。 */
+  const A = TURN(), B = TURN();
+  const a = load({ turns: [A], slot: 'storyA' });
+  eq('物語A: 1件適用', a.api.repairPast({ apply: true }).applied, 1);
+  eq('★物語Aのキーに書く', Object.keys(a.ls.__store), ['v292Dfix620_restore_storyA']);
+
+  /* ★同じ localStorage を共有していても、物語Bは自分のキーに残せる */
+  const b = load({ turns: [B], slot: 'storyB', lsInit: a.ls.__store });
+  eq('物語B: 1件適用', b.api.repairPast({ apply: true }).applied, 1);
+  ok('★物語Bも自分のキーに残る（＝2つ目以降も戻せる）',
+    Object.keys(b.ls.__store).sort().join(',') === 'v292Dfix620_restore_storyA,v292Dfix620_restore_storyB',
+    Object.keys(b.ls.__store));
+  eq('  記録にどの物語か入っている', b.api.restoreInfo().slot, 'storyB');
+  eq('★物語Bを戻せる', b.api.undoPast().restored, 1);
+  eq('  who が元へ', B._convSays[0].who, '真鍋 ひかり');
+  ok('  物語Aは巻き込まれない', A._convSays[0].who === '霧 涼太', A._convSays[0].who);
+
+  /* ★fix623 より前に書かれた共有キーの記録も読める（1つ目の物語の戻し道を失わない） */
+  const C = TURN();
+  C._convSays[0].who = '霧 涼太';   // すでに直っている状態
+  const c = load({ turns: [C], slot: 'storyC',
+    lsInit: { 'v292Dfix620_restore': JSON.stringify({ ts: 1, items: [{ turn: 0, card: 0, from: '真鍋 ひかり', to: '霧 涼太' }] }) } });
+  const ri = c.api.restoreInfo();
+  ok('★旧い共有キーの記録も読める', !!ri && ri._legacy === true, ri);
+  eq('  そこから戻せる', c.api.undoPast().restored, 1);
+  eq('  who が元へ', C._convSays[0].who, '真鍋 ひかり');
+
+  /* 物語ごとのキーがあれば、そちらが優先される */
+  const D = TURN();
+  const d = load({ turns: [D], slot: 'storyD',
+    lsInit: { 'v292Dfix620_restore': JSON.stringify({ ts: 1, items: [] }),
+              'v292Dfix620_restore_storyD': JSON.stringify({ ts: 2, slot: 'storyD', items: [] }) } });
+  eq('★物語ごとのキーを優先する', d.api.restoreInfo().ts, 2);
+  ok('  legacy 印は付かない', !d.api.restoreInfo()._legacy);
 }
 
 console.log('\n--- 7. OFF スイッチ（二重の逃げ道） ---');

@@ -16,7 +16,8 @@
 //   ・カード本文（`say`）と表示文字列は**1文字も変えない**。動かすのは `who` だけ
 //   ・12条件を1つでも満たさなければ**触らない**（判定は fix611 に一任。ここでは判定しない）
 //   ・過去ターンへ**自動では**遡らない
-//   ・書き換える前に**元の値を復元用に残す**（`v292Dfix620_restore`）
+//   ・書き換える前に**元の値を復元用に残す**（★fix623: `v292Dfix620_restore_<スロットid>`＝**物語ごと**。
+//     共有キーだと2つ目以降の物語が戻せなくなる。fix623 前の共有キーも読める）
 //   ・OFF: localStorage `v292Dfix620ApplyOff='1'`（＝完全に従来の who へ戻る）
 //     さらに fix611 側の `v292Dfix619ReconcilerOff='1'` でも止まる（二重の逃げ道）
 //
@@ -32,7 +33,23 @@
   'use strict';
   if (window.__v292Dfix620) return;
 
-  var RESTORE_KEY = 'v292Dfix620_restore';
+  /* ★★fix623（実機で 5物語を順に直そうとして気づいた）
+     復元用の記録キーが**物語ごとに分かれていなかった**。
+     記録は「1回だけ・上書きしない」設計なので、
+       1つ目の物語を直した時点でキーが埋まり、
+       **2つ目以降の物語は記録が残らない＝`undoPast()` で戻せない**。
+     「いつでも戻せる」がこの層の安全性の根拠なので、これは黙って壊れていては困る。
+     → キーを `v292Dfix620_restore_<スロットid>` に分ける。
+     ★fix623 より前に書かれた記録（キーに物語idが無い）も読めるようにする
+       （1つ目の物語の戻し道を失わないため）。 */
+  var RESTORE_BASE = 'v292Dfix620_restore';
+  function slotId() {
+    try {
+      var k = (window.__chr6Key ? window.__chr6Key() : '') || '';
+      return k ? String(k).replace(/^chr6_slot_/, '') : '';
+    } catch (e) { return ''; }
+  }
+  function restoreKey() { var s = slotId(); return s ? (RESTORE_BASE + '_' + s) : RESTORE_BASE; }
   var MAX_RESTORE = 400;
   var stats = { turnsSeen: 0, applied: 0, proposed: 0, denied: {}, errors: 0, pastApplied: 0 };
 
@@ -129,11 +146,13 @@
     }
     if (!apply) return out;
 
-    /* ★書く前に、元の値を復元用に残す（1回だけ・上書きしない）。 */
+    /* ★書く前に、元の値を復元用に残す（その物語について1回だけ・上書きしない）。
+       ★fix623: キーは物語ごと。ここを共有すると2つ目以降の物語が戻せなくなる。 */
     try {
-      if (!localStorage.getItem(RESTORE_KEY)) {
-        var rec = { ts: Date.now(), items: out.proposals.slice(0, MAX_RESTORE) };
-        localStorage.setItem(RESTORE_KEY, JSON.stringify(rec));
+      var rk = restoreKey();
+      if (!localStorage.getItem(rk)) {
+        var rec = { ts: Date.now(), slot: slotId(), items: out.proposals.slice(0, MAX_RESTORE) };
+        localStorage.setItem(rk, JSON.stringify(rec));
       }
     } catch (e) { return { error: 'restore-write-failed', detail: String(e && e.message).slice(0, 60) }; }
 
@@ -151,8 +170,19 @@
     return out;
   }
 
+  /* ★fix623: まず物語ごとのキーを見る。無ければ fix623 より前の共有キーへ落ちる
+     （1つ目の物語の戻し道を失わないため）。どちらから読んだかも返す。 */
   function restoreInfo() {
-    try { return JSON.parse(localStorage.getItem(RESTORE_KEY) || 'null'); } catch (e) { return null; }
+    try {
+      var rk = restoreKey();
+      var v = localStorage.getItem(rk);
+      if (v) { var o = JSON.parse(v); if (o) o._key = rk; return o; }
+      if (rk !== RESTORE_BASE) {
+        var lv = localStorage.getItem(RESTORE_BASE);
+        if (lv) { var lo = JSON.parse(lv); if (lo) { lo._key = RESTORE_BASE; lo._legacy = true; } return lo; }
+      }
+      return null;
+    } catch (e) { return null; }
   }
 
   /* 復元記録から元へ戻す（who だけ） */
