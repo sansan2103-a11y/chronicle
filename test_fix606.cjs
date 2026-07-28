@@ -235,6 +235,51 @@ console.log('\n--- 4b. ★fix607: 証拠の在り処（実セーブの形） ---
   eq('analyze が evidenceField を数える', a.evidenceField['plan'], 1);
 }
 
+console.log('\n--- 4c. ★fix609: 実データで見つけた「数えすぎ」2件 ---');
+{
+  /* 実セーブの unmatched 50件を読んだ結果:
+       31件 … 句読点・三点リーダの表記が違うだけで**本文に在った**（句読点の校正でずれる）
+       14件 … **プレイヤー自身が入力した発話**。`inputType` が実データでは大文字の 'SAY' で、
+              小文字だけを見ていたため hero-utterance が1件も立っていなかった
+     ＝どちらも私の数えすぎ。**残り5件だけが本当に本文に無い**。 */
+  const { api } = load();
+  const H = { hero: '白石澪' };
+
+  // (1) inputType は大文字の 'SAY'
+  const upper = { narrative: '「行こう」', plan: { narrative: ['<say who="白石澪">「行こう」</say>'] },
+                  inputType: 'SAY', playerText: '行こう' };
+  eq('★inputType が大文字 SAY でも hero-utterance',
+    api.classifyCard(upper, { who: '白石澪', say: '「行こう」' }, 0, H).source, 'hero-utterance');
+  eq('小文字 say でも従来どおり',
+    api.classifyCard(Object.assign({}, upper, { inputType: 'say' }), { who: '白石澪', say: '「行こう」' }, 0, H).source, 'hero-utterance');
+  eq('★句読点だけ違うプレイヤー発話も拾う',
+    api.classifyCard(Object.assign({}, upper, { playerText: '行こう。' }), { who: '白石澪', say: '「行こう」' }, 0, H).source, 'hero-utterance');
+
+  // (2) 句読点だけ違うカードは unmatched にしない
+  const punct = { narrative: '「……もう、行こう」', inputType: 'do',
+                  plan: { narrative: ['<say who="ひなた">「……もう、行こう」</say>'] } };
+  const pr = api.classifyCard(punct, { who: 'ひなた', say: '「…もう行こう」' }, 1, H);
+  eq('★句読点差のカードは say-tag として拾う', pr.source, 'say-tag');
+  ok('★緩い照合を使ったことを印で残す', pr.flags.indexOf('punct-normalized') >= 0, pr.flags);
+
+  const punct2 = { narrative: '「……もう、行こう」と誰かが言った。', inputType: 'do',
+                   plan: { narrative: ['「……もう、行こう」と誰かが言った。'] } };
+  eq('★タグ無しでも句読点差なら unmatched にしない',
+    api.classifyCard(punct2, { who: 'ひなた', say: '「…もう行こう」' }, 1, H).source, 'harvest');
+
+  // (3) ★緩めすぎていないこと（canary）— 本当に無いものは今でも unmatched
+  eq('本当に本文に無いカードは unmatched のまま',
+    api.classifyCard({ narrative: '風が吹いた。', plan: { narrative: ['風が吹いた。'] }, inputType: 'do' },
+      { who: 'レナ', say: '「弟の遺体は、結局上がらなかったんです」' }, 1, H).source, 'unmatched');
+  eq('別人の台詞を取り違えない（部分一致で通さない）',
+    api.classifyCard({ narrative: '「行こうか」', plan: { narrative: ['「行こうか」'] }, inputType: 'do' },
+      { who: 'レナ', say: '「行けない」' }, 1, H).source, 'unmatched');
+
+  eq('loose(): 記号を落とす', api.loose('「……もう、行こう」'), 'もう行こう');
+  eq('looseHas(): 記号違いを見つける', api.looseHas('「……もう、行こう」', '「…もう行こう」'), true);
+  eq('looseHas(): 無いものは見つけない', api.looseHas('風が吹いた。', '「行こう」'), false);
+}
+
 console.log('\n--- 5. analyze(): 分母と内訳 ---');
 {
   const { api } = load();

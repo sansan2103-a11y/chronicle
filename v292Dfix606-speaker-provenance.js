@@ -74,6 +74,17 @@
 //   → さらに stats() に **evidenceField**（どちらから読んだかの内訳）を足した。
 //     次に同じ形で盲目になったら、この数字が先に教えてくれる。
 //
+// ■★★fix609（2026-07-28・実データで見つけた「数えすぎ」2件）
+//   `unmatched`（セリフが本文に無い）が50件出たので中身を読んだら、**45件は私の数えすぎ**だった。
+//     ・31件 … 句読点や三点リーダの表記が違うだけで**本文に在った**（句読点の校正でずれる）
+//     ・14件 … **プレイヤー自身が入力した発話**。実データの `inputType` は**大文字の 'SAY'**で、
+//              小文字だけを見ていたため hero-utterance が**1件も立っていなかった**
+//   → (1) 完全一致で外れたときだけ**記号を落とした緩い照合**を試し、使ったら `punct-normalized` の印を残す
+//     (2) `inputType` の比較を大小文字無視にする
+//   ★教訓: **列挙値の大小文字を推測で決めない**。実データを見てから比較する。
+//   ★緩い照合は「黙って緩める」と本当に本文に無いカードまで在ることになるので、
+//     **使った件数を必ず印として数える**。緩めすぎていないことは canary（本当に無い例）で毎回確かめる。
+//
 // OFF: localStorage v292Dfix606Off='1'（分類を止め、stats は disabled を返す）
 // =====================================================================
 (function () {
@@ -109,6 +120,16 @@
   function bare(t) {
     return String(t == null ? '' : t).replace(/[「」『』]/g, '').replace(/[\s　]+/g, '');
   }
+
+  /* ★fix609（実データで自分の誤りを3つ目に見つけた）
+     `unmatched`（＝セリフが本文に無い）が50件出たので中身を読んだところ、
+       **31件は句読点や三点リーダの表記が違うだけ**で、本文に確かに在った。
+       原因は句読点の校正(fix555)などで、カードと本文の表記が1文字ずれること。
+     → 完全一致で見つからなかったときだけ、**記号を落とした緩い照合**を試す。
+       緩い照合で見つかった場合は `punct-normalized` の印を付けて**件数を必ず出す**
+       （黙って緩めると、本当に本文に無いカードまで「在る」ことになってしまう）。 */
+  var PUNCT_RE = /[、。，．・…‥ー―—－\-!?！？"'“”゛゜~〜]/g;
+  function loose(t) { return bare(t).replace(PUNCT_RE, ''); }
 
   /* ---------- 本文中の <say> タグを列挙する ----------
      属性のクォートは "…" / '…' / 裸 の3通りがありうる。推測で1通りに決めない。
@@ -171,6 +192,13 @@
     return b ? n.indexOf(b) : -1;
   }
 
+  /* ★fix609: 完全一致で見つからないときの「記号を無視した」在否判定。
+     位置は返さない（緩い側の添字は元の本文の添字と対応しないため）。在るか無いかだけ。 */
+  function looseHas(narrative, say) {
+    var n = loose(narrative), s = loose(say);
+    return !!(n && s && n.indexOf(s) >= 0);
+  }
+
   function evidenceAt(narrative, at, len) {
     var n = String(narrative || '');
     if (at < 0) return { at: -1, before: '', after: '' };
@@ -208,12 +236,21 @@
         if (tags[i].bare === sb) { hit = tags[i]; break; }
         if (!hit && sb && tags[i].bare.indexOf(sb) >= 0) hit = tags[i];
       }
+      /* ★fix609: それでも当たらないときだけ、記号を落として再照合する（句読点の校正でずれる分）。 */
+      if (!hit) {
+        var sl = loose(say);
+        for (var i2 = 0; i2 < tags.length; i2++) {
+          var tl = loose(tags[i2].text);
+          if (sl && tl && (tl === sl || tl.indexOf(sl) >= 0)) { hit = tags[i2]; flags.push('punct-normalized'); break; }
+        }
+      }
       if (hit) {
         tagWho = hit.who;
         if (bare(hit.who) === bare(who)) { source = 'say-tag'; confidence = 'high'; }
         else { source = 'say-tag-renamed'; confidence = 'medium'; flags.push('evidence-conflict'); }
-      } else if (locate(narrative, say) < 0) {
+      } else if (locate(narrative, say) < 0 && !looseHas(narrative, say)) {
         // 本文に見当たらない＝会話ログを AI に再発明させた経路（index.html:1929 genConvLog）
+        // ★fix609: 記号を無視しても見つからないときだけ unmatched にする
         source = 'unmatched'; confidence = 'unknown';
       } else if (tags.length === 0) {
         source = 'harvest'; confidence = 'low';
@@ -223,9 +260,14 @@
     }
 
     // (2) SAYターンの主人公発話は、抽出ではなく**おしんが入力した文字列**そのもの（index.html:1940）
-    if (idx === 0 && turn && turn.inputType === 'say' && hero && bare(who) === bare(hero)) {
-      var pt = bare(turn.playerText || '');
-      if (pt && (bare(say).indexOf(pt) >= 0 || pt.indexOf(bare(say)) >= 0)) {
+    /* ★fix609: 実データの `inputType` は **大文字の 'SAY'**。小文字だけで比較していたため
+       **プレイヤー自身が入力した発話14件が全部 `unmatched` に落ちていた**（＝14/50 の誤検出）。
+       ★列挙値の大小文字を推測で決めない。実データを見てから比較する。 */
+    var itype = String((turn && turn.inputType) || '').toLowerCase();
+    if (idx === 0 && itype === 'say' && hero && bare(who) === bare(hero)) {
+      var pt = loose(turn && turn.playerText || '');
+      var sl2 = loose(say);
+      if (pt && sl2 && (sl2.indexOf(pt) >= 0 || pt.indexOf(sl2) >= 0)) {
         source = 'hero-utterance'; confidence = 'high';
         // 誤検出防止: ここに来たら evidence-conflict は取り下げる（タグ側が後付けのため）
         flags = flags.filter(function (f) { return f !== 'evidence-conflict'; });
@@ -403,6 +445,8 @@
     listSayTags: listSayTags,
     evidenceSource: evidenceSource,
     textOf: textOf,
+    loose: loose,
+    looseHas: looseHas,
     analyze: analyze,
     sweep: sweep,
     revisions: function () { return revLog.slice(); },
