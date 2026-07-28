@@ -219,13 +219,37 @@
     return out;
   }
   /* 1ターン分の「繰り返し」指標。★点数には**まだ入れない**（測るだけ）。 */
+  /* ★fix629（GPT裁定）: 重複は**地の文だけ**で測る。
+     台詞は「はい」「そうか」「名前の呼びかけ」「同じ質問への応答」「口癖」が
+     **正常に**重なるので、混ぜると分布が汚れる。タグも話者名も落とす。 */
+  function narrativeOnly(v) {
+    var s = textOf(v);
+    s = String(s || '')
+      .replace(/<say\b[^>]*>[\s\S]*?<\/say>/g, '')   // タグ付きの台詞を丸ごと落とす
+      .replace(/<[^>]{1,40}>/g, '')                  // 残りのタグ
+      .replace(/[「『][^」』]{0,200}[」』]/g, '');    // 裸の鉤括弧の台詞
+    return s;
+  }
+  function bodyOf(turn) {
+    if (!turn) return '';
+    var a = narrativeOnly(turn.narrative);
+    if (a.replace(/\s/g, '').length) return a;
+    return narrativeOnly(turn.plan && turn.plan.narrative);
+  }
+
   function repetitionOf(turn, prevTurn) {
-    var cur = stripTags(textOf(turn && turn.narrative) || textOf(turn && turn.plan && turn.plan.narrative));
-    var prev = prevTurn ? stripTags(textOf(prevTurn.narrative) || textOf(prevTurn.plan && prevTurn.plan.narrative)) : '';
-    var lr = longRepeat(cur, 20);
+    var cur = bodyOf(turn), prev = prevTurn ? bodyOf(prevTurn) : '';
+    var lr = longRepeat(stripTags(textOf(turn && turn.narrative)) || '', 20);
+    var curLen = cur.replace(/\s/g, '').length, prevLen = prev.replace(/\s/g, '').length;
     return {
-      prevOverlap5: prev ? containment(cur, prev, 5) : null,
-      prevOverlap8: prev ? containment(cur, prev, 8) : null,
+      /* ★GPT裁定: 主判定は 8-gram の**双方向**。一方向だと
+         「今ターンが前ターンの一部コピー」と「前ターン全部＋付け足し」を区別できない。
+         5-gram は診断用に残す（同じ人物名・場所名だけで上がりやすく、主判定には向かない）。 */
+      currentInPrevious8: prev ? containment(cur, prev, 8) : null,
+      previousInCurrent8: prev ? containment(prev, cur, 8) : null,
+      diag5: prev ? containment(cur, prev, 5) : null,
+      lengthRatio: (prevLen ? Math.round(100 * curLen / prevLen) / 100 : null),
+      inputKind: String((turn && turn.inputType) || '').toUpperCase(),
       selfRepeat20: lr.ratio,
       selfRepeatGrams: lr.repeatedGrams
     };
@@ -316,6 +340,7 @@
   window.__v292Dfix624 = {
     measure: measure, judge: judge, scoreTurn: scoreTurn, sweep: sweep,
     ngrams: ngrams, containment: containment, longRepeat: longRepeat, repetitionOf: repetitionOf,
+    narrativeOnly: narrativeOnly, bodyOf: bodyOf,
     selfTest: selfTest, _fixtures: FIX,
     stats: function () { return { disabled: off(), selfTestPassed: selfTest().ok }; }
   };
