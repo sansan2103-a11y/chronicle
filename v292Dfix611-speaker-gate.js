@@ -352,23 +352,28 @@
       selfTestPassed: selfTest().ok,
       cards: 0, tagCrossCastProposals: 0, tagCrossCastAllowed: 0,
       tagCrossCastDeniedNoHardEvidence: 0, tagCrossCastDeniedReactionFrame: 0,
-      sameEntityRenamesAllowed: 0, labelResolutionsAllowed: 0, labelIsSpeakerDenied: 0, byReason: {}, items: []
+      sameEntityRenamesAllowed: 0, labelResolutionsAllowed: 0, labelIsSpeakerDenied: 0, turnsWithWeakMapping: 0, byReason: {}, items: []
     };
     if (!Array.isArray(turns)) return out;
     for (var ti = 0; ti < turns.length; ti++) {
       var t = turns[ti];
       if (!t || !Array.isArray(t._convSays)) continue;
-      var es = prov.evidenceSource(t), tags = prov.listSayTags(es.text);
+      var es = prov.evidenceSource(t);
+      /* ★fix614: タグ対応の確かさをターン単位で先に測り、カードへ持ち回る。
+         対応が壊れているターンでは強いタグロックを掛けない（誤対応を保護しないため）。 */
+      var tm = prov.turnMapping ? prov.turnMapping(t, es) : null;
+      var tags = tm ? tm.tags : prov.listSayTags(es.text);
+      if (tm && !tm.ok) out.turnsWithWeakMapping++;
       for (var ci = 0; ci < t._convSays.length; ci++) {
         var c = t._convSays[ci]; if (!c) continue;
         out.cards++;
-        var r = prov.classifyCard(t, c, ci, { hero: hero, es: es, tags: tags });
+        var r = prov.classifyCard(t, c, ci, { hero: hero, es: es, tags: tags, mappingOk: tm ? tm.ok : true });
         if (r.source !== 'say-tag-renamed' || !r.tagWho) continue;
         var rel = identityRelation(r.tagWho, c.who, cast);
         if (rel === 'same-entity' || rel === 'exact') { out.sameEntityRenamesAllowed++; continue; }
         if (rel === 'label-resolution') {
           var dl = decide({ from: r.tagWho, to: c.who, sourceKind: 'say-tag' },
-            { cast: cast, evidenceText: es.text, tagMappingHighConfidence: true, uniqueCandidateCount: 1 });
+            { cast: cast, evidenceText: es.text, tagMappingHighConfidence: r.tagMappingHighConfidence !== false, uniqueCandidateCount: 1 });
           out.byReason[dl.reason] = (out.byReason[dl.reason] || 0) + 1;
           if (dl.act === 'allow') { out.labelResolutionsAllowed++; continue; }
           out.labelIsSpeakerDenied++;
@@ -379,7 +384,7 @@
         }
         out.tagCrossCastProposals++;
         var d = decide({ from: r.tagWho, to: c.who, sourceKind: 'say-tag' },
-          { cast: cast, evidenceText: es.text, tagMappingHighConfidence: true, uniqueCandidateCount: 1 });
+          { cast: cast, evidenceText: es.text, tagMappingHighConfidence: r.tagMappingHighConfidence !== false, uniqueCandidateCount: 1 });
         out.byReason[d.reason] = (out.byReason[d.reason] || 0) + 1;
         if (d.act === 'allow') out.tagCrossCastAllowed++;
         else if (d.reason === 'tag-cross-cast-needs-hard-evidence') {

@@ -147,6 +147,37 @@
     return out;
   }
 
+  /* =====================================================================
+     ★fix614（GPT実装順①「分類器の対応信頼度を追加」）
+     タグとカードの**対応づけがどれくらい確かか**を、ターン単位で先に測る。
+     GPT指摘: 同じ本文の引用が複数ある／後段でカードが増える／タグが壊れている、
+     のいずれかがあると **index 対応がずれ**、分類そのものが当てにならなくなる。
+     ★ここが 'high' でないカードへ強いタグロックを掛けると、
+       **分類器の誤対応まで保護してしまう**（GPT明示）。だから先に測って持ち回る。
+     ===================================================================== */
+  function turnMapping(turn, es) {
+    es = es || evidenceSource(turn);
+    var text = es.text || '';
+    var tags = listSayTags(text);
+    var opens = (text.match(/<say\b/g) || []).length;
+    var closes = (text.match(/<\/say>/g) || []).length;
+    var broken = opens !== closes || opens !== tags.length;
+    var seen = {}, dupTag = false;
+    for (var i = 0; i < tags.length; i++) {
+      var k = loose(tags[i].text);
+      if (k && seen[k]) dupTag = true;
+      if (k) seen[k] = 1;
+    }
+    var cards = (turn && turn._convSays) || [], seenC = {}, dupCard = false;
+    for (var j = 0; j < cards.length; j++) {
+      var kc = cards[j] && loose(cards[j].say);
+      if (kc && seenC[kc]) dupCard = true;
+      if (kc) seenC[kc] = 1;
+    }
+    return { tags: tags, tagCount: tags.length, broken: broken, dupTag: dupTag, dupCard: dupCard,
+             ok: !broken && !dupTag && !dupCard };
+  }
+
   /* ---------- ★証拠の在り処（fix607） ----------
      画面用の `turn.narrative` はタグが剥がされているので、話者の一次証拠は残っていない。
      モデルの構造化出力 `turn.plan.narrative` に `<say who="…">` が生きている。
@@ -224,6 +255,7 @@
     var say = String((card && card.say) || '');
     var flags = [], tagWho = null;
     var source, confidence;
+    var matchConfidence = 'none', looseUsed = false;   // ★fix614
 
     // (1) <react 声="<say>…"> 由来は who が一次情報で明示されている＝聖域（index.html:1880 の _rv）
     if (card && card._rv === 1) {
@@ -241,11 +273,12 @@
         var sl = loose(say);
         for (var i2 = 0; i2 < tags.length; i2++) {
           var tl = loose(tags[i2].text);
-          if (sl && tl && (tl === sl || tl.indexOf(sl) >= 0)) { hit = tags[i2]; flags.push('punct-normalized'); break; }
+          if (sl && tl && (tl === sl || tl.indexOf(sl) >= 0)) { hit = tags[i2]; looseUsed = true; flags.push('punct-normalized'); break; }
         }
       }
       if (hit) {
         tagWho = hit.who;
+        matchConfidence = looseUsed ? 'normalized' : (bare(hit.text) === sb ? 'exact' : 'contains');
         if (bare(hit.who) === bare(who)) { source = 'say-tag'; confidence = 'high'; }
         else { source = 'say-tag-renamed'; confidence = 'medium'; flags.push('evidence-conflict'); }
       } else if (locate(narrative, say) < 0 && !looseHas(narrative, say)) {
@@ -288,6 +321,10 @@
       tagWho: tagWho,
       who: who,
       evidenceField: es.field,
+      /* ★fix614: この対応づけがどれくらい確かか。
+         high でないカードには強いタグロックを掛けない（誤対応を保護しないため）。 */
+      matchConfidence: matchConfidence,
+      tagMappingHighConfidence: !!(ctx.mappingOk !== false && (matchConfidence === 'exact' || matchConfidence === 'normalized')),
       len: realLen,
       contentLen: contentLen,
       evidence: evidenceAt(narrative, at, at >= 0 ? String(say).length : 0)
@@ -296,7 +333,7 @@
 
   /* ---------- 全ターン走査（読み取り専用） ---------- */
   function analyze(turns, hero) {
-    var res = { total: 0, turns: 0, bySource: {}, byConfidence: {}, byFlag: {}, evidenceField: {}, items: [] };
+    var res = { total: 0, turns: 0, bySource: {}, byConfidence: {}, byFlag: {}, evidenceField: {}, turnMapping: {}, byMatchConfidence: {}, items: [] };
     if (!Array.isArray(turns)) return res;
     for (var ti = 0; ti < turns.length; ti++) {
       var t = turns[ti];
@@ -304,7 +341,10 @@
       res.turns++;
       var es = evidenceSource(t);
       res.evidenceField[es.field] = (res.evidenceField[es.field] || 0) + 1;
-      var ctx = { hero: hero, es: es, tags: listSayTags(es.text) };
+      var tm = turnMapping(t, es);
+      res.turnMapping[tm.ok ? 'ok' : (tm.broken ? 'broken-tag' : (tm.dupTag ? 'duplicate-quote' : 'duplicate-card'))] =
+        (res.turnMapping[tm.ok ? 'ok' : (tm.broken ? 'broken-tag' : (tm.dupTag ? 'duplicate-quote' : 'duplicate-card'))] || 0) + 1;
+      var ctx = { hero: hero, es: es, tags: tm.tags, mappingOk: tm.ok };
       for (var ci = 0; ci < t._convSays.length; ci++) {
         var c = t._convSays[ci];
         if (!c) continue;
@@ -313,7 +353,8 @@
         res.bySource[r.source] = (res.bySource[r.source] || 0) + 1;
         res.byConfidence[r.confidence] = (res.byConfidence[r.confidence] || 0) + 1;
         for (var fi = 0; fi < r.flags.length; fi++) res.byFlag[r.flags[fi]] = (res.byFlag[r.flags[fi]] || 0) + 1;
-        if (r.flags.length) res.items.push({ turn: ti, card: ci, who: r.who, tagWho: r.tagWho, source: r.source, confidence: r.confidence, flags: r.flags, say: String(c.say || '').slice(0, 40), evidence: r.evidence });
+        res.byMatchConfidence[r.matchConfidence] = (res.byMatchConfidence[r.matchConfidence] || 0) + 1;
+        if (r.flags.length) res.items.push({ turn: ti, card: ci, who: r.who, tagWho: r.tagWho, source: r.source, confidence: r.confidence, flags: r.flags, matchConfidence: r.matchConfidence, tagMappingHighConfidence: r.tagMappingHighConfidence, say: String(c.say || '').slice(0, 40), evidence: r.evidence });
       }
     }
     return res;
@@ -428,6 +469,8 @@
       byConfidence: a.byConfidence,
       byFlag: a.byFlag,
       evidenceField: a.evidenceField,   // ★fix607: 証拠をどちらの欄から読んだか（盲目化の早期警報）
+      turnMapping: a.turnMapping,       // ★fix614: タグ対応が壊れているターンの内訳
+      byMatchConfidence: a.byMatchConfidence,
       needsReview: a.items.length,
       revisionsObserved: revLog.length
     };
@@ -444,6 +487,7 @@
     classifyCard: classifyCard,
     listSayTags: listSayTags,
     evidenceSource: evidenceSource,
+    turnMapping: turnMapping,
     textOf: textOf,
     loose: loose,
     looseHas: looseHas,

@@ -16,7 +16,7 @@
      OFF=v292Dfix580Off -->
 <script src="v292Dfix580-meta-sync-coordinator.js?cb=v292Dfix583"></script>
 <!-- fix590: コミット台帳（「送ったけど結果を受け取れていない」を記録する。挙動は変えない） -->
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix613"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix614"></script>
 <script>
 /* v292Dfix242: iOS Safari の古いHTMLキャッシュ脱出。`.js`は?cb=でキャッシュ破棄できるが
    index.html本体は破棄できず、iOSはbfcache+ヒューリスティックで古いHTMLを長く保持する
@@ -26,7 +26,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260728-fix613';
+  var BUILT = '20260728-fix614';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2925,7 +2925,7 @@ G.init();
 <script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=v292Dfix396"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
-<script src="v292Dfix399-cloudsync.js?cb=v292Dfix613"></script>
+<script src="v292Dfix399-cloudsync.js?cb=v292Dfix614"></script>
   <script src="v292Dfix400-img-url.js?cb=v292Dfix400d"></script>
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=v292Dfix336"></script>
 <script src="v292Dfix338-artstyle.js?cb=v292Dfix484"></script>
@@ -2984,15 +2984,15 @@ G.init();
 <script src="v292Dfix466-dup-say.js?cb=v292Dfix466"></script>
 <script src="v292Dfix467-readability-rules.js?cb=v292Dfix468"></script>
 <script src="v292Dfix468-gen-timing.js?cb=v292Dfix468"></script>
-<script src="v292Dfix469-speaker-score.js?cb=v292Dfix613"></script>
+<script src="v292Dfix469-speaker-score.js?cb=v292Dfix614"></script>
 <!-- fix606: 話者帰属の来歴アナライザ。**読み取り専用**（whoもDOMもlocalStorageも触らない）。
      「どのカードの話者が何を根拠に決まっているか」の分母を出すためだけの層。
      読出=window.__v292Dfix606.stats()/.review(n)/.selfTest() / OFF=v292Dfix606Off -->
-<script src="v292Dfix606-speaker-provenance.js?cb=v292Dfix613"></script>
+<script src="v292Dfix606-speaker-provenance.js?cb=v292Dfix614"></script>
 <!-- fix611: 話者変更の中央ゲート。**影モード**（判定するだけ・適用しない）。
      読出=window.__v292Dfix611.shadowRun()/.decide()/.selfTest() / OFF=v292Dfix611SpeakerGateOff
      ★fix606 の後に置くこと（shadowRun が __v292Dfix606 を使う） -->
-<script src="v292Dfix611-speaker-gate.js?cb=v292Dfix613"></script>
+<script src="v292Dfix611-speaker-gate.js?cb=v292Dfix614"></script>
 <script src="v292Dfix470-style-tail.js?cb=v292Dfix470e"></script>
 <script src="v292Dfix471-style-c.js?cb=v292Dfix472"></script>
 <script src="v292Dfix472-icon-protect.js?cb=v292Dfix472"></script>

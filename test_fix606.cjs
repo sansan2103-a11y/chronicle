@@ -280,6 +280,51 @@ console.log('\n--- 4c. ★fix609: 実データで見つけた「数えすぎ」2
   eq('looseHas(): 無いものは見つけない', api.looseHas('風が吹いた。', '「行こう」'), false);
 }
 
+console.log('\n--- 4d. ★fix614: タグ対応の確かさ（matchConfidence） ---');
+{
+  /* GPT指摘: 同じ本文の引用が複数ある／後段でカードが増える／タグが壊れている、
+     のいずれかがあると index 対応がずれ、分類そのものが当てにならない。
+     ★ここが high でないカードへ強いタグロックを掛けると誤対応まで保護してしまう。 */
+  const { api } = load();
+  const H = { hero: '白石澪' };
+
+  const exact = { plan: { narrative: ['<say who="ひなた">「おはよう」</say>'] }, narrative: '「おはよう」', inputType: 'do' };
+  const r1 = api.classifyCard(exact, { who: 'ひなた', say: '「おはよう」' }, 1, H);
+  eq('完全一致は exact', r1.matchConfidence, 'exact');
+  eq('  タグロックを掛けてよい', r1.tagMappingHighConfidence, true);
+
+  const punct = { plan: { narrative: ['<say who="ひなた">「……もう、行こう」</say>'] }, narrative: '「……もう、行こう」', inputType: 'do' };
+  eq('記号差は normalized', api.classifyCard(punct, { who: 'ひなた', say: '「…もう行こう」' }, 1, H).matchConfidence, 'normalized');
+  eq('  normalized でもロックしてよい', api.classifyCard(punct, { who: 'ひなた', say: '「…もう行こう」' }, 1, H).tagMappingHighConfidence, true);
+
+  eq('タグが無ければ none', api.classifyCard({ narrative: '「x」と誰かが言った。', plan: { narrative: ['「x」と誰かが言った。'] } },
+    { who: 'ひなた', say: '「x」' }, 1, H).matchConfidence, 'none');
+  eq('  ロックしない', api.classifyCard({ narrative: '「x」と誰かが言った。', plan: { narrative: ['「x」と誰かが言った。'] } },
+    { who: 'ひなた', say: '「x」' }, 1, H).tagMappingHighConfidence, false);
+
+  eq('★対応が壊れたターンではロックしない',
+    api.classifyCard(exact, { who: 'ひなた', say: '「おはよう」' }, 1, Object.assign({ mappingOk: false }, H)).tagMappingHighConfidence, false);
+
+  // turnMapping: 壊れ方を種類別に見分ける
+  const dupQuote = { plan: { narrative: ['<say who="A">「うん」</say>', '<say who="B">「うん」</say>'] },
+    _convSays: [{ who: 'A', say: '「うん」' }, { who: 'B', say: '「うん」' }] };
+  eq('★同じ本文の引用が複数 → 対応は当てにならない', api.turnMapping(dupQuote).ok, false);
+  eq('  重複したタグとして検出', api.turnMapping(dupQuote).dupTag, true);
+
+  const brokenTag = { plan: { narrative: ['<say who="A">「うん」'] }, _convSays: [{ who: 'A', say: '「うん」' }] };
+  eq('★閉じタグが無いターン → 対応は当てにならない', api.turnMapping(brokenTag).broken, true);
+
+  const clean = { plan: { narrative: ['<say who="A">「うん」</say>', '<say who="B">「そう」</say>'] },
+    _convSays: [{ who: 'A', say: '「うん」' }, { who: 'B', say: '「そう」' }] };
+  eq('健全なターンは ok', api.turnMapping(clean).ok, true);
+  eq('  タグ数も数える', api.turnMapping(clean).tagCount, 2);
+
+  // analyze が集計に載せる
+  const a = api.analyze([clean, dupQuote], '白石澪');
+  eq('analyze が対応の内訳を返す', a.turnMapping, { ok: 1, 'duplicate-quote': 1 });
+  ok('analyze が matchConfidence の内訳を返す', !!a.byMatchConfidence && a.byMatchConfidence.exact >= 2, a.byMatchConfidence);
+}
+
 console.log('\n--- 5. analyze(): 分母と内訳 ---');
 {
   const { api } = load();
