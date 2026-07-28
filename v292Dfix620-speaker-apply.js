@@ -174,8 +174,17 @@
     return { restored: n, of: rec.items.length };
   }
 
+  /* ★★fix622: selfTest はカウンタを**汚してはいけない**（fix616 と同じ理由）。
+     実機で踏んだ: stats() が selfTest() を呼ぶので、読むたびに
+     `applied` と `denied` が人工ターンの分だけ増え、実データの観測値に見えていた。 */
+  function withoutCounting(fn) {
+    var snap = {}; for (var k in stats) snap[k] = (k === 'denied') ? JSON.parse(JSON.stringify(stats[k])) : stats[k];
+    try { return fn(); } finally { for (var k2 in snap) stats[k2] = snap[k2]; }
+  }
+
   /* ★生存証明: 人工の1ターンで「直る」「本文は変わらない」「OFFで何もしない」 */
-  function selfTest() {
+  function selfTest() { return withoutCounting(_selfTest); }
+  function _selfTest() {
     var g = gate();
     if (!g) return { ok: false, why: 'fix611-missing' };
     var cast = ['霧 涼太', '真鍋 ひかり'];
@@ -206,6 +215,15 @@
     restoreInfo: restoreInfo,
     undoPast: undoPast,
     selfTest: selfTest,
-    stats: function () { var o = {}; for (var k in stats) o[k] = stats[k]; o.disabled = off(); o.selfTestPassed = selfTest().ok; return o; }
+    /* ★fix622: `denied` は入れ子のオブジェクトなので**参照でコピーしてはいけない**。
+       参照のままだと、この直後に呼ぶ selfTest() の中の書き込みが
+       返したオブジェクトにそのまま現れる（カウンタを退避・復元しても意味が無い）。 */
+    stats: function () {
+      var o = {};
+      for (var k in stats) o[k] = (k === 'denied') ? JSON.parse(JSON.stringify(stats[k])) : stats[k];
+      o.disabled = off();
+      o.selfTestPassed = selfTest().ok;
+      return o;
+    }
   };
 })();

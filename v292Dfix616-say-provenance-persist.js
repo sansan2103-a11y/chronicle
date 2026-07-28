@@ -22,8 +22,12 @@
 // ■安全側の約束
 //   ・**新しいターンだけ**に付ける。過去ターンへ遡って書かない
 //     （容量が増える／既存セーブを大きく書き換える／どちらも避ける）
-//   ・自分から `S.save()` を**呼ばない**。次の自然な保存に相乗りする
-//     （大きな書込は副作用で別の控えを消すことがある、というこのプロジェクトの実害を踏まえて）
+//   ・★fix622: meta を**付けたときだけ** `S.save()` を1回呼ぶ（毎ターン無条件には呼ばない）
+//     当初は「次の自然な保存に相乗りする」としていたが、実機で**間違いだと分かった**。
+//     index.html の順序は `S.turns.push(turn); S.save(); UI.appendTurn(…)` なので、
+//     meta は直前の保存に間に合わず、しかも「次の保存」は来る保証が無い
+//     （最後のターンでは誰も保存せず、再読み込みで**消える**。実測で消えた）。
+//     localStorage へ直接書かない約束は守る＝経路は S.save() だけ。
 //   ・カードが極端に多いターン（既定 40枚超）や、meta が大きすぎるターンは**付けない**
 //   ・`_convSays` / `who` / DOM は触らない。localStorage へも自分では書かない
 //   ・OFF: localStorage `v292Dfix616Off='1'`
@@ -47,7 +51,7 @@
   var MAX_CARDS = 40;        // これより多いターンは付けない（容量の暴走防止）
   var MAX_META_CHARS = 8000; // 1ターンの meta がこれを超えたら付けない
 
-  var stats = { attached: 0, migrated: 0, skippedNoProv: 0, skippedTooMany: 0, skippedTooBig: 0, skippedNoCards: 0, alreadyHad: 0, errors: 0 };
+  var stats = { attached: 0, migrated: 0, saves: 0, skippedNoProv: 0, skippedTooMany: 0, skippedTooBig: 0, skippedNoCards: 0, alreadyHad: 0, errors: 0 };
 
   function off() { try { return localStorage.getItem('v292Dfix616Off') === '1'; } catch (e) { return false; } }
 
@@ -170,6 +174,18 @@
     } catch (e) { stats.errors++; return false; }
   }
 
+  /* ★fix622: 付けた meta を確実に残す。
+     ・localStorage へ**自分では書かない**（S.save() が唯一の正規経路）という約束は守る
+     ・呼ぶのは attach が true を返したときだけ（＝毎ターン無条件には呼ばない）
+     ・save が無い/落ちる環境でも例外を外へ出さない */
+  function requestSave() {
+    try {
+      var s = getS();
+      if (s && typeof s.save === 'function') { s.save(); stats.saves++; return true; }
+    } catch (e) { stats.errors++; }
+    return false;
+  }
+
   /* ---------- 配線: ターンが確定した瞬間（UI.appendTurn） ---------- */
   function install() {
     var UI = getUI();
@@ -179,9 +195,20 @@
       if (typeof UI.appendTurn === 'function') {
         var oa = UI.appendTurn.bind(UI);
         UI.appendTurn = function (turn, idx) {
-          /* ★ここでは保存しない。次の自然な保存に相乗りする。
-             appendTurn は S.save() の**直後**に呼ばれるので、この回の meta は次の保存で永続化される。 */
-          try { attach(turn, heroName(getS())); } catch (e) { stats.errors++; }
+          /* ★★fix622（実機で判明。ここには**私の誤解**が書いてあった）
+             元のコメントは「appendTurn は S.save() の直後に呼ばれるので次の保存で永続化される」。
+             前半は正しいが、結論が逆だった。index.html の実際の順序は
+                 S.turns.push(turn); S.save(); UI.appendTurn(turn, …);
+             つまり meta は**いま終わった保存に必ず間に合わない**。
+             そして「次の保存」は来る保証が無い（最後のターンでは誰も保存しない）。
+             実測: 1ターン目を回して再読み込みしたら `_convSayMeta` は**消えていた**。
+             保存されたスロットを見ると `_convSayMeta` の文字列が1つも無く、
+             その場で S.save() を1回呼ぶと 4507→4896 バイトになって現れた
+             （＝**削られてはいない。単に一度も保存されていなかった**）。
+             → 付けたときだけ、自分で1回保存する。fix620 が既に同じ流儀（変わったときだけ保存）。 */
+          var did = false;
+          try { did = attach(turn, heroName(getS())); } catch (e) { stats.errors++; }
+          if (did) requestSave();
           return oa(turn, idx);
         };
       }
@@ -214,8 +241,20 @@
     return { purgedTurns: n, note: 'S.save() は呼んでいません。次の保存で反映されます。' };
   }
 
+  /* ★★fix622: selfTest はカウンタを**汚してはいけない**。
+     実機で踏んだ: stats() が内部で selfTest() を呼んでいたため、
+     `attached:1 / alreadyHad:1` や fix620 の `denied:{...:1}` が
+     **人工ターンの分**で埋まり、実データの観測値だと読み違えた（実際は 0件だった）。
+     観測窓が観測するだけで動くなら、その数字は証拠に使えない。
+     → selfTest の前後でカウンタを退避・復元する。 */
+  function withoutCounting(fn) {
+    var snap = {}; for (var k in stats) snap[k] = stats[k];
+    try { return fn(); } finally { for (var k2 in snap) stats[k2] = snap[k2]; }
+  }
+
   /* ★生存証明: 人工の1ターンで、meta が正しい形で付き、_convSays が変わらないこと */
-  function selfTest() {
+  function selfTest() { return withoutCounting(_selfTest); }
+  function _selfTest() {
     var turn = {
       inputType: 'DO',
       narrative: '「おはよう」\nひなたが笑う。',
