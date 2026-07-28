@@ -76,6 +76,25 @@
       var r = prov.classifyCard(turn, c, i, { hero: hero, es: es, tags: tags, mappingOk: tm ? tm.ok : true });
       /* タグ由来なら、そのタグが本文の何番目か（tagOrdinal）と、段落の位置（paragraphIndex）を残す。
          ★後からカードが増えても、この2つがあれば元の対応を追える。 */
+      /* ★★fix618（2026-07-28・実データで判明した重大な前提の揺らぎ）
+         `<say who="X">` は **モデルが書いたとは限らない**。
+         fix464（裸セリフ→タグ昇格）が、行全体が裸引用の行を fix462 の採点で解決し、
+         **後から `<say who="X">` を挿入している**。
+         保存されたテキストからは**両者を区別できない**（実測: 括弧の有無も行の形も、
+         モデル由来 356件 / 挿入 の見分けに使えなかった）。
+         → 区別できるのは**その場だけ**。fix464 が持っている昇格ログをここで拾って印を残す。
+         ★これが無いと「タグ＝一次証拠」という中央ゲートの前提が部分的に崩れる。
+         ★過去ターンには遡れない（記録が残っていない）。新しいターンからだけ判別できる。 */
+      var promoted = null;
+      try {
+        var f464 = window.__v292Dfix464;
+        var log = (f464 && typeof f464.stats === 'function') ? (f464.stats().last || []) : [];
+        var sl464 = prov.loose(c.say);
+        for (var q = 0; q < log.length; q++) {
+          if (log[q] && sl464 && prov.loose(log[q].say) && sl464.indexOf(prov.loose(log[q].say)) >= 0) { promoted = log[q]; break; }
+        }
+      } catch (e) {}
+
       var ord = -1;
       if (r.tagWho != null) {
         var sb = prov.loose(c.say);
@@ -85,7 +104,9 @@
         }
       }
       meta.push({
-        sourceKind: r.source,
+        sourceKind: promoted ? 'say-tag-promoted' : r.source,
+        promotedBy: promoted ? 'fix464' : null,
+        promoteScore: promoted ? (promoted.score || null) : null,
         sourceWhoRaw: r.tagWho != null ? String(r.tagWho) : null,
         paragraphIndex: r.evidence && r.evidence.at != null ? r.evidence.at : -1,
         tagOrdinal: ord,

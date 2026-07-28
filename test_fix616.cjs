@@ -78,11 +78,42 @@ console.log('\n--- 2. ★カードを1文字も変えない ---');
   eq('★_convSays は不変', JSON.stringify(t._convSays), before);
   eq('★narrative も不変', t.narrative, '「おはよう」\nひなたが笑う。');
   eq('並行配列は同じ長さ', t._convSayMeta.length, t._convSays.length);
-  ok('meta のキーは GPT 指定の6つ',
+  /* GPT指定の6項目 ＋ fix618 で足した2項目（そのタグを fix464 が挿入したか） */
+  ok('meta のキーは GPT 指定の6つ＋fix618の2つ',
     JSON.stringify(Object.keys(t._convSayMeta[0]).sort()) ===
-    JSON.stringify(['paragraphIndex', 'sourceKind', 'sourceWhoRaw', 'speakerRevision', 'tagMappingConfidence', 'tagOrdinal']),
+    JSON.stringify(['paragraphIndex', 'promoteScore', 'promotedBy', 'sourceKind', 'sourceWhoRaw', 'speakerRevision', 'tagMappingConfidence', 'tagOrdinal']),
     Object.keys(t._convSayMeta[0]));
+  eq('モデル由来なら promotedBy は null', t._convSayMeta[0].promotedBy, null);
   eq('speakerRevision は 0 から', t._convSayMeta[0].speakerRevision, 0);
+}
+
+console.log('\n--- 2b. ★fix618: fix464 が挿入したタグを見分ける ---');
+{
+  /* `<say who="X">` はモデルが書いたとは限らない。
+     fix464（裸セリフ→タグ昇格）が後から挿入していることがある。
+     ★保存されたテキストからは区別できない（括弧の有無も行の形も見分けに使えなかった）。
+     区別できるのは**その場だけ**なので、fix464 の昇格ログをここで拾って印を残す。 */
+  const { api, W } = load();
+  W.__v292Dfix464 = { stats: () => ({ last: [{ who: 'ひなた', score: 5, say: 'おはよう' }] }) };
+  const t = TURN();
+  api.attach(t, '白石澪');
+  eq('★fix464 が昇格させたタグだと分かる', t._convSayMeta[0].sourceKind, 'say-tag-promoted');
+  eq('  誰が挿入したか', t._convSayMeta[0].promotedBy, 'fix464');
+  eq('  そのときの点数も残す', t._convSayMeta[0].promoteScore, 5);
+
+  /* ★別のセリフには付けない（取り違え防止） */
+  const { api: a2, W: W2 } = load();
+  W2.__v292Dfix464 = { stats: () => ({ last: [{ who: 'ひなた', score: 5, say: 'またね' }] }) };
+  const t2 = TURN();
+  a2.attach(t2, '白石澪');
+  eq('別のセリフの昇格ログには反応しない', t2._convSayMeta[0].sourceKind, 'say-tag');
+  eq('  promotedBy も null', t2._convSayMeta[0].promotedBy, null);
+
+  /* ★fix464 が居なくても落ちない */
+  const { api: a3 } = load();
+  const t3 = TURN();
+  eq('fix464 が無くても付く', a3.attach(t3, '白石澪'), true);
+  eq('  promotedBy は null', t3._convSayMeta[0].promotedBy, null);
 }
 
 console.log('\n--- 3. ★保存を自分から呼ばない ---');
