@@ -126,12 +126,17 @@ console.log('\n--- 5. 同一人物の名寄せ・役割語は通す ---');
   eq('杏子 → 氷川 杏子（名寄せ）',
     api.decide(P('杏子', '氷川 杏子'), { cast: cast2, evidenceText: '', tagMappingHighConfidence: true }).reason,
     'canonical-name-resolution');
-  eq('少女 → 氷川 杏子（役割語）',
+  eq('少女 → 氷川 杏子（役割語＝ラベル解決）',
     api.decide(P('少女', '氷川 杏子'), { cast: cast2, evidenceText: '', tagMappingHighConfidence: true }).reason,
-    'canonical-name-resolution');
-  eq('怪異 → ノア（役割語）',
+    'label-resolution');
+  eq('怪異 → ノア（役割語＝ラベル解決）',
     api.decide(P('怪異', 'ノア'), { cast: CAST, evidenceText: '', tagMappingHighConfidence: true }).reason,
-    'canonical-name-resolution');
+    'label-resolution');
+  /* ★fix613: ラベル自身が話者だと地の文が言っているなら通さない（実データ「後ろの男Aが…言う」） */
+  eq('★男A→霧 涼太 は、地の文が「男Aが言う」なら通さない',
+    api.decide(P('男A', '霧 涼太'), C('後ろの男Aが、声をひそめて言う。')).reason, 'label-is-speaker');
+  eq('  その手がかりが無ければ通す',
+    api.decide(P('男A', '霧 涼太'), C('風が吹いた。')).reason, 'label-resolution');
   eq('同じ名前なら no-change',
     api.decide(P('ノア', 'ノア'), C('')).reason, 'no-change');
 }
@@ -146,10 +151,10 @@ console.log('\n--- 6. identityRelation の規律 ---');
   eq('★登録キャストに「涼」が居るなら別人物', api.identityRelation('涼', '霧 涼太', CAST.concat(['涼'])), 'cross-cast');
   ok('  → 直接証拠が無ければ通らない',
     api.decide(P('涼', '霧 涼太'), Object.assign(C('涼太は、一段一段、上がり続けた。'), { cast: CAST.concat(['涼']) })).act === 'deny');
-  eq('登録キャストに居なければ名寄せ', api.identityRelation('涼', '霧 涼太', CAST), 'same-entity');
+  eq('登録キャストに居なければラベル解決', api.identityRelation('涼', '霧 涼太', CAST), 'label-resolution');
   /* ★逆向き（登録キャスト → 未登録ラベル）は劣化。通さない。実データ: カエデ→少女 */
   eq('★カエデ→少女 は劣化なので別人物扱い', api.identityRelation('カエデ', '少女', CAST), 'cross-cast');
-  eq('★未登録の仮ラベル（男A）→ 登録キャスト は名寄せ', api.identityRelation('男A', '霧 涼太', CAST), 'same-entity');
+  eq('★未登録の仮ラベル（男A）→ 登録キャスト はラベル解決', api.identityRelation('男A', '霧 涼太', CAST), 'label-resolution');
   eq('別々の登録キャスト', api.identityRelation('ノア', 'カエデ', CAST), 'cross-cast');
   /* ★同じ断片を含むキャストが複数いるときは同一人物と断定しない */
   const dup = ['佐藤 花', '佐藤 実'];

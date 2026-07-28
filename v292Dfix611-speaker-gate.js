@@ -71,7 +71,11 @@
      ===================================================================== */
 
   /* (a) 直接発話述語 … これが名前に結び付いていれば話者の直接証拠 */
-  var DIRECT_SPEECH_PRED = /(言っ|言う|言い放|言い返|告げ|答え|応じ|返事|尋ね|訊ね|訊い|問う|問い返|叫|怒鳴|囁|ささや|呟|つぶや|呻|うめ|吐き捨て|口走|漏らし|続け)/;
+  /* ★fix613: 実データで誤爆した語を外した。
+       「続け」→「上がり**続け**た」に当たった（実データ: 涼太は、一段一段、上がり続けた）。
+       「返し」→「押し返した」「引き返した」に当たる。「応じ」「漏らし」も発話とは限らない。
+     残すのは**それ単体で発話を意味する語**だけ。複合形は明示的に並べる。 */
+  var DIRECT_SPEECH_PRED = /(言っ|言う|言い放|言い返|言い続け|話し続け|語り続け|告げ|答え|返事をし|尋ね|訊ね|訊い|問う|問い返|叫|怒鳴|囁|ささや|呟|つぶや|呻|うめ|吐き捨て|口走)/;
 
   /* (b) 声の出所構文（fix604 の型）… 「Xの<発声器官>から<声>が<出る>」 */
   var VOICE_ORIFICE = '(?:喉|喉元|口|口元|唇|歯の隙間|歯の間|口の端)';
@@ -127,8 +131,17 @@
     var re3 = new RegExp(n + '[はがも][^。\\n]{0,20}?[「『][^」』]{0,80}[」』][、,]?(?:と|って)?[^。、\\n]{0,10}?' + DIRECT_SPEECH_PRED.source);
     /* 形4: X の声で / X の声が した（導入形） */
     var re4 = new RegExp(n + 'の(?:声|囁き|呟き)(?:が(?:した|して|する|響|聞こえ|飛ん|割り込)|で(?:言|尋|囁|呟|叫|告げ|続け))');
-    var m = flat.match(re1) || flat.match(re3) || flat.match(re4);
+    /* 形5: X は/が …(14字以内)… <発話動詞>
+       ★引用と隣接していなくてよい（実データ v41ho7 T9:
+         `<say who="男A">「……おい」</say>` の次の行が **「後ろの男Aが、声をひそめて言う。」**）。
+       ★ここが GPT の言う「発話生成述語の狭いホワイトリスト＋主語」。
+         行動・反応・知覚・曖昧発声（口を開く等）は DIRECT_SPEECH_PRED に**入れていない**。 */
+    var re5 = new RegExp(n + '[はがも][^。\n]{0,14}?' + DIRECT_SPEECH_PRED.source);
+    var m = flat.match(re1) || flat.match(re3) || flat.match(re4) || flat.match(re5);
     if (!m) return null;
+    /* ★否定・打ち消しは証拠にしない（「Xは答えない」「Xは何も言わなかった」） */
+    var neg = flat.slice(m.index + m[0].length, m.index + m[0].length + 8);
+    if (/^(?:ない|なかった|ず|ません|なく)/.test(neg)) return null;
     /* ★受動なら話者ではない（GPT指摘: 「『何か言って』とXが頼まれた」） */
     var tail = flat.slice(m.index, m.index + m[0].length + 8);
     if (PASSIVE_PRED.test(tail)) return null;
@@ -202,14 +215,19 @@
     /* ②登録キャスト → 未登録ラベル は**劣化**（実データ: 「カエデ」→「少女」）。通さない。 */
     if (fIn && !tIn) return 'cross-cast';
 
-    /* ③未登録ラベル → 登録キャスト は名寄せ（fix465/487 の正当な仕事）。
-       ★固定の役割語リストでは足りなかった（実データ: 「男A」→「霧 涼太」を別人物扱いにしていた）。
-         **登録キャストに存在しない名前**は、そもそも同一性の根拠として弱い。
-         そこへ差し戻すより、登録キャストへ寄せる方が正しい。 */
-    if (!fIn && tIn) return 'same-entity';
-
-    /* ④包含が一意なら同一人物（短縮名→フルネーム） */
+    /* ③包含が一意なら同一人物（短縮名→フルネーム） */
     if (contained) return 'same-entity';
+
+    /* ④未登録ラベル → 登録キャスト は「ラベル解決」（fix465/487 の正当な仕事）。
+       ★固定の役割語リストでは足りなかった（実データ: 「男A」→「霧 涼太」）。
+       ★★ただし **same-entity と同じ扱いにしてはいけない**（fix613・実データが即座に教えた）:
+         実データ v41ho7 T9 は `<say who="男A">「……おい」</say>` の直後が
+         **「後ろの男Aが、声をひそめて言う。」**＝**ラベル自身が話者だと地の文が言っている**。
+         それを「霧 涼太」へ寄せるのは誤り。
+         → 別の関係 'label-resolution' として返し、**decide 側で本文を見て**判定する。 */
+    if (!fIn && tIn) return 'label-resolution';
+
+
 
     /* ⑤どちらも未登録なら判断できない */
     if (!fIn && !tIn) return 'unknown';
@@ -229,6 +247,15 @@
 
     if (rel === 'exact') return { act: 'allow', reason: 'no-change', relation: rel };
     if (rel === 'same-entity') return { act: 'allow', reason: 'canonical-name-resolution', relation: rel };
+
+    /* ★fix613: 未登録ラベル → 登録キャスト は原則通すが、
+       **そのラベル自身に直接発話の証拠があるなら通さない**（実データ「後ろの男Aが…言う」）。 */
+    if (rel === 'label-resolution') {
+      var evFrom = evidenceFor(context.evidenceText, proposal.from, context.cast);
+      if (isHardAttributionEvidence(evFrom))
+        return { act: 'deny', reason: 'label-is-speaker', relation: rel, evidence: evFrom };
+      return { act: 'allow', reason: 'label-resolution', relation: rel };
+    }
 
     // 主人公がその場で入力した発話は動かさない
     if (context.sourceKind === 'hero-utterance' || proposal.sourceKind === 'hero-utterance')
@@ -325,7 +352,7 @@
       selfTestPassed: selfTest().ok,
       cards: 0, tagCrossCastProposals: 0, tagCrossCastAllowed: 0,
       tagCrossCastDeniedNoHardEvidence: 0, tagCrossCastDeniedReactionFrame: 0,
-      sameEntityRenamesAllowed: 0, byReason: {}, items: []
+      sameEntityRenamesAllowed: 0, labelResolutionsAllowed: 0, labelIsSpeakerDenied: 0, byReason: {}, items: []
     };
     if (!Array.isArray(turns)) return out;
     for (var ti = 0; ti < turns.length; ti++) {
@@ -339,6 +366,17 @@
         if (r.source !== 'say-tag-renamed' || !r.tagWho) continue;
         var rel = identityRelation(r.tagWho, c.who, cast);
         if (rel === 'same-entity' || rel === 'exact') { out.sameEntityRenamesAllowed++; continue; }
+        if (rel === 'label-resolution') {
+          var dl = decide({ from: r.tagWho, to: c.who, sourceKind: 'say-tag' },
+            { cast: cast, evidenceText: es.text, tagMappingHighConfidence: true, uniqueCandidateCount: 1 });
+          out.byReason[dl.reason] = (out.byReason[dl.reason] || 0) + 1;
+          if (dl.act === 'allow') { out.labelResolutionsAllowed++; continue; }
+          out.labelIsSpeakerDenied++;
+          if (out.items.length < 40) out.items.push({ turn: ti, card: ci, legacyFinalWho: c.who, tagWho: r.tagWho,
+            newDecision: dl.act, reason: dl.reason, evidenceType: (dl.evidence && dl.evidence.type) || null,
+            say: String(c.say || '').slice(0, 24) });
+          continue;
+        }
         out.tagCrossCastProposals++;
         var d = decide({ from: r.tagWho, to: c.who, sourceKind: 'say-tag' },
           { cast: cast, evidenceText: es.text, tagMappingHighConfidence: true, uniqueCandidateCount: 1 });
