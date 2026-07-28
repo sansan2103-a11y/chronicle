@@ -166,6 +166,61 @@
              level: level, hard: level === 'hard', suspect: level === 'hard' };
   }
 
+  /* =====================================================================
+     ★fix627（GPT案②）: 意味レベルの崩壊のうち、**繰り返し**だけは安く測れる
+     ---------------------------------------------------------------------
+     GPT が挙げた「表面統計では捕まらない崩壊」のうち、
+       ・同じ会話・場面を次ターンでも繰り返す
+       ・1ターンの中で同じ文を逐語で繰り返す（実データのダッシュ乱用型がこれ）
+     はLLM無しで測れる。文字n-gramの重なりを見るだけ。
+
+     ★★ただし閾値はまだ決めない。**先に実データの自然な重なりを測る**。
+       連続するターンは同じ宿・同じ人物を描くので、**正常でもある程度は重なる**。
+       ここで勝手に閾値を決めると、正常な会話の続きを「繰り返し」と誤判定する。
+       fix624 で「4〜6点が空」を確かめてから閾値を置いたのと同じ順序を守る。
+     ===================================================================== */
+  function ngrams(s, n) {
+    var set = {}, t = String(s || '').replace(/\s+/g, '');
+    if (t.length < n) return set;
+    for (var i = 0; i + n <= t.length; i++) set[t.substr(i, n)] = 1;
+    return set;
+  }
+  /* いまのターンの n-gram のうち、前ターンにも在る割合（＝現在が過去にどれだけ含まれるか）。
+     ★Jaccard ではなく**含有率**にする。長さが違うターン同士で比べたいため。 */
+  function containment(cur, prev, n) {
+    n = n || 5;
+    var a = ngrams(cur, n), b = ngrams(prev, n);
+    var keys = Object.keys(a);
+    if (!keys.length) return 0;
+    var hit = 0;
+    for (var i = 0; i < keys.length; i++) if (b[keys[i]]) hit++;
+    return Math.round(1000 * hit / keys.length) / 10;
+  }
+  /* 1ターンの中で、同じ文が逐語で2回以上出るか（★実データのダッシュ乱用型がこれ）。 */
+  function selfRepeat(s) {
+    var parts = String(s || '').split(SENT_SPLIT_RE)
+      .map(function (x) { return x.replace(/[\s　―—–─\-]/g, ''); })
+      .filter(function (x) { return x.length >= 12; });
+    var seen = {}, dup = 0, longest = 0;
+    for (var i = 0; i < parts.length; i++) {
+      if (seen[parts[i]]) { dup++; if (parts[i].length > longest) longest = parts[i].length; }
+      seen[parts[i]] = 1;
+    }
+    return { dupSentences: dup, longestDup: longest };
+  }
+  /* 1ターン分の「繰り返し」指標。★点数には**まだ入れない**（測るだけ）。 */
+  function repetitionOf(turn, prevTurn) {
+    var cur = stripTags(textOf(turn && turn.narrative) || textOf(turn && turn.plan && turn.plan.narrative));
+    var prev = prevTurn ? stripTags(textOf(prevTurn.narrative) || textOf(prevTurn.plan && prevTurn.plan.narrative)) : '';
+    var sr = selfRepeat(cur);
+    return {
+      prevOverlap5: prev ? containment(cur, prev, 5) : null,
+      prevOverlap8: prev ? containment(cur, prev, 8) : null,
+      dupSentences: sr.dupSentences,
+      longestDup: sr.longestDup
+    };
+  }
+
   /* いまの物語の全ターン。★読むだけ。 */
   function sweep() {
     if (off()) return { disabled: true };
@@ -178,12 +233,14 @@
     var rows = [], suspects = [];
     for (var k = 0; k < turns.length; k++) {
       var r = scoreTurn(turns[k], { cardAvg: cardAvg });
-      rows.push({ turn: k, score: r.score, cards: r.cards, suspect: r.suspect,
-                  hits: r.hits.map(function (h) { return h.w; }) });
-      if (r.suspect) suspects.push({ turn: k, score: r.score, hits: r.hits });
+      /* ★fix627: 繰り返しは**測るだけ**。点数には入れていない（閾値は実データを見てから）。 */
+      var rep = repetitionOf(turns[k], k > 0 ? turns[k - 1] : null);
+      rows.push({ turn: k, score: r.score, cards: r.cards, level: r.level,
+                  hits: r.hits.map(function (h) { return h.w; }), rep: rep });
+      if (r.hard) suspects.push({ turn: k, score: r.score, hits: r.hits, rep: rep });
     }
     return { turns: turns.length, cardAvg: Math.round(cardAvg * 10) / 10,
-             suspects: suspects.length, rows: rows, detail: suspects };
+             hard: suspects.length, suspects: suspects.length, rows: rows, detail: suspects };
   }
 
   /* ★生存証明: 実データで確かめた4ターンの型を、代表的な文で再現する。
@@ -248,6 +305,7 @@
 
   window.__v292Dfix624 = {
     measure: measure, judge: judge, scoreTurn: scoreTurn, sweep: sweep,
+    ngrams: ngrams, containment: containment, selfRepeat: selfRepeat, repetitionOf: repetitionOf,
     selfTest: selfTest, _fixtures: FIX,
     stats: function () { return { disabled: off(), selfTestPassed: selfTest().ok }; }
   };
