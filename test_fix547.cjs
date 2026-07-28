@@ -226,7 +226,8 @@ console.log('\n== 台帳の更新（移行済みの数） ==');
        fix606 は第一経路が __chronicleGetState なのでここへ足す。
        間接eval だけで S を取るモジュールを足した場合は、この数は増えず**別の意味で落ちる**。 */
   /* + fix611(話者変更の中央ゲート。影モードで S.turns を読む) = 25 */
-  ok('★__chronicleGetState を参照するのは25ファイル(+features.js)', migrated === 25, migrated);
+  /* + fix616(話者の由来を記録。cast.hero を取るため) = 26 */
+  ok('★__chronicleGetState を参照するのは26ファイル(+features.js)', migrated === 26, migrated);
   ok('★features.js も分類1だけ移行済み',
      fs2.readFileSync(path.join(__dirname, 'features.js'), 'utf8').indexOf('__chronicleGetState') > 0);
 }
