@@ -220,7 +220,12 @@ console.log('\n== 台帳の更新（移行済みの数） ==');
   /* コア5 + バッチ1の8 + fix543 + fix192 + 保存ラッパ組3 + バッチ3の3 = 21 */
   /* + fix553(句読点崩れの検出器。保存本文を読むので最初から正式APIを使う) = 22 */
   /* + fix555(校正専用リクエストで cfg のプロバイダ/キー/モデルを読む) = 23 */
-  ok('★__chronicleGetState を参照するのは23ファイル(+features.js)', migrated === 23, migrated);
+  /* + fix606(話者帰属の来歴アナライザ。読み取り専用で S.turns を走査する) = 24
+     ★この台帳が固定しているのは「番号」ではなく
+       **新しく S を読むモジュールを足したら、必ず正式API(fix539)経由にする**という契約。
+       fix606 は第一経路が __chronicleGetState なのでここへ足す。
+       間接eval だけで S を取るモジュールを足した場合は、この数は増えず**別の意味で落ちる**。 */
+  ok('★__chronicleGetState を参照するのは24ファイル(+features.js)', migrated === 24, migrated);
   ok('★features.js も分類1だけ移行済み',
      fs2.readFileSync(path.join(__dirname, 'features.js'), 'utf8').indexOf('__chronicleGetState') > 0);
 }
