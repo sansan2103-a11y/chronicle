@@ -170,6 +170,22 @@
 
   // ---------- 証拠検出 ----------
   var SPEECH = /(言っ|言う|言い|呟|囁|尋ね|問い|問う|答え|叫|返し|応じ|漏らし|告げ|呼ん|続け|笑っ|吐き捨て|口を開)/;
+  /* ★fix610(2026-07-28・おしんの実セーブで捕獲→単独実行で真因確定):
+       「真鍋は**封筒の口を開**けた。」の「口を開」を発話動詞と誤認し、
+       反応しているだけの人物へ speechAfter=140(ハード証拠)を与えて、
+       **モデルが `<say who="霧 涼太">` と明示していたカードを 真鍋 ひかり へ反転**させていた。
+       実データ: 8wfr8b T1 / 発話は「……何か、言ってなかったか。あの日、何か」＝主人公の問いかけ。
+     「口を開く」は発話の慣用句だが、**直前が所有の「の」なら器物の口**（封筒の口・瓶の口・袋の口）。
+     ★lookbehind は使わない（iOS Safari の対応差を持ち込まない）。
+       「の口を開」を**取り除いてから**もう一度判定する。他に発話動詞が残っていれば従来どおり真になる。
+     OFF: localStorage v292Dfix610Off='1' */
+  function f610off(){ try { return localStorage.getItem('v292Dfix610Off') === '1'; } catch(e){ return false; } }
+  function speechTest(s){
+    var t = String(s || '');
+    if (!SPEECH.test(t)) return false;
+    if (f610off()) return true;
+    return SPEECH.test(t.replace(/の口を開/g, ''));
+  }
   var VOICE  = /^の[^。、\n]{0,4}(声|言葉|囁き|呟き|悲鳴|叫び)/;
   // 導入形: 「Xの声がした」→次(または直結する)台詞の話者。描写形: 「Xの声は震えていなかった」=完結した描写。
   var VOICE_INTRO = /^の[^。、\n]{0,4}(?:声|言葉|囁き|呟き|悲鳴|叫び)(?:が(?:した|して|する|響|聞こえ|上がっ|飛ん|割り込)|で(?:言|尋|囁|呟|叫|告げ|続け))/;
@@ -212,7 +228,7 @@
       }
       var reacting = strict && isNext && (REACT_FRAME.test(head) || REACT_PRED.test(tail));
       if (SUBJ.test(tail) && !reacting){
-        var speechNear = isNext ? SPEECH.test(strict ? tail : s) : SPEECH.test(s);
+        var speechNear = isNext ? speechTest(strict ? tail : s) : speechTest(s);
         if (speechNear) offer(isNext ? 'speechAfter' : 'speechBefore', isNext ? 140 : 115);
         else offer('subj', isNext ? 40 : 20);
       }
