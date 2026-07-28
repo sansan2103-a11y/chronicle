@@ -251,5 +251,73 @@ console.log('\n--- 11. shadowRun（★適用しないこと・副作用が無い
   eq('fix606 が無ければ正直に error を返す', load({}, false).api.shadowRun([], []).error, 'fix606-missing');
 }
 
+console.log('\n--- 12. ★fix619 reconciler（GPT指定の12条件・影モード） ---');
+{
+  const { api, ls } = load({}, true);
+  const CAST2 = ['霧 涼太', '真鍋 ひかり', '藤堂 志乃'];
+  const mk = (who, say, tagWho, narr) => ({
+    inputType: 'DO', narrative: say,
+    plan: { narrative: ['<say who="' + tagWho + '">' + say + '</say>'].concat(narr ? [narr] : []) },
+    _convSays: [{ who: who, say: say }]
+  });
+
+  /* ★本命: タグは霧 涼太、最終は真鍋 ひかり、直後は行動文 → タグへ戻す提案 */
+  const t1 = mk('真鍋 ひかり', '「……何か、言ってなかったか」', '霧 涼太', '真鍋は封筒の口を開けた。');
+  const r1 = api.reconcileTurn(t1, CAST2, '霧 涼太');
+  eq('★タグへ戻す提案が1件', r1.proposals.length, 1);
+  eq('  from → to', [r1.proposals[0].from, r1.proposals[0].to], ['真鍋 ひかり', '霧 涼太']);
+  eq('★★適用しない（who は変わらない）', t1._convSays[0].who, '真鍋 ひかり');
+  eq('★localStorage へ書かない', Object.keys(ls.__store).length, 0);
+
+  /* apply:true を明示したときだけ書く。★本文は触らない */
+  const t1b = mk('真鍋 ひかり', '「……何か、言ってなかったか」', '霧 涼太', '真鍋は封筒の口を開けた。');
+  const sayBefore = t1b._convSays[0].say;
+  api.reconcileTurn(t1b, CAST2, '霧 涼太', { apply: true });
+  eq('apply:true なら who を直す', t1b._convSays[0].who, '霧 涼太');
+  eq('★カード本文は変えない', t1b._convSays[0].say, sayBefore);
+
+  /* ⑩ いまの who を支持する直接証拠があれば触らない */
+  const t2 = mk('真鍋 ひかり', '「行こう」', '霧 涼太', '「行こう」と真鍋が言った。');
+  eq('★最終whoに直接証拠があれば戻さない', api.reconcileTurn(t2, CAST2, '霧 涼太').proposals.length, 0);
+  ok('  理由を数える', api.reconcileTurn(t2, CAST2, '霧 涼太').denied['final-who-has-hard-evidence'] === 1);
+
+  /* ⑪ 第三者に直接証拠があれば触らない */
+  const t3 = mk('真鍋 ひかり', '「行こう」', '霧 涼太', '「行こう」と志乃が言った。');
+  eq('★第三者に直接証拠があれば戻さない', api.reconcileTurn(t3, CAST2, '霧 涼太').proposals.length, 0);
+
+  /* ⑥ タグが未登録ラベルなら戻さない */
+  const t4 = mk('真鍋 ひかり', '「行こう」', '少女', '真鍋は封筒の口を開けた。');
+  eq('★タグが未登録ラベルなら戻さない', api.reconcileTurn(t4, CAST2, '霧 涼太').proposals.length, 0);
+  ok('  理由', !!api.reconcileTurn(t4, CAST2, '霧 涼太').denied['tag-who-unresolvable']
+      || !!api.reconcileTurn(t4, CAST2, '霧 涼太').denied['tag-who-label-only'],
+      api.reconcileTurn(t4, CAST2, '霧 涼太').denied);
+
+  /* ⑨ 名寄せ（同一人物）は対象外 */
+  const t5 = mk('真鍋 ひかり', '「行こう」', '真鍋', '真鍋は封筒の口を開けた。');
+  eq('★名寄せは対象外', api.reconcileTurn(t5, CAST2, '霧 涼太').proposals.length, 0);
+
+  /* ④ 同じ発話のカードが2枚あれば触らない */
+  const t6 = mk('真鍋 ひかり', '「うん」', '霧 涼太', '真鍋は封筒の口を開けた。');
+  t6._convSays.push({ who: '藤堂 志乃', say: '「うん」' });
+  eq('★同じ発話のカードが複数なら戻さない', api.reconcileTurn(t6, CAST2, '霧 涼太').proposals.length, 0);
+
+  /* resolveToCast: 一意に決まらなければ null */
+  eq('短縮名を解決する', api.resolveToCast('真鍋', CAST2), '真鍋 ひかり');
+  eq('★複数に当たるなら解決しない', api.resolveToCast('佐藤', ['佐藤 花', '佐藤 実']), null);
+  eq('未登録は解決しない', api.resolveToCast('少女', CAST2), null);
+
+  /* OFF */
+  const { api: aOff } = load({ v292Dfix619ReconcilerOff: '1' }, true);
+  eq('OFF なら何も提案しない', aOff.reconcileTurn(t1, CAST2, '霧 涼太').disabled, true);
+
+  /* 壊れた入力 */
+  let threw = null;
+  for (const t of [null, undefined, {}, { _convSays: null }, { _convSays: [null] }]) {
+    try { api.reconcileTurn(t, CAST2, 'X'); } catch (e) { threw = String(e.message); }
+  }
+  eq('壊れた入力でも例外を投げない', threw, null);
+  eq('fix606 が無ければ提案しない', load({}, false).api.reconcileTurn(t1, CAST2, 'X').denied['no-prov'], 1);
+}
+
 console.log('\npass=' + pass + ' fail=' + fail);
 process.exit(fail ? 1 : 0);

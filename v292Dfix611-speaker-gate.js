@@ -406,6 +406,138 @@
     return out;
   }
 
+  /* =====================================================================
+     ★fix619 = FinalSpeakerReconciler（GPT 再裁定 A・**影モード**）
+     「門」は途中の書換を止める。だが**門を通らない傷**（過去版で保存された誤帰属・
+     配列の再構築・保存/読込境界）は止めようがない。
+     そこでターン確定時に **raw タグと最終カードを突き合わせる**層を置く。
+     ★門と reconciler は**両方要る**（GPT: reconciler だけにすると途中の誤変更が隠れて
+       原因追跡不能になる／門だけでは過去の傷を直せない）。
+
+     ★この段では**適用しない**（提案を返すだけ）。apply は既定 false。
+     ★カード本文は一切変更しない（12番目の条件）。
+     OFF: localStorage v292Dfix619ReconcilerOff='1'
+     ===================================================================== */
+  function rOff() { try { return localStorage.getItem('v292Dfix619ReconcilerOff') === '1'; } catch (e) { return false; } }
+
+  /* GPT指定の12条件。全部満たしたときだけ「タグへ戻す」提案を出す。 */
+  function reconcileTurn(turn, cast, hero, opts) {
+    opts = opts || {};
+    var res = { checked: 0, proposals: [], denied: {}, disabled: false };
+    if (rOff()) { res.disabled = true; return res; }
+    var prov = window.__v292Dfix606;
+    if (!prov) { res.denied['no-prov'] = 1; return res; }
+    var cards = (turn && turn._convSays) || [];
+    if (!cards.length) return res;
+    cast = (cast || []).filter(Boolean);
+
+    var es = prov.evidenceSource(turn);
+    var tm = prov.turnMapping ? prov.turnMapping(turn, es) : null;
+    var tags = tm ? tm.tags : prov.listSayTags(es.text);
+    function deny(k) { res.denied[k] = (res.denied[k] || 0) + 1; }
+
+    /* 条件4のため、同じ発話文字列のカードが何枚あるかを先に数える */
+    var cardCount = {};
+    for (var a = 0; a < cards.length; a++) {
+      if (!cards[a]) continue;
+      var lk = prov.loose(cards[a].say); if (!lk) continue;
+      cardCount[lk] = (cardCount[lk] || 0) + 1;
+    }
+
+    for (var i = 0; i < cards.length; i++) {
+      var c = cards[i]; if (!c) continue;
+      var r = prov.classifyCard(turn, c, i, { hero: hero, es: es, tags: tags, mappingOk: tm ? tm.ok : true });
+      res.checked++;
+
+      // ①⑧ タグ由来で、かつ「タグと最終whoが食い違っている」ものだけ
+      if (r.source !== 'say-tag-renamed') { continue; }
+      // ⑦ 主人公が自分で入力した発話は動かさない
+      if (r.source === 'hero-utterance') { deny('hero-utterance'); continue; }
+      // ② 対応が確実でなければ触らない
+      if (r.tagMappingHighConfidence !== true) { deny('mapping-not-high-confidence'); continue; }
+      // ③ 同じ発話文字列にタグ候補が複数 → 触らない
+      if (r.matchConfidence === 'ambiguous') { deny('tag-candidate-not-unique'); continue; }
+      // ④ カード側も1枚だけ
+      if ((cardCount[prov.loose(c.say)] || 0) !== 1) { deny('card-candidate-not-unique'); continue; }
+
+      // ⑤⑥ raw タグの who を解決する。★未登録ラベルにしか解決できないなら戻さない
+      var rawWho = String(r.tagWho || '');
+      var resolved = resolveToCast(rawWho, cast);
+      if (!resolved) { deny('tag-who-unresolvable'); continue; }
+      if (!isRegistered(resolved, cast)) { deny('tag-who-label-only'); continue; }
+
+      // ⑨ 別人物であること（名寄せ・ラベル解決は対象外）
+      var rel = identityRelation(resolved, c.who, cast);
+      if (rel !== 'cross-cast') { deny('not-cross-cast:' + rel); continue; }
+
+      // ⑩ いまの who を支持する直接証拠があるなら触らない
+      var evNow = evidenceFor(es.text, c.who, cast);
+      if (isHardAttributionEvidence(evNow)) { deny('final-who-has-hard-evidence'); continue; }
+
+      // ⑪ タグ who と矛盾する直接証拠（＝第三者が話者だという直接証拠）があるなら触らない
+      var conflict = null;
+      for (var k = 0; k < cast.length; k++) {
+        if (nrm(cast[k]) === nrm(resolved)) continue;
+        var e2 = evidenceFor(es.text, cast[k], cast);
+        if (isHardAttributionEvidence(e2)) { conflict = cast[k]; break; }
+      }
+      if (conflict) { deny('conflicting-hard-evidence'); continue; }
+
+      // ⑫ カード本文は変更しない（who だけの提案を返す）
+      res.proposals.push({ cardIndex: i, from: c.who, to: resolved, rawTagWho: rawWho,
+        reason: 'reconcile-to-tag', matchConfidence: r.matchConfidence,
+        say: String(c.say || '').slice(0, 24) });
+    }
+    /* ★既定では適用しない。apply:true を明示したときだけ who を書く（本文は触らない）。 */
+    if (opts.apply === true) {
+      for (var q = 0; q < res.proposals.length; q++) {
+        var pr = res.proposals[q];
+        if (cards[pr.cardIndex]) cards[pr.cardIndex].who = pr.to;
+      }
+      res.applied = res.proposals.length;
+    }
+    return res;
+  }
+
+  function isRegistered(name, cast) {
+    var n = nrm(name), C = (cast || []).map(nrm);
+    return C.indexOf(n) >= 0;
+  }
+  /* raw タグ文字列を登録キャストへ解決する。★一意に決まらなければ null（戻さない）。 */
+  function resolveToCast(raw, cast) {
+    var n = nrm(raw); if (!n) return null;
+    var C = (cast || []).filter(Boolean);
+    for (var i = 0; i < C.length; i++) if (nrm(C[i]) === n) return C[i];
+    var hits = [];
+    for (var j = 0; j < C.length; j++) {
+      var cj = nrm(C[j]);
+      if (n.length >= 2 && (cj.indexOf(n) >= 0 || n.indexOf(cj) >= 0)) hits.push(C[j]);
+    }
+    return hits.length === 1 ? hits[0] : null;
+  }
+
+  /* 全ターンへ影で走らせた集計 */
+  function reconcileShadow(turnsIn, castIn) {
+    var S = null, turns = turnsIn, cast = castIn;
+    if (!turns) { S = getS(); turns = S && S.turns; }
+    if (!cast && S && S.cast) cast = [(S.cast.hero && S.cast.hero.name) || ''].concat(((S.cast.npcs) || []).map(function (n) { return n && n.name; }));
+    cast = (cast || []).filter(Boolean);
+    var out = { turns: 0, checked: 0, proposals: [], denied: {}, disabled: rOff() };
+    if (rOff() || !Array.isArray(turns)) return out;
+    for (var i = 0; i < turns.length; i++) {
+      var t = turns[i]; if (!t || !Array.isArray(t._convSays)) continue;
+      out.turns++;
+      var r = reconcileTurn(t, cast, cast[0] || '');
+      out.checked += r.checked;
+      for (var k in r.denied) out.denied[k] = (out.denied[k] || 0) + r.denied[k];
+      for (var j = 0; j < r.proposals.length; j++) {
+        var p = r.proposals[j]; p.turn = i;
+        if (out.proposals.length < 60) out.proposals.push(p);
+      }
+    }
+    return out;
+  }
+
   window.__v292Dfix611 = {
     identityRelation: identityRelation,
     evidenceFor: evidenceFor,
@@ -415,6 +547,9 @@
     voiceSourceEvidence: voiceSourceEvidence,
     nonSpeechFrame: nonSpeechFrame,
     decide: decide,
+    reconcileTurn: reconcileTurn,
+    reconcileShadow: reconcileShadow,
+    resolveToCast: resolveToCast,
     shadowRun: shadowRun,
     selfTest: selfTest,
     _fixtures: fixtures
