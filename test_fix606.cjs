@@ -209,6 +209,23 @@ console.log('\n--- 4b. ★fix607: 証拠の在り処（実セーブの形） ---
   eq('タグが無ければ harvest のまま',
     api.classifyCard(notag, { who: 'ひなた', say: '「おはよう」' }, 1, H).source, 'harvest');
 
+  /* ★fix608: plan.narrative は**段落の配列**だった（実測 165/165 ターン）。
+     fix607 は typeof==='string' で弾き、実データで証拠を1件も読めていなかった。
+     evidenceField を先に足しておいたので `narrative-notag:165` として即座に見えた。 */
+  const realArr = {
+    narrative: '「おはよう」\nひなたが笑う。',
+    plan: { narrative: ['<say who="ひなた">「おはよう」</say>', 'ひなたが笑う。'] },
+    inputType: 'do', playerText: ''
+  };
+  eq('★plan.narrative が配列でも読む', api.evidenceSource(realArr).field, 'plan');
+  eq('★配列でも say-tag と判定できる',
+    api.classifyCard(realArr, { who: 'ひなた', say: '「おはよう」' }, 1, H).source, 'say-tag');
+  eq('textOf: 文字列はそのまま', api.textOf('abc'), 'abc');
+  eq('textOf: 文字列配列は改行で連結', api.textOf(['a', 'b']), 'a\nb');
+  eq('textOf: {text} の配列も受ける', api.textOf([{ text: 'a' }, { text: 'b' }]), 'a\nb');
+  eq('textOf: 想定外の型は空文字', api.textOf({ x: 1 }), '');
+  eq('textOf: null は空文字', api.textOf(null), '');
+
   eq('evidenceSource は plan を優先する', api.evidenceSource(real).field, 'plan');
   eq('evidenceSource(null) でも落ちない', api.evidenceSource(null).field, 'narrative-notag');
 

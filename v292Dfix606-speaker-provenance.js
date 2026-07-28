@@ -130,10 +130,31 @@
      画面用の `turn.narrative` はタグが剥がされているので、話者の一次証拠は残っていない。
      モデルの構造化出力 `turn.plan.narrative` に `<say who="…">` が生きている。
      ★どちらから読んだかは stats().evidenceField に出す（黙って片方に倒れないように）。 */
+  /* ★fix608: `plan.narrative` は**文字列ではなく段落の配列**だった（実測 165/165 ターン）。
+     fix607 では `typeof === 'string'` で弾いてしまい、証拠を1件も読めていなかった
+     （`evidenceField` を足しておいたおかげで `narrative-notag:165` として即座に見えた）。
+     ★型を推測で決めない。文字列／文字列配列／{text}の配列 のどれでも受ける。 */
+  function textOf(v) {
+    if (typeof v === 'string') return v;
+    if (Array.isArray(v)) {
+      var a = [];
+      for (var i = 0; i < v.length; i++) {
+        var e = v[i];
+        if (typeof e === 'string') a.push(e);
+        else if (e && typeof e === 'object') {
+          if (typeof e.text === 'string') a.push(e.text);
+          else if (typeof e.say === 'string') a.push(e.say);
+        }
+      }
+      return a.join('\n');
+    }
+    return '';
+  }
+
   function evidenceSource(turn) {
     var p = turn && turn.plan;
-    var pn = (p && typeof p.narrative === 'string') ? p.narrative : '';
-    var tn = (turn && typeof turn.narrative === 'string') ? turn.narrative : '';
+    var pn = p ? textOf(p.narrative) : '';
+    var tn = turn ? textOf(turn.narrative) : '';
     if (pn && pn.indexOf('<say') >= 0) return { text: pn, field: 'plan' };
     if (tn && tn.indexOf('<say') >= 0) return { text: tn, field: 'narrative' };
     if (pn) return { text: pn, field: 'plan-notag' };
@@ -306,6 +327,11 @@
         turn: { narrative: '「おはよう」\nひなたが笑う。', inputType: 'do', playerText: '',
                 plan: { narrative: '<say who="ひなた">「おはよう」</say>\nひなたが笑う。' } },
         card: { who: 'ひなた', say: '「おはよう」' }, idx: 1, expect: 'say-tag' },
+      /* ★fix608: plan.narrative は**段落の配列**（実測 165/165）。ここを canary に入れる。 */
+      { name: 'say-tag(実セーブの形/plan配列)',
+        turn: { narrative: '「おはよう」\nひなたが笑う。', inputType: 'do', playerText: '',
+                plan: { narrative: ['<say who="ひなた">「おはよう」</say>', 'ひなたが笑う。'] } },
+        card: { who: 'ひなた', say: '「おはよう」' }, idx: 1, expect: 'say-tag' },
       { name: 'say-tag-renamed', turn: { narrative: '<say who="杏子">「行くよ」</say>', inputType: 'do', playerText: '' },
         card: { who: '氷川 杏子', say: '「行くよ」' }, idx: 1, expect: 'say-tag-renamed' },
       { name: 'react-voice', turn: { narrative: 'ひなたが息を呑む。', inputType: 'do', playerText: '' },
@@ -376,6 +402,7 @@
     classifyCard: classifyCard,
     listSayTags: listSayTags,
     evidenceSource: evidenceSource,
+    textOf: textOf,
     analyze: analyze,
     sweep: sweep,
     revisions: function () { return revLog.slice(); },
