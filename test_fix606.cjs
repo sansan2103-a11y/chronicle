@@ -179,6 +179,45 @@ console.log('\n--- 4. ★本命: fix604 で実機捕獲した誤りを二次判�
   eq('正しいカードは印ゼロ', good.flags.length, 0);
 }
 
+console.log('\n--- 4b. ★fix607: 証拠の在り処（実セーブの形） ---');
+{
+  /* 2026-07-28、fix606 を出した直後に実セーブ(165ターン560カード)へ通したら
+     **say-tag が0件**で、全部 harvest / unmatched に倒れた。
+     原因は分類器ではなく「読む場所」だった:
+       turn.narrative      … 画面用。タグは剥がされている（実測 165/165 でタグ0）
+       turn.plan.narrative … モデルの構造化出力。<say who="…"> が生きている（実測 142/165・372タグ）
+     ★この節が固定するのは「plan を先に見る」という契約そのもの。 */
+  const { api } = load();
+  const H = { hero: '白石澪' };
+  const real = {
+    narrative: '「おはよう」\nひなたが笑う。',
+    plan: { narrative: '<say who="ひなた">「おはよう」</say>\nひなたが笑う。' },
+    inputType: 'do', playerText: ''
+  };
+  eq('★plan.narrative のタグを証拠として読む',
+    api.classifyCard(real, { who: 'ひなた', say: '「おはよう」' }, 1, H).source, 'say-tag');
+  eq('★どちらの欄から読んだかを返す',
+    api.classifyCard(real, { who: 'ひなた', say: '「おはよう」' }, 1, H).evidenceField, 'plan');
+
+  const legacy = { narrative: '<say who="ひなた">「おはよう」</say>', inputType: 'do' };
+  eq('plan が無ければ従来どおり narrative を見る',
+    api.classifyCard(legacy, { who: 'ひなた', say: '「おはよう」' }, 1, H).evidenceField, 'narrative');
+
+  const notag = { narrative: '「おはよう」と、ひなたが言う。', plan: { narrative: '「おはよう」と、ひなたが言う。' }, inputType: 'do' };
+  eq('どちらにもタグが無ければ plan-notag',
+    api.classifyCard(notag, { who: 'ひなた', say: '「おはよう」' }, 1, H).evidenceField, 'plan-notag');
+  eq('タグが無ければ harvest のまま',
+    api.classifyCard(notag, { who: 'ひなた', say: '「おはよう」' }, 1, H).source, 'harvest');
+
+  eq('evidenceSource は plan を優先する', api.evidenceSource(real).field, 'plan');
+  eq('evidenceSource(null) でも落ちない', api.evidenceSource(null).field, 'narrative-notag');
+
+  /* ★実データの形（who は必ずダブルクォート・372/372）を1件通しておく＝生存証明 */
+  const a = api.analyze([Object.assign({ _convSays: [{ who: 'ひなた', say: '「おはよう」' }] }, real)], '白石澪');
+  eq('analyze も plan から読む', a.bySource['say-tag'], 1);
+  eq('analyze が evidenceField を数える', a.evidenceField['plan'], 1);
+}
+
 console.log('\n--- 5. analyze(): 分母と内訳 ---');
 {
   const { api } = load();

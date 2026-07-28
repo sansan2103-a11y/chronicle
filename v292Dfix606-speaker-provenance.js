@@ -58,6 +58,22 @@
 //     stats() は必ず `selfTestPassed` と `total`（分母）を一緒に返す。
 //     selfTestPassed が false のときの数字は**採用しない**こと。
 //
+// ■★★fix607（2026-07-28・出荷直後に実データで自分の誤りを見つけた）
+//   fix606 を出した直後、おしんの実セーブ165ターン560カードへ通したら
+//   **say-tag が0件**、全部が harvest / unmatched に倒れた。
+//   分類器の canary は合格していた（人工ケースでは7分類すべて立つ）。
+//   つまり壊れていたのは分類器ではなく **証拠を読む場所** だった。
+//
+//     `turn.narrative` … 画面に出す本文。**タグは剥がされている**（実測 165/165 でタグ0）
+//     `turn.plan.narrative` … モデルの構造化出力。**`<say who="…">` が生きている**
+//        （実測 142/165 ターン・372タグ・全部 who="…" のダブルクォート・368が閉じタグ有り）
+//
+//   ★これは「分類器が全件を1つのラベルへ倒す」型（fix569 で踏んだのと同じ形）。
+//     総数は 560 と健全に見えるので、**分類ごとの内訳を見なければ気づけなかった**。
+//   → 証拠は `plan.narrative` を第一経路にし、そこに say が無ければ `turn.narrative` を見る。
+//   → さらに stats() に **evidenceField**（どちらから読んだかの内訳）を足した。
+//     次に同じ形で盲目になったら、この数字が先に教えてくれる。
+//
 // OFF: localStorage v292Dfix606Off='1'（分類を止め、stats は disabled を返す）
 // =====================================================================
 (function () {
@@ -110,6 +126,20 @@
     return out;
   }
 
+  /* ---------- ★証拠の在り処（fix607） ----------
+     画面用の `turn.narrative` はタグが剥がされているので、話者の一次証拠は残っていない。
+     モデルの構造化出力 `turn.plan.narrative` に `<say who="…">` が生きている。
+     ★どちらから読んだかは stats().evidenceField に出す（黙って片方に倒れないように）。 */
+  function evidenceSource(turn) {
+    var p = turn && turn.plan;
+    var pn = (p && typeof p.narrative === 'string') ? p.narrative : '';
+    var tn = (turn && typeof turn.narrative === 'string') ? turn.narrative : '';
+    if (pn && pn.indexOf('<say') >= 0) return { text: pn, field: 'plan' };
+    if (tn && tn.indexOf('<say') >= 0) return { text: tn, field: 'narrative' };
+    if (pn) return { text: pn, field: 'plan-notag' };
+    return { text: tn, field: 'narrative-notag' };
+  }
+
   /* ---------- 本文中でこのセリフが出てくる位置 ---------- */
   function locate(narrative, say) {
     var n = String(narrative || ''), s = String(say || '');
@@ -139,7 +169,8 @@
   function classifyCard(turn, card, idx, ctx) {
     ctx = ctx || {};
     var hero = String(ctx.hero || '');
-    var narrative = (turn && turn.narrative) || '';
+    var es = ctx.es || evidenceSource(turn);
+    var narrative = es.text || '';
     var who = String((card && card.who) || '');
     var say = String((card && card.say) || '');
     var flags = [], tagWho = null;
@@ -193,6 +224,7 @@
       flags: flags,
       tagWho: tagWho,
       who: who,
+      evidenceField: es.field,
       len: realLen,
       contentLen: contentLen,
       evidence: evidenceAt(narrative, at, at >= 0 ? String(say).length : 0)
@@ -201,13 +233,15 @@
 
   /* ---------- 全ターン走査（読み取り専用） ---------- */
   function analyze(turns, hero) {
-    var res = { total: 0, turns: 0, bySource: {}, byConfidence: {}, byFlag: {}, items: [] };
+    var res = { total: 0, turns: 0, bySource: {}, byConfidence: {}, byFlag: {}, evidenceField: {}, items: [] };
     if (!Array.isArray(turns)) return res;
     for (var ti = 0; ti < turns.length; ti++) {
       var t = turns[ti];
       if (!t || !Array.isArray(t._convSays)) continue;
       res.turns++;
-      var ctx = { hero: hero, tags: listSayTags(t.narrative) };
+      var es = evidenceSource(t);
+      res.evidenceField[es.field] = (res.evidenceField[es.field] || 0) + 1;
+      var ctx = { hero: hero, es: es, tags: listSayTags(es.text) };
       for (var ci = 0; ci < t._convSays.length; ci++) {
         var c = t._convSays[ci];
         if (!c) continue;
@@ -265,6 +299,13 @@
     return [
       { name: 'say-tag', turn: { narrative: '<say who="ひなた">「おはよう」</say>', inputType: 'do', playerText: '' },
         card: { who: 'ひなた', say: '「おはよう」' }, idx: 1, expect: 'say-tag' },
+      /* ★fix607: **実セーブの形**。画面用 narrative からはタグが剥がされ、
+         証拠は plan.narrative にしか無い。これを canary に入れておかないと、
+         「人工ケースだけ合格して実データでは全件が harvest に倒れる」を二度踏む。 */
+      { name: 'say-tag(実セーブの形/plan由来)',
+        turn: { narrative: '「おはよう」\nひなたが笑う。', inputType: 'do', playerText: '',
+                plan: { narrative: '<say who="ひなた">「おはよう」</say>\nひなたが笑う。' } },
+        card: { who: 'ひなた', say: '「おはよう」' }, idx: 1, expect: 'say-tag' },
       { name: 'say-tag-renamed', turn: { narrative: '<say who="杏子">「行くよ」</say>', inputType: 'do', playerText: '' },
         card: { who: '氷川 杏子', say: '「行くよ」' }, idx: 1, expect: 'say-tag-renamed' },
       { name: 'react-voice', turn: { narrative: 'ひなたが息を呑む。', inputType: 'do', playerText: '' },
@@ -292,8 +333,12 @@
       seen[r.source] = true;
       detail.push({ name: f.name, expect: f.expect, got: r.source, conf: r.confidence, flags: r.flags, ok: good });
     }
-    // 二次判定フラグ側の canary（フラグが1つも立たない＝印の付け忘れを検出）
-    var shortR = classifyCard(fixtures()[4].turn, fixtures()[4].card, 2, { hero: hero });
+    /* 二次判定フラグ側の canary（フラグが1つも立たない＝印の付け忘れを検出）。
+       ★添字ではなく名前で引く。添字にすると fixture を1つ足しただけで
+         「別のケースを検査して静かに合格する」ようになる（実際に fix607 で踏んだ）。 */
+    var bi = null;
+    for (var j = 0; j < fx.length; j++) if (fx[j].name === 'bare-inferred') bi = fx[j];
+    var shortR = bi ? classifyCard(bi.turn, bi.card, bi.idx, { hero: hero }) : { flags: [] };
     var flagOk = shortR.flags.indexOf('short-utterance') >= 0 && shortR.flags.indexOf('hero-default') >= 0;
     if (!flagOk) okAll = false;
     detail.push({ name: 'flags(short+hero-default)', expect: 'both', got: shortR.flags.join(','), ok: flagOk });
@@ -314,6 +359,7 @@
       bySource: a.bySource,
       byConfidence: a.byConfidence,
       byFlag: a.byFlag,
+      evidenceField: a.evidenceField,   // ★fix607: 証拠をどちらの欄から読んだか（盲目化の早期警報）
       needsReview: a.items.length,
       revisionsObserved: revLog.length
     };
@@ -329,6 +375,7 @@
   window.__v292Dfix606 = {
     classifyCard: classifyCard,
     listSayTags: listSayTags,
+    evidenceSource: evidenceSource,
     analyze: analyze,
     sweep: sweep,
     revisions: function () { return revLog.slice(); },
