@@ -255,6 +255,92 @@
     };
   }
 
+  /* =====================================================================
+     ★fix630（GPT裁定）: 出来事の**進展停滞／再演の疑い**
+     ---------------------------------------------------------------------
+     ■なぜこの形なのか
+     当初は「場所の矛盾」を検査するつもりだったが、実データを調べたところ
+     **場所の state が存在しなかった**（turn にも plan にも location 相当のキーは0個。
+     scene.loc は物語ごとに1つの固定文字列でターンごとに更新されない）。
+     自由文から場所を抽出する層を新設すると
+       本文 → 不確かな場所 → 不確かな state → その state で本文を異常判定
+     という自己参照になる。GPT自身が警告した罠なので作らないことにした。
+
+     ■代わりに使うもの: fix137_ev（ターンごとの出来事リスト。既に抽出済み）
+     ★★これを「本文より正しい事実」として扱ってはいけない（GPT明示）。
+       生成経路が未確定なので**安全側に倒して derived observation として扱う**。
+       やってよいのは「前ターンの出来事と似すぎていないか」という**自分同士の比較**だけ。
+       「出来事に移動が無いから本文の移動は誤り」という使い方は**禁止**。
+
+     ■指標（GPT指定）
+       ・本文では 8-gram が有効だったが、**出来事文は短いので 5-gram**（8だと一致が疎になる）
+       ・双方向を取り、**min** を使う。
+         「前: 路地の奥へ進んだ / 今: 路地の奥へ進み、貼り紙を発見した」は
+         今が前を含むだけで**新しい出来事がある正常な発展**。一方向だと高く出てしまう。
+     ===================================================================== */
+  var EV_PREFIX = 'chr6_v292Dfix137_ev_slot_';
+  /* ★正規化は空白・改行・引用符・軽微な句読点・全半角まで。
+     ★人物名・場所名・動詞は**削らない**（削ると別の出来事が同じに見える）。 */
+  function normEvent(s) {
+    return String(s == null ? '' : s)
+      .replace(/[\s　]+/g, '')
+      .replace(/[「」『』"'“”]/g, '')
+      .replace(/[、,。.！!？?…‥・]/g, '')
+      .replace(/[Ａ-Ｚａ-ｚ０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); });
+  }
+  function eventsBySlot(slotId) {
+    var out = {};
+    try {
+      var raw = localStorage.getItem(EV_PREFIX + slotId);
+      if (!raw) return out;
+      var arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return out;
+      for (var i = 0; i < arr.length; i++) {
+        var e = arr[i]; if (!e) continue;
+        var ti = +e.turnIdx;
+        if (!(ti >= 0)) continue;
+        (out[ti] = out[ti] || []).push(String(e.event || ''));
+      }
+    } catch (e) {}
+    return out;
+  }
+  /* 2つの出来事群を比べる。★判定はしない。数字を返すだけ。 */
+  function eventStagnation(curEvents, prevEvents, inputType) {
+    var cur = (curEvents || []).map(normEvent).filter(Boolean);
+    var prev = (prevEvents || []).map(normEvent).filter(Boolean);
+    var out = {
+      currentEventCount: cur.length,
+      normalizedExactDuplicate: 0,
+      eventSimilarity: null,
+      inputType: String(inputType || '').toUpperCase()
+    };
+    if (!cur.length || !prev.length) return out;
+
+    var prevSet = {};
+    for (var i = 0; i < prev.length; i++) prevSet[prev[i]] = 1;
+    for (var j = 0; j < cur.length; j++) if (prevSet[cur[j]]) out.normalizedExactDuplicate++;
+
+    var curJoined = cur.join('\n'), prevJoined = prev.join('\n');
+    var a = containment(curJoined, prevJoined, 5);
+    var b = containment(prevJoined, curJoined, 5);
+    /* ★min にする理由: 片方がもう片方を含むだけの「正常な発展」を高類似と誤認しないため */
+    out.curInPrev5 = a; out.prevInCur5 = b;
+    out.eventSimilarity = Math.min(a, b);
+    return out;
+  }
+  /* 1物語ぶん。★読むだけ・診断名は event-stagnation-shadow */
+  function eventSweep(slotId, turns) {
+    var ev = eventsBySlot(slotId);
+    var rows = [];
+    for (var i = 1; i < (turns || []).length; i++) {
+      var r = eventStagnation(ev[i], ev[i - 1], turns[i] && turns[i].inputType);
+      if (r.eventSimilarity == null) continue;
+      rows.push({ turn: i, sim: r.eventSimilarity, dup: r.normalizedExactDuplicate,
+                  n: r.currentEventCount, kind: r.inputType, diag: 'event-stagnation-shadow' });
+    }
+    return rows;
+  }
+
   /* いまの物語の全ターン。★読むだけ。 */
   function sweep() {
     if (off()) return { disabled: true };
@@ -341,6 +427,7 @@
     measure: measure, judge: judge, scoreTurn: scoreTurn, sweep: sweep,
     ngrams: ngrams, containment: containment, longRepeat: longRepeat, repetitionOf: repetitionOf,
     narrativeOnly: narrativeOnly, bodyOf: bodyOf,
+    normEvent: normEvent, eventsBySlot: eventsBySlot, eventStagnation: eventStagnation, eventSweep: eventSweep,
     selfTest: selfTest, _fixtures: FIX,
     stats: function () { return { disabled: off(), selfTestPassed: selfTest().ok }; }
   };
