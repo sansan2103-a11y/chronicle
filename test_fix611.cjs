@@ -114,9 +114,14 @@ console.log('\n--- 4. 通してはいけない紛らわしい形 ---');
     api.decide(P('霧 涼太', '真鍋 ひかり'), C('風が吹いた。')).act, 'deny');
   eq('候補が一意でなければ通さない',
     api.decide(P('霧 涼太', '真鍋 ひかり'), C('「行こう」と真鍋が言った。', { uniqueCandidateCount: 2 })).act, 'deny');
-  eq('タグの対応が確実でなければ通さない',
-    api.decide(P('霧 涼太', '真鍋 ひかり'), C('「行こう」と真鍋が言った。', { tagMappingHighConfidence: false })).reason,
-    'tag-provenance-ambiguous');
+  /* ★向きに注意。対応が確実でないときは**タグを守らない**（＝従来どおり補正器に任せる）。
+     deny は「who をタグ側へ固定する」意味なので、ここで deny にすると
+     **分類器の誤対応まで保護してしまう**（GPT指摘）。 */
+  const amb = api.decide(P('霧 涼太', '真鍋 ひかり'), C('真鍋は封筒の口を開けた。', { tagMappingHighConfidence: false }));
+  eq('タグの対応が確実でなければタグを守らない', amb.act, 'allow');
+  eq('  理由を残す', amb.reason, 'tag-provenance-ambiguous');
+  eq('対応が確実なら同じ文でも守る',
+    api.decide(P('霧 涼太', '真鍋 ひかり'), C('真鍋は封筒の口を開けた。', { tagMappingHighConfidence: true })).act, 'deny');
 }
 
 console.log('\n--- 5. 同一人物の名寄せ・役割語は通す ---');

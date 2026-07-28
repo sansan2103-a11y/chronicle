@@ -263,10 +263,14 @@
 
     var src = proposal.sourceKind || context.sourceKind || '';
     if (src === 'say-tag' || src === 'react-voice') {
-      /* ★旧カードは「タグとカードの対応」が確実でないことがある（GPT指摘）。
-         確実でないカードへ強いタグロックを掛けると、分類器の誤対応まで保護してしまう。 */
+      /* ★★fix614b: ここは**通す**が正しい（実データで自分の向きの誤りに気づいた）。
+         旧カードは「タグとカードの対応」が確実でないことがある（GPT指摘）。
+         そこへ強いタグロックを掛けると **分類器の誤対応まで保護してしまう**。
+         つまり対応が怪しいときは「タグを守る」のではなく「守らない＝従来どおり補正器に任せる」。
+         ★最初 deny にしていた。deny は who をタグ側へ固定する意味なので**逆だった**。
+         実測: 560カード中、対応が壊れているターンは2件だけ（broken-tag）。 */
       if (context.tagMappingHighConfidence === false)
-        return { act: 'deny', reason: 'tag-provenance-ambiguous', relation: rel };
+        return { act: 'allow', reason: 'tag-provenance-ambiguous', relation: rel };
 
       var ev = proposal.evidence || evidenceFor(context.evidenceText, proposal.to, context.cast);
       if (!isHardAttributionEvidence(ev))
