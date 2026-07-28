@@ -3,7 +3,9 @@
  * ■このテストが固定する「約束」
  *   ①`_convSays` / `who` / `say` を **1文字も変えない**（並行配列にだけ書く）
  *   ②**新しいターンだけ**（過去ターンへ遡って書かない）
- *   ③自分から `S.save()` を **呼ばない**（大きな書込の副作用を避ける）
+ *   ③`attach()` 単体では `S.save()` を **呼ばない**（純関数に近く保つ）。
+ *     ★fix622: ターン確定の配線（appendTurn）でだけ、**付いたときに限り**1回保存する
+ *     （実機で「最後のターンの meta が再読み込みで消える」を踏んだため。理由は本文コメント）
  *   ④`localStorage` へ自分では書かない
  *   ⑤同じターンへ二度書かない（冪等）
  *   ⑥カードが多すぎる／meta が大きすぎるターンには付けない（容量の暴走防止）
@@ -35,7 +37,7 @@ function load(opts) {
     removeItem: (k) => { wrote.push(k); throw new Error('fix616 must not remove localStorage: ' + k); },
     length: 0
   };
-  const S = { turns: opts.turns || [], cast: { hero: { name: '白石澪' }, npcs: [{ name: 'ひなた' }] }, save() { saveCalls++; } };
+  const S = { turns: opts.turns || [], cast: { hero: { name: '白石澪' }, npcs: [{ name: 'ひなた' }] }, save() { saveCalls++; S.__saves = (S.__saves || 0) + 1; } };
   const appended = [];
   const UI = { appendTurn(t, i) { appended.push([t, i]); }, renderAll() {}, _renderHooks: [] };
   const W = { localStorage: ls, UI, __chronicleGetState: () => S };
@@ -46,7 +48,7 @@ function load(opts) {
   vm.createContext(ctx);
   if (opts.noProv !== true) vm.runInContext(PROV, ctx, { filename: 'v292Dfix606-speaker-provenance.js' });
   vm.runInContext(SRC, ctx, { filename: 'v292Dfix616-say-provenance-persist.js' });
-  return { api: W.__v292Dfix616, S, UI, W, wrote, appended };
+  return { api: W.__v292Dfix616, S, UI, W, wrote, appended, ls };
 }
 
 const TURN = () => ({
@@ -78,13 +80,144 @@ console.log('\n--- 2. ★カードを1文字も変えない ---');
   eq('★_convSays は不変', JSON.stringify(t._convSays), before);
   eq('★narrative も不変', t.narrative, '「おはよう」\nひなたが笑う。');
   eq('並行配列は同じ長さ', t._convSayMeta.length, t._convSays.length);
-  /* GPT指定の6項目 ＋ fix618 で足した2項目（そのタグを fix464 が挿入したか） */
-  ok('meta のキーは GPT 指定の6つ＋fix618の2つ',
+  /* GPT指定の6項目 ＋ fix618 の2項目 ＋ fix621 の charOffset */
+  ok('meta のキーは GPT 指定の6つ＋fix618の2つ＋fix621の1つ',
     JSON.stringify(Object.keys(t._convSayMeta[0]).sort()) ===
-    JSON.stringify(['paragraphIndex', 'promoteScore', 'promotedBy', 'sourceKind', 'sourceWhoRaw', 'speakerRevision', 'tagMappingConfidence', 'tagOrdinal']),
+    JSON.stringify(['charOffset', 'paragraphIndex', 'promoteScore', 'promotedBy', 'sourceKind', 'sourceWhoRaw', 'speakerRevision', 'tagMappingConfidence', 'tagOrdinal']),
     Object.keys(t._convSayMeta[0]));
   eq('モデル由来なら promotedBy は null', t._convSayMeta[0].promotedBy, null);
   eq('speakerRevision は 0 から', t._convSayMeta[0].speakerRevision, 0);
+}
+
+console.log('\n--- 1b. ★fix622: 付けた meta を確実に残す（実機で消えた） ---');
+{
+  /* ■実機で踏んだ（2026-07-28・新しい物語の1ターン目）
+     1ターン回して再読み込みしたら `_convSayMeta` が**消えていた**。
+     保存されたスロットには `_convSayMeta` の文字列が1つも無く、
+     その場で S.save() を1回呼ぶと 4507→4896 バイトになって現れた
+     （＝削られてはいない。**一度も保存されていなかった**）。
+     原因は index.html の順序:
+         S.turns.push(turn); S.save(); UI.appendTurn(turn, …)
+     meta は直前の保存に間に合わず、「次の保存」は来る保証が無い。
+     ★このテストは「付けたら保存する／付けなければ保存しない」を固定する。 */
+  const { api, UI, S } = load();
+  const t = TURN();
+  UI.appendTurn(t, 0);
+  ok('★meta が付いた', Array.isArray(t._convSayMeta));
+  eq('★付いたので保存を1回呼ぶ', S.__saves, 1);
+  eq('  数えている', api.stats().saves, 1);
+
+  /* 2回目（もう付くものが無い）＝保存を呼ばない */
+  UI.appendTurn(t, 0);
+  eq('★付かなければ保存を呼ばない', S.__saves, 1);
+  eq('  件数も増えない', api.stats().saves, 1);
+
+  /* OFF なら付けないし保存もしない */
+  const { UI: UI3, S: S3 } = load({ lsInit: { v292Dfix616Off: '1' } });
+  const t3 = TURN();
+  UI3.appendTurn(t3, 0);
+  ok('★OFF なら meta も保存も無い', !t3._convSayMeta && !S3.__saves, { meta: !!t3._convSayMeta, saves: S3.__saves });
+
+  /* save が無い state でも例外を外へ出さない */
+  const { UI: UI4, S: S4 } = load();
+  delete S4.save;
+  let threw = null;
+  try { UI4.appendTurn(TURN(), 0); } catch (e) { threw = String(e.message); }
+  eq('save が無くても落ちない', threw, null);
+
+  /* ★localStorage へ自分では書かない（経路は S.save() だけ）
+     ★モックの setItem は throw する設計なので、`wrote` が空＝一度も試みていない証明になる。 */
+  const { UI: UI5, wrote: wrote5 } = load();
+  UI5.appendTurn(TURN(), 0);
+  eq('★localStorage へ直接書こうとすらしない', wrote5, []);
+}
+
+console.log('\n--- 1c. ★fix622: stats() が自分のカウンタを汚さない ---');
+{
+  /* ■実機で踏んだ: stats() が内部で selfTest() を呼んでいたため、
+     読むだけで attached / alreadyHad が増え、**人工ターンの分**を
+     実データの観測値だと読み違えた（実際の実データは 0件だった）。
+     観測窓が観測するだけで動くなら、その数字は証拠に使えない。 */
+  const { api } = load();
+  const a = api.stats();
+  const b = api.stats();
+  const c = api.stats();
+  eq('★何度読んでも attached は 0 のまま', [a.attached, b.attached, c.attached], [0, 0, 0]);
+  eq('★alreadyHad も 0 のまま', [a.alreadyHad, b.alreadyHad, c.alreadyHad], [0, 0, 0]);
+  eq('  それでも生存証明は動いている', a.selfTestPassed, true);
+  eq('  selfTest を直接呼んでも汚さない', (api.selfTest(), api.stats().attached), 0);
+
+  /* 本物の付与だけが数に出る */
+  const { api: api2, UI: UI2 } = load();
+  UI2.appendTurn(TURN(), 0);
+  eq('★実データの付与だけが数に出る', api2.stats().attached, 1);
+  eq('  読み直しても増えない', api2.stats().attached, 1);
+}
+
+console.log('\n--- 2c. ★fix621: paragraphIndex が「文字位置」になっていた誤りを固定する ---');
+{
+  /* ■実機で見つけた誤り（2026-07-28・新しい物語の1ターン目）
+     plan.narrative が 6段落（長さ 85/32/36/51/36/24）のターンで、
+     3枚のカードの paragraphIndex が **102 / 172 / 224** になっていた。
+     6段落しか無いのだから、これは段落番号ではありえない。
+     正体は listSayTags() が返す `at`＝**段落を連結したあとの文字位置**だった。
+     挙動には影響しないが、後から来歴を追う人を確実に誤解させるので分離した。
+     ★このテストは「2つの値が別物であること」を具体値で固定する。 */
+  const { api } = load();
+  const t = {
+    inputType: 'DO',
+    narrative: 'x',
+    plan: { narrative: [
+      'A'.repeat(85),                                   // 0..84      段落0
+      '<say who="宿の主人">……去年の客、ねえ。</say>',      // 86..       段落1
+      'B'.repeat(36),                                   //            段落2
+      '<say who="宿の主人">あんた、何のために聞くんだい。</say>', //     段落3
+      '<say who="緒方 湊">仕事です。私は記者ですから。</say>',   //     段落4
+      'C'.repeat(24)                                    //            段落5
+    ] },
+    _convSays: [
+      { who: '宿の主人', say: '……去年の客、ねえ。' },
+      { who: '宿の主人', say: 'あんた、何のために聞くんだい。' },
+      { who: '緒方 湊', say: '仕事です。私は記者ですから。' }
+    ]
+  };
+  api.attach(t, '緒方 湊');
+  const m = t._convSayMeta;
+  eq('★段落番号は 1 / 3 / 4', m.map(x => x.paragraphIndex), [1, 3, 4]);
+  ok('★文字位置は段落番号より遥かに大きい（＝別物であることの証明）',
+    m.every(x => x.charOffset > x.paragraphIndex && x.charOffset > 85),
+    m.map(x => [x.paragraphIndex, x.charOffset]));
+  eq('  タグの順番も 0 / 1 / 2', m.map(x => x.tagOrdinal), [0, 1, 2]);
+  eq('  段落番号は段落数を超えない', m.every(x => x.paragraphIndex < t.plan.narrative.length), true);
+
+  /* ★段落の中に改行が入っていても数え方が崩れない（'\n' を数える実装だと壊れる） */
+  const t2 = {
+    inputType: 'DO', narrative: 'x',
+    plan: { narrative: ['前置き\nもう1行\nさらに1行', '<say who="ひなた">「おはよう」</say>'] },
+    _convSays: [{ who: 'ひなた', say: '「おはよう」' }]
+  };
+  api.attach(t2, '白石澪');
+  eq('★段落内の改行に騙されない（段落1）', t2._convSayMeta[0].paragraphIndex, 1);
+}
+
+console.log('\n--- 2d. ★fix621: 旧形の meta だけ作り直す ---');
+{
+  const { api } = load();
+  const t = TURN();
+  /* fix621 より前に付いた形（charOffset が無い） */
+  t._convSayMeta = [{ sourceKind: 'say-tag', sourceWhoRaw: 'ひなた', paragraphIndex: 15, tagOrdinal: 0, tagMappingConfidence: 'exact', speakerRevision: 0, promotedBy: null, promoteScore: null }];
+  eq('★旧形は作り直す', api.attach(t, '白石澪'), true);
+  eq('  charOffset が入る', t._convSayMeta[0].charOffset, 15);
+  eq('  paragraphIndex は段落番号になる', t._convSayMeta[0].paragraphIndex, 0);
+  eq('  作り直した件数を数える', api.stats().migrated, 1);
+  eq('★2回目はもう作り直さない', api.attach(t, '白石澪'), false);
+  eq('  件数も増えない', api.stats().migrated, 1);
+
+  /* 判定関数そのもの */
+  eq('新形は旧形と判定しない', api.isStaleMeta([{ charOffset: 0 }]), false);
+  eq('空配列は旧形と判定しない', api.isStaleMeta([]), false);
+  eq('配列でなければ false', api.isStaleMeta(null), false);
+  eq('★null 混じりでも charOffset があれば新形', api.isStaleMeta([null, { charOffset: 3 }]), false);
 }
 
 console.log('\n--- 2b. ★fix618: fix464 が挿入したタグを見分ける ---');
@@ -116,14 +249,17 @@ console.log('\n--- 2b. ★fix618: fix464 が挿入したタグを見分ける --
   eq('  promotedBy は null', t3._convSayMeta[0].promotedBy, null);
 }
 
-console.log('\n--- 3. ★保存を自分から呼ばない ---');
+console.log('\n--- 3. ★attach() 単体は保存を呼ばない ---');
 {
+  /* ★fix622 で「配線側は保存する」に変えたが、`attach()` 自体は
+     副作用の無い部品のままにしておく（過去ターンへ手で付けるときに
+     勝手な保存が走らないように）。保存するのは appendTurn の配線だけ。 */
   saveCalls = 0;
   const { api, S } = load();
   const t = TURN();
   api.attach(t, '白石澪');
-  eq('★S.save() を呼んでいない', saveCalls, 0);
-  ok('（次の自然な保存に相乗りする設計）', true);
+  eq('★attach() 単体では S.save() を呼ばない', saveCalls, 0);
+  eq('  カウンタにも出ない', api.stats().saves, 0);
 }
 
 console.log('\n--- 4. ターン確定で自動的に付く（appendTurn ラップ） ---');

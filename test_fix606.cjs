@@ -229,6 +229,28 @@ console.log('\n--- 4b. ★fix607: 証拠の在り処（実セーブの形） ---
   eq('evidenceSource は plan を優先する', api.evidenceSource(real).field, 'plan');
   eq('evidenceSource(null) でも落ちない', api.evidenceSource(null).field, 'narrative-notag');
 
+  /* ★fix621: 段落の配列そのものを取り出せる／連結後の文字位置から段落番号を出せる。
+     （fix616 の paragraphIndex が実は「文字位置」だった誤りを、ここで根元から支える） */
+  eq('partsOf: 文字列は1段落', api.partsOf('abc'), ['abc']);
+  eq('partsOf: 配列はそのまま', api.partsOf(['a', 'b']), ['a', 'b']);
+  eq('partsOf: {text} も受ける', api.partsOf([{ text: 'a' }, { say: 'b' }]), ['a', 'b']);
+  eq('partsOf: 想定外の型は空配列', api.partsOf({ x: 1 }), []);
+  ok('★textOf は partsOf の連結と必ず一致する（食い違うと位置計算が狂う）',
+    [['a', 'b'], 'abc', [{ text: 'x' }], null, { x: 1 }].every(v => api.textOf(v) === api.partsOf(v).join('\n')));
+  eq('evidenceSource は parts も返す', api.evidenceSource(realArr).parts.length, 2);
+
+  const P = ['abcde', 'fg', 'hijk'];   // 連結: abcde\nfg\nhijk → 0..4 / 6..7 / 9..12
+  eq('paraIndexOf: 先頭は段落0', api.paraIndexOf(P, 0), 0);
+  eq('paraIndexOf: 4 は段落0', api.paraIndexOf(P, 4), 0);
+  eq('paraIndexOf: 区切り文字そのものは段落1側へ倒す', api.paraIndexOf(P, 5), 1);
+  eq('paraIndexOf: 6 は段落1', api.paraIndexOf(P, 6), 1);
+  eq('paraIndexOf: 9 は段落2', api.paraIndexOf(P, 9), 2);
+  eq('paraIndexOf: 12 は段落2', api.paraIndexOf(P, 12), 2);
+  eq('paraIndexOf: 範囲外は -1', api.paraIndexOf(P, 999), -1);
+  eq('paraIndexOf: -1 は -1', api.paraIndexOf(P, -1), -1);
+  eq('paraIndexOf: 配列でなければ -1', api.paraIndexOf(null, 0), -1);
+  eq('★段落内に改行があっても崩れない', api.paraIndexOf(['a\nb\nc', 'd'], 6), 1);
+
   /* ★実データの形（who は必ずダブルクォート・372/372）を1件通しておく＝生存証明 */
   const a = api.analyze([Object.assign({ _convSays: [{ who: 'ひなた', say: '「おはよう」' }] }, real)], '白石澪');
   eq('analyze も plan から読む', a.bySource['say-tag'], 1);

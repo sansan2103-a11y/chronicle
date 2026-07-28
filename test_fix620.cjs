@@ -75,6 +75,31 @@ console.log('--- 1. 起動と生存証明 ---');
   ok('  本文は不変', st.detail.sayUntouched === true);
 }
 
+console.log('\n--- 1b. ★fix622: stats() が自分のカウンタを汚さない ---');
+{
+  /* ■実機で踏んだ（2026-07-28）: stats() が内部で selfTest() を呼ぶため、
+     **読むだけで** applied / proposed / denied が人工ターンの分だけ増えていた。
+     そのせいで実データの1ターン目を測ったとき
+       `applied:1, proposed:1, denied:{final-who-has-hard-evidence:2}`
+     と出て、実データに対する観測値だと読み違えた（実際は全部 0件）。
+     ★観測窓が観測するだけで動くなら、その数字は証拠に使えない。 */
+  const { api } = load();
+  const a = api.stats(), b = api.stats(), c = api.stats();
+  eq('★何度読んでも applied は 0 のまま', [a.applied, b.applied, c.applied], [0, 0, 0]);
+  eq('★proposed も 0 のまま', [a.proposed, b.proposed, c.proposed], [0, 0, 0]);
+  eq('★denied も空のまま', [a.denied, b.denied, c.denied], [{}, {}, {}]);
+  eq('  それでも生存証明は動いている', a.selfTestPassed, true);
+  eq('  selfTest を直接呼んでも汚さない', (api.selfTest(), api.stats().applied), 0);
+
+  /* 本物の適用だけが数に出る */
+  const { api: api2, UI: UI2 } = load();
+  UI2.appendTurn(TURN(), 0);
+  const st = api2.stats();
+  eq('★実データの適用だけが数に出る', st.applied, 1);
+  eq('  読み直しても増えない', api2.stats().applied, 1);
+  eq('  denied は空のまま（この例は却下されない）', api2.stats().denied, {});
+}
+
 console.log('\n--- 2. ★who だけ動かす。本文は触らない ---');
 {
   const { api } = load();
