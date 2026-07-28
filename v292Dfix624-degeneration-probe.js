@@ -196,28 +196,38 @@
     for (var i = 0; i < keys.length; i++) if (b[keys[i]]) hit++;
     return Math.round(1000 * hit / keys.length) / 10;
   }
-  /* 1ターンの中で、同じ文が逐語で2回以上出るか（★実データのダッシュ乱用型がこれ）。 */
-  function selfRepeat(s) {
-    var parts = String(s || '').split(SENT_SPLIT_RE)
-      .map(function (x) { return x.replace(/[\s　―—–─\-]/g, ''); })
-      .filter(function (x) { return x.length >= 12; });
-    var seen = {}, dup = 0, longest = 0;
-    for (var i = 0; i < parts.length; i++) {
-      if (seen[parts[i]]) { dup++; if (parts[i].length > longest) longest = parts[i].length; }
-      seen[parts[i]] = 1;
+  /* 1ターンの中の**逐語の繰り返し**。
+     ★★fix628（自分の実装ミスを実データで発見）
+       最初は「同じ**文**が2回出るか」で数えていたが、実データで **0件** になった。
+       ところが港町ターン2は、同じ一文が確かに2回出ている。
+       原因: 崩壊した文章は**句読点がほとんど無い**ので、句点で切ると
+             1文が 75/160/115字 の塊になり、繰り返し部分は「別々の長い文の中」に埋もれる。
+       ★句読点が壊れているのが崩壊の特徴なのに、句読点を頼りに切っていた。
+       → 文ではなく**固定長の窓**で数える（句読点に依存しない）。 */
+  function longRepeat(s, n) {
+    n = n || 20;
+    var t = String(s || '').replace(/[\s　]/g, '');
+    var out = { repeatedGrams: 0, ratio: 0, n: n };
+    if (t.length < n * 2) return out;
+    var seen = {}, dup = 0, total = t.length - n + 1;
+    for (var i = 0; i < total; i++) {
+      var g = t.substr(i, n);
+      if (seen[g]) dup++; else seen[g] = 1;
     }
-    return { dupSentences: dup, longestDup: longest };
+    out.repeatedGrams = dup;
+    out.ratio = Math.round(1000 * dup / total) / 10;
+    return out;
   }
   /* 1ターン分の「繰り返し」指標。★点数には**まだ入れない**（測るだけ）。 */
   function repetitionOf(turn, prevTurn) {
     var cur = stripTags(textOf(turn && turn.narrative) || textOf(turn && turn.plan && turn.plan.narrative));
     var prev = prevTurn ? stripTags(textOf(prevTurn.narrative) || textOf(prevTurn.plan && prevTurn.plan.narrative)) : '';
-    var sr = selfRepeat(cur);
+    var lr = longRepeat(cur, 20);
     return {
       prevOverlap5: prev ? containment(cur, prev, 5) : null,
       prevOverlap8: prev ? containment(cur, prev, 8) : null,
-      dupSentences: sr.dupSentences,
-      longestDup: sr.longestDup
+      selfRepeat20: lr.ratio,
+      selfRepeatGrams: lr.repeatedGrams
     };
   }
 
@@ -305,7 +315,7 @@
 
   window.__v292Dfix624 = {
     measure: measure, judge: judge, scoreTurn: scoreTurn, sweep: sweep,
-    ngrams: ngrams, containment: containment, selfRepeat: selfRepeat, repetitionOf: repetitionOf,
+    ngrams: ngrams, containment: containment, longRepeat: longRepeat, repetitionOf: repetitionOf,
     selfTest: selfTest, _fixtures: FIX,
     stats: function () { return { disabled: off(), selfTestPassed: selfTest().ok }; }
   };
