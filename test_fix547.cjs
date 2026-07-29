@@ -245,7 +245,11 @@ console.log('\n== 台帳の更新（移行済みの数） ==');
   /* ★2026-07-29 scene_move タグの shadow 収集（fix645）。turns と cast.hero を読み、
      S.save をラップする。window.S は新設せず正式APIだけで届くことが設計の前提。
      + fix645(保存の前でタグを検証し、記録して本文から剥がす)                              = 35 */
-  ok('★__chronicleGetState を参照するのは35ファイル(+features.js)', migrated === 35, migrated);
+  /* ★2026-07-29 句読点隣接重複 collapse（fix648）。S.turns の末尾（新ターン）の narrative を
+     生成出口で正規化し、S.save をラップする。window.S は新設せず正式API(__chronicleGetState('fix648'))
+     を第一経路にするのがこの台帳の契約そのものなので、ここへ足す。
+     + fix648(保存の前で地の文の「、。」「。、」を1つへ collapse する)                       = 36 */
+  ok('★__chronicleGetState を参照するのは36ファイル(+features.js)', migrated === 36, migrated);
   ok('★features.js も分類1だけ移行済み',
      fs2.readFileSync(path.join(__dirname, 'features.js'), 'utf8').indexOf('__chronicleGetState') > 0);
 }
