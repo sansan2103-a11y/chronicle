@@ -229,7 +229,12 @@ console.log('\n== 台帳の更新（移行済みの数） ==');
   /* + fix616(話者の由来を記録。cast.hero を取るため) = 26 */
   /* + fix620(突き合わせの適用層。cast と turns を取るため) = 27 */
   /* + fix624(生成の崩壊を測る探り。読み取り専用で S.turns を走査する) = 28 */
-  ok('★__chronicleGetState を参照するのは28ファイル(+features.js)', migrated === 28, migrated);
+  /* ★2026-07-29 キャラ系統6層監査（fix635/636/637）。3本とも「window.S を唯一の経路にしない」
+     という、この台帳が守らせたかった契約そのものが動機なので、必ずここへ足す。
+     + fix635(新しい物語の保存ガードを正式API で武装し直す。fix600 が window.S で空振りしていた) = 29
+     + fix636(登録NPCの登場証拠を会話ログの確定話者へ揃える。cast と turns を取る)          = 30
+     + fix637(登録キャストが空のまま進むのを観測する。cast/turns/scene を読む)               = 31 */
+  ok('★__chronicleGetState を参照するのは31ファイル(+features.js)', migrated === 31, migrated);
   ok('★features.js も分類1だけ移行済み',
      fs2.readFileSync(path.join(__dirname, 'features.js'), 'utf8').indexOf('__chronicleGetState') > 0);
 }

@@ -185,7 +185,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260728-fix630';
+  var HOME_BUILT = '20260729-fix637';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -200,14 +200,14 @@
   } catch(e){}
 })();
 </script>
-<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix630"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix630"></script>
-<script src="v292Dfix564-snapshot.js?cb=v292Dfix630"></script>
-<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix630"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix630"></script>
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix630"></script>
+<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix637"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix637"></script>
+<script src="v292Dfix564-snapshot.js?cb=v292Dfix637"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix637"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix637"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix637"></script>
 <!-- ★fix602: 墓標が立ったスロットへの書き込みを影で止める（別途配信） -->
-<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix630"></script>
+<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix637"></script>
 <script>
 (function(){
   'use strict';
