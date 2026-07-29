@@ -62,6 +62,12 @@
  *     ⑤採用結果     … noteOutcome(...) → 保全した候補の採否を後追いで記録
  *   'confirm' は 'stop' と**同じ契約**で止まる（ターンを進めない・状態を更新しない・保存しない・入力を残す）。
  *
+ * ■fix652（2026-07-30 追記）
+ *   fix651(A) のガードだけを端末フラグ v292Dfix652StreamGuardAllLive='1' で全物語 live に
+ *   できるようにした。救済生成の live 判定（v292Dfix643Live + fix650 allowlist）は**変えない**。
+ *   ガードが遮断したのに救済が shadow の物語では、救済を撃たずに既存の生成失敗UX
+ *   （ターン不成立・入力を残す・案内バナー）へ倒す。
+ *
  * 冪等: window.__v292Dfix643
  * OFF : localStorage v292Dfix643Off='1'
  * 実弾: localStorage v292Dfix643Live='1'（★これが無い端末は shadow ＝ 記録だけ）
@@ -434,6 +440,22 @@
 
         /* ---- shadow: 判定と記録だけ。**一切ブロックしない** ---- */
         if (!isLive){
+          /* ★fix652: ガードだけが live（端末フラグ v292Dfix652StreamGuardAllLive）で遮断した本文は、
+             救済が shadow の物語でも採用しない＝既存の生成失敗UXへ倒す。
+             ここで救済生成は**撃たない**（fix643/fix650 の live 判定は1ビットも変えない＝canary維持）。 */
+          if (v.guard && seq === 1 && !rescueUsed){   /* ★2本目以降(fix216/235の書き直し)は live と同じく観測だけ */
+            stats.blocked++;
+            record(logRow(v, 'guard-hard-stop', 'guard-live', String(v.guard)));
+            held = { result: result, input: pendingInput, view: v, kind: 'hard' };
+            showBanner();
+            try {
+              setTimeout(function(){
+                try { if (window.UI && typeof window.UI.setStatus === 'function')
+                        window.UI.setStatus('文章の崩れを検知しました。ターンは確定していません', true); } catch(e){}
+              }, 0);
+            } catch(e){}
+            return null;    /* ★index.html:1809 の `if (!result)` が入力を戻して return する */
+          }
           record(logRow(v, 'hard-observed', 'shadow'));
           return result;
         }

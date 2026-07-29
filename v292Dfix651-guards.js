@@ -47,8 +47,16 @@
  *   そのまま fix643 の救済（最大1回）→ fix650 の judgeRescue / ring へ乗る。
  *   救済の応答も同じ監視を通す。2回目も遮断ならターン不成立（二重hard契約）。
  *
+ * ■A の LIVE 判定（★fix652 で分離した）
+ *   既定は従来どおり meta.live（＝fix643 の live()＝fix650 の物語allowlist）に従属する。
+ *   端末フラグ v292Dfix652StreamGuardAllLive='1' を置いた端末だけ、**ガードだけ**が
+ *   その端末の全物語で live になる（救済生成の live 判定は1ビットも変えない＝canary維持）。
+ *   ガードが live で遮断したのに救済が shadow の物語では、fix643 が既存の
+ *   「生成失敗UX」（ターン不成立・入力を残す・案内バナー）へ倒す。
+ *
  * OFF: v292Dfix651StreamGuardOff='1' (A) / v292Dfix651ZeroTurnGuardOff='1' (C)
  *      （B は v292Dfix651SlotBackupGuardOff='1' で旧 fix228 挙動へ戻る）
+ *      ★A の OFF は v292Dfix652StreamGuardAllLive より**優先**する（全停止）。
  * 冪等: window.__v292Dfix651
  * 読出: __v292Dfix651.trace() / .traceStats() / .streamGuard.stats() / .selfTest()
  * ========================================================================== */
@@ -74,9 +82,13 @@
      A. 暴走ストリームガード
      ===================================================================== */
   var A_OFF   = 'v292Dfix651StreamGuardOff';
+  /* ★fix652: ガードの LIVE 判定を fix643 の救済ゲート（fix650 物語allowlist）から切り離す端末フラグ。
+     既定OFF＝従来どおり meta.live 従属。'1' でこの端末の全物語でガードだけ live。 */
+  var A_ALL   = 'v292Dfix652StreamGuardAllLive';
   var A_STATS = 'v292Dfix651Stats';
   var A_LOG   = 'v292Dfix651StreamLog';
   var A_MAXLOG = 20;
+  var A_MAXLAT = 20;   /* fix652: abortLatency は直近この件数だけ持つ */
 
   var CFG = {
     startAt: 1024,   /* 累計これだけ受け取るまで判定を始めない */
@@ -211,7 +223,7 @@
     o[k] = o[k] || {};
     o[k][sub] = (o[k][sub] || 0) + 1;
   }
-  function countSample(text, meta, m){
+  function countSample(text, meta, m, liveEff){
     try {
       var st = readStats();
       var L = String(text == null ? '' : text).length;
@@ -221,7 +233,7 @@
       if (L > (st.maxLen || 0)) st.maxLen = L;
       bump(st, 'len', lenBucket(L));
       bump(st, 'finish', meta.finishReason == null ? 'unknown' : String(meta.finishReason).slice(0, 24));
-      bump(st, 'mode', meta.live ? 'live' : 'shadow');
+      bump(st, 'mode', (liveEff == null ? meta.live : liveEff) ? 'live' : 'shadow');
       bump(st, 'phase', meta.phase === 'rescue' ? 'rescue' : 'first');
       if (m && m.verdict){
         bump(st, 'trip', m.verdict.reason);
@@ -237,36 +249,73 @@
     try { var a = JSON.parse(lsg(A_LOG) || '[]'); return Array.isArray(a) ? a : []; }
     catch(e){ return []; }
   }
-  function logStream(m, meta, outcome){
+  function logStream(m, meta, outcome, liveEff){
     try {
       var a = readStreamLog();
       a.push({ at: new Date().toISOString(), reason: m.verdict.reason, why: m.verdict.why,
                len: m.verdict.len, cov: Math.round(m.verdict.coverage * 1000) / 1000,
                maxRun: m.verdict.maxRun, checks: m.verdict.checks,
                phase: meta.phase || 'first', slotId: meta.slotId == null ? null : String(meta.slotId),
-               mode: meta.live ? 'live' : 'shadow', outcome: outcome });
+               mode: (liveEff == null ? meta.live : liveEff) ? 'live' : 'shadow', outcome: outcome });
       lssRaw(A_LOG, JSON.stringify(a.slice(-A_MAXLOG)));
     } catch(e){ errors++; }
   }
 
-  var aStats = { inspected: 0, tripped: 0, blocked: 0, observed: 0 };
+  /* ★fix652: 端末別の観測カウンタ（この端末で何が起きたかを後から読む）。
+     inspected/tripped/blocked/observed は従来のものを流用し、足りない分だけ足す。 */
+  var aStats = { inspected: 0, tripped: 0, blocked: 0, observed: 0,
+                 falseTrip: 0, abortCompleted: 0, abortLatency: [],
+                 rescued: 0, retryFailed: 0, writesAfterAbort: 0, allLive: false };
+  var abortPending = false;    /* fix652: 遮断してから、そのターンが決着するまで true */
+  var rescuePending = false;   /* fix652: 遮断のあとの救済応答を待っている間だけ true */
+
+  /* fix652: 既存の stats 機構（A_STATS）へ相乗りさせる。増えるのは g652 の1オブジェクトだけ。 */
+  function flushCounters(){
+    try {
+      var st = readStats();
+      st.g652 = { inspected: aStats.inspected, tripped: aStats.tripped, blocked: aStats.blocked,
+                  observed: aStats.observed, falseTrip: aStats.falseTrip,
+                  abortCompleted: aStats.abortCompleted,
+                  abortLatency: aStats.abortLatency.slice(-A_MAXLAT),
+                  rescued: aStats.rescued, retryFailed: aStats.retryFailed,
+                  writesAfterAbort: aStats.writesAfterAbort, allLive: isOn(A_ALL) };
+      writeStats(st);
+    } catch(e){ errors++; }
+  }
 
   /* fix643 が判定 view を作った直後に呼ぶ。
      ・shadow … 記録だけして view をそのまま返す（挙動は1ビットも変わらない）
      ・live   … 遮断理由つきの hard な view に差し替える → fix643 の救済へ直結 */
   function applyToView(view, raw, meta){
     meta = meta || {};
-    if (isOn(A_OFF)) return view;
+    if (isOn(A_OFF)) return view;      /* ★kill スイッチは fix652 のフラグより優先（全停止） */
+    /* ★fix652: LIVE 判定はここで決める。既定は meta.live（fix643/fix650 の救済ゲート）に従属、
+       端末フラグが立っている端末だけ、ガードは全物語で live になる。 */
+    var isLive = !!meta.live || isOn(A_ALL);
+    var isRescue = (meta.phase === 'rescue');
+    if (!isRescue){ abortPending = false; rescuePending = false; }
     var text = String(raw == null ? '' : raw);
-    var m;
+    var m, t0 = now();
     try { m = inspect(text); } catch(e){ errors++; return view; }
     aStats.inspected++;
-    countSample(text, meta, m);
+    aStats.allLive = isOn(A_ALL);
+    countSample(text, meta, m, isLive);
+    if (isRescue && rescuePending){    /* fix652: 遮断のあとの救済がどうなったかを数える */
+      rescuePending = false;
+      if (m.verdict) aStats.retryFailed++;
+      else { aStats.rescued++; abortPending = false; flushCounters(); }
+    }
     if (!m.verdict) return view;
     aStats.tripped++;
-    if (!meta.live){ aStats.observed++; logStream(m, meta, 'observed'); return view; }
+    if (!isLive){ aStats.observed++; logStream(m, meta, 'observed', isLive); flushCounters(); return view; }
     aStats.blocked++;
-    logStream(m, meta, 'blocked');
+    if (m.aborted) aStats.abortCompleted++;
+    aStats.abortLatency.push(Math.max(0, now() - t0));
+    if (aStats.abortLatency.length > A_MAXLAT) aStats.abortLatency = aStats.abortLatency.slice(-A_MAXLAT);
+    abortPending = true;
+    if (!isRescue) rescuePending = true;
+    logStream(m, meta, 'blocked', isLive);
+    flushCounters();
     var codes = (view && view.codes) ? view.codes.slice() : [];
     if (codes.indexOf(m.verdict.reason) < 0) codes.push(m.verdict.reason);
     return {
@@ -288,6 +337,14 @@
   var streamGuard = {
     CFG: CFG,
     isOff: function(){ return isOn(A_OFF); },
+    /* ★fix652: この端末でガードだけを全物語 LIVE にしているか */
+    isAllLive: function(){ return isOn(A_ALL); },
+    /* ★fix652: 誤検出だった遮断を人手で1件マークする（falseTrip の材料） */
+    markFalseTrip: function(n){
+      aStats.falseTrip += (typeof n === 'number' && n > 0) ? n : 1;
+      flushCounters();
+      return aStats.falseTrip;
+    },
     coverage: coverage, maxRun: maxRunOf,
     monitor: createMonitor, inspect: inspect,
     applyToView: applyToView,
@@ -419,6 +476,12 @@
       oldTurns: oldT, newTurns: newT,
       writer: writerOf(stk), reason: 'write', blocked: false
     };
+    /* ★fix652: 遮断した直後にターンが増える書込みが来たら数える
+       （「中断した候補は本文採用しない・ターン数を増やさない」の見張り。書込みは妨げない）。 */
+    if (abortPending && oldT >= 0 && newT > oldT){
+      aStats.writesAfterAbort++;
+      flushCounters();
+    }
     if (!(oldT > 0 && newT === 0)) return rec;
     rec.reason = 'zero-turn-overwrite';
     cStats.zeroOverWrite++;
