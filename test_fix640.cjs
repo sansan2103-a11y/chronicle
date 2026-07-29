@@ -29,6 +29,22 @@ function extractAccessor(){
   return Buffer.from(HTML.slice(i, j + 5), 'latin1').toString('utf8');
 }
 
+/* features.js §8 の純粋関数を**本物のソースから**切り出す（fix640 は地の文の人物候補に
+   これを借りているので、モックで自前実装すると本番と乖離する）。 */
+function realHelpers(){
+  const i = FEAT.indexOf('(function autoBootstrap(){');
+  const END = '  })();';
+  const j = FEAT.indexOf(END, FEAT.indexOf("'registered (render hook + initial sweep)'"));
+  if (i < 0 || j < 0) throw new Error('features.js から autoBootstrap を切り出せない');
+  const body = FEAT.slice(i, j + END.length);
+  const sandbox = { console: { log(){}, warn(){} } };
+  vm.createContext(sandbox);
+  vm.runInContext('var __out = {};\n' + body.replace('whenReady(register);',
+    '__out.extractKatakanaNames = extractKatakanaNames;'), sandbox, { filename: 'features.js:autoBootstrap' });
+  return sandbox.__out;
+}
+const HELP = realHelpers();
+
 /* ---- モック window（★localStorage は Object.keys に見える実体を持つ） ---- */
 function mkWin(opts){
   opts = opts || {};
@@ -70,6 +86,14 @@ function mkS(hero, npcs, turns){
 function T(paras, narrative){
   return { plan: { narrative: Array.isArray(paras) ? paras : [String(paras || '')] },
            narrative: narrative === undefined ? '' : narrative, playerText: '' };
+}
+
+/* 強い証拠2系統 × 2ターン（fix644 の追加テストで使う） */
+function strongPair(name){
+  return [
+    T(['<say who="' + name + '">「こんばんは」</say>', '<state who="' + name + '" からだ="立っている"/>']),
+    T(['<say who="' + name + '">「行きましょう」</say>', '<state who="' + name + '" からだ="歩く"/>'])
+  ];
 }
 
 console.log('\n== (0) 真因の固定 ==');
@@ -352,7 +376,7 @@ console.log('\n== (9) スロット別キー / OFF / 冪等 / 配線 ==');
 }
 {
   ok('★script タグがある', HTMLU.indexOf('v292Dfix640-cast-evidence-ledger.js') >= 0);
-  ok('★?cb= が付いている', HTMLU.indexOf('v292Dfix640-cast-evidence-ledger.js?cb=fix640') >= 0);
+  ok('★?cb= が付いている', HTMLU.indexOf('v292Dfix640-cast-evidence-ledger.js?cb=fix644') >= 0);
   ok('★features.js より後に読み込む',
      HTMLU.indexOf('v292Dfix640-cast-evidence-ledger.js') > HTMLU.indexOf('features.js?'));
   ok('★fix606 より後に読み込む（抽出規則を live 参照するため）',
@@ -366,6 +390,153 @@ console.log('\n== (9) スロット別キー / OFF / 冪等 / 配線 ==');
   ok('★fix277 / fix307 を変更していない',
      read('v292Dfix277-quasi-pack.js').indexOf('fix640') < 0 &&
      read('v292Dfix307-npc-roster.js').indexOf('fix640') < 0);
+}
+
+
+/* =====================================================================
+   fix644（2026-07-29・GPT裁定）採取の厳格化
+   実データで台帳に入っていた「名前でないもの」を落とし、実在の名前は落とさない。
+   ★原則: 文字列の見た目ではなく「人物として使われた構文」で決める。
+     ・カタカナだから弾く方式は不可（カエデ/ノア/ヒナが消える）
+     ・助詞を文字列内の部分一致で弾く方式も不可（「加賀」が「が」で落ちる）
+   ===================================================================== */
+console.log('\n== (10) fix644: 候補の形状条件（純関数） ==');
+{
+  const w = mkWin(); boot(w, mkS());
+  const f = w.__v292Dfix640;
+
+  /* --- 採る（name） --- */
+  ['佐伯トメ', 'カエデ', 'ノア', 'ヒナ', '加賀', '白石澪', '佐々木', 'ミナ'].forEach(n =>
+    ok('★name として通す: ' + n, f.classifyCandidate(n).type === 'name', f.classifyCandidate(n)));
+  ok('★「加賀」を「が」を含むからと除外しない（部分一致で助詞を弾かない）',
+     f.classifyCandidate('加賀').type === 'name' && f.classifyCandidate('加賀').reason === 'ok');
+
+  /* --- 落とす --- */
+  ok('★活用断片を含む候補は落とす（をかざしながら宿の主人）',
+     f.classifyCandidate('をかざしながら宿の主人').type === null, f.classifyCandidate('をかざしながら宿の主人'));
+  ok('★先頭が格助詞なら落とす', f.classifyCandidate('をかざしながら宿の主人').reason === 'leading-particle');
+  ['ながら宿の亭主', 'していた男の子'].forEach(n => {
+    const c = f.classifyCandidate(n);
+    ok('★活用断片: ' + n, c.type === null || c.type === 'role-label' ? c.reason !== 'ok' : false, c);
+  });
+  ok('★1文字は（宣言でなければ）採らない', f.classifyCandidate('澪').type === null);
+  ok('★who 属性で宣言された1文字の名前は採る（澪・蓮を消さない）',
+     f.classifyCandidate('澪', { declared: true }).type === 'name');
+  ok('★21文字以上は採らない', f.classifyCandidate('あ'.repeat(21)).type === null);
+  ok('★改行・句読点・引用符を含む候補は採らない',
+     f.classifyCandidate('佐伯、トメ').type === null && f.classifyCandidate('佐伯\nトメ').type === null);
+  ok('★複数の文節がある候補は name にしない（内容語+助詞+内容語）',
+     f.classifyCandidate('封筒を机').type === null, f.classifyCandidate('封筒を机'));
+  ok('★ひらがなの名前を助詞で壊さない（山田はな / はるか）',
+     f.classifyCandidate('山田はな').type === 'name' && f.classifyCandidate('はるか').type === 'name');
+
+  /* --- 役割語は別枠 --- */
+  ok('★「宿の主人」は role-label', f.classifyCandidate('宿の主人').type === 'role-label');
+  ok('★「去年の客」は name ではない（role-label か不採取）',
+     f.classifyCandidate('去年の客').type !== 'name', f.classifyCandidate('去年の客'));
+  ok('★「少女」「女将」も role-label',
+     f.classifyCandidate('少女').type === 'role-label' && f.classifyCandidate('女将').type === 'role-label');
+}
+
+console.log('\n== (11) fix644: 人物として使われた構文（personUse） ==');
+{
+  const w = mkWin(); boot(w, mkS());
+  const f = w.__v292Dfix640;
+  const prose = '扉がパチリと音を立てた。ヒナはポケットに手を入れた。カエデが振り返る。' +
+                'ノアの声が低い。加賀を見た。佐伯トメさんが頷いた。';
+  ['ヒナ', 'カエデ', 'ノア', '加賀', '佐伯トメ'].forEach(n =>
+    ok('★人物構文あり: ' + n, f.personUse(prose, n) === true));
+  ['パチリ', 'ポケット'].forEach(n =>
+    ok('★人物構文なし（オノマトペ・物）: ' + n, f.personUse(prose, n) === false));
+  ok('★カタカナかどうかでは判定していない（カエデは通り、ポケットは落ちる）',
+     f.personUse(prose, 'カエデ') && !f.personUse(prose, 'ポケット'));
+}
+
+console.log('\n== (12) fix644: 実データの文をそのまま通す（実チェーン） ==');
+{
+  /* 実例そのもの: 「手をかざしながら宿の主人を見上げた」から拾っていたゴミを止め、
+     同じ文から「宿の主人」は正しく採れること。カタカナの実名は消さないこと。
+     ★§8 のカタカナ名抽出は features.js の本物を使う（モック自作にしない）。 */
+  const S = mkS({ name: '' }, [], [
+    T(['火鉢の炭が赤く息づいている。主人公はそのそばに腰を落とし、手をかざしながら宿の主人を見上げた。',
+       '扉がパチリと音を立てた。ヒナはポケットに手を入れた。',
+       '<say who="佐伯トメ">「去年の客も同じことを言ったよ」</say>',
+       '<say who="加賀">「邪魔するよ」</say>']),
+    T(['カエデが振り返る。ノアの声が低い。加賀を見た。ヒナは黙っている。',
+       '<say who="佐伯トメ">「泊まっていくかい」</say>',
+       '<state who="佐伯トメ" からだ="帳場"/>'])
+  ]);
+  const w = mkWin({ helpers: HELP }); boot(w, S);
+  w.__v292Dfix640.harvestPending({});
+  const names = Object.keys(w.__v292Dfix640.ledger().entries);
+  const typeOf = n => { const y = w.__v292Dfix640.why(n); return y ? y.candidateType : null; };
+
+  ok('★「をかざしながら宿の主人」を採らない', names.indexOf('をかざしながら宿の主人') < 0, names);
+  ok('★同じ文から「宿の主人」は採れる（取りこぼさない）', names.indexOf('宿の主人') >= 0, names);
+  ok('★「宿の主人」は role-label', typeOf('宿の主人') === 'role-label', w.__v292Dfix640.why('宿の主人'));
+  ok('★「パチリ」「パチリと」を採らない',
+     names.indexOf('パチリ') < 0 && names.indexOf('パチリと') < 0, names);
+  ok('★前提: §8 は「パチリ」「ポケット」を候補として出している（門番が効いている証拠）',
+     HELP.extractKatakanaNames('扉がパチリと音を立てた。ヒナはポケットに手を入れた。').join(',') === 'パチリ,ヒナ,ポケット',
+     HELP.extractKatakanaNames('扉がパチリと音を立てた。ヒナはポケットに手を入れた。'));
+  ok('★「ポケット」を採らない', names.indexOf('ポケット') < 0, names);
+  ok('★「去年の客」を name として採らない', typeOf('去年の客') !== 'name', names);
+
+  ok('★「佐伯トメ」は採る', names.indexOf('佐伯トメ') >= 0, names);
+  ok('★「佐伯トメ」は name', typeOf('佐伯トメ') === 'name', w.__v292Dfix640.why('佐伯トメ'));
+  ['カエデ', 'ノア', 'ヒナ'].forEach(n => {
+    ok('★カタカナの実名を消さない: ' + n, names.indexOf(n) >= 0, names);
+    ok('★' + n + ' は name', typeOf(n) === 'name');
+  });
+  ok('★「加賀」を採る（「が」を含むという理由で落とさない）', names.indexOf('加賀') >= 0, names);
+  ok('★「加賀」は name', typeOf('加賀') === 'name');
+  ok('★「加賀」は地の文でも記録される（prose_name まで通る）',
+     (w.__v292Dfix640.why('加賀').kinds || []).indexOf('prose_name') >= 0, w.__v292Dfix640.why('加賀'));
+  ok('★落とした理由が stats に残る（実機で偽陰性を疑えるように）',
+     !!w.__v292Dfix640.report().stats.dropped &&
+     Object.keys(w.__v292Dfix640.report().stats.dropped).length > 0,
+     w.__v292Dfix640.report().stats.dropped);
+}
+
+console.log('\n== (13) fix644: 台帳のフィールド追加は後方互換 ==');
+{
+  const S = mkS({ name: '' }, [], strongPair('白石澪'));
+  const w = mkWin(); boot(w, S);
+  w.__v292Dfix640.harvestPending({});
+  const y = w.__v292Dfix640.why('白石澪');
+  ok('★candidateType が入る', y.candidateType === 'name', y);
+  ok('★confidence が数値で入る', typeof y.confidence === 'number' && y.confidence > 0, y);
+  ok('★既存フィールドは残っている',
+     y.roleWord === false && Array.isArray(y.seenTurns) && typeof y.distinctSeenTurns === 'number', y);
+  const row = w.__v292Dfix640.report().entries.filter(r => r.name === '白石澪')[0];
+  ok('★report にも出る', !!row && row.candidateType === 'name' && typeof row.confidence === 'number', row);
+}
+{
+  /* fix644 より前に書かれた台帳（candidateType / confidence が無い）を読んでも壊れない */
+  const oldLedger = JSON.stringify({ v: 1, slotId: 'chr6', cursor: 2,
+    entries: { '宿の主人': { name: '宿の主人', slotId: 'chr6', firstSeenTurn: 0, lastTurn: 1,
+                             distinctSeenTurns: 2, seenTurns: [0, 1], evidenceKinds: ['say_who'],
+                             sourceSpans: [], roleWord: true, resolvedTo: '', resolveCandidates: [],
+                             appearance: {} } },
+    promotions: [], blocked: [] });
+  const w = mkWin({ store: { 'v292Dfix640Evid_slot_chr6': oldLedger } });
+  boot(w, mkS());
+  const y = w.__v292Dfix640.why('宿の主人');
+  ok('★旧台帳を捨てない（履歴を消さない）', !!y, w.__v292Dfix640.report());
+  ok('★candidateType を roleWord から補う', !!y && y.candidateType === 'role-label', y);
+  ok('★confidence を補う', !!y && typeof y.confidence === 'number', y);
+}
+
+console.log('\n== (14) fix644: 昇格条件は変えない（fix641 の契約） ==');
+{
+  const SRC641 = read('v292Dfix641-cast-auto-register.js');
+  ok('★MIN_TURNS は 2 のまま', /var MIN_TURNS\s*=\s*2;/.test(SRC641));
+  ok('★MIN_STRONG_KINDS は 2 のまま', /var MIN_STRONG_KINDS\s*=\s*2;/.test(SRC641));
+  ok('★seen>=3 への緩和を入れていない', SRC641.indexOf('MIN_TURNS = 3') < 0);
+  ok('★confidence を昇格判定に使っていない（正本は強証拠の系統数）',
+     SRC641.indexOf('confidence') < 0);
+  ok('★fix640 の script タグの cb を上げた（中身を変えたので）',
+     HTMLU.indexOf('v292Dfix640-cast-evidence-ledger.js?cb=fix644') >= 0);
 }
 
 console.log('\n---------------------------------------------');

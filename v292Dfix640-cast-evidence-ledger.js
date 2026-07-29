@@ -28,6 +28,17 @@
  *   起動時に cursor→turns.length を1回だけ追いつき採取。周期スイープは置かない。
  *   **1ターンは必ず1回だけ走査される**（cursor が保証）。
  *
+ * ■fix644（2026-07-29・GPT裁定）採取の厳格化
+ *   実データで、名前でないものが台帳へ入っていた:
+ *     「をかざしながら宿の主人」「パチリと」「ポケット」「去年の客」
+ *   直し方の原則は **「文字列の見た目ではなく、人物として使われた構文を必須にする」**。
+ *   ・カタカナだから弾く方式は禁止（カエデ／ノア／ヒナが消える）
+ *   ・助詞を**文字列内の部分一致**で弾く方式も禁止（「加賀」が「が」で落ちる）
+ *   → 判定は候補の**前後境界と構文**で行う。実装は下の「fix644: 形状条件」節。
+ *   ・「宿の主人」等の役割語は名前候補ではなく candidateType:'role-label' として別枠に採る
+ *   ・台帳エントリへ candidateType / confidence を足す（既存フィールドは維持・後方互換）
+ *   ・★昇格条件（fix641）は変えない（異なるターン＋異なる証拠系統2つ）
+ *
  * 冪等: window.__v292Dfix640
  * OFF : localStorage v292Dfix640Off='1'（採取を止める。台帳は消さない）
  * 読出: window.__v292Dfix640.ledger() / .report() / .why('名前') / .selfTest()
@@ -173,6 +184,68 @@
     return false;
   }
 
+  /* ==================== fix644: 形状条件（GPT裁定） ====================
+     ★ここは「文字列の見た目」ではなく「候補の前後境界と構文」で判定する層。
+       ・カタカナだから弾く／助詞を部分一致で弾く、は**やらない**（カエデ・加賀が消える）
+       ・活用断片を**含む**候補は落とす（実例「をかざしながら宿の主人」）
+       ・文節が2つ以上ある候補は名前にしない。判定は
+         「内容語 + ひらがなの助詞 + 内容語」という**境界の形**で見る。
+         「加賀」は漢字が連なるだけなので当たらない。「山田はな」も
+         『は』の後ろがひらがな＝境界ではないので当たらない。 */
+  var CAND_MIN = 2, CAND_MAX = 20;
+  /* 改行・句読点・引用符・タグ記号。isValidName より厳しめ（採取の入口専用） */
+  var CAND_BAD_RE = /[\n\r\t　、。，．！？!?…‥「」『』（）()｛｝\[\]<>"'“”‘’　]/;
+  /* 先頭が格助詞（GPT指定の6語ちょうど）。★内部の助詞は見ない */
+  var CAND_LEAD_RE = /^(?:から|を|に|へ|で|と)/;
+  /* 活用・接続の断片。名前や役割語には現れない */
+  var CAND_INFLECT_RE = /(ながら|つつ|ている|ていた|してい|された|されて|しない|ました|ません|だった|であり|ておく|てくる|ていく|られて|らせて|かけて|ながらも)/;
+  /* 文節の境界: 内容語 + ひらがなの助詞 + 内容語 */
+  var CONTENT = '[一-龥々〆ヵ-ヺーA-Za-zＡ-Ｚａ-ｚ0-9０-９]';
+  var CAND_BUNSETSU_RE = new RegExp(CONTENT + '[はがをにへとでもの]' + CONTENT);
+  function allKana(s){ return /^[ぁ-ゖー]+$/.test(s); }
+
+  /* 候補を分類する。type=null なら採らない。純関数（localStorage も DOM も触らない）。
+     opts.declared … <say who>/<state who>/<react who> のように、モデルが
+                     **明示的に人物として書いた** 候補。1文字の名前（澪・蓮）を落とさないため
+                     最小長だけ緩める。形の壊れた who は declared でも落とす。 */
+  function classifyCandidate(raw, opts){
+    var s = normName(raw);
+    var declared = !!(opts && opts.declared);
+    var out = { name: s, type: null, reason: '' };
+    if (!s){ out.reason = 'empty'; return out; }
+    if (s.length > CAND_MAX || s.length < (declared ? 1 : CAND_MIN)){ out.reason = 'length'; return out; }
+    if (CAND_BAD_RE.test(s)){ out.reason = 'punct'; return out; }
+    if (CAND_LEAD_RE.test(s)){ out.reason = 'leading-particle'; return out; }
+    if (!(allKana(s) && s.length <= 4) && CAND_INFLECT_RE.test(s)){ out.reason = 'inflection'; return out; }
+    if (isRoleWord(s)){ out.type = 'role-label'; out.reason = 'role'; return out; }
+    if (CAND_BUNSETSU_RE.test(s)){ out.reason = 'multi-bunsetsu'; return out; }
+    out.type = 'name'; out.reason = 'ok';
+    return out;
+  }
+
+  /* ---- 人物として使われた構文か（地の文から拾う弱い証拠の必須条件） ----
+     ★「パチリと」「ポケット」を落とすのはこの層。カタカナかどうかは見ない。 */
+  var PERSON_PART = '(声|手|目|瞳|眼|顔|姿|背|肩|指|腕|足|胸|髪|頬|唇|口|首|耳|息|方|隣|横|前|後ろ|傍|言葉|名|名前|表情|視線|気配|返事|問い|答え)';
+  var HONORIFIC = '(さん|くん|ちゃん|様|さま|氏|先生|殿|師匠|先輩|後輩)';
+  var SPEECH_V = '(言|呟|囁|答|返|叫|問|尋|訊|告|笑|微笑|頷|うなず)';
+  var TOWARD_V = '(見|視|眺|呼|追|抱|振り返|睨|訊|尋|問|話しかけ|微笑|向か|近づ|触れ|渡|差し出|続け)';
+  function escRe(s){ return String(s == null ? '' : s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function personUse(prose, name){
+    var p = String(prose || ''), e = escRe(name);
+    if (!p || !e) return false;
+    var pats = [
+      e + '[はがも]',                        /* 主題・主語（カエデは／ノアが） */
+      e + 'の' + PERSON_PART,                /* 人の部位・持ち物としての「の」 */
+      e + HONORIFIC,                         /* 敬称 */
+      e + '[、，]?\\s*と\\s*' + SPEECH_V,     /* 「…」とカエデと答えた 型の帰属 */
+      e + '[をにへ]\\s*' + TOWARD_V           /* ヒナを見た／ノアに尋ねた */
+    ];
+    for (var i = 0; i < pats.length; i++){
+      try { if (new RegExp(pats[i]).test(p)) return true; } catch(err){}
+    }
+    return false;
+  }
+
   /* ============================ 台帳 ============================ */
   var MAX_ENTRIES = 120, MAX_SPANS = 6, MAX_SEEN = 20, MAX_PROMO = 200, SPAN_CHARS = 40;
 
@@ -191,9 +264,24 @@
     if (!Array.isArray(o.promotions)) o.promotions = [];
     if (!Array.isArray(o.blocked)) o.blocked = [];
     if (typeof o.cursor !== 'number' || !(o.cursor >= 0)) o.cursor = 0;
+    /* ★fix644: 前日までに書かれた台帳には candidateType / confidence が無い。
+       消さずに補う（後方互換。既存フィールドには触らない）。 */
+    for (var k in o.entries){
+      if (!Object.prototype.hasOwnProperty.call(o.entries, k)) continue;
+      var e = o.entries[k];
+      if (!e || typeof e !== 'object') continue;
+      if (!e.candidateType) e.candidateType = e.roleWord ? 'role-label' : 'name';
+      if (typeof e.confidence !== 'number') e.confidence = confidenceOf(e);
+    }
     return o;
   }
-  var stats = { harvests: 0, turnsScanned: 0, writes: 0, quota: 0, errors: 0, lastReason: '' };
+  var stats = { harvests: 0, turnsScanned: 0, writes: 0, quota: 0, errors: 0, lastReason: '',
+                /* ★fix644: 何を、なぜ採らなかったか。実機で偽陰性を疑うときの唯一の手がかり */
+                dropped: {} };
+  function bumpDrop(reason){
+    var k = String(reason || 'unknown');
+    stats.dropped[k] = (stats.dropped[k] || 0) + 1;
+  }
   function save(L){
     if (!canSave()) { stats.lastReason = 'epoch-blocked'; return false; }
     L.updated = Date.now();
@@ -224,26 +312,37 @@
     for (var i = 0; i < ks.length; i++){ if (isStrong(ks[i]) && out.indexOf(ks[i]) < 0) out.push(ks[i]); }
     return out;
   }
+  /* ★fix644: 確からしさ。**昇格判定には使わない**（昇格の正本は fix641 の
+     「異なるターン2つ × 強い証拠2系統」のまま）。人が台帳を読むための目安。 */
+  function confidenceOf(e){
+    if (!e) return 0;
+    var s = strongKindsOf(e).length, t = e.distinctSeenTurns || 0;
+    var c = 0.20 * Math.min(t, 3) + 0.25 * Math.min(s, 2);
+    if (e.candidateType === 'role-label' || e.roleWord) c -= 0.20;
+    return Math.max(0, Math.min(1, Math.round(c * 100) / 100));
+  }
 
-  function ensureEntry(L, name, turnIdx){
+  function ensureEntry(L, name, turnIdx, cls){
     var e = L.entries[name];
     if (!e){
+      var t = (cls && cls.type) || (isRoleWord(name) ? 'role-label' : 'name');
       e = L.entries[name] = {
         name: name, slotId: L.slotId,
         firstSeenTurn: turnIdx, lastTurn: -1,
         distinctSeenTurns: 0, seenTurns: [],
         evidenceKinds: [], sourceSpans: [],
-        roleWord: isRoleWord(name), resolvedTo: '', resolveCandidates: [],
-        appearance: {}
+        roleWord: (t === 'role-label'), resolvedTo: '', resolveCandidates: [],
+        appearance: {},
+        candidateType: t, confidence: 0        /* ★fix644 で追加（既存フィールドは維持） */
       };
     }
     return e;
   }
 
   /* 証拠を1件足す。turnIdx は昇順に来る前提（cursor が保証）。 */
-  function addEvidence(L, name, kind, turnIdx, span){
+  function addEvidence(L, name, kind, turnIdx, span, cls){
     if (!isKnownKind(kind)) return false;
-    var e = ensureEntry(L, name, turnIdx);
+    var e = ensureEntry(L, name, turnIdx, cls);
     if (e.evidenceKinds.indexOf(kind) < 0) e.evidenceKinds.push(kind);
     if (span && e.sourceSpans.length < MAX_SPANS){
       e.sourceSpans.push({ turn: turnIdx, kind: kind, at: span.at,
@@ -256,6 +355,7 @@
       e.seenTurns.push(turnIdx);
       if (e.seenTurns.length > MAX_SEEN) e.seenTurns.shift();
     }
+    e.confidence = confidenceOf(e);      /* ★fix644 */
     return true;
   }
 
@@ -319,7 +419,9 @@
       var m;
       while ((m = pats[i].exec(prose)) !== null){
         var c = normName(m[1]);
-        if (isValidName(c) && !isRoleWord(c) && out.indexOf(c) < 0) out.push(c);
+        /* ★fix644: 解決先も「名前の形」を満たすものだけ（役割語→役割語の解決は無意味） */
+        if (classifyCandidate(c).type !== 'name') continue;
+        if (isValidName(c) && out.indexOf(c) < 0) out.push(c);
       }
     }
     return out;
@@ -335,27 +437,32 @@
     var prose = proseOf(text);
     var added = 0, i, j;
 
-    function put(name, kind, at, snippet){
+    /* ★fix644: 採取の関門はここ1箇所。declared = モデルが who 属性で
+       「人物として」書いた候補（1文字の名前を落とさないため最小長だけ緩める）。 */
+    function put(name, kind, at, snippet, declared){
       var n = normName(name);
       if (!n || !isValidName(n)) return;
+      var cls = classifyCandidate(n, { declared: !!declared });
+      if (!cls.type){ bumpDrop(cls.reason); return; }
+      if (kind === 'role_word' && cls.type !== 'role-label'){ bumpDrop('not-a-role'); return; }
       if (heroName && n === heroName) return;              /* ★主人公は台帳にも積まない */
-      if (addEvidence(L, n, kind, turnIdx, { at: at, text: snippet })) added++;
+      if (addEvidence(L, n, kind, turnIdx, { at: at, text: snippet }, cls)) added++;
     }
 
     /* (1) <say who> = 話者の一次証拠（最強） */
     var says = listTagWho(text, 'say');
     for (i = 0; i < says.length; i++){
-      put(says[i].who, 'say_who', says[i].at, text.substr(says[i].at, SPAN_CHARS));
+      put(says[i].who, 'say_who', says[i].at, text.substr(says[i].at, SPAN_CHARS), true);
     }
     /* (2) <state who> = モデルが継続追跡すると宣言した人物 */
     var states = listTagWho(text, 'state');
     for (i = 0; i < states.length; i++){
-      put(states[i].who, 'state_tag', states[i].at, text.substr(states[i].at, SPAN_CHARS));
+      put(states[i].who, 'state_tag', states[i].at, text.substr(states[i].at, SPAN_CHARS), true);
     }
     /* (3) <react who> = 反応しただけ＝弱 */
     var reacts = listTagWho(text, 'react');
     for (i = 0; i < reacts.length; i++){
-      put(reacts[i].who, 'react', reacts[i].at, text.substr(reacts[i].at, SPAN_CHARS));
+      put(reacts[i].who, 'react', reacts[i].at, text.substr(reacts[i].at, SPAN_CHARS), true);
     }
     /* (4) 明示的な人物紹介＝強 */
     for (i = 0; i < INTRO_RES.length; i++){
@@ -376,12 +483,19 @@
       if (!isValidName(nm)) continue;
       var at = prose.indexOf(nm);
       if (at < 0) continue;
+      /* ★fix644: 地の文の候補は「人物として使われた構文」が1つでもあるときだけ採る。
+         「パチリと」「ポケット」はここで落ちる（カタカナかどうかは見ていない）。
+         役割語は語そのものが人物を指すので (6) の経路に任せる。 */
+      if (classifyCandidate(nm).type === 'name' && !personUse(prose, nm)){ bumpDrop('no-person-syntax'); continue; }
       var para = paraAt(parts, at) || prose;
       var kind = RECALL_RE.test(para) ? 'recall' : 'prose_name';
       put(nm, kind, at, prose.substr(Math.max(0, at - 8), SPAN_CHARS));
     }
     /* (6) 役割語（「宿の主人」型）＝弱。正式名への解決候補も貯める */
-    var roleRe = new RegExp('([一-龥ぁ-んァ-ヶー]{1,8})の' + ROLE_TAIL, 'g'), rm;
+    /* ★fix644: 修飾部を **ひらがなを含まない内容語** に限る。
+       これが「手をかざしながら宿の主人」から「をかざしながら宿の主人」を拾っていた真因。
+       ひらがなを外すと、同じ文からは正しく「宿の主人」が採れる（実データで確認）。 */
+    var roleRe = new RegExp('(' + CONTENT + '{1,8})の' + ROLE_TAIL, 'g'), rm;
     var roles = [];
     while ((rm = roleRe.exec(prose)) !== null){ if (roles.indexOf(rm[0]) < 0) roles.push(rm[0]); }
     for (i = 0; i < ROLE_EXACT.length; i++){
@@ -519,6 +633,7 @@
     return { name: e.name, distinctSeenTurns: e.distinctSeenTurns, seenTurns: e.seenTurns.slice(),
              strong: strongKindsOf(e), kinds: e.evidenceKinds.slice(),
              roleWord: e.roleWord, resolvedTo: e.resolvedTo, resolveCandidates: e.resolveCandidates.slice(),
+             candidateType: e.candidateType, confidence: e.confidence,   /* ★fix644 */
              appearance: e.appearance, sourceSpans: e.sourceSpans.slice() };
   }
   function report(){
@@ -527,7 +642,8 @@
       if (!Object.prototype.hasOwnProperty.call(L.entries, k)) continue;
       var e = L.entries[k];
       rows.push({ name: k, turns: e.distinctSeenTurns, strong: strongKindsOf(e),
-                  kinds: e.evidenceKinds.slice(), roleWord: e.roleWord, resolvedTo: e.resolvedTo });
+                  kinds: e.evidenceKinds.slice(), roleWord: e.roleWord, resolvedTo: e.resolvedTo,
+                  candidateType: e.candidateType, confidence: e.confidence });   /* ★fix644 */
     }
     rows.sort(function(a, b){ return (b.strong.length - a.strong.length) || (b.turns - a.turns); });
     return { key: KEY(), slotId: L.slotId, cursor: L.cursor, entries: rows,
@@ -552,6 +668,8 @@
     isStrong: isStrong, isKnownKind: isKnownKind, strongKindsOf: strongKindsOf,
     STRONG_KINDS: Object.keys(STRONG), WEAK_KINDS: Object.keys(WEAK),
     isValidName: isValidName, isRoleWord: isRoleWord, normName: normName,
+    /* 形状条件（fix644。純関数・テストと実機の両方から呼ぶ唯一の正） */
+    classifyCandidate: classifyCandidate, personUse: personUse, confidenceOf: confidenceOf,
     /* 読み出し */
     why: why, report: report, selfTest: selfTest, stats: snap, isOff: off, getState: getState
   };
