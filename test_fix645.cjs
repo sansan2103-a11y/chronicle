@@ -203,12 +203,58 @@ console.log('=== (7) OFF で sys 注入もパーサも停止 ===');
     wOff.__v292Dfix645._processLastTurn();
     return S.turns[0].narrative.indexOf('<scene_move') >= 0 && wOff.__v292Dfix645.log().length === 0;
   })());
-  ok('(7g) ON: prio は 3（予算逼迫時に最初に落ちる＝品質ブロックを押し出さない）',
-     (wOn.__f379reg || []).filter(r => r.marker === '【移動タグ】')[0].prio === 3);
+  ok('(7g) ON: prio は 2（fix647昇格・<say>/<state>/<react> と同じ出力形式ブロックの階層）',
+     (wOn.__f379reg || []).filter(r => r.marker === '【移動タグ】')[0].prio === 2,
+     (wOn.__f379reg || []).filter(r => r.marker === '【移動タグ】')[0].prio);
   ok('(7h) 冪等: 2回読み込んでも keeper 登録は1件のまま', (() => {
     run(wOn, SRC645, 're-load');
     return (wOn.__f379reg || []).filter(r => r.marker === '【移動タグ】').length === 1;
   })());
+  // fix647 緊急復帰: v292Dfix647Off='1' で「prio3＋旧文面」へ戻る
+  const w647 = load645({ store: { v292Dfix647Off: '1' } });
+  const reg647 = (w647.__f379reg || []).filter(r => r.marker === '【移動タグ】');
+  ok('(7i-1) OFF(fix647): keeper prio が 3 へ戻る', reg647.length === 1 && reg647[0].prio === 3,
+     reg647.length && reg647[0].prio);
+  ok('(7i-2) OFF(fix647): text() が旧文面（「迷ったら出さない」を含む）',
+     w647.__v292Dfix645.text().indexOf('迷ったら出さない') >= 0);
+  ok('(7i-3) OFF(fix647): text() は新文面の肯定形（「必ず出す」）を含まない',
+     w647.__v292Dfix645.text().indexOf('必ず出す') < 0);
+  ok('(7i-4) ON: text() は新文面（「迷ったら出さない」を含まない・「必ず出す」を含む）',
+     wOn.__v292Dfix645.text().indexOf('迷ったら出さない') < 0 &&
+     wOn.__v292Dfix645.text().indexOf('必ず出す') >= 0, wOn.__v292Dfix645.text());
+}
+
+console.log('=== (7j) 実チェーン: fix379 予算解決を通して prio2 で登録・BUDGET(2400)内 ===');
+{
+  // fix379(keeper本体) を先に載せ、その reg へ fix645 が prio2 で push されることを実物で確認する。
+  const w = mkWin();
+  // fix379 の budgetSelect は Planner.build を触るが、reg 登録と budgetSelect 純関数だけを使う
+  run(w, read('v292Dfix379-wrap-keeper.js'), 'fix379');
+  run(w, SRC645, 'fix645');
+  const reg = w.__f379reg || [];
+  const mv = reg.filter(r => r.marker === '【移動タグ】');
+  ok('(7j-1) fix379 の __f379reg へ fix645 が prio2 で載る', mv.length === 1 && mv[0].prio === 2, mv.length && mv[0].prio);
+  ok('(7j-2) budgetSelect / BUDGET_V4 が fix379 から取れる',
+     !!(w.__f379x && typeof w.__f379x.budgetSelect === 'function' && w.__f379x.BUDGET_V4 === 2400),
+     w.__f379x && w.__f379x.BUDGET_V4);
+  // 実測の prio2/3 総量（fix646 の real-play 上限 2103）に、この昇格ブロックを足しても BUDGET 内であること。
+  // ここでは fix645 単体 + prio2/3 の実測総量で候補を構成し、budgetSelect が【移動タグ】を落とさないことを確認する。
+  const F = w.__v292Dfix645;
+  const moveLen = F.text().length;
+  const BUDGET = w.__f379x.BUDGET_V4;
+  // fix646 が実測した real-play の prio2/3 上限（【移動タグ】旧prio3 211字を除いた分）＝約1892。
+  // これに新【移動タグ】(prio2)を足した総量が BUDGET 内であることを、実 budgetSelect で確認。
+  const REAL_NON_MOVE_2_3 = 1892;   // fix646 実測 2103 − 旧移動タグ211（設計doc参照）
+  const cands = [
+    { idx: 0, entry: { marker: '【他prio2群】', off: '' }, text: 'x'.repeat(REAL_NON_MOVE_2_3), prio: 2, size: REAL_NON_MOVE_2_3 },
+    { idx: 1, entry: mv[0], text: F.text(), prio: 2, size: moveLen }
+  ];
+  const chosen = w.__f379x.budgetSelect(cands);
+  const chosenMarks = chosen.map(c => c.entry.marker);
+  ok('(7j-3) 昇格後の prio2/3 実測総量が BUDGET_V4(2400) 内',
+     REAL_NON_MOVE_2_3 + moveLen <= BUDGET, { total: REAL_NON_MOVE_2_3 + moveLen, BUDGET });
+  ok('(7j-4) budgetSelect が【移動タグ】を落とさない（予算内なので全採用）',
+     chosenMarks.indexOf('【移動タグ】') >= 0 && chosen.length === 2, chosenMarks);
 }
 
 console.log('=== (8) 画面用 narrative から剥がれ、plan.narrative には残る ===');
@@ -416,7 +462,7 @@ console.log('=== (11) 記録の作法（本文を保存しない・上限） ===
 
 console.log('=== (12) index.html 配線 ===');
 {
-  ok('(12a) script タグが在る', /<script src="v292Dfix645-scene-move-shadow\.js\?cb=fix645"><\/script>/.test(HTMLU));
+  ok('(12a) script タグが在る（cb=fix647 へ更新済み）', /<script src="v292Dfix645-scene-move-shadow\.js\?cb=fix647"><\/script>/.test(HTMLU));
   ok('(12b) fix643 より後ろに置かれている',
      HTMLU.indexOf('v292Dfix645-scene-move-shadow.js') > HTMLU.indexOf('v292Dfix643-collapse-rescue.js'));
   ok('(12c) </body> より前', HTMLU.indexOf('v292Dfix645-scene-move-shadow.js') < HTMLU.lastIndexOf('</body>'));
@@ -436,23 +482,35 @@ console.log('=== (12) index.html 配線 ===');
   ok('(12j) 冪等ガードが __v292* 形式', /__v292Dfix645/.test(SRC645));
 }
 
-console.log('=== (13) sys 文面（GPT裁定の文言を保つ） ===');
+console.log('=== (13) sys 文面（fix647: 肯定形の必須規則へ反転） ===');
 {
   const F = load645().__v292Dfix645;
-  const T = F.TEXT;
+  const T = F.TEXT;   // ON では新文面
   ok('(13a) marker は【移動タグ】', F.MARKER === '【移動タグ】' && T.indexOf('【移動タグ】') === 1);
-  ok('(13b) タグ雛形を含む', T.indexOf('<scene_move who="hero" to="到着地点" ev="本文からの抜粋"/>') >= 0);
-  ok('(13c) 「1つだけ」を含む', T.indexOf('1つだけ') >= 0);
-  ok('(13d) 「一字も変えずに」を含む', T.indexOf('一字も変えずに') >= 0);
-  ok('(13e) 「迷ったら出さない」を含む', T.indexOf('迷ったら出さない') >= 0);
-  ok('(13f) 「本文を短くしない」を含む', T.indexOf('本文を短くしない') >= 0);
-  ok('(13g) 「完全に省略する」を含む', T.indexOf('完全に省略する') >= 0);
+  ok('(13b) タグ雛形を含む（to/ev は「原文」を抜き出す指示）',
+     T.indexOf('<scene_move who="hero" to="到着地点の原文" ev="移動完了箇所の原文"/>') >= 0, T);
+  // ★fix647 反転契約: 省略優先の文言を消し、肯定形の必須規則を入れる
+  ok('(13c) 「迷ったら出さない」を含まない（省略優先を削除）', T.indexOf('迷ったら出さない') < 0);
+  ok('(13d) 「完全に省略する」を含まない（省略優先を削除）', T.indexOf('完全に省略する') < 0);
+  ok('(13e) 「本文を短くしない」を含まない（旧・省略優先の名残を削除）', T.indexOf('本文を短くしない') < 0);
+  ok('(13f) 肯定形の必須規則がある（「明記した場合は」＋「必ず出す」）',
+     T.indexOf('明記した場合は') >= 0 && T.indexOf('必ず出す') >= 0, T);
+  ok('(13g) 完全引用の指示がある（「一字も変えず」）', T.indexOf('一字も変えず') >= 0);
+  ok('(13g2) to は ev 内に含める指示がある（ev.includes(to) を文面でも明示）',
+     T.indexOf('toはev内に含まれる') >= 0, T);
+  ok('(13g3) 未遂・予定・回想・視線・同場所は出さない（除外条件は肯定形と両立）',
+     T.indexOf('移動未遂') >= 0 && T.indexOf('視線移動') >= 0 && T.indexOf('同じ場所内') >= 0, T);
   ok('(13h) from を要求しない', T.indexOf('from') < 0);
   ok('(13i) 長い内省指示を入れない（推論せよ／慎重に 等が無い）',
      T.indexOf('推論') < 0 && T.indexOf('慎重') < 0 && T.indexOf('よく考え') < 0);
+  ok('(13i2) few-shot 例を足していない（本文例の引用符「」を含まない）', T.indexOf('「') < 0 && T.indexOf('例:') < 0, T);
   ok('(13j) 在場・姿勢・所持へ広げていない',
      T.indexOf('在場') < 0 && T.indexOf('姿勢') < 0 && T.indexOf('所持') < 0);
-  ok('(13k) sys ブロックは300字以内（keeper 予算1600字を圧迫しない）', T.length <= 300, T.length);
+  ok('(13k) sys ブロックは300字以内（keeper 予算2400字/prio2 を圧迫しない）', T.length <= 300, T.length);
+  // 旧文面（fix647Off時の退避路）は保持されていること
+  ok('(13l) 旧文面(TEXT_OLD)を保持している（緊急復帰に使う）',
+     typeof F.TEXT_OLD === 'string' && F.TEXT_OLD.indexOf('迷ったら出さない') >= 0);
+  ok('(13m) 新文面(TEXT_NEW)＝ON時のTEXT', F.TEXT_NEW === T && F.TEXT_NEW.indexOf('必ず出す') >= 0);
 }
 
 console.log('=== (14) 実機用の読出口 ===');
@@ -467,6 +525,61 @@ console.log('=== (14) 実機用の読出口 ===');
      /98%/.test(SRC645) && /60%/.test(SRC645) && /99%/.test(SRC645) && /200件/.test(SRC645));
   ok('(14e) 位置 state を作らないことがコメントで明示されている',
      /位置 ?state は?作らない|位置stateは作らない/.test(SRC645));
+}
+
+console.log('=== (16) eligibleMoveTurns 方式の3指標（fix647・変更4） ===');
+{
+  const F0 = load645().__v292Dfix645;
+  // eligibleArrivalApprox: 本文末尾付近に到着完了語彙があれば true（近似）
+  ok('(16a) 末尾に到着語 → eligible(近似)=true',
+     F0.eligibleArrivalApprox('澪は長い廊下をゆっくり歩いて、厨房に入った。') === true);
+  ok('(16b) 末尾が到着でない（視線だけ） → eligible=false',
+     F0.eligibleArrivalApprox('澪は厨房の方をじっと見た。') === false);
+  ok('(16c) 空本文 → eligible=false', F0.eligibleArrivalApprox('') === false);
+  ok('(16d) 到着語が本文の遠い前半にしか無い → 末尾付近ではないので false', (() => {
+    const body = '澪は厨房に入った。' + 'あ'.repeat(80) + '窓の外を眺めていた。';
+    return F0.eligibleArrivalApprox(body) === false;
+  })());
+
+  // 実チェーンで eligible をカウントし、stats() の3指標を確かめる
+  const w = load645();
+  const F = w.__v292Dfix645;
+  w.Planner = { parsePlan(){ return { narrative: [] }; } };
+  F._wrapParse();
+  const cast = { hero: { name: HERO }, npcs: [] };
+  // ターン1: 到着あり＋正しいタグ → eligible++, tagTurns++, accepted++
+  const b1 = '澪は廊下を抜け、厨房に入った。';
+  w.Planner.parsePlan(b1 + tag('hero', '厨房', '厨房に入った'));
+  const S = { turns: [{ narrative: b1 + tag('hero', '厨房', '厨房に入った'), plan: { narrative: [] } }], cast, save(){} };
+  w.S = S; F._wrapSave(); S.save();
+  // ターン2: 到着あり・タグ無し（＝出力漏れ） → eligible++ のみ
+  const b2 = '澪はそのまま階段を上がって、屋上に出た。';
+  w.Planner.parsePlan(b2);
+  S.turns.push({ narrative: b2, plan: { narrative: [] } });
+  S.save();
+  // ターン3: 到着なし（同場所の動作）・タグ無し → どのカウンタも動かない
+  const b3 = '澪は椅子に座り、手元のカップを見つめた。';
+  w.Planner.parsePlan(b3);
+  S.turns.push({ narrative: b3, plan: { narrative: [] } });
+  S.save();
+
+  const s = F.stats();
+  ok('(16e) eligibleApprox が到着ターンのみ数える（=2）', s.eligibleApprox === 2, s);
+  ok('(16f) session.eligibleMoveTurns も同値', s.session.eligibleMoveTurns === 2, s.session);
+  ok('(16g) rawRecall = 出力あり/eligible = 1/2 = 50', s.rawRecall === 50, s);
+  ok('(16h) validatedRecall = 検証通過/eligible = 1/2 = 50', s.validatedRecall === 50, s);
+  ok('(16i) precision = 検証通過/出力総数 = 1/1 = 100', s.precision === 100, s);
+  ok('(16j) 分母0のとき null（新規セッション）', (() => {
+    const s0 = load645().__v292Dfix645.stats();
+    return s0.eligibleApprox === 0 && s0.rawRecall === null &&
+           s0.validatedRecall === null && s0.precision === null;
+  })(), load645().__v292Dfix645.stats());
+  ok('(16k) 既存フィールドを壊さない（後方互換）', (() => {
+    return typeof s.tagTurns === 'number' && typeof s.accepted === 'number' &&
+           typeof s.rejected === 'number' && s.byReason && typeof s.acceptRate !== 'undefined' &&
+           typeof s.turnsObserved === 'number';
+  })(), s);
+  ok('(16l) stats() が fix647 メタ（prio=2・f647off=false）を報告', s.prio === 2 && s.f647off === false, s);
 }
 
 console.log('=== (15) finish_reason の捕捉配線（非同期） ===');
