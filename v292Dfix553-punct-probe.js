@@ -175,8 +175,10 @@
        JSON前提の抽出が全ターンで失敗し、近似も文字列リテラルを拾えず、
        rawUsable が **8ターン中0** = 生を一度も使えていなかった。
        submit() と同じく `<react` / `<state` の手前までを本文とみなす。
-       実測で検証済み: 生の本文671字 vs 保存655字 = 102% / maxRun は 35 で完全一致。 */
-    var body = s.split(/<react|<state/)[0];
+       実測で検証済み: 生の本文671字 vs 保存655字 = 102% / maxRun は 35 で完全一致。
+       ★fix645: <scene_move> も本文の終わりとして扱う（句読点の無い60字のタグが maxRun を
+         押し上げて誤検出になるため）。fix645 が OFF／未ロードならタグは現れない＝挙動不変。 */
+    var body = s.split(/<react|<state|<scene_move/)[0];
     if (body && body.replace(/<[^>]*>/g, '').trim().length >= 40) return body;
     return null;
   }

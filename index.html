@@ -16,7 +16,7 @@
      OFF=v292Dfix580Off -->
 <script src="v292Dfix580-meta-sync-coordinator.js?cb=v292Dfix583"></script>
 <!-- fix590: コミット台帳（「送ったけど結果を受け取れていない」を記録する。挙動は変えない） -->
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix644"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix645"></script>
 <script>
 /* v292Dfix242: iOS Safari の古いHTMLキャッシュ脱出。`.js`は?cb=でキャッシュ破棄できるが
    index.html本体は破棄できず、iOSはbfcache+ヒューリスティックで古いHTMLを長く保持する
@@ -26,7 +26,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260729-fix644';
+  var BUILT = '20260729-fix645';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -1845,7 +1845,7 @@ const G = {
       //     who="…"(二重引用)だけ拾うこの正規表現には掛からず、本文の発話のみ抽出される。
       let _convSays = [];
       try {
-        var _body = String(result.text || '').split(/<react|<state/)[0]; _body = _body.replace(/<say(\s+who="[^"]*"\s*)>([^<\n]*)[」』](?=\s*(?:\n|$))/g, '<say$1>$2</say>'); /* v292Dfix214: 「」で閉じられた壊れsayタグを正規タグに修復(モデルが</say>でなく」で閉じる癖→会話ログ欠落の根治) */ var _heroNm = (S.cast && S.cast.hero && S.cast.hero.name) || ''; var _names = []; if (_heroNm) _names.push(_heroNm); if (S.cast && Array.isArray(S.cast.npcs)) S.cast.npcs.forEach(function(n){ if (n && n.name) _names.push(n.name); });
+        var _body = String(result.text || '').split(/<react|<state|<scene_move/)[0]; /* v292Dfix645: scene_move の ev 内の「」が会話ログへ偽の発話として混ざるのを防ぐ */ _body = _body.replace(/<say(\s+who="[^"]*"\s*)>([^<\n]*)[」』](?=\s*(?:\n|$))/g, '<say$1>$2</say>'); /* v292Dfix214: 「」で閉じられた壊れsayタグを正規タグに修復(モデルが</say>でなく」で閉じる癖→会話ログ欠落の根治) */ var _heroNm = (S.cast && S.cast.hero && S.cast.hero.name) || ''; var _names = []; if (_heroNm) _names.push(_heroNm); if (S.cast && Array.isArray(S.cast.npcs)) S.cast.npcs.forEach(function(n){ if (n && n.name) _names.push(n.name); });
         var _LANGS217 = { ja: { bareSrc: '「([^」]*)」', speechVerb: /(言|呟|囁|尋|問|答|叫|返|応|漏|告|呼|続|笑|声|呻|唸)/, nonSpeech: /(呼ば|称さ)れ|出かかっ|言いかけ|飲み込ん|呑み込ん|喉に詰ま/, /* v292Dfix276: 非発話3型追加(実測T36「檻」=言葉が出かかって型) */ quoteLead: /^\s*[とっ、]*と/, voiceNoun: /^の[^。「」]{0,6}(声|言葉|悲鳴|金切|叫|呟|囁|うめ|絶叫|嗚咽)/, entityNouns: '(妖怪|怪異|化け物|怪物|魔物|悪霊|亡霊|幽霊|人形)', subjAfter: /^[\s　]*[がは]/, voiceAfter: /^の[^。、\n]{0,2}(声|言葉|喉|口|唇|悲鳴|叫)/, voicePost: /^[がはの][^。\n]{0,8}(声|悲鳴|絶叫|金切|嗚咽|叫び)(を上げ|を漏ら|を絞|が漏れ|が上が|が響|が迸|を発)/, namingPre: /を[\s　]*$/ } }; /* v292Dfix217: 言語プロファイル(多言語展開用)。bareSrc=裸引用の正規表現ソース(キャプチャ群ちょうど1個の契約)。言語追加=ここに1エントリ+S.cfg.langで選択。例 en: bareSrc:'“([^”]+)”'(ASCIIの"はsayタグ属性と衝突するためスマートクォート推奨), speechVerb=(said|whisper|shout|murmur|replied|asked|cried)/i, quoteLead=^[\s,]+ 等。露語は«»+ダッシュ式の別bareSrcが要る。 */ var _L217 = _LANGS217[(S.cfg && S.cfg.lang) || 'ja'] || _LANGS217.ja; var _sayRe = new RegExp('<say\\s+who="([^"]*)"\\s*>([^<]*)<\\/say>|' + _L217.bareSrc, 'g'), _sm, _seenSay = {}; /* v292Dfix218: 話者候補=キャスト+本文中の人外実体(fix207語彙)。確信のみ採用・不確信は保留して第2層(モデル帰属照会)へ */ var _cands218 = _names.slice(); try { var _em218, _entRe218 = new RegExp(_L217.entityNouns, 'g'); while ((_em218 = _entRe218.exec(_body))) { if (_cands218.indexOf(_em218[0]) < 0) _cands218.push(_em218[0]); } } catch(e){} var _pend218 = []; /* v292Dfix213: タグ付きセリフの正規化テキスト集合を先に作る(モデルが同じセリフを裸「」とタグで二重に書く対策) */ var _tagNorm = {}; try { var _tm, _tRe = /<say\s+who="([^"]*)"\s*>([^<]*)<\/say>/g; while ((_tm = _tRe.exec(_body))) { _tagNorm[String(_tm[2]||'').trim().slice(0,80).replace(/([？！。…」])と(聞い|言っ|尋ね|呟い|囁い|叫ん|答え|返し|告げ)(た|だ)$/, '$1').replace(/[\s　。、！？!?…・「」『』]/g,'')] = 1; /* v292Dfix255c: ト書き尻尾切除を辞書側にも適用(裸「」との重複判定の整合) */ var _tw238 = String(_tm[1]||'').trim().slice(0,24); if (_tw238 && _cands218.indexOf(_tw238) < 0) _cands218.push(_tw238); } } catch(e){} /* v292Dfix238: タグ付きで登場した話者(店主・通行人等の未登録キャラ)を同ターンの裸引用の話者候補へ動的追加。実測: ジャンルフリー化後、人外固定語彙に無い「店主」の裸セリフ「無料だよ！」がカエデに誤帰属した対策 */
         while ((_sm = _sayRe.exec(_body))) {
           var _ss2 = String((_sm[1] != null ? _sm[2] : _sm[3]) || '').trim().slice(0, 80).replace(/([？！。…」])と(聞い|言っ|尋ね|呟い|囁い|叫ん|答え|返し|告げ)(た|だ)$/, '$1'); /* v292Dfix255c: モデルがsayタグ内に書いたト書き尻尾「？と聞いた」を切除(実測T6)。句読点直後のみ=「大丈夫だと言った」型の本物の伝聞セリフは残す */
@@ -2743,7 +2743,7 @@ G.init();
      ★fetchラッパを持つ他のfix(80/464/476/482)より【前】に置くこと。
      それらは new Response で応答を作り直すので、後から読み込むと「出口ガード後の本文」しか見えず
      モデルの生出力が取れない。本文は1文字も書き換えない。OFF=v292Dfix553Off -->
-<script src="v292Dfix553-punct-probe.js?cb=v292Dfix560"></script>
+<script src="v292Dfix553-punct-probe.js?cb=v292Dfix645"></script>
 <script src="v292Dfix562-backup-inventory.js?cb=v292Dfix567"></script>
 <script src="v292Dfix564-snapshot.js?cb=v292Dfix567"></script>
 <!-- v292Dfix555: 句読点だけを直す校正専用の1回修復。Api.call の直後・Planner.parsePlan の前で、
@@ -2925,7 +2925,7 @@ G.init();
 <script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=v292Dfix396"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
-<script src="v292Dfix399-cloudsync.js?cb=v292Dfix644"></script>
+<script src="v292Dfix399-cloudsync.js?cb=v292Dfix645"></script>
   <script src="v292Dfix400-img-url.js?cb=v292Dfix400d"></script>
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=v292Dfix336"></script>
 <script src="v292Dfix338-artstyle.js?cb=v292Dfix484"></script>
@@ -2974,7 +2974,7 @@ G.init();
 <script src="v292Dfix453-src-coalesce.js?cb=v292Dfix453"></script>
 <script src="v292Dfix454-dash.js?cb=v292Dfix457"></script>
 <script src="v292Dfix458-dash-post.js?cb=v292Dfix547"></script>
-<script src="v292Dfix459-sys-v2.js?cb=v292Dfix498"></script>
+<script src="v292Dfix459-sys-v2.js?cb=v292Dfix645"></script>
 <script src="v292Dfix460-slotgrid.js?cb=v292Dfix460"></script>
 <script src="v292Dfix461-appearance-en.js?cb=v292Dfix497"></script>
 <script src="v292Dfix462-bare-speaker.js?cb=v292Dfix547"></script>
@@ -3054,7 +3054,13 @@ G.init();
      ★既定は shadow ＝ 判定と記録だけで挙動を変えない。実弾は v292Dfix643Live='1' の端末のみ。
      読出=window.__v292Dfix643.status()/.selfTest()/.log() / OFF=v292Dfix643Off
      ★fix624 の後に置くこと -->
-<script src="v292Dfix643-collapse-rescue.js?cb=fix643"></script>
+<script src="v292Dfix643-collapse-rescue.js?cb=v292Dfix645"></script>
+<!-- fix645: scene_move タグの shadow 収集（位置引き継ぎ 第一歩）。移動だけ・主人公の
+     ターン終了時の到着地点だけを、本文との完全一致検証を通ったときだけ derived observation
+     として記録する。本文・保存・生成へ一切影響させない（shadow）。位置stateは作らない。
+     読出=window.__v292Dfix645.stats()/.log()/.status()/.selfTest() / OFF=v292Dfix645Off
+     ★fix643 の後・fix459 の MARKERS へ【移動タグ】を登録済み -->
+<script src="v292Dfix645-scene-move-shadow.js?cb=fix645"></script>
 </body>
 </html>
 

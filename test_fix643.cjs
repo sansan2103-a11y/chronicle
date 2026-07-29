@@ -481,7 +481,7 @@ console.log('\n== (0) 配線位置の根拠（index.html の実際の順序） =
   }
   {
     ok('★script タグがある', HTMLU.indexOf('v292Dfix643-collapse-rescue.js') >= 0);
-    ok('★?cb= が付いている', HTMLU.indexOf('v292Dfix643-collapse-rescue.js?cb=fix643') >= 0);
+    ok('★?cb= が付いている（値は出荷ごとに進む）', /v292Dfix643-collapse-rescue\.js\?cb=[A-Za-z0-9]+/.test(HTMLU));
     ok('★fix624（判定器）より後に読み込む',
        HTMLU.indexOf('v292Dfix643-collapse-rescue.js') > HTMLU.indexOf('v292Dfix624-degeneration-probe.js'));
     ok('★fix641 の後に置く',

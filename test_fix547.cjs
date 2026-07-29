@@ -242,7 +242,10 @@ console.log('\n== 台帳の更新（移行済みの数） ==');
   /* ★2026-07-29 崩壊ターンの救済（fix643）。turns を読み、S.inFlight を見て連打を止める。
      window.S は新設せず正式APIだけで届くことが設計の前提なので、ここへ足す。
      + fix643(Api.call の直後・保存の前で崩壊を判定する)                                    = 34 */
-  ok('★__chronicleGetState を参照するのは34ファイル(+features.js)', migrated === 34, migrated);
+  /* ★2026-07-29 scene_move タグの shadow 収集（fix645）。turns と cast.hero を読み、
+     S.save をラップする。window.S は新設せず正式APIだけで届くことが設計の前提。
+     + fix645(保存の前でタグを検証し、記録して本文から剥がす)                              = 35 */
+  ok('★__chronicleGetState を参照するのは35ファイル(+features.js)', migrated === 35, migrated);
   ok('★features.js も分類1だけ移行済み',
      fs2.readFileSync(path.join(__dirname, 'features.js'), 'utf8').indexOf('__chronicleGetState') > 0);
 }

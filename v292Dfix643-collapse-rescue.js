@@ -93,7 +93,10 @@
     try { var j = JSON.parse(s); if (j && Array.isArray(j.narrative)) return j.narrative.join('\n'); } catch(e){}
     var m = s.match(/"narrative"\s*:\s*\[([\s\S]*?)\]/);
     if (m){ try { var a = JSON.parse('[' + m[1] + ']'); if (Array.isArray(a)) return a.join('\n'); } catch(e2){} }
-    var body = s.split(/<react|<state/)[0];
+    /* ★fix645: <scene_move> も「本文の終わり」として扱う。タグ約60字（句読点なし・ASCII混じり）
+       が崩壊スコアの分母に入ると「長すぎる文」「読点が少ない」を揺らすため。
+       fix645 が OFF／未ロードなら応答にこのタグは現れないので、挙動は1ビットも変わらない。 */
+    var body = s.split(/<react|<state|<scene_move/)[0];
     if (body && body.replace(/<[^>]*>/g, '').trim().length >= 40) return body;
     return null;
   }
