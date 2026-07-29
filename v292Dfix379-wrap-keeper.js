@@ -26,7 +26,11 @@
   // 注入予算（文字数）。v4(Phase2 S1): prio1(必須)は【真の予算外】＝remainから引かない。
   //   BUDGET_V4=1500 は prio2/3 のみを対象にする。旧v3は prio1込み1200で prio2/3を締め出す
   //   逆転構造だった（実測KI-11）。v292Dfix379V4Off='1' で旧意味論(1200・prio1込み・superseded無効)へ復帰。
-  var BUDGET_V4 = 1600;      // v4: prio2/3 のみ対象 (fix419: 1500→1600。監査#7=最悪1495で残余5字だったのを解消。417本文+陰性ガード1文の余裕込み)
+  var BUDGET_V4 = 2400;      // ★fix646(2026-07-29): 1600→2400。実機で prio2/3 合計2103字に対し予算1600で毎ターン503字あふれ、
+                             //   後着の【読ませ方】【ダッシュ】(出荷済みの品質ブロック)と【移動タグ】が毎ターン静かに落ちていた。
+                             //   「注入予算があふれて後着の品質ブロックが無言で落ちる」型の無言の失敗。現総量2103+余裕300で2400。
+                             //   緊急復帰: v292Dfix646Off='1' で旧1600。 (旧: fix419 1500→1600)
+  try { if (localStorage.getItem('v292Dfix646Off') === '1') BUDGET_V4 = 1600; } catch(e){}
   var BUDGET_LEGACY = 1200;  // 旧: prio1込み
   function v4on(){ try { return localStorage.getItem('v292Dfix379V4Off') !== '1'; } catch(e){ return true; } }
   function off(){ try { return localStorage.getItem('v292Dfix379Off') === '1'; } catch(e){ return false; } }

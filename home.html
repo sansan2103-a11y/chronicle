@@ -185,7 +185,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260729-fix645';
+  var HOME_BUILT = '20260729-fix646';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -200,17 +200,17 @@
   } catch(e){}
 })();
 </script>
-<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix645"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix645"></script>
-<script src="v292Dfix564-snapshot.js?cb=v292Dfix645"></script>
-<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix645"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix645"></script>
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix645"></script>
+<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix646"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix646"></script>
+<script src="v292Dfix564-snapshot.js?cb=v292Dfix646"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix646"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix646"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix646"></script>
 <!-- ★fix602: 墓標が立ったスロットへの書き込みを影で止める（別途配信） -->
-<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix645"></script>
+<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix646"></script>
 <!-- ★fix642: 停止中の削除(blocked-stale-legacy)を、クラウド墓標の read-back を根拠に
      新しい planId で作り直して完遂する。**操作専用・自動実行なし**（コンソールから呼ぶ） -->
-<script src="v292Dfix642-delete-readback.js?cb=v292Dfix645"></script>
+<script src="v292Dfix642-delete-readback.js?cb=v292Dfix646"></script>
 <script>
 (function(){
   'use strict';
