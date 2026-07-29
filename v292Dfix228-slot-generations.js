@@ -36,15 +36,63 @@
 
   var lastSeen = null; /* このタブが最後に観測したスロット生値 */
 
+  /* ==========================================================================
+   * ★v292Dfix651(B): 物語の切替でこの監視が汚染される欠陥の根治
+   * ---------------------------------------------------------------------
+   * 旧実装は lastSeen が「どの物語の値か」を覚えていなかった。物語Aを見ている
+   * 途中で物語Bへ切り替わると、次の tick で k=Bのキー / lastSeen=Aの生値 になり、
+   * ターン数が違えば **Aの中身が __gen_<Bのキー> へ退避される**（他人の控えが
+   * 別の物語の世代に混ざる＝復元すると別の物語が復活する）。
+   * 対策: 観測キーを捕まえておき、
+   *   ・キーが変わった tick では **絶対に退避しない**（armed=false / lastSeen=null）
+   *   ・同じキーで次の tick まで安定して初めて基準を取り直し armed=true
+   *   ・退避の直前にもう一度、捕捉キー・armed・lastSeen・指紋を確かめる
+   * 2秒間隔は変えない。OFF: v292Dfix651SlotBackupGuardOff='1'（旧挙動へ戻す）
+   * ======================================================================== */
+  var capturedKey = null;   /* 前回の tick で見ていたスロットキー */
+  var armed = false;        /* 同じキーで安定して基準が取れているか */
+  function guardOff(){
+    try { return localStorage.getItem('v292Dfix651SlotBackupGuardOff') === '1'; } catch(e){ return false; }
+  }
+  /* lastSeen の中に物語を特定できる指紋があるか。**無ければ推測しない**（null を返す）。 */
+  function fingerprintOf(raw){
+    try {
+      var d = JSON.parse(raw);
+      if (!d || typeof d !== 'object') return null;
+      var cand = [d.slotId, d.storyId, d._slot,
+                  d.cfg && d.cfg.slotId, d.cfg && d.cfg.storyId,
+                  d.scene && d.scene.slotId, d.scene && d.scene.storyId];
+      for (var i = 0; i < cand.length; i++){
+        if (typeof cand[i] === 'string' && cand[i]) return cand[i];
+      }
+      return null;
+    } catch(e){ return null; }
+  }
+  function idOfKey(k){ return (k === 'chr6') ? 'default' : String(k).replace(/^chr6_slot_/, ''); }
+
   function tick(){
     try {
       var k = slotKey();
+      if (!guardOff()){
+        /* ★切替 tick: 退避も比較もしない。基準を捨てて armed を降ろすだけ。 */
+        if (k !== capturedKey){ capturedKey = k; armed = false; lastSeen = null; return; }
+      }
       var cur = localStorage.getItem(k);
       if (cur == null) return;
-      if (lastSeen === null){ lastSeen = cur; return; } /* 初回観測は基準取りのみ */
+      if (lastSeen === null){ lastSeen = cur; armed = true; return; } /* 初回観測は基準取りのみ */
       if (cur === lastSeen) return;
       var prevTurns = turnsOf(lastSeen), curTurns = turnsOf(cur);
       if (prevTurns !== curTurns && prevTurns >= 0){
+        /* ★退避の直前に、いま退避しようとしている値が本当にこのスロットのものか確かめ直す */
+        if (!guardOff()){
+          if (!armed || lastSeen === null){ lastSeen = cur; return; }
+          if (slotKey() !== k || k !== capturedKey){ armed = false; lastSeen = null; return; }
+          var fp = fingerprintOf(lastSeen);
+          if (fp && fp !== idOfKey(k)){
+            try { console.warn(TAG, '退避を中止: 控えの指紋が現在の物語と違う (' + fp + ' vs ' + idOfKey(k) + ')'); } catch(e){}
+            lastSeen = cur; return;
+          }
+        }
         /* 変化前の値を世代へ退避 */
         var gens = loadGens(k);
         gens.unshift({ t: Date.now(), turns: prevTurns, data: lastSeen });
@@ -74,6 +122,8 @@
       /* 現在値も世代へ退避してから復元(復元自体も巻き戻せるように) */
       var cur = localStorage.getItem(k);
       if (cur != null){ gens.unshift({ t: Date.now(), turns: turnsOf(cur), data: cur }); if (gens.length > 3) gens.length = 3; saveGens(k, gens); }
+      /* ★v292Dfix651(C): 世代復元は「明示的な復元」＝正規経路。0ターン世代を書き戻す場合も通す。 */
+      try { if (window.__v292Dfix651 && typeof window.__v292Dfix651.allowOnce === 'function') window.__v292Dfix651.allowOnce('fix228-restore'); } catch(e){}
       localStorage.setItem(k, g.data);
       console.log(TAG, '世代復元: ' + k + ' → ' + g.turns + 'ターン版。リロードします。');
       setTimeout(function(){ location.reload(); }, 300);

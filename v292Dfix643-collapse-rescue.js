@@ -87,6 +87,39 @@
       return s;
     } catch(e){ return null; }
   }
+  /* ★fix651(A): 暴走ストリームガード。居なければ null＝従来どおり判定は fix624 だけ。
+     shadow の端末では applyToView が view をそのまま返すので挙動は1ビットも変わらない。 */
+  function guard(){
+    try {
+      var g = window.__v292Dfix651;
+      if (!g || g.__armed !== true) return null;
+      var sg = g.streamGuard;
+      if (!sg || typeof sg.applyToView !== 'function') return null;
+      if (typeof sg.isOff === 'function' && sg.isOff()) return null;
+      return sg;
+    } catch(e){ return null; }
+  }
+  function applyGuard(view, result, isLive, seq, phase){
+    var sg = guard();
+    if (!sg) return view;
+    try {
+      var raw = (result && typeof result.text === 'string') ? result.text : '';
+      var out = sg.applyToView(view, raw, { live: !!isLive, seq: seq, phase: phase,
+                                            slotId: slotId(), finishReason: finishOf(result) });
+      return out || view;
+    } catch(e){ stats.errors++; return view; }
+  }
+  /* 応答から finish_reason を取れるだけ取る（無ければ null。作り話をしない） */
+  function finishOf(r){
+    if (!r || typeof r !== 'object') return null;
+    var v = r.finish_reason || r.finishReason || r.stop_reason || r.stopReason;
+    if (!v && r.body && typeof r.body === 'object'){
+      v = r.body.finish_reason || r.body.stop_reason ||
+          (r.body.choices && r.body.choices[0] && (r.body.choices[0].finish_reason || r.body.choices[0].native_finish_reason));
+    }
+    return v == null ? null : String(v);
+  }
+
   function live(){
     if (lsg('v292Dfix643Live') !== '1') return false;         /* ここは従来どおり。未設定なら shadow */
     var s = safety();
@@ -382,6 +415,9 @@
         if (!result || typeof result.text !== 'string') return result;
 
         var v = judgeRaw(result.text, st);
+        /* ★fix651(A): 受信完了後・パース/描画/保存の**前**に暴走を遮断する。
+           live のときだけ view を hard へ差し替え、そのまま下の救済経路へ流す。 */
+        v = applyGuard(v, result, isLive, seq, 'first');
         var mode = isLive ? 'live' : 'shadow';
 
         if (!v.measurable){
@@ -426,6 +462,8 @@
         try {
           result2 = await prev.apply(this, a2);
           v2 = (result2 && typeof result2.text === 'string') ? judgeRaw(result2.text, st) : { measurable: false };
+          /* ★fix651(A): 救済側の受信にも同じ監視をかける。再遮断ならターン不成立（二重hard契約）。 */
+          v2 = applyGuard(v2, result2, isLive, seq, 'rescue');
           /* ★採用の可否は安全層が決める。居なければ従来どおり「hard でなければ採用」。 */
           if (ctx6 && typeof s6.judgeRescue === 'function'){
             try {

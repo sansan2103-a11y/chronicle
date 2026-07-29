@@ -249,6 +249,27 @@
     var verdict, reason;
 
     var after = stateHash(info.state || null);
+    /* ★fix651(A): 暴走ガードが遮断した応答は、点数を見るまでもなく採用しない。
+       理由コード（stream-degenerate / stream-overlength）をそのまま ring の reason に残す。 */
+    if (v2 && v2.guard){
+      verdict = 'stop'; reason = String(v2.guard); stats.stop++;
+      try {
+        pushRing({
+          v: 1, id: ctx ? ctx.id : ('f650_' + (++seqId)), ts: new Date().toISOString(),
+          slotId: ctx ? ctx.slotId : slotId(), logicalTurnId: ctx ? ctx.turnId : null,
+          turnIndex: ctx ? ctx.turnIndex : -1, planner: ctx ? ctx.planner : null,
+          stateHashBefore: ctx ? ctx.stateHash : null, stateHashAfter: after,
+          route: ctx ? ctx.route : routeOf(info.state),
+          first:  { text: textOf(first.result),  finishReason: finishOf(first.result),  score: viewOf(v1) },
+          rescue: { text: textOf(second.result), finishReason: finishOf(second.result), score: viewOf(v2) },
+          guard: { first: (v1 && v1.guard) || null, rescue: String(v2.guard),
+                   why: v2.guardWhy == null ? null : String(v2.guardWhy),
+                   len: v2.guardLen == null ? null : v2.guardLen },
+          verdict: verdict, reason: reason, outcome: verdict, reviewed: false
+        });
+      } catch(e){ stats.errors++; }
+      return verdict;
+    }
     if (ctx && after !== ctx.stateHash){
       /* ★最重要: 生成前 snapshot から動いていたら、初回候補が仮適用された疑いがある。
          直せないものを黙って採用しない。ここで止めれば二重適用は起こり得ない。 */
