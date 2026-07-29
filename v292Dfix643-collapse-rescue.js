@@ -53,9 +53,19 @@
  * ■記録（★本文は1バイトも保存しない。score と hits のコードだけ）
  *   localStorage `v292Dfix643_log` … {ts, slotId, turnIndex, score, hits, mode, outcome}
  *
+ * ■fix650（安全層）との接続（2026-07-29 追記）
+ *   window.__v292Dfix650 が居るときだけ、次の5点を**その層に聞く**。居なければ従来どおり動く。
+ *     ①live か      … gate(slotId)  → 物語allowlistに載っている物語だけ live（端末フラグだけでは live にしない）
+ *     ②生成の開始   … begin(...)    → logicalTurnId と 生成前 state hash を発行
+ *     ③多重防止     … acquire/release → 同一 logicalTurnId の救済が並列で走らない
+ *     ④採用の可否   … judgeRescue(...) → 'adopt'（0〜3点）/'confirm'（4〜6点・確認待ち）/'stop'（7点以上・state漂流）
+ *     ⑤採用結果     … noteOutcome(...) → 保全した候補の採否を後追いで記録
+ *   'confirm' は 'stop' と**同じ契約**で止まる（ターンを進めない・状態を更新しない・保存しない・入力を残す）。
+ *
  * 冪等: window.__v292Dfix643
  * OFF : localStorage v292Dfix643Off='1'
  * 実弾: localStorage v292Dfix643Live='1'（★これが無い端末は shadow ＝ 記録だけ）
+ *       ★fix650 が居る場合は、さらに v292Dfix650LiveSlots に現在の物語が入っていることが必要
  * 読出: window.__v292Dfix643.status() / .selfTest() / .log() / .clearLog()
  */
 (function v292Dfix643(){
@@ -68,7 +78,23 @@
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix643Off') === '1'; }
-  function live(){ return lsg('v292Dfix643Live') === '1'; }
+  /* ★fix650: 安全層が「起動していて OFF でない」ときだけ返す。居なければ null＝従来の判断のまま。 */
+  function safety(){
+    try {
+      var s = window.__v292Dfix650;
+      if (!s || s.__armed !== true) return null;
+      if (typeof s.isOff === 'function' && s.isOff()) return null;
+      return s;
+    } catch(e){ return null; }
+  }
+  function live(){
+    if (lsg('v292Dfix643Live') !== '1') return false;         /* ここは従来どおり。未設定なら shadow */
+    var s = safety();
+    if (s && typeof s.gate === 'function'){
+      try { return !!s.gate(slotId()); } catch(e){ return false; }   /* ★判定できないなら shadow へ倒す */
+    }
+    return true;
+  }
 
   function getState(){
     try { var g = window.__chronicleGetState; if (typeof g === 'function'){ var a = g('fix643'); if (a) return a; } } catch(e){}
@@ -191,7 +217,8 @@
 
   /* ================= 記録 ================= */
   var stats = { judged: 0, hard: 0, rescued: 0, rescueOk: 0, blocked: 0, accepted: 0,
-                unmeasurable: 0, secondary: 0, errors: 0, wrapped: false, submitWrapped: false };
+                unmeasurable: 0, secondary: 0, errors: 0, wrapped: false, submitWrapped: false,
+                confirmHold: 0, parallelBlocked: 0 };   /* ★fix650 の分岐ぶん */
   function readLog(){ try { var a = JSON.parse(lsg(LOG) || '[]'); return Array.isArray(a) ? a : []; } catch(e){ return []; } }
   function record(rec){
     try {
@@ -254,6 +281,13 @@
     return true;
   }
 
+  /* ★fix650: 保留した候補をユーザーがどうしたかを ring へ書き戻す（本文には触れない） */
+  function noteHeldOutcome(outcome){
+    try {
+      var s = safety();
+      if (s && held && held.f650id && typeof s.noteOutcome === 'function') s.noteOutcome(held.f650id, outcome);
+    } catch(e){}
+  }
   function mkBtn(label, fn){
     var b = document.createElement('button');
     b.textContent = label;
@@ -262,7 +296,8 @@
     b.addEventListener('click', function(){ try { fn(); } catch(e){ stats.errors++; } });
     return b;
   }
-  function showBanner(){
+  function showBanner(opts){
+    opts = opts || {};
     try {
       if (!document.body) return;
       removeBanner();
@@ -273,19 +308,21 @@
         'font-size:13px;max-width:88vw;box-shadow:0 4px 16px rgba(0,0,0,.5);display:flex;gap:8px;' +
         'align-items:center;flex-wrap:wrap';
       var msg = document.createElement('span');
-      msg.textContent = '文章が崩れたので、このターンは確定していません。入力はそのまま残してあります。';
+      msg.textContent = opts.msg || '文章が崩れたので、このターンは確定していません。入力はそのまま残してあります。';
       box.appendChild(msg);
       box.appendChild(mkBtn('もう一度試す', function(){
         removeBanner();
+        noteHeldOutcome('user-retried');
         restoreInput(held && held.input);
         runSubmit();
       }));
       box.appendChild(mkBtn('入力を直す', function(){
         removeBanner();
+        noteHeldOutcome('user-editing');
         restoreInput(held && held.input);
         try { var el = inputEl(); if (el && typeof el.focus === 'function') el.focus(); } catch(e){}
       }));
-      box.appendChild(mkBtn('最初の文章を確認する', function(){
+      box.appendChild(mkBtn(opts.acceptLabel || '最初の文章を確認する', function(){
         if (!held) { removeBanner(); return; }
         removeBanner();
         var el = inputEl();
@@ -323,17 +360,29 @@
         if (accept){
           var h = accept; accept = null; held = null;
           stats.accepted++;
-          record(logRow(h.view, 'user-accepted', live() ? 'live' : 'shadow', 'user-accepted-hard-candidate'));
+          record(logRow(h.view, 'user-accepted', live() ? 'live' : 'shadow',
+                        h.kind === 'confirm' ? 'user-accepted-rescue-candidate' : 'user-accepted-hard-candidate'));
+          /* ★fix650: 保全した候補の採否を後追いで書き込む（本文はそのまま。表示文字列は触らない） */
+          try { var s0 = safety(); if (s0 && h.f650id && typeof s0.noteOutcome === 'function')
+                  s0.noteOutcome(h.f650id, 'user-accepted'); } catch(e){}
           return h.result;
         }
 
         var seq = ++callSeq;
         var st = getState();
+        /* ★fix650: live 判定は**生成の前**に確定させる（停止トグルは次の生成から効く、の意味）。
+           安全層が居れば、この時点で logicalTurnId と生成前 state hash を発行してもらう。 */
+        var isLive = live();
+        var s6 = isLive ? safety() : null;
+        var ctx6 = null;
+        try { if (s6 && typeof s6.begin === 'function')
+                ctx6 = s6.begin({ state: st, seq: seq, input: pendingInput, slotId: slotId(),
+                                  sys: args[0], user: args[1] }); } catch(e){ ctx6 = null; }
         var result = await prev.apply(this, args);
         if (!result || typeof result.text !== 'string') return result;
 
         var v = judgeRaw(result.text, st);
-        var mode = live() ? 'live' : 'shadow';
+        var mode = isLive ? 'live' : 'shadow';
 
         if (!v.measurable){
           stats.unmeasurable++;
@@ -348,7 +397,7 @@
         stats.hard++;
 
         /* ---- shadow: 判定と記録だけ。**一切ブロックしない** ---- */
-        if (!live()){
+        if (!isLive){
           record(logRow(v, 'hard-observed', 'shadow'));
           return result;
         }
@@ -359,6 +408,13 @@
           return result;
         }
 
+        /* ---- ★fix650: 同一論理ターンの救済が並列で走らないようにする（取れなければ観測だけ） ---- */
+        if (ctx6 && typeof s6.acquire === 'function' && !s6.acquire(ctx6)){
+          stats.parallelBlocked++;
+          record(logRow(v, 'hard-singleflight', 'live'));
+          return result;
+        }
+
         /* ---- 救済生成（★1回だけ・壊れた本文は渡さない） ---- */
         rescueUsed = true;
         stats.rescued++;
@@ -366,20 +422,46 @@
 
         var a2 = [args[0], String(args[1] == null ? '' : args[1]) + rescueSuffix(v.codes)];
         for (var i = 2; i < args.length; i++) a2.push(args[i]);
-        var result2 = await prev.apply(this, a2);
-        var v2 = (result2 && typeof result2.text === 'string') ? judgeRaw(result2.text, st) : { measurable: false };
+        var result2, v2, verdict;
+        try {
+          result2 = await prev.apply(this, a2);
+          v2 = (result2 && typeof result2.text === 'string') ? judgeRaw(result2.text, st) : { measurable: false };
+          /* ★採用の可否は安全層が決める。居なければ従来どおり「hard でなければ採用」。 */
+          if (ctx6 && typeof s6.judgeRescue === 'function'){
+            try {
+              verdict = s6.judgeRescue(ctx6, {
+                first:  { view: v,  result: result },
+                second: { view: v2, result: result2 },
+                state: getState()
+              });
+            } catch(e){ stats.errors++; verdict = 'stop'; }   /* ★安全層が転んだら止める側へ倒す */
+          } else {
+            verdict = (!v2.measurable || !v2.hard) ? 'adopt' : 'stop';
+          }
+        } finally {
+          try { if (ctx6 && typeof s6.release === 'function') s6.release(ctx6); } catch(e){}
+        }
+        var good = (result2 && typeof result2.text === 'string') ? result2 : result;
 
-        if (!v2.measurable || !v2.hard){
+        if (verdict === 'adopt'){
           stats.rescueOk++;
           record(logRow(v2.measurable ? v2 : v, 'regen-ok', 'live'));
-          return result2 && typeof result2.text === 'string' ? result2 : result;
+          return good;
         }
 
-        /* ---- 2回目も hard → ターン不成立で停止 ---- */
-        stats.blocked++;
-        record(logRow(v2, 'regen-hard', 'live'));
-        held = { result: result, input: pendingInput, view: v };     /* ★保持は最初の候補（メモリだけ） */
-        showBanner();
+        /* ---- confirm（4〜6点・測れない・state漂流の疑い）／2回目も hard → ターン不成立で停止 ----
+           ★どちらも同じ契約: ターンを進めない・状態を更新しない・保存しない・入力を残す。
+             違うのは「保持しておく候補」と案内文だけ。 */
+        var isConfirm = (verdict === 'confirm');
+        if (isConfirm) stats.confirmHold++; else stats.blocked++;
+        record(logRow(v2.measurable ? v2 : v, isConfirm ? 'regen-confirm' : 'regen-hard', 'live'));
+        held = isConfirm
+          ? { result: good,   input: pendingInput, view: v2, kind: 'confirm', f650id: ctx6 && ctx6.id }
+          : { result: result, input: pendingInput, view: v,  kind: 'hard',    f650id: ctx6 && ctx6.id };
+        showBanner(isConfirm ? {
+          msg: '書き直した文章の品質を自動で確定できませんでした。このターンは確定していません。入力はそのまま残してあります。',
+          acceptLabel: '書き直した文章を確認する'
+        } : null);
         try {
           setTimeout(function(){
             try { if (window.UI && typeof window.UI.setStatus === 'function')
@@ -443,7 +525,10 @@
       probe: !!(window.__v292Dfix624 && typeof window.__v292Dfix624.scoreTurn === 'function'),
       slotId: slotId(),
       turns: (st && Array.isArray(st.turns)) ? st.turns.length : -1,
-      pending: !!held, busy: busy, rescueUsed: rescueUsed,
+      pending: !!held, pendingKind: held ? (held.kind || 'hard') : null, busy: busy, rescueUsed: rescueUsed,
+      /* ★fix650: 安全層が居るか・ゲートが開いているか。居なければ safety:null＝従来の判断。 */
+      safety: (function(){ var s = safety(); if (!s) return null;
+                           try { return { armed: true, gate: !!s.gate(slotId()) }; } catch(e){ return { armed: true, gate: false }; } })(),
       logged: readLog().length,
       stats: JSON.parse(JSON.stringify(stats))
     };
