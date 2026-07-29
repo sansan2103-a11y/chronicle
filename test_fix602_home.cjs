@@ -435,10 +435,17 @@ console.log('\n== (8) 出荷の体裁（配線・キャッシュバスター） 
 {
   ok('★home.html に fix602 のスクリプト参照がある',
      HOME.indexOf('v292Dfix602-tombstone-write-shadow.js') > 0);
-  ok('★★位置は fix587 の直後',
-     HOME.indexOf('v292Dfix602-tombstone-write-shadow.js') >
-     HOME.indexOf('v292Dfix587-story-lifecycle.js') &&
-     !/v292Dfix587-story-lifecycle\.js[\s\S]*?<script src="v292Dfix(?!602)/.test(HOME));
+  /* ★★2026-07-29(fix642): 旧判定は「fix587 の後ろに 602 以外の script が1つでもあれば不合格」
+     だったので、fix587 より後ろへ**新しいモジュールを1本足すだけで必ず落ちた**。
+     固定したい契約は「fix587 の**直後**が fix602 である（間に何も挟まらない）」であって
+     「fix587 より後ろに他のモジュールを置いてはいけない」ではない。間だけを見る。 */
+  {
+    const i587 = HOME.indexOf('v292Dfix587-story-lifecycle.js');
+    const i602 = HOME.indexOf('v292Dfix602-tombstone-write-shadow.js');
+    const between = (i587 >= 0 && i602 > i587) ? HOME.slice(i587, i602) : '';
+    ok('★★位置は fix587 の直後（間に別のモジュールが挟まらない）',
+       i602 > i587 && i587 >= 0 && !/<script src="v292Dfix/.test(between), { i587, i602, between });
+  }
   /* ★★出荷のたびに壊れないように、**リテラルではなく BUILT と突き合わせる**。
      固定したいのは「fix602 という文字列」ではなく
      「配信物を変えたら cb も一緒に上がっている（上げ忘れていない）」という契約。
@@ -448,7 +455,10 @@ console.log('\n== (8) 出荷の体裁（配線・キャッシュバスター） 
   ok('★★home.html から HOME_BUILT を読めている（読めないと以下が偽の合格になる）',
      /^\d+$/.test(String(HOME_BUILT_TOKEN)), HOME_BUILT_TOKEN);
   for (const f of ['v292Dfix579-tombstone-schema.js', 'v292Dfix587-story-lifecycle.js',
-                   'v292Dfix562-backup-inventory.js', 'v292Dfix602-tombstone-write-shadow.js']){
+                   'v292Dfix562-backup-inventory.js', 'v292Dfix602-tombstone-write-shadow.js',
+                   /* ★fix642 もここへ入れる。出荷で HOME_BUILT を上げるとき、
+                      このファイルの cb を上げ忘れたら**テストが落ちる**ようにしておく。 */
+                   'v292Dfix642-delete-readback.js']){
     const cb = (HOME.match(new RegExp(f.replace(/\./g, '\\.') + '\\?cb=v292Dfix(\\d+)')) || [])[1];
     ok('★home.html の ' + f + ' の cb が HOME_BUILT と一致（上げ忘れていない）',
        /^\d+$/.test(String(cb)) && cb === HOME_BUILT_TOKEN, { cb: cb, built: HOME_BUILT_TOKEN });

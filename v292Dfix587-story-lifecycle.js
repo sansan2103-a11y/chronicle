@@ -650,8 +650,12 @@
     refusals: readRefusals,
     humanReason: humanReason,
     /* 画面に出すための1行。★該当が無ければ null（＝黙るのではなく「無い」と言える形） */
+    /* ★fix642(2026-07-29): 後継の計画で片づいた記録（superseded）は**画面に出さない**。
+       fix642 は「旧blockedレコードを消さずに superseded を付けて履歴に残す」ので、
+       ここで除かないと、片づけが完了した後も「停止しました」と言い続ける（＝嘘の警告）。
+       ★履歴そのものは残す。blockedDeletes() は従来どおり全件を返す。 */
     pendingSummary: function(){
-      var p = readPending(), b = readBlocked();
+      var p = readPending(), b = readBlocked().filter(function(x){ return x && !x.superseded; });
       if (!p.length && !b.length) return null;
       var out = [];
       if (p.length) out.push('削除の後片づけが' + p.length + '件残っています');
