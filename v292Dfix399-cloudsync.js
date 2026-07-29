@@ -233,6 +233,21 @@
       });
     }).catch(function(){ return -1; });
   }
+  /* ★★fix638(2026-07-29・GPT裁定「pull側ガード」): blob(pkg.idb)で**既存のローカル画像を上書きしない**。
+     画像の正本は per-key チャネル(D1 images + imageRev / fix523・fix633)であり、blob は最後の受け皿。
+     判定本体は v292Dfix638-pull-image-guard.js（不在＋必要＋墓標なし のときだけ補充する）。
+     ★未ロード or v292Dfix638Off='1' のときは、従来どおり idbWriteAll をそのまま呼ぶ＝fix637時点と同一挙動。
+     ★selfHeal(idbPutAllOneTx 直呼び) と fix564 のスナップショット復元はこの関数を通らない＝影響なし。 */
+  function idbWriteGuarded(map, ctx){
+    try {
+      var g = window.__v292Dfix638;
+      if (g && g.__armed && typeof g.on === 'function' && g.on() && typeof g.guardedWrite === 'function'){
+        return Promise.resolve(g.guardedWrite(map, ctx || { mode: 'normal-sync', path: 'fix399.applySave' },
+                                              { writeAll: idbWriteAll, readKeys: idbReadKeys }));
+      }
+    } catch(e){}
+    return idbWriteAll(map);
+  }
 
   // ---- サーバー通信 ----
   function callSave(bodyObj){
@@ -990,7 +1005,8 @@
       }
     } catch(e){}
     try { Object.keys(incoming).forEach(function(k){ localStorage.setItem(k, incoming[k]); }); } catch(e){ return Promise.reject(e); }
-    return idbWriteAll(pkg.idb || {}).then(function(writeResult){
+    /* ★fix638: ここだけ idbWriteAll → idbWriteGuarded（pull側ガード。OFF/未ロードなら素通し） */
+    return idbWriteGuarded(pkg.idb || {}, { mode: 'normal-sync', path: 'fix399.applySave' }).then(function(writeResult){
       try { window.__v292Dfix399_lastApply = { expected: expectedIdb, writeResult: writeResult, ts: Date.now() }; } catch(e){}
       try { if (pkg.activeSlot) localStorage.setItem('chr6_active_slot', JSON.stringify(pkg.activeSlot)); } catch(e){}
       // 取り込んだ版を基準にする(ループ防止)。imgHashは全書き込み完了後の実在庫で計算(不足0前提)。

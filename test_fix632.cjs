@@ -1,16 +1,18 @@
-/* 回帰テスト: v292Dfix632 — 画像の中身の変化を検出して full 同期を起こす
+/* 回帰テスト: v292Dfix632 — 画像の中身の変化を**検出して記録する**（2026-07-29 診断専用へ格下げ）
  *                + ★fix517 / fix516 の挙動を壊していないことの固定（制約3）
  *
- * ■このテストが固定する「約束」
- *   ①中身が変わったときだけ dirty 化する（同じ絵を書き直しても dirty にしない）
- *   ②dirty の印は fix399 の hash() 出力（10進数字列）と**絶対に衝突しない**
- *     ★これが「fix399を1バイトも変えずに full 送信を起こす」設計の唯一の前提
- *   ③full 送信が成功して fix399 が imgHash を書き戻すと dirty は自動で解除される
+ * ■このテストが固定する「約束」（★は fix638 と同時の格下げで新しくなった契約）
+ *   ①中身が変わったときだけ検知する（同じ絵を書き直しても検知しない）
+ *   ②★fix632 は v292Dfix399_imgHash へ**二度と書かない**（同期の判断を汚さない）
+ *     → 「取り込みが起きただけで dirty が消える＝送っていないのに成功扱い」を構造的に潰す
+ *   ③★検知結果は自前キー v292Dfix632_diag にだけ残る（診断専用）
  *   ④書込は必ず本来の連鎖（fix523→fix346）へ通す。画像を生localStorageへ増やさない
  *   ⑤OFF（v292Dfix632Off='1'）で素通し＝fix630 時点の挙動へ戻る
- *   ⑥setItem を経ないIDB直書きも起動時 reconcile が拾う。初回シードは**一度だけ**
- *   ⑦★fix517: ローカル実画像あり→urlForは''／なし→元URL（fail-open）。fix632を噛ませても同じ
- *   ⑧★fix516: opt-in のときだけ armed。凍結pk一致かつローカル有のときだけ ''
+ *   ⑥setItem を経ないIDB直書きも起動時 reconcile が拾う。★初回シードの full 送信は廃止
+ *   ⑦★旧版が書いた 'dirty632:' は起動時に実在庫hash（fix399と同じ式）へ戻す。
+ *     読めないときは触らない（勝手な値で full 送信を誘発しない）
+ *   ⑧★fix517: ローカル実画像あり→urlForは''／なし→元URL（fail-open）。fix632を噛ませても同じ
+ *   ⑨★fix516: opt-in のときだけ armed。凍結pk一致かつローカル有のときだけ ''
  */
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm');
@@ -60,6 +62,45 @@ function mkCtx(W, ls, extra){
 }
 const tick = async (n = 60) => { for (let i = 0; i < n; i++) await Promise.resolve(); };
 
+/* ★IndexedDB の最小モック（後始末 clearLegacyMarker 用）。
+   openKeyCursor だけを模す。mode:'fail' で open が失敗する端末を再現する。 */
+function mkIDB(keys, mode){
+  return {
+    open(){
+      const req = {};
+      Promise.resolve().then(() => {
+        if (mode === 'fail'){ if (req.onerror) req.onerror(); return; }
+        const db = {
+          objectStoreNames: { contains: () => true },
+          close(){},
+          transaction(){
+            return { objectStore(){
+              return { openKeyCursor(){
+                const cur = {};
+                Promise.resolve().then(() => {
+                  if (mode === 'cursor-fail'){ if (cur.onerror) cur.onerror(); return; }
+                  let i = 0;
+                  const step = () => {
+                    if (i < keys.length){
+                      const k = keys[i++];
+                      if (cur.onsuccess) cur.onsuccess({ target: { result: { key: k, continue: () => Promise.resolve().then(step) } } });
+                    } else if (cur.onsuccess) cur.onsuccess({ target: { result: null } });
+                  };
+                  step();
+                });
+                return cur;
+              } };
+            } };
+          }
+        };
+        req.result = db;
+        if (req.onsuccess) req.onsuccess({ target: { result: db } });
+      });
+      return req;
+    }
+  };
+}
+
 function load632(opts){
   opts = opts || {};
   const ls = mkLS(opts.ls || {});
@@ -67,6 +108,7 @@ function load632(opts){
   installFix346Like(ls, mem);
   const W = { localStorage: ls, document: mkDoc() };
   if (opts.inv) W.__v292av = opts.inv;
+  if (opts.idb) W.indexedDB = opts.idb;
   const ctx = mkCtx(W, ls);
   vm.runInContext(SRC632, ctx, { filename: 'v292Dfix632-img-content-dirty.js' });
   return { W, ls, mem, api: W.__v292Dfix632 };
@@ -82,7 +124,7 @@ console.log('--- 1. 起動と生存証明 ---');
   ok('status() が例外を投げない', (() => { try { api.status(); return true; } catch(e){ return false; } })());
 }
 
-console.log('--- 2. ★sentinel は fix399 の hash() と絶対に衝突しない ---');
+console.log('--- 2. ★sentinel は fix399 の hash() と絶対に衝突しない（後始末の判定に使う） ---');
 {
   const { api } = load632();
   ok('SENTINEL は "dirty632:"', api.SENTINEL === 'dirty632:');
@@ -99,34 +141,35 @@ console.log('--- 2. ★sentinel は fix399 の hash() と絶対に衝突しな�
   ok('sentinelは数字列ではない', !/^\d+$/.test(api.SENTINEL + Date.now()));
 }
 
-console.log('--- 3. ★中身が変わったときだけ dirty 化する ---');
+console.log('--- 3. ★中身が変わったときだけ検知する / ★imgHash へは二度と書かない ---');
 {
   const { api, ls, mem } = load632();
   const D1 = 'data:image/png;base64,AAAA', D2 = 'data:image/png;base64,BBBB';
-  ok('初期は dirty でない', api.isDirty() === false);
+  ok('初期は検知0件', api.diag().n === 0, api.diag());
   ls.setItem('v292av2_mia', D1);
-  ok('新規書込で dirty になる', api.isDirty() === true, ls.getItem('v292Dfix399_imgHash'));
+  ok('新規書込を検知する', api.diag().n === 1, api.diag());
+  ok('★★v292Dfix399_imgHash へは書かない(同期の判断を汚さない)', ls.getItem('v292Dfix399_imgHash') === null);
+  ok('★isDirty() は常に false（同期を汚す dirty は存在しない）', api.isDirty() === false);
+  ok('★診断キーにだけ残る', ls.getItem('v292Dfix632_diag') !== null);
   ok('★画像は生localStorageへ入らない(fix346連鎖へ通っている)', ls.__store['v292av2_mia'] === undefined);
   ok('memへ届いている', mem['v292av2_mia'] === D1);
   ok('台帳に中身ハッシュが載る', api.ledger()['mia'] === api.hashFull(D1), api.ledger());
 
-  // fix399 が full 送信に成功したときの書き戻しを模す
-  ls.setItem('v292Dfix399_imgHash', fix399hash('v292av2_mia'));
-  ok('★fix399の書き戻しで dirty が解除される', api.isDirty() === false);
-
   ls.setItem('v292av2_mia', D1);
-  ok('★同じ中身を書き直しても dirty にならない', api.isDirty() === false, api.status());
+  ok('★同じ中身を書き直しても検知しない', api.diag().n === 1, api.diag());
 
   ls.setItem('v292av2_mia', D2);
-  ok('★中身が変われば dirty になる(=原因Aの修復)', api.isDirty() === true);
+  ok('★中身が変われば検知する(=原因Aの観測は維持)', api.diag().n === 2, api.diag());
   ok('台帳が新しい中身ハッシュへ更新される', api.ledger()['mia'] === api.hashFull(D2));
+  ok('★何度書いても imgHash は無傷', ls.getItem('v292Dfix399_imgHash') === null);
+  ok('検知の理由が残る', /content-changed/.test(String(api.diag().last && api.diag().last.why)), api.diag());
 }
 {
   const { api, ls } = load632();
-  ls.setItem('v292av2_a', 'data:image/png;base64,A');
-  const first = ls.getItem('v292Dfix399_imgHash');
-  ls.setItem('v292av2_b', 'data:image/png;base64,B');
-  ok('既に dirty なら印を上書きしない(理由と時刻を保つ)', ls.getItem('v292Dfix399_imgHash') === first);
+  for (let i = 0; i < 20; i++) ls.setItem('v292av2_k' + i, 'data:image/png;base64,' + i);
+  ok('★診断は上限つきで溜め込まない', api.diag().recent.length <= 8, api.diag().recent.length);
+  ok('総数は数え続ける', api.diag().n === 20, api.diag().n);
+  ok('★大量に書いても imgHash は無傷', ls.getItem('v292Dfix399_imgHash') === null);
 }
 
 console.log('--- 4. 画像以外の書込には一切干渉しない ---');
@@ -146,12 +189,13 @@ console.log('--- 5. OFF(v292Dfix632Off=1)で素通し ---');
   ok('OFFなら on()=false', api.on() === false);
   ls.setItem('v292av2_mia', 'data:image/png;base64,ZZZZ');
   ok('★OFFでも書込は通る(壊さない)', mem['v292av2_mia'] === 'data:image/png;base64,ZZZZ');
-  ok('OFFなら dirty 化しない', ls.getItem('v292Dfix399_imgHash') === null);
+  ok('OFFなら imgHash を触らない', ls.getItem('v292Dfix399_imgHash') === null);
+  ok('OFFなら診断も書かない', ls.getItem('v292Dfix632_diag') === null);
   ok('OFFなら台帳も書かない', ls.getItem('v292Dfix632_ih') === null);
   ok('OFFなら reconcile も何もしない', api.reconcile().skipped === 'off');
 }
 
-console.log('--- 6. reconcile: setItem を経ない変化(IDB直書き)を拾う / 初回シードは一度だけ ---');
+console.log('--- 6. reconcile: setItem を経ない変化(IDB直書き)を拾う / ★初回シードのfull送信は廃止 ---');
 {
   /* 台帳が既にあり、実物が別物 = fix399 の applySave が IDB を直接書いた後の状態 */
   const mem = { 'v292av2_x': 'data:image/png;base64,NEW' };
@@ -162,21 +206,21 @@ console.log('--- 6. reconcile: setItem を経ない変化(IDB直書き)を拾う
   });
   const r = api.reconcile();
   ok('変化を検出する', r.changed === 1, r);
-  ok('★dirty 化する', api.isDirty() === true);
+  ok('★検知として記録する', r.dirtied === true && api.diag().n === 1, api.diag());
+  ok('★★それでも imgHash は触らない', ls.getItem('v292Dfix399_imgHash') === null);
   ok('台帳が実物へ追いつく', api.ledger()['x'] === api.hashFull('data:image/png;base64,NEW'));
 }
 {
-  /* 初回シード: 台帳が無い端末では1回だけ dirty 化して既存の乖離を解消する */
+  /* ★初回シード: 以前は「1回だけ 5MB の full 送信を誘発」していた。正本が per-key になったので廃止 */
   const mem = { 'v292av2_x': 'data:image/png;base64,X' };
   const inv = { keys: () => ['x'], note(){}, refresh(cb){ if (cb) cb(); } };
   const { api, ls } = load632({ mem, inv });
   const r1 = api.reconcile();
-  ok('★初回は seeded=false で dirty 化する', r1.seeded === false && r1.dirtied === true, r1);
-  ok('seededフラグが立つ', ls.getItem('v292Dfix632_seeded') === '1');
-  ls.setItem('v292Dfix399_imgHash', fix399hash('v292av2_x'));   // full送信成功を模す
+  ok('★初回でも dirty 化しない(5MB full 送信を誘発しない)', r1.seeded === false && r1.dirtied === false, r1);
+  ok('★初回でも imgHash を触らない', ls.getItem('v292Dfix399_imgHash') === null);
+  ok('seededフラグは互換のため立つ', ls.getItem('v292Dfix632_seeded') === '1');
   const r2 = api.reconcile();
-  ok('★2回目はシードで dirty 化しない(一度きり)', r2.seeded === true && r2.dirtied === false, r2);
-  ok('dirty のままにならない', api.isDirty() === false);
+  ok('2回目も何も起こさない', r2.seeded === true && r2.dirtied === false, r2);
 }
 {
   /* 台帳から勝手に消さない（削除処理を作らない・制約6） */
@@ -210,7 +254,8 @@ console.log('--- 7. ★fix517 の挙動を壊していない（ローカル優�
   ok('★fix632経由で書いても fix517 がローカルを認識する', f517.hasLocal('mia') === true);
   ok('★ローカル有 → "" を返す(サーバURL抑止)', f400.urlFor('mia') === '');
   ok('PREFIX付きpkでも同じ', f400.urlFor('v292av2_mia') === '');
-  ok('同時に fix632 が dirty 化している', W.__v292Dfix632.isDirty() === true);
+  ok('同時に fix632 が変化を検知している', W.__v292Dfix632.diag().n === 1, W.__v292Dfix632.diag());
+  ok('★それでも imgHash は無傷（fix517経路でも汚さない）', ls.getItem('v292Dfix399_imgHash') === null);
 
   ls.removeItem('v292av2_mia');
   ok('★ローカルが消えたら元URLへ戻る(壊れ画像を出さない)', f400.urlFor('mia') === 'https://proxy/img?ns=NS&k=v292av2_mia');
@@ -280,6 +325,45 @@ console.log('--- 9. ★fix517 と fix516 の二重ラップが共存する（ind
   ok('両方ラップされても "" を返す', W.__v292Dfix400.urlFor('pk_ミア') === '');
   ok('無関係のpkは元URLのまま', W.__v292Dfix400.urlFor('pk_他人') === 'SRV:pk_他人');
   ok('fix632 の台帳も正しく更新される', W.__v292Dfix632.ledger()['pk_ミア'] === W.__v292Dfix632.hashFull('data:image/png;base64,MIA'));
+}
+
+console.log('--- 9b. ★後始末: 旧版が書いた dirty632: を実在庫hashへ戻す ---');
+{
+  const idbKeys = ['v292av2_b', 'v292av2_a'];       // 順不同で渡す（sort されることを確かめる）
+  const { api, ls } = load632({
+    ls: { 'v292Dfix399_imgHash': 'dirty632:1753800000000' },
+    idb: mkIDB(idbKeys)
+  });
+  ok('旧印を検出できる', api.legacyMarkerPresent() === true);
+  await new Promise(res => api.clearLegacyMarker(res));
+  const expect = fix399hash(['v292av2_a', 'v292av2_b'].join('|'));
+  ok('★実在庫hash（fix399と同じ式）へ戻る', ls.getItem('v292Dfix399_imgHash') === expect, ls.getItem('v292Dfix399_imgHash'));
+  ok('★戻した値は10進数字列＝次のpushで full を誘発しない', /^\d+$/.test(ls.getItem('v292Dfix399_imgHash')));
+  ok('旧印は消えている', api.legacyMarkerPresent() === false);
+  ok('公開しているhash式が fix399 と一致', api.fix399Hash('v292av2_a|v292av2_b') === expect);
+}
+{
+  /* IDB が読めない端末では触らない（適当な値を書いて full 送信を誘発しない） */
+  const { api, ls } = load632({
+    ls: { 'v292Dfix399_imgHash': 'dirty632:1' }, idb: mkIDB([], 'fail')
+  });
+  const r = await new Promise(res => api.clearLegacyMarker(res));
+  ok('★IDBを読めないときは書き換えない', ls.getItem('v292Dfix399_imgHash') === 'dirty632:1', r);
+  ok('理由が残る', r.acted === false && r.why === 'idb-unreadable', r);
+}
+{
+  /* 印が無い端末では1バイトも書かない */
+  const { api, ls } = load632({ ls: { 'v292Dfix399_imgHash': '12345' }, idb: mkIDB(['v292av2_a']) });
+  const r = await new Promise(res => api.clearLegacyMarker(res));
+  ok('★印が無ければ何もしない', ls.getItem('v292Dfix399_imgHash') === '12345' && r.acted === false, r);
+}
+{
+  /* OFF なら後始末もしない（緊急停止で完全に旧挙動へ戻す） */
+  const { api, ls } = load632({
+    ls: { 'v292Dfix632Off': '1', 'v292Dfix399_imgHash': 'dirty632:1' }, idb: mkIDB(['v292av2_a'])
+  });
+  await new Promise(res => api.clearLegacyMarker(res));
+  ok('OFFなら旧印にも触らない', ls.getItem('v292Dfix399_imgHash') === 'dirty632:1');
 }
 
 console.log('--- 10. ハッシュ契約が fix523 / Worker と同一 ---');

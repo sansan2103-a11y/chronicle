@@ -59,8 +59,15 @@ console.log('\n== (1) ★★事故の再現: 墓標のあるローカル meta �
 console.log('\n== (2) ★アプリ側(fix399 applySave)に関門がある ==');
 {
   const i = SRC399.indexOf('function applySave');
-  const j = SRC399.indexOf('return idbWriteAll');
+  /* ★2026-07-29(fix638): applySave の末尾は idbWriteAll → idbWriteGuarded へ変わった。
+     区切りは **applySave の先頭から探す**（i を起点にする）。ファイル先頭から探すと、
+     fix638 のフック関数 idbWriteGuarded の中にある `return idbWriteAll(map);` を拾って
+     j < i になり、body が空＝この節がまるごと偽の失敗になる（実際に踏んだ）。 */
+  let j = SRC399.indexOf('idbWriteGuarded(pkg.idb', i);
+  if (j < 0) j = SRC399.indexOf('idbWriteAll(pkg.idb', i);
   const body = SRC399.slice(i, j);
+  ok('applySave の本体を切り出せている（区切りが applySave より後にある）',
+     j > i && body.length > 500, { i, j, len: body.length });
   ok('★★meta を特別扱いしている', /chr6_slots_meta/.test(body), body.length);
   ok('★★mergeMeta を通している', /mergeMeta\(/.test(body));
   ok('★★マージできないのに墓標があれば上書きしない',

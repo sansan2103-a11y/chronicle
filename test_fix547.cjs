@@ -234,7 +234,12 @@ console.log('\n== 台帳の更新（移行済みの数） ==');
      + fix635(新しい物語の保存ガードを正式API で武装し直す。fix600 が window.S で空振りしていた) = 29
      + fix636(登録NPCの登場証拠を会話ログの確定話者へ揃える。cast と turns を取る)          = 30
      + fix637(登録キャストが空のまま進むのを観測する。cast/turns/scene を読む)               = 31 */
-  ok('★__chronicleGetState を参照するのは31ファイル(+features.js)', migrated === 31, migrated);
+  /* ★2026-07-29 証拠ベースの cast 自動登録（fix640/641）。
+     これは「§8 auto_bootstrap が window.S 依存で永久休眠している」への恒久対応そのもので、
+     **window.S を新設せずに正式APIだけで S へ届く**ことが設計の前提。だから必ずここへ足す。
+     + fix640(証拠台帳。turns を読むだけ・物語データは1バイトも書かない)                     = 32
+     + fix641(証拠が揃った人物だけ cast.npcs へ登録する。cast と turns を取る)               = 33 */
+  ok('★__chronicleGetState を参照するのは33ファイル(+features.js)', migrated === 33, migrated);
   ok('★features.js も分類1だけ移行済み',
      fs2.readFileSync(path.join(__dirname, 'features.js'), 'utf8').indexOf('__chronicleGetState') > 0);
 }

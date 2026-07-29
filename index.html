@@ -16,7 +16,7 @@
      OFF=v292Dfix580Off -->
 <script src="v292Dfix580-meta-sync-coordinator.js?cb=v292Dfix583"></script>
 <!-- fix590: コミット台帳（「送ったけど結果を受け取れていない」を記録する。挙動は変えない） -->
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix637"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix641"></script>
 <script>
 /* v292Dfix242: iOS Safari の古いHTMLキャッシュ脱出。`.js`は?cb=でキャッシュ破棄できるが
    index.html本体は破棄できず、iOSはbfcache+ヒューリスティックで古いHTMLを長く保持する
@@ -26,7 +26,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260729-fix637';
+  var BUILT = '20260729-fix641';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2925,7 +2925,7 @@ G.init();
 <script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=v292Dfix396"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
-<script src="v292Dfix399-cloudsync.js?cb=v292Dfix637"></script>
+<script src="v292Dfix399-cloudsync.js?cb=v292Dfix641"></script>
   <script src="v292Dfix400-img-url.js?cb=v292Dfix400d"></script>
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=v292Dfix336"></script>
 <script src="v292Dfix338-artstyle.js?cb=v292Dfix484"></script>
@@ -3029,12 +3029,25 @@ G.init();
 <script src="v292Dfix525-slot-ownership.js?cb=v292Dfix525"></script>
 <script src="v292Dfix526-story-naming.js?cb=v292Dfix527"></script>
 <script src="v292Dfix631-avatar-inventory.js?cb=fix631"></script>
-<script src="v292Dfix632-img-content-dirty.js?cb=fix632"></script>
+<script src="v292Dfix632-img-content-dirty.js?cb=fix638"></script>
 <script src="v292Dfix633-icon-sweep-full.js?cb=fix633"></script>
 <script src="v292Dfix634-aiappearance-sync.js?cb=fix634"></script>
 <script src="v292Dfix635-new-story-guard-rearm.js?cb=v292Dfix637"></script>
 <script src="v292Dfix636-npc-presence-evidence.js?cb=v292Dfix637"></script>
 <script src="v292Dfix637-cast-bootstrap-probe.js?cb=v292Dfix637"></script>
+<!-- fix638: pull側の画像ガード。クラウドの save blob(pkg.idb) で**既存のローカルアイコンを上書きしない**。
+     画像の正本は per-key チャネル(D1 images + imageRev / fix523・fix633)。blob は「不在＋いま必要＋墓標なし」の
+     ときだけ補充し、書いた分は per-key へ backfill する。fix523 の pullOne/pushOne と最小限だけ直列化する。
+     OFF=v292Dfix638Off(→fix637時点の無条件上書きへ完全復帰) / v292Dfix638BackfillOff / v292Dfix638LockOff -->
+<script src="v292Dfix638-pull-image-guard.js?cb=fix638"></script>
+<!-- fix640: 証拠台帳。物語データは1バイトも書かず、自前キー v292Dfix640Evid_slot_<slotId> だけに貯める。
+     読出=window.__v292Dfix640.report()/.why("名前") / OFF=v292Dfix640Off
+     ★fix606 の抽出規則を live 参照するので fix606 の後に置く -->
+<script src="v292Dfix640-cast-evidence-ledger.js?cb=fix640"></script>
+<!-- fix641: 証拠ベースの cast 自動登録。強2系統×2ターンでだけ昇格。
+     hero は対象外。取消=window.__v292Dfix641.undo("名前") / OFF=v292Dfix641Off
+     ★fix640 の後に置くこと -->
+<script src="v292Dfix641-cast-auto-register.js?cb=fix641"></script>
 </body>
 </html>
 
