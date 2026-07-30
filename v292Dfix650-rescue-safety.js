@@ -41,6 +41,10 @@
  *   v292Dfix643Live='1'  かつ  v292Dfix650LiveSlots に現在の slotId が入っている時だけ live。
  *   v292Dfix643LiveSlots も同義キーとして読む（統括の手順書がどちらを書いても効くようにする）。
  *   未設定・壊れたJSON・空配列 は**すべて shadow**（fail-closed）。
+ *   ★fix653: 「現在の slotId」は **URL(?story=) が権威**（fix527 と同じタブ毎の真実）。
+ *     chr6_active_slot は全タブ共有の1個なので、?story= 直リンクのタブでは別タブの物語を
+ *     指したままになり、allowlist に載せた物語でもゲートが別IDで評価されて救済が撃たれなかった。
+ *     URL が無いページ（home.html 等）・空/空白・例外時は従来どおり __chr6Key() 由来。
  *
  * ■即時停止
  *   画面右上のトグル（live のときだけ出る）／ window.__v292Dfix650.stop()
@@ -70,11 +74,32 @@
   function off(){ return lsg('v292Dfix650Off') === '1'; }
   function stopped(){ return lsg(STOP) === '1'; }
 
-  function slotId(){
+  /* ★fix653: 救済ゲートの分母を URL 権威にする（fix527 と同じ「タブ毎の真実」）。
+     chr6_active_slot は全タブ共有の1個なので、index.html?story=X を直リンクで開いたタブでは
+     別タブの現役物語を指したままになる。実測: URL=sms4np33eyg のタブで __chr6Key() 由来の
+     slotId() が smrrcv25pcq を返し、canary allowlist に載せた物語なのに救済が撃たれなかった。
+     ここは**読むだけ**で、URLも localStorage も1バイトも書かない。 */
+  function urlSlotId(){
+    try {
+      var loc = (typeof location !== 'undefined' && location) ? location
+              : ((typeof window !== 'undefined' && window && window.location) || null);
+      if (!loc) return '';
+      if (typeof URLSearchParams !== 'function') return '';   /* 使えない環境は従来経路へ */
+      var v = new URLSearchParams(String(loc.search || '')).get('story');
+      return (typeof v === 'string') ? v.trim() : '';         /* '' / 空白だけ → 従来経路 */
+    } catch(e){ return ''; }                                  /* 例外も従来経路へ倒す（絶対に throw しない） */
+  }
+  /* URL が無いページ（home.html 等）では従来どおり共有ポインタ由来 */
+  function legacySlotId(){
     try {
       var k = (typeof window.__chr6Key === 'function') ? window.__chr6Key() : 'chr6';
       return String(k || 'chr6').replace(/^chr6_slot_/, '') || 'chr6';
     } catch(e){ return 'chr6'; }
+  }
+  function slotId(){
+    var u = '';
+    try { u = urlSlotId(); } catch(e){ u = ''; }
+    return u ? u : legacySlotId();
   }
 
   /* ---- 短い安定ハッシュ（fix564 と同じ FNV-1a 亜種。桁数ではなく「同じか違うか」に使う） ---- */
@@ -110,13 +135,25 @@
     if (!a.length) a = parseSlots(lsg(SLOTS_ALT));
     return a;
   }
-  /* ★fix643 の live() から呼ばれる。false を返した時点で shadow（＝挙動は従来どおり）。 */
-  function gate(slot){
+  /* allowlist 判定そのもの（URLを見ない・渡された id をそのまま照合する）。 */
+  function gateFor(id){
     if (stopped()) return false;
-    var id = slot == null ? slotId() : String(slot);
     var a = allowlist();
     if (!a.length) return false;                              /* 未設定は fail-closed */
-    return a.indexOf(id) >= 0;
+    return a.indexOf(String(id)) >= 0;
+  }
+  /* ★fix653: どの物語で評価するか（＝ゲートの分母）は URL が権威。
+     fix643 は自前の slotId()（__chr6Key 由来＝全タブ共有）を引数で渡してくるので、
+     ここで URL を優先しないと ?story= 直リンクのタブでは別物語IDで評価されてしまう。 */
+  function gateSlotId(slot){
+    var u = '';
+    try { u = urlSlotId(); } catch(e){ u = ''; }
+    if (u) return u;
+    return slot == null ? slotId() : String(slot);
+  }
+  /* ★fix643 の live() から呼ばれる。false を返した時点で shadow（＝挙動は従来どおり）。 */
+  function gate(slot){
+    return gateFor(gateSlotId(slot));
   }
 
   /* =====================================================================
@@ -415,6 +452,9 @@
       off: off(), stopped: stopped(),
       liveFlag: lsg(LIVE) === '1',
       allowlist: a, slotId: sid,
+      /* ★fix653: 分母がURL由来か共有ポインタ由来かを人が見分けられるようにする（診断用） */
+      urlStory: urlSlotId() || null,
+      slotIdFrom: urlSlotId() ? 'url' : 'active_slot',
       gate: (lsg(LIVE) === '1') && !off() && gate(sid),
       mode: ((lsg(LIVE) === '1') && !off() && gate(sid)) ? 'live' : 'shadow',
       ringKey: RING, ring: readRing().length, ringMax: MAX,
@@ -433,8 +473,8 @@
     d.confirmMid = vd(4) === 'confirm' && vd(6) === 'confirm';
     d.stopHigh   = vd(7) === 'stop'    && vd(12) === 'stop';
     d.unmeasurableConfirm = judgeRescueDry(null) === 'confirm';
-    /* ゲートは fail-closed か */
-    d.gateClosedByDefault = !gate('___no_such_slot___');
+    /* ゲートは fail-closed か（★fix653: URLの物語に引きずられないよう照合部だけを直に見る） */
+    d.gateClosedByDefault = !gateFor('___no_such_slot___');
     /* ring キーがクラウド同期・スナップショットの網に掛からないか（名前の契約） */
     d.ringKeyIsolated = !/^chr6/.test(RING) && !/^v292avrec_/.test(RING) && !/^v292appr_/.test(RING);
     d.ringKeyHasNoSlotId = RING.indexOf(slotId()) < 0 || slotId() === 'chr6';
@@ -462,6 +502,9 @@
     /* 部品（テストと診断用） */
     RING_KEY: RING, MAX: MAX,
     _stateHash: stateHash, _hash: fnv, _verdict: judgeRescueDry,
+    /* ★fix653: ゲートの分母（URL権威）を検証・診断できるようにする */
+    _slotId: slotId, _urlSlotId: urlSlotId, _legacySlotId: legacySlotId,
+    _gateFor: gateFor, _gateSlotId: gateSlotId,
     _panel: renderPanel, _removePanel: removePanel, _inflight: inflightCount,
     _stats: function(){ return JSON.parse(JSON.stringify(stats)); }
   };

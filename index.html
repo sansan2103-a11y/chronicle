@@ -16,7 +16,7 @@
      OFF=v292Dfix580Off -->
 <script src="v292Dfix580-meta-sync-coordinator.js?cb=v292Dfix583"></script>
 <!-- fix590: コミット台帳（「送ったけど結果を受け取れていない」を記録する。挙動は変えない） -->
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix652"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix653"></script>
 <script>
 /* v292Dfix242: iOS Safari の古いHTMLキャッシュ脱出。`.js`は?cb=でキャッシュ破棄できるが
    index.html本体は破棄できず、iOSはbfcache+ヒューリスティックで古いHTMLを長く保持する
@@ -26,7 +26,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260730-fix652';
+  var BUILT = '20260730-fix653';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2827,7 +2827,7 @@ G.init();
   <script src="v292Dfix226-engine-unify.js?cb=v292Dfix226"></script>
   <!-- v292Dfix228: スロット自動世代バックアップ(直近3世代)。2026-06-06のクロバー消失事故の恒久保険。
        復元= console で window.__v292Restore() / 一覧= window.__v292Gens() -->
-  <script src="v292Dfix228-slot-generations.js?cb=v292Dfix652"></script>
+  <script src="v292Dfix228-slot-generations.js?cb=v292Dfix653"></script>
   <!-- v292Dfix237: 別キャラ同一アイコンの根治(運搬URLのalt/seed整合ガード)。OFF=v292AvCarrierGuardOff -->
   <script src="v292Dfix237-avatar-carrier-guard.js?cb=v292Dfix237b"></script>
   <!-- v292Dfix239: 未登録キャラ(少女/店主等)のアイコン怪物化根治(genAsync判定待ちのレース封じ)。OFF=v292NcAvRaceOff -->
@@ -2927,7 +2927,7 @@ G.init();
 <script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=v292Dfix396"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
-<script src="v292Dfix399-cloudsync.js?cb=v292Dfix652"></script>
+<script src="v292Dfix399-cloudsync.js?cb=v292Dfix653"></script>
   <script src="v292Dfix400-img-url.js?cb=v292Dfix400d"></script>
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=v292Dfix336"></script>
 <script src="v292Dfix338-artstyle.js?cb=v292Dfix484"></script>
@@ -3056,7 +3056,7 @@ G.init();
      ★既定は shadow ＝ 判定と記録だけで挙動を変えない。実弾は v292Dfix643Live='1' の端末のみ。
      読出=window.__v292Dfix643.status()/.selfTest()/.log() / OFF=v292Dfix643Off
      ★fix624 の後に置くこと -->
-<script src="v292Dfix643-collapse-rescue.js?cb=v292Dfix652"></script>
+<script src="v292Dfix643-collapse-rescue.js?cb=v292Dfix653"></script>
 <!-- fix645: scene_move タグの shadow 収集（位置引き継ぎ 第一歩）。移動だけ・主人公の
      ターン終了時の到着地点だけを、本文との完全一致検証を通ったときだけ derived observation
      として記録する。本文・保存・生成へ一切影響させない（shadow）。位置stateは作らない。
@@ -3074,10 +3074,10 @@ G.init();
      7点以上=停止。hard候補は端末ローカルに直近20件・全文保存(クラウドへ送らない)。
      読出=window.__v292Dfix650.list()/.mark(i)/.status()/.stop()/.arm() / OFF=v292Dfix650Off
      ★fix643 の後に置くこと -->
-<script src="v292Dfix650-rescue-safety.js?cb=v292Dfix652"></script>
+<script src="v292Dfix650-rescue-safety.js?cb=v292Dfix653"></script>
 <!-- fix651: (A)暴走生成の遮断(既定shadow・fix643の救済経路へ直結) / (C)0ターン上書きの非常ブレーキ+書込トレース。
      OFF=v292Dfix651StreamGuardOff / v292Dfix651ZeroTurnGuardOff / v292Dfix651SlotBackupGuardOff(Bはfix228内) -->
-<script src="v292Dfix651-guards.js?cb=v292Dfix652"></script>
+<script src="v292Dfix651-guards.js?cb=v292Dfix653"></script>
 </body>
 </html>
 
