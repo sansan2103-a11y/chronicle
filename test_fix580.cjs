@@ -235,9 +235,14 @@ function step7(){
     const cb = (idx.match(/v292Dfix580-meta-sync-coordinator\.js\?cb=v292Dfix(\d+)/) || [])[1];
     ok('★★cbパラメータが fix581 以降（JSを直したらキャッシュバスターも上げる）',
        !!cb && Number(cb) >= 581, cb);
-    ok('★fix569(localStorage監視)の次に置いている（fix569は先頭でなければならない）',
-       pos('v292Dfix569-gc-shadow.js') === 0 && me === 1,
-       { fix569: pos('v292Dfix569-gc-shadow.js'), fix580: me });
+    /* ★fix654(2026-07-31)で先頭に1本増えた。fix654 は Storage.prototype を accessor 化して
+       以後の全モジュールの localStorage 代入を捕獲する土台で、fix569 の inner ラッパ自体が
+       iOS ではこれが無いと素通りする。fetch には一切触らないので、この検査の意味
+       （fix580 が fetch ラッパ群の先頭・fix569 の直後）は変わらない。 */
+    const trap = pos('v292Dfix654-storage-trap.js');
+    ok('★fix654(storage trap)→fix569(localStorage監視)→fix580 の順に先頭3本が並ぶ',
+       trap === 0 && pos('v292Dfix569-gc-shadow.js') === 1 && me === 2,
+       { fix654: trap, fix569: pos('v292Dfix569-gc-shadow.js'), fix580: me });
   }
 
   console.log('\n== (8) native fetch を捕まえたかを記録する ==');
