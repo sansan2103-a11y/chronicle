@@ -67,8 +67,20 @@
   function applySweep(){ try { var f = W.__v292Dfix197 || W.__v292Dfix199; if (f && f.sweep) f.sweep(); } catch(e){} }
 
   // ---------- PULL（サーバー画像をローカルへ・素のGETでプリフライト回避） ----------
+  // ★fix657(2026-08-01・GPT裁定): pull の read-back 検証。
+  //   旧実装は「setItem が黙って阻止(fix472等)されても revSet を採る」ため、
+  //   台帳だけserver版・実体は旧local → 次周期に旧localを「新しい変更」として押し返す
+  //   (=rev膨張ピンポンの片翼)危険があった。
+  //   新契約: pull取得 → 書込み試行 → **読み戻して server と一致したときだけ revSet**。
+  //   不一致なら revSet しない・pushへ転化させない・apply-blocked として隔離
+  //   (同一セッション中は pull/push とも触らない。人手確認または release() で解除)。
+  //   観測: window.__v292Dfix523.applyBlocked() / releaseBlocked(pk) / counters.applyBlocked
+  var applyBlockedKeys = {};   // pk -> { at, why, localHash, serverHash } メモリのみ(LSへ書かない)
+  var ctr657 = { readbackOk: 0, applyBlocked: 0 };
+  function isApplyBlocked(pk){ return !!applyBlockedKeys[pk]; }
   function pullOne(pk, serverRev, done){
     var ns = nsGet(); if (!ns || !_fetch){ if (done) done(false); return; }
+    if (isApplyBlocked(pk)){ if (done) done(false); return; }   // ★fix657: 隔離中は再pullもしない
     _fetch(proxyUrl() + '/img?ns=' + encodeURIComponent(ns) + '&k=' + encodeURIComponent(PREFIX + pk), { cache: 'no-store' })
       .then(function(r){ if (!r.ok) return null; var ct = r.headers.get('Content-Type') || 'image/png'; return r.arrayBuffer().then(function(buf){ return { ct: ct, buf: buf }; }); })
       .then(function(o){
@@ -79,8 +91,19 @@
             var durl = 'data:' + o.ct + ';base64,' + btoa(bin);
             var loc = localAv(pk);
             if (durl !== loc){ recvMark[pk] = 1; try { W.localStorage.setItem(PREFIX + pk, durl); } catch(e){} applySweep(); try { console.log(TAG, 'pull', pk, 'rev', serverRev); } catch(e){} }
-            if (serverRev != null) revSet(pk, serverRev);
-            ok = true;
+            // ★fix657: 読み戻し検証。書込みが黙って阻止されていたら採用しない
+            var back = localAv(pk);
+            if (back === durl){
+              if (serverRev != null) revSet(pk, serverRev);
+              ctr657.readbackOk++;
+              ok = true;
+            } else {
+              ctr657.applyBlocked++;
+              applyBlockedKeys[pk] = { at: Date.now(), why: 'readback-mismatch',
+                                       localHash: hashFull(back), serverHash: hashFull(durl) };
+              try { console.warn(TAG, '★pull書込みが実体に届かず(保護等)。revSetせず隔離:', pk,
+                                 'local', hashFull(back), 'server', hashFull(durl)); } catch(e){}
+            }
           } catch(e){}
         }
         if (done) done(ok);
@@ -93,6 +116,10 @@
   //   baseImageRev で再送し続ける無限ループになっていた(実機コンソールで 409/404 が連続)。
   var conflictN = {}, CONFLICT_MAX = 3;
   function pushOne(pk, done){
+    /* ★fix657: apply-blocked(pull書込みが実体に届かなかったキー)は押し返さない。
+       「台帳だけserver版・実体は旧local」の状態でpushすると、旧localを新しい変更として
+       サーバーへ戻す=rev膨張ピンポンの片翼になるため。解除は releaseBlocked(pk)(人手確認後)。 */
+    if (isApplyBlocked(pk)){ try { console.warn(TAG, 'push抑止(apply-blocked):', pk); } catch(e){} if (done) done(false); return; }
     var v = localAv(pk); if (!v || !_fetch){ if (done) done(false); return; }
     sending[pk] = true;
     _fetch(proxyUrl() + '/save', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ op: 'putimg', k: PREFIX + pk, data: v, baseImageRev: revGet(pk) }) })
@@ -215,6 +242,11 @@
        `typeof f.revSet === 'function'` ガードで無言の no-op になっていた真因（公開し忘れ）。
        GPT裁定=条件付きGO。公開API契約検査+fail-closed は fix633 側に実装。 */
     revSet: revSet,
+    /* ★fix657(2026-08-01): pull read-back 検証の観測口と隔離の解除口 */
+    isApplyBlocked: isApplyBlocked,
+    applyBlocked: function(){ var out = {}; for (var k in applyBlockedKeys) out[k] = applyBlockedKeys[k]; return out; },
+    releaseBlocked: function(pk){ delete applyBlockedKeys[pk]; return !applyBlockedKeys[pk]; },
+    counters657: function(){ return { readbackOk: ctr657.readbackOk, applyBlocked: ctr657.applyBlocked, blockedNow: Object.keys(applyBlockedKeys).length }; },
     status: function(){ return { armed: true, on: on(), loggedIn: loggedIn(), ns: nsGet() ? 'set' : 'none', keys: localAvKeys().length, revs: Object.keys(revMap()).length }; }
   };
   try {

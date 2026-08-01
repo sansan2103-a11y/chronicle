@@ -50,7 +50,9 @@ function load(opts){
     revGet: (pk) => (+revs[pk] || 0),
     revSet: (pk, r) => { revs[pk] = +r || 0; calls.rev.push([pk, +r || 0]); },
     pullOne: (pk, rev, cb) => { calls.pull.push([pk, rev]); if (cb) cb(true); },
-    pushOne: (pk, cb) => { calls.push.push(pk); if (cb) cb(true); }
+    pushOne: (pk, cb) => { calls.push.push(pk); if (cb) cb(true); },
+    /* ★fix657: DEPS契約に isApplyBlocked が加わった(隔離キーの計画除外)。モックも契約を満たす */
+    isApplyBlocked: () => false
   });
 
   const visible = opts.visible || [];

@@ -62,8 +62,8 @@
   }
 
   // ---------- ★fix655: 公開API契約検査(fail-closed・GPT裁定 2026-08-01) ----------
-  var DEPS = ['revSet', 'revGet', 'hashFull', 'pullOne', 'pushOne'];
-  var ctr = { revAdopted: 0, revAdoptFailed: 0, revPlanNonConvergent: 0 };
+  var DEPS = ['revSet', 'revGet', 'hashFull', 'pullOne', 'pushOne', 'isApplyBlocked'];   // ★fix657: 隔離照会も契約に含める
+  var ctr = { revAdopted: 0, revAdoptFailed: 0, revPlanNonConvergent: 0, applyBlockedSkips: 0 };
   var adopted = {};                    // pk -> 採用済み sRev（メモリのみ・LSへ書かない）
   var depState = { unavailable: false, missing: [] };
   var depWarned = false;
@@ -165,6 +165,9 @@
     var out = [];
     for (i = 0; i < list.length; i++){
       pk = list[i];
+      /* ★fix657: apply-blocked(pull書込みが実体に届かなかったキー)は計画から除外。
+         pullを繰り返さない・pushへ転化させない(人手確認または release まで凍結)。 */
+      if (typeof f.isApplyBlocked === 'function' && f.isApplyBlocked(pk)){ ctr.applyBlockedSkips++; continue; }
       var srv = man[PREFIX + pk];
       if (!srv) continue;
       var sRev = +srv.rev || 0, sHash = String(srv.hash || '');
@@ -248,7 +251,8 @@
                                 depFailCount: parseInt(lsg('v292Dfix655_depFail'), 10) || 0,
                                 bypass: lsg('v292Dfix655Off') === '1' }; })(),
                counters: { revAdopted: ctr.revAdopted, revAdoptFailed: ctr.revAdoptFailed,
-                           revPlanNonConvergent: ctr.revPlanNonConvergent } };
+                           revPlanNonConvergent: ctr.revPlanNonConvergent,
+                           applyBlockedSkips: ctr.applyBlockedSkips } };
     }
   };
 
