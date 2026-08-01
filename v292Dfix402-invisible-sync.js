@@ -292,9 +292,14 @@
     var _putMid = f402dOn ? h : undefined;
     return callSave({ op: 'put', baseRev: baseRev(), pkg: pkg, mid: _putMid }).then(function(r){
       pushing = false;
-      if (r.status === 200 && r.json && r.json.ok && r.json.fork) { forkBanner(r.json.server || {}); return 'fork'; }   // fork応答はclean化しない(現行維持)
+      if (r.status === 200 && r.json && r.json.ok && r.json.fork) { forkBanner(r.json.server || {});
+        /* ★fix658 Phase1(観測のみ): 競合を系譜で分類して数えるだけ。挙動・表示・戻り値は変えない。 */
+        try { if (window.__v292Dfix658) window.__v292Dfix658.noteConflict({ where: 'put-fork', serverRev: (r.json.server && r.json.server.rev) || r.json.rev, localLsHash: h }); } catch(e){}
+        return 'fork'; }   // fork応答はclean化しない(現行維持)
       if (r.status !== 200 || !r.json || !r.json.ok) throw new Error((r.json && r.json.error) || ('HTTP ' + r.status));
       if (r.json.rev != null) setBaseRev(r.json.rev);
+      /* ★fix658 Phase1: 成功した基点(rev/packageHash/lastCommitOpId/送信pkgのhash)を anchor台帳へ記録する。 */
+      try { if (window.__v292Dfix658) window.__v292Dfix658.noteCommit({ rev: r.json.rev, packageHash: r.json.packageHash || null, lastCommitOpId: r.json.lastCommitOpId || null, lsHash: h }); } catch(e){}
       lsSet('v292Dfix402_lastHash', h);
       if (f402dOn && sentSeq !== mutationSeq) {
         // ★fix402d: 飛行中に新規保存(dirty)あり→誤clean化せず再送予約(pushedTs/dirtyTsは触らない)
@@ -324,6 +329,9 @@
     return doApply.then(function(){
       setBaseRev(rev);
       try { lsSet('v292Dfix402_lastHash', lsHash(JSON.stringify(pkg.ls || {}))); } catch(e){}   // ★fix402c堅牢化: length接頭(baseRev/lastHashは常に更新)
+      /* ★fix658 Phase1(観測のみ): 取り込み後の基点を anchor台帳へ。lsHash は直上で書いた値をそのまま読み戻す
+         (巨大な pkg を2度 stringify しない。fix402 自身が基点とみなしている値と必ず同じものになる)。 */
+      try { if (window.__v292Dfix658) window.__v292Dfix658.notePull({ rev: rev, lsHash: lsGet('v292Dfix402_lastHash'), via: 'pull-index' }); } catch(e){}
       if (f402eOn() && mutationSeq !== applySeq) {
         // ★fix402e A-1: applySave中にユーザー保存(markDirty)が入った→pushedTs/dirtyTsをclean化しない。
         //   dirtyを維持し3秒後flushを予約。直後にlocation.reload()が走るが、dirtyTs(LS永続)が残れば
@@ -385,6 +393,9 @@
           applying = false;
           try { console.log(TAG, 'pull中止(local-ahead:全スロット比較)→forkへ委譲'); } catch(e){}
           flush('local-ahead');
+          /* ★fix658 Phase1(観測のみ): local-ahead でスキップした競合を記録する。
+             turnDelta は fix658 が remote pkg とローカルを**読むだけ**で数える(ここのループには触らない)。 */
+          try { if (window.__v292Dfix658) window.__v292Dfix658.noteConflict({ where: 'local-ahead', serverRev: r.json.rev, localLsHash: null, remoteLs: (r.json.data && r.json.data.ls) || null }); } catch(e){}
           return;
         }
       }

@@ -185,7 +185,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260801-fix657';
+  var HOME_BUILT = '20260802-fix658';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -204,18 +204,23 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix657"></script>
-<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix657"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix657"></script>
-<script src="v292Dfix564-snapshot.js?cb=v292Dfix657"></script>
-<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix657"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix657"></script>
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix657"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix658"></script>
+<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix658"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix658"></script>
+<script src="v292Dfix564-snapshot.js?cb=v292Dfix658"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix658"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix658"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix658"></script>
 <!-- ★fix602: 墓標が立ったスロットへの書き込みを影で止める（別途配信） -->
-<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix657"></script>
+<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix658"></script>
 <!-- ★fix642: 停止中の削除(blocked-stale-legacy)を、クラウド墓標の read-back を根拠に
      新しい planId で作り直して完遂する。**操作専用・自動実行なし**（コンソールから呼ぶ） -->
-<script src="v292Dfix642-delete-readback.js?cb=v292Dfix657"></script>
+<script src="v292Dfix642-delete-readback.js?cb=v292Dfix658"></script>
+<!-- ★fix658 Phase1: 系譜センサス（shadow）。同期の競合を「早送りか本物の分岐か」で分類して
+     数えるだけ。ダイアログ・取り込み・送信の挙動は1つも変えない。書込先は
+     v292Dfix658_anchor / v292Dfix658_census の2キーのみ。
+     観測=window.__v292Dfix658.status()/.census()/.selfTest() / OFF=v292Dfix658Off -->
+<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix658"></script>
 <script>
 (function(){
   'use strict';
@@ -862,6 +867,29 @@
           }
         } catch(e){}
         s('v292Dfix402_baseRev', String(serverRev));
+        /* ★fix658 Phase1（観測のみ・挙動は1つも変えない）
+           (e) 取り込み後の基点を anchor台帳へ。ローカル差分を1件も残さなかったときだけ
+               「取り込んだ内容＝この端末の内容」と言えるので lsHash を渡す。
+               1件でも残していれば嘘になるので null（判断しない側へ倒す）。 */
+        try {
+          if (window.__v292Dfix658){
+            var f658clean = (skipped.length===0 && tombBlocked===0 && haltBlocked===0 && retainedLocalDelta===0);
+            window.__v292Dfix658.notePull({ rev: serverRev,
+              lsHash: f658clean ? window.__v292Dfix658.lsHash(JSON.stringify(ls)) : null,
+              via: 'pull-home' });
+          }
+        } catch(e){}
+        /* (f) per-slot の local-ahead スキップは「この端末が旧分岐に取り残される」入口。競合として数える。 */
+        try {
+          if (window.__v292Dfix658 && skipped.length){
+            var f658d = 0;
+            for (var f658i=0; f658i<skipped.length; f658i++){
+              var f658k = skipped[f658i];
+              f658d += (turnsOf(g(f658k)) - turnsOf(ls[f658k]));
+            }
+            window.__v292Dfix658.noteConflict({ where:'home-pull-skip', serverRev: serverRev, localLsHash: null, turnDelta: f658d });
+          }
+        } catch(e){}
         if(r.data.updatedAt){ s('v292Dfix399_baseTs', String(+r.data.updatedAt||0)); s('v292Dfix399_localTs', String(+r.data.updatedAt||0)); }
         el('sync').textContent = '☁ 取り込みました（'+wrote+'件）';
         /* ★★fix602(4): 墓標により除外した件数を**画面とconsoleの両方**に出す。
