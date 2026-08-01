@@ -211,6 +211,10 @@
     __armed: true, on: on, smallHash: smallHash, hashFull: hashFull,
     recvSweep: recvSweep, flushSend: flushSend, pullOne: pullOne, pushOne: pushOne,
     revMap: revMap, revGet: revGet,
+    /* ★fix655(2026-08-01): revSet を公開。fix633 の rev-only 採用が
+       `typeof f.revSet === 'function'` ガードで無言の no-op になっていた真因（公開し忘れ）。
+       GPT裁定=条件付きGO。公開API契約検査+fail-closed は fix633 側に実装。 */
+    revSet: revSet,
     status: function(){ return { armed: true, on: on(), loggedIn: loggedIn(), ns: nsGet() ? 'set' : 'none', keys: localAvKeys().length, revs: Object.keys(revMap()).length }; }
   };
   try {

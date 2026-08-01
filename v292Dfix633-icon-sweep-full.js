@@ -31,6 +31,15 @@
 // 強制shadow: v292Dfix633Shadow='1'（Liveより優先）
 // ★fix523 が OFF のときは本モジュールも動かない(緊急停止スイッチを1本に保つ)。
 // 冪等ガード: window.__v292Dfix633.__armed
+//
+// ★fix655(2026-08-01・GPT裁定=条件付きGO): 公開API契約検査(fail-closed)。
+//   真因: fix523 が revSet を公開しておらず、旧 `typeof f.revSet==='function'` ガードが
+//   黙って素通り=rev-only 採用が全端末で一度も動いていなかった(無言の失敗・A2ケース1で発見)。
+//   裁定条件: 依存APIが1つでも欠けたら sweep 全停止(ネットワーク書込0)・一度だけ warn・
+//   永続counter(v292Dfix655_depFail)加算。Live で一部だけ動かすのは禁止。
+//   plan()/decide() は読み取り専用診断として残す。
+//   観測: status().deps / status().counters {revAdopted, revAdoptFailed, revPlanNonConvergent}
+//   緊急バイパス: localStorage.v292Dfix655Off='1'（検査を外し従来挙動へ。revSet export は無害に残る）
 // =====================================================================
 (function(){
   'use strict';
@@ -51,6 +60,33 @@
     try { if (typeof f.on === 'function' && !f.on()) return false; } catch(e){ return false; }
     return true;
   }
+
+  // ---------- ★fix655: 公開API契約検査(fail-closed・GPT裁定 2026-08-01) ----------
+  var DEPS = ['revSet', 'revGet', 'hashFull', 'pullOne', 'pushOne'];
+  var ctr = { revAdopted: 0, revAdoptFailed: 0, revPlanNonConvergent: 0 };
+  var adopted = {};                    // pk -> 採用済み sRev（メモリのみ・LSへ書かない）
+  var depState = { unavailable: false, missing: [] };
+  var depWarned = false;
+  function missingDeps(){
+    var f = f523(); if (!f) return DEPS.slice();
+    var out = [];
+    for (var i = 0; i < DEPS.length; i++){ if (typeof f[DEPS[i]] !== 'function') out.push(DEPS[i]); }
+    return out;
+  }
+  function depsOk(){
+    if (lsg('v292Dfix655Off') === '1') return true;   // 緊急バイパス（従来挙動）
+    var m = missingDeps();
+    depState.unavailable = m.length > 0;
+    depState.missing = m;
+    if (!m.length) return true;
+    if (!depWarned){
+      depWarned = true;
+      try { console.warn(TAG, 'dependency-unavailable; sweep停止(fail-closed):', m.join(',')); } catch(e){}
+      try { var k = 'v292Dfix655_depFail'; W.localStorage.setItem(k, String((parseInt(lsg(k), 10) || 0) + 1)); } catch(e){}
+    }
+    return false;
+  }
+
   function proxyUrl(){
     try { var u = (lsg('v292ProxyUrl') || '').trim(); if (u) return u.replace(/\/+$/, ''); } catch(e){}
     try { if (W.__v292Dfix247bapi && W.__v292Dfix247bapi.DEFAULT_PROXY_URL) return W.__v292Dfix247bapi.DEFAULT_PROXY_URL; } catch(e){}
@@ -147,10 +183,18 @@
   var busy = false, cursor = 0, lastPlan = null, lastRun = 0;
   function sweep(done){
     if (!on() || busy || !loggedIn() || !nsGet() || !_fetch){ if (done) done(null); return; }
+    if (!depsOk()){ if (done) done(null); return; }   // ★fix655: fail-closed(通信もしない)
     busy = true;
     manifest(function(man){
       if (!man){ busy = false; if (done) done(null); return; }
       var plan = decide(man);
+      // ★fix655: 非収束の観測。前回採用済み(同じsRev)のキーがまだ rev として再計画されたら数える
+      for (var pi = 0; pi < plan.length; pi++){
+        if (plan[pi].act === 'rev' && adopted[plan[pi].pk] === plan[pi].sRev){
+          ctr.revPlanNonConvergent++;
+          try { console.warn(TAG, 'rev non-convergent:', plan[pi].pk, 'sRev', plan[pi].sRev); } catch(e){}
+        }
+      }
       lastPlan = { at: Date.now(), total: plan.length,
                    pull: plan.filter(function(p){ return p.act === 'pull'; }).length,
                    push: plan.filter(function(p){ return p.act === 'push'; }).length,
@@ -170,7 +214,15 @@
         var it = batch[i++];
         var cont = function(){ try { setTimeout(next, GAP_MS); } catch(e){ next(); } };
         try {
-          if (it.act === 'rev'){ if (typeof f.revSet === 'function') f.revSet(it.pk, it.sRev); cont(); return; }
+          if (it.act === 'rev'){
+            /* ★fix655: 旧 `typeof f.revSet==='function'` の黙殺ガードを撤去。
+               depsOk() が保証するので直接呼び、読み戻しで採用を検証して数える。 */
+            var okAdopt = false;
+            try { f.revSet(it.pk, it.sRev); okAdopt = (f.revGet(it.pk) === it.sRev); } catch(e){}
+            if (okAdopt){ ctr.revAdopted++; adopted[it.pk] = it.sRev; }
+            else { ctr.revAdoptFailed++; try { console.warn(TAG, 'rev採用失敗(読み戻し不一致):', it.pk, '→', it.sRev); } catch(e){} }
+            cont(); return;
+          }
           if (it.act === 'pull'){ f.pullOne(it.pk, it.sRev, cont); return; }
           f.pushOne(it.pk, cont);
         } catch(e){ cont(); }
@@ -189,7 +241,14 @@
     status: function(){
       return { armed: true, on: on(), shadow: shadow(), loggedIn: loggedIn(),
                ns: nsGet() ? 'set' : 'none', inventory: localKeys().length,
-               lastPlan: lastPlan, lastRun: lastRun, manifestAt: manAt };
+               lastPlan: lastPlan, lastRun: lastRun, manifestAt: manAt,
+               /* ★fix655: 契約検査と採用の観測口（missingはその場で再計算＝陳腐化しない） */
+               deps: (function(){ var m = missingDeps();
+                       return { unavailable: m.length > 0, missing: m,
+                                depFailCount: parseInt(lsg('v292Dfix655_depFail'), 10) || 0,
+                                bypass: lsg('v292Dfix655Off') === '1' }; })(),
+               counters: { revAdopted: ctr.revAdopted, revAdoptFailed: ctr.revAdoptFailed,
+                           revPlanNonConvergent: ctr.revPlanNonConvergent } };
     }
   };
 
