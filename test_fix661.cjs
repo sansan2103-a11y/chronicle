@@ -328,7 +328,12 @@ function dumps(n){
    ===================================================================== */
 console.log('\n== (C3) 起動時の静かな整理 ==');
 {
-  ok('★起動時に autoGC を呼ぶ', /render\(\); f661AutoGC\(\); renderCapacity\(\);/.test(HOME));
+  /* ★起動チェーンには後から項目が増える(fix663でログイン状態表示が入った)。
+     並びの丸写しではなく「autoGC が起動チェーンの中に居て、pull より前にある」ことで縛る。 */
+  ok('★起動時に autoGC を呼ぶ（pull より前）', (() => {
+    const m = HOME.match(/\.then\(function\(\)\{ render\(\);[\s\S]{0,200}?\}\);/);
+    return !!m && /f661AutoGC\(\)/.test(m[0]) && m[0].indexOf('f661AutoGC()') < m[0].indexOf('pull()');
+  })(), (HOME.match(/\.then\(function\(\)\{ render\(\);[\s\S]{0,200}?\}\);/) || [])[0]);
   ok('★★目標KBは LS で変更できる（既定2000KB）',
      /function f661TargetKB\(\)\{ var v = \+\(g\('v292Dfix661TargetKB'\) \|\| 0\); return \(v > 0\) \? v : 2000; \}/.test(HOME));
   ok('★★1起動あたり最大10単位', /reason: 'home-boot-autogc', maxUnits: 10/.test(HOME));

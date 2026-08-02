@@ -164,7 +164,10 @@
       <!-- ★fix660: 容量の恒久対処。自動GCだけでは足りない（iPhone実データでは597KBの唯一の
            fullDumpが最大占有者で、これは自動では絶対に消さない）。利用者が中身を見て選ぶ。 -->
       <button id="gcBtn" title="使っていない控えを一覧から選んで解放し、保存容量を空けます">🧹 容量を空ける</button>
+      <!-- ★fix663: ホームでもGoogleログインできるようにする（期限切れのたびにゲーム画面へ行かせない） -->
+      <button id="gLoginBtn" title="Googleアカウントでログインします" style="display:none">🔑 Googleでログイン</button>
     </div>
+    <div id="loginState" style="margin-top:6px;font-size:11px;opacity:.75;line-height:1.5"></div>
     <div id="capMeter" style="margin-top:6px;font-size:11px;opacity:.7;line-height:1.5"></div>
   </aside>
 
@@ -199,7 +202,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260802-fix662';
+  var HOME_BUILT = '20260802-fix663';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -218,27 +221,27 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix662"></script>
-<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix662"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix663"></script>
+<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix663"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者（fix569 が捕捉済みの native を借りる） -->
-<script src="v292Dfix660-delete-gateway.js?cb=v292Dfix662"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix662"></script>
-<script src="v292Dfix564-snapshot.js?cb=v292Dfix662"></script>
+<script src="v292Dfix660-delete-gateway.js?cb=v292Dfix663"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix663"></script>
+<script src="v292Dfix564-snapshot.js?cb=v292Dfix663"></script>
 <!-- ★fix660(B): BackupGC。削除候補を選ぶ層。分類は fix562 が唯一の正なのでその後ろ -->
-<script src="v292Dfix660-backup-gc.js?cb=v292Dfix662"></script>
-<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix662"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix662"></script>
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix662"></script>
+<script src="v292Dfix660-backup-gc.js?cb=v292Dfix663"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix663"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix663"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix663"></script>
 <!-- ★fix602: 墓標が立ったスロットへの書き込みを影で止める（別途配信） -->
-<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix662"></script>
+<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix663"></script>
 <!-- ★fix642: 停止中の削除(blocked-stale-legacy)を、クラウド墓標の read-back を根拠に
      新しい planId で作り直して完遂する。**操作専用・自動実行なし**（コンソールから呼ぶ） -->
-<script src="v292Dfix642-delete-readback.js?cb=v292Dfix662"></script>
+<script src="v292Dfix642-delete-readback.js?cb=v292Dfix663"></script>
 <!-- ★fix658 Phase1: 系譜センサス（shadow）。同期の競合を「早送りか本物の分岐か」で分類して
      数えるだけ。ダイアログ・取り込み・送信の挙動は1つも変えない。書込先は
      v292Dfix658_anchor / v292Dfix658_census の2キーのみ。
      観測=window.__v292Dfix658.status()/.census()/.selfTest() / OFF=v292Dfix658Off -->
-<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix662"></script>
+<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix663"></script>
 <script>
 (function(){
   'use strict';
@@ -568,8 +571,8 @@
   function whyNotLoggedIn(){
     var p=(g('v292ProxyPass')||'').trim();
     var t=J(g('v292GoogleToken'),null);
-    if(!p && !t) return 'ログインしていないため同期できません。ゲーム画面からログインしてください。';
-    if(!p && t && t.token) return 'Googleログインの有効期限が切れています。ゲーム画面でログインし直してください。';
+    if(!p && !t) return 'ログインしていないため同期できません。左の「🔑 Googleでログイン」からログインしてください。';
+    if(!p && t && t.token) return 'Googleログインの有効期限が切れています。左の「🔑 Googleでログイン」からログインし直してください。';
     return 'ログイン情報が読めないため同期できません。';
   }
   function noteNotLoggedIn(){
@@ -1456,6 +1459,124 @@
     };
     fr.readAsText(f);
   }
+  /* ================= ★★fix663: ホームでもGoogleログインする ======================
+   * これまでログインはゲーム画面(index.html / v292Dfix328-google-login.js)にしか無く、
+   * Googleトークンが切れるとホームは「ゲーム画面からログインし直してください」としか言えなかった。
+   * ★fix328 と**同じ client id・同じ GIS 初期化・同じ保存キー/形式(v292GoogleToken)**を使う。
+   *   形式が1文字でも違うと、片方でログインしても もう片方が読めない(=いま起きていた事故と同型)。
+   * ★authHeaders() は毎回 localStorage を読むので、保存した瞬間から同期が通るようになる。
+   * ============================================================================== */
+  var F663_BAKED_CLIENT_ID = '755944735372-g4g0rl8if91m2nimo23jdf125cjhs07q.apps.googleusercontent.com';
+  function f663ClientId(){ return (String(g('v292GoogleClientId')||'').trim()) || F663_BAKED_CLIENT_ID; }
+  function f663Off(){ return String(g('v292GoogleLoginOff')||'') === '1'; }
+  function f663Token(){ var j = J(g('v292GoogleToken'), null); return (j && j.token && j.exp) ? j : null; }
+  /* ★fix601 と同じ判定式(exp は**秒**・30秒の余裕)。ここを揃えないと表示と実際がずれる。 */
+  function f663Valid(t){ t = t || f663Token(); return !!(t && t.token && (t.exp*1000) > (Date.now()+30000)); }
+  function f663DecodeJwt(jwt){
+    try {
+      var p = String(jwt).split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+      while(p.length%4) p+='=';
+      return JSON.parse(decodeURIComponent(escape(atob(p))));
+    } catch(e){ return {}; }
+  }
+  var f663GisReady = false, f663GisLoading = false, f663Inited = false, f663Busy = false;
+  function f663LoadGis(cb, onErr){
+    if (f663GisReady){ cb && cb(); return; }
+    try { if (window.google && window.google.accounts && window.google.accounts.id){ f663GisReady = true; cb && cb(); return; } } catch(e){}
+    if (f663GisLoading){ var iv = setInterval(function(){ if (f663GisReady){ clearInterval(iv); cb && cb(); } }, 150); return; }
+    f663GisLoading = true;
+    try {
+      var sc = document.createElement('script');
+      sc.src = 'https://accounts.google.com/gsi/client';
+      sc.async = true; sc.defer = true;
+      sc.onload = function(){ f663GisReady = true; cb && cb(); };
+      sc.onerror = function(){ f663GisLoading = false; onErr && onErr('script'); };
+      (document.head || document.body).appendChild(sc);
+    } catch(e){ f663GisLoading = false; onErr && onErr('script'); }
+  }
+  function f663InitGis(cb, onErr){
+    f663LoadGis(function(){
+      try {
+        if (!f663Inited){
+          window.google.accounts.id.initialize({
+            client_id: f663ClientId(),
+            callback: f663OnCredential,
+            auto_select: true,
+            cancel_on_tap_outside: false,
+            use_fedcm_for_prompt: true
+          });
+          f663Inited = true;      /* ★二重初期化しない */
+        }
+        cb && cb();
+      } catch(e){ onErr && onErr('init'); }
+    }, onErr);
+  }
+  function f663OnCredential(resp){
+    f663Busy = false;
+    try {
+      var jwt = resp && resp.credential;
+      if (!jwt){ f663Fail('token'); return; }
+      var p = f663DecodeJwt(jwt);
+      /* ★fix328 と同一形式・同一キー */
+      var rec = { token: jwt, exp: p.exp || 0, email: String(p.email||'').toLowerCase(), name: p.name || '', pic: p.picture || '' };
+      if (!s('v292GoogleToken', JSON.stringify(rec))){ f663Fail('store'); return; }
+      f663RenderLogin();
+      showNotes(['🔑 Googleでログインしました（' + esc(rec.email || 'アカウント') + '）。クラウドの内容を取り込みます…']);
+      try { console.log('[home][v292Dfix663] logged in as', rec.email); } catch(e){}
+      /* ★せっかくログインしたのに、もう1タップさせない */
+      try { pull(true); } catch(e){}
+    } catch(e){ f663Fail('exception'); }
+  }
+  function f663Fail(why){
+    f663Busy = false;
+    var msg = (why === 'popup')  ? '⚠ Googleのログイン画面が表示されませんでした。ブラウザのポップアップ／サードパーティCookieのブロックを解除してから、もう一度お試しください。'
+            : (why === 'script') ? '⚠ Googleのログイン部品を読み込めませんでした。通信環境を確認してもう一度お試しください。'
+            : (why === 'store')  ? '⚠ ログイン情報を保存できませんでした（保存容量が不足している可能性があります）。「🧹 容量を空ける」を試してください。'
+            : (why === 'init')   ? '⚠ Googleログインを準備できませんでした。ページを再読み込みしてもう一度お試しください。'
+            :                      '⚠ Googleログインに失敗しました。もう一度お試しください。';
+    showNotes([msg]);
+    try { console.warn('[home][v292Dfix663] login failed:', why); } catch(e){}
+    f663RenderLogin();
+  }
+  function f663Login(){
+    if (f663Off()){ showNotes(['⚠ この端末ではGoogleログインが無効化されています（v292GoogleLoginOff）。']); return; }
+    if (f663Busy) return;
+    f663Busy = true;
+    try { el('sync').className='sync'; el('sync').textContent='🔑 Googleでログインしています…'; } catch(e){}
+    f663InitGis(function(){
+      try {
+        window.google.accounts.id.prompt(function(n){
+          try {
+            var skipped = (n && ((n.isNotDisplayed && n.isNotDisplayed()) || (n.isSkippedMoment && n.isSkippedMoment())));
+            if (skipped) f663Fail('popup');
+          } catch(e){}
+        });
+      } catch(e){ f663Fail('popup'); }
+    }, f663Fail);
+  }
+  /* 常設の状態表示。ボタンは「Googleが使えない状態のとき」だけ出す。 */
+  function f663RenderLogin(){
+    try {
+      var box = el('loginState'), btn = el('gLoginBtn');
+      var t = f663Token(), okG = f663Valid(t);
+      var pass = String(g('v292ProxyPass')||'').trim();
+      var text;
+      if (okG){
+        var hours = Math.max(0, Math.floor((t.exp*1000 - Date.now()) / 3600000));
+        text = 'ログイン: Google ✓（残り' + hours + '時間' + (t.email ? ' / ' + t.email : '') + '）';
+      } else if (t){
+        text = 'ログイン: Google期限切れ' + (pass ? '（合言葉で同期中）' : '');
+      } else if (pass){
+        text = 'ログイン: 合言葉のみ';
+      } else {
+        text = 'ログイン: 未ログイン';
+      }
+      if (box) box.textContent = text;
+      if (btn) btn.style.display = (okG || f663Off()) ? 'none' : '';
+    } catch(e){}
+  }
+  if (el('gLoginBtn')) el('gLoginBtn').addEventListener('click', f663Login);
+
   /* ================= ★★fix660: 容量の恒久対処UI ==============================
    * ・容量メーター … いま何KB/何キー使っているかを常に見せる（黙って詰まらせない）
    * ・「🧹 容量を空ける」 … BackupGC が選んだ候補と、自動では消さない review-only を一覧で見せ、
@@ -1673,7 +1794,7 @@
     .then(function(r){ return r.text(); })
     .then(function(t){ BUILD = (t||'').trim(); })
     .catch(function(){})
-    .then(function(){ render(); f661AutoGC(); renderCapacity(); if(!autoPullOnce()) pull(); });
+    .then(function(){ render(); f663RenderLogin(); f661AutoGC(); renderCapacity(); if(!autoPullOnce()) pull(); });
   render();
   deletedNotice();
   pendingDeleteNotice();
