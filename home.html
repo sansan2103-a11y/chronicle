@@ -185,7 +185,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260802-fix658';
+  var HOME_BUILT = '20260802-fix659';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -204,23 +204,23 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix658"></script>
-<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix658"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix658"></script>
-<script src="v292Dfix564-snapshot.js?cb=v292Dfix658"></script>
-<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix658"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix658"></script>
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix658"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix659"></script>
+<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix659"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix659"></script>
+<script src="v292Dfix564-snapshot.js?cb=v292Dfix659"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix659"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix659"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix659"></script>
 <!-- ★fix602: 墓標が立ったスロットへの書き込みを影で止める（別途配信） -->
-<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix658"></script>
+<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix659"></script>
 <!-- ★fix642: 停止中の削除(blocked-stale-legacy)を、クラウド墓標の read-back を根拠に
      新しい planId で作り直して完遂する。**操作専用・自動実行なし**（コンソールから呼ぶ） -->
-<script src="v292Dfix642-delete-readback.js?cb=v292Dfix658"></script>
+<script src="v292Dfix642-delete-readback.js?cb=v292Dfix659"></script>
 <!-- ★fix658 Phase1: 系譜センサス（shadow）。同期の競合を「早送りか本物の分岐か」で分類して
      数えるだけ。ダイアログ・取り込み・送信の挙動は1つも変えない。書込先は
      v292Dfix658_anchor / v292Dfix658_census の2キーのみ。
      観測=window.__v292Dfix658.status()/.census()/.selfTest() / OFF=v292Dfix658Off -->
-<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix658"></script>
+<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix659"></script>
 <script>
 (function(){
   'use strict';
@@ -708,8 +708,54 @@
     return !!(sid && dead[sid]);
   }
 
-  function pull(force){
+  /* ★★fix659: 「クラウド側を取り込む」を押したのに何も起きない、の実因は下の2つの門だった。
+       (G1) 起動時の pull() は force 無しなので `serverRev <= baseRev` で「☁ 最新です」と言って終わる。
+            baseRev は**スキップした回でも** serverRev まで進むので、一度スキップすると
+            その物語は二度と取り込まれない。→ autopull は pull(true, …) を呼ぶ。
+       (G2) スロット毎の「ローカルの方がターン数が多ければ上書きしない」保護は force でも効いたままで、
+            真の分岐(双方が進んだ)では必ずここで止まる。→ **バナーを出した物語1つだけ**、
+            検証済みの控えを取ってから上書きする。控えが取れなければ従来どおり守る(fail-closed)。
+     ★★保護を外すのは adoptSlotId で名指しされた1スロットだけ。バナーは「**この物語**のつづきが
+       2つに分かれています」と物語単位で語るのだから、他の物語まで巻き戻すのは利用者の意図を超える。
+       この端末で進んでいる別の物語は、autopull の回でも従来どおり skip して守る。
+     ★「☁ いま取り込む」(downBtn)は adoptSlotId 無し。ボタンの説明
+       「この端末の方が進んでいる物語は守られます」の約束は変わらない。
+     OFF = localStorage['v292Dfix659AdoptOff']='1' … (G2)の上書きだけを止めて現行動作へ戻す。 */
+  function f659adoptOn(){ return g('v292Dfix659AdoptOff') !== '1'; }
+  /* 名指しされた slotId → 上書きを許す**唯一のキー**。決められなければ null(=誰も外さない)。 */
+  function f659adoptKey(slotId){
+    if(slotId == null || slotId === '') return null;
+    var id = normSlotId(String(slotId));
+    if(!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return null;
+    return (id === 'chr6') ? 'chr6' : ('chr6_slot_' + id);
+  }
+  function pruneAheadBackups(){
+    try {
+      var bks = [];
+      for(var i=0;i<LS.length;i++){ var k=LS.key(i); if(/^chr6_bk_home_pull_ahead_/.test(k||'')) bks.push(k); }
+      bks.sort();
+      while(bks.length > 5){ var oldk = bks.shift(); try { LS.removeItem(oldk); } catch(e){} }
+    } catch(e){}
+  }
+  /* 上書きする前に、この端末の本体を控える。read-back で読み戻せたときだけ true。
+     控えキーは chr6_bk_ 接頭＝同期の収集対象外(クラウドへは上がらない)。 */
+  function backupAheadSlot(k){
+    try {
+      var cur = g(k);
+      if(cur == null) return true;                      /* 失うものが無い */
+      var bk = 'chr6_bk_home_pull_ahead_' + Date.now() + '_' + k;
+      var snap = {}; snap[k] = cur;
+      if(!s(bk, JSON.stringify({ at: Date.now(), reason: 'fix659-adopt-cloud', ls: snap }))) return false;
+      var rb = J(g(bk), null);
+      if(!(rb && rb.ls && rb.ls[k] === cur)) return false;   /* 読み戻せない＝控えられていない→上書きしない */
+      pruneAheadBackups();
+      return true;
+    } catch(e){ return false; }
+  }
+
+  function pull(force, adoptSlotId){
     if(!loggedIn()){ noteNotLoggedIn(); return; }
+    var f659adoptKeyOnly = f659adoptKey(adoptSlotId);   /* ★fix659: 保護を外してよい唯一のキー(無ければ null) */
     el('sync').className='sync';
     el('sync').textContent = '☁ 確認中…';
     call({op:'meta'}, 15000).then(function(m){
@@ -719,7 +765,7 @@
       el('sync').textContent = '☁ 取り込み中…';
       return call({op:'get'}, 40000).then(function(r){
         if(!r || !r.ok || !r.data || !r.data.ls) throw new Error('get');
-        var ls = r.data.ls, wrote=0, skipped=[];
+        var ls = r.data.ls, wrote=0, skipped=[], adopted=[];
         /* ★★fix602(1): 墓標バリア。削除済みスロットのキーを書き戻さない。
            ここが無かったせいで、実機では墓標が立った物語の本体が home の取り込みで復活し、
            さらに2ターン書き足されていた。 */
@@ -787,7 +833,13 @@
           }
           if(k==='chr6' || k.indexOf('chr6_slot_')===0){
             var lt = turnsOf(g(k)), rt = turnsOf(ls[k]);
-            if(lt > rt){ skipped.push(k); continue; }                // ★この端末の方が進んでいる→上書きしない
+            if(lt > rt){
+              /* ★fix659(G2): 分岐バナーで「クラウド側を取り込む」を選んだ**その物語1つだけ**、
+                 検証済みの控えを取ってから上書きする。名指しされていない物語（この端末で進んでいる
+                 別の物語）は従来どおり守る。控えが取れなければ、名指しでも上書きしない(fail-closed)。 */
+              if(!(f659adoptKeyOnly && k === f659adoptKeyOnly && f659adoptOn() && backupAheadSlot(k))){ skipped.push(k); continue; }   // ★この端末の方が進んでいる→上書きしない
+              adopted.push(k);
+            }
           }
           if(g(k) !== ls[k]){ if(s(k, ls[k])){ wrote++; wroteVals[k] = ls[k]; } else applyErrors++; }
         }
@@ -895,6 +947,11 @@
         /* ★★fix602(4): 墓標により除外した件数を**画面とconsoleの両方**に出す。
            黙って除外すると「取り込んだのに増えない」が原因不明の不具合に見える。 */
         var notes602 = [];
+        /* ★fix659: 分岐の解決でこの端末の分を控えて上書きした件数は、必ず画面に出す。
+           黙ってやると「進んでいたはずの物語が短くなった」が原因不明の事故に見える。 */
+        if(adopted.length){
+          notes602.push('クラウド側のつづきを取り込みました。この端末にあった分は自動バックアップ（chr6_bk_home_pull_ahead_*）に残しています。');
+        }
         if(skipped.length){
           notes602.push('この端末の方が進んでいる物語が '+skipped.length+' 件あったので、上書きしませんでした。次にその物語を遊ぶと自動でクラウドへ反映されます。');
         }
@@ -1173,12 +1230,40 @@
     PULL_HALT_CODE: PULL_HALT_CODE
   };
 
+  /* ★★fix659: 物語画面の分岐バナー「☁ クラウド側を取り込む」から来たときは、
+     ここで**一度だけ**強制取り込み(force=true, adoptCloud=true)を走らせる。
+     ・クエリは pull を始める前に history.replaceState で落とす（リロード・戻るで再発火させない）。
+     ・未ログインなら既存の noteNotLoggedIn() を出して終わる（黙って何もしないのが一番たちが悪い）。
+     ・戻り値 true = この起動では通常の pull() を走らせない（二重 pull を作らない）。 */
+  function autoPullOnce(){
+    try {
+      var m = String(location.search||'').match(/[?&]autopull=([^&#]*)/);
+      if(!m) return false;
+      /* ★autopull の**値**が「どの物語で分岐を解決するか」。旧形式の '1' や不正値のときは
+         名指し無し＝強制取り込み(G1の解除)だけ行い、local-ahead保護は一切外さない(安全側・後方互換)。 */
+      var want = '';
+      try { want = decodeURIComponent(m[1]||''); } catch(e){ want = ''; }
+      var adoptId = (want && want !== '1') ? want : null;
+      try {
+        if(window.history && history.replaceState){
+          var q = String(location.search||'').replace(/([?&])autopull=[^&#]*&?/, '$1').replace(/[?&]$/, '');
+          history.replaceState(null, '', location.pathname + q + (location.hash||''));
+        }
+      } catch(e){}
+      if(!loggedIn()){ noteNotLoggedIn(); return true; }
+      try { el('sync').className='sync'; el('sync').textContent='☁ 確認中…'; } catch(e){}
+      try { console.log('[home][v292Dfix659] autopull: 分岐バナーからの取り込みを実行します', JSON.stringify({ adoptSlotId: adoptId })); } catch(e){}
+      pull(true, adoptId);
+      return true;
+    } catch(e){ return false; }
+  }
+
   // ---------- 起動 ----------
   fetch('version.txt?_='+Date.now(), {cache:'no-store'})
     .then(function(r){ return r.text(); })
     .then(function(t){ BUILD = (t||'').trim(); })
     .catch(function(){})
-    .then(function(){ render(); pull(); });
+    .then(function(){ render(); if(!autoPullOnce()) pull(); });
   render();
   deletedNotice();
   pendingDeleteNotice();

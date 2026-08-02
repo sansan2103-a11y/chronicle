@@ -495,6 +495,9 @@
   // ---- 真の分岐(fork)だけ出す非モーダル選択UI(confirm不使用) ----
   var bannerEl = null;
   function forkBanner(server){
+    /* ★fix659: 平易な文言＋「クラウド側を取り込む」が本当に完走する新バナー。描けたら(true)ここで終わる。
+       fix659 が居ない/OFF/例外なら false が返り、以下の従来バナー(+fix527cの付け替え)へ完全フォールバックする。 */
+    try { if (window.__v292Dfix659 && window.__v292Dfix659.renderForkBanner && window.__v292Dfix659.renderForkBanner(server)) return; } catch(e){}
     if (bannerEl && bannerEl.parentNode) return;
     var dev = String((server && server.device) || '').slice(0, 22);
     var el = document.createElement('div');

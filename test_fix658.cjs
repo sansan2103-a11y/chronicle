@@ -503,19 +503,24 @@ console.log('\n== (9) shadow 不変条件（fix402 の既存文をそのまま�
     const hooks = SRC402.match(/try \{ if \(window\.__v292Dfix658\)[\s\S]*?\} catch\(e\)\{\}/g) || [];
     return hooks.length === 4 && hooks.every(h => !/[^=!<>]=[^=]/.test(h.replace(/__v292Dfix658\.\w+\(\{[\s\S]*?\}\)/g, 'CALL')));
   })(), (SRC402.match(/try \{ if \(window\.__v292Dfix658\)[\s\S]*?\} catch\(e\)\{\}/g) || []).length);
-  ok('★★home.html の local-ahead スキップ判定はそのまま',
-     /var lt = turnsOf\(g\(k\)\), rt = turnsOf\(ls\[k\]\);\s*\n\s*if\(lt > rt\)\{ skipped\.push\(k\); continue; \}/.test(HOME));
+  /* ★2026-08-02(fix659): この行に adoptCloud 経路が足された。fix658 が守りたいのは
+     「ターン数の比較で skipped に積む」という**既定の保護と観測材料**が残っていることなので、
+     行の形ではなくその関係で縛り直す(fix659 の変更は test_fix659 が別に固定している)。 */
+  ok('★★home.html の local-ahead 判定と skipped の記録は残っている',
+     /var lt = turnsOf\(g\(k\)\), rt = turnsOf\(ls\[k\]\);/.test(HOME) &&
+     /skipped\.push\(k\); continue; \}/.test(HOME) &&
+     /if\(lt > rt\)\{/.test(HOME));
   ok('★★home.html の baseRev 更新はそのまま', /s\('v292Dfix402_baseRev', String\(serverRev\)\);/.test(HOME));
   ok('★★fix402 の実コードに現れる fix658 は「存在チェック+呼び出し」の8個だけ（他の改変が無い）',
      (CODE402.match(/__v292Dfix658/g) || []).length === 8 && (CODE402.match(/fix658/g) || []).length === 8,
      { api: (CODE402.match(/__v292Dfix658/g) || []).length, all: (CODE402.match(/fix658/g) || []).length });
   ok('★★home.html の実コードに現れる fix658 は「存在チェック+呼び出し」5個と script タグだけ', (() => {
-    const api = (CODEHOME.match(/__v292Dfix658/g) || []).length;
-    const tags = (CODEHOME.match(/v292Dfix658-lineage-shadow\.js\?cb=v292Dfix658/g) || []).length;
-    const cbs = (CODEHOME.match(/\?cb=v292Dfix658/g) || []).length;      /* 出荷札（全モジュール共通） */
+    const api   = (CODEHOME.match(/__v292Dfix658/g) || []).length;
+    const tag   = (CODEHOME.match(/v292Dfix658-lineage-shadow\.js/g) || []).length;   /* script タグのファイル名 */
+    const cbs   = (CODEHOME.match(/\?cb=v292Dfix658\b/g) || []).length;               /* 出荷札(この出荷では0) */
     const built = (CODEHOME.match(/HOME_BUILT = '\d{8}-fix658'/g) || []).length;
-    const all = (CODEHOME.match(/fix658/g) || []).length;
-    return api === 5 && tags === 1 && all === api + cbs + built + tags;
+    const all   = (CODEHOME.match(/fix658/g) || []).length;
+    return api === 5 && tag === 1 && all === api + tag + cbs + built;
   })(), { api: (CODEHOME.match(/__v292Dfix658/g) || []).length, all: (CODEHOME.match(/fix658/g) || []).length });
 }
 
