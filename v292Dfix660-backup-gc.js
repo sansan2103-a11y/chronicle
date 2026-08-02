@@ -369,18 +369,25 @@
         var m = /^chr6_bk_cloudsync_(\d+)$/.exec(k);
         if (m) rows.push({ key: k, ts: +m[1] || 0 });
       });
-      if (rows.length <= 1){ res.kept = rows.length ? rows[0].key : null; return res; }
+      /* ★fix662: サーバー保存証明があるときだけ、**唯一の1件も含めて**降格できる(I11の引継ぎ)。
+         証明が無ければ従来どおり最新1件は必ず残す(二重の防壁: ここで除外し、
+         さらに DeleteGateway が「唯一の復元点」として拒否する)。 */
+      var proof = opts.serverProof || null;
+      if (rows.length === 0){ return res; }
       rows.sort(function(a, b){ return b.ts - a.ts; });
-      res.kept = rows[0].key;                                  /* ★最新1件は常に残す */
+      if (rows.length === 1 && !proof){ res.kept = rows[0].key; return res; }
+      var start = proof ? 0 : 1;
+      res.kept = proof ? null : rows[0].key;
       var maxN = Math.max(1, Math.min(+opts.maxUnits || 10, 50));
-      for (var i = 1; i < rows.length && res.retired.length < maxN; i++){
+      for (var i = start; i < rows.length && res.retired.length < maxN; i++){
         var key = rows[i].key, raw = rawGet(key);
         if (raw == null){ res.skipped.push({ key: key, code: 'missing' }); continue; }
         var cls = null; try { cls = I.classifyKey(key, raw); } catch(e){ cls = null; }
         if (!cls){ res.skipped.push({ key: key, code: 'policy-unavailable' }); continue; }
         var d = G.deleteExact({ planId: PLAN.planId, unitId: 'fulldump-retention:' + key, key: key,
                                 hash: hashOf(raw), bytes: raw.length, family: cls.family, slotId: cls.slotId,
-                                intent: 'retention',
+                                intent: proof ? 'retention-after-server-backup' : 'retention',
+                                serverProof: proof || undefined,
                                 policyVersion: (cls.policyVersion != null ? cls.policyVersion : G.POLICY_VERSION) });
         if (d.ok){ res.retired.push(key); res.freedBytes += raw.length; }
         else res.skipped.push({ key: key, code: d.code });

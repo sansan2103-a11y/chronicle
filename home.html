@@ -126,6 +126,12 @@
     .data button{flex:1 1 calc(50% - 4px);text-align:center;padding:10px 8px}
     section.mid{padding:14px}
   }
+  /* ★fix662(A): 画面最上部の通知帯（スクロール不要で必ず目に入る位置） */
+  #note{ margin:0 }
+  #note .note{ margin:0; padding:10px 16px; border-bottom:1px solid rgba(255,255,255,.12);
+               background:rgba(74,122,208,.10); font-size:13px; line-height:1.7 }
+  #note .note b{ color:#ffd9a0 }
+  #note .more{ cursor:pointer; text-decoration:underline; opacity:.8 }
 </style>
 </head>
 <body>
@@ -135,6 +141,11 @@
   <div class="spacer"></div>
   <div class="sync" id="sync"></div>
 </header>
+
+<!-- ★★fix662(A): 取り込みの診断・警告・自動確保の報告は**画面最上部**に出す。
+     2026-08-02 の実機で、⚠も診断行も一覧の下に出ていたためユーザーの目に入っていなかった。
+     「黙って失敗しない」は、出す位置まで含めて初めて成り立つ。 -->
+<div id="note"></div>
 
 <main>
   <aside>
@@ -169,7 +180,6 @@
       <input class="search" id="q" placeholder="検索（名前・場所・主人公）">
     </div>
     <div class="grid" id="grid"></div>
-    <div id="note"></div>
   </section>
 
   <div class="detail" id="detail"></div>
@@ -189,7 +199,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260802-fix661';
+  var HOME_BUILT = '20260802-fix662';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -208,27 +218,27 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix661"></script>
-<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix661"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix662"></script>
+<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix662"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者（fix569 が捕捉済みの native を借りる） -->
-<script src="v292Dfix660-delete-gateway.js?cb=v292Dfix661"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix661"></script>
-<script src="v292Dfix564-snapshot.js?cb=v292Dfix661"></script>
+<script src="v292Dfix660-delete-gateway.js?cb=v292Dfix662"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix662"></script>
+<script src="v292Dfix564-snapshot.js?cb=v292Dfix662"></script>
 <!-- ★fix660(B): BackupGC。削除候補を選ぶ層。分類は fix562 が唯一の正なのでその後ろ -->
-<script src="v292Dfix660-backup-gc.js?cb=v292Dfix661"></script>
-<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix661"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix661"></script>
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix661"></script>
+<script src="v292Dfix660-backup-gc.js?cb=v292Dfix662"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix662"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix662"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix662"></script>
 <!-- ★fix602: 墓標が立ったスロットへの書き込みを影で止める（別途配信） -->
-<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix661"></script>
+<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix662"></script>
 <!-- ★fix642: 停止中の削除(blocked-stale-legacy)を、クラウド墓標の read-back を根拠に
      新しい planId で作り直して完遂する。**操作専用・自動実行なし**（コンソールから呼ぶ） -->
-<script src="v292Dfix642-delete-readback.js?cb=v292Dfix661"></script>
+<script src="v292Dfix642-delete-readback.js?cb=v292Dfix662"></script>
 <!-- ★fix658 Phase1: 系譜センサス（shadow）。同期の競合を「早送りか本物の分岐か」で分類して
      数えるだけ。ダイアログ・取り込み・送信の挙動は1つも変えない。書込先は
      v292Dfix658_anchor / v292Dfix658_census の2キーのみ。
      観測=window.__v292Dfix658.status()/.census()/.selfTest() / OFF=v292Dfix658Off -->
-<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix661"></script>
+<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix662"></script>
 <script>
 (function(){
   'use strict';
@@ -782,6 +792,30 @@
    * OFF = localStorage['v292Dfix661Off']='1' … 自動系だけ全部止める(手動UIは残る)
    * 目標 = localStorage['v292Dfix661TargetKB'](既定2000KB)
    * ================================================================================= */
+  /* ★fix662(A): 通知は最上部に出し、3行以上は「詳しく」で折りたたむ。
+     先頭2行は必ず見せる（⚠と診断行が先頭に来るように呼び出し側が並べる）。 */
+  function showNotes(lines){
+    try {
+      var box = el('note'); if(!box) return;
+      var a = (lines || []).filter(function(x){ return x != null && x !== ''; });
+      if(!a.length){ box.innerHTML = ''; return; }
+      var head = a.slice(0, 2).map(esc).join('<br>');
+      var rest = a.slice(2);
+      var html = '<div class="note">' + head;
+      if(rest.length){
+        html += '<br><span class="more" id="noteMore">詳しく（あと'+rest.length+'行）</span>'
+             +  '<span id="noteRest" style="display:none"><br>'+rest.map(esc).join('<br>')+'</span>';
+      }
+      box.innerHTML = html + '</div>';
+      var m = el('noteMore');
+      if(m) m.addEventListener('click', function(){
+        var r = el('noteRest'); if(!r) return;
+        var open = r.style.display !== 'none';
+        r.style.display = open ? 'none' : 'inline';
+        m.textContent = open ? ('詳しく（あと'+rest.length+'行）') : '閉じる';
+      });
+    } catch(e){}
+  }
   function f661on(){ return g('v292Dfix661Off') !== '1'; }
   function f661TargetKB(){ var v = +(g('v292Dfix661TargetKB') || 0); return (v > 0) ? v : 2000; }
   function f661gc(){ try { return window.__v292Dfix660gc; } catch(e){ return null; } }
@@ -836,7 +870,7 @@
       gc.plan();
       var r = gc.reclaimPlanned({ needBytes: (u.bytes - target), reason: 'home-boot-autogc', maxUnits: 10 });
       if (r && r.ok){
-        try { el('note').innerHTML = '<div class="note">自動で '+Math.round(r.freedBytes/1024)+'KB 整理しました（古い控え '+r.units.length+' 件）。</div>'; } catch(e){}
+        try { showNotes(['自動で '+Math.round(r.freedBytes/1024)+'KB 整理しました（古い控え '+r.units.length+' 件）。']); } catch(e){}
         try { console.log('[home][v292Dfix661] autoGC:', JSON.stringify(r)); } catch(e){}
       }
       return r;
@@ -852,6 +886,87 @@
       return r;
     } catch(e){ return null; }
   }
+  /* ================= ★★fix662(B): 全自動チェーン「上げて→降格→取り込む」 ==========
+   * iPhone の確定事実: 同一ns・16物語中15一致・白鷺荘(~250KB)だけ quota で書けない。
+   * GREEN候補は枯渇し、大物は「唯一の fullDump(597KB・protected)」と unknown だけ。
+   * つまり**自動で消せるものが無い**。ここで詰むと利用者は永久に取り込めない。
+   *
+   * 裁定 I11(新旧保護の引継ぎ)と fix658裁定(真分岐はサーバーに fork として保存される)を合成する:
+   *   ①いまのローカルの状態を**サーバーへ保存**する(put)。200 ok なら正本か fork として保存済み
+   *     (Worker v18契約: fork保存に失敗したら503。200 ok は保存の証明)。
+   *   ②新しい保護が確立したので、旧ローカルの丸ごと控えを**唯一の1件も含めて**降格(retention)。
+   *     DeleteGateway は intent:'retention-after-server-backup' + 5分以内の証明のときだけ
+   *     「唯一の復元点」を通す。hard は例外の対象外。
+   *   ③空いた容量で取り込みを続行する。
+   * ★順序が命: **put の確認が取れない限り1バイトも消さない**。どの段で止まったかを必ず表示する。
+   * OFF は v292Dfix661Off 配下(自動系一括)。put はログイン時のみ。自動putはこのページで最大1回。
+   * ============================================================================== */
+  var f662ChainDone = false, f662ChainNotes = [];
+  function f662CanChain(){
+    if (!f661on() || f662ChainDone) return false;
+    if (!loggedIn()) return false;
+    var gc = f661gc();
+    if (!(gc && typeof gc.retireOldFullDumps === 'function')) return false;
+    /* ★fix602: 墓標の判定ができないなら送らない(削除済みの物語をサーバー正本に復活させない) */
+    if (!f602off() && hasTombstone() && !classifierReady()) return false;
+    return true;
+  }
+  /* 不足していて、かつ GREEN 候補では埋められない量か */
+  function f662Shortfall(ls, blocked){
+    try {
+      var gc = f661gc(); if(!gc) return 0;
+      var need = f661NeedBytes(ls, blocked);
+      if(!need) return 0;
+      var headroom = f661CapBytes() - gc.usage().bytes;
+      var lack = need - headroom;
+      if (lack <= 0) return 0;
+      gc.plan();
+      var green = 0;
+      (gc.candidates() || []).forEach(function(c){ green += (c.bytes || 0); });
+      return (green >= lack) ? 0 : lack;      /* GREEN で足りるなら通常の pre-flight に任せる */
+    } catch(e){ return 0; }
+  }
+  /* ①サーバーへ現状を保存する。成功したら証明トークンを返す(失敗は null) */
+  function f662ServerBackup(){
+    try {
+      var pkg = { schema:1, updatedAt:Date.now(), device:(navigator.userAgent||'').slice(0,60),
+                  activeSlot:(J(g('chr6_active_slot'),'chr6')||'chr6'), ls:collectLS(), full:true };
+      var base = +(g('v292Dfix402_baseRev')||0)||0;
+      return call({ op:'put', baseRev: base, pkg: pkg, mid: 'f662:' + base + ':' + Date.now() }, 60000)
+        .then(function(j){
+          if (!j || j.ok !== true) return null;                 /* 503/エラーは証明にしない */
+          return { serverConfirmedAt: Date.now(), rev: (j.rev == null ? null : j.rev),
+                   fork: j.fork === true, requestId: j.requestId || null };
+        }, function(){ return null; });                          /* ネットワーク失敗も null */
+    } catch(e){ return Promise.resolve(null); }
+  }
+  /* チェーン本体。戻り値は {ok, notes:[...]} 。ok=true なら呼び出し側が pull を1回やり直す。 */
+  function f662Chain(lack, force, adoptSlotId){
+    f662ChainDone = true;
+    var notes = [];
+    try { el('sync').className='sync'; el('sync').textContent='☁ 容量を確保しています…'; } catch(e){}
+    return f662ServerBackup().then(function(proof){
+      if (!proof){
+        notes.push('⚠ 容量が足りませんが、いまの内容をサーバーへ保存できなかったので**何も消さずに中止**しました。通信を確認してもう一度お試しください。');
+        return { ok:false, notes: notes };
+      }
+      notes.push('☁ 現状をサーバーに保存しました（rev'+(proof.rev==null?'—':proof.rev)+(proof.fork?'・別分岐として保管':'')+'）。');
+      var gc = f661gc();
+      var r = null;
+      try { r = gc.retireOldFullDumps({ serverProof: proof, maxUnits: 10 }); } catch(e){ r = null; }
+      if (!(r && r.ok)){
+        notes.push('⚠ サーバーへの保存は済みましたが、古い控えを解放できませんでした（'+esc((r&&r.code)||'不明')+'）。何も消していません。');
+        return { ok:false, notes: notes };
+      }
+      notes.push('古い控えを '+Math.round(r.freedBytes/1024)+'KB 解放しました（'+r.retired.length+' 件・サーバーに保存済みの分）。');
+      try { console.log('[home][v292Dfix662] チェーン成功:', JSON.stringify({ proof: proof, retired: r.retired, freed: r.freedBytes, lack: lack })); } catch(e){}
+      return { ok:true, notes: notes };
+    }, function(){
+      notes.push('⚠ 容量の確保に失敗しました。何も消していません。');
+      return { ok:false, notes: notes };
+    });
+  }
+
   /* 診断1行(0件のときほど出す) */
   function f661Diag(m, r, ls, serverRev){
     var out = { rev: serverRev, device: '', ns: '不明', srvTurns: null, localTurns: null, keys: 0, bytes: 0 };
@@ -970,6 +1085,21 @@
         /* ★★fix661(C1) pre-flight: 書く前に、足りない分だけ平時経路で空けておく。
            緊急経路(reclaimUrgent=1単位)は最後の砦として残す。GREEN候補だけを見るので
            review/protected/unknown/hard には絶対に触らない。 */
+        /* ★★fix662(B): GREENでは埋まらない不足なら、**書く前に**チェーンへ回す。
+           この回は1バイトも書かずに抜ける(書き掛けを作らない)。チェーンが成功したら pull をやり直す。 */
+        var f662lack = f662Shortfall(ls, B602.blocked);
+        if (f662lack > 0 && f662CanChain()){
+          f662Chain(f662lack, force, adoptSlotId).then(function(cr){
+            f662ChainNotes = cr.notes || [];
+            if (cr.ok){ pull(force, adoptSlotId); }
+            else {
+              try { el('sync').className='sync err'; el('sync').textContent='☁ 容量が足りず取り込めませんでした'; } catch(e){}
+              showNotes(f662ChainNotes.concat(['この端末の物語は1件も消していません。「🧹 容量を空ける」で不要な控えを解放できます。']));
+              f662ChainNotes = [];
+            }
+          });
+          return;
+        }
         f661pre = f661Preflight(ls, B602.blocked);
         for(var k in ls){
           if(!Object.prototype.hasOwnProperty.call(ls,k)) continue;
@@ -1120,6 +1250,8 @@
         /* ★★fix602(4): 墓標により除外した件数を**画面とconsoleの両方**に出す。
            黙って除外すると「取り込んだのに増えない」が原因不明の不具合に見える。 */
         var notes602 = [];
+        /* ★fix662: 直前のチェーン(上げて→降格)の結果を、この回の掲示の先頭に引き継ぐ */
+        if (f662ChainNotes.length){ notes602 = notes602.concat(f662ChainNotes); f662ChainNotes = []; }
         /* ★★fix661(A): 0件のときほど出す。「0件=差分なし」が本当かを画面で確かめられるようにする。 */
         var f661d = f661Diag(m, r, ls, serverRev);
         notes602.push('☁ サーバ: rev'+f661d.rev+'・'+(f661d.device||'端末不明')+'・'+esc(f661d.slotKey||'')+' '
@@ -1160,9 +1292,10 @@
             (quotaN? '左の「🧹 容量を空ける」で不要な控えを解放してから、もう一度お試しください。' : ''));
           try { console.warn('[home][v292Dfix660] 取り込みで書けなかったキー:', JSON.stringify(writeFailures)); } catch(e){}
         }
-        /* ★fix661: 診断行は常にあるので、ここは必ず何かを出す(黙る経路を残さない) */
-        el('note').innerHTML = notes602.length
-          ? '<div class="note">'+notes602.map(esc).join('<br>')+'</div>' : '';
+        /* ★fix661/662: 診断行は常にあるので、ここは必ず何かを出す(黙る経路を残さない)。
+           ★★並び順が重要: ⚠(失敗) → 診断行 → その他。先頭2行は折りたたまれない。 */
+        notes602.sort(function(a, b){ return (b.indexOf('⚠') === 0 ? 1 : 0) - (a.indexOf('⚠') === 0 ? 1 : 0); });
+        showNotes(notes602);
         renderCapacity();
         try {
           if(tombBlocked || haltBlocked || B602.mode==='halt'){

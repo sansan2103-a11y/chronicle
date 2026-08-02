@@ -171,8 +171,11 @@
     try { policy = inv.deletePolicy({ key: tok.key, value: raw, intent: policyIntent(tok.intent) }); } catch(e){ policy = null; }
     if (!policy){ why = 'policy-unavailable'; return { ok:false, why:why, checks:c, raw:raw, classification:cls }; }
     var approved = (tok.intent === 'user-approved');
+    /* ★fix662: 新しい保護(サーバー保存)が確立済みなら、旧ローカル控えを降格してよい(I11)。
+       ★hard(生きている物語・台帳・生きているスロットのサイドストア)は**この例外の対象外**。 */
+    var serverBacked = serverProofOk(tok) && cls.protection !== 'hard';
     if (!policy.allow){
-      if (!(approved && cls.protection !== 'hard')){
+      if (!((approved && cls.protection !== 'hard') || serverBacked)){
         why = 'protected:' + policy.code; return { ok:false, why:why, checks:c, raw:raw, classification:cls, policy:policy };
       }
     }
@@ -182,7 +185,7 @@
        ★user-approved でもここは**確認して警告を残す**。解放するかは呼び出し元(UI)が
          警告文つきで利用者に確認済みであることを allowSoleRestorePoint で明示させる。 */
     var sole = isSoleRestorePoint(tok.key);
-    if (sole && !(approved && tok.allowSoleRestorePoint === true)){
+    if (sole && !((approved && tok.allowSoleRestorePoint === true) || serverBacked)){
       why = 'sole-restore-point'; return { ok:false, why:why, checks:c, raw:raw, classification:cls, policy:policy, sole:sole };
     }
     c.notSoleRestorePoint = true;
@@ -213,9 +216,30 @@
       case 'rollback':  return 'reclaim';     /* 自分が作った未完成データの取消し */
       case 'cache':     return 'reclaim';
       case 'user-approved': return 'reclaim';
+      /* ★fix662: 「いまの状態をサーバーへ保存し終えた」ことを証明として渡された retention。
+         新しい保護(サーバー正本/fork)が確立してから旧ローカル控えを降格する＝裁定 I11 そのもの。 */
+      case 'retention-after-server-backup': return 'retention';
       case 'reclaim':   return 'reclaim';
       default: return 'unknown';              /* → deletePolicy 側で unknown-intent になる */
     }
+  }
+
+  /* ★fix662: サーバー保存証明。put が 200 ok を返した＝サーバー側に現在のパッケージが
+     正本または fork として保存された、という証明(Worker v18契約: fork保存の失敗は503)。
+     5分以内のものだけを有効とする(古い証明で後からこっそり消せないようにする)。 */
+  var SERVER_PROOF_TTL_MS = 5 * 60 * 1000;
+  function serverProofOk(tok){
+    try {
+      if (String(tok.intent || '') !== 'retention-after-server-backup') return false;
+      var p = tok.serverProof;
+      if (!p || typeof p !== 'object') return false;
+      var at = +p.serverConfirmedAt || 0;
+      if (!at) return false;
+      var age = Date.now() - at;
+      if (age < 0 || age > SERVER_PROOF_TTL_MS) return false;
+      if (p.rev == null && p.fork !== true) return false;   /* rev も fork も無い応答は証明にしない */
+      return true;
+    } catch(e){ return false; }
   }
 
   /* そのキーが「あるスロットの唯一の復元点」か。fix562 の protectedSet を唯一の正として使う。 */
@@ -300,6 +324,7 @@
       inFlight = true;
       try {
         if (!tok.intent) return out('intent-required', false);   /* I0: 分類なき削除は受け付けない */
+      if (tok.intent === 'retention-after-server-backup' && !serverProofOk(tok)) return out('server-proof-required', false);
         var pre = preChecks(tok);
         rec.checks = { pre: pre.checks };
         if (!pre.ok){ rec.why = pre.why; return out(preCode(pre.why), false); }
@@ -418,6 +443,8 @@
     selfTest: selfTest,
     allowlist: function(){ return MIGRATION_ALLOWLIST.slice(); },
     POLICY_VERSION: POLICY_VERSION,
+    SERVER_PROOF_TTL_MS: SERVER_PROOF_TTL_MS,
+    _serverProofOk: serverProofOk,
     /* テスト・BackupGC 用の内部露出(本番の削除経路としては使わない) */
     _hash: hashOf, _rawGet: rawGet, _rawKeys: rawKeys,
     _native: function(){ return { remove: nativeRemove, get: nativeGet, set: nativeSet, key: nativeKey }; },
