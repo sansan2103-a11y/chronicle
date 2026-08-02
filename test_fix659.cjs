@@ -434,7 +434,11 @@ console.log('\n== (7) 真分岐が home pull で入るか（実因の固定） =
   const F = fixture(120, 96);
   const h = mkHome({ seed: F.seed, server: F.server });
   await settle();
-  ok('★★[実因G1] スキップしても baseRev は serverRev まで進む', h.store['v292Dfix402_baseRev'] === '96', h.store['v292Dfix402_baseRev']);
+  /* ★実因G1 の芯は「スキップしたのに baseRev だけ serverRev まで進む」ことだった。
+     fix661(B) で**据え置く**ようにしたので、ここは「進まない」ことを固定する。
+     （進まなければ次回の起動時 pull() が普通に走る＝罠そのものが消える） */
+  ok('★★[実因G1の根治] スキップした回は baseRev を進めない（fix661/B）',
+     h.store['v292Dfix402_baseRev'] === '0', h.store['v292Dfix402_baseRev']);
   const F2 = fixture(120, 96, { 'v292Dfix402_baseRev': '96' });
   const h2 = mkHome({ seed: F2.seed, server: F2.server });
   await settle();

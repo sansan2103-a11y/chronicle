@@ -683,7 +683,10 @@ function mkHome(opts){
   await flushHome();
   const F = h.w.window.__v292Dfix658;
   ok('★★既存の挙動は変わらない: 進んでいるローカルは上書きされない', h.store['chr6_slot_sA'] === story(5), h.store['chr6_slot_sA']);
-  ok('★★既存の挙動は変わらない: baseRev は serverRev へ進む', h.store['v292Dfix402_baseRev'] === '20', h.store['v292Dfix402_baseRev']);
+  /* ★2026-08-02(fix661/B): スキップした回は baseRev を**据え置く**ようになった。
+     (据え置かないと「一度スキップした物語を二度と取り込まない」端末ができる=fix659 の実因G1) */
+  ok('★★スキップした回は baseRev を進めない（fix661/B の正直化）',
+     h.store['v292Dfix402_baseRev'] === undefined, h.store['v292Dfix402_baseRev']);
   ok('★★フックが実際に呼ばれている（anchor が via=pull-home で立つ）',
      !!F.anchor() && F.anchor().via !== undefined && F.anchor().localBaseRev === 20, F.anchor());
   ok('★★ローカル差分を残したので lsHash は null（嘘を書かない）', F.anchor().localLsHash === null, F.anchor());

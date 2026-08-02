@@ -314,6 +314,85 @@
   }
 
   /* =====================================================================
+     ★fix661: 平時経路の計画reclaim(緊急経路と違い**複数単位**を解放してよい)。
+     対象は plan() が作った GREEN 候補(intent が reclaim/retention のもの)だけ。
+     review / protected / unknown / hard には**絶対に触らない**(候補配列に入っていない)。
+     needBytes を満たすか maxUnits に達したら止める。1件も消せなければ ok:false(fail-closed)。
+     ===================================================================== */
+  function reclaimPlanned(opts){
+    opts = opts || {};
+    var res = { ok:false, code:'no-plan', freedBytes:0, units:[], skipped:[], reason: opts.reason || null };
+    if (off()){ res.code = 'off'; return res; }
+    if (reclaiming){ res.code = 'reentrant'; return res; }      /* I12: 再入禁止 */
+    reclaiming = true;
+    try {
+      var G = gw(); if (!G){ res.code = 'gateway-unavailable'; return res; }
+      if (!PLAN.at) plan();
+      var list = (PLAN.units || []).slice();
+      if (!list.length){ res.code = 'no-candidate'; return res; }
+      var need = +opts.needBytes || 0;
+      var maxUnits = Math.max(1, Math.min(+opts.maxUnits || 10, 50));
+      for (var i = 0; i < list.length && res.units.length < maxUnits; i++){
+        if (need > 0 && res.freedBytes >= need) break;
+        var u = list[i];
+        if (u.intent !== 'reclaim' && u.intent !== 'retention'){ res.skipped.push({ unitId: u.unitId, code: 'intent-not-green' }); continue; }
+        if (!unitStillValid(u)){ res.skipped.push({ unitId: u.unitId, code: 'stale' }); continue; }
+        var d = G.deleteUnit(u);
+        if (d.ok){
+          res.freedBytes += d.freedBytes || 0; res.units.push(u.unitId);
+          PLAN.units = PLAN.units.filter(function(x){ return x.unitId !== u.unitId; });
+        } else res.skipped.push({ unitId: u.unitId, code: d.code });
+      }
+      res.ok = res.units.length > 0;
+      res.code = res.ok ? ((need > 0 && res.freedBytes < need) ? 'partial' : 'reclaimed') : 'no-candidate';
+      try { G.persistLog(); } catch(e){}
+      return res;
+    } catch(e){ res.code = 'error'; res.why = String(e && e.message || e).slice(0,80); return res; }
+    finally { reclaiming = false; }
+  }
+
+  /* =====================================================================
+     ★fix661(I11 世代交代の自動化): 丸ごと控え chr6_bk_cloudsync_<ts> は
+     **最新1件だけ**が保護対象。pull が完全に収束した時点で、それより古い世代は
+     役目を終えているので retention として解放する。最新1件は常に残す(二重の防壁:
+     ここで除外し、さらに DeleteGateway が「唯一の復元点」として拒否する)。
+     ===================================================================== */
+  function retireOldFullDumps(opts){
+    opts = opts || {};
+    var res = { ok:false, code:'nothing-to-retire', kept:null, retired:[], skipped:[], freedBytes:0 };
+    try {
+      if (off()){ res.code = 'off'; return res; }
+      var G = gw(), I = inv();
+      if (!G || !I){ res.code = 'unavailable'; return res; }
+      var rows = [];
+      rawKeys().forEach(function(k){
+        var m = /^chr6_bk_cloudsync_(\d+)$/.exec(k);
+        if (m) rows.push({ key: k, ts: +m[1] || 0 });
+      });
+      if (rows.length <= 1){ res.kept = rows.length ? rows[0].key : null; return res; }
+      rows.sort(function(a, b){ return b.ts - a.ts; });
+      res.kept = rows[0].key;                                  /* ★最新1件は常に残す */
+      var maxN = Math.max(1, Math.min(+opts.maxUnits || 10, 50));
+      for (var i = 1; i < rows.length && res.retired.length < maxN; i++){
+        var key = rows[i].key, raw = rawGet(key);
+        if (raw == null){ res.skipped.push({ key: key, code: 'missing' }); continue; }
+        var cls = null; try { cls = I.classifyKey(key, raw); } catch(e){ cls = null; }
+        if (!cls){ res.skipped.push({ key: key, code: 'policy-unavailable' }); continue; }
+        var d = G.deleteExact({ planId: PLAN.planId, unitId: 'fulldump-retention:' + key, key: key,
+                                hash: hashOf(raw), bytes: raw.length, family: cls.family, slotId: cls.slotId,
+                                intent: 'retention',
+                                policyVersion: (cls.policyVersion != null ? cls.policyVersion : G.POLICY_VERSION) });
+        if (d.ok){ res.retired.push(key); res.freedBytes += raw.length; }
+        else res.skipped.push({ key: key, code: d.code });
+      }
+      res.ok = res.retired.length > 0;
+      res.code = res.ok ? 'retired' : (res.skipped.length ? 'all-skipped' : 'nothing-to-retire');
+      try { G.persistLog(); } catch(e){}
+      return res;
+    } catch(e){ res.code = 'error'; res.why = String(e && e.message || e).slice(0,80); return res; }
+  }
+
+  /* =====================================================================
      reviewCandidates(): 自動では消さないものの一覧(利用者に見せる)
      ===================================================================== */
   function reviewCandidates(){
@@ -452,6 +531,8 @@
     candidates: function(){ return (PLAN.units || []).map(function(u){
       return { unitId: u.unitId, keys: u.tokens.map(function(t){ return t.key; }), bytes: u.totalBytes, rank: u.rank, why: u.why }; }); },
     reclaimUrgent: reclaimUrgent,
+    reclaimPlanned: reclaimPlanned,
+    retireOldFullDumps: retireOldFullDumps,
     reviewCandidates: reviewCandidates,
     releaseApproved: releaseApproved,
     restoreCapability: restoreCapability,
