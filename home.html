@@ -150,7 +150,11 @@
       <button id="expBtn" title="この端末の全データをJSONファイルに書き出します">⬇ 書き出す</button>
       <button id="impBtn" title="書き出したJSONファイルから復元します">⬆ 取り込む</button>
       <input type="file" id="impFile" accept="application/json,.json" style="display:none">
+      <!-- ★fix660: 容量の恒久対処。自動GCだけでは足りない（iPhone実データでは597KBの唯一の
+           fullDumpが最大占有者で、これは自動では絶対に消さない）。利用者が中身を見て選ぶ。 -->
+      <button id="gcBtn" title="使っていない控えを一覧から選んで解放し、保存容量を空けます">🧹 容量を空ける</button>
     </div>
+    <div id="capMeter" style="margin-top:6px;font-size:11px;opacity:.7;line-height:1.5"></div>
   </aside>
 
   <section class="mid">
@@ -185,7 +189,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260802-fix659';
+  var HOME_BUILT = '20260802-fix660';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -204,29 +208,42 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix659"></script>
-<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix659"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix659"></script>
-<script src="v292Dfix564-snapshot.js?cb=v292Dfix659"></script>
-<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix659"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix659"></script>
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix659"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix660"></script>
+<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix660"></script>
+<!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者（fix569 が捕捉済みの native を借りる） -->
+<script src="v292Dfix660-delete-gateway.js?cb=v292Dfix660"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix660"></script>
+<script src="v292Dfix564-snapshot.js?cb=v292Dfix660"></script>
+<!-- ★fix660(B): BackupGC。削除候補を選ぶ層。分類は fix562 が唯一の正なのでその後ろ -->
+<script src="v292Dfix660-backup-gc.js?cb=v292Dfix660"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix660"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix660"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix660"></script>
 <!-- ★fix602: 墓標が立ったスロットへの書き込みを影で止める（別途配信） -->
-<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix659"></script>
+<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix660"></script>
 <!-- ★fix642: 停止中の削除(blocked-stale-legacy)を、クラウド墓標の read-back を根拠に
      新しい planId で作り直して完遂する。**操作専用・自動実行なし**（コンソールから呼ぶ） -->
-<script src="v292Dfix642-delete-readback.js?cb=v292Dfix659"></script>
+<script src="v292Dfix642-delete-readback.js?cb=v292Dfix660"></script>
 <!-- ★fix658 Phase1: 系譜センサス（shadow）。同期の競合を「早送りか本物の分岐か」で分類して
      数えるだけ。ダイアログ・取り込み・送信の挙動は1つも変えない。書込先は
      v292Dfix658_anchor / v292Dfix658_census の2キーのみ。
      観測=window.__v292Dfix658.status()/.census()/.selfTest() / OFF=v292Dfix658Off -->
-<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix659"></script>
+<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix660"></script>
 <script>
 (function(){
   'use strict';
   var LS = window.localStorage;
   function g(k){ try { return LS.getItem(k); } catch(e){ return null; } }
-  function s(k,v){ try { LS.setItem(k,v); return true; } catch(e){ return false; } }
+  /* ★fix660: 書込失敗を**無言にしない**。iPhone(2632KB/565キー)で実際に起きたのは、
+     home の pull が96ターンの本体だけを静かに書けず、それでも「取り込みました」と
+     表示していたこと。失敗の理由(QuotaExceededError 等)をここで必ず残す。 */
+  var lastWriteError = null;
+  function s(k,v){ try { LS.setItem(k,v); lastWriteError = null; return true; }
+                   catch(e){ lastWriteError = { key:k, name:(e && (e.name||e.code)) || 'UnknownError',
+                                                message:String((e && e.message) || e).slice(0,120),
+                                                bytes:(v==null?0:String(v).length) }; return false; } }
+  function isQuotaError(e){ var n = String((e && (e.name||e.code)) || ''); 
+    return /Quota|QUOTA_EXCEEDED|NS_ERROR_DOM_QUOTA/i.test(n); }
   function J(v,d){ try { return JSON.parse(v); } catch(e){ return d; } }
   function el(id){ return document.getElementById(id); }
   function esc(t){ return String(t==null?'':t).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
@@ -781,6 +798,32 @@
            → fix579 の mergeMeta（対称・墓標優先）を通す。使えないときは**上書きしない**（安全側）。 */
         var mergedMeta = null, metaGuarded = false, metaMerged = false, metaAbsent = false;
         var applyErrors = 0, unknownSkips = 0, wroteVals = {};
+        /* ★fix660: 失敗したキーと理由をためて、必ず画面へ出す(applyErrors の数だけで終わらせない) */
+        var writeFailures = [], reclaimNotes = [];
+        /* ★fix660: quota で書けなかったときだけ、BackupGC に1論理単位の解放を頼み、
+           **そのキーだけを1回だけ**再試行する(裁定 I12/I14)。走査もLS書込もしない緊急経路。
+           解放できなければ(=保護対象しか残っていなければ)fail-closed でそのまま失敗として残す。 */
+        function writeOrReclaim(key, val){
+          if (s(key, val)) return true;
+          var err = lastWriteError;
+          if (!err || !isQuotaError(err)) { writeFailures.push(err || { key:key, name:'UnknownError' }); return false; }
+          var gc = null; try { gc = window.__v292Dfix660gc; } catch(e){ gc = null; }
+          if (!(gc && typeof gc.reclaimUrgent === 'function')){
+            writeFailures.push(err); return false;
+          }
+          var r = null;
+          try {
+            r = gc.reclaimUrgent({ needBytes: (val==null?0:String(val).length), reason: 'home-pull',
+                                   retry: function(){ return s(key, val); } });
+          } catch(e){ r = null; }
+          if (r && r.ok){
+            reclaimNotes.push({ key: key, unitId: r.unitId, freedKB: Math.round((r.freedBytes||0)/1024) });
+            return true;
+          }
+          writeFailures.push({ key: key, name: err.name, message: err.message, bytes: err.bytes,
+                               reclaim: (r && r.code) || 'unavailable' });
+          return false;
+        }
         /* ★fix599: 保持したローカル差分の件数（0 のときだけ remote の完全採用と言える） */
         var retainedLocalDelta = 0;
         try {
@@ -828,7 +871,7 @@
           }
           if(k==='chr6_slots_meta'){
             if(metaGuarded) continue;                                // ★墓標を消さない側へ倒す
-            if(g(k) !== mergedMeta){ if(s(k, mergedMeta)){ wrote++; wroteVals[k] = mergedMeta; } else applyErrors++; }
+            if(g(k) !== mergedMeta){ if(writeOrReclaim(k, mergedMeta)){ wrote++; wroteVals[k] = mergedMeta; } else applyErrors++; }
             continue;
           }
           if(k==='chr6' || k.indexOf('chr6_slot_')===0){
@@ -841,7 +884,7 @@
               adopted.push(k);
             }
           }
-          if(g(k) !== ls[k]){ if(s(k, ls[k])){ wrote++; wroteVals[k] = ls[k]; } else applyErrors++; }
+          if(g(k) !== ls[k]){ if(writeOrReclaim(k, ls[k])){ wrote++; wroteVals[k] = ls[k]; } else applyErrors++; }
         }
         /* ★★fix593(GPT裁定a′): 「pull が remoteRev を基点にローカルを安全に再構成できた」と
            **証明できたときだけ** 共有rev を remoteRev へ更新する。
@@ -960,6 +1003,20 @@
         }
         if(haltBlocked){
           notes602.push('削除の記録を確認できないため、物語のデータ '+haltBlocked+' 件の取り込みを見送りました。ページを再読み込みしてからもう一度お試しください。');
+        }
+        /* ★★fix660: 書けなかったものを**必ず**出す。「取り込みました(N件)」だけで終わらせない。
+           iPhone で実際に起きたのは「静かに書けていない取り込み」で、画面には成功としか出ていなかった。 */
+        if(reclaimNotes.length){
+          notes602.push('容量が足りなかったので、不要な控えを '+reclaimNotes.length+' 件整理して取り込みました（'+
+            reclaimNotes.reduce(function(a,b){ return a+(b.freedKB||0); },0)+'KB 解放）。');
+        }
+        if(writeFailures.length){
+          var quotaN = writeFailures.filter(function(f){ return /Quota/i.test(String(f.name||'')); }).length;
+          notes602.push('⚠ '+writeFailures.length+' 件のデータを保存できませんでした（'+
+            writeFailures.map(function(f){ return esc(f.key)+': '+esc(f.name)+(f.bytes?('/'+Math.round(f.bytes/1024)+'KB'):''); }).slice(0,5).join(' / ')+
+            (writeFailures.length>5?' ほか':'')+'）。この分は取り込めていません。'+
+            (quotaN? '左の「🧹 容量を空ける」で不要な控えを解放してから、もう一度お試しください。' : ''));
+          try { console.warn('[home][v292Dfix660] 取り込みで書けなかったキー:', JSON.stringify(writeFailures)); } catch(e){}
         }
         el('note').innerHTML = notes602.length
           ? '<div class="note">'+notes602.map(esc).join('<br>')+'</div>' : '';
@@ -1122,6 +1179,82 @@
     };
     fr.readAsText(f);
   }
+  /* ================= ★★fix660: 容量の恒久対処UI ==============================
+   * ・容量メーター … いま何KB/何キー使っているかを常に見せる（黙って詰まらせない）
+   * ・「🧹 容量を空ける」 … BackupGC が選んだ候補と、自動では消さない review-only を一覧で見せ、
+   *   **利用者が選んだものだけ** DeleteGateway 経由で解放する。自動実行は一切しない。
+   * ・唯一の fullDump（サイドストアごと復元できる最後の控え）には必ず警告文を出し、
+   *   明示のチェックが無ければ解放しない。
+   * ========================================================================= */
+  function f660gc(){ try { return window.__v292Dfix660gc; } catch(e){ return null; } }
+  function renderCapacity(){
+    try {
+      var box = el('capMeter'); if(!box) return;
+      var gc = f660gc();
+      if(!gc){ box.textContent = ''; return; }
+      var st = gc.status();
+      box.textContent = '保存容量: ' + st.usageKB + 'KB / ' + st.keys + 'キー';
+      if(st.degradedSlots && st.degradedSlots.length){
+        box.textContent += '（控えが弱い物語 ' + st.degradedSlots.length + ' 件）';
+      }
+    } catch(e){}
+  }
+  var gcRows = [];
+  function openGcPanel(){
+    var gc = f660gc();
+    if(!gc){ el('note').innerHTML = '<div class="note">容量の整理機能を読み込めていません。ページを再読み込みしてください。</div>'; return; }
+    var rv = null;
+    try { gc.plan(); rv = gc.reviewCandidates(); } catch(e){ rv = null; }
+    if(!rv){ el('note').innerHTML = '<div class="note">容量の棚卸しに失敗しました。安全のため何も消していません。</div>'; return; }
+    gcRows = rv.rows || [];
+    var h = ['<div class="note"><b>🧹 容量を空ける</b>（いま ' + rv.usage.kb + 'KB / ' + rv.usage.keys + 'キー）<br>'
+           + esc(rv.note) + '<br>'];
+    if(!gcRows.length){ h.push('解放できるものはありません。'); }
+    var sel = gcRows.filter(function(r){ return r.auto || r.selectable; });
+    for(var i=0;i<sel.length;i++){
+      var r = sel[i];
+      h.push('<label style="display:block;margin:6px 0"><input type="checkbox" data-gc="'+i+'"> '
+        + '<b>'+r.kb+'KB</b> '+esc(r.family||'')+(r.slotId?('/'+esc(r.slotId)):'')+' — '+esc(r.why||'')
+        + (r.warning?('<br><span style="color:#ffb4b4">'+esc(r.warning)+'</span>'):'')
+        + '<br><span style="opacity:.6;font-size:11px">'+esc((r.keys||[]).join(', ')).slice(0,160)+'</span></label>');
+    }
+    gcRows = sel;
+    var hardN = (rv.rows||[]).filter(function(r){ return r.protection==='hard'; }).length;
+    if(hardN) h.push('<div style="opacity:.6;font-size:11px">※ 生きている物語そのもの '+hardN+' 件は、ここからは解放できません。</div>');
+    h.push('<div style="margin-top:8px"><label><input type="checkbox" id="gcSole"> 唯一の丸ごと控えでも解放する（上級者向け）</label></div>');
+    h.push('<button id="gcRun" style="margin-top:8px">選んだものを解放する</button> <button id="gcCancel" style="margin-top:8px">やめる</button></div>');
+    el('note').innerHTML = h.join('');
+    var run = el('gcRun'); if(run) run.addEventListener('click', runGcRelease);
+    var cx = el('gcCancel'); if(cx) cx.addEventListener('click', function(){ el('note').innerHTML=''; });
+  }
+  function runGcRelease(){
+    var gc = f660gc(); if(!gc) return;
+    var ids = [], boxes = document.querySelectorAll('[data-gc]');
+    for(var i=0;i<boxes.length;i++){
+      if(boxes[i].checked){ var r = gcRows[+boxes[i].getAttribute('data-gc')]; if(r) ids.push(r.unitId); }
+    }
+    if(!ids.length){ alert('解放するものを選んでください。'); return; }
+    var soleEl = el('gcSole');
+    var allowSole = !!(soleEl && soleEl.checked);
+    var risky = ids.filter(function(id){ var r=null; for(var j=0;j<gcRows.length;j++){ if(gcRows[j].unitId===id) r=gcRows[j]; } return r && r.warning; });
+    if(risky.length && !allowSole){
+      alert('選んだものの中に「復元の最後の手段」が含まれています。\nどうしても解放する場合は「唯一の丸ごと控えでも解放する」にチェックしてください。');
+      return;
+    }
+    if(!confirm(ids.length+' 件を解放します。元に戻せません。よろしいですか？')) return;
+    var res = gc.releaseApproved(ids, { allowSoleRestorePoint: allowSole });
+    var msg = res.ok
+      ? ('解放しました（'+res.released.length+' 件 / '+Math.round((res.freedBytes||0)/1024)+'KB）。')
+      : '解放できませんでした。データはそのまま残っています。';
+    if(res.skipped && res.skipped.length){
+      msg += ' 解放できなかったもの: ' + res.skipped.map(function(x){ return esc(x.unitId)+'('+esc(x.code)+')'; }).join(', ');
+    }
+    el('note').innerHTML = '<div class="note">'+msg+'</div>';
+    renderCapacity();
+    try { console.log('[home][v292Dfix660] 解放結果:', JSON.stringify(res)); } catch(e){}
+  }
+  if(el('gcBtn')) el('gcBtn').addEventListener('click', openGcPanel);
+
   el('upBtn').addEventListener('click', push);
   el('downBtn').addEventListener('click', function(){ pull(true); });
   el('expBtn').addEventListener('click', exportAll);
@@ -1263,7 +1396,7 @@
     .then(function(r){ return r.text(); })
     .then(function(t){ BUILD = (t||'').trim(); })
     .catch(function(){})
-    .then(function(){ render(); if(!autoPullOnce()) pull(); });
+    .then(function(){ render(); renderCapacity(); if(!autoPullOnce()) pull(); });
   render();
   deletedNotice();
   pendingDeleteNotice();
