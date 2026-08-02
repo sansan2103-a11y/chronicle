@@ -202,7 +202,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260802-fix663';
+  var HOME_BUILT = '20260802-fix664';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -221,27 +221,27 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix663"></script>
-<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix663"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix664"></script>
+<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix664"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者（fix569 が捕捉済みの native を借りる） -->
-<script src="v292Dfix660-delete-gateway.js?cb=v292Dfix663"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix663"></script>
-<script src="v292Dfix564-snapshot.js?cb=v292Dfix663"></script>
+<script src="v292Dfix660-delete-gateway.js?cb=v292Dfix664"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix664"></script>
+<script src="v292Dfix564-snapshot.js?cb=v292Dfix664"></script>
 <!-- ★fix660(B): BackupGC。削除候補を選ぶ層。分類は fix562 が唯一の正なのでその後ろ -->
-<script src="v292Dfix660-backup-gc.js?cb=v292Dfix663"></script>
-<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix663"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix663"></script>
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix663"></script>
+<script src="v292Dfix660-backup-gc.js?cb=v292Dfix664"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix664"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix664"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix664"></script>
 <!-- ★fix602: 墓標が立ったスロットへの書き込みを影で止める（別途配信） -->
-<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix663"></script>
+<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix664"></script>
 <!-- ★fix642: 停止中の削除(blocked-stale-legacy)を、クラウド墓標の read-back を根拠に
      新しい planId で作り直して完遂する。**操作専用・自動実行なし**（コンソールから呼ぶ） -->
-<script src="v292Dfix642-delete-readback.js?cb=v292Dfix663"></script>
+<script src="v292Dfix642-delete-readback.js?cb=v292Dfix664"></script>
 <!-- ★fix658 Phase1: 系譜センサス（shadow）。同期の競合を「早送りか本物の分岐か」で分類して
      数えるだけ。ダイアログ・取り込み・送信の挙動は1つも変えない。書込先は
      v292Dfix658_anchor / v292Dfix658_census の2キーのみ。
      観測=window.__v292Dfix658.status()/.census()/.selfTest() / OFF=v292Dfix658Off -->
-<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix663"></script>
+<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix664"></script>
 <script>
 (function(){
   'use strict';
@@ -828,9 +828,20 @@
           var cur = +(g('v292Dfix661_capBytes') || 0);
           if(!cur || u.bytes < cur) s('v292Dfix661_capBytes', String(u.bytes)); } catch(e){}
   }
+  /* ★★fix664（仮想iPhone検証で発見）: 「片付けの目標」と「この端末の実効容量」は別物。
+     ここが f661TargetKB()（既定2000KB）を実効容量として使っていたため、
+     **使用量が目標を超えているだけで「容量不足」と誤判定**し、本当は普通に書ける場面でも
+     自動put＋丸ごと控えの降格まで走ってしまう恐れがあった（逆に、利用者が目標KBを
+     大きくすると pre-flight が永久に発火しなくなる）。
+     実効容量は iOS の 5MiB(UTF-16=文字数×2バイト)＝2,621,440文字から安全余裕を引いた値を既定とし、
+     実際に quota を踏んだらその実測値で**より小さい方へ**更新する。
+     ★f661TargetKB() は「平時の片付けの目標」専用に戻す（容量判定には使わない）。 */
+  var F664_IOS_CAP_CHARS = 2621440;      /* 5MiB(UTF-16) の文字数上限 */
+  var F664_SAFETY_CHARS  = 65536;        /* 端末差・オーバーヘッドの安全余裕 */
   function f661CapBytes(){
+    var def = F664_IOS_CAP_CHARS - F664_SAFETY_CHARS;
     var known = +(g('v292Dfix661_capBytes') || 0);
-    return known > 0 ? known : (f661TargetKB() * 1024);
+    return (known > 0) ? Math.min(known, def) : def;
   }
   /* 取り込みで新たに要るバイト数(差分のあるキーだけ) */
   function f661NeedBytes(ls, blocked){
