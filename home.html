@@ -202,7 +202,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260803-fix665';
+  var HOME_BUILT = '20260803-fix666';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -221,27 +221,27 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix665"></script>
-<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix665"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix666"></script>
+<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix666"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者（fix569 が捕捉済みの native を借りる） -->
-<script src="v292Dfix660-delete-gateway.js?cb=v292Dfix665"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix665"></script>
-<script src="v292Dfix564-snapshot.js?cb=v292Dfix665"></script>
+<script src="v292Dfix660-delete-gateway.js?cb=v292Dfix666"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix666"></script>
+<script src="v292Dfix564-snapshot.js?cb=v292Dfix666"></script>
 <!-- ★fix660(B): BackupGC。削除候補を選ぶ層。分類は fix562 が唯一の正なのでその後ろ -->
-<script src="v292Dfix660-backup-gc.js?cb=v292Dfix665"></script>
-<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix665"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix665"></script>
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix665"></script>
+<script src="v292Dfix660-backup-gc.js?cb=v292Dfix666"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix666"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix666"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix666"></script>
 <!-- ★fix602: 墓標が立ったスロットへの書き込みを影で止める（別途配信） -->
-<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix665"></script>
+<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix666"></script>
 <!-- ★fix642: 停止中の削除(blocked-stale-legacy)を、クラウド墓標の read-back を根拠に
      新しい planId で作り直して完遂する。**操作専用・自動実行なし**（コンソールから呼ぶ） -->
-<script src="v292Dfix642-delete-readback.js?cb=v292Dfix665"></script>
+<script src="v292Dfix642-delete-readback.js?cb=v292Dfix666"></script>
 <!-- ★fix658 Phase1: 系譜センサス（shadow）。同期の競合を「早送りか本物の分岐か」で分類して
      数えるだけ。ダイアログ・取り込み・送信の挙動は1つも変えない。書込先は
      v292Dfix658_anchor / v292Dfix658_census の2キーのみ。
      観測=window.__v292Dfix658.status()/.census()/.selfTest() / OFF=v292Dfix658Off -->
-<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix665"></script>
+<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix666"></script>
 <script>
 (function(){
   'use strict';
@@ -452,6 +452,44 @@
       }).join('') : '<div style="font-size:12px;color:var(--dim);margin-top:8px">まだいません</div>');
   }
 
+  /* ============================================================
+   * ★v292Dfix666: 新しい物語の「認証ブートストラップ」だけを初期化する
+   * ------------------------------------------------------------
+   * 直した症状（2026-08-03 実測・原因確定）:
+   *   APIキーは物語(slot)ごとの blob の中の cfg に入っている。newStory() は
+   *   {turns:[]} だけを書いていたため、index.html の S.load()(fix230) が
+   *   その新slotを読んだ時点で S.cfg はハードコード既定(provider:'anthropic',
+   *   key:'', orKey:'')のまま。G.init() はパース中に同期実行されるので
+   *   「⚙設定からAPIキーと世界設定を入力してください」＋設定自動オープンへ
+   *   分岐する。番兵 __proxy__ を埋めるのは fix336 だけで、それは実測 977ms
+   *   （G.init より後）に走り、しかも画面を作り直さない。だからリロードする
+   *   まで直らなかった。
+   *
+   * ★やること: **プロキシ利用が有効なときだけ**、新規slotの初期データへ
+   *   provider / orKey の2つだけを入れる。
+   * ★禁止（おしん指示）: 既存物語や直前slotの cfg を丸ごと継承しない。
+   *   ここで書くのは下のリテラル2項目だけで、他のslotを一切読まない。
+   * ★pollKey は入れない（指示どおり2項目のみ）。従来どおり fix336 が後から埋める。
+   * ★プロキシOFF/未設定なら従来どおり {turns:[]}（BYOK利用者の挙動を変えない）。
+   * ========================================================== */
+  function f666ProxyOn(){
+    try {
+      if ((localStorage.getItem('v292ProxyOff') || '') === '1') return false;
+      var u = (localStorage.getItem('v292ProxyUrl') || '').trim();
+      if (!u) return false;
+      var pw = (localStorage.getItem('v292ProxyPass') || '').trim();
+      if (pw) return true;
+      /* Googleログイン運用: fix328 の保管トークンが生きているかを見る。
+         home.html は fix328 を読み込まないので window.__chronicleGoogleId は使えない。 */
+      var t = JSON.parse(localStorage.getItem('v292GoogleToken') || 'null');
+      return !!(t && t.token && (+t.exp * 1000) > (Date.now() + 30000));
+    } catch(e){ return false; }
+  }
+  function f666InitialSlotData(){
+    if (!f666ProxyOn()) return { turns: [] };
+    return { turns: [], cfg: { provider: 'openrouter', orKey: '__proxy__' } };
+  }
+
   // ---------- 操作 ----------
   function openStory(id){
     var u = 'index.html' + (BUILD ? ('?v='+encodeURIComponent(BUILD)+'&story=') : '?story=') + encodeURIComponent(id);
@@ -467,10 +505,12 @@
        これまでは一覧に登録するだけで中身を作っていなかったため、
        「中身が無い物語」を開くことになり、別タブが開いている物語の状態を
        そのまま抱えてしまう余地があった（2026-07-27 に実際に起きた）。
-       ★上書きしない。既にあるなら触らない（万一の同一id衝突でデータを消さないため）。 */
+       ★上書きしない。既にあるなら触らない（万一の同一id衝突でデータを消さないため）。
+       ★fix666: 中身は f666InitialSlotData() が決める（プロキシONのときだけ
+         provider/orKey の2項目を足す。継承は一切しない）。 */
     try {
       if (localStorage.getItem('chr6_slot_'+id) == null){
-        localStorage.setItem('chr6_slot_'+id, JSON.stringify({ turns: [] }));
+        localStorage.setItem('chr6_slot_'+id, JSON.stringify(f666InitialSlotData()));
       }
     } catch(e){}
     /* ★共有ポインタを先にこの物語へ向けておく（index.html の起動が読むのはこれ）。 */

@@ -183,11 +183,16 @@ ok('B2 home.html の HOME_BUILT が version.txt と同値',
    (HOME.match(/var HOME_BUILT = '([^']+)'/) || [])[1] === VER);
 ok('B3 fix654 の BUILD が version.txt と同値',
    (read('v292Dfix654-storage-trap.js').match(/BUILD\s*=\s*'([^']+)'/) || [])[1] === VER);
-ok('B4 内容を変えた features.js の ?cb= が更新されている',
-   /features\.js\?cb=v292Dfix665/.test(HTML));
-ok('B5 新規 blocker の ?cb= が付いている',
-   /v292DfixP0-scenario-blocker\.js\?cb=v292Dfix665/.test(HTML));
-ok('B6 home.html は識別子更新のみ（危険 selector も P0 コードも入れない）',
+/* ★fix666: 出荷のたびに書き換える固定値をやめ、version.txt の fix札から導出する
+   （固定値は「上げ忘れ」ではなく「テストを直し忘れた」だけで落ちるため、
+    契約としては version.txt と一致していることを見るほうが強い）。 */
+const CBTOK = (VER.match(/-(fix[\w]+)$/) || [])[1] || '';
+ok('B3b version.txt から fix札を取り出せた', !!CBTOK, VER);
+ok('B4 内容を変えた features.js の ?cb= がいまの BUILT と一致',
+   new RegExp('features\\.js\\?cb=v292D' + CBTOK + '(?![\\w])').test(HTML), CBTOK);
+ok('B5 新規 blocker の ?cb= がいまの BUILT と一致',
+   new RegExp('v292DfixP0-scenario-blocker\\.js\\?cb=v292D' + CBTOK + '(?![\\w])').test(HTML), CBTOK);
+ok('B6 home.html に危険 selector も P0 コードも入っていない',
    HOME.indexOf('data-act="apply"') < 0 && HOME.indexOf('v292DfixP0-inline') < 0);
 ok('B7 index.html のリテラルNULは1個のまま',
    fs.readFileSync(path.join(__dirname, 'index.html')).filter(b => b === 0).length === 1);
