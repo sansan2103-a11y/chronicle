@@ -168,8 +168,13 @@ console.log('\n[D] 回帰（触っていないことの確認）');
 ok('D1 chr6_active_slot を先に向ける処理は残っている',
    /localStorage\.setItem\('chr6_active_slot',\s*JSON\.stringify\(id\)\)/.test(HOME));
 ok('D2 ?new=1 付きで遷移する処理は残っている', /'&new=1'/.test(HOME));
+/* ★fix667 で連打ガードの解除(f667Creating=false)が alert の直前に入ったため、
+   「alert が直後にある」という並びの縛りをやめ、**中身の契約**で縛り直す。
+   ＝ 容量不足のときは (1) 保存容量の警告を出し (2) 必ず return して作成へ進まない。
+   固定の並びを見るより強い（return まで要求する）。 */
 ok('D3 容量不足のときは物語を作らない（writeMeta ガード）',
-   /if\(!writeMeta\(meta\)\)\{\s*alert\(/.test(HOME));
+   /if\(!writeMeta\(meta\)\)\{[^{}]*alert\('保存容量が不足[^{}]*return;\s*\}/.test(HOME),
+   (HOME.match(/if\(!writeMeta\(meta\)\)\{[^{}]*\}/) || [])[0]);
 ok('D4 削除は正規サービスへの委譲のまま（自前削除へ戻していない）',
    /__chronicleStoryLifecycle/.test(HOME) && /requestDelete/.test(HOME));
 ok('D5 ★newStory 本体は他slotの cfg を読まない', (() => {

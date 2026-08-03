@@ -205,8 +205,22 @@ const past   = Math.floor(Date.now() / 1000) - 3600;
   const h = mkHome({ seed: baseSeed(), server });
   await settle();
   ok('★★何も無い → 「未ログイン」', /未ログイン/.test(h.nodes.loginState.textContent), h.nodes.loginState.textContent);
-  ok('★未ログインの案内文がホームでのログインを指す',
-     /「🔑 Googleでログイン」からログイン/.test(HOME));
+  /* ★fix667: 旧prompt経路のボタン名を直接書いていたが、iPhone ではそのボタンを隠すので
+     文言が変わった。**この試験が本当に守りたいのは「ホームでログインしろと言うこと」**
+     （fix663 以前は「ゲーム画面からログインし直してください」としか言えなかった）。
+     ボタン名の固定値ではなく、その意味で縛り直す。退行文言の禁止も足すので契約は弱くならない。 */
+  ok('★未ログインの案内文がホームでのログインを指す', (() => {
+    /* ★whyNotLoggedIn の**本体だけ**を見る。home.html 全体で探すと、別の場所（fix667 のゲート案内）
+       に同じ語があるだけで通ってしまい、この文言が退行しても気づけない。
+       退行文言の検査はコメントを除いた実行部に掛ける（fix667 の由来コメントに
+       「ゲーム画面からログインし直してください」という過去の症状の引用があるため）。 */
+    const i = HOME.indexOf('function whyNotLoggedIn(');
+    const body = i < 0 ? '' : HOME.slice(i, HOME.indexOf('\n  }', i)).replace(/\/\*[\s\S]*?\*\//g, '');
+    return body.length > 0
+        && /ホームのGoogle公式ログインボタンからログインしてください。/.test(body)
+        && /ホームのGoogle公式ログインボタンからログインし直してください。/.test(body)
+        && !/ゲーム画面からログイン/.test(body);
+  })(), (HOME.match(/ログインしていないため同期できません。[^']*/) || [])[0]);
 }
 {
   const h = mkHome({ seed: baseSeed({ 'v292GoogleLoginOff': '1' }), server });
