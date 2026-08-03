@@ -8173,6 +8173,20 @@
 
   function getActiveSlotId(){ try { if (window.__v292Dfix30 && typeof window.__v292Dfix30.getActive === 'function') return window.__v292Dfix30.getActive(); } catch(_){} return 'default'; }
   function applyTemplate(tpl, options){
+    /* ============================================================
+     * ★★ v292DfixP0 (L0) : シナリオテンプレ適用の緊急封鎖 (hard stop)
+     *  fix527 が chr6_active_slot の別ID書込みを捨てるため「新規 slot へ」でも
+     *  切替が成立せず、いま開いている物語を上書きする。
+     *  closure内2呼出し / 公開API / 将来追加される呼出元を、
+     *  発生源で一括して停止する。
+     *  ★依存なし・副作用なし。画面通知は L1/L2/L2b 側が行う。
+     *  ★S.scene / S.cast / S.turns / S.save() / chr6_active_slot /
+     *    localStorage へ触れるより前に必ず停止する。
+     *  ★OFFスイッチは意図的に設けない（安全封鎖の例外）。
+     * ========================================================== */
+    try { console.warn('[v292DfixP0][L0] Scenario template application is disabled for safety.'); } catch (e) {}
+    return false;
+    /* 以下の旧処理は緊急封鎖中のため到達不能 */
     options = options || {};
     if (typeof S === 'undefined' || !S){ alert('S 未初期化'); return false; }
     try {
