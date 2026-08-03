@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><title>gold 書き出し（fix670 / 開発4本専用）</title>
+<style>
+ body{font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN",sans-serif;margin:24px;line-height:1.7;max-width:960px}
+ h1{font-size:19px} h2{font-size:15px;margin-top:26px;border-left:4px solid #666;padding-left:8px}
+ .box{border:1px solid #ccc;border-radius:6px;padding:12px;margin:12px 0;background:#fafafa}
+ .warn{border-color:#c33;background:#fff5f5}
+ button{font-size:14px;padding:8px 14px;margin:4px 4px 4px 0;cursor:pointer}
+ table{border-collapse:collapse;margin:10px 0;font-size:13px} td,th{border:1px solid #ccc;padding:4px 8px;text-align:left}
+ tr.dev{background:#f2f8ff}
+ pre{background:#f4f4f4;padding:8px;overflow:auto;font-size:12px;max-height:280px}
+ code{background:#eee;padding:1px 4px;border-radius:3px}
+ .ok{color:#080} .ng{color:#c00} .mut{color:#888}
+</style></head><body>
+<h1>gold 書き出し — 開発4本専用（合計156ターン）</h1>
+
+<div class="box warn">
+<b>このページがしないこと</b><br>
+・localStorage へ<b>1バイトも書きません</b>（<code>getItem</code> しか呼びません）。<br>
+・キーの総なめ（<code>localStorage.key()</code> の走査）もしません。<br>
+・<b>開発4本以外の本体キーを1度も読みません。</b> holdout も、他の物語も、削除済みも開きません。<br>
+・IndexedDB を開きません。同期・Worker・生成へ触れません。<br>
+・物語を削除・上書き・複製しません。<br>
+・画面へ出す文字列はすべて<b>テキストとして</b>入れます（HTML として解釈させません）。<br>
+<b>前提</b>：Chronicle と<b>同じオリジン</b>で開いてください（<code>file://</code> は不可）。
+</div>
+
+<h2>対象</h2>
+<div class="box">
+このページが開くのは開発4本だけです。<br>
+<code>sms4np33eyg</code>(96) / <code>smri0s9cno3</code>(25) / <code>sms60fhnthz</code>(25) / <code>smsb7nn2xgl</code>(10) ＝ <b>156ターン</b><br>
+holdout は Phase 2 でルールを凍結した後、別ファイルの書き出しツールで扱います。
+</div>
+
+<h2>手順</h2>
+<div class="box">
+<b>1.</b> PC の Chrome で Chronicle を開き、<b>他の Chronicle タブをすべて閉じます</b>。<br>
+<b>2.</b> 同じサイトの URL でこのファイルを開きます。<br>
+<b>3.</b> 「① 一覧を読む」を押します。開発4本は<b>最初から選択済み</b>です。<br>
+<b>4.</b> 「② 書き出す」で <code>gold_raw_dev156_YYYYMMDD.json</code> がダウンロードされます。<br>
+<b>5.</b> そのファイルを会話へ添付してください。<code>gold_156.csv</code>（1ターン1行）に変換してお返しします。<br>
+<b>6.</b> 正解ラベルの記入だけお願いします。
+</div>
+
+<h2>① 一覧</h2>
+<button id="b1">① 一覧を読む</button>
+<span id="s1"></span>
+<div id="list"></div>
+
+<h2>② 書き出し</h2>
+<button id="b2">② 書き出す</button>
+<span id="s2"></span>
+<pre id="log"></pre>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  function say(m) { $('log').textContent += m + '\n'; }
+  function lsg(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+
+  /* ★このページが開いてよい物語。ここに無い slot は**本体キーを読みません**。 */
+  var DEV = ['sms4np33eyg', 'smri0s9cno3', 'sms60fhnthz', 'smsb7nn2xgl'];
+  var EXPECT_TURNS = 156;
+
+  /* ★HTML への注入を防ぐ。物語名・主人公名・slotId はすべてこれを通す。 */
+  function esc(x) {
+    return String(x == null ? '' : x)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  /* chr6_slots_meta を一覧の正本にする（キーの総なめはしない） */
+  function readMeta() {
+    var raw = lsg('chr6_slots_meta'), a = null;
+    try { a = JSON.parse(raw || 'null'); } catch (e) { return { err: 'chr6_slots_meta が壊れています' }; }
+    if (!Array.isArray(a)) return { err: 'chr6_slots_meta が配列ではありません（Chronicle と同じオリジンで開いていますか）' };
+    return { list: a };
+  }
+  /* meta の id から**厳密な本体キー**を1つだけ組み立てる */
+  function bodyKeyOf(id) { return (id === 'chr6' || id === 'default') ? 'chr6' : ('chr6_slot_' + id); }
+
+  /* ★v0.2.2: DEV 以外は**本体キーを読む前に**捨てる。
+     deleted も holdout も他の物語も、この関門の内側へは入らない。 */
+  function buildRows() {
+    var mr = readMeta();
+    if (mr.err) return { err: mr.err };
+    var rows = [], skipped = 0, skippedDeleted = 0;
+    mr.list.forEach(function (m) {
+      if (!m || !m.id) return;
+      var id = String(m.id);
+      if (DEV.indexOf(id) < 0) { skipped++; return; }           /* ★DEV 以外は読まない */
+      if (m.deleted) { skippedDeleted++; return; }              /* ★削除済みは読まない */
+      var key = bodyKeyOf(id);
+      var raw = lsg(key);                                       /* ★exact なキーだけ読む */
+      if (raw == null) { rows.push({ id: id, name: m.name || '', key: key, turns: -1, bytes: 0, missing: true, dev: true }); return; }
+      var d = null;
+      try { d = JSON.parse(raw); } catch (e) { rows.push({ id: id, name: m.name || '', key: key, turns: -1, bytes: raw.length, bad: true, dev: true }); return; }
+      rows.push({ id: id, name: m.name || '', key: key,
+                  turns: (d && Array.isArray(d.turns)) ? d.turns.length : -1,
+                  bytes: raw.length,
+                  hero: (d && d.cast && d.cast.hero && d.cast.hero.name) || '',
+                  npcs: (d && d.cast && Array.isArray(d.cast.npcs)) ? d.cast.npcs.length : 0,
+                  dev: true });
+    });
+    /* DEV の並び順で固定する（画面と書き出しの順を揃えるため） */
+    rows.sort(function (a, b) { return DEV.indexOf(a.id) - DEV.indexOf(b.id); });
+    return { rows: rows, skipped: skipped, skippedDeleted: skippedDeleted, metaCount: mr.list.length };
+  }
+
+  /* ★選択そのものの検査（一覧時の値で見る第一段） */
+  function checkExportable(picked) {
+    var ids = picked.map(function (r) { return r.id; }).slice().sort();
+    var want = DEV.slice().sort();
+    if (picked.length !== DEV.length || JSON.stringify(ids) !== JSON.stringify(want))
+      return { ok: false, why: '選択が開発4本と一致していません（' + picked.length + ' 件）' };
+    var bad = picked.filter(function (r) { return r.turns < 0; });
+    if (bad.length) return { ok: false, why: '本体を読めない物語があります: ' + bad.map(function (r) { return r.id; }).join(', ') };
+    var total = picked.reduce(function (a, r) { return a + r.turns; }, 0);
+    if (total !== EXPECT_TURNS) return { ok: false, why: '合計ターンが ' + total + ' で、期待値 ' + EXPECT_TURNS + ' と違います' };
+    return { ok: true, total: total };
+  }
+
+  /* ★v0.2.3: 一覧を作った時刻と押した時刻の間に、別タブが物語を変えているかもしれない。
+     押した瞬間に**本体を読み直して**から作る。読み直した値で全条件を検査し、
+     1つでも合わなければ Blob もリンクも作らない。 */
+  function collectForExport(picked) {
+    var chk = checkExportable(picked);
+    if (!chk.ok) return chk;
+    var out = { v: 2, kind: 'chronicle-gold-raw', set: 'dev', stories: [] };
+    var i, r, raw, d;
+    for (i = 0; i < picked.length; i++) {
+      r = picked[i];
+      raw = lsg(r.key);                                   /* ★クリック時に読み直す */
+      if (raw == null) return { ok: false, why: '本体キーが消えています: ' + r.id };
+      try { d = JSON.parse(raw); } catch (e) { return { ok: false, why: '本体が壊れています: ' + r.id }; }
+      if (!d || !Array.isArray(d.turns)) return { ok: false, why: 'turns が配列ではありません: ' + r.id };
+      out.stories.push({
+        slotId: r.id, name: r.name || '', turnCount: d.turns.length,
+        cast: d.cast || null,
+        /* ★gold 判定に必要な3項目だけ。plan・画像・デバッグ情報は持ち出さない */
+        turns: d.turns.map(function (t, k) {
+          return { i: k, inputType: String(t.inputType || ''),
+                   playerText: String(t.playerText || ''), narrative: String(t.narrative || '') };
+        })
+      });
+    }
+    var ids2 = out.stories.map(function (x) { return x.slotId; }).slice().sort();
+    if (JSON.stringify(ids2) !== JSON.stringify(DEV.slice().sort()))
+      return { ok: false, why: '読み直した結果が開発4本と一致しません' };
+    var sum = out.stories.reduce(function (a, x) { return a + x.turnCount; }, 0);
+    if (sum !== EXPECT_TURNS)
+      return { ok: false, why: '読み直したら合計が ' + sum + ' でした（一覧時は ' + chk.total + '）。書き出しません' };
+    var real = out.stories.reduce(function (a, x) { return a + x.turns.length; }, 0);
+    if (real !== sum) return { ok: false, why: 'turnCount と実データの件数が一致しません' };
+    out.totalTurns = sum;
+    if (out.totalTurns !== real) return { ok: false, why: 'totalTurns が実データと一致しません' };
+    return { ok: true, total: sum, out: out };
+  }
+
+  function rowsHtml(rows) {
+    var h = '<table><tr><th>選</th><th>slotId</th><th>名前</th><th>ターン</th><th>KB</th><th>主人公</th><th>NPC</th></tr>';
+    rows.forEach(function (r, i) {
+      h += '<tr class="dev">' +
+           '<td><input type="checkbox" class="pick" data-i="' + (i | 0) + '" checked></td>' +
+           '<td><code>' + esc(r.id) + '</code></td>' +
+           '<td>' + esc(r.name) + '</td>' +
+           '<td class="' + (r.turns > 0 ? 'ok' : 'ng') + '">' + (r.turns < 0 ? '読めず' : (r.turns | 0)) + '</td>' +
+           '<td>' + Math.round(r.bytes / 1024) + '</td>' +
+           '<td>' + esc(r.hero) + '</td>' +
+           '<td>' + (r.npcs | 0) + '</td></tr>';
+    });
+    return h + '</table>';
+  }
+
+  /* 試験用の入口（画面を作らずに検証できるようにする） */
+  window.__GOLD = { readMeta: readMeta, bodyKeyOf: bodyKeyOf, buildRows: buildRows,
+                    checkExportable: checkExportable, collectForExport: collectForExport,
+                    rowsHtml: rowsHtml, esc: esc,
+                    DEV: DEV, EXPECT_TURNS: EXPECT_TURNS };
+
+  var rows = [];
+  $('b1').onclick = function () {
+    var br = buildRows();
+    if (br.err) { $('s1').innerHTML = ' <b class="ng">' + esc(br.err) + '</b>'; return; }
+    rows = br.rows;
+    var h = rowsHtml(rows);
+    h += '<div>選択中の合計: <b id="sel">0</b> ターン（期待値 <b>156</b>）</div>';
+    if (br.skippedDeleted) h += '<div class="mut">開発4本のうち deleted の ' + (br.skippedDeleted | 0) + ' 件を除外しました。</div>';
+    h += '<div class="mut">開発4本以外の ' + (br.skipped | 0) + ' 件は、本体キーを1度も読んでいません。</div>';
+    $('list').innerHTML = h;
+    $('s1').innerHTML = ' meta ' + (br.metaCount | 0) + ' 件 → 対象 <b>' + rows.length + '</b> 件';
+
+    var boxes = document.querySelectorAll('.pick');
+    function upd() {
+      var s = 0;
+      Array.prototype.forEach.call(boxes, function (b) { if (b.checked) s += Math.max(0, rows[+b.dataset.i].turns); });
+      $('sel').textContent = s;
+      $('sel').className = (s === EXPECT_TURNS) ? 'ok' : 'ng';
+    }
+    Array.prototype.forEach.call(boxes, function (b) { b.onchange = upd; });
+    upd();
+  };
+
+  $('b2').onclick = function () {
+    if (!rows.length) { $('s2').textContent = ' 先に①を押してください'; return; }
+    var picked = [];
+    Array.prototype.forEach.call(document.querySelectorAll('.pick'), function (b) {
+      if (b.checked) picked.push(rows[+b.dataset.i]);
+    });
+    var chk = collectForExport(picked);              /* ★押した瞬間に読み直して再検証 */
+    if (!chk.ok) {                                   /* ★条件を満たさなければ書き出さない */
+      $('s2').innerHTML = ' <b class="ng">書き出しません: ' + esc(chk.why) + '</b>';
+      say('書き出し中止: ' + chk.why);
+      return;
+    }
+    var out = chk.out;
+    out.exportedAt = new Date().toISOString();
+    out.stories.forEach(function (x) { say(x.slotId + ' ' + (x.name || '') + ' : ' + x.turnCount + ' ターン'); });
+    say('---- 合計 ' + chk.total + ' ターン / ' + out.stories.length + ' 物語 ----');
+    var blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
+    var a = document.createElement('a');
+    var dt = new Date(), p = function (x) { return ('0' + x).slice(-2); };
+    a.href = URL.createObjectURL(blob);
+    a.download = 'gold_raw_dev156_' + dt.getFullYear() + p(dt.getMonth() + 1) + p(dt.getDate()) + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    $('s2').innerHTML = ' <b class="ok">書き出しました</b>（' + chk.total + ' ターン / ' +
+                        Math.round(blob.size / 1024) + ' KB）';
+  };
+})();
+</script>
+</body></html>
