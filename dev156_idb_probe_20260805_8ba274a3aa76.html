@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>dev156 chr6mem 最小診断 probe</title>
+<style>
+ body{font:14px/1.7 system-ui,-apple-system,"Hiragino Sans",sans-serif;margin:0;padding:16px;background:#111;color:#ddd}
+ h1{font-size:16px;margin:0 0 8px}
+ .warn{background:#3a2a00;border:1px solid #7a5a00;padding:10px;border-radius:6px;margin:8px 0}
+ .ok{color:#7ee787}.ng{color:#ff7b72}
+ button{font:inherit;padding:10px 16px;margin:6px 6px 6px 0;border-radius:6px;border:1px solid #555;background:#222;color:#ddd}
+ textarea{width:100%;height:40vh;background:#000;color:#9fe;border:1px solid #444;border-radius:6px;font:12px/1.4 ui-monospace,monospace;padding:8px;box-sizing:border-box}
+ pre{white-space:pre-wrap;word-break:break-all;background:#000;border:1px solid #333;border-radius:6px;padding:8px;max-height:26vh;overflow:auto}
+ code{color:#ffd}
+</style></head><body>
+<h1>dev156 chr6mem 最小診断 probe</h1>
+<div class="warn">
+ <b>読み取り専用・レコード本文は一切出しません。</b>出すのは objectStore 名 / index 名 / キー(slotId) / 件数だけです。<br>
+ <code>meta</code> ストアには触れません。書き込み・削除・版上げは行いません。<br>
+ 版上げが要求された場合は中止します。自動保存もしません。
+</div>
+<button id="b1">1. 自己照合</button>
+<button id="b2">2. chain / events / entities のキーと件数を見る</button>
+<button id="b3">3. opt-in フラグを読む（localStorage 読み取りのみ・任意）</button>
+<pre id="log">待機中。</pre>
+<textarea id="out" readonly placeholder="ここに診断結果（JSON）が出ます。自動保存はしません"></textarea>
+<script>
+/* dev156 chr6mem 最小診断 probe — core（読み取り専用・レコード本文を一切出さない）
+ * 目的: chain / events / entities に「どの slotId のキーが何件あるか」だけを確認する。
+ * 出さないもの: レコード本文・evidence・entity 名・turn 本文。キー（slotId）と件数だけ。
+ * 約束（audit_probe.cjs が機械検査する）:
+ *   Chronicle 本体 JS を読み込まない / __v292Dfix670 を呼ばない / selfTest を呼ばない /
+ *   meta ストアに触れない / 端末の設定ストレージへ書かない / Service Worker を登録しない /
+ *   open は名前だけ（版番号なし）/ 版上げ要求なら中止 / 取引は読み取り専用のみ /
+ *   書き込み系・破棄系 API を使わない / ファイルの自動保存をしない
+ */
+(function (root, factory) {
+  var api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.DEV156Probe = api;
+}(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+  var DB = 'chr6mem';
+  var WANT = ['events', 'entities', 'chain'];
+  var TARGET_SLOTS = ['sms4np33eyg', 'smri0s9cno3', 'sms60fhnthz', 'smsb7nn2xgl'];
+  var MANIFEST = { probeVersion: 'dev156-idbprobe-0.1.0', dbName: DB, targetSlots: TARGET_SLOTS,
+                   emits: 'objectStore 名 / index 名 / キー（slotId）/ 件数 のみ',
+                   neverEmits: 'レコード本文・evidence・entity 名・turn 本文' };
+
+  function guardSelfTest() {
+    var bad = [];
+    if (MANIFEST.dbName !== 'chr6mem') bad.push('dbName');
+    if (TARGET_SLOTS.length !== 4) bad.push('targetSlots.count');
+    return { ok: bad.length === 0, problems: bad };
+  }
+  function req2p(r) {
+    return new Promise(function (res, rej) {
+      r.onsuccess = function () { res(r.result); };
+      r.onerror = function () { rej(r.error || new Error('idb-request-failed')); };
+    });
+  }
+  /* index の distinct キー（= slotId）を、レコードを読まずに数え上げる */
+  function distinctSlots(ix) {
+    return new Promise(function (res, rej) {
+      var out = [], r;
+      try { r = ix.openKeyCursor(null, 'nextunique'); } catch (e) { rej(e); return; }
+      r.onsuccess = function () {
+        var c = r.result;
+        if (!c) { res(out); return; }
+        out.push(String(c.key)); c.continue();
+      };
+      r.onerror = function () { rej(r.error || new Error('cursor-failed')); };
+    });
+  }
+  function storeReport(st) {
+    var ixNames = [];
+    try { for (var i = 0; i < st.indexNames.length; i++) ixNames.push(st.indexNames[i]); } catch (e) {}
+    return req2p(st.count()).then(function (total) {
+      if (ixNames.indexOf('by_slot') < 0) return { total: total, indexes: ixNames, bySlot: null, note: 'by_slot index が無い' };
+      var ix = st.index('by_slot');
+      return distinctSlots(ix).then(function (slots) {
+        return slots.reduce(function (p, sid) {
+          return p.then(function (acc) {
+            return req2p(ix.count(IDBKeyRange.only(sid))).then(function (n) { acc[sid] = n; return acc; });
+          });
+        }, Promise.resolve({})).then(function (bySlot) {
+          return { total: total, indexes: ixNames, bySlot: bySlot };
+        });
+      });
+    });
+  }
+
+  function probe(factory) {
+    return new Promise(function (resolve, reject) {
+      var g = guardSelfTest();
+      if (!g.ok) { reject(new Error('guard-self-test-failed: ' + g.problems.join(','))); return; }
+      var listP = (factory.databases ? factory.databases().then(function (a) {
+        return (a || []).map(function (x) { return { name: x.name, version: x.version }; });
+      }, function () { return 'unsupported'; }) : Promise.resolve('unsupported'));
+      listP.then(function (dbList) {
+        var r;
+        try { r = factory.open(DB); } catch (e) { reject(e); return; }   /* 版番号は渡さない */
+        r.onupgradeneeded = function (ev) {
+          try { if (ev && ev.target && ev.target.transaction) ev.target.transaction.abort(); } catch (e2) {}
+          reject(new Error('upgrade-needed-abort（この origin に chr6mem が無い、または版が想定より古い）'));
+        };
+        r.onerror = function () { reject(r.error || new Error('idb-open-failed')); };
+        r.onsuccess = function () {
+          var db = r.result, names = [], i;
+          for (i = 0; i < db.objectStoreNames.length; i++) names.push(db.objectStoreNames[i]);
+          var open = WANT.filter(function (s) { return names.indexOf(s) >= 0; });   /* ★meta は含めない */
+          if (!open.length) { try { db.close(); } catch (e3) {} 
+            resolve({ probeVersion: MANIFEST.probeVersion, databases: dbList, dbVersion: db.version,
+                      objectStoreNames: names, stores: {}, note: 'events/entities/chain がどれも無い' }); return; }
+          var tx;
+          try { tx = db.transaction(open, 'readonly'); }
+          catch (e4) { try { db.close(); } catch (e5) {} reject(e4); return; }
+          var res = { probeVersion: MANIFEST.probeVersion, databases: dbList, dbVersion: db.version,
+                      objectStoreNames: names, stores: {} };
+          var chainKeys = open.indexOf('chain') >= 0
+            ? req2p(tx.objectStore('chain').getAllKeys()).then(function (k) { return (k || []).map(String); })
+            : Promise.resolve(null);
+          chainKeys.then(function (ck) {
+            res.chainKeys = ck;
+            return open.reduce(function (p, s) {
+              return p.then(function () {
+                return storeReport(tx.objectStore(s)).then(function (rep) { res.stores[s] = rep; });
+              });
+            }, Promise.resolve());
+          }).then(function () {
+            res.targetSlotPresence = {};
+            TARGET_SLOTS.forEach(function (sid) {
+              res.targetSlotPresence[sid] = {
+                inChain: !!(res.chainKeys && res.chainKeys.indexOf(sid) >= 0),
+                events: (res.stores.events && res.stores.events.bySlot) ? (res.stores.events.bySlot[sid] || 0) : null,
+                entities: (res.stores.entities && res.stores.entities.bySlot) ? (res.stores.entities.bySlot[sid] || 0) : null
+              };
+            });
+            try { db.close(); } catch (e6) {}
+            resolve(res);
+          }, function (err) { try { db.close(); } catch (e7) {} reject(err); });
+        };
+      }, reject);
+    });
+  }
+  return { MANIFEST: MANIFEST, TARGET_SLOTS: TARGET_SLOTS, guardSelfTest: guardSelfTest, probe: probe };
+}));
+
+</script>
+<script>
+(function(){
+ var log=document.getElementById('log'), out=document.getElementById('out');
+ function p(s,c){var d=document.createElement('div'); if(c)d.className=c; d.textContent=s; log.appendChild(d);}
+ document.getElementById('b1').onclick=function(){
+  log.textContent='';
+  var g=DEV156Probe.guardSelfTest();
+  p('probeVersion: '+DEV156Probe.MANIFEST.probeVersion);
+  p('出すもの: '+DEV156Probe.MANIFEST.emits);
+  p('出さないもの: '+DEV156Probe.MANIFEST.neverEmits);
+  p('対象 slot: '+DEV156Probe.TARGET_SLOTS.join(', '));
+  p(g.ok?'自己照合 OK':'自己照合 NG: '+g.problems.join(', '), g.ok?'ok':'ng');
+ };
+ document.getElementById('b2').onclick=function(){
+  log.textContent=''; out.value=''; p('読み取り中…');
+  DEV156Probe.probe(indexedDB).then(function(r){
+   log.textContent='';
+   p('origin: '+location.origin);
+   p('DB 一覧: '+(typeof r.databases==='string'?r.databases:r.databases.map(function(d){return d.name+'(v'+d.version+')';}).join(', ')));
+   p('chr6mem version: '+r.dbVersion+' / stores: '+r.objectStoreNames.join(', '));
+   p('chain キー数: '+(r.chainKeys?r.chainKeys.length:'-'));
+   if(r.chainKeys&&r.chainKeys.length) p('chain キー: '+r.chainKeys.join(', '));
+   Object.keys(r.stores).forEach(function(s){
+    var x=r.stores[s];
+    p(s+': total '+x.total+' / index '+x.indexes.join(',')+' / slot別 '+(x.bySlot?JSON.stringify(x.bySlot):'(by_slot なし)'));
+   });
+   Object.keys(r.targetSlotPresence||{}).forEach(function(s){
+    var x=r.targetSlotPresence[s];
+    p(s+': chain '+(x.inChain?'あり':'なし')+' / events '+x.events+' / entities '+x.entities, x.inChain?'ok':'ng');
+   });
+   out.value=JSON.stringify(r,null,1);
+  }).catch(function(e){ log.textContent=''; p('中止: '+(e&&e.message||e),'ng'); });
+ };
+ document.getElementById('b3').onclick=function(){
+  log.textContent='';
+  try{
+   ['v292Dfix670On','v292Dfix670Off'].forEach(function(k){
+    var v=localStorage.getItem(k); p(k+' = '+(v===null?'(未設定)':JSON.stringify(v)), v?'ok':'');
+   });
+   var s=localStorage.getItem('v292Dfix670stat');
+   p('v292Dfix670stat = '+(s===null?'(未設定)':s.length+' 文字'));
+   p('読み取りのみ。1バイトも書いていません。','ok');
+  }catch(e){ p('読めません: '+(e&&e.message||e),'ng'); }
+ };
+})();
+</script>
+</body></html>
