@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>dev156 readonly IDB exporter (Phase 1)</title>
+<style>
+ body{font:14px/1.7 system-ui,-apple-system,"Hiragino Sans",sans-serif;margin:0;padding:16px;background:#111;color:#ddd}
+ h1{font-size:16px;margin:0 0 8px}
+ .warn{background:#3a2a00;border:1px solid #7a5a00;padding:10px;border-radius:6px;margin:8px 0}
+ .ok{color:#7ee787}.ng{color:#ff7b72}
+ button{font:inherit;padding:10px 16px;margin:6px 6px 6px 0;border-radius:6px;border:1px solid #555;background:#222;color:#ddd}
+ textarea{width:100%;height:46vh;background:#000;color:#9fe;border:1px solid #444;border-radius:6px;font:12px/1.4 ui-monospace,monospace;padding:8px;box-sizing:border-box}
+ pre{white-space:pre-wrap;word-break:break-all;background:#000;border:1px solid #333;border-radius:6px;padding:8px;max-height:24vh;overflow:auto}
+ code{color:#ffd}
+</style></head><body>
+<h1>dev156 readonly IDB exporter — Phase 1</h1>
+<div class="warn">
+ このページは <code>chr6mem</code> を<b>読み取り専用</b>で開くだけです。書き込み・削除・版上げは行いません。<br>
+ 版上げが要求された場合は取引を中止して何も出力しません。<br>
+ 出力は下の枠に表示するだけで、<b>自動保存はしません</b>。手動で選択してコピーしてください。<br>
+ 対象は 4 slot（sms4np33eyg / smri0s9cno3 / sms60fhnthz / smsb7nn2xgl）のみです。
+</div>
+<button id="b1">1. 自己照合（openGuard）</button>
+<button id="b2">2. 読み取って表示</button>
+<pre id="log">待機中。</pre>
+<textarea id="out" readonly placeholder="ここに出力が出ます（自動保存はしません）"></textarea>
+<script>
+/* dev156 読み取り専用 IDB exporter — core
+ * Layer C 契約 v1.1 / label adapter v1.0 に紐づく。Phase 1 は「作成・静的監査・モック試験」まで。
+ *
+ * 設計上の約束（静的監査 audit_exporter.cjs が機械検査する）:
+ *   - Chronicle 本体 JS を読み込まない / window.__v292Dfix670 を呼ばない / selfTest を呼ばない
+ *   - meta ストアに触れない
+ *   - 端末の設定ストレージへ一切書かない
+ *   - Service Worker を登録しない
+ *   - open は名前だけで呼ぶ（版番号を渡さない）
+ *   - 版上げ要求が来たら中止する
+ *   - 取り出しは読み取り専用の取引でのみ行う
+ *   - 書き込み系・破棄系の IDB API を一切使わない
+ *   - ファイルの自動保存をしない（画面に出すだけ）
+ *   - 対象 4 slot 以外を出力しない
+ *   - 埋め込み manifest の自己照合、実物の形の照合、どちらか外れたら出力しない
+ */
+(function (root, factory) {
+  var api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.DEV156Export = api;
+}(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  var DB = 'chr6mem';
+  var STORES = ['events', 'entities', 'chain'];
+  var SLOT_ALLOWLIST = ['sms4np33eyg', 'smri0s9cno3', 'sms60fhnthz', 'smsb7nn2xgl'];
+
+  /* Layer B v1.2 / Layer C v1.1 再凍結時の指紋。offline 側 validate_layerC.cjs が正本 */
+  var MANIFEST = {
+    exporterVersion: 'dev156-idbexport-0.1.0',
+    boundContract: { file: 'dev156_layerC_contract_v1.json', contractVersion: 'v1.2',
+                     sha256: '2e484210cc221147c8eb937df7689dc136b986a01d3772a54f4018a4a58ec9c4' },
+    boundAdapter: { file: 'dev156_layerC_label_adapter_v1.json', adapterVersion: 'v1.0',
+                    sha256: 'dd6b3f1496a2bb5bf15f80bf916596d252c1a247f1b4b21838d7d75a71414b8b' },
+    layerA: {
+      'sms4np33eyg.silver.json': 'fdf34de1c05aa6222559d282c9a0203cd83b55a050cef4b3a4dc32188c93fe96',
+      'smri0s9cno3.silver.json': '36655dbb56c6c38568e11d27c7db706a58399253bbbbd5dd873450c4c10e3d64',
+      'sms60fhnthz.silver.json': '69be8c6c0645ff5f7a4baf18cf140516dadcdc58a87693dc23bdde09ae317acf',
+      'smsb7nn2xgl.silver.json': '4324b04d45ad454c2d3f544e89f50efc4a45fd1ea98cefaa5521f0f2f50e99d8'
+    },
+    layerB: {
+      'sms4np33eyg.silverB.json': '86bdd108ce78920744fceb48f3cf65ffd9ee4396bafef66b36c576e73d47a777',
+      'smri0s9cno3.silverB.json': '9775ae72321e1f0dba8cae412ed3e11d8c24fd8180e5a35f572d80ba6050e2f3',
+      'sms60fhnthz.silverB.json': 'bd67d5bdabe7963ea373660ecfabeefccd8e58f9fa3cc5ceb58863d20de0736c',
+      'smsb7nn2xgl.silverB.json': '5e63af8c237edce12dc45c261ed5b1bc985eaa2a6093c361d8774e64b603f42c'
+    },
+    raw: { 'dev156_raw_20260805.json': '91ebd4623701e8463b27c46d230b2bbec51c50b6f9662577b7a54c7bb4e5d25d' },
+    expect: { chainSchemaVersion: 3, extractorVersion: 'me-0.2.2' },
+    recordKindDomain: ['event', 'candidate'],
+    entityKindDomain: ['entity', 'entity_candidate'],
+    engineTypes: ['death','revival','wound_persistent','amnesia','curse_applied','possession_started',
+      'terrain_changed','item_acquired','item_transferred','item_used','item_consumed','item_broken','item_lost',
+      'contract_made','quest_state_changed','seal_state_changed','boss_defeated','identity_revealed',
+      'name_declared','affiliation_changed','trait_declared','time_loop_detected'],
+    slots: SLOT_ALLOWLIST.slice()
+  };
+
+  var HEX64 = /^[0-9a-f]{64}$/;
+
+  /* 埋め込み manifest の自己照合。1つでも崩れていたら出力しない */
+  function guardSelfTest() {
+    var bad = [];
+    if (MANIFEST.boundContract.contractVersion !== 'v1.2') bad.push('contractVersion');
+    if (MANIFEST.boundAdapter.adapterVersion !== 'v1.0') bad.push('adapterVersion');
+    if (!HEX64.test(MANIFEST.boundContract.sha256)) bad.push('contract.sha256');
+    if (!HEX64.test(MANIFEST.boundAdapter.sha256)) bad.push('adapter.sha256');
+    ['layerA', 'layerB', 'raw'].forEach(function (g) {
+      var ks = Object.keys(MANIFEST[g]);
+      if (g !== 'raw' && ks.length !== 4) bad.push(g + '.count');
+      ks.forEach(function (k) { if (!HEX64.test(MANIFEST[g][k])) bad.push(g + '.' + k); });
+    });
+    if (MANIFEST.slots.length !== 4) bad.push('slots.count');
+    if (MANIFEST.engineTypes.length !== 22) bad.push('engineTypes.count');
+    if (MANIFEST.expect.chainSchemaVersion !== 3) bad.push('expect.chainSchemaVersion');
+    if (MANIFEST.expect.extractorVersion !== 'me-0.2.2') bad.push('expect.extractorVersion');
+    return { ok: bad.length === 0, problems: bad };
+  }
+
+  function pathOf(o, p) {
+    var cur = o, i, seg = p.split('.');
+    for (i = 0; i < seg.length; i++) { if (cur == null) return undefined; cur = cur[seg[i]]; }
+    return cur;
+  }
+
+  /* runtime schema attestation（C0）。値の中身では判定しない。形だけを見る */
+  function attest(chain, events, entities) {
+    var p = [];
+    if (!chain) p.push('chain が無い');
+    else {
+      if (chain.schemaVersion !== MANIFEST.expect.chainSchemaVersion) p.push('chain.schemaVersion=' + chain.schemaVersion);
+      if (chain.extractorVersion !== MANIFEST.expect.extractorVersion) p.push('chain.extractorVersion=' + chain.extractorVersion);
+      ['processedCount', 'total', 'entityContextHash', 'unhandled'].forEach(function (k) {
+        if (!(k in chain)) p.push('chain.' + k + ' が無い');
+      });
+    }
+    var need = ['type', 'sourceTurnIndex', 'recordKind', 'prov.evidence', 'subject', 'target',
+                'subjectId', 'objectId', 'argumentResolution', 'missingArguments'];
+    (events || []).slice(0, 50).forEach(function (r, i) {
+      need.forEach(function (k) { if (pathOf(r, k) === undefined) p.push('events[' + i + '].' + k + ' が無い'); });
+      if (MANIFEST.recordKindDomain.indexOf(r.recordKind) < 0) p.push('events[' + i + '].recordKind=' + r.recordKind);
+      if (MANIFEST.engineTypes.indexOf(r.type) < 0) p.push('events[' + i + '].type=' + r.type);
+      if (r.subject && !('raw' in r.subject)) p.push('events[' + i + '].subject.raw が無い');
+    });
+    (entities || []).slice(0, 50).forEach(function (e, i) {
+      if (MANIFEST.entityKindDomain.indexOf(e.kind) < 0) p.push('entities[' + i + '].kind=' + e.kind);
+      ['entityId', 'name', 'entityType', 'status'].forEach(function (k) {
+        if (!(k in e)) p.push('entities[' + i + '].' + k + ' が無い');
+      });
+    });
+    return { ok: p.length === 0, problems: p };
+  }
+
+  /* 純関数。取り出した生データから出力物を組み立てる */
+  function buildPayload(slotData, stamp) {
+    var g = guardSelfTest();
+    if (!g.ok) return { ok: false, reason: 'guard-self-test-failed', problems: g.problems };
+    var out = { exporterVersion: MANIFEST.exporterVersion, exportedAt: stamp || null,
+                openGuard: MANIFEST, mode: 'readonly', slots: {}, attestation: {}, skipped: [] };
+    var i, sid, d, at;
+    for (i = 0; i < slotData.length; i++) {
+      sid = slotData[i].slotId;
+      if (SLOT_ALLOWLIST.indexOf(sid) < 0) { out.skipped.push({ slotId: sid, reason: 'not-in-allowlist' }); continue; }
+      d = slotData[i];
+      at = attest(d.chain, d.events, d.entities);
+      out.attestation[sid] = at;
+      if (!at.ok) { out.skipped.push({ slotId: sid, reason: 'schema-attestation-failed' }); continue; }
+      out.slots[sid] = { chain: d.chain, events: d.events || [], entities: d.entities || [],
+                         counts: { events: (d.events || []).filter(function (r) { return r.recordKind === 'event'; }).length,
+                                   candidates: (d.events || []).filter(function (r) { return r.recordKind === 'candidate'; }).length,
+                                   entities: (d.entities || []).filter(function (e) { return e.kind === 'entity'; }).length,
+                                   entityCandidates: (d.entities || []).filter(function (e) { return e.kind === 'entity_candidate'; }).length,
+                                   unhandled: ((d.chain && d.chain.unhandled) || []).length } };
+    }
+    var got = Object.keys(out.slots).length;
+    out.ok = got > 0;
+    if (!out.ok) out.reason = 'no-slot-passed-attestation';
+    return out;
+  }
+
+  function req2p(r) {
+    return new Promise(function (res, rej) {
+      r.onsuccess = function () { res(r.result); };
+      r.onerror = function () { rej(r.error || new Error('idb-request-failed')); };
+    });
+  }
+
+  /* 実データの取り出し。書き込み系 API は一切呼ばない */
+  function read(factory) {
+    return new Promise(function (resolve, reject) {
+      var g = guardSelfTest();
+      if (!g.ok) { reject(new Error('guard-self-test-failed: ' + g.problems.join(','))); return; }
+      var r;
+      try { r = factory.open(DB); } catch (e) { reject(e); return; }   /* 版番号は渡さない */
+      r.onupgradeneeded = function (ev) {
+        /* 版上げが要求された＝この端末の DB が想定と違う。何もせず中止する */
+        try { if (ev && ev.target && ev.target.transaction) ev.target.transaction.abort(); } catch (e2) {}
+        reject(new Error('upgrade-needed-abort'));
+      };
+      r.onerror = function () { reject(r.error || new Error('idb-open-failed')); };
+      r.onsuccess = function () {
+        var db = r.result, missing = [];
+        STORES.forEach(function (s) { if (!db.objectStoreNames.contains(s)) missing.push(s); });
+        if (missing.length) { try { db.close(); } catch (e3) {} reject(new Error('store-missing: ' + missing.join(','))); return; }
+        var tx;
+        try { tx = db.transaction(STORES, 'readonly'); }
+        catch (e4) { try { db.close(); } catch (e5) {} reject(e4); return; }
+        var cs = tx.objectStore('chain'), es = tx.objectStore('events'), ns = tx.objectStore('entities');
+        var jobs = SLOT_ALLOWLIST.map(function (sid) {
+          return Promise.all([
+            req2p(cs.get(sid)),
+            req2p(es.index('by_slot').getAll(IDBKeyRange.only(sid))),
+            req2p(ns.index('by_slot').getAll(IDBKeyRange.only(sid)))
+          ]).then(function (a) { return { slotId: sid, chain: a[0] || null, events: a[1] || [], entities: a[2] || [] }; });
+        });
+        Promise.all(jobs).then(function (all) { try { db.close(); } catch (e6) {} resolve(all); },
+                               function (err) { try { db.close(); } catch (e7) {} reject(err); });
+      };
+    });
+  }
+
+  /* 画面に出すだけ。ファイルは自動で保存しない */
+  function run(factory, stamp) {
+    return read(factory).then(function (all) { return buildPayload(all, stamp || null); });
+  }
+
+  return { MANIFEST: MANIFEST, SLOT_ALLOWLIST: SLOT_ALLOWLIST, guardSelfTest: guardSelfTest,
+           attest: attest, buildPayload: buildPayload, read: read, run: run };
+}));
+
+</script>
+<script>
+(function(){
+ var log=document.getElementById('log'), out=document.getElementById('out');
+ function p(s,cls){ var d=document.createElement('div'); if(cls)d.className=cls; d.textContent=s; log.appendChild(d); }
+ document.getElementById('b1').onclick=function(){
+  log.textContent='';
+  var g=DEV156Export.guardSelfTest();
+  p('exporterVersion: '+DEV156Export.MANIFEST.exporterVersion);
+  p('contract '+DEV156Export.MANIFEST.boundContract.contractVersion+' / adapter '+DEV156Export.MANIFEST.boundAdapter.adapterVersion);
+  p('対象 slot: '+DEV156Export.SLOT_ALLOWLIST.join(', '));
+  p(g.ok?'自己照合 OK':'自己照合 NG: '+g.problems.join(', '), g.ok?'ok':'ng');
+ };
+ document.getElementById('b2').onclick=function(){
+  log.textContent=''; out.value='';
+  if(!DEV156Export.guardSelfTest().ok){ p('自己照合に失敗したので読み取りません','ng'); return; }
+  p('読み取り中…');
+  DEV156Export.run(indexedDB, new Date().toISOString()).then(function(r){
+   log.textContent='';
+   Object.keys(r.attestation||{}).forEach(function(s){
+    var a=r.attestation[s];
+    p(s+': '+(a.ok?'形の照合 OK':'形の照合 NG → '+a.problems.slice(0,3).join(' / ')), a.ok?'ok':'ng');
+   });
+   (r.skipped||[]).forEach(function(s){ p('出力しない: '+s.slotId+' ('+s.reason+')','ng'); });
+   if(!r.ok){ p('出力なし: '+(r.reason||'不明'),'ng'); return; }
+   Object.keys(r.slots).forEach(function(s){
+    var c=r.slots[s].counts;
+    p(s+': event '+c.events+' / candidate '+c.candidates+' / entity '+c.entities+' / entity_candidate '+c.entityCandidates+' / unhandled '+c.unhandled,'ok');
+   });
+   out.value=JSON.stringify(r,null,1);
+   p('表示しました。自動保存はしていません。','ok');
+  }).catch(function(e){ log.textContent=''; p('中止: '+(e&&e.message||e),'ng'); });
+ };
+})();
+</script>
+</body></html>
