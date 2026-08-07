@@ -16,8 +16,8 @@
  .ok{color:#080} .ng{color:#c00} .mut{color:#888}
  ul{margin:6px 0 6px 1.2em;padding:0}
 </style></head><body>
-<h1>dev156_raw A2 holdout 書き出し v0.2.8a2 — A2 holdout 2本専用（合計46ターン）</h1>
-<div class="box new"><b>このページは v0.2.8（開発4本専用）の書き出しロジックをそのまま使い、対象 slot 一覧（A2 holdout 2本）・合計ターン（46）・set（a2holdout）だけを差し替えた A2 holdout 専用版です。exporterVersion は同一ロジックのため gold-export-0.2.8 のままです。A2 holdout 受入（manifest_a2holdout_final.json）専用。</b></div>
+<h1>dev156_raw A2 holdout 書き出し v0.2.8a2 — A2 holdout 2本専用（合計50ターン）</h1>
+<div class="box new"><b>このページは v0.2.8（開発4本専用）の書き出しロジックをそのまま使い、対象 slot 一覧（A2 holdout 2本）・合計ターン（50）・set（a2holdout）だけを差し替えた A2 holdout 専用版です。exporterVersion は同一ロジックのため gold-export-0.2.8 のままです。A2 holdout 受入（manifest_a2holdout_final.json）専用。</b></div>
 
 <div class="box warn">
 <b>このページがしないこと</b>
@@ -73,7 +73,7 @@ Memory Engine <code>me-0.2.2</code> がコード上で読む入力は
 <h2>対象</h2>
 <div class="box">
 このページが開くのは holdout 2本だけです。<br>
-<code>sms5xyl4jjy</code>(25) / <code>smrg85jwsn6</code>(21) ＝ <b>46ターン</b><br>
+<code>sms5xyl4jjy</code>(27) / <code>smrg85jwsn6</code>(23) ＝ <b>50ターン</b><br>
 開発4本（<code>sms4np33eyg</code> / <code>smri0s9cno3</code> / <code>sms60fhnthz</code> / <code>smsb7nn2xgl</code>）はこのページでは一切読みません（混入した場合は受入 verify が自動拒否します）。
 </div>
 
@@ -112,7 +112,7 @@ Memory Engine <code>me-0.2.2</code> がコード上で読む入力は
   /* ★このページが開いてよい物語。ここに無い slot は本体キーも補助キーも読みません。
      v0.2.8h: holdout 2本のみ（開発4本は読まない）。 */
   var DEV = ['sms5xyl4jjy', 'smrg85jwsn6'];
-  var EXPECT_TURNS = 46;
+  var EXPECT_TURNS = 50;
 
   /* ★v0.2.7 修正1: byte長は UTF-8 で数える。
      String.length は UTF-16 コードユニット数なので、日本語で 1/3、絵文字で 1/2 に化ける。 */
@@ -394,7 +394,7 @@ Memory Engine <code>me-0.2.2</code> がコード上で読む入力は
     container.appendChild(tbl);
     var sum = el('div'); sum.appendChild(el('span', '選択中の合計: '));
     var b = el('b', '0'); b.id = 'sel'; sum.appendChild(b);
-    sum.appendChild(el('span', ' ターン（期待値 46）'));
+    sum.appendChild(el('span', ' ターン（期待値 50）'));
     container.appendChild(sum);
   }
 
