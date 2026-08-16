@@ -218,7 +218,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260803-fix670';
+  var HOME_BUILT = '20260816-fix680';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -237,27 +237,27 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix670"></script>
-<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix670"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix680"></script>
+<script src="v292Dfix569-gc-shadow.js?cb=v292Dfix680"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者（fix569 が捕捉済みの native を借りる） -->
-<script src="v292Dfix660-delete-gateway.js?cb=v292Dfix670"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix670"></script>
-<script src="v292Dfix564-snapshot.js?cb=v292Dfix670"></script>
+<script src="v292Dfix660-delete-gateway.js?cb=v292Dfix680"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix680"></script>
+<script src="v292Dfix564-snapshot.js?cb=v292Dfix680"></script>
 <!-- ★fix660(B): BackupGC。削除候補を選ぶ層。分類は fix562 が唯一の正なのでその後ろ -->
-<script src="v292Dfix660-backup-gc.js?cb=v292Dfix670"></script>
-<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix670"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix670"></script>
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix670"></script>
+<script src="v292Dfix660-backup-gc.js?cb=v292Dfix680"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix680"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix680"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix680"></script>
 <!-- ★fix602: 墓標が立ったスロットへの書き込みを影で止める（別途配信） -->
-<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix670"></script>
+<script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix680"></script>
 <!-- ★fix642: 停止中の削除(blocked-stale-legacy)を、クラウド墓標の read-back を根拠に
      新しい planId で作り直して完遂する。**操作専用・自動実行なし**（コンソールから呼ぶ） -->
-<script src="v292Dfix642-delete-readback.js?cb=v292Dfix670"></script>
+<script src="v292Dfix642-delete-readback.js?cb=v292Dfix680"></script>
 <!-- ★fix658 Phase1: 系譜センサス（shadow）。同期の競合を「早送りか本物の分岐か」で分類して
      数えるだけ。ダイアログ・取り込み・送信の挙動は1つも変えない。書込先は
      v292Dfix658_anchor / v292Dfix658_census の2キーのみ。
      観測=window.__v292Dfix658.status()/.census()/.selfTest() / OFF=v292Dfix658Off -->
-<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix670"></script>
+<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix680"></script>
 <script>
 (function(){
   'use strict';

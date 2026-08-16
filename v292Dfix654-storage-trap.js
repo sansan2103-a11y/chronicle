@@ -56,7 +56,7 @@
   } catch(e){ return; }
 
   var TAG   = '[v292Dfix654]';
-  var BUILD = '20260803-fix670';
+  var BUILD = '20260816-fix680';
   var METHODS = ['getItem', 'setItem', 'removeItem'];
   var EXPANDO = '__v346raw';
   var MAXLOG  = 40;

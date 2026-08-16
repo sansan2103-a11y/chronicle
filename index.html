@@ -9,7 +9,7 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix670"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix680"></script>
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
@@ -21,18 +21,18 @@
      OFF=v292Dfix580Off -->
 <script src="v292Dfix580-meta-sync-coordinator.js?cb=v292Dfix583"></script>
 <!-- fix590: コミット台帳（「送ったけど結果を受け取れていない」を記録する。挙動は変えない） -->
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix670"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix680"></script>
 <!-- ★fix658 Phase1: 系譜センサス（shadow）。同期の競合を「早送りか本物の分岐か」で分類して
      数えるだけ。ダイアログ・取り込み・送信の振る舞いは1つも変えない。書込先は
      v292Dfix658_anchor / v292Dfix658_census の2キーのみ。
      観測=window.__v292Dfix658.status()/.census()/.selfTest() / OFF=v292Dfix658Off -->
-<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix670"></script>
+<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix680"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者。**fix246 より前**に置くこと。
      理由(GPT裁定 シナリオ2): fix246 は removeItem のキー名を実効キーへ書き換えるので、
      削除自体が fix246 を通ると「確認したキーとは別のキーが消える」。fix246 より前に捕捉した
      native primitive で exact-delete する必要がある（fix569 が捕捉済みならそれを借りる）。
      読出=window.__v292Dfix660gw.status()/.log()/.selfTest() / OFF=v292Dfix660Off -->
-<script src="v292Dfix660-delete-gateway.js?cb=v292Dfix670"></script>
+<script src="v292Dfix660-delete-gateway.js?cb=v292Dfix680"></script>
 <script>
 /* v292Dfix242: iOS Safari の古いHTMLキャッシュ脱出。`.js`は?cb=でキャッシュ破棄できるが
    index.html本体は破棄できず、iOSはbfcache+ヒューリスティックで古いHTMLを長く保持する
@@ -42,7 +42,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260803-fix670';
+  var BUILT = '20260816-fix680';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2767,7 +2767,7 @@ G.init();
 <!-- ★fix660(B): BackupGC。削除候補を「選ぶ」層（物理削除はしない）。
      分類・保護判定は fix562 を唯一の正として使うので、fix562 / fix564 の後ろに置く。
      読出=window.__v292Dfix660gc.status()/.reviewCandidates()/.selfTest() / OFF=v292Dfix660Off -->
-<script src="v292Dfix660-backup-gc.js?cb=v292Dfix670"></script>
+<script src="v292Dfix660-backup-gc.js?cb=v292Dfix680"></script>
 <!-- v292Dfix555: 句読点だけを直す校正専用の1回修復。Api.call の直後・Planner.parsePlan の前で、
      崩れた区間だけを直す。句読点・空白・改行以外を1文字でも変えられたら元を採用(fail-closed)。
      タグを含む区間は触らない。<state>/<react> はモデルへ渡さない。OFF=v292Dfix555Off -->
@@ -2788,8 +2788,8 @@ G.init();
      ★fix527 の直後に置く: fix527c が付け替える対象は id='v292Dfix402-fork' の旧バナーだけで、
        fix659 は別 id + __f527 マーカーを立てるので干渉しない、という関係をこの並びで示す。
      読出=window.__v292Dfix659.status()/.selfTest() / OFF=v292Dfix659Off -->
-<script src="v292Dfix659-fork-choice.js?cb=v292Dfix670"></script>
-<script src="features.js?cb=v292Dfix670"></script>
+<script src="v292Dfix659-fork-choice.js?cb=v292Dfix680"></script>
+<script src="features.js?cb=v292Dfix680"></script>
 <script>
 /* ============================================================================
  * v292DfixP0-inline : シナリオテンプレ適用の緊急封鎖（L2 + L2b）
@@ -3024,7 +3024,7 @@ G.init();
   try { console.log('[v292DfixP0] ' + (st.armed ? 'ARMED' : 'SAFE HALT') + ' build=' + st.built); } catch (e) {}
 })();
 </script>
-<script src="v292DfixP0-scenario-blocker.js?cb=v292Dfix670"></script>
+<script src="v292DfixP0-scenario-blocker.js?cb=v292Dfix680"></script>
 <script src="v292Dfix135-longmem.js?cb=v292Dfix299b"></script>
 <script src="v292Dfix138-continue.js?cb=v292Dfix225"></script>
 <script src="v292Dfix145-charlist.js?cb=v292Dfix539c"></script>
@@ -3089,7 +3089,7 @@ G.init();
   <script src="v292Dfix226-engine-unify.js?cb=v292Dfix226"></script>
   <!-- v292Dfix228: スロット自動世代バックアップ(直近3世代)。2026-06-06のクロバー消失事故の恒久保険。
        復元= console で window.__v292Restore() / 一覧= window.__v292Gens() -->
-  <script src="v292Dfix228-slot-generations.js?cb=v292Dfix670"></script>
+  <script src="v292Dfix228-slot-generations.js?cb=v292Dfix680"></script>
   <!-- v292Dfix237: 別キャラ同一アイコンの根治(運搬URLのalt/seed整合ガード)。OFF=v292AvCarrierGuardOff -->
   <script src="v292Dfix237-avatar-carrier-guard.js?cb=v292Dfix237b"></script>
   <!-- v292Dfix239: 未登録キャラ(少女/店主等)のアイコン怪物化根治(genAsync判定待ちのレース封じ)。OFF=v292NcAvRaceOff -->
@@ -3189,13 +3189,13 @@ G.init();
 <script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=v292Dfix396"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
-<script src="v292Dfix399-cloudsync.js?cb=v292Dfix670"></script>
+<script src="v292Dfix399-cloudsync.js?cb=v292Dfix680"></script>
   <script src="v292Dfix400-img-url.js?cb=v292Dfix400d"></script>
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=v292Dfix336"></script>
 <script src="v292Dfix338-artstyle.js?cb=v292Dfix484"></script>
 <script src="v292Dfix346-idb-avatars.js?cb=v292Dfix346"></script>
 <script src="v292Dfix356-avatar-eager.js?cb=v292Dfix450"></script>
-<script src="v292Dfix402-invisible-sync.js?cb=v292Dfix670"></script>
+<script src="v292Dfix402-invisible-sync.js?cb=v292Dfix680"></script>
 <script src="v292Dfix405-state-freshness.js?cb=v292Dfix417"></script>
 <script src="v292Dfix406-automode.js?cb=v292Dfix417d"></script>
 <script src="v292Dfix407-load-noconfirm.js?cb=v292Dfix407"></script>
@@ -3249,6 +3249,7 @@ G.init();
 <script src="v292Dfix467-readability-rules.js?cb=v292Dfix468"></script>
 <script src="v292Dfix468-gen-timing.js?cb=v292Dfix468"></script>
 <script src="v292Dfix469-speaker-score.js?cb=v292Dfix630"></script>
+  <script src="v292Dfix680-bare-speaker-provenance.js?cb=v292Dfix680"></script>
 <!-- fix606: 話者帰属の来歴アナライザ。**読み取り専用**（whoもDOMもlocalStorageも触らない）。
      「どのカードの話者が何を根拠に決まっているか」の分母を出すためだけの層。
      読出=window.__v292Dfix606.stats()/.review(n)/.selfTest() / OFF=v292Dfix606Off -->
@@ -3318,7 +3319,7 @@ G.init();
      ★既定は shadow ＝ 判定と記録だけで挙動を変えない。実弾は v292Dfix643Live='1' の端末のみ。
      読出=window.__v292Dfix643.status()/.selfTest()/.log() / OFF=v292Dfix643Off
      ★fix624 の後に置くこと -->
-<script src="v292Dfix643-collapse-rescue.js?cb=v292Dfix670"></script>
+<script src="v292Dfix643-collapse-rescue.js?cb=v292Dfix680"></script>
 <!-- fix645: scene_move タグの shadow 収集（位置引き継ぎ 第一歩）。移動だけ・主人公の
      ターン終了時の到着地点だけを、本文との完全一致検証を通ったときだけ derived observation
      として記録する。本文・保存・生成へ一切影響させない（shadow）。位置stateは作らない。
@@ -3336,12 +3337,12 @@ G.init();
      7点以上=停止。hard候補は端末ローカルに直近20件・全文保存(クラウドへ送らない)。
      読出=window.__v292Dfix650.list()/.mark(i)/.status()/.stop()/.arm() / OFF=v292Dfix650Off
      ★fix643 の後に置くこと -->
-<script src="v292Dfix650-rescue-safety.js?cb=v292Dfix670"></script>
+<script src="v292Dfix650-rescue-safety.js?cb=v292Dfix680"></script>
 <!-- fix651: (A)暴走生成の遮断(既定shadow・fix643の救済経路へ直結) / (C)0ターン上書きの非常ブレーキ+書込トレース。
      OFF=v292Dfix651StreamGuardOff / v292Dfix651ZeroTurnGuardOff / v292Dfix651SlotBackupGuardOff(Bはfix228内) -->
-<script src="v292Dfix651-guards.js?cb=v292Dfix670"></script>
+<script src="v292Dfix651-guards.js?cb=v292Dfix680"></script>
 <!-- v292Dfix670: Memory Engine v0.2 / Phase1 Shadow. UI._renderHooks push only. OFF=v292Dfix670Off -->
-<script src="v292Dfix670-memory-engine.js?cb=v292Dfix670"></script>
+<script src="v292Dfix670-memory-engine.js?cb=v292Dfix680"></script>
 </body>
 </html>
 
