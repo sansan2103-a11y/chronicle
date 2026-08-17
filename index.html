@@ -9,7 +9,7 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix681"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix682"></script>
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
@@ -42,7 +42,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260817-fix681';
+  var BUILT = '20260817-fix682';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3076,7 +3076,7 @@ G.init();
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
-  <script src="v292Dfix192-newengine.js?cb=v292Dfix548"></script>
+  <script src="v292Dfix192-newengine.js?cb=v292Dfix682"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
   <script src="v292Dfix197-avatar-key.js?cb=v292Dfix524"></script>

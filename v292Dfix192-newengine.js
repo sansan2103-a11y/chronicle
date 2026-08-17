@@ -534,7 +534,7 @@
     var hero = heroName ? ('〈'+heroName+'〉') : '主人公';
     var inputLine = '';
     if (m==='SAY' && inText){
-      inputLine = '【プレイヤー入力＝主人公の発話】主人公'+hero+'が「'+inText+'」と発話した。これは主人公の台詞。主人公が口にしたものとして本文に書き、絶対に他のキャラの発言・声にしない。';
+      inputLine = '【プレイヤー入力＝主人公の発話】'+hero+'が「'+inText+'」と発話した。これは主人公の台詞。主人公が口にしたものとして本文に書き、絶対に他のキャラの発言・声にしない。';
     } else if (m==='DO' && inText){
       inputLine = '【プレイヤー入力＝主人公の行動】主人公'+hero+'が「'+inText+'」という行動をとった。主人公の行動として本文に反映し、他キャラの行動にしない。';
     } else if (m==='STORY' && inText && !isCont){
