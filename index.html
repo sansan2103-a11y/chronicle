@@ -9,7 +9,7 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix687"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix682"></script>
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
@@ -42,7 +42,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260817-fix687';
+  var BUILT = '20260817-fix682';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -430,7 +430,7 @@ const SS = {
 const KEY = 'chr6';
 /* v292Dfix225: スロット対応の共有キー解決。chr6直アクセス散在(fix205の残債)の根治用。
    全パッチのLSフォールバックはこれを経由し、アクティブスロット使用時に旧デフォルトストアを読まない。 */
-window.__chr6Key = function(){ /* ★2026-08-17 fix687 URL-FIRST: 物語画面では URL の ?story を story identity の正とする。 chr6_active_slot は互換用ミラーに過ぎず、stale のまま foreign story を指し続けることがある。 呼ばれるたびに location.search を読む（起動時キャッシュしない）。storage へは書かない。?story 無し(home)は従来どおり。 */ try { var u = new URLSearchParams(location.search).get('story'); if (u && u !== 'default') return 'chr6_slot_' + u; } catch(e){} try { var a = JSON.parse(localStorage.getItem('chr6_active_slot') || 'null'); if (a && a !== 'default') return 'chr6_slot_' + a; } catch(e){} return 'chr6'; };
+window.__chr6Key = function(){ try { var a = JSON.parse(localStorage.getItem('chr6_active_slot') || 'null'); if (a && a !== 'default') return 'chr6_slot_' + a; } catch(e){} return 'chr6'; };
 
 // ─────────────────────────────────────────────────────────────
 // State
