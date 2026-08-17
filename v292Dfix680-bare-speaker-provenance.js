@@ -117,6 +117,8 @@
   // ---------- 適用 ----------
   function apply(force){
     if (!force && !armed()) return { skipped: true, armed: armed() };
+    /* ★2026-08-16 FIX680_INFLIGHT_WRITE_RACE: 生成中は1バイトも書かない。直接呼出しの保険。 */
+    try { var _s0 = getS(); if (_s0 && _s0.inFlight) return { skipped: true, inFlight: true }; } catch(e){}
     var p = plan();
     if (!p || !p.applied.length) return { changed: false, plan: p };
     var S = getS();
@@ -127,7 +129,7 @@
         if (c && c.who === r.from) c.who = r.to;
       } catch(e){}
     });
-    try { if (S.save && !document.hidden) S.save(); } catch(e){}
+    try { if (S.save) S.save(); } catch(e){}   /* ★DOCUMENT_HIDDEN_SAVE_SKIP_CONFIRMED: visibility は save 可否に使わない */
     try {
       var cards = document.querySelectorAll('.v292-dlg-card');
       for (var i = 0; i < cards.length; i++) if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]);
@@ -174,10 +176,12 @@
   }
   function applyDemote(force){
     if (!force && !armed()) return { skipped: true };
+    /* ★2026-08-16 FIX680_INFLIGHT_WRITE_RACE: 生成中は1バイトも書かない。直接呼出しの保険。 */
+    try { var _s0 = getS(); if (_s0 && _s0.inFlight) return { skipped: true, inFlight: true }; } catch(e){}
     var S = getS(), p = planDemote();
     if (!p.length) return { changed: false, n: 0 };
     p.forEach(function(r){ try { var c = S.turns[r.turn - 1]._convSays[r.idx]; if (c && c.who === r.from) c.who = '???'; } catch(e){} });
-    try { if (S.save && !document.hidden) S.save(); } catch(e){}
+    try { if (S.save) S.save(); } catch(e){}   /* ★DOCUMENT_HIDDEN_SAVE_SKIP_CONFIRMED: visibility は save 可否に使わない */
     try {
       var cd = document.querySelectorAll('.v292-dlg-card');
       for (var i = 0; i < cd.length; i++) if (cd[i].parentNode) cd[i].parentNode.removeChild(cd[i]);
@@ -197,6 +201,10 @@
   function tick(){
     try {
       if (!armed()) return;
+      /* ★最重要 authority: sig() 取得・lastSig 更新より **前** に返す。
+         lastSig を進めてから apply 側で return すると、生成後の次 tick で sig===lastSig となり
+         修復対象を恒久的に取りこぼす（新しい race を作らない）。 */
+      var S0 = getS(); if (!S0 || S0.inFlight) return;
       var s = sig(); if (!s || s === lastSig) return;
       lastSig = s; apply(); applyDemote();
     } catch(e){}

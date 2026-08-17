@@ -9,7 +9,7 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix680"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix681"></script>
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
@@ -42,7 +42,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260816-fix680';
+  var BUILT = '20260817-fix681';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3249,7 +3249,8 @@ G.init();
 <script src="v292Dfix467-readability-rules.js?cb=v292Dfix468"></script>
 <script src="v292Dfix468-gen-timing.js?cb=v292Dfix468"></script>
 <script src="v292Dfix469-speaker-score.js?cb=v292Dfix630"></script>
-  <script src="v292Dfix680-bare-speaker-provenance.js?cb=v292Dfix680"></script>
+  <script src="v292Dfix680-bare-speaker-provenance.js?cb=v292Dfix681"></script>
+  <script src="v292Dfix681-player-say-claim.js?cb=v292Dfix681"></script>
 <!-- fix606: 話者帰属の来歴アナライザ。**読み取り専用**（whoもDOMもlocalStorageも触らない）。
      「どのカードの話者が何を根拠に決まっているか」の分母を出すためだけの層。
      読出=window.__v292Dfix606.stats()/.review(n)/.selfTest() / OFF=v292Dfix606Off -->
