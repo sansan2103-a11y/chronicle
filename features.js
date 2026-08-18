@@ -5958,11 +5958,34 @@
     }
     return g.requestDelete(id, { source: 'features-clearSlot' }) === true;
   }
+  /* ★2026-08-18 fix695 LIBRARY_SLOT_BODY_KEY
+     実測(META_KEY_CONSUMER_STATIC_001): meta entry の .key を本体アクセスに使うと、
+     key 欠落 entry で `getItem(undefined)` となり **literal キー 'undefined'** を読み書きする。
+     当該キーには 37T の historical blob が実在するため、
+     ・loadSlot が foreign 本体を runtime S へ載せる（WRONG SOURCE READ）
+     ・importToSlot が literal 'undefined' へ書く（IMPORT DESTINATION）
+     が静的に成立していた。
+     対策: **library 上で明示選択された slot の本体キーを canonical 導出だけで決める**。
+     ・meta.key は body access authority として使わない（fallback もしない）
+     ・deleted(墓標) は key 導出前に null
+     ・null のときは読まない / 書かない
+     ※ __chr6WriteKey()（= この document の mutation authority・fix694）とは**統合しない**。
+       役割が違う: あちらは「今の document が書いてよい先」、これは「明示選択された slot の本体」 */
+  function f695BodyKey(slot){
+    if (!slot || typeof slot !== 'object') return null;
+    if (slot.deleted === true) return null;
+    var id = slot.id;
+    if (typeof id !== 'string' || !id) return null;
+    if (id === 'default' || id === 'chr6') return DEFAULT_SLOT_KEY;
+    return 'chr6_slot_' + id;
+  }
   function slotHasData(id){
     var s = findSlot(id);
     if (!s) return false;
+    var k = f695BodyKey(s);            /* ★fix695: meta.key を使わない */
+    if (!k) return false;
     var raw = null;
-    try { raw = localStorage.getItem(s.key); } catch(_){}
+    try { raw = localStorage.getItem(k); } catch(_){}
     return !!raw;
   }
 
@@ -6004,7 +6027,9 @@
   function loadSlot(id){
     var s = findSlot(id);
     if (!s) return false;
-    var data = lsGet(s.key, null);
+    var k = f695BodyKey(s);            /* ★fix695: canonical 本体のみ読む */
+    if (!k) return false;
+    var data = lsGet(k, null);
     if (!data || typeof data !== 'object') return false;
     // Apply to S
     try {
@@ -6088,11 +6113,9 @@
     var v = validateImportData(data);
     if (!v.ok) return v;
     var payload = { cfg: data.cfg, cast: data.cast, scene: data.scene, turns: data.turns, mode: data.mode };
-    if (s.id === 'default'){
-      lsSet(DEFAULT_SLOT_KEY, payload);
-    } else {
-      lsSet(s.key, payload);
-    }
+    var k = f695BodyKey(s);            /* ★fix695: literal 'undefined' へ書かない */
+    if (!k) return { ok: false, err: '保存先キーを決められない slot: ' + targetSlotId };
+    lsSet(k, payload);
     touchSlot(targetSlotId);
     return { ok: true };
   }
@@ -6124,7 +6147,8 @@
   }
 
   function buildScenarioPreview(slot){
-    var key = slot.id === 'default' ? DEFAULT_SLOT_KEY : slot.key;
+    var key = f695BodyKey(slot);       /* ★fix695 */
+    if (!key) return '';
     var data = lsGet(key, null);
     if (!data) return '';
     var hero = (data.cast && data.cast.hero && data.cast.hero.name) || '';
@@ -8244,7 +8268,7 @@
       if (t.dataset.act === 'apply-to-slot'){
         if (!window.__v292Dfix30){ showToast('fix30 未 install', true); return; }
         var meta = window.__v292Dfix30.getMeta();
-        var emptySlots = meta.filter(function(s){ if (s.id === 'default') return false; var raw = null; try { raw = localStorage.getItem(s.key); } catch(_){} return !raw; });
+        var emptySlots = meta.filter(function(s){ if (s.id === 'default') return false; var k = f695BodyKey(s); if (!k) return false; /* ★fix695 */ var raw = null; try { raw = localStorage.getItem(k); } catch(_){} return !raw; });
         if (!emptySlots.length){ showToast('空 slot がありません', true); return; }
         var choice = prompt('適用する slot を選択:\n' + emptySlots.map(function(s, i){ return (i+1) + ': ' + s.name; }).join('\n') + '\n\n番号 (1-' + emptySlots.length + '):');
         var idx = parseInt(choice, 10) - 1;
