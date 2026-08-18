@@ -17,6 +17,8 @@
 //   ・fix419c の教訓: 内側関数の own props を全継承する(fix490 の __f490 等を隠さない)。
 //
 // 読出: window.__v292Dfix543.stats() / .headroom() / .recent()
+//       ★fix696: .headroomIsLowerBound() / .headroomText() / .headroomStatus()
+//       ★fix696: headroom() は LOW_WATER 以上のとき **exact ではなく lower bound** を返す
 // OFF : localStorage v292Dfix543Off='1'
 (function v292Dfix543(){
   'use strict';
@@ -150,8 +152,9 @@
     try {
       var m = document.getElementById('v292-fix545-msg'); if (!m) return;
       var h = -1; try { h = headroom(false); } catch(e){}
+      var ht = headroomText(h);      /* ★fix696: 下限値のときは「200KB以上」と出す(偽の精度を出さない) */
       m.textContent = '⚠ このターンは保存できていません（' + unsaved.count + '回失敗）。'
-        + (h >= 0 ? '保存領域の空きは約' + Math.round(h / 1024) + 'KBです。' : '')
+        + (ht ? '保存領域の空きは' + ht + 'です。' : '')
         + 'このまま閉じると進行が失われます。';
     } catch(e){}
   }
@@ -165,22 +168,60 @@
     });
   } catch(e){}
 
-  /* 空き容量の推定(二分探索・書けたら即消す)。呼ぶたびに走らせると重いので間引く */
-  var lastProbe = 0, lastHeadroom = -1;
+  /* 空き容量の推定(書けたら即消す)。呼ぶたびに走らせると重いので間引く
+     ★★fix696(2026-08-18・GPT裁定#82 QUOTA_PROBE_SIDE_EFFECT): **探索範囲を LOW_WATER で打ち切る**。
+       症状(実測 QUOTA_PROBE_STATIC_001): 旧実装は hi=4MB から**バイト単位まで**二分探索していたため、
+         収束の瞬間に **その時点の空き容量をほぼ全量、一時的に占有**していた
+         (実測: 空き 415,826 文字 = 406KB を丸ごと。1 回の測定でそういう瞬間が 9 回・所要 34ms)。
+       なぜ危ないか: localStorage の quota は **origin 単位で共有**され、別 document の save は
+         並行に走る(fix694 で確定したとおり複数 document 同時稼働が現実の運用形態)。
+         その瞬間に他タブが物語を保存すると QuotaExceededError となり、
+         **本来は空きがあったのに保存失敗と判定される偽陽性**が成立する。
+       なぜ範囲を切ってよいか: 唯一の自動消費者 checkLowWater() が知りたいのは
+         **「空きが LOW_WATER を下回ったか」という真偽値ひとつ**だけで、
+         LOW_WATER を超える領域の正確な値には消費者が存在しない(表示も KB へ丸めている)。
+       やること:
+         STEP 1  probe(LOW_WATER) を **1 回だけ**試す。通れば「LOW_WATER 以上空いている」ことだけ確定し、
+                 **それ以上は測らない** → 一時占有の上限が LOW_WATER に固定され、空き全量を埋める瞬間が消える。
+         STEP 2  通らなかったときだけ **0..LOW_WATER の範囲でのみ**二分探索する
+                 (警告に必要な精度はこの範囲にしかない)。4MB までの探索は行わない。
+       ★戻り値の意味論: **LOW_WATER 以上のときは正確な空きではなく「下限値」**。
+         headroom() は window.__v292Dfix543.headroom として外部診断に公開されているので、
+         exact か lower bound かを headroomIsLowerBound() / headroomStatus() で判別できるようにする。
+       ★checkLowWater() の `h < LOW_WATER` 判定の意味論は**不変**(下限値でも大小判定は正しい)。
+       ★新しい永続キーは追加しない。挙動(警告条件)も変えない。 */
+  var lastProbe = 0, lastHeadroom = -1, lastLowerBound = false;
   function headroom(force){
     var now = Date.now();
     if (!force && lastHeadroom >= 0 && (now - lastProbe) < 60000) return lastHeadroom;
-    var lo = 0, hi = 4 * 1024 * 1024, ok = 0;
     function probe(n){
       try { localStorage.setItem(PROBE_KEY, new Array(n + 1).join('x')); localStorage.removeItem(PROBE_KEY); return true; }
       catch(e){ try { localStorage.removeItem(PROBE_KEY); } catch(_){} return false; }
     }
-    for (var i = 0; i < 22 && lo <= hi; i++){
-      var mid = Math.floor((lo + hi) / 2);
-      if (probe(mid)){ ok = mid; lo = mid + 1; } else hi = mid - 1;
+    var ok = 0, lower = false;
+    /* STEP 1: LOW_WATER ちょうどを 1 回だけ。★これが一時占有の上限 */
+    if (probe(LOW_WATER)){
+      ok = LOW_WATER; lower = true;              /* = 「LOW_WATER 以上」。これ以上は測らない */
+    } else {
+      /* STEP 2: 足りないときだけ 0..LOW_WATER の範囲で二分探索する */
+      var lo = 0, hi = LOW_WATER - 1;
+      for (var i = 0; i < 18 && lo <= hi; i++){
+        var mid = Math.floor((lo + hi) / 2);
+        if (probe(mid)){ ok = mid; lo = mid + 1; } else hi = mid - 1;
+      }
     }
-    lastProbe = now; lastHeadroom = ok;
+    lastProbe = now; lastHeadroom = ok; lastLowerBound = lower;
     return ok;
+  }
+  /* ★fix696: 直近の headroom() が exact か lower bound かを外から判別する */
+  function headroomIsLowerBound(){ return !!lastLowerBound; }
+  /* ★fix696: 表示用。LOW_WATER 以上のときに「約200KB」と**過小な精度で見せない** */
+  function headroomText(h){
+    try {
+      if (h == null || h < 0) return '';
+      if (lastLowerBound && h >= LOW_WATER) return Math.round(LOW_WATER / 1024) + 'KB以上';
+      return '約' + Math.round(h / 1024) + 'KB';
+    } catch(e){ return ''; }
   }
 
   function checkLowWater(){
@@ -235,6 +276,15 @@
     stats: function(){ try { return JSON.parse(JSON.stringify(stats)); } catch(e){ return null; } },
     recent: function(){ return recent.slice(); },
     headroom: headroom,
+    /* ★fix696: LOW_WATER 以上のとき headroom() は exact ではなく lower bound */
+    headroomIsLowerBound: headroomIsLowerBound,
+    headroomText: function(){ return headroomText(headroom(false)); },
+    headroomStatus: function(){
+      var h = headroom(false);
+      return { value: h, isLowerBound: headroomIsLowerBound(), lowWater: LOW_WATER,
+               text: headroomText(h), maxProbeBytes: LOW_WATER,
+               note: 'fix696: value は LOW_WATER 以上のとき exact ではなく lower bound。probe は LOW_WATER を超えない' };
+    },
     unsaved: function(){ return { active: unsaved.active, key: unsaved.key, count: unsaved.count, since: unsaved.since }; },
     retrySave: retrySave,
     off: off
