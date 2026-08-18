@@ -9,7 +9,7 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix682"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix692"></script>
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
@@ -42,7 +42,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260817-fix682';
+  var BUILT = '20260817-fix692';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2326,9 +2326,39 @@ G.init();
   }
 
   /* ─── 2. PROVIDER CONFIG HYGIENE (v18+v72 essence) ─────────────── */
+  /* ★2026-08-18 fix692 PROVIDER_CFG_EARLY_BOOT_TARGET_FIX
+     実測: この hygiene は boot 最初期(t=950ms / readyState=loading)に同期実行され、
+     fix527 が current story を確定する約 1.8 秒前に走る。その時点の
+     __chr6Key() は stale な chr6_active_slot を解決するため、URL が X なのに
+     別物語 B の本体を read/write していた(STORY_BOOT_CROSS_SLOT_WRITE)。
+     対策: 対象キーを **1 回だけ** 決め、read と write で同じキーを使う。
+     ・?story=X が chr6_slots_meta に登録済み  → chr6_slot_X (URL を正とする)
+     ・?story 無し(home 等)                    → 従来どおり __chr6Key()
+     ・?story はあるが正規確認できない/墓標    → **null を返して hygiene を skip**
+       (stale chr6_active_slot へ fallback して他物語を書かない)
+     chr6_active_slot は書き換えない。新規 schema なし。 */
+  function __f692CfgKey(){
+    var u = null;
+    try { u = new URLSearchParams(location.search).get('story'); } catch(e){ u = null; }
+    if (!u) { try { return window.__chr6Key ? window.__chr6Key() : 'chr6'; } catch(e2){ return 'chr6'; } }
+    if (u === 'default' || u === 'chr6') return 'chr6';
+    var ok = false;
+    try {
+      var m = JSON.parse(localStorage.getItem('chr6_slots_meta') || '[]');
+      if (Object.prototype.toString.call(m) === '[object Array]'){
+        for (var i = 0; i < m.length; i++){
+          var e3 = m[i];
+          if (e3 && String(e3.id) === String(u)){ ok = (e3.deleted !== true); break; }
+        }
+      }
+    } catch(e4){ ok = false; }
+    return ok ? ('chr6_slot_' + u) : null;
+  }
   function fixProviderCfg(){
     try {
-      var raw = localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6');
+      var __k = __f692CfgKey();
+      if (__k === null) return;
+      var raw = localStorage.getItem(__k);
       if (!raw) return;
       var s = JSON.parse(raw);
       if (!s.cfg) return;
@@ -2362,7 +2392,7 @@ G.init();
         changed = true;
       }
       if (changed){
-        localStorage.setItem(window.__chr6Key ? window.__chr6Key() : 'chr6', JSON.stringify(s));
+        localStorage.setItem(__k, JSON.stringify(s));
         console.log(TAG, 'cfg cleaned');
       }
     } catch(e){}
