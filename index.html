@@ -9,7 +9,7 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix692"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix694"></script>
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
@@ -42,7 +42,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260817-fix692';
+  var BUILT = '20260817-fix694';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -432,6 +432,58 @@ const KEY = 'chr6';
    全パッチのLSフォールバックはこれを経由し、アクティブスロット使用時に旧デフォルトストアを読まない。 */
 window.__chr6Key = function(){ try { var a = JSON.parse(localStorage.getItem('chr6_active_slot') || 'null'); if (a && a !== 'default') return 'chr6_slot_' + a; } catch(e){} return 'chr6'; };
 
+/* ★2026-08-18 fix694 DOCUMENT_SCOPED_STORY_WRITE_AUTHORITY
+   実測(fix693): bare index.html(?story 無し)の別 document が、共有ミラー chr6_active_slot を
+   根拠に他物語の本体 chr6_slot_B を書いていた(CROSS_DOCUMENT_BODY_WRITE)。
+   対策: **この document が書いてよい保存先**を boot 時に一度だけ確定し、以後不変にする。
+   ・chr6_active_slot は navigation / last-opened ミラー専用。書込先の決定に使わない(INV-C)
+   ・?story=X(登録済 or 本体実在の legacy) → 'chr6_slot_'+X / ?story=default|chr6 → 'chr6'
+   ・墓標 / 不明 / ?story 無し → null（**書かない**。'chr6' へ fallback もしない）
+   ・null のときは home.html へ戻す。ただし遷移前の save race を止めるため gate も必ず併用
+   ・read 用 __chr6Key() は互換のため無変更(INV: read/write の分離)
+   OFF: localStorage['v292Dfix694Off']==='1' で従来挙動へ戻す */
+(function(){
+  function f694off(){ try { return localStorage.getItem('v292Dfix694Off') === '1'; } catch(e){ return false; } }
+  function f694meta(){
+    try { var m = JSON.parse(localStorage.getItem('chr6_slots_meta') || '[]');
+          return (Object.prototype.toString.call(m) === '[object Array]') ? m : []; } catch(e){ return []; }
+  }
+  function f694entry(id){
+    var m = f694meta();
+    for (var i = 0; i < m.length; i++){ var e = m[i]; if (e && String(e.id) === String(id)) return e; }
+    return null;
+  }
+  function f694decide(){
+    var u = null;
+    try { u = new URLSearchParams(location.search).get('story'); } catch(e){ u = null; }
+    if (!u) return null;                                  /* bare index = 権限なし */
+    if (u === 'default' || u === 'chr6') return 'chr6';
+    var e = f694entry(u);
+    if (e && e.deleted === true) return null;             /* 墓標 */
+    if (e) return 'chr6_slot_' + u;                       /* 登録済み */
+    /* legacy 救済: 本体が実在し、JSON として解釈でき、object であるときだけ権限を与える。
+       壊れた blob / 空 / 配列 では権限を与えない（migration はしない） */
+    try {
+      var raw = localStorage.getItem('chr6_slot_' + u);
+      if (raw != null){
+        var d = JSON.parse(raw);
+        if (d && typeof d === 'object' && Object.prototype.toString.call(d) !== '[object Array]') return 'chr6_slot_' + u;
+      }
+    } catch(e2){}
+    return null;
+  }
+  var K = null;
+  try { K = f694off() ? (window.__chr6Key ? window.__chr6Key() : 'chr6') : f694decide(); } catch(e){ K = null; }
+  window.__chronicleDocumentStoryKey = K;                 /* 非永続・document scoped・immutable */
+  window.__chr6WriteKey = function(){ return window.__chronicleDocumentStoryKey; };
+  window.__v292Dfix694 = { key: function(){ return window.__chronicleDocumentStoryKey; },
+                           off: f694off, decided: K };
+  if (K === null && !f694off()){
+    try { console.warn('[v292Dfix694] no write authority for this document -> home'); } catch(e){}
+    try { location.replace('home.html'); } catch(e){}
+  }
+})();
+
 // ─────────────────────────────────────────────────────────────
 // State
 // ─────────────────────────────────────────────────────────────
@@ -463,7 +515,10 @@ const S = {
         return;
       }
     } catch (e) {}
-    SS.set((window.__chr6Key ? window.__chr6Key() : KEY), { cfg: this.cfg, cast: this.cast, scene: this.scene, turns: this.turns, mode: this.mode }); /* v292Dfix230: 保存も発生源からスロット対応(fix30 wrapへの依存を排除) */
+    /* ★fix694: 保存先はこの document の権限キーのみ。権限が無ければ保存しない */
+    var __wk = (window.__chr6WriteKey ? window.__chr6WriteKey() : (window.__chr6Key ? window.__chr6Key() : KEY));
+    if (!__wk) return;
+    SS.set(__wk, { cfg: this.cfg, cast: this.cast, scene: this.scene, turns: this.turns, mode: this.mode }); /* v292Dfix230: 保存も発生源からスロット対応(fix30 wrapへの依存を排除) */
   },
   load() {
     /* v292Dfix230: クロバー構造窓の根治。従来はここが常にデフォルト'chr6'を読み、
@@ -2326,38 +2381,11 @@ G.init();
   }
 
   /* ─── 2. PROVIDER CONFIG HYGIENE (v18+v72 essence) ─────────────── */
-  /* ★2026-08-18 fix692 PROVIDER_CFG_EARLY_BOOT_TARGET_FIX
-     実測: この hygiene は boot 最初期(t=950ms / readyState=loading)に同期実行され、
-     fix527 が current story を確定する約 1.8 秒前に走る。その時点の
-     __chr6Key() は stale な chr6_active_slot を解決するため、URL が X なのに
-     別物語 B の本体を read/write していた(STORY_BOOT_CROSS_SLOT_WRITE)。
-     対策: 対象キーを **1 回だけ** 決め、read と write で同じキーを使う。
-     ・?story=X が chr6_slots_meta に登録済み  → chr6_slot_X (URL を正とする)
-     ・?story 無し(home 等)                    → 従来どおり __chr6Key()
-     ・?story はあるが正規確認できない/墓標    → **null を返して hygiene を skip**
-       (stale chr6_active_slot へ fallback して他物語を書かない)
-     chr6_active_slot は書き換えない。新規 schema なし。 */
-  function __f692CfgKey(){
-    var u = null;
-    try { u = new URLSearchParams(location.search).get('story'); } catch(e){ u = null; }
-    if (!u) { try { return window.__chr6Key ? window.__chr6Key() : 'chr6'; } catch(e2){ return 'chr6'; } }
-    if (u === 'default' || u === 'chr6') return 'chr6';
-    var ok = false;
-    try {
-      var m = JSON.parse(localStorage.getItem('chr6_slots_meta') || '[]');
-      if (Object.prototype.toString.call(m) === '[object Array]'){
-        for (var i = 0; i < m.length; i++){
-          var e3 = m[i];
-          if (e3 && String(e3.id) === String(u)){ ok = (e3.deleted !== true); break; }
-        }
-      }
-    } catch(e4){ ok = false; }
-    return ok ? ('chr6_slot_' + u) : null;
-  }
   function fixProviderCfg(){
     try {
-      var __k = __f692CfgKey();
-      if (__k === null) return;
+      /* ★fix694: fix692 の個別 resolver を共有 authority へ統合 */
+      var __k = (window.__chr6WriteKey ? window.__chr6WriteKey() : null);
+      if (!__k) return;
       var raw = localStorage.getItem(__k);
       if (!raw) return;
       var s = JSON.parse(raw);
@@ -2483,7 +2511,10 @@ G.init();
   /* ─── 5. HERO/NPC GENDER + NAME FIXES (v70+v73+v76 essence) ───── */
   function fixGenderAndNames(){
     try {
-      var raw = localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6');
+      /* ★fix694 */
+      var __k = (window.__chr6WriteKey ? window.__chr6WriteKey() : null);
+      if (!__k) return;
+      var raw = localStorage.getItem(__k);
       if (!raw) return;
       var s = JSON.parse(raw);
       var changed = false;
@@ -2505,14 +2536,17 @@ G.init();
           }
         }
       });
-      if (changed) localStorage.setItem(window.__chr6Key ? window.__chr6Key() : 'chr6', JSON.stringify(s));
+      if (changed) localStorage.setItem(__k, JSON.stringify(s));
     } catch(e){}
   }
 
   /* ─── 6. UI-TEXT DIALOGUE PURGER (v77 essence) ─────────────────── */
   function purgeBadDialogues(){
     try {
-      var raw = localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6');
+      /* ★fix694 */
+      var __k = (window.__chr6WriteKey ? window.__chr6WriteKey() : null);
+      if (!__k) return;
+      var raw = localStorage.getItem(__k);
       if (!raw) return;
       var s = JSON.parse(raw);
       var changed = false;
@@ -2527,7 +2561,7 @@ G.init();
         }
       });
       if (changed){
-        localStorage.setItem(window.__chr6Key ? window.__chr6Key() : 'chr6', JSON.stringify(s));
+        localStorage.setItem(__k, JSON.stringify(s));
         if (typeof UI === 'object' && typeof UI.renderAll === 'function'){
           try { UI.renderAll(); } catch(e){}
         }
@@ -2554,27 +2588,33 @@ G.init();
 
   function generateHeroAvatar(){
     try {
-      var raw = localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6');
+      /* ★fix694 */
+      var __k = (window.__chr6WriteKey ? window.__chr6WriteKey() : null);
+      if (!__k) return;
+      var raw = localStorage.getItem(__k);
       if (!raw) return;
       var s = JSON.parse(raw);
       var hero = (s.cast||{}).hero;
       if (!hero || !hero.name){ alert('主人公の名前を先に設定してください'); return; }
       var url = avatarUrl(hero.name, hero.desc||'', hero.gender||'');
       hero.avatar = url;
-      localStorage.setItem(window.__chr6Key ? window.__chr6Key() : 'chr6', JSON.stringify(s));
+      localStorage.setItem(__k, JSON.stringify(s));
       buildHeroWidget(); /* re-render */
     } catch(e){ console.warn(TAG, 'hero avatar', e); }
   }
 
   function generateNpcAvatar(idx){
     try {
-      var raw = localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6');
+      /* ★fix694 */
+      var __k = (window.__chr6WriteKey ? window.__chr6WriteKey() : null);
+      if (!__k) return;
+      var raw = localStorage.getItem(__k);
       if (!raw) return;
       var s = JSON.parse(raw);
       var npc = (s.cast||{}).npcs && s.cast.npcs[idx];
       if (!npc || !npc.name){ alert('NPCの名前を先に設定してください'); return; }
       npc.avatar = avatarUrl(npc.name, npc.desc||'', npc.gender||'');
-      localStorage.setItem(window.__chr6Key ? window.__chr6Key() : 'chr6', JSON.stringify(s));
+      localStorage.setItem(__k, JSON.stringify(s));
       buildAllNpcAvatars();
     } catch(e){ console.warn(TAG, 'npc avatar', e); }
   }
@@ -2819,7 +2859,7 @@ G.init();
        fix659 は別 id + __f527 マーカーを立てるので干渉しない、という関係をこの並びで示す。
      読出=window.__v292Dfix659.status()/.selfTest() / OFF=v292Dfix659Off -->
 <script src="v292Dfix659-fork-choice.js?cb=v292Dfix680"></script>
-<script src="features.js?cb=v292Dfix680"></script>
+<script src="features.js?cb=v292Dfix694"></script>
 <script>
 /* ============================================================================
  * v292DfixP0-inline : シナリオテンプレ適用の緊急封鎖（L2 + L2b）
@@ -3065,7 +3105,7 @@ G.init();
 <script src="v292Dfix55-gm-mode.js?cb=v292Dfix55c"></script>
   <script src="v292Dfix56-conversation-log-fix.js?cb=v292Dfix200"></script>
   <script src="v292Dfix57-script-style-dialogue.js?cb=v292Dfix57"></script>
-  <script src="v292Dfix58-prompt-rebuild.js?cb=v292Dfix58"></script>
+  <script src="v292Dfix58-prompt-rebuild.js?cb=v292Dfix694"></script>
   <script src="v292Dfix60-display-pipeline.js?cb=v292Dfix60"></script>
   <script src="v292Dfix59-hybrid-extractor.js?cb=v292Dfix59"></script>
   <script src="v292Dfix61-alpha-strip-protect.js?cb=v292Dfix61v3"></script>

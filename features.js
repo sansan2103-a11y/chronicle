@@ -2382,8 +2382,10 @@
     var DESCS_F = ['18歳。意志が強い記録官見習い。','16歳。他人の感情に敏感。','20歳。踊り手。','17歳。天才的だが壊れやすい魔法使い。','少女のような外見の珍財ハンター。'];
     var DESCS_M = ['老齢の元兵士。皮肉屋。','15歳の魔法使い見習い。','真面目な役人。','無口だが仲間思いの元傭兵。'];
     function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
-    function getCast(){ try { return JSON.parse(localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6') || '{}'); } catch(e){ return {}; } }
-    function setCast(s){ try { localStorage.setItem(window.__chr6Key ? window.__chr6Key() : 'chr6', JSON.stringify(s)); } catch(e){} }
+    /* ★fix694: read/write ともこの document の権限キーへ固定。権限が無ければ触らない */
+    function f694key(){ try { return window.__chr6WriteKey ? window.__chr6WriteKey() : (window.__chr6Key ? window.__chr6Key() : 'chr6'); } catch(e){ return null; } }
+    function getCast(){ try { var k = f694key(); if (!k) return {}; return JSON.parse(localStorage.getItem(k) || '{}'); } catch(e){ return {}; } }
+    function setCast(s){ try { var k = f694key(); if (!k) return; localStorage.setItem(k, JSON.stringify(s)); } catch(e){} }
 
     var __busy = false;
     function injectOnce(){
@@ -5970,18 +5972,26 @@
     if (S.__v292Dfix30Wrapped) return true;
     var origSave = S.save.bind(S);
     S.save = function(){
-      var slot = activeSlot();
-      if (!slot || slot.id === 'default'){
+      /* ★fix694: 保存先は chr6_active_slot ではなく document の権限キー(INV-A/B/C)。
+         権限が無い document(bare index / 墓標 / 不明 story)では保存しない。 */
+      if (typeof window.__chr6WriteKey !== 'function'){
+        try { console.warn(TAG, 'fix694 authority missing - skip body save'); } catch(e){}
+        return;                       /* fail-closed: activeSlot() へ fallback しない */
+      }
+      var wk = null;
+      try { wk = window.__chr6WriteKey(); } catch(e){ wk = null; }
+      if (!wk) return;                /* 権限なし document は保存しない */
+      if (wk === DEFAULT_SLOT_KEY){
         // default slot: use original behavior (writes to 'chr6')
         var r = origSave.apply(this, arguments);
         touchSlot('default');
         return r;
       }
-      // named slot: write to slot.key
+      // named slot: write to the authority key
       try {
         var payload = { cfg: this.cfg, cast: this.cast, scene: this.scene, turns: this.turns, mode: this.mode };
-        lsSet(slot.key, payload);
-        touchSlot(slot.id);
+        lsSet(wk, payload);
+        touchSlot(wk.indexOf('chr6_slot_') === 0 ? wk.slice(10) : 'default');
       } catch(e){
         console.warn(TAG, 'save error:', e && e.message);
       }

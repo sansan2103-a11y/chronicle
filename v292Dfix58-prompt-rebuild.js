@@ -172,7 +172,10 @@
           state.rollingSummary = summary;
           try {
             if (typeof state.save === 'function') state.save();
-            else localStorage.setItem('chr6', JSON.stringify(state));
+            else { /* ★fix694: 既定の 'chr6' 決め打ちをやめ document の権限キーへ */
+              var __wk = (window.__chr6WriteKey ? window.__chr6WriteKey() : 'chr6');
+              if (__wk) localStorage.setItem(__wk, JSON.stringify(state));
+            }
           } catch(e){}
           console.log(TAG, 'summary captured (' + summary.length + ' chars):', summary.slice(0, 60) + (summary.length > 60 ? '…' : ''));
         }
