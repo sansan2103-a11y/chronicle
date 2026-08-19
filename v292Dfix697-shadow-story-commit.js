@@ -140,10 +140,16 @@
       return txt.slice(0, 200);
     } catch(e){ return ''; }
   }
-  function projection(){
-    var id = storyId();
-    if (!id) return null;
-    var bodyRaw = lsg(authorityKey());
+  /* ★★fix708(STEP3F): 任意 story の **read-only** projection を出せるようにする。
+     なぜ必要か: 削除トランザクションは「まだ live のうちに」canonical hash を確定させる必要がある
+     （墓標を立てた後に projection を作り直すのは禁止＝別物の hash になる）。
+     独自 serializer を作ると contract が二重化するので、**必ずこの owner の実装を通す**。
+     ★ここは読むだけ。書込・通信・commit・marker 更新を一切しない。
+     ★deleted:true の meta を持つ story は従来どおり null（live のみ）＝ null 保護は壊さない。 */
+  function keyOf(id){ return (String(id) === 'default') ? 'chr6' : ('chr6_slot_' + String(id)); }
+  function projectFrom(id, key){
+    if (!id || !key) return null;
+    var bodyRaw = lsg(key);
     if (bodyRaw == null) return null;
     var d = null;
     try { d = JSON.parse(bodyRaw); } catch(e){ return null; }
@@ -170,6 +176,17 @@
       turnCount: turns.length,
       snippet: snippetOf(body)
     };
+  }
+  function projection(){
+    var id = storyId();
+    if (!id) return null;
+    return projectFrom(id, authorityKey());          /* ★従来と完全に同じ経路 */
+  }
+  /* ★fix708: document authority に依存しない read-only projection。 */
+  function projectionOf(id){
+    var s = (id == null) ? '' : String(id);
+    if (!s) return null;
+    return projectFrom(s, keyOf(s));
   }
   function canonicalString(content){ return stableStringify(content); }
   function sha256hex(str, cb){
@@ -352,7 +369,36 @@
     flush: function(){ commit('manual'); return true; },
     projection: projection,
     canonicalString: canonicalString,
-    contentHash: function(cb){ var c = projection(); if (!c) return cb(null); sha256hex(canonicalString(c), cb); }
+    contentHash: function(cb){ var c = projection(); if (!c) return cb(null); sha256hex(canonicalString(c), cb); },
+    /* ★★fix708(STEP3F): 削除トランザクション用の read-only 口。
+       どちらも **読むだけ**（書込 0 / 通信 0 / commit 0 / marker 更新 0）。 */
+    projectionOf: projectionOf,
+    contentHashOf: function(id, cb){
+      var c = projectionOf(id);
+      if (!c) return cb(null, 'NO_LIVE_PROJECTION');
+      sha256hex(canonicalString(c), function(h){ cb(h || null, h ? null : 'HASH_FAILED'); });
+    },
+    /* fix587 が shadow op を出すための transport（endpoint/auth の owner を増やさない）。
+       ★shadow op 以外は通さない。 */
+    shadowRequest: function(payload, cb){
+      var op = payload && payload.op;
+      if (op !== 'getstory' && op !== 'deleteshadow'){ cb(null, 'OP_NOT_ALLOWED'); return; }
+      if (!isLoggedIn()){ cb(null, 'NOT_LOGGED_IN'); return; }
+      var ac = null, timer = null;
+      try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, TIMEOUT_MS); } catch(e){}
+      var opts = { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) };
+      if (ac) opts.signal = ac.signal;
+      fetch(proxyUrl() + '/save', opts).then(function(res){
+        return res.json().then(function(j){ return { status: res.status, j: j }; },
+                               function(){ return { status: res.status, j: null }; });
+      }).then(function(r){
+        if (timer) clearTimeout(timer);
+        cb({ status: r.status, j: r.j || {} }, null);
+      })['catch'](function(e){
+        if (timer) clearTimeout(timer);
+        cb(null, 'NETWORK_FAILED');
+      });
+    }
   };
   try { console.log(TAG, 'loaded (shadow non-authoritative / default OFF / on=v292Dfix697On)'); } catch(e){}
 })();
