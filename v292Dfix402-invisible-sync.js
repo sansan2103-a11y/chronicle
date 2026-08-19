@@ -88,7 +88,14 @@
   function isLoggedIn(){ var h = authHeaders(); return !!(h['x-google-id'] || h['x-chronicle-pass']); }
   // ★fix402e A-4: AbortタイムアウトつきcallSave(本文既定25s・画像は呼び出し側で40s)。
   //   タイムアウト/例外時はrejectして呼び出し側のフラグ(pushing/pulling/applying/imgSending)を解除させる。
+  /* ★★fix702(STEP3D): legacy pkg 書込に cutover-aware protocol を申告する。
+     ★body 直下に置くこと。pkg の中へ入れてはいけない（packageHash = chronicle-light-v1 の
+     形の上で計算されるため、pkg にフィールドを足すと fork/conflict 判定の前提が壊れる）。
+     Worker v30 は canonical story が1本でも出来た account に対してのみこの値を要求する
+     （legacy-client-too-old）。canonical 0 のうちはゲート自体が発火しない。 */
+  var CHR_CLIENT_PROTOCOL = 1;
   function callSave(bodyObj, timeoutMs){
+    try { if (bodyObj && typeof bodyObj === 'object' && bodyObj.clientProtocol === undefined) bodyObj.clientProtocol = CHR_CLIENT_PROTOCOL; } catch(e){}
     var ctrl = null, timer = null;
     try { if (typeof AbortController !== 'undefined') ctrl = new AbortController(); } catch(e){ ctrl = null; }
     var opts = { method: 'POST', headers: authHeaders(), body: JSON.stringify(bodyObj) };
@@ -416,11 +423,31 @@
                   inMeta[sid] = 1;
                 }
               }
+              /* ★★fix702(STEP3D P0-2): canonical story を削除伝播から守る。
+                 この経路は applySave（＝filterIncoming の mask）を通らない**別経路**なので、
+                 mask だけでは canonical body の物理削除を防げない。
+                 ・marker 未作成（cutover 前）→ canon = {} なので**従来と完全に同じ挙動**。
+                 ・marker が壊れている → 削除伝播そのものを見送る（保持側へ fail-safe）。 */
+              var canon = {}, canonReadable = true;
+              try {
+                var rawAuth = lsGet('v292Dfix702_storyAuth');
+                if (rawAuth != null){
+                  var mAuth = JSON.parse(rawAuth);
+                  if (mAuth && typeof mAuth === 'object' && !(mAuth instanceof Array)){
+                    for (var ck in mAuth){ if (Object.prototype.hasOwnProperty.call(mAuth, ck)
+                      && mAuth[ck] && mAuth[ck].authority === 'canonical') canon[String(ck)] = 1; }
+                  } else canonReadable = false;
+                }
+              } catch(e){ canonReadable = false; }
+              if (!canonReadable){
+                try { console.warn(TAG, 'fix702 marker が読めないため削除伝播を見送りました（保持側へ fail-safe）'); } catch(e){}
+                metaOk = false;
+              }
               if (metaOk) {
                 var doomed = [];
                 for (var di = 0; di < localStorage.length; di++){ var dk = localStorage.key(di);
                   var dmatch = /^chr6_slot_(.+)$/.exec(dk || '');
-                  if (dmatch && !inMeta[dmatch[1]]) doomed.push(dk); }
+                  if (dmatch && !inMeta[dmatch[1]] && !canon[dmatch[1]]) doomed.push(dk); }
                 if (doomed.length) {
                   var snap = {}; doomed.forEach(function(dk){ snap[dk] = localStorage.getItem(dk); });
                   var bkKey = 'chr6_bk_cloudsync_del_' + Date.now();

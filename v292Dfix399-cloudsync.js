@@ -250,7 +250,14 @@
   }
 
   // ---- サーバー通信 ----
+  /* ★★fix702(STEP3D): legacy pkg 書込に cutover-aware protocol を申告する。
+     ★body 直下に置くこと。pkg の中へ入れてはいけない（packageHash = chronicle-light-v1 の
+     形の上で計算されるため、pkg にフィールドを足すと fork/conflict 判定の前提が壊れる）。
+     Worker v30 は canonical story が1本でも出来た account に対してのみこの値を要求する
+     （legacy-client-too-old）。canonical 0 のうちはゲート自体が発火しない。 */
+  var CHR_CLIENT_PROTOCOL = 1;
   function callSave(bodyObj){
+    try { if (bodyObj && typeof bodyObj === 'object' && bodyObj.clientProtocol === undefined) bodyObj.clientProtocol = CHR_CLIENT_PROTOCOL; } catch(e){}
     return fetch(proxyUrl() + '/save', { method: 'POST', headers: authHeaders(), body: JSON.stringify(bodyObj) })
       .then(function(r){ return r.json().then(function(j){ return { status: r.status, json: j }; }); });
   }

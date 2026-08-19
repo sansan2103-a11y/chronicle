@@ -218,7 +218,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260819-fix701';
+  var HOME_BUILT = '20260819-fix702';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -237,7 +237,7 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix701"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix702"></script>
 <script src="v292Dfix698-mutation-bus.js?cb=v292Dfix701"></script>
 <script src="v292Dfix569-gc-shadow.js?cb=v292Dfix680"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者（fix569 が捕捉済みの native を借りる） -->
@@ -649,7 +649,11 @@
     try { el('sync').className='sync err'; el('sync').textContent='⚠ '+whyNotLoggedIn(); } catch(e){}
     try { console.warn('[home] 同期不可:', whyNotLoggedIn()); } catch(e){}
   }
+  /* ★★fix702(STEP3D P0-3): home も legacy pkg writer（L~1019 op:'put' / L~1461 body596 op:'forceput'）。
+     新 build の全 legacy writer が protocol=1 を送る。★body 直下に置く（pkg / packageHash には入れない）。 */
+  var CHR_CLIENT_PROTOCOL = 1;
   function call(body, ms){
+    try { if (body && typeof body === 'object' && body.clientProtocol === undefined) body.clientProtocol = CHR_CLIENT_PROTOCOL; } catch(e){}
     var ctrl = (typeof AbortController!=='undefined') ? new AbortController() : null;
     var timer = ctrl ? setTimeout(function(){ try{ctrl.abort();}catch(e){} }, ms||25000) : null;
     var o={ method:'POST', headers:authHeaders(), body:JSON.stringify(body) };

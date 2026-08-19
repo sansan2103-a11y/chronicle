@@ -9,7 +9,7 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix701"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix702"></script>
 <script src="v292Dfix698-mutation-bus.js?cb=v292Dfix701"></script>
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
@@ -43,7 +43,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260819-fix701';
+  var BUILT = '20260819-fix702';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2826,6 +2826,7 @@ G.init();
 <script src="v292Dfix543-save-guard.js?cb=v292Dfix696"></script>
 <script src="v292Dfix697-shadow-story-commit.js?cb=v292Dfix700"></script>
 <script src="v292Dfix700-nonauthoritative-mirror.js?cb=v292Dfix700"></script>
+<script src="v292Dfix702-authority-cutover.js?cb=v292Dfix702"></script>
 <!-- v292Dfix573: 主人公が「無言で消える」のを見張る。
      名前が「あった→無くなった」書込を捉え、旧値の控えを取り、その場で知らせる。
      書込は止めない・自動復元もしない。OFF=v292Dfix573Off -->
@@ -3262,13 +3263,13 @@ G.init();
 <script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=v292Dfix396"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
-<script src="v292Dfix399-cloudsync.js?cb=v292Dfix680"></script>
+<script src="v292Dfix399-cloudsync.js?cb=v292Dfix702"></script>
   <script src="v292Dfix400-img-url.js?cb=v292Dfix400d"></script>
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=v292Dfix336"></script>
 <script src="v292Dfix338-artstyle.js?cb=v292Dfix484"></script>
 <script src="v292Dfix346-idb-avatars.js?cb=v292Dfix346"></script>
 <script src="v292Dfix356-avatar-eager.js?cb=v292Dfix450"></script>
-<script src="v292Dfix402-invisible-sync.js?cb=v292Dfix680"></script>
+<script src="v292Dfix402-invisible-sync.js?cb=v292Dfix702"></script>
 <script src="v292Dfix405-state-freshness.js?cb=v292Dfix417"></script>
 <script src="v292Dfix406-automode.js?cb=v292Dfix417d"></script>
 <script src="v292Dfix407-load-noconfirm.js?cb=v292Dfix407"></script>
