@@ -84,18 +84,20 @@
   // =====================================================================
   //   chr6 / chr6_slot_<id>                → body
   //   v292aiInstr / v292aiInstr_slot_<id>  → sidecar aiInstr
-  //   genderMap_<id> / genderMap_"<id>"    → sidecar genderMap
-  //   ★genderMap_default は **account-global**。story canonical mutation ではない → null
+  //   ★fix701(STEP3C 後片付け・GPT裁定): genderMap family は **canonical から除外済み**。
+  //     GENDER_SOURCE_CONTRACT_001 により gender の canonical source は body.cast のみ。
+  //     fix697 の sidecar.genderMap は null 固定であり、genderMap_* への書込は
+  //     canonical projection を一切変えない。よって resolver は genderMap を解決しない:
+  //       genderMap_<id> / genderMap_"<id>" / genderMap_default
+  //       / chr6_v292Dfix54_genderMap_*        → すべて null = NOT_CANONICAL_MUTATION
+  //     （layer1 の isWatched には残す＝ legacy 書込を notCanonical として観測できるようにする）
   function resolve(key){
     var k = String(key == null ? '' : key);
     if (k === 'chr6') return { storyId: 'default', part: 'body' };
     if (k.indexOf('chr6_slot_') === 0){ var id = k.slice(10); return id ? { storyId: id, part: 'body' } : null; }
     if (k === 'v292aiInstr') return { storyId: 'default', part: 'aiInstr' };
     if (k.indexOf('v292aiInstr_slot_') === 0){ var a = k.slice(17); return a ? { storyId: a, part: 'aiInstr' } : null; }
-    if (k === 'genderMap_default' || k === 'genderMap_"default"') return null;   /* ★account-global */
-    var mq = /^genderMap_"(.+)"$/.exec(k);
-    if (mq) return { storyId: mq[1], part: 'genderMap', quoted: true };
-    if (k.indexOf('genderMap_') === 0){ var g = k.slice(10); return g ? { storyId: g, part: 'genderMap', quoted: false } : null; }
+    /* ★fix701: genderMap_* は解決しない（下の return null に落ちる） */
     return null;                                   /* NOT CANONICAL MUTATION */
   }
 
@@ -130,25 +132,17 @@
   function canonicalChanged(r, key, oldV, newV){
     if (r.part === 'body') return bodyPart(oldV) !== bodyPart(newV);
     if (r.part === 'aiInstr') return String(oldV == null ? '' : oldV) !== String(newV == null ? '' : newV);
-    if (r.part === 'genderMap'){
-      /* ★STEP2 と同一の unquoted 優先規則。quoted への書込は unquoted が実在するなら
-         canonical projection を変えない（＝ 無視して正しい）。 */
-      if (r.quoted && lsg('genderMap_' + r.storyId) != null) return false;
-      return gmPart(oldV) !== gmPart(newV);
-    }
+    /* ★fix701: part === 'genderMap' は resolver が返さなくなったため分岐ごと削除。
+       未知 part は常に false（= canonical 不変）。 */
     return false;
   }
   /* story 全体の canonical projection hash（pending の hash に使う） */
   function storyCanonicalString(storyId){
     var bodyKey = (storyId === 'default') ? 'chr6' : ('chr6_slot_' + storyId);
     var ai = (storyId === 'default') ? lsg('v292aiInstr') : lsg('v292aiInstr_slot_' + storyId);
-    var gmRaw = null;
-    if (storyId !== 'default'){
-      var un = lsg('genderMap_' + storyId);
-      gmRaw = (un != null) ? un : lsg('genderMap_"' + storyId + '"');
-    }
+    /* ★fix701: genderMap は canonical から除外。shape は変えず値だけ固定（fix697 sidecar.genderMap = null と一致）。 */
     return stableStringify({ id: String(storyId), body: bodyPart(lsg(bodyKey)),
-      aiInstr: (ai == null ? null : String(ai)), genderMap: gmPart(gmRaw) });
+      aiInstr: (ai == null ? null : String(ai)), genderMap: gmPart(null) });
   }
   function h10(s){
     if (s == null) return null;
@@ -312,6 +306,8 @@
   // =====================================================================
   function isWatched(k){
     var s = String(k == null ? '' : k);
+    /* ★fix701: genderMap_* は canonical ではないが watch は残す。
+       resolver が null を返すので分類は NOT_CANONICAL_MUTATION（dirty 0 / pending 0）。 */
     return s === 'chr6' || s.indexOf('chr6_slot_') === 0
         || s === 'v292aiInstr' || s.indexOf('v292aiInstr_slot_') === 0
         || s.indexOf('genderMap_') === 0;
