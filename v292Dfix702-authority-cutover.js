@@ -125,6 +125,13 @@
     }
     return { ls: out, blocked: blocked };
   }
+  /* ★★fix703(production regression 修正)
+     fix702 初版は「service が無ければ自分で __chronicleStoryLifecycle を作る」実装だった。
+     しかし index.html の読込順は fix702(L2829) → fix587(L3205) で、
+     fix587 の冒頭は `if (window.__chronicleStoryLifecycle) return;` という**冪等ガード**。
+     先にオブジェクトを作ってしまうと **fix587 が丸ごと起動しなくなる**（実機で観測）。
+     → 二度と value 代入で先回りしない。fix685 と同じ accessor 方式で
+       「fix587 が代入した瞬間に包む」に変える。自前生成は最後の保険だけ。 */
   function installMask(){
     if (maskStats.installed) return true;
     try {
@@ -153,33 +160,53 @@
         }
         return { ls: cur, blocked: blockedAll };
       };
-      if (svc && typeof svc === 'object'){
-        svc.filterIncoming = wrapped;
-        maskStats.mode = prev ? 'wrap(fix587)' : 'attach(existing-svc)';
-      } else {
-        /* service ごと未定義でも mask だけは立てる（fail-closed 側） */
-        window.__chronicleStoryLifecycle = { filterIncoming: wrapped, __f702created: true };
-        maskStats.mode = 'create';
-      }
+      wrapped.__f702 = true;
+      if (!(svc && typeof svc === 'object')) return false;   /* ★自分では作らない（fix587 を殺さない） */
+      svc.filterIncoming = wrapped;
+      maskStats.mode = prev ? 'wrap(fix587)' : 'attach(existing-svc)';
       maskStats.installed = true;
       try { console.log(TAG, 'legacy apply mask installed (' + maskStats.mode + ')'); } catch(e){}
       return true;
     } catch(e){ return false; }
   }
-  /* fix587 が後から load される場合に備えて短時間だけ再試行する（既に installed なら何もしない） */
+  /* ★fix703: accessor 方式。getter は「まだ誰も代入していない間」undefined を返すので、
+     fix587 の冪等ガードは素通りし、fix587 は正常に起動できる。
+     fix587（あるいは他モジュール）が代入した瞬間に setter が包む。 */
+  var __svcHeld = undefined;
+  if (!(window.__chronicleStoryLifecycle && typeof window.__chronicleStoryLifecycle === 'object')){
+    try {
+      Object.defineProperty(window, '__chronicleStoryLifecycle', {
+        configurable: true,
+        get: function(){ return __svcHeld; },
+        set: function(v){ __svcHeld = v; try { maskStats.installed = false; installMask(); } catch(e){} }
+      });
+      maskStats.mode = 'accessor-armed';
+    } catch(e){ maskStats.mode = 'accessor-failed'; }
+  } else {
+    installMask();
+  }
+  /* 監視: 誰かが filterIncoming を差し替えたら包み直す。
+     ★最後の保険: DOMContentLoaded 後も service がまだ無い（fix587 未ロード / OFF）なら、
+     そこで初めて自前生成する。この時点なら同期 script tag はすべて実行済みで
+     fix587 の冪等ガードを踏まない。 */
   (function maskPoll(){
     maskPoll._n = (maskPoll._n || 0) + 1;
     try {
       var svc = window.__chronicleStoryLifecycle;
-      if (maskStats.installed){
-        /* 誰かが filterIncoming を置き換えたら（fix587 の後 load 等）包み直す */
-        if (svc && typeof svc.filterIncoming === 'function' && !svc.filterIncoming.__f702){ maskStats.installed = false; installMask(); }
-      } else if (svc || maskPoll._n > 6){ installMask(); }
-      if (window.__chronicleStoryLifecycle && typeof window.__chronicleStoryLifecycle.filterIncoming === 'function'){
-        try { window.__chronicleStoryLifecycle.filterIncoming.__f702 = true; } catch(e){}
+      if (svc && typeof svc.filterIncoming === 'function' && !svc.filterIncoming.__f702){
+        maskStats.installed = false; installMask();
+      }
+      var domReady = (typeof document !== 'undefined' && document.readyState !== 'loading');
+      if (!svc && domReady && maskPoll._n > 4){
+        __svcHeld = { filterIncoming: null, __f702created: true };
+        var host = __svcHeld;
+        maskStats.installed = false;
+        host.filterIncoming = function(x){ return { ls: x, blocked: [] }; };   /* 一旦置いてから包む */
+        installMask();
+        maskStats.mode = 'create(fallback:no-lifecycle)';
       }
     } catch(e){}
-    if (maskPoll._n > 40) return;
+    if (maskPoll._n > 60) return;
     setTimeout(maskPoll, 500);
   })();
 
