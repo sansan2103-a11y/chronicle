@@ -1,0 +1,548 @@
+// =====================================================================
+// v292Dfix705 — STEP3E: canonical read authority（既知 storyId 限定）
+// ---------------------------------------------------------------------
+// 役割:
+//   ・story document を開いた時点（head）で **WRITE HOLD** を張る。
+//   ・server に op:'getstory' を **document あたり1回**だけ投げて authority を分類する。
+//       authority = 'canonical' → server を正本として扱う（same-hash なら無書込）
+//       authority = 'shadow'    → HOLD 解除。現行 shadow/local 経路へ戻す
+//       row なし / 404          → HOLD 解除。現行経路へ戻す
+//       network/auth/parse/hash/classification 失敗
+//                               → KEEP LOCAL DATA + HOLD 継続 + 明示エラー + STOP
+//   ・「fetch 失敗したので local を正本として書く」は**実装しない**。
+//
+// 設計上の必須事実（実測）:
+//   F1 起動時の最初の body 書込は index.html:2424（fixProviderCfg / 2429 で同期呼出）で、
+//      S.save を経由しない直書き。→ HOLD は storage 境界に、かつ head で張る必要がある。
+//   F2 S は boot で一度だけ hydrate され以後 localStorage を読み直さない。
+//      → apply 後は location.reload() が必須（fix399/fix402 の既存 pull と同じ）。
+//   F3 __v292Dfix654._native('setItem') は全 wrapper 装着前に捕獲された native。
+//      → canonical hydration をこれで書けば fix698 layer1 / fix402 / fix527 が発火しない。
+//
+// 禁止（コードで担保）:
+//   ・legacy pkg apply（fix399 applySave / fix402 applyPkg）を呼ばない
+//   ・fix587 filterIncoming を通さない（fix702 mask と衝突させない）
+//   ・chr6_slots_meta / genderMap_* / account 設定 / 他 story を書かない
+//   ・canonical marker を削除しない
+//   ・canonical → shadow の downgrade をしない
+//   ・owner global（__chronicleStoryLifecycle 等）を先行生成しない
+//
+// 既定: OFF（v292Dfix705On === '1' かつ v292Dfix705Off !== '1' のときだけ有効）
+// 検証口: window.__v292Dfix705 = { status, stats, classify, release, on, off, __armed }
+// =====================================================================
+(function(){
+  'use strict';
+  if (window.__v292Dfix705) return;                 /* 冪等（自 namespace のみ） */
+  var TAG = '[v292Dfix705:canonical-read-gate]';
+  var BUILD = 'fix705';
+  var TIMEOUT_MS = 25000;
+  var APPLIED_KEY = 'v292Dfix705_applied';          /* ★sessionStorage（localStorage ではない） */
+  var META_KEY = 'chr6_slots_meta';                 /* ★canonical hash の title 供給元（共有 key） */
+
+  // ---- localStorage 薄いアクセサ（読みのみ。書きは applyWrite だけ） ----
+  function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function off(){ return lsg('v292Dfix705Off') === '1'; }
+  function on(){ return !off() && lsg('v292Dfix705On') === '1'; }
+
+  // ---- sessionStorage（apply → reload の収束記録） ----
+  function ssGet(k){ try { return sessionStorage.getItem(k); } catch(e){ return null; } }
+  function ssSet(k,v){ try { sessionStorage.setItem(k, v); return true; } catch(e){ return false; } }
+  function ssDel(k){ try { sessionStorage.removeItem(k); return true; } catch(e){ return false; } }
+
+  // =====================================================================
+  // storyId の導出（T0: head。fix694 はまだ走っていないので URL から独立に導く）
+  //   ・?story=<id> のみを見る。chr6_active_slot（mirror）は読まない。
+  //   ・T1 で __chronicleDocumentStoryKey が確定したら **必ず突合**し、
+  //     食い違ったら KEY_DIVERGENCE として HOLD 継続 + STOP。
+  // =====================================================================
+  function urlStoryId(){
+    try {
+      var m = String(location.search || '').match(/[?&]story=([^&#]*)/);
+      if (!m) return null;
+      var v = decodeURIComponent(m[1] || '');
+      v = v.replace(/^"+|"+$/g, '');
+      if (!v) return null;
+      if (!/^[A-Za-z0-9_-]{1,80}$/.test(v)) return null;   /* 一意に取れないなら hold しない */
+      return v;
+    } catch(e){ return null; }
+  }
+  function bodyKeyOf(id){ return (id === 'default') ? 'chr6' : ('chr6_slot_' + id); }
+  function aiKeyOf(id){ return (id === 'default') ? 'v292aiInstr' : ('v292aiInstr_slot_' + id); }
+
+  var STORY_ID = urlStoryId();
+  var BODY_KEY = STORY_ID ? bodyKeyOf(STORY_ID) : null;
+  var AI_KEY   = STORY_ID ? aiKeyOf(STORY_ID) : null;
+
+  /* ★書込許可リスト（コード固定・この2つだけ）。native body writer はこれ以外を書けない。
+     ★chr6_slots_meta は **この list に入れない**。title 更新は専用 helper applyTitleMeta のみ。 */
+  function allowList(){ return BODY_KEY ? (AI_KEY ? [BODY_KEY, AI_KEY] : [BODY_KEY]) : []; }
+  function isAllowed(k){
+    var a = allowList();
+    for (var i = 0; i < a.length; i++) if (a[i] === String(k)) return true;
+    return false;
+  }
+  /* WRITE HOLD の対象は「body / aiInstr」＋「chr6_slots_meta」。
+     ★meta を含める理由: S.save 経路（features.js fix30 wrapSave）が boot 中に meta も書き、
+       meta.title は canonical hash の入力なので、分類前に書かれると判定が揺れる。
+     ★current document からの write を止めるだけ。他 tab を制御する仕組みは持たない。 */
+  function heldKeys(){ var a = allowList().slice(); if (BODY_KEY) a.push(META_KEY); return a; }
+  function isHeld(k){
+    var a = heldKeys();
+    for (var i = 0; i < a.length; i++) if (a[i] === String(k)) return true;
+    return false;
+  }
+
+  // =====================================================================
+  // state / stats
+  // =====================================================================
+  var state = {
+    build: BUILD, storyId: STORY_ID, bodyKey: BODY_KEY, aiKey: AI_KEY,
+    held: false, holdInstalled: false, resolved: false,
+    phase: 'init',            /* init / held / classifying / applied / released / stopped */
+    verdict: null,            /* CANONICAL_SAME_HASH / CANONICAL_APPLIED / SHADOW / NOT_FOUND / … */
+    error: null,              /* NETWORK / AUTH / PARSE / HASH / APPLY_PARTIAL / … */
+    serverRev: null,          /* ★document runtime live authority（共有 rev map には書かない） */
+    serverHash: null,
+    localHash: null,
+    markerAuthority: null,
+    keyDivergence: null
+  };
+  var stats = {
+    holdBlockedSet: 0, holdBlockedRemove: 0, lastBlockedKey: null,
+    getstory: 0, netFail: 0,
+    sameHash: 0, applies: 0, reloads: 0, partial: 0, stops: 0,
+    titleHydrated: 0, metaWrites: 0, metaRace: 0,
+    /* ★意図的に迂回したことを観測可能にする（裁定要件） */
+    bypass: { nativeWrites: 0, metaNativeWrites: 0, keys: [], bypassed: ['fix698:layer1-setItem', 'fix402:wrapSetItem', 'fix527:mirror-lock', 'fix705:write-hold'] }
+  };
+  var LEDGER = [], LEDGER_CAP = 30;
+  function note(row){ try { row.t = Date.now(); LEDGER.push(row); while (LEDGER.length > LEDGER_CAP) LEDGER.shift(); } catch(e){} }
+  function stop(code, extra){
+    state.phase = 'stopped'; state.error = code; stats.stops++;
+    var r = { stop: code }; if (extra) for (var k in extra) r[k] = extra[k];
+    note(r);
+    try { console.warn(TAG, 'STOP:', code, '（local データは保持。write hold は継続）'); } catch(e){}
+    return r;
+  }
+
+  // =====================================================================
+  // (1) WRITE HOLD — storage 境界・document scoped
+  //   ・対象は **この document の story の 2 key だけ**。他 story / 他 key は素通し。
+  //   ・block = 「捨てる」。既存値は書き換えない（KEEP LOCAL DATA）。
+  //   ・marker(v292Dfix702_storyAuth) の有無に関係なく張る（裁定 Q2）。
+  // =====================================================================
+  function installHold(){
+    if (state.holdInstalled || !BODY_KEY) return false;
+    var f654 = window.__v292Dfix654;
+    if (!f654 || typeof f654.wrap !== 'function') { state.error = 'NO_STORAGE_TRAP'; return false; }
+    var prevSet = f654.wrap('setItem', function(k, v){
+      try {
+        if (state.held && isHeld(k)){
+          stats.holdBlockedSet++; stats.lastBlockedKey = String(k);
+          return;                                     /* ★捨てる。既存値は無変更 */
+        }
+      } catch(e){}
+      return prevSet ? prevSet.call(this, k, v) : undefined;
+    });
+    var prevRem = f654.wrap('removeItem', function(k){
+      try {
+        if (state.held && isHeld(k)){
+          stats.holdBlockedRemove++; stats.lastBlockedKey = String(k);
+          return;                                     /* ★KEEP DATA: 削除も止める */
+        }
+      } catch(e){}
+      return prevRem ? prevRem.call(this, k) : undefined;
+    });
+    state.holdInstalled = true; state.held = true; state.phase = 'held';
+    note({ hold: 'installed', keys: heldKeys() });
+    return true;
+  }
+  function releaseHold(why){
+    state.held = false; state.resolved = true; state.phase = 'released';
+    note({ hold: 'released', why: why });
+  }
+
+  // =====================================================================
+  // (2) canonical hydration 専用 native writer
+  //   ★fix705 内部からのみ / apply window 中のみ / allowlist の key のみ。
+  //   ★汎用 writer として export しない（window へ出さない）。
+  // =====================================================================
+  var applyWindow = false;
+  function applyWrite(k, v){
+    if (!applyWindow) return { ok: false, reason: 'NOT_IN_APPLY_WINDOW' };
+    if (!isAllowed(k)) return { ok: false, reason: 'KEY_NOT_ALLOWED' };
+    var f654 = window.__v292Dfix654;
+    var nat = (f654 && typeof f654._native === 'function') ? f654._native('setItem') : null;
+    if (typeof nat !== 'function') return { ok: false, reason: 'NO_NATIVE_SETITEM' };
+    try {
+      nat.call(localStorage, String(k), String(v));
+      stats.bypass.nativeWrites++;
+      if (stats.bypass.keys.indexOf(String(k)) < 0) stats.bypass.keys.push(String(k));
+      return { ok: true };
+    } catch(e){ return { ok: false, reason: 'QUOTA_OR_THROW', detail: String(e && e.message || e) }; }
+  }
+
+  /* ---------------------------------------------------------------
+     canonical title の server→local hydration 専用 helper。
+     ・chr6_slots_meta 専用 / 対象 storyId 専用 / title 専用
+     ・raw compare guard（読んだ raw と write 直前の raw が同一でなければ書かない）
+     ・native write は1回だけ / write 後 readback
+     ・window へ export しない
+     ★title を server へ送る経路は持たない（read 方向のみ）。
+     --------------------------------------------------------------- */
+  function applyTitleMeta(serverTitle){
+    if (!applyWindow) return { ok: false, reason: 'NOT_IN_APPLY_WINDOW' };
+    if (!STORY_ID || STORY_ID === 'default') return { ok: true, skipped: 'NO_META_TITLE' };
+    var want = (serverTitle == null) ? '' : String(serverTitle);
+
+    /* 1. apply 直前の raw を取得 */
+    var raw0 = lsg(META_KEY);
+    if (raw0 == null) return { ok: false, reason: 'META_ABSENT' };
+
+    /* 2. parse し、対象 storyId の entry だけを特定 */
+    var arr = null;
+    try { arr = JSON.parse(raw0); } catch(e){ return { ok: false, reason: 'META_PARSE' }; }
+    if (Object.prototype.toString.call(arr) !== '[object Array]') return { ok: false, reason: 'META_NOT_ARRAY' };
+    var idx = -1, hits = 0;
+    for (var i = 0; i < arr.length; i++){
+      if (arr[i] && String(arr[i].id) === String(STORY_ID)) { if (idx < 0) idx = i; hits++; }
+    }
+    if (idx < 0) return { ok: false, reason: 'META_ENTRY_NOT_FOUND' };
+    if (hits > 1) return { ok: false, reason: 'META_ENTRY_AMBIGUOUS' };   /* 一意に特定できない → 書かない */
+    var cur = (arr[idx].title == null) ? '' : String(arr[idx].title);
+    if (cur === want) return { ok: true, skipped: 'TITLE_SAME' };         /* ★一致なら write 0 */
+
+    /* 3. title だけ patch した新 raw を生成（他 entry / 他 field は触らない） */
+    var patched = [];
+    for (var j = 0; j < arr.length; j++){
+      if (j !== idx) { patched.push(arr[j]); continue; }
+      var e2 = {};
+      for (var k in arr[j]) if (Object.prototype.hasOwnProperty.call(arr[j], k)) e2[k] = arr[j][k];
+      e2.title = want;
+      patched.push(e2);
+    }
+    var raw1 = JSON.stringify(patched);
+
+    /* 4. write 直前に raw が変化していないか再確認 */
+    var raw0b = lsg(META_KEY);
+    if (raw0b !== raw0) { stats.metaRace++; return { ok: false, reason: 'META_RACE' }; }
+
+    var f654 = window.__v292Dfix654;
+    var nat = (f654 && typeof f654._native === 'function') ? f654._native('setItem') : null;
+    if (typeof nat !== 'function') return { ok: false, reason: 'NO_NATIVE_SETITEM' };
+    try { nat.call(localStorage, META_KEY, raw1); }
+    catch(e){ return { ok: false, reason: 'META_WRITE_THROW', detail: String(e && e.message || e) }; }
+    stats.metaWrites++; stats.bypass.metaNativeWrites++;
+
+    /* 5. readback: 対象 title が server title と一致し、他 entry が保持されているか */
+    var back = null;
+    try { back = JSON.parse(lsg(META_KEY) || 'null'); } catch(e){ back = null; }
+    if (Object.prototype.toString.call(back) !== '[object Array]' || back.length !== arr.length)
+      return { ok: false, reason: 'META_READBACK_SHAPE' };
+    for (var m = 0; m < arr.length; m++){
+      if (m === idx) continue;
+      if (JSON.stringify(back[m]) !== JSON.stringify(arr[m])) return { ok: false, reason: 'META_OTHER_ENTRY_CHANGED' };
+    }
+    var got = (back[idx] && back[idx].title != null) ? String(back[idx].title) : '';
+    if (got !== want) return { ok: false, reason: 'META_READBACK_TITLE' };
+    var before = {}, after = {};
+    for (var q in arr[idx]) if (q !== 'title') before[q] = arr[idx][q];
+    for (var q2 in back[idx]) if (q2 !== 'title') after[q2] = back[idx][q2];
+    if (JSON.stringify(before) !== JSON.stringify(after)) return { ok: false, reason: 'META_OTHER_FIELD_CHANGED' };
+
+    stats.titleHydrated++;
+    return { ok: true, patched: true };
+  }
+
+  // =====================================================================
+  // (3) 通信（fix697/fix700 と同一規約・独立実装）
+  // =====================================================================
+  function proxyUrl(){
+    try {
+      var u = (lsg('v292ProxyUrl') || '').replace(/\s+/g, '');
+      if (u) return u.replace(/\/+$/, '');
+      if (window.__v292Dfix247bapi && window.__v292Dfix247bapi.DEFAULT_PROXY_URL) return window.__v292Dfix247bapi.DEFAULT_PROXY_URL;
+    } catch(e){}
+    return 'https://novel-proxy.sansan2103.workers.dev';
+  }
+  function authHeaders(){
+    var h = { 'Content-Type': 'application/json' };
+    try { var g = (window.__chronicleGoogleId && window.__chronicleGoogleId()) || ''; if (g) h['x-google-id'] = g; } catch(e){}
+    try { var p = (lsg('v292ProxyPass') || '').replace(/^\s+|\s+$/g, ''); if (p) h['x-chronicle-pass'] = p; } catch(e){}
+    return h;
+  }
+  function isLoggedIn(){ var h = authHeaders(); return !!(h['x-google-id'] || h['x-chronicle-pass']); }
+  function post(payload, cb){
+    var ac = null, timer = null;
+    try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, TIMEOUT_MS); } catch(e){}
+    var opts = { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) };
+    if (ac) opts.signal = ac.signal;
+    fetch(proxyUrl() + '/save', opts).then(function(res){
+      return res.json().then(function(j){ return { status: res.status, j: j }; },
+                             function(){ return { status: res.status, j: null }; });
+    }).then(function(r){ if (timer) clearTimeout(timer); cb(null, r); })
+    ['catch'](function(e){ if (timer) clearTimeout(timer); cb(e, null); });
+  }
+
+  // =====================================================================
+  // (4) local canonical hash
+  //   ★fix697 の projection / canonicalString を **再実装しない**（規約分岐を作らない）。
+  //     fix697.contentHash は on() を見ないので OFF でも使える。
+  //     fix697 が居ない場合は HASH_UNAVAILABLE として STOP（local を正本にしない）。
+  // =====================================================================
+  function localHash(cb){
+    var W = window.__v292Dfix697;
+    if (!W || typeof W.contentHash !== 'function') return cb(null, 'HASH_UNAVAILABLE');
+    try { W.contentHash(function(h){ cb(h || null, h ? null : 'HASH_NULL'); }); }
+    catch(e){ cb(null, 'HASH_THROW'); }
+  }
+  function localTitle(){
+    try {
+      if (STORY_ID === 'default') return 'default';
+      var a = JSON.parse(lsg('chr6_slots_meta') || '[]');
+      if (!Array.isArray(a)) return null;
+      for (var i = 0; i < a.length; i++) if (a[i] && String(a[i].id) === String(STORY_ID)) return (a[i].title == null ? '' : String(a[i].title));
+    } catch(e){}
+    return null;
+  }
+
+  // =====================================================================
+  // (5) marker（fix702 の cache を **読むだけ**。分類の高速化用。HOLD の条件にはしない） 
+  // =====================================================================
+  function markerOf(id){
+    try {
+      var m = JSON.parse(lsg('v292Dfix702_storyAuth') || '{}');
+      if (m && typeof m === 'object' && m[id]) return m[id];
+    } catch(e){}
+    return null;
+  }
+
+  // =====================================================================
+  // (6) applied record（sessionStorage・収束判定）
+  // =====================================================================
+  function readApplied(){
+    try {
+      var r = JSON.parse(ssGet(APPLIED_KEY) || 'null');
+      if (!r || typeof r !== 'object') return null;
+      if (String(r.storyId) !== String(STORY_ID)) return null;      /* ★別 story の record は使わない */
+      return r;
+    } catch(e){ return null; }
+  }
+  function writeApplied(rec){ return ssSet(APPLIED_KEY, JSON.stringify(rec)); }
+  function consumeApplied(){ ssDel(APPLIED_KEY); }
+
+  // =====================================================================
+  // (7) 分類 → same-hash / apply / 解除 / STOP
+  // =====================================================================
+  var classifyStarted = false;
+  function classify(cb){
+    cb = (typeof cb === 'function') ? cb : function(){};
+    if (!on()) return cb({ skipped: 'OFF' });
+    if (!STORY_ID) return cb({ skipped: 'NO_STORY_ID' });
+    if (classifyStarted) return cb({ skipped: 'ALREADY_RAN' });    /* ★document あたり1回 */
+    classifyStarted = true;
+    state.phase = 'classifying';
+
+    if (!isLoggedIn()) return cb(stop('AUTH', { detail: 'not logged in' }));
+
+    var mk = markerOf(STORY_ID);
+    state.markerAuthority = mk ? String(mk.authority || '') : null;
+
+    stats.getstory++;
+    post({ op: 'getstory', id: STORY_ID }, function(e, r){
+      if (e || !r) { stats.netFail++; return cb(stop('NETWORK', { detail: e ? String(e.message || e) : 'no response' })); }
+      if (r.status === 404) {
+        consumeApplied(); state.verdict = 'NOT_FOUND'; releaseHold('not-found'); return cb({ verdict: 'NOT_FOUND' });
+      }
+      if (r.status === 401 || r.status === 403) { stats.netFail++; return cb(stop('AUTH', { status: r.status })); }
+      if (r.status !== 200 || !r.j || !r.j.ok) { stats.netFail++; return cb(stop('NETWORK', { status: r.status })); }
+
+      var j = r.j;
+      var auth = String(j.authority || 'shadow');
+      state.serverRev = (typeof j.rev === 'number') ? j.rev : null;
+      state.serverHash = j.serverHash || null;
+
+      if (auth === 'shadow') {
+        /* ★downgrade 禁止: marker が canonical なのに server が shadow → 競合として STOP */
+        if (state.markerAuthority === 'canonical') {
+          return cb(stop('AUTHORITY_CONFLICT', { markerAuthority: 'canonical', serverAuthority: 'shadow' }));
+        }
+        consumeApplied(); state.verdict = 'SHADOW'; releaseHold('shadow'); return cb({ verdict: 'SHADOW' });
+      }
+      if (auth !== 'canonical') {
+        return cb(stop('UNKNOWN_AUTHORITY', { serverAuthority: auth }));
+      }
+      if (j.deleted) {
+        /* live delete は STEP3E スコープ外。触らずに STOP（KEEP DATA） */
+        return cb(stop('SERVER_TOMBSTONE', {}));
+      }
+      if (!j.record || typeof j.record !== 'object') return cb(stop('PARSE', { detail: 'no record' }));
+      if (!state.serverHash) return cb(stop('PARSE', { detail: 'no serverHash' }));
+
+      localHash(function(lh, herr){
+        if (!lh) return cb(stop('HASH', { detail: herr }));
+        state.localHash = lh;
+
+        /* ---- same-hash: 1バイトも書かない ---- */
+        if (lh === state.serverHash) {
+          stats.sameHash++;
+          consumeApplied();
+          state.verdict = 'CANONICAL_SAME_HASH';
+          releaseHold('same-hash');
+          return cb({ verdict: 'CANONICAL_SAME_HASH', serverRev: state.serverRev });
+        }
+
+        /* ---- 収束保護: 同じ serverHash で apply 済みなのにまだ一致しない ---- */
+        var prev = readApplied();
+        if (prev && String(prev.serverHash) === String(state.serverHash)) {
+          consumeApplied();
+          var diag = { serverTitle: (j.record.title == null ? null : String(j.record.title)), localTitle: localTitle() };
+          return cb(stop('APPLY_NOT_CONVERGED', diag));      /* ★再 apply しない = reload ループ禁止 */
+        }
+
+        /* ---- dedicated apply ---- */
+        return doApply(j, cb);
+      });
+    });
+  }
+
+  function doApply(j, cb){
+    var rec = j.record;
+    var body = rec && rec.body;
+    if (!body || typeof body !== 'object') return cb(stop('PARSE', { detail: 'no record.body' }));
+
+    applyWindow = true;
+    var wroteBody = false, wroteAi = false, wroteTitle = false, fail = null;
+    var skippedBody = false, skippedAi = false;
+    try {
+      var bodyStr = JSON.stringify({
+        cfg:   (body.cfg   === undefined ? null : body.cfg),
+        cast:  (body.cast  === undefined ? null : body.cast),
+        scene: (body.scene === undefined ? null : body.scene),
+        turns: (Object.prototype.toString.call(body.turns) === '[object Array]') ? body.turns : [],
+        mode:  (body.mode  === undefined ? null : body.mode)
+      });
+      /* ★条件 D の精神: 同じ内容なら書き直さない（field 単位でも無駄な write を出さない） */
+      if (lsg(BODY_KEY) === bodyStr) { skippedBody = true; }
+      else {
+        var w1 = applyWrite(BODY_KEY, bodyStr);
+        if (!w1.ok) fail = { stage: 'body', reason: w1.reason, detail: w1.detail || null };
+        else wroteBody = true;
+      }
+
+      if (!fail) {
+        var ai = rec.sidecar && rec.sidecar.aiInstr;
+        if (ai != null && ai !== '') {
+          if (lsg(AI_KEY) === String(ai)) { skippedAi = true; }
+          else {
+            var w2 = applyWrite(AI_KEY, String(ai));
+            if (!w2.ok) fail = { stage: 'aiInstr', reason: w2.reason, detail: w2.detail || null };
+            else wroteAi = true;
+          }
+        }
+        /* ★sidecar.aiInstr が null のときは触らない（削除もしない） */
+      }
+      /* ---- canonical title の hydration（title 専用 helper。read 方向のみ） ---- */
+      if (!fail) {
+        var wt = applyTitleMeta(rec.title);
+        if (!wt.ok) {
+          fail = { stage: 'title', reason: wt.reason, detail: wt.detail || null };
+        } else if (wt.patched) { wroteTitle = true; }
+      }
+    } catch(e){ fail = { stage: 'throw', reason: String(e && e.message || e) }; }
+    applyWindow = false;
+
+    if (fail) {
+      stats.partial++;
+      /* ★META_RACE / META_APPLY_FAILED を含め、reload しない / HOLD 継続 /
+         自動 forceput なし / legacy apply なし */
+      var code = (fail.stage === 'title')
+        ? (fail.reason === 'META_RACE' ? 'META_RACE' : 'META_APPLY_FAILED')
+        : 'APPLY_PARTIAL';
+      return cb(stop(code, { wroteBody: wroteBody, wroteAi: wroteAi, wroteTitle: wroteTitle, fail: fail }));
+    }
+
+    /* ★裁定: body + aiInstr + title を含む local canonical content を再計算し、
+       serverHash と一致する状態で reload する。一致しなければ reload しない。 */
+    /* ★applied 記録は「書込を実行した」時点で残す。
+       収束しなかった場合でも記録が残るので、同一 session の次の boot は
+       write 0 のまま APPLY_NOT_CONVERGED を返す（apply の反復を防ぐ）。 */
+    writeApplied({ storyId: STORY_ID, serverHash: state.serverHash, serverRev: state.serverRev });
+    localHash(function(lh2, herr2){
+      if (!lh2) return cb(stop('HASH', { detail: herr2, stage: 'post-apply' }));
+      state.localHash = lh2;
+      if (lh2 !== state.serverHash) {
+        return cb(stop('APPLY_NOT_CONVERGED', {
+          stage: 'post-apply',
+          serverTitle: (rec.title == null ? null : String(rec.title)), localTitle: localTitle(),
+          wroteBody: wroteBody, wroteAi: wroteAi, wroteTitle: wroteTitle
+        }));                                            /* ★reload しない / 再 apply しない */
+      }
+      stats.applies++;
+      state.verdict = 'CANONICAL_APPLIED'; state.phase = 'applied';
+      note({ apply: 'ok', keys: stats.bypass.keys.slice(), title: wroteTitle,
+             skippedBody: skippedBody, skippedAi: skippedAi, serverRev: state.serverRev });
+
+      /* ★F2: 実行中 document は S を再読しないので reload が必須 */
+      stats.reloads++;
+      try { setTimeout(function(){ try { location.reload(); } catch(e){} }, 300); } catch(e){}
+      return cb({ verdict: 'CANONICAL_APPLIED', serverRev: state.serverRev, titleHydrated: wroteTitle, reload: true });
+    });
+  }
+
+  // =====================================================================
+  // (8) boot: T0 で HOLD → fix694 と突合 → 分類を1回起動
+  // =====================================================================
+  if (on() && STORY_ID) {
+    installHold();
+  } else {
+    state.phase = on() ? 'no-story-id' : 'off';
+  }
+
+  var bootN = 0;
+  (function bootPoll(){
+    bootN++;
+    try {
+      if (!on() || !STORY_ID || state.phase === 'stopped') return;
+
+      /* fix694 authority との突合（食い違ったら HOLD 継続 + STOP） */
+      var dk = window.__chronicleDocumentStoryKey;
+      if (typeof dk === 'string' && dk) {
+        if (dk !== BODY_KEY) {
+          state.keyDivergence = { fix694: dk, fix705: BODY_KEY };
+          stop('KEY_DIVERGENCE', state.keyDivergence);
+          return;
+        }
+        /* 突合 OK。fix697（hash 提供元）が来たら分類を始める */
+        if (!classifyStarted && window.__v292Dfix697 && typeof window.__v292Dfix697.contentHash === 'function') {
+          classify(function(){});
+          return;
+        }
+      }
+      /* fix694 が出ない document（= story authority なし）は対象外 */
+      if (bootN > 40 && typeof dk !== 'string') { releaseHold('no-fix694-authority'); return; }
+      if (bootN > 120 && !classifyStarted) { stop('HASH', { detail: 'fix697 not present' }); return; }
+    } catch(e){}
+    setTimeout(bootPoll, 250);
+  })();
+
+  // =====================================================================
+  // 検証口（自 namespace のみ）
+  // =====================================================================
+  window.__v292Dfix705 = {
+    __armed: true, on: on, off: off,
+    status: function(){
+      return { on: on(), off: off(), build: BUILD, loggedIn: isLoggedIn(),
+               storyId: STORY_ID, bodyKey: BODY_KEY, aiKey: AI_KEY,
+               allowList: allowList(), heldKeys: heldKeys(), metaKey: META_KEY,
+               state: JSON.parse(JSON.stringify(state)),
+               stats: JSON.parse(JSON.stringify(stats)),
+               applied: readApplied() };
+    },
+    stats: function(){ return JSON.parse(JSON.stringify(stats)); },
+    classify: classify,
+    release: function(why){ releaseHold(why || 'manual'); return true; },
+    ledger: function(){ return LEDGER.slice(); }
+  };
+  try { console.log(TAG, 'loaded (canonical read authority / default OFF / on=v292Dfix705On)'); } catch(e){}
+})();

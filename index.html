@@ -9,8 +9,13 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix703"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix705"></script>
 <script src="v292Dfix698-mutation-bus.js?cb=v292Dfix701"></script>
+<!-- v292Dfix705(STEP3E): canonical read authority。既知 storyId の document で
+     canonical 判定が終わるまで **その story の body / aiInstr への書込だけ**を保留する。
+     ★起動時の最初の body 書込(v100-patch fixProviderCfg)より前に居る必要があるため head。
+     ★既定 OFF。on=v292Dfix705On / OFF=v292Dfix705Off -->
+<script src="v292Dfix705-canonical-read-gate.js?cb=v292Dfix705"></script>
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
@@ -43,7 +48,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260819-fix703';
+  var BUILT = '20260819-fix705';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
