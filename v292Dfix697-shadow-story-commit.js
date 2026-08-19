@@ -91,7 +91,7 @@
     return null;
   }
 
-  // ---- meta（title / deleted 読み取り専用） ----
+  // ---- meta（表示名 name / deleted 読み取り専用。★fix707: title ではなく name） ----
   function metaEntry(id){
     try {
       var a = JSON.parse(lsg('chr6_slots_meta') || '[]');
@@ -157,7 +157,13 @@
     return {
       schema: 1,
       id: String(id),
-      title: (me && me.title != null) ? String(me.title) : (id === 'default' ? 'default' : ''),
+      /* ★★fix707(CANONICAL_TITLE_SOURCE_CONTRACT)
+         正式 contract: SERVER StoryRecord.title  <->  LOCAL chr6_slots_meta[].name
+         ・live entry の表示名 field は **name**（title は fix579 の tombstone 専用 field で、
+           tombstone は上の me.deleted 判定で既に null 返ししているため到達不能だった）。
+         ・したがって me.title を読む旧実装では title が常に '' になっていた。
+         ・default story は現行の 'default' 特例を**変更しない**（既存挙動維持）。 */
+      title: (id === 'default') ? 'default' : ((me && me.name != null) ? String(me.name) : ''),
       deleted: false,
       body: body,
       sidecar: { aiInstr: readAiInstr(id), genderMap: readGenderMap(id) },

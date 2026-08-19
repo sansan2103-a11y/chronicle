@@ -1,6 +1,8 @@
 // =====================================================================
 // v292Dfix705 — STEP3E: canonical read authority（既知 storyId 限定）
 //   ★fix706 改訂: meta を HOLD しない / title hydration を行わない / title 不一致は fail-closed
+//   ★fix707 改訂: LEGACY EMPTY-TITLE **SAME-HASH ONLY** COMPATIBILITY（serverHash 一致必須）
+//                legacy diff hydration は採用しない（OVERBROAD として REJECT）
 // ---------------------------------------------------------------------
 // 役割:
 //   ・story document を開いた時点（head）で **WRITE HOLD** を張る。
@@ -110,13 +112,14 @@
     localHash: null,
     markerAuthority: null,
     keyDivergence: null,
-    serverTitle: null, localTitle: null
+    serverTitle: null, localTitle: null,
+    legacy: false, legacyHashComputed: false
   };
   var stats = {
     holdBlockedSet: 0, holdBlockedRemove: 0, lastBlockedKey: null,
     getstory: 0, netFail: 0,
     sameHash: 0, applies: 0, reloads: 0, partial: 0, stops: 0,
-    titleUnresolved: 0,
+    titleUnresolved: 0, legacySameHash: 0, legacyUnsupported: 0,
     /* ★意図的に迂回したことを観測可能にする（裁定要件） */
     bypass: { nativeWrites: 0, keys: [], bypassed: ['fix698:layer1-setItem', 'fix402:wrapSetItem', 'fix527:mirror-lock', 'fix706:write-hold'] }
   };
@@ -317,7 +320,7 @@
         if (!lh) return cb(stop('HASH', { detail: herr }));
         state.localHash = lh;
 
-        /* ---- same-hash: 1バイトも書かない ---- */
+        /* ---- same-hash（新 contract）: 1バイトも書かない ---- */
         if (lh === state.serverHash) {
           stats.sameHash++;
           consumeApplied();
@@ -326,22 +329,92 @@
           return cb({ verdict: 'CANONICAL_SAME_HASH', serverRev: state.serverRev });
         }
 
+        var srvTitle0 = (j.record && j.record.title != null) ? String(j.record.title) : '';
+        /* ---- ★fix707: legacy empty-title row の判定（server.title === '' のときだけ試す） ---- */
+        if (srvTitle0 === '') {
+          return legacyEmptyTitleHash(function(lgh){
+            state.legacyHashComputed = !!lgh;
+            if (lgh && lgh === state.serverHash) {
+              /* ★serverHash 一致を確認できた場合のみ legacy と認める */
+              stats.legacySameHash++;
+              state.legacy = true;
+              consumeApplied();
+              state.verdict = 'CANONICAL_LEGACY_TITLE_EMPTY';
+              releaseHold('legacy-empty-title-same-hash');
+              return cb({ verdict: 'CANONICAL_LEGACY_TITLE_EMPTY', serverRev: state.serverRev });
+            }
+            /* ★★fix707 FINAL SAFETY CUT
+               legacy hash も不一致。この時点では
+                 ・旧 contract（title を '' として commit した）row なのか
+                 ・新 contract で local meta.name が本当に空の row なのか
+               を server.title === '' だけからは判定できない。
+               したがって **body を hydrate しない**（LEGACY_EMPTY_TITLE_DIFF_HYDRATION = REJECTED）。
+               local title も '' のときだけ、新 contract の blank-title row として
+               通常の diff 経路へ進む（title は一致しているので契約違反ではない）。 */
+            var lt0 = localProjectionTitle();
+            if (lt0 === null) return cb(stop('TITLE_CONTRACT_UNRESOLVED', { reason: 'NO_LOCAL_PROJECTION' }));
+            if (lt0 !== '') {
+              stats.legacyUnsupported++;
+              return cb(stop('LEGACY_TITLE_DIFF_UNSUPPORTED', {
+                reason: 'SERVER_EMPTY_TITLE_WITH_LOCAL_TITLE_AND_HASH_MISMATCH',
+                serverTitleLen: 0, localTitleLen: lt0.length,
+                note: 'body/aiInstr/meta write 0 / reload 0 / HOLD 継続（旧契約かを証明できない）'
+              }));
+            }
+            return afterHash();
+          });
+        }
+        return afterHash();
+
+        function afterHash(){
+
         /* ---- 収束保護: 同じ serverHash で apply 済みなのにまだ一致しない ---- */
         var prev = readApplied();
         if (prev && String(prev.serverHash) === String(state.serverHash)) {
           consumeApplied();
           var diag = { serverTitleLen: (j.record.title == null ? 0 : String(j.record.title).length),
-                       localTitleLen: (localProjectionTitle() == null ? -1 : localProjectionTitle().length) };
+                       localTitleLen: (localProjectionTitle() == null ? -1 : localProjectionTitle().length),
+                       legacyHashComputed: state.legacyHashComputed };
           return cb(stop('APPLY_NOT_CONVERGED', diag));      /* ★再 apply しない = reload ループ禁止 */
         }
 
         /* ---- dedicated apply ---- */
         return doApply(j, cb);
+        }
       });
     });
   }
 
   /* local canonical projection の title（fix697 の projection をそのまま使う） */
+  /* ★★fix707: LEGACY EMPTY-TITLE COMPATIBILITY（READ / HYDRATION 限定）
+     旧 contract（title を常に '' として commit していた）で作られた server row を
+     **server を書き換えずに** 読めるようにする。
+     ・legacy 判定は server.title === '' だけでは行わない。**serverHash 一致を必須**とする。
+     ・serializer は fix697 の canonicalString をそのまま使う（規約分岐を作らない）。
+     ・putstory / promotestory では使用しない（この module は書込 op を持たない）。 */
+  function sha256hex(str, cb){
+    try {
+      crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(str))).then(function(buf){
+        var a = new Uint8Array(buf), h = '';
+        for (var i = 0; i < a.length; i++){ var x = a[i].toString(16); h += (x.length < 2 ? '0' : '') + x; }
+        cb(h);
+      })['catch'](function(){ cb(null); });
+    } catch(e){ cb(null); }
+  }
+  function legacyEmptyTitleHash(cb){
+    var W = window.__v292Dfix697;
+    if (!W || typeof W.projection !== 'function' || typeof W.canonicalString !== 'function') return cb(null, 'NO_FIX697');
+    var pj = null;
+    try { pj = W.projection(); } catch(e){ return cb(null, 'PROJECTION_THROW'); }
+    if (!pj) return cb(null, 'NO_PROJECTION');
+    var copy = {};
+    for (var k in pj) if (Object.prototype.hasOwnProperty.call(pj, k)) copy[k] = pj[k];
+    copy.title = '';                       /* ★title だけを '' に強制。他 field は触らない */
+    var str = null;
+    try { str = W.canonicalString(copy); } catch(e){ return cb(null, 'CANONICAL_THROW'); }
+    sha256hex(str, function(h){ cb(h || null, h ? null : 'HASH_FAIL'); });
+  }
+
   function localProjectionTitle(){
     try {
       var W = window.__v292Dfix697;
@@ -365,6 +438,7 @@
     var locTitle = localProjectionTitle();
     state.serverTitle = srvTitle; state.localTitle = locTitle;
     if (locTitle === null) return cb(stop('TITLE_CONTRACT_UNRESOLVED', { reason: 'NO_LOCAL_PROJECTION' }));
+    /* ★fix707 FINAL: title 不一致の例外は無い。legacy 特例で body を書く経路は存在しない。 */
     if (srvTitle !== locTitle) {
       stats.titleUnresolved++;
       return cb(stop('TITLE_CONTRACT_UNRESOLVED', {
