@@ -1,5 +1,6 @@
 // =====================================================================
 // v292Dfix705 — STEP3E: canonical read authority（既知 storyId 限定）
+//   ★fix706 改訂: meta を HOLD しない / title hydration を行わない / title 不一致は fail-closed
 // ---------------------------------------------------------------------
 // 役割:
 //   ・story document を開いた時点（head）で **WRITE HOLD** を張る。
@@ -37,7 +38,6 @@
   var BUILD = 'fix705';
   var TIMEOUT_MS = 25000;
   var APPLIED_KEY = 'v292Dfix705_applied';          /* ★sessionStorage（localStorage ではない） */
-  var META_KEY = 'chr6_slots_meta';                 /* ★canonical hash の title 供給元（共有 key） */
 
   // ---- localStorage 薄いアクセサ（読みのみ。書きは applyWrite だけ） ----
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
@@ -74,18 +74,22 @@
   var AI_KEY   = STORY_ID ? aiKeyOf(STORY_ID) : null;
 
   /* ★書込許可リスト（コード固定・この2つだけ）。native body writer はこれ以外を書けない。
-     ★chr6_slots_meta は **この list に入れない**。title 更新は専用 helper applyTitleMeta のみ。 */
+     ★fix706: chr6_slots_meta はこの list にも WRITE HOLD にも入れない（title hydration を行わないため）。 */
   function allowList(){ return BODY_KEY ? (AI_KEY ? [BODY_KEY, AI_KEY] : [BODY_KEY]) : []; }
   function isAllowed(k){
     var a = allowList();
     for (var i = 0; i < a.length; i++) if (a[i] === String(k)) return true;
     return false;
   }
-  /* WRITE HOLD の対象は「body / aiInstr」＋「chr6_slots_meta」。
-     ★meta を含める理由: S.save 経路（features.js fix30 wrapSave）が boot 中に meta も書き、
-       meta.title は canonical hash の入力なので、分類前に書かれると判定が揺れる。
-     ★current document からの write を止めるだけ。他 tab を制御する仕組みは持たない。 */
-  function heldKeys(){ var a = allowList().slice(); if (BODY_KEY) a.push(META_KEY); return a; }
+  /* ★★fix706(POST-CANARY SAFETY REVISION)
+     WRITE HOLD の対象は「body / aiInstr」だけに戻す。
+     ・chr6_slots_meta は **HOLD しない**。
+       現行 canonical hash 規約では meta.name / lastOpenedAt 等は hash 入力ではないため、
+       分類前に meta 全体を DROP する必要がない。
+       fix705 では DROP していたため通常起動の lastOpenedAt 更新が失われていた
+       （META_HOLD_LASTOPENED_LOSS / MEDIUM / CONFIRMED）。
+     ・current document からの write を止めるだけ。他 tab を制御する仕組みは持たない。 */
+  function heldKeys(){ return allowList().slice(); }
   function isHeld(k){
     var a = heldKeys();
     for (var i = 0; i < a.length; i++) if (a[i] === String(k)) return true;
@@ -105,15 +109,16 @@
     serverHash: null,
     localHash: null,
     markerAuthority: null,
-    keyDivergence: null
+    keyDivergence: null,
+    serverTitle: null, localTitle: null
   };
   var stats = {
     holdBlockedSet: 0, holdBlockedRemove: 0, lastBlockedKey: null,
     getstory: 0, netFail: 0,
     sameHash: 0, applies: 0, reloads: 0, partial: 0, stops: 0,
-    titleHydrated: 0, metaWrites: 0, metaRace: 0,
+    titleUnresolved: 0,
     /* ★意図的に迂回したことを観測可能にする（裁定要件） */
-    bypass: { nativeWrites: 0, metaNativeWrites: 0, keys: [], bypassed: ['fix698:layer1-setItem', 'fix402:wrapSetItem', 'fix527:mirror-lock', 'fix705:write-hold'] }
+    bypass: { nativeWrites: 0, keys: [], bypassed: ['fix698:layer1-setItem', 'fix402:wrapSetItem', 'fix527:mirror-lock', 'fix706:write-hold'] }
   };
   var LEDGER = [], LEDGER_CAP = 30;
   function note(row){ try { row.t = Date.now(); LEDGER.push(row); while (LEDGER.length > LEDGER_CAP) LEDGER.shift(); } catch(e){} }
@@ -182,77 +187,15 @@
     } catch(e){ return { ok: false, reason: 'QUOTA_OR_THROW', detail: String(e && e.message || e) }; }
   }
 
-  /* ---------------------------------------------------------------
-     canonical title の server→local hydration 専用 helper。
-     ・chr6_slots_meta 専用 / 対象 storyId 専用 / title 専用
-     ・raw compare guard（読んだ raw と write 直前の raw が同一でなければ書かない）
-     ・native write は1回だけ / write 後 readback
-     ・window へ export しない
-     ★title を server へ送る経路は持たない（read 方向のみ）。
-     --------------------------------------------------------------- */
-  function applyTitleMeta(serverTitle){
-    if (!applyWindow) return { ok: false, reason: 'NOT_IN_APPLY_WINDOW' };
-    if (!STORY_ID || STORY_ID === 'default') return { ok: true, skipped: 'NO_META_TITLE' };
-    var want = (serverTitle == null) ? '' : String(serverTitle);
-
-    /* 1. apply 直前の raw を取得 */
-    var raw0 = lsg(META_KEY);
-    if (raw0 == null) return { ok: false, reason: 'META_ABSENT' };
-
-    /* 2. parse し、対象 storyId の entry だけを特定 */
-    var arr = null;
-    try { arr = JSON.parse(raw0); } catch(e){ return { ok: false, reason: 'META_PARSE' }; }
-    if (Object.prototype.toString.call(arr) !== '[object Array]') return { ok: false, reason: 'META_NOT_ARRAY' };
-    var idx = -1, hits = 0;
-    for (var i = 0; i < arr.length; i++){
-      if (arr[i] && String(arr[i].id) === String(STORY_ID)) { if (idx < 0) idx = i; hits++; }
-    }
-    if (idx < 0) return { ok: false, reason: 'META_ENTRY_NOT_FOUND' };
-    if (hits > 1) return { ok: false, reason: 'META_ENTRY_AMBIGUOUS' };   /* 一意に特定できない → 書かない */
-    var cur = (arr[idx].title == null) ? '' : String(arr[idx].title);
-    if (cur === want) return { ok: true, skipped: 'TITLE_SAME' };         /* ★一致なら write 0 */
-
-    /* 3. title だけ patch した新 raw を生成（他 entry / 他 field は触らない） */
-    var patched = [];
-    for (var j = 0; j < arr.length; j++){
-      if (j !== idx) { patched.push(arr[j]); continue; }
-      var e2 = {};
-      for (var k in arr[j]) if (Object.prototype.hasOwnProperty.call(arr[j], k)) e2[k] = arr[j][k];
-      e2.title = want;
-      patched.push(e2);
-    }
-    var raw1 = JSON.stringify(patched);
-
-    /* 4. write 直前に raw が変化していないか再確認 */
-    var raw0b = lsg(META_KEY);
-    if (raw0b !== raw0) { stats.metaRace++; return { ok: false, reason: 'META_RACE' }; }
-
-    var f654 = window.__v292Dfix654;
-    var nat = (f654 && typeof f654._native === 'function') ? f654._native('setItem') : null;
-    if (typeof nat !== 'function') return { ok: false, reason: 'NO_NATIVE_SETITEM' };
-    try { nat.call(localStorage, META_KEY, raw1); }
-    catch(e){ return { ok: false, reason: 'META_WRITE_THROW', detail: String(e && e.message || e) }; }
-    stats.metaWrites++; stats.bypass.metaNativeWrites++;
-
-    /* 5. readback: 対象 title が server title と一致し、他 entry が保持されているか */
-    var back = null;
-    try { back = JSON.parse(lsg(META_KEY) || 'null'); } catch(e){ back = null; }
-    if (Object.prototype.toString.call(back) !== '[object Array]' || back.length !== arr.length)
-      return { ok: false, reason: 'META_READBACK_SHAPE' };
-    for (var m = 0; m < arr.length; m++){
-      if (m === idx) continue;
-      if (JSON.stringify(back[m]) !== JSON.stringify(arr[m])) return { ok: false, reason: 'META_OTHER_ENTRY_CHANGED' };
-    }
-    var got = (back[idx] && back[idx].title != null) ? String(back[idx].title) : '';
-    if (got !== want) return { ok: false, reason: 'META_READBACK_TITLE' };
-    var before = {}, after = {};
-    for (var q in arr[idx]) if (q !== 'title') before[q] = arr[idx][q];
-    for (var q2 in back[idx]) if (q2 !== 'title') after[q2] = back[idx][q2];
-    if (JSON.stringify(before) !== JSON.stringify(after)) return { ok: false, reason: 'META_OTHER_FIELD_CHANGED' };
-
-    stats.titleHydrated++;
-    return { ok: true, patched: true };
-  }
+  /* ★★fix706: title hydration は **実行しない**（裁定 (c) ADOPT / (b) HOLD）。
+     applyTitleMeta は削除した。理由:
+       ・chr6_slots_meta の表示名 field は name であり title ではない
+         （CANONICAL_TITLE_SOURCE_CONTRACT / HIGH / CONFIRMED MISMATCH / OPEN）
+       ・server canonical title は現行 client 由来 row では実質 '' なので、
+         それを local へ hydrate すると表示名を空にする危険がある
+       ・migration / compatibility 設計なしに me.title → me.name へ変えることも禁止
+     したがって fix706 は「title が一致する場合だけ body / aiInstr を apply する」
+     fail-closed 方針にする（下記 doApply の TITLE_CONTRACT_UNRESOLVED）。 */
 
   // =====================================================================
   // (3) 通信（fix697/fix700 と同一規約・独立実装）
@@ -295,15 +238,6 @@
     if (!W || typeof W.contentHash !== 'function') return cb(null, 'HASH_UNAVAILABLE');
     try { W.contentHash(function(h){ cb(h || null, h ? null : 'HASH_NULL'); }); }
     catch(e){ cb(null, 'HASH_THROW'); }
-  }
-  function localTitle(){
-    try {
-      if (STORY_ID === 'default') return 'default';
-      var a = JSON.parse(lsg('chr6_slots_meta') || '[]');
-      if (!Array.isArray(a)) return null;
-      for (var i = 0; i < a.length; i++) if (a[i] && String(a[i].id) === String(STORY_ID)) return (a[i].title == null ? '' : String(a[i].title));
-    } catch(e){}
-    return null;
   }
 
   // =====================================================================
@@ -396,7 +330,8 @@
         var prev = readApplied();
         if (prev && String(prev.serverHash) === String(state.serverHash)) {
           consumeApplied();
-          var diag = { serverTitle: (j.record.title == null ? null : String(j.record.title)), localTitle: localTitle() };
+          var diag = { serverTitleLen: (j.record.title == null ? 0 : String(j.record.title).length),
+                       localTitleLen: (localProjectionTitle() == null ? -1 : localProjectionTitle().length) };
           return cb(stop('APPLY_NOT_CONVERGED', diag));      /* ★再 apply しない = reload ループ禁止 */
         }
 
@@ -406,13 +341,41 @@
     });
   }
 
+  /* local canonical projection の title（fix697 の projection をそのまま使う） */
+  function localProjectionTitle(){
+    try {
+      var W = window.__v292Dfix697;
+      if (!W || typeof W.projection !== 'function') return null;
+      var pj = W.projection();
+      if (!pj) return null;
+      return (pj.title == null) ? '' : String(pj.title);
+    } catch(e){ return null; }
+  }
+
   function doApply(j, cb){
     var rec = j.record;
     var body = rec && rec.body;
     if (!body || typeof body !== 'object') return cb(stop('PARSE', { detail: 'no record.body' }));
 
+    /* ★★fix706: TITLE CONTRACT GATE（fail-closed）
+       server title と local canonical projection title が一致しない場合、
+       body も aiInstr も meta も書かず、reload もせず、HOLD を継続して STOP する。
+       server title を name / title へ勝手に反映しない。 */
+    var srvTitle = (rec.title == null) ? '' : String(rec.title);
+    var locTitle = localProjectionTitle();
+    state.serverTitle = srvTitle; state.localTitle = locTitle;
+    if (locTitle === null) return cb(stop('TITLE_CONTRACT_UNRESOLVED', { reason: 'NO_LOCAL_PROJECTION' }));
+    if (srvTitle !== locTitle) {
+      stats.titleUnresolved++;
+      return cb(stop('TITLE_CONTRACT_UNRESOLVED', {
+        reason: 'SERVER_LOCAL_TITLE_MISMATCH',
+        serverTitleLen: srvTitle.length, localTitleLen: locTitle.length,
+        note: 'body/aiInstr/meta write 0 / reload 0 / HOLD 継続'
+      }));
+    }
+
     applyWindow = true;
-    var wroteBody = false, wroteAi = false, wroteTitle = false, fail = null;
+    var wroteBody = false, wroteAi = false, fail = null;
     var skippedBody = false, skippedAi = false;
     try {
       var bodyStr = JSON.stringify({
@@ -442,24 +405,13 @@
         }
         /* ★sidecar.aiInstr が null のときは触らない（削除もしない） */
       }
-      /* ---- canonical title の hydration（title 専用 helper。read 方向のみ） ---- */
-      if (!fail) {
-        var wt = applyTitleMeta(rec.title);
-        if (!wt.ok) {
-          fail = { stage: 'title', reason: wt.reason, detail: wt.detail || null };
-        } else if (wt.patched) { wroteTitle = true; }
-      }
     } catch(e){ fail = { stage: 'throw', reason: String(e && e.message || e) }; }
     applyWindow = false;
 
     if (fail) {
       stats.partial++;
-      /* ★META_RACE / META_APPLY_FAILED を含め、reload しない / HOLD 継続 /
-         自動 forceput なし / legacy apply なし */
-      var code = (fail.stage === 'title')
-        ? (fail.reason === 'META_RACE' ? 'META_RACE' : 'META_APPLY_FAILED')
-        : 'APPLY_PARTIAL';
-      return cb(stop(code, { wroteBody: wroteBody, wroteAi: wroteAi, wroteTitle: wroteTitle, fail: fail }));
+      /* ★APPLY_PARTIAL: reload しない / HOLD 継続 / 自動 forceput なし / legacy apply なし */
+      return cb(stop('APPLY_PARTIAL', { wroteBody: wroteBody, wroteAi: wroteAi, fail: fail }));
     }
 
     /* ★裁定: body + aiInstr + title を含む local canonical content を再計算し、
@@ -474,19 +426,19 @@
       if (lh2 !== state.serverHash) {
         return cb(stop('APPLY_NOT_CONVERGED', {
           stage: 'post-apply',
-          serverTitle: (rec.title == null ? null : String(rec.title)), localTitle: localTitle(),
-          wroteBody: wroteBody, wroteAi: wroteAi, wroteTitle: wroteTitle
+          serverTitleLen: srvTitle.length, localTitleLen: locTitle.length,
+          wroteBody: wroteBody, wroteAi: wroteAi
         }));                                            /* ★reload しない / 再 apply しない */
       }
       stats.applies++;
       state.verdict = 'CANONICAL_APPLIED'; state.phase = 'applied';
-      note({ apply: 'ok', keys: stats.bypass.keys.slice(), title: wroteTitle,
+      note({ apply: 'ok', keys: stats.bypass.keys.slice(),
              skippedBody: skippedBody, skippedAi: skippedAi, serverRev: state.serverRev });
 
       /* ★F2: 実行中 document は S を再読しないので reload が必須 */
       stats.reloads++;
       try { setTimeout(function(){ try { location.reload(); } catch(e){} }, 300); } catch(e){}
-      return cb({ verdict: 'CANONICAL_APPLIED', serverRev: state.serverRev, titleHydrated: wroteTitle, reload: true });
+      return cb({ verdict: 'CANONICAL_APPLIED', serverRev: state.serverRev, reload: true });
     });
   }
 
@@ -534,7 +486,7 @@
     status: function(){
       return { on: on(), off: off(), build: BUILD, loggedIn: isLoggedIn(),
                storyId: STORY_ID, bodyKey: BODY_KEY, aiKey: AI_KEY,
-               allowList: allowList(), heldKeys: heldKeys(), metaKey: META_KEY,
+               allowList: allowList(), heldKeys: heldKeys(), metaHeld: false,
                state: JSON.parse(JSON.stringify(state)),
                stats: JSON.parse(JSON.stringify(stats)),
                applied: readApplied() };
