@@ -24,12 +24,13 @@
 //   ・device/build は content に入れない（clientMeta として送る audit metadata）
 //   ・hash は stableStringify(content) の SHA-256。Worker 側 chrCanonicalStoryString と
 //     同一規約（契約試験で fixture 群の完全一致を検証）
-//   ・genderMap の正規化（BLOCKER5）:
-//       genderMap_<id> があれば **常に** canonical（quoted と両方あって値が違っても決定的）
-//       無いときだけ genderMap_"<id>" を fallback
-//       ★default story は sidecar.genderMap = null 固定。
-//         genderMap_default は account-global の契約であり、default story sidecar と
-//         同じキーを二重 authority にしない（裁定どおり）。
+//   ・★STEP3C 裁定: sidecar.genderMap = **null 固定**（全 story 共通）。
+//       GENDER_SOURCE_CONTRACT_001 の確定により、gender の canonical source は
+//       body.cast.hero.gender / body.cast.npcs[].gender のみ。
+//       projection は genderMap_<id> / genderMap_"<id>" / chr6_v292Dfix54_genderMap_* を
+//       **一切読まない**（legacy genderMap を canonical hash / source から除外）。
+//       schema shape は変えない（sidecar.genderMap キーは残し値だけ null 固定）。
+//       Worker serializer 側の物理削除は STEP3D〜3E 境界の課題として据置。
 //   ・aiInstr: slot story = 'v292aiInstr_slot_<id>' / default story = 'v292aiInstr'
 //     （fix297 KEY() = 'v292aiInstr' + slotSfx() と同じ導出）
 //
@@ -71,7 +72,7 @@
   var TAG = '[v292Dfix697:shadow-story-commit]';
   var DEBOUNCE_MS = 12000, MAXWAIT_MS = 45000, SIDE_POLL_MS = 20000, TIMEOUT_MS = 25000;
   var MARKER_KEY = 'v292Dfix402_storyRevs';   // ★collectLS 除外 prefix に同居（pkg baseline 不変）
-  var BUILD = 'fix697';
+  var BUILD = 'fix700';
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function lss(k,v){ try { localStorage.setItem(k, v); return true; } catch(e){ return false; } }
@@ -106,14 +107,10 @@
     var v = lsg(k);
     return (v == null || v === '') ? null : String(v);
   }
-  function readGenderMap(id){
-    if (id === 'default') return null;   // ★account-global(genderMap_default)と二重 authority にしない
-    var un = lsg('genderMap_' + id);
-    var src = (un != null) ? un : lsg('genderMap_"' + id + '"');   // unquoted 優先・無い時のみ quoted
-    if (src == null) return null;
-    try { var o = JSON.parse(src); return (o && typeof o === 'object' && !Array.isArray(o)) ? o : null; }
-    catch(e){ return null; }
-  }
+  /* ★STEP3C: legacy genderMap を canonical から除外。
+     genderMap_<id> / genderMap_"<id>" / chr6_v292Dfix54_genderMap_* を読まず、常に null。
+     引数 id は schema 互換のため残すが未使用。 */
+  function readGenderMap(id){ return null; }
 
   // ---- canonical projection（Worker chrCanonicalStoryString と同一規約） ----
   function stableStringify(v){
@@ -221,6 +218,11 @@
                 seedEquivalent: 0, shadowConflict: 0, netFail: 0, skipped: 0 };
   var LEDGER = [], LEDGER_CAP = 50;
   function note(row){ row.t = Date.now(); LEDGER.push(row); while (LEDGER.length > LEDGER_CAP) LEDGER.shift(); }
+  /* ★STEP3C SUCCESS LEDGER（裁定: canary observability 目的のみ）
+     in-memory only / 永続化しない / localStorage に書かない / network 追加なし /
+     canonical payload に混ぜない / 本文・aiInstr 実内容は記録しない（hash と長さのみ）。 */
+  /* replayed は Worker の idemReserve が replay 応答へ付ける authoritative flag（j.replayed）。
+     client 側で推測しない。 */
 
   // ---- commit（完全 fire-and-forget） ----
   var inFlight = false, lastSentHash = null;
@@ -255,6 +257,10 @@
           if (j.noop) stats.noop++; else stats.ok++;
           if (j.serverHash && j.serverHash === localHash){ stats.parityPass++; }
           else { stats.parityFail++; note({ kind: 'PARITY_FAIL', id: id, rev: j.rev, localHash: localHash, serverHash: j.serverHash || null, why: why }); }
+          /* ★STEP3C SUCCESS LEDGER: 成功も1行だけ記録（type/why/baseRev/serverRev/hash のみ） */
+          note({ kind: 'SUCCESS', type: (j.noop ? 'NOOP' : 'OK'), id: id, why: why,
+                 baseRev: baseRev, serverRev: (typeof j.rev === 'number' ? j.rev : null),
+                 localHash: localHash, serverHash: j.serverHash || null, replayed: (j.replayed === true) });
           if (typeof j.rev === 'number') advanceDocRev(id, j.rev);   // 200 normal / 200 noop
           return;
         }
@@ -313,9 +319,8 @@
   var lastFp = null;
   function fp(){
     var id = storyId(); if (!id) return null;
-    var a = readAiInstr(id) || '';
-    var g = readGenderMap(id); var gs = g ? stableStringify(g) : '';
-    return a.length + ':' + gs.length + ':' + gs.slice(0, 80) + ':' + a.slice(0, 80);
+    var a = readAiInstr(id) || '';          /* ★STEP3C: genderMap は projection に入らないので指紋対象外 */
+    return a.length + ':' + a.slice(0, 80);
   }
   try {
     setInterval(function(){
