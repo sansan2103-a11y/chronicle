@@ -217,8 +217,22 @@
   function resumablePending(){
     return readPending().filter(function(p){ return !(p && p.sdTerminal === true); });
   }
+  /* ★★fix712(GPT裁定 DEFAULT ON CUT): 既定を反転する。
+     旧: DEFAULT OFF ＋ v292Dfix708On='1' で ON
+     新: DEFAULT ON  ＋ v292Dfix708Off='1' で OFF（最優先の kill switch）
+     ・v292Dfix708Off === '1' → 必ず OFF（v292Dfix708On='1' が残っていても OFF）
+     ・それ以外（Off が無い / Off が別の値）→ ON
+     ・旧 v292Dfix708On は **読まない** が、localStorage からの削除・cleanup もしない（互換のため残置）。
+     ・localStorage の読取りが throw したときは **OFF**（kill switch 判定不能 → fail closed）。
+     ★ここで変えるのは既定値の意味だけ。削除トランザクション本体・404 契約・fix710 の
+       eligibility は 1バイトも変えていない。 */
   function sdOn(){
-    try { return lsg('v292Dfix708On') === '1' && lsg('v292Dfix708Off') !== '1'; }
+    /* ★★fix712(GPT裁定 追補): localStorage の読取り自体が throw した場合は **OFF**。
+       default ON は「通常状態の既定値」であって、緊急停止スイッチ(v292Dfix708Off)の状態すら
+       判定できない異常時まで削除トランザクションを ON にする意味ではない。→ fail closed。 */
+    /* ★lsg() は例外を握り潰して null を返すので、ここでは **localStorage を直接読む**。
+       そうしないと「読めなかった」と「Off が無い」を区別できず fail closed にならない。 */
+    try { return localStorage.getItem('v292Dfix708Off') !== '1'; }
     catch(e){ return false; }
   }
   /* canonical hash 契約と shadow transport の owner は fix697 だけ。ここでは作らない。 */

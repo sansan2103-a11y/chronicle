@@ -9,7 +9,7 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix711"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix712"></script>
 <script src="v292Dfix698-mutation-bus.js?cb=v292Dfix701"></script>
 <!-- v292Dfix705(STEP3E): canonical read authority。既知 storyId の document で
      canonical 判定が終わるまで **その story の body / aiInstr への書込だけ**を保留する。
@@ -48,7 +48,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260820-fix711';
+  var BUILT = '20260820-fix712';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3207,7 +3207,7 @@ G.init();
 <!-- fix587: 物語削除の正規サービス。UIは意思表示を受け取るだけで、認可と手順はここが持つ。
      削除の順序: 再読込→exact key確定→復元セット作成→検証→墓標→クラウドへ反映確認→ゲート経由でexact削除。
      ★物理削除より先に墓標をクラウドへ確定させる。OFF=v292Dfix587Off -->
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix711"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix712"></script>
 <!-- fix602: 墓標(tombstone)が立ったスロットのキーへの setItem を影監視する。
      拒否しない・挙動を1ミリも変えない・LSへは1バイトも書かない。
      経路・key・slotId を記録するだけ。読出: __v292Dfix602.stats()/.recent()/.selfTest()

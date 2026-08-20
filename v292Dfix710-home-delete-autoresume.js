@@ -21,7 +21,7 @@
 //     ・historical(pre-fix708) の pending には触らない
 //
 // ■autoResume の対象（1つでも欠けたら **撃たない**）
-//   ・fix708 ON            … v292Dfix708On==='1' かつ v292Dfix708Off!=='1'
+//   ・fix708 ON            … ★fix712 以降は既定 ON。v292Dfix708Off==='1' のときだけ OFF
 //   ・terminal でない      … sdTerminal !== true
 //   ・shadowDeleteVersion === 1   … pre-fix708 の historical plan を除外する版札
 //   ・localDeleteBaseHash あり    … live のうちに確定した canonical hash（無ければ CAS を撃てない）
@@ -53,8 +53,15 @@
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix710Off') === '1'; }
+  /* ★★fix712: fix587 と同じ既定反転。DEFAULT ON ＋ v292Dfix708Off='1' で OFF。
+     判定は fix587 側と 1文字も食い違わせない（食い違うと「HOME だけ勝手に動く」が起きる）。 */
   function sdOn(){
-    try { return lsg('v292Dfix708On') === '1' && lsg('v292Dfix708Off') !== '1'; }
+    /* ★★fix712(GPT裁定 追補): localStorage の読取り自体が throw した場合は **OFF**。
+       default ON は「通常状態の既定値」であって、緊急停止スイッチ(v292Dfix708Off)の状態すら
+       判定できない異常時まで削除トランザクションを ON にする意味ではない。→ fail closed。 */
+    /* ★lsg() は例外を握り潰して null を返すので、ここでは **localStorage を直接読む**。
+       そうしないと「読めなかった」と「Off が無い」を区別できず fail closed にならない。 */
+    try { return localStorage.getItem('v292Dfix708Off') !== '1'; }
     catch(e){ return false; }
   }
   function svc(){ try { return window.__chronicleStoryLifecycle || null; } catch(e){ return null; } }
