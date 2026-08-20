@@ -390,6 +390,26 @@
   // ★boot 時に一度だけ document rev snapshot を取る（fix694 authority は既に確定済み）
   try { initDocRev(); } catch(e){}
 
+  /* ★★fix716: endpoint / auth / request の単一実装。shadowRequest と putStoryOnce が共有する。
+     ここは送るだけ。localStorage / sessionStorage / docBaseRev / commit / projection を触らない。 */
+  function postSaveOnce(body, cb){
+    if (!isLoggedIn()){ cb(null, 'NOT_LOGGED_IN'); return; }
+    var ac = null, timer = null;
+    try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, TIMEOUT_MS); } catch(e){}
+    var opts = { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) };
+    if (ac) opts.signal = ac.signal;
+    fetch(proxyUrl() + '/save', opts).then(function(res){
+      return res.json().then(function(j){ return { status: res.status, j: j }; },
+                             function(){ return { status: res.status, j: null }; });
+    }).then(function(r){
+      if (timer) clearTimeout(timer);
+      cb({ status: r.status, j: r.j || {} }, null);
+    })['catch'](function(e){
+      if (timer) clearTimeout(timer);
+      cb(null, 'NETWORK_FAILED');
+    });
+  }
+
   window.__v292Dfix697 = {
     __armed: true,
     off: off, on: on,
@@ -415,21 +435,36 @@
     shadowRequest: function(payload, cb){
       var op = payload && payload.op;
       if (op !== 'getstory' && op !== 'deleteshadow'){ cb(null, 'OP_NOT_ALLOWED'); return; }
-      if (!isLoggedIn()){ cb(null, 'NOT_LOGGED_IN'); return; }
-      var ac = null, timer = null;
-      try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, TIMEOUT_MS); } catch(e){}
-      var opts = { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) };
-      if (ac) opts.signal = ac.signal;
-      fetch(proxyUrl() + '/save', opts).then(function(res){
-        return res.json().then(function(j){ return { status: res.status, j: j }; },
-                               function(){ return { status: res.status, j: null }; });
-      }).then(function(r){
-        if (timer) clearTimeout(timer);
-        cb({ status: r.status, j: r.j || {} }, null);
-      })['catch'](function(e){
-        if (timer) clearTimeout(timer);
-        cb(null, 'NETWORK_FAILED');
-      });
+      postSaveOnce(payload, cb);
+    },
+    /* ★★fix716(STEP C): per-story backfill 専用の **狭い** write 口。
+       なぜ shadowRequest の allow-list に putstory を足さないのか:
+         shadowRequest は read/delete 系の汎用外部口なので、そこへ write op を generic に開けると
+         fix715 以外の caller にも putstory capability が広がる。ここは1本の専用口に閉じる。
+       契約:
+         ・caller から op を受け取らない。op は 'putstory' 固定。
+         ・request は exactly 1。自動 retry は **しない**（曖昧なら caller が fresh getstory で確認する）。
+         ・localStorage / sessionStorage へ 1 バイトも書かない。
+         ・document authority に依存しない。current document の storyId も見ない。
+         ・docBaseRev / document runtime rev を変更しない。commit を発火しない。projection を書き換えない。
+           ＝別 story を backfill しても、いま開いている document の rev authority は一切動かない。
+         ・endpoint / auth / request 実装は上と同一（postSaveOnce）。新 auth・新 token・新 endpoint は 0。
+         ・応答は caller へそのまま返す（既存 error normalization のみ）。 */
+    putStoryOnce: function(payload, cb){
+      var p = (payload && typeof payload === 'object') ? payload : null;
+      if (!p) { cb(null, 'BAD_PAYLOAD'); return; }
+      var id = (p.id == null) ? '' : String(p.id);
+      if (!id) { cb(null, 'BAD_STORY_ID'); return; }
+      if (!p.record || typeof p.record !== 'object') { cb(null, 'BAD_RECORD'); return; }
+      var base = +p.baseStoryRev;
+      if (!(base >= 0)) { cb(null, 'BAD_BASE_STORY_REV'); return; }
+      var mid = (p.mid == null) ? '' : String(p.mid);
+      if (!mid) { cb(null, 'BAD_MID'); return; }
+      /* ★caller が渡してきた op / その他の任意 field は捨てる。ここで組み直す。 */
+      var body = { op: 'putstory', id: id, baseStoryRev: base, record: p.record,
+                   shadow: true, mid: mid };
+      if (p.clientMeta && typeof p.clientMeta === 'object') body.clientMeta = p.clientMeta;
+      postSaveOnce(body, cb);
     }
   };
   try { console.log(TAG, 'loaded (shadow non-authoritative / default OFF / on=v292Dfix697On)'); } catch(e){}
