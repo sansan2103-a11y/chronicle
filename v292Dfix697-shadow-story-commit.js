@@ -209,9 +209,41 @@
     } catch(e){}
     return 'https://novel-proxy.sansan2103.workers.dev';
   }
+  /* ★★fix709(STEP3F canary で発見・HOME_SHADOW_TRANSPORT_AUTH_MISSING / GPT裁定 = APPROVED with 1 cut):
+     window.__chronicleGoogleId を定義しているのは fix328 だが、**fix328 は index.html にしか script tag が無い**。
+     home.html は fix663 が独自に Google ログインを持ち、**同じ保存キー v292GoogleToken・同じ形式**で保存し、
+     認証ヘッダ相当は毎回 localStorage を読む方式になっている。
+     そのため fix697 の authHeaders は HOME で常に空になり、shadowRequest が NOT_LOGGED_IN で止まっていた
+     （＝削除の実入口である HOME で、fix708 のサーバ削除段が一度も到達できない）。
+
+     ★裁定で確定した契約（ここを広げてはいけない）:
+       A. window.__chronicleGoogleId が **function として存在する** ページ（index.html）
+          ・helper が credential を返す      → 従来どおり認証
+          ・helper が空 / null を返す        → 認証なし。**localStorage fallback しない**
+          ・helper が throw する             → fail closed。**localStorage fallback しない**
+          ＝ index の認証挙動を fix708 以前から 1 ミリも変えない。
+       B. window.__chronicleGoogleId が **存在しない** ページ（home.html）だけ
+          ・localStorage v292GoogleToken を **read-only fallback** として使ってよい。
+     ★token 検証は fix328 / fix601 / fix663 と同一契約: exp は**秒** / 30 秒の余裕 / 期限切れは使わない /
+       JSON schema を拡張しない / 新しい storage key を作らない / 書込をしない。 */
+  function googleTokenFromLS(){
+    try {
+      var j = JSON.parse(lsg('v292GoogleToken') || 'null');
+      if (j && j.token && j.exp && (j.exp * 1000) > (Date.now() + 30000)) return String(j.token);
+    } catch(e){}
+    return '';
+  }
   function authHeaders(){
     var h = { 'Content-Type': 'application/json' };
-    try { var g = (window.__chronicleGoogleId && window.__chronicleGoogleId()) || ''; if (g) h['x-google-id'] = g; } catch(e){}
+    var g = '';
+    if (typeof window.__chronicleGoogleId === 'function'){
+      /* ★A: helper があるページでは helper だけ。空でも throw でも fallback しない（fail closed）。 */
+      try { g = window.__chronicleGoogleId() || ''; } catch(e){ g = ''; }
+    } else {
+      /* ★B: helper 自体が無いページ（home.html）だけ read-only fallback。 */
+      g = googleTokenFromLS();
+    }
+    if (g) h['x-google-id'] = g;
     try { var p = (lsg('v292ProxyPass') || '').replace(/^\s+|\s+$/g,''); if (p) h['x-chronicle-pass'] = p; } catch(e){}
     return h;
   }
