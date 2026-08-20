@@ -73,6 +73,8 @@
                 sdContractUnavailable: 0, sdBaseHashCaptured: 0, sdBaseHashFailed: 0,
                 sdLegacyPushAttempts: 0, sdLegacyPushOk: 0, sdLegacyPushDeferred: 0,
                 sdTerminalHolds: 0, sdResumeSkippedTerminal: 0,
+                /* ★★fix711: 移行期の 404（story_shadow に row が無いだけ）を legacy 経路へ戻した回数 */
+                sd404LegacyRequired: 0, sd404LegacyCompleted: 0,
                 /* ★★fix710: 呼び出し側の planId 絞り込みで resume 対象外にした件数 */
                 sdResumeFilteredOut: 0, sdResumeInvalidFilter: 0 };
   function bumpCode(map, code){
@@ -173,7 +175,9 @@
   //   (5) サーバ削除段は **legacy pkg push を要求しない**。fresh getstory から始める
   //   (6) shadow live なら「今の serverHash === 保存した localDeleteBaseHash」を必須にし、
   //       一致したときだけ **fresh な rev/hash** で deleteshadow の CAS を撃つ
-  //   (7) 404/absent → CLOUD_ALREADY_ABSENT（サーバに墓標行は作らない）→ 物理削除可
+  //   (7) ★fix711: 404 は SHADOW_ROW_MISSING_LEGACY_REQUIRED。移行期は「クラウドに無い」と
+  //       断定しない（story_shadow に row が無いだけ）。サーバに墓標行は作らず、legacy 経路へ戻し、
+  //       legacy pkg 墓標 push が成功したときだけ物理削除する
   //   (8) deleted=true → CLOUD_ALREADY_DELETED → 物理削除可
   //   (9) authority=canonical → DELETE_CANONICAL_UNSUPPORTED → 止まる
   //  (10) deleteshadow 成功後にだけ fix660 ゲート経由の物理削除
@@ -539,10 +543,36 @@
           return;
         }
         var j = r.j || {};
-        /* (7) 行が無い = クラウドにはもう存在しない。サーバ墓標行は **作らない**。 */
+        /* ★★fix711(GPT裁定 SHADOW 404 SAFETY CUT): 移行期の 404 は
+           「クラウドにその物語が無い」ことを意味しない。証明できるのは
+           **story_shadow namespace に row が無い** ことだけ。
+           main は local 38 スロットに対し story_shadow 7 行、CLOUD_STORY_CANONICAL = NOT YET。
+           legacy package 側に本体が残っている可能性があるので、404 だけで physical delete へ
+           進むのは禁止（SHADOW_404_NOT_AUTHORITATIVE_DURING_PARTIAL_COVERAGE）。
+           → 従来の legacy 経路（finishLegacy）へ戻し、legacy pkg 墓標 push が
+             **成功したときだけ** 物理削除する。失敗したら pending / 本体 / 墓標 / snapshot を保持。
+           ★server row は作らない ★deleteshadow は撃たない ★新 op / 新 key / 新 ledger も作らない。
+           将来 per-story cloud canonical へ完全 cutover し legacy package が story authority から
+           退役した後にだけ、404 → CLOUD_ALREADY_ABSENT を再検討できる。 */
         if (r.status === 404 || j.errorCode === 'not-found'){
-          stats.sdAlreadyAbsent++;
-          resolve(proceedPhysical('CLOUD_ALREADY_ABSENT'));
+          stats.sd404LegacyRequired++;
+          note({ act:'shadow-404-legacy-required', slotId:slotId, deleteOpId:deleteOpId,
+                 verdict:'SHADOW_ROW_MISSING_LEGACY_REQUIRED',
+                 detail:'story_shadow に row が無いだけ。legacy pkg 墓標 push の成功を物理削除の条件にする' });
+          finishLegacy(plan, d, snapshotId).then(function(res){
+            try {
+              res = res || {};
+              res.shadowDelete = true;
+              res.legacyFallback = true;
+              res.verdict = (res.code === 'deleted' || res.code === 'partial')
+                ? 'SHADOW_ROW_MISSING_LEGACY_COMPLETED' : 'SHADOW_ROW_MISSING_LEGACY_REQUIRED';
+              if (res.code === 'deleted') stats.sd404LegacyCompleted++;
+            } catch(e){}
+            resolve(res);
+          }, function(e){
+            resolve(hold('pending-cloud', 'SHADOW_ROW_MISSING_LEGACY_REQUIRED',
+                         'legacy fallback が失敗した: ' + String(e)));
+          });
           return;
         }
         if (r.status !== 200 || !j.ok){
