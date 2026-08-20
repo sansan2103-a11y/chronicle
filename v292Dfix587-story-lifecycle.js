@@ -72,7 +72,9 @@
                 sdHeld: 0, sdBaseConflict: 0, sdCanonicalUnsupported: 0, sdNoBaseHash: 0,
                 sdContractUnavailable: 0, sdBaseHashCaptured: 0, sdBaseHashFailed: 0,
                 sdLegacyPushAttempts: 0, sdLegacyPushOk: 0, sdLegacyPushDeferred: 0,
-                sdTerminalHolds: 0, sdResumeSkippedTerminal: 0 };
+                sdTerminalHolds: 0, sdResumeSkippedTerminal: 0,
+                /* ★★fix710: 呼び出し側の planId 絞り込みで resume 対象外にした件数 */
+                sdResumeFilteredOut: 0, sdResumeInvalidFilter: 0 };
   function bumpCode(map, code){
     try { var k = String(code || 'unknown'); map[k] = (map[k] || 0) + 1; } catch(e){}
   }
@@ -835,16 +837,50 @@
   }
 
   /* ---- 保留分の続き（再接続後に呼ぶ） ------------------------------------ */
-  function resumePending(){
+  /* ★★fix710(GPT裁定 PRIORITY 1): 呼び出し側が「この planId だけ」を指定できるようにする。
+     引数なしの呼び出しは **1バイトも振る舞いが変わらない**（既存 autoResume / コンソール操作はそのまま）。
+     これは HOME の boot trigger(fix710) が
+       「pre-fix708 の historical pending を 1件も autoResume 対象にしない」
+     という裁定条件を、fix587 の delete transaction 本体を作り直さずに満たすためだけの絞り込み。
+     ★広げる方向には使えない: off / 依存欠け / terminal の判定は先に効いたままで、
+       ここでできるのは **候補を減らすこと** だけ。 */
+  function resumePending(opts){
     var d = dep();
     if (off() || missingDeps(d).length) return Promise.resolve({ ok:false, code:'not-ready' });
     /* ★fix708(Q3): terminal（再送では直らない）計画は自動再開の対象にしない。 */
     var allPending = readPending();
-    var list = resumablePending();
-    var skipped = allPending.length - list.length;
+    var resumable = resumablePending();
+    var skipped = allPending.length - resumable.length;
     if (skipped > 0) stats.sdResumeSkippedTerminal += skipped;
+    var list = resumable, filteredOut = 0;
+    if (opts && Object.prototype.hasOwnProperty.call(opts, 'onlyPlanIds')){
+      var ids = opts.onlyPlanIds;
+      /* ★★fix710(GPT裁定): 絞り込みを **要求されたのに解釈できない** ときは
+         **全件 sweep へ戻してはいけない**（historical まで巻き込むため）。fail-closed。 */
+      if (Object.prototype.toString.call(ids) !== '[object Array]'){
+        stats.sdResumeInvalidFilter++;
+        return Promise.resolve({ ok:false, code:'invalid-filter', done:0,
+                                 skippedTerminal: skipped, filteredOut: resumable.length,
+                                 pending: allPending.length });
+      }
+      var want = {};
+      for (var oi = 0; oi < ids.length; oi++) want[String(ids[oi])] = 1;
+      /* 同一 planId が pending に二重に載っていても **1回しか処理しない** */
+      var seenPlan = {};
+      list = resumable.filter(function(p){
+        if (!p || want[String(p.planId)] !== 1) return false;   /* unknown id は無視（他 plan へ影響 0） */
+        var k = String(p.planId);
+        if (seenPlan[k] === 1) return false;
+        seenPlan[k] = 1;
+        return true;
+      });
+      filteredOut = resumable.length - list.length;
+      stats.sdResumeFilteredOut += filteredOut;
+    }
+    /* ★空配列 = 対象0件。ここで止める（全件 resume へ fallback しない）。 */
     if (!list.length) return Promise.resolve({ ok:true, code:'nothing', done:0,
-                                               skippedTerminal: skipped, pending: allPending.length });
+                                               skippedTerminal: skipped, filteredOut: filteredOut,
+                                               pending: allPending.length });
     /* ★★fix708: ON のときは **legacy pkg push を待たない**。各計画を新 protocol へ通す。
        （旧実装は push 成功を全計画の前提条件にしていた＝今回直した結線そのもの） */
     if (sdOn()){
@@ -860,7 +896,8 @@
       });
       return chain.then(function(){
         return { ok:true, code:'resumed', shadowDelete:true, done: done2,
-                 pending: readPending().length, skippedTerminal: skipped, held: held };
+                 pending: readPending().length, skippedTerminal: skipped,
+                 filteredOut: filteredOut, held: held };
       });
     }
     return pushTombstone(d).then(function(pushed){
@@ -878,7 +915,7 @@
           blocked.push({ slotId: plan.slotId, reason: outcome, humanReason: humanReason(outcome) });
       });
       return { ok:true, code:'resumed', done: done, pending: readPending().length,
-               blocked: blocked };
+               filteredOut: filteredOut, blocked: blocked };
     });
   }
 
