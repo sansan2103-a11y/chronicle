@@ -256,10 +256,80 @@
      Worker v30 は canonical story が1本でも出来た account に対してのみこの値を要求する
      （legacy-client-too-old）。canonical 0 のうちはゲート自体が発火しない。 */
   var CHR_CLIENT_PROTOCOL = 1;
+  /* ================= ★★fix713: LEGACY PACKAGE OVERSIZE GUARD =================
+   * Worker は `JSON.stringify(pkg から idb を除いたもの)` の **UTF-8 byte 長**が 4MB を
+   * 超えると、DBに触る前に HTTP 413 / errorCode 'too-large' を返す。
+   * 2026-08-20 の実測で main の legacy package は 5.92MB。この経路は決定論的に失敗する。
+   * 送信直前に測って fetch を出さない。4MB 未満の挙動は一切変えない。
+   * ★測定はこの場で行う（fix590 の読み込み順・v292Dfix590Off に依存させない）。
+   * ========================================================================== */
+  var F713_LIMIT_BYTES = 4 * 1024 * 1024;
+  function f713Bytes(pkg){
+    if (!pkg || typeof pkg !== 'object') return null;
+    var light = {}, k;
+    for (k in pkg){ if (k !== 'idb' && Object.prototype.hasOwnProperty.call(pkg, k)) light[k] = pkg[k]; }
+    var str = null;
+    try { str = JSON.stringify(light); } catch(e){ return null; }
+    if (str == null) return null;
+    try { if (typeof TextEncoder === 'undefined') return null; return new TextEncoder().encode(str).length; }
+    catch(e){ return null; }
+  }
+  /* 止めるべきときだけ {code,bytes,limit} を返す。収まっているときだけ null。
+     ★★fix713(GPT裁定 追補): **測れないときも止める**（fail-closed）。
+       安全弁の役目は「4MB超と分かっているものを送らない」ことなので、
+       「測れないから送ってみる」は逆方向。正常な package は素の JSON であり、
+       測定不能そのものが異常。 */
+  function f713Over(pkg){
+    var b = f713Bytes(pkg);
+    if (b == null) return { code:'LEGACY_PACKAGE_SIZE_UNMEASURABLE', bytes: null, limit: F713_LIMIT_BYTES };
+    if (b <= F713_LIMIT_BYTES) return null;
+    return { code:'LEGACY_PACKAGE_TOO_LARGE', bytes: b, limit: F713_LIMIT_BYTES };
+  }
+  function f713Note(stage, over, op, commitOpId){
+    try {
+      var L = window.__v292Dfix590;
+      if (over.code === 'LEGACY_PACKAGE_SIZE_UNMEASURABLE'){
+        if (L && typeof L.noteSizeUnmeasurable === 'function') L.noteSizeUnmeasurable({ stage: stage, op: op || null });
+      } else {
+        if (L && typeof L.noteOversizeBlocked === 'function'){
+          L.noteOversizeBlocked({ stage: stage, bytes: over.bytes, op: op || null, commitOpId: commitOpId || null });
+        }
+      }
+    } catch(e){}
+    try { console.warn(TAG, 'fix713: ' + over.code + ' のため送信しません', over.bytes, '/', over.limit, '(' + stage + ')'); } catch(e){}
+  }
+  function f713Refusal(over){
+    return { status: 413, json: { ok:false,
+             error: (over.code === 'LEGACY_PACKAGE_SIZE_UNMEASURABLE')
+                    ? 'データの大きさを確認できなかったため、安全のためクラウドへ送りませんでした。'
+                    : 'この端末のデータが大きすぎるため、クラウドへ送れませんでした。',
+             errorCode: over.code, retryable:false,
+             bytes: over.bytes, limit: over.limit, blockedBeforeSend:true } };
+  }
   function callSave(bodyObj){
     try { if (bodyObj && typeof bodyObj === 'object' && bodyObj.clientProtocol === undefined) bodyObj.clientProtocol = CHR_CLIENT_PROTOCOL; } catch(e){}
+    /* ★fix713(最後の関門): pkg を積んだ送信はここで必ず測る。超過なら fetch 0。 */
+    if (bodyObj && typeof bodyObj === 'object' && bodyObj.pkg){
+      var over713 = f713Over(bodyObj.pkg);
+      if (over713){
+        f713Note('fix399:callSave', over713, bodyObj.op, bodyObj.commitOpId);
+        return Promise.resolve(f713Refusal(over713));
+      }
+    }
     return fetch(proxyUrl() + '/save', { method: 'POST', headers: authHeaders(), body: JSON.stringify(bodyObj) })
-      .then(function(r){ return r.json().then(function(j){ return { status: r.status, json: j }; }); });
+      .then(function(r){ return r.json().then(function(j){
+        /* ★fix713: HTTP status と errorCode を捨てない（返り値の形は変えない）。 */
+        try {
+          if (r.status !== 200 || !(j && j.ok === true)){
+            var L = window.__v292Dfix590;
+            if (L && typeof L.noteTransportFailure === 'function'){
+              L.noteTransportFailure({ stage:'fix399:callSave', op:(bodyObj && bodyObj.op) || null,
+                                       httpStatus: r.status, errorCode: (j && j.errorCode) || null });
+            }
+          }
+        } catch(e){}
+        return { status: r.status, json: j };
+      }); });
   }
   function getMeta(){ return callSave({ op: 'meta' }).then(function(r){ return (r.json && r.json.meta) || null; }).catch(function(){ return null; }); }
 
@@ -657,6 +727,18 @@
         throw ep;
       }
       function attempt(){
+        /* ★★fix713: commit台帳の予約(notePut)より**前**に測る。
+           予約だけ作って送れないと、awaiting-result が増えて次の put まで止まる。 */
+        var overAtt713 = f713Over(o.pkg);
+        if (overAtt713){
+          f713Note('fix399:attempt', overAtt713, 'put', null);
+          setNum('v292Dfix399_localTs', Date.now());   /* 未同期であることを残す */
+          var e713 = new Error(overAtt713.code);
+          e713.legacyPackageTooLarge = true;          /* 分類は e713.message / errorCode 側に持つ */
+          e713.errorCode = overAtt713.code;
+          e713.bytes = overAtt713.bytes; e713.limit = overAtt713.limit;
+          throw e713;
+        }
         var body = { op: 'put', pkg: o.pkg };
         if (c) body.baseRev = c.rev();          /* ★これが無いとサーバは競合検査をしない */
         /* ★fix590: 「何を送ったか」を put の**直前に永続化**する。
@@ -770,7 +852,8 @@
         /* ★★fix599: 関門で止まった場合は照合しても意味が無い（結末はすでに判明している）。
            ここで照合を走らせると、決着しないまま通信を繰り返すだけになる。
            不変条件違反も同じで、直すべきは呼び出し側なので照合対象ではない。 */
-        var noReconcile = isFork || !!(err && (err.resolutionRequired || err.invariant));
+        /* ★fix713: 容量超過は「送っていない」ことが確定しているので、照合の通信も出さない。 */
+        var noReconcile = isFork || !!(err && (err.resolutionRequired || err.invariant || err.legacyPackageTooLarge));
         if (!noReconcile) setTimeout(function(){ reconcileNow(err && err.pendingCommit ? 'pending-blocked' : 'io-error'); }, 0);
       } catch(e){}
       throw err;
