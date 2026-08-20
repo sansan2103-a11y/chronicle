@@ -94,8 +94,69 @@
      Worker v30 は canonical story が1本でも出来た account に対してのみこの値を要求する
      （legacy-client-too-old）。canonical 0 のうちはゲート自体が発火しない。 */
   var CHR_CLIENT_PROTOCOL = 1;
+  /* ================= ★★fix713: LEGACY PACKAGE OVERSIZE GUARD =================
+   * Worker は `JSON.stringify(pkg から idb を除いたもの)` の **UTF-8 byte 長**が 4MB を
+   * 超えると、DBに触る前に HTTP 413 / errorCode 'too-large' を返す。
+   * 2026-08-20 の実測では main の legacy package が 5.92MB あり、この経路は
+   * **決定論的に必ず失敗する**。それを裏で30秒ごとに送り直すのは無駄でしかない。
+   * ここは送信直前で測って fetch を出さないだけ。4MB 未満のときの挙動は一切変えない。
+   * ★測定はこの場で行う（fix590 の読み込み順や v292Dfix590Off に依存させない）。
+   *   記録だけ既存の fix590 台帳へ流す（新しい保存先は作らない）。
+   * ========================================================================== */
+  var F713_LIMIT_BYTES = 4 * 1024 * 1024;
+  function f713Bytes(pkg){
+    if (!pkg || typeof pkg !== 'object') return null;
+    var light = {}, k;
+    for (k in pkg){ if (k !== 'idb' && Object.prototype.hasOwnProperty.call(pkg, k)) light[k] = pkg[k]; }
+    var str = null;
+    try { str = JSON.stringify(light); } catch(e){ return null; }
+    if (str == null) return null;
+    try { if (typeof TextEncoder === 'undefined') return null; return new TextEncoder().encode(str).length; }
+    catch(e){ return null; }
+  }
+  /* 止めるべきときだけ {code,bytes,limit} を返す。収まっているときだけ null。
+     ★★fix713(GPT裁定 追補): **測れないときも止める**（fail-closed）。
+       安全弁の役目は「4MB超と分かっているものを送らない」ことなので、
+       「測れないから送ってみる」は逆方向。正常な package は素の JSON であり、
+       測定不能そのものが異常。 */
+  function f713Over(pkg){
+    var b = f713Bytes(pkg);
+    if (b == null) return { code:'LEGACY_PACKAGE_SIZE_UNMEASURABLE', bytes: null, limit: F713_LIMIT_BYTES };
+    if (b <= F713_LIMIT_BYTES) return null;
+    return { code:'LEGACY_PACKAGE_TOO_LARGE', bytes: b, limit: F713_LIMIT_BYTES };
+  }
+  function f713Note(stage, over, op, commitOpId){
+    try {
+      var L = window.__v292Dfix590;
+      if (over.code === 'LEGACY_PACKAGE_SIZE_UNMEASURABLE'){
+        if (L && typeof L.noteSizeUnmeasurable === 'function') L.noteSizeUnmeasurable({ stage: stage, op: op || null });
+      } else {
+        if (L && typeof L.noteOversizeBlocked === 'function'){
+          L.noteOversizeBlocked({ stage: stage, bytes: over.bytes, op: op || null, commitOpId: commitOpId || null });
+        }
+      }
+    } catch(e){}
+    try { console.warn(TAG, 'fix713: ' + over.code + ' のため送信しません', over.bytes, '/', over.limit, '(' + stage + ')'); } catch(e){}
+  }
+  /* サーバが 413 を返したときと**同じ形**を、送らずに作る（呼び出し側の分岐を変えないため） */
+  function f713Refusal(over){
+    return { status: 413, json: { ok:false,
+             error: (over.code === 'LEGACY_PACKAGE_SIZE_UNMEASURABLE')
+                    ? 'データの大きさを確認できなかったため、安全のためクラウドへ送りませんでした。'
+                    : 'この端末のデータが大きすぎるため、クラウドへ送れませんでした。',
+             errorCode: over.code, retryable:false,
+             bytes: over.bytes, limit: over.limit, blockedBeforeSend:true } };
+  }
   function callSave(bodyObj, timeoutMs){
     try { if (bodyObj && typeof bodyObj === 'object' && bodyObj.clientProtocol === undefined) bodyObj.clientProtocol = CHR_CLIENT_PROTOCOL; } catch(e){}
+    /* ★fix713: pkg を積んだ送信（put / forceput）はここで必ず測る。超過なら fetch 0。 */
+    if (bodyObj && typeof bodyObj === 'object' && bodyObj.pkg){
+      var over713 = f713Over(bodyObj.pkg);
+      if (over713){
+        f713Note('fix402:callSave', over713, bodyObj.op, bodyObj.commitOpId);
+        return Promise.resolve(f713Refusal(over713));
+      }
+    }
     var ctrl = null, timer = null;
     try { if (typeof AbortController !== 'undefined') ctrl = new AbortController(); } catch(e){ ctrl = null; }
     var opts = { method: 'POST', headers: authHeaders(), body: JSON.stringify(bodyObj) };
@@ -103,7 +164,20 @@
     var clear = function(){ if (timer) { clearTimeout(timer); timer = null; } };
     return fetch(proxyUrl() + '/save', opts)
       .then(function(r){ return r.json().then(function(j){ return { status: r.status, json: j }; }); })
-      .then(function(res){ clear(); return res; }, function(err){ clear(); throw err; });
+      .then(function(res){
+        clear();
+        /* ★fix713: HTTP status と errorCode を捨てない（返り値の形は変えない）。 */
+        try {
+          if (res && (res.status !== 200 || !(res.json && res.json.ok === true))){
+            var L = window.__v292Dfix590;
+            if (L && typeof L.noteTransportFailure === 'function'){
+              L.noteTransportFailure({ stage:'fix402:callSave', op:(bodyObj && bodyObj.op) || null,
+                                       httpStatus: res.status, errorCode: (res.json && res.json.errorCode) || null });
+            }
+          }
+        } catch(e){}
+        return res;
+      }, function(err){ clear(); throw err; });
   }
   function hash(s){ var h=0; s=String(s||''); for(var i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; } return String(h>>>0); }
   function lsHash(s){ s = String(s || ''); return String(s.length) + ':' + hash(s); }   // ★fix402c堅牢化: length接頭で衝突耐性
