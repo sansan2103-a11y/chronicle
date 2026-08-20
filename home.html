@@ -218,7 +218,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260820-fix712';
+  var HOME_BUILT = '20260820-fix713';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -237,7 +237,7 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix712"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix713"></script>
 <script src="v292Dfix698-mutation-bus.js?cb=v292Dfix701"></script>
 <script src="v292Dfix569-gc-shadow.js?cb=v292Dfix680"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者（fix569 が捕捉済みの native を借りる） -->
@@ -247,7 +247,7 @@
 <!-- ★fix660(B): BackupGC。削除候補を選ぶ層。分類は fix562 が唯一の正なのでその後ろ -->
 <script src="v292Dfix660-backup-gc.js?cb=v292Dfix680"></script>
 <script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix680"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix680"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix713"></script>
 <!-- ★★fix708(STEP3F / GPT裁定 Q1 = CONDITIONAL GO): fix587 の削除トランザクションが
      **live のうちに** canonical hash を確定するために、fix697 の read-only 契約口
      (projectionOf / contentHashOf / shadowRequest) だけを使う。
@@ -671,13 +671,106 @@
   /* ★★fix702(STEP3D P0-3): home も legacy pkg writer（L~1019 op:'put' / L~1461 body596 op:'forceput'）。
      新 build の全 legacy writer が protocol=1 を送る。★body 直下に置く（pkg / packageHash には入れない）。 */
   var CHR_CLIENT_PROTOCOL = 1;
+  /* ================= ★★fix713: LEGACY PACKAGE OVERSIZE GUARD =================
+   * 2026-08-20 の実測（Cloudflare Workers のログ）:
+   *   POST /save  content-length 5,923,616  →  HTTP 413 / errorCode 'too-large'
+   * Worker は `str = JSON.stringify(pkg から idb を除いたもの)` の **UTF-8 byte 長**が
+   * 4MB を超えると、DBに触る前に 413 を返す。main の legacy package はすでに
+   * 5.92MB あり、この経路は**決定論的に必ず失敗する**。
+   * それを毎回 5.9MB 送って確かめるのは無駄で、しかも失敗の理由が画面にも台帳にも残らない。
+   *
+   * ここでやること（それだけ）:
+   *   ・送信直前に Worker と同じ境界で測る
+   *   ・超えていたら **fetch を1回も出さない**
+   *   ・止めた事実を既存の fix590 台帳へ流す（新しい保存先は作らない）
+   *   ・4MB 未満のときは**今までと完全に同じ**（測って通すだけ）
+   * ここは legacy sync を直す修正ではない。決定論的に失敗する送信を止める安全弁。
+   *
+   * ★判定を fix590 に依存させない: 台帳が未読込・v292Dfix590Off のときに
+   *   5.9MB を送ってしまうのを避けるため、測定は**この場で**行う。
+   *   記録だけ、台帳があれば借りる。
+   * ========================================================================== */
+  var F713_LIMIT_BYTES = 4 * 1024 * 1024;      /* Worker と完全に同じ境界 */
+  function f713Bytes(pkg){
+    /* Worker の str と同じ文字列を作る（idb だけ除く）。測れなければ null。 */
+    if (!pkg || typeof pkg !== 'object') return null;
+    var light = {}, k;
+    for (k in pkg){ if (k !== 'idb' && Object.prototype.hasOwnProperty.call(pkg, k)) light[k] = pkg[k]; }
+    var str = null;
+    try { str = JSON.stringify(light); } catch(e){ return null; }
+    if (str == null) return null;
+    try { if (typeof TextEncoder === 'undefined') return null; return new TextEncoder().encode(str).length; }
+    catch(e){ return null; }
+  }
+  /* 止めるべきときだけ {code,bytes,limit} を返す。収まっているときだけ null。
+     ★★fix713(GPT裁定 追補): **測れないときも止める**（fail-closed）。
+       安全弁の役目は「4MB超と分かっているものを送らない」ことなので、
+       「測れないから送ってみる」は逆方向。正常な package は素の JSON であり、
+       測定不能そのものが異常。 */
+  function f713Over(pkg){
+    var b = f713Bytes(pkg);
+    if (b == null) return { code:'LEGACY_PACKAGE_SIZE_UNMEASURABLE', bytes: null, limit: F713_LIMIT_BYTES };
+    if (b <= F713_LIMIT_BYTES) return null;
+    return { code:'LEGACY_PACKAGE_TOO_LARGE', bytes: b, limit: F713_LIMIT_BYTES };
+  }
+  function f713Note(stage, over, op, commitOpId){
+    try {
+      var L = window.__v292Dfix590;
+      if (over.code === 'LEGACY_PACKAGE_SIZE_UNMEASURABLE'){
+        if (L && typeof L.noteSizeUnmeasurable === 'function') L.noteSizeUnmeasurable({ stage: stage, op: op || null });
+      } else {
+        if (L && typeof L.noteOversizeBlocked === 'function'){
+          L.noteOversizeBlocked({ stage: stage, bytes: over.bytes, op: op || null, commitOpId: commitOpId || null });
+        }
+      }
+    } catch(e){}
+    try { console.warn('[home][v292Dfix713] ' + over.code + ' のため送信しません', over.bytes, '/', over.limit, '(' + stage + ')'); } catch(e){}
+  }
+  /* サーバが 413 を返したときと**同じ形**を、送らずに作る。
+     呼び出し側の分岐（ok:false → 失敗表示）を1つも変えないため。 */
+  function f713Refusal(over){
+    return { ok:false,
+             error: (over.code === 'LEGACY_PACKAGE_SIZE_UNMEASURABLE')
+                    ? 'データの大きさを確認できなかったため、安全のためクラウドへ送りませんでした。'
+                    : 'この端末のデータが大きすぎるため、クラウドへ送れませんでした。',
+             errorCode: over.code, retryable:false,
+             bytes: over.bytes, limit: over.limit, blockedBeforeSend:true };
+  }
+  function f713NoteTransport(stage, op, httpStatus, errorCode){
+    try {
+      var L = window.__v292Dfix590;
+      if (L && typeof L.noteTransportFailure === 'function'){
+        L.noteTransportFailure({ stage: stage, op: op || null, httpStatus: httpStatus, errorCode: errorCode || null });
+      }
+    } catch(e){}
+  }
   function call(body, ms){
     try { if (body && typeof body === 'object' && body.clientProtocol === undefined) body.clientProtocol = CHR_CLIENT_PROTOCOL; } catch(e){}
+    /* ★fix713(最後の関門): どの呼び出し元から来ても、pkg を積んだ送信はここで必ず測る。
+       上流で測り漏れても 5.9MB が外へ出ないようにするための二重化。 */
+    if (body && typeof body === 'object' && body.pkg){
+      var over713 = f713Over(body.pkg);
+      if (over713){
+        f713Note('home:call', over713, body.op, body.commitOpId);
+        return Promise.resolve(f713Refusal(over713));
+      }
+    }
     var ctrl = (typeof AbortController!=='undefined') ? new AbortController() : null;
     var timer = ctrl ? setTimeout(function(){ try{ctrl.abort();}catch(e){} }, ms||25000) : null;
     var o={ method:'POST', headers:authHeaders(), body:JSON.stringify(body) };
     if(ctrl) o.signal = ctrl.signal;
-    return fetch(proxyUrl()+'/save', o).then(function(r){ if(timer) clearTimeout(timer); return r.json(); });
+    return fetch(proxyUrl()+'/save', o).then(function(r){
+      if(timer) clearTimeout(timer);
+      return r.json().then(function(j){
+        /* ★fix713: HTTP status と Worker の errorCode を捨てない（返り値の形は変えない）。 */
+        try {
+          if (!r.ok || !(j && j.ok === true)){
+            f713NoteTransport('home:call', body && body.op, r.status, (j && j.errorCode) || null);
+          }
+        } catch(e){}
+        return j;
+      });
+    });
   }
   function turnsOf(raw){ var d=J(raw,null); return (d && Array.isArray(d.turns)) ? d.turns.length : -1; }
 
@@ -1038,6 +1131,13 @@
     try {
       var pkg = { schema:1, updatedAt:Date.now(), device:(navigator.userAgent||'').slice(0,60),
                   activeSlot:(J(g('chr6_active_slot'),'chr6')||'chr6'), ls:collectLS(), full:true };
+      /* ★★fix713: 容量超過なら「サーバへ控えを取れた」証明にはならないので null を返す。
+         ここで null を返すと、呼び出し側は**1バイトも消さない**（既存の契約どおり）。 */
+      var over662 = f713Over(pkg);
+      if (over662){
+        f713Note('home:f662-server-backup', over662, 'put', null);
+        return Promise.resolve(null);
+      }
       var base = +(g('v292Dfix402_baseRev')||0)||0;
       return call({ op:'put', baseRev: base, pkg: pkg, mid: 'f662:' + base + ':' + Date.now() }, 60000)
         .then(function(j){
@@ -1477,6 +1577,25 @@
     el('sync').className='sync'; el('sync').textContent='☁ 上げています…';
     var pkg = { schema:1, updatedAt:Date.now(), device:(navigator.userAgent||'').slice(0,60),
                 activeSlot:(J(g('chr6_active_slot'),'chr6')||'chr6'), ls:collectLS(), full:true };
+    /* ★★fix713: ここで止める。op:'meta' も commit台帳の予約も**作らせない**。
+       予約だけ残って結果が来ない状態（awaiting-result）を新たに増やさないため。 */
+    var overPush713 = f713Over(pkg);
+    if (overPush713){
+      f713Note('home:forceput', overPush713, 'forceput', null);
+      var unmeas713 = (overPush713.code === 'LEGACY_PACKAGE_SIZE_UNMEASURABLE');
+      el('sync').className='sync err';
+      el('sync').textContent = unmeas713
+        ? '☁ 上げられませんでした（大きさを確認できません）'
+        : '☁ 上げられませんでした（データが大きすぎます）';
+      try {
+        el('note').innerHTML = '<div class="note">'+esc(unmeas713
+          ? 'この端末のデータの大きさを確認できなかったため、安全のため送信していません。データは何も変わっていません。'
+          : ('この端末のデータが ' + Math.round(overPush713.bytes/1048576*100)/100
+             + 'MB あり、クラウドが受け取れる上限（' + Math.round(overPush713.limit/1048576) + 'MB）を超えています。'
+             + 'そのため送信していません。データは何も変わっていません。'))+'</div>';
+      } catch(e){}
+      return;
+    }
     call({op:'meta'},15000).then(function(m){
       /* ★★fix596(GPT指定1): 「いま上げる」は forceput なので、**曖昧コミットはここでも起きる**。
          put と同じ commit ledger を通し、commitOpId を付けて送る。
