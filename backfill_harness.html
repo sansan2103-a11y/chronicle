@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Backfill harness</title>
+<!--
+  backfill_harness.html — STEP C one-story backfill 専用の最小 harness（裁定 RULING18）
+
+  ★このページは「何もしない」ことが仕様です。
+    ・自動 getstory / 自動 putstory / timer / interval / auto backfill / candidate loop を持ちません。
+    ・localStorage / sessionStorage へ 1 バイトも書きません。
+    ・button から何かが自動実行されることもありません（button 自体を置いていません）。
+    ・実行は開発者コンソールから window.__v292Dfix715.sendOne(...) を 1 回だけ呼ぶ形に限定します。
+
+  ★読み込むのは production 実物の 2 本だけです。
+      v292Dfix697-shadow-story-commit.js   （canonical projection / hash / transport の唯一の owner）
+      v292Dfix715-onestory-backfill-sender.js（one-story sender harness）
+    fix399 / fix402 / fix587 / fix590 / fix698 / lifecycle delete resume / HOME boot / index boot /
+    legacy sync / autopull は **一切読み込みません**。したがって pull も resumePending も起動できません。
+
+  ★fix697 の外部依存はすべて optional で、このページに無くても安全側に倒れます（静的確認済み）。
+      window.__chronicleDocumentStoryKey  … 無い → storyId() = null → projection() = null
+                                             → commit 経路がそもそも成立しない（このページでは望ましい）
+      window.__chronicleGetState / window.S … 無い → S.save の wrap は成立しない
+      window.__chronicleGoogleId          … 無い → home.html と同じ localStorage read-only fallback
+      window.__v292Dfix247bapi            … 無い → 既定の proxy URL へ fallback
+    fix697 の localStorage 書込は advanceDocRev の 1 箇所だけで、これは自 document の commit 成功時に
+    しか呼ばれません。このページでは commit が成立しないため、書込は 0 です。
+
+  ★一般 HOME / index からリンクしません。index.html / home.html へ script tag も追加しません。
+-->
+<style>
+  html,body{margin:0;padding:0;background:#0b0b12;color:#e6e6f2;
+            font:14px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}
+  main{max-width:680px;margin:0 auto;padding:32px 20px}
+  h1{font-size:16px;margin:0 0 12px}
+  p{margin:0 0 8px;color:#9aa0b5}
+  code{color:#c9a44c}
+</style>
+</head>
+<body>
+<main>
+  <h1>Backfill harness / no automatic actions</h1>
+  <p>このページは何も自動実行しません。</p>
+  <p>読み込み対象は <code>v292Dfix697</code> と <code>v292Dfix715</code> のみです。</p>
+</main>
+<script src="v292Dfix697-shadow-story-commit.js?cb=v292Dfix716"></script>
+<script src="v292Dfix715-onestory-backfill-sender.js?cb=v292Dfix716"></script>
+</body>
+</html>
