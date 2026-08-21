@@ -450,6 +450,36 @@
            ＝別 story を backfill しても、いま開いている document の rev authority は一切動かない。
          ・endpoint / auth / request 実装は上と同一（postSaveOnce）。新 auth・新 token・新 endpoint は 0。
          ・応答は caller へそのまま返す（既存 error normalization のみ）。 */
+    /* ★★fix717(STEP4A): canonical row への通常更新の **狭い** write 口（putcanonical 専用）。
+       fix716 putStoryOnce と対をなす。authority で write path を完全分離する:
+         shadow story    → putStoryOnce (op putstory 固定)
+         canonical story → putCanonicalOnce (op putcanonical 固定)
+       契約:
+         ・caller から op を受け取らない。op は 'putcanonical' 固定。
+         ・expectedRev / expectedHash 必須（caller は直前の fresh getstory から取得する。
+           過去に観測した hash を authority にしない）。
+         ・request は exactly 1。自動 retry しない（409 は CANONICAL_WRITE_CONFLICT として caller が停止）。
+         ・localStorage / sessionStorage へ 1 バイトも書かない。docBaseRev / commit / projection を触らない。
+           shadow 用の document rev 系（advanceDocRev）は canonical write と無関係のまま。
+         ・endpoint / auth / request 実装は postSaveOnce（既存単一実装）を共有。新 auth・新 endpoint 0。 */
+    putCanonicalOnce: function(payload, cb){
+      var p = (payload && typeof payload === 'object') ? payload : null;
+      if (!p) { cb(null, 'BAD_PAYLOAD'); return; }
+      var id = (p.id == null) ? '' : String(p.id);
+      if (!id) { cb(null, 'BAD_STORY_ID'); return; }
+      if (!p.record || typeof p.record !== 'object') { cb(null, 'BAD_RECORD'); return; }
+      var xr = +p.expectedRev;
+      if (!(xr >= 0)) { cb(null, 'BAD_EXPECTED_REV'); return; }
+      var xh = (p.expectedHash == null) ? '' : String(p.expectedHash);
+      if (!xh) { cb(null, 'BAD_EXPECTED_HASH'); return; }
+      var mid = (p.mid == null) ? '' : String(p.mid);
+      if (!mid) { cb(null, 'BAD_MID'); return; }
+      /* ★caller が渡してきた op / 任意 field は捨てて whitelist から組み直す。 */
+      var body = { op: 'putcanonical', id: id, expectedRev: Math.floor(xr), expectedHash: xh,
+                   record: p.record, mid: mid };
+      if (p.clientMeta && typeof p.clientMeta === 'object') body.clientMeta = p.clientMeta;
+      postSaveOnce(body, cb);
+    },
     putStoryOnce: function(payload, cb){
       var p = (payload && typeof payload === 'object') ? payload : null;
       if (!p) { cb(null, 'BAD_PAYLOAD'); return; }
