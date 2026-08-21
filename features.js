@@ -6107,17 +6107,88 @@
     return { ok: true };
   }
 
+  /* ★★fix721.3(STEP4G-A / RULING34): SLOT IMPORT MINIMAL SAFETY
+     この経路は FULL RESTORE ではなく「1つのセーブスロットを利用者が意図して差し替える操作」。
+     しかし従来は以下が無く、契約違反（墓標復活）と取消不能上書きが可能だった:
+       §7 tombstone/delete-control slot への取込禁止（UI非表示 + runtime拒否の二重防御）
+       §8 full restore transaction中（v292Dfix721_txn=PREPARED/APPLYING）の取込禁止
+       §9 既存body上書き前の fix564 snapshot 必須（失敗したら書込0）
+       §10 body書込後の readback verify（不一致/Quotaは成功扱いにしない）
+       §11 墓標entryへの meta touch 禁止 / import JSON内のmeta・controlは受理しない
+       §12 active document への取込後は reload（旧memoryのS.saveで巻き戻さない）
+       §13 SLOT_IMPORT_DIRECT_CLOUD_WRITE = 0
+           → 書込は fix654 の native setItem（fix698 bus/fix402 wrapper を経由しない）で行う。
+             cloud commit の起動は本経路の責務ではない（RULING34 §13-14。canonical反映は別issue）。
+     判定regexやfield listはここに複製せず、fix721 の単一policy(slotImportGuard)へ委譲する。 */
+  function slotImportGuard(targetSlotId){
+    try {
+      var SR = window.__v292Dfix721;
+      if (!SR || typeof SR.slotImportGuard !== 'function')
+        return { allowed: false, reason: 'SAFETY_MODULE_MISSING' };      /* fail-closed */
+      var g = SR.slotImportGuard(targetSlotId);
+      if (!g || typeof g !== 'object') return { allowed: false, reason: 'GUARD_INVALID' };
+      return { allowed: g.allowed === true, reason: String(g.reason || '') };
+    } catch(e){ return { allowed: false, reason: 'GUARD_THREW' }; }
+  }
+  function slotImportGuardMsg(reason){
+    if (reason === 'CURRENT_TOMBSTONE_OR_DELETE_CONTROL') return '削除済みの物語には取り込めません';
+    if (reason === 'RESTORE_HOLD_ACTIVE') return '復元処理の実行中は取り込めません';
+    if (reason === 'SAFETY_MODULE_MISSING' || reason === 'GUARD_INVALID' || reason === 'GUARD_THREW')
+      return '安全モジュール未読込のため取り込めません（ページを再読み込みしてください）';
+    return '取り込めません (' + reason + ')';
+  }
+  /* ★§13: fix698 layer1 / fix402 wrapper を発火させない native writer（fix721/fix705 と同じ primitive） */
+  function nativeSet(k, v){
+    try {
+      var f654 = window.__v292Dfix654;
+      var nat = (f654 && typeof f654._native === 'function') ? f654._native('setItem') : null;
+      if (typeof nat !== 'function') return { ok: false, err: 'NO_NATIVE_SETITEM' };
+      nat.call(localStorage, String(k), String(v));
+      return { ok: true };
+    } catch(e){ return { ok: false, err: 'WRITE_FAILED: ' + (e && e.message || e) }; }
+  }
+  function activeDocumentBodyKey(){
+    try { var k = window.__chronicleDocumentStoryKey; return (typeof k === 'string' && k) ? k : null; } catch(e){ return null; }
+  }
+
   function importToSlot(targetSlotId, data){
     var s = findSlot(targetSlotId);
     if (!s) return { ok: false, err: 'slot 未定義: ' + targetSlotId };
+    /* ★§7-8 runtime guard（UI非表示だけに依存しない） */
+    var g = slotImportGuard(targetSlotId);
+    if (!g.allowed) return { ok: false, err: slotImportGuardMsg(g.reason), code: g.reason };
     var v = validateImportData(data);
     if (!v.ok) return v;
     var payload = { cfg: data.cfg, cast: data.cast, scene: data.scene, turns: data.turns, mode: data.mode };
     var k = f695BodyKey(s);            /* ★fix695: literal 'undefined' へ書かない */
     if (!k) return { ok: false, err: '保存先キーを決められない slot: ' + targetSlotId };
-    lsSet(k, payload);
+    /* ★§9: 既存bodyがあるなら上書き前に snapshot 必須（新規slotは不要） */
+    var hadBody = false;
+    try { hadBody = (localStorage.getItem(k) != null); } catch(_){ hadBody = false; }
+    var snapId = null;
+    if (hadBody){
+      var snap = window.__v292Dfix564;
+      if (!snap || typeof snap.create !== 'function')
+        return { ok: false, err: '安全な控えを作れないため中止しました', code: 'SNAPSHOT_PRIMITIVE_UNAVAILABLE' };
+      var sr = null;
+      try { sr = snap.create(targetSlotId, { reason: 'fix721.3-slot-import', now: Date.now() }); }
+      catch(e){ sr = { ok: false }; }
+      if (!sr || !sr.ok)
+        return { ok: false, err: '控えの作成に失敗したため中止しました', code: 'SNAPSHOT_FAILED' };
+      snapId = sr.id || null;
+    }
+    /* ★§13: bus を通さない native write */
+    var body = JSON.stringify(payload);
+    var w = nativeSet(k, body);
+    if (!w.ok) return { ok: false, err: w.err, code: 'WRITE_FAILED', snapshotId: snapId };
+    /* ★§10: readback verify（silent failure / Quota を成功扱いにしない） */
+    var back = null;
+    try { back = localStorage.getItem(k); } catch(_){ back = null; }
+    if (back !== body)
+      return { ok: false, err: '取込内容を確認できませんでした（保存されていません）', code: 'READBACK_MISMATCH', snapshotId: snapId };
+    /* ★§11: meta touch は live slot のみ（墓標/control entry は guard で既に除外済み） */
     touchSlot(targetSlotId);
-    return { ok: true };
+    return { ok: true, snapshotId: snapId, activeDocument: (activeDocumentBodyKey() === k) };
   }
 
   function handleImportFile(file, targetSlotId, onDone){
@@ -6240,7 +6311,10 @@
       html.push('<div class="v30-slot-actions">');
       html.push('<button class="v30-btn ' + (isActive ? '' : 'v30-btn-primary') + '" data-act="load" data-id="' + slot.id + '"' + (!hasData || isActive ? ' disabled' : '') + '>読込</button>');
       html.push('<button class="v30-btn" data-act="saveto" data-id="' + slot.id + '">現在の状態を保存</button>');
-      html.push('<button class="v30-btn" data-act="import" data-id="' + slot.id + '">JSON 取込</button>');
+      /* ★fix721.3(STEP4G-A §7): current tombstone / delete-control の slot には取込入口を出さない
+         （runtime guard と二重防御。判定は fix721 の単一policy） */
+      if (slotImportGuard(slot.id).allowed)
+        html.push('<button class="v30-btn" data-act="import" data-id="' + slot.id + '">JSON 取込</button>');
       if (slot.id !== 'default'){
         html.push('<button class="v30-btn v30-btn-danger" data-act="clear" data-id="' + slot.id + '"' + (hasData ? '' : ' disabled') + '>削除</button>');
       }
@@ -6362,6 +6436,9 @@
   function promptImport(targetSlotId){
     var slot = findSlot(targetSlotId);
     if (!slot) return;
+    /* ★fix721.3(STEP4G-A §7-8): file選択を開く前に拒否する（誤操作の入口自体を閉じる） */
+    var g0 = slotImportGuard(targetSlotId);
+    if (!g0.allowed){ showToast(slotImportGuardMsg(g0.reason), true); return; }
     var fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.json,application/json';
@@ -6379,6 +6456,13 @@
         var hint = '';
         if (data && data._meta){
           hint = ' (元: ' + (data._meta.slotName || '?') + ' / ' + (data._meta.exportedAt || '') + ')';
+        }
+        /* ★fix721.3(STEP4G-A §12): 取込先が「いま開いている物語」なら、旧memoryのSが
+           次のS.saveで取込内容を巻き戻すため、必ず再読み込みしてから操作を続けさせる。 */
+        if (r.activeDocument === true){
+          showToast('「' + slot.name + '」に取込完了' + hint + ' — 再読み込みします');
+          try { setTimeout(function(){ try { location.reload(); } catch(e){} }, 600); } catch(e){}
+          return;
         }
         showToast('「' + slot.name + '」に取込完了' + hint);
         renderManager();
