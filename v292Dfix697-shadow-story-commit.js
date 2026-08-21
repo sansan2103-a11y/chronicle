@@ -72,7 +72,7 @@
   var TAG = '[v292Dfix697:shadow-story-commit]';
   var DEBOUNCE_MS = 12000, MAXWAIT_MS = 45000, SIDE_POLL_MS = 20000, TIMEOUT_MS = 25000;
   var MARKER_KEY = 'v292Dfix402_storyRevs';   // ★collectLS 除外 prefix に同居（pkg baseline 不変）
-  var BUILD = 'fix724';
+  var BUILD = 'fix725';
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function lss(k,v){ try { localStorage.setItem(k, v); return true; } catch(e){ return false; } }
@@ -744,6 +744,37 @@
       var body = { op: 'putcanonical', id: id, expectedRev: Math.floor(xr), expectedHash: xh,
                    record: p.record, mid: mid };
       if (p.clientMeta && typeof p.clientMeta === 'object') body.clientMeta = p.clientMeta;
+      postSaveOnce(body, cb);
+    },
+    /* ★★fix725(RULING44 / Worker v36): SERVER-PRESERVING CFG SCRUB 専用の **狭い** write 口。
+       なぜ shadowRequest の allow-list に scrubstorycfg を足さないのか:
+         shadowRequest は read/delete 系の汎用外部口。write op を generic に開けると
+         migration 以外の caller にも scrub capability が広がる。ここは1本の専用口に閉じる。
+       契約:
+         ・caller から op を受け取らない。op は 'scrubstorycfg' 固定。
+         ・**client content payload を一切送らない**。送るのは id / expectedRev / expectedHash / mid だけ。
+           record / body / cfg / cast / scene / turns / sidecar / title / deleted / authority は
+           whitelist から組み直す時点で落ちる（Worker 側も fail-closed で拒否する）。
+           ＝ CLIENT CONTENT AUTHORITY = ZERO。story content の source は server stored record のみ。
+         ・request は exactly 1。自動 retry は **しない**（曖昧なら caller が fresh getstory で確認する）。
+         ・localStorage / sessionStorage へ 1 バイトも書かない。
+         ・current document の storyId を見ない。docBaseRev / commit / projection を触らない。
+         ・**normal runtime からは呼ばれない**。migration caller 専用（自動 call 0 / UI 0 /
+           background scrub 0）。呼ぶのは明示的な migration 手続きのみ。
+         ・endpoint / auth / request 実装は postSaveOnce（既存単一実装）を共有。新 auth・新 endpoint 0。 */
+    scrubStoryCfgOnce: function(payload, cb){
+      var p = (payload && typeof payload === 'object') ? payload : null;
+      if (!p) { cb(null, 'BAD_PAYLOAD'); return; }
+      var id = (p.id == null) ? '' : String(p.id);
+      if (!id) { cb(null, 'BAD_STORY_ID'); return; }
+      var xr = +p.expectedRev;
+      if (!(xr >= 0)) { cb(null, 'BAD_EXPECTED_REV'); return; }
+      var xh = (p.expectedHash == null) ? '' : String(p.expectedHash);
+      if (!xh) { cb(null, 'BAD_EXPECTED_HASH'); return; }
+      var mid = (p.mid == null) ? '' : String(p.mid);
+      if (!mid) { cb(null, 'BAD_MID'); return; }
+      /* ★caller が渡してきた op / content / その他の任意 field は捨てる。ここで組み直す。 */
+      var body = { op: 'scrubstorycfg', id: id, expectedRev: Math.floor(xr), expectedHash: xh, mid: mid };
       postSaveOnce(body, cb);
     },
     putStoryOnce: function(payload, cb){
