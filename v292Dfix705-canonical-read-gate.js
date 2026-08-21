@@ -37,7 +37,7 @@
   'use strict';
   if (window.__v292Dfix705) return;                 /* 冪等（自 namespace のみ） */
   var TAG = '[v292Dfix705:canonical-read-gate]';
-  var BUILD = 'fix705';
+  var BUILD = 'fix705+719merge';
   var TIMEOUT_MS = 25000;
   var APPLIED_KEY = 'v292Dfix705_applied';          /* ★sessionStorage（localStorage ではない） */
 
@@ -425,6 +425,23 @@
     } catch(e){ return null; }
   }
 
+  /* ★★fix719(STEP4E): HYDRATION CFG MERGE — server canonical body.cfg を local body.cfg 全体へ
+     丸ごと上書きしない。server が権威を持つのは allowlist を通った story cfg だけで、
+     local の provider runtime / secret-capable / UI-device cfg（=非 allowlist field）は保持する。
+     merge 規約はこの1本のみ（fix705 特殊 merge を増やさない）。 */
+  var HY_CFG_ALLOW = ['authorNote','bannedPhrases','creepyMode','dialogueLevel',
+    'dramaLevel','engineMode','genrePresets','outLen','reactionLevel','toneKey'];
+  function hydrateMergedCfg(localRaw, serverStoryCfg){
+    var loc = (localRaw && typeof localRaw === 'object' && Object.prototype.toString.call(localRaw) !== '[object Array]') ? localRaw : null;
+    var srv = (serverStoryCfg && typeof serverStoryCfg === 'object' && Object.prototype.toString.call(serverStoryCfg) !== '[object Array]') ? serverStoryCfg : null;
+    if (!loc && !srv) return null;
+    var out = {};
+    var k;
+    if (loc){ for (k in loc){ if (Object.prototype.hasOwnProperty.call(loc, k) && HY_CFG_ALLOW.indexOf(k) < 0) out[k] = loc[k]; } }
+    if (srv){ for (k in srv){ if (Object.prototype.hasOwnProperty.call(srv, k) && HY_CFG_ALLOW.indexOf(k) >= 0) out[k] = srv[k]; } }
+    /* ★server 側に無い allowlist field は server 権威に従い落とす（out には local 非 allowlist 分と srv 通過分だけが残る） */
+    return out;
+  }
   function doApply(j, cb){
     var rec = j.record;
     var body = rec && rec.body;
@@ -452,8 +469,10 @@
     var wroteBody = false, wroteAi = false, fail = null;
     var skippedBody = false, skippedAi = false;
     try {
+      var __locBody = null; try { __locBody = JSON.parse(lsg(BODY_KEY) || 'null'); } catch(e2){ __locBody = null; }
+      var __locCfg = (__locBody && typeof __locBody === 'object') ? __locBody.cfg : null;
       var bodyStr = JSON.stringify({
-        cfg:   (body.cfg   === undefined ? null : body.cfg),
+        cfg:   hydrateMergedCfg(__locCfg, (body.cfg === undefined ? null : body.cfg)),
         cast:  (body.cast  === undefined ? null : body.cast),
         scene: (body.scene === undefined ? null : body.scene),
         turns: (Object.prototype.toString.call(body.turns) === '[object Array]') ? body.turns : [],
