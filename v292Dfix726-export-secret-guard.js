@@ -38,7 +38,7 @@
   'use strict';
   if (window.__v292Dfix726) return;
   var TAG = '[v292Dfix726:export-secret-guard]';
-  var BUILD = 'fix727';
+  var BUILD = 'fix728';
 
   /* ★read 専用。この module は localStorage へ 1 バイトも書かない。 */
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
@@ -48,6 +48,26 @@
   /* ---- 契約定数 ---- */
   var SECRET_FIELDS = ['key', 'naiKey', 'orKey', 'pollKey'];
   var TOPLEVEL_OMIT = ['v292ProxyPass', 'v292GoogleToken', 'v292ProxyUrl', 'v292Dfix702_storyAuth'];
+
+  /* ★★fix728(RULING52 §1-§9): DIAGNOSTIC_RUNTIME_LOG != PORTABLE USER BACKUP。
+     診断・trace・refusal・dropped-event の記録は、story でも snapshot 復旧資産でも
+     ユーザー設定でも画像資産でもなく、別端末へ持ち出す復旧価値が 0。
+     しかも内部の localStorage キー名を 'key' field に持つため、
+     unknown key ambiguity（§7 の tripwire）を無用に増やす。よって export copy から落とす。
+
+     ★EXACT KEY LIST ONLY（§4-§5）。prefix / regex による一般化は禁止。
+     「log」「trace」「dropped」という語だけでは semantic authority を保証できず、
+     将来そこに user data を持つ key が現れたときに、物語や復旧資産を
+     誤って backup から消してしまう方が危険なため。
+     未登録の新しい診断風 key は通常分類へ回す。unknown key tripwire に当たって
+     FAIL CLOSED したら、そこで role を read-only trace してこの表へ足すか
+     known schema を足すか判断する（= EXPECTED FAIL-CLOSED DISCOVERY PATH / §6）。
+
+     ★これは fix721 の deny を流用したものではない（§3）。
+     「復旧資産でない / 再生成される / portability 価値 0 / key ambiguity を持つ」
+     という export 側独自の理由による。 */
+  var DIAGNOSTIC_OMIT = ['v292Dfix651Trace', 'v292Dfix587_refusals',
+                         'v292Dfix515log', 'v292Dfix490_dropped'];
   var STORY_FIELDS  = ['cfg', 'cast', 'scene', 'turns', 'mode'];
 
   /* known story family（§12）。ここに載っていない key の中身は触らない。 */
@@ -60,6 +80,7 @@
   function classifyKey(k){
     if (typeof k !== 'string') return 'UNKNOWN';
     if (TOPLEVEL_OMIT.indexOf(k) >= 0) return 'AUTH_OR_OWNER_CONTROL';
+    if (DIAGNOSTIC_OMIT.indexOf(k) >= 0) return 'DIAGNOSTIC_RUNTIME_LOG';
     if (FAM_DEFAULT_SLOT.test(k)) return 'STORY_DEFAULT_SLOT';
     if (FAM_NAMED_SLOT.test(k))   return 'STORY_NAMED_SLOT';
     if (FAM_SNAP_PART.test(k))    return 'SNAPSHOT_PART';
@@ -138,26 +159,75 @@
         && typeof v.key === 'string' && typeof v.blob === 'string';
   }
   /* SCHEMA_SLOT_META: HOME の story 一覧 metadata。実データでは 8 通りの field 組み合わせがあり、
-     exact key set では表現できない。そこで **field 名の allowlist** で定義する。
-     この allowlist に naiKey / orKey / pollKey は含まれないため、
-     この形に一致したレコードが BYOK credential を抱えることは構造上ありえない。
-     'key' は localStorage のキー名（string）。cfg を持つものは除外する。 */
-  var META_FIELDS = ['id', 'name', 'title', 'key', 'summary', 'createdAt', 'updatedAt',
-                     'lastOpenedAt', 'turns', 'canary', 'deleted', 'deletedAt',
-                     'deleteOpId', 'lifecycleVersion', 'recoverySnapshotId'];
+     exact key set では表現できない。そこで RULING51 §1-§2 の 4 条件で定義する。
+
+       ① ARRAY であり、全 item が plain object
+       ② 全 item が id を持つ
+       ③ 全 property 名が META_FIELD_TYPES の allowlist 内、かつ **型も実測 domain 内**
+       ④ story-bearing field（cfg / body / blob / data）を 1 つも持たない
+
+     naiKey / orKey / pollKey は allowlist に無いので、この形が BYOK credential を
+     抱えることは構造上ありえない。'key' はこの schema でのみ storage pointer metadata として扱う。
+     型まで一致しない場合は SLOT_META として認識せず、unknown 経路（＝tripwire）へ戻す。 */
+  var META_FIELD_TYPES = {
+    id:                 ['string'],
+    name:               ['string'],
+    title:              ['string'],
+    key:                ['string'],
+    summary:            ['string'],
+    deleteOpId:         ['string'],
+    recoverySnapshotId: ['string'],
+    lastOpenedAt:       ['string'],
+    createdAt:          ['string', 'number'],
+    updatedAt:          ['string', 'number', 'null'],
+    deletedAt:          ['number'],
+    lifecycleVersion:   ['number'],
+    turns:              ['number'],
+    canary:             ['boolean'],
+    deleted:            ['boolean']
+  };
+  /* この 4 つのいずれかを持つ item は story を運びうるので metadata 扱いしない。 */
+  var STORY_BEARING_FIELDS = ['cfg', 'body', 'blob', 'data'];
+
+  function typeTag(v){
+    if (v === null) return 'null';
+    if (Array.isArray(v)) return 'array';
+    return typeof v;
+  }
   function isStoryMetaRecord(e){
     if (!isPlainObject(e)) return false;
     if (!Object.prototype.hasOwnProperty.call(e, 'id')) return false;
-    if (Object.prototype.hasOwnProperty.call(e, 'cfg')) return false;
+    for (var b = 0; b < STORY_BEARING_FIELDS.length; b++){
+      if (Object.prototype.hasOwnProperty.call(e, STORY_BEARING_FIELDS[b])) return false;
+    }
     var ks = Object.keys(e);
     for (var i = 0; i < ks.length; i++){
-      if (META_FIELDS.indexOf(ks[i]) < 0) return false;
+      var allowed = META_FIELD_TYPES[ks[i]];
+      if (!allowed) return false;                          /* 未知の field 名 */
+      if (allowed.indexOf(typeTag(e[ks[i]])) < 0) return false;  /* 既知 domain 外の型 */
     }
-    if (Object.prototype.hasOwnProperty.call(e, 'key') && typeof e.key !== 'string') return false;
     return true;
   }
   function isSlotMetaList(v){
     return allElements(v, isStoryMetaRecord);
+  }
+
+  /* ★★fix728(RULING51 §4-§6): parse 済み UNKNOWN payload の structural tripwire。
+     own-property 'key' を持つ UNKNOWN object / UNKNOWN array item は raw export させない。
+     mutation しない / story と推測して sanitize しない / 無制限 recursive traversal もしない。
+     見るのは root object と array の direct item だけ。
+     例外は明示認識済みの SCHEMA_SLOT_META / SCHEMA_KEYED_BLOB のみ（呼び出し順で保証）。 */
+  function unknownHasKeyProperty(parsed){
+    if (isPlainObject(parsed)){
+      return Object.prototype.hasOwnProperty.call(parsed, 'key');
+    }
+    if (Array.isArray(parsed)){
+      for (var i = 0; i < parsed.length; i++){
+        if (isPlainObject(parsed[i]) && Object.prototype.hasOwnProperty.call(parsed[i], 'key')) return true;
+      }
+      return false;
+    }
+    return false;
   }
 
   /* 登録済みスキーマなら sanitize 結果を返す。非該当なら null（＝呼び出し側で FAIL CLOSED 判定）。 */
@@ -196,12 +266,26 @@
   function nameAppears(raw, n){
     return raw.indexOf('"' + n + '"') >= 0 || raw.indexOf('\\"' + n + '\\"') >= 0;
   }
+  /* ★fix728(RULING51 §7): textual safety net は naiKey / orKey / pollKey の
+     **token presence** のみを見る。引用符形式に依存せず plain token として検出するので、
+     通常の JSON property も escaped nested JSON property も同じ 1 本で拾える。
+     'key' はここでは見ない（authority は structural layer + unknownHasKeyProperty）。 */
+  function tokenAppears(raw, n){
+    var i = raw.indexOf(n);
+    while (i >= 0){
+      var before = i === 0 ? '' : raw.charAt(i - 1);
+      var after  = raw.charAt(i + n.length);
+      var wordish = /[A-Za-z0-9_$]/;
+      if (!wordish.test(before) && !wordish.test(after)) return true;
+      i = raw.indexOf(n, i + 1);
+    }
+    return false;
+  }
   function tripwire(raw, fam){
     if (typeof raw !== 'string') return false;
     for (var i = 0; i < UNAMBIGUOUS_SECRET_FIELDS.length; i++){
-      if (nameAppears(raw, UNAMBIGUOUS_SECRET_FIELDS[i])) return true;
+      if (tokenAppears(raw, UNAMBIGUOUS_SECRET_FIELDS[i])) return true;
     }
-    if (isSecretBearingFamily(fam) && nameAppears(raw, 'key')) return true;
     return false;
   }
 
@@ -251,16 +335,20 @@
   function sanitizeDeviceBackupMap(map){
     if (!isPlainObject(map)) return { ok: false, map: null, error: 'NOT_OBJECT' };
     var out = {};
-    var stats = { total: 0, omittedTopLevel: 0, sanitizedBodies: 0, secretFieldsRemoved: 0,
-                  passedThrough: 0, containers: {} };
+    var stats = { total: 0, omittedTopLevel: 0, omittedDiagnostic: 0, sanitizedBodies: 0,
+                  secretFieldsRemoved: 0, passedThrough: 0, containers: {} };
     var keys = Object.keys(map);
     for (var i = 0; i < keys.length; i++){
       var k = keys[i], raw = map[k];
       stats.total++;
       var fam = classifyKey(k);
 
-      /* ① key family: 落とすものだけをここで決める */
+      /* ①-a TOPLEVEL_SECURITY_OMIT（§8） */
       if (fam === 'AUTH_OR_OWNER_CONTROL'){ stats.omittedTopLevel++; continue; }
+
+      /* ①-b TOPLEVEL_DIAGNOSTIC_OMIT（§8）。
+         export 対象ではないので parse も secret 判定もしない。 */
+      if (fam === 'DIAGNOSTIC_RUNTIME_LOG'){ stats.omittedDiagnostic++; continue; }
 
       if (typeof raw !== 'string'){ out[k] = raw; stats.passedThrough++; continue; }
 
@@ -311,10 +399,17 @@
         continue;
       }
 
-      /* ③ ★fix727(RULING50 §7): ここへ来た値だけが UNKNOWN。tripwire は sanitizer ではなく
-         「raw のまま export してよいか」の関門としてのみ使う。 */
+      /* ③ ここへ来た値だけが UNKNOWN。tripwire は sanitizer ではなく
+         「raw のまま export してよいか」の関門としてのみ使う（§7）。 */
       if (tripwire(raw, fam)){
         return { ok: false, map: null, error: 'SECRET_FIELD_IN_UNRECOGNIZED_SCHEMA', failedKey: k, family: fam };
+      }
+      /* ★★fix728(RULING51 §4-§5): UNKNOWN な object / array item が own-property 'key' を
+         持つなら、それが credential なのか storage pointer なのか判定できない。
+         判定できないものを raw で持ち出さない。例外は上で既に認識済みの
+         SCHEMA_SLOT_META / SCHEMA_KEYED_BLOB だけ（この行には到達しない）。 */
+      if (unknownHasKeyProperty(parsed)){
+        return { ok: false, map: null, error: 'UNKNOWN_KEY_PROPERTY', failedKey: k, family: fam };
       }
       out[k] = raw; stats.passedThrough++;
     }
@@ -380,6 +475,9 @@
     for (var a = 0; a < TOPLEVEL_OMIT.length; a++){
       if (Object.prototype.hasOwnProperty.call(ls, TOPLEVEL_OMIT[a])) bad.push(TOPLEVEL_OMIT[a]);
     }
+    for (var a2 = 0; a2 < DIAGNOSTIC_OMIT.length; a2++){
+      if (Object.prototype.hasOwnProperty.call(ls, DIAGNOSTIC_OMIT[a2])) bad.push('diag:' + DIAGNOSTIC_OMIT[a2]);
+    }
     var cfgs = [], lsKeys = Object.keys(ls);
     for (var b = 0; b < lsKeys.length; b++){
       collectCfgs(parseMaybe(ls[lsKeys[b]]), cfgs, 0);
@@ -392,10 +490,10 @@
       }
     }
 
-    /* --- 層2 TEXTUAL（曖昧でない 3 つだけ） --- */
+    /* --- 層2 TEXTUAL SAFETY NET（曖昧でない 3 つを token として検出） --- */
     for (var e = 0; e < UNAMBIGUOUS_SECRETS.length; e++){
       var n = UNAMBIGUOUS_SECRETS[e];
-      if (text.indexOf('"' + n + '"') >= 0 || text.indexOf('\\"' + n + '\\"') >= 0) bad.push('text:' + n);
+      if (tokenAppears(text, n)) bad.push('text:' + n);
     }
 
     /* 重複除去 */
@@ -411,8 +509,10 @@
     off: off, on: on,
     SECRET_FIELDS: SECRET_FIELDS.slice(),
     TOPLEVEL_OMIT: TOPLEVEL_OMIT.slice(),
+    DIAGNOSTIC_OMIT: DIAGNOSTIC_OMIT.slice(),
     status: function(){ return { build: BUILD, on: on(),
-      secretFields: SECRET_FIELDS.slice(), topLevelOmit: TOPLEVEL_OMIT.slice() }; },
+      secretFields: SECRET_FIELDS.slice(), topLevelOmit: TOPLEVEL_OMIT.slice(),
+      diagnosticOmit: DIAGNOSTIC_OMIT.slice() }; },
     classifyKey: classifyKey,
     isStoryBodyLike: isStoryBodyLike,
     sanitizeStoryBody: sanitizeStoryBody,
@@ -421,6 +521,8 @@
     sanitizeImportedStoryRaw: sanitizeImportedStoryRaw,
     sanitizeKnownContainer: sanitizeKnownContainer,
     tripwire: tripwire,
+    tokenAppears: tokenAppears,
+    unknownHasKeyProperty: unknownHasKeyProperty,
     verifyExportText: verifyExportText
   };
   try { console.log(TAG, 'loaded (export-copy only / no localStorage write / default ON / kill=v292Dfix726Off=1)'); } catch(e){}
