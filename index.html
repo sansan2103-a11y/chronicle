@@ -9,7 +9,7 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix713"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix726"></script>
 <script src="v292Dfix698-mutation-bus.js?cb=v292Dfix701"></script>
 <!-- v292Dfix705(STEP3E): canonical read authority。既知 storyId の document で
      canonical 判定が終わるまで **その story の body / aiInstr への書込だけ**を保留する。
@@ -48,7 +48,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260821-fix725';
+  var BUILT = '20260821-fix726';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -727,8 +727,10 @@ const Api = {
   async _callAnthropic(system, userContent, maxTok, opts = {}) {
     const key = this.normalize(S.cfg.key);
     if (!key) throw new Error('AnthropicのAPIキーが設定されていません（sk-ant-... 形式）');
-    if (!key.startsWith('sk-')) throw new Error(`キー形式が違います: "${key.slice(0,8)}..." → sk-ant- で始まる必要があります`);
-    console.log('[Anthropic] key:', key.slice(0,8)+'...'+key.slice(-4), 'model:', S.cfg.model);
+    if (!key.startsWith('sk-')) throw new Error('キー形式が違います。sk-ant- で始まる必要があります');  /* ★fix726: エラー文へ key 断片を出さない */
+    /* ★★fix726(RULING48 §18-19): credential 由来文字列を console へ出さない。
+       旧: key の先頭 8 文字 + 末尾 4 文字を出力していた。model だけ残す。 */
+    console.log('[Anthropic] model:', S.cfg.model);
 
     const id = ++S.reqId;
     S.inFlight = true;
@@ -2847,7 +2849,8 @@ G.init();
      NON-DESTRUCTIVE MERGE + default-deny + durable journal + boot rollbackで復元する。
      配置契約(RULING31/32): fix564直後・全writer(291/587/399/402)より前 = RECOVERY EARLY。
      観測=window.__v292Dfix721.status() / OFF=v292Dfix721Off -->
-<script src="v292Dfix721-safe-restore.js?cb=v292Dfix722"></script>
+<script src="v292Dfix726-export-secret-guard.js?cb=v292Dfix726"></script>
+<script src="v292Dfix721-safe-restore.js?cb=v292Dfix726"></script>
 <!-- ★fix660(B): BackupGC。削除候補を「選ぶ」層（物理削除はしない）。
      分類・保護判定は fix562 を唯一の正として使うので、fix562 / fix564 の後ろに置く。
      読出=window.__v292Dfix660gc.status()/.reviewCandidates()/.selfTest() / OFF=v292Dfix660Off -->
@@ -2873,7 +2876,7 @@ G.init();
        fix659 は別 id + __f527 マーカーを立てるので干渉しない、という関係をこの並びで示す。
      読出=window.__v292Dfix659.status()/.selfTest() / OFF=v292Dfix659Off -->
 <script src="v292Dfix659-fork-choice.js?cb=v292Dfix680"></script>
-<script src="features.js?cb=v292Dfix722"></script>
+<script src="features.js?cb=v292Dfix726"></script>
 <script>
 /* ============================================================================
  * v292DfixP0-inline : シナリオテンプレ適用の緊急封鎖（L2 + L2b）
