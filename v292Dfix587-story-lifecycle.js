@@ -76,7 +76,10 @@
                 /* ★★fix711: 移行期の 404（story_shadow に row が無いだけ）を legacy 経路へ戻した回数 */
                 sd404LegacyRequired: 0, sd404LegacyCompleted: 0,
                 /* ★★fix710: 呼び出し側の planId 絞り込みで resume 対象外にした件数 */
-                sdResumeFilteredOut: 0, sdResumeInvalidFilter: 0 };
+                sdResumeFilteredOut: 0, sdResumeInvalidFilter: 0,
+                /* ★★fix720(STEP4D/RULING28): canonical delete protocol の計数（shadow 系と分離） */
+                dcAttempts: 0, dcServerTombstoned: 0, dcAlreadyDeleted: 0, dcBaseConflict: 0,
+                dcAmbiguous: 0, dcConfirmedByReadback: 0, sdAuthorityUnsupported: 0 };
   function bumpCode(map, code){
     try { var k = String(code || 'unknown'); map[k] = (map[k] || 0) + 1; } catch(e){}
   }
@@ -194,10 +197,11 @@
      plan / snapshot / deleteOpId / localDeleteBaseHash を失う。裁定の指定どおり
      「pending payload は保持 ＋ terminal flag ＋ autoResume skip」とし、
      可視化のためだけに **既存の** blocked ledger へ 1 行足す（新しい ledger は作らない）。 */
-  var SD_TERMINAL_VERDICTS = { DELETE_BASE_CONFLICT: 1, DELETE_CANONICAL_UNSUPPORTED: 1 };
+  var SD_TERMINAL_VERDICTS = { DELETE_BASE_CONFLICT: 1, DELETE_CANONICAL_UNSUPPORTED: 1, DELETE_AUTHORITY_UNSUPPORTED: 1 };
   function sdTerminalReason(verdict){
     return (verdict === 'DELETE_BASE_CONFLICT') ? 'blocked-delete-base-conflict'
          : (verdict === 'DELETE_CANONICAL_UNSUPPORTED') ? 'blocked-delete-canonical-unsupported'
+         : (verdict === 'DELETE_AUTHORITY_UNSUPPORTED') ? 'blocked-delete-authority-unsupported'
          : null;
   }
   /* ★dropPending しない版の blocked 記録。payload は pending 側に残したままにする。 */
@@ -405,7 +409,9 @@
       'delete-failed':          '片づけに失敗したので、次に開いたときにもう一度試します',
       /* ★fix708: 再送では直らない停止理由。データは消さずに残してある。 */
       'blocked-delete-base-conflict':        '削除を決めたあとに内容が変わったため、消してよいか確認が必要です',
-      'blocked-delete-canonical-unsupported': 'この物語は保護された保存方式に切り替わっているため停止しました'
+      'blocked-delete-canonical-unsupported': 'この物語は保護された保存方式に切り替わっているため停止しました',
+      /* ★fix720: 想定外の保存方式。データは消さずに残してある。 */
+      'blocked-delete-authority-unsupported': 'この物語の保存方式を判定できないため停止しました'
     };
     return m[String(reason)] || '確認が必要です';
   }
@@ -595,10 +601,13 @@
           return;
         }
         var auth = String(j.authority || 'shadow');
-        /* (9) canonical の削除は本ラウンドの対象外。止まる。 */
-        if (auth !== 'shadow'){
-          stats.sdCanonicalUnsupported++;
-          resolve(hold('blocked-canonical', 'DELETE_CANONICAL_UNSUPPORTED',
+        /* ★★fix720(STEP4D/RULING28 §5): authority 別 writer routing。
+             shadow    → 既存 deleteshadow（下の経路。1 バイトも変えない）
+             canonical → 新 deletecanonical（専用 writer。promotedelete は使わない）
+             その他    → DELETE_AUTHORITY_UNSUPPORTED terminal hold（KEEP DATA） */
+        if (auth !== 'shadow' && auth !== 'canonical'){
+          stats.sdAuthorityUnsupported++;
+          resolve(hold('blocked-canonical', 'DELETE_AUTHORITY_UNSUPPORTED',
                        'authority=' + auth + ' の削除はこの protocol では扱わない'));
           return;
         }
@@ -614,6 +623,75 @@
           stats.sdBaseConflict++;
           resolve(hold('blocked-delete-base-conflict', 'DELETE_BASE_CONFLICT',
                        '削除時点の hash と現在の serverHash が一致しない（強制削除はしない）'));
+          return;
+        }
+        /* ★★fix720(STEP4D/RULING28): canonical row は専用 writer deletecanonical へ。
+           ・delete parity は上の base 比較（= fix719 sanitized canonicalProjection hash）を通過済み。
+             raw local body と server blob の差は conflict にしない（§14）。
+           ・§10: 送信後の network/応答不明は fresh getstory 最大 1 回の readback で収束判定。
+             確定できなければ CANONICAL_DELETE_AMBIGUOUS（KEEP DATA / blind retry 禁止 / 物理削除 0）。
+           ・§11: 409 (rev/hash/cas-lost) は force しない。readback 最大 1 回で
+             「望んだ tombstone（deleted=true / authority=canonical）」なら収束、
+             それ以外は DELETE_BASE_CONFLICT terminal（KEEP DATA）。 */
+        if (auth === 'canonical'){
+          stats.dcAttempts++;
+          var dcReadbackConverge = function(holdCode, holdVerdict, holdMsg){
+            W.shadowRequest({ op:'getstory', id: sid }, function(g2, ge2){
+              var jj = (g2 && g2.j) || {};
+              if (ge2 || !g2 || g2.status !== 200 || jj.ok !== true){
+                stats.dcAmbiguous++;
+                resolve(hold('pending-cloud', 'CANONICAL_DELETE_AMBIGUOUS',
+                             'deletecanonical の結果を readback で確定できない（データは消さない）'));
+                return;
+              }
+              if (jj.deleted === true && String(jj.authority || '') === 'canonical'){
+                stats.dcConfirmedByReadback++;
+                resolve(proceedPhysical('CANONICAL_DELETE_CONFIRMED_BY_READBACK',
+                         { serverRev: (typeof jj.rev === 'number' ? jj.rev : null) }));
+                return;
+              }
+              if (holdVerdict === 'DELETE_BASE_CONFLICT') stats.dcBaseConflict++; else stats.dcAmbiguous++;
+              resolve(hold(holdCode, holdVerdict,
+                           holdMsg + '（readback: deleted=' + (jj.deleted === true) + '）'));
+            });
+          };
+          W.shadowRequest({ op:'deletecanonical', id: sid, expectedRev: serverRev,
+                            expectedHash: serverHash, deleteOpId: String(deleteOpId),
+                            mid: 'dc:' + sid + ':' + String(deleteOpId) }, function(r3, err3){
+            if (err3 || !r3){
+              dcReadbackConverge('pending-cloud', 'CANONICAL_DELETE_AMBIGUOUS',
+                                 'deletecanonical に到達できない/応答不明');
+              return;
+            }
+            var j3 = r3.j || {};
+            if (r3.status === 200 && j3.ok === true){
+              stats.dcServerTombstoned++;
+              resolve(proceedPhysical('CANONICAL_DELETE_CONFIRMED',
+                       { serverRev: (typeof j3.rev === 'number' ? j3.rev : null),
+                         serverHash: j3.serverHash || null, replayed: (j3.replayed === true) }));
+              return;
+            }
+            var ec3 = String(j3.errorCode || '');
+            if (r3.status === 409 && ec3 === 'already-deleted'){
+              stats.dcAlreadyDeleted++;
+              resolve(proceedPhysical('CLOUD_ALREADY_DELETED',
+                       { serverRev: (typeof j3.serverRev === 'number' ? j3.serverRev : null) }));
+              return;
+            }
+            if (r3.status === 409 && ec3 === 'not-canonical'){
+              stats.dcBaseConflict++;
+              resolve(hold('blocked-delete-base-conflict', 'DELETE_BASE_CONFLICT',
+                           'deletecanonical が not-canonical を返した（並行 authority 変化。強制削除はしない）'));
+              return;
+            }
+            if (r3.status === 409 && (ec3 === 'rev-mismatch' || ec3 === 'hash-mismatch' || ec3 === 'cas-lost')){
+              dcReadbackConverge('blocked-delete-base-conflict', 'DELETE_BASE_CONFLICT',
+                                 'deletecanonical の CAS が ' + ec3 + ' で成立しなかった（強制削除はしない）');
+              return;
+            }
+            resolve(hold('pending-cloud', 'DELETE_SERVER_ERROR',
+                         'deletecanonical status=' + r3.status + ' code=' + (ec3 || '?')));
+          });
           return;
         }
         /* ★保存済みの last-known rev は使わない。いま読んだ fresh な rev/hash で CAS を撃つ。 */
