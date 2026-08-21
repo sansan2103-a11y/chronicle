@@ -218,7 +218,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260821-fix725';
+  var HOME_BUILT = '20260821-fix726';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -237,7 +237,7 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix713"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix726"></script>
 <script src="v292Dfix698-mutation-bus.js?cb=v292Dfix701"></script>
 <script src="v292Dfix569-gc-shadow.js?cb=v292Dfix680"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者（fix569 が捕捉済みの native を借りる） -->
@@ -248,7 +248,8 @@
      NON-DESTRUCTIVE MERGE + default-deny + durable journal + boot rollbackで復元する。
      配置契約(RULING31/32): fix564直後・全writer(291/587/399/402)より前 = RECOVERY EARLY。
      観測=window.__v292Dfix721.status() / OFF=v292Dfix721Off -->
-<script src="v292Dfix721-safe-restore.js?cb=v292Dfix722"></script>
+<script src="v292Dfix726-export-secret-guard.js?cb=v292Dfix726"></script>
+<script src="v292Dfix721-safe-restore.js?cb=v292Dfix726"></script>
 <!-- ★fix660(B): BackupGC。削除候補を選ぶ層。分類は fix562 が唯一の正なのでその後ろ -->
 <script src="v292Dfix660-backup-gc.js?cb=v292Dfix680"></script>
 <script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix680"></script>
@@ -1661,7 +1662,35 @@
   }
   function exportAll(){
     var o={}; for(var i=0;i<LS.length;i++){ var k=LS.key(i); o[k]=g(k); }
+    /* ★★fix726(RULING48): 持ち出す控えからだけ認証情報と鍵欄を落とす。
+       live localStorage は 1 バイトも変えない（上の o は detached copy）。
+       policy の唯一の authority は fix726。HOME 側に第二の scrub logic を持たない。 */
+    var G726 = window.__v292Dfix726;
+    if (!G726){
+      el('sync').className='sync err';
+      el('sync').textContent='⬇ 書き出しを中止しました（保護機能が読み込めません）';
+      return;                                   /* ★FAIL CLOSED: guard 不在で raw を出さない */
+    }
+    if (G726.on()){
+      var sr726 = G726.sanitizeDeviceBackupMap(o);
+      if (!sr726.ok){
+        el('sync').className='sync err';
+        el('sync').textContent='⬇ 書き出しを中止しました（' + (sr726.error || 'sanitize') + '）';
+        try { console.warn('[home][fix726] export aborted:', sr726.error, sr726.failedKey || ''); } catch(e){}
+        return;                                 /* ★FAIL CLOSED: 部分 sanitize の控えを出さない */
+      }
+      o = sr726.map;
+    }
     var body = JSON.stringify({ kind:'chronicle-device-backup', takenAt:new Date().toISOString(), keys:Object.keys(o).length, ls:o });
+    if (G726.on()){
+      var vr726 = G726.verifyExportText(body);
+      if (!vr726.ok){
+        el('sync').className='sync err';
+        el('sync').textContent='⬇ 書き出しを中止しました（検査未通過）';
+        try { console.warn('[home][fix726] invariant violation:', vr726.found); } catch(e){}
+        return;                                 /* ★download 0 */
+      }
+    }
     var a=document.createElement('a');
     a.href=URL.createObjectURL(new Blob([body],{type:'application/json'}));
     a.download='chronicle_backup_'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'.json';
