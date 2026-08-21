@@ -15,7 +15,7 @@
      canonical 判定が終わるまで **その story の body / aiInstr への書込だけ**を保留する。
      ★起動時の最初の body 書込(v100-patch fixProviderCfg)より前に居る必要があるため head。
      ★既定 OFF。on=v292Dfix705On / OFF=v292Dfix705Off -->
-<script src="v292Dfix705-canonical-read-gate.js?cb=v292Dfix719"></script>
+<script src="v292Dfix705-canonical-read-gate.js?cb=v292Dfix721"></script>
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
@@ -48,7 +48,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260821-fix720';
+  var BUILT = '20260821-fix721';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2829,7 +2829,7 @@ G.init();
 <!-- v292Dfix246: per-storyストア(fix77状態/longmem/会話キャッシュ)をスロット単位に分離。features.js等の前に設置。OFF=v292StoreSlotIsoOff -->
 <script src="v292Dfix246-store-slot-isolation.js?cb=v292Dfix246"></script>
 <script src="v292Dfix543-save-guard.js?cb=v292Dfix696"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=v292Dfix720"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=v292Dfix721"></script>
 <script src="v292Dfix700-nonauthoritative-mirror.js?cb=v292Dfix700"></script>
 <script src="v292Dfix702-authority-cutover.js?cb=v292Dfix718"></script>
 <!-- v292Dfix573: 主人公が「無言で消える」のを見張る。
@@ -2843,6 +2843,11 @@ G.init();
 <script src="v292Dfix553-punct-probe.js?cb=v292Dfix645"></script>
 <script src="v292Dfix562-backup-inventory.js?cb=v292Dfix567"></script>
 <script src="v292Dfix564-snapshot.js?cb=v292Dfix567"></script>
+<!-- v292Dfix721(STEP4F): SAFE RESTORE ENGINE。fix291のimportAllを委譲で受け、
+     NON-DESTRUCTIVE MERGE + default-deny + durable journal + boot rollbackで復元する。
+     配置契約(RULING31/32): fix564直後・全writer(291/587/399/402)より前 = RECOVERY EARLY。
+     観測=window.__v292Dfix721.status() / OFF=v292Dfix721Off -->
+<script src="v292Dfix721-safe-restore.js?cb=v292Dfix721"></script>
 <!-- ★fix660(B): BackupGC。削除候補を「選ぶ」層（物理削除はしない）。
      分類・保護判定は fix562 を唯一の正として使うので、fix562 / fix564 の後ろに置く。
      読出=window.__v292Dfix660gc.status()/.reviewCandidates()/.selfTest() / OFF=v292Dfix660Off -->
@@ -3185,7 +3190,7 @@ G.init();
 <script src="v292Dfix277-quasi-pack.js?cb=v292Dfix541"></script>
 <script src="v292Dfix288-tooltips.js?cb=v292Dfix288"></script>
 <script src="v292Dfix290-mobile.js?cb=v292Dfix290"></script>
-<script src="v292Dfix291-saveexport.js?cb=v292Dfix294"></script>
+<script src="v292Dfix291-saveexport.js?cb=v292Dfix721"></script>
 <script src="v292Dfix292-health.js?cb=v292Dfix398"></script>
 <script src="v292Dfix295-convlog-stability.js?cb=v292Dfix295d"></script>
 <script src="v292Dfix297-ai-instructions.js?cb=v292Dfix297b"></script>
@@ -3207,7 +3212,7 @@ G.init();
 <!-- fix587: 物語削除の正規サービス。UIは意思表示を受け取るだけで、認可と手順はここが持つ。
      削除の順序: 再読込→exact key確定→復元セット作成→検証→墓標→クラウドへ反映確認→ゲート経由でexact削除。
      ★物理削除より先に墓標をクラウドへ確定させる。OFF=v292Dfix587Off -->
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix720"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix721"></script>
 <!-- fix602: 墓標(tombstone)が立ったスロットのキーへの setItem を影監視する。
      拒否しない・挙動を1ミリも変えない・LSへは1バイトも書かない。
      経路・key・slotId を記録するだけ。読出: __v292Dfix602.stats()/.recent()/.selfTest()
@@ -3274,7 +3279,7 @@ G.init();
 <script src="v292Dfix338-artstyle.js?cb=v292Dfix484"></script>
 <script src="v292Dfix346-idb-avatars.js?cb=v292Dfix346"></script>
 <script src="v292Dfix356-avatar-eager.js?cb=v292Dfix450"></script>
-<script src="v292Dfix402-invisible-sync.js?cb=v292Dfix713"></script>
+<script src="v292Dfix402-invisible-sync.js?cb=v292Dfix721"></script>
 <script src="v292Dfix405-state-freshness.js?cb=v292Dfix417"></script>
 <script src="v292Dfix406-automode.js?cb=v292Dfix417d"></script>
 <script src="v292Dfix407-load-noconfirm.js?cb=v292Dfix407"></script>
