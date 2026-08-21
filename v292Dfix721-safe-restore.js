@@ -17,7 +17,7 @@
   'use strict';
   if (window.__v292Dfix721) return;
   var TAG = '[v292Dfix721:safe-restore]';
-  var BUILD = 'fix721.2';   /* STEP4F.2: + ISOLATED RESTORE confirm contract（RULING32 §5/§7） */
+  var BUILD = 'fix721.4';   /* STEP4G-A/B: + slotImportGuard + importMap（HOME adapter入口） */
   var JOURNAL_KEY = 'v292Dfix721_txn';          // ★新規keyはこの1つだけ（RULING30許可枠）
   var VALUE_MAX = 1500000;                      // 1値上限（保守的）
 
@@ -299,33 +299,82 @@
     return { ok: rb.ok, code: rb.ok ? 'RECOVERED_BY_ROLLBACK' : 'RECOVERY_PARTIAL', detail: rb };
   }
 
-  // ---- fix291互換入口 ----
+  /* ★★fix721.4(STEP4G-B/RULING34 §17): restore実行本体。
+     入口（index fix291 / HOME adapter）が何であっても、plan→confirm→apply→reload の
+     意味論はこの1本だけを通る。第二restore engine・第二allowlistを作らないための集約点。 */
+  function runRestoreFromData(data){
+    var plan = buildPlan(data);
+    if (!plan.ok){ alert('読み込めない形式です (' + plan.code + ')'); return { ok:false, code: plan.code }; }
+    /* ★fix721.2(RULING32 §5): ISOLATED RESTORE OPERATION — confirm contract の一部。
+       他のChronicleタブを閉じることを復元の必須運用条件として明示する。 */
+    var msg = '【まるごと読み込み（安全版・合流）】\n物語 ' + plan.storyIds.length + '件・' + plan.writes.length + '項目を読み込みます。\n' +
+              '今ある物語は消しません（バックアップに無い物語はそのまま残ります）。\n' +
+              '設定・ログイン・実験フラグ等の制御データ ' + plan.denied.length + '項目は安全のため復元しません。\n\n' +
+              '⚠ 復元中に別のChronicleタブ（ホーム・物語）が開いていると、古い状態が再保存される可能性があります。\n' +
+              '他のChronicleタブをすべて閉じてから続行してください。\n' +
+              '（復元完了後は、開いていたChronicleタブを必ず再読み込みしてください）\n\n続けますか？';
+    if (!confirm(msg)) return { ok:false, code:'CANCELLED' };
+    var r = applyPlan(plan);
+    if (r.ok){ alert('復元しました。ページを再読み込みします。'); try { location.reload(); } catch(e){} }
+    else if (r.code === 'RESTORE_ROLLED_BACK'){ alert('復元に失敗したため、元の状態に戻しました。'); }
+    else { alert('復元に失敗しました (' + r.code + ')。次回起動時に自動回復します。'); }
+    return r;
+  }
+
+  // ---- fix291互換入口（index.html「📥 まるごと読込」） ----
   function importAll(file){
     if (!file) return;
     if (off()){ try { alert('復元機能は現在停止中です。'); } catch(e){} return; }
     var reader = new FileReader();
     reader.onload = function(){
-      try {
-        var obj = JSON.parse(String(reader.result || '{}'));
-        var plan = buildPlan(obj);
-        if (!plan.ok){ alert('読み込めない形式です (' + plan.code + ')'); return; }
-        /* ★fix721.2(RULING32 §5): ISOLATED RESTORE OPERATION — confirm contract の一部。
-           他のChronicleタブを閉じることを復元の必須運用条件として明示する。 */
-        var msg = '【まるごと読み込み（安全版・合流）】\n物語 ' + plan.storyIds.length + '件・' + plan.writes.length + '項目を読み込みます。\n' +
-                  '今ある物語は消しません（バックアップに無い物語はそのまま残ります）。\n' +
-                  '設定・ログイン・実験フラグ等の制御データ ' + plan.denied.length + '項目は安全のため復元しません。\n\n' +
-                  '⚠ 復元中に別のChronicleタブ（ホーム・物語）が開いていると、古い状態が再保存される可能性があります。\n' +
-                  '他のChronicleタブをすべて閉じてから続行してください。\n' +
-                  '（復元完了後は、開いていたChronicleタブを必ず再読み込みしてください）\n\n続けますか？';
-        if (!confirm(msg)) return;
-        var r = applyPlan(plan);
-        if (r.ok){ alert('復元しました。ページを再読み込みします。'); location.reload(); }
-        else if (r.code === 'RESTORE_ROLLED_BACK'){ alert('復元に失敗したため、元の状態に戻しました。'); }
-        else { alert('復元に失敗しました (' + r.code + ')。次回起動時に自動回復します。'); }
-      } catch(e){ alert('読み込みに失敗しました: ' + (e && e.message)); }
+      try { runRestoreFromData(JSON.parse(String(reader.result || '{}'))); }
+      catch(e){ alert('読み込みに失敗しました: ' + (e && e.message)); }
     };
     reader.onerror = function(){ alert('ファイルの読み取りに失敗しました。'); };
     reader.readAsText(file);
+  }
+
+  /* ★★fix721.4(STEP4G-B/RULING34 §5・§17): HOME adapter 用入口。
+     HOMEは自身のfile format（kind:'chronicle-device-backup' の pkg.ls）を parse/validate するだけで、
+     **key-value map をそのまま safe core へ渡す**。HOME側に第二allowlistを持たせない
+     （FIX721_ALLOWLIST = SINGLE AUTHORITY）。ここから先は fix291経路と完全に同一契約。 */
+  function importMap(map){
+    if (off()){ try { alert('復元機能は現在停止中です。'); } catch(e){} return { ok:false, code:'FIX721_OFF' }; }
+    if (!map || typeof map !== 'object' || Object.prototype.toString.call(map) === '[object Array]'){
+      alert('読み込めない形式です (RESTORE_SCHEMA_INVALID)');
+      return { ok:false, code:'RESTORE_SCHEMA_INVALID' };
+    }
+    return runRestoreFromData(map);
+  }
+
+  /* ★★fix721.3(STEP4G-A/RULING34 §6): SLOT IMPORT SAFETY POLICY（read-only helper）。
+     features.js の単一slot import（セーブ管理「JSON 取込」）が、
+       ・full restore transaction中（journal PREPARED/APPLYING）に割り込む
+       ・current tombstone / delete-control state の slot へ body を書き戻す（local resurrection）
+     ことを防ぐ判定を **fix721の単一policy** として提供する。
+     features.js側で deleted/deleteOpId/pending/blocked 等のfield listを複製させないための口。
+     storage write 0 / network 0 / 副作用0。返却は { allowed, reason }。 */
+  function slotImportGuard(slotId){
+    var id = (slotId == null) ? '' : String(slotId);
+    if (!id) return { allowed: false, reason: 'NO_SLOT_ID' };
+    if (off()) return { allowed: false, reason: 'FIX721_OFF' };
+    try {
+      var j = readJournal();
+      if (j && (j.phase === 'PREPARED' || j.phase === 'APPLYING'))
+        return { allowed: false, reason: 'RESTORE_HOLD_ACTIVE' };
+    } catch(e){ /* journal不在/壊れ = hold無し（従来挙動） */ }
+    var e2 = null;
+    try {
+      var cm = JSON.parse(rawGet('chr6_slots_meta') || '[]');
+      if (Object.prototype.toString.call(cm) === '[object Array]'){
+        for (var i = 0; i < cm.length; i++){
+          if (cm[i] && cm[i].id != null && String(cm[i].id) === id){ e2 = cm[i]; break; }
+        }
+      }
+    } catch(e){ return { allowed: false, reason: 'META_UNREADABLE' }; }   /* 判定不能はfail-closed */
+    if (e2 && (e2.deleted === true || hasControl(e2)))
+      return { allowed: false, reason: 'CURRENT_TOMBSTONE_OR_DELETE_CONTROL' };
+    return { allowed: true, reason: 'OK' };
   }
 
   var bootRecovery = null;
@@ -344,6 +393,8 @@
     classifyForRestore: classifyForRestore, buildPlan: buildPlan, preflight: preflight,
     applyPlan: applyPlan, rollback: rollback, recoverIfNeeded: recoverIfNeeded,
     mergeMeta: mergeMeta, importAll: importAll, journal: readJournal,
+    slotImportGuard: slotImportGuard,                                   /* ★fix721.3(STEP4G-A) read-only */
+    importMap: importMap,                                               /* ★fix721.4(STEP4G-B) HOME adapter入口 */
     holdActive: function(){ var j = readJournal(); return !!(j && (j.phase === 'PREPARED' || j.phase === 'APPLYING')); },
     status: function(){ return { build: BUILD, off: off(), bootRecovery: bootRecovery, journal: readJournal() }; }
   };
