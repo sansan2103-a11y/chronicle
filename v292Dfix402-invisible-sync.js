@@ -335,7 +335,16 @@
     if (now - dirtySince > MAXWAIT_MS) wait = 50;   // 長時間書きっぱなし→即flush
     pushTimer = setTimeout(function(){ flush('debounce'); }, wait);
   }
+  /* ★★fix721.1(STEP4F.1/RULING31): restore transaction hold。
+     v292Dfix721_txn が PREPARED/APPLYING の間は cloud push/pull を発火させない
+     （restore途中の混在stateをlegacy packageとして送る/上書きpullする事故の防止）。
+     読取のみ・書込0。journal不在/壊れ = hold無し（従来どおり）。 */
+  function restoreHold(){
+    try { var j = JSON.parse(localStorage.getItem('v292Dfix721_txn') || 'null');
+          return !!(j && (j.phase === 'PREPARED' || j.phase === 'APPLYING')); } catch(e){ return false; }
+  }
   function flush(why){
+    if (restoreHold()) return Promise.resolve('restore-hold');   /* ★fix721.1 */
     if (!on() || !isLoggedIn() || pushing) return Promise.resolve('skip');
     if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
     var f402dOn = (lsGet('v292Dfix402dOff') !== '1');
@@ -548,6 +557,7 @@
     }).catch(function(e){ applying = false; try { console.warn(TAG, 'pull失敗:', e && e.message); } catch(_){} });
   }
   function pullCheck(why){
+    if (restoreHold()) return;                                    /* ★fix721.1 */
     if (!on() || !isLoggedIn() || pulling || applying) return;
     var now = Date.now(); if (now - lastPullCheck < 5000) return; lastPullCheck = now;
     pulling = true;
