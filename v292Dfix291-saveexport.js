@@ -43,6 +43,15 @@
 
   function importAll(file){
     if (!file) return;
+    /* ★★fix721(STEP4F/RULING30): 安全なrestore transactionへ委譲。
+       fix721が存在するページでは旧経路（localStorage.clear()＋全key無差別rawSet）を通らない。
+       fix721が無いページでも旧経路をそのまま残さず、案内して停止する（fail-closed）。 */
+    try {
+      var SR = window.__v292Dfix721;
+      if (SR && typeof SR.importAll === 'function'){ SR.importAll(file); return; }
+    } catch(e){}
+    try { alert('この画面では復元機能を利用できません（安全モジュール未読込）。ページを再読み込みしてから再度お試しください。'); } catch(e){}
+    if (true) return;
     var reader = new FileReader();
     reader.onload = function(){
       try {
