@@ -72,7 +72,7 @@
   var TAG = '[v292Dfix697:shadow-story-commit]';
   var DEBOUNCE_MS = 12000, MAXWAIT_MS = 45000, SIDE_POLL_MS = 20000, TIMEOUT_MS = 25000;
   var MARKER_KEY = 'v292Dfix402_storyRevs';   // ★collectLS 除外 prefix に同居（pkg baseline 不変）
-  var BUILD = 'fix700';
+  var BUILD = 'fix718';
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function lss(k,v){ try { localStorage.setItem(k, v); return true; } catch(e){ return false; } }
@@ -279,6 +279,136 @@
   /* replayed は Worker の idemReserve が replay 応答へ付ける authoritative flag（j.replayed）。
      client 側で推測しない。 */
 
+  // =====================================================================
+  // ★★fix718(STEP4B): CANONICAL NORMAL SAVE ROUTING — document authority で write path を分離
+  //   契約（GPT裁定 RULING22）:
+  //     ・shadow document → 既存 putstory 経路（下の commit() 本体はバイト不変 / fresh getstory 追加なし）
+  //     ・canonical document → canonicalCommit()（fresh-server-state-before-write / strict CAS / KEEP DATA）
+  //     ・unknown / hold → どちらにも送らない（write 0、dirty は保持）
+  //     ・LS の共有 cache (v292Dfix702_storyAuth) を canonical write authority にしない。
+  //       cache が canonical を主張しても、in-memory の fresh 確認が無ければ unknown（送信 0）。
+  //     ・account-global rev 参照 0 / force 0 / storage delete 0 / 新 endpoint ・新 auth 0。
+  // =====================================================================
+  var canonCtx = null;                       // ★document-scoped runtime: {id, rev, hash}（この document 自身の fresh 応答のみが更新）
+  var canonHold = {};                        // ★terminal hold（CANONICAL_WRITE_CONFLICT / AUTHORITY_DRIFT / ALREADY_DELETED）
+  var cstats = { routedCanonical: 0, routedShadow: 0, routedUnknown: 0, holds: 0,
+                 convergedNoWrite: 0, sent: 0, ok: 0, noop: 0, convergedAfterConflict: 0,
+                 confirmedByReadback: 0, conflicts: 0, ambiguous: 0, localChanged: 0,
+                 drift: 0, deletedStop: 0, rowMissing: 0, parityFail: 0, netFail: 0 };
+  function markerAuthorityHint(id){
+    /* cache は「shadow へ送ってよいか」の否定側にだけ使う（canonical を与えない） */
+    try { var m = JSON.parse(lsg('v292Dfix702_storyAuth') || '{}'); var e = m && m[String(id)];
+          return !!(e && e.authority === 'canonical'); } catch(er){ return false; }
+  }
+  function docAuthorityRoute(id){
+    if (canonHold[id]) return 'hold';
+    if (canonCtx && canonCtx.id === id) return 'canonical';            // (1) この document 自身の canonical runtime
+    try {                                                              // (2) fix702 の in-memory fresh accessor（あれば）
+      var F2 = window.__v292Dfix702;
+      if (F2 && typeof F2.docAuthority === 'function'){
+        var a = F2.docAuthority();
+        if (a && a.id === id && a.present === true){
+          if (a.deleted) return 'unknown';
+          if (a.authority === 'canonical') return 'canonical';
+          if (a.authority === 'shadow') return 'shadow';
+        }
+      }
+    } catch(e){}
+    if (markerAuthorityHint(id)) return 'unknown';                     // (3) cache 単独は昇格させない＝送信 0
+    return 'shadow';                                                   // (4) 既定（従来挙動）
+  }
+  function currentHashOf(id, cb){
+    var c = null;
+    try { c = projection(); } catch(e){ c = null; }
+    if (!c || String(c.id) !== String(id)) return cb(null, null);
+    var s = canonicalString(c);
+    sha256hex(s, function(h){ cb(h || null, c); });
+  }
+  function sendPutCanonicalRaw(id, xr, xh, record, mid, cb){
+    postSaveOnce({ op: 'putcanonical', id: id, expectedRev: xr, expectedHash: xh,
+                   record: record, mid: mid,
+                   clientMeta: { device: (navigator.userAgent || '').slice(0, 60), build: BUILD } }, cb);
+  }
+  function canonicalCommit(id, content, intendedLocalHash, why){
+    inFlight = true; cstats.routedCanonical++;
+    var fin = function(){ inFlight = false; };
+    var condClearDirty = function(then){
+      /* 送信 snapshot 以降に local mutation が無い場合のみ dirty 解消（後発入力を落とさない） */
+      currentHashOf(id, function(h2){
+        if (h2 && h2 === intendedLocalHash){ lastSentHash = intendedLocalHash; }
+        then();
+      });
+    };
+    /* ---- fresh getstory exactly 1（この応答だけを CAS authority にする） ---- */
+    postSaveOnce({ op: 'getstory', id: id }, function(g, gerr){
+      if (gerr || !g){ cstats.netFail++; note({ kind: 'C_GETSTORY_FAIL', id: id, why: why }); return fin(); }
+      var j = g.j || {};
+      if (g.status === 404){ cstats.rowMissing++; canonHold[id] = true;
+        note({ kind: 'CANONICAL_ROW_MISSING', id: id }); return fin(); }
+      if (g.status !== 200 || !j.ok){ cstats.netFail++; note({ kind: 'C_GETSTORY_HTTP_' + g.status, id: id }); return fin(); }
+      if (String(j.authority || 'shadow') !== 'canonical'){
+        cstats.drift++; canonHold[id] = true;
+        note({ kind: 'CANONICAL_AUTHORITY_DRIFT', id: id, serverAuthority: j.authority || 'shadow' }); return fin(); }
+      if (j.deleted){ cstats.deletedStop++; canonHold[id] = true;
+        note({ kind: 'CANONICAL_ALREADY_DELETED', id: id }); return fin(); }
+      var srvRev = (typeof j.rev === 'number') ? j.rev : 0;
+      var srvHash = String(j.serverHash || '');
+      /* ---- POST 前の local 再確認（連続入力競合対策） ---- */
+      currentHashOf(id, function(hNow){
+        if (!hNow){ cstats.netFail++; note({ kind: 'C_LOCAL_HASH_FAIL', id: id }); return fin(); }
+        if (hNow !== intendedLocalHash){
+          cstats.localChanged++; note({ kind: 'LOCAL_CHANGED_DURING_PREFLIGHT', id: id }); return fin(); }
+        if (srvHash && srvHash === intendedLocalHash){
+          /* 既に収束済み → write 0 */
+          cstats.convergedNoWrite++; canonCtx = { id: id, rev: srvRev, hash: srvHash };
+          note({ kind: 'CANONICAL_CONVERGED_NO_WRITE', id: id, rev: srvRev });
+          return condClearDirty(fin);
+        }
+        /* ---- 異内容 → fresh 値で strict CAS 1回（force 禁止） ---- */
+        var mid = 'pc:' + id + ':' + srvRev + ':' + intendedLocalHash;   // ★決定的（retry で新 mid を作らない）
+        cstats.sent++;
+        sendPutCanonicalRaw(id, srvRev, srvHash, content, mid, function(r, err){
+          var readbackConverge = function(kindOk, kindKeep){
+            postSaveOnce({ op: 'getstory', id: id }, function(g2, ge2){
+              if (ge2 || !g2 || g2.status !== 200 || !(g2.j && g2.j.ok)){
+                cstats.ambiguous++; note({ kind: 'CANONICAL_WRITE_AMBIGUOUS', id: id }); return fin(); }
+              var j2 = g2.j;
+              if (String(j2.serverHash || '') === intendedLocalHash){
+                canonCtx = { id: id, rev: (typeof j2.rev === 'number' ? j2.rev : null), hash: intendedLocalHash };
+                if (kindOk === 'CANONICAL_CONVERGED_AFTER_CONFLICT') cstats.convergedAfterConflict++;
+                else cstats.confirmedByReadback++;
+                note({ kind: kindOk, id: id, rev: j2.rev });
+                return condClearDirty(fin);
+              }
+              if (kindKeep === 'CANONICAL_WRITE_CONFLICT'){
+                cstats.conflicts++; canonHold[id] = true;
+                note({ kind: 'CANONICAL_WRITE_CONFLICT', id: id, serverRev: j2.rev,
+                       serverHash: String(j2.serverHash || '').slice(0, 16) });
+              } else {
+                cstats.ambiguous++; note({ kind: kindKeep, id: id, serverRev: j2.rev });
+              }
+              return fin();
+            });
+          };
+          if (err || !r){ /* network / 不明瞭 → readback 最大 1 回 */
+            return readbackConverge('CANONICAL_COMMIT_CONFIRMED_BY_READBACK', 'CANONICAL_WRITE_UNSETTLED'); }
+          var jj = r.j || {};
+          if (r.status === 200 && jj.ok){
+            if (String(jj.serverHash || '') !== intendedLocalHash){
+              cstats.parityFail++; note({ kind: 'CANONICAL_PARITY_FAIL', id: id }); return fin(); }
+            canonCtx = { id: id, rev: (typeof jj.rev === 'number' ? jj.rev : null), hash: intendedLocalHash };
+            if (jj.noop) cstats.noop++; else cstats.ok++;
+            note({ kind: 'CANONICAL_COMMIT_OK', id: id, rev: jj.rev, noop: !!jj.noop, why: why });
+            return condClearDirty(fin);
+          }
+          if (r.status === 409){ /* rev/hash mismatch ・cas-lost 等 → readback 最大 1 回で収束判定 */
+            return readbackConverge('CANONICAL_CONVERGED_AFTER_CONFLICT', 'CANONICAL_WRITE_CONFLICT'); }
+          cstats.netFail++; note({ kind: 'C_HTTP_' + r.status, id: id, errorCode: jj.errorCode || null });
+          return fin();
+        });
+      });
+    });
+  }
   // ---- commit（完全 fire-and-forget） ----
   var inFlight = false, lastSentHash = null;
   function commit(why){
@@ -291,6 +421,16 @@
     sha256hex(str, function(localHash){
       if (!localHash) { stats.netFail++; return; }
       if (localHash === lastSentHash) return;              // 端末側 no-op skip
+      /* ★★fix718(STEP4B): document authority で write path を分離。
+         shadow は以下の既存経路のまま（fresh getstory 追加なし・バイト不変）。 */
+      var route = docAuthorityRoute(id);
+      if (route === 'canonical'){ canonicalCommit(id, content, localHash, why); return; }
+      if (route !== 'shadow'){
+        if (route === 'hold') cstats.holds++; else cstats.routedUnknown++;
+        note({ kind: 'CANONICAL_AUTHORITY_UNCONFIRMED', id: id, route: route });
+        return;                                            /* 送信 0、dirty は保持 */
+      }
+      cstats.routedShadow++;
       initDocRev();
       var baseRev = +docBaseRev || 0;                      // ★shared map を再読しない（document-scoped）
       var mid = 'ps:' + id + ':' + baseRev + ':' + localHash;   // ★BLOCKER2
@@ -419,6 +559,9 @@
     stats: function(){ return JSON.parse(JSON.stringify(stats)); },
     ledger: function(){ return LEDGER.slice(); },
     flush: function(){ commit('manual'); return true; },
+    /* ★fix718: read-only 可視化（書込 0） */
+    canonState: function(){ return { ctx: canonCtx ? JSON.parse(JSON.stringify(canonCtx)) : null,
+      holds: JSON.parse(JSON.stringify(canonHold)), cstats: JSON.parse(JSON.stringify(cstats)) }; },
     projection: projection,
     canonicalString: canonicalString,
     contentHash: function(cb){ var c = projection(); if (!c) return cb(null); sha256hex(canonicalString(c), cb); },
