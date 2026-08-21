@@ -218,7 +218,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260821-fix718';
+  var HOME_BUILT = '20260821-fix719';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -256,7 +256,7 @@
        fix697 の projection() は常に null → commit は発生しない（さらに fix697 は既定 OFF）。
      ・home.html には S / __chronicleGetState が無いので S.save wrap も成立しない（wrapSave は空振りして諦める）。
      ・fix587 より前に置く（fix587 は呼び出し時に参照するので順序依存は無いが、owner を先に載せる）。 -->
-<script src="v292Dfix697-shadow-story-commit.js?cb=v292Dfix718"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=v292Dfix719"></script>
 <script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix712"></script>
 <!-- ★fix602: 墓標が立ったスロットへの書き込みを影で止める（別途配信） -->
 <script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix680"></script>
