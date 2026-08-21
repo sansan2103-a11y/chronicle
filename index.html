@@ -48,7 +48,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260821-fix721';
+  var BUILT = '20260821-fix722';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2847,7 +2847,7 @@ G.init();
      NON-DESTRUCTIVE MERGE + default-deny + durable journal + boot rollbackで復元する。
      配置契約(RULING31/32): fix564直後・全writer(291/587/399/402)より前 = RECOVERY EARLY。
      観測=window.__v292Dfix721.status() / OFF=v292Dfix721Off -->
-<script src="v292Dfix721-safe-restore.js?cb=v292Dfix721"></script>
+<script src="v292Dfix721-safe-restore.js?cb=v292Dfix722"></script>
 <!-- ★fix660(B): BackupGC。削除候補を「選ぶ」層（物理削除はしない）。
      分類・保護判定は fix562 を唯一の正として使うので、fix562 / fix564 の後ろに置く。
      読出=window.__v292Dfix660gc.status()/.reviewCandidates()/.selfTest() / OFF=v292Dfix660Off -->
@@ -2873,7 +2873,7 @@ G.init();
        fix659 は別 id + __f527 マーカーを立てるので干渉しない、という関係をこの並びで示す。
      読出=window.__v292Dfix659.status()/.selfTest() / OFF=v292Dfix659Off -->
 <script src="v292Dfix659-fork-choice.js?cb=v292Dfix680"></script>
-<script src="features.js?cb=v292Dfix695"></script>
+<script src="features.js?cb=v292Dfix722"></script>
 <script>
 /* ============================================================================
  * v292DfixP0-inline : シナリオテンプレ適用の緊急封鎖（L2 + L2b）
