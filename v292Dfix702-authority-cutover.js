@@ -264,6 +264,8 @@
   // =====================================================================
   // 分類（裁定 §8: CLOUD_NEWER の auto apply は実装しない）
   // =====================================================================
+  /* ★fix718(STEP4B): in-memory fresh authority（LS cache とは別。write authority の根拠はこちら） */
+  var lastFresh = null;   // {id, present, authority, rev, hash, deleted, at}
   function classify(cb){
     cb = (typeof cb === 'function') ? cb : function(){};
     var id = storyId();
@@ -279,6 +281,7 @@
         if (r.status === 404 || (j && j.errorCode === 'not-found')){
           var ra = { storyId: id, serverPresent: false, serverAuthority: null, localHash: lh,
                      marker: mk, verdict: 'SERVER_ROW_ABSENT', note: 'row missing は delete ではない（未 seed）' };
+          lastFresh = { id: id, present: false, authority: null, rev: null, hash: null, deleted: false, at: Date.now() };
           note(ra); return cb(ra);
         }
         if (r.status !== 200 || !j.ok){ stats.netFail++; var re = { storyId: id, error: 'HTTP_' + r.status }; note(re); return cb(re); }
@@ -286,6 +289,7 @@
         var sHash = j.serverHash || null, sDel = !!j.deleted;
         /* ★server が正本。marker は cache なので、食い違ったら server で直す。 */
         markerSet(id, sAuth, sRev, sHash);
+        lastFresh = { id: id, present: true, authority: sAuth, rev: sRev, hash: sHash, deleted: sDel, at: Date.now() };
         var v, detail = null;
         if (sDel){ v = 'SERVER_TOMBSTONE'; }
         else if (!mk){
@@ -515,6 +519,10 @@
                stats: JSON.parse(JSON.stringify(stats)) };
     },
     marker: markerMap, markerOf: markerOf,
+    /* ★fix718: document-scoped read-only accessor。LS cache ではなく直近の fresh getstory のみを返す。 */
+    docAuthority: function(){ var id = storyId();
+      if (!id || !lastFresh || lastFresh.id !== id) return null;
+      return JSON.parse(JSON.stringify(lastFresh)); },
     classify: classify, promote: promote, promoteDelete: promoteDelete, gate: gate,
     maskPreview: function(ls){ return maskIncoming(ls); },
     ledger: function(){ return LEDGER.slice(); }
