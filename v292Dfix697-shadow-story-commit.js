@@ -777,6 +777,43 @@
       var body = { op: 'scrubstorycfg', id: id, expectedRev: Math.floor(xr), expectedHash: xh, mid: mid };
       postSaveOnce(body, cb);
     },
+    /* ★★fix729(RULING57 §4): CAPABILITY ENDPOINT == TITLE WRITE ENDPOINT を構造で保証するための
+       read-only accessor。fix729 が独自の URL 設定体系を作らないよう、
+       title write が実際に向く base をそのまま返す。書き込み能力は一切持たない。 */
+    endpointBase: function(){ try { return proxyUrl(); } catch(e){ return ''; } },
+    /* ★★fix729(RULING56 / Worker v37): TITLE-ONLY STRICT CAS 専用の **狭い** write 口。
+       なぜ必要か:
+         rename UI は現在開いていない slot も rename できる（CASE T2）。しかし fix697 の
+         dirty trigger は body / sidecar しか見ないので title だけの変更は永久に commit されない。
+         body を巻き込まずに server stored record の title だけを差し替える口をここに 1 本だけ開ける。
+       契約（RULING56 §19-§20）:
+         ・caller から op を受け取らない。op は 'setstorytitle' 固定。
+         ・payload whitelist は id / title / expectedRev / expectedHash / mid の 5 つだけ。
+           record / body / cfg / cast / scene / turns / sidecar / deleted / authority は
+           組み直す時点で落ちる（Worker 側も fail-closed で拒否する）。
+         ・request は exactly 1。自動 retry は **しない**。
+         ・localStorage / sessionStorage へ 1 バイトも書かない。
+         ・**current document を一切見ない**。storyId() / docBaseRev / projection() / commit() /
+           markDirty を呼ばない。id は caller が明示的に渡す（cross-document 対応のため）。
+         ・この port から normal body commit を呼ばない。
+         ・endpoint / auth / request 実装は postSaveOnce（既存単一実装）を共有。新 auth・新 endpoint 0。 */
+    setStoryTitleOnce: function(payload, cb){
+      var p = (payload && typeof payload === 'object') ? payload : null;
+      if (!p) { cb(null, 'BAD_PAYLOAD'); return; }
+      var id = (p.id == null) ? '' : String(p.id);
+      if (!id) { cb(null, 'BAD_STORY_ID'); return; }
+      if (typeof p.title !== 'string') { cb(null, 'BAD_TITLE'); return; }
+      var xr = +p.expectedRev;
+      if (!(xr >= 0)) { cb(null, 'BAD_EXPECTED_REV'); return; }
+      var xh = (p.expectedHash == null) ? '' : String(p.expectedHash);
+      if (!xh) { cb(null, 'BAD_EXPECTED_HASH'); return; }
+      var mid = (p.mid == null) ? '' : String(p.mid);
+      if (!mid) { cb(null, 'BAD_MID'); return; }
+      /* ★caller が渡してきた op / content / その他の任意 field は捨てる。ここで組み直す。 */
+      var body = { op: 'setstorytitle', id: id, title: String(p.title).slice(0, 40),
+                   expectedRev: Math.floor(xr), expectedHash: xh, mid: mid };
+      postSaveOnce(body, cb);
+    },
     putStoryOnce: function(payload, cb){
       var p = (payload && typeof payload === 'object') ? payload : null;
       if (!p) { cb(null, 'BAD_PAYLOAD'); return; }

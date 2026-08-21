@@ -9,8 +9,10 @@
   P2-b/P2-d ホーム画面 (2026-07-25)
   設計書「P2: ホーム画面 + 物語ID(URL)方式」§4/§6.5/§8.1 に対応。
   ★重要な設計上の約束:
-    1) このページは features.js / S を一切読み込まない。保存済みJSONを"読むだけ"。
-       → ホームを開いただけでセーブが書き換わることが原理的に起こらない。
+    1) このページは features.js / S を一切読み込まない。game runtime / save authority を持たない。
+       → ホームを開いただけでゲーム本文のセーブが書き換わることが原理的に起こらない。
+       ただし削除・名前変更など、HOME 上の明示的な管理操作は専用の狭い server API で同期する。
+       (fix708 系 delete / fix729 title-sync)  ★fix729(RULING58 §6-§8): READ-ONLY PAGE ではない。
     2) 取り込み(pull)はこのページでだけ行う。物語がメモリに載っていないので衝突しない。
        ただし「この端末の方がターン数が多い物語」は上書きしない(local-ahead保護)。
     3) chr6_active_slot は書かない。物語は index.html?story=<id> で開く(URLが真実)。
@@ -218,7 +220,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260821-fix728';
+  var HOME_BUILT = '20260822-fix729';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -237,7 +239,7 @@
      （Storage の named-setter 挙動。own property が作られず、prototype の native が先に解決される）。
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
-<script src="v292Dfix654-storage-trap.js?cb=v292Dfix728"></script>
+<script src="v292Dfix654-storage-trap.js?cb=v292Dfix729"></script>
 <script src="v292Dfix698-mutation-bus.js?cb=v292Dfix701"></script>
 <script src="v292Dfix569-gc-shadow.js?cb=v292Dfix680"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者（fix569 が捕捉済みの native を借りる） -->
@@ -263,7 +265,8 @@
        （★fix724 でも fix697 は既定 ON だが、この不変条件は storyId 由来なので変わらない）。
      ・home.html には S / __chronicleGetState が無いので S.save wrap も成立しない（wrapSave は空振りして諦める）。
      ・fix587 より前に置く（fix587 は呼び出し時に参照するので順序依存は無いが、owner を先に載せる）。 -->
-<script src="v292Dfix697-shadow-story-commit.js?cb=v292Dfix725"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=v292Dfix729"></script>
+<script src="v292Dfix729-title-sync.js?cb=v292Dfix729"></script>
 <script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix721"></script>
 <!-- ★fix602: 墓標が立ったスロットへの書き込みを影で止める（別途配信） -->
 <script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix680"></script>
@@ -304,7 +307,7 @@
   function el(id){ return document.getElementById(id); }
   function esc(t){ return String(t==null?'':t).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
 
-  // ---------- データ読み取り（読むだけ・書き換えない） ----------
+  // ---------- データ読み書き（表示・管理用。ゲーム本文の save authority は持たない） ----------
   function readMeta(){ var m = J(g('chr6_slots_meta'),[]); return Array.isArray(m)?m:[]; }
   function writeMeta(m){ return s('chr6_slots_meta', JSON.stringify(m)); }
   function slotKey(id){ return (id==='default'||id==='chr6') ? 'chr6' : ('chr6_slot_'+id); }
@@ -618,7 +621,12 @@
         var v = prompt('新しい名前', meta[i].name || '');
         if(v==null) return;
         v = String(v).trim().slice(0,40); if(!v) return;
-        meta[i].name = v; writeMeta(meta); render(); return;
+        meta[i].name = v;
+        var okW = writeMeta(meta);
+        /* ★★fix729(RULING58 §2・§3・§13-B): writeMeta 成功時だけ title-sync へ通知する。
+           getstory / CAS / capability 取得などの network protocol はここに 1 文字も書かない(全て fix729 側)。 */
+        if (okW){ try { if (window.__chronicleTitleRename) window.__chronicleTitleRename(id, v); } catch(e){} }
+        render(); return;
       }
     }
   }

@@ -5938,7 +5938,15 @@
   function renameSlot(id, newName){
     var meta = getMeta();
     var s = meta.find(function(x){ return x.id === id; });
-    if (s && newName){ s.name = String(newName).slice(0, 40); setMeta(meta); }
+    if (s && newName){
+      s.name = String(newName).slice(0, 40);
+      setMeta(meta);
+      /* ★★fix729(RULING56 §5-§6・§18): local meta 更新が成功した後にだけ、
+         「この story の title が変わった」ことを title-sync module へ通知する。
+         ここに network protocol は書かない。fresh getstory / CAS / validation は module 側。
+         module が無ければ何も起きない（local rename は従来どおり成功する）。 */
+      try { if (window.__chronicleTitleRename) window.__chronicleTitleRename(id, s.name); } catch(e){}
+    }
   }
   /* ★fix577(2026-07-26・GPT裁定): 本体1キーだけを消す旧実装は危険なので無効化した。
      旧実装の問題:
