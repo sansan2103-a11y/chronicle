@@ -37,16 +37,19 @@
   'use strict';
   if (window.__v292Dfix705) return;                 /* 冪等（自 namespace のみ） */
   var TAG = '[v292Dfix705:canonical-read-gate]';
-  var BUILD = 'fix705+719merge+721gate+723auth';
+  var BUILD = 'fix705+719merge+721gate+723auth+724flags';
   var TIMEOUT_MS = 25000;
   var APPLIED_KEY = 'v292Dfix705_applied';          /* ★sessionStorage（localStorage ではない） */
 
   // ---- localStorage 薄いアクセサ（読みのみ。書きは applyWrite だけ） ----
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix705Off') === '1'; }
-  /* ★★fix723(STEP4H/RULING36 §Q3): DEFAULT ON + EXPLICIT OFF。kill switch = v292Dfix705Off==='1'。
-     On='0' 明示で従来 opt-in 相当へ戻せる（段階展開用の逃げ道）。 */
-  function on(){ if (off()) return false; if (lsg('v292Dfix705On') === '0') return false; return true; }
+  /* ★★fix724(RULING37 §15/§24): FLAG 2-STATE CONTRACT。
+     Off==='1' → OFF / それ以外 → DEFAULT ON。これだけ。
+     legacy の v292Dfix705On は '1' でも '0' でも effective state に影響させない
+     （fix723 の 3 値契約は STALE_EXPLICIT_ZERO_FLAG_SUPPRESSES_DEFAULT_ON のため撤回）。
+     storage migration は行わない（残っている On キーを削除しない）。 */
+  function on(){ return !off(); }
 
   /* ★★fix721.2(STEP4F.2/RULING32 §2): INDEX PRE-RECOVERY SIDE EFFECT GAP 封鎖。
      restore journal(v292Dfix721_txn)が PREPARED/APPLYING の間は、fix705 は
@@ -651,5 +654,5 @@
     release: function(why){ releaseHold(why || 'manual'); return true; },
     ledger: function(){ return LEDGER.slice(); }
   };
-  try { console.log(TAG, 'loaded (canonical read authority / default ON(fix723) / kill=v292Dfix705Off=1)'); } catch(e){}
+  try { console.log(TAG, 'loaded (canonical read authority / default ON / kill=v292Dfix705Off=1)'); } catch(e){}
 })();
