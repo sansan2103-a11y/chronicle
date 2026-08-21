@@ -174,13 +174,36 @@
       else if (c.family !== 'META_REBUILD') denied.push({ k: k, family: c.family });
     });
     if (!writes.length) return { ok: false, code: 'RESTORE_NOTHING_ALLOWED', denied: denied };
-    var meta = mergeMeta(rawGet('chr6_slots_meta'), data['chr6_slots_meta'], storyIds);
+    /* ★★fix726(RULING48 §15-17): RESTORE INPUT SANITIZATION ONLY。
+       top-level auth key は既に denyFamily() で deny 済みだが、
+       悪意ある/古い backup の story cfg に secret4 を埋め込めば再注入できてしまう。
+       ここで落とすのは **import copy だけ**。existing local story / runtime S.cfg には触れない。
+       policy の authority は fix726。ここに第二の secret 判定を書かない。 */
+    var sdata = data, secretStripped = 0;
+    var G726b = window.__v292Dfix726;
+    if (G726b && G726b.on() && typeof G726b.sanitizeImportedStoryRaw === 'function'){
+      sdata = {};
+      for (var dk in data){ if (Object.prototype.hasOwnProperty.call(data, dk)) sdata[dk] = data[dk]; }
+      for (var wi = 0; wi < writes.length; wi++){
+        if (writes[wi].family !== 'STORY_DATA') continue;
+        var wk = writes[wi].k, wv = sdata[wk];
+        if (typeof wv !== 'string') continue;
+        var sres = G726b.sanitizeImportedStoryRaw(wv);
+        if (sres && sres.ok && sres.value != null){
+          if (sres.value !== wv){ sdata[wk] = sres.value; secretStripped += (sres.removed || 0); }
+        }
+        /* parse 不能等で !ok の場合は値を変えず、既存の classifyForRestore /
+           applyPlan の契約にそのまま任せる（restore 挙動を変えない）。 */
+      }
+    }
+    var meta = mergeMeta(rawGet('chr6_slots_meta'), sdata['chr6_slots_meta'], storyIds);
     /* ★RULING31 §3-4: NON_DESTRUCTIVE MERGE — backupに無い現在storyのremoveは行わない（removes恒常0） */
     var removes = [];
     var affected = {};
     writes.forEach(function(w){ if (w.mode === 'overwrite' && w.slotId && w.slotId !== 'default') affected[w.slotId] = 1; });
-    return { ok: true, restoreId: 'r721_' + Date.now(), data: data, writes: writes, removes: removes,
+    return { ok: true, restoreId: 'r721_' + Date.now(), data: sdata, writes: writes, removes: removes,
              denied: denied, storyIds: storyIds, meta: meta, bytes: bytes,
+             secretFieldsStripped: secretStripped,
              affectedSlots: Object.keys(affected) };
   }
 
