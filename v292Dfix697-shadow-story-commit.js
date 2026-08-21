@@ -428,6 +428,9 @@
   // ---- commit（完全 fire-and-forget） ----
   var inFlight = false, lastSentHash = null;
   function commit(why){
+    /* ★★fix721.1(STEP4F.1/RULING31): restore transaction中はshadow/canonical writeを発火させない（読取のみ） */
+    try { var __rj = JSON.parse(lsg('v292Dfix721_txn') || 'null');
+          if (__rj && (__rj.phase === 'PREPARED' || __rj.phase === 'APPLYING')) return; } catch(e){}
     if (!on() || inFlight) return;
     if (!isLoggedIn()) { stats.skipped++; return; }
     var content = projection();
