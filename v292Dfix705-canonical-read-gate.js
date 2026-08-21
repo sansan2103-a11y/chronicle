@@ -37,14 +37,16 @@
   'use strict';
   if (window.__v292Dfix705) return;                 /* 冪等（自 namespace のみ） */
   var TAG = '[v292Dfix705:canonical-read-gate]';
-  var BUILD = 'fix705+719merge+721gate';
+  var BUILD = 'fix705+719merge+721gate+723auth';
   var TIMEOUT_MS = 25000;
   var APPLIED_KEY = 'v292Dfix705_applied';          /* ★sessionStorage（localStorage ではない） */
 
   // ---- localStorage 薄いアクセサ（読みのみ。書きは applyWrite だけ） ----
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix705Off') === '1'; }
-  function on(){ return !off() && lsg('v292Dfix705On') === '1'; }
+  /* ★★fix723(STEP4H/RULING36 §Q3): DEFAULT ON + EXPLICIT OFF。kill switch = v292Dfix705Off==='1'。
+     On='0' 明示で従来 opt-in 相当へ戻せる（段階展開用の逃げ道）。 */
+  function on(){ if (off()) return false; if (lsg('v292Dfix705On') === '0') return false; return true; }
 
   /* ★★fix721.2(STEP4F.2/RULING32 §2): INDEX PRE-RECOVERY SIDE EFFECT GAP 封鎖。
      restore journal(v292Dfix721_txn)が PREPARED/APPLYING の間は、fix705 は
@@ -591,8 +593,51 @@
   // =====================================================================
   // 検証口（自 namespace のみ）
   // =====================================================================
+  // =====================================================================
+  // ★★fix723(STEP4H/RULING36): DOCUMENT AUTHORITY ACCESSOR（read-only contract）
+  //   ・fix697 が write transport（putstory / putcanonical）を選ぶための **唯一の公開 evidence**。
+  //   ・storage write 0 / network 追加 0 / LS authority cache 参照 0。
+  //     すでに取得済みの fresh getstory 応答（state.serverRev/serverHash/verdict）だけを写す。
+  //   ・現在 document の storyId と完全一致する fresh classification だけを返す。
+  //   ・authority として返すのは 'canonical' / 'shadow' のみ。
+  //   ・STOP / 分類失敗（NETWORK / AUTH / PARSE / HASH / SERVER_TOMBSTONE /
+  //     AUTHORITY_CONFLICT / APPLY_PARTIAL / KEY_DIVERGENCE / …）は
+  //     **authority を返さず unsafe:true** を立てる。
+  //     呼び手は unsafe を default shadow へ fallback してはならない（FAILED CLASSIFICATION != SHADOW）。
+  //   ・generic な内部 state を素通しで漏らさない（固定 field のみ・deep copy 不要な primitive のみ）。
+  // =====================================================================
+  function docAuthority(){
+    if (!on() || !STORY_ID) return null;
+    var out = { id: String(STORY_ID), present: false, authority: null,
+                rev: null, hash: null, deleted: false,
+                phase: String(state.phase || ''), fresh: false, unsafe: false, build: BUILD };
+    /* STOP は必ず phase='stopped' を立てる。error だけが立つ非 STOP（NO_STORAGE_TRAP 等）も
+       分類の健全性を保証できないので unsafe 扱いにする。 */
+    if (state.phase === 'stopped' || state.error){ out.unsafe = true; return out; }
+    var v = state.verdict;
+    if (v === 'NOT_FOUND'){
+      /* server canonical row が確認されなかった状態。既存 shadow / new-story path へ進めてよい
+         （RULING36 §NOT_FOUND）。delete 契約の 404 != CLOUD_FULLY_ABSENT とは無関係。 */
+      out.present = false; out.fresh = true; return out;
+    }
+    if (v === 'SHADOW'){
+      out.present = true; out.authority = 'shadow'; out.fresh = true;
+      out.rev = (typeof state.serverRev === 'number') ? state.serverRev : null;
+      out.hash = state.serverHash || null;
+      return out;
+    }
+    if (v === 'CANONICAL_SAME_HASH' || v === 'CANONICAL_APPLIED' || v === 'CANONICAL_LEGACY_TITLE_EMPTY'){
+      out.present = true; out.authority = 'canonical'; out.fresh = true;
+      out.rev = (typeof state.serverRev === 'number') ? state.serverRev : null;
+      out.hash = state.serverHash || null;
+      return out;
+    }
+    /* 未分類（verdict null / 分類中）: fresh=false・unsafe=false。呼び手は下流の判定へ落としてよい。 */
+    return out;
+  }
+
   window.__v292Dfix705 = {
-    __armed: true, on: on, off: off,
+    __armed: true, on: on, off: off, docAuthority: docAuthority,
     status: function(){
       return { on: on(), off: off(), build: BUILD, loggedIn: isLoggedIn(),
                storyId: STORY_ID, bodyKey: BODY_KEY, aiKey: AI_KEY,
@@ -606,5 +651,5 @@
     release: function(why){ releaseHold(why || 'manual'); return true; },
     ledger: function(){ return LEDGER.slice(); }
   };
-  try { console.log(TAG, 'loaded (canonical read authority / default OFF / on=v292Dfix705On)'); } catch(e){}
+  try { console.log(TAG, 'loaded (canonical read authority / default ON(fix723) / kill=v292Dfix705Off=1)'); } catch(e){}
 })();
