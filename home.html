@@ -218,7 +218,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260821-fix721';
+  var HOME_BUILT = '20260821-fix722';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -248,7 +248,7 @@
      NON-DESTRUCTIVE MERGE + default-deny + durable journal + boot rollbackで復元する。
      配置契約(RULING31/32): fix564直後・全writer(291/587/399/402)より前 = RECOVERY EARLY。
      観測=window.__v292Dfix721.status() / OFF=v292Dfix721Off -->
-<script src="v292Dfix721-safe-restore.js?cb=v292Dfix721"></script>
+<script src="v292Dfix721-safe-restore.js?cb=v292Dfix722"></script>
 <!-- ★fix660(B): BackupGC。削除候補を選ぶ層。分類は fix562 が唯一の正なのでその後ろ -->
 <script src="v292Dfix660-backup-gc.js?cb=v292Dfix680"></script>
 <script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix680"></script>
@@ -1668,22 +1668,34 @@
     setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
     el('sync').className='sync'; el('sync').textContent='⬇ 書き出しました（'+Object.keys(o).length+'件）';
   }
+  /* ★★fix721.4(STEP4G-B / RULING34 §3-§9・§17-§18): HOME IMPORT SAFE-RESTORE UNIFICATION
+     旧実装は pkg.ls の全keyを chr6_active_slot 以外そのまま raw set していた
+     （HOME_LEGACY_IMPORT_PATH_UNGATED / HIGH）。これは
+       ・auth(v292GoogleToken/ProxyPass/ProxyUrl)・feature flag・cloud cache・delete pending・
+         unknown/化石key まで復元してしまう（control-plane restore）
+       ・current tombstone を backup値で上書きできる（local resurrection）
+       ・journal / snapshot / rollback / restore-hold が無い
+     という、fix721 が index側で閉じたのと同型の危険を HOME に残していた。
+     ★このページは **file formatの解釈だけ** を担当し、実際の書込は fix721 safe restore core に委譲する。
+       - HOME側に第二allowlist / 第二deny table を持たない（FIX721_ALLOWLIST = SINGLE AUTHORITY）
+       - raw set ループは撤去（HOME_RAW_RESTORE_WRITER = unreachable）
+       - 非破壊merge・墓標優先・control-plane DENY・journal durability・rollback・restore hold・
+         isolated restore 警告・meta sanitized overlay は fix291 経路と完全に同一。 */
   function importFile(f){
     var fr=new FileReader();
     fr.onload=function(){
       var pkg=J(fr.result,null);
+      /* HOME format validate: kind + pkg.ls(plain object) のみ受理。malformed は WRITE 0 */
+      var kind = pkg && pkg.kind;
       var ls=(pkg&&pkg.ls)||(pkg&&pkg.data&&pkg.data.ls)||null;
-      if(!ls){ alert('このファイルは読み込めませんでした。'); return; }
-      var n=Object.keys(ls).length;
-      if(!confirm('ファイルから '+n+' 件のデータを取り込みます。\n同じ名前のデータはファイルの内容で置き換わります。よろしいですか？')) return;
-      var w=0;
-      for(var k in ls){
-        if(!Object.prototype.hasOwnProperty.call(ls,k)) continue;
-        if(k==='chr6_active_slot') continue;            // 開いている物語は持ち込まない
-        if(s(k, ls[k])) w++;
+      var okShape = !!ls && typeof ls === 'object' && Object.prototype.toString.call(ls) !== '[object Array]';
+      if(!okShape || kind !== 'chronicle-device-backup'){ alert('このファイルは読み込めませんでした。'); return; }
+      var SR = window.__v292Dfix721;
+      if(!SR || typeof SR.importMap !== 'function'){
+        alert('安全モジュールが読み込まれていないため取り込めません。ページを再読み込みしてから再度お試しください。');
+        return;                                          /* ★fail-closed（旧raw経路へ落ちない） */
       }
-      el('sync').className='sync'; el('sync').textContent='⬆ 取り込みました（'+w+'件）';
-      render();
+      SR.importMap(ls);                                  /* ★以降の確認・適用・再読込は fix721 が行う */
     };
     fr.readAsText(f);
   }
