@@ -72,12 +72,15 @@
   var TAG = '[v292Dfix697:shadow-story-commit]';
   var DEBOUNCE_MS = 12000, MAXWAIT_MS = 45000, SIDE_POLL_MS = 20000, TIMEOUT_MS = 25000;
   var MARKER_KEY = 'v292Dfix402_storyRevs';   // ★collectLS 除外 prefix に同居（pkg baseline 不変）
-  var BUILD = 'fix720';
+  var BUILD = 'fix723';
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function lss(k,v){ try { localStorage.setItem(k, v); return true; } catch(e){ return false; } }
   function off(){ return lsg('v292Dfix697Off') === '1'; }
-  function on(){ return !off() && lsg('v292Dfix697On') === '1'; }
+  /* ★★fix723(STEP4H/RULING36 §Q3): DEFAULT ON + EXPLICIT OFF。
+     kill switch は従来と同一キー v292Dfix697Off === '1'。opt-in キー On='1' も引き続き有効。
+     On='0' を明示した場合だけ従来 opt-in 相当に戻す（段階展開用の逃げ道）。 */
+  function on(){ if (off()) return false; if (lsg('v292Dfix697On') === '0') return false; return true; }
 
   // ---- storyId（fix694 authority のみ・chr6_active_slot 不使用） ----
   function authorityKey(){
@@ -319,7 +322,28 @@
   function docAuthorityRoute(id){
     if (canonHold[id]) return 'hold';
     if (canonCtx && canonCtx.id === id) return 'canonical';            // (1) この document 自身の canonical runtime
-    try {                                                              // (2) fix702 の in-memory fresh accessor（あれば）
+    /* ★★fix723(STEP4H/RULING36): (2) fix705 の read-only document authority contract。
+       ・fix705 が boot で取得済みの fresh getstory 結果を **公開 contract 経由でのみ** 読む
+         （内部 state を解釈しない・新規 network 0・LS cache 参照 0）。
+       ・unsafe（STOP / 分類失敗）は **default shadow へ fallback せず 'hold'**。
+         FAILED CLASSIFICATION != SHADOW（RULING36）。
+       ・fresh かつ present かつ deleted:false のときだけ authority を採用する。
+       ・NOT_FOUND（present:false / fresh:true）は判定せず下流へ落とす＝従来の new-story path。 */
+    try {
+      var F5 = window.__v292Dfix705;
+      if (F5 && typeof F5.docAuthority === 'function'){
+        var a5 = F5.docAuthority();
+        if (a5 && String(a5.id) === String(id)){
+          if (a5.unsafe === true) return 'hold';
+          if (a5.fresh === true && a5.present === true){
+            if (a5.deleted === true) return 'hold';
+            if (a5.authority === 'canonical') return 'canonical';
+            if (a5.authority === 'shadow') return 'shadow';
+          }
+        }
+      }
+    } catch(e){}
+    try {                                                              // (3) fix702 の in-memory fresh accessor（あれば）
       var F2 = window.__v292Dfix702;
       if (F2 && typeof F2.docAuthority === 'function'){
         var a = F2.docAuthority();
@@ -330,8 +354,8 @@
         }
       }
     } catch(e){}
-    if (markerAuthorityHint(id)) return 'unknown';                     // (3) cache 単独は昇格させない＝送信 0
-    return 'shadow';                                                   // (4) 既定（従来挙動）
+    if (markerAuthorityHint(id)) return 'unknown';                     // (4) cache 単独は昇格させない＝送信 0
+    return 'shadow';                                                   // (5) 既定（従来挙動）
   }
   function currentHashOf(id, cb){
     var c = null;
@@ -663,5 +687,5 @@
       postSaveOnce(body, cb);
     }
   };
-  try { console.log(TAG, 'loaded (shadow non-authoritative / default OFF / on=v292Dfix697On)'); } catch(e){}
+  try { console.log(TAG, 'loaded (shadow non-authoritative / default ON(fix723) / kill=v292Dfix697Off=1)'); } catch(e){}
 })();
