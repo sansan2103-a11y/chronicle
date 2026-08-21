@@ -15,7 +15,7 @@
      canonical 判定が終わるまで **その story の body / aiInstr への書込だけ**を保留する。
      ★起動時の最初の body 書込(v100-patch fixProviderCfg)より前に居る必要があるため head。
      ★既定 OFF。on=v292Dfix705On / OFF=v292Dfix705Off -->
-<script src="v292Dfix705-canonical-read-gate.js?cb=v292Dfix707"></script>
+<script src="v292Dfix705-canonical-read-gate.js?cb=v292Dfix719"></script>
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
@@ -48,7 +48,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260821-fix718';
+  var BUILT = '20260821-fix719';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2829,7 +2829,7 @@ G.init();
 <!-- v292Dfix246: per-storyストア(fix77状態/longmem/会話キャッシュ)をスロット単位に分離。features.js等の前に設置。OFF=v292StoreSlotIsoOff -->
 <script src="v292Dfix246-store-slot-isolation.js?cb=v292Dfix246"></script>
 <script src="v292Dfix543-save-guard.js?cb=v292Dfix696"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=v292Dfix718"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=v292Dfix719"></script>
 <script src="v292Dfix700-nonauthoritative-mirror.js?cb=v292Dfix700"></script>
 <script src="v292Dfix702-authority-cutover.js?cb=v292Dfix718"></script>
 <!-- v292Dfix573: 主人公が「無言で消える」のを見張る。
