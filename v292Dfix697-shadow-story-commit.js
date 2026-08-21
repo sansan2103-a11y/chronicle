@@ -72,7 +72,7 @@
   var TAG = '[v292Dfix697:shadow-story-commit]';
   var DEBOUNCE_MS = 12000, MAXWAIT_MS = 45000, SIDE_POLL_MS = 20000, TIMEOUT_MS = 25000;
   var MARKER_KEY = 'v292Dfix402_storyRevs';   // ★collectLS 除外 prefix に同居（pkg baseline 不変）
-  var BUILD = 'fix718';
+  var BUILD = 'fix719';
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function lss(k,v){ try { localStorage.setItem(k, v); return true; } catch(e){ return false; } }
@@ -147,6 +147,22 @@
      ★ここは読むだけ。書込・通信・commit・marker 更新を一切しない。
      ★deleted:true の meta を持つ story は従来どおり null（live のみ）＝ null 保護は壊さない。 */
   function keyOf(id){ return (String(id) === 'default') ? 'chr6' : ('chr6_slot_' + String(id)); }
+  /* ★★fix719(STEP4E): CANONICAL CFG OWNERSHIP — story canonical に入る cfg の ALLOWLIST。
+     ・secret-capable（key/naiKey/orKey/pollKey）・provider runtime（provider/orModel/model）・
+       UI/device 設定（debug/showInner/simpleMode/aiAvatar/artStyle）・未知 field は **既定で除外**。
+     ・Worker v34 の chrCanonicalStoryCfg と同一規約（別 serializer 禁止）。
+     ・local body.cfg は一切書き換えない（projection 時にのみ濾過する read-only sanitize）。 */
+  var CANONICAL_CFG_ALLOW = ['authorNote','bannedPhrases','creepyMode','dialogueLevel',
+    'dramaLevel','engineMode','genrePresets','outLen','reactionLevel','toneKey'];
+  function canonicalStoryCfg(raw){
+    if (raw == null || typeof raw !== 'object' || Object.prototype.toString.call(raw) === '[object Array]') return null;
+    var out = {};
+    for (var i = 0; i < CANONICAL_CFG_ALLOW.length; i++){
+      var k = CANONICAL_CFG_ALLOW[i];
+      if (raw[k] !== undefined) out[k] = raw[k];
+    }
+    return out;
+  }
   function projectFrom(id, key){
     if (!id || !key) return null;
     var bodyRaw = lsg(key);
@@ -157,7 +173,7 @@
     var me = (id === 'default') ? null : metaEntry(id);
     if (me && me.deleted === true) return null;             // ★STEP2 は live のみ
     var turns = (d.turns && Object.prototype.toString.call(d.turns) === '[object Array]') ? d.turns : [];
-    var body = { cfg: (d.cfg === undefined ? null : d.cfg), cast: (d.cast === undefined ? null : d.cast),
+    var body = { cfg: canonicalStoryCfg(d.cfg === undefined ? null : d.cfg), cast: (d.cast === undefined ? null : d.cast),
                  scene: (d.scene === undefined ? null : d.scene), turns: turns,
                  mode: (d.mode === undefined ? null : d.mode) };
     return {
@@ -562,6 +578,8 @@
     /* ★fix718: read-only 可視化（書込 0） */
     canonState: function(){ return { ctx: canonCtx ? JSON.parse(JSON.stringify(canonCtx)) : null,
       holds: JSON.parse(JSON.stringify(canonHold)), cstats: JSON.parse(JSON.stringify(cstats)) }; },
+    /* ★fix719: 規約検証用 read-only（書込 0） */
+    canonicalStoryCfg: canonicalStoryCfg,
     projection: projection,
     canonicalString: canonicalString,
     contentHash: function(cb){ var c = projection(); if (!c) return cb(null); sha256hex(canonicalString(c), cb); },
