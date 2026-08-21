@@ -849,9 +849,16 @@
 
   /* ---- ★本体: 削除要求 --------------------------------------------------- */
   /* 戻り: Promise<{ok, code, ...}>。UIは ok を見るだけでよい。 */
+  /* ★★fix721.1(STEP4F.1/RULING31): restore transaction hold（読取のみ・書込0） */
+  function restoreHold(){
+    try { var j = JSON.parse(lsg('v292Dfix721_txn') || 'null');
+          return !!(j && (j.phase === 'PREPARED' || j.phase === 'APPLYING')); } catch(e){ return false; }
+  }
   function requestDelete(slotId, opts){
     opts = opts || {};
     stats.requested++;
+    if (restoreHold()){ note({ act:'refused', slotId:slotId, why:'restore transaction進行中' });
+      return Promise.resolve({ ok:false, code:'restore-hold' }); }        /* ★fix721.1 */
     var src = String(opts.source || 'unknown');
     var d = dep();
 
@@ -968,6 +975,7 @@
        ここでできるのは **候補を減らすこと** だけ。 */
   function resumePending(opts){
     var d = dep();
+    if (restoreHold()) return Promise.resolve({ ok:false, code:'restore-hold' });   /* ★fix721.1 */
     if (off() || missingDeps(d).length) return Promise.resolve({ ok:false, code:'not-ready' });
     /* ★fix708(Q3): terminal（再送では直らない）計画は自動再開の対象にしない。 */
     var allPending = readPending();
