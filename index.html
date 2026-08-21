@@ -48,7 +48,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260821-fix717';
+  var BUILT = '20260821-fix718';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2829,9 +2829,9 @@ G.init();
 <!-- v292Dfix246: per-storyストア(fix77状態/longmem/会話キャッシュ)をスロット単位に分離。features.js等の前に設置。OFF=v292StoreSlotIsoOff -->
 <script src="v292Dfix246-store-slot-isolation.js?cb=v292Dfix246"></script>
 <script src="v292Dfix543-save-guard.js?cb=v292Dfix696"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=v292Dfix717"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=v292Dfix718"></script>
 <script src="v292Dfix700-nonauthoritative-mirror.js?cb=v292Dfix700"></script>
-<script src="v292Dfix702-authority-cutover.js?cb=v292Dfix703"></script>
+<script src="v292Dfix702-authority-cutover.js?cb=v292Dfix718"></script>
 <!-- v292Dfix573: 主人公が「無言で消える」のを見張る。
      名前が「あった→無くなった」書込を捉え、旧値の控えを取り、その場で知らせる。
      書込は止めない・自動復元もしない。OFF=v292Dfix573Off -->
