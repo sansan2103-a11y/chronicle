@@ -6080,7 +6080,33 @@
       turns: S.turns,
       mode: S.mode
     };
+    /* ★★fix726(RULING48 §11): export copy だけから secret4 を落とす。
+       runtime S.cfg は変更しない（sanitizeStoryExport が deep copy を返す）。
+       policy の authority は fix726 側に一本化。ここに第二の scrub logic を書かない。 */
+    var G726 = window.__v292Dfix726;
+    if (!G726){
+      try { showToast('保護機能が読み込めないため書き出しを中止したよ'); } catch(e){}
+      console.warn(TAG, 'export aborted: fix726 guard missing');
+      return;                                   /* ★FAIL CLOSED */
+    }
+    if (G726.on()){
+      var sr726 = G726.sanitizeStoryExport(payload);
+      if (!sr726.ok){
+        try { showToast('書き出しを中止したよ'); } catch(e){}
+        console.warn(TAG, 'export aborted:', sr726.error);
+        return;                                 /* ★download 0 */
+      }
+      payload = sr726.payload;
+    }
     var json = JSON.stringify(payload, null, 2);
+    if (G726.on()){
+      var vr726 = G726.verifyExportText(json);
+      if (!vr726.ok){
+        try { showToast('書き出しを中止したよ'); } catch(e){}
+        console.warn(TAG, 'export invariant violation:', vr726.found);
+        return;                                 /* ★download 0 */
+      }
+    }
     var blob = new Blob([json], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
