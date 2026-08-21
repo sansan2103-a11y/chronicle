@@ -72,7 +72,7 @@
   var TAG = '[v292Dfix697:shadow-story-commit]';
   var DEBOUNCE_MS = 12000, MAXWAIT_MS = 45000, SIDE_POLL_MS = 20000, TIMEOUT_MS = 25000;
   var MARKER_KEY = 'v292Dfix402_storyRevs';   // ★collectLS 除外 prefix に同居（pkg baseline 不変）
-  var BUILD = 'fix719';
+  var BUILD = 'fix720';
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function lss(k,v){ try { localStorage.setItem(k, v); return true; } catch(e){ return false; } }
@@ -595,7 +595,9 @@
        ★shadow op 以外は通さない。 */
     shadowRequest: function(payload, cb){
       var op = payload && payload.op;
-      if (op !== 'getstory' && op !== 'deleteshadow'){ cb(null, 'OP_NOT_ALLOWED'); return; }
+      /* ★★fix720(STEP4D/RULING28): deletecanonical を allow-list に追加。
+         caller は fix587 の削除トランザクションだけ（write 系汎用 op はここに足さない）。 */
+      if (op !== 'getstory' && op !== 'deleteshadow' && op !== 'deletecanonical'){ cb(null, 'OP_NOT_ALLOWED'); return; }
       postSaveOnce(payload, cb);
     },
     /* ★★fix716(STEP C): per-story backfill 専用の **狭い** write 口。
