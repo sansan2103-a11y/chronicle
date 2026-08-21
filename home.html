@@ -218,7 +218,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260821-fix720';
+  var HOME_BUILT = '20260821-fix721';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -244,6 +244,11 @@
 <script src="v292Dfix660-delete-gateway.js?cb=v292Dfix680"></script>
 <script src="v292Dfix562-backup-inventory.js?cb=v292Dfix680"></script>
 <script src="v292Dfix564-snapshot.js?cb=v292Dfix680"></script>
+<!-- v292Dfix721(STEP4F): SAFE RESTORE ENGINE。fix291のimportAllを委譲で受け、
+     NON-DESTRUCTIVE MERGE + default-deny + durable journal + boot rollbackで復元する。
+     配置契約(RULING31/32): fix564直後・全writer(291/587/399/402)より前 = RECOVERY EARLY。
+     観測=window.__v292Dfix721.status() / OFF=v292Dfix721Off -->
+<script src="v292Dfix721-safe-restore.js?cb=v292Dfix721"></script>
 <!-- ★fix660(B): BackupGC。削除候補を選ぶ層。分類は fix562 が唯一の正なのでその後ろ -->
 <script src="v292Dfix660-backup-gc.js?cb=v292Dfix680"></script>
 <script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix680"></script>
@@ -256,8 +261,8 @@
        fix697 の projection() は常に null → commit は発生しない（さらに fix697 は既定 OFF）。
      ・home.html には S / __chronicleGetState が無いので S.save wrap も成立しない（wrapSave は空振りして諦める）。
      ・fix587 より前に置く（fix587 は呼び出し時に参照するので順序依存は無いが、owner を先に載せる）。 -->
-<script src="v292Dfix697-shadow-story-commit.js?cb=v292Dfix720"></script>
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix720"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=v292Dfix721"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix721"></script>
 <!-- ★fix602: 墓標が立ったスロットへの書き込みを影で止める（別途配信） -->
 <script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix680"></script>
 <!-- ★fix642: 停止中の削除(blocked-stale-legacy)を、クラウド墓標の read-back を根拠に
