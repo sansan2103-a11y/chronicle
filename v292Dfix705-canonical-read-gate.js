@@ -37,7 +37,7 @@
   'use strict';
   if (window.__v292Dfix705) return;                 /* 冪等（自 namespace のみ） */
   var TAG = '[v292Dfix705:canonical-read-gate]';
-  var BUILD = 'fix705+719merge';
+  var BUILD = 'fix705+719merge+721gate';
   var TIMEOUT_MS = 25000;
   var APPLIED_KEY = 'v292Dfix705_applied';          /* ★sessionStorage（localStorage ではない） */
 
@@ -45,6 +45,18 @@
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix705Off') === '1'; }
   function on(){ return !off() && lsg('v292Dfix705On') === '1'; }
+
+  /* ★★fix721.2(STEP4F.2/RULING32 §2): INDEX PRE-RECOVERY SIDE EFFECT GAP 封鎖。
+     restore journal(v292Dfix721_txn)が PREPARED/APPLYING の間は、fix705 は
+     getstory / classify / apply / body write を一切開始しない（読取のみのgate。
+     journal を localStorage から直読するので fix721 の load 前でも有効）。
+     journal 不在/壊れ = hold 無し（従来挙動）。第二markerは作らない。 */
+  function restoreHold721(){
+    try {
+      var j = JSON.parse(lsg('v292Dfix721_txn') || 'null');
+      return !!(j && (j.phase === 'PREPARED' || j.phase === 'APPLYING'));
+    } catch(e){ return false; }
+  }
 
   // ---- sessionStorage（apply → reload の収束記録） ----
   function ssGet(k){ try { return sessionStorage.getItem(k); } catch(e){ return null; } }
@@ -277,6 +289,8 @@
     if (!on()) return cb({ skipped: 'OFF' });
     if (!STORY_ID) return cb({ skipped: 'NO_STORY_ID' });
     if (classifyStarted) return cb({ skipped: 'ALREADY_RAN' });    /* ★document あたり1回 */
+    /* ★fix721.2: restore-hold 中は開始しない（classifyStarted を消費しない = hold 解除後に実行可能） */
+    if (restoreHold721()) return cb({ skipped: 'restore-hold' });
     classifyStarted = true;
     state.phase = 'classifying';
 
@@ -546,6 +560,9 @@
 
   var bootN = 0;
   (function bootPoll(){
+    /* ★fix721.2: restore journal PREPARED/APPLYING 中は分類を開始せず待機だけ続ける
+       （getstory 0 / apply 0 / body write 0。bootN も消費しない）。 */
+    try { if (restoreHold721()) { setTimeout(bootPoll, 250); return; } } catch(e){}
     bootN++;
     try {
       if (!on() || !STORY_ID || state.phase === 'stopped') return;
