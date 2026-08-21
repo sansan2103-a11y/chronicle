@@ -72,15 +72,17 @@
   var TAG = '[v292Dfix697:shadow-story-commit]';
   var DEBOUNCE_MS = 12000, MAXWAIT_MS = 45000, SIDE_POLL_MS = 20000, TIMEOUT_MS = 25000;
   var MARKER_KEY = 'v292Dfix402_storyRevs';   // ★collectLS 除外 prefix に同居（pkg baseline 不変）
-  var BUILD = 'fix723';
+  var BUILD = 'fix724';
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function lss(k,v){ try { localStorage.setItem(k, v); return true; } catch(e){ return false; } }
   function off(){ return lsg('v292Dfix697Off') === '1'; }
-  /* ★★fix723(STEP4H/RULING36 §Q3): DEFAULT ON + EXPLICIT OFF。
-     kill switch は従来と同一キー v292Dfix697Off === '1'。opt-in キー On='1' も引き続き有効。
-     On='0' を明示した場合だけ従来 opt-in 相当に戻す（段階展開用の逃げ道）。 */
-  function on(){ if (off()) return false; if (lsg('v292Dfix697On') === '0') return false; return true; }
+  /* ★★fix724(RULING37 §15/§24): FLAG 2-STATE CONTRACT。
+     Off==='1' → OFF / それ以外 → DEFAULT ON。これだけ。
+     legacy の v292Dfix697On は '1' でも '0' でも effective state に影響させない
+     （fix723 の 3 値契約は STALE_EXPLICIT_ZERO_FLAG_SUPPRESSES_DEFAULT_ON のため撤回）。
+     storage migration は行わない（残っている On キーを削除しない）。 */
+  function on(){ return !off(); }
 
   // ---- storyId（fix694 authority のみ・chr6_active_slot 不使用） ----
   function authorityKey(){
@@ -538,20 +540,87 @@
     pushTimer = setTimeout(function(){ pushTimer = null; firstDirtyTs = 0; commit('debounce'); }, wait);
   }
 
-  // ---- トリガ1: S.save 相乗り（fix402 と同型・独立 wrap） ----
+  // ---- トリガ1: S.save 相乗り ----
+  /* ★★fix724(RULING37 §21-C): SAVE_CHAIN_TRUNCATED_AT_FEATURES_JS_FOR_NAMED_SLOTS 対策。
+     ■何が起きていたか（RULING37 で確定した root cause）
+       features.js(fix30) の S.save wrapper は named slot（chr6_slot_*）のとき
+       inner を呼ばずに自分で lsSet して return する。
+       → features.js より **内側** に install された層は、実 story の save で丸ごと飛ばされる。
+       fix697 は内側に居たため markDirty が一度も発火しなかった（production 実測）。
+     ■修正方針（fix444 world-law と同型・実績のある方式）
+       (1) 冪等ガードを S 側フラグ → **関数側マーカー S.save.__f697** へ移す。
+       (2) 低頻度 interval で「マーカーが消えていたら再 wrap」する。
+           → 後から誰かが上に被せても、fix697 は必ず **最外殻へ戻る**＝truncation の外へ出る。
+       (3) 内側関数の own props を全継承する（fix419c 教訓。__f444 等を隠さない）。
+       (4) **多重 wrap しても markDirty は 1 save につき 1 回だけ**にする（depth ガード）。
+           GPT裁定 §22 の「markDirty 二重発火 0 / commit storm 0」を構造で保証する。
+     ■やらないこと
+       ・features.js を書き換えない（named slot の保存経路には一切触れない）
+       ・S.__f697wrapped は後方互換で書き続けるが **判定には使わない**
+       ・bind しない（fix444 と同じく this を素通しする） */
+  var REARM_MS = 2000;                    /* GPT裁定 RULING38 §Q3: 2000ms APPROVED（5000 へ落とさない） */
+  var saveDepth = 0;
+  var myWrapper = null;                   /* ★identity。marker だけに頼らない（後述） */
+  var wrapStats = { installs: 0, rearmChecks: 0, marks: 0, skippedNoChange: 0 };
+
+  /* ★★fix724(RULING38 §STOP): BLOCKED SAVE で false-dirty を作らない。
+     fix600/fix635 の new-story-guard は「保存を通さない」= inner が body を書かずに return する。
+     最外殻の fix697 が無条件に markDirty すると、書かれていない保存で commit が走ってしまう。
+     → **この save で story body が実際に変化したときだけ** markDirty する。
+     読むのは current document の body key 1 本だけ（storage write 0 / network 0）。 */
+  function bodySnapshot(){
+    try { var id = storyId(); if (!id) return null; return lsg(keyOf(id)); } catch(e){ return null; }
+  }
+
   function wrapSave(){
     try {
       var S = (typeof window.__chronicleGetState === 'function') ? window.__chronicleGetState('fix697')
             : (window.S || null);
-      if (!S || typeof S.save !== 'function' || S.__f697wrapped) return !!(S && S.__f697wrapped);
-      var os = S.save.bind(S);
-      S.save = function(){ var r = os.apply(this, arguments); try { markDirty(); } catch(e){} return r; };
-      S.__f697wrapped = true; S.save.__f697 = true;
-      try { console.log(TAG, 'S.save wrapped (shadow trigger)'); } catch(e){}
+      if (!S || typeof S.save !== 'function') return false;
+      /* ★★identity ガード（marker ガードでは不十分）:
+         fix444/fix445 は inner の own props を全継承するため、__f697 マーカーだけを見ると
+         「fix444 の wrapper に複写された __f697」を自分だと誤認し、fix697 層が内側に埋まったまま
+         再装着されない。したがって **関数 identity** で判定する。 */
+      if (S.save === myWrapper) return true;
+      var os = S.save;
+      var w = function(){
+        var top = (saveDepth === 0);
+        var before = top ? bodySnapshot() : null;
+        saveDepth++;
+        try { return os.apply(this, arguments); }
+        finally {
+          saveDepth--;
+          if (saveDepth === 0){                 /* ★最外殻の層でだけ判定。層が二重でも 1 回 */
+            try {
+              var after = bodySnapshot();
+              if (after !== before){ wrapStats.marks++; markDirty(); }
+              else { wrapStats.skippedNoChange++; }
+            } catch(e){}
+          }
+        }
+      };
+      /* ★★fix724(RULING38 §STOP: wrapper ping-pong 防止) MARKER UNION。
+         fix419c の教訓どおり inner の own props を全継承するが、それだけでは足りない。
+         ・fix444 の再装着条件は `S.save.__f444` の有無（関数側マーカー）。
+         ・自分より外に「props を継承しない wrapper」（fix399/fix402/fix427/… ）が
+           1 枚でも挟まると __f444 が消え、fix444 が再 wrap → 自分が埋没 → 自分も再 wrap …
+           と 2 秒ごとに層が増え続ける（実測で再現した）。
+         → **一度でも見たマーカーは落とさない**（os の props ∪ 直前の自分の props）。
+           これで fix444 の guard は満たされ続け、ping-pong が止まる。 */
+      try { var ks = Object.keys(os); for (var i = 0; i < ks.length; i++){ try { w[ks[i]] = os[ks[i]]; } catch(e2){} } } catch(e3){}
+      try { if (myWrapper){ var pk = Object.keys(myWrapper);
+              for (var j = 0; j < pk.length; j++){ try { if (w[pk[j]] === undefined) w[pk[j]] = myWrapper[pk[j]]; } catch(e4){} } } } catch(e5){}
+      w.__f697 = true;                          /* 観測用マーカー（判定には使わない） */
+      myWrapper = w;
+      S.save = w;
+      S.__f697wrapped = true;                   /* 後方互換のみ。判定に使わない */
+      wrapStats.installs++;
+      try { console.log(TAG, 'S.save wrapped (shadow trigger, re-armable)'); } catch(e){}
       return true;
     } catch(e){ return false; }
   }
-  (function wpoll(){ wpoll._n = (wpoll._n || 0) + 1; if (wrapSave()) return; if (wpoll._n > 120) return; setTimeout(wpoll, 500); })();
+  wrapSave();
+  try { setInterval(function(){ wrapStats.rearmChecks++; try { wrapSave(); } catch(e){} }, REARM_MS); } catch(e){}
 
   // ---- トリガ2: sidecar 指紋 poll（read-only・aiInstr/genderMap 変更を拾う） ----
   var lastFp = null;
@@ -598,7 +667,14 @@
     off: off, on: on,
     status: function(){ return { on: on(), loggedIn: isLoggedIn(), storyId: storyId(),
       authorityKey: authorityKey(), documentShadowBaseRev: docBaseRev, docRevInit: docBaseRevInit,
-      bootCache: revMap(), inFlight: inFlight, stats: JSON.parse(JSON.stringify(stats)) }; },
+      bootCache: revMap(), inFlight: inFlight, stats: JSON.parse(JSON.stringify(stats)),
+      /* ★★fix724: save wrapper の装着状況（RULING37 §22 の観測点） */
+      saveWrap: { installs: wrapStats.installs, rearmChecks: wrapStats.rearmChecks,
+                  marks: wrapStats.marks, skippedNoChange: wrapStats.skippedNoChange,
+                  attached: (function(){ try { var S = (typeof window.__chronicleGetState === 'function')
+                    ? window.__chronicleGetState('fix697') : (window.S || null);
+                    return !!(S && S.save && S.save === myWrapper); } catch(e){ return false; } })(),
+                  rearmMs: REARM_MS } }; },
     stats: function(){ return JSON.parse(JSON.stringify(stats)); },
     ledger: function(){ return LEDGER.slice(); },
     flush: function(){ commit('manual'); return true; },
@@ -687,5 +763,5 @@
       postSaveOnce(body, cb);
     }
   };
-  try { console.log(TAG, 'loaded (shadow non-authoritative / default ON(fix723) / kill=v292Dfix697Off=1)'); } catch(e){}
+  try { console.log(TAG, 'loaded (shadow non-authoritative / default ON / kill=v292Dfix697Off=1 / save-wrap re-arm)'); } catch(e){}
 })();
