@@ -206,7 +206,17 @@
          修復対象を恒久的に取りこぼす（新しい race を作らない）。 */
       var S0 = getS(); if (!S0 || S0.inFlight) return;
       var s = sig(); if (!s || s === lastSig) return;
-      lastSig = s; apply(); applyDemote();
+      /* ★★fix731(RULING74 §4・§5・§6) — FIX680_NORMAL_LOAD_HISTORICAL_REWRITE = DISABLED BY DESIGN.
+         apply() / applyDemote() はどちらも S.turns 全体（＝保存済みの過去ターン）を走査して
+         _convSays[].who を書き換え、S.save() まで到達する。通常の open / load / hydrate から
+         自動でそれが起きることが HISTORICAL_SPEAKER_IMMUTABILITY_ON_NORMAL_LOAD 契約に反する。
+         実測(2026-08-24 detached): sms4np33eyg turn30 i4/i7/i8 について planDemote が
+         `緒方 湊 -> ???` を score -50 で 3/3 提案し、server 側の値と完全一致した。
+         つまり applyDemote は **有効な話者名を控え無しで ??? へ落とす**現役の劣化経路である。
+         ここでは自動起動だけを止める。plan / dryRun / planDemote / state は診断用に残し、
+         apply(true) / applyDemote(true) は将来の explicit repair 経路として温存する
+         （新しい localStorage flag は増やさない = §6）。 */
+      lastSig = s;   /* sig は進めて再入を防ぐ。自動 apply は行わない。 */
     } catch(e){}
   }
   try { setTimeout(tick, 5000); setInterval(tick, 2500); } catch(e){}

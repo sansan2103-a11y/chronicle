@@ -137,7 +137,14 @@
   // ★1文字ラベル(男/女)は禁止: 彼女/少女/長男 等に部分一致して大事故になる(実測)
   var PRONOUN_WHO = ['私','俺','僕','彼','彼女','あなた','お前','君','誰か','自分']; // fix495(B1)
   function _dropOn(){ try { return localStorage.getItem('v292Dfix469DropOn') === '1'; } catch(e){ return false; } }  // fix495(B5)
-  var _stats = { wouldDrop: 0, backupFail: 0, wouldPronounFlip: 0, pronounAmbiguous: 0, pronounNoGender: 0, wouldToneFlip: 0, toneConflict: 0 };  // fix498: 代名詞ブリッジ診断 / 根治: 口調ブリッジ
+  var _stats = { wouldDrop: 0, backupFail: 0, wouldPronounFlip: 0, pronounAmbiguous: 0, pronounNoGender: 0, wouldToneFlip: 0, toneConflict: 0, historicalSkipped: 0 };  // fix498: 代名詞ブリッジ診断 / 根治: 口調ブリッジ / fix730: 過去ターン不触の件数
+  /* ★★fix730(RULING72 §15・§16): plan phase を非破壊にするための最小 clone。
+     own property を全部写す(_rv や将来の付随フィールドを落とさない)。 */
+  function _cloneCS(o){
+    var n = {}, k;
+    for (k in o){ if (Object.prototype.hasOwnProperty.call(o, k)) n[k] = o[k]; }
+    return n;
+  }
   var GENERIC_LABELS = ['若い男','若い女','若者','青年','老人','老婆','老爺','少年','少女','子供','男性','女性','人影','黒衣の男','黒衣の女'];
   var ATTR_CONSTRUCT = '(の(?:声|口調|言葉|囁き|呟き|悲鳴|叫び)|[はが](?:[^。、\\n]{0,6})?(?:言|口を開|続け|答え|尋ね|叫|呟|囁|告げ|問い|返し|吐き捨て))';
   function extraTokens(t, names, narr){
@@ -395,7 +402,10 @@
     } catch(e){}   // fail-closed
   }
   //   allTokens=[{canon(登録名), tok(短縮含む)}]。本文照合はtokで行い canon に写す(短縮名対応)。
-  function pronounShadow(cs, i, lines, at, heroName, profs, allTokens){
+  /* ★★fix730(RULING72 §15・§18): sink を渡された場合は「その場で永続ログへ書かない」。
+     plan phase は純粋に保ち、適用が確定してから applyTurn 側で flush する。
+     sink 未指定の呼び出し(外部/診断)は従来どおり即書き。 */
+  function pronounShadow(cs, i, lines, at, heroName, profs, allTokens, sink){
     try {
       var c = cs[i];
       if (i === 0) return;                                   // card0(実発話)保護
@@ -426,7 +436,7 @@
       try { console.log(TAG, '[wouldPronounFlip(shadow)]', String(c.who), '→', cand, String(c.say).slice(0,14)); } catch(e){}
       // fix508: 追加専用の永続ログへ(dedup・fail-closed・chr6/セーブ非破壊)
       try {
-        _pshadowLog({
+        var _prec = {
           ts: Date.now(),
           slot: _activeStoreKey(),
           turnFp: (String(lines[0]||'') + String(lines[1]||'')).slice(0, 40),
@@ -435,7 +445,9 @@
           cand: cand,
           say: String(c.say||'').slice(0, 40),
           voice: nextLine.slice(0, 40)
-        });
+        };
+        if (sink) sink.push({ kind: 'p', rec: _prec });   // ★fix730: 遅延(適用確定後に flush)
+        else _pshadowLog(_prec);
       } catch(e){}
     } catch(e){}
   }
@@ -640,9 +652,14 @@
     var lines = narr.split('\n');
     var allTokens = tokens.concat(extraTokens(t, names, narr));   // v2: 未登録話者も候補に
     var pText = norm((t && t.playerText) || '');
-    var out = [], changes = [], changed = false;
+    /* ★★fix730(RULING72 §12・§15・§16): PLAN → BACKUP → APPLY。
+       plan phase は live state を 1 バイトも変えない。書き換えが必要になった要素だけ
+       clone してから触る(識別子の入れ替わりを最小にするため lazy clone)。
+       永続 log(pshadow/toneshadow)も plan では書かず pending へ積み、
+       applyTurn が backup 成功を確認してから flush する(§17・§18)。 */
+    var out = [], changes = [], changed = false, pending = [];
     for (var i = 0; i < cs.length; i++){
-      var c = cs[i];
+      var c0 = cs[i], c = c0;
       if (!c) continue;
       if (!c.say){ out.push(c); continue; }   // fix495(F12): say欠落は不触で素通し(黙殺削除しない)
       if (c._rv === 1 || (pText && norm(c.say) === pText)){ out.push(c); continue; }
@@ -656,6 +673,7 @@
       var cur = canonicalWho(cur0, names);
       if (cur !== cur0){
         changes.push({ act: 'canon', from: cur0, to: cur, say: String(c.say).slice(0, 14) });
+        if (c === c0) c = _cloneCS(c0);          /* ★fix730: live 非破壊 */
         c.who = cur; changed = true;
       }
       var res = score(c.say, prev, next, allTokens, profs, prevSand);
@@ -666,6 +684,7 @@
       }
       if (d.act === 'flip' && d.to !== cur){
         changes.push({ act: 'fix', from: cur, to: d.to, score: d.score, say: String(c.say).slice(0, 14) });
+        if (c === c0) c = _cloneCS(c0);          /* ★fix730: live 非破壊 */
         c.who = d.to; changed = true; out.push(c); continue;
       }
       if (d.act === 'drop'){
@@ -687,18 +706,21 @@
         if (pick){
           _stats.wouldToneFlip++;
           try { console.log(TAG, '[wouldToneFlip' + (_toneFlipOn() ? '(FLIP)' : '(shadow)') + ']', cur, '→', pick.to, '(' + pick.reasons.join(',') + ')', String(c.say).slice(0, 16)); } catch(e){}
-          try { _toneShadowLog({ ts: Date.now(), slot: _activeStoreKey(), turnFp: (String(lines[0]||'') + String(lines[1]||'')).slice(0, 40), i: i, from: cur, to: pick.to, why: pick.reasons.join(','), say: String(c.say||'').slice(0, 40) }); } catch(e){}
+          /* ★fix730(RULING72 §18): 「適用済み」を名乗るログは apply 確定後にだけ書く。
+             backup 失敗で中止されたときに applied 記録が残らないよう pending へ回す。 */
+          try { pending.push({ kind: 't', rec: { ts: Date.now(), slot: _activeStoreKey(), turnFp: (String(lines[0]||'') + String(lines[1]||'')).slice(0, 40), i: i, from: cur, to: pick.to, why: pick.reasons.join(','), say: String(c.say||'').slice(0, 40) } }); } catch(e){}
           if (_toneFlipOn()){
             changes.push({ act: 'toneFix', from: cur, to: pick.to, why: pick.reasons.join(','), say: String(c.say).slice(0, 14) });
+            if (c === c0) c = _cloneCS(c0);      /* ★fix730: live 非破壊 */
             c.who = pick.to; changed = true; out.push(c); continue;
           }
         }
       }
       // fix498(C+): keep判定のheroタグカードに代名詞ブリッジのshadow診断(記録のみ・書換なし)
-      if (d.act === 'keep' && names && names.length) { pronounShadow(cs, i, lines, at, String(names[0]||''), profs, allTokens); }
+      if (d.act === 'keep' && names && names.length) { pronounShadow(cs, i, lines, at, String(names[0]||''), profs, allTokens, pending); }
       out.push(c);
     }
-    return { changed: changed, changes: changes, arr: out };
+    return { changed: changed, changes: changes, arr: out, pending: pending };
   }
 
   // ---------- 適用（v2: 凍結方式。全過去ターンの永続再採点を廃止） ----------
@@ -757,12 +779,26 @@
           localStorage.setItem('chr6_bk_fix469_' + _ak, localStorage.getItem(_ak) || '');
           _bkOk = true;
         } catch(e){ _stats.backupFail++; }
-        if (!_bkOk){ try { console.warn(TAG, 'backup failed -> 変更中止(fail-closed)'); } catch(e){} return { changed: false, changes: [], arr: S.turns[ti]._convSays }; }
+        if (!_bkOk){ try { console.warn(TAG, 'backup failed -> 変更中止(fail-closed)'); } catch(e){} return { changed: false, changes: [], arr: S.turns[ti]._convSays, pending: [] }; }
         backedUp = true;
       }
       S.turns[ti]._convSays = p.arr;
+      /* ★★fix730(RULING72 §17・§18): ここまで来て初めて「適用済み」。
+         plan で積んだ shadow ログはこの時点で flush する。backup 失敗で
+         上の return を通った場合は 1 件も書かれない。 */
+      _flushPending(p.pending);
     }
     return p;
+  }
+
+  function _flushPending(pending){
+    if (!pending || !pending.length) return;
+    for (var q = 0; q < pending.length; q++){
+      try {
+        if (pending[q].kind === 't') _toneShadowLog(pending[q].rec);
+        else if (pending[q].kind === 'p') _pshadowLog(pending[q].rec);
+      } catch(e){}
+    }
   }
 
   function repair(){
@@ -781,11 +817,17 @@
       if (reg && reg.frozen) continue;
       var sig = sigOf(S.turns[ti]);
       if (!isNew){
-        // 過去ターン: 読み込み時に1回だけ「明確な誤りの振替」。以後凍結。
-        if (reg) continue;
-        var p0 = applyTurn(S, ti, false, tokens, profs, ns);
-        evalReg[ti] = { sig: sigOf(S.turns[ti]), evals: 1, frozen: true };
-        if (p0.changed){ any = true; log.push({ turn: ti + 1, changes: p0.changes }); }
+        /* ★★fix730(RULING72 §8・§9・§10・§11) — HISTORICAL CONVSAYS IMMUTABILITY:
+           既に保存済みの過去ターンは OPEN / LOAD / HYDRATE では **一切書き換えない**。
+           旧実装は「読み込み時に1回だけ明確な誤りの振替」を行っていたが、
+           実測(smrj0rvnuup turn8/i4・turn13/i2)でその「明確な誤り」判定自体が
+           同じ地の文の中にある反証を覆して誤爆することが確認された。
+           who が canonical / 短縮 / ??? / unknown のいずれであっても load を repair
+           trigger にしない(§9・§10)。unknown 話者の解決が必要なら explicit repair /
+           versioned migration / 新ターン生成時 resolution へ将来分離する。
+           新ターン(ti >= baseTurns)の scoring は従来どおり維持する(§11)。 */
+        evalReg[ti] = { sig: sig, evals: 1, frozen: true };
+        _stats.historicalSkipped++;
         continue;
       }
       // 新ターン: シグネチャが変わったときだけ再評価。最大3回で凍結。
