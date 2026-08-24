@@ -347,6 +347,17 @@
           note(lc); return cb(lc);                     /* ★promotestory request 0 */
         }
         stats.promotes++;
+        /* ★★fix733(RULING90 §11-§14) — TYPE A SIDE-PORT NOTIFY
+           promote 系は server の authority / lifecycle 自体を変える。fix697 が持っている
+           document rev authority と route は送信を試みた時点で信用できなくなるため、
+           **request attempt 時点で** invalidate する（応答を待たない。network error でも
+           server 側で成立している可能性があるため）。
+           fix697 側は AUTHORITY_RELOAD_REQUIRED になり、reload まで body write 0 になる。
+           ここでは fix702 の判定・CAS・marker には一切触れていない。 */
+        try { var _f697 = window.__v292Dfix697;
+              if (_f697 && typeof _f697.invalidateDocRevAuthority === 'function'){
+                _f697.invalidateDocRevAuthority('promotestory-attempt', id, true);
+              } } catch(_e733){}
         var mid = 'promo:' + id + ':' + g.rev + ':' + lh;
         post({ op: 'promotestory', id: id, expectedRev: g.rev, expectedHash: lh, mid: mid }, function(e2, r2){
           /* ★★P0-4B: network error / timeout / 曖昧応答。
@@ -440,6 +451,17 @@
         if (!g.serverHash || g.serverHash !== lh) return cb({ storyId: id, ok: false, stage: 'precheck', error: 'HASH_MISMATCH', pre: pre });
         stats.promoteDeletes++;
         var mid = 'promodel:' + id + ':' + g.rev + ':' + lh;
+        /* ★★fix733(RULING90 §11-§14) — TYPE A SIDE-PORT NOTIFY
+           promote 系は server の authority / lifecycle 自体を変える。fix697 が持っている
+           document rev authority と route は送信を試みた時点で信用できなくなるため、
+           **request attempt 時点で** invalidate する（応答を待たない。network error でも
+           server 側で成立している可能性があるため）。
+           fix697 側は AUTHORITY_RELOAD_REQUIRED になり、reload まで body write 0 になる。
+           ここでは fix702 の判定・CAS・marker には一切触れていない。 */
+        try { var _f697 = window.__v292Dfix697;
+              if (_f697 && typeof _f697.invalidateDocRevAuthority === 'function'){
+                _f697.invalidateDocRevAuthority('promotedelete-attempt', id, true);
+              } } catch(_e733){}
         post({ op: 'promotedelete', id: id, expectedRev: g.rev, expectedHash: lh, deleteOpId: localOpId, mid: mid }, function(e2, r2){
           if (e2 || !r2){ stats.netFail++; return cb({ storyId: id, ok: false, stage: 'promotedelete', error: 'NET_FAIL', pre: pre }); }
           var j2 = r2.j || {};

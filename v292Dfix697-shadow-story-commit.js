@@ -275,18 +275,280 @@
     try { var m = JSON.parse(lsg(MARKER_KEY) || '{}'); return (m && typeof m === 'object') ? m : {}; }
     catch(e){ return {}; }
   }
-  var docBaseRev = null, docBaseRevInit = false;      // ★非永続 runtime 値（この document 専用）
-  function initDocRev(){
-    if (docBaseRevInit) return;
-    var id = storyId();
-    if (!id) return;                                   // 権限なし document は初期化もしない
-    docBaseRevInit = true;
-    docBaseRev = +revMap()[id] || 0;                   // ★boot cache から一度だけコピー
+  /* ★★fix733(RULING83 §15-§16 / §40 / §55-§59 ・ RULING88 §5-§7 ・ RULING89) — DOCUMENT REV AUTHORITY
+     ■旧実装の欠陥（型エラー）
+       docBaseRev = +revMap()[id] || 0
+       は **UNKNOWN（cache に entry が無い）と KNOWN_REV_0（server に row が無い）を同一視**していた。
+       server row が実在するのに cache が無い document は baseRev 0 で putstory し、
+       409 SHADOW_CONFLICT（advance 0 / retry 0）へ落ちて **永久に同期できない**。
+     ■3 状態
+       UNKNOWN … authority 未確定。**rev 0 として送らない**（write 0 / commit intent は保持）
+       KNOWN_0 … authoritative NOT_FOUND を確認したときだけ（server 不在の新規 story）
+       KNOWN_N … fresh authoritative read の rev、または自 document の成功 CAS 結果
+       v292Dfix402_storyRevs は **hint / cache であって write authority ではない**（RULING83 §40）。
+     ■AUTHORITY EPOCH（RULING89 §12-§15）
+       fix705 の docAuthority() は **document あたり one-shot**。side-port 等で server rev が進んだ後に
+       同じ snapshot を再採用すると STALE_ONE_SHOT_AUTHORITY_RECONSUMPTION になる。
+       そこで epoch を持ち、**epoch 0 でだけ fix705 snapshot を bootstrap authority として採用**する。
+       invalidate すると epoch++ され、以後その snapshot は二度と authority にならない。
+       epoch>0 で write 需要が出たときだけ **lazy authoritative getstory** を 1 epoch 1 回だけ行う。
+     ■fix705 の safety switch は迂回しない（RULING89 §9-§10）
+       OFF（docAuthority() が null）/ unsafe / STOP は lazy GET でも回復させない。write 0 を維持する。 */
+  /* ★fix733 */
+  var REV_UNKNOWN = 'UNKNOWN', REV_KNOWN = 'KNOWN';
+  var docRevState = REV_UNKNOWN;     // 'UNKNOWN' | 'KNOWN'
+  var docBaseRev = null;             // KNOWN のときだけ数値。UNKNOWN では null（0 へ落とさない）
+  var docRevSource = null;           // どの証拠で KNOWN / なぜ UNKNOWN か
+  var docRevId = null;
+  var docBaseRevInit = false;        // 互換: status().docRevInit
+  /* ★fix733 */
+  var authorityEpoch = 0;            // ★invalidate のたびに ++
+  var refreshInFlightEpoch = -1;     // ★1 epoch につき最大 1 in-flight GET
+  var initialLocalHash = null;       // document bind 時の local canonical hash（read-only capture）
+  var initialLocalHashAt = null;
+  /* ★fix733 */
+  var lineageBaseHash = null;        // 「この local が base にしている server content」の証明済み hash
+  var pendingIntent = false;         // ★AUTHORITY_PENDING の commit intent（poll budget 切れでも捨てない）
+  /* ★fix733(RULING90) ROUTE COHERENCE
+     rev だけでなく **authority 種別**も coherent でなければ送ってはいけない。
+     TYPE A（authority / lifecycle を変える side-port）が current document へ attempt されたら
+     以後この document では body write 0 にし、reload で fix705 に再分類させる。 */
+  var authorityReloadRequired = false;
+  var bootstrapAuthority = null;     // epoch0 で確定した authority class（'shadow' | 'canonical' | null=absent）
+  var bootstrapPresent = null;       // epoch0 で server row が在ったか
+  /* ★fix733 */
+  var revStats = { knownFromAbsent: 0, knownFromPresent: 0, unknownBlocks: 0, divergenceBlocks: 0,
+                   pendingRechecks: 0, invalidations: 0, lazyReads: 0, staleRefreshDiscarded: 0,
+                   pendingUnresolved: 0 };
+
+  /* ★fix733 */
+  function setDocRevKnown(id, rev, source){
+    docRevState = REV_KNOWN; docBaseRev = (+rev || 0); docRevId = String(id);
+    docRevSource = source; docBaseRevInit = true; recheckTries = 0;
+    /* cache は「次回 boot のための hint」として更新するだけ。write authority には使わない。 */
+    try { var m = revMap(); m[String(id)] = docBaseRev; lss(MARKER_KEY, JSON.stringify(m)); } catch(e){}
   }
+  /* ★fix733 */
+  function setDocRevUnknown(reason){
+    docRevState = REV_UNKNOWN; docBaseRev = null; docRevSource = reason || null;
+  }
+  /* side-port / 409 で server rev が進んだ（または base が古いと確定した）とき。
+     **current document への操作のときだけ**無効化する。非 current story は current authority を変えない。
+     無効化は必ず UNKNOWN へ落とすだけで、rev を進めることは決してしない（fail-closed）。 */
+  /* ★fix733 */
+  function invalidateDocRevAuthority(reason, id, typeA){
+    var cur = storyId();
+    if (!cur) return false;
+    if (id != null && String(id) !== String(cur)) return false;
+    if (typeA === true){
+      /* ★★fix733(RULING90 §13): authority / lifecycle を変え得る side-port。
+         rev を取り直しても route（shadow / canonical / deleted）が変わっている可能性があるので
+         **lazy refresh で復活させない**。reload して fix705 に再分類させる。 */
+      authorityReloadRequired = true;
+      try { note({ kind: 'AUTHORITY_RELOAD_REQUIRED', id: cur, reason: String(reason || 'type-a') }); } catch(e){}
+    }
+    authorityEpoch++;                       /* ★stale snapshot の再消費を構造的に禁止 */
+    setDocRevUnknown('INVALIDATED:' + (reason || 'side-port'));
+    lineageBaseHash = null;
+    revStats.invalidations++;
+    try { note({ kind: 'DOC_REV_AUTHORITY_INVALIDATED', id: cur, reason: String(reason || 'side-port'),
+                 epoch: authorityEpoch }); } catch(e){}
+    return true;
+  }
+  /* 互換: boot 時の一括初期化は行わない（UNKNOWN のまま始める）。 */
+  function initDocRev(){ return; }
   function advanceDocRev(id, rev){
     // ★この document 自身の 200 normal / 200 noop / SEED_EQUIVALENT からのみ呼ばれる
-    docBaseRev = +rev || 0;
-    try { var m = revMap(); m[String(id)] = docBaseRev; lss(MARKER_KEY, JSON.stringify(m)); } catch(e){}
+    setDocRevKnown(id, rev, 'COMMIT_OK');
+  }
+
+  /* ---- lineage gate（RULING83 §55-§59 / RULING89 §21・§23） ----
+     CASE A  server absent                      → KNOWN_REV_0
+     CASE B  server hash == 現在の local         → KNOWN_N（送るものが無い / seed 相当）
+     CASE B' server hash == bind 時 local        → KNOWN_N（local は server current の子孫）
+     CASE B'' server hash == 証明済み lineage    → KNOWN_N
+     CASE C  上記いずれでもない                   → BOOTSTRAP_CONTENT_DIVERGENCE / write 0
+     **fresh read 成功 ≠ 自動送信。必ずこのゲートを通す。** */
+  /* ★fix733 */
+  function adoptAuthority(id, present, deleted, rev, hash, localHash, source, authorityClass){
+    if (authorityEpoch === 0){                     /* ★fix733: bootstrap の route を記録して以後の比較基準にする */
+      bootstrapPresent = (present === true);
+      bootstrapAuthority = (present === true) ? String(authorityClass || '') : null;
+    }
+    if (present === false){
+      revStats.knownFromAbsent++;
+      setDocRevKnown(id, 0, source + ':SERVER_ABSENT');
+      try { note({ kind: 'DOC_REV_KNOWN_0_SERVER_ABSENT', id: id, source: source }); } catch(e){}
+      return true;
+    }
+    if (deleted === true){ setDocRevUnknown('SERVER_DELETED'); return false; }
+    if (typeof rev !== 'number'){ setDocRevUnknown('NO_SERVER_REV'); return false; }
+    var sh = hash || null;
+    if (!sh){ setDocRevUnknown('NO_SERVER_HASH'); return false; }
+    if (sh === localHash || (initialLocalHash && sh === initialLocalHash)
+                         || (lineageBaseHash && sh === lineageBaseHash)){
+      revStats.knownFromPresent++;
+      setDocRevKnown(id, rev, source + ':SERVER_PRESENT');
+      if (!lineageBaseHash) lineageBaseHash = sh;
+      try { note({ kind: 'DOC_REV_KNOWN_N', id: id, rev: rev, source: source }); } catch(e){}
+      return true;
+    }
+    revStats.divergenceBlocks++;
+    setDocRevUnknown('BOOTSTRAP_CONTENT_DIVERGENCE');
+    try { note({ kind: 'BOOTSTRAP_CONTENT_DIVERGENCE', id: id, serverRev: rev, serverHash: sh,
+                 localHash: localHash, initialLocalHash: initialLocalHash, source: source }); } catch(e){}
+    return false;
+  }
+
+  /* fix705 の公開 contract のみを読む。内部 state は解釈しない。追加 network 0。 */
+  /* ★fix733 */
+  function fresh705(id){
+    var F5 = null;
+    try { F5 = window.__v292Dfix705; } catch(e){ F5 = null; }
+    if (!F5 || typeof F5.docAuthority !== 'function') return { err: 'NO_FIX705_MODULE' };
+    var a5 = null;
+    try { a5 = F5.docAuthority(); } catch(e){ return { err: 'FIX705_THREW' }; }
+    if (a5 === null) return { err: 'AUTHORITY_DISABLED' };        /* OFF / STORY_ID 無し */
+    if (!a5 || String(a5.id) !== String(id)) return { err: 'AUTHORITY_ID_MISMATCH' };
+    if (a5.unsafe === true) return { err: 'AUTHORITY_UNSAFE' };   /* STOP / 分類失敗は迂回しない */
+    return { a5: a5 };
+  }
+
+  /* ---- post-bootstrap lazy authoritative refresh（RULING89 §7-§8・§11-§15・§19） ----
+     ・fix705 を置き換えない。epoch 0 の bootstrap は必ず fix705 が担う。
+     ・epoch>0（= 一度 safe な authority を得た後に invalidate された document）でだけ使う。
+     ・1 epoch につき最大 1 in-flight。開始時の epoch を保持し、応答時に epoch が変わっていたら破棄。 */
+  /* ★fix733 */
+  function startLazyRefresh(id){
+    if (refreshInFlightEpoch === authorityEpoch) return;      /* GET storm を作らない */
+    refreshInFlightEpoch = authorityEpoch;
+    var myEpoch = authorityEpoch;
+    revStats.lazyReads++;
+    try { note({ kind: 'LAZY_AUTHORITY_REFRESH_START', id: id, epoch: myEpoch }); } catch(e){}
+    postSaveOnce({ op: 'getstory', id: id }, function(r, err){
+      if (myEpoch !== authorityEpoch){                        /* ★stale response は破棄 */
+        revStats.staleRefreshDiscarded++;
+        try { note({ kind: 'LAZY_AUTHORITY_REFRESH_DISCARDED', id: id, epoch: myEpoch,
+                     currentEpoch: authorityEpoch }); } catch(e){}
+        return;
+      }
+      refreshInFlightEpoch = -1;
+      if (err || !r){ setDocRevUnknown('LAZY_REFRESH_FAILED'); return; }
+      /* ★★fix733(RULING90 §16-§18) — lazy GET response validation。
+         fix705 を再実装はしない。Stage B の refresh に必要な最小条件だけを課す:
+           response OK / expected story id / recognized authority / not deleted /
+           numeric rev / full hash / TYPE R では bootstrap と同じ authority class。
+         いずれか欠けたら fresh base 不成立 = write 0。deleted / tombstone は絶対に KNOWN_0 にしない。 */
+      var j = r.j || {};
+      if (r.status === 404){
+        /* server row が消えている。bootstrap で present だった document を KNOWN_0 へ戻すのは
+           story resurrection になるので禁止（RULING90 §16）。 */
+        if (bootstrapPresent === false){
+          try { adoptAuthority(id, false, false, null, null, null, 'LAZY_REFRESH', null); } catch(e){}
+          setDocRevUnknown('LAZY_REFRESH_ABSENT_NEEDS_LOCAL_HASH');
+        }
+        authorityReloadRequired = true;
+        setDocRevUnknown('LAZY_REFRESH_SERVER_GONE');
+        try { note({ kind: 'AUTHORITY_RELOAD_REQUIRED', id: id, reason: 'lazy-refresh-404' }); } catch(e){}
+        return;
+      }
+      if (r.status !== 200 || !j.ok){ setDocRevUnknown('LAZY_REFRESH_HTTP_' + r.status); return; }
+      if (String(j.id != null ? j.id : id) !== String(id)){ setDocRevUnknown('LAZY_REFRESH_ID_MISMATCH'); return; }
+      if (j.deleted === true){
+        authorityReloadRequired = true;
+        setDocRevUnknown('LAZY_REFRESH_TOMBSTONE');
+        try { note({ kind: 'AUTHORITY_RELOAD_REQUIRED', id: id, reason: 'lazy-refresh-tombstone' }); } catch(e){}
+        return;                                                  /* resurrection 禁止 */
+      }
+      if (typeof j.rev !== 'number'){ setDocRevUnknown('LAZY_REFRESH_NO_REV'); return; }
+      if (!j.serverHash){ setDocRevUnknown('LAZY_REFRESH_NO_HASH'); return; }
+      var freshAuth = String(j.authority || 'shadow');
+      if (freshAuth !== 'shadow' && freshAuth !== 'canonical'){
+        setDocRevUnknown('LAZY_REFRESH_UNKNOWN_AUTHORITY'); return;
+      }
+      if (bootstrapAuthority != null && freshAuth !== bootstrapAuthority){
+        /* ★rev / hash が正しくても route が違えば送らない（RULING90 §15）。 */
+        authorityReloadRequired = true;
+        setDocRevUnknown('AUTHORITY_ROUTE_CHANGED');
+        try { note({ kind: 'AUTHORITY_RELOAD_REQUIRED', id: id, reason: 'authority-route-changed',
+                     bootstrap: bootstrapAuthority, fresh: freshAuth }); } catch(e){}
+        return;
+      }
+      var c = null;
+      try { c = projection(); } catch(e){ c = null; }
+      if (!c){ setDocRevUnknown('LAZY_REFRESH_NO_PROJECTION'); return; }
+      sha256hex(canonicalString(c), function(lh){
+        if (myEpoch !== authorityEpoch){ revStats.staleRefreshDiscarded++; return; }
+        if (!lh){ setDocRevUnknown('LAZY_REFRESH_HASH_FAILED'); return; }
+        var okAdopt = adoptAuthority(id, true, false, j.rev, j.serverHash, lh, 'LAZY_REFRESH', freshAuth);
+        /* refresh 成功後も pending intent があるときだけ commit を再評価する。 */
+        if (okAdopt && pendingIntent){ try { commit('lazy-refresh'); } catch(e){} }
+      });
+    });
+  }
+
+  /* ★fix733 */
+  function resolveDocRev(id, localHash){
+    if (docRevState === REV_KNOWN && String(docRevId) === String(id)) return true;
+    if (authorityReloadRequired){                 /* ★fix733(RULING90): reload するまで body write 0 */
+      setDocRevUnknown('AUTHORITY_RELOAD_REQUIRED'); return false;
+    }
+    var f = fresh705(id);
+    if (f.err){ setDocRevUnknown(f.err); return false; }       /* OFF / unsafe / 不在は迂回しない */
+    var a5 = f.a5;
+    if (a5.fresh !== true){ setDocRevUnknown('AUTHORITY_PENDING'); return false; }
+    if (authorityEpoch === 0){                                  /* epoch0 = bootstrap */
+      return adoptAuthority(id, a5.present, a5.deleted, a5.rev, a5.hash, localHash,
+                            'FIX705_BOOTSTRAP', a5.authority);
+    }
+    /* ★epoch>0: fix705 の one-shot snapshot は既に stale。二度と authority にしない。 */
+    startLazyRefresh(id);
+    setDocRevUnknown('AWAITING_LAZY_REFRESH');
+    return false;
+  }
+
+  /* ---- AUTHORITY_PENDING: commit intent を落とさない（RULING89 §22） ----
+     network retry ではなく local authority の再評価。poll budget が尽きても intent は残し、
+     新しい authority event（invalidate / refresh 完了）や次の markDirty で再 arm できるようにする。 */
+  /* ★fix733 */
+  var recheckTimer = null, recheckTries = 0;
+  var RECHECK_MS = 3000, RECHECK_MAX = 20;
+  /* ★fix733 */
+  function scheduleAuthorityRecheck(){
+    if (recheckTimer) return;
+    if (recheckTries >= RECHECK_MAX){
+      if (pendingIntent){
+        revStats.pendingUnresolved++;
+        try { note({ kind: 'PENDING_UNRESOLVED', id: storyId(), tries: recheckTries }); } catch(e){}
+      }
+      return;                                   /* intent は残したまま poll だけ止める */
+    }
+    try {
+      recheckTimer = setTimeout(function(){
+        recheckTimer = null; recheckTries++; revStats.pendingRechecks++;
+        try { if (on()) commit('authority-pending-recheck'); } catch(e){}
+      }, RECHECK_MS);
+    } catch(e){}
+  }
+
+  /* ---- document bind 時の local canonical hash を read-only capture ----
+     lineage gate の base。projection() が使えるようになった最初の周回で 1 回だけ。書込 0 / 通信 0。
+     取得できなくても UNKNOWN 側へ倒れるだけで、誤って送信することはない。 */
+  /* ★fix733 */
+  var initHashTries = 0;
+  /* ★fix733 */
+  function captureInitialLocalHash(){
+    if (initialLocalHash) return;
+    initHashTries++;
+    var c = null;
+    try { c = projection(); } catch(e){ c = null; }
+    if (!c){ if (initHashTries < 120){ try { setTimeout(captureInitialLocalHash, 250); } catch(e){} } return; }
+    try {
+      sha256hex(canonicalString(c), function(h){
+        if (!h){ if (initHashTries < 120){ try { setTimeout(captureInitialLocalHash, 250); } catch(e){} } return; }
+        initialLocalHash = h; initialLocalHashAt = Date.now();
+      });
+    } catch(e){}
   }
 
   // ---- 記録（メモリのみ・永続キー追加なし） ----
@@ -473,11 +735,27 @@
       if (route !== 'shadow'){
         if (route === 'hold') cstats.holds++; else cstats.routedUnknown++;
         note({ kind: 'CANONICAL_AUTHORITY_UNCONFIRMED', id: id, route: route });
+        /* ★★fix733: ここも authority 未確定と同じ状態。debounce timer は既に消費されているため
+           何もしないと commit intent が silent drop になる。再評価を予約する（network retry ではない）。 */
+        revStats.unknownBlocks++;
+        pendingIntent = true;
+        setDocRevUnknown('ROUTE_' + String(route).toUpperCase());   /* ★fix733: 理由を残して診断可能にする */
+        note({ kind: 'AUTHORITY_PENDING', id: id, reason: 'ROUTE_' + String(route).toUpperCase(), localHash: localHash });
+        scheduleAuthorityRecheck();
         return;                                            /* 送信 0、dirty は保持 */
       }
       cstats.routedShadow++;
-      initDocRev();
-      var baseRev = +docBaseRev || 0;                      // ★shared map を再読しない（document-scoped）
+      /* ★★fix733: authority が確定していないなら **送らない**（rev 0 として送らない）。
+         commit intent は捨てず AUTHORITY_PENDING として再評価を予約する。 */
+      if (!resolveDocRev(id, localHash)){
+        revStats.unknownBlocks++;
+        pendingIntent = true;
+        note({ kind: 'AUTHORITY_PENDING', id: id, reason: docRevSource, epoch: authorityEpoch, localHash: localHash });
+        scheduleAuthorityRecheck();
+        return;                                            /* write 0 */
+      }
+      pendingIntent = false;
+      var baseRev = docBaseRev;                            // ★KNOWN のときだけ数値（cache は再読しない）
       var mid = 'ps:' + id + ':' + baseRev + ':' + localHash;   // ★BLOCKER2
       var payload = { op: 'putstory', id: id, baseStoryRev: baseRev,
                       record: content, shadow: true, mid: mid,
@@ -494,6 +772,7 @@
         var j = r.j || {};
         if (r.status === 200 && j.ok){
           lastSentHash = localHash;
+          lineageBaseHash = localHash;                     /* ★fix733: server 側に載ったことが確定した内容 */
           if (j.noop) stats.noop++; else stats.ok++;
           if (j.serverHash && j.serverHash === localHash){ stats.parityPass++; }
           else { stats.parityFail++; note({ kind: 'PARITY_FAIL', id: id, rev: j.rev, localHash: localHash, serverHash: j.serverHash || null, why: why }); }
@@ -509,9 +788,14 @@
             stats.seedEquivalent++;                         // ★SEED_EQUIVALENT: doc rev 採用可・retry 0・UI 0
             if (typeof j.serverRev === 'number') advanceDocRev(id, j.serverRev);
             lastSentHash = localHash;
+            lineageBaseHash = localHash;                    /* ★fix733: server と同一内容が確定 */
             note({ kind: 'SEED_EQUIVALENT', id: id, serverRev: j.serverRev });
           } else {
             stats.shadowConflict++;                         // ★SHADOW_CONFLICT: marker 不変・retry 0・UI 0
+            /* ★★fix733(RULING89 §20): blind rev seed 0 / same payload retry 0 は維持。
+               ただし「今持っている base が古い」ことは確定したので authority は invalidate してよい。
+               次の write 需要で fresh authority を取り直す（rev だけ更新して stale local を送ることはしない）。 */
+            invalidateDocRevAuthority('409-shadow-conflict', id);
             note({ kind: 'SHADOW_CONFLICT', id: id, baseRev: baseRev,
                    serverRev: (typeof j.serverRev === 'number' ? j.serverRev : null),
                    localHash: localHash, serverHash: j.serverHash || null });
@@ -639,13 +923,44 @@
     }, SIDE_POLL_MS);
   } catch(e){}
 
-  // ★boot 時に一度だけ document rev snapshot を取る（fix694 authority は既に確定済み）
-  try { initDocRev(); } catch(e){}
+  /* ★★fix733: boot 時に cache から rev を推定するのをやめた（UNKNOWN のまま開始）。
+     代わりに lineage gate の base となる local canonical hash だけを read-only で捉える。 */
+  try { captureInitialLocalHash(); } catch(e){}
 
   /* ★★fix716: endpoint / auth / request の単一実装。shadowRequest と putStoryOnce が共有する。
      ここは送るだけ。localStorage / sessionStorage / docBaseRev / commit / projection を触らない。 */
+  /* ★★fix733(RULING83 §7 / RULING86 §31 / RULING88 §31 / RULING89 §16-§19) — SIDE-PORT REV COHERENCE
+     trace 結果: side-port は server rev を進めるが v292Dfix402_storyRevs を更新しない。
+       setstorytitle（fix729）             … server rev 前進 / cache 更新 0 / 非 current story も対象になり得る
+       putcanonical（canonicalCommit・port）… server rev 前進 / cache 更新 0（rev は in-memory canonCtx のみ）
+       promotestory / promotedelete（fix702）… server rev 前進 / 更新するのは v292Dfix702_storyAuth のみ
+       deleteshadow / deletecanonical      … server 状態変更 / cache 更新 0
+     いずれも SAFE REV HANDOFF を証明できないので **DOCUMENT AUTHORITY INVALIDATE** に分類する。
+     ★タイミングは **response ではなく REQUEST ATTEMPT**（RULING89 §16-§18）。
+       client 側が network error になっても server では成功している可能性があるため。
+     実装位置は全 side-port が共有する postSaveOnce の 1 箇所だけ。port 本体は byte 不変。
+     getstory 等の read は対象外。commit() 自身の putstory は postSaveOnce を通らないので自己無効化はしない。 */
+  /* ★★fix733(RULING90 §12-§14) — side-port の 2 分類
+     TYPE R  REV-ONLY / SAME-AUTHORITY 候補 … setstorytitle / scrubstorycfg / putstory
+             → epoch invalidate → lazy getstory → authority が bootstrap と同一 かつ not deleted
+               かつ rev/hash valid なら lineage gate へ進んで sync 再開できる
+     TYPE A  AUTHORITY / LIFECYCLE CHANGING … putcanonical / promotestory / promotedelete /
+             deleteshadow / deletecanonical
+             → attempt した時点で AUTHORITY_RELOAD_REQUIRED。以後 body write 0。
+               lazy rev refresh で無理に復活させない（reload で fix705 に再分類させる） */
+  var F733_SIDEPORT_TYPE_R = { setstorytitle: 1, scrubstorycfg: 1, putstory: 1 };
+  var F733_SIDEPORT_TYPE_A = { putcanonical: 1, promotestory: 1, promotedelete: 1,
+                               deleteshadow: 1, deletecanonical: 1 };
+  /* ★fix733 */
+  function f733SidePortAttempt(body){
+    if (!body) return;
+    var op = String(body.op || '');
+    if (F733_SIDEPORT_TYPE_A[op]){ invalidateDocRevAuthority('sideportA:' + op, body.id, true); return; }
+    if (F733_SIDEPORT_TYPE_R[op]){ invalidateDocRevAuthority('sideportR:' + op, body.id, false); return; }
+  }
   function postSaveOnce(body, cb){
     if (!isLoggedIn()){ cb(null, 'NOT_LOGGED_IN'); return; }
+    try { f733SidePortAttempt(body); } catch(e){}          /* ★fix733: 送信を試みた時点で invalidate */
     var ac = null, timer = null;
     try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, TIMEOUT_MS); } catch(e){}
     var opts = { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) };
@@ -664,9 +979,26 @@
 
   window.__v292Dfix697 = {
     __armed: true,
+    /* ★★fix733: side-port 側から current document の rev authority を無効化するための口。
+       **進めることは決してしない**（UNKNOWN へ落とすだけ）。fix702 / fix729 からも呼べる。 */
+    invalidateDocRevAuthority: invalidateDocRevAuthority,
+    docRevAuthority: function(){ return { state: docRevState, rev: docBaseRev, source: docRevSource,
+      id: docRevId, epoch: authorityEpoch, authorityReloadRequired: authorityReloadRequired,
+      bootstrapAuthority: bootstrapAuthority, bootstrapPresent: bootstrapPresent,
+      initialLocalHash: initialLocalHash,
+      lineageBaseHash: lineageBaseHash, pendingIntent: pendingIntent,
+      stats: JSON.parse(JSON.stringify(revStats)) }; },
     off: off, on: on,
     status: function(){ return { on: on(), loggedIn: isLoggedIn(), storyId: storyId(),
       authorityKey: authorityKey(), documentShadowBaseRev: docBaseRev, docRevInit: docBaseRevInit,
+      /* ★★fix733: 3 状態 authority + epoch の可視化（bootCache は hint であって write authority ではない） */
+      docRev: { state: docRevState, rev: docBaseRev, source: docRevSource, id: docRevId,
+                epoch: authorityEpoch, refreshInFlightEpoch: refreshInFlightEpoch,
+                authorityReloadRequired: authorityReloadRequired,
+                bootstrapAuthority: bootstrapAuthority, bootstrapPresent: bootstrapPresent,
+                initialLocalHash: initialLocalHash, initialLocalHashAt: initialLocalHashAt,
+                lineageBaseHash: lineageBaseHash, pendingIntent: pendingIntent,
+                recheckTries: recheckTries, stats: JSON.parse(JSON.stringify(revStats)) },
       bootCache: revMap(), inFlight: inFlight, stats: JSON.parse(JSON.stringify(stats)),
       /* ★★fix724: save wrapper の装着状況（RULING37 §22 の観測点） */
       saveWrap: { installs: wrapStats.installs, rearmChecks: wrapStats.rearmChecks,
