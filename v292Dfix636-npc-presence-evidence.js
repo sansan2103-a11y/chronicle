@@ -113,10 +113,65 @@
     return res;
   }
 
+  /* ★★fix732(RULING85 §13-§19) — NORMAL_LOAD_HISTORICAL_MUTATION_CONTAINMENT
+     自動経路（タイマ / render フック / appendTurn）は
+     **このセッション中に生成されたターンだけ**を対象にする。
+     判定は turns.length の差分ではなく、唯一の新ターン生成口
+     （index.html の S.turns.push(turn)）で登録された provenance を使う。
+     → hydration 0→1 / 逐次 hydration / restore 後の regrow を新ターンと誤認しない。
+     → 全 module が同一 registry を見るので module 間で baseline がズレない。
+     scope module が居ない場合は false ＝ 何も自動処理しない fail-closed。
+     heuristics: 変更 0 / explicit API: 全ターン対象のまま保持 / new-turn logic: 保持。 */
+  function _f732New(t){
+    try { var W = window.__v292Dfix732Scope; return !!(W && typeof W.isNew === 'function' && W.isNew(t)); }
+    catch(e){ return false; }
+  }
+
+  /* ★★fix732(RULING85 §13-§19) — fix636 の採用形
+       ・historical turns: automatic では走査も昇格もしない（NORMAL_LOAD_AUTO_REPAIR は撤去）
+       ・session-new turns: exact _convSays[].who evidence による昇格は **残す**
+         （fix95 は playerText / recent narrative、fix636 は dialogue speaker と証拠が別。
+          「NPC が新ターンで喋ったが narrative / playerText に名前が出ない」ケースは
+          fix95 では拾えないため、ここを消すと機能欠落になる）
+       ・explicit scan({}) は従来どおり全 historical capability を保持
+       判定規則（登録 NPC 名と who の完全一致のみ）は scan() と同一。走査対象だけが違う。 */
+  function scanNewTurns(){
+    var res = { ok: false, newTurns: 0, candidates: [], promoted: [], reason: '' };
+    if (off()){ res.reason = 'off'; return res; }
+    var st = getState();
+    if (!st || !st.cast || !Array.isArray(st.cast.npcs)){ res.reason = 'no-cast'; return res; }
+    var turns = Array.isArray(st.turns) ? st.turns : [];
+    var fresh = [];
+    for (var i = 0; i < turns.length; i++){ if (_f732New(turns[i])) fresh.push(turns[i]); }
+    res.newTurns = fresh.length;
+    if (!fresh.length){ res.reason = 'no-session-new-turns'; return res; }
+    var who = convWhoSet(fresh);                 /* scan() と同じ関数を再利用（byte 不変） */
+    res.ok = true;
+    for (var j = 0; j < st.cast.npcs.length; j++){
+      var n = st.cast.npcs[j];
+      if (!n || !norm(n.name)) continue;
+      if (n.appeared === true) continue;
+      var nm = norm(n.name);
+      if (!who[nm]) continue;                    /* ★完全一致だけ。部分一致はしない */
+      res.candidates.push(nm);
+      n.appeared = true;
+      res.promoted.push(nm);
+    }
+    if (res.promoted.length){
+      stats.promoted += res.promoted.length;
+      stats.lastNames = res.promoted.slice(0, 10);
+      try { if (typeof st.save === 'function'){ st.save(); stats.saves++; } } catch(e){}
+      try { console.warn(TAG, '新ターンの確定話者として出ている登録NPCを登場扱いにしました:',
+                         res.promoted.join('、')); } catch(e){}
+    }
+    return res;
+  }
+
   function tick(){
     if (off()) return;
     stats.runs++;
-    try { scan({}); } catch(e){ try { console.warn(TAG, 'scan err:', e && e.message); } catch(_){} }
+    try { stats.lastNewTurnScan = scanNewTurns(); }
+    catch(e){ try { console.warn(TAG, 'scan err:', e && e.message); } catch(_){} }
   }
 
   /* ---- 取り付け: 毎ターンの render 後（他fixと同じ hook）＋起動時に1回 ---- */
@@ -152,7 +207,8 @@
 
   window.__v292Dfix636 = {
     __armed: true,
-    scan: scan, tick: tick, convWhoSet: convWhoSet, getState: getState,
+    scan: scan, scanNewTurns: scanNewTurns, tick: tick, convWhoSet: convWhoSet, getState: getState,
+    isSessionNew: _f732New,
     stats: function(){ return JSON.parse(JSON.stringify(stats)); },
     selfTest: selfTest, isOff: off
   };

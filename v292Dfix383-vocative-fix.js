@@ -43,6 +43,20 @@
     } catch(e){}
     return out.filter(function(n){ return n && n.length >= 2; });
   }
+  /* ★★fix732(RULING85 §1-§10) — NORMAL_LOAD_HISTORICAL_MUTATION_CONTAINMENT
+     自動経路（タイマ / render フック / appendTurn）は
+     **このセッション中に生成されたターンだけ**を対象にする。
+     判定は turns.length の差分ではなく、唯一の新ターン生成口
+     （index.html の S.turns.push(turn)）で登録された provenance を使う。
+     → hydration 0→1 / 逐次 hydration / restore 後の regrow を新ターンと誤認しない。
+     → 全 module が同一 registry を見るので module 間で baseline がズレない。
+     scope module が居ない場合は false ＝ 何も自動処理しない fail-closed。
+     heuristics: 変更 0 / explicit API: 全ターン対象のまま保持 / new-turn logic: 保持。 */
+  function _f732New(t){
+    try { var W = window.__v292Dfix732Scope; return !!(W && typeof W.isNew === 'function' && W.isNew(t)); }
+    catch(e){ return false; }
+  }
+
   var PUNCT = '、。！？!?…っッ―—';
   function findFixes(t){
     var fixes = [];
@@ -84,6 +98,7 @@
     var tl = S.turns.length;
     if (tl === lastLen) return;
     lastLen = tl;
+    if (!_f732New(S.turns[tl - 1])) return;      /* ★★fix732: 過去ターンには自動適用しない */
     try {
       var t = S.turns[tl - 1];
       var fixes = findFixes(t);

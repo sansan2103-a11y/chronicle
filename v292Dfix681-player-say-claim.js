@@ -50,6 +50,20 @@
   }
   function norm(s){ return String(s || '').replace(/[\s　。、，．！？!?…‥・「」『』]/g, ''); }
 
+  /* ★★fix732(RULING85 §1-§10) — NORMAL_LOAD_HISTORICAL_MUTATION_CONTAINMENT
+     自動経路（タイマ / render フック / appendTurn）は
+     **このセッション中に生成されたターンだけ**を対象にする。
+     判定は turns.length の差分ではなく、唯一の新ターン生成口
+     （index.html の S.turns.push(turn)）で登録された provenance を使う。
+     → hydration 0→1 / 逐次 hydration / restore 後の regrow を新ターンと誤認しない。
+     → 全 module が同一 registry を見るので module 間で baseline がズレない。
+     scope module が居ない場合は false ＝ 何も自動処理しない fail-closed。
+     heuristics: 変更 0 / explicit API: 全ターン対象のまま保持 / new-turn logic: 保持。 */
+  function _f732New(t){
+    try { var W = window.__v292Dfix732Scope; return !!(W && typeof W.isNew === 'function' && W.isNew(t)); }
+    catch(e){ return false; }
+  }
+
   function plan(){
     var S = getS();
     if (!S || !Array.isArray(S.turns)) return null;
@@ -72,7 +86,7 @@
     return { hero: hero, applied: out };
   }
 
-  function apply(force){
+  function apply(force, _auto){
     if (!force && !armed()) return { skipped: true, armed: armed() };
     /* ★2026-08-16 実測: 生成中(S.inFlight)に書くと、生成完了時の保存に
        古いスナップショットで上書きされ修正が消える。実際に1回発生した。 */
@@ -80,6 +94,15 @@
     var p = plan();
     if (!p || !p.applied.length) return { changed: false, plan: p };
     var S = getS();
+    /* ★★fix732(RULING85): 自動経路は session-new turn のみ。
+       explicit（__v292Dfix681.apply(true) / apply(true)）は従来どおり全ターン対象。 */
+    if (_auto){
+      var _keep = p.applied.filter(function(r){
+        try { return _f732New(S.turns[r.turn - 1]); } catch(e){ return false; }
+      });
+      if (!_keep.length) return { changed: false, historicalSkipped: p.applied.length };
+      p = { hero: p.hero, applied: _keep };
+    }
     try { localStorage.setItem('chr6_bk_fix681', localStorage.getItem('chr6') || ''); } catch(e){}
     p.applied.forEach(function(r){
       try { var c = S.turns[r.turn - 1]._convSays[r.idx]; if (c) c.who = r.to; } catch(e){}
@@ -107,7 +130,7 @@
       if (!armed()) return;
       var S0 = getS(); if (!S0 || S0.inFlight) return;      /* 生成中は触らない */
       var s = sig(); if (!s || s === lastSig) return;
-      lastSig = s; apply();
+      lastSig = s; apply(false, true);        /* ★fix732: 自動経路 */
     } catch(e){}
   }
   try { setTimeout(tick, 5000); setInterval(tick, 2500); } catch(e){}

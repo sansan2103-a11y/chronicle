@@ -48,7 +48,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260824-fix731';
+  var BUILT = '20260824-fix732';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2070,6 +2070,9 @@ const G = {
       };
 
       S.turns.push(turn);
+      /* ★★fix732(RULING85): 唯一の新ターン生成口。このターンが session 中に生成されたことを ephemeral に記録する。
+         localStorage / story body / hash へは 1 バイトも書かない。 */
+      try { if (window.__v292Dfix732Scope) window.__v292Dfix732Scope.markNew(turn); } catch(_e732){}
       S.scene.branches = plan.branchCandidates || [];
       S.save();
       UI.appendTurn(turn, S.turns.length - 1);
@@ -3203,7 +3206,8 @@ G.init();
 <script src="v292Dfix300-readability.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix301-longmem-stale-guard.js?cb=v292Dfix301"></script>
 <script src="v292Dfix302-undo-state-rollback.js?cb=v292Dfix302b"></script>
-<script src="v292Dfix303-speaker-backref.js?cb=v292Dfix547"></script>
+<script src="v292Dfix732-session-turn-scope.js?cb=v292Dfix732"></script>
+<script src="v292Dfix303-speaker-backref.js?cb=v292Dfix732"></script>
 <script src="v292Dfix304-emotion.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix305-trigger-states.js?cb=v292Dfix305"></script>
 <script src="v292Dfix306-npc-liveliness.js?cb=v292Dfix419c"></script>
@@ -3268,14 +3272,14 @@ G.init();
 <script src="v292Dfix379-wrap-keeper.js?cb=v292Dfix646"></script>
 <script src="v292Dfix381-reaction.js?cb=v292Dfix381"></script>
 <script src="v292Dfix382-auto-dial.js?cb=v292Dfix382"></script>
-<script src="v292Dfix383-vocative-fix.js?cb=v292Dfix547"></script>
+<script src="v292Dfix383-vocative-fix.js?cb=v292Dfix732"></script>
 <script src="v292Dfix384-auto-restore.js?cb=v292Dfix384"></script>
 <script src="v292Dfix385-voice-correction.js?cb=v292Dfix385"></script>
 <script src="v292Dfix386-relation-gauge.js?cb=v292Dfix386b"></script>
 <script src="v292Dfix387-confession.js?cb=v292Dfix387"></script>
 <script src="v292Dfix388-first-person-speaker.js?cb=v292Dfix547"></script>
 <script src="v292Dfix389-npc-relations.js?cb=v292Dfix389"></script>
-<script src="v292Dfix390-speaker-fullname.js?cb=v292Dfix547"></script>
+<script src="v292Dfix390-speaker-fullname.js?cb=v292Dfix732"></script>
 <script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=v292Dfix396"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
@@ -3289,7 +3293,7 @@ G.init();
 <script src="v292Dfix405-state-freshness.js?cb=v292Dfix417"></script>
 <script src="v292Dfix406-automode.js?cb=v292Dfix417d"></script>
 <script src="v292Dfix407-load-noconfirm.js?cb=v292Dfix407"></script>
-<script src="v292Dfix409-handle-merge.js?cb=v292Dfix539c"></script>
+<script src="v292Dfix409-handle-merge.js?cb=v292Dfix732"></script>
 <script src="v292Dfix414-constraint-engine.js?cb=v292Dfix428"></script>
 <script src="v292Dfix415-opening-mask.js?cb=v292Dfix415b"></script>
 <script src="v292Dfix416-pain-style.js?cb=v292Dfix428"></script>
@@ -3334,13 +3338,13 @@ G.init();
 <script src="v292Dfix462-bare-speaker.js?cb=v292Dfix547"></script>
 <script src="v292Dfix463-human-guard.js?cb=v292Dfix463"></script>
 <script src="v292Dfix464-say-promote.js?cb=v292Dfix465"></script>
-<script src="v292Dfix465-role-who.js?cb=v292Dfix547"></script>
+<script src="v292Dfix465-role-who.js?cb=v292Dfix732"></script>
 <script src="v292Dfix466-dup-say.js?cb=v292Dfix466"></script>
 <script src="v292Dfix467-readability-rules.js?cb=v292Dfix468"></script>
 <script src="v292Dfix468-gen-timing.js?cb=v292Dfix468"></script>
 <script src="v292Dfix469-speaker-score.js?cb=v292Dfix731"></script>
   <script src="v292Dfix680-bare-speaker-provenance.js?cb=v292Dfix731"></script>
-  <script src="v292Dfix681-player-say-claim.js?cb=v292Dfix681"></script>
+  <script src="v292Dfix681-player-say-claim.js?cb=v292Dfix732"></script>
 <!-- fix606: 話者帰属の来歴アナライザ。**読み取り専用**（whoもDOMもlocalStorageも触らない）。
      「どのカードの話者が何を根拠に決まっているか」の分母を出すためだけの層。
      読出=window.__v292Dfix606.stats()/.review(n)/.selfTest() / OFF=v292Dfix606Off -->
@@ -3389,7 +3393,7 @@ G.init();
 <script src="v292Dfix633-icon-sweep-full.js?cb=fix657"></script>
 <script src="v292Dfix634-aiappearance-sync.js?cb=fix634"></script>
 <script src="v292Dfix635-new-story-guard-rearm.js?cb=v292Dfix637"></script>
-<script src="v292Dfix636-npc-presence-evidence.js?cb=v292Dfix637"></script>
+<script src="v292Dfix636-npc-presence-evidence.js?cb=v292Dfix732"></script>
 <script src="v292Dfix637-cast-bootstrap-probe.js?cb=v292Dfix637"></script>
 <!-- fix638: pull側の画像ガード。クラウドの save blob(pkg.idb) で**既存のローカルアイコンを上書きしない**。
      画像の正本は per-key チャネル(D1 images + imageRev / fix523・fix633)。blob は「不在＋いま必要＋墓標なし」の

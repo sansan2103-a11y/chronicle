@@ -33,6 +33,20 @@
     try{ if(s&&s.cast){ if(s.cast.hero&&s.cast.hero.name) out.push(s.cast.hero.name); if(Array.isArray(s.cast.npcs)) s.cast.npcs.forEach(function(n){ if(n&&n.name) out.push(n.name); }); } }catch(e){}
     return out;
   }
+  /* ★★fix732(RULING85 §1-§10) — NORMAL_LOAD_HISTORICAL_MUTATION_CONTAINMENT
+     自動経路（タイマ / render フック / appendTurn）は
+     **このセッション中に生成されたターンだけ**を対象にする。
+     判定は turns.length の差分ではなく、唯一の新ターン生成口
+     （index.html の S.turns.push(turn)）で登録された provenance を使う。
+     → hydration 0→1 / 逐次 hydration / restore 後の regrow を新ターンと誤認しない。
+     → 全 module が同一 registry を見るので module 間で baseline がズレない。
+     scope module が居ない場合は false ＝ 何も自動処理しない fail-closed。
+     heuristics: 変更 0 / explicit API: 全ターン対象のまま保持 / new-turn logic: 保持。 */
+  function _f732New(t){
+    try { var W = window.__v292Dfix732Scope; return !!(W && typeof W.isNew === 'function' && W.isNew(t)); }
+    catch(e){ return false; }
+  }
+
   function correctConvSays(convSays, narrative, cast){
     var changed=0;
     var n=String(narrative||''); if(!n||!Array.isArray(convSays)) return 0;
@@ -59,9 +73,10 @@
     var UI=getUI();
     if(!UI) return false;
     if(UI.__v292Dfix303) return true;
-    try{ if(typeof UI.appendTurn==='function'){ var oa=UI.appendTurn.bind(UI); UI.appendTurn=function(turn,idx){ try{ processTurn(turn); }catch(e){} return oa(turn,idx); }; } }catch(e){}
+    try{ if(typeof UI.appendTurn==='function'){ var oa=UI.appendTurn.bind(UI); UI.appendTurn=function(turn,idx){ try{ if(_f732New(turn)) processTurn(turn); }catch(e){} return oa(turn,idx); };  /* ★fix732: renderAll は過去ターンにも appendTurn を呼ぶ */ } }catch(e){}
     UI.__v292Dfix303=true;
-    try{ var s=getS(); if(s&&Array.isArray(s.turns)){ var ch=0; s.turns.forEach(function(t){ ch+=processTurn(t); }); if(ch>0){ try{ s.save&&s.save(); }catch(e){} try{ UI.renderAll&&UI.renderAll(); }catch(e){} try{ console.log('[v292Dfix303] retroactively corrected', ch, 'speaker(s)'); }catch(e){} } } }catch(e){}
+    /* ★★fix732(RULING85): 設置時の「既存ターン遡及補正」= NORMAL LOAD → HISTORICAL WRITE → save
+       の直接経路だったので撤去。同等の遡及補正は explicit __v292Dfix303api.retroAll() として保持する。 */
     try{ console.log('[v292Dfix303] speaker back-ref corrector wired (b)'); }catch(e){}
     return true;
   }
@@ -70,9 +85,16 @@
   try{ setInterval(function(){
     if(off()) return;
     var s=getS(); if(!s||!Array.isArray(s.turns)) return;
-    var ch=0; for(var i=Math.max(0,s.turns.length-4);i<s.turns.length;i++){ ch+=processTurn(s.turns[i]); }
+    var ch=0; for(var i=Math.max(0,s.turns.length-4);i<s.turns.length;i++){ if(_f732New(s.turns[i])) ch+=processTurn(s.turns[i]); }   /* ★fix732 */
     if(ch>0){ try{ s.save&&s.save(); }catch(e){} var UI=getUI(); try{ UI&&UI.renderAll&&UI.renderAll(); }catch(e){} try{ console.log('[v292Dfix303] corrected', ch, 'speaker(s) (poll)'); }catch(e){} }
   }, 1500); }catch(e){}
 
-  window.__v292Dfix303api={ correctConvSays:correctConvSays, processTurn:processTurn, castNames:castNames };
+  /* ★fix732: 撤去した遡及補正を明示 API として保持（自動では絶対に呼ばれない）。 */
+  function retroAll(){
+    var s=getS(); if(!s||!Array.isArray(s.turns)) return { changed:0 };
+    var ch=0; s.turns.forEach(function(t){ ch+=processTurn(t); });
+    if(ch>0){ try{ s.save&&s.save(); }catch(e){} var U=getUI(); try{ U&&U.renderAll&&U.renderAll(); }catch(e){} }
+    return { changed:ch };
+  }
+  window.__v292Dfix303api={ correctConvSays:correctConvSays, processTurn:processTurn, castNames:castNames, retroAll:retroAll, isSessionNew:_f732New };
 })();

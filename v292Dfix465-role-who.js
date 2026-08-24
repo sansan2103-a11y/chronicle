@@ -88,8 +88,22 @@
     return { changed: changed, changes: changes, unknown: unknown };
   }
 
+  /* ★★fix732(RULING85 §1-§10) — NORMAL_LOAD_HISTORICAL_MUTATION_CONTAINMENT
+     自動経路（タイマ / render フック / appendTurn）は
+     **このセッション中に生成されたターンだけ**を対象にする。
+     判定は turns.length の差分ではなく、唯一の新ターン生成口
+     （index.html の S.turns.push(turn)）で登録された provenance を使う。
+     → hydration 0→1 / 逐次 hydration / restore 後の regrow を新ターンと誤認しない。
+     → 全 module が同一 registry を見るので module 間で baseline がズレない。
+     scope module が居ない場合は false ＝ 何も自動処理しない fail-closed。
+     heuristics: 変更 0 / explicit API: 全ターン対象のまま保持 / new-turn logic: 保持。 */
+  function _f732New(t){
+    try { var W = window.__v292Dfix732Scope; return !!(W && typeof W.isNew === 'function' && W.isNew(t)); }
+    catch(e){ return false; }
+  }
+
   var backedUp = false;
-  function repair(){
+  function repair(_auto){
     if (off()) return { changed: false };
     var S = getS();
     if (!S || !Array.isArray(S.turns) || !S.turns.length) return { changed: false };
@@ -100,6 +114,7 @@
     var map = roleTable(list);
     var any = false, log = [], unk = [];
     for (var ti = 0; ti < S.turns.length; ti++){
+      if (_auto && !_f732New(S.turns[ti])) continue;    /* ★★fix732: 自動経路は session-new turn のみ */
       var p = planTurn(S.turns[ti], known, map);
       if (p.changed){
         if (!backedUp){ try { localStorage.setItem('chr6_bk_fix465', localStorage.getItem('chr6') || ''); } catch(e){} backedUp = true; }
@@ -134,7 +149,7 @@
       var sig = S.turns.length + ':' + ((last && Array.isArray(last._convSays)) ? last._convSays.length : 0);
       if (sig === lastSig) return;
       lastSig = sig;
-      repair();
+      repair(true);           /* ★fix732: 自動経路 */
     } catch(e){}
   }
   try { setTimeout(tick, 3500); setInterval(tick, 2500); } catch(e){}

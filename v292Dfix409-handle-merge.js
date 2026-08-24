@@ -320,8 +320,22 @@
     } catch(e){}
   }
 
+  /* ★★fix732(RULING85 §1-§10) — NORMAL_LOAD_HISTORICAL_MUTATION_CONTAINMENT
+     自動経路（タイマ / render フック / appendTurn）は
+     **このセッション中に生成されたターンだけ**を対象にする。
+     判定は turns.length の差分ではなく、唯一の新ターン生成口
+     （index.html の S.turns.push(turn)）で登録された provenance を使う。
+     → hydration 0→1 / 逐次 hydration / restore 後の regrow を新ターンと誤認しない。
+     → 全 module が同一 registry を見るので module 間で baseline がズレない。
+     scope module が居ない場合は false ＝ 何も自動処理しない fail-closed。
+     heuristics: 変更 0 / explicit API: 全ターン対象のまま保持 / new-turn logic: 保持。 */
+  function _f732New(t){
+    try { var W = window.__v292Dfix732Scope; return !!(W && typeof W.isNew === 'function' && W.isNew(t)); }
+    catch(e){ return false; }
+  }
+
   // 全ターン検査＆適用(変更時のみ save + 再描画)。
-  function repair(){
+  function repair(_auto){
     if (off()) return { changed: false };
     var S = getS();
     if (!S || !Array.isArray(S.turns) || !S.turns.length) return { changed: false };
@@ -333,6 +347,7 @@
     // ★fix409b D-4(2026-07-11): まずdryRun(コピーに対して・副作用なし)で「実適用される変更があるか」確認。
     var willApply = false;
     for (var di = 0; di < S.turns.length; di++){
+      if (_auto && !_f732New(S.turns[di])) continue;    /* ★★fix732: 自動経路は session-new turn のみ */
       var dcopy = { _convSays: ((S.turns[di] && S.turns[di]._convSays) || []).map(function(x){ return x ? { who: x.who, say: x.say, _rv: x._rv } : x; }) };
       var dplan = planTurn(dcopy, names, di, ctx);
       if (dplan.changed){ willApply = true; break; }
@@ -343,6 +358,7 @@
     // 本適用(バックアップ検証OK後にだけ S.turns を書き換える)。
     var anyChange = false, log = [];
     for (var ti = 0; ti < S.turns.length; ti++){
+      if (_auto && !_f732New(S.turns[ti])) continue;    /* ★★fix732: 同上（本適用ループ） */
       var plan = planTurn(S.turns[ti], names, ti, ctx);
       var appliedHere = false;
       if (plan.changes){ for (var ci = 0; ci < plan.changes.length; ci++){ if (!plan.changes[ci].skipped){ appliedHere = true; break; } } }
@@ -425,7 +441,7 @@
       var sig = computeSig();
       if (sig === lastSig) return;
       lastSig = sig;
-      repair();   // fix409b(c): inFlight中なら repair 内で lastSig=null に戻り次tickで再評価
+      repair(true);   /* ★fix732: 自動経路 */ // fix409b(c): inFlight中なら repair 内で lastSig=null に戻り次tickで再評価
     } catch(e){}
   }
   setTimeout(function(){ tick(); setInterval(tick, 2000); }, 7000);
