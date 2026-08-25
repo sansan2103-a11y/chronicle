@@ -359,6 +359,40 @@
     return null;
   }
 
+  /* ★★fix736(RULING111-A): LDR terminal cleanup の実行スコープ。
+     ・module scope の揮発変数のみ。localStorage 等へは一切書かない
+     ・公開 API から直接立てられない（ldrCleanupOnce の内部でのみ set される）
+     ・physicalPhase が成功しても dropPending を発火させないのは、この scope が
+       立っていて **かつ** LDR terminal predicate を満たす plan のときだけ
+     ・単なる boolean では止めない。predicate は毎回 plan を見て評価する */
+  var LDR_CLEANUP_SCOPE = null;      /* { planId, slotId, authorityAt } | null */
+  function ldrCleanupScopeFor(plan){
+    var s = LDR_CLEANUP_SCOPE;
+    if (!s || !plan) return null;
+    if (s.planId !== String(plan.planId)) return null;
+    if (s.slotId !== String(plan.slotId)) return null;
+    return s;
+  }
+  /* exact LDR terminal plan であることの述語。ここを緩めない。 */
+  function isLdrTerminalPlan(plan){
+    if (!plan || typeof plan !== 'object') return false;
+    if (plan.sdTerminal !== true) return false;
+    if (plan.sdResolution !== 'SERVER_TOMBSTONED_BY_LDR') return false;
+    if (!plan.sdHold || plan.sdHold.verdict !== 'DELETE_BASE_HASH_MISSING') return false;
+    if (plan.localDeleteBaseHash != null && plan.localDeleteBaseHash !== '') return false;
+    if (typeof plan.resolutionDeleteOpId !== 'string' || plan.resolutionDeleteOpId === '') return false;
+    if (typeof plan.resolvedServerRev !== 'number' || !isFinite(plan.resolvedServerRev)) return false;
+    return true;
+  }
+  /* dropPending を抑止してよいか。5 条件の AND。 */
+  function preserveTerminalPlanOnSuccess(plan){
+    var s = ldrCleanupScopeFor(plan);
+    if (!s) return false;                      /* ① 内部 LDR cleanup path からの実行でない */
+    if (!isLdrTerminalPlan(plan)) return false;/* ②③④ terminal / resolution / hold verdict */
+    if (!ldrExecProofFor(plan)) return false;  /* ⑤ fresh authority 済み（runtime proof が生きている） */
+    return true;
+  }
+
   /* ★★fix735(RULING109 §4): executePlan を通ったら proof は **必ず** 捨てる。
      例外で抜けても捨てる。＝ proof は「1 回の削除実行」だけに効く揮発値であり、
      reload はもちろん、同一 runtime でも使い回せない。 */
@@ -576,7 +610,19 @@
     if (!replaced) a.push(plan);
     writePending(a); stats.pending = a.length;
   }
+  /* ★★fix736(RULING111-A §5): LDR terminal cleanup 中の exact plan は **落とさない**。
+     成功経路（physicalPhase 末尾）だけでなく、拒否経路（afterRefusal → moveToBlocked）も
+     dropPending を通るので、**source 側 1 箇所**で止める。
+     こうすると「drop してから復元する」窓が構造的に存在しない。
+     この値は physicalPhase が LDR predicate を満たしたときだけ立て、必ず finally で戻す。 */
+  var LDR_PRESERVE_PLAN_ID = null;
   function dropPending(planId){
+    if (LDR_PRESERVE_PLAN_ID != null && LDR_PRESERVE_PLAN_ID === String(planId)){
+      stats.f736DropSuppressed = (stats.f736DropSuppressed || 0) + 1;
+      note({ act:'ldr-cleanup-drop-suppressed', planId: String(planId),
+             detail:'LDR terminal cleanup 中。server 削除の provenance を落とさない' });
+      return;
+    }
     var a = readPending().filter(function(x){ return x.planId !== planId; });
     writePending(a); stats.pending = a.length;
   }
@@ -597,20 +643,41 @@
              why:'分類器(fix562.classifyKey)が使えないので物理削除しない' });
       return withExtra({ ok:true, code:'pending-classifier', deleteOpId:deleteOpId, snapshotId:snapshotId, hidden:true });
     }
-    /* ⑦⑧ */
-    var r = executePlan(plan, d);
+    /* ★★fix736: preserve 判定は executePlan を呼ぶ **前** に行う。
+       executePlan は finally で runtime proof を捨てるので、後から評価すると
+       「fresh authority 済み」条件が必ず false になってしまう。 */
+    var preserveTerminal = false;
+    try { preserveTerminal = preserveTerminalPlanOnSuccess(plan); } catch(e){ preserveTerminal = false; }
+    var prevPreserve = LDR_PRESERVE_PLAN_ID;
+    if (preserveTerminal) LDR_PRESERVE_PLAN_ID = String(plan.planId);
+    var r;
+    try {
+      /* ⑦⑧ */
+      r = executePlan(plan, d);
+    } finally {
+      /* 成功・拒否・例外いずれでも、この 1 回の実行を出たら抑止は解除する */
+      if (preserveTerminal){
+        stats.f736TerminalPlanPreserved = (stats.f736TerminalPlanPreserved || 0) + 1;
+        note({ act:'ldr-cleanup-plan-preserved', slotId:slotId, deleteOpId:deleteOpId,
+               planId: plan.planId,
+               detail:'LDR terminal cleanup。物理 key だけ削除し、terminal plan は byte 不変で保持' });
+      }
+    }
     if (r.refused.length){
       /* ★fix602: ここで無条件に addPending すると、**同じhashの計画を永久に拒否され続ける**。
          一過性かどうかを判定し、自動で片づけられないものは理由つきの終端状態へ移す。 */
       var outcome = afterRefusal(plan, r.refused);
       note({ act:'partial', slotId:slotId, deleteOpId:deleteOpId, deleted:r.deleted.length,
              refused:r.refused, outcome: outcome });
+      LDR_PRESERVE_PLAN_ID = prevPreserve;
       return withExtra({ ok:true, code:'partial', deleteOpId:deleteOpId, snapshotId:snapshotId,
                deleted:r.deleted.length, refused:r.refused,
                outcome: outcome, humanReason: humanReason(outcome) });
     }
-    /* 保留に載っていたときだけ外す（載っていないのに書くと、無意味な localStorage 書込みになる） */
+    /* 保留に載っていたときだけ外す（載っていないのに書くと、無意味な localStorage 書込みになる）。
+       ★fix736: LDR terminal cleanup 中は dropPending 側で抑止されるので、ここは無変更でよい。 */
     if (readPending().some(function(p){ return p && p.planId === plan.planId; })) dropPending(plan.planId);
+    LDR_PRESERVE_PLAN_ID = prevPreserve;
     stats.completed++;
     note({ act:'completed', slotId:slotId, deleteOpId:deleteOpId, deleted:r.deleted.length });
     return withExtra({ ok:true, code:'deleted', deleteOpId:deleteOpId, snapshotId:snapshotId, deleted:r.deleted.length });
@@ -1251,6 +1318,149 @@
     });
   }
 
+  /* ---- ★★fix736: LDR terminal cleanup entrypoint（owner explicit / 1 件だけ） ----
+     RULING111-A Architecture B。
+     ・caller が渡してよいのは planId / slotId だけ。authority は 1 つも受け取らない
+     ・server の deleted / rev / hash / proof / policy 結果を caller から受け取らない
+     ・entrypoint 自身が fresh getstory を 1 回だけ取得し、runtime-only proof を作る
+     ・物理削除は既存 physicalPhase を再利用する。
+       classification fail-closed → fix735 deletePolicy → TOCTOU binding → fix569 gate
+     ・executePlanInner / fix569 / removeItem を直接呼ばない
+     ・deleteshadow は送らない（server は既に tombstone 済み）
+     ・boot / autoResume / timer / sweep からは絶対に呼ばれない（呼び出し側は owner のみ）
+     ・confirm:'OWNER_EXPLICIT' は **認証ではない**。誤操作防止 marker。 */
+  var LDR_CLEANUP_CONFIRM = 'OWNER_EXPLICIT';
+  function ldrCleanupOnce(req){
+    function fail(code, why, extra){
+      var o = { ok:false, code:code, why: why || null, deleted:[], refused:[],
+                serverChecked:false, planRetained:true };
+      if (extra) for (var k in extra){ if (Object.prototype.hasOwnProperty.call(extra,k)) o[k] = extra[k]; }
+      try { LDR_CLEANUP_SCOPE = null; clearLdrExecProof(); } catch(e){}
+      return Promise.resolve(o);
+    }
+    if (off()) return fail('lifecycle-off', 'fix587 が OFF');
+    if (restoreHold()) return fail('restore-hold', 'fix721 の復元トランザクション中');
+    if (!req || typeof req !== 'object') return fail('bad-request', '引数が無い');
+    /* ★誤操作防止 marker。これ単独では authorization にならない。 */
+    if (req.confirm !== LDR_CLEANUP_CONFIRM) return fail('confirm-required', 'confirm marker が無い');
+    /* ★caller が authority を渡そうとしたら、その時点で拒否する（黙って無視しない） */
+    var FORBIDDEN = ['serverProof','proof','deleted','rev','serverRev','serverHash','hash',
+                     'authority','allow','policy','keys','expectedKeys','bytes'];
+    for (var fi = 0; fi < FORBIDDEN.length; fi++){
+      if (Object.prototype.hasOwnProperty.call(req, FORBIDDEN[fi]))
+        return fail('caller-authority-rejected', 'caller は authority を渡せない: ' + FORBIDDEN[fi]);
+    }
+    var planId = (req.planId == null) ? '' : String(req.planId);
+    var slotId = (req.slotId == null) ? '' : String(req.slotId);
+    if (!planId || !slotId) return fail('bad-target', 'planId と slotId の両方が必要');
+
+    var d = dep();
+    var miss = missingDeps(d);
+    if (miss.length) return fail('deps-missing', miss.join(','));
+
+    /* ① exact terminal plan を pending から 1 件だけ取る（同一 planId が複数なら拒否） */
+    var all = readPending();
+    var hits = [];
+    for (var i = 0; i < all.length; i++){
+      if (all[i] && String(all[i].planId) === planId) hits.push(all[i]);
+    }
+    if (hits.length !== 1) return fail('plan-not-unique', 'planId 一致が ' + hits.length + ' 件');
+    var plan = hits[0];
+    if (String(plan.slotId) !== slotId) return fail('slot-mismatch', 'plan.slotId と一致しない');
+
+    /* ② RUNTIME PROVENANCE（terminal record 側）。external artifact は runtime では見ない。 */
+    if (!isLdrTerminalPlan(plan)) return fail('not-ldr-terminal', 'LDR terminal plan ではない');
+    if (typeof plan.snapshotId !== 'string' || plan.snapshotId === '')
+      return fail('plan-no-snapshotid', 'snapshotId が無い');
+    if (typeof plan.deleteOpId !== 'string' || plan.deleteOpId === '')
+      return fail('plan-no-deleteopid', 'deleteOpId が無い');
+
+    /* ③ local 墓標 barrier が立っていること（消さない。立っていることを要求する） */
+    var metaOk = false;
+    try {
+      var mrows = readMeta();
+      for (var mi = 0; mi < mrows.length; mi++){
+        if (mrows[mi] && mrows[mi].deleted === true && String(mrows[mi].id) === slotId){ metaOk = true; break; }
+      }
+    } catch(e){ metaOk = false; }
+    if (!metaOk) return fail('no-meta-tombstone', 'meta 墓標が無い');
+
+    /* ④ fresh authority。**entrypoint 自身が** 1 回だけ getstory する。deleteshadow は送らない。 */
+    var W = contract();
+    if (!W) return fail('contract-unavailable', 'fix697 の shadow transport が無い');
+    var sid = (plan.storyId != null && plan.storyId !== '') ? String(plan.storyId) : slotId;
+    var planSnapshot = JSON.stringify(plan);   /* ★TOCTOU: authority 取得前の plan preimage */
+    return new Promise(function(resolve){
+      var settled = false;
+      function done(o){ if (settled) return; settled = true;
+        try { LDR_CLEANUP_SCOPE = null; clearLdrExecProof(); } catch(e){}
+        resolve(o); }
+      try {
+        W.shadowRequest({ op:'getstory', id: sid }, function(r, err){
+          try {
+            if (err || !r) return done({ ok:false, code:'server-unreachable', why:String(err || '?'),
+                                          deleted:[], refused:[], serverChecked:false, planRetained:true });
+            var j = r.j || {};
+            if (j.ok !== true) return done({ ok:false, code:'server-not-ok', why:String(j.code || r.status || '?'),
+                                              deleted:[], refused:[], serverChecked:true, planRetained:true });
+            if (j.deleted !== true) return done({ ok:false, code:'server-not-deleted',
+                                                   why:'server 側が deleted:true ではない',
+                                                   deleted:[], refused:[], serverChecked:true, planRetained:true });
+            if (j.authority !== 'shadow' && j.authority !== 'canonical')
+              return done({ ok:false, code:'server-authority-unexpected', why:String(j.authority || '?'),
+                             deleted:[], refused:[], serverChecked:true, planRetained:true });
+            if (typeof j.rev !== 'number' || j.rev !== plan.resolvedServerRev)
+              return done({ ok:false, code:'server-rev-mismatch',
+                             why:'rev が terminal record と一致しない',
+                             deleted:[], refused:[], serverChecked:true, planRetained:true });
+            if (j.id != null && String(j.id) !== String(sid))
+              return done({ ok:false, code:'server-id-mismatch', why:String(j.id),
+                             deleted:[], refused:[], serverChecked:true, planRetained:true });
+
+            /* ⑤ runtime-only proof を **entrypoint 自身が** 作る。caller の値は使わない。 */
+            var okSet = setLdrExecProof(plan.planId, slotId,
+              { id: sid, deleted: true, rev: j.rev, authority: j.authority,
+                serverConfirmedAt: Date.now() });
+            if (!okSet) return done({ ok:false, code:'proof-setup-failed', why:null,
+                                       deleted:[], refused:[], serverChecked:true, planRetained:true });
+            LDR_CLEANUP_SCOPE = { planId: String(plan.planId), slotId: slotId, authorityAt: Date.now() };
+
+            /* ★fix736: authority 取得中に plan が書き換えられていないことを、
+               physicalPhase を呼ぶ **直前** に pending を再読して byte 単位で確認する。 */
+            var again = readPending().filter(function(x){ return x && String(x.planId) === planId; });
+            if (again.length !== 1 || JSON.stringify(again[0]) !== planSnapshot)
+              return done({ ok:false, code:'plan-mutated-during-authority', why:null,
+                             deleted:[], refused:[], serverChecked:true, planRetained:true });
+
+            /* ⑥ 既存 physicalPhase を再利用する。ここから先の順序は 1 バイトも変えない。 */
+            var out = null;
+            try {
+              out = physicalPhase(plan, d, plan.snapshotId,
+                                  { ldrCleanup:true, verdict:'LDR_TERMINAL_LOCAL_CLEANUP' });
+            } catch(e){
+              return done({ ok:false, code:'physical-threw', why:String(e && e.message || e),
+                             deleted:[], refused:[], serverChecked:true, planRetained:true });
+            }
+            var retained = readPending().some(function(p){ return p && String(p.planId) === String(plan.planId); });
+            done({ ok: !!(out && out.code === 'deleted'),
+                   code: (out && out.code) || 'unknown',
+                   deleted: (out && out.deleted != null) ? out.deleted : 0,
+                   refused: (out && out.refused) || [],
+                   serverChecked: true,
+                   planRetained: retained,
+                   snapshotId: plan.snapshotId });
+          } catch(e2){
+            done({ ok:false, code:'threw', why:String(e2 && e2.message || e2),
+                   deleted:[], refused:[], serverChecked:false, planRetained:true });
+          }
+        });
+      } catch(e3){
+        done({ ok:false, code:'request-threw', why:String(e3 && e3.message || e3),
+               deleted:[], refused:[], serverChecked:false, planRetained:true });
+      }
+    });
+  }
+
   /* ---- ★T2: pull barrier の判定 ------------------------------------------
    * 取り込み側がこれを使って「墓標が立っているスロットのキーは書き戻さない」。
    * ここは判定を返すだけで、自分では何も書かない。 */
@@ -1355,6 +1565,9 @@
     noteFilterUnavailable: function(){ stats.tombstonePayloadFilterUnavailable++; },
     /* ★fix562 の deletePolicy がこれを見て lifecycle-delete を解禁する */
     tombstoneBarrierReady: true,
+    /* ★★fix736(RULING111-A): owner explicit / 1 件だけの LDR terminal cleanup。
+       boot / autoResume / timer / sweep からは呼ばれない。汎用 sweep 引数を持たない。 */
+    ldrCleanupOnce: ldrCleanupOnce,
     /* ★★fix735(RULING109 §4 / R110 最優先2): LDR server proof の **非永続** 受け口。
        ここへ渡した proof は runtime memory にしか置かれない。localStorage /
        sessionStorage / IndexedDB / pending plan / meta / snapshot へは書かれない。

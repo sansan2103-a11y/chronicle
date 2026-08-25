@@ -1,0 +1,73 @@
+================================================================
+ fix736 出荷用マニフェスト
+ LDR EXPLICIT LOCAL CLEANUP ENTRYPOINT
+ RULING111-C: Architecture B ACCEPT / D1-D5 充足で自律 deploy GO
+ 2026-08-25 / Chronicle v292-rebuild
+================================================================
+
+■ この3ファイルだけを GitHub の chronicle リポジトリ直下へドラッグして
+  コミットしてください。他のファイルは触らないでください。
+
+----------------------------------------------------------------
+1) v292Dfix587-story-lifecycle.js
+   bytes  100,628   （PRE 87,023 → +13,605）
+   blob   7321827fcda9298d2107b198c6e49fd51194a2e6
+   sha256 60b22670ac0464564789ce882b21377fc889d3330aa2b91f424cb7ec2e18b256
+   PRE    87,023 / sha256 eec4fdd1ba40dd964297ee37a972fceb939a31a0c812048a92241593d2ceeb33
+
+2) index.html
+   bytes  231,645（PRE と同じ。cb 文字列長が同一）
+   blob   c9dfb7989119cca82b81c4ceff7a58cd329bde4e
+   sha256 9ff30ad008957c9b14056e3974bb34a76ca37d9ca16ae32eb0166cee98120ba7
+   PRE    231,645 / sha256 3e46e3793dfc16c5de0b1f3d70f3e8e7490c5446d0b98edb8359d969b5ab4e8c
+   変更   1 行のみ:
+     L3225  v292Dfix587-story-lifecycle.js?cb=v292Dfix735 → v292Dfix736
+
+3) home.html
+   bytes  143,816（PRE と同じ）
+   blob   94daca91de2c12c4d412be181301daf96221884a
+   sha256 c0a98e3058cf44377dc86831761e2872a3b46f1bf154ff4f8ae59f233dbbf8b9
+   PRE    143,816 / sha256 52619fc056954d243bf283a876b83869b97fa8f6829516b1d960af539ec97b7d
+   変更   1 行のみ:
+     L270   v292Dfix587-story-lifecycle.js?cb=v292Dfix735 → v292Dfix736
+
+----------------------------------------------------------------
+■ 変更しないもの
+   v292Dfix562-backup-inventory.js … byte 不変（cb も v292Dfix735 のまま）
+   v292Dfix569-gc-shadow.js        … byte 不変
+   v292Dfix660-delete-gateway.js   … byte 不変
+   Cloudflare Worker novel-proxy   … 1 バイトも触らない
+   新規 asset                      … 0
+   script タグの追加・削除・並び替え … 0
+     index.html  script 258 本 / 順序 完全一致
+     home.html   script  18 本 / 順序 完全一致
+
+----------------------------------------------------------------
+■ PREDEPLOY drift 検査（2026-08-25 実施）
+   production 6 asset を no-store で readback し SHA-256 で照合 → 6/6 一致。DRIFT = 0。
+
+----------------------------------------------------------------
+■ fix736 が足すもの
+
+   __chronicleStoryLifecycle.ldrCleanupOnce({ planId, slotId, confirm:'OWNER_EXPLICIT' })
+
+   ・owner が明示指定した 1 plan / 1 slot だけを対象にする
+   ・caller が渡せるのは planId / slotId / confirm だけ。
+     authority 系（serverProof / rev / hash / authority / allow / policy 等）を
+     付けると caller-authority-rejected で拒否
+   ・confirm は認証ではなく誤操作防止 marker
+   ・entrypoint 自身が getstory を 1 回だけ取得（deleteshadow は送らない）
+   ・物理削除は既存 physicalPhase を再利用:
+       classification fail-closed → fix735 policy → TOCTOU binding
+       → fix569.tryDeleteExact → removeItem
+   ・boot / autoResume / timer / sweep からは起動されない
+
+■ deploy 直後の挙動
+   ・この API を **呼ばない限り何も起きない**
+   ・通常の削除ライフサイクルは 1 バイトも変わらない
+     （通常 plan は従来どおり dropPending される = T25 で固定）
+
+■ deploy 後にやらないこと（R111-E 裁定まで HOLD）
+   CANARY B physical cleanup / CANARY A cleanup / IndexedDB cleanup /
+   real story mutation / promotion / WHO・title repair
+================================================================
