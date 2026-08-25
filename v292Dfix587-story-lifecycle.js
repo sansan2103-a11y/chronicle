@@ -186,7 +186,10 @@
   //  (10) deleteshadow 成功後にだけ fix660 ゲート経由の物理削除
   //  (11) legacy pkg push は **後追いの best-effort**。失敗しても削除は巻き戻さない
   //
-  // 既定 OFF（v292Dfix708On==='1' かつ v292Dfix708Off!=='1' のときだけ新経路）。
+  // ★fix734(RULING100 §Q3) COMMENT_ONLY / BEHAVIOR DELTA 0:
+  //   実装は fix712 で既定 ON へ反転済み（sdOn() は v292Dfix708Off==='1' のときだけ OFF。
+  //   v292Dfix708On は読んでいない）。旧コメント「既定 OFF」は stale だったので実装に合わせる。
+  // 既定 ON（v292Dfix708Off==='1' のときだけ従来経路）。
   // OFF のときは 1 バイトも挙動が変わらない（従来の finishLegacy をそのまま通る）。
   // ===================================================================
   var SHADOW_DELETE_PROTOCOL_VERSION = 1;
@@ -480,8 +483,34 @@
   }
 
   /* ---- ⑥⑦⑧ 旧経路: legacy pkg push が通ってから物理削除（fix708 OFF 時） ---- */
+  /* ★★fix734(RULING100): DELETE_PLAN_SAFETY_MONOTONICITY
+     一度 fix708 の安全管理下（shadow delete protocol）に入った計画は、
+     kill switch(v292Dfix708Off='1') を立てても **より安全性の低い legacy 破壊経路へ降格させない**。
+     ・降格させると「危険なので止めた計画」が、server の row を一切見ない legacy 経路へ落ち、
+       local key を物理削除し得る（DELETE_KILL_SWITCH_SAFETY_DOWNGRADE）。
+     ・最初から fix708 OFF で作られた真正 legacy plan は従来どおり通す。
+       kill switch 本来の legacy fallback は壊さない。
+     ・既存の sdHold は **上書きしない**（止まった理由の履歴を消さない）。 */
+  function isGuardedPlan(plan){
+    if (!plan || typeof plan !== 'object') return false;
+    if (plan.shadowDeleteVersion === 1) return true;                 /* fix708 世代の plan */
+    if (plan.sdHold && typeof plan.sdHold === 'object') return true; /* 安全上いちど止めた plan */
+    return false;
+  }
+  function guardedDowngradeHold(plan, snapshotId){
+    stats.f734GuardedDowngradeRefused = (stats.f734GuardedDowngradeRefused || 0) + 1;
+    addPending(plan);                        /* ★payload は必ず保持（dropPending しない） */
+    note({ act:'refused', slotId: (plan && plan.slotId), deleteOpId: (plan && plan.deleteOpId),
+           why:'fix708 の安全管理下に入った計画を kill switch OFF で legacy 物理削除へ降格させない' });
+    return { ok:true, code:'pending-guarded-no-downgrade',
+             verdict:'DELETE_PLAN_SAFETY_MONOTONICITY_HOLD',
+             deleteOpId: (plan && plan.deleteOpId), snapshotId: snapshotId,
+             hidden:true, mutated:false };
+  }
   function finishLegacy(plan, d, snapshotId){
     var slotId = plan.slotId, deleteOpId = plan.deleteOpId;
+    /* ★fix734: guarded plan は legacy 破壊経路へ入れない */
+    if (isGuardedPlan(plan)) return Promise.resolve(guardedDowngradeHold(plan, snapshotId));
     return pushTombstone(d).then(function(pushed){
       if (!pushed){
         /* オフライン/push失敗: 一覧からは消えるが、実データは**まだ消さない**。
@@ -894,73 +923,95 @@
       stats.refused++; return Promise.resolve({ ok:false, code:'no-keys' });
     }
 
-    /* ③スナップショット作成（＝復元セット。新しい退避方式は作らない）
-       ★fix588(GPT裁定C): 復元セットが**どの削除操作のものか**を後から確認できるように、
-         deleteOpId を先に決めて manifest の reason に埋め込む。
-         （fix564 の形は変えない。pending を失った異常系で「別のsnapshotへ差し替わった」を検出するため） */
-    var now = Date.now();
-    var deleteOpId = 'del_' + slotId + '_' + now;
-    var snap = null;
-    try { snap = d.snap.create(slotId, { now: now, reason: 'lifecycle-delete:' + deleteOpId }); }
-    catch(e){ snap = { ok:false, error:String(e && e.message) }; }
-    if (!snap || !snap.ok){
-      stats.refused++;
-      note({ act:'refused', slotId:slotId, source:src, why:'復元セットを作れない: ' + ((snap && snap.error) || '?') });
-      return Promise.resolve({ ok:false, code:'snapshot-failed', error: snap && snap.error });
-    }
-
-    /* ④read-back・hash一致の検証。ここが通らなければ**絶対に消さない** */
-    var ver = null;
-    try { ver = d.snap.verify(snap.id); } catch(e){ ver = { ok:false }; }
-    if (!ver || !ver.ok){
-      stats.refused++;
-      note({ act:'refused', slotId:slotId, source:src, why:'復元セットの検証に失敗' });
-      return Promise.resolve({ ok:false, code:'snapshot-unverified', snapshotId: snap.id });
-    }
-
-    /* ★★fix708(1): **墓標を立てる前に** live projection から canonical hash を確定する。
-       墓標を立てた後は fix697 の projection が null になるため、ここでしか取れない
-       （後から作り直すのは「別物の hash」を作ることであり、裁定で禁止されている）。 */
-    function proceed(baseHash, baseWhy){
-      /* ⑤meta に tombstone を立てる */
-      var meta = readMeta();
-      var cur = meta.filter(function(e){ return e && String(e.id) === String(slotId); })[0] || null;
-      var tomb = d.tomb.make({ slotId: slotId, title: (cur && cur.name) || (cur && cur.title) || '',
-                               deletedAt: now, deleteOpId: deleteOpId, recoverySnapshotId: snap.id });
-      if (!tomb || !d.tomb.validate(tomb).ok){
-        stats.refused++; return Promise.resolve({ ok:false, code:'tombstone-invalid' });
-      }
-      var next = meta.filter(function(e){ return !e || String(e.id) !== String(slotId); });
-      next.push(tomb);
-      if (!writeMeta(next)){
+    /* ★★fix734(RULING99 §4): CURRENT_DELETE_HASH_CAPTURE_FAILS_OPEN の修正。
+       旧実装は captureDeleteBaseHash が失敗しても proceed() し、墓標を立ててしまうため
+       localDeleteBaseHash なしの plan が確定し、削除段で pending-no-base-hash の
+       **恒久保留**（回復経路なし）になっていた。
+       → base hash を確定できないなら **1 バイトも変更せずに中止**する。
+       ★ snapshot 作成より前に hash を取る。これは fix708 がヘッダへ自ら書いた
+         (1)hash → (2)snapshot → (3)墓標 の順序へ戻すだけで、成功時の振る舞いは同じ。
+       ★ OFF 経路（sdOn()===false）は従来と完全に同じ。 */
+    function f734Continue(baseHash){
+      /* ③スナップショット作成（＝復元セット。新しい退避方式は作らない）
+         ★fix588(GPT裁定C): 復元セットが**どの削除操作のものか**を後から確認できるように、
+           deleteOpId を先に決めて manifest の reason に埋め込む。
+           （fix564 の形は変えない。pending を失った異常系で「別のsnapshotへ差し替わった」を検出するため） */
+      var now = Date.now();
+      var deleteOpId = 'del_' + slotId + '_' + now;
+      var snap = null;
+      try { snap = d.snap.create(slotId, { now: now, reason: 'lifecycle-delete:' + deleteOpId }); }
+      catch(e){ snap = { ok:false, error:String(e && e.message) }; }
+      if (!snap || !snap.ok){
         stats.refused++;
-        note({ act:'refused', slotId:slotId, source:src, why:'metaへ墓標を書けない（容量不足）' });
-        return Promise.resolve({ ok:false, code:'tombstone-write-failed' });
-      }
-      note({ act:'tombstone', slotId:slotId, source:src, deleteOpId:deleteOpId, snapshotId:snap.id });
-
-      var plan = { planId: 'plan_' + deleteOpId, deleteOpId: deleteOpId, slotId: slotId,
-                   snapshotId: snap.id, createdAt: now, lifecycleVersion: LIFECYCLE_VERSION,
-                   keys: keys, source: src };
-      /* ★fix708(4): 計画へ最小限の項目だけ足す（schema はこれ以上増やさない）。 */
-      if (sdOn()){
-        plan.storyId = String(slotId);
-        plan.recoverySnapshotId = snap.id;
-        plan.shadowDeleteVersion = SHADOW_DELETE_PROTOCOL_VERSION;
-        plan.localDeleteBaseHash = baseHash || null;
-        if (!baseHash) plan.localDeleteBaseHashWhy = String(baseWhy || 'UNKNOWN');
+        note({ act:'refused', slotId:slotId, source:src, why:'復元セットを作れない: ' + ((snap && snap.error) || '?') });
+        return Promise.resolve({ ok:false, code:'snapshot-failed', error: snap && snap.error });
       }
 
-      /* ⑥tombstone をクラウドへ確定させてから、はじめて物理削除する */
-      return finish(plan, d, snap.id);
+      /* ④read-back・hash一致の検証。ここが通らなければ**絶対に消さない** */
+      var ver = null;
+      try { ver = d.snap.verify(snap.id); } catch(e){ ver = { ok:false }; }
+      if (!ver || !ver.ok){
+        stats.refused++;
+        note({ act:'refused', slotId:slotId, source:src, why:'復元セットの検証に失敗' });
+        return Promise.resolve({ ok:false, code:'snapshot-unverified', snapshotId: snap.id });
+      }
+
+      /* ★★fix708(1): **墓標を立てる前に** live projection から canonical hash を確定する。
+         墓標を立てた後は fix697 の projection が null になるため、ここでしか取れない
+         （後から作り直すのは「別物の hash」を作ることであり、裁定で禁止されている）。 */
+      function proceed(baseHash, baseWhy){
+        /* ⑤meta に tombstone を立てる */
+        var meta = readMeta();
+        var cur = meta.filter(function(e){ return e && String(e.id) === String(slotId); })[0] || null;
+        var tomb = d.tomb.make({ slotId: slotId, title: (cur && cur.name) || (cur && cur.title) || '',
+                                 deletedAt: now, deleteOpId: deleteOpId, recoverySnapshotId: snap.id });
+        if (!tomb || !d.tomb.validate(tomb).ok){
+          stats.refused++; return Promise.resolve({ ok:false, code:'tombstone-invalid' });
+        }
+        var next = meta.filter(function(e){ return !e || String(e.id) !== String(slotId); });
+        next.push(tomb);
+        if (!writeMeta(next)){
+          stats.refused++;
+          note({ act:'refused', slotId:slotId, source:src, why:'metaへ墓標を書けない（容量不足）' });
+          return Promise.resolve({ ok:false, code:'tombstone-write-failed' });
+        }
+        note({ act:'tombstone', slotId:slotId, source:src, deleteOpId:deleteOpId, snapshotId:snap.id });
+
+        var plan = { planId: 'plan_' + deleteOpId, deleteOpId: deleteOpId, slotId: slotId,
+                     snapshotId: snap.id, createdAt: now, lifecycleVersion: LIFECYCLE_VERSION,
+                     keys: keys, source: src };
+        /* ★fix708(4): 計画へ最小限の項目だけ足す（schema はこれ以上増やさない）。 */
+        if (sdOn()){
+          plan.storyId = String(slotId);
+          plan.recoverySnapshotId = snap.id;
+          plan.shadowDeleteVersion = SHADOW_DELETE_PROTOCOL_VERSION;
+          plan.localDeleteBaseHash = baseHash || null;
+          if (!baseHash) plan.localDeleteBaseHashWhy = String(baseWhy || 'UNKNOWN');
+        }
+
+        /* ⑥tombstone をクラウドへ確定させてから、はじめて物理削除する */
+        return finish(plan, d, snap.id);
+      }
+
+      return proceed(baseHash, null);
     }
-
-    if (!sdOn()) return proceed(null, null);      /* ★OFF は従来と完全に同じ経路 */
+    if (!sdOn()) return f734Continue(null);      /* ★OFF は従来と完全に同じ経路 */
     return new Promise(function(resolve){
       captureDeleteBaseHash(slotId, function(h, why){
-        note({ act:'delete-base-hash', slotId:slotId, deleteOpId:deleteOpId,
-               captured: !!h, why: (h ? null : String(why || '?')) });
-        resolve(proceed(h, why));
+        note({ act:'delete-base-hash', slotId:slotId, captured: !!h,
+               why: (h ? null : String(why || '?')) });
+        if (typeof h !== 'string' || h === ''){
+          stats.f734AbortedNoBaseHash = (stats.f734AbortedNoBaseHash || 0) + 1;
+          stats.refused++;
+          note({ act:'refused', slotId:slotId, source:src,
+                 why:'削除時点の canonical hash を確定できないため中止した'
+                      + '（本体・墓標・計画・送信すべて 0）' });
+          resolve({ ok:false, code:'delete-base-hash-unavailable',
+                    verdict:'DELETE_ABORTED_NO_BASE_HASH',
+                    baseHashWhy: String(why || 'UNKNOWN'), mutated:false });
+          return;
+        }
+        resolve(f734Continue(h));
       });
     });
   }
@@ -1029,6 +1080,23 @@
                  pending: readPending().length, skippedTerminal: skipped,
                  filteredOut: filteredOut, held: held };
       });
+    }
+    /* ★★fix734(RULING100): OFF 分岐は finish() を通らず executePlan を直接呼ぶため、
+       ここでも guarded plan を除外する。除外した計画は pending に残したまま理由だけ記録する。 */
+    var guardedOut = list.filter(isGuardedPlan);
+    if (guardedOut.length){
+      list = list.filter(function(p){ return !isGuardedPlan(p); });
+      guardedOut.forEach(function(p){
+        stats.f734GuardedDowngradeRefused = (stats.f734GuardedDowngradeRefused || 0) + 1;
+        note({ act:'refused', slotId: p && p.slotId, deleteOpId: p && p.deleteOpId,
+               why:'fix708 の安全管理下に入った計画を kill switch OFF で legacy 物理削除へ降格させない' });
+      });
+      if (!list.length)
+        return Promise.resolve({ ok:true, code:'pending-guarded-no-downgrade',
+                                 verdict:'DELETE_PLAN_SAFETY_MONOTONICITY_HOLD',
+                                 done:0, guardedHeld: guardedOut.length,
+                                 pending: readPending().length, skippedTerminal: skipped,
+                                 filteredOut: filteredOut });
     }
     return pushTombstone(d).then(function(pushed){
       /* ★fix589: 'still-offline' は誤解を招く名前だった（実際の原因は空ガードでもオフラインと表示された）。

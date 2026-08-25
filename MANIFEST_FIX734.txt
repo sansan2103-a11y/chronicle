@@ -1,0 +1,14 @@
+CHRONICLE fix734 FINAL PREDEPLOY MANIFEST (R101)
+marker      : 20260825-fix734
+cache-buster: v292Dfix734
+base        : production readback 20260824-fix733 (r99src)
+
+file                            bytes    git-blob                                  sha256
+index.html                      231645   3a817f3626c36066bbdd7e50cdd47088ae6907b6  a9c900714c187335c7fd19dabbeb3da0b8cde687fd2c0ee060d1f6d0dad544e5
+home.html                       143816   b235741a857f22e45e9a7c88968a19ccbac64cd0  583c49e6a5a51866392928b8a7e12546991ab50d04ebbe01b978154878b3e368
+v292Dfix587-story-lifecycle.js  77646    9c3877bd8443ca7d979c1fe03de0e5b1ecb4dcea  b161df2547998d60b28686f3af9e6830a1ef1043bebc6c7815dfdb2475338939
+version.txt                     16       a0586e2f490052db8e3b03e0f3e30d01d1dc43d6  fdf635728dd3dc84076fbb73f1db3ccd7f702360db76ddc009e8be57247d0766
+
+PRE (production) fix587: 72728 bytes, blob d70f396cd4993cc4095c03c0cb299212294abe95
+index.html / home.html delta vs production: 2 lines each (BUILT marker + fix587 cb) only.
+DEPLOY: NOT PERFORMED.
