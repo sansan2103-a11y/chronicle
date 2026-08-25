@@ -1,0 +1,74 @@
+================================================================
+ fix735 出荷用マニフェスト（RULING110-B: PRODUCTION DEPLOY = GO）
+ 2026-08-25 / Chronicle v292-rebuild
+================================================================
+
+■ この4ファイルだけを GitHub の chronicle リポジトリ直下へドラッグして
+  コミットしてください。他のファイルは触らないでください。
+
+----------------------------------------------------------------
+1) v292Dfix562-backup-inventory.js
+   bytes  45,188   （PRE 36,775 → +8,413）
+   blob   5d18a4aa727c455984bdbbb5aa0db6d391d5b023
+   sha256 a878f4d06adbc15cc29f7e05818f65c34f8ca29c62b0fb2d706ec67537f6fafd
+   PRE    36,775 / blob 9667ecc322c26d7967872c8216f0d761c896340f
+
+2) v292Dfix587-story-lifecycle.js
+   bytes  87,023   （PRE 77,646 → +9,377）
+   blob   1406c62ead358b65ac541a55e0b7428bee53c7a4
+   sha256 eec4fdd1ba40dd964297ee37a972fceb939a31a0c812048a92241593d2ceeb33
+   PRE    77,646 / blob 9c3877bd8443ca7d979c1fe03de0e5b1ecb4dcea
+
+3) index.html
+   bytes  231,645（PRE と同じ。cb 文字列長が同一のため）
+   blob   5d6c9c040375a49b275b9cdb6c2bacd79ebef58b
+   sha256 3e46e3793dfc16c5de0b1f3d70f3e8e7490c5446d0b98edb8359d969b5ab4e8c
+   PRE    231,645 / blob 3a817f3626c36066bbdd7e50cdd47088ae6907b6
+   変更   2 行のみ:
+     L2852  v292Dfix562-backup-inventory.js?cb=v292Dfix567 → v292Dfix735
+     L3225  v292Dfix587-story-lifecycle.js?cb=v292Dfix734  → v292Dfix735
+
+4) home.html
+   bytes  143,816（PRE と同じ）
+   blob   07782dac5e83b5f605606f53de99c2cf01a9e6de
+   sha256 52619fc056954d243bf283a876b83869b97fa8f6829516b1d960af539ec97b7d
+   PRE    143,816 / blob b235741a857f22e45e9a7c88968a19ccbac64cd0
+   変更   2 行のみ:
+     L247   v292Dfix562-backup-inventory.js?cb=v292Dfix680 → v292Dfix735
+     L270   v292Dfix587-story-lifecycle.js?cb=v292Dfix734  → v292Dfix735
+
+----------------------------------------------------------------
+■ 変更しないもの
+   v292Dfix569-gc-shadow.js       … byte 不変
+   v292Dfix660-delete-gateway.js  … byte 不変
+   Cloudflare Worker novel-proxy  … 1 バイトも触らない
+   新規 asset                     … 0（fix735 は独立ファイルを作らない）
+   script タグの追加・削除・並び替え … 0
+     index.html  script 258 本 / 順序 完全一致
+     home.html   script  18 本 / 順序 完全一致
+
+----------------------------------------------------------------
+■ PREDEPLOY drift 検査（2026-08-25 実施）
+   production 6 asset を no-store で readback し SHA-256 で照合 → 6/6 一致。
+   DRIFT = 0。
+
+   注記: 途中 git-blob SHA-1 が食い違って見えたが、これはブラウザ JS 実行
+   チャネルで NUL 文字が空白へ正規化されたことによる計測アーティファクトで、
+   SHA-256 では 6/6 完全一致。production 内容の変化ではない。
+
+----------------------------------------------------------------
+■ fix735 が変えること
+   hard 分類 key の物理削除に
+     POLICY ALLOW ∧ TOCTOU BINDING OK ∧ DESTRUCTIVE GATE ALLOW
+   を必須にする。従来は fix562.deletePolicy を通さず fix569 のゲートだけで
+   消していた（FIX587_GATE_ONLY_HARD_DELETE_BYPASS）。それを閉じる。
+
+■ 既知の tradeoff（RULING110-B で ACCEPTED）
+   ・通常削除後も local recovery bytes が残る（story 実サイズに 1:1、複製なし）
+   ・初回削除トランザクション内で server 往復が MAX_ATTEMPTS(3) 倍。以降 0
+   ・fix562.liveSlots() が削除済みスロットを数える（UI 可視性・復活には波及しない）
+
+■ deploy 後にやらないこと（R110-C まで HOLD）
+   physical delete / CANARY A・B cleanup / IndexedDB cleanup /
+   real story mutation / promotion / WHO・title repair
+================================================================

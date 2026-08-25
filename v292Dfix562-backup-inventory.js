@@ -598,6 +598,39 @@
    *   tombstone が無いまま生セーブを消すと、次の bootPull で復活して
    *   「消したのに戻ってくる」を新たに作るため。
    */
+  /* ★fix735: LDR server proof の鮮度上限。fix660 の SERVER_PROOF_TTL_MS と同じ意味
+     （0 <= now - serverConfirmedAt <= TTL）。理由なく別 semantics へ分岐させない。 */
+  var LDR_PROOF_TTL_MS = 120000;
+
+  /* ★★fix735(RULING109 §3): 分類器の入力（localStorage の列挙）が信用できないとき、
+     hard を releasable などへ降格させたまま削除許可を出さない。
+     ・ここで判定するのは **削除の authorization** だけ。classifyKey 本体は 1 行も変えない
+     ・正常な production 相当の列挙では従来どおりの分類・従来どおりの判断を返す
+     ・新しい storage 抽象や汎用 enumerator は作らない */
+  function enumerationTrustworthy(){
+    try {
+      var ks = Object.keys(localStorage);
+      if (Object.prototype.toString.call(ks) !== '[object Array]') return false;
+      var len = localStorage.length;
+      if (typeof len !== 'number' || !isFinite(len) || len < 0 || Math.floor(len) !== len) return false;
+      if (ks.length !== len) return false;
+      var seen = Object.create(null), n = 0;
+      for (var i = 0; i < len; i++){
+        var k = localStorage.key(i);
+        if (typeof k !== 'string' || k === '') return false;     /* invalid key */
+        if (seen[k] === 1) return false;                          /* duplicate */
+        seen[k] = 1; n++;
+      }
+      if (n !== len) return false;
+      for (var j = 0; j < ks.length; j++){
+        var kk = ks[j];
+        if (typeof kk !== 'string' || kk === '') return false;
+        if (seen[kk] !== 1) return false;                         /* 集合不一致 */
+      }
+      return true;
+    } catch(e){ return false; }                                   /* throw / 判定不能 */
+  }
+
   function tombstoneReady(){
     try { var s = window.__chronicleStoryLifecycle;
           return !!(s && s.tombstoneBarrierReady === true); } catch(e){ return false; }
@@ -607,6 +640,14 @@
     var c = classifyKey(req.key, req.value);
     var intent = String(req.intent || 'reclaim');
     var out = { allow: false, code: 'denied', classification: c, policyVersion: 1 };
+
+    /* ★★fix735: 列挙が信用できない状態では、どの分類であっても削除を許可しない。
+       hard → orphan-side-store(releasable) のような降格で authorization を
+       迂回されるのを防ぐ（fail closed）。 */
+    if (!enumerationTrustworthy()){
+      out.code = 'classification-input-unreliable';
+      return out;
+    }
 
     if (c.protection === 'review'){ out.code = 'unknown-format-review-only'; return out; }
     if (c.protection === 'releasable'){
@@ -630,8 +671,116 @@
       out.code = 'lifecycle-delete-not-ready';
       return out;
     }
+    /* ★★fix735(RULING108 修正1): LDR-terminal に限った狭い verified authorization。
+       汎用の verified-plan 機構ではない。LIFECYCLE_DELETE_RECOVERY で server tombstone が
+       確定し legacy plan が正式 terminal 化された **その計画に載っている exact key** だけを解禁する。
+       通常の（非 terminal）hard story delete は今回も解禁しない。 */
+    var ldr = ldrTerminalAuthorization(req, c);
+    if (ldr.ok){
+      out.allow = true;
+      out.code = 'lifecycle-delete-verified-ldr-terminal';
+      out.ldr = { slotId: ldr.slotId, resolutionDeleteOpId: ldr.resolutionDeleteOpId,
+                  resolvedServerRev: ldr.resolvedServerRev };
+      /* ★fix735: TOCTOU 対策。authorization を「exact key + そのときの値 + 計画同一性」へ縛る。
+         新しい永続 hash authority は作らない（既存 hash() の値をその場で持つだけ）。 */
+      out.binding = ldr.binding;
+      return out;
+    }
     out.code = 'lifecycle-delete-requires-verified-plan';
-    return out;   /* 計画の検証は A3.5/A3.6 で実装する。ここではまだ許可しない */
+    out.ldrWhy = ldr.why;     /* なぜ verified 経路に乗らなかったか（診断のみ） */
+    return out;
+  }
+
+  /* ★★fix735: LDR-terminal verified authorization の判定だけを行う。
+     ここでは **何も削除しない・何も書かない**。判定と理由を返すだけ。 */
+  var LDR_RESOLUTION = 'SERVER_TOMBSTONED_BY_LDR';
+  function metaTombstoneExists(slotId){
+    try {
+      var a = JSON.parse(lsg('chr6_slots_meta') || '[]');
+      if (!Array.isArray(a)) return false;
+      for (var i = 0; i < a.length; i++){
+        var e = a[i];
+        if (e && e.deleted === true && String(e.id) === String(slotId)) return true;
+      }
+      return false;
+    } catch(e){ return false; }
+  }
+  /* ★fix735: 時刻異常は必ず fail closed。TTL を伸ばして通す方向にはしない。 */
+  function proofTimeOk(sp){
+    var at = sp.serverConfirmedAt;
+    if (typeof at !== 'number' || !isFinite(at) || at <= 0) return 'proof-timestamp-invalid';
+    var now = Date.now();
+    var age = now - at;
+    if (age < 0) return 'proof-timestamp-future';
+    if (age > LDR_PROOF_TTL_MS) return 'proof-stale';
+    if (sp.issuedAt !== undefined){
+      var ia = sp.issuedAt;
+      if (typeof ia !== 'number' || !isFinite(ia) || ia <= 0) return 'proof-issuedat-invalid';
+      if (ia - now > 0) return 'proof-issuedat-future';
+    }
+    if (sp.expiresAt !== undefined){
+      var ea = sp.expiresAt;
+      if (typeof ea !== 'number' || !isFinite(ea) || ea <= 0) return 'proof-expiresat-invalid';
+      if (ea <= now) return 'proof-expired';
+      if (ea - now > LDR_PROOF_TTL_MS) return 'proof-expiresat-abnormal';
+    }
+    return null;
+  }
+  function ldrTerminalAuthorization(req, c){
+    function no(why){ return { ok:false, why:why }; }
+    if (!req || typeof req !== 'object') return no('no-req');
+    /* ① 対象は hard の live-story / live-side-store のみ */
+    if (!c || c.protection !== 'hard') return no('not-hard');
+    if (c.family !== 'live-story' && c.family !== 'live-side-store') return no('family-not-story');
+    /* ② 計画 */
+    var vp = req.verifiedPlan;
+    if (!vp || typeof vp !== 'object') return no('no-verified-plan');
+    if (vp.sdTerminal !== true) return no('plan-not-terminal');
+    if (vp.sdResolution !== LDR_RESOLUTION) return no('plan-resolution-mismatch');
+    if (typeof vp.resolutionDeleteOpId !== 'string' || vp.resolutionDeleteOpId === '')
+      return no('plan-no-resolution-opid');
+    if (typeof vp.planId !== 'string' || vp.planId === '') return no('plan-no-planid');
+    if (typeof vp.deleteOpId !== 'string' || vp.deleteOpId === '') return no('plan-no-deleteopid');
+    if (typeof vp.snapshotId !== 'string' || vp.snapshotId === '') return no('plan-no-snapshotid');
+    /* ★元の停止理由（事故原因の証拠）が残っていること */
+    if (!vp.sdHold || vp.sdHold.verdict !== 'DELETE_BASE_HASH_MISSING')
+      return no('plan-provenance-missing');
+    if (vp.localDeleteBaseHash != null && vp.localDeleteBaseHash !== '')
+      return no('plan-basehash-present');
+    if (c.slotId == null || String(c.slotId) !== String(vp.slotId)) return no('slot-mismatch');
+    /* ③ exact key が計画に載っており、bytes/hash が現在値と一致する */
+    var keys = vp.keys;
+    if (Object.prototype.toString.call(keys) !== '[object Array]') return no('plan-keys-missing');
+    var it = null;
+    for (var i = 0; i < keys.length; i++){ if (keys[i] && keys[i].key === req.key){ it = keys[i]; break; } }
+    if (!it) return no('key-not-in-plan');
+    var raw = (req.value !== undefined) ? req.value : lsg(req.key);
+    if (raw == null) return no('value-missing');
+    if (it.bytes != null && raw.length !== it.bytes) return no('bytes-mismatch');
+    var curHash = hash(raw);
+    if (it.hash != null && curHash !== it.hash) return no('hash-mismatch');
+    /* ④ server proof（id / deleted / authority / rev / 時刻） */
+    var sp = req.serverProof;
+    if (!sp || typeof sp !== 'object') return no('no-server-proof');
+    if (String(sp.id != null ? sp.id : vp.slotId) !== String(vp.slotId)) return no('proof-id-mismatch');
+    if (sp.deleted !== true) return no('proof-not-deleted');
+    if (sp.authority !== 'shadow' && sp.authority !== 'canonical') return no('proof-authority-unexpected');
+    if (typeof vp.resolvedServerRev !== 'number' || sp.rev !== vp.resolvedServerRev) return no('proof-rev-mismatch');
+    var tw = proofTimeOk(sp);
+    if (tw) return no(tw);
+    /* ⑤ local 側の墓標と barrier */
+    if (!metaTombstoneExists(vp.slotId)) return no('no-meta-tombstone');
+    if (!tombstoneReady()) return no('tombstone-barrier-not-ready');
+    return { ok:true, slotId: String(vp.slotId),
+             resolutionDeleteOpId: vp.resolutionDeleteOpId,
+             resolvedServerRev: vp.resolvedServerRev,
+             /* ★TOCTOU binding。永続化しない。判定した瞬間の同一性そのもの */
+             binding: { key: req.key, bytes: raw.length, hash: curHash,
+                        slotId: String(vp.slotId), planId: vp.planId,
+                        deleteOpId: vp.deleteOpId, snapshotId: vp.snapshotId,
+                        sdTerminal: true, sdResolution: vp.sdResolution,
+                        resolutionDeleteOpId: vp.resolutionDeleteOpId,
+                        resolvedServerRev: vp.resolvedServerRev } };
   }
 
   window.__v292Dfix562 = {

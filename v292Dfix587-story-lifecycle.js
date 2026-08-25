@@ -282,7 +282,91 @@
   }
 
   /* ---- ⑦⑧ 物理削除（必ずゲート経由） ------------------------------------ */
+  /* ★★fix735(RULING109 §4 / R110 最優先2): LDR server proof は **永続化しない**。
+     ・plan オブジェクトへ書かない（= v292Dfix587_pending へ絶対に載らない）
+     ・runtime memory だけで保持し、削除トランザクションが終わったら必ず捨てる
+     ・reload すると必ず消えるので、「昔の proof で今の hard delete を通す」ことはできない
+     ・fresh proof が無ければ hard delete は policy 側で DENY（fail closed）
+     ★意図的に localStorage/sessionStorage/IndexedDB を一切使わない。 */
+  var LDR_EXEC_PROOF = null;                      /* { planId, slotId, proof } | null */
+  function setLdrExecProof(planId, slotId, proof){
+    if (!planId || !proof || typeof proof !== 'object'){ LDR_EXEC_PROOF = null; return false; }
+    LDR_EXEC_PROOF = { planId: String(planId), slotId: String(slotId), proof: proof };
+    return true;
+  }
+  function clearLdrExecProof(){ LDR_EXEC_PROOF = null; }
+  function ldrExecProofFor(plan){
+    var h = LDR_EXEC_PROOF;
+    if (!h || !plan) return null;
+    if (h.planId !== String(plan.planId)) return null;      /* 別計画の proof は使わせない */
+    if (h.slotId !== String(plan.slotId)) return null;      /* 別スロットの proof は使わせない */
+    return h.proof;
+  }
+
+  /* ★★fix735: hard データの物理削除に対する policy guard。
+     判定だけを返し、ここでは何も消さない・何も書かない。
+     ・非 hard（releasable 等）は従来どおり gate 判断に委ねる（ok:true を返して素通し）
+     ・hard は fix562.deletePolicy が allow を返したときだけ ok:true
+     ・serverProof は **runtime holder からのみ** 取る。plan に埋まっている
+       ldrServerProof は（過去バージョンや外部書換で存在しても）**絶対に使わない**。 */
+  function policyVerdictForKey(it, plan, d){
+    var inv = d && d.inv;
+    if (!inv || typeof inv.classifyKey !== 'function' || typeof inv.deletePolicy !== 'function'){
+      return { ok:false, code:'policy-unavailable', why:'fix562 の classifyKey/deletePolicy が無い' };
+    }
+    var raw = lsg(it.key);
+    var cls = null;
+    try { cls = inv.classifyKey(it.key, raw); } catch(e){ cls = null; }
+    if (!cls) return { ok:false, code:'policy-unavailable', why:'classifyKey が判定できない' };
+    if (cls.protection !== 'hard') return { ok:true, code:'not-hard', why:null, binding:null };
+    var pol = null;
+    try {
+      pol = inv.deletePolicy({ key: it.key, value: raw, intent: 'lifecycle-delete',
+                               verifiedPlan: plan,
+                               serverProof: ldrExecProofFor(plan) });
+    } catch(e){ pol = null; }
+    if (!pol) return { ok:false, code:'policy-unavailable', why:'deletePolicy が例外' };
+    if (typeof pol !== 'object') return { ok:false, code:'policy-unavailable', why:'deletePolicy の戻りが不正' };
+    if (pol.allow !== true)
+      return { ok:false, code:'policy-denied', why:String(pol.code || 'denied') + (pol.ldrWhy ? ('/' + pol.ldrWhy) : '') };
+    return { ok:true, code:String(pol.code || 'allow'), why:null, binding: pol.binding || null };
+  }
+
+  /* ★★fix735(R110 最優先4): TOCTOU 再検証。
+     policy が allow を返した「その瞬間の同一性」と、**gate を呼ぶ直前の現物**が
+     完全に一致するときだけ通す。新しい永続 hash 権威は作らない（binding は揮発値）。 */
+  function bindingStillValid(it, plan, d, binding){
+    if (!binding || typeof binding !== 'object') return 'binding-missing';
+    if (binding.key !== it.key) return 'binding-key-mismatch';
+    if (String(binding.slotId) !== String(plan.slotId)) return 'binding-slot-mismatch';
+    if (binding.planId !== plan.planId) return 'binding-planid-mismatch';
+    if (binding.deleteOpId !== plan.deleteOpId) return 'binding-deleteopid-mismatch';
+    if (binding.snapshotId !== plan.snapshotId) return 'binding-snapshotid-mismatch';
+    if (plan.sdTerminal !== true) return 'binding-plan-not-terminal';
+    if (binding.sdResolution !== plan.sdResolution) return 'binding-resolution-mismatch';
+    if (binding.resolutionDeleteOpId !== plan.resolutionDeleteOpId) return 'binding-resolution-opid-mismatch';
+    if (binding.resolvedServerRev !== plan.resolvedServerRev) return 'binding-serverrev-mismatch';
+    if (it.bytes != null && binding.bytes !== it.bytes) return 'binding-planbytes-mismatch';
+    if (it.hash != null && binding.hash !== it.hash) return 'binding-planhash-mismatch';
+    var now = lsg(it.key);
+    if (now == null) return 'binding-value-vanished';
+    if (now.length !== binding.bytes) return 'binding-bytes-changed';
+    var hashOf = (d.inv && d.inv._hash) ? d.inv._hash : null;
+    if (typeof hashOf !== 'function') return 'binding-hash-unavailable';
+    var h = null;
+    try { h = hashOf(now); } catch(e){ return 'binding-hash-threw'; }
+    if (h !== binding.hash) return 'binding-hash-changed';
+    return null;
+  }
+
+  /* ★★fix735(RULING109 §4): executePlan を通ったら proof は **必ず** 捨てる。
+     例外で抜けても捨てる。＝ proof は「1 回の削除実行」だけに効く揮発値であり、
+     reload はもちろん、同一 runtime でも使い回せない。 */
   function executePlan(plan, d){
+    try { return executePlanInner(plan, d); }
+    finally { clearLdrExecProof(); }
+  }
+  function executePlanInner(plan, d){
     var deleted = [], refused = [];
     for (var i = 0; i < plan.keys.length; i++){
       var it = plan.keys[i];
@@ -293,6 +377,28 @@
          消す目的は既に達成されているので、ここは成功として数える。 */
       /* ★fix595: 「元から無かった」は成功だが**物理削除ではない**。別の数として数える。 */
       if (lsg(it.key) == null){ deleted.push(it.key); stats.alreadyMissingPlannedKeys++; continue; }
+      /* ★★fix735(RULING108 修正2 / RULING109): hard データの物理削除は
+             POLICY ALLOW ∧ TOCTOU BINDING OK ∧ DESTRUCTIVE GATE ALLOW
+         でなければ実行しない。従来は fix562.deletePolicy を通さず fix569 のゲートだけで
+         消していた（FIX587_GATE_ONLY_HARD_DELETE_BYPASS）。ここでそれを閉じる。
+         ・policy が使えない/例外/deny/証明不足/binding 不一致 → **gate を呼ばない**。物理削除 0
+         ・plan / snapshot / 墓標などの provenance は一切消さない
+         ・hard 以外の分類は従来の挙動を変えない */
+      var pv = policyVerdictForKey(it, plan, d);
+      if (pv.ok && pv.code !== 'not-hard'){
+        var bw = bindingStillValid(it, plan, d, pv.binding);
+        if (bw) pv = { ok:false, code:'policy-binding-mismatch', why:bw };
+      }
+      if (!pv.ok){
+        stats.f735PolicyDenied = (stats.f735PolicyDenied || 0) + 1;
+        refused.push({ key: it.key, code: pv.code,
+                       expectedBytes: (it.bytes == null ? null : it.bytes),
+                       actualBytes: (function(){ var v = lsg(it.key); return v == null ? null : v.length; })(),
+                       expectedHash: it.hash || null, actualHash: null,
+                       policyWhy: pv.why || null });
+        stats.gateRefused++; bumpCode(stats.gateRefusedByCode, pv.code);
+        continue;                                   /* ★gate へ到達させない */
+      }
       var r = null;
       try {
         r = d.gate.tryDeleteExact({
@@ -319,6 +425,7 @@
     if (refused.length) noteRefusals(plan, refused);
     return { deleted: deleted, refused: refused };
   }
+
 
   /* ---- ★★fix602: 拒否理由を**再読込しても消えない場所**へ残す -----------------
    * これまで理由はメモリ上の LOG にしか無かったので、ページを閉じた時点で
@@ -425,7 +532,34 @@
     try { var a = JSON.parse(lsg(PENDING_KEY) || '[]'); return Array.isArray(a) ? a : []; }
     catch(e){ return []; }
   }
-  function writePending(a){ return lss(PENDING_KEY, JSON.stringify(a.slice(-20))); }
+  /* ★★fix735(RULING109 §4): pending へ serialize する直前に、authorization proof 系の
+     フィールドを **必ず** 落とす。formal: PERSISTED_PLAN_LDR_SERVER_PROOF = 0。
+     ・通常の計画は該当フィールドを持たないので、**同一オブジェクトをそのまま通す**
+       （= 既存 plan の serialize バイト列は 1 バイトも変わらない）
+     ・持っていた場合だけ shallow copy から取り除く（元 plan の provenance は書き換えない） */
+  /* ★RULING110 §5: strip 対象は fix735 が所有する LDR 専用名だけにする。
+     generic な `serverProof` は fix735 の namespace ではないので **strip しない**
+     （将来 plan が無関係な serverProof を持ったときに黙って消さないため）。 */
+  var LDR_NONPERSIST_FIELDS = ['ldrServerProof', 'ldrProof'];
+  function stripExecProof(plan){
+    if (!plan || typeof plan !== 'object') return plan;
+    var hit = false, i;
+    for (i = 0; i < LDR_NONPERSIST_FIELDS.length; i++)
+      if (Object.prototype.hasOwnProperty.call(plan, LDR_NONPERSIST_FIELDS[i])){ hit = true; break; }
+    if (!hit) return plan;                       /* ★通常経路: 無変更・無コピー */
+    var o = {}, k;
+    for (k in plan){
+      if (!Object.prototype.hasOwnProperty.call(plan, k)) continue;
+      if (LDR_NONPERSIST_FIELDS.indexOf(k) >= 0) continue;
+      o[k] = plan[k];
+    }
+    return o;
+  }
+  function writePending(a){
+    var safe = a.slice(-20), out = [], i;
+    for (i = 0; i < safe.length; i++) out.push(stripExecProof(safe[i]));
+    return lss(PENDING_KEY, JSON.stringify(out));
+  }
   function addPending(plan){
     var a = readPending();
     /* ★★fix602: 同じ planId が既に載っているときは**置き換える**。
@@ -1221,6 +1355,18 @@
     noteFilterUnavailable: function(){ stats.tombstonePayloadFilterUnavailable++; },
     /* ★fix562 の deletePolicy がこれを見て lifecycle-delete を解禁する */
     tombstoneBarrierReady: true,
+    /* ★★fix735(RULING109 §4 / R110 最優先2): LDR server proof の **非永続** 受け口。
+       ここへ渡した proof は runtime memory にしか置かれない。localStorage /
+       sessionStorage / IndexedDB / pending plan / meta / snapshot へは書かれない。
+       executePlan を 1 回通ると必ず破棄される。reload すると必ず消える。 */
+    provideLdrServerProof: function(planId, slotId, proof){ return setLdrExecProof(planId, slotId, proof); },
+    clearLdrServerProof: function(){ clearLdrExecProof(); },
+    /* 観測用。**proof の中身は返さない**（有無と対象だけ） */
+    ldrServerProofStatus: function(){
+      var h = LDR_EXEC_PROOF;
+      return { present: !!h, planId: h ? h.planId : null, slotId: h ? h.slotId : null,
+               persisted: false };
+    },
     /* ★★fix708(STEP3F): 読むだけの観測口。ここから何かを起動することはできない。 */
     shadowDeleteStatus: function(){
       var W = contract();
