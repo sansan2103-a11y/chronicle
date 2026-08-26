@@ -165,6 +165,8 @@
     if (/(解離|現実感が(薄|な)|頭が真っ白|凍りつ|固ま|震えが止ま|身がすく)/.test(mindText)){
       add(6, '即応・機転は出ない(型B/C)');
     }
+    // ★R118 Phase2-S: severity consequence lane hook（外部 fix741。未load時 no-op / flag 既定OFF）
+    try{ if(window.__v292Dfix414S) window.__v292Dfix414S(bodyClauses, add); }catch(e){}
     cons.sort(function(a, b){ return a.rank - b.rank; });
     return cons.slice(0, 3);   // 3件超は重い順に3件まで
   }
