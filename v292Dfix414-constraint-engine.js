@@ -167,6 +167,8 @@
     }
     // ★R118 Phase2-S: severity consequence lane hook（外部 fix741。未load時 no-op / flag 既定OFF）
     try{ if(window.__v292Dfix414S) window.__v292Dfix414S(bodyClauses, add); }catch(e){}
+    // ★R118 Phase3-A: existing physical signal bridge hook（外部 fix742。未load時 no-op / flag 既定OFF）
+    try{ if(window.__v292Dfix414P) window.__v292Dfix414P(name, cons, add); }catch(e){}
     cons.sort(function(a, b){ return a.rank - b.rank; });
     return cons.slice(0, 3);   // 3件超は重い順に3件まで
   }
