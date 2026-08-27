@@ -113,6 +113,24 @@
     } catch(e){}
   }
   window.__v292Dfix77Store = store;
+  /* ★R118F Phase B(RULING118F-PREP Q3): 共有guarded commit(単一書込みゲート)。
+     - raw persist(=setItem直呼び)は公開しない。公開するのは fix532 guard を必ず通る commit のみ。
+     - 書き先スロットは persist 内部(curSfx)で導出。呼び出し側からキー指定は不可。
+     - 引数 extStore は同一性検査のみに使う: fix77 の store と別オブジェクトなら書かない
+       (caller支給の異物storeで上書きさせない・fail-closed)。
+     - semantic ownership は変えない(fix190 の傷/関係/未解決はfix190のまま)。 */
+  window.__v292Dfix77CommitStats = { committed: 0, foreignStoreRejected: 0 };
+  window.__v292Dfix77Commit = function(extStore){
+    try {
+      if (extStore != null && extStore !== store){
+        window.__v292Dfix77CommitStats.foreignStoreRejected++;
+        return false;
+      }
+      persist();
+      window.__v292Dfix77CommitStats.committed++;
+      return true;
+    } catch(e){ return false; }
+  };
   window.__v292Dfix532 = { loadedSfx: function(){ return loadedSfx; }, curSfx: curSfx, off: off532,
     stats: function(){ return { slotMismatchReloads: stats.slotMismatchReloads, stateUpdatesDroppedOnReload: stats.stateUpdatesDroppedOnReload }; } };
 
