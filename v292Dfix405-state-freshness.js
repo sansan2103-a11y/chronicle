@@ -26,6 +26,24 @@
   //   fix192 stateBlock と二重掲載だった「全キャラ現在状態一覧」(statesBlock405)を除去する。
   //   v292Dfix405SlimOff='1' で旧テキスト(一覧つき)へ復帰（statesBlock405は分岐で温存）。
   function slim(){ try { return localStorage.getItem('v292Dfix405SlimOff') !== '1'; } catch(e){ return true; } }
+  /* ★U2(R118F ARCHITECTURE RULING — ACCEPT B / 2026-08-28): D1 feature boundary。
+     engineMode1 かつ D1(v292Dfix77XClear='1') ON のとき、D1 の deterministic contract と
+     競合する posterior EMIT405 を suppression する（V5 causal probe の S1 arm と同一の sys 形状）。
+     ・D1 OFF（既定）では条件が偽 → 従来 text をそのまま返す = legacy exact parity（バイト不変）
+     ・engineMode0 では suppression しない（legacy engine0 behavior）
+     ・kill switch: v292Dfix405D1SuppressOff='1' → D1 ON のままでも EMIT405 を復活
+     ・registration 削除・registry order 変更・marker 変更は行わない（text() の条件分岐のみ） */
+  function engineOn405(){
+    try { if (window.__v292NewEngine && typeof window.__v292NewEngine.engineOn === 'function') return !!window.__v292NewEngine.engineOn(); } catch(e){}
+    try { return localStorage.getItem('v292EngineMode') === '1'; } catch(e){ return false; }
+  }
+  function d1Suppress405(){
+    try {
+      return localStorage.getItem('v292Dfix77XClear') === '1'
+        && engineOn405()
+        && localStorage.getItem('v292Dfix405D1SuppressOff') !== '1';
+    } catch(e){ return false; }
+  }
   var SLIM_LINE = '\n・【各キャラの現在の状態】節を反応の前提にする。回復イベント無しに改善・平常化させない。';
 
   // ---- EMIT405: fix77 の EMIT と同一文言(複製・fix77本体は不触) ----
@@ -66,7 +84,9 @@
       var reg = window.__f379reg;
       var MARKER = '【状態の出力';
       for (var i = 0; i < reg.length; i++){ if (reg[i] && reg[i].marker === MARKER) return; } // 二重登録回避
-      reg.push({ off: 'v292Dfix405Off', marker: MARKER, prio: 1, text: function(){ return slim() ? (EMIT405 + SLIM_LINE) : (EMIT405 + statesBlock405()); } });
+      reg.push({ off: 'v292Dfix405Off', marker: MARKER, prio: 1, text: function(){
+        if (d1Suppress405()) return '';   /* ★U2: D1 boundary（keeper は空文字を skip する） */
+        return slim() ? (EMIT405 + SLIM_LINE) : (EMIT405 + statesBlock405()); } });
       try { console.log(TAG, 'registered to __f379reg (prio1)'); } catch(_){}
     } catch(e){}
   })();
