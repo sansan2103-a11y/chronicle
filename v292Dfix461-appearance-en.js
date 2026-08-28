@@ -24,6 +24,15 @@
 //   ・APIは fix436 と同じ経路（proxy 経由の chat completions・1キャラ1回だけ・数百トークン）
 //
 // 冪等: window.__v292Dfix461
+// ★U4a(GPT RULING「R118F U3/U4 READ-ONLY TRACE — GPT RULING」2026-08-28):
+//   v292Dfix461Det='1'（既定OFF・opt-in）のときだけ per-key outbound LLM retry budget を有効化。
+//   MAX_OUTBOUND_PER_KEY_PER_PAGE=5（260→700 fallback の両送信を数える）。超過後は
+//   PAGE_RETRY_BUDGET_EXHAUSTED（「このpage lifecycleではこれ以上自動background LLMを浪費しない」の意。
+//   PERMANENT_FAILURE ではない）として memory-only terminal＝以後その key は outbound 0。
+//   永続storageへは書かない（reload/story navigationで自然reset）。cache semantics は不変。
+//   Det ON かつ 461Off が install 時点で立っていれば timer(2500 setTimeout/20000 interval)を作らない。
+//   Det OFF は legacy path そのもの（新budget/timer/state登録なし＝DEFAULT_OFF_STRUCTURAL_NOOP）。
+//   interval object の停止は裁定により今回実装しない（ALL_CACHED_LLM_OUTBOUND=0 が要求であり INTERVAL_OBJECT=0 ではない）。
 // OFF : localStorage.v292Dfix461Off = '1'（従来の日本語プロンプトに戻る）
 // 検証口: window.__v292Dfix461.tagsFor('名前') / .ensure() / .stats() / .verNow() / .sysNow()
 // ---------------------------------------------------------------------
@@ -62,6 +71,10 @@
   var inflight = {};
 
   function off(){ try { return localStorage.getItem('v292Dfix461Off') === '1'; } catch(e){ return false; } }
+  function det(){ try { return localStorage.getItem('v292Dfix461Det') === '1'; } catch(e){ return false; } }   // ★U4a
+  var MAX_OUTBOUND_PER_KEY_PER_PAGE = 5;   // ★U4a: 安全予算（GPT裁定）
+  var outboundCount = {};                  // ★U4a: key→実outbound送信数（memory-only）
+  var pageTerminal = {};                   // ★U4a: key→PAGE_RETRY_BUDGET_EXHAUSTED（memory-only）
   function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined"?S:null'); } catch(e){ return null; } }
   function getUI(){ try { return window.UI || (0,eval)('typeof UI!=="undefined"?UI:null'); } catch(e){ return null; } }
   function hash(s){ var h=0; s=String(s); for(var i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; } return Math.abs(h).toString(36); }
@@ -121,6 +134,18 @@
     + 'Do not add art style, lighting, camera or quality words. Those are added later by application code.';
 
   function ask(m, cb, _retry){
+    /* ★U4a: Det ON のとき、実outbound送信の直前で budget を消費（fallback含め全送信を数える） */
+    if (det()){
+      var _bk = keyOf(m);
+      if (pageTerminal[_bk]) return cb(new Error('PAGE_RETRY_BUDGET_EXHAUSTED'));
+      if ((outboundCount[_bk] || 0) >= MAX_OUTBOUND_PER_KEY_PER_PAGE){
+        pageTerminal[_bk] = true;
+        stats.pageRetryBudgetExhausted = (stats.pageRetryBudgetExhausted || 0) + 1;
+        try { console.warn(TAG, (m && m.name), 'PAGE_RETRY_BUDGET_EXHAUSTED (outbound=' + outboundCount[_bk] + '/page)'); } catch(e){}
+        return cb(new Error('PAGE_RETRY_BUDGET_EXHAUSTED'));
+      }
+      outboundCount[_bk] = (outboundCount[_bk] || 0) + 1;
+    }
     var S = getS(), cfg = (S && S.cfg) || {};
     // ★C: **世界観(scene.lore)を入力から外す**。疎なキャラ説明のとき、世界観から服・装飾を
     //   「補完」してしまう余地を断つ（設定に無いものは出さない）。
@@ -183,6 +208,7 @@
       var cur = '';
       try { cur = localStorage.getItem(k) || ''; } catch(e){}
       if (cur && !force){ stats.cached++; return; }
+      if (det() && pageTerminal[k]){ stats.skippedAfterBudget = (stats.skippedAfterBudget || 0) + 1; return; }   // ★U4a
       if (inflight[k]) return;
       inflight[k] = 1;
       ask(m, function(err, txt){
@@ -198,6 +224,11 @@
   }
 
   function install(){
+    if (det() && off()){
+      /* ★U4a: Det ON かつ 461Off at install → timer/XHR を一切作らない（再ONは reload required） */
+      try { console.log(TAG, 'U4a: 461Off at install — timers not created'); } catch(e){}
+      return;
+    }
     setTimeout(function(){ try { ensure(false); } catch(e){} }, 2500);
     try { setInterval(function(){ try { ensure(false); } catch(e){} }, 20000); } catch(e){}
   }
@@ -211,6 +242,8 @@
     members: members,
     stats: function(){ return stats; },
     isOff: off,
+    det: det,
+    budgetState: function(){ return { max: MAX_OUTBOUND_PER_KEY_PER_PAGE, outbound: outboundCount, terminal: pageTerminal }; },   // ★U4a 検証口
     v21on: v21on,
     verNow: verOf,
     sysNow: sysNow
