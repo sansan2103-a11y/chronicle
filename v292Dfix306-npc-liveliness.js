@@ -12,6 +12,14 @@
 //   手法: Planner.build を最外ラップし毎ターンsys末尾にディレクティブを追記(fix304と同方式)。
 //     fix274対策で冪等マークは非__v292接頭辞(_v292f306)+MARKER冪等追記+setInterval再付与。
 //   OFF: localStorage v292Dfix306Off='1'
+//   ★U1(R118F ARCHITECTURE RULING — ACCEPT B + OFF-INERTNESS FIX / 2026-08-28):
+//     v292Dfix306Det==='1' のとき: fix379 keeper registry (__f379reg) へ登録し、
+//       legacy の Planner.build wrap と setInterval を装着しない（決定論的注入・R118F-G/G1 と同型）。
+//     それ以外（既定）: keeper へ一切登録せず、従来の legacy wrap + selfHeal 経路そのもの
+//       （runtime 構造まで production と同一 = OFF-inert）。
+//     flag 切替は reload で反映（起動時に一度だけ分岐）。GUARD 文言・MARKER・
+//     v292Dfix306Off の意味・keeper ON 時の priority/order は変更しない。
+//     rollback: v292Dfix306Det を消す（or '0'）→ reload。
 // =====================================================================
 (function(){
   'use strict';
@@ -20,6 +28,7 @@
   var MARKER='【NPCの登場】';
   var GUARD='\n\n'+MARKER+'場面の空気を読むこと。人がいて自然な状況（街・店・宿・捜査・社交・群衆・緊迫など）では、雰囲気の描写だけで済ませず、まだ誰も絡んでいなければ未登録の人物を一人前へ出し、言葉や行動で関わらせる。情報・関係・緊張・選択肢のいずれかに寄与させること。再登場しそうな重要人物には名前を与える（一覧に残り一貫させるため）。ただし既に登場中・直近で出したNPCが居る場合や、親密な二人だけ・一人きりの静かな場面では無理に増やさない。中心キャラの焦点は薄めない。創作したNPCは状況次第で言葉を発し、生きた人物として絡ませてよい。';
   function block(){ try{ if(localStorage.getItem('v292Dfix306Off')==='1') return ''; }catch(e){} return GUARD; }
+  function det306(){ try{ return localStorage.getItem('v292Dfix306Det')==='1'; }catch(e){ return false; } }
   function installBuild(){
     try{
       var P=window.Planner||(typeof Planner!=='undefined'?Planner:null);
@@ -38,8 +47,24 @@
       return true;
     }catch(e){ return false; }
   }
-  installBuild();
-  try{ setInterval(installBuild, 2500); }catch(e){}
-  window.__v292Dfix306api={ block:block, guard:GUARD, marker:MARKER };
+  if (det306()){
+    /* ★U1 ON: keeper registry へ登録（prio2）。legacy wrap / interval は装着しない。 */
+    try {
+      window.__f379reg = window.__f379reg || [];
+      var reg306 = window.__f379reg, dup306 = false;
+      for (var i306 = 0; i306 < reg306.length; i306++){ if (reg306[i306] && reg306[i306].__v292Dfix306) { dup306 = true; break; } }
+      if (!dup306){
+        var ent306 = { off: 'v292Dfix306Off', marker: MARKER, prio: 2, text: block };
+        ent306.__v292Dfix306 = true;
+        reg306.push(ent306);
+      }
+      try{ console.log(TAG,'deterministic mode: keeper registry only (no build wrap)'); }catch(e){}
+    } catch(e){}
+  } else {
+    /* ★U1 OFF（既定）: production legacy 経路そのもの（keeper 登録なし）。 */
+    installBuild();
+    try{ setInterval(installBuild, 2500); }catch(e){}
+  }
+  window.__v292Dfix306api={ block:block, guard:GUARD, marker:MARKER, det:det306 };
   try{ console.log(TAG,'loaded'); }catch(e){}
 })();
