@@ -3057,6 +3057,18 @@
     function attrOf(tag, name){ try { var m = String(tag).match(new RegExp(name + '\\s*=\\s*"([^"]*)"')); return m ? m[1].trim() : ''; } catch(e){ return ''; } }
     function persist(){ try { localStorage.setItem(LSKEY, JSON.stringify(store())); } catch(e){} }
 
+    /* ★R118F-G(RULING R118F — FIX190 PROMPT OWNERSHIP): fix190 prompt determinism。
+       flag v292Dfix190Det='1' のときだけ有効。既定OFF＝従来経路と1バイトも変わらない。
+       ・G1: flag ON では Planner.build wrapper と selfHeal を使わない（捕捉側 captureExt は不変）
+       ・G2: 永続state semantics を readonly canonical contract として1箇所に置く（新schemaは足さない）
+       ・G3: engineMode0 の注入は keeper(__f379reg) prio1 の決定論的登録へ。engineMode1 では空文字
+       ・G4: engineMode1 は fix192 が唯一の state-prompt owner。fix190 の late injection は無し */
+    function detOn(){ try { return localStorage.getItem('v292Dfix190Det') === '1'; } catch(e){ return false; } }
+    function engineOn190(){
+      try { if (window.__v292NewEngine && typeof window.__v292NewEngine.engineOn === 'function') return !!window.__v292NewEngine.engineOn(); } catch(e){}
+      try { return localStorage.getItem('v292EngineMode') === '1'; } catch(e){ return false; }
+    }
+
     // --- 捕捉: ctx.raw の <state> から 傷/関係/未解決 を読み store[who] に merge ---
     //   ctx.raw から読むので、fix77 が plan.narrative の <state> を strip する順序に依存しない。
     function captureExt(plan, ctx){
@@ -3121,6 +3133,11 @@
         if (Array.isArray(P._parseExtensions) && !P._parseExtensions.some(function(f){ return f && f.__v292Dfix190; })){
           captureExt.__v292Dfix190 = true; P._parseExtensions.push(captureExt);
         }
+        /* ★R118F-G/G1: flag ON では build wrap を装着しない（order-sensitive な注入をやめる）。
+           捕捉(_parseExtensions)は上で済んでおり、semantics は不変。 */
+        if (detOn()){ P.__v292Dfix190 = true;
+          try { console.log(TAG, 'installed (deterministic mode: parse capture only)'); } catch(_){}
+          return; }
         // inject (build wrap)。二重 wrap 防止。
         if (!P.build.__v292Dfix190){
           var orig = P.build.bind(P);
@@ -3138,8 +3155,36 @@
     }
     install();
     // selfHeal: build が他fixで再wrapされて自分のwrapが外れたら入れ直す。
-    setInterval(function(){ try { var P = window.Planner; if (P && P.build && !P.build.__v292Dfix190) install(); } catch(e){} }, 2500);
-    window.__v292Dfix190 = { store: store, buildBlock: buildBlock };
+    setInterval(function(){ try { if (detOn()) return; var P = window.Planner; if (P && P.build && !P.build.__v292Dfix190) install(); } catch(e){} }, 2500);   /* R118F-G/G1: flag ON では selfHeal しない */
+    /* ★R118F-G/G2: readonly canonical contract。既存文言をそのまま1箇所へ集約する。
+       fieldShort 系は fix192 の allowed field list が現在使っている文字列と完全に同一
+       （＝参照へ切り替えても engineMode1 の sys は1バイトも変わらない）。新 semantics は足さない。 */
+    var CONTRACT190 = { version: 'R118F-G/1',
+      kizuFieldShort:        '負傷した瞬間だけ記入・治るまで保持',
+      kankeiFieldShort:      '主人公や他者への今の関係',
+      mikaiketsuFieldShort:  '抱えた感情の負債',
+      retentionRuleShort:    '・傷/関係/未解決は中身がある時だけ書く（空なら省く）。一度書いた傷は治療されるまで毎ターン保持する。',
+      persistentContractText: EMIT,
+      buildPersistentBlock:  buildBlock };
+    try { Object.freeze(CONTRACT190); } catch(e){}
+    try { window.__v292Dfix190Contract = CONTRACT190; } catch(e){}
+
+    /* ★R118F-G/G3: engineMode0 の注入を keeper の決定論的登録へ。
+       identity は専用 marker で一意化する（substring dedup の偶然に依存しない）。
+       engineMode1 では text を空文字にし、fix192 を唯一の state-prompt owner にする。
+       flag OFF のときは text が常に空＝登録が在っても sys は1バイトも変わらない。 */
+    try {
+      window.__f379reg = window.__f379reg || [];
+      if (!window.__f379reg.some(function(e){ return e && e.__v292Dfix190det; })){
+        var ent190 = { off: 'v292Dfix190Off', marker: MARK190, prio: 1,
+          text: function(){ try { if (!detOn()) return ''; if (engineOn190()) return ''; return buildBlock(); } catch(e){ return ''; } } };
+        ent190.__v292Dfix190det = true;
+        window.__f379reg.push(ent190);
+      }
+    } catch(e){}
+
+    window.__v292Dfix190 = { store: store, buildBlock: buildBlock, detOn: detOn,
+                             engineOn: engineOn190, contract: CONTRACT190 };
   })();
 
   // ====================================================================

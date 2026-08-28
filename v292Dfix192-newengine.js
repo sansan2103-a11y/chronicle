@@ -610,7 +610,16 @@
       /* ★R118F/D1(v292Dfix77XClear): 明示的な傷の解除属性。この行が allowed field list そのものなので、
          ここに置かないとモデルは属性を出力候補にできない（実測: R118F_D1_DELIVERY_TRACE_LIVE）。
          既定OFF。OFF時は連結が空文字＝この行も sys も1バイトも変わらない。 */
-      '<state who="名前" からだ="今この瞬間の身体" こころ="今の感情" 本能="体が今したいこと" 目的="今この場面で本人が望む小さなこと" 傷="負傷した瞬間だけ記入・治るまで保持"'
+      /* ★R118F-G/G4(RULING R118F — FIX190 PROMPT OWNERSHIP): engineMode1 では fix192 が唯一の
+         state-prompt owner。永続fieldの記法は fix190 の canonical contract を参照する。
+         canonical が無い場合は現行と byte-equivalent な legacy 文言へ fallback し、契約を消さない。
+         canonical 値は現行リテラルと完全一致させてあるので sys は1バイトも変わらない。 */
+      '<state who="名前" からだ="今この瞬間の身体" こころ="今の感情" 本能="体が今したいこと" 目的="今この場面で本人が望む小さなこと" 傷="'
+        + (function(){ try { var c = window.__v292Dfix190Contract;
+            return (c && localStorage.getItem('v292Dfix190Det') === '1' && c.kizuFieldShort)
+              ? c.kizuFieldShort : '負傷した瞬間だけ記入・治るまで保持'; }
+          catch(e){ return '負傷した瞬間だけ記入・治るまで保持'; } })()
+        + '"'
         + (function(){ try { return localStorage.getItem('v292Dfix77XClear') === '1'
             ? ' 傷解消="この傷が完全に解消した時だけ、部位名だけを書く（例: 右腕）"' : ''; } catch(e){ return ''; } })()
         + ' 関係="主人公や他者への今の関係" 未解決="抱えた感情の負債"/>',
@@ -620,7 +629,10 @@
          when と shape を同時に示す。positive example だけを足すと、仮定文でも正しい形の
          誤CLEARを出すようになり危険（N3実測）。追加はこの1ブロックのみ・以降prompt tuning禁止。
          OFF 時は連結が空文字＝この行も sys も1バイトも変わらない（空要素をjoinに混ぜない）。 */
-      '・傷/関係/未解決は中身がある時だけ書く（空なら省く）。一度書いた傷は治療されるまで毎ターン保持する。'
+      (function(){ try { var c = window.__v292Dfix190Contract;
+          return (c && localStorage.getItem('v292Dfix190Det') === '1' && c.retentionRuleShort)
+            ? c.retentionRuleShort : '・傷/関係/未解決は中身がある時だけ書く（空なら省く）。一度書いた傷は治療されるまで毎ターン保持する。'; }
+        catch(e){ return '・傷/関係/未解決は中身がある時だけ書く（空なら省く）。一度書いた傷は治療されるまで毎ターン保持する。'; } })()
         + (function(){ try { return localStorage.getItem('v292Dfix77XClear') === '1' ? (
             '\n【傷解消の使い分け（この2例だけ）】'
           + '\n・実際に解消した時: 右腕の断裂が完全に治り、今その傷が存在しない → 傷解消="右腕"（部位名だけ）'

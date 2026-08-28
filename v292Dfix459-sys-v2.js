@@ -33,6 +33,12 @@
   function off(){ return flag('v292Dfix459Off'); }
 
   // ---- 既知マーカー（これだけをブロック境界として扱う。本文中の【短い】等では切らない） ----
+  /* ★R118F-G/G5(RULING R118F — FIX190 PROMPT OWNERSHIP): fix190 の exact 2 markers を認識する。
+     未登録だと未知ブロックが直前ブロックへ吸収され、直前が drop 対象だと道連れ削除され得る
+     （L74-76 の fix496 が同型事故を記録）。新 deterministic flag 配下でのみ有効にし、
+     flag OFF 時の legacy behavior は1バイトも変えない。marker 範囲は拡大しない。 */
+  var MARKERS_FIX190_DET = ['【状態の出力・拡張（永続フィールド／fix190）】',
+                            '【各キャラの永続状態（傷・関係・未解決／必ず踏まえる）】'];
   var MARKERS = [
     '【プレイヤー入力＝主人公の発話】',
     '【プレイヤー入力＝主人公の行動】',
@@ -86,10 +92,16 @@
     '【移動タグ】'
   ];
 
+  function detOn459(){ try { return localStorage.getItem('v292Dfix190Det') === '1'; } catch(e){ return false; } }
+  function activeMarkers(){
+    /* R118F-G/G5: flag ON のときだけ fix190 の2 marker を足す。OFF なら配列は完全に従来どおり。 */
+    return detOn459() ? MARKERS.concat(MARKERS_FIX190_DET) : MARKERS;
+  }
   function parse(sys){
     var hits = [];
-    for (var i = 0; i < MARKERS.length; i++){
-      var m = MARKERS[i], from = 0, at;
+    var MK = activeMarkers();
+    for (var i = 0; i < MK.length; i++){
+      var m = MK[i], from = 0, at;
       while ((at = sys.indexOf(m, from)) >= 0){ hits.push({ at: at, mk: m }); from = at + m.length; }
     }
     hits.sort(function(a, b){ return a.at - b.at; });
