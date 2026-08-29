@@ -105,7 +105,7 @@
       if (!fixes.length) return;
       try { localStorage.setItem('chr6_bk_fix383', localStorage.getItem('chr6') || ''); } catch(e){}
       fixes.forEach(function(f){ t._convSays[f.j].who = f.to; });
-      try { if (!document.hidden && S.save) S.save(); } catch(e){}
+      try { if (!document.hidden && S.save) (typeof S.saveC==='function'?S.saveC('fix383.tick'):S.save()); } catch(e){}
       try {
         var cards = document.querySelectorAll('.v292-dlg-card');
         for (var i = 0; i < cards.length; i++) cards[i].parentNode.removeChild(cards[i]);

@@ -40,21 +40,62 @@
   function STORE(){ return 'v292Dfix307Roster'+slotSfx(); }
   function LASTK(){ return 'v292Dfix307Last'+slotSfx(); }
 
+  /* ★★fix748(Phase C / C5 = Class C): fix307 は 2 つのキーを書く。
+       v292Dfix307Roster<sfx> … 直近12ターン窓から LLM が抽出した登場人物ロスター
+       v292Dfix307Last<sfx>   … 「どのターンまで処理したか」のカーソル（companion key）
+     両方とも同じ logical transaction の一部なので、片方だけ lock の外へ出さない。
+
+     RECOMPUTATION_SOURCE  = S.turns の直近12ターン（recentTranscript）+ 既存 roster。
+                             ロスターは「窓から再抽出してマージする」ので、1 回書き損ねても
+                             同じ登場人物は次の抽出で再び出てくる。
+     RECOMPUTATION_TRIGGER = 5000ms の setInterval run()（+ 起動 4000ms 後の run）。
+                             ★カーソルを書けなかったときは LLM を撃たない = 次の run が同じ ct で再試行する。
+                             ★ロスター書込を skip した場合はカーソルが進んでいるので、
+                               同じ ct では再試行せず、次の INTERVAL ターン後の run で
+                               同じ12ターン窓から再抽出される（窓が滑るだけで内容は失われない）。
+     ★resetCheck の 2 キー削除は 1 つの transaction にまとめる。 */
+  function f748(){ try { return window.__v292DfixDAdm || null; } catch(e){ return null; } }
+  function f748Skip(who){
+    var A = f748();
+    if (!A || typeof A.skipGuard !== 'function') return null;
+    return A.skipGuard(who);
+  }
+  function f748RunC(label, fn){
+    var A = f748();
+    if (!A || typeof A.runC !== 'function') return Promise.resolve({ ran:true, result: fn(), legacy:true });
+    return A.runC(label, fn);
+  }
+  (function(){
+    try {
+      var A = f748();
+      if (A && typeof A.registerC === 'function'){
+        A.registerC('fix307.saveRoster',
+          'S.turns の直近12ターン窓（recentTranscript → LLM 抽出）+ 既存 roster とのマージ',
+          '5000ms setInterval run()（次の INTERVAL ターン後に同じ窓から再抽出される）',
+          'C5 npc roster');
+        A.registerC('fix307.saveLast',
+          'S.turns.length - 1（カーソルは物語本体から常に再計算できる）',
+          '5000ms setInterval run()。カーソルを書けなければ LLM を撃たないので次の run が同じ ct で再試行',
+          'C5 cursor / companion of fix307.saveRoster');
+      }
+    } catch(e){}
+  })();
+
   // single-writer(epoch)ゲート: 古い世代タブは書かない(longmem fix299と同方針)
   function canSave(){ try{ var ep=+(localStorage.getItem('chr6_epoch')||0); if(window.__chrEpoch&&ep>window.__chrEpoch) return false; }catch(e){} return true; }
   function getKey(){ try{ var c=JSON.parse(localStorage.getItem((typeof window.__chr6Key==='function'?window.__chr6Key():'chr6'))||'{}').cfg||{}; return c.orKey||''; }catch(e){ return ''; } }
 
   function loadRoster(){ try{ return JSON.parse(localStorage.getItem(STORE())||'[]')||[]; }catch(e){ return []; } }
-  function saveRoster(a){ if(!canSave())return; try{ localStorage.setItem(STORE(), JSON.stringify((a||[]).slice(0,CAP))); }catch(e){} }
+  function saveRoster(a){ if(!canSave())return; var g748=f748Skip('fix307.saveRoster'); if(g748&&(g748.skip||g748.hold)) return g748; try{ localStorage.setItem(STORE(), JSON.stringify((a||[]).slice(0,CAP))); }catch(e){} }
   function loadLast(){ try{ return parseInt(localStorage.getItem(LASTK())||'-1',10); }catch(e){ return -1; } }
-  function saveLast(i){ if(!canSave())return; try{ localStorage.setItem(LASTK(), String(i)); }catch(e){} }
+  function saveLast(i){ if(!canSave())return; var g748=f748Skip('fix307.saveLast'); if(g748&&(g748.skip||g748.hold)) return g748; try{ localStorage.setItem(LASTK(), String(i)); }catch(e){} }
   // ★fix307e: スロット厳密化用のキー固定版。run()開始時に決めたキーへ書く(切替で揺れない)。
   function rosterKey(sfx){ return 'v292Dfix307Roster'+sfx; }
   function lastKey(sfx){ return 'v292Dfix307Last'+sfx; }
   function loadRosterK(k){ try{ return JSON.parse(localStorage.getItem(k)||'[]')||[]; }catch(e){ return []; } }
-  function saveRosterK(k,a){ if(!canSave())return; try{ localStorage.setItem(k, JSON.stringify((a||[]).slice(0,CAP))); }catch(e){} }
+  function saveRosterK(k,a){ if(!canSave())return; var g748=f748Skip('fix307.saveRoster'); if(g748&&(g748.skip||g748.hold)) return g748; try{ localStorage.setItem(k, JSON.stringify((a||[]).slice(0,CAP))); }catch(e){} }
   function loadLastK(k){ try{ return parseInt(localStorage.getItem(k)||'-1',10); }catch(e){ return -1; } }
-  function saveLastK(k,i){ if(!canSave())return; try{ localStorage.setItem(k, String(i)); }catch(e){} }
+  function saveLastK(k,i){ if(!canSave())return; var g748=f748Skip('fix307.saveLast'); if(g748&&(g748.skip||g748.hold)) return g748; try{ localStorage.setItem(k, String(i)); }catch(e){} }
   // そのスロットのセーブ本体(blob)が保持する物語のloc。Sが指す物語と一致確認に使う。
   function slotBlobLoc(sfx){ try{ var b=JSON.parse(localStorage.getItem('chr6'+sfx)||'null'); return (b&&b.scene)?(b.scene.loc||null):null; }catch(e){ return null; } }
 
@@ -155,7 +196,18 @@
     if(ct<=last) return;                     // 新ターン無し
     if(last>=0 && (ct-last)<INTERVAL) return; // INTERVALターン待つ
     var tr=recentTranscript(); if(!tr) return;
-    saveLastK(lastK, ct);                     // 呼び出し前に進めて二重発火防止
+    /* ★fix748(C5): カーソル前進は「この run が ct を予約した」という mutation。
+       書けなかった場合は **LLM を撃たない**（二重発火防止が効かなくなるため）。
+       次の run が同じ ct で再試行する = SKIP_THIS_PERSIST の TRIGGER。 */
+    f748RunC('FIX307_CURSOR', function(){ return saveLastK(lastK, ct); }).then(function(x){
+      var w = x && x.result;
+      if (!(x && x.ran) || (w && (w.skip || w.hold))){
+        try{ console.log(TAG,'fix748: カーソルを書けなかったので今回は抽出しない（次の run で再試行）'); }catch(e){}
+        return;
+      }
+      runLLM();
+    });
+    function runLLM(){
     callLLM(tr, function(out){
       // ★再確認: LLM(最大90s)中にスロット切替/物語差替が起きていたら、このスロットには書かない。
       var s2=getS();
@@ -163,10 +215,21 @@
       if(slotSfx()!==sfx) return;                                   // アクティブスロットが変わった
       var arr=parseArr(out);
       if(!arr) return;                       // 失敗時は次INTERVALで再試行
-      var merged=mergeRoster(loadRosterK(storeK), arr);
-      saveRosterK(storeK, merged);
-      try{ console.log(TAG,'roster updated, count=', merged.length, 'slot=', sfx||'(default)'); }catch(e){}
+      /* ★fix748(C5): roster 書込は Class C transaction。network(callLLM) は **この外**で終わっている。 */
+      f748RunC('FIX307_ROSTER', function(){
+        var merged=mergeRoster(loadRosterK(storeK), arr);
+        var w = saveRosterK(storeK, merged);
+        return { merged: merged, w: w };
+      }).then(function(x){
+        var r = x && x.result;
+        if (!(x && x.ran) || (r && r.w && (r.w.skip || r.w.hold))){
+          try{ console.log(TAG,'fix748: roster 保存を飛ばした（次の INTERVAL で同じ窓から再抽出）'); }catch(e){}
+          return;
+        }
+        try{ console.log(TAG,'roster updated, count=', r.merged.length, 'slot=', sfx||'(default)'); }catch(e){}
+      });
     });
+    }
   }
 
   // リセット安全: turns=0なのにロスターが残ってたらクリア
@@ -178,8 +241,15 @@
     var blobLoc=slotBlobLoc(sfx); var curLoc=(s.scene&&s.scene.loc)||null;
     if(blobLoc && curLoc && blobLoc!==curLoc) return;
     if(s.turns.length===0 && (loadRosterK(storeK).length || loadLastK(lastK)>=0)){
-      try{ localStorage.removeItem(storeK); localStorage.removeItem(lastK); }catch(e){}
-      try{ console.log(TAG,'no turns — roster cleared'); }catch(e){}
+      /* ★fix748(C5): roster と cursor の削除は **同じ logical transaction**。
+         片方だけ消すと「カーソルは進んだままロスターが空」という desync を作る。 */
+      f748RunC('FIX307_RESET', function(){
+        try{ localStorage.removeItem(storeK); localStorage.removeItem(lastK); }catch(e){}
+        return true;
+      }).then(function(x){
+        if (!(x && x.ran)){ try{ console.log(TAG,'fix748: reset を飛ばした（4 秒後の resetCheck で再試行）'); }catch(e){} return; }
+        try{ console.log(TAG,'no turns — roster cleared'); }catch(e){}
+      });
     }
   }
 

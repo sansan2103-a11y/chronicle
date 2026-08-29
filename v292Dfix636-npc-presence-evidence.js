@@ -106,7 +106,7 @@
     if (!opts.dryRun && res.promoted.length){
       stats.promoted += res.promoted.length;
       stats.lastNames = res.promoted.slice(0, 10);
-      try { if (typeof st.save === 'function'){ st.save(); stats.saves++; } } catch(e){}
+      try { if (typeof st.save === 'function'){ (typeof st.saveC==='function'?st.saveC('fix636.presenceEvidence'):st.save()); stats.saves++; } } catch(e){}
       try { console.warn(TAG, '会話ログに確定話者として出ている登録NPCを登場扱いにしました:',
                          res.promoted.join('、')); } catch(e){}
     }
@@ -160,7 +160,7 @@
     if (res.promoted.length){
       stats.promoted += res.promoted.length;
       stats.lastNames = res.promoted.slice(0, 10);
-      try { if (typeof st.save === 'function'){ st.save(); stats.saves++; } } catch(e){}
+      try { if (typeof st.save === 'function'){ (typeof st.saveC==='function'?st.saveC('fix636.presenceEvidence'):st.save()); stats.saves++; } } catch(e){}
       try { console.warn(TAG, '新ターンの確定話者として出ている登録NPCを登場扱いにしました:',
                          res.promoted.join('、')); } catch(e){}
     }

@@ -128,7 +128,7 @@
       }
     }
     if (anyChange){
-      try { if (!document.hidden && S.save) S.save(); } catch(e){}
+      try { if (!document.hidden && S.save) (typeof S.saveC==='function'?S.saveC('fix390.repair'):S.save()); } catch(e){}
       try {
         var cards = document.querySelectorAll('.v292-dlg-card');
         for (var i = 0; i < cards.length; i++){ if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]); }

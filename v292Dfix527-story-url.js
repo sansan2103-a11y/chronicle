@@ -171,7 +171,7 @@
       try { b.className = anchor.className || ''; } catch(e){}
       b.style.cssText = (anchor.getAttribute('style') || '') + ';cursor:pointer';
       b.addEventListener('click', function(){
-        try { var S = window.S || (0,eval)('typeof S!=="undefined"?S:null'); if (S && typeof S.save === 'function') S.save(); } catch(e){}
+        try { var S = window.S || (0,eval)('typeof S!=="undefined"?S:null'); if (S && typeof S.save === 'function') (typeof S.saveD==='function'?S.saveD('fix527.injectHomeButton'):S.save()); } catch(e){}
         setTimeout(function(){ try { location.href = HOME; } catch(e){} }, 150);
       });
       anchor.parentNode.insertBefore(b, anchor);
@@ -195,7 +195,7 @@
         var nb = b.cloneNode(false);                 // 元のリスナーを落とす
         nb.textContent = '🏠 ホームで取り込む';
         nb.addEventListener('click', function(){
-          try { var S = window.S || (0,eval)('typeof S!=="undefined"?S:null'); if (S && typeof S.save === 'function') S.save(); } catch(e){}
+          try { var S = window.S || (0,eval)('typeof S!=="undefined"?S:null'); if (S && typeof S.save === 'function') (typeof S.saveD==='function'?S.saveD('fix527.fixForkBanner'):S.save()); } catch(e){}
           setTimeout(function(){ try { location.href = HOME; } catch(e){} }, 150);
         });
         b.parentNode.replaceChild(nb, b);
@@ -255,11 +255,29 @@
     blockPull();
 
     // lastOpenedAt を更新(表示用・同一性キーではない)
+    /* ★★fix748 + 裁定11 GATE3: chr6_slots_meta は protected domain（本体の companion key）。
+       この boot 時 write は GWS を通っていなかった（GLOBAL_WRITE_BYPASS_AUDIT で検出）。
+         分類 = Class C
+         RECOMPUTATION_SOURCE  = chr6_slots_meta 自身。この write を失っても直前の lastOpenedAt が
+                                 残るだけで、物語データにも同一性にも影響しない **表示用フィールド**
+         RECOMPUTATION_TRIGGER = 次にこの story を開いたとき（毎 boot 必ず実行される）
+       ★「開けなかった」ことにはしない（story を開く操作そのものは成功してよい）ので Class D ではない。 */
     try {
       var meta = JSON.parse(lsg('chr6_slots_meta') || '[]') || [];
       var hit = false;
       for (var i = 0; i < meta.length; i++){ if (meta[i] && String(meta[i].id) === storyId){ meta[i].lastOpenedAt = new Date().toISOString(); hit = true; break; } }
-      if (hit) localStorage.setItem('chr6_slots_meta', JSON.stringify(meta));
+      if (hit){
+        var A748 = null;
+        try { A748 = window.__v292DfixDAdm; } catch(_){}
+        if (A748 && typeof A748.registerC === 'function')
+          A748.registerC('fix527.lastOpenedAt',
+            'chr6_slots_meta 自身（失っても直前の lastOpenedAt が残るだけ。表示用で同一性には影響しない）',
+            '次にこの story を開いたとき（毎 boot）',
+            'C17 story-url lastOpenedAt / companion of chr6_slot_');
+        if (A748 && typeof A748.persistC === 'function')
+          A748.persistC('fix527.lastOpenedAt', function(){ localStorage.setItem('chr6_slots_meta', JSON.stringify(meta)); });
+        else localStorage.setItem('chr6_slots_meta', JSON.stringify(meta));
+      }
     } catch(e){}
 
     // fix525 の own を URL 由来へ

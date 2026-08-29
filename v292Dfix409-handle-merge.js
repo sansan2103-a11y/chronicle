@@ -374,7 +374,7 @@
       // ★fix409b D-3(2026-07-11): hidden中は保存を延期(pendingSave)し、可視化時にflush。
       try {
         if (S.save){
-          if (!document.hidden){ S.save(); }
+          if (!document.hidden){ (typeof S.saveC==='function'?S.saveC('fix409.repair'):S.save()); }
           else { pendingSave = true; lastSig = null; }
         }
       } catch(e){}
@@ -451,7 +451,7 @@
       try {
         if (!document.hidden && pendingSave){
           var S = getS();
-          if (S && S.save){ S.save(); }
+          if (S && S.save){ (typeof S.saveC==='function'?S.saveC('fix409.tick'):S.save()); }
           pendingSave = false;
         }
       } catch(e){}

@@ -50,7 +50,7 @@
       var S = getS();
       if (S && S.cfg && S.cfg.aiAvatar !== true) {
         S.cfg.aiAvatar = true;
-        if (typeof S.save === 'function') S.save();
+        if (typeof S.save === 'function') (typeof S.saveC==='function'?S.saveC('fix355.apply'):S.save());
         try{ if (det() && window.__v292Dfix355Det) window.__v292Dfix355Det.__s.cfgForces++; }catch(_){}   // ★U3a telemetry
         try{ console.log(TAG, 'aiAvatar forced true'); }catch(_){}
       }

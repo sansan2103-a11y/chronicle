@@ -20,7 +20,7 @@
   function getS(){ try{ return window.S||(typeof S!=='undefined'?S:null); }catch(e){ return null; } }
   function getNote(){ var s=getS(); if(!s) return ''; if(!s.scene) s.scene={}; return (typeof s.scene.memoryNote==='string')?s.scene.memoryNote:''; }
   function setNote(v){ var s=getS(); if(!s) return; if(!s.scene) s.scene={}; s.scene.memoryNote=String(v||''); persist(); }
-  function persist(){ try{ var s=getS(); if(s&&typeof s.save==='function'){ s.save(); return; } }catch(e){}
+  function persist(){ try{ var s=getS(); if(s&&typeof s.save==='function'){ (typeof s.saveD==='function'?s.saveD('fix314.persist'):s.save()); return; } }catch(e){}
     try{ if(window.S&&typeof window.S.save==='function') window.S.save(); }catch(e){} }
 
   // ---- (A) 注入: Planner.build最外ラップ ----

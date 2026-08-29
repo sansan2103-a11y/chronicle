@@ -65,7 +65,7 @@
     return 'shizuka';
   }
   function setTone(k){
-    try{ var S=getS(); if(S&&S.cfg){ S.cfg.toneKey=k; if(typeof S.save==='function') S.save(); } }catch(e){}
+    try{ var S=getS(); if(S&&S.cfg){ S.cfg.toneKey=k; if(typeof S.save==='function') (typeof S.saveD==='function'?S.saveD('fix192.setTone'):S.save()); } }catch(e){}
     try{ localStorage.setItem('v292Tone', k); }catch(e){}
   }
 

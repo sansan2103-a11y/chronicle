@@ -171,10 +171,15 @@
         if (summary){
           state.rollingSummary = summary;
           try {
-            if (typeof state.save === 'function') state.save();
+            if (typeof state.save === 'function') (typeof state.saveD==='function'?state.saveD('fix58.rollingSummary'):state.save());
             else { /* ★fix694: 既定の 'chr6' 決め打ちをやめ document の権限キーへ */
+              /* ★fix748(C9): state.save が無い環境の fallback。本体への直接書込なので
+                 admission 外なら書かない（次の summary 捕捉で再試行）。 */
+              var __g748 = null;
+              try { var __A748 = window.__v292DfixDAdm;
+                    if (__A748 && typeof __A748.skipGuard === 'function') __g748 = __A748.syncGuard('S.save(fix58.fallback)'); } catch(_){}
               var __wk = (window.__chr6WriteKey ? window.__chr6WriteKey() : 'chr6');
-              if (__wk) localStorage.setItem(__wk, JSON.stringify(state));
+              if (__wk && !(__g748 && (__g748.skip || __g748.hold))) localStorage.setItem(__wk, JSON.stringify(state));
             }
           } catch(e){}
           console.log(TAG, 'summary captured (' + summary.length + ' chars):', summary.slice(0, 60) + (summary.length > 60 ? '…' : ''));

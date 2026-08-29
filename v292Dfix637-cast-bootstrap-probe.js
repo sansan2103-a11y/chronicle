@@ -192,7 +192,7 @@
     if (isEmpty(st.scene.loc) && p.scene.loc){ st.scene.loc = p.scene.loc; changed.push('loc=' + p.scene.loc); }
     if (isEmpty(st.scene.obj) && p.scene.obj){ st.scene.obj = p.scene.obj; changed.push('obj=' + p.scene.obj); }
     if (!changed.length) return { written: false, reason: 'no-change' };
-    try { if (typeof st.save === 'function') st.save(); } catch(e){}
+    try { if (typeof st.save === 'function') (typeof st.saveC==='function'?st.saveC('fix637.castBootstrapProbe'):st.save()); } catch(e){}
     try { console.warn(TAG, '書き込みました:', changed.join(' / ')); } catch(e){}
     return { written: true, changed: changed };
   }

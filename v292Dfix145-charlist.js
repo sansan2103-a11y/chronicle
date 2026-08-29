@@ -447,7 +447,7 @@
         }
       }
       st.cast.npcs.push({ name: name, desc: desc, appeared: true });
-      if (typeof st.save === 'function') st.save();
+      if (typeof st.save === 'function') (typeof st.saveD==='function'?st.saveD('fix145.promoteToNpc'):st.save());
       try { console.log(TAG, 'promoted to NPC:', name); } catch(_){}
       // re-render modal
       renderModal();
@@ -467,7 +467,7 @@
         alert('編集対象が見つかりません'); return false;
       }
       st.cast.npcs[npcIdx].desc = newDesc;
-      if (typeof st.save === 'function') st.save();
+      if (typeof st.save === 'function') (typeof st.saveD==='function'?st.saveD('fix145.editNpc'):st.save());
       // Invalidate avatar cache so the new description regenerates the icon
       try {
         if (window.__aiAvatar && typeof window.__aiAvatar.regen === 'function'){

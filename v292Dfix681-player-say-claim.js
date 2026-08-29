@@ -109,7 +109,7 @@
     });
     /* ★2026-08-16 GPT裁定 DOCUMENT_HIDDEN_SAVE_SKIP_CONFIRMED: document.hidden を
        save 可否の条件に使わない。生成競合の防御は S.inFlight だけが担う。 */
-    try { if (S.save) S.save(); } catch(e){}
+    try { if (S.save) (typeof S.saveC==='function'?S.saveC('fix681.apply'):S.save()); } catch(e){}
     try {
       var cards = document.querySelectorAll('.v292-dlg-card');
       for (var i = 0; i < cards.length; i++) if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]);

@@ -95,7 +95,7 @@
     });
     lastMigratedLoc = sLoc;
     if (changed){
-      try { if (typeof s.save === 'function') s.save(); else if (window.S && window.S.save) window.S.save(); } catch(e){}
+      try { if (typeof s.save === 'function') (typeof s.saveC==='function'?s.saveC('fix322.migrate'):s.save()); else if (window.S && window.S.save) (typeof window.S.saveC==='function'?window.S.saveC('fix322.migrate'):window.S.save()); } catch(e){}
       try { if (window.UI && UI.renderAll) UI.renderAll(); } catch(e){}
       try { console.log(TAG, 'migrated existing turns (state/meta/md) & re-saved'); } catch(_){}
     }

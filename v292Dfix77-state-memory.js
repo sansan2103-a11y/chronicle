@@ -57,6 +57,16 @@
   // ---- store（キャラ名 -> {karada,kokoro,honno,turn}）localStorage 永続 ----
   var store = (function(){ try { return JSON.parse(localStorage.getItem(LSKEY)||'{}') || {}; } catch(e){ return {}; } })();
   // v292Dfix223f: 既存ストアの値頭タグ断片(「<関係:」等)を一度だけ浄化(過去ターンの捕捉残骸)
+  (function(){
+    try {
+      var A = window.__v292DfixDAdm;
+      if (A && typeof A.registerC === 'function')
+        A.registerC('fix77.sanitize223f',
+          'store 自身（clean は純関数・冪等。メモリ側は既に正規化済み）',
+          '次の captureState → persist（store 全体を直列化する）',
+          'C7b boot sanitize');
+    } catch(e){}
+  })();
   (function sanitize223f(){
     try{
       var changed=false;
@@ -64,7 +74,23 @@
       Object.keys(store).forEach(function(n){ var s=store[n]; if(!s||typeof s!=='object') return;
         ['karada','kokoro','honno','mokuteki','kizu','kankei','mikaiketsu'].forEach(function(k){ if(s[k]!=null) s[k]=clean(s[k]); });
       });
-      if(changed){ localStorage.setItem(LSKEY, JSON.stringify(store)); }
+      /* ★★fix748(Phase C / C7b = Class C): boot 時の 1 回きりの正規化。
+           RECOMPUTATION_SOURCE  = store 自身（clean は純関数・冪等。メモリ側の値は既に正規化済み）
+           RECOMPUTATION_TRIGGER = 次の captureState → persist（store 全体を直列化するので
+                                   正規化済みの値がそのまま書かれる）
+         ＝ この 1 回の persist を飛ばしても、次に <state> を1つでも捕捉した時点で
+            正規化済みの store 全体が書かれる。boot 限定ではあるが、
+            **同一 session 内で必ず来る次の persist が TRIGGER になっている**。
+         ★admission 外で skip した場合でもメモリ側は正規化済みのまま（表示・注入はメモリを読む）。 */
+      if(changed){
+        /* ★裁定11 GATE1: 「admission 外なら常に skip」ではなく、**実際に lock を取って書く**。
+           BUSY のときだけ SKIP_THIS_PERSIST。同期契約は persistC が保つ。 */
+        var A748 = null;
+        try { A748 = window.__v292DfixDAdm; } catch(_){}
+        if (A748 && typeof A748.persistC === 'function')
+          A748.persistC('fix77.sanitize223f', function(){ localStorage.setItem(LSKEY, JSON.stringify(store)); });
+        else localStorage.setItem(LSKEY, JSON.stringify(store));
+      }
     }catch(e){}
   })();
   /* ★fix532(2026-07-25・GPT監査がB-2の前提条件として先行を指名):
@@ -140,9 +166,28 @@
   }
 
   // ---- (capture+strip) parseExtension: narrative 中の <state> を拾って保存、本文から除去 ----
+  /* ★★fix748(Phase C / C7a = Class D): captureState は LLM 応答から <state> を回収して
+     v292Dfix77States_slot_ へ persist する。raw を保存していないので、この write を失うと
+     二度と再構成できない = Class D。
+     ・意味的所有者は G.submit の TURN_PARSE admission（Planner.parsePlan の呼び出し側）。
+     ・_parseExtensions は sync 契約（呼び出し側が typeof r === 'object' で plan を差し替える）なので、
+       ここは **同期のまま**。admission の外なら **store もキーも 1 バイトも触らない**。
+       （store だけ更新して persist しないと、次の Class C persist がそれを別 transaction で書いてしまう） */
+  function f748Guard748(){
+    try {
+      var A = window.__v292DfixDAdm;
+      if (!A || typeof A.syncGuard !== 'function') return null;
+      return A.syncGuard('fix77.captureState');
+    } catch(e){ return null; }
+  }
   function captureState(plan, ctx){
     try {
       if (!plan || !Array.isArray(plan.narrative)) return plan;
+      var _h748 = f748Guard748();
+      if (_h748 && _h748.hold){
+        try { console.warn(TAG, 'fix748: class D admission 外なので <state> を回収しない（write0）'); } catch(_){}
+        return plan;                              /* ★store 不変 / narrative 不変 / persist 0 */
+      }
       var re = /<state\b[^>]*?\/?>/g;
       var found = 0, m;
       // v292Dfix203: 読み元を ctx.raw（生テキスト）に変更。reactionVoiceExt(fix157①・

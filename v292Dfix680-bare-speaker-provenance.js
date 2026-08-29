@@ -129,7 +129,7 @@
         if (c && c.who === r.from) c.who = r.to;
       } catch(e){}
     });
-    try { if (S.save) S.save(); } catch(e){}   /* ★DOCUMENT_HIDDEN_SAVE_SKIP_CONFIRMED: visibility は save 可否に使わない */
+    try { if (S.save) (typeof S.saveC==='function'?S.saveC('fix680.apply'):S.save()); } catch(e){}   /* ★DOCUMENT_HIDDEN_SAVE_SKIP_CONFIRMED: visibility は save 可否に使わない */
     try {
       var cards = document.querySelectorAll('.v292-dlg-card');
       for (var i = 0; i < cards.length; i++) if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]);
@@ -181,7 +181,7 @@
     var S = getS(), p = planDemote();
     if (!p.length) return { changed: false, n: 0 };
     p.forEach(function(r){ try { var c = S.turns[r.turn - 1]._convSays[r.idx]; if (c && c.who === r.from) c.who = '???'; } catch(e){} });
-    try { if (S.save) S.save(); } catch(e){}   /* ★DOCUMENT_HIDDEN_SAVE_SKIP_CONFIRMED: visibility は save 可否に使わない */
+    try { if (S.save) (typeof S.saveC==='function'?S.saveC('fix680.applyDemote'):S.save()); } catch(e){}   /* ★DOCUMENT_HIDDEN_SAVE_SKIP_CONFIRMED: visibility は save 可否に使わない */
     try {
       var cd = document.querySelectorAll('.v292-dlg-card');
       for (var i = 0; i < cd.length; i++) if (cd[i].parentNode) cd[i].parentNode.removeChild(cd[i]);

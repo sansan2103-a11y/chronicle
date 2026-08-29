@@ -43,7 +43,7 @@
       if (Number(S.cfg.artStyle) !== LEGACY) return;
       if (chosen()) return;
       S.cfg.artStyle = UNIFIED;
-      if (typeof S.save === 'function') S.save();
+      if (typeof S.save === 'function') (typeof S.saveC==='function'?S.saveC('fix374.tick'):S.save());
       try {
         var sels = document.querySelectorAll('select');
         for (var i=0;i<sels.length;i++){

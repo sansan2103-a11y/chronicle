@@ -398,7 +398,10 @@
         }
 
         /* ---- dedicated apply ---- */
-        return doApply(j, cb);
+        /* ★fix745: call site で呼び分ける（1関数の runtime-dependent return type を作らない）。
+           afterHash の戻り値は caller(classify) で使われないため、どちらの分岐でも影響しない。 */
+        if (gwsRequired()){ doApplyGws(j, cb); return; }
+        return doApplyInner(j, cb);
         }
       });
     });
@@ -461,7 +464,50 @@
     /* ★server 側に無い allowlist field は server 権威に従い落とす（out には local 非 allowlist 分と srv 通過分だけが残る） */
     return out;
   }
-  function doApply(j, cb){
+  /* ★★fix745(GWS Phase B): doApply は **applyWindow 開始〜readback/収束判定〜reload 予約**までが
+     1つの logical transaction。read-compare(dedupe) → native setItem → 再読取hash照合 が
+     ひとつづきでなければ TOCTOU になるため、**transaction 全体**を shared lock で囲う。
+       ・native setItem semantics は維持する（applyWrite 内の
+         `__v292Dfix654._native('setItem')` は一切触らない。fix246 wrapper へは戻さない）。
+       ・lock は setItem 単位ではなく doApply 単位。
+       ・呼び出し元(afterHash)は既に network response 取得後の callback なので、
+         lock 保持中に network を待たない。
+       ・Class A(REPLAYABLE_REMOTE_APPLY) / BUSY = DROP_AND_REFETCH:
+         **apply 0 / body write 0 / applied 記録 0 / reload 0** で STOP する。
+         applied 記録を残さないので次 load で再取得・再適用できる。
+       ・serialization 不要（C1 OFF・journal無し ＝ production の通常状態）は **完全素通し**。 */
+  /* ★裁定(Phase B review §3): 1関数が sync/Promise を切り替える契約は REJECT。
+       doApplyInner … 既存の callback 形式のまま（**常に同じ戻り値契約**・legacy 不変）
+       doApplyGws   … **常に Promise**（結果は cb で受ける）
+     呼び分けは同期の gwsRequired() で call site が行う。 */
+  function gwsApi(){
+    try {
+      var G = window.__v292DfixGWS || null;
+      if (G && typeof G.runExclusive === 'function' && typeof G.serializationRequired === 'function') return G;
+    } catch(e){}
+    return null;
+  }
+  function gwsRequired(){ var G = gwsApi(); return !!(G && G.serializationRequired()); }
+  function doApplyGws(j, cb){
+    var G = gwsApi();
+    if (!G) return Promise.resolve(doApplyInner(j, cb));
+    return G.runExclusive('A', function(){
+      return new Promise(function(res){
+        var settled = false;
+        function once(out){ if (settled) return; settled = true; res(out); }
+        try { doApplyInner(j, once); }
+        catch(e){ once(stop('APPLY_THREW', { detail: String(e && e.message || e) })); }
+      });
+    }).then(function(x){
+      if (x && x.ran) return cb(x.result);
+      return cb(stop('GWS_BUSY_DROP_AND_REFETCH', {
+        policy: (x && x.policy) || 'DROP_AND_REFETCH', reason: (x && x.reason) || 'BUSY',
+        wrote: 0, applied: 0, reloaded: 0 }));
+    }, function(e){
+      return cb(stop('GWS_THREW', { detail: String(e && e.message || e), wrote: 0 }));
+    });
+  }
+  function doApplyInner(j, cb){
     var rec = j.record;
     var body = rec && rec.body;
     if (!body || typeof body !== 'object') return cb(stop('PARSE', { detail: 'no record.body' }));

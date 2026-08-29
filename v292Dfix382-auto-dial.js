@@ -57,12 +57,12 @@
       if (typeof t.narrative === 'string' && RE.test(t.narrative + '')){ t.narrative = strip(t.narrative); dirty = true; }
       RE.lastIndex = 0;
       if (typeof t.text === 'string'){ var s2 = strip(t.text); if (s2 !== t.text){ t.text = s2; dirty = true; } }
-      if (dirty){ try { if (!document.hidden && S.save) S.save(); } catch(e){} }
+      if (dirty){ try { if (!document.hidden && S.save) (typeof S.saveC==='function'?S.saveC('fix382.tick.a'):S.save()); } catch(e){} }
       // ヒステリシス適用
       var cur = (S.cfg && S.cfg.dialogueLevel != null) ? +S.cfg.dialogueLevel : 1;
       if (!touched() && lastRec === rec && lastRecTurn === tl - 1 && rec !== cur){
         S.cfg.dialogueLevel = rec;
-        try { if (!document.hidden && S.save) S.save(); } catch(e){}
+        try { if (!document.hidden && S.save) (typeof S.saveC==='function'?S.saveC('fix382.tick.b'):S.save()); } catch(e){}
         applied.push({ turn: tl, from: cur, to: rec });
         try { console.log(TAG, 'セリフ量を自動調整: ' + cur + ' → ' + rec + '（2ターン連続推奨・手動時は不動作）'); } catch(e){}
       }

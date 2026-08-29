@@ -678,7 +678,7 @@
       if (!t.__f445mprev) t.__f445mprev = (t._convSays || []).map(cloneCS);   // 退避
       t._convSays[plan[i].ci].who = plan[i].to;
     }
-    try { if (S.save) S.save(); } catch(e){}
+    try { if (S.save) (typeof S.saveD==='function'?S.saveD('fix445.mergeNow'):S.save()); } catch(e){}
     try {
       var cards = document.querySelectorAll('.v292-dlg-card');
       for (i = 0; i < cards.length; i++){ if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]); }

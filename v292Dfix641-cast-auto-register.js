@@ -200,7 +200,7 @@
       stats.promoted += res.promoted.length;
       stats.lastNames = res.promoted.slice(0, 10);
       try { f.save(L); } catch(e){ stats.errors++; }
-      try { if (typeof st.save === 'function') st.save(); } catch(e){ stats.errors++; }
+      try { if (typeof st.save === 'function') (typeof st.saveC==='function'?st.saveC('fix641.castAutoRegister'):st.save()); } catch(e){ stats.errors++; }
       try { console.warn(TAG, '証拠が揃ったのでキャストへ登録しました:', res.promoted.join('、'),
                          '（取り消し: window.__v292Dfix641.undo("名前")）'); } catch(e){}
     }
@@ -223,7 +223,7 @@
     }
     if (idx < 0){ out.reason = 'not-auto-registered'; return out; }   /* 人が登録したものは触らない */
     st.cast.npcs.splice(idx, 1);
-    try { if (typeof st.save === 'function') st.save(); } catch(e){ stats.errors++; }
+    try { if (typeof st.save === 'function') (typeof st.saveC==='function'?st.saveC('fix641.castAutoRegister'):st.save()); } catch(e){ stats.errors++; }
     if (f){
       try {
         var L = f.load();

@@ -31,7 +31,7 @@
     if (!st.cfg.orKey){ st.cfg.orKey='__proxy__'; ch=true; }
     if (!st.cfg.pollKey){ st.cfg.pollKey='__proxy__'; ch=true; }
     if (st.cfg.provider!=='openrouter'){ st.cfg.provider='openrouter'; ch=true; }
-    if (ch){ try{ st.save && st.save(); }catch(e){} try{ console.log(TAG,'sentinel filled via getS()'); }catch(_){} }
+    if (ch){ try{ st.save && (typeof st.saveC==='function'?st.saveC('fix336.sentinelCfg'):st.save()); }catch(e){} try{ console.log(TAG,'sentinel filled via getS()'); }catch(_){} }
   }
   // 起動直後に速く効かせる(ゲートを押す前に埋める)＋常駐で保険
   setTimeout(ensureSentinel, 300);

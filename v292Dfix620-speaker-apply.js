@@ -106,7 +106,7 @@
             var n = applyTurn(turn, castOf(s), (s && s.cast && s.cast.hero && s.cast.hero.name) || '');
             if (n > 0) {
               /* 変わったときだけ保存と再描画（他の補正器と同じ流儀）。 */
-              try { s && s.save && s.save(); } catch (e) {}
+              try { s && s.save && (typeof s.saveC==='function'?s.saveC('fix620.install'):s.save()); } catch (e) {}
               try { if (window.__v292Dfix66 && typeof window.__v292Dfix66.repair === 'function') window.__v292Dfix66.repair(); } catch (e) {}
               try { console.log('[v292Dfix620] 話者をタグへ揃えました:', n, '件'); } catch (e) {}
             }
@@ -164,7 +164,7 @@
     }
     stats.pastApplied += out.applied;
     if (out.applied > 0) {
-      try { s && s.save && s.save(); } catch (e) {}
+      try { s && s.save && (typeof s.saveC==='function'?s.saveC('fix620.repairPast'):s.save()); } catch (e) {}
       try { if (window.__v292Dfix66 && typeof window.__v292Dfix66.repair === 'function') window.__v292Dfix66.repair(); } catch (e) {}
     }
     return out;
@@ -198,7 +198,7 @@
       c.who = it.from; n++;
     }
     if (n > 0) {
-      try { s && s.save && s.save(); } catch (e) {}
+      try { s && s.save && (typeof s.saveC==='function'?s.saveC('fix620.undoPast'):s.save()); } catch (e) {}
       try { if (window.__v292Dfix66 && typeof window.__v292Dfix66.repair === 'function') window.__v292Dfix66.repair(); } catch (e) {}
     }
     return { restored: n, of: rec.items.length };

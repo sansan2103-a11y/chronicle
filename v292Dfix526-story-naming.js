@@ -91,8 +91,29 @@
       if (!s.summary){ var sm = deriveSummary(d); if (sm){ s.summary = sm; changed = true; } }
       if (!s.createdAt && s.updatedAt){ s.createdAt = s.updatedAt; changed = true; }
     }
-    if (changed) lss('chr6_slots_meta', JSON.stringify(meta));
-    lss(DONE, '1');
+    /* ★★fix748 + 裁定11 GATE3: chr6_slots_meta は protected domain（本体の companion key）。
+       この boot 時の正規化は GWS を通っていなかった（GLOBAL_WRITE_BYPASS_AUDIT で検出）。
+         分類 = Class C
+         RECOMPUTATION_SOURCE  = chr6_slots_meta + 各 slot の durable body
+                                 （deriveTitle / deriveSummary は純関数。同じ入力から同じ題名を作る）
+         RECOMPUTATION_TRIGGER = 次 boot の retitle(false)
+       ★重要: DONE marker は **payload と同じ transaction の中**で立てる。
+         別々にすると「meta は書けなかったのに『済』だけ立つ」→ 次 boot で再実行されず
+         永久に収束しない（裁定11 が名指しした one-shot marker の罠）。 */
+    var _write748 = function(){
+      if (changed) lss('chr6_slots_meta', JSON.stringify(meta));
+      lss(DONE, '1');
+    };
+    var _A748 = null;
+    try { _A748 = window.__v292DfixDAdm; } catch(e){}
+    if (_A748 && typeof _A748.registerC === 'function')
+      _A748.registerC('fix526.retitle',
+        'chr6_slots_meta + 各 slot の durable body（deriveTitle / deriveSummary は純関数）',
+        '次 boot の retitle(false)。DONE marker を payload と同一 transaction で立てるので、書けなければ再実行される',
+        'C18 story naming / companion of chr6_slot_');
+    if (changed && _A748 && typeof _A748.persistC === 'function')
+      _A748.persistC('fix526.retitle', _write748);
+    else _write748();
     renamed += n;
     try { console.log(TAG, 'retitled ' + n + ' / ' + meta.length); } catch(e){}
     return { renamed: n, total: meta.length };

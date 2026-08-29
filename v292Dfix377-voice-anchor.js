@@ -136,7 +136,7 @@
       }
     }
     if (dirty){
-      try { if (!document.hidden && S.save) S.save(); } catch(e){}
+      try { if (!document.hidden && S.save) (typeof S.saveC==='function'?S.saveC('fix377.autoLearn'):S.save()); } catch(e){}
     }
   }
 
@@ -402,7 +402,7 @@
     var S = getS(); if (!S || !p) return;
     if (val){ p.voice = { raw: val, manual: 1 }; }
     else if (p.voice && p.voice.manual){ delete p.voice; lastLearnTurns = -1; } // 空に戻したら自動へ
-    try { if (!document.hidden && S.save) S.save(); } catch(e){}
+    try { if (!document.hidden && S.save) (typeof S.saveC==='function'?S.saveC('fix377.setCastVoice'):S.save()); } catch(e){}
   }
   function injectInputs(){
     if (!on()) return;

@@ -124,7 +124,7 @@
       if (!st.cfg.orKey){ st.cfg.orKey='__proxy__'; ch=true; }
       if (!st.cfg.pollKey){ st.cfg.pollKey='__proxy__'; ch=true; }
       if (st.cfg.provider!=='openrouter'){ st.cfg.provider='openrouter'; ch=true; }
-      if (ch){ try{ st.save && st.save(); }catch(e){} }
+      if (ch){ try{ st.save && (typeof st.saveC==='function'?st.saveC('fix328.sentinelCfg'):st.save()); }catch(e){} }
     } catch(e){}
   }
 

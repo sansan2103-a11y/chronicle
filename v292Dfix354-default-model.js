@@ -29,7 +29,7 @@
       var S = getS(); if (!S || !S.cfg) return;
       if (S.cfg.orModel === OLD) {
         S.cfg.orModel = NEW;
-        if (typeof S.save === 'function') S.save();
+        if (typeof S.save === 'function') (typeof S.saveC==='function'?S.saveC('fix354.migrate'):S.save());
         try{ console.log(TAG, 'orModel migrated: mistral-nemo -> DS V4 Flash'); }catch(_){}
       }
     } catch(e){}

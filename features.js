@@ -943,7 +943,7 @@
             if (descEl) S.cast.npcs[i].desc = descEl.value.trim();
           });
         }
-        if (S.save) S.save();
+        if (S.save) (typeof S.saveD==='function'?S.saveD('features.syncStateFromForm'):S.save());
       } catch(e){
         console.warn(TAG, 'state sync failed:', e && e.message);
       }
@@ -1213,7 +1213,7 @@
         if (!ex.hero && (!ex.npcs || !ex.npcs.length) && !ex.scene.loc && !ex.scene.obj) return;
         var changed = applyBootstrap(ex);
         if (changed){
-          try { if (S.save) S.save(); } catch(e){}
+          try { if (S.save) (typeof S.saveC==='function'?S.saveC('features.maybeBootstrap'):S.save()); } catch(e){}
           console.log(TAG, 'bootstrapped:',
             'hero=', ex.hero ? ex.hero.name : '(none)',
             'npcs=', (ex.npcs || []).map(function(n){ return n.name; }).join(','),
@@ -1392,7 +1392,7 @@
           if (updateChar(c, last.narrative)) anyChanged = true;
         });
         if (anyChanged){
-          try { if (S.save) S.save(); } catch(e){}
+          try { if (S.save) (typeof S.saveC==='function'?S.saveC('features.updateAllStates'):S.save()); } catch(e){}
           console.log(TAG, 'states updated');
         }
       } catch(e){
@@ -1676,7 +1676,7 @@
         n++;
       });
       if (n > 0){
-        try { if (S.save) S.save(); } catch(e){}
+        try { if (S.save) (typeof S.saveC==='function'?S.saveC('features.inferState'):S.save()); } catch(e){}
       }
       return n;
     }
@@ -1705,7 +1705,7 @@
         n++;
       });
       if (n > 0){
-        try { if (S.save) S.save(); } catch(e){}
+        try { if (S.save) (typeof S.saveD==='function'?S.saveD('features.revive'):S.save()); } catch(e){}
         try {
           if (typeof UI !== 'undefined' && UI && typeof UI.renderAll === 'function') UI.renderAll();
         } catch(e){}
@@ -2523,7 +2523,7 @@
                 else if (__gsnap[S.cast.npcs[idx].name] !== undefined){ S.cast.npcs[idx].gender = __gsnap[S.cast.npcs[idx].name]; }
               }
             });
-            if (typeof S !== 'undefined' && typeof S.save === 'function') S.save();
+            if (typeof S !== 'undefined' && typeof S.save === 'function') (typeof S.saveD==='function'?S.saveD('features.npcGenderForm'):S.save());
           } catch(e){}
           return r;
         };
@@ -3055,7 +3055,27 @@
     var FIELDS = [['傷','kizu'], ['関係','kankei'], ['未解決','mikaiketsu']];
     function store(){ try { window.__v292Dfix77Store = window.__v292Dfix77Store || {}; return window.__v292Dfix77Store; } catch(e){ return {}; } }
     function attrOf(tag, name){ try { var m = String(tag).match(new RegExp(name + '\\s*=\\s*"([^"]*)"')); return m ? m[1].trim() : ''; } catch(e){ return ''; } }
-    function persist(){ try { localStorage.setItem(LSKEY, JSON.stringify(store())); } catch(e){} }
+    /* ★★fix748 + 裁定11 GATE1 の再分類: fix190 は **Class D** です。
+       当初 Class C（SOURCE = 共有ストア）としましたが、裁定11 の
+       「memory object を durable source と数えない」に照らすと成立しません:
+         傷/関係/未解決 の出どころは LLM 応答の <state> タグであり、
+         turn.dbg.raw は `S.cfg.debug` が ON のときしか本体へ載りません（index.html:2129）。
+         つまり persist を skip した直後に context death すると、次 boot で再構成できません。
+       → Class D（write0 + 上位の semantic operation を成功扱いしない）へ格上げ。
+       ★実運用の唯一の caller は captureExt（_parseExtensions）で、これは turn pipeline の
+         TURN_PARSE admission の内側です。したがって admission が取れないときは
+         **turn 自体が成立しない**ので、値が失われることもありません。 */
+    function persist(){
+      try {
+        var A = window.__v292DfixDAdm;
+        if (A && typeof A.syncGuard === 'function'){
+          var g = A.syncGuard('fix190.persist');
+          if (g && g.hold) return g;                  /* ★write 0 */
+        }
+      } catch(e){}
+      try { localStorage.setItem(LSKEY, JSON.stringify(store())); } catch(e){}
+      return true;
+    }
 
     /* ★R118F-G(RULING R118F — FIX190 PROMPT OWNERSHIP): fix190 prompt determinism。
        flag v292Dfix190Det='1' のときだけ有効。既定OFF＝従来経路と1バイトも変わらない。
@@ -3226,7 +3246,7 @@
         if (S.cast.hero) fillFor(S.cast.hero);
         if (Array.isArray(S.cast.npcs)) S.cast.npcs.forEach(fillFor);
         if (n > 0){
-          try { if (S.save) S.save(); } catch(e){}
+          try { if (S.save) (typeof S.saveC==='function'?S.saveC('features.avatarFill3258'):S.save()); } catch(e){}
           try { if (typeof UI !== 'undefined' && UI && typeof UI.renderAll === 'function') UI.renderAll(); } catch(e){}
         }
         return n;
@@ -4765,7 +4785,7 @@
       if (S.cast.hero) fillFor(S.cast.hero);
       if (Array.isArray(S.cast.npcs)) S.cast.npcs.forEach(fillFor);
       if (n > 0){
-        try { if (S.save) S.save(); } catch(e){}
+        try { if (S.save) (typeof S.saveC==='function'?S.saveC('features.avatarFill4797'):S.save()); } catch(e){}
         try { if (typeof UI !== 'undefined' && UI && typeof UI.renderAll === 'function') UI.renderAll(); } catch(e){}
       }
       return n;
@@ -6047,7 +6067,79 @@
     if (typeof S === 'undefined' || !S || typeof S.save !== 'function') return false;
     if (S.__v292Dfix30Wrapped) return true;
     var origSave = S.save.bind(S);
+    /* ★★fix748(Phase C / C9 = Class D 既定): S.save は chr6_slot_<id>（物語本体）の唯一の funnel。
+       ・sync 契約は壊さない（呼び出し側 30 箇所以上が同期前提。Promise を漏らさない）。
+       ・意味的所有者（turn commit / undo / retryRollback / 設定保存 など）が
+         GWS Class D admission を取り、その内側でこの同期 save が走る形にする。
+       ・admission の外から呼ばれた S.save は **この段階では従来どおり実行する**が、
+         誰がそこに居るのかを必ず記録する（Class C 監査 = 裁定 §「audited S.save callers」の入力）。
+         記録だけで挙動は 1 バイトも変えない。silent success を許すためではなく、
+         分類前の caller を勝手に壊さないため。分類後に refuse へ切り替える。 */
+    var f748Audit = { total:0, inAdmission:0, outsideAdmission:0, legacy:0, callers:{} };
+    function f748Note(){
+      try {
+        var A = window.__v292DfixDAdm;
+        f748Audit.total++;
+        if (!A || typeof A.required !== 'function' || !A.required()){ f748Audit.legacy++; return; }
+        if (A.inTransaction()){ f748Audit.inAdmission++; return; }
+        f748Audit.outsideAdmission++;
+        var site = '?';
+        try {
+          var st = String(new Error().stack || '').split('\n');
+          for (var i = 1; i < st.length; i++){
+            if (st[i].indexOf('f748Note') >= 0 || st[i].indexOf('S.save') >= 0) continue;
+            site = st[i].trim().slice(0, 160); break;
+          }
+        } catch(e){}
+        f748Audit.callers[site] = (f748Audit.callers[site] || 0) + 1;
+      } catch(e){}
+    }
+    /* ★★fix748(Phase C / C9 最終形): S.save の caller を 3 つに分けた。
+         S.saveD(who) … Class D。ユーザー操作・確定系。admission を **自分で取る**。
+                        取れなければ書かず、humanReason を画面に出す（silent success 禁止）。
+         S.saveC(who) … Class C。メモリ側に既に反映済みの後追い補正。
+                        admission 外ならこの 1 回の persist を飛ばす（次の S.save で必ず載る）。
+         S.save()     … 未分類。C1/GWS required かつ admission 外なら **refuse**（write0）。
+                        裁定「分類不能caller は Class D へ倒す」の実装。
+                        kill switch: v292Dfix748SaveRefuseOff='1'（緊急時のみ。既定は refuse 有効） */
+    /* ★★裁定11 FINAL GATE 2: この kill switch で C1/GWS required 中に raw S.save を
+       再許可してはいけない（safety switch が safety を壊す）。
+         serializationRequired()===false … legacy emergency switch として許可（従来どおり）
+         serializationRequired()===true  … switch が立っていても refuse を維持し、
+                                           理由を CLASS_D_SAFETY_DISABLED_HOLD に切り替える */
+    function f748RefuseOffRaw(){
+      try { return localStorage.getItem('v292Dfix748SaveRefuseOff') === '1'; } catch(e){ return false; }
+    }
+    function f748RefuseOff(){
+      if (!f748RefuseOffRaw()) return false;
+      try {
+        var A = window.__v292DfixDAdm;
+        if (A && typeof A.required === 'function' && A.required()) return false;   /* ★required 中は効かせない */
+      } catch(e){}
+      return true;
+    }
     S.save = function(){
+      f748Note();
+      try {
+        var A748 = window.__v292DfixDAdm;
+        if (A748 && typeof A748.syncGuard === 'function' && !f748RefuseOff()){
+          var g748 = A748.syncGuard('S.save(unclassified)');
+          if (g748 && g748.hold){
+            f748Audit.refused = (f748Audit.refused || 0) + 1;
+            if (f748RefuseOffRaw()){
+              /* ★裁定11 GATE2: switch は立っているが required 中なので効かせなかった。
+                 「安全装置を切ったのに止まった」ことを診断できるよう別コードで返す。 */
+              g748 = { hold:true, code:'CLASS_D_SAFETY_DISABLED_HOLD', who:'S.save(unclassified)',
+                       reason:'SAFETY_SWITCH_IGNORED_WHILE_REQUIRED', wrote:0, mutated:false,
+                       detail:'C1/GWS required 中は v292Dfix748SaveRefuseOff で raw S.save を再許可しません。'
+                            + '先に C1 を OFF にしてください' };
+              f748Audit.safetyDisabledHold = (f748Audit.safetyDisabledHold || 0) + 1;
+            }
+            try { console.warn(TAG, 'fix748: 未分類の S.save が admission 外から呼ばれたので書かない（write0）'); } catch(e){}
+            return g748;                      /* ★write 0 */
+          }
+        }
+      } catch(e){}
       /* ★fix694: 保存先は chr6_active_slot ではなく document の権限キー(INV-A/B/C)。
          権限が無い document(bare index / 墓標 / 不明 story)では保存しない。 */
       if (typeof window.__chr6WriteKey !== 'function'){
@@ -6072,6 +6164,67 @@
         console.warn(TAG, 'save error:', e && e.message);
       }
     };
+    /* ★fix748: await できる意味的所有者のための入口。中身は同期 save をそのまま呼ぶだけ。
+       戻り: Promise<{ran:true} | {ran:false, reason, ...}>。BUSY / isolation HOLD なら **書かない**。 */
+    S.saveGws = function(){
+      var self = this;
+      var A = window.__v292DfixDAdm;
+      if (!A || typeof A.run !== 'function')
+        return Promise.resolve({ ran:true, result: S.save.call(self), legacy:true });
+      return A.run('S_SAVE', function(){ return S.save.call(self); });
+    };
+    /* ★★Class D caller 用。admission を自分で取り、取れなければ画面に理由を出す。
+       同期 caller は戻り Promise を無視してよい（写り込むのは「保存できなかった」表示だけ）。 */
+    S.saveD = function(who){
+      var self = this === undefined ? S : this;
+      var A = window.__v292DfixDAdm;
+      if (!A || typeof A.run !== 'function')
+        return Promise.resolve({ ran:true, result: S.save.call(self), legacy:true });
+      return A.run('S_SAVE_D:' + String(who || '?'), function(){ return S.save.call(self); })
+        .then(function(x){
+          if (!x || x.ran !== true){
+            f748Audit.dRefused = (f748Audit.dRefused || 0) + 1;
+            try {
+              var msg = (typeof A.humanReason === 'function') ? A.humanReason(x) : 'この操作は保存できませんでした。';
+              if (typeof showToast === 'function') showToast(msg, true);
+              else if (typeof window.showToast === 'function') window.showToast(msg, true);
+            } catch(e){}
+          }
+          return x;
+        });
+    };
+    /* ★★Class C caller 用。admission 外ならこの 1 回の persist を飛ばす。
+       ★共通 proof（この family は全部同じ）:
+           RECOMPUTATION_SOURCE  = S.turns / S.cast / S.cfg（メモリ）。
+             この family は「メモリ側の値を先に書き換えてから save を呼ぶ」形しか無いので、
+             persist を飛ばしても値そのものは失われない。
+           RECOMPUTATION_TRIGGER = 次の S.save（ターン確定 TURN_COMMIT は必ず来る。
+             加えて各 module 自身の timer / repair 再実行）。 */
+    S.saveC = function(who){
+      var self = this === undefined ? S : this;
+      var A = window.__v292DfixDAdm;
+      if (!A || typeof A.persistC !== 'function') return S.save.call(self);
+      /* ★裁定11 GATE1: admission 外でも **実際に lock を取りに行く**。BUSY のときだけ飛ばす。
+         同期契約は persistC が保つ（caller へ Promise を漏らさない）。 */
+      var r = A.persistC('S.saveC', function(){ S.save.call(self); });
+      if (r && (r.deferred || r.skip || r.hold)){
+        f748Audit.cSkipped = (f748Audit.cSkipped || 0) + 1;
+        f748Audit.cSkippedBy = f748Audit.cSkippedBy || {};
+        f748Audit.cSkippedBy[String(who || '?')] = (f748Audit.cSkippedBy[String(who || '?')] || 0) + 1;
+      }
+      return r;
+    };
+    (function(){
+      try {
+        var A = window.__v292DfixDAdm;
+        if (A && typeof A.registerC === 'function')
+          A.registerC('S.saveC',
+            'S.turns / S.cast / S.cfg（メモリ。この family は必ずメモリを先に更新してから save を呼ぶ）',
+            '次の S.save（ターン確定 TURN_COMMIT は必ず来る）+ 各 module 自身の timer / repair 再実行',
+            'C9 audited recomputable S.save callers');
+      } catch(e){}
+    })();
+    S.__v292Dfix748SaveAudit = function(){ try { return JSON.parse(JSON.stringify(f748Audit)); } catch(e){ return null; } };
     S.__v292Dfix30Wrapped = true;
     console.log(TAG, 'S.save wrapped for multi-slot support');
     return true;
@@ -6445,7 +6598,7 @@
           return;
         }
         // Auto-save current to active slot first
-        try { if (typeof S !== 'undefined' && typeof S.save === 'function') S.save(); } catch(_){}
+        try { if (typeof S !== 'undefined' && typeof S.save === 'function') (typeof S.saveD==='function'?S.saveD('features.bindManagerEvents.a'):S.save()); } catch(_){}
         var ok = loadSlot(id);
         if (ok){
           showToast('「' + s.name + '」を読み込んだ');
@@ -6467,7 +6620,7 @@
         // Temporarily switch active, save, restore
         var prevActive = getActive();
         setActive(id);
-        try { if (typeof S !== 'undefined' && typeof S.save === 'function') S.save(); } catch(_){}
+        try { if (typeof S !== 'undefined' && typeof S.save === 'function') (typeof S.saveD==='function'?S.saveD('features.bindManagerEvents.b'):S.save()); } catch(_){}
         setActive(prevActive);
         showToast('「' + s2.name + '」に保存した');
         renderManager(); // refresh
@@ -6716,7 +6869,7 @@
   function actSave(){
     try {
       if (typeof S !== 'undefined' && typeof S.save === 'function'){
-        S.save();
+        (typeof S.saveD==='function'?S.saveD('features.actSave'):S.save());
         showToast('💾 保存しました');
       } else {
         showToast('S.save 未定義 (state 未初期化?)', true);
@@ -6969,7 +7122,7 @@
     var turn = undoStack.pop();
     S.turns.push(turn);
     try { if (S.scene){ S.scene.branches = (turn.plan && turn.plan.branchCandidates) || []; } } catch(_){}
-    try { if (typeof S.save === 'function') S.save(); } catch(_){}
+    try { if (typeof S.save === 'function') (typeof S.saveD==='function'?S.saveD('features.actRedo'):S.save()); } catch(_){}
     try {
       if (typeof UI !== 'undefined'){
         if (typeof UI.renderAll === 'function') UI.renderAll();
@@ -8220,8 +8373,38 @@
   function getActiveSlotId(){ try { if (window.__v292Dfix30 && typeof window.__v292Dfix30.getActive === 'function') return window.__v292Dfix30.getActive(); } catch(_){} return 'default'; }
   function pendingKey(){ return 'chr6_pending_dice_' + getActiveSlotId(); }
   function loadPending(){ try { var v = localStorage.getItem(pendingKey()); return v ? JSON.parse(v) : null; } catch(_){ return null; } }
-  function savePending(p){ if (!p) try { localStorage.removeItem(pendingKey()); } catch(_){} else try { localStorage.setItem(pendingKey(), JSON.stringify(p)); } catch(_){} }
-  function clearPending(){ savePending(null); }
+  /* ★★fix748(Phase C / C10 = Class D): chr6_pending_dice_<slot> は
+     「ダイス1回の消費」という再構成できない mutation。よって Class D。
+     ・意味的所有者は 3 つだけ: ①判定ボタン(roll) ②キャンセル ③ターン送信(userExt→clearPending)。
+     ・③は G.submit の TURN_BUILD admission の内側で走る（fix748）。
+     ・①②はこのファイル内の handler が admission を取る。
+     ・admission の外から呼ばれたら **1 バイトも書かない**（silent success 禁止）。 */
+  function f748(){ try { return window.__v292DfixDAdm || null; } catch(e){ return null; } }
+  function f748Guard(who){
+    var A = f748();
+    if (!A || typeof A.syncGuard !== 'function') return null;
+    return A.syncGuard(who);
+  }
+  function f748Run(label, fn){
+    var A = f748();
+    if (!A || typeof A.run !== 'function') return Promise.resolve({ ran:true, result: fn(), legacy:true });
+    return A.run(label, fn);
+  }
+  function f748Notice(x){
+    try {
+      var A = f748();
+      var msg = (A && typeof A.humanReason === 'function') ? A.humanReason(x) : 'この操作は行いませんでした。';
+      if (typeof showToast === 'function') showToast(msg, true);
+      else if (typeof window.showToast === 'function') window.showToast(msg, true);
+    } catch(e){}
+  }
+  function savePending(p){
+    var h = f748Guard('fix40.savePending');
+    if (h && h.hold) return h;                    /* ★write 0 / 成功扱いしない */
+    if (!p) try { localStorage.removeItem(pendingKey()); } catch(_){} else try { localStorage.setItem(pendingKey(), JSON.stringify(p)); } catch(_){}
+    return true;
+  }
+  function clearPending(){ return savePending(null); }
   function roll(difficultyKey){
     var d = DIFFICULTIES.find(function(x){ return x.key === difficultyKey; });
     if (!d) return null;
@@ -8284,9 +8467,24 @@
     document.getElementById('v40-close-x').addEventListener('click', closeDicePanel);
     modal.addEventListener('click', function(e){
       var t = e.target.closest('button'); if (!t || !t.dataset || !t.dataset.act) return;
-      if (t.dataset.act === 'roll'){ var r = roll(t.dataset.diff); renderDicePanel(r); return; }
+      /* ★fix748 D2(C10): 判定ロールとキャンセルは「ユーザーが意味を持たせた 1 回の消費」= Class D。
+         admission が取れなければロールもキャンセルも **行わない**（画面もそのまま）。 */
+      if (t.dataset.act === 'roll'){
+        var _d748 = t.dataset.diff;
+        f748Run('DICE_ROLL', function(){ return roll(_d748); }).then(function(x){
+          if (!x.ran){ f748Notice(x); return; }
+          renderDicePanel(x.result);
+        });
+        return;
+      }
       if (t.dataset.act === 'reroll'){ renderDicePanel(null); return; }
-      if (t.dataset.act === 'cancel'){ clearPending(); closeDicePanel(); return; }
+      if (t.dataset.act === 'cancel'){
+        f748Run('DICE_CANCEL', function(){ return clearPending(); }).then(function(x){
+          if (!x.ran){ f748Notice(x); return; }
+          closeDicePanel();
+        });
+        return;
+      }
       if (t.dataset.act === 'close'){ closeDicePanel(); return; }
     });
   }
@@ -8391,7 +8589,7 @@
       if (S.scene){ S.scene.loc = t.scene.loc; S.scene.obj = t.scene.obj; S.scene.tone = t.scene.tone; S.scene.lore = t.scene.lore; S.scene.branches = []; }
       if (S.cast){ S.cast.hero = t.cast.hero; S.cast.npcs = t.cast.npcs; }
       if (options.resetTurns !== false) S.turns = [];
-      if (typeof S.save === 'function') S.save();
+      if (typeof S.save === 'function') (typeof S.saveD==='function'?S.saveD('features.applyTemplate'):S.save());
       try { if (typeof UI !== 'undefined' && typeof UI.renderAll === 'function') UI.renderAll(); } catch(_){}
       try { if (typeof UI !== 'undefined' && Array.isArray(UI._renderHooks)){ UI._renderHooks.forEach(function(h){ try { h({}); } catch(_){} }); } } catch(_){}
       return true;
@@ -8506,7 +8704,7 @@
     if (typeof S === 'undefined' || !S || !S.cast) return false;
     if (!confirm('Hero を「' + arch.label + '」アーキタイプで上書きしますか？\n名前: ' + randName(arch) + ' / 既存 Hero の設定は失われます')) return false;
     S.cast.hero = { name: randName(arch), desc: arch.desc, personality: arch.personality, coreDesire: arch.coreDesire, coreFear: arch.coreFear, wound: arch.wound };
-    try { if (S.save) S.save(); } catch(_){}
+    try { if (S.save) (typeof S.saveD==='function'?S.saveD('features.applyToHero'):S.save()); } catch(_){}
     try { if (typeof UI !== 'undefined' && UI._renderHooks) UI._renderHooks.forEach(function(h){ try { h({}); } catch(_){} }); } catch(_){}
     return true;
   }
@@ -8517,7 +8715,7 @@
     var id = String.fromCharCode(97 + S.cast.npcs.length);
     var npc = { id: id, name: randName(arch), desc: arch.desc, personality: arch.personality, coreDesire: arch.coreDesire, coreFear: arch.coreFear, wound: arch.wound };
     S.cast.npcs.push(npc);
-    try { if (S.save) S.save(); } catch(_){}
+    try { if (S.save) (typeof S.saveD==='function'?S.saveD('features.applyToNpc'):S.save()); } catch(_){}
     try { if (typeof UI !== 'undefined' && UI._renderHooks) UI._renderHooks.forEach(function(h){ try { h({}); } catch(_){} }); } catch(_){}
     return true;
   }
@@ -9587,7 +9785,7 @@
             // v292Dfix95: reset NPC appearance — a fresh story starts with all NPCs
             // dormant again (they re-enter when their name is mentioned).
             if (_S.cast && Array.isArray(_S.cast.npcs)) _S.cast.npcs.forEach(function(n){ if (n) delete n.appeared; });
-            if (typeof _S.save === 'function') _S.save();
+            if (typeof _S.save === 'function') (typeof _S.saveD==='function'?_S.saveD('features.wrapReset'):_S.save());
           }
         } catch(e){}
         // v292Dfix204: このwrapがfix154版resetStoryを丸ごと置換していたため、
@@ -9742,7 +9940,7 @@
         if (ctx.indexOf(n.name) >= 0){ n.appeared = true; changed = true; return true; }
         return false;
       });
-      if (changed){ try { if (typeof st.save === 'function') st.save(); } catch(e){} }
+      if (changed){ try { if (typeof st.save === 'function') (typeof st.saveC==='function'?st.saveC('features.npcAppearedMark'):st.save()); } catch(e){} }
       if (active.length === npcs.length){ return orig(inputType, inputText); } // all appeared — no swap needed
       st.cast.npcs = active;
       try { return orig(inputType, inputText); }
@@ -10452,7 +10650,7 @@
     sel.addEventListener('change', function(){
       var c = getCfg(); if (!c) return;
       c[cfgKey] = +sel.value;
-      try { if (typeof S !== 'undefined' && typeof S.save === 'function') S.save(); } catch(e){}
+      try { if (typeof S !== 'undefined' && typeof S.save === 'function') (typeof S.saveD==='function'?S.saveD('features.mkSel'):S.save()); } catch(e){}
       try { if (typeof onAfter === 'function') onAfter(+sel.value); } catch(e){}
     });
     wrap.appendChild(lab); wrap.appendChild(sel);
@@ -10647,7 +10845,7 @@
     });
     var removed = before - st.cast.npcs.length;
     if (removed > 0){
-      try { if (typeof st.save === 'function') st.save(); } catch(e){}
+      try { if (typeof st.save === 'function') (typeof st.saveC==='function'?st.saveC('fix149.removeEmptyNpc'):st.save()); } catch(e){}
       try { console.log('[v292Dfix149] removed', removed, 'empty NPC(s)'); } catch(e){}
     }
     return removed;

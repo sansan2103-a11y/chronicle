@@ -21,7 +21,7 @@
   function off(){ try{ return localStorage.getItem('v292Dfix313Off')==='1'; }catch(e){ return false; } }
   function getS(){ try{ return window.S||(typeof S!=='undefined'?S:null); }catch(e){ return null; } }
   function getCards(){ var s=getS(); if(!s) return []; if(!s.scene) s.scene={}; if(!Array.isArray(s.scene.cards)) s.scene.cards=[]; return s.scene.cards; }
-  function persist(){ try{ var s=getS(); if(s&&typeof s.save==='function'){ s.save(); return; } }catch(e){}
+  function persist(){ try{ var s=getS(); if(s&&typeof s.save==='function'){ (typeof s.saveD==='function'?s.saveD('fix313.persist'):s.save()); return; } }catch(e){}
     try{ if(window.S&&typeof window.S.save==='function') window.S.save(); }catch(e){} }
   function recentText(){ var s=getS(); if(!s||!Array.isArray(s.turns)) return ''; return s.turns.slice(-RECENT).map(function(t){ return (t&&t.narrative||'')+' '+(t&&(t.playerText||t.player)||''); }).join(' '); }
 

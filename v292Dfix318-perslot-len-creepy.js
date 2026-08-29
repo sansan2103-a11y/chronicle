@@ -21,7 +21,7 @@
   function getS(){ try{ return window.S||(typeof S!=='undefined'?S:null); }catch(e){ return null; } }
   function activeKey(){ try{ return (typeof window.__chr6Key==='function')?window.__chr6Key():'chr6'; }catch(e){ return 'chr6'; } }
   function blobCfg(){ try{ var d=JSON.parse(localStorage.getItem(activeKey())||'{}'); return (d&&d.cfg)||null; }catch(e){ return null; } }
-  function persist(){ try{ var s=getS(); if(s&&typeof s.save==='function') s.save(); }catch(e){} }
+  function persist(){ try{ var s=getS(); if(s&&typeof s.save==='function') (typeof s.saveD==='function'?s.saveD('fix318.persist'):s.save()); }catch(e){} }
   function lsg(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
   function lss(k,v){ try{ localStorage.setItem(k, v); }catch(e){} }
 

@@ -421,10 +421,15 @@
   /* ★★fix721.4(STEP4G-B/RULING34 §17): restore実行本体。
      入口（index fix291 / HOME adapter）が何であっても、plan→confirm→apply→reload の
      意味論はこの1本だけを通る。第二restore engine・第二allowlistを作らないための集約点。 */
-  function runRestoreFromData(data){
+  /* ★★裁定(Phase B review §3): 1つの関数が状況により 同期値 / Promise を返す契約は REJECT。
+     ここは **sync core(Inner) + async GWS orchestration(Gws)** に分離してある。
+       runRestoreFromDataInner(data) → **常に同期オブジェクト**（legacy semantics を1バイトも変えない）
+       runRestoreFromDataGws(data)   → **常に Promise**（Promise を扱える caller だけが使う）
+     呼び分けは同期の serializationRequired() で行い、戻り値型は関数ごとに固定する。 */
+  function runRestoreFromDataInner(data){
     var plan = buildPlan(data);
     if (!plan.ok){
-      /* ★fix721.5(hotfix): HOLD は「読み込めない形式」ではないので、理由を正しく伝える。
+      /* ★fix721.5(hotfix): HOLD は「読み込めない形式」ではないので理由を正しく伝える。
          ここで return するため confirm / journal / rawSet / reload は 0。partial restore も 0。 */
       if (plan.code === 'RESTORE_SLOT_BASE_KEY_AMBIGUOUS_HOLD'){
         alert('このバックアップは、今の保存方式（物語ごとの分離保存）と形式が合わない項目を含んでいます。\n' +
@@ -445,20 +450,75 @@
               '他のChronicleタブをすべて閉じてから続行してください。\n' +
               '（復元完了後は、開いていたChronicleタブを必ず再読み込みしてください）\n\n続けますか？';
     if (!confirm(msg)) return { ok:false, code:'CANCELLED' };
-    var r = applyPlan(plan);
+    return afterApply(applyPlan(plan));                            /* ★legacy: 完全同期・不変 */
+  }
+
+  function afterApply(r){
     if (r.ok){ alert('復元しました。ページを再読み込みします。'); try { location.reload(); } catch(e){} }
     else if (r.code === 'RESTORE_ROLLED_BACK'){ alert('復元に失敗したため、元の状態に戻しました。'); }
     else { alert('復元に失敗しました (' + r.code + ')。次回起動時に自動回復します。'); }
     return r;
   }
+  function gws721(){
+    try {
+      var G = window.__v292DfixGWS || null;
+      if (G && typeof G.runExclusive === 'function' && typeof G.serializationRequired === 'function') return G;
+    } catch(e){}
+    return null;
+  }
+  function serializationRequired721(){ var G = gws721(); return !!(G && G.serializationRequired()); }
+
+  /* ★★fix745(GWS Phase B): apply は **logical transaction 全体**を shared lock で囲う。
+       ・buildPlan / confirm() は lock の**外**（modal 待ちの間 lock を保持しない）。
+       ・Class B(RECOVERY_OR_DESTRUCTIVE) = HARD_HOLD_NO_WRITE:
+         BUSY なら applyPlan に**入らない** ＝ write0 / journal 未生成 / 成功verdict禁止 / reloadしない。
+     **常に Promise を返す。** */
+  function runRestoreFromDataGws(data){
+    var G = gws721();
+    if (!G) return Promise.resolve(runRestoreFromDataInner(data));
+    var plan = buildPlan(data);
+    if (!plan.ok){
+      /* ★fix721.5(hotfix): 同上（Gws 経路。戻り値型は常に Promise を維持） */
+      if (plan.code === 'RESTORE_SLOT_BASE_KEY_AMBIGUOUS_HOLD'){
+        alert('このバックアップは、今の保存方式（物語ごとの分離保存）と形式が合わない項目を含んでいます。\n' +
+              'そのまま読み込むと、キャラクターの状態などが「戻ったように見えて実際には反映されない」\n' +
+              '状態になるため、安全のため **何も変更せずに中止** しました。\n\n' +
+              '対象: ' + plan.baseKeys.join(', ') + '\n\n' +
+              '今のデータは1バイトも変更していません。');
+        return Promise.resolve({ ok:false, code: plan.code, baseKeys: plan.baseKeys, wrote: 0, partial: false });
+      }
+      alert('読み込めない形式です (' + plan.code + ')');
+      return Promise.resolve({ ok:false, code: plan.code });
+    }
+    var msg = '【まるごと読み込み（安全版・合流）】\n物語 ' + plan.storyIds.length + '件・' + plan.writes.length + '項目を読み込みます。\n' +
+              '今ある物語は消しません（バックアップに無い物語はそのまま残ります）。\n' +
+              '設定・ログイン・実験フラグ等の制御データ ' + plan.denied.length + '項目は安全のため復元しません。\n\n' +
+              '⚠ 復元中に別のChronicleタブ（ホーム・物語）が開いていると、古い状態が再保存される可能性があります。\n' +
+              '他のChronicleタブをすべて閉じてから続行してください。\n' +
+              '（復元完了後は、開いていたChronicleタブを必ず再読み込みしてください）\n\n続けますか？';
+    if (!confirm(msg)) return Promise.resolve({ ok:false, code:'CANCELLED' });
+    return G.runExclusive('B', function(){ return applyPlan(plan); }).then(function(x){
+      if (x && x.ran) return afterApply(x.result);
+      try { alert('他のタブが物語データを更新中のため、復元を中止しました。データは変更していません。\n' +
+                  '他のChronicleタブを閉じてからやり直してください。'); } catch(e){}
+      return { ok:false, code:'GWS_BUSY_HOLD', reason:(x && x.reason) || 'BUSY',
+               policy:(x && x.policy) || 'HARD_HOLD_NO_WRITE', wrote:0 };
+    });
+  }
 
   // ---- fix291互換入口（index.html「📥 まるごと読込」） ----
+  /* ★importAll は **常に undefined を返す**（FileReader callback。戻り値契約は不変）ので、
+     内部で Inner / Gws を呼び分けても runtime-dependent return type にはならない。 */
   function importAll(file){
     if (!file) return;
     if (off()){ try { alert('復元機能は現在停止中です。'); } catch(e){} return; }
     var reader = new FileReader();
     reader.onload = function(){
-      try { runRestoreFromData(JSON.parse(String(reader.result || '{}'))); }
+      try {
+        var data = JSON.parse(String(reader.result || '{}'));
+        if (serializationRequired721()) runRestoreFromDataGws(data);   /* Promise は捨てる（元も戻り値未使用） */
+        else runRestoreFromDataInner(data);
+      }
       catch(e){ alert('読み込みに失敗しました: ' + (e && e.message)); }
     };
     reader.onerror = function(){ alert('ファイルの読み取りに失敗しました。'); };
@@ -469,13 +529,30 @@
      HOMEは自身のfile format（kind:'chronicle-device-backup' の pkg.ls）を parse/validate するだけで、
      **key-value map をそのまま safe core へ渡す**。HOME側に第二allowlistを持たせない
      （FIX721_ALLOWLIST = SINGLE AUTHORITY）。ここから先は fix291経路と完全に同一契約。 */
-  function importMap(map){
+  /* ★importMap は HOME adapter へ **常に同期オブジェクト**を返す（既存 public contract を変えない）。
+     serialization が必要な状態では Promise を返さず、**同期の fail-closed verdict**で止める。
+     Promise を扱える HOME caller のために importMapGws（**常に Promise**）を別名で用意する。 */
+  function importMapCheck(map){
     if (off()){ try { alert('復元機能は現在停止中です。'); } catch(e){} return { ok:false, code:'FIX721_OFF' }; }
     if (!map || typeof map !== 'object' || Object.prototype.toString.call(map) === '[object Array]'){
       alert('読み込めない形式です (RESTORE_SCHEMA_INVALID)');
       return { ok:false, code:'RESTORE_SCHEMA_INVALID' };
     }
-    return runRestoreFromData(map);
+    return null;
+  }
+  function importMap(map){
+    var bad = importMapCheck(map); if (bad) return bad;
+    if (serializationRequired721()){
+      try { alert('別のタブが物語データを更新中の可能性があるため、この入口からは復元できません。\n' +
+                  '他のChronicleタブをすべて閉じてから、もう一度お試しください。'); } catch(e){}
+      return { ok:false, code:'GWS_SERIALIZATION_REQUIRED_USE_ASYNC_ENTRY', wrote:0 };
+    }
+    return runRestoreFromDataInner(map);
+  }
+  function importMapGws(map){
+    var bad = importMapCheck(map); if (bad) return Promise.resolve(bad);
+    if (!serializationRequired721()) return Promise.resolve(runRestoreFromDataInner(map));
+    return runRestoreFromDataGws(map);
   }
 
   /* ★★fix721.3(STEP4G-A/RULING34 §6): SLOT IMPORT SAFETY POLICY（read-only helper）。
@@ -508,16 +585,41 @@
     return { allowed: true, reason: 'OK' };
   }
 
+  /* ★★fix745(GWS Phase B): module-scope boot recovery は **必ず GWS を通す**。
+     ・GWS 不在 / serialization 不要（C1 OFF・journal無し ＝ production の通常状態）
+         → その場で**同期実行**。legacy と1バイトも変わらない（順序・戻り値・reload判定）。
+     ・serialization 必要（C1 active）
+         → GWS_BOOT_RECOVERY_BARRIER に登録。shared lock 取得後に state 再読取 →
+           同期 recovery → RESOLVED。unlocked recovery を1回も起こさない。
+     裁定:「実際のproduction script順で起動した瞬間から、fix721/fix587が一度もGWSの外へ出ないか」 */
   var bootRecovery = null;
-  try { bootRecovery = recoverIfNeeded(); } catch(e){ bootRecovery = { ok: false, code: 'RECOVERY_THREW' }; }
-  /* ★RULING31 §10-11: rollback recovery後は素のpre-restore状態で確実にboot し直す。
-     journalはclear済みなので次loadでは発火しない（reloadループ不可）。test環境(location無し)ではskip。 */
-  try {
-    if (bootRecovery && bootRecovery.code === 'RECOVERED_BY_ROLLBACK' &&
-        typeof location !== 'undefined' && location && typeof location.reload === 'function'){
-      setTimeout(function(){ try { location.reload(); } catch(e){} }, 0);
+  var gwsBypassed = false;                 /* GWS未loadで走った＝load order違反（PASS条件の観測点） */
+  function bootRecoverBody(){
+    var out;
+    try { out = recoverIfNeeded(); } catch(e){ out = { ok: false, code: 'RECOVERY_THREW' }; }
+    bootRecovery = out;
+    /* ★RULING31 §10-11: rollback recovery後は素のpre-restore状態で確実にboot し直す。
+       journalはclear済みなので次loadでは発火しない（reloadループ不可）。test環境(location無し)ではskip。 */
+    try {
+      if (out && out.code === 'RECOVERED_BY_ROLLBACK' &&
+          typeof location !== 'undefined' && location && typeof location.reload === 'function'){
+        setTimeout(function(){ try { location.reload(); } catch(e){} }, 0);
+      }
+    } catch(e){}
+    return out;
+  }
+  (function(){
+    var G = null;
+    try { G = window.__v292DfixGWS || null; } catch(e){ G = null; }
+    if (G && typeof G.runBootRecovery === 'function'){
+      var br = G.runBootRecovery('FIX721', bootRecoverBody);
+      if (br && br.sync !== true)
+        bootRecovery = { ok: true, code: 'DEFERRED_TO_GWS_BARRIER', barrier: br.barrier };
+      return;
     }
-  } catch(e){}
+    gwsBypassed = true;
+    bootRecoverBody();
+  })();
 
   window.__v292Dfix721 = {
     __armed: true, BUILD: BUILD, JOURNAL_KEY: JOURNAL_KEY,
@@ -525,9 +627,14 @@
     applyPlan: applyPlan, rollback: rollback, recoverIfNeeded: recoverIfNeeded,
     mergeMeta: mergeMeta, importAll: importAll, journal: readJournal,
     slotImportGuard: slotImportGuard,                                   /* ★fix721.3(STEP4G-A) read-only */
-    importMap: importMap,                                               /* ★fix721.4(STEP4G-B) HOME adapter入口 */
+    importMap: importMap,                                               /* ★fix721.4(STEP4G-B) HOME adapter入口・常に同期 */
+    importMapGws: importMapGws,                                         /* ★fix745: 常にPromise（async-capable caller用） */
+    runRestoreFromDataInner: runRestoreFromDataInner,                    /* ★fix745: 常に同期 */
+    runRestoreFromDataGws: runRestoreFromDataGws,                        /* ★fix745: 常にPromise */
     holdActive: function(){ var j = readJournal(); return !!(j && (j.phase === 'PREPARED' || j.phase === 'APPLYING')); },
-    status: function(){ return { build: BUILD, off: off(), bootRecovery: bootRecovery, journal: readJournal() }; }
+    status: function(){ return { build: BUILD, off: off(), bootRecovery: bootRecovery, journal: readJournal(),
+                                 gwsBypassed: gwsBypassed }; },
+    gwsBypassed: function(){ return gwsBypassed; }
   };
   try { console.log(TAG, 'loaded (bootRecovery=' + (bootRecovery && bootRecovery.code) + ')'); } catch(e){}
 })();

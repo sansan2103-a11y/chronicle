@@ -150,7 +150,7 @@
       doneReg[ti] = sigOf(S.turns[ti]);
     }
     if (any){
-      try { if (S.save && !document.hidden) S.save(); } catch(e){}
+      try { if (S.save && !document.hidden) (typeof S.saveC==='function'?S.saveC('fix489.repair'):S.save()); } catch(e){}
       try {
         var cards = document.querySelectorAll('.v292-dlg-card');
         for (var i = 0; i < cards.length; i++){ if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]); }

@@ -23,7 +23,30 @@
   function off(){ try { return localStorage.getItem('v292Dfix325Off') === '1'; } catch(e){ return false; } }
   function getS(){ try { return window.S || (typeof S !== 'undefined' ? S : null); } catch(e){ return null; } }
   function getStore(){ return window.__v292Dfix77Store; }
-  function persist(){ try { localStorage.setItem('v292Dfix77States', JSON.stringify(getStore()||{})); } catch(e){} } // fix246がスロット接尾辞へ
+  /* ★★fix748(Phase C / C6 = Class C): rederive は S.turns から純関数的に作り直した store を書く。
+       RECOMPUTATION_SOURCE  = S.turns（dbg.raw の <state>。durable な物語本体側に載っている）
+       RECOMPUTATION_TRIGGER = 直下の 1500ms staleness ポーリング（毎回 maxStoreTurn / turn regression を見る）
+                               + undo/retry フック
+     ＝ skip しても 1.5 秒後の同じ判定でもう一度 rederive されるので SKIP_THIS_PERSIST が成立する。
+     ★メモリ側の store 差し替えは行ってよい（Class C は persist だけを飛ばす）。 */
+  (function(){
+    try {
+      var A = window.__v292DfixDAdm;
+      if (A && typeof A.registerC === 'function')
+        A.registerC('fix325.persist',
+          'S.turns（dbg.raw の <state> から deriveFromTurns で純関数的に再構成）',
+          '1500ms staleness ポーリング（state ahead / turn regression を毎回判定）+ undo/retry フック',
+          'C6 state rederive');
+    } catch(e){}
+  })();
+  function persist(){
+    var A = null;
+    try { A = window.__v292DfixDAdm; } catch(e){}
+    var w = function(){ try { localStorage.setItem('v292Dfix77States', JSON.stringify(getStore()||{})); } catch(e){} };
+    /* ★裁定11 GATE1: lock を実際に取りに行き、BUSY のときだけ飛ばす（1.5 秒後に再試行）。 */
+    if (A && typeof A.persistC === 'function') return A.persistC('fix325.persist', w);
+    w(); return true;
+  }
 
   // <state> 属性パーサ(引用符の揺れに対応: 半角" / 全角” “ / 和文「『)
   function attr(tag, name){

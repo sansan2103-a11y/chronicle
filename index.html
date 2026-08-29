@@ -10,12 +10,15 @@
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
 <script src="v292Dfix654-storage-trap.js?cb=v292Dfix731"></script>
+<script src="v292Dfix745-gws-lock.js?cb=20260829-fix748"></script>
+<script src="v292Dfix746-slot-isolation-authority.js?cb=20260829-fix748"></script>
+<script src="v292Dfix748-class-d-admission.js?cb=20260829-fix748"></script>
 <script src="v292Dfix698-mutation-bus.js?cb=v292Dfix701"></script>
 <!-- v292Dfix705(STEP3E): canonical read authority。既知 storyId の document で
      canonical 判定が終わるまで **その story の body / aiInstr への書込だけ**を保留する。
      ★起動時の最初の body 書込(v100-patch fixProviderCfg)より前に居る必要があるため head。
      ★fix724 で既定 ON。kill switch=v292Dfix705Off=1 のみ（On キーは効かない） -->
-<script src="v292Dfix705-canonical-read-gate.js?cb=v292Dfix725"></script>
+<script src="v292Dfix705-canonical-read-gate.js?cb=20260829-fix748"></script>
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
@@ -48,7 +51,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260829-fix743';
+  var BUILT = '20260829-fix748';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -299,7 +302,7 @@ body {
   <div class="tool-row">
     <button class="tbtn" onclick="G.cont()">続きを書く</button>
     <button class="tbtn" onclick="G.retry()">やり直す</button>
-    <button class="tbtn" onclick="G.undo()">↩ 取消</button>
+    <button class="tbtn" onclick="G.undoGws()">↩ 取消</button>
   </div>
 </div>
 
@@ -1705,8 +1708,15 @@ const UI = {
     });
     S.cast.npcs = S.cast.npcs.filter(n => n.name);
 
-    S.save(); this.closeSettings(); this.setStatus('設定を保存しました');
-    if (S.turns.length === 0) this._showIntro();
+    /* ★fix748(C9 = Class D): 設定保存はユーザーの確定操作。書けなければ
+       「保存しました」と出さない（silent success 禁止）。設定画面も閉じない。 */
+    const _s748 = this;
+    (typeof S.saveD === 'function' ? S.saveD('UI.saveSettings') : Promise.resolve({ ran:true, result: S.save() }))
+      .then(function(x){
+        if (!x || x.ran !== true){ _s748.setStatus('設定を保存できませんでした。もう一度お試しください', true); return; }
+        _s748.closeSettings(); _s748.setStatus('設定を保存しました');
+        if (S.turns.length === 0) _s748._showIntro();
+      });
   },
 
   _showIntro() {
@@ -1741,8 +1751,20 @@ const UI = {
   closeEdit() { document.getElementById('editOv').classList.remove('open'); S.editIdx = -1; },
   saveEdit() {
     if (S.editIdx < 0) return;
+    /* ★fix748(C9 = Class D): 本文の手編集はユーザーの確定操作。書けなければ
+       編集画面を閉じず、入力も保持したままにする（silent success 禁止）。 */
+    const _prev748 = S.turns[S.editIdx].narrative;
     S.turns[S.editIdx].narrative = document.getElementById('editTa').value;
-    S.save(); this.closeEdit(); this.renderAll(); this.renderBranches(S.scene.branches);
+    const _e748 = this;
+    (typeof S.saveD === 'function' ? S.saveD('UI.saveEdit') : Promise.resolve({ ran:true, result: S.save() }))
+      .then(function(x){
+        if (!x || x.ran !== true){
+          try { if (S.editIdx >= 0) S.turns[S.editIdx].narrative = _prev748; } catch(e){}   /* ★メモリも戻す */
+          _e748.setStatus('編集を保存できませんでした。もう一度お試しください', true);
+          return;
+        }
+        _e748.closeEdit(); _e748.renderAll(); _e748.renderBranches(S.scene.branches);
+      });
   }
 };
 
@@ -1844,6 +1866,29 @@ const G = {
     } catch(e) { try { console.warn('[v292Dfix218] attribQuotes err:', e && e.message); } catch(_){} return {}; }
   },
 
+  /* ★★fix748(Phase C / Class D): turn pipeline の Class D admission。
+     GWS(fix745) の Class D transaction を「意味的所有者」であるこの turn 操作の側で取り、
+     内側の同期 writer（C7a fix77 persist / C10 clearPending / C9 S.save）は同期のまま走らせる。
+     ・network（Api.call）は **必ず lock の外**。よって admission は 3 つに分ける。
+     ・BUSY / SLOT_ISOLATION_RUNTIME_HOLD のときは **write 0 かつ turn を成立させない**
+       （silent success 禁止 = 裁定 Class D contract）。 */
+  _dadm() { try { return window.__v292DfixDAdm || null; } catch(e){ return null; } },
+  _dadmRun(label, fn) {
+    const A = this._dadm();
+    if (!A || typeof A.run !== 'function') return Promise.resolve({ ran:true, result: fn(), legacy:true });
+    return A.run(label, fn);
+  },
+  /* admission に入れなかったときの唯一の出口。入力を戻し、成功に見せない。 */
+  _dadmHold(x, inputEl, text) {
+    const A = this._dadm();
+    const msg = (A && typeof A.humanReason === 'function') ? A.humanReason(x)
+              : 'この操作は行いませんでした（保存の順番待ちに入れませんでした）。';
+    try { if (inputEl && text && !inputEl.value.trim()) inputEl.value = text; } catch(e){}
+    try { UI.setStatus(msg, true); } catch(e){}
+    try { showToast(msg, true); } catch(e){}
+    try { console.warn('[v292Dfix748]', 'class D hold', x && x.label, x && x.reason, x && x.isolation); } catch(e){}
+  },
+
   async submit() {
     if (S.inFlight) return;
     /* ★fix546(2026-07-25・おしん裁定「直るまで遊べなくてもいい」): 直前のターンが保存できていない間は
@@ -1880,11 +1925,23 @@ const G = {
     UI.setLoading(true); UI.renderBranches([]);
 
     try {
-      const { sys, user } = Planner.build(S.mode, text);
+      /* ★fix748 D2(C10): Planner.build の _userExtensions から
+         features.js userExt → clearPending（chr6_pending_dice_）が同期で走る。
+         ダイス1回の消費は再構成できない = Class D。network より前・lock の外に network なし。 */
+      const _b748 = await this._dadmRun('TURN_BUILD', () => Planner.build(S.mode, text));
+      if (!_b748.ran) { this._dadmHold(_b748, inputEl, text); return; }
+      const { sys, user } = _b748.result;
       let result; try { result = await Api.call(sys, user); } catch (_e265) { var _m269 = String((_e265 && _e265.message) || _e265); var _is429 = /HTTP 429/.test(_m269); if (_is429 || /HTTP 5\d\d|Failed to fetch|NetworkError|load failed/i.test(_m269)) { UI.setStatus(_is429 ? 'レート制限(429)。8秒待って自動再試行…' : '一時エラー。2秒後に自動再試行…'); await new Promise(function(_r){ setTimeout(_r, _is429 ? 8000 : 2000); }); result = await Api.call(sys, user); } else { throw _e265; } } /* v292Dfix269: 429(レート制限)はレート明けを8秒待って再試行 */ /* v292Dfix265: 5xx/ネットワーク一過性エラーは1回だけ透過リトライ。2回目失敗はfix263aトーストへ */
       if (!result) { try { if (text && !inputEl.value.trim()) inputEl.value = text; UI.setStatus('応答が得られませんでした。もう一度お試しください', true); } catch(_){} return; } /* v292Dfix263a2 */
 
-      let plan = Planner.parsePlan(result.text, S.mode);
+      /* ★fix748 D1(C7a): parsePlan の _parseExtensions から
+         fix77 captureState → persist（v292Dfix77States_slot_）が同期で走る。
+         raw を保持していないので失っても再構成できない = Class D。
+         ★_parseExtensions は sync 契約（呼び出し側が typeof r === 'object' で plan を差し替える）なので
+           hook 自体は Promise 化しない。admission はこの呼び出し**側**で取る。 */
+      const _p748 = await this._dadmRun('TURN_PARSE', () => Planner.parsePlan(result.text, S.mode));
+      if (!_p748.ran) { this._dadmHold(_p748, inputEl, text); return; }
+      let plan = _p748.result;
       if (!plan) throw new Error('AIの応答をJSONとして解析できませんでした。\nデバッグをONにして確認してください。\n\n' + result.text.slice(0,300));
 
       /* v292Dfix216: 丸ごと再掲ターンの品質ゲート。実測: モデルが「続き」で直前場面をほぼ同文で
@@ -1906,7 +1963,10 @@ const G = {
           UI.setStatus((_recap235 ? '前ターンの再掲' : '短すぎる応答') + 'を検知 → 書き直し中…');
           const result2 = await Api.call(sys, user + '\n\n【重要・書き直し】直前のあなたの出力は' + (_recap235 ? '前ターンの内容のほぼ再掲だった。' : '') + (_short235 ? '短すぎた(数文で切り上げていた)。最低でも8文以上で場面を最後まで描き切ること。' : '') + '同じ場面・同じ文を繰り返さず、時間と状況を必ず前へ進めて、新しい出来事・発見・反応を描くこと。');
           if (result2 && result2.text){
-            const plan2 = Planner.parsePlan(result2.text, S.mode);
+            /* ★fix748 D1(C7a): 書き直し経路も同じ Class D admission を通す */
+            const _p2748 = await this._dadmRun('TURN_PARSE_REWRITE', () => Planner.parsePlan(result2.text, S.mode));
+            if (!_p2748.ran) { this._dadmHold(_p2748, inputEl, text); return; }
+            const plan2 = _p2748.result;
             if (plan2 && Array.isArray(plan2.narrative) && plan2.narrative.join('').length > 40){ plan = plan2; result = result2; }
           }
         }
@@ -2069,12 +2129,19 @@ const G = {
         dbg: S.cfg.debug ? { sys, user, raw: result.text } : null
       };
 
-      S.turns.push(turn);
-      /* ★★fix732(RULING85): 唯一の新ターン生成口。このターンが session 中に生成されたことを ephemeral に記録する。
-         localStorage / story body / hash へは 1 バイトも書かない。 */
-      try { if (window.__v292Dfix732Scope) window.__v292Dfix732Scope.markNew(turn); } catch(_e732){}
-      S.scene.branches = plan.branchCandidates || [];
-      S.save();
+      /* ★fix748 D4(C9): turn commit。S.turns.push + branches + S.save() が 1 つの logical transaction。
+         S.save は fix30 wrapper 経由で chr6_slot_<id>（本体）を書く Class D writer。
+         ★BUSY / isolation HOLD なら **push もしない**（turn を成立させない = silent success 禁止）。 */
+      const _c748 = await this._dadmRun('TURN_COMMIT', () => {
+        S.turns.push(turn);
+        /* ★★fix732(RULING85): 唯一の新ターン生成口。このターンが session 中に生成されたことを ephemeral に記録する。
+           localStorage / story body / hash へは 1 バイトも書かない。 */
+        try { if (window.__v292Dfix732Scope) window.__v292Dfix732Scope.markNew(turn); } catch(_e732){}
+        S.scene.branches = plan.branchCandidates || [];
+        S.save();
+        return true;
+      });
+      if (!_c748.ran) { this._dadmHold(_c748, inputEl, text); return; }
       UI.appendTurn(turn, S.turns.length - 1);
       UI.renderBranches(plan.branchCandidates);
       UI.setStatus('');
@@ -2107,17 +2174,40 @@ const G = {
     try { const _ic = document.getElementById('inp'); if (_ic){ _ic.value = ''; _ic.style.height = 'auto'; } } catch(e){}  /* v292Dfix321: 続きを書く後はsentinelを入力欄に残さない */
   },
 
-  async retry() {
-    if (S.inFlight || S.turns.length === 0) return;
+  /* ★fix748 D3(C16): やり直しの「巻き戻し部分」だけを切り出す。
+     fix302 はこの名前を wrap するので、restoreTo（v292Dfix77States_slot_ への persist）は
+     必ず下の retry() が取る Class D admission の内側で走る。★同期のまま。 */
+  retryRollback() {
     const last = S.turns[S.turns.length - 1];
     S.turns.pop(); S.save(); UI.renderAll(); UI.renderBranches([]);
+    return last;
+  },
+  async retry() {
+    if (S.inFlight || S.turns.length === 0) return;
+    /* ★fix748: 巻き戻し（fix302 の状態復元 + pop + S.save）を 1 つの Class D transaction にする。
+       network（submit の Api.call）は **lock を離してから**。 */
+    const _r748 = await this._dadmRun('RETRY_ROLLBACK', () => this.retryRollback());
+    if (!_r748.ran) { this._dadmHold(_r748, null, null); return; }
+    const last = _r748.result;
     document.getElementById('inp').value = last.playerText;
     this.setMode(last.inputType); await this.submit();
   },
 
-  undo() {
+  /* ★fix748 D3(C16): 取消の唯一の入口。confirm（ユーザー待ち）は **lock の外**で行い、
+     確定後の同期チェーン（fix33 wrapper → fix302 wrapper → undo 本体）を
+     1 つの Class D transaction の内側で走らせる。
+     ★fix33 は origUndo() を同期で呼び、直後に S.turns.length を見て redo スタックへ積む。
+       ここを Promise 化すると redo が黙って壊れるため、undo() は同期のままにする。 */
+  async undoGws() {
     if (S.turns.length === 0) return;
     if (!confirm('直前のターンを取り消しますか？')) return;
+    const _u748 = await this._dadmRun('UNDO', () => { this.undo(); return true; });
+    if (!_u748.ran) { this._dadmHold(_u748, null, null); return; }
+  },
+  /* ★fix748: confirm は undoGws が済ませている（lock 保持中にユーザー待ちを作らない）。
+     この関数は同期契約を維持する（fix33 / fix302 が wrap する対象）。 */
+  undo() {
+    if (S.turns.length === 0) return;
     S.turns.pop();
     S.scene.branches = S.turns.length ? (S.turns[S.turns.length-1].plan?.branchCandidates || []) : [];
     S.save(); UI.renderAll(); UI.renderBranches(S.scene.branches); UI.setStatus('取り消しました');
@@ -2125,12 +2215,32 @@ const G = {
 
   resetStory() {
     if (!confirm('物語をリセットしますか？\n世界観・キャラ・設定・ログインは保持されます。')) return;
-    S.turns = []; S.scene.branches = [];
-    /* v292Dfix651(C): 物語リセットは「明示的な初期化」=正規経路。0ターン上書きの非常ブレーキを一回だけ通す。 */
-    try { if (window.__v292Dfix651 && window.__v292Dfix651.allowOnce) window.__v292Dfix651.allowOnce('resetStory'); } catch (e) {}
-    S.save();
-    this._clearDerivedState();   // v292Dfix154: wipe character-state stores so the previous game doesn't bleed in
-    location.reload();           // rebuild every in-memory module state from a clean slate
+    /* ★fix748(C9 = Class D): 物語リセットはユーザーの確定操作かつ破壊的。
+       admission が取れなければ **1 バイトも変えず、派生ストアも消さず、reload もしない**。
+       ★S.turns を空にするのも admission の内側で行う（書けないのにメモリだけ空にしない）。 */
+    const _prevTurns748 = S.turns, _prevBranches748 = S.scene.branches;
+    const _r748 = this;
+    (typeof S.saveD === 'function'
+        ? (function(){
+            S.turns = []; S.scene.branches = [];
+            /* v292Dfix651(C): 物語リセットは「明示的な初期化」=正規経路。0ターン上書きの非常ブレーキを一回だけ通す。 */
+            try { if (window.__v292Dfix651 && window.__v292Dfix651.allowOnce) window.__v292Dfix651.allowOnce('resetStory'); } catch (e) {}
+            return S.saveD('UI.resetStory');
+          })()
+        : (function(){
+            S.turns = []; S.scene.branches = [];
+            try { if (window.__v292Dfix651 && window.__v292Dfix651.allowOnce) window.__v292Dfix651.allowOnce('resetStory'); } catch (e) {}
+            return Promise.resolve({ ran:true, result: S.save() });
+          })())
+      .then(function(x){
+        if (!x || x.ran !== true){
+          S.turns = _prevTurns748; S.scene.branches = _prevBranches748;   /* ★メモリも戻す */
+          try { UI.setStatus('リセットできませんでした。もう一度お試しください', true); } catch(e){}
+          return;
+        }
+        _r748._clearDerivedState();   // v292Dfix154: wipe character-state stores so the previous game doesn't bleed in
+        location.reload();            // rebuild every in-memory module state from a clean slate
+      });
   },
 
   resetAll() {
@@ -2392,6 +2502,53 @@ G.init();
   }
 
   /* ─── 2. PROVIDER CONFIG HYGIENE (v18+v72 essence) ─────────────── */
+  /* ★★fix748(Phase C / C11): v100-patch から本体 chr6_slot_<id> を直接書く 5 経路。
+     内訳を分類し直しました（裁定「分類不能は Class D へ倒す」に従い、2 本を D へ格上げ）。
+
+       C11a fixProviderCfg    … Class C（provider/key/model の正規化。純粋に冪等）
+       C11b fixGenderAndNames … Class C（性別・名前の正規化）
+       C11c purgeBadDialogues … Class C（壊れた dialogues の除去）
+       C11d generateHeroAvatar … **Class D**（ユーザーが押した「生成」。書けなければ押していないのと同じにする）
+       C11e generateNpcAvatar  … **Class D**（同上）
+
+     C11a-c の RECOMPUTATION_SOURCE / TRIGGER:
+       SOURCE  = localStorage 上の本体そのもの（これらは本体を読んで正規化し書き戻すだけで、
+                 新しい情報を作らない。飛ばしても失われるのは「修復済みという状態」だけで、
+                 元データは 1 バイトも欠けない）
+       TRIGGER = init() の起動時 1 回 + 設定画面を開くたびの onSettingsOpen()
+                 （MutationObserver で overlay の表示切替を毎回拾う）
+     ★「boot 1 回だけ」ではありません。設定画面を開くたびに必ず再試行されます。 */
+  function _f748(){ try { return window.__v292DfixDAdm || null; } catch(e){ return null; } }
+  function _f748RunC(label, fn){
+    var A = _f748();
+    if (!A || typeof A.runC !== 'function') return Promise.resolve({ ran:true, result: fn(), legacy:true });
+    return A.runC(label, fn);
+  }
+  function _f748RunD(label, fn){
+    var A = _f748();
+    if (!A || typeof A.run !== 'function') return Promise.resolve({ ran:true, result: fn(), legacy:true });
+    return A.run(label, fn);
+  }
+  function _f748Notice(x){
+    try {
+      var A = _f748();
+      var msg = (A && typeof A.humanReason === 'function') ? A.humanReason(x) : 'この操作は行いませんでした。';
+      if (typeof showToast === 'function') showToast(msg, true);
+      else if (typeof UI === 'object' && UI && typeof UI.setStatus === 'function') UI.setStatus(msg, true);
+    } catch(e){}
+  }
+  (function(){
+    try {
+      var A = _f748();
+      if (!A || typeof A.registerC !== 'function') return;
+      var SRC = 'localStorage 上の本体そのもの（読んで正規化して書き戻すだけ。新しい情報を作らない）';
+      var TRG = 'init() 起動時 1 回 + 設定画面を開くたびの onSettingsOpen()（overlay の MutationObserver）';
+      A.registerC('v100.fixProviderCfg', SRC, TRG, 'C11a');
+      A.registerC('v100.fixGenderAndNames', SRC, TRG, 'C11b');
+      A.registerC('v100.purgeBadDialogues', SRC, TRG, 'C11c');
+    } catch(e){}
+  })();
+
   function fixProviderCfg(){
     try {
       /* ★fix694: fix692 の個別 resolver を共有 authority へ統合 */
@@ -2431,8 +2588,13 @@ G.init();
         changed = true;
       }
       if (changed){
-        localStorage.setItem(__k, JSON.stringify(s));
-        console.log(TAG, 'cfg cleaned');
+        _f748RunC('V100_FIX_PROVIDER_CFG', function(){
+          localStorage.setItem(__k, JSON.stringify(s));
+          return true;
+        }).then(function(x){
+          if (!(x && x.ran)){ console.log(TAG, 'cfg clean skipped (次に設定画面を開いたとき再試行)'); return; }
+          console.log(TAG, 'cfg cleaned');
+        });
       }
     } catch(e){}
   }
@@ -2547,7 +2709,9 @@ G.init();
           }
         }
       });
-      if (changed) localStorage.setItem(__k, JSON.stringify(s));
+      if (changed) _f748RunC('V100_FIX_GENDER_NAMES', function(){
+        localStorage.setItem(__k, JSON.stringify(s)); return true;
+      });
     } catch(e){}
   }
 
@@ -2572,7 +2736,9 @@ G.init();
         }
       });
       if (changed){
-        localStorage.setItem(__k, JSON.stringify(s));
+        _f748RunC('V100_PURGE_BAD_DIALOGUES', function(){
+          localStorage.setItem(__k, JSON.stringify(s)); return true;
+        });
         if (typeof UI === 'object' && typeof UI.renderAll === 'function'){
           try { UI.renderAll(); } catch(e){}
         }
@@ -2608,9 +2774,16 @@ G.init();
       var hero = (s.cast||{}).hero;
       if (!hero || !hero.name){ alert('主人公の名前を先に設定してください'); return; }
       var url = avatarUrl(hero.name, hero.desc||'', hero.gender||'');
-      hero.avatar = url;
-      localStorage.setItem(__k, JSON.stringify(s));
-      buildHeroWidget(); /* re-render */
+      /* ★fix748(C11d = Class D): ユーザーが押した「生成」。書けなければ
+         **押していないのと同じ**にする（メモリも UI も進めない = silent success 禁止）。 */
+      _f748RunD('V100_HERO_AVATAR', function(){
+        hero.avatar = url;
+        localStorage.setItem(__k, JSON.stringify(s));
+        return true;
+      }).then(function(x){
+        if (!(x && x.ran)){ _f748Notice(x); return; }
+        buildHeroWidget(); /* re-render */
+      });
     } catch(e){ console.warn(TAG, 'hero avatar', e); }
   }
 
@@ -2624,9 +2797,16 @@ G.init();
       var s = JSON.parse(raw);
       var npc = (s.cast||{}).npcs && s.cast.npcs[idx];
       if (!npc || !npc.name){ alert('NPCの名前を先に設定してください'); return; }
-      npc.avatar = avatarUrl(npc.name, npc.desc||'', npc.gender||'');
-      localStorage.setItem(__k, JSON.stringify(s));
-      buildAllNpcAvatars();
+      /* ★fix748(C11e = Class D): 同上。ユーザー操作なので silent success 禁止。 */
+      var _url748 = avatarUrl(npc.name, npc.desc||'', npc.gender||'');
+      _f748RunD('V100_NPC_AVATAR', function(){
+        npc.avatar = _url748;
+        localStorage.setItem(__k, JSON.stringify(s));
+        return true;
+      }).then(function(x){
+        if (!(x && x.ran)){ _f748Notice(x); return; }
+        buildAllNpcAvatars();
+      });
     } catch(e){ console.warn(TAG, 'npc avatar', e); }
   }
 
@@ -2833,7 +3013,7 @@ G.init();
 </script>
 <!-- v292Dfix246: per-storyストア(fix77状態/longmem/会話キャッシュ)をスロット単位に分離。features.js等の前に設置。OFF=v292StoreSlotIsoOff -->
 <script src="v292Dfix246-store-slot-isolation.js?cb=v292Dfix246"></script>
-<script src="v292Dfix543-save-guard.js?cb=v292Dfix696"></script>
+<script src="v292Dfix543-save-guard.js?cb=20260829-fix748"></script>
 <script src="v292Dfix697-shadow-story-commit.js?cb=v292Dfix733"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
      OFF=v292Dfix729Off / 検証口=window.__v292Dfix729 -->
@@ -2856,7 +3036,7 @@ G.init();
      配置契約(RULING31/32): fix564直後・全writer(291/587/399/402)より前 = RECOVERY EARLY。
      観測=window.__v292Dfix721.status() / OFF=v292Dfix721Off -->
 <script src="v292Dfix726-export-secret-guard.js?cb=v292Dfix728"></script>
-<script src="v292Dfix721-safe-restore.js?cb=v292Dfix726"></script>
+<script src="v292Dfix721-safe-restore.js?cb=20260829-fix748"></script>
 <!-- ★fix660(B): BackupGC。削除候補を「選ぶ」層（物理削除はしない）。
      分類・保護判定は fix562 を唯一の正として使うので、fix562 / fix564 の後ろに置く。
      読出=window.__v292Dfix660gc.status()/.reviewCandidates()/.selfTest() / OFF=v292Dfix660Off -->
@@ -2869,12 +3049,12 @@ G.init();
 <script src="v292Dfix499-freeget-style-canon.js?cb=v292Dfix499"></script>
 <script src="v292Dfix484-style-canon.js?cb=v292Dfix486"></script>
 <!-- v292Dfix247: APIプロキシ切替(公開化PoC)。設定のプロキシURL+合言葉が入っていれば全API(本文/longmem/🎲/アバター)をWorker経由へ。空=従来BYOK直叩き。OFF=v292ProxyOff -->
-<script src="v292Dfix247-proxy.js?cb=v292Dfix248"></script>
+<script src="v292Dfix247-proxy.js?cb=20260829-fix748"></script>
 <script src="v292Dfix247b-proxy-admin.js?cb=v292Dfix247b"></script>
 <!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
 <!-- v292Dfix600: 新しい物語(?new=1)に別の物語の中身が混入したら保存を止める。 2026-07-27の実機事故（タブ2枚で新物語に他物語のキャラが丸ごと入った）の再発防止。 features.js より前に置き、S.save を待ち受けて包む。OFF=v292Dfix600Off -->
 <script src="v292Dfix600-new-story-guard.js?cb=v292Dfix601"></script>
-<script src="v292Dfix527-story-url.js?cb=v292Dfix588"></script>
+<script src="v292Dfix527-story-url.js?cb=20260829-fix748"></script>
 <!-- ★fix659: 分岐(fork)バナーの作り直し。平易な文言＋「☁ クラウド側を取り込む」が
      home.html?autopull=1 へ渡って**取り込みまで完走**する。物語画面で pull しないのは
      fix527 [3] の設計どおり（ここは変えない）。
@@ -2882,7 +3062,7 @@ G.init();
        fix659 は別 id + __f527 マーカーを立てるので干渉しない、という関係をこの並びで示す。
      読出=window.__v292Dfix659.status()/.selfTest() / OFF=v292Dfix659Off -->
 <script src="v292Dfix659-fork-choice.js?cb=v292Dfix680"></script>
-<script src="features.js?cb=v292Dfix737"></script>
+<script src="features.js?cb=20260829-fix748"></script>
 <script>
 /* ============================================================================
  * v292DfixP0-inline : シナリオテンプレ適用の緊急封鎖（L2 + L2b）
@@ -3120,7 +3300,7 @@ G.init();
 <script src="v292DfixP0-scenario-blocker.js?cb=v292Dfix680"></script>
 <script src="v292Dfix135-longmem.js?cb=v292Dfix299b"></script>
 <script src="v292Dfix138-continue.js?cb=v292Dfix225"></script>
-<script src="v292Dfix145-charlist.js?cb=v292Dfix539c"></script>
+<script src="v292Dfix145-charlist.js?cb=20260829-fix748"></script>
 <!-- v292Dfix226(P1): fix52(可読性v1)はfix53(包括v2)に内包されるため退役。問題があれば下行のコメントを外す
 <script src="v292Dfix52-readability.js?cb=v292Dfix52"></script> -->
 <script src="v292Dfix53-readability-v2.js?cb=v292Dfix53"></script>
@@ -3128,10 +3308,10 @@ G.init();
 <script src="v292Dfix55-gm-mode.js?cb=v292Dfix55c"></script>
   <script src="v292Dfix56-conversation-log-fix.js?cb=v292Dfix200"></script>
   <script src="v292Dfix57-script-style-dialogue.js?cb=v292Dfix57"></script>
-  <script src="v292Dfix58-prompt-rebuild.js?cb=v292Dfix694"></script>
+  <script src="v292Dfix58-prompt-rebuild.js?cb=20260829-fix748"></script>
   <script src="v292Dfix60-display-pipeline.js?cb=v292Dfix60"></script>
   <script src="v292Dfix59-hybrid-extractor.js?cb=v292Dfix59"></script>
-  <script src="v292Dfix61-alpha-strip-protect.js?cb=v292Dfix61v3"></script>
+  <script src="v292Dfix61-alpha-strip-protect.js?cb=20260829-fix748"></script>
   <!-- v292Dfix230(判定テスト): fix62はfix66(fix102修復)+fix197スイープと役割重複の疑い。退役試験中。
        アバターに「?」が出る場合はコメント解除で復活
   <script src="v292Dfix62-avatar-fix.js?cb=v292Dfix62"></script> -->
@@ -3140,7 +3320,7 @@ G.init();
   <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=v292Dfix74"></script>
-  <script src="v292Dfix66-renderhook-repair.js?cb=v292Dfix550"></script>
+  <script src="v292Dfix66-renderhook-repair.js?cb=20260829-fix748"></script>
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
     <!-- v292Dfix189c: fix70(dialogue-order, 本文ベースの並べ替え)を無効化。fix70bが
@@ -3153,7 +3333,7 @@ G.init();
     <script src="v292Dfix73-card-dedup.js?cb=v292Dfix200"></script>
     <script src="v292Dfix70b-order-convsays.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix75-history-dedup.js?cb=v292Dfix75"></script>
-<script src="v292Dfix76-human-foundation.js?cb=v292Dfix76b"></script>  <script src="v292Dfix77-state-memory.js?cb=v292Dfix539c"></script>
+<script src="v292Dfix76-human-foundation.js?cb=v292Dfix76b"></script>  <script src="v292Dfix77-state-memory.js?cb=20260829-fix748"></script>
   <script src="v292Dfix78-tag-case-normalize.js?cb=v292Dfix78"></script>
   <script src="v292Dfix79-momentum-anchor.js?cb=v292Dfix79"></script>
   <script src="v292Dfix80-gen-gate-retry.js?cb=v292Dfix504"></script>
@@ -3169,7 +3349,7 @@ G.init();
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
-  <script src="v292Dfix192-newengine.js?cb=v292Dfix737"></script>
+  <script src="v292Dfix192-newengine.js?cb=20260829-fix748"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
   <script src="v292Dfix197-avatar-key.js?cb=v292Dfix524"></script>
@@ -3192,11 +3372,11 @@ G.init();
   <!-- v292Dfix244: 心理プロファイル入力欄を1つの自由記述に統合(裏の4軸は保持)。OFF=v292PsychMergeOff -->
   <script src="v292Dfix244-psych-merge.js?cb=v292Dfix244b"></script>
   <!-- v292Dfix256: 🧠モデル切替セレクタ(cfg.orModel・スロット毎保存)。A/B実測でDS V4 Flash推奨。OFF=v292ModelSelOff -->
-  <script src="v292Dfix256-model-select.js?cb=v292Dfix279"></script>
+  <script src="v292Dfix256-model-select.js?cb=20260829-fix748"></script>
 <script src="v292Dfix270-topbar-ui.js?cb=v292Dfix270"></script>
 <script src="v292Dfix274-build-flag-guard.js?cb=v292Dfix274"></script>
 <script src="v292Dfix275-settings-tabs.js?cb=v292Dfix275"></script>
-<script src="v292Dfix277-quasi-pack.js?cb=v292Dfix541"></script>
+<script src="v292Dfix277-quasi-pack.js?cb=20260829-fix748"></script>
 <script src="v292Dfix288-tooltips.js?cb=v292Dfix288"></script>
 <script src="v292Dfix290-mobile.js?cb=v292Dfix290"></script>
 <script src="v292Dfix291-saveexport.js?cb=v292Dfix721"></script>
@@ -3205,13 +3385,13 @@ G.init();
 <script src="v292Dfix297-ai-instructions.js?cb=v292Dfix297b"></script>
 <script src="v292Dfix300-readability.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix301-longmem-stale-guard.js?cb=v292Dfix301"></script>
-<script src="v292Dfix302-undo-state-rollback.js?cb=v292Dfix302b"></script>
+<script src="v292Dfix302-undo-state-rollback.js?cb=20260829-fix748"></script>
 <script src="v292Dfix732-session-turn-scope.js?cb=v292Dfix732"></script>
-<script src="v292Dfix303-speaker-backref.js?cb=v292Dfix732"></script>
+<script src="v292Dfix303-speaker-backref.js?cb=20260829-fix748"></script>
 <script src="v292Dfix304-emotion.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix305-trigger-states.js?cb=v292Dfix305"></script>
 <script src="v292Dfix306-npc-liveliness.js?cb=v292Dfix738"></script>
-<script src="v292Dfix307-npc-roster.js?cb=v292Dfix414"></script>
+<script src="v292Dfix307-npc-roster.js?cb=20260829-fix748"></script>
 <script src="v292Dfix308-creepy-toggle.js?cb=v292Dfix308"></script>
 <script src="v292Dfix309-progression.js?cb=v292Dfix419c"></script>
 <!-- fix577: 物語削除の入口を1つに寄せる。B(gallery)/C(features clearSlot)の独自削除を停止し、
@@ -3222,7 +3402,7 @@ G.init();
 <!-- fix587: 物語削除の正規サービス。UIは意思表示を受け取るだけで、認可と手順はここが持つ。
      削除の順序: 再読込→exact key確定→復元セット作成→検証→墓標→クラウドへ反映確認→ゲート経由でexact削除。
      ★物理削除より先に墓標をクラウドへ確定させる。OFF=v292Dfix587Off -->
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix736"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=20260829-fix748"></script>
 <!-- fix602: 墓標(tombstone)が立ったスロットのキーへの setItem を影監視する。
      拒否しない・挙動を1ミリも変えない・LSへは1バイトも書かない。
      経路・key・slotId を記録するだけ。読出: __v292Dfix602.stats()/.recent()/.selfTest()
@@ -3231,69 +3411,69 @@ G.init();
 
 
 <script src="v292Dfix577-delete-entry-guard.js?cb=v292Dfix577"></script>
-<script src="v292Dfix310-gallery.js?cb=v292Dfix495"></script>
-<script src="v292Dfix313-story-cards.js?cb=v292Dfix419c"></script>
-<script src="v292Dfix314-memory.js?cb=v292Dfix419c"></script>
+<script src="v292Dfix310-gallery.js?cb=20260829-fix748"></script>
+<script src="v292Dfix313-story-cards.js?cb=20260829-fix748"></script>
+<script src="v292Dfix314-memory.js?cb=20260829-fix748"></script>
 <script src="v292Dfix315-see.js?cb=v292Dfix315b2"></script>
 <script src="v292Dfix316-gallery-search.js?cb=v292Dfix316"></script>
 <script src="v292Dfix317-slot-leak.js?cb=v292Dfix319"></script>
-<script src="v292Dfix318-perslot-len-creepy.js?cb=v292Dfix320"></script>
-<script src="v292Dfix322-state-line-strip.js?cb=v292Dfix322c"></script>
+<script src="v292Dfix318-perslot-len-creepy.js?cb=20260829-fix748"></script>
+<script src="v292Dfix322-state-line-strip.js?cb=20260829-fix748"></script>
 <script src="v292Dfix323-boundary-guards.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix324-show-dont-tell.js?cb=v292Dfix419c"></script>
-<script src="v292Dfix325-state-rederive.js?cb=v292Dfix325b"></script>
+<script src="v292Dfix325-state-rederive.js?cb=20260829-fix748"></script>
 <script src="v292Dfix326-story-scroll.js?cb=v292Dfix326"></script>
 <script src="v292Dfix327-turn-counter.js?cb=v292Dfix327"></script>
-<script src="v292Dfix328-google-login.js?cb=v292Dfix328d"></script>
+<script src="v292Dfix328-google-login.js?cb=20260829-fix748"></script>
 <script src="v292Dfix298-roster.js?cb=v292Dfix298b"></script>
 <script src="v292Dfix330-somatic-guard.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix332-uifold.js?cb=v292Dfix332"></script>
 <script src="v292Dfix333-actor-reality.js?cb=v292Dfix333p"></script>
 <script src="v292Dfix334-entryhub.js?cb=v292Dfix334"></script>
 <script src="v292Dfix335-omakase.js?cb=v292Dfix335k"></script>
-<script src="v292Dfix351-settings-draft.js?cb=v292Dfix351"></script>
+<script src="v292Dfix351-settings-draft.js?cb=20260829-fix748"></script>
 <script src="v292Dfix352-hero-placeholder.js?cb=v292Dfix352"></script>
 <script src="v292Dfix353-omakase-fill-rest.js?cb=v292Dfix353"></script>
-<script src="v292Dfix354-default-model.js?cb=v292Dfix354"></script>
-<script src="v292Dfix355-selector-cleanup.js?cb=v292Dfix741"></script>
+<script src="v292Dfix354-default-model.js?cb=20260829-fix748"></script>
+<script src="v292Dfix355-selector-cleanup.js?cb=20260829-fix748"></script>
 <script src="v292Dfix359-gender-avatar.js?cb=v292Dfix359"></script>
 <script src="v292Dfix360-seed-ux.js?cb=v292Dfix360"></script>
 <script src="v292Dfix361-phaseb-preview.js?cb=v292Dfix361"></script>
 <script src="v292Dfix363-player-seed.js?cb=v292Dfix363"></script>
 <script src="v292Dfix364-reset-help.js?cb=v292Dfix365"></script>
 <script src="v292Dfix366-cast-gender.js?cb=v292Dfix369"></script>
-<script src="v292Dfix370-model-guard.js?cb=v292Dfix371"></script>
+<script src="v292Dfix370-model-guard.js?cb=20260829-fix748"></script>
 <script src="v292Dfix371-reset-dialog-text.js?cb=v292Dfix371"></script>
 <script src="v292Dfix372-gender-radio-guard.js?cb=v292Dfix372"></script>
-<script src="v292Dfix374-default-style-guard.js?cb=v292Dfix396"></script>
-<script src="v292Dfix376-speaker-guard.js?cb=v292Dfix550"></script>
-<script src="v292Dfix377-voice-anchor.js?cb=v292Dfix377b"></script>
+<script src="v292Dfix374-default-style-guard.js?cb=20260829-fix748"></script>
+<script src="v292Dfix376-speaker-guard.js?cb=20260829-fix748"></script>
+<script src="v292Dfix377-voice-anchor.js?cb=20260829-fix748"></script>
 <script src="v292Dfix378-species-judge.js?cb=v292Dfix378"></script>
 <script src="v292Dfix379-wrap-keeper.js?cb=v292Dfix646"></script>
 <script src="v292Dfix381-reaction.js?cb=v292Dfix381"></script>
-<script src="v292Dfix382-auto-dial.js?cb=v292Dfix382"></script>
-<script src="v292Dfix383-vocative-fix.js?cb=v292Dfix732"></script>
+<script src="v292Dfix382-auto-dial.js?cb=20260829-fix748"></script>
+<script src="v292Dfix383-vocative-fix.js?cb=20260829-fix748"></script>
 <script src="v292Dfix384-auto-restore.js?cb=v292Dfix384"></script>
 <script src="v292Dfix385-voice-correction.js?cb=v292Dfix385"></script>
 <script src="v292Dfix386-relation-gauge.js?cb=v292Dfix386b"></script>
 <script src="v292Dfix387-confession.js?cb=v292Dfix387"></script>
-<script src="v292Dfix388-first-person-speaker.js?cb=v292Dfix547"></script>
+<script src="v292Dfix388-first-person-speaker.js?cb=20260829-fix748"></script>
 <script src="v292Dfix389-npc-relations.js?cb=v292Dfix389"></script>
-<script src="v292Dfix390-speaker-fullname.js?cb=v292Dfix732"></script>
+<script src="v292Dfix390-speaker-fullname.js?cb=20260829-fix748"></script>
 <script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
-<script src="v292Dfix395-default-darkanime.js?cb=v292Dfix396"></script>
+<script src="v292Dfix395-default-darkanime.js?cb=20260829-fix748"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
-<script src="v292Dfix399-cloudsync.js?cb=v292Dfix713"></script>
+<script src="v292Dfix399-cloudsync.js?cb=20260829-fix748"></script>
   <script src="v292Dfix400-img-url.js?cb=v292Dfix400d"></script>
-<script src="v292Dfix336-proxy-sentinel-fix.js?cb=v292Dfix336"></script>
-<script src="v292Dfix338-artstyle.js?cb=v292Dfix484"></script>
+<script src="v292Dfix336-proxy-sentinel-fix.js?cb=20260829-fix748"></script>
+<script src="v292Dfix338-artstyle.js?cb=20260829-fix748"></script>
 <script src="v292Dfix346-idb-avatars.js?cb=v292Dfix346"></script>
 <script src="v292Dfix356-avatar-eager.js?cb=v292Dfix450"></script>
-<script src="v292Dfix402-invisible-sync.js?cb=v292Dfix721"></script>
+<script src="v292Dfix402-invisible-sync.js?cb=20260829-fix748"></script>
 <script src="v292Dfix405-state-freshness.js?cb=v292Dfix739"></script>
 <script src="v292Dfix406-automode.js?cb=v292Dfix417d"></script>
 <script src="v292Dfix407-load-noconfirm.js?cb=v292Dfix407"></script>
-<script src="v292Dfix409-handle-merge.js?cb=v292Dfix732"></script>
+<script src="v292Dfix409-handle-merge.js?cb=20260829-fix748"></script>
 <script src="v292Dfix414-constraint-engine.js?cb=v292Dfix428"></script>
 <!-- v292Dfix77X(R118F/D1): 明示的な傷の解除 傷解消="部位"。既定OFF(v292Dfix77XClear='1'で有効)。OFF時は契約文言もparse分岐も出ない=byte-inert。書込みはfix77のguarded commitのみ。 -->
 <script src="v292Dfix77X-clear.js?cb=v292Dfix77X1"></script>
@@ -3326,8 +3506,8 @@ G.init();
 <script src="v292Dfix442-folklore.js?cb=v292Dfix442"></script>
 <script src="v292Dfix443-drama-rescue.js?cb=v292Dfix443"></script>
 <script src="v292Dfix483-beat-director.js?cb=v292Dfix483"></script>
-<script src="v292Dfix444-world-law.js?cb=v292Dfix451"></script>
-<script src="v292Dfix445-handle-lock.js?cb=v292Dfix550"></script>
+<script src="v292Dfix444-world-law.js?cb=20260829-fix748"></script>
+<script src="v292Dfix445-handle-lock.js?cb=20260829-fix748"></script>
 <script src="v292Dfix446-fill-robust.js?cb=v292Dfix446"></script>
 <script src="v292Dfix447-json-force.js?cb=v292Dfix447"></script>
 <script src="v292Dfix448-genloading.js?cb=v292Dfix448"></script>
@@ -3337,16 +3517,16 @@ G.init();
 <script src="v292Dfix459-sys-v2.js?cb=v292Dfix737"></script>
 <script src="v292Dfix460-slotgrid.js?cb=v292Dfix460"></script>
 <script src="v292Dfix461-appearance-en.js?cb=v292Dfix740"></script>
-<script src="v292Dfix462-bare-speaker.js?cb=v292Dfix547"></script>
+<script src="v292Dfix462-bare-speaker.js?cb=20260829-fix748"></script>
 <script src="v292Dfix463-human-guard.js?cb=v292Dfix463"></script>
 <script src="v292Dfix464-say-promote.js?cb=v292Dfix465"></script>
-<script src="v292Dfix465-role-who.js?cb=v292Dfix732"></script>
+<script src="v292Dfix465-role-who.js?cb=20260829-fix748"></script>
 <script src="v292Dfix466-dup-say.js?cb=v292Dfix466"></script>
 <script src="v292Dfix467-readability-rules.js?cb=v292Dfix468"></script>
 <script src="v292Dfix468-gen-timing.js?cb=v292Dfix468"></script>
-<script src="v292Dfix469-speaker-score.js?cb=v292Dfix731"></script>
-  <script src="v292Dfix680-bare-speaker-provenance.js?cb=v292Dfix731"></script>
-  <script src="v292Dfix681-player-say-claim.js?cb=v292Dfix732"></script>
+<script src="v292Dfix469-speaker-score.js?cb=20260829-fix748"></script>
+  <script src="v292Dfix680-bare-speaker-provenance.js?cb=20260829-fix748"></script>
+  <script src="v292Dfix681-player-say-claim.js?cb=20260829-fix748"></script>
 <!-- fix606: 話者帰属の来歴アナライザ。**読み取り専用**（whoもDOMもlocalStorageも触らない）。
      「どのカードの話者が何を根拠に決まっているか」の分母を出すためだけの層。
      読出=window.__v292Dfix606.stats()/.review(n)/.selfTest() / OFF=v292Dfix606Off -->
@@ -3359,12 +3539,12 @@ G.init();
      新ターンは確定時に自動。過去ターンは __v292Dfix620.repairPast({apply:true}) を呼んだときだけ。
      復元=__v292Dfix620.undoPast() / OFF=v292Dfix620ApplyOff（fix619側のOFFでも止まる）
      ★fix611 の後に置くこと -->
-<script src="v292Dfix620-speaker-apply.js?cb=v292Dfix630"></script>
+<script src="v292Dfix620-speaker-apply.js?cb=20260829-fix748"></script>
 <!-- fix616: 話者の由来をターンへ記録（GPT実装順②）。並行配列 turn._convSayMeta に書き、
      _convSays / who / say / DOM は触らない。**新ターンだけ**・自分から保存しない。
      読出=window.__v292Dfix616.stats()/.coverage()/.purge() / OFF=v292Dfix616Off
      ★fix606・fix611 の後に置くこと -->
-<script src="v292Dfix616-say-provenance-persist.js?cb=v292Dfix630"></script>
+<script src="v292Dfix616-say-provenance-persist.js?cb=20260829-fix748"></script>
 <!-- fix624: 生成の**崩壊**を測る（★読み取り専用・影モード）。
      実データ168ターンで崩壊3件(1.8%)を検出。崩壊は少なくとも3型あり、
      「反復＋ルビ」だけの検出器では**語調崩壊型を取り逃がす**（実測で確認済み）。
@@ -3379,7 +3559,7 @@ G.init();
 <script src="v292Dfix488-nonhuman-detail.js?cb=v292Dfix488b"></script>
 <script src="v292Dfix456-name-space.js?cb=v292Dfix456"></script>
 <script src="v292Dfix482-output-quality.js?cb=v292Dfix503"></script>
-<script src="v292Dfix489-convlog-gate.js?cb=v292Dfix547"></script>
+<script src="v292Dfix489-convlog-gate.js?cb=20260829-fix748"></script>
 <script src="v292Dfix490-slot-write-guard.js?cb=v292Dfix565"></script>
 <script src="v292Dfix492-genfail-toast.js?cb=v292Dfix492"></script>
 <script src="v292Dfix501-legacy-appearance-probe.js?cb=v292Dfix501"></script>
@@ -3389,14 +3569,14 @@ G.init();
 <script src="v292Dfix519-icon-p2p.js?cb=v292Dfix519e"></script>
 <script src="v292Dfix523-icon-sync-versioned.js?cb=v292Dfix657"></script>
 <script src="v292Dfix525-slot-ownership.js?cb=v292Dfix525"></script>
-<script src="v292Dfix526-story-naming.js?cb=v292Dfix527"></script>
+<script src="v292Dfix526-story-naming.js?cb=20260829-fix748"></script>
 <script src="v292Dfix631-avatar-inventory.js?cb=fix631"></script>
 <script src="v292Dfix632-img-content-dirty.js?cb=fix638"></script>
 <script src="v292Dfix633-icon-sweep-full.js?cb=fix657"></script>
 <script src="v292Dfix634-aiappearance-sync.js?cb=fix634"></script>
 <script src="v292Dfix635-new-story-guard-rearm.js?cb=v292Dfix637"></script>
-<script src="v292Dfix636-npc-presence-evidence.js?cb=v292Dfix732"></script>
-<script src="v292Dfix637-cast-bootstrap-probe.js?cb=v292Dfix637"></script>
+<script src="v292Dfix636-npc-presence-evidence.js?cb=20260829-fix748"></script>
+<script src="v292Dfix637-cast-bootstrap-probe.js?cb=20260829-fix748"></script>
 <!-- fix638: pull側の画像ガード。クラウドの save blob(pkg.idb) で**既存のローカルアイコンを上書きしない**。
      画像の正本は per-key チャネル(D1 images + imageRev / fix523・fix633)。blob は「不在＋いま必要＋墓標なし」の
      ときだけ補充し、書いた分は per-key へ backfill する。fix523 の pullOne/pushOne と最小限だけ直列化する。
@@ -3409,7 +3589,7 @@ G.init();
 <!-- fix641: 証拠ベースの cast 自動登録。強2系統×2ターンでだけ昇格。
      hero は対象外。取消=window.__v292Dfix641.undo("名前") / OFF=v292Dfix641Off
      ★fix640 の後に置くこと -->
-<script src="v292Dfix641-cast-auto-register.js?cb=fix641"></script>
+<script src="v292Dfix641-cast-auto-register.js?cb=20260829-fix748"></script>
 <!-- fix643: 崩壊ターンの救済生成。fix624/626 の判定を **保存の前**（Api.call の直後・
      Planner.parsePlan の前）へ移し、hard(7点以上) なら1回だけ書き直させる。2回目も hard なら
      ターンを確定せず案内を出す（入力は残る・ターン番号は増えない）。

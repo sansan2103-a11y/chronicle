@@ -289,7 +289,7 @@
       //   画風変更は🖌セレクタで手動＝意図した再生成だけにする。
       if(hasAnyIcon()){ try{ console.log(TAG,'genre',g,'→ 既存アイコンあり: 画風据え置き(再生成しない)'); }catch(_){} return; }
       c.artStyle=idx;
-      try{ var S=getS(); if(S&&typeof S.save==='function') S.save(); }catch(_){}
+      try{ var S=getS(); if(S&&typeof S.save==='function') (typeof S.saveD==='function'?S.saveD('fix338.onGenre'):S.save()); }catch(_){}
       patchSelector();
       try{ var sel=document.getElementById('v292-style-sel'); if(sel) sel.value=String(idx); }catch(_){}
       try{ if(window.__aiAvatar&&window.__aiAvatar.refreshAll) window.__aiAvatar.refreshAll(); }catch(_){}

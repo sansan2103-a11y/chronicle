@@ -31,7 +31,7 @@
     try{ var S=getS(); return (S && S.cfg && S.cfg.orModel) || ''; }catch(e){ return ''; }
   }
   function setModel(id){
-    try{ var S=getS(); if(S && S.cfg){ S.cfg.orModel = id; if (typeof S.save === 'function') S.save(); try{ console.log(TAG, 'orModel ->', id); }catch(_){} } }catch(e){}
+    try{ var S=getS(); if(S && S.cfg){ S.cfg.orModel = id; if (typeof S.save === 'function') (typeof S.saveD==='function'?S.saveD('fix256.setModel'):S.save()); try{ console.log(TAG, 'orModel ->', id); }catch(_){} } }catch(e){}
   }
 
   function inject(){

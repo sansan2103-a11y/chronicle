@@ -181,7 +181,7 @@
   function requestSave() {
     try {
       var s = getS();
-      if (s && typeof s.save === 'function') { s.save(); stats.saves++; return true; }
+      if (s && typeof s.save === 'function') { (typeof s.saveC==='function'?s.saveC('fix616.requestSave'):s.save()); stats.saves++; return true; }
     } catch (e) { stats.errors++; }
     return false;
   }

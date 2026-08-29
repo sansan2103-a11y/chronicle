@@ -37,7 +37,7 @@
       if (cur != null && Number(cur) !== DEFAULT) return;  // 既定(3)/未設定の時だけ
       if (Number(cur) === TARGET) return;
       S.cfg.artStyle = TARGET;
-      if (typeof S.save === 'function') S.save();
+      if (typeof S.save === 'function') (typeof S.saveC==='function'?S.saveC('fix395.tick'):S.save());
       try {
         var sels = document.querySelectorAll('select');
         for (var i=0;i<sels.length;i++){

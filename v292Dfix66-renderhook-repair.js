@@ -1174,7 +1174,7 @@
               if (_sc !== S.turns[_si].narrative){ S.turns[_si].narrative = _sc; _liveChanged = true; }
             }
           }
-          if (_liveChanged && typeof S.save === 'function'){ try { S.save(); } catch(e){} }
+          if (_liveChanged && typeof S.save === 'function'){ try { (typeof S.saveC==='function'?S.saveC('fix66.repair'):S.save()); } catch(e){} }
         }
       } catch(e){}
       var hero = getHero(st);
@@ -1334,10 +1334,24 @@
         }
       }
       if (changed){
-        try {
-          if (window.S && window.S.turns === turns && typeof window.S.save === 'function'){ window.S.save(); }
-          else if (!(window.S && window.S.turns)){ localStorage.setItem(activeStoreKey(), JSON.stringify(st)); }   // v292Dfix205b
-        } catch(e){}
+        /* ★★fix748(Phase C / C12 = Class C): _convSays の話者を後置話者から補正して書き戻す。
+             RECOMPUTATION_SOURCE  = S.turns（本体に載っている narrative と _convSays。
+                                     resolvePostQuoteSpeaker は純関数で、同じ入力から同じ補正を作る）
+             RECOMPUTATION_TRIGGER = module load 時の即時実行 + setTimeout 800ms + setTimeout 2500ms
+                                     （3 回の再試行が同一 session 内に必ず来る。冪等なので何度走っても同じ）
+           ★skip してもメモリ上の t._convSays[j].who は補正済みなので、
+             次に S.save が走った時点で（turn commit 等）補正済みの内容が本体へ載る。 */
+        /* ★裁定11 GATE1: lock を実際に取りに行き、BUSY のときだけ飛ばす。 */
+        var _A748 = null;
+        try { _A748 = window.__v292DfixDAdm; } catch(_){}
+        var _w748 = function(){
+          try {
+            if (window.S && window.S.turns === turns && typeof window.S.save === 'function'){ window.S.save(); }
+            else if (!(window.S && window.S.turns)){ localStorage.setItem(activeStoreKey(), JSON.stringify(st)); }   // v292Dfix205b
+          } catch(e){}
+        };
+        if (_A748 && typeof _A748.persistC === 'function') _A748.persistC('fix66.migrateConvSaysPostfix', _w748);
+        else _w748();
         // 既に古い話者で描画済みのカードを一掃して正しい話者で再構築(一回きり)
         try {
           var stream = document.getElementById('dialogue-stream');
@@ -1352,6 +1366,16 @@
       return changed;
     } catch(e){ try { console.warn(TAG, 'v292Dfix200b err:', e && e.message); } catch(_){} return 0; }
   }
+  (function(){
+    try {
+      var A = window.__v292DfixDAdm;
+      if (A && typeof A.registerC === 'function')
+        A.registerC('fix66.migrateConvSaysPostfix',
+          'S.turns（narrative と _convSays。resolvePostQuoteSpeaker は純関数で同じ補正を再生成する）',
+          'module load 即時 + setTimeout 800ms + setTimeout 2500ms の 3 回（冪等）。さらに次の S.save でもメモリ側の補正済み内容が載る',
+          'C12 conv-says postfix migration');
+    } catch(e){}
+  })();
   // S/localStorage が整う前に走ると0件で終わるだけなので、初回即時+遅延リトライ(冪等)。
   try { migrateConvSaysPostfix(); } catch(e){}
   setTimeout(migrateConvSaysPostfix, 800);

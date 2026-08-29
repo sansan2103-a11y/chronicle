@@ -119,7 +119,7 @@
       var s = null;
       try { s = (typeof window.__chronicleGetState === 'function') ? window.__chronicleGetState('fix545') : null; } catch(e){}
       if (!s || typeof s.save !== 'function'){ toast('再保存できませんでした（状態を取得できません）', true); return; }
-      try { s.save(); } catch(e){ /* 失敗すれば note() が拾ってバナーは残る */ }
+      try { (typeof s.saveD==='function'?s.saveD('fix543.retrySave'):s.save()); } catch(e){ /* 失敗すれば note() が拾ってバナーは残る */ }
       if (!unsaved.active) toast('保存できました');
       else toast('まだ保存できません。古い控えを整理してから、もう一度お試しください。', true);
     } catch(e){}

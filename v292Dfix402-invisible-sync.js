@@ -412,10 +412,31 @@
 
   // ---- pull(静かに取り込み・confirm無し・上書き前は必ず自動バックアップ=applySave内蔵) ----
   var pulling = false, lastPullCheck = 0, applying = false;
-  function applyPkg(pkg, rev){
+
+  /* ★★fix745(GWS Phase B): Class A(REPLAYABLE_REMOTE_APPLY) 用の薄い入口。
+     fn は Promise を返す関数。lock は fn の settle まで保持される（fn 内に network を入れない）。
+     GWS 不在 / serialization 不要（C1 OFF・journal無し）なら **素通し**＝legacy と完全同一。
+     戻り値は fn の解決値。BUSY のときだけ { applied:false, gwsBusy:true }。 */
+  function gwsRemoteApply(fn){
+    var G = null; try { G = window.__v292DfixGWS || null; } catch(e){ G = null; }
+    if (!G || typeof G.runExclusive !== 'function' || typeof G.serializationRequired !== 'function'
+        || !G.serializationRequired())
+      return Promise.resolve().then(function(){ return fn(null); });   /* legacy 経路（token 無し） */
+    return G.runExclusive('A', fn).then(function(x){
+      if (x && x.ran) return x.result;
+      return { applied: false, gwsBusy: true, wrote: 0,
+               policy: (x && x.policy) || 'DROP_AND_REFETCH', reason: (x && x.reason) || 'BUSY' };
+    });
+  }
+  /* ★★fix745: gwsToken は「fix402 が既に取得している GWS Class A lock」の ownership token。
+     fix399 側はこの token を見たときだけ **2回目の Web Lock 取得を行わない**（明示的 nested path）。
+     token を api.applySave の**第2引数**として渡すのは意図的で、
+     fix527 の story-page pull veto wrapper が arguments を丸ごと forward するため、
+     veto を1バイトも迂回せずに nested path を成立させられる（applySaveInner 直呼びだと veto を飛ばしてしまう）。 */
+  function applyPkg(pkg, rev, gwsToken){
     var api = window.__v292Dfix399x;
     var applySeq = mutationSeq;   // ★fix402e A-1: applySave(非同期)飛行中のユーザー保存を検出する基準
-    var doApply = (api && api.applySave) ? api.applySave(pkg) : Promise.reject(new Error('fix399 applySave不在'));
+    var doApply = (api && api.applySave) ? api.applySave(pkg, gwsToken) : Promise.reject(new Error('fix399 applySave不在'));
     return doApply.then(function(){
       setBaseRev(rev);
       try { lsSet('v292Dfix402_lastHash', lsHash(JSON.stringify(pkg.ls || {}))); } catch(e){}   // ★fix402c堅牢化: length接頭(baseRev/lastHashは常に更新)
@@ -489,7 +510,13 @@
           return;
         }
       }
-      return applyPkg(r.json.data, r.json.rev).then(function(){
+      /* ★★fix745(GWS Phase B): remote apply は Class A(REPLAYABLE_REMOTE_APPLY)。
+           ・network response を**取得した後**に shared lock を取る（待機中は保持しない）。
+           ・applyPkg(→fix399.applySave) と fix402c 削除伝播（chr6_slot_* の物理削除）までを
+             **1つの logical transaction**として囲う。
+           ・BUSY = DROP_AND_REFETCH: write0 / reload0 / 成功扱いしない。次の pullCheck が取り直す。 */
+      return gwsRemoteApply(function(gwsToken){
+      return applyPkg(r.json.data, r.json.rev, gwsToken).then(function(){
         // ★fix402c(+堅牢化): メタ権威の削除伝播。full pkg・メタ完全性・退避read-back検証の三重ゲート
         try {
           if (lsGet('v292Dfix402cOff') !== '1') {
@@ -551,6 +578,16 @@
             }
           }
         } catch(e){}
+        return { applied: true };
+      });
+      }).then(function(res){
+        /* ★fix745: **apply が成立したときだけ** 既存の reload を行う。
+           BUSY(DROP_AND_REFETCH) では toast も reload もしない（write0 は lock 側で保証済み）。 */
+        if (!res || res.applied !== true){
+          applying = false;                       /* 次の pullCheck で取り直せるようにする */
+          try { console.warn(TAG, 'GWS BUSY: 他contextが物語データを更新中のため取り込みを見送りました（write0/reload0・次回再取得）'); } catch(_){}
+          return;
+        }
         toast('☁️ ' + (label || '別端末のつづき') + 'を取り込みました。再読み込みします…');
         setTimeout(function(){ try { location.reload(); } catch(e){} }, 700);
       });

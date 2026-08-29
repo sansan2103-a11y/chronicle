@@ -70,7 +70,7 @@
         });
         S.cast.npcs = list;
       }
-      if (typeof S.save === 'function') S.save();
+      if (typeof S.save === 'function') (typeof S.saveD==='function'?S.saveD('fix351.commitDraft'):S.save());
       try{ console.log(TAG, 'committed('+reason+') hero="'+(S.cast.hero.name||'')+'" npcs='+((S.cast.npcs||[]).length)); }catch(_){}
       return true;
     } catch(e){ try{ console.warn(TAG, 'commit failed', e); }catch(_){}; return false; }

@@ -28,7 +28,7 @@
           if (state){
             state.rollingSummary = summary;
             try {
-              if (typeof state.save === 'function') state.save();
+              if (typeof state.save === 'function') (typeof state.saveD==='function'?state.saveD('fix61.rollingSummary'):state.save());
             } catch(e){}
             console.log(TAG, 'rollingSummary captured (' + summary.length + ' chars)');
             return summary;

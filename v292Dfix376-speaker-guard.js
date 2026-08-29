@@ -101,7 +101,7 @@
       }
     }
     if (!dry && total){
-      try { if (typeof S.save === 'function') S.save(); } catch(e){}
+      try { if (typeof S.save === 'function') (typeof S.saveC==='function'?S.saveC('fix376.pass'):S.save()); } catch(e){}
       try {
         var stream = document.getElementById('dialogue-stream');
         if (stream){

@@ -697,7 +697,7 @@
       var rec = { id: newId(), text: law.text, cond: law.cond, cost: law.cost, keys: law.keys,
                   src: 'manual', t0: turn, state: 'idle', fired: 0, last: -1, fireTurn: -1 };
       laws.push(rec);
-      try { if (typeof S.save === 'function') S.save(); } catch(e){}
+      try { if (typeof S.save === 'function') (typeof S.saveD==='function'?S.saveD('fix444.armKeeper'):S.save()); } catch(e){}
       return rec;
     },
     dump: function(){

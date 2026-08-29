@@ -90,9 +90,46 @@
     return qStore;
   }
   var qDirty = false;
+  /* ★★fix748(Phase C / C15 = Class C): fix277 は 2 つのキーを書く。
+       ・v292Dfix277Quasi<sfx>（準登録台帳） … saveQ()
+       ・v292Dfix77States<sfx>（別名→正名マージ結果） … mergeAliasStates()
+     この 2 つは **同じ logical transaction**（companion key）なので、
+     lock の外へ片方だけ出さない。実際の主経路は Planner.build wrapper
+     （= turn pipeline の TURN_BUILD admission の内側）と _parseExtensions（TURN_PARSE の内側）。
+
+     RECOMPUTATION_SOURCE  = qStore（メモリ上の準登録台帳。qDirty が立ったまま残る）
+                             + aliasMap()（台帳から導出）→ fix77 store への再マージは純関数的
+     RECOMPUTATION_TRIGGER = 次の Planner.build（毎ターン必ず走る。syncConv → mergeAliasStates → saveQ）
+     ＝ skip しても qDirty は false にしないので、次ターンの build で同じ内容が必ず書かれる。 */
+  (function(){
+    try {
+      var A = window.__v292DfixDAdm;
+      if (A && typeof A.registerC === 'function'){
+        A.registerC('fix277.saveQ',
+          'qStore（メモリ上の準登録台帳。skip 時は qDirty を落とさない）',
+          '次の Planner.build（毎ターン。syncConv → mergeAliasStates → saveQ）',
+          'C15 quasi ledger');
+        A.registerC('fix277.mergeAliasStates',
+          'aliasMap()（準登録台帳から導出）+ __v292Dfix77Store。再マージは純関数的',
+          '次の Planner.build（毎ターン）',
+          'C15 alias merge / companion of fix277.saveQ');
+      }
+    } catch(e){}
+  })();
+  /* ★裁定11 GATE1: admission 外でも **実際に lock を取りに行く**。BUSY のときだけ飛ばす。 */
+  function f748PersistC(who, fn){
+    try {
+      var A = window.__v292DfixDAdm;
+      if (!A || typeof A.persistC !== 'function'){ fn(); return { wrote:1, legacy:true }; }
+      return A.persistC(who, fn);
+    } catch(e){ try { fn(); } catch(_){} return { wrote:1, legacy:true }; }
+  }
   function saveQ(){
     if (!qDirty || !qStore) return;
-    try { localStorage.setItem(qKeyLoaded || QK(), JSON.stringify(qStore)); qDirty = false; } catch(e){}
+    /* ★qDirty は書けたときにだけ落とす。飛ばされた場合は次の build で必ずもう一度書く。 */
+    return f748PersistC('fix277.saveQ', function(){
+      try { localStorage.setItem(qKeyLoaded || QK(), JSON.stringify(qStore)); qDirty = false; } catch(e){}
+    });
   }
 
   // ---- キャスト ----
@@ -200,8 +237,13 @@
         st[c] = dst; delete st[a]; moved++;
       });
       if (moved){
-        try { localStorage.setItem('v292Dfix77States', JSON.stringify(st)); } catch(e){} /* fix246がスロット接尾辞へ自動リダイレクト */
-        try { console.log(TAG, '別名状態を正名へマージ:', moved, '件'); } catch(e){}
+        /* ★fix748(C15): admission 外ならこの 1 回の persist を飛ばす。
+           メモリ側のマージ結果は残るので、次の Planner.build 時に
+           （まだ別名が残っていればもう一度マージされ）必ず書かれる。 */
+        f748PersistC('fix277.mergeAliasStates', function(){
+          try { localStorage.setItem('v292Dfix77States', JSON.stringify(st)); } catch(e){} /* fix246がスロット接尾辞へ自動リダイレクト */
+          try { console.log(TAG, '別名状態を正名へマージ:', moved, '件'); } catch(e){}
+        });
       }
     } catch(e){}
   }
@@ -508,7 +550,7 @@
         });
       });
       if (changed.length){
-        try { if (typeof S.save === 'function') S.save(); } catch(e){}
+        try { if (typeof S.save === 'function') (typeof S.saveC==='function'?S.saveC('fix277.normalizeConvWho'):S.save()); } catch(e){}
         try {
           var lg = JSON.parse(localStorage.getItem('v292Dfix538_log') || '[]');
           lg.push({ ts: Date.now(), reason: reason || '', n: changed.length, sample: changed.slice(0, 5) });

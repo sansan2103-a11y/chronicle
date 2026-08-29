@@ -1046,7 +1046,33 @@
       return true;
     } catch(e){ return false; }
   }
-  function applySave(pkg){
+  /* ★★fix745(GWS Phase B): remote apply の実体。Class A(REPLAYABLE_REMOTE_APPLY)。
+       ・呼び出し元（bootPull / onDown / fix402.applyPkg）はいずれも **network response 取得後**に
+         呼ぶため、ここで lock を取っても「network 待機中の lock 保持」にはならない。
+       ・backupBeforeApply → ls 一括書込 → IDB → 末尾 ls 書込 までを **1つの logical transaction**
+         として囲う（setItem 単位の lock にはしない）。
+       ・fix402 経由の入れ子呼び出しは GWS 側で reentrant 実行される（自分自身に BUSY を返さない）。
+       ・BUSY = DROP_AND_REFETCH: **1バイトも書かずに reject**。既存 caller は .catch へ落ちるので
+         BUSY 時の reload は 0（成功扱いしない）。次の pull が取り直す。 */
+  /* ★戻り値は **常に Promise**（runtime-dependent return type を作らない。裁定 Phase B review §3）。
+     第2引数 gwsToken は「既に GWS Class A lock を保持している親から渡された ownership token」。
+     token を持たない呼び出しは同一 context でも必ず lock 取得を試みる（汎用 reentrant は無し）。 */
+  function applySave(pkg, gwsToken){
+    var G = null; try { G = window.__v292DfixGWS || null; } catch(e){ G = null; }
+    if (!G || typeof G.runExclusive !== 'function' || typeof G.serializationRequired !== 'function'
+        || !G.serializationRequired())
+      return applySaveInner(pkg);                                    /* legacy 経路（不変・Promise） */
+    /* ★明示的 nested path: fix402 が取得した lock の中から渡された token のときだけ再取得しない */
+    if (gwsToken && typeof G.isLockOwner === 'function' && G.isLockOwner(gwsToken))
+      return applySaveInner(pkg);
+    return G.runExclusive('A', function(){ return applySaveInner(pkg); }).then(function(x){
+      if (x && x.ran) return x.result;
+      var err = new Error('他のタブ/端末が物語データを更新中のため取り込みを見送りました（データは変更していません）');
+      err.gwsBusy = true; err.wrote = 0; err.policy = (x && x.policy) || 'DROP_AND_REFETCH';
+      throw err;
+    });
+  }
+  function applySaveInner(pkg){
     if (!pkg || pkg.schema !== SCHEMA) return Promise.reject(new Error('セーブ形式が不明です'));
     if (!backupBeforeApply(pkg)) return Promise.reject(new Error('安全バックアップを作成できないため取り込みを中止しました(端末の保存容量不足)'));   // fix495(C1): fail-closed(GPT裁定)
     var expectedIdb = Object.keys(pkg.idb || {});   // fix399i: 検証用に期待キーを控える

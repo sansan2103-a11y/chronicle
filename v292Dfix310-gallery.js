@@ -128,7 +128,7 @@
     // ②現物語をsave ③成功時のみmeta追加→active切替→reload。save不能ならreloadせず中止。
     var _S=null; try{ _S=window.S||(0,eval)('typeof S!=="undefined"?S:null'); }catch(e){}
     if(!_S || typeof _S.save!=='function'){ try{ alert('現在の物語の退避に失敗したため、新規作成を中止しました。ページを再読込してからもう一度お試しください。'); }catch(e){} return; }
-    try{ _S.save(); }catch(e){ try{ alert('現在の物語の保存に失敗したため、新規作成を中止しました(容量不足の可能性)。'); }catch(_){} return; }
+    try{ (typeof _S.saveD==='function'?_S.saveD('fix310.createSave'):_S.save()); }catch(e){ try{ alert('現在の物語の保存に失敗したため、新規作成を中止しました(容量不足の可能性)。'); }catch(_){} return; }
     var meta=readMeta();
     var id='s'+Date.now().toString(36)+Math.floor(Math.random()*1296).toString(36);
     meta.push({id:id, name:'\u65b0\u3057\u3044\u7269\u8a9e', key:'chr6_slot_'+id, updatedAt:null});

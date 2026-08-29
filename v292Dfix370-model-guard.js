@@ -26,7 +26,7 @@
       if (!isDS(S.cfg.orModel)) {
         var old = S.cfg.orModel;
         S.cfg.orModel = FLASH;
-        if (typeof S.save === 'function') S.save();
+        if (typeof S.save === 'function') (typeof S.saveC==='function'?S.saveC('fix370.migrate'):S.save());
         try{ console.log(TAG, 'orModel migrated:', old, '-> DS V4 Flash'); }catch(_){}
       }
     } catch(e){}

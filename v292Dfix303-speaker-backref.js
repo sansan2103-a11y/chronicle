@@ -86,14 +86,14 @@
     if(off()) return;
     var s=getS(); if(!s||!Array.isArray(s.turns)) return;
     var ch=0; for(var i=Math.max(0,s.turns.length-4);i<s.turns.length;i++){ if(_f732New(s.turns[i])) ch+=processTurn(s.turns[i]); }   /* ★fix732 */
-    if(ch>0){ try{ s.save&&s.save(); }catch(e){} var UI=getUI(); try{ UI&&UI.renderAll&&UI.renderAll(); }catch(e){} try{ console.log('[v292Dfix303] corrected', ch, 'speaker(s) (poll)'); }catch(e){} }
+    if(ch>0){ try{ s.save&&(typeof s.saveC==='function'?s.saveC('fix303.w'):s.save()); }catch(e){} var UI=getUI(); try{ UI&&UI.renderAll&&UI.renderAll(); }catch(e){} try{ console.log('[v292Dfix303] corrected', ch, 'speaker(s) (poll)'); }catch(e){} }
   }, 1500); }catch(e){}
 
   /* ★fix732: 撤去した遡及補正を明示 API として保持（自動では絶対に呼ばれない）。 */
   function retroAll(){
     var s=getS(); if(!s||!Array.isArray(s.turns)) return { changed:0 };
     var ch=0; s.turns.forEach(function(t){ ch+=processTurn(t); });
-    if(ch>0){ try{ s.save&&s.save(); }catch(e){} var U=getUI(); try{ U&&U.renderAll&&U.renderAll(); }catch(e){} }
+    if(ch>0){ try{ s.save&&(typeof s.saveC==='function'?s.saveC('fix303.retroAll'):s.save()); }catch(e){} var U=getUI(); try{ U&&U.renderAll&&U.renderAll(); }catch(e){} }
     return { changed:ch };
   }
   window.__v292Dfix303api={ correctConvSays:correctConvSays, processTurn:processTurn, castNames:castNames, retroAll:retroAll, isSessionNew:_f732New };

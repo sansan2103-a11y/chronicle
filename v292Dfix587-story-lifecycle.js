@@ -629,7 +629,7 @@
 
   /* ---- ⑦⑧ 物理削除フェーズ（クラウド確定**後**に共通で使う） --------------
      ★fix708: 従来 finish の後半をそのまま切り出したもの。判定・順序は変えていない。 */
-  function physicalPhase(plan, d, snapshotId, extra){
+  function physicalPhaseInner(plan, d, snapshotId, extra){
     var slotId = plan.slotId, deleteOpId = plan.deleteOpId;
     function withExtra(o){ if (extra) for (var k in extra){ if (Object.prototype.hasOwnProperty.call(extra,k)) o[k] = extra[k]; } return o; }
     /* ★fix588(GPT裁定D-5): 物理削除の解禁条件に「fix562分類器が利用可能」を入れる。
@@ -683,6 +683,115 @@
     return withExtra({ ok:true, code:'deleted', deleteOpId:deleteOpId, snapshotId:snapshotId, deleted:r.deleted.length });
   }
 
+  /* ★★fix745(GWS Phase B): physicalPhaseInner は「クラウド確定**後**・完全同期」の logical transaction。
+     13 materialization target keys の物理削除（executePlan）と pending の read-modify-write を
+     まとめて含むので、**この単位で** shared exclusive lock を取る。
+       ・network 待機は必ずこの外（裁定: network待機中lock保持は禁止）。
+       ・setItem 1回単位の lock にはしない（裁定REJECT）。logical transaction 全体。
+       ・Class B(RECOVERY_OR_DESTRUCTIVE) = HARD_HOLD_NO_WRITE:
+         BUSY なら physicalPhaseInner に**入らない** ＝ 物理削除0 / pending 保持 / 成功verdict禁止。
+         次回 autoResume(resumePending) が続きをやるので、削除は失われず遅れるだけ。
+
+     ★裁定(Phase B review §3): 1関数が sync/Promise を切り替える契約は REJECT。
+       physicalPhaseInner … **常に同期**（legacy semantics を1バイトも変えない）
+       physicalPhaseGws   … **常に Promise**
+     3つの call site（finishLegacy / proceedPhysical / ldrCleanupOnce）はいずれも
+     既に Promise / callback 文脈なので、常に Gws（Promise）を使って戻り値型を1つに固定する。 */
+  /* ★★fix746(C13 Proof B): forward / recovery を **明示 enum** で区別する。
+       heuristic（pending に載っているかで推測する等）は裁定 REJECT。既定は fail-closed の FORWARD。
+       FORWARD_DELETE       … requestDelete。isolation exemption なし（Gate B を必ず通る）
+       RECOVERY_RESUME      … resumePending。既に durable 化された pending の消化
+       RECOVERY_LDR_CLEANUP … ldrCleanupOnce。同上（pending が無ければそもそも到達しない） */
+  var PP_MODE = { FORWARD: 'FORWARD_DELETE', RESUME: 'RECOVERY_RESUME', LDR: 'RECOVERY_LDR_CLEANUP' };
+  function isRecoveryMode(mode){ return mode === PP_MODE.RESUME || mode === PP_MODE.LDR; }
+
+  /* ★recovery exemption は「無条件で書いてよい」ではない（裁定）。
+     shared lock を取った**後**に durable pending を再読取して、
+       ・pending が実在する
+       ・parse 正常
+       ・exact story identity が plan 側で確定している
+       ・exact physical plan（keys）が plan 側で確定している
+       ・壊れている可能性のある current resolver から target key を再導出していない
+     を確認してからでなければ recovery を実行しない。
+     不正なら RECOVERY_PENDING_INVALID_HOLD（write0 / pending 保持 / 成功扱いしない）。 */
+  function validateDurableRecovery(plan){
+    if (!plan || typeof plan !== 'object') return { ok:false, why:'plan-not-object' };
+    var pid = (plan.planId == null) ? '' : String(plan.planId);
+    var sid = (plan.slotId == null) ? '' : String(plan.slotId);
+    if (!pid) return { ok:false, why:'plan-no-planId' };
+    if (!sid) return { ok:false, why:'plan-no-slotId' };
+    var all;
+    try { all = readPending(); } catch(e){ return { ok:false, why:'pending-unreadable' }; }
+    if (!all || Object.prototype.toString.call(all) !== '[object Array]')
+      return { ok:false, why:'pending-not-array' };
+    var hits = [];
+    for (var i = 0; i < all.length; i++) if (all[i] && String(all[i].planId) === pid) hits.push(all[i]);
+    if (hits.length !== 1) return { ok:false, why:'pending-not-unique:' + hits.length };
+    var dur = hits[0];
+    if (String(dur.slotId) !== sid) return { ok:false, why:'pending-slot-mismatch' };
+    if (Object.prototype.toString.call(plan.keys) !== '[object Array]' || !plan.keys.length)
+      return { ok:false, why:'plan-no-exact-keys' };
+    /* ★target keys は durable plan 側の exact key でなければならない。
+       壊れた resolver から作り直した key（＝ durable 側に無い key）が混ざっていたら拒否する。 */
+    var durKeys = {};
+    if (Object.prototype.toString.call(dur.keys) === '[object Array]')
+      for (var j = 0; j < dur.keys.length; j++){ var dk = dur.keys[j]; if (dk && dk.key) durKeys[String(dk.key)] = 1; }
+    for (var k2 = 0; k2 < plan.keys.length; k2++){
+      var it = plan.keys[k2];
+      if (!it || !it.key) return { ok:false, why:'plan-key-shape' };
+      if (!durKeys[String(it.key)]) return { ok:false, why:'plan-key-not-in-durable-pending:' + it.key };
+      /* exact key は必ず自 slot に属していること（他 slot へ展開しない） */
+      if (String(it.key).indexOf(sid) < 0) return { ok:false, why:'plan-key-foreign-slot:' + it.key };
+    }
+    return { ok:true, durable: dur };
+  }
+  function recoveryInvalidHold(plan, snapshotId, why, extra){
+    stats.recoveryPendingInvalid = (stats.recoveryPendingInvalid || 0) + 1;
+    note({ act:'recovery-pending-invalid', slotId: plan && plan.slotId, planId: plan && plan.planId,
+           why: 'durable pending の検証に失敗したため recovery を実行しない: ' + why });
+    var o = { ok:false, code:'RECOVERY_PENDING_INVALID_HOLD', why: why, wrote:0,
+              deleted:[], refused:[], planRetained:true, snapshotId: snapshotId || null };
+    if (extra) for (var k in extra){ if (Object.prototype.hasOwnProperty.call(extra,k)) o[k] = extra[k]; }
+    return o;
+  }
+
+  function physicalPhaseGws(plan, d, snapshotId, extra, mode){
+    mode = mode || PP_MODE.FORWARD;                    /* ★既定は fail-closed の FORWARD */
+    var G = null;
+    try { G = window.__v292DfixGWS || null; } catch(e){ G = null; }
+    if (!G || typeof G.runExclusive !== 'function' || typeof G.serializationRequired !== 'function'
+        || !G.serializationRequired())
+      return Promise.resolve(physicalPhaseInner(plan, d, snapshotId, extra));   /* legacy 経路 */
+
+    /* recovery は専用入口（generic な exemption API は裁定 REJECT）。 */
+    if (isRecoveryMode(mode)){
+      if (typeof G.runFix587Recovery !== 'function')
+        return Promise.resolve(gwsBusyHold(plan, snapshotId, { reason:'NO_RECOVERY_ENTRY' }, extra));
+      return G.runFix587Recovery(function(){
+        /* ★lock 取得後に durable pending を再読取して検証する */
+        var v = validateDurableRecovery(plan);
+        if (!v.ok) return recoveryInvalidHold(plan, snapshotId, v.why, extra);
+        return physicalPhaseInner(plan, d, snapshotId, extra);
+      }).then(function(x){
+        return (x && x.ran) ? x.result : gwsBusyHold(plan, snapshotId, x, extra);
+      });
+    }
+    return G.runExclusive('B', function(){ return physicalPhaseInner(plan, d, snapshotId, extra); })
+      .then(function(x){
+        return (x && x.ran) ? x.result : gwsBusyHold(plan, snapshotId, x, extra);
+      });
+  }
+  /* BUSY 時の戻り。**pending は残す**（hidden:true ＝ 一覧からは既に消えている）。 */
+  function gwsBusyHold(plan, snapshotId, x, extra){
+    stats.gwsBusyHold = (stats.gwsBusyHold || 0) + 1;
+    note({ act:'pending-gws-busy', slotId: plan.slotId, deleteOpId: plan.deleteOpId,
+           why:'他タブ/他contextが物語データを更新中。物理削除は保留（write0・保留は保持）' });
+    var o = { ok:true, code:'pending-gws-busy', deleteOpId: plan.deleteOpId, snapshotId: snapshotId,
+              hidden:true, gwsBusy:true, wrote:0,
+              policy: (x && x.policy) || 'HARD_HOLD_NO_WRITE', reason: (x && x.reason) || 'BUSY' };
+    if (extra) for (var k in extra){ if (Object.prototype.hasOwnProperty.call(extra,k)) o[k] = extra[k]; }
+    return o;
+  }
   /* ---- ⑥⑦⑧ 旧経路: legacy pkg push が通ってから物理削除（fix708 OFF 時） ---- */
   /* ★★fix734(RULING100): DELETE_PLAN_SAFETY_MONOTONICITY
      一度 fix708 の安全管理下（shadow delete protocol）に入った計画は、
@@ -708,7 +817,7 @@
              deleteOpId: (plan && plan.deleteOpId), snapshotId: snapshotId,
              hidden:true, mutated:false };
   }
-  function finishLegacy(plan, d, snapshotId){
+  function finishLegacy(plan, d, snapshotId, mode){
     var slotId = plan.slotId, deleteOpId = plan.deleteOpId;
     /* ★fix734: guarded plan は legacy 破壊経路へ入れない */
     if (isGuardedPlan(plan)) return Promise.resolve(guardedDowngradeHold(plan, snapshotId));
@@ -722,12 +831,12 @@
                why:'クラウドへ墓標を反映できなかった。物理削除は保留' });
         return { ok:true, code:'pending-cloud', deleteOpId:deleteOpId, snapshotId:snapshotId, hidden:true };
       }
-      return physicalPhase(plan, d, snapshotId, null);
+      return physicalPhaseGws(plan, d, snapshotId, null, mode);   /* ★fix745/746: 常にPromise・mode明示 */
     });
   }
 
   /* ---- ★★fix708: 新経路（shadow delete protocol） ------------------------ */
-  function finishShadowDelete(plan, d, snapshotId){
+  function finishShadowDelete(plan, d, snapshotId, mode){
     var slotId = plan.slotId, deleteOpId = plan.deleteOpId;
     var sid = (plan.storyId != null && plan.storyId !== '') ? String(plan.storyId) : String(slotId);
     stats.sdAttempts++;
@@ -762,9 +871,15 @@
     function proceedPhysical(verdict, extra){
       var e = { shadowDelete:true, verdict:verdict };
       if (extra) for (var k in extra){ if (Object.prototype.hasOwnProperty.call(extra,k)) e[k] = extra[k]; }
-      var out = physicalPhase(plan, d, snapshotId, e);
-      bestEffortLegacyPush(plan, d);          /* ★(11) 失敗しても巻き戻さない */
-      return out;
+      /* ★fix745(GWS Phase B): 物理削除は shared lock 下。**常に Promise**（戻り値型を固定）。
+         呼び出し元はすべて resolve(proceedPhysical(...)) なので Promise でも順序は変わらない。
+         bestEffortLegacyPush は lock の**外**（network 後追い・失敗しても巻き戻さない）。 */
+      return physicalPhaseGws(plan, d, snapshotId, e, mode).then(function(out){
+        /* BUSY(pending-gws-busy) のときは削除が確定していないので legacy push もしない */
+        if (out && out.gwsBusy === true) return out;
+        bestEffortLegacyPush(plan, d);        /* ★(11) 失敗しても巻き戻さない */
+        return out;
+      });
     }
 
     /* (1)(4) live のうちに確定した hash が計画に無ければ **サーバ削除しない**。
@@ -809,7 +924,7 @@
           note({ act:'shadow-404-legacy-required', slotId:slotId, deleteOpId:deleteOpId,
                  verdict:'SHADOW_ROW_MISSING_LEGACY_REQUIRED',
                  detail:'story_shadow に row が無いだけ。legacy pkg 墓標 push の成功を物理削除の条件にする' });
-          finishLegacy(plan, d, snapshotId).then(function(res){
+          finishLegacy(plan, d, snapshotId, mode).then(function(res){
             try {
               res = res || {};
               res.shadowDelete = true;
@@ -968,9 +1083,11 @@
   }
 
   /* ---- 入口: fix708 が ON のときだけ新経路 -------------------------------- */
-  function finish(plan, d, snapshotId){
-    if (!sdOn()) return finishLegacy(plan, d, snapshotId);
-    return finishShadowDelete(plan, d, snapshotId);
+  /* ★fix746: mode は呼び出し側が **必ず明示**する。既定は fail-closed の FORWARD_DELETE。 */
+  function finish(plan, d, snapshotId, mode){
+    mode = mode || PP_MODE.FORWARD;
+    if (!sdOn()) return finishLegacy(plan, d, snapshotId, mode);
+    return finishShadowDelete(plan, d, snapshotId, mode);
   }
 
   /* ---- ★fix588: 既に墓標がある物語への2回目の要求 ------------------------
@@ -1041,7 +1158,8 @@
     var plan = readPending().filter(function(p){ return p && String(p.slotId) === slotId; })[0] || null;
     if (plan){
       note({ act:'continue', slotId:slotId, source:src, deleteOpId:deleteOpId, keys:plan.keys.length });
-      return finish(plan, d, plan.snapshotId || tomb.recoverySnapshotId || null);
+      /* ★fix746: 既に durable 化された pending をそのまま使う継続なので RECOVERY_RESUME。 */
+      return finish(plan, d, plan.snapshotId || tomb.recoverySnapshotId || null, PP_MODE.RESUME);
     }
 
     /* 保留が残っていない。残りのキーが無ければ、もう終わっている。 */
@@ -1118,9 +1236,11 @@
       return Promise.resolve({ ok:false, code:'no-body' });
     }
 
-    /* ②exact key と hash を確定 */
-    var keys = planKeys(slotId, d);
-    if (!keys.length){
+    /* ②exact key が1つでもあるかの **読み取りだけ**の事前確認。
+       ★fix747: 計画に載せる exact key / hash は admission lock の中で **再導出**する。
+         ここは「無駄な network を撃たない」ためだけの read-only pre-check。 */
+    var preKeys = planKeys(slotId, d);
+    if (!preKeys.length){
       stats.refused++; return Promise.resolve({ ok:false, code:'no-keys' });
     }
 
@@ -1132,49 +1252,96 @@
        ★ snapshot 作成より前に hash を取る。これは fix708 がヘッダへ自ら書いた
          (1)hash → (2)snapshot → (3)墓標 の順序へ戻すだけで、成功時の振る舞いは同じ。
        ★ OFF 経路（sdOn()===false）は従来と完全に同じ。 */
+    /* ★★fix747(裁定8: FIX587_FORWARD_ADMISSION)
+       forward delete の **最初の localStorage mutation より前** に、短い GWS transaction を1つ置く。
+         ・分類 = Class D（TURN_OR_USER_SEMANTIC）。ユーザーの「削除する」意思なので silent skip 禁止。
+         ・lock 内で: runtime isolation check(Gate B) → 本体 / exact key を **再読取** →
+           snapshot 作成 → verify → chr6_slots_meta 墓標更新 → lock release
+         ・network（captureDeleteBaseHash / pushTombstone / shadowRequest）は必ず lock の **外**。
+           lock を握ったまま network を待つのは裁定で禁止。
+         ・lock 取得前の古い read だけで snapshot を書かない（read〜tombstone write を同一 critical section に）。
+         ・admission FAIL（isolation FAIL / GWS BUSY）なら
+           snapshot 0 / descriptor 0 / meta 変更 0 / pending 0 / physical delete 0 / hard data 変更 0。
+           ★pending を作らないこと: forward の失敗を pending 化すると、次回 RECOVERY_RESUME の
+             exemption によって Gate B を迂回できてしまう（裁定 REJECT）。 */
+    function runForwardAdmission(fn){
+      var G = null;
+      try { G = window.__v292DfixGWS || null; } catch(e){ G = null; }
+      if (!G || typeof G.runTurnMutation !== 'function'
+          || typeof G.serializationRequired !== 'function' || !G.serializationRequired())
+        return Promise.resolve({ ran:true, result: fn(), serialized:false });   /* legacy 経路は従来どおり */
+      return G.runTurnMutation(function(){ return fn(); });
+    }
+    /* admission が通らなかったときの戻り。**1バイトも書いていない**ことを表す。 */
+    function admissionHold(x){
+      stats.f747AdmissionHold = (stats.f747AdmissionHold || 0) + 1;
+      note({ act:'forward-admission-hold', slotId:slotId, source:src,
+             reason: (x && x.reason) || 'BUSY', isolation: (x && x.isolation) || null,
+             why:'削除操作をまだ開始していない（snapshot / 墓標 / 計画 / 物理削除すべて 0）' });
+      return { ok:false, code:'FORWARD_ADMISSION_HOLD',
+               reason: (x && x.reason) || 'BUSY',
+               isolation: (x && x.isolation) || null,
+               isolationDetail: (x && x.isolationDetail) || null,
+               policy: (x && x.policy) || 'TURN_MUTATION_BUSY_HOLD',
+               wrote: 0, mutated: false, snapshotId: null, deleteOpId: null };
+    }
+
     function f734Continue(baseHash){
-      /* ③スナップショット作成（＝復元セット。新しい退避方式は作らない）
-         ★fix588(GPT裁定C): 復元セットが**どの削除操作のものか**を後から確認できるように、
-           deleteOpId を先に決めて manifest の reason に埋め込む。
-           （fix564 の形は変えない。pending を失った異常系で「別のsnapshotへ差し替わった」を検出するため） */
-      var now = Date.now();
-      var deleteOpId = 'del_' + slotId + '_' + now;
-      var snap = null;
-      try { snap = d.snap.create(slotId, { now: now, reason: 'lifecycle-delete:' + deleteOpId }); }
-      catch(e){ snap = { ok:false, error:String(e && e.message) }; }
-      if (!snap || !snap.ok){
-        stats.refused++;
-        note({ act:'refused', slotId:slotId, source:src, why:'復元セットを作れない: ' + ((snap && snap.error) || '?') });
-        return Promise.resolve({ ok:false, code:'snapshot-failed', error: snap && snap.error });
-      }
+      return runForwardAdmission(function(){
+        /* ============ ここから lock 内 / runtime isolation check 済み ============ */
+        /* ★fix588(GPT裁定C): 復元セットが**どの削除操作のものか**を後から確認できるように、
+             deleteOpId を先に決めて manifest の reason に埋め込む。
+             （fix564 の形は変えない。pending を失った異常系で「別のsnapshotへ差し替わった」を検出するため） */
+        var now = Date.now();
+        var deleteOpId = 'del_' + slotId + '_' + now;
 
-      /* ④read-back・hash一致の検証。ここが通らなければ**絶対に消さない** */
-      var ver = null;
-      try { ver = d.snap.verify(snap.id); } catch(e){ ver = { ok:false }; }
-      if (!ver || !ver.ok){
-        stats.refused++;
-        note({ act:'refused', slotId:slotId, source:src, why:'復元セットの検証に失敗' });
-        return Promise.resolve({ ok:false, code:'snapshot-unverified', snapshotId: snap.id });
-      }
+        /* ①本体を lock 内で再読取（confirm / network の間に状態が変わっている可能性がある） */
+        if (lsg('chr6_slot_' + slotId) == null){
+          stats.refused++;
+          note({ act:'refused', slotId:slotId, source:src, why:'本体セーブが無い（admission 内の再読取）' });
+          return { ok:false, code:'no-body', mutated:false };
+        }
+        /* ②exact key と hash も lock 内で再導出する。★計画に載るのはこちら。 */
+        var keys = planKeys(slotId, d);
+        if (!keys.length){
+          stats.refused++;
+          note({ act:'refused', slotId:slotId, source:src, why:'exact key が無い（admission 内の再導出）' });
+          return { ok:false, code:'no-keys', mutated:false };
+        }
 
-      /* ★★fix708(1): **墓標を立てる前に** live projection から canonical hash を確定する。
-         墓標を立てた後は fix697 の projection が null になるため、ここでしか取れない
-         （後から作り直すのは「別物の hash」を作ることであり、裁定で禁止されている）。 */
-      function proceed(baseHash, baseWhy){
+        /* ③スナップショット作成（＝復元セット。新しい退避方式は作らない） */
+        var snap = null;
+        try { snap = d.snap.create(slotId, { now: now, reason: 'lifecycle-delete:' + deleteOpId }); }
+        catch(e){ snap = { ok:false, error:String(e && e.message) }; }
+        if (!snap || !snap.ok){
+          stats.refused++;
+          note({ act:'refused', slotId:slotId, source:src, why:'復元セットを作れない: ' + ((snap && snap.error) || '?') });
+          return { ok:false, code:'snapshot-failed', error: snap && snap.error };
+        }
+
+        /* ④read-back・hash一致の検証。ここが通らなければ**絶対に消さない** */
+        var ver = null;
+        try { ver = d.snap.verify(snap.id); } catch(e){ ver = { ok:false }; }
+        if (!ver || !ver.ok){
+          stats.refused++;
+          note({ act:'refused', slotId:slotId, source:src, why:'復元セットの検証に失敗' });
+          return { ok:false, code:'snapshot-unverified', snapshotId: snap.id };
+        }
+
         /* ⑤meta に tombstone を立てる */
         var meta = readMeta();
         var cur = meta.filter(function(e){ return e && String(e.id) === String(slotId); })[0] || null;
         var tomb = d.tomb.make({ slotId: slotId, title: (cur && cur.name) || (cur && cur.title) || '',
                                  deletedAt: now, deleteOpId: deleteOpId, recoverySnapshotId: snap.id });
         if (!tomb || !d.tomb.validate(tomb).ok){
-          stats.refused++; return Promise.resolve({ ok:false, code:'tombstone-invalid' });
+          stats.refused++; return { ok:false, code:'tombstone-invalid' };
         }
         var next = meta.filter(function(e){ return !e || String(e.id) !== String(slotId); });
         next.push(tomb);
         if (!writeMeta(next)){
           stats.refused++;
           note({ act:'refused', slotId:slotId, source:src, why:'metaへ墓標を書けない（容量不足）' });
-          return Promise.resolve({ ok:false, code:'tombstone-write-failed' });
+          return { ok:false, code:'tombstone-write-failed' };
         }
         note({ act:'tombstone', slotId:slotId, source:src, deleteOpId:deleteOpId, snapshotId:snap.id });
 
@@ -1187,14 +1354,20 @@
           plan.recoverySnapshotId = snap.id;
           plan.shadowDeleteVersion = SHADOW_DELETE_PROTOCOL_VERSION;
           plan.localDeleteBaseHash = baseHash || null;
-          if (!baseHash) plan.localDeleteBaseHashWhy = String(baseWhy || 'UNKNOWN');
+          if (!baseHash) plan.localDeleteBaseHashWhy = 'UNKNOWN';
         }
-
-        /* ⑥tombstone をクラウドへ確定させてから、はじめて物理削除する */
-        return finish(plan, d, snap.id);
-      }
-
-      return proceed(baseHash, null);
+        stats.f747Admitted = (stats.f747Admitted || 0) + 1;
+        return { ok:true, code:'admitted', plan: plan, snapshotId: snap.id };
+        /* ============ ここで lock release ============ */
+      }).then(function(x){
+        if (!x || x.ran !== true) return admissionHold(x);
+        var r = x.result;
+        if (!r || r.ok !== true) return r || { ok:false, code:'admission-threw', mutated:false };
+        /* ⑥network は lock の外。tombstone をクラウドへ確定させてから、はじめて物理削除する。 */
+        /* ★fix746: 新規の delete intent なので FORWARD_DELETE（isolation exemption なし）。
+           physicalPhaseGws が **再度** lock を取り、**再度** runtime isolation check を通す。 */
+        return finish(r.plan, d, r.snapshotId, PP_MODE.FORWARD);
+      });
     }
     if (!sdOn()) return f734Continue(null);      /* ★OFF は従来と完全に同じ経路 */
     return new Promise(function(resolve){
@@ -1269,7 +1442,7 @@
       var chain = Promise.resolve(), done2 = 0, held = [];
       list.forEach(function(plan){
         chain = chain.then(function(){
-          return finishShadowDelete(plan, d, plan.snapshotId || plan.recoverySnapshotId || null)
+          return finishShadowDelete(plan, d, plan.snapshotId || plan.recoverySnapshotId || null, PP_MODE.RESUME)
             .then(function(r){
               if (r && r.code === 'deleted') done2++;
               else held.push({ slotId: plan.slotId, code: (r && r.code) || '?', verdict: (r && r.verdict) || null });
@@ -1432,23 +1605,43 @@
               return done({ ok:false, code:'plan-mutated-during-authority', why:null,
                              deleted:[], refused:[], serverChecked:true, planRetained:true });
 
-            /* ⑥ 既存 physicalPhase を再利用する。ここから先の順序は 1 バイトも変えない。 */
-            var out = null;
+            /* ⑥ 既存 physicalPhase を再利用する。ここから先の順序は 1 バイトも変えない。
+               ★fix745(GWS Phase B): 呼び出しだけ shared lock で囲う（Class B）。
+                 serialization 不要なら同期のまま＝legacy と完全同一。
+                 BUSY なら物理削除0・plan は保持したまま次回へ回す。 */
+            function ldrFinish(out){
+              var retained = readPending().some(function(p){ return p && String(p.planId) === String(plan.planId); });
+              done({ ok: !!(out && out.code === 'deleted'),
+                     code: (out && out.code) || 'unknown',
+                     deleted: (out && out.deleted != null) ? out.deleted : 0,
+                     refused: (out && out.refused) || [],
+                     serverChecked: true,
+                     planRetained: retained,
+                     snapshotId: plan.snapshotId });
+            }
+            var ppLdr = null;
             try {
-              out = physicalPhase(plan, d, plan.snapshotId,
-                                  { ldrCleanup:true, verdict:'LDR_TERMINAL_LOCAL_CLEANUP' });
+              /* ★fix746: RECOVERY_LDR_CLEANUP。
+                 この入口は pending に exact 一致する terminal plan が **1件だけ**存在しないと
+                 上流の 'plan-not-unique' で fail するため、新しい delete intent を作れない
+                 （＝裁定の recovery 条件を call-site で満たしている）。 */
+              ppLdr = physicalPhaseGws(plan, d, plan.snapshotId,      /* ★fix745: 常にPromise */
+                                       { ldrCleanup:true, verdict:'LDR_TERMINAL_LOCAL_CLEANUP' },
+                                       PP_MODE.LDR);
             } catch(e){
               return done({ ok:false, code:'physical-threw', why:String(e && e.message || e),
                              deleted:[], refused:[], serverChecked:true, planRetained:true });
             }
-            var retained = readPending().some(function(p){ return p && String(p.planId) === String(plan.planId); });
-            done({ ok: !!(out && out.code === 'deleted'),
-                   code: (out && out.code) || 'unknown',
-                   deleted: (out && out.deleted != null) ? out.deleted : 0,
-                   refused: (out && out.refused) || [],
-                   serverChecked: true,
-                   planRetained: retained,
-                   snapshotId: plan.snapshotId });
+            return ppLdr.then(function(out){
+              if (out && out.gwsBusy === true)
+                return done({ ok:false, code:'pending-gws-busy', why:(out && out.reason) || 'BUSY',
+                              deleted:[], refused:[], serverChecked:true, planRetained:true,
+                              gwsBusy:true, wrote:0, snapshotId: plan.snapshotId });
+              return ldrFinish(out);
+            }, function(e3){
+              return done({ ok:false, code:'physical-threw', why:String(e3 && e3.message || e3),
+                            deleted:[], refused:[], serverChecked:true, planRetained:true });
+            });
           } catch(e2){
             done({ ok:false, code:'threw', why:String(e2 && e2.message || e2),
                    deleted:[], refused:[], serverChecked:false, planRetained:true });
@@ -1530,10 +1723,29 @@
       })();
     } catch(e){}
   }
-  try { autoResume(); } catch(e){}
+  /* ★★fix745(GWS Phase B): module-scope autoResume は **必ず GWS を通す**。
+     ・GWS 不在 / serialization 不要（C1 OFF・journal無し ＝ production の通常状態）
+         → その場で同期実行。legacy と1バイトも変わらない（呼び出し位置・タイミング・guard）。
+     ・serialization 必要（C1 active）
+         → GWS_BOOT_RECOVERY_BARRIER に登録。barrier RESOLVED まで開始しない。
+           CONFLICT/PENDING なら **1度も走らない**（fail-closed / pending は保持）。
+     autoResume 自体は storage を読むだけで、実際の書込みは 8s 後の resumePending →
+     physicalPhase（＝別途 shared lock で囲う logical transaction）で起きる。 */
+  var gwsBypassed587 = false;
+  (function(){
+    var G = null;
+    try { G = window.__v292DfixGWS || null; } catch(e){ G = null; }
+    if (G && typeof G.runBootRecovery === 'function'){
+      G.runBootRecovery('FIX587', function(){ try { autoResume(); } catch(e){} });
+      return;
+    }
+    gwsBypassed587 = true;
+    try { autoResume(); } catch(e){}
+  })();
 
   window.__chronicleStoryLifecycle = {
     __armed: true,
+    gwsBypassed: function(){ return gwsBypassed587; },
     requestDelete: requestDelete,
     resumePending: resumePending,
     pendingDeletes: readPending,
