@@ -17,7 +17,9 @@
   'use strict';
   if (window.__v292Dfix721) return;
   var TAG = '[v292Dfix721:safe-restore]';
-  var BUILD = 'fix721.4';   /* STEP4G-A/B: + slotImportGuard + importMap（HOME adapter入口） */
+  var BUILD = 'fix721.5';   /* STEP4G-A/B: + slotImportGuard + importMap（HOME adapter入口）
+                               ★fix721.5(hotfix): SLOT_ISOLATED_BASE_KEY deny + plan全体HOLD
+                                                  + SLOT_SIDECAR を境界一致へ根治 */
   var JOURNAL_KEY = 'v292Dfix721_txn';          // ★新規keyはこの1つだけ（RULING30許可枠）
   var VALUE_MAX = 1500000;                      // 1値上限（保守的）
 
@@ -38,8 +40,84 @@
   var TEST_FIXTURE_RE = /^(ab\d+p\d+[A-Za-z]?|chr6_gc_probe_|__v543|__v292probe)/;                    // fix562と同一
   var LITERALS = { 'undefined':1, 'null':1, 'setItem':1, 'getItem':1, 'removeItem':1, '[object Object]':1 };
 
+  /* ★★★fix721.5(hotfix / PRODUCTION_RESTORE_INTEGRITY_DEFECT・GPT裁定 案(c))
+   *
+   * 【何が壊れていたか】
+   *   旧 SLOT_SIDECAR 判定は `k.indexOf(storyIds[i]) >= 0` という **bare substring 包含**だった。
+   *   slot id は1文字（'a'/'b'/'c'）なので、
+   *       'v292Dfix77St(a)tes'.indexOf('a') === 12
+   *   が成立し、**接尾辞なしの基底キーが「slot a の sidecar」として allow** されていた。
+   *   allow された基底キーは applyPlan が `Storage.prototype.setItem.bind(localStorage)`
+   *   （＝真の native）で書くため、fix246 の redirect wrapper を構造的に迂回する。
+   *   結果:
+   *     ・動作中のアプリは接尾辞つきを読むので **復元したのに状態が戻らない（silent omission）**
+   *     ・基底キーが復活し、次 boot の fix246 が
+   *       `else if (gv != null && _get(dst) != null){ _rem(base); }` ＝**コピーせず削除**へ入る
+   *     ・fix246 ヘッダが「自動回復なし=主犯」と書くキーが失われ得る
+   *
+   * 【修正 A】slot-isolated 基底キーを明示的に危険 family として認識する。
+   *   ただし **そのキーだけ skip して「復元成功」にしてはならない**（silent failure の温存）。
+   *   危険基底キーを含む plan は **mutation 開始前に全体 HOLD**（write 0 / journal 0 / reload 0 /
+   *   partial restore 0）。
+   * 【修正 B】positive matcher を **family 単位の境界一致**へ根治。
+   *   generic な文字包含も、根拠のない `_<id>` heuristic も作らない。
+   *   production に実在する形式だけを列挙する（下記2表は実ソースの key 構築式から採取）。 */
+
+  /* (A) 接尾辞なしのまま復元してはいけない基底キー。
+   *     ・fix246 KEYS（redirect 管理下） … v292Dfix246-store-slot-isolation.js:44-51
+   *     ・自己 suffix 系（'<base>' + slotSfx()） … fix307 / fix277 */
+  var SLOT_ISOLATED_BASE = {
+    'v292Dfix77States': 1, 'chr6_v292Dfix104_dlg': 1, 'chr6_v292Dfix135_sum': 1,
+    'chr6_v292Dfix135_last': 1, 'chr6_v292Dfix136_wi': 1, 'chr6_v292Dfix137_ev': 1,
+    'v292Dfix307Roster': 1, 'v292Dfix307Last': 1, 'v292Dfix277Quasi': 1
+  };
+  /* (B-1) '<base>_slot_<id>' 形式を採用している family */
+  var SLOT_FAMILY_SLOTFORM = [
+    'v292Dfix77States', 'v292Dfix307Roster', 'v292Dfix307Last', 'v292Dfix277Quasi',
+    'chr6_v292Dfix104_dlg', 'chr6_v292Dfix135_sum', 'chr6_v292Dfix135_last',
+    'chr6_v292Dfix136_wi', 'chr6_v292Dfix137_ev'
+  ];
+  /* (B-2) '<base>_<id>' 形式を採用している family（fix743 keysFor() と同一の構築式） */
+  var SLOT_FAMILY_BAREFORM = [
+    'chr6_relations', 'chr6_char_states', 'chr6_char_flags', 'chr6_pending_dice',
+    'chr6_turn_summaries', 'chr6_chapter_titles', 'chr6_scene_breaks',
+    'chr6_scene_summaries', 'v292cover_seed'
+  ];
+  var SLOT_ID_RE = /^[A-Za-z0-9]+$/;
+  /* k が「既知 family の slot-scoped key」なら { base, id } を返す。それ以外は null。
+     ★substring 包含は一切使わない。family prefix + 区切り + id の**構造一致**のみ。 */
+  function slotScopedOf(k){
+    var i, base, sep, id;
+    for (i = 0; i < SLOT_FAMILY_SLOTFORM.length; i++){
+      base = SLOT_FAMILY_SLOTFORM[i]; sep = base + '_slot_';
+      if (k.length > sep.length && k.slice(0, sep.length) === sep){
+        id = k.slice(sep.length);
+        if (SLOT_ID_RE.test(id)) return { base: base, id: id, form: 'SLOT' };
+      }
+    }
+    for (i = 0; i < SLOT_FAMILY_BAREFORM.length; i++){
+      base = SLOT_FAMILY_BAREFORM[i]; sep = base + '_';
+      if (k.length > sep.length && k.slice(0, sep.length) === sep){
+        id = k.slice(sep.length);
+        if (SLOT_ID_RE.test(id)) return { base: base, id: id, form: 'BARE' };
+      }
+    }
+    return null;
+  }
+  /* story id の帰属判定（tombstone 照合用）。旧 `k.indexOf(id) >= 0` の置き換え。 */
+  function storyIdOfKey(k){
+    var m = SLOT_RE.exec(k); if (m) return m[1];
+    var a = AI_RE.exec(k);   if (a) return a[2] || 'default';
+    if (k === 'chr6') return 'default';
+    var sc = slotScopedOf(k); if (sc) return sc.id;
+    return null;
+  }
+
   function denyFamily(k){
     if (LITERALS[k]) return 'LITERAL_KEY';
+    /* ★fix721.5(hotfix): 接尾辞なし slot-isolated 基底キー。
+       ここで deny するだけでは足りず、buildPlan が **plan 全体を HOLD** する（下記）。 */
+    if (SLOT_ISOLATED_BASE[k]) return 'SLOT_ISOLATED_BASE_KEY';
     if (k === 'v292GoogleToken' || k === 'v292ProxyPass' || k === 'v292ProxyUrl') return 'AUTH_OR_OWNER_CONTROL';
     if (k === 'v292Dfix702_storyAuth' || k === 'v292Dfix402_storyRevs') return 'CLOUD_AUTHORITY_CACHE';
     if (/^v292Dfix\d+(On|Off)$/.test(k) || k === 'v292SaveExportOff') return 'FEATURE_FLAG';
@@ -69,10 +147,16 @@
                                                  : { allow: true, family: 'STORY_SIDECAR', slotId: a[2] || 'default' };
     if (SHARED_ASSET_RE.test(k)) return { allow: true, family: 'SHARED_ASSET' };
     if (k === 'chr6_slots_meta') return { allow: false, family: 'META_REBUILD' };   // copy禁止→rebuild
-    if (storyIds){ /* per-slot sidecar: fix564 partKeys と同じ「slotIdを含む」包含規則 */
-      for (var i = 0; i < storyIds.length; i++){
-        if (storyIds[i] !== 'default' && k.indexOf(storyIds[i]) >= 0)
-          return { allow: true, family: 'SLOT_SIDECAR', slotId: storyIds[i] };
+    /* ★fix721.5(hotfix): per-slot sidecar は **family 単位の境界一致**でのみ認める。
+       旧実装の `k.indexOf(storyIds[i]) >= 0`（bare substring）は廃止。
+       1文字 slot id ではキー本文中の偶然の a/b/c を slot 識別子と誤認するため。 */
+    if (storyIds){
+      var sc = slotScopedOf(k);
+      if (sc && sc.id !== 'default'){
+        for (var i = 0; i < storyIds.length; i++){
+          if (storyIds[i] !== 'default' && storyIds[i] === sc.id)
+            return { allow: true, family: 'SLOT_SIDECAR', slotId: sc.id };
+        }
       }
     }
     return { allow: false, family: 'UNKNOWN' };
@@ -155,7 +239,8 @@
       var m2 = SLOT_RE.exec(k);
       var a2 = AI_RE.exec(k);
       var tid = m2 ? m2[1] : (a2 && a2[2]) ? a2[2] : null;
-      if (!tid){ for (var ti in tombIds){ if (k.indexOf(ti) >= 0){ tid = ti; break; } } }
+      /* ★fix721.5(hotfix): ここも bare substring だった。境界一致の storyIdOfKey へ置換。 */
+      if (!tid){ var sid0 = storyIdOfKey(k); if (sid0 && tombIds[sid0]) tid = sid0; }
       if (tid && tombIds[tid]){ denied.push({ k: k, family: 'CURRENT_TOMBSTONE_PRESERVED' }); return; }
       var c = classifyForRestore(k, data[k], storyIds);
       if (c.allow){
@@ -173,6 +258,17 @@
       }
       else if (c.family !== 'META_REBUILD') denied.push({ k: k, family: c.family });
     });
+    /* ★★★fix721.5(hotfix / GPT裁定): 危険 base key を1つでも含む backup は、
+       **そのキーだけ落として「復元成功」にしない**。それは
+       「復元したつもりで状態だけ戻っていない」という現状の silent failure を温存する。
+       mutation を1バイトも始める前に **restore 全体を HOLD** する。
+       ここで返すと preflight / journal / rawSet / reload はすべて実行されない。 */
+    var baseKeys = [];
+    for (var bi = 0; bi < denied.length; bi++)
+      if (denied[bi].family === 'SLOT_ISOLATED_BASE_KEY') baseKeys.push(denied[bi].k);
+    if (baseKeys.length)
+      return { ok: false, code: 'RESTORE_SLOT_BASE_KEY_AMBIGUOUS_HOLD',
+               baseKeys: baseKeys, denied: denied, wrote: 0, partial: false };
     if (!writes.length) return { ok: false, code: 'RESTORE_NOTHING_ALLOWED', denied: denied };
     /* ★★fix726(RULING48 §15-17): RESTORE INPUT SANITIZATION ONLY。
        top-level auth key は既に denyFamily() で deny 済みだが、
@@ -327,7 +423,19 @@
      意味論はこの1本だけを通る。第二restore engine・第二allowlistを作らないための集約点。 */
   function runRestoreFromData(data){
     var plan = buildPlan(data);
-    if (!plan.ok){ alert('読み込めない形式です (' + plan.code + ')'); return { ok:false, code: plan.code }; }
+    if (!plan.ok){
+      /* ★fix721.5(hotfix): HOLD は「読み込めない形式」ではないので、理由を正しく伝える。
+         ここで return するため confirm / journal / rawSet / reload は 0。partial restore も 0。 */
+      if (plan.code === 'RESTORE_SLOT_BASE_KEY_AMBIGUOUS_HOLD'){
+        alert('このバックアップは、今の保存方式（物語ごとの分離保存）と形式が合わない項目を含んでいます。\n' +
+              'そのまま読み込むと、キャラクターの状態などが「戻ったように見えて実際には反映されない」\n' +
+              '状態になるため、安全のため **何も変更せずに中止** しました。\n\n' +
+              '対象: ' + plan.baseKeys.join(', ') + '\n\n' +
+              '今のデータは1バイトも変更していません。');
+        return { ok:false, code: plan.code, baseKeys: plan.baseKeys, wrote: 0, partial: false };
+      }
+      alert('読み込めない形式です (' + plan.code + ')'); return { ok:false, code: plan.code };
+    }
     /* ★fix721.2(RULING32 §5): ISOLATED RESTORE OPERATION — confirm contract の一部。
        他のChronicleタブを閉じることを復元の必須運用条件として明示する。 */
     var msg = '【まるごと読み込み（安全版・合流）】\n物語 ' + plan.storyIds.length + '件・' + plan.writes.length + '項目を読み込みます。\n' +
