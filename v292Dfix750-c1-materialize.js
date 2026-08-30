@@ -36,6 +36,8 @@
 //     new raw fetch / new endpoint / new auth / new token / new lock name
 //
 //   再利用するもの（すべて既存・無改変で呼ぶだけ）:
+//     fix697 getStoryV2Once       … schema2-capable 専用の狭い read 口（裁定36 OPTION_B）
+//                                   （clientCanonicalSchemaMax:2 を内部固定。caller は storyId のみ）
 //     fix697 putStoryOnce         … op:'putstory' 固定の狭い write 口
 //     fix697 putCanonicalOnce     … op:'putcanonical' 固定の狭い write 口
 //                                   （fix750 で record.schema===2 のときだけ
@@ -178,19 +180,28 @@
     });
   }
 
-  /* ---------------- fresh getstory（既存 shadowRequest 経路のみ） ---------------- */
+  /* ---------------- fresh getstory（schema2-capable dedicated read のみ） ----------------
+     ★★裁定36 OPTION_B / BLOCKER #6 = C1_POST_COMMIT_READBACK_SCHEMA_DECLARATION_GAP:
+       旧実装は fix697.shadowRequest({op:'getstory'}) を使っており
+       clientCanonicalSchemaMax を宣言しないため、row が schema2 になった瞬間から
+       Worker v39 の OLD CLIENT READ GATE に掛かり 409 CLIENT_SCHEMA_TOO_OLD になっていた
+       （= schema2 を書けるのに書いた直後から自分で読めない）。live で実測。
+     ★fix697.getStoryV2Once **のみ**を使う。shadowRequest への fallback は禁止。
+       fallback を残すと「schema2 へ到達した後だけ突然旧 read へ落ちて 409」という
+       同じ構造を再び作ることになる。ROW_ABSENT / schema1 / schema2 は
+       すべてこの dedicated read で分類する。 */
   function freshGetStory(storyId){
     return new Promise(function(resolve){
       var F = f697();
-      if (!F || typeof F.shadowRequest !== 'function')
-        return resolve({ error: 'NO_READ_PATH' });
+      if (!F || typeof F.getStoryV2Once !== 'function')
+        return resolve({ error: 'NO_V2_READ_PATH' });
       /* ★★裁定34 待ち BLOCKER5（FIX697_CALLBACK_ARG_ORDER）:
          fix697 の callback は **cb(result, errorCode)**（node 慣例の (err, result) ではない）。
          逐語: postSaveOnce は成功時 cb({status,j}, null) / 失敗時 cb(null, 'NETWORK_FAILED')。
          ★fix702 の post() は逆に cb(err, result) なので、両者を取り違えないこと。
          旧実装は (err, result) と解釈していたため、成功応答が err 扱いになり
          prepare が必ず READ_FAILED_AT_START で write0 になっていた（live で実測）。 */
-      F.shadowRequest({ op: 'getstory', id: storyId }, function(r, errCode){
+      F.getStoryV2Once(storyId, function(r, errCode){
         if (errCode || !r) return resolve({ error: 'READ_UNAVAILABLE', detail: errCode || null });
         if (r.status === 404) return resolve({ absent: true, status: 404 });
         var j = r.j || {};
@@ -548,22 +559,32 @@
         var steps = [];
         return stepCanonicalWrite(storyId, ctx, g, b.record).then(function(w){
           if (w && w.ok === false) return holdWith(j, 'CANONICAL_WRITE_REFUSED', w, steps, ctx);
+          /* ★★裁定36 BLOCKER #7: ここから先は putcanonical を **送信済み**。
+             以降の HOLD はすべて holdAfterWrite を通し、wrote:0 / mutated:false と断定しない。 */
           return freshGetStory(storyId).then(function(g3){
-            if (g3.error) return holdWith(j, 'READ_FAILED_AFTER_CANONICAL_WRITE', g3, steps, ctx);
+            if (g3.error)
+              /* readback 不能 ＝ server mutation の有無を client からは証明できない。
+                 ★「client が HOLD ＝ schema2 未作成」と解釈してはならない。
+                 ★blind retry 禁止。caller は authoritative read（D1 等）で確定させること。 */
+              return holdAfterWrite(j, 'READ_FAILED_AFTER_CANONICAL_WRITE', g3, steps, ctx, 'UNKNOWN');
             var s3 = classify(g3);
             steps.push({ step: 'CANONICAL_WRITE', status: w.status || null, observedAfter: s3 });
             if (s3 !== STATE.CANONICAL_S2)
-              /* ★blind retry 禁止。schema1 canonical のままなら明示 resume を要求して HOLD。 */
-              return holdWith(j, 'CANONICAL_WRITE_DID_NOT_TAKE_EFFECT',
+              /* ★blind retry 禁止。schema1 canonical のままなら明示 resume を要求して HOLD。
+                 readback 自体は成功しているが、それでも wrote:0 は返さない（NOT_OBSERVED）。 */
+              return holdAfterWrite(j, 'CANONICAL_WRITE_DID_NOT_TAKE_EFFECT',
                               { resp: (w && w.j) ? { errorCode: w.j.errorCode, status: w.status } : { status: w.status },
-                                server: g3 }, steps, ctx);
+                                server: g3 }, steps, ctx, 'NOT_OBSERVED');
             if (w.builtTitle != null && g3.title != null && g3.title !== w.builtTitle)
-              return holdWith(j, 'TITLE_MISMATCH_AFTER_WRITE',
-                              { sent: w.builtTitle, server: g3.title }, steps, ctx);
+              /* mutation は authoritative readback で確認済み（APPLIED）。title だけが不一致。 */
+              return holdAfterWrite(j, 'TITLE_MISMATCH_AFTER_WRITE',
+                              { sent: w.builtTitle, server: g3.title }, steps, ctx, 'APPLIED');
             j.phase = PHASE.COMPLETE; j.lastVerifiedAuthority = 'canonical'; j.lastVerifiedSchema = 2;
             j.lastVerifiedRev = g3.rev; j.lastVerifiedHash = g3.serverHash; journalSet(j);
             journalClear();
             var done = { ok: true, ran: true, wrote: 1, mutated: true, code: 'MATERIALIZED',
+                         serverWriteAttempted: true, serverMutationState: 'APPLIED',
+                         authoritativeReadbackRequired: false,
                          state: s3, steps: steps, server: g3, snapshotId: ctx.snapshotId };
             note(done); return done;
           });
@@ -572,11 +593,47 @@
     });
   }
 
-  /* HOLD: journal を残し、自動 rollback も自動 retry もしない */
+  /* HOLD: journal を残し、自動 rollback も自動 retry もしない
+     ★★裁定36 BLOCKER #7 = C1_POST_WRITE_RESULT_TRUTHFULNESS:
+       旧実装は steps が非空（＝既に server へ書いている）でも一律 wrote:0 / mutated:false を返していた。
+       ここは **実際に完了が観測できた step 数**を返す（各 step は push 前に fresh readback で確認済み）。 */
   function holdWith(j, code, detail, steps, ctx){
     j.hold = code; j.holdAt = Date.now();
     journalSet(j);
-    var h = { ok: false, ran: true, wrote: 0, mutated: false, code: 'HOLD', hold: code,
+    var n = (steps && steps.length) || 0;
+    var h = { ok: false, ran: true, wrote: n, mutated: n > 0, code: 'HOLD', hold: code,
+              detail: detail, steps: steps, journalRetained: true, snapshotId: ctx.snapshotId };
+    note(h); return Promise.resolve(h);
+  }
+
+  /* ★★裁定36 BLOCKER #7: putcanonical を **送信したあと**の HOLD 専用。
+     旧実装はここでも wrote:0 / mutated:false を返していたが、live で
+       client result = { wrote:0, mutated:false, hold:'READ_FAILED_AFTER_CANONICAL_WRITE' }
+       server        = schema2 row が実在
+     という乖離が発生した（初 schema2 canonical row 作成時の実測）。
+     ＝「client が write0 と言った」を **server mutation 不存在の証拠として使えてはならない**。
+     契約:
+       serverWriteAttempted        … putcanonical を送信したか（送信していれば常に true）
+       serverMutationState         … 'APPLIED'（authoritative readback で確認）
+                                     'UNKNOWN'（readback 不能。作成有無を証明できない）
+                                     'NOT_OBSERVED'（readback は成功したが schema2 を観測できず）
+       authoritativeReadbackRequired … caller が D1/authoritative read で確定させる必要があるか
+     ★UNKNOWN / NOT_OBSERVED では wrote / mutated を **null** にする。
+       0 / false を返さないので「書いていない証拠」として使えない。
+     ★blind retry は禁止（この関数は retry を一切示唆しない）。 */
+  function holdAfterWrite(j, code, detail, steps, ctx, mutState){
+    j.hold = code; j.holdAt = Date.now();
+    j.serverWriteAttempted = true;
+    j.serverMutationState = mutState;
+    journalSet(j);
+    var applied = (mutState === 'APPLIED');
+    var h = { ok: false, ran: true,
+              wrote: applied ? 1 : null,
+              mutated: applied ? true : null,
+              serverWriteAttempted: true,
+              serverMutationState: mutState,
+              authoritativeReadbackRequired: !applied,
+              code: 'HOLD', hold: code,
               detail: detail, steps: steps, journalRetained: true, snapshotId: ctx.snapshotId };
     note(h); return Promise.resolve(h);
   }

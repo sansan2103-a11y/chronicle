@@ -1035,6 +1035,35 @@
       if (op !== 'getstory' && op !== 'deleteshadow' && op !== 'deletecanonical'){ cb(null, 'OP_NOT_ALLOWED'); return; }
       postSaveOnce(payload, cb);
     },
+    /* ★★fix751(GPT裁定36 OPTION_B): schema2-capable client 専用の **狭い** read 口。
+       背景（BLOCKER #6 = C1_POST_COMMIT_READBACK_SCHEMA_DECLARATION_GAP）:
+         Worker v39 の getstory は OLD CLIENT READ GATE を持ち、stored blob が schema2 のとき
+         clientCanonicalSchemaMax >= 2 を宣言しない client へは 409 CLIENT_SCHEMA_TOO_OLD を返す
+         （fail-closed。旧 client へ schema2 を誤配信しないための安全装置）。
+         fix750 の post-write readback は既存 shadowRequest を使っており capability を宣言しないため、
+         schema2 を書いた直後から自分で読めず READ_FAILED_AFTER_CANONICAL_WRITE になっていた（live 実測）。
+       なぜ shadowRequest へ無条件に capability を足さないのか（裁定36 で OPTION_A は却下）:
+         shadowRequest は read/delete 系の汎用外部口。そこへ無条件に schema2 capability を付けると、
+         schema2 を扱う能力の無い既存 caller まで「自分は読めます」と Worker へ申告することになり、
+         Worker 側の fail-closed gate を弱める方向になる。既存 shadowRequest は **byte 不変**で残す。
+       契約:
+         ・caller が渡せるのは **exact storyId（string）だけ**。
+           op / payload / record / clientCanonicalSchemaMax を caller から受け取らない。
+         ・op は 'getstory' 固定。clientCanonicalSchemaMax は caller 値を通さず **内部で 2 固定**
+           （capability 詐称の余地を作らない）。
+         ・request は exactly 1。自動 retry しない。
+         ・localStorage / sessionStorage へ 1 バイトも書かない。docBaseRev / commit / projection を触らない。
+           op は read なので fix733 の side-port invalidate 分類（TYPE_R / TYPE_A）にも該当しない。
+         ・endpoint / auth / request 実装は postSaveOnce（既存単一実装）を共有。
+           新 fetch 0 / 新 endpoint 0 / 新 auth 0 / 新 Worker op 0。
+         ・callback は fix697 正式契約 **cb(result, errorCode)**。
+         ・ROW_ABSENT(404) / schema1(200) / schema2(200) をすべてこの1本で読める。 */
+    getStoryV2Once: function(storyId, cb){
+      if (typeof cb !== 'function') return;
+      if (typeof storyId !== 'string' || !storyId){ cb(null, 'BAD_STORY_ID'); return; }
+      /* ★caller の申告を一切流さず whitelist から組み直す。 */
+      postSaveOnce({ op: 'getstory', id: storyId, clientCanonicalSchemaMax: 2 }, cb);
+    },
     /* ★★fix716(STEP C): per-story backfill 専用の **狭い** write 口。
        なぜ shadowRequest の allow-list に putstory を足さないのか:
          shadowRequest は read/delete 系の汎用外部口なので、そこへ write op を generic に開けると
