@@ -37,7 +37,7 @@
   'use strict';
   if (window.__v292Dfix705) return;                 /* 冪等（自 namespace のみ） */
   var TAG = '[v292Dfix705:canonical-read-gate]';
-  var BUILD = 'fix705+719merge+721gate+723auth+724flags+755v2read+755b';
+  var BUILD = 'fix705+719merge+721gate+723auth+724flags+755v2read+755b+755d';
   var TIMEOUT_MS = 25000;
   var APPLIED_KEY = 'v292Dfix705_applied';          /* ★sessionStorage（localStorage ではない） */
 
@@ -129,7 +129,7 @@
     localHash: null,
     markerAuthority: null,
     keyDivergence: null,
-    serverTitle: null, localTitle: null,
+    serverTitle: null, localTitle: null, freshLocal: false,
     legacy: false, legacyHashComputed: false,
     schema: null              /* ★fix755: fresh 分類が確定した row の schema（1/2）。未分類は null */
   };
@@ -400,8 +400,17 @@
       if (!state.serverHash) return cb(stop('PARSE', { detail: 'no serverHash' }));
 
       localHashForSchema(function(lh, herr){
-        if (!lh) return cb(stop('HASH', { detail: herr }));
-        state.localHash = lh;
+        if (!lh) {
+          /* ★fix755d(実機 iPhone E2E で観測): schema2 + local body 不在 = 新端末 bootstrap。
+             local に守るべき本文が無いので HASH 失敗で止めず、server canonical の
+             hydrate(apply)へ進む。fix694 が authority を与えた document（= meta 登録済み）
+             だけがここへ来る。schema1 と「body があるのに hash 失敗」は従来どおり STOP。 */
+          var freshLocal755 = false;
+          try { freshLocal755 = (state.schema === 2 && lsg(BODY_KEY) == null); } catch(e755d){}
+          if (!freshLocal755) return cb(stop('HASH', { detail: herr }));
+          state.freshLocal = true;
+        }
+        state.localHash = lh || null;
 
         /* ---- same-hash（新 contract）: 1バイトも書かない ---- */
         if (lh === state.serverHash) {
@@ -513,6 +522,18 @@
     } catch(e){ return null; }
   }
 
+  /* ★fix755d: 新端末 bootstrap 用の title 正本（fix750 と同一契約:
+     SERVER StoryRecord.title ↔ LOCAL chr6_slots_meta[].name。読取のみ）。 */
+  function localMetaName755(){
+    try {
+      var m = JSON.parse(lsg('chr6_slots_meta') || '[]');
+      if (Object.prototype.toString.call(m) !== '[object Array]') return null;
+      for (var i755 = 0; i755 < m.length; i755++){ var e755 = m[i755];
+        if (e755 && String(e755.id) === STORY_ID) return (e755.name == null) ? '' : String(e755.name); }
+      return null;
+    } catch(e){ return null; }
+  }
+
   /* ★★fix719(STEP4E): HYDRATION CFG MERGE — server canonical body.cfg を local body.cfg 全体へ
      丸ごと上書きしない。server が権威を持つのは allowlist を通った story cfg だけで、
      local の provider runtime / secret-capable / UI-device cfg（=非 allowlist field）は保持する。
@@ -584,6 +605,9 @@
        server title を name / title へ勝手に反映しない。 */
     var srvTitle = (rec.title == null) ? '' : String(rec.title);
     var locTitle = localProjectionTitle();
+    /* ★fix755d: 新端末 bootstrap（schema2 + local body 不在）は projection が存在しないため、
+       fix750 と同一の title 正本契約（meta[].name）で照合する。不一致は従来どおり fail-closed。 */
+    if (locTitle === null && state.schema === 2 && state.freshLocal === true) locTitle = localMetaName755();
     state.serverTitle = srvTitle; state.localTitle = locTitle;
     if (locTitle === null) return cb(stop('TITLE_CONTRACT_UNRESOLVED', { reason: 'NO_LOCAL_PROJECTION' }));
     /* ★fix707 FINAL: title 不一致の例外は無い。legacy 特例で body を書く経路は存在しない。 */
