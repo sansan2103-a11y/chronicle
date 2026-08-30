@@ -184,8 +184,14 @@
       var F = f697();
       if (!F || typeof F.shadowRequest !== 'function')
         return resolve({ error: 'NO_READ_PATH' });
-      F.shadowRequest({ op: 'getstory', id: storyId }, function(err, r){
-        if (err || !r) return resolve({ error: 'READ_UNAVAILABLE', detail: err || null });
+      /* ★★裁定34 待ち BLOCKER5（FIX697_CALLBACK_ARG_ORDER）:
+         fix697 の callback は **cb(result, errorCode)**（node 慣例の (err, result) ではない）。
+         逐語: postSaveOnce は成功時 cb({status,j}, null) / 失敗時 cb(null, 'NETWORK_FAILED')。
+         ★fix702 の post() は逆に cb(err, result) なので、両者を取り違えないこと。
+         旧実装は (err, result) と解釈していたため、成功応答が err 扱いになり
+         prepare が必ず READ_FAILED_AT_START で write0 になっていた（live で実測）。 */
+      F.shadowRequest({ op: 'getstory', id: storyId }, function(r, errCode){
+        if (errCode || !r) return resolve({ error: 'READ_UNAVAILABLE', detail: errCode || null });
         if (r.status === 404) return resolve({ absent: true, status: 404 });
         var j = r.j || {};
         if (r.status !== 200 || !j.ok){
@@ -223,9 +229,10 @@
       var ip = internalProjection(storyId);
       if (ip.error) return resolve(refuse(ip.error, ip.detail || null));
       var mid = 'f750:shadow:' + storyId + ':' + ctx.startedAt;
+      /* ★fix697 契約: cb(result, errorCode) */
       F.putStoryOnce({ id: storyId, baseStoryRev: 0, record: ip.projection, mid: mid,
-                       clientMeta: { build: BUILD } }, function(err, r){
-        resolve({ err: err || null, status: r ? r.status : null, j: r ? r.j : null });
+                       clientMeta: { build: BUILD } }, function(r, errCode){
+        resolve({ err: errCode || null, status: r ? r.status : null, j: r ? r.j : null });
       });
     });
   }
@@ -253,10 +260,11 @@
       /* ★expectedRev / expectedHash は **直前の fresh readback 値のみ**。
          journal の値は「prepared 値と一致するか」の検査にだけ使い、expected には fresh を渡す。 */
       var mid = 'f750:canon:' + storyId + ':' + fresh.rev + ':' + fresh.serverHash;
+      /* ★fix697 契約: cb(result, errorCode) */
       F.putCanonicalOnce({ id: storyId, expectedRev: fresh.rev, expectedHash: fresh.serverHash,
                            record: record, mid: mid, clientMeta: { build: BUILD } },
-        function(err, r){
-          resolve({ err: err || null, status: r ? r.status : null, j: r ? r.j : null,
+        function(r, errCode){
+          resolve({ err: errCode || null, status: r ? r.status : null, j: r ? r.j : null,
                     builtTitle: record.title });
         });
     });
