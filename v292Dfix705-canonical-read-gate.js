@@ -37,7 +37,7 @@
   'use strict';
   if (window.__v292Dfix705) return;                 /* 冪等（自 namespace のみ） */
   var TAG = '[v292Dfix705:canonical-read-gate]';
-  var BUILD = 'fix705+719merge+721gate+723auth+724flags+755v2read+755b+755d+755e';
+  var BUILD = 'fix705+719merge+721gate+723auth+724flags+755v2read+755b+755d+755e+755f';
   var TIMEOUT_MS = 25000;
   var APPLIED_KEY = 'v292Dfix705_applied';          /* ★sessionStorage（localStorage ではない） */
 
@@ -406,7 +406,13 @@
              hydrate(apply)へ進む。fix694 が authority を与えた document（= meta 登録済み）
              だけがここへ来る。schema1 と「body があるのに hash 失敗」は従来どおり STOP。 */
           var freshLocal755 = false;
-          try { freshLocal755 = (state.schema === 2 && lsg(BODY_KEY) == null); } catch(e755d){}
+          try {
+            /* ★fix755f: meta 登録が無い端末（旧パッケージ同期が body だけ配った状態を実機で観測）
+               も bootstrap 対象。local に「title の主張」が存在しないため、server canonical を
+               正として hydrate + meta 登録する。それ以外の hash 失敗は従来どおり STOP。 */
+            freshLocal755 = (state.schema === 2 &&
+                             (lsg(BODY_KEY) == null || localMetaName755() === null));
+          } catch(e755d){}
           if (!freshLocal755) return cb(stop('HASH', { detail: herr }));
           state.freshLocal = true;
         }
@@ -534,6 +540,31 @@
     } catch(e){ return null; }
   }
 
+  /* ★fix755f: bootstrap 用 meta 登録（append-only・native 直書き・readback 検証）。
+     既存 entry の変更/削除はしない。異常（配列でない・既に登録済み・native 無し・
+     readback 不一致）はすべて書込 0 で失敗を返す。 */
+  function registerMetaEntry755(srvTitle){
+    try {
+      var f654m = window.__v292Dfix654;
+      var raw = lsg('chr6_slots_meta');
+      var m = [];
+      if (raw != null){
+        try { m = JSON.parse(raw); } catch(eP){ return { ok: false, reason: 'META_PARSE_ERROR' }; }
+        if (Object.prototype.toString.call(m) !== '[object Array]') return { ok: false, reason: 'META_NOT_ARRAY' };
+      }
+      for (var i = 0; i < m.length; i++){ var e = m[i];
+        if (e && String(e.id) === STORY_ID) return { ok: false, reason: 'META_ALREADY_PRESENT' }; }
+      m.push({ id: STORY_ID, name: String(srvTitle == null ? '' : srvTitle),
+               key: BODY_KEY, updatedAt: Date.now() });
+      var out = JSON.stringify(m);
+      var nat = (f654m && typeof f654m._native === 'function') ? f654m._native('setItem') : null;
+      if (typeof nat !== 'function') return { ok: false, reason: 'NO_NATIVE_SETITEM' };
+      nat.call(localStorage, 'chr6_slots_meta', out);
+      if (lsg('chr6_slots_meta') !== out) return { ok: false, reason: 'META_READBACK_MISMATCH' };
+      return { ok: true };
+    } catch(e){ return { ok: false, reason: 'META_REGISTER_THREW' } }
+  }
+
   /* ★★fix719(STEP4E): HYDRATION CFG MERGE — server canonical body.cfg を local body.cfg 全体へ
      丸ごと上書きしない。server が権威を持つのは allowlist を通った story cfg だけで、
      local の provider runtime / secret-capable / UI-device cfg（=非 allowlist field）は保持する。
@@ -608,6 +639,15 @@
     /* ★fix755d: 新端末 bootstrap（schema2 + local body 不在）は projection が存在しないため、
        fix750 と同一の title 正本契約（meta[].name）で照合する。不一致は従来どおり fail-closed。 */
     if (locTitle === null && state.schema === 2 && state.freshLocal === true) locTitle = localMetaName755();
+    /* ★fix755f: bootstrap かつ meta 登録自体が無い場合、local には title の主張が存在しない。
+       server canonical の title を正として meta entry を **append-only** で登録する
+       （既存 entry の変更・削除はしない。配列でない/登録済み等の異常は書込 0 で中止）。
+       同期処理のみ（この間に await は無い）なので read-modify-write は割り込まれない。 */
+    var needMetaRegister755 = false;
+    if (state.schema === 2 && state.freshLocal === true && localMetaName755() === null){
+      needMetaRegister755 = true;
+      locTitle = srvTitle;   /* 照合対象が存在しない = server title を採用（登録後は恒久に一致） */
+    }
     state.serverTitle = srvTitle; state.localTitle = locTitle;
     if (locTitle === null) return cb(stop('TITLE_CONTRACT_UNRESOLVED', { reason: 'NO_LOCAL_PROJECTION' }));
     /* ★fix707 FINAL: title 不一致の例外は無い。legacy 特例で body を書く経路は存在しない。 */
@@ -630,6 +670,11 @@
       try { C755 = window.__v292DfixCC2 || null; } catch(e755){}
       if (!C755 || typeof C755.buildWritePlan !== 'function')
         return cb(stop('APPLY_PARTIAL', { fail: { stage: 'plan', reason: 'NO_FIX743_BUILDER' } }));
+      if (needMetaRegister755){
+        var mr755 = registerMetaEntry755(srvTitle);
+        if (!mr755.ok)
+          return cb(stop('APPLY_PARTIAL', { fail: { stage: 'meta-register', reason: mr755.reason } }));
+      }
       /* validateServerRecord（既存 contract）で record を先に検証（書込 0 で判定） */
       if (typeof C755.validateServerRecord === 'function'){
         var verr755 = null;
