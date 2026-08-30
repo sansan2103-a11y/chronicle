@@ -21,6 +21,13 @@ if (window.__v292DfixGWS) return;
 
 var LOCK_NAME = 'chronicle:cc2:materialization:v1';
 var C1_JOURNAL_KEY = 'v292Dfix705_hydrateTxn';   /* C1 専用journal（fix743契約） */
+/* ★★裁定33 OPTION_A（GWS_FIX750_ACTIVATION_WIRING）:
+   fix750 の C1 materialization も GWS の活性条件に入れる。
+   これが無いと fix750On=1 / CC2On absent のとき serializationRequired()===false になり、
+   _runExclusive が legacy bypass するため fix750 は自分のガードで write0 になり、
+   live prepare が構造的に実行できない（GWS_ACTIVATION_GAP_FOR_FIX750）。
+   ★既存の CC2 / fix705 判定は 1 バイトも変えない。 */
+var MAT_JOURNAL_KEY = 'v292Dfix750_matTxn';       /* fix750 materialization journal */
 var CLASS = { A: 'REPLAYABLE_REMOTE_APPLY', B: 'RECOVERY_OR_DESTRUCTIVE',
               C: 'RECOMPUTABLE_PERSIST',   D: 'TURN_OR_USER_SEMANTIC' };
 var BUSY = { A: 'DROP_AND_REFETCH', B: 'HARD_HOLD_NO_WRITE',
@@ -38,6 +45,19 @@ function locksApi(){
 }
 
 /* C1 が active か。★boot時cache禁止：呼ばれるたびに読む */
+/* ★★裁定33 OPTION_A: fix750 の materialization が「開始し得る」または「進行中」なら true。
+   契約（逐語）:
+     1) journal 存在は kill switch より強い。v292Dfix750Off=1 でも matTxn があれば active。
+        既存 transaction/recovery が残っている状態で、kill switch を理由に GWS を解除しない。
+     2) matTxn は JSON parse 結果で判定しない。non-null なら active。
+        壊れた journal ほど fail-closed で serialization を維持する。
+   ★新 lock 名は作らない（chronicle:cc2:materialization:v1 のみ）。
+   ★bootRecoveryBarrier.activeRecoveries() には追加しない（裁定33 = DEFER）。 */
+function materializationActive(){
+  if (lsGet(MAT_JOURNAL_KEY) != null) return true;   /* journal 生存 > kill switch */
+  if (lsGet('v292Dfix750Off') !== '1' && lsGet('v292Dfix750On') === '1') return true;
+  return false;
+}
 function c1Active(){
   try {
     var cc2 = window.__v292DfixCC2;
@@ -48,6 +68,7 @@ function c1Active(){
       && lsGet('v292DfixCC2On') === '1') return true;
   var j = lsGet(C1_JOURNAL_KEY);
   if (j != null) return true;                       /* journal 生存 = transaction/recovery 進行中 */
+  if (materializationActive()) return true;         /* ★裁定33: fix750 materialization */
   return false;
 }
 /* ★★裁定11 FINAL GATE 2（SAFETY SWITCH FAIL-CLOSED）:
@@ -355,6 +376,7 @@ traceAdd('GWS_INIT');
 
 window.__v292DfixGWS = {
   BUILD: 'fix745', LOCK_NAME: LOCK_NAME, C1_JOURNAL_KEY: C1_JOURNAL_KEY,
+  MAT_JOURNAL_KEY: MAT_JOURNAL_KEY, materializationActive: materializationActive,
   CLASS: CLASS, BUSY: BUSY, BARRIER: BARRIER,
   FIX721_JOURNAL_KEY: FIX721_JOURNAL_KEY, FIX587_PENDING_KEY: FIX587_PENDING_KEY,
   barrier: barrier, targetWriteAllowed: targetWriteAllowed,
