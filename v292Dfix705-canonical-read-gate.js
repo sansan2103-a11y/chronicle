@@ -37,7 +37,7 @@
   'use strict';
   if (window.__v292Dfix705) return;                 /* 冪等（自 namespace のみ） */
   var TAG = '[v292Dfix705:canonical-read-gate]';
-  var BUILD = 'fix705+719merge+721gate+723auth+724flags';
+  var BUILD = 'fix705+719merge+721gate+723auth+724flags+755v2read';
   var TIMEOUT_MS = 25000;
   var APPLIED_KEY = 'v292Dfix705_applied';          /* ★sessionStorage（localStorage ではない） */
 
@@ -130,7 +130,8 @@
     markerAuthority: null,
     keyDivergence: null,
     serverTitle: null, localTitle: null,
-    legacy: false, legacyHashComputed: false
+    legacy: false, legacyHashComputed: false,
+    schema: null              /* ★fix755: fresh 分類が確定した row の schema（1/2）。未分類は null */
   };
   var stats = {
     holdBlockedSet: 0, holdBlockedRemove: 0, lastBlockedKey: null,
@@ -193,9 +194,31 @@
   //   ★汎用 writer として export しない（window へ出さない）。
   // =====================================================================
   var applyWindow = false;
+  /* ★fix755: schema2 hydrate の書込先は fix743.keysFor(STORY_ID) の固定集合
+     （body + sidecar 13 keys）。新しい key mapping をここに作らない。
+     schema1 のときは従来どおり body / aiInstr の 2 key のみ。 */
+  function applyAllowedKeys(){
+    if (state.schema === 2){
+      try {
+        var C = window.__v292DfixCC2;
+        if (C && typeof C.keysFor === 'function' && STORY_ID){
+          var K = C.keysFor(STORY_ID), out = [];
+          for (var f in K){ if (Object.prototype.hasOwnProperty.call(K, f)) out.push(String(K[f])); }
+          return out;
+        }
+      } catch(e){}
+      return [];                                   /* builder 不在 = 書込 0（fail-closed） */
+    }
+    return allowList();
+  }
+  function isApplyAllowed(k){
+    var a = applyAllowedKeys();
+    for (var i = 0; i < a.length; i++) if (a[i] === String(k)) return true;
+    return false;
+  }
   function applyWrite(k, v){
     if (!applyWindow) return { ok: false, reason: 'NOT_IN_APPLY_WINDOW' };
-    if (!isAllowed(k)) return { ok: false, reason: 'KEY_NOT_ALLOWED' };
+    if (!isApplyAllowed(k)) return { ok: false, reason: 'KEY_NOT_ALLOWED' };
     var f654 = window.__v292Dfix654;
     var nat = (f654 && typeof f654._native === 'function') ? f654._native('setItem') : null;
     if (typeof nat !== 'function') return { ok: false, reason: 'NO_NATIVE_SETITEM' };
@@ -205,6 +228,21 @@
       if (stats.bypass.keys.indexOf(String(k)) < 0) stats.bypass.keys.push(String(k));
       return { ok: true };
     } catch(e){ return { ok: false, reason: 'QUOTA_OR_THROW', detail: String(e && e.message || e) }; }
+  }
+  /* ★fix755: schema2 hydrate 専用の remove（server 側 null の sidecar を exact に反映する）。
+     apply window 中 / 許可キーのみ / fix654 native removeItem 経由。export しない。 */
+  function applyRemove(k){
+    if (!applyWindow) return { ok: false, reason: 'NOT_IN_APPLY_WINDOW' };
+    if (!isApplyAllowed(k)) return { ok: false, reason: 'KEY_NOT_ALLOWED' };
+    var f654 = window.__v292Dfix654;
+    var nat = (f654 && typeof f654._native === 'function') ? f654._native('removeItem') : null;
+    if (typeof nat !== 'function') return { ok: false, reason: 'NO_NATIVE_REMOVEITEM' };
+    try {
+      nat.call(localStorage, String(k));
+      stats.bypass.nativeWrites++;
+      if (stats.bypass.keys.indexOf(String(k)) < 0) stats.bypass.keys.push(String(k));
+      return { ok: true };
+    } catch(e){ return { ok: false, reason: 'REMOVE_THROW', detail: String(e && e.message || e) }; }
   }
 
   /* ★★fix706: title hydration は **実行しない**（裁定 (c) ADOPT / (b) HOLD）。
@@ -259,6 +297,19 @@
     try { W.contentHash(function(h){ cb(h || null, h ? null : 'HASH_NULL'); }); }
     catch(e){ cb(null, 'HASH_THROW'); }
   }
+  /* ★fix755: schema2 row 用の local hash。fix697.contentHashV2（= fix743 builder +
+     既存 canonicalString の単一実装）を使う。fix705 に serializer を作らない。 */
+  function localHashV2(cb){
+    var W = window.__v292Dfix697;
+    if (!W || typeof W.contentHashV2 !== 'function') return cb(null, 'HASH_V2_UNAVAILABLE');
+    try { W.contentHashV2(STORY_ID, function(h, err){ cb(h || null, h ? null : (err || 'HASH_V2_NULL')); }); }
+    catch(e){ cb(null, 'HASH_V2_THROW'); }
+  }
+  /* ★fix755: 分類済み schema に応じた hash 経路（schema1 は従来と byte 同一の経路） */
+  function localHashForSchema(cb){
+    if (state.schema === 2) return localHashV2(cb);
+    return localHash(cb);
+  }
 
   // =====================================================================
   // (5) marker（fix702 の cache を **読むだけ**。分類の高速化用。HOLD の条件にはしない） 
@@ -305,18 +356,31 @@
     state.markerAuthority = mk ? String(mk.authority || '') : null;
 
     stats.getstory++;
-    post({ op: 'getstory', id: STORY_ID }, function(e, r){
-      if (e || !r) { stats.netFail++; return cb(stop('NETWORK', { detail: e ? String(e.message || e) : 'no response' })); }
+    /* ★★fix755(裁定 BLOCKER#12): current document の authoritative read を
+       **schema2-capable** にする。fix697.getStoryV2Once（op:'getstory' 固定 /
+       clientCanonicalSchemaMax:2 内部固定）を使う。汎用 shadowRequest には触らない。
+       ★fix697 契約: cb(result, errorCode)（fix705 の post とは引数順が逆。罠#3）。 */
+    var W755 = window.__v292Dfix697;
+    if (!W755 || typeof W755.getStoryV2Once !== 'function')
+      return cb(stop('NETWORK', { detail: 'NO_V2_READ_PATH' }));
+    W755.getStoryV2Once(STORY_ID, function(r, e){
+      if (e === 'NOT_LOGGED_IN') { stats.netFail++; return cb(stop('AUTH', { detail: e })); }
+      if (e || !r) { stats.netFail++; return cb(stop('NETWORK', { detail: e ? String(e) : 'no response' })); }
       if (r.status === 404) {
         consumeApplied(); state.verdict = 'NOT_FOUND'; releaseHold('not-found'); return cb({ verdict: 'NOT_FOUND' });
       }
       if (r.status === 401 || r.status === 403) { stats.netFail++; return cb(stop('AUTH', { status: r.status })); }
-      if (r.status !== 200 || !r.j || !r.j.ok) { stats.netFail++; return cb(stop('NETWORK', { status: r.status })); }
+      if (r.status !== 200 || !r.j || !r.j.ok) { stats.netFail++;
+        return cb(stop('NETWORK', { status: r.status,
+                                    errorCode: (r.j && r.j.errorCode) || null })); }
 
       var j = r.j;
       var auth = String(j.authority || 'shadow');
       state.serverRev = (typeof j.rev === 'number') ? j.rev : null;
       state.serverHash = j.serverHash || null;
+      /* ★fix755: row schema を確定（Worker getstory は recordSchema を返す） */
+      state.schema = (typeof j.recordSchema === 'number') ? j.recordSchema
+                   : ((j.record && j.record.schema === 2) ? 2 : 1);
 
       if (auth === 'shadow') {
         /* ★downgrade 禁止: marker が canonical なのに server が shadow → 競合として STOP */
@@ -335,7 +399,7 @@
       if (!j.record || typeof j.record !== 'object') return cb(stop('PARSE', { detail: 'no record' }));
       if (!state.serverHash) return cb(stop('PARSE', { detail: 'no serverHash' }));
 
-      localHash(function(lh, herr){
+      localHashForSchema(function(lh, herr){
         if (!lh) return cb(stop('HASH', { detail: herr }));
         state.localHash = lh;
 
@@ -349,8 +413,10 @@
         }
 
         var srvTitle0 = (j.record && j.record.title != null) ? String(j.record.title) : '';
-        /* ---- ★fix707: legacy empty-title row の判定（server.title === '' のときだけ試す） ---- */
-        if (srvTitle0 === '') {
+        /* ---- ★fix707: legacy empty-title row の判定（server.title === '' のときだけ試す）
+           ★fix755: schema2 row は fix750 の新契約でのみ作られる（legacy 旧契約 row は存在しない）
+                    ため schema1 のときだけ。schema2 は通常 diff 経路へ。 ---- */
+        if (srvTitle0 === '' && state.schema !== 2) {
           return legacyEmptyTitleHash(function(lgh){
             state.legacyHashComputed = !!lgh;
             if (lgh && lgh === state.serverHash) {
@@ -530,6 +596,71 @@
       }));
     }
 
+    /* ★★fix755(裁定 BLOCKER#12): schema2 row は body だけでなく sidecar 13 keys も
+       **exact** に hydrate する。書込計画は fix743.buildWritePlan（既存 C1-b の
+       key/serialization mapping）をそのまま使う。新 mapping をここに作らない。
+       newValue === null は remove（server 側 null を local へ exact 反映。残すと
+       post-apply の V2 hash が収束せず APPLY_NOT_CONVERGED で止まるため）。 */
+    if (state.schema === 2){
+      var C755 = null;
+      try { C755 = window.__v292DfixCC2 || null; } catch(e755){}
+      if (!C755 || typeof C755.buildWritePlan !== 'function')
+        return cb(stop('APPLY_PARTIAL', { fail: { stage: 'plan', reason: 'NO_FIX743_BUILDER' } }));
+      /* validateServerRecord（既存 contract）で record を先に検証（書込 0 で判定） */
+      if (typeof C755.validateServerRecord === 'function'){
+        var verr755 = null;
+        try { verr755 = C755.validateServerRecord(rec); } catch(e756){ verr755 = 'VALIDATOR_THREW'; }
+        if (verr755) return cb(stop('APPLY_PARTIAL', { fail: { stage: 'validate', reason: verr755 } }));
+      }
+      var plan755 = null;
+      try { plan755 = C755.buildWritePlan(STORY_ID, rec, { nativeGet: lsg }); }
+      catch(e757){ return cb(stop('APPLY_PARTIAL', { fail: { stage: 'plan', reason: String(e757 && e757.message || e757) } })); }
+      if (!plan755 || Object.prototype.toString.call(plan755) !== '[object Array]' || !plan755.length)
+        return cb(stop('APPLY_PARTIAL', { fail: { stage: 'plan', reason: 'EMPTY_PLAN' } }));
+      applyWindow = true;
+      var wrote755 = 0, skipped755 = 0, fail755 = null;
+      try {
+        for (var pi = 0; pi < plan755.length; pi++){
+          var it = plan755[pi];
+          var cur755 = lsg(it.key);
+          if (it.newValue === null){
+            if (cur755 === null) { skipped755++; continue; }        /* 既に absent */
+            var wr = applyRemove(it.key);
+            if (!wr.ok){ fail755 = { stage: it.field, reason: wr.reason, detail: wr.detail || null }; break; }
+            wrote755++;
+          } else {
+            if (cur755 === String(it.newValue)) { skipped755++; continue; }
+            var ww = applyWrite(it.key, String(it.newValue));
+            if (!ww.ok){ fail755 = { stage: it.field, reason: ww.reason, detail: ww.detail || null }; break; }
+            wrote755++;
+          }
+        }
+      } catch(e758){ fail755 = { stage: 'throw', reason: String(e758 && e758.message || e758) }; }
+      applyWindow = false;
+      if (fail755){
+        stats.partial++;
+        return cb(stop('APPLY_PARTIAL', { schema: 2, wrote: wrote755, skipped: skipped755, fail: fail755 }));
+      }
+      writeApplied({ storyId: STORY_ID, serverHash: state.serverHash, serverRev: state.serverRev });
+      return localHashV2(function(lhV2, herrV2){
+        if (!lhV2) return cb(stop('HASH', { detail: herrV2, stage: 'post-apply-v2' }));
+        state.localHash = lhV2;
+        if (lhV2 !== state.serverHash){
+          return cb(stop('APPLY_NOT_CONVERGED', {
+            stage: 'post-apply-v2', schema: 2,
+            wrote: wrote755, skipped: skipped755
+          }));                                        /* ★reload しない / 再 apply しない */
+        }
+        stats.applies++;
+        state.verdict = 'CANONICAL_APPLIED'; state.phase = 'applied';
+        note({ apply: 'ok', schema: 2, keys: stats.bypass.keys.slice(),
+               wrote: wrote755, skipped: skipped755, serverRev: state.serverRev });
+        stats.reloads++;
+        try { setTimeout(function(){ try { location.reload(); } catch(e){} }, 300); } catch(e){}
+        return cb({ verdict: 'CANONICAL_APPLIED', serverRev: state.serverRev, reload: true, schema: 2 });
+      });
+    }
+
     applyWindow = true;
     var wroteBody = false, wroteAi = false, fail = null;
     var skippedBody = false, skippedAi = false;
@@ -627,7 +758,9 @@
           return;
         }
         /* 突合 OK。fix697（hash 提供元）が来たら分類を始める */
-        if (!classifyStarted && window.__v292Dfix697 && typeof window.__v292Dfix697.contentHash === 'function') {
+        if (!classifyStarted && window.__v292Dfix697 &&
+            typeof window.__v292Dfix697.contentHash === 'function' &&
+            typeof window.__v292Dfix697.getStoryV2Once === 'function') {
           classify(function(){});
           return;
         }
@@ -658,7 +791,7 @@
   function docAuthority(){
     if (!on() || !STORY_ID) return null;
     var out = { id: String(STORY_ID), present: false, authority: null,
-                rev: null, hash: null, deleted: false,
+                rev: null, hash: null, deleted: false, schema: null,
                 phase: String(state.phase || ''), fresh: false, unsafe: false, build: BUILD };
     /* STOP は必ず phase='stopped' を立てる。error だけが立つ非 STOP（NO_STORAGE_TRAP 等）も
        分類の健全性を保証できないので unsafe 扱いにする。 */
@@ -679,6 +812,8 @@
       out.present = true; out.authority = 'canonical'; out.fresh = true;
       out.rev = (typeof state.serverRev === 'number') ? state.serverRev : null;
       out.hash = state.serverHash || null;
+      /* ★fix755: fresh 分類が確定した row の schema（1/2）。fix697 の write 経路選択が使う。 */
+      out.schema = (state.schema === 2) ? 2 : 1;
       return out;
     }
     /* 未分類（verdict null / 分類中）: fresh=false・unsafe=false。呼び手は下流の判定へ落としてよい。 */

@@ -210,6 +210,38 @@
     return projectFrom(s, keyOf(s));
   }
   function canonicalString(content){ return stableStringify(content); }
+  /* ★★fix755(裁定 BLOCKER#12 / OPTION_B_MINIMAL_RUNTIME_PATH):
+     schema2 の **server-parity content**（Worker chrCanonicalStoryContentV2 と同一形）を
+     client 側で 1 箇所だけ合成する。
+       ・record 本体は fix743.buildSchema2Record（既存 schema2 builder）をそのまま使う。
+         新しい 13-key mapping をここに作らない。
+       ・derived field（id / turnCount / snippet）は Worker と同じ導出:
+         turnCount = body.turns.length / snippet = snippetOf(body)（V1 と同一実装を共有）。
+       ・serializer は既存 canonicalString（stableStringify）のみ。duplicate 実装 0。
+     read-only（storage write 0 / 通信 0 / commit 0）。 */
+  function projectionV2(id){
+    var sid = (id == null) ? '' : String(id);
+    if (!sid) return null;
+    var C = null;
+    try { C = window.__v292DfixCC2 || null; } catch(e){ return null; }
+    if (!C || typeof C.buildSchema2Record !== 'function') return null;
+    var built;
+    try { built = C.buildSchema2Record({ nativeGet: lsg }, sid); }
+    catch(e){ return null; }
+    if (!built || built.hold || !built.record || built.record.schema !== 2) return null;
+    var r = built.record;
+    var turns = (r.body && Object.prototype.toString.call(r.body.turns) === '[object Array]') ? r.body.turns : [];
+    return { schema: 2, id: sid,
+             title: (r.title == null) ? '' : String(r.title),
+             deleted: r.deleted === true,
+             body: r.body, sidecar: r.sidecar,
+             turnCount: turns.length, snippet: snippetOf(r.body) };
+  }
+  function contentHashV2(id, cb){
+    var c = projectionV2(id);
+    if (!c) return cb(null, 'NO_V2_PROJECTION');
+    sha256hex(canonicalString(c), function(h){ cb(h || null, h ? null : 'HASH_FAILED'); });
+  }
   function sha256hex(str, cb){
     try {
       var enc = new TextEncoder().encode(String(str));
@@ -713,6 +745,130 @@
       });
     });
   }
+  /* ═══════════════════════════════════════════════════════════════════
+     ★★fix755(裁定 BLOCKER#12 / OPTION_B_MINIMAL_RUNTIME_PATH)
+     canonicalCommit2 — **canonical schema2 row 専用**の通常 save 経路。
+       ・canonical schema1 は従来の canonicalCommit のまま（byte 不変・経路も不変）。
+       ・fresh read / post-write readback は V2-capable getstory
+         （clientCanonicalSchemaMax:2。**この canonical-save 内部読取だけ**。
+          汎用 shadowRequest へは capability を足さない）。
+       ・outgoing record は既存 schema2 builder（fix743.buildSchema2Record 経由の
+         projectionV2）。legacy V1 projection を schema2 row へ書かない。
+       ・hash 比較も既存 schema2 content contract（projectionV2 + canonicalString）。
+       ・write は既存 putCanonicalOnceImpl（whitelist / cap2 自動付与）。
+       ・CAS / readback / hold の意味論は canonicalCommit と同一（strict CAS 1回 /
+         force 禁止 / readback 最大 1 回 / conflict は canonHold）。
+     dirty 追跡（lastSentHash）は従来どおり V1 projection hash で行う:
+       V1 hash は body/turns/title の変化を検出でき、schema2 save の成功後に
+       「送信 snapshot 以降 local 変化なし」を確認する用途には従来契約のまま使える。 */
+  function canonicalCommit2(id, intendedLocalHash, why){
+    inFlight = true; cstats.routedCanonical++;
+    var fin = function(){ inFlight = false; };
+    var condClearDirty = function(then){
+      currentHashOf(id, function(h2){
+        if (h2 && h2 === intendedLocalHash){ lastSentHash = intendedLocalHash; }
+        then();
+      });
+    };
+    /* ---- fresh getstory exactly 1（V2-capable。この応答だけを CAS authority にする） ---- */
+    postSaveOnce({ op: 'getstory', id: id, clientCanonicalSchemaMax: 2 }, function(g, gerr){
+      if (gerr || !g){ cstats.netFail++; note({ kind: 'C2_GETSTORY_FAIL', id: id, why: why }); return fin(); }
+      var j = g.j || {};
+      if (g.status === 404){ cstats.rowMissing++; canonHold[id] = true;
+        note({ kind: 'CANONICAL_ROW_MISSING', id: id }); return fin(); }
+      if (g.status !== 200 || !j.ok){ cstats.netFail++; note({ kind: 'C2_GETSTORY_HTTP_' + g.status, id: id }); return fin(); }
+      if (String(j.authority || 'shadow') !== 'canonical'){
+        cstats.drift++; canonHold[id] = true;
+        note({ kind: 'CANONICAL_AUTHORITY_DRIFT', id: id, serverAuthority: j.authority || 'shadow' }); return fin(); }
+      if (j.deleted){ cstats.deletedStop++; canonHold[id] = true;
+        note({ kind: 'CANONICAL_ALREADY_DELETED', id: id }); return fin(); }
+      var srvSchema = (typeof j.recordSchema === 'number') ? j.recordSchema
+                    : ((j.record && j.record.schema === 2) ? 2 : 1);
+      if (srvSchema !== 2){
+        /* ★V2 経路へ入ったのに server は schema1 へ戻っている＝分類が古い。write 0 で戻す。
+           次の commit で docAuthority から再 route される（downgrade write は絶対にしない）。 */
+        note({ kind: 'C2_SERVER_NOT_SCHEMA2', id: id, recordSchema: srvSchema }); return fin(); }
+      var srvRev = (typeof j.rev === 'number') ? j.rev : 0;
+      var srvHash = String(j.serverHash || '');
+      /* ---- outgoing: 既存 schema2 builder（V1 projection は使わない） ---- */
+      var v2c = projectionV2(id);
+      if (!v2c){ cstats.netFail++; note({ kind: 'C2_BUILD_FAILED', id: id }); return fin(); }
+      sha256hex(canonicalString(v2c), function(v2hash){
+        if (!v2hash){ cstats.netFail++; note({ kind: 'C2_LOCAL_HASH_FAIL', id: id }); return fin(); }
+        /* ---- POST 前の local 再確認（従来どおり V1 hash で mutation 検出） ---- */
+        currentHashOf(id, function(hNow){
+          if (!hNow){ cstats.netFail++; note({ kind: 'C2_LOCAL_V1_HASH_FAIL', id: id }); return fin(); }
+          if (hNow !== intendedLocalHash){
+            cstats.localChanged++; note({ kind: 'LOCAL_CHANGED_DURING_PREFLIGHT', id: id }); return fin(); }
+          if (srvHash && srvHash === v2hash){
+            /* 既に収束済み → write 0 */
+            cstats.convergedNoWrite++; canonCtx = { id: id, rev: srvRev, hash: srvHash };
+            note({ kind: 'CANONICAL_CONVERGED_NO_WRITE', id: id, rev: srvRev, schema: 2 });
+            return condClearDirty(fin);
+          }
+          /* ---- 異内容 → fresh 値で strict CAS 1回（force 禁止） ---- */
+          var rec = { schema: 2, title: v2c.title, deleted: false, body: v2c.body, sidecar: v2c.sidecar };
+          var mid = 'pc2:' + id + ':' + srvRev + ':' + v2hash;    /* ★決定的（retry で新 mid を作らない） */
+          cstats.sent++;
+          putCanonicalOnceImpl({ id: id, expectedRev: srvRev, expectedHash: srvHash,
+                                 record: rec, mid: mid,
+                                 clientMeta: { device: (navigator.userAgent || '').slice(0, 60), build: BUILD } },
+            function(r, err){
+            var readbackConverge = function(kindOk, kindKeep){
+              postSaveOnce({ op: 'getstory', id: id, clientCanonicalSchemaMax: 2 }, function(g2, ge2){
+                if (ge2 || !g2 || g2.status !== 200 || !(g2.j && g2.j.ok)){
+                  cstats.ambiguous++; note({ kind: 'CANONICAL_WRITE_AMBIGUOUS', id: id }); return fin(); }
+                var j2 = g2.j;
+                if (String(j2.serverHash || '') === v2hash){
+                  canonCtx = { id: id, rev: (typeof j2.rev === 'number' ? j2.rev : null), hash: v2hash };
+                  if (kindOk === 'CANONICAL_CONVERGED_AFTER_CONFLICT') cstats.convergedAfterConflict++;
+                  else cstats.confirmedByReadback++;
+                  note({ kind: kindOk, id: id, rev: j2.rev, schema: 2 });
+                  return condClearDirty(fin);
+                }
+                if (kindKeep === 'CANONICAL_WRITE_CONFLICT'){
+                  cstats.conflicts++; canonHold[id] = true;
+                  note({ kind: 'CANONICAL_WRITE_CONFLICT', id: id, serverRev: j2.rev,
+                         serverHash: String(j2.serverHash || '').slice(0, 16) });
+                } else {
+                  cstats.ambiguous++; note({ kind: kindKeep, id: id, serverRev: j2.rev });
+                }
+                return fin();
+              });
+            };
+            if (err || !r){ /* network / 不明瞭 → readback 最大 1 回（V2-capable） */
+              return readbackConverge('CANONICAL_COMMIT_CONFIRMED_BY_READBACK', 'CANONICAL_WRITE_UNSETTLED'); }
+            var jj = r.j || {};
+            if (r.status === 200 && jj.ok){
+              if (String(jj.serverHash || '') !== v2hash){
+                cstats.parityFail++; note({ kind: 'CANONICAL_PARITY_FAIL', id: id, schema: 2 }); return fin(); }
+              canonCtx = { id: id, rev: (typeof jj.rev === 'number' ? jj.rev : null), hash: v2hash };
+              if (jj.noop) cstats.noop++; else cstats.ok++;
+              note({ kind: 'CANONICAL_COMMIT_OK', id: id, rev: jj.rev, noop: !!jj.noop, why: why, schema: 2 });
+              return condClearDirty(fin);
+            }
+            if (r.status === 409){
+              return readbackConverge('CANONICAL_CONVERGED_AFTER_CONFLICT', 'CANONICAL_WRITE_CONFLICT'); }
+            cstats.netFail++; note({ kind: 'C2_HTTP_' + r.status, id: id, errorCode: jj.errorCode || null });
+            return fin();
+          });
+        });
+      });
+    });
+  }
+  /* ★fix755: route が canonical のとき、fix705 の fresh 分類が schema2 なら V2 save 経路へ。
+     docAuthority に schema が無い（旧分類 / schema1）は従来経路（変更 0）。 */
+  function docAuthoritySchema2(id){
+    try {
+      var F5 = window.__v292Dfix705;
+      if (!F5 || typeof F5.docAuthority !== 'function') return false;
+      var a5 = F5.docAuthority();
+      return !!(a5 && String(a5.id) === String(id) && a5.unsafe !== true &&
+                a5.fresh === true && a5.present === true &&
+                a5.authority === 'canonical' && a5.schema === 2);
+    } catch(e){ return false; }
+  }
+
   // ---- commit（完全 fire-and-forget） ----
   var inFlight = false, lastSentHash = null;
   function commit(why){
@@ -731,7 +887,11 @@
       /* ★★fix718(STEP4B): document authority で write path を分離。
          shadow は以下の既存経路のまま（fresh getstory 追加なし・バイト不変）。 */
       var route = docAuthorityRoute(id);
-      if (route === 'canonical'){ canonicalCommit(id, content, localHash, why); return; }
+      if (route === 'canonical'){
+        /* ★fix755: schema2 row だけ V2 保存経路。schema1 canonical は従来のまま。 */
+        if (docAuthoritySchema2(id)){ canonicalCommit2(id, localHash, why); return; }
+        canonicalCommit(id, content, localHash, why); return;
+      }
       if (route !== 'shadow'){
         if (route === 'hold') cstats.holds++; else cstats.routedUnknown++;
         note({ kind: 'CANONICAL_AUTHORITY_UNCONFIRMED', id: id, route: route });
@@ -977,6 +1137,36 @@
     });
   }
 
+  /* ★★fix755: putCanonicalOnce の単一実装（export と canonicalCommit2 が共有。duplicate 禁止）。
+     契約は fix717/fix750 のまま byte 同一の意味論:
+       ・op 固定 / whitelist 組立 / record.schema===2 のときだけ clientCanonicalSchemaMax:2。 */
+  function putCanonicalOnceImpl(payload, cb){
+    var p = (payload && typeof payload === 'object') ? payload : null;
+    if (!p) { cb(null, 'BAD_PAYLOAD'); return; }
+    var id = (p.id == null) ? '' : String(p.id);
+    if (!id) { cb(null, 'BAD_STORY_ID'); return; }
+    if (!p.record || typeof p.record !== 'object') { cb(null, 'BAD_RECORD'); return; }
+    var xr = +p.expectedRev;
+    if (!(xr >= 0)) { cb(null, 'BAD_EXPECTED_REV'); return; }
+    var xh = (p.expectedHash == null) ? '' : String(p.expectedHash);
+    if (!xh) { cb(null, 'BAD_EXPECTED_HASH'); return; }
+    var mid = (p.mid == null) ? '' : String(p.mid);
+    if (!mid) { cb(null, 'BAD_MID'); return; }
+    /* ★caller が渡してきた op / 任意 field は捨てて whitelist から組み直す。 */
+    var body = { op: 'putcanonical', id: id, expectedRev: Math.floor(xr), expectedHash: xh,
+                 record: p.record, mid: mid };
+    if (p.clientMeta && typeof p.clientMeta === 'object') body.clientMeta = p.clientMeta;
+    /* ★★fix750(C1_WRITE_PATH_WIRING): schema2 canonical write のときだけ
+         clientCanonicalSchemaMax を whitelist に加える。
+       ・Worker v39 は schema2 record に対して clientCanonicalSchemaMax >= 2 を要求し、
+         無ければ CLIENT_SCHEMA_TOO_OLD で fail-closed する（= negative control を壊さない）。
+       ・**record.schema === 2 のときだけ** 送る。schema1 の既存 payload は 1 バイトも変えない。
+       ・値は caller の申告をそのまま流さず 2 に正規化する（capability 詐称の余地を作らない）。
+         schema2 を送る client は定義上 v2-capable であり、それ以外の値に意味は無い。 */
+    if (p.record.schema === 2) body.clientCanonicalSchemaMax = 2;
+    postSaveOnce(body, cb);
+  }
+
   window.__v292Dfix697 = {
     __armed: true,
     /* ★★fix733: side-port 側から current document の rev authority を無効化するための口。
@@ -1021,6 +1211,9 @@
     /* ★★fix708(STEP3F): 削除トランザクション用の read-only 口。
        どちらも **読むだけ**（書込 0 / 通信 0 / commit 0 / marker 更新 0）。 */
     projectionOf: projectionOf,
+    /* ★fix755: schema2 server-parity content の read-only 口（fix705 の分類 / 検証用）。 */
+    projectionV2: projectionV2,
+    contentHashV2: contentHashV2,
     contentHashOf: function(id, cb){
       var c = projectionOf(id);
       if (!c) return cb(null, 'NO_LIVE_PROJECTION');
@@ -1089,32 +1282,8 @@
          ・localStorage / sessionStorage へ 1 バイトも書かない。docBaseRev / commit / projection を触らない。
            shadow 用の document rev 系（advanceDocRev）は canonical write と無関係のまま。
          ・endpoint / auth / request 実装は postSaveOnce（既存単一実装）を共有。新 auth・新 endpoint 0。 */
-    putCanonicalOnce: function(payload, cb){
-      var p = (payload && typeof payload === 'object') ? payload : null;
-      if (!p) { cb(null, 'BAD_PAYLOAD'); return; }
-      var id = (p.id == null) ? '' : String(p.id);
-      if (!id) { cb(null, 'BAD_STORY_ID'); return; }
-      if (!p.record || typeof p.record !== 'object') { cb(null, 'BAD_RECORD'); return; }
-      var xr = +p.expectedRev;
-      if (!(xr >= 0)) { cb(null, 'BAD_EXPECTED_REV'); return; }
-      var xh = (p.expectedHash == null) ? '' : String(p.expectedHash);
-      if (!xh) { cb(null, 'BAD_EXPECTED_HASH'); return; }
-      var mid = (p.mid == null) ? '' : String(p.mid);
-      if (!mid) { cb(null, 'BAD_MID'); return; }
-      /* ★caller が渡してきた op / 任意 field は捨てて whitelist から組み直す。 */
-      var body = { op: 'putcanonical', id: id, expectedRev: Math.floor(xr), expectedHash: xh,
-                   record: p.record, mid: mid };
-      if (p.clientMeta && typeof p.clientMeta === 'object') body.clientMeta = p.clientMeta;
-      /* ★★fix750(C1_WRITE_PATH_WIRING): schema2 canonical write のときだけ
-           clientCanonicalSchemaMax を whitelist に加える。
-         ・Worker v39 は schema2 record に対して clientCanonicalSchemaMax >= 2 を要求し、
-           無ければ CLIENT_SCHEMA_TOO_OLD で fail-closed する（= negative control を壊さない）。
-         ・**record.schema === 2 のときだけ** 送る。schema1 の既存 payload は 1 バイトも変えない。
-         ・値は caller の申告をそのまま流さず 2 に正規化する（capability 詐称の余地を作らない）。
-           schema2 を送る client は定義上 v2-capable であり、それ以外の値に意味は無い。 */
-      if (p.record.schema === 2) body.clientCanonicalSchemaMax = 2;
-      postSaveOnce(body, cb);
-    },
+    putCanonicalOnce: putCanonicalOnceImpl,
+
     /* ★★fix725(RULING44 / Worker v36): SERVER-PRESERVING CFG SCRUB 専用の **狭い** write 口。
        なぜ shadowRequest の allow-list に scrubstorycfg を足さないのか:
          shadowRequest は read/delete 系の汎用外部口。write op を generic に開けると
