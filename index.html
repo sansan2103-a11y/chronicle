@@ -51,7 +51,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260830-fix757';
+  var BUILT = '20260831-fix758';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3423,7 +3423,7 @@ G.init();
 <script src="v292Dfix304-emotion.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix305-trigger-states.js?cb=v292Dfix305"></script>
 <script src="v292Dfix306-npc-liveliness.js?cb=v292Dfix738"></script>
-<script src="v292Dfix307-npc-roster.js?cb=20260829-fix748"></script>
+<script src="v292Dfix307-npc-roster.js?cb=20260831-fix758"></script>
 <script src="v292Dfix308-creepy-toggle.js?cb=v292Dfix308"></script>
 <script src="v292Dfix309-progression.js?cb=v292Dfix419c"></script>
 <!-- fix577: 物語削除の入口を1つに寄せる。B(gallery)/C(features clearSlot)の独自削除を停止し、
@@ -3666,6 +3666,7 @@ G.init();
      既存 fix750 の prepare→commitSchema2 で schema2 canonical にする。新batch機構/新op/新endpoint 0本。
      ★既定 ON。KILL=v292Dfix756Off=1。失敗時は自分が作った pre-irreversible journal を畳んで legacy 経路へ戻す。 -->
 <script src="v292Dfix756-new-story-schema2.js?cb=20260830-fix757"></script>
+<script src="v292Dfix758-cloud-save-pending.js?cb=20260831-fix758"></script>
 </body>
 </html>
 

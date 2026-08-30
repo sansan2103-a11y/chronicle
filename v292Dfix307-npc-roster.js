@@ -22,6 +22,10 @@
 //   fix408(2026-07-10): (a)回想/過去描写/記録/写真/比喩/他者の背景説明の中にだけ出る存在を
 //     除外(T16でカエデの過去描写から実体のない「孤児院の子」が登録された件)。(b)既存台帳を
 //     「呼称: 外見」の行形式でLLMに渡し、外見一致の存在への新呼称乱立を抑止(同一存在の二重登録防止)。
+//   fix307f(2026-08-31): 別storyを開いたdocumentが、共有ポインタ__chr6Key()(chr6_active_slot)経由で
+//     「いまアクティブなstory」のロスター/カーソルへ読み書き・削除していた不具合を修正。
+//     slotSfx()をfix694のdocument authority(window.__chronicleDocumentStoryKey)基準へ固定。
+//     authorityが無いdocumentはnullを返し、fix307のストアに一切触らない。OFF: v292Dfix307fOff='1'
 // =====================================================================
 (function(){
   'use strict';
@@ -36,9 +40,26 @@
 
   function off(){ try{ return localStorage.getItem('v292Dfix307Off')==='1'; }catch(e){ return false; } }
   function getS(){ try{ return window.S||(typeof S!=='undefined'?S:null); }catch(e){ return null; } }
-  function slotSfx(){ try{ if(typeof window.__chr6Key==='function'){ var k=window.__chr6Key(); return (k&&k!=='chr6')?k.replace(/^chr6/,''):''; } }catch(e){} return ''; }
-  function STORE(){ return 'v292Dfix307Roster'+slotSfx(); }
-  function LASTK(){ return 'v292Dfix307Last'+slotSfx(); }
+  function slotSfx(){
+    /* ★fix307f(2026-08-31): 共有ポインタ __chr6Key()(chr6_active_slot) は別 document の
+       story を指し得る（実測: 0T document の resetCheck がアクティブ story の roster を削除）。
+       この document が書いてよい story = fix694 の document authority に固定する。
+       authority が無い(null) document では null を返し、呼び手は読み書き・削除を一切しない。
+       OFF: localStorage v292Dfix307fOff='1' で旧挙動へ戻る */
+    try {
+      if (localStorage.getItem('v292Dfix307fOff') === '1') { /* 旧挙動 */
+        if (typeof window.__chr6Key === 'function'){ var k0 = window.__chr6Key(); return (k0 && k0 !== 'chr6') ? k0.replace(/^chr6/, '') : ''; }
+        return '';
+      }
+    } catch(e){}
+    try {
+      var dk = window.__chronicleDocumentStoryKey;
+      if (typeof dk === 'string' && dk){ return (dk === 'chr6') ? '' : dk.replace(/^chr6/, ''); }
+    } catch(e){}
+    return null;   /* authority 無し = この document は fix307 のストアに触らない */
+  }
+  function STORE(){ var s=slotSfx(); return (s===null)?null:('v292Dfix307Roster'+s); }
+  function LASTK(){ var s=slotSfx(); return (s===null)?null:('v292Dfix307Last'+s); }
 
   /* ★★fix748(Phase C / C5 = Class C): fix307 は 2 つのキーを書く。
        v292Dfix307Roster<sfx> … 直近12ターン窓から LLM が抽出した登場人物ロスター
@@ -85,10 +106,10 @@
   function canSave(){ try{ var ep=+(localStorage.getItem('chr6_epoch')||0); if(window.__chrEpoch&&ep>window.__chrEpoch) return false; }catch(e){} return true; }
   function getKey(){ try{ var c=JSON.parse(localStorage.getItem((typeof window.__chr6Key==='function'?window.__chr6Key():'chr6'))||'{}').cfg||{}; return c.orKey||''; }catch(e){ return ''; } }
 
-  function loadRoster(){ try{ return JSON.parse(localStorage.getItem(STORE())||'[]')||[]; }catch(e){ return []; } }
-  function saveRoster(a){ if(!canSave())return; var g748=f748Skip('fix307.saveRoster'); if(g748&&(g748.skip||g748.hold)) return g748; try{ localStorage.setItem(STORE(), JSON.stringify((a||[]).slice(0,CAP))); }catch(e){} }
-  function loadLast(){ try{ return parseInt(localStorage.getItem(LASTK())||'-1',10); }catch(e){ return -1; } }
-  function saveLast(i){ if(!canSave())return; var g748=f748Skip('fix307.saveLast'); if(g748&&(g748.skip||g748.hold)) return g748; try{ localStorage.setItem(LASTK(), String(i)); }catch(e){} }
+  function loadRoster(){ var k=STORE(); if(k===null) return []; try{ return JSON.parse(localStorage.getItem(k)||'[]')||[]; }catch(e){ return []; } }
+  function saveRoster(a){ var k=STORE(); if(k===null) return; if(!canSave())return; var g748=f748Skip('fix307.saveRoster'); if(g748&&(g748.skip||g748.hold)) return g748; try{ localStorage.setItem(k, JSON.stringify((a||[]).slice(0,CAP))); }catch(e){} }
+  function loadLast(){ var k=LASTK(); if(k===null) return -1; try{ return parseInt(localStorage.getItem(k)||'-1',10); }catch(e){ return -1; } }
+  function saveLast(i){ var k=LASTK(); if(k===null) return; if(!canSave())return; var g748=f748Skip('fix307.saveLast'); if(g748&&(g748.skip||g748.hold)) return g748; try{ localStorage.setItem(k, String(i)); }catch(e){} }
   // ★fix307e: スロット厳密化用のキー固定版。run()開始時に決めたキーへ書く(切替で揺れない)。
   function rosterKey(sfx){ return 'v292Dfix307Roster'+sfx; }
   function lastKey(sfx){ return 'v292Dfix307Last'+sfx; }
@@ -185,7 +206,7 @@
     // ★fix307e: 保存先スロットと、いまSが保持する物語の一致をここで固定/検証する。
     //   起動/切替の中間状態(キーは新スロット・Sはまだ前の物語)で書くと、別スロットの
     //   ロスターに前物語のキャラが混入する(=今回のキャラ一覧混入バグ)。fix320と同型の根治。
-    var sfx=slotSfx();
+    var sfx=slotSfx(); if(sfx===null) return;
     var storeK=rosterKey(sfx), lastK=lastKey(sfx);
     var curLoc=(s.scene&&s.scene.loc)||null;
     var blobLoc=slotBlobLoc(sfx);
@@ -237,7 +258,7 @@
     var s=getS(); if(!s||!Array.isArray(s.turns)) return;
     // ★fix307e: 中間状態での誤クリア防止。Sが空(新規)でも、保存先スロットのblobが別物語を
     //   持っているなら切替中なので触らない。blobも空/一致の時だけクリアする。
-    var sfx=slotSfx(); var storeK=rosterKey(sfx), lastK=lastKey(sfx);
+    var sfx=slotSfx(); if(sfx===null) return; var storeK=rosterKey(sfx), lastK=lastKey(sfx);
     var blobLoc=slotBlobLoc(sfx); var curLoc=(s.scene&&s.scene.loc)||null;
     if(blobLoc && curLoc && blobLoc!==curLoc) return;
     if(s.turns.length===0 && (loadRosterK(storeK).length || loadLastK(lastK)>=0)){
