@@ -194,10 +194,16 @@ function _runExclusive(cls, fn, opts){
      ただし通すのは **activeRecoveries() が exact ['MAT'] のとき**だけ。
      MAT + FIX721 / FIX587 / fix705(C1) の CONFLICT では従来どおり止める。 */
   var completionOwner = opts.recoveryCompletionOwner === true;
+  /* ★★裁定43: ambiguous commit の明示 reconcile 専用 owner。
+     barrier / generic MAT hold の越え方は completion owner と同一（exact ['MAT'] のときだけ）。
+     ★ただし isolationExempt は **絶対に付けない**。この経路は schema2 の server write 能力を
+       持つので、Gate B（slot isolation）は completion owner と違って免除できない。 */
+  var reconcileOwner = opts.ambiguousReconcileOwner === true;
+  var matGateOwner = completionOwner || reconcileOwner;
   var matOnly = (function(){ var a = activeRecoveries(); return a.length === 1 && a[0] === 'MAT'; })();
-  if (!targetWriteAllowed() && !(completionOwner && matOnly))
+  if (!targetWriteAllowed() && !(matGateOwner && matOnly))
     return Promise.resolve({ ran: false, reason: 'BOOT_RECOVERY_BARRIER_' + barrierState, policy: policy, wrote: 0 });
-  if (completionOwner && !matOnly)
+  if (matGateOwner && !matOnly)
     return Promise.resolve({ ran: false, reason: 'MULTI_RECOVERY_CONFLICT', policy: policy, wrote: 0,
                              active: activeRecoveries(), journalsKept: true });
   /* ★★裁定39 BLOCKER #9 = C1_STALE_CONTEXT_MAT_ADMISSION:
@@ -214,7 +220,7 @@ function _runExclusive(cls, fn, opts){
        正規 commitSchema2() 自身まで殺してしまう。正規 materialization transaction だけを
        この generic MAT hold の例外にする（dedicated named entry・下の runMaterialization）。
        public runExclusive からは materializationOwner を渡せない（isolationExempt と同じ思想）。 */
-  if (matRecoveryActive() && opts.materializationOwner !== true && !completionOwner)
+  if (matRecoveryActive() && opts.materializationOwner !== true && !matGateOwner)
     return Promise.resolve({ ran: false, reason: 'MATERIALIZATION_RECONCILE_REQUIRED',
                              policy: policy, wrote: 0, journalsKept: true, autoResume: false });
   var locks = locksApi();
@@ -514,6 +520,11 @@ window.__v292DfixGWS = {
      ・2 tab 同時 release を既存 shared lock で serialize する（新 lock は作らない） */
   runMaterializationRecoveryCompletion: function (fn){
     return _runExclusive('B', fn, { recoveryCompletionOwner: true, isolationExempt: true });
+  },
+  /* ★★裁定43: ambiguous COMMITTING の明示 reconcile 専用 entry。
+     ★isolationExempt を渡さない（server write 能力があるため Gate B PASS 必須）。 */
+  runMaterializationAmbiguousCommitReconcile: function (fn){
+    return _runExclusive('B', fn, { ambiguousReconcileOwner: true });
   },
   RELEASE_EPOCH_KEY: RELEASE_EPOCH_KEY,
   releaseEpochNow: releaseEpochNow,

@@ -127,6 +127,26 @@
   function journalSet(j){ return lss(JOURNAL_KEY, JSON.stringify(j)); }
   function journalClear(){ return lsr(JOURNAL_KEY); }
 
+  /* ═══════════════════════════════════════════════════════════════════
+     ★★裁定43 PREPARED MID BINDING — canonical mid の生成式は **ここ 1 箇所だけ**。
+     commit と reconcile で式を複製しない。両者とも journal.preparedCanonicalMid を使い、
+     この関数は「その値が prepared 値と整合しているか」を検証するためだけに再計算する。
+     ═══════════════════════════════════════════════════════════════════ */
+  function canonicalMid(storyId, preparedRev, preparedHash){
+    if (typeof storyId !== 'string' || !storyId) return null;
+    if (typeof preparedRev !== 'number' || !isFinite(preparedRev)) return null;
+    if (typeof preparedHash !== 'string' || !preparedHash) return null;
+    return 'f750:canon:' + storyId + ':' + preparedRev + ':' + preparedHash;
+  }
+  /* journal に保存された mid が、同じ journal の prepared 値から導ける値と exact 一致するか。
+     不一致（欠落・改変・式ズレ）は必ず write0 で止める。 */
+  function canonicalMidBindingOk(j){
+    if (!j || j.__corrupt) return false;
+    if (typeof j.preparedCanonicalMid !== 'string' || !j.preparedCanonicalMid) return false;
+    var expect = canonicalMid(j.storyId, j.preparedServerRev, j.preparedServerHash);
+    return expect !== null && j.preparedCanonicalMid === expect;
+  }
+
   /* ---------------- server 実状態の分類（唯一の authority） ----------------
      ★journal を信用して続きを書かない。分類は必ず fresh getstory の結果から行う。 */
   function classify(g){
@@ -268,19 +288,19 @@
 
   /* ---------------- STATE C: canonical schema1 → canonical schema2 ----------------
      ★ここだけが不可逆。commitSchema2() からしか呼ばれない。 */
-  function stepCanonicalWrite(storyId, ctx, fresh, record){
+  /* ★★裁定43: putcanonical の payload は **journal binding からのみ**組み立てる。
+     ここで fresh server state からも current runtime BUILD からも値を作らない。
+     req = { storyId, expectedRev, expectedHash, mid, record, build } */
+  function stepCanonicalWrite(req){
     return new Promise(function(resolve){
       var F = f697();
       if (!F || typeof F.putCanonicalOnce !== 'function') return resolve(refuse('NO_PUTCANONICAL_PATH'));
-      /* ★expectedRev / expectedHash は **直前の fresh readback 値のみ**。
-         journal の値は「prepared 値と一致するか」の検査にだけ使い、expected には fresh を渡す。 */
-      var mid = 'f750:canon:' + storyId + ':' + fresh.rev + ':' + fresh.serverHash;
       /* ★fix697 契約: cb(result, errorCode) */
-      F.putCanonicalOnce({ id: storyId, expectedRev: fresh.rev, expectedHash: fresh.serverHash,
-                           record: record, mid: mid, clientMeta: { build: BUILD } },
+      F.putCanonicalOnce({ id: req.storyId, expectedRev: req.expectedRev, expectedHash: req.expectedHash,
+                           record: req.record, mid: req.mid, clientMeta: { build: req.build } },
         function(r, errCode){
           resolve({ err: errCode || null, status: r ? r.status : null, j: r ? r.j : null,
-                    builtTitle: record.title });
+                    builtTitle: req.record.title });
         });
     });
   }
@@ -395,6 +415,7 @@
                 lastVerifiedRev: g0.absent ? null : g0.rev,
                 lastVerifiedHash: g0.absent ? null : g0.serverHash,
                 preparedServerRev: null, preparedServerHash: null, preparedSchema2RecordHash: null,
+                preparedCanonicalMid: null,          /* ★裁定43 */
                 startedAt: ctx.startedAt };
       if (!journalSet(j)) return refuse('JOURNAL_WRITE_FAILED');
 
@@ -463,16 +484,23 @@
          ★ここで server へは 1 バイトも送らない。 */
       return buildSchema2WithHash(storyId, ctx.deps).then(function(b){
         if (b.error) return holdWith(j, b.error, b.detail || null, steps, ctx);
+        /* ★★裁定43: ここで canonical mid を **固定**する。以後 commit も reconcile も
+           この値を使い、fresh server state から mid を再生成しない。 */
+        var pmid = canonicalMid(storyId, g.rev, g.serverHash);
+        if (!pmid) return holdWith(j, 'PREPARED_MID_BUILD_FAILED',
+                                   { rev: g.rev, hash: g.serverHash }, steps, ctx);
         j.phase = PHASE.READY_FOR_SCHEMA2;
         j.preparedServerRev = g.rev;
         j.preparedServerHash = g.serverHash;
         j.preparedSchema2RecordHash = b.recordHash;
+        j.preparedCanonicalMid = pmid;
         j.preparedAt = Date.now();
         if (!journalSet(j)) return refuse('JOURNAL_WRITE_FAILED');
         var ready = { ok: true, ran: true, wrote: steps.length, mutated: steps.length > 0,
                       code: 'READY_FOR_SCHEMA2', state: state, steps: steps, server: g,
                       snapshotId: ctx.snapshotId,
-                      prepared: { rev: g.rev, hash: g.serverHash, recordHash: b.recordHash } };
+                      prepared: { rev: g.rev, hash: g.serverHash, recordHash: b.recordHash,
+                                  canonicalMid: pmid, build: j.build } };
         note(ready); return ready;
       });
     }
@@ -496,9 +524,16 @@
       return Promise.resolve(refuse('REFUSED_JOURNAL_STORY_MISMATCH', { journal: j0.storyId, target: storyId }));
     if (j0.phase !== PHASE.READY_FOR_SCHEMA2 && j0.phase !== PHASE.COMMITTING_SCHEMA2)
       return Promise.resolve(refuse('REFUSED_NOT_READY', { phase: j0.phase }));
-    if (j0.preparedServerRev == null || !j0.preparedServerHash || !j0.preparedSchema2RecordHash)
+    if (j0.preparedServerRev == null || !j0.preparedServerHash || !j0.preparedSchema2RecordHash
+        || !j0.preparedCanonicalMid || !j0.build)
       return Promise.resolve(refuse('REFUSED_INCOMPLETE_BINDING', {
-        rev: j0.preparedServerRev, hash: !!j0.preparedServerHash, recordHash: !!j0.preparedSchema2RecordHash }));
+        rev: j0.preparedServerRev, hash: !!j0.preparedServerHash, recordHash: !!j0.preparedSchema2RecordHash,
+        canonicalMid: !!j0.preparedCanonicalMid, build: !!j0.build }));
+    /* ★★裁定43: mid は journal 由来。式との exact 一致を commit 前に検証する。 */
+    if (!canonicalMidBindingOk(j0))
+      return Promise.resolve(refuse('REFUSED_PREPARED_MID_MISMATCH', {
+        stored: j0.preparedCanonicalMid || null,
+        expected: canonicalMid(j0.storyId, j0.preparedServerRev, j0.preparedServerHash) }));
     var ctx = mkCtx(opts);
     ctx.snapshotId = j0.snapshotId || null;
     /* ★同じ GWS lock を **新規取得**する（prepare 終了から commit まで保持しない）。 */
@@ -514,6 +549,11 @@
       return Promise.resolve(refuse('REFUSED_JOURNAL_STORY_MISMATCH', { journal: j.storyId, target: storyId }));
     if (j.phase !== PHASE.READY_FOR_SCHEMA2 && j.phase !== PHASE.COMMITTING_SCHEMA2)
       return Promise.resolve(refuse('REFUSED_NOT_READY', { phase: j.phase }));
+    /* ★★裁定43: lock 内でも mid binding を再検証（lock 外で journal が差し替わり得る）。 */
+    if (!canonicalMidBindingOk(j) || !j.build)
+      return Promise.resolve(refuse('REFUSED_PREPARED_MID_MISMATCH', {
+        stored: j.preparedCanonicalMid || null, build: j.build || null,
+        expected: canonicalMid(j.storyId, j.preparedServerRev, j.preparedServerHash) }));
     /* ---- 1) current document story 再確認（lock 取得までに切替わっている可能性）---- */
     if (docStoryId() !== storyId)
       return Promise.resolve(refuse('REFUSED_SCOPE_MISMATCH', { documentStory: docStoryId(), target: storyId }));
@@ -565,9 +605,32 @@
                             freshPrefix: String(b.recordHash).slice(0, 12) }, ctx);
 
         /* ---- 5) ★ここだけが不可逆。putcanonical を **exactly 1 回**。---- */
-        j.phase = PHASE.COMMITTING_SCHEMA2; j.committingAt = Date.now(); journalSet(j);
+        /* ★★裁定43: expectedRev / expectedHash / mid / build はすべて **journal 由来**。
+           fresh 値からは作らない。fresh との一致は上の 3) で既に検証済みなので、
+           journal 由来にしても normal commit の送信内容は従来と同一（parity）。 */
+        /* ═══ ★★裁定44 BLOCKER #11 = C1_COMMIT_INTENT_DURABILITY ═══
+           不可逆 putcanonical を送る **前** に COMMITTING journal が durable であることを必須化する。
+             persist → fresh readback exact → only then putcanonical
+           これで「persisted phase < COMMITTING ⇒ putcanonical attempt 0」が正式契約になり、
+           safe abandon の判断を phase に依存させられる（裁定44）。
+           ★journalSet の戻り値を無視して送信してはならない。
+           ★readback は 8 フィールド exact（commitIntentIdentity）。 */
+        j.phase = PHASE.COMMITTING_SCHEMA2; j.committingAt = Date.now();
+        var want = commitIntentIdentity(j);
+        if (!journalSet(j))
+          return refuseNotSent('REFUSED_COMMITTING_JOURNAL_PERSIST_FAILED',
+                               { reason: 'JOURNAL_SET_FAILED', phase: PHASE.COMMITTING_SCHEMA2 });
+        var back = journal();
+        if (!back || back.__corrupt || commitIntentIdentity(back) !== want)
+          return refuseNotSent('REFUSED_COMMITTING_JOURNAL_PERSIST_FAILED',
+                               { reason: 'READBACK_MISMATCH',
+                                 persistedPhase: back && !back.__corrupt ? (back.phase || null) : null,
+                                 corrupt: !!(back && back.__corrupt) });
         var steps = [];
-        return stepCanonicalWrite(storyId, ctx, g, b.record).then(function(w){
+        var req = { storyId: storyId, expectedRev: j.preparedServerRev,
+                    expectedHash: j.preparedServerHash, mid: j.preparedCanonicalMid,
+                    record: b.record, build: j.build };
+        return stepCanonicalWrite(req).then(function(w){
           if (w && w.ok === false) return holdWith(j, 'CANONICAL_WRITE_REFUSED', w, steps, ctx);
           /* ★★裁定36 BLOCKER #7: ここから先は putcanonical を **送信済み**。
              以降の HOLD はすべて holdAfterWrite を通し、wrote:0 / mutated:false と断定しない。 */
@@ -646,6 +709,15 @@
               code: 'HOLD', hold: code,
               detail: detail, steps: steps, journalRetained: true, snapshotId: ctx.snapshotId };
     note(h); return Promise.resolve(h);
+  }
+  /* ★★裁定44 BLOCKER #11: server へ 1 バイトも送っていないことが確実な refuse。
+     journal へは書かない（そもそも journal 書込が失敗しているケースで使うため）。 */
+  function refuseNotSent(code, detail){
+    var r = { ok: false, ran: true, wrote: 0, mutated: false,
+              serverWriteAttempted: false, serverMutationState: null,
+              authoritativeReadbackRequired: false,
+              code: code, detail: detail || null, journalRetained: true, snapshotRetained: true };
+    note(r); return r;
   }
   /* commit の precondition 不成立（★server へ 1 バイトも送っていない）*/
   function holdSync(j, code, detail, ctx){
@@ -959,6 +1031,222 @@
     });
   }
 
+  /* ═══════════════════════════════════════════════════════════════════
+     ★★裁定43 C1_AMBIGUOUS_COMMIT_EXPLICIT_RECONCILE_GATE
+     reconcileAmbiguousCommit() — 「putcanonical を送ったかもしれないが server はまだ
+     schema1」という COMMITTING_SCHEMA2 の曖昧状態を、**元とまったく同じ 1 発**として
+     もう一度送り直せるかを判定し、条件が全部揃ったときだけ exactly 1 回だけ送る。
+
+     ★これは retry ではない。Worker v39 監査（裁定42/43）で確定した契約に依存する:
+       ・idempotency key は (u, mid)。op と reqHash(pc1:sid:rev:hash) は validator。
+       ・reqHash は record 本体を **含まない** → same-mid different-record を Worker は
+         検出できず古い成功応答を replay する。よって record binding は client 側の責務。
+       ・noop 判定（server hash == 再構成 hash）は CAS より **前**。したがって既に schema2 なら
+         idem の生死に関わらず mutation 0。
+     ★journal は絶対に clear しない。epoch も bump しない。snapshot も消さない。
+       local release は completeAppliedRecovery() のまま（1 API に混ぜない）。
+     ★auto retry 0 / auto resume 0 / 2 回目送信 0。
+     ═══════════════════════════════════════════════════════════════════ */
+  var RECONCILE = {
+    ALREADY_APPLIED_CANDIDATE:   'ALREADY_APPLIED_CANDIDATE',
+    RECONCILED_APPLIED_CANDIDATE:'RECONCILED_APPLIED_CANDIDATE',
+    REFUSED_NO_JOURNAL:          'REFUSED_NO_JOURNAL',
+    REFUSED_JOURNAL_CORRUPT:     'REFUSED_JOURNAL_CORRUPT',
+    REFUSED_PHASE_NOT_COMMITTING:'REFUSED_PHASE_NOT_COMMITTING',
+    REFUSED_STORY_MISMATCH:      'REFUSED_STORY_MISMATCH',
+    REFUSED_INCOMPLETE_BINDING:  'REFUSED_INCOMPLETE_BINDING',
+    REFUSED_PREPARED_MID_MISMATCH:'REFUSED_PREPARED_MID_MISMATCH',
+    REFUSED_SNAPSHOT_UNVERIFIED: 'REFUSED_SNAPSHOT_UNVERIFIED',
+    REFUSED_BUILD_FAILED:        'REFUSED_BUILD_FAILED',
+    REFUSED_PREPARED_RECORD_HASH_MISMATCH:'REFUSED_PREPARED_RECORD_HASH_MISMATCH',
+    REFUSED_READ_UNAVAILABLE:    'REFUSED_READ_UNAVAILABLE',
+    REFUSED_SERVER_STATE_MISMATCH:'REFUSED_SERVER_STATE_MISMATCH',
+    REFUSED_JOURNAL_CHANGED_DURING_RECONCILE:'REFUSED_JOURNAL_CHANGED_DURING_RECONCILE',
+    REFUSED_NO_RECONCILE_PATH:   'REFUSED_NO_RECONCILE_PATH',
+    REFUSED_RECONCILE_LOCK_HOLD: 'REFUSED_RECONCILE_LOCK_HOLD',
+    REFUSED_NO_PUTCANONICAL_PATH:'REFUSED_NO_PUTCANONICAL_PATH',
+    REFUSED_NOT_SENT:            'REFUSED_NOT_SENT',
+    HOLD_IDEM_PROCESSING:        'HOLD_IDEM_PROCESSING',
+    HOLD_RECONCILE_WRITE_UNKNOWN:'HOLD_RECONCILE_WRITE_UNKNOWN',
+    HOLD_RECONCILE_REFUSED:      'HOLD_RECONCILE_REFUSED',
+    HOLD_POST_WRITE_READ_FAILED: 'HOLD_POST_WRITE_READ_FAILED',
+    HOLD_NOT_OBSERVED:           'HOLD_NOT_OBSERVED'
+  };
+  /* ★fix697.putCanonicalOnce / postSaveOnce が **fetch より前**に返す error code（逐語）。
+     この集合だけは「送信されていない」ことが production 契約から確定できる。 */
+  var PRESEND_ERRORS = { BAD_PAYLOAD: true, BAD_STORY_ID: true, BAD_RECORD: true,
+                         BAD_EXPECTED_REV: true, BAD_EXPECTED_HASH: true, BAD_MID: true,
+                         NOT_LOGGED_IN: true };
+  /* ★★裁定43/44 が列挙した 8 フィールド exact の journal identity。
+     ・裁定43: reconcile の server write 直前 race 検出
+     ・裁定44 BLOCKER #11: commit の COMMITTING durable readback 照合
+     両者で同じ契約を共有する（式を複製しない）。 */
+  function commitIntentIdentity(j){
+    if (!j || j.__corrupt) return null;
+    return [j.storyId, j.phase, j.snapshotId,
+            j.preparedServerRev, j.preparedServerHash, j.preparedSchema2RecordHash,
+            j.preparedCanonicalMid, j.build].join('\x1f');
+  }
+  /* server へ 1 バイトも送っていない refuse。wrote:0 / mutated:false は真実。 */
+  function recoResult(code, extra){
+    var r = { code: code, ok: false, ran: true, wrote: 0, mutated: false,
+              serverWriteAttempted: false, serverMutationState: null,
+              authoritativeReadbackRequired: false,
+              completionRequired: false, autoResume: false,
+              journalRetained: true, journalCleared: false, snapshotRetained: true };
+    if (extra) for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) r[k] = extra[k];
+    note(r); return r;
+  }
+  /* ★送信後。wrote:0 / mutated:false を「server mutation 無し」の証拠として返さない。 */
+  function recoAfterWrite(j, code, mutState, extra){
+    var applied = (mutState === 'APPLIED');
+    j.hold = code; j.holdAt = Date.now();
+    j.serverWriteAttempted = true; j.serverMutationState = mutState;
+    journalSet(j);
+    var r = { code: code, ok: false, ran: true,
+              wrote: applied ? 1 : null,
+              mutated: applied ? true : null,
+              serverWriteAttempted: true,
+              serverMutationState: mutState,
+              authoritativeReadbackRequired: !applied,
+              completionRequired: applied,
+              autoResume: false,
+              journalRetained: true, journalCleared: false, snapshotRetained: true };
+    if (extra) for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) r[k] = extra[k];
+    note(r); return r;
+  }
+
+  function reconcileAmbiguousCommit(){
+    var j0 = journal();
+    if (!j0) return Promise.resolve(recoResult(RECONCILE.REFUSED_NO_JOURNAL));
+    if (j0.__corrupt) return Promise.resolve(recoResult(RECONCILE.REFUSED_JOURNAL_CORRUPT));
+    var sid = j0.storyId;
+    if (!sid || typeof sid !== 'string')
+      return Promise.resolve(recoResult(RECONCILE.REFUSED_JOURNAL_CORRUPT, { detail: { reason: 'NO_STORY_ID' } }));
+    /* ★許可 phase は COMMITTING_SCHEMA2 のみ。READY / PREPARING 等からは commit させない。 */
+    if (j0.phase !== PHASE.COMMITTING_SCHEMA2)
+      return Promise.resolve(recoResult(RECONCILE.REFUSED_PHASE_NOT_COMMITTING,
+        { storyId: sid, phase: j0.phase || null }));
+    var dk = docStoryId();
+    if (dk !== sid)
+      return Promise.resolve(recoResult(RECONCILE.REFUSED_STORY_MISMATCH,
+        { storyId: sid, detail: { documentStory: dk } }));
+    if (j0.preparedServerRev == null || !j0.preparedServerHash || !j0.preparedSchema2RecordHash
+        || !j0.preparedCanonicalMid || !j0.build)
+      return Promise.resolve(recoResult(RECONCILE.REFUSED_INCOMPLETE_BINDING,
+        { storyId: sid, detail: { rev: j0.preparedServerRev, hash: !!j0.preparedServerHash,
+                                  recordHash: !!j0.preparedSchema2RecordHash,
+                                  canonicalMid: !!j0.preparedCanonicalMid, build: !!j0.build } }));
+    /* ★mid は journal 由来。式との exact 一致を server read より前に検証する。 */
+    if (!canonicalMidBindingOk(j0))
+      return Promise.resolve(recoResult(RECONCILE.REFUSED_PREPARED_MID_MISMATCH,
+        { storyId: sid, detail: { stored: j0.preparedCanonicalMid,
+            expected: canonicalMid(j0.storyId, j0.preparedServerRev, j0.preparedServerHash) } }));
+    var id0 = commitIntentIdentity(j0);
+    var snap = snapshotState(j0.snapshotId || null);
+    if (!(snap.present && snap.verifyOk && snap.liveMatches))
+      return Promise.resolve(recoResult(RECONCILE.REFUSED_SNAPSHOT_UNVERIFIED,
+        { storyId: sid, snapshot: snap }));
+
+    return freshGetStory(sid).then(function(g){
+      var base = { storyId: sid, phase: j0.phase, snapshot: snap,
+                   binding: { rev: j0.preparedServerRev,
+                              hashPrefix: String(j0.preparedServerHash).slice(0, 12),
+                              recordHashPrefix: String(j0.preparedSchema2RecordHash).slice(0, 12),
+                              mid: j0.preparedCanonicalMid, build: j0.build } };
+      if (g.error)
+        return recoResult(RECONCILE.REFUSED_READ_UNAVAILABLE,
+          Object.assign(base, { server: { error: g.error, status: g.status || null,
+                                          errorCode: g.errorCode || null } }));
+      var st = classify(g);
+      base.server = { state: st, rev: g.rev == null ? null : g.rev, serverHash: g.serverHash || null,
+                      authority: g.authority || null, schema: g.schema == null ? null : g.schema,
+                      deleted: !!g.deleted };
+      /* ---- SERVER 既に schema2 → putcanonical 0。journal も snapshot もそのまま。 ---- */
+      if (st === STATE.CANONICAL_S2 && g.deleted !== true)
+        return recoResult(RECONCILE.ALREADY_APPLIED_CANDIDATE,
+          Object.assign(base, { completionRequired: true }));
+      /* ---- SERVER canonical schema1 exact のときだけ resend 候補 ---- */
+      if (st !== STATE.CANONICAL_S1 || g.deleted === true
+          || g.rev !== j0.preparedServerRev || g.serverHash !== j0.preparedServerHash)
+        return recoResult(RECONCILE.REFUSED_SERVER_STATE_MISMATCH,
+          Object.assign(base, { expected: { state: STATE.CANONICAL_S1, rev: j0.preparedServerRev,
+                                            hashPrefix: String(j0.preparedServerHash).slice(0, 12) } }));
+      /* ---- current local から record を build し直して prepared hash と exact 一致するか ---- */
+      return buildSchema2WithHash(sid, mkCtx({}).deps).then(function(b){
+        if (b.error)
+          return recoResult(RECONCILE.REFUSED_BUILD_FAILED, Object.assign(base, { detail: b }));
+        if (b.recordHash !== j0.preparedSchema2RecordHash)
+          return recoResult(RECONCILE.REFUSED_PREPARED_RECORD_HASH_MISMATCH,
+            Object.assign(base, { preparedPrefix: String(j0.preparedSchema2RecordHash).slice(0, 12),
+                                  freshPrefix: String(b.recordHash).slice(0, 12) }));
+        var G = gws();
+        if (!G || typeof G.runMaterializationAmbiguousCommitReconcile !== 'function')
+          return recoResult(RECONCILE.REFUSED_NO_RECONCILE_PATH, base);
+        var F = f697();
+        if (!F || typeof F.putCanonicalOnce !== 'function')
+          return recoResult(RECONCILE.REFUSED_NO_PUTCANONICAL_PATH, base);
+        /* ★★server write は専用 GWS entry の中だけ。isolationExempt は渡さない。 */
+        return G.runMaterializationAmbiguousCommitReconcile(function(){
+          /* (a) server write 直前に journal identity を再確認 */
+          var j1 = journal();
+          if (!j1 || j1.__corrupt || commitIntentIdentity(j1) !== id0)
+            return recoResult(RECONCILE.REFUSED_JOURNAL_CHANGED_DURING_RECONCILE,
+              Object.assign(base, { detail: { after: j1 ? 'changed' : 'absent' } }));
+          /* (b) exact resend。payload はすべて journal binding 由来。exactly 1 回。 */
+          var req = { storyId: sid, expectedRev: j1.preparedServerRev,
+                      expectedHash: j1.preparedServerHash, mid: j1.preparedCanonicalMid,
+                      record: b.record, build: j1.build };
+          return stepCanonicalWrite(req).then(function(w){
+            var sent = { status: w ? (w.status || null) : null,
+                         errorCode: (w && w.j) ? (w.j.errorCode || null) : null };
+            base.sent = sent;
+            /* ★fix697 逐語: 下の code はすべて postSaveOnce の fetch より **前**で返る
+               ＝ request は 1 バイトも出ていない。ここだけは serverWriteAttempted:false が真実。
+               （NETWORK_FAILED は fetch 後なので含めない。） */
+            if (w && w.err && PRESEND_ERRORS[w.err] === true)
+              return recoResult(RECONCILE.REFUSED_NOT_SENT,
+                Object.assign(base, { detail: { errorCode: w.err } }));
+            /* ★★ここから先は「送信済みかもしれない」。2 回目送信は禁止。 */
+            if (w && w.err === 'NETWORK_FAILED')
+              return recoAfterWrite(j1, RECONCILE.HOLD_RECONCILE_WRITE_UNKNOWN, 'UNKNOWN',
+                Object.assign(base, { detail: { reason: 'NETWORK_FAILURE_AFTER_SEND' } }));
+            if (sent.errorCode === 'idem-processing')
+              return recoAfterWrite(j1, RECONCILE.HOLD_IDEM_PROCESSING, 'UNKNOWN',
+                Object.assign(base, { detail: { reason: 'SERVER_IDEM_PROCESSING', retry: false } }));
+            /* ★応答が何であっても fresh V2 read を **1 回だけ**。 */
+            return freshGetStory(sid).then(function(g3){
+              if (g3.error)
+                return recoAfterWrite(j1, RECONCILE.HOLD_POST_WRITE_READ_FAILED, 'UNKNOWN',
+                  Object.assign(base, { server3: { error: g3.error, status: g3.status || null,
+                                                   errorCode: g3.errorCode || null } }));
+              var s3 = classify(g3);
+              base.server3 = { state: s3, rev: g3.rev == null ? null : g3.rev,
+                               serverHash: g3.serverHash || null, deleted: !!g3.deleted };
+              if (s3 === STATE.CANONICAL_S2 && g3.deleted !== true)
+                /* ★journal keep / snapshot keep / epoch bump 0 / journal clear 0 /
+                   completeAppliedRecovery の自動 call 0。 */
+                return recoAfterWrite(j1, RECONCILE.RECONCILED_APPLIED_CANDIDATE, 'APPLIED',
+                  Object.assign(base, { code: RECONCILE.RECONCILED_APPLIED_CANDIDATE }));
+              if (w && w.ok === false)
+                return recoAfterWrite(j1, RECONCILE.HOLD_RECONCILE_REFUSED, 'NOT_OBSERVED',
+                  Object.assign(base, { detail: { reason: 'WRITE_REFUSED_AND_NOT_SCHEMA2' } }));
+              return recoAfterWrite(j1, RECONCILE.HOLD_NOT_OBSERVED, 'NOT_OBSERVED', base);
+            });
+          });
+        }).then(function(x){
+          if (!x || x.ran !== true)
+            return recoResult(RECONCILE.REFUSED_RECONCILE_LOCK_HOLD,
+              Object.assign(base, { detail: { reason: x && x.reason, policy: x && x.policy,
+                                              isolation: x && x.isolation,
+                                              active: x && x.active,
+                                              reloadRequired: !!(x && x.reloadRequired) } }));
+          return x.result;
+        });
+      });
+    });
+  }
+
   /* resume: 自動では絶対に走らない。明示呼び出しのみ。
      journal の phase は「どちらの段だったか」のヒントに過ぎず、
      続きの判断は必ず fresh getstory の結果から行う（prepare / commit と同一経路）。 */
@@ -985,6 +1273,10 @@
     RECOVERY: RECOVERY, recoveryStatus: recoveryStatus,
     /* ★裁定39: applied 済み journal だけを解消する狭い正式経路。自動実行 0 / server write 0。 */
     RELEASE: RELEASE, completeAppliedRecovery: completeAppliedRecovery,
+    /* ★裁定43: ambiguous COMMITTING を元と同一の 1 発として明示 reconcile する狭い正式経路。
+       journal clear / epoch bump / snapshot 削除は一切しない（local release は別 API）。 */
+    RECONCILE: RECONCILE, reconcileAmbiguousCommit: reconcileAmbiguousCommit,
+    canonicalMid: canonicalMid,
     journal: journal,
     journalClear: journalClear,
     status: function(){
