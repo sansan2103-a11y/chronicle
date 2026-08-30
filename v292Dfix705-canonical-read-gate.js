@@ -37,7 +37,7 @@
   'use strict';
   if (window.__v292Dfix705) return;                 /* 冪等（自 namespace のみ） */
   var TAG = '[v292Dfix705:canonical-read-gate]';
-  var BUILD = 'fix705+719merge+721gate+723auth+724flags+755v2read';
+  var BUILD = 'fix705+719merge+721gate+723auth+724flags+755v2read+755b';
   var TIMEOUT_MS = 25000;
   var APPLIED_KEY = 'v292Dfix705_applied';          /* ★sessionStorage（localStorage ではない） */
 
@@ -758,9 +758,20 @@
           return;
         }
         /* 突合 OK。fix697（hash 提供元）が来たら分類を始める */
+        /* ★fix755.2(実機 E2E で観測): fix743 は index の末尾近くで load されるため、
+           fix697 だけ待って分類を始めると schema2 の localHashV2 が
+           __v292DfixCC2 不在 → HASH_FAILED で誤 STOP する boot 競合がある。
+           schema は server を読むまで分からないので、schema1/2 共通で fix743 も待つ。
+           （fix743 は静的 script tag。万一 load しない場合は既存の bootN>120 で
+             STOP('HASH') し write-hold は維持される = fail-closed のまま。） */
         if (!classifyStarted && window.__v292Dfix697 &&
             typeof window.__v292Dfix697.contentHash === 'function' &&
-            typeof window.__v292Dfix697.getStoryV2Once === 'function') {
+            typeof window.__v292Dfix697.getStoryV2Once === 'function' &&
+            window.__v292DfixCC2 &&
+            typeof window.__v292DfixCC2.buildSchema2Record === 'function' &&
+            typeof window.__v292DfixCC2.buildWritePlan === 'function' &&
+            typeof window.__v292DfixCC2.validateServerRecord === 'function' &&
+            typeof window.__v292DfixCC2.keysFor === 'function') {
           classify(function(){});
           return;
         }
