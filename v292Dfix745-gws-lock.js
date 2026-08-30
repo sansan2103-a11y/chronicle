@@ -39,6 +39,15 @@ var C1_JOURNAL_KEY = 'v292Dfix705_hydrateTxn';   /* C1 専用journal（fix743契
    live prepare が構造的に実行できない（GWS_ACTIVATION_GAP_FOR_FIX750）。
    ★既存の CC2 / fix705 判定は 1 バイトも変えない。 */
 var MAT_JOURNAL_KEY = 'v292Dfix750_matTxn';       /* fix750 materialization journal */
+/* ★★裁定40 BLOCKER #10 = C1_POST_RELEASE_STALE_CONTEXT_REENTRY:
+     journal 存在中の stale tab は裁定39 で止まるようになったが、recovery completion で
+     matTxn を clear した瞬間、昔から開いている tab は matRecoveryActive()===false /
+     serializationRequired()===false へ**動的復帰**して、古い in-memory 状態のまま
+     writer を再開できてしまう。
+   ★対策: recovery release epoch。document は load 時の値を baseline として持ち、
+     transaction のたびに現在値と比較する。違えば MATERIALIZATION_RELOAD_REQUIRED。
+     fresh reload した document だけが新 epoch を baseline として受け入れられる。 */
+var RELEASE_EPOCH_KEY = 'v292Dfix750_recoveryReleaseEpoch';
 var CLASS = { A: 'REPLAYABLE_REMOTE_APPLY', B: 'RECOVERY_OR_DESTRUCTIVE',
               C: 'RECOMPUTABLE_PERSIST',   D: 'TURN_OR_USER_SEMANTIC' };
 var BUSY = { A: 'DROP_AND_REFETCH', B: 'HARD_HOLD_NO_WRITE',
@@ -46,6 +55,24 @@ var BUSY = { A: 'DROP_AND_REFETCH', B: 'HARD_HOLD_NO_WRITE',
 
 function lsGet(k){ try { return localStorage.getItem(k); } catch (e){ return null; } }
 function off(){ return lsGet('v292Dfix745Off') === '1'; }
+
+/* ★load 時に 1 回だけ読む。以後この document ではこの値が baseline（動的に更新しない）。 */
+var releaseEpochAtLoad = lsGet(RELEASE_EPOCH_KEY);
+function releaseEpochNow(){ return lsGet(RELEASE_EPOCH_KEY); }
+function releaseEpochStale(){ return releaseEpochNow() !== releaseEpochAtLoad; }
+/* ★epoch を進める。recovery completion からのみ呼ばれる（下の dedicated entry 内）。
+   成功したら新しい値を返し、書けなければ null を返す（journal は消さない＝fail-closed）。 */
+function bumpReleaseEpoch(){
+  var prev = lsGet(RELEASE_EPOCH_KEY);
+  var v = String(Date.now()) + '-' + Math.random().toString(36).slice(2, 10);
+  /* ★裁定41 EPOCH NON-REUSE: 生成値が旧値と同じなら fail-closed。再生成ループは作らない。 */
+  if (prev !== null && v === prev) return null;
+  try { localStorage.setItem(RELEASE_EPOCH_KEY, v); } catch (e){ return null; }
+  if (lsGet(RELEASE_EPOCH_KEY) !== v) return null;      /* 読み戻して確認 */
+  /* ★裁定41: 永続化後も old value と必ず異なることを明示確認。 */
+  if (prev !== null && lsGet(RELEASE_EPOCH_KEY) === prev) return null;
+  return v;
+}
 
 function locksApi(){
   try {
@@ -145,6 +172,15 @@ function _runExclusive(cls, fn, opts){
   opts = opts || {};
   var policy = BUSY[cls] || BUSY.D;
   var exempt = opts.isolationExempt === true;
+  /* ★★裁定40 BLOCKER #10: epoch の判定は **legacy bypass より前**。
+     recovery completion 後は serializationRequired() が false になるので、
+     bypass の後に見たのでは手遅れになる。
+     ★materializationOwner / recoveryCompletionOwner でも **免除しない**。
+       fresh reload だけが新しい baseline を受け取れる。 */
+  if (releaseEpochStale())
+    return Promise.resolve({ ran: false, reason: 'MATERIALIZATION_RELOAD_REQUIRED',
+                             policy: policy, wrote: 0, reloadRequired: true,
+                             epochAtLoad: releaseEpochAtLoad, epochNow: releaseEpochNow() });
   if (!serializationRequired()) return Promise.resolve({ ran: true, result: fn(null), serialized: false });
   /* ★裁定11 GATE2: C1 active 中に GWS の kill switch が立っている = 直列化できない。
      ここで fail-open にすると 59 ファイルの結線が switch 1 個で無効化される。
@@ -153,8 +189,34 @@ function _runExclusive(cls, fn, opts){
     return Promise.resolve({ ran: false, reason: 'GWS_SAFETY_DISABLED_HOLD', policy: policy, wrote: 0,
                              detail: 'C1 が active のまま v292Dfix745Off が立っています。'
                                    + 'GWS を切るには先に C1 を OFF にしてください' });
-  if (!targetWriteAllowed())            /* ★B-3: barrier PENDING/CONFLICT 中は開始禁止 */
+  /* ★★裁定40: recovery completion は barrier PENDING でも通す必要がある。
+     さもないと「recovery を解消する処理を recovery barrier 自身が永久に止める」循環になる。
+     ただし通すのは **activeRecoveries() が exact ['MAT'] のとき**だけ。
+     MAT + FIX721 / FIX587 / fix705(C1) の CONFLICT では従来どおり止める。 */
+  var completionOwner = opts.recoveryCompletionOwner === true;
+  var matOnly = (function(){ var a = activeRecoveries(); return a.length === 1 && a[0] === 'MAT'; })();
+  if (!targetWriteAllowed() && !(completionOwner && matOnly))
     return Promise.resolve({ ran: false, reason: 'BOOT_RECOVERY_BARRIER_' + barrierState, policy: policy, wrote: 0 });
+  if (completionOwner && !matOnly)
+    return Promise.resolve({ ran: false, reason: 'MULTI_RECOVERY_CONFLICT', policy: policy, wrote: 0,
+                             active: activeRecoveries(), journalsKept: true });
+  /* ★★裁定39 BLOCKER #9 = C1_STALE_CONTEXT_MAT_ADMISSION:
+       targetWriteAllowed() は **この document の barrierState** しか見ない。barrier は page load
+       時にしか走らないので、
+         Tab A を開く（matTxn 無し / barrier NOT_REQUIRED）
+         → Tab B が materialization を開始して matTxn を作る
+         → Tab B が crash（Web Lock は解放される）
+         → Tab A は reload していない
+       のとき Tab A の barrierState は NOT_REQUIRED のままで、normal writer が journal を
+       横から踏み越えられてしまう。reload に依存してはならない。
+     ★対策: transaction 開始のたびに **journal の存在を動的再確認**する（boot 時 cache 禁止）。
+     ★ただし「matTxn があれば全部止める」にはしない。それだと READY journal を持つ
+       正規 commitSchema2() 自身まで殺してしまう。正規 materialization transaction だけを
+       この generic MAT hold の例外にする（dedicated named entry・下の runMaterialization）。
+       public runExclusive からは materializationOwner を渡せない（isolationExempt と同じ思想）。 */
+  if (matRecoveryActive() && opts.materializationOwner !== true && !completionOwner)
+    return Promise.resolve({ ran: false, reason: 'MATERIALIZATION_RECONCILE_REQUIRED',
+                             policy: policy, wrote: 0, journalsKept: true, autoResume: false });
   var locks = locksApi();
   if (!locks) return Promise.resolve({ ran: false, reason: 'WEB_LOCKS_UNAVAILABLE', policy: policy, wrote: 0 });
   var got = false;
@@ -434,6 +496,30 @@ window.__v292DfixGWS = {
        再読取・検証してから mutation すること（fix587 validateDurableRecovery）。
      ★BUSY は queue しない。Class B の HARD_HOLD_NO_WRITE のまま次の resume 機会へ回す。 */
   runFix587Recovery: function (fn){ return _runExclusive('B', fn, { isolationExempt: true }); },
+  /* ★★裁定39: fix750 materialization 専用の狭い entry。
+     generic MAT hold（上の MATERIALIZATION_RECONCILE_REQUIRED）**だけ**を免除する。
+     ・generic bypass ではない。safetyDisabled / barrier / Web Locks / cross-context BUSY /
+       Gate B(SLOT_ISOLATION) は一切免除しない。
+     ・fix750 側の scope / snapshot / READY binding / server rev・hash / recordHash の
+       各 gate も従来どおり全て維持される（GWS は関与しない）。
+     ・新 lock 名は作らない（chronicle:cc2:materialization:v1 のみ）。
+     ・public runExclusive からこの option は渡せない。 */
+  runMaterialization: function (fn){ return _runExclusive('B', fn, { materializationOwner: true }); },
+  /* ★★裁定40: MAT recovery の検証・epoch 更新・journal clear **専用**の狭い entry。
+     ・schema2 write capability ではない（server write の免除は一切しない）
+     ・activeRecoveries() が exact ['MAT'] のときだけ barrier PENDING を通る
+     ・epoch mismatch / kill switch / Web Locks / cross-context BUSY は免除しない
+     ・generic public runExclusive からこの option は渡せない
+     ・recovery なので Gate B(SLOT_ISOLATION) のみ免除（fix587 recovery と同じ扱い）
+     ・2 tab 同時 release を既存 shared lock で serialize する（新 lock は作らない） */
+  runMaterializationRecoveryCompletion: function (fn){
+    return _runExclusive('B', fn, { recoveryCompletionOwner: true, isolationExempt: true });
+  },
+  RELEASE_EPOCH_KEY: RELEASE_EPOCH_KEY,
+  releaseEpochNow: releaseEpochNow,
+  releaseEpochAtLoad: function (){ return releaseEpochAtLoad; },
+  releaseEpochStale: releaseEpochStale,
+  bumpReleaseEpoch: bumpReleaseEpoch,
   /* Phase B: module-scope boot 入口 + 観測 */
   runBootRecovery: runBootRecovery,
   bootTrace: function (){ return bootTrace.slice(); },

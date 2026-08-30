@@ -46,7 +46,8 @@
 //     fix697 canonicalString      … 既存 stableStringify（binding hash 用。新 serializer を作らない）
 //     fix702 promoteForC1Materialization … fresh getstory → strict CAS → fresh readback
 //     fix743 buildSchema2Record   … schema2 record builder（title 正本は meta.name）
-//     fix745 GWS runTurnMutation  … chronicle:cc2:materialization:v1 で直列化
+//     fix745 GWS runMaterialization … chronicle:cc2:materialization:v1 で直列化
+//                                   （裁定39 の dedicated entry。generic MAT hold のみ免除）
 //     fix564 create/verify        … preimage snapshot
 //
 //   既定 OFF:
@@ -214,7 +215,10 @@
         var schema = (rec && rec.schema === 2) ? 2 : 1;
         resolve({ absent: false, rev: (typeof j.rev === 'number' ? j.rev : null),
                   serverHash: j.serverHash || null, authority: String(j.authority || 'shadow'),
-                  deleted: !!j.deleted, schema: schema, title: rec ? rec.title : null });
+                  deleted: !!j.deleted, schema: schema, title: rec ? rec.title : null,
+                  /* ★裁定39: release validation で server record 本体を照合するため保持する。
+                     ★分類（classify）には使わない。従来の metadata 判定は 1 ビットも変えない。 */
+                  record: rec });
       });
     });
   }
@@ -298,7 +302,9 @@
     var dk = docStoryId();
     if (dk !== storyId) return refuse('REFUSED_SCOPE_MISMATCH', { documentStory: dk, target: storyId });
     var G = gws();
-    if (!G || typeof G.runTurnMutation !== 'function') return refuse('REFUSED_NO_GWS');
+    /* ★裁定39: materialization は GWS の dedicated entry からのみ入る。
+       generic runTurnMutation は generic MAT hold に掛かるため使わない（fallback も作らない）。 */
+    if (!G || typeof G.runMaterialization !== 'function') return refuse('REFUSED_NO_GWS');
     var C = f743();
     if (!C || typeof C.buildSchema2Record !== 'function') return refuse('REFUSED_NO_BUILDER');
     var F = f697();
@@ -314,10 +320,14 @@
       snapshotId: null
     };
   }
-  /* GWS 直列化（既存 lock 名のみ・新規 lock を作らない） */
+  /* GWS 直列化（既存 lock 名のみ・新規 lock を作らない）
+     ★★裁定39: dedicated materialization entry を使う。
+       これが免除するのは generic MAT hold（MATERIALIZATION_RECONCILE_REQUIRED）**だけ**で、
+       safetyDisabled / boot barrier / Web Locks / cross-context BUSY / Gate B は従来どおり掛かる。
+       fix750 側の scope / snapshot / READY binding / server rev・hash / recordHash も全て維持。 */
   function inLock(fn){
     var G = gws();
-    return G.runTurnMutation(function(){
+    return G.runMaterialization(function(){
       /* ★legacy bypass 拒否: serializationRequired()===false のとき _runExclusive は
          lock を取らずに fn を呼ぶ。materialization を非直列で走らせない。 */
       if (typeof G.serializationRequired === 'function' && !G.serializationRequired())
@@ -752,6 +762,203 @@
     });
   }
 
+  /* ═══════════════════════════════════════════════════════════════════
+     ★★裁定39 C1_RECOVERY_RELEASE_GATE — completeAppliedRecovery()
+
+     「schema2 まで確かに書けたあとに落ちた」journal **だけ**を、狭い正式経路で解消する。
+     一般ユーザーに DevTools を触らせないための唯一の出口。
+
+     契約:
+       ・引数 0。対象は journal.storyId 固定（caller は対象を差し替えられない）。
+       ・自動実行 0（明示呼び出しのみ）。UI から journalClear を直接露出しない。
+       ・server write 0。snapshot 削除 0。
+       ・成功時のみ v292Dfix750_matTxn を **1 回だけ** removeItem。他の storage mutation 0。
+       ・NOT_APPLIED / PARTIAL / HARD_HOLD 系は **絶対に clear しない**
+         （C1_RECOVERY_NON_APPLIED_EXIT は別 Gate。auto resume / cancel rollback は作らない）。
+       ・成功しても同一 page でゲーム再開はしない（reloadRequired:true を返す）。
+
+     clear 条件（1 つでも欠けたら REFUSE / journal 保持）:
+       1. journal valid（parse 可・storyId あり）
+       2. documentStory === journal.storyId
+       3. fresh V2 read: authority canonical / schema 2 / deleted false
+       4. server.rev === preparedServerRev + 1
+       5. snapshot: present / verify PASS / liveMatches PASS
+       6. 現在の buildSchema2Record() hash === journal.preparedSchema2RecordHash
+       7. server schema2 record の client-owned（schema/title/deleted/body/sidecar）が
+          現在の rebuilt record と semantic exact
+       8. server-owned: id === storyId / turnCount === body.turns.length / snippet contract valid
+       9. ★async validation 中に journal がすり替わっていないこと
+          （開始時と clear 直前で transaction identity / binding を再照合） */
+  var RELEASE = {
+    COMPLETED:                              'RECOVERY_COMPLETED',
+    REFUSED_NO_JOURNAL:                     'REFUSED_NO_JOURNAL',
+    REFUSED_JOURNAL_CORRUPT:                'REFUSED_JOURNAL_CORRUPT',
+    REFUSED_STORY_MISMATCH:                 'REFUSED_STORY_MISMATCH',
+    REFUSED_NOT_APPLIED:                    'REFUSED_NOT_APPLIED',
+    REFUSED_READ_UNAVAILABLE:               'REFUSED_READ_UNAVAILABLE',
+    REFUSED_SERVER_REV_MISMATCH:            'REFUSED_SERVER_REV_MISMATCH',
+    REFUSED_SNAPSHOT_UNVERIFIED:            'REFUSED_SNAPSHOT_UNVERIFIED',
+    REFUSED_PREPARED_RECORD_HASH_MISMATCH:  'REFUSED_PREPARED_RECORD_HASH_MISMATCH',
+    REFUSED_RECOVERY_SERVER_RECORD_MISMATCH:'REFUSED_RECOVERY_SERVER_RECORD_MISMATCH',
+    REFUSED_JOURNAL_CHANGED_DURING_VALIDATION:'REFUSED_JOURNAL_CHANGED_DURING_VALIDATION',
+    REFUSED_BUILD_FAILED:                   'REFUSED_BUILD_FAILED',
+    /* ★裁定40 BLOCKER #10 */
+    REFUSED_NO_COMPLETION_PATH:             'REFUSED_NO_COMPLETION_PATH',
+    REFUSED_COMPLETION_LOCK_HOLD:           'REFUSED_COMPLETION_LOCK_HOLD',
+    REFUSED_RELEASE_EPOCH_WRITE_FAILED:     'REFUSED_RELEASE_EPOCH_WRITE_FAILED',
+    REFUSED_JOURNAL_CLEAR_FAILED:           'REFUSED_JOURNAL_CLEAR_FAILED'
+  };
+  function relResult(code, extra){
+    var ok = (code === RELEASE.COMPLETED);
+    var r = { code: code, completed: ok, journalCleared: ok, reloadRequired: ok,
+              ok: false, ran: true, wrote: 0, mutated: false,
+              serverWriteAttempted: false, autoResume: false,
+              journalRetained: !ok, snapshotRetained: true };
+    if (extra) for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) r[k] = extra[k];
+    note(r); return r;
+  }
+  /* journal の同一性（async 検証中のすり替え検出用）。値は hash ではなく binding そのもの。 */
+  function journalIdentity(j){
+    if (!j || j.__corrupt) return null;
+    return [j.storyId, j.phase, j.snapshotId, j.startedAt, j.preparedAt,
+            j.preparedServerRev, j.preparedServerHash, j.preparedSchema2RecordHash].join('\x1f');
+  }
+  /* client-owned フィールドの semantic exact 比較（key 順に依存しない） */
+  function semanticEqual(a, b){
+    if (a === b) return true;
+    if (a === null || b === null || a === undefined || b === undefined) return a === b;
+    var ta = Object.prototype.toString.call(a), tb = Object.prototype.toString.call(b);
+    if (ta !== tb) return false;
+    if (ta === '[object Array]'){
+      if (a.length !== b.length) return false;
+      for (var i = 0; i < a.length; i++) if (!semanticEqual(a[i], b[i])) return false;
+      return true;
+    }
+    if (ta === '[object Object]'){
+      var ka = Object.keys(a).sort(), kb = Object.keys(b).sort();
+      if (ka.length !== kb.length) return false;
+      for (var n = 0; n < ka.length; n++) if (ka[n] !== kb[n]) return false;
+      for (var m = 0; m < ka.length; m++) if (!semanticEqual(a[ka[m]], b[ka[m]])) return false;
+      return true;
+    }
+    return a === b;
+  }
+  function completeAppliedRecovery(){
+    var j0 = journal();
+    if (!j0) return Promise.resolve(relResult(RELEASE.REFUSED_NO_JOURNAL));
+    if (j0.__corrupt) return Promise.resolve(relResult(RELEASE.REFUSED_JOURNAL_CORRUPT));
+    var sid = j0.storyId;
+    if (!sid || typeof sid !== 'string')
+      return Promise.resolve(relResult(RELEASE.REFUSED_JOURNAL_CORRUPT, { detail: { reason: 'NO_STORY_ID' } }));
+    var dk = docStoryId();
+    if (dk !== sid)
+      return Promise.resolve(relResult(RELEASE.REFUSED_STORY_MISMATCH,
+        { storyId: sid, detail: { documentStory: dk } }));
+    if (j0.preparedServerRev == null || !j0.preparedSchema2RecordHash)
+      return Promise.resolve(relResult(RELEASE.REFUSED_JOURNAL_CORRUPT,
+        { storyId: sid, detail: { reason: 'INCOMPLETE_BINDING' } }));
+    var id0 = journalIdentity(j0);
+    var snap = snapshotState(j0.snapshotId || null);
+    /* 5. snapshot は server を読む前に判定できる */
+    if (!(snap.present && snap.verifyOk && snap.liveMatches))
+      return Promise.resolve(relResult(RELEASE.REFUSED_SNAPSHOT_UNVERIFIED, { storyId: sid, snapshot: snap }));
+
+    return freshGetStory(sid).then(function(g){
+      var base = { storyId: sid, phase: j0.phase || null, snapshot: snap };
+      if (g.error){
+        base.server = { error: g.error, status: g.status || null, errorCode: g.errorCode || null };
+        return relResult(RELEASE.REFUSED_READ_UNAVAILABLE, base);
+      }
+      var st = classify(g);
+      base.server = { state: st, rev: g.rev == null ? null : g.rev, serverHash: g.serverHash || null,
+                      authority: g.authority || null, schema: g.schema == null ? null : g.schema,
+                      deleted: !!g.deleted };
+      /* 3. applied 以外は絶対に clear しない */
+      if (st !== STATE.CANONICAL_S2 || g.deleted === true)
+        return relResult(RELEASE.REFUSED_NOT_APPLIED, base);
+      /* 4. rev は prepared+1 でなければならない（別 context の後続更新を弾く） */
+      if (g.rev !== (j0.preparedServerRev + 1))
+        return relResult(RELEASE.REFUSED_SERVER_REV_MISMATCH,
+          Object.assign(base, { expectedRev: j0.preparedServerRev + 1, actualRev: g.rev }));
+
+      /* 6. 現在の local から record を build し直して prepared hash と一致するか */
+      return buildSchema2WithHash(sid, mkCtx({}).deps).then(function(b){
+        if (b.error) return relResult(RELEASE.REFUSED_BUILD_FAILED, Object.assign(base, { detail: b }));
+        if (b.recordHash !== j0.preparedSchema2RecordHash)
+          return relResult(RELEASE.REFUSED_PREPARED_RECORD_HASH_MISMATCH,
+            Object.assign(base, { preparedPrefix: String(j0.preparedSchema2RecordHash).slice(0, 12),
+                                  freshPrefix: String(b.recordHash).slice(0, 12) }));
+        /* 7/8. server 上の schema2 record 本体と照合 */
+        var srv = g.record;
+        if (!srv || typeof srv !== 'object')
+          return relResult(RELEASE.REFUSED_RECOVERY_SERVER_RECORD_MISMATCH,
+            Object.assign(base, { detail: { reason: 'NO_SERVER_RECORD' } }));
+        var mine = b.record;
+        var clientOwned = ['schema', 'title', 'deleted', 'body', 'sidecar'];
+        var bad = null;
+        for (var i = 0; i < clientOwned.length; i++){
+          var k = clientOwned[i];
+          if (!semanticEqual(srv[k], mine[k])){ bad = k; break; }
+        }
+        if (bad)
+          return relResult(RELEASE.REFUSED_RECOVERY_SERVER_RECORD_MISMATCH,
+            Object.assign(base, { detail: { field: bad } }));
+        var turns = (mine.body && Object.prototype.toString.call(mine.body.turns) === '[object Array]')
+                    ? mine.body.turns.length : null;
+        if (srv.id !== sid || srv.turnCount !== turns || typeof srv.snippet !== 'string')
+          return relResult(RELEASE.REFUSED_RECOVERY_SERVER_RECORD_MISMATCH,
+            Object.assign(base, { detail: { serverOwned: { id: srv.id, turnCount: srv.turnCount,
+                                                           snippetType: typeof srv.snippet },
+                                            expect: { id: sid, turnCount: turns } } }));
+        /* ---- 9. finalization。★★裁定40 BLOCKER #10:
+             ここだけは **既存 shared Web Lock で serialize** する（2 tab 同時 release の CAS）。
+             新 lock は作らない。GWS の dedicated completion entry を使う。
+             lock 内の順序は厳格に:
+               (a) journal identity を再確認（async 検証中のすり替え検出）
+               (b) release epoch を **先に**進める
+               (c) epoch 書込の成功を読み戻して確認
+               (d) その後にだけ matTxn を clear
+             journal を先に消すのは禁止。epoch 書込に失敗したら journal を残す（fail-closed）ので、
+             全 tab は引き続き MAT hold のまま。epoch が進めば、既存 tab は
+             MATERIALIZATION_RELOAD_REQUIRED になり、journal clear 後も古い状態で動けない。 */
+        var G = gws();
+        if (!G || typeof G.runMaterializationRecoveryCompletion !== 'function')
+          return relResult(RELEASE.REFUSED_NO_COMPLETION_PATH, base);
+        return G.runMaterializationRecoveryCompletion(function(){
+          /* (a) */
+          var j1 = journal();
+          if (!j1 || j1.__corrupt || journalIdentity(j1) !== id0)
+            return relResult(RELEASE.REFUSED_JOURNAL_CHANGED_DURING_VALIDATION,
+              Object.assign(base, { detail: { before: id0 ? 'present' : null,
+                                              after: j1 ? 'changed' : 'absent' } }));
+          /* (b)(c) epoch を先に進める。読み戻して確認できなければ journal は消さない。 */
+          var epoch = (typeof G.bumpReleaseEpoch === 'function') ? G.bumpReleaseEpoch() : null;
+          if (!epoch)
+            return relResult(RELEASE.REFUSED_RELEASE_EPOCH_WRITE_FAILED,
+              Object.assign(base, { detail: { reason: 'EPOCH_NOT_PERSISTED' } }));
+          /* (d) ここだけが journal の mutation。exactly once。 */
+          var cleared = journalClear();
+          if (!cleared || journal() !== null)
+            /* epoch は進んでいるので全 tab は reload-required。journal も残る＝safe hold。 */
+            return relResult(RELEASE.REFUSED_JOURNAL_CLEAR_FAILED,
+              Object.assign(base, { releaseEpoch: epoch, reloadRequired: true,
+                                    detail: { reason: 'EPOCH_BUMPED_JOURNAL_KEPT' } }));
+          return relResult(RELEASE.COMPLETED,
+            Object.assign(base, { journalClearedOk: true, releaseEpoch: epoch,
+                                  verified: { serverRev: g.rev, serverHash: g.serverHash,
+                                              recordHash: b.recordHash, snapshotId: j0.snapshotId || null } }));
+        }).then(function(x){
+          if (!x || x.ran !== true)
+            return relResult(RELEASE.REFUSED_COMPLETION_LOCK_HOLD,
+              Object.assign(base, { detail: { reason: x && x.reason, policy: x && x.policy,
+                                              active: x && x.active,
+                                              reloadRequired: !!(x && x.reloadRequired) } }));
+          return x.result;
+        });
+      });
+    });
+  }
+
   /* resume: 自動では絶対に走らない。明示呼び出しのみ。
      journal の phase は「どちらの段だったか」のヒントに過ぎず、
      続きの判断は必ず fresh getstory の結果から行う（prepare / commit と同一経路）。 */
@@ -776,6 +983,8 @@
     resume: resume,
     /* ★裁定37: crash/reload 後の read-only 分類。server write 0 / storage write 0 / auto-* 0。 */
     RECOVERY: RECOVERY, recoveryStatus: recoveryStatus,
+    /* ★裁定39: applied 済み journal だけを解消する狭い正式経路。自動実行 0 / server write 0。 */
+    RELEASE: RELEASE, completeAppliedRecovery: completeAppliedRecovery,
     journal: journal,
     journalClear: journalClear,
     status: function(){
