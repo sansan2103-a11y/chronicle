@@ -646,6 +646,112 @@
     note(h); return h;
   }
 
+  /* ═══════════════════════════════════════════════════════════════════
+     ★★裁定37 FIX750_CRASH_BOOT_RECOVERY_GATE — recoveryStatus()
+     crash / reload で matTxn が残ったときの **分類だけ**を行う read-only 診断。
+
+     契約（この関数は絶対に守る）:
+       ・server へ write を 1 バイトも送らない（read は fix697.getStoryV2Once のみ）
+       ・localStorage を 1 バイトも書かない / journal を clear しない / snapshot を消さない
+       ・auto commit / auto retry / auto resume / auto rollback / auto cleanup を **しない**
+       ・journal だけで結論を出さない。必ず fresh server truth と突き合わせる
+         （ただし journal 自体が壊れている / story が違う場合は server を読む前に HARD_HOLD）
+       ・この結果が GWS barrier を自動で開けることは無い（barrier は PENDING のまま）
+       ・caller は引数を渡せない。対象は journal.storyId のみ
+       ・fix750On / fix750Off の状態に関わらず動く（journal の寿命 > kill switch）
+
+     戻り値: { verdict, ok:false, ran:true, wrote:0, mutated:false,
+               serverWriteAttempted:false, autoResume:false, journalRetained:true,
+               phase, storyId, server, snapshot, localCompletionEligible, detail? } */
+  var RECOVERY = {
+    NO_JOURNAL:                    'NO_JOURNAL',
+    HARD_HOLD_JOURNAL_CORRUPT:     'HARD_HOLD_JOURNAL_CORRUPT',
+    HARD_HOLD_STORY_MISMATCH:      'HARD_HOLD_STORY_MISMATCH',
+    HOLD_READ_UNAVAILABLE:         'HOLD_READ_UNAVAILABLE',
+    ALREADY_APPLIED_CANDIDATE:     'ALREADY_APPLIED_CANDIDATE',
+    HOLD_AMBIGUOUS_NOT_APPLIED:    'HOLD_AMBIGUOUS_NOT_APPLIED',
+    HOLD_PREPARED:                 'HOLD_PREPARED',
+    HOLD_PARTIAL_PREPARE:          'HOLD_PARTIAL_PREPARE',
+    HOLD_PARTIAL_OR_FAILED_PREPARE:'HOLD_PARTIAL_OR_FAILED_PREPARE'
+  };
+  function recResult(verdict, extra){
+    var r = { verdict: verdict, ok: false, ran: true, wrote: 0, mutated: false,
+              serverWriteAttempted: false, autoResume: false, journalRetained: true };
+    if (extra) for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) r[k] = extra[k];
+    note(r); return r;
+  }
+  /* snapshot の健全性（read-only）。fix564.verify は snapshot コピーの自己整合しか見ないので、
+     live local key との独立比較もここで行う（裁定32 で確定した 4 番目の乖離への対処）。 */
+  function snapshotState(snapshotId){
+    var out = { id: snapshotId || null, present: false, verifyOk: false, liveMatches: false };
+    if (!snapshotId) return out;
+    var raw = lsg(snapshotId);
+    if (raw == null) return out;
+    out.present = true;
+    var S = f564();
+    if (S && typeof S.verify === 'function'){
+      try { var v = S.verify(snapshotId); out.verifyOk = !!(v && v.ok); out.verify = v; }
+      catch(e){ out.verifyOk = false; out.verifyThrew = String(e && e.message || e); }
+    }
+    var man = null; try { man = JSON.parse(raw); } catch(e){ out.manifestCorrupt = true; return out; }
+    if (!man || !man.parts){ out.manifestCorrupt = true; return out; }
+    var all = true, n = 0;
+    for (var lk in man.parts){
+      if (!Object.prototype.hasOwnProperty.call(man.parts, lk)) continue;
+      n++;
+      var p = man.parts[lk];
+      if (lsg(p.liveKey) !== lsg(p.snapKey)) all = false;
+    }
+    out.parts = n; out.liveMatches = (n > 0 && all);
+    return out;
+  }
+  function recoveryStatus(){
+    var j = journal();
+    if (!j) return Promise.resolve(recResult(RECOVERY.NO_JOURNAL, { phase: null, storyId: null }));
+    if (j.__corrupt)
+      return Promise.resolve(recResult(RECOVERY.HARD_HOLD_JOURNAL_CORRUPT,
+        { phase: null, storyId: null, detail: { raw: j.raw || null } }));
+    var sid = j.storyId;
+    if (!sid || typeof sid !== 'string')
+      return Promise.resolve(recResult(RECOVERY.HARD_HOLD_JOURNAL_CORRUPT,
+        { phase: j.phase || null, storyId: sid || null, detail: { reason: 'NO_STORY_ID' } }));
+    /* ★scope: 別 story を巻き込まない。document が別なら server を読まずに HARD_HOLD。 */
+    var dk = docStoryId();
+    if (dk !== sid)
+      return Promise.resolve(recResult(RECOVERY.HARD_HOLD_STORY_MISMATCH,
+        { phase: j.phase || null, storyId: sid, detail: { documentStory: dk } }));
+    var snap = snapshotState(j.snapshotId || null);
+    return freshGetStory(sid).then(function(g){
+      var base = { phase: j.phase || null, storyId: sid, snapshot: snap,
+                   journal: { preparedServerRev: j.preparedServerRev == null ? null : j.preparedServerRev,
+                              preparedServerHash: j.preparedServerHash || null,
+                              preparedSchema2RecordHash: j.preparedSchema2RecordHash || null,
+                              hold: j.hold || null } };
+      if (g.error){
+        base.server = { error: g.error, status: g.status || null, errorCode: g.errorCode || null };
+        return recResult(RECOVERY.HOLD_READ_UNAVAILABLE, base);
+      }
+      var st = classify(g);
+      base.server = { state: st, absent: !!g.absent, rev: g.rev == null ? null : g.rev,
+                      serverHash: g.serverHash || null, authority: g.authority || null,
+                      schema: g.schema == null ? null : g.schema, title: g.title == null ? null : g.title };
+      if (st === STATE.CANONICAL_S2){
+        /* server 側は既に schema2。**それでも自動で journal を閉じない**。
+           local completion の候補にできるのは snapshot が健全なときだけ。 */
+        base.localCompletionEligible = !!(snap.present && snap.verifyOk && snap.liveMatches);
+        return recResult(RECOVERY.ALREADY_APPLIED_CANDIDATE, base);
+      }
+      if (st === STATE.CANONICAL_S1){
+        if (j.phase === PHASE.COMMITTING_SCHEMA2) return recResult(RECOVERY.HOLD_AMBIGUOUS_NOT_APPLIED, base);
+        if (j.phase === PHASE.READY_FOR_SCHEMA2)  return recResult(RECOVERY.HOLD_PREPARED, base);
+        return recResult(RECOVERY.HOLD_PARTIAL_PREPARE, base);
+      }
+      if (st === STATE.SHADOW_S1)   return recResult(RECOVERY.HOLD_PARTIAL_PREPARE, base);
+      if (st === STATE.ROW_ABSENT)  return recResult(RECOVERY.HOLD_PARTIAL_OR_FAILED_PREPARE, base);
+      return recResult(RECOVERY.HOLD_PARTIAL_PREPARE, base);
+    });
+  }
+
   /* resume: 自動では絶対に走らない。明示呼び出しのみ。
      journal の phase は「どちらの段だったか」のヒントに過ぎず、
      続きの判断は必ず fresh getstory の結果から行う（prepare / commit と同一経路）。 */
@@ -668,6 +774,8 @@
     prepare: prepare,
     commitSchema2: commitSchema2,
     resume: resume,
+    /* ★裁定37: crash/reload 後の read-only 分類。server write 0 / storage write 0 / auto-* 0。 */
+    RECOVERY: RECOVERY, recoveryStatus: recoveryStatus,
     journal: journal,
     journalClear: journalClear,
     status: function(){

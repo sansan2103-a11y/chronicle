@@ -5,6 +5,17 @@
  *   ・lock は **setItem 1回単位ではなく logical transaction 全体**を囲う。
  *   ・fix246 等の低レベル setItem wrapper を serialization layer にはしない（裁定REJECT）。
  *   ・network 待機中は lock を保持しない（呼び出し側が応答取得後に取ること）。
+ *     ★★裁定38 GWS_NETWORK_WAIT_SCOPE = ACCEPTED_NARROW_EXCEPTION:
+ *       GENERAL: この一般ルールは**変更しない**。network 待機を lock 内へ一般化しない。
+ *       NARROW EXCEPTION: fix750 の exact-one-story **foreground** materialization
+ *         （prepare / commitSchema2）に限り、logical transaction 全体の lock 保持を許容する。
+ *         理由: lock 解除 → network → その間の local 変更 → 再 lock → stale projection 判定 →
+ *         server 側 partial state との整合、という新しい状態機械を今作る方が危険と裁定された。
+ *       条件（裁定37/38 逐語）: fix750 限定 / exact one story / foreground transaction 限定 /
+ *         background migration 禁止 / turn・user semantic action との並行実行禁止 /
+ *         cross-context BUSY は fail-closed（silent skip 禁止）/ blind retry 禁止 /
+ *         既存 bounded network timeout を維持。
+ *       ★この例外を他の writer（Class A/B/C/D の一般経路）へ転用することを禁止する。
  * BUSY policy は writer class 別（裁定4クラス）:
  *   A REPLAYABLE_REMOTE_APPLY  → DROP_AND_REFETCH      （write0・成功扱いしない・reloadしない）
  *   B RECOVERY_OR_DESTRUCTIVE  → HARD_HOLD_NO_WRITE    （write0・journal保持・通常処理を進めない）
@@ -52,7 +63,8 @@ function locksApi(){
      2) matTxn は JSON parse 結果で判定しない。non-null なら active。
         壊れた journal ほど fail-closed で serialization を維持する。
    ★新 lock 名は作らない（chronicle:cc2:materialization:v1 のみ）。
-   ★bootRecoveryBarrier.activeRecoveries() には追加しない（裁定33 = DEFER）。 */
+   ★裁定37 で activeRecoveries() へ 'MAT' として追加した（裁定33 の DEFER は解除）。
+     ただし MAT は **recovery handler を持たない**。下の bootRecoveryBarrier を参照。 */
 function materializationActive(){
   if (lsGet(MAT_JOURNAL_KEY) != null) return true;   /* journal 生存 > kill switch */
   if (lsGet('v292Dfix750Off') !== '1' && lsGet('v292Dfix750On') === '1') return true;
@@ -209,11 +221,19 @@ function fix587PendingActive(){
   if (Object.prototype.toString.call(j) === '[object Array]') return j.length > 0;
   return true;
 }
+/* ★★裁定37 FIX750_CRASH_BOOT_RECOVERY_GATE:
+   fix750 materialization journal が残ったまま reload された場合、
+   既存 barrier は C1 / FIX721 / FIX587 しか見ていないため NO_PENDING_RECOVERY で
+   RESOLVED になり、normal 13-key writer を通してしまっていた（＝crash 後に物語が進む）。
+   ここでは **存在するかどうかだけ**を見る。JSON parse しない
+   （壊れた journal ほど fail-closed で止める。materializationActive() と同じ契約）。 */
+function matRecoveryActive(){ return lsGet(MAT_JOURNAL_KEY) != null; }
 function activeRecoveries(){
   var a = [];
   if (c1RecoveryActive())     a.push('C1');
   if (fix721RecoveryActive()) a.push('FIX721');
   if (fix587PendingActive())  a.push('FIX587');
+  if (matRecoveryActive())    a.push('MAT');
   return a;
 }
 
@@ -251,7 +271,24 @@ function bootRecoveryBarrier(recoveries){
       barrierState = BARRIER.RESOLVED;
       return { barrier: BARRIER.RESOLVED, ran: false, reason: 'NO_PENDING_RECOVERY', active: [], wrote: 0 };
     }
-    var who = act[0], fn = recoveries[who];
+    var who = act[0];
+    /* ★★裁定37 CORE INVARIANT:
+         MAT JOURNAL EXISTS → NEW NORMAL TARGET-DOMAIN MUTATION MUST NOT PROCEED
+         until materialization state is explicitly reconciled.
+       MAT には **recovery handler を登録させない**。理由:
+         ・fix750 の reconcile は fresh V2 server read を要するので async。
+           この barrier は「callback 内に await/yield 0」の同期契約なので構造的に入らない。
+         ・auto commit / auto retry / auto resume / auto rollback / auto destructive cleanup は
+           すべて禁止（裁定37）。handler を持たせると将来それを足す穴になる。
+       よって MAT が先頭なら **常に PENDING を維持**して writer を止め続ける。
+       分類は fix750.recoveryStatus()（read-only・server write 0）で別途行い、
+       その結果が barrier を自動で開けることは無い。 */
+    if (who === 'MAT'){
+      barrierState = BARRIER.PENDING;
+      return { barrier: BARRIER.PENDING, ran: false, reason: 'MATERIALIZATION_RECONCILE_REQUIRED',
+               active: act, wrote: 0, journalsKept: true, autoResume: false };
+    }
+    var fn = recoveries[who];
     if (typeof fn !== 'function'){
       barrierState = BARRIER.PENDING;
       return { barrier: BARRIER.PENDING, ran: false, reason: 'RECOVERY_HANDLER_MISSING', active: act, wrote: 0 };
@@ -380,7 +417,8 @@ window.__v292DfixGWS = {
   CLASS: CLASS, BUSY: BUSY, BARRIER: BARRIER,
   FIX721_JOURNAL_KEY: FIX721_JOURNAL_KEY, FIX587_PENDING_KEY: FIX587_PENDING_KEY,
   barrier: barrier, targetWriteAllowed: targetWriteAllowed,
-  activeRecoveries: activeRecoveries, bootRecoveryBarrier: bootRecoveryBarrier,
+  activeRecoveries: activeRecoveries, matRecoveryActive: matRecoveryActive,
+  bootRecoveryBarrier: bootRecoveryBarrier,
   serializationRequired: serializationRequired, c1Active: c1Active, safetyDisabled: safetyDisabled,
   /* ★★裁定: generic public exemption は REJECT。
        public runExclusive からは isolationExempt を **渡せない**（第3引数を捨てる）。
