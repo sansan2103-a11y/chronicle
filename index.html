@@ -18,7 +18,7 @@
      canonical 判定が終わるまで **その story の body / aiInstr への書込だけ**を保留する。
      ★起動時の最初の body 書込(v100-patch fixProviderCfg)より前に居る必要があるため head。
      ★fix724 で既定 ON。kill switch=v292Dfix705Off=1 のみ（On キーは効かない） -->
-<script src="v292Dfix705-canonical-read-gate.js?cb=20260830-fix755f"></script>
+<script src="v292Dfix705-canonical-read-gate.js?cb=20260830-fix757"></script>
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
@@ -51,7 +51,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260830-fix756';
+  var BUILT = '20260830-fix757';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -462,6 +462,29 @@ window.__chr6Key = function(){ try { var a = JSON.parse(localStorage.getItem('ch
     for (var i = 0; i < m.length; i++){ var e = m[i]; if (e && String(e.id) === String(id)) return e; }
     return null;
   }
+  /* ★★2026-08-30 fix757 FRESH_DEVICE_SCHEMA2_ACCESS
+     実測(裁定49): 旧一括 package を D1 から削除した後、まっさらな端末で
+     `index.html?story=<id>`(D1 に schema2 canonical row が実在) を開くと、meta も body も
+     無いため K=null → 即 home.html へ戻していた。fix705(fix755d/f) の server canonical
+     bootstrap に到達できない（=新しい端末からクラウドの物語を開けない）。
+     対策: **well-formed な未登録 id にだけ**「暫定 authority」を与え、redirect を
+     server を見た後（fix705）へ移す。
+     ・K を決めるのは従来どおり boot 時の 1 回だけ（immutable 契約を維持）
+     ・墓標 / ?story 無し / body はあるが壊れている = 従来どおり K=null → 即 home
+     ・ここでは localStorage を 1 バイトも書かない（meta 登録は fix705 の fix755f の仕事）
+     ・fix756(new-story materialize) は provisional のとき起動しない（fix756 側で gate）
+     OFF: v292Dfix694Off==='1'（従来の f694 ごと停止）/ v292Dfix757Off==='1'（暫定 authority だけ停止） */
+  function f757off(){ try { return localStorage.getItem('v292Dfix757Off') === '1'; } catch(e){ return false; } }
+  /* ★fix757 fail-closed: 暫定 authority の決着を付けられるのは fix705 だけ。
+     fix705 が居ない / OFF のときに暫定 authority を与えると、未登録 id のまま
+     空の本体を書き始めてしまう。そのときは従来どおり即 home へ戻す。
+     （fix705 の script tag はこの inline より前にあるので、ここで必ず判定できる） */
+  function f757resolverReady(){
+    try { var F = window.__v292Dfix705;
+          return !!(F && F.__armed === true && typeof F.on === 'function' && F.on() === true); }
+    catch(e){ return false; }
+  }
+  var f694provisional = false;
   function f694decide(){
     var u = null;
     try { u = new URLSearchParams(location.search).get('story'); } catch(e){ u = null; }
@@ -477,16 +500,25 @@ window.__chr6Key = function(){ try { var a = JSON.parse(localStorage.getItem('ch
       if (raw != null){
         var d = JSON.parse(raw);
         if (d && typeof d === 'object' && Object.prototype.toString.call(d) !== '[object Array]') return 'chr6_slot_' + u;
+        return null;                                        /* 壊れた body が実在 = 従来どおり権限なし */
       }
-    } catch(e2){}
+    } catch(e2){ return null; }
+    /* ★fix757: meta にも body にも無い well-formed id = 新端末の可能性。
+       server canonical row があるかどうかは fix705 だけが知るので、
+       ここでは暫定の authority を与え、決着は fix705 に任せる。 */
+    if (!f757off() && f757resolverReady() && /^[A-Za-z0-9_-]{1,80}$/.test(u)){ f694provisional = true; return 'chr6_slot_' + u; }
     return null;
   }
   var K = null;
   try { K = f694off() ? (window.__chr6Key ? window.__chr6Key() : 'chr6') : f694decide(); } catch(e){ K = null; }
   window.__chronicleDocumentStoryKey = K;                 /* 非永続・document scoped・immutable */
   window.__chr6WriteKey = function(){ return window.__chronicleDocumentStoryKey; };
+  var PROV = (K !== null) && f694provisional === true;      /* ★fix757: K と同じく document scoped ・不変 */
   window.__v292Dfix694 = { key: function(){ return window.__chronicleDocumentStoryKey; },
-                           off: f694off, decided: K };
+                           off: f694off, decided: K, provisional: PROV };
+  if (PROV){
+    try { console.warn('[v292Dfix694] provisional authority (unregistered story id) -> fix705 に決着を委ねる'); } catch(e){}
+  }
   if (K === null && !f694off()){
     try { console.warn('[v292Dfix694] no write authority for this document -> home'); } catch(e){}
     try { location.replace('home.html'); } catch(e){}
@@ -3633,7 +3665,7 @@ G.init();
 <!-- v292Dfix756(M1 NEW_STORY_SCHEMA2_DEFAULT): server row が無い story(fix705 verdict NOT_FOUND)だけを
      既存 fix750 の prepare→commitSchema2 で schema2 canonical にする。新batch機構/新op/新endpoint 0本。
      ★既定 ON。KILL=v292Dfix756Off=1。失敗時は自分が作った pre-irreversible journal を畳んで legacy 経路へ戻す。 -->
-<script src="v292Dfix756-new-story-schema2.js?cb=20260830-fix756"></script>
+<script src="v292Dfix756-new-story-schema2.js?cb=20260830-fix757"></script>
 </body>
 </html>
 

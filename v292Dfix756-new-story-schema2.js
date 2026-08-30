@@ -87,7 +87,7 @@
   'use strict';
   if (window.__v292Dfix756) return;                 /* 二重install防止（自 namespace のみ） */
   var TAG = '[v292Dfix756:new-story-schema2]';
-  var BUILD = 'fix756';
+  var BUILD = 'fix756+757prov';
   var ATT_PREFIX  = 'v292Dfix756_att:';
   var DONE_PREFIX = 'v292Dfix756_done:';
   /* ★裁定44: putcanonical を 1 バイトも送っていないことが phase から確定できる集合。
@@ -112,6 +112,15 @@
   function docStoryKey(){
     try { var k = window.__chronicleDocumentStoryKey; return (typeof k === 'string' && k) ? k : null; }
     catch(e){ return null; }
+  }
+  /* ★★fix757: fix694 が与えたのが **暫定** authority（= local meta にも body にも無い
+     well-formed ?story=<id>。新端末から共有 URL を開いた状態）なら、この document で
+     new-story materialize を起動してはならない。
+     理由: 未登録 id は「この端末で作られた新しい物語」ではない。server row が無ければ
+     fix705 が home へ返す（fix757）ので、fix756 がそれを prepare→putstory で
+     **勝手に新規 story として作ってしまう**ことだけを止める。判定は read-only。 */
+  function provisional694(){
+    try { var F = window.__v292Dfix694; return !!(F && F.provisional === true); } catch(e){ return false; }
   }
   function docStoryId(){
     var k = docStoryKey();
@@ -146,6 +155,7 @@
     var id = docStoryId();
     if (!id) return { ok: false, code: 'NO_DOCUMENT_STORY' };
     if (id === 'default') return { ok: false, code: 'DEFAULT_STORY_UNSUPPORTED' };
+    if (provisional694()) return { ok: false, code: 'PROVISIONAL_AUTHORITY', storyId: id };   /* ★fix757 */
     if (ssGet(ATT_PREFIX + id) != null) return { ok: false, code: 'ATTEMPTED_THIS_SESSION', storyId: id };
 
     var F750 = f750();
@@ -358,6 +368,7 @@
       state.phase = 'waiting'; state.code = g.code;
       /* 恒久的に成立しない条件は待たずに終える（poll を無駄に回さない） */
       if (g.code === 'OFF' || g.code === 'NO_DOCUMENT_STORY' || g.code === 'DEFAULT_STORY_UNSUPPORTED' ||
+          g.code === 'PROVISIONAL_AUTHORITY' ||                       /* ★fix757: document 不変の条件 */
           g.code === 'ATTEMPTED_THIS_SESSION' || g.code === 'SERVER_ROW_PRESENT' ||
           g.code === 'FIX705_UNSAFE' || g.code === 'PREEXISTING_JOURNAL' ||
           g.code === 'FIX705_ID_MISMATCH'){

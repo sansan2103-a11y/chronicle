@@ -3,6 +3,14 @@
 //   ★fix706 改訂: meta を HOLD しない / title hydration を行わない / title 不一致は fail-closed
 //   ★fix707 改訂: LEGACY EMPTY-TITLE **SAME-HASH ONLY** COMPATIBILITY（serverHash 一致必須）
 //                legacy diff hydration は採用しない（OVERBROAD として REJECT）
+//   ★★fix757 追加: PROVISIONAL AUTHORITY RESOLUTION（FRESH_DEVICE_SCHEMA2_ACCESS）
+//                fix694 が **暫定** authority を与えた document（= local meta にも body にも
+//                無い well-formed ?story=<id>）の決着をここで付ける。
+//                  CANONICAL_*      → 従来どおり（fix755d/f の bootstrap hydrate → reload）
+//                  NOT_FOUND/SHADOW → **HOLD を解除せず** local write 0 のまま home.html へ戻す
+//                  STOP（AUTH / NETWORK / HASH / …）→ 同上（HOLD 継続 = local write 0）
+//                これは fix694 が従来 boot 時に即やっていた redirect を、
+//                「server を 1 回だけ見た後」へ移したもの。新しい判定は増やさない。
 // ---------------------------------------------------------------------
 // 役割:
 //   ・story document を開いた時点（head）で **WRITE HOLD** を張る。
@@ -37,7 +45,7 @@
   'use strict';
   if (window.__v292Dfix705) return;                 /* 冪等（自 namespace のみ） */
   var TAG = '[v292Dfix705:canonical-read-gate]';
-  var BUILD = 'fix705+719merge+721gate+723auth+724flags+755v2read+755b+755d+755e+755f';
+  var BUILD = 'fix705+719merge+721gate+723auth+724flags+755v2read+755b+755d+755e+755f+757prov';
   var TIMEOUT_MS = 25000;
   var APPLIED_KEY = 'v292Dfix705_applied';          /* ★sessionStorage（localStorage ではない） */
 
@@ -131,6 +139,7 @@
     keyDivergence: null,
     serverTitle: null, localTitle: null, freshLocal: false,
     legacy: false, legacyHashComputed: false,
+    provisionalHome: null,    /* ★fix757: home へ返した理由（返していなければ null） */
     schema: null              /* ★fix755: fresh 分類が確定した row の schema（1/2）。未分類は null */
   };
   var stats = {
@@ -138,16 +147,45 @@
     getstory: 0, netFail: 0,
     sameHash: 0, applies: 0, reloads: 0, partial: 0, stops: 0,
     titleUnresolved: 0, legacySameHash: 0, legacyUnsupported: 0,
+    provisionalHome: 0,          /* ★fix757: 暫定 authority を home へ返した回数（document あたり最大1） */
     /* ★意図的に迂回したことを観測可能にする（裁定要件） */
     bypass: { nativeWrites: 0, keys: [], bypassed: ['fix698:layer1-setItem', 'fix402:wrapSetItem', 'fix527:mirror-lock', 'fix706:write-hold'] }
   };
   var LEDGER = [], LEDGER_CAP = 30;
   function note(row){ try { row.t = Date.now(); LEDGER.push(row); while (LEDGER.length > LEDGER_CAP) LEDGER.shift(); } catch(e){} }
+
+  // =====================================================================
+  // ★★fix757: PROVISIONAL AUTHORITY RESOLUTION
+  //   fix694 が「暫定」authority を与えた document（local meta にも body にも無い id）は、
+  //   server canonical row が確認できなかった時点で **home へ返す**のが正しい終端。
+  //   ・HOLD は解除しない（＝body / aiInstr の local write は 0 のまま）
+  //   ・local を 1 バイトも書かない / server へ追加の request を出さない
+  //   ・document あたり 1 回だけ（went757）
+  //   ・fix694 が本 authority を与えた document（provisional=false）の挙動は 1 つも変えない
+  // =====================================================================
+  function provisional757(){
+    try { var F = window.__v292Dfix694; return !!(F && F.provisional === true); } catch(e){ return false; }
+  }
+  var went757 = false;
+  function toHome757(why){
+    if (went757) return false;
+    went757 = true;
+    stats.provisionalHome++;
+    state.provisionalHome = String(why || '');
+    note({ provisional: 'home', why: String(why || '') });
+    try { console.warn(TAG, 'provisional authority unresolved (' + why + ') — local write 0 のまま home へ戻す'); } catch(e){}
+    try { location.replace('home.html'); } catch(e){}
+    return true;
+  }
+
   function stop(code, extra){
     state.phase = 'stopped'; state.error = code; stats.stops++;
     var r = { stop: code }; if (extra) for (var k in extra) r[k] = extra[k];
     note(r);
     try { console.warn(TAG, 'STOP:', code, '（local データは保持。write hold は継続）'); } catch(e){}
+    /* ★fix757: 暫定 authority の document は STOP のまま留まってはいけない（未登録 id の
+       ページに居座ると、以後の write は HOLD で全部落ちるだけ）。HOLD 継続のまま home へ戻す。 */
+    if (provisional757()) toHome757('STOP:' + code);
     return r;
   }
 
@@ -367,7 +405,11 @@
       if (e === 'NOT_LOGGED_IN') { stats.netFail++; return cb(stop('AUTH', { detail: e })); }
       if (e || !r) { stats.netFail++; return cb(stop('NETWORK', { detail: e ? String(e) : 'no response' })); }
       if (r.status === 404) {
-        consumeApplied(); state.verdict = 'NOT_FOUND'; releaseHold('not-found'); return cb({ verdict: 'NOT_FOUND' });
+        consumeApplied(); state.verdict = 'NOT_FOUND';
+        /* ★fix757: 暫定 authority なら server に row が無い＝この端末が開いてよい物語ではない。
+           HOLD を解除せずに home へ返す（local write 0 / fix756 も起動しない）。 */
+        if (provisional757()){ toHome757('NOT_FOUND'); return cb({ verdict: 'NOT_FOUND', provisionalHome: true }); }
+        releaseHold('not-found'); return cb({ verdict: 'NOT_FOUND' });
       }
       if (r.status === 401 || r.status === 403) { stats.netFail++; return cb(stop('AUTH', { status: r.status })); }
       if (r.status !== 200 || !r.j || !r.j.ok) { stats.netFail++;
@@ -387,7 +429,11 @@
         if (state.markerAuthority === 'canonical') {
           return cb(stop('AUTHORITY_CONFLICT', { markerAuthority: 'canonical', serverAuthority: 'shadow' }));
         }
-        consumeApplied(); state.verdict = 'SHADOW'; releaseHold('shadow'); return cb({ verdict: 'SHADOW' });
+        consumeApplied(); state.verdict = 'SHADOW';
+        /* ★fix757: 暫定 authority + shadow row は「この端末に本文が無い legacy 状態」。
+           local を書かずに home へ返す（shadow の hydrate 経路はここには無い）。 */
+        if (provisional757()){ toHome757('SHADOW'); return cb({ verdict: 'SHADOW', provisionalHome: true }); }
+        releaseHold('shadow'); return cb({ verdict: 'SHADOW' });
       }
       if (auth !== 'canonical') {
         return cb(stop('UNKNOWN_AUTHORITY', { serverAuthority: auth }));
@@ -920,6 +966,8 @@
     status: function(){
       return { on: on(), off: off(), build: BUILD, loggedIn: isLoggedIn(),
                storyId: STORY_ID, bodyKey: BODY_KEY, aiKey: AI_KEY,
+               provisional: provisional757(),                    /* ★fix757 */
+               provisionalHome: state.provisionalHome,           /* ★fix757 */
                allowList: allowList(), heldKeys: heldKeys(), metaHeld: false,
                state: JSON.parse(JSON.stringify(state)),
                stats: JSON.parse(JSON.stringify(stats)),

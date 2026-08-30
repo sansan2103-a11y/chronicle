@@ -220,7 +220,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260830-fix756';
+  var HOME_BUILT = '20260830-fix757';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -366,10 +366,87 @@
     } catch(e){}
     return !!(m && m.deleted === true);
   }
+  /* ============================================================
+   * ★★2026-08-30 fix757 FRESH_DEVICE_SCHEMA2_ACCESS（HOME 側）
+   * ------------------------------------------------------------
+   * 実測(裁定49): 旧「一括 package」を D1 から削除した後、まっさらな端末で home を開くと
+   * 一覧が 0 件になる。home は chr6_slots_meta（=この端末の local slot）しか見ないため、
+   * クラウドにある schema2 canonical の物語が **どこにも出てこない**。
+   * 「いま取り込む」(pull) も旧 package を前提にしているので 0 件のまま。
+   *
+   * ここでやること（それだけ）:
+   *   ・既存の認証（合言葉 / Google トークン = authHeaders）で op:'listshadow' を **1 回**呼ぶ
+   *   ・authority==='canonical' かつ deleted でない story のうち、
+   *     local slot に **無いもの** だけを「クラウド」印付きで一覧へ足す
+   *   ・クリックは既存カードと同じ openStory()（index.html?v=<BUILD>&story=<id>）
+   *
+   * ここで **やらないこと**:
+   *   ・localStorage を 1 バイトも書かない（body も chr6_slots_meta も書かない）。
+   *     本文の取り込み(hydrate)と meta 登録は index 側の fix705(fix755d/f) の仕事。
+   *   ・Worker の op を増やさない（listshadow は既存 op）。pull / put を呼ばない。
+   *   ・未ログイン / 通信失敗 / 応答不正のときは **黙って何もしない**（既存一覧は不変）。
+   *
+   * OFF: localStorage['v292Dfix757Off']='1' → クラウド行を出さない（従来の一覧に戻る）
+   * 観測: window.__v292Dfix757.status()
+   * ========================================================== */
+  function f757off(){ return g('v292Dfix757Off') === '1'; }
+  var F757 = { tried:false, ok:false, code:null, stories:[], hidden:0, fetchedAt:0 };
+  /* local に無いクラウド story を「一覧行」の形にして返す（読むだけ・毎回作り直す） */
+  function f757CloudOnly(){
+    if (f757off() || !F757.ok) return [];
+    var have = {}, m = readMeta(), i;
+    /* ★墓標(deleted)も have に入れる。削除済みの物語がクラウド経由で復活しては困る。 */
+    for (i = 0; i < m.length; i++) if (m[i] && m[i].id != null) have[String(m[i].id)] = true;
+    var out = [], hidden = 0;
+    for (i = 0; i < F757.stories.length; i++){
+      var c = F757.stories[i];
+      if (!c || !c.id) continue;
+      if (have[c.id]) { hidden++; continue; }
+      out.push({ id: c.id, name: c.title || '（無題）',
+                 summary: 'クラウドにある物語（開くとこの端末へ取り込みます）',
+                 loc: '', hero: null, npcs: [], turns: c.turnCount,
+                 updated: c.updatedAt, created: 0, opened: 0,
+                 favorite: false, scene: null, meta: null, cloud: true });
+    }
+    F757.hidden = hidden;
+    return out;
+  }
+  /* listshadow を 1 回だけ呼ぶ。成功したときだけ再描画する。 */
+  function f757Fetch(){
+    if (f757off() || F757.tried) return;
+    F757.tried = true;
+    if (!loggedIn()){ F757.code = 'NOT_LOGGED_IN'; return; }
+    var p = null;
+    try { p = call({ op: 'listshadow' }, 20000); } catch(e){ F757.code = 'CALL_THREW'; return; }
+    Promise.resolve(p).then(function(j){
+      if (!j || j.ok !== true || Object.prototype.toString.call(j.stories) !== '[object Array]'){
+        F757.code = (j && j.errorCode) || 'BAD_RESPONSE'; return;
+      }
+      var rows = [];
+      for (var i = 0; i < j.stories.length; i++){
+        var r = j.stories[i];
+        if (!r || r.id == null || String(r.id) === '') continue;
+        if (r.deleted === true) continue;                       /* 墓標は出さない */
+        if (String(r.authority || '') !== 'canonical') continue; /* shadow は正本ではない */
+        rows.push({ id: String(r.id), title: String(r.title == null ? '' : r.title),
+                    turnCount: Math.max(0, +r.turnCount || 0),
+                    updatedAt: Math.max(0, +r.updatedAt || 0) });
+      }
+      F757.stories = rows; F757.ok = true; F757.code = 'OK'; F757.fetchedAt = Date.now();
+      try { console.log('[home][v292Dfix757] クラウドの物語 ' + rows.length + ' 件を一覧へ反映します'); } catch(e){}
+      render();
+    })['catch'](function(e){ F757.code = 'NETWORK'; });
+  }
+  try { window.__v292Dfix757 = { status: function(){
+    return { off: f757off(), tried: F757.tried, ok: F757.ok, code: F757.code,
+             fetched: F757.stories.length, hiddenBecauseLocal: F757.hidden,
+             shown: f757CloudOnly().length, loggedIn: loggedIn() }; } }; } catch(e){}
+
   // 互換用の内部スロット 'default'(chr6) は、中身が無い限り一覧に出さない
   function all(){
     return readMeta().filter(function(m){ return m && m.id && !isTombstoneEntry(m); }).map(story)
-      .filter(function(x){ return x.id !== 'default' || x.turns > 0; });
+      .filter(function(x){ return x.id !== 'default' || x.turns > 0; })
+      .concat(f757CloudOnly());          /* ★fix757: local に無いクラウド story だけ足す */
   }
 
   // 表紙は無料GET(image.pollinations.ai)。同時に殺到するとrate-limitされるので
@@ -445,7 +522,8 @@
     }).join('');
     el('navs').innerHTML = navs;
 
-    var rec = full.slice().sort(function(a,b){ return b.opened-a.opened; }).slice(0,6);
+    var rec = full.filter(function(x){ return !x.cloud; })          /* ★fix757 */
+                  .sort(function(a,b){ return b.opened-a.opened; }).slice(0,6);
     el('recent').innerHTML = rec.map(function(x){
       var u = coverUrl(x.id, x.scene);
       return '<div class="r" data-open="'+esc(x.id)+'"><div class="rc" style="background-image:'+(u?"url('"+u+"')":gradient(x.name))+'"></div>'+
@@ -461,7 +539,7 @@
         var chars = [].concat(x.hero?[x.hero]:[], x.npcs).filter(Boolean).slice(0,4);
         return '<div class="card'+(SEL===x.id?' sel':'')+'" data-id="'+esc(x.id)+'">'+
           '<div class="cover" style="background:'+gradient(x.name)+'"'+(u?' data-cover="'+esc(u)+'"':'')+'>'+
-            '<div class="badge" style="z-index:2">'+(x.turns>0?'進行中':'未開始')+'</div></div>'+
+            '<div class="badge" style="z-index:2">'+(x.cloud?'☁ クラウド':(x.turns>0?'進行中':'未開始'))+'</div></div>'+
           '<div class="cbody"><div class="ctitle">'+esc(x.name)+'</div>'+
           '<div class="csum">'+esc(x.summary||'')+'</div>'+
           '<div class="cchars">'+chars.map(function(c,i){ return avatar(c.name,i); }).join('')+
@@ -2206,7 +2284,7 @@
     .then(function(r){ return r.text(); })
     .then(function(t){ BUILD = (t||'').trim(); })
     .catch(function(){})
-    .then(function(){ render(); f663RenderLogin(); f661AutoGC(); renderCapacity(); if(!autoPullOnce()) pull(); });
+    .then(function(){ render(); f663RenderLogin(); f661AutoGC(); renderCapacity(); if(!autoPullOnce()) pull(); f757Fetch(); });
   render();
   deletedNotice();
   pendingDeleteNotice();
