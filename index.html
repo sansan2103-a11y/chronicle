@@ -10,7 +10,7 @@
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
 <script src="v292Dfix654-storage-trap.js?cb=v292Dfix731"></script>
-<script src="v292Dfix745-gws-lock.js?cb=20260830-fix754"></script>
+<script src="v292Dfix745-gws-lock.js?cb=20260830-fix756"></script>
 <script src="v292Dfix746-slot-isolation-authority.js?cb=20260829-fix748"></script>
 <script src="v292Dfix748-class-d-admission.js?cb=20260829-fix748"></script>
 <script src="v292Dfix698-mutation-bus.js?cb=v292Dfix701"></script>
@@ -51,7 +51,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260830-fix755f';
+  var BUILT = '20260830-fix756';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3629,7 +3629,11 @@ G.init();
 <!-- CLOUD_CANONICAL C1 client (C1-a builder + C1-b hydrator)。DEPLOY != ENABLE：呼び出し側0本・load時storage読取0。OFF=v292Dfix743Off / feature=v292DfixCC2On (default OFF) -->
 <script src="v292Dfix743-cc2-client.js?cb=20260830-fix750"></script>
 <!-- CLOUD_CANONICAL C1 write path wiring（裁定30/31/32）。DEPLOY != ENABLE：caller 0本・自動実行0・load時storage読取0。prepare()/commitSchema2() は明示呼出のみ。ON=v292Dfix750On / KILL=v292Dfix750Off (default OFF) -->
-<script src="v292Dfix750-c1-materialize.js?cb=20260830-fix754"></script>
+<script src="v292Dfix750-c1-materialize.js?cb=20260830-fix756"></script>
+<!-- v292Dfix756(M1 NEW_STORY_SCHEMA2_DEFAULT): server row が無い story(fix705 verdict NOT_FOUND)だけを
+     既存 fix750 の prepare→commitSchema2 で schema2 canonical にする。新batch機構/新op/新endpoint 0本。
+     ★既定 ON。KILL=v292Dfix756Off=1。失敗時は自分が作った pre-irreversible journal を畳んで legacy 経路へ戻す。 -->
+<script src="v292Dfix756-new-story-schema2.js?cb=20260830-fix756"></script>
 </body>
 </html>
 

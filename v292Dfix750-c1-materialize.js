@@ -87,6 +87,32 @@
   function off(){ return lsg('v292Dfix750Off') === '1'; }
   function on(){ return !off() && lsg('v292Dfix750On') === '1'; }
 
+  /* ═══════════════════════════════════════════════════════════════════
+     ★★fix756 NEW_STORY_SCHEMA2_DEFAULT — AUTO NEW-STORY PERMIT（狭い専用入口）
+       裁定31 P0-3 と **同型**の in-memory permit。localStorage へ 1 バイトも書かない。
+       目的: server row が存在しない新規 story を、ユーザー操作なしに
+             prepare()→commitSchema2() で schema2 canonical にする（fix756 だけが呼ぶ）。
+
+       この permit が widen するのは次の 2 点 **だけ**:
+         (1) fix750 の enable 判定（v292Dfix750On の代替）
+         (2) fix745 materializationActive()（= serializationRequired の活性化）
+             ※ 裁定33 OPTION_A と同じ GWS_ACTIVATION_GAP 対策。
+                permit は **serialization を ON にするだけ**で、generic MAT hold
+                （matRecoveryActive = journal 存在）には一切影響しない。
+       widen **しない**もの（1 バイトも変えない）:
+         kill switch off() / scope（current document story）/ snapshot / GWS lock /
+         Gate B(slot isolation) / boot barrier / READY binding / server rev・hash /
+         recordHash binding / caller projection 禁止 / 状態分類。
+       permit の寿命 = autoNewStoryPermit() に渡した fn の Promise settle まで。
+       crash/reload を跨がない（in-memory のみ）。二重 arm は REFUSED_AUTO_PERMIT_BUSY。
+     ═══════════════════════════════════════════════════════════════════ */
+  var AUTO_PERMIT = null;                          /* {storyId, armed, at} */
+  function autoPermitValid(storyId){
+    return !!(AUTO_PERMIT && AUTO_PERMIT.armed === true &&
+              typeof storyId === 'string' && AUTO_PERMIT.storyId === storyId);
+  }
+  function autoPermitArmed(){ return !!(AUTO_PERMIT && AUTO_PERMIT.armed === true); }
+
   function f697(){ try { return window.__v292Dfix697 || null; } catch(e){ return null; } }
   function f702(){ try { return window.__v292Dfix702 || null; } catch(e){ return null; } }
   function f743(){ try { return window.__v292DfixCC2 || null; } catch(e){ return null; } }
@@ -307,7 +333,10 @@
 
   /* ---------------- 共通 preflight（lock の外・mutation 0） ---------------- */
   function preflight(storyId, opts){
-    if (!on()) return refuse('REFUSED_DISABLED');
+    /* ★fix756: kill switch は permit より常に優先（off() は 1 バイトも緩めない）。
+       enable 判定だけを「永続 flag OR in-memory auto permit」に広げる。 */
+    if (off()) return refuse('REFUSED_DISABLED');
+    if (!on() && !autoPermitValid(storyId)) return refuse('REFUSED_DISABLED');
     if (!storyId || typeof storyId !== 'string') return refuse('REFUSED_BAD_TARGET');
     if (storyId === 'default' || storyId === 'chr6')
       return refuse('REFUSED_DEFAULT_STORY_UNSUPPORTED');
@@ -1261,6 +1290,32 @@
     return prepare(storyId, {});
   }
 
+  /* ★★fix756: AUTO NEW-STORY PERMIT の唯一の入口。
+       autoNewStoryPermit(storyId, fn) — fn は { prepare, commitSchema2 } を受け取り Promise を返す。
+       ・permit は fn の Promise settle まで armed（非同期 transaction 全体を serialization 対象に保つ）。
+       ・fn へ渡す ops は **storyId 固定**。caller は別 story を指定できない。
+       ・opts は preflight の caller-projection 禁止判定をそのまま通す（projection/record/body/sidecar を
+         渡せば従来どおり REFUSED_CALLER_PROJECTION_FORBIDDEN）。
+       ・permit は「どの gate も」免除しない（上の AUTO PERMIT ブロックの契約を参照）。 */
+  function autoNewStoryPermit(storyId, fn){
+    if (off()) return Promise.resolve(refuse('REFUSED_DISABLED'));
+    if (typeof storyId !== 'string' || !storyId) return Promise.resolve(refuse('REFUSED_BAD_TARGET'));
+    if (typeof fn !== 'function') return Promise.resolve(refuse('REFUSED_AUTO_BAD_FN'));
+    if (AUTO_PERMIT) return Promise.resolve(refuse('REFUSED_AUTO_PERMIT_BUSY',
+                                                   { armedFor: AUTO_PERMIT.storyId }));
+    AUTO_PERMIT = { storyId: storyId, armed: true, at: Date.now() };
+    var disarm = function(){ AUTO_PERMIT = null; };
+    var p;
+    try {
+      p = fn({ prepare:        function(o){ return prepare(storyId, o || {}); },
+               commitSchema2:  function(o){ return commitSchema2(storyId, o || {}); } });
+    } catch(e){
+      disarm(); return Promise.resolve(refuse('REFUSED_AUTO_THREW', String(e && e.message || e)));
+    }
+    return Promise.resolve(p).then(function(r){ disarm(); return r; },
+                                   function(e){ disarm(); throw e; });
+  }
+
   window.__v292Dfix750 = {
     BUILD: BUILD, WIRED: false, ENABLED_BY_DEFAULT: false,
     JOURNAL_KEY: JOURNAL_KEY, PHASE: PHASE, STATE: STATE,
@@ -1277,6 +1332,10 @@
        journal clear / epoch bump / snapshot 削除は一切しない（local release は別 API）。 */
     RECONCILE: RECONCILE, reconcileAmbiguousCommit: reconcileAmbiguousCommit,
     canonicalMid: canonicalMid,
+    /* ★fix756: 新規 story 自動 materialization 専用の狭い permit 入口 + 観測口。
+       autoPermitArmed() は fix745 materializationActive() が読む（read-only boolean）。 */
+    autoNewStoryPermit: autoNewStoryPermit,
+    autoPermitArmed: autoPermitArmed,
     journal: journal,
     journalClear: journalClear,
     status: function(){

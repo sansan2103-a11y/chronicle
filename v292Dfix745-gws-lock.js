@@ -92,9 +92,23 @@ function locksApi(){
    ★新 lock 名は作らない（chronicle:cc2:materialization:v1 のみ）。
    ★裁定37 で activeRecoveries() へ 'MAT' として追加した（裁定33 の DEFER は解除）。
      ただし MAT は **recovery handler を持たない**。下の bootRecoveryBarrier を参照。 */
+/* ★★fix756 NEW_STORY_SCHEMA2_DEFAULT: 裁定33 OPTION_A と同じ GWS_ACTIVATION_GAP 対策を
+   **in-memory auto permit** にも適用する（裁定31 P0-3: 永続 flag に依存しない）。
+   permit が armed の間だけ serializationRequired() を true にする。
+   ・これは **活性化を広げるだけ**で、どの gate も緩めない（狭める方向のみ）。
+   ・matRecoveryActive()（generic MAT hold）には影響しない — あちらは journal 存在のみ。
+   ・window.__v292Dfix750 は fix745 より後に load されるが、この関数は transaction のたびに
+     呼ばれる（boot 時 cache 禁止）ので参照時点では必ず解決している。不在なら false。 */
+function autoNewStoryPermitArmed(){
+  try {
+    var F = window.__v292Dfix750;
+    return !!(F && typeof F.autoPermitArmed === 'function' && F.autoPermitArmed());
+  } catch (e){ return false; }
+}
 function materializationActive(){
   if (lsGet(MAT_JOURNAL_KEY) != null) return true;   /* journal 生存 > kill switch */
   if (lsGet('v292Dfix750Off') !== '1' && lsGet('v292Dfix750On') === '1') return true;
+  if (lsGet('v292Dfix750Off') !== '1' && autoNewStoryPermitArmed()) return true;   /* ★fix756 */
   return false;
 }
 function c1Active(){
