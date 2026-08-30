@@ -3014,12 +3014,12 @@ G.init();
 <!-- v292Dfix246: per-storyストア(fix77状態/longmem/会話キャッシュ)をスロット単位に分離。features.js等の前に設置。OFF=v292StoreSlotIsoOff -->
 <script src="v292Dfix246-store-slot-isolation.js?cb=v292Dfix246"></script>
 <script src="v292Dfix543-save-guard.js?cb=20260829-fix748"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=v292Dfix733"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20260830-fix750"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
      OFF=v292Dfix729Off / 検証口=window.__v292Dfix729 -->
 <script src="v292Dfix729-title-sync.js?cb=v292Dfix729"></script>
 <script src="v292Dfix700-nonauthoritative-mirror.js?cb=v292Dfix700"></script>
-<script src="v292Dfix702-authority-cutover.js?cb=v292Dfix733"></script>
+<script src="v292Dfix702-authority-cutover.js?cb=20260830-fix750"></script>
 <!-- v292Dfix573: 主人公が「無言で消える」のを見張る。
      名前が「あった→無くなった」書込を捉え、旧値の控えを取り、その場で知らせる。
      書込は止めない・自動復元もしない。OFF=v292Dfix573Off -->
@@ -3627,7 +3627,9 @@ G.init();
 <!-- R118 Phase3-A: existing physical signal bridge. fix414 hook 経由。OFF=v292Dfix742Off / feature=v292Dfix414PhysP (default OFF) -->
 <script src="v292Dfix742-physical-bridge.js?cb=v292Dfix742"></script>
 <!-- CLOUD_CANONICAL C1 client (C1-a builder + C1-b hydrator)。DEPLOY != ENABLE：呼び出し側0本・load時storage読取0。OFF=v292Dfix743Off / feature=v292DfixCC2On (default OFF) -->
-<script src="v292Dfix743-cc2-client.js?cb=v292Dfix743"></script>
+<script src="v292Dfix743-cc2-client.js?cb=20260830-fix750"></script>
+<!-- CLOUD_CANONICAL C1 write path wiring（裁定30/31/32）。DEPLOY != ENABLE：caller 0本・自動実行0・load時storage読取0。prepare()/commitSchema2() は明示呼出のみ。ON=v292Dfix750On / KILL=v292Dfix750Off (default OFF) -->
+<script src="v292Dfix750-c1-materialize.js?cb=20260830-fix750"></script>
 </body>
 </html>
 

@@ -1076,6 +1076,14 @@
       var body = { op: 'putcanonical', id: id, expectedRev: Math.floor(xr), expectedHash: xh,
                    record: p.record, mid: mid };
       if (p.clientMeta && typeof p.clientMeta === 'object') body.clientMeta = p.clientMeta;
+      /* ★★fix750(C1_WRITE_PATH_WIRING): schema2 canonical write のときだけ
+           clientCanonicalSchemaMax を whitelist に加える。
+         ・Worker v39 は schema2 record に対して clientCanonicalSchemaMax >= 2 を要求し、
+           無ければ CLIENT_SCHEMA_TOO_OLD で fail-closed する（= negative control を壊さない）。
+         ・**record.schema === 2 のときだけ** 送る。schema1 の既存 payload は 1 バイトも変えない。
+         ・値は caller の申告をそのまま流さず 2 に正規化する（capability 詐称の余地を作らない）。
+           schema2 を送る client は定義上 v2-capable であり、それ以外の値に意味は無い。 */
+      if (p.record.schema === 2) body.clientCanonicalSchemaMax = 2;
       postSaveOnce(body, cb);
     },
     /* ★★fix725(RULING44 / Worker v36): SERVER-PRESERVING CFG SCRUB 専用の **狭い** write 口。

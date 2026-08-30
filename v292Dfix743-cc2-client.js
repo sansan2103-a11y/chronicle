@@ -113,7 +113,15 @@ function buildSchema2Record(deps, storyId){
   try {
     const meta = JSON.parse(metaRaw || '[]');
     if (!Array.isArray(meta)) return { hold: { code: 'META_TYPE' } };
-    for (const e of meta){ if (e && String(e.id) === storyId){ title = (e.title == null) ? '' : String(e.title); break; } }
+    /* ★★fix750(SCHEMA2_RECORD_CONTRACT_PARITY): title の local 正本は **name**。
+       fix697/fix707 CANONICAL_TITLE_SOURCE_CONTRACT と同一意味論に揃える:
+         SERVER StoryRecord.title  <->  LOCAL chr6_slots_meta[].name
+       旧実装は e.title を読んでいたが live entry に title field は存在しない
+       （title は fix579 の tombstone 専用 field）。そのため title が常に '' になり、
+       schema2 化と同時に server の title を空文字で確定させてしまう。
+       ★fix697 L193 の 'default' 特例は移植しない。storyId==='default' は上の
+         DEFAULT_STORY_UNSUPPORTED_IN_C1 で hold 済みでここへ到達しないため。 */
+    for (const e of meta){ if (e && String(e.id) === storyId){ title = (e.name == null) ? '' : String(e.name); break; } }
   } catch (e){ return { hold: { code: 'META_PARSE_ERROR' } }; }
   if (title === null) return { hold: { code: 'META_ENTRY_ABSENT' } };
   /* sidecar 13 fields（tri-state） */

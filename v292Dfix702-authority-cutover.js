@@ -310,12 +310,67 @@
   }
 
   // =====================================================================
+  // (7-C1) 裁定31 P0-3 — C1 materialization 専用の狭い promotion 入口
+  //   なぜ必要か: promote() は v292Dfix702On（origin 全体の永続 localStorage flag）を要求する。
+  //   promotion のためだけにそれを一時 ON にすると、途中の crash/reload で flag が残留し、
+  //   promotion 以外の fix702 挙動まで ON 状態で残る。FIRST_SCHEMA2 の制御として広すぎる。
+  //   契約:
+  //     ・current document exact story のみ
+  //     ・schema1 shadow のみ（fresh getstory で確認）
+  //     ・persistent fix702On 不要 / kill switch v292Dfix702Off は常に優先
+  //     ・permit は in-memory のみ。promote() の同期 guard を通った直後に disarm するので、
+  //       reload/crash 後の permit 残留は構造上 0。
+  //     ・promotion ロジック自体は再実装せず promote() をそのまま reuse する。
+  //     ・通常 fix702 behavior / 既存 fix702On path は一切変更しない。
+  // =====================================================================
+  var C1_PERMIT = null;   /* ★in-memory のみ。永続化しない。 */
+  function c1PermitValid(id){
+    return !!(C1_PERMIT && C1_PERMIT.armed === true && id && C1_PERMIT.storyId === id);
+  }
+  function promoteForC1Materialization(targetId, cb){
+    cb = (typeof cb === 'function') ? cb : function(){};
+    if (!targetId || typeof targetId !== 'string') return cb({ ok: false, error: 'C1_BAD_TARGET' });
+    if (off()) return cb({ ok: false, error: 'C1_KILLED' });
+    var id = storyId();
+    if (!id || id !== targetId)
+      return cb({ ok: false, error: 'C1_SCOPE_MISMATCH', documentStory: id, target: targetId });
+    if (!isLoggedIn()) return cb({ ok: false, error: 'NOT_LOGGED_IN' });
+    /* ★fresh server state を見てからしか permit を arm しない。 */
+    post({ op: 'getstory', id: id }, function(e, r){
+      if (e || !r || r.status !== 200 || !r.j || !r.j.ok)
+        return cb({ ok: false, error: 'C1_PRECHECK_UNAVAILABLE', status: r ? r.status : null });
+      var g = r.j;
+      if (String(g.authority || 'shadow') !== 'shadow')
+        return cb({ ok: false, error: 'C1_NOT_SHADOW', authority: g.authority });
+      if (g.record && g.record.schema === 2)
+        return cb({ ok: false, error: 'C1_NOT_SCHEMA1', schema: 2 });
+      if (g.deleted) return cb({ ok: false, error: 'C1_SERVER_TOMBSTONE' });
+      var done = false;
+      C1_PERMIT = { storyId: id, armed: true, at: Date.now() };
+      try {
+        promote(function(res){ if (done) return; done = true; C1_PERMIT = null; cb(res); });
+      } catch(err){
+        done = true; C1_PERMIT = null;
+        return cb({ ok: false, error: 'C1_PROMOTE_THREW', detail: String(err && err.message || err) });
+      } finally {
+        /* ★promote() の permit 検査は同期。ここで disarm しても遅くない。
+           permit の寿命 = 1 回の同期呼出フレームのみ。 */
+        C1_PERMIT = null;
+      }
+    });
+  }
+
+  // =====================================================================
   // (7) promotestory — fresh getstory → strict CAS → fresh readback
   // =====================================================================
   function promote(cb){
     cb = (typeof cb === 'function') ? cb : function(){};
-    if (!on()){ stats.skipped++; return cb({ skipped: 'OFF' }); }
     var id = storyId();
+    /* ★裁定31 P0-3: 永続 flag v292Dfix702On の代わりに、in-memory の C1 permit でも通す。
+       permit は promoteForC1Materialization が同期フレーム内だけ arm するため、
+       reload/crash 後に残留し得ない（localStorage へ 1 バイトも書かない）。
+       ON 時の既存挙動は 1 バイトも変えない。 */
+    if (!on() && !c1PermitValid(id)){ stats.skipped++; return cb({ skipped: 'OFF' }); }
     if (!id){ stats.skipped++; return cb({ skipped: 'NO_AUTHORITY' }); }
     if (!isLoggedIn()){ stats.skipped++; return cb({ skipped: 'NOT_LOGGED_IN' }); }
     var snapAtStart = canonicalStringNow();                 /* ★P0-4A: 起点スナップショット */
@@ -546,6 +601,9 @@
       if (!id || !lastFresh || lastFresh.id !== id) return null;
       return JSON.parse(JSON.stringify(lastFresh)); },
     classify: classify, promote: promote, promoteDelete: promoteDelete, gate: gate,
+    /* ★裁定31 P0-3: C1 materialization 専用の狭い promotion 入口（永続 flag 不要） */
+    promoteForC1Materialization: promoteForC1Materialization,
+    c1PermitArmed: function(){ return !!(C1_PERMIT && C1_PERMIT.armed); },
     maskPreview: function(ls){ return maskIncoming(ls); },
     ledger: function(){ return LEDGER.slice(); }
   };
