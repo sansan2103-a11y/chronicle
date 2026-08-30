@@ -37,7 +37,7 @@
   'use strict';
   if (window.__v292Dfix705) return;                 /* 冪等（自 namespace のみ） */
   var TAG = '[v292Dfix705:canonical-read-gate]';
-  var BUILD = 'fix705+719merge+721gate+723auth+724flags+755v2read+755b+755d';
+  var BUILD = 'fix705+719merge+721gate+723auth+724flags+755v2read+755b+755d+755e';
   var TIMEOUT_MS = 25000;
   var APPLIED_KEY = 'v292Dfix705_applied';          /* ★sessionStorage（localStorage ではない） */
 
@@ -765,6 +765,18 @@
   }
 
   var bootN = 0;
+  /* ★fix755e(実機 iPhone E2E で観測): __chronicleGoogleId() は fix328 の Worker probe
+     (workerReady)完了まで同期的に '' を返すため、boot 直後に分類を始めると
+     NOT_LOGGED_IN → stop('AUTH') で誤 STOP する（遅い回線で確実に発生。fix402 は
+     起動が遅いので同じ load で「ログイン済み」に見え、非対称になる）。
+     auth が読める状態になるまで分類開始を待つ。合言葉(v292ProxyPass)があれば即 ready。
+     どちらも無いまま待機上限に達したら AUTH で fail-closed STOP（hold 維持・従来と同じ終端）。 */
+  function authReady755(){
+    try { if ((lsg('v292ProxyPass') || '').replace(/^\s+|\s+$/g,'')) return true; } catch(e){}
+    try { if (typeof window.__chronicleGoogleId === 'function' && window.__chronicleGoogleId()) return true; } catch(e){}
+    return false;
+  }
+
   (function bootPoll(){
     /* ★fix721.2: restore journal PREPARED/APPLYING 中は分類を開始せず待機だけ続ける
        （getstory 0 / apply 0 / body write 0。bootN も消費しない）。 */
@@ -788,7 +800,7 @@
            schema は server を読むまで分からないので、schema1/2 共通で fix743 も待つ。
            （fix743 は静的 script tag。万一 load しない場合は既存の bootN>120 で
              STOP('HASH') し write-hold は維持される = fail-closed のまま。） */
-        if (!classifyStarted && window.__v292Dfix697 &&
+        if (!classifyStarted && authReady755() && window.__v292Dfix697 &&
             typeof window.__v292Dfix697.contentHash === 'function' &&
             typeof window.__v292Dfix697.getStoryV2Once === 'function' &&
             window.__v292DfixCC2 &&
@@ -802,7 +814,10 @@
       }
       /* fix694 が出ない document（= story authority なし）は対象外 */
       if (bootN > 40 && typeof dk !== 'string') { releaseHold('no-fix694-authority'); return; }
-      if (bootN > 120 && !classifyStarted) { stop('HASH', { detail: 'fix697 not present' }); return; }
+      if (bootN > 120 && !classifyStarted) {
+        if (!authReady755()) { stop('AUTH', { detail: 'AUTH_NOT_READY_TIMEOUT' }); return; }
+        stop('HASH', { detail: 'fix697 not present' }); return;
+      }
     } catch(e){}
     setTimeout(bootPoll, 250);
   })();
