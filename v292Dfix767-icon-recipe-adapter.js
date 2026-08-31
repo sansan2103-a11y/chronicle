@@ -75,6 +75,31 @@
 //   ・★S.cast への逆書き込みはしない。双方に無ければ従来どおり '' ＝ neutral 'person'。
 //   ・kill: localStorage.v292Dfix776Off==='1' → fallback を止め、cast-only の従来動作へ。
 //
+// ■fix778(2026-08-31 / 4E slice 3B): **Non-human Morphology v1** = 人外の主語テンプレ
+//   ・真因（QA実機実測）: roster「青銅の心臓」（appr＝青銅製の塊。脈動する。）に対して
+//     prompt が "dark fantasy anime character portrait of one adult person, …" になり、
+//     **器物が30代会社員の人物画として生成されていた**。人物用の主語句しか無かった構造穴。
+//   ・対処: fix766 の attrs.entityType（6種・明示語のみ・既定 HUMAN）が非 HUMAN のときだけ、
+//     主語を「人物」から **形状（morphology）** へ差し替えた別テンプレで組む:
+//       `dark fantasy anime illustration of <morphology>, <fix775 の style lock 一式>,
+//        <distinctive>, <型別の構図>, <fix484 canonical creature tail>`
+//     年齢 / 性別 / 服装 / bust shot は **1語も入れない**（人物用の語彙を人外へ流さない）。
+//   ・GPT 裁定#4「人外も Chronicle dark anime style を維持（photoreal concept art 化しない）」:
+//     MEDIUM_WORD_FN()（＝fix774+fix775 の style lock）を **人物と全く同じ文字列で** 共有する。
+//     分岐で複製しないので、将来 style lock を触ったときに人外だけ取り残されることがない。
+//   ・GPT 裁定#3「鏡から伸びる腕は fullBody:false / face:none」:
+//     PARTIAL は構図語を 'close-up composition' だけにし、full body / face / portrait /
+//     bust を強制する語を **fix767 側では 1語も出さない**。morphology も腕・手・指・脚・足に
+//     限定してあり（fix766 側）、顔・首は PARTIAL の主語にならない。
+//   ・tail: 非 HUMAN では fix484 の **STYLE6_TAIL_CREATURE** を live 参照する（文字列は複製しない）。
+//     理由: 人物用 STYLE6_TAIL は 'head and shoulders, …, detailed face' を含み、器物・霊体へ
+//     顔と胸像を強制する。さらに fix484 は fetch 層で末尾を検出して canonical へ張り替えるため、
+//     ここで human tail を付けると **人外の便にも人物 tail が再付与される**（=顔が強制される）。
+//     creature tail を選べば fix484 の張り替えと一致して冪等になり、client の prompt と
+//     送信 prompt が同一になる（fixture で検証できる状態を保つ）。
+//   ・kill: localStorage.v292Dfix778Off === '1' → recipe.entityType を常に 'HUMAN' 扱いにし、
+//     人外分岐も tail 差し替えも起きない＝**完全に従来（fix777 と同一の prompt）**。
+//
 // ■公開口
 //   window.__v292Dfix767 = { __armed, buildRecipe, toProviderBody, promptFor,
 //     bumpVariant, variantOf, recordGeneration, generationsOf, FRAMING, WORDS, RECIPE_VERSION,
@@ -101,6 +126,8 @@
   function off769(){ try{ return localStorage.getItem('v292Dfix769Off')==='1'; }catch(e){ return false; } }
   function off770(){ try{ return localStorage.getItem('v292Dfix770Off')==='1'; }catch(e){ return false; } }
   function off773(){ try{ return localStorage.getItem('v292Dfix773Off')==='1'; }catch(e){ return false; } }
+  /* ★fix778: 人外分岐だけの kill。ON にすると entityType は常に HUMAN 扱い＝従来の人物 prompt。 */
+  function off778(){ try{ return localStorage.getItem('v292Dfix778Off')==='1'; }catch(e){ return false; } }
 
   function hash32(s){ var h=2166136261; s=String(s); for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=(h*16777619)>>>0; } return h>>>0; }
   function artStyleId(){ try{ var S=getS(); return String((S&&S.cfg&&S.cfg.artStyle)!=null ? S.cfg.artStyle : 0); }catch(e){ return '0'; } }
@@ -193,17 +220,37 @@
     } else noun = (g==='male' ? 'man' : (g==='female' ? 'woman' : 'person'));
     return (adj ? adj + ' ' : '') + noun;
   }
-  /* art6 のときだけ fix484 の canonical tail を live 参照で返す（文字列は複製しない）。 */
-  function styleTail(){
+  /* art6 のときだけ fix484 の canonical tail を live 参照で返す（文字列は複製しない）。
+     ★fix778: 引数 et が非 HUMAN のときは canonical **creature** tail を返す。
+       人物 tail は 'head and shoulders … detailed face' を含み、器物・霊体・部分顕現に
+       顔と胸像を強制してしまう。fix484 は fetch 層で末尾を検出して張り替えるので、
+       ここで creature tail を選ぶと張り替え後と一致し冪等になる（＝送信 prompt と同一）。
+       STYLE6_TAIL_CREATURE を持たない古い fix484 では従来どおり human tail へフォールバック。 */
+  function styleTail(et){
     if (off769()) return '';
     if (artStyleId() !== '6') return '';
     var f = f484();
-    if (!f || typeof f.STYLE6_TAIL !== 'string' || !f.STYLE6_TAIL) return '';
+    if (!f) return '';
     /* fix484 の kill(v292Dfix484Off='1')が引かれているときは付けない:
        fetch 層の画風正規化を止めた状態で、こちらだけ画風を足すのは筋が悪い。 */
     try { if (typeof f.active === 'function' && !f.active()) return ''; } catch(e){}
+    if (et && et !== 'HUMAN' && !off778() &&
+        typeof f.STYLE6_TAIL_CREATURE === 'string' && f.STYLE6_TAIL_CREATURE) return f.STYLE6_TAIL_CREATURE;
+    if (typeof f.STYLE6_TAIL !== 'string' || !f.STYLE6_TAIL) return '';
     return f.STYLE6_TAIL;
   }
+
+  /* ---------- ★fix778: 人外テンプレ（年齢・性別・服装・bust shot は 1語も入れない） ---------- */
+  var HEAD_PREFIX_NH = 'dark fantasy anime illustration of ';
+  var NH_COMPOSITION = {
+    HUMANOID:   'centered figure composition',
+    BEAST:      'centered creature composition',
+    OBJECT:     'centered object composition',
+    APPARITION: 'centered figure composition',
+    /* PARTIAL は全身も顔も強制しない（GPT 裁定#3: fullBody:false / face:none） */
+    PARTIAL:    'close-up composition'
+  };
+  var NH_FALLBACK = 'mysterious entity';   /* morphology を抽出できなかったときの主語 */
 
   // ---------- fix770: IDENTITY_REFERENCE（再生成時のみ・有料 model。★fix772 以降は既定で有効） ----------
   var TOGETHER_MODEL = 'black-forest-labs/FLUX.2-dev';   // Worker は ^black-forest-labs/… のみ受理
@@ -305,6 +352,24 @@
    * buildRecipe(name) → recipe | null
    *   fix766 に record が無ければ null（呼び手は従来経路へ落ちる）。
    */
+  /* ★fix778: entityType / morphology の読み口。権威は fix766（entityTypeOf が kill を見る）。
+     fix766 が古い（entityTypeOf を持たない）ときは record を直接読み、それも無ければ 'HUMAN'。 */
+  function entityTypeOfRec(rec){
+    if (off778()) return 'HUMAN';
+    try { var f = f766(); if (f && typeof f.entityTypeOf === 'function') return f.entityTypeOf(rec) || 'HUMAN'; } catch(e){}
+    try {
+      var v = rec && rec.attrs && rec.attrs.entityType && rec.attrs.entityType.value;
+      if (v) return String(v);
+      if (rec && rec.entityType) return String(rec.entityType);
+    } catch(e2){}
+    return 'HUMAN';
+  }
+  function morphologyOfRec(rec){
+    if (off778()) return '';
+    try { var v = rec && rec.attrs && rec.attrs.morphology && rec.attrs.morphology.value; return v ? String(v) : ''; }
+    catch(e){ return ''; }
+  }
+
   function buildRecipe(name){
     var f = f766(); if (!f) return null;
     var who = resolveName(name); if (!who) return null;
@@ -316,7 +381,10 @@
     return {
       recipeVersion: RECIPE_VERSION,
       entityKey: who,
-      entityType: rec.entityType || 'HUMAN',
+      /* ★fix778: entityType は fix766 の権威関数から取る（kill 中は常に 'HUMAN'）。
+         morphology は人外の主語になる英語名詞句（人間では '' ＝従来と同じ recipe）。 */
+      entityType: entityTypeOfRec(rec),
+      morphology: morphologyOfRec(rec),
       appearanceRevision: revision,
       gender: genderOf(who),
       attrs: rec.attrs,
@@ -337,9 +405,45 @@
    *   ★fix769: art6 かつ fix484 armed のときだけ、fix484 の STYLE6_TAIL を live 参照で末尾に1回付ける。
    *     art6 以外・fix484 不在・769Off では付けない（＝従来どおり fetch 層が最終決定）。
    */
+  /* ★fix778: 人外の body（人物用の主語・年齢・性別・服装・bust shot は一切通らない経路）。
+     seed / fix770 reference の扱いは人物と完全に同じ（同一人物性の仕組みは型に依らない）。 */
+  function nonHumanBody(recipe, et, tail){
+    var parts = [];
+    /* ① 主語＝形状。fix766 が appr から決定的に作った英語名詞句（無ければ mysterious entity）。 */
+    parts.push(HEAD_PREFIX_NH + (String(recipe.morphology || '') || NH_FALLBACK));
+    /* ② 画風。★人物と **同じ関数** を呼ぶ（fix774+fix775 の style lock を全 type 共通に保つ）。 */
+    parts.push(MEDIUM_WORD_FN());
+    /* ③ 目印（材質・発光・脈動・濡れ・着物 等。fix766 が人外のときだけ足した語も含む） */
+    var df = recipe.distinctiveFeatures || [];
+    for (var i=0;i<df.length;i++){ var v = df[i] && df[i].value; if (v) parts.push(String(v)); }
+    /* ④ hardConstraints は人物と同じく肯定形のみ */
+    var hcs = recipe.hardConstraints || [];
+    for (var j=0;j<hcs.length;j++){
+      var c = hcs[j]; var cv = (c && c.value != null) ? c.value : c;
+      if (cv && String(cv).indexOf('no ') !== 0) parts.push(String(cv));
+    }
+    /* ⑤ 構図。型別の1語だけ（PARTIAL は close-up＝全身も顔も強制しない）。 */
+    parts.push(NH_COMPOSITION[et] || NH_COMPOSITION.OBJECT);
+    if (!tail) parts.push(w('framing', 'SIMPLE'));   // tail 無し（art6 以外 / fix484 不在）のときだけ背景語
+    var prompt = parts.filter(function(x){ return !!x; }).join(', ');
+    if (tail) prompt += ', ' + tail;
+    var seed = hash32(String(recipe.sampling.appearanceSeed) + ':' + String(recipe.sampling.variantIndex)) >>> 0;
+    if (seed === 0) seed = 1;
+    var out = { prompt: prompt, seed: seed };
+    var ref = refUrlFor(recipe.entityKey);
+    if (ref){
+      out.imgProvider = 'together';
+      out.style420 = { model: TOGETHER_MODEL, steps: TOGETHER_STEPS, reference_images: [ref] };
+    }
+    return out;
+  }
+
   function toProviderBody(recipe){
     if (!recipe) return null;
     var legacy = off769();                 // kill: slice 1 の旧語順へ
+    /* ★fix778: 人外は主語テンプレごと差し替える。legacy(769Off) / kill(778Off) では通らない。 */
+    var et778 = (legacy || off778()) ? 'HUMAN' : String(recipe.entityType || 'HUMAN');
+    if (et778 !== 'HUMAN') return nonHumanBody(recipe, et778, styleTail(et778));
     var tail = legacy ? '' : styleTail();  // '' なら tail 無し（＝従来の framing を使う）
     var g = recipe.gender === '男性' ? 'male' : (recipe.gender === '女性' ? 'female' : '');
     var parts = [];
@@ -473,6 +577,10 @@
     rebuildAndRegen: rebuildAndRegen,
     /* ★fix776: gender 解決の検証口（読み取りのみ・castへは書き戻さない） */
     genderOf: genderOf, castGenderOf: castGenderOf, recordGenderOf: recordGenderOf,
+    /* ★fix778: 人外テンプレの検証口（読み取り専用の定数と純関数のみ） */
+    HEAD_PREFIX_NH: HEAD_PREFIX_NH, NH_COMPOSITION: NH_COMPOSITION, NH_FALLBACK: NH_FALLBACK,
+    styleTail: styleTail, nonHumanBody: nonHumanBody,
+    entityTypeOfRec: entityTypeOfRec, morphologyOfRec: morphologyOfRec, isOff778: off778,
     _skipRefOnce: function(){ var o = {}; for (var k in skipRefOnce) o[k] = skipRefOnce[k]; return o; }   // 検証口(読み取り)
   };
   try { console.log(TAG, 'loaded (recipeVersion=' + RECIPE_VERSION + ')'); } catch(e){}

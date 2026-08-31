@@ -56,6 +56,40 @@
 //   ・kill: localStorage.v292Dfix776Off === '1' → gender の導出と backfill だけ停止
 //     （fix766 本体・12軸・fill は一切変えない）。
 //
+// ■fix778(2026-08-31 / 4E slice 3B): **Non-human Morphology v1** = attrs.entityType / attrs.morphology
+//   ・真因（QA実機 smtg00ynsv1 で実測）: roster「青銅の心臓」の appr は
+//     「人の手のひらほどの大きさの青銅製の塊。心臓のような形状で、内部から淡い灯りを保ち、脈動する。」
+//     ＝**器物**なのに、v1 の entityType は 'HUMAN' 固定だったため 12軸が全部 RANDOM_FILL され
+//     {THIRTIES, GRAY, OFFICE_WORKER, SMALL_SOFT} が立ち、fix767 が
+//     "…portrait of one adult person…" を組んだ。**器物が30代会社員の人物画として生成される**。
+//     ＝「人間ではない、という書いてある事実」が record にも prompt にも1バイトも無い構造穴。
+//   ・GPT 裁定: Base + Human + Morphology の分離。**entityType は6種で打ち止め**（巨大 taxonomy 禁止）。
+//       HUMAN / HUMANOID（人型の人外: 鬼・天狗・一つ目の童）/ BEAST（獣型: 黒犬・大蛇）/
+//       OBJECT（器物・付喪神: 青銅の心臓）/ APPARITION（霊体・影: 濡れた着物の人影）/
+//       PARTIAL（部分顕現: 鏡から伸びる腕）
+//   ・構造上の保証: entityType / morphology は ENUMS / ATTR_KEYS の **外側**（fix776 gender と同じ）。
+//     よって fillMissing の RANDOM 抽選対象に構造的になりえない（規約ではなく構造で保証）。
+//   ・導出は **明示語のみ・既定 HUMAN**（＝迷ったら現状挙動＝安全側）。規律は fix776 と同じ:
+//       ① 人間含意語（性別語・「男」「女」を含む語・年齢語・職業語・敬称）が同居したら HUMAN へ倒す
+//          （「鬼のような形相の男」「犬を連れた老人」「鏡を持つ娘」は全て HUMAN）。
+//       ② 主語判定を伴わない単純 substring は禁止。型語は **文の主名詞位置**
+//          （句点・文末・閉じ括弧・コピュラ直前）に立っているときだけ採る。
+//          「犬を連れた」の犬は格助詞「を」の前＝主名詞ではないので採らない。
+//       ③ 修飾語として単独で人外を確定させる語（一つ目・付喪神・半透明・〜製 等）だけ位置を問わない。
+//   ・非 HUMAN の record では human 12軸を **1つも RANDOM_FILL しない**（fillMissing が先頭で抜ける）。
+//     rebuildAppearance でも復活しない（kept → fillMissing が no-op）。
+//   ・morphology = appr からの決定的な英語名詞句（LLM なし）。fix767 の主語になる。
+//     材質・発光・脈動・濡れ・着物 等は distinctiveFeatures へ（人外のときだけ追加語彙を使う＝
+//     HUMAN の抽出結果は 1バイトも変わらない）。
+//   ・既存 record の backfill: get() で attrs.entityType が無い record に 1回だけ追い抽出する。
+//     明示語が無ければ **書込 0**（既定 HUMAN はキー自体を書かない＝将来語彙を足したとき
+//     誤った HUMAN で凍結されない・fix776 backfillGender と同じ書込 0 規律）。
+//     人外と判った既存 record は、その場で human 12軸の **RANDOM_FILL だけ** 落とす
+//     （EXPLICIT / locked は残す）。appearanceRevision / updatedAt は不変。
+//     これが無いと「青銅の心臓」の既存 record（30代会社員）が直らない。
+//   ・kill: localStorage.v292Dfix778Off === '1' → 導出・backfill・fill 分岐の全てを停止し、
+//     entityTypeOf は常に 'HUMAN' を返す＝**完全に従来（全員 HUMAN 扱い）**。
+//
 // ■kill（既定ON・停止は Off 側だけ）
 //   localStorage.v292Dfix766Off === '1' のときだけ全停止（従来の強制停止をそのまま昇格）。
 //   停止中の ensureFor() は no-op（ストアへ1バイトも書かない）。
@@ -68,6 +102,8 @@
 //     extractExplicit, fillMissing, appearanceSeed, rng,
 //     ENUMS, BASE_WEIGHTS, assertExplicitPreserved,
 //     ★fix776: GENDER_WORDS, detectGenderWord, extractGender, backfillGender, isOff776,
+//     ★fix778: ENTITY_TYPES, HUMAN_MARKERS, detectEntityType, extractEntityType,
+//              morphologyOf, morphFeatures, entityTypeOf, backfillEntityType, isOff778,
 //     _load, _save, _reset, _put, _rosterCounts, _resolveName }
 // =====================================================================
 (function(){
@@ -84,6 +120,9 @@
   function isOff(){ return lsg('v292Dfix766Off') === '1'; }
   /* ★fix776: gender 導出 + backfill だけの kill。fix766 本体（12軸・fill・store）には効かない。 */
   function isOff776(){ return lsg('v292Dfix776Off') === '1'; }
+  /* ★fix778: entityType/morphology の導出・backfill・fill 分岐だけの kill。
+     ON にすると entityTypeOf は常に 'HUMAN'＝完全に従来（全員 HUMAN 扱い）へ戻る。 */
+  function isOff778(){ return lsg('v292Dfix778Off') === '1'; }
 
   /* slotId: fix640 と同じ経路（document authority = __chr6Key）。読取のみ。 */
   function slotId(){
@@ -173,6 +212,227 @@
     if (isOff776()) return null;
     var g = detectGenderWord(text);
     return g ? { value: g, source: source || 'STORY_EXPLICIT', locked: false } : null;
+  }
+
+  // =====================================================================
+  // ★fix778: entityType / morphology（人外の形状。12軸の外側・明示語のみ・既定 HUMAN）
+  // ---------------------------------------------------------------------
+  //  ・entityType は **6種で打ち止め**（GPT 裁定・巨大 taxonomy 禁止）。
+  //  ・ENUMS / ATTR_KEYS には入れない → fillMissing の抽選対象に構造的になりえない。
+  //  ・「無い＝HUMAN」。HUMAN のときはキー自体を書かない（ストア書込 0・将来語彙を足したときに
+  //    誤った HUMAN で凍結されないため）。
+  // =====================================================================
+  var ENTITY_TYPES = ['HUMAN','HUMANOID','BEAST','OBJECT','APPARITION','PARTIAL'];
+
+  /* ① 人間含意語（veto）。1つでも出たら **無条件で HUMAN**（＝従来動作＝安全側）。
+     単字「男」「女」をここに入れてよいのは、誤爆したときの行き先が HUMAN＝現状維持だから。
+     （gender と逆で、こちらは「立てない方向」の判定なので単字 substring が安全側になる） */
+  var HUMAN_MARKERS = [
+    '男','女',
+    '人間','人物','人々','村人','住人','大人','子供','こども','幼児','赤ん坊','若者',
+    '老人','老年','年老い','老爺','老婆','初老','中年','青年','少年','少女',
+    '学生','生徒','高校生','中学生','大学生',
+    '息子','娘','母','父','兄','姉','弟','妹','祖父','祖母','夫','妻','主人','紳士','婦人',
+    '爺','婆','翁',
+    '漁師','漁夫','農夫','農家','百姓','農民','神主','宮司','神職','神官','巫女',
+    '医者','教師','教員','会社員','事務員','公務員','商人','店主','行商','村長','先生',
+    '研究者','武士','侍','職人',
+    '\\d+\\s*[歳才]'
+  ];
+  var RE_HUMAN_MARK = new RegExp(HUMAN_MARKERS.join('|'));
+
+  /* ② 主名詞位置の判定。型語のすぐ後ろが「句点/文末/閉じ括弧/コピュラ」のときだけ主名詞と見なす。
+     「犬を連れた老人」の犬は次が格助詞「を」＝主名詞ではない → 採らない（単純 substring の禁止）。
+     「鏡を持つ娘」「鬼のような形相」も同じ理屈で落ちる（次が「を」「の」）。 */
+  var RE_HEAD_TAIL = /^(?:$|[。．.、，,！!？?\n\r」』）)\]】　 ]|で[、，,]|であ|です|だ[。．.、，,]|らしい)/;
+  function headMatch(t, word){
+    var from = 0, i;
+    while ((i = t.indexOf(word, from)) >= 0){
+      if (RE_HEAD_TAIL.test(t.slice(i + word.length))) return true;
+      from = i + 1;
+    }
+    return false;
+  }
+
+  /* ③ 主名詞位置を要求する型語（長い語を先に置く＝「大蛇」が「蛇」より先） */
+  var MORPH_HEAD = {
+    APPARITION: ['人影','影法師','亡霊','幽霊','怨霊','生霊','死霊','悪霊','亡者','陽炎','残像','靄','霊','影','幻','魂'],
+    BEAST:      ['大蛇','黒犬','蜘蛛','蝙蝠','犬','狼','猫','蛇','鴉','烏','狐','狸','鼠','猿','牛','馬','熊','猪','鹿','獣','蟲','虫','魚','鳥','龍','竜'],
+    OBJECT:     ['彫像','能面','仮面','置物','骨董','絡繰','からくり','機械','提灯','行灯','人形','塊','鏡','壺','甕','器','刀','剣','鎧','兜','札','鈴','櫛','傘','像','面','石'],
+    HUMANOID:   ['大入道','化け物','化物','物の怪','もののけ','山姥','天狗','河童','妖怪','獣人','入道','鵺','鬼']
+  };
+  /* ④ 位置を問わない語（それ単独で人外が確定する修飾語だけ）。veto には負ける。 */
+  var MORPH_ANY = {
+    APPARITION: ['半透明','透けて','実体の無い','実体のない','宙に浮かぶ'],
+    HUMANOID:   ['一つ目','ひとつ目','一つ眼','三つ目','単眼','角の生えた','角が生えた','牙の生えた','人ならざる','異形','半人半'],
+    OBJECT:     ['付喪神','器物']
+  };
+  /* 材質＋「製」は器物の確定語（材質を限定して誤爆面を絞る） */
+  var RE_OBJ_MADE = /(青銅|銅|鉄|鋼|銀|金|石|木|陶|磁|硝子|ガラス|布|紙|骨|革|土)製/;
+  /* ⑤ PARTIAL（部分顕現）。構文そのものが主語を含むので位置判定は不要。
+     腕/手/指/脚/足のみを対象にする（顔・首は入れない＝face を主語にしない）。 */
+  var RE_PARTIAL_FROM = /から[^。]{0,8}(?:伸び|突き出|生え|覗|のぞ|這い出)[^。]{0,6}(?:腕|手|指|脚|足)/;
+  var RE_PARTIAL_ONLY = /(?:腕|手|指|脚|足)(?:だけ|のみ)/;
+  /* 判定順（先に一致した型が勝つ＝決定的。人外どうしの曖昧さは HUMAN へ倒さない） */
+  var MORPH_ORDER = ['PARTIAL','APPARITION','BEAST','OBJECT','HUMANOID'];
+
+  /**
+   * detectEntityType(text) → 'HUMANOID'|'BEAST'|'OBJECT'|'APPARITION'|'PARTIAL' | ''
+   *   '' は「明示語なし＝既定 HUMAN」。人間含意語が1つでもあれば無条件に ''。
+   */
+  function detectEntityType(text){
+    var t = String(text==null?'':text);
+    if (!t) return '';
+    if (RE_HUMAN_MARK.test(t)) return '';            // ★veto: 迷ったら HUMAN（従来動作）
+    for (var i=0;i<MORPH_ORDER.length;i++){
+      var ty = MORPH_ORDER[i];
+      if (ty === 'PARTIAL'){ if (RE_PARTIAL_FROM.test(t) || RE_PARTIAL_ONLY.test(t)) return 'PARTIAL'; continue; }
+      var any = MORPH_ANY[ty] || [];
+      for (var a=0;a<any.length;a++){ if (t.indexOf(any[a]) >= 0) return ty; }
+      if (ty === 'OBJECT' && RE_OBJ_MADE.test(t)) return 'OBJECT';
+      var hd = MORPH_HEAD[ty] || [];
+      for (var h=0;h<hd.length;h++){ if (headMatch(t, hd[h])) return ty; }
+    }
+    return '';
+  }
+  /** extractEntityType(text, source) → {value,source,locked} | null（HUMAN / kill 中は null） */
+  function extractEntityType(text, source){
+    if (isOff778()) return null;
+    var ty = detectEntityType(text);
+    return ty ? { value: ty, source: source || 'STORY_EXPLICIT', locked: false } : null;
+  }
+
+  /* ---------- morphology: 日本語 appr → 決定的な英語名詞句（LLM なし） ---------- */
+  var MORPH_NOUN = {
+    APPARITION: [['人影','a shadowy human silhouette'],['影法師','a shadowy human silhouette'],
+                 ['亡霊','a pale ghost'],['幽霊','a pale ghost'],['死霊','a pale ghost'],
+                 ['怨霊','a vengeful spirit'],['生霊','a wandering spirit'],['悪霊','a malevolent spirit'],
+                 ['亡者','a wandering dead figure'],['陽炎','a shimmering phantom'],
+                 ['残像','a lingering afterimage figure'],['靄','a drifting haze figure'],
+                 ['霊','a pale ghost'],['影','a dark shadow figure'],['幻','a fading phantom'],['魂','a drifting soul']],
+    BEAST:      [['大蛇','a giant serpent'],['黒犬','a black dog'],['蜘蛛','a giant spider'],['蝙蝠','a bat'],
+                 ['犬','a dog'],['狼','a wolf'],['猫','a cat'],['蛇','a serpent'],['鴉','a crow'],['烏','a crow'],
+                 ['狐','a fox'],['狸','a raccoon dog'],['鼠','a rat'],['猿','a monkey'],['牛','an ox'],
+                 ['馬','a horse'],['熊','a bear'],['猪','a boar'],['鹿','a deer'],['蟲','an insect creature'],
+                 ['虫','an insect creature'],['魚','a fish'],['鳥','a bird'],['龍','a dragon'],['竜','a dragon'],
+                 ['獣','a beast']],
+    OBJECT:     [['付喪神','an old possessed household object'],['彫像','a small statue'],['能面','a japanese noh mask'],
+                 ['仮面','a japanese mask'],['置物','a small ornament'],['骨董','an antique object'],
+                 ['絡繰','a clockwork automaton'],['からくり','a clockwork automaton'],['機械','an old machine'],
+                 ['提灯','a paper lantern'],['行灯','a paper lamp'],['人形','an old japanese doll'],
+                 ['塊','a solid lump'],['鏡','an ornate old mirror'],['壺','a ceramic jar'],['甕','a ceramic urn'],
+                 ['器','an old vessel'],['刀','an old japanese sword'],['剣','an old sword'],
+                 ['鎧','an old suit of armor'],['兜','an old helmet'],['札','a paper talisman'],
+                 ['鈴','a small bell'],['櫛','an ornate comb'],['傘','an old paper umbrella'],
+                 ['像','a small statue'],['面','a japanese noh mask'],['石','a stone']],
+    HUMANOID:   [['一つ目の童','a one-eyed childlike yokai'],['一つ目','a one-eyed humanlike yokai'],
+                 ['ひとつ目','a one-eyed humanlike yokai'],['一つ眼','a one-eyed humanlike yokai'],
+                 ['三つ目','a three-eyed humanlike yokai'],['単眼','a one-eyed humanlike yokai'],
+                 ['大入道','a giant bald yokai'],['化け物','a humanlike monster'],['化物','a humanlike monster'],
+                 ['物の怪','a humanlike yokai'],['もののけ','a humanlike yokai'],['山姥','a mountain crone yokai'],
+                 ['天狗','a tengu with a long red nose'],['河童','a kappa'],['妖怪','a humanlike yokai'],
+                 ['獣人','a beast-headed humanoid'],['入道','a bald yokai'],['鵺','a chimeric yokai'],
+                 ['異形','a misshapen humanlike figure'],['鬼','an oni demon with horns']]
+  };
+  var MORPH_FALLBACK = { HUMANOID:'a humanlike yokai', BEAST:'a beast', OBJECT:'an old object',
+                         APPARITION:'a ghostly apparition', PARTIAL:'a disembodied human limb' };
+  /* PARTIAL: 「<出所>から伸びる<部位>」を英語の1句に写す */
+  var PARTIAL_LIMB = [['腕','a human arm'],['手','a human hand'],['指','human fingers'],
+                      ['脚','a human leg'],['足','a human leg']];
+  var PARTIAL_SRC  = [['水面','the water surface'],['暗闇','the darkness'],['井戸','a well'],['天井','the ceiling'],
+                      ['地面','the ground'],['画面','a screen'],['障子','a paper screen'],['襖','a sliding paper door'],
+                      ['鏡','a mirror'],['壁','a wall'],['戸','a doorway'],['扉','a doorway'],['床','the floor'],
+                      ['闇','the darkness'],['水','the water'],['絵','a painting'],['穴','a hole']];
+  /* 大きさ・形状（名詞句へ組み込む） */
+  var MORPH_SIZE  = [[/手のひらほど|掌ほど|手のひら大/,'palm-sized'],[/巨大|見上げるほど|山のような/,'enormous'],
+                     [/細長/,'elongated'],[/小ぶり|小さ/,'small']];
+  var MORPH_SHAPE = [[/心臓のような|心臓の形|心臓状/,'shaped like a heart'],[/人の形|人型|ひとがた/,'roughly humanlike in shape'],
+                     [/球状|丸い形/,'spherical'],[/歪|いびつ/,'misshapen']];
+  function firstOf(pairs, t){ for (var i=0;i<pairs.length;i++){ if (t.indexOf(pairs[i][0]) >= 0) return pairs[i][1]; } return ''; }
+  function firstRe(pairs, t){ for (var i=0;i<pairs.length;i++){ if (pairs[i][0].test(t)) return pairs[i][1]; } return ''; }
+
+  /**
+   * morphologyOf(entityType, text) → 英語名詞句
+   *   決定的（LLM なし）。語彙に無ければ型ごとの fallback、型も無ければ 'mysterious entity'。
+   */
+  function morphologyOf(entityType, text){
+    var t = String(text==null?'':text);
+    var ty = String(entityType||'');
+    if (!ty || ty === 'HUMAN') return '';
+    if (ty === 'PARTIAL'){
+      var limb = firstOf(PARTIAL_LIMB, t) || MORPH_FALLBACK.PARTIAL;
+      var src  = RE_PARTIAL_FROM.test(t) ? firstOf(PARTIAL_SRC, t) : '';
+      return src ? (limb + ' reaching out from ' + src) : (limb + ' emerging into view');
+    }
+    var noun = firstOf(MORPH_NOUN[ty] || [], t) || MORPH_FALLBACK[ty] || 'mysterious entity';
+    var size = firstRe(MORPH_SIZE, t);
+    if (size){
+      /* 'a solid lump' → 'a palm-sized solid lump'（冠詞は size の頭文字で決める） */
+      var art = /^[aeiou]/i.test(size) ? 'an ' : 'a ';
+      noun = noun.replace(/^an?\s+/, art + size + ' ');
+    }
+    var shape = firstRe(MORPH_SHAPE, t);
+    return shape ? (noun + ', ' + shape) : noun;
+  }
+
+  /* 人外のときだけ足す distinctiveFeatures 語彙（材質・発光・表面・色）。
+     HUMAN の抽出結果を1バイトも変えないため、entityType≠HUMAN のときしか回さない。 */
+  var MORPH_FEATURE_RULES = [
+    [/青銅/,                  'made of tarnished bronze'],
+    [/真鍮|黄銅/,             'made of brass'],
+    [/(?:^|[^青黄])銅/,       'made of copper'],   /* 「青銅」「黄銅」の内側の銅では発火させない */
+    [/鉄|鋼/,                 'made of dark iron'],
+    [/銀色|銀製|白銀/,        'made of silver'],
+    [/黄金|金色/,             'gilded'],
+    [/石造|石製|岩/,          'made of stone'],
+    [/木製|木彫|木造/,        'made of carved wood'],
+    [/陶器|磁器|焼き物|陶製/,  'made of glazed ceramic'],
+    [/硝子|ガラス/,           'made of glass'],
+    [/骨製|白骨/,             'made of bone'],
+    [/紙製|和紙/,             'made of paper'],
+    [/錆|さび|朽ち/,          'rusted and decayed'],
+    [/古い|古びた|年季|古めかし/, 'ancient and weathered'],
+    [/淡い灯り|淡い光|仄かな光|ほのかな光|微かな光|内部から[^。]{0,6}(?:灯|光)/, 'faint inner glow'],
+    [/光る|輝く|燐光|発光/,    'glowing'],
+    [/脈動|脈打/,             'pulsating rhythmically'],
+    [/濡れ/,                  'soaking wet and dripping'],
+    [/着物|和服|袴|羽織/,      'draped in a japanese kimono'],
+    [/半透明|透けて/,          'translucent'],
+    [/角/,                    'with horns'],
+    [/牙/,                    'with fangs'],
+    [/鱗/,                    'covered in scales'],
+    [/毛皮|毛並/,             'thick fur'],
+    [/漆黒|真っ黒|黒/,        'black colored'],
+    [/真っ白|白/,             'white colored'],
+    [/紅|赤/,                 'red colored'],
+    [/血/,                    'blood stained']
+  ];
+  /** morphFeatures(text) → ['made of tarnished bronze', …]（重複なし・決定的） */
+  function morphFeatures(text){
+    var t = String(text==null?'':text), out = [];
+    if (!t) return out;
+    for (var i=0;i<MORPH_FEATURE_RULES.length;i++){
+      if (!MORPH_FEATURE_RULES[i][0].test(t)) continue;
+      var v = MORPH_FEATURE_RULES[i][1];
+      if (out.indexOf(v) < 0) out.push(v);
+    }
+    return out;
+  }
+
+  /**
+   * entityTypeOf(record) → 6種のいずれか（既定 'HUMAN'）
+   *   kill(v292Dfix778Off='1') のときは record に何が入っていても 'HUMAN'＝完全に従来へ戻る。
+   */
+  function entityTypeOf(record){
+    try {
+      if (isOff778()) return 'HUMAN';
+      var a = record && record.attrs;
+      var v = a && a.entityType && a.entityType.value;
+      if (v && ENTITY_TYPES.indexOf(v) >= 0) return v;
+      var t = record && record.entityType;
+      if (t && ENTITY_TYPES.indexOf(t) >= 0) return t;
+    } catch(e){}
+    return 'HUMAN';
   }
 
   /* base weights（controlled random fill の素の分布）。
@@ -349,6 +609,17 @@
     var gEx = extractGender(t, src);
     if (gEx && !out.attrs.gender) out.attrs.gender = gEx;
 
+    /* ★fix778: entityType / morphology（明示語のみ・既定 HUMAN・kill 中は null）。
+       HUMAN のときはキー自体を作らない＝人間の抽出結果は 1バイトも変わらない。
+       gender の veto（人間含意語）と entityType の veto は同じ規律なので、
+       gender が立つテキストで entityType が非 HUMAN になることは構造上ありえない。 */
+    var etEx = extractEntityType(t, src);
+    if (etEx && !out.attrs.entityType){
+      out.attrs.entityType = etEx;
+      var mdesc = morphologyOf(etEx.value, t);
+      if (mdesc && !out.attrs.morphology) out.attrs.morphology = mkVal(mdesc, src);
+    }
+
     /* 傷: 最初の出現位置の前後8字から位置語を読む。読めなければ 'facial scar' */
     var mScar = t.match(/刀傷|傷跡|傷痕|傷/);
     if (mScar){
@@ -364,6 +635,15 @@
         var dup = false;
         for (var q=0; q<out.distinctiveFeatures.length; q++){ if (out.distinctiveFeatures[q].value === v){ dup = true; break; } }
         if (!dup) out.distinctiveFeatures.push({ value: v, source: src, locked: false });
+      }
+    }
+    /* ★fix778: 人外のときだけ材質・発光・脈動・濡れ・着物等を足す（HUMAN では 1つも回さない）。 */
+    if (out.attrs.entityType){
+      var mfs = morphFeatures(t);
+      for (var m=0; m<mfs.length; m++){
+        var mv = mfs[m], mdup = false;
+        for (var mq=0; mq<out.distinctiveFeatures.length; mq++){ if (out.distinctiveFeatures[mq].value === mv){ mdup = true; break; } }
+        if (!mdup) out.distinctiveFeatures.push({ value: mv, source: src, locked: false });
       }
     }
     return out;
@@ -434,6 +714,11 @@
   function fillMissing(record, rosterCounts, rngFn){
     if (!record) return record;
     if (!record.attrs) record.attrs = {};
+    /* ★fix778: 人外（entityType≠HUMAN）は human 12軸を 1つも抽選しない。
+       真因＝器物「青銅の心臓」に {THIRTIES, GRAY, OFFICE_WORKER, SMALL_SOFT} が立っていた。
+       rebuildAppearance も kept→fillMissing なので、ここで抜ければ人外の human 軸は復活しない。
+       kill(v292Dfix778Off='1') では entityTypeOf が常に HUMAN を返す＝従来どおり 12軸を埋める。 */
+    if (entityTypeOf(record) !== 'HUMAN') return record;
     var r = rngFn || rng(appearanceSeed(record.entityKey || '', record.appearanceRevision || 1));
     for (var i=0; i<ATTR_KEYS.length; i++){
       var k = ATTR_KEYS[i];
@@ -478,7 +763,7 @@
     } catch(e){ return blank(); }
   }
   function _save(o){ try { return lss(KEY(), JSON.stringify(o)); } catch(e){ return false; } }
-  function _reset(){ try { localStorage.removeItem(KEY()); } catch(e){} genderTried = Object.create(null); }
+  function _reset(){ try { localStorage.removeItem(KEY()); } catch(e){} genderTried = Object.create(null); morphTried = Object.create(null); /* ★fix778 */ }
   function _put(name, record){
     var who = resolveName(name); if (!who) return null;
     var st = _load(); st.entities[who] = record; _save(st); return record;
@@ -514,11 +799,59 @@
     } catch(e){ return rec; }
   }
 
+  /* ★fix778: 「entityType だけ」の追い抽出を1回試したかの memo（モジュール内メモリ）。 */
+  var morphTried = Object.create(null);
+
+  /**
+   * ★fix778 backfillEntityType(who, rec) → rec
+   *   既存 record に attrs.entityType が無いときだけ、1回だけ追い抽出する。
+   *   ・明示語が無ければ（＝既定 HUMAN）**キーも書かない・保存もしない**（ストア書込 0）。
+   *   ・人外と判ったときだけ:
+   *       attrs.entityType / attrs.morphology / 人外 distinctiveFeatures を足し、
+   *       human 12軸の **RANDOM_FILL だけ** 落とす（EXPLICIT / locked は残す）。
+   *       これが無いと「青銅の心臓」の既存 record（12軸全部 RANDOM_FILL で 30代会社員）が直らない。
+   *   ・appearanceRevision / updatedAt は 1バイトも動かさない（外見の“版”は変えていないため）。
+   *   ・kill(v292Dfix778Off='1') / fix766 本体 Off のときは何もしない。
+   *   一般規則であり、特定 story / 特定名への patch ではない。
+   */
+  function backfillEntityType(who, rec){
+    try {
+      if (!rec || !rec.attrs) return rec;
+      if (isOff778() || !on()) return rec;
+      if (rec.attrs.entityType) return rec;             // 既存 entityType は絶対に上書きしない
+      if (morphTried[who]) return rec;
+      morphTried[who] = 1;
+      /* 優先は buildRecord と同じ ①ユーザー desc → ②roster appr */
+      var src = 'USER_EXPLICIT', txt = castDescOf(who);
+      var et = extractEntityType(txt, src);
+      if (!et){ src = 'STORY_EXPLICIT'; txt = rosterApprOf(who); et = extractEntityType(txt, src); }
+      if (!et) return rec;                              // 明示語なし＝既定 HUMAN（書込 0）
+      rec.attrs.entityType = et;
+      var mdesc = morphologyOf(et.value, txt);
+      if (mdesc && !rec.attrs.morphology) rec.attrs.morphology = mkVal(mdesc, src);
+      if (!rec.distinctiveFeatures) rec.distinctiveFeatures = [];
+      var mfs = morphFeatures(txt);
+      for (var m=0;m<mfs.length;m++){
+        var mv = mfs[m], mdup = false;
+        for (var q=0;q<rec.distinctiveFeatures.length;q++){ if (rec.distinctiveFeatures[q] && rec.distinctiveFeatures[q].value === mv){ mdup = true; break; } }
+        if (!mdup) rec.distinctiveFeatures.push({ value: mv, source: src, locked: false });
+      }
+      for (var i=0;i<ATTR_KEYS.length;i++){
+        var k = ATTR_KEYS[i], a = rec.attrs[k];
+        if (a && !a.locked && a.source === 'RANDOM_FILL') delete rec.attrs[k];   // 人外に人間の抽選値は残さない
+      }
+      rec.entityType = et.value;
+      _put(who, rec);
+      return rec;
+    } catch(e){ return rec; }
+  }
+
   function get(name){
     var who = resolveName(name); if (!who) return null;
     var st = _load();
     if (!Object.prototype.hasOwnProperty.call(st.entities, who)) return null;
-    return backfillGender(who, st.entities[who]);       // ★fix776: gender が無い既存 record だけ直す
+    var rec = backfillGender(who, st.entities[who]);    // ★fix776: gender が無い既存 record だけ直す
+    return backfillEntityType(who, rec);                // ★fix778: entityType が無い既存 record だけ直す
   }
 
   /* 既に保存済みの他キャラの分布（多様性ペナルティの材料） */
@@ -589,6 +922,9 @@
     }
     merge(extractExplicit(userText, 'USER_EXPLICIT'));
     merge(extractExplicit(storyText, 'STORY_EXPLICIT'));
+    /* ★fix778: 導出できた entityType を record 直下へも写す（fix767 の recipe が読む口）。
+       明示語が無ければ 'HUMAN' のまま＝人間 record は 1バイトも変わらない。 */
+    if (rec.attrs.entityType && rec.attrs.entityType.value) rec.entityType = rec.attrs.entityType.value;
     fillMissing(rec, counts, rng(appearanceSeed(entityKey, 1)));
     rec.updatedAt = nowMs();
     return rec;
@@ -642,6 +978,12 @@
     /* ★fix776: gender（12軸の外側・明示語のみ・kill=v292Dfix776Off） */
     isOff776: isOff776, GENDER_WORDS: GENDER_WORDS,
     detectGenderWord: detectGenderWord, extractGender: extractGender, backfillGender: backfillGender,
+    /* ★fix778: entityType / morphology（6種・12軸の外側・明示語のみ・kill=v292Dfix778Off） */
+    isOff778: isOff778, ENTITY_TYPES: ENTITY_TYPES, HUMAN_MARKERS: HUMAN_MARKERS,
+    MORPH_HEAD: MORPH_HEAD, MORPH_ANY: MORPH_ANY, MORPH_ORDER: MORPH_ORDER,
+    detectEntityType: detectEntityType, extractEntityType: extractEntityType,
+    morphologyOf: morphologyOf, morphFeatures: morphFeatures,
+    entityTypeOf: entityTypeOf, backfillEntityType: backfillEntityType,
     assertExplicitPreserved: assertExplicitPreserved,
     worldStyleVersion: worldStyleVersion,
     _load: _load, _save: _save, _reset: _reset, _put: _put,
