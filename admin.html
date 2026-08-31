@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chronicle 管理</title>
+<!-- admin v3.4 (2026-08-31): キー経路(FREE/PAID/AUTO)の見える化。①ヘッダにキー経路chip ②Pollinationsカードにモード別の挙動サマリ(AUTO=毎回primaryから・402のみreserve1回試行・429/timeout/5xxは切替なし=worker v26実装の事実表示) ③無料GET救済(v28)の今月枚数 ④予備キー残高差分（参考）(この端末での前回読込比・正式な有料使用量ではない) ⑤観測不能項目の明示(有料使用回数/直近fallback理由/直近キー種別は現行Worker記録なし)。Worker変更なし・balances既存フィールドのみ使用。 -->
 <!-- admin v3.3 (2026-07-17): +アイコン標準ONトグル(config.fix476Guard・worker v27)。 v3.2: +生成キー切替(通常/予備/自動)+キー予算上限の可視化(worker v26)。 v3.1: +生成遮断器の上限設定(config.genBudget)。 v3: v2 + Pollinationsカード + アイコン生成経路トグル(imgProvider) + ヘッダ経路chip + 台帳偶数行/カード見やすさ改善。worker v22のbalances(pollinations,imgProvider)/config-set(imgProvider)を使用 -->
 <style>
   :root { color-scheme: dark;
@@ -78,6 +79,11 @@
   #tbl tbody tr:nth-child(even) td, #atbl tbody tr:nth-child(even) td { background:#101024; }
   #tbl tbody tr:hover td, #atbl tbody tr:hover td { background:#181834; }
   .chip.img { color:var(--accent); border-color:#4a4a72; }
+  /* ---- v3.4 キー経路 ---- */
+  .chip.warnc { color:var(--warn); border-color:#8a7340; }
+  .kmbox { background:#0f0f20; border:1px solid #34344f; border-radius:8px; padding:8px 10px; margin-top:6px; font-size:12px; }
+  .kmbox .kmtitle { font-weight:600; font-size:13px; margin-bottom:2px; }
+  .kmbox.kmwarn { border-color:#8a7340; background:#221a10; }
   @media (max-width:520px) { .grid { grid-template-columns:1fr; } }
 </style>
 </head>
@@ -87,6 +93,7 @@
     <h1>◈ CHRONICLE 管理</h1>
     <span class="chip" id="wver">worker: -</span>
     <span class="chip img" id="imgchip" style="display:none">🎨 アイコン: -</span>
+    <span class="chip" id="keychip" style="display:none">🔑 -</span>
     <span class="chip bad" id="killchip" style="display:none">緊急停止中</span>
     <span class="spacer"></span>
     <button class="primary" onclick="load()">⟳ 再読込</button>
@@ -192,7 +199,7 @@
     <div class="muted" style="margin-top:8px;font-size:12px">緊急停止ONの間、全員の生成が止まります(管理APIは生きています)</div>
   </div>
 
-  <div class="foot">Chronicle admin v3 (2026-07-17)</div>
+  <div class="foot">Chronicle admin v3.4 (2026-08-31)</div>
 </div>
 
 <script>
@@ -262,7 +269,28 @@ async function loadBalances() {
   const plabel = CURRENT_IMG_PROVIDER === 'pollinations' ? 'Pollinations' : 'Together';
   $('imgchip').textContent = '🎨 アイコン: ' + plabel;
   $('imgchip').style.display = '';
+  renderKeyChip();
   $('killchip').style.display = b.killSwitch ? '' : 'none';
+}
+
+// ★v3.4: キー経路chip。設定モードの表示であって「今この瞬間どのキーで生成したか」ではない
+//   (AUTOは毎回primaryから開始・402のみその1回をreserveで再試行。永続的な切替状態は存在しない=worker v26実装)。
+function renderKeyChip() {
+  const el = $('keychip'); if (!el) return;
+  if (CURRENT_IMG_PROVIDER !== 'pollinations') { el.style.display = 'none'; return; }
+  const km = CURRENT_IMG_KEYMODE, paid = !!window.__PAID_KEY_SET;
+  let txt = '', cls = 'chip';
+  if (km === 'reserve') {
+    txt = paid ? '🔑 有料キー固定（全生成が有料）' : '🔑 有料固定設定・予備キー未設定＝実質無料';
+    cls = 'chip warnc';
+  } else if (km === 'auto') {
+    txt = paid ? '🔑 AUTO: 基本 無料 / 402時のみ有料救済' : '🔑 AUTO・予備キー未設定＝救済なし(無料のみ)';
+    cls = paid ? 'chip good' : 'chip warnc';
+  } else {
+    txt = '🔑 無料キー固定';
+    cls = 'chip good';
+  }
+  el.textContent = txt; el.className = cls; el.style.display = '';
 }
 
 function renderOR(b) {
@@ -356,7 +384,7 @@ function renderPL(b) {
       cls = low ? 'bad' : (bal < 15 ? 'warn' : '');
       html += '<div class="sub">残Pollen（$1≒1Pollen）</div>' +
         '<div class="big">' + bal.toFixed(2) + ' <small>Pollen（約' + Math.round(bal * 150) + '円）</small></div>' +
-        '<div class="kv">今月の生成: ' + (p.images || 0) + '枚</div>';
+        '<div class="kv">今月の生成（キー経由）: ' + (p.images || 0) + '枚</div>';
       if (low) html += '<div class="alertline">⚠ 残りわずか！下のボタンから補充してください</div>';
     } else {
       html += '<div class="sub muted">残Pollenは取得できませんでした</div>' +
@@ -372,18 +400,55 @@ function renderPL(b) {
   }
   const paid = b.pollinationsPaid || {};
   const pk = b.pollinationsPaidKey || {};
-  if (paid.keySet) {
+  const paidSet = !!paid.keySet;
+  if (paidSet) {
     const pb = (paid.balance != null && isFinite(+paid.balance)) ? +paid.balance : null;
     html += '<div class="sub" style="margin-top:6px">予備（有料）キー' + (pk.name ? '「' + esc(pk.name) + '」' : '') + '</div>';
     html += '<div class="kv">残Pollen: ' + (pb != null ? esc(pb.toFixed(2)) : '?') + (pk.pollenBudget != null ? ' / 予算上限 ' + esc((+pk.pollenBudget).toFixed(2)) : '') + '</div>';
+    // ★v3.4: 前回読込比(この端末のlocalStorage観測)。Workerに有料使用回数の記録が無いため、残高の減少を有料使用の目安として示す。
+    if (pb != null) {
+      let prev = null; try { prev = JSON.parse(localStorage.getItem('chrAdminPaidBal') || 'null'); } catch (e) {}
+      if (prev && isFinite(+prev.b)) {
+        const d = pb - (+prev.b);
+        const when = prev.t ? rel(prev.t) : '前回';
+        if (d < -0.0001) html += '<div class="kv" style="color:var(--warn)">予備キー残高差分（参考）: 前回読込(' + esc(when) + ')比 <b>-' + esc((-d).toFixed(2)) + ' Pollen</b>（正式な有料使用量ではありません・この端末での観測）</div>';
+        else if (d > 0.0001) html += '<div class="kv muted">予備キー残高差分（参考）: 前回読込(' + esc(when) + ')比 +' + esc(d.toFixed(2)) + ' Pollen（補充/上限変更?）</div>';
+        else html += '<div class="kv muted" style="font-size:11px">予備キー残高差分（参考）: 前回読込(' + esc(when) + ')比 変化なし</div>';
+      }
+      try { localStorage.setItem('chrAdminPaidBal', JSON.stringify({ t: new Date().toISOString(), b: pb })); } catch (e) {}
+    }
   } else {
     html += '<div class="kv muted" style="margin-top:6px">予備（有料）キー未設定（POLLINATIONS_KEY_PAID）</div>';
   }
+  // ★v3.4: キー経路モードの挙動サマリ(worker v26実装の事実表示)。
+  //   AUTOは「有料へ切り替わって維持」ではない: 毎回primaryから開始し、HTTP 402のときだけその1回をreserveで再試行。
   const km = CURRENT_IMG_KEYMODE;
+  let kmHtml = '', kmWarn = false;
+  if (km === 'reserve') {
+    kmHtml += '<div class="kmtitle">設定: 有料固定（PAID）</div>';
+    if (paidSet) { kmHtml += '<div class="alertline" style="margin:2px 0">⚠ すべての生成を予備（有料）キーで実行する設定です</div>'; kmWarn = true; }
+    else { kmHtml += '<div class="alertline" style="margin:2px 0">予備キー未設定のため、実際は通常（無料）キーで動作中</div>'; kmWarn = true; }
+  } else if (km === 'auto') {
+    kmHtml += '<div class="kmtitle">設定: 自動（AUTO）</div>' +
+      '<div class="kv">基本経路: 通常（無料）キー（毎回ここから開始・切替状態は保持されません）</div>' +
+      '<div class="kv">有料救済: HTTP 402（無料キー予算切れ）のときだけ、その1回を予備（有料）キーで再試行</div>' +
+      '<div class="kv muted">429・タイムアウト・5xxでは有料キーへ切替えません（provider障害時は有料でも同じ失敗をするため）</div>';
+    if (!paidSet) { kmHtml += '<div class="alertline" style="margin:2px 0">予備キー未設定のため、402でも救済されません（実質 無料のみ）</div>'; kmWarn = true; }
+  } else {
+    kmHtml += '<div class="kmtitle">設定: 無料固定（FREE）</div>' +
+      '<div class="kv">すべての生成を通常（無料）キーで実行。予備（有料）キーは使いません</div>';
+  }
+  html += '<div class="kmbox' + (kmWarn ? ' kmwarn' : '') + '">' + kmHtml + '</div>';
   const kmBtn = (v, lab) => '<button class="provbtn' + (km === v ? ' active' : '') + '" onclick="setKeyMode(\'' + v + '\')">' + lab + '</button>';
   html += '<div class="sub" style="margin-top:8px">生成に使うキー</div>';
-  html += '<div style="margin-top:2px">' + kmBtn('primary', '通常（無料）') + kmBtn('reserve', '予備（有料）') + kmBtn('auto', '自動') + '</div>';
-  html += '<div class="kv muted" style="font-size:10px">自動＝通常キーが予算切れ(402)のときだけ有料キーへ切替。混雑や一時失敗では切替えません</div>';
+  html += '<div style="margin-top:2px">' + kmBtn('primary', '無料固定') + kmBtn('reserve', '有料固定') + kmBtn('auto', '自動(AUTO)') + '</div>';
+  // ★v3.4: 観測できるもの/できないものを正直に表示(balances既存フィールドのみ・推測や捏造をしない)
+  const ba = (b.together && b.together.imagesAll) || {};
+  const freeN = +ba['pollinations-free'] || 0;
+  const lastAt = b.together && b.together.lastAt;
+  html += '<div class="kv" style="margin-top:8px">無料GET救済（上流失敗時の無認証経路・<b>有料fallbackではありません</b>）: 今月 ' + freeN + '枚</div>';
+  if (lastAt) html += '<div class="kv muted">最終画像生成: ' + esc(rel(lastAt)) + '（全provider共通の記録）</div>';
+  html += '<div class="kv muted" style="font-size:10px">※現行Workerには「今月の有料(reserve)使用回数」「直近fallback理由」「直近生成に使ったキー種別」の記録が無く、この画面では観測できません。上の予備キー残高差分（参考）が目安になります。</div>';
   html += '<div><a class="linkbtn hot" target="_blank" rel="noopener" href="' + LINKS.plDash + '">💳 補充・ダッシュボード ↗</a></div>';
   el.className = 'bcard ' + cls;
   el.innerHTML = html;
@@ -392,7 +457,7 @@ function renderPL(b) {
 async function setKeyMode(m) {
   if (m !== 'primary' && m !== 'reserve' && m !== 'auto') return;
   if (m === CURRENT_IMG_KEYMODE) { setStatus('すでにこのモードです', 'ok'); return; }
-  const labels = { primary: '通常（無料キー）', reserve: '予備（有料キー）', auto: '自動（予算切れで有料へ）' };
+  const labels = { primary: '無料固定（通常キーのみ）', reserve: '有料固定（予備キーのみ）', auto: '自動（毎回無料から・402のみ有料で1回再試行）' };
   if ((m === 'reserve' || m === 'auto') && !window.__PAID_KEY_SET) {
     if (!confirm('予備（有料）キー POLLINATIONS_KEY_PAID がまだ未設定です。設定するまでこのモードは通常キーで動作します。続けますか？')) return;
   }
