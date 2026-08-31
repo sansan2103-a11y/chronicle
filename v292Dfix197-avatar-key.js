@@ -31,6 +31,13 @@
 //     canonName を変えると icon の外へ影響が漏れるため触らない（fix455/456 の教訓）。
 //   返すのは必ず「登録済みの表示形」。fold 形そのものは 1 バイトも返さない・保存しない。
 //   OFF: v292Dfix764Off='1' で従来動作。
+// ★fix766/fix767(2026-08-31 / PHASE 4E = Icon System slice 1): 「同じ人物のアイコンが毎回別人」の根治。
+//   外見の確定は v292Dfix766(Canonical Appearance)、prompt/seed への翻訳は v292Dfix767(IconRecipe)。
+//   本ファイルは **配線だけ**（数行）。genOne で body.prompt/seed を recipe 由来へ差し替え、
+//   regenFor で variantIndex++（＝同じ見た目のまま別サンプリング）を頼むだけ。
+//   ★opt-in: localStorage.v292Dfix766On==='1' かつ当人の record が有るときだけ差し替わる。
+//     OFF/未ロード/record無しでは body も seed も1バイトも変わらない（従来動作と完全一致）。
+//   ★keyFor / v292avrec_ / v292av2_ の形は不変。style は入れない（画風の権威は fetch 層の fix484）。
 // ---------------------------------------------------------------------
 // fix199 からの改良（おしんFB: 場所ごとに絵が違う／絵柄が前と違う）:
 //   ・キャッシュを【キャラ名＋画風】単位に統一 → 会話ログ/設定/キャラ一覧で同じ1枚を共有。
@@ -343,6 +350,21 @@
       try { var p412 = buildPrompt412(info.name||''); if (p412) body.prompt = p412; } catch(e){}   // ★fix412: 現在の設定+世界観を優先
       body.seed = Math.floor(Math.random()*1000000000);
     }
+    // ★fix766/fix767: Canonical Appearance(opt-in) が有効で当人の record があるときだけ、
+    //   body.prompt/seed を IconRecipe 由来へ差し替える(明示↻の :344 ランダムseedもこれで上書き)。
+    //   record が無ければ ensureFor が初回だけ作る。OFF/未ロード/失敗は従来動作のまま(全て try/catch)。
+    try {
+      var a766 = window.__v292Dfix766, r767 = window.__v292Dfix767;
+      if (a766 && a766.__armed && a766.on() && r767 && r767.__armed) {
+        try { a766.ensureFor(info.name||''); } catch(e766){}
+        var rc767 = r767.buildRecipe(info.name||'');
+        var pb767 = rc767 ? r767.toProviderBody(rc767) : null;
+        if (pb767 && pb767.prompt) {
+          body.prompt = pb767.prompt; body.seed = pb767.seed;
+          try { r767.recordGeneration(pk, { providerSeed: pb767.seed, variantIndex: rc767.sampling.variantIndex, appearanceRevision: rc767.appearanceRevision, recipeVersion: rc767.recipeVersion }); } catch(e767){}
+        }
+      }
+    } catch(e){}
     // ★fix484: 診断タグ(mode=auto|regen)。fix484が有効なときだけ付与し、fix484が送信直前に必ず除去する
     //   （fix484不在/OFFなら付けない=外部APIへ内部フィールドを漏らさない）。秘密情報は含まない。
     try { var d484 = window.__v292Dfix484; if (d484 && d484.__armed && d484.active && d484.active()) body.__diag484 = { m: fresh403 ? 'regen' : 'auto' }; } catch(e){}
@@ -499,6 +521,8 @@
     // v292Dfix524: フライトロック。同一キャラの↻連打/多重発火を2秒デバウンス(二重生成・二重課金防止・persist/putimg一回)。
     try { var _n524=Date.now(); if(!regenFor.__lock524) regenFor.__lock524={}; if(regenFor.__lock524[pk] && (_n524 - regenFor.__lock524[pk] < 2000)){ try{ console.log('[v292Dfix524] regen debounced', pk); }catch(e){} return; } regenFor.__lock524[pk]=_n524; } catch(e){}
     try { if (localStorage.getItem('v292Dfix403Off')!=='1') freshSeed403[pk]=1; } catch(e){}   // ★fix403: 明示↻は新seed
+    // ★fix767: 明示↻＝「同じ見た目のまま別の絵」。fix766 On かつ record 有りのときだけ variantIndex++。
+    try { var a766r=window.__v292Dfix766, r767r=window.__v292Dfix767; if (a766r&&a766r.__armed&&a766r.on()&&r767r&&r767r.__armed&&a766r.get(name)) r767r.bumpVariant(name); } catch(e){}
     var rec=null; try { rec=JSON.parse(localStorage.getItem('v292avrec_'+pk)||'null'); } catch(e){}  // ★fix403b: レシピ取得
     // ★fix197 H-3(2026-07-11): 旧画像を生成成功まで保持(生成失敗時に復元)。persistDelは即時に行わない。
     try { var _pv=persistGet(pk); if(_pv && _pv.indexOf('data:')===0) regenPrev[pk]=_pv; } catch(e){}
