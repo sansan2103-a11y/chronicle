@@ -51,7 +51,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260831-fix762';
+  var BUILT = '20260831-fix763';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2169,6 +2169,8 @@ const G = {
         /* ★★fix732(RULING85): 唯一の新ターン生成口。このターンが session 中に生成されたことを ephemeral に記録する。
            localStorage / story body / hash へは 1 バイトも書かない。 */
         try { if (window.__v292Dfix732Scope) window.__v292Dfix732Scope.markNew(turn); } catch(_e732){}
+        /* ★★fix763(QG-7): S.save()より前に清書を確定（詳細=v292Dfix458-dash-post.js冒頭）。OFF=v292Dfix763Off */
+        try { if (window.__v292Dfix458 && typeof window.__v292Dfix458.cleanTurn === 'function') window.__v292Dfix458.cleanTurn(turn); } catch(_e763){}
         S.scene.branches = plan.branchCandidates || [];
         S.save();
         return true;
@@ -3545,7 +3547,7 @@ G.init();
 <script src="v292Dfix448-genloading.js?cb=v292Dfix448"></script>
 <script src="v292Dfix453-src-coalesce.js?cb=v292Dfix453"></script>
 <script src="v292Dfix454-dash.js?cb=v292Dfix457"></script>
-<script src="v292Dfix458-dash-post.js?cb=v292Dfix762"></script>
+<script src="v292Dfix458-dash-post.js?cb=v292Dfix763"></script>
 <script src="v292Dfix459-sys-v2.js?cb=v292Dfix737"></script>
 <script src="v292Dfix460-slotgrid.js?cb=v292Dfix460"></script>
 <script src="v292Dfix461-appearance-en.js?cb=v292Dfix740"></script>

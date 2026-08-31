@@ -21,6 +21,12 @@
 //         ターンごとに t.__f458=1 を立てて冪等。
 // 冪等: window.__v292Dfix458   /   OFF: localStorage.v292Dfix458Off='1'
 // ★fix762(2026-08-31): 閉じダッシュ直後が「1文字助詞＋非句読点」ならも `、` を足さず直結する。 OFF: v292Dfix762Off='1'
+// ★fix763(2026-08-31 QG-7根治): commit時に S.save() より**前**で清書を確定させる公式入口 cleanTurn(t) を追加。
+//   従来は UI.appendTurn の renderHook 経由＝**raw保存の後にメモリだけ**清書していたため、
+//   localStorage / canonical(fix697) には raw が残り、reload+hydrate で raw が復活し
+//   seal() が既存ターンとして封印するので二度と清書されなかった。
+//   cleanTurn は既存の processTurn をそのまま呼ぶだけ（判定ロジックは一切不変・冪等も __f458 のまま）。
+//   OFF: localStorage.v292Dfix763Off='1' → この入口だけ無効化（renderHook 経路は従来どおり動く）。
 // 検証口: window.__v292Dfix458.clean('文——文') / .stats()
 // =====================================================================
 (function(){
@@ -211,6 +217,16 @@
     return st.replaced;
   }
 
+  /* ★fix763(QG-7): commit の公式入口。S.save() の前に呼ばれ、保存される本文を清書後に揃える。
+     processTurn の中身には触れない（同じ関数をそのまま呼ぶ）。例外は握り潰して commit を止めない。 */
+  function cleanTurn(t){
+    try {
+      if (off()) return 0;
+      try { if (localStorage.getItem('v292Dfix763Off') === '1') return 0; } catch(e){}
+      return processTurn(t);
+    } catch(e){ return 0; }
+  }
+
   // 起動時に存在したターンは「過去の物語」として触らない（印だけ付ける）
   var sealed = false;
   function seal(){
@@ -246,6 +262,6 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
   else install();
 
-  window.__v292Dfix458 = { __armed: true, clean: clean, run: run, stats: function(){ return stats; }, isOff: off };
+  window.__v292Dfix458 = { __armed: true, clean: clean, cleanTurn: cleanTurn, run: run, stats: function(){ return stats; }, isOff: off };
   try { console.log(TAG, 'armed'); } catch(e){}
 })();
