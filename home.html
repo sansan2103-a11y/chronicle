@@ -220,7 +220,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260831-fix758';
+  var HOME_BUILT = '20260831-fix760';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -551,6 +551,23 @@
     mountCovers(document);
   }
 
+  /* ============================================================
+   * ★★2026-08-31 fix759 CLOUD_ROW_ACTIONS（HOME 側・描画だけ）
+   * ------------------------------------------------------------
+   * 症状(実機観測): fix757 が一覧に出す「☁ クラウド」行を選ぶと、詳細の
+   *   「☆お気に入り / 名前を変更 / 削除」を押しても **何も起きない**。
+   * 真因: この3ボタンは行の種類に関係なく常に描かれるが、ハンドラの
+   *   delStory()/renameStory()/favStory() は readMeta()（= この端末の
+   *   chr6_slots_meta）に id が無いと無言で return する。クラウド行は
+   *   local meta に **無い** 行なので、必ず無反応になる。
+   * 最小修正: cloud 行のときだけ、この3ボタンを **描かない**（案内文に置き換える）。
+   *   併せて playBtn の文言を「開いてこの端末へ取り込む」にする。
+   *   → ハンドラ・データ経路（削除/改名/同期/墓標）は 1 行も触らない。
+   * OFF: localStorage['v292Dfix759Off']='1' → 従来どおり3ボタンを描く。
+   * ========================================================== */
+  function f759off(){ return g('v292Dfix759Off') === '1'; }
+  function f759Cloud(x){ return !f759off() && !!(x && x.cloud === true); }
+
   function renderDetail(full){
     var x = null;
     for(var i=0;i<full.length;i++){ if(full[i].id===SEL){ x=full[i]; break; } }
@@ -565,10 +582,12 @@
       '<div class="drow"><span>最終更新</span><b>'+dt(x.updated)+'</b></div>'+
       '<div class="drow"><span>総ターン数</span><b>'+x.turns+'</b></div>'+
       '<div class="drow"><span>場所</span><b>'+esc(x.loc||'—')+'</b></div>'+
-      '<button class="play" id="playBtn">'+(x.turns>0?'続きから始める':'この物語を始める')+'</button>'+
-      '<div class="mini"><button id="favBtn">'+(x.favorite?'★ お気に入り解除':'☆ お気に入り')+'</button>'+
-      '<button id="renBtn">名前を変更</button>'+
-      '<button class="danger" id="delBtn">削除</button></div>'+
+      '<button class="play" id="playBtn">'+(f759Cloud(x)?'開いてこの端末へ取り込む':(x.turns>0?'続きから始める':'この物語を始める'))+'</button>'+
+      (f759Cloud(x)
+        ? '<div class="mini" style="color:var(--dim);font-size:12px;line-height:1.6">☁ クラウドの物語です。開いてこの端末へ取り込むと、名前の変更や削除ができます。</div>'
+        : '<div class="mini"><button id="favBtn">'+(x.favorite?'★ お気に入り解除':'☆ お気に入り')+'</button>'+
+          '<button id="renBtn">名前を変更</button>'+
+          '<button class="danger" id="delBtn">削除</button></div>')+
       '<div class="dsec">この物語のキャラクター</div>'+
       (chars.length ? chars.map(function(o){
         return '<div class="ch">'+avatar(o.c.name)+'<div><div class="nm">'+esc(o.c.name||'')+
