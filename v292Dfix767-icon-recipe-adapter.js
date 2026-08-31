@@ -65,6 +65,16 @@
 //   ・「もう一度」(↻) の挙動は不変（appearance 固定・variantIndex++・reference 付き）。
 //   ・kill: localStorage.v292Dfix773Off==='1' → rebuildAndRegen は no-op（fix145 のボタンも非表示）。
 //
+// ■fix776(2026-08-31 / 4E-GEN1): genderOf に **record fallback** を足す（cast 欠落時だけ）
+//   ・真因: subjectPhrase の性別は S.cast.{hero,npcs}.gender からしか来ず、cast に載っていない
+//     roster 由来キャラ（例:「〜のお婆さん」）は常に g='' → 'elderly person' → 画像が男性へ倒れる
+//     （OWNER 実画像で "お婆さん" に髭）。書いてある性別が prompt へ 1バイトも流れていなかった。
+//   ・対処: cast に gender が無いときだけ fix766.get(name).attrs.gender を見る。
+//     'FEMALE'→'女性' / 'MALE'→'男性' に写して従来の g 判定へ渡すだけ（下流の語順は不変）。
+//   ・fix766 側の gender は **明示性別語からしか立たない**（職業・名前・年齢からの推測は禁止）。
+//   ・★S.cast への逆書き込みはしない。双方に無ければ従来どおり '' ＝ neutral 'person'。
+//   ・kill: localStorage.v292Dfix776Off==='1' → fallback を止め、cast-only の従来動作へ。
+//
 // ■公開口
 //   window.__v292Dfix767 = { __armed, buildRecipe, toProviderBody, promptFor,
 //     bumpVariant, variantOf, recordGeneration, generationsOf, FRAMING, WORDS, RECIPE_VERSION,
@@ -222,7 +232,14 @@
     } catch(e){ return ''; }
   }
 
-  function genderOf(name){
+  /* ---------- gender（★fix776: cast 欠落時だけ fix766 record を見る） ----------
+     ・第一権威は従来どおり S.cast.{hero,npcs}.gender（挙動を1バイトも変えない）。
+     ・cast にその名前が無い / あっても gender が空のときだけ、fix766 の
+       attrs.gender（**明示性別語からしか立たない**）を 'FEMALE'→'女性' / 'MALE'→'男性' へ移す。
+     ・双方に無ければ従来どおり '' を返す（＝subjectPhrase は neutral 'person'）。
+     ・★S.cast への逆書き込みは行わない（物語データは読むだけ）。
+     ・kill: v292Dfix776Off='1' で fallback ごと従来の cast-only 動作へ戻る。 */
+  function castGenderOf(name){
     try {
       var S = getS(); if (!S || !S.cast) return '';
       if (S.cast.hero && S.cast.hero.name === name) return String(S.cast.hero.gender || '');
@@ -230,6 +247,23 @@
       for (var i=0;i<ns.length;i++){ if (ns[i] && ns[i].name === name) return String(ns[i].gender || ''); }
     } catch(e){}
     return '';
+  }
+  function off776(){ try { return localStorage.getItem('v292Dfix776Off') === '1'; } catch(e){ return false; } }
+  function recordGenderOf(name){
+    try {
+      if (off776()) return '';
+      var f = f766(); if (!f || typeof f.get !== 'function') return '';
+      var rec = f.get(name);
+      var g = rec && rec.attrs && rec.attrs.gender && rec.attrs.gender.value;
+      if (g === 'FEMALE') return '女性';
+      if (g === 'MALE')   return '男性';
+    } catch(e){}
+    return '';
+  }
+  function genderOf(name){
+    var g = castGenderOf(name);
+    if (g) return g;                 // cast が持っているならそれが権威（従来どおり）
+    return recordGenderOf(name);     // ★fix776: cast 欠落時だけ record 由来（castへは書き戻さない）
   }
 
   // ---------- variantIndex（= 同じ外見のまま別サンプリング） ----------
@@ -437,6 +471,8 @@
     SHOT_ANIME: SHOT_ANIME, AGE_ADJ: AGE_ADJ, subjectPhrase: subjectPhrase, refUrlFor: refUrlFor,
     /* ★fix773 */
     rebuildAndRegen: rebuildAndRegen,
+    /* ★fix776: gender 解決の検証口（読み取りのみ・castへは書き戻さない） */
+    genderOf: genderOf, castGenderOf: castGenderOf, recordGenderOf: recordGenderOf,
     _skipRefOnce: function(){ var o = {}; for (var k in skipRefOnce) o[k] = skipRefOnce[k]; return o; }   // 検証口(読み取り)
   };
   try { console.log(TAG, 'loaded (recipeVersion=' + RECIPE_VERSION + ')'); } catch(e){}

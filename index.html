@@ -51,7 +51,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260831-fix775';
+  var BUILT = '20260831-fix777';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3335,6 +3335,7 @@ G.init();
 <script src="v292Dfix135-longmem.js?cb=v292Dfix299b"></script>
 <script src="v292Dfix138-continue.js?cb=v292Dfix225"></script>
 <script src="v292Dfix145-charlist.js?cb=v292Dfix773"></script>
+<script src="v292Dfix777-icon-lightbox.js?cb=v292Dfix777"></script>
 <!-- v292Dfix226(P1): fix52(可読性v1)はfix53(包括v2)に内包されるため退役。問題があれば下行のコメントを外す
 <script src="v292Dfix52-readability.js?cb=v292Dfix52"></script> -->
 <script src="v292Dfix53-readability-v2.js?cb=v292Dfix53"></script>
@@ -3426,8 +3427,8 @@ G.init();
 <script src="v292Dfix305-trigger-states.js?cb=v292Dfix305"></script>
 <script src="v292Dfix306-npc-liveliness.js?cb=v292Dfix738"></script>
 <script src="v292Dfix764-name-variant-fold.js?cb=v292Dfix764"></script>
-<script src="v292Dfix766-canonical-appearance.js?cb=v292Dfix772"></script>
-<script src="v292Dfix767-icon-recipe-adapter.js?cb=v292Dfix775"></script>
+<script src="v292Dfix766-canonical-appearance.js?cb=v292Dfix776"></script>
+<script src="v292Dfix767-icon-recipe-adapter.js?cb=v292Dfix776b"></script>
 <script src="v292Dfix307-npc-roster.js?cb=v292Dfix765"></script>
 <script src="v292Dfix308-creepy-toggle.js?cb=v292Dfix308"></script>
 <script src="v292Dfix309-progression.js?cb=v292Dfix419c"></script>

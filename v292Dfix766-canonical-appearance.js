@@ -34,6 +34,28 @@
 //   background 自動有料生成は無い。retry も有限（fix476=3+3候補で打ち止め・fix478=最大2回・
 //   fix524=2sデバウンス・fix197 GEN_BUDGET=30/セッション）。kill は維持。
 //
+// ■fix776(2026-08-31 / 4E-GEN1): **明示性別語 → attrs.gender** の導出（軽微 schema 拡張）
+//   ・真因: OWNER の実画像で「辻井のお婆さん」に髭が生えた。fix767 の subjectPhrase は
+//     性別を **S.cast.{hero,npcs}.gender からしか読まない**ため、cast に載っていない
+//     物語内キャラ（roster 由来の"お婆さん"など）は常に g='' → 主語が 'person' になる。
+//     'elderly person' は画像モデル側で男性に倒れやすく、髭が生える。
+//     ＝「女性という**書いてある事実**が prompt へ1バイトも流れていなかった」構造穴。
+//   ・GPT 裁定: 12軸 ENUMS を増やさず、attrs に gender を1つだけ足す軽微拡張を承認。
+//     ただし **推測は全面禁止**（職業・名前・年齢・服装・性格から性別を決めない）。
+//     決めてよいのは「desc / roster appr の本文に明示的な性別語が書いてあるとき」だけ。
+//   ・構造上の保証: gender は ENUMS / ATTR_KEYS に **入れない**。よって fillMissing の
+//     RANDOM 対象に構造的になりえない（＝性別を勝手に抽選することが実装上不可能）。
+//   ・両性の語が同一テキストに同居したら（例:「母親譲りの黒髪を持つ少年」）**導出しない**。
+//     曖昧なら空＝従来どおり 'person'。誤った性別を立てるより無指定の方が安全。
+//   ・単字「女」「男」「婆」の substring 判定は禁止（「彼女は言った」「長男の話」で誤爆する）。
+//     語彙は必ず2字以上の語単位。「老人」は中立語として **どちらにも入れない**。
+//   ・既存 record への backfill: get()/ensureFor() で attrs.gender が無い record を見つけたら、
+//     **gender 項目だけ** 1回追い抽出して保存する（他 attrs は不触・appearanceRevision も不変）。
+//     これが無いと fix772 の既定ON以前に作られた既存 record（＝実際に髭が生えた人）が直らない。
+//     一般規則であり、特定 story / 特定名への patch ではない。
+//   ・kill: localStorage.v292Dfix776Off === '1' → gender の導出と backfill だけ停止
+//     （fix766 本体・12軸・fill は一切変えない）。
+//
 // ■kill（既定ON・停止は Off 側だけ）
 //   localStorage.v292Dfix766Off === '1' のときだけ全停止（従来の強制停止をそのまま昇格）。
 //   停止中の ensureFor() は no-op（ストアへ1バイトも書かない）。
@@ -45,6 +67,7 @@
 //     ensureFor, get, rebuildAppearance,
 //     extractExplicit, fillMissing, appearanceSeed, rng,
 //     ENUMS, BASE_WEIGHTS, assertExplicitPreserved,
+//     ★fix776: GENDER_WORDS, detectGenderWord, extractGender, backfillGender, isOff776,
 //     _load, _save, _reset, _put, _rosterCounts, _resolveName }
 // =====================================================================
 (function(){
@@ -59,6 +82,8 @@
      後方互換で読むが結果には効かせない＝古い端末に '1' が残っていても害が無い）。 */
   function on(){ try { lsg('v292Dfix766On'); } catch(e){} return lsg('v292Dfix766Off') !== '1'; }
   function isOff(){ return lsg('v292Dfix766Off') === '1'; }
+  /* ★fix776: gender 導出 + backfill だけの kill。fix766 本体（12軸・fill・store）には効かない。 */
+  function isOff776(){ return lsg('v292Dfix776Off') === '1'; }
 
   /* slotId: fix640 と同じ経路（document authority = __chr6Key）。読取のみ。 */
   function slotId(){
@@ -107,6 +132,48 @@
   };
   var ATTR_KEYS = ['ageBand','bodyBuild','heightImpression','faceShape','hairColor','hairLength','hairShape',
                    'clothingArchetype','clothingCondition','posture','expressionBaseline','silhouette'];
+
+  // =====================================================================
+  // ★fix776: gender（明示語からの導出のみ・12軸の外側）
+  // ---------------------------------------------------------------------
+  //  ・gender は ENUMS にも ATTR_KEYS にも **入れない**。
+  //    → fillMissing は ATTR_KEYS しか回さないので、RANDOM_FILL が gender を作ることは
+  //      実装上ありえない（規約ではなく構造で保証する）。
+  //  ・値は 'FEMALE' | 'MALE' の2値のみ。'UNKNOWN' は持たない（無い＝キー自体が無い）。
+  //  ・語彙は「その人物の性別が本文に書いてある」と読める語だけ。2字以上の語単位のみ。
+  //    単字「女」「男」「婆」は入れない（彼女／長男／男女 などで誤爆する）。
+  //  ・「老人」「紳士」「主人」「人物」「村長」「漁師」「先生」「研究者」「巫女」等の
+  //    職業語・敬称・年齢語は **どちらにも入れない**（＝推測禁止の実体）。
+  //     ※「巫女」は職業語であり性別語ではない（男性神職が巫女装束を着る筋書きもありうる）。
+  //       服装 archetype は既存 RULES が SHRINE_PRIEST として拾うので情報は落ちない。
+  // =====================================================================
+  var GENDER_WORDS = {
+    FEMALE: ['女性','女の人','女の子','お婆さん','おばあさん','婆さん','ばあさん','老婆','女将','娘','少女','乙女','母親','母'],
+    MALE:   ['男性','男の人','男の子','お爺さん','おじいさん','爺さん','じいさん','老爺','翁','息子','少年','父親','父']
+  };
+  var RE_FEMALE = new RegExp(GENDER_WORDS.FEMALE.join('|'));
+  var RE_MALE   = new RegExp(GENDER_WORDS.MALE.join('|'));
+
+  /**
+   * detectGenderWord(text) → 'FEMALE' | 'MALE' | ''
+   *   明示語が **片側だけ** 出たときだけ値を返す。両方出たら '' （曖昧＝導出しない）。
+   *   例: 「母親譲りの黒髪を持つ少年」→ FEMALE語(母親)とMALE語(少年)が同居 → '' 。
+   */
+  function detectGenderWord(text){
+    var t = String(text==null?'':text);
+    if (!t) return '';
+    var f = RE_FEMALE.test(t), m = RE_MALE.test(t);
+    if (f && m) return '';
+    if (f) return 'FEMALE';
+    if (m) return 'MALE';
+    return '';
+  }
+  /** extractGender(text, source) → {value,source,locked} | null （kill 中は常に null） */
+  function extractGender(text, source){
+    if (isOff776()) return null;
+    var g = detectGenderWord(text);
+    return g ? { value: g, source: source || 'STORY_EXPLICIT', locked: false } : null;
+  }
 
   /* base weights（controlled random fill の素の分布）。
      ・実在しうる人口分布に寄せる（CHILD/ELDERLY は薄い、TWENTIES〜FIFTIES を厚く）
@@ -277,6 +344,11 @@
       if (RULES[i][0].test(t)) setIfAbsent(RULES[i][1], RULES[i][2]);
     }
 
+    /* ★fix776: 明示性別語だけ（推測は一切しない・kill 中は何も足さない）。
+       gender は ATTR_KEYS の外なので fillMissing / rebuild の抽選対象にはならない。 */
+    var gEx = extractGender(t, src);
+    if (gEx && !out.attrs.gender) out.attrs.gender = gEx;
+
     /* 傷: 最初の出現位置の前後8字から位置語を読む。読めなければ 'facial scar' */
     var mScar = t.match(/刀傷|傷跡|傷痕|傷/);
     if (mScar){
@@ -406,15 +478,47 @@
     } catch(e){ return blank(); }
   }
   function _save(o){ try { return lss(KEY(), JSON.stringify(o)); } catch(e){ return false; } }
-  function _reset(){ try { localStorage.removeItem(KEY()); } catch(e){} }
+  function _reset(){ try { localStorage.removeItem(KEY()); } catch(e){} genderTried = Object.create(null); }
   function _put(name, record){
     var who = resolveName(name); if (!who) return null;
     var st = _load(); st.entities[who] = record; _save(st); return record;
   }
+  /* ★fix776: 「gender だけ」の追い抽出を1回試したかの memo（モジュール内メモリ・localStorage は汚さない）。
+     語が見つからなかった人を毎 get() で再走査しないためだけのもの。リロードで自然に消える。 */
+  var genderTried = Object.create(null);
+
+  /**
+   * ★fix776 backfillGender(who, rec) → rec
+   *   既存 record に attrs.gender が無いときだけ、**gender 項目だけ** 1回追い抽出して保存する。
+   *   ・他の attrs / distinctiveFeatures / appearanceRevision / updatedAt は 1バイトも変えない。
+   *   ・既に gender があれば絶対に触らない（USER_EXPLICIT / STORY_EXPLICIT の上書き禁止）。
+   *   ・語が見つからなければ **保存もしない**（ストア書込0）。
+   *   ・kill(v292Dfix776Off='1') / fix766 本体 Off のときは何もしない。
+   *   一般規則: 「明示性別語が本文にあるのに record に gender が無い record を直す」だけであり、
+   *   特定の story / 特定の名前に効く patch ではない。
+   */
+  function backfillGender(who, rec){
+    try {
+      if (!rec || !rec.attrs) return rec;
+      if (isOff776() || !on()) return rec;
+      if (rec.attrs.gender) return rec;                 // 既存 gender は絶対に上書きしない
+      if (genderTried[who]) return rec;
+      genderTried[who] = 1;
+      /* 優先は buildRecord と同じ ①ユーザー desc → ②roster appr */
+      var g = extractGender(castDescOf(who), 'USER_EXPLICIT');
+      if (!g) g = extractGender(rosterApprOf(who), 'STORY_EXPLICIT');
+      if (!g) return rec;                               // 明示語なし＝導出しない（書込もしない）
+      rec.attrs.gender = g;                             // ★gender 以外は触らない・revision も動かさない
+      _put(who, rec);
+      return rec;
+    } catch(e){ return rec; }
+  }
+
   function get(name){
     var who = resolveName(name); if (!who) return null;
     var st = _load();
-    return Object.prototype.hasOwnProperty.call(st.entities, who) ? st.entities[who] : null;
+    if (!Object.prototype.hasOwnProperty.call(st.entities, who)) return null;
+    return backfillGender(who, st.entities[who]);       // ★fix776: gender が無い既存 record だけ直す
   }
 
   /* 既に保存済みの他キャラの分布（多様性ペナルティの材料） */
@@ -535,6 +639,9 @@
     extractExplicit: extractExplicit, fillMissing: fillMissing, buildRecord: buildRecord,
     appearanceSeed: appearanceSeed, rng: rng, hash32: hash32,
     ENUMS: ENUMS, ATTR_KEYS: ATTR_KEYS, BASE_WEIGHTS: BASE_WEIGHTS,
+    /* ★fix776: gender（12軸の外側・明示語のみ・kill=v292Dfix776Off） */
+    isOff776: isOff776, GENDER_WORDS: GENDER_WORDS,
+    detectGenderWord: detectGenderWord, extractGender: extractGender, backfillGender: backfillGender,
     assertExplicitPreserved: assertExplicitPreserved,
     worldStyleVersion: worldStyleVersion,
     _load: _load, _save: _save, _reset: _reset, _put: _put,
