@@ -48,14 +48,28 @@
 //     pollinations で reference は無視される）ため、client 側で provider を明示する。
 //   ・初回（当人のキャッシュ画像がまだ無い）は参照無し＝従来どおり。
 //   ・参照元は同期ラグで1版古いことがある（既知 caveat）。
-//   ・コスト: together FLUX.2-dev は **有料 model**。既定 OFF の QA 限定機能であり、
-//     既定 ON 化のコスト判断は OWNER 裁定事項。
+//   ・コスト: together FLUX.2-dev は **有料 model**。★fix772 で fix766 が既定ONになったため
+//     この経路も既定で生きる。課金が発生するのは **ユーザーが明示↻を押した再生成だけ**
+//     （初回生成・自動生成には参照が付かない＝無料経路）。↻1回あたり最大6候補
+//     （fix476=3候補×最大2バッチ）が有料生成される。
 //   ・kill: localStorage.v292Dfix770Off==='1' → reference 拡張だけ無効（fix769 の語順は残る）。
+//
+// ■fix773(2026-08-31 / PHASE 4E slice 3A): 「外見を作り直す」UX（API 1個だけ）
+//   ・rebuildAndRegen(name): ①fix766.rebuildAppearance（EXPLICIT/locked は不触・RANDOM_FILL だけ
+//     引き直し・appearanceRevision++）→ ②**直後の1回だけ reference を使わない**（one-shot）
+//     → ③fix197.regenFor(name) を1回だけ呼ぶ。返値 { ok, revision }。全て try/catch。
+//   ・なぜ reference を切るのか: 「外見を作り直す」は identity の **再定義** であって
+//     「同じ人物の別の絵」ではない。旧 icon を参照させると作り直した外見が旧顔へ引き戻される。
+//     以後の「もう一度」(↻) では新しく受理された icon が参照になる（＝新 identity で固定される）。
+//   ・one-shot はモジュール内メモリのみ（localStorage を汚さない）。refUrlFor が先頭で消費する。
+//   ・「もう一度」(↻) の挙動は不変（appearance 固定・variantIndex++・reference 付き）。
+//   ・kill: localStorage.v292Dfix773Off==='1' → rebuildAndRegen は no-op（fix145 のボタンも非表示）。
 //
 // ■公開口
 //   window.__v292Dfix767 = { __armed, buildRecipe, toProviderBody, promptFor,
 //     bumpVariant, variantOf, recordGeneration, generationsOf, FRAMING, WORDS, RECIPE_VERSION,
-//     PROMPT_CONTRACT, HEAD_PREFIX, MEDIUM_WORD, SHOT_ANIME, AGE_ADJ, subjectPhrase, refUrlFor }
+//     PROMPT_CONTRACT, HEAD_PREFIX, MEDIUM_WORD, SHOT_ANIME, AGE_ADJ, subjectPhrase, refUrlFor,
+//     rebuildAndRegen, _skipRefOnce }
 // =====================================================================
 // ★fix771(2026-08-31): 受入E2Eで refUrlFor が常に '' になる実バグを観測(fix400.urlForの表示優先ラッパが
 //   ローカル画像有=再生成時にサーバURLを抑止するため)。参照URLはns+proxyから直接構築へ変更。
@@ -76,6 +90,7 @@
   function f400(){ try{ var f=window.__v292Dfix400; return f || null; }catch(e){ return null; } }
   function off769(){ try{ return localStorage.getItem('v292Dfix769Off')==='1'; }catch(e){ return false; } }
   function off770(){ try{ return localStorage.getItem('v292Dfix770Off')==='1'; }catch(e){ return false; } }
+  function off773(){ try{ return localStorage.getItem('v292Dfix773Off')==='1'; }catch(e){ return false; } }
 
   function hash32(s){ var h=2166136261; s=String(s); for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=(h*16777619)>>>0; } return h>>>0; }
   function artStyleId(){ try{ var S=getS(); return String((S&&S.cfg&&S.cfg.artStyle)!=null ? S.cfg.artStyle : 0); }catch(e){ return '0'; } }
@@ -161,12 +176,17 @@
     return f.STYLE6_TAIL;
   }
 
-  // ---------- fix770: IDENTITY_REFERENCE（再生成時のみ・有料 model・既定 OFF 前提） ----------
+  // ---------- fix770: IDENTITY_REFERENCE（再生成時のみ・有料 model。★fix772 以降は既定で有効） ----------
   var TOGETHER_MODEL = 'black-forest-labs/FLUX.2-dev';   // Worker は ^black-forest-labs/… のみ受理
   var TOGETHER_STEPS = 28;
+  /* ★fix773: 「外見を作り直す」直後の1回だけ reference を使わないための one-shot（モジュール内メモリ）。
+     localStorage には書かない＝リロードで自然消滅する（作り直しの1発分だけ効けばよい）。 */
+  var skipRefOnce = Object.create(null);
   /* refUrlFor(name) → 参照画像URL | ''（'' = 初回 or 参照不能 = 従来どおり reference 無し） */
   function refUrlFor(name){
     try {
+      /* ★fix773: one-shot を先頭で消費。あれば '' を返してフラグを削除（次回からは通常どおり参照する）。 */
+      try { var pk773 = pkOf(name); if (pk773 && skipRefOnce[pk773]){ delete skipRefOnce[pk773]; return ''; } } catch(e773){}
       if (off770()) return '';
       var f = f197(); if (!f || typeof f.cachedFor !== 'function') return '';
       var cached = f.cachedFor(name) || '';
@@ -350,6 +370,34 @@
     return out;
   }
 
+  /**
+   * ★fix773: rebuildAndRegen(name) → { ok, revision }
+   *   「外見を作り直す」の唯一の API。UI（fix145 のボタン）はこれを呼ぶだけ。
+   *   ① fix766.rebuildAppearance: USER_EXPLICIT / STORY_EXPLICIT / locked は不触、
+   *      RANDOM_FILL だけ捨てて appearanceRevision++ で引き直す（既存 API・ここでは何も足さない）。
+   *   ② この直後の1回だけ reference を使わない（skipRefOnce）。
+   *      理由: 作り直し＝identity の再定義であり、旧 icon を参照すると旧顔へ引き戻される。
+   *      以後の「もう一度」(↻) は新しく受理された icon が参照になる。
+   *   ③ fix197.regenFor(name) を1回だけ呼ぶ（生成キューへ載せるのは fix197 の役目・ここでは生成しない）。
+   *   kill(v292Dfix773Off='1') は完全 no-op（rebuildAppearance も呼ばない＝revision も動かさない）。
+   */
+  function rebuildAndRegen(name){
+    var out = { ok: false, revision: 0 };
+    try {
+      if (off773()) return out;                                  // kill: 何もしない
+      var f = f766(); if (!f || typeof f.rebuildAppearance !== 'function') return out;
+      var who = resolveName(name); if (!who) return out;
+      var rec = null;
+      try { rec = f.rebuildAppearance(who); } catch(e1){ return out; }
+      if (!rec) return out;                                      // record が無い＝作り直す対象が無い
+      out.revision = rec.appearanceRevision || 0;
+      try { var pk = pkOf(who); if (pk) skipRefOnce[pk] = 1; } catch(e2){}   // ② regenFor より先に立てる
+      try { var f2 = f197(); if (f2 && typeof f2.regenFor === 'function') f2.regenFor(who); } catch(e3){}
+      out.ok = true;
+    } catch(e){}
+    return out;
+  }
+
   /** promptFor(name) → prompt文字列 | null（record が無ければ null＝呼び手は従来経路へ） */
   function promptFor(name){
     var r = buildRecipe(name); if (!r) return null;
@@ -367,7 +415,10 @@
     pkOf: pkOf, hash32: hash32,
     /* ★fix769/fix770 の検証口（読み取り専用の定数と純関数のみ） */
     PROMPT_CONTRACT: PROMPT_CONTRACT, HEAD_PREFIX: HEAD_PREFIX, MEDIUM_WORD: MEDIUM_WORD,
-    SHOT_ANIME: SHOT_ANIME, AGE_ADJ: AGE_ADJ, subjectPhrase: subjectPhrase, refUrlFor: refUrlFor
+    SHOT_ANIME: SHOT_ANIME, AGE_ADJ: AGE_ADJ, subjectPhrase: subjectPhrase, refUrlFor: refUrlFor,
+    /* ★fix773 */
+    rebuildAndRegen: rebuildAndRegen,
+    _skipRefOnce: function(){ var o = {}; for (var k in skipRefOnce) o[k] = skipRefOnce[k]; return o; }   // 検証口(読み取り)
   };
   try { console.log(TAG, 'loaded (recipeVersion=' + RECIPE_VERSION + ')'); } catch(e){}
 })();

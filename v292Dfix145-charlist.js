@@ -27,6 +27,17 @@
 //   - S.cast.npcs[i].desc = ... on edit
 //   - S.save() on any change
 //   - textarea#inp.value on "add to input"
+//
+// ★fix773(2026-08-31 / PHASE 4E slice 3A): 「🎨 外見を作り直す」ボタンを1個だけ追加。
+//   既存の「↻ アイコン再生成」＝「同じ人物の別の絵」（外見は固定）に対し、
+//   こちらは **外見そのものを引き直す**（fix766 の RANDOM_FILL のみ再抽選・EXPLICIT は不触）。
+//   実体は window.__v292Dfix767.rebuildAndRegen(name) の呼び出し1行のみ（editor 化はしない）。
+//   表示条件: fix766.on() && fix766.get(名前) が有る && v292Dfix773Off!=='1'。
+//   ★文言に「再生成/↻/↺/⟳/🔄」を含めない: fix197/fix437/fix487/fix515/fix516/features.js の
+//     グローバル↻クリック検知（/再生成|↻|↺|⟳|🔄/）に誤マッチして二重生成になるのを避けるため。
+//     ↻クリックに紐づくUI応答は公開APIを明示的に呼んで得る:
+//       fix437.regenStart(name)=押した瞬間のスピナー / fix516.seedName(name)=新画像のローカル優先表示。
+//   既存ボタンのイベント・表示・文言は1バイトも変えない。
 // =====================================================================
 (function v292Dfix145(){
   'use strict';
@@ -667,6 +678,24 @@
           }
         } catch(e){}
       }));
+      // ★fix773: 🎨 外見を作り直す（fix766 の record がある人だけ・API 1個を呼ぶだけ）
+      try {
+        var a766x = window.__v292Dfix766, r767x = window.__v292Dfix767;
+        var off773x = false; try { off773x = localStorage.getItem('v292Dfix773Off') === '1'; } catch (_e1) {}
+        if (!off773x && a766x && a766x.__armed && typeof a766x.on === 'function' && a766x.on() &&
+            typeof a766x.get === 'function' && a766x.get(c.name) &&
+            r767x && r767x.__armed && typeof r767x.rebuildAndRegen === 'function'){
+          btnRow.appendChild(mkBtn('🎨 外見を作り直す', '#4a6a5a', function(){
+            try {
+              try { if (window.__f487kick) delete window.__f487kick[c.name]; } catch (_e2) {}   // ★fix487g と同じ配慮
+              try { var f437 = window.__v292Dfix437; if (f437 && typeof f437.regenStart === 'function') f437.regenStart(c.name); } catch (_e3) {}   // 押した瞬間のスピナー
+              try { var f516 = window.__v292Dfix516; if (f516 && typeof f516.seedName === 'function') f516.seedName(c.name); } catch (_e4) {}    // 新画像をローカル優先表示（↻と同じ）
+              window.__v292Dfix767.rebuildAndRegen(c.name);
+              setTimeout(renderModal, 1500);   // 既存↻と同じUI応答
+            } catch (e) {}
+          }));
+        }
+      } catch (e) {}
       col.appendChild(btnRow);
       card.appendChild(col);
       return card;

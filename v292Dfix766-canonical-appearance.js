@@ -26,9 +26,18 @@
 //
 // ■fix768(2026-08-31): 受入E2E実データ(QA story村長のroster appr「老年の男性。日焼けした肌…」)で
 //   「老年」が年齢語彙に無くageBandがRANDOM_FILLに落ちる取り残しを観測→ 老年/年老い をELDERLY語彙へ追加。
-// ■opt-in（既定OFF＝プレビュー規約）
-//   実機で動くのは localStorage.v292Dfix766On === '1' のときだけ。
-//   OFF のとき ensureFor() は no-op（ストアへ1バイトも書かない）。
+// ■fix772(2026-08-31): **既定ON化**（PHASE 4E slice2 CLOSED・GPT裁定GO）。
+//   GO条件は実装確認済み: 初回生成は無料経路（fix770 の reference は cachedFor に画像がある
+//   ＝再生成のときだけ付き、genOne の自動発火は fix197 applyOne :445-448 の
+//   「cache/persist に画像が無く info.prompt がある」ときだけ＝icon未取得時のみ）。
+//   有料 reference 生成が起きるのはユーザーの明示↻/明示「作り直す」経路のみで、
+//   background 自動有料生成は無い。retry も有限（fix476=3+3候補で打ち止め・fix478=最大2回・
+//   fix524=2sデバウンス・fix197 GEN_BUDGET=30/セッション）。kill は維持。
+//
+// ■kill（既定ON・停止は Off 側だけ）
+//   localStorage.v292Dfix766Off === '1' のときだけ全停止（従来の強制停止をそのまま昇格）。
+//   停止中の ensureFor() は no-op（ストアへ1バイトも書かない）。
+//   旧 opt-in フラグ v292Dfix766On は **読むが不要**（残っていても害が無いよう真偽に影響させない）。
 //   fixture からは extractExplicit / fillMissing / _store 系を直接呼べるので常に検証できる。
 //
 // ■公開口
@@ -46,7 +55,9 @@
   function getS(){ try{ return window.S || (0,eval)('typeof S!=="undefined"?S:null'); }catch(e){ return null; } }
   function lsg(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
   function lss(k,v){ try{ localStorage.setItem(k,v); return true; }catch(e){ return false; } }
-  function on(){ return lsg('v292Dfix766On') === '1' && lsg('v292Dfix766Off') !== '1'; }
+  /* ★fix772: 既定ON。停止は v292Dfix766Off==='1' だけ（旧 opt-in の v292Dfix766On は
+     後方互換で読むが結果には効かせない＝古い端末に '1' が残っていても害が無い）。 */
+  function on(){ try { lsg('v292Dfix766On'); } catch(e){} return lsg('v292Dfix766Off') !== '1'; }
   function isOff(){ return lsg('v292Dfix766Off') === '1'; }
 
   /* slotId: fix640 と同じ経路（document authority = __chr6Key）。読取のみ。 */
