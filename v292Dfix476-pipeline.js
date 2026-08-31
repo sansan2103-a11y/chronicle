@@ -18,6 +18,21 @@
 //   ★index.html では fix478 より後（=より外側／最外殻）に読み込む想定。
 //   ★index.html変更・デプロイは親が別途行う。本ファイルは新規1ファイルで完結。
 // ---------------------------------------------------------------------
+// ■fix779(2026-08-31 / PHASE 4E slice 3B): entityType別 tolerated hard（APPARITION の 'non_human' だけ）
+//   真因: Worker v38 /inspect の creature 側 hard は
+//     ['single_creature','non_human','clearly_visible','anime_or_concept_art','desc_match_form',
+//      'no_text_or_watermark','no_severe_artifacts'] で、**人型の霊(APPARITION)は構造的に
+//     non_human=false** になる。実測(QA実機 smtg00ynsv1・百鬼夜行ベンチ「濡れた着物の人影」)では
+//     6/6候補が hardFails=1 で全滅→採用0(502)。落選画像は狙いどおりの良画像だった。
+//     human 側へ切り替えても 'face_clear' で落ちる（顔が髪で隠れた霊は両側詰み）。Worker は変更禁止。
+//   対処: **client 側の検品受入だけ** を調整する。/inspect の body・kind 選択・score・3+3・
+//     全滅502(自動採用なし)の契約は 1バイトも変えない。当該 record の fix766 entityType が
+//     APPARITION のときだけ、r.hard の 'non_human' を tolerated として合否を数え直す。
+//     ・r.hard が無い/空の候補は従来どおり劣後（昇格しない）
+//     ・tolerated 以外の hard が1つでも false なら不合格のまま
+//     ・tolerated が実際に false でない候補は昇格しない（＝soft/その他理由の不合格は救わない）
+//   kill: localStorage.v292Dfix779Off='1' → tolerated 無効＝従来の全hard適用へ完全復帰。
+// ---------------------------------------------------------------------
 // 有効化(opt-in・既定OFF): localStorage.v292Dfix476OnV1='1' かつ v292Dfix476Off!=='1'（live評価）
 // 対象: fix475 が arm 済みで detect(prompt) が truthy な workers.dev の /image POST のみ。
 //   それ以外（pollinations宛/非対象/OFF/fix475不在）は完全素通し(byte-equivalent)。
@@ -209,12 +224,101 @@
   // ---------- 検品（★v476.2: 1枚ずつ個別に /inspect・12sタイムアウト） ----------
   //   実測(2026-07-17): 3枚まとめ検品だと軽量VLMが anime_style を全画像falseにする
   //   (同一画像でも単発なら合格)。→ 候補ごとに1リクエストへ変更。全滅時のみ null(=検品不能)。
+  // ---------- ■fix779: entityType別 tolerated hard ----------
+  //   ここは「検品の受入(acceptance)」だけを触る層。/inspect へ送る body・kind・desc・score は
+  //   一切変えない（Worker 不触の制約下で人型の霊を通すための最小の口）。
+  function isOff779(){ try { return localStorage.getItem('v292Dfix779Off') === '1'; } catch(e){ return false; } }
+  /* 型 → 見逃してよい hard キー。APPARITION 以外は空＝従来どおり全hard適用
+     （HUMANOID/BEAST/OBJECT/PARTIAL は実測で通っているので触らない）。 */
+  var TOLERATED_HARD = { APPARITION: ['non_human'] };
+  /* fix767 の人外テンプレ先頭（v292Dfix767-icon-recipe-adapter.js: HEAD_PREFIX_NH）。
+     人外 prompt は必ず この接頭辞 + morphology + ',' で始まる（nonHumanBody）。 */
+  var NH_HEAD_PREFIX = 'dark fantasy anime illustration of ';
+  /**
+   * entityTypeForPrompt(prompt) → 'APPARITION' 等 | null
+   *   fix476 は genOne の fetch を包む層なのでキャラ名/pk は届かない。届く材料は entry body の
+   *   prompt だけ。そこで fix766 のストア(_load・読取のみ)を引き、morphology が prompt 先頭に
+   *   前方一致する record の entityType を取る。前方一致した record の型が **1種類に収束した
+   *   ときだけ** 採用し、割れたら null（＝曖昧なら緩めない。fix476 既存の
+   *   correctRecipeSeedDeferred と同じ「曖昧ならやらない」規律）。ストアへは1バイトも書かない。
+   */
+  function entityTypeForPrompt(prompt){
+    try {
+      var f = W.__v292Dfix766;
+      if (!f || !f.__armed || typeof f._load !== 'function' || typeof f.entityTypeOf !== 'function') return null;
+      var p = String(prompt == null ? '' : prompt);
+      if (p.indexOf(NH_HEAD_PREFIX) !== 0) return null;      // 人外テンプレでない＝対象外(HUMANは触らない)
+      var rest = p.slice(NH_HEAD_PREFIX.length);
+      var st = f._load(), ents = (st && st.entities) || {}, found = null;
+      for (var who in ents){
+        if (!Object.prototype.hasOwnProperty.call(ents, who)) continue;
+        var rec = ents[who]; if (!rec) continue;
+        var m = rec.attrs && rec.attrs.morphology && rec.attrs.morphology.value;
+        if (!m) continue;
+        m = String(m); if (!m) continue;
+        if (rest.indexOf(m) !== 0) continue;
+        var after = rest.charAt(m.length);
+        if (after !== ',' && after !== '') continue;          // 語の途中一致を弾く
+        var ty = f.entityTypeOf(rec);
+        if (found && found !== ty) return null;               // 型が割れた＝曖昧 → 緩めない
+        found = ty;
+      }
+      return found;
+    } catch(e){ return null; }
+  }
+  /** toleratedFor(prompt) → ['non_human'] | null（kill / 非APPARITION / 判定不能は null） */
+  function toleratedFor(prompt){
+    try {
+      if (isOff779()) return null;
+      var ty = entityTypeForPrompt(prompt);
+      var list = ty && TOLERATED_HARD[ty];
+      return (list && list.length) ? list.slice() : null;
+    } catch(e){ return null; }
+  }
+  /**
+   * passWithTolerance(r, tol) → boolean
+   *   降格は絶対にしない（サーバが pass=true なら true のまま）。昇格するのは
+   *   「tolerated が実際に false で、かつ tolerated 以外の hard が1つも落ちていない」候補だけ。
+   *   r.hard が無い/空(=判定不能)の候補は昇格しない＝従来どおり劣後。
+   */
+  function passWithTolerance(r, tol){
+    var served = !!(r && r.pass);
+    try {
+      if (served) return true;
+      if (!tol || !tol.length) return served;
+      if (!r || !r.hard || typeof r.hard !== 'object') return served;
+      var keys = 0, blocked = 0, tolHit = 0;
+      for (var k in r.hard){
+        if (!Object.prototype.hasOwnProperty.call(r.hard, k)) continue;
+        keys++;
+        var v = r.hard[k], bad = (v !== true && v !== null);
+        if (tol.indexOf(k) >= 0){ if (bad) tolHit++; continue; }
+        if (bad) blocked++;
+      }
+      if (keys === 0) return served;                          // 全項目未返却＝判定不能
+      return (blocked === 0 && tolHit > 0);
+    } catch(e){ return served; }
+  }
+
   // ---------- ハード判定の失格数（r.hard の false 値の個数・item1で使用） ----------
-  function hardFailCount(r){
+  function hardFailCount(r, tol){
     // ★v476.3(GPT-5.6監査2026-07-17): 未返却(undefined)も「欠損失敗」として数える。
     //   優先: サーバ計算 r.hardFails(数値・Worker v20.4以降)。無ければ hard の
     //   true/null 以外(false等)を数える。hardが無い/空(=判定不能)は 99 で最劣後。
     try {
+      /* ■fix779: tolerated があるときだけ、サーバ数値 r.hardFails を盲信せず r.hard の
+         個別値から数え直す（tolerated 分を差し引く）。tol 無しなら下の従来分岐と完全同一。 */
+      if (tol && tol.length && r && r.hard && typeof r.hard === 'object'){
+        var tn = 0, tk = 0;
+        for (var tKey in r.hard){
+          if (!Object.prototype.hasOwnProperty.call(r.hard, tKey)) continue;
+          tk++;
+          if (tol.indexOf(tKey) >= 0) continue;
+          var tv = r.hard[tKey];
+          if (tv !== true && tv !== null) tn++;
+        }
+        if (tk > 0) return tn;
+      }
       if (r && typeof r.hardFails === 'number' && isFinite(r.hardFails) && r.hardFails >= 0) return r.hardFails;
       if (!r || !r.hard || typeof r.hard !== 'object') return 99;
       var n = 0, keys = 0;
@@ -228,7 +332,7 @@
       return n;
     } catch(e){ return 99; }
   }
-  function inspectOne(iurl, headers, kind, desc, cand){
+  function inspectOne(iurl, headers, kind, desc, cand, tol){   // ■fix779: tol を追加（body は不変）
     var ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     var timer = null;
     if (ac){ timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, 12000); }
@@ -240,17 +344,20 @@
         if (timer) clearTimeout(timer);
         var r = j && Array.isArray(j.results) && j.results[0];
         if (!r) return false;
-        cand.pass = !!r.pass;
+        /* ■fix779: 合否だけ client 側で数え直す。score は 1バイトも変えない（表示専用のまま）。 */
+        var served = !!r.pass;
+        cand.pass = passWithTolerance(r, tol);
+        cand.tolerated = (cand.pass && !served) || false;
         cand.score = (typeof r.score === 'number') ? r.score : (r.pass ? 100 : 0);
-        cand.hardFails = hardFailCount(r);
+        cand.hardFails = hardFailCount(r, tol);
         return true;
       }, function(){ if (timer) clearTimeout(timer); return false; });
     }, function(){ if (timer) clearTimeout(timer); return false; });
   }
-  function inspectAndScore(url, init, kind, desc, cands){
+  function inspectAndScore(url, init, kind, desc, cands, tol){   // ■fix779: tol を追加
     var headers = copyInspectHeaders(init);
     var iurl = inspectUrlFor(url);
-    return Promise.all(cands.map(function(c){ return inspectOne(iurl, headers, kind, desc, c); }))
+    return Promise.all(cands.map(function(c){ return inspectOne(iurl, headers, kind, desc, c, tol); }))
       .then(function(oks){
         var any = false;
         for (var i = 0; i < cands.length; i++){
@@ -395,14 +502,20 @@
     });
   }
   // 各候補を /avatar-inspect(runId+candidateId+image)で検品。any=1件でも検品成立。
-  function inspectRunCandidates(base, headers, runId, cands){
+  function inspectRunCandidates(base, headers, runId, cands, tol){   // ■fix779: tol を追加
     return Promise.all(cands.map(function(c){
       return postJsonRun(base, '/avatar-inspect', headers, { runId: runId, candidateId: c.candidateId, image: c.b64 })
         .then(function(res){
           if (res.ok && res.j && res.j.result){
-            c.pass = !!res.j.result.pass;
-            c.score = (typeof res.j.result.score === 'number') ? res.j.result.score : (c.pass ? 100 : 0);
-            c.hardFails = (typeof res.j.result.hardFails === 'number') ? res.j.result.hardFails : (c.pass ? 0 : 99);
+            var rr = res.j.result;
+            /* ■fix779: legacy 経路と同じ受入調整。result.hard が無ければ従来どおり(=昇格しない)。 */
+            var served = !!rr.pass;
+            c.pass = passWithTolerance(rr, tol);
+            c.tolerated = (c.pass && !served) || false;
+            c.score = (typeof rr.score === 'number') ? rr.score : (served ? 100 : 0);
+            c.hardFails = (tol && tol.length && rr.hard && typeof rr.hard === 'object')
+              ? hardFailCount(rr, tol)
+              : ((typeof rr.hardFails === 'number') ? rr.hardFails : (served ? 0 : 99));
             return true;
           }
           c.pass = false; c.score = 0; c.hardFails = 98;   // 検品不能候補は劣後
@@ -422,7 +535,7 @@
 
   // ---------- ★v476.4: run経路パイプライン ----------
   function pipelineRun(url, init){
-    var lastRun = { mode: 'run', seeds: [], scores: [], picked: null, rebatched: false, inspected: false, fallback: null, error: null, runId: null, failedCandidates: null };
+    var lastRun = { mode: 'run', seeds: [], scores: [], picked: null, rebatched: false, inspected: false, fallback: null, error: null, runId: null, failedCandidates: null, tolerated: null };
     API.lastRun = lastRun;
     var baseBody = JSON.parse(String(init.body));
     var kind = detectKind(baseBody.prompt) || 'human';
@@ -432,6 +545,8 @@
     var iurl = inspectUrlFor(url);
     var base = String(iurl || '').replace(/\/inspect$/, '');
     var headers = copyInspectHeaders(init);
+    var tol = toleratedFor(baseBody.prompt);   // ■fix779: APPARITION のときだけ ['non_human']
+    lastRun.tolerated = tol;
     if (!base) return pipelineCore(url, init);   // ベース不明 → legacy
     var clientReqId = genUuid();
     return postJsonRun(base, '/avatar-run', headers, {
@@ -452,7 +567,7 @@
           releaseRun(base, headers, runId);
           return _origFetch.call(W, url, init);   // 生成0枚 → 最後の砦として素通し1回(アイコン0を避ける)
         }
-        return inspectRunCandidates(base, headers, runId, cands).then(function(){
+        return inspectRunCandidates(base, headers, runId, cands, tol).then(function(){
           lastRun.inspected = true;
           lastRun.scores = cands.map(function(c){ return c.score || 0; });
           var winner = bestPass(cands);
@@ -462,7 +577,7 @@
           var seeds2 = mkSeeds(baseSeed, 1);
           lastRun.seeds = lastRun.seeds.concat(seeds2);
           return genRunCandidates(url, init, baseBody, runId, [3, 4, 5], seeds2).then(function(c2){
-            var after = c2.length ? inspectRunCandidates(base, headers, runId, c2) : Promise.resolve(false);
+            var after = c2.length ? inspectRunCandidates(base, headers, runId, c2, tol) : Promise.resolve(false);
             return after.then(function(){
               var all = cands.concat(c2);
               lastRun.scores = all.map(function(c){ return c.score || 0; });
@@ -485,7 +600,7 @@
 
   // ---------- パイプライン本体 ----------
   function pipelineCore(url, init){
-    var lastRun = { seeds: [], scores: [], picked: null, rebatched: false, inspected: false, fallback: null, error: null, failedCandidates: null };
+    var lastRun = { seeds: [], scores: [], picked: null, rebatched: false, inspected: false, fallback: null, error: null, failedCandidates: null, tolerated: null };
     API.lastRun = lastRun;
 
     var baseBody = JSON.parse(String(init.body));
@@ -493,6 +608,8 @@
     var bs = baseBody.seed;
     var baseSeed = (bs != null && isFinite(+bs)) ? +bs : null;
     var desc = buildDesc(baseBody.prompt, kind);
+    var tol = toleratedFor(baseBody.prompt);   // ■fix779: APPARITION のときだけ ['non_human']
+    lastRun.tolerated = tol;
 
     var seeds1 = mkSeeds(baseSeed, 0);
     lastRun.seeds = seeds1.slice();
@@ -504,7 +621,7 @@
         warn('all candidate generations failed; passing entry request through');
         return _origFetch.call(W, url, init);
       }
-      return inspectAndScore(url, init, kind, desc, cands).then(function(scored){
+      return inspectAndScore(url, init, kind, desc, cands, tol).then(function(scored){
         if (scored === null){
           // 検品失敗 → 検品なしで最初の成功候補(fail-open)
           lastRun.fallback = 'inspect-failed';
@@ -529,7 +646,7 @@
         lastRun.seeds = lastRun.seeds.concat(seeds2);
         return genCandidates(url, init, baseBody, seeds2, 1).then(function(cands2){
           var afterInspect = cands2.length
-            ? inspectAndScore(url, init, kind, desc, cands2)
+            ? inspectAndScore(url, init, kind, desc, cands2, tol)
             : Promise.resolve(null);
           return afterInspect.then(function(scored2){
             var all = cands.concat(cands2);
@@ -632,7 +749,10 @@
     } catch(e){ warn('showFailed error'); return 0; }
   }
   API.showFailed = showFailed;
-  API.__test = { hardFailCount: hardFailCount, bestPass: bestPass, mkFailResponse: mkFailResponse };
+  API.__test = { hardFailCount: hardFailCount, bestPass: bestPass, mkFailResponse: mkFailResponse,
+    /* ■fix779 */ isOff779: isOff779, TOLERATED_HARD: TOLERATED_HARD, NH_HEAD_PREFIX: NH_HEAD_PREFIX,
+    entityTypeForPrompt: entityTypeForPrompt, toleratedFor: toleratedFor, passWithTolerance: passWithTolerance,
+    inspectOne: inspectOne, inspectAndScore: inspectAndScore };
 
   try { scheduleGuardRefresh(); } catch(e){}   // ★v476.4: サーバ標準ONフラグを取得
   try { console.log(TAG, 'armed; active:', on() ? 'on' : 'off(preview)'); } catch(e){}

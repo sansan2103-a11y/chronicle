@@ -123,6 +123,9 @@
   /* ★fix778: entityType/morphology の導出・backfill・fill 分岐だけの kill。
      ON にすると entityTypeOf は常に 'HUMAN'＝完全に従来（全員 HUMAN 扱い）へ戻る。 */
   function isOff778(){ return lsg('v292Dfix778Off') === '1'; }
+  /* ■fix779: 人外の形態語彙の追加分（顔なし・単眼・腕の本数・提げ物・裂けた口・肌の色）だけの kill。
+     ON にすると morphFeatures は fix778 と 1バイト同じ結果へ戻る（人外以外は元から通らない）。 */
+  function isOff779(){ return lsg('v292Dfix779Off') === '1'; }
 
   /* slotId: fix640 と同じ経路（document authority = __chr6Key）。読取のみ。 */
   function slotId(){
@@ -407,15 +410,96 @@
     [/紅|赤/,                 'red colored'],
     [/血/,                    'blood stained']
   ];
+  /* =====================================================================
+   * ■fix779(2026-08-31 / 4E slice 3B): 実測FAIL 由来の追加語彙（決定的規則のみ）
+   * ---------------------------------------------------------------------
+   * 実測(QA実機 smtg00ynsv1・fix778 の実 prompt で生成した実画像の目視QA):
+   *   F2「顔のない人影。のっぺりとした頭部で、提灯を提げて立つ。」
+   *      → 「顔のない/のっぺり/提灯を提げ」に規則が無く prompt から丸ごと落ち、
+   *        モデルが角+赤目の悪魔を発明した（morphology FAIL）。
+   *   F3「六本の腕を持つ影。」→「六本の腕」が落ちて腕2本で生成。
+   *   F4「破れた提灯の付喪神。器物に一つ目と裂けた口が浮かぶ。」→「一つ目」「裂けた口」が落ち両目で生成。
+   *   F5「角の生えた鬼。赤銅色の肌で、…」→ 材質規則 /(?:^|[^青黄])銅/ が「赤銅色の肌」で発火し
+   *        'made of copper'（＝銅製の像）に化けていた。肌の色は材質ではない。
+   * 真因はいずれも「fix766 の抽出語彙に規則が無く、書いてある情報が prompt に届いていない」こと。
+   * ★ここは morphFeatures の中＝**人外(entityType≠HUMAN)のときしか回らない**。
+   *   extractExplicit / backfillEntityType のどちらも out.attrs.entityType が立った時にしか
+   *   morphFeatures を呼ばないので、HUMAN の抽出結果は構造的に 1バイトも変わらない。
+   * kill: v292Dfix779Off='1' → 下の追加分は 1つも足さず、材質判定も fix778 と同一入力に戻る。
+   * ===================================================================== */
+  var MORPH_FEATURE_RULES_779 = [
+    [/顔のない|顔が無い|顔がない|のっぺらぼう|のっぺり|目鼻の無い|目鼻のない/,
+                                      'featureless blank face, no eyes, no mouth'],
+    [/一つ目|ひとつ目|一つ眼|単眼|隻眼/, 'a single large eye, only one eye'],
+    [/裂けた口|裂けた唇|口が裂け/,      'wide torn mouth'],
+    [/(?:提灯|行灯|灯籠)を(?:提げ|下げ|持|携え)/, 'carrying a paper lantern']
+  ];
+  /* 腕の本数（「六本の腕」→ 'six arms'）。2〜9 のみ（1本は既定と同じ・10本以上は語彙にしない）。
+     実測FAIL は腕だけなので、脚・目・首へは広げない（推測禁止）。 */
+  var ARM_NUM = { '二':'two','三':'three','四':'four','五':'five','六':'six','七':'seven','八':'eight','九':'nine',
+                  '2':'two','3':'three','4':'four','5':'five','6':'six','7':'seven','8':'eight','9':'nine',
+                  '２':'two','３':'three','４':'four','５':'five','６':'six','７':'seven','８':'eight','９':'nine' };
+  var RE_ARM_COUNT = /([二三四五六七八九23456789２３４５６７８９])\s*本の腕/;
+  function armCountFeature(t){
+    var m = RE_ARM_COUNT.exec(String(t==null?'':t));
+    if (!m) return '';
+    var n = ARM_NUM[m[1]];
+    return n ? (n + ' arms') : '';
+  }
+  /* 「〜色の肌」は材質ではない（F5）。材質規則を回す前に肌色の言い回しを切り出し、
+     その span を材質判定の入力から外す（全角空白へ差し替え）。
+     ★材質規則そのもの（「青銅製の塊」→ made of tarnished bronze 等）は 1バイトも変えない。
+       「材質は X製 だけ」に絞ると実測 PASS の「青銅の心臓」が退行するため、
+       材質側ではなく **肌の言い回しだけ** を先に取り除く方向で解く。 */
+  var SKIN_TONE = [
+    ['赤銅','reddish-bronze skin'], ['青銅','bronze-toned skin'], ['乳白','milky pale skin'],
+    ['青白','pale bluish skin'],   ['土気','sallow earthen skin'], ['褐','dark brown skin'],
+    ['銅','coppery skin'],         ['鉄','iron-gray skin'],        ['灰','ashen gray skin'],
+    ['土','earth-toned skin'],     ['金','golden skin'],           ['銀','silvery skin'],
+    ['白','pale white skin'],      ['黒','dark black skin'],       ['赤','red skin'],
+    ['青','bluish skin']
+  ];
+  var SKIN_WORDS = (function(){ var a=[]; for (var i=0;i<SKIN_TONE.length;i++) a.push(SKIN_TONE[i][0]); return a.join('|'); })();
+  var RE_SKIN_PRE  = new RegExp('(' + SKIN_WORDS + ')色(?:の|をした|した)?(?:肌|膚|皮膚)', 'g');
+  var RE_SKIN_POST = new RegExp('(?:肌|皮膚)(?:は|が)(' + SKIN_WORDS + ')色', 'g');
+  /** skinToneScan(text) → { features:[…], masked:'材質判定用に肌色 span を抜いた本文' } */
+  function skinToneScan(text){
+    var out = [], masked = String(text==null?'':text);
+    function rep(re){
+      re.lastIndex = 0;
+      masked = masked.replace(re, function(all, w){
+        for (var j=0;j<SKIN_TONE.length;j++){
+          if (SKIN_TONE[j][0] === w){ if (out.indexOf(SKIN_TONE[j][1]) < 0) out.push(SKIN_TONE[j][1]); break; }
+        }
+        return '　';
+      });
+    }
+    rep(RE_SKIN_PRE); rep(RE_SKIN_POST);
+    return { features: out, masked: masked };
+  }
+
   /** morphFeatures(text) → ['made of tarnished bronze', …]（重複なし・決定的） */
   function morphFeatures(text){
     var t = String(text==null?'':text), out = [];
     if (!t) return out;
+    /* ■fix779: 肌色 span を材質判定から外す（kill 中は mt === t ＝fix778 と同一入力）。 */
+    var off779 = isOff779();
+    var sk = off779 ? null : skinToneScan(t);
+    var mt = sk ? sk.masked : t;
     for (var i=0;i<MORPH_FEATURE_RULES.length;i++){
-      if (!MORPH_FEATURE_RULES[i][0].test(t)) continue;
+      if (!MORPH_FEATURE_RULES[i][0].test(mt)) continue;
       var v = MORPH_FEATURE_RULES[i][1];
       if (out.indexOf(v) < 0) out.push(v);
     }
+    if (off779) return out;                     /* ■fix779 kill: ここから下は 1つも足さない */
+    for (var s=0;s<sk.features.length;s++){ if (out.indexOf(sk.features[s]) < 0) out.push(sk.features[s]); }
+    for (var r=0;r<MORPH_FEATURE_RULES_779.length;r++){
+      if (!MORPH_FEATURE_RULES_779[r][0].test(t)) continue;
+      var v7 = MORPH_FEATURE_RULES_779[r][1];
+      if (out.indexOf(v7) < 0) out.push(v7);
+    }
+    var ac = armCountFeature(t);
+    if (ac && out.indexOf(ac) < 0) out.push(ac);
     return out;
   }
 
@@ -980,6 +1064,9 @@
     detectGenderWord: detectGenderWord, extractGender: extractGender, backfillGender: backfillGender,
     /* ★fix778: entityType / morphology（6種・12軸の外側・明示語のみ・kill=v292Dfix778Off） */
     isOff778: isOff778, ENTITY_TYPES: ENTITY_TYPES, HUMAN_MARKERS: HUMAN_MARKERS,
+    /* ■fix779: 実測FAIL 由来の追加語彙（人外のみ・kill=v292Dfix779Off） */
+    isOff779: isOff779, MORPH_FEATURE_RULES_779: MORPH_FEATURE_RULES_779,
+    SKIN_TONE: SKIN_TONE, skinToneScan: skinToneScan, armCountFeature: armCountFeature,
     MORPH_HEAD: MORPH_HEAD, MORPH_ANY: MORPH_ANY, MORPH_ORDER: MORPH_ORDER,
     detectEntityType: detectEntityType, extractEntityType: extractEntityType,
     morphologyOf: morphologyOf, morphFeatures: morphFeatures,
