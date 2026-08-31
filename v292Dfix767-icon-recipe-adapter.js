@@ -145,7 +145,26 @@
   // ---------- fix769: anime-first contract（主語句そのものを画風で始める） ----------
   var PROMPT_CONTRACT = 'anime-first-v1';
   var HEAD_PREFIX = 'dark fantasy anime character portrait of one ';
-  var MEDIUM_WORD = '2d anime illustration';
+  /* ★fix774(2026-08-31 / 4E-SV1): reference無し無料生成の画風分散の根治。
+     baseline実測(同seed対照6run)で老人・中年男性の4/4がsemi-realistic painterlyへ振れ(OWNER STYLE FAIL)、
+     下記3句の挿入で5/5がクリーンな2Dアニメ/VN調へ収束(年齢感・キャラ間差は維持)を実測確認。
+     GPT裁定の解決順A(prompt最小強化)のみで達成＝C(検品調整)は不要と裁定(必要最小限)。
+     OFF: v292Dfix774Off='1' でこの3句だけ外す(旧fix769語順へ)。 */
+  var MEDIUM_WORD_BASE = '2d anime illustration';
+  var STYLE_LOCK_774 = 'clean lineart, flat cel shading, hand-drawn japanese visual novel art';
+  function off774(){ try { return localStorage.getItem('v292Dfix774Off') === '1'; } catch(e){ return false; } }
+  /* ★fix775(2026-08-31 / 4E-SV1最終): OWNER A/B判定(同一seed6キャラ横並び)で「全部B」採用。
+     B=描画方法だけ半歩VN寄せの2句。内容(皺・年齢・体格)はKEEP・肌の立体感をフラット化。
+     若返り・美形化・同顔化の副作用なしをA/Bで確認済み。OFF: v292Dfix775Off='1'(この2句のみ外す)。 */
+  var STYLE_LOCK_775 = 'stylized anime facial proportions, simplified illustrated skin texture';
+  function off775(){ try { return localStorage.getItem('v292Dfix775Off') === '1'; } catch(e){ return false; } }
+  function MEDIUM_WORD_FN(){
+    var s = MEDIUM_WORD_BASE;
+    if (!off774()) s += ', ' + STYLE_LOCK_774;
+    if (!off775()) s += ', ' + STYLE_LOCK_775;
+    return s;
+  }
+  var MEDIUM_WORD = MEDIUM_WORD_BASE;   /* 公開口の後方互換用(値としては基本語のみ) */
   var SHOT_ANIME  = 'bust shot';
   /* 年代の **形容詞形**（WORDS.ageBand の名詞句は 769Off の旧語順用に温存する）。
      9 バンドが1対1で別語になるようにする＝ageBand が変われば prompt も必ず変わる。 */
@@ -298,7 +317,7 @@
       parts.push(age ? (head + ' of ' + age) : head);
     } else {
       parts.push(HEAD_PREFIX + subjectPhrase(av(recipe,'ageBand'), g));
-      parts.push(MEDIUM_WORD);
+      parts.push(MEDIUM_WORD_FN());   /* ★fix774: style lock 3句込み(kill=v292Dfix774Off) */
     }
 
     /* ② 体（身長印象＋体格＋シルエット） */
