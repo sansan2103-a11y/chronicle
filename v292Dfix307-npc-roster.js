@@ -22,6 +22,16 @@
 //   fix408(2026-07-10): (a)回想/過去描写/記録/写真/比喩/他者の背景説明の中にだけ出る存在を
 //     除外(T16でカエデの過去描写から実体のない「孤児院の子」が登録された件)。(b)既存台帳を
 //     「呼称: 外見」の行形式でLLMに渡し、外見一致の存在への新呼称乱立を抑止(同一存在の二重登録防止)。
+//   fix764(2026-08-31 / PHASE 4C = Entity Identity): 同一人物が表記差だけで別 entry に分裂する
+//     不具合の根治。一次資料: モデルが同じ人物を「渔师」(T56)と「漁師」(T62)で書き、
+//     mergeRoster の byKey[handle] が完全一致なのでキャラ一覧に2人並んだ。
+//     対策= **キーの引き方だけ** を fix764 の字形フォールドにする（比較専用）。
+//     ・格納する handle は表示形のまま（fold 形は 1 バイトも保存しない = fix455/456 の教訓）
+//     ・既存 handle が簡体専用字を含み incoming が含まない時だけ handle を incoming の表示形へ寄せる
+//       （以後 buildUserPrompt の「呼称固定」が日本語形を強制する）。名前固有リストは持たない。
+//     ・既に台帳内に fold 同一の重複がある場合は 1 回だけ統合。統合前に roster 全体を
+//       v292Dfix307_bk_fix764_<ts> へ退避し、退避できなければ **統合しない**（fail-closed / fix458 と同作法）。
+//     OFF: v292Dfix764Off='1'（fix764 本体の kill）で従来動作へ戻る。
 //   fix307f(2026-08-31): 別storyを開いたdocumentが、共有ポインタ__chr6Key()(chr6_active_slot)経由で
 //     「いまアクティブなstory」のロスター/カーソルへ読み書き・削除していた不具合を修正。
 //     slotSfx()をfix694のdocument authority(window.__chronicleDocumentStoryKey)基準へ固定。
@@ -179,10 +189,77 @@
     try{ var a=JSON.parse(m[0]); return Array.isArray(a)?a:null; }catch(e){ return null; }
   }
 
+  /* ============ ★fix764(2026-08-31) PHASE 4C: 字形フォールド（比較専用） ============
+     window.__v292Dfix764 が無い/kill されている場合は null を返し、周囲は従来動作へ戻る。
+     ★ fold 形は **比較にしか使わない**。handle に入れない・sys に入れない・localStorage に入れない。 */
+  function f764(){ try{ var f=window.__v292Dfix764; return (f && f.__armed && typeof f.fold==='function' && !f.isOff()) ? f : null; }catch(e){ return null; } }
+  function fkey764(h){ var f=f764(); var s=String(h==null?'':h); if(!f) return s; try{ return f.fold(s); }catch(e){ return s; } }
+  function fsimp764(h){ var f=f764(); if(!f) return false; try{ return !!f.hasSimplifiedOnly(h); }catch(e){ return false; } }
+
+  /* 退避は 1 セッション 1 回・新しい順 2 件まで（fix458 backupOnce と同作法）。
+     退避できなければ false を返し、呼び手は統合を **しない**（fail-closed）。 */
+  var _bk764=false;
+  function backupRosterOnce764(arr){
+    if(_bk764) return true;
+    var tag='v292Dfix307_bk_fix764_';
+    try{
+      localStorage.setItem(tag+Date.now(), JSON.stringify(arr||[]));
+      _bk764=true;
+    }catch(e){ return false; }
+    try{
+      var bks=[];
+      for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k && k.indexOf(tag)===0 && /_\d+$/.test(k)) bks.push(k); }
+      bks.sort(function(a,b){ return (+a.split('_').pop()||0)-(+b.split('_').pop()||0); });
+      while(bks.length>2){ var oldk=bks.shift(); try{ localStorage.removeItem(oldk); }catch(e){} }
+    }catch(e){}
+    return _bk764;
+  }
+
+  /* 既に台帳内に fold 同一の重複がある場合だけ **1 回だけ** 統合する。
+     生き残りは先出の entry（オブジェクト同一性を保つ）で、後出からは情報が多い側を取り込む。 */
+  function dedupe764(existing){
+    var f=f764(); if(!f || !existing || !existing.length) return existing;
+    var seen={}, dup=false, i, e, k;
+    for(i=0;i<existing.length;i++){
+      e=existing[i]; if(!e||!e.handle) continue;
+      k=fkey764(e.handle);
+      if(seen[k]){ dup=true; break; }
+      seen[k]=1;
+    }
+    if(!dup) return existing;
+    if(!backupRosterOnce764(existing)){
+      try{ console.warn(TAG,'fix764: roster を退避できなかったので重複統合を中止（fail-closed）'); }catch(e2){}
+      return existing;
+    }
+    var byK={}, out=[], merged=0;
+    for(i=0;i<existing.length;i++){
+      var it=existing[i];
+      if(!it || !it.handle){ out.push(it); continue; }
+      var kk=fkey764(it.handle), keep=byK[kk];
+      if(!keep){ byK[kk]=it; out.push(it); continue; }
+      /* 統合: 情報が多い方を残す（同点なら先出） */
+      if(String(it.appr||'').length > String(keep.appr||'').length) keep.appr=it.appr;
+      if(!keep.kind && it.kind) keep.kind=it.kind;
+      if(!keep.importance && it.importance) keep.importance=it.importance;
+      if(typeof it.firstTurn==='number' && (typeof keep.firstTurn!=='number' || it.firstTurn<keep.firstTurn)) keep.firstTurn=it.firstTurn;
+      if(typeof it.lastTurn==='number' && (typeof keep.lastTurn!=='number' || it.lastTurn>keep.lastTurn)) keep.lastTurn=it.lastTurn;
+      /* 表示形は、簡体専用字を含まない方へ寄せる（一般規則・名前リストなし） */
+      if(fsimp764(keep.handle) && !fsimp764(it.handle)) keep.handle=it.handle;
+      merged++;
+    }
+    if(merged){
+      existing.length=0;
+      for(i=0;i<out.length;i++) existing.push(out[i]);
+      try{ console.warn(TAG,'fix764: 表記差だけの重複を統合しました count=',merged,'（退避: v292Dfix307_bk_fix764_*）'); }catch(e2){}
+    }
+    return existing;
+  }
+
   // 追記マージ: 既存呼称は維持(固定)・新規は追加・重要度/外見は更新・削除しない
   function mergeRoster(existing, incoming){
     existing=existing||[];
-    var byKey={}; existing.forEach(function(e){ if(e&&e.handle) byKey[e.handle]=e; });
+    existing=dedupe764(existing);                                                   // ★fix764
+    var byKey={}; existing.forEach(function(e){ if(e&&e.handle) byKey[fkey764(e.handle)]=e; });  // ★fix764: 引きは fold ・格納は表示形
     var ct=curTurn(); var cast=castNames();
     (incoming||[]).forEach(function(it){
       if(!it) return;
@@ -193,8 +270,15 @@
       if(/現象|物体|場所|風景|景色|液体|物音|背景/.test(kind)) return; // 存在でないものは載せない(fix307c)
       var imp=String((it['重要度']!=null?it['重要度']:it.importance)||'中');
       var appr=String((it['外見']!=null?it['外見']:it.appr)||'').trim().slice(0,120);
-      if(byKey[h]){ byKey[h].kind=kind; byKey[h].importance=imp; if(appr) byKey[h].appr=appr; byKey[h].lastTurn=ct; }
-      else { var o={handle:h, kind:kind, importance:imp, appr:appr, firstTurn:ct, lastTurn:ct}; byKey[h]=o; existing.push(o); }
+      var hk=fkey764(h);                                                            // ★fix764
+      var ex=byKey[hk];
+      if(ex){
+        /* ★fix764: 表示形の寄せ。既存が簡体専用字を含み、incoming が含まないときだけ更新する。
+           fold 形は代入しない（入るのは常にモデルが実際に書いた表示形）。 */
+        if(ex.handle!==h && fsimp764(ex.handle) && !fsimp764(h)) ex.handle=h;
+        ex.kind=kind; ex.importance=imp; if(appr) ex.appr=appr; ex.lastTurn=ct;
+      }
+      else { var o={handle:h, kind:kind, importance:imp, appr:appr, firstTurn:ct, lastTurn:ct}; byKey[hk]=o; existing.push(o); }
     });
     return existing;
   }
@@ -312,6 +396,6 @@
   installWiShim();
   try{ window.addEventListener('focus', function(){ try{ run(); }catch(e){} }); }catch(e){}
 
-  window.__v292Dfix307api={ loadRoster:loadRoster, saveRoster:saveRoster, run:run, mergeRoster:mergeRoster, parseArr:parseArr, recentTranscript:recentTranscript, installWiShim:installWiShim, SYS:SYS, buildExistingLines:buildExistingLines, buildUserPrompt:buildUserPrompt };
+  window.__v292Dfix307api={ loadRoster:loadRoster, saveRoster:saveRoster, run:run, mergeRoster:mergeRoster, dedupe764:dedupe764, fkey764:fkey764, parseArr:parseArr, recentTranscript:recentTranscript, installWiShim:installWiShim, SYS:SYS, buildExistingLines:buildExistingLines, buildUserPrompt:buildUserPrompt };
   try{ console.log(TAG,'loaded (fix307e slot-strict)'); }catch(e){}
 })();

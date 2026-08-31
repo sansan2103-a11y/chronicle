@@ -21,6 +21,16 @@
 //   '_s'+hash(slotId) を付加。generic判定は window.__v292Dfix487.isGeneric を live 参照、slotIdは
 //   chr6_active_slot を【読取のみ】(引用符付きJSONは正規化)。非generic名/フラグOFF時はキー完全不変。
 //   有効条件: localStorage.v292Dfix493OnV1==='1' かつ v292Dfix493Off!=='1'。
+// ★fix764(2026-08-31 / PHASE 4C = Entity Identity): 表記差（簡体字↔日本語漢字）だけが違う同一人物の
+//   アイコンが2枚になる件の根治。実データ: 同じ人物が「渔师」(T56)と「漁師」(T62)で出た。
+//   keyFor は hash(canonName(name)|style)、素材lookup(buildCurrentAppearancePrompt)は ===name の
+//   完全一致なので、字形が1字違うだけで別キー・素材ゼロになっていた。
+//   ★配線先を canonName ではなく **keyFor と素材lookup に局所化**した。理由: canonName は icon 以外の
+//     消費者と共有されている ―― v292Dfix474-candidate.js:48/108 は canonName の戻り値を候補レコード/
+//     テレメトリへ**保存**し、:267 は画面へ**表示**する。v292Dfix641:82 は cast 重複判定に使う。
+//     canonName を変えると icon の外へ影響が漏れるため触らない（fix455/456 の教訓）。
+//   返すのは必ず「登録済みの表示形」。fold 形そのものは 1 バイトも返さない・保存しない。
+//   OFF: v292Dfix764Off='1' で従来動作。
 // ---------------------------------------------------------------------
 // fix199 からの改良（おしんFB: 場所ごとに絵が違う／絵柄が前と違う）:
 //   ・キャッシュを【キャラ名＋画風】単位に統一 → 会話ログ/設定/キャラ一覧で同じ1枚を共有。
@@ -147,12 +157,43 @@
     return res;
   }
 
+  /* ============ ★fix764(2026-08-31) PHASE 4C: 字形フォールド（比較専用・icon 局所） ============
+     canonName（＝fix424 の呼称→正名）で解決しなかった場合の **追加段**。
+     cast 登録名（castNames424）と fix307 roster の handle に対して fold 一致を試し、
+     一意に当たったら **登録済みの表示形** を返す。fold 形そのものは返さない。
+     ★この関数は keyFor と buildCurrentAppearancePrompt からしか呼ばない（canonName は不触）。 */
+  function f764(){ try{ var f=window.__v292Dfix764; return (f && f.__armed && typeof f.fold==='function' && !f.isOff()) ? f : null; }catch(e){ return null; } }
+  function rosterHandles764(){
+    var out=[];
+    try{
+      var ro=(window.__v292Dfix307api && window.__v292Dfix307api.loadRoster && window.__v292Dfix307api.loadRoster())||[];
+      for(var i=0;i<ro.length;i++){ if(ro[i] && ro[i].handle) out.push(String(ro[i].handle).trim()); }
+    }catch(e){}
+    return out;
+  }
+  function resolveVariant764(name){
+    var raw=String(name==null?'':name);
+    var f=f764(); if(!f) return raw;
+    var who=raw.trim(); if(!who) return raw;
+    var tgt; try{ tgt=f.fold(who); }catch(e){ return raw; }
+    var pool=castNames424().concat(rosterHandles764());
+    var hits=[];
+    for(var i=0;i<pool.length;i++){
+      var n=pool[i]; if(!n) continue;
+      if(n===who) return raw;                                   // 既に登録済みの表示形＝不触
+      try{ if(f.fold(n)===tgt && hits.indexOf(n)<0) hits.push(n); }catch(e){}
+    }
+    if(hits.length===1) return hits[0];                         // 一意なときだけ振替（曖昧は見送り）
+    return raw;
+  }
+
   // キャッシュキー＝キャラ名（正名へ名寄せ）＋画風（場所が違っても同キャラは同じ1枚）
   // ★fix493(2026-07-19): 汎用ラベルのアイコンキーをslotスコープ化(opt-in)。詳細ヘッダ参照
   //   従来キー(base)は1バイトも変えない。有効条件(live評価)・generic判定(live参照)・slot取得が
   //   全て揃った場合だけ base に '_s'+hash(slotId) を付加。isGeneric/localStorage例外は従来動作へ。
   function keyFor(name){
-    var base = 'n' + hash(canonName(name) + '|' + artStyle());
+    /* ★fix764: canonName で解決しなかった字形差だけの別名を、登録済み表示形へ寄せてからキー化する */
+    var base = 'n' + hash(resolveVariant764(canonName(name)) + '|' + artStyle());
     try {
       if (localStorage.getItem('v292Dfix493OnV1') === '1' && localStorage.getItem('v292Dfix493Off') !== '1') {
         var f487 = window.__v292Dfix487;   // live参照(fix487はfix197より後にロード＝固定禁止)
@@ -194,6 +235,9 @@
   function buildCurrentAppearancePrompt(name){
     try{
       if (!name) return '';
+      /* ★fix764: 以下の素材lookupは全て ===name の完全一致。字形差だけの別名を
+         登録済み表示形へ寄せてから引く（fold 形は入れない＝ここに入るのは常に実在の表示形）。 */
+      try{ var nv764=resolveVariant764(name); if(nv764) name=nv764; }catch(e764){}
       var S=null; try{ S=window.S||(0,eval)('typeof S!=="undefined"?S:null'); }catch(e){}
       function stripLabel(t){
         t=String(t||'').trim();
@@ -522,6 +566,7 @@
     // v292Dfix209: 書き手(fix66等)が初期srcに使うキャッシュ済みdata:URLの取得口
     keyFor: keyFor,
     canonName: canonName,   // ★fix424: 検証口(呼称→正名)
+    resolveVariant764: resolveVariant764,   // ★fix764: 検証口(字形差→登録済み表示形・icon局所)
     __test_state: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; return { pk:pk, pending:(c==='pending'), dice:(c==='dice'), dataUrl:(typeof c==='string'&&c.indexOf('data:')===0), queued:(queue.indexOf(pk)>=0), hasJob:!!jobInfo[pk], jobPrompt:(jobInfo[pk]&&jobInfo[pk].prompt)||'' }; }catch(e){ return null; } },
     cachedFor: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; if(typeof c==='string'&&c.indexOf('data:')===0) return c; var p=persistGet(pk); return (p&&p.indexOf('data:')===0)?p:''; }catch(e){ return ''; } },
     /* ★fix579: 削除候補の列挙に Object.keys(localStorage) を使わない。

@@ -51,7 +51,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260831-fix763';
+  var BUILT = '20260831-fix765';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3386,7 +3386,7 @@ G.init();
   <script src="v292Dfix192-newengine.js?cb=20260829-fix748"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
-  <script src="v292Dfix197-avatar-key.js?cb=v292Dfix524"></script>
+  <script src="v292Dfix197-avatar-key.js?cb=v292Dfix765"></script>
   <!-- v292Dfix221: モデル文脈の直近会話(recentDialogues)を、表示と同じ権威データ
        _convSays に一本化。fix58の壊れた本文再抽出(speakerに地の文が混入→過去セリフ
        がモデルへ誤供給され全キャラが同じセリフを言う)を発生源から断つ。 -->
@@ -3425,7 +3425,8 @@ G.init();
 <script src="v292Dfix304-emotion.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix305-trigger-states.js?cb=v292Dfix305"></script>
 <script src="v292Dfix306-npc-liveliness.js?cb=v292Dfix738"></script>
-<script src="v292Dfix307-npc-roster.js?cb=20260831-fix758"></script>
+<script src="v292Dfix764-name-variant-fold.js?cb=v292Dfix764"></script>
+<script src="v292Dfix307-npc-roster.js?cb=v292Dfix765"></script>
 <script src="v292Dfix308-creepy-toggle.js?cb=v292Dfix308"></script>
 <script src="v292Dfix309-progression.js?cb=v292Dfix419c"></script>
 <!-- fix577: 物語削除の入口を1つに寄せる。B(gallery)/C(features clearSlot)の独自削除を停止し、
@@ -3619,11 +3620,11 @@ G.init();
 <!-- fix640: 証拠台帳。物語データは1バイトも書かず、自前キー v292Dfix640Evid_slot_<slotId> だけに貯める。
      読出=window.__v292Dfix640.report()/.why("名前") / OFF=v292Dfix640Off
      ★fix606 の抽出規則を live 参照するので fix606 の後に置く -->
-<script src="v292Dfix640-cast-evidence-ledger.js?cb=fix644"></script>
+<script src="v292Dfix640-cast-evidence-ledger.js?cb=v292Dfix765"></script>
 <!-- fix641: 証拠ベースの cast 自動登録。強2系統×2ターンでだけ昇格。
      hero は対象外。取消=window.__v292Dfix641.undo("名前") / OFF=v292Dfix641Off
      ★fix640 の後に置くこと -->
-<script src="v292Dfix641-cast-auto-register.js?cb=20260829-fix748"></script>
+<script src="v292Dfix641-cast-auto-register.js?cb=v292Dfix765"></script>
 <!-- fix643: 崩壊ターンの救済生成。fix624/626 の判定を **保存の前**（Api.call の直後・
      Planner.parsePlan の前）へ移し、hard(7点以上) なら1回だけ書き直させる。2回目も hard なら
      ターンを確定せず案内を出す（入力は残る・ターン番号は増えない）。

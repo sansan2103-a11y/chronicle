@@ -26,6 +26,17 @@
  *   `S.cast.npcs.push(...)` の後に `S.save()` を呼ぶ。**window.S は新設しない**
  *   （features.js §8/§9/§10・fix50 など休眠コード約40箇所を起こすため禁止）。
  *
+ * ■fix765（2026-08-31・GPT裁定 = PHASE 4F: Dynamic Registration）反復登場の昇格路を1本足す
+ *   一次資料（実データ）: 「村長」は 42 ターンに渡って登場し、say_who が **15 ターン** で観測され
+ *   （fix640 confidence 0.85）ながら、強い証拠が **1 系統しかない** ため decide() の
+ *   'weak-evidence' で **永久に落選** し続けていた。台詞だけで生きる人物（村長型）が構造的に
+ *   1 人も登録されない穴。
+ *   追加条件（従来条件との **OR**。従来条件は 1 文字も緩めない）:
+ *     強い証拠 1 系統以上 かつ distinctSeenTurns >= RECURRING_MIN_TURNS(5) かつ 名前系候補
+ *   ・役割語（candidateType 'role-label' / roleWord）は対象外＝従来どおり正式名への一意解決が要る
+ *   ・hero / blocked / MAX_PER_RUN / live() ゲート / dryRun 既定は **一切変えない**
+ *   OFF: localStorage v292Dfix765Off='1' で **この OR 条件だけ** 無効（従来判定へ戻る）
+ *
  * 冪等: window.__v292Dfix641
  * OFF : localStorage v292Dfix641Off='1'（★新規昇格を止める。既に入ったものは消さない）
  * 読出: window.__v292Dfix641.dryRun()      … 何が昇格するかを見るだけ（書かない）
@@ -43,6 +54,21 @@
   var MIN_TURNS = 2;        /* distinctSeenTurns の下限 */
   var MIN_STRONG_KINDS = 2; /* 強い証拠の**系統数**の下限 */
   var MAX_PER_RUN = 3;      /* 1回の評価で足す上限（暴走時の被害を限る） */
+
+  /* ===================== fix765 (2026-08-31 / PHASE 4F) =====================
+     反復登場の昇格路。強い証拠が 1 系統しか出ない人物（台詞だけの「村長」型）が
+     MIN_STRONG_KINDS=2 に永久に届かず落選し続けていた実データへの対策。
+     ★これは **OR で足す条件** であって、従来条件を緩めるものではない。 */
+  var RECURRING_MIN_TURNS = 5;   /* 反復登場とみなす distinctSeenTurns の下限 */
+  function off765(){ return lsg('v292Dfix765Off') === '1'; }
+  function recurring765(entry, d){
+    if (off765()) return false;                                      /* kill = OR 条件だけ無効 */
+    if (!entry || !d) return false;
+    if (entry.roleWord || entry.candidateType === 'role-label') return false;  /* 役割語は対象外 */
+    if (!d.strong || d.strong.length < 1) return false;              /* 強い証拠ゼロは救わない */
+    if ((d.turns || 0) < RECURRING_MIN_TURNS) return false;
+    return true;
+  }
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix641Off') === '1'; }
@@ -136,7 +162,9 @@
 
     if (d.turns < MIN_TURNS){ d.reason = 'few-turns'; return d; }
     /* ★弱い証拠が何回あっても、ここは通れない */
-    if (d.strong.length < MIN_STRONG_KINDS){ d.reason = 'weak-evidence'; return d; }
+    /* ★fix765: (強2系統) に加えて (強1系統以上 かつ 5ターン以上 かつ 名前系) でも通す。OR。 */
+    if (d.strong.length < MIN_STRONG_KINDS && !recurring765(entry, d)){ d.reason = 'weak-evidence'; return d; }
+    if (d.strong.length < MIN_STRONG_KINDS) d.via765 = true;         /* 由来を残す（判定は変えない） */
     if (alreadyInCast(target, ctx.names)){ d.reason = 'already'; return d; }
 
     d.ok = true; d.reason = 'promote';
@@ -189,7 +217,7 @@
         st.cast.npcs.push({ name: d.name, desc: '', appeared: true,
                             autoBy: 'fix641', autoAt: Date.now() });
         L.promotions.push({ name: d.name, from: d.from, turn: e.lastTurn,
-                            kinds: d.strong.slice(), turns: d.turns,
+                            kinds: d.strong.slice(), turns: d.turns, via765: !!d.via765,   /* ★fix765 */
                             spans: (e.sourceSpans || []).slice(0, 3), ts: Date.now(), undone: false });
         ctx.names.push(d.name);
         res.promoted.push(d.name);
@@ -325,6 +353,8 @@
     promotions: promotions, why: why,
     alreadyInCast: alreadyInCast, getState: getState,
     MIN_TURNS: MIN_TURNS, MIN_STRONG_KINDS: MIN_STRONG_KINDS,
+    RECURRING_MIN_TURNS: RECURRING_MIN_TURNS, recurring765: recurring765, isOff765: off765,   /* ★fix765: 検証口 */
+    buildCtx: buildCtx,   /* ★fix765: fixture が decide() へ渡す ctx を作るための検証口（判定は変えない） */
     stats: function(){ return JSON.parse(JSON.stringify(stats)); },
     selfTest: selfTest, isOff: off
   };

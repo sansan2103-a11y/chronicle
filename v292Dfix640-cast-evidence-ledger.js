@@ -39,6 +39,13 @@
  *   ・台帳エントリへ candidateType / confidence を足す（既存フィールドは維持・後方互換）
  *   ・★昇格条件（fix641）は変えない（異なるターン＋異なる証拠系統2つ）
  *
+ * ■fix764（2026-08-31・PHASE 4C = Entity Identity）台帳キーの引きだけを字形フォールドにする
+ *   実データ: 同じ人物が「渔师」(T56)と「漁師」(T62)で出て、entries[名前] が完全一致なので
+ *   **別 entry** になり、証拠が2つに割れて昇格条件（異なるターン×強証拠系統）に永久に届かなかった。
+ *   直し方 = **lookup だけ** fold で引く。fold 一致する既存キーがあればそこへ蓄積する。
+ *   ★格納キーと e.name は **最初に見えた表示形のまま**（fold 形は 1 バイトも保存しない・fix455/456 の教訓）。
+ *   OFF: localStorage v292Dfix764Off='1'（fix764 本体の kill）で従来動作へ戻る。
+ *
  * 冪等: window.__v292Dfix640
  * OFF : localStorage v292Dfix640Off='1'（採取を止める。台帳は消さない）
  * 読出: window.__v292Dfix640.ledger() / .report() / .why('名前') / .selfTest()
@@ -145,6 +152,23 @@
   /* ============================ 名前の妥当性 ============================ */
   var PLACEHOLDER = /^(主人公|相手|プレイヤー|自分|ナレーター|語り手|不明|誰か|何者か|それ|あれ|これ|敵|味方)$/;
   function normName(x){ return String(x == null ? '' : x).replace(/[\u3000\s]+$/,'').replace(/^[\u3000\s]+/,''); }
+
+  /* ★fix764(2026-08-31): 台帳キーの **引き** だけを字形フォールドにする（比較専用）。
+     完全一致が最優先。無ければ fold 一致する既存キーを返す。どちらも無ければ入力をそのまま返す。
+     ★新しいキーを fold 形で作ることは無い（返すのは常に「入力の表示形」か「既存キーの表示形」）。 */
+  function f764(){ try { var f = window.__v292Dfix764; return (f && f.__armed && typeof f.fold === 'function' && !f.isOff()) ? f : null; } catch(e){ return null; } }
+  function entryKey764(L, name){
+    var n = String(name == null ? '' : name);
+    if (!L || !L.entries) return n;
+    if (Object.prototype.hasOwnProperty.call(L.entries, n)) return n;
+    var f = f764(); if (!f) return n;
+    var t; try { t = f.fold(n); } catch(e){ return n; }
+    for (var k in L.entries){
+      if (!Object.prototype.hasOwnProperty.call(L.entries, k)) continue;
+      try { if (f.fold(k) === t) return k; } catch(e){}
+    }
+    return n;
+  }
   function isGenericLive(n){
     try { var f = window.__v292Dfix487; if (f && typeof f.isGeneric === 'function') return !!f.isGeneric(n); } catch(e){}
     return false;
@@ -323,11 +347,12 @@
   }
 
   function ensureEntry(L, name, turnIdx, cls){
-    var e = L.entries[name];
+    var key = entryKey764(L, name);          /* ★fix764: 引きだけ fold。格納キーは表示形のまま */
+    var e = L.entries[key];
     if (!e){
-      var t = (cls && cls.type) || (isRoleWord(name) ? 'role-label' : 'name');
-      e = L.entries[name] = {
-        name: name, slotId: L.slotId,
+      var t = (cls && cls.type) || (isRoleWord(key) ? 'role-label' : 'name');
+      e = L.entries[key] = {
+        name: key, slotId: L.slotId,
         firstSeenTurn: turnIdx, lastTurn: -1,
         distinctSeenTurns: 0, seenTurns: [],
         evidenceKinds: [], sourceSpans: [],
@@ -628,7 +653,7 @@
   /* ============================ 読み出し ============================ */
   function ledger(){ return load(); }
   function why(name){
-    var L = load(), e = L.entries[normName(name)];
+    var L = load(), e = L.entries[entryKey764(L, normName(name))];   /* ★fix764 */
     if (!e) return null;
     return { name: e.name, distinctSeenTurns: e.distinctSeenTurns, seenTurns: e.seenTurns.slice(),
              strong: strongKindsOf(e), kinds: e.evidenceKinds.slice(),
@@ -668,6 +693,7 @@
     isStrong: isStrong, isKnownKind: isKnownKind, strongKindsOf: strongKindsOf,
     STRONG_KINDS: Object.keys(STRONG), WEAK_KINDS: Object.keys(WEAK),
     isValidName: isValidName, isRoleWord: isRoleWord, normName: normName,
+    entryKey764: entryKey764,   /* ★fix764: 検証口(台帳キーの引き) */
     /* 形状条件（fix644。純関数・テストと実機の両方から呼ぶ唯一の正） */
     classifyCandidate: classifyCandidate, personUse: personUse, confidenceOf: confidenceOf,
     /* 読み出し */
