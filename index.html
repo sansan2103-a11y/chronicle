@@ -51,7 +51,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260831-fix760';
+  var BUILT = '20260831-fix762';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -2968,7 +2968,7 @@ G.init();
           if (b && b.messages){
             var len = getOutputLen();
             // v292 Tier 1.5: JSON モードで verbose な schema が truncate しないよう cap 緩和
-            var max = len === 'short' ? 900 : (len === 'long' ? 2500 : 1600);
+            var max = len === 'short' ? (function(){ /* v292Dfix761: QG-2 短cap 900→1300 (kill=v292Dfix761Off) */ try { return localStorage.getItem('v292Dfix761Off') === '1' ? 900 : 1300; } catch(e){ return 1300; } })() : (len === 'long' ? 2500 : 1600);
             if (b.max_tokens && b.max_tokens > max) b.max_tokens = max;
             else if (!b.max_tokens) b.max_tokens = max;
             opts.body = JSON.stringify(b);
@@ -3545,7 +3545,7 @@ G.init();
 <script src="v292Dfix448-genloading.js?cb=v292Dfix448"></script>
 <script src="v292Dfix453-src-coalesce.js?cb=v292Dfix453"></script>
 <script src="v292Dfix454-dash.js?cb=v292Dfix457"></script>
-<script src="v292Dfix458-dash-post.js?cb=v292Dfix760"></script>
+<script src="v292Dfix458-dash-post.js?cb=v292Dfix762"></script>
 <script src="v292Dfix459-sys-v2.js?cb=v292Dfix737"></script>
 <script src="v292Dfix460-slotgrid.js?cb=v292Dfix460"></script>
 <script src="v292Dfix461-appearance-en.js?cb=v292Dfix740"></script>
