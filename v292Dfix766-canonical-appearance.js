@@ -24,6 +24,8 @@
 //   ・enum はここに書いた分で打ち止め。巨大 taxonomy 化は禁止（QAで不足を実証したときだけ足す）。
 //   ・非人間（怪異）は対象外。entityType は 'HUMAN' 固定（v1）。
 //
+// ■fix768(2026-08-31): 受入E2E実データ(QA story村長のroster appr「老年の男性。日焼けした肌…」)で
+//   「老年」が年齢語彙に無くageBandがRANDOM_FILLに落ちる取り残しを観測→ 老年/年老い をELDERLY語彙へ追加。
 // ■opt-in（既定OFF＝プレビュー規約）
 //   実機で動くのは localStorage.v292Dfix766On === '1' のときだけ。
 //   OFF のとき ensureFor() は no-op（ストアへ1バイトも書かない）。
@@ -155,7 +157,7 @@
   var RULES = [
     /* ---- ageBand（語彙。数値「歳」は別途・数値が最優先） ---- */
     [/老婆|お婆さん|おばあさん|ばあさん/,           'ageBand', 'ELDERLY'],
-    [/老爺|老人|お爺さん|おじいさん|じいさん|翁/,   'ageBand', 'ELDERLY'],
+    [/老爺|老人|老年|年老い|お爺さん|おじいさん|じいさん|翁/,   'ageBand', 'ELDERLY'],   /* ★fix768: 「老年の男性」(QA story村長roster appr実測)と活用形「年老いた」を追加 */
     [/初老/,                                       'ageBand', 'FIFTIES'],
     [/中年/,                                       'ageBand', 'FORTIES'],
     [/青年/,                                       'ageBand', 'TWENTIES'],
