@@ -38,6 +38,11 @@
 //   ★opt-in: localStorage.v292Dfix766On==='1' かつ当人の record が有るときだけ差し替わる。
 //     OFF/未ロード/record無しでは body も seed も1バイトも変わらない（従来動作と完全一致）。
 //   ★keyFor / v292avrec_ / v292av2_ の形は不変。style は入れない（画風の権威は fetch 層の fix484）。
+// ★fix769/fix770(2026-08-31 / PHASE 4E slice 2): prompt は anime-first 語順へ（fix769。本ファイルは無変更）、
+//   再生成時だけ IDENTITY_REFERENCE を渡す（fix770）。本ファイルの変更は配線の数行だけ:
+//   fix767 の toProviderBody が imgProvider / style420 を返してきたときに body へ載せる。
+//   返って来ない（初回・参照不能・v292Dfix770Off='1'）ときは body は従来どおり1バイトも変わらない。
+//   ★コスト注記: style420 の together FLUX.2-dev は有料 model（既定 OFF の QA 限定機能）。
 // ---------------------------------------------------------------------
 // fix199 からの改良（おしんFB: 場所ごとに絵が違う／絵柄が前と違う）:
 //   ・キャッシュを【キャラ名＋画風】単位に統一 → 会話ログ/設定/キャラ一覧で同じ1枚を共有。
@@ -361,7 +366,10 @@
         var pb767 = rc767 ? r767.toProviderBody(rc767) : null;
         if (pb767 && pb767.prompt) {
           body.prompt = pb767.prompt; body.seed = pb767.seed;
-          try { r767.recordGeneration(pk, { providerSeed: pb767.seed, variantIndex: rc767.sampling.variantIndex, appearanceRevision: rc767.appearanceRevision, recipeVersion: rc767.recipeVersion }); } catch(e767){}
+          // ★fix770: 参照画像つき再生成のときだけ provider 指定と style420 が返る（初回は返らない=従来body）
+          if (pb767.imgProvider) body.imgProvider = pb767.imgProvider;
+          if (pb767.style420) body.style420 = pb767.style420;
+          try { r767.recordGeneration(pk, { providerSeed: pb767.seed, variantIndex: rc767.sampling.variantIndex, appearanceRevision: rc767.appearanceRevision, recipeVersion: rc767.recipeVersion, ref: !!pb767.style420 }); } catch(e767){}
         }
       }
     } catch(e){}

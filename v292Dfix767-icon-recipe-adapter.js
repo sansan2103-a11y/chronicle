@@ -26,9 +26,36 @@
 //   よって v1 では hardConstraints の否定側は **送信せず**、QA 検査でのみ使う。
 //   肯定形への変換（「眼鏡なし」→「素顔」等）は次スライスの課題。
 //
+// ■fix769(2026-08-31 / PHASE 4E slice 2): Global Art Style contract = **anime-first 語順**
+//   ・真因: slice 1 の prompt は "…portrait of a person in their forties, …" という
+//     **写真キャプション調の主語句で始まっていた**。この先頭句が、fetch 層で末尾に付く
+//     STYLE6_TAIL（画風）より強く効き、出力が写実へ倒れた（＝画風指定が負ける）。
+//     結果 fix476 の Worker VLM 検品（hard 項目に anime_style）が写実を正しく弾いて全滅→合成502。
+//   ・対処: 主語句そのものを画風で始める。
+//       `dark fantasy anime character portrait of one <年代> <性別名詞>, 2d anime illustration, …`
+//     ライブ実測で検品 score103 PASS・旧 Chronicle 系 2D アニメ出力に復帰することを確認した。
+//   ・GPT 裁定: 旧 Chronicle 画風（2D アニメ）が正式ターゲット。写実は不採用。
+//   ・art6 のときは fix484 の canonical STYLE6_TAIL を **live 参照で** 末尾に1回だけ付ける
+//     （文字列は自前に複製しない＝二重管理事故 fix480 と同型の再発防止）。
+//     このとき framing の 'simple plain background' は出さない（tail の dark shadowy background と
+//     矛盾し、検品 desc = prompt − tail を汚すため）。art6 以外は従来どおり（fetch 層 fix338 が処理）。
+//   ・kill: localStorage.v292Dfix769Off==='1' → slice 1 の旧語順（tail も付けない）。
+//
+// ■fix770(2026-08-31 / 同 slice): IDENTITY_REFERENCE（再生成時の同一人物性）
+//   ・**再生成のときだけ**、直近に受理された当人のアイコン（Worker 公開 /img URL）を
+//     参照画像として渡す: imgProvider:'together' ＋ style420.reference_images:[url]。
+//     Worker は together 分岐でのみ reference_images を受理する（実効既定 provider は
+//     pollinations で reference は無視される）ため、client 側で provider を明示する。
+//   ・初回（当人のキャッシュ画像がまだ無い）は参照無し＝従来どおり。
+//   ・参照元は同期ラグで1版古いことがある（既知 caveat）。
+//   ・コスト: together FLUX.2-dev は **有料 model**。既定 OFF の QA 限定機能であり、
+//     既定 ON 化のコスト判断は OWNER 裁定事項。
+//   ・kill: localStorage.v292Dfix770Off==='1' → reference 拡張だけ無効（fix769 の語順は残る）。
+//
 // ■公開口
 //   window.__v292Dfix767 = { __armed, buildRecipe, toProviderBody, promptFor,
-//     bumpVariant, variantOf, recordGeneration, generationsOf, FRAMING, WORDS, RECIPE_VERSION }
+//     bumpVariant, variantOf, recordGeneration, generationsOf, FRAMING, WORDS, RECIPE_VERSION,
+//     PROMPT_CONTRACT, HEAD_PREFIX, MEDIUM_WORD, SHOT_ANIME, AGE_ADJ, subjectPhrase, refUrlFor }
 // =====================================================================
 (function(){
   'use strict';
@@ -43,6 +70,10 @@
   function lss(k,v){ try{ localStorage.setItem(k,v); return true; }catch(e){ return false; } }
   function f766(){ try{ var f=window.__v292Dfix766; return (f && f.__armed) ? f : null; }catch(e){ return null; } }
   function f197(){ try{ var f=window.__v292Dfix197; return f || null; }catch(e){ return null; } }
+  function f484(){ try{ var f=window.__v292Dfix484; return (f && f.__armed) ? f : null; }catch(e){ return null; } }
+  function f400(){ try{ var f=window.__v292Dfix400; return f || null; }catch(e){ return null; } }
+  function off769(){ try{ return localStorage.getItem('v292Dfix769Off')==='1'; }catch(e){ return false; } }
+  function off770(){ try{ return localStorage.getItem('v292Dfix770Off')==='1'; }catch(e){ return false; } }
 
   function hash32(s){ var h=2166136261; s=String(s); for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=(h*16777619)>>>0; } return h>>>0; }
   function artStyleId(){ try{ var S=getS(); return String((S&&S.cfg&&S.cfg.artStyle)!=null ? S.cfg.artStyle : 0); }catch(e){ return '0'; } }
@@ -94,6 +125,56 @@
     }
   };
 
+  // ---------- fix769: anime-first contract（主語句そのものを画風で始める） ----------
+  var PROMPT_CONTRACT = 'anime-first-v1';
+  var HEAD_PREFIX = 'dark fantasy anime character portrait of one ';
+  var MEDIUM_WORD = '2d anime illustration';
+  var SHOT_ANIME  = 'bust shot';
+  /* 年代の **形容詞形**（WORDS.ageBand の名詞句は 769Off の旧語順用に温存する）。
+     9 バンドが1対1で別語になるようにする＝ageBand が変われば prompt も必ず変わる。 */
+  var AGE_ADJ = {
+    CHILD:'young', EARLY_TEENS:'young teenage', LATE_TEENS:'teenage',
+    TWENTIES:'young adult', THIRTIES:'adult', FORTIES:'middle-aged',
+    FIFTIES:'older middle-aged', SENIOR:'aging', ELDERLY:'elderly'
+  };
+  /* subjectPhrase('ELDERLY','male') → 'elderly man' / ('LATE_TEENS','female') → 'teenage girl' */
+  function subjectPhrase(band, g){
+    var adj = AGE_ADJ[band] || '', noun;
+    if (band === 'CHILD') noun = (g==='male' ? 'boy' : (g==='female' ? 'girl' : 'child'));
+    else if (band === 'EARLY_TEENS' || band === 'LATE_TEENS'){
+      noun = (g==='male' ? 'boy' : (g==='female' ? 'girl' : 'teenager'));
+      if (noun === 'teenager') adj = (band === 'EARLY_TEENS' ? 'young' : 'older');   // 'young teenage teenager' を避ける
+    } else noun = (g==='male' ? 'man' : (g==='female' ? 'woman' : 'person'));
+    return (adj ? adj + ' ' : '') + noun;
+  }
+  /* art6 のときだけ fix484 の canonical tail を live 参照で返す（文字列は複製しない）。 */
+  function styleTail(){
+    if (off769()) return '';
+    if (artStyleId() !== '6') return '';
+    var f = f484();
+    if (!f || typeof f.STYLE6_TAIL !== 'string' || !f.STYLE6_TAIL) return '';
+    /* fix484 の kill(v292Dfix484Off='1')が引かれているときは付けない:
+       fetch 層の画風正規化を止めた状態で、こちらだけ画風を足すのは筋が悪い。 */
+    try { if (typeof f.active === 'function' && !f.active()) return ''; } catch(e){}
+    return f.STYLE6_TAIL;
+  }
+
+  // ---------- fix770: IDENTITY_REFERENCE（再生成時のみ・有料 model・既定 OFF 前提） ----------
+  var TOGETHER_MODEL = 'black-forest-labs/FLUX.2-dev';   // Worker は ^black-forest-labs/… のみ受理
+  var TOGETHER_STEPS = 28;
+  /* refUrlFor(name) → 参照画像URL | ''（'' = 初回 or 参照不能 = 従来どおり reference 無し） */
+  function refUrlFor(name){
+    try {
+      if (off770()) return '';
+      var f = f197(); if (!f || typeof f.cachedFor !== 'function') return '';
+      var cached = f.cachedFor(name) || '';
+      if (String(cached).indexOf('data:') !== 0) return '';        // 受理済みアイコンが無い＝初回
+      var f4 = f400(); if (!f4 || typeof f4.urlFor !== 'function') return '';
+      var url = f4.urlFor(pkOf(name)) || '';                        // ns 未確立/off なら '' が返る
+      return /^https:\/\//.test(url) ? url : '';                   // Worker は https のみ受理
+    } catch(e){ return ''; }
+  }
+
   function genderOf(name){
     try {
       var S = getS(); if (!S || !S.cast) return '';
@@ -130,7 +211,8 @@
       providerSeed: info.providerSeed,
       variantIndex: info.variantIndex,
       appearanceRevision: info.appearanceRevision,
-      recipeVersion: info.recipeVersion || RECIPE_VERSION
+      recipeVersion: info.recipeVersion || RECIPE_VERSION,
+      ref: !!info.ref                                    // ★fix770: 参照画像つきで生成したか
     });
     while (arr.length > GEN_RING) arr.pop();
     lss(GEN_PREFIX + pk, JSON.stringify(arr));
@@ -169,19 +251,27 @@
   function av(recipe, k){ var a = recipe.attrs && recipe.attrs[k]; return (a && a.value) ? a.value : ''; }
 
   /**
-   * toProviderBody(recipe) → { prompt, seed }
-   *   ★返すのは prompt と seed だけ。model / size / n など既存 genOne の既定は触らない。
-   *   ★style トークンは足さない（fix484 が fetch 層で最終決定する）。
+   * toProviderBody(recipe) → { prompt, seed } （＋fix770 で参照可能なときだけ imgProvider / style420）
+   *   ★model / size / n など既存 genOne の既定は触らない。
+   *   ★fix769: art6 かつ fix484 armed のときだけ、fix484 の STYLE6_TAIL を live 参照で末尾に1回付ける。
+   *     art6 以外・fix484 不在・769Off では付けない（＝従来どおり fetch 層が最終決定）。
    */
   function toProviderBody(recipe){
     if (!recipe) return null;
+    var legacy = off769();                 // kill: slice 1 の旧語順へ
+    var tail = legacy ? '' : styleTail();  // '' なら tail 無し（＝従来の framing を使う）
     var g = recipe.gender === '男性' ? 'male' : (recipe.gender === '女性' ? 'female' : '');
     var parts = [];
 
-    /* ① 誰か（性別＋年齢） */
-    var head = (g ? g + ' ' : '') + 'portrait';
-    var age = w('ageBand', av(recipe,'ageBand'));
-    parts.push(age ? (head + ' of ' + age) : head);
+    /* ① 誰か（★fix769: 画風→主語 の順で始める。写真キャプション調の語で始めない） */
+    if (legacy){
+      var head = (g ? g + ' ' : '') + 'portrait';
+      var age = w('ageBand', av(recipe,'ageBand'));
+      parts.push(age ? (head + ' of ' + age) : head);
+    } else {
+      parts.push(HEAD_PREFIX + subjectPhrase(av(recipe,'ageBand'), g));
+      parts.push(MEDIUM_WORD);
+    }
 
     /* ② 体（身長印象＋体格＋シルエット） */
     var h = w('heightImpression', av(recipe,'heightImpression'));
@@ -226,15 +316,30 @@
       if (cv && String(cv).indexOf('no ') !== 0) parts.push(String(cv));
     }
 
-    /* ⑨ 構図（画風ではない＝fix484 の管轄外） */
-    parts.push(w('framing', recipe.framing && recipe.framing.shot));
-    parts.push(w('framing', recipe.framing && recipe.framing.camera));
-    parts.push(w('framing', recipe.framing && recipe.framing.background));
+    /* ⑨ 構図。tail を付ける（art6）ときは短い 'bust shot' だけにする:
+          'head and shoulders' は tail 側にあり、'simple plain background' は tail の
+          dark shadowy background と矛盾して検品 desc を汚すため出さない。
+          tail が無いとき（art6 以外 / fix484 不在 / 769Off）は従来の3語のまま。 */
+    if (tail){
+      parts.push(SHOT_ANIME);
+    } else {
+      parts.push(w('framing', recipe.framing && recipe.framing.shot));
+      parts.push(w('framing', recipe.framing && recipe.framing.camera));
+      parts.push(w('framing', recipe.framing && recipe.framing.background));
+    }
 
     var prompt = parts.filter(function(x){ return !!x; }).join(', ');
+    if (tail) prompt += ', ' + tail;   // ★末尾に1回だけ（fix484 が fetch 層で剥がして付け直しても冪等）
     var seed = hash32(String(recipe.sampling.appearanceSeed) + ':' + String(recipe.sampling.variantIndex)) >>> 0;
     if (seed === 0) seed = 1;   // provider へ 0 を渡さない（正整数を保証）
-    return { prompt: prompt, seed: seed };
+    var out = { prompt: prompt, seed: seed };
+    /* ★fix770: 受理済みアイコンがあるとき（＝再生成）だけ参照画像を足す。初回は 2 キーのまま。 */
+    var ref = refUrlFor(recipe.entityKey);
+    if (ref){
+      out.imgProvider = 'together';
+      out.style420 = { model: TOGETHER_MODEL, steps: TOGETHER_STEPS, reference_images: [ref] };
+    }
+    return out;
   }
 
   /** promptFor(name) → prompt文字列 | null（record が無ければ null＝呼び手は従来経路へ） */
@@ -251,7 +356,10 @@
     buildRecipe: buildRecipe, toProviderBody: toProviderBody, promptFor: promptFor,
     bumpVariant: bumpVariant, variantOf: variantOf,
     recordGeneration: recordGeneration, generationsOf: generationsOf,
-    pkOf: pkOf, hash32: hash32
+    pkOf: pkOf, hash32: hash32,
+    /* ★fix769/fix770 の検証口（読み取り専用の定数と純関数のみ） */
+    PROMPT_CONTRACT: PROMPT_CONTRACT, HEAD_PREFIX: HEAD_PREFIX, MEDIUM_WORD: MEDIUM_WORD,
+    SHOT_ANIME: SHOT_ANIME, AGE_ADJ: AGE_ADJ, subjectPhrase: subjectPhrase, refUrlFor: refUrlFor
   };
   try { console.log(TAG, 'loaded (recipeVersion=' + RECIPE_VERSION + ')'); } catch(e){}
 })();
