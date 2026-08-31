@@ -57,6 +57,8 @@
 //     bumpVariant, variantOf, recordGeneration, generationsOf, FRAMING, WORDS, RECIPE_VERSION,
 //     PROMPT_CONTRACT, HEAD_PREFIX, MEDIUM_WORD, SHOT_ANIME, AGE_ADJ, subjectPhrase, refUrlFor }
 // =====================================================================
+// ★fix771(2026-08-31): 受入E2Eで refUrlFor が常に '' になる実バグを観測(fix400.urlForの表示優先ラッパが
+//   ローカル画像有=再生成時にサーバURLを抑止するため)。参照URLはns+proxyから直接構築へ変更。
 (function(){
   'use strict';
   var TAG = '[v292Dfix767:icon-recipe]';
@@ -169,8 +171,14 @@
       var f = f197(); if (!f || typeof f.cachedFor !== 'function') return '';
       var cached = f.cachedFor(name) || '';
       if (String(cached).indexOf('data:') !== 0) return '';        // 受理済みアイコンが無い＝初回
-      var f4 = f400(); if (!f4 || typeof f4.urlFor !== 'function') return '';
-      var url = f4.urlFor(pkOf(name)) || '';                        // ns 未確立/off なら '' が返る
+      /* ★fix771(2026-08-31 受入実バグ): fix400.urlFor は表示優先ラッパ(ローカル画像有→サーバURL抑止)に
+         包まれており、再生成時(=ローカル有)は必ず '' になる。表示用の抑止と参照用URLは別物なので、
+         ns + proxy から直接組み立てる（構成要素は fix400 と同じ情報源・重複最小2行） */
+      var ns771 = ''; try { ns771 = localStorage.getItem('v292Dfix400_ns') || ''; } catch(e771){}
+      if (!ns771) return '';
+      var px771 = 'https://novel-proxy.sansan2103.workers.dev';
+      try { var pu = (localStorage.getItem('v292ProxyUrl') || '').trim(); if (pu) px771 = pu.replace(/\/+$/, ''); } catch(e772){}
+      var url = px771 + '/img?ns=' + encodeURIComponent(ns771) + '&k=' + encodeURIComponent('v292av2_' + pkOf(name));
       return /^https:\/\//.test(url) ? url : '';                   // Worker は https のみ受理
     } catch(e){ return ''; }
   }
