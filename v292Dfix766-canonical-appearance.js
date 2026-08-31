@@ -430,7 +430,13 @@
   var MORPH_FEATURE_RULES_779 = [
     [/顔のない|顔が無い|顔がない|のっぺらぼう|のっぺり|目鼻の無い|目鼻のない/,
                                       'featureless blank face, no eyes, no mouth'],
-    [/一つ目|ひとつ目|一つ眼|単眼|隻眼/, 'a single large eye, only one eye'],
+    /* ■fix780(2026-08-31): 「一つ目」の語を強化。実測: fix779の 'a single large eye, only one eye' では
+       付喪神が両目で描かれた（tailの monster design 圧に負ける）。同一条件で語だけ強化した対照プローブで
+       'one single cyclopean eye in the center, cyclops' が単眼を実現（QA実機・実画像で確認）。
+       隻眼だけは分離: 単眼(一つ目小僧型)ではなく「片目を失った」型（隻眼の狼等）なので cyclops を使わない。
+       kill は fix779 と共通（v292Dfix779Off で本ルールごと消える）。 */
+    [/一つ目|ひとつ目|一つ眼|単眼/,     'one single cyclopean eye in the center, cyclops'],
+    [/隻眼/,                            'a single eye, one-eyed'],
     [/裂けた口|裂けた唇|口が裂け/,      'wide torn mouth'],
     [/(?:提灯|行灯|灯籠)を(?:提げ|下げ|持|携え)/, 'carrying a paper lantern']
   ];
