@@ -72,7 +72,30 @@
   var TAG = '[v292Dfix697:shadow-story-commit]';
   var DEBOUNCE_MS = 12000, MAXWAIT_MS = 45000, SIDE_POLL_MS = 20000, TIMEOUT_MS = 25000;
   var MARKER_KEY = 'v292Dfix402_storyRevs';   // ★collectLS 除外 prefix に同居（pkg baseline 不変）
-  var BUILD = 'fix725';
+  var BUILD = 'fix725+781';
+
+  /* ■fix781(Phase 2.5A): UnsyncedGuard への最小フック。
+     ここは「送信を開始した / ACK を受けた」という **既に存在する事実** を durable に写すだけ。
+     ・fix697 の判定・送信・CAS・retry 方針は 1 バイトも変えない。
+     ・guard 不在（home.html など fix781 を読まない document）では全部 no-op。
+     ・kill: v292Dfix781Off='1'（guard 側で live 評価。ここは guard の API を呼ぶだけ）。 */
+  function g781(){ try { return window.__v292Dfix781 || null; } catch(e){ return null; } }
+  function g781InFlight(id, fp){ try { var G = g781(); if (G) G.noteInFlight(id, fp); } catch(e){} }
+  function g781Refine(id, fp){   try { var G = g781(); if (G) G.refineInFlight(id, fp); } catch(e){} }
+  function g781Clear(id){        try { var G = g781(); if (G) G.clearInFlight(id); } catch(e){} }
+  function g781Confirm(id, rev, fp){ try { var G = g781(); if (G) G.confirm(id, rev, fp); } catch(e){} }
+  /* ■fix781: response handler の **同期本体が終わってから** 後片付けする。
+     先に clear すると g781Confirm が inFlightSave.generation と突き合わせられず
+     CLEAN 判定（裁定の CLEAN 遷移条件）が成立しなくなるため microtask へ回す。 */
+  function g781Settle(id){
+    var run = function(){ try { g781Clear(id); } catch(e){} try { f781cDrain(); } catch(e){} };
+    try {
+      if (typeof Promise === 'function' && Promise.resolve){ Promise.resolve().then(run); return; }
+    } catch(e){}
+    try { setTimeout(run, 0); } catch(e){ run(); }
+  }
+  function f781bOff(){ return lsg('v292Dfix781bOff') === '1'; }
+  function f781cOff(){ return lsg('v292Dfix781cOff') === '1'; }
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function lss(k,v){ try { localStorage.setItem(k, v); return true; } catch(e){ return false; } }
@@ -667,11 +690,16 @@
   }
   function canonicalCommit(id, content, intendedLocalHash, why){
     inFlight = true; cstats.routedCanonical++;
-    var fin = function(){ inFlight = false; };
+    g781InFlight(id, intendedLocalHash);                    /* ■fix781: 送信開始を durable 化 */
+    var fin = function(){ inFlight = false; g781Clear(id); f781cDrain(); };   /* ■fix781 / ■fix781c */
     var condClearDirty = function(then){
       /* 送信 snapshot 以降に local mutation が無い場合のみ dirty 解消（後発入力を落とさない） */
       currentHashOf(id, function(h2){
         if (h2 && h2 === intendedLocalHash){ lastSentHash = intendedLocalHash; }
+        /* ■fix781: ACK 済み事実の durable 化。canonCtx は直前に必ず設定されているので
+           「server に載った rev と hash」をそのまま lastConfirmed にする。
+           CLEAN へ落とすかは guard 側が inFlightSave.generation と突き合わせて決める。 */
+        try { if (canonCtx && canonCtx.id === id) g781Confirm(id, canonCtx.rev, canonCtx.hash); } catch(e781){}
         then();
       });
     };
@@ -763,10 +791,13 @@
        「送信 snapshot 以降 local 変化なし」を確認する用途には従来契約のまま使える。 */
   function canonicalCommit2(id, intendedLocalHash, why){
     inFlight = true; cstats.routedCanonical++;
-    var fin = function(){ inFlight = false; };
+    g781InFlight(id, intendedLocalHash);                    /* ■fix781: まず V1 hash で記録（v2hash は後で refine） */
+    var fin = function(){ inFlight = false; g781Clear(id); f781cDrain(); };   /* ■fix781 / ■fix781c */
     var condClearDirty = function(then){
       currentHashOf(id, function(h2){
         if (h2 && h2 === intendedLocalHash){ lastSentHash = intendedLocalHash; }
+        /* ■fix781: schema2 の canonCtx.hash は v2hash（= server の content_hash と同一 domain）。 */
+        try { if (canonCtx && canonCtx.id === id) g781Confirm(id, canonCtx.rev, canonCtx.hash); } catch(e781){}
         then();
       });
     };
@@ -795,6 +826,9 @@
       if (!v2c){ cstats.netFail++; note({ kind: 'C2_BUILD_FAILED', id: id }); return fin(); }
       sha256hex(canonicalString(v2c), function(v2hash){
         if (!v2hash){ cstats.netFail++; note({ kind: 'C2_LOCAL_HASH_FAIL', id: id }); return fin(); }
+        /* ■fix781: server と比較可能な指紋が確定したので inFlightSave.fingerprint だけを差し替える
+           （generation / startedAt は保つ = lost ACK reconcile が schema2 でも成立する）。 */
+        g781Refine(id, v2hash);
         /* ---- POST 前の local 再確認（従来どおり V1 hash で mutation 検出） ---- */
         currentHashOf(id, function(hNow){
           if (!hNow){ cstats.netFail++; note({ kind: 'C2_LOCAL_V1_HASH_FAIL', id: id }); return fin(); }
@@ -871,11 +905,32 @@
 
   // ---- commit（完全 fire-and-forget） ----
   var inFlight = false, lastSentHash = null;
+  /* ■fix781c(サブfix・kill=v292Dfix781cOff): DROPPED COMMIT INTENT の 1 回だけ再スケジュール。
+     旧実装は `if (!on() || inFlight) return;` で **in-flight 中に来た commit intent を黙って捨てて**
+     いた（再スケジュール 0）。fix697 は自動再送を一切持たない（TIMEOUT_MS=25000 で abort → note のみ）
+     ため、捨てられた intent は次の markDirty が来るまで永久に送られない。
+     ・fin() 到達時にフラグが立っていれば **既存の markDirty(debounce) 経路へ 1 回だけ**戻す。
+     ・network retry ではない（同じ payload の再送ではなく、現在の local を改めて評価し直す）。
+     ・無限ループ防止に document 単位の上限を置く。 */
+  var f781cPending = false, f781cCount = 0, F781C_MAX = 20;
+  function f781cDrain(){
+    try {
+      if (!f781cPending) return;
+      f781cPending = false;                                  /* ★consume してから発火（1 回のみ） */
+      if (f781cOff()) return;
+      if (f781cCount >= F781C_MAX){ note({ kind: 'F781C_CAP_REACHED', count: f781cCount }); return; }
+      f781cCount++;
+      note({ kind: 'F781C_RESCHEDULE', count: f781cCount });
+      markDirty();
+    } catch(e){}
+  }
   function commit(why){
     /* ★★fix721.1(STEP4F.1/RULING31): restore transaction中はshadow/canonical writeを発火させない（読取のみ） */
     try { var __rj = JSON.parse(lsg('v292Dfix721_txn') || 'null');
           if (__rj && (__rj.phase === 'PREPARED' || __rj.phase === 'APPLYING')) return; } catch(e){}
-    if (!on() || inFlight) return;
+    if (!on()) return;
+    /* ■fix781c: in-flight 中の intent は捨てずに「あとで 1 回だけ」へ回す */
+    if (inFlight){ if (!f781cOff()) f781cPending = true; return; }
     if (!isLoggedIn()) { stats.skipped++; return; }
     var content = projection();
     if (!content) { stats.skipped++; return; }
@@ -921,6 +976,7 @@
                       record: content, shadow: true, mid: mid,
                       clientMeta: { device: (navigator.userAgent || '').slice(0, 60), build: BUILD } };
       inFlight = true; stats.commits++;
+      g781InFlight(id, localHash);                           /* ■fix781: 送信開始を durable 化（shadow 経路） */
       var ac = null, timer = null;
       try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, TIMEOUT_MS); } catch(e){}
       var opts = { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) };
@@ -929,6 +985,7 @@
         return res.json().then(function(j){ return { status: res.status, j: j }; });
       }).then(function(r){
         inFlight = false; if (timer) clearTimeout(timer);
+        g781Settle(id);                                        /* ■fix781 / ■fix781c: 後片付けは microtask（confirm の後） */
         var j = r.j || {};
         if (r.status === 200 && j.ok){
           lastSentHash = localHash;
@@ -941,6 +998,8 @@
                  baseRev: baseRev, serverRev: (typeof j.rev === 'number' ? j.rev : null),
                  localHash: localHash, serverHash: j.serverHash || null, replayed: (j.replayed === true) });
           if (typeof j.rev === 'number') advanceDocRev(id, j.rev);   // 200 normal / 200 noop
+          /* ■fix781: ACK 済み事実の durable 化（shadow 200 / noop） */
+          g781Confirm(id, (typeof j.rev === 'number' ? j.rev : null), localHash);
           return;
         }
         if (r.status === 409 && j.conflict){
@@ -949,6 +1008,8 @@
             if (typeof j.serverRev === 'number') advanceDocRev(id, j.serverRev);
             lastSentHash = localHash;
             lineageBaseHash = localHash;                    /* ★fix733: server と同一内容が確定 */
+            /* ■fix781: SEED_EQUIVALENT も「server 側に同一内容が載っている」確定事実 */
+            g781Confirm(id, (typeof j.serverRev === 'number' ? j.serverRev : null), localHash);
             note({ kind: 'SEED_EQUIVALENT', id: id, serverRev: j.serverRev });
           } else {
             stats.shadowConflict++;                         // ★SHADOW_CONFLICT: marker 不変・retry 0・UI 0
@@ -966,6 +1027,7 @@
         note({ kind: 'HTTP_' + r.status, id: id, errorCode: j.errorCode || null });
       })['catch'](function(e){
         inFlight = false; if (timer) clearTimeout(timer);
+        g781Settle(id);                                        /* ■fix781 / ■fix781c: 後片付けは microtask（confirm の後） */
         stats.netFail++;
         note({ kind: 'NET_FAIL', id: id, msg: String((e && e.message) || e).slice(0, 60) });
       });
@@ -1071,7 +1133,33 @@
   function fp(){
     var id = storyId(); if (!id) return null;
     var a = readAiInstr(id) || '';          /* ★STEP3C: genderMap は projection に入らないので指紋対象外 */
-    return a.length + ':' + a.slice(0, 80);
+    var base = a.length + ':' + a.slice(0, 80);
+    /* ■fix781b(サブfix・kill=v292Dfix781bOff): SIDECAR DIRTY TRIGGER GAP の最小手当。
+       schema2 の canonical content は sidecar 13key（fix743 S2_FIELDS）を含むのに、
+       この poll は aiInstr 1 本しか指紋化していなかった。残り 12key
+       （relations / charStates / charFlags / pendingDice / states77 / roster307 /
+        turnSummaryOverrides / chapterTitles / sceneBreaks / sceneSummaries / coverSeed）
+       は content_hash を動かすのに専用トリガが無く、次の S.save に相乗りしない限り
+       永久に commit されなかった（= 「turn 同数で sidecar だけ先行」が送信すらされない）。
+       ・key mapping は fix743.keysFor を **読むだけ**（新 serializer を作らない）。
+       ・指紋の作り方は既存 base と同じ「長さ + 先頭数十文字」だけ（canonical hash ではない）。
+       ・781bOff='1' のとき戻り値は従来と byte 同一。 */
+    if (f781bOff()) return base;
+    var K = null;
+    try { var C = window.__v292DfixCC2; if (C && typeof C.keysFor === 'function') K = C.keysFor(String(id)); }
+    catch(e){ K = null; }
+    if (!K) return base;
+    var names = [], n;
+    for (n in K){ if (Object.prototype.hasOwnProperty.call(K, n)) names.push(n); }
+    names.sort();                                        /* 決定的な順序（列挙順に依存しない） */
+    var out = base;
+    for (var i = 0; i < names.length; i++){
+      var kk = String(K[names[i]]);
+      if (kk === keyOf(id)) continue;                    /* body は S.save 側トリガが既に見ている */
+      var v = null; try { v = lsg(kk); } catch(e2){ v = null; }
+      out += '|' + names[i] + '=' + (v == null ? 'n' : (v.length + ':' + v.slice(0, 24)));
+    }
+    return out;
   }
   try {
     setInterval(function(){

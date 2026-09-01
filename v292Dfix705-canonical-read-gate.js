@@ -71,6 +71,35 @@
     } catch(e){ return false; }
   }
 
+  /* ■fix781(Phase 2.5A / UNSYNCED_LOCAL_PROGRESS_OVERWRITE) — 入口 gate。
+     restoreHold721 と **完全同型**（読取のみ / localStorage 直読 / 第二 marker を作らない）。
+     v292Dfix781 の marker が terminal hold（DIVERGED / BOOTSTRAP_HOLD）を主張している間は
+     getstory / classify / apply / body write を一切開始しない。
+       ・fix781 未 load / marker 不在 / 壊れている = hold 無し（＝従来挙動・fail-open しない側は下の resolve781 が担う）
+       ・kill: localStorage v292Dfix781Off='1' で完全に従来へ戻る
+       ・marker prefix が v292Dfix402_ 配下なのは fix697:74 と同じ collectLS 除外枠に同居させるため */
+  var F781_MPRE = 'v292Dfix402_f781g_';
+  function f781Off(){ return lsg('v292Dfix781Off') === '1'; }
+  function f781Marker(){
+    try {
+      if (f781Off() || !STORY_ID) return null;
+      var raw = lsg(F781_MPRE + STORY_ID);
+      if (raw == null) return null;
+      var m = JSON.parse(raw);
+      if (!m || typeof m !== 'object' || m.v !== 1) return null;
+      if (typeof m.localGeneration !== 'number') return null;
+      return m;
+    } catch(e){ return null; }
+  }
+  function unsyncedHold781(){
+    var m = f781Marker();
+    if (!m) return false;
+    if (m.state !== 'DIVERGED' && m.state !== 'BOOTSTRAP_HOLD') return false;
+    /* hold 中はユーザーが選べるように banner を出す（storage write 0 / network 0） */
+    try { var G = window.__v292Dfix781; if (G && typeof G.banner === 'function') G.banner(STORY_ID, m.state); } catch(eb){}
+    return true;
+  }
+
   // ---- sessionStorage（apply → reload の収束記録） ----
   function ssGet(k){ try { return sessionStorage.getItem(k); } catch(e){ return null; } }
   function ssSet(k,v){ try { sessionStorage.setItem(k, v); return true; } catch(e){ return false; } }
@@ -148,6 +177,7 @@
     sameHash: 0, applies: 0, reloads: 0, partial: 0, stops: 0,
     titleUnresolved: 0, legacySameHash: 0, legacyUnsupported: 0,
     provisionalHome: 0,          /* ★fix757: 暫定 authority を home へ返した回数（document あたり最大1） */
+    f781LocalAhead: 0, f781Holds: 0,   /* ■fix781: apply を止めた回数（local 先行 / terminal hold） */
     /* ★意図的に迂回したことを観測可能にする（裁定要件） */
     bypass: { nativeWrites: 0, keys: [], bypassed: ['fix698:layer1-setItem', 'fix402:wrapSetItem', 'fix527:mirror-lock', 'fix706:write-hold'] }
   };
@@ -350,6 +380,124 @@
   }
 
   // =====================================================================
+  // ■fix781(Phase 2.5A) — UNSYNCED LOCAL PROGRESS RESOLUTION
+  //   serverHash / serverRev / localHash が揃った 1 点でだけ呼ばれる **read-only 判定**。
+  //   ・fix705 は localStorage へ書かない契約（このファイル冒頭 L52）なので、
+  //     marker の永続化は必ず window.__v292Dfix781 へ委譲する。guard 不在でも
+  //     判定（block するかどうか）は成立させる = fail-closed を guard 依存にしない。
+  //   ・turn 数は使わない（旧新の単調性チェックは入れない）。hash と rev と generation だけ。
+  //   ・auto merge 0 / silent overwrite 0 / server への追加 request 0。
+  //   判定順（裁定）: x(adopt) → y(keep-local) → e(lost ACK) → f(stale intent)
+  //                   → d(clean) → a(bootstrap) → b(server at base) → c(diverged)
+  // =====================================================================
+  function resolve781(j){
+    if (f781Off()) return null;
+    var G = null; try { G = window.__v292Dfix781 || null; } catch(e){ G = null; }
+    var m  = f781Marker();
+    var lh = state.localHash ? String(state.localHash) : null;
+    var sh = state.serverHash ? String(state.serverHash) : null;
+    var srev = (typeof state.serverRev === 'number') ? state.serverRev : null;
+    var gen  = m ? (+m.localGeneration || 0) : 0;
+    var lcRev = (m && m.lastConfirmed && typeof m.lastConfirmed.serverRev === 'number') ? m.lastConfirmed.serverRev : null;
+    var lcFp  = (m && m.lastConfirmed && m.lastConfirmed.fingerprint != null) ? String(m.lastConfirmed.fingerprint) : null;
+    var infl  = (m && m.inFlightSave) ? m.inFlightSave : null;
+    function isDirtyState(s){ return s === 'DIRTY_INTENT' || s === 'DIRTY_LOCAL'; }
+
+    /* HOLD の共通終端: marker を terminal 状態にし、Recovery Draft を作り、banner を出す。 */
+    function toHold(nextState, reason){
+      var out = { action:'HOLD', state: nextState, reason: reason,
+                  lastConfirmedRev: lcRev, gen: gen };
+      try {
+        if (G && typeof G.transition === 'function'){
+          G.transition(STORY_ID, nextState, { pendingServerRev: srev, pendingServerHash: sh,
+                                              reason: reason, detectedAt: Date.now() });
+        }
+        if (G && typeof G.draftCreate === 'function'){
+          G.draftCreate(STORY_ID, { schema: (state.schema === 2 ? 2 : 1), serverRev: srev, serverHash: sh,
+                                    reason: reason,
+                                    /* CASE F は server 側 record も畳む（local を選んでも server 内容が失われないように） */
+                                    serverRecord: (nextState === 'DIVERGED' && j && j.record) ? j.record : null },
+            function(ok, err){
+              if (!ok) { try { console.warn(TAG, 'fix781: Recovery Draft を作れなかった:', err); } catch(e){} }
+            });
+        }
+        if (G && typeof G.banner === 'function') G.banner(STORY_ID, nextState);
+      } catch(e){}
+      return out;
+    }
+    /* marker の in-place 更新（G があるときだけ永続化。無ければ判定だけ進める）。 */
+    function patch(nextState, extra){
+      if (m) { m.state = nextState; if (extra) for (var k in extra) m[k] = extra[k]; }
+      try { if (G && typeof G.transition === 'function') G.transition(STORY_ID, nextState, extra || null); } catch(e){}
+    }
+
+    /* (x) ADOPT_SERVER — banner ①「ローカルを退避してクラウド版を開く」を押した後の boot。
+           押した時点の serverRev と今回の serverRev が同じときだけ apply を許す。 */
+    if (m && m.adopt && m.adopt.serverRev != null && srev != null && +m.adopt.serverRev === srev)
+      return { action:'ALLOW', reason:'USER_ADOPT_SERVER' };
+
+    /* (y) KEEP_LOCAL — banner ②「このままローカルで続ける」を押した後の boot。
+           明示同意なので auto merge ではない。押した時点の serverRev と同じときだけ有効。 */
+    if (m && m.userChoice && m.userChoice.kind === 'KEEP_LOCAL' &&
+        m.userChoice.atServerRev != null && srev != null && +m.userChoice.atServerRev === srev)
+      return { action:'LOCAL_AHEAD', reason:'USER_KEEP_LOCAL', lastConfirmedRev: lcRev, gen: gen };
+
+    /* (e) LOST ACK RECONCILE — 送信は落ちたが server には載っていた。
+           server の現在内容が「自分が送った内容」そのものなら、それは confirm 済みと同義。 */
+    if (m && infl && sh && infl.fingerprint != null && String(infl.fingerprint) === sh){
+      var sameGen = ((+gen || 0) === (+infl.generation || 0));
+      lcRev = srev; lcFp = sh;
+      if (m) { m.lastConfirmed = { serverRev: srev, fingerprint: sh }; m.inFlightSave = null; }
+      infl = null;
+      try {
+        if (G && typeof G.confirm === 'function'){
+          /* confirm は inFlightSave / generation を見て CLEAN 可否を自分で決める（二重実装しない） */
+          G.confirm(STORY_ID, srev, sh);
+        }
+      } catch(e){}
+      if (sameGen && m) m.state = 'CLEAN';
+      /* → 以下の (f)/(d)/(b)/(c) で再評価する（ここでは return しない） */
+    }
+
+    /* (f) STALE DIRTY_INTENT — dirty を立てたが local は lastConfirmed と同一内容だった
+           （false positive。prevSet throw 容認や同値上書きで起こる）。安全に CLEAN へ。 */
+    if (m && isDirtyState(m.state) && lcFp && lh && lh === lcFp){
+      patch('CLEAN', { inFlightSave: null });
+      if (m) m.inFlightSave = null;
+      infl = null;
+    }
+
+    /* (d) CLEAN — local は lastConfirmed そのもの＝未同期の作業が無い。
+           server 側が違う内容なのは他端末の正当な更新。従来どおり apply する（回帰させない）。 */
+    if (m && m.state === 'CLEAN' && !infl && lcFp && lh && lh === lcFp)
+      return { action:'ALLOW', reason:'CLEAN_CROSS_DEVICE_PULL' };
+
+    /* (a) BOOTSTRAP — marker が無い（fix781 導入前から在る端末の初回 boot）。
+           local に本文が実在して hash が食い違う = 実事故と同じ形なので必ず止める。
+           local に本文が無い（新端末 bootstrap）は従来どおり通す。 */
+    if (!m){
+      var hasBody781 = false;
+      try { hasBody781 = (lsg(BODY_KEY) != null); } catch(e){ hasBody781 = false; }
+      if (hasBody781 && lh && sh && lh !== sh) return toHold('BOOTSTRAP_HOLD', 'NO_GUARD_MARKER_LOCAL_BODY_PRESENT');
+      return null;                                   /* 従来どおり（fix755d/f の新端末 hydrate を壊さない） */
+    }
+
+    /* (b) SERVER AT BASE — local は dirty だが server は自分の lastConfirmed から 1 歩も動いていない。
+           = 単に未送信なだけ。apply は不要かつ有害。local を保持して保存フローに追い付かせる。 */
+    if (isDirtyState(m.state) && lcRev != null && srev != null && srev === lcRev)
+      return { action:'LOCAL_AHEAD', reason:'SERVER_AT_LAST_CONFIRMED_REV', lastConfirmedRev: lcRev, gen: gen };
+
+    /* (c) TRUE DIVERGENCE — local が dirty かつ server rev が lastConfirmed から進んでいる。
+           どちらも捨てられないので Draft を作って止め、ユーザーに選ばせる。 */
+    if (isDirtyState(m.state))
+      return toHold('DIVERGED', (lcRev == null) ? 'DIRTY_WITH_NO_LAST_CONFIRMED' : 'SERVER_REV_ADVANCED');
+
+    /* 上のどれにも当てはまらない（CLEAN なのに lh != lastConfirmed.fingerprint 等）。
+       marker の外で local が書き換わった可能性があり安全側を判定できないので fail-closed。 */
+    return toHold('DIVERGED', 'UNRESOLVED_GUARD_STATE');
+  }
+
+  // =====================================================================
   // (5) marker（fix702 の cache を **読むだけ**。分類の高速化用。HOLD の条件にはしない） 
   // =====================================================================
   function markerOf(id){
@@ -385,6 +533,8 @@
     if (classifyStarted) return cb({ skipped: 'ALREADY_RAN' });    /* ★document あたり1回 */
     /* ★fix721.2: restore-hold 中は開始しない（classifyStarted を消費しない = hold 解除後に実行可能） */
     if (restoreHold721()) return cb({ skipped: 'restore-hold' });
+    /* ■fix781: unsynced terminal hold 中も開始しない（classifyStarted を消費しない） */
+    if (unsyncedHold781()) return cb({ skipped: 'unsynced-hold-781' });
     classifyStarted = true;
     state.phase = 'classifying';
 
@@ -513,6 +663,36 @@
         return afterHash();
 
         function afterHash(){
+
+        /* ■fix781(Phase 2.5A): ここが破壊的 apply の唯一の入口。
+           serverHash / serverRev / localHash が全部揃った **この 1 点** で
+           「local が未同期のまま先行していないか」を marker から判定する。
+           ・LOCAL_AHEAD … apply 0 / body write 0 / HOLD 解除。local を正本のまま
+                           保存フロー(fix697 canonicalCommit*)に追い付かせる。
+           ・HOLD        … apply 0 / body write 0 / HOLD 継続。Recovery Draft を作り
+                           banner の 2 択でユーザーが決める（auto merge 0 / silent overwrite 0）。
+           ・null/ALLOW  … 従来どおり（CLEAN な pull は 1 バイトも挙動を変えない）。 */
+        var g781 = null;
+        try { g781 = resolve781(j); } catch(e781){ g781 = null; }
+        if (g781 && g781.action === 'LOCAL_AHEAD'){
+          stats.f781LocalAhead++;
+          consumeApplied();
+          state.verdict = 'CANONICAL_LOCAL_AHEAD';
+          note({ f781: 'local-ahead', reason: g781.reason, serverRev: state.serverRev,
+                 lastConfirmedRev: g781.lastConfirmedRev, gen: g781.gen });
+          try { console.warn(TAG, 'fix781: local が未同期のまま先行 — server canonical を apply しない（local 保持 / 保存フローに任せる）'); } catch(e){}
+          releaseHold('fix781-local-ahead');
+          return cb({ verdict: 'CANONICAL_LOCAL_AHEAD', serverRev: state.serverRev,
+                      unsynced: true, reason: g781.reason });
+        }
+        if (g781 && g781.action === 'HOLD'){
+          stats.f781Holds++;
+          return cb(stop('UNSYNCED_LOCAL_PROGRESS', {
+            guardState: g781.state, reason: g781.reason,
+            serverRev: state.serverRev, lastConfirmedRev: g781.lastConfirmedRev, gen: g781.gen,
+            note: 'body/aiInstr/sidecar write 0 / reload 0 / HOLD 継続。Recovery Draft を作成し banner で選択させる' }));
+        }
+        /* ■fix781 end（以下は従来どおり・1 バイト不変） */
 
         /* ---- 収束保護: 同じ serverHash で apply 済みなのにまだ一致しない ---- */
         var prev = readApplied();
@@ -872,6 +1052,9 @@
     /* ★fix721.2: restore journal PREPARED/APPLYING 中は分類を開始せず待機だけ続ける
        （getstory 0 / apply 0 / body write 0。bootN も消費しない）。 */
     try { if (restoreHold721()) { setTimeout(bootPoll, 250); return; } } catch(e){}
+    /* ■fix781: unsynced terminal hold 中は分類を開始せず待機だけ続ける
+       （getstory 0 / apply 0 / body write 0。bootN も消費しない。banner でユーザーが決める）。 */
+    try { if (unsyncedHold781()) { setTimeout(bootPoll, 250); return; } } catch(e){}
     bootN++;
     try {
       if (!on() || !STORY_ID || state.phase === 'stopped') return;
@@ -949,7 +1132,13 @@
       out.hash = state.serverHash || null;
       return out;
     }
-    if (v === 'CANONICAL_SAME_HASH' || v === 'CANONICAL_APPLIED' || v === 'CANONICAL_LEGACY_TITLE_EMPTY'){
+    /* ■fix781: CANONICAL_LOCAL_AHEAD も「fresh に確認できた canonical row」である点は
+       上の 3 verdict と同じ（getstory は 200 で完了し、rev / hash / schema が確定している）。
+       違うのは **apply を意図的に行わなかった** ことだけなので、authority contract としては
+       同じものを返す。こうしないと fix697 の docAuthorityRoute が 'hold' へ落ち、
+       未同期の local 進行を server へ押し上げる唯一の経路（canonicalCommit*）が塞がる。 */
+    if (v === 'CANONICAL_SAME_HASH' || v === 'CANONICAL_APPLIED' || v === 'CANONICAL_LEGACY_TITLE_EMPTY'
+        || v === 'CANONICAL_LOCAL_AHEAD'){
       out.present = true; out.authority = 'canonical'; out.fresh = true;
       out.rev = (typeof state.serverRev === 'number') ? state.serverRev : null;
       out.hash = state.serverHash || null;
@@ -976,7 +1165,11 @@
     stats: function(){ return JSON.parse(JSON.stringify(stats)); },
     classify: classify,
     release: function(why){ releaseHold(why || 'manual'); return true; },
-    ledger: function(){ return LEDGER.slice(); }
+    ledger: function(){ return LEDGER.slice(); },
+    /* ■fix781: 観測口（read-only）。__resolve781 は fixture 専用で production の呼び手は
+       afterHash の 1 箇所だけ。state を渡さず内部 state を使うので副作用は本番と同一。 */
+    f781: { off: f781Off, marker: f781Marker, hold: unsyncedHold781 },
+    __resolve781: resolve781
   };
   try { console.log(TAG, 'loaded (canonical read authority / default ON / kill=v292Dfix705Off=1)'); } catch(e){}
 })();
