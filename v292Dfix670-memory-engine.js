@@ -101,7 +101,7 @@
   var TAG = '[v292Dfix670]';
   var BUILD = '20260901-fix785';
   var SCHEMA_VERSION = 4;   /* ★v0.3: family / speechAct / knownTo / epistemic が増えた */
-  var EXTRACTOR_VERSION = 'me-0.4.0';   /* ★fix787: 構造シグネチャ（抽出規則が変わるので版を上げる） */   /* ★fix786: 台帳候補の 4C 解決（identity が変わるので版を上げる） */      /* ★抽出規則も鍵の作り方も変わったので上げる */
+  var EXTRACTOR_VERSION = 'me-0.5.0';   /* ★fix788: N1 複合連用形補完（抽出結果が変わるので版を上げる） */   /* ★fix787: 構造シグネチャ（抽出規則が変わるので版を上げる） */   /* ★fix786: 台帳候補の 4C 解決（identity が変わるので版を上げる） */      /* ★抽出規則も鍵の作り方も変わったので上げる */
   var DB_NAME = 'chr6mem';                 /* ★chr6av(アバター)には相乗りしない */
   var DB_VER = 3;                          /* ★v0.3 で store も index も増やさない（既存の by_slot_type で足りる） */
   var OFF_KEY = 'v292Dfix670Off';          /* 緊急停止（ON より優先） */
@@ -469,6 +469,8 @@
     relation_broken: 'RELATION_EVENT', speech_relation_declaration: 'RELATION_EVENT',
     contract_made: 'COMMITMENT_EVENT', speech_commitment: 'COMMITMENT_EVENT',
     disclosure_made: 'DISCLOSURE_CLAIM_EVENT', speech_disclosure: 'DISCLOSURE_CLAIM_EVENT',
+    /* ■fix788 N2: 文書記載も「主張」。既存 DISCLOSURE_CLAIM_EVENT へ写す（新 family は作らない）。 */
+    narration_written_record: 'DISCLOSURE_CLAIM_EVENT',
     /* ■fix787(v0.4) 構造シグネチャの type。★family は既存 9 種のまま（増やしていない）。 */
     speech_prohibition: 'COMMITMENT_EVENT',
     speech_past_disclosure: 'DISCLOSURE_CLAIM_EVENT',
@@ -498,7 +500,14 @@
     { type: 'curse_applied',      re: /(呪われ|呪いをかけ|呪いが)/,                  cat: 'char' },
     { type: 'possession_started', re: /(憑依|取り憑|乗っ取られ)/,                    cat: 'char' },
     { type: 'terrain_changed',    re: /(崩落|崩れ落ち|塞がれ|埋まっ|開通|焼け落ち|橋が落ち)/, cat: 'place', place: 1 },
-    { type: 'item_acquired',      re: /(受け取っ|手に入れ|拾っ|入手し)/,             cat: 'item' },
+    /* ■fix788 N1(2026-09-01): 既存 rule は「拾っ」（音便形）だけを見ていたため、
+       実文「金属片を**拾い上げる**」（複合動詞の連用形）を1件も拾えていなかった。
+       ★既にある動詞「拾」の複合連用形を補完するだけ。新しい動詞は1語も足さない
+       （受け取る/手に入れる/入手する には触れない・他 type の活用形も触らない）。
+       「拾い物」「拾い読み」は複合先が「上げ」ではないので発火しない。
+       kill: v292Dfix788Off='1' → 従来の re に戻る。 */
+    { type: 'item_acquired',      re: /(受け取っ|手に入れ|拾っ|入手し)/,             cat: 'item',
+                                  reN1: /(受け取っ|手に入れ|拾(?:っ|い上げ)|入手し)/ },
     { type: 'item_transferred',   re: /(渡し|手渡し|譲っ|奪っ|奪い取っ)/,            cat: 'item' },
     { type: 'item_used',          re: /(使っ|用い|かざし)/,                          cat: 'item' },
     { type: 'item_consumed',      re: /(飲み干し|食べ切っ|使い切っ|消費し)/,         cat: 'item' },
@@ -982,14 +991,16 @@
      source 全体を検索すると、別文・別人物の理由が流用される。 */
   function changeReasonMap(spans, kn) {
     var map = [], j, t, sp, refs, kw, rr, set;
+    var n1On = (lsg('v292Dfix788Off') !== '1');                            /* ■fix788 N1 */
     for (j = 0; j < spans.length; j++) {
       sp = spans[j].s; set = null;
       if (gateBlocked(sp) || G.hearsay.test(sp)) { map.push(null); continue; }
       refs = findRefs(sp, kn);
       for (t = 0; t < TYPES.length; t++) {
         if (!CHANGE_REASON[TYPES[t].type]) continue;
-        if (!TYPES[t].re.test(sp)) continue;
-        kw = sp.search(TYPES[t].re);
+        var tre2 = (n1On && TYPES[t].reN1) ? TYPES[t].reN1 : TYPES[t].re;  /* ■fix788 N1 */
+        if (!tre2.test(sp)) continue;
+        kw = sp.search(tre2);
         rr = resolveRoles(TYPES[t].type, sp, refs, kw);
         /* ★同じ span に理由が2つ以上あることがある（正体判明＋一人称宣言など）。
            1つで上書きすると「自分自身が理由」になって判定が壊れるので、集合で持つ。 */
@@ -1341,6 +1352,87 @@
     return out;
   }
 
+  /* ==================================================================
+   * ■fix788 N2 (v0.5) WRITTEN_RECORD — 文書に書かれた情報の candidate 化
+   *   Fable5 裁定（深夜45）: **Dialogue Truth 原則を文書へ延長する**。
+   *   日誌の「娘が帰ってきた」は WORLD_FACT ではない。「文書にそう記載されている」
+   *   という **claim** であって、真偽の確定は 3A-2 の責務。
+   *   ★新 family は作らない（DOCUMENT_EVENT 新設は裁定で REJECT）。既存
+   *     DISCLOSURE_CLAIM_EVENT の candidate として残す。
+   *
+   *   構造アンカー = **引用の「と」+ 書字述語の閉クラス（書 / 記 / 綴）+ 文法形**。
+   *   ★「と」は飾りではなく**命題の供給源**である。「墨で書かれた歳時記」「鉛筆で
+   *     書かれた数字」のような連体修飾には命題が無いので、原理的に発火しない。
+   *   ★書字動詞は 3 語で固定。**4 語目を足したくなったら STOP して Fable5 へ**。
+   *
+   *   ・地の文の**マスク前**テキストから読む（記載内容は「」『』の中にあるため）。
+   *     v0.2 の引用マスクは「引用を世界の事実として読まない」ための門であり、
+   *     ここは事実ではなく claim として保存するので、その規律に反しない。
+   *   ・raw 全文は保存しない（既存の 64 字命題のみ）。
+   *   ・knownTo は持たない（地の文由来＝scope 未主張。dialogue の speaker/addressee を捏造しない）。
+   *   ・書き手 entity を推測で作らない（entity 新造 0）。
+   *   kill: v292Dfix788Off='1'
+   * ================================================================ */
+  var WR_PRED = /と(?:書いてあ|書かれて|記されて|記してあ|綴られて|綴ってあ)/;
+  /* 記載の存在そのものが不確かな言い方（伝聞・推量・仮定・疑問）は claim にしない。 */
+  function wrBlocked(span) {
+    if (G.hearsay.test(span)) return 'hearsay';
+    if (G.uncertain.test(span)) return 'uncertain';
+    if (G.hyp.test(span)) return 'hyp';
+    if (G.q.test(span)) return 'q';
+    return null;
+  }
+  /* 「と」の直前から命題を切り出す。引用符の中にあればその中身を優先する。 */
+  function wrProposition(head) {
+    var h = String(head || '').replace(/[\s\u3000]+/g, ' ').trim();
+    var m = /[「『]([^「」『』]{2,120})[」』][\s、,]*$/.exec(h);
+    var pick = m ? m[1] : h;
+    pick = pick.replace(/^[^。！？!?]*[。！？!?]\s*/, function (x) {   /* 直前の文は落とす */
+      return /[「『]/.test(x) ? x : '';
+    });
+    pick = pick.replace(/^[\s、,]+/, '').replace(/[。、，,！？!?\s]+$/, '').trim();
+    if (!pick) return null;
+    var truncated = false;
+    if (pick.length > PROP_MAX) { pick = pick.slice(-PROP_MAX); truncated = true; }
+    return { text: pick, truncated: truncated };
+  }
+  function extractWrittenRecords(turn, idx) {
+    var out = [], raw = String((turn && turn.narrative) || ''), sp, i, m, prop;
+    if (!raw) return out;
+    var spans = splitSpans(raw);
+    for (i = 0; i < spans.length; i++) {
+      sp = spans[i].s;
+      if (!WR_PRED.test(sp)) continue;
+      if (wrBlocked(sp)) continue;
+      m = WR_PRED.exec(sp);
+      prop = wrProposition(sp.slice(0, m.index));
+      if (!prop) continue;                       /* 命題が取れないものは記録しない */
+      out.push({
+        type: 'narration_written_record', category: 'document',
+        family: 'DISCLOSURE_CLAIM_EVENT',
+        sourceTurnIndex: idx, spanOrder: 400000 + i,
+        sourceMode: 'NARRATION', epistemic: 'DISCLOSURE',
+        roleMode: 'written-record',
+        actor: null, subject: null, target: null,
+        subjectId: null, objectId: null,
+        recordKind: 'candidate', candidateReason: 'written-record',
+        argumentResolution: 'partial',
+        missingArguments: [{ role: 'author', entityType: 'character', reason: 'not-inferred' }],
+        personCandidates: null,
+        writtenRecord: {
+          normalizedProposition: prop.text,
+          propositionTruncated: !!prop.truncated,
+          sourceTurn: idx, sourceMode: 'NARRATION'
+        },
+        /* ★地の文由来なので knownTo キー自体を持たない（保存時に削除される） */
+        audience: 'UNKNOWN',
+        worldFactPromotion: false,
+        prov: { kind: 'written_record', authority: 3, confidence: 0.5, evidence: null }
+      });
+    }
+    return out;
+  }
+
   /* ★場所の生 mention。**Entity 化はしない**（v0.2 監査3 の規律のまま）。 */
   function placeMentionAt(span, kw) {
     var head = String(span || '').slice(0, kw);
@@ -1355,6 +1447,7 @@
   function extractTurn(turn, idx, known) {
     var res = { records: [], events: [], candidates: [], unhandled: [], entityRefs: [] };
     if (!turn) return res;
+    var n1On = (lsg('v292Dfix788Off') !== '1');                            /* ■fix788 N1/N2 kill */
     var kn = asKnown(known);
     var mode = String(turn.inputType || '');
     var srcs = [];
@@ -1379,7 +1472,8 @@
         if (srcs[s].kind === 'narration' && isInSay(span)) continue;  /* 念のための二重防御 */
         refs = findRefs(span, kn);
         for (t = 0; t < TYPES.length; t++) {
-          if (!TYPES[t].re.test(span)) continue;
+          var tre = (n1On && TYPES[t].reN1) ? TYPES[t].reN1 : TYPES[t].re;   /* ■fix788 N1 */
+          if (!tre.test(span)) continue;
           /* ★v0.3: 構造条件（cond）。明示マーカーだけでは決めない型に足す追加条件。 */
           if (TYPES[t].cond && !TYPES[t].cond.test(span)) continue;
           var type = TYPES[t].type;
@@ -1389,7 +1483,7 @@
                                  reason: 'state_rewrite_not_supported' });
             continue;
           }
-          kw = span.search(TYPES[t].re);
+          kw = span.search(tre);                                            /* ■fix788 N1 */
           /* ★v0.3(a) DISCOVERY: 「同じものだ」等の**文字列単独 rule は禁止**。
              両 referent が安全に解決できたときだけ IDENTITY_CONFIRMATION 候補。
                2件以上 … DISCOVERY_EVENT / identity_confirmation（candidate）
@@ -1523,6 +1617,11 @@
     /* ★v0.3(c): 発話行為。地の文とは別の経路で、構造化済み say カードからだけ読む。 */
     var sa = extractSpeechActs(turn, idx, kn), sk;
     for (sk = 0; sk < sa.length; sk++) res.records.push(sa[sk]);
+    /* ★■fix788 N2: 文書記載。地の文とも発話とも別経路で、書字述語の閉構造からだけ読む。 */
+    if (n1On) {
+      var wr = extractWrittenRecords(turn, idx), wk;
+      for (wk = 0; wk < wr.length; wk++) res.records.push(wr[wk]);
+    }
 
     /* ★監査2: Event と Candidate を1本にまとめてから全体 sort し、ordinal を一度だけ振る */
     res.records.sort(cmpRec);
@@ -2203,6 +2302,9 @@
               foldUnique: foldUnique, canonAlias: canonAlias, resolveMention: resolveMention,
               SPEECH_ACTS: SPEECH_ACTS, sayCards: sayCards, sayNorm: sayNorm,
               /* ---- ■fix787 v0.4 ---- */
+              /* ---- fix788 v0.5 ---- */
+              WR_PRED: WR_PRED, wrBlocked: wrBlocked, wrProposition: wrProposition,
+              extractWrittenRecords: extractWrittenRecords,
               SIGNATURES: SIGNATURES, sigSentences: sigSentences, sigProbe: sigProbe,
               sigProposition: sigProposition, speechGateBlocked: speechGateBlocked,
               sig1Prohibition: sig1Prohibition, sig2PastDisclosure: sig2PastDisclosure,
