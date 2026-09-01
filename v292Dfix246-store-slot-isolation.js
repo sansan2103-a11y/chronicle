@@ -50,8 +50,25 @@
     'chr6_v292Dfix137_ev': 1
   };
 
+  /* ■fix783(2026-09-01) MULTI_TAB_CROSS_STORY_CFG_CONTAMINATION
+     真因: suffix() は getItem/setItem/removeItem の**都度**評価されるので、別タブが物語を
+       開いて共有ポインタが動いた瞬間、per-story 6キー(fix77States / fix104_dlg /
+       fix135_sum / _last / fix136_wi / fix137_ev)への読み書きがまるごと別 story の
+       接尾辞へ逸れた(実測: ct_fix783_multitab.mjs R3)。
+     対処: fix694 document authority(__chronicleDocumentStoryKey)を第一経路にする。
+     ★例外(裁定): ここだけは authority 無しのとき **no-op にしない**。このモジュールは
+       localStorage の global wrapper なので、null で「触らない」を選ぶと接尾辞の形が
+       変わり別キーを読み書きすることになる。従来経路(__chr6Key)へ fallback する。
+       なお index.html は authority 無しなら fix694 が home へ replace するため、
+       この fallback が使われるのは fix694 OFF 等の退避状態だけ。
+     kill: localStorage v292Dfix783Off='1' → 旧 __chr6Key() 挙動へ戻る。 */
+  function f783Off(){ try{ return _get('v292Dfix783Off') === '1'; } catch(e){ return false; } }
   function suffix(){
     try {
+      if (!f783Off()){
+        var dk = window.__chronicleDocumentStoryKey;
+        if (typeof dk === 'string' && dk) return (dk === 'chr6') ? '' : dk.replace(/^chr6/, '');
+      }
       if (typeof window.__chr6Key === 'function'){
         var k = window.__chr6Key();
         return (k && k !== 'chr6') ? k.replace(/^chr6/, '') : '';   // 'chr6_slot_a' → '_slot_a'

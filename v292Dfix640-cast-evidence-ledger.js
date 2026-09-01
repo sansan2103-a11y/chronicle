@@ -81,14 +81,27 @@
     return null;
   }
 
+  /* ■fix783(2026-09-01) MULTI_TAB_CROSS_STORY_CFG_CONTAMINATION
+     真因: 共有ポインタ chr6_active_slot(= __chr6Key()) は**全タブで1個**。別タブが物語を
+       開いた瞬間このタブの key 解決が相手の story を指し、cast evidence 台帳 v292Dfix640Evid_slot_<id> が
+       別 story へ着弾/汚染された(実測: ct_fix783_multitab.mjs R群)。
+     対処: key 解決を fix694 document authority(__chronicleDocumentStoryKey)へ固定する
+       (fix307f と同じ作法)。authority 無し document(home 等)では null=**読まない/書かない**。
+     kill: localStorage v292Dfix783Off='1' → 全ファイル同時に旧 __chr6Key() 挙動へ戻る。 */
+  function f783Off(){ try{ return localStorage.getItem('v292Dfix783Off')==='1'; }catch(e){ return false; } }
   function slotId(){
+    if(!f783Off()){
+      try { var dk = window.__chronicleDocumentStoryKey;
+            if (typeof dk === 'string' && dk) return (dk === 'chr6') ? 'chr6' : dk.replace(/^chr6_slot_/, ''); } catch(e){}
+      return null;                                   /* authority 無し = 触らない */
+    }
     try {
       var k = (typeof window.__chr6Key === 'function') ? window.__chr6Key() : 'chr6';
       k = String(k || 'chr6');
       return k.replace(/^chr6_slot_/, '') || 'chr6';
     } catch(e){ return 'chr6'; }
   }
-  function KEY(){ return 'v292Dfix640Evid_slot_' + slotId(); }
+  function KEY(){ var s = slotId(); return (s === null) ? null : ('v292Dfix640Evid_slot_' + s); }
 
   /* 単一書き手ゲート（fix307 と同方針）: 古い世代のタブは自前キーを書かない */
   function canSave(){
@@ -278,7 +291,8 @@
              entries: {}, promotions: [], blocked: [] };
   }
   function load(){
-    var raw = lsg(KEY());
+    var _k = KEY(); if (_k === null) return blank();
+    var raw = lsg(_k);
     if (!raw) return blank();
     var o = null;
     try { o = JSON.parse(raw); } catch(e){ return blank(); }
@@ -310,7 +324,8 @@
     if (!canSave()) { stats.lastReason = 'epoch-blocked'; return false; }
     L.updated = Date.now();
     prune(L);
-    var okw = lss(KEY(), JSON.stringify(L));
+    var _k = KEY(); if (_k === null) return false;
+    var okw = lss(_k, JSON.stringify(L));
     if (okw) stats.writes++; else { stats.quota++; stats.lastReason = 'ls-write-failed'; }
     return okw;
   }
@@ -674,7 +689,7 @@
     return { key: KEY(), slotId: L.slotId, cursor: L.cursor, entries: rows,
              promotions: L.promotions.slice(), blocked: L.blocked.slice(), stats: snap() };
   }
-  function reset(){ _fastSlot = null; _fastTurns = -1; try { localStorage.removeItem(KEY()); } catch(e){} return blank(); }
+  function reset(){ _fastSlot = null; _fastTurns = -1; try { var _k=KEY(); if(_k!==null) localStorage.removeItem(_k); } catch(e){} return blank(); }
   function snap(){ try { return JSON.parse(JSON.stringify(stats)); } catch(e){ return null; } }
   function selfTest(){
     var st = getState();

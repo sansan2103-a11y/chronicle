@@ -21,9 +21,23 @@
 
   function off(){ try{ return localStorage.getItem('v292Dfix317Off')==='1'; }catch(e){ return false; } }
   function getS(){ try{ return window.S||(typeof S!=='undefined'?S:null); }catch(e){ return null; } }
-  function activeKey(){ try{ return (typeof window.__chr6Key==='function')?window.__chr6Key():'chr6'; }catch(e){ return 'chr6'; } }
-  function blobScene(){ try{ var d=JSON.parse(localStorage.getItem(activeKey())||'{}'); return (d&&d.scene)||null; }catch(e){ return null; } }
-  function blobCfg(){ try{ var d=JSON.parse(localStorage.getItem(activeKey())||'{}'); return (d&&d.cfg)||null; }catch(e){ return null; } }
+  /* ■fix783(2026-09-01) MULTI_TAB_CROSS_STORY_CFG_CONTAMINATION
+     真因: 共有ポインタ chr6_active_slot(= __chr6Key()) は**全タブで1個**。別タブが物語を
+       開いた瞬間このタブの key 解決が相手の story を指し、S.cfg の8セレクタ / S.scene の自story固有キー削除 が
+       別 story へ着弾/汚染された(実測: ct_fix783_multitab.mjs R群)。
+     対処: key 解決を fix694 document authority(__chronicleDocumentStoryKey)へ固定する
+       (fix307f と同じ作法)。authority 無し document(home 等)では null=**読まない/書かない**。
+     kill: localStorage v292Dfix783Off='1' → 全ファイル同時に旧 __chr6Key() 挙動へ戻る。 */
+  function f783Off(){ try{ return localStorage.getItem('v292Dfix783Off')==='1'; }catch(e){ return false; } }
+  function activeKey(){
+    if(!f783Off()){
+      try{ var dk=window.__chronicleDocumentStoryKey; if(typeof dk==='string'&&dk) return dk; }catch(e){}
+      return null;                                   /* authority 無し = 触らない */
+    }
+    try{ return (typeof window.__chr6Key==='function')?window.__chr6Key():'chr6'; }catch(e){ return 'chr6'; }
+  }
+  function blobScene(){ try{ var _k=activeKey(); if(!_k) return null; var d=JSON.parse(localStorage.getItem(_k)||'{}'); return (d&&d.scene)||null; }catch(e){ return null; } }
+  function blobCfg(){ try{ var _k=activeKey(); if(!_k) return null; var d=JSON.parse(localStorage.getItem(_k)||'{}'); return (d&&d.cfg)||null; }catch(e){ return null; } }
 
   // スロット毎セレクタ(S.cfgに保存)。切替時にDOM値が前スロットのまま残る＋blobにキーが無いと
   // 前スロット値が漏れる(Object.assign統合)ので、読み込んだスロットのcfgに合わせて両方直す。
@@ -39,6 +53,7 @@
     {dom:'v292-model-sel',  key:'orModel',       def:null, num:false}
   ];
   function syncSelectors(){
+    if(activeKey()===null) return;                  /* ■fix783: authority 無し document は no-op */
     var s=getS(); var bc=blobCfg(); if(!s||!s.cfg) return;
     SELS.forEach(function(m){
       try{
@@ -64,12 +79,13 @@
   // スロット切替/新規開始でだけ変わる。
   function sig(){
     var s=getS(); var sc=(s&&s.scene)||{};
-    return activeKey()+'|'+(sc.loc||'')+'|'+hashN((sc.lore||'')+''+(sc.tone||''));
+    return (activeKey()||'')+'|'+(sc.loc||'')+'|'+hashN((sc.lore||'')+''+(sc.tone||''));
   }
 
   var _lastSwitchT=0;
   function onStoryChange(){
     if(off()) return;
+    if(activeKey()===null) return;                  /* ■fix783: authority 無し document は no-op */
     _lastSwitchT=Date.now();
     // (0) 展開の描写(#story)を現スロットのS.turnsで作り直す。
     //   ★loadSlotはUI.renderAllを呼ばず弱いtriggerReRenderだけなので、右の物語パネル(#story)が
@@ -117,7 +133,7 @@
         (c.npcs||[]).forEach(function(n){ if(n&&n.name) set[n.name]=1; });
         if(Array.isArray(s.turns)) narr=s.turns.map(function(t){return String(t&&t.narrative||'');}).join('\n');
       } else {
-        var d=JSON.parse(localStorage.getItem(activeKey())||'{}');
+        var _k=activeKey(); var d=_k?(JSON.parse(localStorage.getItem(_k)||'{}')):{};
         if(d.cast){ var h2=(d.cast.protagonist||d.cast.hero||{}); if(h2.name) set[h2.name]=1; (d.cast.npcs||[]).forEach(function(n){if(n&&n.name)set[n.name]=1;}); }
         narr=(d.turns||[]).map(function(t){return String(t&&t.narrative||'');}).join('\n');
       }
@@ -168,6 +184,7 @@
   var last=null, primed=false;
   function check(){
     if(off()) return;
+    if(activeKey()===null) return;                  /* ■fix783: authority 無し document では監視ごと止める */
     var s=getS(); if(!s||!s.scene) return;   // 状態未確立なら待つ
     var cur=sig();
     if(!primed){ last=cur; primed=true; return; }  // 初回は基準化のみ(誤wipe防止)

@@ -54,7 +54,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260901-fix782';
+  var BUILT = '20260901-fix783';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3049,7 +3049,7 @@ G.init();
 })();
 </script>
 <!-- v292Dfix246: per-storyストア(fix77状態/longmem/会話キャッシュ)をスロット単位に分離。features.js等の前に設置。OFF=v292StoreSlotIsoOff -->
-<script src="v292Dfix246-store-slot-isolation.js?cb=v292Dfix246"></script>
+<script src="v292Dfix246-store-slot-isolation.js?cb=20260901-fix783"></script>
 <script src="v292Dfix543-save-guard.js?cb=20260829-fix748"></script>
 <script src="v292Dfix697-shadow-story-commit.js?cb=20260901-fix781"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
@@ -3342,7 +3342,7 @@ G.init();
 <!-- v292Dfix226(P1): fix52(可読性v1)はfix53(包括v2)に内包されるため退役。問題があれば下行のコメントを外す
 <script src="v292Dfix52-readability.js?cb=v292Dfix52"></script> -->
 <script src="v292Dfix53-readability-v2.js?cb=v292Dfix53"></script>
-<script src="v292Dfix54-gender-pronoun.js?cb=v292Dfix54"></script>
+<script src="v292Dfix54-gender-pronoun.js?cb=20260901-fix783"></script>
 <script src="v292Dfix55-gm-mode.js?cb=v292Dfix55c"></script>
   <script src="v292Dfix56-conversation-log-fix.js?cb=v292Dfix200"></script>
   <script src="v292Dfix57-script-style-dialogue.js?cb=v292Dfix57"></script>
@@ -3358,7 +3358,7 @@ G.init();
   <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=v292Dfix74"></script>
-  <script src="v292Dfix66-renderhook-repair.js?cb=20260829-fix748"></script>
+  <script src="v292Dfix66-renderhook-repair.js?cb=20260901-fix783"></script>
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
     <!-- v292Dfix189c: fix70(dialogue-order, 本文ベースの並べ替え)を無効化。fix70bが
@@ -3400,7 +3400,7 @@ G.init();
   <script src="v292Dfix226-engine-unify.js?cb=v292Dfix226"></script>
   <!-- v292Dfix228: スロット自動世代バックアップ(直近3世代)。2026-06-06のクロバー消失事故の恒久保険。
        復元= console で window.__v292Restore() / 一覧= window.__v292Gens() -->
-  <script src="v292Dfix228-slot-generations.js?cb=v292Dfix680"></script>
+  <script src="v292Dfix228-slot-generations.js?cb=20260901-fix783"></script>
   <!-- v292Dfix237: 別キャラ同一アイコンの根治(運搬URLのalt/seed整合ガード)。OFF=v292AvCarrierGuardOff -->
   <script src="v292Dfix237-avatar-carrier-guard.js?cb=v292Dfix237b"></script>
   <!-- v292Dfix239: 未登録キャラ(少女/店主等)のアイコン怪物化根治(genAsync判定待ちのレース封じ)。OFF=v292NcAvRaceOff -->
@@ -3414,13 +3414,13 @@ G.init();
 <script src="v292Dfix270-topbar-ui.js?cb=v292Dfix270"></script>
 <script src="v292Dfix274-build-flag-guard.js?cb=v292Dfix274"></script>
 <script src="v292Dfix275-settings-tabs.js?cb=v292Dfix275"></script>
-<script src="v292Dfix277-quasi-pack.js?cb=20260829-fix748"></script>
+<script src="v292Dfix277-quasi-pack.js?cb=20260901-fix783"></script>
 <script src="v292Dfix288-tooltips.js?cb=v292Dfix288"></script>
 <script src="v292Dfix290-mobile.js?cb=v292Dfix290"></script>
 <script src="v292Dfix291-saveexport.js?cb=v292Dfix721"></script>
 <script src="v292Dfix292-health.js?cb=v292Dfix398"></script>
 <script src="v292Dfix295-convlog-stability.js?cb=v292Dfix295d"></script>
-<script src="v292Dfix297-ai-instructions.js?cb=v292Dfix297b"></script>
+<script src="v292Dfix297-ai-instructions.js?cb=20260901-fix783"></script>
 <script src="v292Dfix300-readability.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix301-longmem-stale-guard.js?cb=v292Dfix301"></script>
 <script src="v292Dfix302-undo-state-rollback.js?cb=20260829-fix748"></script>
@@ -3430,7 +3430,7 @@ G.init();
 <script src="v292Dfix305-trigger-states.js?cb=v292Dfix305"></script>
 <script src="v292Dfix306-npc-liveliness.js?cb=v292Dfix738"></script>
 <script src="v292Dfix764-name-variant-fold.js?cb=v292Dfix764"></script>
-<script src="v292Dfix766-canonical-appearance.js?cb=v292Dfix780"></script>
+<script src="v292Dfix766-canonical-appearance.js?cb=20260901-fix783"></script>
 <script src="v292Dfix767-icon-recipe-adapter.js?cb=v292Dfix778"></script>
 <script src="v292Dfix307-npc-roster.js?cb=v292Dfix765"></script>
 <script src="v292Dfix308-creepy-toggle.js?cb=v292Dfix308"></script>
@@ -3457,8 +3457,8 @@ G.init();
 <script src="v292Dfix314-memory.js?cb=20260829-fix748"></script>
 <script src="v292Dfix315-see.js?cb=v292Dfix315b2"></script>
 <script src="v292Dfix316-gallery-search.js?cb=v292Dfix316"></script>
-<script src="v292Dfix317-slot-leak.js?cb=v292Dfix319"></script>
-<script src="v292Dfix318-perslot-len-creepy.js?cb=20260829-fix748"></script>
+<script src="v292Dfix317-slot-leak.js?cb=20260901-fix783"></script>
+<script src="v292Dfix318-perslot-len-creepy.js?cb=20260901-fix783"></script>
 <script src="v292Dfix322-state-line-strip.js?cb=20260829-fix748"></script>
 <script src="v292Dfix323-boundary-guards.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix324-show-dont-tell.js?cb=v292Dfix419c"></script>
@@ -3466,7 +3466,7 @@ G.init();
 <script src="v292Dfix326-story-scroll.js?cb=v292Dfix326"></script>
 <script src="v292Dfix327-turn-counter.js?cb=v292Dfix327"></script>
 <script src="v292Dfix328-google-login.js?cb=20260829-fix748"></script>
-<script src="v292Dfix298-roster.js?cb=v292Dfix298b"></script>
+<script src="v292Dfix298-roster.js?cb=20260901-fix783"></script>
 <script src="v292Dfix330-somatic-guard.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix332-uifold.js?cb=v292Dfix332"></script>
 <script src="v292Dfix333-actor-reality.js?cb=v292Dfix333p"></script>
@@ -3486,15 +3486,15 @@ G.init();
 <script src="v292Dfix370-model-guard.js?cb=20260829-fix748"></script>
 <script src="v292Dfix371-reset-dialog-text.js?cb=v292Dfix371"></script>
 <script src="v292Dfix372-gender-radio-guard.js?cb=v292Dfix372"></script>
-<script src="v292Dfix374-default-style-guard.js?cb=20260829-fix748"></script>
+<script src="v292Dfix374-default-style-guard.js?cb=20260901-fix783"></script>
 <script src="v292Dfix376-speaker-guard.js?cb=20260829-fix748"></script>
 <script src="v292Dfix377-voice-anchor.js?cb=20260829-fix748"></script>
 <script src="v292Dfix378-species-judge.js?cb=v292Dfix378"></script>
 <script src="v292Dfix379-wrap-keeper.js?cb=v292Dfix646"></script>
 <script src="v292Dfix381-reaction.js?cb=v292Dfix381"></script>
-<script src="v292Dfix382-auto-dial.js?cb=20260829-fix748"></script>
+<script src="v292Dfix382-auto-dial.js?cb=20260901-fix783"></script>
 <script src="v292Dfix383-vocative-fix.js?cb=20260829-fix748"></script>
-<script src="v292Dfix384-auto-restore.js?cb=v292Dfix384"></script>
+<script src="v292Dfix384-auto-restore.js?cb=20260901-fix783"></script>
 <script src="v292Dfix385-voice-correction.js?cb=v292Dfix385"></script>
 <script src="v292Dfix386-relation-gauge.js?cb=v292Dfix386b"></script>
 <script src="v292Dfix387-confession.js?cb=v292Dfix387"></script>
@@ -3502,7 +3502,7 @@ G.init();
 <script src="v292Dfix389-npc-relations.js?cb=v292Dfix389"></script>
 <script src="v292Dfix390-speaker-fullname.js?cb=20260829-fix748"></script>
 <script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
-<script src="v292Dfix395-default-darkanime.js?cb=20260829-fix748"></script>
+<script src="v292Dfix395-default-darkanime.js?cb=20260901-fix783"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
 <script src="v292Dfix399-cloudsync.js?cb=20260829-fix748"></script>
   <script src="v292Dfix400-img-url.js?cb=v292Dfix400d"></script>
@@ -3580,7 +3580,7 @@ G.init();
      新ターンは確定時に自動。過去ターンは __v292Dfix620.repairPast({apply:true}) を呼んだときだけ。
      復元=__v292Dfix620.undoPast() / OFF=v292Dfix620ApplyOff（fix619側のOFFでも止まる）
      ★fix611 の後に置くこと -->
-<script src="v292Dfix620-speaker-apply.js?cb=20260829-fix748"></script>
+<script src="v292Dfix620-speaker-apply.js?cb=20260901-fix783"></script>
 <!-- fix616: 話者の由来をターンへ記録（GPT実装順②）。並行配列 turn._convSayMeta に書き、
      _convSays / who / say / DOM は触らない。**新ターンだけ**・自分から保存しない。
      読出=window.__v292Dfix616.stats()/.coverage()/.purge() / OFF=v292Dfix616Off
@@ -3626,7 +3626,7 @@ G.init();
 <!-- fix640: 証拠台帳。物語データは1バイトも書かず、自前キー v292Dfix640Evid_slot_<slotId> だけに貯める。
      読出=window.__v292Dfix640.report()/.why("名前") / OFF=v292Dfix640Off
      ★fix606 の抽出規則を live 参照するので fix606 の後に置く -->
-<script src="v292Dfix640-cast-evidence-ledger.js?cb=v292Dfix765"></script>
+<script src="v292Dfix640-cast-evidence-ledger.js?cb=20260901-fix783"></script>
 <!-- fix641: 証拠ベースの cast 自動登録。強2系統×2ターンでだけ昇格。
      hero は対象外。取消=window.__v292Dfix641.undo("名前") / OFF=v292Dfix641Off
      ★fix640 の後に置くこと -->

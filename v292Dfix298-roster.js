@@ -21,11 +21,26 @@
   if(window.__v292Dfix298) return; window.__v292Dfix298=true;
 
   function off(){ try{ return localStorage.getItem('v292Dfix298Off')==='1'; }catch(e){ return false; } }
-  function slotSfx(){ try{ if(typeof window.__chr6Key==='function'){ var k=window.__chr6Key(); return (k&&k!=='chr6')?k.replace(/^chr6/,''):''; } }catch(e){} return ''; }
-  function SK(){ return 'v292Dfix298'+slotSfx(); }
+  /* ■fix783(2026-09-01) MULTI_TAB_CROSS_STORY_CFG_CONTAMINATION
+     真因: 共有ポインタ chr6_active_slot(= __chr6Key()) は**全タブで1個**。別タブが物語を
+       開いた瞬間このタブの key 解決が相手の story を指し、キャラ一覧ロスター v292Dfix298<sfx> / quasi 参照 が
+       別 story へ着弾/汚染された(実測: ct_fix783_multitab.mjs R群)。
+     対処: key 解決を fix694 document authority(__chronicleDocumentStoryKey)へ固定する
+       (fix307f と同じ作法)。authority 無し document(home 等)では null=**読まない/書かない**。
+     kill: localStorage v292Dfix783Off='1' → 全ファイル同時に旧 __chr6Key() 挙動へ戻る。 */
+  function f783Off(){ try{ return localStorage.getItem('v292Dfix783Off')==='1'; }catch(e){ return false; } }
+  function slotSfx(){
+    if(!f783Off()){
+      try{ var dk=window.__chronicleDocumentStoryKey;
+           if(typeof dk==='string'&&dk) return (dk==='chr6')?'':dk.replace(/^chr6/,''); }catch(e){}
+      return null;                                   /* authority 無し = 触らない */
+    }
+    try{ if(typeof window.__chr6Key==='function'){ var k=window.__chr6Key(); return (k&&k!=='chr6')?k.replace(/^chr6/,''):''; } }catch(e){} return '';
+  }
+  function SK(){ var s=slotSfx(); return (s===null)?null:('v292Dfix298'+s); }
   function curEpoch(){ try{ return +(localStorage.getItem('chr6_epoch')||0); }catch(e){ return 0; } }
   function getS(){ try{ return window.S || (typeof S!=='undefined'?S:null); }catch(e){ return null; } }
-  function getSlot(){ try{ return JSON.parse(localStorage.getItem('chr6'+slotSfx())||'null'); }catch(e){ return null; } }
+  function getSlot(){ try{ var s=slotSfx(); if(s===null) return null; return JSON.parse(localStorage.getItem('chr6'+s)||'null'); }catch(e){ return null; } }
   // cast/turns は window.S が露出しない環境があるのでスロットblobもフォールバック参照(fix298b)
   function getCast(){ var s=getS(); if(s&&s.cast) return s.cast; var sl=getSlot(); return (sl&&sl.cast)?sl.cast:null; }
   function curTurns(){ var s=getS(); if(s&&Array.isArray(s.turns)) return s.turns.length; var sl=getSlot(); return (sl&&Array.isArray(sl.turns))?sl.turns.length:0; }
@@ -35,10 +50,10 @@
     // 単一書き込みガード: 背景タブ/旧epochタブは書かない(多タブclobber防止)
     try{ if(document.visibilityState && document.visibilityState!=='visible') return; }catch(e){}
     try{ if(window.__chrEpoch && curEpoch() > window.__chrEpoch) return; }catch(e){}
-    try{ localStorage.setItem(SK(), JSON.stringify(st)); }catch(e){}
+    try{ var k=SK(); if(k===null) return; localStorage.setItem(k, JSON.stringify(st)); }catch(e){}
   }
   function load(){
-    var st; try{ st=JSON.parse(localStorage.getItem(SK())||'null'); }catch(e){ st=null; }
+    var st; try{ var _k=SK(); st=(_k===null)?null:JSON.parse(localStorage.getItem(_k)||'null'); }catch(e){ st=null; }
     var ep=curEpoch(), ct=curTurns();
     if(!st || typeof st!=='object' || !st.dismissed){ st={epoch:ep, hwTurns:ct, dismissed:{}}; save(st); return st; }
     // リセット検知: epoch変化 or ターン数が記録高水位より減少 → 旧ゲーム扱いでクリア
@@ -57,7 +72,8 @@
   function quasiRoster(){
     var out={};
     try{
-      var qs=JSON.parse(localStorage.getItem('v292Dfix277Quasi'+slotSfx())||'{}')||{};
+      var _s=slotSfx(); if(_s===null) return out;
+      var qs=JSON.parse(localStorage.getItem('v292Dfix277Quasi'+_s)||'{}')||{};
       var ct=curTurns();
       Object.keys(qs).forEach(function(n){
         var e=qs[n]; if(!e) return;

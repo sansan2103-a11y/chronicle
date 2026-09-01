@@ -43,13 +43,26 @@
      ★fix623 より前に書かれた記録（キーに物語idが無い）も読めるようにする
        （1つ目の物語の戻し道を失わないため）。 */
   var RESTORE_BASE = 'v292Dfix620_restore';
+  /* ■fix783(2026-09-01) MULTI_TAB_CROSS_STORY_CFG_CONTAMINATION
+     真因: 共有ポインタ chr6_active_slot(= __chr6Key()) は**全タブで1個**。別タブが物語を
+       開いた瞬間このタブの key 解決が相手の story を指し、話者適用の復元台帳 v292Dfix620_restore_<id> が
+       別 story へ着弾/汚染された(実測: ct_fix783_multitab.mjs R群)。
+     対処: key 解決を fix694 document authority(__chronicleDocumentStoryKey)へ固定する
+       (fix307f と同じ作法)。authority 無し document(home 等)では null=**読まない/書かない**。
+     kill: localStorage v292Dfix783Off='1' → 全ファイル同時に旧 __chr6Key() 挙動へ戻る。 */
+  function f783Off(){ try{ return localStorage.getItem('v292Dfix783Off')==='1'; }catch(e){ return false; } }
   function slotId() {
+    if (!f783Off()){
+      try { var dk = window.__chronicleDocumentStoryKey;
+            if (typeof dk === 'string' && dk) return String(dk).replace(/^chr6_slot_/, ''); } catch (e) {}
+      return null;                                   /* authority 無し = 触らない */
+    }
     try {
       var k = (window.__chr6Key ? window.__chr6Key() : '') || '';
       return k ? String(k).replace(/^chr6_slot_/, '') : '';
     } catch (e) { return ''; }
   }
-  function restoreKey() { var s = slotId(); return s ? (RESTORE_BASE + '_' + s) : RESTORE_BASE; }
+  function restoreKey() { var s = slotId(); if (s === null) return null; return s ? (RESTORE_BASE + '_' + s) : RESTORE_BASE; }
   var MAX_RESTORE = 400;
   var stats = { turnsSeen: 0, applied: 0, proposed: 0, denied: {}, errors: 0, pastApplied: 0 };
 
@@ -150,6 +163,7 @@
        ★fix623: キーは物語ごと。ここを共有すると2つ目以降の物語が戻せなくなる。 */
     try {
       var rk = restoreKey();
+      if (rk === null) return { error: 'no-write-authority' };   /* ■fix783 */
       if (!localStorage.getItem(rk)) {
         var rec = { ts: Date.now(), slot: slotId(), items: out.proposals.slice(0, MAX_RESTORE) };
         localStorage.setItem(rk, JSON.stringify(rec));
@@ -175,6 +189,7 @@
   function restoreInfo() {
     try {
       var rk = restoreKey();
+      if (rk === null) return null;                     /* ■fix783: 権限が無い document は読まない */
       var v = localStorage.getItem(rk);
       if (v) { var o = JSON.parse(v); if (o) o._key = rk; return o; }
       if (rk !== RESTORE_BASE) {

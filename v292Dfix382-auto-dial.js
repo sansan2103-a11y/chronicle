@@ -23,9 +23,24 @@
   function previewOn(){ try { return localStorage.getItem('v292Dfix382') === '1'; } catch(e){ return false; } }
   function on(){ return previewOn() && !offAll(); }
   function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined" ? S : null'); } catch(e){ return null; } }
-  function slotSfx(){ try { if (typeof window.__chr6Key === 'function'){ var k = window.__chr6Key(); return (k && k !== 'chr6') ? k.replace(/^chr6/, '') : ''; } } catch(e){} return ''; }
-  function touchedKey(){ return 'v292Dfix382Touched' + slotSfx(); }
-  function touched(){ try { return localStorage.getItem(touchedKey()) === '1'; } catch(e){ return false; } }
+  /* ■fix783(2026-09-01) MULTI_TAB_CROSS_STORY_CFG_CONTAMINATION
+     真因: 共有ポインタ chr6_active_slot(= __chr6Key()) は**全タブで1個**。別タブが物語を
+       開いた瞬間このタブの key 解決が相手の story を指し、セリフ量の手動固定フラグ v292Dfix382Touched<sfx> が
+       別 story へ着弾/汚染された(実測: ct_fix783_multitab.mjs R群)。
+     対処: key 解決を fix694 document authority(__chronicleDocumentStoryKey)へ固定する
+       (fix307f と同じ作法)。authority 無し document(home 等)では null=**読まない/書かない**。
+     kill: localStorage v292Dfix783Off='1' → 全ファイル同時に旧 __chr6Key() 挙動へ戻る。 */
+  function f783Off(){ try{ return localStorage.getItem('v292Dfix783Off')==='1'; }catch(e){ return false; } }
+  function slotSfx(){
+    if (!f783Off()){
+      try { var dk = window.__chronicleDocumentStoryKey;
+            if (typeof dk === 'string' && dk) return (dk === 'chr6') ? '' : dk.replace(/^chr6/, ''); } catch(e){}
+      return null;                                   /* authority 無し = 触らない */
+    }
+    try { if (typeof window.__chr6Key === 'function'){ var k = window.__chr6Key(); return (k && k !== 'chr6') ? k.replace(/^chr6/, '') : ''; } } catch(e){} return '';
+  }
+  function touchedKey(){ var s = slotSfx(); return (s === null) ? null : ('v292Dfix382Touched' + s); }
+  function touched(){ try { var k = touchedKey(); if (k === null) return false; return localStorage.getItem(k) === '1'; } catch(e){ return false; } }
 
   var SYSLINE = '\n【調整タグ】本文をすべて書き終えた最後に、次のターンに適したセリフ量の推奨を <dial level="0"/> か <dial level="1"/> か <dial level="2"/> の形でちょうど1つ添える（0=控えめ/1=標準/2=濃いめ。直近の会話の熱・緊張・静けさから判断）。このタグは物語本文ではなく、地の文に混ぜない。';
   window.__f379reg = window.__f379reg || [];
@@ -80,7 +95,8 @@
       var box = el.closest ? (el.closest('span,label,div') || el.parentNode) : el.parentNode;
       var around = box ? String(box.textContent || '') : '';
       if (around.indexOf('セリフ') < 0) return;
-      localStorage.setItem(touchedKey(), '1');
+      var _tk = touchedKey(); if (_tk === null) return;   /* ■fix783 */
+      localStorage.setItem(_tk, '1');
       try { console.log(TAG, 'セリフセレクタ手動変更を検知→このslotでは以後自動調整しない'); } catch(e){}
     } catch(e){}
   }, true);

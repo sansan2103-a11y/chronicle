@@ -127,15 +127,29 @@
      ON にすると morphFeatures は fix778 と 1バイト同じ結果へ戻る（人外以外は元から通らない）。 */
   function isOff779(){ return lsg('v292Dfix779Off') === '1'; }
 
-  /* slotId: fix640 と同じ経路（document authority = __chr6Key）。読取のみ。 */
+  /* ★fix783: 旧コメントの「document authority = __chr6Key」は**誤記**だった。
+     __chr6Key() は共有ポインタ chr6_active_slot のミラーであって document authority ではない。 */
+  /* ■fix783(2026-09-01) MULTI_TAB_CROSS_STORY_CFG_CONTAMINATION
+     真因: 共有ポインタ chr6_active_slot(= __chr6Key()) は**全タブで1個**。別タブが物語を
+       開いた瞬間このタブの key 解決が相手の story を指し、正典 appearance ストア v292capp_slot_<id> が
+       別 story へ着弾/汚染された(実測: ct_fix783_multitab.mjs R群)。
+     対処: key 解決を fix694 document authority(__chronicleDocumentStoryKey)へ固定する
+       (fix307f と同じ作法)。authority 無し document(home 等)では null=**読まない/書かない**。
+     kill: localStorage v292Dfix783Off='1' → 全ファイル同時に旧 __chr6Key() 挙動へ戻る。 */
+  function f783Off(){ try{ return localStorage.getItem('v292Dfix783Off')==='1'; }catch(e){ return false; } }
   function slotId(){
+    if(!f783Off()){
+      try { var dk = window.__chronicleDocumentStoryKey;
+            if (typeof dk === 'string' && dk) return (dk === 'chr6') ? 'chr6' : dk.replace(/^chr6_slot_/, ''); } catch(e){}
+      return null;                                   /* authority 無し = 触らない */
+    }
     try {
       var k = (typeof window.__chr6Key === 'function') ? window.__chr6Key() : 'chr6';
       k = String(k || 'chr6');
       return k.replace(/^chr6_slot_/, '') || 'chr6';
     } catch(e){ return 'chr6'; }
   }
-  function KEY(){ return 'v292capp_slot_' + slotId(); }
+  function KEY(){ var s = slotId(); return (s === null) ? null : ('v292capp_slot_' + s); }
 
   function hash(s){ var h=0; s=String(s); for(var i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; } return Math.abs(h).toString(36); }
   function hash32(s){ var h=2166136261; s=String(s); for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=(h*16777619)>>>0; } return h>>>0; }
@@ -847,13 +861,14 @@
   function blank(){ return { version: 1, entities: {} }; }
   function _load(){
     try {
-      var o = JSON.parse(lsg(KEY()) || 'null');
+      var _k = KEY(); if (_k === null) return blank();   /* ■fix783: 権限が無い document は保存済みを読まない(空として振る舞う・返り値の型は不変) */
+      var o = JSON.parse(lsg(_k) || 'null');
       if (!o || o.version !== 1 || !o.entities) return blank();
       return o;
     } catch(e){ return blank(); }
   }
-  function _save(o){ try { return lss(KEY(), JSON.stringify(o)); } catch(e){ return false; } }
-  function _reset(){ try { localStorage.removeItem(KEY()); } catch(e){} genderTried = Object.create(null); morphTried = Object.create(null); /* ★fix778 */ }
+  function _save(o){ try { var _k=KEY(); if(_k===null) return false; return lss(_k, JSON.stringify(o)); } catch(e){ return false; } }
+  function _reset(){ try { var _k=KEY(); if(_k!==null) localStorage.removeItem(_k); } catch(e){} genderTried = Object.create(null); morphTried = Object.create(null); /* ★fix778 */ }
   function _put(name, record){
     var who = resolveName(name); if (!who) return null;
     var st = _load(); st.entities[who] = record; _save(st); return record;

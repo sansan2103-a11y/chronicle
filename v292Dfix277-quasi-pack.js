@@ -70,7 +70,20 @@
   function offI(){ try { return localStorage.getItem('v292IconUnifyOff') === '1'; } catch(e){ return false; } }
 
   // ---- スロット接尾辞(fix246と同ロジック・ただし自前キーなので自前で付ける) ----
+  /* ■fix783(2026-09-01) MULTI_TAB_CROSS_STORY_CFG_CONTAMINATION
+     真因: 共有ポインタ chr6_active_slot(= __chr6Key()) は**全タブで1個**。別タブが物語を
+       開いた瞬間このタブの key 解決が相手の story を指し、準登場人物パック v292Dfix277Quasi<sfx> が
+       別 story へ着弾/汚染された(実測: ct_fix783_multitab.mjs R群)。
+     対処: key 解決を fix694 document authority(__chronicleDocumentStoryKey)へ固定する
+       (fix307f と同じ作法)。authority 無し document(home 等)では null=**読まない/書かない**。
+     kill: localStorage v292Dfix783Off='1' → 全ファイル同時に旧 __chr6Key() 挙動へ戻る。 */
+  function f783Off(){ try{ return localStorage.getItem('v292Dfix783Off')==='1'; }catch(e){ return false; } }
   function slotSfx(){
+    if(!f783Off()){
+      try { var dk = window.__chronicleDocumentStoryKey;
+            if (typeof dk === 'string' && dk) return (dk === 'chr6') ? '' : dk.replace(/^chr6/, ''); } catch(e){}
+      return null;                                   /* authority 無し = 触らない */
+    }
     try {
       if (typeof window.__chr6Key === 'function'){
         var k = window.__chr6Key();
@@ -79,11 +92,13 @@
     } catch(e){}
     return '';
   }
-  function QK(){ return 'v292Dfix277Quasi' + slotSfx(); }
+  function QK(){ var s = slotSfx(); return (s === null) ? null : ('v292Dfix277Quasi' + s); }
 
   var qStore = null, qKeyLoaded = '';
   function loadQ(){
     var k = QK();
+    /* ■fix783: 権限が無い document は台帳を読まない（メモリ上の空台帳として振る舞う。返り値の型は不変） */
+    if (k === null){ if (qKeyLoaded !== null){ qStore = {}; qKeyLoaded = null; } return qStore; }
     if (qStore && qKeyLoaded === k) return qStore;
     try { qStore = JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch(e){ qStore = {}; }
     qKeyLoaded = k;
@@ -128,7 +143,7 @@
     if (!qDirty || !qStore) return;
     /* ★qDirty は書けたときにだけ落とす。飛ばされた場合は次の build で必ずもう一度書く。 */
     return f748PersistC('fix277.saveQ', function(){
-      try { localStorage.setItem(qKeyLoaded || QK(), JSON.stringify(qStore)); qDirty = false; } catch(e){}
+      try { var _qk = qKeyLoaded || QK(); if (!_qk) return; localStorage.setItem(_qk, JSON.stringify(qStore)); qDirty = false; } catch(e){}
     });
   }
 

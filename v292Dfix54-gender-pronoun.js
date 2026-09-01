@@ -314,9 +314,29 @@
   // ---------------------------------------------------------------------------
   // (3) NPC gender persistence sanity mirror
   // ---------------------------------------------------------------------------
+  /* ■fix783(2026-09-01) MULTI_TAB_CROSS_STORY_CFG_CONTAMINATION
+     真因: 共有ポインタ chr6_active_slot は全タブで1個。別タブが物語を開くと
+       genderMap の控えが別 story のキーへ書かれた。
+     対処: fix694 document authority と共有ポインタを**照合**する(fix670 と同じ作法)。
+       ★ここは歴史的経緯で **JSON.parse せず生値**（= 引用符付き "id"）をキーに使っている
+         (fix562:467 参照)。authority から作り直すとキー形が変わって既存の控えが迷子に
+         なるので、**ポインタが自 document の story と一致している時だけ従来の生値を使う**。
+         食い違う(=別タブが動かした) / authority 無し → null = 書かない。
+     kill: localStorage v292Dfix783Off='1' → 旧挙動へ戻る。 */
+  function f783Off(){ try{ return localStorage.getItem('v292Dfix783Off')==='1'; }catch(e){ return false; } }
   function activeSlotId(){
     try {
       var v = localStorage.getItem('chr6_active_slot');
+      if (!f783Off()){
+        var dk = window.__chronicleDocumentStoryKey;
+        if (typeof dk !== 'string' || !dk) return null;                 /* authority 無し */
+        var id = (dk === 'chr6') ? 'default' : dk.replace(/^chr6_slot_/, '');
+        var norm = String(v == null ? '' : v).replace(/^"|"$/g, '');
+        if (v == null) return (id === 'default') ? 'default' : null;    /* 従来の既定値と同じ */
+        if (norm === id) return v;                                      /* 一致 = 従来と1バイト同じキー */
+        if (id === 'default' && (norm === 'default' || norm === 'chr6')) return v;
+        return null;                                                    /* 別タブが動かした = 書かない */
+      }
       return v || 'default';
     } catch(_){ return 'default'; }
   }
@@ -333,7 +353,8 @@
           isBoyish: c.isBoyish
         };
       });
-      var key = 'chr6_v292Dfix54_genderMap_' + activeSlotId();
+      var _sid = activeSlotId(); if (_sid === null) return;   /* ■fix783: 権限が無い / 別タブが動かした */
+      var key = 'chr6_v292Dfix54_genderMap_' + _sid;
       localStorage.setItem(key, JSON.stringify({
         at: Date.now(),
         map: dump

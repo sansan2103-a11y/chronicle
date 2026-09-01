@@ -23,7 +23,21 @@
   try { if (localStorage.getItem('v292SlotGenOff') === '1') return; } catch(e){}
   if (window.__v292Dfix228) return; window.__v292Dfix228 = 1;
 
-  function slotKey(){ try { return (window.__chr6Key && window.__chr6Key()) || 'chr6'; } catch(e){ return 'chr6'; } }
+  /* ■fix783(2026-09-01) MULTI_TAB_CROSS_STORY_CFG_CONTAMINATION
+     真因: 共有ポインタ chr6_active_slot(= __chr6Key()) は**全タブで1個**。別タブが物語を
+       開いた瞬間このタブの key 解決が相手の story を指し、世代控え __gen_<key> と世代復元の書込先 が
+       別 story へ着弾/汚染された(実測: ct_fix783_multitab.mjs R群)。
+     対処: key 解決を fix694 document authority(__chronicleDocumentStoryKey)へ固定する
+       (fix307f と同じ作法)。authority 無し document(home 等)では null=**読まない/書かない**。
+     kill: localStorage v292Dfix783Off='1' → 全ファイル同時に旧 __chr6Key() 挙動へ戻る。 */
+  function f783Off(){ try{ return localStorage.getItem('v292Dfix783Off')==='1'; }catch(e){ return false; } }
+  function slotKey(){
+    if (!f783Off()){
+      try { var dk = window.__chronicleDocumentStoryKey; if (typeof dk === 'string' && dk) return dk; } catch(e){}
+      return null;                                   /* authority 無し = 触らない */
+    }
+    try { return (window.__chr6Key && window.__chr6Key()) || 'chr6'; } catch(e){ return 'chr6'; }
+  }
   function genKey(k){ return '__gen_' + k; }
   function turnsOf(raw){ try { var d = JSON.parse(raw); return (d && Array.isArray(d.turns)) ? d.turns.length : -1; } catch(e){ return -1; } }
   function loadGens(k){ try { return JSON.parse(localStorage.getItem(genKey(k)) || '[]') || []; } catch(e){ return []; } }
@@ -73,6 +87,7 @@
   function tick(){
     try {
       var k = slotKey();
+      if (!k) return;                                  /* ■fix783: authority 無し = 監視しない */
       if (!guardOff()){
         /* ★切替 tick: 退避も比較もしない。基準を捨てて armed を降ろすだけ。 */
         if (k !== capturedKey){ capturedKey = k; armed = false; lastSeen = null; return; }
@@ -110,11 +125,13 @@
 
   window.__v292Gens = function(){
     var k = slotKey();
+    if (!k) return [];                                /* ■fix783 */
     return loadGens(k).map(function(g, i){ return { gen: i + 1, turns: g.turns, savedAt: new Date(g.t).toLocaleString() }; });
   };
   window.__v292Restore = function(n){
     n = n || 1;
     var k = slotKey();
+    if (!k){ try { console.warn(TAG, 'この document には書込権限がありません(fix694)'); } catch(e){} return false; }   /* ■fix783 */
     var gens = loadGens(k);
     var g = gens[n - 1];
     if (!g){ console.warn(TAG, '世代' + n + 'がありません。__v292Gens()で一覧確認。'); return false; }

@@ -80,7 +80,21 @@
   //   保存はfix30がアクティブスロットへ書くのに、ここのLSフォールバックは常に'chr6'を
   //   読んでいた＝スロットa使用時、window.S確立前の初回repairがデフォルトスロットの
   //   旧物語から会話カードを作ってしまう(リセット不全の残党・実測)。
+  /* ■fix783(2026-09-01) MULTI_TAB_CROSS_STORY_CFG_CONTAMINATION
+     真因: activeStoreKey() は共有ポインタ chr6_active_slot 由来。別タブが物語を開くと
+       ①LS fallback の読みが別 story の本体になる
+       ②migrateConvSaysPostfix の LS 直書き(下方 `localStorage.setItem(activeStoreKey(), ...)`)が
+         **この document の S を別 story の本体へ書き込む**(= fix694 S.save を迂回する
+         CROSS_DOCUMENT_BODY_WRITE)。
+     対処: key 解決だけを fix694 document authority へ固定する。**分岐ロジックは不変**。
+       authority 無し document(home 等)では null を返し、呼び手が読まない/書かない。
+     kill: localStorage v292Dfix783Off='1' → 旧 __chr6Key/chr6_active_slot 挙動へ戻る。 */
+  function f783Off(){ try{ return localStorage.getItem('v292Dfix783Off')==='1'; }catch(e){ return false; } }
   function activeStoreKey(){
+    if (!f783Off()){
+      try { var dk = window.__chronicleDocumentStoryKey; if (typeof dk === 'string' && dk) return dk; } catch(e){}
+      return null;                                   /* authority 無し = 読まない/書かない */
+    }
     try {
       var act = JSON.parse(localStorage.getItem('chr6_active_slot') || 'null');
       if (act && act !== 'default') return 'chr6_slot_' + act;
@@ -103,7 +117,8 @@
     } catch(e){}
     // 2) features.js IIFE-local S は外から見えないので LS fallback（スロット対応）
     try {
-      var raw = localStorage.getItem(activeStoreKey());
+      var _ask = activeStoreKey();
+      var raw = _ask ? localStorage.getItem(_ask) : null;
       if (raw){
         var parsed = JSON.parse(raw);
         if (parsed && parsed.turns) return parsed;
@@ -807,7 +822,7 @@
   // right (天狗) and honestly returns ??? only when truly ambiguous. Extraction input is
   // one small turn, so 405B here is still cheap (~0.2 yen/turn).
   function bModel(){
-    try { var c = JSON.parse(localStorage.getItem(activeStoreKey()) || '{}').cfg || {}; if (c.orModel) return c.orModel; } catch(e){}
+    try { var _ask = activeStoreKey(); var c = JSON.parse((_ask ? localStorage.getItem(_ask) : null) || '{}').cfg || {}; if (c.orModel) return c.orModel; } catch(e){}
     return 'nousresearch/hermes-4-405b';
   }
   var B_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
@@ -826,7 +841,8 @@
   function bEnabled(){
     try {
       if (localStorage.getItem(B_OFF_KEY)) return false;
-      var c = (JSON.parse(localStorage.getItem(activeStoreKey()) || '{}').cfg) || {};
+      var _ask = activeStoreKey();
+      var c = (JSON.parse((_ask ? localStorage.getItem(_ask) : null) || '{}').cfg) || {};
       return c.provider === 'openrouter' && !!c.orKey;
     } catch(e){ return false; }
   }
@@ -861,7 +877,7 @@
   }
   function bCall(narr, names, cb){
     var key = '';
-    try { var c = JSON.parse(localStorage.getItem(activeStoreKey()) || '{}'); key = (c.cfg && c.cfg.orKey) || ''; } catch(e){}
+    try { var _ask = activeStoreKey(); var c = JSON.parse((_ask ? localStorage.getItem(_ask) : null) || '{}'); key = (c.cfg && c.cfg.orKey) || ''; } catch(e){}
     if (!key){ cb(null); return; }
     var body;
     try { body = JSON.stringify({ model: bModel(), temperature: 0, max_tokens: 900,
@@ -1347,7 +1363,7 @@
         var _w748 = function(){
           try {
             if (window.S && window.S.turns === turns && typeof window.S.save === 'function'){ window.S.save(); }
-            else if (!(window.S && window.S.turns)){ localStorage.setItem(activeStoreKey(), JSON.stringify(st)); }   // v292Dfix205b
+            else if (!(window.S && window.S.turns)){ var _ask = activeStoreKey(); if (_ask) localStorage.setItem(_ask, JSON.stringify(st)); }   // v292Dfix205b / ■fix783: 権限が無ければ書かない
           } catch(e){}
         };
         if (_A748 && typeof _A748.persistC === 'function') _A748.persistC('fix66.migrateConvSaysPostfix', _w748);
