@@ -54,7 +54,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260901-fix791';
+  var BUILT = '20260901-fix792';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3682,6 +3682,10 @@ G.init();
 <!-- v292Dfix791: Phase3A-2 Update/Conflict (shadow). lineage 同士の関係のみ。真偽を決めない。
      chr6mem/chr6adj/chr6lin は読むだけ・relation は別DB chr6rel。自動実行しない。OFF=v292Dfix791Off -->
 <script src="v292Dfix791-lineage-relations.js?cb=20260901-fix791"></script>
+<!-- v292Dfix792: Phase3A-2 Referent Resolution (shadow). 解けるものだけ安全に解く。
+     誤 resolve より UNRESOLVED を優先。new entity を作らない。chr6mem/chr6lin は読むだけ・
+     resolution は別DB chr6ref。自動実行しない。OFF=v292Dfix792Off -->
+<script src="v292Dfix792-referent-resolution.js?cb=20260901-fix792"></script>
 <!-- R118 Phase1: capability constraint telemetry. read-only / memory only. OFF=v292Dfix740Off verbose=chronDiagVerbose -->
 <script src="v292Dfix740-cap-telemetry.js?cb=v292Dfix740"></script>
 <!-- R118 Phase2-S: severity consequence lane. fix414 hook 経由。OFF=v292Dfix741Off / feature=v292Dfix414SeverityS (default OFF) -->
