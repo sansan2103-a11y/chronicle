@@ -54,7 +54,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260901-fix792';
+  var BUILT = '20260901-fix793';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3686,6 +3686,11 @@ G.init();
      誤 resolve より UNRESOLVED を優先。new entity を作らない。chr6mem/chr6lin は読むだけ・
      resolution は別DB chr6ref。自動実行しない。OFF=v292Dfix792Off -->
 <script src="v292Dfix792-referent-resolution.js?cb=20260901-fix792"></script>
+<!-- v292Dfix793: Phase3B-1 QA限定 Canonical Memory canary (client). 既定OFF・呼び出し側0本。
+     memory state = UNLOADED/LOADED_ABSENT/LOADED_VALUE。UNLOADEDからsaveしない(fail-closed)。
+     nullは明示clearだけ。unknown-fieldでstrip retryしない。canaryはsmtg00ynsv1のみ。
+     ON=v292Dfix793On / OFF=v292Dfix793Off / story=v292Dfix793Story -->
+<script src="v292Dfix793-memory-canonical.js?cb=20260901-fix793"></script>
 <!-- R118 Phase1: capability constraint telemetry. read-only / memory only. OFF=v292Dfix740Off verbose=chronDiagVerbose -->
 <script src="v292Dfix740-cap-telemetry.js?cb=v292Dfix740"></script>
 <!-- R118 Phase2-S: severity consequence lane. fix414 hook 経由。OFF=v292Dfix741Off / feature=v292Dfix414SeverityS (default OFF) -->
@@ -3693,7 +3698,7 @@ G.init();
 <!-- R118 Phase3-A: existing physical signal bridge. fix414 hook 経由。OFF=v292Dfix742Off / feature=v292Dfix414PhysP (default OFF) -->
 <script src="v292Dfix742-physical-bridge.js?cb=v292Dfix742"></script>
 <!-- CLOUD_CANONICAL C1 client (C1-a builder + C1-b hydrator)。DEPLOY != ENABLE：呼び出し側0本・load時storage読取0。OFF=v292Dfix743Off / feature=v292DfixCC2On (default OFF) -->
-<script src="v292Dfix743-cc2-client.js?cb=20260830-fix750"></script>
+<script src="v292Dfix743-cc2-client.js?cb=20260901-fix793"></script>
 <!-- CLOUD_CANONICAL C1 write path wiring（裁定30/31/32）。DEPLOY != ENABLE：caller 0本・自動実行0・load時storage読取0。prepare()/commitSchema2() は明示呼出のみ。ON=v292Dfix750On / KILL=v292Dfix750Off (default OFF) -->
 <script src="v292Dfix750-c1-materialize.js?cb=20260830-fix756"></script>
 <!-- v292Dfix756(M1 NEW_STORY_SCHEMA2_DEFAULT): server row が無い story(fix705 verdict NOT_FOUND)だけを

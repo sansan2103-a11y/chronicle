@@ -34,8 +34,13 @@ const S2_FIELDS = {
   sceneBreaks:          { kind: 'array' },
   sceneSummaries:       { kind: 'object' },
   coverSeed:            { kind: 'string_or_null', maxLen: 64 },
+  /* ★fix793(3B-1): Worker v40 の optional sidecar domain と同一契約。
+     optional=true なので presence 必須ではない。既存13の契約は 1 つも変えない。 */
+  memoryV1:             { kind: 'memory_v1_or_null', optional: true, maxLen: 262144 },
 };
 const S2_FIELD_NAMES = Object.keys(S2_FIELDS);
+const S2_REQUIRED_NAMES = S2_FIELD_NAMES.filter(function (k) { return S2_FIELDS[k].optional !== true; });
+const S2_OPTIONAL_NAMES = S2_FIELD_NAMES.filter(function (k) { return S2_FIELDS[k].optional === true; });
 
 /* ---- localキー構成（fix694 STORY_ID 起点・activeSlot不使用・named storyのみ） ----
  * ★DEFAULT story('chr6')はC1対象外（fix246無サフィックス基底キーがfix564 snapshotの
@@ -55,6 +60,10 @@ function keysFor(storyId){
     sceneSummaries:       'chr6_scene_summaries_' + storyId,
     aiInstr:              'v292aiInstr_slot_' + storyId,
     coverSeed:            'v292cover_seed_' + storyId,
+    /* ★fix793(3B-1): optional memoryV1 の story-scoped key。global key は作らない。
+       ここに載せることで fix781 の keySet（SyncGuard snapshot / Recovery Draft）へ
+       **自動的に**入る（fix781 は keysFor を反復するだけなので改変不要）。 */
+    memoryV1:             'v292Dmem1_slot_' + storyId,
   };
 }
 const JSON_FIELDS = { relations:1, charStates:1, charFlags:1, pendingDice:1, states77:1, roster307:1,
@@ -67,6 +76,12 @@ const EMPTY = { relations:{}, charStates:{}, charFlags:{}, pendingDice:null, sta
 function isPlainObject(v){ return v != null && typeof v === 'object' && !Array.isArray(v); }
 function typeOk(field, v){
   const k = S2_FIELDS[field].kind;
+  if (k === 'memory_v1_or_null'){
+    if (v === null) return true;
+    return isPlainObject(v)
+        && Object.prototype.toString.call(v.records) === '[object Array]'
+        && Object.prototype.toString.call(v.edges)   === '[object Array]';
+  }
   if (k === 'null_only') return v === null;
   if (k === 'string_or_null') return v === null || (typeof v === 'string' && v.length <= S2_FIELDS[field].maxLen);
   if (k === 'object') return isPlainObject(v);
@@ -127,12 +142,34 @@ function buildSchema2Record(deps, storyId){
   /* sidecar 13 fields（tri-state） */
   const sidecar = { genderMap: null };
   const sources = { genderMap: 'RESERVED_COMPAT' };
-  for (const f of S2_FIELD_NAMES){
+  for (const f of S2_REQUIRED_NAMES){
     if (f === 'genderMap') continue;
     const c = collectField(deps, storyId, f);
     if (c.state === 'READ_ERROR_OR_AMBIGUOUS') return { hold: { code: 'BUILD_SCHEMA2_HOLD', field: f, reason: c.reason } };
     sidecar[f] = c.value;
     sources[f] = c.state;
+  }
+  /* ★fix793(3B-1): optional domain。**fix793 の gate だけが決める**（localStorage を
+     ここで直接読まない＝UNLOADED と LOADED_ABSENT の区別を client 側 1 箇所に閉じる）。
+       include:false → key を **生やさない**（canary 対象外 story はここ）
+       include:true  → 常に送る（G1。null は明示 clear のときだけ）
+       hold          → ★fail-closed（UNLOADED から save させない）
+     fix793 が無ければ「canary ではない」として何もしない（既存挙動と同一）。 */
+  for (const f of S2_OPTIONAL_NAMES){
+    let g = null;
+    try {
+      const M = (typeof window !== 'undefined') ? window.__v292Dfix793 : null;
+      if (M && typeof M.saveGate === 'function'){
+        const cg = (typeof M.clearGate === 'function') ? M.clearGate(storyId) : null;
+        g = (cg && cg.include) ? cg : M.saveGate(storyId);
+      }
+    } catch (e){ return { hold: { code: 'BUILD_SCHEMA2_HOLD', field: f, reason: 'MEMORY_GATE_THREW' } }; }
+    if (!g) { sources[f] = 'OPTIONAL_ABSENT_NO_MODULE'; continue; }
+    if (g.hold) return { hold: { code: 'BUILD_SCHEMA2_HOLD', field: f, reason: g.hold } };
+    if (!g.include) { sources[f] = 'OPTIONAL_ABSENT:' + (g.reason || 'not-included'); continue; }
+    if (g.value !== null && !typeOk(f, g.value)) return { hold: { code: 'BUILD_SCHEMA2_HOLD', field: f, reason: 'BAD_MEMORY_SHAPE' } };
+    sidecar[f] = g.value;
+    sources[f] = g.explicitClear ? 'OPTIONAL_EXPLICIT_CLEAR' : 'OPTIONAL_PRESENT';
   }
   /* 送信payload最小化: cfgはHY_CFG_ALLOWで絞る（秘密を載せない。hashはWorker側allowlistが正） */
   const HY_CFG_ALLOW = ['authorNote','bannedPhrases','creepyMode','dialogueLevel','dramaLevel','engineMode','genrePresets','outLen','reactionLevel','toneKey'];
@@ -163,7 +200,10 @@ function validateServerRecord(rec){
   if (!isPlainObject(rec.sidecar)) return 'BAD_SIDECAR';
   for (const k of Object.keys(rec.sidecar)) if (!S2_FIELDS[k]) return 'UNKNOWN_FIELD:' + k;
   for (const f of S2_FIELD_NAMES){
-    if (!Object.prototype.hasOwnProperty.call(rec.sidecar, f)) return 'FIELD_MISSING:' + f;
+    if (!Object.prototype.hasOwnProperty.call(rec.sidecar, f)){
+      if (S2_FIELDS[f].optional === true) continue;      /* ★optional は presence 不要 */
+      return 'FIELD_MISSING:' + f;
+    }
     if (!typeOk(f, rec.sidecar[f])) return 'BAD_FIELD_TYPE:' + f;
   }
   if (!isPlainObject(rec.body)) return 'BAD_BODY';
@@ -185,7 +225,7 @@ function buildWritePlan(storyId, rec, deps){
     scene: (rec.body.scene === undefined ? null : rec.body.scene),
     turns: Array.isArray(rec.body.turns) ? rec.body.turns : [], mode: (rec.body.mode === undefined ? null : rec.body.mode) });
   plan.push({ key: K.body, newValue: bodyStr, field: 'body' });
-  for (const f of S2_FIELD_NAMES){
+  for (const f of S2_REQUIRED_NAMES){
     if (f === 'genderMap') continue;
     const v = rec.sidecar[f];
     if (STRING_FIELDS[f]){
@@ -193,6 +233,15 @@ function buildWritePlan(storyId, rec, deps){
     } else {
       plan.push({ key: K[f], newValue: JSON.stringify(v), field: f });
     }
+  }
+  /* ★fix793(3B-1): optional domain の hydrate。server に値があれば local key へ materialize
+     する（**shadow DB が無くても server の memoryV1 を保持できる**＝fresh context/new device）。
+     server に key が無ければ **plan に載せない**（local を消さない＝silent loss を作らない）。
+     null は明示 clear なので remove。 */
+  for (const f of S2_OPTIONAL_NAMES){
+    if (!Object.prototype.hasOwnProperty.call(rec.sidecar, f)) continue;
+    const v = rec.sidecar[f];
+    plan.push({ key: K[f], newValue: (v === null ? null : JSON.stringify(v)), field: f });
   }
   return plan;
 }
@@ -338,6 +387,7 @@ window.__v292DfixCC2 = {
   FLAG_ON: FLAG_ON, FLAG_KILL: FLAG_KILL, FLAG_MODULE_OFF: FLAG_MODULE_OFF,
   isEnabled: isEnabled,
   S2_FIELDS: S2_FIELDS, S2_FIELD_NAMES: S2_FIELD_NAMES, EMPTY: EMPTY, PHASE: PHASE,
+  S2_REQUIRED_NAMES: S2_REQUIRED_NAMES, S2_OPTIONAL_NAMES: S2_OPTIONAL_NAMES,
   keysFor: keysFor, collectField: collectField, buildSchema2Record: buildSchema2Record,
   validateServerRecord: validateServerRecord, buildWritePlan: buildWritePlan,
   hydrateSchema2: hydrateSchema2, bootRecovery: bootRecovery
