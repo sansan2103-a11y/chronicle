@@ -177,7 +177,7 @@
     sameHash: 0, applies: 0, reloads: 0, partial: 0, stops: 0,
     titleUnresolved: 0, legacySameHash: 0, legacyUnsupported: 0,
     provisionalHome: 0,          /* ★fix757: 暫定 authority を home へ返した回数（document あたり最大1） */
-    f781LocalAhead: 0, f781Holds: 0,   /* ■fix781: apply を止めた回数（local 先行 / terminal hold） */
+    f781LocalAhead: 0, f781Holds: 0, f781Errors: 0,   /* ■fix781: apply を止めた回数（local 先行 / terminal hold） */
     /* ★意図的に迂回したことを観測可能にする（裁定要件） */
     bypass: { nativeWrites: 0, keys: [], bypassed: ['fix698:layer1-setItem', 'fix402:wrapSetItem', 'fix527:mirror-lock', 'fix706:write-hold'] }
   };
@@ -392,6 +392,9 @@
   // =====================================================================
   function resolve781(j){
     if (f781Off()) return null;
+    /* ■fix781d ★QA専用 fault injection（fixture/実機受入で「意図的throw→fail-closed」を実測するための検証口。
+       本番では立てない。fix476.__rng と同系の作法。 */
+    if (lsg('v292Dfix781dQaThrow') === '1') throw new Error('fix781d-qa-fault-injection');
     var G = null; try { G = window.__v292Dfix781 || null; } catch(e){ G = null; }
     var m  = f781Marker();
     var lh = state.localHash ? String(state.localHash) : null;
@@ -673,7 +676,37 @@
                            banner の 2 択でユーザーが決める（auto merge 0 / silent overwrite 0）。
            ・null/ALLOW  … 従来どおり（CLEAN な pull は 1 バイトも挙動を変えない）。 */
         var g781 = null;
-        try { g781 = resolve781(j); } catch(e781){ g781 = null; }
+        /* ■fix781d(2026-09-01 / GPT裁定): resolve781 の throw / 不正結果は **fail-closed**。
+           旧実装は catch で null=従来 hydrate へ落ちており（fail-open）、guard にバグがあった場合
+           「CLEAN と証明できない local へ server canonical を破壊的に apply しない」という
+           2.5A の最重要不変条件が破れる。ERROR ≠ CLEAN。
+           ・null は resolve781 の**設計された**「guard 対象外＝従来どおり」返値なので通す。
+           ・throw / null 以外の未知の形は判定不能＝apply 0 / body write 0 / HOLD（stop）。
+           ・UX は最小の text-only 通知のみ（既存 banner の 2 ボタンは draft/marker 前提のため使わない）。
+           ・kill は fix781 と共通（v292Dfix781Off → resolve781 が先頭で null を返す＝この分岐に来ない）。 */
+        var g781err = false;
+        try { g781 = resolve781(j); } catch(e781){ g781err = true; }
+        if (!g781err && g781 !== null){
+          var a781 = g781 && g781.action;
+          if (a781 !== 'ALLOW' && a781 !== 'LOCAL_AHEAD' && a781 !== 'HOLD') g781err = true;
+        }
+        if (g781err){
+          stats.f781Errors++;
+          try { console.warn(TAG, 'fix781d: guard 判定不能（throw/invalid）— fail-closed: server canonical を apply しません（ローカル保持）'); } catch(e){}
+          try {
+            if (document && document.body && !document.getElementById('v781derr')){
+              var ed = document.createElement('div');
+              ed.id = 'v781derr';
+              ed.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:100000;'
+                + 'background:#2a2438;color:#e8dfff;border:1px solid #6a5ba0;border-radius:10px;'
+                + 'padding:8px 14px;font-size:13px;max-width:92vw;box-shadow:0 4px 16px rgba(0,0,0,.5)';
+              ed.textContent = '同期状態を確認できないため、ローカルデータを保持しました（クラウドからの上書きは行いません）';
+              document.body.appendChild(ed);
+            }
+          } catch(e){}
+          return cb(stop('UNSYNCED_GUARD_ERROR', {
+            note: 'resolve781 threw or returned invalid result — destructive apply 0 / local retained (fail-closed)' }));
+        }
         if (g781 && g781.action === 'LOCAL_AHEAD'){
           stats.f781LocalAhead++;
           consumeApplied();
