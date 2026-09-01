@@ -255,7 +255,21 @@
 
   // ---- fix409b(b): バックアップ強化 + 統合ログ ----
   var lastBkTs = 0;   // 同一ms内の連続退避でもキー衝突しないよう単調増加を保証。
+  /* ■fix784(2026-09-01) MULTI_TAB Tier3: backup provenance(控えの出所)
+     真因: 控えの**元キー**が共有ポインタ chr6_active_slot(= __chr6Key()) 由来だったため、
+       別タブが物語を開いた瞬間に **chr6_bk_fix409 / chr6_bk_fix409_<ts> の控えとして別 story の本体が保存される**。
+       控え先キー名も形式もタイミングも正しいのに中身だけが他人の物語になる(= 出所誤り)。
+       事故後の復元先として使えないだけでなく、別 story の本体を控え枠に居座らせる。
+     対処: 控えの元キーだけを fix694 document authority(__chronicleDocumentStoryKey)で解決する。
+       authority 無し document では**控えない** = 既存の fail-closed に合流し破壊的変更も行わない。
+       退避先キー名・退避形式・退避タイミング・件数 trim は 1 バイトも変えていない。
+     kill: localStorage v292Dfix783Off='1' → 旧共有ポインタ挙動(fix783 と共通の kill)。 */
+  function f784Off(){ try{ return localStorage.getItem('v292Dfix783Off') === '1'; }catch(e){ return false; } }
   function activeSlotKey(){
+    if (!f784Off()){
+      try { var dk = window.__chronicleDocumentStoryKey; if (typeof dk === 'string' && dk) return dk; } catch(e){}
+      return null;                                   /* authority 無し = 控えない */
+    }
     var ak = 'chr6';
     try { if (typeof window.__chr6Key === 'function') ak = window.__chr6Key() || 'chr6'; } catch(e){}
     return ak;
@@ -264,6 +278,7 @@
   function backupBefore(){
     try {
       var ak = activeSlotKey();
+      if (!ak) return false;                         /* ■fix784: 控えない → 既存 fail-closed(適用中止)へ合流 */
       var blob = '';
       try { blob = localStorage.getItem(ak) || ''; } catch(e){}
       if (off409b()){

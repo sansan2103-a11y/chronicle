@@ -160,9 +160,28 @@
     try {
       // fix495(C2): activeが未設定/defaultの実体は'chr6'キー(従来はchr6_slot_defaultを読んで
       // 空振り=defaultスロットでは控えゼロのまま本文書換していた)。控えは新しい順2件にtrim。
-      var slot = JSON.parse(localStorage.getItem('chr6_active_slot') || '""');
-      var key = (slot && slot !== 'default') ? ('chr6_slot_' + slot) : 'chr6';
-      var tag = (slot && slot !== 'default') ? slot : 'default';
+      /* ■fix784(2026-09-01) MULTI_TAB Tier3: backup provenance(控えの出所)
+         真因: 控えの**元キー**が共有ポインタ chr6_active_slot(= __chr6Key()) 由来だったため、
+           別タブが物語を開いた瞬間に **chr6_bk_fix458_<tag>_<ts> の控えとして別 story の本体が保存される**。
+           控え先キー名も形式もタイミングも正しいのに中身だけが他人の物語になる(= 出所誤り)。
+           事故後の復元先として使えないだけでなく、別 story の本体を控え枠に居座らせる。
+         対処: 控えの元キーだけを fix694 document authority(__chronicleDocumentStoryKey)で解決する。
+           authority 無し document では**控えない** = 既存の fail-closed に合流し破壊的変更も行わない。
+           退避先キー名・退避形式・退避タイミング・件数 trim は 1 バイトも変えていない。
+         kill: localStorage v292Dfix783Off='1' → 旧共有ポインタ挙動(fix783 と共通の kill)。 */
+      var key = null, tag = null;
+      var _f784Off = false; try { _f784Off = (localStorage.getItem('v292Dfix783Off') === '1'); } catch(e){}
+      if (!_f784Off){
+        var _dk = null; try { _dk = window.__chronicleDocumentStoryKey; } catch(e){}
+        if (typeof _dk !== 'string' || !_dk) return false;   /* ■fix784: 控えない → fail-closed(本文も書換えない) */
+        key = _dk;
+        /* tag は key と**同じ story** から導く。形(<slot-id> または 'default')は従来と 1 バイト同じ。 */
+        tag = (_dk.indexOf('chr6_slot_') === 0) ? _dk.slice(10) : 'default';
+      } else {
+        var slot = JSON.parse(localStorage.getItem('chr6_active_slot') || '""');
+        key = (slot && slot !== 'default') ? ('chr6_slot_' + slot) : 'chr6';
+        tag = (slot && slot !== 'default') ? slot : 'default';
+      }
       var blob = localStorage.getItem(key);
       if (blob) localStorage.setItem('chr6_bk_fix458_' + tag + '_' + Date.now(), blob);
       backedUp = true;

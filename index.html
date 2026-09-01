@@ -54,7 +54,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260901-fix783';
+  var BUILT = '20260901-fix784';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -569,7 +569,19 @@ const S = {
        bootLoadActiveSlot(fix205)が後からスロットへ差し替える非対称だった。その間の
        一瞬「別の物語がメモリに載った状態」で保存が走るとアクティブスロットを別物語で
        上書きする(2026-06-06のスロットa消失事故の構造窓)。初手から正しいスロットを読む。 */
-    const d = SS.get(window.__chr6Key ? window.__chr6Key() : KEY);
+    /* ■fix784(2026-09-01) MULTI_TAB Tier3: S.load() の read authority 統一
+       真因: 保存先は fix694 の __chr6WriteKey()(= __chronicleDocumentStoryKey ・ document scoped)で
+         固定されているのに、**読みだけが共有ポインタ __chr6Key()(= chr6_active_slot ・全タブで 1 個)**
+         だった。別タブが物語を開いた瞬間にこのタブの G.init() が走ると
+         **相手の story をメモリへ載せてしまう**(実測: ct_multitab_repro R0-4 / readとwriteの非対称)。
+       対処: 読みも fix694 document authority を第一経路にする(= save と同じ解決)。
+         authority 無し時の fallback は従来どおり(index.html では fix694 が home へ
+         replace するため実質到達しない)。読む中身・代入先・戻り値は 1 バイトも変えない。
+       kill: localStorage v292Dfix783Off='1' → 旧 __chr6Key() 読みへ戻る(fix783 と共通の kill)。 */
+    var __rk = null;
+    try { if (localStorage.getItem('v292Dfix783Off') !== '1'){ var __dk = window.__chronicleDocumentStoryKey; if (typeof __dk === 'string' && __dk) __rk = __dk; } } catch (e) {}
+    if (!__rk) __rk = (window.__chr6Key ? window.__chr6Key() : KEY);
+    const d = SS.get(__rk);
     if (!d) return false;
     Object.assign(this.cfg, d.cfg || {});
     Object.assign(this.cast, d.cast || {});
@@ -3371,7 +3383,7 @@ G.init();
     <script src="v292Dfix73-card-dedup.js?cb=v292Dfix200"></script>
     <script src="v292Dfix70b-order-convsays.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix75-history-dedup.js?cb=v292Dfix75"></script>
-<script src="v292Dfix76-human-foundation.js?cb=v292Dfix76b"></script>  <script src="v292Dfix77-state-memory.js?cb=20260829-fix748"></script>
+<script src="v292Dfix76-human-foundation.js?cb=v292Dfix76b"></script>  <script src="v292Dfix77-state-memory.js?cb=20260901-fix784"></script>
   <script src="v292Dfix78-tag-case-normalize.js?cb=v292Dfix78"></script>
   <script src="v292Dfix79-momentum-anchor.js?cb=v292Dfix79"></script>
   <script src="v292Dfix80-gen-gate-retry.js?cb=v292Dfix504"></script>
@@ -3414,7 +3426,7 @@ G.init();
 <script src="v292Dfix270-topbar-ui.js?cb=v292Dfix270"></script>
 <script src="v292Dfix274-build-flag-guard.js?cb=v292Dfix274"></script>
 <script src="v292Dfix275-settings-tabs.js?cb=v292Dfix275"></script>
-<script src="v292Dfix277-quasi-pack.js?cb=20260901-fix783"></script>
+<script src="v292Dfix277-quasi-pack.js?cb=20260901-fix784"></script>
 <script src="v292Dfix288-tooltips.js?cb=v292Dfix288"></script>
 <script src="v292Dfix290-mobile.js?cb=v292Dfix290"></script>
 <script src="v292Dfix291-saveexport.js?cb=v292Dfix721"></script>
@@ -3514,7 +3526,7 @@ G.init();
 <script src="v292Dfix405-state-freshness.js?cb=v292Dfix739"></script>
 <script src="v292Dfix406-automode.js?cb=v292Dfix417d"></script>
 <script src="v292Dfix407-load-noconfirm.js?cb=v292Dfix407"></script>
-<script src="v292Dfix409-handle-merge.js?cb=20260829-fix748"></script>
+<script src="v292Dfix409-handle-merge.js?cb=20260901-fix784"></script>
 <script src="v292Dfix414-constraint-engine.js?cb=v292Dfix428"></script>
 <!-- v292Dfix77X(R118F/D1): 明示的な傷の解除 傷解消="部位"。既定OFF(v292Dfix77XClear='1'で有効)。OFF時は契約文言もparse分岐も出ない=byte-inert。書込みはfix77のguarded commitのみ。 -->
 <script src="v292Dfix77X-clear.js?cb=v292Dfix77X1"></script>
@@ -3548,13 +3560,13 @@ G.init();
 <script src="v292Dfix443-drama-rescue.js?cb=v292Dfix443"></script>
 <script src="v292Dfix483-beat-director.js?cb=v292Dfix483"></script>
 <script src="v292Dfix444-world-law.js?cb=20260829-fix748"></script>
-<script src="v292Dfix445-handle-lock.js?cb=20260829-fix748"></script>
+<script src="v292Dfix445-handle-lock.js?cb=20260901-fix784"></script>
 <script src="v292Dfix446-fill-robust.js?cb=v292Dfix446"></script>
 <script src="v292Dfix447-json-force.js?cb=v292Dfix447"></script>
 <script src="v292Dfix448-genloading.js?cb=v292Dfix448"></script>
 <script src="v292Dfix453-src-coalesce.js?cb=v292Dfix453"></script>
 <script src="v292Dfix454-dash.js?cb=v292Dfix457"></script>
-<script src="v292Dfix458-dash-post.js?cb=v292Dfix763"></script>
+<script src="v292Dfix458-dash-post.js?cb=20260901-fix784"></script>
 <script src="v292Dfix459-sys-v2.js?cb=v292Dfix737"></script>
 <script src="v292Dfix460-slotgrid.js?cb=v292Dfix460"></script>
 <script src="v292Dfix461-appearance-en.js?cb=v292Dfix740"></script>
@@ -3565,7 +3577,7 @@ G.init();
 <script src="v292Dfix466-dup-say.js?cb=v292Dfix466"></script>
 <script src="v292Dfix467-readability-rules.js?cb=v292Dfix468"></script>
 <script src="v292Dfix468-gen-timing.js?cb=v292Dfix468"></script>
-<script src="v292Dfix469-speaker-score.js?cb=20260829-fix748"></script>
+<script src="v292Dfix469-speaker-score.js?cb=20260901-fix784"></script>
   <script src="v292Dfix680-bare-speaker-provenance.js?cb=20260829-fix748"></script>
   <script src="v292Dfix681-player-say-claim.js?cb=20260829-fix748"></script>
 <!-- fix606: 話者帰属の来歴アナライザ。**読み取り専用**（whoもDOMもlocalStorageも触らない）。
@@ -3600,7 +3612,7 @@ G.init();
 <script src="v292Dfix488-nonhuman-detail.js?cb=v292Dfix488b"></script>
 <script src="v292Dfix456-name-space.js?cb=v292Dfix456"></script>
 <script src="v292Dfix482-output-quality.js?cb=v292Dfix503"></script>
-<script src="v292Dfix489-convlog-gate.js?cb=20260829-fix748"></script>
+<script src="v292Dfix489-convlog-gate.js?cb=20260901-fix784"></script>
 <script src="v292Dfix490-slot-write-guard.js?cb=v292Dfix565"></script>
 <script src="v292Dfix492-genfail-toast.js?cb=v292Dfix492"></script>
 <script src="v292Dfix501-legacy-appearance-probe.js?cb=v292Dfix501"></script>

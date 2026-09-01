@@ -538,7 +538,22 @@
       if (!n) return 0;
       if (!_bk538){
         try {
-          var k = (typeof window.__chr6Key === 'function') ? window.__chr6Key() : 'chr6';
+          /* ■fix784(2026-09-01) MULTI_TAB Tier3: backup provenance(控えの出所)
+             真因: 控えの**元キー**が共有ポインタ chr6_active_slot(= __chr6Key()) 由来だったため、
+               別タブが物語を開いた瞬間に **chr6_bk_fix538_<ts> の控えとして別 story の本体が保存される**。
+               控え先キー名も形式もタイミングも正しいのに中身だけが他人の物語になる(= 出所誤り)。
+               事故後の復元先として使えないだけでなく、別 story の本体を控え枠に居座らせる。
+             対処: 控えの元キーだけを fix694 document authority(__chronicleDocumentStoryKey)で解決する。
+               authority 無し document では**控えない** = 既存の fail-closed に合流し破壊的変更も行わない。
+               退避先キー名・退避形式・退避タイミング・件数 trim は 1 バイトも変えていない。
+             kill: localStorage v292Dfix783Off='1' → 旧共有ポインタ挙動(fix783 と共通の kill)。 */
+          var k = null;
+          if (!f783Off()){
+            try { var _dk = window.__chronicleDocumentStoryKey; if (typeof _dk === 'string' && _dk) k = _dk; } catch(e){}
+            if (!k) return 0;                            /* ■fix784: 控えない → 既存 fail-closed(話者正名化も行わない) */
+          } else {
+            k = (typeof window.__chr6Key === 'function') ? window.__chr6Key() : 'chr6';
+          }
           var blob = localStorage.getItem(k);
           if (blob) localStorage.setItem('chr6_bk_fix538_' + Date.now(), JSON.stringify({ key: k, blob: blob, ts: Date.now() }));
           /* 新しい順3件だけ残す */

@@ -102,6 +102,20 @@
           if (a && a !== 'default') return 'chr6_slot_' + a; } catch(e){}
     return 'chr6';
   }
+  /* ■fix784(2026-09-01) MULTI_TAB Tier3: backup provenance(控えの出所)専用のキー解決。
+     真因: 控えの元キーが共有ポインタ chr6_active_slot 由来なので、別タブが物語を開いた
+       瞬間に **chr6_bk_fix489_<key> の控えとして別 story の本体が保存される**(出所誤り)。
+     対処: 控えの元キーだけを fix694 document authority で解決する。authority 無し = null =
+       控えない → 既存の fail-closed(控え不能なら破壊的変更を中止)にそのまま合流する。
+       _activeStoreKey()/_slotGate() は**意図的に不触**。あれは「物語が切り替わったか」の
+       検知器(3 重検知の 1 つ)であって控えの出所ではなく、別タブで発火しても安全側
+       (state reset)に倒れる——Tier3 の範囲外として DEFER 記録。
+     kill: localStorage v292Dfix783Off='1' → 旧挙動(_activeStoreKey() そのもの)へ戻る。 */
+  function _bk784Key(){
+    try { if (localStorage.getItem('v292Dfix783Off') === '1') return _activeStoreKey(); } catch(e){}
+    try { var dk = window.__chronicleDocumentStoryKey; if (typeof dk === 'string' && dk) return dk; } catch(e){}
+    return null;
+  }
   var _lastSlotKey = null, _lastTurnsRef = null, _lastT0 = null;
   function _t0fp(S){ try { var t0 = S.turns[0]; return String((t0 && (t0.narrative || t0.text || '')) || '').slice(0, 80); } catch(e){ return ''; } }
   function _slotGate(S){
@@ -140,7 +154,8 @@
         // fix495(B3): 控えはアクティブスロットの実キーから・スロット別キーへ。書けなければ中止(fail-closed)。
         var _bkOk = backedUp;
         if (!_bkOk){
-          try { var _ak = _activeStoreKey(); localStorage.setItem('chr6_bk_fix489_' + _ak, localStorage.getItem(_ak) || ''); _bkOk = true; backedUp = true; } catch(e){ _stats.backupFail++; }
+          /* ■fix784: 控えの元キーは document authority。authority 無し = 控えない → _bkOk=false のまま fail-closed(drop中止)。 */
+          try { var _ak = _bk784Key(); if (_ak){ localStorage.setItem('chr6_bk_fix489_' + _ak, localStorage.getItem(_ak) || ''); _bkOk = true; backedUp = true; } } catch(e){ _stats.backupFail++; }
         }
         if (_bkOk){
           S.turns[ti]._convSays = p.arr;
