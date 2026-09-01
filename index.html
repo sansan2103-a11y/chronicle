@@ -54,7 +54,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260901-fix785';
+  var BUILT = '20260901-fix786';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3672,7 +3672,7 @@ G.init();
      OFF=v292Dfix651StreamGuardOff / v292Dfix651ZeroTurnGuardOff / v292Dfix651SlotBackupGuardOff(Bはfix228内) -->
 <script src="v292Dfix651-guards.js?cb=v292Dfix680"></script>
 <!-- v292Dfix670: Memory Engine v0.3 / Phase3A-1 Shadow. UI._renderHooks push only. opt-in=v292Dfix670On / OFF=v292Dfix670Off -->
-<script src="v292Dfix670-memory-engine.js?cb=20260901-fix785"></script>
+<script src="v292Dfix670-memory-engine.js?cb=20260901-fix786"></script>
 <!-- R118 Phase1: capability constraint telemetry. read-only / memory only. OFF=v292Dfix740Off verbose=chronDiagVerbose -->
 <script src="v292Dfix740-cap-telemetry.js?cb=v292Dfix740"></script>
 <!-- R118 Phase2-S: severity consequence lane. fix414 hook 経由。OFF=v292Dfix741Off / feature=v292Dfix414SeverityS (default OFF) -->

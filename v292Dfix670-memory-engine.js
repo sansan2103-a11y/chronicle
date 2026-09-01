@@ -101,7 +101,7 @@
   var TAG = '[v292Dfix670]';
   var BUILD = '20260901-fix785';
   var SCHEMA_VERSION = 4;   /* ★v0.3: family / speechAct / knownTo / epistemic が増えた */
-  var EXTRACTOR_VERSION = 'me-0.3.0';      /* ★抽出規則も鍵の作り方も変わったので上げる */
+  var EXTRACTOR_VERSION = 'me-0.3.1';   /* ★fix786: 台帳候補の 4C 解決（identity が変わるので版を上げる） */      /* ★抽出規則も鍵の作り方も変わったので上げる */
   var DB_NAME = 'chr6mem';                 /* ★chr6av(アバター)には相乗りしない */
   var DB_VER = 3;                          /* ★v0.3 で store も index も増やさない（既存の by_slot_type で足りる） */
   var OFF_KEY = 'v292Dfix670Off';          /* 緊急停止（ON より優先） */
@@ -597,9 +597,26 @@
         }
       }
     } catch (e) {}
+    /* ■fix786(2026-09-01 / 3A-1 実測FAIL根治): fix307 ロスターは **配列**（[{handle, appr, ...}]）である。
+       真因（QA story 155T 実測）: ここが Object.keys(array) を回していたため
+         ・ロスター既知（漁師 / 娘 / 辻井のお婆さん / 老婆 / 青銅の心臓 …）が **1件も known にならず**、
+           「漁師」は fix640 の候補 id へ落ちて label 由来の分裂を起こしていた
+         ・代わりに "0".."6" という**添字が entity 名として map に入っていた**（実測 7件）
+       対処: 配列形（entry.handle / entry.name）と旧オブジェクト形の両方を受ける。
+         id の扱い・entityId の形（char:npc:<表示名>）・known 判定は従来どおりで変えない。
+       kill: v292Dfix786Off='1' → 従来（オブジェクト前提）へ戻る。 */
     try {
       var r = JSON.parse(lsg('v292Dfix307Roster_slot_' + slotId) || 'null');
-      if (r && typeof r === 'object') Object.keys(r).forEach(function (k) {
+      var off786r = (lsg('v292Dfix786Off') === '1');
+      if (!off786r && Array.isArray(r)) {
+        r.forEach(function (e) {
+          if (!e || typeof e !== 'object') return;
+          var rn = nfc(e.handle || e.name || '');
+          if (!rn) return;
+          var hasId2 = !!e.id;
+          addName(map, rn, entRef(hasId2 ? ('char:' + e.id) : ('char:npc:' + rn), 'character', 'known', 'roster'), hasId2);
+        });
+      } else if (r && typeof r === 'object') Object.keys(r).forEach(function (k) {
         if (!k) return;
         /* ★値が 1 などの既存形式なら明示 id は無い。cast の id を上書きしない。 */
         var hasId = !!(r[k] && typeof r[k] === 'object' && r[k].id);
@@ -607,16 +624,59 @@
         addName(map, k, entRef(rid, 'character', 'known', 'roster'), hasId);
       });
     } catch (e) {}
-    /* ★fix640 台帳は「既知候補」。正規 Entity へは昇格させない（status='candidate'）。 */
+    /* ★fix640 台帳は「既知候補」。正規 Entity へは昇格させない（status='candidate'）。
+       ■fix786(2026-09-01 / 3A-1 実測FAIL根治): 台帳キーを **verbatim で実体化しない**。
+         真因（QA story 155T 実測）: `char_candidate:<台帳キー>` をそのまま作っていたため
+           ・「漁師の声」が既知 roster「漁師」と別 entity になり memory が label 由来で分裂
+             （実測: 漁師の声に3記録 / 漁師に1記録）
+           ・「彼の声」「主人公の声」のような**代名詞由来の句まで entity 候補**として実体化
+             （GPT 裁定: 代名詞は resolve しない・未知名詞句を new entity 化しない）
+         対処: cast/roster を入れ終えた map に対し、台帳キーごとに既存規則だけで判定する。
+           ① PRONOUN / GENERIC そのもの      → 実体化しない
+           ② 既に map にある名前              → 出所を足すだけ（新 id を作らない）
+           ③ 「Xの声」で base が既知へ解決     → その既知 entity の**別名**として足す
+              （base が代名詞/総称、または解決不能なら実体化しない）
+           ④ それ以外                         → 従来どおり char_candidate:<key>
+         ★新しい語彙は 1 語も足していない（PRONOUN / GENERIC / VOICE_OF / fold は v0.3 の既存規則）。
+         ★誤結合より未解決を優先する向きだけに倒す（新しい同一視は作らない）。
+       kill: localStorage v292Dfix786Off==='1' → 従来（verbatim 実体化）へ戻る。 */
     try {
       var L = JSON.parse(lsg('v292Dfix640Evid_slot_' + slotId) || 'null');
       if (L && L.v === 1 && L.entries && typeof L.entries === 'object') {
+        var f786 = (lsg('v292Dfix786Off') !== '1');
         Object.keys(L.entries).forEach(function (k) {
           var e = L.entries[k]; if (!e || !k) return;
           var nk = nfc(k); if (!nk) return;
           var ct = (e.candidateType === 'role-label') ? 'role' : 'character';
+          if (f786) {
+            if (PRONOUN.test(nk) || GENERIC.test(nk)) return;                    /* ① */
+            var cur786 = map[nk];
+            if (cur786) {                                                        /* ② */
+              addName(map, nk, entRef(cur786.entityId, cur786.entityType, cur786.status, 'fix640'), false);
+              return;
+            }
+            var vm786 = VOICE_OF.exec(nk);
+            if (vm786) {                                                         /* ③ */
+              var base786 = nfc(vm786[1]);
+              if (!base786 || PRONOUN.test(base786) || GENERIC.test(base786)) return;
+              var be786 = map[base786] || null;
+              if (!be786) {
+                var bk786 = foldStr(base786), ks786 = Object.keys(map), j786, hit786 = null;
+                for (j786 = 0; j786 < ks786.length; j786++) {
+                  if (foldStr(ks786[j786]) !== bk786) continue;
+                  if (hit786 && map[hit786].entityId !== map[ks786[j786]].entityId) { hit786 = null; break; }
+                  hit786 = ks786[j786];
+                }
+                be786 = hit786 ? map[hit786] : null;
+              }
+              if (be786 && be786.entityId) {
+                addName(map, nk, entRef(be786.entityId, be786.entityType, be786.status, 'fix640.voice-of'), false);
+              }
+              return;                                    /* base 未解決 → 実体化しない（安全側） */
+            }
+          }
           /* ★台帳は明示 id を持たない。既知があれば出所を足すだけで上書きしない。 */
-          addName(map, nk, entRef('char_candidate:' + nk, ct, 'candidate', 'fix640'), false);
+          addName(map, nk, entRef('char_candidate:' + nk, ct, 'candidate', 'fix640'), false);   /* ④ */
         });
       }
     } catch (e) {}
