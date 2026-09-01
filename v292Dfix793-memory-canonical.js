@@ -282,7 +282,15 @@
     var edges = [];
     for (i = 0; i < relations.length; i++) {
       var rel = relations[i];
-      var fromId = 'cmem:' + rel.from, toId = 'cmem:' + rel.to;
+      /* ★fix793-A(3B-1 canary 実測で検出): fix791 が chr6rel へ保存する実レコードの
+         endpoint フィールドは **fromLineageId / toLineageId**。`from` / `to` だけを
+         読んでいたため live で edges が 0 になっていた（QA 成果物では正規化済みの
+         `from`/`to` を渡していたので fixture では露見しなかった）。
+         **両方の綴りを受ける**。どちらも無ければその relation は edge にしない。 */
+      var relFrom = (rel.fromLineageId != null) ? rel.fromLineageId : rel.from;
+      var relTo   = (rel.toLineageId   != null) ? rel.toLineageId   : rel.to;
+      if (relFrom == null || relTo == null) continue;
+      var fromId = 'cmem:' + relFrom, toId = 'cmem:' + relTo;
       if (!byMemoryId[fromId] || !byMemoryId[toId]) continue;   /* endpoint 不在なら作らない */
       edges.push({ relationId: rel.relationId, kind: rel.kind, from: fromId, to: toId,
                    basis: rel.basis, resolvesTruth: false, winner: null, knownToUnion: false });
