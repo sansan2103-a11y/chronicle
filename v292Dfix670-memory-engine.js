@@ -101,7 +101,7 @@
   var TAG = '[v292Dfix670]';
   var BUILD = '20260901-fix785';
   var SCHEMA_VERSION = 4;   /* ★v0.3: family / speechAct / knownTo / epistemic が増えた */
-  var EXTRACTOR_VERSION = 'me-0.3.1';   /* ★fix786: 台帳候補の 4C 解決（identity が変わるので版を上げる） */      /* ★抽出規則も鍵の作り方も変わったので上げる */
+  var EXTRACTOR_VERSION = 'me-0.4.0';   /* ★fix787: 構造シグネチャ（抽出規則が変わるので版を上げる） */   /* ★fix786: 台帳候補の 4C 解決（identity が変わるので版を上げる） */      /* ★抽出規則も鍵の作り方も変わったので上げる */
   var DB_NAME = 'chr6mem';                 /* ★chr6av(アバター)には相乗りしない */
   var DB_VER = 3;                          /* ★v0.3 で store も index も増やさない（既存の by_slot_type で足りる） */
   var OFF_KEY = 'v292Dfix670Off';          /* 緊急停止（ON より優先） */
@@ -469,6 +469,10 @@
     relation_broken: 'RELATION_EVENT', speech_relation_declaration: 'RELATION_EVENT',
     contract_made: 'COMMITMENT_EVENT', speech_commitment: 'COMMITMENT_EVENT',
     disclosure_made: 'DISCLOSURE_CLAIM_EVENT', speech_disclosure: 'DISCLOSURE_CLAIM_EVENT',
+    /* ■fix787(v0.4) 構造シグネチャの type。★family は既存 9 種のまま（増やしていない）。 */
+    speech_prohibition: 'COMMITMENT_EVENT',
+    speech_past_disclosure: 'DISCLOSURE_CLAIM_EVENT',
+    speech_negation_claim: 'DISCLOSURE_CLAIM_EVENT',
     discovery_made: 'DISCOVERY_EVENT', identity_confirmation: 'DISCOVERY_EVENT',
     identity_unresolved: 'UNRESOLVED_EVENT', time_loop_detected: 'UNRESOLVED_EVENT',
     terrain_changed: 'LOCATION_STATE_EVENT', seal_state_changed: 'LOCATION_STATE_EVENT',
@@ -1036,6 +1040,89 @@
       re: /((仲間|味方|敵|家族|恩人|師匠|弟子|相棒)(だ|です|だよ|になる|になろう|にはならない)|絶交だ|縁を切る|二度と(会わない|顔を見せるな))/,
       cut: null, gate: 'neghypq' }
   ];
+  /* ==================================================================
+   * ■fix787 (v0.4) 構造シグネチャ — Fable5 裁定「C系 hybrid」
+   *   v0.3 の SPEECH_ACTS は**語彙マーカー**（約束する/実は/白状する…）で発話行為を
+   *   見つけていた。QA story 155T の実測で、say カード 404 枚に対しマーカー一致は
+   *   **1 枚だけ**だった（実台詞が方言・間接表現のため構造的に当たらない）。
+   *   マーカー語彙を足す方向（A案）は Gold Set 過適合になるため REJECT され、
+   *   **文法構造 + 役割スロット**で検出する方式が採用された。
+   *
+   *   S1 PROHIBITION      否定命令の文法形（〜てはならない / 動詞終止形+な / 〜ないでくれ）
+   *   S2 PAST_DISCLOSURE  一人称主体 + 過去への時間距離 + 完了・経験 の**共起**（3スロット必須）
+   *   S3 NEGATION_CLAIM   体言 + コピュラ否定（★動詞否定「知らない」は拾わない）
+   *
+   *   ★出力は**必ず candidate**。3A-1 では event へ昇格させない（誤検出の影響半径を
+   *     proposal 段に閉じ込めるため。昇格判断は 3A-2 の照合の責務）。
+   *   ★新しい entity を作らない・knownTo は既存規則（speaker + 明示 addressee）のまま。
+   *   ★claim を WORLD_FACT へ昇格しない（Dialogue Truth 原則は v0.3 のまま）。
+   *   ★1 say カードにつき各シグネチャ最大 1 件（発話 1 つ＝その種の行為 1 つ）。
+   *   kill: localStorage v292Dfix787Off==='1' → シグネチャ検出を丸ごと停止（v0.3.1 と同じ出力）。
+   * ================================================================ */
+  /* --- S1: 否定命令の文法形 --- */
+  /* 「〜てはならない/いけない/だめ」。★「なくてはならない」は義務であって禁止ではないので除外。 */
+  /* ★禁止の指示は非過去。「書いてはいけなかった」は過去の評価であって指示ではないので外す。 */
+  var SG1_PAST  = /(?:て|で)は(?:なら|いけ|だめ|ダメ)[^。！？!?…]{0,3}(?:なかった|んかった|でした)/;
+  var SG1_TEWA  = /(?<!な(?:く|くて))(?:て|で)は(?:なら|いけ|だめ|ダメ)/;
+  var SG1_CHA   = /(?:ちゃ|じゃ)(?:なら|いけ|だめ|ダメ)/;              /* 口語形「〜ちゃならねえ」 */
+  /* 動詞終止形 + 禁止の終助詞「な」。動詞終止形の語尾かなに限定して文末で見る。 */
+  var SG1_NA    = /[うくぐすつぬぶむる]な(?:よ)?(?=[。！？!?…」』\s]|$)/;
+  /* 「だろうな/そうだな/ようだな」等は詠嘆であって禁止ではない。 */
+  var SG1_NA_EX = /(?:だろ|でしょ|そう|よう|ろう|らしい|だ|か|の|わ|も)な(?:よ)?(?=[。！？!?…」』\s]|$)/;
+  var SG1_NAIDE = /ないで(?:くれ|ください|おくれ)/;                     /* 否定て形 + 依頼 */
+  function sig1Prohibition(s) {
+    if (SG1_PAST.test(s)) return false;
+    if (SG1_TEWA.test(s) || SG1_CHA.test(s) || SG1_NAIDE.test(s)) return true;
+    return SG1_NA.test(s) && !SG1_NA_EX.test(s);
+  }
+  /* --- S2: 一人称 / 時間距離 / 完了・経験 の 3 スロット共起 --- */
+  var SG2_SELF = /(?:^|[^ぁ-んァ-ヶ一-龠])(?:私|わたし|わたくし|あたし|わし|俺|おれ|オレ|僕|ぼく|自分)(?=[はもがのにをへと、\s]|$)/;
+  var SG2_DIST = /(?:(?:[0-9０-９]+|[一二三四五六七八九十百千]+)\s*年(?:ほど|ばかり|くらい|ぐらい|も)?(?:前|昔)|あの(?:日|夜|晩|時|とき|頃|ころ)|昔|かつて|以前|当時)/;
+  var SG2_PAST = /(?:たことがある|たことが|ていた|でいた|だった|(?:まし|でし)た|[たっだ](?=[。！？!?…」』、\s]|$))/;
+  function sig2PastDisclosure(s) {          /* ★単独の「昔」も単独の過去形も発火させない */
+    return SG2_SELF.test(s) && SG2_DIST.test(s) && SG2_PAST.test(s);
+  }
+  /* --- S3: 体言 + コピュラ否定 --- */
+  /* 「XはYではない/じゃない」。★「知らない」「行かない」等の動詞否定は では/じゃ を伴わないので入らない。 */
+  /* コピュラと否定の間の読点・空白は「間（ま）」であって構造の切れ目ではない
+     （実データ: 「おとう…さん…では、ない」）。 */
+  var SG3_COP = /[ぁ-んァ-ヶ一-龠々ー]{1,}(?:では|じゃ)[、,\s]*(?:ない|ねえ|ねぇ|ありません|なかった|なかろう)/;
+  /* 直前が指示詞（そう/こう/どう/そっち…/こんな…）、または緩衝・準体（わけ/はず/もの/
+     もん/つもり/べき/の）→ 体言否定ではないので落とす。
+     ★口語形（もん / こんなん / そっち）も同じ類。標準形だけ書くと実台詞で素通りする。 */
+  var SG3_EX  = /(?:そう|こう|どう|さよう|[そこあど]っち|[こそあど]んな(?:ん)?|わけ|はず|もの|もん|つもり|べき|の)(?:では|じゃ)[、,\s]*(?:ない|ねえ|ねぇ|ありません|なかった|なかろう)/;
+  /* 「行くんじゃない」「いいんじゃない」「したんじゃない」= 用言 + 準体助詞「ん」。
+     ★「おとうさんではない」「娘さんじゃない」の「さん」は用言語尾ではないので残す。 */
+  var SG3_NDA = /[ういくぐすつぬぶむるた]ん(?:じゃ|では)[、,\s]*(?:ない|ねえ|ねぇ)/;
+  function sig3NegationClaim(s) { return SG3_COP.test(s) && !SG3_EX.test(s) && !SG3_NDA.test(s); }
+
+  var SIGNATURES = [
+    { id: 'S1', kind: 'PROHIBITION', type: 'speech_prohibition', epistemic: 'COMMITMENT',
+      test: sig1Prohibition,
+      pick: /(?:て|で)は(?:なら|いけ|だめ|ダメ)|(?:ちゃ|じゃ)(?:なら|いけ|だめ|ダメ)|ないで(?:くれ|ください|おくれ)|[うくぐすつぬぶむる]な(?:よ)?(?=[。！？!?…」』\s]|$)/ },
+    { id: 'S2', kind: 'PAST_DISCLOSURE', type: 'speech_past_disclosure', epistemic: 'DISCLOSURE',
+      test: sig2PastDisclosure, pick: SG2_DIST },
+    { id: 'S3', kind: 'NEGATION_CLAIM', type: 'speech_negation_claim', epistemic: 'DIALOGUE_CLAIM',
+      test: sig3NegationClaim, pick: SG3_COP }
+  ];
+  /* ★「…」は文末ではなく間（ま）。v0.3 の文分割は「…」も区切りにするため
+     「おとう…さん…ではない」が 3 断片になり構造が壊れる。シグネチャ判定では
+     句点・感嘆・疑問だけで切り、スロット判定は「…」を除いた probe に対して行う。 */
+  function sigSentences(text) {
+    return String(text || '').replace(/<[^<>]*>/g, ' ').replace(/[「」『』]/g, ' ')
+      .split(/(?<=[。！？!?])/)
+      .map(function (x) { return x.replace(/[\s\u3000]+/g, ' ').trim(); })
+      .filter(function (x) { return !!x; });
+  }
+  function sigProbe(sentence) { return String(sentence || '').replace(/[…‥]+/g, ''); }
+  function sigProposition(sentence) {
+    var pick = String(sentence || '').replace(/[\s\u3000]+/g, ' ')
+      .replace(/^[\s、,]+/, '').replace(/[。、，,！？!?\s]+$/, '').trim();
+    var truncated = false;
+    if (pick.length > PROP_MAX) { pick = pick.slice(0, PROP_MAX) + '…'; truncated = true; }
+    return { text: pick, truncated: truncated };
+  }
+
   /* 呼びかけ（明示 addressee）。「Xさん、」「X、」の形だけ。推測はしない。 */
   var VOCATIVE = /^[「『\s\u3000]*([^\s\u3000、,。！？!?「」『』]{1,16}?)(さん|様|さま|殿|どの|くん|君|ちゃん)?[、,]/;
 
@@ -1111,9 +1198,25 @@
        G.neg の裸の「ず」は「必ず」を否定と誤認するため、発話では NEG_SPEECH を使う。
        他（仮定・疑問・比喩・幻・伝聞・推量・受益）は地の文と同じ門を通す。 */
   var NEG_SPEECH = /(ない|なかった|ません|ぬ(?![か-ん])|わけではない|ものではない)/;
+  /* ■fix787: 「〜してはならない」は G.hyp の「なら」に当たってしまう（禁止形が仮定と
+     読まれる）。仮定の「なら(ば)」と禁止・不可能の「ならない/ならぬ」を構造で分ける。 */
+  var HYP_SIG = /(もし|たら|なら(?!ない|ぬ|ず|ん|ねえ|ねぇ|ね[。！？!?…\s]|ね$)|ならば|かもしれ|だろうか|かどうか|仮に|とすれば)/;
   function speechGateBlocked(clause, mode) {
     var s = String(clause || '');
     if (mode === 'hypq') return G.hyp.test(s) ? 'hyp' : (G.q.test(s) ? 'q' : null);
+    /* ■fix787 'sig': 否定そのもの（禁止・体言否定）が対象なので neg は掛けない。
+       それ以外（仮定・疑問・比喩・幻・思い込み・伝聞・推量・受益）は地の文と同じ門を通す。 */
+    if (mode === 'sig') {
+      if (HYP_SIG.test(s)) return 'hyp';
+      if (G.q.test(s)) return 'q';
+      if (G.metaphor.test(s)) return 'metaphor';
+      if (G.illusion.test(s)) return 'illusion';
+      if (G.belief.test(s)) return 'belief';
+      if (G.reported.test(s)) return 'reported';
+      if (G.uncertain.test(s)) return 'uncertain';
+      if (G.voice.test(s)) return 'voice';
+      return null;
+    }
     if (NEG_SPEECH.test(s)) return 'neg';
     if (G.hyp.test(s)) return 'hyp';
     if (G.q.test(s)) return 'q';
@@ -1128,8 +1231,10 @@
   }
   function extractSpeechActs(turn, idx, kn) {
     var out = [], cards = sayCards(turn), i, t, c, sp, prop, addr, act, clause, rec, ok;
+    var sigOn = (lsg('v292Dfix787Off') !== '1');          /* ■fix787 kill */
     for (i = 0; i < cards.length; i++) {
       c = cards[i];
+      var seen = {};
       for (t = 0; t < SPEECH_ACTS.length; t++) {
         act = SPEECH_ACTS[t];
         if (!act.re.test(c.say)) continue;                       /* マーカーが無い発話は保存しない */
@@ -1177,6 +1282,60 @@
           prov: { kind: 'say_card', authority: 4, confidence: ok ? 0.9 : 0.5, evidence: null }
         };
         out.push(rec);
+        seen[sayNorm(prop.clause)] = 1;                 /* ■fix787: 同じ節の二重計上を防ぐ */
+      }
+      /* ==== ■fix787 構造シグネチャ pass（★全て candidate） ==== */
+      if (sigOn) {
+        var body2 = c.say, vm3 = VOCATIVE.exec(c.say);
+        addr = null;
+        if (vm3) { addr = addresseesOf(c.say, kn, null); if (addr.length) body2 = c.say.slice(vm3[0].length); }
+        var sents = sigSentences(body2), g, si, sig, hitS, probe;
+        for (g = 0; g < SIGNATURES.length; g++) {
+          sig = SIGNATURES[g]; hitS = null;
+          for (si = 0; si < sents.length; si++) {        /* ★1カード1シグネチャ 1件だけ */
+            probe = sigProbe(sents[si]);
+            if (!sig.test(probe)) continue;
+            if (speechGateBlocked(probe, 'sig')) continue;
+            if (seen[sayNorm(sents[si])]) continue;      /* v0.3 マーカーが既に拾った節 */
+            hitS = sents[si]; break;
+          }
+          if (hitS == null) continue;
+          sp = speakerOf(c, kn);
+          ok = !!(sp && sp.entityId);
+          var addr2 = ok ? addresseesOf(c.say, kn, sp.entityId) : (addr || addresseesOf(c.say, kn, null));
+          var prop2 = sigProposition(hitS);
+          out.push({
+            type: sig.type, category: 'speech',
+            family: ok ? familyOf(sig.type) : 'UNRESOLVED_EVENT',
+            sourceTurnIndex: idx, spanOrder: 300000 + i * 20 + g,
+            sourceMode: 'DIALOGUE', epistemic: sig.epistemic,
+            roleMode: 'speech-act',
+            actor: null, subject: null, target: null,
+            subjectId: ok ? sp.entityId : null,
+            objectId: addr2.length ? addr2[0] : null,
+            /* ★裁定: シグネチャ由来は 3A-1 では**常に candidate**（event 昇格は 3A-2） */
+            recordKind: 'candidate',
+            candidateReason: ok ? 'signature-only' : 'speaker-unresolved',
+            argumentResolution: ok ? 'complete' : 'partial',
+            missingArguments: ok ? [] : [{ role: 'speaker', entityType: 'character',
+                                           reason: (sp && sp.reason) || 'no-structured-who' }],
+            personCandidates: null,
+            speechAct: {
+              kind: sig.kind, signature: sig.id,
+              speakerEntityId: ok ? sp.entityId : null,
+              speakerSource: ok ? sp.method : null,
+              addresseeEntityIds: addr2.slice(),
+              normalizedProposition: prop2.text,
+              propositionTruncated: !!prop2.truncated,
+              sourceTurn: idx, sourceMode: 'DIALOGUE', cardIndex: c.card
+            },
+            knownTo: (ok ? [sp.entityId] : []).concat(addr2),
+            audience: addr2.length ? 'EXPLICIT' : 'UNKNOWN',
+            worldFactPromotion: false,
+            prov: { kind: 'say_card', authority: 4, confidence: 0.5, evidence: null }
+          });
+          seen[sayNorm(hitS)] = 1;
+        }
       }
     }
     return out;
@@ -2043,6 +2202,11 @@
               fixFold: fixFold, fix197: fix197, foldStr: foldStr, foldSpanSafe: foldSpanSafe,
               foldUnique: foldUnique, canonAlias: canonAlias, resolveMention: resolveMention,
               SPEECH_ACTS: SPEECH_ACTS, sayCards: sayCards, sayNorm: sayNorm,
+              /* ---- ■fix787 v0.4 ---- */
+              SIGNATURES: SIGNATURES, sigSentences: sigSentences, sigProbe: sigProbe,
+              sigProposition: sigProposition, speechGateBlocked: speechGateBlocked,
+              sig1Prohibition: sig1Prohibition, sig2PastDisclosure: sig2PastDisclosure,
+              sig3NegationClaim: sig3NegationClaim, HYP_SIG: HYP_SIG,
               speakerOf: speakerOf, addresseesOf: addresseesOf,
               normalizeProposition: normalizeProposition, extractSpeechActs: extractSpeechActs,
               placeMentionAt: placeMentionAt, PROP_MAX: PROP_MAX, SAY_MAX: SAY_MAX,
