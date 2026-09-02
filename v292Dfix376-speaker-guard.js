@@ -15,6 +15,26 @@
 //   [3] 既存のタグ契約・3層判別器・fix200b後置修正はそのまま(最終保険が本fix)。
 //   起動6秒後に全ターン一括修正(過去分も直る)→以後2sポーリングで新ターンを監視。
 // OFF: localStorage v292Dfix376Off='1'
+// ---------------------------------------------------------------------
+// ★★fix799(2026-09-02) HISTORICAL CONVSAYS IMMUTABILITY
+//   GPT裁定 out/GPT_RULING_3B2_3T_FIX376_FIX798_20260902.md (b)。
+//   実測事故(CC_3B2_FIRST_WRITE_20260902.md §12.5 / turn7RootCause):
+//     story smrj0rvnuup の既存 turn index 7 の _convSays[2]/[4].who が
+//     「霧 涼太」→「藤堂 志乃」へ書き換わった。writer は本ファイル
+//     fixTurn() の c.who = others[0]、駆動は pass() の全ターン sweep、永続化は
+//     自己の S.saveC('fix376.pass')、発火は tick() の turns.length 変化検知。
+//   下の fix495(B6) cede は index.html の load 順(fix376 :3502 / fix469 :3580)に
+//   依存する arming race で素通りしうるため、**安全性の唯一の根拠にできない**
+//   (GPT: cede 再評価だけの修正は REJECT)。よって fix469 の fix730 HISTORICAL-IMMUTABILITY と
+//   **同じ意味の境界**を本 fix 自身が持つ:
+//     baseTurns = 物語 load 時点の S.turns.length を固定。i < baseTurns(凍結済み)は
+//     非 dry では**読みもしない・write 0**。dry は分類ログ(status().historicalWould)のみ。
+//     story/slot 切替で再固定(fix469 :771-780 / fix489 :121-130 と同型の 3 重検知)。
+//   fix469 は baseTurns を公開していない(closure 変数・輸出に getter 無し)ため同じ規則を
+//   独立に計算する—— fix489 がすでに同じ独立計算をしている先例に倣う。
+//   cede(fix495 B6) は残す。kill switch v292Dfix376Off は不変。
+//   観測口: window.__v292Dfix376x.status() = { baseTurns, historicalSkipped, rewritten,
+//   historicalWould, resets, off }(memory only ・ localStorage/save に一切書かない)。
 // =====================================================================
 (function(){
   'use strict';
@@ -30,6 +50,33 @@
     try{ if (window.S) return window.S; return (0,eval)('S'); }catch(e){ return null; }
   }
   function norm(s){ return String(s||'').replace(/[「」\s]/g,''); }
+
+  /* ---- ★fix799: historical boundary(fix469 :745/:751-780/:825-826 ・ fix489 :94/:100-130/:143 と同型) ---- */
+  var baseTurns = -1;                                   // load 時の S.turns.length(凍結境界)
+  var _f799 = { historicalSkipped: 0, rewritten: 0, historicalWould: 0, resets: 0 };  // memory only
+  function _activeStoreKey(){
+    try { var a = JSON.parse(localStorage.getItem('chr6_active_slot') || 'null');
+          if (a && a !== 'default') return 'chr6_slot_' + a; } catch(e){}
+    return 'chr6';
+  }
+  var _lastSlotKey = null, _lastTurnsRef = null, _lastT0 = null;
+  function _t0fp(S){ try { var t0 = S.turns[0]; return String((t0 && (t0.narrative || t0.text || '')) || '').slice(0, 80); } catch(e){ return ''; } }
+  function _slotGate(S){
+    // 物語/スロット切替の 3 重検知(キー / turns 配列の同一性 / turns[0] 指紋)。境界を再固定するだけ。
+    var k = _activeStoreKey(), fp = _t0fp(S);
+    var changed = (_lastSlotKey !== null && k !== _lastSlotKey) ||
+                  (_lastTurnsRef !== null && S.turns !== _lastTurnsRef) ||
+                  (_lastT0 !== null && fp !== _lastT0);
+    if (changed){ baseTurns = -1; _f799.resets++;
+      try { console.log(TAG, 'slot/story switch detected -> baseTurns reset'); } catch(e){} }
+    _lastSlotKey = k; _lastTurnsRef = S.turns; _lastT0 = fp;
+    return changed;
+  }
+  function _clone376(t){                                 // dry-run 専用の浅い控え(本体に触らない)
+    if (!t) return null;
+    return { inputType: t.inputType, playerText: t.playerText, narrative: t.narrative,
+             _convSays: (t._convSays||[]).map(function(c){ return { who: c.who, say: c.say }; }) };
+  }
 
   // ---- [1] sys強化 ----
   function hookSys(){
@@ -81,25 +128,33 @@
     // fix495(B6): 話者補正はfix469(点数制)に一本化(fix462と同型のcede)。本fixは証拠なしで
     // 全ターンを振替え、469の凍結済みターンも上書きしてしまうため、469稼働時は退譲する。
     // sys注入([1]hookSys)は従来どおり生かす。
+    /* ★fix799: 境界の固定は cede より**先**に行う。cede が arming race で素通りしても
+       baseTurns は必ず確定させる(= race に依存しない)。getS()/_slotGate() は副作用なし。 */
+    var S = getS();
+    if (!S || !S.cast || !S.cast.hero || !S.cast.hero.name || !Array.isArray(S.turns)) return 0;
+    if (!S.turns.length) return 0;   /* fix469 repair() と同じ早期 return。空→投入を story 切替と誤認しないため(挙動不変: 旧コードも 0 回ループ) */
+    _slotGate(S);
+    if (baseTurns < 0) baseTurns = S.turns.length;
     try {
       if (window.__v292Dfix469 && window.__v292Dfix469.__armed && localStorage.getItem('v292Dfix469Off') !== '1') return 0;
     } catch(e){}
-    var S = getS();
-    if (!S || !S.cast || !S.cast.hero || !S.cast.hero.name || !Array.isArray(S.turns)) return 0;
     var hero = S.cast.hero.name;
     var total = 0;
     for (var i = 0; i < S.turns.length; i++){
+      /* ★★fix799 — HISTORICAL CONVSAYS IMMUTABILITY(fix469 :834-848 と同じ意味):
+         凍結済みターンは非 dry では読みもしない(write 0)。dry は分類ログのみ数える。 */
+      if (i < baseTurns){
+        _f799.historicalSkipped++;
+        if (dry) _f799.historicalWould += fixTurn(_clone376(S.turns[i]), hero);
+        continue;
+      }
       if (dry){
-        // dry-run: コピーで数えるだけ
-        var t = S.turns[i];
-        if (!t) continue;
-        var clone = { inputType: t.inputType, playerText: t.playerText, narrative: t.narrative,
-                      _convSays: (t._convSays||[]).map(function(c){ return { who: c.who, say: c.say }; }) };
-        total += fixTurn(clone, hero);
+        total += fixTurn(_clone376(S.turns[i]), hero);   // dry-run: コピーで数えるだけ
       } else {
         total += fixTurn(S.turns[i], hero);
       }
     }
+    if (!dry) _f799.rewritten += total;
     if (!dry && total){
       try { if (typeof S.save === 'function') (typeof S.saveC==='function'?S.saveC('fix376.pass'):S.save()); } catch(e){}
       try {
@@ -114,7 +169,10 @@
     }
     return total;
   }
-  window.__v292Dfix376x = { dryRun: function(){ return pass(true); }, run: function(){ return pass(false); } };
+  window.__v292Dfix376x = { dryRun: function(){ return pass(true); }, run: function(){ return pass(false); },
+    /* ★fix799: memory-only の観測口。localStorage も save も一切触らない。 */
+    status: function(){ return { baseTurns: baseTurns, historicalSkipped: _f799.historicalSkipped,
+      rewritten: _f799.rewritten, historicalWould: _f799.historicalWould, resets: _f799.resets, off: off() }; } };
 
   var lastLen = -1;
   function tick(){
