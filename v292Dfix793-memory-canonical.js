@@ -185,10 +185,18 @@
     }
     if (lin.lineageClass === 'dialogue_claim') {
       var sp = findRes('speaker', 'speaker');
+      /* ★fix795(3B-2 real-data admission gate・GPT裁定 2026-09-02): critical speaker が
+         `char_candidate:*`（4C でまだ canonical roster/entity へ昇格していない candidate-tier）
+         のときは **canonical resolved と扱わない** → resolutionStatus=UNRESOLVED /
+         pendingReasonCode='candidate-entity-not-canonical' → その record は PENDING_REF へ倒れる。
+         entityId は provenance として残す。canonical speaker と「未 speaker」の挙動は不変。
+         新 schema / Entity Registry / candidate promotion / 4C は一切変更しない。 */
+      var _spk0 = lin.speakerEntityId;
+      var _spkCand = !!(_spk0 && String(_spk0).indexOf('char_candidate:') === 0);
       refs.push({ role: 'speaker',
         entityId: lin.speakerEntityId || (sp && sp.resolvedEntityId) || null,
-        resolutionStatus: lin.speakerEntityId ? 'RESOLVED_EXISTING' : (sp ? sp.status : 'UNRESOLVED'),
-        pendingReasonCode: lin.speakerEntityId ? null : (sp ? sp.reason : 'speaker-not-structured') });
+        resolutionStatus: (_spk0 && !_spkCand) ? 'RESOLVED_EXISTING' : (_spkCand ? 'UNRESOLVED' : (sp ? sp.status : 'UNRESOLVED')),
+        pendingReasonCode: (_spk0 && !_spkCand) ? null : (_spkCand ? 'candidate-entity-not-canonical' : (sp ? sp.reason : 'speaker-not-structured')) });
       if (lin.kind === 'NEGATION_CLAIM') {
         var tp = findRes('claim_topic', 'topic');
         if (tp) refs.push({ role: 'topic', entityId: tp.resolvedEntityId || null,

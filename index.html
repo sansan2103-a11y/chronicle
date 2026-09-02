@@ -54,7 +54,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260901-fix794';
+  var BUILT = '20260902-fix795';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3690,7 +3690,7 @@ G.init();
      memory state = UNLOADED/LOADED_ABSENT/LOADED_VALUE。UNLOADEDからsaveしない(fail-closed)。
      nullは明示clearだけ。unknown-fieldでstrip retryしない。canaryはsmtg00ynsv1のみ。
      ON=v292Dfix793On / OFF=v292Dfix793Off / story=v292Dfix793Story -->
-<script src="v292Dfix793-memory-canonical.js?cb=20260901-fix794"></script>
+<script src="v292Dfix793-memory-canonical.js?cb=20260902-fix795"></script>
 <!-- R118 Phase1: capability constraint telemetry. read-only / memory only. OFF=v292Dfix740Off verbose=chronDiagVerbose -->
 <script src="v292Dfix740-cap-telemetry.js?cb=v292Dfix740"></script>
 <!-- R118 Phase2-S: severity consequence lane. fix414 hook 経由。OFF=v292Dfix741Off / feature=v292Dfix414SeverityS (default OFF) -->
