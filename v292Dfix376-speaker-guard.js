@@ -35,6 +35,16 @@
 //   cede(fix495 B6) は残す。kill switch v292Dfix376Off は不変。
 //   観測口: window.__v292Dfix376x.status() = { baseTurns, historicalSkipped, rewritten,
 //   historicalWould, resets, off }(memory only ・ localStorage/save に一切書かない)。
+// ---------------------------------------------------------------------
+// ★★fix800(2026-09-02) BOUNDARY HOIST — hero.name 空でも境界を武装する
+//   実測(out/CC_FIX799_LIVE_ACCEPT_QA_20260902.md §5): QA story smtg00ynsv1 は
+//   S.cast.hero.name === '' のため pass() の hero guard が **境界固定より先に**
+//   return し、baseTurns が -1 のまま = fix799 の凍結境界が武装しない。
+//   (rewrite 自体も起きないので事故ではないが、fix799 の「race に依存しない」意図に反し、
+//    後から hero.name が入った瞬間に過去ターン全体が sweep 対象になりうる。)
+//   対処: 境界固定(_slotGate + baseTurns)を hero.name 判定より**前**へ hoist し、
+//   さらに install 時に _armBoundary() で 1 回固定する(pass() 側は fallback として残す)。
+//   sweep(i < baseTurns) ・ cede(fix469) ・ kill(v292Dfix376Off) ・ status() は不変。
 // =====================================================================
 (function(){
   'use strict';
@@ -76,6 +86,22 @@
     if (!t) return null;
     return { inputType: t.inputType, playerText: t.playerText, narrative: t.narrative,
              _convSays: (t._convSays||[]).map(function(c){ return { who: c.who, say: c.say }; }) };
+  }
+  /* ★★fix800: install 時に境界を 1 回固定する(cast/hero に一切依存しない)。
+     読むのは S.turns の**長さ**だけ。turn も localStorage も save も触らない。
+     kill(v292Dfix376Off) 中は fix799 と同じく何もしない(baseTurns は -1 のまま)。 */
+  function _armBoundary(){
+    if (off()) return false;
+    var S = getS();
+    if (!S || !Array.isArray(S.turns) || !S.turns.length) return false;  // 空 turns では固定しない(pass() と同規則)
+    _slotGate(S);
+    if (baseTurns < 0) baseTurns = S.turns.length;
+    try{ console.log(TAG, 'fix800 boundary armed at load: baseTurns=' + baseTurns); }catch(_){}
+    return true;
+  }
+  if (!_armBoundary()) {   // 物語 load 前なら短時間だけ待つ(hookSys と同型)。以後は pass() が fallback。
+    var bv = setInterval(function(){ if (_armBoundary()) clearInterval(bv); }, 250);
+    setTimeout(function(){ clearInterval(bv); }, 30000);
   }
 
   // ---- [1] sys強化 ----
@@ -130,11 +156,14 @@
     // sys注入([1]hookSys)は従来どおり生かす。
     /* ★fix799: 境界の固定は cede より**先**に行う。cede が arming race で素通りしても
        baseTurns は必ず確定させる(= race に依存しない)。getS()/_slotGate() は副作用なし。 */
+    /* ★★fix800: hero guard を分割し、境界固定を hero.name 判定より**前**に置く。
+       条件の集合は不変(sweep 到達条件は fix799 と同一)——順序だけを変える。 */
     var S = getS();
-    if (!S || !S.cast || !S.cast.hero || !S.cast.hero.name || !Array.isArray(S.turns)) return 0;
+    if (!S || !Array.isArray(S.turns)) return 0;
     if (!S.turns.length) return 0;   /* fix469 repair() と同じ早期 return。空→投入を story 切替と誤認しないため(挙動不変: 旧コードも 0 回ループ) */
     _slotGate(S);
     if (baseTurns < 0) baseTurns = S.turns.length;
+    if (!S.cast || !S.cast.hero || !S.cast.hero.name) return 0;   /* fix376 本来の hero guard(fix800 で境界固定の後ろへ移動) */
     try {
       if (window.__v292Dfix469 && window.__v292Dfix469.__armed && localStorage.getItem('v292Dfix469Off') !== '1') return 0;
     } catch(e){}
