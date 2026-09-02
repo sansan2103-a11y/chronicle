@@ -18,6 +18,12 @@
  *   ・保存しない debug: full promotionReason / full excludeReason / me1 dump /
  *     precision labels / shadow verdict dump。
  *   ・deterministic output を維持する。
+ * ★fix798（GPT 裁定 3B-2 (b)・2026-09-02 / Rev2 裁定 同日）: canonical memory write の
+ *   入口に boot recovery barrier gate を追加（fix745 の barrier() を **読むだけ**）。
+ *   barrier が明示的に NOT_REQUIRED / RESOLVED でない限り local key も server も書かない。
+ *   Rev2: materialize だけでなく **save payload に memoryV1 が載る経路**（既存 local key 由来の
+ *   LOADED_VALUE / 明示 clear）も対象。その場合は memoryV1 を落として残りを保存するのではなく
+ *   **save 全体を hold** する（silent loss class の禁止）。793 OFF / canary 外は従来どおり。
  *
  * ★DEPLOY != ENABLE。既定 OFF。load 時に localStorage を読まない・listener 0・timer 0。
  * opt-in : v292Dfix793On === '1'（既定 OFF）
@@ -29,7 +35,7 @@
   if (typeof window === 'undefined') return;
   if (window.__v292Dfix793) return;                 /* 二重install防止 */
 
-  var BUILD = '20260901-fix793';
+  var BUILD = '20260902-fix798';
   var MEMORY_VERSION = 'cmem-1.0.0';
   var MEMORY_SCHEMA_VERSION = 1;
   var KEY_PREFIX = 'v292Dmem1_slot_';               /* ★story-scoped。global key を作らない */
@@ -121,6 +127,10 @@
     var sid = String(storyId || '');
     if (!armed()) return { include: false, reason: HOLD.DISABLED };
     if (!isCanary(sid)) return { include: false, reason: HOLD.NOT_CANARY };   /* ★他 story には生やさない */
+    /* ★fix798 Rev2: 明示 clear が pending の状態は「memoryV1:null が payload に載る」経路。
+       clearGate 側が hold で include:false を返しても、ここを素通りさせると
+       clear が黙って落ちたまま save が通ってしまうので同じく hold する。 */
+    if (_clearPending[sid]) { var _hc = barrierHold(sid, 'clearGate'); if (_hc) return _hc; }
     var s = stateOf(sid);
     if (s.state === STATE.UNLOADED) {
       s = load(sid);                                    /* 1回だけ解消を試みる */
@@ -134,6 +144,9 @@
     if (!validShape(s.value)) return { hold: HOLD.UNLOADED };
     var bytes = byteLen(s.value);
     if (bytes > MAX_BYTES) return { hold: HOLD.TOO_LARGE, bytes: bytes };
+    /* ★fix798 Rev2: ここから先で memoryV1 が payload に載る（既存 local key 由来の
+       LOADED_VALUE も含む）。barrier が開いていなければ **save 全体を hold**。 */
+    var _hs = barrierHold(sid, 'saveGate'); if (_hs) return _hs;
     return { include: true, value: s.value, bytes: bytes };
   }
 
@@ -150,6 +163,8 @@
   function clearGate(storyId) {
     var sid = String(storyId || '');
     if (!_clearPending[sid]) return { include: false };
+    /* ★fix798 Rev2: 明示 clear（memoryV1:null）も canonical write。barrier gate 対象。 */
+    var _h = barrierHold(sid, 'clearGate'); if (_h) return _h;
     return { include: true, value: null, explicitClear: true };
   }
   function clearConsumed(storyId) { delete _clearPending[String(storyId || '')]; }
@@ -310,6 +325,49 @@
              records: records, edges: edges };
   }
 
+  /* ==================================================================
+   * ★fix798（GPT 裁定 3B-2 (b)・2026-09-02）: boot recovery barrier gate
+   *   観測 bug: fix745 barrier = PENDING（stale MAT journal）で fix748 が
+   *   TURN_BUILD を hold している最中に materialize() → local key 書込 →
+   *   製品 save（docRev.source = INVALIDATED:sideportA:putcanonical）が成立した。
+   *   memory sidecar でも canonical write（rev/hash mutation）なので barrier を通す。
+   *   ・fix745 の public API `__v292DfixGWS.barrier()` を **読むだけ**。
+   *     fix745 / fix748 は変更しない。新 authority / recovery framework も作らない。
+   *   ・ALLOW は fix745 が NOT_REQUIRED / RESOLVED を **明示的に**返したときだけ。
+   *     PENDING / DUAL_RECOVERY_CONFLICT_HOLD / API 未 load / throw / 判定不能 は
+   *     すべて **fail-closed**（local key も server も書かない）。
+   *   ・観測は memory-only ring（localStorage 0・listener 0・timer 0）。
+   * ================================================================== */
+  var BARRIER_HOLD = 'BOOT_RECOVERY_BARRIER_PENDING';
+  var GATE_RING_MAX = 20;
+  var _gateRing = [], _gateBlocked = 0;
+  function barrierStateNow() {
+    var g;
+    try { g = window.__v292DfixGWS; } catch (e) { return 'API_UNAVAILABLE'; }
+    if (!g || typeof g.barrier !== 'function') return 'API_UNAVAILABLE';
+    var s; try { s = g.barrier(); } catch (e) { return 'API_THREW'; }
+    return (s == null) ? 'API_UNAVAILABLE' : String(s);
+  }
+  function barrierWriteAllowed(s) { return s === 'NOT_REQUIRED' || s === 'RESOLVED'; }
+  function noteGateBlock(sid, s, where) {
+    _gateBlocked++;
+    _gateRing.push({ storyId: sid, state: s, reason: BARRIER_HOLD, where: where || '?', n: _gateBlocked });
+    if (_gateRing.length > GATE_RING_MAX) _gateRing.shift();
+  }
+  /* ★fix798 Rev2: barrier が開いていなければ hold object を返す（開いていれば null）。
+     **判定はこの 1 関数だけ**。呼び出しは canonical memory write が起きる直前の 4 経路のみ:
+       materialize（local key 書込）/ saveGate（payload に value が載る）/
+       saveGate の pending clear / clearGate（payload に null が載る）。
+     ★hold は fix743 buildSchema2Record の既存 return（BUILD_SCHEMA2_HOLD）に載り、
+       **save 全体が止まる**。memoryV1 だけ落として残りを保存する経路は作らない
+       （silent loss class の禁止・GPT 裁定 Rev2）。 */
+  function barrierHold(sid, where) {
+    var s = barrierStateNow();
+    if (barrierWriteAllowed(s)) return null;
+    noteGateBlock(sid, s, where);
+    return { hold: BARRIER_HOLD, barrier: s };
+  }
+
   /* shadow 5層（readonly）から materialize して local key へ書く。 */
   function readAll(dbName, store, slotId) {
     return new Promise(function (res, rej) {
@@ -340,6 +398,12 @@
       readAll('chr6rel', 'relations', sid),
       readAll('chr6ref', 'resolutions', sid)
     ]).then(function (a) {
+      /* ★fix798: canonical write 入口（この下は local key 書込 → LOADED_VALUE →
+         saveGate include:true → 製品 save → server canonical write が繋がる）。
+         shadow 5層は readonly なのでここが **書込直前の最終同期点**。
+         barrier が明示的に開いていなければ何も書かずに返す（fail-closed）。 */
+      var _hm = barrierHold(sid, 'materialize');
+      if (_hm) return { ok: false, reason: BARRIER_HOLD, barrier: _hm.barrier, wrote: 0 };
       var v = materializeFrom({ storyId: sid, lineages: a[0], events: a[1],
                                 relations: a[2], resolutions: a[3] });
       var bytes = byteLen(v);
@@ -361,6 +425,8 @@
       return { build: BUILD, on: optedIn(), off: off(), active: armed(),
                canaryStory: sid, memoryVersion: MEMORY_VERSION, maxBytes: MAX_BYTES,
                state: stateOf(sid).state, source: stateOf(sid).source,
+               barrierGate: { state: barrierStateNow(), blocked: _gateBlocked,
+                              where: (function(){ var o={}, i; for (i=0;i<_gateRing.length;i++) o[_gateRing[i].where]=(o[_gateRing[i].where]||0)+1; return o; })() },
                states: [STATE.UNLOADED, STATE.LOADED_ABSENT, STATE.LOADED_VALUE],
                note: 'UNLOADED からは save しない（fail-closed） / null は明示 clear だけ / '
                    + 'unknown-field で strip retry しない / 他 story には memoryV1 を生やさない' };
@@ -374,7 +440,10 @@
     materialize: materialize, byteLen: byteLen,
     __test: { materializeFrom: materializeFrom, criticalRefsOf: criticalRefsOf,
               validShape: validShape, setState: setState, LIFECYCLE: LIFECYCLE,
-              AUTHORITY: AUTHORITY, MAX_BYTES: MAX_BYTES, CANARY_DEFAULT: CANARY_DEFAULT }
+              AUTHORITY: AUTHORITY, MAX_BYTES: MAX_BYTES, CANARY_DEFAULT: CANARY_DEFAULT,
+              BARRIER_HOLD: BARRIER_HOLD, barrierStateNow: barrierStateNow,
+              barrierWriteAllowed: barrierWriteAllowed, barrierHold: barrierHold,
+              gateRing: function () { return _gateRing.slice(); } }
   };
   /* ★自動実行しない。Planner / Retrieve へは 1 本も繋がない。 */
 })();
