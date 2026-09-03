@@ -948,7 +948,7 @@
                        ackHash: ackHash.slice(0, 16), outgoing: String(v2hash).slice(0, 16),
                        ackHashMissing: !ackHash });
                 f697pMarkParity(id, (typeof jj.rev === 'number' ? jj.rev : null), ackHash, v2hash);
-                return f697pParityReadback(id, canonicalSendStr, v2hash, fin, condClearDirty);
+                return f697pParityReadback(id, canonicalSend, canonicalSendStr, v2hash, fin, condClearDirty);
               }
               canonCtx = { id: id, rev: (typeof jj.rev === 'number' ? jj.rev : null), hash: v2hash };
               if (jj.noop) cstats.noop++; else cstats.ok++;
@@ -1072,7 +1072,9 @@
                      /* ★Rev3 */
                      parityMismatch: 0, parityReadbacks: 0, parityReadbackFailed: 0,
                      holdParity: 0, landedContentEqual: 0, clearedStaleLanded: 0,
-                     hashProbes: 0, hashContractMismatch: 0 };
+                     hashProbes: 0, hashContractMismatch: 0,
+                     /* ★Rev3c(OPTIONAL_SIDECAR_PARITY_SEMANTICS) */
+                     compareSkipped: 0, contentDiffers: 0, optionalExcluded: 0, cappedRescues: 0 };
   var f697pLastHashProbe = null;           /* ★Rev3(P0-5): READ-ONLY 診断の直近結果 */
   var f697pLast = null;                    /* 直近 verdict（read-only 可視化） */
   var f697pResumeFired = false;            /* この page session で resume を撃ったか（多重発火の構造的禁止） */
@@ -1197,6 +1199,8 @@
       var same = !!(prev && prev.intendedCanonicalHash === String(intendedHash)
                          && prev.lastConfirmedRev === lc.rev
                          && prev.lastConfirmedHash === String(lc.hash));
+      /* ★Rev3d: `lastConfirmedHash` は **client fingerprint（contentHashV2 domain）**。
+         serverHash との比較には二度と使わない（Case B は rev と client hash で判定する）。 */
       var rec = { v: F697P_VER, state: F697P_PREPARED, storyId: String(id),
                   lastConfirmedRev: lc.rev, lastConfirmedHash: String(lc.hash),
                   intendedCanonicalHash: String(intendedHash),
@@ -1327,6 +1331,106 @@
     } catch(e){ return null; }
   }
 
+  /* ★★fix697p Rev3c(OPTIONAL_SIDECAR_PARITY_SEMANTICS / P0-6): **pure comparator 1 本**。
+     R1（P0-3 parity readback）と boot（P0-4）が **これだけ**を使う。
+
+     契約（GPT 裁定 2026-09-03 §1）:
+       ・必須 domain は **常に**比較する（1 つも除外しない）。
+       ・optional field は **client が今回の outgoing payload に property を持っていた field だけ**比較する。
+         Worker が omit=preserve 契約を持つ optional field を client が送らなかった場合、
+         server に存在していても parity 差分にしない（= server-only optional を除外）。
+       ・**explicit null 送信は比較対象**（property が存在する = 送った）。
+       ・**unknown / non-optional の server-only は不一致**（除外しない）。
+       ・PUT payload（canonicalSend / rec）は **1 バイトも変更しない**。server wrap も変更しない
+         （shallow copy のみ）。comparator は state を持たない pure 関数。
+
+     optional 名の単一ソース = fix743 の `S2_OPTIONAL_NAMES`（fix697 のソースに optional field 名の
+     literal を 1 つも書かない）。取得できない = ownership 判定不能 → **fail-closed で ok:false**。 */
+  function f697pOptionalNames(){
+    try {
+      var C = window.__v292DfixCC2;
+      if (!C) return null;
+      var a = C.S2_OPTIONAL_NAMES;
+      if (Object.prototype.toString.call(a) !== '[object Array]') return null;
+      var out = [];
+      for (var i = 0; i < a.length; i++){ if (typeof a[i] === 'string' && a[i]) out.push(a[i]); }
+      return out;
+    } catch(e){ return null; }
+  }
+  function f697pHasOwn(o, k){
+    try { return !!o && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k); }
+    catch(e){ return false; }
+  }
+  /* sendWrap = client が送った（または今作れる）projectionV2 形 / serverWrap = f697pServerWrap の戻り。
+     戻り: { ok, reason?, equal, excluded:[key], diffKeys:[key] } — 値は一切載せない。 */
+  function f697pContentEqual(sendWrap, serverWrap){
+    if (!sendWrap || !serverWrap) return { ok: false, reason: 'NO_WRAP', equal: false, excluded: [], diffKeys: [] };
+    var OPT = f697pOptionalNames();
+    if (!OPT) return { ok: false, reason: 'NO_OPTIONAL_CONTRACT', equal: false, excluded: [], diffKeys: [] };
+    var ss = serverWrap.sidecar, ls = sendWrap.sidecar;
+    var excluded = [];
+    try {
+      for (var i = 0; i < OPT.length; i++){
+        var k = OPT[i];
+        /* 3 条件積: optional domain ∩ server が持つ ∩ **client が送っていない**。
+           client が送っていれば（値が null でも）除外しない。 */
+        if (f697pHasOwn(ss, k) && !f697pHasOwn(ls, k)) excluded.push(k);
+      }
+    } catch(e){ return { ok: false, reason: 'OWNERSHIP_THREW', equal: false, excluded: [], diffKeys: [] }; }
+    var s2 = null, sStr = null, lStr = null;
+    try {
+      s2 = {}; for (var a1 in serverWrap){ if (Object.prototype.hasOwnProperty.call(serverWrap, a1)) s2[a1] = serverWrap[a1]; }
+      if (excluded.length){
+        var sc = {};
+        for (var a2 in ss){ if (Object.prototype.hasOwnProperty.call(ss, a2)) sc[a2] = ss[a2]; }
+        for (var a3 = 0; a3 < excluded.length; a3++) delete sc[excluded[a3]];
+        s2.sidecar = sc;                       /* ★元 serverWrap.sidecar は触らない */
+      }
+      sStr = canonicalString(s2);
+      lStr = canonicalString(sendWrap);
+    } catch(e){ return { ok: false, reason: 'SERIALIZE_FAILED', equal: false, excluded: excluded, diffKeys: [] }; }
+    if (sStr === lStr) return { ok: true, equal: true, excluded: excluded, diffKeys: [], localStr: lStr };
+    /* 不一致: **キー名だけ**を出す（値は載せない） */
+    var diffKeys = [];
+    try {
+      var top = { schema: 1, id: 1, title: 1, deleted: 1, turnCount: 1, snippet: 1 };
+      for (var t in top){ if (JSON.stringify(s2[t]) !== JSON.stringify(sendWrap[t])) diffKeys.push(t); }
+      var bk = { cfg: 1, cast: 1, scene: 1, turns: 1, mode: 1 };
+      var sb = s2.body || {}, lb = sendWrap.body || {};
+      for (var b1 in bk){ if (JSON.stringify(sb[b1]) !== JSON.stringify(lb[b1])) diffKeys.push('body.' + b1); }
+      var seen = {}, kk;
+      var scS = s2.sidecar || {}, scL = ls || {};
+      for (kk in scS){ if (Object.prototype.hasOwnProperty.call(scS, kk)) seen[kk] = 1; }
+      for (kk in scL){ if (Object.prototype.hasOwnProperty.call(scL, kk)) seen[kk] = 1; }
+      for (kk in seen){
+        var hs = f697pHasOwn(scS, kk), hl = f697pHasOwn(scL, kk);
+        if (hs !== hl || JSON.stringify(scS[kk]) !== JSON.stringify(scL[kk])) diffKeys.push('sidecar.' + kk);
+      }
+      diffKeys.sort();
+    } catch(e){ diffKeys = ['<UNKNOWN>']; }
+    return { ok: true, equal: false, excluded: excluded, diffKeys: diffKeys, localStr: lStr };
+  }
+  /* 比較結果の note（キー名だけ・値 0）。skipped は救済しない = fail-closed。 */
+  function f697pNoteCompare(id, where, cmp){
+    try {
+      if (!cmp || cmp.ok !== true){
+        f697pStats.compareSkipped++;
+        note({ kind: 'F697P_CONTENT_COMPARE_SKIPPED', id: String(id), where: String(where),
+               reason: String((cmp && cmp.reason) || 'UNKNOWN') });
+        return;
+      }
+      if (cmp.excluded && cmp.excluded.length) f697pStats.optionalExcluded++;
+      note({ kind: 'F697P_CONTENT_COMPARE', id: String(id), where: String(where),
+             equal: !!cmp.equal, excluded: (cmp.excluded || []).slice(0),
+             optionalPreserved: !!(cmp.excluded && cmp.excluded.length) });
+      if (!cmp.equal){
+        f697pStats.contentDiffers++;
+        note({ kind: 'F697P_CONTENT_DIFFERS', id: String(id), where: String(where),
+               fields: (cmp.diffKeys || []).slice(0, 24) });
+      }
+    } catch(e){}
+  }
+
   /* ★★fix697p Rev3(P0-5): READ-ONLY 診断。GET した server canonical を client 側で再 hash し
      Worker の serverHash と突き合わせるだけ。**write 0 / network 0 / 判定に使わない**。 */
   function f697pHashProbe(id, j, where){
@@ -1356,7 +1460,7 @@
        R1 content deep-equal → LANDED_CONTENT_EQUAL → 既存 sanctioned confirm 経路 → journal clear → CLEAN
        R2 content differs    → HOLD_PARITY 維持・confirm 0・retry 0・write 0
        R3 readback 失敗       → HOLD_PARITY_READBACK_FAILED・confirm 0・retry 0・write 0 */
-  function f697pParityReadback(id, sendStr, outHash, fin, condClearDirty){
+  function f697pParityReadback(id, sendWrap, sendStr, outHash, fin, condClearDirty){
     f697pStats.parityReadbacks++;
     try { note({ kind: 'F697P_PARITY_READBACK_START', id: String(id),
                  outgoing: String(outHash).slice(0, 16) }); } catch(e){}
@@ -1377,30 +1481,46 @@
         f697pNoteVerdictById(id, 'HOLD_PARITY_READBACK_FAILED', { reason: 'NO_SERVER_RECORD' });
         return fin();
       }
-      if (srvStr !== String(sendStr)){
+      /* ★★Rev3c: 文字列直比較をやめ、**pure comparator 1 本**に委ねる。
+         optional preserve semantics（Worker の omit=preserve）を理解した上での equivalence。 */
+      var cmp = f697pContentEqual(sendWrap, w);
+      f697pNoteCompare(id, 'parity-readback', cmp);
+      if (cmp.ok !== true){
+        /* ownership 判定不能 / serialize 不能 → **救済しない**（fail-closed・HOLD_PARITY 維持） */
+        f697pStats.holdParity++;
+        f697pNoteVerdictById(id, 'HOLD_PARITY_COMPARE_SKIPPED',
+          { serverRev: j2.rev, reason: String(cmp.reason || '') });
+        return fin();
+      }
+      if (!cmp.equal){
         /* R2: 内容が違う = 着地していない（または別内容） → STOP */
         f697pStats.holdParity++;
         f697pNoteVerdictById(id, 'HOLD_PARITY',
-          { serverRev: j2.rev, serverHash: String(j2.serverHash || '').slice(0, 16), contentEqual: false });
+          { serverRev: j2.rev, serverHash: String(j2.serverHash || '').slice(0, 16), contentEqual: false,
+            diffFields: (cmp.diffKeys || []).slice(0, 12) });
         return fin();
       }
-      /* R1: content deep-equal → **着地している**。server の実 rev/hash で正式 confirm する。 */
+      /* R1: content equivalent → **着地している**。server の実 rev で正式 confirm する。 */
       var sRev = (typeof j2.rev === 'number') ? j2.rev : null;
       var sHash = String(j2.serverHash || '');
       f697pStats.landedContentEqual++;
       cstats.confirmedByReadback++;
       try { note({ kind: 'HASH_CONTRACT_MISMATCH_CONTENT_EQUAL', id: String(id), serverRev: sRev,
-                   serverHash: sHash.slice(0, 16), outgoing: String(outHash).slice(0, 16) }); } catch(e){}
-      /* ■既存 sanctioned 経路のみ: refine で inFlightSave.fingerprint を server 実 hash に合わせ、
-         canonCtx 経由の condClearDirty → g781Confirm。transition()/confirm() の生直呼びはしない。 */
-      g781Refine(id, sHash);
-      canonCtx = { id: id, rev: sRev, hash: sHash };
+                   serverHashSeen: sHash.slice(0, 16), outgoing: String(outHash).slice(0, 16),
+                   excluded: (cmp.excluded || []).slice(0) }); } catch(e){}
+      /* ★★Rev3c(GPT 裁定 §3): fingerprint は **client contentHashV2 domain**（= outHash）に統一する。
+         serverHash を lastConfirmed.fingerprint に入れると fix705 の `lh`（client 域）と永久に
+         一致せず、CLEAN 直後の reload で resolve781 が UNRESOLVED_GUARD_STATE → DIVERGED を自作する。
+         server 実 hash は `serverHashSeen` として note / verdict に **別 field** で残す。
+         inFlightSave.fingerprint は既に v2hash（= outHash）に refine 済みなので触らない。 */
+      canonCtx = { id: id, rev: sRev, hash: String(outHash) };
       f697pClear(id, 'LANDED_CONTENT_EQUAL');
-      f697pFinish(id, 'LANDED_CONTENT_EQUAL', { serverRev: sRev, serverHash: sHash.slice(0, 16) });
-      /* ★Rev3b(Q3): confirm が成立した **後** に CANONICAL_COMMIT_OK{via:'content-equal'} を積む。
-         HASH_CONTRACT_MISMATCH_CONTENT_EQUAL は telemetry として上に併記済み。 */
+      f697pFinish(id, 'LANDED_CONTENT_EQUAL', { serverRev: sRev, serverHashSeen: sHash.slice(0, 16),
+                                                fingerprint: String(outHash).slice(0, 16),
+                                                excluded: (cmp.excluded || []).slice(0) });
+      /* ★Rev3b(Q3): confirm が成立した **後** に CANONICAL_COMMIT_OK{via:'content-equal'} を積む。 */
       return condClearDirty(function(){
-        f697pNoteCommitOk(id, sRev, sHash, 'content-equal');
+        f697pNoteCommitOk(id, sRev, String(outHash), 'content-equal');
         fin();
       });
     });
@@ -1408,20 +1528,33 @@
 
   /* ★★fix697p Rev3(P0-4): boot reconcile で「hash は違うが content は同一」= 既に着地していた
      ケースを救う。**server へは 1 バイトも書かない**。confirm は既存 hook のペアのみ。 */
-  function f697pClearedStaleLanded(id, rec, rev, serverHash){
+  /* ★★Rev3c: fingerprint は **client contentHashV2 domain**（localHash）。serverHash は
+     `serverHashSeen` として別 field に残すだけ（GPT 裁定 §3）。 */
+  function f697pClearedStaleLanded(id, rec, rev, serverHash, localHash, excluded, capped){
+    if (!localHash){
+      /* fingerprint を client 域で確定できないなら **救済しない**（fail-closed・捏造禁止） */
+      f697pStats.compareSkipped++;
+      try { note({ kind: 'F697P_CONTENT_COMPARE_SKIPPED', id: String(id), where: 'boot-reconcile',
+                   reason: 'NO_LOCAL_FINGERPRINT' }); } catch(e){}
+      return f697pNoteVerdict(id, rec, 'CLEARED_STALE_LANDED_SKIPPED', { reason: 'NO_LOCAL_FINGERPRINT' });
+    }
     f697pStats.clearedStaleLanded++;
+    if (capped) f697pStats.cappedRescues++;
     try { note({ kind: 'F697P_CLEARED_STALE_LANDED', id: String(id), serverRev: rev,
-                 serverHash: String(serverHash).slice(0, 16),
+                 serverHashSeen: String(serverHash).slice(0, 16),
+                 fingerprint: String(localHash).slice(0, 16),
+                 excluded: (excluded || []).slice(0), capped: !!capped,
                  from: String((rec && rec.state) || '') }); } catch(e){}
-    /* ■sanctioned hook のペア（noteInFlight → confirm）。transition() は呼ばない。
-       fingerprint は **server 実 hash**（以後の Case B は serverHash と突き合わせるため）。 */
-    try { g781InFlight(id, String(serverHash)); } catch(e){}
-    try { g781Confirm(id, (typeof rev === 'number' ? rev : null), String(serverHash)); } catch(e){}
+    /* ■sanctioned hook のペア（noteInFlight → confirm）。transition() は呼ばない。 */
+    try { g781InFlight(id, String(localHash)); } catch(e){}
+    try { g781Confirm(id, (typeof rev === 'number' ? rev : null), String(localHash)); } catch(e){}
     /* ★Rev3b(Q3): boot 救済でも confirm 成立時にだけ CANONICAL_COMMIT_OK{via:'boot-cleared-stale'}。 */
-    f697pNoteCommitOk(id, rev, serverHash, 'boot-cleared-stale');
-    canonCtx = { id: id, rev: (typeof rev === 'number' ? rev : null), hash: String(serverHash) };
+    f697pNoteCommitOk(id, rev, localHash, 'boot-cleared-stale');
+    canonCtx = { id: id, rev: (typeof rev === 'number' ? rev : null), hash: String(localHash) };
     f697pClear(id, 'CLEARED_STALE_LANDED');
-    f697pFinish(id, 'CLEARED_STALE_LANDED', { serverRev: rev, serverHash: String(serverHash).slice(0, 16) });
+    f697pFinish(id, 'CLEARED_STALE_LANDED', { serverRev: rev, serverHashSeen: String(serverHash).slice(0, 16),
+                                              fingerprint: String(localHash).slice(0, 16),
+                                              excluded: (excluded || []).slice(0), capped: !!capped });
   }
 
   function f697pClear(id, reason){
@@ -1553,28 +1686,48 @@
     try { commit('fix697p-journal-resume'); } catch(e){}
   }
 
-  /* ★Case B の追加条件: 現在の local canonical hash == intendedCanonicalHash。
-     PREPARED_LOCAL 以降に local が進んでいたら **resume しない**（Case C HOLD）。 */
-  function f697pVerifyLocalThenResume(id, rec, serverRev){
+  /* ★Case B の追加条件（Rev3d): 現在の local client hash（contentHashV2 domain）が
+     **その journal state の期待値**と一致すること。
+       PREPARED_LOCAL → intendedCanonicalHash ／ ARMED_CAS → outgoingV2Hash
+     一致しない = prepare/arm 以降に local が進んだ → **resume しない**（Case C HOLD）。 */
+  function f697pVerifyLocalThenResume(id, rec, serverRev, expectHash, fromState){
+    var want = String(expectHash == null ? rec.intendedCanonicalHash : expectHash);
     var c2 = null;
     try { c2 = projectionV2(id); } catch(e){ c2 = null; }
     if (!c2) return f697pHold(id, rec, 'NO_V2_PROJECTION');
     try {
       sha256hex(canonicalString(c2), function(h){
         if (!h) return f697pHold(id, rec, 'LOCAL_HASH_FAILED');
-        if (h !== String(rec.intendedCanonicalHash)){
+        if (h !== want){
           f697pStats.localMoved++;
           return f697pHold(id, rec, 'LOCAL_MOVED_SINCE_PREPARE',
-                           { localHash: h.slice(0, 16),
-                             intended: String(rec.intendedCanonicalHash).slice(0, 16) });
+                           { localHash: h.slice(0, 16), expected: want.slice(0, 16),
+                             from: String(fromState || rec.state || '') });
         }
+        try { note({ kind: 'F697P_CASE_B_RESUME_ELIGIBLE', id: String(id),
+                     from: String(fromState || rec.state || ''), serverRev: serverRev,
+                     localHash: h.slice(0, 16) }); } catch(e2){}
         f697pResume(id, rec, serverRev, 0);
       });
     } catch(e){ f697pHold(id, rec, 'LOCAL_HASH_THREW'); }
   }
 
-  function f697pReconcile(id, rec){
+  /* ★★Rev3c(GPT 裁定 §4): capped=true は「holdCount cap 到達後でも **safe content-equivalence**
+     だけは試す」モード。holdCount の reset も cap 除外もしない。equivalence 以外の判定
+     （Case A / B / C・resume）は一切行わず、journal も書かない（read-only 証明のみ）。 */
+  function f697pReconcile(id, rec, capped){
     f697pStats.reconciles++;
+    /* capped 中は holdCount を進めない（cap は既に適用済み・journal write 0） */
+    var capStop = function(reason, extra){
+      f697pStats.skipped++;
+      var o = { holdCount: ((+rec.holdCount) || 0), reason: String(reason || '') };
+      if (extra){ for (var k in extra){ if (Object.prototype.hasOwnProperty.call(extra, k)) o[k] = extra[k]; } }
+      return f697pFinish(id, 'HOLD_CAP_REACHED', o);
+    };
+    var holdX = function(verdict, extra){
+      if (capped) return capStop(verdict, extra);
+      return f697pHold(id, rec, verdict, extra);
+    };
     try { note({ kind: 'F697P_RECONCILE_START', id: String(id), state: String(rec.state),
                  lastConfirmedRev: rec.lastConfirmedRev,
                  intended: String(rec.intendedCanonicalHash).slice(0, 16) }); } catch(e){}
@@ -1584,35 +1737,44 @@
       if (gerr || !g){ f697pStats.getFails++;
         return f697pNoteVerdict(id, rec, 'RECONCILE_GET_FAILED'); }
       var j = g.j || {};
-      if (g.status === 404) return f697pHold(id, rec, 'ROW_MISSING');       /* resurrection 禁止 */
+      if (g.status === 404) return holdX('ROW_MISSING');       /* resurrection 禁止 */
       if (g.status !== 200 || !j.ok){ f697pStats.getFails++;
         return f697pNoteVerdict(id, rec, 'RECONCILE_GET_HTTP_' + g.status); }
-      if (String(j.id != null ? j.id : id) !== String(id)) return f697pHold(id, rec, 'ID_MISMATCH');
-      if (j.deleted === true) return f697pHold(id, rec, 'TOMBSTONE');
+      if (String(j.id != null ? j.id : id) !== String(id)) return holdX('ID_MISMATCH');
+      if (j.deleted === true) return holdX('TOMBSTONE');
       if (String(j.authority || 'shadow') !== 'canonical')
-        return f697pHold(id, rec, 'AUTHORITY_DRIFT', { serverAuthority: String(j.authority || 'shadow') });
+        return holdX('AUTHORITY_DRIFT', { serverAuthority: String(j.authority || 'shadow') });
       var srvSchema = (typeof j.recordSchema === 'number') ? j.recordSchema
                     : ((j.record && j.record.schema === 2) ? 2 : 1);
-      if (srvSchema !== 2) return f697pHold(id, rec, 'SERVER_NOT_SCHEMA2', { recordSchema: srvSchema });
-      if (typeof j.rev !== 'number') return f697pHold(id, rec, 'NO_SERVER_REV');
+      if (srvSchema !== 2) return holdX('SERVER_NOT_SCHEMA2', { recordSchema: srvSchema });
+      if (typeof j.rev !== 'number') return holdX('NO_SERVER_REV');
       var sh = String(j.serverHash || '');
-      if (!sh) return f697pHold(id, rec, 'NO_SERVER_HASH');
+      if (!sh) return holdX('NO_SERVER_HASH');
       /* ★★fix697p Rev3(P0-4): hash だけで A/B/C を決めない。**最優先で content 同一性**を見る。
          比較対象は projectionV2 全体（turns ＋ sidecar 13key ＋ memoryV1）の canonical serialization。
          これで「Worker の content_hash 規約が client と違うだけで、実際は着地していた」
          （= T23 実測 CANONICAL_LANDED_NOCONFIRM）を救う。**server へは write 0**。 */
       f697pHashProbe(id, j, 'boot-reconcile');
+      /* ★★Rev3c: boot も **同じ pure comparator 1 本**。boot には過去の actual PUT payload が
+         無いので「現在 client が作れる effective local projection / ownership set」を基準にする
+         （GPT 裁定 §2）。projection 不能 / ownership 判定不能 / serialize 不能 は
+         CONTENT_COMPARE_SKIPPED で **救済しない・CLEAN にしない**（fail-closed）。 */
       var swrap = f697pServerWrap(id, j);
-      if (swrap){
-        var lnow = null; try { lnow = projectionV2(id); } catch(e){ lnow = null; }
-        if (lnow){
-          var sStr = null, lStr = null;
-          try { sStr = canonicalString(swrap); lStr = canonicalString(lnow); } catch(e){ sStr = null; lStr = null; }
-          if (sStr !== null && lStr !== null && sStr === lStr){
-            return f697pClearedStaleLanded(id, rec, j.rev, sh);
-          }
-        }
+      var lnow = null; try { lnow = projectionV2(id); } catch(e){ lnow = null; }
+      var cmp = (swrap && lnow)
+        ? f697pContentEqual(lnow, swrap)
+        : { ok: false, equal: false, excluded: [], diffKeys: [],
+            reason: (!swrap ? 'NO_SERVER_RECORD' : 'NO_V2_PROJECTION') };
+      f697pNoteCompare(id, 'boot-reconcile', cmp);
+      if (cmp.ok === true && cmp.equal === true){
+        /* fingerprint は client contentHashV2 domain（= 比較に使った local serialization の sha）。 */
+        return sha256hex(cmp.localStr, function(lh){
+          f697pClearedStaleLanded(id, rec, j.rev, sh, lh || null, cmp.excluded, !!capped);
+        });
       }
+      /* ★Rev3c(GPT 裁定 §4): equivalent でない / 比較不能なら capped は従来どおり cap 適用。 */
+      if (capped) return capStop(cmp.ok === true ? 'CONTENT_DIFFERS' : String(cmp.reason || 'COMPARE_SKIPPED'),
+                                 { serverRev: j.rev });
       /* ---- Case A: intended / outgoing content が既に server へ着地している ---- */
       if (sh === String(rec.intendedCanonicalHash) ||
           (rec.outgoingV2Hash && sh === String(rec.outgoingV2Hash))){
@@ -1622,18 +1784,40 @@
       }
       /* ---- HOLD_CONFLICT / HOLD_PARITY: 収束していない限り保持して HOLD（自動 resume 禁止） ---- */
       if (rec.state === F697P_CONFLICT){
-        return f697pHold(id, rec, 'HOLD_CONFLICT_KEPT', { serverRev: j.rev, serverHash: sh.slice(0, 16) });
+        return holdX('HOLD_CONFLICT_KEPT', { serverRev: j.rev, serverHash: sh.slice(0, 16) });
       }
       if (rec.state === F697P_PARITY){
         /* ★Rev3: parity readback で content 不一致だった journal は自動 resume しない（GPT: STOP）。 */
-        return f697pHold(id, rec, 'HOLD_PARITY_KEPT', { serverRev: j.rev, serverHash: sh.slice(0, 16) });
+        return holdX('HOLD_PARITY_KEPT', { serverRev: j.rev, serverHash: sh.slice(0, 16) });
       }
       /* ---- Case B 候補: server は lastConfirmed pre-state のまま = 未着地 ---- */
-      if (j.rev === rec.lastConfirmedRev && sh === String(rec.lastConfirmedHash)){
-        return f697pVerifyLocalThenResume(id, rec, j.rev);
+      /* ★★fix697p Rev3d(GPT 裁定 2026-09-03 / Case B REVISE): PREPARED_LOCAL と ARMED_CAS で
+         resume 規則を分ける。**`lastConfirmedHash` は client fingerprint（contentHashV2 domain）であり、
+         serverHash と比較してはならない**（Rev3c で fingerprint domain を統一した結果、
+         optional 非対称 story では serverHash と永久に一致せず Case B が死んでいた）。
+
+           PREPARED_LOCAL: `server.rev === lastConfirmedRev`（**rev が CAS authority**）
+                           AND 現在 local の client hash === intendedCanonicalHash
+                           → strict CAS を 1 回だけ resume。serverHash は要求しない。
+           ARMED_CAS     : fresh GET が ARM 時の pre-state と完全一致
+                           （`server.rev === preServerRev` AND `server.hash === preServerHash`）
+                           AND 現在 local の client hash === outgoingV2Hash → resume once（強い規則を維持）。
+         いずれも server.rev が進んでいれば HOLD / local が intended(outgoing) から動いていれば HOLD。 */
+      if (rec.state === F697P_ARMED){
+        var armedHash = String(rec.outgoingV2Hash || '');
+        if (!armedHash) return holdX('ARMED_WITHOUT_OUTGOING_HASH', { serverRev: j.rev });
+        if (j.rev === rec.preServerRev && sh === String(rec.preServerHash || '')){
+          return f697pVerifyLocalThenResume(id, rec, j.rev, armedHash, 'ARMED_CAS');
+        }
+        return holdX('SERVER_MOVED', { serverRev: j.rev, serverHash: sh.slice(0, 16),
+                                       preServerRev: (rec.preServerRev == null ? null : rec.preServerRev),
+                                       from: 'ARMED_CAS' });
+      }
+      if (rec.state === F697P_PREPARED && j.rev === rec.lastConfirmedRev){
+        return f697pVerifyLocalThenResume(id, rec, j.rev, String(rec.intendedCanonicalHash), 'PREPARED_LOCAL');
       }
       /* ---- Case C: server が別の rev/hash へ進んだ → auto write 禁止 ---- */
-      return f697pHold(id, rec, 'SERVER_MOVED', { serverRev: j.rev, serverHash: sh.slice(0, 16),
+      return holdX('SERVER_MOVED', { serverRev: j.rev, serverHash: sh.slice(0, 16),
                                                   lastConfirmedRev: rec.lastConfirmedRev });
     });
   }
@@ -1651,13 +1835,15 @@
     if (!id) return again();                        /* document bind 前 */
     var rec = f697pRead(id);
     if (!rec) return;                               /* journal 無し = 従来挙動（read 1 回・write 0・GET 0） */
-    if (((+rec.holdCount) || 0) >= F697P_HOLD_MAX){
-      f697pStats.skipped++; f697pReconciled = true;
-      return f697pFinish(id, 'HOLD_CAP_REACHED', { holdCount: ((+rec.holdCount) || 0) });
-    }
     if (!isLoggedIn()) return again();               /* 未 login では authoritative GET を撃たない */
+    /* ★★Rev3c(GPT 裁定 §4): holdCount cap に達していても **safe content-equivalence reconcile**
+       だけは cap 判定より前に実施する（holdCount reset 禁止・cap 除外禁止のまま）。
+       fresh GET が取れて optional-preserve semantics 込みで equivalent と証明できたときだけ
+       CLEARED_STALE_LANDED → sanctioned confirm → journal clear（server write 0 の bookkeeping 収束）。
+       differs / compare skipped / GET 失敗は従来どおり cap 適用（journal write 0・resume 0）。 */
+    var capped = (((+rec.holdCount) || 0) >= F697P_HOLD_MAX);
     f697pReconciled = true;
-    f697pReconcile(id, rec);
+    f697pReconcile(id, rec, capped);
   }
 
   // ---- commit（完全 fire-and-forget） ----
