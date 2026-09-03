@@ -87,6 +87,31 @@
  *       memoryV1 の key は生の storyId。囲みの二重引用符だけ `normSid()` で外す。
  *   (h) 副作用は Rev5 と同じ 0。localStorage は read のみ・network 0 / timer 0 /
  *       listener 0 / DOM 0 / 生成系レジストリ非登録。throw 0（fail-open で null）。
+ * ---------------------------------------------------------------------
+ * ★Rev7（2026-09-03 / GPT 裁定 3C-3A = F1_k1 ADOPT。閾値・重み・tier・80 字・3 件・
+ *   cap300・Memory->state->guard・CanonicalMemory・knownTo・refresh は **一切不変**）
+ *   (a) **repetition filter F1_k1 を 1 段だけ追加**。構造は
+ *       **admission/ranking（select）-> F1 filter -> cap/render** の順。
+ *       select() / score() / render() / dryBlock() のコードは 1 バイトも変えていない。
+ *   (b) **k=1 の厳密な意味**: `lastInjectedTurn === currentTurn - 1` の record だけを
+ *       **今回に限り**候補から外す。`currentTurn` は `S.turns.length`（0-based 規約のまま）。
+ *       それ以外（2 ターン前・同一ターン・未記録）は **除外しない**。
+ *   (c) **候補が全部消えたら 0 件**。後順位の record で 3 枠を埋め直さない。
+ *       0 件なら guard も出さない（既存契約 = canaryBlocks が null を返す）。
+ *   (d) **状態は `storyId + '|' + memoryId -> lastInjectedTurn` のみ**。
+ *       **session scoped（この module の変数だけ）**。localStorage / IndexedDB /
+ *       CanonicalMemory へは保存しない。**reload で reset される（KNOWN LIMITATION）**。
+ *       story ごとに key を分けるので cross-story の混線は構造的に起きない。
+ *   (e) **LLM retry 安全**: 同じ `currentTurn` で再呼出されても
+ *       ・除外判定は `=== currentTurn - 1` の一致のみなので、今ターン記録済みの record は
+ *         `lastInjectedTurn === currentTurn` となり **除外されない**＝ 同一選択になる。
+ *       ・記録は `map[key] = currentTurn` の **idempotent 代入**（加算ではない）。
+ *       → cooldown が二重進行せず、連続カウントも 2 回加算されない。
+ *   (f) **記録するのは実際に Memory block へ入った memoryId のみ**。
+ *       候補段階で除外されたもの・render で落ちたものは記録しない。
+ *   (g) telemetry: `status().lastBlocks` に `cooldownExcluded[]` / `zeroTurn` /
+ *       `lastInjectedSize`（map の件数）を追加。
+ * ---------------------------------------------------------------------
  * ★DEPLOY != ENABLE。既定 OFF。load 時に自動実行しない。
  * opt-in : v292Dfix796On  === '1'（既定 OFF）
  * kill   : v292Dfix796Off === '1'
@@ -205,6 +230,17 @@
 
   var _lastLog = null;
   var _lastBlocks = null;                            /* ★Rev6: canaryBlocks の最終 telemetry */
+
+  /* ★Rev7 (3C-3A / F1_k1): repetition cooldown の状態。
+     key = storyId + '|' + memoryId  →  value = lastInjectedTurn（0-based の currentTurn）。
+     **この module 変数だけ = session scoped**。localStorage / IndexedDB /
+     CanonicalMemory へは書かない。ページを reload すると reset される
+     （KNOWN LIMITATION・GPT 契約で明示的に許容された挙動）。 */
+  var _lastInjected = {};
+  function coolKey(sid, mid) { return String(sid) + '|' + String(mid); }
+  function coolSize() { var n = 0, k;
+    for (k in _lastInjected) if (Object.prototype.hasOwnProperty.call(_lastInjected, k)) n++;
+    return n; }
   function setLog(o) { _lastLog = o; return o; }
   function newLog(storyId, turnCtx) {
     return {
@@ -844,13 +880,55 @@
     return s;
   }
 
+  /* ★Rev7 (F1_k1) — admission/ranking の **後段**、cap/render の **前段**。
+     直前ターン（currentTurn - 1）に **実際に Memory block へ入った** record だけを
+     今回に限り外す。score も tier も admission も 1 mm も触らない
+     （順位付けが済んだ列から 1 件ずつ抜くだけで、順序も残りの相対順位も保つ）。
+     currentTurn が数値でないときは何もしない（従来動作）。 */
+  function cooldownFilter(sid, ranked, currentTurn, excluded) {
+    if (!isNum(currentTurn)) return ranked;
+    var prev = currentTurn - 1, out = [], i, e, seen;
+    for (i = 0; i < ranked.length; i++) {
+      e = ranked[i]; if (!e) continue;
+      seen = _lastInjected[coolKey(sid, e.memoryId)];
+      if (isNum(seen) && seen === prev) { if (excluded) excluded.push(str(e.memoryId)); continue; }
+      out.push(e);
+    }
+    return out;
+  }
+
+  /* ★Rev7: 記録するのは **実際に block へ入った memoryId のみ**。
+     代入は idempotent（同一 currentTurn の retry で二重進行しない）。 */
+  function noteInjected(sid, ids, currentTurn) {
+    if (!isNum(currentTurn)) return;
+    for (var i = 0; i < ids.length; i++) _lastInjected[coolKey(sid, ids[i])] = currentTurn;
+  }
+
+  /* ★Rev7: render が実際に採用する列を、render と **同じ条件**で先読みして memoryId を得る
+     （world_event 除外 → 命題が空なら出さない、の順。render の判定と 1 対 1）。 */
+  function injectedIdsOf(cooled, count) {
+    var ids = [], i, e, rec, prop;
+    for (i = 0; i < cooled.length && ids.length < count; i++) {
+      e = cooled[i]; if (!e) continue;
+      rec = (e.record && typeof e.record === 'object') ? e.record : e;
+      if (str(rec.lineageClass) === CLASS_WORLD_EVENT) continue;
+      prop = (e.proposition80 !== undefined && e.proposition80 !== null && e.proposition80 !== '')
+             ? str(e.proposition80) : truncate(rec.normalizedProposition, LIMITS.PROP_MAX);
+      if (!prop) continue;
+      ids.push(str(e.memoryId));
+    }
+    return ids;
+  }
+
   function storyFlag() { return normSid(lsg('v292Dfix796Story')); }
 
   function canaryBlocks(ctx) {
     var meta = { build: BUILD, gate: 'none', sid: '', currentTurn: null,
                  memoryChars: 0, guardChars: 0, records: 0, droppedByCap: 0,
                  order: ORDER.slice(), queryReason: 'none', reason: REASON.OK,
-                 registered: false, cap: LIMITS.TOTAL_SOFT };
+                 registered: false, cap: LIMITS.TOTAL_SOFT,
+                 /* ★Rev7 telemetry */
+                 cooldownExcluded: [], zeroTurn: false, lastInjectedSize: 0 };
     try {
       var o = (ctx && typeof ctx === 'object') ? ctx : {};
       var sid = normSid(o.sid); meta.sid = sid;
@@ -877,24 +955,34 @@
       var cap = LIMITS.TOTAL_SOFT;
       if (isNum(o.maxChars) && o.maxChars < cap) cap = o.maxChars;
       meta.cap = cap;
-      var r = render(sel, { maxChars: cap });
+      /* ★Rev7 (F1_k1): admission/ranking は済んでいる。ここで直前ターンに出した
+         record だけを外し、その後で cap/render に渡す（構造 = admission -> filter -> cap）。 */
+      var cooled = cooldownFilter(sid, sel, meta.currentTurn, meta.cooldownExcluded);
+      var r = render(cooled, { maxChars: cap });
       meta.records = r.actuallyInjected;
       meta.droppedByCap = r.droppedByBudget;
 
       if (!r.text) {                                    /* ★memory 0 件 → guard も 0（guard 単独禁止） */
         meta.gate = 'NO_MEMORY_BLOCK';
         meta.memoryChars = 0; meta.guardChars = 0;
+        meta.zeroTurn = true;                           /* ★Rev7: 0 件ターン（filter 由来も含む） */
+        meta.lastInjectedSize = coolSize();             /* ★Rev7: 記録は増やさない（block に入っていない） */
         _lastBlocks = meta; return null;
       }
       meta.gate = 'EMITTED';
       meta.memoryChars = r.text.length;
       meta.guardChars = GUARD_SENTENCE.length;          /* guard 固定文長は cap の外で数える */
+      /* ★Rev7: 実際に block へ入った memoryId だけを cooldown へ記録（idempotent 代入）。 */
+      noteInjected(sid, injectedIdsOf(cooled, r.actuallyInjected), meta.currentTurn);
+      meta.zeroTurn = false;
+      meta.lastInjectedSize = coolSize();
       _lastBlocks = meta;
       return { memoryText: r.text, guardText: GUARD_SENTENCE, meta: meta };
     } catch (e5) {
       meta.gate = 'ERROR'; meta.reason = REASON.ERROR;
       meta.error = str(e5 && e5.message);
       meta.memoryChars = 0; meta.guardChars = 0; meta.records = 0;
+      meta.zeroTurn = true; meta.lastInjectedSize = coolSize();
       _lastBlocks = meta;
       return null;                                      /* fail-open: throw しない */
     }
@@ -916,7 +1004,9 @@
         note: 'shadow only / index=ACTIVE all / PENDING_REF structurally excluded / '
             + 'exact entityId match only / world_event excluded at render / '
             + 'knownTo is provenance only / read-only localStorage / no hook / '
-            + 'render cap = caller remaining budget (default 300, hard 360)'
+            + 'render cap = caller remaining budget (default 300, hard 360) / '
+            + 'Rev7 F1_k1 repetition cooldown after ranking, before cap '
+            + '(session scoped module map, never persisted, reset on reload)'
       };
     },
     on:  function () { return isOn(); },      /* ★flag の読み取りのみ（書き込み禁止のため） */
@@ -948,7 +1038,15 @@
       buildTurnCtxFromTurn: buildTurnCtxFromTurn,
       newTelemetry: newTelemetry, noteTelemetry: noteTelemetry,
       knownFromMemory: knownFromMemory, ctxFromCaller: ctxFromCaller,
-      storyFlag: storyFlag, normSid: normSid, lastBlocks: function () { return _lastBlocks; }
+      storyFlag: storyFlag, normSid: normSid, lastBlocks: function () { return _lastBlocks; },
+      /* ★Rev7: cooldown の検査口（fixture 用。live 経路からは使わない） */
+      coolKey: coolKey, coolSize: coolSize,
+      cooldownFilter: cooldownFilter, noteInjected: noteInjected, injectedIdsOf: injectedIdsOf,
+      cooldownMap: function () { var o = {}, k;
+        for (k in _lastInjected) if (Object.prototype.hasOwnProperty.call(_lastInjected, k)) o[k] = _lastInjected[k];
+        return o; },
+      /* reload 相当（新しいページロードで map が空から始まることの再現） */
+      resetCooldown: function () { _lastInjected = {}; }
     }
   };
   /* ★自動実行しない。生成側へ 1 本も繋がない。sys 登録なし。DOM 参照なし。 */
