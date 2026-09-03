@@ -596,7 +596,33 @@
           ? '本文は地の文と「」セリフで、3〜6文程度に絞って書き切る。'
           : '本文は地の文と「」セリフで、5〜10文程度を目安に書き切る。') + contLine
     ]);
-    if (st){ blocks.push(''); blocks.push(st); }
+    /* ★3C-2 / fix192 optional memory canary block（hard cap 300）— hook 1 点だけ。
+       fix796 から memoryText / guardText の 2 文字列を **READ-ONLY** で受け取り、
+       current state の直前 / 直後へ条件挿入する。Retrieve・score・entity 解決・
+       300 字化は 1 行もここに無い（すべて fix796 側）。
+       未ロード / OFF / 非 canary story / 例外 / memory 0 件 → 両方 '' ＝ この関数の
+       出力は 1 バイトも変わらない。**guard だけを単独で出すことは無い**。
+       write-free 維持: 追加した localStorage アクセスは getItem 1 本のみ。 */
+    if (st){
+      var _mem3c2 = '', _grd3c2 = '';
+      try {
+        var _sid3c2 = localStorage.getItem('chr6_active_slot');
+        var _S3c2 = getS();
+        var _ct3c2 = (_S3c2 && Array.isArray(_S3c2.turns)) ? _S3c2.turns.length : null;
+        var _b3c2 = (window.__v292Dfix796 && typeof window.__v292Dfix796.canaryBlocks === 'function')
+          ? window.__v292Dfix796.canaryBlocks({
+              sid: _sid3c2, mode: m, text: t, currentTurn: _ct3c2,
+              prevTurn: (_ct3c2 && _ct3c2 > 0) ? _S3c2.turns[_ct3c2 - 1] : null })
+          : null;
+        if (_b3c2 && typeof _b3c2.memoryText === 'string' && typeof _b3c2.guardText === 'string'
+            && _b3c2.memoryText && _b3c2.guardText){
+          _mem3c2 = _b3c2.memoryText; _grd3c2 = _b3c2.guardText;
+        }
+      } catch(_e3c2){ _mem3c2 = ''; _grd3c2 = ''; }
+      if (_mem3c2){ blocks.push(''); blocks.push(_mem3c2); }
+      blocks.push(''); blocks.push(st);
+      if (_grd3c2){ blocks.push(''); blocks.push(_grd3c2); }
+    }
     if (seed){ blocks.push(''); blocks.push(seed); }     /* v292Dfix223a */
     if (spice){ blocks.push(''); blocks.push(spice); }   /* v292Dfix223c */
     if (agenda){ blocks.push(''); blocks.push(agenda); } /* v292Dfix254 */
