@@ -66,6 +66,10 @@
 //   有効 = v292Dfix697On === '1' かつ v292Dfix697Off !== '1'（★既定 OFF = 明示 opt-in）
 // 検証口: window.__v292Dfix697 = { status, stats, ledger, flush, projection, contentHash, off,
 //                                  journal, journalStats }  ★fix697p は read-only 口のみ追加
+// ■fix697p Rev3(CANONICAL_LANDED_NOCONFIRM_FIX697P): 二段 journal（PREPARED_LOCAL → ARMED_CAS）＋
+//   send projection single-source（hash 対象 = PUT body）＋ 200/serverHash 不一致を捨てず
+//   bounded readback 1 回で content deep-equal なら sanctioned confirm（LANDED_CONTENT_EQUAL）＋
+//   boot reconcile を content-first 化（CLEARED_STALE_LANDED）＋ hash 規約の READ-ONLY 診断。
 // ■fix697p Rev2(PRODUCT_SAVE_STRANDING_FIX697): P2 = startLazyRefresh の getstory に
 //   clientCanonicalSchemaMax:2 / P1 = canonicalCommit2 入口の PREPARED_LOCAL journal
 //   （storyId / lastConfirmedRev / lastConfirmedHash / intendedCanonicalHash / 最小 binding）
@@ -848,10 +852,25 @@
         note({ kind: 'C2_SERVER_NOT_SCHEMA2', id: id, recordSchema: srvSchema }); return fin(); }
       var srvRev = (typeof j.rev === 'number') ? j.rev : 0;
       var srvHash = String(j.serverHash || '');
-      /* ---- outgoing: 既存 schema2 builder（V1 projection は使わない） ---- */
-      var v2c = projectionV2(id);
-      if (!v2c){ cstats.netFail++; note({ kind: 'C2_BUILD_FAILED', id: id }); return fin(); }
-      sha256hex(canonicalString(v2c), function(v2hash){
+      f697pHashProbe(id, j, 'cas-preflight');            /* ★fix697p Rev3(P0-5): READ-ONLY 診断のみ */
+      /* ★★fix697p Rev3(P0-1 / P0-2 SEND PROJECTION SINGLE-SOURCE)
+         Rev2 の欠陥（T23 実測 CANONICAL_LANDED_NOCONFIRM の直接原因）:
+           journal の intendedCanonicalHash は f697pPrepare 時点の projectionV2() から、
+           実際に送る body の hash は **getstory 1 往復を挟んだ別の projectionV2()** から
+           計算されており、その間の local 変化（V2-only sidecar / memoryV1）を
+           V1 preflight が素通しするため hash と body が乖離し得た。
+         Rev3 の契約:
+           ・**この 1 箇所でだけ** send object を作る（canonicalSend）。
+           ・serialization も 1 回だけ（canonicalSendStr）。hash はそれを sha したもの。
+           ・PUT body（rec）は canonicalSend の部分参照だけで組む。
+           ・ARMED_CAS を書いた後に projectionV2() を呼び直すことは **禁止**。
+             （readback の deep-equal も canonicalSendStr と比較する） */
+      var canonicalSend = projectionV2(id);
+      if (!canonicalSend){ cstats.netFail++; note({ kind: 'C2_BUILD_FAILED', id: id }); return fin(); }
+      var canonicalSendStr = null;
+      try { canonicalSendStr = canonicalString(canonicalSend); } catch(eCS){ canonicalSendStr = null; }
+      if (canonicalSendStr === null){ cstats.netFail++; note({ kind: 'C2_BUILD_FAILED', id: id, reason: 'SERIALIZE' }); return fin(); }
+      sha256hex(canonicalSendStr, function(v2hash){
         if (!v2hash){ cstats.netFail++; note({ kind: 'C2_LOCAL_HASH_FAIL', id: id }); return fin(); }
         /* ■fix781: server と比較可能な指紋が確定したので inFlightSave.fingerprint だけを差し替える
            （generation / startedAt は保つ = lost ACK reconcile が schema2 でも成立する）。 */
@@ -869,7 +888,16 @@
             return condClearDirty(fin);
           }
           /* ---- 異内容 → fresh 値で strict CAS 1回（force 禁止） ---- */
-          var rec = { schema: 2, title: v2c.title, deleted: false, body: v2c.body, sidecar: v2c.sidecar };
+          /* ★★fix697p Rev3(P0-1): **PUT の直前**に ARMED_CAS を durable 化する。
+             ここに載る outgoingV2Hash は上の canonicalSendStr（= これから送る body の
+             serialization）そのものの sha であり、PUT body と定義上一致する。 */
+          f697pArm(id, srvRev, srvHash, v2hash, canonicalSend, canonicalSendStr);
+          /* ★★fix697p Rev3b(Q1): **deleted も同一 object から取る**。
+             Rev2 / Rev3 は `deleted:false` 固定で、hash 対象（canonicalSend）と PUT body が
+             1 field だけずれ得た（P0-2「同一 object / serialization」契約の穴）。
+             これで rec は canonicalSend の **部分参照のみ**で構成され、field 単位で同一になる。 */
+          var rec = { schema: 2, title: canonicalSend.title, deleted: canonicalSend.deleted === true,
+                      body: canonicalSend.body, sidecar: canonicalSend.sidecar };
           var mid = 'pc2:' + id + ':' + srvRev + ':' + v2hash;    /* ★決定的（retry で新 mid を作らない） */
           cstats.sent++;
           putCanonicalOnceImpl({ id: id, expectedRev: srvRev, expectedHash: srvHash,
@@ -906,8 +934,22 @@
               return readbackConverge('CANONICAL_COMMIT_CONFIRMED_BY_READBACK', 'CANONICAL_WRITE_UNSETTLED'); }
             var jj = r.j || {};
             if (r.status === 200 && jj.ok){
-              if (String(jj.serverHash || '') !== v2hash){
-                cstats.parityFail++; note({ kind: 'CANONICAL_PARITY_FAIL', id: id, schema: 2 }); return fin(); }
+              var ackHash = String(jj.serverHash || '');
+              if (ackHash !== v2hash){
+                /* ★★fix697p Rev3(P0-3 本丸): 200 で着地しているのに serverHash が一致しない。
+                   Rev2 はここで黙って fin() していたため「server は rev を進めたのに client は
+                   confirm も journal clear もしない」= CANONICAL_LANDED_NOCONFIRM になった（T23 実測）。
+                   Rev3 は journal を HOLD_PARITY にし、**bounded fresh readback 1 回**で
+                   server の canonical content が送信 object と deep-equal かどうかだけを判定する。
+                   serverHash 欠落（空文字）も同じ経路で扱う（!== v2hash が成立するため）。 */
+                cstats.parityFail++;
+                note({ kind: 'CANONICAL_PARITY_FAIL', id: id, schema: 2,
+                       ackRev: (typeof jj.rev === 'number' ? jj.rev : null),
+                       ackHash: ackHash.slice(0, 16), outgoing: String(v2hash).slice(0, 16),
+                       ackHashMissing: !ackHash });
+                f697pMarkParity(id, (typeof jj.rev === 'number' ? jj.rev : null), ackHash, v2hash);
+                return f697pParityReadback(id, canonicalSendStr, v2hash, fin, condClearDirty);
+              }
               canonCtx = { id: id, rev: (typeof jj.rev === 'number' ? jj.rev : null), hash: v2hash };
               if (jj.noop) cstats.noop++; else cstats.ok++;
               note({ kind: 'CANONICAL_COMMIT_OK', id: id, rev: jj.rev, noop: !!jj.noop, why: why, schema: 2 });
@@ -1009,18 +1051,29 @@
        startLazyRefresh の body も base と byte 同一）。v292Dfix697Off='1'（本体 OFF）でも同じ。
      ═══════════════════════════════════════════════════════════════════ */
   var F697P_PRE = 'v292Dfix402_f697p_';    /* ★prefix AUDIT 済み（上記）。collectLS 除外枠に同居 */
-  var F697P_VER = 2;                       /* ★Rev2。v:1(Rev1) record は fail-closed で無視 */
-  var F697P_PREPARED = 'PREPARED_LOCAL';
+  var F697P_VER = 3;                       /* ★Rev3。書込は v:3 */
+  /* ★Rev3: v:2(Rev2) の record も **読み取りは受け入れる**。
+     理由: live に残っている PREPARED_LOCAL（smrj0rvnuup / T23 no-confirm）を
+     P0-4 の CLEARED_STALE_LANDED で救う必要があるため。v:1(Rev1) は従来どおり無視。 */
+  var F697P_VER_ACCEPT = { 2: 1, 3: 1 };
+  var F697P_PREPARED = 'PREPARED_LOCAL';   /* prepare 時 snapshot（CAS 未到達でも残す） */
+  var F697P_ARMED    = 'ARMED_CAS';        /* ★Rev3: これから PUT する body の指紋を確定した状態 */
+  var F697P_PARITY   = 'HOLD_PARITY';      /* ★Rev3: 200 だが serverHash 不一致（content 未判定/不一致） */
   var F697P_CONFLICT = 'HOLD_CONFLICT';
   var F697P_RESUME_MAX = 1;                /* ★「1 回だけ」= journal 1 件につき resume 1 回 */
   var F697P_HOLD_MAX = 3;                  /* Case C を無限に GET し続けない */
   var F697P_WAIT_MS = 2000, F697P_WAIT_TRIES = 15;   /* barrier / readiness の bounded 待機（最大 30s） */
   var F697P_BOOT_MS = 250, F697P_BOOT_TRIES = 120;   /* storyId / login の bounded 待機（最大 30s） */
 
-  var f697pStats = { prepares: 0, prepareSkipped: 0, clears: 0, clearFails: 0, conflicts: 0,
+  var f697pStats = { prepares: 0, prepareSkipped: 0, arms: 0, clears: 0, clearFails: 0, conflicts: 0,
                      reconciles: 0, convergedA: 0, resumedB: 0, holdC: 0, localMoved: 0,
                      crossStoryIgnored: 0, barrierBlocked: 0, waitCancelled: 0,
-                     budgetExhausted: 0, getFails: 0, skipped: 0 };
+                     budgetExhausted: 0, getFails: 0, skipped: 0,
+                     /* ★Rev3 */
+                     parityMismatch: 0, parityReadbacks: 0, parityReadbackFailed: 0,
+                     holdParity: 0, landedContentEqual: 0, clearedStaleLanded: 0,
+                     hashProbes: 0, hashContractMismatch: 0 };
+  var f697pLastHashProbe = null;           /* ★Rev3(P0-5): READ-ONLY 診断の直近結果 */
   var f697pLast = null;                    /* 直近 verdict（read-only 可視化） */
   var f697pResumeFired = false;            /* この page session で resume を撃ったか（多重発火の構造的禁止） */
   var f697pReconciled = false;
@@ -1072,9 +1125,10 @@
       if (raw == null) return null;
       var r = JSON.parse(raw);
       if (!r || typeof r !== 'object' || Object.prototype.toString.call(r) === '[object Array]') return null;
-      if (r.v !== F697P_VER) return null;                       /* 未知 / 旧 version は「無し」扱い */
+      if (!F697P_VER_ACCEPT[r.v]) return null;                  /* v:1(Rev1) / 未知 version は「無し」扱い */
       if (r.cleared === true) return null;                      /* tombstone */
-      if (r.state !== F697P_PREPARED && r.state !== F697P_CONFLICT) return null;
+      if (r.state !== F697P_PREPARED && r.state !== F697P_ARMED &&
+          r.state !== F697P_PARITY && r.state !== F697P_CONFLICT) return null;
       if (String(r.storyId || '') !== String(id)){              /* ★cross-story replay の構造的禁止 */
         f697pStats.crossStoryIgnored++;
         try { note({ kind: 'F697P_CROSS_STORY_IGNORED', id: String(id),
@@ -1130,9 +1184,14 @@
     if (!f697pEnabled() || !id) return false;
     try {
       var prev = f697pRead(id);
-      /* HOLD_CONFLICT は上書きしない（自動 resume 禁止の状態を保持する） */
-      if (prev && prev.state === F697P_CONFLICT){
-        try { note({ kind: 'F697P_PREPARE_SKIPPED', id: String(id), reason: 'HOLD_CONFLICT_KEPT' }); } catch(e){}
+      /* HOLD_CONFLICT は上書きしない（自動 resume 禁止の状態を保持する）。
+         ★★Rev3b(Q2): **HOLD_PARITY も同じく粘着**させる。GPT R2「journal 保持」の趣旨は
+         「次の commit の PREPARED_LOCAL で証跡を消さない」ことまで含む。出口は
+         CONVERGED_NO_WRITE / COMMIT_OK / readback 収束 / CLEARED_STALE_LANDED の f697pClear だけ。
+         （自動 resume 禁止は f697pReconcile 側で維持。save 自体は従来どおり止めない） */
+      if (prev && (prev.state === F697P_CONFLICT || prev.state === F697P_PARITY)){
+        try { note({ kind: 'F697P_PREPARE_SKIPPED', id: String(id),
+                     reason: (prev.state === F697P_PARITY) ? 'HOLD_PARITY_KEPT' : 'HOLD_CONFLICT_KEPT' }); } catch(e){}
         return false;
       }
       var same = !!(prev && prev.intendedCanonicalHash === String(intendedHash)
@@ -1172,6 +1231,197 @@
       try { note({ kind: 'F697P_HOLD_CONFLICT', id: String(id), serverRev: rec.conflictServerRev }); } catch(e){}
       return f697pSave(id, rec);
     } catch(e){ return false; }
+  }
+
+  /* ★★fix697p Rev3(P0-1): ARMED_CAS — 「いま実際に PUT する body」の指紋を durable 化する。
+     outgoingV2Hash は PUT body と同一 serialization（canonicalSendStr）の sha であることが契約。
+     outgoingFingerprint は content の構造指紋（診断用・deep-equal の代替ではない）。 */
+  function f697pArm(id, preRev, preHash, outHash, sendObj, sendStr){
+    if (!f697pEnabled() || !id) return false;
+    try {
+      var rec = f697pRead(id);
+      /* ★★Rev3b(Q2): HOLD_CONFLICT / HOLD_PARITY は ARM でも上書きしない（証跡の粘着）。
+         この journal は「server に載ったか未判定」の状態なので、次の CAS が成功して
+         f697pClear が走るまで保持する。 */
+      if (rec && (rec.state === F697P_CONFLICT || rec.state === F697P_PARITY)){
+        try { note({ kind: 'F697P_ARM_SKIPPED', id: String(id), reason: rec.state + '_KEPT' }); } catch(e){}
+        return false;
+      }
+      if (!rec){
+        /* prepare が skip された（lastConfirmed 無し）場合は ARMED も書かない = blind write 禁止 */
+        f697pStats.prepareSkipped++;
+        try { note({ kind: 'F697P_ARM_SKIPPED', id: String(id), reason: 'NO_PREPARED_JOURNAL' }); } catch(e){}
+        return false;
+      }
+      var turns = null;
+      try { turns = (sendObj && sendObj.body && Object.prototype.toString.call(sendObj.body.turns) === '[object Array]')
+                    ? sendObj.body.turns.length : null; } catch(e){ turns = null; }
+      var skeys = [];
+      try { var sc = sendObj && sendObj.sidecar;
+            if (sc && typeof sc === 'object'){ for (var kk in sc){
+              if (Object.prototype.hasOwnProperty.call(sc, kk) && sc[kk] != null) skeys.push(kk); } }
+            skeys.sort(); } catch(e){ skeys = []; }
+      rec.state = F697P_ARMED;
+      rec.preServerRev = (typeof preRev === 'number') ? preRev : null;
+      rec.preServerHash = String(preHash || '');
+      rec.outgoingV2Hash = String(outHash);
+      rec.outgoingFingerprint = { len: (sendStr == null ? null : String(sendStr).length),
+                                  turnCount: turns, sidecarKeys: skeys,
+                                  title: (sendObj && sendObj.title != null) ? String(sendObj.title).slice(0, 40) : null };
+      rec.armedAt = Date.now();
+      rec.lastVerdict = null;
+      f697pStats.arms++;
+      try { note({ kind: 'F697P_ARMED_CAS', id: String(id), preServerRev: rec.preServerRev,
+                   preServerHash: rec.preServerHash.slice(0, 16),
+                   outgoing: rec.outgoingV2Hash.slice(0, 16),
+                   len: rec.outgoingFingerprint.len, turnCount: turns }); } catch(e){}
+      return f697pSave(id, rec);
+    } catch(e){ return false; }
+  }
+
+  /* ★★fix697p Rev3b(Q3): **sanctioned confirm が実際に成立した時点でだけ** ledger へ
+     CANONICAL_COMMIT_OK{via} を積む。fix758 は既存の監視 kind（CANONICAL_COMMIT_OK）で消灯するので
+     **fix758 側の変更は不要**。成立判定は fix781 marker の lastConfirmed が
+     server 実 rev / 実 hash に前進したことの再読み取りで行う（捏造禁止・fail-closed）。 */
+  function f697pNoteCommitOk(id, rev, hash, via){
+    try {
+      var want = (typeof rev === 'number') ? rev : null;
+      if (want === null) return false;
+      var lc = f697pLastConfirmed(id);
+      if (!lc || lc.rev !== want || String(lc.hash) !== String(hash)) return false;
+      note({ kind: 'CANONICAL_COMMIT_OK', id: String(id), rev: want, noop: false, schema: 2,
+             via: String(via || ''), confirmed: true });
+      return true;
+    } catch(e){ return false; }
+  }
+
+  /* ★★fix697p Rev3(P0-3): 200 ＋ serverHash 不一致 → HOLD_PARITY（まだ判定していない状態）。 */
+  function f697pMarkParity(id, ackRev, ackHash, outHash){
+    if (!f697pEnabled() || !id) return false;
+    try {
+      var rec = f697pRead(id);
+      if (!rec) return false;
+      if (rec.state === F697P_CONFLICT) return false;
+      rec.state = F697P_PARITY;
+      rec.lastVerdict = 'PARITY_MISMATCH';
+      rec.ackServerRev = (typeof ackRev === 'number') ? ackRev : null;
+      rec.ackServerHash = ackHash ? String(ackHash).slice(0, 64) : null;
+      rec.outgoingV2Hash = String(outHash);
+      f697pStats.parityMismatch++;
+      return f697pSave(id, rec);
+    } catch(e){ return false; }
+  }
+
+  /* server の canonical record を **projectionV2 と同一の wrap** に組み直す。
+     ここで client の serializer を使うのは「hash 規約」ではなく「content 同一性」を見るため。 */
+  function f697pServerWrap(id, j){
+    try {
+      var r = j && j.record;
+      if (!r || typeof r !== 'object' || r.schema !== 2) return null;
+      var turns = (r.body && Object.prototype.toString.call(r.body.turns) === '[object Array]') ? r.body.turns : [];
+      return { schema: 2, id: String(id),
+               title: (r.title == null) ? '' : String(r.title),
+               deleted: r.deleted === true,
+               body: r.body, sidecar: r.sidecar,
+               turnCount: turns.length, snippet: snippetOf(r.body) };
+    } catch(e){ return null; }
+  }
+
+  /* ★★fix697p Rev3(P0-5): READ-ONLY 診断。GET した server canonical を client 側で再 hash し
+     Worker の serverHash と突き合わせるだけ。**write 0 / network 0 / 判定に使わない**。 */
+  function f697pHashProbe(id, j, where){
+    if (!f697pEnabled()) return;
+    try {
+      var w = f697pServerWrap(id, j);
+      var sh = String((j && j.serverHash) || '');
+      if (!w || !sh) return;
+      f697pStats.hashProbes++;
+      sha256hex(canonicalString(w), function(h){
+        if (!h || h === sh) return;
+        f697pStats.hashContractMismatch++;
+        f697pLastHashProbe = { where: String(where || ''), serverHash: sh.slice(0, 16),
+                               clientRehash: String(h).slice(0, 16), at: Date.now() };
+        try { note({ kind: 'F697P_HASH_CONTRACT_PROBE', id: String(id), where: String(where || ''),
+                     serverHash: sh.slice(0, 16), clientRehash: String(h).slice(0, 16) }); } catch(e){}
+      });
+    } catch(e){}
+  }
+
+  function f697pNoteVerdictById(id, verdict, extra){
+    var rec = null; try { rec = f697pRead(id); } catch(e){ rec = null; }
+    f697pNoteVerdict(id, rec, verdict, extra);
+  }
+
+  /* ★★fix697p Rev3(P0-3): parity mismatch の bounded readback（**GET 1 回だけ・retry 0**）。
+       R1 content deep-equal → LANDED_CONTENT_EQUAL → 既存 sanctioned confirm 経路 → journal clear → CLEAN
+       R2 content differs    → HOLD_PARITY 維持・confirm 0・retry 0・write 0
+       R3 readback 失敗       → HOLD_PARITY_READBACK_FAILED・confirm 0・retry 0・write 0 */
+  function f697pParityReadback(id, sendStr, outHash, fin, condClearDirty){
+    f697pStats.parityReadbacks++;
+    try { note({ kind: 'F697P_PARITY_READBACK_START', id: String(id),
+                 outgoing: String(outHash).slice(0, 16) }); } catch(e){}
+    postSaveOnce({ op: 'getstory', id: id, clientCanonicalSchemaMax: 2 }, function(g2, ge2){
+      if (ge2 || !g2 || g2.status !== 200 || !(g2.j && g2.j.ok)){
+        f697pStats.parityReadbackFailed++;
+        f697pNoteVerdictById(id, 'HOLD_PARITY_READBACK_FAILED',
+                             { status: g2 ? g2.status : null, err: ge2 || null });
+        return fin();
+      }
+      var j2 = g2.j;
+      f697pHashProbe(id, j2, 'parity-readback');
+      var w = f697pServerWrap(id, j2);
+      var srvStr = null;
+      if (w){ try { srvStr = canonicalString(w); } catch(e){ srvStr = null; } }
+      if (srvStr === null){
+        f697pStats.parityReadbackFailed++;
+        f697pNoteVerdictById(id, 'HOLD_PARITY_READBACK_FAILED', { reason: 'NO_SERVER_RECORD' });
+        return fin();
+      }
+      if (srvStr !== String(sendStr)){
+        /* R2: 内容が違う = 着地していない（または別内容） → STOP */
+        f697pStats.holdParity++;
+        f697pNoteVerdictById(id, 'HOLD_PARITY',
+          { serverRev: j2.rev, serverHash: String(j2.serverHash || '').slice(0, 16), contentEqual: false });
+        return fin();
+      }
+      /* R1: content deep-equal → **着地している**。server の実 rev/hash で正式 confirm する。 */
+      var sRev = (typeof j2.rev === 'number') ? j2.rev : null;
+      var sHash = String(j2.serverHash || '');
+      f697pStats.landedContentEqual++;
+      cstats.confirmedByReadback++;
+      try { note({ kind: 'HASH_CONTRACT_MISMATCH_CONTENT_EQUAL', id: String(id), serverRev: sRev,
+                   serverHash: sHash.slice(0, 16), outgoing: String(outHash).slice(0, 16) }); } catch(e){}
+      /* ■既存 sanctioned 経路のみ: refine で inFlightSave.fingerprint を server 実 hash に合わせ、
+         canonCtx 経由の condClearDirty → g781Confirm。transition()/confirm() の生直呼びはしない。 */
+      g781Refine(id, sHash);
+      canonCtx = { id: id, rev: sRev, hash: sHash };
+      f697pClear(id, 'LANDED_CONTENT_EQUAL');
+      f697pFinish(id, 'LANDED_CONTENT_EQUAL', { serverRev: sRev, serverHash: sHash.slice(0, 16) });
+      /* ★Rev3b(Q3): confirm が成立した **後** に CANONICAL_COMMIT_OK{via:'content-equal'} を積む。
+         HASH_CONTRACT_MISMATCH_CONTENT_EQUAL は telemetry として上に併記済み。 */
+      return condClearDirty(function(){
+        f697pNoteCommitOk(id, sRev, sHash, 'content-equal');
+        fin();
+      });
+    });
+  }
+
+  /* ★★fix697p Rev3(P0-4): boot reconcile で「hash は違うが content は同一」= 既に着地していた
+     ケースを救う。**server へは 1 バイトも書かない**。confirm は既存 hook のペアのみ。 */
+  function f697pClearedStaleLanded(id, rec, rev, serverHash){
+    f697pStats.clearedStaleLanded++;
+    try { note({ kind: 'F697P_CLEARED_STALE_LANDED', id: String(id), serverRev: rev,
+                 serverHash: String(serverHash).slice(0, 16),
+                 from: String((rec && rec.state) || '') }); } catch(e){}
+    /* ■sanctioned hook のペア（noteInFlight → confirm）。transition() は呼ばない。
+       fingerprint は **server 実 hash**（以後の Case B は serverHash と突き合わせるため）。 */
+    try { g781InFlight(id, String(serverHash)); } catch(e){}
+    try { g781Confirm(id, (typeof rev === 'number' ? rev : null), String(serverHash)); } catch(e){}
+    /* ★Rev3b(Q3): boot 救済でも confirm 成立時にだけ CANONICAL_COMMIT_OK{via:'boot-cleared-stale'}。 */
+    f697pNoteCommitOk(id, rev, serverHash, 'boot-cleared-stale');
+    canonCtx = { id: id, rev: (typeof rev === 'number' ? rev : null), hash: String(serverHash) };
+    f697pClear(id, 'CLEARED_STALE_LANDED');
+    f697pFinish(id, 'CLEARED_STALE_LANDED', { serverRev: rev, serverHash: String(serverHash).slice(0, 16) });
   }
 
   function f697pClear(id, reason){
@@ -1250,6 +1500,9 @@
     if (!f697pEnabled()){ f697pStats.skipped++; return f697pFinish(id, 'RESUME_SKIPPED_OFF'); }
     if (rec.state === F697P_CONFLICT){                          /* ★HOLD_CONFLICT は永久に resume 禁止 */
       return f697pHold(id, rec, 'HOLD_CONFLICT_NO_RESUME');
+    }
+    if (rec.state === F697P_PARITY){                            /* ★Rev3: HOLD_PARITY も resume 禁止 */
+      return f697pHold(id, rec, 'HOLD_PARITY_NO_RESUME');
     }
     if (((+rec.resumeCount) || 0) >= F697P_RESUME_MAX){          /* ★1 journal = 1 resume（reload を跨いでも） */
       f697pStats.budgetExhausted++;
@@ -1344,15 +1597,36 @@
       if (typeof j.rev !== 'number') return f697pHold(id, rec, 'NO_SERVER_REV');
       var sh = String(j.serverHash || '');
       if (!sh) return f697pHold(id, rec, 'NO_SERVER_HASH');
-      /* ---- Case A: intended content が既に server へ着地している（HOLD_CONFLICT の唯一の出口） ---- */
-      if (sh === String(rec.intendedCanonicalHash)){
+      /* ★★fix697p Rev3(P0-4): hash だけで A/B/C を決めない。**最優先で content 同一性**を見る。
+         比較対象は projectionV2 全体（turns ＋ sidecar 13key ＋ memoryV1）の canonical serialization。
+         これで「Worker の content_hash 規約が client と違うだけで、実際は着地していた」
+         （= T23 実測 CANONICAL_LANDED_NOCONFIRM）を救う。**server へは write 0**。 */
+      f697pHashProbe(id, j, 'boot-reconcile');
+      var swrap = f697pServerWrap(id, j);
+      if (swrap){
+        var lnow = null; try { lnow = projectionV2(id); } catch(e){ lnow = null; }
+        if (lnow){
+          var sStr = null, lStr = null;
+          try { sStr = canonicalString(swrap); lStr = canonicalString(lnow); } catch(e){ sStr = null; lStr = null; }
+          if (sStr !== null && lStr !== null && sStr === lStr){
+            return f697pClearedStaleLanded(id, rec, j.rev, sh);
+          }
+        }
+      }
+      /* ---- Case A: intended / outgoing content が既に server へ着地している ---- */
+      if (sh === String(rec.intendedCanonicalHash) ||
+          (rec.outgoingV2Hash && sh === String(rec.outgoingV2Hash))){
         f697pStats.convergedA++;
         f697pClear(id, 'CASE_A_CONVERGED');
         return f697pFinish(id, 'CASE_A_CONVERGED', { serverRev: j.rev, from: String(rec.state) });
       }
-      /* ---- HOLD_CONFLICT: 収束していない限り保持して HOLD（自動 resume 禁止） ---- */
+      /* ---- HOLD_CONFLICT / HOLD_PARITY: 収束していない限り保持して HOLD（自動 resume 禁止） ---- */
       if (rec.state === F697P_CONFLICT){
         return f697pHold(id, rec, 'HOLD_CONFLICT_KEPT', { serverRev: j.rev, serverHash: sh.slice(0, 16) });
+      }
+      if (rec.state === F697P_PARITY){
+        /* ★Rev3: parity readback で content 不一致だった journal は自動 resume しない（GPT: STOP）。 */
+        return f697pHold(id, rec, 'HOLD_PARITY_KEPT', { serverRev: j.rev, serverHash: sh.slice(0, 16) });
       }
       /* ---- Case B 候補: server は lastConfirmed pre-state のまま = 未着地 ---- */
       if (j.rev === rec.lastConfirmedRev && sh === String(rec.lastConfirmedHash)){
@@ -1787,12 +2061,14 @@
        reset / force / resume を外から撃つ口は **作らない**（guard の無効化を構造的に禁止）。 */
     journal: function(id){ var s = id || storyId(); return s ? f697pRead(s) : null; },
     journalStats: function(){
-      return { off: f697pOff(), enabled: f697pEnabled(), rev: 2,
+      return { off: f697pOff(), enabled: f697pEnabled(), rev: 3,
                key: F697P_PRE + String(storyId() || ''),
                resumeFired: f697pResumeFired, reconciled: f697pReconciled,
                waiting: (f697pWaitTimer != null),
                resumeMax: F697P_RESUME_MAX, holdMax: F697P_HOLD_MAX,
                barrier: f697pBarrierState(), last: f697pLast ? JSON.parse(JSON.stringify(f697pLast)) : null,
+               /* ★Rev3(P0-5): READ-ONLY 診断の直近結果（判定には使わない） */
+               hashProbe: f697pLastHashProbe ? JSON.parse(JSON.stringify(f697pLastHashProbe)) : null,
                stats: JSON.parse(JSON.stringify(f697pStats)) }; },
     flush: function(){ commit('manual'); return true; },
     /* ★fix718: read-only 可視化（書込 0） */
