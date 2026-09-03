@@ -1064,6 +1064,9 @@
   var F697P_HOLD_MAX = 3;                  /* Case C を無限に GET し続けない */
   var F697P_WAIT_MS = 2000, F697P_WAIT_TRIES = 15;   /* barrier / readiness の bounded 待機（最大 30s） */
   var F697P_BOOT_MS = 250, F697P_BOOT_TRIES = 120;   /* storyId / login の bounded 待機（最大 30s） */
+  /* ★Rev3e(GPT 追補 2): boot 時 projectionV2()==null の **bounded** retry。
+     大きな boot scheduler は作らない（この 1 箇所・GET 再送 0・write 0）。 */
+  var F697P_PROJ_RETRY_MS = 500, F697P_PROJ_RETRY_MAX = 6;
 
   var f697pStats = { prepares: 0, prepareSkipped: 0, arms: 0, clears: 0, clearFails: 0, conflicts: 0,
                      reconciles: 0, convergedA: 0, resumedB: 0, holdC: 0, localMoved: 0,
@@ -1074,8 +1077,11 @@
                      holdParity: 0, landedContentEqual: 0, clearedStaleLanded: 0,
                      hashProbes: 0, hashContractMismatch: 0,
                      /* ★Rev3c(OPTIONAL_SIDECAR_PARITY_SEMANTICS) */
-                     compareSkipped: 0, contentDiffers: 0, optionalExcluded: 0, cappedRescues: 0 };
+                     compareSkipped: 0, contentDiffers: 0, optionalExcluded: 0, cappedRescues: 0,
+                     /* ★Rev3e(RECOVERY_LANDED_BASE_BOOKKEEPING) */
+                     landedBaseConfirmed: 0, landedBaseRejected: 0, projRetries: 0, projRetryTimeouts: 0 };
   var f697pLastHashProbe = null;           /* ★Rev3(P0-5): READ-ONLY 診断の直近結果 */
+  var f697pProjRetryTimer = null;          /* ★Rev3e: projection bounded retry の timer（cancel 対象） */
   var f697pLast = null;                    /* 直近 verdict（read-only 可視化） */
   var f697pResumeFired = false;            /* この page session で resume を撃ったか（多重発火の構造的禁止） */
   var f697pReconciled = false;
@@ -1265,12 +1271,35 @@
             if (sc && typeof sc === 'object'){ for (var kk in sc){
               if (Object.prototype.hasOwnProperty.call(sc, kk) && sc[kk] != null) skeys.push(kk); } }
             skeys.sort(); } catch(e){ skeys = []; }
+      /* ★★Rev3f(GPT REVISE 1): **actual outgoing payload に own-property として存在した optional key を
+         値に関わらず全部**記録する（object / string / **null** のいずれでも「送った」）。
+         `sentOptionalNullKeys` は そのうち **明示 null（= clear を送った）** 部分集合。
+         Worker は null=clear なので「送った null」は server 側で **key ごと消える**。
+         その 2 つが揃って初めて LANDED_BASE の正規化が送信 domain を正確に復元できる。
+         ★optional 契約が読めないときは **null**（空配列ではない）を記録し、LANDED_BASE を fail-closed にする。 */
+      var sentOpt = null, sentOptNull = null;
+      try {
+        var OPTa = f697pOptionalNames();
+        var sc2 = sendObj && sendObj.sidecar;
+        if (OPTa && sc2 && typeof sc2 === 'object'){
+          sentOpt = []; sentOptNull = [];
+          for (var oi = 0; oi < OPTa.length; oi++){
+            var ok2 = OPTa[oi];
+            if (!Object.prototype.hasOwnProperty.call(sc2, ok2)) continue;
+            sentOpt.push(ok2);
+            if (sc2[ok2] === null) sentOptNull.push(ok2);
+          }
+          sentOpt.sort(); sentOptNull.sort();
+        }
+      } catch(e){ sentOpt = null; sentOptNull = null; }
       rec.state = F697P_ARMED;
       rec.preServerRev = (typeof preRev === 'number') ? preRev : null;
       rec.preServerHash = String(preHash || '');
       rec.outgoingV2Hash = String(outHash);
       rec.outgoingFingerprint = { len: (sendStr == null ? null : String(sendStr).length),
                                   turnCount: turns, sidecarKeys: skeys,
+                                  /* ★Rev3f: LANDED_BASE の正規化はこの 2 つだけを使う */
+                                  sentOptionalKeys: sentOpt, sentOptionalNullKeys: sentOptNull,
                                   title: (sendObj && sendObj.title != null) ? String(sendObj.title).slice(0, 40) : null };
       rec.armedAt = Date.now();
       rec.lastVerdict = null;
@@ -1278,6 +1307,7 @@
       try { note({ kind: 'F697P_ARMED_CAS', id: String(id), preServerRev: rec.preServerRev,
                    preServerHash: rec.preServerHash.slice(0, 16),
                    outgoing: rec.outgoingV2Hash.slice(0, 16),
+                   sentOptionalKeys: sentOpt, sentOptionalNullKeys: sentOptNull,
                    len: rec.outgoingFingerprint.len, turnCount: turns }); } catch(e){}
       return f697pSave(id, rec);
     } catch(e){ return false; }
@@ -1410,13 +1440,39 @@
     } catch(e){ diffKeys = ['<UNKNOWN>']; }
     return { ok: true, equal: false, excluded: excluded, diffKeys: diffKeys, localStr: lStr };
   }
+  /* ★★Rev3e(GPT 追補 2): boot で projectionV2() が null（fix793/fix743 の hold 等）のときの
+     **bounded retry**。契約:
+       ・null のまま「同値扱い」に倒すことは **絶対にしない**（fail-closed 維持）。
+       ・retry 中に server write 0 / PUT 0 / confirm 0 / **getstory 再送 0**（既存応答 j を使い回す）。
+       ・500ms × 6 の bounded。story / page 切替で cancel（f697pCancelProjRetry）。
+       ・上限到達なら従来どおり HOLD へ落とし、retry 回数を telemetry に残す。 */
+  function f697pWithProjection(id, tries, cb){
+    var lnow = null;
+    try { lnow = projectionV2(id); } catch(e){ lnow = null; }
+    if (lnow) return cb(lnow, tries);
+    if (tries >= F697P_PROJ_RETRY_MAX){
+      f697pStats.projRetryTimeouts++;
+      return cb(null, tries);
+    }
+    f697pStats.projRetries++;
+    try { note({ kind: 'F697P_CONTENT_COMPARE_RETRY', id: String(id), n: (tries + 1),
+                 max: F697P_PROJ_RETRY_MAX, reason: 'NO_V2_PROJECTION' }); } catch(e){}
+    try {
+      f697pProjRetryTimer = setTimeout(function(){
+        f697pProjRetryTimer = null;
+        try { f697pWithProjection(id, tries + 1, cb); } catch(e){}
+      }, F697P_PROJ_RETRY_MS);
+    } catch(e){ return cb(null, tries); }
+  }
+
   /* 比較結果の note（キー名だけ・値 0）。skipped は救済しない = fail-closed。 */
   function f697pNoteCompare(id, where, cmp){
     try {
       if (!cmp || cmp.ok !== true){
         f697pStats.compareSkipped++;
         note({ kind: 'F697P_CONTENT_COMPARE_SKIPPED', id: String(id), where: String(where),
-               reason: String((cmp && cmp.reason) || 'UNKNOWN') });
+               reason: String((cmp && cmp.reason) || 'UNKNOWN'),
+               retries: ((cmp && typeof cmp.retries === 'number') ? cmp.retries : 0) });
         return;
       }
       if (cmp.excluded && cmp.excluded.length) f697pStats.optionalExcluded++;
@@ -1528,6 +1584,104 @@
 
   /* ★★fix697p Rev3(P0-4): boot reconcile で「hash は違うが content は同一」= 既に着地していた
      ケースを救う。**server へは 1 バイトも書かない**。confirm は既存 hook のペアのみ。 */
+  /* ★★fix697p Rev3e(RECOVERY_LANDED_BASE_BOOKKEEPING / GPT 裁定 Rev3e)
+     「PUT は着地したが confirm できないまま local が先へ進んだ」ケースの **bookkeeping 収束**。
+     turn-prefix 推論は使わない（GPT: 弱い）。使うのは **durable journal の landed payload provenance**:
+       ・journal が ARM 済み（preServerRev N / outgoingV2Hash X / outgoingFingerprint）
+       ・fresh GET の rev が **ちょうど N+1**（複数進んでいたら不成立）
+       ・server canonical を **client の送信 domain へ正規化**（optional omit=preserve を、ARM 時に
+         durable 化した `outgoingFingerprint.sidecarKeys`＝実際に送った非 null optional key で判定）
+       ・その正規化 content の hash が **X と完全一致** = 「server が保持しているのは我々が PUT した payload そのもの」
+     証明できたときだけ lastConfirmed を server rev（＋client fingerprint domain = X）へ前進させる。
+     **現在の local 全体が server と一致する必要は無い**（PUT 後に local が先へ進んでいてよい）。
+     契約: CLEAN にしない・state は触らない・server write 0・userChoice 書換 0・transition() 0。
+       → `g781InFlight` を **呼ばず** に `g781Confirm` だけを使う。fix781 の confirm は
+         inFlightSave が無いと canClean=false（ACK_DIRTY_KEPT）なので **lastConfirmed だけが前進**する。 */
+  function f697pMarkerHasInFlight(id){
+    try {
+      var G = g781();
+      if (!G || typeof G.marker !== 'function') return null;      /* 判定不能 */
+      var m = G.marker(id);
+      if (!m) return null;
+      return !!m.inFlightSave;
+    } catch(e){ return null; }
+  }
+  /* server wrap を「ARM 時に送った domain」へ正規化する（server / rec は 1 バイトも変更しない）。 */
+  function f697pServerAsSent(serverWrap, rec){
+    var OPT = f697pOptionalNames();
+    if (!OPT) return { ok: false, reason: 'NO_OPTIONAL_CONTRACT' };
+    var fp = rec && rec.outgoingFingerprint;
+    var isArr = function(x){ return Object.prototype.toString.call(x) === '[object Array]'; };
+    /* ★★Rev3f(GPT REVISE 1): 除外判定は **sentOptionalKeys**（値に関わらず送った optional key 全部）
+       だけを使う。旧 `sidecarKeys`（非 null のみ）は使わない。無い journal は fail-closed。 */
+    var sent = (fp && isArr(fp.sentOptionalKeys)) ? fp.sentOptionalKeys : null;
+    if (!sent) return { ok: false, reason: 'NO_SENT_OPTIONAL_KEYS' };
+    var sentNull = (fp && isArr(fp.sentOptionalNullKeys)) ? fp.sentOptionalNullKeys : [];
+    var has = {}, wasNull = {};
+    for (var i = 0; i < sent.length; i++) has[String(sent[i])] = 1;
+    for (var n = 0; n < sentNull.length; n++) wasNull[String(sentNull[n])] = 1;
+    var ss = serverWrap.sidecar, excluded = [], restoredNull = [];
+    try {
+      for (var o = 0; o < OPT.length; o++){
+        var k = OPT[o], sHas = f697pHasOwn(ss, k);
+        /* (1) server が持つ ∩ 送っていない → Worker の omit=preserve で残ったもの → 送信 domain から除外 */
+        if (sHas && !has[k]) { excluded.push(k); continue; }
+        /* (2) server に無い ∩ **null を送った** → 明示 clear が着地した形 → 送信 domain では null で存在した */
+        if (!sHas && has[k] && wasNull[k]) { restoredNull.push(k); continue; }
+        /* (3) それ以外（送った key が server にある / 送った非 null が server に無い）は素のまま比較する。 */
+      }
+    } catch(e){ return { ok: false, reason: 'OWNERSHIP_THREW' }; }
+    var w = {};
+    try {
+      for (var a in serverWrap){ if (Object.prototype.hasOwnProperty.call(serverWrap, a)) w[a] = serverWrap[a]; }
+      if (excluded.length || restoredNull.length){
+        var sc = {};
+        for (var b in ss){ if (Object.prototype.hasOwnProperty.call(ss, b)) sc[b] = ss[b]; }
+        for (var c = 0; c < excluded.length; c++) delete sc[excluded[c]];
+        for (var d2 = 0; d2 < restoredNull.length; d2++) sc[restoredNull[d2]] = null;
+        w.sidecar = sc;
+      }
+      return { ok: true, wrap: w, str: canonicalString(w), excluded: excluded, restoredNull: restoredNull };
+    } catch(e){ return { ok: false, reason: 'SERIALIZE_FAILED' }; }
+  }
+  /* provenance の事前条件（同期・安価）。満たさないなら null を返して従来経路へ。 */
+  function f697pLandedBaseEligible(rec, j){
+    if (!rec || !j) return null;
+    if (rec.state !== F697P_PARITY && rec.state !== F697P_ARMED) return null;
+    if (typeof rec.preServerRev !== 'number') return null;
+    if (!rec.outgoingV2Hash) return null;
+    if (typeof j.rev !== 'number') return null;
+    if (j.rev !== rec.preServerRev + 1) return { reject: 'REV_NOT_EXACTLY_PLUS_ONE' };
+    return { ok: true };
+  }
+  /* 成立したときの bookkeeping（server write 0 / CLEAN 化 0 / transition 0）。 */
+  function f697pLandedBaseConfirm(id, rec, j, norm){
+    var infl = f697pMarkerHasInFlight(id);
+    if (infl !== false){
+      f697pStats.landedBaseRejected++;
+      try { note({ kind: 'F697P_LANDED_BASE_REJECTED', id: String(id),
+                   reason: (infl === null ? 'MARKER_UNREADABLE' : 'IN_FLIGHT_SAVE_PRESENT') }); } catch(e){}
+      return false;
+    }
+    f697pStats.landedBaseConfirmed++;
+    try { note({ kind: 'F697P_LANDED_BASE_CONFIRMED', id: String(id), serverRev: j.rev,
+                 preServerRev: rec.preServerRev,
+                 fingerprint: String(rec.outgoingV2Hash).slice(0, 16),
+                 serverHashSeen: String(j.serverHash || '').slice(0, 16),
+                 excluded: (norm.excluded || []).slice(0),
+                 restoredNull: (norm.restoredNull || []).slice(0), from: String(rec.state) }); } catch(e){}
+    /* ★sanctioned hook は confirm だけ（noteInFlight は呼ばない）。
+       fix781:315-336 → infl==null なので canClean=false → **lastConfirmed のみ前進 / state 不変**。 */
+    try { g781Confirm(id, j.rev, String(rec.outgoingV2Hash)); } catch(e){}
+    /* landed が証明できたので journal の役目（未着地 PUT の復旧）は終了 → clear。
+       ★canonCtx は **設定しない**（local は server より先行しており write authority を与えない）。 */
+    f697pClear(id, 'LANDED_BASE_CONFIRMED');
+    f697pFinish(id, 'LANDED_BASE_CONFIRMED', { serverRev: j.rev, preServerRev: rec.preServerRev,
+                                               fingerprint: String(rec.outgoingV2Hash).slice(0, 16),
+                                               excluded: (norm.excluded || []).slice(0) });
+    return true;
+  }
+
   /* ★★Rev3c: fingerprint は **client contentHashV2 domain**（localHash）。serverHash は
      `serverHashSeen` として別 field に残すだけ（GPT 裁定 §3）。 */
   function f697pClearedStaleLanded(id, rec, rev, serverHash, localHash, excluded, capped){
@@ -1585,7 +1739,16 @@
   function f697pBarrierAllows(s){ return s === 'NOT_REQUIRED' || s === 'RESOLVED'; }
 
   /* ★待機の cancel（story 切替 / pagehide）。cancel 後に自動 write は起きない。 */
+  /* ★Rev3e: projection retry の cancel（story 切替 / pagehide）。write は元々 0。 */
+  function f697pCancelProjRetry(reason){
+    if (f697pProjRetryTimer == null) return false;
+    try { clearTimeout(f697pProjRetryTimer); } catch(e){}
+    f697pProjRetryTimer = null;
+    try { note({ kind: 'F697P_CONTENT_COMPARE_RETRY_CANCELLED', reason: String(reason || '') }); } catch(e){}
+    return true;
+  }
   function f697pCancelWait(reason){
+    try { f697pCancelProjRetry(reason); } catch(e){}
     if (f697pWaitTimer == null) return false;
     try { clearTimeout(f697pWaitTimer); } catch(e){}
     f697pWaitTimer = null;
@@ -1760,11 +1923,14 @@
          （GPT 裁定 §2）。projection 不能 / ownership 判定不能 / serialize 不能 は
          CONTENT_COMPARE_SKIPPED で **救済しない・CLEAN にしない**（fail-closed）。 */
       var swrap = f697pServerWrap(id, j);
-      var lnow = null; try { lnow = projectionV2(id); } catch(e){ lnow = null; }
+      /* ★★Rev3e: projectionV2()==null は **bounded retry**（500ms×6・GET 再送 0・write 0）。
+         null のまま同値扱いにすることは絶対にしない。 */
+      return f697pWithProjection(id, 0, function(lnow, retries){
       var cmp = (swrap && lnow)
         ? f697pContentEqual(lnow, swrap)
         : { ok: false, equal: false, excluded: [], diffKeys: [],
             reason: (!swrap ? 'NO_SERVER_RECORD' : 'NO_V2_PROJECTION') };
+      cmp.retries = retries;
       f697pNoteCompare(id, 'boot-reconcile', cmp);
       if (cmp.ok === true && cmp.equal === true){
         /* fingerprint は client contentHashV2 domain（= 比較に使った local serialization の sha）。 */
@@ -1772,6 +1938,46 @@
           f697pClearedStaleLanded(id, rec, j.rev, sh, lh || null, cmp.excluded, !!capped);
         });
       }
+      /* ★★Rev3e(RECOVERY_LANDED_BASE_BOOKKEEPING): local 全体が一致しなくても、
+         **journal provenance**（ARM 時に固定した outgoing payload の指紋）で
+         「server が保持しているのは我々が PUT したものそのもの」を証明できるなら
+         lastConfirmed だけを server rev へ前進させる（CLEAN 化 0 / server write 0）。
+         equivalence 救済と同じく **read-only 証明**なので cap 判定より前に置く。 */
+      /* ★Rev3e(GPT 追補 2): projection が取れていない間は LANDED_BASE にも進まない（fail-closed）。 */
+      var elig = lnow ? f697pLandedBaseEligible(rec, j) : null;
+      if (elig && elig.reject){
+        f697pStats.landedBaseRejected++;
+        try { note({ kind: 'F697P_LANDED_BASE_REJECTED', id: String(id), reason: String(elig.reject),
+                     serverRev: j.rev, preServerRev: rec.preServerRev }); } catch(e){}
+      } else if (elig && elig.ok && swrap && lnow){
+        var norm = f697pServerAsSent(swrap, rec);
+        if (norm.ok !== true){
+          f697pStats.landedBaseRejected++;
+          try { note({ kind: 'F697P_LANDED_BASE_REJECTED', id: String(id),
+                       reason: String(norm.reason || 'NORMALIZE_FAILED') }); } catch(e){}
+        } else {
+          return sha256hex(norm.str, function(nh){
+            if (nh && nh === String(rec.outgoingV2Hash)){
+              if (f697pLandedBaseConfirm(id, rec, j, norm)) return;
+            } else {
+              f697pStats.landedBaseRejected++;
+              try { note({ kind: 'F697P_LANDED_BASE_REJECTED', id: String(id), reason: 'PROVENANCE_MISMATCH',
+                           serverAsSent: String(nh || '').slice(0, 16),
+                           outgoing: String(rec.outgoingV2Hash).slice(0, 16),
+                           excluded: (norm.excluded || []).slice(0) }); } catch(e){}
+            }
+            return f697pReconcileTail(id, rec, j, sh, cmp, capped, capStop, holdX);
+          });
+        }
+      }
+      return f697pReconcileTail(id, rec, j, sh, cmp, capped, capStop, holdX);
+      });
+    });
+  }
+
+  /* reconcile の後半（Case A / HOLD 保持 / Case B / Case C）。Rev3e の非同期分岐から
+     2 箇所で呼ぶために切り出しただけで、判定順序は Rev3d から 1 行も変えていない。 */
+  function f697pReconcileTail(id, rec, j, sh, cmp, capped, capStop, holdX){
       /* ★Rev3c(GPT 裁定 §4): equivalent でない / 比較不能なら capped は従来どおり cap 適用。 */
       if (capped) return capStop(cmp.ok === true ? 'CONTENT_DIFFERS' : String(cmp.reason || 'COMPARE_SKIPPED'),
                                  { serverRev: j.rev });
@@ -1819,7 +2025,6 @@
       /* ---- Case C: server が別の rev/hash へ進んだ → auto write 禁止 ---- */
       return holdX('SERVER_MOVED', { serverRev: j.rev, serverHash: sh.slice(0, 16),
                                                   lastConfirmedRev: rec.lastConfirmedRev });
-    });
   }
 
   function f697pBoot(tries){
