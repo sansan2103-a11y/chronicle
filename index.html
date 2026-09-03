@@ -54,7 +54,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260903-3c3a';
+  var BUILT = '20260903-fix802';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3063,7 +3063,10 @@ G.init();
 <!-- v292Dfix246: per-storyストア(fix77状態/longmem/会話キャッシュ)をスロット単位に分離。features.js等の前に設置。OFF=v292StoreSlotIsoOff -->
 <script src="v292Dfix246-store-slot-isolation.js?cb=20260901-fix783"></script>
 <script src="v292Dfix543-save-guard.js?cb=20260829-fix748"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20260903-fix697p5"></script>
+<!-- v292Dfix802: 3C-3B Refresh Orchestrator (telemetry / write-0). default OFF (opt-in=v292Dfix802On / kill=v292Dfix802Off / story=v292Dfix802Story).
+     fix697 (LANDED) / fix670 (RAW_READY) の one-line notify 先なので両者より前に置く。timer 0 / retry 0 / materialize() 0 -->
+<script src="v292Dfix802-refresh-orchestrator.js?cb=20260903-fix802"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20260903-fix802"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
      OFF=v292Dfix729Off / 検証口=window.__v292Dfix729 -->
 <script src="v292Dfix729-title-sync.js?cb=v292Dfix729"></script>
@@ -3673,7 +3676,9 @@ G.init();
      OFF=v292Dfix651StreamGuardOff / v292Dfix651ZeroTurnGuardOff / v292Dfix651SlotBackupGuardOff(Bはfix228内) -->
 <script src="v292Dfix651-guards.js?cb=v292Dfix680"></script>
 <!-- v292Dfix670: Memory Engine v0.3 / Phase3A-1 Shadow. UI._renderHooks push only. opt-in=v292Dfix670On / OFF=v292Dfix670Off -->
-<script src="v292Dfix670-memory-engine.js?cb=20260901-fix788"></script>
+<script src="v292Dfix670-memory-engine.js?cb=20260903-fix802"></script>
+<!-- v292Dfix801: events story-scoped adapter (GPT Q4). fix670 の後・fix792/793 の前。__v292Dfix801.eventsForStory(sid) READ only -->
+<script src="v292Dfix801-events-story-adapter.js?cb=20260903-fix802"></script>
 <!-- v292Dfix789: Phase3A-2 Semantic Adjudication (shadow). chr6mem は読むだけ・verdict は別DB chr6adj。
      Extractor ではない（fix670 不変）。自動実行しない。opt-in=v292Dfix670On / OFF=v292Dfix789Off -->
 <script src="v292Dfix789-semantic-adjudication.js?cb=20260901-fix789"></script>
@@ -3686,12 +3691,12 @@ G.init();
 <!-- v292Dfix792: Phase3A-2 Referent Resolution (shadow). 解けるものだけ安全に解く。
      誤 resolve より UNRESOLVED を優先。new entity を作らない。chr6mem/chr6lin は読むだけ・
      resolution は別DB chr6ref。自動実行しない。OFF=v292Dfix792Off -->
-<script src="v292Dfix792-referent-resolution.js?cb=20260901-fix792"></script>
+<script src="v292Dfix792-referent-resolution.js?cb=20260903-fix802"></script>
 <!-- v292Dfix793: Phase3B-1 QA限定 Canonical Memory canary (client). 既定OFF・呼び出し側0本。
      memory state = UNLOADED/LOADED_ABSENT/LOADED_VALUE。UNLOADEDからsaveしない(fail-closed)。
      nullは明示clearだけ。unknown-fieldでstrip retryしない。canaryはsmtg00ynsv1のみ。
      ON=v292Dfix793On / OFF=v292Dfix793Off / story=v292Dfix793Story -->
-<script src="v292Dfix793-memory-canonical.js?cb=20260902-fix798"></script>
+<script src="v292Dfix793-memory-canonical.js?cb=20260903-fix802"></script>
 <!-- R118 Phase1: capability constraint telemetry. read-only / memory only. OFF=v292Dfix740Off verbose=chronDiagVerbose -->
 <script src="v292Dfix740-cap-telemetry.js?cb=v292Dfix740"></script>
 <!-- R118 Phase2-S: severity consequence lane. fix414 hook 経由。OFF=v292Dfix741Off / feature=v292Dfix414SeverityS (default OFF) -->

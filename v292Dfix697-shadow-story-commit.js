@@ -885,6 +885,7 @@
             cstats.convergedNoWrite++; canonCtx = { id: id, rev: srvRev, hash: srvHash };
             note({ kind: 'CANONICAL_CONVERGED_NO_WRITE', id: id, rev: srvRev, schema: 2 });
             f697pClear(id, 'CONVERGED_NO_WRITE');            /* ★fix697p: server 側が最新 = journal 完了 */
+            f697pNotifyLanded(id, srvRev, srvHash, (canonicalSend && canonicalSend.body && canonicalSend.body.turns) ? canonicalSend.body.turns.length : null);   /* ★fix802 Rev2: 4 番目の LANDED 境界（CONVERGED_NO_WRITE） */
             return condClearDirty(fin);
           }
           /* ---- 異内容 → fresh 値で strict CAS 1回（force 禁止） ---- */
@@ -915,6 +916,7 @@
                   else cstats.confirmedByReadback++;
                   note({ kind: kindOk, id: id, rev: j2.rev, schema: 2 });
                   f697pClear(id, kindOk);                    /* ★fix697p: readback で着地確認 = journal 完了 */
+                  f697pNotifyLanded(id, canonCtx.rev, canonCtx.hash, (canonicalSend && canonicalSend.body && canonicalSend.body.turns) ? canonicalSend.body.turns.length : null);   /* ★fix802 */
                   return condClearDirty(fin);
                 }
                 if (kindKeep === 'CANONICAL_WRITE_CONFLICT'){
@@ -954,6 +956,7 @@
               if (jj.noop) cstats.noop++; else cstats.ok++;
               note({ kind: 'CANONICAL_COMMIT_OK', id: id, rev: jj.rev, noop: !!jj.noop, why: why, schema: 2 });
               f697pClear(id, 'CANONICAL_COMMIT_OK');         /* ★fix697p: ACK 確定 = journal 完了 */
+              f697pNotifyLanded(id, canonCtx.rev, canonCtx.hash, (canonicalSend && canonicalSend.body && canonicalSend.body.turns) ? canonicalSend.body.turns.length : null);   /* ★fix802 */
               return condClearDirty(fin);
             }
             if (r.status === 409){
@@ -1676,6 +1679,7 @@
     /* landed が証明できたので journal の役目（未着地 PUT の復旧）は終了 → clear。
        ★canonCtx は **設定しない**（local は server より先行しており write authority を与えない）。 */
     f697pClear(id, 'LANDED_BASE_CONFIRMED');
+    f697pNotifyLanded(id, j.rev, String(rec.outgoingV2Hash), (rec.outgoingFingerprint && typeof rec.outgoingFingerprint.turnCount === 'number') ? rec.outgoingFingerprint.turnCount : null);   /* ★fix802 */
     f697pFinish(id, 'LANDED_BASE_CONFIRMED', { serverRev: j.rev, preServerRev: rec.preServerRev,
                                                fingerprint: String(rec.outgoingV2Hash).slice(0, 16),
                                                excluded: (norm.excluded || []).slice(0) });
@@ -1727,6 +1731,7 @@
       return okd;
     } catch(e){ f697pStats.clearFails++; return false; }
   }
+  function f697pNotifyLanded(id, rev, hash, turnCount){ try{ var o=window.__v292Dfix802; o && o.onLanded && o.onLanded(id, rev, hash, turnCount); }catch(_){} }   /* ★fix802: REFRESH_SETTLED one-line notify（Orchestrator 不在なら no-op・判断ロジック 0） */
 
   /* ■fix745/748/798 barrier: fix793(:344-351) と同一の read-only 述語。
      fix745 / fix748 は 1 バイトも変えない。判定不能はすべて fail-closed。 */

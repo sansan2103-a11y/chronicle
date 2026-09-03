@@ -1831,6 +1831,7 @@
     }).then(function (r) {
       st.reconciles++; st.timings.lastReconcileMs = nowMs() - t0; st.busyMs += st.timings.lastReconcileMs;
       running = false; saveStat();
+      try{ var o=window.__v292Dfix802; o && o.onRawReady && o.onRawReady(st.slotId, st.processedCount, st.reconciles); }catch(_){}   /* ★fix802 R1: RAW_READY one-line notify（READ のみ・分岐追加 0） */
       rearmIfPending(); return r;
     }).catch(function (e) {
       running = false; degrade('reconcile:' + (e && e.message)); saveStat();

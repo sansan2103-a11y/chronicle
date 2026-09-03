@@ -414,7 +414,7 @@
     st.heroIdentity = d.deps.heroEntityId ? 'present' : 'missing';
     var t0 = nowMs();
     var m = window.__v292Dfix670;
-    return Promise.all([readAll('chr6lin', 'lineages', slotId), m.events(slotId)])
+    return Promise.all([readAll('chr6lin', 'lineages', slotId), (window.__v292Dfix801 ? window.__v292Dfix801.eventsForStory(slotId) : m.events(Infinity))])   /* ★fix801: story-scoped adapter（fallback = fix670 正式契約 events(Infinity)=全件） */
       .then(function (a) {
         var rows = deriveResolutions(a[0], a[1], d.deps);
         return putResolutions(rows).then(function () {

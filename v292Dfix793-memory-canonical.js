@@ -394,7 +394,7 @@
     if (!me || typeof me.events !== 'function') return Promise.resolve({ ok: false, reason: 'no-extractor' });
     return Promise.all([
       readAll('chr6lin', 'lineages', sid),
-      me.events(sid),
+      (window.__v292Dfix801 ? window.__v292Dfix801.eventsForStory(sid) : me.events(Infinity)),   /* ★fix801: story-scoped adapter（fallback = fix670 正式契約 events(Infinity)=全件） */
       readAll('chr6rel', 'relations', sid),
       readAll('chr6ref', 'resolutions', sid)
     ]).then(function (a) {
