@@ -64,7 +64,14 @@
 //
 // ■スイッチ
 //   有効 = v292Dfix697On === '1' かつ v292Dfix697Off !== '1'（★既定 OFF = 明示 opt-in）
-// 検証口: window.__v292Dfix697 = { status, stats, ledger, flush, projection, contentHash, off }
+// 検証口: window.__v292Dfix697 = { status, stats, ledger, flush, projection, contentHash, off,
+//                                  journal, journalStats }  ★fix697p は read-only 口のみ追加
+// ■fix697p Rev2(PRODUCT_SAVE_STRANDING_FIX697): P2 = startLazyRefresh の getstory に
+//   clientCanonicalSchemaMax:2 / P1 = canonicalCommit2 入口の PREPARED_LOCAL journal
+//   （storyId / lastConfirmedRev / lastConfirmedHash / intendedCanonicalHash / 最小 binding）
+//   ＋ reload 後 fresh GET reconcile（Case A CONVERGED / Case B strict CAS を 1 回だけ /
+//   Case C HOLD・HOLD_CONFLICT は自動 resume 禁止）。
+//   kill = v292Dfix697pOff='1'（本体 OFF でも停止・そのとき挙動は base と byte 同一）。
 // =====================================================================
 (function(){
   'use strict';
@@ -480,7 +487,19 @@
     var myEpoch = authorityEpoch;
     revStats.lazyReads++;
     try { note({ kind: 'LAZY_AUTHORITY_REFRESH_START', id: id, epoch: myEpoch }); } catch(e){}
-    postSaveOnce({ op: 'getstory', id: id }, function(r, err){
+    /* ★★fix697p(P2 / GPT 裁定 3C-2 §4・REVISE でも ADOPT 維持): この getstory は schema2
+       canonical document に対しても走るのに capability を宣言していなかった。Worker v39/v40 の
+       OLD CLIENT READ GATE は stored blob が schema2 のとき clientCanonicalSchemaMax >= 2 を
+       宣言しない client へ 409 CLIENT_SCHEMA_TOO_OLD を返すため、下の :510 相当が
+       LAZY_REFRESH_HTTP_409 になり **epoch>0 の lazy authority 復帰が schema2 では構造的に
+       成功しない**（live 実測）。
+       ・capability は caller から受け取らず内部で 2 固定（fix751 getStoryV2Once と同じ規約）。
+       ・request 数 / retry / 応答検証は 1 つも変えない（増える field はこの 1 個だけ）。
+       ・kill（v292Dfix697pOff='1' / 本体 OFF）のとき body は base と **byte 同一**。
+       ・memoryV1 sidecar は read 側で strip しない（応答をそのまま検証するだけ）。 */
+    var f697pLazyBody = { op: 'getstory', id: id };
+    if (f697pEnabled()) f697pLazyBody.clientCanonicalSchemaMax = 2;
+    postSaveOnce(f697pLazyBody, function(r, err){
       if (myEpoch !== authorityEpoch){                        /* ★stale response は破棄 */
         revStats.staleRefreshDiscarded++;
         try { note({ kind: 'LAZY_AUTHORITY_REFRESH_DISCARDED', id: id, epoch: myEpoch,
@@ -801,6 +820,14 @@
         then();
       });
     };
+    /* ★★fix697p Rev2(P1 / GPT REVISE 2): **CAS へ到達し得ない分岐より前**に
+       PREPARED_LOCAL journal を書く。ここは
+         ・intendedCanonicalHash（いまの local の schema2 canonical hash）
+         ・lastConfirmedRev / lastConfirmedHash（fix781 marker の証明済み server pre-state）
+       の両方が揃えられる最初の地点であり、この後の fresh getstory 失敗 / 404 / drift /
+       schema1 / preflight 変化 / CAS 直前の unload のどれで落ちても reload 後に reconcile できる。
+       ★4 field が揃わなければ **書かない**（blind write 禁止）。kill 時は同期で素通し。 */
+    f697pPrepare(id, function(){
     /* ---- fresh getstory exactly 1（V2-capable。この応答だけを CAS authority にする） ---- */
     postSaveOnce({ op: 'getstory', id: id, clientCanonicalSchemaMax: 2 }, function(g, gerr){
       if (gerr || !g){ cstats.netFail++; note({ kind: 'C2_GETSTORY_FAIL', id: id, why: why }); return fin(); }
@@ -838,6 +865,7 @@
             /* 既に収束済み → write 0 */
             cstats.convergedNoWrite++; canonCtx = { id: id, rev: srvRev, hash: srvHash };
             note({ kind: 'CANONICAL_CONVERGED_NO_WRITE', id: id, rev: srvRev, schema: 2 });
+            f697pClear(id, 'CONVERGED_NO_WRITE');            /* ★fix697p: server 側が最新 = journal 完了 */
             return condClearDirty(fin);
           }
           /* ---- 異内容 → fresh 値で strict CAS 1回（force 禁止） ---- */
@@ -858,12 +886,16 @@
                   if (kindOk === 'CANONICAL_CONVERGED_AFTER_CONFLICT') cstats.convergedAfterConflict++;
                   else cstats.confirmedByReadback++;
                   note({ kind: kindOk, id: id, rev: j2.rev, schema: 2 });
+                  f697pClear(id, kindOk);                    /* ★fix697p: readback で着地確認 = journal 完了 */
                   return condClearDirty(fin);
                 }
                 if (kindKeep === 'CANONICAL_WRITE_CONFLICT'){
                   cstats.conflicts++; canonHold[id] = true;
                   note({ kind: 'CANONICAL_WRITE_CONFLICT', id: id, serverRev: j2.rev,
                          serverHash: String(j2.serverHash || '').slice(0, 16) });
+                  /* ★fix697p Rev2(GPT REVISE 3-(2)): journal を消さず HOLD_CONFLICT にする。
+                     自動 resume は永久に禁止。fresh GET で CONVERGED になったときだけ clear。 */
+                  f697pMarkConflict(id, j2.rev, String(j2.serverHash || ''));
                 } else {
                   cstats.ambiguous++; note({ kind: kindKeep, id: id, serverRev: j2.rev });
                 }
@@ -879,6 +911,7 @@
               canonCtx = { id: id, rev: (typeof jj.rev === 'number' ? jj.rev : null), hash: v2hash };
               if (jj.noop) cstats.noop++; else cstats.ok++;
               note({ kind: 'CANONICAL_COMMIT_OK', id: id, rev: jj.rev, noop: !!jj.noop, why: why, schema: 2 });
+              f697pClear(id, 'CANONICAL_COMMIT_OK');         /* ★fix697p: ACK 確定 = journal 完了 */
               return condClearDirty(fin);
             }
             if (r.status === 409){
@@ -889,6 +922,7 @@
         });
       });
     });
+    });                                            /* ★fix697p Rev2: f697pPrepare の callback 終端 */
   }
   /* ★fix755: route が canonical のとき、fix705 の fresh 分類が schema2 なら V2 save 経路へ。
      docAuthority に schema が無い（旧分類 / schema1）は従来経路（変更 0）。 */
@@ -901,6 +935,455 @@
                 a5.fresh === true && a5.present === true &&
                 a5.authority === 'canonical' && a5.schema === 2);
     } catch(e){ return false; }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     ★★fix697p Rev2(P1) — PRODUCT_SAVE_STRANDING_FIX697
+     PREPARED_LOCAL JOURNAL + RELOAD RECONCILE（GPT REVISE 裁定 2026-09-03）
+
+     ■観測 defect（CC_FIX799_LIVE_ACCEPT_20260902.md §4）
+       putcanonical（F733_SIDEPORT_TYPE_A・:1200-1207）は **attempt 時点**で authority を
+       invalidate する（`authorityReloadRequired = true`）。以後この page session では
+         ・:546-550 resolveDocRev が AUTHORITY_RELOAD_REQUIRED で body write 0
+         ・pendingIntent（:366）は **in-memory** なので reload で消える
+         ・reload 後は S.save が発火しないので markDirty も立たない
+       ＝ **未同期 local が自動で push されない（stranded）**。実例: smrj0rvnuup turn22 / server rev9。
+
+     ■Rev1 → Rev2 の変更（GPT REVISE §2 / §3）
+       Rev1 は journal を **strict CAS の直前 1 点**でしか書かなかった。
+       → 「CAS へ到達する前に return した commit」（getstory 失敗 / route hold /
+          AUTHORITY_RELOAD_REQUIRED / preflight 失敗 / CAS 直前の unload）が
+          journal 無しのまま stranded になる。**この設計は REJECT された。**
+       Rev2 は **canonicalCommit2 の入口**（fresh getstory より前・= CAS へ到達し得ない
+       分岐より前）で **PREPARED_LOCAL** journal を書く。書ける条件は
+         (a) intendedCanonicalHash … いまの local の schema2 canonical hash が計算できる
+         (b) lastConfirmedRev / lastConfirmedHash … fix781 marker の lastConfirmed
+             （= **証明済みの server pre-state**）が読める
+       の両方が揃ったときだけ。**揃わなければ書かない**（blind write 禁止）。
+
+     ■journal（story scoped 単一キー journal・形は fix721/fix750/fix781 と同一）
+       key = `v292Dfix402_f697p_<storyId>`
+       ★prefix AUDIT（live bytes・Rev2 で実施）:
+         ・live 全 module で `v292Dfix402_` を **prefix 列挙**しているのは
+           `v292Dfix402-invisible-sync.js:276` の `collectLS()` **1 箇所だけ**で、
+           意味は「cloud-sync package から除外する」＝ skip。delete / migrate / clear は 0。
+         ・削除ループが列挙する prefix は `^chr6_slot_` / `^chr6_bk_cloudsync_del_` /
+           `^chr6_bk_cloudsync_(\d+)$` のみ。`v292Dfix402_` を消す経路は live に存在しない。
+         ・fix705(:80) / fix781(:42,:69) が同じ理由で同 prefix に marker を同居させている。
+         ・逆に専用 prefix（例 `v292Dfix697p_<storyId>`）にすると collectLS の
+           `k.indexOf(slotId) >= 0` に **一致して package へ収集され**、他端末へ複製される。
+           per-device journal を cross-device 複製するのは新事故源なので **不可**。
+         → 互換 alias として `v292Dfix402_f697p_` を採用する（GPT REVISE §3(5) の許容条件を満たす）。
+       record（v:2。v:1 = Rev1 record は「無し」扱いで fail-closed）:
+         { v:2, state:'PREPARED_LOCAL'|'HOLD_CONFLICT', storyId,
+           lastConfirmedRev, lastConfirmedHash, intendedCanonicalHash,
+           commitBinding{route,schema,generation,epoch,build},
+           resumeCount, holdCount, lastVerdict, createdAt, updatedAt, build }
+
+     ■reload 後 reconcile（fresh GET は clientCanonicalSchemaMax:2 の read op）
+       Case A  serverHash == intendedCanonicalHash → CONVERGED → clear → **write 0**
+       Case B  serverHash/rev == lastConfirmed pre-state
+               **かつ 現在の local canonical hash == intendedCanonicalHash**
+               → 未着地かつ local も動いていない → strict CAS を **1 回だけ** resume
+       Case C  それ以外（server 前進 / local 前進 / 404 / tombstone / drift / schema1 /
+               HOLD_CONFLICT）→ **auto write 禁止** → HOLD
+       ★HOLD_CONFLICT（in-session の CANONICAL_WRITE_CONFLICT）は journal を消さず保持し、
+         **自動 resume を永久に禁止**する。fresh GET で CONVERGED になったときだけ clear。
+       ★boot 1 回だけ reconcile する。live index.html の
+         `window.__chronicleDocumentStoryKey = K;` （コメントに「非永続・document scoped・immutable」）
+         が示すとおり story 切替は必ず document reload なので、
+         同一 document 内での activation 再 reconcile は不要（GPT REVISE §3(6) の条件を満たす）。
+
+     ■resume の意味（★blind retry ではない）
+       保存した payload を再送しない。**既存の commit() 経路**を 1 回だけ起動し、
+       fresh GET → strict CAS で改めて評価し直す。
+       ・`__v292Dfix781.transition()/confirm()` は **呼ばない**。fix781 へは read だけ。
+       ・fix705 の safety switch（OFF / unsafe / not fresh / route≠canonical）は迂回しない。
+       ・barrier（fix745/748/798）は fix793 と同一述語で読むだけ。
+         **NOT_REQUIRED / RESOLVED を明示的に返したときだけ** resume。
+         待機は非 blocking の bounded poll（2s×15）で、story 切替 / pagehide で cancel、
+         timeout したら **HOLD のまま**（auto write 0・budget も消費しない）。
+       ・budget は **撃つ前に durable 化**する（crash 中断でも 2 回目は撃たない）。
+       ・cross-story: key が story scoped な上に record.storyId を照合し、不一致は無視。
+     ■kill: v292Dfix697pOff='1' → P1/P2 とも完全停止（storage read/write 0・GET 0・resume 0・
+       startLazyRefresh の body も base と byte 同一）。v292Dfix697Off='1'（本体 OFF）でも同じ。
+     ═══════════════════════════════════════════════════════════════════ */
+  var F697P_PRE = 'v292Dfix402_f697p_';    /* ★prefix AUDIT 済み（上記）。collectLS 除外枠に同居 */
+  var F697P_VER = 2;                       /* ★Rev2。v:1(Rev1) record は fail-closed で無視 */
+  var F697P_PREPARED = 'PREPARED_LOCAL';
+  var F697P_CONFLICT = 'HOLD_CONFLICT';
+  var F697P_RESUME_MAX = 1;                /* ★「1 回だけ」= journal 1 件につき resume 1 回 */
+  var F697P_HOLD_MAX = 3;                  /* Case C を無限に GET し続けない */
+  var F697P_WAIT_MS = 2000, F697P_WAIT_TRIES = 15;   /* barrier / readiness の bounded 待機（最大 30s） */
+  var F697P_BOOT_MS = 250, F697P_BOOT_TRIES = 120;   /* storyId / login の bounded 待機（最大 30s） */
+
+  var f697pStats = { prepares: 0, prepareSkipped: 0, clears: 0, clearFails: 0, conflicts: 0,
+                     reconciles: 0, convergedA: 0, resumedB: 0, holdC: 0, localMoved: 0,
+                     crossStoryIgnored: 0, barrierBlocked: 0, waitCancelled: 0,
+                     budgetExhausted: 0, getFails: 0, skipped: 0 };
+  var f697pLast = null;                    /* 直近 verdict（read-only 可視化） */
+  var f697pResumeFired = false;            /* この page session で resume を撃ったか（多重発火の構造的禁止） */
+  var f697pReconciled = false;
+  var f697pWaitTimer = null;               /* barrier / readiness の待機 timer（cancel 可能） */
+
+  function f697pOff(){ return lsg('v292Dfix697pOff') === '1'; }
+  function f697pEnabled(){ return on() && !f697pOff(); }
+
+  /* journal の読み書きは fix781 と同じく fix654 の native accessor を優先する
+     （自分の wrapper へ再入しない / fix402・fix490・fix543 の観測を汚さない）。 */
+  function f697pNat(m){
+    try { var F = window.__v292Dfix654;
+          var f = (F && typeof F._native === 'function') ? F._native(m) : null;
+          return (typeof f === 'function') ? f : null; } catch(e){ return null; }
+  }
+  function f697pGet(k){
+    try { var f = f697pNat('getItem'); if (f) return f.call(localStorage, String(k)); } catch(e){}
+    return lsg(k);
+  }
+  function f697pSet(k, v){
+    try { var f = f697pNat('setItem'); if (f){ f.call(localStorage, String(k), String(v)); return true; } } catch(e){}
+    return lss(k, v);
+  }
+  function f697pDel(k){
+    try { var f = f697pNat('removeItem'); if (f){ f.call(localStorage, String(k)); return true; } } catch(e){}
+    try { localStorage.removeItem(String(k)); return true; } catch(e){ return false; }
+  }
+  function f697pKey(id){ return F697P_PRE + String(id); }
+
+  /* fix781 marker を **読むだけ**（書込 0 / 遷移 0）。
+     lastConfirmed = 「server 側に載ったことを ACK で確認済みの rev / content hash」
+     ＝ blind ではない pre-state。これが無ければ journal を書かない。 */
+  function f697pLastConfirmed(id){
+    try {
+      var G = g781();
+      if (!G || typeof G.marker !== 'function') return null;
+      var m = G.marker(id);
+      if (!m || !m.lastConfirmed) return null;
+      var r = m.lastConfirmed.serverRev, h = m.lastConfirmed.fingerprint;
+      if (typeof r !== 'number' || typeof h !== 'string' || !h) return null;
+      return { rev: r, hash: h, generation: (+m.localGeneration) || 0 };
+    } catch(e){ return null; }
+  }
+
+  function f697pRead(id){
+    if (!f697pEnabled() || !id) return null;      /* ★OFF / kill では storage を 1 バイトも読まない */
+    try {
+      var raw = f697pGet(f697pKey(id));
+      if (raw == null) return null;
+      var r = JSON.parse(raw);
+      if (!r || typeof r !== 'object' || Object.prototype.toString.call(r) === '[object Array]') return null;
+      if (r.v !== F697P_VER) return null;                       /* 未知 / 旧 version は「無し」扱い */
+      if (r.cleared === true) return null;                      /* tombstone */
+      if (r.state !== F697P_PREPARED && r.state !== F697P_CONFLICT) return null;
+      if (String(r.storyId || '') !== String(id)){              /* ★cross-story replay の構造的禁止 */
+        f697pStats.crossStoryIgnored++;
+        try { note({ kind: 'F697P_CROSS_STORY_IGNORED', id: String(id),
+                     recordStoryId: String(r.storyId || '') }); } catch(e){}
+        return null;
+      }
+      if (typeof r.intendedCanonicalHash !== 'string' || !r.intendedCanonicalHash) return null;
+      if (typeof r.lastConfirmedRev !== 'number') return null;
+      if (typeof r.lastConfirmedHash !== 'string' || !r.lastConfirmedHash) return null;
+      return r;
+    } catch(e){ return null; }
+  }
+
+  function f697pSave(id, rec){
+    try { rec.updatedAt = Date.now(); return f697pSet(f697pKey(id), JSON.stringify(rec)); }
+    catch(e){ return false; }
+  }
+
+  /* ★★Rev2: PREPARED_LOCAL を canonicalCommit2 の入口で書く。
+     4 field（storyId / lastConfirmedRev / lastConfirmedHash / intendedCanonicalHash）が
+     揃わなければ **書かない**。next() は必ず 1 回だけ呼ぶ（save 経路を止めない）。 */
+  function f697pPrepare(id, next){
+    var done = false;
+    var go = function(){ if (done) return; done = true; try { next(); } catch(e){} };
+    if (!f697pEnabled()){ go(); return; }          /* ★kill: 同期で素通し = base と byte 同一 */
+    var lc = null, c2 = null;
+    try { lc = f697pLastConfirmed(id); } catch(e){ lc = null; }
+    if (!lc){
+      f697pStats.prepareSkipped++;
+      try { note({ kind: 'F697P_PREPARE_SKIPPED', id: String(id), reason: 'NO_LAST_CONFIRMED' }); } catch(e){}
+      go(); return;                                 /* ★blind write 禁止 */
+    }
+    try { c2 = projectionV2(id); } catch(e){ c2 = null; }
+    if (!c2){
+      f697pStats.prepareSkipped++;
+      try { note({ kind: 'F697P_PREPARE_SKIPPED', id: String(id), reason: 'NO_V2_PROJECTION' }); } catch(e){}
+      go(); return;
+    }
+    try {
+      sha256hex(canonicalString(c2), function(h){
+        if (!h){
+          f697pStats.prepareSkipped++;
+          try { note({ kind: 'F697P_PREPARE_SKIPPED', id: String(id), reason: 'HASH_FAILED' }); } catch(e){}
+          go(); return;
+        }
+        f697pWritePrepared(id, lc, h);
+        go();
+      });
+    } catch(e){ f697pStats.prepareSkipped++; go(); }
+  }
+
+  function f697pWritePrepared(id, lc, intendedHash){
+    if (!f697pEnabled() || !id) return false;
+    try {
+      var prev = f697pRead(id);
+      /* HOLD_CONFLICT は上書きしない（自動 resume 禁止の状態を保持する） */
+      if (prev && prev.state === F697P_CONFLICT){
+        try { note({ kind: 'F697P_PREPARE_SKIPPED', id: String(id), reason: 'HOLD_CONFLICT_KEPT' }); } catch(e){}
+        return false;
+      }
+      var same = !!(prev && prev.intendedCanonicalHash === String(intendedHash)
+                         && prev.lastConfirmedRev === lc.rev
+                         && prev.lastConfirmedHash === String(lc.hash));
+      var rec = { v: F697P_VER, state: F697P_PREPARED, storyId: String(id),
+                  lastConfirmedRev: lc.rev, lastConfirmedHash: String(lc.hash),
+                  intendedCanonicalHash: String(intendedHash),
+                  commitBinding: { route: 'canonicalCommit2', schema: 2,
+                                   generation: lc.generation, epoch: authorityEpoch, build: BUILD },
+                  resumeCount: same ? ((+prev.resumeCount) || 0) : 0,   /* ★別 intent なら budget を作り直す */
+                  holdCount: same ? ((+prev.holdCount) || 0) : 0,
+                  lastVerdict: same ? (prev.lastVerdict || null) : null,
+                  createdAt: same ? (prev.createdAt || Date.now()) : Date.now(),
+                  updatedAt: Date.now(), build: BUILD };
+      var okw = f697pSave(id, rec);
+      if (okw) f697pStats.prepares++;
+      try { note({ kind: 'F697P_PREPARED_LOCAL', id: String(id), lastConfirmedRev: lc.rev,
+                   lastConfirmedHash: String(lc.hash).slice(0, 16),
+                   intended: String(intendedHash).slice(0, 16), ok: !!okw }); } catch(e){}
+      return okw;
+    } catch(e){ return false; }
+  }
+
+  /* ★in-session の CANONICAL_WRITE_CONFLICT: journal を消さず HOLD_CONFLICT にする。
+     以後この journal からの **自動 resume は永久に禁止**（Case A の clear だけが出口）。 */
+  function f697pMarkConflict(id, serverRev, serverHash){
+    if (!f697pEnabled() || !id) return false;
+    try {
+      var rec = f697pRead(id);
+      if (!rec) return false;
+      rec.state = F697P_CONFLICT;
+      rec.lastVerdict = 'IN_SESSION_CONFLICT';
+      rec.conflictServerRev = (typeof serverRev === 'number') ? serverRev : null;
+      rec.conflictServerHash = serverHash ? String(serverHash).slice(0, 64) : null;
+      f697pStats.conflicts++;
+      try { note({ kind: 'F697P_HOLD_CONFLICT', id: String(id), serverRev: rec.conflictServerRev }); } catch(e){}
+      return f697pSave(id, rec);
+    } catch(e){ return false; }
+  }
+
+  function f697pClear(id, reason){
+    if (!f697pEnabled() || !id) return false;
+    try {
+      var k = f697pKey(id);
+      if (f697pGet(k) == null) return true;
+      var okd = f697pDel(k);
+      if (!okd){
+        /* removeItem が通らない環境では tombstone を書いて resume を構造的に不能にする */
+        okd = f697pSet(k, JSON.stringify({ v: F697P_VER, storyId: String(id), cleared: true,
+                                           reason: String(reason || ''), updatedAt: Date.now() }));
+      }
+      if (okd) f697pStats.clears++; else f697pStats.clearFails++;
+      try { note({ kind: 'F697P_JOURNAL_CLEAR', id: String(id), reason: String(reason || ''), ok: !!okd }); } catch(e){}
+      return okd;
+    } catch(e){ f697pStats.clearFails++; return false; }
+  }
+
+  /* ■fix745/748/798 barrier: fix793(:344-351) と同一の read-only 述語。
+     fix745 / fix748 は 1 バイトも変えない。判定不能はすべて fail-closed。 */
+  function f697pBarrierState(){
+    var g; try { g = window.__v292DfixGWS; } catch(e){ return 'API_UNAVAILABLE'; }
+    if (!g || typeof g.barrier !== 'function') return 'API_UNAVAILABLE';
+    var s; try { s = g.barrier(); } catch(e){ return 'API_THREW'; }
+    return (s == null) ? 'API_UNAVAILABLE' : String(s);
+  }
+  function f697pBarrierAllows(s){ return s === 'NOT_REQUIRED' || s === 'RESOLVED'; }
+
+  /* ★待機の cancel（story 切替 / pagehide）。cancel 後に自動 write は起きない。 */
+  function f697pCancelWait(reason){
+    if (f697pWaitTimer == null) return false;
+    try { clearTimeout(f697pWaitTimer); } catch(e){}
+    f697pWaitTimer = null;
+    f697pStats.waitCancelled++;
+    try { note({ kind: 'F697P_WAIT_CANCELLED', reason: String(reason || '') }); } catch(e){}
+    return true;
+  }
+
+  function f697pFinish(id, verdict, extra){
+    f697pLast = { verdict: String(verdict), id: String(id || ''), at: Date.now() };
+    if (extra){ for (var k in extra){ if (Object.prototype.hasOwnProperty.call(extra, k)) f697pLast[k] = extra[k]; } }
+    try { note({ kind: 'F697P_' + String(verdict), id: String(id || ''),
+                 detail: JSON.parse(JSON.stringify(f697pLast)) }); } catch(e){}
+  }
+  /* HOLD: holdCount を進める（Case C の cap 用） */
+  function f697pHold(id, rec, verdict, extra){
+    f697pStats.holdC++;
+    try {
+      rec.holdCount = ((+rec.holdCount) || 0) + 1;
+      rec.lastVerdict = String(verdict);
+      f697pSave(id, rec);
+    } catch(e){}
+    var o = { reason: String(verdict), holdCount: ((+rec.holdCount) || 0) };
+    if (extra){ for (var k in extra){ if (Object.prototype.hasOwnProperty.call(extra, k)) o[k] = extra[k]; } }
+    f697pFinish(id, 'CASE_C_HOLD', o);
+  }
+  /* 判定不能で終わったときの記録（holdCount は進めない = 次 load で再挑戦できる） */
+  function f697pNoteVerdict(id, rec, verdict, extra){
+    try { if (rec){ rec.lastVerdict = String(verdict); f697pSave(id, rec); } } catch(e){}
+    f697pFinish(id, verdict, extra);
+  }
+
+  /* resume を撃てる状態か（撃てないうちは budget を消費しない）。 */
+  function f697pNotReady(id){
+    if (!isLoggedIn()) return 'NOT_LOGGED_IN';
+    var c = null; try { c = projection(); } catch(e){ c = null; }
+    if (!c || String(c.id) !== String(id)) return 'NO_PROJECTION';
+    if (inFlight) return 'IN_FLIGHT';
+    return null;
+  }
+
+  function f697pResume(id, rec, serverRev, tries){
+    tries = tries || 0;
+    if (f697pResumeFired){ return f697pFinish(id, 'RESUME_ALREADY_FIRED'); }
+    if (!f697pEnabled()){ f697pStats.skipped++; return f697pFinish(id, 'RESUME_SKIPPED_OFF'); }
+    if (rec.state === F697P_CONFLICT){                          /* ★HOLD_CONFLICT は永久に resume 禁止 */
+      return f697pHold(id, rec, 'HOLD_CONFLICT_NO_RESUME');
+    }
+    if (((+rec.resumeCount) || 0) >= F697P_RESUME_MAX){          /* ★1 journal = 1 resume（reload を跨いでも） */
+      f697pStats.budgetExhausted++;
+      return f697pHold(id, rec, 'RESUME_BUDGET_EXHAUSTED');
+    }
+    /* ★story 切替（document scoped なので通常起きないが、起きたら待機を捨てる） */
+    if (String(storyId() || '') !== String(id)){
+      f697pCancelWait('STORY_CHANGED');
+      return f697pNoteVerdict(id, rec, 'RESUME_ABORTED_STORY_CHANGED');
+    }
+    var bs = f697pBarrierState();
+    var nr = f697pNotReady(id);
+    if (!f697pBarrierAllows(bs) || nr){
+      if (tries < F697P_WAIT_TRIES){
+        try {
+          f697pWaitTimer = setTimeout(function(){
+            f697pWaitTimer = null;
+            try { f697pResume(id, rec, serverRev, tries + 1); } catch(e){}
+          }, F697P_WAIT_MS);
+        } catch(e){}
+        return;                                                  /* ★非 blocking */
+      }
+      /* ★timeout は HOLD のまま。auto write 0・budget も消費しない。 */
+      if (!f697pBarrierAllows(bs)){
+        f697pStats.barrierBlocked++;
+        return f697pNoteVerdict(id, rec, 'BARRIER_TIMEOUT_HOLD', { barrier: bs });
+      }
+      f697pStats.skipped++;
+      return f697pNoteVerdict(id, rec, 'RESUME_NOT_READY_HOLD', { notReady: nr });
+    }
+    /* ■fix705 の safety switch は迂回しない（OFF / unsafe / not fresh / route≠canonical は resume 0）。 */
+    var f = fresh705(id);
+    if (f.err || !f.a5 || f.a5.fresh !== true || f.a5.unsafe === true){
+      return f697pNoteVerdict(id, rec, 'RESUME_HELD_AUTHORITY', { err: (f && f.err) || null });
+    }
+    var rt = docAuthorityRoute(id);
+    if (rt !== 'canonical'){ return f697pNoteVerdict(id, rec, 'RESUME_HELD_ROUTE', { route: String(rt) }); }
+    /* ★budget を **先に** durable 化してから撃つ（crash 中断でも 2 回目は撃たない）。 */
+    rec.resumeCount = ((+rec.resumeCount) || 0) + 1;
+    rec.lastVerdict = 'CASE_B_RESUME';
+    rec.resumedAt = Date.now();
+    f697pSave(id, rec);
+    f697pResumeFired = true;
+    f697pStats.resumedB++;
+    f697pFinish(id, 'CASE_B_RESUME', { serverRev: serverRev, barrier: bs,
+                                       resumeCount: ((+rec.resumeCount) || 0) });
+    /* ★blind retry ではない: 保存 payload の再送 0。既存 commit 経路で strict CAS をやり直すだけ。 */
+    try { commit('fix697p-journal-resume'); } catch(e){}
+  }
+
+  /* ★Case B の追加条件: 現在の local canonical hash == intendedCanonicalHash。
+     PREPARED_LOCAL 以降に local が進んでいたら **resume しない**（Case C HOLD）。 */
+  function f697pVerifyLocalThenResume(id, rec, serverRev){
+    var c2 = null;
+    try { c2 = projectionV2(id); } catch(e){ c2 = null; }
+    if (!c2) return f697pHold(id, rec, 'NO_V2_PROJECTION');
+    try {
+      sha256hex(canonicalString(c2), function(h){
+        if (!h) return f697pHold(id, rec, 'LOCAL_HASH_FAILED');
+        if (h !== String(rec.intendedCanonicalHash)){
+          f697pStats.localMoved++;
+          return f697pHold(id, rec, 'LOCAL_MOVED_SINCE_PREPARE',
+                           { localHash: h.slice(0, 16),
+                             intended: String(rec.intendedCanonicalHash).slice(0, 16) });
+        }
+        f697pResume(id, rec, serverRev, 0);
+      });
+    } catch(e){ f697pHold(id, rec, 'LOCAL_HASH_THREW'); }
+  }
+
+  function f697pReconcile(id, rec){
+    f697pStats.reconciles++;
+    try { note({ kind: 'F697P_RECONCILE_START', id: String(id), state: String(rec.state),
+                 lastConfirmedRev: rec.lastConfirmedRev,
+                 intended: String(rec.intendedCanonicalHash).slice(0, 16) }); } catch(e){}
+    /* ★read op（getstory）なので side-port 分類（TYPE_R/TYPE_A）に該当せず authority を汚さない。
+       capability は caller 値を通さず内部で 2 固定（fix751 getStoryV2Once と同じ規約）。 */
+    postSaveOnce({ op: 'getstory', id: id, clientCanonicalSchemaMax: 2 }, function(g, gerr){
+      if (gerr || !g){ f697pStats.getFails++;
+        return f697pNoteVerdict(id, rec, 'RECONCILE_GET_FAILED'); }
+      var j = g.j || {};
+      if (g.status === 404) return f697pHold(id, rec, 'ROW_MISSING');       /* resurrection 禁止 */
+      if (g.status !== 200 || !j.ok){ f697pStats.getFails++;
+        return f697pNoteVerdict(id, rec, 'RECONCILE_GET_HTTP_' + g.status); }
+      if (String(j.id != null ? j.id : id) !== String(id)) return f697pHold(id, rec, 'ID_MISMATCH');
+      if (j.deleted === true) return f697pHold(id, rec, 'TOMBSTONE');
+      if (String(j.authority || 'shadow') !== 'canonical')
+        return f697pHold(id, rec, 'AUTHORITY_DRIFT', { serverAuthority: String(j.authority || 'shadow') });
+      var srvSchema = (typeof j.recordSchema === 'number') ? j.recordSchema
+                    : ((j.record && j.record.schema === 2) ? 2 : 1);
+      if (srvSchema !== 2) return f697pHold(id, rec, 'SERVER_NOT_SCHEMA2', { recordSchema: srvSchema });
+      if (typeof j.rev !== 'number') return f697pHold(id, rec, 'NO_SERVER_REV');
+      var sh = String(j.serverHash || '');
+      if (!sh) return f697pHold(id, rec, 'NO_SERVER_HASH');
+      /* ---- Case A: intended content が既に server へ着地している（HOLD_CONFLICT の唯一の出口） ---- */
+      if (sh === String(rec.intendedCanonicalHash)){
+        f697pStats.convergedA++;
+        f697pClear(id, 'CASE_A_CONVERGED');
+        return f697pFinish(id, 'CASE_A_CONVERGED', { serverRev: j.rev, from: String(rec.state) });
+      }
+      /* ---- HOLD_CONFLICT: 収束していない限り保持して HOLD（自動 resume 禁止） ---- */
+      if (rec.state === F697P_CONFLICT){
+        return f697pHold(id, rec, 'HOLD_CONFLICT_KEPT', { serverRev: j.rev, serverHash: sh.slice(0, 16) });
+      }
+      /* ---- Case B 候補: server は lastConfirmed pre-state のまま = 未着地 ---- */
+      if (j.rev === rec.lastConfirmedRev && sh === String(rec.lastConfirmedHash)){
+        return f697pVerifyLocalThenResume(id, rec, j.rev);
+      }
+      /* ---- Case C: server が別の rev/hash へ進んだ → auto write 禁止 ---- */
+      return f697pHold(id, rec, 'SERVER_MOVED', { serverRev: j.rev, serverHash: sh.slice(0, 16),
+                                                  lastConfirmedRev: rec.lastConfirmedRev });
+    });
+  }
+
+  function f697pBoot(tries){
+    tries = tries || 0;
+    if (!f697pEnabled()) return;                    /* ★OFF / kill: storage 0 / GET 0 / resume 0 */
+    if (f697pReconciled) return;
+    var again = function(){
+      if (tries < F697P_BOOT_TRIES){
+        try { setTimeout(function(){ try { f697pBoot(tries + 1); } catch(e){} }, F697P_BOOT_MS); } catch(e){}
+      }
+    };
+    var id = storyId();
+    if (!id) return again();                        /* document bind 前 */
+    var rec = f697pRead(id);
+    if (!rec) return;                               /* journal 無し = 従来挙動（read 1 回・write 0・GET 0） */
+    if (((+rec.holdCount) || 0) >= F697P_HOLD_MAX){
+      f697pStats.skipped++; f697pReconciled = true;
+      return f697pFinish(id, 'HOLD_CAP_REACHED', { holdCount: ((+rec.holdCount) || 0) });
+    }
+    if (!isLoggedIn()) return again();               /* 未 login では authoritative GET を撃たない */
+    f697pReconciled = true;
+    f697pReconcile(id, rec);
   }
 
   // ---- commit（完全 fire-and-forget） ----
@@ -1175,6 +1658,19 @@
      代わりに lineage gate の base となる local canonical hash だけを read-only で捉える。 */
   try { captureInitialLocalHash(); } catch(e){}
 
+  /* ★★fix697p Rev2(P1): reload を跨いだ PREPARED_LOCAL journal の reconcile を 1 回だけ起動する。
+     ここは「起動」だけ。判定・resume 可否は f697pBoot / f697pReconcile / f697pResume 側で
+     fail-closed に決める（journal が無ければ storage 1 read で終わる＝従来挙動）。
+     ★story 切替は必ず document reload（live index.html の __chronicleDocumentStoryKey は
+       非永続・document scoped・immutable）なので、同一 document 内での再 reconcile は不要。 */
+  try { f697pBoot(0); } catch(e){}
+  /* ★barrier / readiness の待機は pagehide で必ず cancel する（GPT REVISE 3-(4)）。 */
+  try {
+    if (f697pEnabled() && typeof window.addEventListener === 'function'){
+      window.addEventListener('pagehide', function(){ try { f697pCancelWait('PAGEHIDE'); } catch(e){} }, false);
+    }
+  } catch(e){}
+
   /* ★★fix716: endpoint / auth / request の単一実装。shadowRequest と putStoryOnce が共有する。
      ここは送るだけ。localStorage / sessionStorage / docBaseRev / commit / projection を触らない。 */
   /* ★★fix733(RULING83 §7 / RULING86 §31 / RULING88 §31 / RULING89 §16-§19) — SIDE-PORT REV COHERENCE
@@ -1287,6 +1783,17 @@
                   rearmMs: REARM_MS } }; },
     stats: function(){ return JSON.parse(JSON.stringify(stats)); },
     ledger: function(){ return LEDGER.slice(); },
+    /* ★★fix697p(P1/P2): PREPARED_LOCAL journal の read-only 可視化（write 0 / network 0 / 遷移 0）。
+       reset / force / resume を外から撃つ口は **作らない**（guard の無効化を構造的に禁止）。 */
+    journal: function(id){ var s = id || storyId(); return s ? f697pRead(s) : null; },
+    journalStats: function(){
+      return { off: f697pOff(), enabled: f697pEnabled(), rev: 2,
+               key: F697P_PRE + String(storyId() || ''),
+               resumeFired: f697pResumeFired, reconciled: f697pReconciled,
+               waiting: (f697pWaitTimer != null),
+               resumeMax: F697P_RESUME_MAX, holdMax: F697P_HOLD_MAX,
+               barrier: f697pBarrierState(), last: f697pLast ? JSON.parse(JSON.stringify(f697pLast)) : null,
+               stats: JSON.parse(JSON.stringify(f697pStats)) }; },
     flush: function(){ commit('manual'); return true; },
     /* ★fix718: read-only 可視化（書込 0） */
     canonState: function(){ return { ctx: canonCtx ? JSON.parse(JSON.stringify(canonCtx)) : null,
