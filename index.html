@@ -54,7 +54,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260903-fix802';
+  var BUILT = '20260903-fix803';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3065,7 +3065,11 @@ G.init();
 <script src="v292Dfix543-save-guard.js?cb=20260829-fix748"></script>
 <!-- v292Dfix802: 3C-3B Refresh Orchestrator (telemetry / write-0). default OFF (opt-in=v292Dfix802On / kill=v292Dfix802Off / story=v292Dfix802Story).
      fix697 (LANDED) / fix670 (RAW_READY) の one-line notify 先なので両者より前に置く。timer 0 / retry 0 / materialize() 0 -->
-<script src="v292Dfix802-refresh-orchestrator.js?cb=20260903-fix802"></script>
+<script src="v292Dfix802-refresh-orchestrator.js?cb=20260903-fix803"></script>
+<!-- v292Dfix803: 3C-3B Automatic Materialize (QA canary only / changed:true only / fix793.materialize() 経由).
+     default OFF (opt-in=v292Dfix803On / kill=v292Dfix803Off / story=v292Dfix803Story)。fix802 の fire 末尾から onFire で呼ばれる。
+     timer 0 / retry 0 / 新 write path 0 / localStorage 書込は fix793.materialize() 経由の v292Dmem1_slot_<sid> のみ -->
+<script src="v292Dfix803-auto-materialize.js?cb=20260903-fix803"></script>
 <script src="v292Dfix697-shadow-story-commit.js?cb=20260903-fix802"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
      OFF=v292Dfix729Off / 検証口=window.__v292Dfix729 -->

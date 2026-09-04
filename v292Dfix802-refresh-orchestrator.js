@@ -36,6 +36,8 @@
   function active() { return optedIn() && !off(); }
   function story() { var s = ls('v292Dfix802Story'); return (s && String(s)) || CANARY_DEFAULT; }
   function nowMs() { try { return performance.now(); } catch (e) { return Date.now(); } }
+  /* ★fix803（automatic materialize）への one-line notify。不在 / throw / reject は no-op（fire の結果を変えない）。 */
+  function f802Notify803(a) { try { var m = window.__v292Dfix803; return (m && typeof m.onFire === 'function') ? Promise.resolve(m.onFire(a)).then(null, function () { return null; }) : Promise.resolve(null); } catch (e) { return Promise.resolve(null); } }
 
   /* ---------------- state（story ごと・in-memory・永続化しない） ---------------- */
   var latch = {};          /* sid -> { landed, raw, refreshedFor, running } */
@@ -183,8 +185,8 @@
                                      791: !!(out[791] && out[791].ok), 792: !!(out[792] && out[792].ok),
                                      reason792: (out[792] && out[792].reason) || null },
                              at: Date.now() };
-              l.running = false;
-              return 'fired';
+              /* ★fix803 hook（fire 末尾 1 点・分岐追加 0）: changed 判定と materialize は fix803 側。ここは chain するだけ。 */
+              return f802Notify803({ storyId: sid, turnCount: tc, cand: cand, candHash16: h16, rev: landed.rev }).then(function () { l.running = false; return 'fired'; });
             });
           });
       });
