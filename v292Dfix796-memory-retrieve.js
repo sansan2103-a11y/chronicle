@@ -184,7 +184,7 @@
   if (typeof window === 'undefined') return;
   if (window.__v292Dfix796) return;                  /* 二重install防止 */
 
-  var BUILD = '20260904-rer1b';
+  var BUILD = '20260905-rer1c';
   var KEY_PREFIX = 'v292Dmem1_slot_';                /* fix793 と同じ story-scoped key（read only） */
   var LIFECYCLE_ACTIVE = 'ACTIVE';
   var CLASS_WORLD_EVENT = 'world_event';
@@ -229,6 +229,10 @@
   /* ★rer1 kill flag（RETRIEVE_ENTITY_RESOLUTION_V1）。'1' で H1〜H4 を全部迂回し、
      Rev7（BUILD 20260902-fix796）と同一の keys / selected / rendered になる。読み取りのみ。 */
   function isRerOff() { return lsg('v292Dfix796RerOff') === '1'; }
+  /* ★rer1c: duplicate containment だけを止める kill。'1' で畳まなくなる（rer1b と同一挙動）。
+     `v292Dfix796RerOff='1'` でも containment は迂回される（rer1b = 畳まない旧挙動へ戻る）。 */
+  function isDedupeOff() { return lsg('v292Dfix796DedupeOff') === '1'; }
+  function dedupeOn()    { return !isRerOff() && !isDedupeOff(); }
   function rerOn()    { return !isRerOff(); }
   function keyFor(storyId) { return KEY_PREFIX + String(storyId); }
 
@@ -253,6 +257,8 @@
       turn: (turnCtx && isNum(turnCtx.currentTurn)) ? turnCtx.currentTurn : null,
       armed: armed(), on: isOn(), off: isOff(),
       reason: REASON.OK, invariants: [],
+      /* ★rer1c telemetry: Retrieve block 生成時に畳んだ duplicate の観測口 */
+      dedupeDropped: 0, dedupeDetail: [], dedupeGroups: [],
       indexSize: 0, candidates: 0, activeDialogueClaim: 0, activeWorldEvent: 0,
       keys: null, selectedDetail: [], knownToProvenance: [], excludedWorldEvent: 0, renderedChars: 0,
       futureDropped: 0, futureGateApplied: false, entityGateDropped: 0,
@@ -452,7 +458,7 @@
    *   relationHit は「選択済みとの 1 hop」なので貪欲に 1 件ずつ確定する
    *   （各ラウンドで最大 score・同点は memoryId 昇順 → 決定的）。
    * ================================================================== */
-  function select(storyId, memoryV1, turnCtx) {
+  function select(storyId, memoryV1, turnCtx, opts) {
     var out = [];
     var log = setLog(newLog(storyId, turnCtx));
     /* ★早期 return でも log を必ず添付するため、本体は内部関数に閉じる */
@@ -495,7 +501,13 @@
       /* ★(I9) 計測のみ: entityHit = resolvable のうち entityId 完全一致があった件数 */
       log.entityHit = entityAdmitted.length;
       log.noMatchReason.noEntity = log.entityGateDropped;
-      var remaining = entityAdmitted.slice(0);  /* memoryId 昇順で安定済み */
+      /* ★rer1c: **cap(MAX_ITEMS) を消費する ranking ループの前**に narrow containment を適用。
+         同一 fingerprint は memoryId 最小の 1 件だけ残す（cap starvation を防ぐ）。 */
+      var admitted2 = entityAdmitted;
+      if (dedupeOn() && !(opts && opts.dedupe === false)) {
+        admitted2 = containDuplicates(entityAdmitted, (opts && opts.displayMap) || null, log);
+      }
+      var remaining = admitted2.slice(0);       /* memoryId 昇順で安定済み */
       var chosenRecords = [];
       while (out.length < LIMITS.MAX_ITEMS && remaining.length) {
         var bestIdx = -1, best = null;
@@ -1007,6 +1019,60 @@
     }
   }
 
+  /* ==================================================================
+   * ★rer1c —— narrow duplicate containment（GPT 裁定 2026-09-05 §3）
+   *   `MEMORY_DUPLICATE_ACTIVE_PROPOSITION = OPEN_BLOCKER` に対する **Retrieve 側だけ**の封じ込め。
+   *   ・duplicate fingerprint = **resolved display entity ＋ source turn ＋ normalizedProposition**
+   *     が全部同じもの **だけ**。意味の類似では畳まない（semantic dedupe は禁止）。
+   *       畳む  : 藤堂 志乃（T7）: 見てはいけないものを… ×2
+   *       畳まない: 同一命題でも別 entity ／ 同一 entity・同一命題でも別 source turn ／ 別命題
+   *   ・**Memory 本体は触らない**。ACTIVE 2 件の削除・memoryV1 の書換・normalizedProposition の
+   *     再生成・semantic similarity dedupe・knownTo / provenance の merge・materializer 変更は
+   *     **すべて行わない**。保存上は 2 件のまま、**Retrieve block を作る瞬間だけ 1 件**にする。
+   *   ・representative は **決定論的に固定** = fingerprint group 内で **memoryId の
+   *     lexical order 最小**。turn / query / score に依存しないので、
+   *     「T1 は duplicate A、T2 は同内容の duplicate B」という **別 ID すり替えによる連続表示**
+   *     （F1_k1 cooldown をすり抜ける事故）が構造的に起きない。
+   *   ・適用位置は **admission gate の直後・MAX_ITEMS(cap) を消費する ranking ループの前**。
+   *     本 module では cap は greedy ループ内で数えるため、「cap の前」に置ける唯一の位置がここ。
+   *     これにより duplicate が cap 枠を 2 つ食って別の有用 Memory を押し出す
+   *     **cap starvation** が起きない（表示だけ 1 行にする後段 dedupe では防げない）。
+   * ================================================================== */
+  function dupFingerprint(record, displayMap) {
+    if (!record) return '';
+    var spk = record.source ? str(record.source.speakerEntityId) : '';
+    var disp = displayFromMap(displayMap, spk) || displayNameOf(spk) || spk;   /* resolved display entity */
+    var lt = (record.source && isNum(record.source.lastTurn)) ? String(record.source.lastTurn) : '';
+    return disp + '\u0000' + lt + '\u0000' + str(record.normalizedProposition);
+  }
+  /* fingerprint group ごとに memoryId 最小の 1 件だけ残す。落とした分は log に記録する。
+     ★score / admission / ranking のアルゴリズムには一切触らない（入力集合を縮めるだけ）。 */
+  function containDuplicates(list, displayMap, log) {
+    var byFp = {}, i, fp, mid, keepIds = {}, out = [], k;
+    for (i = 0; i < list.length; i++) {
+      fp = dupFingerprint(list[i], displayMap);
+      if (!fp) continue;
+      mid = str(list[i].memoryId);
+      if (!Object.prototype.hasOwnProperty.call(byFp, fp)) byFp[fp] = { rep: mid, all: [mid] };
+      else { byFp[fp].all.push(mid); if (mid < byFp[fp].rep) byFp[fp].rep = mid; }   /* lexical 最小 */
+    }
+    for (k in byFp) if (Object.prototype.hasOwnProperty.call(byFp, k)) keepIds[byFp[k].rep] = 1;
+    for (i = 0; i < list.length; i++) {
+      mid = str(list[i].memoryId);
+      fp = dupFingerprint(list[i], displayMap);
+      if (!fp || Object.prototype.hasOwnProperty.call(keepIds, mid)) { out.push(list[i]); continue; }
+      if (log) { log.dedupeDropped++; log.dedupeDetail.push({ memoryId: mid, representative: byFp[fp].rep }); }
+    }
+    if (log) {
+      for (k in byFp) if (Object.prototype.hasOwnProperty.call(byFp, k) && byFp[k].all.length > 1) {
+        byFp[k].all.sort();
+        log.dedupeGroups.push({ representative: byFp[k].rep, memoryIds: byFp[k].all.slice(),
+                                collapsed: byFp[k].all.length - 1 });
+      }
+    }
+    return out;
+  }
+
   /* 呼び出し側が turnCtx を持たない live 経路用。entity 解決は **ここ**でやる。 */
   function ctxFromCaller(o, kNow) {
     var who = interlocutorFromTurn(o.prevTurn, kNow.byName, kNow.metaByName);
@@ -1075,6 +1141,7 @@
   function canaryBlocks(ctx) {
     var meta = { build: BUILD, gate: 'none', sid: '', currentTurn: null,
                  memoryChars: 0, guardChars: 0, records: 0, droppedByCap: 0,
+                 dedupeDropped: 0, dedupeGroups: [],   /* ★rer1c */
                  order: ORDER.slice(), queryReason: 'none', reason: REASON.OK,
                  registered: false, cap: LIMITS.TOTAL_SOFT,
                  /* ★Rev7 telemetry */
@@ -1105,9 +1172,12 @@
         ? (keys.explicitInputMentionIds.length ? 'interlocutor+explicitInput' : 'interlocutor')
         : (keys.explicitInputMentionIds.length ? 'explicitInput' : 'none');
 
-      var sel = select(sid, m1, tc);
+      var sel = select(sid, m1, tc, { displayMap: (kNow && kNow._byId) || null });
       if (_lastLog && _lastLog.reason) meta.reason = _lastLog.reason;
       if (_lastLog) _lastLog.knownEntities = _lastKnown;              /* ★rer1 telemetry */
+      /* ★rer1c telemetry: 畳んだ件数と group を block 側からも観測できるようにする */
+      meta.dedupeDropped = (_lastLog && _lastLog.dedupeDropped) || 0;
+      meta.dedupeGroups = (_lastLog && _lastLog.dedupeGroups) ? _lastLog.dedupeGroups.slice() : [];
 
       /* ★cap 300 固定（GPT 裁定 2）。呼び出し側がさらに小さい値を渡した時だけ下げる。 */
       var cap = LIMITS.TOTAL_SOFT;
@@ -1155,6 +1225,9 @@
       return {
         build: BUILD, on: isOn(), off: isOff(), active: armed(),
         rerOff: isRerOff(),                          /* ★rer1 kill flag */
+        dedupeOff: isDedupeOff(), dedupeActive: dedupeOn(),   /* ★rer1c containment kill flag */
+        dedupeDropped: (_lastLog && _lastLog.dedupeDropped) || 0,
+        dedupeGroups: (_lastLog && _lastLog.dedupeGroups) || [],
         wired: false, registered: false, writes: 'none',
         inputs: ['canonical memoryV1 only',
                  'caller-supplied knownEntities (identity/display map only, NOT admission authority)'],
@@ -1167,7 +1240,10 @@
             + 'knownTo is provenance only / read-only localStorage / no hook / '
             + 'render cap = caller remaining budget (default 300, hard 360) / '
             + 'Rev7 F1_k1 repetition cooldown after ranking, before cap '
-            + '(session scoped module map, never persisted, reset on reload)'
+            + '(session scoped module map, never persisted, reset on reload) / '
+            + 'rer1c narrow duplicate containment before cap '
+            + '(fingerprint = display entity + source turn + normalizedProposition, '
+            + 'representative = lexically smallest memoryId, memoryV1 never modified)'
       };
     },
     on:  function () { return isOn(); },      /* ★flag の読み取りのみ（書き込み禁止のため） */
@@ -1203,6 +1279,9 @@
       mergeKnownEntities: mergeKnownEntities, displayFromMap: displayFromMap,
       uniqueIdFromList: uniqueIdFromList, resolveOneCand: resolveOneCand,
       isSayTagEntry: isSayTagEntry, isRerOff: isRerOff, isSubstantiveCand: isSubstantiveCand,
+      /* ★rer1c: 検査口 */
+      dupFingerprint: dupFingerprint, containDuplicates: containDuplicates,
+      isDedupeOff: isDedupeOff, dedupeOn: dedupeOn,
       lastKnown: function () { return _lastKnown; },
       storyFlag: storyFlag, normSid: normSid, lastBlocks: function () { return _lastBlocks; },
       /* ★Rev7: cooldown の検査口（fixture 用。live 経路からは使わない） */
