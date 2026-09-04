@@ -612,7 +612,18 @@
         var _b3c2 = (window.__v292Dfix796 && typeof window.__v292Dfix796.canaryBlocks === 'function')
           ? window.__v292Dfix796.canaryBlocks({
               sid: _sid3c2, mode: m, text: t, currentTurn: _ct3c2,
-              prevTurn: (_ct3c2 && _ct3c2 > 0) ? _S3c2.turns[_ct3c2 - 1] : null })
+              prevTurn: (_ct3c2 && _ct3c2 > 0) ? _S3c2.turns[_ct3c2 - 1] : null,
+              /* ★rer1 (RETRIEVE_ENTITY_RESOLUTION_V1 / H1): story cast の **純射影**だけを渡す。
+                 判断ロジック・Memory ロジックはここに置かない（identity map の供給のみ）。
+                 hero は含めない（Owner の入力にほぼ毎ターン出るため query が hero に支配される）。
+                 roster307 handle / chr6_char_states / presence / candidate も含めない。
+                 null のときは fix796 が従来経路（memoryV1 由来のみ）で動く。 */
+              knownEntities: (function(){ try {
+                  var c = _S3c2 && _S3c2.cast, out = [], a = (c && c.npcs) || [], i, n;
+                  for (i = 0; i < a.length; i++){ n = a[i];
+                    if (n && n.id && n.name) out.push({ entityId: 'char:' + n.id, name: String(n.name) }); }
+                  return out.length ? out : null;
+                } catch(_e){ return null; } })() })
           : null;
         if (_b3c2 && typeof _b3c2.memoryText === 'string' && typeof _b3c2.guardText === 'string'
             && _b3c2.memoryText && _b3c2.guardText){

@@ -184,7 +184,7 @@
   if (typeof window === 'undefined') return;
   if (window.__v292Dfix796) return;                  /* 二重install防止 */
 
-  var BUILD = '20260902-fix796';
+  var BUILD = '20260904-rer1b';
   var KEY_PREFIX = 'v292Dmem1_slot_';                /* fix793 と同じ story-scoped key（read only） */
   var LIFECYCLE_ACTIVE = 'ACTIVE';
   var CLASS_WORLD_EVENT = 'world_event';
@@ -226,10 +226,15 @@
   function isOn()  { return lsg('v292Dfix796On')  === '1'; }
   function isOff() { return lsg('v292Dfix796Off') === '1'; }
   function armed() { return isOn() && !isOff(); }
+  /* ★rer1 kill flag（RETRIEVE_ENTITY_RESOLUTION_V1）。'1' で H1〜H4 を全部迂回し、
+     Rev7（BUILD 20260902-fix796）と同一の keys / selected / rendered になる。読み取りのみ。 */
+  function isRerOff() { return lsg('v292Dfix796RerOff') === '1'; }
+  function rerOn()    { return !isRerOff(); }
   function keyFor(storyId) { return KEY_PREFIX + String(storyId); }
 
   var _lastLog = null;
   var _lastBlocks = null;                            /* ★Rev6: canaryBlocks の最終 telemetry */
+  var _lastKnown = null;                             /* ★rer1: 供給 name map の telemetry（表示・resolve のみ） */
 
   /* ★Rev7 (3C-3A / F1_k1): repetition cooldown の状態。
      key = storyId + '|' + memoryId  →  value = lastInjectedTurn（0-based の currentTurn）。
@@ -592,19 +597,68 @@
     try { return fn(t); } catch (e) { return null; }
   }
 
+  /* ★rer1 H4: 候補 1 個（名前 or entityId）を canonical entity へ resolve。導けなければ ''。
+     literal な完全一致のみ。substring / fuzzy / 読み推定はしない。 */
+  function resolveOneCand(v, byName) {
+    var sv = str(v);
+    if (!sv) return '';
+    if (sv.indexOf(':') >= 0) return sv;                              /* 既に entityId */
+    return (byName && Object.prototype.hasOwnProperty.call(byName, sv)) ? str(byName[sv]) : '';
+  }
+  /* ★rer1 H4 —— **TIER2_UNIQUENESS = ALL_SUBSTANTIVE_ELEMENTS_RESOLVED_TO_ONE_ENTITY**
+     GPT 裁定 2026-09-05（V-A1 ACCEPT / V-base・V-A2・V-A1A2 REJECT）の正式契約:
+       1. `_v254who` の **substantive な各要素**（null / undefined / 空文字 / 空白のみは
+          substantive でないので無視）を resolve する
+       2. **1 つでも unresolved / ambiguous があれば tier2 = null**
+       3. 全要素が resolve でき、その entityId 集合が **ちょうど 1 種類**のときだけ成立
+     例: ["大浦 源蔵"] → 成立／["大浦 源蔵","源蔵"]（canonical 名 ＋ alias）→ 同一 entity なので **成立**
+         ["藤堂 志乃","霧 涼太"] → hero は map 外 = unresolved なので **null**
+         ["志乃","謎の誰か"] → null／別 entity 2 人 → null
+     **未知候補を捨てて残った 1 entity を採用するのは禁止**（V-base の artifact・GPT REJECT）。
+     **先頭要素の採用も禁止**。hero は v1 の knownEntities に入れない（GPT REJECT）。
+     ※ resolve は literal 完全一致のみ（trim 等の正規化はしない）。 */
+  function isSubstantiveCand(v) {
+    if (v === null || v === undefined) return false;
+    return str(v).replace(/[\s　]+/g, '') !== '';
+  }
+  function uniqueIdFromList(list, byName, metaByName) {
+    var seen = {}, out = [], i, v, nm, id;
+    for (i = 0; i < list.length; i++) {
+      v = list[i];
+      if (!isSubstantiveCand(v)) continue;                            /* substantive でない要素は無視 */
+      nm = str(v);
+      if (nm.indexOf(':') < 0 && metaByName
+          && Object.prototype.hasOwnProperty.call(metaByName, nm)
+          && metaByName[nm].ambiguous === true) return null;          /* ambiguous が 1 つでも → null */
+      id = resolveOneCand(nm, byName);
+      if (!id) return null;                                           /* unresolved が 1 つでも → null */
+      if (!Object.prototype.hasOwnProperty.call(seen, id)) { seen[id] = 1; out.push(id); }
+    }
+    return out.length === 1 ? out[0] : null;                          /* ちょうど 1 種類のときだけ */
+  }
+  /* ★rer1 H4: _convSayMeta から話者を作れるのは sourceKind==='say-tag' の entry だけ。
+     bare-inferred / harvest / react-voice / hero-utterance / unmatched 等は禁止（GPT 裁定）。 */
+  function isSayTagEntry(e) {
+    return !!(e && typeof e === 'object' && str(e.sourceKind) === 'say-tag');
+  }
   /* 対話相手: turn.plan._v254who → turn._convSayMeta の順で「導ければ」取る。無ければ null。 */
-  function interlocutorFromTurn(turn, byName) {
+  function interlocutorFromTurn(turn, byName, metaByName) {
     if (!turn || typeof turn !== 'object') return null;
     var cand = null, m, last;
     if (turn.plan && typeof turn.plan === 'object' && turn.plan._v254who) cand = turn.plan._v254who;
+    /* ★rer1 H4 (TIER2_UNIQUENESS): 配列は「全 substantive 要素が resolve でき、同一 entity」
+       のときだけ。文字列 _v254who の従来挙動は不変。 */
+    if (rerOn() && Array.isArray(cand)) return uniqueIdFromList(cand, byName, metaByName);
     if (!cand) {
       m = turn._convSayMeta;
       if (Array.isArray(m) && m.length) {
         last = m[m.length - 1];
+        if (rerOn() && !isSayTagEntry(last)) last = null;             /* ★rer1 H4: say-tag 以外は話者にしない */
         if (typeof last === 'string') cand = last;
         else if (last && typeof last === 'object') cand = last.entityId || last.who || last.speaker || last.name || null;
       } else if (m && typeof m === 'object') {
-        cand = m.entityId || m.who || m.speaker || m.name || null;
+        if (rerOn() && !isSayTagEntry(m)) cand = null;                /* ★rer1 H4: 同上 */
+        else cand = m.entityId || m.who || m.speaker || m.name || null;
       }
     }
     cand = str(cand);
@@ -665,7 +719,7 @@
       var kNow = normalizeKnown(callKnown(knownEntitiesFn, ti));
 
       /* 対話相手（tier2） */
-      var who = interlocutorFromTurn(turn, kNow.byName);
+      var who = interlocutorFromTurn(turn, kNow.byName, kNow.metaByName);
       ctx.interlocutorId = who;
       if (who) ctx._sources.interlocutor = (turn && turn.plan && turn.plan._v254who) ? 'plan._v254who' : '_convSayMeta';
 
@@ -694,6 +748,13 @@
    *      1 件すら入らなければ空文字（memory 0 件は異常ではない）。
    *   戻り値 { text, excludedWorldEvent, droppedForBudget, lines, chars, maxChars }
    * ================================================================== */
+  /* ★rer1 H3（**表示だけ**）: entityId → 人間可読名。供給 map に無ければ '' を返して
+     従来の fallback へ落ちる。推定も部分一致もしない。score / admission / ranking とは無関係。 */
+  function displayFromMap(map, entityId) {
+    if (!map || typeof map !== 'object') return '';
+    var id = str(entityId); if (!id) return '';
+    return Object.prototype.hasOwnProperty.call(map, id) ? str(map[id]) : '';
+  }
   function composeText(lines) { return HEAD + '\n' + lines.join('\n') + '\n' + FOOT; }
   function capFor(opts) {
     var want = (opts && typeof opts === 'object' && isNum(opts.maxChars)) ? opts.maxChars : LIMITS.TOTAL_SOFT;
@@ -715,7 +776,9 @@
         e = list[i]; if (!e) continue;
         rec = (e.record && typeof e.record === 'object') ? e.record : e;
         if (str(rec.lineageClass) === CLASS_WORLD_EVENT) { res.excludedWorldEvent++; continue; }  /* ★除外 */
-        var spk = str(e.displayName) || displayNameOf(rec.source && rec.source.speakerEntityId)
+        /* ★rer1 H3: displayMap があるときだけ人間可読名を優先。無ければ従来と byte 同一。 */
+        var spk = displayFromMap(opts && opts.displayMap, rec.source && rec.source.speakerEntityId)
+                  || str(e.displayName) || displayNameOf(rec.source && rec.source.speakerEntityId)
                   || (rec.source ? str(rec.source.speakerEntityId) : '');
         var lt  = (e.lastTurn !== undefined && e.lastTurn !== null) ? e.lastTurn
                   : (rec.source ? rec.source.lastTurn : null);
@@ -857,9 +920,96 @@
     return normalizeKnown(list);
   }
 
+  /* ==================================================================
+   * ★rer1 H1/H2 — mergeKnownEntities(kMem, supplied)
+   *   supplied = fix192（Story cast）が渡す read-only な canonical name map
+   *   [{ entityId, name | canonicalName }]。
+   *   ★これは **admission authority ではない**。何を思い出すかは memoryV1 の record
+   *     だけが決める（presence / candidate / 「思い出すべきか」の判断には使わない）。
+   *     用途は (1) Owner 入力名 → entityId の解決 (2) entityId → 人間可読名 の 2 つだけ。
+   *   ・supplied が非空配列でなければ kMem を **そのまま返す**（fail-open = 従来と byte 同一）。
+   *   ・`char_candidate:` 始まりの entityId は捨てる（candidate は query source にしない）。
+   *   ・同名 2 entityId は ambiguous:true（既存 normalizeKnown と同じ規則）→ 0 件側。
+   *   ・H2 alias: canonical name が **複数 token** のときだけ空白分割の各 token を候補にする。
+   *       - token は 2 文字以上（1 文字は捨てる）
+   *       - map 全体で一意に 1 entityId へ resolve できるときだけ採用（衝突は両方捨てる）
+   *       - 他 entity の canonical name と一致する token は捨てる（canonical 優先）
+   *       - substring 検索 / fuzzy / 読み推定 / generated text 由来 / 履歴走査は **禁止**
+   *   ・供給名が memoryV1 に無い entityId でも受ける（record が無ければ entityHit 0 で無害）。
+   * ================================================================== */
+  function mergeKnownEntities(kMem, supplied) {
+    if (!supplied || !Array.isArray(supplied) || !supplied.length) return kMem;   /* fail-open */
+    try {
+      var byName = {}, byId = {}, aliasIndex = {}, dropped = [], canon = [], canonName = {};
+      var i, j, v, id, nm, tk, ids, toks, mm;
+      function put(name, entityId, source) {
+        var n = str(name); if (!n || !entityId) return;
+        if (!Object.prototype.hasOwnProperty.call(byName, n)) {
+          byName[n] = { entityId: entityId, name: n, status: '', ambiguous: false };
+          aliasIndex[n] = { entityId: entityId, source: source };
+        } else if (byName[n].entityId !== entityId) {
+          byName[n].ambiguous = true;                                 /* 同名 2 id = 一意 resolve 不能 */
+          if (aliasIndex[n]) aliasIndex[n].ambiguous = true;
+        }
+      }
+      /* 1) 既存の memoryV1 由来 name 表（従来の唯一の供給源）を土台に残す */
+      var memNames = arr(kMem && kMem.names);
+      for (i = 0; i < memNames.length; i++) {
+        nm = str(memNames[i]); if (!nm) continue;
+        id = str(kMem.byName[nm]); if (!id) continue;
+        put(nm, id, 'memory');
+        mm = (kMem.metaByName && kMem.metaByName[nm]) ? kMem.metaByName[nm] : null;
+        if (mm && mm.ambiguous === true && byName[nm]) byName[nm].ambiguous = true;
+      }
+      /* 2) 供給された canonical name */
+      for (i = 0; i < supplied.length; i++) {
+        v = supplied[i];
+        if (!v || typeof v !== 'object') continue;
+        id = str(v.entityId); nm = str(v.name || v.canonicalName);
+        if (!id || !nm) continue;
+        if (id.indexOf(CANDIDATE_PREFIX) === 0) { dropped.push({ token: nm, reason: 'candidate' }); continue; }
+        put(nm, id, 'canonical');
+        canonName[nm] = 1;
+        canon.push({ entityId: id, name: nm });
+        if (!Object.prototype.hasOwnProperty.call(byId, id)) byId[id] = nm;   /* entityId → 可読名 */
+      }
+      /* 3) H2 deterministic unique token alias */
+      var tokIds = {}, tokOrder = [];
+      for (i = 0; i < canon.length; i++) {
+        toks = str(canon[i].name).split(/[\s\u3000]+/);
+        if (toks.length < 2) continue;                                /* 単一 token の name からは alias を作らない */
+        for (j = 0; j < toks.length; j++) {
+          tk = str(toks[j]); if (!tk) continue;
+          if (tk.length < 2) { dropped.push({ token: tk, reason: 'too_short' }); continue; }
+          if (!Object.prototype.hasOwnProperty.call(tokIds, tk)) { tokIds[tk] = {}; tokOrder.push(tk); }
+          tokIds[tk][canon[i].entityId] = 1;
+        }
+      }
+      for (i = 0; i < tokOrder.length; i++) {
+        tk = tokOrder[i];
+        if (Object.prototype.hasOwnProperty.call(canonName, tk)) { dropped.push({ token: tk, reason: 'equals_canonical_name' }); continue; }
+        if (Object.prototype.hasOwnProperty.call(byName, tk))    { dropped.push({ token: tk, reason: 'collides_with_known_name' }); continue; }
+        ids = [];
+        for (var k in tokIds[tk]) if (Object.prototype.hasOwnProperty.call(tokIds[tk], k)) ids.push(k);
+        if (ids.length !== 1) { dropped.push({ token: tk, reason: 'ambiguous' }); continue; }
+        put(tk, ids[0], 'alias');
+      }
+      var list = [], key;
+      for (key in byName) if (Object.prototype.hasOwnProperty.call(byName, key)) list.push(byName[key]);
+      var res = normalizeKnown(list);
+      res._byId = byId;                    /* entityId → canonical name（render の displayMap） */
+      res._aliasIndex = aliasIndex;        /* name → { entityId, source:'memory'|'canonical'|'alias' } */
+      res.droppedAliases = dropped;        /* [{ token, reason }] */
+      res._suppliedCount = canon.length;
+      return res;
+    } catch (eM) {
+      return kMem;                                                    /* fail-open: 例外なら従来経路 */
+    }
+  }
+
   /* 呼び出し側が turnCtx を持たない live 経路用。entity 解決は **ここ**でやる。 */
   function ctxFromCaller(o, kNow) {
-    var who = interlocutorFromTurn(o.prevTurn, kNow.byName);
+    var who = interlocutorFromTurn(o.prevTurn, kNow.byName, kNow.metaByName);
     var ex  = explicitMentionIdsFromText(o.text, kNow);
     return {
       interlocutorId: who,
@@ -940,7 +1090,14 @@
       var m1 = resolveMemory(sid, mem);
       if (!m1)                   { meta.gate = 'NO_MEMORY'; meta.reason = REASON.NO_MEMORY; _lastBlocks = meta; return null; }
 
-      var kNow = knownFromMemory(m1, sid);
+      /* ★rer1 H1: 呼出側（fix192）の canonical name map を merge。未供給・kill flag ON なら
+         従来どおり memoryV1 由来のみ（byte 同一）。fix796 は localStorage / cast を直接 READ しない。 */
+      var kNow = isRerOff() ? knownFromMemory(m1, sid)
+                            : mergeKnownEntities(knownFromMemory(m1, sid), o.knownEntities);
+      _lastKnown = { supplied: (kNow && kNow._suppliedCount) || 0,
+                     aliasIndex: (kNow && kNow._aliasIndex) || null,
+                     droppedAliases: (kNow && kNow.droppedAliases) || [] };
+      meta.knownEntities = _lastKnown;
       var tc = (o.turnCtx && typeof o.turnCtx === 'object') ? o.turnCtx : ctxFromCaller(o, kNow);
       meta.currentTurn = isNum(tc.currentTurn) ? tc.currentTurn : null;
       var keys = keysFor(tc);
@@ -950,6 +1107,7 @@
 
       var sel = select(sid, m1, tc);
       if (_lastLog && _lastLog.reason) meta.reason = _lastLog.reason;
+      if (_lastLog) _lastLog.knownEntities = _lastKnown;              /* ★rer1 telemetry */
 
       /* ★cap 300 固定（GPT 裁定 2）。呼び出し側がさらに小さい値を渡した時だけ下げる。 */
       var cap = LIMITS.TOTAL_SOFT;
@@ -958,7 +1116,7 @@
       /* ★Rev7 (F1_k1): admission/ranking は済んでいる。ここで直前ターンに出した
          record だけを外し、その後で cap/render に渡す（構造 = admission -> filter -> cap）。 */
       var cooled = cooldownFilter(sid, sel, meta.currentTurn, meta.cooldownExcluded);
-      var r = render(cooled, { maxChars: cap });
+      var r = render(cooled, { maxChars: cap, displayMap: (kNow && kNow._byId) || null });
       meta.records = r.actuallyInjected;
       meta.droppedByCap = r.droppedByBudget;
 
@@ -996,8 +1154,11 @@
     status: function () {
       return {
         build: BUILD, on: isOn(), off: isOff(), active: armed(),
+        rerOff: isRerOff(),                          /* ★rer1 kill flag */
         wired: false, registered: false, writes: 'none',
-        inputs: ['canonical memoryV1 only'],
+        inputs: ['canonical memoryV1 only',
+                 'caller-supplied knownEntities (identity/display map only, NOT admission authority)'],
+        knownEntities: _lastKnown,                   /* ★rer1 telemetry: _aliasIndex / droppedAliases */
         limits: LIMITS, keyPrefix: KEY_PREFIX,
         lastLog: _lastLog,
         lastBlocks: _lastBlocks,          /* ★Rev6: canaryBlocks の最終 telemetry */
@@ -1038,6 +1199,11 @@
       buildTurnCtxFromTurn: buildTurnCtxFromTurn,
       newTelemetry: newTelemetry, noteTelemetry: noteTelemetry,
       knownFromMemory: knownFromMemory, ctxFromCaller: ctxFromCaller,
+      /* ★rer1: 検査口（fixture 用） */
+      mergeKnownEntities: mergeKnownEntities, displayFromMap: displayFromMap,
+      uniqueIdFromList: uniqueIdFromList, resolveOneCand: resolveOneCand,
+      isSayTagEntry: isSayTagEntry, isRerOff: isRerOff, isSubstantiveCand: isSubstantiveCand,
+      lastKnown: function () { return _lastKnown; },
       storyFlag: storyFlag, normSid: normSid, lastBlocks: function () { return _lastBlocks; },
       /* ★Rev7: cooldown の検査口（fixture 用。live 経路からは使わない） */
       coolKey: coolKey, coolSize: coolSize,
