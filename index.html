@@ -54,7 +54,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260905-fix809';
+  var BUILT = '20260905-fix810';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3730,7 +3730,7 @@ G.init();
 <!-- v292Dfix756(M1 NEW_STORY_SCHEMA2_DEFAULT): server row が無い story(fix705 verdict NOT_FOUND)だけを
      既存 fix750 の prepare→commitSchema2 で schema2 canonical にする。新batch機構/新op/新endpoint 0本。
      ★既定 ON。KILL=v292Dfix756Off=1。失敗時は自分が作った pre-irreversible journal を畳んで legacy 経路へ戻す。 -->
-<script src="v292Dfix756-new-story-schema2.js?cb=20260830-fix757"></script>
+<script src="v292Dfix756-new-story-schema2.js?cb=20260905-fix810"></script>
 <script src="v292Dfix758-cloud-save-pending.js?cb=20260831-fix758"></script>
 </body>
 </html>

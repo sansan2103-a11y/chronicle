@@ -6,6 +6,8 @@
 //     schema2 canonical として D1 へ作り、以後の保存を fix697.canonicalCommit2 経路に乗せる。
 //     ＝「新規 story は最初から schema2」を製品既定にする。
 //
+//   ★fix810（既定 OFF・opt-in v292Dfix810On）: MATERIALIZED 成功後・reload 前に fix781.confirm を 1 回呼ぶ
+//     （fix781 への委譲による marker 間接 write のみ。localStorage への直接 write は引き続き 0）。
 //   ★このモジュールは **状態機械を持たない**。
 //     materialization の実体は既存 fix750（prepare → commitSchema2）そのまま。
 //     fix756 がやるのは
@@ -87,7 +89,7 @@
   'use strict';
   if (window.__v292Dfix756) return;                 /* 二重install防止（自 namespace のみ） */
   var TAG = '[v292Dfix756:new-story-schema2]';
-  var BUILD = 'fix756+757prov';
+  var BUILD = 'fix756+757prov+810confirm';
   var ATT_PREFIX  = 'v292Dfix756_att:';
   var DONE_PREFIX = 'v292Dfix756_done:';
   /* ★裁定44: putcanonical を 1 バイトも送っていないことが phase から確定できる集合。
@@ -135,10 +137,11 @@
     try { row.t = Date.now(); LEDGER.push(row); while (LEDGER.length > LEDGER_CAP) LEDGER.shift(); } catch(e){}
   }
   var stats = { polls: 0, gateChecks: 0, triggered: 0, prepared: 0, committed: 0,
-                abandoned: 0, holds: 0, reloads: 0, manualReconcileRequired: 0 };
+                abandoned: 0, holds: 0, reloads: 0, manualReconcileRequired: 0,
+                confirm810Calls: 0, confirm810Skipped: 0, confirm810MarkerCreated: 0 };   /* fix810 */
   var state = { build: BUILD, phase: 'idle', storyId: null, verdict: null, code: null,
                 detail: null, startedAt: null, finishedAt: null, reloadScheduled: false,
-                abandon: null, steps: null };
+                abandon: null, steps: null, confirm781: null };                             /* fix810 */
 
   var RAN = false;                 /* この document で 1 回だけ */
   var RUN_P = null;                /* 実行中/実行済みの Promise（診断・fixture 用。再実行はしない） */
@@ -240,6 +243,37 @@
   // =====================================================================
   // (3) 終了処理
   // =====================================================================
+  /* ■fix810: MATERIALIZED 成功後の confirm（fix697:97 g781Confirm と同型・confirm-only・transition 直呼び 0） */
+  function on810(){ return lsg('v292Dfix810Off') !== '1' && lsg('v292Dfix810On') === '1'; }
+  function confirm810(id, r){
+    var rec = { on: on810(), code: r ? r.code : null, called: false, ok: null, rev: null, fp16: null,
+                markerBefore: null, skip: null };
+    try {
+      if (!rec.on){ rec.skip = 'OFF'; }
+      else if (!r || r.code !== 'MATERIALIZED' || r.serverMutationState !== 'APPLIED'){ rec.skip = 'NOT_MATERIALIZED_APPLIED'; }
+      else {
+        var sv = r.server || null;
+        var rev = sv ? sv.rev : null, fp = sv ? sv.serverHash : null;
+        if (typeof rev !== 'number' || !(rev >= 0)){ rec.skip = 'NO_SERVER_REV'; }
+        else if (typeof fp !== 'string' || !fp){ rec.skip = 'NO_SERVER_HASH'; }
+        else {
+          var G = null; try { G = window.__v292Dfix781 || null; } catch(e){ G = null; }
+          if (!G || typeof G.confirm !== 'function'){ rec.skip = 'NO_FIX781'; }
+          else {
+            try { rec.markerBefore = (typeof G.marker === 'function') ? (G.marker(id) ? 'PRESENT' : 'ABSENT') : null; } catch(e){}
+            rec.rev = rev; rec.fp16 = String(fp).slice(0, 16);
+            rec.called = true; stats.confirm810Calls++;
+            rec.ok = !!G.confirm(id, rev, String(fp));       /* fix781 OFF → false（no-op） */
+            if (rec.ok && rec.markerBefore === 'ABSENT') stats.confirm810MarkerCreated++;
+          }
+        }
+      }
+    } catch(e810){ rec.skip = 'THREW'; rec.ok = false; }
+    if (!rec.called) stats.confirm810Skipped++;
+    state.confirm781 = rec;
+    note({ kind: 'CONFIRM781', storyId: id, called: rec.called, ok: rec.ok, rev: rec.rev, fp16: rec.fp16, skip: rec.skip, markerBefore: rec.markerBefore });
+    return rec;
+  }
   function scheduleReload(why){
     if (state.reloadScheduled) return;
     state.reloadScheduled = true;
@@ -324,6 +358,16 @@
       /* out.stage === 'COMMIT' */
       if (r && r.ok === true && (r.code === 'MATERIALIZED' || r.code === 'ALREADY_COMPLETE')){
         ssSet(DONE_PREFIX + id, String(Date.now()));
+        /* ■fix810(FRESH_STORY_MATERIALIZE_CONFIRM_GAP・経路 B・GPT 裁定 深夜204/207 d1 GO・既定 OFF):
+           materialize 成功（MATERIALIZED ＝ putcanonical 送信 → authoritative readback g3 ＝ r.server）の直後、
+           reload の **前** に fix781.confirm(id, r.server.rev, r.server.serverHash) を 1 回だけ呼ぶ。
+           これが無いと lastConfirmed=null のまま次 boot へ入り、W3 窓（disarm〜reload 300ms）や
+           boot#2 same-hash 後の write が resolve781 (c) DIRTY_WITH_NO_LAST_CONFIRMED → DIVERGED を作る。
+           fingerprint は Worker 側で確定した readback の serverHash（client 再計算を authority にしない）。
+           ALREADY_COMPLETE（今回 write 0）／rev 非 number／hash 欠落／APPLIED でない → confirm 0（fail-open）。
+           fix781 不在・OFF は G.confirm が false を返すだけ（no-op）。localStorage への直接 write 0（fix781 委譲）。
+           opt-in: v292Dfix810On='1' ／ kill: v292Dfix810Off='1'（kill 優先）。 */
+        confirm810(id, r);
         scheduleReload(r.code);
         return finish('MATERIALIZED', r.code, { serverRev: (r.server && r.server.rev) || null });
       }
