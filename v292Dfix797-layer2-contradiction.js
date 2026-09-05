@@ -72,6 +72,13 @@
  *   beginTurnContext(S) 1 行 = 追加 4 行・削除 0。
  *   本 file 未 load / flag OFF で完全 no-op（出力 byte 同一）。
  * ==========================================================================*/
+/* ★A-1 PREMISE-TIER stage（4A-2 v1・GPT 裁定 2026-09-05 G4/G5）: hero.desc = PREMISE_EVIDENCE。
+ *   detect: 評価順 A(非desc)→B→A(desc)・hit.decl.via / out.tier('PREMISE'|'CURRENT') を追加。
+ *   turnHook: tier==='PREMISE' かつ v292Dfix797DescRewrite!=='1' なら rewrite せず ring 'premise-hold'（api 0）。
+ *   HARD_DENIAL / VIOL / outcome / helper 語彙 / fix741 経路は 1 バイトも変えない。
+ */
+/* ★A-0 stage（4A-2 v1）2026-09-05: N1P bb2ecfffe29d に対し beginTurnContext(desc snapshot)・prevFor(desc)・detect(source A-0) の 3 箇所だけ追加。
+   他は 1 バイトも変えない。stage only・deploy HOLD・既定 OFF 維持。 */
 (function () {
   'use strict';
 
@@ -84,6 +91,9 @@
   var RING_MAX = 50;                                     // memory only（設計 §5）
 
   function on() { return lsGet('v292Dfix797On') === '1'; }
+  /* ★A-1 PREMISE-TIER（4A-2 v1・GPT 裁定 2026-09-05 G4/G5）: desc-only evidence による rewrite は既定 OFF。
+   *  QA のみ v292Dfix797DescRewrite='1' で解禁。detection / log は flag に依らず常に行う。 */
+  function descRewriteOn() { return lsGet('v292Dfix797DescRewrite') === '1'; }
 
   /* ---- 外部依存（すべて参照。コピー 0・改変 0） ---------------------- */
   function dep741() {
@@ -358,9 +368,14 @@
       var nm = heroOf(st);
       var e = {};
       try { var store = window.__v292Dfix77Store; if (store && nm) e = store[nm] || {}; } catch (e2) { e = {}; }
+      var desc = '';
+      try { desc = String((st && st.cast && st.cast.hero && st.cast.hero.desc) || ''); } catch (e3) { desc = ''; }
       PREV = { story: storyKeyOf(), turn: turnOf(st), name: nm,
                karada: String(e.karada || e['からだ'] || ''),
-               kizu:   String(e.kizu   || e['傷'] || '') };
+               kizu:   String(e.kizu   || e['傷'] || ''),
+               /* ★A-0（4A-2 v1・GPT 裁定 2026-09-05）: hero.desc（Owner 明示の premise）を同じ snapshot に写す。
+                  canonical の読取のみ（AUTHORITY_CONSUMPTION_EXPANSION = YES / NEW_AUTHORITY = NO）。書込 0。 */
+               desc: desc };
     } catch (e) { PREV = null; }
   }
 
@@ -374,7 +389,7 @@
     if (story && p.story && story !== p.story) return {};   /* story mismatch → fail-open */
     var t = turnOf(st);
     if (t >= 0 && p.turn >= 0 && t !== p.turn) return {};   /* turn mismatch → fail-open */
-    return { karada: p.karada, kizu: p.kizu };
+    return { karada: p.karada, kizu: p.kizu, desc: p.desc || '' };
   }
 
   /* ---- 節分割（fix414 keepClauses は非公開なので同形の最小分割のみ） ----
@@ -539,18 +554,42 @@
       for (var ax = 0; ax < aExp.length; ax++)
         out.sourceA.push({ via: 'explicit', cat: aExp[ax].cat, part: aExp[ax].part,
                            cls: 'EXPLICIT_HARD_DENIAL', text: aExp[ax].text, clause: aExp[ax].text });
+      /* ---- A-0（4A-2 v1・GPT RULING 2026-09-05 A1/A3）: hero.desc を **同じ** explicitHardConstraint() で読む。
+       *  hero.desc = explicit premise evidence（Owner 明示）であって永久の current-state truth ではない（A2）。
+       *  実測根拠: QA canary smtnvr26m7w で desc「走ることはできない」「大声は出せない」が HARD_DENIAL に一致するのに
+       *  fix797 は desc を読んでおらず source A が空だった（3 語彙系統の未接続）。
+       *  語彙 0・推論 0・persist 0。HARD_DENIAL / VIOL / outcome / rewrite / gate は 1 バイトも変えない。
+       *  stale desc（回復後）との衝突は STALE_DESC_CAPABILITY_CONFLICT として fixture で記録（治癒判定 regex は追加しない）。 */
+      var descText = String(prev.desc || '');
+      if (descText.trim()) {
+        var aDesc = explicitHardConstraint(descText, ctx, g670);
+        for (var dx = 0; dx < aDesc.length; dx++)
+          out.sourceA.push({ via: 'desc', cat: aDesc[dx].cat, part: aDesc[dx].part,
+                             cls: 'EXPLICIT_HARD_DENIAL', text: aDesc[dx].text, clause: aDesc[dx].text });
+      }
 
       /* ---- source B: 同一 output 内の明示宣言（同一 helper・宣言より後方のみ） */
       out.sourceB = explicitHardConstraint(body, ctx, g670);
 
       /* ---- H1 判定: HARD 宣言 → 後方の完遂 --------------------------- */
+      /* ★A-1 PREMISE-TIER: 評価順 = A（fix741 / explicit = current-state 側）→ B（同 output）→ A via:'desc'（premise）。
+       *  desc 以外の独立証拠が同じ違反に到達するなら hit.decl は desc にならない（従来 rewrite authority 不変）。
+       *  desc だけが到達した hit は tier='PREMISE'（detect/log は従来どおり・rewrite は descRewriteOn() gate）。
+       *  desc 空なら順序は従来（A→B）と同一 = corpus72 invariance。 */
       var cands = [];
-      for (var a = 0; a < out.sourceA.length; a++)
-        cands.push({ src: 'A', cat: out.sourceA[a].cat, part: out.sourceA[a].part, at: -1,
+      for (var a = 0; a < out.sourceA.length; a++) {
+        if (out.sourceA[a].via === 'desc') continue;
+        cands.push({ src: 'A', via: out.sourceA[a].via, cat: out.sourceA[a].cat, part: out.sourceA[a].part, at: -1,
                      text: out.sourceA[a].text });
+      }
       for (var b = 0; b < out.sourceB.length; b++)
-        cands.push({ src: 'B', cat: out.sourceB[b].cat, part: out.sourceB[b].part,
+        cands.push({ src: 'B', via: 'B', cat: out.sourceB[b].cat, part: out.sourceB[b].part,
                      at: out.sourceB[b].at, text: out.sourceB[b].text });
+      for (var a2 = 0; a2 < out.sourceA.length; a2++) {
+        if (out.sourceA[a2].via !== 'desc') continue;
+        cands.push({ src: 'A', via: 'desc', cat: out.sourceA[a2].cat, part: out.sourceA[a2].part, at: -1,
+                     text: out.sourceA[a2].text });
+      }
 
       /* ★Rev5: gate（否定・仮定・伝聞・引用）を span ごとに 1 度だけ評価して使い回す。
          fix670 の実装は参照のまま・regex のコピー 0。 */
@@ -587,7 +626,8 @@
           var oc = outcomeAt(cd.cat, V, list, vi, gates, handoff);
           if (!oc) continue;
           out.hit = true; out.severity = 'HIGH';
-          out.decl = { src: cd.src, cat: cd.cat, part: cd.part, text: cd.text, at: cd.at };
+          out.decl = { src: cd.src, via: cd.via, cat: cd.cat, part: cd.part, text: cd.text, at: cd.at };
+          out.tier = (cd.via === 'desc') ? 'PREMISE' : 'CURRENT';   /* ★A-1 */
           out.viol = { at: oc.at, path: oc.path, text: (oc.at === vi ? v.o.trim().slice(0, 60)
                         : (v.o.trim().slice(0, 28) + '……' + list[oc.at].o.trim().slice(0, 28))) };
           /* ---- H2 deferred-cost signature（後方 2 文以内の崩れ語・信号のみ） */
@@ -782,12 +822,20 @@
       if (d.softViolation || d.soft.length) rec({ k: 'log', soft: d.soft.length, reason: d.reason });
       return Promise.resolve(null);
     }
+    /* ★A-1 PREMISE-TIER gate: desc-only evidence の hit は既定で rewrite しない（detect は ring に残す）。
+     *  api.call 0・sessionRewrites 不変・元採用（fail-open と同じ帰り値）。QA は v292Dfix797DescRewrite='1' で解禁。 */
+    if (d.tier === 'PREMISE' && !descRewriteOn()) {
+      rec({ k: 'premise-hold', src: 'A', via: 'desc', cat: d.decl.cat,
+            decl: String(d.decl.text || '').slice(0, 40), viol: String(d.viol && d.viol.text || '').slice(0, 40),
+            adopted: false, why: 'desc-only-rewrite-off' });
+      return Promise.resolve(null);
+    }
     if (sessionRewrites >= SESSION_CAP) {
       rec({ k: 'capped', decl: d.decl && d.decl.text, cap: SESSION_CAP });
       return Promise.resolve(null);
     }
     sessionRewrites++;
-    var base = { k: 'rewrite', src: d.decl.src, cat: d.decl.cat,
+    var base = { k: 'rewrite', src: d.decl.src, via: d.decl.via, tier: d.tier, cat: d.decl.cat,
                  decl: String(d.decl.text || '').slice(0, 40),
                  viol: String(d.viol.text || '').slice(0, 40),
                  conf: 'HIGH', deferredCost: !!d.signals.deferredCost };
@@ -830,7 +878,8 @@
     beginTurnContext: beginTurnContext,               /* ★Rev4: PREV snapshot の唯一の入口 */
     turnHook: turnHook,
     status: function () {
-      return { build: BUILD, on: on(), off: lsGet('v292Dfix797Off') === '1',
+      return { build: BUILD, stage: 'a1-premise', on: on(), off: lsGet('v292Dfix797Off') === '1',
+               descRewrite: descRewriteOn(),
                dep741: !!dep741(), dep670: !!dep670(),
                prevReady: !!PREV, prevTurn: PREV ? PREV.turn : -1,
                prevHero: PREV ? PREV.name : '', prevStory: PREV ? PREV.story : '',
@@ -855,8 +904,9 @@
       explicitHardConstraint: explicitHardConstraint, declBlocked: declBlocked,
       instructionFor: instructionFor, ctxOf: ctxOf,
       prevSnap: function () { return PREV ? { story: PREV.story, turn: PREV.turn, name: PREV.name,
-                                              karada: PREV.karada, kizu: PREV.kizu } : null; },
+                                              karada: PREV.karada, kizu: PREV.kizu, desc: PREV.desc || '' } : null; },
       prevFor: prevFor, heroOf: heroOf, turnOf: turnOf,
+      descRewriteOn: descRewriteOn,                       /* ★A-1 */
       clearTurnContext: function () { PREV = null; },
       resetSession: function () { sessionRewrites = 0; ring.length = 0; last = null; },
       sessionRewrites: function () { return sessionRewrites; }
