@@ -291,9 +291,19 @@
       });
       if(!cands.length) return '';
       cands.sort(function(a,b){ return (b.p-a.p)||(a.r-b.r); }); /* 内圧降順・同点は決定的ローテで固着防止 */
+      /* ★v292Dfix812 AGENDA_CHOICE_VOCAB_V1（4B-4・Fable 設計 V1 案 A・GPT gate 後 default OFF opt-in）:
+         候補選定・閾値・頻度・見出しは 1 byte も変えず、注入文の尾だけ「小さな一歩(発言・行動)を起こす」→
+         「今できる範囲で一言だけ割り込む／答えない／様子を見る／距離を取る等から自分で選ぶ。黙ったままでもよい」へ（GPT 深夜240 推奨文面・「首を振る」「手を止めず」等の物理行動仮定を削除・「立ち去る」明示化は HOLD・4A capability 制約を上書きしない）。
+         発話数を増やさない（「発言」先出しをやめる・「必ず」「毎ターン」を書かない・理由は説明しない）。scene/kankei/他 NPC/playerText は読まない（従来どおり）。
+         opt-in: localStorage v292Dfix812AgendaVocab='1' ／ kill: v292Dfix812Off='1'（既存 v292AgendaOff は上位で有効）。OFF = 従来文と byte 一致。 */
+      var vocab812=false;
+      try{ vocab812 = (localStorage.getItem('v292Dfix812Off')!=='1') && (localStorage.getItem('v292Dfix812AgendaVocab')==='1'); }catch(e){ vocab812=false; }
       var lines=cands.slice(0,2).map(function(c){
         var core=c.d?('内心『'+c.d.slice(0,40)+'』を抱え続けている'):('傷('+c.w.slice(0,30)+')が言動の下に燻り続けている');
         var sub=(c.d&&c.w)?('傷('+c.w.slice(0,30)+')もその下に流れている。'):'';
+        if(vocab812){
+          return '・'+c.name+'は'+core+'。'+sub+'場面がそれに触れた時、または静かな間が来たら、'+c.name+'はそれを理由に、今できる範囲で一言だけ割り込む／答えない／様子を見る／距離を取る等から自分で選ぶ。黙ったままでもよい。理由は説明しない。唐突な暴走はしない。';
+        }
         return '・'+c.name+'は'+core+'。'+sub+'場面がそれに触れた時、または行動の区切り(静かな間)が来たら、'+c.name+'の方から小さな一歩(発言・行動)を起こす。唐突な暴走はしない。';
       });
       return '【自発(黙り続けている人ほど、内側が動いている)】\n'+lines.join('\n');
