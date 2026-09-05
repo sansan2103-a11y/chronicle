@@ -2220,7 +2220,7 @@
   var REARM_MS = 2000;                    /* GPT裁定 RULING38 §Q3: 2000ms APPROVED（5000 へ落とさない） */
   var saveDepth = 0;
   var myWrapper = null;                   /* ★identity。marker だけに頼らない（後述） */
-  var wrapStats = { installs: 0, rearmChecks: 0, marks: 0, skippedNoChange: 0 };
+  var wrapStats = { installs: 0, rearmChecks: 0, marks: 0, skippedNoChange: 0, retitleCalls: 0, retitled: 0 };   /* fix809 */
 
   /* ★★fix724(RULING38 §STOP): BLOCKED SAVE で false-dirty を作らない。
      fix600/fix635 の new-story-guard は「保存を通さない」= inner が body を書かずに return する。
@@ -2252,7 +2252,17 @@
           if (saveDepth === 0){                 /* ★最外殻の層でだけ判定。層が二重でも 1 回 */
             try {
               var after = bodySnapshot();
-              if (after !== before){ wrapStats.marks++; markDirty(); }
+              if (after !== before){
+                /* ■fix809(FRESH_STORY_TITLE_CANONICAL_MISMATCH A 型・GPT 裁定 深夜201 GO_A-I):
+                   fresh story の placeholder title（'新しい物語'）を、body 付き初回 commit より **前** に確定させる。
+                   fix526.retitle(false) は boot で毎回走っている純関数由来・冪等・placeholder 0 件なら meta 1 回の
+                   JSON.parse で即 return。title が最初の body 付き PUT に同乗するので server write +0・hash authority 変更 0。
+                   失敗/不在/kill は無視（従来どおり markDirty のみ）。kill = v292Dfix809Off=1（v292Dfix526Off=1 でも停止）。 */
+                try { if (lsg('v292Dfix809Off') !== '1'){ var R809 = window.__v292Dfix526;
+                      if (R809 && typeof R809.retitle === 'function'){ wrapStats.retitleCalls++; var r809 = R809.retitle(false);
+                        if (r809 && r809.renamed > 0) wrapStats.retitled += r809.renamed; } } } catch(e809){}
+                wrapStats.marks++; markDirty();
+              }
               else { wrapStats.skippedNoChange++; }
             } catch(e){}
           }
@@ -2447,6 +2457,7 @@
       /* ★★fix724: save wrapper の装着状況（RULING37 §22 の観測点） */
       saveWrap: { installs: wrapStats.installs, rearmChecks: wrapStats.rearmChecks,
                   marks: wrapStats.marks, skippedNoChange: wrapStats.skippedNoChange,
+                  retitleCalls: wrapStats.retitleCalls, retitled: wrapStats.retitled,   /* fix809 */
                   attached: (function(){ try { var S = (typeof window.__chronicleGetState === 'function')
                     ? window.__chronicleGetState('fix697') : (window.S || null);
                     return !!(S && S.save && S.save === myWrapper); } catch(e){ return false; } })(),
