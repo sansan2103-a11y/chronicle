@@ -297,8 +297,22 @@
     } catch(e){}
     return '';
   }
+  /* ★fix808（UNKNOWN_AVATAR_MINISTAGE v1・GPT 裁定 2026-09-05）: UNKNOWN SPEAKER = attribution state, not character identity。
+   *   who（trim 後）が /^[?？]+$/ の card は、人物 avatar pipeline（dfix15 cache → cast → ncBuildAvatar(本文 tail prompt) → aiHook/fix118 生成）へ
+   *   入る前に neutral silhouette へ短絡する。性別・年齢・人種・外見を推定しない／本文から prompt を作らない／生成 call 0／
+   *   既存の人物画像 cache（chrAiAv4 / v292av2_）を使わない・消さない（lookup で無視するだけ）。
+   *   placeholder = fix487 の Owner 承認 silhouette（localStorage v292Dfix487sil0 の dataURL）を index 0 固定で流用（'???'／'？？？'／'?' すべて同一）。
+   *   無ければ fix487 と同じ SVG fallback。'男'／'スーツの男'／cast は従来経路（不触）。kill: v292Dfix808Off='1'。 */
+  var UNKNOWN_SIL_FALLBACK = "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22b%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%2333304a%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%2316141f%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2248%22%20height%3D%2248%22%20fill%3D%22url%28%23b%29%22%2F%3E%3Cg%20fill%3D%22%233a3652%22%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2219%22%20r%3D%227.5%22%2F%3E%3Cpath%20d%3D%22M9%2044c0-8%206.5-13%2015-13s15%205%2015%2013z%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E";
+  function isUnknownLabel(name){ return /^[?？]+$/.test(String(name == null ? '' : name).trim()); }   // GPT MINOR_REVISE: 空白のみは UNKNOWN ではない
+  function fix808Off(){ try { return localStorage.getItem('v292Dfix808Off') === '1'; } catch(e){ return false; } }
+  function unknownPlaceholder(){
+    try { var ls0 = localStorage.getItem('v292Dfix487sil0'); if (ls0 && ls0.indexOf('data:image') === 0) return ls0; } catch(e){}
+    return UNKNOWN_SIL_FALLBACK;
+  }
   function lookupAvatar(name){
     if (!name) return '';
+    if (isUnknownLabel(name) && !fix808Off()) return unknownPlaceholder();   // ★fix808: 人物 pipeline へ入らない
     try {
       if (window.__v292 && window.__v292.dfix15 &&
           typeof window.__v292.dfix15.getAvatar === 'function'){
@@ -1402,6 +1416,7 @@
     repair: repair,
     preprocessNarrative: preprocessNarrative,
     lookupAvatar: lookupAvatar,
+    __fix808: { isUnknownLabel: isUnknownLabel, unknownPlaceholder: unknownPlaceholder, off: fix808Off },   // ★fix808 検証口（読み取りのみ）
     // v292Dfix123: expose the entity context so fix118's generator can describe non-cast
     // entities (creatures/people/etc.) from the story prose, not a fixed horror template.
     isCast: function(name){ try { var st = getState(); if (st && st.cast){ if (st.cast.hero && st.cast.hero.name === name) return true; var a = st.cast.npcs || []; for (var i = 0; i < a.length; i++){ if (a[i] && a[i].name === name) return true; } } } catch(e){} return false; },
