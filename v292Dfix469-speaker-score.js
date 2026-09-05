@@ -137,7 +137,7 @@
   // ★1文字ラベル(男/女)は禁止: 彼女/少女/長男 等に部分一致して大事故になる(実測)
   var PRONOUN_WHO = ['私','俺','僕','彼','彼女','あなた','お前','君','誰か','自分']; // fix495(B1)
   function _dropOn(){ try { return localStorage.getItem('v292Dfix469DropOn') === '1'; } catch(e){ return false; } }  // fix495(B5)
-  var _stats = { wouldDrop: 0, backupFail: 0, wouldPronounFlip: 0, pronounAmbiguous: 0, pronounNoGender: 0, wouldToneFlip: 0, toneConflict: 0, historicalSkipped: 0 };  // fix498: 代名詞ブリッジ診断 / 根治: 口調ブリッジ / fix730: 過去ターン不触の件数
+  var _stats = { wouldDrop: 0, backupFail: 0, wouldPronounFlip: 0, pronounAmbiguous: 0, pronounNoGender: 0, wouldToneFlip: 0, toneConflict: 0, historicalSkipped: 0, tagGuarded: 0 };  // fix498: 代名詞ブリッジ診断 / 根治: 口調ブリッジ / fix730: 過去ターン不触の件数
   /* ★★fix730(RULING72 §15・§16): plan phase を非破壊にするための最小 clone。
      own property を全部写す(_rv や将来の付随フィールドを落とさない)。 */
   function _cloneCS(o){
@@ -645,6 +645,31 @@
 
   // ---------- 1ターンの計画 ----------
   // allowDrop=true は「読み込み後の新ターン」のみ(拮抗時のカード非表示を許可)
+  /* ★★TG（2026-09-05・GPT RULING FIX469_OVERRIDES_EXPLICIT_SAY_TAG = OPEN_P1 / LIVE_CONFIRMED）
+     authority 原則: **exact explicit say-tag > heuristic neighboring-text repair**。
+     実測（QA smto0axx9nv T3/T9）: モデルが <say who="大鳥 玄斉"> と明示したカード（fix616 meta sourceKind 'say-tag'・
+     tagMappingConfidence exact）を、隣接地の文の証拠（score 230/115）で別人へ flip していた。
+     対処 = 高 provenance カード（say-tag / hero-utterance / react-voice）は flip / drop / toneFix の対象外。
+     bare-inferred / harvest / say-tag-promoted（fix464 の推測昇格）/ say-tag-renamed / unmatched は従来どおり。
+     判定元 = fix616 が付けた turn._convSayMeta（永続）→ 無ければ fix606.classifyCard（同じ純関数）→ どちらも無ければ保護しない（従来）。
+     新 authority ではなく provenance priority の修正。kill: v292Dfix469TagGuardOff='1'。 */
+  var TG_PROTECT = { 'say-tag': 1, 'hero-utterance': 1, 'react-voice': 1 };
+  function _tagGuardOn(){ try { return localStorage.getItem('v292Dfix469TagGuardOff') !== '1'; } catch(e){ return true; } }
+  function _highProvenance(t, c, i, heroName){
+    try {
+      var mm = t && t._convSayMeta;
+      if (Array.isArray(mm) && mm.length === ((t._convSays || []).length)){
+        var m = mm[i]; return !!(m && TG_PROTECT[m.sourceKind]);
+      }
+      var p6 = window.__v292Dfix606;
+      if (p6 && typeof p6.classifyCard === 'function'){
+        var r = p6.classifyCard(t, c, i, { hero: heroName || '' });
+        return !!(r && TG_PROTECT[r.source]);
+      }
+    } catch(e){}
+    return false;
+  }
+
   function planTurn(t, names, tokens, profs, allowDrop){
     var cs = t && t._convSays;
     if (!Array.isArray(cs) || !cs.length) return { changed: false, changes: [], arr: cs };
@@ -675,6 +700,11 @@
         changes.push({ act: 'canon', from: cur0, to: cur, say: String(c.say).slice(0, 14) });
         if (c === c0) c = _cloneCS(c0);          /* ★fix730: live 非破壊 */
         c.who = cur; changed = true;
+      }
+      /* ★TG: 高 provenance カードは canon 正規化だけ許し、flip / drop / toneFix / 代名詞 shadow は行わない */
+      if (_tagGuardOn() && _highProvenance(t, c0, i, String((names && names[0]) || ''))){
+        _stats.tagGuarded++;
+        out.push(c); continue;
       }
       var res = score(c.say, prev, next, allTokens, profs, prevSand);
       var d = decide(res, cur, !!allowDrop && _dropOn());

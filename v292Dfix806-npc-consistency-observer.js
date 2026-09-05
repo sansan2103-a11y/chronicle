@@ -88,11 +88,14 @@
     var out = [];
     sentences(turn.narrative).forEach(function(s){
       if (!COPULA.test(s)) return;                      // 「X は Y だ」型の断定文だけ見る（描写文の同居は拾わない）
-      var fr = firstHit(s, FEMALE_REF), mk = firstHit(s, MALE_KIN);
-      if (fr && mk && !(fr === '女' && mk === '男') && s.indexOf(fr) < s.indexOf(mk))
+      /* ★v1.1（FIX806_G_TOKEN_BOUNDARY_FP・GPT 2026-09-05）: 「彼女」を 彼＋女 に分解して拾わない。
+         彼女 は FEMALE_REF としてだけ扱い、男性指示語／女性続柄の走査は 彼女 を潰した文で行う。 */
+      var s2 = s.replace(/彼女/g, '▲▲');
+      var fr = firstHit(s, FEMALE_REF), mk = firstHit(s2, MALE_KIN);
+      if (fr && mk && !(fr === '女' && mk === '男') && s.indexOf(fr) < s2.indexOf(mk))
         out.push({ kind: 'G', turn: ti, ref: fr, kin: mk, sentence: s.slice(0, 60) });
-      var mr = firstHit(s, MALE_REF), fk = firstHit(s, FEMALE_KIN);
-      if (mr && fk && !(mr === '男' && fk === '女') && s.indexOf(mr) < s.indexOf(fk) && !(fr && mk))
+      var mr = firstHit(s2, MALE_REF), fk = firstHit(s2, FEMALE_KIN);
+      if (mr && fk && !(mr === '男' && fk === '女') && s2.indexOf(mr) < s2.indexOf(fk) && !(fr && mk))
         out.push({ kind: 'G', turn: ti, ref: mr, kin: fk, sentence: s.slice(0, 60) });
     });
     return out;
@@ -159,7 +162,7 @@
   (function w(){ w._n = (w._n || 0) + 1; if (install()) return; if (w._n > 120) return; setTimeout(w, 500); })();
 
   window.__v292Dfix806 = {
-    __v: 1,
+    __v: 1.1,
     stats: function(){ return JSON.parse(JSON.stringify(stats)); },
     candidates: function(){ return ring.slice(); },
     observe: function(turn, S){ S = S || getS(); return { G: observeG(turn, -1), SK: observeSK(S, -1), P: observeP(turn) }; },   // READ-ONLY・任意 turn
