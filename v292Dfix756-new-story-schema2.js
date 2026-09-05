@@ -6,7 +6,7 @@
 //     schema2 canonical として D1 へ作り、以後の保存を fix697.canonicalCommit2 経路に乗せる。
 //     ＝「新規 story は最初から schema2」を製品既定にする。
 //
-//   ★fix810（既定 OFF・opt-in v292Dfix810On）: MATERIALIZED 成功後・reload 前に fix781.confirm を 1 回呼ぶ
+//   ★fix810（既定 ON・kill v292Dfix810Off）: MATERIALIZED 成功後・reload 前に fix781.confirm を 1 回呼ぶ
 //     （fix781 への委譲による marker 間接 write のみ。localStorage への直接 write は引き続き 0）。
 //   ★このモジュールは **状態機械を持たない**。
 //     materialization の実体は既存 fix750（prepare → commitSchema2）そのまま。
@@ -89,7 +89,7 @@
   'use strict';
   if (window.__v292Dfix756) return;                 /* 二重install防止（自 namespace のみ） */
   var TAG = '[v292Dfix756:new-story-schema2]';
-  var BUILD = 'fix756+757prov+810confirm';
+  var BUILD = 'fix756+757prov+810confirm-on';
   var ATT_PREFIX  = 'v292Dfix756_att:';
   var DONE_PREFIX = 'v292Dfix756_done:';
   /* ★裁定44: putcanonical を 1 バイトも送っていないことが phase から確定できる集合。
@@ -244,7 +244,8 @@
   // (3) 終了処理
   // =====================================================================
   /* ■fix810: MATERIALIZED 成功後の confirm（fix697:97 g781Confirm と同型・confirm-only・transition 直呼び 0） */
-  function on810(){ return lsg('v292Dfix810Off') !== '1' && lsg('v292Dfix810On') === '1'; }
+  var F810_DEFAULT_ON = true;   /* GPT 裁定 深夜213: FIX810_DEFAULT_ON = GO（kill v292Dfix810Off は残す・v292Dfix810On は互換のため受理） */
+  function on810(){ return lsg('v292Dfix810Off') !== '1' && (F810_DEFAULT_ON || lsg('v292Dfix810On') === '1'); }
   function confirm810(id, r){
     var rec = { on: on810(), code: r ? r.code : null, called: false, ok: null, rev: null, fp16: null,
                 markerBefore: null, skip: null };
@@ -366,7 +367,7 @@
            fingerprint は Worker 側で確定した readback の serverHash（client 再計算を authority にしない）。
            ALREADY_COMPLETE（今回 write 0）／rev 非 number／hash 欠落／APPLIED でない → confirm 0（fail-open）。
            fix781 不在・OFF は G.confirm が false を返すだけ（no-op）。localStorage への直接 write 0（fix781 委譲）。
-           opt-in: v292Dfix810On='1' ／ kill: v292Dfix810Off='1'（kill 優先）。 */
+           既定 ON（GPT 深夜213）／ kill: v292Dfix810Off='1'（優先）／ v292Dfix810On は互換受理。 */
         confirm810(id, r);
         scheduleReload(r.code);
         return finish('MATERIALIZED', r.code, { serverRev: (r.server && r.server.rev) || null });
