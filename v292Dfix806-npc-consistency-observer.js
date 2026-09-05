@@ -24,6 +24,10 @@
 //   X = KNOWNTO_NONMEMBER_MEMORY_EXPOSURE_OBS: fix796 status().lastLog.knownToProvenance を READ し「Memory が sys に入った turn で、
 //       current-turn evidence にある cast NPC がその record の knownTo に含まれない」件数を数えるだけ（nonmember ≠ ignorance・leak 判定/filter/FAIL に使わない・取得不能は no-op）。
 //   FREEZE: PLANNER_RELATION_AUTHORITY_V1 = FIX190_KANKEI_STRING / K_EPHEMERAL は entity 登録候補ではない / ??? は relation endpoint ではない。
+// ★v1.3 GENERIC_QUASI_RESOLUTION diagnostic minor（GPT 裁定 2026-09-05 深夜229・REVISE_DIAGNOSTIC_ONLY・new K class = HOLD）:
+//   K_RESOLVED は維持したまま、quasi roster（fix277）経由でしか解けない相手は via='QUASI'（alias の canonical が quasi のみ → via='ALIAS' + quasi=true）、
+//   generic=true/false（GENERIC_LABEL 一致・DIAGNOSTIC_HEURISTIC_ONLY）を diagnostic として付ける。persistent/canonical/entity 変更 0。
+//   公開口 classifyPartner/classifyWho に第 4 引数 sid（historical LS READ sweep 用: quasi roster を document 以外の story から読む・書換 0）。
 // =====================================================================
 (function(){
   'use strict';
@@ -38,7 +42,7 @@
   var COPULA = /(だ|です|である|なんだ|だった|でした)[。、」！？!?…\s]|(だ|です|である)$/;
 
   var stats = { turnsSeen: 0, G: 0, S: 0, K: 0, P_unknown: 0, P_lowprov: 0, droppedCount: 0, errors: 0, last: null,
-                /* v1.2 */ K_RESOLVED: 0, K_UNRESOLVED: 0, K_EPHEMERAL: 0, K_UNKNOWN_LABEL: 0, compositeSeen: 0,
+                /* v1.2 */ K_RESOLVED: 0, K_UNRESOLVED: 0, K_EPHEMERAL: 0, K_UNKNOWN_LABEL: 0, compositeSeen: 0, K_RESOLVED_QUASI: 0, K_RESOLVED_GENERIC: 0,
                 S_UNKNOWN_LABEL: 0, S_EPHEMERAL: 0, X_turnsWithMemory: 0, X_records: 0, X_nonmember: 0, X_unavailable: 0 };
   var seenKall = {};   /* v1.2: who>partner → class（全 class を 1 度だけ ring へ） */
   var ring = [];
@@ -58,8 +62,8 @@
     try { var dk = window.__chronicleDocumentStoryKey; if (typeof dk === 'string' && dk) return String(dk).replace(/^chr6_slot_/, ''); } catch(e){}
     return '';
   }
-  function quasiNames(){
-    var id = slotId(); if (!id) return [];
+  function quasiNames(sid){
+    var id = (typeof sid === 'string' && sid) ? sid : slotId(); if (!id) return [];
     try {
       var raw = ls('v292Dfix277Quasi_slot_' + id); if (!raw) return [];
       var o = JSON.parse(raw);
@@ -67,7 +71,7 @@
       return Object.keys(o || {});
     } catch(e){ return []; }
   }
-  function knownNames(S){
+  function knownNames(S, sid){
     var out = [];
     try {
       if (S && S.cast){
@@ -75,7 +79,8 @@
         (S.cast.npcs || []).forEach(function(x){ if (x && x.name) out.push(String(x.name)); });
       }
     } catch(e){}
-    return out.concat(quasiNames());
+    var arr = out.concat(quasiNames(sid)); arr.castCount = out.length;   /* v1.3: 先頭 castCount 件 = cast（hero+npcs）・以降 = quasi roster */
+    return arr;
   }
   /* 名前解決（読取のみ）: 完全一致 → 空白差 → fix764 fold 同値 → 分割トークン一致（姓 or 名）。 */
   function resolves(name, known){
@@ -128,9 +133,13 @@
   function resolvePartner(n, known){
     var w = nospace(n); if (!w) return { ok: false, via: null };
     if (isUnknownLabel(w)) return { ok: false, via: null };
-    if (heroToken(w)) return { ok: true, via: 'HERO' };
-    if (resolves(w, known)) return { ok: true, via: 'EXACT' };
-    var c = aliasCanon(n); if (c && resolves(c, known)) return { ok: true, via: 'ALIAS', canon: c };
+    var g = GENERIC_LABEL.test(w);
+    if (heroToken(w)) return { ok: true, via: 'HERO', quasi: false, generic: g };
+    /* v1.3: cast（hero+npcs）で解ける → EXACT／quasi roster でしか解けない → QUASI（class は同じ K_RESOLVED・diagnostic のみ） */
+    var cast = (typeof known.castCount === 'number') ? known.slice(0, known.castCount) : known;
+    if (resolves(w, cast)) return { ok: true, via: 'EXACT', quasi: false, generic: g };
+    if (resolves(w, known)) return { ok: true, via: 'QUASI', quasi: true, generic: g };
+    var c = aliasCanon(n); if (c && resolves(c, known)) return { ok: true, via: 'ALIAS', canon: c, quasi: !resolves(c, cast), generic: g };
     return { ok: false, via: null };
   }
   /* 話者証拠（current + previous turn の card who・say/react 由来）: ephemeral らしさの根拠。書換なし。 */
@@ -157,7 +166,7 @@
     if (!w) return { cls: 'K_UNRESOLVED', via: null };
     if (isUnknownLabel(w)) return { cls: 'K_UNKNOWN_LABEL', via: null };
     var r = resolvePartner(part, known);
-    if (r.ok) return { cls: 'K_RESOLVED', via: r.via, canon: r.canon || null };
+    if (r.ok) return { cls: 'K_RESOLVED', via: r.via, canon: r.canon || null, quasi: !!r.quasi, generic: !!r.generic };
     if (spk[w] || GENERIC_LABEL.test(w)) return { cls: 'K_EPHEMERAL', via: null, reason: spk[w] ? 'SPEAKER_EVIDENCE' : 'GENERIC_LABEL' };
     return { cls: 'K_UNRESOLVED', via: null };
   }
@@ -167,10 +176,11 @@
     var parts = raw.split(/・/).map(function(x){ return x.trim(); }).filter(Boolean);
     if (!parts.length) return { cls: 'K_UNRESOLVED', parts: [] };
     var det = parts.map(function(p){ var c = classifyOne(p, known, spk); c.part = p; return c; });
-    if (det.length === 1) return { cls: det[0].cls, via: det[0].via, reason: det[0].reason || null, parts: det, composite: false };
+    if (det.length === 1) return { cls: det[0].cls, via: det[0].via, reason: det[0].reason || null, quasi: !!det[0].quasi, generic: !!det[0].generic, parts: det, composite: false };
     var anyUnknown = det.some(function(d){ return d.cls === 'K_UNKNOWN_LABEL'; });
     var allResolved = det.every(function(d){ return d.cls === 'K_RESOLVED'; });
-    return { cls: anyUnknown ? 'K_UNKNOWN_LABEL' : (allResolved ? 'K_RESOLVED' : 'K_UNRESOLVED'), parts: det, composite: true };
+    return { cls: anyUnknown ? 'K_UNKNOWN_LABEL' : (allResolved ? 'K_RESOLVED' : 'K_UNRESOLVED'), parts: det, composite: true,
+             quasi: det.some(function(d){ return !!d.quasi; }), generic: det.some(function(d){ return !!d.generic; }) };
   }
   function classifyWho(who, known, spk){
     var w = nospace(who);
@@ -204,9 +214,10 @@
         remember(seenKall, key, c.cls);
         if (c.composite) stats.compositeSeen++;
         stats[c.cls] = (stats[c.cls] || 0) + 1;
+        if (c.cls === 'K_RESOLVED'){ if (c.quasi) stats.K_RESOLVED_QUASI++; if (c.generic) stats.K_RESOLVED_GENERIC++; }   /* v1.3 diagnostic */
         if (!seenK[key] && c.cls !== 'K_RESOLVED'){ remember(seenK, key, { turn: ti }); }
-        out.push({ kind: 'K', turn: ti, who: who, partner: partner, cls: c.cls, via: c.via || null, reason: c.reason || null,
-                   parts: c.composite ? c.parts.map(function(d){ return { part: d.part, cls: d.cls, via: d.via || null }; }) : null,
+        out.push({ kind: 'K', turn: ti, who: who, partner: partner, cls: c.cls, via: c.via || null, reason: c.reason || null, quasi: !!c.quasi, generic: !!c.generic,
+                   parts: c.composite ? c.parts.map(function(d){ return { part: d.part, cls: d.cls, via: d.via || null, quasi: !!d.quasi, generic: !!d.generic }; }) : null,
                    whoEvidence: evidence254(S, ti, who), partnerEvidence: evidence254(S, ti, partner) });
       });
     });
@@ -278,10 +289,10 @@
   (function w(){ w._n = (w._n || 0) + 1; if (install()) return; if (w._n > 120) return; setTimeout(w, 500); })();
 
   window.__v292Dfix806 = {
-    __v: 1.2,
+    __v: 1.3,
     /* v1.2 READ-ONLY 検証口（純関数・書換 0） */
-    classifyPartner: function(partner, S, ti){ S = S || getS(); return classifyPartner(partner, knownNames(S), speakerWhos(S, (typeof ti === 'number') ? ti : ((S && S.turns) ? S.turns.length - 1 : -1))); },
-    classifyWho: function(who, S, ti){ S = S || getS(); return classifyWho(who, knownNames(S), speakerWhos(S, (typeof ti === 'number') ? ti : ((S && S.turns) ? S.turns.length - 1 : -1))); },
+    classifyPartner: function(partner, S, ti, sid){ S = S || getS(); return classifyPartner(partner, knownNames(S, sid), speakerWhos(S, (typeof ti === 'number') ? ti : ((S && S.turns) ? S.turns.length - 1 : -1))); },
+    classifyWho: function(who, S, ti, sid){ S = S || getS(); return classifyWho(who, knownNames(S, sid), speakerWhos(S, (typeof ti === 'number') ? ti : ((S && S.turns) ? S.turns.length - 1 : -1))); },
     observeX: function(S, ti){ S = S || getS(); return observeX(S, (typeof ti === 'number') ? ti : ((S && S.turns) ? S.turns.length - 1 : -1)); },
     stats: function(){ return JSON.parse(JSON.stringify(stats)); },
     candidates: function(){ return ring.slice(); },
