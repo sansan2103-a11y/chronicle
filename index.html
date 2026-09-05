@@ -3608,6 +3608,11 @@ G.init();
      読出=window.__v292Dfix616.stats()/.coverage()/.purge() / OFF=v292Dfix616Off
      ★fix606・fix611 の後に置くこと -->
 <script src="v292Dfix616-say-provenance-persist.js?cb=20260829-fix748"></script>
+<!-- fix805(4B-1): speaker abstention layer。新ターン確定時(UI.appendTurn・描画前)に bare-inferred/harvest かつ fix469 正証拠 0 の who だけを '???' へ倒す。既定 OFF(opt-in v292Dfix805On='1' / kill v292Dfix805Off='1')。
+     say/枚数/順序/meta/過去ターン不触・逆方向なし。★fix616/620 より後ろに置く(外側 wrapper = fix616 の save に相乗り・自前 save 0)。GPT RULING 4B-1 deploy gate 2026-09-05 -->
+<script src="v292Dfix805-speaker-abstain.js?cb=20260905-fix805"></script>
+<!-- fix806(4B-2): NPC consistency observer（観測のみ・in-memory・write 0・既定 OFF opt-in v292Dfix806On='1' / kill v292Dfix806Off='1'）。GPT RULING 4A-2+4B-2 2026-09-05: fix805 と同 release・805 bytes 不変 -->
+<script src="v292Dfix806-npc-consistency-observer.js?cb=20260905-fix806"></script>
 <!-- fix624: 生成の**崩壊**を測る（★読み取り専用・影モード）。
      実データ168ターンで崩壊3件(1.8%)を検出。崩壊は少なくとも3型あり、
      「反復＋ルビ」だけの検出器では**語調崩壊型を取り逃がす**（実測で確認済み）。
