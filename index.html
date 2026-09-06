@@ -54,7 +54,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260906-fix817';
+  var BUILT = '20260906-fix818';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -938,6 +938,35 @@ const Api = {
       //   許可セット外の文字だけを除去して採用(再生成より文意の保全を優先。簡体字は
       //   CJK共有ブロックのため削らない=破損リスク回避)。
       if (lastResult && lastResult.text && attempt >= maxRetries && this._hasForeignGarbage(lastResult.text)) {
+        /* ★v292Dfix818（GPT 裁定 2026-09-06 `FIX250_DESTRUCTIVE_SALVAGE_GUARD = GO_STAGE_WITH_CALIBRATION`）:
+           fix250 の救済は「軽微なノイズ除去」に限る。元出力の大半を削らないと成立しない応答は
+           **salvage ではなく別物の採用**なので、採らずに既存の失敗経路（throw → G.submit の catch →
+           「生成に失敗しました／再試行」トースト）へ返す。→ parsePlan 0 / fix77 write 0 / fix190 write 0 / TURN_COMMIT 0。
+           閾値 0.30 は実測で決めた: 正常 769 標本（corpus_v2 raw 186 ＋ blind narrative 144 ＋ 保存本文 439）の
+           removed_ratio 最大 = 0.0144、既知 garbage（18,578→691）= 0.9628。観測 gap 内で両側に余裕を取った値。
+           **retry 回数 / sanitizer(_re250) / _hasForeignGarbage は 1 バイトも変えない**（retry 成功時はここへ来ない）。
+           guard 内部で例外が出た場合は **reject 側へ倒す**（安全 gate 自身が壊れた時に既知 garbage を採用しない）。
+           **契約（GPT 裁定 2026-09-06）: 0.30 は普遍的な『garbage 率』ではない。**
+           `_hasForeignGarbage` が発火し、retry を使い切り、fix250 salvage に到達した応答**だけ**に適用する
+           destructive-salvage safety threshold v1。**自動調整・他の品質判定への流用・length gate への転用は禁止。**
+           removedChars / originalChars は同じ JS 文字長基準で計算し、空入力等の除算異常は reject 側へ倒す。
+           opt-in `v292Dfix818DestructiveSalvage='1'` / kill `v292Dfix818Off='1'`（既定 OFF で挙動不変）。 */
+        var _on818 = false;
+        try { _on818 = (localStorage.getItem('v292Dfix818Off') !== '1') && (localStorage.getItem('v292Dfix818DestructiveSalvage') === '1'); } catch (_e818a) { _on818 = false; }
+        if (_on818) {
+          var _rej818 = true, _r818 = 1;   /* 既定 reject 側 */
+          try {
+            var _re818 = new RegExp('[^\\u0000-\\u007F\\u2000-\\u206F\\u2100-\\u22FF\\u2460-\\u24FF\\u2500-\\u25FF\\u2600-\\u27BF\\u3000-\\u30FF\\u31F0-\\u31FF\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF\\uFF00-\\uFFEF\\s]', 'g');
+            var _b818 = lastResult.text.length;
+            var _a818 = lastResult.text.replace(_re818, '').length;
+            _r818 = _b818 ? (_b818 - _a818) / _b818 : 1;
+            _rej818 = !(_r818 < 0.30);      /* NaN も reject 側 */
+          } catch (_e818b) { _rej818 = true; _r818 = 1; }
+          if (_rej818) {
+            try { console.warn('[v292Dfix818] destructive salvage → 採用せず失敗経路へ (' + Math.round(_r818 * 1000) / 10 + '% 除去 / ' + lastResult.text.length + '字)'); } catch (_e818c) {}
+            throw new Error('生成が壊れていたため採用しませんでした（除去率 ' + Math.round(_r818 * 100) + '%）');
+          }
+        }
         try {
           const _re250 = new RegExp('[^\\u0000-\\u007F\\u2000-\\u206F\\u2100-\\u22FF\\u2460-\\u24FF\\u2500-\\u25FF\\u2600-\\u27BF\\u3000-\\u30FF\\u31F0-\\u31FF\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF\\uFF00-\\uFFEF\\s]', 'g');
           const _before250 = lastResult.text.length;
