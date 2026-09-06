@@ -288,6 +288,12 @@
      観測 = window.__v292Dfix710.status() / .decide()
      ★fix587 より後に置く（__chronicleStoryLifecycle が生えている必要がある）。 -->
 <script src="v292Dfix710-home-delete-autoresume.js?cb=v292Dfix712"></script>
+<!-- v292Dfix819: STORY_INSTANTIATION_PRIMITIVE（原本 → 独立 Story を 1 本作る primitive）。
+     GPT 裁定 2026-09-06 `FIX819_DEPLOY_DORMANT_LIBRARY = GO`: **載せるだけ。UI caller 0・Owner 操作から到達不能。**
+     配置 = home の既存 story lifecycle / protection 群（fix654/fix697/fix587/fix710 …）の**後**、
+            将来の Scenario caller（下のインライン home ロジック）の**前**。既存 script の並び替えは 0。
+     index.html には載せない（Story 生成境界の owner は home 側）。kill = v292Dfix819Off='1'。 -->
+<script src="v292Dfix819-story-instantiator.js?cb=20260906-fix819"></script>
 <script>
 (function(){
   'use strict';
