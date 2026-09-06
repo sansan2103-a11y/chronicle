@@ -54,7 +54,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260906-fix816b';
+  var BUILT = '20260906-fix817';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3724,7 +3724,7 @@ G.init();
 <!-- R118 Phase3-A: existing physical signal bridge. fix414 hook 経由。OFF=v292Dfix742Off / feature=v292Dfix414PhysP (default OFF) -->
 <script src="v292Dfix742-physical-bridge.js?cb=v292Dfix742"></script>
 <!-- v292Dfix797: 4A Layer2 v1 hard capability contradiction (N1P: persistent 3 属性 = 傷/関係/未解決 を parse 前に original 継承). 既定 OFF=v292Dfix797On / kill=v292Dfix797Off -->
-<script src="v292Dfix797-layer2-contradiction.js?cb=20260905-fix797a1"></script>
+<script src="v292Dfix797-layer2-contradiction.js?cb=20260906-fix817"></script>
 <!-- CLOUD_CANONICAL C1 client (C1-a builder + C1-b hydrator)。DEPLOY != ENABLE：呼び出し側0本・load時storage読取0。OFF=v292Dfix743Off / feature=v292DfixCC2On (default OFF) -->
 <script src="v292Dfix743-cc2-client.js?cb=20260901-fix793"></script>
 <!-- CLOUD_CANONICAL C1 write path wiring（裁定30/31/32）。DEPLOY != ENABLE：caller 0本・自動実行0・load時storage読取0。prepare()/commitSchema2() は明示呼出のみ。ON=v292Dfix750On / KILL=v292Dfix750Off (default OFF) -->

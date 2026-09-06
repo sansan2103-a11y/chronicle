@@ -90,7 +90,15 @@
   var SESSION_CAP = 20;                                  // 設計 §4 セッション上限
   var RING_MAX = 50;                                     // memory only（設計 §5）
 
-  function on() { return lsGet('v292Dfix797On') === '1'; }
+  /* ★fix817（2026-09-06 / GPT 裁定 `FIX797_DEFAULT_ON = GO / CURRENT_TIER_ONLY`）:
+   *  変更したのは **この default-on gate 式 1 箇所だけ**。detector / regex / source tier /
+   *  rewrite prompt / 採用 gate / persistent-state 契約（N1P）/ fix414 / DescRewrite は 1 バイトも触らない。
+   *  既定 ON（fix814 と同じ 2 行パターン）。kill `v292Dfix797Off='1'` が最優先で、
+   *  module 冒頭の early-return（load 時）に加えて **session 途中の kill も効く**ように on() でも見る。
+   *  scope は CURRENT tier のみ: PREMISE（hero.desc 由来）は `descRewriteOn()` で従来どおり既定 OFF＝
+   *  `premise-hold` で api.call 0（`FIX797_DESC_REWRITE = HOLD / NOT_IN_V1`）。 */
+  var F797_DEFAULT_ON = true;
+  function on() { return lsGet('v292Dfix797Off') !== '1' && (F797_DEFAULT_ON || lsGet('v292Dfix797On') === '1'); }
   /* ★A-1 PREMISE-TIER（4A-2 v1・GPT 裁定 2026-09-05 G4/G5）: desc-only evidence による rewrite は既定 OFF。
    *  QA のみ v292Dfix797DescRewrite='1' で解禁。detection / log は flag に依らず常に行う。 */
   function descRewriteOn() { return lsGet('v292Dfix797DescRewrite') === '1'; }
