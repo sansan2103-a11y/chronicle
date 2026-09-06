@@ -25,18 +25,30 @@
 //
 // ■ schema authority（GPT 裁定・二重 authority を作らない）
 //   META: scenarioId / title / schemaVersion / createdAt / updatedAt
-//   BODY: scenarioId / schemaVersion / scene / cast / startCondition
+//   BODY: scenarioId / schemaVersion / scene / cast / startCondition / startRules   （v1.2: startRules 追加・schemaVersion 2）
 //   meta.key                  = DO NOT STORE（scenarioId から決定的に導出できる）
 //   body title/timestamps dup = DO NOT STORE
 //
 // ■ START_CONDITIONS_V1 = DEDICATED_SINGLE_FIELD
-//   startCondition: string ＝ 物語開始時点の具体的な状況・配置・直前条件。
-//   START_CONDITION != START_RULES（後者は ongoing な拘束ルール＝ NOT_IMPLEMENTED_YET）。
-//   FIX819_START_CONDITION_BRIDGE = IMPLEMENTATION_DEFERRED
-//     … fix820 stage で fix819 は 1 バイトも変えない。startCondition は
-//       「保存 authority は確定したが、まだ runtime projection されない field」。
-//       toInstantiationInput() は **黙って捨てず**、projection 対象外であることを diagnostic で返す。
-//       「投影できないから desc へ混ぜる」は禁止。
+//   startCondition: string ＝ 物語開始時点の具体的な状況・配置・直前条件（T=0 でだけ prompt に出る）。
+//   START_CONDITION != START_RULES。混ぜない。
+//
+// ■ START_RULES_V1（v1.2・GPT 裁定 2026-09-06(20)(21) START_RULES_V1 = GO_STAGE_WITH_REVISIONS）
+//   startRules: string（optional・既定 ''）＝ 物語全体で持続する **作者（Owner）明示の自由文ルール**。
+//   START_RULES_SOURCE = ORIGINAL_TEXT … 保存は原文（trim ＋ 改行正規化 \r\n|\r → \n のみ。
+//     paraphrase 0 / 抽出 0 / 分解 0 / AI 0）。
+//   START_RULES_MAX_LENGTH_V1 = 300 … **正規化後の Unicode code point 数**（JS .length = UTF-16 unit ではない）。
+//     超過 = START_RULES_TOO_LONG で reject（write 0）。silent truncation 禁止。
+//   ★『【』『】』は **reject しない**（GPT 裁定: 永続 schema は下流 prompt formatter＝fix459 の事情を知らない。
+//     marker 衝突の回避は fix822 の render 時 MARKER_SAFE で行う）。
+//   FIX820_SCHEMA_VERSION = BUMP（1 → 2）… accepted BODY shape が変わるため。migration engine は作らない。
+//     deploy 前 hard gate = 既存 Scenario Original record が 0 であること（selfCheck.legacySchemaRecords / meta.count）。
+//     1 件でも在れば STOP → migration 裁定。schemaVersion 1 の body/meta は read/edit で
+//     SCHEMA_VERSION_MISMATCH（fail-closed・自動変換しない）。
+//   FIX819_START_CONDITION_BRIDGE = IMPLEMENTATION_GO（fix819 v1.1）
+//     … toInstantiationInput() は startRules / startCondition を **input の top-level** に複製し、
+//       fix819.project が Story.scene.startRules / Story.scene.startCondition へ snapshot する
+//       （空文字なら Story 側 key を作らない・Original への live link 0・provenance 0）。
 //
 // ■ STORY_ID_FORMAT_ASSUMPTION_V1（v1.1・GPT 裁定 2026-09-06(14)）
 //   現行 Story ID = 's' + Date.now().toString(36)(8) + base36(rand)(1〜2) ＝ 英数字 10〜11 文字。
@@ -60,19 +72,20 @@
   'use strict';
   if (window.__v292Dfix820) return;
   var TAG = '[v292Dfix820:scenario-original-store]';
-  var VERSION = 'v292Dfix820-20260906-store-v1.1';
+  var VERSION = 'v292Dfix820-20260906-store-v1.2';
 
   var META_KEY    = 'chr6_scenario_meta';
   var KEY_PREFIX  = 'chr6_scenario_';
   var STORY_META  = 'chr6_slots_meta';       /* READ 専用（ghost 診断の材料。membership authority ではない） */
   var STORY_BODY_PREFIX = 'chr6_slot_';      /* READ 専用（R3 gate の authority = 実在する Story 本体キー） */
-  var SCHEMA_VERSION = 1;
+  var SCHEMA_VERSION = 2;                    /* v1.2: BUMP（startRules を accepted BODY field に追加） */
+  var START_RULES_MAX_CP = 300;              /* START_RULES_MAX_LENGTH_V1（Unicode code point） */
   var MAX_ID_TRIES = 5;
   var MIN_STORY_ID_LEN = 10;                 /* STORY_ID_FORMAT_ASSUMPTION_V1 */
   var MAX_RUN = 9;                           /* Scenario key の連続英数字 run は 9 以下 */
 
   /* ---- whitelist（accepted schema surface。これ以外は 1 つも通さない）---- */
-  var TOP_FIELDS   = ['title', 'scene', 'cast', 'startCondition'];
+  var TOP_FIELDS   = ['title', 'scene', 'cast', 'startCondition', 'startRules'];
   var SCENE_FIELDS = ['lore', 'loc', 'obj', 'tone'];
   var HERO_FIELDS  = ['name', 'desc'];
   var NPC_FIELDS   = ['name', 'desc', 'personality', 'coreDesire', 'coreFear', 'wound'];
@@ -86,6 +99,21 @@
   function lsr(k){ try { localStorage.removeItem(k); return true; } catch(e){ return false; } }
   function off(){ return lsg('v292Dfix820Off') === '1'; }
   function trim(v){ return (v == null) ? '' : String(v).trim(); }
+  /* START_RULES 正規化: 改行を \n に統一してから trim。内容は 1 文字も変えない（原文保持） */
+  function normRules(v){ return (v == null) ? '' : String(v).replace(/\r\n?/g, '\n').trim(); }
+  /* Unicode code point 数（サロゲートペアを 1 と数える。JS .length ではない） */
+  function codePoints(str){
+    var n = 0, s = String(str == null ? '' : str);
+    for (var i = 0; i < s.length; i++){
+      var c = s.charCodeAt(i);
+      if (c >= 0xD800 && c <= 0xDBFF && i + 1 < s.length){
+        var d = s.charCodeAt(i + 1);
+        if (d >= 0xDC00 && d <= 0xDFFF){ i++; }
+      }
+      n++;
+    }
+    return n;
+  }
   function isObj(o){ return !!o && typeof o === 'object' && Object.prototype.toString.call(o) !== '[object Array]'; }
   function isArr(o){ return Object.prototype.toString.call(o) === '[object Array]'; }
   function own(o){ var out = []; for (var k in o){ if (Object.prototype.hasOwnProperty.call(o, k)) out.push(k); } return out; }
@@ -272,7 +300,16 @@
       sc = trim(input.startCondition);
     }
 
-    var value = { title: title, scene: scene, cast: { hero: hero, npcs: npcs }, startCondition: sc };
+    /* startRules（START_RULES_V1・原文保持・code point cap・【】は reject しない） */
+    var sr = '';
+    if (input.startRules !== undefined){
+      if (input.startRules != null && typeof input.startRules !== 'string') return err('NOT_STRING', 'startRules');
+      sr = normRules(input.startRules);
+      var cp = codePoints(sr);
+      if (cp > START_RULES_MAX_CP) return err('START_RULES_TOO_LONG', { codePoints: cp, max: START_RULES_MAX_CP });
+    }
+
+    var value = { title: title, scene: scene, cast: { hero: hero, npcs: npcs }, startCondition: sc, startRules: sr };
 
     /* 二次防壁: 受理面の中に secret の **field 名**が構造として残っていないこと。
        主保証は上の whitelist reject。ここは「万一 whitelist を通り抜けたら書かない」ための最後の関門。 */
@@ -288,7 +325,8 @@
 
   function bodyOf(scenarioId, value){
     return { scenarioId: scenarioId, schemaVersion: SCHEMA_VERSION,
-             scene: value.scene, cast: value.cast, startCondition: value.startCondition };
+             scene: value.scene, cast: value.cast, startCondition: value.startCondition,
+             startRules: (typeof value.startRules === 'string') ? value.startRules : '' };
   }
 
   /* ================= CRUD ================= */
@@ -383,7 +421,8 @@
       updatedAt: me.updatedAt == null ? null : me.updatedAt,
       scene: isObj(body.scene) ? body.scene : {},
       cast:  isObj(body.cast)  ? body.cast  : { hero: {}, npcs: [] },
-      startCondition: typeof body.startCondition === 'string' ? body.startCondition : ''
+      startCondition: typeof body.startCondition === 'string' ? body.startCondition : '',
+      startRules: typeof body.startRules === 'string' ? body.startRules : ''
     });
     if (!out) return err('CLONE_FAILED');
     return { ok: true, scenario: out };
@@ -504,8 +543,9 @@
 
   /* ================= fix819 への projection（純関数・caller は作らない） =================
      ★store の body そのものを fix819 へ渡さない。**新しいオブジェクト**を作って渡す。
-     ★startCondition は現時点で projection 対象外。**黙って捨てず** diagnostic で明示する。
-       「投影できないから desc へ混ぜる」は禁止。 */
+     ★v1.2: startCondition / startRules は **input の top-level** に別々に複製する（scene の中には入れない。
+       Scenario 側の型を保ち、fix819 v1.1 の project が Story.scene.* へ snapshot する）。
+       空文字なら key を作らない。「desc 等へ混ぜる」は引き続き禁止。 */
   function toInstantiationInput(scenario){
     var s = isObj(scenario) ? scenario : {};
     var srcScene = isObj(s.scene) ? s.scene : {};
@@ -531,25 +571,31 @@
       }
       if (any) npcs.push(o);
     }
-    var sc = (typeof s.startCondition === 'string') ? s.startCondition : '';
+    var sc = (typeof s.startCondition === 'string') ? trim(s.startCondition) : '';
+    var sr = (typeof s.startRules === 'string') ? normRules(s.startRules) : '';
+    var input = { scene: scene, cast: { hero: hero, npcs: npcs } };
+    if (sc) input.startCondition = sc;     /* 空なら key を作らない */
+    if (sr) input.startRules = sr;         /* 空なら key を作らない */
     return {
-      input: { scene: scene, cast: { hero: hero, npcs: npcs } },
+      input: input,
       initialTitle: trim(s.title),
-      notProjected: sc ? ['startCondition'] : [],
+      notProjected: [],
       diagnostics: {
-        bridge: 'FIX819_START_CONDITION_BRIDGE = IMPLEMENTATION_DEFERRED',
+        bridge: 'FIX819_START_CONDITION_BRIDGE = IMPLEMENTATION_GO (requires fix819 v1.1)',
         startConditionPresent: !!sc,
         startConditionLength: sc.length,
-        note: sc ? 'startCondition は保存されているが、現行 fix819 の projection 面には無いため Story へは渡らない（desc 等へ混ぜてはならない）'
-                 : 'startCondition なし'
+        startRulesPresent: !!sr,
+        startRulesCodePoints: codePoints(sr),
+        note: 'startCondition / startRules は input top-level に複製され fix819 v1.1 が Story.scene へ snapshot する（scene.lore/obj/desc へは混ぜない）'
       }
     };
   }
 
   /* ================= selfCheck（READ のみ・書込 0・自動修復 0） ================= */
   function selfCheck(){
-    var out = { version: 'v292Dfix820-20260906-store-v1.1', off: off(), writes: 0,
+    var out = { version: VERSION, schemaVersion: SCHEMA_VERSION, off: off(), writes: 0,
                 storyIdGate: storyIdGate(), meta: null, orphanBodies: [], orphanMeta: [],
+                legacySchemaRecords: [],              /* v1.2 deploy gate の材料: schemaVersion !== 現行 の meta entry */
                 keyInvariantSample: keyInvariant(keyFor(newScenarioId())),
                 notes: [] };
     var m = readMetaRaw();
@@ -561,6 +607,7 @@
         var id = String(e.scenarioId == null ? '' : e.scenarioId);
         known[keyFor(id)] = 1;
         if (id && lsg(keyFor(id)) == null) out.orphanMeta.push(id);
+        if (e.schemaVersion !== SCHEMA_VERSION) out.legacySchemaRecords.push({ scenarioId: id, schemaVersion: e.schemaVersion === undefined ? null : e.schemaVersion });
       }
       try {
         for (i = 0; i < localStorage.length; i++){
@@ -580,6 +627,10 @@
     if (out.orphanMeta.length || out.orphanBodies.length){
       out.notes.push('orphan を検出したが **自動修復しない**（報告のみ）。');
     }
+    if (out.legacySchemaRecords.length){
+      out.notes.push('LEGACY_SCHEMA_RECORDS: 現行 schemaVersion と異なる Scenario record が存在する。'
+                   + '自動 migration はしない（read/edit は SCHEMA_VERSION_MISMATCH で fail-closed）。migration 裁定が必要。');
+    }
     out.ok = out.storyIdGate.ok && (!m.ok ? false : true);
     return out;
   }
@@ -598,6 +649,8 @@
     ghostMetaIds: ghostMetaIds,
     storyIdSubstringHits: storyIdSubstringHits,
     toInstantiationInput: toInstantiationInput,
+    codePoints: codePoints,
+    normRules: normRules,
     /* CRUD */
     create: create,
     read: read,
@@ -609,6 +662,7 @@
     state: function(){
       return { off: off(), metaKey: META_KEY, keyPrefix: KEY_PREFIX, schemaVersion: SCHEMA_VERSION,
                minStoryIdLen: MIN_STORY_ID_LEN, maxKeyRun: MAX_RUN, maxIdTries: MAX_ID_TRIES,
+               startRulesMaxCodePoints: START_RULES_MAX_CP,
                whitelist: { top: TOP_FIELDS.slice(), scene: SCENE_FIELDS.slice(), hero: HERO_FIELDS.slice(),
                             npc: NPC_FIELDS.slice(), meta: META_FIELDS.slice() },
                uiWired: false, indexLoaded: false };

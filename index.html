@@ -54,7 +54,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260906-fix820';
+  var BUILT = '20260906-fix822';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3551,6 +3551,10 @@ G.init();
 <script src="v292Dfix377-voice-anchor.js?cb=20260829-fix748"></script>
 <script src="v292Dfix378-species-judge.js?cb=v292Dfix378"></script>
 <script src="v292Dfix379-wrap-keeper.js?cb=v292Dfix646"></script>
+<!-- v292Dfix822: START_RULES_V1（GPT 裁定 2026-09-06(20)(21)）。keeper prio1 で【開始ルール】(毎turn)・【開始時の状況】(T0のみ) を
+     S.scene.startRules / S.scene.startCondition から注入。両 field を持つ Story が無ければ sys は 1 バイトも変わらない（dormant）。
+     MARKER_SAFE render / fix444 の law 意味論は不使用 / S.scene への書込 0。kill = v292Dfix822Off='1'。 -->
+<script src="v292Dfix822-start-rules-block.js?cb=20260906-fix822"></script>
 <script src="v292Dfix381-reaction.js?cb=v292Dfix381"></script>
 <script src="v292Dfix382-auto-dial.js?cb=20260901-fix783"></script>
 <script src="v292Dfix383-vocative-fix.js?cb=20260829-fix748"></script>
@@ -3615,7 +3619,7 @@ G.init();
 <script src="v292Dfix453-src-coalesce.js?cb=v292Dfix453"></script>
 <script src="v292Dfix454-dash.js?cb=v292Dfix457"></script>
 <script src="v292Dfix458-dash-post.js?cb=20260901-fix784"></script>
-<script src="v292Dfix459-sys-v2.js?cb=v292Dfix737"></script>
+<script src="v292Dfix459-sys-v2.js?cb=20260906-fix822"></script>
 <script src="v292Dfix460-slotgrid.js?cb=v292Dfix460"></script>
 <script src="v292Dfix461-appearance-en.js?cb=v292Dfix740"></script>
 <script src="v292Dfix462-bare-speaker.js?cb=20260829-fix748"></script>

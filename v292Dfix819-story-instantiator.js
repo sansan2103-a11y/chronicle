@@ -24,8 +24,11 @@
 //   SIDE_STORE_POLICY = CREATE_NONE_AT_INSTANTIATION … side store を 1 本も作らない
 //                          （navigation 後の lazy creation は ALLOWED＝既存 fix の正常動作）
 //   SCENARIO_PROVENANCE_V1 = NONE_PERSISTED … source Scenario ID を Story へ保存しない
-//   START_RULES_PROJECTION = CONTRACT YES / field implementation = DEFERRED
-//                          … startRules は **書かない**（field/owner は Start Rules stage で決める）
+//   START_RULES_PROJECTION = IMPLEMENTED (v1.1・GPT 裁定 2026-09-06(20)(21))
+//                          … input.startRules → body.scene.startRules / input.startCondition → body.scene.startCondition
+//                            を **snapshot**（文字列複製）。空文字なら key を作らない。Original への live link 0・
+//                            Scenario ID provenance 0。scene.startRules は Story 側 owner
+//                            （STORY_START_RULES_OWNER = scene.startRules / START_CONDITION_STORY_OWNER = scene.startCondition）。
 //   ZERO_TURN_MATERIALIZATION = ALLOWED / DO_NOT_MODIFY … fix756 には触らない
 //
 // ■ 原子性（FAILURE_ATOMICITY）
@@ -106,8 +109,16 @@
       if (o2) cfg.orKey = o2;
       if (cfg.provider || cfg.orKey) body.cfg = cfg;
     }
-    /* ★startRules は書かない（START_RULES_PROJECTION field implementation = DEFERRED）
-       ★scenario id も書かない（SCENARIO_PROVENANCE_V1 = NONE_PERSISTED） */
+    /* ★v1.1 START_RULES / START_CONDITION bridge: input の top-level から Story.scene へ snapshot。
+       ・input.scene.startRules / input.scene.startCondition は **読まない**（SCENE_FIELDS whitelist 外＝落ちる。
+         Scenario 側は scene の外に置く契約なので、ここで scene 内から拾うと二重 authority になる）
+       ・空文字なら key を作らない（既存 Story と byte 互換）
+       ・改行正規化以外は 1 文字も変えない
+       ★scenario id は書かない（SCENARIO_PROVENANCE_V1 = NONE_PERSISTED） */
+    var sr = str(sc.startRules).replace(/\r\n?/g, '\n').trim();
+    var scd = trim(sc.startCondition);
+    if (sr) body.scene.startRules = sr;
+    if (scd) body.scene.startCondition = scd;
     return body;
   }
 
@@ -215,7 +226,7 @@
   }
 
   window.__v292Dfix819 = {
-    version: 'v292Dfix819-20260906-primitive',
+    version: 'v292Dfix819-20260906-primitive-v1.1',
     /* 純関数（テスト用・書込 0） */
     project: function(input, runtime){ return project(input, runtime); },
     isOccupied: isOccupied,
@@ -224,7 +235,7 @@
     instantiate: instantiate,
     state: function(){
       return { off: off(), whitelist: { scene: SCENE_FIELDS.slice(), hero: HERO_FIELDS.slice(), npc: NPC_FIELDS.slice() },
-               maxIdTries: MAX_ID_TRIES, uiWired: false };
+               bridge: ['startRules', 'startCondition'], maxIdTries: MAX_ID_TRIES, uiWired: false };
     }
   };
   try { console.log(TAG, 'loaded (primitive only; not wired to any UI)'); } catch(e){}

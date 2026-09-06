@@ -89,7 +89,11 @@
     '【NPC間の関係】',
     // fix645: scene_move タグの shadow 収集ブロック(keeper prio3)。上の fix496 と同じ理由で
     // ここへ登録する。dropA/B/C/D のどれにも無いので、認識後は生存してモデルへ届く。
-    '【移動タグ】'
+    '【移動タグ】',
+    // fix822(START_RULES_V1・GPT 裁定 2026-09-06(20)): 開始ルール(毎turn・prio1)と開始時の状況(T0のみ・prio1)。
+    // fix496/fix645 と同じ理由で正式 MARKER 登録。dropA/B/C/D のどれにも無いので認識後は生存してモデルへ届く。
+    '【開始ルール】',
+    '【開始時の状況】'
   ];
 
   function detOn459(){ try { return localStorage.getItem('v292Dfix190Det') === '1'; } catch(e){ return false; } }
