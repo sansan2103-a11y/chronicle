@@ -26,6 +26,11 @@
 (function(){
   'use strict';
   var TAG = '[v292Dfix192:newengine]';
+  /* ★v292Dfix814 DEFAULT_ON（GPT 裁定 2026-09-05 深夜247）: fix812（agenda 選択語彙）と fix813（??? turn の沈黙棄権）を
+     同一 release で既定 ON にする。挙動そのものは canary 済のコードと 1 byte も違わず、既定値だけを true にする。
+     kill: v292Dfix812Off='1' / v292Dfix813Off='1'（どちらも従来どおり最優先）。旧 opt-in キーは互換のため読み続ける。 */
+  var F812_DEFAULT_ON = true;
+  var F813_DEFAULT_ON = true;
 
   /* ★fix548(2026-07-25・バッチ2A): S の取得は index.html の正式API(fix539)を第一経路にする。
      このファイルは**プロンプト生成**(S.cfg / S.turns の読み取りが中心)で、
@@ -267,7 +272,7 @@
          触らないもの: appeared / present / 12T 窓 / 閾値 / sort / 上位 2 / agendaBlock 文言 / fix812 / cadence。write 0・sys 0・schema 0・identity 0。
          既定 OFF（opt-in v292Dfix813AgendaSilenceAbstain='1'）／kill v292Dfix813Off='1'。OFF は従来と byte 一致。 */
       var on813=false;
-      try{ on813 = (localStorage.getItem('v292Dfix813Off')!=='1') && (localStorage.getItem('v292Dfix813AgendaSilenceAbstain')==='1'); }catch(e813){ on813=false; }
+      try{ on813 = (localStorage.getItem('v292Dfix813Off')!=='1') && (F813_DEFAULT_ON || localStorage.getItem('v292Dfix813AgendaSilenceAbstain')==='1'); }catch(e813){ on813=false; }
       var unkC813={};
       function unk813(ix, t){
         if(unkC813[ix]!==undefined) return unkC813[ix];
@@ -320,8 +325,10 @@
          「今できる範囲で一言だけ割り込む／答えない／様子を見る／距離を取る等から自分で選ぶ。黙ったままでもよい」へ（GPT 深夜240 推奨文面・「首を振る」「手を止めず」等の物理行動仮定を削除・「立ち去る」明示化は HOLD・4A capability 制約を上書きしない）。
          発話数を増やさない（「発言」先出しをやめる・「必ず」「毎ターン」を書かない・理由は説明しない）。scene/kankei/他 NPC/playerText は読まない（従来どおり）。
          opt-in: localStorage v292Dfix812AgendaVocab='1' ／ kill: v292Dfix812Off='1'（既存 v292AgendaOff は上位で有効）。OFF = 従来文と byte 一致。 */
+      /* ★既定 ON（GPT 裁定 2026-09-05 深夜247 `FIX812_DEFAULT_ON = GO`・812+813 = SAME RELEASE CANDIDATE）。
+         kill: v292Dfix812Off='1'（opt-in キー v292Dfix812AgendaVocab は互換のため残す・'0' では止まらない＝kill を使う）。 */
       var vocab812=false;
-      try{ vocab812 = (localStorage.getItem('v292Dfix812Off')!=='1') && (localStorage.getItem('v292Dfix812AgendaVocab')==='1'); }catch(e){ vocab812=false; }
+      try{ vocab812 = (localStorage.getItem('v292Dfix812Off')!=='1') && (F812_DEFAULT_ON || localStorage.getItem('v292Dfix812AgendaVocab')==='1'); }catch(e){ vocab812=false; }
       var lines=cands.slice(0,2).map(function(c){
         var core=c.d?('内心『'+c.d.slice(0,40)+'』を抱え続けている'):('傷('+c.w.slice(0,30)+')が言動の下に燻り続けている');
         var sub=(c.d&&c.w)?('傷('+c.w.slice(0,30)+')もその下に流れている。'):'';
