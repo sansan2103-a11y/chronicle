@@ -1675,7 +1675,7 @@
      既定 OFF。ON = v292Dfix821On='1' / kill = v292Dfix821Off='1'。
      ================================================================== */
   var F821_DENY = /^(chrAdminTok|chrAdminUrl)$/;
-  var F821_DEFAULT_ON = false;
+  var F821_DEFAULT_ON = true;
   function f821On(){
     try { if (g('v292Dfix821Off') === '1') return false; } catch(e){ return false; }
     try { if (g('v292Dfix821On') === '1') return true; } catch(e){}
