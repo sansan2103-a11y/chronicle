@@ -131,8 +131,22 @@
     + '居場所が変わらない動作では出力しない。迷ったら出さない。'
     + '物語本文を優先し、タグのために本文を短くしない。該当しなければタグは完全に省略する。';
 
+  /* ★v292Dfix815 SCENE_MOVE_TAG_REACHABILITY_REPAIR（4D-L・GPT 裁定 2026-09-05 深夜251 GO_STAGE）:
+     実測 accepted 0 / rejected 9（ev-not-in-body 6・who-not-hero 1・ev-missing-to 1・ev-not-in-final-body 1）。
+     却下の根は検証器ではなく**タグ契約の遵守失敗**（ev が逐語でない／who にキャラ名）。そこで新文面へ
+     **2 点だけ**明示を足す（GPT 指定: (1) ev は本文の移動完了表現をそのまま引用 (2) who は hero のみ）。
+     階層・部屋・from/to 推論は足さない。検証器（verify/judge）・prio・marker・剥がし・記録は 1 バイトも変えない。
+     **S.scene.loc への write は行わない（FORBIDDEN）／location authority も与えない（HOLD）。**
+     既定 OFF（opt-in v292Dfix815SceneMoveRepair='1'）／kill v292Dfix815Off='1'。OFF は従来文面と byte 一致。 */
+  var TEXT_REPAIR = TEXT_NEW
+    + 'whoには主人公の名前を書かず必ず hero と書く。'
+    + 'evは本文に実際に書いた移動完了の一文をそのままコピーし、要約・言い換えをしない。';
+  function r815(){
+    try { return G.localStorage.getItem('v292Dfix815Off') !== '1' && G.localStorage.getItem('v292Dfix815SceneMoveRepair') === '1'; }
+    catch(e){ return false; }
+  }
   /* 冪等・後方互換: 旧テストが参照する TEXT は「実際に注入される文面」を指す（fix647OffでOLDへ切替）。 */
-  function activeText(){ return f647off() ? TEXT_OLD : TEXT_NEW; }
+  function activeText(){ return f647off() ? TEXT_OLD : (r815() ? TEXT_REPAIR : TEXT_NEW); }
   var TEXT = activeText();               // 読出口・status 用のスナップショット
   var PRIO = f647off() ? 3 : 2;          // fix647昇格。緊急復帰時のみ 3。
 

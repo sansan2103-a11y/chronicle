@@ -54,7 +54,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260905-fix814';
+  var BUILT = '20260905-fix815';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3677,7 +3677,7 @@ G.init();
      として記録する。本文・保存・生成へ一切影響させない（shadow）。位置stateは作らない。
      読出=window.__v292Dfix645.stats()/.log()/.status()/.selfTest() / OFF=v292Dfix645Off
      ★fix643 の後・fix459 の MARKERS へ【移動タグ】を登録済み -->
-<script src="v292Dfix645-scene-move-shadow.js?cb=fix647"></script>
+<script src="v292Dfix645-scene-move-shadow.js?cb=20260905-fix815"></script>
 <!-- fix648: 句読点隣接重複 collapse。新ターンの地の文を生成出口で正規化する（案A）。
      厳密に2種だけ: 「、。」→「。」 / 「。、」→「。」。既存保存は非遡及。
      最終出口(S.save)で narrative だけ。fix555/fix553/fix645 の後。
