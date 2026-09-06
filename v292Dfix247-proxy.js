@@ -24,7 +24,15 @@
 (function(){
   'use strict';
   if (window.__v292Dfix247) return;
-  window.__v292Dfix247 = true;
+  /* ★v2(HOME_AI_TRANSPORT_BRIDGE_V1・GPT 裁定 2026-09-06(29) FIX247_PUBLIC_API_V2 = MINIMAL_DIAGNOSTIC):
+     boolean marker → runtime authority の最小 export。fix823 等は on() だけを見る（LS/token を自分で再計算しない）。
+     state() は boolean 診断のみ（token / pass / email / proxy URL は出さない）。冪等チェック（上の if）は object でも成立。
+     wrapper・timer・UI 注入・on() の意味論は 1 バイトも変えない。 */
+  window.__v292Dfix247 = {
+    version: 'v292Dfix247-20260906-api-v2.1',
+    on: function(){ return on(); },
+    state: function(){ return { loaded: true, on: on(), googleAvailable: !!gid(), passAvailable: !!ppass(), proxyOff: off(), urlConfigured: !!purl() }; }
+  };
   var TAG = '[v292Dfix247:proxy]';
   function off(){ try{ return localStorage.getItem('v292ProxyOff')==='1'; }catch(e){ return false; } }
   function purl(){ try{ return (localStorage.getItem('v292ProxyUrl')||'').trim().replace(/\/+$/,''); }catch(e){ return ''; } }
@@ -152,5 +160,7 @@
   setInterval(applyVis248, 2000);
   setTimeout(applyVis248, 1600);
 
-  console.log(TAG, 'loaded — proxy ' + (on() ? 'ON → ' + purl() : 'off (BYOK direct)'));
+  /* ★v2.1(GPT 裁定 2026-09-06(30)): loaded log から proxy URL を除去（home へ新規展開するため console 露出を 0 に）。
+     token / pass / email / URL は console へ出さない。wrapper / on() / mapping / headers / timer / state は不変。 */
+  console.log(TAG, 'proxy transport loaded (' + (on() ? 'on' : 'off') + ')');
 })();

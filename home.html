@@ -1950,6 +1950,11 @@
   function f663Token(){ var j = J(g('v292GoogleToken'), null); return (j && j.token && j.exp) ? j : null; }
   /* ★fix601 と同じ判定式(exp は**秒**・30秒の余裕)。ここを揃えないと表示と実際がずれる。 */
   function f663Valid(t){ t = t || f663Token(); return !!(t && t.token && (t.exp*1000) > (Date.now()+30000)); }
+  /* ★fix824(HOME_AI_TRANSPORT_BRIDGE_V1・GPT 裁定 2026-09-06(29) FIX663_PUBLIC_AUTH_EXPORT_V1 = __chronicleGoogleId ONLY):
+     fix247 が読む identity 供給口を、fix663 の **既存 validated helper** で提供する（fix328 と同名・同契約 = 有効なら token・無効なら ''）。
+     JWT decode / exp 計算 / LS 直読の新規実装 0。workerReady gate は NOT_REQUIRED_V1（HOME_PROXY_WORKER_COMPAT_ASSUMPTION = V40_COMPATIBLE_WORKER）。
+     email は export しない。 */
+  window.__chronicleGoogleId = function(){ var t = f663Token(); return f663Valid(t) ? t.token : ''; };
   function f663DecodeJwt(jwt){
     try {
       var p = String(jwt).split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
@@ -2412,5 +2417,11 @@
   pendingDeleteNotice();
 })();
 </script>
+<!-- v292Dfix247（HOME_AI_TRANSPORT_BRIDGE_V1・GPT 裁定 2026-09-06(29)）: index と同じ proxy transport owner を home にも載せる。
+     fix663 の __chronicleGoogleId export（上の inline script）より **後**に置く（load order = fix663 provider → fix247 → caller）。
+     home では openrouter/pollinations URL の XHR/fetch だけを Worker /openrouter.ai 等へ書換える。Worker /save 等は素通し。
+     timer 2 本（sentinel: window.S 不在で no-op / applyVis248: 要素不在で no-op）= HOME_FIX247_POLLERS = ACCEPTED_KNOWN_OVERHEAD_V1。
+     ★将来 home に window.S を導入するときは fix247 sentinel（cfg.orKey/pollKey/provider の番兵書込）を再評価すること。 -->
+<script src="v292Dfix247-proxy.js?cb=20260906-fix824"></script>
 </body>
 </html>

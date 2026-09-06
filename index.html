@@ -54,7 +54,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260906-fix823';
+  var BUILT = '20260906-fix824';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3145,7 +3145,7 @@ G.init();
 <script src="v292Dfix499-freeget-style-canon.js?cb=v292Dfix499"></script>
 <script src="v292Dfix484-style-canon.js?cb=v292Dfix486"></script>
 <!-- v292Dfix247: APIプロキシ切替(公開化PoC)。設定のプロキシURL+合言葉が入っていれば全API(本文/longmem/🎲/アバター)をWorker経由へ。空=従来BYOK直叩き。OFF=v292ProxyOff -->
-<script src="v292Dfix247-proxy.js?cb=20260829-fix748"></script>
+<script src="v292Dfix247-proxy.js?cb=20260906-fix824"></script>
 <script src="v292Dfix247b-proxy-admin.js?cb=v292Dfix247b"></script>
 <!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
 <!-- v292Dfix600: 新しい物語(?new=1)に別の物語の中身が混入したら保存を止める。 2026-07-27の実機事故（タブ2枚で新物語に他物語のキャラが丸ごと入った）の再発防止。 features.js より前に置き、S.save を待ち受けて包む。OFF=v292Dfix600Off -->
