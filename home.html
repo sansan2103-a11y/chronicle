@@ -162,6 +162,10 @@
 <main>
   <aside>
     <button class="newbtn" id="newBtn">＋ 新しい物語を始める</button>
+    <!-- ★fix825(SCENARIO_ORIGINAL_UI_V1・GPT 裁定 2026-09-06(31)(32)): 原本（Scenario Original）ビューの入口。
+         SCENARIO_ENTRY = ASIDE_ALWAYS_VISIBLE_AREA（640px 以下で #navs が消えても到達できる位置）。
+         hidden = dormant。SCENARIO_UI_OWNER_REACHABLE 解放時に hidden を外す（remote main の QA story absent 確認後）。 -->
+    <button class="newbtn" id="scBtn" hidden style="margin-top:8px" title="原本を作り、そこから何度でも新しい物語を始められます">✎ 原本から物語を作る</button>
     <div class="navttl" id="ttlLib">ライブラリ</div>
     <div id="navs"></div>
     <div class="navttl" id="ttlRecent">最近プレイした物語</div>
@@ -203,6 +207,8 @@
     <div class="grid" id="grid"></div>
   </section>
 
+  <!-- ★fix825: Scenario ビュー（中身は v292Dfix825-scenario-ui.js が描く。既存 render()/delegation は触らない） -->
+  <section class="mid" id="scView" hidden></section>
   <div class="detail" id="detail"></div>
 </main>
 
@@ -2140,7 +2146,9 @@
   function f667CloseGate(){
     try { var d = el('f667gate'); if (d && d.parentNode) d.parentNode.removeChild(d); } catch(e){}
   }
-  function f667ShowGate(){
+  /* ★fix825: opts={ onForce, retryHint } を受ける（省略時 = 従来どおり blank new Story の動作。1 バイトも意味を変えない）。
+     Scenario UI の「この物語を始める」も **同じ gate UI・同じ判定**を使う（STORY_GATE_AUTHORITY = EXISTING_F667）。 */
+  function f667ShowGate(opts){
     if (el('f667gate')) return;                                      /* ★二重表示しない */
     var wrap = document.createElement('div');
     wrap.id = 'f667gate';
@@ -2185,14 +2193,35 @@
         if (b){ b.style.display = ''; if (b.scrollIntoView) b.scrollIntoView({block:'center'}); }
       } catch(e){}
       showNotes(['🔑 ホームのGoogle公式ログインボタンからログインしてください。',
-                 'ログインが終わったら、もう一度「＋ 新しい物語を始める」を押してください。']);
+                 'ログインが終わったら、もう一度「' + ((opts && opts.retryHint) ? String(opts.retryHint) : '＋ 新しい物語を始める') + '」を押してください。']);
     }, false);
     bForce.addEventListener('click', function(){
       f667CloseGate();
+      if (opts && typeof opts.onForce === 'function'){ opts.onForce(); return; }   /* ★fix825: Scenario UI から呼ばれたとき */
       newStory({ force: true });                                     /* ★明示選択のときだけ従来どおり */
     }, false);
     bBack.addEventListener('click', function(){ f667CloseGate(); }, false);
   }
+
+  /* ★fix825(SCENARIO_ORIGINAL_UI_V1・GPT 裁定 2026-09-06(32)): home 閉包の **既存 authority を外へ出すだけの bridge**。
+     ・needsStoryGate      = 既存 f667NeedsGate()（fix825 は認証判定を再計算しない = STORY_GATE_AUTHORITY = EXISTING_F667）
+     ・showStoryGate       = 既存 f667ShowGate(opts)（同じ gate UI。Login/pass/credential 処理は fix825 に無い）
+     ・newStoryRuntime     = 既存 f666InitialSlotData().cfg の provider/orKey（番兵 literal を fix825 に書かない）
+     ・openInstantiatedStory = blank new Story（newStory）と **同じ navigation contract**（index.html?v=<BUILD>&story=<id>&new=1）。
+       fix825 は URL 式を持たない（SCENARIO_START_NAVIGATION = MATCH_EXISTING_NEW_STORY_PATH）。
+     Story 作成そのものは fix819.instantiate（fix825 側）。ここは LS を 1 バイトも書かない。 */
+  window.__chronicleHome = {
+    needsStoryGate: function(){ try { f667Refresh(); } catch(e){} return f667NeedsGate() === true; },
+    showStoryGate: function(opts){ f667ShowGate(opts || {}); },
+    newStoryRuntime: function(){
+      var d = f666InitialSlotData();
+      return (d && d.cfg) ? { provider: d.cfg.provider, orKey: d.cfg.orKey } : null;
+    },
+    openInstantiatedStory: function(id){
+      var u = 'index.html' + (BUILD ? ('?v='+encodeURIComponent(BUILD)+'&story=') : '?story=') + encodeURIComponent(id) + '&new=1';
+      location.href = u;
+    }
+  };
 
   /* ================= ★★fix660: 容量の恒久対処UI ==============================
    * ・容量メーター … いま何KB/何キー使っているかを常に見せる（黙って詰まらせない）
@@ -2423,5 +2452,9 @@
      timer 2 本（sentinel: window.S 不在で no-op / applyVis248: 要素不在で no-op）= HOME_FIX247_POLLERS = ACCEPTED_KNOWN_OVERHEAD_V1。
      ★将来 home に window.S を導入するときは fix247 sentinel（cfg.orKey/pollKey/provider の番兵書込）を再評価すること。 -->
 <script src="v292Dfix247-proxy.js?cb=20260906-fix824"></script>
+<!-- v292Dfix825（SCENARIO_ORIGINAL_UI_V1・GPT 裁定 2026-09-06(31)(32)）: 原本ビュー。home 専用（index には載せない）。
+     依存 = fix819/fix820/fix823（上）・fix247（AI 可否の runtime authority・呼び出し時にだけ見る）・__chronicleHome（inline script）。
+     dormant: #scBtn が hidden の間は Owner から到達不能。kill: localStorage v292Dfix825Off='1'。 -->
+<script src="v292Dfix825-scenario-ui.js?cb=20260906-fix825"></script>
 </body>
 </html>
