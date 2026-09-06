@@ -288,6 +288,12 @@
      観測 = window.__v292Dfix710.status() / .decide()
      ★fix587 より後に置く（__chronicleStoryLifecycle が生えている必要がある）。 -->
 <script src="v292Dfix710-home-delete-autoresume.js?cb=v292Dfix712"></script>
+<!-- v292Dfix436 / v292Dfix335（SEED_EXPANSION_V1・GPT 裁定 2026-09-06(25)(27)）: index と同じ file を home にも載せる。
+     fix436 = 「種を広げる」engine の公開 pure 関数（buildFillPrompt / parseFillJson / normVal / applyFill / request）を fix823 が再利用する。
+     home には UI.randomFill が無いので fix436 は arm されず 30 秒 keeper が空回りして止まる（model call 0 / LS write 0 / DOM 0 = stage 実測）。
+     fix335 は既定 OFF・呼び手 0（pure API __v292Dfix335api.draw を fix823 の RANDOM_FALLBACK が使う）。fix247 は home に **載せない**（裁定 27）。 -->
+<script src="v292Dfix436-seed-expand.js?cb=20260906-fix823"></script>
+<script src="v292Dfix335-omakase.js?cb=20260906-fix823"></script>
 <!-- v292Dfix819: STORY_INSTANTIATION_PRIMITIVE（原本 → 独立 Story を 1 本作る primitive）。
      GPT 裁定 2026-09-06 `FIX819_DEPLOY_DORMANT_LIBRARY = GO`: **載せるだけ。UI caller 0・Owner 操作から到達不能。**
      配置 = home の既存 story lifecycle / protection 群（fix654/fix697/fix587/fix710 …）の**後**、
@@ -301,6 +307,9 @@
      index.html には載せない（index には fix246 の LS ラッパ・S・features.js が居る）。
      kill = v292Dfix820Off='1'。 -->
 <script src="v292Dfix820-scenario-original-store.js?cb=20260906-fix822"></script>
+<!-- v292Dfix823: SEED_EXPANSION_V1 Scenario Seed Adapter（dormant・UI caller 0・kill v292Dfix823Off）。fix436+fix335 の再利用で
+     Scenario Original の空欄だけを埋める。transport は実 fix247 runtime authority のみ（home には fix247 が無いので現状は常に AI_UNAVAILABLE = fail-closed）。 -->
+<script src="v292Dfix823-scenario-seed-adapter.js?cb=20260906-fix823"></script>
 <script>
 (function(){
   'use strict';

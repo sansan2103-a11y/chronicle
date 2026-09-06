@@ -437,6 +437,9 @@
     parseFillJson: parseFillJson,
     applyFill: applyFill,
     normVal: normVal,
+    /* fix823(SEED_EXPANSION_V1・GPT 裁定 2026-09-06(25) FIX436_REQUEST_EXPORT): Scenario Seed Adapter が
+       同じ XHR 経路(fix247 proxy 化・error handling)を使うための export 1 本。index 側の挙動は不変。 */
+    request: request,
     run: run,
     arm: arm,
     off: off,
