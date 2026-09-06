@@ -1653,20 +1653,101 @@
     if(ids.indexOf('chr6')<0) ids.push('chr6');
     return ids;
   }
+
+  /* ==================================================================
+     ★★fix821 CLOUD_PACKAGE_STORY_MEMBERSHIP_V1（GPT 裁定 2026-09-06(14)(15)）
+     ------------------------------------------------------------------
+     直す欠陥: cloud package の「この key はどの Story のものか」を
+       ①chr6_slots_meta の id 文字列（本体の無い ghost を含む）から作り
+       ②k.indexOf(id) >= 0 の **裸の部分一致**で判定していた。
+     実測（2026-09-06・実 480 キー）: meta に残る 1 文字 ghost（a/b/c/default）のせいで
+       **全 480 キー中 413 キー**が payload に入り、その中に **chrAdminTok / chrAdminUrl**
+       まで含まれていた。正しい membership なら 105 件程度。
+     契約:
+       PACKAGE_STORY_MEMBERSHIP_AUTHORITY = EXACT chr6_slot_<id> BODY（meta は authority ではない）
+       NAKED_SUBSTRING = REJECTED / BOUNDARY_AWARE_MATCH = REQUIRED
+       SENSITIVE_LOCAL_KEYS = EXPLICIT_PACKAGE_DENY（chrAdminTok / chrAdminUrl の 2 本だけ）
+       existing caller scope = PRESERVE（「この Story だけ」の要求を全 Story へ広げない）
+     やらないこと: meta の書き換え / ghost の削除 / orphan body の修復 / EXCL・isGlobalKey の変更 /
+       tombstone 判定の変更 / Worker・schema・canonical の変更 / 新しい共有モジュールの新設。
+     ★同じ意味論を home.html / fix402 / fix399 の 3 か所へ局所実装する（共通化しない＝
+       load 順・依存・rollback 範囲を増やさない）。fixture が 3 実装の一致を機械固定する。
+     既定 OFF。ON = v292Dfix821On='1' / kill = v292Dfix821Off='1'。
+     ================================================================== */
+  var F821_DENY = /^(chrAdminTok|chrAdminUrl)$/;
+  var F821_DEFAULT_ON = false;
+  function f821On(){
+    try { if (g('v292Dfix821Off') === '1') return false; } catch(e){ return false; }
+    try { if (g('v292Dfix821On') === '1') return true; } catch(e){}
+    return F821_DEFAULT_ON;
+  }
+  /* body-backed Story ID = chr6_slot_<id> が実在する id（fix562.liveSlots と同一 authority） */
+  function f821BodyBackedIds(){
+    var out = [], seen = {};
+    try {
+      for (var i = 0; i < localStorage.length; i++){
+        var k = localStorage.key(i); if (!k) continue;
+        var m = /^chr6_slot_([A-Za-z0-9]+)$/.exec(k); if (!m) continue;
+        if (seen[m[1]]) continue; seen[m[1]] = 1; out.push(m[1]);
+      }
+    } catch(e){}
+    return out;
+  }
+  function f821HasBody(id){ try { return g('chr6_slot_' + id) != null; } catch(e){ return false; } }
+  /* 「全 Story」を要求されたときの membership source */
+  function f821PackageSlotIds(dead, norm){
+    var all = f821BodyBackedIds(), out = [];
+    for (var i = 0; i < all.length; i++){
+      var id = all[i], key = norm ? norm(id) : id;
+      if (dead && dead[key]) continue;
+      out.push(id);
+    }
+    if (out.indexOf('chr6') < 0) out.push('chr6');
+    return out;
+  }
+  /* caller が特定 Story を要求したときは scope を広げない。body が無ければ対象 0 */
+  function f821Eligible(requested){
+    var out = [];
+    for (var i = 0; i < requested.length; i++){
+      var id = String(requested[i] == null ? '' : requested[i]);
+      if (!id) continue;
+      if (id === 'chr6'){ if (out.indexOf('chr6') < 0) out.push('chr6'); continue; }
+      if (f821HasBody(id) && out.indexOf(id) < 0) out.push(id);
+    }
+    return out;
+  }
+  /* 境界一致: id の直前・直後が英数字なら別 id の一部とみなす（文字列端は境界） */
+  function f821KeyBelongs(k, id){
+    var at = 0;
+    for (;;){
+      var p = k.indexOf(id, at); if (p < 0) return false;
+      var a = (p === 0) ? '' : k.charAt(p - 1), b = k.charAt(p + id.length);
+      if (!/[A-Za-z0-9]/.test(a) && !/[A-Za-z0-9]/.test(b)) return true;
+      at = p + 1;
+    }
+  }
+  function f821SlotKeyMatch(k, id){
+    if (id === 'chr6') return (k === 'chr6' || /_slot_chr6$|genderMap_"?chr6"?$/.test(k));
+    return !!(id && f821KeyBelongs(k, id));
+  }
   /* 直近の送信で墓標により除いた件数（画面とconsoleへ出すため・fix602(4)） */
   var lastPayloadDropped = 0;
   function collectLS(){                                  // fix402 collectLS と同じ判定式
-    var ids = allSlotIds(), out = {}, dead = tombstonedIds(), dropped = 0;
+    var use821 = f821On();                                  /* ★fix821 */
+    var dead = tombstonedIds();
+    var ids = use821 ? f821PackageSlotIds(dead, normSlotId) : allSlotIds();
+    var out = {}, dropped = 0;
     for(var i=0;i<LS.length;i++){
       var k = LS.key(i); if(!k) continue;
       if(/^__gen_|^chr6_bk_|^v292Dfix399_|^v292Dfix402_/.test(k)) continue;
+      if(use821 && F821_DENY.test(k)) continue;              /* ★fix821③ credential は package 対象外 */
       /* ★fix602: 列挙側の除外だけに頼らない。組み立ての最後の関門でも墓標スロットを落とす
          （fix588 が fix402/fix399 に入れたのと同じ二重の防壁）。 */
       if(isTombstonedSlotKey(k, dead)){ dropped++; continue; }
       var hit=false;
       for(var j=0;j<ids.length;j++){
         var id=ids[j];
-        if(id && id!=='chr6' && k.indexOf(id)>=0){ hit=true; break; }
+        if(id && id!=='chr6' && (use821 ? f821KeyBelongs(k,id) : k.indexOf(id)>=0)){ hit=true; break; }
         if(id==='chr6' && (k==='chr6' || /_slot_chr6$|genderMap_"?chr6"?$/.test(k))){ hit=true; break; }
       }
       if(hit || isGlobalKey(k)) out[k]=g(k);
