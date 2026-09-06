@@ -54,7 +54,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260906-fix818';
+  var BUILT = '20260906-fix818on';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -951,8 +951,10 @@ const Api = {
            destructive-salvage safety threshold v1。**自動調整・他の品質判定への流用・length gate への転用は禁止。**
            removedChars / originalChars は同じ JS 文字長基準で計算し、空入力等の除算異常は reject 側へ倒す。
            opt-in `v292Dfix818DestructiveSalvage='1'` / kill `v292Dfix818Off='1'`（既定 OFF で挙動不変）。 */
-        var _on818 = false;
-        try { _on818 = (localStorage.getItem('v292Dfix818Off') !== '1') && (localStorage.getItem('v292Dfix818DestructiveSalvage') === '1'); } catch (_e818a) { _on818 = false; }
+        /* ★fix818on（GPT 裁定 2026-09-06 `DEFAULT_ON = PREAUTHORIZED_CONDITIONAL_GO`・production bytes checklist 全 PASS 後）:
+           変更したのは **この default gate 式だけ**。guard 本体・閾値 0.30・retry・sanitizer・detector は 1 バイトも触らない。 */
+        var _on818 = false, F818_DEFAULT_ON = true;
+        try { _on818 = (localStorage.getItem('v292Dfix818Off') !== '1') && (F818_DEFAULT_ON || localStorage.getItem('v292Dfix818DestructiveSalvage') === '1'); } catch (_e818a) { _on818 = false; }
         if (_on818) {
           var _rej818 = true, _r818 = 1;   /* 既定 reject 側 */
           try {
