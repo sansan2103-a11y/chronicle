@@ -258,13 +258,37 @@
         return narrHas(String(t.narrative||''), name);
       }
       var turns=S.turns, out={}, win=turns.slice(-2); /* 在場判定窓=直近2ターン */
+      /* ★v292Dfix813 AGENDA_SILENCE_ABSTAIN_UNKNOWN_V1（4B-4・GPT 裁定 2026-09-05 深夜244 OPTION_A_ONLY）:
+         「その turn に who='???'（帰属不能）の card が 1 枚でもあれば、その turn は **沈黙の証拠にならない**」
+         → p++ を **落とすだけ**（spoke=true にも break にもしない＝帰属 0・不在と同じ凍結）。
+         根拠: fix805 の abstain 対象は low provenance（bare-inferred/harvest）のみで、'???' の裏に高信頼な話者証拠は無く、
+               元 who は永続側に残らない（復元不能）。よって「誰が喋ったか分からない turn」は「誰が黙っていたか」も断定できない。
+         性質（GPT 固定）: ∀NPC p_ON ≤ p_OFF ／ eligible_ON ⊆ eligible_OFF ／ final top2 の subset は要求しない（top2_changed = diagnostic）。
+         触らないもの: appeared / present / 12T 窓 / 閾値 / sort / 上位 2 / agendaBlock 文言 / fix812 / cadence。write 0・sys 0・schema 0・identity 0。
+         既定 OFF（opt-in v292Dfix813AgendaSilenceAbstain='1'）／kill v292Dfix813Off='1'。OFF は従来と byte 一致。 */
+      var on813=false;
+      try{ on813 = (localStorage.getItem('v292Dfix813Off')!=='1') && (localStorage.getItem('v292Dfix813AgendaSilenceAbstain')==='1'); }catch(e813){ on813=false; }
+      var unkC813={};
+      function unk813(ix, t){
+        if(unkC813[ix]!==undefined) return unkC813[ix];
+        var r=false;
+        try{
+          var cs=(t&&t._convSays)||[];
+          for(var q=0;q<cs.length;q++){
+            var c=cs[q]; if(!c) continue;
+            var w=String(c.who==null?'':c.who).replace(/[\s\u3000]/g,'');
+            if(w==='' || /^[?？]+$/.test(w)){ r=true; break; }
+          }
+        }catch(eu){ r=false; }
+        unkC813[ix]=r; return r;
+      }
       npcs.forEach(function(n){
         var name=String(n.name), p=0;
         for(var i=turns.length-1; i>=0 && i>turns.length-13; i--){
           var t=turns[i]||{};
           var spoke=((t._convSays)||[]).some(function(c){ return c && c.who===name; });
           if(spoke) break; /* 喋った時点で打ち切り=リセット相当 */
-          if(appeared(t, name)) p++; /* 登場したのに無言=+1 / 不在=凍結 */
+          if(appeared(t, name)){ if(on813 && unk813(i, t)){ /* ★fix813: 帰属不能の発話がある turn は沈黙の証拠にしない（棄権） */ } else p++; } /* 登場したのに無言=+1 / 不在=凍結 */
         }
         var present=win.some(function(t){ return appeared(t, name); });
         out[name]={ pressure:p, present:present };
