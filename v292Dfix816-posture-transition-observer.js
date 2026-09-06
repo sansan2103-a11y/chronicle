@@ -33,8 +33,10 @@
   /* ---- 起立・姿勢回復（同一 narrative 内にあれば除外） ---- */
   var RECOVER = ['立ち上が','起き上が','身を起こ'];
   /* ---- 比喩の除外（同一文に来たら その文の該当トークンを採らない・OBSERVED_ONLY の narrow guard） ---- */
-  var META_LOCO = { '走': ['悪寒','戦慄','痛み','電流','衝撃','緊張','震え','汗'],
-                    '立': ['鳥肌','音','波','湯気','腹が立','煙','霧','角が立'] };
+  /* ★v1.1: 実測 karada「溝の縁で膝をつく。左脚に激痛が走る」から、痛み系は「痛み」ではなく「痛」で弾く。
+     「霧」は cast 姓（霧 涼太）と衝突するため除外語から外した（本人の候補を潰さないため）。 */
+  var META_LOCO = { '走': ['悪寒','戦慄','痛','電流','衝撃','緊張','震え','汗','痺れ','鳥肌'],
+                    '立': ['鳥肌','音','波','湯気','腹が立','腹立','煙','角が立'] };
 
   var stats = { turnsSeen: 0, candidates: 0, droppedCount: 0, errors: 0,
                 postureTurns: 0, postureKarada: 0, postureNarrative: 0,
@@ -181,7 +183,7 @@
   (function w(){ w._n = (w._n || 0) + 1; if (install()) return; if (w._n > 120) return; setTimeout(w, 500); })();
 
   window.__v292Dfix816 = {
-    __v: 1.0,
+    __v: 1.1,
     VOCAB: { POSTURE: POSTURE.slice(), LOCO: LOCO.slice(), RECOVER: RECOVER.slice() },
     /* READ-ONLY 検証口（純関数・書換 0） */
     pairCandidates: function(ctx){ return pairCandidates(ctx || {}); },
