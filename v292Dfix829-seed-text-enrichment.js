@@ -20,8 +20,11 @@
 //   LENGTH           … per field <= 120cp（超過 = その field を REJECT。truncate 禁止）
 //                      per character 合計 <= 300cp（超過 = **その character の候補ごと reject**。
 //                      truncate も「どの field を落とすか」の恣意的間引きも禁止 = 裁定 71）
-//   DUPLICATION      … 正規化後に addendum === seed / addendum.startsWith(seed) は reject。
-//                      seed が 12cp 以上のときだけ完全包含も reject。短い seed の語彙重複は reject しない。
+//   DUPLICATION      … 裁定 72 で裁定 58 の prefix 規則を訂正（UNCONDITIONAL_PREFIX_REJECT = SUPERSEDED）:
+//                      A. 正規化後に addendum === seed → REJECT
+//                      B. addendum が seed で始まり、**seed の直後が文の境界**（空白 / 改行 / 句読点）→ REJECT
+//                      C. seed が 12cp 以上で、addendum のどこかに seed が完全包含 → REJECT
+//                      それ以外は prefix 一致だけでは reject しない（例「18歳」→「18歳らしい…」は ALLOW）。
 //                      新しい意味類似判定は作らない。LLM に同義判定させない。
 //   CALLS            … 1 character = ちょうど 1 call・直列（hero → npc1 → npc2 …）。
 //                      field 単位の失敗 → その field だけ落として続行。
@@ -39,7 +42,7 @@
   'use strict';
   if (window.__v292Dfix829) return;
   var TAG = '[v292Dfix829:seed-text-enrichment]';
-  var VERSION = 'v292Dfix829-20260907-enrich-v1';
+  var VERSION = 'v292Dfix829-20260907-enrich-v1.1';   /* v1.1: 裁定 72 R58_PREFIX_RULE_CORRECTION（duplicate detector のみ） */
 
   var SEPARATOR      = '\n';   /* ENRICHMENT_SEPARATOR_V1（裁定 58） */
   var MAX_FIELD_CP   = 120;    /* MAX_ENRICH_ADDENDUM_PER_FIELD */
@@ -74,13 +77,19 @@
      既存の trim / 空白畳み込みだけ。新しい意味類似判定は作らない（裁定 58）。 */
   function normCmp(s){ return trim(str(s).replace(/\s+/g, ' ')); }
 
-  /* ADDENDUM_CONTAINS_ORIGINAL の 3 段（裁定 58）。null = reject しない */
+  /* 「文の境界」= 固定的な空白・改行・句読点だけ（裁定 72）。意味判定は一切しない。 */
+  var BOUNDARY_RE = /[\s、。，．,.!！?？…‥「」『』〈〉《》（）()\[\]【】〔〕・:：;；\/／\\|｜~〜\-–—ー]/;
+  /* ADDENDUM_CONTAINS_ORIGINAL（裁定 58 → 裁定 72 で prefix 規則を訂正）。null = reject しない */
   function dupReject(seed, add){
     var s = normCmp(seed), a = normCmp(add);
     if (!s || !a) return null;
-    if (a === s) return 'DUP_EQUAL';
-    if (a.indexOf(s) === 0) return 'DUP_PREFIX';
-    if (cpLen(s) >= DUP_CONTAIN_CP && a.indexOf(s) >= 0) return 'DUP_CONTAINED';
+    if (a === s) return 'DUP_EQUAL';                        /* A */
+    if (a.indexOf(s) === 0){                                /* B: prefix ＋ 直後が文の境界のときだけ */
+      var next = a.charAt(s.length);                        /* a は s で始まるので UTF-16 index はそのまま使える */
+      if (next === '' || BOUNDARY_RE.test(next)) return 'DUP_PREFIX_BOUNDARY';
+      /* 「18歳」→「18歳らしい…」のような自然な続きは落とさない（UNCONDITIONAL_PREFIX_REJECT = SUPERSEDED） */
+    }
+    if (cpLen(s) >= DUP_CONTAIN_CP && a.indexOf(s) >= 0) return 'DUP_CONTAINED';   /* C */
     return null;                     /* 短い seed の単純な語彙重複だけでは落とさない */
   }
 
@@ -302,7 +311,7 @@
     SEPARATOR: SEPARATOR, MAX_FIELD_CP: MAX_FIELD_CP, MAX_CHAR_CP: MAX_CHAR_CP,
     OFFER_MAX_CP: OFFER_MAX_CP, DUP_CONTAIN_CP: DUP_CONTAIN_CP,
     HERO_FIELDS: HERO_FIELDS, NPC_FIELDS: NPC_FIELDS, LABEL: LABEL, HERO_LABEL: HERO_LABEL,
-    cpLen: cpLen, normCmp: normCmp, dupReject: dupReject,
+    cpLen: cpLen, normCmp: normCmp, dupReject: dupReject, BOUNDARY_RE: BOUNDARY_RE,
     eligible: eligible, offerCount: offerCount, buildPrompt: buildPrompt,
     validateCandidate: validateCandidate, applyCandidates: applyCandidates,
     transportAvailable: transportAvailable, enrich: enrich,
