@@ -39,7 +39,7 @@
   'use strict';
   if (window.__v292Dfix825) return;
   var TAG = '[v292Dfix825:scenario-ui]';
-  var VERSION = 'v292Dfix825-20260907-ui-v1.1';
+  var VERSION = 'v292Dfix825-20260907-ui-v1.2';   /* v1.2: SEED_TEXT_ENRICHMENT_V1 caller（GPT 裁定 58 / 71） */
   var SCENE_FIELDS = ['lore', 'loc', 'obj', 'tone'];
   var HERO_FIELDS  = ['name', 'desc', 'gender'];
   var NPC_FIELDS   = ['name', 'desc', 'personality', 'coreDesire', 'coreFear', 'wound', 'gender'];
@@ -65,6 +65,7 @@
   function ST(){ return window.__v292Dfix820 || null; }
   function INST(){ return window.__v292Dfix819 || null; }
   function SEED(){ return window.__v292Dfix823 || null; }
+  function ENR(){ return window.__v292Dfix829 || null; }   /* SEED_TEXT_ENRICHMENT_V1 engine（無ければ機能単位で disabled） */
   function HOME(){ var h = window.__chronicleHome; return (h && typeof h === 'object') ? h : null; }
   function homeReady(){
     var h = HOME();
@@ -83,7 +84,9 @@
     wired: false, view: 'LIST',
     draft: null, scenarioId: null, dirty: false, draftRevision: 0, savedSnapshot: null,
     busy: null, hardStop: false, candidate: null, candidateReport: null, lastError: null, lastNote: null,
-    starts: 0, navigated: false
+    starts: 0, navigated: false,
+    /* ---- SEED_TEXT_ENRICHMENT_V1（memory only。LS / sessionStorage / 新 key 0） ---- */
+    enrichCandidates: null, enrichReport: null, enrichRevision: -1, enrichCalls: 0, offers: 0
   };
 
   /* ---------- draft model（文字列は常に存在。'' = 空欄） ---------- */
@@ -156,6 +159,10 @@
       case 'GENERATION_INCOMPLETE': case 'RANDOM_INCOMPLETE': return 'NPC を揃えられませんでした。名前を入れるか、もう一度お試しください';
       case 'NPC_COUNT_INVARIANT_VIOLATED': case 'BASE_MUTATED': return '内部整合性エラー（' + code + '）';
       case 'STALE_AI_CANDIDATE': return 'AI の生成中に入力が変わったため、候補を破棄しました。もう一度お試しください';
+      case 'STALE_ENRICH_CANDIDATE': return 'AI が書いている間に入力が変わったため、肉付けの候補を破棄しました（入力は変わっていません）。もう一度お試しください';
+      case 'FIX829_UNAVAILABLE': return 'この機能に必要な部品が読み込まれていません（FIX829_UNAVAILABLE）';
+      case 'NO_ENRICH_TARGET': return '肉付けできる短いキャラ設定がありません（1〜24 文字の欄が対象です）';
+      case 'ENRICH_NOTHING': return 'AI から採用できる追記が返りませんでした。もう一度お試しください';
       case 'NO_BLANKS': return '埋める空欄がありません';
       case 'NOT_SAVED': return '先に保存してください';
       case 'DIRTY': return '未保存の変更があります。先に保存してください';
@@ -218,6 +225,9 @@
       '.sc-panel h3{margin:0 0 8px;font-size:15px}' +
       '.sc-diff{display:grid;grid-template-columns:150px 1fr;gap:6px 10px;font-size:12.5px;margin:10px 0}' +
       '.sc-diff .sc-k{color:#aab;}.sc-diff .sc-lock{color:#9fd9a0}.sc-diff .sc-new{color:#ffd9a0}' +
+      '.sc-diff .sc-en-h{grid-column:1/-1;margin-top:8px;padding-top:8px;border-top:1px solid #333;color:#cfd6e6;font-weight:600}' +
+      '.sc-diff .sc-en-a{color:#ffd9a0;white-space:pre-wrap}' +
+      '.sc-diff .sc-en-s{color:#9fd9a0;white-space:pre-wrap}' +
       '.sc-panel .sc-acts{justify-content:flex-end}';
     (document.head || document.documentElement).appendChild(s);
   }
@@ -304,6 +314,7 @@
       field('cast.hero.name', LABEL.heroName, false, false) +
       field('cast.hero.desc', LABEL.heroDesc, true, true) +
       genderField('cast.hero.' + GENDER_FIELD, LABEL.heroGender) +
+      enrichBtnHtml('hero') +
       '<div class="sc-sec"><span>NPC（' + d.cast.npcs.length + ' 人' + (d.cast.npcs.length ? '' : '・🎲 全部おまかせ なら 2 人生成') + '）</span>' +
       '<button class="sc-btn" data-sc-act="npcAdd">＋ NPC を追加</button></div>';
     for (var n = 0; n < d.cast.npcs.length; n++){
@@ -314,6 +325,7 @@
         if (f === GENDER_FIELD){ html += genderField('cast.npcs.' + n + '.' + f, NPC_LABEL[f]); continue; }
         html += field('cast.npcs.' + n + '.' + f, NPC_LABEL[f], f !== 'name', f !== 'name');
       }
+      html += enrichBtnHtml('npc' + n);
       html += '</div></details>';
     }
     html += '<div class="sc-sec"><span>開始</span></div>' +
@@ -353,6 +365,18 @@
     setDisabled('delete', busy || hard, '');
     setDisabled('npcAdd', busy || hard, '');
     qa('[data-sc-npcdel]').forEach(function(b){ b.disabled = busy || hard; });
+    /* ✒ 肉付けボタン: eligible（1〜24cp）な欄を持つキャラだけ表示。件数は現在の draft から毎回引き直す */
+    var E = ENR(), tg = {}, cs = enrichTargets(), ci;
+    for (ci = 0; ci < cs.length; ci++) tg[cs[ci].key] = cs[ci].count;
+    var enTransport = !!(E && E.transportAvailable && E.transportAvailable());
+    qa('[data-sc-enrichwrap]').forEach(function(w){
+      var key = w.getAttribute('data-sc-enrichwrap'), n = tg[key] || 0, b = w.querySelector('[data-sc-enrich]');
+      w.hidden = !n;
+      if (!b) return;
+      b.disabled = busy || hard || !enTransport || !n;
+      b.textContent = '✒ この人物を詳しくする（短い欄 ' + n + ' 件）';
+      b.title = !enTransport ? msg('AI_UNAVAILABLE') : 'すでに書いた内容は変えずに、続きの文を改行で書き足します';
+    });
     var box = q('[data-sc-msg]');
     if (box){
       box.innerHTML = (S.lastError ? '<div class="sc-msg sc-err">' + esc(S.lastError) + '</div>' : '') +
@@ -492,9 +516,153 @@
     S.draft = toDraft(S.candidate, S.draft.title);        /* draft だけが変わる。store write 0 */
     S.candidate = null; S.candidateReport = null;
     bump(); renderEdit(); setNote('提案を draft に反映しました。内容を確認して「保存」してください。');
-    return { ok: true };
+    /* 裁定 58 POST_EXPAND: 採用後の draft を再 scan して、短い欄が残っていれば肉付けを **提案**する（自動発火はしない） */
+    var of = maybeOfferEnrich();
+    return { ok: true, offered: !!(of && of.offered), offerCount: (of && of.count) || 0 };
   }
   function discardCandidate(){ S.candidate = null; S.candidateReport = null; closeOverlay(); refreshEdit(); return { ok: true }; }
+
+  /* =================================================================
+     SEED_TEXT_ENRICHMENT_V1（GPT 裁定 58 / 71）
+     すでに書かれている **短い**キャラ設定（1〜24cp）に、改行 1 個で「続き」を append する。
+     ・engine = fix829（長さ / 重複 / 直列 call / STOP 境界はすべて engine 側の契約）
+     ・ここは caller。draft だけを変える（Store / cloud / LS write 0）。
+     ・ENRICH_NO_MEANS_ZERO_CALL: offer の「いいえ」/ Esc / 外側クリックでは engine を呼ばない。
+     ・adoption には draftRevision の stale guard が必須（裁定 71）。
+     ================================================================= */
+  function enrichTargets(){
+    var E = ENR(); if (!E || !S.draft || typeof E.eligible !== 'function') return [];
+    try { return E.eligible(S.draft) || []; } catch(e){ return []; }
+  }
+  function enrichOfferCount(){
+    var cs = enrichTargets(), n = 0;
+    for (var i = 0; i < cs.length; i++) n += cs[i].count;
+    return n;
+  }
+  function enrichBtnHtml(key){
+    if (!ENR()) return '';
+    return '<div class="sc-f sc-wide" data-sc-enrichwrap="' + esc(key) + '" hidden>' +
+           '<button class="sc-btn" data-sc-enrich="' + esc(key) + '">✒ この人物を詳しくする</button></div>';
+  }
+  function enrichRun(only, cb){
+    cb = cb || function(){};
+    function bail(f){ cb(f); return f; }              /* 同期で分かる失敗は戻り値でも返す（呼び手が cb を渡さない場合のため） */
+    if (off()) return bail(fail('OFF'));
+    if (S.hardStop) return bail(fail('HARD_STOP'));
+    if (!S.draft) return bail(fail('NO_DRAFT'));
+    if (S.busy) return bail(fail('BUSY'));            /* SINGLE_FLIGHT: 重複 call 0 */
+    var E = ENR();
+    if (!E || typeof E.enrich !== 'function'){ setError('FIX829_UNAVAILABLE'); return bail(fail('FIX829_UNAVAILABLE')); }
+    var targets = enrichTargets(), i, keep = [];
+    if (only){ for (i = 0; i < targets.length; i++) if (targets[i].key === only) keep.push(targets[i]); targets = keep; }
+    if (!targets.length){ setNote(msg('NO_ENRICH_TARGET')); return bail(fail('NO_ENRICH_TARGET')); }
+
+    var rev = S.draftRevision;                    /* ★STALE guard: 依頼した時点の revision */
+    var snapshot = clone(S.draft);
+    var done = false;
+    S.busy = 'enrich'; S.enrichCandidates = null; S.enrichReport = null;
+    setNote('AI がキャラクター設定に書き足しています…（' + targets.length + ' 人 / ' + targets.length + ' 回）');
+    E.enrich(snapshot, { only: only || null }, function(res){
+      if (done) return; done = true;
+      S.busy = null; S.enrichCalls++;
+      /* 依頼後に seed が変わっていたら apply 0（裁定 71） */
+      if (S.draftRevision !== rev){
+        S.enrichCandidates = null; S.enrichReport = null;
+        setError('STALE_ENRICH_CANDIDATE', { startedAt: rev, now: S.draftRevision });
+        return cb(fail('STALE_ENRICH_CANDIDATE', { startedAt: rev, now: S.draftRevision }));
+      }
+      if (!res || !res.ok){ setError(res && res.code, res && res.detail); return cb(res || fail('ENRICH_FAILED')); }
+      S.enrichReport = res.report || {};
+      if (res.noTargets || !res.candidates || !res.candidates.length){
+        setNote(res.stopped ? msg(res.stopped.code) : msg('ENRICH_NOTHING'));
+        return cb({ ok: true, candidates: [], report: res.report, stopped: res.stopped || null });
+      }
+      S.enrichCandidates = res.candidates; S.enrichRevision = rev;
+      if (S.view === 'SC_EDIT' && root && !root.hidden) renderEnrichReview();
+      return cb({ ok: true, candidates: res.candidates, report: res.report, stopped: res.stopped || null });
+    });
+    return { ok: true, started: true, chars: targets.length };
+  }
+  function renderEnrichReview(){
+    var cands = S.enrichCandidates || [], rep = S.enrichReport || {}, rows = [], i, k, c;
+    for (i = 0; i < cands.length; i++){
+      c = cands[i];
+      rows.push('<div class="sc-en-h">' + esc(c.label) + '</div>');
+      for (k in c.addenda){
+        if (!Object.prototype.hasOwnProperty.call(c.addenda, k)) continue;
+        rows.push('<div class="sc-k">' + esc((c.labels && c.labels[k]) || k) + '</div>' +
+                  '<div class="sc-en-s">🔒 ' + esc(str(c.seeds[k])) + '</div>' +
+                  '<div class="sc-k"></div>' +
+                  '<div class="sc-en-a">✒ ' + esc(str(c.addenda[k])) + '</div>');
+      }
+    }
+    var stopNote = rep.stopped ? '<div class="sc-msg sc-err">途中で止まりました（' + esc(rep.stopped.code) + '）。ここまでの候補だけを表示しています。</div>' : '';
+    overlay('<h3>AI の書き足し案（✒ 肉付け）</h3>' +
+      '<div style="font-size:12px;color:#aab">🔒 = あなたが書いた内容（<b>1 文字も変えません</b>）／✒ = その下に改行で足す文。反映しても<b>まだ保存はされません</b>。</div>' +
+      stopNote +
+      '<div class="sc-diff">' + rows.join('') + '</div>' +
+      '<div class="sc-acts"><button class="sc-btn" data-sc-c="endiscard">破棄</button>' +
+      '<button class="sc-btn sc-primary" data-sc-c="enaccept">この内容を draft に反映</button></div>',
+      function(p){
+        p.querySelector('[data-sc-c="endiscard"]').addEventListener('click', function(){ discardEnrich(); }, false);
+        p.querySelector('[data-sc-c="enaccept"]').addEventListener('click', function(){ acceptEnrich(); }, false);
+      });
+  }
+  function acceptEnrich(){
+    var E = ENR();
+    if (!E || typeof E.applyCandidates !== 'function') return fail('FIX829_UNAVAILABLE');
+    if (!S.enrichCandidates || !S.enrichCandidates.length || !S.draft) return fail('NO_CANDIDATE');
+    closeOverlay();
+    /* ★裁定 71: adoption 時点でも revision を照合。ズレていたら apply 0（draft は 1 バイトも変えない） */
+    if (S.draftRevision !== S.enrichRevision){
+      S.enrichCandidates = null; S.enrichReport = null;
+      setError('STALE_ENRICH_CANDIDATE', { startedAt: S.enrichRevision, now: S.draftRevision });
+      return fail('STALE_ENRICH_CANDIDATE');
+    }
+    var applied = 0, i, k;
+    for (i = 0; i < S.enrichCandidates.length; i++){
+      for (k in S.enrichCandidates[i].addenda){ if (Object.prototype.hasOwnProperty.call(S.enrichCandidates[i].addenda, k)) applied++; }
+    }
+    S.draft = E.applyCandidates(S.draft, S.enrichCandidates);   /* 対象 field への差分 append（全置換ではない） */
+    S.enrichCandidates = null; S.enrichReport = null;
+    bump(); renderEdit();
+    setNote('書き足しを draft に反映しました（' + applied + ' 欄）。内容を確認して「保存」してください。');
+    return { ok: true, appliedFields: applied };
+  }
+  function discardEnrich(){
+    S.enrichCandidates = null; S.enrichReport = null; closeOverlay();
+    setNote('書き足し案を破棄しました（入力は変わっていません）');
+    return { ok: true };
+  }
+  /* 🌱 / 🎲 の候補を採用したあとに **現在の draft を再 scan** して offer するかを決める（裁定 58）。
+     ここは提案だけ。「いいえ」/ Esc / 外側クリックでは engine を 1 回も呼ばない。 */
+  function maybeOfferEnrich(){
+    var E = ENR(); if (!E) return { ok: true, offered: false };
+    var transport = !!(E.transportAvailable && E.transportAvailable());
+    if (!transport) return { ok: true, offered: false, why: 'AI_UNAVAILABLE' };
+    var n = enrichOfferCount();
+    if (!n) return { ok: true, offered: false, why: 'NO_TARGET' };
+    S.offers++;
+    offerBox('短いキャラクター設定が ' + n + ' 件あります。書いた内容はそのままに、AI が続きを書き足しますか？',
+             function(){ enrichRun(null); });
+    return { ok: true, offered: true, count: n };
+  }
+  /* offer 専用の確認ダイアログ。いいえ / Esc / 外側クリック = 何もしない（model call 0） */
+  function offerBox(text, onYes){
+    overlay('<h3>キャラクターをもっと詳しくしますか？</h3><div>' + esc(text) + '</div>' +
+      '<div style="font-size:12px;color:#aab;margin-top:8px">すでに書かれている文は 1 文字も変えません。改行して続きを足すだけです。</div>' +
+      '<div class="sc-acts"><button class="sc-btn" data-sc-c="ofno">いいえ</button>' +
+      '<button class="sc-btn sc-primary" data-sc-c="ofyes">✒ 書き足してもらう</button></div>',
+      function(p){
+        var w = el('scOverlay');
+        function bye(){ document.removeEventListener('keydown', onKey, true); closeOverlay(); }
+        function onKey(e){ if (e.key === 'Escape' || e.keyCode === 27){ e.stopPropagation(); bye(); } }
+        document.addEventListener('keydown', onKey, true);
+        if (w) w.addEventListener('click', function(e){ if (e.target === w) bye(); }, false);
+        p.querySelector('[data-sc-c="ofno"]').addEventListener('click', bye, false);
+        p.querySelector('[data-sc-c="ofyes"]').addEventListener('click', function(){ bye(); onYes(); }, false);
+      });
+  }
 
   function remove(){
     if (off() || S.busy || S.hardStop || !S.scenarioId) return fail(off() ? 'OFF' : (S.busy ? 'BUSY' : (S.hardStop ? 'HARD_STOP' : 'NOT_SAVED')));
@@ -550,6 +718,7 @@
   function onRootClick(e){
     var t = e.target;
     var act = t.closest && t.closest('[data-sc-act]'); if (act){ dispatch(act.getAttribute('data-sc-act')); return; }
+    var enr = t.closest && t.closest('[data-sc-enrich]'); if (enr){ e.preventDefault(); enrichRun(enr.getAttribute('data-sc-enrich')); return; }
     var del = t.closest && t.closest('[data-sc-npcdel]'); if (del){ e.preventDefault(); npcDel(+del.getAttribute('data-sc-npcdel')); return; }
     var open = t.closest && t.closest('[data-sc-open]'); if (open){ openExisting(open.getAttribute('data-sc-open')); return; }
   }
@@ -603,14 +772,22 @@
     state: function(){
       return { off: off(), wired: S.wired, view: S.view, scenarioId: S.scenarioId, dirty: S.dirty, draftRevision: S.draftRevision,
                busy: S.busy, hardStop: S.hardStop, hasCandidate: !!S.candidate, starts: S.starts, navigated: S.navigated,
-               deps: { fix819: !!INST(), fix820: !!ST(), fix823: !!SEED(), fix247: !!(window.__v292Dfix247 && typeof window.__v292Dfix247 === 'object'), homeBridge: homeReady() },
+               enrich: { has: !!(S.enrichCandidates && S.enrichCandidates.length), chars: (S.enrichCandidates || []).length,
+                         revision: S.enrichRevision, calls: S.enrichCalls, offers: S.offers, offerCount: enrichOfferCount() },
+               deps: { fix819: !!INST(), fix820: !!ST(), fix823: !!SEED(), fix829: !!ENR(), fix247: !!(window.__v292Dfix247 && typeof window.__v292Dfix247 === 'object'), homeBridge: homeReady() },
                entryHidden: btn ? !!btn.hidden : null, uiWired: true };
     },
     startability: startability,
     /* fixture / 診断用: DOM を通さず同じ core を呼ぶ（Owner UI と同一経路） */
     api: { openList: openList, openNew: openNew, openExisting: openExisting, edit: edit, npcAdd: npcAdd, npcDel: npcDel,
            save: save, expand: expand, acceptCandidate: acceptCandidate, discardCandidate: discardCandidate,
-           remove: remove, start: start, toStories: toStories, draft: function(){ return S.draft ? clone(S.draft) : null; } }
+           remove: remove, start: start, toStories: toStories, draft: function(){ return S.draft ? clone(S.draft) : null; },
+           /* SEED_TEXT_ENRICHMENT_V1 */
+           enrich: enrichRun, acceptEnrich: acceptEnrich, discardEnrich: discardEnrich,
+           enrichTargets: enrichTargets, enrichOfferCount: enrichOfferCount, maybeOfferEnrich: maybeOfferEnrich,
+           enrichCandidates: function(){ return S.enrichCandidates ? clone(S.enrichCandidates) : null; },
+           enrichReport: function(){ return S.enrichReport ? clone(S.enrichReport) : null; },
+           setDraft: function(d){ S.draft = toDraft(d, (S.draft && S.draft.title) || DEFAULT_TITLE); bump(); if (S.view === 'SC_EDIT') renderEdit(); return { ok: true }; } }
   };
 
   if (off()){ try { console.log(TAG, 'OFF (v292Dfix825Off=1)'); } catch(e){} return; }

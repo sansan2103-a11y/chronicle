@@ -2566,6 +2566,10 @@
 <!-- v292Dfix825（SCENARIO_ORIGINAL_UI_V1・GPT 裁定 2026-09-06(31)(32)）: 原本ビュー。home 専用（index には載せない）。
      依存 = fix819/fix820/fix823（上）・fix247（AI 可否の runtime authority・呼び出し時にだけ見る）・__chronicleHome（inline script）。
      dormant: #scBtn が hidden の間は Owner から到達不能。kill: localStorage v292Dfix825Off='1'。 -->
-<script src="v292Dfix825-scenario-ui.js?cb=20260907-schema3"></script>
+<!-- v292Dfix829(SEED_TEXT_ENRICHMENT_V1 / GPT ruling 58+71): already-written SHORT character seeds (1-24cp) get an
+     appended continuation line. engine only; DOM 0; store/cloud/LS write 0; reuses fix436 request/parseFillJson/normVal only.
+     caller = fix825 (button per character card + post-expand offer). kill: localStorage v292Dfix829Off=1. -->
+<script src="v292Dfix829-seed-text-enrichment.js?cb=20260907-fix829"></script>
+<script src="v292Dfix825-scenario-ui.js?cb=20260907-fix829"></script>
 </body>
 </html>
