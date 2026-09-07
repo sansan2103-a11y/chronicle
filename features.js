@@ -3089,6 +3089,26 @@
       try { return localStorage.getItem('v292EngineMode') === '1'; } catch(e){ return false; }
     }
 
+    /* ★v292Dfix834 FIX190_WRAPPER_ORDER_CONVERGENCE_V1（lane: FIX190_LEGACY_REATTACH_DUPLICATION）
+       公開バイトでの実測: fix190 と fix192 が互いに Planner.build を包み直し続けるため、
+       (A) どちらが最外かで sys が変わり、fix190 が最外の turn だけ fix192 の stateBlock と
+           fix190 の legacy block が二重に載る（実測 sysLen 3541 ⇄ 4454・同じ「関係」値が 2 回）。
+       (B) 包み直しが収束せず層が線形に増える（実測: 60 秒で fix192 層 ≒ 48。
+           1 turn あたりの buildSys 再構築回数がそのまま増える）。
+       直すのは既存契約 R118F-G/G4「engineMode1 では fix192 が唯一の state-prompt owner。
+       fix190 の late injection は無し」の**適用漏れ**だけ。新しい schema も engine も足さない。
+       v292Dfix190Det は触らない（裁定 237 で既定 ON 化は HOLD）。
+       kill: v292Dfix834Off='1' → 従来動作（順序依存・二重載り含む）へ 1 キーで戻る。 */
+    var F834_DEFAULT_ON = true;
+    function on834(){ try { return F834_DEFAULT_ON && localStorage.getItem('v292Dfix834Off') !== '1'; } catch(e){ return false; } }
+    function d834(k){ try { var o = window.__v292Dfix834 = window.__v292Dfix834 || { skipped: 0, healSkipped: 0 }; o[k]++; } catch(e){} }
+    /* fix192 が実際に読み込まれていて、かつ engineMode1 を自ら報告している時だけ true。
+       localStorage へフォールバックしない＝fix192 が居なければ従来どおり fix190 が注入する（fail-open）。 */
+    function owner192(){
+      try { var E = window.__v292NewEngine;
+        return !!(E && typeof E.engineOn === 'function' && E.engineOn()); } catch(e){ return false; }
+    }
+
     // --- 捕捉: ctx.raw の <state> から 傷/関係/未解決 を読み store[who] に merge ---
     //   ctx.raw から読むので、fix77 が plan.narrative の <state> を strip する順序に依存しない。
     function captureExt(plan, ctx){
@@ -3163,6 +3183,8 @@
           var orig = P.build.bind(P);
           var wrapped = function(){
             var r = orig.apply(this, arguments);
+            /* ★fix834/(A): engineMode1 で fix192 が sys を所有している間は追記しない（R118F-G/G4）。 */
+            try { if (on834() && owner192()){ d834('skipped'); return r; } } catch(e834){}
             try { if (r && typeof r.sys === 'string' && r.sys.indexOf(MARK190) < 0){ r.sys = r.sys + buildBlock(); } } catch(e){}
             return r;
           };
@@ -3175,7 +3197,12 @@
     }
     install();
     // selfHeal: build が他fixで再wrapされて自分のwrapが外れたら入れ直す。
-    setInterval(function(){ try { if (detOn()) return; var P = window.Planner; if (P && P.build && !P.build.__v292Dfix190) install(); } catch(e){} }, 2500);   /* R118F-G/G1: flag ON では selfHeal しない */
+    setInterval(function(){ try { if (detOn()) return; var P = window.Planner; if (!P || !P.build) return;
+      if (P.build.__v292Dfix190) return;
+      /* ★fix834/(B): fix192 の wrapper が最外で、fix190 が既に chain 内に居るなら包み直さない（収束）。
+         別の fix が包んだ場合は __v292NewEngine が最外に無いので従来どおり自己修復する。 */
+      if (on834() && P.__v292Dfix190 && P.build.__v292NewEngine){ d834('healSkipped'); return; }
+      install(); } catch(e){} }, 2500);   /* R118F-G/G1: flag ON では selfHeal しない */
     /* ★R118F-G/G2: readonly canonical contract。既存文言をそのまま1箇所へ集約する。
        fieldShort 系は fix192 の allowed field list が現在使っている文字列と完全に同一
        （＝参照へ切り替えても engineMode1 の sys は1バイトも変わらない）。新 semantics は足さない。 */
