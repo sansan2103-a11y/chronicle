@@ -68,7 +68,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260907-fix829r';
+  var BUILT = '20260907-fix830';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3500,7 +3500,7 @@ G.init();
 <script src="v292Dfix270-topbar-ui.js?cb=v292Dfix270"></script>
 <script src="v292Dfix274-build-flag-guard.js?cb=v292Dfix274"></script>
 <script src="v292Dfix275-settings-tabs.js?cb=v292Dfix275"></script>
-<script src="v292Dfix277-quasi-pack.js?cb=20260901-fix784"></script>
+<script src="v292Dfix277-quasi-pack.js?cb=20260907-fix830"></script>
 <script src="v292Dfix288-tooltips.js?cb=v292Dfix288"></script>
 <script src="v292Dfix290-mobile.js?cb=v292Dfix290"></script>
 <script src="v292Dfix291-saveexport.js?cb=v292Dfix721"></script>
@@ -3516,6 +3516,8 @@ G.init();
 <script src="v292Dfix305-trigger-states.js?cb=v292Dfix305"></script>
 <script src="v292Dfix306-npc-liveliness.js?cb=v292Dfix738"></script>
 <script src="v292Dfix764-name-variant-fold.js?cb=v292Dfix764"></script>
+<!-- v292Dfix830(ENTITY_MATCH_RESOLVER_V1 / GPT ruling 73+74): one shared read-time predicate for "is this name an entity we already know". Auto-merge only on EXACT / ALIAS_EXACT / FOLDED_EXACT; fix445 castMatch (prefix/suffix) is classified as LEGACY_PARTIAL and never auto-merges. No new persistent state, no Story schema change. kill: localStorage v292Dfix830Off=1. -->
+<script src="v292Dfix830-entity-match-resolver.js?cb=20260907-fix830"></script>
 <script src="v292Dfix766-canonical-appearance.js?cb=20260901-fix783"></script>
 <script src="v292Dfix767-icon-recipe-adapter.js?cb=v292Dfix778"></script>
 <script src="v292Dfix307-npc-roster.js?cb=v292Dfix765"></script>
@@ -3551,7 +3553,7 @@ G.init();
 <script src="v292Dfix325-state-rederive.js?cb=20260829-fix748"></script>
 <script src="v292Dfix326-story-scroll.js?cb=v292Dfix326"></script>
 <script src="v292Dfix327-turn-counter.js?cb=v292Dfix327"></script>
-<script src="v292Dfix328-google-login.js?cb=20260829-fix748"></script>
+<script src="v292Dfix328-google-login.js?cb=20260907-fix830"></script>
 <script src="v292Dfix298-roster.js?cb=20260901-fix783"></script>
 <script src="v292Dfix330-somatic-guard.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix332-uifold.js?cb=v292Dfix332"></script>

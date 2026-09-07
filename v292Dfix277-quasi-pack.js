@@ -337,6 +337,19 @@
     e.sf = foreign ? 2 : 1;   // 2=別物語由来 / 1=巻き戻し等。どちらも再観測まで注入禁止
     try { console.log(TAG, 'fix528d: 注入停止(' + (foreign ? '別物語由来' : '未来ターン') + '):', name); } catch(_){}
   }
+  /* ★fix830(2026-09-07・GPT 裁定 73/74 ENTITY_IDENTITY_DYNAMIC_REGISTRATION_V1):
+       「この名前はすでに知っている人物か」を 1 か所で答える共有 resolver。
+       自動 merge に使ってよいのは EXACT / ALIAS_EXACT / FOLDED_EXACT だけで、
+       fix445 の前方後方一致（LEGACY_PARTIAL）は **使わない**（「少女」と「観覧車の少女」を同一人物にしない）。
+       fix830 不在 / v292Dfix830Off / v292Dfix764Off のときは '' を返す＝このファイルは従来どおり動く。 */
+  function f830AutoMatch(name, names){
+    try {
+      var f = window.__v292Dfix830;
+      if (!f || typeof f.autoMatch !== 'function') return '';
+      return f.autoMatch(name, names, { noPartial: true }) || '';
+    } catch(e){ return ''; }
+  }
+
   function castPartOwner(name){
     try {
       var cs = castNames(), hit = null, n2;
@@ -374,9 +387,14 @@
     name = validName(aliasFix(name));
     if (!name) return;
     if (castNames().indexOf(name) >= 0) return;
+    /* ★fix830: 表記ゆれ（簡体 ↔ 繁体 ↔ 新字体）だけが違う登録済みキャストは同一人物。準登録を作らない。 */
+    if (f830AutoMatch(name, castNames())) return;
     if (!off528() && castPartOwner(name)) return;   // ★fix528b: 登録キャラの名だけ呼び=別人物にしない
     var qs = loadQ();
-    var e = qs[name] || { seen: [], ali: [] };
+    /* ★fix830: 準登録台帳のキーも同じ述語で寄せる（渔师 と 漁師 がカルテ 2 枚に割れるのを止める）。
+       採用するキーは **既存の表示形そのまま**。fold した文字列は 1 バイトも保存しない（fix764 の設計線）。 */
+    var qkey = f830AutoMatch(name, Object.keys(qs)) || name;
+    var e = qs[qkey] || { seen: [], ali: [] };
     /* ★fix528d-b(2026-07-25・おしん指摘の再発条件を潰す):
          「未来のターン番号」を持つ残骸は sf(suspended-future) で【再観測まで注入禁止】にする。
        なぜ一時除外では足りないか: 旧実装は quasiRecent で `last > cur-1` を弾くだけだったので、
@@ -412,7 +430,7 @@
       qDirty = true;
     }
     if ((e.last || 0) < turnIdx){ e.last = turnIdx; qDirty = true; }
-    qs[name] = e;
+    qs[qkey] = e;
     // 台帳の暴走防止: 60ターン以上前が最終登場のエントリは間引く(50件超のときだけ)
     try {
       var keys = Object.keys(qs);

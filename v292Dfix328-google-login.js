@@ -107,12 +107,75 @@
       if (!jwt) return;
       var p = decodeJwt(jwt);
       store({ token: jwt, exp: p.exp||0, email: (p.email||'').toLowerCase(), name: p.name||'', pic: p.picture||'' });
+      f831Reset('logged-in');                          /* ★fix831: ログイン成功で自動更新の抑制を解除 */
       console.log(TAG, 'logged in as', T.email);
       hideGate(); renderUI(); ensureSentinel();
     } catch(e){ console.warn(TAG,'onCredential error', e); }
   }
 
   function prompt(){ try { window.google.accounts.id.prompt(); } catch(e){} }
+
+  /* ★fix831 AUTH_REFRESH_PROMPT_HYGIENE_V1（GPT 裁定 74・2026-09-07）
+     目的は **「静かな更新を保証すること」ではなく、無言の連射をやめること**。
+     背景（READ で確定）: ID トークンの寿命は 1 時間で、refresh token を持つ経路はこの製品に存在しない。
+       それなのに refreshTick は期限切れの間 60 秒ごとに prompt() を撃ち、結果を一切観測していなかった。
+       One Tap / FedCM は閉じられると指数的なクールダウンに入るので、この連射は更新を助けるどころか
+       One Tap を長時間封じる方向に働く。
+     契約:
+       ・再試行は 10 分以上あける（**callback が来ない環境でも**この 1 点だけで連射は止まる）
+       ・表示されなかった理由を console に出す（新しい永続 telemetry は作らない）
+       ・連続で表示されない / 試行が上限に達したら **ユーザー操作があるまで停止**
+       ・page が hidden のときは撃たない
+       ・状態は page lifetime のメモリのみ（新しい localStorage key 0）
+     kill: localStorage v292Dfix831Off='1' → 旧挙動（毎分 prompt・観測なし）へ戻る */
+  var f831 = { last: 0, notShown: 0, attempts: 0, stopped: null };
+  var F831_MIN_GAP_MS   = 10 * 60 * 1000;   /* 再試行の最小間隔 */
+  var F831_MAX_NOTSHOWN = 3;                /* 「表示されなかった」が続いたら停止 */
+  var F831_MAX_ATTEMPTS = 6;                /* callback が来ない環境の保険（約 1 時間ぶん） */
+  function f831Off(){ return lsGet('v292Dfix831Off') === '1'; }
+  function f831Visible(){ try { return document.visibilityState !== 'hidden'; } catch(e){ return true; } }
+  function f831Reset(why){
+    if (f831.stopped || f831.notShown || f831.attempts){
+      try { console.log(TAG, 'renewal state reset (' + (why || '') + ')'); } catch(e){}
+    }
+    f831.last = 0; f831.notShown = 0; f831.attempts = 0; f831.stopped = null;
+  }
+  function f831Stop(why){
+    if (f831.stopped) return;
+    f831.stopped = why || 'unknown';
+    try { console.warn(TAG, '自動更新を止めました（' + f831.stopped + '）。ログインボタンから手動でログインしてください。'); } catch(e){}
+  }
+  /* 戻り値は診断用の文字列（'prompted' 以外は prompt を呼んでいない） */
+  function promptQuietly(why){
+    if (f831Off()){ prompt(); return 'legacy'; }
+    if (f831.stopped) return 'stopped:' + f831.stopped;
+    if (!f831Visible()) return 'hidden';
+    var now = Date.now();
+    if (f831.last && (now - f831.last) < F831_MIN_GAP_MS) return 'cooldown';
+    f831.last = now;
+    f831.attempts++;
+    if (f831.attempts > F831_MAX_ATTEMPTS){ f831Stop('max-attempts'); return 'stopped:max-attempts'; }
+    try {
+      window.google.accounts.id.prompt(function(n){
+        /* ★この callback は来ないことがある（GIS / FedCM の実装差）。
+             来なくても上の 10 分ギャップと試行上限だけで連射は止まる。ここは理由を足すだけ。 */
+        var shown = true, reason = '';
+        try {
+          var nd = !!(n && typeof n.isNotDisplayed === 'function' && n.isNotDisplayed());
+          var sk = !!(n && typeof n.isSkippedMoment === 'function' && n.isSkippedMoment());
+          shown = !(nd || sk);
+          if (nd && typeof n.getNotDisplayedReason === 'function') reason = String(n.getNotDisplayedReason() || '');
+          else if (sk && typeof n.getSkippedReason === 'function') reason = String(n.getSkippedReason() || '');
+        } catch(e){}
+        if (shown){ f831.notShown = 0; return; }
+        f831.notShown++;
+        try { console.warn(TAG, 'silent renewal not displayed [' + (reason || 'unknown') + '] '
+                                + f831.notShown + '/' + F831_MAX_NOTSHOWN + ' (' + (why || '') + ')'); } catch(e){}
+        if (f831.notShown >= F831_MAX_NOTSHOWN) f831Stop('not-displayed:' + (reason || 'unknown'));
+      });
+    } catch(e){ f831.notShown++; if (f831.notShown >= F831_MAX_NOTSHOWN) f831Stop('prompt-threw'); }
+    return 'prompted';
+  }
   function signOut(){ try { window.google.accounts.id.disableAutoSelect(); } catch(e){} clear(); renderUI(); maybeGate(); }
 
   /* ─── 番兵cfg（fix247のゲート通過用・Googleモードでも必要） ─── */
@@ -225,12 +288,12 @@
     if (!enabled()) return;
     if (!workerReady){ checkWorker(function(){ if (workerReady) boot(); }); return; }
     if (!valid()){
-      // 期限切れ/未ログイン: 自動選択が効くなら静かに再発行を試みる
-      if (T) { initGis(function(){ prompt(); }); }
+      // 期限切れ/未ログイン: 自動選択が効くなら静かに再発行を試みる（★fix831: 連射しない・結果を見る）
+      if (T) { initGis(function(){ promptQuietly('expired'); }); }
       maybeGate();
     } else {
-      // 残り5分を切ったら先回りで更新
-      if ((T.exp*1000) < (Date.now()+5*60*1000)) initGis(function(){ prompt(); });
+      // 残り5分を切ったら先回りで更新（★fix831: ここも同じ hygiene を通す）
+      if ((T.exp*1000) < (Date.now()+5*60*1000)) initGis(function(){ promptQuietly('pre-expiry'); });
     }
   }
   setInterval(refreshTick, 60*1000);
@@ -239,7 +302,12 @@
 
   /* ─── 外部(fix399の同期UI等)からログインを促すAPI ─── */
   window.__v292Dfix328api = {
-    login: function(){ try { if (!enabled()) return; var g=document.getElementById('g250-gate'); if(g) g.remove(); checkWorker(function(){ initGis(function(){ showGate(); }); }); } catch(e){} },
+    login: function(){ try { if (!enabled()) return; f831Reset('user-login-request'); var g=document.getElementById('g250-gate'); if(g) g.remove(); checkWorker(function(){ initGis(function(){ showGate(); }); }); } catch(e){} },
+    f831: function(){ return { off: f831Off(), last: f831.last, notShown: f831.notShown, attempts: f831.attempts, stopped: f831.stopped,
+                               minGapMs: F831_MIN_GAP_MS, maxNotShown: F831_MAX_NOTSHOWN, maxAttempts: F831_MAX_ATTEMPTS }; },
+    /* 診断口（fixture / 手動確認用）。hygiene の gate は全部通るので、最悪でも prompt 1 回で止まる。 */
+    f831Prompt: function(why){ try { return promptQuietly(why || 'diag'); } catch(e){ return 'threw'; } },
+    f831Reset: function(){ try { f831Reset('diag'); return true; } catch(e){ return false; } },
     email: function(){ return (T && T.email) || ''; },
     valid: function(){ return valid(); },
     enabled: function(){ return enabled(); },
@@ -254,7 +322,7 @@
       if (!workerReady){ console.log(TAG,'proxy not v4(google) yet — dormant, no gate'); return; }
       renderUI();
       if (valid()){ hideGate(); initGis(); }
-      else { initGis(function(){ prompt(); }); maybeGate(); }
+      else { initGis(function(){ promptQuietly('boot'); }); maybeGate(); }
       console.log(TAG, 'loaded — worker v4 ready, ' + (valid()?('logged in: '+T.email):'awaiting login'));
     });
   }
