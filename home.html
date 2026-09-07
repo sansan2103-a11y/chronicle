@@ -314,17 +314,17 @@
      配置 = home の既存 story lifecycle / protection 群（fix654/fix697/fix587/fix710 …）の**後**、
             将来の Scenario caller（下のインライン home ロジック）の**前**。既存 script の並び替えは 0。
      index.html には載せない（Story 生成境界の owner は home 側）。kill = v292Dfix819Off='1'。 -->
-<script src="v292Dfix819-story-instantiator.js?cb=20260906-fix822"></script>
+<script src="v292Dfix819-story-instantiator.js?cb=20260907-schema3"></script>
 <!-- ★★fix820 SCENARIO_ORIGINAL_STORE_V1（GPT 裁定 2026-09-06 `FIX820_DEPLOY_DORMANT = GO`）
      「遊んでも絶対に原本が変わらない箱」。Story とは別 entity の local store。
      **載せるだけ。UI caller 0・Owner 操作から到達不能。**
      配置 = fix819 の直後・将来の Scenario UI / caller より前（依存ではなく読み順のため）。
      index.html には載せない（index には fix246 の LS ラッパ・S・features.js が居る）。
      kill = v292Dfix820Off='1'。 -->
-<script src="v292Dfix820-scenario-original-store.js?cb=20260906-fix822"></script>
+<script src="v292Dfix820-scenario-original-store.js?cb=20260907-schema3"></script>
 <!-- v292Dfix823: SEED_EXPANSION_V1 Scenario Seed Adapter（dormant・UI caller 0・kill v292Dfix823Off）。fix436+fix335 の再利用で
      Scenario Original の空欄だけを埋める。transport は実 fix247 runtime authority のみ（home には fix247 が無いので現状は常に AI_UNAVAILABLE = fail-closed）。 -->
-<script src="v292Dfix823-scenario-seed-adapter.js?cb=20260906-fix823"></script>
+<script src="v292Dfix823-scenario-seed-adapter.js?cb=20260907-schema3"></script>
 <script>
 (function(){
   'use strict';
@@ -2566,6 +2566,6 @@
 <!-- v292Dfix825（SCENARIO_ORIGINAL_UI_V1・GPT 裁定 2026-09-06(31)(32)）: 原本ビュー。home 専用（index には載せない）。
      依存 = fix819/fix820/fix823（上）・fix247（AI 可否の runtime authority・呼び出し時にだけ見る）・__chronicleHome（inline script）。
      dormant: #scBtn が hidden の間は Owner から到達不能。kill: localStorage v292Dfix825Off='1'。 -->
-<script src="v292Dfix825-scenario-ui.js?cb=20260906-fix825"></script>
+<script src="v292Dfix825-scenario-ui.js?cb=20260907-schema3"></script>
 </body>
 </html>

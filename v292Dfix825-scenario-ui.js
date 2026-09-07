@@ -39,17 +39,24 @@
   'use strict';
   if (window.__v292Dfix825) return;
   var TAG = '[v292Dfix825:scenario-ui]';
-  var VERSION = 'v292Dfix825-20260906-ui-v1.0';
+  var VERSION = 'v292Dfix825-20260907-ui-v1.1';
   var SCENE_FIELDS = ['lore', 'loc', 'obj', 'tone'];
-  var HERO_FIELDS  = ['name', 'desc'];
-  var NPC_FIELDS   = ['name', 'desc', 'personality', 'coreDesire', 'coreFear', 'wound'];
+  var HERO_FIELDS  = ['name', 'desc', 'gender'];
+  var NPC_FIELDS   = ['name', 'desc', 'personality', 'coreDesire', 'coreFear', 'wound', 'gender'];
+  /* ★v1.1 SCENARIO_SCHEMA_V3 = GENDER_ONLY（GPT 裁定 56）
+     UI は 女性 / 男性 / 未設定 の 3 択。**canonical へ書くのは 2 値だけ**で、
+     「未設定」は空文字のまま持ち、fix820 が key ごと落とす（'未設定' という string は保存しない）。
+     index の設定画面の性別ラジオ（値 = 女性 / 男性 / 空）と値域を揃える。
+     🌱 は gender を書き換えない（fix823 が writable:false の確定情報として扱う）。 */
+  var GENDER_FIELD  = 'gender';
+  var GENDER_VALUES = ['女性', '男性'];
   var LABEL = {
     title: 'タイトル', lore: '世界観メモ', loc: '現在の場所', obj: '物語の前提・目的', tone: '文体・雰囲気',
-    heroName: '主人公の名前', heroDesc: '主人公の説明（性格・外見・立場）',
+    heroName: '主人公の名前', heroDesc: '主人公の説明（性格・外見・立場）', heroGender: '主人公の性別',
     startCondition: '開始時の状況（物語の最初の場面・配置・直前の出来事。1〜3文）',
     startRules: '開始ルール（作者が定めた約束。物語全体で持続する）'
   };
-  var NPC_LABEL = { name: '名前', desc: '外見・立場', personality: '性格特性', coreDesire: '核心的欲求', coreFear: '核心的恐怖', wound: '傷・過去' };
+  var NPC_LABEL = { name: '名前', desc: '外見・立場', personality: '性格特性', coreDesire: '核心的欲求', coreFear: '核心的恐怖', wound: '傷・過去', gender: '性別' };
   var DEFAULT_TITLE = '新しい物語';
 
   /* ---------- deps（呼ぶだけ・無ければ機能単位で disabled） ---------- */
@@ -192,6 +199,9 @@
       '.sc-f label{font-size:11px;color:var(--dim);letter-spacing:.04em}' +
       '.sc-f input,.sc-f textarea{background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;resize:vertical}' +
       '.sc-f textarea{min-height:64px}' +
+      '.sc-grow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:6px 0}' +
+      '.sc-g{display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer}' +
+      '.sc-g-none{opacity:.75}' +
       '.sc-sec{grid-column:1/-1;margin-top:8px;font-size:11px;letter-spacing:.1em;color:var(--dim);border-top:1px solid var(--line);padding-top:10px;display:flex;justify-content:space-between;align-items:center}' +
       '.sc-npc{grid-column:1/-1;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel)}' +
       '.sc-npc summary{cursor:pointer;font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:center}' +
@@ -254,6 +264,20 @@
              : '<input id="' + id + '" type="text" data-sc-field="' + esc(path) + '" value="' + esc(v) + '">') +
       (path === 'startRules' ? '<div class="sc-cnt" data-sc-cnt="startRules"></div>' : '') + '</div>';
   }
+  /* ★性別は 3 択ラジオ。value='' が「未設定」（保存時に key ごと落ちる） */
+  function genderField(path, label){
+    var cur = getPath(path);
+    var nm = 'scg_' + path.replace(/[^a-zA-Z0-9]/g, '_');
+    var opts = '';
+    for (var i = 0; i < GENDER_VALUES.length; i++){
+      var v = GENDER_VALUES[i];
+      opts += '<label class="sc-g"><input type="radio" name="' + nm + '" data-sc-gender="' + esc(path) + '" value="' + esc(v) + '"'
+            + (cur === v ? ' checked' : '') + '>' + esc(v) + '</label>';
+    }
+    opts += '<label class="sc-g sc-g-none"><input type="radio" name="' + nm + '" data-sc-gender="' + esc(path) + '" value=""'
+          + (GENDER_VALUES.indexOf(cur) < 0 ? ' checked' : '') + '>未設定</label>';
+    return '<div class="sc-f"><label>' + esc(label) + '</label><div class="sc-grow">' + opts + '</div></div>';
+  }
   function getPath(path){
     var p = path.split('.'), o = S.draft;
     for (var i = 0; i < p.length; i++){ if (o == null) return ''; o = o[p[i]]; }
@@ -279,6 +303,7 @@
       '<div class="sc-sec"><span>主人公</span></div>' +
       field('cast.hero.name', LABEL.heroName, false, false) +
       field('cast.hero.desc', LABEL.heroDesc, true, true) +
+      genderField('cast.hero.' + GENDER_FIELD, LABEL.heroGender) +
       '<div class="sc-sec"><span>NPC（' + d.cast.npcs.length + ' 人' + (d.cast.npcs.length ? '' : '・🎲 全部おまかせ なら 2 人生成') + '）</span>' +
       '<button class="sc-btn" data-sc-act="npcAdd">＋ NPC を追加</button></div>';
     for (var n = 0; n < d.cast.npcs.length; n++){
@@ -286,6 +311,7 @@
         '<button class="sc-btn sc-danger" data-sc-npcdel="' + n + '">この NPC を削除</button></summary><div class="sc-form">';
       for (var k = 0; k < NPC_FIELDS.length; k++){
         var f = NPC_FIELDS[k];
+        if (f === GENDER_FIELD){ html += genderField('cast.npcs.' + n + '.' + f, NPC_LABEL[f]); continue; }
         html += field('cast.npcs.' + n + '.' + f, NPC_LABEL[f], f !== 'name', f !== 'name');
       }
       html += '</div></details>';
@@ -547,6 +573,15 @@
     if (/^cast\.npcs\.\d+\.name$/.test(path)){ var sum = t.closest('details.sc-npc'); if (sum){ var sp = sum.querySelector('summary span'); var i = +path.split('.')[2]; if (sp) sp.textContent = 'NPC ' + (i + 1) + (trim(t.value) ? '：' + t.value : '（名前なし）'); } }
     refreshEdit();
   }
+  /* 性別ラジオ（change でも input でも同じ経路。値は 女性 / 男性 / ''） */
+  function onRootGender(e){
+    var t = e.target; var path = t && t.getAttribute && t.getAttribute('data-sc-gender');
+    if (!path || !t.checked) return;
+    var v = str(t.value);
+    if (v && GENDER_VALUES.indexOf(v) < 0) return;          /* 値域外は書かない（fail-closed） */
+    if (getPath(path) === v) return;
+    setPath(path, v); bump(); refreshEdit();
+  }
   function wire(){
     if (S.wired) return;
     if (!document.body) return;
@@ -557,6 +592,7 @@
     injectStyle();
     root.addEventListener('click', onRootClick, false);
     root.addEventListener('input', onRootInput, false);
+    root.addEventListener('change', onRootGender, false);
     btn.addEventListener('click', function(){ if (S.view === 'LIST') openList(); else toStories(); }, false);
     S.wired = true;
     try { console.log(TAG, 'loaded (wired to #scBtn/#scView; entry ' + (btn.hidden ? 'hidden=dormant' : 'visible') + ')'); } catch(e){}

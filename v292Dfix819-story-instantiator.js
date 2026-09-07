@@ -55,8 +55,13 @@
 
   /* ---- whitelist（GPT 裁定 SCENARIO_PROJECTION）---- */
   var SCENE_FIELDS = ['lore', 'loc', 'obj', 'tone'];
-  var HERO_FIELDS  = ['name', 'desc'];
-  var NPC_FIELDS   = ['name', 'desc', 'personality', 'coreDesire', 'coreFear', 'wound'];
+  var HERO_FIELDS  = ['name', 'desc', 'gender'];
+  var NPC_FIELDS   = ['name', 'desc', 'personality', 'coreDesire', 'coreFear', 'wound', 'gender'];
+  /* ★v1.2 FIX819_GENDER_PROJECTION（GPT 裁定 56）: Scenario Original の gender を Story の
+     cast.hero.gender / cast.npcs[i].gender へ **そのまま** 写す。新しい runtime authority は作らない
+     （index 側の既存 consumer = 設定画面の性別ラジオと prompt seed がそのまま読む）。
+     空なら key を作らない（未設定 = key absent）。**genderMap への write は 0**（fix54 の mirror 責務のまま）。
+     voice は projection しない（V3 の canonical field ではない）。 */
   /* ★NPC の wound は「cast の初期定義フィールド」としてのみ許可。
      fix190 の永続「傷」を projection する意味では **ない**（GPT 明示）。 */
 
@@ -226,7 +231,7 @@
   }
 
   window.__v292Dfix819 = {
-    version: 'v292Dfix819-20260906-primitive-v1.1',
+    version: 'v292Dfix819-20260907-primitive-v1.2',
     /* 純関数（テスト用・書込 0） */
     project: function(input, runtime){ return project(input, runtime); },
     isOccupied: isOccupied,

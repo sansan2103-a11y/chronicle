@@ -72,13 +72,19 @@
   'use strict';
   if (window.__v292Dfix820) return;
   var TAG = '[v292Dfix820:scenario-original-store]';
-  var VERSION = 'v292Dfix820-20260906-store-v1.2';
+  var VERSION = 'v292Dfix820-20260907-store-v1.3';
 
   var META_KEY    = 'chr6_scenario_meta';
   var KEY_PREFIX  = 'chr6_scenario_';
   var STORY_META  = 'chr6_slots_meta';       /* READ 専用（ghost 診断の材料。membership authority ではない） */
   var STORY_BODY_PREFIX = 'chr6_slot_';      /* READ 専用（R3 gate の authority = 実在する Story 本体キー） */
-  var SCHEMA_VERSION = 2;                    /* v1.2: BUMP（startRules を accepted BODY field に追加） */
+  var SCHEMA_VERSION = 3;                    /* v1.3: BUMP（cast.*.gender を accepted BODY field に追加・GPT 裁定 56） */
+  /* ★READ_SUPPORTED_SCHEMA = {2,3}（裁定 45 訂正版 / 裁定 56）。
+     ・read / list は schema 2 をそのまま読む（**migration write 0**）
+     ・Owner が **明示的に保存**したときだけ 2 → 3 へ上がる（exactly once）
+     ・schema 1 と 4 以上は従来どおり SCHEMA_VERSION_MISMATCH で fail-closed（この lane で互換を広げない） */
+  var READ_SCHEMA_VERSIONS = [2, 3];
+  function schemaReadable(v){ return inList(READ_SCHEMA_VERSIONS, v); }
   var START_RULES_MAX_CP = 300;              /* START_RULES_MAX_LENGTH_V1（Unicode code point） */
   var MAX_ID_TRIES = 5;
   var MIN_STORY_ID_LEN = 10;                 /* STORY_ID_FORMAT_ASSUMPTION_V1 */
@@ -87,8 +93,14 @@
   /* ---- whitelist（accepted schema surface。これ以外は 1 つも通さない）---- */
   var TOP_FIELDS   = ['title', 'scene', 'cast', 'startCondition', 'startRules'];
   var SCENE_FIELDS = ['lore', 'loc', 'obj', 'tone'];
-  var HERO_FIELDS  = ['name', 'desc'];
-  var NPC_FIELDS   = ['name', 'desc', 'personality', 'coreDesire', 'coreFear', 'wound'];
+  var HERO_FIELDS  = ['name', 'desc', 'gender'];
+  var NPC_FIELDS   = ['name', 'desc', 'personality', 'coreDesire', 'coreFear', 'wound', 'gender'];
+  /* ★SCENARIO_SCHEMA_V3 = GENDER_ONLY（裁定 56）。
+     canonical 値は 2 値だけ。「未設定」は **key absent** で表し、'未設定' という string は保存しない。
+     index の既存 authority（設定画面の性別ラジオ = 女性 / 男性 / 空）と完全一致させる。
+     voice は V3 の canonical field ではない（裁定 42 の voice 部分は SUPERSEDED）。 */
+  var GENDER_FIELD  = 'gender';
+  var GENDER_VALUES = ['女性', '男性'];
   var CAST_FIELDS  = ['hero', 'npcs'];
   var META_FIELDS  = ['scenarioId', 'title', 'schemaVersion', 'createdAt', 'updatedAt'];
   /* ★npc.wound は「cast の初期定義フィールド」。fix190 の永続「傷」ではない（fix819 から継続） */
@@ -269,7 +281,11 @@
           if (hv != null && typeof hv !== 'string') return err('NOT_STRING', 'cast.hero.' + hk[i]);
         }
         for (i = 0; i < HERO_FIELDS.length; i++){
-          var h2 = trim(srcCast.hero[HERO_FIELDS[i]]); if (h2) hero[HERO_FIELDS[i]] = h2;
+          var h2 = trim(srcCast.hero[HERO_FIELDS[i]]);
+          if (!h2) continue;                                   /* 空 = key を作らない（未設定） */
+          if (HERO_FIELDS[i] === GENDER_FIELD && !inList(GENDER_VALUES, h2))
+            return err('INVALID_ENUM', 'cast.hero.gender');    /* ★write 0（黙って落とさない） */
+          hero[HERO_FIELDS[i]] = h2;
         }
       }
       if (srcCast.npcs !== undefined){
@@ -285,7 +301,11 @@
           }
           for (i = 0; i < NPC_FIELDS.length; i++){
             var nv = trim(src[NPC_FIELDS[i]]);
-            if (nv){ o[NPC_FIELDS[i]] = nv; if (NPC_FIELDS[i] === 'name') any = true; }
+            if (!nv) continue;                                 /* 空 = key を作らない（未設定） */
+            if (NPC_FIELDS[i] === GENDER_FIELD && !inList(GENDER_VALUES, nv))
+              return err('INVALID_ENUM', 'cast.npcs[' + n + '].gender');   /* ★write 0 */
+            o[NPC_FIELDS[i]] = nv;
+            if (NPC_FIELDS[i] === 'name') any = true;
           }
           if (!any) return err('NPC_WITHOUT_NAME', n);
           npcs.push(o);
@@ -410,13 +430,17 @@
     try { body = JSON.parse(raw); } catch(e){ return err('BODY_PARSE_FAILED', id); }
     if (!isObj(body)) return err('BODY_NOT_OBJECT', id);
     if (String(body.scenarioId) !== id) return err('SCENARIO_ID_MISMATCH', { meta: id, body: body.scenarioId });
-    if (body.schemaVersion !== SCHEMA_VERSION) return err('SCHEMA_VERSION_MISMATCH', body.schemaVersion);
-    if (me.schemaVersion !== SCHEMA_VERSION) return err('SCHEMA_VERSION_MISMATCH', me.schemaVersion);
+    /* ★v1.3: READ_SUPPORTED_SCHEMA = {2,3}。schema 2 はそのまま読む（**write 0**・自動 migration 0）。
+       返す schemaVersion は **その record が実際に持っている版**（現行版に見せかけない）。 */
+    if (!schemaReadable(body.schemaVersion)) return err('SCHEMA_VERSION_MISMATCH', body.schemaVersion);
+    if (!schemaReadable(me.schemaVersion)) return err('SCHEMA_VERSION_MISMATCH', me.schemaVersion);
+    if (body.schemaVersion !== me.schemaVersion)
+      return err('SCHEMA_VERSION_MISMATCH', { meta: me.schemaVersion, body: body.schemaVersion });
 
     var out = clone({
       scenarioId: id,
       title: me.title == null ? '' : String(me.title),
-      schemaVersion: SCHEMA_VERSION,
+      schemaVersion: body.schemaVersion,
       createdAt: me.createdAt == null ? null : me.createdAt,
       updatedAt: me.updatedAt == null ? null : me.updatedAt,
       scene: isObj(body.scene) ? body.scene : {},
@@ -466,7 +490,9 @@
     try { oldBody = JSON.parse(snapBody); } catch(e){ return err('BODY_PARSE_FAILED', id); }
     if (!isObj(oldBody)) return err('BODY_NOT_OBJECT', id);
     if (String(oldBody.scenarioId) !== id) return err('SCENARIO_ID_MISMATCH', { meta: id, body: oldBody.scenarioId });
-    if (oldBody.schemaVersion !== SCHEMA_VERSION) return err('SCHEMA_VERSION_MISMATCH', oldBody.schemaVersion);
+    /* ★v1.3: schema 2 の原本も編集できる。**この explicit save のときだけ** schemaVersion が 3 へ上がる
+       （bodyOf / meta が SCHEMA_VERSION を書く）。read / list では 1 バイトも書き換えない。 */
+    if (!schemaReadable(oldBody.schemaVersion)) return err('SCHEMA_VERSION_MISMATCH', oldBody.schemaVersion);
 
     var snapMeta = m.raw;
     var wroteBody = false;
@@ -595,7 +621,9 @@
   function selfCheck(){
     var out = { version: VERSION, schemaVersion: SCHEMA_VERSION, off: off(), writes: 0,
                 storyIdGate: storyIdGate(), meta: null, orphanBodies: [], orphanMeta: [],
-                legacySchemaRecords: [],              /* v1.2 deploy gate の材料: schemaVersion !== 現行 の meta entry */
+                readSchemaVersions: READ_SCHEMA_VERSIONS.slice(),
+                legacySchemaRecords: [],              /* 読めない版（1 や 4 以上）= fail-closed 対象 */
+                upgradableSchemaRecords: [],          /* 読めるが現行より古い版（= 2）。**自動では上げない** */
                 keyInvariantSample: keyInvariant(keyFor(newScenarioId())),
                 notes: [] };
     var m = readMetaRaw();
@@ -607,7 +635,11 @@
         var id = String(e.scenarioId == null ? '' : e.scenarioId);
         known[keyFor(id)] = 1;
         if (id && lsg(keyFor(id)) == null) out.orphanMeta.push(id);
-        if (e.schemaVersion !== SCHEMA_VERSION) out.legacySchemaRecords.push({ scenarioId: id, schemaVersion: e.schemaVersion === undefined ? null : e.schemaVersion });
+        if (e.schemaVersion !== SCHEMA_VERSION){
+          var row = { scenarioId: id, schemaVersion: e.schemaVersion === undefined ? null : e.schemaVersion };
+          if (schemaReadable(e.schemaVersion)) out.upgradableSchemaRecords.push(row);
+          else out.legacySchemaRecords.push(row);
+        }
       }
       try {
         for (i = 0; i < localStorage.length; i++){
@@ -628,8 +660,12 @@
       out.notes.push('orphan を検出したが **自動修復しない**（報告のみ）。');
     }
     if (out.legacySchemaRecords.length){
-      out.notes.push('LEGACY_SCHEMA_RECORDS: 現行 schemaVersion と異なる Scenario record が存在する。'
+      out.notes.push('LEGACY_SCHEMA_RECORDS: READ_SUPPORTED_SCHEMA の外にある Scenario record が存在する。'
                    + '自動 migration はしない（read/edit は SCHEMA_VERSION_MISMATCH で fail-closed）。migration 裁定が必要。');
+    }
+    if (out.upgradableSchemaRecords.length){
+      out.notes.push('UPGRADABLE_SCHEMA_RECORDS: schema 2 の record は **そのまま読める**。'
+                   + 'Owner が明示的に保存したときだけ 3 へ上がる（read/list の migration write は 0）。');
     }
     out.ok = out.storyIdGate.ok && (!m.ok ? false : true);
     return out;
@@ -663,6 +699,7 @@
       return { off: off(), metaKey: META_KEY, keyPrefix: KEY_PREFIX, schemaVersion: SCHEMA_VERSION,
                minStoryIdLen: MIN_STORY_ID_LEN, maxKeyRun: MAX_RUN, maxIdTries: MAX_ID_TRIES,
                startRulesMaxCodePoints: START_RULES_MAX_CP,
+               genderValues: GENDER_VALUES.slice(), readSchemaVersions: READ_SCHEMA_VERSIONS.slice(),
                whitelist: { top: TOP_FIELDS.slice(), scene: SCENE_FIELDS.slice(), hero: HERO_FIELDS.slice(),
                             npc: NPC_FIELDS.slice(), meta: META_FIELDS.slice() },
                uiWired: false, indexLoaded: false };

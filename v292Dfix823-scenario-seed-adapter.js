@@ -47,7 +47,7 @@
   'use strict';
   if (window.__v292Dfix823) return;
   var TAG = '[v292Dfix823:scenario-seed-adapter]';
-  var VERSION = 'v292Dfix823-20260906-adapter-v1.2';   /* v1.1: 裁定 26 slot 維持 / v1.2: 裁定 27 FIX823_TRANSPORT_AVAILABILITY = ACTUAL_PROXY_RUNTIME_ONLY */
+  var VERSION = 'v292Dfix823-20260907-adapter-v1.3';   /* v1.1: 裁定 26 slot 維持 / v1.2: 裁定 27 FIX823_TRANSPORT_AVAILABILITY = ACTUAL_PROXY_RUNTIME_ONLY */
   var MODES = { EXPAND_EXISTING: 'EXPAND_EXISTING', OMAKASE_CREATE: 'OMAKASE_CREATE' };
   var OMAKASE_DEFAULT_NPC = 2;          /* fix436 NEW_NPC_COUNT と同じ既定（OMAKASE_CREATE 専用） */
   var SCENE_FIELDS = ['lore', 'loc', 'obj', 'tone'];
@@ -62,6 +62,15 @@
     { key: 'tone',     label: '文体・雰囲気',                  get: function(s){ return s.scene.tone; } }
   ];
   var NPC_LABEL = { name: '名前', desc: '外見・立場', personality: '性格特性', coreDesire: '核心的欲求', coreFear: '核心的恐怖', wound: '傷・過去' };
+  /* ★v1.3 FIX823_GENDER_AI_WRITE = 0（GPT 裁定 56）
+     gender は **AI に書かせない**（自由文字列で INVALID_ENUM を作らせない）。
+     ただし Owner が設定済みなら fix436 の buildFillPrompt へ **確定情報（LOCKED context）** として渡し、
+     他の欄の補完が性別と矛盾しないようにする。fix436 の DOM 版 collectFields と key / label / writable を揃える
+     （heroGender / npcN_gender・writable:false → applyFill は構造的に書かない）。
+     ★これが無いと 🌱「全採用」で Owner の選んだ性別が消える（fix825 の adopt は draft を候補で置き換えるため）。 */
+  var GENDER_FIELD = 'gender';
+  var HERO_GENDER_KEY = 'heroGender';
+  var HERO_GENDER_LABEL = '主人公の性別';
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix823Off') === '1'; }
@@ -87,9 +96,11 @@
     var i, j;
     for (i = 0; i < SCENE_FIELDS.length; i++) out.scene[SCENE_FIELDS[i]] = trim(scene[SCENE_FIELDS[i]]);
     for (i = 0; i < HERO_FIELDS.length; i++) out.cast.hero[HERO_FIELDS[i]] = trim(hero[HERO_FIELDS[i]]);
+    out.cast.hero[GENDER_FIELD] = trim(hero[GENDER_FIELD]);          /* ★LOCKED（AI は書かない） */
     for (i = 0; i < npcs.length; i++){
       var src = isObj(npcs[i]) ? npcs[i] : {}, o = {};
       for (j = 0; j < NPC_FIELDS.length; j++) o[NPC_FIELDS[j]] = trim(src[NPC_FIELDS[j]]);
+      o[GENDER_FIELD] = trim(src[GENDER_FIELD]);                     /* ★LOCKED */
       out.cast.npcs.push(o);
     }
     return out;
@@ -103,6 +114,9 @@
       var d = SCALAR_MAP[i], v = d.get(s);
       fields.push({ key: d.key, label: d.label, value: v, filled: v.length > 0, writable: true, el: null });
     }
+    /* ★主人公の性別 = 読み取り専用の確定情報（writable:false・fix436 と同じ扱い） */
+    var hg = trim(s.cast.hero[GENDER_FIELD]);
+    fields.push({ key: HERO_GENDER_KEY, label: HERO_GENDER_LABEL, value: hg, filled: hg.length > 0, writable: false, el: null });
     var npcCount = s.cast.npcs.length;
     if (mode === MODES.OMAKASE_CREATE && npcCount === 0) npcCount = OMAKASE_DEFAULT_NPC;   /* ★ OMAKASE_CREATE だけ */
     for (i = 0; i < npcCount; i++){
@@ -111,6 +125,10 @@
         var f = NPC_FIELDS[j], nv = trim(src[f]);
         fields.push({ key: 'npc' + (i + 1) + '_' + f, label: 'NPC' + (i + 1) + 'の' + NPC_LABEL[f], value: nv, filled: nv.length > 0, writable: true, el: null });
       }
+      /* ★NPC の性別も読み取り専用の確定情報（writable:false） */
+      var ngv = trim(src[GENDER_FIELD]);
+      fields.push({ key: 'npc' + (i + 1) + '_' + GENDER_FIELD, label: 'NPC' + (i + 1) + 'の性別',
+                    value: ngv, filled: ngv.length > 0, writable: false, el: null });
     }
     /* startCondition: 空欄なら AI fill 可 */
     fields.push({ key: 'startCondition', label: '開始時の状況（物語の最初の場面・配置・直前の出来事。1〜3文）', value: s.startCondition, filled: s.startCondition.length > 0, writable: true, el: null });
@@ -187,6 +205,7 @@
     for (var k in sc){ if (sc[k]) out.scene[k] = sc[k]; }
     var hn = val('heroName'), hd = val('heroDesc');
     if (hn) out.cast.hero.name = hn; if (hd) out.cast.hero.desc = hd;
+    var hgv = val(HERO_GENDER_KEY); if (hgv) out.cast.hero[GENDER_FIELD] = hgv;   /* ★LOCKED をそのまま戻す */
     /* NPC（裁定 26）: fields の npcN_* を N 順に **slot をそのまま**再構成する。name が無くても slot は消さない
        （EXISTING_NPC_SLOT_DELETION_BY_EXPANSION = FORBIDDEN）。name の無い slot は namelessSlots として報告するだけ。
        slot 数は toFields が決めた数（EXPAND_EXISTING = base の npcs 数 / OMAKASE_CREATE = base 0 なら 2） */
