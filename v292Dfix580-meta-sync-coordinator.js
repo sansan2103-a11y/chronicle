@@ -232,7 +232,30 @@
   function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function lsSet(k, v){ try { localStorage.setItem(k, String(v)); return true; } catch(e){ return false; } }
 
-  function rev(){ var n = +(lsGet(REV_KEY) || 0); return (n === n && n >= 0) ? n : 0; }
+  /* ★★v292Dfix826 F1（GPT裁定52 `FIX580_REV_AUTHORITY_V1 = MONOTONIC_MAX`）:
+     home 側の同期は `v292Dfix402_baseRev` だけを進める（home に fix580 は載っていない）。
+     一方 index の put は この rev() だけを baseRev として送るため、home で同期した直後に
+     index が保存すると **必ず 1 つ古い baseRev を送り、サーバが fork する**
+     （2026-09-07 Incident 2 の実因 `BASE_REV_AUTHORITY_SPLIT`）。
+     そこで **より新しい trusted package revision** を採用する。
+       ・read only（ここでは localStorage を書かない）
+       ・小さい方へ寄らない（rollback 0）
+       ・story-lane rev（fix750 の preparedServerRev 等）は混ぜない
+     安全条件（裁定 52 §7）: fork 応答や stale pull で 402 が「local package の実体より
+     新しい rev」を持たないこと。これは同 bundle の F2 / F3 が担保する。
+     OFF（v292Dfix826Off='1'）なら従来どおり自前キーだけを見る。 */
+  function rev(){
+    var n = +(lsGet(REV_KEY) || 0);
+    var own = (n === n && n >= 0) ? n : 0;
+    try {
+      var C = window.__v292Dfix826;
+      if (C && !C.off()){
+        var t = C.trustedRev();
+        if (t != null && t > own) return t;
+      }
+    } catch(e){}
+    return own;
+  }
   /* 成功応答でのみ昇格。巻き戻さない（古い応答が遅れて届いても下げない）。 */
   function promoteRev(newRev, why){
     var n = +newRev;

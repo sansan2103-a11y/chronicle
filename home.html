@@ -294,6 +294,15 @@
      観測 = window.__v292Dfix710.status() / .decide()
      ★fix587 より後に置く（__chronicleStoryLifecycle が生えている必要がある）。 -->
 <script src="v292Dfix710-home-delete-autoresume.js?cb=v292Dfix712"></script>
+<!-- ★★v292Dfix826 P0B_REVISION_COHERENCE_BUNDLE_V1（GPT 裁定 52）
+     read-only の判定 module（localStorage を 1 バイトも書かない）。
+       F1 trustedRev() = max(valid v292Dfix580_rev, valid v292Dfix402_baseRev)
+       F2 classifyPut() / mayDestructiveCleanup() … fork を main 成功として扱わない
+       F3 shouldApplyPull() … responseRev < currentKnownRev なら適用しない
+     home / index の両方に載せる（判定 authority を 1 本にするため。ロジック複製禁止）。
+     呼び出し側（home push / f662 / home pull / fix402 pull / fix580 rev）は最小分岐のみ。
+     kill = v292Dfix826Off='1'（全 API が従来相当へ倒れる）。 -->
+<script src="v292Dfix826-revision-coherence.js?cb=20260907-fix826"></script>
 <!-- v292Dfix436 / v292Dfix335（SEED_EXPANSION_V1・GPT 裁定 2026-09-06(25)(27)）: index と同じ file を home にも載せる。
      fix436 = 「種を広げる」engine の公開 pure 関数（buildFillPrompt / parseFillJson / normVal / applyFill / request）を fix823 が再利用する。
      home には UI.randomFill が無いので fix436 は arm されず 30 秒 keeper が空回りして止まる（model call 0 / LS write 0 / DOM 0 = stage 実測）。
@@ -1298,6 +1307,17 @@
         return { ok:false, notes: notes };
       }
       notes.push('☁ 現状をサーバーに保存しました（rev'+(proof.rev==null?'—':proof.rev)+(proof.fork?'・別分岐として保管':'')+'）。');
+      /* ★★v292Dfix826 F2（GPT裁定52）: fork は「main へ控えを取れた」証明にならない。
+         fork のまま古いローカル控えを解放すると、main と整合しない状態でローカルだけ痩せる。
+         destructive cleanup はここで中止し、データは 1 バイトも消さない。
+         OFF（v292Dfix826Off='1'）なら従来どおり。 */
+      var mayGc826 = null;
+      try { mayGc826 = (window.__v292Dfix826) ? window.__v292Dfix826.mayDestructiveCleanup({ ok:true, fork: !!proof.fork, rev: proof.rev }) : null; } catch(e){ mayGc826 = null; }
+      if (mayGc826 === false){
+        notes.push('⚠ 別分岐として保管されたため、古い控えは**何も消していません**（本体側に取り込まれた確証が無いため）。');
+        try { console.warn('[home][v292Dfix826] fork proof: 控えの解放を中止'); } catch(e){}
+        return { ok:false, notes: notes };
+      }
       var gc = f661gc();
       var r = null;
       try { r = gc.retireOldFullDumps({ serverProof: proof, maxUnits: 10 }); } catch(e){ r = null; }
@@ -1349,6 +1369,24 @@
       el('sync').textContent = '☁ 取り込み中…';
       return call({op:'get'}, 40000).then(function(r){
         if(!r || !r.ok || !r.data || !r.data.ls) throw new Error('get');
+        /* ★★v292Dfix826 F3（GPT裁定52）: 応答が届くまでの間に、この端末の別経路が
+           より新しい版を確定させていることがある（実観測: rev69 の pull 応答が
+           rev70 の push 後に適用され、古い状態が local へ戻った）。
+           適用の**直前**に、応答が表す版と現在の trusted 版を比べ、古ければ 1 バイトも書かない。
+           OFF（v292Dfix826Off='1'）なら従来どおり。 */
+        try {
+          if (window.__v292Dfix826 && !window.__v292Dfix826.off()){
+            var respRev826 = (r.rev != null) ? r.rev
+                             : ((r.data && r.data.rev != null) ? r.data.rev : serverRev);
+            var v826 = window.__v292Dfix826.shouldApplyPull(respRev826);
+            if (v826 && v826.apply === false){
+              el('sync').className = 'sync';
+              el('sync').textContent = '☁ 取り込みを見送りました（手元の方が新しい版です）';
+              try { console.warn('[home][v292Dfix826] stale pull 応答を適用せず', JSON.stringify(v826)); } catch(e){}
+              return;
+            }
+          }
+        } catch(e){}
         var ls = r.data.ls, wrote=0, skipped=[], adopted=[];
         /* ★★fix602(1): 墓標バリア。削除済みスロットのキーを書き戻さない。
            ここが無かったせいで、実機では墓標が立った物語の本体が home の取り込みで復活し、
@@ -1862,6 +1900,26 @@
         });
     }).then(function(r){
       if(!r || !r.ok) throw new Error(r&&r.errorCode||'push');
+      /* ★★v292Dfix826 F2（GPT裁定52）: fork 応答を「main へ保存できた」ことにしない。
+         fork の rev は **サーバの現在値**であって、自分の package が main になった証明ではない。
+         ここで baseRev を進めると、次の通常 put が「自分が main を書いた」前提の baseRev を
+         送ることになり、サーバ側 fail-closed の fork 隔離をクライアントがすり抜ける。
+         OFF（v292Dfix826Off='1'）なら従来どおり。 */
+      var c826 = null;
+      try { c826 = (window.__v292Dfix826 && !window.__v292Dfix826.off())
+                     ? window.__v292Dfix826.classifyPut(r) : null; } catch(e){ c826 = null; }
+      if (c826 && c826.kind === 'FORK'){
+        /* baseRev は進めない / baseTs・localTs も「同期済み」にしない（未同期のまま残す） */
+        el('sync').className = 'sync';
+        el('sync').textContent = '☁ 別分岐として保管されました（rev '
+                                 + (c826.serverRev == null ? '—' : c826.serverRev) + '）';
+        try { el('note').innerHTML = '<div class="note">'
+              + esc('サーバ側にすでに新しい版があったため、いまの内容は「別分岐」として保管されました。'
+                  + 'ローカルのデータはそのまま残しています。取り込み（☁ いま取り込む）で最新を確認してください。')
+              + '</div>'; } catch(e){}
+        try { console.warn('[home][v292Dfix826] fork 応答: baseRev を進めない', { serverRev: c826.serverRev }); } catch(e){}
+        return;
+      }
       s('v292Dfix402_baseRev', String(r.rev));
       s('v292Dfix399_baseTs', String(pkg.updatedAt)); s('v292Dfix399_localTs', String(pkg.updatedAt));
       el('sync').textContent = '☁ 上げました（rev '+r.rev+'）';

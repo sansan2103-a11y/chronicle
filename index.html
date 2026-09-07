@@ -31,6 +31,14 @@
      fix569 と同じく最初に置いて native fetch を捕まえる。
      /save の put を経路別に観測し、baseRev の有無と二重発火を数える。リクエストは1バイトも変えない。
      OFF=v292Dfix580Off -->
+<!-- ★★v292Dfix826 P0B_REVISION_COHERENCE_BUNDLE_V1（GPT 裁定 52）
+     read-only の判定 module（localStorage を 1 バイトも書かない）。
+       F1 trustedRev() = max(valid v292Dfix580_rev, valid v292Dfix402_baseRev)
+       F2 classifyPut() / mayDestructiveCleanup()
+       F3 shouldApplyPull()
+     fix580 の rev() がこれを参照するので **fix580 より前**に置く。
+     kill = v292Dfix826Off='1'。 -->
+<script src="v292Dfix826-revision-coherence.js?cb=20260907-fix826"></script>
 <script src="v292Dfix580-meta-sync-coordinator.js?cb=v292Dfix583"></script>
 <!-- fix590: コミット台帳（「送ったけど結果を受け取れていない」を記録する。挙動は変えない） -->
 <script src="v292Dfix590-commit-ledger.js?cb=v292Dfix713"></script>
@@ -54,7 +62,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260906-fix825r';
+  var BUILT = '20260907-fix826';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })

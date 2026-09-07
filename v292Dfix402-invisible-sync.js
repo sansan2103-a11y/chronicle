@@ -547,6 +547,23 @@
     var seq0 = mutationSeq;   // ★fix402d: op:get発行"前"のseqを記録
     return callSave({ op: 'get' }).then(function(r){
       if (r.status !== 200 || !r.json || !r.json.ok || !r.json.data) throw new Error((r.json && r.json.error) || ('HTTP ' + r.status));
+      /* ★★v292Dfix826 F3（GPT裁定52）: 応答が表す版が、いま端末が知っている版より古ければ
+         **package を 1 バイトも適用しない**（revision rollback も 0）。
+         既存の seq / pushing / dirty / turns ガードは版の比較をしていないため、
+         「古い pull 応答が新しい push の後に届く」race を通してしまう（実観測 rev69→rev70）。
+         OFF（v292Dfix826Off='1'）なら従来どおり。 */
+      try {
+        if (window.__v292Dfix826 && !window.__v292Dfix826.off()){
+          var rr826 = (r.json.rev != null) ? r.json.rev
+                      : ((r.json.data && r.json.data.rev != null) ? r.json.data.rev : null);
+          var v826 = window.__v292Dfix826.shouldApplyPull(rr826);
+          if (v826 && v826.apply === false){
+            applying = false;
+            try { console.warn(TAG, '[v292Dfix826] stale pull 応答を適用せず', JSON.stringify(v826)); } catch(e){}
+            return;
+          }
+        }
+      } catch(e){}
       // ★fix402d: 応答受信後・applyPkg"前"に飛行中の変異/push/dirtyを再確認→あればpull中止しpushへ委譲
       if (f402dOn && !force && (mutationSeq !== seq0 || pushing || isDirty())) {
         applying = false;
