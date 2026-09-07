@@ -39,6 +39,12 @@
      fix580 の rev() がこれを参照するので **fix580 より前**に置く。
      kill = v292Dfix826Off='1'。 -->
 <script src="v292Dfix826-revision-coherence.js?cb=20260907-fix826"></script>
+<!-- ★★v292Dfix827 MAT_RECOVERY_UX_V1（GPT 裁定 54・M1 表示 + M2 read-only 診断）
+     未完了の materialization で全ターンが止まっているときだけ理由を表示し、
+     read-only の状態確認（fix750.recoveryStatus 1 回）へ繋ぐ。
+     UI から resume / complete / journalClear / rollback / delete を実行させない。
+     localStorage write 0 / cloud write 0 / auto retry 0。kill = v292Dfix827Off='1'。 -->
+<script src="v292Dfix827-mat-recovery-ux.js?cb=20260907-fix827"></script>
 <script src="v292Dfix580-meta-sync-coordinator.js?cb=v292Dfix583"></script>
 <!-- fix590: コミット台帳（「送ったけど結果を受け取れていない」を記録する。挙動は変えない） -->
 <script src="v292Dfix590-commit-ledger.js?cb=v292Dfix713"></script>
@@ -62,7 +68,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260907-fix826';
+  var BUILT = '20260907-fix827';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -1967,8 +1973,20 @@ const G = {
   /* admission に入れなかったときの唯一の出口。入力を戻し、成功に見せない。 */
   _dadmHold(x, inputEl, text) {
     const A = this._dadm();
-    const msg = (A && typeof A.humanReason === 'function') ? A.humanReason(x)
+    let msg = (A && typeof A.humanReason === 'function') ? A.humanReason(x)
               : 'この操作は行いませんでした（保存の順番待ちに入れませんでした）。';
+    /* ★★v292Dfix827 M1（GPT裁定54）: 未完了の materialization が残って **全ターンが止まっている**
+       ときだけ、専用の説明と「状態を確認」導線を出す。MAT recovery が active であることを
+       authority にしているので、他の Class-D hold を MAT と誤表示しない。
+       自動 resume / 自動 clear は作らない（EXPLAIN + DIAGNOSE のみ）。
+       OFF（v292Dfix827Off='1'）なら従来どおり。 */
+    try {
+      const M827 = window.__v292Dfix827;
+      if (M827 && !M827.off()){
+        const m827 = M827.onHold(x);
+        if (m827 && m827.text) msg = m827.text;
+      }
+    } catch(e){}
     try { if (inputEl && text && !inputEl.value.trim()) inputEl.value = text; } catch(e){}
     try { UI.setStatus(msg, true); } catch(e){}
     try { showToast(msg, true); } catch(e){}
