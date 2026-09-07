@@ -395,6 +395,9 @@
    *     ・正式な pull の収束（supersedeByPull / closeGate('pull-converged')）
    *     ・ユーザーが明示した forceput（この端末をクラウドの正にする）
    * ★pending とは別物。pending は「結果不明」、関門は「結果は分かったが、まだ足並みが揃っていない」。 */
+  /* ★★fix828(P0B_POST_COMMIT_COHERENCE_BUNDLE_V2 / GPT 裁定 61): この bundle だけを止める kill。
+     未設定 = ENABLED。fix590 本体の off（v292Dfix590Off 等）とは別。 */
+  function f828off(){ try { return localStorage.getItem('v292Dfix828Off') === '1'; } catch(e){ return false; } }
   function readGate(){
     try { var g = JSON.parse(lsg(GATE_KEY) || 'null'); return (g && g.reason) ? g : null; }
     catch(e){ return null; }
@@ -420,6 +423,18 @@
     return { ok:true, was: g };
   }
   function gateState(){ return readGate(); }
+  /* ★★fix828 R1: 「いま自動 package put を出してよいか」の唯一の判定口。
+     fix402 / home f662 / fix399 が同じ答えを見る（それぞれが独自に条件を組み立てない）。
+     forceput は Owner の明示操作なので対象外（既存 gateAllows と同じ扱い）。 */
+  function autoPutAllowed(){
+    if (off()) return { ok: true, why: 'ledger-off' };
+    if (f828off()) return { ok: true, why: 'fix828-off' };
+    var g = readGate();
+    if (g) return { ok: false, why: 'gate', reason: g.reason || null,
+                    conflictState: g.conflictState || null, remoteRev: (g.remoteRev == null ? null : +g.remoteRev) };
+    if (hasAwaiting()) return { ok: false, why: 'pending-unresolved' };
+    return { ok: true, why: null };
+  }
   /* ★関門が閉じていても通してよいのは「ユーザーが明示した forceput」だけ。
      fix399 の通常同期は op:'put' なので必ず止まる。home の「☁ いま上げる」は forceput。 */
   function gateAllows(o){
@@ -678,9 +693,28 @@
     var cur = read();
     if (o.fork){
       stats.forks++; stats.forksObserved++;
+      /* ★★fix828 R1(GPT 裁定 61 `R1_EXISTING_GATE_AUTO_PUT_QUARANTINE`):
+         fork を受けたら **次 boot にも残る関門**を開く。新しい marker は作らず既存 gate を使う。
+         2026-09-07 の実害: fork 応答は dirty を解除しないので、以後の mutation ごとに
+         同じ stale base で put し続け（STALE_BASE_FORK_LOOP）、fork rotation が
+         古い復旧枝を押し出した。ここで止める。
+         ・promotion 0 / destructive cleanup 0 / dirty も local data も保持
+         ・解除は「証明済みの収束成功」後だけ（reload・timer・「今は決めない」では閉じない） */
+      var gOpened = false;
+      if (!f828off()){
+        try {
+          if (!readGate()){
+            openGate({ reason: 'fork-unresolved', conflictState: 'forked-stale-base',
+                       remoteRev: (o.serverRev == null ? null : +o.serverRev),
+                       identity: (cur && cur.identity) || null });
+            gOpened = true;
+            stats.gateOpenedOnFork = (stats.gateOpenedOnFork || 0) + 1;
+          }
+        } catch(e){}
+      }
       note({ act:'fork', serverRev: (o.serverRev == null ? null : +o.serverRev),
-             hasLedger: !!cur, source: String(o.source || 'unknown') });
-      return { status:'fork' };
+             hasLedger: !!cur, gateOpened: gOpened, source: String(o.source || 'unknown') });
+      return { status:'fork', gateOpened: gOpened, gateOpen: !!readGate() };
     }
     var resp = o.response || {};
     /* 照合の材料がそろっているか。v25未満の Worker は hashAlg を返さないので従来どおりにする。 */
@@ -753,6 +787,87 @@
        ローカル墓標などを merge 保持した pull は dirty=true のまま（未同期の変更が載っているため）。
      引数は { remoteRev, proof, identity|ns|nsFp, fullyAdoptedRemote } を推奨。
      互換のため数値ひとつでも呼べるが、その場合は**証明なし**として拒否する。 */
+  /* ★★fix828 R1b: pending 不在でも「証明済みの収束」なら gate を閉じる。
+     必要条件（1 つでも欠けたら **gate 維持**）:
+       ① gate が実際に OPEN
+       ② pull apply が成功した後（proof は post-apply のもの）
+       ③ proof.ok === true
+       ④ identity が現行規則で一致
+       ⑤ remoteRev が valid
+       ⑥ gate 側に remoteRev があるなら proof.remoteRev >= gate.remoteRev（stale で閉じない）
+       ⑦ **現在の local package == 取り込んだ remote package**（hash で確認）
+       ⑧ proof 作成後〜closeGate 直前に local が変わっていない（TOCTOU 再確認）
+       ⑨ より新しい pending intent が存在しない
+     戻り: { ok, code|status, ... }。**pending は触らない**。 */
+  function closeGateByPullConvergence(o){
+    o = o || {};
+    if (off()) return { ok:false, code:'off' };
+    if (f828off()) return { ok:false, code:'no-ledger' };            /* kill 時は従来の返り値のまま */
+    var g = readGate();
+    if (!g) return { ok:false, code:'no-ledger' };                   /* ① 関門が無いなら従来どおり */
+    var pf = o.proof;
+    if (!pf || pf.ok !== true){                                      /* ③ */
+      note({ act:'gate-close-rejected', why:'no-proof' });
+      return { ok:false, code:'pull-not-converged', why:(pf && pf.why) || 'no-proof' };
+    }
+    if (o.postApply !== true){                                       /* ② apply 成功後の証明だけ使う */
+      note({ act:'gate-close-rejected', why:'proof-not-post-apply' });
+      return { ok:false, code:'proof-not-post-apply' };
+    }
+    var rRev = (o.remoteRev == null) ? null : +o.remoteRev;          /* ⑤ */
+    if (rRev == null || !isFinite(rRev) || rRev < 0){
+      note({ act:'gate-close-rejected', why:'remote-rev-invalid' });
+      return { ok:false, code:'remote-rev-invalid' };
+    }
+    if (g.remoteRev != null && isFinite(+g.remoteRev) && rRev < +g.remoteRev){   /* ⑥ */
+      note({ act:'gate-close-rejected', why:'remote-rev-stale', gateRev:+g.remoteRev, proofRev:rRev });
+      return { ok:false, code:'remote-rev-stale' };
+    }
+    var idNow = identityOf(o);                                       /* ④ */
+    if (g.identity && idNow == null){
+      stats.identityUnverified++;
+      note({ act:'gate-close-rejected', why:'identity-unverified' });
+      return { ok:false, code:'identity-unverified' };
+    }
+    if (g.identity && idNow && String(g.identity) !== String(idNow)){
+      note({ act:'gate-close-rejected', why:'identity-mismatch' });
+      return { ok:false, code:'identity-mismatch' };
+    }
+    /* ⑦ 現在の local が「取り込んだ remote そのもの」であること。
+       ★呼出側の自己申告 boolean は使わない。fullyAdoptedRemote は supersedeByPull と
+         **同じ規則で証明から導出**する（ローカル差分を抱えたまま閉じさせない）。 */
+    var fully = (pf && typeof pf.fullyAdoptedRemote === 'boolean')
+                ? pf.fullyAdoptedRemote
+                : (pf && pf.retainedLocalDeltaCount === 0 && pf.metaMergedWithLocalDelta === false);
+    if (fully !== true){
+      note({ act:'gate-close-rejected', why:'not-fully-adopted-remote' });
+      return { ok:false, code:'not-fully-adopted-remote' };
+    }
+    if (o.readBackOk !== true){                                      /* 書いた値を読み戻して一致 */
+      note({ act:'gate-close-rejected', why:'read-back-failed' });
+      return { ok:false, code:'read-back-failed' };
+    }
+    /* ⑧ proof 作成後〜closeGate 直前に local が変わっていないことを **その場で** 再確認する。 */
+    if (typeof o.recheckReadBack !== 'function'){
+      note({ act:'gate-close-rejected', why:'recheck-missing' });
+      return { ok:false, code:'recheck-missing' };
+    }
+    var again = null;
+    try { again = o.recheckReadBack(); } catch(e){ again = null; }
+    if (again !== true){
+      note({ act:'gate-close-rejected', why:'local-mutated-after-proof' });
+      return { ok:false, code:'local-mutated-after-proof' };
+    }
+    if (hasAwaiting()){                                              /* ⑨ */
+      note({ act:'gate-close-rejected', why:'newer-pending-exists' });
+      return { ok:false, code:'newer-pending-exists' };
+    }
+    var closed = closeGate('pull-converged');
+    stats.gateClosedByPullConvergence = (stats.gateClosedByPullConvergence || 0) + 1;
+    note({ act:'gate-closed-by-pull-convergence', remoteRev: rRev, was: (closed && closed.was) || null });
+    return { ok:true, status:'gate-closed-by-pull-convergence', remoteRev: rRev,
+             gateClosed: !!(closed && closed.ok), pendingTouched: false };
+  }
   function supersedeByPull(o){
     if (typeof o === 'number' || typeof o === 'string'){
       stats.pullProofRejected++;
@@ -761,7 +876,17 @@
     }
     o = o || {};
     var cur = read();
-    if (!cur) return { ok:false, code:'no-ledger' };
+    if (!cur){
+      /* ★★fix828 R1b（GPT 裁定 62 `R1b_PULL_CONVERGENCE_WITHOUT_LEDGER`）
+         pending が無くても「関門だけが開いている」状態は起こる:
+           local-diverged 分類 → led.clear() → openGate(...)  ← 既存の fix597/599 の lifecycle
+         この状態で adopt-remote（正式 pull）が収束しても、従来は no-ledger で早期 return して
+         **closeGate に到達せず、forceput だけが出口になる deadlock** だった。
+         そこで「pull による現在 state の収束証明が成立した場合の gate 解消 authority」まで広げる。
+         ★`proof.ok` だけでは閉じない（裁定 62 明示）。下の全条件を満たしたときだけ閉じる。
+         ★pending には一切触らない（ここは gate lifecycle だけを扱う）。 */
+      return closeGateByPullConvergence(o);
+    }
     var proofOk = !!(o.proof && o.proof.ok === true);
     if (!proofOk){
       stats.pullProofRejected++;
@@ -1202,6 +1327,10 @@
     supersedeByPullAsync: supersedeByPullAsync,
     /* ★fix599: 決着するまで通常putを止める関門 */
     gateState: gateState,
+    /* ★★fix828 R1 */
+    autoPutAllowed: autoPutAllowed,
+    closeGateByPullConvergence: closeGateByPullConvergence,
+    f828off: f828off,
     openGate: openGate,
     closeGate: closeGate,
     gateAllows: gateAllows,
@@ -1223,7 +1352,7 @@
     /* ★fix596: Worker v25 の commitstate と繋いだので、復帰へ配線済み。 */
     wiredIntoRecovery: true,
     /* ★fix597: GPT裁定 D1〜D3 / ns / pkgTs を反映済み。 */
-    verdictApplied: 'fix599'
+    verdictApplied: 'fix599+fix828'
   };
   /* ---- ★fix597: 旧キーに残っている**生の ns** を、どのページからでも必ず片付ける ----
    * 2026-07-27 の実機で見つけた: fix596 が `v292Dfix596_ns` に ns の生値を保存していた。

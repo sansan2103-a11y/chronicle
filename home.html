@@ -261,7 +261,7 @@
 <!-- ★fix660(B): BackupGC。削除候補を選ぶ層。分類は fix562 が唯一の正なのでその後ろ -->
 <script src="v292Dfix660-backup-gc.js?cb=v292Dfix680"></script>
 <script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix680"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=v292Dfix713"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=20260907-fix828"></script>
 <!-- ★★fix708(STEP3F / GPT裁定 Q1 = CONDITIONAL GO): fix587 の削除トランザクションが
      **live のうちに** canonical hash を確定するために、fix697 の read-only 契約口
      (projectionOf / contentHashOf / shadowRequest) だけを使う。
@@ -1287,7 +1287,34 @@
         f713Note('home:f662-server-backup', over662, 'put', null);
         return Promise.resolve(null);
       }
+      /* ★★fix828 R3(GPT 裁定 61 `R3_F662_TRUSTED_REV_AND_GATE`):
+         ① baseRev は fix826 の trustedRev()（= max(580, 402)）を優先する。
+            402 だけを直読みしていると、index 側で 580 だけが進んだ状態のとき
+            1 つ古い baseRev を送って fork を作る（F662_SINGLE_REV_AUTHORITY_HOLE）。
+            fix826 が居ない / OFF / 値を出せないときは従来どおり 402 へ落ちる。
+         ② **gate が開いている間はこの自動 put を出さない**。
+            trustedRev を直しても、trusted 自体が古いままの局面では結局 stale を送るため、
+            R1 の hold を f662 も必ず尊重する（trustedRev だけ直す実装は不可）。 */
+      var hold662 = null;
+      try {
+        var L662 = window.__v292Dfix590;
+        if (L662 && typeof L662.autoPutAllowed === 'function'){
+          var a662 = L662.autoPutAllowed();
+          if (a662 && a662.ok === false) hold662 = a662.why || 'hold';
+        }
+      } catch(e){}
+      if (hold662){
+        try { console.log('[home:f662]', '自動バックアップ put を保留（' + hold662 + '）'); } catch(e){}
+        return Promise.resolve(null);                          /* 1 バイトも消さない既存契約のまま */
+      }
       var base = +(g('v292Dfix402_baseRev')||0)||0;
+      try {
+        var C662 = window.__v292Dfix826;
+        if (C662 && typeof C662.off === 'function' && !C662.off() && typeof C662.trustedRev === 'function'){
+          var t662 = C662.trustedRev();
+          if (t662 != null && +t662 >= 0) base = +t662;
+        }
+      } catch(e){}
       return call({ op:'put', baseRev: base, pkg: pkg, mid: 'f662:' + base + ':' + Date.now() }, 60000)
         .then(function(j){
           if (!j || j.ok !== true) return null;                 /* 503/エラーは証明にしない */
@@ -1581,6 +1608,32 @@
                   spFn({ remoteRev: +serverRev || 0, proof: proof, ns: nsNow597 }).then(function(sp){
                     try { console.log('[home] 保留中の送信記録をpullで解消:', JSON.stringify(sp)); } catch(e){}
                   });
+                }
+                /* ★★fix828 R1b（GPT 裁定 62）: pending が無くても「関門だけが開いている」ことがある
+                   （local-diverged 分類は pending を消してから gate を開くため）。
+                   そのとき adopt-remote（= この pull）が収束したなら、**証明できた場合だけ**関門を開ける。
+                   ★proof.ok だけでは閉じない。台帳側が
+                     gate OPEN / post-apply / fullyAdoptedRemote / readBackOk / TOCTOU 再確認 /
+                     identity / remoteRev の非 stale / newer pending 0
+                   を全部見る。1 つでも欠けたら関門は維持される。
+                   ★pending には触らない。 */
+                else if (typeof L590.closeGateByPullConvergence === 'function' &&
+                         typeof L590.gateState === 'function' && L590.gateState()){
+                  var recheck828 = function(){
+                    try {
+                      for (var ck in wroteVals){
+                        if (!Object.prototype.hasOwnProperty.call(wroteVals, ck)) continue;
+                        if (g(ck) !== wroteVals[ck]) return false;
+                      }
+                      return true;
+                    } catch(e){ return false; }
+                  };
+                  var ns828 = null;
+                  try { ns828 = (r && r.data && r.data.ns) ? String(r.data.ns) : null; } catch(e){}
+                  var gc828 = L590.closeGateByPullConvergence({
+                    remoteRev: +serverRev || 0, proof: proof, ns: ns828,
+                    postApply: true, readBackOk: readBackOk, recheckReadBack: recheck828 });
+                  try { console.log('[home] 関門(pull収束):', JSON.stringify(gc828)); } catch(e){}
                 }
               } catch(e){}
             } else {

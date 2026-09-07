@@ -200,6 +200,19 @@
   function baseRev(){
     var sr = sharedRev();
     if (sr != null) return sr;
+    /* ★★fix828(GPT 裁定 63 `RAW_REV_SAFETY_CONSUMER_AUDIT`):
+       fix580 が居ない / v292Dfix584Off で共有台帳を切っているときに **raw な 402 単独**で
+       package put の baseRev を決めていた。raw 402 は trusted より低いことがある
+       （今回の事故がまさに 580=80 / 402=79）ので、その 1 本だけを最後の砦にしない。
+       fix826 の trustedRev()（= max(580,402)・読むだけ・巻き戻さない）を先に使い、
+       それも取れないときだけ従来の raw 402 へ落ちる。**write は増やさない**。 */
+    try {
+      var C = window.__v292Dfix826;
+      if (C && typeof C.off === 'function' && !C.off() && typeof C.trustedRev === 'function'){
+        var t = C.trustedRev();
+        if (t != null && +t >= 0) return +t;
+      }
+    } catch(e){}
     return getNum('v292Dfix402_baseRev');
   }
   /* 成功revは**両方**へ書く。共有台帳は巻き戻さない仕様なので、古い値で下げてしまう心配はない。 */
@@ -209,6 +222,95 @@
           if (c && typeof c.promoteRev === 'function') c.promoteRev(+v || 0, 'fix402の同期成功'); } catch(e){}
   }
   function toast(msg){ try { if (window.UI && UI.setStatus) UI.setStatus(msg); } catch(e){} try { console.log(TAG, msg); } catch(e){} }
+
+  /* ================= ★★fix828: P0B_POST_COMMIT_COHERENCE_BUNDLE_V2（GPT 裁定 61） =========
+   * 2026-09-07 の実害:
+   *   ページ破棄の瞬間（pagehide / visibilitychange hidden）に投げた put が **server では成功**したのに、
+   *   その応答を受け取る前に page context が消えて setBaseRev(N) に到達しなかった。
+   *   以後この lane は古い baseRev を送り続け、fork 応答は dirty を解除しないため
+   *   mutation のたびに fork を積み（STALE_BASE_FORK_LOOP）、fork rotation が
+   *   **古い復旧枝を押し出した**。
+   * ここで入れるのは 2 つだけ:
+   *   R1  gate/pending がある間は **自動 package put を 1 本も出さない**（fail-closed）
+   *   R2A 送信の意図を **fetch より前に** fix590 の台帳へ durable に記録し、応答が来たら結果を記録する
+   *       → 応答を失っても、次 boot の照合（fix596）で自分の commit を exact に証明して rev を回復できる
+   * 新しい marker も engine も作らない。既存の fix590 pending と fix599 gate をそのまま使う。
+   * kill: v292Dfix828Off='1' で従来挙動へ戻る。
+   * ======================================================================================= */
+  function f828off(){ return lsGet('v292Dfix828Off') === '1'; }
+  function f590(){ try { return window.__v292Dfix590 || null; } catch(e){ return null; } }
+  function f399x(){ try { return window.__v292Dfix399x || null; } catch(e){ return null; } }
+  /* 自動 put を出してよいか。判定は fix590 に一本化する（ここで条件を組み立て直さない）。 */
+  function autoPutHold(){
+    if (f828off()) return null;
+    var L = f590();
+    if (!L || typeof L.autoPutAllowed !== 'function') return null;   /* 旧 fix590 なら従来どおり */
+    var a = null;
+    try { a = L.autoPutAllowed(); } catch(e){ return null; }
+    if (a && a.ok === false) return (a.why || 'hold');
+    return null;
+  }
+  /* 照合を促す（連射しない）。実際の commitstate 往復は fix399 の reconcileNow が持っている。 */
+  var _f828ReconcileAt = 0;
+  function askReconcile(why){
+    if (f828off()) return false;
+    var X = f399x();
+    if (!X || typeof X.reconcileNow !== 'function') return false;
+    var now = Date.now();
+    if (now - _f828ReconcileAt < 60000) return false;
+    _f828ReconcileAt = now;
+    try { X.reconcileNow(String(why || 'fix828')); return true; } catch(e){ return false; }
+  }
+  function identityArgs828(){
+    var h = authHeaders(), ns = null;
+    try { var L = f590(); if (L && typeof L.knownNsRaw === 'function') ns = L.knownNsRaw(); } catch(e){}
+    return { ns: ns, identity: (h['x-google-id'] || h['x-chronicle-pass'] || null),
+             identityKind: (h['x-google-id'] ? 'google' : 'pass') };
+  }
+  /* ★R2A: **fetch より前に** 意図を durable 記録する。返り値:
+       null                      … 台帳が無い / fix590 が off → 従来どおり送ってよい（fail-open）
+       { blocked:true, code }    … 送ってはいけない（gate / pending / 不変条件違反 / 記録できない）
+       { blocked:false, commitOpId } … 送ってよい */
+  function notePutFirst(op, pkg, base){
+    if (f828off()) return Promise.resolve(null);                 /* この bundle の kill → 従来挙動 */
+    var L = f590();
+    /* ★★fix828(GPT 裁定 62 b): 「明示的に OFF」と「壊れている」を分ける。
+       ・fix590 が **明示 OFF** → 台帳が無い前提の従来挙動（legacy fail-open）
+       ・module 不在 / API 欠落 / notePut throw / hash 失敗 / 永続化不能
+         → **FAIL_CLOSED（put 0）**。「壊れたので OFF 相当として送る」は禁止。 */
+    try { if (L && typeof L.isOff === 'function' && L.isOff()) return Promise.resolve(null); } catch(e){}
+    if (!L) return Promise.resolve({ blocked: true, code: 'ledger-absent' });
+    if (typeof L.notePut !== 'function') return Promise.resolve({ blocked: true, code: 'ledger-api-missing' });
+    var ia = identityArgs828(), opId = null;
+    try { if (typeof L.newCommitOpId === 'function') opId = L.newCommitOpId(); } catch(e){}
+    var args = { pkg: pkg, baseRev: (base == null ? null : base), op: op, pkgTs: pkg && pkg.updatedAt,
+                 ns: ia.ns, identity: ia.identity, identityKind: ia.identityKind, source: 'fix402' };
+    if (opId) args.commitOpId = opId;
+    /* ★同期 throw もここで捕まえる。捕まえないと flush が reject して
+       pushing が true のまま残り、以後の送信が永久に止まる。 */
+    var p;
+    try { p = L.notePut(args); }
+    catch(e){ return Promise.resolve({ blocked: true, code: 'note-threw' }); }
+    return Promise.resolve(p).then(function(pr){
+      if (!pr) return { blocked: true, code: 'no-result' };
+      if (pr.blocked) return { blocked: true, code: pr.code || 'blocked' };
+      if (pr.ok === false){
+        /* fix590 自体が off なら台帳が無いのと同じ＝従来どおり送る。それ以外は送らない
+           （intent を残せないまま送ると、まさに今回の事故形状を再現する）。 */
+        if (pr.code === 'off') return null;
+        return { blocked: true, code: pr.code || 'note-failed' };
+      }
+      if (pr.persisted === false) return { blocked: true, code: 'intent-not-persisted' };
+      return { blocked: false, commitOpId: pr.commitOpId || opId || null };
+    }, function(){ return { blocked: true, code: 'note-threw' }; });
+  }
+  /* ★R2A: 応答を台帳へ返す。fork のときは fix590 側で gate が開く（R1）。 */
+  function noteResult828(o){
+    if (f828off()) return null;
+    var L = f590();
+    if (!L || typeof L.noteResult !== 'function') return null;
+    try { return L.noteResult(o); } catch(e){ return null; }
+  }
 
   // ---- 収集(fix399と同じ規約・軽量ls onlyのみ) ----
   function activeSlot(){ try { return JSON.parse(lsGet('chr6_active_slot') || '"chr6"'); } catch(e){ return 'chr6'; } }
@@ -428,6 +530,16 @@
   function flush(why){
     if (restoreHold()) return Promise.resolve('restore-hold');   /* ★fix721.1 */
     if (!on() || !isLoggedIn() || pushing) return Promise.resolve('skip');
+    /* ★★fix828 R1: gate / 未解決 pending がある間は **自動 package put を 1 本も出さない**。
+       dirty も dirtySince も pushedTs も触らない（ローカル保存は従来どおり続く）。
+       ここが RECONCILE_BEFORE_ANY_AUTO_PACKAGE_PUT を **時間ではなく構造で**保証する。 */
+    var hold828 = autoPutHold();
+    if (hold828){
+      if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
+      askReconcile('fix828:' + hold828);
+      try { console.log(TAG, 'auto put を保留（' + hold828 + '・' + (why || '') + '）: 決着まで送りません'); } catch(e){}
+      return Promise.resolve('hold-' + hold828);
+    }
     if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
     var f402dOn = (lsGet('v292Dfix402dOff') !== '1');
     var sentSeq = mutationSeq;                       // ★fix402d: pkg構築"前"にseqを記録(飛行中の新規保存検出用)
@@ -462,13 +574,31 @@
     // ★C1-1(fix402d idempotency): midに送信pkgのhash(既存のhを流用・新規計算なし)を付与。
     //   Worker v17のidem表で同一midの再送は同一応答を返し二重fork/二重revを防ぐ(旧Worker=mid無視で後方互換)。
     var _putMid = f402dOn ? h : undefined;
-    return callSave({ op: 'put', baseRev: baseRev(), pkg: pkg, mid: _putMid }).then(function(r){
+    var _base828 = baseRev();
+    /* ★★fix828 R2A: **fetch より前に** 意図を durable 記録する（逆順は禁止）。 */
+    return notePutFirst('put', pkg, _base828).then(function(intent){
+      if (intent && intent.blocked){
+        pushing = false;
+        askReconcile('fix828:notePut-' + (intent.code || 'blocked'));
+        try { console.log(TAG, 'auto put を保留（notePut ' + (intent.code || 'blocked') + '）'); } catch(e){}
+        return 'hold-' + (intent.code || 'blocked');
+      }
+      var _body828 = { op: 'put', baseRev: _base828, pkg: pkg, mid: _putMid };
+      if (intent && intent.commitOpId) _body828.commitOpId = intent.commitOpId;
+      return callSave(_body828).then(function(r){
       pushing = false;
-      if (r.status === 200 && r.json && r.json.ok && r.json.fork) { forkBanner(r.json.server || {});
+      if (r.status === 200 && r.json && r.json.ok && r.json.fork) {
+        /* ★★fix828 R1: fork を台帳へ返す → 次 boot にも残る gate が開く。
+           **rev は採用しない・dirty も local data も消さない**（従来どおり）。 */
+        noteResult828({ fork: true, serverRev: (r.json.server && r.json.server.rev) != null ? r.json.server.rev : r.json.rev,
+                        rev: r.json.rev, response: r.json, source: 'fix402:put' });
+        forkBanner(r.json.server || {});
         /* ★fix658 Phase1(観測のみ): 競合を系譜で分類して数えるだけ。挙動・表示・戻り値は変えない。 */
         try { if (window.__v292Dfix658) window.__v292Dfix658.noteConflict({ where: 'put-fork', serverRev: (r.json.server && r.json.server.rev) || r.json.rev, localLsHash: h }); } catch(e){}
         return 'fork'; }   // fork応答はclean化しない(現行維持)
       if (r.status !== 200 || !r.json || !r.json.ok) throw new Error((r.json && r.json.error) || ('HTTP ' + r.status));
+      /* ★★fix828 R2A: 成功応答を台帳へ返す（6 項目照合。ok:true だけでは pending を消さない）。 */
+      noteResult828({ rev: r.json.rev, response: r.json, source: 'fix402:put' });
       if (r.json.rev != null) setBaseRev(r.json.rev);
       /* ★fix658 Phase1: 成功した基点(rev/packageHash/lastCommitOpId/送信pkgのhash)を anchor台帳へ記録する。 */
       try { if (window.__v292Dfix658) window.__v292Dfix658.noteCommit({ rev: r.json.rev, packageHash: r.json.packageHash || null, lastCommitOpId: r.json.lastCommitOpId || null, lsHash: h }); } catch(e){}
@@ -483,11 +613,15 @@
         try { console.log(TAG, 'pushed rev=' + (r.json.rev != null ? r.json.rev : '?') + ' (' + (why||'') + ') perf=' + JSON.stringify(window.__v292Dfix402 && window.__v292Dfix402.perf)); } catch(e){}
       }
       return 'pushed';
-    }).catch(function(e){
-      pushing = false;
-      try { console.warn(TAG, 'push failed (' + (why||'') + '):', e && e.message); } catch(_){}
-      if (!retryTimer) retryTimer = setTimeout(function(){ retryTimer = null; if (dirtySince) flush('retry'); }, 30000);
-      return 'error';
+      }).catch(function(e){
+        pushing = false;
+        try { console.warn(TAG, 'push failed (' + (why||'') + '):', e && e.message); } catch(_){}
+        /* ★★fix828 R2A: ここで台帳は **awaiting-result のまま残す**。
+           それが「送ったかもしれない」ことの唯一の証拠で、次 boot の照合の材料になる。
+           以後の自動 put は R1 の hold で止まり、reconcile が決着させる。 */
+        if (!retryTimer) retryTimer = setTimeout(function(){ retryTimer = null; if (dirtySince) flush('retry'); }, 30000);
+        return 'error';
+      });
     });
   }
   function isDirty(){ return getNum('v292Dfix402_dirtyTs') > getNum('v292Dfix402_pushedTs'); }
@@ -722,8 +856,22 @@
     // ★C1-1: forceputにもmid付与。put mid(素のhash)との衝突を避けるため 'fp:' 接頭を付ける。
     //   f402dOff時は世代ガードごとOFF=mid無し(後方互換)。連投で内容同一ならidemで単一化。
     var _fpMid = (lsGet('v292Dfix402dOff') !== '1') ? ('fp:' + lsHash(JSON.stringify(pkg.ls || {}))) : undefined;
-    return callSave({ op: 'forceput', pkg: pkg, mid: _fpMid }).then(function(r){
+    /* ★★fix828 R2A: forceput も台帳へ載せる。
+       これが無いと、R1 で開いた gate を閉じられる唯一の明示経路（noteResult の
+       allOk かつ op:'forceput' → closeGate('forceput-confirmed')）に乗らず、
+       Owner が「この端末のつづきで進める」を選んでも関門が残り続ける。
+       ★forceput は Owner の明示操作なので gate では止めない（既存 gateAllows と同じ）。 */
+    return notePutFirst('forceput', pkg, null).then(function(intent){
+      if (intent && intent.blocked){
+        try { console.warn(TAG, 'forceput を中止（notePut ' + (intent.code || 'blocked') + '）'); } catch(e){}
+        done(false);
+        return false;
+      }
+      var _fpBody = { op: 'forceput', pkg: pkg, mid: _fpMid };
+      if (intent && intent.commitOpId) _fpBody.commitOpId = intent.commitOpId;
+      return callSave(_fpBody).then(function(r){
       if (r.status === 200 && r.json && r.json.ok) {
+        noteResult828({ rev: r.json.rev, response: r.json, source: 'fix402:forceput' });
         if (r.json.rev != null) setBaseRev(r.json.rev);
         try { lsSet('v292Dfix402_lastHash', ''); } catch(e){}   // 次flushで必ず再push(現行維持)
         if (!f402eOn() || forceSeq === mutationSeq) {
@@ -736,7 +884,8 @@
         }
         done(true);
       } else { done(false); }
-    }).catch(function(){ done(false); });
+      }).catch(function(){ done(false); });
+    });
   }
 
   // ---- 真の分岐(fork)だけ出す非モーダル選択UI(confirm不使用) ----
@@ -971,6 +1120,9 @@
     muteFix399();
     wrapSetItem();
     (function wpoll(){ wpoll._n=(wpoll._n||0)+1; if (wrapSave()) return; if (wpoll._n>120) return; setTimeout(wpoll, 500); })();
+    /* ★★fix828: RECONCILE_BEFORE_ANY_AUTO_PACKAGE_PUT。
+       自動 put は flush 入口の hold で構造的に止まるので、ここでは照合を促すだけ。 */
+    setTimeout(function(){ try { if (autoPutHold()) askReconcile('fix828:boot'); } catch(e){} }, 1200);
     setTimeout(function(){ pullCheck('boot1'); }, 2500);
     setTimeout(function(){ pullCheck('boot2'); }, 6500);
     setInterval(muteFix399, 60000);
@@ -1004,6 +1156,15 @@
     pullApply: function(force){ lastPullCheck = 0; return pullApplyReload('手動取込', { force: !!force }); },   // ★fix402d: 明示pull(forceでturns/conflictガード迂回)
     forkBanner: forkBanner,
     forcePut: doForcePut,   // ★fix402e A-2: 世代化forceput
+    /* ★★fix828: 診断口（write 0）。fixture と smoke がここを見る。 */
+    f828: function(){
+      var L = f590();
+      return { off: f828off(), ledger: !!L,
+               autoPutAllowed: (L && typeof L.autoPutAllowed === 'function') ? L.autoPutAllowed() : null,
+               gate: (L && typeof L.gateState === 'function') ? L.gateState() : null,
+               pending: (L && typeof L.pendingCommit === 'function') ? L.pendingCommit() : null,
+               hold: autoPutHold(), lastReconcileAskAt: _f828ReconcileAt };
+    },
     imgHash: imgHash, sendImgs: sendImgs, scheduleImgPush: scheduleImgPush,   // ★fix411強化: 検証フック
     retryDead: function(k){ try { var m = pimgDeadAll(); if (k in m){ pimgDeadDel(k); try { delete imgRetried[k]; } catch(e){} scheduleImgPush(k); return true; } } catch(e){} return false; },   // ★fix411/C-3検証口(retryDeadでretry解除)
     clearDead: function(k){ pimgDeadDel(k); },
