@@ -31,6 +31,9 @@
      kill: v292Dfix812Off='1' / v292Dfix813Off='1'（どちらも従来どおり最優先）。旧 opt-in キーは互換のため読み続ける。 */
   var F812_DEFAULT_ON = true;
   var F813_DEFAULT_ON = true;
+  /* ★v292Dfix832 AGENDA_SILENCE_ABSTAIN_SHORTNAME_V1（GPT CURRENT AUTHORITY 2026-09-07 / 主 lane SHORTNAME_CANONICAL_MISMATCH）:
+     既定 ON。kill: v292Dfix832Off='1' → 従来動作へ 1 キーで戻せる。 */
+  var F832_DEFAULT_ON = true;
 
   /* ★fix548(2026-07-25・バッチ2A): S の取得は index.html の正式API(fix539)を第一経路にする。
      このファイルは**プロンプト生成**(S.cfg / S.turns の読み取りが中心)で、
@@ -273,6 +276,47 @@
          既定 OFF（opt-in v292Dfix813AgendaSilenceAbstain='1'）／kill v292Dfix813Off='1'。OFF は従来と byte 一致。 */
       var on813=false;
       try{ on813 = (localStorage.getItem('v292Dfix813Off')!=='1') && (F813_DEFAULT_ON || localStorage.getItem('v292Dfix813AgendaSilenceAbstain')==='1'); }catch(e813){ on813=false; }
+      /* ★v292Dfix832 AGENDA_SILENCE_ABSTAIN_SHORTNAME_V1（SHORTNAME_CANONICAL_MISMATCH の narrow fix）
+         観測された欠陥（live bytes で exact reproduce 済み）:
+           `appeared` は _v254who ＝ **cast 正名のみ**で入る（<state who="鷺沼 朔"> / 本文の正名出現）。
+           一方 `spoke`（:294 相当）は `c.who === name` の **生文字列完全一致**。
+           モデルが <say who="朔"> と書くと、fix606 の provenance が最高位（say-tag）でも spoke に数えられず、
+           **喋っているのに「登場したのに無言」= p++** が毎ターン積み上がる（実測 5 ターンで p=5）。
+         方針（fix813 と同じ形＝**帰属しない・棄権するだけ**）:
+           その turn に「NPC の正名の **丸ごと 1 パート**（区切り付き名前の先頭 or 末尾・cast 内で一意）」と
+           一致する card who があれば、その turn は **沈黙の証拠にしない** → p++ を落とすだけ。
+           **spoke=true にも break にもしない**（＝誰かに発話を帰属させない・不在と同じ凍結）。
+         安全境界:
+           判定は fix830 の `partMatch()` だけを使う。fix445 の前方後方の部分一致（LEGACY_PARTIAL）は **使わない**。
+           「村長」→「村長の使い」は既存名に区切りが無いので該当しない（別人を救わない）。
+           一意に決まらないとき（「霧 涼太」と「霧 悠真」に対する「霧」）は **何もしない**＝従来動作。
+           fix830 が無い / v292Dfix830Off / v292Dfix832Off のときも従来動作。
+         性質: ∀NPC p_ON ≤ p_OFF（p++ を落とすだけなので単調）。write 0・sys 追加 0・schema 0・identity 0・帰属 0。 */
+      var on832=false;
+      try{ on832 = (localStorage.getItem('v292Dfix832Off')!=='1') && F832_DEFAULT_ON; }catch(e832){ on832=false; }
+      var allNames832=names.slice();
+      try{ var hn=S.cast&&S.cast.hero&&S.cast.hero.name; if(hn) allNames832.push(String(hn)); }catch(e83){}
+      var shortC832={};
+      function short832(ix, t, name){
+        if(!on832) return false;
+        var key=ix+'\u0000'+name;
+        if(shortC832[key]!==undefined) return shortC832[key];
+        var r=false;
+        try{
+          var f830=window.__v292Dfix830;
+          if(f830 && typeof f830.partMatch==='function'){
+            var cs=(t&&t._convSays)||[];
+            for(var q=0;q<cs.length;q++){
+              var c=cs[q]; if(!c) continue;
+              var w=String(c.who==null?'':c.who);
+              if(!w.replace(/[\s\u3000]/g,'')) continue;
+              if(f830.partMatch(w, allNames832)===name){ r=true; break; }
+            }
+          }
+        }catch(es){ r=false; }
+        shortC832[key]=r; return r;
+      }
+
       var unkC813={};
       function unk813(ix, t){
         if(unkC813[ix]!==undefined) return unkC813[ix];
@@ -293,7 +337,7 @@
           var t=turns[i]||{};
           var spoke=((t._convSays)||[]).some(function(c){ return c && c.who===name; });
           if(spoke) break; /* 喋った時点で打ち切り=リセット相当 */
-          if(appeared(t, name)){ if(on813 && unk813(i, t)){ /* ★fix813: 帰属不能の発話がある turn は沈黙の証拠にしない（棄権） */ } else p++; } /* 登場したのに無言=+1 / 不在=凍結 */
+          if(appeared(t, name)){ if(on813 && unk813(i, t)){ /* ★fix813: 帰属不能の発話がある turn は沈黙の証拠にしない（棄権） */ } else if(short832(i, t, name)){ /* ★fix832: 正名の丸ごと 1 パートで喋っている turn は沈黙の証拠にしない（棄権・帰属 0） */ } else p++; } /* 登場したのに無言=+1 / 不在=凍結 */
         }
         var present=win.some(function(t){ return appeared(t, name); });
         out[name]={ pressure:p, present:present };

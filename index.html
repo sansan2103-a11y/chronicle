@@ -68,7 +68,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260907-fix830';
+  var BUILT = '20260907-fix832';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3473,7 +3473,7 @@ G.init();
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
   <script src="v292Dfix796-memory-retrieve.js?cb=20260905-rer1c"></script>
-  <script src="v292Dfix192-newengine.js?cb=20260905-fix814"></script>
+  <script src="v292Dfix192-newengine.js?cb=20260907-fix832"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
   <script src="v292Dfix197-avatar-key.js?cb=v292Dfix770"></script>
@@ -3517,7 +3517,7 @@ G.init();
 <script src="v292Dfix306-npc-liveliness.js?cb=v292Dfix738"></script>
 <script src="v292Dfix764-name-variant-fold.js?cb=v292Dfix764"></script>
 <!-- v292Dfix830(ENTITY_MATCH_RESOLVER_V1 / GPT ruling 73+74): one shared read-time predicate for "is this name an entity we already know". Auto-merge only on EXACT / ALIAS_EXACT / FOLDED_EXACT; fix445 castMatch (prefix/suffix) is classified as LEGACY_PARTIAL and never auto-merges. No new persistent state, no Story schema change. kill: localStorage v292Dfix830Off=1. -->
-<script src="v292Dfix830-entity-match-resolver.js?cb=20260907-fix830"></script>
+<script src="v292Dfix830-entity-match-resolver.js?cb=20260907-fix832"></script>
 <script src="v292Dfix766-canonical-appearance.js?cb=20260901-fix783"></script>
 <script src="v292Dfix767-icon-recipe-adapter.js?cb=v292Dfix778"></script>
 <script src="v292Dfix307-npc-roster.js?cb=v292Dfix765"></script>
