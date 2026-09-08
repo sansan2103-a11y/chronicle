@@ -193,6 +193,7 @@
 
   /* ─── ログインUI（設定パネル内・カード型） ─── */
   function renderUI(){
+    f835Notice();                    /* ★fix835: dormant でも必ず評価する（早期 return より前） */
     if (!enabled() || !workerReady) return;
     try {
       var anchor = document.getElementById('cfgProxyPass247') || document.getElementById('cfgPollKey');
@@ -257,6 +258,40 @@
   }
 
   /* ─── ログインゲート（未ログイン＆合言葉なしのとき中央に表示） ─── */
+  /* ★fix835 AUTH_DORMANT_SILENT_WRITE_LOSS_V1（GPT 裁定 2026-09-08・候補2 を採用）
+     観測（隔離ミラーで exact reproduce・run D）:
+       Google ログインのみの端末（合言葉なし）で token が失効し、かつ checkWorker() が失敗していると
+       workerReady=false のままなので shouldGate() が false になり、**gate も警告も出ない**。
+       同時に authHeaders が付ける認証ヘッダは 0 本になるので **cloud write は必ず失敗する**。
+       ユーザーから見える手掛かりは無い（console にのみ dormant のログ）＝「無言の失敗」。
+     契約:
+       ・**非ブロッキングの 1 行バナーを出すだけ**。gate の条件は 1 文字も変えない。
+       ・pointer-events:none なので操作を一切邪魔しない。
+       ・条件が解消したら自分で消える（refreshTick が通信復帰で workerReady=true にする）。
+       ・**新しい localStorage key 0 / 新しい永続 telemetry 0 / 保存経路に触れない。**
+     kill: localStorage v292Dfix835Off='1' → 何も表示しない（従来挙動） */
+  var F835_ID = 'g250-dormant-notice';
+  function f835On(){ return lsGet('v292Dfix835Off') !== '1'; }
+  function f835Should(){
+    try { return f835On() && enabled() && !!purl() && !ppass() && !valid() && !workerReady; }
+    catch(e){ return false; }
+  }
+  function f835Notice(){
+    try {
+      var el = document.getElementById(F835_ID);
+      if (!f835Should()){ if (el && el.parentNode) el.parentNode.removeChild(el); return; }
+      if (el) return;
+      if (!document.body) return;
+      el = document.createElement('div');
+      el.id = F835_ID;
+      el.setAttribute('role','status');
+      el.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99998;padding:6px 12px;'
+        + 'background:#5a3a12;color:#ffe6bf;font:12px/1.5 system-ui,sans-serif;text-align:center;'
+        + 'pointer-events:none;box-shadow:0 1px 4px rgba(0,0,0,.35)';
+      el.textContent = '\u26a0 \u30af\u30e9\u30a6\u30c9\u306b\u4fdd\u5b58\u3067\u304d\u3066\u3044\u307e\u305b\u3093\uff08Google\u30ed\u30b0\u30a4\u30f3\u304c\u5207\u308c\u3066\u3044\u308b\u304b\u3001\u30b5\u30fc\u30d0\u30fc\u306b\u63a5\u7d9a\u3067\u304d\u307e\u305b\u3093\uff09\u3002\u8a2d\u5b9a\u304b\u3089\u30ed\u30b0\u30a4\u30f3\u3057\u76f4\u3057\u3066\u304f\u3060\u3055\u3044\u3002';
+      document.body.appendChild(el);
+    } catch(e){}
+  }
   function shouldGate(){ return enabled() && workerReady && !!purl() && !ppass() && !valid(); }
   function maybeGate(){ if (shouldGate()) showGate(); else hideGate(); }
   function showGate(){
@@ -311,7 +346,8 @@
     email: function(){ return (T && T.email) || ''; },
     valid: function(){ return valid(); },
     enabled: function(){ return enabled(); },
-    workerReady: function(){ return workerReady; }
+    workerReady: function(){ return workerReady; },
+    f835: function(){ return { on: f835On(), should: f835Should(), shown: !!document.getElementById(F835_ID) }; }
   };
 
   /* ─── 起動 ─── */
