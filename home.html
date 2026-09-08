@@ -246,7 +246,7 @@
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
 <script src="v292Dfix654-storage-trap.js?cb=v292Dfix731"></script>
-<script src="v292Dfix698-mutation-bus.js?cb=v292Dfix701"></script>
+<script src="v292Dfix698-mutation-bus.js?cb=20260908-fix837"></script>
 <script src="v292Dfix569-gc-shadow.js?cb=v292Dfix680"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者（fix569 が捕捉済みの native を借りる） -->
 <script src="v292Dfix660-delete-gateway.js?cb=v292Dfix680"></script>
@@ -271,7 +271,7 @@
        （★fix724 でも fix697 は既定 ON だが、この不変条件は storyId 由来なので変わらない）。
      ・home.html には S / __chronicleGetState が無いので S.save wrap も成立しない（wrapSave は空振りして諦める）。
      ・fix587 より前に置く（fix587 は呼び出し時に参照するので順序依存は無いが、owner を先に載せる）。 -->
-<script src="v292Dfix697-shadow-story-commit.js?cb=v292Dfix733"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20260908-fix837"></script>
 <script src="v292Dfix729-title-sync.js?cb=v292Dfix729"></script>
 <script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix736"></script>
 <!-- ★fix602: 墓標が立ったスロットへの書き込みを影で止める（別途配信） -->
@@ -283,7 +283,7 @@
      数えるだけ。ダイアログ・取り込み・送信の挙動は1つも変えない。書込先は
      v292Dfix658_anchor / v292Dfix658_census の2キーのみ。
      観測=window.__v292Dfix658.status()/.census()/.selfTest() / OFF=v292Dfix658Off -->
-<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix680"></script>
+<script src="v292Dfix658-lineage-shadow.js?cb=20260908-fix837"></script>
 <!-- ★★fix710(GPT裁定 PRIORITY 1): HOME で保留中の shadow delete を boot時に1回だけ自動再開する。
      fix587 の autoResume() は fix399(クラウド同期)が現れるのを待つ実装で、home.html には
      fix399 が無いため **必ず諦める** → 通信障害で pending になった削除が HOME から永久に再開されない。

@@ -79,9 +79,21 @@
     var h = { 'Content-Type': 'application/json' };
     try { var g = (window.__chronicleGoogleId && window.__chronicleGoogleId()) || ''; if (g) h['x-google-id'] = g; } catch(e){}
     try { var p = (lsGet('v292ProxyPass') || '').trim(); if (p) h['x-chronicle-pass'] = p; } catch(e){}
+    /* ★fix837: Google トークンは 1 時間で失効し refresh 経路が無い。長寿命 session を併送して cloud write を止めない。
+       **x-google-id は従来どおり併送する**（CLIENT_MUST_KEEP_SENDING_GOOGLE_ID）。
+       supplier(fix328) が無いページ（home.html）だけ fix697 と同じ read-only の localStorage fallback を使う。 */
+    try {
+      var s837 = '';
+      if (typeof window.__chronicleSessionId === 'function') { try { s837 = window.__chronicleSessionId() || ''; } catch(e){ s837 = ''; } }
+      else if (localStorage.getItem('v292Dfix837Off') !== '1') {
+        var o837 = JSON.parse(localStorage.getItem('v292Dfix837_sess') || 'null');
+        if (o837 && o837.sid && o837.ts && (Date.now() - o837.ts) < 604800000) s837 = o837.sid;
+      }
+      if (s837) h['x-chronicle-session'] = s837;
+    } catch(e){}
     return h;
   }
-  function isLoggedIn(){ var h = authHeaders(); return !!(h['x-google-id'] || h['x-chronicle-pass']); }
+  function isLoggedIn(){ var h = authHeaders(); return !!(h['x-google-id'] || h['x-chronicle-pass'] || h['x-chronicle-session']); }
 
   /* ---- 読取専用API。**書込opは絶対に発行しない**(契約テストで固定) ---- */
   function callCommitstate(){

@@ -59,6 +59,73 @@
   window.__chronicleGoogleId = function(){ return (workerReady && valid()) ? T.token : ''; };
   window.__chronicleGoogleEmail = function(){ return (T && T.email) || ''; };
 
+  /* ★★fix837 CLIENT_LONG_LIVED_SESSION_V1（②GPT 裁定 2026-09-08 / Worker fix836 = workerBuild v40.1 と対）
+     背景（実測）: Google ID トークンの寿命は 1 時間で、refresh token を持つ経路がこの製品に存在しない。
+       1 時間後は __chronicleGoogleId() が '' を返し、13 個の authHeaders は認証ヘッダを 1 本も付けられず、
+       cloud write が静かに全滑する（= AUTH_DORMANT_SILENT_WRITE_LOSS の真因。fix835 は表出のみ修正）。
+     契約:
+       ・Google 検証に成功しているときだけ Worker の op:'session' を叩き、不透明な session id を受け取る。
+       ・保存先は localStorage の 1 キー v292Dfix837_sess のみ。
+         **合言葉(v292ProxyPass) と Google トークン(v292GoogleToken) には一切触らない**。
+       ・**x-google-id は従来どおり併送し続ける**（CLIENT_MUST_KEEP_SENDING_GOOGLE_ID）。
+         Worker 側の順序は session → google → 合言葉で、session が無効なら従来経路に落ちる。
+       ・TTL は Worker と同じ 7 日。5 日を過ぎたら Google が有効なうちに取り直す。
+       ・kill switch = v292Dfix837Off。'1' にすると供給口が '' を返し、完全に従来挙動へ戻る。 */
+  var F837_KEY      = 'v292Dfix837_sess';
+  var F837_TTL_MS   = 7 * 24 * 60 * 60 * 1000;   /* Worker 側 CHR_SESS_TTL_SEC と同じ 7 日 */
+  var F837_RENEW_MS = 5 * 24 * 60 * 60 * 1000;   /* 5 日を超えたら先回りで取り直す */
+  function f837On(){ return lsGet('v292Dfix837Off') !== '1'; }
+  function f837Load(){
+    try {
+      var j = JSON.parse(lsGet(F837_KEY) || 'null');
+      if (j && j.sid && j.ts && (Date.now() - j.ts) < F837_TTL_MS) return j;
+    } catch(e){}
+    return null;
+  }
+  function f837Save(sid, email){
+    try { lsSet(F837_KEY, JSON.stringify({ sid: String(sid), ts: Date.now(), email: String(email || '') })); } catch(e){}
+  }
+  var f837Busy = false, f837Stat = { minted: 0, failed: 0, last: '' };
+  function f837Mint(){
+    try {
+      if (!f837On() || f837Busy) return;
+      if (!workerReady || !valid()) return;              /* Google が有効なときだけ発行できる */
+      var cur = f837Load();
+      if (cur && (Date.now() - cur.ts) < F837_RENEW_MS) return;   /* まだ十分新しい */
+      var u = purl(); if (!u) return;
+      f837Busy = true;
+      fetch(u + '/save', { method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-google-id': T.token },
+        body: JSON.stringify({ op: 'session' }) })
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          if (j && j.ok && j.session){ f837Save(j.session, T.email); f837Stat.minted++; f837Stat.last = 'ok'; console.log(TAG, 'fix837 session minted'); }
+          else { f837Stat.failed++; f837Stat.last = 'no-session'; }
+        })
+        .catch(function(){ f837Stat.failed++; f837Stat.last = 'network'; })
+        .then(function(){ f837Busy = false; });
+    } catch(e){ f837Busy = false; f837Stat.failed++; f837Stat.last = 'threw'; }
+  }
+  function f837End(){
+    /* 明示ログアウトではサーバ側の sess: も消す（KV 1 キーの削除だけ。D1 には触らない）。 */
+    try {
+      var j = f837Load(), u = purl();
+      lsDel(F837_KEY);
+      if (j && j.sid && u){
+        fetch(u + '/save', { method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-chronicle-session': j.sid },
+          body: JSON.stringify({ op: 'sessionend', session: j.sid }) }).catch(function(){});
+      }
+    } catch(e){}
+  }
+  /* 13 個の authHeaders が読む供給口。
+     **workerReady を条件にしない**：checkWorker が落ちて workerReady=false になる場面こそ救いたい。 */
+  window.__chronicleSessionId = function(){
+    if (!f837On()) return '';
+    var j = f837Load();
+    return (j && j.sid) ? j.sid : '';
+  };
+
   function decodeJwt(jwt){
     try {
       var p = jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
@@ -107,7 +174,8 @@
       if (!jwt) return;
       var p = decodeJwt(jwt);
       store({ token: jwt, exp: p.exp||0, email: (p.email||'').toLowerCase(), name: p.name||'', pic: p.picture||'' });
-      f831Reset('logged-in');                          /* ★fix831: ログイン成功で自動更新の抑制を解除 */
+      f831Reset('logged-in');
+      f837Mint();                                    /* ★fix837: ログイン成功直後に長寿命 session を発行 */                          /* ★fix831: ログイン成功で自動更新の抑制を解除 */
       console.log(TAG, 'logged in as', T.email);
       hideGate(); renderUI(); ensureSentinel();
     } catch(e){ console.warn(TAG,'onCredential error', e); }
@@ -176,7 +244,7 @@
     } catch(e){ f831.notShown++; if (f831.notShown >= F831_MAX_NOTSHOWN) f831Stop('prompt-threw'); }
     return 'prompted';
   }
-  function signOut(){ try { window.google.accounts.id.disableAutoSelect(); } catch(e){} clear(); renderUI(); maybeGate(); }
+  function signOut(){ try { window.google.accounts.id.disableAutoSelect(); } catch(e){} f837End(); clear(); renderUI(); maybeGate(); }
 
   /* ─── 番兵cfg（fix247のゲート通過用・Googleモードでも必要） ─── */
   function ensureSentinel(){
@@ -322,6 +390,7 @@
   function refreshTick(){
     if (!enabled()) return;
     if (!workerReady){ checkWorker(function(){ if (workerReady) boot(); }); return; }
+    f837Mint();                                      /* ★fix837: 期限内に先回りで取り直す（自己 guard あり） */
     if (!valid()){
       // 期限切れ/未ログイン: 自動選択が効くなら静かに再発行を試みる（★fix831: 連射しない・結果を見る）
       if (T) { initGis(function(){ promptQuietly('expired'); }); }
@@ -347,7 +416,8 @@
     valid: function(){ return valid(); },
     enabled: function(){ return enabled(); },
     workerReady: function(){ return workerReady; },
-    f835: function(){ return { on: f835On(), should: f835Should(), shown: !!document.getElementById(F835_ID) }; }
+    f835: function(){ return { on: f835On(), should: f835Should(), shown: !!document.getElementById(F835_ID) }; },
+    f837: function(){ var j = f837Load(); return { on: f837On(), has: !!j, ageMs: j ? (Date.now() - j.ts) : null, stat: f837Stat, header: (window.__chronicleSessionId && window.__chronicleSessionId()) ? 'present' : 'absent' }; }
   };
 
   /* ─── 起動 ─── */
@@ -357,6 +427,7 @@
     checkWorker(function(){
       if (!workerReady){ console.log(TAG,'proxy not v4(google) yet — dormant, no gate'); return; }
       renderUI();
+      f837Mint();                                    /* ★fix837: 既にログイン済みなら起動時に発行 */
       if (valid()){ hideGate(); initGis(); }
       else { initGis(function(){ promptQuietly('boot'); }); maybeGate(); }
       console.log(TAG, 'loaded — worker v4 ready, ' + (valid()?('logged in: '+T.email):'awaiting login'));

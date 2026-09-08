@@ -16,12 +16,12 @@
 <script src="v292Dfix745-gws-lock.js?cb=20260830-fix756"></script>
 <script src="v292Dfix746-slot-isolation-authority.js?cb=20260829-fix748"></script>
 <script src="v292Dfix748-class-d-admission.js?cb=20260829-fix748"></script>
-<script src="v292Dfix698-mutation-bus.js?cb=v292Dfix701"></script>
+<script src="v292Dfix698-mutation-bus.js?cb=20260908-fix837"></script>
 <!-- v292Dfix705(STEP3E): canonical read authority。既知 storyId の document で
      canonical 判定が終わるまで **その story の body / aiInstr への書込だけ**を保留する。
      ★起動時の最初の body 書込(v100-patch fixProviderCfg)より前に居る必要があるため head。
      ★fix724 で既定 ON。kill switch=v292Dfix705Off=1 のみ（On キーは効かない） -->
-<script src="v292Dfix705-canonical-read-gate.js?cb=v292Dfix782"></script>
+<script src="v292Dfix705-canonical-read-gate.js?cb=20260908-fix837"></script>
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
@@ -52,7 +52,7 @@
      数えるだけ。ダイアログ・取り込み・送信の振る舞いは1つも変えない。書込先は
      v292Dfix658_anchor / v292Dfix658_census の2キーのみ。
      観測=window.__v292Dfix658.status()/.census()/.selfTest() / OFF=v292Dfix658Off -->
-<script src="v292Dfix658-lineage-shadow.js?cb=v292Dfix680"></script>
+<script src="v292Dfix658-lineage-shadow.js?cb=20260908-fix837"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者。**fix246 より前**に置くこと。
      理由(GPT裁定 シナリオ2): fix246 は removeItem のキー名を実効キーへ書き換えるので、
      削除自体が fix246 を通ると「確認したキーとは別のキーが消える」。fix246 より前に捕捉した
@@ -68,7 +68,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260908-fix835';
+  var BUILT = '20260908-fix837';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3136,12 +3136,12 @@ G.init();
      default OFF (opt-in=v292Dfix803On / kill=v292Dfix803Off / story=v292Dfix803Story)。fix802 の fire 末尾から onFire で呼ばれる。
      timer 0 / retry 0 / 新 write path 0 / localStorage 書込は fix793.materialize() 経由の v292Dmem1_slot_<sid> のみ -->
 <script src="v292Dfix803-auto-materialize.js?cb=20260903-fix803"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20260905-fix809"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20260908-fix837"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
      OFF=v292Dfix729Off / 検証口=window.__v292Dfix729 -->
 <script src="v292Dfix729-title-sync.js?cb=v292Dfix729"></script>
-<script src="v292Dfix700-nonauthoritative-mirror.js?cb=v292Dfix700"></script>
-<script src="v292Dfix702-authority-cutover.js?cb=20260830-fix750"></script>
+<script src="v292Dfix700-nonauthoritative-mirror.js?cb=20260908-fix837"></script>
+<script src="v292Dfix702-authority-cutover.js?cb=20260908-fix837"></script>
 <!-- v292Dfix573: 主人公が「無言で消える」のを見張る。
      名前が「あった→無くなった」書込を捉え、旧値の控えを取り、その場で知らせる。
      書込は止めない・自動復元もしない。OFF=v292Dfix573Off -->
@@ -3553,7 +3553,7 @@ G.init();
 <script src="v292Dfix325-state-rederive.js?cb=20260829-fix748"></script>
 <script src="v292Dfix326-story-scroll.js?cb=v292Dfix326"></script>
 <script src="v292Dfix327-turn-counter.js?cb=v292Dfix327"></script>
-<script src="v292Dfix328-google-login.js?cb=20260908-fix835"></script>
+<script src="v292Dfix328-google-login.js?cb=20260908-fix837"></script>
 <script src="v292Dfix298-roster.js?cb=20260901-fix783"></script>
 <script src="v292Dfix330-somatic-guard.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix332-uifold.js?cb=v292Dfix332"></script>
@@ -3596,13 +3596,13 @@ G.init();
 <script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=20260901-fix783"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
-<script src="v292Dfix399-cloudsync.js?cb=20260906-fix821on"></script>
-  <script src="v292Dfix400-img-url.js?cb=v292Dfix400d"></script>
+<script src="v292Dfix399-cloudsync.js?cb=20260908-fix837"></script>
+  <script src="v292Dfix400-img-url.js?cb=20260908-fix837"></script>
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=20260829-fix748"></script>
 <script src="v292Dfix338-artstyle.js?cb=20260829-fix748"></script>
 <script src="v292Dfix346-idb-avatars.js?cb=v292Dfix346"></script>
 <script src="v292Dfix356-avatar-eager.js?cb=v292Dfix450"></script>
-<script src="v292Dfix402-invisible-sync.js?cb=20260907-fix828"></script>
+<script src="v292Dfix402-invisible-sync.js?cb=20260908-fix837"></script>
 <script src="v292Dfix405-state-freshness.js?cb=v292Dfix739"></script>
 <script src="v292Dfix406-automode.js?cb=v292Dfix417d"></script>
 <script src="v292Dfix407-load-noconfirm.js?cb=v292Dfix407"></script>
@@ -3705,14 +3705,14 @@ G.init();
 <script src="v292Dfix515-icon-persist-probe.js?cb=v292Dfix515"></script>
 <script src="v292Dfix516-regen-local-display.js?cb=v292Dfix516b"></script>
 <script src="v292Dfix517-local-authoritative-avatar.js?cb=v292Dfix517b"></script>
-<script src="v292Dfix519-icon-p2p.js?cb=v292Dfix519e"></script>
-<script src="v292Dfix523-icon-sync-versioned.js?cb=v292Dfix657"></script>
+<script src="v292Dfix519-icon-p2p.js?cb=20260908-fix837"></script>
+<script src="v292Dfix523-icon-sync-versioned.js?cb=20260908-fix837"></script>
 <script src="v292Dfix525-slot-ownership.js?cb=v292Dfix525"></script>
 <script src="v292Dfix526-story-naming.js?cb=20260829-fix748"></script>
 <script src="v292Dfix631-avatar-inventory.js?cb=fix631"></script>
 <script src="v292Dfix632-img-content-dirty.js?cb=fix638"></script>
-<script src="v292Dfix633-icon-sweep-full.js?cb=fix657"></script>
-<script src="v292Dfix634-aiappearance-sync.js?cb=fix634"></script>
+<script src="v292Dfix633-icon-sweep-full.js?cb=20260908-fix837"></script>
+<script src="v292Dfix634-aiappearance-sync.js?cb=20260908-fix837"></script>
 <script src="v292Dfix635-new-story-guard-rearm.js?cb=v292Dfix637"></script>
 <script src="v292Dfix636-npc-presence-evidence.js?cb=20260829-fix748"></script>
 <script src="v292Dfix637-cast-bootstrap-probe.js?cb=20260829-fix748"></script>
