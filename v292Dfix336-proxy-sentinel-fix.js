@@ -20,7 +20,31 @@
   function purl(){ return ls('v292ProxyUrl').replace(/\/+$/,''); }
   function ppass(){ return ls('v292ProxyPass'); }
   function gid(){ try{ return (window.__chronicleGoogleId && window.__chronicleGoogleId()) || ''; }catch(e){ return ''; } }
-  function proxyOn(){ return !proxyOff() && !!(purl() && (ppass() || gid())); }
+  /* ★★fix841 AUTH_SESSION_READINESS_V1（②C1 裁定 2026-09-09 / THREE NARROW PATCHES）
+     背景（隔離実測）: fix837 で long-lived session を導入したが、
+       「今 auth が使えるか」を判定する述語が session を見ておらず、
+       pass 無し・Google 失効・session 生存の状態で
+       fix247.on()=false / fix336.proxyOn()=false / fix705.authReady755()=false になる。
+       その結果 LLM/画像生成は proxy へ書き換えられず外部へ直行し、
+       fix705 は classify を開始できず恒久 write HOLD に落ちる。
+     契約:
+       ・session の読み方は fix837 と同一。__chronicleSessionId() が有れば使い、
+         無ければ v292Dfix837_sess を TTL 7 日で read-only に読むだけ（1 バイトも書かない）。
+       ・v292Dfix837Off='1' なら従来どおり session を使わない。
+       ・pass / Google の既存挙動は変えない。auth precedence を client に新設しない。
+       ・kill switch = v292Dfix841Off='1' で本 fix を完全に無効化し従来挙動へ戻す。 */
+  function f841Off(){ try { return localStorage.getItem('v292Dfix841Off') === '1'; } catch(e){ return false; } }
+  function f841Sess(){
+    try {
+      if (f841Off()) return '';
+      if (typeof window.__chronicleSessionId === 'function') { try { return window.__chronicleSessionId() || ''; } catch(e){ return ''; } }
+      if (localStorage.getItem('v292Dfix837Off') === '1') return '';
+      var o = JSON.parse(localStorage.getItem('v292Dfix837_sess') || 'null');
+      if (o && o.sid && o.ts && (Date.now() - o.ts) < 604800000) return String(o.sid);
+    } catch(e){}
+    return '';
+  }
+  function proxyOn(){ return !proxyOff() && !!(purl() && (ppass() || gid() || f841Sess())); }
   // ★堅牢なS取得(window.S未定義でもグローバルSを拾う)
   function getS(){ try{ return window.S || (0,eval)('S'); }catch(e){ return null; } }
 

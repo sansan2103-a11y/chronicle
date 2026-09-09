@@ -1154,9 +1154,26 @@
      起動が遅いので同じ load で「ログイン済み」に見え、非対称になる）。
      auth が読める状態になるまで分類開始を待つ。合言葉(v292ProxyPass)があれば即 ready。
      どちらも無いまま待機上限に達したら AUTH で fail-closed STOP（hold 維持・従来と同じ終端）。 */
+  /* ★★fix841 AUTH_SESSION_READINESS_V1: fix837 の long-lived session も auth 可能と見なす。
+     これが無いと pass 無し・Google 失効・session 生存の端末で classify が始まらず、
+     bootN>120 で stop('AUTH', AUTH_NOT_READY_TIMEOUT) = 恒久 write HOLD になる（隔離実測）。
+     ★HOLD/release の条件そのものは 1 行も変えない。変えるのは「auth が使えるか」の判定だけ。
+     kill = v292Dfix841Off='1' で従来どおり pass || google のみに戻る。 */
+  function f841Off755(){ try { return lsg('v292Dfix841Off') === '1'; } catch(e){ return false; } }
+  function f841Sess755(){
+    try {
+      if (f841Off755()) return '';
+      if (typeof window.__chronicleSessionId === 'function') { try { return window.__chronicleSessionId() || ''; } catch(e){ return ''; } }
+      if (lsg('v292Dfix837Off') === '1') return '';
+      var o = JSON.parse(lsg('v292Dfix837_sess') || 'null');
+      if (o && o.sid && o.ts && (Date.now() - o.ts) < 604800000) return String(o.sid);
+    } catch(e){}
+    return '';
+  }
   function authReady755(){
     try { if ((lsg('v292ProxyPass') || '').replace(/^\s+|\s+$/g,'')) return true; } catch(e){}
     try { if (typeof window.__chronicleGoogleId === 'function' && window.__chronicleGoogleId()) return true; } catch(e){}
+    try { if (f841Sess755()) return true; } catch(e){}          /* ★fix841 */
     return false;
   }
 

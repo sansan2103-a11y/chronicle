@@ -21,7 +21,7 @@
      canonical 判定が終わるまで **その story の body / aiInstr への書込だけ**を保留する。
      ★起動時の最初の body 書込(v100-patch fixProviderCfg)より前に居る必要があるため head。
      ★fix724 で既定 ON。kill switch=v292Dfix705Off=1 のみ（On キーは効かない） -->
-<script src="v292Dfix705-canonical-read-gate.js?cb=20260909-fix838"></script>
+<script src="v292Dfix705-canonical-read-gate.js?cb=20260909-fix841"></script>
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
@@ -68,7 +68,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260909-fix838';
+  var BUILT = '20260909-fix841';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3171,7 +3171,7 @@ G.init();
 <script src="v292Dfix499-freeget-style-canon.js?cb=v292Dfix499"></script>
 <script src="v292Dfix484-style-canon.js?cb=v292Dfix486"></script>
 <!-- v292Dfix247: APIプロキシ切替(公開化PoC)。設定のプロキシURL+合言葉が入っていれば全API(本文/longmem/🎲/アバター)をWorker経由へ。空=従来BYOK直叩き。OFF=v292ProxyOff -->
-<script src="v292Dfix247-proxy.js?cb=20260906-fix824"></script>
+<script src="v292Dfix247-proxy.js?cb=20260909-fix841"></script>
 <script src="v292Dfix247b-proxy-admin.js?cb=v292Dfix247b"></script>
 <!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
 <!-- v292Dfix600: 新しい物語(?new=1)に別の物語の中身が混入したら保存を止める。 2026-07-27の実機事故（タブ2枚で新物語に他物語のキャラが丸ごと入った）の再発防止。 features.js より前に置き、S.save を待ち受けて包む。OFF=v292Dfix600Off -->
@@ -3598,7 +3598,7 @@ G.init();
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
 <script src="v292Dfix399-cloudsync.js?cb=20260908-fix837"></script>
   <script src="v292Dfix400-img-url.js?cb=20260908-fix837"></script>
-<script src="v292Dfix336-proxy-sentinel-fix.js?cb=20260829-fix748"></script>
+<script src="v292Dfix336-proxy-sentinel-fix.js?cb=20260909-fix841"></script>
 <script src="v292Dfix338-artstyle.js?cb=20260829-fix748"></script>
 <script src="v292Dfix346-idb-avatars.js?cb=v292Dfix346"></script>
 <script src="v292Dfix356-avatar-eager.js?cb=v292Dfix450"></script>
