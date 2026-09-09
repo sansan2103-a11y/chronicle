@@ -52,7 +52,8 @@
   function on(){ return !off(); }
 
   var stats = { hooks: 0, skippedOff: 0, skippedNoPort: 0, skippedNoCapability: 0,
-                skippedBadInput: 0, reads: 0, noop: 0, writes: 0, ok: 0, fail: 0, netFail: 0 };
+                skippedBadInput: 0, reads: 0, noop: 0, writes: 0, ok: 0, fail: 0, netFail: 0,
+                capabilityFail: 0 };   /* ★fix842 */
   var lastResult = null;
 
   /* ---- capability（RULING57 §1-§9）----
@@ -138,6 +139,36 @@
     return null;
   }
 
+  /* ★★fix842 STORY_TITLE_SCHEMA2_REACHABILITY_V1（②C1 裁定 2026-09-09: A/B/C 採用）
+     ■何を直すか（隔離実測 / FAILURE MODE B = LOCAL_CHANGED_SERVER_REJECTED）
+       schema2 canonical row のタイトル変更で、fix729 の step-1 fresh read が
+       generic shadowRequest({op:'getstory'}) を使い clientCanonicalSchemaMax を申告しないため、
+       Worker の OLD CLIENT READ GATE が 409 CLIENT_SCHEMA_TOO_OLD を返して停止する。
+       setstorytitle は 1 度も送られず、home 側は writeMeta を先に済ませているので
+       「ローカルだけ新しい名前・サーバは古いまま」が reload 後も残る。
+     ■方針（裁定 A）
+       新しい title 専用 read port は作らない。fix751 が RULING36 に従って用意済みの
+       **狭い v2 read 口** getStoryV2Once を reuse する。
+       汎用口 shadowRequest には capability を足さない（RULING36 OPTION_A 却下の趣旨を維持）。
+     ■kill switch = v292Dfix842Off='1' で読み口も 409 分類も従来へ完全復帰する。 */
+  function f842Off(){ return lsg('v292Dfix842Off') === '1'; }
+  /* 非一過性の capability 系 409 だけ（裁定 C: 全 409 を丸めない） */
+  var F842_CAP_CODES = { 'CLIENT_SCHEMA_TOO_OLD': 1, 'legacy-client-too-old': 1, 'CANONICAL_WRITE_DISABLED': 1 };
+  function f842IsCap(res){
+    try {
+      if (!res || res.status !== 409) return false;
+      var ec = res.j && res.j.errorCode;
+      return !!(ec && F842_CAP_CODES[String(ec)]);
+    } catch(e){ return false; }
+  }
+  /* schema2 を読める狭い口を優先。未搭載/kill 時は従来どおり shadowRequest。 */
+  function f842Read(F, sid, cb){
+    try {
+      if (!f842Off() && F && typeof F.getStoryV2Once === 'function') { F.getStoryV2Once(sid, cb); return; }
+    } catch(e){}
+    F.shadowRequest({ op: 'getstory', id: sid }, cb);
+  }
+
   function normalize(name){
     if (typeof name !== 'string') return null;
     return name.slice(0, TITLE_MAX);
@@ -187,8 +218,14 @@
     /* ---- 1) fresh getstory。過去に観測した rev/hash を authority にしない。 ---- */
     function proceed(){
     stats.reads++;
-    F.shadowRequest({ op: 'getstory', id: sid }, function(res, err){
+    f842Read(F, sid, function(res, err){
       if (err || !res || res.status !== 200 || !res.j || !res.j.ok){
+        /* ★fix842(裁定 C): 非一過性 capability 409 は通信障害ではない。netFail に混ぜない。 */
+        if (!f842Off() && f842IsCap(res)){
+          stats.capabilityFail = (stats.capabilityFail || 0) + 1;
+          return done({ ok: false, stage: 'fresh-getstory', reason: 'CAPABILITY_409',
+                        errorCode: (res.j && res.j.errorCode) || null, status: 409, id: sid });
+        }
         stats.netFail++;
         return done({ ok: false, stage: 'fresh-getstory', reason: 'UNAVAILABLE_OR_ABSENT',
                       status: res ? res.status : null, id: sid });
@@ -222,7 +259,7 @@
           if (err2 || !res2 || !res2.j){
             stats.netFail++;
             /* ★曖昧応答。ここで「失敗」と決めつけない。fresh getstory を **1 回だけ**。 */
-            return F.shadowRequest({ op: 'getstory', id: sid }, function(res3){
+            return f842Read(F, sid, function(res3){
               var b = (res3 && res3.j) ? res3.j : null;
               var t3 = (b && b.record && typeof b.record.title === 'string') ? b.record.title : null;
               if (res3 && res3.status === 200 && b && b.ok && t3 === title){
@@ -238,6 +275,8 @@
           }
           var j2 = res2.j;
           if (!j2.ok){
+            /* ★fix842(裁定 C): capability 409 は観測用に別カウント。stage/reason は従来のまま。 */
+            if (!f842Off() && f842IsCap(res2)) stats.capabilityFail = (stats.capabilityFail || 0) + 1;
             stats.fail++;
             return done({ ok: false, stage: 'cas', reason: j2.errorCode || 'CAS_FAILED',
                           pre: pre, serverRev: j2.serverRev, serverHash: j2.serverHash ? true : false });
@@ -247,7 +286,7 @@
             return done({ ok: true, stage: 'server-noop', pre: pre, titleChanged: 0 });
           }
           /* ---- 5) readback validate。1 回だけ。 ---- */
-          F.shadowRequest({ op: 'getstory', id: sid }, function(res4){
+          f842Read(F, sid, function(res4){
             var b4 = (res4 && res4.j) ? res4.j : null;
             var t4 = (b4 && b4.record && typeof b4.record.title === 'string') ? b4.record.title : null;
             var validated = !!(res4 && res4.status === 200 && b4 && b4.ok && t4 === title

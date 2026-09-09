@@ -2660,6 +2660,12 @@
       /* ★caller が渡してきた op / content / その他の任意 field は捨てる。ここで組み直す。 */
       var body = { op: 'setstorytitle', id: id, title: String(p.title).slice(0, 40),
                    expectedRev: Math.floor(xr), expectedHash: xh, mid: mid };
+      /* ★★fix842(②C1 裁定 B): この口は既に title 専用の **狭い** write 口なので、
+         RULING36 が認めた形状に合致する。schema2 canonical row へ書くために
+         capability を 1 項目だけ申告する。汎用 shadowRequest には足さない（byte 不変）。
+         content は 1 バイトも増えない（title 以外は Worker 側の clone で保全される）。
+         kill = v292Dfix842Off='1' で従来どおり capability 無しへ戻る。 */
+      try { if (lsg('v292Dfix842Off') !== '1') body.clientCanonicalSchemaMax = 2; } catch(e){}
       postSaveOnce(body, cb);
     },
     putStoryOnce: function(payload, cb){
