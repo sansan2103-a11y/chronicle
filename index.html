@@ -68,7 +68,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260909-fix842';
+  var BUILT = '20260909-fix843';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3140,6 +3140,7 @@ G.init();
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
      OFF=v292Dfix729Off / 検証口=window.__v292Dfix729 -->
 <script src="v292Dfix729-title-sync.js?cb=20260909-fix842"></script>
+<script src="v292Dfix843-capability-notice.js?cb=20260909-fix843"></script>
 <script src="v292Dfix700-nonauthoritative-mirror.js?cb=20260908-fix837"></script>
 <script src="v292Dfix702-authority-cutover.js?cb=20260908-fix837"></script>
 <!-- v292Dfix573: 主人公が「無言で消える」のを見張る。
