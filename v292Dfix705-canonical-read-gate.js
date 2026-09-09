@@ -52,6 +52,8 @@
   // ---- localStorage 薄いアクセサ（読みのみ。書きは applyWrite だけ） ----
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix705Off') === '1'; }
+  /* ★fix838: 409 分類の kill switch。'1' で本 fix の分岐を全部無効化し、従来挙動へ完全復帰する。 */
+  function f838Off(){ return lsg('v292Dfix838Off') === '1'; }
   /* ★★fix840 TRANSIENT_NETWORK_CLASSIFY_RETRY_V1（②GPT 裁定 2026-09-09: (a)+(c) 採用 / (b) 不採用）
      ■何を直すか
        classify() は document あたり 1 回しか走らない。その 1 回が **一過性の通信断**で失敗すると、
@@ -212,6 +214,7 @@
     phase: 'init',            /* init / held / classifying / applied / released / stopped */
     verdict: null,            /* CANONICAL_SAME_HASH / CANONICAL_APPLIED / SHADOW / NOT_FOUND / … */
     error: null,              /* NETWORK / AUTH / PARSE / HASH / APPLY_PARTIAL / … */
+    errorCode: null,          /* ★fix838: 409 のときだけ Worker の errorCode を載せる（観測用） */
     serverRev: null,          /* ★document runtime live authority（共有 rev map には書かない） */
     serverHash: null,
     localHash: null,
@@ -628,6 +631,18 @@
         releaseHold('not-found'); return cb({ verdict: 'NOT_FOUND' });
       }
       if (r.status === 401 || r.status === 403) { stats.netFail++; return cb(stop('AUTH', { status: r.status })); }
+      /* ★★fix838 NON_TRANSIENT_409_CLASSIFICATION_V1（②GPT ACCEPT 2026-09-08）
+         409 は通信障害ではない。CLIENT_SCHEMA_TOO_OLD / CANONICAL_WRITE_DISABLED /
+         SHADOW_DELETED のように **再試行しても永久に直らない** 契約・状態の拒否である。
+         これを NETWORK に丸めると「無言 write-hold」になり、利用者にも運用にも見えない。
+         ★書くかどうかの判断は 1 行も変えない。HOLD は従来どおり **解除しない**（fail-closed 維持）。
+           変えるのは verdict 名と counter と観測口だけ。kill = v292Dfix838Off='1'。
+         ★fix840 との合成: 409 はここで捕まるので f840Schedule() へ落ちず、再試行されない。 */
+      if (r.status === 409 && !f838Off()) {
+        stats.capabilityFail = (stats.capabilityFail || 0) + 1;
+        state.errorCode = (r.j && r.j.errorCode) || null;
+        return cb(stop('CAPABILITY_409', { status: 409, errorCode: state.errorCode }));
+      }
       if (r.status !== 200 || !r.j || !r.j.ok) { stats.netFail++;
         var r840c = cb(stop('NETWORK', { status: r.status,
                                     errorCode: (r.j && r.j.errorCode) || null }));

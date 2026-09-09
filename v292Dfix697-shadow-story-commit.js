@@ -111,6 +111,8 @@
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function lss(k,v){ try { localStorage.setItem(k, v); return true; } catch(e){ return false; } }
   function off(){ return lsg('v292Dfix697Off') === '1'; }
+  /* ★fix838: 409 分類の kill switch（fix705 と同一キー）。'1' で従来挙動へ完全復帰。 */
+  function f838Off(){ return lsg('v292Dfix838Off') === '1'; }
   /* ★★fix724(RULING37 §15/§24): FLAG 2-STATE CONTRACT。
      Off==='1' → OFF / それ以外 → DEFAULT ON。これだけ。
      legacy の v292Dfix697On は '1' でも '0' でも effective state に影響させない
@@ -801,6 +803,11 @@
             return condClearDirty(fin);
           }
           if (r.status === 409){ /* rev/hash mismatch ・cas-lost 等 → readback 最大 1 回で収束判定 */
+            /* ★fix838: 収束判定は従来どおり必ず実行する。理由コードを捨てないだけ。 */
+            if (!f838Off() && jj && jj.errorCode){
+              cstats.contractFail = (cstats.contractFail || 0) + 1;
+              note({ kind: 'CANONICAL_409', id: id, errorCode: jj.errorCode });
+            }
             return readbackConverge('CANONICAL_CONVERGED_AFTER_CONFLICT', 'CANONICAL_WRITE_CONFLICT'); }
           cstats.netFail++; note({ kind: 'C_HTTP_' + r.status, id: id, errorCode: jj.errorCode || null });
           return fin();
@@ -972,6 +979,11 @@
               return condClearDirty(fin);
             }
             if (r.status === 409){
+              /* ★fix838: 収束判定は従来どおり必ず実行する。理由コードを捨てないだけ。 */
+              if (!f838Off() && jj && jj.errorCode){
+                cstats.contractFail = (cstats.contractFail || 0) + 1;
+                note({ kind: 'CANONICAL_409', id: id, errorCode: jj.errorCode, schema: 2 });
+              }
               return readbackConverge('CANONICAL_CONVERGED_AFTER_CONFLICT', 'CANONICAL_WRITE_CONFLICT'); }
             cstats.netFail++; note({ kind: 'C2_HTTP_' + r.status, id: id, errorCode: jj.errorCode || null });
             return fin();
@@ -2186,6 +2198,14 @@
                    serverRev: (typeof j.serverRev === 'number' ? j.serverRev : null),
                    localHash: localHash, serverHash: j.serverHash || null });
           }
+          return;
+        }
+        /* ★fix838: conflict が付かない 409 は「契約 / 状態の恒久的な拒否」であって通信障害ではない。
+           netFail に混ぜると「再試行で直る障害」と区別できなくなる。分類と counter だけ分ける。
+           送るか送らないかの判断・retry 方針・UI は 1 つも変えない。 */
+        if (r.status === 409 && !f838Off()){
+          stats.contractFail = (stats.contractFail || 0) + 1;
+          note({ kind: 'CONTRACT_409', id: id, errorCode: j.errorCode || null });
           return;
         }
         stats.netFail++;
