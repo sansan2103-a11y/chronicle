@@ -52,6 +52,57 @@
   // ---- localStorage 薄いアクセサ（読みのみ。書きは applyWrite だけ） ----
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix705Off') === '1'; }
+  /* ★★fix840 TRANSIENT_NETWORK_CLASSIFY_RETRY_V1（②GPT 裁定 2026-09-09: (a)+(c) 採用 / (b) 不採用）
+     ■何を直すか
+       classify() は document あたり 1 回しか走らない。その 1 回が **一過性の通信断**で失敗すると、
+       通信が完全復旧してもそのページは **リロードするまで永久に write HOLD** になる。
+       隔離再現 9/9 PASS 済み（qa_p0_4_singleshot.mjs）。
+     ■契約（ここを外さない）
+       ・**releaseHold の条件は 1 ミリも変えない。** 再試行は「もう一度分類させる」だけ。
+       ・再試行するのは **NETWORK 系 STOP のときだけ**。AUTH / PARSE / HASH / TOMBSTONE 等は 1 回で確定。
+       ・**上限付き**（4 回）＋指数バックオフ。無限再試行しない。
+       ・single-shot guard の解除は **この内部スケジューラからのみ**。外部から classify() を呼んでも
+         従来どおり ALREADY_RAN で拒否される（read gate の一般契約は変えない = 裁定 (b) 不採用の趣旨）。
+       ・使い切っても直らなければ **1 行だけ告知**する（裁定 (c)）。UI はそれ以上作らない。
+     ■kill switch = v292Dfix840Off='1' で再試行も告知も止まり、従来挙動へ完全復帰する。
+     ■注記: fix838 未 deploy の現時点では 409 も NETWORK に丸められているため、
+       409 でも最大 4 回の無害な再試行が起きうる。fix838 が入れば 409 は CAPABILITY_409 へ分離され再試行しない。 */
+  var F840_BACKOFF_MS = [2000, 6000, 15000, 40000];
+  var F840_NOTICE_ID  = 'v292Dfix840-notice';
+  var f840Tries = 0, f840Timer = null, f840Exhausted = false;
+  function f840Off(){ return lsg('v292Dfix840Off') === '1'; }
+  function f840Notice(){
+    try {
+      if (f840Off() || document.getElementById(F840_NOTICE_ID)) return;
+      var d = document.createElement('div');
+      d.id = F840_NOTICE_ID;
+      d.textContent = '⚠ 通信が回復しないため、安全のためこの物語の保存を止めています。'
+                    + 'ページを再読み込みすると再開します。';
+      d.setAttribute('style', 'position:fixed;left:0;right:0;top:0;z-index:99997;'
+        + 'background:#5a2b2b;color:#ffdede;font-size:12px;line-height:1.6;padding:6px 10px;'
+        + 'text-align:center;pointer-events:none;font-family:system-ui,sans-serif;');
+      (document.body || document.documentElement).appendChild(d);
+    } catch (e) {}
+  }
+  /* NETWORK 系 STOP からのみ呼ぶ。ここでは HOLD を触らない。 */
+  function f840Schedule(){
+    try {
+      if (f840Off() || f840Timer) return;
+      if (f840Tries >= F840_BACKOFF_MS.length){ f840Exhausted = true; f840Notice(); return; }
+      var wait = F840_BACKOFF_MS[f840Tries];
+      f840Tries++;
+      f840Timer = setTimeout(function(){
+        f840Timer = null;
+        try {
+          /* ★内部再試行のときだけ single-shot guard を解ける。外部呼出には効かない。 */
+          classifyStarted = false;
+          state.phase = 'classifying'; state.error = null;
+          note({ f840: 'retry', attempt: f840Tries, waitedMs: wait });
+          classify(function(){});
+        } catch (e) {}
+      }, wait);
+    } catch (e) {}
+  }
   /* ★★fix724(RULING37 §15/§24): FLAG 2-STATE CONTRACT。
      Off==='1' → OFF / それ以外 → DEFAULT ON。これだけ。
      legacy の v292Dfix705On は '1' でも '0' でも effective state に影響させない
@@ -565,10 +616,10 @@
        ★fix697 契約: cb(result, errorCode)（fix705 の post とは引数順が逆。罠#3）。 */
     var W755 = window.__v292Dfix697;
     if (!W755 || typeof W755.getStoryV2Once !== 'function')
-      return cb(stop('NETWORK', { detail: 'NO_V2_READ_PATH' }));
+      { var r840a = cb(stop('NETWORK', { detail: 'NO_V2_READ_PATH' })); f840Schedule(); return r840a; }
     W755.getStoryV2Once(STORY_ID, function(r, e){
       if (e === 'NOT_LOGGED_IN') { stats.netFail++; return cb(stop('AUTH', { detail: e })); }
-      if (e || !r) { stats.netFail++; return cb(stop('NETWORK', { detail: e ? String(e) : 'no response' })); }
+      if (e || !r) { stats.netFail++; var r840b = cb(stop('NETWORK', { detail: e ? String(e) : 'no response' })); f840Schedule(); return r840b; }
       if (r.status === 404) {
         consumeApplied(); state.verdict = 'NOT_FOUND';
         /* ★fix757: 暫定 authority なら server に row が無い＝この端末が開いてよい物語ではない。
@@ -578,8 +629,9 @@
       }
       if (r.status === 401 || r.status === 403) { stats.netFail++; return cb(stop('AUTH', { status: r.status })); }
       if (r.status !== 200 || !r.j || !r.j.ok) { stats.netFail++;
-        return cb(stop('NETWORK', { status: r.status,
-                                    errorCode: (r.j && r.j.errorCode) || null })); }
+        var r840c = cb(stop('NETWORK', { status: r.status,
+                                    errorCode: (r.j && r.j.errorCode) || null }));
+        f840Schedule(); return r840c; }
 
       var j = r.j;
       var auth = String(j.authority || 'shadow');
@@ -1208,6 +1260,9 @@
                applied: readApplied() };
     },
     stats: function(){ return JSON.parse(JSON.stringify(stats)); },
+    f840: function(){ return { off: f840Off(), tries: f840Tries, max: F840_BACKOFF_MS.length,
+                               pending: !!f840Timer, exhausted: f840Exhausted,
+                               notice: !!document.getElementById(F840_NOTICE_ID) }; },
     classify: classify,
     release: function(why){ releaseHold(why || 'manual'); return true; },
     ledger: function(){ return LEDGER.slice(); },
