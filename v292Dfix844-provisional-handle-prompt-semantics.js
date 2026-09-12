@@ -1,5 +1,10 @@
 // =====================================================================
-// v292Dfix844 — PROVISIONAL_HANDLE_PROMPT_SEMANTICS v2.1
+// v292Dfix844 — PROVISIONAL_HANDLE_PROMPT_SEMANTICS v2.2
+// ★v2.2（STEP B live B-4 FAIL の根治）: wrapper は **呼び出しごとに enabled() を見る**。
+//   v2.1 は install 時にしかゲートを見なかったため、slot flag を消しても / v292Dfix844Off を立てても
+//   page を reload するまで強いブロックの filtering と【暫定呼称】が残った（live turn5 + offline R1-R6 で確認）。
+//   v2.2: enabled() が false なら production の text() をそのまま返し、【暫定呼称】も '' を返す。
+//   install / uninstall / 判定ロジックは v2.1 と同一。DEFAULT_OFF のとき byte 一致は不変。
 // ---------------------------------------------------------------------
 // ②C1 裁定 BW Q42:
 //   DEFAULT_OFF + EXPLICIT_CANARY_ON + OFF_OVERRIDE
@@ -131,6 +136,7 @@
   }
 
   function provisionalBlock(){
+    if(!enabled()) return '';                        /* ★v2.2 per-call gate */
     var list=activeProvisionalSet();
     if(!list.length) return '';
     return M_PROV+'本文から抽出された追跡用の仮呼称（正式呼称ではない）: '+list.join('、')
@@ -165,13 +171,13 @@
       if(e.marker===M_CANON && !e.__f844){
         _orig[M_CANON]=e.text;
         (function(entry){ var o=entry.text;
-          entry.text=function(){ return withoutProvisionalRows(function(){ return o.call(entry); }); };
+          entry.text=function(){ if(!enabled()) return o.call(entry); /* ★v2.2 per-call gate */ return withoutProvisionalRows(function(){ return o.call(entry); }); };
           entry.__f844=true; })(e);
         hitCanon=true;
       } else if(e.marker===M_LOCK && !e.__f844){
         _orig[M_LOCK]=e.text;
         (function(entry){ var o=entry.text;
-          entry.text=function(){ return lockTextFiltered(o, entry); };
+          entry.text=function(){ if(!enabled()) return o.call(entry); /* ★v2.2 per-call gate */ return lockTextFiltered(o, entry); };
           entry.__f844=true; })(e);
         hitLock=true;
       }
@@ -189,7 +195,7 @@
   }
 
   window.__v292Dfix844={ __armed:true,
-    version:'PROVISIONAL_HANDLE_PROMPT_SEMANTICS v2.1 (fix844 / DEFAULT_OFF)',
+    version:'PROVISIONAL_HANDLE_PROMPT_SEMANTICS v2.2 (fix844 / DEFAULT_OFF / PER_CALL_GATE)',
     install:install, uninstall:uninstall, installed:function(){return _installed;},
     enabled:enabled, offOverride:offOverride, gate:function(){
       return { OFF_OVERRIDE:offOverride(), GLOBAL_ON:ls('v292Dfix844On')==='1',
