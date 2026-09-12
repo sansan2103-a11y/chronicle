@@ -8,6 +8,26 @@
 // 修正(2): ??? root — 全セリフを <say who="名前"> で囲ませる system 指示。裸の「」を減らし
 //   speaker 不明(???)カードの発生源を断つ（fix73 のクライアント側 dedup と合わせ技）。
 // flag: window.__v292Dfix74Active
+// ---------------------------------------------------------------------
+// ★Q119 PAGE_CANARY_GATE v1  (②C1 裁定 EE SK-4)
+//   設計: gold/Q119_PHASE_A_PAGE_CANARY_GATE_DESIGN_v1.md / lineage: candidate/q119pc/
+//   PAGE_CANARY_GATE v1
+//   DEFAULT OFF
+//   PAGE-SCOPED (TAB) NOT STORY-SCOPED
+//   FORMAL ROLLBACK = CLEAR FLAG + RELOAD (tab close is auxiliary)
+//   DEDICATED_QA_TAB_MUST_NOT_NAVIGATE_TO_ANOTHER_STORY
+//   PAGE_CANARY_TAKES_EFFECT_ONLY_AT_PAGE_LOAD
+//   FLAG_MUST_BE_SET_BEFORE_PAGE_LOAD
+//   kill is not per-call (reload required)
+//   NOT YET FOR FINAL ACTIVATION
+//   opt-in : sessionStorage['v292DQ119PageCanaryOn']  === '1'   (この tab のこの page だけ)
+//   kill   : localStorage ['v292DQ119PageCanaryOff'] === '1'   (profile 全体・opt-in に勝つ)
+//   既定 / storage 例外 / 未知値 → OFF（FAIL CLOSED・'1' の厳密一致のみ true）
+//   OFF = production 逐語（定期再ラップによる chain 成長を含めて production と同一）
+//   ON  = frozen Phase A core（candidate/q119/）逐語 = INSTALL_ONCE_PER_PAGE registry
+//   ★分岐するのは wrapParse の guard だけ。wrapper 本体・marker・timer(400/1500/4000+2000)・
+//     tick()/install()・off() 契約・wrapSave/wrapRender/wrapFetch は 1 文字も変えない。
+// ---------------------------------------------------------------------
 (function v292Dfix74(){
   'use strict';
   if (window.__v292Dfix74Active) return;
@@ -53,13 +73,37 @@
     try { console.log(TAG,'build wrapped'); } catch(_){}
     return true;
   }
+  /* Q119-PC PAGE_CANARY: page 生存中の定数（load 時 1 回だけ読む・以後読み直さない）。kill(localStorage) > opt-in(sessionStorage)。既定 OFF。 */
+  function pcRead(){
+    try { if (window.localStorage.getItem('v292DQ119PageCanaryOff') === '1') return false; } catch(e){ return false; }
+    try { return window.sessionStorage.getItem('v292DQ119PageCanaryOn') === '1'; } catch(e){ return false; }
+  }
+  var PAGE_CANARY = pcRead();
+  // Q119 Phase A: page-scoped install registry（共通基盤は新設しない）
+  function reg74(){
+    var R; try{ R = window.__v292WrapReg = window.__v292WrapReg || {}; }catch(e){ R = {}; }
+    return R;
+  }
   function wrapParse(){
-    var P = getPlanner();
-    if (!P || typeof P.parsePlan!=='function' || P.parsePlan.__v292Dfix74w) return false;
+    var P, R = null;
+    if (!PAGE_CANARY){
+      /* ===== OFF: production 経路（production v292Dfix74 :57-58 statement 逐語） ===== */
+      P = getPlanner();
+      if (!P || typeof P.parsePlan!=='function' || P.parsePlan.__v292Dfix74w) return false;
+    } else {
+      /* ===== ON: frozen Phase A core 経路（candidate/q119 :61-66 逐語） ===== */
+      R = reg74();
+      if (R.f74parse) return false;                 /* ★Q119-A INSTALL_ONCE_PER_PAGE */
+      P = getPlanner();
+      if (!P || typeof P.parsePlan!=='function') return false;
+      if (P.parsePlan.__v292Dfix74w){ R.f74parse = true; return false; }  /* 既に居るなら registry を合わせるだけ */
+    }
+    /* ===== 以下 OFF/ON 共通・production 逐語 ===== */
     var orig = P.parsePlan.bind(P);
     var w = function(){ try{ dedupAll(); }catch(e){} return orig.apply(this, arguments); };
     w.__v292Dfix74w = true;
     P.parsePlan = w;
+    if (PAGE_CANARY) R.f74parse = true;             /* ★registry が真実（ON のみ） */
     try { console.log(TAG,'parsePlan wrapped'); } catch(_){}
     return true;
   }

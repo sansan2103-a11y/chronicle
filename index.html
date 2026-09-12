@@ -68,7 +68,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260912-fix844v22';
+  var BUILT = '20260912-q119s1';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3443,7 +3443,7 @@ G.init();
   <!-- v292Dfix229(P3): solo執行をfix66に内蔵したためfix64(抑制器)退役。復活=コメント解除
   <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
-  <script src="v292Dfix74-ext-dedup-and-say.js?cb=v292Dfix74"></script>
+  <script src="v292Dfix74-ext-dedup-and-say.js?cb=20260912-q119s1"></script>
   <script src="v292Dfix66-renderhook-repair.js?cb=20260905-fix808"></script>
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
@@ -3458,7 +3458,7 @@ G.init();
     <script src="v292Dfix70b-order-convsays.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix75-history-dedup.js?cb=v292Dfix75"></script>
 <script src="v292Dfix76-human-foundation.js?cb=v292Dfix76b"></script>  <script src="v292Dfix77-state-memory.js?cb=20260901-fix784"></script>
-  <script src="v292Dfix78-tag-case-normalize.js?cb=v292Dfix78"></script>
+  <script src="v292Dfix78-tag-case-normalize.js?cb=20260912-q119s1"></script>
   <script src="v292Dfix79-momentum-anchor.js?cb=v292Dfix79"></script>
   <script src="v292Dfix80-gen-gate-retry.js?cb=v292Dfix504"></script>
   <script src="v292Dfix82-injury-reaction-root.js?cb=v292Dfix82"></script>
@@ -3501,7 +3501,7 @@ G.init();
 <script src="v292Dfix270-topbar-ui.js?cb=v292Dfix270"></script>
 <script src="v292Dfix274-build-flag-guard.js?cb=v292Dfix274"></script>
 <script src="v292Dfix275-settings-tabs.js?cb=v292Dfix275"></script>
-<script src="v292Dfix277-quasi-pack.js?cb=20260907-fix830"></script>
+<script src="v292Dfix277-quasi-pack.js?cb=20260912-q119s1"></script>
 <script src="v292Dfix288-tooltips.js?cb=v292Dfix288"></script>
 <script src="v292Dfix290-mobile.js?cb=v292Dfix290"></script>
 <script src="v292Dfix291-saveexport.js?cb=v292Dfix721"></script>
@@ -3742,12 +3742,12 @@ G.init();
      として記録する。本文・保存・生成へ一切影響させない（shadow）。位置stateは作らない。
      読出=window.__v292Dfix645.stats()/.log()/.status()/.selfTest() / OFF=v292Dfix645Off
      ★fix643 の後・fix459 の MARKERS へ【移動タグ】を登録済み -->
-<script src="v292Dfix645-scene-move-shadow.js?cb=20260905-fix815"></script>
+<script src="v292Dfix645-scene-move-shadow.js?cb=20260912-q119s1"></script>
 <!-- fix648: 句読点隣接重複 collapse。新ターンの地の文を生成出口で正規化する（案A）。
      厳密に2種だけ: 「、。」→「。」 / 「。、」→「。」。既存保存は非遡及。
      最終出口(S.save)で narrative だけ。fix555/fix553/fix645 の後。
      読出=window.__v292Dfix648.stats()/.selfTest()/.log() / OFF=v292Dfix648Off -->
-<script src="v292Dfix648-punct-collapse.js?cb=fix648"></script>
+<script src="v292Dfix648-punct-collapse.js?cb=20260912-q119s1"></script>
 <!-- fix650: fix643(自動救済)を canary で回すための安全層。
      ★端末フラグ(v292Dfix643Live)だけでは live にしない。v292Dfix650LiveSlots に
      現在の物語が入っている時だけ実弾。救済の採用は 0～3点=採用 / 4～6点=確認待ち /

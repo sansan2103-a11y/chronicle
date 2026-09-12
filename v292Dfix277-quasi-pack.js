@@ -25,6 +25,49 @@
 //   (fix197 keyFor=名前+画風)から適用。キャッシュ未生成時のみ従来経路。
 //   OFF: localStorage v292IconUnifyOff='1'
 // ---------------------------------------------------------------------
+// ★FIX277_LOCAL_CASE_NORMALIZED_ANALYSIS_VIEW v1 (②C1 裁定 EC SI-1)
+//   FEATURE  : FIX277_LOCAL_CASE_NORMALIZED_ANALYSIS_VIEW
+//   VERSION  : FIX277_LOCAL_CASE_NORMALIZED_ANALYSIS_VIEW/v1 (2026-09-12)
+//   設計     : gold/FIX277_LOCAL_CASE_NORMALIZED_ANALYSIS_VIEW_DESIGN_v1.md
+//   目的     : fix277 自身の tag 解析だけを case 正規化した **analysis view** の上で行い、
+//              fix277 の結果を parsePlan wrapper chain 上の位置(fix78 の内側/外側)から独立させる。
+//   ★CASE_VIEW = LOCAL ANALYSIS ONLY / RAW IMMUTABLE
+//     ・view は harvestRaw / detectSelfNaming の **関数内ローカル変数 txt** にしか存在しない。
+//     ・parsePlan の第1引数 rawText は書き換えない(inner(rawText, inputType) は原文のまま)。
+//     ・戻り値 plan に触れない。view 文字列を localStorage / prompt / ログへ書かない。
+//     ・正規化するのは say/state の **タグ名のみ**(開き + 閉じ)。属性名・属性値・本文・
+//       react/scene_move/voice/summary は 1 文字も変えない。
+//   ★TAG_CASE_SEMANTICS = STILL UNRESOLVED
+//     本 fix は **互換性(順序非依存化)** であって「タグ名は小文字が正」という protocol 裁定ではない。
+//     大文字タグが正しい文法かモデル逸脱かは本 fix で一切決めていない。
+//   ★NO RUNTIME COUPLING TO fix78
+//     fix78 の関数も window.__v292Dfix78Normalize も **参照しない**。fix78 が 1 本も無いページでも成立する。
+//     caseViewForAnalysis は fix78 L22-27 と同一意味論の file-local copy(window へ公開しない)。
+//   適用点   : harvestRaw 冒頭 / detectSelfNaming 冒頭 の 2 か所のみ
+//              (production 行番号で R1 :446 / R2 :448 / R3 :490 の 3 read site を全被覆)
+//   既定     : **DEFAULT OFF**。フラグは呼ぶたびに評価(per-call)。優先順位は kill > slot opt-in > global opt-in。
+//     kill        = localStorage v292Dfix277CaseViewOff='1'              → 常に OFF(**最優先**)
+//     slot opt-in = localStorage v292Dfix277CaseViewOn_slot_<slotId>='1' → **初期 production canary はこの経路のみ**
+//     global      = localStorage v292Dfix277CaseViewOn='1'               → page 全体 ON。
+//                   ★NOT FOR INITIAL ROLLOUT(初期展開では使わない。canary は slot opt-in で行う)
+//     slotId は fix783 document authority(window.__chronicleDocumentStoryKey)から解決する
+//     (fix640 の slotId と同作法。v292Dfix783Off='1' のときだけ旧 __chr6Key() へ戻る)。
+//     ★FAIL CLOSED: authority が取れない document(home 等)では slotId=null となり
+//       **slot opt-in は一致しえない = slot 経路は OFF**。
+//       ただし global flag は slot 権威と **independent** なので、authority=null でも
+//       global='1' なら ON になる(fail-closed がかかるのは slot flag 経路だけ)。
+//         Off='1'          → OFF
+//         slot flag='1'    → ON (authority がある document のみ)
+//         authority=null   → slot 経路 OFF。global='1' なら ON、でなければ OFF
+//         いずれも未設定   → OFF(production と同一経路)
+//   不変条件 : installParse/wrapParse のロジック変更 0 / 新しい timer・watchdog 0 / 新しい wrapper 層 0 /
+//              Phase A 「1 parse = 1 execution」不変 / Phase B raw→final plan pairing 不変。
+//   ★lineage : 本 file は **production fix277(919 行)を基点にした別 lineage** であり、
+//              candidate/f537arc(PER_SLOT_BOUNDED_ARCHIVE)とは独立である。両者は **合成していない**。
+//              将来合成する場合の順序は production → f537arc(archive) → CASE_VIEW とし、
+//              合成後は両フラグの 4 象限(ArcOn×CvOn)で **回帰を全部取り直す**(設計 §10)。
+//   production status: **HOLD**(本 file は offline candidate。production へは未適用)
+// ---------------------------------------------------------------------
 // 可逆性: 全コンポーネント個別OFFフラグ + データは別キー保存 = ダメなら戻せる。
 // =====================================================================
 (function(){
@@ -93,6 +136,40 @@
     return '';
   }
   function QK(){ var s = slotSfx(); return (s === null) ? null : ('v292Dfix277Quasi' + s); }
+
+  /* ★FIX277_LOCAL_CASE_NORMALIZED_ANALYSIS_VIEW v1 (②C1 裁定 EC SI-1 / 詳細は本 file 冒頭の header)
+     RAW IMMUTABLE: ここにあるのは fix277 自身の **解析用コピー** を作る純関数と旗だけであり、
+     parsePlan の引数・戻り値・保存内容を 1 バイトも変えない。 */
+  /* slot id: fix783 document authority から解決(fix640 slotId と同作法)。authority 無し = null。 */
+  function cvSlotId(){
+    if (!f783Off()){
+      try { var dk = window.__chronicleDocumentStoryKey;
+            if (typeof dk === 'string' && dk) return (dk === 'chr6') ? 'chr6' : dk.replace(/^chr6_slot_/, ''); } catch(e){}
+      return null;                                   /* authority 無し = slot opt-in は成立しない(FAIL CLOSED) */
+    }
+    try {
+      var k = (typeof window.__chr6Key === 'function') ? window.__chr6Key() : 'chr6';
+      k = String(k || 'chr6');
+      return k.replace(/^chr6_slot_/, '') || 'chr6';
+    } catch(e){ return 'chr6'; }
+  }
+  /* 呼ぶたびに評価(per-call)。kill > slot opt-in > global opt-in。既定 OFF。 */
+  function caseViewOn(){
+    try {
+      if (localStorage.getItem('v292Dfix277CaseViewOff') === '1') return false;      /* kill 最優先 */
+      try { var s = cvSlotId();
+            if (s !== null && localStorage.getItem('v292Dfix277CaseViewOn_slot_' + s) === '1') return true; } catch(e2){}
+      return localStorage.getItem('v292Dfix277CaseViewOn') === '1';                  /* global: NOT FOR INITIAL ROLLOUT */
+    } catch(e){ return false; }
+  }
+  /* fix78 L22-27 と同一意味論の file-local copy。fix78 を一切参照しないし window へも公開しない。
+     say/state のタグ名のみ小文字化(開き/閉じ両方・\b で終端)。副作用無しの純関数。 */
+  function caseViewForAnalysis(s){
+    if (typeof s !== 'string') return s;
+    return s.replace(/<(\/?)(say|state)\b/gi, function(m, slash, tag){
+      return '<' + slash + tag.toLowerCase();
+    });
+  }
 
   var qStore = null, qKeyLoaded = '';
   function loadQ(){
@@ -442,7 +519,7 @@
   }
   function harvestRaw(raw, turnIdx){
     try {
-      var txt = String(raw || ''); var m;
+      var txt = caseViewOn() ? caseViewForAnalysis(String(raw || '')) : String(raw || ''); var m;   /* ★CASE_VIEW A1(解析用コピーのみ・raw 不変) */
       var re1 = /<(?:say|react|state)\b[^>]*?who="([^"]{1,24})"/g;
       while ((m = re1.exec(txt))) noteAppear(m[1], turnIdx, { source: 'current-parse' });
       var re2 = /<say\s+who='([^']{1,24})'/g; /* react声の入れ子(単引用) */
@@ -486,7 +563,7 @@
   function detectSelfNaming(raw, turnIdx){
     try {
       if (off537() || offQ()) return;
-      var txt = String(raw || ''), m, cast = castNames();
+      var txt = caseViewOn() ? caseViewForAnalysis(String(raw || '')) : String(raw || ''), m, cast = castNames();   /* ★CASE_VIEW A2(解析用コピーのみ・raw 不変) */
       var re = /<say\s+who="([^"]{2,24})"\s*>([\s\S]{0,200}?)<\/say>/g;
       var qs = loadQ();
       while ((m = re.exec(txt))){
