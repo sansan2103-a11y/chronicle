@@ -25,48 +25,49 @@
 //   (fix197 keyFor=名前+画風)から適用。キャッシュ未生成時のみ従来経路。
 //   OFF: localStorage v292IconUnifyOff='1'
 // ---------------------------------------------------------------------
-// ★FIX277_LOCAL_CASE_NORMALIZED_ANALYSIS_VIEW v1 (②C1 裁定 EC SI-1)
+// ★FIX277_LOCAL_CASE_NORMALIZED_ANALYSIS_VIEW v2 / CASE_VIEW γ  (②C1 裁定 EI SO-2)
 //   FEATURE  : FIX277_LOCAL_CASE_NORMALIZED_ANALYSIS_VIEW
-//   VERSION  : FIX277_LOCAL_CASE_NORMALIZED_ANALYSIS_VIEW/v1 (2026-09-12)
-//   設計     : gold/FIX277_LOCAL_CASE_NORMALIZED_ANALYSIS_VIEW_DESIGN_v1.md
-//   目的     : fix277 自身の tag 解析だけを case 正規化した **analysis view** の上で行い、
-//              fix277 の結果を parsePlan wrapper chain 上の位置(fix78 の内側/外側)から独立させる。
-//   ★CASE_VIEW = LOCAL ANALYSIS ONLY / RAW IMMUTABLE
+//   VERSION  : FIX277_LOCAL_CASE_NORMALIZED_ANALYSIS_VIEW/v2 (2026-09-12)
+//   設計     : gold/Q119_S4_FINAL_ACTIVATION_DESIGN_v1.md §2 / §6
+//              （v1 = gold/FIX277_LOCAL_CASE_NORMALIZED_ANALYSIS_VIEW_DESIGN_v1.md）
+//   lineage  : candidate/q119s4/。candidate/f277cv/ は R5′ の戻し先実体として凍結保存（置き換えない）。
+//   ★CASE_VIEW = case-order 互換層（case-order compatibility layer）
+//     Phase A が実効な page では **常に実効**であり、Phase A が OFF の page では **常に OFF** である（γ）。
+//     CASE_VIEW は protocol を決めない。
+//       ・「say/state タグは小文字が正」という裁定ではない。
+//       ・大文字タグが文法違反かモデル逸脈かを 1 つも決めていない。
+//     CASE_VIEW が除去するのは **wrapper 年齢依存（wrapper-age dependency）だけ** である。
+//   ★TAG_CASE_SEMANTICS = STILL UNRESOLVED（S4 でも解決しない・維持）
+//   ★DEFAULT ON（γ）
+//     CASE_VIEW 実効 = CASE_VIEW_PHASE_A（load 時 1 回・Phase A と同一の kill key）
+//                      ∧ localStorage['v292Dfix277CaseViewOff'] !== '1'（per-call）
+//     kill(Phase A)   = localStorage['v292DQ119PageCanaryOff'] === '1'
+//                       → Phase A と CASE_VIEW が **reload で同時に** OFF（R1′ = 論理 rollback）
+//     kill(CASE_VIEW) = localStorage['v292Dfix277CaseViewOff'] === '1'
+//                       → CASE_VIEW だけ OFF（Phase A は ON = F6b 状態・設計 §2-4 で受理）
+//     storage read が throw → OFF（FAIL TO PRODUCTION・Phase A と対）
+//     slot opt-in（v292Dfix277CaseViewOn_slot_<slotId>）と global opt-in（v292Dfix277CaseViewOn）は
+//       ★**読まない**（S4 で廃止。立てても消しても何も起きない）。cvSlotId() も削除した。
+//   ★契約名
+//     CASE_VIEW_TRACKS_PHASE_A_AT_LOAD_ONLY : Phase A kill による CASE_VIEW の反転は reload 時のみ。
+//                                             走行中に立てても当該 page では効かない。
+//     CASE_VIEW_OWN_KILL_STAYS_PER_CALL     : CASE_VIEW 単独の kill は従来どおり **次の parse から即**効く（reload 不要）。
+//   ★SHARES ONLY THE KILL FLAG NAME WITH PHASE A（flag-name coupling のみ）
+//     fix78 の関数も window.__v292Dfix78Normalize も registry（__v292WrapReg）も window property も
+//     **一切参照しない**。NO RUNTIME COUPLING TO fix78 / fix74 / fix645 / fix648。
+//     読むのは localStorage だけなので load 順依存 0（fix277 は idx 88 で fix645/648 より先に走る）。
+//     caseViewForAnalysis は fix78 L22-27 と同一意味論の file-local copy(window へ公開しない)。
+//   ★CASE_VIEW = LOCAL ANALYSIS ONLY / RAW IMMUTABLE（v1 から 1 文字も変えていない）
 //     ・view は harvestRaw / detectSelfNaming の **関数内ローカル変数 txt** にしか存在しない。
 //     ・parsePlan の第1引数 rawText は書き換えない(inner(rawText, inputType) は原文のまま)。
 //     ・戻り値 plan に触れない。view 文字列を localStorage / prompt / ログへ書かない。
 //     ・正規化するのは say/state の **タグ名のみ**(開き + 閉じ)。属性名・属性値・本文・
 //       react/scene_move/voice/summary は 1 文字も変えない。
-//   ★TAG_CASE_SEMANTICS = STILL UNRESOLVED
-//     本 fix は **互換性(順序非依存化)** であって「タグ名は小文字が正」という protocol 裁定ではない。
-//     大文字タグが正しい文法かモデル逸脱かは本 fix で一切決めていない。
-//   ★NO RUNTIME COUPLING TO fix78
-//     fix78 の関数も window.__v292Dfix78Normalize も **参照しない**。fix78 が 1 本も無いページでも成立する。
-//     caseViewForAnalysis は fix78 L22-27 と同一意味論の file-local copy(window へ公開しない)。
-//   適用点   : harvestRaw 冒頭 / detectSelfNaming 冒頭 の 2 か所のみ
+//   適用点   : harvestRaw 冒頭 / detectSelfNaming 冒頭 の 2 か所のみ（v1 から byte 逐語不変）
 //              (production 行番号で R1 :446 / R2 :448 / R3 :490 の 3 read site を全被覆)
-//   既定     : **DEFAULT OFF**。フラグは呼ぶたびに評価(per-call)。優先順位は kill > slot opt-in > global opt-in。
-//     kill        = localStorage v292Dfix277CaseViewOff='1'              → 常に OFF(**最優先**)
-//     slot opt-in = localStorage v292Dfix277CaseViewOn_slot_<slotId>='1' → **初期 production canary はこの経路のみ**
-//     global      = localStorage v292Dfix277CaseViewOn='1'               → page 全体 ON。
-//                   ★NOT FOR INITIAL ROLLOUT(初期展開では使わない。canary は slot opt-in で行う)
-//     slotId は fix783 document authority(window.__chronicleDocumentStoryKey)から解決する
-//     (fix640 の slotId と同作法。v292Dfix783Off='1' のときだけ旧 __chr6Key() へ戻る)。
-//     ★FAIL CLOSED: authority が取れない document(home 等)では slotId=null となり
-//       **slot opt-in は一致しえない = slot 経路は OFF**。
-//       ただし global flag は slot 権威と **independent** なので、authority=null でも
-//       global='1' なら ON になる(fail-closed がかかるのは slot flag 経路だけ)。
-//         Off='1'          → OFF
-//         slot flag='1'    → ON (authority がある document のみ)
-//         authority=null   → slot 経路 OFF。global='1' なら ON、でなければ OFF
-//         いずれも未設定   → OFF(production と同一経路)
 //   不変条件 : installParse/wrapParse のロジック変更 0 / 新しい timer・watchdog 0 / 新しい wrapper 層 0 /
 //              Phase A 「1 parse = 1 execution」不変 / Phase B raw→final plan pairing 不変。
-//   ★lineage : 本 file は **production fix277(919 行)を基点にした別 lineage** であり、
-//              candidate/f537arc(PER_SLOT_BOUNDED_ARCHIVE)とは独立である。両者は **合成していない**。
-//              将来合成する場合の順序は production → f537arc(archive) → CASE_VIEW とし、
-//              合成後は両フラグの 4 象限(ArcOn×CvOn)で **回帰を全部取り直す**(設計 §10)。
-//   production status: **HOLD**(本 file は offline candidate。production へは未適用)
+//   production status: **PRODUCTION ACTIVATION HOLD**（本 file は offline candidate。deploy は Owner gate + ②C1 裁定）
 // ---------------------------------------------------------------------
 // 可逆性: 全コンポーネント個別OFFフラグ + データは別キー保存 = ダメなら戻せる。
 // =====================================================================
@@ -137,30 +138,18 @@
   }
   function QK(){ var s = slotSfx(); return (s === null) ? null : ('v292Dfix277Quasi' + s); }
 
-  /* ★FIX277_LOCAL_CASE_NORMALIZED_ANALYSIS_VIEW v1 (②C1 裁定 EC SI-1 / 詳細は本 file 冒頭の header)
+  /* ★FIX277_LOCAL_CASE_NORMALIZED_ANALYSIS_VIEW v2 (②C1 裁定 EI SO-2 / 詳細は本 file 冒頭の header)
      RAW IMMUTABLE: ここにあるのは fix277 自身の **解析用コピー** を作る純関数と旗だけであり、
      parsePlan の引数・戻り値・保存内容を 1 バイトも変えない。 */
-  /* slot id: fix783 document authority から解決(fix640 slotId と同作法)。authority 無し = null。 */
-  function cvSlotId(){
-    if (!f783Off()){
-      try { var dk = window.__chronicleDocumentStoryKey;
-            if (typeof dk === 'string' && dk) return (dk === 'chr6') ? 'chr6' : dk.replace(/^chr6_slot_/, ''); } catch(e){}
-      return null;                                   /* authority 無し = slot opt-in は成立しない(FAIL CLOSED) */
-    }
-    try {
-      var k = (typeof window.__chr6Key === 'function') ? window.__chr6Key() : 'chr6';
-      k = String(k || 'chr6');
-      return k.replace(/^chr6_slot_/, '') || 'chr6';
-    } catch(e){ return 'chr6'; }
+  /* Q119-S4 γ: Phase A と同一の kill key を **load 時 1 回**だけ読む（両者は reload でしか同時反転しない）。 */
+  function cvPhaseARead(){
+    try { return localStorage.getItem('v292DQ119PageCanaryOff') !== '1'; } catch(e){ return false; }
   }
-  /* 呼ぶたびに評価(per-call)。kill > slot opt-in > global opt-in。既定 OFF。 */
+  var CASE_VIEW_PHASE_A = cvPhaseARead();       /* page-lifetime constant */
+  /* CASE_VIEW 実効 = Phase A 実効（load 時定数） ∧ 自 kill が立っていない（per-call・既存契約 R3 を保存） */
   function caseViewOn(){
-    try {
-      if (localStorage.getItem('v292Dfix277CaseViewOff') === '1') return false;      /* kill 最優先 */
-      try { var s = cvSlotId();
-            if (s !== null && localStorage.getItem('v292Dfix277CaseViewOn_slot_' + s) === '1') return true; } catch(e2){}
-      return localStorage.getItem('v292Dfix277CaseViewOn') === '1';                  /* global: NOT FOR INITIAL ROLLOUT */
-    } catch(e){ return false; }
+    if (!CASE_VIEW_PHASE_A) return false;
+    try { return localStorage.getItem('v292Dfix277CaseViewOff') !== '1'; } catch(e){ return false; }
   }
   /* fix78 L22-27 と同一意味論の file-local copy。fix78 を一切参照しないし window へも公開しない。
      say/state のタグ名のみ小文字化(開き/閉じ両方・\b で終端)。副作用無しの純関数。 */
