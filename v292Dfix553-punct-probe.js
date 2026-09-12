@@ -30,41 +30,49 @@
  * 保存先= localStorage['v292Dfix553_log'](上限30件・古いものから捨てる)
  *
  * ============================================================================
- * ★Q119 PHASE B FOR S4 TOPOLOGY(②C1 裁定 EI SO-3・縮小版 B+C+D) — offline candidate
- *   ★lineage = candidate/q119b3/。
- *     base   = candidate/q119b2/v292Dfix553-punct-probe.js
- *              sha256 dabd4f11185776bf502818b10b8aaf72fcf7877f8c19892e1cdebead75fcd8ac / 48010 B（FROZEN）
+ * ★Q119 PHASE B FINAL ACTIVATION (SB-3) FOR S4 TOPOLOGY(②C1 裁定 EM・縮小版 B+C+D) — offline candidate
+ *   ★lineage = candidate/q119b4/。
+ *     base   = candidate/q119b3/v292Dfix553-punct-probe.js
+ *              sha256 c7dbfad469b99af2c1275fb429467cb5a8471cd0648301090443bf548f5c8385 / 50845 B（FROZEN）
  *     topology base = candidate/q119s4/（Phase A DEFAULT ON ＋ CASE_VIEW γ・5 file）
- *     q119b / q119b2 / q119s4 は 1 バイトも置き換えない。
- *     q119b の 13/13・q119b2 の 24/24 の記録はそれぞれの実体に対して有効なまま残る。
+ *     q119b / q119b2 / q119b3 / q119s4 は 1 バイトも置き換えない。
+ *     q119b の 13/13・q119b2 の 24/24・q119b3 の 32/32 の記録はそれぞれの実体に対して有効なまま残る。
+ *     ★q119b3（production resident / DEFAULT OFF / SB-2 canary PASS の proven baseline）は
+ *       **physical rollback 先**として残す(②C1 裁定 EM-4 の R-B1)。
  *
- *   ★NOT FOR PRODUCTION YET ／ DEFAULT OFF ／ SESSION OPT-IN ONLY ／ FAIL CLOSED ／ '1' の厳密一致のみ
+ *   ★SB-3 DEFAULT ON ／ SESSION OPT-IN ABOLISHED ／ FAIL CLOSED ／ '1' の厳密一致のみ
  *   ★REQUIRES REGISTRY 4-4 (RUNTIME_STATE_PROOF)
  *     = Phase A が「その page で実効」であることの証明は window.__v292WrapReg の 4 key であり、
  *       S4 では opt-in flag が存在しないので flag では判定できない(設計 §1-1 / §5-2)。
+ *   ★DEFAULT ON STILL REQUIRES REGISTRY 4-4（②C1 裁定 EM-1・安全境界）
+ *     既定 ON は「権限」であって「証明」ではない。registry がちょうど 4 key・全 true の
+ *     RUNTIME_PHASE_A_PROOF が無い page では **絶対に reattach しない**
+ *     (partial / undefined は inert latch のまま。q119b3 から 1 行も変えていない)。
  *   ★DEPLOY SEPARATE FROM S4: 本 file は S4 build と同じ release に混ぜない。
- *     SB-1(inert 配置) → SB-2(QA tab canary) → SB-3(DEFAULT ON・別裁定) の順で段階を踏む。
+ *     SB-1(inert 配置・済) → SB-2(QA tab canary・PASS/CLOSED) → SB-3(★本 file・DEFAULT ON) と段階を踏む。
+ *     upload は 3 file のみ(fix553 / index.html の cb+BUILT 2 行 / version.txt)。
  *
  *   PHASE_B_CANDIDATE_REQUIRES_PHASE_A_GROWTH_STOP_CORE
  *     この変更は Phase A(fix74/78/645/648 の wrapParse INSTALL_ONCE 化)が入っている
  *     topology を前提にする。Phase A 無しの chain 無限成長下では意味を持たない。
  *
- *   PHASE_B_REQUIRES_PHASE_A_EFFECTIVE（★S4 版・q119b2 の PHASE_B_REQUIRES_PAGE_CANARY を置換）
+ *   PHASE_B_REQUIRES_PHASE_A_EFFECTIVE（★SB-3 版・intent の既定値を ON へ反転）
  *     DECLARED_INTENT(IIFE で 1 回だけ読む・page 生存中の定数):
- *       sessionStorage['v292DQ119PhaseBOn']     === '1'   (Phase B opt-in・tab scope・唯一の opt-in)
+ *       localStorage ['v292Dfix553PbOff']       !== '1'   (Phase B kill・profile 全体・最優先)
  *       AND localStorage ['v292DQ119PageCanaryOff'] !== '1'   (Phase A kill・profile 全体)
- *       AND localStorage ['v292Dfix553PbOff']       !== '1'   (Phase B kill・profile 全体・最優先)
+ *       = gate flag は **kill 2 本だけ**。key 未設定(= 普通の page)なら **既定 ON**。
  *       storage read が throw したら **OFF**(明示的 fail closed。lsg() 経由の暗黙 null に頼らない)
- *     ★sessionStorage['v292DQ119PageCanaryOn'] は **読まない**。
- *       S4 build では Phase A の opt-in が廃止され(設計 §1-2 / §1-3 (1a))、誰も立てないので、
- *       q119b2 のようにこれを AND 条件に含めると Phase B は **永久 OFF** になる(設計 §5-1)。
- *       立てても消しても何も起きない。frozen q119b2 はこの read を **持ったまま**凍結されている。
- *     ★localStorage['v292Dfix553PbOn'] も **読まない**(q119b2 の決定を継承・設計 §3 J-1〜J-5)。
- *     ★読むだけの key は 3 本(q119b2 は 4 本)。新しい永続データは 1 バイトも書かない。
- *     ★opt-in と kill で key 接頭辞が食い違う(v292DQ119PhaseBOn / v292Dfix553PbOff)。
- *       kill の既存契約を壊さないことを優先した **意図的な非対称**である(OQ-B3・継承)。
+ *     ★sessionStorage['v292DQ119PhaseBOn'](旧 Phase B opt-in)は **読まない = 廃止**。
+ *       立てても消しても何も起きない(S4 §1-2 と同じ作法・受入 D-2 / D-5)。
+ *       frozen q119b3 はこの opt-in read を **持ったまま**凍結されている。
+ *     ★sessionStorage['v292DQ119PageCanaryOn'] は **読まない**(q119b3 の決定を継承)。
+ *     ★localStorage['v292Dfix553PbOn'] も **読まない**(q119b2 / q119b3 の決定を継承)。
+ *     ★読むだけの key は 2 本(q119b3 は 3 本・q119b2 は 4 本)。新しい永続データは 1 バイトも書かない。
+ *       ★実行コード中の sessionStorage 参照は **0 件**(受入 D-5 で機械計数)。
+ *     ★opt-in 廃止により gate は localStorage の 2 本(v292Dfix553PbOff / v292DQ119PageCanaryOff)へ揃った
+ *       (q119b2/q119b3 の接頭辞非対称 OQ-B3 は解消)。
  *     FLAG_MUST_BE_SET_BEFORE_PAGE_LOAD ／ kill は per-call ではない(効かせるには reload)
- *     ★flag は「この tab で Phase B を試したい」という **declared intent** であって、
+ *     ★kill は「この profile で Phase B を止める」という **declared intent** であって、
  *       「Phase A が実際に install した」という **runtime proof** ではない(設計 §4-1)。
  *       runtime proof は下の registry 4-4 だけが与える。
  *
@@ -103,16 +111,21 @@
  *       (P2) pbReattachOnce() の **直前**。latch 済みでも必ずもう一度読む。
  *            ここで不成立なら再装着せず、その場で inert 確定(grace は使わない)。
  *
- *   既定 = OFF。OFF のときは機構 B/C/D がすべて素通りし、監視タイマーも起動しない
- *   = Phase A 時点の fix553 と挙動が同一。
+ *   既定 = ON。kill が立った page / localStorage が読めない page では機構 B/C/D がすべて素通りし、
+ *   監視タイマーも起動しない = Phase A 時点の fix553 と挙動が同一(= q119b3 の OFF 経路と同一)。
  *   ★PHASE B 自身の段階(設計 v3 §4・Phase A の S1→S2→S4 を写す):
- *       SB-1 inert 配置(flag 0・全 user で PB=false・タイマー 0 本。S4 が live で安定した後・別 commit)
- *       SB-2 QA tab canary(その tab の sessionStorage['v292DQ119PhaseBOn']='1' ＋ reload)
- *       SB-3 DEFAULT ON(opt-in 廃止 = intent を !PbOff ∧ !PageCanaryOff にする)★別裁定
- *     本 file は SB-1 / SB-2 用であり、SB-3 の反転は **含んでいない**。
- *   ★ROLLBACK: localStorage['v292Dfix553PbOff']='1' ＋ reload で profile 全体を OFF
- *     (Phase A kill localStorage['v292DQ119PageCanaryOff']='1' でも Phase B は止まる)。
- *     物理 rollback は fix553 を production 7913a971…(27294 B) に戻すだけでよい。
+ *       SB-1 inert 配置(q119b3・flag 0 で全 user PB=false・済)
+ *       SB-2 QA tab canary(q119b3 ＋ sessionStorage opt-in・PASS/CLOSED)
+ *       SB-3 DEFAULT ON(★本 file。opt-in 廃止 = intent を !PbOff ∧ !PageCanaryOff にした)
+ *     ★本 file に inert 配置段階は無い(deploy した瞬間に全 page で Phase B が既定 ON になる)。
+ *   ★ROLLBACK(②C1 裁定 EM-4):
+ *     (R-B0 論理・profile 単位) localStorage['v292Dfix553PbOff']='1' ＋ reload でその profile だけ OFF
+ *       (Phase A kill localStorage['v292DQ119PageCanaryOff']='1' でも Phase B は止まる)。
+ *       単一 profile / 単一 page の異常のみに使う。
+ *     (R-B1 物理・第一の fleet rollback) fix553 を **q119b3 SB1 package の
+ *       c7dbfad469b99af2c1275fb429467cb5a8471cd0648301090443bf548f5c8385(50845 B)** へ戻す
+ *       = Phase B を production resident / DEFAULT OFF / session opt-in の proven baseline へ戻す。
+ *     (R-B2 物理・第二段) fix553 を production 7913a971…(27294 B) に戻して Phase B コードごと撤去。
  *   ★裁定 DZ により機構 A(Planner.parsePlan の accessor 化 = assignment provenance
  *     recorder)は **採用しない**。production 側に accessor は 1 つも張らない。
  *   機構 B: 「自分が最終 plan 境界に居るか」の権威は **参照 identity**
@@ -137,7 +150,7 @@
 
   /* ---- ★Q119 Phase B: DECLARED_INTENT と page-local state ----------------
      flag は page 生存中 1 回だけ読む(parse ごとに storage を読まない = 挙動差を作らない)。
-     新しい永続データは 1 バイトも書かない。読むだけの key が 3 つ(q119b2 は 4 つ)。
+     新しい永続データは 1 バイトも書かない。読むだけの key が 2 つ(q119b3 は 3 つ・q119b2 は 4 つ)。
      ★read は 1 本ずつ try/catch し、catch は return false(明示的 fail closed)。
        lsg() は throw 時に null を返すので、4 file 側(q119s4 paRead)と意味論が割れる。 */
 
@@ -147,12 +160,14 @@
   function paRead553(){
     try { return window.localStorage.getItem('v292DQ119PageCanaryOff') !== '1'; } catch(e){ return false; }
   }
-  /* (2) Phase B 自身の opt-in は sessionStorage(tab scope)／ kill は localStorage(profile 全体・最優先)。
-         ★localStorage['v292Dfix553PbOn'] は **この lineage では読まない**(NOT IN INITIAL CANARY LINEAGE)。 */
+  /* (2) ★SB-3: Phase B の opt-in は **廃止**した。sessionStorage['v292DQ119PhaseBOn'] は読まない
+         (立てても消しても何も起きない)。gate は kill 2 本だけで、どちらも立っていなければ **既定 ON**。
+         ★localStorage['v292Dfix553PbOn'] も **この lineage では読まない**(q119b2/q119b3 を継承)。
+         ★実行コード中の sessionStorage 参照は 0 件(受入 D-5)。 */
   function pbOn(){
     try { if (window.localStorage.getItem('v292Dfix553PbOff') === '1') return false; } catch(e){ return false; }  /* kill が勝つ */
     if (!paRead553()) return false;                                     /* ★Phase A kill が立っていれば fail closed OFF */
-    try { return window.sessionStorage.getItem('v292DQ119PhaseBOn') === '1'; } catch(e){ return false; }
+    return true;                                                    /* ★SB-3 DEFAULT ON（EXECUTION DIFF BUDGET = この 1 行） */
   }
   var PB = pbOn();                  /* ★DECLARED_INTENT（page 生存中の定数・以後書き換えない） */
   /* ★pbLive = 「いま実際に Phase B 意味論が生きているか」。初期値は DECLARED_INTENT。
