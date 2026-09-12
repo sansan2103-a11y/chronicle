@@ -69,6 +69,74 @@
 //              Phase A 「1 parse = 1 execution」不変 / Phase B raw→final plan pairing 不変。
 //   production status: **PRODUCTION ACTIVATION HOLD**（本 file は offline candidate。deploy は Owner gate + ②C1 裁定）
 // ---------------------------------------------------------------------
+// ★HOT_LOG_SLOT_ATTRIBUTION v1.1 (FIX537_HOT_LOG_NOT_SLOT_SCOPED の修正 / ②C1 裁定 EN-4 ・ EO-3 ・ **EP**)
+//   FEATURE  : HOT_LOG_SLOT_ATTRIBUTION
+//   VERSION  : HOT_LOG_SLOT_ATTRIBUTION/v1.1 (2026-09-12)
+//   v1 からの差分 : **UNIQUE-ATTRIBUTION FIX**（②C1 裁定 EP）。
+//     v1 は「現在 slot の台帳で P2 ∧ P3 が証明できたら attribute」だったが、
+//     同じ (alias, canonical, turn) が **2 つ以上の slot 台帳** で成立すると
+//     「一致した」ことだけで attribute してしまう（= 実質的な推測）。
+//     v1.1 は **「一意にしか一致しない」** を要求する: 全 slot の slot-scoped evidence（各 slot の台帳）を
+//     照合し、P2 ∧ P3 を満たす候補 slot が **exactly 1 件** のときだけ attribute する。
+//       候補 0 件   → UNKNOWN_SLOT（reason = ledger-no-candidate）
+//       候補 2 件以上 → UNKNOWN_SLOT（reason = ledger-ambiguous-multi）
+//     ★AMBIGUOUS_SLOT というデータ区分は **作らない**。区別は diagnostic reason だけで行い、
+//       データ分類としては UNKNOWN_SLOT に集約する（UNKNOWN は positive evidence にならない）。
+//   設計     : gold/FIX537_HOT_LOG_SLOT_SCOPE_DESIGN_v1.md（ACCEPTED_DESIGN）§4 （採用 = A2 entry stamp + 3.B(i) fix277 内）
+//   lineage  : candidate/f537hs/。patch base = 現 live fix277 = candidate/q119s4/ (c3a94d64… / 64,214 B)。
+//   目的     : 固定 key 'v292Dfix537_log' に全 story の edge が混ざる（S-1 CROSS_STORY_MIXING）と、
+//              slot 権威が無い document でも hot log だけは書かれる（S-2 NO_SLOT_AUTHORITY_GATE）を直す。
+//   ★契約 (AUDIT EVIDENCE ONLY — archive v1 と同一):
+//     この hot log は **同一性の権威ではない**。
+//       ・fix845 の persisted judgment に使ってはならない
+//       ・XLE evaluator の STRONG edge 判定に使ってはならない
+//       ・canonicalize / merge / alias 昇格 / identity promotion に使ってはならない
+//     production の reader は **0 本**（本 fix でも追加しない）。
+//   ★WRITE 契約 (EN-4 逐語):
+//     authoritative current slot（slotSfx()、= fix783 __chronicleDocumentStoryKey 権威）があるときだけ、
+//     entry の **末尾** に slot stamp field `s` を付けて保存する。slot が無ければ hot log を **書かない**（S-2 gate）。
+//     既存 4 field {ts,turn,alias,canonical} は名前・型・順序とも不変。key も cap 30 も FIFO(slice(-30)) も不変。
+//   ★READ 契約 (②C1 裁定 EP で正本の表現を狭めた):
+//     **ACTIVE_PRODUCTION_RUNTIME_CONSUMERS_INSIDE_FIX277 = SLOT_SCOPED**
+//       ← これが本 candidate が保証する契約であり、ALL_HOT_LOG_CONSUMERS では **ない**。
+//     すなわち fix277 内の **現行 production runtime consumer** はすべて
+//     `entry.s === current slot`（または一意に証明できた legacy entry）だけを入力にする。
+//     fix277 内の read site は 2 つしかない:
+//       (R-a) detectSelfNaming の read-modify-write（= 永続化のための read。consumer ではない。
+//             他 slot / stamp 無し entry を **1 バイトも書き換えず、削らず**に保存する）
+//       (R-b) hlsRead()（= 唯一の正規 consumer 経路。current / foreign / unknown を分け、
+//             `s === 現在 slot` のものだけを current として返す）
+//     fix277 外の reader（設計 §1.4 の 12 本）は **本 candidate では規制外 = F537HS_READER_MIGRATION lane**。
+//       → gold/FIX537_HOT_LOG_SLOT_SCOPE_OFFLINE_IMPLEMENTATION_v1.md §4 に行番号付きで一覧を残してある。
+//       ★fix845 を ON にする前の activation checklist に
+//         「HOT_LOG reader must require entry.s === currentSlot」を **必須条件** として追記する（同 §12）。
+//   ★UNKNOWN_SLOT:
+//     stamp 無し entry・他 slot entry は **証拠として保存するが**、current story の入力・判断には絶対に使わない。
+//     migration は **推測禁止**。既存の slot-scoped evidence（各 slot の台帳 v292Dfix277Quasi<sfx>）を
+//     **全 slot 分照合**し、以下をすべて満たすときだけ attribute する:
+//       (P1) 現在 slot に権威がある（slotSfx() !== null）
+//       (P2) store[canonical].ali に alias が含まれる
+//       (P3) entry.turn が store[canonical].seen に実在する（= 同一 event の turn が台帳側にもある）
+//       (P4) ★**P2 ∧ P3 を満たす候補 slot が全 slot 中で exactly 1 件**（UNIQUE ATTRIBUTION / ②C1 EP）
+//     候補 0 件も 2 件以上も UNKNOWN_SLOT。「一致した」ではなく「一意にしか一致しない」を要求する。
+//   既定     : **DEFAULT OFF**。opt-in = localStorage v292Dfix537SlotLogOn='1'
+//              kill   = localStorage v292Dfix537SlotLogOff='1'（opt-in より **優先**）
+//              storage read が throw → OFF（FAIL TO PRODUCTION）。off537 / offQ の全停止はこれらより **上位**。
+//   容量（実測で更新。設計 §6.1 の見積りを置き換える）:
+//     stamp `s` = slotSfx() 逐語（'_slot_' 込み）なので 1 entry あたり **≈ +22 B**。
+//     cap 30 で **≈ 660 B**（live の slot id 長 10-11 字なら +23 B/entry = **700 B 弱**で頭打ち）。
+//     設計 §6.1 の「短形 +13 B / 30 件で +390〜600 B」は裸の slot id を前提にしていたため不正確。
+//     ★fix543 LOW_WATER（204,800 B）比は **参考値**としてのみ扱い、受入条件にしない。
+//   不変条件 :
+//     ・OFF のとき hot log の 3 行は production と **逐語同一** （書込内容・順序・cap 30・key すべて不変）
+//     ・検出意味論（detectSelfNaming の成立条件 4 つ）と ali 台帳への書込みを 1 行も変えない
+//     ・新しい永続 key を **1 本も作らない**（counter は in-memory + window 公開 API のみ）
+//     ・Planner.parsePlan を **新たに包まない**（new parsePlan wrapper 0 / wrap chain に層を足さない）
+//     ・fix553 / Q119 registry / Phase B / q119b4 / fix844 / fix845 の key を read も write もしない
+//     ・archive（f537arc = 'v292Dfix537_logArc'+slotSfx()）に依存しない・触らない
+//     ・log 書込みは try/catch 完全内包。quota 失敗は in-memory counter を上げるだけで検出へ伝播しない
+//   production status: **PRODUCTION HOLD**（F537HS_STAGE1_v1.1 = OFFLINE_CANDIDATE / DEFAULT OFF。deploy は Owner gate + ②C1 裁定）
+// ---------------------------------------------------------------------
 // 可逆性: 全コンポーネント個別OFFフラグ + データは別キー保存 = ダメなら戻せる。
 // =====================================================================
 (function(){
@@ -536,6 +604,161 @@
      OFF: localStorage v292Dfix537Off='1' */
   var DESCRIPTIVE_TAIL = /(少女|少年|女|男|子供|子ども|娘|息子|影|人影|老人|老婆|青年|婦人)$/;
   function off537(){ try { return localStorage.getItem('v292Dfix537Off') === '1'; } catch(e){ return false; } }
+
+  /* ============ HOT_LOG_SLOT_ATTRIBUTION v1.1 (②C1 裁定 EN-4 / EO-3 / ★EP UNIQUE-ATTRIBUTION) ============
+     FEATURE / VERSION / 契約の全文は本 file 冗頭の header を規定とする。
+     ここにあるのは (1) opt-in/kill の読み (2) slot gate 付き stamp 書込み
+     (3) `entry.s === current slot` を必須にした唯一の READ 経路 (4) 非永続の診断口 の 4 つだけであり、
+     検出意味誺（detectSelfNaming の成立条件）と ali 台帳には 1 行も触れない。
+     ★key / cap 30 / FIFO(slice(-30)) / 既存 4 field は不変。stamp `s` は **末尾追加のみ**。
+     ★新しい永続 key は 0 本（counter は in-memory。hlsDiag() で読む）。
+     既定 OFF: 'v292Dfix537SlotLogOn'='1' で opt-in / 'v292Dfix537SlotLogOff'='1' が **優先** して kill。 */
+  var HLS_FEATURE = 'HOT_LOG_SLOT_ATTRIBUTION';
+  var HLS_VERSION = 'HOT_LOG_SLOT_ATTRIBUTION/v1.1';
+  var HLS_KEY     = 'v292Dfix537_log';    /* ★不変（reader が literal 直書き。key を移すと全員が空を読む） */
+  var HLS_CAP     = 30;                   /* ★不変（production と同じ FIFO 上限） */
+  var HLS_STAMP   = 's';                  /* ★entry 末尾に追加する slot stamp field 名 */
+  /* 非永続 counter（新しい localStorage key を作らないため in-memory のみ） */
+  var hlsSkipNoSlot = 0, hlsQuota = 0, hlsWrote = 0, hlsLast = 'init';
+  function hlsOn(){
+    try {
+      if (localStorage.getItem('v292Dfix537SlotLogOff') === '1') return false;   /* kill が opt-in に勝つ */
+      return localStorage.getItem('v292Dfix537SlotLogOn') === '1';               /* 既定 = OFF */
+    } catch(e){ return false; }                                                  /* throw → OFF */
+  }
+  function hlsKilled(){ try { return localStorage.getItem('v292Dfix537SlotLogOff') === '1'; } catch(e){ return false; } }
+  function hlsLoad(){
+    var a = null;
+    try { a = JSON.parse(localStorage.getItem(HLS_KEY) || '[]'); } catch(e){ a = null; }
+    return Array.isArray(a) ? a : [];
+  }
+  /* ---- WRITE（EN-4）: authoritative slot があるときだけ stamp 付きで保存。無ければ書かない ----
+     既存 entry（他 slot / stamp 無し）は **読んでそのまま戻すだけ**。書き換えない = provenance 捕造 0。 */
+  function hlsWrite(turnIdx, L1, W){
+    var sfx = slotSfx();
+    if (sfx === null){ hlsSkipNoSlot++; hlsLast = 'skip-no-slot'; return false; }   /* fix783 契約の穴を塞ぐ */
+    var lg = hlsLoad();
+    var ent = { ts: Date.now(), turn: turnIdx, alias: L1, canonical: W };
+    ent[HLS_STAMP] = sfx;                 /* ★末尾追加のみ（JSON の prefix は production 形と逐語一致） */
+    lg.push(ent);
+    try { localStorage.setItem(HLS_KEY, JSON.stringify(lg.slice(-HLS_CAP))); }
+    catch(e){ hlsQuota++; hlsLast = 'ls-write-failed'; return false; }
+    hlsWrote++; hlsLast = 'written';
+    return true;
+  }
+  /* ---- migration の証明述語（EN-4 「たぶんこの slot」禁止 → ★EP 「一意にしか一致しない」）----
+     P2 store[canonical].ali に alias がある（= L515 相当の ent.ali.push(L1) がその slot の台帳へ書いた edge）
+     P3 entry.turn が store[canonical].seen に実在する（= 同一 event の turn が台帳側にも記録されている）
+     → この 2 つは「ある slot の台帳と矛盾しない」という候補条件にすぎない。 */
+  function hlsProve(e, store){
+    try {
+      if (!e || !store) return false;
+      var ent = store[e.canonical];
+      if (!ent || !Array.isArray(ent.ali) || ent.ali.indexOf(e.alias) < 0) return false;      /* P2 */
+      return Array.isArray(ent.seen) && ent.seen.indexOf(e.turn) >= 0;                        /* P3 */
+    } catch(x){ return false; }
+  }
+  /* ---- 候補 slot の全数調査（★EP: UNIQUE ATTRIBUTION）----
+     既存の slot-scoped evidence = 各 slot の台帳 'v292Dfix277Quasi'+sfx を **全部**見る。
+     current slot の台帳だけは loadQ()（未保存のメモリ状態を含む正本）を使い、
+     他 slot は localStorage の実体を読む（read のみ・write 0）。 */
+  var HLS_QPREFIX = 'v292Dfix277Quasi';        /* ★既存 key。新規 key は 1 本も作らない */
+  function hlsSlotSfxs(){
+    var out = [];
+    try {
+      for (var i = 0; i < localStorage.length; i++){
+        var k = localStorage.key(i);
+        if (typeof k === 'string' && k.indexOf(HLS_QPREFIX) === 0){
+          var s = k.slice(HLS_QPREFIX.length);
+          if (out.indexOf(s) < 0) out.push(s);
+        }
+      }
+    } catch(e){}
+    return out;
+  }
+  function hlsLedgerOf(sfx, curSfx){
+    if (curSfx !== null && sfx === curSfx){ try { return loadQ(); } catch(e){ return null; } }
+    try { var o = JSON.parse(localStorage.getItem(HLS_QPREFIX + sfx) || 'null');
+          return (o && typeof o === 'object') ? o : null; } catch(e){ return null; }
+  }
+  function hlsCandidateSlots(e, curSfx){
+    var sfxs = hlsSlotSfxs(), out = [];
+    if (curSfx !== null && sfxs.indexOf(curSfx) < 0) sfxs.push(curSfx);   /* 未保存の current slot も母数に入れる */
+    for (var i = 0; i < sfxs.length; i++){
+      if (hlsProve(e, hlsLedgerOf(sfxs[i], curSfx))) out.push(sfxs[i]);
+    }
+    out.sort();
+    return out;
+  }
+  /* ---- 分類（データ区分は 4 つだけ。AMBIGUOUS_SLOT は作らない）----
+     CURRENT                  : stamp が current slot と一致
+     FOREIGN                  : stamp が他 slot / または legacy でありながら他 slot に **一意に** 帰属した
+     CURRENT_PROVEN_BY_LEDGER : legacy であり、候補 slot が current slot の **1 件だけ**
+     UNKNOWN_SLOT             : 候補 0 件 / 候補 2 件以上 / slot 権威なし / entry が不正
+     ★UNKNOWN_SLOT は positive evidence にならない。reason で 0 件と複数を分けるのは **診断のためだけ**。 */
+  function hlsClassifyEx(e, sfx){
+    if (!e || typeof e !== 'object') return { cls: 'UNKNOWN_SLOT', reason: 'entry-invalid', candidates: [] };
+    if (typeof e[HLS_STAMP] === 'string'){
+      return (e[HLS_STAMP] === sfx)
+        ? { cls: 'CURRENT', reason: 'stamp-current', candidates: [] }
+        : { cls: 'FOREIGN', reason: 'stamp-foreign', candidates: [] };
+    }
+    if (sfx === null) return { cls: 'UNKNOWN_SLOT', reason: 'no-slot-authority', candidates: [] };
+    var c = hlsCandidateSlots(e, sfx);
+    if (c.length === 0) return { cls: 'UNKNOWN_SLOT', reason: 'ledger-no-candidate', candidates: c };
+    if (c.length > 1)  return { cls: 'UNKNOWN_SLOT', reason: 'ledger-ambiguous-multi', candidates: c };
+    return (c[0] === sfx)
+      ? { cls: 'CURRENT_PROVEN_BY_LEDGER', reason: 'ledger-unique-current', candidates: c }
+      : { cls: 'FOREIGN', reason: 'ledger-unique-other-slot', candidates: c };
+  }
+  function hlsClassify(e, sfx){ return hlsClassifyEx(e, sfx).cls; }
+  /* ---- READ: 唯一の正規 consumer 経路 ----
+     ACTIVE_PRODUCTION_RUNTIME_CONSUMERS_INSIDE_FIX277 = SLOT_SCOPED。
+     current に入るのは `entry.s === 現在 slot` または **一意に**台帳で証明できた entry だけ。
+     foreign（他 slot）と unknown（候補 0 / 候補複数 / 権威なし）は
+     **証拠として返すが current には絶対に混ざない**。
+     この戻り値は AUDIT_EVIDENCE_ONLY。fix845 crossCheck / XLE STRONG / canonicalize / merge /
+     identity promotion の入力にしてはならない（fix277 内からの呼び出しは 0 件）。 */
+  function hlsRead(){
+    var sfx = null; try { sfx = slotSfx(); } catch(e){ sfx = null; }
+    var all = hlsLoad();
+    var cur = [], foreign = [], unknown = [], rows = [];
+    var rc = { 'stamp-current': 0, 'stamp-foreign': 0, 'no-slot-authority': 0, 'entry-invalid': 0,
+               'ledger-unique-current': 0, 'ledger-unique-other-slot': 0,
+               'ledger-no-candidate': 0, 'ledger-ambiguous-multi': 0 };
+    for (var i = 0; i < all.length; i++){
+      var x = hlsClassifyEx(all[i], sfx);
+      rc[x.reason] = (rc[x.reason] || 0) + 1;
+      rows.push({ i: i, cls: x.cls, reason: x.reason, candidates: x.candidates });
+      if (x.cls === 'CURRENT' || x.cls === 'CURRENT_PROVEN_BY_LEDGER') cur.push(all[i]);
+      else if (x.cls === 'FOREIGN') foreign.push(all[i]);
+      else unknown.push(all[i]);
+    }
+    return { feature: HLS_FEATURE, version: HLS_VERSION, contract: 'AUDIT_EVIDENCE_ONLY',
+             readContract: 'ACTIVE_PRODUCTION_RUNTIME_CONSUMERS_INSIDE_FIX277 = SLOT_SCOPED',
+             attribution: 'UNIQUE_ATTRIBUTION_REQUIRED',
+             on: hlsOn(), slot: sfx, total: all.length,
+             current: cur, foreign: foreign, unknown: unknown,
+             currentCount: cur.length, foreignCount: foreign.length, unknownCount: unknown.length,
+             reasonCounts: rc, rows: rows, slotsSeen: hlsSlotSfxs().sort(),
+             classOf: function(e){ return hlsClassify(e, sfx); },
+             reasonOf: function(e){ return hlsClassifyEx(e, sfx).reason; },
+             candidatesOf: function(e){ return hlsClassifyEx(e, sfx).candidates; } };
+  }
+  function hlsDiag(){
+    var r = hlsRead();
+    return { feature: HLS_FEATURE, version: HLS_VERSION, contract: 'AUDIT_EVIDENCE_ONLY',
+             readContract: r.readContract, attribution: r.attribution,
+             on: hlsOn(), killed: hlsKilled(), key: HLS_KEY, cap: HLS_CAP, stampField: HLS_STAMP,
+             slot: r.slot, total: r.total, current: r.currentCount, foreign: r.foreignCount,
+             unknown: r.unknownCount, reasonCounts: r.reasonCounts, slotsSeen: r.slotsSeen,
+             unknownNoCandidate: r.reasonCounts['ledger-no-candidate'],
+             unknownAmbiguous: r.reasonCounts['ledger-ambiguous-multi'],
+             skipNoSlot: hlsSkipNoSlot, quota: hlsQuota, wrote: hlsWrote,
+             lastReason: hlsLast, persistentKeysAdded: 0 };
+  }
+  /* ================ /HOT_LOG_SLOT_ATTRIBUTION ================ */
+
   function namingOf(text, who){
     var t = String(text || ''), w = String(who || '');
     if (!w || w.length < 2) return false;
@@ -586,6 +809,9 @@
           if ((ent.last || 0) < (le2.last || 0)) ent.last = le2.last;
         }
         qs[W] = ent; qDirty = true; aliasCache = null;
+        /* ★HOT_LOG_SLOT_ATTRIBUTION v1: 既定 OFF = 下の 5 行（production L523-527 相当）を
+           **1 バイトも変えずに**実行する。ON のときだけ slot gate + stamp 版へ分岐する。 */
+        if (hlsOn()){ try { hlsWrite(turnIdx, L1, W); } catch(e2h){} } else
         try {
           var lg = JSON.parse(localStorage.getItem('v292Dfix537_log') || '[]');
           lg.push({ ts: Date.now(), turn: turnIdx, alias: L1, canonical: W });
@@ -974,6 +1200,7 @@
     store: loadQ, key: QK, surgery: surgery, aliasMap: aliasMap, aliasFix: aliasFix,
     noteAppear: noteAppear, quasiRecent: quasiRecent, syncConv: syncConv, unifyCards: unifyCards,
     detectSelfNaming: detectSelfNaming, /* ★fix537 検証口(実経路はparsePlanラップ) */
+    fix537SlotLog: hlsRead, fix537SlotLogDiag: hlsDiag,   /* ★HOT_LOG_SLOT_ATTRIBUTION v1 の唯一の READ 経路と診断口(読むだけ) */
     normalizeConvWho: normalizeConvWho,   /* ★fix538 検証口 */
     ambiguousHubs: ambiguousHubs,         /* ★fix541 検出のみ・停止措置なし */
     _dropCache: function(){ qStore = null; qKeyLoaded = ''; aliasCache = null; }, /* 検証用 */
