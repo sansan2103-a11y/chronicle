@@ -30,15 +30,62 @@
  * 保存先= localStorage['v292Dfix553_log'](上限30件・古いものから捨てる)
  *
  * ============================================================================
- * ★Q119 PHASE B FINAL ACTIVATION (SB-3) FOR S4 TOPOLOGY(②C1 裁定 EM・縮小版 B+C+D) — offline candidate
- *   ★lineage = candidate/q119b4/。
- *     base   = candidate/q119b3/v292Dfix553-punct-probe.js
- *              sha256 c7dbfad469b99af2c1275fb429467cb5a8471cd0648301090443bf548f5c8385 / 50845 B（FROZEN）
+ * ★Q119 PHASE B WATCHER LIVENESS FIX (q119b5) FOR S4 TOPOLOGY(②C1 裁定 ER・縮小版 B+C+D) — offline candidate
+ *   ★lineage = candidate/q119b5/。
+ *     base   = candidate/q119b4/v292Dfix553-punct-probe.js
+ *              sha256 6a2758b6801a84bda893dd34b4fc99f56a6d69ffc8cad085e894a35bc76b0e1c / 52284 B（FROZEN・現 live）
  *     topology base = candidate/q119s4/（Phase A DEFAULT ON ＋ CASE_VIEW γ・5 file）
- *     q119b / q119b2 / q119b3 / q119s4 は 1 バイトも置き換えない。
- *     q119b の 13/13・q119b2 の 24/24・q119b3 の 32/32 の記録はそれぞれの実体に対して有効なまま残る。
- *     ★q119b3（production resident / DEFAULT OFF / SB-2 canary PASS の proven baseline）は
- *       **physical rollback 先**として残す(②C1 裁定 EM-4 の R-B1)。
+ *     q119b / q119b2 / q119b3 / q119b4 / q119s4 は 1 バイトも置き換えない。
+ *     q119b の 13/13・q119b2 の 24/24・q119b3 の 32/32・q119b4 の 33/33 の記録は
+ *     それぞれの実体に対して有効なまま残る。
+ *     ★q119b4（現 live / DEFAULT ON）＝ **physical rollback 先 R-B1'**、
+ *       q119b3（DEFAULT OFF / SB-2 canary PASS の proven baseline）＝ **R-B1**(②C1 裁定 EM-4)。
+ *
+ *   ★直す欠陥 = Q119B4_PHASE_B_WATCHER_UNBOUNDED_IN_T1_LOAD
+ *     （CONFIRMED_RUNTIME_LIVE + CONFIRMED_SOURCE ／ gold/F537HS_SH1_INERT_PLACEMENT_LIVE_v1.md §3）
+ *     live 観測: T1 topology（最外殻 Planner.parsePlan に __v292Dfix277q が無い load・[__f553,__f648]）で
+ *       q119b4 の pbF277Quiescent() が fix277 marker を要求するため **永久に false** →
+ *       quiescence 窓が開かず reattachOnce に到達せず、pbWatch が 500ms ごとに無限に回る
+ *       （watchTicks 31 @ 53s・reattachCalls 0・layers 1・iAmOutermost true・watcherDone false）。
+ *       このとき fix553 wrap#1 は既に最外殻なので、本来は stop/already-outermost で閉じるべきだった。
+ *
+ *   ★QUIESCENCE AUTHORITY = PARSEPLAN REFERENCE STABILITY, NOT FIX277 MARKER（②C1 裁定 ER-2・逐語）
+ *     手順（pbWatch の 1 tick）:
+ *       (1) registry exactly 4/4（既存 pbProofDecide・PB_PROOF_GRACE_TICKS=12 不変）。
+ *       (2) Planner.parsePlan の **reference identity** が既存 quiescence margin
+ *           （PB_QUIESCE_MARGIN_MS=1500 不変）の間 1 度も変わらないことを観測する。
+ *           誰か（fix277 / fix645 / fix648 / 他）が代入すれば参照が変わる = 窓を取り直す。
+ *       (3) 窓が満了した時点で fix553 が既に最外殻（pbIAmOutermost）なら **再 wrap せず**
+ *           'stop/already-outermost' で latch して watcher を停止する。
+ *           最外殻でなければ従来どおり **ちょうど 1 回**だけ reattach して停止する。
+ *     ★fix277 marker（__v292Dfix277q / __v292Dfix277b2）は **診断情報へ降格**した。
+ *       pbF277Quiescent() は残すが **authority 経路から呼ばない**（_pbState の f277Quiescent は診断のみ）。
+ *     ★健全性: fix277 の installParse() は「marker が parsePlan に無いとき」だけ再代入する。
+ *       marker が消えるのは誰かが parsePlan に代入したときだけなので、参照 identity の安定は
+ *       marker 到着の **上位条件**である（marker 条件で待てた事象はすべて参照条件でも待てる）。
+ *       逆に T1（marker が永久に来ない load）では参照条件だけが決着できる。
+ *
+ *   ★HARD WATCH BUDGET = REQUIRED（②C1 裁定 ER-2・二重安全弁）
+ *     PB_WATCH_MAX_TICKS = 240（既存 pbWatch の 500ms tick の本数上限。新しいタイマーは 1 本も足さない）
+ *     ★BUDGET EXHAUSTION MUST STOP, NEVER BLIND-REATTACH:
+ *       上限到達で watcher を停止し（pbDone=true）、**現 topology をそのまま保持**して
+ *       reattach は 1 回も行わない。trace 'stop/budget-exhausted' と _pbState.budgetExhausted の
+ *       診断だけを残す（新永続 write 0）。
+ *     ★恒久値ではなく offline 実測に基づく bounded constant:
+ *       正常経路の最大 tick 数（late-install / lateReg / fix277-watchdog 最大 / registry 後から 4/4）を
+ *       harness が実測し、その最大 × 余裕（≥3）が定数以下であることを機械検査する
+ *       （受入 W-7。wall-clock 値そのものは acceptance にしない = B13 と同じ作法）。
+ *
+ *   ★q119b4 から引き継ぐもの（1 バイトも変えない）:
+ *     DEFAULT ON ／ kill 2 本（v292Dfix553PbOff / v292DQ119PageCanaryOff）／ session opt-in 廃止 ／
+ *     RUNTIME_PHASE_A_PROOF（registry ちょうど 4/4・grace 12 tick・pre-reattach 再読）／
+ *     reattachOnce latch ／ 機構 B の参照 identity 最外殻判定 ／ 機構 C の activeId 短絡。
+ *     新永続 write 0 ／ 新タイマー 0 ／ parse ごとの storage read 0 ／ WRITE / capture / poll 側 無変更。
+ *   ★ROLLBACK（q119b5）:
+ *     (R-B0 論理) localStorage['v292Dfix553PbOff']='1' ＋ reload でその profile だけ OFF
+ *     (R-B1' 物理・第一) fix553 を q119b4 6a2758b6…(52284 B) へ戻す（= 現 live・欠陥ごと戻る）
+ *     (R-B1  物理・第二) fix553 を q119b3 c7dbfad4…(50845 B) へ戻す（Phase B DEFAULT OFF の proven baseline）
+ *     (R-B2  物理・第三) fix553 を production 7913a971…(27294 B) へ戻す（Phase B 撤去）
  *
  *   ★SB-3 DEFAULT ON ／ SESSION OPT-IN ABOLISHED ／ FAIL CLOSED ／ '1' の厳密一致のみ
  *   ★REQUIRES REGISTRY 4-4 (RUNTIME_STATE_PROOF)
@@ -116,25 +163,31 @@
  *   ★PHASE B 自身の段階(設計 v3 §4・Phase A の S1→S2→S4 を写す):
  *       SB-1 inert 配置(q119b3・flag 0 で全 user PB=false・済)
  *       SB-2 QA tab canary(q119b3 ＋ sessionStorage opt-in・PASS/CLOSED)
- *       SB-3 DEFAULT ON(★本 file。opt-in 廃止 = intent を !PbOff ∧ !PageCanaryOff にした)
+ *       SB-3 DEFAULT ON(q119b4・現 live)
+ *       SB-4 WATCHER LIVENESS FIX(★本 file = q119b5。DEFAULT ON を継承・PRODUCTION DEPLOY は HOLD)
  *     ★本 file に inert 配置段階は無い(deploy した瞬間に全 page で Phase B が既定 ON になる)。
- *   ★ROLLBACK(②C1 裁定 EM-4):
+ *   ★ROLLBACK(②C1 裁定 EM-4 / ER を継承・詳細は上の q119b5 ROLLBACK 節):
  *     (R-B0 論理・profile 単位) localStorage['v292Dfix553PbOff']='1' ＋ reload でその profile だけ OFF
  *       (Phase A kill localStorage['v292DQ119PageCanaryOff']='1' でも Phase B は止まる)。
  *       単一 profile / 単一 page の異常のみに使う。
- *     (R-B1 物理・第一の fleet rollback) fix553 を **q119b3 SB1 package の
+ *     (R-B1' 物理・第一の fleet rollback) fix553 を **q119b4 の
+ *       6a2758b6801a84bda893dd34b4fc99f56a6d69ffc8cad085e894a35bc76b0e1c(52284 B)** へ戻す
+ *       = 現 live へ戻る(T1 watcher 欠陥も一緒に戻ることを承知のうえで使う)。
+ *     (R-B1 物理・第二段) fix553 を **q119b3 SB1 package の
  *       c7dbfad469b99af2c1275fb429467cb5a8471cd0648301090443bf548f5c8385(50845 B)** へ戻す
- *       = Phase B を production resident / DEFAULT OFF / session opt-in の proven baseline へ戻す。
- *     (R-B2 物理・第二段) fix553 を production 7913a971…(27294 B) に戻して Phase B コードごと撤去。
+ *       = Phase B を production resident / session opt-in の proven baseline へ戻す。
+ *     (R-B2 物理・第三段) fix553 を production 7913a971…(27294 B) に戻して Phase B コードごと撤去。
  *   ★裁定 DZ により機構 A(Planner.parsePlan の accessor 化 = assignment provenance
  *     recorder)は **採用しない**。production 側に accessor は 1 つも張らない。
  *   機構 B: 「自分が最終 plan 境界に居るか」の権威は **参照 identity**
  *           (Planner.parsePlan === 自分が作った wrapper)。__f553 は DIAGNOSTIC ONLY。
  *   機構 C: 各 wrapper 層の先頭で activeId を見る。active でない層は telemetry にも
  *           lastRaw/pairedRaw にも **一切触れずに** 元の戻り値を返す。
- *   機構 D: fix277 の lifecycle 停止(v292Dfix277-quasi-pack.js L785 の a&&b)を
- *           **外から読み取りだけで**評価し、待機窓で代入が無いことを確かめてから
+ *   機構 D: ★q119b5 で権威を差し替えた。待機窓の条件は **Planner.parsePlan の参照 identity が
+ *           margin の間不変であること**であり、fix277 marker は読まない(診断へ降格)。
+ *           窓が満了した時点で自分が最外殻なら再装着せず停止し、そうでなければ
  *           **ちょうど 1 回だけ** 再装着する(latch)。二度目は無い。
+ *           さらに tick 数の hard budget(PB_WATCH_MAX_TICKS)で watcher が必ず有限回で止まる。
  * ============================================================================
  */
 (function v292Dfix553(){
@@ -174,7 +227,17 @@
      RUNTIME_PHASE_A_PROOF が最終的に不成立になった瞬間に false へ落ち、二度と true に戻らない
      (単調・latch)。機構 B/C/D はすべて **pbLive** を見る。 */
   var pbLive = PB;
-  var PB_QUIESCE_MARGIN_MS = 1500;  /* fix277 waitP の周期 500ms(fix277 L786)× 3 周期 */
+  var PB_QUIESCE_MARGIN_MS = 1500;  /* fix277 waitP の周期 500ms(fix277 L786)× 3 周期（q119b4 から不変） */
+  /* ★q119b5 HARD WATCH BUDGET（二重安全弁・②C1 裁定 ER-2）
+     既存 pbWatch の 500ms tick を数えるだけの上限。新しいタイマーは 1 本も足さない。
+     上限到達 = 「決着できない page」と確定し、watcher を止めて現 topology を保持する。
+     ★BUDGET EXHAUSTION MUST STOP, NEVER BLIND-REATTACH（reattach は 1 回も行わない）。
+     根拠（offline 実測・受入 W-7 で機械計算）: 正常経路の最大 tick 数は
+       通常 load / lateReg(registry 後から 4/4) / late-install / fix277-watchdog 最大（fix277 waitP が
+       build を 500ms×最大 61 回待つ間 parsePlan は再代入されない）でも 70 tick を超えない。
+       その ×3 以上の余裕を取って 240 tick(= 既存 tick 周期で 120 秒相当)とした。
+     ★wall-clock 値そのものは acceptance 条件にしない（②C1 裁定 EG SM-2 / 受入 B13 と同じ作法）。 */
+  var PB_WATCH_MAX_TICKS = 240;
   /* ★RUNTIME_PHASE_A_PROOF（PHASE_B_MUST_NOT_REATTACH_UNLESS_PHASE_A_REGISTRY_COMPLETE） */
   var PB_REG_KEYS = ['f74parse', 'f78parse', 'f645parse', 'f648parse'];
   var PB_PROOF_GRACE_TICKS = 12;    /* ★既存 pbWatch の 500ms tick を最大 12 回だけ再利用(= 6s)。
@@ -189,8 +252,10 @@
   var pbReattachCalls = 0;
   var pbDone = false;               /* 監視ループ終了 latch(再起動しない) */
   var pbWatchTicks = 0;
-  var pbQuiesceSince = 0;           /* f277 quiescent を最初に観測した時刻 */
+  var pbQuiesceSince = 0;           /* ★q119b5: 参照 identity が安定し始めた時刻 */
   var pbQuiesceFn = null;           /* そのときの Planner.parsePlan 参照(代入の有無を identity で見る) */
+  var pbQuiesceRestarts = 0;        /* ★q119b5 診断: 窓を取り直した回数(= margin 内の代入回数) */
+  var pbBudgetOut = false;          /* ★q119b5 診断: HARD WATCH BUDGET を使い切って停止したか */
   var pbTrace = [];                 /* 診断のみ。最大 20 件 */
   function pbLog(ev){ try { if (pbTrace.length < 20) pbTrace.push({ ev: ev, ts: Date.now() }); } catch(e){} }
 
@@ -208,7 +273,12 @@
       return pbMyFns.length > 0 && P.parsePlan === pbMyFns[pbMyFns.length - 1];
     } catch(e){ return false; }
   }
-  /* 機構 D: fix277 の停止条件を **fix277 自身の式と同じ形**で、外から読み取りだけで評価する。
+  /* ★q119b5: DIAGNOSTIC ONLY へ降格した（②C1 裁定 ER-2「fix277 marker は診断情報へ降格」）。
+     この関数は _pbState().f277Quiescent からしか呼ばれない。pbWatch の authority 経路からは
+     **1 か所も呼ばない**（受入 SRC-5 で機械計数する）。
+     降格の理由（live 実測）: T1 topology（最外殻に __v292Dfix277q が無い load）では
+     この式が永久に false になり、quiescence 窓が開かないまま watcher が無限に回った。
+     機構 D: fix277 の停止条件を **fix277 自身の式と同じ形**で、外から読み取りだけで評価する。
        v292Dfix277-quasi-pack.js L777  var a = installParse();
                                  L726  if (P.parsePlan.__v292Dfix277q) return true;   → a の実体
                                  L784  var b = ready ? installBuild() : false;
@@ -593,35 +663,66 @@
     pbLog('proof-wait/' + pf.proof + '#' + pbProofTries);
     return false;
   }
+  /* ★q119b5: QUIESCENCE AUTHORITY = PARSEPLAN REFERENCE STABILITY（②C1 裁定 ER-2）
+     いまの Planner.parsePlan 参照を読むだけの補助関数（production に accessor は張らない）。 */
+  function pbPlanFn(){
+    try {
+      var P = getPlanner553();
+      return (P && typeof P.parsePlan === 'function') ? P.parsePlan : null;
+    } catch(e){ return null; }
+  }
+  /* ★q119b5: 参照 identity が margin の間不変であることを観測する 1 tick 分。
+     戻り値（診断名も兼ねる）:
+       'none'    Planner.parsePlan がまだ関数でない（窓は開いていない）
+       'lost'    関数が消えた（開いていた窓を捨てる）
+       'start'   窓を開いた
+       'restart' 誰かが代入した = 窓を取り直した（fix277 / fix645 / fix648 / 他を区別しない）
+       'wait'    まだ margin に届いていない
+       'stable'  margin のあいだ 1 度も代入が無かった = quiescence 成立
+     ★marker は 1 つも見ない。「代入が無いこと」を参照の不変で確かめるだけである。 */
+  function pbQuiesceObserve(now){
+    var fn = pbPlanFn();
+    if (!fn){
+      if (pbQuiesceSince){ pbQuiesceSince = 0; pbQuiesceFn = null; return 'lost'; }
+      return 'none';
+    }
+    if (!pbQuiesceSince){ pbQuiesceSince = now; pbQuiesceFn = fn; return 'start'; }
+    if (fn !== pbQuiesceFn){
+      pbQuiesceSince = now; pbQuiesceFn = fn; pbQuiesceRestarts++; return 'restart';
+    }
+    return (now - pbQuiesceSince >= PB_QUIESCE_MARGIN_MS) ? 'stable' : 'wait';
+  }
   function pbWatch(){
     if (pbDone) return;
     if (off()){ pbDone = true; pbLog('stop/off'); return; }
     pbWatchTicks++;
+    /* ★q119b5 HARD WATCH BUDGET（二重安全弁）: 上限に達したら **何もせずに止まる**。
+       reattach は 1 回も行わない(BUDGET EXHAUSTION MUST STOP, NEVER BLIND-REATTACH)。
+       現 topology はそのまま保持され、残るのは診断だけ(新永続 write 0)。 */
+    if (pbWatchTicks > PB_WATCH_MAX_TICKS){
+      pbBudgetOut = true; pbDone = true; pbLog('stop/budget-exhausted'); return;
+    }
     try {
       /* ★Phase A registry が complete と証明されるまでは quiescence 窓を **開始しない**
-         (= reattachOnce lifecycle にそもそも入らない)。 */
+         (= reattachOnce lifecycle にそもそも入らない)。q119b4 から 1 行も変えていない。 */
       if (!pbProofOK && !pbProofDecide('watch')){
         if (pbDone) return;                 /* budget 切れ = inert 確定。tick も足さない */
         setTimeout(pbWatch, 500); return;   /* 既存 chain のみ */
       }
-      if (pbF277Quiescent()){
-        var P = getPlanner553(), now = Date.now();
-        if (!pbQuiesceSince){ pbQuiesceSince = now; pbQuiesceFn = P.parsePlan; pbLog('quiesce/start'); }
-        else if (now - pbQuiesceSince >= PB_QUIESCE_MARGIN_MS){
-          /* 待機窓のあいだ Planner.parsePlan への代入が 1 度も無かったことを、
-             production に accessor を張らずに **参照 identity の不変**として確かめる。 */
-          if (P.parsePlan === pbQuiesceFn){
-            /* ★PHASE_B_MUST_NOT_REATTACH_UNLESS_PHASE_A_REGISTRY_COMPLETE:
-               pbReattachOnce() の **直前・この瞬間**に registry をもう一度読む(latch 済みでも読む)。
-               IIFE では読めない(fix553 idx 24 ＜ Phase A 4 file idx 56/65/267/268)。 */
-            if (!pbProofDecide('pre-reattach')) return;   /* 不成立 = 再装着せず inert 確定 */
-            if (pbIAmOutermost()){ pbDone = true; pbLog('stop/already-outermost'); return; }
-            pbReattachOnce();
-            pbDone = true; pbLog('stop/reattached'); return;
-          }
-          pbQuiesceSince = now; pbQuiesceFn = P.parsePlan; pbLog('quiesce/restart');  /* 代入があった = 窓を取り直す */
-        }
-      } else if (pbQuiesceSince){ pbQuiesceSince = 0; pbQuiesceFn = null; pbLog('quiesce/lost'); }
+      var q = pbQuiesceObserve(Date.now());
+      /* trace は最大 20 件なので、churn する page で末尾の停止理由を潰さないよう
+         restart は **最初の 1 回だけ**記録する（回数は _pbState.quiesceRestarts で読む）。 */
+      if (q === 'start' || q === 'lost' || (q === 'restart' && pbQuiesceRestarts === 1)) pbLog('quiesce/' + q);
+      if (q === 'stable'){
+        /* ★PHASE_B_MUST_NOT_REATTACH_UNLESS_PHASE_A_REGISTRY_COMPLETE:
+           pbReattachOnce() の **直前・この瞬間**に registry をもう一度読む(latch 済みでも読む)。
+           IIFE では読めない(fix553 idx 24 ＜ Phase A 4 file idx 56/65/267/268)。 */
+        if (!pbProofDecide('pre-reattach')) return;   /* 不成立 = 再装着せず inert 確定 */
+        /* ★T1 欠陥の修復点: 既に最外殻なら再 wrap せず、ここで latch して止まる。 */
+        if (pbIAmOutermost()){ pbDone = true; pbLog('stop/already-outermost'); return; }
+        pbReattachOnce();
+        pbDone = true; pbLog('stop/reattached'); return;
+      }
     } catch(e){}
     setTimeout(pbWatch, 500);
   }
@@ -777,8 +878,19 @@
                seq: pbSeq, activeId: pbActiveId, layers: pbMyFns.length,
                reattached: pbReattached, reattachCalls: pbReattachCalls,
                watcherDone: pbDone, watchTicks: pbWatchTicks,
+               /* ★q119b5: fix277 marker は **診断情報へ降格**（authority ではない）。
+                  field 名は q119b4 と同じまま残す（live の読み出し手順を変えないため）。 */
                f277Quiescent: pbF277Quiescent(), iAmOutermost: pbIAmOutermost(),
-               quiesceMarginMs: PB_QUIESCE_MARGIN_MS, trace: pbTrace.slice(),
+               quiesceMarginMs: PB_QUIESCE_MARGIN_MS,
+               /* ★q119b5 の追加 field（4 つだけ・すべて読み取り専用の診断）。
+                  quiesceAuthority : live で q119b4 と q119b5 を 1 目で区別するため
+                  quiesceRestarts  : margin 内に何回代入が続いたか（既存 field では表せない）
+                  watchBudget      : 有効な hard budget の値（定数の live 確認用）
+                  budgetExhausted  : budget 切れで止まったのか（stop 理由は trace だけだと 20 件で溢れる） */
+               quiesceAuthority: 'parsePlan-reference-stability',
+               quiesceRestarts: pbQuiesceRestarts,
+               watchBudget: PB_WATCH_MAX_TICKS, budgetExhausted: pbBudgetOut,
+               trace: pbTrace.slice(),
                pairedBody: pairedRaw ? pairedRaw.body : null,
                pairedLen: pairedRaw ? pairedRaw.bodyLen : null,
                parsedBody: lastParsed ? lastParsed.body : null };
