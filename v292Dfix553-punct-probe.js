@@ -28,6 +28,101 @@
  * OFF   = localStorage['v292Dfix553Off'] = '1'
  * 読出  = window.__v292Dfix553.dump() / .stats() / .clear() / .metrics(text)
  * 保存先= localStorage['v292Dfix553_log'](上限30件・古いものから捨てる)
+ *
+ * ============================================================================
+ * ★Q119 PHASE B FOR S4 TOPOLOGY(②C1 裁定 EI SO-3・縮小版 B+C+D) — offline candidate
+ *   ★lineage = candidate/q119b3/。
+ *     base   = candidate/q119b2/v292Dfix553-punct-probe.js
+ *              sha256 dabd4f11185776bf502818b10b8aaf72fcf7877f8c19892e1cdebead75fcd8ac / 48010 B（FROZEN）
+ *     topology base = candidate/q119s4/（Phase A DEFAULT ON ＋ CASE_VIEW γ・5 file）
+ *     q119b / q119b2 / q119s4 は 1 バイトも置き換えない。
+ *     q119b の 13/13・q119b2 の 24/24 の記録はそれぞれの実体に対して有効なまま残る。
+ *
+ *   ★NOT FOR PRODUCTION YET ／ DEFAULT OFF ／ SESSION OPT-IN ONLY ／ FAIL CLOSED ／ '1' の厳密一致のみ
+ *   ★REQUIRES REGISTRY 4-4 (RUNTIME_STATE_PROOF)
+ *     = Phase A が「その page で実効」であることの証明は window.__v292WrapReg の 4 key であり、
+ *       S4 では opt-in flag が存在しないので flag では判定できない(設計 §1-1 / §5-2)。
+ *   ★DEPLOY SEPARATE FROM S4: 本 file は S4 build と同じ release に混ぜない。
+ *     SB-1(inert 配置) → SB-2(QA tab canary) → SB-3(DEFAULT ON・別裁定) の順で段階を踏む。
+ *
+ *   PHASE_B_CANDIDATE_REQUIRES_PHASE_A_GROWTH_STOP_CORE
+ *     この変更は Phase A(fix74/78/645/648 の wrapParse INSTALL_ONCE 化)が入っている
+ *     topology を前提にする。Phase A 無しの chain 無限成長下では意味を持たない。
+ *
+ *   PHASE_B_REQUIRES_PHASE_A_EFFECTIVE（★S4 版・q119b2 の PHASE_B_REQUIRES_PAGE_CANARY を置換）
+ *     DECLARED_INTENT(IIFE で 1 回だけ読む・page 生存中の定数):
+ *       sessionStorage['v292DQ119PhaseBOn']     === '1'   (Phase B opt-in・tab scope・唯一の opt-in)
+ *       AND localStorage ['v292DQ119PageCanaryOff'] !== '1'   (Phase A kill・profile 全体)
+ *       AND localStorage ['v292Dfix553PbOff']       !== '1'   (Phase B kill・profile 全体・最優先)
+ *       storage read が throw したら **OFF**(明示的 fail closed。lsg() 経由の暗黙 null に頼らない)
+ *     ★sessionStorage['v292DQ119PageCanaryOn'] は **読まない**。
+ *       S4 build では Phase A の opt-in が廃止され(設計 §1-2 / §1-3 (1a))、誰も立てないので、
+ *       q119b2 のようにこれを AND 条件に含めると Phase B は **永久 OFF** になる(設計 §5-1)。
+ *       立てても消しても何も起きない。frozen q119b2 はこの read を **持ったまま**凍結されている。
+ *     ★localStorage['v292Dfix553PbOn'] も **読まない**(q119b2 の決定を継承・設計 §3 J-1〜J-5)。
+ *     ★読むだけの key は 3 本(q119b2 は 4 本)。新しい永続データは 1 バイトも書かない。
+ *     ★opt-in と kill で key 接頭辞が食い違う(v292DQ119PhaseBOn / v292Dfix553PbOff)。
+ *       kill の既存契約を壊さないことを優先した **意図的な非対称**である(OQ-B3・継承)。
+ *     FLAG_MUST_BE_SET_BEFORE_PAGE_LOAD ／ kill は per-call ではない(効かせるには reload)
+ *     ★flag は「この tab で Phase B を試したい」という **declared intent** であって、
+ *       「Phase A が実際に install した」という **runtime proof** ではない(設計 §4-1)。
+ *       runtime proof は下の registry 4-4 だけが与える。
+ *
+ *   ★REQUIREMENT WORDING（②C1 裁定 EI・逐語）
+ *     「fix553 は、**それ以降どの production wrapper も plan を書き換えない地点**で
+ *       最終 plan 境界を正しく観測できなければならない」。
+ *     = 要求は「物理的に永久に最外殻であること」では **ない**。
+ *       機構 B は参照 identity で「いま自分が最終境界に居るか」を見るだけであり、
+ *       のちに他の fix が Planner.parsePlan を包み直したら、その層は機構 C により
+ *       自分から inert になる(telemetry / lastRaw に一切触らない)。
+ *     ★fix845(DEFAULT OFF・最後尾)を有効化した場合は、fix845 が plan を書き換えるかどうかで
+ *       この条件が変わりうる。**fix845 activation 時は pairing を再検証すること**
+ *       (S4 設計 §12 / Q119S4 OI-5 の X-4 / X-6 と同じ申し送り)。本 lineage は fix845 OFF の
+ *       topology でのみ受入値を持つ。
+ *
+ *   PHASE_B_MUST_NOT_REATTACH_UNLESS_PHASE_A_REGISTRY_COMPLETE（★q119b2 から 1 行も変えない）
+ *     ★S4 では Phase A が DEFAULT ON なので、実効な page では registry が必ず 4/4 になる
+ *       (PHASE_A_REGISTRY_IS_RUNTIME_STATE_PROOF・S4 設計 §1-1)。q119b2 の OI-4
+ *       「S4 で registry を誰が書くのか」はこれで解消している。
+ *     fix553 は index.html idx 24 で走り、Phase A の 4 file(idx 56/65/267/268)より **先**なので、
+ *     IIFE 時点では window.__v292WrapReg は必ず undefined である。よって runtime proof は
+ *     **pbWatch の判定の瞬間・pbReattachOnce() の直前**に評価する:
+ *       window.__v292WrapReg が {f74parse,f78parse,f645parse,f648parse} の
+ *       **ちょうど 4 key・すべて === true** であること(registry のみを見る。marker は使わない)。
+ *       undefined → proof 'undefined' ／ それ以外の過不足 → proof 'partial' → **どちらも再装着しない**。
+ *     ★proof が最終的に不成立なら Phase B の意味論を **丸ごと inert** にする:
+ *       pbLive=false ／ pbDone=true(監視終了) ／ 再装着 0 ／ 以後 install 判定も activeId 判定も
+ *       OFF(production)経路と同一になる。= captures / telemetry の意味論が OFF arm と一致する。
+ *     ★registry が **後から** 4/4 になる場合に備え、判定は既存 pbWatch の 500ms tick を
+ *       **最大 PB_PROOF_GRACE_TICKS(=12) 回だけ**再利用して再評価する(bounded)。
+ *       新しいタイマーは 1 本も足さない。exactly-once latch(pbReattached)は 1 ミリも緩めない。
+ *     ★評価点は 2 つ。どちらも registry だけを読む:
+ *       (P1) pbWatch の各 tick 冒頭。complete を観測するまで **quiescence 窓を開始しない**
+ *            (= reattachOnce lifecycle にそもそも入らない)。complete で latch(pbProofOK)。
+ *            budget を使い切ったら inert 確定。
+ *       (P2) pbReattachOnce() の **直前**。latch 済みでも必ずもう一度読む。
+ *            ここで不成立なら再装着せず、その場で inert 確定(grace は使わない)。
+ *
+ *   既定 = OFF。OFF のときは機構 B/C/D がすべて素通りし、監視タイマーも起動しない
+ *   = Phase A 時点の fix553 と挙動が同一。
+ *   ★PHASE B 自身の段階(設計 v3 §4・Phase A の S1→S2→S4 を写す):
+ *       SB-1 inert 配置(flag 0・全 user で PB=false・タイマー 0 本。S4 が live で安定した後・別 commit)
+ *       SB-2 QA tab canary(その tab の sessionStorage['v292DQ119PhaseBOn']='1' ＋ reload)
+ *       SB-3 DEFAULT ON(opt-in 廃止 = intent を !PbOff ∧ !PageCanaryOff にする)★別裁定
+ *     本 file は SB-1 / SB-2 用であり、SB-3 の反転は **含んでいない**。
+ *   ★ROLLBACK: localStorage['v292Dfix553PbOff']='1' ＋ reload で profile 全体を OFF
+ *     (Phase A kill localStorage['v292DQ119PageCanaryOff']='1' でも Phase B は止まる)。
+ *     物理 rollback は fix553 を production 7913a971…(27294 B) に戻すだけでよい。
+ *   ★裁定 DZ により機構 A(Planner.parsePlan の accessor 化 = assignment provenance
+ *     recorder)は **採用しない**。production 側に accessor は 1 つも張らない。
+ *   機構 B: 「自分が最終 plan 境界に居るか」の権威は **参照 identity**
+ *           (Planner.parsePlan === 自分が作った wrapper)。__f553 は DIAGNOSTIC ONLY。
+ *   機構 C: 各 wrapper 層の先頭で activeId を見る。active でない層は telemetry にも
+ *           lastRaw/pairedRaw にも **一切触れずに** 元の戻り値を返す。
+ *   機構 D: fix277 の lifecycle 停止(v292Dfix277-quasi-pack.js L785 の a&&b)を
+ *           **外から読み取りだけで**評価し、待機窓で代入が無いことを確かめてから
+ *           **ちょうど 1 回だけ** 再装着する(latch)。二度目は無い。
+ * ============================================================================
  */
 (function v292Dfix553(){
   if (window.__v292Dfix553) return;
@@ -39,6 +134,106 @@
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix553Off') === '1'; }
+
+  /* ---- ★Q119 Phase B: DECLARED_INTENT と page-local state ----------------
+     flag は page 生存中 1 回だけ読む(parse ごとに storage を読まない = 挙動差を作らない)。
+     新しい永続データは 1 バイトも書かない。読むだけの key が 3 つ(q119b2 は 4 つ)。
+     ★read は 1 本ずつ try/catch し、catch は return false(明示的 fail closed)。
+       lsg() は throw 時に null を返すので、4 file 側(q119s4 paRead)と意味論が割れる。 */
+
+  /* (1) ★S4 の Phase A kill を q119s4 の paRead() と **同じ意味論**で読む(kill を読めて '1' でない)。
+         q119b2 の pcRead553() から sessionStorage['v292DQ119PageCanaryOn'] の read を **削除**した形。
+         S4 build には opt-in が存在しないので、読むと Phase B が永久 OFF になる(設計 v3 §2)。 */
+  function paRead553(){
+    try { return window.localStorage.getItem('v292DQ119PageCanaryOff') !== '1'; } catch(e){ return false; }
+  }
+  /* (2) Phase B 自身の opt-in は sessionStorage(tab scope)／ kill は localStorage(profile 全体・最優先)。
+         ★localStorage['v292Dfix553PbOn'] は **この lineage では読まない**(NOT IN INITIAL CANARY LINEAGE)。 */
+  function pbOn(){
+    try { if (window.localStorage.getItem('v292Dfix553PbOff') === '1') return false; } catch(e){ return false; }  /* kill が勝つ */
+    if (!paRead553()) return false;                                     /* ★Phase A kill が立っていれば fail closed OFF */
+    try { return window.sessionStorage.getItem('v292DQ119PhaseBOn') === '1'; } catch(e){ return false; }
+  }
+  var PB = pbOn();                  /* ★DECLARED_INTENT（page 生存中の定数・以後書き換えない） */
+  /* ★pbLive = 「いま実際に Phase B 意味論が生きているか」。初期値は DECLARED_INTENT。
+     RUNTIME_PHASE_A_PROOF が最終的に不成立になった瞬間に false へ落ち、二度と true に戻らない
+     (単調・latch)。機構 B/C/D はすべて **pbLive** を見る。 */
+  var pbLive = PB;
+  var PB_QUIESCE_MARGIN_MS = 1500;  /* fix277 waitP の周期 500ms(fix277 L786)× 3 周期 */
+  /* ★RUNTIME_PHASE_A_PROOF（PHASE_B_MUST_NOT_REATTACH_UNLESS_PHASE_A_REGISTRY_COMPLETE） */
+  var PB_REG_KEYS = ['f74parse', 'f78parse', 'f645parse', 'f648parse'];
+  var PB_PROOF_GRACE_TICKS = 12;    /* ★既存 pbWatch の 500ms tick を最大 12 回だけ再利用(= 6s)。
+                                       新しいタイマーは 1 本も足さない。budget を使い切ったら inert 確定。 */
+  var pbProofTries = 0;
+  var pbProofOK = false;            /* complete を一度でも観測したら latch(true)。緩めるのは latch ではなく窓の開始条件だけ */
+  var pbProof = { proof: 'undefined', keys: [], extra: [], decidedAt: 0, tries: 0, final: false, at: null };
+  var pbSeq = 0;                    /* 自分が作った wrapper の通し番号 */
+  var pbActiveId = 0;               /* 機構 C: 現在 active な層の id。これ以外の層は完全に inert */
+  var pbMyFns = [];                 /* 機構 B: 自分が作った wrapper 関数の **参照そのもの** */
+  var pbReattached = false;         /* 機構 D: 再装着 latch(成否によらず二度目は無い) */
+  var pbReattachCalls = 0;
+  var pbDone = false;               /* 監視ループ終了 latch(再起動しない) */
+  var pbWatchTicks = 0;
+  var pbQuiesceSince = 0;           /* f277 quiescent を最初に観測した時刻 */
+  var pbQuiesceFn = null;           /* そのときの Planner.parsePlan 参照(代入の有無を identity で見る) */
+  var pbTrace = [];                 /* 診断のみ。最大 20 件 */
+  function pbLog(ev){ try { if (pbTrace.length < 20) pbTrace.push({ ev: ev, ts: Date.now() }); } catch(e){} }
+
+  function getPlanner553(){
+    try { return window.Planner || (function(){ try { return (0,eval)('typeof Planner!=="undefined"?Planner:null'); } catch(e){ return null; } })(); }
+    catch(e){ return null; }
+  }
+  /* 機構 B: marker(__f553)は **一切見ない**。自分が作った最新の wrapper と参照比較する。
+     実測(gold/Q119_PHASE_B_OUTERMOST_IDENTITY_v1.json)では最外殻に __f553 が付いていても
+     所有者は fix277 でありうる = MARKER_ON_OUTERMOST_IS_NOT_INSTALL_STATE。 */
+  function pbIAmOutermost(){
+    try {
+      var P = getPlanner553();
+      if (!P || typeof P.parsePlan !== 'function') return false;
+      return pbMyFns.length > 0 && P.parsePlan === pbMyFns[pbMyFns.length - 1];
+    } catch(e){ return false; }
+  }
+  /* 機構 D: fix277 の停止条件を **fix277 自身の式と同じ形**で、外から読み取りだけで評価する。
+       v292Dfix277-quasi-pack.js L777  var a = installParse();
+                                 L726  if (P.parsePlan.__v292Dfix277q) return true;   → a の実体
+                                 L784  var b = ready ? installBuild() : false;
+                                 L757  if (P.build.__v292Dfix277b2) return true;      → b の実体
+                                 L785  if (a && b) return;                            → 恒久停止
+     fix277 は 1 バイトも変更していない。ここで marker を読むのは「自分の install 状態」を
+     決めるためではなく、「他 fix の lifecycle が終わったか」を見るためである(機構 B とは役割が違う)。 */
+  function pbF277Quiescent(){
+    try {
+      var P = getPlanner553();
+      if (!P || typeof P.parsePlan !== 'function' || typeof P.build !== 'function') return false;
+      if (!P.parsePlan.__v292Dfix277q) return false;
+      if (!P.build.__v292Dfix277b2) return false;
+      return true;
+    } catch(e){ return false; }
+  }
+
+  /* ★RUNTIME_PHASE_A_PROOF（本 lineage の新設・読み取り専用）
+     Phase A(q119pc / q119s4)が install した page では window.__v292WrapReg が
+     {f74parse,f78parse,f645parse,f648parse} の 4 key すべて true になる(q119pc 受入 ON-5 / q119s4 受入 D-4)。
+     OFF の page では undefined(OFF-8)。partial は SPLIT。
+     ★registry だけを見る。marker(__v292Dfix74w / __f645 など)は **使わない**
+       (marker は他 fix の包み直しで消えるため install state の権威にならない)。
+     ★過不足を許さない: own key が **ちょうど 4 個**で、その 4 個が上の集合と一致し、
+       すべて === true のときだけ complete。 */
+  function pbPhaseAProof(){
+    var R = null;
+    try { R = window.__v292WrapReg; } catch(e){ return { proof:'undefined', keys: [], extra: [], complete:false }; }
+    if (R === undefined || R === null || typeof R !== 'object')
+      return { proof:'undefined', keys: [], extra: [], complete:false };
+    var own = [];
+    try { own = Object.keys(R); } catch(e){ return { proof:'undefined', keys: [], extra: [], complete:false }; }
+    var hit = [], extra = [], i;
+    for (i = 0; i < PB_REG_KEYS.length; i++){
+      try { if (R[PB_REG_KEYS[i]] === true) hit.push(PB_REG_KEYS[i]); } catch(e){}
+    }
+    for (i = 0; i < own.length; i++){ if (PB_REG_KEYS.indexOf(own[i]) < 0) extra.push(own[i]); }
+    var complete = (hit.length === 4 && own.length === 4 && extra.length === 0);
+    return { proof: complete ? 'complete' : 'partial', keys: hit, extra: extra, complete: complete };
+  }
 
   /* ---- 指標 ---------------------------------------------------------- */
   /* 「、。！？…」に加えて、この作品で文の区切りに使われる ——／──／\n も区切りとして数える。
@@ -301,14 +496,33 @@
      **parsePlan は最外殻の方が正しい**(submit() が実際に受け取る plan を測りたいため)。
      よって消えていたら包み直してよい。ただし「掴めているか」は
      __f553 の有無ではなく **実際に捕捉した回数** で見る(印だけ見ると false negative になる)。 */
-  function wrapParse(){
+  function wrapParse(opt){
     try {
       var P = window.Planner || (function(){ try { return (0,eval)('typeof Planner!=="undefined"?Planner:null'); } catch(e){ return null; } })();
-      if (!P || typeof P.parsePlan !== 'function' || P.parsePlan.__f553) return false;
+      if (!P || typeof P.parsePlan !== 'function') return false;
+      if (pbLive){
+        /* ★Phase B: install 判定を marker から **参照 identity** へ差し替える(機構 B)。
+           再装着は reattachOnce(force)経由だけに限る = tryParse からは 1 枚目しか積まない。
+           → fix553 由来の代入は page 生存中 **最大 2 回**(w1 と w2)に構造的に上限が付く。
+           ★pbLive は RUNTIME_PHASE_A_PROOF が不成立になると false へ落ちる。
+             落ちた後は下の marker 判定(= production/OFF 経路)へ戻る。 */
+        if (!(opt && opt.force)){
+          if (pbIAmOutermost()) return false;
+          if (pbMyFns.length > 0) return false;
+        }
+      } else if (P.parsePlan.__f553) return false;   /* OFF = 現行(Phase A 時点)の marker 判定 */
       var prev = P.parsePlan;
+      var myId = pbLive ? (++pbSeq) : 0;
       var wrapped = function(){
         var r = prev.apply(this, arguments);      /* 例外はそのまま伝播させる */
         try {
+          /* ★Phase B 機構 C: activeId 判定を **いちばん最初に** 行う。
+             自分が active な層でなければ telemetry(parsedCaptures / lastParsed)にも
+             lastRaw / pairedRaw にも一切触れずに、そのまま元の戻り値を返す。
+             OFF のときは pbLive=false で短絡するので 1 行も意味を持たない。
+             ★RUNTIME_PHASE_A_PROOF 不成立で pbLive が false へ落ちた後も同じく短絡し、
+               この層は production/OFF の層とまったく同じに振る舞う(= 全層が telemetry を触る)。 */
+          if (pbLive && pbActiveId !== myId) return r;
           if (!off() && r && Array.isArray(r.narrative)){
             lastParsed = { metrics: metrics(r.narrative.join('\n')), n: r.narrative.length, ts: Date.now() };
             parsedCaptures++;
@@ -325,11 +539,76 @@
         } catch(e){}
         return r;
       };
-      wrapped.__f553 = true;
+      wrapped.__f553 = true;                       /* ★DIAGNOSTIC ONLY。install 判定には使わない */
       try { Object.keys(prev).forEach(function(k){ if (k !== '__f553') wrapped[k] = prev[k]; }); } catch(e){}
+      /* ★L329 と同じ「__f553 以外の own key は全継承」を維持する。
+         __v292Dfix277q を落とさないことが fix553↔fix277 の ping-pong 防止の要(補助的観測)。 */
+      if (pbLive) pbMyFns.push(wrapped);
       P.parsePlan = wrapped;
+      if (pbLive){ pbActiveId = myId; pbLog('wrap#' + myId + (opt && opt.force ? '/force' : '')); }
       return true;
     } catch(e){ return false; }
+  }
+
+  /* ---- ★Q119 Phase B 機構 D: 監視ループと「ちょうど 1 回」の再装着 --------- */
+  function pbReattachOnce(){
+    if (pbReattached) return false;      /* ★構造的な 1 回性(成否によらず二度目は無い) */
+    pbReattached = true; pbReattachCalls++;
+    pbLog('reattachOnce');
+    return wrapParse({ force: true });
+  }
+  /* ★RUNTIME_PHASE_A_PROOF の判定 1 回分。complete を観測したら latch(pbProofOK)。
+     bounded budget(PB_PROOF_GRACE_TICKS)を使い切るまで complete にならなければ inert 確定。
+     戻り値 true = 「この tick は先へ進んでよい」。 */
+  function pbProofDecide(at){
+    var pf = pbPhaseAProof();
+    pbProofTries++;
+    pbProof = { proof: pf.proof, keys: pf.keys.slice(), extra: pf.extra.slice(),
+                decidedAt: Date.now(), tries: pbProofTries, final: false, at: at };
+    if (pf.complete){ pbProofOK = true; pbProof.final = true; pbLog('proof/complete#' + pbProofTries); return true; }
+    if (pbProofTries >= PB_PROOF_GRACE_TICKS || at === 'pre-reattach'){
+      /* ★不成立確定。Phase B 意味論を **丸ごと inert** にする:
+         再装着しない・監視も止める・以後の install 判定も activeId 判定も OFF(production)経路と同一。 */
+      pbProof.final = true;
+      pbLive = false; pbDone = true; pbLog('stop/proof-' + pf.proof + '/' + at);
+      return false;
+    }
+    /* 既存の 500ms tick chain で次も再評価される(bounded)。新しいタイマーは 1 本も足さない。
+       registry が後から 4/4 になっても reattachOnce lifecycle の内側で安全に成立する。 */
+    pbLog('proof-wait/' + pf.proof + '#' + pbProofTries);
+    return false;
+  }
+  function pbWatch(){
+    if (pbDone) return;
+    if (off()){ pbDone = true; pbLog('stop/off'); return; }
+    pbWatchTicks++;
+    try {
+      /* ★Phase A registry が complete と証明されるまでは quiescence 窓を **開始しない**
+         (= reattachOnce lifecycle にそもそも入らない)。 */
+      if (!pbProofOK && !pbProofDecide('watch')){
+        if (pbDone) return;                 /* budget 切れ = inert 確定。tick も足さない */
+        setTimeout(pbWatch, 500); return;   /* 既存 chain のみ */
+      }
+      if (pbF277Quiescent()){
+        var P = getPlanner553(), now = Date.now();
+        if (!pbQuiesceSince){ pbQuiesceSince = now; pbQuiesceFn = P.parsePlan; pbLog('quiesce/start'); }
+        else if (now - pbQuiesceSince >= PB_QUIESCE_MARGIN_MS){
+          /* 待機窓のあいだ Planner.parsePlan への代入が 1 度も無かったことを、
+             production に accessor を張らずに **参照 identity の不変**として確かめる。 */
+          if (P.parsePlan === pbQuiesceFn){
+            /* ★PHASE_B_MUST_NOT_REATTACH_UNLESS_PHASE_A_REGISTRY_COMPLETE:
+               pbReattachOnce() の **直前・この瞬間**に registry をもう一度読む(latch 済みでも読む)。
+               IIFE では読めない(fix553 idx 24 ＜ Phase A 4 file idx 56/65/267/268)。 */
+            if (!pbProofDecide('pre-reattach')) return;   /* 不成立 = 再装着せず inert 確定 */
+            if (pbIAmOutermost()){ pbDone = true; pbLog('stop/already-outermost'); return; }
+            pbReattachOnce();
+            pbDone = true; pbLog('stop/reattached'); return;
+          }
+          pbQuiesceSince = now; pbQuiesceFn = P.parsePlan; pbLog('quiesce/restart');  /* 代入があった = 窓を取り直す */
+        }
+      } else if (pbQuiesceSince){ pbQuiesceSince = 0; pbQuiesceFn = null; pbLog('quiesce/lost'); }
+    } catch(e){}
+    setTimeout(pbWatch, 500);
   }
 
   /* ★fix554(GPT指定): 生成単位ID。G.submit の入口で1つ増やすだけ(挙動は変えない)。
@@ -438,6 +717,8 @@
       setTimeout(function(){ tryParse(n + 1); }, n > 120 ? 5000 : 500);
     })(0);
     setInterval(poll, 3000);
+    /* ★Q119 Phase B: opt-in のときだけ監視ループを起動する。OFF ならタイマーも 1 本も増えない。 */
+    if (PB) setTimeout(pbWatch, 500);
     try { console.log(TAG, 'ready (読み取り専用・本文は書き換えない)'); } catch(e){}
   }
 
@@ -464,6 +745,29 @@
     _wrapFetch: wrapFetch, _wrapParse: wrapParse, _wrapSubmit: wrapSubmit, _poll: poll,
     _narrativeFromRaw: narrativeFromRaw, _kindOf: kindOf, _shareChunk: shareChunk,
     _peekPair: function(){ return { paired: !!pairedRaw, pairedLen: pairedRaw ? pairedRaw.bodyLen : null }; },
+    /* ★Q119 Phase B の自己申告(DIAGNOSTIC ONLY・読み取り専用)。
+       stats() の公開形は 1 field も変えていない。既存の _peek / _peekPair と同じ「_ 接頭辞 = 診断面」。
+       pairedBody / parsedBody は「捕捉した生」と「捕捉した最終 plan」の対応を外から確かめるためだけに出す。 */
+    /* ★本 lineage の追加読み出し(DIAGNOSTIC ONLY・読み取り専用・production 値は 1 つも変えない) */
+    _pbProof: function(){ return pbPhaseAProof(); },   /* いま評価したらどうなるか(副作用なし) */
+    _pbState: function(){
+      return { on: pbLive,                 /* ★いま Phase B 意味論が生きているか(= 実効値) */
+               intent: PB,                 /* ★DECLARED_INTENT(IIFE 1 回読み・以後不変) */
+               proof: pbProof.proof, proofKeys: pbProof.keys.slice(),
+               proofExtraKeys: (pbProof.extra || []).slice(),
+               proofDecidedAt: pbProof.decidedAt, proofTries: pbProof.tries,
+               proofFinal: pbProof.final, proofAt: pbProof.at, proofOK: pbProofOK,
+               proofGraceTicks: PB_PROOF_GRACE_TICKS,
+               proofRegKeys: PB_REG_KEYS.slice(),
+               seq: pbSeq, activeId: pbActiveId, layers: pbMyFns.length,
+               reattached: pbReattached, reattachCalls: pbReattachCalls,
+               watcherDone: pbDone, watchTicks: pbWatchTicks,
+               f277Quiescent: pbF277Quiescent(), iAmOutermost: pbIAmOutermost(),
+               quiesceMarginMs: PB_QUIESCE_MARGIN_MS, trace: pbTrace.slice(),
+               pairedBody: pairedRaw ? pairedRaw.body : null,
+               pairedLen: pairedRaw ? pairedRaw.bodyLen : null,
+               parsedBody: lastParsed ? lastParsed.body : null };
+    },
     _peek: function(){ return { hasRaw: !!lastRaw, hasParsed: !!lastParsed, lastLen: lastLen }; }
   };
 
