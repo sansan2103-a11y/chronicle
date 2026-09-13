@@ -382,7 +382,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260913-dsadm1';
+  var BUILT = '20260914-dsadm1b';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -737,7 +737,11 @@ body {
             ['応答が申告したモデル（Response-reported Model）', 'responseReportedModel', null],
             ['実際の Provider（Actual Provider）',        'actualProvider',       null]
           ];
-          function rawCfg(){ try { return (window.S && window.S.cfg && window.S.cfg.orModel) || ''; } catch(e){ return ''; } }
+          /* ★v1.1 hotfix / LD-1: live の S は index.html の classic script 内 `const S`（global lexical 束縛）で
+             **window.S には載らない**（runtime 実測: typeof S 'object' / typeof window.S 'undefined'）。
+             v1 は window.S だけを見ていたため legacy story でも「(未設定→primary) / 最新版」と描画された。
+             lexical の S を先に見て、無ければ window.S へ落ちる。**読み取りのみ**（書込・保存・network は依然 0）。 */
+          function rawCfg(){ try { var s = (typeof S !== 'undefined') ? S : (window.S || null); return (s && s.cfg && s.cfg.orModel) || ''; } catch(e){ return ''; } }
           function render(){
             try {
               var R = window.__CHR_MODEL_REGISTRY; if (!R || !R.adminView) return;
