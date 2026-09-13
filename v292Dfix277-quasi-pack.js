@@ -823,7 +823,17 @@
     } catch(e){}
   }
 
-  /* ============ ★fix537pt / PRENAME_WHO_TRANSITION v1.3 (②C1 裁定 EZ-2 GO ＋ ★裁定 FA) ============
+  /* ============ ★fix537pt / PRENAME_WHO_TRANSITION v1.4 (②C1 裁定 EZ-2 GO ＋ 裁定 FA ＋ ★裁定 FC) ============
+     ★v1.4 の変更は FC-2 の 1 点だけ（v1.3 からの差分はこの 1 箇所のみ・既存 namingOf() は 1 バイトも触らない）:
+       FC-2 COPULA_INTRO_CONTINUATION_FORM (e) を PT detector **だけ**に追加。
+            live canary PT2（gold/F537PT_PT2_CANARY_LIVE_v1.md §0/§1 turn 5）で観測した
+              <say who="婆さん">景子だよ。みんな景ちゃん景ちゃん呼びだがね。</say> → <say who="景子">
+            を v1.3 が落とした（drop = no-self-naming）。根本原因は既存 namingOf L769 の copula 分岐
+            `だ(?:よ|けど)?[。、！\s]?$` が **8 字窓の末尾アンカー**を要求すること（= 台詞が続くと false）。
+            FC-2 により既存 namingOf の修正は REJECT されたので、PT 側に次の狭い形だけを足す:
+              ptNameLeading(pre) が真（= 発話の実質先頭が X）∧ X の直後が (だよ|だ|です|だけど) ＋ 句読点。
+              → 後続文が続いてもよい。第三者文（「妹は景子だよ。…」）は name-leading 条件で落とす。
+              → immediate next say who == X（N-3）は従来どおり必須（単独では発火しない二重根拠）。
      ★v1.3 の変更は FA-3 / FA-2 の 2 点だけ（detectSelfNaming 不触・v1.2 からの変更もこの 2 箇所のみ）:
        FA-3 (PT-Q5 = REJECT) EXISTING DETECTOR PRIORITY = **SAME-TURN ONLY**
             ／ HISTORICAL ALIAS PRESENCE != SUPPRESSION AUTHORITY。
@@ -842,7 +852,8 @@
      検出 = 「旧/記述的 who L の say 本文に X の名乗りがあり、**その直後の say の who が X**」の 2 点同時成立のみ。
        N-1 同一 turn の say 列（who 下限だけ 1 に下げた本検出器**専用**の正規表現。L779 は触らない）
        N-2 says[i].body に X の明示的 self-naming 構文（既存 namingOf ＋ (a) 鉤括弧形 / (b) 読点許容形 /
-           (c) 名は形 / (d) 読み仮名形 の合議。PQ-2 により一人称マーカは要求しない）
+           (c) 名は形 / (d) 読み仮名形 / ★(e) copula-intro continuation 形 の合議。
+           PQ-2 により一人称マーカは要求しない。(d)(e) は ptNameLeading 必須）
        N-3 **IMMEDIATE_NEXT_SAY_ONLY**（PQ-1・同一 turn のみ・次 turn へ跨がせない）。
            ★「直後の say」の解釈 = i の次に現れる **異なる who の say** 1 本だけ（同一 who の連続 say は読み飛ばす）。
              その 1 本の who が X でなければ落とす（next-who-mismatch は no-self-naming として記録される）。
@@ -867,7 +878,11 @@
   /* ★FA-2: (d) 読み仮名形の前提。X より前が「名前(＋読み)＋区切り」の並びだけで出来ていること。 */
   var PT_LEADCUT = /^[\s　…‥・、，。．！？!?ー—―－〜~“”"']+/;
   var PT_NAMESEQ = /^(?:[一-龥々〆ヵヶぁ-んァ-ヶーA-Za-zＡ-Ｚａ-ｚ・]{1,12}(?:[（(《〈][^）)》〉]{1,12}[）)》〉][\s　、，。．…‥・]*|[、，。．…‥・]+[\s　]*))*$/;
-  var ptWrote = 0, ptLast = 'init', ptDrops = [], ptThirdHit = false, ptLeadBlocked = false;
+  /* ★FC-2 (e) copula-intro continuation 形: X の直後が (だよ|だ|です|だけど) ＋ 句読点。
+     既存 namingOf L769 と違い **末尾アンカーを要求しない**ので「景子だよ。みんな…」のように台詞が続いてもよい。
+     単独では発火せず、ptNameLeading（発話の実質先頭が X）と N-3（直後 say の who == X）の二重根拠が要る。 */
+  var PT_COPULA  = /^(?:だよ|だけど|だが|です|だ)[。、，．！？!?…‥]/;
+  var ptWrote = 0, ptLast = 'init', ptDrops = [], ptThirdHit = false, ptLeadBlocked = false, ptCopulaBlocked = false;
   function ptKilled(){ try { return localStorage.getItem('v292Dfix537PtOff') === '1'; } catch(e){ return false; } }
   function ptOn(){ try { if (localStorage.getItem('v292Dfix537PtOff') === '1') return false;   /* kill 優先 */
                          return localStorage.getItem('v292Dfix537PtOn') === '1'; } catch(e){ return false; } }
@@ -882,12 +897,14 @@
     return PT_NAMESEQ.test(String(pre || '').replace(PT_LEADCUT, ''));
   }
   function ptNaming(body, X){
-    var t = String(body || ''), i = t.indexOf(X), m, h, yomi; ptThirdHit = false; ptLeadBlocked = false;
+    var t = String(body || ''), i = t.indexOf(X), m, h, yomi, cop, lead;
+    ptThirdHit = false; ptLeadBlocked = false; ptCopulaBlocked = false;
     for (; i >= 0; i = t.indexOf(X, i + 1)){
       var af = t.slice(i + X.length, i + X.length + 10);
-      yomi = PT_YOMI.test(af);
-      if (yomi && !ptNameLeading(t.slice(0, i))) ptLeadBlocked = true;   /* ★ARBITRARY_SUBSTRING_MATCH = REJECTED */
-      h = PT_AFTER.test(af) ? 'b' : (yomi && ptNameLeading(t.slice(0, i))) ? 'd'
+      yomi = PT_YOMI.test(af); cop = PT_COPULA.test(af); lead = (yomi || cop) ? ptNameLeading(t.slice(0, i)) : false;
+      if (yomi && !lead) ptLeadBlocked = true;      /* ★ARBITRARY_SUBSTRING_MATCH = REJECTED */
+      if (cop  && !lead) ptCopulaBlocked = true;    /* ★FC-2: 第三者文「妹は景子だよ。…」はここで落ちる */
+      h = PT_AFTER.test(af) ? 'b' : (cop && lead) ? 'e' : (yomi && lead) ? 'd'
           : PT_BEFORE.test(t.slice(Math.max(0, i - 8), i)) ? 'c' : (namingOf(X + af, X) ? 'n' : '');
       if (h){ if (!PT_THIRD.test(t.slice(Math.max(0, i - 12), i))) return h; ptThirdHit = true; }
     }
@@ -931,7 +948,8 @@
             !(xe.seen.length === 1 && xe.seen[0] === turnIdx)){ drop('not-first-time'); continue; }
         why = ptNaming(says[i].body, X);
         if (!why){ drop(ptThirdHit ? 'third-party-introduction'
-                        : (ptLeadBlocked ? 'reading-form-not-name-leading' : 'no-self-naming')); continue; }
+                        : ptLeadBlocked ? 'reading-form-not-name-leading'
+                        : ptCopulaBlocked ? 'copula-form-not-name-leading' : 'no-self-naming'); continue; }
         if (ptSameTurnEdge(turnIdx, X)){ drop('existing-detector-priority-same-turn'); done[X] = 1; continue; }  /* ★FA-3 */
         ent = qs[X] || { seen: [], ali: [] }; ent.ali = ent.ali || [];
         if (ent.ali.indexOf(L) >= 0){ drop('duplicate-edge'); done[X] = 1; continue; }   /* 同一 (alias,canonical) 重複 0 */
@@ -949,7 +967,7 @@
       }
     } catch(e){ ptLast = 'threw'; }
   }
-  function ptDiag(){ return { version: 'PRENAME_WHO_TRANSITION/v1.3', on: ptOn(), killed: ptKilled(),
+  function ptDiag(){ return { version: 'PRENAME_WHO_TRANSITION/v1.4', on: ptOn(), killed: ptKilled(),
                               wrote: ptWrote, last: ptLast, drops: ptDrops.slice(), persistentKeysAdded: 0 }; }
   /* ============ /PRENAME_WHO_TRANSITION ============ */
 
