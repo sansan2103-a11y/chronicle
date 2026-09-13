@@ -237,6 +237,117 @@
       catalog: cat
     };
   }
+  /* ★dscmf-1 / CROSS-MODEL FALLBACK v1（②C1 裁定 CF-1〜CF-7）。
+     ・**機構と model 選定を分離**（CF-2）。production 初期値は enabled:false / to:''（UNASSIGNED）。
+       実 model が未承認でも実装は止めない。to が未割当なら gate は **fail closed**（effective=false）。
+     ・fallbackChain() は FALLBACK_POLICY からの導出に変わるが、既定（OFF / UNASSIGNED）では
+       従来どおり [] を返す = 既存 API の戻り値は 1 byte も変わらない（管理画面の
+       'NOT_IMPLEMENTED (v1)' 表示も維持される）。
+     ・classifyFailure は **純粋関数**。未知の失敗は eligible:false（fail closed）。
+     ・診断（FB_DIAG）は **volatile な module 変数**だけ。localStorage 書込 0 / 新 save schema 0（CF-5）。
+       reload で消えてよい。Admin read-only から fallbackDiag() で閲覧する。
+     ・この block は定義だけ。load 時の localStorage 読み書き 0 / network 0 / wrapper 0。 */
+  var FALLBACK_POLICY = { version: 'cmf-1', enabled: false, from: PRIMARY_ID, to: '', maxHops: 1 };
+
+  function fallbackPolicy(){ return _policyCopy(FALLBACK_POLICY); }
+  function fallbackAssigned(){ return !!FALLBACK_POLICY.to && FALLBACK_POLICY.to !== FALLBACK_POLICY.from; }
+
+  /* ★純粋関数。err → { eligible, reason, httpStatus }。
+     CF-1 対象 = network/timeout・429・5xx・provider 一時障害・HTTP 200 だが usable content なし。
+     CF-1 非対象 = user cancel（そもそも例外にならず null が返る）・auth/permission・request validation。
+     未知は **必ず fail closed**（eligible:false）。副作用 0 / localStorage 0 / 時計 0。 */
+  function classifyFailure(err){
+    var msg = '', nm = '';
+    try { msg = String((err && err.message) || err || ''); } catch(e){ msg = ''; }
+    try { nm  = String((err && err.name) || ''); } catch(e){ nm = ''; }
+    if (msg.indexOf('APIキーが設定されていません') >= 0) return { eligible:false, reason:'auth-missing-key', httpStatus:null };
+    var hm = msg.match(/OpenRouter HTTP (\d+)/);
+    if (hm){
+      var st = parseInt(hm[1], 10);
+      if (st === 401 || st === 402 || st === 403) return { eligible:false, reason:'auth-permission',    httpStatus:st };
+      if (st === 400 || st === 404 || st === 405 || st === 422) return { eligible:false, reason:'request-validation', httpStatus:st };
+      if (st === 408 || st === 409 || st === 425 || st === 429 || (st >= 500 && st <= 599))
+                                                  return { eligible:true,  reason:'transient-http',    httpStatus:st };
+      return { eligible:false, reason:'unclassified-http', httpStatus:st };
+    }
+    if (msg.indexOf('出力がありませんでした') >= 0) return { eligible:true, reason:'empty-content', httpStatus:null };
+    /* fix818 の破棄（生成が壊れていたため採用しませんでした）は **未 commit** の破棄なので対象。 */
+    if (msg.indexOf('採用しませんでした') >= 0 || msg.indexOf('生成が壊れていた') >= 0)
+      return { eligible:true, reason:'unusable-content', httpStatus:null };
+    if (nm === 'AbortError' || /aborted/i.test(msg)) return { eligible:true, reason:'timeout-abort', httpStatus:null };
+    if (/Failed to fetch|NetworkError|load failed/i.test(msg)) return { eligible:true, reason:'network', httpStatus:null };
+    return { eligible:false, reason:'unclassified', httpStatus:null };
+  }
+
+  /* ★volatile 診断（CF-5）。localStorage / save schema へは 1 byte も出さない。reload で消える。 */
+  var FB_DIAG = { enabled:false, triggered:false, primaryModel:null, fallbackModel:null, reason:null,
+                  primaryAttempts:0, fallbackAttempts:0, outcome:'NONE', requestId:null, at:null };
+  function fallbackDiag(){
+    var o = {}; for (var k in FB_DIAG) if (Object.prototype.hasOwnProperty.call(FB_DIAG, k)) o[k] = FB_DIAG[k];
+    return o;
+  }
+  /* 既知 field だけを更新する（未知 key は捨てる）。**localStorage を触らない**のが契約。 */
+  function _fbDiag(patch){
+    if (patch && typeof patch === 'object'){
+      for (var k in patch) if (Object.prototype.hasOwnProperty.call(patch, k) &&
+                               Object.prototype.hasOwnProperty.call(FB_DIAG, k)) FB_DIAG[k] = patch[k];
+    }
+    return fallbackDiag();
+  }
+
+  /* ★dscmf-1b / ②C1 RB-3 是正: slot opt-in の authority は **fix845 FR-11 と同じ 2 段だけ**。
+     ① window.__v292QuasiPack.key() … 'v292Dfix277Quasi' + '_slot_<id>' の <id> を取る。
+        prefix しか無い（= default story を指す）ときは **slot なし扱い（null）**。authority は解決済みなので ② へは降りない。
+        key() が別形式 / null / 非文字列なら「① は取れていない」として ② へ降りる。
+     ② window.__chronicleDocumentStoryKey … 'chr6_slot_<id>' の <id>。'chr6' / null / 非文字列は null。
+     ③ どちらも取れない・空文字・型違い・例外 → null。
+     ★null なら fallbackGate() の slotOptIn は false（**fail closed**）。
+     ★この関数は localStorage を 1 度も読まない。**navigation / last-opened の共有ミラー key は
+       CMF の authority ではない**（fix693 INV-C: 書込先の決定に使わない共有ポインタ。本 lane はその key を
+       1 度も読まず、CMF 領域の source にその key 名を 1 文字も置かない）。 */
+  function _cmfSlot(){
+    try {
+      var q = window.__v292QuasiPack;
+      if (q && typeof q.key === 'function'){
+        var k = q.key();
+        if (typeof k === 'string' && k.indexOf('v292Dfix277Quasi') === 0){
+          var sfx = k.slice('v292Dfix277Quasi'.length);
+          if (sfx.indexOf('_slot_') === 0){
+            var id = sfx.slice('_slot_'.length);
+            if (id) return { slot: id, source: 'quasipack-key' };
+          }
+          return { slot: null, source: 'none' };      /* default story = slot なし（fail closed）*/
+        }
+      }
+    } catch(e){}
+    try {
+      var dk = window.__chronicleDocumentStoryKey;
+      if (typeof dk === 'string' && dk.indexOf('chr6_slot_') === 0){
+        var id2 = dk.slice('chr6_slot_'.length);
+        if (id2) return { slot: id2, source: 'document-story-key' };
+      }
+    } catch(e){}
+    return { slot: null, source: 'none' };
+  }
+
+  /* ★非純粋（localStorage **読取のみ**・書込 0）。新 key は gate flag 2 本だけで、どちらも読むだけ。
+       kill  : v292DfixCmfOff === '1'            → effective=false（最優先）
+       opt-in: v292DfixCmfOn_slot_<slot> === '1' → enabled（CF-4 の dedicated QA slot）
+     assigned=false（to が未割当）なら **fail closed**（CF-2）。 */
+  function fallbackGate(){
+    var killed = false, slotOptIn = false, sl = { slot: null, source: 'none' };
+    try { killed = !!(window.localStorage && window.localStorage.getItem('v292DfixCmfOff') === '1'); } catch(e){ killed = false; }
+    try {
+      sl = _cmfSlot() || { slot: null, source: 'none' };
+      if (sl.slot && window.localStorage) slotOptIn = (window.localStorage.getItem('v292DfixCmfOn_slot_' + sl.slot) === '1');
+    } catch(e){ slotOptIn = false; }
+    var enabled  = (FALLBACK_POLICY.enabled === true) || slotOptIn === true;
+    var assigned = fallbackAssigned();
+    /* slotSource は診断の透明性のためだけの read-only field（'quasipack-key' / 'document-story-key' / 'none'）。 */
+    return { enabled: !!enabled, killed: !!killed, slotOptIn: !!slotOptIn, slot: sl.slot, slotSource: sl.source,
+             assigned: !!assigned, effective: !!(!killed && enabled && assigned) };
+  }
+
   var R = {
     version: 'dsmrc-2b',
     primary:   function(){ return PRIMARY_ID; },
@@ -288,9 +399,19 @@
        戻り値は表示用の平たい object。UI はこれを描くだけで判定ロジックを持たない。 */
     adminView: adminView,
     modelMeta: function(id){ var m = _metaOf(id); if (!m) return null; var o = {}; for (var k in m) if (Object.prototype.hasOwnProperty.call(m,k)) o[k] = m[k]; return o; },
-    /* 将来 IF（cross-model fallback）。第2段でも実装しない = 常に空を返す。
-       実装時も client に再送 wrapper を足さない（Worker 側で吸収する = 棚卸し §5.1）。 */
-    fallbackChain: function(){ return []; },
+    /* ★dscmf-1: cross-model fallback の chain。FALLBACK_POLICY からの導出に変える。
+       既定（enabled:false / to:'' = UNASSIGNED）では従来どおり **[]**（= 戻り値不変）。 */
+    fallbackChain: function(){
+      return (FALLBACK_POLICY.enabled === true && fallbackAssigned()) ? [FALLBACK_POLICY.from, FALLBACK_POLICY.to] : [];
+    },
+    /* ★dscmf-1 公開 API（機構）。policy / gate / 分類 / 診断の 5 本だけを外へ出す。
+       fallbackNote(patch) は G.submit の _cmfTry だけが呼ぶ診断更新口で、**localStorage を触らない**。 */
+    fallbackPolicy:   fallbackPolicy,
+    fallbackAssigned: fallbackAssigned,
+    fallbackGate:     fallbackGate,
+    classifyFailure:  classifyFailure,
+    fallbackDiag:     fallbackDiag,
+    fallbackNote:     function(patch){ return _fbDiag(patch); },
     /* 置換が起きたときだけ通知 object を返す（起きていなければ null）。
        UI はこれを読んで「設定値: 旧 / 実効: 新」を出せる。副作用 0・保存 0。 */
     substitutionNotice: function(v){
@@ -382,7 +503,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260914-dsadm1b';
+  var BUILT = '20260914-dscmf1b';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -715,6 +836,9 @@ body {
         <div id="dsadm1State" style="display:inline-block;padding:4px 10px;border-radius:999px;border:1px solid var(--border);font-size:12px;margin-bottom:8px">状態: UNKNOWN</div>
         <div id="dsadm1Note" style="font-size:11px;color:var(--dim);margin-bottom:6px;line-height:1.5"></div>
         <div style="overflow-x:auto"><table id="dsadm1Tbl" style="width:100%;border-collapse:collapse;font-size:12px"><tbody></tbody></table></div>
+        <!-- ★dscmf-1: cross-model fallback の **runtime 診断**（read-only）。上の「Cross-model fallback status」行はそのまま残し、その直下に機構の状態と直近の発動を出す。値は volatile（保存しない・再読込で消える = CF-5）。 -->
+        <div id="dscmf1Hdr" style="font-size:11px;color:var(--dim);margin-top:10px;margin-bottom:2px;line-height:1.5">予備モデル（cross-model fallback / dscmf-1）— 実行時の診断です。保存していません（再読込で消えます）。</div>
+        <div style="overflow-x:auto"><table id="dscmf1Tbl" style="width:100%;border-collapse:collapse;font-size:12px"><tbody></tbody></table></div>
         <div style="font-size:11px;color:var(--dim);margin-top:6px;line-height:1.5">表示専用の欄です。ここからモデルは切り替わりません（自動切替なし・外部問い合わせなし・設定値は変更していません）。API キー等の秘匿値はここに表示しません。</div>
         <script>
         /* dsadm-1 renderer: registry.adminView() を描くだけ。判定ロジックを持たない。 */
@@ -742,6 +866,54 @@ body {
              v1 は window.S だけを見ていたため legacy story でも「(未設定→primary) / 最新版」と描画された。
              lexical の S を先に見て、無ければ window.S へ落ちる。**読み取りのみ**（書込・保存・network は依然 0）。 */
           function rawCfg(){ try { var s = (typeof S !== 'undefined') ? S : (window.S || null); return (s && s.cfg && s.cfg.orModel) || ''; } catch(e){ return ''; } }
+          /* ★dscmf-1: 予備モデル（cross-model fallback）の read-only 行。値は registry の
+             fallbackDiag() / fallbackPolicy() / fallbackGate() を **読むだけ**（書込 0・localStorage 直接 0）。
+             未発動なら triggered=false / outcome='NONE' / 他は '-'。 */
+          var FBROWS = [
+            ['Fallback: 有効（effective）',       'enabled'],
+            ['Fallback: 予備モデル割当（assigned）', 'assigned'],
+            ['Fallback: 発動（triggered）',       'triggered'],
+            ['Fallback: 予備モデル（fallback model）', 'fallbackModel'],
+            ['Fallback: 理由（reason）',          'reason'],
+            ['Fallback: primary 試行回数',        'primaryAttempts'],
+            ['Fallback: 予備 試行回数',           'fallbackAttempts'],
+            ['Fallback: 結果（outcome）',         'outcome'],
+            ['Fallback: requestId',               'requestId'],
+            ['Fallback: 発動時刻（at）',           'at']   /* ★dscmf-1b（②C1 RB-2 許可）: volatile 診断の at を表示。未発動は '-' */
+          ];
+          function fbView(R){
+            var d = {}, p = {}, g = {};
+            try { if (R && R.fallbackDiag)   d = R.fallbackDiag()   || {}; } catch(e){}
+            try { if (R && R.fallbackPolicy) p = R.fallbackPolicy() || {}; } catch(e){}
+            try { if (R && R.fallbackGate)   g = R.fallbackGate()   || {}; } catch(e){}
+            var un = function(v){ return (v === undefined || v === null || v === '') ? '-' : v; };
+            return { enabled:   (g.effective === true) ? 'true' : 'false',
+                     assigned:  (g.assigned  === true) ? 'true' : 'false',
+                     triggered: (d.triggered === true) ? 'true' : 'false',
+                     fallbackModel:    un(d.fallbackModel || p.to),
+                     reason:           un(d.reason),
+                     primaryAttempts:  un(d.primaryAttempts),
+                     fallbackAttempts: un(d.fallbackAttempts),
+                     outcome:          un(d.outcome),
+                     requestId:        un(d.requestId),
+                     /* ★dscmf-1b: 既存の at をそのまま整形するだけ。**Date.now() を新たに呼ばない**
+                        （new Date(at) は受け取った値の表示整形であって時計の読み取りではない）。 */
+                     at: (d.at === undefined || d.at === null || d.at === '') ? '-'
+                         : (function(){ try { return new Date(d.at).toISOString(); } catch(e){ return String(d.at); } })() };
+          }
+          function paint(tb, rows, v){
+            for (var i = 0; i < rows.length; i++){
+              var tr = document.createElement('tr');
+              var k1 = document.createElement('td'); k1.textContent = rows[i][0];
+              k1.style.cssText = 'padding:3px 8px 3px 0;color:var(--dim);white-space:nowrap;vertical-align:top';
+              var v1 = document.createElement('td');
+              var mainT = String(v[rows[i][1]] === undefined ? 'UNKNOWN' : v[rows[i][1]]);
+              var subT  = rows[i][2] ? String(v[rows[i][2]] === undefined ? '' : v[rows[i][2]]) : '';
+              v1.textContent = (subT && subT !== mainT) ? (mainT + '（' + subT + '）') : mainT;
+              v1.style.cssText = 'padding:3px 0;word-break:break-all';
+              tr.appendChild(k1); tr.appendChild(v1); tb.appendChild(tr);
+            }
+          }
           function render(){
             try {
               var R = window.__CHR_MODEL_REGISTRY; if (!R || !R.adminView) return;
@@ -765,6 +937,15 @@ body {
               if (st){ st.textContent = '状態: ' + v.state + '（' + v.asOf + ' 時点）'; st.setAttribute('data-dsadm1-state', v.state); }
               var nt = document.getElementById('dsadm1Note');
               if (nt) nt.textContent = v.substitution ? v.substitution.text : '';
+              /* ★dscmf-1: 予備モデル診断（read-only）。上の表と同じ描き方で、判定ロジックは持たない。 */
+              try {
+                var ft = document.getElementById('dscmf1Tbl');
+                if (ft){
+                  var ftb = ft.tBodies[0] || ft.appendChild(document.createElement('tbody'));
+                  ftb.innerHTML = '';
+                  paint(ftb, FBROWS, fbView(R));
+                }
+              } catch(e2){}
             } catch(e){}
           }
           window.__DSADM1RENDER = render;
@@ -1252,7 +1433,7 @@ const Api = {
   async _callOpenRouter(system, userContent, maxTok, opts = {}) {
     const key = this.normalize(S.cfg.orKey);
     if (!key) throw new Error('OpenRouter APIキーが設定されていません（sk-or-... 形式）');
-    const model = (window.__CHR_MODEL_REGISTRY ? window.__CHR_MODEL_REGISTRY.resolve(S.cfg.orModel) : S.cfg.orModel); /* v292Dsmrc1: 旧 literal fallback を集中定義の resolve() へ（同値）。 v292Dfix272: 空時フォールバックをEuryale遺物→DS Flash(orModel消失時の意図外モデル課金防止) */
+    const model = ((opts && typeof opts.__fbModel === 'string' && opts.__fbModel) ? opts.__fbModel : (window.__CHR_MODEL_REGISTRY ? window.__CHR_MODEL_REGISTRY.resolve(S.cfg.orModel) : S.cfg.orModel)); /* v292Dsmrc1: 旧 literal fallback を集中定義の resolve() へ（同値）。 v292Dfix272: 空時フォールバックをEuryale遺物→DS Flash(orModel消失時の意図外モデル課金防止) */ /* ★dscmf-1: opts.__fbModel（**非空文字列のときだけ**）= cross-model fallback の予備 model。これは opts の top-level prop なので JSON body へは混入しない（body は model/max_tokens/sampling/messages と opts.extraBody だけを積む）。以降の applyRequestPolicy(body, model) が **予備 model の** request policy を引く（CF-7）。__fbModel が無い通常経路は従来式と逐語同値。 */
     console.log('[OpenRouter] model:', model);
 
     /* ★v292Dfix557: 校正(fix555)のような「推論が要らない」呼び出しだけ、
@@ -2390,6 +2571,57 @@ const G = {
     try { console.warn('[v292Dfix748]', 'class D hold', x && x.label, x && x.reason, x && x.isolation); } catch(e){}
   },
 
+  /* ★★dscmf-1 / CROSS-MODEL FALLBACK v1（②C1 裁定 CF-1〜CF-7）。
+     ここは **submit の同一モデル retry を使い切った最終段**（fix265/fix269 の catch 末尾）だけから呼ばれる。
+     ・CF-1: primary response が turn/save へ **未 commit** の地点。commit 済み経路からは 1 箇所も呼ばない。
+     ・CF-3: MAX_CROSS_MODEL_FALLBACK_ATTEMPTS = 1。__cmfBusy で構造的に 2 回目を起こさない。
+     ・gate（既定 OFF / UNASSIGNED）または分類が非対象なら **元の err をそのまま throw** =
+       現行 production と完全同値（CF-4 の inert placement）。
+     ・失敗したら **元の err** を throw（既存の fix263a トースト経路を変えない）。
+     ・診断は volatile（registry の FB_DIAG）。localStorage / save schema へは 1 byte も書かない（CF-5）。
+     ・新 wrapper 0（fetch/XHR/parsePlan/submit を包まない・参照へ代入しない）。 */
+  async _cmfTry(sys, user, err, primaryAttempts) {
+    var R = null; try { R = window.__CHR_MODEL_REGISTRY; } catch(_e0){ R = null; }
+    if (!R || typeof R.fallbackGate !== 'function' || typeof R.classifyFailure !== 'function' ||
+        typeof R.fallbackPolicy !== 'function') throw err;
+    var gate = null; try { gate = R.fallbackGate(); } catch(_e1){ gate = null; }
+    if (!gate || gate.effective !== true) throw err;                    /* OFF / kill / UNASSIGNED = fail closed */
+    var cls = null; try { cls = R.classifyFailure(err); } catch(_e2){ cls = null; }
+    if (!cls || cls.eligible !== true) throw err;                       /* 非対象（auth / validation / 未知）*/
+    var pol = null; try { pol = R.fallbackPolicy(); } catch(_e3){ pol = null; }
+    var m = pol && pol.to;
+    if (typeof m !== 'string' || !m || m === pol.from) throw err;
+    if (this.__cmfBusy === true) throw err;                             /* CF-3: 2 回目の fallback は起こさない */
+
+    var pm = ''; try { pm = R.resolve(S.cfg.orModel); } catch(_e4){ pm = ''; }
+    var at = null; try { at = Date.now(); } catch(_e5){ at = null; }
+    try { R.fallbackNote({ enabled:true, triggered:true, primaryModel: pm, fallbackModel: m,
+                           reason: cls.reason, primaryAttempts: primaryAttempts | 0, fallbackAttempts: 0,
+                           outcome: 'FALLBACK_ATTEMPT', requestId: S.reqId, at: at }); } catch(_e6){}
+    var lb = m; try { lb = R.label(m); } catch(_e7){ lb = m; }
+    try { UI.setStatus('一次モデルが応答しませんでした。予備モデル（' + lb + '）で生成中…'); } catch(_e8){}
+
+    var r = null, fbErr = null;
+    this.__cmfBusy = true;
+    try { r = await Api.call(sys, user, undefined, { __fbModel: m }); }
+    catch (_efb) { fbErr = _efb; }
+    finally { this.__cmfBusy = false; }
+
+    if (fbErr){
+      try { R.fallbackNote({ fallbackAttempts: 1, outcome: 'FALLBACK_FAILED' }); } catch(_e9){}
+      throw err;                                                        /* 元の err = 既存の失敗表示のまま */
+    }
+    if (r && r.text){
+      try { R.fallbackNote({ fallbackAttempts: 1, outcome: 'FALLBACK_SUCCESS' }); } catch(_e10){}
+      /* ★CF-6: 黙って別モデルを使わない。通常 UI に簡潔に出す（既存 UI API のみ・新 toast 機構 0）。 */
+      try { UI.setStatus('予備モデル（' + lb + '）で生成しました'); } catch(_e11){}
+      return r;
+    }
+    /* r === null = reqId が進んだ（cancel / 新しい送信に追い越された）。呼び出し側の既存 null 処理へ。 */
+    try { R.fallbackNote({ fallbackAttempts: 1, outcome: 'FALLBACK_SUPERSEDED' }); } catch(_e12){}
+    return null;
+  },
+
   async submit() {
     if (S.inFlight) return;
     /* ★fix546(2026-07-25・おしん裁定「直るまで遊べなくてもいい」): 直前のターンが保存できていない間は
@@ -2433,7 +2665,7 @@ const G = {
       if (!_b748.ran) { this._dadmHold(_b748, inputEl, text); return; }
       const { sys, user } = _b748.result;
       try { window.__v292Dfix797 && __v292Dfix797.beginTurnContext(S); } catch(_e797b){} /* ★v292Dfix797 Rev4: 今回の生成が始まる前の fix77 状態を 1 回だけ写す（ephemeral／書込 0）。未 load / flag OFF で no-op */
-      let result; try { result = await Api.call(sys, user); } catch (_e265) { var _m269 = String((_e265 && _e265.message) || _e265); var _is429 = /HTTP 429/.test(_m269); if (_is429 || /HTTP 5\d\d|Failed to fetch|NetworkError|load failed/i.test(_m269)) { UI.setStatus(_is429 ? 'レート制限(429)。8秒待って自動再試行…' : '一時エラー。2秒後に自動再試行…'); await new Promise(function(_r){ setTimeout(_r, _is429 ? 8000 : 2000); }); result = await Api.call(sys, user); } else { throw _e265; } } /* v292Dfix269: 429(レート制限)はレート明けを8秒待って再試行 */ /* v292Dfix265: 5xx/ネットワーク一過性エラーは1回だけ透過リトライ。2回目失敗はfix263aトーストへ */
+      let result; try { result = await Api.call(sys, user); } catch (_e265) { var _m269 = String((_e265 && _e265.message) || _e265); var _is429 = /HTTP 429/.test(_m269); if (_is429 || /HTTP 5\d\d|Failed to fetch|NetworkError|load failed/i.test(_m269)) { UI.setStatus(_is429 ? 'レート制限(429)。8秒待って自動再試行…' : '一時エラー。2秒後に自動再試行…'); await new Promise(function(_r){ setTimeout(_r, _is429 ? 8000 : 2000); }); try { result = await Api.call(sys, user); } catch (_e2cmf) { result = await this._cmfTry(sys, user, _e2cmf, 2); } } else { result = await this._cmfTry(sys, user, _e265, 1); } } /* v292Dfix269: 429(レート制限)はレート明けを8秒待って再試行 */ /* v292Dfix265: 5xx/ネットワーク一過性エラーは1回だけ透過リトライ。2回目失敗はfix263aトーストへ */ /* ★dscmf-1: 同一モデル retry を **使い切った最終段だけ** に cross-model fallback を足す（CF-1）。_cmfTry は gate OFF / 非対象なら受け取った err をそのまま throw するので、既定では throw _e265 と完全同値。commit 済み response には到達しない（この行は result 取得前）。 */
       if (!result) { try { if (text && !inputEl.value.trim()) inputEl.value = text; UI.setStatus('応答が得られませんでした。もう一度お試しください', true); } catch(_){} return; } /* v292Dfix263a2 */
 
       /* ★fix748 D1(C7a): parsePlan の _parseExtensions から
