@@ -41,10 +41,23 @@
   'use strict';
   if (window.__v292Dfix845 && window.__v292Dfix845.__armed) return;
 
-  var VERSION='v292Dfix845 SELF_NAMING_SHADOW_OBSERVER v2.5-LENGTH-ORDERED-RELATION'
+  var VERSION='v292Dfix845ss SELF_NAMING_SHADOW_OBSERVER v3.0-SLOT-SCOPED'
     +' (observe-only / no writes / GRADED EVIDENCE / +fixN +fixL +fixM +fixO'
     +' / COMMIT15 DISABLE_ONLY + COMMIT16 segment dedup'
-    +' + COMMIT17 evidence-preserving multi + COMMIT18 length-ordered relation)';
+    +' + COMMIT17 evidence-preserving multi + COMMIT18 length-ordered relation'
+    +' + f845ss FR-1..FR-6 / FR-11 / FR-12 SLOT_SCOPED READER)';
+  /* ★f845ss v1 契約（②C1 裁定 FG / FQ-1〜10）
+     SCOPE                 = SLOT_SCOPED（event ∧ current slot。旧 'EVENT_SCOPED' は廃止）
+     SLOT_AUTHORITY        = FIX783_CONTRACT（QuasiPack.key() → __chronicleDocumentStoryKey）
+                             ★chr6_active_slot へは fallback しない（AUTHORITY FAILURE MUST REMAIN FAILURE）
+     AUTHORITY NULL        = fix845 enabled=false（fail closed）
+     CROSSCHECK INPUT      = CURRENT / CURRENT_PROVEN_BY_LEDGER のみ
+     FOREIGN / UNKNOWN     = COUNT ONLY（corroboration に使わない・個別 identity を出さない）
+     RELATION 名           = NO_CURRENT_SLOT_CORROBORATION（旧 NO_OTHER_PRODUCER）
+                             = no attributable current-slot evidence（global absence ではない）
+     identityDecision      = ABSTAIN 固定（COMMIT18 から意味論を 1 mm も変えていない）
+     WRITES                = NONE（localStorage / store / alias / cast / roster すべて 0）
+     NEW PERSISTENT KEY    = 0 ／ NEW parsePlan WRAPPER = 0 ／ DEFAULT = OFF */
   var MAX_EVENTS = 40;                 /* bounded telemetry */
   var _events = [], _weakEvents = [], _installed = false, _origParse = null,
       _stats = { turns:0, detections:0, errors:0,
@@ -77,13 +90,48 @@
   }
 
   function ls(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
-  function slot(){ return String(ls('chr6_active_slot')||'').replace(/"/g,''); }
+
+  /* ================ FR-11 SLOT_AUTHORITY（②C1 FQ-2 ACCEPT） ================
+     旧実装は ls('chr6_active_slot') を読んでいた。これは fix277 v1.4 L186 / L1000 / L1076 が
+     「slot 漏れの真因（共有ポインタ・全タブで 1 個）」と記録した経路であり、
+     **authority ではない**。f845ss は fix783 契約だけを authority とする。
+       段 1  window.__v292QuasiPack.key()  → 'v292Dfix277Quasi' を剥いだ suffix
+       段 2  window.__chronicleDocumentStoryKey → 'chr6' なら '' / 他は /^chr6/ を剥ぐ
+       いずれも取れなければ **null（= authority 無し）**
+     ★AUTHORITY FAILURE MUST REMAIN FAILURE: null のとき chr6_active_slot へ戻らない。
+     ★fix783 kill flag が立つ ctx では段 2 を封じる（helper HQ-3 / EV-6 と同じ採用）。
+     suffix（台帳 key 形）と slotId（flag key 形）は 1 つの primitive から導く:
+       sfx ''            -> id 'chr6'
+       sfx '_slot_XXXX'  -> id 'XXXX'     ← live 形。旧 flag key と同一文字列になる
+       その他 sfx        -> id = sfx      （offline 合成 ctx など） */
+  var QPREFIX='v292Dfix277Quasi';
+  function f783Off(){ try{ return localStorage.getItem('v292Dfix783Off')==='1'; }catch(e){ return false; } }
+  function quasiPack(){ try{ return window.__v292QuasiPack||null; }catch(e){ return null; } }
+  function authSfx(){
+    var p=quasiPack();
+    if (p && typeof p.key==='function'){
+      var k=null; try{ k=p.key(); }catch(e){ k=null; }
+      if (typeof k==='string' && k.indexOf(QPREFIX)===0) return k.slice(QPREFIX.length);
+      if (k===null) return null;                       /* key() が権威なしを返した = 権威なし */
+    }
+    if (!f783Off()){
+      try{ var dk=window.__chronicleDocumentStoryKey;
+           if (typeof dk==='string' && dk) return (dk==='chr6')?'':dk.replace(/^chr6/,''); }catch(e){}
+    }
+    return null;                                        /* ★chr6_active_slot へは戻らない */
+  }
+  function slot(){                                      /* flag key / telemetry 用の slot id */
+    var s=authSfx();
+    if (s===null) return null;                          /* ★空文字ではなく null（fail closed） */
+    return (s==='') ? 'chr6' : s.replace(/^_slot_/,'');
+  }
   function offOverride(){ return ls('v292Dfix845Off')==='1'; }
   function enabled(){
     if (offOverride()) return false;
     if (rt().disabled) return false;                       /* ★COMMIT15: DISABLE は最優先 */
     var s=slot();
-    return !!(s && ls('v292Dfix845On_slot_'+s)==='1');    /* ★QA slot のみ。global ON は無い */
+    if (s===null) return false;                            /* ★FR-11 fail closed */
+    return ls('v292Dfix845On_slot_'+s)==='1';             /* ★QA slot のみ。global ON は無い */
   }
   function getS(){ try{ var g=window.__chronicleGetState; return (typeof g==='function')?g():window.S; }catch(e){ return null; } }
   function castNow(){                                     /* ★event 時点の cast */
@@ -473,27 +521,148 @@
            +' / WHITESPACE_NORMALIZATION = NOT IDENTITY AUTHORITY' });
   }
 
-  /* ---- fix537 の結果を **読むだけ**（動作は変更しない） ---- */
+  /* ================ FR-1 / FR-3 SLOT-SCOPED HOT LOG READER ================
+     ★FR-3 二経路（②C1 FQ-6 条件付き ACCEPT）
+       経路 A（優先）= 委譲: window.__v292QuasiPack.fix537SlotLog()（f537hs/f537pt の hlsRead）
+       経路 B（fallback）= inline 最小版: 同じ authority 規則・同じ 4 分類 8 reason・同じ fail-closed
+       ★helper file（canary/HOTLOG_SCOPED_READER_v1.js）は load しない（EU-2 TQ-1: runtime import 禁止）。
+         従うのは helper の **契約**であって file ではない。
+     ★分類規則は fix277 v1.4 L699-713（hlsClassifyEx）の逐語再現:
+       entry 非 object                 -> UNKNOWN_SLOT / 'entry-invalid'
+       typeof e.s === 'string'         -> e.s===sfx ? CURRENT/'stamp-current' : FOREIGN/'stamp-foreign'
+       sfx === null                    -> UNKNOWN_SLOT / 'no-slot-authority'   ★fail closed
+       候補 0                          -> UNKNOWN_SLOT / 'ledger-no-candidate'
+       候補 2 件以上                   -> UNKNOWN_SLOT / 'ledger-ambiguous-multi'（EP UNIQUE ATTRIBUTION）
+       候補 1 件 === sfx               -> CURRENT_PROVEN_BY_LEDGER / 'ledger-unique-current'
+       候補 1 件 !== sfx               -> FOREIGN / 'ledger-unique-other-slot'
+     ★read only。localStorage への write / entry への s 後付け（provenance 捏造）はしない。 */
+  var HOTKEY='v292Dfix537_log', STAMP='s';
+  function rawHotLog(){
+    try{ var lg=JSON.parse(ls(HOTKEY)||'[]'); return Array.isArray(lg)?lg:[]; }catch(e){ return []; }
+  }
+  function hlProve(e, store){
+    if (!store || typeof store!=='object' || !e) return false;
+    var ent=store[e.canonical];
+    if (!ent || typeof ent!=='object') return false;
+    if (!Array.isArray(ent.ali) || ent.ali.indexOf(e.alias)<0) return false;
+    if (!Array.isArray(ent.seen) || ent.seen.indexOf(e.turn)<0) return false;
+    return true;
+  }
+  function hlSlotSfxs(){
+    var out=[];
+    try{ for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i);
+      if (typeof k==='string' && k.indexOf(QPREFIX)===0){
+        var s=k.slice(QPREFIX.length); if (out.indexOf(s)<0) out.push(s); } } }catch(e){}
+    return out;
+  }
+  function hlLedgerOf(sfx, cur){
+    var p=quasiPack();
+    if (cur!==null && sfx===cur && p && typeof p.store==='function'){
+      try{ var o=p.store(); if (o && typeof o==='object') return o; }catch(e){}
+    }
+    try{ var j=JSON.parse(localStorage.getItem(QPREFIX+sfx)||'null');
+         return (j && typeof j==='object')?j:null; }catch(e){ return null; }
+  }
+  function hlCandidates(e, cur){
+    var sfxs=hlSlotSfxs(), out=[];
+    if (cur!==null && sfxs.indexOf(cur)<0) sfxs.push(cur);   /* 未保存の current slot も母数に入れる */
+    for(var i=0;i<sfxs.length;i++){ if (hlProve(e, hlLedgerOf(sfxs[i], cur))) out.push(sfxs[i]); }
+    out.sort();
+    return out;
+  }
+  function hlClassify(e, sfx){
+    if (!e || typeof e!=='object') return { cls:'UNKNOWN_SLOT', reason:'entry-invalid' };
+    if (typeof e[STAMP]==='string')
+      return (e[STAMP]===sfx) ? { cls:'CURRENT', reason:'stamp-current' }
+                              : { cls:'FOREIGN', reason:'stamp-foreign' };
+    if (sfx===null) return { cls:'UNKNOWN_SLOT', reason:'no-slot-authority' };
+    var c=hlCandidates(e, sfx);
+    if (c.length===0) return { cls:'UNKNOWN_SLOT', reason:'ledger-no-candidate' };
+    if (c.length>1)   return { cls:'UNKNOWN_SLOT', reason:'ledger-ambiguous-multi' };
+    return (c[0]===sfx) ? { cls:'CURRENT_PROVEN_BY_LEDGER', reason:'ledger-unique-current' }
+                        : { cls:'FOREIGN', reason:'ledger-unique-other-slot' };
+  }
+  /* 経路 A: 委譲。rows は raw log と index 整合（fix277 v1.4 L722-747） */
+  function scopedViaDelegate(raw){
+    var p=quasiPack();
+    if (!p || typeof p.fix537SlotLog!=='function') return null;
+    var r=null; try{ r=p.fix537SlotLog(); }catch(e){ return null; }
+    if (!r || !Array.isArray(r.rows) || r.rows.length!==raw.length) return null;
+    var out=[];
+    for(var i=0;i<raw.length;i++){
+      var row=r.rows[i]||{};
+      out.push({ cls:row.cls||'UNKNOWN_SLOT', reason:row.reason||'entry-invalid' });
+    }
+    return { cls:out, sfx:(typeof r.slot==='undefined')?null:r.slot, source:'delegated-fix277' };
+  }
+  /* 経路 B: inline 最小 fallback（同一規則・同一 fail-closed） */
+  function scopedViaInline(raw){
+    var sfx=authSfx(), out=[];
+    for(var i=0;i<raw.length;i++) out.push(hlClassify(raw[i], sfx));
+    return { cls:out, sfx:sfx, source:'inline-fallback' };
+  }
+  /* ★FR-1: entry.s を **保持**して返す（後付けはしない = 無い entry は undefined のまま） */
+  function fix537EdgesScoped(force){
+    var raw=rawHotLog();
+    var r=(force==='inline') ? null : scopedViaDelegate(raw);
+    if (!r) r=scopedViaInline(raw);
+    var edges=[];
+    for(var i=0;i<raw.length;i++){
+      var x=raw[i]||{};
+      var e={ from:x.alias, to:x.canonical, turn:x.turn };
+      if (typeof x[STAMP]==='string') e.s=x[STAMP];        /* ★FR-1 保持。無ければ足さない */
+      e.__cls=r.cls[i].cls; e.__reason=r.cls[i].reason;
+      edges.push(e);
+    }
+    return { edges:edges, slotSfx:r.sfx, source:r.source };
+  }
+  /* 互換用（旧名。CURRENT だけを返す点が COMMIT18 との差） */
   function fix537Edges(){
-    try{ var lg=JSON.parse(ls('v292Dfix537_log')||'[]')||[];
-      return lg.map(function(x){ return { from:x.alias, to:x.canonical, turn:x.turn }; }); }catch(e){ return []; }
+    return fix537EdgesScoped().edges.filter(function(e){
+      return e.__cls==='CURRENT' || e.__cls==='CURRENT_PROVEN_BY_LEDGER'; });
   }
   /* ★②C1 裁定 CQ: これは arbitration ではなく CROSS_PRODUCER_RELATION_OBSERVER である。
      判定するだけで、identity の決定は一切しない。
      ★CROSSCHECK_MUST_BE_EVENT_SCOPED:
        **異なる event の edge 同士を chain 扱いしてはいけない。**
        fix537 の log は他ターンの分も溜まるので、必ず turn で絞る。 */
-  function crossCheck(r, eventTurn){
+  /* 公開する edge から内部診断 key（__cls/__reason）を落とす。s は FR-1 のとおり保持する */
+  function pubEdge(e){
+    var o={ from:e.from, to:e.to, turn:e.turn };
+    if (typeof e.s==='string') o.s=e.s;
+    return o;
+  }
+  function crossCheck(r, eventTurn, opts){
     if(!r || !r.from || !r.claimedNames) return null;
-    var all=fix537Edges();
-    /* ★同一 event（同じ turn）のものだけを比較対象にする */
-    var es=all.filter(function(e){ return e.turn===eventTurn; });
-    var skipped=all.length-es.length;
-    var base={ scope:'EVENT_SCOPED', eventTurn:eventTurn, otherProducerEdgesInEvent:es.length,
-               edgesIgnoredFromOtherEvents:skipped };
-    if(!es.length) return Object.assign(base,{ relation:'NO_OTHER_PRODUCER' });
+    var read=fix537EdgesScoped(opts && opts.path==='inline' ? 'inline' : null);
+    var all=read.edges;
+    /* ★FR-2: turn 一致 **かつ** current slot 帰属の 2 条件（turn だけでは不十分）。
+       ★FR-6: ここを通った edge だけが relation の材料になる。 */
+    var cur=all.filter(function(e){ return e.__cls==='CURRENT' || e.__cls==='CURRENT_PROVEN_BY_LEDGER'; });
+    var es=cur.filter(function(e){ return e.turn===eventTurn; });
+    var skipped=cur.length-es.length;                       /* 同 slot・別 event（旧 counter と同義） */
+    /* ★FR-4: FOREIGN / UNKNOWN は **件数のみ**。個別 identity は 1 件も出さない。 */
+    var foreignIgnored=0, unknownIgnored=0;
+    for(var i=0;i<all.length;i++){
+      if (all[i].__cls==='FOREIGN') foreignIgnored++;
+      else if (all[i].__cls==='UNKNOWN_SLOT') unknownIgnored++;
+    }
+    var base={ scope:'SLOT_SCOPED',                          /* ★FR-5 自己申告 */
+               eventTurn:eventTurn,
+               slot:read.slotSfx, slotAuthority:(read.slotSfx===null?'NONE':'FIX783_CONTRACT'),
+               readPath:read.source,
+               otherProducerEdgesInEvent:es.length,
+               edgesIgnoredFromOtherEvents:skipped,
+               foreignEdgesIgnored:foreignIgnored,          /* ★FR-4 必須 field（OPTIONAL にしない） */
+               unknownEdgesIgnored:unknownIgnored,          /* ★FR-4 必須 field（OPTIONAL にしない） */
+               evidenceContract:'CURRENT_SLOT_ONLY / FOREIGN_AND_UNKNOWN_ARE_COUNT_ONLY' };
+    /* ★FR-12: 旧 NO_OTHER_PRODUCER は「他 producer が存在しない」と誤読されうるため改称。
+       意味は **no attributable current-slot evidence** であって global absence ではない。 */
+    if(!es.length) return Object.assign(base,{ relation:'NO_CURRENT_SLOT_CORROBORATION',
+      NOTE:'NO ATTRIBUTABLE CURRENT-SLOT EVIDENCE / NOT A GLOBAL ABSENCE CLAIM'
+        +' / FOREIGN AND UNKNOWN EDGES ARE COUNTED BUT NEVER CORROBORATE' });
     var same=es.filter(function(e){ return e.from===r.from && r.claimedNames.indexOf(e.to)>=0; });
-    if(same.length) return Object.assign(base,{ relation:'SAME_EDGE', with:'fix537', edge:same[0] });
+    if(same.length) return Object.assign(base,{ relation:'SAME_EDGE', with:'fix537', edge:pubEdge(same[0]) });
     var conflicting=es.filter(function(e){ return e.from===r.from && r.claimedNames.indexOf(e.to)<0; });
     if(conflicting.length) return Object.assign(base,{ relation:'CONFLICTING_EDGE', with:'fix537',
       theirs:conflicting.map(function(e){ return e.to; }) });
@@ -618,6 +787,9 @@
       enabled:enabled(),
       offOverride:offOverride(),
       slot:slot(),
+      slotSfx:authSfx(),
+      slotAuthority:(slot()===null?'NONE':'FIX783_CONTRACT'),
+      failClosed:(slot()===null),
       wrapperResident:!!(R.wrapperRef),
       /* ★DIAGNOSTIC ONLY: production の包み直しで false になり得る。装着判定に使わない */
       outerMarkerPresent:!!(P && P.parsePlan && P.parsePlan.__f845Wrapped),
@@ -643,8 +815,11 @@
     uninstall:uninstall,
     installed:function(){ return !!rt().installedOnce; },
     enabled:enabled, offOverride:offOverride,
-    gate:function(){ return { OFF_OVERRIDE:offOverride(), slot:slot(),
-      QA_SLOT_ON: !!(slot() && ls('v292Dfix845On_slot_'+slot())==='1'),
+    gate:function(){ var s=slot(); return { OFF_OVERRIDE:offOverride(), slot:s, slotSfx:authSfx(),
+      SLOT_AUTHORITY:(s===null?'NONE':'FIX783_CONTRACT'),
+      FAIL_CLOSED:(s===null),
+      CHR6_ACTIVE_SLOT_FALLBACK:false,          /* ★FR-11: この経路は実装していない */
+      QA_SLOT_ON: (s!==null && ls('v292Dfix845On_slot_'+s)==='1'),
       GLOBAL_ON_EXISTS:false, enabled:enabled(),
       installedOnce:!!rt().installedOnce, disabled:!!rt().disabled }; },
     detect:detect,                       /* 純関数。テストから直接叩ける */
@@ -653,6 +828,20 @@
     pendingInput:function(){ return _pendingInput; },
     __setPendingInputForTest:function(v){ _pendingInput=String(v||''); },
     crossCheck:crossCheck,               /* CROSS_PRODUCER_RELATION_OBSERVER（判定のみ） */
+    /* ★f845ss: slot-scoped reader の診断口（read only・件数と分類のみ・entry 本体は返さない） */
+    slotAuthority:function(){ return { sfx:authSfx(), id:slot(),
+      source:(function(){ var p=quasiPack();
+        return (p && typeof p.key==='function') ? 'quasipack-key' :
+               (!f783Off() && typeof window.__chronicleDocumentStoryKey==='string') ? 'document-story-key' : 'none'; })(),
+      chr6ActiveSlotFallback:false }; },
+    scopedReadDiag:function(path){
+      var r=fix537EdgesScoped(path==='inline'?'inline':null), c={};
+      for(var i=0;i<r.edges.length;i++){ var k=r.edges[i].__cls; c[k]=(c[k]||0)+1; }
+      return { source:r.source, slot:r.slotSfx, total:r.edges.length, counts:c,
+               classes:r.edges.map(function(e){ return e.__cls; }),
+               reasons:r.edges.map(function(e){ return e.__reason; }),
+               stamped:r.edges.filter(function(e){ return typeof e.s==='string'; }).length,
+               contract:'AUDIT_EVIDENCE_ONLY / CURRENT_ONLY_FEEDS_CROSSCHECK', mutations:{set:0,remove:0} }; },
     events:function(){ return _events.slice(); },
     weakEvents:function(){ return _weakEvents.slice(); },   /* WEAK_DESU_UNCORROBORATED */
     stats:function(){ var o={}; for(var k in _stats) o[k]=_stats[k]; o.held=_events.length; o.weakHeld=_weakEvents.length; return o; },
