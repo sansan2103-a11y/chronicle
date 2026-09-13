@@ -46,6 +46,31 @@
  *   ★格納キーと e.name は **最初に見えた表示形のまま**（fold 形は 1 バイトも保存しない・fix455/456 の教訓）。
  *   OFF: localStorage v292Dfix764Off='1'（fix764 本体の kill）で従来動作へ戻る。
  *
+ * ■fix640-PG（2026-09-12・②C1 裁定 DW）PROVENANCE_GATED_ROLE_RESOLUTION（既定 OFF・opt-in）
+ *   実データ（STEP A story）: 役割語「店員」の resolvedTo が所有句「店員の指先」から **指先** になった
+ *   （FIX640_ROLE_WORD_RESOLVED_TO_NON_NAME）。fix641 は既定 dryRun なので Owner 端末での実害は無いが、
+ *   Live 端末では cast.npcs へ {name:"指先"} が書かれる経路（Q142 case E）。
+ *   直し方の原則 = **「名前らしさ」を判定しない**。解決先 X が **役割語解決とは独立した人物名系 evidence**
+ *   （この台帳の name 系 entry として STRONG 証拠 1 系統以上）を持つときだけ resolvedTo に採用する。
+ *     R1 X が台帳に candidateType==='name' の entry として存在する
+ *     R2 その entry が STRONG（say_who / state_tag / introduction / appearance_stable）を 1 系統以上持つ
+ *     R3 X 自身が役割語でない
+ *   ★INDEPENDENT_NAME_PROVENANCE_REQUIRED: 役割語解決（collectResolutions）は entry を **作らない**。
+ *     entry は (1)〜(6) の採取経路（<say who>/<state who>/紹介文/地の文）からしか生まれないので、
+ *     「店員→指先 という候補が自分で entry を作り、それを根拠に名前と認める」自己証明は構造的に起きない。
+ *     この不変条件は fixture（f640pg_acceptance）で固定する。
+ *   ★fix670 の GENERIC / PRONOUN 語彙は module 内部にあり共有 predicate が無い → **参照しない**
+ *     （fix670 のロード順に依存する module coupling を作らない。R1〜R3 の独立 provenance が主防御）。
+ *   満たさない候補は resolveCandidates に **残し**（証拠は捨てない）、e.resolveBlocked に
+ *   {cand, reason:'NO_INDEPENDENT_NAME_EVIDENCE'|'ROLE_WORD'} を診断用に記録する（新フィールド 1 つ・後方互換）。
+ *   v1.2: REGATE_ON_LOAD_MUST_NOT_ERASE_STORED_EVIDENCE（②C1 DX）— load() の再 gate で resolvedTo が変わった entry には
+ *         非永続の診断 storedResolvedTo（保存物に入っていた値）を付け、why() が返す。RAW/STORED と effective view を分離する。
+ *   v1.1: load() でも PG ON なら roleWord entry の resolvedTo を同じ条件で再評価する（読み出し側の再 gate・保存しない）。
+ *         OFF 時代に永続化された stale な resolvedTo が ON 後も fix641（load() 経由で読む）に残らないため。
+ *   ON : localStorage v292Dfix640PgOn='1'（全 slot）または v292Dfix640PgOn_slot_<slotId>='1'（slot 限定）
+ *   OFF（既定）: 従来どおり「一意なら採用」。v292Dfix640PgOff='1' は明示 kill（PgOn より優先）。
+ *   production 配置は別裁定（DW: offline 実装 GO / DEFAULT OFF / production HOLD）。
+ *
  * 冪等: window.__v292Dfix640
  * OFF : localStorage v292Dfix640Off='1'（採取を止める。台帳は消さない）
  * 読出: window.__v292Dfix640.ledger() / .report() / .why('名前') / .selfTest()
@@ -61,6 +86,13 @@
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function lss(k, v){ try { localStorage.setItem(k, v); return true; } catch(e){ return false; } }
   function off(){ return lsg('v292Dfix640Off') === '1'; }
+  /* ★fix640-PG gate（呼ぶたびに評価 = per-call。既定 OFF・opt-in・kill 優先） */
+  function pgOn(){
+    if (lsg('v292Dfix640PgOff') === '1') return false;
+    if (lsg('v292Dfix640PgOn') === '1') return true;
+    try { var s = slotId(); if (s !== null && lsg('v292Dfix640PgOn_slot_' + s) === '1') return true; } catch(e){}
+    return false;
+  }
 
   function note539(reason, err){
     try { if (window.__chronicleState && typeof window.__chronicleState.note === 'function')
@@ -311,6 +343,23 @@
       if (!e.candidateType) e.candidateType = e.roleWord ? 'role-label' : 'name';
       if (typeof e.confidence !== 'number') e.confidence = confidenceOf(e);
     }
+    /* ★fix640-PG v1.1: 読み出し側の再 gate。PG ON のとき、過去（OFF 時）に永続化された
+       roleWord entry の resolvedTo を同じ採用条件で再評価する（fix641 は load() 経由で読むので、
+       stale な「店員→指先」が ON 後も昇格経路に残る隙を塞ぐ）。読むだけ・保存しない・OFF なら無処理。 */
+    if (pgOn()){
+      for (var k2 in o.entries){
+        if (!Object.prototype.hasOwnProperty.call(o.entries, k2)) continue;
+        var e2 = o.entries[k2];
+        if (!(e2 && typeof e2 === 'object' && e2.roleWord && Array.isArray(e2.resolveCandidates) && e2.resolveCandidates.length)) continue;
+        var stored = e2.resolvedTo;
+        adoptResolution(o, e2);
+        /* ★v1.2 REGATE_ON_LOAD_MUST_NOT_ERASE_STORED_EVIDENCE（②C1 DX）: 保存物に入っていた値は
+           非永続の診断として残す（non-enumerable = JSON.stringify で保存されない。why() が読む）。 */
+        if (stored !== e2.resolvedTo){
+          try { Object.defineProperty(e2, 'storedResolvedTo', { value: stored, enumerable: false, configurable: true, writable: true }); } catch(err){}
+        }
+      }
+    }
     return o;
   }
   var stats = { harvests: 0, turnsScanned: 0, writes: 0, quota: 0, errors: 0, lastReason: '',
@@ -447,6 +496,32 @@
     return [];
   }
 
+  /* ★fix640-PG: 解決先 X が「役割語解決とは独立した人物名系 evidence」を持つか。
+     台帳の name 系 entry（R1）＋ STRONG 1 系統以上（R2）＋ X が役割語でない（R3）。
+     読むだけ。entry を作らない・触らない。 */
+  function independentNameProvenance(L, x){
+    var n = normName(x);
+    if (!n) return { ok: false, reason: 'EMPTY' };
+    if (isRoleWord(n)) return { ok: false, reason: 'ROLE_WORD' };                       /* R3 */
+    var e = L && L.entries ? L.entries[entryKey764(L, n)] : null;                       /* R1（引きは fix764 fold） */
+    if (!e || e.roleWord || e.candidateType === 'role-label') return { ok: false, reason: 'NO_INDEPENDENT_NAME_EVIDENCE' };
+    if (strongKindsOf(e).length < 1) return { ok: false, reason: 'NO_INDEPENDENT_NAME_EVIDENCE' };   /* R2 */
+    return { ok: true, reason: 'ok', strong: strongKindsOf(e) };
+  }
+  /* ★fix640-PG: resolvedTo の採用。OFF = 従来（一意なら採用）。ON = 一意 ∧ 独立 provenance。
+     候補は resolveCandidates に残す（証拠は捨てない）。診断は e.resolveBlocked（最大 8 件）。 */
+  function adoptResolution(L, e){
+    var c = e.resolveCandidates;
+    if (!pgOn()){ e.resolvedTo = (c.length === 1) ? c[0] : ''; return; }
+    var blocked = [];
+    for (var i = 0; i < c.length; i++){
+      var pv = independentNameProvenance(L, c[i]);
+      if (!pv.ok) blocked.push({ cand: c[i], reason: pv.reason });
+    }
+    e.resolveBlocked = blocked.slice(0, 8);
+    e.resolvedTo = (c.length === 1 && blocked.length === 0) ? c[0] : '';
+  }
+
   /* 役割語 → 正式名の一意解決 */
   function collectResolutions(prose, role){
     var out = [], esc = role.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -560,7 +635,7 @@
       if (e.roleWord && prose.indexOf(key) >= 0){
         var res = collectResolutions(prose, key);
         for (j = 0; j < res.length; j++){ if (e.resolveCandidates.indexOf(res[j]) < 0) e.resolveCandidates.push(res[j]); }
-        e.resolvedTo = (e.resolveCandidates.length === 1) ? e.resolveCandidates[0] : '';
+        adoptResolution(L, e);                                  /* ★fix640-PG（OFF なら従来と同一式） */
       }
       var pat = prose.indexOf(key);
       if (pat >= 0){
@@ -673,6 +748,8 @@
     return { name: e.name, distinctSeenTurns: e.distinctSeenTurns, seenTurns: e.seenTurns.slice(),
              strong: strongKindsOf(e), kinds: e.evidenceKinds.slice(),
              roleWord: e.roleWord, resolvedTo: e.resolvedTo, resolveCandidates: e.resolveCandidates.slice(),
+             resolveBlocked: (e.resolveBlocked || []).slice(),             /* ★fix640-PG */
+             storedResolvedTo: (typeof e.storedResolvedTo === 'string') ? e.storedResolvedTo : null,   /* ★v1.2: load() で再 gate されたときの保存値（非永続） */
              candidateType: e.candidateType, confidence: e.confidence,   /* ★fix644 */
              appearance: e.appearance, sourceSpans: e.sourceSpans.slice() };
   }
@@ -693,7 +770,7 @@
   function snap(){ try { return JSON.parse(JSON.stringify(stats)); } catch(e){ return null; } }
   function selfTest(){
     var st = getState();
-    return { off: off(), key: KEY(), stateReachable: !!st,
+    return { off: off(), pgOn: pgOn(), key: KEY(), stateReachable: !!st,
              turns: (st && Array.isArray(st.turns)) ? st.turns.length : -1,
              cursor: load().cursor, names: Object.keys(load().entries), stats: snap() };
   }
@@ -711,6 +788,9 @@
     entryKey764: entryKey764,   /* ★fix764: 検証口(台帳キーの引き) */
     /* 形状条件（fix644。純関数・テストと実機の両方から呼ぶ唯一の正） */
     classifyCandidate: classifyCandidate, personUse: personUse, confidenceOf: confidenceOf,
+    /* ★fix640-PG（provenance-gated role resolution。純関数・テストから呼ぶ） */
+    pgOn: pgOn, independentNameProvenance: independentNameProvenance, adoptResolution: adoptResolution,
+    PG_VERSION: 'PROVENANCE_GATED_ROLE_RESOLUTION v1.2 (fix640-PG / DEFAULT_OFF / OPT_IN / REGATE_ON_LOAD / STORED_EVIDENCE_AUDITABLE)',
     /* 読み出し */
     why: why, report: report, selfTest: selfTest, stats: snap, isOff: off, getState: getState
   };
