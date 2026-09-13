@@ -68,7 +68,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260913-f537pt2';
+  var BUILT = '20260913-f640pga1';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -3725,7 +3725,7 @@ G.init();
 <!-- fix640: 証拠台帳。物語データは1バイトも書かず、自前キー v292Dfix640Evid_slot_<slotId> だけに貯める。
      読出=window.__v292Dfix640.report()/.why("名前") / OFF=v292Dfix640Off
      ★fix606 の抽出規則を live 参照するので fix606 の後に置く -->
-<script src="v292Dfix640-cast-evidence-ledger.js?cb=20260913-f640pg1"></script>
+<script src="v292Dfix640-cast-evidence-ledger.js?cb=20260913-f640pga1"></script>
 <!-- fix641: 証拠ベースの cast 自動登録。強2系統×2ターンでだけ昇格。
      hero は対象外。取消=window.__v292Dfix641.undo("名前") / OFF=v292Dfix641Off
      ★fix640 の後に置くこと -->

@@ -67,9 +67,11 @@
  *         非永続の診断 storedResolvedTo（保存物に入っていた値）を付け、why() が返す。RAW/STORED と effective view を分離する。
  *   v1.1: load() でも PG ON なら roleWord entry の resolvedTo を同じ条件で再評価する（読み出し側の再 gate・保存しない）。
  *         OFF 時代に永続化された stale な resolvedTo が ON 後も fix641（load() 経由で読む）に残らないため。
- *   ON : localStorage v292Dfix640PgOn='1'（全 slot）または v292Dfix640PgOn_slot_<slotId>='1'（slot 限定）
- *   OFF（既定）: 従来どおり「一意なら採用」。v292Dfix640PgOff='1' は明示 kill（PgOn より優先）。
- *   production 配置は別裁定（DW: offline 実装 GO / DEFAULT OFF / production HOLD）。
+ *   v1.3 (f640pga): DEFAULT ON。②C1 裁定 FE-2（ACTIVATION FORM = NEW LINEAGE / DEFAULT TRUE /
+ *         EXISTING PgOff KILL / NO NEW GLOBAL FLAG）。gate は既定で true に到達する。
+ *   ON（既定）: 何も設定しなくても PG が効く。v292Dfix640PgOn / PgOn_slot_<slotId> は読むが既に既定 true（挙動不変の no-op）。
+ *   OFF: v292Dfix640PgOff='1' が唯一の kill（最優先）。旧挙動「一意なら採用」へ戻る。
+ *   新しい global flag は 1 つも増やしていない（key 名・schema・書込先・API 名は v1.2 と同一）。
  *
  * 冪等: window.__v292Dfix640
  * OFF : localStorage v292Dfix640Off='1'（採取を止める。台帳は消さない）
@@ -86,12 +88,15 @@
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function lss(k, v){ try { localStorage.setItem(k, v); return true; } catch(e){ return false; } }
   function off(){ return lsg('v292Dfix640Off') === '1'; }
-  /* ★fix640-PG gate（呼ぶたびに評価 = per-call。既定 OFF・opt-in・kill 優先） */
+  /* ★fix640-PG gate（呼ぶたびに評価 = per-call。★v1.3: 既定 ON・kill 優先）
+     v292Dfix640PgOff='1' のときだけ false。それ以外は true（PgOn / PgOn_slot_* の read は
+     削除せず残すが、既定が true なので到達しても結果は変わらない = 挙動不変の no-op）。
+     新 global flag は新設しない。 */
   function pgOn(){
     if (lsg('v292Dfix640PgOff') === '1') return false;
     if (lsg('v292Dfix640PgOn') === '1') return true;
     try { var s = slotId(); if (s !== null && lsg('v292Dfix640PgOn_slot_' + s) === '1') return true; } catch(e){}
-    return false;
+    return true;
   }
 
   function note539(reason, err){
@@ -790,7 +795,7 @@
     classifyCandidate: classifyCandidate, personUse: personUse, confidenceOf: confidenceOf,
     /* ★fix640-PG（provenance-gated role resolution。純関数・テストから呼ぶ） */
     pgOn: pgOn, independentNameProvenance: independentNameProvenance, adoptResolution: adoptResolution,
-    PG_VERSION: 'PROVENANCE_GATED_ROLE_RESOLUTION v1.2 (fix640-PG / DEFAULT_OFF / OPT_IN / REGATE_ON_LOAD / STORED_EVIDENCE_AUDITABLE)',
+    PG_VERSION: 'PROVENANCE_GATED_ROLE_RESOLUTION v1.3 (fix640-PG / DEFAULT_ON / KILL_PgOff / REGATE_ON_LOAD / STORED_EVIDENCE_AUDITABLE)',
     /* 読み出し */
     why: why, report: report, selfTest: selfTest, stats: snap, isOff: off, getState: getState
   };
