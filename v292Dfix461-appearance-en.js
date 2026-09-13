@@ -163,6 +163,9 @@
       max_tokens: _retry ? 700 : 260,
       messages: [{ role: 'system', content: sysNow() }, { role: 'user', content: user }]
     };
+    /* ★v292Dsmrc2b: MODEL-SPECIFIC REQUEST POLICY。body.model は既に registry.resolve() 済み
+       ＝ effective model。fix497(D3) の max_tokens 再試行ロジックには触らない。 */
+    try { var _R = window.__CHR_MODEL_REGISTRY; if (_R && _R.applyRequestPolicy) _R.applyRequestPolicy(body, body.model); } catch(e){}
     try {
       var xhr = new XMLHttpRequest();
       xhr.open('POST', 'https://openrouter.ai/api/v1/chat/completions', true);

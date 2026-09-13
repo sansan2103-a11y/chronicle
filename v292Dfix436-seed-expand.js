@@ -321,6 +321,9 @@
       max_tokens: 1800,
       messages: [{ role: 'system', content: p.sys }, { role: 'user', content: p.user }]
     };
+    /* ★v292Dsmrc2b: MODEL-SPECIFIC REQUEST POLICY。body.model は既に registry.resolve() 済み
+       ＝ effective model なので、そのまま policy の key に使う。registry 不在なら従来 body。 */
+    try { var _R = window.__CHR_MODEL_REGISTRY; if (_R && _R.applyRequestPolicy) _R.applyRequestPolicy(body, body.model); } catch(e){}
     try {
       var xhr = new XMLHttpRequest();
       xhr.open('POST', 'https://openrouter.ai/api/v1/chat/completions', true);

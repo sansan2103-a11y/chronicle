@@ -10,13 +10,21 @@
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
 <script src="v292Dfix654-storage-trap.js?cb=v292Dfix731"></script>
-<!-- ★v292Dsmrc1(2026-09-13) MODEL ROUTING CENTRALIZATION 第1段 = 集中定義のみ。
+<!-- ★v292Dsmrc1 block / 版 dsmrc-2p(2026-09-13) MODEL ROUTING CENTRALIZATION 第2段 P（policy 基盤のみ）
+     = 第1段の集中定義（primary = DS V4 Flash のまま）に MODEL-SPECIFIC REQUEST POLICY の基盤だけを足す。
      「今使う primary model」をこの 1 block だけが決める。UI 選択肢・既定値・送信 payload・
      背景 XHR・fix370 の復帰判定はすべてここを参照する（各所に literal を再生産しない）。
-     ★第1段は既定を現行のまま据え置く = production 挙動不変（byte 以外の観測同値）。
-     ★V4.1 切替（第2段）は下の PRIMARY_ID の 1 行だけを書き換える。他 file は 1 byte も変えない。
+     ★dsmrc-2p は既定を現行のまま据え置く = **現行ユーザーに観測同値**（primary は V4 Flash のまま・
+       legacy effective mapping も入れない = M2 由来の切替要素 0）。policy 表に載っている model を
+       **明示的に選んでいるユーザーだけ**が request body の差分を受ける。
+     ★V4.1 切替（M2b-S）は下の PRIMARY_ID の 1 行 + legacy mapping + 版文字列だけを書き換える。
+     ★dsmrc-2p / SK-2 MODEL-SPECIFIC REQUEST POLICY: 「この model に投げるときだけ body に足す
+       既定パラメータ」を registry の 1 表 + 純粋関数 2 本（requestPolicy / mergePolicy）が決める。
+       適用先は 5 経路（本文 _callOpenRouter + 背景 XHR 4 本）で、いずれも registry の
+       applyRequestPolicy() を 1 回呼ぶだけ（各所に merge ロジックを複製しない）。
+       ★policy 表・純粋関数・公開 API・_callOpenRouter 合流点は M2b 候補と **byte 同一**（移植）。
      ★この block は定義と option 同値再設定 1 回だけ。localStorage 書込 0 / 新永続 key 0 /
-       fetch・XHR・parsePlan の wrapper 追加 0（Q119 topology 不触）。 -->
+       fetch・XHR・parsePlan の wrapper 追加 0（Q119 topology 不触）。sampling(fix84) 不触。 -->
 <script>
 (function v292Dsmrc1(){
   'use strict';
@@ -37,12 +45,82 @@
 
   function ns(){ var i = PRIMARY_ID.indexOf('/'); return (i > 0) ? PRIMARY_ID.slice(0, i + 1) : ''; }
 
+  /* ★dsmrc-2b / SK-2 MODEL-SPECIFIC REQUEST POLICY。
+     key は **effective model**（resolve() 後の ID）の**完全一致**。legacy slug は resolve() が
+     PRIMARY_ID へ写像するので、effective で引けば旧 slug 保存値も自動的に対象になる
+     （この表に legacy を書かない = 判定を 1 箇所に閉じる）。
+     ★DS V4.1 Flash は thinking が既定 ON（effort=high 相当）で、推論 token が max_tokens
+       （本文 1400/2400・背景 260〜2000）を食い潰し content 空 / 途中切れを起こす
+       （live A/B 実測 = 空 2/5・途中切れ 2/5。原因は強い仮説であって証明ではない）。
+       OpenRouter 統一 reasoning パラメータ effort:'none' で推論を無効化し、
+       provider:{require_parameters:true} で「その指定を無視する provider へ回さない」。
+       前例 = 本文 _callOpenRouter の v292Dfix557（校正呼び出し）コメント。
+     ★sampling（temperature / top_p / penalties = fix84）には触れない。max_tokens も変えない。 */
+  var REQUEST_POLICY_BY_ID = {
+    'deepseek/deepseek-v4.1-flash': { reasoning: { effort: 'none' }, provider: { require_parameters: true } }
+  };
+
+  /* plain object だけを再帰複製する（Array / 非 object はそのまま）。表を呼び出し側に渡さないため。 */
+  function _policyCopy(o){
+    if (!o || typeof o !== 'object' || Object.prototype.toString.call(o) === '[object Array]') return o;
+    var r = {};
+    for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) r[k] = _policyCopy(o[k]);
+    return r;
+  }
+
+  /* ★純粋関数 #1。入力 = effective model（resolve 後の ID）。戻り = その model 用の追加 body。
+     対象外・空文字・非文字列（undefined 等）は {}。副作用 0 / localStorage 読み書き 0 /
+     network 0 / 保存値書換 0。毎回 fresh copy を返すので呼び出し側が壊しても表は無傷。 */
+  function requestPolicy(model){
+    if (typeof model !== 'string' || !model) return {};
+    if (!Object.prototype.hasOwnProperty.call(REQUEST_POLICY_BY_ID, model)) return {};
+    return _policyCopy(REQUEST_POLICY_BY_ID[model]);
+  }
+
+  /* ★純粋関数 #2（deep-merge の実装は**この 1 本だけ**。5 経路が同じものを使う）。
+     ・policy が {} なら body は 1 byte も変わらない（対象外 model = 完全に無干渉）
+     ・policy の field と body の field が両方 plain object なら **key 単位**で merge し、
+       body 側にしか無い key（将来の provider.order 等）を消さない
+     ・衝突した key は **policy が authority**（呼び出し側が reasoning.effort:'high' を
+       渡していても policy の 'none' で上書きする = SK-2）
+     ・merge 先は必ず新しい object にする（呼び出し側の opts.extraBody を汚さない）
+     第 3 引数 effectiveModel は呼び出し箇所を自己説明的にするための記録用で、判定には使わない
+     （policy をどの model から引いたかは requestPolicy() 側で確定している）。 */
+  function mergePolicy(body, policy, effectiveModel){
+    void effectiveModel;
+    if (!body || typeof body !== 'object') return body;
+    if (!policy || typeof policy !== 'object') return body;
+    for (var k in policy){
+      if (!Object.prototype.hasOwnProperty.call(policy, k)) continue;
+      var pv = policy[k], bv = body[k];
+      var pObj = !!pv && typeof pv === 'object' && Object.prototype.toString.call(pv) !== '[object Array]';
+      var bObj = !!bv && typeof bv === 'object' && Object.prototype.toString.call(bv) !== '[object Array]';
+      if (pObj && bObj){
+        var merged = _policyCopy(bv);
+        for (var k2 in pv) if (Object.prototype.hasOwnProperty.call(pv, k2)) merged[k2] = _policyCopy(pv[k2]);
+        body[k] = merged;
+      } else {
+        body[k] = _policyCopy(pv);
+      }
+    }
+    return body;
+  }
+
   var R = {
-    version: 'dsmrc-1',
+    version: 'dsmrc-2p',
     primary:   function(){ return PRIMARY_ID; },
     secondary: function(){ return SECONDARY_ID; },
     /* cfg の値が空のときだけ primary を返す（= 従来の cfg.orModel || '<literal>' と同値） */
     resolve:   function(v){ return (typeof v === 'string' && v.trim()) ? v : PRIMARY_ID; },
+    /* ★dsmrc-2b: MODEL-SPECIFIC REQUEST POLICY の公開 API。
+       requestPolicy(effectiveModel) … 純粋関数。その model 用の追加 body（無ければ {}）
+       mergePolicy(body, policy, m)  … 純粋関数。1 段 deep-merge（policy authority）
+       applyRequestPolicy(body, m)   … 5 経路が呼ぶ唯一の入口。body を in-place 更新して返す */
+    requestPolicy: requestPolicy,
+    mergePolicy:   mergePolicy,
+    applyRequestPolicy: function(body, effectiveModel){
+      return mergePolicy(body, requestPolicy(effectiveModel), effectiveModel);
+    },
     /* 旧 fix370 の isDS と同値。判定 prefix を primary の namespace から導く
        ⇒ 第2段で primary が同じ namespace の新 slug になっても引き戻さない */
     ns:        ns,
@@ -143,7 +221,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260913-dsmrc1';
+  var BUILT = '20260913-dsmrc2p';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -969,6 +1047,13 @@ const Api = {
            provider:{require_parameters:true}(指定を無視するプロバイダへ回さない)を渡す。
            既定の本文生成には opts.extraBody を渡さないので挙動は変わらない。 */
         try { if (opts && opts.extraBody && typeof opts.extraBody === 'object') Object.assign(body, opts.extraBody); } catch(e){}
+        /* ★v292Dsmrc2b: MODEL-SPECIFIC REQUEST POLICY を **effective model**（上の model 変数
+           = registry.resolve() 後の ID）で引いて body へ deep-merge する。fix557 の extraBody
+           合流の**後**に置くのは「衝突した key は policy が authority」（②C1 SK-2）だから。
+           policy 対象外の model では requestPolicy() が {} を返し body は 1 byte も変わらない
+           （= extraBody をそのまま尊重）。registry 不在なら何もしない（従来どおり = fail-open）。
+           deep-merge なので provider.order 等の既存 field は消えない。 */
+        try { var _R = window.__CHR_MODEL_REGISTRY; if (_R && _R.applyRequestPolicy) _R.applyRequestPolicy(body, model); } catch(e){}
         // Tier 1: OpenRouter の JSON モード（Hermes 系のみ。Llama 微調整系は対象外）
         if (/hermes/i.test(model)) {
           /* v292Dfix87: disabled json_object - fix58 outputs prose, not JSON */ void 0;
@@ -3496,7 +3581,7 @@ G.init();
 })();
 </script>
 <script src="v292DfixP0-scenario-blocker.js?cb=v292Dfix680"></script>
-<script src="v292Dfix135-longmem.js?cb=20260913-dsmrc1"></script>
+<script src="v292Dfix135-longmem.js?cb=20260913-dsmrc2p"></script>
 <script src="v292Dfix138-continue.js?cb=v292Dfix225"></script>
 <script src="v292Dfix145-charlist.js?cb=v292Dfix773"></script>
 <script src="v292Dfix777-icon-lightbox.js?cb=v292Dfix777"></script>
@@ -3596,7 +3681,7 @@ G.init();
 <script src="v292Dfix830-entity-match-resolver.js?cb=20260907-fix832"></script>
 <script src="v292Dfix766-canonical-appearance.js?cb=20260901-fix783"></script>
 <script src="v292Dfix767-icon-recipe-adapter.js?cb=v292Dfix778"></script>
-<script src="v292Dfix307-npc-roster.js?cb=20260913-dsmrc1"></script>
+<script src="v292Dfix307-npc-roster.js?cb=20260913-dsmrc2p"></script>
 <script src="v292Dfix308-creepy-toggle.js?cb=v292Dfix308"></script>
 <script src="v292Dfix309-progression.js?cb=v292Dfix419c"></script>
 <!-- fix577: 物語削除の入口を1つに寄せる。B(gallery)/C(features clearSlot)の独自削除を停止し、
@@ -3701,7 +3786,7 @@ G.init();
 <script src="v292Dfix483-genbudget-sync.js?cb=v292Dfix495"></script>
 <script src="v292Dfix427-output-sanitize.js?cb=v292Dfix427"></script>
 <script src="v292Dfix430-carrier-block.js?cb=v292Dfix430"></script>
-<script src="v292Dfix436-seed-expand.js?cb=20260913-dsmrc1"></script>
+<script src="v292Dfix436-seed-expand.js?cb=20260913-dsmrc2p"></script>
 <script src="v292Dfix437-regen-instant.js?cb=v292Dfix437"></script>
 <script src="v292Dfix438-inline-dialogue.js?cb=v292Dfix438"></script>
 <script src="v292Dfix439-readability.js?cb=v292Dfix457"></script>
@@ -3725,7 +3810,7 @@ G.init();
 <script src="v292Dfix458-dash-post.js?cb=20260901-fix784"></script>
 <script src="v292Dfix459-sys-v2.js?cb=20260906-fix822"></script>
 <script src="v292Dfix460-slotgrid.js?cb=v292Dfix460"></script>
-<script src="v292Dfix461-appearance-en.js?cb=20260913-dsmrc1"></script>
+<script src="v292Dfix461-appearance-en.js?cb=20260913-dsmrc2p"></script>
 <script src="v292Dfix462-bare-speaker.js?cb=20260829-fix748"></script>
 <script src="v292Dfix463-human-guard.js?cb=v292Dfix463"></script>
 <script src="v292Dfix464-say-promote.js?cb=v292Dfix465"></script>

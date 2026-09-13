@@ -119,12 +119,18 @@
     var body;
     var _m = getModel(); if (!_m){ cb(null); return; }   /* v292Dsmrc1: 集中定義が取れないときは送信しない(fail-closed) */
     try {
-      body = JSON.stringify({
+      var _b = {
         model: _m,
         temperature: 0.3,
         max_tokens: 2000,
         messages: [{ role: 'user', content: prompt }]
-      });
+      };
+      /* ★v292Dsmrc2b: MODEL-SPECIFIC REQUEST POLICY。effective model（_m = registry.primary()）で
+         registry の 1 本の関数を呼ぶだけ（merge ロジックをこの file に複製しない）。
+         registry が無い環境では従来どおり policy なしの body を送る（fail-open）。
+         sampling（temperature）・max_tokens は触らない。 */
+      try { var _R = window.__CHR_MODEL_REGISTRY; if (_R && _R.applyRequestPolicy) _R.applyRequestPolicy(_b, _m); } catch(e){}
+      body = JSON.stringify(_b);
     } catch(e){ cb(null); return; }
     try {
       var xhr = new XMLHttpRequest();

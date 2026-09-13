@@ -172,7 +172,11 @@
     var key=getKey(); if(!key){ cb(null); return; }
     var user=buildUserPrompt(transcript);   // ★fix408強化: 総文字数上限+改行1行化(buildExistingLines)
     var _m=MODEL(); if(!_m){ cb(null); return; }   /* v292Dsmrc1: fail-closed */
-    var body=JSON.stringify({ model:_m, temperature:0.2, max_tokens:600, messages:[{role:'system',content:SYS},{role:'user',content:user}] });
+    var _b={ model:_m, temperature:0.2, max_tokens:600, messages:[{role:'system',content:SYS},{role:'user',content:user}] };
+    /* ★v292Dsmrc2b: MODEL-SPECIFIC REQUEST POLICY（effective model = _m = registry.primary()）。
+       registry の applyRequestPolicy() を 1 回呼ぶだけ。registry 不在なら従来 body（fail-open）。 */
+    try { var _R=window.__CHR_MODEL_REGISTRY; if(_R&&_R.applyRequestPolicy) _R.applyRequestPolicy(_b,_m); }catch(e){}
+    var body=JSON.stringify(_b);
     try{
       var xhr=new XMLHttpRequest();
       xhr.open('POST', ENDPOINT, true);
