@@ -57,7 +57,17 @@
         o.value = m.id; o.textContent = m.label;
         sel.appendChild(o);
       });
-      sel.value = cur || (opts[0] && opts[0].id) || '';   /* v292Dsmrc1 */
+      /* ★v292Dsadm1: 保存値が**旧 primary の完全一致**のときだけ、selected を実効値
+         （= registry.effective() = 現 primary）に合わせる。**表示だけ**である:
+           ・S.cfg.orModel（raw）を 1 byte も書き換えない・S.save() を呼ばない
+           ・.value 代入は change を発火しない（保存は下の change listener = ユーザー操作時だけ）
+           ・listener を張る前に代入する（従来どおりの順序）
+         legacy 以外（未設定 / V4 Pro / リスト外 ID）は従来と 1 byte も同値。
+         registry が無ければ従来どおり（fail-closed）。 */
+      var curDisp = cur;
+      try { var _Rd = window.__CHR_MODEL_REGISTRY;
+            if (_Rd && _Rd.isLegacyPrimary && _Rd.effective && _Rd.isLegacyPrimary(cur)) curDisp = _Rd.effective(cur); } catch(e){}
+      sel.value = curDisp || (opts[0] && opts[0].id) || '';   /* v292Dsmrc1 + v292Dsadm1 */
       sel.addEventListener('change', function(){ setModel(sel.value); });
       tb.appendChild(span);
       try{ console.log(TAG, 'injected (current:', cur || '(未設定)', ')'); }catch(_){}

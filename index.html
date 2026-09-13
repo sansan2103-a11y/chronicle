@@ -129,6 +129,114 @@
     return body;
   }
 
+  /* ★dsadm-1 / AI モデル管理 lane v1（read-only）。**表示専用の管理 metadata + 純粋関数 1 本**。
+     ・model ID の literal を 1 つも置かない（key は PRIMARY_ID / SECONDARY_ID / LEGACY_PRIMARY_IDS から組む）。
+       vendorApiName も PRIMARY_META から引く ⇒ 受入 M2-1c / M2-1d（旧 slug・直 API 名の source 出現数）を 1 つも動かさない。
+     ・既存 API（primary/resolve/effective/configured/isLegacyPrimary/isManaged/label/list/meta/
+       requestPolicy/mergePolicy/applyRequestPolicy/fallbackChain/substitutionNotice/version）の戻り値は 1 byte も変えない。
+     ・自動切替 0 / 外部 fetch 0 / localStorage 0 / 保存値書換 0 / request への混入 0。
+     ・「今日」を Date.now() から読まない（REGISTRY_AS_OF 固定値）= adminView は純粋関数。 */
+  var REGISTRY_AS_OF = '2026-09-13';        /* 棚卸し日（DS_V41_FLASH_MIGRATION_INVENTORY_v1 / CONFIRMED_EXTERNAL） */
+  var UNKNOWN_V     = 'UNKNOWN';            /* ②C1: 不明値は必ずこの文字列 */
+  var MODEL_META = {};
+  MODEL_META[PRIMARY_ID] = {
+    label: PRIMARY_LABEL, provider: 'OpenRouter', vendorApiName: PRIMARY_META.vendorApiName,
+    recommended: true, deprecated: false, sunset: null, replacement: null, legacy: false,
+    lastChecked: REGISTRY_AS_OF, migrationStatus: 'PRODUCTION_VERIFIED',
+    qaStatus: 'AB2 PASS 5/5 (gold/DS_AB2_POLICY_CAUSAL_QA_LIVE_v1)'
+  };
+  MODEL_META[SECONDARY_ID] = {
+    /* 棚卸し CONFIRMED_EXTERNAL: 2026-09-14 04:00Z 以降 vendor 側で V4.1-Flash へ routing 予定。
+       その時刻を過ぎるまでは deprecated ではない（sunset 判定で自動的に切り替わる・自動切替はしない）。 */
+    label: SECONDARY_LABEL, provider: 'OpenRouter', vendorApiName: UNKNOWN_V,
+    recommended: false, deprecated: false, sunset: '2026-09-14T04:00Z', replacement: PRIMARY_ID, legacy: false,
+    lastChecked: REGISTRY_AS_OF, migrationStatus: 'USER_SELECTABLE (未移行)',
+    qaStatus: UNKNOWN_V
+  };
+  for (var _lm = 0; _lm < LEGACY_PRIMARY_IDS.length; _lm++){
+    /* 旧 primary。vendor 公式 2026-09-10 retire・互換 routing は暫定（= 恒久仕様ではない）。
+       client 側は resolve() が effective mapping するので今日は壊れない ⇒ 「切替必須」ではなく「切替推奨」。 */
+    MODEL_META[LEGACY_PRIMARY_IDS[_lm]] = {
+      label: 'DS V4 Flash (Legacy)', provider: 'OpenRouter', vendorApiName: UNKNOWN_V,
+      recommended: false, deprecated: true, sunset: '2026-09-10', replacement: PRIMARY_ID, legacy: true,
+      lastChecked: REGISTRY_AS_OF, migrationStatus: 'SUPERSEDED (client effective mapping)',
+      qaStatus: 'RETIRED_UPSTREAM (vendor 互換 routing は暫定)'
+    };
+  }
+
+  function _metaOf(id){
+    return (typeof id === 'string' && id && Object.prototype.hasOwnProperty.call(MODEL_META, id)) ? MODEL_META[id] : null;
+  }
+  function _un(v){ return (v === undefined || v === null || v === '') ? UNKNOWN_V : v; }
+  /* replacement は「知らない（metadata なし）= UNKNOWN」と「不要（metadata あり・null）= なし」を区別する。 */
+  function _repl(m){ return m ? (m.replacement ? m.replacement : 'なし') : UNKNOWN_V; }
+  function _recommendedId(){
+    for (var k in MODEL_META) if (Object.prototype.hasOwnProperty.call(MODEL_META, k) && MODEL_META[k].recommended === true) return k;
+    return PRIMARY_ID;
+  }
+  /* sunset 経過判定は ISO-8601 の辞書順比較（date-only の asOf と datetime の sunset を比べると
+     同日でも時刻ぶんだけ「未経過」に倒れる = 安全側）。外部時刻を読まない。 */
+  function _sunsetPassed(m, asOf){ return !!(m && m.sunset) && String(asOf) >= String(m.sunset); }
+
+  /* ★純粋関数: 管理画面が描く全 field を 1 回で返す（UI にロジックを複製しない）。
+     入力 = 保存値 raw（S.cfg.orModel）と任意の asOf。副作用 0・network 0・localStorage 0。
+     状態の派生規則（固定・強い順に 1 つだけ当たる）:
+       ①「切替必須」= 設定値が deprecated かつ sunset 経過かつ **実効値が設定値のまま**（救済なし）
+       ②「切替推奨」= 設定値が deprecated で replacement がある（effective mapping で今日は動く）
+       ③「新しいモデルあり」= 実効値 ≠ 推奨モデル
+       ④「最新版」= それ以外（実効値 = 推奨モデル） */
+  function adminView(configuredRaw, asOf){
+    var at  = (typeof asOf === 'string' && asOf) ? asOf : REGISTRY_AS_OF;
+    var raw = (typeof configuredRaw === 'string') ? configuredRaw : '';
+    var has = !!raw.trim();
+    var cfgId = has ? raw : '';
+    var effId = R.resolve(raw);
+    var cm = _metaOf(cfgId), em = _metaOf(effId);
+    var recId = _recommendedId(), rm = _metaOf(recId);
+    var dep = !!(cm && (cm.deprecated === true || _sunsetPassed(cm, at)));
+    var state;
+    if (dep && _sunsetPassed(cm, at) && effId === cfgId) state = '切替必須';
+    else if (dep && cm && cm.replacement)                state = '切替推奨';
+    else if (effId !== recId)                            state = '新しいモデルあり';
+    else                                                 state = '最新版';
+    var chain = R.fallbackChain();
+    var cat = [];
+    for (var k in MODEL_META) if (Object.prototype.hasOwnProperty.call(MODEL_META, k)){
+      var mm = MODEL_META[k];
+      cat.push({ id: k, label: mm.label, recommended: mm.recommended === true, deprecated: mm.deprecated === true,
+                 sunset: _un(mm.sunset), replacement: _repl(mm), legacy: mm.legacy === true,
+                 provider: _un(mm.provider), lastChecked: _un(mm.lastChecked),
+                 migrationStatus: _un(mm.migrationStatus), qaStatus: _un(mm.qaStatus) });
+    }
+    return {
+      readOnly: true, v: 'dsadm-1', asOf: at,
+      primaryId: PRIMARY_ID, primaryLabel: PRIMARY_LABEL,
+      configuredRaw: raw,
+      configuredId:    has ? cfgId : UNKNOWN_V,
+      configuredLabel: has ? (cm ? cm.label : R.label(cfgId)) : '(未設定→primary)',
+      effectiveId:     effId,
+      effectiveLabel:  em ? em.label : R.label(effId),
+      recommendedId:   recId,
+      recommendedLabel: rm ? rm.label : R.label(recId),
+      provider:        _un(em && em.provider),
+      apiModelId:      _un(effId),
+      vendorApiName:   _un(em && em.vendorApiName),
+      isLegacyConfigured: R.isLegacyPrimary(raw),
+      deprecated:      dep,
+      legacyDeprecatedLabel: has ? ((cm ? (cm.legacy === true ? 'LEGACY' : 'NOT_LEGACY') : UNKNOWN_V) + ' / ' +
+                                    (cm ? (dep ? 'DEPRECATED' : 'ACTIVE') : UNKNOWN_V)) : UNKNOWN_V,
+      replacement:     _repl(cm),
+      qaStatus:        _un(em && em.qaStatus),
+      migrationStatus: has ? _un(cm && cm.migrationStatus) : UNKNOWN_V,
+      lastChecked:     _un((cm && cm.lastChecked) || (em && em.lastChecked)),
+      crossModelFallback: (chain && chain.length) ? chain.join(' -> ') : 'NOT_IMPLEMENTED (v1)',
+      responseReportedModel: UNKNOWN_V,   /* v1: 取得手段を作らない（応答 wrapper 禁止）*/
+      actualProvider:        UNKNOWN_V,   /* v1: 同上（response header / body を読む経路を足さない）*/
+      state: state,
+      substitution: R.substitutionNotice(raw),
+      catalog: cat
+    };
+  }
   var R = {
     version: 'dsmrc-2b',
     primary:   function(){ return PRIMARY_ID; },
@@ -176,6 +284,10 @@
                  return [ { id: PRIMARY_ID,   label: PRIMARY_LABEL,   long: PRIMARY_LONG,   tip: PRIMARY_TIP },
                           { id: SECONDARY_ID, label: SECONDARY_LABEL, long: SECONDARY_LONG, tip: SECONDARY_TIP } ];
                },
+    /* ★dsadm-1: 管理画面 v1 が読む唯一の入口（純粋関数・read-only）。
+       戻り値は表示用の平たい object。UI はこれを描くだけで判定ロジックを持たない。 */
+    adminView: adminView,
+    modelMeta: function(id){ var m = _metaOf(id); if (!m) return null; var o = {}; for (var k in m) if (Object.prototype.hasOwnProperty.call(m,k)) o[k] = m[k]; return o; },
     /* 将来 IF（cross-model fallback）。第2段でも実装しない = 常に空を返す。
        実装時も client に再送 wrapper を足さない（Worker 側で吸収する = 棚卸し §5.1）。 */
     fallbackChain: function(){ return []; },
@@ -270,7 +382,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260913-dsmrc2b';
+  var BUILT = '20260913-dsadm1';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -592,6 +704,78 @@ body {
       </div>
       <div class="fld">
         <label class="chk-row"><input type="checkbox" id="cfgShowInner" checked> NPCの内心を表示（《》で表示）</label>
+      </div>
+
+      <!-- ★dsadm-1 / AI モデル管理 lane v1: **read-only**。registry.adminView() の戻りを表示するだけ。
+           書込要素（input / select / button）0・onclick 0・localStorage 0・外部 fetch 0・S.cfg 書換 0・秘匿値 0。
+           fix275 の tab 割当は直前の .sec 文言で決まる（/主人公|NPC/→chr, /世界|シーン/→wld, else sys）
+           ⇒ 本 section は ⚙ システム tab に入る。 -->
+      <div class="sec">🧭 AI モデル管理（read-only）</div>
+      <div class="fld" id="dsadm1Sec">
+        <div id="dsadm1State" style="display:inline-block;padding:4px 10px;border-radius:999px;border:1px solid var(--border);font-size:12px;margin-bottom:8px">状態: UNKNOWN</div>
+        <div id="dsadm1Note" style="font-size:11px;color:var(--dim);margin-bottom:6px;line-height:1.5"></div>
+        <div style="overflow-x:auto"><table id="dsadm1Tbl" style="width:100%;border-collapse:collapse;font-size:12px"><tbody></tbody></table></div>
+        <div style="font-size:11px;color:var(--dim);margin-top:6px;line-height:1.5">表示専用の欄です。ここからモデルは切り替わりません（自動切替なし・外部問い合わせなし・設定値は変更していません）。API キー等の秘匿値はここに表示しません。</div>
+        <script>
+        /* dsadm-1 renderer: registry.adminView() を描くだけ。判定ロジックを持たない。 */
+        (function dsadm1(){
+          'use strict';
+          if (window.__DSADM1) return; window.__DSADM1 = true;
+          var ROWS = [
+            ['現在の primary モデル',                    'primaryLabel',         'primaryId'],
+            ['設定値（Configured Model）',                'configuredLabel',      'configuredId'],
+            ['実効モデル（Effective Model）',             'effectiveLabel',       'effectiveId'],
+            ['推奨モデル（Recommended Model）',           'recommendedLabel',     'recommendedId'],
+            ['Provider',                                  'provider',             null],
+            ['API model ID',                              'apiModelId',           null],
+            ['Legacy / Deprecated',                       'legacyDeprecatedLabel', null],
+            ['置換先（Replacement）',                     'replacement',          null],
+            ['QA status',                                 'qaStatus',             null],
+            ['Migration status',                          'migrationStatus',      null],
+            ['Cross-model fallback status',               'crossModelFallback',   null],
+            ['Last checked',                              'lastChecked',          null],
+            ['応答が申告したモデル（Response-reported Model）', 'responseReportedModel', null],
+            ['実際の Provider（Actual Provider）',        'actualProvider',       null]
+          ];
+          function rawCfg(){ try { return (window.S && window.S.cfg && window.S.cfg.orModel) || ''; } catch(e){ return ''; } }
+          function render(){
+            try {
+              var R = window.__CHR_MODEL_REGISTRY; if (!R || !R.adminView) return;
+              var tbl = document.getElementById('dsadm1Tbl'); if (!tbl) return;
+              var v = R.adminView(rawCfg());
+              var tb = tbl.tBodies[0] || tbl.appendChild(document.createElement('tbody'));
+              tb.innerHTML = '';
+              for (var i = 0; i < ROWS.length; i++){
+                var tr = document.createElement('tr');
+                var k1 = document.createElement('td'); k1.textContent = ROWS[i][0];
+                k1.style.cssText = 'padding:3px 8px 3px 0;color:var(--dim);white-space:nowrap;vertical-align:top';
+                var v1 = document.createElement('td');
+                var mainT = String(v[ROWS[i][1]] === undefined ? 'UNKNOWN' : v[ROWS[i][1]]);
+                var subT  = ROWS[i][2] ? String(v[ROWS[i][2]] === undefined ? '' : v[ROWS[i][2]]) : '';
+                v1.textContent = (subT && subT !== mainT) ? (mainT + '（' + subT + '）') : mainT;
+                v1.style.cssText = 'padding:3px 0;word-break:break-all';
+                tr.appendChild(k1); tr.appendChild(v1); tb.appendChild(tr);
+              }
+              var st = document.getElementById('dsadm1State');
+              /* 状態は「棚卸し日（asOf）時点」の派生であることを必ず添える（端末時計を読まないため）。 */
+              if (st){ st.textContent = '状態: ' + v.state + '（' + v.asOf + ' 時点）'; st.setAttribute('data-dsadm1-state', v.state); }
+              var nt = document.getElementById('dsadm1Note');
+              if (nt) nt.textContent = v.substitution ? v.substitution.text : '';
+            } catch(e){}
+          }
+          window.__DSADM1RENDER = render;
+          try { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render); else render(); } catch(e){}
+          /* 設定モーダルが開くたびに描き直す（openSettings を書き換えない = 既存経路不触）。 */
+          (function arm(){
+            try {
+              var ov = document.getElementById('settingsOv');
+              if (!ov){ setTimeout(arm, 600); return; }
+              if (ov.__dsadm1watch) return; ov.__dsadm1watch = true;
+              new MutationObserver(render).observe(ov, { attributes: true, attributeFilter: ['class','style'] });
+            } catch(e){}
+          })();
+        })();
+        </script>
       </div>
 
       <div class="sec">主人公</div>
@@ -3706,7 +3890,7 @@ G.init();
   <!-- v292Dfix244: 心理プロファイル入力欄を1つの自由記述に統合(裏の4軸は保持)。OFF=v292PsychMergeOff -->
   <script src="v292Dfix244-psych-merge.js?cb=v292Dfix244b"></script>
   <!-- v292Dfix256: 🧠モデル切替セレクタ(cfg.orModel・スロット毎保存)。A/B実測でDS V4 Flash推奨。OFF=v292ModelSelOff -->
-  <script src="v292Dfix256-model-select.js?cb=20260913-dsmrc1"></script>
+  <script src="v292Dfix256-model-select.js?cb=20260913-dsadm1"></script>
 <script src="v292Dfix270-topbar-ui.js?cb=v292Dfix270"></script>
 <script src="v292Dfix274-build-flag-guard.js?cb=v292Dfix274"></script>
 <script src="v292Dfix275-settings-tabs.js?cb=v292Dfix275"></script>
