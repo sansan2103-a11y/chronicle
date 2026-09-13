@@ -10,19 +10,19 @@
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
 <script src="v292Dfix654-storage-trap.js?cb=v292Dfix731"></script>
-<!-- ★v292Dsmrc1 block / 版 dsmrc-2p(2026-09-13) MODEL ROUTING CENTRALIZATION 第2段 P（policy 基盤のみ）
-     = 第1段の集中定義（primary = DS V4 Flash のまま）に MODEL-SPECIFIC REQUEST POLICY の基盤だけを足す。
+<!-- ★v292Dsmrc1 block / 版 dsmrc-2b(2026-09-13) MODEL ROUTING CENTRALIZATION 第2段b
+     = primary を DS V4.1 Flash へ切り替える（dsmrc-2）＋ MODEL-SPECIFIC REQUEST POLICY（dsmrc-2b）。
+     block の場所・IIFE 名・公開名は M1 のまま。
      「今使う primary model」をこの 1 block だけが決める。UI 選択肢・既定値・送信 payload・
      背景 XHR・fix370 の復帰判定はすべてここを参照する（各所に literal を再生産しない）。
-     ★dsmrc-2p は既定を現行のまま据え置く = **現行ユーザーに観測同値**（primary は V4 Flash のまま・
-       legacy effective mapping も入れない = M2 由来の切替要素 0）。policy 表に載っている model を
-       **明示的に選んでいるユーザーだけ**が request body の差分を受ける。
-     ★V4.1 切替（M2b-S）は下の PRIMARY_ID の 1 行 + legacy mapping + 版文字列だけを書き換える。
-     ★dsmrc-2p / SK-2 MODEL-SPECIFIC REQUEST POLICY: 「この model に投げるときだけ body に足す
+     ★第2段で変える「効く」行は PRIMARY_ID の 1 行だけ（他 8 js は M1 のまま 1 byte も変えない）。
+     ★DQ-2 LEGACY PRIMARY EFFECTIVE MAPPING: 保存値が旧 primary の**完全一致**のときだけ
+       request 時に現在の PRIMARY_ID として解決する。保存値（raw configured）は書き換えない
+       ＝ bulk migration をしない・load 時 write 0・ユーザーが選んだ他モデルは 1 つも置換しない。
+     ★dsmrc-2b / SK-2 MODEL-SPECIFIC REQUEST POLICY: 「この model に投げるときだけ body に足す
        既定パラメータ」を registry の 1 表 + 純粋関数 2 本（requestPolicy / mergePolicy）が決める。
        適用先は 5 経路（本文 _callOpenRouter + 背景 XHR 4 本）で、いずれも registry の
        applyRequestPolicy() を 1 回呼ぶだけ（各所に merge ロジックを複製しない）。
-       ★policy 表・純粋関数・公開 API・_callOpenRouter 合流点は M2b 候補と **byte 同一**（移植）。
      ★この block は定義と option 同値再設定 1 回だけ。localStorage 書込 0 / 新永続 key 0 /
        fetch・XHR・parsePlan の wrapper 追加 0（Q119 topology 不触）。sampling(fix84) 不触。 -->
 <script>
@@ -30,13 +30,31 @@
   'use strict';
   if (window.__CHR_MODEL_REGISTRY) return;
 
-  /* ===================== STAGE-2 SWITCH LINE (この 1 行だけ) ===================== */
-  var PRIMARY_ID      = 'deepseek/deepseek-v4-flash';
+  /* ===================== SWITCH LINE (この 1 行だけ) ===================== */
+  var PRIMARY_ID      = 'deepseek/deepseek-v4.1-flash';
   /* ======================================================================== */
-  /* 以下 3 行は表示文言のみ（挙動に影響しない・第2段で任意に更新） */
-  var PRIMARY_LABEL   = 'DS V4 Flash';
-  var PRIMARY_LONG    = 'DeepSeek V4 Flash（推奨：高速・高品質・安価）';
-  var PRIMARY_TIP     = 'DS V4 Flash：速い・安い・十分賢い。普段使いにおすすめ';
+  /* 以下 3 行は表示文言のみ（挙動に影響しない） */
+  var PRIMARY_LABEL   = 'DS V4.1 Flash';
+  var PRIMARY_LONG    = 'DeepSeek V4.1 Flash（推奨：高速・高品質・安価）';
+  var PRIMARY_TIP     = 'DS V4.1 Flash：速い・安い・十分賢い。普段使いにおすすめ';
+
+  /* ★dsmrc-2 / DQ-2: LEGACY PRIMARY（= ここに挙げた ID の**完全一致**だけを現 PRIMARY_ID
+     として解決する）。保存値は書き換えない。ユーザーが明示的に選んだ他モデル
+     （SECONDARY_ID / deepseek/ の別モデル / 非 DS）は 1 つも置換しない。 */
+  var LEGACY_PRIMARY_IDS = ['deepseek/deepseek-v4-flash'];
+
+  /* ★dsmrc-2: **管理情報 field**（DQ-8 の管理画面が読む表示専用データ）。
+     ここに置く vendorApiName（DeepSeek 直 API の model 名）は request body に**入れない**。
+     送信経路は primary() / resolve() の戻り値だけで、この object を読む送信経路は無い
+     （受入 M2-1c で機械確認）。 */
+  var PRIMARY_META = {
+    provider:      'openrouter',                    /* 実際に request を撃つ相手 */
+    routedId:      PRIMARY_ID,                      /* request に載る唯一の model 文字列 */
+    vendorApiName: 'deepseek-flash',                /* DeepSeek 直 API 名。表示専用・request に入れない */
+    vendorBaseUrl: 'https://api.deepseek.com',      /* 表示専用（本 client は直叩きしない） */
+    legacyIds:     LEGACY_PRIMARY_IDS,              /* 旧 primary（effective mapping の対象） */
+    note:          'vendorApiName / vendorBaseUrl は管理画面の表示専用。request には使わない'
+  };
 
   var SECONDARY_ID    = 'deepseek/deepseek-v4-pro';
   var SECONDARY_LABEL = 'DS V4 Pro';
@@ -44,6 +62,11 @@
   var SECONDARY_TIP   = 'DS V4 Pro：心理の深さ・状況追跡が一段上。ここぞの修羅場や濃い場面に。やや遅く約4倍のコスト';
 
   function ns(){ var i = PRIMARY_ID.indexOf('/'); return (i > 0) ? PRIMARY_ID.slice(0, i + 1) : ''; }
+
+  /* 保存値が「旧 primary の完全一致」か。trim も小文字化もしない = 完全一致のみ。 */
+  function isLegacyPrimary(v){
+    return typeof v === 'string' && LEGACY_PRIMARY_IDS.indexOf(v) >= 0;
+  }
 
   /* ★dsmrc-2b / SK-2 MODEL-SPECIFIC REQUEST POLICY。
      key は **effective model**（resolve() 後の ID）の**完全一致**。legacy slug は resolve() が
@@ -107,11 +130,24 @@
   }
 
   var R = {
-    version: 'dsmrc-2p',
+    version: 'dsmrc-2b',
     primary:   function(){ return PRIMARY_ID; },
     secondary: function(){ return SECONDARY_ID; },
-    /* cfg の値が空のときだけ primary を返す（= 従来の cfg.orModel || '<literal>' と同値） */
-    resolve:   function(v){ return (typeof v === 'string' && v.trim()) ? v : PRIMARY_ID; },
+    /* 送信 payload の model 欄。
+       ・空（未設定）        → primary()（従来の cfg.orModel || '<literal>' と同値）
+       ・旧 primary の完全一致 → primary()（DQ-2 LEGACY PRIMARY EFFECTIVE MAPPING）
+       ・それ以外            → 保存値そのまま（ユーザー選択を尊重・置換 0）
+       ★この関数は保存値を 1 byte も書き換えない（read-only）。 */
+    resolve:   function(v){
+                 if (typeof v === 'string' && v.trim()) return isLegacyPrimary(v) ? PRIMARY_ID : v;
+                 return PRIMARY_ID;
+               },
+    /* 表示用 3 点セット（管理画面 lane / 設定 UI が「設定値: 旧 / 実効: 新」を出せる形）。
+       configured() は保存値をそのまま返す（未設定は ''）。effective() は実際に送る値。 */
+    configured: function(v){ return (typeof v === 'string' && v.trim()) ? v : ''; },
+    effective:  function(v){ return R.resolve(v); },
+    isLegacyPrimary: isLegacyPrimary,
+    legacyPrimaries: function(){ return LEGACY_PRIMARY_IDS.slice(); },
     /* ★dsmrc-2b: MODEL-SPECIFIC REQUEST POLICY の公開 API。
        requestPolicy(effectiveModel) … 純粋関数。その model 用の追加 body（無ければ {}）
        mergePolicy(body, policy, m)  … 純粋関数。1 段 deep-merge（policy authority）
@@ -121,6 +157,12 @@
     applyRequestPolicy: function(body, effectiveModel){
       return mergePolicy(body, requestPolicy(effectiveModel), effectiveModel);
     },
+    /* 管理情報（表示専用・request に入れない）。呼び出し側が壊せないよう複製を返す。 */
+    meta:      function(){
+                 var o = {}; for (var k in PRIMARY_META) if (Object.prototype.hasOwnProperty.call(PRIMARY_META, k)) o[k] = PRIMARY_META[k];
+                 o.routedId = PRIMARY_ID; o.legacyIds = LEGACY_PRIMARY_IDS.slice();
+                 return o;
+               },
     /* 旧 fix370 の isDS と同値。判定 prefix を primary の namespace から導く
        ⇒ 第2段で primary が同じ namespace の新 slug になっても引き戻さない */
     ns:        ns,
@@ -134,14 +176,21 @@
                  return [ { id: PRIMARY_ID,   label: PRIMARY_LABEL,   long: PRIMARY_LONG,   tip: PRIMARY_TIP },
                           { id: SECONDARY_ID, label: SECONDARY_LABEL, long: SECONDARY_LONG, tip: SECONDARY_TIP } ];
                },
-    /* 将来 IF（cross-model fallback）。第1段では実装しない = 常に空を返す。
+    /* 将来 IF（cross-model fallback）。第2段でも実装しない = 常に空を返す。
        実装時も client に再送 wrapper を足さない（Worker 側で吸収する = 棚卸し §5.1）。 */
     fallbackChain: function(){ return []; },
-    substitutionNotice: null
+    /* 置換が起きたときだけ通知 object を返す（起きていなければ null）。
+       UI はこれを読んで「設定値: 旧 / 実効: 新」を出せる。副作用 0・保存 0。 */
+    substitutionNotice: function(v){
+      if (!isLegacyPrimary(v)) return null;
+      return { reason: 'legacy-primary', configured: v, effective: PRIMARY_ID,
+               effectiveLabel: PRIMARY_LABEL,
+               text: '設定値: ' + v + ' / 実効: ' + PRIMARY_ID + '（旧 primary のため自動で読み替え・設定は変更していません）' };
+    }
   };
 
-  /* static <option> の value/表示を集中定義から埋める（第1段では既存表示と同値）。
-     DOM を新規に作らない・選択状態を変えない・1 回だけ。 */
+  /* static <option> の value/表示を集中定義から埋める（第2段では primary 側が V4.1 になる）。
+     DOM を新規に作らない・選択状態を変えない・1 回だけ・localStorage 書込 0。 */
   function syncStaticOptions(){
     try {
       var list = document.querySelectorAll('option[data-chr-model]');
@@ -221,7 +270,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260913-dsmrc2p';
+  var BUILT = '20260913-dsmrc2b';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -1769,7 +1818,7 @@ const UI = {
     document.getElementById('cfgKey').value       = S.cfg.key      || '';
     document.getElementById('cfgOrKey').value     = S.cfg.orKey    || '';
     { var _pk = document.getElementById('cfgPollKey'); if (_pk) _pk.value = S.cfg.pollKey || ''; }
-    document.getElementById('cfgOrModel').value   = S.cfg.orModel  || (window.__CHR_MODEL_REGISTRY ? window.__CHR_MODEL_REGISTRY.primary() : ''); /* v292Dsmrc1 */
+    document.getElementById('cfgOrModel').value   = (window.__CHR_MODEL_REGISTRY ? window.__CHR_MODEL_REGISTRY.effective(S.cfg.orModel) : (S.cfg.orModel || '')); /* v292Dsmrc2: 旧 primary 保存値でも option と噛み合う「実効値」を表示する（S.cfg は書き換えない）。未設定・非 legacy は従来と同値 */
     document.getElementById('cfgNaiKey').value    = S.cfg.naiKey   || '';
     document.getElementById('cfgModel').value     = S.cfg.model    || 'claude-haiku-4-5-20251001';
     document.getElementById('cfgDbg').checked     = S.cfg.debug    || false;
@@ -3581,7 +3630,7 @@ G.init();
 })();
 </script>
 <script src="v292DfixP0-scenario-blocker.js?cb=v292Dfix680"></script>
-<script src="v292Dfix135-longmem.js?cb=20260913-dsmrc2p"></script>
+<script src="v292Dfix135-longmem.js?cb=20260913-dsmrc2b"></script>
 <script src="v292Dfix138-continue.js?cb=v292Dfix225"></script>
 <script src="v292Dfix145-charlist.js?cb=v292Dfix773"></script>
 <script src="v292Dfix777-icon-lightbox.js?cb=v292Dfix777"></script>
@@ -3681,7 +3730,7 @@ G.init();
 <script src="v292Dfix830-entity-match-resolver.js?cb=20260907-fix832"></script>
 <script src="v292Dfix766-canonical-appearance.js?cb=20260901-fix783"></script>
 <script src="v292Dfix767-icon-recipe-adapter.js?cb=v292Dfix778"></script>
-<script src="v292Dfix307-npc-roster.js?cb=20260913-dsmrc2p"></script>
+<script src="v292Dfix307-npc-roster.js?cb=20260913-dsmrc2b"></script>
 <script src="v292Dfix308-creepy-toggle.js?cb=v292Dfix308"></script>
 <script src="v292Dfix309-progression.js?cb=v292Dfix419c"></script>
 <!-- fix577: 物語削除の入口を1つに寄せる。B(gallery)/C(features clearSlot)の独自削除を停止し、
@@ -3786,7 +3835,7 @@ G.init();
 <script src="v292Dfix483-genbudget-sync.js?cb=v292Dfix495"></script>
 <script src="v292Dfix427-output-sanitize.js?cb=v292Dfix427"></script>
 <script src="v292Dfix430-carrier-block.js?cb=v292Dfix430"></script>
-<script src="v292Dfix436-seed-expand.js?cb=20260913-dsmrc2p"></script>
+<script src="v292Dfix436-seed-expand.js?cb=20260913-dsmrc2b"></script>
 <script src="v292Dfix437-regen-instant.js?cb=v292Dfix437"></script>
 <script src="v292Dfix438-inline-dialogue.js?cb=v292Dfix438"></script>
 <script src="v292Dfix439-readability.js?cb=v292Dfix457"></script>
@@ -3810,7 +3859,7 @@ G.init();
 <script src="v292Dfix458-dash-post.js?cb=20260901-fix784"></script>
 <script src="v292Dfix459-sys-v2.js?cb=20260906-fix822"></script>
 <script src="v292Dfix460-slotgrid.js?cb=v292Dfix460"></script>
-<script src="v292Dfix461-appearance-en.js?cb=20260913-dsmrc2p"></script>
+<script src="v292Dfix461-appearance-en.js?cb=20260913-dsmrc2b"></script>
 <script src="v292Dfix462-bare-speaker.js?cb=20260829-fix748"></script>
 <script src="v292Dfix463-human-guard.js?cb=v292Dfix463"></script>
 <script src="v292Dfix464-say-promote.js?cb=v292Dfix465"></script>
