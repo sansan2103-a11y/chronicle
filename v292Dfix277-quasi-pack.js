@@ -823,6 +823,136 @@
     } catch(e){}
   }
 
+  /* ============ ★fix537pt / PRENAME_WHO_TRANSITION v1.3 (②C1 裁定 EZ-2 GO ＋ ★裁定 FA) ============
+     ★v1.3 の変更は FA-3 / FA-2 の 2 点だけ（detectSelfNaming 不触・v1.2 からの変更もこの 2 箇所のみ）:
+       FA-3 (PT-Q5 = REJECT) EXISTING DETECTOR PRIORITY = **SAME-TURN ONLY**
+            ／ HISTORICAL ALIAS PRESENCE != SUPPRESSION AUTHORITY。
+            抑止は「既存 detectSelfNaming が **同じ turn で同じ canonical X** の edge を既に生成した」ときだけ
+            （ptSameTurnEdge: hot log の {turn, canonical} を読むだけ・新 key 0）。
+            過去 turn の ali 履歴は抑止理由にしない。同一 turn 同一 (alias,canonical) の重複 0 と
+            1 canonical / turn 最大 1 edge は維持（ent.ali.indexOf(L) ＋ done[X]）。
+       FA-2 (PT-Q2 = 条件付き ACCEPT) READING_ANNOTATION_FORM = ACCEPTED / ARBITRARY_SUBSTRING_MATCH = REJECTED。
+            読み仮名形 (d) は **name-only / name-leading utterance** のときだけ有効。
+            = X より前が「間投記号・句読点」＋「名前（＋読み）＋区切り」の並びだけで構成されている発話。
+            一般文中に埋め込まれた X（読み）（例「妹は篠宮 黎（れい）っていうんだ」）は通さない。
+     正本 = gold/PRENAME_WHO_TRANSITION_SOURCE_DIFF_v1.md §3（最小修正案）＋ §8（裁定 EZ・PQ-1〜7。§3 と食い違う点は §8 が勝つ）
+            ＋ gold/F537PT_OFFLINE_IMPLEMENTATION_v1.md §8 追記（裁定 FA。PT-Q5 だけ §8 PQ-5 を上書きする）。
+     上の detectSelfNaming / namingOf / validName / DESCRIPTIVE_TAIL / hlsWrite / loadQ / saveQ は **1 バイトも変更していない**。
+     本検出器はその横に並置する第 2 検出器であり、既存条件を 1 つも緩めない（緩めると FX-4 型の誤 edge が立つ = 設計 §3.1）。
+     検出 = 「旧/記述的 who L の say 本文に X の名乗りがあり、**その直後の say の who が X**」の 2 点同時成立のみ。
+       N-1 同一 turn の say 列（who 下限だけ 1 に下げた本検出器**専用**の正規表現。L779 は触らない）
+       N-2 says[i].body に X の明示的 self-naming 構文（既存 namingOf ＋ (a) 鉤括弧形 / (b) 読点許容形 /
+           (c) 名は形 / (d) 読み仮名形 の合議。PQ-2 により一人称マーカは要求しない）
+       N-3 **IMMEDIATE_NEXT_SAY_ONLY**（PQ-1・同一 turn のみ・次 turn へ跨がせない）。
+           ★「直後の say」の解釈 = i の次に現れる **異なる who の say** 1 本だけ（同一 who の連続 say は読み飛ばす）。
+             その 1 本の who が X でなければ落とす（next-who-mismatch は no-self-naming として記録される）。
+       N-4 L = says[i].who そのもの（1 文字可。台帳一意性ヒューリスティックは使わない = FX-4 型の誤 L を構造的に遮断）／
+           X = 2〜12 字（PQ-2。1 文字 canonical は v1 対象外）・内部空白 1 個まで許容（PQ-3）・
+           DESCRIPTIVE_TAIL / GENERIC_HUB / BAD / PLACEHOLDER（すべて**既存**定数）を再利用して記述語・代名詞を落とす・
+           L !== X（空白正規化して比較）・両方 cast 外・X がこの物語で初出（既存 firstTime 述語と同形）。
+     二重発火（PQ-5 → ★FA-3 で上書き）: 既存 detectSelfNaming が先に走り、**同じ turn で同じ canonical X** の
+       edge を既に生成していたときだけ本検出器は降りる（supplement only ／ 1 canonical・1 turn あたり最大 1 edge ／
+       同一 (alias,canonical) の重複生成 0）。**過去 turn の ali 履歴では降りない**。
+     出力先は既存の 2 本だけ: 台帳 v292Dfix277Quasi<sfx> の ent.ali.push(L) と hot log v292Dfix537_log
+       （HLS ON なら hlsWrite 経由 = S-2 slot gate ＋ s stamp）。**新しい永続 key 0 本・hot log の新 field 0**。
+     既定 OFF: opt-in 'v292Dfix537PtOn'='1' ／ kill 'v292Dfix537PtOff'='1'（kill が勝つ）。
+       off537 / offQ は本フラグより **上位**。storage read が throw → OFF（FAIL TO PRODUCTION）。
+     診断は非永続（in-memory・ptDiag()）。fix640 source 変更 0 ／ fix640 の key への write 0。 */
+  var PT_SAY   = /<say\s+who="([^"]{1,24})"\s*>([\s\S]{0,200}?)<\/say>/g;   /* L779 と同型・who 下限のみ 1 */
+  var PT_KAGI  = /[「『]([^「」『』]{2,12})[」』][\s　]*[、，]?[\s　]*(?:って|と)[\s　]*[、，]?[\s　]*(?:呼ば|言わ|いわ|いう|言う|申し|名乗)/g;
+  var PT_AFTER = /^[、，]?[\s　]*(?:って(?:いう|言う|呼ば|呼ぶ)|という|と言う|と呼ば|と申し|と名乗)/;
+  var PT_YOMI  = /^[（(《〈][^）)》〉]{1,12}[）)》〉]/;
+  var PT_BEFORE= /(名前は|名は|名を|わたしは|私は|僕は|俺は|あたしは)[\s　]*$/;
+  var PT_THIRD = /(あの子|その子|あいつ|あの人|その人|あの方|彼女|彼|奴)[はがもの]?[\s　]*$/;   /* 第三者紹介の遮断(FP-4・★9 語で凍結) */
+  /* ★FA-2: (d) 読み仮名形の前提。X より前が「名前(＋読み)＋区切り」の並びだけで出来ていること。 */
+  var PT_LEADCUT = /^[\s　…‥・、，。．！？!?ー—―－〜~“”"']+/;
+  var PT_NAMESEQ = /^(?:[一-龥々〆ヵヶぁ-んァ-ヶーA-Za-zＡ-Ｚａ-ｚ・]{1,12}(?:[（(《〈][^）)》〉]{1,12}[）)》〉][\s　、，。．…‥・]*|[、，。．…‥・]+[\s　]*))*$/;
+  var ptWrote = 0, ptLast = 'init', ptDrops = [], ptThirdHit = false, ptLeadBlocked = false;
+  function ptKilled(){ try { return localStorage.getItem('v292Dfix537PtOff') === '1'; } catch(e){ return false; } }
+  function ptOn(){ try { if (localStorage.getItem('v292Dfix537PtOff') === '1') return false;   /* kill 優先 */
+                         return localStorage.getItem('v292Dfix537PtOn') === '1'; } catch(e){ return false; } }
+  function ptNorm(s){ return String(s || '').replace(/[ 　]/g, ''); }        /* 比較時のみの空白正規化(PQ-3) */
+  function ptValidX(n){
+    var s = String(n || ''), sp = s.match(/[\s　]/g);
+    if (/^[\s　]|[\s　]$/.test(s) || (sp && sp.length > 1)) return '';        /* 前後空白 不可・内部空白は最大 1 個 */
+    if (!validName(ptNorm(s))) return '';                                    /* ★既存 validName を再利用(2-12 字) */
+    return (DESCRIPTIVE_TAIL.test(s) || GENERIC_HUB.test(s)) ? '' : s;       /* ★既存 記述語/役名 predicate を再利用 */
+  }
+  function ptNameLeading(pre){   /* ★FA-2: name-only / name-leading utterance か（一般文中の埋め込みを落とす） */
+    return PT_NAMESEQ.test(String(pre || '').replace(PT_LEADCUT, ''));
+  }
+  function ptNaming(body, X){
+    var t = String(body || ''), i = t.indexOf(X), m, h, yomi; ptThirdHit = false; ptLeadBlocked = false;
+    for (; i >= 0; i = t.indexOf(X, i + 1)){
+      var af = t.slice(i + X.length, i + X.length + 10);
+      yomi = PT_YOMI.test(af);
+      if (yomi && !ptNameLeading(t.slice(0, i))) ptLeadBlocked = true;   /* ★ARBITRARY_SUBSTRING_MATCH = REJECTED */
+      h = PT_AFTER.test(af) ? 'b' : (yomi && ptNameLeading(t.slice(0, i))) ? 'd'
+          : PT_BEFORE.test(t.slice(Math.max(0, i - 8), i)) ? 'c' : (namingOf(X + af, X) ? 'n' : '');
+      if (h){ if (!PT_THIRD.test(t.slice(Math.max(0, i - 12), i))) return h; ptThirdHit = true; }
+    }
+    for (PT_KAGI.lastIndex = 0; (m = PT_KAGI.exec(t)); ){
+      if (m[1] === X){ if (!PT_THIRD.test(t.slice(Math.max(0, m.index - 12), m.index))) return 'a'; ptThirdHit = true; }
+    }
+    return '';
+  }
+  /* ★FA-3: 既存 detector の抑止権は **same-turn only**。hot log の {turn, canonical} を読むだけ（新 key 0）。 */
+  function ptSameTurnEdge(turnIdx, X){
+    try {
+      var lg = JSON.parse(localStorage.getItem('v292Dfix537_log') || '[]');
+      if (!Array.isArray(lg)) return false;
+      for (var i = lg.length - 1; i >= 0; i--){
+        var e = lg[i]; if (e && e.turn === turnIdx && e.canonical === X) return true;
+      }
+    } catch(e){}
+    return false;
+  }
+  function detectPrenameWhoTransition(raw, turnIdx){
+    ptDrops = [];
+    try {
+      if (off537() || offQ()){ ptLast = 'off-upper'; return; }                /* ★上位 kill が優先 */
+      if (!ptOn()){ ptLast = ptKilled() ? 'killed' : 'off'; return; }         /* ★既定 OFF */
+      var txt = caseViewOn() ? caseViewForAnalysis(String(raw || '')) : String(raw || ''), m, cast = castNames(), says = [];
+      for (PT_SAY.lastIndex = 0; (m = PT_SAY.exec(txt)); ) says.push({ who: String(m[1] || '').trim(), body: String(m[2] || '') });
+      if (says.length < 2){ ptLast = 'no-who-transition'; ptDrops.push('no-who-transition'); return; }
+      var qs = loadQ(), done = {}, drop = function(r){ ptDrops.push(r); ptLast = r; };
+      for (var i = 0; i < says.length - 1; i++){
+        var L = says[i].who, j = i + 1, X, xe, ent, why; if (!L) continue;
+        while (j < says.length && says[j].who === L) j++;                      /* 直後 = 次に現れる異なる who */
+        if (j >= says.length){ drop('no-who-transition'); continue; }
+        X = ptValidX(says[j].who);
+        if (!X){ drop(ptNorm(says[j].who).length < 2 ? 'canonical-too-short' : 'invalid-canonical'); continue; }
+        if (ptNorm(L) === ptNorm(X)){ drop('same-who'); continue; }
+        if (cast.indexOf(L) >= 0 || cast.indexOf(X) >= 0){ drop('cast'); continue; }
+        if (BAD.test(L) || (!off528() && PLACEHOLDER.test(L))){ drop('invalid-alias'); continue; }   /* ★既存定数の再利用 */
+        if (done[X]){ drop('one-edge-per-canonical'); continue; }
+        xe = qs[X];
+        if (xe && Array.isArray(xe.seen) && xe.seen.length &&
+            !(xe.seen.length === 1 && xe.seen[0] === turnIdx)){ drop('not-first-time'); continue; }
+        why = ptNaming(says[i].body, X);
+        if (!why){ drop(ptThirdHit ? 'third-party-introduction'
+                        : (ptLeadBlocked ? 'reading-form-not-name-leading' : 'no-self-naming')); continue; }
+        if (ptSameTurnEdge(turnIdx, X)){ drop('existing-detector-priority-same-turn'); done[X] = 1; continue; }  /* ★FA-3 */
+        ent = qs[X] || { seen: [], ali: [] }; ent.ali = ent.ali || [];
+        if (ent.ali.indexOf(L) >= 0){ drop('duplicate-edge'); done[X] = 1; continue; }   /* 同一 (alias,canonical) 重複 0 */
+        ent.ali.push(L); qs[X] = ent; qDirty = true; aliasCache = null; done[X] = 1;
+        /* ★出力は既存 detectSelfNaming と同形の 5 行（HLS ON のときだけ slot gate + stamp 版へ分岐） */
+        if (hlsOn()){ try { hlsWrite(turnIdx, L, X); } catch(e2h){} } else
+        try {
+          var lg = JSON.parse(localStorage.getItem('v292Dfix537_log') || '[]');
+          lg.push({ ts: Date.now(), turn: turnIdx, alias: L, canonical: X });
+          localStorage.setItem('v292Dfix537_log', JSON.stringify(lg.slice(-30)));
+        } catch(e2){}
+        ptWrote++; ptLast = 'written:' + why;
+        try { console.log(TAG, 'fix537pt: 遷移名乗りで同一性確定:', L, '=', X); } catch(e3){}
+        try { saveQ(); normalizeConvWho('fix537pt:' + L + '=' + X); } catch(e4){}
+      }
+    } catch(e){ ptLast = 'threw'; }
+  }
+  function ptDiag(){ return { version: 'PRENAME_WHO_TRANSITION/v1.3', on: ptOn(), killed: ptKilled(),
+                              wrote: ptWrote, last: ptLast, drops: ptDrops.slice(), persistentKeysAdded: 0 }; }
+  /* ============ /PRENAME_WHO_TRANSITION ============ */
+
 
   /* ★fix538(2026-07-25): 別名が確定したら、**保存済みの会話ログの話者も**正名へ寄せる。
      実測(30ターン試験): fix537 が 少女=シオン を確定させると、キャラ一覧と fix77 の状態は統合されるのに
@@ -1024,6 +1154,7 @@
             var S = getS();
             harvestRaw(rawText, (S && S.turns) ? S.turns.length : 0);
             detectSelfNaming(rawText, (S && S.turns) ? S.turns.length : 0);   // ★fix537
+            detectPrenameWhoTransition(rawText, (S && S.turns) ? S.turns.length : 0);   // ★fix537pt(既定 OFF・既存 wrapper 内・新 wrapper 0)
             saveQ();
           }
         } catch(e){}
@@ -1200,6 +1331,7 @@
     store: loadQ, key: QK, surgery: surgery, aliasMap: aliasMap, aliasFix: aliasFix,
     noteAppear: noteAppear, quasiRecent: quasiRecent, syncConv: syncConv, unifyCards: unifyCards,
     detectSelfNaming: detectSelfNaming, /* ★fix537 検証口(実経路はparsePlanラップ) */
+    detectPrenameWhoTransition: detectPrenameWhoTransition, fix537PtDiag: ptDiag,   /* ★fix537pt 検証口と非永続診断口 */
     fix537SlotLog: hlsRead, fix537SlotLogDiag: hlsDiag,   /* ★HOT_LOG_SLOT_ATTRIBUTION v1 の唯一の READ 経路と診断口(読むだけ) */
     normalizeConvWho: normalizeConvWho,   /* ★fix538 検証口 */
     ambiguousHubs: ambiguousHubs,         /* ★fix541 検出のみ・停止措置なし */
