@@ -316,7 +316,7 @@
   function request(p, cb){
     var st = getS(), cfg = (st && st.cfg) || {};
     var body = {
-      model: cfg.orModel || 'deepseek/deepseek-v4-flash',
+      model: (window.__CHR_MODEL_REGISTRY ? window.__CHR_MODEL_REGISTRY.resolve(cfg.orModel) : cfg.orModel),   /* v292Dsmrc1: 集中定義 */
       temperature: 0.85,
       max_tokens: 1800,
       messages: [{ role: 'system', content: p.sys }, { role: 'user', content: p.user }]

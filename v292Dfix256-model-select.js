@@ -22,10 +22,13 @@
 
   function getS(){ try{ return window.S || (0,eval)('S'); }catch(e){ return null; } }
 
-  var MODELS = [
-    { id: 'deepseek/deepseek-v4-flash',    label: 'DS V4 Flash' },
-    { id: 'deepseek/deepseek-v4-pro',      label: 'DS V4 Pro' }
-  ]; /* v292Dfix279: おしん指示(2026-06-13)「モデルはDSだけ・Hermesはもう使わない」→Hermes 2種を除去。cfgにリスト外IDが残っている場合は下のopts.unshiftが従来通り温存表示する */
+  /* ★v292Dsmrc1: 選択肢を集中定義（__CHR_MODEL_REGISTRY.list()）から引く。
+     この file に model ID の literal を置かない。registry が無ければ空（= 既存 cur のみ温存）。 */
+  function MODELS_(){
+    try { var R = window.__CHR_MODEL_REGISTRY; if (R && R.list) return R.list().map(function(m){ return { id: m.id, label: m.label }; }); } catch(e){}
+    return [];
+  }
+  var MODELS = MODELS_(); /* v292Dfix279: おしん指示(2026-06-13)「モデルはDSだけ・Hermesはもう使わない」→Hermes 2種を除去。cfgにリスト外IDが残っている場合は下のopts.unshiftが従来通り温存表示する */
 
   function currentModel(){
     try{ var S=getS(); return (S && S.cfg && S.cfg.orModel) || ''; }catch(e){ return ''; }
@@ -41,7 +44,7 @@
       if(!tb || !S){ setTimeout(inject, 600); return; }
       if(document.getElementById('v292-model-sel')) return;
       var cur = currentModel();
-      var opts = MODELS.slice();
+      var opts = MODELS_().slice();   /* v292Dsmrc1: 注入時点で registry を再読む */
       if (cur && !opts.some(function(m){ return m.id === cur; })) {
         opts.unshift({ id: cur, label: cur.split('/').pop().slice(0, 18) }); /* リスト外IDも温存 */
       }
@@ -54,7 +57,7 @@
         o.value = m.id; o.textContent = m.label;
         sel.appendChild(o);
       });
-      sel.value = cur || MODELS[0].id;
+      sel.value = cur || (opts[0] && opts[0].id) || '';   /* v292Dsmrc1 */
       sel.addEventListener('change', function(){ setModel(sel.value); });
       tb.appendChild(span);
       try{ console.log(TAG, 'injected (current:', cur || '(未設定)', ')'); }catch(_){}
@@ -62,6 +65,6 @@
   }
   inject();
 
-  window.__v292ModelSel = { setModel: setModel, currentModel: currentModel, MODELS: MODELS };
+  window.__v292ModelSel = { setModel: setModel, currentModel: currentModel, MODELS: MODELS, models: MODELS_ };
   try{ console.log(TAG, 'loaded'); }catch(_){}
 })();

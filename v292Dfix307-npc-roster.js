@@ -43,7 +43,9 @@
   if(window.__v292Dfix307) return; window.__v292Dfix307=true;
 
   var ENDPOINT='https://openrouter.ai/api/v1/chat/completions';  // fix247がプロキシへ書換
-  var MODEL='deepseek/deepseek-v4-flash';  // 背景タスクは軽量Flash固定
+  /* ★v292Dsmrc1: model は集中定義（index.html head の __CHR_MODEL_REGISTRY）から取る。
+     この file に model ID の literal を置かない。取れなければ fail-closed（送信しない）。 */
+  function MODEL(){ try { var R = window.__CHR_MODEL_REGISTRY; if (R && R.primary) return R.primary(); } catch(e){} return ''; }
   var INTERVAL=3;     // 何ターンごとに抽出するか
   var WINDOW=12;      // 弧の文脈として遡るターン数
   var CAP=60;         // ロスター上限
@@ -169,7 +171,8 @@
   function callLLM(transcript, cb){
     var key=getKey(); if(!key){ cb(null); return; }
     var user=buildUserPrompt(transcript);   // ★fix408強化: 総文字数上限+改行1行化(buildExistingLines)
-    var body=JSON.stringify({ model:MODEL, temperature:0.2, max_tokens:600, messages:[{role:'system',content:SYS},{role:'user',content:user}] });
+    var _m=MODEL(); if(!_m){ cb(null); return; }   /* v292Dsmrc1: fail-closed */
+    var body=JSON.stringify({ model:_m, temperature:0.2, max_tokens:600, messages:[{role:'system',content:SYS},{role:'user',content:user}] });
     try{
       var xhr=new XMLHttpRequest();
       xhr.open('POST', ENDPOINT, true);

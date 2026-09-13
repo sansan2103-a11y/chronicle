@@ -18,7 +18,8 @@
   if (window.__v292Dfix354) return; window.__v292Dfix354 = true;
   var TAG = '[v292Dfix354:defaultModel]';
   var OLD = 'mistralai/mistral-nemo';
-  var NEW = 'deepseek/deepseek-v4-flash';
+  /* ★v292Dsmrc1: 移行先を集中定義へ。OLD（退役 ID）は移行元の識別子なので残す。 */
+  function NEW(){ try { var R = window.__CHR_MODEL_REGISTRY; if (R && R.primary) return R.primary(); } catch(e){} return ''; }
   function off(){ try{ return localStorage.getItem('v292Dfix354Off')==='1'; }catch(e){ return false; } }
   function getS(){ try{ if (window.S) return window.S; return (0,eval)('S'); }catch(e){ return null; } }
 
@@ -27,10 +28,11 @@
     if (off()) return;
     try {
       var S = getS(); if (!S || !S.cfg) return;
+      var _n = NEW(); if (!_n) return;   /* v292Dsmrc1: fail-closed */
       if (S.cfg.orModel === OLD) {
-        S.cfg.orModel = NEW;
+        S.cfg.orModel = _n;
         if (typeof S.save === 'function') (typeof S.saveC==='function'?S.saveC('fix354.migrate'):S.save());
-        try{ console.log(TAG, 'orModel migrated: mistral-nemo -> DS V4 Flash'); }catch(_){}
+        try{ console.log(TAG, 'orModel migrated: mistral-nemo ->', _n); }catch(_){}
       }
     } catch(e){}
   }
@@ -39,6 +41,7 @@
   function pruneSelectors(){
     if (off()) return;
     try {
+      var _n2 = NEW(); if (!_n2) return;   /* v292Dsmrc1: fail-closed */
       document.querySelectorAll('select').forEach(function(sel){
         var removed = false;
         Array.prototype.slice.call(sel.options).forEach(function(o){
@@ -46,8 +49,8 @@
             var wasSelected = o.selected;
             o.remove(); removed = true;
             if (wasSelected) {
-              var ds = Array.prototype.slice.call(sel.options).find(function(x){ return x.value === NEW; });
-              if (ds) { sel.value = NEW; try{ sel.dispatchEvent(new Event('change', {bubbles:true})); }catch(_){} }
+              var ds = Array.prototype.slice.call(sel.options).find(function(x){ return x.value === _n2; });
+              if (ds) { sel.value = _n2; try{ sel.dispatchEvent(new Event('change', {bubbles:true})); }catch(_){} }
             }
           }
         });

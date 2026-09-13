@@ -15,25 +15,33 @@
   'use strict';
   if (window.__v292Dfix370) return; window.__v292Dfix370 = true;
   var TAG = '[v292Dfix370:modelGuard]';
-  var FLASH = 'deepseek/deepseek-v4-flash';
-  var isDS = function(v){ return typeof v === 'string' && v.indexOf('deepseek/') === 0; };
+  /* ★v292Dsmrc1: 復帰先と prefix 判定を集中定義へ。
+     旧: FLASH = '<旧 Flash literal>' / isDS = indexOf('deepseek/')===0
+     新: 復帰先 = registry.primary()、判定 = registry.isManaged()（primary の namespace から導く）
+     ⇒ 第2段で primary が新 slug になっても **新 slug を引き戻さない**し、旧 Flash へも戻さない。
+     registry が無いときは fail-closed = 移行も剪定もしない（既存値を壊さない）。 */
+  function REG(){ try { return window.__CHR_MODEL_REGISTRY || null; } catch(e){ return null; } }
+  function FLASH(){ var R = REG(); return (R && R.primary) ? R.primary() : ''; }
+  var isDS = function(v){ var R = REG(); return !!R && !!R.isManaged && R.isManaged(v); };
   function off(){ try{ return localStorage.getItem('v292Dfix370Off')==='1'; }catch(e){ return false; } }
   function getS(){ try{ if (window.S) return window.S; return (0,eval)('S'); }catch(e){ return null; } }
   function migrate(){
     if (off()) return;
     try {
       var S = getS(); if (!S || !S.cfg) return;
+      var _p = FLASH(); if (!_p) return;   /* v292Dsmrc1: fail-closed */
       if (!isDS(S.cfg.orModel)) {
         var old = S.cfg.orModel;
-        S.cfg.orModel = FLASH;
+        S.cfg.orModel = _p;
         if (typeof S.save === 'function') (typeof S.saveC==='function'?S.saveC('fix370.migrate'):S.save());
-        try{ console.log(TAG, 'orModel migrated:', old, '-> DS V4 Flash'); }catch(_){}
+        try{ console.log(TAG, 'orModel migrated:', old, '->', _p); }catch(_){}
       }
     } catch(e){}
   }
   function pruneSelectors(){
     if (off()) return;
     try {
+      var _pf = FLASH(); if (!_pf) return;   /* v292Dsmrc1: fail-closed */
       document.querySelectorAll('select').forEach(function(sel){
         var opts = Array.prototype.slice.call(sel.options);
         var isModelSel = opts.some(function(o){ return isDS(o.value); });
@@ -44,7 +52,7 @@
             var wasSelected = o.selected;
             o.remove(); removed = true;
             if (wasSelected) {
-              var ds = Array.prototype.slice.call(sel.options).find(function(x){ return x.value === FLASH; })
+              var ds = Array.prototype.slice.call(sel.options).find(function(x){ return x.value === _pf; })
                     || Array.prototype.slice.call(sel.options).find(function(x){ return isDS(x.value); });
               if (ds) { sel.value = ds.value; try{ sel.dispatchEvent(new Event('change', {bubbles:true})); }catch(_){} }
             }

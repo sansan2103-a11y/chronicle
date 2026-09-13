@@ -155,7 +155,7 @@
              + (world ? ('\n世界観: ' + world) : '')
              + '\n\nEnglish tags:';
     var body = {
-      model: cfg.orModel || 'deepseek/deepseek-v4-flash',
+      model: (window.__CHR_MODEL_REGISTRY ? window.__CHR_MODEL_REGISTRY.resolve(cfg.orModel) : cfg.orModel),   /* v292Dsmrc1: 集中定義 */
       temperature: 0.2,
       // fix497(D3): 推論型モデル(deepseek/hermes等)が外見判定でmax_tokensを推論に使い切り
       //   content空(finish=length)になる根治。初回260、空/length時のみ700で1回だけ再試行

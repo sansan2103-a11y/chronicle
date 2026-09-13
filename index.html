@@ -10,6 +10,81 @@
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
 <script src="v292Dfix654-storage-trap.js?cb=v292Dfix731"></script>
+<!-- ★v292Dsmrc1(2026-09-13) MODEL ROUTING CENTRALIZATION 第1段 = 集中定義のみ。
+     「今使う primary model」をこの 1 block だけが決める。UI 選択肢・既定値・送信 payload・
+     背景 XHR・fix370 の復帰判定はすべてここを参照する（各所に literal を再生産しない）。
+     ★第1段は既定を現行のまま据え置く = production 挙動不変（byte 以外の観測同値）。
+     ★V4.1 切替（第2段）は下の PRIMARY_ID の 1 行だけを書き換える。他 file は 1 byte も変えない。
+     ★この block は定義と option 同値再設定 1 回だけ。localStorage 書込 0 / 新永続 key 0 /
+       fetch・XHR・parsePlan の wrapper 追加 0（Q119 topology 不触）。 -->
+<script>
+(function v292Dsmrc1(){
+  'use strict';
+  if (window.__CHR_MODEL_REGISTRY) return;
+
+  /* ===================== STAGE-2 SWITCH LINE (この 1 行だけ) ===================== */
+  var PRIMARY_ID      = 'deepseek/deepseek-v4-flash';
+  /* ======================================================================== */
+  /* 以下 3 行は表示文言のみ（挙動に影響しない・第2段で任意に更新） */
+  var PRIMARY_LABEL   = 'DS V4 Flash';
+  var PRIMARY_LONG    = 'DeepSeek V4 Flash（推奨：高速・高品質・安価）';
+  var PRIMARY_TIP     = 'DS V4 Flash：速い・安い・十分賢い。普段使いにおすすめ';
+
+  var SECONDARY_ID    = 'deepseek/deepseek-v4-pro';
+  var SECONDARY_LABEL = 'DS V4 Pro';
+  var SECONDARY_LONG  = 'DeepSeek V4 Pro（濃い場面・長文向け）';
+  var SECONDARY_TIP   = 'DS V4 Pro：心理の深さ・状況追跡が一段上。ここぞの修羅場や濃い場面に。やや遅く約4倍のコスト';
+
+  function ns(){ var i = PRIMARY_ID.indexOf('/'); return (i > 0) ? PRIMARY_ID.slice(0, i + 1) : ''; }
+
+  var R = {
+    version: 'dsmrc-1',
+    primary:   function(){ return PRIMARY_ID; },
+    secondary: function(){ return SECONDARY_ID; },
+    /* cfg の値が空のときだけ primary を返す（= 従来の cfg.orModel || '<literal>' と同値） */
+    resolve:   function(v){ return (typeof v === 'string' && v.trim()) ? v : PRIMARY_ID; },
+    /* 旧 fix370 の isDS と同値。判定 prefix を primary の namespace から導く
+       ⇒ 第2段で primary が同じ namespace の新 slug になっても引き戻さない */
+    ns:        ns,
+    isManaged: function(v){ var p = ns(); return !!p && typeof v === 'string' && v.indexOf(p) === 0; },
+    label:     function(id){
+                 if (id === PRIMARY_ID)   return PRIMARY_LABEL;
+                 if (id === SECONDARY_ID) return SECONDARY_LABEL;
+                 return String(id || '').split('/').pop().slice(0, 18);
+               },
+    list:      function(){
+                 return [ { id: PRIMARY_ID,   label: PRIMARY_LABEL,   long: PRIMARY_LONG,   tip: PRIMARY_TIP },
+                          { id: SECONDARY_ID, label: SECONDARY_LABEL, long: SECONDARY_LONG, tip: SECONDARY_TIP } ];
+               },
+    /* 将来 IF（cross-model fallback）。第1段では実装しない = 常に空を返す。
+       実装時も client に再送 wrapper を足さない（Worker 側で吸収する = 棚卸し §5.1）。 */
+    fallbackChain: function(){ return []; },
+    substitutionNotice: null
+  };
+
+  /* static <option> の value/表示を集中定義から埋める（第1段では既存表示と同値）。
+     DOM を新規に作らない・選択状態を変えない・1 回だけ。 */
+  function syncStaticOptions(){
+    try {
+      var list = document.querySelectorAll('option[data-chr-model]');
+      for (var i = 0; i < list.length; i++){
+        var role = list[i].getAttribute('data-chr-model');
+        var id = (role === 'primary') ? PRIMARY_ID : (role === 'secondary' ? SECONDARY_ID : '');
+        var tx = (role === 'primary') ? PRIMARY_LONG : (role === 'secondary' ? SECONDARY_LONG : '');
+        if (!id) continue;
+        if (list[i].value !== id) list[i].value = id;
+        if (tx && list[i].textContent !== tx) list[i].textContent = tx;
+      }
+    } catch(e){}
+  }
+
+  window.__CHR_MODEL_REGISTRY = R;
+  window.__CHRMODEL = function(v){ return R.resolve(v); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncStaticOptions);
+  else syncStaticOptions();
+  try { console.log('[v292Dsmrc1:model-registry] loaded primary=', PRIMARY_ID); } catch(_){}
+})();
+</script>
 <!-- ■fix781(Phase 2.5A): UNSYNCED_LOCAL_PROGRESS_OVERWRITE Client Protection。fix654 の直後（= body への最初の書込より前）に置く必要がある。
      既定 ON / kill=v292Dfix781Off=1 (サブ=v292Dfix781bOff / v292Dfix781cOff) -->
 <script src="v292Dfix781-unsynced-guard.js?cb=20260901-fix781"></script>
@@ -68,7 +143,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260913-f845ss1';
+  var BUILT = '20260913-dsmrc1';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -362,8 +437,8 @@ body {
         <div class="fld">
           <label>モデル</label>
           <select id="cfgOrModel">
-            <option value="deepseek/deepseek-v4-flash">DeepSeek V4 Flash（推奨：高速・高品質・安価）</option>
-            <option value="deepseek/deepseek-v4-pro">DeepSeek V4 Pro（濃い場面・長文向け）</option><!-- v292Dfix279: おしん指示(2026-06-13)でDS専用化(Hermes/Euryale等を除去。既存cfgのリスト外IDはfix256セレクタが温存表示) -->
+            <option value="" data-chr-model="primary">DeepSeek V4 Flash（推奨：高速・高品質・安価）</option><!-- v292Dsmrc1: value は集中定義（__CHR_MODEL_REGISTRY）が埋める -->
+            <option value="" data-chr-model="secondary">DeepSeek V4 Pro（濃い場面・長文向け）</option><!-- v292Dfix279: おしん指示(2026-06-13)でDS専用化(Hermes/Euryale等を除去。既存cfgのリスト外IDはfix256セレクタが温存表示) -->
           </select>
         </div>
         <div class="fld">
@@ -862,7 +937,7 @@ const Api = {
   async _callOpenRouter(system, userContent, maxTok, opts = {}) {
     const key = this.normalize(S.cfg.orKey);
     if (!key) throw new Error('OpenRouter APIキーが設定されていません（sk-or-... 形式）');
-    const model = S.cfg.orModel || 'deepseek/deepseek-v4-flash'; /* v292Dfix272: 空時フォールバックをEuryale遺物→DS Flash(orModel消失時の意図外モデル課金防止) */
+    const model = (window.__CHR_MODEL_REGISTRY ? window.__CHR_MODEL_REGISTRY.resolve(S.cfg.orModel) : S.cfg.orModel); /* v292Dsmrc1: 旧 literal fallback を集中定義の resolve() へ（同値）。 v292Dfix272: 空時フォールバックをEuryale遺物→DS Flash(orModel消失時の意図外モデル課金防止) */
     console.log('[OpenRouter] model:', model);
 
     /* ★v292Dfix557: 校正(fix555)のような「推論が要らない」呼び出しだけ、
@@ -1609,7 +1684,7 @@ const UI = {
     document.getElementById('cfgKey').value       = S.cfg.key      || '';
     document.getElementById('cfgOrKey').value     = S.cfg.orKey    || '';
     { var _pk = document.getElementById('cfgPollKey'); if (_pk) _pk.value = S.cfg.pollKey || ''; }
-    document.getElementById('cfgOrModel').value   = S.cfg.orModel  || 'deepseek/deepseek-v4-flash';
+    document.getElementById('cfgOrModel').value   = S.cfg.orModel  || (window.__CHR_MODEL_REGISTRY ? window.__CHR_MODEL_REGISTRY.primary() : ''); /* v292Dsmrc1 */
     document.getElementById('cfgNaiKey').value    = S.cfg.naiKey   || '';
     document.getElementById('cfgModel').value     = S.cfg.model    || 'claude-haiku-4-5-20251001';
     document.getElementById('cfgDbg').checked     = S.cfg.debug    || false;
@@ -3421,7 +3496,7 @@ G.init();
 })();
 </script>
 <script src="v292DfixP0-scenario-blocker.js?cb=v292Dfix680"></script>
-<script src="v292Dfix135-longmem.js?cb=v292Dfix299b"></script>
+<script src="v292Dfix135-longmem.js?cb=20260913-dsmrc1"></script>
 <script src="v292Dfix138-continue.js?cb=v292Dfix225"></script>
 <script src="v292Dfix145-charlist.js?cb=v292Dfix773"></script>
 <script src="v292Dfix777-icon-lightbox.js?cb=v292Dfix777"></script>
@@ -3497,12 +3572,12 @@ G.init();
   <!-- v292Dfix244: 心理プロファイル入力欄を1つの自由記述に統合(裏の4軸は保持)。OFF=v292PsychMergeOff -->
   <script src="v292Dfix244-psych-merge.js?cb=v292Dfix244b"></script>
   <!-- v292Dfix256: 🧠モデル切替セレクタ(cfg.orModel・スロット毎保存)。A/B実測でDS V4 Flash推奨。OFF=v292ModelSelOff -->
-  <script src="v292Dfix256-model-select.js?cb=20260829-fix748"></script>
+  <script src="v292Dfix256-model-select.js?cb=20260913-dsmrc1"></script>
 <script src="v292Dfix270-topbar-ui.js?cb=v292Dfix270"></script>
 <script src="v292Dfix274-build-flag-guard.js?cb=v292Dfix274"></script>
 <script src="v292Dfix275-settings-tabs.js?cb=v292Dfix275"></script>
 <script src="v292Dfix277-quasi-pack.js?cb=20260913-f537pt2"></script>
-<script src="v292Dfix288-tooltips.js?cb=v292Dfix288"></script>
+<script src="v292Dfix288-tooltips.js?cb=20260913-dsmrc1"></script>
 <script src="v292Dfix290-mobile.js?cb=v292Dfix290"></script>
 <script src="v292Dfix291-saveexport.js?cb=v292Dfix721"></script>
 <script src="v292Dfix292-health.js?cb=v292Dfix398"></script>
@@ -3521,7 +3596,7 @@ G.init();
 <script src="v292Dfix830-entity-match-resolver.js?cb=20260907-fix832"></script>
 <script src="v292Dfix766-canonical-appearance.js?cb=20260901-fix783"></script>
 <script src="v292Dfix767-icon-recipe-adapter.js?cb=v292Dfix778"></script>
-<script src="v292Dfix307-npc-roster.js?cb=v292Dfix765"></script>
+<script src="v292Dfix307-npc-roster.js?cb=20260913-dsmrc1"></script>
 <script src="v292Dfix308-creepy-toggle.js?cb=v292Dfix308"></script>
 <script src="v292Dfix309-progression.js?cb=v292Dfix419c"></script>
 <!-- fix577: 物語削除の入口を1つに寄せる。B(gallery)/C(features clearSlot)の独自削除を停止し、
@@ -3564,7 +3639,7 @@ G.init();
 <script src="v292Dfix351-settings-draft.js?cb=20260829-fix748"></script>
 <script src="v292Dfix352-hero-placeholder.js?cb=v292Dfix352"></script>
 <script src="v292Dfix353-omakase-fill-rest.js?cb=v292Dfix353"></script>
-<script src="v292Dfix354-default-model.js?cb=20260829-fix748"></script>
+<script src="v292Dfix354-default-model.js?cb=20260913-dsmrc1"></script>
 <script src="v292Dfix355-selector-cleanup.js?cb=20260829-fix748"></script>
 <script src="v292Dfix359-gender-avatar.js?cb=v292Dfix359"></script>
 <script src="v292Dfix360-seed-ux.js?cb=v292Dfix360"></script>
@@ -3572,7 +3647,7 @@ G.init();
 <script src="v292Dfix363-player-seed.js?cb=v292Dfix363"></script>
 <script src="v292Dfix364-reset-help.js?cb=v292Dfix365"></script>
 <script src="v292Dfix366-cast-gender.js?cb=v292Dfix369"></script>
-<script src="v292Dfix370-model-guard.js?cb=20260829-fix748"></script>
+<script src="v292Dfix370-model-guard.js?cb=20260913-dsmrc1"></script>
 <script src="v292Dfix371-reset-dialog-text.js?cb=v292Dfix371"></script>
 <script src="v292Dfix372-gender-radio-guard.js?cb=v292Dfix372"></script>
 <script src="v292Dfix374-default-style-guard.js?cb=20260901-fix783"></script>
@@ -3626,7 +3701,7 @@ G.init();
 <script src="v292Dfix483-genbudget-sync.js?cb=v292Dfix495"></script>
 <script src="v292Dfix427-output-sanitize.js?cb=v292Dfix427"></script>
 <script src="v292Dfix430-carrier-block.js?cb=v292Dfix430"></script>
-<script src="v292Dfix436-seed-expand.js?cb=20260906-fix823"></script>
+<script src="v292Dfix436-seed-expand.js?cb=20260913-dsmrc1"></script>
 <script src="v292Dfix437-regen-instant.js?cb=v292Dfix437"></script>
 <script src="v292Dfix438-inline-dialogue.js?cb=v292Dfix438"></script>
 <script src="v292Dfix439-readability.js?cb=v292Dfix457"></script>
@@ -3650,7 +3725,7 @@ G.init();
 <script src="v292Dfix458-dash-post.js?cb=20260901-fix784"></script>
 <script src="v292Dfix459-sys-v2.js?cb=20260906-fix822"></script>
 <script src="v292Dfix460-slotgrid.js?cb=v292Dfix460"></script>
-<script src="v292Dfix461-appearance-en.js?cb=v292Dfix740"></script>
+<script src="v292Dfix461-appearance-en.js?cb=20260913-dsmrc1"></script>
 <script src="v292Dfix462-bare-speaker.js?cb=20260829-fix748"></script>
 <script src="v292Dfix463-human-guard.js?cb=v292Dfix463"></script>
 <script src="v292Dfix464-say-promote.js?cb=v292Dfix465"></script>

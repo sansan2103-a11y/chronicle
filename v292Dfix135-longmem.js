@@ -33,7 +33,10 @@
 
   function getModel(){
     // fix299: 要約は背景タスク。軽量・高速・安価な Flash を優先(物語モデルがProでも要約はFlashで速く確実に)。
-    return 'deepseek/deepseek-v4-flash';
+  /* ★v292Dsmrc1: model は集中定義（index.html head の __CHR_MODEL_REGISTRY）から取る。
+     この file に model ID の literal を置かない。取れなければ fail-closed（送信しない）。 */
+    try { var R = window.__CHR_MODEL_REGISTRY; if (R && R.primary) return R.primary(); } catch(e){}
+    return '';
   }
   function getKey(){
     try { var c = JSON.parse(localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6') || '{}').cfg || {}; return c.orKey || ''; } catch(e){ return ''; }
@@ -114,9 +117,10 @@
     var key = getKey();
     if (!key){ cb(null); return; }
     var body;
+    var _m = getModel(); if (!_m){ cb(null); return; }   /* v292Dsmrc1: 集中定義が取れないときは送信しない(fail-closed) */
     try {
       body = JSON.stringify({
-        model: getModel(),
+        model: _m,
         temperature: 0.3,
         max_tokens: 2000,
         messages: [{ role: 'user', content: prompt }]

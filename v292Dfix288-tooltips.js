@@ -87,10 +87,15 @@
     },
     'v292-model-sel': {
       self: '🧠 モデル：文章を書くAI。\nFlash=高速・安価で十分賢い（普段向き）／Pro=心理描写と状況把握が一段上（修羅場・濃い場面向き・やや遅め＆高コスト）',
-      opts: {
-        'deepseek/deepseek-v4-flash': 'DS V4 Flash：速い・安い・十分賢い。普段使いにおすすめ',
-        'deepseek/deepseek-v4-pro': 'DS V4 Pro：心理の深さ・状況追跡が一段上。ここぞの修羅場や濃い場面に。やや遅く約4倍のコスト'
-      }
+      /* ★v292Dsmrc1: tooltip の**キーが model ID** なので、キーを集中定義から埋める
+         （内容は表示文言 = registry.list() の tip）。literal の model ID を置かない。 */
+      opts: (function(){
+        var o = {};
+        try { var R = window.__CHR_MODEL_REGISTRY;
+          if (R && R.list) R.list().forEach(function(m){ if (m && m.id) o[m.id] = m.tip || ''; });
+        } catch(e){}
+        return o;
+      })()
     }
   };
 
