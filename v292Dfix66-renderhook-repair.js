@@ -835,9 +835,14 @@
   // Validation showed 70B mis-attributes hard cases (天狗→フィーネ) while 405B gets them
   // right (天狗) and honestly returns ??? only when truly ambiguous. Extraction input is
   // one small turn, so 405B here is still cheap (~0.2 yen/turn).
+  /* v292Dm3: 退役 ID literal（hermes-4-405b）を廃し、model routing を __CHR_MODEL_REGISTRY へ集約する。
+     resolve('') は primary を返すので保存値が無くても退役 ID は載らない。legacy 保存値は effective mapping される。
+     registry 不在時は従来どおり保存値そのまま（fail-open）。 */
   function bModel(){
-    try { var _ask = activeStoreKey(); var c = JSON.parse((_ask ? localStorage.getItem(_ask) : null) || '{}').cfg || {}; if (c.orModel) return c.orModel; } catch(e){}
-    return 'nousresearch/hermes-4-405b';
+    var _v = '';
+    try { var _ask = activeStoreKey(); var c = JSON.parse((_ask ? localStorage.getItem(_ask) : null) || '{}').cfg || {}; _v = c.orModel || ''; } catch(e){ _v = ''; }
+    try { var R = window.__CHR_MODEL_REGISTRY; if (R && R.resolve) return R.resolve(_v); } catch(e){}
+    return _v;
   }
   var B_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
   var B_CACHE_KEY = 'chr6_v292Dfix104_dlg';

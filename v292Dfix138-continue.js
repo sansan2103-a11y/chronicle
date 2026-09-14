@@ -26,7 +26,13 @@
   var CONTINUE_TRIGGER = /続きを(?:自然に)?進めて|^続きを書/;
 
   function getKey(){ try { var c = JSON.parse(localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6') || '{}').cfg || {}; return c.orKey || ''; } catch(e){ return ''; } }
-  function getModel(){ try { var c = JSON.parse(localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6') || '{}').cfg || {}; return c.orModel || 'nousresearch/hermes-4-405b'; } catch(e){ return 'nousresearch/hermes-4-405b'; } }
+  /* v292Dm3: 退役 ID literal（hermes-4-405b）を廃し、model routing を __CHR_MODEL_REGISTRY へ集約する。
+     resolve('') は primary を返すので、保存値が無いときも退役 ID は載らない。
+     legacy 保存値（旧 primary）はここで effective mapping され、主経路 S1 と同じ model が送られる。
+     registry 不在時は従来どおり保存値をそのまま使う（fail-open）。 */
+  function getModel(){ var _v = ''; try { var c = JSON.parse(localStorage.getItem(window.__chr6Key ? window.__chr6Key() : 'chr6') || '{}').cfg || {}; _v = c.orModel || ''; } catch(e){ _v = ''; }
+    try { var R = window.__CHR_MODEL_REGISTRY; if (R && R.resolve) return R.resolve(_v); } catch(e){}
+    return _v; }
   function getState(){ try { if (typeof S !== 'undefined' && S) return S; } catch(e){} return window.S || null; }
 
   // ---------- LLM call (XHR, async) ----------

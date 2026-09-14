@@ -10832,7 +10832,7 @@
       };
       xhr.onerror = function(){ setStatus('通信失敗→固定ランダムで埋めます', true); fallback(); };
       xhr.ontimeout = function(){ setStatus('生成タイムアウト→固定ランダムで埋めます', true); fallback(); };
-      xhr.send(JSON.stringify({ model: cfg.orModel || 'nousresearch/hermes-4-405b', temperature: 1.05, max_tokens: 1200, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] }));
+      xhr.send(JSON.stringify({ model: /* v292Dm3: 退役 ID literal を廃し model routing を registry へ集約。resolve('') は primary を返すので || フォールバックは不要。legacy 保存値もここで effective mapping される（S1〜S5 と同値）。registry 不在時は従来どおり保存値そのまま=fail-open。 */ (window.__CHR_MODEL_REGISTRY ? window.__CHR_MODEL_REGISTRY.resolve(cfg.orModel) : (cfg.orModel || '')), temperature: 1.05, max_tokens: 1200, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] }));
     } catch(e){ fallback(); }
   }
 
@@ -11072,7 +11072,7 @@
       };
       xhr.onerror = function(){ delete pending[name]; };
       xhr.ontimeout = function(){ delete pending[name]; };
-      xhr.send(JSON.stringify({ model: cfg.orModel || 'nousresearch/hermes-4-405b', temperature: 0.5, max_tokens: 160, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] }));
+      xhr.send(JSON.stringify({ model: /* v292Dm3: 同上（__aiAvatar 経路）。 */ (window.__CHR_MODEL_REGISTRY ? window.__CHR_MODEL_REGISTRY.resolve(cfg.orModel) : (cfg.orModel || '')), temperature: 0.5, max_tokens: 160, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] }));
     } catch(e){ delete pending[name]; }
   }
   window.__aiAvatar = {

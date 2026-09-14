@@ -523,7 +523,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260914-dscmf3';
+  var BUILT = '20260914-dsm3';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -1139,7 +1139,10 @@ window.__chr6Key = function(){ try { var a = JSON.parse(localStorage.getItem('ch
 const S = {
   cfg: {
     provider: 'anthropic', key: '', naiKey: '', orKey: '', pollKey: '',
-    model: 'claude-haiku-4-5-20251001', orModel: 'mistralai/mistral-nemo',
+    /* v292Dm3: 新規 state の既定 orModel は超初期の退役 ID（mistral-nemo）だった。
+       registry の primary() を初期値にして、退役 ID が storage へ入る経路を断つ。
+       registry 不在なら '' （resolve('') と同じく主経路では primary へ解決される）。 */
+    model: 'claude-haiku-4-5-20251001', orModel: (window.__CHR_MODEL_REGISTRY ? window.__CHR_MODEL_REGISTRY.primary() : ''),
     debug: false, showInner: true
   },
   cast: {
@@ -3834,7 +3837,7 @@ G.init();
        fix659 は別 id + __f527 マーカーを立てるので干渉しない、という関係をこの並びで示す。
      読出=window.__v292Dfix659.status()/.selfTest() / OFF=v292Dfix659Off -->
 <script src="v292Dfix659-fork-choice.js?cb=v292Dfix680"></script>
-<script src="features.js?cb=20260829-fix748"></script>
+<script src="features.js?cb=20260914-dsm3"></script>
 <script>
 /* ============================================================================
  * v292DfixP0-inline : シナリオテンプレ適用の緊急封鎖（L2 + L2b）
@@ -4071,7 +4074,7 @@ G.init();
 </script>
 <script src="v292DfixP0-scenario-blocker.js?cb=v292Dfix680"></script>
 <script src="v292Dfix135-longmem.js?cb=20260913-dsmrc2b"></script>
-<script src="v292Dfix138-continue.js?cb=v292Dfix225"></script>
+<script src="v292Dfix138-continue.js?cb=20260914-dsm3"></script>
 <script src="v292Dfix145-charlist.js?cb=v292Dfix773"></script>
 <script src="v292Dfix777-icon-lightbox.js?cb=v292Dfix777"></script>
 <!-- v292Dfix226(P1): fix52(可読性v1)はfix53(包括v2)に内包されるため退役。問題があれば下行のコメントを外す
@@ -4093,7 +4096,7 @@ G.init();
   <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=20260912-q119s4"></script>
-  <script src="v292Dfix66-renderhook-repair.js?cb=20260905-fix808"></script>
+  <script src="v292Dfix66-renderhook-repair.js?cb=20260914-dsm3"></script>
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
     <!-- v292Dfix189c: fix70(dialogue-order, 本文ベースの並べ替え)を無効化。fix70bが
