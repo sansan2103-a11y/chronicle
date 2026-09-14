@@ -55,7 +55,7 @@
   function lss(k, v) { try { window.localStorage.setItem(k, v); return true; } catch (e) { return false; } }
   function keyFor(storyId) { return KEY_PREFIX + String(storyId); }
   function optedIn() { /* ★ge2 (2026-09-14 / ②C1 ME general-enable): 既定だけを変える。未設定 = ON、'0' = 明示 opt-out。Off='1' の最優先は不変。 */ return lsg('v292Dfix793On') !== '0'; }
-  function off() { return lsg('v292Dfix793Off') === '1'; }
+  function off() { /* ★ge3 ME master kill: v292DmeOff='1' はこの module のどの gate よりも先に効く。 個別 flag は読みも書きも変えないので、master を外せば元の設定へそのまま戻る。 */ return lsg('v292DmeOff') === '1' || lsg('v292Dfix793Off') === '1'; }
   function armed() { return optedIn() && !off(); }
   function canaryStory() { var s = lsg('v292Dfix793Story'); return (s && String(s)) || CANARY_DEFAULT; }
   function storyScoped() { /* ★ge2: Story key 未設定 = 全 story。明示したときは従来どおり 1 本に絞る。 */ var s = lsg('v292Dfix793Story'); return !!(s && String(s)); }

@@ -71,7 +71,7 @@
   }
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
-  function off(){ return lsg('v292Dfix641Off') === '1'; }
+  function off(){ /* ★ge3 ME master kill: v292DmeOff='1' はこの module のどの gate よりも先に効く。 個別 flag は読みも書きも変えないので、master を外せば元の設定へそのまま戻る。 */ return lsg('v292DmeOff') === '1' || lsg('v292Dfix641Off') === '1'; }
   /* ★don1 (2026-09-14 / ②C1 SM-1 = DEFAULT ON GO): 既定を実書込へ変更する。
      理由: dynamic NPC が cast へ昇格しないと known entity が生まれず、
      entity-linked memory も Memory Retrieval も構造的に起動しない
