@@ -34,6 +34,7 @@
   var BUILD = '20260903-fix803';
   var CANARY_DEFAULT = 'smtg00ynsv1';
   var KEY_PREFIX = 'v292Dmem1_slot_';               /* ★READ のみ。書込は fix793.materialize() 経由だけ */
+  var KEY_NAME = 'memoryV1';                 /* ★fix803B: optional sidecar key 名（既存契約の参照のみ） */
   var DRIFT = 'MATERIALIZE_CANDIDATE_DRIFT';
   var ERR_MAX = 50;
 
@@ -47,7 +48,7 @@
   /* ---------------- state（story ごと・in-memory・永続化しない） ---------------- */
   var halted = {};            /* sid -> reason（session 内停止・retry 0） */
   var materializedFor = {};   /* sid -> turnCount（1 successful turn につき materialize <=1） */
-  var T = { fires: 0, changed: 0, unchanged: 0, nullSkips: 0, materialized: 0, driftStops: 0,
+  var T = { fires: 0, changed: 0, unchanged: 0, nullSkips: 0, bootstraps: 0, materialized: 0, driftStops: 0,
             matFailed: 0, skipped: 0, skipReasons: {}, domainMismatch: 0, lastRun: null, errors: [] };
   function skip(reason) { T.skipped++; T.skipReasons[reason] = (T.skipReasons[reason] || 0) + 1; return 'skipped:' + reason; }
   function err(sid, tc, stage, e) {
@@ -111,6 +112,60 @@
     return sha256hex16(candCanon(r.value)).then(function (h) { return { hash: h, reason: null }; });
   }
 
+  /* ★★fix803B(BOOTSTRAP_OWNER / ②C1 裁定 2): 「最初の memoryV1 を作る責任」も fix803 に統一する。
+     新 writer / 新 persistent marker / 新 schema / 新 network path は一切増やさない。
+     既存の landing・save metadata・in-memory ledger だけで判定し、判定不能は **fail-closed**（bootstrap しない）。 */
+  function nullKeysHasMemory(e) {
+    var nk = (e && e.sentOptionalNullKeys) || [];
+    for (var i = 0; i < nk.length; i++) { if (nk[i] === KEY_NAME) return true; }
+    return false;
+  }
+  /* この landing が「memoryV1:null を送った clear transaction」そのものか。
+     true / 判定不能 → bootstrap しない。 */
+  function isClearCycle(sid, rev) {
+    /* (a) fix793 の explicit-clear watch / ring（in-memory・既存口） */
+    try {
+      var m = window.__v292Dfix793;
+      if (m) {
+        if (typeof m.clearStatus === 'function') {
+          var cs = m.clearStatus(sid);
+          if (cs && cs.pending === true) return true;                 /* clear 進行中 */
+          if (cs && cs.watch && typeof cs.watch.confirmedRev === 'number'
+              && typeof rev === 'number' && cs.watch.confirmedRev === rev) return true;
+        }
+        if (typeof m.clearRing === 'function') {
+          var ring = m.clearRing() || [];
+          for (var i = ring.length - 1; i >= 0; i--) {
+            var r = ring[i];
+            if (r && String(r.sid) === String(sid) && typeof r.rev === 'number'
+                && typeof rev === 'number' && r.rev === rev) return true;
+          }
+        }
+      }
+    } catch (e) { return true; }
+    /* (b) fix697 ledger（in-memory・既存口）: 直近の ARMED_CAS が memoryV1 を null 送出しているか */
+    try {
+      var f = window.__v292Dfix697;
+      var led = (f && typeof f.ledger === 'function') ? (f.ledger() || []) : null;
+      if (!led) return true;                                          /* 読めない = 判定不能 */
+      for (var j = led.length - 1; j >= 0; j--) {
+        var e2 = led[j];
+        if (!e2 || e2.kind !== 'F697P_ARMED_CAS' || String(e2.id) !== String(sid)) continue;
+        return nullKeysHasMemory(e2);                                 /* 直近の送信が null なら clear cycle */
+      }
+    } catch (e) { return true; }
+    return false;                                                     /* ledger に該当なし = 通常 landing */
+  }
+  /* bootstrap 可否。全条件 AND。ここで false なら従来どおり null-skip。 */
+  function bootstrapAllowed(sid, a, o, cur) {
+    if (cur.reason !== 'absent') return 'not-absent:' + String(cur.reason);   /* 壊れ / storage-throw は従来どおり fail-closed */
+    if (o.domainMatch !== true) return 'no-fix802-domain';            /* 通常 fix802 refresh pipeline 由来であること */
+    var recs = (a.cand && a.cand.records) || [];
+    if (!(recs.length > 0)) return 'records-0';                       /* records=0 なら write しない */
+    if (isClearCycle(sid, o.rev)) return 'clear-cycle';               /* clear と同じ cycle では絶対に再生成しない */
+    return null;
+  }
+
   /* ---------------- 本体（notify 1 本・timer 0・retry 0） ---------------- */
   function finish(sid, tc, o, result, t0) {
     T.lastRun = { storyId: sid, turnCount: tc, candHash16: o.candHash16 || null, curHash16: (o.curHash16 === undefined ? null : o.curHash16),
@@ -118,6 +173,7 @@
                   domainMatch: (o.domainMatch === undefined ? null : o.domainMatch), rev: (o.rev === undefined ? null : o.rev),
                   materializeOk: (o.materializeOk === undefined ? null : o.materializeOk),
                   materializeReason: o.materializeReason || null, localReason: o.localReason || null,
+                  bootstrap: (o.bootstrap === true), bootstrapSkip: o.bootstrapSkip || null,
                   result: result, ms: nowMs() - t0, at: Date.now() };
     return result;
   }
@@ -146,8 +202,31 @@
       return hashLocal(sid);
     }).then(function (cur) {
       o.curHash16 = cur.hash; o.localReason = cur.reason;
-      /* ★local 不在 / 壊れ（null）→ write 0（初回でも書かない・GPT 明示） */
-      if (cur.hash === null) { T.nullSkips++; return finish(sid, tc, o, 'null-skip:' + (cur.reason || 'absent'), t0); }
+      /* ★local 不在 / 壊れ（null）→ 原則 write 0（GPT 明示）。
+         ★★fix803B(②C1 裁定 2): ただし **bootstrap 条件を全て満たすときだけ** 初回生成を許す。
+            writer は増やさず、下の changed:true と **完全に同じ write path**（fix793.materialize）を使う。 */
+      if (cur.hash === null) {
+        var bReason = bootstrapAllowed(sid, a, o, cur);
+        if (bReason !== null) { T.nullSkips++; o.bootstrapSkip = bReason;
+          return finish(sid, tc, o, 'null-skip:' + (cur.reason || 'absent'), t0); }
+        T.bootstraps++; o.bootstrap = true;
+        materializedFor[sid] = tc;                                   /* ★write exactly once（同一 turnCount 再入を封じる） */
+        return Promise.resolve(m793.materialize(sid)).then(function (r) {
+          o.materializeOk = !!(r && r.ok);
+          o.materializeReason = (r && r.reason) ? String(r.reason) : null;
+          if (!o.materializeOk) { T.matFailed++; return finish(sid, tc, o, 'bootstrap-failed:' + (o.materializeReason || 'unknown'), t0); }
+          return hashLocal(sid).then(function (post) {
+            o.postHash16 = post.hash;
+            if (post.hash !== o.candHash16) {
+              T.driftStops++; halted[sid] = DRIFT;
+              err(sid, tc, 'drift', new Error(DRIFT + ' cand=' + o.candHash16 + ' post=' + String(post.hash)));
+              return finish(sid, tc, o, DRIFT, t0);
+            }
+            T.materialized++;
+            return finish(sid, tc, o, 'bootstrapped', t0);
+          });
+        });
+      }
       /* ★changed:false → write 0 */
       if (cur.hash === o.candHash16) { T.unchanged++; return finish(sid, tc, o, 'unchanged', t0); }
       /* ★changed:true → 既存 fix793.materialize() のみ（新 write path 0・1 turn 1 回・retry 0） */
@@ -179,7 +258,7 @@
   function status() {
     return { build: BUILD, on: optedIn(), off: off(), active: active(), story: story(),
              halted: JSON.parse(JSON.stringify(halted)),
-             fires: T.fires, changed: T.changed, unchanged: T.unchanged, nullSkips: T.nullSkips,
+             fires: T.fires, changed: T.changed, unchanged: T.unchanged, nullSkips: T.nullSkips, bootstraps: T.bootstraps,
              materialized: T.materialized, driftStops: T.driftStops, matFailed: T.matFailed,
              skipped: T.skipped, skipReasons: JSON.parse(JSON.stringify(T.skipReasons)),
              domainMismatch: T.domainMismatch, materializedFor: JSON.parse(JSON.stringify(materializedFor)),
@@ -187,7 +266,7 @@
   }
   function reset() {
     halted = {}; materializedFor = {};
-    T = { fires: 0, changed: 0, unchanged: 0, nullSkips: 0, materialized: 0, driftStops: 0,
+    T = { fires: 0, changed: 0, unchanged: 0, nullSkips: 0, bootstraps: 0, materialized: 0, driftStops: 0,
           matFailed: 0, skipped: 0, skipReasons: {}, domainMismatch: 0, lastRun: null, errors: [] };
   }
 
@@ -195,6 +274,7 @@
     BUILD: BUILD, ENABLED_BY_DEFAULT: false, CANARY_DEFAULT: CANARY_DEFAULT, DRIFT: DRIFT,
     onFire: onFire, status: status,
     __test: { norm: norm, candCanon: candCanon, sha256hex16: sha256hex16, shapeOk: shapeOk,
+              isClearCycle: isClearCycle, bootstrapAllowed: bootstrapAllowed,
               keyOf: keyOf, readLocal: readLocal, hashLocal: hashLocal, reset: reset,
               haltedOf: function (sid) { return halted[sid] || null; }, KEY_PREFIX: KEY_PREFIX }
   };
