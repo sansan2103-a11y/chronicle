@@ -72,7 +72,22 @@
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix641Off') === '1'; }
-  function live(){ return lsg('v292Dfix641Live') === '1'; }  // ★既定はdryRun相当。実書込はLive='1'端末のみ(プレビューOFF既定の規約)
+  /* ★don1 (2026-09-14 / ②C1 SM-1 = DEFAULT ON GO): 既定を実書込へ変更する。
+     理由: dynamic NPC が cast へ昇格しないと known entity が生まれず、
+     entity-linked memory も Memory Retrieval も構造的に起動しない
+     （live canary で 5 eligible / 4 positive / safety violation 0 を確認済み）。
+     ★既存 kill switch は 1 つも外していない:
+       v292Dfix641Off='1'  … 新規昇格を完全停止（従来どおり・最優先）
+       v292Dfix765Off='1'  … 反復登場 OR 条件だけ無効（従来どおり）
+       v292Dfix641Live='0' … ★この端末だけ従来の dryRun 既定へ戻す（新設の明示 opt-out）
+     ★昇格条件（MIN_TURNS / MIN_STRONG_KINDS / RECURRING_MIN_TURNS / 役割語の扱い /
+       hero 除外 / MAX_PER_RUN）は 1 文字も変えていない。 */
+  function live(){
+    var v = lsg('v292Dfix641Live');
+    if (v === '1') return true;
+    if (v === '0') return false;    /* 明示 opt-out（端末単位） */
+    return true;                    /* ★既定 ON */
+  }
 
   function note539(reason, err){
     try { if (window.__chronicleState && typeof window.__chronicleState.note === 'function')

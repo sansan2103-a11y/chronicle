@@ -237,7 +237,26 @@
       var npcs = []; try { (S.cast.npcs || []).forEach(function(n){ if (n && n.name && ev.some(function(e){ return nospace(e) === nospace(n.name); })) npcs.push(String(n.name)); }); } catch(e){}
       log.knownToProvenance.forEach(function(rec){
         stats.X_records++;
-        var kt = (rec && Array.isArray(rec.knownTo)) ? rec.knownTo.map(function(x){ var s = String(x || ''); var i = s.lastIndexOf(':'); return nospace(i >= 0 ? s.slice(i + 1) : s); }) : [];
+        /* ★fix806k (2026-09-14): fix796 の knownToProvenance[].knownTo は
+           **provenance オブジェクトの配列** [{eventId, entries:[id,...]}] であって
+           id 文字列の配列ではない。旧実装は String(x) が "[object Object]" になるため
+           id が一度も比較対象に到達せず、X_nonmember が memory 注入時に構造的に
+           必ず 100% 発火していた（観測器のみの欠陥。filter/FAIL 権限は無いので
+           production の知識境界には影響しない）。entries を flatten してから
+           従来どおり最終セグメントを正規化する。**判定式は 1 文字も変えない**。
+           旧形（id 文字列配列）が来ても壊れないよう両方受ける。 */
+        var kt = [];
+        if (rec && Array.isArray(rec.knownTo)){
+          for (var _q = 0; _q < rec.knownTo.length; _q++){
+            var _x = rec.knownTo[_q];
+            var _ids = (_x && Array.isArray(_x.entries)) ? _x.entries : [_x];
+            for (var _r = 0; _r < _ids.length; _r++){
+              var _s = String(_ids[_r] || ''); if (!_s) continue;
+              var _i = _s.lastIndexOf(':');
+              kt.push(nospace(_i >= 0 ? _s.slice(_i + 1) : _s));
+            }
+          }
+        }
         npcs.forEach(function(n){
           if (kt.indexOf(nospace(n)) < 0){ stats.X_nonmember++; out.push({ kind: 'X', turn: ti, npc: n, memoryId: rec && rec.memoryId, knownToN: kt.length }); }
         });

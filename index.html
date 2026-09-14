@@ -742,7 +742,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260914-mer1';
+  var BUILT = '20260914-ge1';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -4456,7 +4456,7 @@ G.init();
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
-  <script src="v292Dfix796-memory-retrieve.js?cb=20260905-rer1c"></script>
+  <script src="v292Dfix796-memory-retrieve.js?cb=20260914-ge1f796"></script>
   <script src="v292Dfix192-newengine.js?cb=20260907-fix832"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
@@ -4666,7 +4666,7 @@ G.init();
      say/枚数/順序/meta/過去ターン不触・逆方向なし。★fix616/620 より後ろに置く(外側 wrapper = fix616 の save に相乗り・自前 save 0)。GPT RULING 4B-1 deploy gate 2026-09-05 -->
 <script src="v292Dfix805-speaker-abstain.js?cb=20260905-fix805v2"></script>
 <!-- fix806(4B-2): NPC consistency observer（観測のみ・in-memory・write 0・既定 OFF opt-in v292Dfix806On='1' / kill v292Dfix806Off='1'）。GPT RULING 4A-2+4B-2 2026-09-05: fix805 と同 release・805 bytes 不変 -->
-<script src="v292Dfix806-npc-consistency-observer.js?cb=20260905-fix806v13"></script>
+<script src="v292Dfix806-npc-consistency-observer.js?cb=20260914-ge1f806"></script>
 <script src="v292Dfix816-posture-transition-observer.js?cb=20260906-fix816b"></script>
 <!-- fix624: 生成の**崩壊**を測る（★読み取り専用・影モード）。
      実データ168ターンで崩壊3件(1.8%)を検出。崩壊は少なくとも3型あり、
@@ -4712,7 +4712,7 @@ G.init();
 <!-- fix641: 証拠ベースの cast 自動登録。強2系統×2ターンでだけ昇格。
      hero は対象外。取消=window.__v292Dfix641.undo("名前") / OFF=v292Dfix641Off
      ★fix640 の後に置くこと -->
-<script src="v292Dfix641-cast-auto-register.js?cb=v292Dfix765"></script>
+<script src="v292Dfix641-cast-auto-register.js?cb=20260914-ge1f641"></script>
 <!-- fix643: 崩壊ターンの救済生成。fix624/626 の判定を **保存の前**（Api.call の直後・
      Planner.parsePlan の前）へ移し、hard(7点以上) なら1回だけ書き直させる。2回目も hard なら
      ターンを確定せず案内を出す（入力は残る・ターン番号は増えない）。

@@ -225,6 +225,8 @@
   function lsg(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
   function isOn()  { return lsg('v292Dfix796On')  === '1'; }
   function isOff() { return lsg('v292Dfix796Off') === '1'; }
+  /* ★bf1: cooldown backfill の kill switch（'1' で従来の cap→cooldown へ戻す） */
+  function backfillOff() { return lsg('v292Dfix796BackfillOff') === '1'; }
   function armed() { return isOn() && !isOff(); }
   /* ★rer1 kill flag（RETRIEVE_ENTITY_RESOLUTION_V1）。'1' で H1〜H4 を全部迂回し、
      Rev7（BUILD 20260902-fix796）と同一の keys / selected / rendered になる。読み取りのみ。 */
@@ -264,7 +266,7 @@
       futureDropped: 0, futureGateApplied: false, entityGateDropped: 0,
       /* ★(I9) Rev3 計測専用フィールド。観測のみ・選択挙動に一切影響しない。 */
       active: 0, resolvable: 0, entityHit: 0, admitted: 0, selected: 0,
-      noMatchReason: { future: 0, noEntity: 0, lowScore: 0, capped: 0 },
+      noMatchReason: { future: 0, noEntity: 0, lowScore: 0, capped: 0, cooldown: 0 },   /* ★bf1: cooldown は telemetry のみ */
       /* ★(I10) render 段で埋まる（budget で落とした record 数） */
       droppedForBudget: 0
     };
@@ -507,7 +509,33 @@
       if (dedupeOn() && !(opts && opts.dedupe === false)) {
         admitted2 = containDuplicates(entityAdmitted, (opts && opts.displayMap) || null, log);
       }
-      var remaining = admitted2.slice(0);       /* memoryId 昇順で安定済み */
+      /* ★bf1 (2026-09-14 / ②C1 SM-3): FIX796_COOLDOWN_NO_BACKFILL の修正。
+         従来は cap(MAX_ITEMS) を消費する ranking ループの **後** に cooldown を引いていたため、
+         上位 3 件が全部 cooled だと 4 位以下が繰り上がらず block が空になっていた。
+         意味論を **rank → cooldown exclusion → cap** に直す。
+         実装は「cap を消費する前に cooled を候補から外す」backfill 方式（②C1 が明示的に許可）。
+         ★重み・MIN_SCORE・MAX_ITEMS・80 字・admission gate・future gate・dedupe・
+           knownTo provenance の順序と値は 1 つも変えていない。
+         ★cooled を ranking から外すことで relationHit の基準集合（chosenRecords）にも
+           入らなくなるが、これは「出力されない record が他の record の順位を動かさない」
+           という本来の意味に沿う（従来は cooled が chosen になり得たため影響していた）。
+         kill: localStorage v292Dfix796BackfillOff='1' で従来（cap → cooldown）へ戻す。 */
+      var cooledSet = (opts && opts.cooldownIds && typeof opts.cooldownIds === 'object') ? opts.cooldownIds : null;
+      var cooledSink = (opts && Array.isArray(opts.cooldownExcluded)) ? opts.cooldownExcluded : null;
+      var admitted3 = admitted2;
+      if (cooledSet && !backfillOff()) {
+        admitted3 = [];
+        for (var cx = 0; cx < admitted2.length; cx++) {
+          var cmid = str(admitted2[cx].memoryId);
+          if (Object.prototype.hasOwnProperty.call(cooledSet, cmid)) {
+            log.noMatchReason.cooldown++;
+            if (cooledSink) cooledSink.push(cmid);
+            continue;
+          }
+          admitted3.push(admitted2[cx]);
+        }
+      }
+      var remaining = admitted3.slice(0);       /* memoryId 昇順で安定済み */
       var chosenRecords = [];
       while (out.length < LIMITS.MAX_ITEMS && remaining.length) {
         var bestIdx = -1, best = null;
@@ -1172,7 +1200,21 @@
         ? (keys.explicitInputMentionIds.length ? 'interlocutor+explicitInput' : 'interlocutor')
         : (keys.explicitInputMentionIds.length ? 'explicitInput' : 'none');
 
-      var sel = select(sid, m1, tc, { displayMap: (kNow && kNow._byId) || null });
+      /* ★bf1: cap 消費前に cooldown を効かせるため、cooled 集合を select へ渡す。
+         集合は従来と同じ _lastInjected（session scoped・非永続）から作る。 */
+      var cooledIds = null;
+      if (!backfillOff() && isNum(meta.currentTurn)) {
+        cooledIds = {}; var _prev = meta.currentTurn - 1, _ck;
+        for (_ck in _lastInjected) {
+          if (!Object.prototype.hasOwnProperty.call(_lastInjected, _ck)) continue;
+          if (_lastInjected[_ck] !== _prev) continue;
+          if (_ck.indexOf(String(sid) + '|') !== 0) continue;
+          cooledIds[_ck.slice(String(sid).length + 1)] = true;
+        }
+      }
+      var sel = select(sid, m1, tc, { displayMap: (kNow && kNow._byId) || null,
+                                      cooldownIds: cooledIds,
+                                      cooldownExcluded: meta.cooldownExcluded });
       if (_lastLog && _lastLog.reason) meta.reason = _lastLog.reason;
       if (_lastLog) _lastLog.knownEntities = _lastKnown;              /* ★rer1 telemetry */
       /* ★rer1c telemetry: 畳んだ件数と group を block 側からも観測できるようにする */
