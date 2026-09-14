@@ -35,7 +35,7 @@
   if (typeof window === 'undefined') return;
   if (window.__v292Dfix793) return;                 /* 二重install防止 */
 
-  var BUILD = '20260902-fix798';
+  var BUILD = '20260914-fix798r2r3';
   var MEMORY_VERSION = 'cmem-1.0.0';
   var MEMORY_SCHEMA_VERSION = 1;
   var KEY_PREFIX = 'v292Dmem1_slot_';               /* ★story-scoped。global key を作らない */
@@ -151,12 +151,87 @@
   }
 
   /* ★明示 clear。null は **ここを通ったときだけ** payload に載る。 */
+  /* =====================================================================
+   * ★★ME-R2/R3 CLEAR_LIFECYCLE（②C1 裁定 2026-09-14）
+   *   問題: 旧 clearExplicit は in-memory state と _clearPending を立てるだけで
+   *   local key を消さなかったため、**reload 1 回で memoryV1 が LOADED_VALUE へ戻り
+   *   projection/hash へ復活**した（2026-09-14 実証。ME_CANARY_REVERSIBILITY = FAIL）。
+   *   desired lifecycle:
+   *     clearExplicit → clearGate が memoryV1:null を payload に載せる
+   *     → **実 canonical save 成功を因果的に確認** → clearConsumed
+   *     → clearConsumed の中で local key を削除 → _clearPending 解除
+   *     → reload/hydrate しても復活しない
+   *   絶対条件:
+   *     ・server save 成功前に local key を消さない（失敗時は旧 memory を保持）
+   *     ・「save を呼んだ直後」に clearConsumed を置かない。
+   *       成功判定は **既存境界**＝fix697 の sanctioned confirm でだけ積まれる
+   *       ledger `CANONICAL_COMMIT_OK{id, rev, noop}` を read-only で観測する。
+   *     ・watermark は server 実 rev（単調増加）。clear 時点の最大 rev を超え、かつ
+   *       noop でない commit が現れたときだけ成功とみなす（noop は内容不変＝我々の
+   *       null を運んでいないので採らない＝fail-closed）。
+   *     ・新しい永続 schema を作らない。_clearPending / watch は **in-memory のみ**。
+   *     ・外部から info 無しで clearConsumed を呼んでも **purge しない**（旧契約を維持）。
+   * ===================================================================== */
+  var WATCH_INTERVAL_MS = 3000, WATCH_MAX_TICKS = 60;   /* 最大およそ 3 分で諦める */
+  var _clearWatch = {}, _clearRing = [];
+
+  function f697CommitsFor(sid) {
+    try {
+      var A = window.__v292Dfix697;
+      if (!A || typeof A.ledger !== 'function') return [];
+      var L = A.ledger() || [], out = [], i;
+      for (i = 0; i < L.length; i++) {
+        var r = L[i];
+        if (r && r.kind === 'CANONICAL_COMMIT_OK' && String(r.id) === String(sid)) out.push(r);
+      }
+      return out;
+    } catch (e) { return []; }
+  }
+  function maxCommitRev(sid) {
+    var c = f697CommitsFor(sid), m = -1, i;
+    for (i = 0; i < c.length; i++) if (typeof c[i].rev === 'number' && c[i].rev > m) m = c[i].rev;
+    return m;
+  }
+  function watchTick(sid) {
+    try {
+      var w = _clearWatch[sid];
+      if (!w || w.done) return;
+      /* ★★安全条件（acceptance M-24 で捕捉した実欠陥の修正）:
+         clearGate が **実際に memoryV1:null を payload へ載せた** あとでなければ、
+         どんな CANONICAL_COMMIT_OK も「我々の clear が着地した証拠」ではない。
+         barrier hold 等で clear が送られていないのに、無関係な save の commit を
+         根拠に local key を消すと **server には旧 memory が残ったまま local だけ消える**
+         ＝データ損失になる。emit 前は観測を続けるだけで purge しない。 */
+      if (!w.emitted) {
+        if (++w.ticks >= WATCH_MAX_TICKS) { w.done = true; w.expired = true; return; }
+        setTimeout(function () { watchTick(sid); }, WATCH_INTERVAL_MS);
+        return;
+      }
+      var c = f697CommitsFor(sid), i;
+      for (i = 0; i < c.length; i++) {
+        var r = c[i];
+        /* watermark は **emit 時点**の最大 rev。clear 要求時点ではない。 */
+        if (typeof r.rev === 'number' && r.rev > w.emitRev && r.noop !== true) {
+          clearConsumed(sid, { via: 'canonical-commit-ok', rev: r.rev });
+          return;
+        }
+      }
+      if (++w.ticks >= WATCH_MAX_TICKS) { w.done = true; w.expired = true; return; }
+      setTimeout(function () { watchTick(sid); }, WATCH_INTERVAL_MS);
+    } catch (e) {}
+  }
+
   function clearExplicit(storyId) {
     var sid = String(storyId || '');
     if (!armed() || !isCanary(sid)) return { ok: false, reason: HOLD.NOT_CANARY };
     setState(sid, STATE.LOADED_ABSENT, null, 'explicit-clear');
     _clearPending[sid] = 1;
-    return { ok: true };
+    var base = maxCommitRev(sid);
+    _clearWatch[sid] = { baseRev: base, emitRev: null, emitted: false, emittedAt: null,
+                         at: Date.now(), ticks: 0, done: false,
+                         expired: false, purged: false, confirmedRev: null, err: null };
+    try { setTimeout(function () { watchTick(sid); }, WATCH_INTERVAL_MS); } catch (e) {}
+    return { ok: true, baseRev: base, watching: true };
   }
   var _clearPending = {};
   /* clear を1回だけ payload に載せるための gate（clear 後の通常 save は include:false へ戻る） */
@@ -165,9 +240,42 @@
     if (!_clearPending[sid]) return { include: false };
     /* ★fix798 Rev2: 明示 clear（memoryV1:null）も canonical write。barrier gate 対象。 */
     var _h = barrierHold(sid, 'clearGate'); if (_h) return _h;
+    /* ★★ME-R2/R3: ここを通った瞬間だけが「null を payload に載せた」事実。
+       watcher の watermark をこの時点の最大 rev へ再アンカーする。 */
+    var w = _clearWatch[sid];
+    if (w && !w.emitted) { w.emitted = true; w.emittedAt = Date.now(); w.emitRev = maxCommitRev(sid); }
     return { include: true, value: null, explicitClear: true };
   }
-  function clearConsumed(storyId) { delete _clearPending[String(storyId || '')]; }
+  /* ★ME-R2/R3: **実 canonical save 成功が確認できたときだけ** local key を消す。
+     info が無い / via が違う呼び出しでは purge しない（旧契約のまま pending を下ろすだけ）。
+     removeItem は fix402/fix781/fix706 の write-hold に阻まれ得るので、**消えたことを
+     読み直して確認**し、消えていなければ purged:false と理由を残す（嘘をつかない）。 */
+  function clearConsumed(storyId, info) {
+    var sid = String(storyId || '');
+    var w = _clearWatch[sid] || null;
+    var confirmed = !!(info && info.via === 'canonical-commit-ok' && typeof info.rev === 'number');
+    /* ★★emit していない clear は、どんな commit 証拠があっても purge しない。 */
+    if (confirmed && !(w && w.emitted)) { confirmed = false; }
+    var purged = false, err = null;
+    if (confirmed && armed() && isCanary(sid)) {
+      try {
+        window.localStorage.removeItem(keyFor(sid));
+        var still = null;
+        try { still = window.localStorage.getItem(keyFor(sid)); } catch (e2) { still = '__READ_FAILED__'; }
+        if (still === null) purged = true;
+        else { err = (still === '__READ_FAILED__') ? 'VERIFY_READ_FAILED' : 'REMOVE_BLOCKED'; }
+      } catch (e) { err = 'REMOVE_THREW:' + String(e && e.message || e); }
+    } else if (!confirmed) {
+      err = 'NOT_CONFIRMED_NO_PURGE';
+    }
+    delete _clearPending[sid];
+    if (w) { w.done = true; w.purged = purged; w.confirmedRev = confirmed ? info.rev : null; w.err = err; }
+    if (purged) setState(sid, STATE.LOADED_ABSENT, null, 'explicit-clear-purged');
+    _clearRing.push({ sid: sid, confirmed: confirmed, purged: purged,
+                      rev: (confirmed ? info.rev : null), err: err, at: Date.now() });
+    if (_clearRing.length > 20) _clearRing.shift();
+    return { ok: true, confirmed: confirmed, purged: purged, error: err };
+  }
 
   /* ★retry 禁止。unknown-field を受けたときに **必ず** fail-closed を返す。
      この関数は payload を書き換えない（strip する口を持たない）。 */
@@ -436,6 +544,18 @@
     stateOf: stateOf, load: load,
     hydrateFromServerRecord: hydrateFromServerRecord,
     saveGate: saveGate, clearExplicit: clearExplicit, clearGate: clearGate, clearConsumed: clearConsumed,
+    /* ★ME-R2/R3 観測口（read-only・write 0） */
+    clearStatus: function (storyId) {
+      var sid = String(storyId || canaryStory());
+      var w = _clearWatch[sid] || null;
+      return { sid: sid, pending: !!_clearPending[sid],
+               watch: w ? { baseRev: w.baseRev, emitted: !!w.emitted, emitRev: w.emitRev,
+                            ticks: w.ticks, done: !!w.done, expired: !!w.expired,
+                            purged: !!w.purged, confirmedRev: w.confirmedRev, err: w.err } : null,
+               keyPresent: (function () { try { return window.localStorage.getItem(keyFor(sid)) !== null; } catch (e) { return 'ERR'; } })(),
+               watchIntervalMs: WATCH_INTERVAL_MS, watchMaxTicks: WATCH_MAX_TICKS };
+    },
+    clearRing: function () { return _clearRing.slice(); },
     onUnknownFieldError: onUnknownFieldError,
     materialize: materialize, byteLen: byteLen,
     __test: { materializeFrom: materializeFrom, criticalRefsOf: criticalRefsOf,
