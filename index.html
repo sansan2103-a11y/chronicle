@@ -465,6 +465,225 @@
   try { console.log('[v292Dsmrc1:model-registry] loaded primary=', PRIMARY_ID); } catch(_){}
 })();
 </script>
+<script>
+/* ★dsmon-1 / MODEL_UPDATE_MONITOR v1（②C1 lane 裁定・最新 action semantics 反映）
+   ・OpenRouter の **公開・無認証** catalog を読むだけの read-only モニタ
+     （live 実測: /api/v1/models と /models/<id>/endpoints は CORS 可・credential 不要）
+   ・**自動モデル切替なし**（S.cfg / FALLBACK_POLICY へ 1 byte も書かない）
+   ・**永続化なし**（結果は volatile な module 変数のみ。localStorage 書込 0 = CF-5 と同方式）
+   ・**新 wrapper なし**（window.fetch / XMLHttpRequest.prototype へ代入しない）
+   ・**起動時 fetch なし**（Admin の「更新を確認」を押したときだけ）
+   ・Provider availability（実測）と Vendor lifecycle（curated MODEL_META）を **別 field 群**にする
+   ・MUST は UNLISTED/404 と verified expiration だけ。NO_PROVIDER / ALL_PROVIDERS_DOWN は
+     CURRENTLY_UNAVAILABLE（一時障害と廃止を混同しない）
+   詳細 = gold/DS_MODEL_UPDATE_MONITOR_DESIGN_v1.md */
+(function v292Dsmon1(){
+
+  'use strict';
+
+  var SOURCE_ENDPOINTS = 'openrouter:/api/v1/models/{id}/endpoints';
+  var SOURCE_CATALOG   = 'openrouter:/api/v1/models';
+  var UNKNOWN = 'UNKNOWN';
+
+  /* ---- volatile state（reload で消える。永続化しない） ---------------- */
+  var LAST = null;
+
+  /* ---- 純粋関数 1: /endpoints の応答 → provider availability ---------- */
+  /* 入力は { status:<httpStatus>, json:<parsed body or null>, error:<string|null> } */
+  function classifyAvailability(res){
+    if (!res || typeof res !== 'object') return { availability: UNKNOWN, listed: UNKNOWN, providers: null, providersDown: null, reason: 'no-result' };
+    if (res.error) return { availability: UNKNOWN, listed: UNKNOWN, providers: null, providersDown: null, reason: 'fetch-error' };
+    if (res.status === 404) return { availability: 'UNLISTED', listed: false, providers: 0, providersDown: 0, reason: 'not-found' };
+    if (res.status !== 200) return { availability: UNKNOWN, listed: UNKNOWN, providers: null, providersDown: null, reason: 'http-' + res.status };
+    var eps = (res.json && res.json.data && res.json.data.endpoints) || null;
+    if (!eps || Object.prototype.toString.call(eps) !== '[object Array]')
+      return { availability: UNKNOWN, listed: true, providers: null, providersDown: null, reason: 'no-endpoints-array' };
+    var total = eps.length;
+    var down = 0;
+    for (var i = 0; i < total; i++){ if (eps[i] && eps[i].status !== 0) down++; }
+    if (total === 0)      return { availability: 'NO_PROVIDER', listed: true, providers: 0, providersDown: 0, reason: 'zero-providers' };
+    if (down === total)   return { availability: 'ALL_PROVIDERS_DOWN', listed: true, providers: total, providersDown: down, reason: 'all-down' };
+    if (down > 0)         return { availability: 'DEGRADED', listed: true, providers: total, providersDown: down, reason: 'partial-down' };
+    return { availability: 'AVAILABLE', listed: true, providers: total, providersDown: 0, reason: 'ok' };
+  }
+
+  /* ---- 純粋関数 2: catalog の 1 件 → expiration -------------------------- */
+  /* asOf は ISO 文字列。外部時計は読まない（呼び出し側が渡す）。 */
+  function classifyExpiration(catalogEntry, asOf){
+    if (catalogEntry === undefined) return { expiration: UNKNOWN, expired: UNKNOWN };
+    if (catalogEntry === null)      return { expiration: null, expired: false };   /* 掲載はあるが期限なし */
+    var e = catalogEntry.expiration_date;
+    if (e === null || e === undefined || e === '') return { expiration: null, expired: false };
+    if (typeof asOf !== 'string' || !asOf) return { expiration: String(e), expired: UNKNOWN };
+    /* ISO-8601 辞書順比較。date-only の asOf は安全側（未経過）に倒れる＝ registry の _sunsetPassed と同方針 */
+    return { expiration: String(e), expired: String(asOf) >= String(e) };
+  }
+
+  /* ---- 純粋関数 3: curated metadata → vendor lifecycle ------------------ */
+  /* monitor は curated を **読むだけ**。書き換えない。 */
+  function classifyLifecycle(meta, asOf){
+    if (!meta || typeof meta !== 'object')
+      return { recommended: UNKNOWN, hardDeprecated: UNKNOWN, replacement: UNKNOWN, sunset: UNKNOWN, sunsetPassed: UNKNOWN, legacy: UNKNOWN };
+    var sunset = (meta.sunset === null || meta.sunset === undefined || meta.sunset === '') ? null : String(meta.sunset);
+    var passed = (sunset === null) ? false
+               : ((typeof asOf === 'string' && asOf) ? (String(asOf) >= sunset) : UNKNOWN);
+    return {
+      recommended:    meta.recommended === true,
+      hardDeprecated: meta.deprecated === true,
+      replacement:    (meta.replacement === null || meta.replacement === undefined || meta.replacement === '') ? null : String(meta.replacement),
+      sunset:         sunset,
+      sunsetPassed:   passed,
+      legacy:         meta.legacy === true
+    };
+  }
+
+  /* ---- 純粋関数 4: 行動判定（②C1 **最新裁定** の実装） -------------------
+     ★一時障害とモデル廃止を混同しない。
+       MUST_SWITCH（切替必須）
+         ・OpenRouter catalog で model ID が UNLISTED / 404
+         ・verified expiration が経過し、継続利用不能と確認できる場合
+       CURRENTLY_UNAVAILABLE / WATCH（いずれも **MUST ではない**）
+         ・NO_PROVIDER / ALL_PROVIDERS_DOWN  → CURRENTLY_UNAVAILABLE（今は使えないが廃止ではない）
+         ・DEGRADED / UNKNOWN               → WATCH
+       SHOULD_SWITCH（切替推奨）
+         ・vendor lifecycle が legacy / phased-out
+         ・Chronicle 非推奨
+         ・replacement / 後継 model あり
+     ★評価順は「今いちばん急を要する運用状態」を action に出し、
+       それによって隠れた lifecycle の助言は advisories[] に必ず残す（情報を失わない）。
+     ★判定材料が足りないときは MUST へ倒さない（fail-safe）。 */
+  function _lifecycleAdvice(life){
+    if (!life) return null;
+    if (life.hardDeprecated === true)
+      return { action: 'SHOULD_SWITCH', label: '切替推奨', because: 'hard-deprecated', to: life.replacement || null };
+    if (life.legacy === true)
+      return { action: 'SHOULD_SWITCH', label: '切替推奨', because: 'vendor-lifecycle-legacy', to: life.replacement || null };
+    if (life.sunsetPassed === true)
+      return { action: 'SHOULD_SWITCH', label: '切替推奨', because: 'vendor-lifecycle-phased-out', to: life.replacement || null };
+    if (life.recommended === false && life.replacement)
+      return { action: 'SHOULD_SWITCH', label: '切替推奨', because: 'not-recommended', to: life.replacement };
+    return null;
+  }
+  function decideAction(av, exp, life){
+    var a = (av && av.availability) || UNKNOWN;
+    var advice = _lifecycleAdvice(life);
+    var advisories = advice ? [advice] : [];
+
+    /* (1) 廃止・失効 = MUST。**UNLISTED / 404 と verified expiration だけ** */
+    if (a === 'UNLISTED')
+      return { action: 'MUST_SWITCH', label: '切替必須', because: 'unlisted-or-404',
+               to: (life && life.replacement) || null, advisories: advisories };
+    if (exp && exp.expired === true)
+      return { action: 'MUST_SWITCH', label: '切替必須', because: 'verified-expiration-passed',
+               to: (life && life.replacement) || null, advisories: advisories };
+
+    /* (2) 一時的に使えない = **MUST へ倒さない** */
+    if (a === 'NO_PROVIDER' || a === 'ALL_PROVIDERS_DOWN')
+      return { action: 'CURRENTLY_UNAVAILABLE', label: '現在利用不可（一時障害の可能性）',
+               because: (a === 'NO_PROVIDER') ? 'no-provider' : 'all-providers-down',
+               to: null, advisories: advisories };
+    if (a === 'DEGRADED')
+      return { action: 'WATCH', label: '注意', because: 'partial-provider-outage', to: null, advisories: advisories };
+    if (a === UNKNOWN)
+      return { action: 'WATCH', label: '注意', because: 'availability-unknown', to: null, advisories: advisories };
+
+    /* (3) 使えるが lifecycle 上の助言がある */
+    if (advice) return { action: advice.action, label: advice.label, because: advice.because, to: advice.to, advisories: [] };
+
+    return { action: 'OK', label: '問題なし', because: 'available', to: null, advisories: [] };
+  }
+
+  /* ---- 純粋関数 5: 1 件分の表示行を組み立てる -------------------------- */
+  /* Provider availability（実測）と Vendor lifecycle（curated）を **別 field 群**にする。 */
+  function buildRow(id, res, catalogEntry, meta, asOf, checkedAt){
+    var av   = classifyAvailability(res);
+    var exp  = classifyExpiration(catalogEntry, asOf);
+    var life = classifyLifecycle(meta, asOf);
+    var act  = decideAction(av, exp, life);
+    return {
+      id: id,
+      providerAvailability: {                 /* ← 実測レイヤー */
+        availability: av.availability, listed: av.listed,
+        providers: av.providers, providersDown: av.providersDown,
+        expiration: exp.expiration, expired: exp.expired,
+        reason: av.reason,
+        source: (catalogEntry !== undefined) ? (SOURCE_ENDPOINTS + ' + ' + SOURCE_CATALOG) : SOURCE_ENDPOINTS,
+        checkedAt: checkedAt || null
+      },
+      vendorLifecycle: {                      /* ← curated レイヤー（人手棚卸し） */
+        recommended: life.recommended, hardDeprecated: life.hardDeprecated,
+        replacement: life.replacement, sunset: life.sunset, sunsetPassed: life.sunsetPassed,
+        legacy: life.legacy,
+        source: 'chronicle:MODEL_META', checkedAt: (meta && meta.lastChecked) || null
+      },
+      action: act                             /* ← 両者から導く。自動切替はしない（表示のみ） */
+    };
+  }
+
+  /* ---- 非純粋はここだけ: fetch を **呼ぶ**（包まない） ------------------ */
+  /* fetchImpl は差し替え可能（テストでは注入）。credential は一切付けない。 */
+  function check(opts){
+    opts = opts || {};
+    var ids = opts.ids || [];
+    var metaOf = opts.metaOf || function(){ return null; };
+    var fetchImpl = opts.fetch;
+    var asOf = opts.asOf || null;
+    var checkedAt = opts.checkedAt || null;
+    var deep = opts.deep === true;            /* true のときだけ catalog(736KB) を 1 回取る */
+    if (typeof fetchImpl !== 'function') return Promise.reject(new Error('fetch required'));
+
+    var epUrl = function(id){ return 'https://openrouter.ai/api/v1/models/' + id + '/endpoints'; };
+    var getJson = function(url){
+      /* ★credential を付けない（Authorization / x-chronicle-pass / cookie を送らない）。
+         ★proxy(fix247) の書き換え対象 URL ではないので素通し。 */
+      return fetchImpl(url, { method: 'GET', cache: 'no-store', credentials: 'omit' })
+        .then(function(r){ return r.text().then(function(t){
+          var j = null; try { j = JSON.parse(t); } catch(e){ j = null; }
+          return { status: r.status, json: j, error: null, bytes: t.length };
+        }); })
+        .catch(function(e){ return { status: 0, json: null, error: String((e && e.message) || e) }; });
+    };
+
+    var jobs = ids.map(function(id){ return getJson(epUrl(id)).then(function(r){ return { id: id, res: r }; }); });
+    var catalogP = deep ? getJson('https://openrouter.ai/api/v1/models') : Promise.resolve(null);
+
+    return Promise.all([Promise.all(jobs), catalogP]).then(function(pair){
+      var results = pair[0], cat = pair[1];
+      var catIndex = undefined;               /* undefined = 未取得 → expiration は UNKNOWN */
+      if (cat && cat.status === 200 && cat.json && cat.json.data){
+        catIndex = {};
+        for (var i = 0; i < cat.json.data.length; i++){ catIndex[cat.json.data[i].id] = cat.json.data[i]; }
+      } else if (deep){ catIndex = null; }    /* deep を試みたが取れなかった */
+      var rows = results.map(function(r){
+        var ce = (catIndex === undefined) ? undefined : (catIndex === null ? undefined : (catIndex[r.id] || null));
+        return buildRow(r.id, r.res, ce, metaOf(r.id), asOf, checkedAt);
+      });
+      var out = { version: 'monitor-1', checkedAt: checkedAt || null, asOf: asOf || null,
+                  deep: !!deep, rows: rows,
+                  bytes: results.reduce(function(a,x){ return a + ((x.res && x.res.bytes) || 0); }, 0) + ((cat && cat.bytes) || 0),
+                  requests: results.length + (deep ? 1 : 0) };
+      LAST = out;                              /* volatile のみ。localStorage へは書かない */
+      return out;
+    });
+  }
+
+  function snapshot(){ return LAST ? JSON.parse(JSON.stringify(LAST)) : null; }
+  function clear(){ LAST = null; }
+
+  window.__CHR_MODEL_MONITOR = {
+    version: 'monitor-1',
+    classifyAvailability: classifyAvailability,
+    classifyExpiration: classifyExpiration,
+    classifyLifecycle: classifyLifecycle,
+    decideAction: decideAction,
+    buildRow: buildRow,
+    check: check,
+    snapshot: snapshot,
+    clear: clear,
+    sources: { endpoints: SOURCE_ENDPOINTS, catalog: SOURCE_CATALOG }
+  };
+})();
+</script>
 <!-- ■fix781(Phase 2.5A): UNSYNCED_LOCAL_PROGRESS_OVERWRITE Client Protection。fix654 の直後（= body への最初の書込より前）に置く必要がある。
      既定 ON / kill=v292Dfix781Off=1 (サブ=v292Dfix781bOff / v292Dfix781cOff) -->
 <script src="v292Dfix781-unsynced-guard.js?cb=20260901-fix781"></script>
@@ -523,7 +742,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260914-dsm3';
+  var BUILT = '20260914-dsmon1';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -859,6 +1078,14 @@ body {
         <!-- ★dscmf-1: cross-model fallback の **runtime 診断**（read-only）。上の「Cross-model fallback status」行はそのまま残し、その直下に機構の状態と直近の発動を出す。値は volatile（保存しない・再読込で消える = CF-5）。 -->
         <div id="dscmf1Hdr" style="font-size:11px;color:var(--dim);margin-top:10px;margin-bottom:2px;line-height:1.5">予備モデル（cross-model fallback / dscmf-1）— 実行時の診断です。保存していません（再読込で消えます）。</div>
         <div style="overflow-x:auto"><table id="dscmf1Tbl" style="width:100%;border-collapse:collapse;font-size:12px"><tbody></tbody></table></div>
+        <!-- ★dsmon-1: モデル更新検知 v1（read-only / manual-only）。押したときだけ OpenRouter の公開 catalog を読む。 -->
+        <div id="dsmon1Hdr" style="font-size:11px;color:var(--dim);margin-top:10px;margin-bottom:4px;line-height:1.5">モデル更新の確認（dsmon-1）— 押したときだけ提供状況を調べます。自動では調べません。結果は保存しません（再読込で消えます）。</div>
+        <div style="margin-bottom:6px">
+          <button type="button" id="dsmon1Btn" class="btn-s" style="margin-right:8px">🔄 更新を確認</button>
+          <span id="dsmon1State" style="font-size:11px;color:var(--dim)">未取得</span>
+        </div>
+        <div style="overflow-x:auto"><table id="dsmon1Tbl" style="width:100%;border-collapse:collapse;font-size:12px"><tbody></tbody></table></div>
+        <div style="font-size:11px;color:var(--dim);margin-top:6px;line-height:1.5">「提供状況」は実際に使っている提供元（OpenRouter）の実測、「モデルの世代」は Chronicle 側の棚卸し情報です。別々に表示しています。ここからモデルは切り替わりません。API キーは送っていません。</div>
         <div style="font-size:11px;color:var(--dim);margin-top:6px;line-height:1.5">表示専用の欄です。ここからモデルは切り替わりません（自動切替なし・外部問い合わせなし・設定値は変更していません）。API キー等の秘匿値はここに表示しません。</div>
         <script>
         /* dsadm-1 renderer: registry.adminView() を描くだけ。判定ロジックを持たない。 */
@@ -969,6 +1196,107 @@ body {
             } catch(e){}
           }
           window.__DSADM1RENDER = render;
+
+          /* ★dsmon-1: モデル更新検知の配線（read-only / manual-only / single-flight）
+             ・起動時 fetch なし。ボタンを押したときだけ __CHR_MODEL_MONITOR.check() を呼ぶ。
+             ・single-flight: 実行中は再入を弾き（__mbusy）、さらに request sequence（__mseq）で
+               **古い応答が新しい結果を上書きしない**ことを二重に保証する。
+             ・取得失敗は monitor 側が UNKNOWN → WATCH へ fail-safe する（MUST にはならない）。
+             ・localStorage へ書かない / モデルを切り替えない / credential を送らない。 */
+          var MONROWS = [
+            ['提供状況（provider availability）', '_av'],
+            ['提供元の数（OpenRouter）',          '_prov'],
+            ['期限（expiration）',                '_exp'],
+            ['モデルの世代（vendor lifecycle）',   '_life'],
+            ['後継（replacement）',               '_repl'],
+            ['判定',                              '_act'],
+            ['確認時刻（checkedAt）',             '_at'],
+            ['出所（source）',                    '_src']
+          ];
+          function monIds(R){
+            var ids = [];
+            try { if (R && R.primary) ids.push(R.primary()); } catch(e){}
+            try { if (R && R.secondary) ids.push(R.secondary()); } catch(e){}
+            try { var p = R && R.fallbackPolicy && R.fallbackPolicy(); if (p && p.to && ids.indexOf(p.to) < 0) ids.push(p.to); } catch(e){}
+            return ids;
+          }
+          function monMetaOf(R){
+            return function(id){
+              try { var v = R && R.adminView && R.adminView(id); if (!v || !v.catalog) return null;
+                    for (var i = 0; i < v.catalog.length; i++){ if (v.catalog[i].id === id) return v.catalog[i]; } } catch(e){}
+              return null;
+            };
+          }
+          function monPaint(snap){
+            var tb = null, st = null;
+            try { tb = document.querySelector('#dsmon1Tbl tbody'); st = document.getElementById('dsmon1State'); } catch(e){}
+            if (!tb) return;
+            tb.innerHTML = '';
+            if (!snap || !snap.rows || !snap.rows.length){ if (st) st.textContent = '未取得'; return; }
+            if (st) st.textContent = '確認しました（' + snap.rows.length + ' モデル / ' + snap.requests + ' 回の問い合わせ）';
+            for (var i = 0; i < snap.rows.length; i++){
+              var r = snap.rows[i];
+              var pa = r.providerAvailability || {}, vl = r.vendorLifecycle || {}, ac = r.action || {};
+              var life = (vl.hardDeprecated === true) ? '廃止扱い'
+                       : (vl.legacy === true) ? '旧世代（legacy）'
+                       : (vl.sunsetPassed === true) ? '移行期（phased-out）'
+                       : (vl.recommended === true) ? '推奨' : '非推奨';
+              var adv = (ac.advisories && ac.advisories.length) ? ('（' + ac.advisories[0].label + '）') : '';
+              var hdr = document.createElement('tr');
+              var hc = document.createElement('td'); hc.colSpan = 2; hc.textContent = r.id;
+              hc.style.cssText = 'padding:8px 0 2px;font-weight:600;word-break:break-all';
+              hdr.appendChild(hc); tb.appendChild(hdr);
+              paint(tb, MONROWS, {
+                _av:   String(pa.availability === undefined ? 'UNKNOWN' : pa.availability),
+                _prov: (pa.providers === null || pa.providers === undefined) ? 'UNKNOWN'
+                       : (String(pa.providers) + '（停止中 ' + String(pa.providersDown) + '）'),
+                _exp:  (pa.expiration === null) ? 'なし' : String(pa.expiration === undefined ? 'UNKNOWN' : pa.expiration),
+                _life: life,
+                _repl: (vl.replacement === null || vl.replacement === undefined) ? '-' : String(vl.replacement),
+                _act:  String(ac.label || 'UNKNOWN') + adv,
+                _at:   String(pa.checkedAt || '-'),
+                _src:  String(pa.source || '-') + ' / ' + String(vl.source || '-')
+              });
+            }
+          }
+          function monRun(){
+            var btn = null, st = null;
+            try { btn = document.getElementById('dsmon1Btn'); st = document.getElementById('dsmon1State'); } catch(e){}
+            var M = window.__CHR_MODEL_MONITOR;
+            if (!M || !M.check){ if (st) st.textContent = 'この版では利用できません'; return; }
+            if (window.__DSMON1.__mbusy === true) return;           /* single-flight: 二重実行しない */
+            var my = (window.__DSMON1.__mseq = (window.__DSMON1.__mseq | 0) + 1);
+            window.__DSMON1.__mbusy = true;
+            if (btn) btn.disabled = true;
+            if (st) st.textContent = '確認中…';
+            var R = null; try { R = window.__CHR_MODEL_REGISTRY; } catch(e){}
+            var when = null; try { when = new Date().toISOString(); } catch(e){}
+            var done = function(){ window.__DSMON1.__mbusy = false; if (btn) btn.disabled = false; };
+            try {
+              M.check({ ids: monIds(R), metaOf: monMetaOf(R), fetch: window.fetch.bind(window),
+                        asOf: when, checkedAt: when, deep: true })
+               .then(function(snap){
+                 if (my !== window.__DSMON1.__mseq) return;          /* 古い応答は捨てる */
+                 monPaint(snap);
+               })
+               .catch(function(){
+                 if (my !== window.__DSMON1.__mseq) return;
+                 if (st) st.textContent = '確認できませんでした（UNKNOWN のまま）';
+               })
+               .then(done, done);
+            } catch(e){ done(); if (st) st.textContent = '確認できませんでした（UNKNOWN のまま）'; }
+          }
+          window.__DSMON1 = { run: monRun, paint: monPaint, rows: MONROWS, ids: monIds, __mbusy: false, __mseq: 0 };
+          (function armMon(){
+            try {
+              var b = document.getElementById('dsmon1Btn');
+              if (!b){ setTimeout(armMon, 600); return; }
+              if (b.__dsmon1) return; b.__dsmon1 = true;
+              b.addEventListener('click', monRun);
+              /* ★起動時 fetch はしない。直近スナップショットがあれば描くだけ。 */
+              try { monPaint(window.__CHR_MODEL_MONITOR && window.__CHR_MODEL_MONITOR.snapshot()); } catch(e){}
+            } catch(e){}
+          })();
           try { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render); else render(); } catch(e){}
           /* 設定モーダルが開くたびに描き直す（openSettings を書き換えない = 既存経路不触）。 */
           (function arm(){
