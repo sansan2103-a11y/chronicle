@@ -261,10 +261,13 @@
      ・診断（FB_DIAG）は **volatile な module 変数**だけ。localStorage 書込 0 / 新 save schema 0（CF-5）。
        reload で消えてよい。Admin read-only から fallbackDiag() で閲覧する。
      ・この block は定義だけ。load 時の localStorage 読み書き 0 / network 0 / wrapper 0。 */
-  /* ★dscmf-2: to を承認済み予備 model へ割り当てる（ASSIGNED）。
-     **enabled は false のまま** = production-wide fallback は引き続き OFF。
-     実発火は QA slot opt-in（v292DfixCmfOn_slot_<slot>）でのみ起こる。maxHops=1 も不変。 */
-  var FALLBACK_POLICY = { version: 'cmf-1', enabled: false, from: PRIMARY_ID, to: FALLBACK_ID, maxHops: 1 };
+  /* ★dscmf-3（②C1 activation 裁定）: production-wide activation。**enabled を true にするのはこの 1 箇所だけ**。
+     from / to / maxHops、予備 model の request policy（reasoning:{effort:'none'} のみ）は 1 byte も変えない。
+     kill switch（v292DfixCmfOff='1'）は従来どおり最優先で effective=false にできる。
+     activation blocker の充足根拠 = offline exactly-one-hop / 二重 commit なし / 失敗時は元 primary error 保持 /
+     MiniMax M3 候補 QA PASS / inert production PASS / slot opt-in live PASS /
+     validation400 の live fail-closed PASS / maxHops=1 / third-model chain なし / Q119・PG 非回帰。 */
+  var FALLBACK_POLICY = { version: 'cmf-1', enabled: true, from: PRIMARY_ID, to: FALLBACK_ID, maxHops: 1 };
 
   function fallbackPolicy(){ return _policyCopy(FALLBACK_POLICY); }
   function fallbackAssigned(){ return !!FALLBACK_POLICY.to && FALLBACK_POLICY.to !== FALLBACK_POLICY.from; }
@@ -520,7 +523,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260914-dscmf2';
+  var BUILT = '20260914-dscmf3';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
