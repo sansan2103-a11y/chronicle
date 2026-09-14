@@ -56,6 +56,12 @@
     note:          'vendorApiName / vendorBaseUrl は管理画面の表示専用。request には使わない'
   };
 
+  /* ★dscmf-2（②C1 APPROVED_FALLBACK_MODEL）: cross-model fallback の承認済み予備 model。
+     ここ 1 箇所にだけ literal を置き、FALLBACK_POLICY.to と REQUEST_POLICY_BY_ID の両方が
+     この定数を参照する（ID literal の散在を作らない）。
+     選定根拠 = gold/DS_FBQA_CANDIDATE_RESULT_v1.md（A=qwen3.6-flash は CR-3 FAIL で REJECTED）。 */
+  var FALLBACK_ID = 'minimax/minimax-m3';
+
   var SECONDARY_ID    = 'deepseek/deepseek-v4-pro';
   var SECONDARY_LABEL = 'DS V4 Pro';
   var SECONDARY_LONG  = 'DeepSeek V4 Pro（濃い場面・長文向け）';
@@ -82,6 +88,14 @@
   var REQUEST_POLICY_BY_ID = {
     'deepseek/deepseek-v4.1-flash': { reasoning: { effort: 'none' }, provider: { require_parameters: true } }
   };
+  /* ★dscmf-2（②C1 裁定）: 予備 model の request policy【初版】。
+     ・reasoning:{effort:'none'} のみ。**provider.require_parameters は付けない**
+       （予備の可用 provider を不用意に絞らないため = ②C1 明示指示）。
+     ・key を literal で書かず FALLBACK_ID から組む ⇒ ID literal の出現数を増やさない。
+     ・sampling（fix84）と max_tokens には触れない。CF-7「fallback request にも
+       model-specific request policy を必ず適用」は applyRequestPolicy() が
+       **effective model = 予備 model** で引くことで自動的に満たされる。 */
+  REQUEST_POLICY_BY_ID[FALLBACK_ID] = { reasoning: { effort: 'none' } };
 
   /* plain object だけを再帰複製する（Array / 非 object はそのまま）。表を呼び出し側に渡さないため。 */
   function _policyCopy(o){
@@ -247,7 +261,10 @@
      ・診断（FB_DIAG）は **volatile な module 変数**だけ。localStorage 書込 0 / 新 save schema 0（CF-5）。
        reload で消えてよい。Admin read-only から fallbackDiag() で閲覧する。
      ・この block は定義だけ。load 時の localStorage 読み書き 0 / network 0 / wrapper 0。 */
-  var FALLBACK_POLICY = { version: 'cmf-1', enabled: false, from: PRIMARY_ID, to: '', maxHops: 1 };
+  /* ★dscmf-2: to を承認済み予備 model へ割り当てる（ASSIGNED）。
+     **enabled は false のまま** = production-wide fallback は引き続き OFF。
+     実発火は QA slot opt-in（v292DfixCmfOn_slot_<slot>）でのみ起こる。maxHops=1 も不変。 */
+  var FALLBACK_POLICY = { version: 'cmf-1', enabled: false, from: PRIMARY_ID, to: FALLBACK_ID, maxHops: 1 };
 
   function fallbackPolicy(){ return _policyCopy(FALLBACK_POLICY); }
   function fallbackAssigned(){ return !!FALLBACK_POLICY.to && FALLBACK_POLICY.to !== FALLBACK_POLICY.from; }
@@ -503,7 +520,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260914-dscmf1b';
+  var BUILT = '20260914-dscmf2';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
