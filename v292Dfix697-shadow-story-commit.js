@@ -1427,23 +1427,37 @@
     if (!OPT) return { ok: false, reason: 'NO_OPTIONAL_CONTRACT', equal: false, excluded: [], diffKeys: [] };
     var ss = serverWrap.sidecar, ls = sendWrap.sidecar;
     var excluded = [];
-    /* ★★fix697E(PARITY_SEMANTIC_NORMALIZATION / ②C1 裁定 3):
-       **memoryV1 に限り** `null` と `absent` を semantic equal として扱う。
-       storage 表現・Worker・canonical schema・stored null 表現は **一切変更しない**（比較だけを正規化する）。
-         両方が empty(null|absent)          → この key を **両側から外して**比較（＝equal 扱い）
-         片方だけ empty                     → **mismatch**（diffKeys に memoryV1）
-         両方 non-null                      → 従来どおり値で比較
-       他の optional key は従来の omit=preserve（excluded）semantics を 1 バイトも変えない。 */
+    /* ★★fix697E Rev2(PARITY_SEMANTIC_NORMALIZATION / ②C1 最新裁定 3):
+       **memoryV1 のみ** 下表で判定する。storage 表現・Worker・canonical schema・stored null 表現は不変。
+       他の optional key は従来の omit=preserve（excluded）semantics を 1 バイトも変えない。
+         client / server
+         absent   / absent   → equal
+         absent   / null     → equal（両側から外す）
+         absent   / non-null → **preserve（excluded）**  ← ME OFF の非所有はサーバ値を保全する
+         null     / absent   → equal（両側から外す）
+         null     / null     → equal
+         null     / non-null → mismatch
+         non-null / absent   → mismatch
+         non-null / null     → mismatch
+         non-null / non-null → 通常の値比較 */
     var memVerdict = null;   /* null | 'EMPTY_EQUAL' | 'MISMATCH' | 'COMPARE' */
     try {
       for (var i = 0; i < OPT.length; i++){
         var k = OPT[i];
         if (k === F697E_MEM_KEY){
-          var sHas = f697pHasOwn(ss, k), lHas = f697pHasOwn(ls, k);
-          var sEmpty = (!sHas) || (ss[k] === null);
-          var lEmpty = (!lHas) || (ls[k] === null);
-          memVerdict = (sEmpty && lEmpty) ? 'EMPTY_EQUAL'
-                     : (sEmpty !== lEmpty) ? 'MISMATCH' : 'COMPARE';
+          var cHas = f697pHasOwn(ls, k), sHas = f697pHasOwn(ss, k);
+          var cNull = cHas && (ls[k] === null), sNull = sHas && (ss[k] === null);
+          if (!cHas){
+            if (!sHas)        memVerdict = 'EMPTY_EQUAL';        /* absent / absent */
+            else if (sNull)   memVerdict = 'EMPTY_EQUAL';        /* absent / null   */
+            else { excluded.push(k); memVerdict = 'PRESERVED'; } /* absent / non-null → 従来 preserve */
+          } else if (cNull){
+            if (!sHas || sNull) memVerdict = 'EMPTY_EQUAL';      /* null / absent, null / null */
+            else                memVerdict = 'MISMATCH';         /* null / non-null */
+          } else {
+            if (!sHas || sNull) memVerdict = 'MISMATCH';         /* non-null / absent, non-null / null */
+            else                memVerdict = 'COMPARE';          /* non-null / non-null */
+          }
           continue;
         }
         /* 3 条件積: optional domain ∩ server が持つ ∩ **client が送っていない**。
@@ -1457,7 +1471,7 @@
     var s2 = null, sStr = null, lStr = null;
     try {
       s2 = {}; for (var a1 in serverWrap){ if (Object.prototype.hasOwnProperty.call(serverWrap, a1)) s2[a1] = serverWrap[a1]; }
-      var dropMem = (memVerdict === 'EMPTY_EQUAL');   /* ★fix697E */
+      var dropMem = (memVerdict === 'EMPTY_EQUAL');   /* ★fix697E: 両側 empty のときだけ両側から外す */
       if (excluded.length || dropMem){
         var sc = {};
         for (var a2 in ss){ if (Object.prototype.hasOwnProperty.call(ss, a2)) sc[a2] = ss[a2]; }

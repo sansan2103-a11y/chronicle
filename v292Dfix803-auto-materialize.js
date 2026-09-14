@@ -48,7 +48,7 @@
   /* ---------------- state（story ごと・in-memory・永続化しない） ---------------- */
   var halted = {};            /* sid -> reason（session 内停止・retry 0） */
   var materializedFor = {};   /* sid -> turnCount（1 successful turn につき materialize <=1） */
-  var T = { fires: 0, changed: 0, unchanged: 0, nullSkips: 0, bootstraps: 0, materialized: 0, driftStops: 0,
+  var T = { fires: 0, changed: 0, unchanged: 0, nullSkips: 0, bootstraps: 0, srvProbes: 0, srvLast: null, materialized: 0, driftStops: 0,
             matFailed: 0, skipped: 0, skipReasons: {}, domainMismatch: 0, lastRun: null, errors: [] };
   function skip(reason) { T.skipped++; T.skipReasons[reason] = (T.skipReasons[reason] || 0) + 1; return 'skipped:' + reason; }
   function err(sid, tc, stage, e) {
@@ -156,14 +156,74 @@
     } catch (e) { return true; }
     return false;                                                     /* ledger に該当なし = 通常 landing */
   }
+  /* ★★fix803B Rev2(②C1 最新裁定 2 / DURABLE TOMBSTONE):
+     同 cycle だけを止める isClearCycle() では不十分。**server canonical の memoryV1 実体**を
+     eligibility の authority にする。新 persistent marker は作らない。
+       server ownKey=false                → UNINITIALIZED → bootstrap 可
+       server ownKey=true && value===null → CLEARED       → bootstrap 禁止（durable tombstone）
+       server memoryV1 non-null           → EXISTING      → 通常 update（bootstrap 不要）
+       判定不能                            → UNKNOWN       → fail-closed / bootstrap 禁止
+     読み出しは **既存 read-only 口** window.__v292Dfix697.getStoryV2Once のみ（新 endpoint / 新 auth / 新 op 0）。
+     in-memory cache（永続化しない）を持ち、bootstrap 分岐に入ったときだけ・story ごとに最小回数だけ読む。 */
+  var srvMem = {};      /* sid -> { state, rev, at } （in-memory のみ・reload で消える＝再 probe する） */
+  function srvMemStateOf(sid) { var c = srvMem[sid]; return c ? c.state : null; }
+  function probeServerMemState(sid) {
+    return new Promise(function (resolve) {
+      var f = null; try { f = window.__v292Dfix697; } catch (e) { f = null; }
+      if (!f || typeof f.getStoryV2Once !== 'function') { resolve('UNKNOWN'); return; }
+      var done = false;
+      try {
+        f.getStoryV2Once(sid, function (g, err) {
+          if (done) return; done = true;
+          try {
+            if (err || !g || g.status !== 200 || !(g.j && g.j.ok)) { resolve('UNKNOWN'); return; }
+            var r = g.j.record;
+            if (!r || typeof r !== 'object' || r.schema !== 2) { resolve('UNKNOWN'); return; }
+            var sc = r.sidecar;
+            if (!sc || typeof sc !== 'object') { resolve('UNINITIALIZED'); return; }
+            if (!Object.prototype.hasOwnProperty.call(sc, KEY_NAME)) { resolve('UNINITIALIZED'); return; }
+            resolve(sc[KEY_NAME] === null ? 'CLEARED' : 'EXISTING');
+          } catch (e) { resolve('UNKNOWN'); }
+        });
+      } catch (e) { if (!done) { done = true; resolve('UNKNOWN'); } }
+    });
+  }
+  /* cache 方針: CLEARED / EXISTING は session 内で安定（client 自身しか書かないため）なので再 probe しない。
+     UNINITIALIZED は bootstrap 成功後に local が present になり、この分岐へ戻らない。
+     UNKNOWN は毎回 fail-closed のまま、次回改めて probe する（cache しない）。 */
+  function serverMemState(sid) {
+    var c = srvMem[sid];
+    if (c && (c.state === 'CLEARED' || c.state === 'EXISTING' || c.state === 'UNINITIALIZED')) {
+      return Promise.resolve(c.state);
+    }
+    return probeServerMemState(sid).then(function (st) {
+      if (st !== 'UNKNOWN') srvMem[sid] = { state: st, at: Date.now() };
+      T.srvProbes++;
+      T.srvLast = { sid: sid, state: st, at: Date.now() };
+      return st;
+    });
+  }
+
   /* bootstrap 可否。全条件 AND。ここで false なら従来どおり null-skip。 */
-  function bootstrapAllowed(sid, a, o, cur) {
+  function bootstrapAllowedSync(sid, a, o, cur) {
     if (cur.reason !== 'absent') return 'not-absent:' + String(cur.reason);   /* 壊れ / storage-throw は従来どおり fail-closed */
     if (o.domainMatch !== true) return 'no-fix802-domain';            /* 通常 fix802 refresh pipeline 由来であること */
     var recs = (a.cand && a.cand.records) || [];
     if (!(recs.length > 0)) return 'records-0';                       /* records=0 なら write しない */
-    if (isClearCycle(sid, o.rev)) return 'clear-cycle';               /* clear と同じ cycle では絶対に再生成しない */
+    if (isClearCycle(sid, o.rev)) return 'clear-cycle';               /* 同 cycle の即時 guard（Rev2 では補助） */
     return null;
+  }
+  /* Rev2: 同期条件を満たした場合のみ server canonical を見て最終判定する。 */
+  function bootstrapAllowed(sid, a, o, cur) {
+    var sync = bootstrapAllowedSync(sid, a, o, cur);
+    if (sync !== null) return Promise.resolve(sync);
+    return serverMemState(sid).then(function (st) {
+      o.serverMemState = st;
+      if (st === 'UNINITIALIZED') return null;                        /* ★唯一の bootstrap 可 */
+      if (st === 'CLEARED')  return 'server-cleared-tombstone';       /* ★durable tombstone */
+      if (st === 'EXISTING') return 'server-existing';                /* 通常 update の領域 */
+      return 'server-unknown';                                        /* fail-closed */
+    }, function () { return 'server-probe-failed'; });
   }
 
   /* ---------------- 本体（notify 1 本・timer 0・retry 0） ---------------- */
@@ -174,6 +234,7 @@
                   materializeOk: (o.materializeOk === undefined ? null : o.materializeOk),
                   materializeReason: o.materializeReason || null, localReason: o.localReason || null,
                   bootstrap: (o.bootstrap === true), bootstrapSkip: o.bootstrapSkip || null,
+                  serverMemState: o.serverMemState || null,
                   result: result, ms: nowMs() - t0, at: Date.now() };
     return result;
   }
@@ -206,7 +267,7 @@
          ★★fix803B(②C1 裁定 2): ただし **bootstrap 条件を全て満たすときだけ** 初回生成を許す。
             writer は増やさず、下の changed:true と **完全に同じ write path**（fix793.materialize）を使う。 */
       if (cur.hash === null) {
-        var bReason = bootstrapAllowed(sid, a, o, cur);
+        return bootstrapAllowed(sid, a, o, cur).then(function (bReason) {
         if (bReason !== null) { T.nullSkips++; o.bootstrapSkip = bReason;
           return finish(sid, tc, o, 'null-skip:' + (cur.reason || 'absent'), t0); }
         T.bootstraps++; o.bootstrap = true;
@@ -225,6 +286,7 @@
             T.materialized++;
             return finish(sid, tc, o, 'bootstrapped', t0);
           });
+        });
         });
       }
       /* ★changed:false → write 0 */
@@ -259,6 +321,7 @@
     return { build: BUILD, on: optedIn(), off: off(), active: active(), story: story(),
              halted: JSON.parse(JSON.stringify(halted)),
              fires: T.fires, changed: T.changed, unchanged: T.unchanged, nullSkips: T.nullSkips, bootstraps: T.bootstraps,
+             srvProbes: T.srvProbes, srvLast: T.srvLast, srvMem: JSON.parse(JSON.stringify(srvMem)),
              materialized: T.materialized, driftStops: T.driftStops, matFailed: T.matFailed,
              skipped: T.skipped, skipReasons: JSON.parse(JSON.stringify(T.skipReasons)),
              domainMismatch: T.domainMismatch, materializedFor: JSON.parse(JSON.stringify(materializedFor)),
@@ -266,7 +329,8 @@
   }
   function reset() {
     halted = {}; materializedFor = {};
-    T = { fires: 0, changed: 0, unchanged: 0, nullSkips: 0, bootstraps: 0, materialized: 0, driftStops: 0,
+    srvMem = {};
+    T = { fires: 0, changed: 0, unchanged: 0, nullSkips: 0, bootstraps: 0, srvProbes: 0, srvLast: null, materialized: 0, driftStops: 0,
           matFailed: 0, skipped: 0, skipReasons: {}, domainMismatch: 0, lastRun: null, errors: [] };
   }
 
@@ -274,7 +338,8 @@
     BUILD: BUILD, ENABLED_BY_DEFAULT: false, CANARY_DEFAULT: CANARY_DEFAULT, DRIFT: DRIFT,
     onFire: onFire, status: status,
     __test: { norm: norm, candCanon: candCanon, sha256hex16: sha256hex16, shapeOk: shapeOk,
-              isClearCycle: isClearCycle, bootstrapAllowed: bootstrapAllowed,
+              isClearCycle: isClearCycle, bootstrapAllowed: bootstrapAllowed, bootstrapAllowedSync: bootstrapAllowedSync,
+              serverMemState: serverMemState, probeServerMemState: probeServerMemState, srvMemStateOf: srvMemStateOf,
               keyOf: keyOf, readLocal: readLocal, hashLocal: hashLocal, reset: reset,
               haltedOf: function (sid) { return halted[sid] || null; }, KEY_PREFIX: KEY_PREFIX }
   };
