@@ -742,7 +742,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260914-dsmon1';
+  var BUILT = '20260914-c1n1';
   try {
     if (/[?&]vr=1/.test(location.search)) return;
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -4121,6 +4121,9 @@ G.init();
      OFF=v292Dfix729Off / 検証口=window.__v292Dfix729 -->
 <script src="v292Dfix729-title-sync.js?cb=20260909-fix842"></script>
 <script src="v292Dfix843-capability-notice.js?cb=20260909-fix843"></script>
+<!-- v292Dfix846: access gate(401/403)の告知。UIのみ/read-only observer/wrapper無し/storage write 0。
+     OFF=v292Dfix846Off / 検証口=window.__v292Dfix846 -->
+<script src="v292Dfix846-access-gate-notice.js?cb=20260914-fix846"></script>
 <script src="v292Dfix700-nonauthoritative-mirror.js?cb=20260908-fix837"></script>
 <script src="v292Dfix702-authority-cutover.js?cb=20260908-fix837"></script>
 <!-- v292Dfix573: 主人公が「無言で消える」のを見張る。
