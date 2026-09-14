@@ -51,7 +51,7 @@
   function remember(map, key, v){ map[key] = v; var ks = Object.keys(map); while (ks.length > SEEN_CAP){ delete map[ks.shift()]; } }
   function ls(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return ls('v292Dfix806Off') === '1'; }
-  function on(){ return ls('v292Dfix806On') === '1' && !off(); }
+  function on(){ /* ★ge2 (2026-09-14 / ②C1 ME general-enable): 既定だけを変える。未設定 = ON、'0' = 明示 opt-out。Off='1' の最優先は不変。 */ return ls('v292Dfix806On') !== '0' && !off(); }
   function getS(){
     try { var a = window.__chronicleGetState ? window.__chronicleGetState('fix806') : null; if (a) return a; } catch(e){}
     try { return window.S || null; } catch(e){ return null; }

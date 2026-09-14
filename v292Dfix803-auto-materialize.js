@@ -39,10 +39,12 @@
   var ERR_MAX = 50;
 
   function ls(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
-  function optedIn() { return ls('v292Dfix803On') === '1'; }
+  function optedIn() { /* ★ge2 (2026-09-14 / ②C1 ME general-enable): 既定だけを変える。未設定 = ON、'0' = 明示 opt-out。Off='1' の最優先は不変。 */ return ls('v292Dfix803On') !== '0'; }
   function off() { return ls('v292Dfix803Off') === '1'; }
   function active() { return optedIn() && !off(); }
   function story() { var s = ls('v292Dfix803Story'); return (s && String(s)) || CANARY_DEFAULT; }
+  function storyScoped() { /* ★ge2: Story key 未設定 = 全 story。明示したときは従来どおり 1 本に絞る。 */ var s = ls('v292Dfix803Story'); return !!(s && String(s)); }
+  function storyAllowed(sid) { return !storyScoped() || sid === story(); }
   function nowMs() { try { return performance.now(); } catch (e) { return Date.now(); } }
 
   /* ---------------- state（story ごと・in-memory・永続化しない） ---------------- */
@@ -243,7 +245,7 @@
     if (!active()) return Promise.resolve('off');
     a = a || {};
     var sid = (a.storyId != null) ? String(a.storyId) : ((a.sid != null) ? String(a.sid) : '');
-    if (sid !== story()) return Promise.resolve(skip('other-story'));
+    if (!storyAllowed(sid)) return Promise.resolve(skip('other-story'));
     if (halted[sid]) return Promise.resolve(skip('halted'));
     var tc = a.turnCount;
     if (typeof tc !== 'number' || !isFinite(tc)) return Promise.resolve(skip('turnCount-null'));

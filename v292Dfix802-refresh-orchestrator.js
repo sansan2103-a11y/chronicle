@@ -31,10 +31,12 @@
   var ERR_MAX = 50;
 
   function ls(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
-  function optedIn() { return ls('v292Dfix802On') === '1'; }
+  function optedIn() { /* ★ge2 (2026-09-14 / ②C1 ME general-enable): 既定だけを変える。未設定 = ON、'0' = 明示 opt-out。Off='1' の最優先は不変。 */ return ls('v292Dfix802On') !== '0'; }
   function off() { return ls('v292Dfix802Off') === '1'; }
   function active() { return optedIn() && !off(); }
   function story() { var s = ls('v292Dfix802Story'); return (s && String(s)) || CANARY_DEFAULT; }
+  function storyScoped() { /* ★ge2: Story key 未設定 = 全 story。明示したときは従来どおり 1 本に絞る。 */ var s = ls('v292Dfix802Story'); return !!(s && String(s)); }
+  function storyAllowed(sid) { return !storyScoped() || sid === story(); }
   function nowMs() { try { return performance.now(); } catch (e) { return Date.now(); } }
   /* ★fix803（automatic materialize）への one-line notify。不在 / throw / reject は no-op（fire の結果を変えない）。 */
   function f802Notify803(a) { try { var m = window.__v292Dfix803; return (m && typeof m.onFire === 'function') ? Promise.resolve(m.onFire(a)).then(null, function () { return null; }) : Promise.resolve(null); } catch (e) { return Promise.resolve(null); } }
@@ -214,7 +216,7 @@
   function onLanded(sid, rev, hash, turnCount) {
     if (!active()) return 'off';
     sid = (sid == null) ? '' : String(sid);
-    if (sid !== story()) return skip('other-story');
+    if (!storyAllowed(sid)) return skip('other-story');
     if (typeof turnCount !== 'number' || !isFinite(turnCount)) return skip('turnCount-null');
     var l = L(sid);
     l.landed = { rev: (typeof rev === 'number') ? rev : null, hash16: (hash == null) ? null : String(hash).slice(0, 16),
@@ -235,7 +237,7 @@
   function onRawReady(sid, processedCount, reconciles) {
     if (!active()) return 'off';
     sid = (sid == null) ? '' : String(sid);
-    if (sid !== story()) return skip('other-story');
+    if (!storyAllowed(sid)) return skip('other-story');
     var l = L(sid);
     l.raw = { processedCount: (typeof processedCount === 'number') ? processedCount : -1,
               reconciles: reconciles, at: Date.now(), restored: false };

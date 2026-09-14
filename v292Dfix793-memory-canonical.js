@@ -54,11 +54,12 @@
   function lsg(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
   function lss(k, v) { try { window.localStorage.setItem(k, v); return true; } catch (e) { return false; } }
   function keyFor(storyId) { return KEY_PREFIX + String(storyId); }
-  function optedIn() { return lsg('v292Dfix793On') === '1'; }
+  function optedIn() { /* ★ge2 (2026-09-14 / ②C1 ME general-enable): 既定だけを変える。未設定 = ON、'0' = 明示 opt-out。Off='1' の最優先は不変。 */ return lsg('v292Dfix793On') !== '0'; }
   function off() { return lsg('v292Dfix793Off') === '1'; }
   function armed() { return optedIn() && !off(); }
   function canaryStory() { var s = lsg('v292Dfix793Story'); return (s && String(s)) || CANARY_DEFAULT; }
-  function isCanary(storyId) { return !!storyId && String(storyId) === canaryStory(); }
+  function storyScoped() { /* ★ge2: Story key 未設定 = 全 story。明示したときは従来どおり 1 本に絞る。 */ var s = lsg('v292Dfix793Story'); return !!(s && String(s)); }
+  function isCanary(storyId) { if (!storyId) return false; if (!storyScoped()) return true; return String(storyId) === canaryStory(); }
 
   /* ==================================================================
    * memory state（★UNLOADED / LOADED_ABSENT / LOADED_VALUE）

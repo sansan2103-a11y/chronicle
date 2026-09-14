@@ -120,7 +120,7 @@
   function lsg(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lss(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
   function off() { return lsg(OFF_KEY) === '1'; }
-  function optedIn() { return lsg(ON_KEY) === '1'; }
+  function optedIn() { /* ★ge2 (2026-09-14 / ②C1 ME general-enable): 既定だけを変える。未設定 = ON、'0' = 明示 opt-out。Off='1' の最優先は不変。 */ return lsg(ON_KEY) !== '0'; }
   /* ★起動判定はこの1関数だけ。
        OFF=1                → 停止
        OFF!=1 かつ ON=1     → 起動

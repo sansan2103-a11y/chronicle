@@ -223,7 +223,7 @@
 
   /* ---------- flags（read only。書き込みは一切しない） ---------- */
   function lsg(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
-  function isOn()  { return lsg('v292Dfix796On')  === '1'; }
+  function isOn()  { /* ★ge2 (2026-09-14 / ②C1 ME general-enable): 既定だけを変える。未設定 = ON、'0' = 明示 opt-out。Off='1' の最優先は不変。 */ return lsg('v292Dfix796On') !== '0'; }
   function isOff() { return lsg('v292Dfix796Off') === '1'; }
   /* ★bf1: cooldown backfill の kill switch（'1' で従来の cap→cooldown へ戻す） */
   function backfillOff() { return lsg('v292Dfix796BackfillOff') === '1'; }
@@ -1179,8 +1179,8 @@
       var sid = normSid(o.sid); meta.sid = sid;
       if (!armed())              { meta.gate = 'OFF';            meta.reason = REASON.DISABLED; _lastBlocks = meta; return null; }
       if (!sid)                  { meta.gate = 'NO_STORY_ID';    _lastBlocks = meta; return null; }
-      var want = storyFlag();
-      if (!want || want !== sid) { meta.gate = 'STORY_MISMATCH'; _lastBlocks = meta; return null; }
+      var want = storyFlag();   /* ★ge2: Story key 未設定 = 全 story。明示したときは従来どおり 1 本に絞る。 */
+      if (want && want !== sid) { meta.gate = 'STORY_MISMATCH'; _lastBlocks = meta; return null; }
       var mem = Object.prototype.hasOwnProperty.call(o, 'memoryV1') ? o.memoryV1 : undefined;
       var m1 = resolveMemory(sid, mem);
       if (!m1)                   { meta.gate = 'NO_MEMORY'; meta.reason = REASON.NO_MEMORY; _lastBlocks = meta; return null; }
