@@ -1598,6 +1598,7 @@
          inFlightSave.fingerprint は既に v2hash（= outHash）に refine 済みなので触らない。 */
       canonCtx = { id: id, rev: sRev, hash: String(outHash) };
       f697pClear(id, 'LANDED_CONTENT_EQUAL');
+      f697pNotifyLanded(id, sRev, String(outHash), (sendWrap && sendWrap.body && sendWrap.body.turns) ? sendWrap.body.turns.length : null);   /* ★fix802 A: 5 番目の LANDED 境界（LANDED_CONTENT_EQUAL）。landing semantics は変えず通知欠落のみを修正 */
       f697pFinish(id, 'LANDED_CONTENT_EQUAL', { serverRev: sRev, serverHashSeen: sHash.slice(0, 16),
                                                 fingerprint: String(outHash).slice(0, 16),
                                                 excluded: (cmp.excluded || []).slice(0) });
