@@ -43,7 +43,10 @@
 
   function ls(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return ls('v292Dfix852Off') === '1' || ls('v292DrrOff') === '1'; }
-  function on(){ if (off()) return false; return ls('v292Dfix852On') === '1'; }
+  /* ★RR-3 default ON(2026-09-15): 既定を ON にする。
+     未設定＝ON / '0'＝端末単位の opt-out / Off='1' と v292DrrOff='1' は従来どおり最優先。
+     旧 On='1' も引き続き有効。語彙・軸・上限・出力文面は 1 文字も変えていない。 */
+  function on(){ if (off()) return false; return ls('v292Dfix852On') !== '0'; }
   function str(v){ return String(v == null ? '' : v); }
   function store(){ try { return G.__v292Dfix77Store || {}; } catch(e){ return {}; } }
 
