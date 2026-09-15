@@ -93,7 +93,17 @@
     // fix822(START_RULES_V1・GPT 裁定 2026-09-06(20)): 開始ルール(毎turn・prio1)と開始時の状況(T0のみ・prio1)。
     // fix496/fix645 と同じ理由で正式 MARKER 登録。dropA/B/C/D のどれにも無いので認識後は生存してモデルへ届く。
     '【開始ルール】',
-    '【開始時の状況】'
+    '【開始時の状況】',
+    // ★fix459c(2026-09-15・②C1 裁定 FIX459_AUTHORITY_MARKER_COMPAT = CONFIRMED_EXISTING_BUG / FIX_GO):
+    // fix333 の authorityBlock が出す見出し。未登録だったため未知マーカーとして直前ブロックへ吸収され、
+    // 実測ではその吸収先が dropD の【描写の作り方（説明せず"見せる"・最優先）】だったため
+    // **ブロックごと道連れ削除**されていた(L79-81 の fix496 と同型事故)。
+    // 既存バグであり RR-1 由来の regression ではない(authorityBlock が常に空だったため表面化しなかった)。
+    // 文字列は fix333 の literal と runtime 出力の両方に対して byte 一致を確認済み
+    // (18 chars / 50 B / sha256[:16]=0fcea02558f23ee5、括弧は半角)。
+    // dropA/B/C/D のどれにも無いので、認識させれば生存してモデルへ届く。
+    // prefix/fuzzy/generalized 化はしない。parser 本体は不触。追加はこの 1 件のみ。
+    '【身体状態・正史(絶対に覆らない)】'
   ];
 
   function detOn459(){ try { return localStorage.getItem('v292Dfix190Det') === '1'; } catch(e){ return false; } }
