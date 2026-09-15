@@ -15,7 +15,16 @@
   function npcAutonomyOn(){ try{ var v=localStorage.getItem('v292Dfix333Npc'); return v!=='0' && v!=='off'; }catch(e){ return true; } }
   function getS(){ try{ return window.S || (0,eval)('S') || null; }catch(e){ return null; } }
   function store(){ try{ return window.__v292Dfix77Store||{}; }catch(e){ return {}; } }
-  function heroName(){ try{ var S=getS(); return (S&&S.cast&&S.cast.hero&&S.cast.hero.name)||''; }catch(e){ return ''; } }
+  /* ★fix333n(2026-09-15・NPC_AUTONOMY_LANE / RC-1): hero に名前が無い story では
+     従来 heroName() が '' を返していたため `n !== hero` の除外が効かず、
+     **主人公が NPC として前面化候補に入っていた**（live 実測: 12 turn 中 6 turn で fg に主人公、
+     前面化枠の 28% を消費し rotation の公平指標も汚染）。
+     features.js が既に使っている確立した規約 `hero.name || '主人公'` に合わせるだけ。
+     名前つき hero では戻り値が変わらない＝挙動は 1 バイトも変わらない。
+     OFF: v292Dfix333HeroLabelOff='1' で従来どおり '' を返す。 */
+  function heroLabelOff(){ try{ return localStorage.getItem('v292Dfix333HeroLabelOff')==='1'; }catch(e){ return false; } }
+  function heroName(){ try{ var S=getS(); var n=(S&&S.cast&&S.cast.hero&&S.cast.hero.name)||'';
+    if(n) return n; return heroLabelOff()?'':'主人公'; }catch(e){ return ''; } }
   function turnNow(){ try{ var S=getS(); return (S&&S.turns)?S.turns.length:0; }catch(e){ return 0; } }
   function presentNames(){
     try{ var S=getS(); if(!S||!S.cast) return Object.keys(store());
@@ -202,6 +211,7 @@
           if(authority && sys.indexOf('【身体状態・正史')<0) sys=sys+'\n\n'+authority;
           if(npcAutonomyOn()){
             var sel=selectForeground(p.states, p.text, p.turnNum);
+            try{ p.__sel=sel; }catch(_ps){}   /* ★fix333n(RC-2): 品質分析で再計算せず再利用する */
             var fb=foregroundBlock(sel);
             if(fb && sys.indexOf('【この一手で前面に出す')<0) sys=sys+'\n\n'+fb;
           }
@@ -223,7 +233,17 @@
       }catch(e){ try{console.warn(TAG,'api wrap err',e.message);}catch(_){} }
       try{
         if(p && npcAutonomyOn() && res && typeof res.text==='string'){
-          var _sel2=null; try{ _sel2=selectForeground(p.states, p.text, p.turnNum); }catch(_s){}
+          /* ★fix333n(RC-2): ここで selectForeground を呼び直すと 1 turn に 2 回走り、
+             (a) logRotation が 1 turn 2 件記録して rotation window が実質半分になる
+             (b) lull の __pool が倍速で進む
+             (c) __prevKarada は 1 回目で更新済みなので 2 回目は changed=0 となり、
+                 **実際に注入した fg とは別の選択**を品質分析していた
+                 （live 実測: window 14 件が 7 turn 分・全 turn が 2 エントリ）。
+             注入時の選択をそのまま使う。OFF: v292Dfix333SelOnceOff='1' で従来どおり呼び直す。 */
+          var _sel2=null;
+          try{ var _once=(localStorage.getItem('v292Dfix333SelOnceOff')!=='1');
+               _sel2=(_once && p.__sel!==undefined && p.__sel!==null) ? p.__sel
+                     : selectForeground(p.states, p.text, p.turnNum); }catch(_s){}
           var _budget=_sel2?_sel2.budget:2;
           var _hero=heroName();
           var _npcs=presentNames().filter(function(n){ return n && n!==_hero; });
