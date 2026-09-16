@@ -742,7 +742,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260916-ux3';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20260916-ux4';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -2536,7 +2536,7 @@ const UI = {
     document.getElementById('provNovelAI').style.display     = prov === 'novelai'     ? '' : 'none';
   },
 
-  openSettings() {
+  openSettings(reason) {
     document.getElementById('cfgProvider').value  = S.cfg.provider || 'anthropic';
     document.getElementById('cfgKey').value       = S.cfg.key      || '';
     document.getElementById('cfgOrKey').value     = S.cfg.orKey    || '';
@@ -2555,6 +2555,9 @@ const UI = {
     document.getElementById('cfgTone').value  = S.scene.tone || '';
     this._renderNpcList();
     document.getElementById('settingsOv').classList.add('open');
+    /* ★v292Dfix854: APIキー未設定が理由で開いた時だけ ⚙システム タブを初期選択にする
+       (通常の手動 open は reason 無し = 従来どおり)。詳細は v292Dfix854-firstrun-key-tab.js */
+    if (reason === 'key-missing') { try { window.__v292Dfix854KeyMissing = Date.now(); if (window.__v292Dfix854) window.__v292Dfix854.focusSystemTab(); } catch(e){} }
   },
 
   closeSettings() { document.getElementById('settingsOv').classList.remove('open'); },
@@ -2806,7 +2809,7 @@ const G = {
     });
     if (S.turns.length > 0)    { UI.renderAll(); UI.renderBranches(S.scene.branches); }
     else if (S.cfg.key || S.cfg.naiKey || S.cfg.orKey) { UI._showIntro(); }
-    else                                { setTimeout(() => UI.openSettings(), 100); }
+    else                                { setTimeout(() => UI.openSettings('key-missing'), 100); }   /* ★v292Dfix854 */
   },
 
   startScene() {
@@ -3006,7 +3009,7 @@ const G = {
     }
     const prov = S.cfg.provider || 'anthropic';
     const hasKey = prov === 'novelai' ? S.cfg.naiKey : prov === 'openrouter' ? S.cfg.orKey : S.cfg.key;
-    if (!hasKey) { UI.setStatus(`APIキーが未設定です`, true); UI.openSettings(); return; }
+    if (!hasKey) { UI.setStatus(`APIキーが未設定です`, true); UI.openSettings('key-missing'); return; }   /* ★v292Dfix854 */
 
     inputEl.value = ''; inputEl.style.height = 'auto';
     UI.setLoading(true); UI.renderBranches([]);
@@ -4487,6 +4490,7 @@ G.init();
 <script src="v292Dfix270-topbar-ui.js?cb=v292Dfix270"></script>
 <script src="v292Dfix274-build-flag-guard.js?cb=v292Dfix274"></script>
 <script src="v292Dfix275-settings-tabs.js?cb=v292Dfix275"></script>
+<script src="v292Dfix854-firstrun-key-tab.js?cb=20260916-ux4"></script>
 <script src="v292Dfix277-quasi-pack.js?cb=20260913-f537pt2"></script>
 <script src="v292Dfix288-tooltips.js?cb=20260913-dsmrc1"></script>
 <script src="v292Dfix290-mobile.js?cb=v292Dfix290"></script>

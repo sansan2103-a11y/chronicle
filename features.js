@@ -10783,9 +10783,39 @@
 
   function fallback(){ var U = getUI(); if (U && typeof U.__origRandomFill === 'function') U.__origRandomFill(); }
 
+  /* ===================================================================
+     ★v292Dfix855(2026-09-16): 「AI失敗を成功表示しない」 — fix117 側。
+     真因(runtime 実測 / gold/DS_UX_FIRSTRUN_P0P1_SWEEP_v1.md §B):
+       fallback() は元の UI.randomFill を呼び、その **最終行が**
+       UI.setStatus('🎲 ランダム生成しました。…') である。
+       fix117 は失敗文言を出した **直後に** fallback() を呼ぶので、その成功文言に上書きされる。
+       実測の setStatus 列: [ERR]AI生成に失敗→固定ランダムで埋めます → [ok]🎲 ランダム生成しました。
+       ＝ ユーザーには **AI 失敗が成功として** 見える。鍵なし経路は文言自体が無く同じ結果になる。
+     対処(最小・順序と文言だけ / fallback の挿入自体は削除しない):
+       fallback() を **先に** 実行し、そのあとで状況を setStatus する。
+     OFF: localStorage v292Dfix855Off='1' → 従来の順序・文言へ戻る。 */
+  function f855Off(){ try { return localStorage.getItem('v292Dfix855Off') === '1'; } catch(e){ return false; } }
+  var F855_TAIL = 'ローカルの雛形を入力しました。';
+  function f855Reason(why){
+    var w = String(why == null ? '' : why);
+    if (/^HTTP 40[13]$/.test(w))               return 'APIキーが未設定または無効です。';
+    if (/^HTTP /.test(w))                      return 'AIサーバがエラーを返しました(' + w + ')。';
+    if (/parse/i.test(w))                      return 'AIの応答を解釈できませんでした。';
+    return 'AI生成に失敗しました。';
+  }
+  function f855Fail(msgLegacy, msgNew){
+    if (f855Off()){ setStatus(msgLegacy, true); fallback(); return; }
+    fallback();                       /* ★先に雛形を入れ… */
+    setStatus(msgNew, true);          /* ★…その後に状況を出す(旧経路の成功文言に上書きされない) */
+  }
+
   function aiGenerate(){
     var st = getS(); var cfg = (st && st.cfg) || {};
-    if (cfg.provider !== 'openrouter' || !cfg.orKey){ fallback(); return; }
+    if (cfg.provider !== 'openrouter' || !cfg.orKey){
+      f855Fail('', (!cfg.orKey ? 'AI生成は使えません(OpenRouter APIキーが未設定)。'
+                               : 'AI生成は OpenRouter 選択時のみ利用できます。') + F855_TAIL);
+      return;
+    }
     var filled = {};
     [['主人公名','cfgHName'],['主人公の説明','cfgHDesc'],['世界観','cfgLore'],['場所','cfgLoc'],['目的','cfgObj'],['雰囲気','cfgTone']].forEach(function(p){ var e = $(p[1]); if (e && e.value.trim()) filled[p[0]] = e.value.trim(); });
     // v292Dfix117b: 世界観(lore)が入力済みなら、それを最優先の前提にして登場人物・場所・
@@ -10828,10 +10858,10 @@
           var sc = parseJson(txt);
           if (!sc) throw new Error('parse');
           applyScenario(sc, capN);
-        } catch(e){ setStatus('AI生成に失敗→固定ランダムで埋めます', true); fallback(); }
+        } catch(e){ f855Fail('AI生成に失敗→固定ランダムで埋めます', f855Reason(e && e.message) + F855_TAIL); }
       };
-      xhr.onerror = function(){ setStatus('通信失敗→固定ランダムで埋めます', true); fallback(); };
-      xhr.ontimeout = function(){ setStatus('生成タイムアウト→固定ランダムで埋めます', true); fallback(); };
+      xhr.onerror = function(){ f855Fail('通信失敗→固定ランダムで埋めます', 'AIに接続できませんでした。' + F855_TAIL); };
+      xhr.ontimeout = function(){ f855Fail('生成タイムアウト→固定ランダムで埋めます', 'AI生成がタイムアウトしました。' + F855_TAIL); };
       xhr.send(JSON.stringify({ model: /* v292Dm3: 退役 ID literal を廃し model routing を registry へ集約。resolve('') は primary を返すので || フォールバックは不要。legacy 保存値もここで effective mapping される（S1〜S5 と同値）。registry 不在時は従来どおり保存値そのまま=fail-open。 */ (window.__CHR_MODEL_REGISTRY ? window.__CHR_MODEL_REGISTRY.resolve(cfg.orModel) : (cfg.orModel || '')), temperature: 1.05, max_tokens: 1200, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] }));
     } catch(e){ fallback(); }
   }

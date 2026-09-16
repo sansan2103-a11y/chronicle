@@ -351,12 +351,37 @@
     }
     return false;
   }
+  /* ===================================================================
+     ★v292Dfix855(2026-09-16): 「AI失敗を成功表示しない」。
+     真因(runtime 実測 / gold/DS_UX_FIRSTRUN_P0P1_SWEEP_v1.md):
+       ・legacy() は元の UI.randomFill を呼ぶが、その **最終行が**
+         UI.setStatus('🎲 ランダム生成しました。内容を確認して保存してください。') である。
+       ・onFail は「AI生成に失敗しました。固定パターンで埋めます。」を出した **直後に**
+         legacy() を呼ぶので、その成功文言に **上書きされる**(実測: 表示は成功文に化ける)。
+       ・鍵が無い/OpenRouter 以外のときの短絡 legacy() は status を一切出さないため、
+         ローカル雛形しか動いていないのに「🎲 ランダム生成しました」とだけ表示される。
+     対処(最小・順序と文言だけ):
+       ・legacy() を **先に** 実行し、そのあとで状況を setStatus する(上書きされない)。
+       ・ローカル雛形の挿入自体は **削除しない**(空フォームで詰まらない親切さを維持)。
+       ・原因が既存情報だけで安全に特定できる時(HTTP 401/403・鍵未設定・provider 不一致)は明示する。
+     OFF: localStorage v292Dfix855Off='1' → 従来の順序・文言へ戻る。 */
+  function f855Off(){ try { return localStorage.getItem('v292Dfix855Off') === '1'; } catch(e){ return false; } }
+  function f855Reason(why){
+    var w = String(why == null ? '' : why);
+    if (/^HTTP 40[13]$/.test(w))                 return 'APIキーが未設定または無効です。';
+    if (/^HTTP /.test(w))                        return 'AIサーバがエラーを返しました(' + w + ')。';
+    if (/timeout|abort|network|send/i.test(w))   return 'AIに接続できませんでした。';
+    return 'AI生成に失敗しました。';
+  }
+  var F855_TAIL = 'ローカルの雛形を入力しました。';
+
   function onFail(fields, why){
     try { console.warn(TAG, 'fail:', why); } catch(e){}
     if (!hasSeed(fields)){
       // 種が皆無 → 空フォームで詰まないよう従来の固定ランダムへ退避
-      setStatus('AI生成に失敗しました。固定パターンで埋めます。', true);
-      legacy();
+      if (f855Off()){ setStatus('AI生成に失敗しました。固定パターンで埋めます。', true); legacy(); return; }
+      legacy();                                                   /* ★fix855: 先に退避を実行し… */
+      setStatus(f855Reason(why) + F855_TAIL, true);               /* ★…その後に状況を出す(旧経路の成功文言に上書きされない) */
       return;
     }
     // 種がある → 何も書かない(定型文で種を汚さない)。入力はそのまま。
@@ -374,7 +399,13 @@
       return;
     }
     var st = getS(), cfg = (st && st.cfg) || {};
-    if (cfg.provider !== 'openrouter' || !cfg.orKey){ legacy(); return; }
+    if (cfg.provider !== 'openrouter' || !cfg.orKey){
+      if (f855Off()){ legacy(); return; }
+      legacy();                                                   /* ★fix855: 雛形挿入は従来どおり */
+      setStatus((!cfg.orKey ? 'AI生成は使えません(OpenRouter APIキーが未設定)。'
+                            : 'AI生成は OpenRouter 選択時のみ利用できます。') + F855_TAIL, true);
+      return;
+    }
 
     setStatus('🎲 書いた内容から、空いている欄をAIが埋めています…（数秒）');
     request(p, function(err, txt){
