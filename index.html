@@ -696,8 +696,8 @@
      ★起動時の最初の body 書込(v100-patch fixProviderCfg)より前に居る必要があるため head。
      ★fix724 で既定 ON。kill switch=v292Dfix705Off=1 のみ（On キーは効かない） -->
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
-<script src="v292Dfix859-story-session.js?cb=20260916-sp1"></script>
-<script src="v292Dfix705-canonical-read-gate.js?cb=20260916-sp1"></script>
+<script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
+<script src="v292Dfix705-canonical-read-gate.js?cb=20260916-sp2"></script>
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
@@ -744,7 +744,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260916-sp1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20260916-sp2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4124,7 +4124,7 @@ G.init();
      default OFF (opt-in=v292Dfix803On / kill=v292Dfix803Off / story=v292Dfix803Story)。fix802 の fire 末尾から onFire で呼ばれる。
      timer 0 / retry 0 / 新 write path 0 / localStorage 書込は fix793.materialize() 経由の v292Dmem1_slot_<sid> のみ -->
 <script src="v292Dfix803-auto-materialize.js?cb=20260914-ge3f803"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20260916-sp1"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20260916-sp2"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
      OFF=v292Dfix729Off / 検証口=window.__v292Dfix729 -->
 <script src="v292Dfix729-title-sync.js?cb=20260909-fix842"></script>
@@ -4132,10 +4132,10 @@ G.init();
 <!-- v292Dfix846: access gate(401/403)の告知。UIのみ/read-only observer/wrapper無し/storage write 0。
      OFF=v292Dfix846Off / 検証口=window.__v292Dfix846 -->
 <script src="v292Dfix846-access-gate-notice.js?cb=20260914-fix846"></script>
-<script src="v292Dfix700-nonauthoritative-mirror.js?cb=20260916-sp1"></script>
-<script src="v292Dfix702-authority-cutover.js?cb=20260916-sp1"></script>
+<script src="v292Dfix700-nonauthoritative-mirror.js?cb=20260916-sp2"></script>
+<script src="v292Dfix702-authority-cutover.js?cb=20260916-sp2"></script>
 <!-- ★fix860 STORY_PASSCODE: unlock dialog / passcode 管理 UI（supplier と fix697 の狭い口に依存） -->
-<script src="v292Dfix860-story-unlock-ui.js?cb=20260916-sp1"></script>
+<script src="v292Dfix860-story-unlock-ui.js?cb=20260916-sp2"></script>
 <!-- v292Dfix573: 主人公が「無言で消える」のを見張る。
      名前が「あった→無くなった」書込を捉え、旧値の控えを取り、その場で知らせる。
      書込は止めない・自動復元もしない。OFF=v292Dfix573Off -->

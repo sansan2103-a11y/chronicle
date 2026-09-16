@@ -27,7 +27,7 @@
   function gate() { var F = window.__v292Dfix705; return (F && typeof F.classify === 'function') ? F : null; }
 
   var stats = { dialogsOpened: 0, unlockOk: 0, unlockFail: 0, lockedOut: 0,
-                reclassify: 0, tokensStored: 0, tokensDropped: 0,
+                reclassify: 0, reloads: 0, reloadSuppressed: 0, stuckShown: 0, tokensStored: 0, tokensDropped: 0,
                 setOk: 0, changeOk: 0, clearOk: 0, mismatchBlocked: 0, autoUnlockFail: 0 };
   var openFor = null;            /* ★duplicate dialog 0 のための単一性ガード */
   var reclassifiedFor = {};      /* ★sid ごとに再分類は 1 回だけ */
@@ -186,6 +186,9 @@
         try { stored = window.__chronicleStorySessionSet(sid, jsonOf(r).storySession) === true; } catch (e) {}
         if (!stored) { err.textContent = 'この端末でパスコードの状態を保存できませんでした。'; return; }
         stats.tokensStored++;
+        /* ★ここで reload マークを消してはいけない。unlock 成功 → reload → まだ locked →
+           unlock 成功 → reload … という**ループそのもの**を許してしまう。
+           マークは「gate が実際に解決したページ」でだけ消す（下の clearMarkIfResolved）。 */
         closeDialog();
         if (opts && typeof opts.onUnlocked === 'function') { try { opts.onUnlocked(sid); } catch (e) {} }
         else reclassifyOnce(sid);
@@ -196,15 +199,74 @@
     return true;
   }
 
-  /* ★getstory を exactly once だけやり直す。fix705 の classify を 1 回呼ぶだけで、
-     HOLD 解除も materialize も既存経路が 1 回だけ行う（ここでは何も解除しない）。 */
+  /* ★getstory を exactly once だけやり直す。
+     ★★fix862（live E2E で発見・修正）: fix705 の classify() は
+     `if (classifyStarted) return cb({skipped:'ALREADY_RAN'})` で **document あたり 1 回**しか
+     走らない。unlock 後にそのまま呼んでも何も起きず、★**正しい passcode を入れたのに
+     物語が読み込まれず WRITE HOLD も張られたまま**になる（live で実測）。
+     → classify() を 1 回試し、`ALREADY_RAN`（= 既に判定済み）なら **このページを 1 回だけ
+     reload する**。token は sessionStorage にあるので、reload 後は通常経路がそのまま
+     getstory 1 回 → HOLD 解除 1 回 → materialize 1 回 を行う（live で実測確認済み）。
+     ★reload ループ防止: sid ごとに 1 回だけ。2 回目は reload せずエラー表示に戻す。 */
+  var RELOAD_FLAG = 'chr6_sp_reloaded_';
+  function reloadedAlready(sid) {
+    try { return sessionStorage.getItem(RELOAD_FLAG + sid) === '1'; } catch (e) { return false; }
+  }
+  function markReloaded(sid) {
+    try { sessionStorage.setItem(RELOAD_FLAG + sid, '1'); } catch (e) {}
+  }
+  function clearReloadMark(sid) {
+    try { sessionStorage.removeItem(RELOAD_FLAG + sid); } catch (e) {}
+  }
   function reclassifyOnce(sid) {
     if (reclassifiedFor[sid]) return false;            /* ★duplicate materialization 0 */
     var F = gate();
     if (!F) return false;
     reclassifiedFor[sid] = true;
     stats.reclassify++;
-    try { F.classify(function () {}); } catch (e) {}
+    var res = null;
+    try { F.classify(function (r) { res = r; }); } catch (e) { res = { skipped: 'THREW' }; }
+    /* classify が実際に走ったならここで終わり（HOLD 解除も materialize も既存経路が行う） */
+    if (!res || !res.skipped) return true;
+    if (res.skipped !== 'ALREADY_RAN') return true;    /* restore-hold 等は既存経路に任せる */
+    if (reloadedAlready(sid)) {                        /* ★2 回目は reload しない */
+      stats.reloadSuppressed++;
+      /* ★★acceptance U-27f で発見: ここで黙って戻ると、unlock は成功しているのに
+         dialog は閉じ、物語も開かず、★**画面に何も無い**状態で放置される。
+         裁定「failed reload 時は無限 reload せず、error / locked UI へ留まる」に従い、
+         ★**説明つきの停止 UI** を出す（再読み込みは人の操作でだけ行う＝ループにしない）。 */
+      openStuck(sid);
+      return false;
+    }
+    markReloaded(sid);
+    stats.reloads++;
+    try { location.reload(); } catch (e) {}
+    return true;
+  }
+
+  /* ★自動 reload を使い切った後の停止 UI。★ここから自動で reload はしない。 */
+  function openStuck(sid) {
+    if (off() || !sid) return false;
+    stats.stuckShown++;
+    var wrap = buildDialog(
+      '<h2>この物語を開けませんでした</h2>' +
+      '<p>パスコードは確認できましたが、この画面では本文を読み込めませんでした。' +
+      'お手数ですが再読み込みするか、一覧へ戻ってからもう一度開いてください。</p>' +
+      '<div class="sp-err" id="sp-err">自動での再試行は行いません。</div>' +
+      '<div class="sp-row">' +
+      '<button class="sp-primary" id="sp-reload">再読み込み</button>' +
+      '<button id="sp-back">一覧へ戻る</button>' +
+      '</div>');
+    openFor = sid;
+    wrap.querySelector('#sp-reload').onclick = function () {
+      /* ★人が押したときだけ。押した時点で mark を外し、次の 1 回を許す（ループにはならない）。 */
+      clearReloadMark(sid);
+      try { location.reload(); } catch (e) {}
+    };
+    wrap.querySelector('#sp-back').onclick = function () {
+      closeDialog();
+      try { location.href = 'home.html'; } catch (e) {}
+    };
     return true;
   }
 
@@ -345,13 +407,22 @@
   // (C) HOME の lock badge — ★presentation のみ。ここで security を成立させない。
   //     locked story をクリックしたら通常どおり遷移し、server 409 → play 側 unlock で成立する。
   // =====================================================================
+  /* ★★fix863（live で発見・修正）: HOME の実 DOM は `<div class="card" data-id="<storyId>">` で、
+     `data-story-id` **ではない**（live 実測: data-id 139 件 / data-story-id 0 件）。
+     jsdom の acceptance では私が作った合成 DOM に `data-story-id` を使っていたため気づけなかった。
+     → 両方の属性を受け付ける。 */
+  function findCard(root, id) {
+    var safe = String(id).replace(/["\\]/g, '');
+    return root.querySelector('[data-story-id="' + safe + '"]') ||
+           root.querySelector('[data-id="' + safe + '"]');
+  }
   function decorate(root, stories) {
     if (off() || !root || !stories || !stories.length) return 0;
     var n = 0;
     for (var i = 0; i < stories.length; i++) {
       var st = stories[i];
       if (!st || !st.locked || !st.id) continue;
-      var el = root.querySelector('[data-story-id="' + String(st.id).replace(/"/g, '') + '"]');
+      var el = findCard(root, st.id);
       if (!el || el.querySelector('.chr6-lock-badge')) continue;
       var b = document.createElement('span');
       b.className = 'chr6-lock-badge';
@@ -364,10 +435,65 @@
     return n;
   }
 
+  /* ★HOME だけで動く自動配線。★security はここに一切依存しない（badge は presentation のみ）。
+     locked story をクリックしても navigation を奪わず、play 側の 409 → unlock で成立する。 */
+  var homeRows = null, homeObs = null, homeRuns = 0;
+  function homeRoot() {
+    return document.querySelector('.grid') || document.body;
+  }
+  function isHomePage() {
+    /* fix705（play 側の read gate）が居ないページ = HOME。?story= も持たない。 */
+    return !window.__v292Dfix705 && !!document.querySelector('[data-id],[data-story-id]');
+  }
+  function paint() {
+    if (!homeRows || !homeRows.length) return 0;
+    homeRuns++;
+    return decorate(homeRoot(), homeRows);
+  }
+  function autoDecorateHome() {
+    if (off() || homeObs) return false;
+    if (!isHomePage()) return false;
+    var W = port();
+    if (!W || typeof W.storyLockList !== 'function') return false;
+    W.storyLockList(function (rows) {
+      if (!rows) return;
+      homeRows = rows.filter(function (r) { return r.locked; });
+      if (!homeRows.length) return;
+      paint();
+      /* grid は再描画されうるので、再描画のたびに塗り直す（idempotent） */
+      try {
+        homeObs = new MutationObserver(function () { paint(); });
+        homeObs.observe(homeRoot(), { childList: true, subtree: true });
+      } catch (e) {}
+    });
+    return true;
+  }
+  /* ★reload マークの解除は「この document で gate が実際に解決した」ときだけ。
+     ＝ token が効いて普通に読み込めたページ。ここで消しておけば、同じ tab で
+     もう一度 lock したときにも 1 回だけ reload できる。解決していないページでは消さない
+     （＝ reload ループを構造的に作らない）。 */
+  function clearMarkIfResolved() {
+    try {
+      var F = gate(); if (!F) return false;
+      var st = F.status(); if (!st || !st.storyId) return false;
+      if (st.state && st.state.resolved === true && !st.state.error) { clearReloadMark(st.storyId); return true; }
+    } catch (e) {}
+    return false;
+  }
+  function onReady() { setTimeout(function () { autoDecorateHome(); clearMarkIfResolved(); }, 900); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', onReady);
+  else onReady();
+
   window.__v292Dfix860 = {
     off: off,
     openUnlock: openUnlock, openSet: openSet, openChange: openChange,
-    clearPass: clearPass, decorate: decorate, close: closeDialog,
+    clearPass: clearPass, decorate: decorate, close: closeDialog, openStuck: openStuck,
+    autoDecorateHome: autoDecorateHome, findCard: findCard,
+    clearMarkIfResolved: clearMarkIfResolved,
+    reloadMark: function (sid) { return reloadedAlready(sid); },
+    homeInfo: function () { return { isHome: isHomePage(), rows: homeRows ? homeRows.length : null,
+      runs: homeRuns, observing: !!homeObs,
+      badges: document.querySelectorAll('.chr6-lock-badge').length }; },
     reclassifyOnce: reclassifyOnce,
     stats: function () { return JSON.parse(JSON.stringify(stats)); },
     /* 診断用。★passcode も token も返さない。 */

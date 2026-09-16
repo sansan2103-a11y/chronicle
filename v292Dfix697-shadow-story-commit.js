@@ -2595,6 +2595,25 @@
        ・request は exactly 1。自動 retry しない。
        ・f733 の side-port 分類（TYPE_R / TYPE_A）にこの 4 op は 1 つも該当しないので、
          docRevAuthority を無効化しない（実測: どちらの表にも無い）。 */
+    /* ★★fix861 STORY_PASSCODE: HOME の lock badge 用の **狭い read 口**。
+       fix751 / storyPassRequest と同じ方針で ★新 fetch 0 / 新 endpoint 0 / 新 auth 0。
+       ・op は 'listshadow' 固定。caller から op / payload を受け取らない。
+       ・返すのは ★**{id, locked} だけ**（title / snippet / rev / hash は落とす）。
+       ・request は exactly 1。自動 retry しない。localStorage も sessionStorage も書かない。
+       ・listshadow は SP_PROTECTED_OPS ではないので token は付かない（付ける必要も無い）。 */
+    storyLockList: function(cb){
+      cb = (typeof cb === 'function') ? cb : function(){};
+      postSaveOnce({ op: 'listshadow' }, function(r, err){
+        if (err || !r || r.status !== 200 || !r.j || !r.j.ok) { cb(null, err || 'LIST_FAIL'); return; }
+        var src = (r.j.stories && r.j.stories.length) ? r.j.stories : [];
+        var rows = [];
+        for (var i = 0; i < src.length; i++) {
+          var x = src[i] || {};
+          if (x.id) rows.push({ id: String(x.id), locked: !!x.locked });
+        }
+        cb(rows, null);
+      });
+    },
     storyPassRequest: function(payload, cb){
       var op = payload && payload.op;
       if (op !== 'storyunlock' && op !== 'storypassset'
