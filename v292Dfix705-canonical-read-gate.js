@@ -270,6 +270,17 @@
     /* ★fix757: 暫定 authority の document は STOP のまま留まってはいけない（未登録 id の
        ページに居座ると、以後の write は HOLD で全部落ちるだけ）。HOLD 継続のまま home へ戻す。 */
     if (provisional757()) toHome757('STOP:' + code);
+    /* ★★fix859/fix860 STORY_PASSCODE: 「この物語は passcode で保護されている」ときだけ、
+       UI へ 1 回通知する。★HOLD も write も retry も **1 行も変えない**（裁定: client 側に
+       追加の HOLD patch は作らない）。hook が居なければ完全に従来どおり。
+       ★404 や他の STOP を STORY_LOCKED として扱わない（errorCode を厳密に見る）。 */
+    try {
+      if (code === 'CAPABILITY_409' && state.errorCode === 'STORY_LOCKED'
+          && typeof window.__chronicleStoryLockedHook === 'function') {
+        window.__chronicleStoryLockedHook(STORY_ID, { reason: (extra && extra.reason) || null,
+                                                      errorCode: state.errorCode });
+      }
+    } catch (e) {}
     return r;
   }
 
@@ -388,7 +399,7 @@
     } catch(e){}
     return 'https://novel-proxy.sansan2103.workers.dev';
   }
-  function authHeaders(){
+  function authHeaders(payload){
     var h = { 'Content-Type': 'application/json' };
     try { var g = (window.__chronicleGoogleId && window.__chronicleGoogleId()) || ''; if (g) h['x-google-id'] = g; } catch(e){}
     try { var p = (lsg('v292ProxyPass') || '').replace(/^\s+|\s+$/g, ''); if (p) h['x-chronicle-pass'] = p; } catch(e){}
@@ -404,13 +415,22 @@
       }
       if (s837) h['x-chronicle-session'] = s837;
     } catch(e){}
+    /* ★★fix859 STORY_PASSCODE: story 単位の unlock token を付ける。
+       供給元は v292Dfix859-story-session.js **1 つだけ**（fix837 と同じ supplier パターン）。
+       ここは「payload を渡して、返ってきたら載せる」だけで、★token 管理は一切しない。
+       supplier が居ない / kill switch ON / その sid の token が無い → 何も足さない＝従来どおり。 */
+    try {
+      var t859 = (typeof window.__chronicleStorySessionFor === 'function')
+                 ? (window.__chronicleStorySessionFor(payload) || '') : '';
+      if (t859) h['x-chronicle-story-session'] = t859;
+    } catch (e) {}
     return h;
   }
   function isLoggedIn(){ var h = authHeaders(); return !!(h['x-google-id'] || h['x-chronicle-pass'] || h['x-chronicle-session']); }
   function post(payload, cb){
     var ac = null, timer = null;
     try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, TIMEOUT_MS); } catch(e){}
-    var opts = { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) };
+    var opts = { method: 'POST', headers: authHeaders(payload), body: JSON.stringify(payload) };
     if (ac) opts.signal = ac.signal;
     fetch(proxyUrl() + '/save', opts).then(function(res){
       return res.json().then(function(j){ return { status: res.status, j: j }; },

@@ -322,7 +322,7 @@
     } catch(e){}
     return '';
   }
-  function authHeaders(){
+  function authHeaders(payload){
     var h = { 'Content-Type': 'application/json' };
     var g = '';
     if (typeof window.__chronicleGoogleId === 'function'){
@@ -346,6 +346,15 @@
       }
       if (s837) h['x-chronicle-session'] = s837;
     } catch(e){}
+    /* ★★fix859 STORY_PASSCODE: story 単位の unlock token を付ける。
+       供給元は v292Dfix859-story-session.js **1 つだけ**（fix837 と同じ supplier パターン）。
+       ここは「payload を渡して、返ってきたら載せる」だけで、★token 管理は一切しない。
+       supplier が居ない / kill switch ON / その sid の token が無い → 何も足さない＝従来どおり。 */
+    try {
+      var t859 = (typeof window.__chronicleStorySessionFor === 'function')
+                 ? (window.__chronicleStorySessionFor(payload) || '') : '';
+      if (t859) h['x-chronicle-story-session'] = t859;
+    } catch (e) {}
     return h;
   }
   function isLoggedIn(){ var h = authHeaders(); return !!(h['x-google-id'] || h['x-chronicle-pass'] || h['x-chronicle-session']); }
@@ -2201,7 +2210,7 @@
       g781InFlight(id, localHash);                           /* ■fix781: 送信開始を durable 化（shadow 経路） */
       var ac = null, timer = null;
       try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, TIMEOUT_MS); } catch(e){}
-      var opts = { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) };
+      var opts = { method: 'POST', headers: authHeaders(payload), body: JSON.stringify(payload) };
       if (ac) opts.signal = ac.signal;
       fetch(proxyUrl() + '/save', opts).then(function(res){
         return res.json().then(function(j){ return { status: res.status, j: j }; });
@@ -2464,7 +2473,7 @@
     try { f733SidePortAttempt(body); } catch(e){}          /* ★fix733: 送信を試みた時点で invalidate */
     var ac = null, timer = null;
     try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, TIMEOUT_MS); } catch(e){}
-    var opts = { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) };
+    var opts = { method: 'POST', headers: authHeaders(body), body: JSON.stringify(body) };
     if (ac) opts.signal = ac.signal;
     fetch(proxyUrl() + '/save', opts).then(function(res){
       return res.json().then(function(j){ return { status: res.status, j: j }; },
@@ -2576,6 +2585,23 @@
     },
     /* fix587 が shadow op を出すための transport（endpoint/auth の owner を増やさない）。
        ★shadow op 以外は通さない。 */
+    /* ★★fix860 STORY_PASSCODE: passcode lifecycle 専用の **狭い** 口。
+       fix751 と同じ方針で、★**新 fetch 0 / 新 endpoint 0 / 新 auth 0**。
+       endpoint / auth / request は既存の postSaveOnce（単一実装）をそのまま共有する。
+       ・通すのは storyunlock / storypassset / storypassclear / storypassstatus の 4 op だけ。
+         protected op（getstory 等）はここを通さない（shadowRequest / getStoryV2Once の領分）。
+       ・storypassset(変更) と storypassclear は valid token が要るが、token の添付は
+         authHeaders → fix859 supplier が payload.id を見て行う。★ここで token を触らない。
+       ・request は exactly 1。自動 retry しない。
+       ・f733 の side-port 分類（TYPE_R / TYPE_A）にこの 4 op は 1 つも該当しないので、
+         docRevAuthority を無効化しない（実測: どちらの表にも無い）。 */
+    storyPassRequest: function(payload, cb){
+      var op = payload && payload.op;
+      if (op !== 'storyunlock' && op !== 'storypassset'
+          && op !== 'storypassclear' && op !== 'storypassstatus'){ cb(null, 'OP_NOT_ALLOWED'); return; }
+      if (!payload.id){ cb(null, 'NO_STORY_ID'); return; }
+      postSaveOnce(payload, cb);
+    },
     shadowRequest: function(payload, cb){
       var op = payload && payload.op;
       /* ★★fix720(STEP4D/RULING28): deletecanonical を allow-list に追加。
