@@ -123,6 +123,13 @@
           padding:10px 12px;overflow:visible}
     aside #ttlLib, aside #navs, aside #ttlRecent, aside #recent{display:none}
     aside #ttlData{margin:12px 0 6px}
+    /* ★ux1(2026-09-15 / UX_UI_PRODUCT_POLISH_LANE Phase 1):
+       .sync は white-space:nowrap なので、未ログイン時の長い警告文が
+       折り返せず、390px 端末で document 幅を 778px へ押し広げて
+       HOME 全体が横スクロールする（runtime 実測で超過要素は #sync のみ、
+       #sync を隠すと docW が 390 へ戻ることを確認済み）。
+       携帯幅だけ折り返しを許可する。PC / iPad 幅は一切変えない。 */
+    .sync{white-space:normal;overflow-wrap:anywhere;line-height:1.45;text-align:right}
     .newbtn{padding:10px;font-size:13px}
     .data{flex-direction:row;flex-wrap:wrap;gap:8px}
     .data button{flex:1 1 calc(50% - 4px);text-align:center;padding:10px 8px}
