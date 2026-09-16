@@ -46,6 +46,10 @@
     if (el.id === 'v243-toggle') return true;
     if (el.id === 'topStatus') return true;
     if (el.id === 'v30-topbar-btn') return true;        // 📁 セーブ
+    if (el.id === 'v527-home') return true;             // ★ux2(2026-09-16): 🏠 ホーム＝物語から出る唯一の導線。
+                                                        //   fix527 が生成するが allowlist に無く、携帯の折りたたみ時に
+                                                        //   display:none になって HOME へ戻れなくなっていた（390px 実測）。
+                                                        //   allowlist への足し算のみ。collapse 機構自体は変えない。
     if (el.tagName === 'H1') return true;               // ◈ CHRONICLE
     var t = (el.textContent || '').replace(/\s+/g, '');
     if (/^👥?キャラ$/.test(t)) return true;             // 👥 キャラ
