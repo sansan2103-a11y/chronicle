@@ -1,6 +1,15 @@
 name: chronicle-release-gate
 
-# Chronicle Release Pipeline V1.2 (Pages).
+# Chronicle Release Pipeline V1.2.1 (Pages).
+#
+# V1.2.1 CHANGE - `dry_run: true` NO LONGER CLAIMS. In V1.2 the claim step was
+# unguarded, so a manual dry run took a real 30-minute lease on the oldest
+# queued row and then reported nothing, stranding it and consuming the queue's
+# single in-flight slot (docs/PIPELINE_V1.md section 11b). The claim step now
+# carries `if: inputs.dry_run != true`, and a sibling step loads the checked-in
+# synthetic fixture under `pipeline/fixtures/dryrun/` into the same
+# ${RUNNER_TEMP} paths, WITHOUT a claim_token. A dry run therefore exercises the
+# validator end to end (--no-commit) and never touches the queue.
 #
 # FABLE_BUILD -> D1 QUEUE -> [release-gate shim] -> [this gate] -> PAGES_DEPLOY -> FABLE_VERIFY
 #
@@ -66,6 +75,9 @@ jobs:
       # ---------------------------------------------------------------------
       - name: Claim a release
         id: claim
+        # V1.2.1: a dry run must not consume a queue row. The fixture step
+        # below is the dry-run counterpart of this one.
+        if: inputs.dry_run != true
         env:
           RELEASE_GATE_URL: ${{ secrets.RELEASE_GATE_URL }}
           RELEASE_GATE_SECRET: ${{ secrets.RELEASE_GATE_SECRET }}
@@ -139,6 +151,54 @@ jobs:
           node "${RUNNER_TEMP}/claim.mjs"
 
       # ---------------------------------------------------------------------
+      # 1b. DRY RUN ONLY (V1.2.1). The counterpart of the claim step.
+      #
+      #     It performs NO network call at all: no /health, no /claim, no queue
+      #     row, no lease, and - deliberately - no claim_token file, so nothing
+      #     downstream can report an outcome even if a later guard were removed.
+      #     It writes the checked-in synthetic fixture to exactly the paths the
+      #     claim step writes and sets exactly the outputs the claim step sets.
+      #
+      #     `baseCommit` is the one value a checked-in fixture cannot know: the
+      #     branch moves. It is rewritten here to the commit this job checked
+      #     out, and manifestSha256 recomputed over the rewritten object with
+      #     the validator's own canonical serializer, so the fixture reaches
+      #     exit 0 under --no-commit instead of failing base-commit (exit 11).
+      #
+      #     `pipeline/fixtures/**` is NOT writable by a normal release:
+      #     PIPELINE_ALLOW_RE in validate_and_apply.mjs admits only
+      #     pipeline/PROBE.md and pipeline/probes/<name>. Only a pipeline-admin
+      #     push can change these fixture bytes.
+      # ---------------------------------------------------------------------
+      - name: Dry run - load the checked-in fixture instead of claiming
+        id: dryrun
+        if: inputs.dry_run == true
+        run: |
+          set -euo pipefail
+          cat > "${RUNNER_TEMP}/dryrun.mjs" <<'MJS'
+          import fs from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const tmp = process.env.RUNNER_TEMP;
+          const repo = process.cwd();
+          const dir = `${repo}/pipeline/fixtures/dryrun`;
+          const { manifestDigest } = await import(`${repo}/pipeline/validate_and_apply.mjs`);
+
+          const m = JSON.parse(fs.readFileSync(`${dir}/manifest.json`, 'utf8'));
+          m.baseCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+          m.manifestSha256 = manifestDigest(m);
+          fs.writeFileSync(`${tmp}/manifest.json`, JSON.stringify(m));
+          fs.copyFileSync(`${dir}/payload.json`, `${tmp}/chunks.json`);
+          // No capability is minted for a dry run, so none is written.
+          fs.rmSync(`${tmp}/claim_token`, { force: true });
+
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,
+            'found=true\nrelease_id=dryrun-fixture\nkind=pages\nexit_code=0\n');
+          console.log('dry run - the queue was NOT touched (no claim request was sent)');
+          console.log(`fixture ${m.releaseId} (kind=${m.kind}) against baseCommit ${m.baseCommit}`);
+          MJS
+          node "${RUNNER_TEMP}/dryrun.mjs"
+
+      # ---------------------------------------------------------------------
       # 2. Download the payload chunks and verify each one against the index
       #    before handing them to the validator.
       # ---------------------------------------------------------------------
@@ -206,7 +266,9 @@ jobs:
       # ---------------------------------------------------------------------
       - name: Validate and apply
         id: apply
-        if: steps.claim.outputs.found == 'true' && steps.payload.outputs.exit_code == '0'
+        # V1.2.1: two mutually exclusive producers. A real run must have claimed
+        # AND downloaded the payload; a dry run gets both from the fixture step.
+        if: (steps.claim.outputs.found == 'true' && steps.payload.outputs.exit_code == '0') || steps.dryrun.outputs.found == 'true'
         continue-on-error: true
         env:
           DRY_RUN: ${{ inputs.dry_run }}
@@ -335,10 +397,12 @@ jobs:
         # shell body by `${{ }}`. Every value arrives as an environment variable,
         # which the shell never re-parses.
         env:
-          FOUND: ${{ steps.claim.outputs.found }}
-          RID: ${{ steps.claim.outputs.release_id }}
-          KIND: ${{ steps.claim.outputs.kind }}
-          YEXIT: ${{ steps.payload.outputs.exit_code }}
+          # V1.2.1: `a || b` picks the first non-empty value. Exactly one of the
+          # claim step and the fixture step runs, so this is unambiguous.
+          FOUND: ${{ steps.claim.outputs.found || steps.dryrun.outputs.found }}
+          RID: ${{ steps.claim.outputs.release_id || steps.dryrun.outputs.release_id }}
+          KIND: ${{ steps.claim.outputs.kind || steps.dryrun.outputs.kind }}
+          YEXIT: ${{ steps.payload.outputs.exit_code || steps.dryrun.outputs.exit_code }}
           VEXIT: ${{ steps.apply.outputs.exit_code }}
           PEXIT: ${{ steps.push.outputs.exit_code }}
           PVERIFY: ${{ steps.push.outputs.push_verify }}
@@ -352,7 +416,7 @@ jobs:
           PVERIFY="${PVERIFY:-}"; OUTCOME="${OUTCOME:-}"
           REPORT_STATUS="${REPORT_STATUS:-}"; DRY_RUN="${DRY_RUN:-false}"
           {
-            echo "## Chronicle release gate (V1.1)"
+            echo "## Chronicle release gate (V1.2.1)"
             echo ""
             echo "| field | value |"
             echo "| --- | --- |"
@@ -382,7 +446,13 @@ jobs:
           {
             echo "### Queue state"
             echo ""
-            if [ "${FOUND:-false}" != "true" ]; then
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "- **dry run - the queue was NOT touched.** No \`/claim\` was sent, no"
+              echo "  row changed state, no lease was taken and no token was minted."
+              echo "- The validator ran \`--no-commit\` against the checked-in fixture"
+              echo "  \`pipeline/fixtures/dryrun/\`, rebased onto this run's HEAD."
+              echo "- Nothing was committed, pushed or reported."
+            elif [ "${FOUND:-false}" != "true" ]; then
               echo "- Nothing claimable. No queue row changed."
             elif [ "${OUTCOME:-}" = "applied" ]; then
               echo "- \`${RID}\` APPLIED and reported. The queue row is now \`applied\`."
@@ -401,10 +471,10 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Fail the run when the release did not land
-        if: steps.claim.outputs.found == 'true'
+        if: steps.claim.outputs.found == 'true' || steps.dryrun.outputs.found == 'true'
         env:
-          RID: ${{ steps.claim.outputs.release_id }}
-          YEXIT: ${{ steps.payload.outputs.exit_code }}
+          RID: ${{ steps.claim.outputs.release_id || steps.dryrun.outputs.release_id }}
+          YEXIT: ${{ steps.payload.outputs.exit_code || steps.dryrun.outputs.exit_code }}
           VEXIT: ${{ steps.apply.outputs.exit_code }}
           PEXIT: ${{ steps.push.outputs.exit_code }}
           DRY_RUN: ${{ inputs.dry_run }}
@@ -422,5 +492,9 @@ jobs:
           if [ "${DRY_RUN:-false}" != 'true' ] && [ "${PEXIT:-1}" != "0" ]; then
             echo "::error::push failed for ${RID} with exit ${PEXIT:-unknown}"
             exit 1
+          fi
+          if [ "${DRY_RUN:-false}" = 'true' ]; then
+            echo "dry run - the queue was NOT touched; fixture ${RID} validated with --no-commit"
+            exit 0
           fi
           echo "release ${RID} applied"

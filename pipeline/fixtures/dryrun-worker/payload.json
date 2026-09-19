@@ -1,0 +1,8 @@
+[
+  {
+    "path": "worker.js",
+    "seq": 0,
+    "chunk_b64": "Ly8gZHJ5LXJ1biBmaXh0dXJlIHdvcmtlciBzY3JpcHQuIE5FVkVSIGRlcGxveWVkOiBjaHJvbmljbGUtd29ya2VyLWdhdGUncwovLyBkZXBsb3kgc3RlcCBjYXJyaWVzIGBpZjogLi4uICYmIGlucHV0cy5kcnlfcnVuICE9IHRydWVgLgpleHBvcnQgZGVmYXVsdCB7IGFzeW5jIGZldGNoKCkgeyByZXR1cm4gbmV3IFJlc3BvbnNlKCJkcnktcnVuIGZpeHR1cmUiLCB7IHN0YXR1czogNTAzIH0pOyB9IH07Cg==",
+    "chunk_sha256": "a6bbf609cf9358a4ff7fdc33558a0c82865b45feead6d1f544f8701f13cbb98c"
+  }
+]

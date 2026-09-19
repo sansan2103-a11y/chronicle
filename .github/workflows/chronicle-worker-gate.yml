@@ -40,6 +40,16 @@ name: chronicle-worker-gate
 #
 # No value that originated in the queue is ever interpolated into a shell body
 # with ${{ }}. See v1.1/docs/V11_REAUDIT.md F1 for why that rule exists.
+#
+# V1.2.1 CHANGE - `dry_run: true` NO LONGER CLAIMS. The claim step now carries
+# `if: inputs.dry_run != true`, and a sibling step loads the checked-in
+# synthetic fixture under `pipeline/fixtures/dryrun-worker/` into the same
+# ${RUNNER_TEMP} paths, WITHOUT a claim_token. The fixture is a no-op probe
+# whose three build markers are rewritten at runtime to the LIVE workerBuild -
+# the one value a checked-in fixture cannot know - so the live pre-check is
+# exercised for real and the validator reaches exit 0. Nothing is deployed:
+# the deploy step keeps its own `inputs.dry_run != true` guard.
+# See docs/PIPELINE_V1.md section 11b/11c.
 
 on:
   schedule:
@@ -135,7 +145,9 @@ jobs:
       # ---------------------------------------------------------------------
       - name: Claim a worker release
         id: claim
-        if: steps.preflight.outputs.configured == 'true'
+        # V1.2.1: a dry run must not consume a queue row. The fixture step
+        # after the live pre-check is the dry-run counterpart of this one.
+        if: steps.preflight.outputs.configured == 'true' && inputs.dry_run != true
         env:
           RELEASE_GATE_URL: ${{ secrets.RELEASE_GATE_URL }}
           RELEASE_GATE_SECRET: ${{ secrets.RELEASE_GATE_SECRET }}
@@ -253,7 +265,10 @@ jobs:
       # ---------------------------------------------------------------------
       - name: Pre-check the live worker build
         id: live
-        if: steps.claim.outputs.found == 'true' && steps.payload.outputs.exit_code == '0'
+        # V1.2.1: a dry run reaches this step too. Reading the live build is a
+        # plain GET on a public URL - it changes nothing - and it is what the
+        # fixture step needs to bind its build markers to.
+        if: (steps.claim.outputs.found == 'true' && steps.payload.outputs.exit_code == '0') || (steps.preflight.outputs.configured == 'true' && inputs.dry_run == true)
         continue-on-error: true
         run: |
           set -uo pipefail
@@ -283,13 +298,79 @@ jobs:
           exit 0
 
       # ---------------------------------------------------------------------
+      # 3b. DRY RUN ONLY (V1.2.1). The counterpart of the claim step.
+      #
+      #     No /health, no /claim, no queue row, no lease, and no claim_token
+      #     file. It writes the checked-in synthetic fixture to exactly the
+      #     paths the claim step writes and sets exactly the outputs it sets.
+      #
+      #     The fixture is a NO-OP probe (expectedCurrentBuild == newBuild ==
+      #     rollbackBuild, workerSha256 == rollbackSha256). Those three markers
+      #     are rewritten to the build the live pre-check just read, which keeps
+      #     every no-op invariant intact and lets precheck.liveBuild pass for
+      #     real; manifestSha256 is recomputed with the worker validator's own
+      #     canonical serializer.
+      #
+      #     `pipeline/fixtures/**` is NOT writable by a normal release:
+      #     PIPELINE_ALLOW_RE in validate_and_apply.mjs admits only
+      #     pipeline/PROBE.md and pipeline/probes/<name>. Only a pipeline-admin
+      #     push can change these fixture bytes.
+      # ---------------------------------------------------------------------
+      - name: Dry run - load the checked-in fixture instead of claiming
+        id: dryrun
+        if: steps.preflight.outputs.configured == 'true' && inputs.dry_run == true && steps.live.outputs.exit_code == '0'
+        env:
+          LIVE_BUILD: ${{ steps.live.outputs.build }}
+        run: |
+          set -euo pipefail
+          cat > "${RUNNER_TEMP}/dryrun.mjs" <<'MJS'
+          import fs from 'node:fs';
+          const tmp = process.env.RUNNER_TEMP;
+          const repo = process.cwd();
+          const dir = `${repo}/pipeline/fixtures/dryrun-worker`;
+          const { manifestDigest } = await import(`${repo}/pipeline/validate_worker_release.mjs`);
+          const BUILD_RE = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
+
+          const live = String(process.env.LIVE_BUILD || '');
+          if (!BUILD_RE.test(live)) { console.log('::error::the live workerBuild is not a bare build marker'); process.exit(1); }
+
+          const m = JSON.parse(fs.readFileSync(`${dir}/manifest.json`, 'utf8'));
+          m.expectedCurrentBuild = live;
+          m.newBuild = live;
+          m.rollbackBuild = live;
+          m.manifestSha256 = manifestDigest(m);
+          fs.writeFileSync(`${tmp}/manifest.json`, JSON.stringify(m));
+          fs.copyFileSync(`${dir}/payload.json`, `${tmp}/chunks.json`);
+          // No capability is minted for a dry run, so none is written.
+          fs.rmSync(`${tmp}/claim_token`, { force: true });
+
+          const put = (k, v) => {
+            if (!/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(String(v))) {
+              console.log(`::error::refusing to emit output ${k}: value is not a bare token`);
+              process.exit(1);
+            }
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${v}\n`);
+          };
+          put('found', 'true');
+          put('release_id', 'dryrun-fixture');
+          put('expected_build', live);
+          put('new_build', live);
+          put('noop', 'true');
+          put('exit_code', '0');
+          console.log('dry run - the queue was NOT touched (no claim request was sent)');
+          console.log(`fixture ${m.releaseId} bound to the live workerBuild ${live}`);
+          MJS
+          node "${RUNNER_TEMP}/dryrun.mjs"
+
+      # ---------------------------------------------------------------------
       # 4. Validate. Refuses on env delta, missing bindings, sha/size mismatch,
       #    wrong targetWorker, or a live build that is not expectedCurrentBuild.
       #    worker.js and wrangler.toml are written ONLY when everything passed.
       # ---------------------------------------------------------------------
       - name: Validate the worker release and render wrangler.toml
         id: validate
-        if: steps.claim.outputs.found == 'true' && steps.payload.outputs.exit_code == '0' && steps.live.outputs.exit_code == '0'
+        # V1.2.1: two mutually exclusive producers, as in the Pages gate.
+        if: (steps.claim.outputs.found == 'true' && steps.payload.outputs.exit_code == '0' && steps.live.outputs.exit_code == '0') || steps.dryrun.outputs.found == 'true'
         continue-on-error: true
         env:
           LIVE_BUILD: ${{ steps.live.outputs.build }}
@@ -453,13 +534,15 @@ jobs:
       - name: Write run summary
         if: always() && steps.preflight.outputs.configured == 'true'
         env:
-          FOUND: ${{ steps.claim.outputs.found }}
-          RID: ${{ steps.claim.outputs.release_id }}
-          EXPECTED: ${{ steps.claim.outputs.expected_build }}
-          NEWB: ${{ steps.claim.outputs.new_build }}
-          IS_NOOP: ${{ steps.claim.outputs.noop }}
+          # V1.2.1: `a || b` picks the first non-empty value. Exactly one of the
+          # claim step and the fixture step runs, so this is unambiguous.
+          FOUND: ${{ steps.claim.outputs.found || steps.dryrun.outputs.found }}
+          RID: ${{ steps.claim.outputs.release_id || steps.dryrun.outputs.release_id }}
+          EXPECTED: ${{ steps.claim.outputs.expected_build || steps.dryrun.outputs.expected_build }}
+          NEWB: ${{ steps.claim.outputs.new_build || steps.dryrun.outputs.new_build }}
+          IS_NOOP: ${{ steps.claim.outputs.noop || steps.dryrun.outputs.noop }}
           LIVE: ${{ steps.live.outputs.build }}
-          YEXIT: ${{ steps.payload.outputs.exit_code }}
+          YEXIT: ${{ steps.payload.outputs.exit_code || steps.dryrun.outputs.exit_code }}
           VEXIT: ${{ steps.validate.outputs.exit_code }}
           DEXIT: ${{ steps.deploy_code.outputs.exit_code }}
           PEXIT: ${{ steps.poll.outputs.exit_code }}
@@ -490,6 +573,16 @@ jobs:
             echo "| dry run | \`${DRY_RUN}\` |"
             echo ""
           } >> "${GITHUB_STEP_SUMMARY}"
+          if [ "${DRY_RUN}" = "true" ]; then
+            {
+              echo "> **dry run - the queue was NOT touched.** No \`/claim\` was sent, no"
+              echo "> row changed state, no lease was taken and no token was minted."
+              echo "> The validator ran against the checked-in fixture"
+              echo "> \`pipeline/fixtures/dryrun-worker/\`, bound to the live workerBuild."
+              echo "> Nothing was deployed and nothing was reported."
+              echo ""
+            } >> "${GITHUB_STEP_SUMMARY}"
+          fi
           if [ "${IS_NOOP}" = "true" ]; then
             {
               echo "> **No-op probe.** \`expectedCurrentBuild == newBuild\`, so the"
@@ -529,10 +622,10 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Fail the run when the release did not land
-        if: steps.claim.outputs.found == 'true'
+        if: steps.claim.outputs.found == 'true' || steps.dryrun.outputs.found == 'true'
         env:
-          RID: ${{ steps.claim.outputs.release_id }}
-          YEXIT: ${{ steps.payload.outputs.exit_code }}
+          RID: ${{ steps.claim.outputs.release_id || steps.dryrun.outputs.release_id }}
+          YEXIT: ${{ steps.payload.outputs.exit_code || steps.dryrun.outputs.exit_code }}
           LEXIT: ${{ steps.live.outputs.exit_code }}
           VEXIT: ${{ steps.validate.outputs.exit_code }}
           DEXIT: ${{ steps.deploy_code.outputs.exit_code }}
@@ -549,7 +642,7 @@ jobs:
             fi
           done
           if [ "${DRY_RUN:-false}" = "true" ]; then
-            echo "dry run: ${RID} validated and wrangler.toml rendered; nothing deployed"
+            echo "dry run - the queue was NOT touched; fixture ${RID} validated and wrangler.toml rendered, nothing deployed"
             exit 0
           fi
           if [ "${DEXIT:-1}" != "0" ]; then echo "::error::deploy failed for ${RID}"; exit 1; fi

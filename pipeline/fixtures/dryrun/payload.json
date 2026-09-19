@@ -1,0 +1,8 @@
+[
+  {
+    "path": "pipeline/probes/dryrun-fixture",
+    "seq": 0,
+    "chunk_b64": "IyBkcnktcnVuIGZpeHR1cmUgcHJvYmUKCldyaXR0ZW4gT05MWSBieSBhIHdvcmtmbG93X2Rpc3BhdGNoIGRyeSBydW4gb2YgY2hyb25pY2xlLXJlbGVhc2UtZ2F0ZS4KSXQgaXMgbmV2ZXIgY29tbWl0dGVkOiB0aGUgZ2F0ZSBydW5zIHdpdGggLS1uby1jb21taXQgYW5kIHJlc3RvcmVzIHRoZSB0cmVlLgpJZiB0aGlzIGZpbGUgaXMgZXZlciBmb3VuZCBjb21taXR0ZWQgb24gdjI5Mi1yZWJ1aWxkLCBhIGRyeSBydW4gbGVha2VkLgo=",
+    "chunk_sha256": "00ff1e55926fb6c0a6422856f217bb3f8b0ec5e38f30d564845d6d48c8408dcc"
+  }
+]

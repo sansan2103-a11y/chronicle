@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 2,
+  "releaseId": "20260919-dryrun-fixture",
+  "targetRepo": "sansan2103-a11y/chronicle",
+  "targetBranch": "v292-rebuild",
+  "baseCommit": "0000000000000000000000000000000000000000",
+  "commitMessage": "dry-run fixture (never committed)\n\nRelease-Id: 20260919-dryrun-fixture",
+  "kind": "pages",
+  "note": "synthetic dry-run fixture; baseCommit is rewritten to HEAD by the workflow",
+  "pagesContract": {
+    "version": "20260919-dryrun-fixture",
+    "checkBuiltMarkers": true
+  },
+  "limits": {
+    "maxFiles": 1,
+    "maxTotalBytes": 65536,
+    "maxFileBytes": 32768,
+    "maxChunkBytes": 65536
+  },
+  "files": [
+    {
+      "path": "pipeline/probes/dryrun-fixture",
+      "operation": "new",
+      "beforeSha256": null,
+      "afterSha256": "fbfa9810da7bec71dc3d567f87aa72d5d288e326fb91e8381785f868ceb7c7a1",
+      "size": 245,
+      "payload": {
+        "encoding": "full-base64",
+        "payloadSha256": "00ff1e55926fb6c0a6422856f217bb3f8b0ec5e38f30d564845d6d48c8408dcc",
+        "chunkCount": 1,
+        "totalBytes": 328
+      }
+    }
+  ],
+  "manifestSha256": "8394680ff3d520d34a008e75ebc3871c0156db1e749ee4cb21d60616c1946bb0"
+}

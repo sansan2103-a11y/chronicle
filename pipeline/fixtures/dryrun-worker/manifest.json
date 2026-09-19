@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 3,
+  "releaseId": "20260919-dryrun-fixture",
+  "kind": "worker",
+  "targetWorker": "novel-proxy",
+  "expectedCurrentBuild": "dryrun-fixture",
+  "newBuild": "dryrun-fixture",
+  "noop": true,
+  "workerSha256": "07206f9f7aa2183e6e54aef77e405035587909191498c57733c3ddd314bfcafc",
+  "workerSizeBytes": 229,
+  "expectedEnvDelta": [],
+  "rollbackSha256": "07206f9f7aa2183e6e54aef77e405035587909191498c57733c3ddd314bfcafc",
+  "rollbackBuild": "dryrun-fixture",
+  "bindings": {
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_name": "chronicle-saves",
+        "database_id": "00000000-0000-4000-8000-000000000000"
+      }
+    ],
+    "kv_namespaces": [
+      {
+        "binding": "LEDGER",
+        "id": "00000000000000000000000000000000"
+      }
+    ]
+  },
+  "compatibilityDate": "2024-09-23",
+  "compatibilityFlags": [],
+  "note": "synthetic dry-run fixture; the three build markers are rewritten to the LIVE workerBuild by the workflow",
+  "payload": {
+    "path": "worker.js",
+    "encoding": "full-base64",
+    "payloadSha256": "a6bbf609cf9358a4ff7fdc33558a0c82865b45feead6d1f544f8701f13cbb98c",
+    "chunkCount": 1,
+    "totalBytes": 308
+  },
+  "limits": {
+    "maxWorkerBytes": 65536,
+    "maxChunkBytes": 65536
+  },
+  "manifestSha256": "50186a370b0247136428208837028d4b80fb157d162b82ea5fdac1d1e4fc1da9"
+}
