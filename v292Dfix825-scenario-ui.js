@@ -631,12 +631,19 @@
       return cb({ ok: true, candidate: res.candidate, report: res.report });
     });
   }
-  function acceptCandidate(){
+  /* ★★sp9 / GPT 裁定 #L13entry: opts.suppressEnrichOffer === true のときだけ、採用後の
+     ✒ 肉付け offer を **出さない**。採用そのもの（draft 置換・store write 0）は 1 バイトも変えない。
+     用途 = fix873 の「▶ このシナリオで始める」。採用 → 保存 → 開始 の途中に offer overlay が
+     割り込むと、利用者は「始める」を押したのに別の問いに答えさせられる。
+     ★既定（引数なし・従来の呼び出し）は 1 バイトも挙動が変わらない。DOM 経路
+     （SC_REVIEW の「この内容を draft に反映」）は今までどおり offer を出す。 */
+  function acceptCandidate(opts){
     if (!S.candidate || !S.draft) return fail('NO_CANDIDATE');
     closeOverlay();
     S.draft = toDraft(S.candidate, S.draft.title);        /* draft だけが変わる。store write 0 */
     S.candidate = null; S.candidateReport = null;
     bump(); renderEdit(); setNote('提案を draft に反映しました。内容を確認して「保存」してください。');
+    if (opts && opts.suppressEnrichOffer === true) return { ok: true, offered: false, offerSuppressed: true };
     /* 裁定 58 POST_EXPAND: 採用後の draft を再 scan して、短い欄が残っていれば肉付けを **提案**する（自動発火はしない） */
     var of = maybeOfferEnrich();
     return { ok: true, offered: !!(of && of.offered), offerCount: (of && of.count) || 0 };
