@@ -189,13 +189,13 @@
   function msg(code, detail){
     switch (code){
       case 'NO_TITLE': return 'タイトルを入力してください';
-      case 'NPC_WITHOUT_NAME': return 'NPC ' + (detail + 1) + ' の名前が空です。名前の無い NPC は原本に保存できません（🌱 で埋めるか、行を削除してください）';
+      case 'NPC_WITHOUT_NAME': return 'NPC ' + (detail + 1) + ' の名前が空です。名前の無い NPC はシナリオに保存できません（🌱 で埋めるか、行を削除してください）';
       case 'START_RULES_TOO_LONG': return '開始ルールが長すぎます（' + (detail && detail.codePoints) + ' / ' + (detail && detail.max) + ' 文字）';
-      case 'STORY_ID_FORMAT_ASSUMPTION_VIOLATED': return 'この端末の物語 ID が想定外の形式のため、原本を作成できません';
+      case 'STORY_ID_FORMAT_ASSUMPTION_VIOLATED': return 'この端末の物語 ID が想定外の形式のため、シナリオを作成できません';
       case 'ID_ALLOCATION_EXHAUSTED': case 'ID_COLLISION_EXHAUSTED': return 'ID の採番に失敗しました。もう一度お試しください';
       case 'ROLLBACK_FAILED': return '失敗し、元に戻せませんでした。ページを再読み込みしてください';
       case 'NOT_FOUND': case 'ORPHAN_META': case 'SCHEMA_VERSION_MISMATCH': case 'SCENARIO_ID_MISMATCH':
-      case 'BODY_PARSE_FAILED': case 'BODY_NOT_OBJECT': return 'この原本は読めません' + f867c(code);
+      case 'BODY_PARSE_FAILED': case 'BODY_NOT_OBJECT': return 'このシナリオは読めません' + f867c(code);
       case 'AI_UNAVAILABLE': return 'AI が使えません（Google ログインを確認してください）';
       case 'AI_FAILED': case 'BAD_JSON': case 'AI_VALUE_OVERSIZED': case 'NOTHING_APPLIED': case 'APPLY_ERROR':
         return 'AI 補完に失敗しました' + f867c(code) + '。もう一度お試しください';
@@ -288,23 +288,23 @@
   function renderList(){
     if (!root) return;
     var st = ST();
-    var html = '<div class="sc-head"><div class="sc-h1">物語の原本</div>' +
+    var html = '<div class="sc-head"><div class="sc-h1">シナリオ</div>' +
       '<button class="sc-btn" data-sc-act="toStories">← 物語一覧へ</button>' +
-      '<button class="sc-btn sc-primary" data-sc-act="new">＋ 原本を作る</button></div>';
+      '<button class="sc-btn sc-primary" data-sc-act="new">＋ シナリオを作る</button></div>';
     if (!st){ html += '<div class="sc-msg sc-err">' + esc(msg('FIX820_UNAVAILABLE')) + '</div>'; root.innerHTML = html; return; }
     var r = st.list();
     if (!r.ok){ html += '<div class="sc-msg sc-err">' + esc(msg(r.code, r.detail)) + '</div>'; root.innerHTML = html; return; }
     var rows = r.scenarios.slice().sort(function(a, b){ return String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')); });
     if (!rows.length){
-      html += '<div class="sc-empty">原本がありません。「＋ 原本を作る」から作成してください。<br>' +
-              '<span style="font-size:12px">少しだけ書いて 🌱 AI に広げてもらう、🎲 全部おまかせ、どちらでも。気に入った原本から何度でも物語を始められます。</span></div>';
+      html += '<div class="sc-empty">シナリオがありません。「＋ シナリオを作る」から作成してください。<br>' +
+              '<span style="font-size:12px">少しだけ書いて 🌱 AI に広げてもらう、🎲 全部おまかせ、どちらでも。気に入ったシナリオから何度でも物語を始められます。</span></div>';
     } else {
       html += '<div class="sc-rows">' + rows.map(function(m){
         return '<div class="sc-row" data-sc-open="' + esc(m.scenarioId) + '"><div class="sc-t">' + esc(m.title || '(無題)') + '</div>' +
                '<div class="sc-m">作成 ' + esc(fmt(m.createdAt)) + (m.updatedAt ? ' ／ 更新 ' + esc(fmt(m.updatedAt)) : '') + '</div></div>';
       }).join('') + '</div>';
     }
-    html += '<div class="sc-msg sc-note" style="margin-top:16px">原本は遊んでも変わりません。「▶ この物語を始める」を押すたびに、原本から新しい独立した物語が 1 本できます。</div>';
+    html += '<div class="sc-msg sc-note" style="margin-top:16px">シナリオは遊んでも変わりません。「▶ このシナリオで始める」を押すたびに、シナリオから新しい独立した物語が 1 本できます。</div>';
     root.innerHTML = html;
   }
   function fmt(iso){ try { var d = new Date(iso); if (isNaN(+d)) return '—'; return d.toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch(e){ return '—'; } }
@@ -345,9 +345,9 @@
   function renderEdit(){
     if (!root || !S.draft) return;
     var d = S.draft;
-    var html = '<div class="sc-head"><div class="sc-h1">' + (S.scenarioId ? '原本を編集' : '原本を作る') + '</div>' +
+    var html = '<div class="sc-head"><div class="sc-h1">' + (S.scenarioId ? 'シナリオを編集' : 'シナリオを作る') + '</div>' +
       '<span class="sc-badge" data-sc-badge></span>' +
-      '<button class="sc-btn" data-sc-act="back">← 原本一覧へ</button></div>';
+      '<button class="sc-btn" data-sc-act="back">← シナリオ一覧へ</button></div>';
     html += '<div class="sc-form">' +
       field('title', LABEL.title, true, false) +
       field('scene.lore', LABEL.lore, true, true) +
@@ -380,7 +380,7 @@
       '<button class="sc-btn" data-sc-act="expand" title="空欄だけを AI が埋めます。書いた内容は変えません">🌱 AIで残りを広げる</button>' +
       '<button class="sc-btn" data-sc-act="omakase" title="全部おまかせ。NPC が 0 人なら 2 人作ります">🎲 全部おまかせ</button>' +
       '<button class="sc-btn sc-primary" data-sc-act="save">💾 保存</button>' +
-      '<button class="sc-btn sc-start" data-sc-act="start">▶ この物語を始める</button>' +
+      '<button class="sc-btn sc-start" data-sc-act="start">▶ このシナリオで始める</button>' +
       (S.scenarioId ? '<button class="sc-btn sc-danger" data-sc-act="delete">削除</button>' : '') +
       '</div><div data-sc-msg></div>';
     root.innerHTML = html;
@@ -516,7 +516,7 @@
   function npcAdd(){ if (!S.draft || S.busy) return; S.draft.cast.npcs.push(emptyNpc()); bump(); renderEdit(); }
   function npcDel(i){ if (!S.draft || S.busy) return; S.draft.cast.npcs.splice(i, 1); bump(); renderEdit(); }
   function leaveEdit(){
-    if (S.dirty) confirmBox('未保存の変更があります。破棄して原本一覧へ戻りますか？', function(){ S.dirty = false; openList(); });
+    if (S.dirty) confirmBox('未保存の変更があります。破棄してシナリオ一覧へ戻りますか？', function(){ S.dirty = false; openList(); });
     else openList();
   }
 
@@ -534,7 +534,7 @@
     if (!S.scenarioId) S.scenarioId = r.scenarioId;
     S.savedSnapshot = JSON.stringify(S.draft); S.dirty = false;
     if (S.view === 'SC_EDIT') renderEdit();
-    setNote('保存しました。「▶ この物語を始める」で、この原本から新しい物語を始められます。');
+    setNote('保存しました。「▶ このシナリオで始める」で、このシナリオから新しい物語を始められます。');
     return { ok: true, saved: true, scenarioId: S.scenarioId };
   }
 
@@ -730,7 +730,7 @@
     return { ok: true };
   }
   function askRemove(){
-    confirmBox('この原本を削除しますか？（この原本から始めた物語は残ります）', function(){ remove(); });
+    confirmBox('このシナリオを削除しますか？（このシナリオから始めた物語は残ります）', function(){ remove(); });
   }
 
   /* START STORY PATH（裁定 32 §9）: read → startability → f667 gate（home bridge）→ runtime → toInstantiationInput → instantiate → open */
@@ -748,7 +748,7 @@
       if (needs){
         S.busy = null; refreshEdit();
         if (typeof home.showStoryGate === 'function'){
-          home.showStoryGate({ retryHint: '▶ この物語を始める', onForce: function(){ start({ force: true }); } });
+          home.showStoryGate({ retryHint: '▶ このシナリオで始める', onForce: function(){ start({ force: true }); } });
         } else setError('GATE_REQUIRED');
         return fail('GATE_REQUIRED');
       }
