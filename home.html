@@ -233,7 +233,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260919-sp7';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20260919-sp8b';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -336,7 +336,14 @@
      配置 = fix819 の直後・将来の Scenario UI / caller より前（依存ではなく読み順のため）。
      index.html には載せない（index には fix246 の LS ラッパ・S・features.js が居る）。
      kill = v292Dfix820Off='1'。 -->
-<script src="v292Dfix820-scenario-original-store.js?cb=20260919-sp7"></script>
+<script src="v292Dfix820-scenario-original-store.js?cb=20260919-sp8"></script>
+<!-- ★★fix872 SCENARIO_CLOUD_SYNC_V1（sp8 / Owner 承認 OWNER_DECISION_SP8_v2 待ち）
+     Scenario 原本を cloud（D1 `scenario` 表・worker v43.0-scenario）と同期する唯一の module。
+     **既定 OFF**: localStorage['v292Dfix872On']='1' を立てた端末でだけ走る（kill = 'v292Dfix872Off'='1' が最優先）。
+     載せるだけでは 1 バイトも通信しない（起動時の自動同期・自動 caller は 0）。
+     配置 = fix820 の直後（f872* bridge に依存するため読み順だけを揃える）・fix825 より前。
+     index.html には載せない（Scenario の owner は home 側）。 -->
+<script src="v292Dfix872-scenario-cloud-sync.js?cb=20260919-sp8"></script>
 <!-- v292Dfix823: SEED_EXPANSION_V1 Scenario Seed Adapter（dormant・UI caller 0・kill v292Dfix823Off）。fix436+fix335 の再利用で
      Scenario Original の空欄だけを埋める。transport は実 fix247 runtime authority のみ（home には fix247 が無いので現状は常に AI_UNAVAILABLE = fail-closed）。 -->
 <script src="v292Dfix823-scenario-seed-adapter.js?cb=20260907-schema3"></script>
@@ -2615,7 +2622,7 @@
      appended continuation line. engine only; DOM 0; store/cloud/LS write 0; reuses fix436 request/parseFillJson/normVal only.
      caller = fix825 (button per character card + post-expand offer). kill: localStorage v292Dfix829Off=1. -->
 <script src="v292Dfix829-seed-text-enrichment.js?cb=20260907-fix829r"></script>
-<script src="v292Dfix825-scenario-ui.js?cb=20260919-sp7"></script>
+<script src="v292Dfix825-scenario-ui.js?cb=20260919-sp8"></script>
 <!-- v292Dfix870(HOME_THREE_CTA_V1・GPT 裁定 #L12entry): HOME の入口を 3 本立てにする。
      DOM は 1 つも消さない（#newBtn / #newCard / #scBtn は node ごと生き残り、id・class・delegation も不変）。
      新 URL 式 0（[3] は data-open を既存 openStory delegation に拾わせる）・localStorage 書込 0。

@@ -126,7 +126,14 @@
        **同一の setItem** で行う（別書き込みにすると body が新しいのに rev が古い状態が生じる）。
      ・sp8 で cloud 保存を足したら **server が rev の権威**になり、client は putscenario が
        返した rev をそのまま格納する（ここで採番した値を正としない）。 */
-  var META_FIELDS  = ['scenarioId', 'title', 'schemaVersion', 'createdAt', 'updatedAt', 'rev'];
+  /* ★★v292Dfix872 SCENARIO_CLOUD_SYNC_V1（sp8 / Owner 承認事項 ⑤）: META に 3 語だけ足す。
+       cloudRev … D1 `scenario.rev`（server 権威の CAS 版）。**欠落 = 0 = 未アップロード**。
+       dirty    … 「local の内容が cloudRev 以降に変わった」フラグ。欠落 = false。
+       deleted  … tombstone。欠落 = false。true の entry は body を持たない。
+     ★`rev` の意味は **1 バイトも変えない**（= scenarioRev = Scenario 内容の版。Story origin.scenarioRev と同義）。
+     ★legacy（3 語のいずれも無い META）は **合法**。revOf と同じ「欠落は捏造しない」規則で読む。
+     ★この 3 語は fix872 が有効なときだけ **書く**。既定 OFF のままなら META のバイト列は sp7 と同一。 */
+  var META_FIELDS  = ['scenarioId', 'title', 'schemaVersion', 'createdAt', 'updatedAt', 'rev', 'cloudRev', 'dirty', 'deleted'];
   /* legacy 寛容: rev が無い / 数でない / 負 / 小数 は **0**（＝版不明）として読む。捏造しない。 */
   function revOf(entry){
     var v = (entry && entry.rev);
@@ -134,7 +141,22 @@
     var n = Math.floor(v);
     return (n > 0) ? n : 0;
   }
+  function cloudRevOf(entry){
+    var v = (entry && entry.cloudRev);
+    if (typeof v !== 'number' || !isFinite(v)) return 0;
+    var n = Math.floor(v);
+    return (n > 0) ? n : 0;
+  }
+  function dirtyOf(entry){ return !!(entry && entry.dirty === true); }
+  function deletedOf(entry){ return !!(entry && entry.deleted === true); }
   function f871Off(){ return lsg('v292Dfix871Off') === '1'; }
+  /* ★fix872 の有効判定（既定 OFF・kill が勝つ）。fix820 は fix872 の **存在に依存しない**:
+     module が居なくても、Owner が明示的に ON にしていれば tombstone 側の作法へ切り替わる
+     （同期は走らないが、削除が「墓標として残る」ので後から同期を足しても復活しない）。 */
+  function f872On(){
+    if (lsg('v292Dfix872Off') === '1') return false;
+    return lsg('v292Dfix872On') === '1';
+  }
   /* ★npc.wound は「cast の初期定義フィールド」。fix190 の永続「傷」ではない（fix819 から継続） */
   var SECRET_NAMES = ['orKey', 'naiKey', 'pollKey', 'apiKey', 'provider', 'cfg'];
 
@@ -516,6 +538,9 @@
     var newEntry = { scenarioId: id, title: v.value.title, schemaVersion: SCHEMA_VERSION,
                      createdAt: now, updatedAt: null };
     if (!f871Off()) newEntry.rev = 1;
+    /* ★fix872: 新規は local-only。cloudRev=0（未アップロード）/ dirty=true（次の同期で push）。
+       ★fix872 が OFF のときは 1 語も書かない＝ META のバイト列は sp7 と同一。 */
+    if (f872On()){ newEntry.cloudRev = 0; newEntry.dirty = true; newEntry.deleted = false; }
     list.push(newEntry);
     var metaStr;
     try { metaStr = JSON.stringify(list); } catch(e){ return rollback('META_SERIALIZE_FAILED'); }
@@ -534,6 +559,8 @@
     if (!m.ok) return err(m.code);
     var idx = metaIndexOf(m.list, id);
     if (idx < 0) return err('NOT_FOUND');
+    /* ★fix872: tombstone は「無い」と答える（body も持たない）。 */
+    if (deletedOf(m.list[idx])) return err('NOT_FOUND');
     var me = m.list[idx];
 
     var raw = lsg(keyFor(id));
@@ -565,24 +592,43 @@
     return { ok: true, scenario: out };
   }
 
-  /* list: **body を 1 本も読まない**。meta の deep copy だけを返す。 */
-  function list(){
-    if (off()) return err('OFF');
+  /* list: **body を 1 本も読まない**。meta の deep copy だけを返す。
+     ★fix872: tombstone（deleted:true）は **返さない**。Owner の一覧に墓標を出さないため。
+       tombstone まで要る同期側は listAll() を使う（fix872 だけが呼ぶ）。
+       ★fix872 が OFF の間は tombstone が 1 件も生まれない（remove は従来どおり hard delete）ので、
+         この filter は 1 件も落とさない＝ sp7 と同じ結果を返す。 */
+  function listRows(includeDeleted){
     var m = readMetaRaw();
     if (!m.ok) return err(m.code);
     var out = [];
     for (var i = 0; i < m.list.length; i++){
       var e = m.list[i]; if (!isObj(e)) continue;
+      if (!includeDeleted && deletedOf(e)) continue;
       var row = {};
       for (var f = 0; f < META_FIELDS.length; f++){
         var k = META_FIELDS[f];
         /* ★fix871: rev だけは「欠落 = null」ではなく **0**（= 版不明）で返す。
-           呼び手が null と 0 を両方扱わなくて済むようにする。他の field の意味は不変。 */
-        row[k] = (k === 'rev') ? revOf(e) : ((e[k] === undefined) ? null : e[k]);
+           呼び手が null と 0 を両方扱わなくて済むようにする。他の field の意味は不変。
+           ★fix872: cloudRev / dirty / deleted も同じ作法で「欠落 = 既定値」に正規化して返す
+           （legacy META を呼び手が 2 通り扱わなくて済む。localStorage は 1 バイトも書き換えない）。 */
+        if (k === 'rev') row[k] = revOf(e);
+        else if (k === 'cloudRev') row[k] = cloudRevOf(e);
+        else if (k === 'dirty') row[k] = dirtyOf(e);
+        else if (k === 'deleted') row[k] = deletedOf(e);
+        else row[k] = (e[k] === undefined) ? null : e[k];
       }
       out.push(row);
     }
     return { ok: true, scenarios: clone(out) || [] };
+  }
+  function list(){
+    if (off()) return err('OFF');
+    return listRows(false);
+  }
+  /* listAll: tombstone を含む全件（同期専用の読み口・書込 0） */
+  function listAll(){
+    if (off()) return err('OFF');
+    return listRows(true);
   }
 
   /* edit: WHOLE_VALUE_EDIT。部分 patch は受け付けない（input は create と同じ完全な形）。 */
@@ -597,6 +643,8 @@
     if (!m.ok) return err(m.code);
     var idx = metaIndexOf(m.list, id);
     if (idx < 0) return err('NOT_FOUND');
+    /* ★fix872: tombstone は編集できない（復活禁止。新 ID へ fork する）。 */
+    if (deletedOf(m.list[idx])) return err('NOT_FOUND');
 
     var bodyKey = keyFor(id);
     var snapBody = lsg(bodyKey);
@@ -637,6 +685,17 @@
        kill 中は rev を **触らない**（既にあるなら保持する。勝手に消さない）。 */
     if (!f871Off()) me.rev = revOf(src) + 1;
     else if (src && src.rev !== undefined) me.rev = src.rev;
+    /* ★fix872: cloudRev は **client が動かさない**（server 権威）。編集は dirty を立てるだけ。
+       OFF のときは既存値をそのまま保持する（勝手に消さない＝ fix871 の rev と同じ作法）。 */
+    if (f872On()){
+      me.cloudRev = cloudRevOf(src);
+      me.dirty = true;
+      me.deleted = false;
+    } else {
+      if (src && src.cloudRev !== undefined) me.cloudRev = src.cloudRev;
+      if (src && src.dirty   !== undefined) me.dirty   = src.dirty;
+      if (src && src.deleted !== undefined) me.deleted = src.deleted;
+    }
     listArr[idx] = me;
     var metaStr;
     try { metaStr = JSON.stringify(listArr); } catch(e){ return rollback('META_SERIALIZE_FAILED'); }
@@ -646,7 +705,13 @@
     return { ok: true, scenarioId: id, updatedAt: me.updatedAt };
   }
 
-  /* remove: Scenario 専用 local 削除。fix587 も tombstone も cloud も使わない。 */
+  /* remove: Scenario 専用 local 削除。
+     ★fix872 OFF（既定）= 従来どおりの hard delete（META から splice + body を removeItem）。
+     ★fix872 ON        = **tombstone**（META entry を deleted:true / dirty:true にして残し、body だけ消す）。
+       理由（設計 P1-e-4 / R3）: hard delete は「B で削除 → A が古い行を上げ直す = 復活」を原理的に許す。
+       Story 側で fix587/fix602 が長期間かけて潰した事故と同型なので、cloud を足す前に墓標を作る。
+       ★tombstone は rev / cloudRev / title / createdAt を **保持**する（cloud の deletescenario が
+         expectedRev = cloudRev を要求するため。消すと削除を push できなくなる）。 */
   function remove(scenarioId){
     if (off()) return err('OFF');
     var id = trim(scenarioId);
@@ -655,6 +720,9 @@
     if (!m.ok) return err(m.code);
     var idx = metaIndexOf(m.list, id);
     if (idx < 0) return err('NOT_FOUND');
+    if (deletedOf(m.list[idx])) return err('NOT_FOUND');     /* 既に墓標 */
+
+    if (f872On()) return removeTombstone(m, idx, id);
 
     var bodyKey = keyFor(id);
     var snapBody = lsg(bodyKey);
@@ -684,6 +752,124 @@
     }
     try { console.log(TAG, 'SCENARIO_REMOVED', id); } catch(e){}
     return { ok: true, scenarioId: id };
+  }
+
+  /* ★fix872: tombstone 版の remove。META を先に書き、成功してから body を消す（create/edit と同じ
+     「META 書き込み成功 = 確定」規約）。失敗したら META を巻き戻す。 */
+  function removeTombstone(m, idx, id){
+    var bodyKey = keyFor(id);
+    var snapBody = lsg(bodyKey);
+    var snapMeta = m.raw;
+    var src = m.list[idx];
+    var listArr = m.list.slice();
+    listArr[idx] = { scenarioId: id,
+                     title: (src && src.title != null) ? src.title : '',
+                     schemaVersion: (src && src.schemaVersion !== undefined) ? src.schemaVersion : SCHEMA_VERSION,
+                     createdAt: (src && src.createdAt !== undefined) ? src.createdAt : null,
+                     updatedAt: new Date().toISOString(),
+                     rev: revOf(src),                 /* 内容版は進めない（削除は編集ではない） */
+                     cloudRev: cloudRevOf(src),       /* deletescenario の expectedRev に要る */
+                     dirty: true,                     /* 次の同期で削除を push する */
+                     deleted: true };
+    var metaStr;
+    try { metaStr = JSON.stringify(listArr); } catch(e){ return err('META_SERIALIZE_FAILED'); }
+    if (!lss(META_KEY, metaStr)) return err('META_WRITE_FAILED');
+    if (snapBody != null){
+      if (!lsr(bodyKey) || lsg(bodyKey) != null){
+        var back = (snapMeta == null) ? lsr(META_KEY) : lss(META_KEY, snapMeta);
+        if (back) return { ok: false, code: 'BODY_REMOVE_FAILED', rolledBack: true };
+        return { ok: false, code: 'ROLLBACK_FAILED', hard: true, failedAt: 'BODY_REMOVE_FAILED',
+                 detail: { meta: back, scenarioId: id } };
+      }
+    }
+    try { console.log(TAG, 'SCENARIO_TOMBSTONED', id); } catch(e){}
+    return { ok: true, scenarioId: id, tombstone: true };
+  }
+
+  /* =====================================================================
+   * ★★fix872 SYNC BRIDGE（sp8）— 同期 module だけが呼ぶ書込口。
+   *   ・すべて f872On() が false なら OFF で止まる（既定 OFF のとき fix820 は sp7 と同じ挙動）。
+   *   ・cloudRev / dirty / deleted 以外の意味論（rev = scenarioRev / body の whitelist）は触らない。
+   *   ・body は必ず validate() を通して bodyOf() で組む（cloud から来た record も素通ししない）。
+   * ===================================================================== */
+  function f872Meta(){ return readMetaRaw(); }
+  function f872WriteMeta(listArr){
+    var s; try { s = JSON.stringify(listArr); } catch(e){ return false; }
+    return lss(META_KEY, s);
+  }
+  /* pull: cloud の record を local へ適用する（新規 or 上書き）。 */
+  function f872ApplyRemote(id0, input, cloudRev, scenarioRev){
+    if (off()) return err('OFF');
+    if (!f872On()) return err('F872_OFF');
+    var id = trim(id0); if (!id) return err('NO_ID');
+    var v = validate(input);
+    if (!v.ok) return v;                                   /* cloud 由来でも受理面は同じ（素通し禁止） */
+    var m = readMetaRaw(); if (!m.ok) return err(m.code);
+    var snapMeta = m.raw, bodyKey = keyFor(id);
+    var snapBody = lsg(bodyKey);
+    var bodyStr; try { bodyStr = JSON.stringify(bodyOf(id, v.value)); } catch(e){ return err('SERIALIZE_ERROR'); }
+    if (!lss(bodyKey, bodyStr)) return err('BODY_WRITE_FAILED');
+    var listArr = m.list.slice(), idx = metaIndexOf(listArr, id);
+    var src = (idx >= 0) ? listArr[idx] : null;
+    var entry = { scenarioId: id, title: v.value.title, schemaVersion: SCHEMA_VERSION,
+                  createdAt: (src && src.createdAt !== undefined) ? src.createdAt : new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                  rev: (typeof scenarioRev === 'number' && scenarioRev >= 0) ? Math.floor(scenarioRev) : revOf(src),
+                  cloudRev: Math.max(0, Math.floor(+cloudRev || 0)),
+                  dirty: false, deleted: false };
+    if (idx >= 0) listArr[idx] = entry; else listArr.push(entry);
+    if (!f872WriteMeta(listArr)){
+      if (snapBody == null) lsr(bodyKey); else lss(bodyKey, snapBody);
+      if (snapMeta == null) lsr(META_KEY); else lss(META_KEY, snapMeta);
+      return { ok: false, code: 'META_WRITE_FAILED', rolledBack: true };
+    }
+    return { ok: true, scenarioId: id, cloudRev: entry.cloudRev, rev: entry.rev };
+  }
+  /* pull(remote deleted): local body を消して META を墓標にする。 */
+  function f872ApplyRemoteDelete(id0, cloudRev){
+    if (off()) return err('OFF');
+    if (!f872On()) return err('F872_OFF');
+    var id = trim(id0); if (!id) return err('NO_ID');
+    var m = readMetaRaw(); if (!m.ok) return err(m.code);
+    var snapMeta = m.raw, bodyKey = keyFor(id), snapBody = lsg(bodyKey);
+    var listArr = m.list.slice(), idx = metaIndexOf(listArr, id);
+    var src = (idx >= 0) ? listArr[idx] : null;
+    var entry = { scenarioId: id, title: (src && src.title != null) ? src.title : '',
+                  schemaVersion: (src && src.schemaVersion !== undefined) ? src.schemaVersion : SCHEMA_VERSION,
+                  createdAt: (src && src.createdAt !== undefined) ? src.createdAt : null,
+                  updatedAt: new Date().toISOString(),
+                  rev: revOf(src), cloudRev: Math.max(0, Math.floor(+cloudRev || 0)),
+                  dirty: false, deleted: true };
+    if (idx >= 0) listArr[idx] = entry; else listArr.push(entry);
+    if (!f872WriteMeta(listArr)){ if (snapMeta == null) lsr(META_KEY); else lss(META_KEY, snapMeta); return { ok: false, code: 'META_WRITE_FAILED', rolledBack: true }; }
+    if (snapBody != null && !lsr(bodyKey)) return { ok: false, code: 'BODY_REMOVE_FAILED' };
+    return { ok: true, scenarioId: id, cloudRev: entry.cloudRev, deleted: true };
+  }
+  /* push 成功後: server が返した cloudRev を格納して dirty を降ろす。**内容は 1 バイトも触らない**。 */
+  function f872MarkPushed(id0, cloudRev){
+    if (off()) return err('OFF');
+    if (!f872On()) return err('F872_OFF');
+    var id = trim(id0); if (!id) return err('NO_ID');
+    var m = readMetaRaw(); if (!m.ok) return err(m.code);
+    var listArr = m.list.slice(), idx = metaIndexOf(listArr, id);
+    if (idx < 0) return err('NOT_FOUND');
+    var e = listArr[idx], out = {};
+    for (var k in e){ if (Object.prototype.hasOwnProperty.call(e, k)) out[k] = e[k]; }
+    out.cloudRev = Math.max(0, Math.floor(+cloudRev || 0));
+    out.dirty = false;
+    listArr[idx] = out;
+    if (!f872WriteMeta(listArr)) return err('META_WRITE_FAILED');
+    return { ok: true, scenarioId: id, cloudRev: out.cloudRev, deleted: !!out.deleted };
+  }
+  /* body の生文字列（canonical 計算用の read 口・書込 0） */
+  function f872RawBody(id0){
+    if (off()) return err('OFF');
+    var id = trim(id0); if (!id) return err('NO_ID');
+    var raw = lsg(keyFor(id));
+    if (raw == null) return err('NOT_FOUND');
+    var b = null; try { b = JSON.parse(raw); } catch(e){ return err('BODY_PARSE_FAILED', id); }
+    if (!isObj(b)) return err('BODY_NOT_OBJECT', id);
+    return { ok: true, body: clone(b) };
   }
 
   /* ================= fix819 への projection（純関数・caller は作らない） =================
@@ -822,6 +1008,13 @@
     list: list,
     edit: edit,
     remove: remove,
+    /* ★fix872（sp8）: 同期専用の追加口。既存 export は 1 つも変えていない。 */
+    listAll: listAll,
+    f872On: f872On,
+    f872ApplyRemote: f872ApplyRemote,
+    f872ApplyRemoteDelete: f872ApplyRemoteDelete,
+    f872MarkPushed: f872MarkPushed,
+    f872RawBody: f872RawBody,
     /* 診断 */
     selfCheck: selfCheck,
     state: function(){
@@ -833,6 +1026,7 @@
                genderValues: GENDER_VALUES.slice(), readSchemaVersions: READ_SCHEMA_VERSIONS.slice(),
                whitelist: { top: TOP_FIELDS.slice(), scene: SCENE_FIELDS.slice(), hero: HERO_FIELDS.slice(),
                             npc: NPC_FIELDS.slice(), meta: META_FIELDS.slice() },
+               f871Off: f871Off(), f872On: f872On(),        /* ★sp8 診断口（読むだけ） */
                uiWired: false, indexLoaded: false };
     }
   };

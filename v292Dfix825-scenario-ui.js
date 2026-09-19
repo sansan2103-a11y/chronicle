@@ -462,6 +462,71 @@
         p.querySelector('[data-sc-c="yes"]').addEventListener('click', function(){ closeOverlay(); onYes(); }, false);
       });
   }
+  /* ★★fix872 SCENARIO_CLOUD_SYNC_V1（sp8）— 衝突ダイアログの **最小**配線。
+     ・fix872 が 409 / CONFLICT を検出したときだけ呼ばれる。自動 merge も force overwrite も無い。
+     ・選択肢は Owner 承認事項 ④ のとおり **2 つだけ**:
+         「クラウド版を使う」 … 相手端末の版を取り込む（この端末の未同期編集は失われることを文面で明示する）
+         「新しいIDとして保存」… この端末の版を新しい Scenario として残し、元 ID にはクラウド版を入れる
+     ・×（閉じる）は「今は決めない」＝ 何も書かない。次の同期でまた出る（黙って消えない）。
+     ・この関数は **fix825 の既存経路から 1 か所も呼ばれない**（fix872 だけが呼ぶ）。
+       fix872 が居ない / 既定 OFF のままなら、この code は 1 度も実行されない。 */
+  function f872ConflictDialog(info){
+    var id = (info && info.id) ? String(info.id) : '';
+    var st = ST();
+    var title = '';
+    try {
+      var l = st && st.list && st.list();
+      if (l && l.ok){ for (var i = 0; i < l.scenarios.length; i++){ if (l.scenarios[i].scenarioId === id){ title = l.scenarios[i].title || ''; break; } } }
+    } catch(e){}
+    /* ★★R10 解消（Fable review 2026-09-19）: remote が「削除」のときは文面と選択肢の語を変える。
+       中身の契約は同じ（2 択・自動解決なし・閉じれば 0 バイト）で、
+       「更新されています」と書いて実際には削除だった、という誤解を作らないため。 */
+    var remoteDeleted = !!(info && info.remoteDeleted);
+    var head = remoteDeleted ? '別の端末で削除されています' : '別の端末で更新されています';
+    var lead = remoteDeleted
+      ? (' は、別の端末で<b>削除</b>されています。この端末にはまだ<b>クラウドへ送っていない変更</b>があります。'
+         + 'どちらにするか選んでください。')
+      : (' は、別の端末で先に保存されています。この端末の変更は<b>まだクラウドへ送られていません</b>。'
+         + 'どちらを残すか選んでください。');
+    var notes = remoteDeleted
+      ? ('・「クラウドの削除を受け入れる」を選ぶと、この端末からも<b>消えます（元に戻せません）</b>。<br>'
+         + '・「新しいIDとして保存」を選ぶと、この端末の版が<b>別のシナリオとして残ります</b>（削除されたシナリオは削除されたままです）。<br>'
+         + '・削除済みのIDを復活させることはできません。閉じれば何も変わりません（次の同期でまた確認します）。')
+      : ('・「クラウド版を使う」を選ぶと、<b>この端末の未保存の変更は失われます</b>。<br>'
+         + '・「新しいIDとして保存」を選ぶと、この端末の版が別のシナリオとして残り、元のシナリオにはクラウド版が入ります。<br>'
+         + '・自動で混ぜ合わせることはしません。閉じれば何も変わりません（次の同期でまた確認します）。');
+    var cloudLabel = remoteDeleted ? 'クラウドの削除を受け入れる' : 'クラウド版を使う';
+    overlay('<h3>' + esc(head) + '</h3>'
+      + '<div>' + (title ? ('「' + esc(title) + '」') : ('ID: ' + esc(id))) + lead + '</div>'
+      + '<div style="font-size:12px;color:#aab;margin-top:6px">' + notes + '</div>'
+      + '<div class="sc-acts">'
+      + '<button class="sc-btn" data-sc-c="close">閉じる</button>'
+      + '<button class="sc-btn" data-sc-c="fork">新しいIDとして保存</button>'
+      + '<button class="sc-btn sc-primary" data-sc-c="cloud">' + esc(cloudLabel) + '</button>'
+      + '</div>',
+      function(p){
+        function pick(choice){
+          closeOverlay();
+          var sync = window.__v292Dfix872;
+          if (!sync || typeof sync.resolveConflict !== 'function'){ setError('SCENARIO_SYNC_CONFLICT', 'SYNC_MODULE_MISSING'); return; }
+          sync.resolveConflict(id, choice, function(r){
+            if (r && r.ok) setNote(choice === 'cloud'
+              ? (remoteDeleted ? 'クラウドの削除を受け入れました' : 'クラウド版を取り込みました')
+              : ('新しいIDとして保存しました（' + (r.forkedTo || '') + '）'));
+            else setError('SCENARIO_SYNC_CONFLICT', (r && r.code) || 'CONFLICT_RESOLVE_FAILED');
+            if (S.view === 'LIST') openList();
+          });
+        }
+        p.querySelector('[data-sc-c="close"]').addEventListener('click', closeOverlay, false);
+        p.querySelector('[data-sc-c="fork"]').addEventListener('click', function(){ pick('fork'); }, false);
+        p.querySelector('[data-sc-c="cloud"]').addEventListener('click', function(){ pick('cloud'); }, false);
+      });
+    return { ok: true, shown: true, id: id, choices: ['cloud', 'fork'],
+             kind: remoteDeleted ? 'REMOTE_DELETED' : 'REMOTE_UPDATED', head: head, cloudLabel: cloudLabel };
+  }
+  /* fix872 は load 順に依存せずここへ届く（fix825 が先でも後でも良い） */
+  try { window.__v292Dfix825ScenarioConflict = f872ConflictDialog; } catch(e){}
+
   function fieldLabel(key){
     var m = /^npc(\d+)_(\w+)$/.exec(key);
     if (m) return 'NPC ' + m[1] + ' の' + (NPC_LABEL[m[2]] || m[2]);
@@ -844,6 +909,8 @@
     api: { openList: openList, openNew: openNew, openExisting: openExisting, edit: edit, npcAdd: npcAdd, npcDel: npcDel,
            save: save, expand: expand, acceptCandidate: acceptCandidate, discardCandidate: discardCandidate,
            remove: remove, start: start, toStories: toStories, draft: function(){ return S.draft ? clone(S.draft) : null; },
+           /* ★fix872（sp8）: 衝突ダイアログ。fix825 の既存経路からは呼ばれない。 */
+           f872Conflict: f872ConflictDialog,
            /* SEED_TEXT_ENRICHMENT_V1 */
            enrich: enrichRun, acceptEnrich: acceptEnrich, discardEnrich: discardEnrich,
            enrichTargets: enrichTargets, enrichOfferCount: enrichOfferCount, maybeOfferEnrich: maybeOfferEnrich,
