@@ -1,0 +1,600 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/sansan2103-a11y/chronicle/pipeline/manifest.schema.json",
+  "title": "Chronicle Release Manifest (Pipeline V1.2 / V2)",
+  "description": "One file, two manifest shapes, selected by schemaVersion. schemaVersion 2 = a REPOSITORY release (kind pages | rollback | pipeline-admin), applied by pipeline/validate_and_apply.mjs and claimed by chronicle-release-gate.yml with {\"kind\":\"pages\"}. schemaVersion 3 = a WORKER release (kind worker), validated by pipeline/validate_worker_release.mjs and claimed by chronicle-worker-gate.yml with {\"kind\":\"worker\"}. The two never mix: each validator refuses the other's schemaVersion. This document is reference material - the validators are the authority, and they re-derive every digest, size and path rather than trusting a manifest's claim about itself.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/repositoryRelease"
+    },
+    {
+      "$ref": "#/$defs/workerRelease"
+    }
+  ],
+  "$defs": {
+    "repositoryRelease": {
+      "title": "Chronicle Release Manifest (Pipeline V1.1)",
+      "description": "Chronicle Release Pipeline V1.1 manifest, schemaVersion 2. One manifest == one release == one commit on the target branch. schemaVersion 2 differs from V1's schemaVersion 1 in two load-bearing ways: (a) files[] no longer embed content - the bytes live in the D1 table release_payload as ordered base64 chunks, and each file carries only a payload descriptor; (b) the manifest carries manifestSha256 over its own canonical form. The gate re-derives every digest, size and path from the reassembled chunks and the working tree; it never trusts a manifest's claim about itself.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "releaseId",
+        "targetRepo",
+        "targetBranch",
+        "baseCommit",
+        "commitMessage",
+        "kind",
+        "files",
+        "limits",
+        "manifestSha256"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "description": "Manifest schema version. Pipeline V1.1 accepts 2 only; a schemaVersion 1 manifest (inline content) is refused with exit 10.",
+          "type": "integer",
+          "const": 2
+        },
+        "manifestSha256": {
+          "description": "sha256 (hex) over the UTF-8 bytes of the canonical manifest JSON: all object keys sorted by code unit, arrays in order, no whitespace, and the manifestSha256 property itself removed before serialization. Verified by the gate; a mismatch is exit 19.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "releaseId": {
+          "description": "Globally unique release identifier, format <YYYYMMDD>-<tag>. Uniqueness is enforced against git history via the 'Release-Id: <releaseId>' commit trailer (exit 18). A FAILed releaseId is quarantined in the queue and MUST NOT be retried; issue a new releaseId instead.",
+          "type": "string",
+          "pattern": "^[0-9]{8}-[A-Za-z0-9][A-Za-z0-9._-]{0,31}$",
+          "examples": [
+            "20260919-sp7",
+            "20260920-sp8",
+            "20260920-rb-sp8"
+          ]
+        },
+        "targetRepo": {
+          "type": "string",
+          "const": "sansan2103-a11y/chronicle"
+        },
+        "targetBranch": {
+          "type": "string",
+          "const": "v292-rebuild"
+        },
+        "baseCommit": {
+          "description": "40-hex commit sha the release was built against. MUST equal `git rev-parse HEAD` of the checked-out target branch at apply time (exit 11). This is the optimistic-concurrency token: if the branch moved since the build, the release is rejected and never retried.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "commitMessage": {
+          "description": "Commit message. MUST end with the trailer 'Release-Id: <releaseId>'. The validator appends it when absent and rejects a different one (exit 10).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "kind": {
+          "description": "pages = normal product release. rollback = a pages release restoring a previous state; requires rollbackOf. pipeline-admin = changes to .github/** or pipeline/**; the release-gate shim never hands one out, the gate validator refuses it, and it can only be applied by a human running pipeline/admin_apply.mjs.",
+          "type": "string",
+          "enum": [
+            "pages",
+            "pipeline-admin",
+            "rollback"
+          ]
+        },
+        "rollbackOf": {
+          "description": "Required when kind=rollback: the releaseId being rolled back. Must differ from releaseId, and must be findable in the target branch history by its Release-Id: trailer. The validator enforces that the rollback RESTORES BYTES: each file afterSha256 must equal the blob recorded at commit(rollbackOf)^ for that path (exit 14), a path absent before that release must be deleted, and the set of non-Pages-trio paths must equal the set that release changed (exit 10). The Pages version trio is exempt from byte-exactness because pagesContract pins it to the rollback's own releaseId. See docs/V11_REAUDIT.md F2.",
+          "type": "string",
+          "pattern": "^[0-9]{8}-[A-Za-z0-9][A-Za-z0-9._-]{0,31}$"
+        },
+        "files": {
+          "description": "Complete, exhaustive set of file operations. After applying, `git status --porcelain` MUST describe exactly this set - no more, no less (exit 15).",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/fileOp"
+          }
+        },
+        "limits": {
+          "description": "Declared limits. They may only be LOWER than the gate's hard caps (maxFiles 32, maxTotalBytes 4194304, maxFileBytes 1048576, maxChunkBytes 524288); a manifest cannot raise them. Effective limit = min(declared, hard cap). Violation = exit 17.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "maxFiles",
+            "maxTotalBytes",
+            "maxFileBytes"
+          ],
+          "properties": {
+            "maxFiles": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 32
+            },
+            "maxTotalBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4194304
+            },
+            "maxFileBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048576
+            },
+            "maxChunkBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 524288
+            }
+          }
+        },
+        "pagesContract": {
+          "description": "Static Pages deploy contract. Required for kind=pages and kind=rollback. version MUST equal releaseId. When checkBuiltMarkers is true the validator statically checks the version.txt / index.html BUILT / home.html HOME_BUILT trio (exit 16).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "version",
+            "checkBuiltMarkers"
+          ],
+          "properties": {
+            "version": {
+              "type": "string",
+              "description": "MUST be identical to releaseId."
+            },
+            "checkBuiltMarkers": {
+              "type": "boolean",
+              "const": true
+            }
+          }
+        },
+        "note": {
+          "description": "Free-form human note carried in the queue row. Not written to the repo.",
+          "type": "string",
+          "maxLength": 2048
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "rollback"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "rollbackOf"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "pages",
+                  "rollback"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "pagesContract"
+            ]
+          }
+        }
+      ],
+      "$defs": {
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "fileOp": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "operation",
+            "beforeSha256",
+            "afterSha256",
+            "size"
+          ],
+          "properties": {
+            "path": {
+              "description": "Repo-relative POSIX path. Denied (exit 12): absolute paths, any '.' / '..' / empty segment, backslashes, control characters, leading/trailing whitespace, any '.git' segment, '.github/**', 'pipeline/**' except 'pipeline/PROBE.md' and 'pipeline/probes/<name>', and a basename of '.gitattributes' or '.gitmodules'. Also denied when the path or any of its existing parents is a symlink, or is recorded in the index with mode 120000.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[^/][^\\u0000-\\u001f\\\\]*$"
+            },
+            "operation": {
+              "type": "string",
+              "enum": [
+                "new",
+                "change",
+                "delete"
+              ]
+            },
+            "beforeSha256": {
+              "description": "sha256 of the file bytes BEFORE the operation. null for operation=new. Checked against the working tree before applying (exit 13).",
+              "$ref": "#/$defs/sha256"
+            },
+            "afterSha256": {
+              "description": "sha256 of the file bytes AFTER the operation. null for operation=delete. Checked after applying and again against the committed tree (exit 14).",
+              "$ref": "#/$defs/sha256"
+            },
+            "size": {
+              "description": "Byte length of the file AFTER the operation; 0 for operation=delete. Must equal the real post-apply size (exit 14), and must not exceed maxFileBytes (exit 17).",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1048576
+            },
+            "payload": {
+              "description": "Descriptor for the chunked payload. Required for operation new/change; MUST be absent for operation=delete. The bytes themselves live in release_payload rows keyed (release_id, path, seq).",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "encoding",
+                "payloadSha256",
+                "chunkCount",
+                "totalBytes"
+              ],
+              "properties": {
+                "encoding": {
+                  "description": "full-base64 = the reassembled payload is the complete post-operation file bytes (the only encoding allowed for operation=new). patch-base64 = the reassembled payload is a unified diff applied with `git apply -p1`; the diff MUST mention exactly one file whose a//b/ paths equal this entry's path (operation=change only).",
+                  "type": "string",
+                  "enum": [
+                    "patch-base64",
+                    "full-base64"
+                  ]
+                },
+                "payloadSha256": {
+                  "description": "sha256 over the ENCODED payload, i.e. over the UTF-8 bytes of the full base64 text formed by concatenating every chunk_b64 in seq order. Mismatch = exit 19.",
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "chunkCount": {
+                  "description": "Number of release_payload rows for this (release_id, path). Their seq values MUST form the complete run 0..chunkCount-1 with no gaps and no duplicates (exit 19).",
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "totalBytes": {
+                  "description": "Byte length of the ENCODED payload, i.e. the sum of the lengths of every chunk_b64. NOT the decoded file size - that is `size`. Mismatch = exit 19.",
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "operation": {
+                    "const": "new"
+                  }
+                },
+                "required": [
+                  "operation"
+                ]
+              },
+              "then": {
+                "required": [
+                  "payload"
+                ],
+                "properties": {
+                  "beforeSha256": {
+                    "type": "null"
+                  },
+                  "afterSha256": {
+                    "type": "string"
+                  },
+                  "payload": {
+                    "properties": {
+                      "encoding": {
+                        "const": "full-base64"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "operation": {
+                    "const": "change"
+                  }
+                },
+                "required": [
+                  "operation"
+                ]
+              },
+              "then": {
+                "required": [
+                  "payload"
+                ],
+                "properties": {
+                  "beforeSha256": {
+                    "type": "string"
+                  },
+                  "afterSha256": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "operation": {
+                    "const": "delete"
+                  }
+                },
+                "required": [
+                  "operation"
+                ]
+              },
+              "then": {
+                "not": {
+                  "required": [
+                    "payload"
+                  ]
+                },
+                "properties": {
+                  "beforeSha256": {
+                    "type": "string"
+                  },
+                  "afterSha256": {
+                    "type": "null"
+                  },
+                  "size": {
+                    "const": 0
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "workerRelease": {
+      "title": "Chronicle Worker Release Manifest (Pipeline V2, schemaVersion 3)",
+      "description": "A worker release deploys exactly one Cloudflare Worker (novel-proxy) and touches no repository file. The payload is worker.js, carried as ordered base64 chunks in the same D1 table release_payload. Validated by pipeline/validate_worker_release.mjs, which re-derives every digest and renders the wrangler.toml the deploy uses. CRITICAL: a wrangler deploy uploads a new Worker VERSION, and a version carries its complete binding set - a binding the configuration does not declare is NOT in the new version. `bindings` is therefore mandatory and exact. Vars are preserved by keep_vars=true in the rendered config; secrets are never deleted by a deployment. See docs/PIPELINE_V2.md section 3.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "releaseId",
+        "kind",
+        "targetWorker",
+        "expectedCurrentBuild",
+        "newBuild",
+        "workerSha256",
+        "workerSizeBytes",
+        "expectedEnvDelta",
+        "rollbackSha256",
+        "rollbackBuild",
+        "bindings",
+        "compatibilityDate",
+        "compatibilityFlags",
+        "payload",
+        "limits",
+        "manifestSha256"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 3
+        },
+        "manifestSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "sha256 over the canonical manifest JSON (keys sorted by code unit, no whitespace, this field excluded)."
+        },
+        "releaseId": {
+          "type": "string",
+          "pattern": "^[0-9]{8}-[A-Za-z0-9][A-Za-z0-9._-]{0,31}$"
+        },
+        "kind": {
+          "const": "worker"
+        },
+        "targetWorker": {
+          "const": "novel-proxy",
+          "description": "Pinned in the validator. This gate deploys exactly one Worker."
+        },
+        "expectedCurrentBuild": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+          "description": "The workerBuild this release was built against. Compared with the LIVE root JSON before anything is deployed; a mismatch aborts (exit 20) because rollbackSha256 would no longer describe what is running."
+        },
+        "newBuild": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+          "description": "The workerBuild the new bytes report at GET /."
+        },
+        "noop": {
+          "type": "boolean",
+          "description": "REQUIRED true when expectedCurrentBuild == newBuild, and forbidden otherwise. An equal-build release is a probe: the post-deploy poll cannot distinguish a successful deploy from no deploy at all, so the release must declare that it knows this. Proof of landing is the version id in the wrangler deploy output."
+        },
+        "workerSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "sha256 of the reconstructed worker.js. Re-derived and compared (exit 14)."
+        },
+        "workerSizeBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2097152
+        },
+        "expectedEnvDelta": {
+          "type": "array",
+          "maxItems": 0,
+          "description": "MUST be empty in V2.0. Any entry is refused (exit 21): this pipeline deploys code only. A release that needs a var, secret or binding change is an Owner dashboard action plus a separate code release."
+        },
+        "rollbackSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The bytes to return to. For a no-op release this must equal workerSha256; for a build-changing release it must differ. A rollback is a NEW queued release carrying these bytes - never an automatic action."
+        },
+        "rollbackBuild": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+          "description": "Must equal expectedCurrentBuild: the state to roll back to IS the state this release replaces."
+        },
+        "compatibilityDate": {
+          "type": "string",
+          "pattern": "^20[0-9]{2}-[0-9]{2}-[0-9]{2}$",
+          "description": "Pinned yyyy-mm-dd. Compatibility settings are part of a Worker version; letting wrangler default this would move the runtime under a bytes-only release. Owner-confirmed once."
+        },
+        "compatibilityFlags": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]{1,64}$"
+          },
+          "description": "REQUIRED, and may be an EMPTY array. compatibility_flags is as much a part of a Worker version as compatibility_date: a flag that is live today and absent from the rendered wrangler.toml is switched off by the deploy. The field is required rather than defaulted to [] so that \"no flags\" is a statement the Owner made, not a value nobody supplied. Rendered into wrangler.toml always, including when empty."
+        },
+        "bindings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "d1_databases",
+            "kv_namespaces"
+          ],
+          "description": "Names and ids only. No secret value is ever carried in a manifest. The set must be EXACTLY the bindings novel-proxy uses: under-declaring removes a binding from the live Worker, over-declaring adds one nobody reviewed.",
+          "properties": {
+            "d1_databases": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "binding",
+                  "database_name",
+                  "database_id"
+                ],
+                "properties": {
+                  "binding": {
+                    "type": "string",
+                    "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+                  },
+                  "database_name": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+                  },
+                  "database_id": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                  }
+                }
+              }
+            },
+            "kv_namespaces": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "binding",
+                  "id"
+                ],
+                "properties": {
+                  "binding": {
+                    "type": "string",
+                    "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+                  },
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{32}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "encoding",
+            "payloadSha256",
+            "chunkCount",
+            "totalBytes"
+          ],
+          "properties": {
+            "path": {
+              "const": "worker.js"
+            },
+            "encoding": {
+              "const": "full-base64",
+              "description": "A Worker script is never patched; it is replaced whole."
+            },
+            "payloadSha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "chunkCount": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "totalBytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxWorkerBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2097152
+            },
+            "maxChunkBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 524288
+            }
+          },
+          "description": "A manifest may declare LOWER limits but can never raise the gate hard caps."
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2048
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "noop": {
+                "const": true
+              }
+            },
+            "required": [
+              "noop"
+            ]
+          },
+          "then": {
+            "description": "a no-op release rolls back to the bytes it ships"
+          }
+        }
+      ]
+    }
+  }
+}

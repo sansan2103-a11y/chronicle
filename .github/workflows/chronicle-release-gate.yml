@@ -1,0 +1,426 @@
+name: chronicle-release-gate
+
+# Chronicle Release Pipeline V1.2 (Pages).
+#
+# FABLE_BUILD -> D1 QUEUE -> [release-gate shim] -> [this gate] -> PAGES_DEPLOY -> FABLE_VERIFY
+#
+# This workflow is the only automated writer of the v292-rebuild branch.
+#
+# It never speaks to D1 and holds no Cloudflare API token. It talks only to the
+# `chronicle-release-queue-gate` Worker, which is bound to exactly one D1
+# database and exposes a fixed, closed API. See docs/PIPELINE_V1.md.
+#
+# Quarantine authority lives in the queue, not here: a failed run reports
+# outcome=quarantined through POST /result, and that row is terminal. This
+# workflow keeps no local state of any kind between runs.
+#
+# `kind: pipeline-admin` is unreachable from here by construction:
+#   - the shim never hands out a pipeline-admin row;
+#   - the gate validator CLI has no flag that would authorize one;
+#   - the separate manual admin script is never invoked by this file.
+#
+# Those last two are enforced by a grep guard in the acceptance harness, so this
+# file must not contain the flag name or the admin script name even in a comment.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Validate only; do not commit or push'
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-gate
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  gate:
+    name: release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout v292-rebuild (full history)
+        uses: actions/checkout@v4
+        with:
+          ref: v292-rebuild
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Node version
+        run: node --version
+
+      # ---------------------------------------------------------------------
+      # 1. Claim one release from the queue, through the shim.
+      #    The claim is atomic and takes a 30-minute lease, so a second runner
+      #    (or a retried run) cannot pick up the same release.
+      # ---------------------------------------------------------------------
+      - name: Claim a release
+        id: claim
+        env:
+          RELEASE_GATE_URL: ${{ secrets.RELEASE_GATE_URL }}
+          RELEASE_GATE_SECRET: ${{ secrets.RELEASE_GATE_SECRET }}
+        run: |
+          set -euo pipefail
+          set +x
+          if [ -z "${RELEASE_GATE_URL}" ] || [ -z "${RELEASE_GATE_SECRET}" ]; then
+            echo "::error::Missing RELEASE_GATE_URL or RELEASE_GATE_SECRET"
+            exit 1
+          fi
+          cat > "${RUNNER_TEMP}/claim.mjs" <<'MJS'
+          import fs from 'node:fs';
+          const base = process.env.RELEASE_GATE_URL.replace(/\/+$/, '');
+          const auth = { authorization: `Bearer ${process.env.RELEASE_GATE_SECRET}`, 'content-type': 'application/json' };
+          const tmp = process.env.RUNNER_TEMP;
+          // Every value written here is validated against a closed pattern
+          // FIRST. A step output is later read back by other steps, and a value
+          // containing a newline would forge a second output key; a value
+          // containing a backtick or $( would be executed when a later `run:`
+          // block interpolates it. Refuse instead of escaping.
+          const put = (k, v) => {
+            if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(String(v))) {
+              console.log(`::error::refusing to emit output ${k}: value is not a bare token`);
+              process.exit(1);
+            }
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${v}\n`);
+          };
+          const ID_RE = /^[0-9]{8}-[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/;
+          const KINDS = ['pages', 'rollback'];
+
+          const health = await fetch(`${base}/health`);
+          if (!health.ok) { console.log('::error::shim /health is not reachable'); process.exit(1); }
+          console.log(`shim build: ${(await health.json()).build}`);
+
+          // Shim v1.2 requires the claiming GATE to be named. 'pages' covers both
+          // kind=pages and kind=rollback; worker releases belong to
+          // chronicle-worker-gate.yml and are invisible here. A shim older than
+          // v1.2 ignores the body, and a v1.2 shim answers 400 to a caller that
+          // omits it - deliberately, so a forgetful caller cannot be served "any
+          // kind". See docs/PIPELINE_V2.md section 5.
+          const res = await fetch(`${base}/claim`, { method: 'POST', headers: auth, body: JSON.stringify({ kind: 'pages' }) });
+          if (res.status === 204) { put('found', 'false'); console.log('no eligible release'); process.exit(0); }
+          if (res.status === 400) {
+            console.log('::error::the shim rejected the claim kind. This gate needs release-gate-shim-v1.2.0 or later; check GET /health.');
+            process.exit(1);
+          }
+          if (res.status !== 200) { console.log(`::error::claim failed with HTTP ${res.status}`); process.exit(1); }
+
+          const c = await res.json();
+          if (!ID_RE.test(String(c.release_id ?? ''))) { console.log('::error::shim returned a malformed release_id'); process.exit(1); }
+          // The claim token is a capability for this release: never print it.
+          console.log(`::add-mask::${c.claim_token}`);
+          if (c.manifest?.releaseId !== c.release_id) { console.log('::error::manifest releaseId does not match the claimed row'); process.exit(1); }
+          // Closed allowlist, not a denylist. `pipeline-admin` is refused, and so
+          // is every other value: kind reaches a later `run:` block, so an
+          // unconstrained string here is remote code execution on a runner that
+          // holds contents:write. See docs/V11_REAUDIT.md F1.
+          const kind = String(c.manifest?.kind ?? '');
+          if (!KINDS.includes(kind)) {
+            console.log(`::error::shim handed out a release whose kind is not ${KINDS.join('|')}; refusing`);
+            process.exit(1);
+          }
+
+          fs.writeFileSync(`${tmp}/manifest.json`, JSON.stringify(c.manifest));
+          fs.writeFileSync(`${tmp}/claim_token`, c.claim_token);
+          put('found', 'true');
+          put('release_id', c.release_id);
+          put('kind', kind);
+          console.log(`claimed ${c.release_id} (kind=${kind}) lease_until=${JSON.stringify(String(c.lease_until ?? ''))}`);
+          MJS
+          node "${RUNNER_TEMP}/claim.mjs"
+
+      # ---------------------------------------------------------------------
+      # 2. Download the payload chunks and verify each one against the index
+      #    before handing them to the validator.
+      # ---------------------------------------------------------------------
+      - name: Fetch payload chunks
+        id: payload
+        if: steps.claim.outputs.found == 'true'
+        continue-on-error: true
+        env:
+          RELEASE_GATE_URL: ${{ secrets.RELEASE_GATE_URL }}
+          RELEASE_GATE_SECRET: ${{ secrets.RELEASE_GATE_SECRET }}
+          RELEASE_ID: ${{ steps.claim.outputs.release_id }}
+        run: |
+          set -uo pipefail
+          set +x
+          cat > "${RUNNER_TEMP}/payload.mjs" <<'MJS'
+          import fs from 'node:fs';
+          import { createHash } from 'node:crypto';
+          const base = process.env.RELEASE_GATE_URL.replace(/\/+$/, '');
+          const auth = { authorization: `Bearer ${process.env.RELEASE_GATE_SECRET}` };
+          const id = process.env.RELEASE_ID;
+          const tmp = process.env.RUNNER_TEMP;
+          const sha256 = (b) => createHash('sha256').update(b).digest('hex');
+
+          // Chunk paths come from the queue. They are never printed raw: a
+          // newline in one would let a queue row emit its own ::workflow
+          // commands into this log. JSON.stringify escapes them. (REAUDIT F7)
+          const q = (v) => JSON.stringify(String(v)).replace(/[\r\n]/g, ' ');
+
+          const idxRes = await fetch(`${base}/release/${id}/payload/index`, { headers: auth });
+          if (!idxRes.ok) { console.log(`::error::payload index failed with HTTP ${idxRes.status}`); process.exit(1); }
+          const index = await idxRes.json();
+          if (!Array.isArray(index)) { console.log('::error::payload index is not an array'); process.exit(1); }
+          // Bound the transfer before it starts. The validator enforces the real
+          // limits, but it only sees bytes the runner already downloaded.
+          if (index.length > 256) { console.log(`::error::payload index declares ${index.length} chunks, over the transport cap of 256`); process.exit(1); }
+          console.log(`payload index: ${index.length} chunk(s)`);
+
+          const rows = [];
+          let transferred = 0;
+          for (const e of index) {
+            const u = `${base}/release/${id}/payload?path=${encodeURIComponent(e.path)}&seq=${e.seq}`;
+            const r = await fetch(u, { headers: auth });
+            if (!r.ok) { console.log(`::error::chunk ${q(e.path)}#${e.seq} failed with HTTP ${r.status}`); process.exit(1); }
+            const row = await r.json();
+            const got = sha256(Buffer.from(row.chunk_b64, 'utf8'));
+            if (got !== e.sha256 || got !== row.chunk_sha256) {
+              console.log(`::error::chunk ${q(e.path)}#${e.seq} failed its transport sha256 check`);
+              process.exit(1);
+            }
+            transferred += Buffer.byteLength(row.chunk_b64, 'utf8');
+            if (transferred > 8 * 1024 * 1024) { console.log('::error::payload transfer exceeded 8 MB'); process.exit(1); }
+            rows.push({ path: row.path, seq: row.seq, chunk_b64: row.chunk_b64, chunk_sha256: row.chunk_sha256 });
+          }
+          fs.writeFileSync(`${tmp}/chunks.json`, JSON.stringify(rows));
+          console.log(`downloaded ${rows.length} chunk(s), all matching the index sha256`);
+          MJS
+          node "${RUNNER_TEMP}/payload.mjs"
+          echo "exit_code=$?" >> "${GITHUB_OUTPUT}"
+          exit 0
+
+      # ---------------------------------------------------------------------
+      # 3. Validate + apply + commit.
+      #    No flag here authorizes a pipeline-admin release, and the validator
+      #    CLI rejects any unknown argument.
+      # ---------------------------------------------------------------------
+      - name: Validate and apply
+        id: apply
+        if: steps.claim.outputs.found == 'true' && steps.payload.outputs.exit_code == '0'
+        continue-on-error: true
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -uo pipefail
+          FLAGS=""
+          if [ "${DRY_RUN:-false}" = "true" ]; then FLAGS="--no-commit"; fi
+          node pipeline/validate_and_apply.mjs \
+            --repo . \
+            --manifest "${RUNNER_TEMP}/manifest.json" \
+            --payload "${RUNNER_TEMP}/chunks.json" \
+            --json "${RUNNER_TEMP}/result.json" \
+            ${FLAGS}
+          code=$?
+          echo "exit_code=${code}" >> "${GITHUB_OUTPUT}"
+          exit 0
+
+      # ---------------------------------------------------------------------
+      # 4. Push. No force, ever. A rejected push means the branch moved under
+      #    us: exit 11 and do not retry.
+      # ---------------------------------------------------------------------
+      - name: Push one commit
+        id: push
+        if: steps.claim.outputs.found == 'true' && steps.apply.outputs.exit_code == '0' && inputs.dry_run != true
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          LOCAL=$(git rev-parse HEAD)
+          echo "local_head=${LOCAL}" >> "${GITHUB_OUTPUT}"
+          if ! git push origin "HEAD:refs/heads/v292-rebuild"; then
+            echo "::error::push rejected (branch moved or protected); NOT retrying"
+            echo "push_verify=rejected" >> "${GITHUB_OUTPUT}"
+            echo "exit_code=11" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          # REAUDIT F5: the push SUCCEEDED here. If the readback then fails we
+          # must not report the same thing as a rejection: the commit is on the
+          # branch, and telling Fable "quarantined" without saying so invites a
+          # rebuild that lands the change a second time.
+          REMOTE=""
+          for attempt in 1 2 3; do
+            REMOTE=$(git ls-remote origin refs/heads/v292-rebuild 2>/dev/null | awk '{print $1}')
+            [ -n "${REMOTE}" ] && break
+            sleep 3
+          done
+          echo "remote_head=${REMOTE}" >> "${GITHUB_OUTPUT}"
+          if [ -z "${REMOTE}" ]; then
+            echo "::error::push succeeded but the remote could not be read back; treating as NOT LANDED (fail closed)"
+            echo "push_verify=unverified" >> "${GITHUB_OUTPUT}"
+            echo "exit_code=11" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          if [ "${REMOTE}" != "${LOCAL}" ]; then
+            echo "::error::post-push verification failed: remote ${REMOTE} != local ${LOCAL}"
+            echo "push_verify=mismatch" >> "${GITHUB_OUTPUT}"
+            echo "exit_code=11" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          echo "push_verify=ok" >> "${GITHUB_OUTPUT}"
+          echo "exit_code=0" >> "${GITHUB_OUTPUT}"
+
+      # ---------------------------------------------------------------------
+      # 5. Report the outcome back to the queue. ALWAYS, on success and on
+      #    failure. A failure reports outcome=quarantined, which is terminal:
+      #    NO_RETRY_UNTIL_PASS. A dry run reports nothing and lets the lease
+      #    expire, so the release stays claimable after manual recovery.
+      # ---------------------------------------------------------------------
+      - name: Report outcome to the queue
+        id: report
+        if: steps.claim.outputs.found == 'true' && inputs.dry_run != true
+        continue-on-error: true
+        env:
+          RELEASE_GATE_URL: ${{ secrets.RELEASE_GATE_URL }}
+          RELEASE_GATE_SECRET: ${{ secrets.RELEASE_GATE_SECRET }}
+          RELEASE_ID: ${{ steps.claim.outputs.release_id }}
+          PAYLOAD_EXIT: ${{ steps.payload.outputs.exit_code }}
+          VALIDATOR_EXIT: ${{ steps.apply.outputs.exit_code }}
+          PUSH_EXIT: ${{ steps.push.outputs.exit_code }}
+          COMMIT_SHA: ${{ steps.push.outputs.local_head }}
+        run: |
+          set -uo pipefail
+          set +x
+          cat > "${RUNNER_TEMP}/report.mjs" <<'MJS'
+          import fs from 'node:fs';
+          const base = process.env.RELEASE_GATE_URL.replace(/\/+$/, '');
+          const id = process.env.RELEASE_ID;
+          const tmp = process.env.RUNNER_TEMP;
+          const num = (v) => (/^[0-9]+$/.test(v || '') ? Number(v) : null);
+
+          const payloadExit = num(process.env.PAYLOAD_EXIT);
+          const validatorExit = num(process.env.VALIDATOR_EXIT);
+          const pushExit = num(process.env.PUSH_EXIT);
+          const ok = validatorExit === 0 && pushExit === 0;
+
+          const body = {
+            claim_token: fs.readFileSync(`${tmp}/claim_token`, 'utf8').trim(),
+            outcome: ok ? 'applied' : 'quarantined',
+            run_id: String(process.env.GITHUB_RUN_ID || ''),
+          };
+          if (ok) body.commit_sha = String(process.env.COMMIT_SHA || '');
+          else body.exit_code = validatorExit ?? pushExit ?? payloadExit ?? 1;
+
+          const r = await fetch(`${base}/release/${id}/result`, {
+            method: 'POST',
+            headers: { authorization: `Bearer ${process.env.RELEASE_GATE_SECRET}`, 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          console.log(`reported outcome=${body.outcome} -> HTTP ${r.status}`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `outcome=${body.outcome}\nreport_status=${r.status}\n`);
+          if (r.status === 409) {
+            console.log('::warning::the lease had already expired or been resolved; Fable must reconcile this release manually');
+          } else if (r.status !== 200) {
+            console.log(`::error::result report failed with HTTP ${r.status}`);
+            process.exit(1);
+          }
+          MJS
+          node "${RUNNER_TEMP}/report.mjs"
+          exit 0
+
+      # ---------------------------------------------------------------------
+      # 6. Summary.
+      # ---------------------------------------------------------------------
+      - name: Write run summary
+        if: always()
+        # REAUDIT F1: nothing that originated in the queue may be pasted into a
+        # shell body by `${{ }}`. Every value arrives as an environment variable,
+        # which the shell never re-parses.
+        env:
+          FOUND: ${{ steps.claim.outputs.found }}
+          RID: ${{ steps.claim.outputs.release_id }}
+          KIND: ${{ steps.claim.outputs.kind }}
+          YEXIT: ${{ steps.payload.outputs.exit_code }}
+          VEXIT: ${{ steps.apply.outputs.exit_code }}
+          PEXIT: ${{ steps.push.outputs.exit_code }}
+          PVERIFY: ${{ steps.push.outputs.push_verify }}
+          OUTCOME: ${{ steps.report.outputs.outcome }}
+          REPORT_STATUS: ${{ steps.report.outputs.report_status }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -uo pipefail
+          FOUND="${FOUND:-}"; RID="${RID:-}"; KIND="${KIND:-}"
+          YEXIT="${YEXIT:-}"; VEXIT="${VEXIT:-}"; PEXIT="${PEXIT:-}"
+          PVERIFY="${PVERIFY:-}"; OUTCOME="${OUTCOME:-}"
+          REPORT_STATUS="${REPORT_STATUS:-}"; DRY_RUN="${DRY_RUN:-false}"
+          {
+            echo "## Chronicle release gate (V1.1)"
+            echo ""
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| run | \`${GITHUB_RUN_ID}\` |"
+            echo "| claimed | \`${FOUND:-false}\` |"
+            echo "| releaseId | \`${RID:-none}\` |"
+            echo "| kind | \`${KIND:-none}\` |"
+            echo "| payload exit | \`${YEXIT:-n/a}\` |"
+            echo "| validator exit | \`${VEXIT:-n/a}\` |"
+            echo "| push exit | \`${PEXIT:-n/a}\` |"
+            echo "| push verified | \`${PVERIFY:-n/a}\` |"
+            echo "| reported outcome | \`${OUTCOME:-none}\` |"
+            echo "| report status | \`${REPORT_STATUS:-none}\` |"
+            echo "| dry run | \`${DRY_RUN}\` |"
+            echo ""
+          } >> "${GITHUB_STEP_SUMMARY}"
+          if [ -f "${RUNNER_TEMP}/result.json" ]; then
+            {
+              echo "### validator result"
+              echo ""
+              echo '```json'
+              cat "${RUNNER_TEMP}/result.json"
+              echo '```'
+              echo ""
+            } >> "${GITHUB_STEP_SUMMARY}"
+          fi
+          {
+            echo "### Queue state"
+            echo ""
+            if [ "${FOUND:-false}" != "true" ]; then
+              echo "- Nothing claimable. No queue row changed."
+            elif [ "${OUTCOME:-}" = "applied" ]; then
+              echo "- \`${RID}\` APPLIED and reported. The queue row is now \`applied\`."
+            elif [ "${OUTCOME:-}" = "quarantined" ]; then
+              echo "- \`${RID}\` FAILED and reported. The queue row is now \`quarantined\` - terminal."
+              echo "- NO_RETRY_UNTIL_PASS: rebuild under a NEW releaseId."
+              if [ "${PVERIFY:-}" = "unverified" ]; then
+                echo "- :warning: the push itself did NOT fail - only its readback did. The commit"
+                echo "  MAY already be on \`v292-rebuild\`. Check git for a \`Release-Id: ${RID}\`"
+                echo "  trailer BEFORE rebuilding, or the same change will land twice."
+              fi
+            else
+              echo "- \`${RID}\` was claimed but no outcome was reported (dry run, or the report failed)."
+              echo "- The lease expires 30 minutes after the claim. Fable must reconcile it manually (queue.sql section 5)."
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Fail the run when the release did not land
+        if: steps.claim.outputs.found == 'true'
+        env:
+          RID: ${{ steps.claim.outputs.release_id }}
+          YEXIT: ${{ steps.payload.outputs.exit_code }}
+          VEXIT: ${{ steps.apply.outputs.exit_code }}
+          PEXIT: ${{ steps.push.outputs.exit_code }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -uo pipefail
+          RID="${RID:-unknown}"
+          if [ "${YEXIT:-1}" != "0" ]; then
+            echo "::error::payload download failed for ${RID}"
+            exit 1
+          fi
+          if [ "${VEXIT:-1}" != "0" ]; then
+            echo "::error::validator failed for ${RID} with exit ${VEXIT:-unknown}"
+            exit 1
+          fi
+          if [ "${DRY_RUN:-false}" != 'true' ] && [ "${PEXIT:-1}" != "0" ]; then
+            echo "::error::push failed for ${RID} with exit ${PEXIT:-unknown}"
+            exit 1
+          fi
+          echo "release ${RID} applied"

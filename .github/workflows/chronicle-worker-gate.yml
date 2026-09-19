@@ -1,0 +1,557 @@
+name: chronicle-worker-gate
+
+# Chronicle Release Pipeline V2 - Worker auto-deploy.
+#
+# FABLE_BUILD -> D1 QUEUE -> [release-gate shim] -> [this gate] -> WRANGLER DEPLOY -> POLL
+#
+# SEPARATE from chronicle-release-gate.yml (Pages). Same shim, same claim API,
+# same bearer secret, different concurrency group, different claim filter, and
+# a Cloudflare token that this workflow alone can read.
+#
+# WHAT THIS WORKFLOW CAN DO, EXACTLY
+#   - claim one queued row whose manifest.kind == 'worker'
+#   - reconstruct worker.js from the chunked D1 payload and verify its sha/size
+#   - read GET https://novel-proxy.sansan2103.workers.dev/ and refuse unless the
+#     live workerBuild equals the manifest's expectedCurrentBuild
+#   - run `wrangler deploy` for the single Worker `novel-proxy`
+#   - poll GET / until workerBuild == newBuild
+#   - report applied|quarantined to the queue
+#
+# WHAT IT CANNOT DO
+#   - touch the repository (permissions: contents: read, and nothing pushes)
+#   - deploy any other Worker (targetWorker is pinned in the validator)
+#   - change a var, a secret or a binding (expectedEnvDelta must be [];
+#     keep_vars = true; secrets are never deleted by a deployment)
+#   - roll back by itself. A rollback is a NEW queued release carrying the
+#     rollbackSha256 bytes. Automatic rollback would be a retry, and
+#     NO_RETRY_UNTIL_PASS forbids it.
+#
+# SECRETS
+#   CLOUDFLARE_API_TOKEN   Owner-created, scoped to Account -> Workers Scripts ->
+#                          Edit on this account ONLY. Never passes through
+#                          Claude; never echoed; consumed only by wrangler-action.
+#   CLOUDFLARE_ACCOUNT_ID  account identifier, not a credential.
+#   RELEASE_GATE_URL / RELEASE_GATE_SECRET  the queue shim, as in the Pages gate.
+#
+# FAILS CLOSED WHEN UNCONFIGURED. Step 0 checks that all four secrets exist. If
+# any is missing the run exits 0 with "V2 not configured" and skips everything
+# else - it does not claim, does not deploy, and does not turn the Actions tab
+# red every 15 minutes while the Owner is still doing the one-time setup.
+#
+# No value that originated in the queue is ever interpolated into a shell body
+# with ${{ }}. See v1.1/docs/V11_REAUDIT.md F1 for why that rule exists.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Validate and render wrangler.toml only; do not deploy'
+        type: boolean
+        default: false
+
+concurrency:
+  group: worker-gate
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  WORKER_URL: https://novel-proxy.sansan2103.workers.dev/
+
+jobs:
+  worker-gate:
+    name: worker gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # ---------------------------------------------------------------------
+      # 0. Is V2 configured on this account at all?
+      #
+      #    This file ships in the SAME pipeline-admin commit as the Pages gate,
+      #    so it exists before CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID do.
+      #    An absent secret is not an error, it is "V2 not set up yet": this
+      #    step reports it and every later step is skipped, so the scheduled run
+      #    is GREEN and takes seconds. It runs BEFORE the checkout and BEFORE
+      #    the claim, so an unconfigured account can never claim a release and
+      #    strand it for 30 minutes.
+      #
+      #    (`secrets` is not available in a step-level `if:`, which is why this
+      #    is a step that emits an output rather than a condition.)
+      # ---------------------------------------------------------------------
+      - name: Preflight - are the V2 secrets configured?
+        id: preflight
+        env:
+          CF_TOKEN_PRESENT: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          CF_ACCOUNT_PRESENT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+          GATE_URL_PRESENT: ${{ secrets.RELEASE_GATE_URL != '' }}
+          GATE_SECRET_PRESENT: ${{ secrets.RELEASE_GATE_SECRET != '' }}
+        run: |
+          set -uo pipefail
+          MISSING=""
+          [ "${CF_TOKEN_PRESENT}" = "true" ]    || MISSING="${MISSING} CLOUDFLARE_API_TOKEN"
+          [ "${CF_ACCOUNT_PRESENT}" = "true" ]  || MISSING="${MISSING} CLOUDFLARE_ACCOUNT_ID"
+          [ "${GATE_URL_PRESENT}" = "true" ]    || MISSING="${MISSING} RELEASE_GATE_URL"
+          [ "${GATE_SECRET_PRESENT}" = "true" ] || MISSING="${MISSING} RELEASE_GATE_SECRET"
+          if [ -n "${MISSING}" ]; then
+            echo "configured=false" >> "${GITHUB_OUTPUT}"
+            echo "V2 not configured - missing secret(s):${MISSING}"
+            {
+              echo "## Chronicle worker gate (V2)"
+              echo ""
+              echo "**V2 not configured.** Missing repository secret(s):\`${MISSING# }\`"
+              echo ""
+              echo "Nothing was claimed and nothing was deployed. This run is a"
+              echo "no-op by design: the workflow ships in the same pipeline-admin"
+              echo "commit as the Pages gate, before the Cloudflare secrets exist."
+              echo "See \`docs/PIPELINE_V2.md\` and \`OWNER_ONE_TIME_SETUP.md\` part B."
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+          echo "configured=true" >> "${GITHUB_OUTPUT}"
+          echo "V2 secrets present"
+
+      - name: Checkout pipeline code (no push credentials)
+        if: steps.preflight.outputs.configured == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: v292-rebuild
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Node version
+        if: steps.preflight.outputs.configured == 'true'
+        run: node --version
+
+      # ---------------------------------------------------------------------
+      # 1. Claim one WORKER release. The shim filters on manifest.kind, so this
+      #    gate can never take a Pages release out from under the Pages gate.
+      # ---------------------------------------------------------------------
+      - name: Claim a worker release
+        id: claim
+        if: steps.preflight.outputs.configured == 'true'
+        env:
+          RELEASE_GATE_URL: ${{ secrets.RELEASE_GATE_URL }}
+          RELEASE_GATE_SECRET: ${{ secrets.RELEASE_GATE_SECRET }}
+        run: |
+          set -euo pipefail
+          set +x
+          if [ -z "${RELEASE_GATE_URL}" ] || [ -z "${RELEASE_GATE_SECRET}" ]; then
+            echo "::error::Missing RELEASE_GATE_URL or RELEASE_GATE_SECRET"
+            exit 1
+          fi
+          cat > "${RUNNER_TEMP}/claim.mjs" <<'MJS'
+          import fs from 'node:fs';
+          const base = process.env.RELEASE_GATE_URL.replace(/\/+$/, '');
+          const auth = { authorization: `Bearer ${process.env.RELEASE_GATE_SECRET}`, 'content-type': 'application/json' };
+          const tmp = process.env.RUNNER_TEMP;
+          const ID_RE = /^[0-9]{8}-[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/;
+          const BUILD_RE = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
+          const put = (k, v) => {
+            if (!/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(String(v))) {
+              console.log(`::error::refusing to emit output ${k}: value is not a bare token`);
+              process.exit(1);
+            }
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${v}\n`);
+          };
+
+          const health = await fetch(`${base}/health`);
+          if (!health.ok) { console.log('::error::shim /health is not reachable'); process.exit(1); }
+          console.log(`shim build: ${(await health.json()).build}`);
+
+          // kind filter: shim >= v1.2. Without it this gate would claim Pages
+          // releases, and the queue holds at most one row in flight.
+          const res = await fetch(`${base}/claim`, { method: 'POST', headers: auth, body: JSON.stringify({ kind: 'worker' }) });
+          if (res.status === 204) { fs.appendFileSync(process.env.GITHUB_OUTPUT, 'found=false\n'); console.log('no eligible worker release'); process.exit(0); }
+          if (res.status !== 200) { console.log(`::error::claim failed with HTTP ${res.status}`); process.exit(1); }
+
+          const c = await res.json();
+          if (!ID_RE.test(String(c.release_id ?? ''))) { console.log('::error::shim returned a malformed release_id'); process.exit(1); }
+          console.log(`::add-mask::${c.claim_token}`);
+          const m = c.manifest;
+          if (m?.releaseId !== c.release_id) { console.log('::error::manifest releaseId does not match the claimed row'); process.exit(1); }
+          if (m?.kind !== 'worker') { console.log('::error::the shim handed out a non-worker release; refusing'); process.exit(1); }
+          if (m?.targetWorker !== 'novel-proxy') { console.log('::error::targetWorker is not novel-proxy; refusing'); process.exit(1); }
+          if (!BUILD_RE.test(String(m?.expectedCurrentBuild ?? '')) || !BUILD_RE.test(String(m?.newBuild ?? ''))) {
+            console.log('::error::build markers are malformed'); process.exit(1);
+          }
+
+          fs.writeFileSync(`${tmp}/manifest.json`, JSON.stringify(m));
+          fs.writeFileSync(`${tmp}/claim_token`, c.claim_token);
+          put('found', 'true');
+          put('release_id', c.release_id);
+          put('expected_build', m.expectedCurrentBuild);
+          put('new_build', m.newBuild);
+          put('noop', m.noop === true ? 'true' : 'false');
+          console.log(`claimed ${c.release_id}: ${m.expectedCurrentBuild} -> ${m.newBuild}${m.noop === true ? ' (NO-OP PROBE)' : ''}`);
+          MJS
+          node "${RUNNER_TEMP}/claim.mjs"
+
+      # ---------------------------------------------------------------------
+      # 2. Download the payload chunks; each one is checked against the index.
+      # ---------------------------------------------------------------------
+      - name: Fetch worker payload chunks
+        id: payload
+        if: steps.claim.outputs.found == 'true'
+        continue-on-error: true
+        env:
+          RELEASE_GATE_URL: ${{ secrets.RELEASE_GATE_URL }}
+          RELEASE_GATE_SECRET: ${{ secrets.RELEASE_GATE_SECRET }}
+          RELEASE_ID: ${{ steps.claim.outputs.release_id }}
+        run: |
+          set -uo pipefail
+          set +x
+          cat > "${RUNNER_TEMP}/payload.mjs" <<'MJS'
+          import fs from 'node:fs';
+          import { createHash } from 'node:crypto';
+          const base = process.env.RELEASE_GATE_URL.replace(/\/+$/, '');
+          const auth = { authorization: `Bearer ${process.env.RELEASE_GATE_SECRET}` };
+          const id = process.env.RELEASE_ID;
+          const tmp = process.env.RUNNER_TEMP;
+          const sha256 = (b) => createHash('sha256').update(b).digest('hex');
+          const q = (v) => JSON.stringify(String(v)).replace(/[\r\n]/g, ' ');
+
+          const idxRes = await fetch(`${base}/release/${id}/payload/index`, { headers: auth });
+          if (!idxRes.ok) { console.log(`::error::payload index failed with HTTP ${idxRes.status}`); process.exit(1); }
+          const index = await idxRes.json();
+          if (!Array.isArray(index)) { console.log('::error::payload index is not an array'); process.exit(1); }
+          if (index.length > 64) { console.log(`::error::payload index declares ${index.length} chunks, over the transport cap of 64`); process.exit(1); }
+          if (index.some((e) => e.path !== 'worker.js')) { console.log('::error::a worker release may carry only worker.js'); process.exit(1); }
+
+          const rows = [];
+          let transferred = 0;
+          for (const e of index) {
+            const u = `${base}/release/${id}/payload?path=${encodeURIComponent(e.path)}&seq=${e.seq}`;
+            const r = await fetch(u, { headers: auth });
+            if (!r.ok) { console.log(`::error::chunk ${q(e.path)}#${e.seq} failed with HTTP ${r.status}`); process.exit(1); }
+            const row = await r.json();
+            const got = sha256(Buffer.from(row.chunk_b64, 'utf8'));
+            if (got !== e.sha256 || got !== row.chunk_sha256) {
+              console.log(`::error::chunk ${q(e.path)}#${e.seq} failed its transport sha256 check`);
+              process.exit(1);
+            }
+            transferred += Buffer.byteLength(row.chunk_b64, 'utf8');
+            if (transferred > 4 * 1024 * 1024) { console.log('::error::payload transfer exceeded 4 MB'); process.exit(1); }
+            rows.push({ path: row.path, seq: row.seq, chunk_b64: row.chunk_b64, chunk_sha256: row.chunk_sha256 });
+          }
+          fs.writeFileSync(`${tmp}/chunks.json`, JSON.stringify(rows));
+          console.log(`downloaded ${rows.length} chunk(s), all matching the index sha256`);
+          MJS
+          node "${RUNNER_TEMP}/payload.mjs"
+          echo "exit_code=$?" >> "${GITHUB_OUTPUT}"
+          exit 0
+
+      # ---------------------------------------------------------------------
+      # 3. Read the LIVE worker build. This is the abort gate: if production is
+      #    not what the release was built against, nothing is deployed.
+      # ---------------------------------------------------------------------
+      - name: Pre-check the live worker build
+        id: live
+        if: steps.claim.outputs.found == 'true' && steps.payload.outputs.exit_code == '0'
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          cat > "${RUNNER_TEMP}/live.mjs" <<'MJS'
+          import fs from 'node:fs';
+          const url = process.env.WORKER_URL;
+          const BUILD_RE = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
+          let build = null, last = null;
+          for (let i = 0; i < 3; i++) {
+            try {
+              const r = await fetch(url, { headers: { 'cache-control': 'no-cache' } });
+              last = `HTTP ${r.status}`;
+              if (r.ok) {
+                const j = await r.json();
+                if (typeof j.workerBuild === 'string' && BUILD_RE.test(j.workerBuild)) { build = j.workerBuild; break; }
+                last = `root JSON has no usable workerBuild (${JSON.stringify(j.workerBuild)})`;
+              }
+            } catch (e) { last = String(e.message || e); }
+            await new Promise((s) => setTimeout(s, 4000));
+          }
+          if (build === null) { console.log(`::error::could not read the live workerBuild: ${last}`); process.exit(1); }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `build=${build}\n`);
+          console.log(`live workerBuild: ${build}`);
+          MJS
+          node "${RUNNER_TEMP}/live.mjs"
+          echo "exit_code=$?" >> "${GITHUB_OUTPUT}"
+          exit 0
+
+      # ---------------------------------------------------------------------
+      # 4. Validate. Refuses on env delta, missing bindings, sha/size mismatch,
+      #    wrong targetWorker, or a live build that is not expectedCurrentBuild.
+      #    worker.js and wrangler.toml are written ONLY when everything passed.
+      # ---------------------------------------------------------------------
+      - name: Validate the worker release and render wrangler.toml
+        id: validate
+        if: steps.claim.outputs.found == 'true' && steps.payload.outputs.exit_code == '0' && steps.live.outputs.exit_code == '0'
+        continue-on-error: true
+        env:
+          LIVE_BUILD: ${{ steps.live.outputs.build }}
+        run: |
+          set -uo pipefail
+          mkdir -p "${RUNNER_TEMP}/deploy"
+          node pipeline/validate_worker_release.mjs \
+            --manifest "${RUNNER_TEMP}/manifest.json" \
+            --payload "${RUNNER_TEMP}/chunks.json" \
+            --live-build "${LIVE_BUILD}" \
+            --out-worker "${RUNNER_TEMP}/deploy/worker.js" \
+            --out-toml "${RUNNER_TEMP}/deploy/wrangler.toml" \
+            --json "${RUNNER_TEMP}/result.json"
+          code=$?
+          echo "exit_code=${code}" >> "${GITHUB_OUTPUT}"
+          if [ "${code}" = "0" ]; then
+            echo "--- rendered wrangler.toml ---"
+            cat "${RUNNER_TEMP}/deploy/wrangler.toml"
+            sha256sum "${RUNNER_TEMP}/deploy/worker.js"
+          fi
+          exit 0
+
+      # ---------------------------------------------------------------------
+      # 5. Deploy. The ONLY step that sees the Cloudflare token, and the only
+      #    step whose working directory is the rendered deploy directory.
+      # ---------------------------------------------------------------------
+      - name: Deploy novel-proxy
+        id: deploy
+        if: steps.claim.outputs.found == 'true' && steps.validate.outputs.exit_code == '0' && inputs.dry_run != true
+        continue-on-error: true
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: ${{ runner.temp }}/deploy
+          command: deploy --config wrangler.toml
+          # No --var, no --secret, no secrets-file: this gate never writes a var
+          # or a secret. keep_vars=true in the rendered config preserves the
+          # live vars; secrets are never deleted by a deployment.
+
+      - name: Record the deploy outcome
+        id: deploy_code
+        if: steps.claim.outputs.found == 'true' && steps.validate.outputs.exit_code == '0' && inputs.dry_run != true
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+        run: |
+          set -uo pipefail
+          if [ "${DEPLOY_OUTCOME}" = "success" ]; then
+            echo "exit_code=0" >> "${GITHUB_OUTPUT}"
+          else
+            echo "::error::wrangler deploy did not succeed (${DEPLOY_OUTCOME})"
+            echo "exit_code=30" >> "${GITHUB_OUTPUT}"
+          fi
+
+      # ---------------------------------------------------------------------
+      # 6. Post-deploy poll. For a build-changing release this proves the new
+      #    code is live. For a NO-OP probe it cannot: the marker is unchanged
+      #    by design, so the proof is the Cloudflare version id in the deploy
+      #    log, and the poll only confirms the Worker is still healthy.
+      # ---------------------------------------------------------------------
+      - name: Poll until the new build is live
+        id: poll
+        if: steps.claim.outputs.found == 'true' && steps.deploy_code.outputs.exit_code == '0'
+        continue-on-error: true
+        env:
+          NEW_BUILD: ${{ steps.claim.outputs.new_build }}
+          IS_NOOP: ${{ steps.claim.outputs.noop }}
+        run: |
+          set -uo pipefail
+          cat > "${RUNNER_TEMP}/poll.mjs" <<'MJS'
+          import fs from 'node:fs';
+          const url = process.env.WORKER_URL;
+          const want = process.env.NEW_BUILD;
+          const noop = process.env.IS_NOOP === 'true';
+          const DEADLINE = Date.now() + 5 * 60 * 1000;
+          let seen = null, attempts = 0;
+          while (Date.now() < DEADLINE) {
+            attempts++;
+            try {
+              const r = await fetch(url, { headers: { 'cache-control': 'no-cache' } });
+              if (r.ok) { const j = await r.json(); seen = j.workerBuild ?? null; if (seen === want) break; }
+            } catch { /* keep polling */ }
+            await new Promise((s) => setTimeout(s, 10000));
+          }
+          const ok = seen === want;
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `seen=${ok ? want : 'mismatch'}\nattempts=${attempts}\n`);
+          if (!ok) {
+            console.log(`::error::after ${attempts} attempts the live workerBuild is still not the expected one; REPORTING, not rolling back. A rollback is a new queued release carrying rollbackSha256.`);
+            process.exit(1);
+          }
+          if (noop) {
+            console.log(`::warning::NO-OP PROBE: workerBuild is '${want}', which it was BEFORE this deploy too. This poll does NOT prove the deploy landed - read the version id in the deploy step's log.`);
+          }
+          console.log(`live workerBuild == ${want} after ${attempts} attempt(s)`);
+          MJS
+          node "${RUNNER_TEMP}/poll.mjs"
+          echo "exit_code=$?" >> "${GITHUB_OUTPUT}"
+          exit 0
+
+      # ---------------------------------------------------------------------
+      # 7. Report to the queue. Always, on success and on failure.
+      # ---------------------------------------------------------------------
+      - name: Report outcome to the queue
+        id: report
+        if: steps.claim.outputs.found == 'true' && inputs.dry_run != true
+        continue-on-error: true
+        env:
+          RELEASE_GATE_URL: ${{ secrets.RELEASE_GATE_URL }}
+          RELEASE_GATE_SECRET: ${{ secrets.RELEASE_GATE_SECRET }}
+          RELEASE_ID: ${{ steps.claim.outputs.release_id }}
+          PAYLOAD_EXIT: ${{ steps.payload.outputs.exit_code }}
+          LIVE_EXIT: ${{ steps.live.outputs.exit_code }}
+          VALIDATOR_EXIT: ${{ steps.validate.outputs.exit_code }}
+          DEPLOY_EXIT: ${{ steps.deploy_code.outputs.exit_code }}
+          POLL_EXIT: ${{ steps.poll.outputs.exit_code }}
+        run: |
+          set -uo pipefail
+          set +x
+          cat > "${RUNNER_TEMP}/report.mjs" <<'MJS'
+          import fs from 'node:fs';
+          const base = process.env.RELEASE_GATE_URL.replace(/\/+$/, '');
+          const id = process.env.RELEASE_ID;
+          const tmp = process.env.RUNNER_TEMP;
+          const num = (v) => (/^[0-9]+$/.test(v || '') ? Number(v) : null);
+
+          const payloadExit = num(process.env.PAYLOAD_EXIT);
+          const liveExit = num(process.env.LIVE_EXIT);
+          const validatorExit = num(process.env.VALIDATOR_EXIT);
+          const deployExit = num(process.env.DEPLOY_EXIT);
+          const pollExit = num(process.env.POLL_EXIT);
+          const ok = validatorExit === 0 && deployExit === 0 && pollExit === 0;
+
+          const body = {
+            claim_token: fs.readFileSync(`${tmp}/claim_token`, 'utf8').trim(),
+            outcome: ok ? 'applied' : 'quarantined',
+            run_id: String(process.env.GITHUB_RUN_ID || ''),
+          };
+          if (!ok) body.exit_code = validatorExit || deployExit || pollExit || liveExit || payloadExit || 1;
+
+          const r = await fetch(`${base}/release/${id}/result`, {
+            method: 'POST',
+            headers: { authorization: `Bearer ${process.env.RELEASE_GATE_SECRET}`, 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          console.log(`reported outcome=${body.outcome} -> HTTP ${r.status}`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `outcome=${body.outcome}\nreport_status=${r.status}\n`);
+          if (r.status === 409) {
+            console.log('::warning::the lease had already expired or been resolved; Fable must reconcile this release manually');
+          } else if (r.status !== 200) {
+            console.log(`::error::result report failed with HTTP ${r.status}`);
+            process.exit(1);
+          }
+          MJS
+          node "${RUNNER_TEMP}/report.mjs"
+          exit 0
+
+      # ---------------------------------------------------------------------
+      # 8. Summary. Every value arrives through env:, never through ${{ }} in
+      #    the body - see v1.1/docs/V11_REAUDIT.md F1.
+      # ---------------------------------------------------------------------
+      - name: Write run summary
+        if: always() && steps.preflight.outputs.configured == 'true'
+        env:
+          FOUND: ${{ steps.claim.outputs.found }}
+          RID: ${{ steps.claim.outputs.release_id }}
+          EXPECTED: ${{ steps.claim.outputs.expected_build }}
+          NEWB: ${{ steps.claim.outputs.new_build }}
+          IS_NOOP: ${{ steps.claim.outputs.noop }}
+          LIVE: ${{ steps.live.outputs.build }}
+          YEXIT: ${{ steps.payload.outputs.exit_code }}
+          VEXIT: ${{ steps.validate.outputs.exit_code }}
+          DEXIT: ${{ steps.deploy_code.outputs.exit_code }}
+          PEXIT: ${{ steps.poll.outputs.exit_code }}
+          OUTCOME: ${{ steps.report.outputs.outcome }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -uo pipefail
+          FOUND="${FOUND:-false}"; RID="${RID:-none}"; EXPECTED="${EXPECTED:-n/a}"
+          NEWB="${NEWB:-n/a}"; IS_NOOP="${IS_NOOP:-false}"; LIVE="${LIVE:-n/a}"
+          YEXIT="${YEXIT:-n/a}"; VEXIT="${VEXIT:-n/a}"; DEXIT="${DEXIT:-n/a}"
+          PEXIT="${PEXIT:-n/a}"; OUTCOME="${OUTCOME:-none}"; DRY_RUN="${DRY_RUN:-false}"
+          {
+            echo "## Chronicle worker gate (V2)"
+            echo ""
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| run | \`${GITHUB_RUN_ID}\` |"
+            echo "| claimed | \`${FOUND}\` |"
+            echo "| releaseId | \`${RID}\` |"
+            echo "| build | \`${EXPECTED}\` -> \`${NEWB}\` |"
+            echo "| no-op probe | \`${IS_NOOP}\` |"
+            echo "| live build before | \`${LIVE}\` |"
+            echo "| payload exit | \`${YEXIT}\` |"
+            echo "| validator exit | \`${VEXIT}\` |"
+            echo "| deploy exit | \`${DEXIT}\` |"
+            echo "| poll exit | \`${PEXIT}\` |"
+            echo "| reported outcome | \`${OUTCOME}\` |"
+            echo "| dry run | \`${DRY_RUN}\` |"
+            echo ""
+          } >> "${GITHUB_STEP_SUMMARY}"
+          if [ "${IS_NOOP}" = "true" ]; then
+            {
+              echo "> **No-op probe.** \`expectedCurrentBuild == newBuild\`, so the"
+              echo "> post-deploy poll cannot distinguish a successful deploy from no"
+              echo "> deploy at all. The proof is the version id in the deploy log."
+              echo ""
+            } >> "${GITHUB_STEP_SUMMARY}"
+          fi
+          if [ -f "${RUNNER_TEMP}/deploy/wrangler.toml" ]; then
+            {
+              echo "### rendered wrangler.toml"
+              echo ""
+              echo '```toml'
+              cat "${RUNNER_TEMP}/deploy/wrangler.toml"
+              echo '```'
+              echo ""
+            } >> "${GITHUB_STEP_SUMMARY}"
+          fi
+          if [ -f "${RUNNER_TEMP}/result.json" ]; then
+            {
+              echo "### validator result"
+              echo ""
+              echo '```json'
+              cat "${RUNNER_TEMP}/result.json"
+              echo '```'
+              echo ""
+            } >> "${GITHUB_STEP_SUMMARY}"
+          fi
+          {
+            echo "### Rollback"
+            echo ""
+            echo "- This gate NEVER rolls back on its own. A failed deploy is reported"
+            echo "  and quarantined; NO_RETRY_UNTIL_PASS."
+            echo "- To roll back, Fable enqueues a NEW worker release whose payload is"
+            echo "  the \`rollbackSha256\` bytes, with \`expectedCurrentBuild\` set to"
+            echo "  whatever is live at that moment."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Fail the run when the release did not land
+        if: steps.claim.outputs.found == 'true'
+        env:
+          RID: ${{ steps.claim.outputs.release_id }}
+          YEXIT: ${{ steps.payload.outputs.exit_code }}
+          LEXIT: ${{ steps.live.outputs.exit_code }}
+          VEXIT: ${{ steps.validate.outputs.exit_code }}
+          DEXIT: ${{ steps.deploy_code.outputs.exit_code }}
+          PEXIT: ${{ steps.poll.outputs.exit_code }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -uo pipefail
+          RID="${RID:-unknown}"
+          for pair in "payload:${YEXIT:-1}" "live-precheck:${LEXIT:-1}" "validator:${VEXIT:-1}"; do
+            stage="${pair%%:*}"; code="${pair##*:}"
+            if [ "${code}" != "0" ]; then
+              echo "::error::${stage} failed for ${RID} with exit ${code}"
+              exit 1
+            fi
+          done
+          if [ "${DRY_RUN:-false}" = "true" ]; then
+            echo "dry run: ${RID} validated and wrangler.toml rendered; nothing deployed"
+            exit 0
+          fi
+          if [ "${DEXIT:-1}" != "0" ]; then echo "::error::deploy failed for ${RID}"; exit 1; fi
+          if [ "${PEXIT:-1}" != "0" ]; then echo "::error::post-deploy poll failed for ${RID}"; exit 1; fi
+          echo "worker release ${RID} deployed and confirmed live"
