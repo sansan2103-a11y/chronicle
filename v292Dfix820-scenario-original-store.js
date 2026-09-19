@@ -117,7 +117,24 @@
   var GENDER_FIELD  = 'gender';
   var GENDER_VALUES = ['女性', '男性'];
   var CAST_FIELDS  = ['hero', 'npcs'];
-  var META_FIELDS  = ['scenarioId', 'title', 'schemaVersion', 'createdAt', 'updatedAt'];
+  /* ★★v292Dfix871 SCENARIO_PROVENANCE_V1（Owner 承認 2026-09-18）: META に `rev` を 1 語足す。
+     ・create = 1 / edit = 前 rev + 1 / legacy（欠落）= 0（=「版不明」）。
+     ・**body には置かない**（body の受理面 whitelist = TOP_FIELDS を 1 語も広げない）。
+       validate() は TOP_FIELDS＝**入力 value 側**の UNKNOWN_FIELD 規則なので、META への追加は
+       validate を一切変えない（＝この 1 語で受理面は広がらない）。
+     ・「保存確定」= META 書き込みが成功した瞬間。rev の increment は META 書き込みと
+       **同一の setItem** で行う（別書き込みにすると body が新しいのに rev が古い状態が生じる）。
+     ・sp8 で cloud 保存を足したら **server が rev の権威**になり、client は putscenario が
+       返した rev をそのまま格納する（ここで採番した値を正としない）。 */
+  var META_FIELDS  = ['scenarioId', 'title', 'schemaVersion', 'createdAt', 'updatedAt', 'rev'];
+  /* legacy 寛容: rev が無い / 数でない / 負 / 小数 は **0**（＝版不明）として読む。捏造しない。 */
+  function revOf(entry){
+    var v = (entry && entry.rev);
+    if (typeof v !== 'number' || !isFinite(v)) return 0;
+    var n = Math.floor(v);
+    return (n > 0) ? n : 0;
+  }
+  function f871Off(){ return lsg('v292Dfix871Off') === '1'; }
   /* ★npc.wound は「cast の初期定義フィールド」。fix190 の永続「傷」ではない（fix819 から継続） */
   var SECRET_NAMES = ['orKey', 'naiKey', 'pollKey', 'apiKey', 'provider', 'cfg'];
 
@@ -495,8 +512,11 @@
     wroteBody = true;
 
     var list = m.list.slice();
-    list.push({ scenarioId: id, title: v.value.title, schemaVersion: SCHEMA_VERSION,
-                createdAt: now, updatedAt: null });
+    /* ★fix871: 新規は rev = 1。kill 中は rev を書かない（= legacy と同じ「版不明」に見える）。 */
+    var newEntry = { scenarioId: id, title: v.value.title, schemaVersion: SCHEMA_VERSION,
+                     createdAt: now, updatedAt: null };
+    if (!f871Off()) newEntry.rev = 1;
+    list.push(newEntry);
     var metaStr;
     try { metaStr = JSON.stringify(list); } catch(e){ return rollback('META_SERIALIZE_FAILED'); }
     if (!lss(META_KEY, metaStr)) return rollback('META_WRITE_FAILED');
@@ -535,6 +555,7 @@
       schemaVersion: body.schemaVersion,
       createdAt: me.createdAt == null ? null : me.createdAt,
       updatedAt: me.updatedAt == null ? null : me.updatedAt,
+      rev: revOf(me),                       /* ★fix871: legacy（欠落）は 0 = 版不明 */
       scene: isObj(body.scene) ? body.scene : {},
       cast:  isObj(body.cast)  ? body.cast  : { hero: {}, npcs: [] },
       startCondition: typeof body.startCondition === 'string' ? body.startCondition : '',
@@ -555,7 +576,9 @@
       var row = {};
       for (var f = 0; f < META_FIELDS.length; f++){
         var k = META_FIELDS[f];
-        row[k] = (e[k] === undefined) ? null : e[k];
+        /* ★fix871: rev だけは「欠落 = null」ではなく **0**（= 版不明）で返す。
+           呼び手が null と 0 を両方扱わなくて済むようにする。他の field の意味は不変。 */
+        row[k] = (k === 'rev') ? revOf(e) : ((e[k] === undefined) ? null : e[k]);
       }
       out.push(row);
     }
@@ -610,6 +633,10 @@
     me.schemaVersion = SCHEMA_VERSION;
     me.createdAt     = (src && src.createdAt !== undefined) ? src.createdAt : null;   /* 不変 */
     me.updatedAt     = new Date().toISOString();
+    /* ★fix871: 保存確定ごとに単調増加。legacy（rev 欠落 = 0）からの初回編集は 1 になる。
+       kill 中は rev を **触らない**（既にあるなら保持する。勝手に消さない）。 */
+    if (!f871Off()) me.rev = revOf(src) + 1;
+    else if (src && src.rev !== undefined) me.rev = src.rev;
     listArr[idx] = me;
     var metaStr;
     try { metaStr = JSON.stringify(listArr); } catch(e){ return rollback('META_SERIALIZE_FAILED'); }
@@ -694,9 +721,18 @@
     var input = { scene: scene, cast: { hero: hero, npcs: npcs } };
     if (sc) input.startCondition = sc;     /* 空なら key を作らない */
     if (sr) input.startRules = sr;         /* 空なら key を作らない */
+    /* ★★fix871 SCENARIO_PROVENANCE_V1: provenance は **input の外**の独立した返り値にする。
+       ・input に混ぜてはいけない: fix819 project() の whitelist 外なので**黙って落ちる**うえ、
+         Scenario の受理面（TOP_FIELDS）に provenance を足したのと同じ意味になってしまう。
+       ・読むのは read() が返した scenarioId / rev だけ。ここで採番も補完もしない。
+       ・rev が 0（= legacy で版不明）のときも **0 のまま渡す**。1 に偽装しない。
+       ・kill（v292Dfix871Off='1'）のときは null を返す ＝ 呼び手は origin を渡せなくなる。 */
+    var pid = trim(s.scenarioId);
+    var provenance = (!f871Off() && pid) ? { scenarioId: pid, scenarioRev: revOf(s) } : null;
     return {
       input: input,
       initialTitle: trim(s.title),
+      provenance: provenance,
       notProjected: [],
       diagnostics: {
         bridge: 'FIX819_START_CONDITION_BRIDGE = IMPLEMENTATION_GO (requires fix819 v1.1)',

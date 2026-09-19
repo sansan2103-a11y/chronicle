@@ -193,6 +193,40 @@
        UI/device 設定（debug/showInner/simpleMode/aiAvatar/artStyle）・未知 field は **既定で除外**。
      ・Worker v34 の chrCanonicalStoryCfg と同一規約（別 serializer 禁止）。
      ・local body.cfg は一切書き換えない（projection 時にのみ濾過する read-only sanitize）。 */
+  /* ==================================================================
+     ★★v292Dfix871 SCENARIO_PROVENANCE_V1 — body.origin を canonical projection に載せる。
+     ------------------------------------------------------------------
+     ★載せてよいのは「server が origin を canonical 契約として受け取る build のとき」だけ。
+       v41.4 以前の worker は body.origin を **黙って落とす**ので、client が先に載せると
+       server record と local projection が食い違い、**parity 不一致で HOLD**（cloud 保存が
+       止まる）。worker v42 は getstory / listshadow の envelope に originSupported:true を
+       足したので、それを受け取るまでは **載せない**（fail-closed）。
+     ★flag は postSaveOnce が **getstory / listshadow の応答を受けた瞬間だけ**更新する。
+       ・true を受けた → true
+       ・key が無い応答（= v41.4 / kill switch ON）→ false へ戻す（stale な true を残さない）
+       ・他の op（putstory 等）の応答では **触らない**（marker を載せない契約なので）
+     ★whitelist は worker v42 chrCanonicalStoryOrigin と同一。別実装を増やさない・緩めない。
+     kill: v292Dfix871Off='1' → 常に載せない（worker が v42 でも sp6 と同じ projection）。
+     ================================================================== */
+  var F871_ID_RE = /^[A-Za-z0-9_-]+$/;
+  var f871WorkerOrigin = false;                 /* 既定 false = 未確認は「非対応」と読む */
+  function f871Off(){ try { return lsg('v292Dfix871Off') === '1'; } catch(e){ return false; } }
+  function f871Supported(){ return f871WorkerOrigin === true && !f871Off(); }
+  function f871NoteEnvelope(op, j){
+    if (op !== 'getstory' && op !== 'listshadow') return;      /* marker を載せる op だけ */
+    f871WorkerOrigin = !!(j && j.originSupported === true);
+  }
+  function f871Origin(raw){
+    if (!f871Supported()) return null;
+    if (!raw || typeof raw !== 'object' || Object.prototype.toString.call(raw) === '[object Array]') return null;
+    var id = raw.scenarioId;
+    if (typeof id !== 'string' || id.length < 1 || id.length > 64) return null;
+    if (!F871_ID_RE.test(id)) return null;
+    var rv = raw.scenarioRev;
+    if (typeof rv !== 'number' || !isFinite(rv) || Math.floor(rv) !== rv) return null;
+    if (rv < 0 || rv > 2147483647) return null;
+    return { scenarioId: id, scenarioRev: rv };
+  }
   var CANONICAL_CFG_ALLOW = ['authorNote','bannedPhrases','creepyMode','dialogueLevel',
     'dramaLevel','engineMode','genrePresets','outLen','reactionLevel','toneKey'];
   function canonicalStoryCfg(raw){
@@ -217,6 +251,10 @@
     var body = { cfg: canonicalStoryCfg(d.cfg === undefined ? null : d.cfg), cast: (d.cast === undefined ? null : d.cast),
                  scene: (d.scene === undefined ? null : d.scene), turns: turns,
                  mode: (d.mode === undefined ? null : d.mode) };
+    /* ★fix871: server が origin 対応を名乗っているときだけ載せる。載せないときは key ごと作らない
+       （= sp6 以前と byte 同一の projection）。worker v42 も同じ条件で同じ 2 key だけを残す。 */
+    var f871o = f871Origin(d.origin);
+    if (f871o) body.origin = f871o;
     return {
       schema: 1,
       id: String(id),
@@ -2480,6 +2518,9 @@
                              function(){ return { status: res.status, j: null }; });
     }).then(function(r){
       if (timer) clearTimeout(timer);
+      /* ★fix871: callback（= projection を作る側）より **前**に capability を確定させる。
+         ここ 1 箇所で全 op を覆うので、各 getstory callback に手を入れずに済む。 */
+      try { f871NoteEnvelope(body && body.op, r.j); } catch(e2){}
       cb({ status: r.status, j: r.j || {} }, null);
     })['catch'](function(e){
       if (timer) clearTimeout(timer);
@@ -2571,6 +2612,10 @@
     canonicalStoryCfg: canonicalStoryCfg,
     projection: projection,
     canonicalString: canonicalString,
+    /* ★fix871 診断口（read-only・書込 0・通信 0）。harness と現場の切り分け用。 */
+    originState: function(){ return { fix: 'v292Dfix871', off: f871Off(),
+                                      workerSupported: f871WorkerOrigin, projecting: f871Supported() }; },
+    __f871NoteEnvelope: function(op, j){ f871NoteEnvelope(op, j); },
     contentHash: function(cb){ var c = projection(); if (!c) return cb(null); sha256hex(canonicalString(c), cb); },
     /* ★★fix708(STEP3F): 削除トランザクション用の read-only 口。
        どちらも **読むだけ**（書込 0 / 通信 0 / commit 0 / marker 更新 0）。 */

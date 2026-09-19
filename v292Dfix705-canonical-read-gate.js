@@ -51,6 +51,22 @@
 
   // ---- localStorage 薄いアクセサ（読みのみ。書きは applyWrite だけ） ----
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  /* ★★v292Dfix871 SCENARIO_PROVENANCE_V1: body.origin の whitelist。
+     worker v42 chrCanonicalStoryOrigin / fix697 f871Origin / fix819 f871Origin と **同一規約**。
+     ここは server record を local へ写すだけなので kill switch は見ない
+     （kill は「新しく書かない」ための switch であって、既に server にある値を
+       取りこぼしてよい理由ではない。取りこぼすと parity が壊れる）。 */
+  var F871_ID_RE = /^[A-Za-z0-9_-]+$/;
+  function f871OriginOf(raw){
+    if (!raw || typeof raw !== 'object' || Object.prototype.toString.call(raw) === '[object Array]') return null;
+    var id = raw.scenarioId;
+    if (typeof id !== 'string' || id.length < 1 || id.length > 64) return null;
+    if (!F871_ID_RE.test(id)) return null;
+    var rv = raw.scenarioRev;
+    if (typeof rv !== 'number' || !isFinite(rv) || Math.floor(rv) !== rv) return null;
+    if (rv < 0 || rv > 2147483647) return null;
+    return { scenarioId: id, scenarioRev: rv };
+  }
   function off(){ return lsg('v292Dfix705Off') === '1'; }
   /* ★fix838: 409 分類の kill switch。'1' で本 fix の分岐を全部無効化し、従来挙動へ完全復帰する。 */
   function f838Off(){ return lsg('v292Dfix838Off') === '1'; }
@@ -1094,13 +1110,22 @@
     try {
       var __locBody = null; try { __locBody = JSON.parse(lsg(BODY_KEY) || 'null'); } catch(e2){ __locBody = null; }
       var __locCfg = (__locBody && typeof __locBody === 'object') ? __locBody.cfg : null;
-      var bodyStr = JSON.stringify({
+      /* ★★v292Dfix871 SCENARIO_PROVENANCE_V1: canonical apply は server record から local body を
+         **作り直す**ので、ここで origin を写さないと「cloud を取り込んだ瞬間に provenance が消える」。
+         しかも消えた直後の projection は origin を持たないのに server blob は持ったままなので、
+         **その Story だけ parity 不一致で HOLD** する（= 取り込むほど壊れる）。
+         ★worker v42 / fix697 / fix819 と **同一の whitelist**。2 key 以外は 1 つも写さない。
+         ★server record に origin が無ければ key を作らない（= 従来と byte 同一）。 */
+      var __f871body = {
         cfg:   hydrateMergedCfg(__locCfg, (body.cfg === undefined ? null : body.cfg)),
         cast:  (body.cast  === undefined ? null : body.cast),
         scene: (body.scene === undefined ? null : body.scene),
         turns: (Object.prototype.toString.call(body.turns) === '[object Array]') ? body.turns : [],
         mode:  (body.mode  === undefined ? null : body.mode)
-      });
+      };
+      var __f871o = f871OriginOf(body && body.origin);
+      if (__f871o) __f871body.origin = __f871o;
+      var bodyStr = JSON.stringify(__f871body);
       /* ★条件 D の精神: 同じ内容なら書き直さない（field 単位でも無駄な write を出さない） */
       if (lsg(BODY_KEY) === bodyStr) { skippedBody = true; }
       else {

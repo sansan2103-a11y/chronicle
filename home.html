@@ -233,7 +233,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260919-sp6';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20260919-sp7';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -283,7 +283,7 @@
      ・fix587 より前に置く（fix587 は呼び出し時に参照するので順序依存は無いが、owner を先に載せる）。 -->
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
 <script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20260916-sp2"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20260919-sp7"></script>
 <!-- ★fix860 STORY_PASSCODE: unlock dialog / passcode 管理 UI（supplier と fix697 の狭い口に依存） -->
 <script src="v292Dfix860-story-unlock-ui.js?cb=20260916-sp2"></script>
 <script src="v292Dfix729-title-sync.js?cb=20260909-fix842"></script>
@@ -329,14 +329,14 @@
      配置 = home の既存 story lifecycle / protection 群（fix654/fix697/fix587/fix710 …）の**後**、
             将来の Scenario caller（下のインライン home ロジック）の**前**。既存 script の並び替えは 0。
      index.html には載せない（Story 生成境界の owner は home 側）。kill = v292Dfix819Off='1'。 -->
-<script src="v292Dfix819-story-instantiator.js?cb=20260907-schema3"></script>
+<script src="v292Dfix819-story-instantiator.js?cb=20260919-sp7"></script>
 <!-- ★★fix820 SCENARIO_ORIGINAL_STORE_V1（GPT 裁定 2026-09-06 `FIX820_DEPLOY_DORMANT = GO`）
      「遊んでも絶対に原本が変わらない箱」。Story とは別 entity の local store。
      **載せるだけ。UI caller 0・Owner 操作から到達不能。**
      配置 = fix819 の直後・将来の Scenario UI / caller より前（依存ではなく読み順のため）。
      index.html には載せない（index には fix246 の LS ラッパ・S・features.js が居る）。
      kill = v292Dfix820Off='1'。 -->
-<script src="v292Dfix820-scenario-original-store.js?cb=20260919-sp4"></script>
+<script src="v292Dfix820-scenario-original-store.js?cb=20260919-sp7"></script>
 <!-- v292Dfix823: SEED_EXPANSION_V1 Scenario Seed Adapter（dormant・UI caller 0・kill v292Dfix823Off）。fix436+fix335 の再利用で
      Scenario Original の空欄だけを埋める。transport は実 fix247 runtime authority のみ（home には fix247 が無いので現状は常に AI_UNAVAILABLE = fail-closed）。 -->
 <script src="v292Dfix823-scenario-seed-adapter.js?cb=20260907-schema3"></script>
@@ -2615,7 +2615,7 @@
      appended continuation line. engine only; DOM 0; store/cloud/LS write 0; reuses fix436 request/parseFillJson/normVal only.
      caller = fix825 (button per character card + post-expand offer). kill: localStorage v292Dfix829Off=1. -->
 <script src="v292Dfix829-seed-text-enrichment.js?cb=20260907-fix829r"></script>
-<script src="v292Dfix825-scenario-ui.js?cb=20260919-sp5"></script>
+<script src="v292Dfix825-scenario-ui.js?cb=20260919-sp7"></script>
 <!-- v292Dfix870(HOME_THREE_CTA_V1・GPT 裁定 #L12entry): HOME の入口を 3 本立てにする。
      DOM は 1 つも消さない（#newBtn / #newCard / #scBtn は node ごと生き残り、id・class・delegation も不変）。
      新 URL 式 0（[3] は data-open を既存 openStory delegation に拾わせる）・localStorage 書込 0。

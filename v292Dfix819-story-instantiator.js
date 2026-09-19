@@ -23,11 +23,17 @@
 //                          fix809 への正常系依存 = FORBIDDEN（fallback safety としてのみ残る）
 //   SIDE_STORE_POLICY = CREATE_NONE_AT_INSTANTIATION … side store を 1 本も作らない
 //                          （navigation 後の lazy creation は ALLOWED＝既存 fix の正常動作）
-//   SCENARIO_PROVENANCE_V1 = NONE_PERSISTED … source Scenario ID を Story へ保存しない
+//   SCENARIO_PROVENANCE_V1 = PERSISTED (v1.3 / v292Dfix871・Owner 承認 2026-09-18)
+//                        … 旧 NONE_PERSISTED を **差し替え**。opts.origin を渡されたときだけ
+//                          body.origin = {scenarioId, scenarioRev} を書く（whitelist 2 key のみ）。
+//                          出所は fix820.toInstantiationInput().provenance だけで、input からは拾わない。
+//                          live link ではない（Scenario を後で編集しても Story は変わらない）。
+//                          kill: v292Dfix871Off='1' → 1 度も書かない＝ sp6 以前と byte 互換。
 //   START_RULES_PROJECTION = IMPLEMENTED (v1.1・GPT 裁定 2026-09-06(20)(21))
 //                          … input.startRules → body.scene.startRules / input.startCondition → body.scene.startCondition
-//                            を **snapshot**（文字列複製）。空文字なら key を作らない。Original への live link 0・
-//                            Scenario ID provenance 0。scene.startRules は Story 側 owner
+//                            を **snapshot**（文字列複製）。空文字なら key を作らない。Original への live link 0。
+//                            （★Scenario ID provenance は v1.3 で body.origin へ分離＝ここでは扱わない）
+//                            scene.startRules は Story 側 owner
 //                            （STORY_START_RULES_OWNER = scene.startRules / START_CONDITION_STORY_OWNER = scene.startCondition）。
 //   ZERO_TURN_MATERIALIZATION = ALLOWED / DO_NOT_MODIFY … fix756 には触らない
 //
@@ -41,7 +47,7 @@
 //   body OR meta OR **その id を含む localStorage key が 1 本でもある**（side store / tombstone /
 //   lifecycle marker を包含）なら占有とみなす。5 回再採番して全部衝突なら **write 0 で失敗**。
 //
-// 検証口: window.__v292Dfix819 = { project, isOccupied, allocateId, instantiate, state }
+// 検証口: window.__v292Dfix819 = { project(input, runtime, origin), isOccupied, allocateId, instantiate, state }
 // 既定: 誰も呼ばない（UI 未接続）。kill: v292Dfix819Off='1' で instantiate が即失敗する。
 // =====================================================================
 (function(){
@@ -69,6 +75,23 @@
   function lss(k, v){ try { localStorage.setItem(k, v); return true; } catch(e){ return false; } }
   function lsr(k){ try { localStorage.removeItem(k); return true; } catch(e){ return false; } }
   function off(){ return lsg('v292Dfix819Off') === '1'; }
+  /* ★★v292Dfix871 SCENARIO_PROVENANCE_V1（Owner 承認 2026-09-18・裁定で NONE_PERSISTED を差し替え）。
+     kill: v292Dfix871Off='1' → origin を 1 度も書かない（＝ sp6 以前と byte 互換の body に戻る）。 */
+  function f871Off(){ return lsg('v292Dfix871Off') === '1'; }
+  /* ★worker v42 chrCanonicalStoryOrigin と **同一の whitelist**（別実装を作らない/緩めない）。
+     ここで通らなかった値は body に 1 度も書かれないので、server 側で黙って落ちる事態にならない。 */
+  var F871_ID_RE = /^[A-Za-z0-9_-]+$/;
+  function f871Origin(raw){
+    if (f871Off()) return null;
+    if (!raw || typeof raw !== 'object' || Object.prototype.toString.call(raw) === '[object Array]') return null;
+    var id = raw.scenarioId;
+    if (typeof id !== 'string' || id.length < 1 || id.length > 64) return null;
+    if (!F871_ID_RE.test(id)) return null;
+    var rv = raw.scenarioRev;
+    if (typeof rv !== 'number' || !isFinite(rv) || Math.floor(rv) !== rv) return null;
+    if (rv < 0 || rv > 2147483647) return null;
+    return { scenarioId: id, scenarioRev: rv };
+  }
   function str(v){ return (v == null) ? '' : String(v); }
   function trim(v){ return str(v).trim(); }
 
@@ -77,7 +100,7 @@
      ・whitelist 外は 1 つも通さない（runtime field を混ぜられても落ちる）
      ・turns は常に []
      ・cfg は **runtime 引数から**のみ（scenario.cfg は無視する） */
-  function project(input, runtime){
+  function project(input, runtime, origin){
     var sc = (input && typeof input === 'object') ? input : {};
     var srcScene = (sc.scene && typeof sc.scene === 'object') ? sc.scene : {};
     var srcCast  = (sc.cast  && typeof sc.cast  === 'object') ? sc.cast  : {};
@@ -119,11 +142,19 @@
          Scenario 側は scene の外に置く契約なので、ここで scene 内から拾うと二重 authority になる）
        ・空文字なら key を作らない（既存 Story と byte 互換）
        ・改行正規化以外は 1 文字も変えない
-       ★scenario id は書かない（SCENARIO_PROVENANCE_V1 = NONE_PERSISTED） */
+       ★scenario id は **input からは** 書かない。provenance は下の第 3 引数からだけ入る。 */
     var sr = str(sc.startRules).replace(/\r\n?/g, '\n').trim();
     var scd = trim(sc.startCondition);
     if (sr) body.scene.startRules = sr;
     if (scd) body.scene.startCondition = scd;
+    /* ★★fix871 SCENARIO_PROVENANCE_V1（旧 NONE_PERSISTED を差し替え）:
+       ・出所は **caller が渡した origin 引数だけ**（fix820.toInstantiationInput().provenance）。
+         input（= Scenario 本体）からは絶対に拾わない。Scenario の受理面を広げないため。
+       ・不正 / 未指定 / kill のときは **key を 1 つも作らない**（＝既存 Story と byte 互換）。
+       ・live link ではない。Scenario を後で編集しても、この Story は書き換わらない
+         （Story の埋め込み snapshot が runtime authority という裁定のまま）。 */
+    var org = f871Origin(origin);
+    if (org) body.origin = org;
     return body;
   }
 
@@ -177,7 +208,8 @@
     if (!title) return { ok: false, code: 'NO_TITLE' };   /* FINAL_AT_META_CREATION: title は必須 */
 
     var body;
-    try { body = project(o.scenario, o.runtime); }
+    /* ★fix871: origin は opts.origin（fix820.toInstantiationInput().provenance）からのみ受け取る。 */
+    try { body = project(o.scenario, o.runtime, o.origin); }
     catch(e){ return { ok: false, code: 'PROJECT_ERROR', message: e && e.message }; }
 
     var id = allocateId();
@@ -233,14 +265,15 @@
   window.__v292Dfix819 = {
     version: 'v292Dfix819-20260907-primitive-v1.2',
     /* 純関数（テスト用・書込 0） */
-    project: function(input, runtime){ return project(input, runtime); },
+    project: function(input, runtime, origin){ return project(input, runtime, origin); },
     isOccupied: isOccupied,
     allocateId: allocateId,
     /* 原子的な作成（navigation はしない） */
     instantiate: instantiate,
     state: function(){
       return { off: off(), whitelist: { scene: SCENE_FIELDS.slice(), hero: HERO_FIELDS.slice(), npc: NPC_FIELDS.slice() },
-               bridge: ['startRules', 'startCondition'], maxIdTries: MAX_ID_TRIES, uiWired: false };
+               bridge: ['startRules', 'startCondition'], maxIdTries: MAX_ID_TRIES, uiWired: false,
+               provenance: { fix: 'v292Dfix871', off: f871Off(), fields: ['scenarioId', 'scenarioRev'] } };
     }
   };
   try { console.log(TAG, 'loaded (primitive only; not wired to any UI)'); } catch(e){}

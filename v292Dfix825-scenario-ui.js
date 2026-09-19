@@ -19,6 +19,7 @@
 //                            開始可否 = startability()（保存済み ∧ !dirty ∧ 下流契約 = fix819 の title 必須 ∧ 依存あり）。
 //   START STORY PATH       … saved read → startability → **既存 f667 auth gate（home bridge 経由）** →
 //                            __chronicleHome.newStoryRuntime() → fix820.toInstantiationInput → fix819.instantiate →
+//                            ★fix871: toInstantiationInput().provenance を input とは別に instantiate({origin}) へ渡す
 //                            fresh ID → __chronicleHome.openInstantiatedStory(id)（&new=1 は home bridge が付ける。
 //                            fix825 は URL 式を持たない = SCENARIO_START_NAVIGATION = MATCH_EXISTING_NEW_STORY_PATH）。
 //   STORY_GATE_AUTHORITY = EXISTING_F667 … fix825 は googleAvailable/passAvailable/proxyOff 等から gate を再計算しない。
@@ -140,7 +141,11 @@
     /* fix819.project は name の無い NPC を落とす（下流契約）。保存済み原本には fix820 validate 上存在しないが導出は残す */
     var npcs = (r.scenario && r.scenario.cast && isArr(r.scenario.cast.npcs)) ? r.scenario.cast.npcs : [];
     for (var i = 0; i < npcs.length; i++){ if (!trim(npcs[i] && npcs[i].name)) warnings.push({ code: 'NPC_WITHOUT_NAME_NOT_PROJECTED', index: i }); }
-    return { ok: true, scenario: r.scenario, input: ti.input, initialTitle: ti.initialTitle, warnings: warnings };
+    /* ★★fix871 SCENARIO_PROVENANCE_V1: provenance は input の外側でそのまま運ぶ。
+       ここで組み立て直さない（fix820 が唯一の出所）。kill 中や legacy では null のまま流れ、
+       fix819 側が「origin を書かない」に倒れる。 */
+    return { ok: true, scenario: r.scenario, input: ti.input, initialTitle: ti.initialTitle,
+             provenance: (ti.provenance || null), warnings: warnings };
   }
 
   /* ---------- 文言 ---------- */
@@ -755,7 +760,9 @@
     }
     var runtime = null;
     try { runtime = home.newStoryRuntime(); } catch(e){ runtime = null; }
-    var res = INST().instantiate({ scenario: sa.input, runtime: runtime, initialTitle: sa.initialTitle });
+    /* ★fix871: origin は startability() が fix820 から受け取ったものをそのまま渡す。 */
+    var res = INST().instantiate({ scenario: sa.input, runtime: runtime, initialTitle: sa.initialTitle,
+                                   origin: (sa.provenance || null) });
     if (!res || !res.ok){
       S.busy = null;
       if (res && res.hard) S.hardStop = true;
