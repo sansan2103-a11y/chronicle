@@ -233,7 +233,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260919-sp9';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20260919-sp9h';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -256,6 +256,18 @@
      Storage.prototype を accessor 化して以後の全モジュールの代入を捕獲する。**最初の script**。
      OFF=v292Dfix654Off -->
 <script src="v292Dfix654-storage-trap.js?cb=v292Dfix731"></script>
+<!-- ★v292Dfix887(HOME_AI_MODEL_GAP hotfix / client 20260919-sp9h): home に模型 registry を載せる。
+     home の AI 経路（シナリオ編集の「🌱 AIで残りを広げる」「🎲 全部おまかせ」・fix873 の
+     「おまかせで作る」「物語の種から作る」）は fix823 → fix436.request を通る。fix436 は
+     2026-09-13 の dsmrc-1 以降 model を window.__CHR_MODEL_REGISTRY からしか得られないが、
+     home にはその registry が無く（index には inline 版が在る）、model が undefined になって
+     request から key ごと落ち、HTTP 400 になっていた。
+     この file は index.html の v292Dsmrc1 block を **逐語コピー**しただけで、model id も
+     request policy も書き起こさない（literal を再生産しない = smrc1 の原則）。
+     registry が既に在れば上書きしない。localStorage 書込 0・network 0・DOM 0（home に
+     option[data-chr-model] は無い）。★index.html は本 client で BUILT 以外 1 バイトも変えない。
+     kill = localStorage['v292Dfix887Off']='1' -->
+<script src="v292Dfix887-home-model-registry.js?cb=20260919-sp9h"></script>
 <script src="v292Dfix698-mutation-bus.js?cb=20260908-fix837"></script>
 <script src="v292Dfix569-gc-shadow.js?cb=v292Dfix680"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者（fix569 が捕捉済みの native を借りる） -->
