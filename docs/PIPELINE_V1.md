@@ -397,3 +397,221 @@ history: `docs/V11_REAUDIT.md`.
   carries an env delta must FAIL.
 - **Manifest signing** — not required: the transport is private and
   write-authority is limited to Fable.
+
+---
+
+## 11. V1.2.1 addendum — live schema drift on `release_log.event`
+
+**Incident.** 2026-09-19 09:00Z. The first real claim through the V1.2 shim,
+for `20260919-pr1`, returned `HTTP 500 claim_failed`.
+
+**Root cause.** The live `chronicle-release-queue` was created by the
+**original V1** `queue.sql`, whose `release_log` carries
+
+```sql
+event TEXT NOT NULL CHECK (event IN ('enqueued','observed_run','applied',
+                 'quarantined','withdrawn','verified_live','note'))
+```
+
+— seven events, **no `'claimed'`**. Shim v1.2 appends a
+`release_log(event='claimed')` row in a statement that runs *after* the claim
+`UPDATE` batch has already committed (`shim_worker_...js` ~197–200). The insert
+raised a CHECK violation, the router's `catch { return err(500,'claim_failed') }`
+turned it into a 500, and the queue row was left `claimed` holding a token the
+runner never received. `applied`/`quarantined` would have gone through fine —
+only the V1.2-new event was outside the vocabulary, so the defect could not
+surface until the first claim.
+
+**Why nothing caught it.** Three independent copies of one schema:
+
+| copy | had the CHECK? | effect |
+| --- | --- | --- |
+| live DB (original V1 `queue.sql`) | yes, 7 events, no `'claimed'` | the fault |
+| V1.2 `queue.sql` §2 `release_log` | **no CHECK at all** | a fresh DB would have worked; the live DB was not fresh |
+| `acceptance/shim_acceptance_v1.mjs` fake D1 | **no CHECK at all** | 36/36 green against a schema nothing runs |
+
+V1.2 §1.3 dumped `sqlite_master` for all three tables but told the operator to
+read exactly one constraint — `release_queue.status`. The drifted constraint was
+on screen and unnamed.
+
+**V1.2.1 fixes, none of them in the shim.**
+
+- `queue.sql` **§1.0** is now the single canonical DDL, fenced with
+  `-- @@DDL-BEGIN/END` markers. `acceptance/shim_acceptance_v1_1.mjs` parses
+  those fences and executes them verbatim instead of keeping its own copy; case
+  **S37** asserts byte-identity. §2's `release_log` was deleted and replaced by
+  a pointer to §1.0 — one copy now, not three.
+- `queue.sql` **§1.3** checks **both** constraints and prints a verdict:
+  `OK` / `OK but PERMISSIVE (a CHECK is missing)` /
+  `RUN SECTION 6` / `RUN SECTION 6b` / `RUN SECTION 6 AND 6b`. It distinguishes
+  *a CHECK that omits `'claimed'`* (the fault) from *no CHECK at all*
+  (permissive, cannot 500, but below canonical).
+- `queue.sql` **§6b** is the one-time `release_log` rebuild, reproduced verbatim
+  from the SQL handed to the Owner: explicit column lists on both sides, `id`
+  preserved, `old_rows == new_rows` verified **before** the `DROP`, index
+  recreated.
+- **The canonical `release_log` keeps a CHECK**, widened to the full eight-event
+  vocabulary. Dropping the constraint would also have prevented the incident and
+  is still the wrong call: `event` is a closed vocabulary shared by four writers
+  and read by equality in §7 and in Fable's reconciliation, so an unconstrained
+  column makes a typo'd event silently durable. The price — a ninth event needs
+  a table rebuild — is the right amount of friction for an audit vocabulary.
+
+**The event vocabulary, and every writer of it.** No GitHub Actions workflow
+speaks D1, and neither validator touches `release_log`; the shim and Fable are
+the only writers.
+
+| event | written by | actor |
+| --- | --- | --- |
+| `enqueued` | Fable — `queue.sql` §4.3 / `make_release_package.mjs` | `fable` |
+| `claimed` | **shim `POST /claim`**, after the claim UPDATE (V1.2-new — the drift) | `gate` |
+| `observed_run` | Fable, by hand, reconciling an Actions run | `fable` |
+| `applied` | shim `POST /result` (bound as `?3`) | `gate` |
+| `quarantined` | shim `POST /result`, **and** shim `POST /claim` on a manifest/row mismatch (F3) | `gate` |
+| `withdrawn` | Fable, by hand, alongside §5.1 | `fable` |
+| `verified_live` | Fable — §5.2 / `README_enqueue.md` | `fable` |
+| `note` | Fable, free-form annotation | `fable` |
+
+### 11a. Runbook — recovering a release stranded by this defect
+
+A 500 from `/claim` leaves the row `claimed`, with a live token nobody holds and
+**no log row at all** — the audit trail does not even record the attempt. The
+row is not re-offered (it is no longer `queued`), so the queue is blocked by the
+one-in-flight invariant until it is resolved.
+
+1. **Do not re-queue it.** `NO_RETRY_UNTIL_PASS` applies exactly as it does to a
+   lease-expiry stranding: the outcome is unknown to the runner, and an
+   automatic or manual un-claim is a retry path.
+2. **Confirm nothing landed.** `queue.sql` §5.4: read the row, then check the
+   evidence for its kind (a `Release-Id:` trailer in `git log` for
+   pages/rollback; `workerBuild` plus the worker-gate run log for worker). After
+   a `/claim` 500 the runner never received a token, so nothing can have landed —
+   confirm it anyway.
+3. **Quarantine it** — §5.4b, terminal. For this failure the lease has not
+   necessarily expired, so use the reason text rather than waiting: the token was
+   never delivered, no runner can report against it.
+4. **Repair the database before the next claim** — run §1.3, and §6b if the
+   verdict asks for it. Re-run §1.3 and expect `OK`.
+5. **Rebuild under a NEW `releaseId`.** The quarantined id is spent. Enqueue the
+   replacement only after §1.3 reads `OK` and §1.4 shows `in_flight = 0`.
+
+Applied on 2026-09-19: `20260919-pr1` quarantined; §6b prepared for the Owner;
+the replacement ships as a new id.
+
+### 11b. Hazard observed — `workflow_dispatch` `dry_run` performs a REAL claim
+
+**Not fixed in V1.2.1** — the workflows are byte-identical to V1.2, because
+changing one is a pipeline-admin push (Owner / code session). Described here so
+the hazard is known before the change is made.
+
+In both `chronicle-release-gate.yml` and `chronicle-worker-gate.yml` the
+`Claim a release` step is **unguarded**, while the `Report the result` step
+carries `if: ... && inputs.dry_run != true`. So a manual `dry_run: true` run:
+
+1. claims the oldest queued row for real — `queued -> claimed`, 30-minute lease,
+   a `release_log` row;
+2. validates, and deliberately does not commit, deploy or report;
+3. ends, leaving the row `claimed` with no outcome. The summary step already
+   admits this: *"`${RID}` was claimed but no outcome was reported (dry run, or
+   the report failed)."*
+
+The row is then stranded for the lease duration and needs the §5.4 manual
+reconciliation, and — because a dry run consumes the queue's single in-flight
+slot — the next real release cannot be enqueued until it is resolved. A dry run
+that fails anywhere between the claim and the end of the job strands it the same
+way, with no dry-run marker in the queue to distinguish it from a genuine
+failure.
+
+**Proposed minimal change for V1.2.1 (diff description only — not applied):**
+
+- In both workflows, gate the claim step: `if: inputs.dry_run != true`, and add a
+  sibling step `if: inputs.dry_run == true` that writes a **synthetic fixture**
+  release (a checked-in manifest plus a tiny payload under
+  `pipeline/fixtures/dryrun/`) to the same `${RUNNER_TEMP}` paths the claim step
+  writes — `manifest.json`, `release_id`, `kind`, and **no** `claim_token` — then
+  sets `steps.claim.outputs.found=true`. Downstream steps are untouched: they key
+  off `steps.claim.outputs.found`, and the report step is already `dry_run`-gated.
+- Equivalently, if a dry run must exercise the shim: add a `--no-claim` mode —
+  `POST /claim` with `{"kind":"pages","dry_run":true}` returning the oldest
+  queued row **without** the UPDATE and **without** a token. That is a shim byte
+  change (a second Owner paste) and a new response shape, so it is the larger of
+  the two; the fixture route needs no shim change at all and is preferred.
+- Either way, add to the job summary an explicit `dry run — the queue was NOT
+  touched` line, so a dry run can never again be mistaken for a consumed claim.
+
+**Interim operating rule, effective now:** do not run either gate with
+`dry_run: true` against the live queue. Validate offline with
+`acceptance/pipeline_v11_acceptance_v1.mjs` and
+`acceptance/pipeline_v2_acceptance_v1.mjs`, which claim nothing.
+
+### 11c. V1.2.1 workflow change — the dry-run fixture route (APPLIED)
+
+§11b described this as a diff proposal. It is now applied to both workflows; the
+fixture route was chosen over a shim `--no-claim` mode because it needs no
+second Owner paste and no new response shape.
+
+**Both gates.** The claim step carries `if: inputs.dry_run != true`. A sibling
+step, `id: dryrun`, carries `if: inputs.dry_run == true` and makes **no network
+call at all** — no `/health`, no `/claim`, no queue row, no lease, and,
+deliberately, **no `claim_token` file**, so nothing downstream can report an
+outcome even if a later guard were removed. It writes the checked-in synthetic
+fixture to exactly the `${RUNNER_TEMP}` paths the claim step writes and sets
+exactly the outputs the claim step sets (`found=true`,
+`release_id=dryrun-fixture`, plus the per-gate ones).
+
+Downstream steps take the two producers as mutually exclusive alternatives:
+`(<real claim path>) || steps.dryrun.outputs.found == 'true'`. The push, report
+and deploy steps already carried `inputs.dry_run != true` **and**
+`steps.claim.outputs.found == 'true'`, so on a dry run they are now skipped
+twice over. The summary and the final fail-check read
+`steps.claim.outputs.X || steps.dryrun.outputs.X`, and both job summaries print
+**`dry run — the queue was NOT touched`**.
+
+**The fixtures.** `pipeline/fixtures/dryrun/{manifest,payload}.json` (Pages) and
+`pipeline/fixtures/dryrun-worker/{manifest,payload}.json` (Worker). Each is
+schema-valid as checked in, and each has exactly one value a checked-in file
+cannot know, rewritten at runtime with `manifestSha256` recomputed by the
+validator's *own* exported canonical serializer:
+
+| gate | rewritten at runtime | why |
+| --- | --- | --- |
+| Pages | `baseCommit` ← `git rev-parse HEAD` | the branch moves; a stale baseCommit is exit 11 |
+| Worker | `expectedCurrentBuild` = `newBuild` = `rollbackBuild` ← the live `workerBuild` | production moves; a stale marker is exit 20 |
+
+The Pages fixture's single file is `pipeline/probes/dryrun-fixture`,
+`operation: new`, `beforeSha256: null` — so the before-check asserts the path
+does not exist and is not tracked, which is true at every commit and does not
+drift the way a `change` against `pipeline/PROBE.md` would. The Worker fixture
+is a **no-op probe**; binding the three markers to one live value together keeps
+every no-op invariant (`expectedCurrentBuild == newBuild`,
+`rollbackBuild == expectedCurrentBuild`, `workerSha256 == rollbackSha256`)
+intact by construction. Its `database_id` and KV `id` are obviously synthetic
+(`00000000-0000-4000-8000-000000000000`, thirty-two zeros); nothing is deployed
+from them.
+
+**Who may change a fixture.** `PIPELINE_ALLOW_RE` in `validate_and_apply.mjs` is
+
+```js
+/^pipeline\/(PROBE\.md|probes\/[A-Za-z0-9][A-Za-z0-9._-]{0,63})$/
+```
+
+`pipeline/fixtures/**` does not match it, so `validatePathSyntax` denies those
+paths to every non-admin release with exit 12. The fixture bytes can only be
+changed by a **pipeline-admin push** — the same authority that can change the
+workflow that reads them. That is the point: the dry-run input and the dry-run
+code share one trust boundary.
+
+**Unchanged by this diff:** `concurrency` (`release-gate` / `worker-gate`,
+`cancel-in-progress: false`), `permissions` (`contents: write` / `contents:
+read`), both cron expressions, the closed `KINDS` allowlist, the
+`JSON.stringify({ kind: 'pages' })` claim body, the rule that no `${{ }}`
+appears inside any `run:` body, fixed argv everywhere, and the fact that
+`kind: pipeline-admin` is unreachable from either gate.
+
+**Side effect the Owner should know about.** This diff is also the mechanism
+that registers the `schedule:` trigger on the new default branch. GitHub
+registers a workflow's cron when a **user** push to the **default branch**
+touches the workflow file; switching the default branch to `v292-rebuild` did
+not do it, and neither did the gate's own push with `GITHUB_TOKEN` (`e59f1b0`),
+which is why no `schedule` run fired between 09:00Z and 12:05Z. See
+`README_bootstrap_code_session_v121.md` §5.
