@@ -233,7 +233,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260916-sp3';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20260919-sp4';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -336,7 +336,7 @@
      配置 = fix819 の直後・将来の Scenario UI / caller より前（依存ではなく読み順のため）。
      index.html には載せない（index には fix246 の LS ラッパ・S・features.js が居る）。
      kill = v292Dfix820Off='1'。 -->
-<script src="v292Dfix820-scenario-original-store.js?cb=20260907-schema3"></script>
+<script src="v292Dfix820-scenario-original-store.js?cb=20260919-sp4"></script>
 <!-- v292Dfix823: SEED_EXPANSION_V1 Scenario Seed Adapter（dormant・UI caller 0・kill v292Dfix823Off）。fix436+fix335 の再利用で
      Scenario Original の空欄だけを埋める。transport は実 fix247 runtime authority のみ（home には fix247 が無いので現状は常に AI_UNAVAILABLE = fail-closed）。 -->
 <script src="v292Dfix823-scenario-seed-adapter.js?cb=20260907-schema3"></script>
@@ -1147,14 +1147,19 @@
    * ================================================================================= */
   /* ★fix662(A): 通知は最上部に出し、3行以上は「詳しく」で折りたたむ。
      先頭2行は必ず見せる（⚠と診断行が先頭に来るように呼び出し側が並べる）。 */
-  function showNotes(lines){
+  /* ★★v292Dfix866: 第2引数 f866mark（任意）は .note へ data-f866 属性を付けるだけ。
+     省略時の出力は従来と1バイトも変わらない（fix662 の「⚠→診断行」順・折りたたみ・
+     esc の掛かり方はいずれも不変）。行の中身には一切触れない。 */
+  function showNotes(lines, f866mark){
     try {
       var box = el('note'); if(!box) return;
       var a = (lines || []).filter(function(x){ return x != null && x !== ''; });
       if(!a.length){ box.innerHTML = ''; return; }
       var head = a.slice(0, 2).map(esc).join('<br>');
       var rest = a.slice(2);
-      var html = '<div class="note">' + head;
+      var html = '<div class="note"'
+               + (f866mark ? ' data-f866="' + esc(f866mark) + '"' : '')
+               + '>' + head;
       if(rest.length){
         html += '<br><span class="more" id="noteMore">詳しく（あと'+rest.length+'行）</span>'
              +  '<span id="noteRest" style="display:none"><br>'+rest.map(esc).join('<br>')+'</span>';
@@ -1167,6 +1172,25 @@
         r.style.display = open ? 'none' : 'inline';
         m.textContent = open ? ('詳しく（あと'+rest.length+'行）') : '閉じる';
       });
+    } catch(e){}
+  }
+  /* ==================================================================================
+     ★★v292Dfix866 TRANSIENT_LOGIN_NOTE_V1
+     f663OnCredential() が出す「🔑 Googleでログインしました（…）。クラウドの内容を
+     取り込みます…」は **これから起きること**の予告であって、結果ではない。
+     pull() には #note を 1 バイトも書き換えずに終わる終端がある（最新です / fix826 の
+     stale 見送り / .catch）。そこへ到達すると予告だけが画面に残り、
+     「取り込みます…」と「見送りました」が同時に見えてしまう。
+     → 予告にだけ印（data-f866="login"）を付け、終端でその **1 ノードだけ** を外す。
+       他の通知（fix662 の警告・診断行）には触れない。
+     kill = localStorage['v292Dfix866Off']='1' … 何もしない＝従来どおり残る。
+     ================================================================================== */
+  function f866ClearTransientNote(){
+    if (g('v292Dfix866Off') === '1') return;
+    try {
+      var box = el('note'); if(!box) return;
+      var n = box.querySelector('[data-f866="login"]');
+      if (n && n.parentNode) n.parentNode.removeChild(n);
     } catch(e){}
   }
   function f661on(){ return g('v292Dfix661Off') !== '1'; }
@@ -1407,7 +1431,8 @@
     call({op:'meta'}, 15000).then(function(m){
       if(!m || !m.ok){ throw new Error('meta'); }
       var serverRev = +m.rev||0, base = +(g('v292Dfix402_baseRev')||0)||0;
-      if(!force && serverRev <= base){ el('sync').textContent='☁ 最新です'; return; }
+      /* ★fix866 終端①: #note を書き換えずに終わるので、予告だけを外す */
+      if(!force && serverRev <= base){ el('sync').textContent='☁ 最新です'; f866ClearTransientNote(); return; }
       el('sync').textContent = '☁ 取り込み中…';
       return call({op:'get'}, 40000).then(function(r){
         if(!r || !r.ok || !r.data || !r.data.ls) throw new Error('get');
@@ -1425,6 +1450,7 @@
               el('sync').className = 'sync';
               el('sync').textContent = '☁ 取り込みを見送りました（手元の方が新しい版です）';
               try { console.warn('[home][v292Dfix826] stale pull 応答を適用せず', JSON.stringify(v826)); } catch(e){}
+              f866ClearTransientNote();   /* ★fix866 終端②: 見送りは終端。予告を残さない */
               return;
             }
           }
@@ -1762,6 +1788,7 @@
     }).catch(function(e){
       el('sync').className='sync err';
       el('sync').textContent = '☁ 同期できませんでした（後で自動再試行）';
+      f866ClearTransientNote();   /* ★fix866 終端③: meta/get の throw もここへ来る */
     });
   }
 
@@ -2136,7 +2163,7 @@
       var rec = { token: jwt, exp: p.exp || 0, email: String(p.email||'').toLowerCase(), name: p.name || '', pic: p.picture || '' };
       if (!s('v292GoogleToken', JSON.stringify(rec))){ f663Fail('store'); return; }
       f663RenderLogin();
-      showNotes(['🔑 Googleでログインしました（' + esc(rec.email || 'アカウント') + '）。クラウドの内容を取り込みます…']);
+      showNotes(['🔑 Googleでログインしました（' + esc(rec.email || 'アカウント') + '）。クラウドの内容を取り込みます…'], 'login');
       try { console.log('[home][v292Dfix663] logged in as', rec.email); } catch(e){}
       /* ★せっかくログインしたのに、もう1タップさせない */
       try { pull(true); } catch(e){}
@@ -2154,7 +2181,10 @@
     f663RenderLogin();
   }
   function f663Login(){
-    if (f663Off()){ showNotes(['⚠ この端末ではGoogleログインが無効化されています（v292GoogleLoginOff）。']); return; }
+    /* ★★v292Dfix867 USER_TEXT_WITHOUT_CODES_V1: 内部 flag 名は利用者向けの文に出さない。
+       診断は console に残す（localStorage['v292GoogleLoginOff'] は変えない）。 */
+    if (f663Off()){ try { console.warn('[home][v292Dfix663] login disabled by v292GoogleLoginOff'); } catch(e){}
+                    showNotes(['⚠ この端末ではGoogleログインが無効化されています。']); return; }
     if (f663Busy) return;
     f663Busy = true;
     try { el('sync').className='sync'; el('sync').textContent='🔑 Googleでログインしています…'; } catch(e){}
@@ -2585,6 +2615,6 @@
      appended continuation line. engine only; DOM 0; store/cloud/LS write 0; reuses fix436 request/parseFillJson/normVal only.
      caller = fix825 (button per character card + post-expand offer). kill: localStorage v292Dfix829Off=1. -->
 <script src="v292Dfix829-seed-text-enrichment.js?cb=20260907-fix829r"></script>
-<script src="v292Dfix825-scenario-ui.js?cb=20260907-fix829"></script>
+<script src="v292Dfix825-scenario-ui.js?cb=20260919-sp4"></script>
 </body>
 </html>

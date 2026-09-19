@@ -64,6 +64,21 @@
 //     hazard を作らない。cloud package 側の誤認は **fix821 が membership authority を
 //     body-backed へ移して解消済み**。したがって ghost は **diagnostic only** とし、
 //     Scenario の create blocker にはしない（GPT 裁定）。
+//   ★v1.2（v292Dfix868 STORY_ID_GATE_NARROWED_V1・GPT 裁定 P2close-L12 = CONDITIONAL GO → GO。
+//     条件 = ①列挙不能時は fail-closed のまま ②allocateId() の per-key 再確認を残す）
+//     hazard の本体は「**この Scenario key の中に** 短い Story ID が裸の部分文字列として現れる」こと。
+//     端末のどこかに 1 件でも規格外 Story ID が在るだけで **Scenario の作成を全部止める**のは、
+//     hazard の無い key まで巻き添えにする（= 利用者は原因も直し方も分からないまま作成できない）。
+//     → blocker は **提案 key に実際に当たる違反 ID（hazardous）だけ**へ狭める。
+//       ・当たらない違反 ID は **診断のみ**（console.warn('[fix820][storyIdGate] offenders', …)）。
+//       ・localStorage を列挙できない（= 判定不能）ときは **従来どおり fail-closed**。
+//         storyIdSubstringHits() は列挙不能時に [] を返す＝fail-open なので、ここを外すと穴が開く。
+//       ・allocateId() の既存 storyIdSubstringHits() チェックは残す。採番後に
+//         storyIdGateForKey(keyFor(id)) で **もう一度**確かめる（二重・fail-closed）。
+//     ★構造的保証（MAX_RUN=9 ∧ 全 Story ID length>=10 ⇒ 部分一致は原理的に 0）は
+//       「全件が規格内」でしか成立しないため、狭めると **将来作られる短い ID** への
+//       先回り防御は失われる（既存 key への遡及 hazard は元々この gate では守れていない）。
+//     kill = localStorage['v292Dfix868Off']='1' … 従来の all-or-nothing へ戻す。
 //
 // 検証口: window.__v292Dfix820（下部の export を参照）
 // 既定: 誰も呼ばない（UI 未接続・script タグ未追加）。kill: v292Dfix820Off='1' で全 API が即失敗する。
@@ -225,6 +240,63 @@
     out.ok = out.offenders.length === 0;
     return out;
   }
+  /* ================= ★★v292Dfix868: key 単位の gate（READ のみ・書込 0）=================
+     storyIdGate() は「端末の全 body-backed Story ID が規格内か」を見る（= 全件 all-or-nothing）。
+     storyIdGateForKey(key) は同じ検査をした上で、**その key に実際に部分一致する違反 ID** だけを
+     blocker（hazardous）として扱う。offenders は全部そのまま残す（診断を落とさない）。
+     ★列挙不能（bodyBackedStoryIds() === null）は従来どおり ok:false（fail-closed）。 */
+  function f868Off(){ return lsg('v292Dfix868Off') === '1'; }
+  function storyIdGateForKey(key){
+    var out = { ok: false, scope: 'KEY', key: String(key == null ? '' : key),
+                checked: 0, offenders: [], hazardous: [], enumerable: false, ids: [], ghostMetaIds: [] };
+    var ids = bodyBackedStoryIds();
+    if (ids == null){ out.note = 'localStorage を列挙できない（判定不能）'; return out; }
+    out.enumerable = true;
+    out.ids = ids;
+    try { out.ghostMetaIds = ghostMetaIds(); } catch(e){ out.ghostMetaIds = []; }
+    for (var i = 0; i < ids.length; i++){
+      var id = ids[i];
+      out.checked++;
+      var bad = null;
+      if (!id) bad = 'EMPTY';
+      else if (id.charAt(0) !== 's') bad = 'NOT_S_PREFIX';
+      else if (!/^[A-Za-z0-9]+$/.test(id)) bad = 'NOT_ALPHANUMERIC';
+      else if (id.length < MIN_STORY_ID_LEN) bad = 'TOO_SHORT';
+      if (!bad) continue;
+      var row = { id: id, why: bad, inKey: (!!id && out.key.indexOf(id) >= 0) };
+      out.offenders.push(row);
+      if (row.inKey) out.hazardous.push(row);       /* ★この key に実際に当たる違反だけが blocker */
+    }
+    if (!ids.length) out.note = 'body-backed Story が 0 件';
+    out.ok = out.hazardous.length === 0;
+    return out;
+  }
+  function f868WarnOffenders(where, gate){
+    try {
+      if (!gate || (gate.enumerable && !(gate.offenders && gate.offenders.length))) return;
+      console.warn('[fix820][storyIdGate] offenders', where,
+        JSON.stringify({ enumerable: !!gate.enumerable, offenders: gate.offenders || [],
+                         hazardous: gate.hazardous || null, ghostMetaIds: gate.ghostMetaIds || [] }));
+    } catch(e){}
+  }
+  /* ★裁定 P2close-L12(c): 採番が尽きたときだけ呼ぶ診断。実際に 1 本 key を作って当て、
+     当たらなければ「key の連続英数字 run（<= MAX_RUN）に収まる長さの違反 ID」を hazard 候補として挙げる。
+     console.warn だけ。戻り値も player 向け文言も 1 つも変えない。 */
+  function f868WarnExhausted(){
+    try {
+      var probe = storyIdGateForKey(keyFor(newScenarioId()));
+      var haz = (probe.hazardous || []).slice();
+      if (!haz.length){
+        var offs = probe.offenders || [];
+        for (var i = 0; i < offs.length; i++){
+          if (String(offs[i].id).length <= MAX_RUN) haz.push(offs[i]);
+        }
+      }
+      if (!haz.length) return;
+      console.warn('[fix820][storyIdGate] offenders', 'create/allocation-exhausted',
+        JSON.stringify({ hazardous: haz, probeKey: probe.key }));
+    } catch(e){}
+  }
   /* 提案キーに **body-backed** Story ID が裸の部分文字列として現れないこと（hard condition） */
   function storyIdSubstringHits(key){
     var hits = [], ids = bodyBackedStoryIds() || [];
@@ -376,13 +448,33 @@
     if (!v.ok) return v;
 
     var gate = storyIdGate();
-    if (!gate.ok) return err('STORY_ID_FORMAT_ASSUMPTION_VIOLATED', gate.offenders);
+    f868WarnOffenders('create/pre', gate);
+    if (f868Off()){
+      /* kill switch: 従来どおり 1 件でも規格外なら create ごと拒否 */
+      if (!gate.ok) return err('STORY_ID_FORMAT_ASSUMPTION_VIOLATED', gate.offenders);
+    } else if (!gate.enumerable){
+      /* 判定不能は据え置き fail-closed（storyIdSubstringHits は列挙不能時に fail-open のため） */
+      return err('STORY_ID_FORMAT_ASSUMPTION_VIOLATED', gate.offenders);
+    }
 
     var m = readMetaRaw();
     if (!m.ok) return err(m.code);
 
     var id = allocateId();
-    if (!id) return err('ID_ALLOCATION_EXHAUSTED');
+    if (!id){
+      /* ★裁定 P2close-L12(c): 返す code は従来どおり ID_ALLOCATION_EXHAUSTED のまま変えない。
+         ただし「ただの衝突」と「hazardous な既存 Story ID のせいで全候補が弾かれた」を
+         診断で切り分けられるよう、hazardous offender を **console にだけ** 名指しする。 */
+      if (!f868Off()) f868WarnExhausted();
+      return err('ID_ALLOCATION_EXHAUSTED');
+    }
+    /* ★v292Dfix868: 採番した **この key** に対してだけ、もう一度 gate を当てる（二重・fail-closed）。
+       allocateId() の storyIdSubstringHits() を通っていれば hazardous は 0 件になる。 */
+    if (!f868Off()){
+      var kgate = storyIdGateForKey(keyFor(id));
+      f868WarnOffenders('create/post-allocate', kgate);
+      if (!kgate.ok) return err('STORY_ID_FORMAT_ASSUMPTION_VIOLATED', kgate.hazardous.length ? kgate.hazardous : kgate.offenders);
+    }
 
     var snapMeta = m.raw;
     var bodyKey = keyFor(id), wroteBody = false;
@@ -681,6 +773,7 @@
     newScenarioId: newScenarioId,
     isTaken: isTaken,
     storyIdGate: storyIdGate,
+    storyIdGateForKey: storyIdGateForKey,
     bodyBackedStoryIds: bodyBackedStoryIds,
     ghostMetaIds: ghostMetaIds,
     storyIdSubstringHits: storyIdSubstringHits,
@@ -698,6 +791,8 @@
     state: function(){
       return { off: off(), metaKey: META_KEY, keyPrefix: KEY_PREFIX, schemaVersion: SCHEMA_VERSION,
                minStoryIdLen: MIN_STORY_ID_LEN, maxKeyRun: MAX_RUN, maxIdTries: MAX_ID_TRIES,
+               f868Off: f868Off(),
+               storyIdGateScope: f868Off() ? 'ALL_BODY_BACKED' : 'KEY_HAZARD_ONLY',
                startRulesMaxCodePoints: START_RULES_MAX_CP,
                genderValues: GENDER_VALUES.slice(), readSchemaVersions: READ_SCHEMA_VERSIONS.slice(),
                whitelist: { top: TOP_FIELDS.slice(), scene: SCENE_FIELDS.slice(), hero: HERO_FIELDS.slice(),

@@ -84,6 +84,7 @@
     wired: false, view: 'LIST',
     draft: null, scenarioId: null, dirty: false, draftRevision: 0, savedSnapshot: null,
     busy: null, hardStop: false, candidate: null, candidateReport: null, lastError: null, lastNote: null,
+    lastErrorCode: null,                 /* ★fix867: 画面に出さない code の置き場（memory only・LS 書込 0） */
     starts: 0, navigated: false,
     /* ---- SEED_TEXT_ENRICHMENT_V1（memory only。LS / sessionStorage / 新 key 0） ---- */
     enrichCandidates: null, enrichReport: null, enrichRevision: -1, enrichCalls: 0, offers: 0
@@ -143,6 +144,48 @@
   }
 
   /* ---------- 文言 ---------- */
+  /* ==================================================================================
+     ★★v292Dfix867 USER_TEXT_WITHOUT_CODES_V1
+     利用者向けの文に内部 code（AI_FAILED / FIX819_UNAVAILABLE / …）を混ぜない。
+     読み手には意味が無く、「何か壊れた」という不安だけを残すため。
+     ★code は捨てない: setError() が console.warn('[fix825]', code …) へ出し、
+       S.lastErrorCode に残す（window.__v292Dfix825.state().lastErrorCode で読める）。
+     ★admin 診断で画面にも出したいときだけ localStorage['v292Dfix867ShowCodes']='1'
+       （Off スイッチではない。既定＝出さない、明示的に ON で従来表示へ戻る）。
+     ★switch の arm は 1 つも減らさない。default arm も残す。変わるのは返す文字列だけ。
+     ================================================================================== */
+  function f867ShowCodes(){ return lsg('v292Dfix867ShowCodes') === '1'; }
+  function f867c(code){ return f867ShowCodes() ? ('（' + str(code) + '）') : ''; }
+  /* ★★裁定 P2close-L12(a): console へ出すのは **既定で code だけ**。
+     detail は「number / boolean / 120 文字以下の安全な文字 class の string」、または
+     「その scalar だけを値に持つ plain object（key 10 個以下）」のときに限って添える。
+     それ以外は '[omitted]'。**API の生レスポンスを console へ出さない**ための関門。 */
+  var F867_SAFE_RE = /^[A-Za-z0-9_:.,\- ]*$/;
+  function f867SafeScalar(v){
+    if (typeof v === 'number') return isFinite(v);
+    if (typeof v === 'boolean') return true;
+    if (typeof v === 'string') return v.length <= 120 && F867_SAFE_RE.test(v);
+    return false;
+  }
+  function f867SafeDetail(d){
+    if (d === undefined || d === null) return null;            /* 添えない */
+    if (f867SafeScalar(d)) return d;
+    if (!isObj(d)) return '[omitted]';                         /* 配列・関数・その他 */
+    var keys = [], i;
+    for (var k in d){ if (Object.prototype.hasOwnProperty.call(d, k)) keys.push(k); }
+    if (keys.length > 10) return '[omitted]';
+    for (i = 0; i < keys.length; i++){ if (!f867SafeScalar(d[keys[i]])) return '[omitted]'; }
+    var out = {};
+    for (i = 0; i < keys.length; i++) out[keys[i]] = d[keys[i]];
+    return out;
+  }
+  function f867Warn(code, detail){
+    try {
+      var sd = f867SafeDetail(detail);
+      if (sd === null) console.warn('[fix825]', code);
+      else console.warn('[fix825]', code, { detail: sd });
+    } catch(e){}
+  }
   function msg(code, detail){
     switch (code){
       case 'NO_TITLE': return 'タイトルを入力してください';
@@ -152,15 +195,16 @@
       case 'ID_ALLOCATION_EXHAUSTED': case 'ID_COLLISION_EXHAUSTED': return 'ID の採番に失敗しました。もう一度お試しください';
       case 'ROLLBACK_FAILED': return '失敗し、元に戻せませんでした。ページを再読み込みしてください';
       case 'NOT_FOUND': case 'ORPHAN_META': case 'SCHEMA_VERSION_MISMATCH': case 'SCENARIO_ID_MISMATCH':
-      case 'BODY_PARSE_FAILED': case 'BODY_NOT_OBJECT': return 'この原本は読めません（' + code + '）';
+      case 'BODY_PARSE_FAILED': case 'BODY_NOT_OBJECT': return 'この原本は読めません' + f867c(code);
       case 'AI_UNAVAILABLE': return 'AI が使えません（Google ログインを確認してください）';
       case 'AI_FAILED': case 'BAD_JSON': case 'AI_VALUE_OVERSIZED': case 'NOTHING_APPLIED': case 'APPLY_ERROR':
-        return 'AI 補完に失敗しました（' + code + '）。もう一度お試しください';
+        return 'AI 補完に失敗しました' + f867c(code) + '。もう一度お試しください';
       case 'GENERATION_INCOMPLETE': case 'RANDOM_INCOMPLETE': return 'NPC を揃えられませんでした。名前を入れるか、もう一度お試しください';
-      case 'NPC_COUNT_INVARIANT_VIOLATED': case 'BASE_MUTATED': return '内部整合性エラー（' + code + '）';
+      /* ★fix867: ここだけ code が文の情報量の全部だったので、動詞を 1 つ足して文として成立させる */
+      case 'NPC_COUNT_INVARIANT_VIOLATED': case 'BASE_MUTATED': return '内部整合性エラーが起きました' + f867c(code);
       case 'STALE_AI_CANDIDATE': return 'AI の生成中に入力が変わったため、候補を破棄しました。もう一度お試しください';
       case 'STALE_ENRICH_CANDIDATE': return 'AI が書いている間に入力が変わったため、肉付けの候補を破棄しました（入力は変わっていません）。もう一度お試しください';
-      case 'FIX829_UNAVAILABLE': return 'この機能に必要な部品が読み込まれていません（FIX829_UNAVAILABLE）';
+      case 'FIX829_UNAVAILABLE': return 'この機能に必要な部品が読み込まれていません' + f867c(code);
       case 'NO_ENRICH_TARGET': return '肉付けできる短いキャラ設定がありません（1〜24 文字の欄が対象です）';
       case 'ENRICH_NOTHING': return 'AI から採用できる追記が返りませんでした。もう一度お試しください';
       case 'NO_BLANKS': return '埋める空欄がありません';
@@ -168,13 +212,13 @@
       case 'DIRTY': return '未保存の変更があります。先に保存してください';
       case 'HOME_BRIDGE_UNAVAILABLE': return 'ホームとの接続が見つかりません（ページを再読み込みしてください）';
       case 'FIX819_UNAVAILABLE': case 'FIX819_OFF': case 'FIX820_UNAVAILABLE': case 'FIX823_UNAVAILABLE': case 'FIX436_UNAVAILABLE':
-        return 'この機能に必要な部品が読み込まれていません（' + code + '）';
+        return 'この機能に必要な部品が読み込まれていません' + f867c(code);
       case 'GATE_REQUIRED': return 'Google ログインの有効期限が切れています。ホームのログインボタンからログインしてください';
       case 'HARD_STOP': return '前の操作で復旧できない失敗が起きています。ページを再読み込みしてください';
       case 'OFF': return 'この機能は無効化されています';
       default:
         if (/_WRITE_FAILED$/.test(str(code)) || /_SERIALIZE_FAILED$/.test(str(code))) return '保存できませんでした（保存容量が不足している可能性があります）';
-        return '失敗しました（' + code + '）';
+        return '失敗しました' + f867c(code);
     }
   }
 
@@ -387,7 +431,14 @@
     var b = q('[data-sc-act="' + act + '"]'); if (!b) return;
     b.disabled = !!dis; if (why != null) b.title = why || b.getAttribute('data-sc-title') || '';
   }
-  function setError(code, detail){ S.lastError = code ? msg(code, detail) : null; S.lastNote = null; refreshEdit(); }
+  /* ★fix867: code は画面から外すだけで、捨てない（console + state に必ず残す） */
+  function setError(code, detail){
+    if (code) f867Warn(code, detail);
+    S.lastErrorCode = code || null;
+    S.lastError = code ? msg(code, detail) : null;
+    S.lastNote = null;
+    refreshEdit();
+  }
   function setNote(text){ S.lastNote = text || null; S.lastError = null; refreshEdit(); }
 
   /* ---- overlays（自前 confirm / review。window.confirm は使わない） ---- */
@@ -596,7 +647,10 @@
                   '<div class="sc-en-a">✒ ' + esc(str(c.addenda[k])) + '</div>');
       }
     }
-    var stopNote = rep.stopped ? '<div class="sc-msg sc-err">途中で止まりました（' + esc(rep.stopped.code) + '）。ここまでの候補だけを表示しています。</div>' : '';
+    /* ★fix867 / 裁定 P2close-L12(a): 停止理由の code は console と state へ（画面は admin ON のときだけ）。
+       rep.stopped は engine の報告で生の応答片を含みうるので、**code だけ**を渡す。 */
+    if (rep.stopped){ f867Warn('ENRICH_STOPPED', rep.stopped.code); S.lastErrorCode = rep.stopped.code || null; }
+    var stopNote = rep.stopped ? '<div class="sc-msg sc-err">途中で止まりました' + esc(f867c(rep.stopped.code)) + '。ここまでの候補だけを表示しています。</div>' : '';
     overlay('<h3>AI の書き足し案（✒ 肉付け）</h3>' +
       '<div style="font-size:12px;color:#aab">🔒 = あなたが書いた内容（<b>1 文字も変えません</b>）／✒ = その下に改行で足す文。反映しても<b>まだ保存はされません</b>。</div>' +
       stopNote +
@@ -772,6 +826,7 @@
     state: function(){
       return { off: off(), wired: S.wired, view: S.view, scenarioId: S.scenarioId, dirty: S.dirty, draftRevision: S.draftRevision,
                busy: S.busy, hardStop: S.hardStop, hasCandidate: !!S.candidate, starts: S.starts, navigated: S.navigated,
+               lastErrorCode: S.lastErrorCode, showCodes: f867ShowCodes(),   /* ★fix867 診断口 */
                enrich: { has: !!(S.enrichCandidates && S.enrichCandidates.length), chars: (S.enrichCandidates || []).length,
                          revision: S.enrichRevision, calls: S.enrichCalls, offers: S.offers, offerCount: enrichOfferCount() },
                deps: { fix819: !!INST(), fix820: !!ST(), fix823: !!SEED(), fix829: !!ENR(), fix247: !!(window.__v292Dfix247 && typeof window.__v292Dfix247 === 'object'), homeBridge: homeReady() },
