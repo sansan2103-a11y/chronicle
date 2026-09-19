@@ -16,3 +16,4 @@ behaviour.
 | probe | releaseId | note |
 | --- | --- | --- |
 | - | - | no probe release has been applied yet |
+probe: 20260919-pr2 (synthetic, Fable; pr1 quarantined: shim claim 500, release_log CHECK drift)
