@@ -1,17 +1,40 @@
 # =====================================================================
 # chronicle / v292-rebuild — GitHub Pages (Jekyll) build exclusion
-#   release : 20260919-cfg1   kind: pages   status: WAIT_GPT_R2_AND_OWNER_ONE_LINE
-#   purpose : PUBLIC_SITE_ARTIFACT_ALLOWLIST v1 の **暫定 (interim)** 実装。
+#   release : 20260919-cfg3   kind: pages   status: READY_WAIT_PIPELINE_V1_4_OR_QUEUE
+#   purpose : PUBLIC_SITE_ARTIFACT_ALLOWLIST v1 の **暫定 (interim)** 実装 v2。
 #             「消す」のではなく「配らない」。repo の bytes は 1 も失わない。
 #   scope   : Pages の source 設定 / branch / deploy 方式は **変えない**。
-#             これは repo root に 1 file 足すだけの通常 `kind: pages` release である。
+#             これは repo root の `_config.yml` を 1 file 置換するだけの
+#             通常 `kind: pages` release である（trio move 無し）。
 #
-#   ★この file を足すと Jekyll の build から 316 path が落ち、publish 集合は
-#     pages_allowlist.json の publish 集合 310（allow 309 + temporary_allow admin.html 1）
-#     と一致する。検証は pipeline_v1/v13/jekyll_exclude_sim_v1.mjs。
+#   ── v1 (20260919-cfg1, LIVE at 618e2f9) からの差分 ──
+#   v1 は **626 entry の古い tree** から導出した allowlist に合わせて書かれていた。
+#   head 618e2f9 の実 tree は 643 entry で、v1 では想定していなかった
+#   `pipeline/` `docs/` `.github/` が入っている。live 検証（/tmp/rr/cfg2_live_verify.json）
+#   の結果、published = 318 で、そのうち以下が **配ってはいけないのに配られていた**:
+#     docs/PIPELINE_V1.md, docs/PIPELINE_V2.md, pipeline/PROBE.md,
+#     pipeline/admin_apply.mjs, pipeline/manifest.schema.json,
+#     pipeline/validate_and_apply.mjs, pipeline/validate_worker_release.mjs,
+#     pipeline/fixtures/dryrun{,-worker}/{manifest,payload}.json
+#   = pipeline 内部実装が public surface に出ていた。v2 の §8 で dir ごと落とす。
+#
+#   ★同じ live 検証で `v292Dfix859-story-session.js` /
+#     `v292Dfix860-story-unlock-ui.js` / `v292Dfix870-home-entry.js` の 3 本も
+#     「allowlist 外なのに配られている」と出たが、これは **allowlist 側の誤り**
+#     （stale tree 由来）であって exclude 対象ではない。3 本とも live の
+#     index/home から実際に読まれる runtime である。pages_allowlist.json は
+#     head 618e2f9 から再導出し allow 309 → 312 になった。この `_config.yml`
+#     はこの 3 本を **1 本も落とさない**（§6/§7 の pattern に当たらないことを
+#     jekyll_exclude_sim_v1.mjs で両 mode 実測済み）。
+#
+#   ★この file を置くと Jekyll の build から 330 path が落ち、publish 集合は
+#     pages_allowlist.json の publish 集合 313（allow 312 + temporary_allow
+#     admin.html 1）と **conservative / ruby の両 glob mode で一致**する。
+#     検証は pipeline_v1/v13/jekyll_exclude_sim_v1.mjs（v1 は ruby mode のみ
+#     一致し conservative では 324 で割れていた = MODE_DIVERGE。v2 は解消）。
 #
 #   ★`.nojekyll` は **置かない**。`.nojekyll` は Jekyll build そのものを止めるので、
-#     exclude は 1 件も効かなくなり、626 file が全部配られる（今より悪化する）。
+#     exclude は 1 件も効かなくなり、643 file が全部配られる（今より悪化する）。
 #
 #   ★`include:` は **書かない**。Jekyll の EntryFilter は include を exclude より
 #     先に判定するので、include を書くと既定 `.htaccess` を上書きしてしまう。
@@ -42,7 +65,7 @@ exclude:
   - _config.yml
   - _redeploy.txt
 
-  # --- §2. ディレクトリ（root 以外の tracked path は 37 件すべて非公開） ---
+  # --- §2. ディレクトリ（root 以外の tracked path は 50 件すべて非公開） ---
   # 末尾 `/` は必須。`worker` と書くと Jekyll の prefix 規則で
   # `worker.js` / `worker_v40_candidate.js` まで巻き込む（今回は結果的に同じだが、
   # 「dir を指す」意図を byte で表す）。
@@ -113,3 +136,18 @@ exclude:
   - v292Dfix693-cross-document-storage-event-probe.js
   - v292Dfix70-dialogue-order.js
   - v292Dfix715-onestory-backfill-sender.js
+
+  # --- §8. pipeline 内部実装 / 設計 doc / CI 定義（v2 で追加） ---
+  # head 618e2f9 で repo に入った 3 dir。player runtime は 1 本も読まない。
+  # 末尾 `/` は §2 と同じ理由で必須（`docs` と書くと将来 `docs.md` 等を巻き込む）。
+  # ★`.github/` は先頭 `.` なので Jekyll の EntryFilter#special? で
+  #   exclude に書かなくても落ちる（sim 実測: cfg1 でも published 0 件）。
+  #   github-pages gem が `.github` を exclude へ足すという記述もある [C]。
+  #   どの経路でも落ちることを byte で固定するため **明示的に書く**。
+  - pipeline/
+  - docs/
+  - .github/
+  # ★注意: `*.md` / `*.mjs`（§3）は ruby の File.fnmatch?（FNM_PATHNAME 無し）では
+  #   `/` を跨ぐので docs/*.md や pipeline/*.mjs にも当たるが、
+  #   conservative（segment 内のみ）では当たらない。§8 を dir で書くことで
+  #   **glob 実装差に依存せず** 両 mode で同じ結果になる。
