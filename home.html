@@ -233,7 +233,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260919-sp9h';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20260919-sp10ar';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -1391,7 +1391,7 @@
         notes.push('⚠ 容量が足りませんが、いまの内容をサーバーへ保存できなかったので**何も消さずに中止**しました。通信を確認してもう一度お試しください。');
         return { ok:false, notes: notes };
       }
-      notes.push('☁ 現状をサーバーに保存しました（rev'+(proof.rev==null?'—':proof.rev)+(proof.fork?'・別分岐として保管':'')+'）。');
+      notes.push('☁ いまの内容をクラウドへ保存しました'+(proof.fork?'（別の版として保管）':'')+'。');
       /* ★★v292Dfix826 F2（GPT裁定52）: fork は「main へ控えを取れた」証明にならない。
          fork のまま古いローカル控えを解放すると、main と整合しない状態でローカルだけ痩せる。
          destructive cleanup はここで中止し、データは 1 バイトも消さない。
@@ -1752,14 +1752,14 @@
         if (f662ChainNotes.length){ notes602 = notes602.concat(f662ChainNotes); f662ChainNotes = []; }
         /* ★★fix661(A): 0件のときほど出す。「0件=差分なし」が本当かを画面で確かめられるようにする。 */
         var f661d = f661Diag(m, r, ls, serverRev);
-        notes602.push('☁ サーバ: rev'+f661d.rev+'・'+(f661d.device||'端末不明')+'・'+esc(f661d.slotKey||'')+' '
+        notes602.push('☁ クラウド側: '+(f661d.device||'端末不明')+' '
           +(f661d.srvTurns==null?'—':f661d.srvTurns)+'T / この端末: '+(f661d.localTurns==null?'—':f661d.localTurns)+'T'
-          +' ・ ns:'+esc(f661d.ns)+' ・ 受信'+f661d.keys+'キー/'+Math.round(f661d.bytes/1024)+'KB'
+          +' ・ 受信 '+f661d.keys+'件/'+Math.round(f661d.bytes/1024)+'KB'
           +(f661AdoptRev?'':' ・ 基点は据え置き'));
         /* ★fix659: 分岐の解決でこの端末の分を控えて上書きした件数は、必ず画面に出す。
            黙ってやると「進んでいたはずの物語が短くなった」が原因不明の事故に見える。 */
         if(adopted.length){
-          notes602.push('クラウド側のつづきを取り込みました。この端末にあった分は自動バックアップ（chr6_bk_home_pull_ahead_*）に残しています。');
+          notes602.push('クラウド側のつづきを取り込みました。この端末にあった分は自動で控えに残しています。');
         }
         if(skipped.length){
           notes602.push('この端末の方が進んでいる物語が '+skipped.length+' 件あったので、上書きしませんでした。次にその物語を遊ぶと自動でクラウドへ反映されます。');
@@ -2025,8 +2025,7 @@
       if (c826 && c826.kind === 'FORK'){
         /* baseRev は進めない / baseTs・localTs も「同期済み」にしない（未同期のまま残す） */
         el('sync').className = 'sync';
-        el('sync').textContent = '☁ 別分岐として保管されました（rev '
-                                 + (c826.serverRev == null ? '—' : c826.serverRev) + '）';
+        el('sync').textContent = '☁ 別の版として保管しました';
         try { el('note').innerHTML = '<div class="note">'
               + esc('サーバ側にすでに新しい版があったため、いまの内容は「別分岐」として保管されました。'
                   + 'ローカルのデータはそのまま残しています。取り込み（☁ いま取り込む）で最新を確認してください。')
@@ -2036,7 +2035,7 @@
       }
       s('v292Dfix402_baseRev', String(r.rev));
       s('v292Dfix399_baseTs', String(pkg.updatedAt)); s('v292Dfix399_localTs', String(pkg.updatedAt));
-      el('sync').textContent = '☁ 上げました（rev '+r.rev+'）';
+      el('sync').textContent = '☁ 保存しました';
       /* ★★fix602(4): 送信で墓標により除いた件数を画面とconsoleへ出す（黙って減らさない） */
       try {
         if(lastPayloadDropped){
@@ -2061,7 +2060,7 @@
       var sr726 = G726.sanitizeDeviceBackupMap(o);
       if (!sr726.ok){
         el('sync').className='sync err';
-        el('sync').textContent='⬇ 書き出しを中止しました（' + (sr726.error || 'sanitize') + '）';
+        el('sync').textContent='⬇ 書き出しを中止しました（安全確認に通りませんでした）';
         try { console.warn('[home][fix726] export aborted:', sr726.error, sr726.failedKey || ''); } catch(e){}
         return;                                 /* ★FAIL CLOSED: 部分 sanitize の控えを出さない */
       }
@@ -2229,9 +2228,9 @@
         var hours = Math.max(0, Math.floor((t.exp*1000 - Date.now()) / 3600000));
         text = 'ログイン: Google ✓（残り' + hours + '時間' + (t.email ? ' / ' + t.email : '') + '）';
       } else if (t){
-        text = 'ログイン: Google期限切れ' + (pass ? '（合言葉で同期中）' : '');
+        text = 'ログイン: Google期限切れ' + (pass ? '（アクセスコードで同期中）' : '');
       } else if (pass){
-        text = 'ログイン: 合言葉のみ';
+        text = 'ログイン: アクセスコード';
       } else {
         text = 'ログイン: 未ログイン';
       }
@@ -2412,7 +2411,7 @@
       var gc = f660gc();
       if(!gc){ box.textContent = ''; return; }
       var st = gc.status();
-      box.textContent = '保存容量: ' + st.usageKB + 'KB / ' + st.keys + 'キー';
+      box.textContent = '保存容量: ' + st.usageKB + 'KB';
       if(st.degradedSlots && st.degradedSlots.length){
         box.textContent += '（控えが弱い物語 ' + st.degradedSlots.length + ' 件）';
       }
@@ -2426,7 +2425,7 @@
     try { gc.plan(); rv = gc.reviewCandidates(); } catch(e){ rv = null; }
     if(!rv){ el('note').innerHTML = '<div class="note">容量の棚卸しに失敗しました。安全のため何も消していません。</div>'; return; }
     gcRows = rv.rows || [];
-    var h = ['<div class="note"><b>🧹 容量を空ける</b>（いま ' + rv.usage.kb + 'KB / ' + rv.usage.keys + 'キー）<br>'
+    var h = ['<div class="note"><b>🧹 容量を空ける</b>（いま ' + rv.usage.kb + 'KB）<br>'
            + esc(rv.note) + '<br>'];
     if(!gcRows.length){ h.push('解放できるものはありません。'); }
     var sel = gcRows.filter(function(r){ return r.auto || r.selectable; });

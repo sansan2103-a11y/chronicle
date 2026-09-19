@@ -8,14 +8,18 @@
 // 設計: 純UI。コア(G.startScene / UI.openSettings / hasKeyゲート)は不触=既存の
 //   開始ゲートに一切触れない(友達のプロキシ認証パスを壊さない)。表示文字列と導線だけ改善。
 //   UI._showIntroをラップして空状態を再スキン+起動時ポーリング。
-//   ★既定OFF(友達のライブ入口は不変)。プレビュー=localStorage v292Dfix334='1'。
+//   ★sp10A(lane 15)より既定ON。opt-out/kill=localStorage v292Dfix334='0'。
 //   将来おまかせ生成(Phase B)は #v334-omakase ボタンにフックするだけで載る。
 // =====================================================================
 (function(){
   'use strict';
   if (window.__v292Dfix334) return; window.__v292Dfix334 = true;
   var TAG='[v292Dfix334:entryhub]';
-  function on(){ try{ return localStorage.getItem('v292Dfix334')==='1'; }catch(e){ return false; } }
+  /* ★v292Dfix880/sp10A(lane 15 / GPT 裁定 #L15entry F2): **既定値だけ**を ON へ反転する。
+     裁定: fix334 は developer diagnostics ではないので dev mode に寄せない。
+     既存の kill / opt-out は独立して維持する = localStorage['v292Dfix334']='0' で従来の空状態へ戻る。
+     '1' は従来どおり ON（明示 opt-in の互換）。未設定 = ON（ここだけが sp9 との差）。 */
+  function on(){ try{ return localStorage.getItem('v292Dfix334')!=='0'; }catch(e){ return true; } }
 
   // inject style once
   try{
