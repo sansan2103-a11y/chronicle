@@ -1,0 +1,115 @@
+# =====================================================================
+# chronicle / v292-rebuild — GitHub Pages (Jekyll) build exclusion
+#   release : 20260919-cfg1   kind: pages   status: WAIT_GPT_R2_AND_OWNER_ONE_LINE
+#   purpose : PUBLIC_SITE_ARTIFACT_ALLOWLIST v1 の **暫定 (interim)** 実装。
+#             「消す」のではなく「配らない」。repo の bytes は 1 も失わない。
+#   scope   : Pages の source 設定 / branch / deploy 方式は **変えない**。
+#             これは repo root に 1 file 足すだけの通常 `kind: pages` release である。
+#
+#   ★この file を足すと Jekyll の build から 316 path が落ち、publish 集合は
+#     pages_allowlist.json の publish 集合 310（allow 309 + temporary_allow admin.html 1）
+#     と一致する。検証は pipeline_v1/v13/jekyll_exclude_sim_v1.mjs。
+#
+#   ★`.nojekyll` は **置かない**。`.nojekyll` は Jekyll build そのものを止めるので、
+#     exclude は 1 件も効かなくなり、626 file が全部配られる（今より悪化する）。
+#
+#   ★`include:` は **書かない**。Jekyll の EntryFilter は include を exclude より
+#     先に判定するので、include を書くと既定 `.htaccess` を上書きしてしまう。
+#     本 repo に `.htaccess` は無いので既定のままで無害。
+#
+#   ★`exclude:` は Jekyll 既定 exclude を **上書きする可能性がある**（3.5 以降は
+#     追記という記述もあり [C]）。どちらでも同じ結果になるよう、既定分を
+#     §0 に明示して書き足してある。
+# =====================================================================
+
+# --- §0. Jekyll 既定 exclude の明示再掲（上書き/追記のどちらでも同一になるように） ---
+# 本 repo には 1 件も存在しないが、将来 Gemfile 等が置かれたときに
+# 既定の保護が失われないよう明示する。
+exclude:
+  - .sass-cache
+  - .jekyll-cache
+  - gemfiles
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor/bundle/
+  - vendor/cache/
+  - vendor/gems/
+  - vendor/ruby/
+
+  # --- §1. この設定 file 自身 / ops note ---
+  # `_` 始まりは Jekyll 既定でも落ちるが、明示する（設計文 §6-2）。
+  - _config.yml
+  - _redeploy.txt
+
+  # --- §2. ディレクトリ（root 以外の tracked path は 37 件すべて非公開） ---
+  # 末尾 `/` は必須。`worker` と書くと Jekyll の prefix 規則で
+  # `worker.js` / `worker_v40_candidate.js` まで巻き込む（今回は結果的に同じだが、
+  # 「dir を指す」意図を byte で表す）。
+  - worker/
+  - icons/
+  - style/
+
+  # --- §3. 拡張子で確実に切れるもの ---
+  # `.md` は front matter が無いと **変換されず逐語 copy される**ので、
+  # 除外しないと `/WORKER更新手順.md` が 200 で配られる。
+  - "*.md"
+  - "*.cjs"
+  - "*.mjs"
+  - "*.orig"
+  # ★`*.txt` / `*.json` は **書けない**（version.txt / seed_atoms.v1.json /
+  #   seed_anti_cliche.v1.json が publish 集合に居る）。個別に書く。
+  - "MANIFEST_FIX*.txt"
+  - seed_constraints.v1.json
+  - source_manifest.v1.json
+
+  # --- §4. QA / harness 由来の HTML ---
+  # publish 集合の html は admin/home/index/start の 4 本だけなので、
+  # 下の 4 pattern は 1 本も巻き込まない。
+  - backfill_harness.html
+  - "dev156_*"
+  - "gold_export_*"
+  - "test*.html"
+
+  # --- §5. worker / proxy 源（root 側 16 本。worker/ 配下 25 本は §2） ---
+  - ab552_driver.js
+  - "chronicle-proxy-*"
+  - worker.js
+  - worker_v40_candidate.js
+
+  # --- §6. v292 以前の旧 patch ---
+  # ★`v1*-patch.js` は v118〜v147 の 30 本だけに当たる。
+  - "v1*-patch.js"
+  # ★`v2*` や `v29*` は **絶対に書かない**（`v292Dfix*.js` 303 本を巻き込んで
+  #   player を全部殺す）。v20x〜v28x の band だけを 1 つずつ書く。
+  #   `?` metacharacter は使わない（Jekyll 3.x の fnmatch 呼び出し条件が
+  #   version 差で `*` を含む pattern に限られていた履歴があり [C]、
+  #   `*` のみで表現できるなら `*` のみにする）。
+  - "v20*.js"
+  - "v21*.js"
+  - "v22*.js"
+  - "v23*.js"
+  - "v24*.js"
+  - "v25*.js"
+  - "v26*.js"
+  - "v27*.js"
+  - "v28*.js"
+  # v29 band は `v292Dfix*` と同じ prefix を共有するため glob 化できない。逐語で書く。
+  - v290-verbatim-input.js
+  - v291-wrap-unwind-and-context-fix.js
+
+  # --- §7. v292Dfix 系だが index/home から 1 本も読まれない 12 本 ---
+  # glob 不能（publish される 303 本と名前空間を共有する）。逐語で書く。
+  # 新しい fix を足すときにここへ誤って足さないこと（§ DEPLOY_MANIFEST 7 の ordering hazard）。
+  - v292Dfix356-style-unify-button.js
+  - v292Dfix479-avatar-size.js
+  - v292Dfix506-sys-consolidate.js
+  - v292Dfix684-slot-write-identity-guard.js
+  - v292Dfix685-apply-identity-guard.js
+  - v292Dfix686-boot-read-probe.js
+  - v292Dfix689-registered-boot-probe.js
+  - v292Dfix690-newstory-firstboot-probe.js
+  - v292Dfix691-story-boot-cross-write-probe.js
+  - v292Dfix693-cross-document-storage-event-probe.js
+  - v292Dfix70-dialogue-order.js
+  - v292Dfix715-onestory-backfill-sender.js
