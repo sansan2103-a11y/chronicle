@@ -744,7 +744,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260920-sp14h';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20260920-sp14j';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -957,6 +957,53 @@ body {
   .narr-block { font-size: 14px; padding: 12px 34px 12px 14px; }
 }
 </style>
+<script id="v292Dfix890-early">/* ★sp14i part A — hunk A1h（UI PRE-HIDE ONLY）
+   incident: candidate/sp14h_g8post_v1.md §3（live cold で visible frames 14-61 / 初可視 5304-5658 ms）。
+   機序: v292Dfix890-anon-gate-yield.js は index.html の 308 本中 308 本目の script なので
+   DOMContentLoaded（live cold 6.0-6.5 s）より早く arm できず、fix328 の checkWorker
+   （小さな GET 1 本・3.8-5.0 s）に追い抜かれて板が paint されていた。
+   この script は </head> の直前（G.init() と fix328 の両方より前） に在るので、G.init()（index.html:3539）も fix328 も
+   動き出す前に必ず走る。
+
+   ★★Fable 裁定 SP14I — この bootstrap の役割は **UI の先回し非表示だけ**である。
+     ・ localStorage への **書き込み 0**（読みだけ）。
+     ・ **auth の authority にならない**。認証の判断は 1 つもしない。
+     ・ **query も body も見ない**（URL の ?code= の presence 読みも v2 で削除した）。
+     ・ credential は **localStorage の presence のみ**（v292ProxyPass / v292GoogleToken /
+       v292Dfix837_sess）。値も期限も見ない。どれかが在るなら 1 バイトも作用しない。
+     ・ やることは **#g250-gate を一時的に隠す 1 規則を head に入れる**ことだけ。
+     ・ **最終判断は v292Dfix890-anon-gate-yield.js v3（publicAnon）**。本 script は結論を出さない。
+   ★placeholder は置かない（匿名という答えが要る）。所有権は v292Dfix890-anon-gate-yield.js v3 が引き取る:
+       publicAnon:1 → placeholder を置き CSS はそのまま。
+       publicAnon:0 / credential あり / fix890 の arm から 2.5 秒 → CSS を外す。
+   ★誰も引き取らなかったとき（fix890 が配られていない・落ちた）の保険として
+     10 秒の watchdog で自分で外す。板が永久に消えたままにはならない。
+   kill: localStorage[v292Dfix890] = 0 */
+(function(){try{
+  if (window.__v292Dfix890Early) return;
+  var GID='g250-gate', SID='v292Dfix890-css', KILL='v292Dfix890', MAXMS=10000;
+  function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  if (lsg(KILL) === '0') return;
+  function present(k){ var v=lsg(k); if (v===null||v===undefined) return false; var s=String(v).trim();
+    return !!(s && s!=='null' && s!=='undefined' && s!=='{}' && s!=='[]'); }
+  if (present('v292ProxyPass') || present('v292GoogleToken') || present('v292Dfix837_sess')) return;
+  var head = document.head || document.getElementsByTagName('head')[0] || document.documentElement;
+  if (!head || document.getElementById(SID)) return;
+  var st = document.createElement('style'); st.id = SID; st.setAttribute('type','text/css');
+  st.appendChild(document.createTextNode('#g250-gate{display:none!important;visibility:hidden!important;pointer-events:none!important}'));
+  head.appendChild(st);
+  var now = function(){ try { return (window.performance && performance.now) ? performance.now() : 0; } catch(e){ return 0; } };
+  var E = window.__v292Dfix890Early = { role: 'ui-pre-hide', armedAt: now(), css: true, owned: false, released: 0, reason: '', gate: GID };
+  E.release = function(why){ try { var n=document.getElementById(SID); if (n && n.parentNode) n.parentNode.removeChild(n); } catch(e){}
+    E.css = false; E.released = now(); E.reason = String(why || ''); };
+  var iv = setInterval(function(){
+    try {
+      if (window.__v292Dfix890){ E.owned = true; clearInterval(iv); return; }
+      if (now() - E.armedAt > MAXMS){ clearInterval(iv); E.release('no-owner'); }
+    } catch(e){ try { clearInterval(iv); } catch(x){} }
+  }, 250);
+}catch(e){}})();
+</script>
 </head>
 <body>
 
@@ -2811,7 +2858,7 @@ const G = {
     });
     if (S.turns.length > 0)    { UI.renderAll(); UI.renderBranches(S.scene.branches); }
     else if (S.cfg.key || S.cfg.naiKey || S.cfg.orKey) { UI._showIntro(); }
-    else                                { setTimeout(() => UI.openSettings('key-missing'), 100); }   /* ★v292Dfix854 */
+    else                                { setTimeout(() => { if (!(window.__v292Dfix890Early && window.__v292Dfix890Early.css)) UI.openSettings('key-missing'); }, 100); }   /* ★v292Dfix854 ／ ★sp14i A2: 早出し CSS が掛かっている間（= credential を 1 つも持たない訪問者）は起動時の自動 open を行わない。fix890 v3 の E2 脚は fallback として残す */
   },
 
   startScene() {
@@ -3256,7 +3303,7 @@ const G = {
         var _t263 = document.getElementById('v263toast'); if (_t263) _t263.remove();
         _t263 = document.createElement('div'); _t263.id = 'v263toast';
         _t263.style.cssText = 'position:fixed;left:50%;bottom:90px;transform:translateX(-50%);z-index:99999;background:#3a1418;color:#ffd9d9;border:1px solid #a04040;border-radius:10px;padding:10px 14px;font-size:13px;max-width:86vw;box-shadow:0 4px 16px rgba(0,0,0,.5);display:flex;gap:10px;align-items:center';
-        var _tm263 = document.createElement('span'); var _m268 = String((e && e.message) || e); if (/abort/i.test(_m268)) _m268 = '生成がタイムアウトしました（時間切れ）'; /* v292Dfix268 */ _tm263.textContent = '⚠ 生成に失敗しました(' + _m268.slice(0, 90) + ')。入力は残してあります。'; _t263.appendChild(_tm263);
+        var _tm263 = document.createElement('span'); var _m268 = String((e && e.message) || e); try { console.warn('[gen] ', _m268); } catch(_w268){} /* ★sp14i-v2 B（Fable 裁定）: 公開文面は **allowlist**。server の error 文字列は画面に出さない（errorCode → 定文の写像だけ）。生 message / HTTP / status / JSON は console のみ。全利用者に適用。 */ var _st268 = '', _cd268 = ''; try { var _hm268 = _m268.match(/HTTP (\d+)/); if (_hm268) _st268 = _hm268[1]; } catch(_h268){} try { var _mm268 = _m268.match(/HTTP \d+: (\{[\s\S]*\})\s*$/); if (_mm268) { var _j268 = JSON.parse(_mm268[1]); if (_j268 && typeof _j268.errorCode === 'string') _cd268 = _j268.errorCode; } } catch(_p268){} if (!_cd268 && (_st268 === '401' || _st268 === '403')) _cd268 = 'auth'; if (!_cd268) { if (/abort/i.test(_m268)) _cd268 = 'timeout'; else if (/Failed to fetch|NetworkError|load failed/i.test(_m268)) _cd268 = 'network'; } var _map268 = { 'anon-daily': '今日はここまで。明日また遊べます。', 'ip-daily': '本日の利用上限に達しました。時間をおいてお試しください。', 'budget': '本日の利用上限に達しました。時間をおいてお試しください。', 'auth': 'ログインまたは招待の状態をご確認ください。', 'timeout': '生成がタイムアウトしました。もう一度お試しください。', 'network': '通信に失敗しました。もう一度お試しください。' }; _tm263.textContent = '⚠ ' + (_map268[_cd268] || '生成に失敗しました。もう一度お試しください。') + '入力は残してあります。'; _t263.appendChild(_tm263);
         var _tb263 = document.createElement('button'); _tb263.textContent = '再試行'; _tb263.style.cssText = 'background:#a04040;color:#fff;border:0;border-radius:8px;padding:5px 12px;cursor:pointer;flex:none';
         var _g263 = this; _tb263.onclick = function(){ try { _t263.remove(); } catch(_){} _g263.submit(); };
         _t263.appendChild(_tb263);
@@ -4810,7 +4857,7 @@ G.init();
      既定 ON だが root JSON の publicAnon が 1 のときだけ作用する（それ以外は sp11a と同じ挿動）。
      ★★WAIT_V44_LIVE_GREEN / BUNDLED_WITH_SP10B_SP11A。
      kill: localStorage[v292Dfix886Off]=1 ／ lane 一括は localStorage[v292PublicAiOff]=1 -->
-<script src="v292Dfix886-public-anon-client.js?cb=20260919-sp14"></script>
+<script src="v292Dfix886-public-anon-client.js?cb=20260920-sp14j"></script>
 <!-- ★sp14h hotfix（incident: candidate/sp14_g8post_v1.md E1 CRITICAL_FAIL / E2 FAIL）:
      匿名経路が開いている（root JSON publicAnon:1・合言葉なし・Google 無効）ときだけ、
      v292Dfix328-google-login.js の全画面 gate #g250-gate に譲ってもらう。
@@ -4818,7 +4865,7 @@ G.init();
        （立てると設定パネル内の Google カード #g250-settings まで死ぬ）。
      ★fix886 の 1 つ後ろに置く。fix886 の probe 結果（publicAnon）を読むため。
      kill: localStorage[v292Dfix890]=0 → 何もしない（fix328 は sp14 と同じ挙動に戻る） -->
-<script src="v292Dfix890-anon-gate-yield.js?cb=20260920-sp14h"></script>
+<script src="v292Dfix890-anon-gate-yield.js?cb=20260920-sp14j"></script>
 </body>
 </html>
 

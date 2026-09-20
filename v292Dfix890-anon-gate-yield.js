@@ -59,6 +59,25 @@
 //   NO_NETWORK      … 自分では 1 本も通信しない（匿名判定は fix886 の結果と cache を読むだけ）。
 //   NO_STATIC_DOM   … index.html の静的 DOM・文言・style を書き換えない。
 //
+//
+// ■ v2 → v3 で変えたこと（sp14i / incident: candidate/sp14h_g8post_v1.md §3）
+//   live の cold 初回訪問で 0-frame が成立しなかった。機序は完全に特定されている:
+//   本 file は index.html の **308 本中 308 本目の script** なので、DOMContentLoaded より
+//   早く arm できない。live cold では DCL が 6.0–6.5 s、fix328 の checkWorker は
+//   小さな GET 1 本なので 3.8–5.0 s で返り、板は 5.3–5.7 s に paint される。
+//   順序が反転して visible frame が 14–61 出た（offline harness では 0 だった）。
+//
+//   v3 では **CSS 相だけを index.html の inline script へ前倒し**した（hunk A1）。
+//   その script は fix328 の tag の直前（および head）に在るので、fix328 が動き出す前に
+//   必ず同じ 1 規則が head に入る。paint は原理的に起こり得ない。
+//   本 file は v3 から **その早出し CSS の所有権を引き取る側**になる:
+//     ・publicAnon:1 と分かった → placeholder を置き、CSS はそのまま残す
+//     ・publicAnon:0 / 暫定の上限（PROV_MS）到達 → CSS を外す（= 板が遅れて見える。開示）
+//     ・本 file が 1 度も動かなかった場合 → 早出し script 自身の watchdog が外す
+//   早出し script との受け渡しは window.__v292Dfix890Early の 1 object だけで行う。
+//   本 file は **早出し CSS を作らない場合でも STYLE_ID を同じにしてある**ので、
+//   styleOn() は「もう在る」を見て何もせず、styleOff() は同じ node を外す。
+//
 // 検証口: window.__v292Dfix890 = { version, status(), stats, api }
 // kill:  localStorage[v292Dfix890] = 0   → 何もしない（fix328 は sp14 と同じ挙動に戻る）
 // =====================================================================
@@ -66,7 +85,7 @@
   'use strict';
   if (window.__v292Dfix890) return;
   var TAG = '[v292Dfix890:anon-gate-yield]';
-  var VERSION = 'v292Dfix890-20260920-sp14h-v2.0';
+  var VERSION = 'v292Dfix890-20260920-sp14i-v3.1';
 
   var GATE_ID   = 'g250-gate';
   var CARD_ID   = 'g250-settings';
@@ -109,12 +128,19 @@
 
   var stats = { sweeps: 0, styleOn: 0, styleOff: 0, placeholder: 0, gateRemoved: 0, observed: 0,
                 provArmed: 0, provReleased: 0, noticeShown: 0, noticeDismissed: 0,
-                cardMoved: 0, foldsOpened: 0, loginRedirect: 0, e2Closed: 0, settled0: 0, stopped: 0 };
+                cardMoved: 0, foldsOpened: 0, loginRedirect: 0, e2Closed: 0, settled0: 0, stopped: 0,
+                earlyAdopted: 0, earlyReleased: 0 };
 
   /* ---------------- localStorage ---------------- */
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function lss(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
   function off(){ return lsg(LS_KILL) === '0'; }
+
+  /* ★v3: index.html の早出し inline script が置いた受け渡し object。
+     形: { armedAt, css, owned, released, reason, release(why) }。無いこともある
+     （その hunk が入っていない配布・credential 持ち・kill）ので、必ず null を許す。 */
+  function early(){ try { return window.__v292Dfix890Early || null; } catch(e){ return null; } }
+  function earlyOwn(){ var E = early(); if (E && !E.owned){ E.owned = true; return true; } return false; }
 
   /* ---------------- 既存の読み手と同じ読み方 ---------------- */
   function purl(){ var v = lsg('v292ProxyUrl'); return (v || '').trim().replace(/\/+$/, ''); }
@@ -181,6 +207,7 @@
   /* ---------------- ① (a) style：paint 前に効く抑止 ---------------- */
   function styleOn(){
     try {
+      /* 早出し script が同じ id で同じ 1 規則を入れている。作り直さず、所有権だけ引き取る。 */
       if (document.getElementById(STYLE_ID)) return false;
       var head = document.head || document.getElementsByTagName('head')[0] || document.documentElement;
       if (!head) return false;
@@ -195,9 +222,12 @@
   }
   function styleOff(){
     try {
+      var E = early();
+      if (E) E.owned = true;
       var s = document.getElementById(STYLE_ID);
-      if (!s || !s.parentNode) return false;
+      if (!s || !s.parentNode){ if (E && E.css){ E.css = false; E.reason = 'fix890'; } return false; }
       s.parentNode.removeChild(s);
+      if (E && E.css){ E.css = false; E.reason = 'fix890'; stats.earlyReleased++; }
       stats.styleOff++;
       return true;
     } catch(e){ return false; }
@@ -524,12 +554,26 @@
   }
 
   /* ---------------- boot ---------------- */
+  /* ★v3: 2 度目の DOMContentLoaded（あるいは api.boot() の手叩き）で timer と wrap が
+     二重に張られないようにする。v2 には無かった。 */
+  var booted = false;
   function boot(){
+    if (booted) return false;
+    booted = true;
     if (off()){ try { console.log(TAG, 'disabled (v292Dfix890=0)'); } catch(e){} return false; }
+    /* ★v3: ここから先は「早出し bootstrap が置いた CSS の所有者は本 file」。watchdog を止める。 */
+    var E0 = early();
+    if (E0){ E0.owned = true; if (E0.css) stats.earlyAdopted++; }
     var c = credPresent();
-    /* credential を 1 つでも持っている利用者には最初から 1 バイトも作用しない */
-    if (c){ try { console.log(TAG, 'inert (credential present: ' + c + ')'); } catch(e){} return false; }
-    if (anonProbe() === 0){ try { console.log(TAG, 'inert (publicAnon:0)'); } catch(e){} return false; }
+    /* credential を 1 つでも持っている利用者には 1 バイトも作用しない。
+       ★v3.1: 早出し bootstrap は **localStorage の presence しか見ない**（URL の ?code= は見ない）ので、
+       配布リンク経由の訪問者では「bootstrap は掛けた／本 file は credential を見つけた」という
+       食い違いが起こり得る。そのときは **ここで必ず CSS を外す**。外さないと watchdog の
+       10 秒まで板が出ない。 */
+    if (c){ styleOff(); try { console.log(TAG, 'inert (credential present: ' + c + ')'); } catch(e){} return false; }
+    /* publicAnon:0 と分かっているなら、早出し CSS を **今すぐ** 外す。
+       node には触っていないので、fix328 は従来どおり本物の板を出す（遅れて見える。開示）。 */
+    if (anonProbe() === 0){ styleOff(); try { console.log(TAG, 'inert (publicAnon:0)'); } catch(e){} return false; }
 
     /* ★ここが 0-frame の要。fix328 の boot は同じ DOMContentLoaded で先に走り、
        checkWorker の 1 往復を待ってから showGate する。こちらは **同期で** style を入れる。 */
@@ -565,7 +609,9 @@
                gate: !!g, gateIsPlaceholder: isOurs(g), style: s, notice: n,
                wrapped: wrapped, loginWrapped: loginWrapped, stopped: stopped,
                e2Done: e2Done, userOpened: userOpened, sawKeyMissing: sawKeyMissing,
-               ageMs: Date.now() - T0, armedAtMs: Math.round(T0 - NAV0) };
+               ageMs: Date.now() - T0, armedAtMs: Math.round(T0 - NAV0),
+               early: (function(){ var E = early(); return E ? { armedAt: Math.round(E.armedAt || 0), css: !!E.css,
+                        owned: !!E.owned, reason: String(E.reason || '') } : null; })() };
     },
     api: {
       isOff: off, active: active, provisional: provisional, anonProbe: anonProbe,
@@ -573,6 +619,7 @@
       purl: purl, seen: seen,
       styleOn: styleOn, styleOff: styleOff, placeholder: placeholder, removePlaceholder: removePlaceholder,
       isOurs: isOurs, observe: observe, unobserve: unobserve,
+      early: early, earlyOwn: earlyOwn,
       ensureNotice: ensureNotice, removeNotice: removeNotice, dismiss: dismiss,
       openLogin: openLogin, ensureCardReachable: ensureCardReachable,
       wrapUi: wrapUi, unwrapUi: unwrapUi, wrapLogin: wrapLogin, unwrapLogin: unwrapLogin,
