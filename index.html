@@ -744,7 +744,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260919-sp14';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20260920-sp14h';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4811,6 +4811,14 @@ G.init();
      ★★WAIT_V44_LIVE_GREEN / BUNDLED_WITH_SP10B_SP11A。
      kill: localStorage[v292Dfix886Off]=1 ／ lane 一括は localStorage[v292PublicAiOff]=1 -->
 <script src="v292Dfix886-public-anon-client.js?cb=20260919-sp14"></script>
+<!-- ★sp14h hotfix（incident: candidate/sp14_g8post_v1.md E1 CRITICAL_FAIL / E2 FAIL）:
+     匿名経路が開いている（root JSON publicAnon:1・合言葉なし・Google 無効）ときだけ、
+     v292Dfix328-google-login.js の全画面 gate #g250-gate に譲ってもらう。
+     ★fix328 の byte は 1 文字も変えない。v292GoogleLoginOff も立てない
+       （立てると設定パネル内の Google カード #g250-settings まで死ぬ）。
+     ★fix886 の 1 つ後ろに置く。fix886 の probe 結果（publicAnon）を読むため。
+     kill: localStorage[v292Dfix890]=0 → 何もしない（fix328 は sp14 と同じ挙動に戻る） -->
+<script src="v292Dfix890-anon-gate-yield.js?cb=20260920-sp14h"></script>
 </body>
 </html>
 
