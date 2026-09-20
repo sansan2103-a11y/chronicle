@@ -744,7 +744,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260919-sp10ar';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20260919-sp14';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4558,6 +4558,10 @@ G.init();
      kill: localStorage['v292Dfix880Off']='1' / localStorage['v292Dfix881Off']='1' -->
 <script src="v292Dfix880-settings-fold.js?cb=20260919-sp10a"></script>
 <script src="v292Dfix881-public-strings.js?cb=20260919-sp10a"></script>
+<!-- ★lane 15 / sp10B(GPT 裁定 #L15entry F1/F3): BYOK（API キー・provider・モデル・アクセスコード）を
+     【開発者向け】へ寄せる。**ACTIVATION_BLOCKED_PUBLIC_AI_ACCESS** — API キー不要の経路が実際に使えるように
+     なるまで production では有効化しない。kill: localStorage['v292Dfix884Off']='1' → sp10A と同じ配置へ戻る。 -->
+<script src="v292Dfix884-byok-dev-only.js?cb=20260919-sp14"></script>
 <script src="v292Dfix335-omakase.js?cb=v292Dfix335k"></script>
 <script src="v292Dfix351-settings-draft.js?cb=20260829-fix748"></script>
 <script src="v292Dfix352-hero-placeholder.js?cb=v292Dfix352"></script>
@@ -4802,6 +4806,11 @@ G.init();
 <script src="v292Dfix851-posture-directive.js?cb=20260915-rron851"></script>
 <script src="v292Dfix852-mental-capability.js?cb=20260915-rr3on852"></script>
 <script src="v292Dfix853-truncated-name-guard.js?cb=20260915-tng853"></script>
+<!-- ★lane PUBLIC_AI_ACCESS / sp12: worker v44 の匿名経路の client 側。
+     既定 ON だが root JSON の publicAnon が 1 のときだけ作用する（それ以外は sp11a と同じ挿動）。
+     ★★WAIT_V44_LIVE_GREEN / BUNDLED_WITH_SP10B_SP11A。
+     kill: localStorage[v292Dfix886Off]=1 ／ lane 一括は localStorage[v292PublicAiOff]=1 -->
+<script src="v292Dfix886-public-anon-client.js?cb=20260919-sp14"></script>
 </body>
 </html>
 

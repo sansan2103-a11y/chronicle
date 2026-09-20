@@ -233,7 +233,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260919-sp10ar';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20260919-sp14';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -2646,5 +2646,11 @@
      ★WAIT_SP8_LIVE_GREEN: sp8（fix872 同期）が live green になるまで本番投入しない。
      kill = localStorage['v292Dfix873Off']='1' → 深さ選択を出さず従来どおり SC_EDIT へ直行。 -->
 <script src="v292Dfix873-scenario-creator.js?cb=20260919-sp9"></script>
+<!-- v292Dfix885(HOME_DATA_MANAGEMENT_FOLD_V1・GPT 裁定 #L16entry): ホーム左袖の「データ」欄を
+     player 向けに減らす（DOM の移動だけ・id ・ handler ・ 保存経路は不変）。
+     ★手動同期の 2 ボタン（#upBtn / #downBtn）は **常に見える位置のまま**（降格は sp11b）。
+     ★ログイン導線（#gLoginBtn / #g667btn / #loginState）には 1 バイトも触れない。
+     kill = localStorage['v292Dfix885Off']='1'（または 'v292Lane16Off'）→ sp10b と同じ DOM。 -->
+<script src="v292Dfix885-home-data-fold.js?cb=20260919-sp14"></script>
 </body>
 </html>
