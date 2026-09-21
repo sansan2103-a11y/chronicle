@@ -82,11 +82,13 @@
         row.appendChild(bMake);
         // 🎲 おまかせ (Phase B接続点・今は近日ラベル)
         var bOma=document.createElement('button'); bOma.className='v334-btn omakase'; bOma.id='v334-omakase';
-        bOma.innerHTML='🎲 おまかせで用意<span class="v334-soon">近日</span>';
+        /* ★sp16(C-13): fix873 の「おまかせで作る」は実装済み、こちらは未実装。同じ語が 2 か所で
+           違う意味になっていたので、ここでは名乗らない（ラベル 1 つ・挙動は 1 バイトも変えない）。 */
+        bOma.innerHTML='🎲 AI に考えてもらう<span class="v334-soon">近日</span>';
         bOma.onclick=function(){
           // Phase Bで window.__v334Omakase() が定義されたらそれを呼ぶ。未定義なら案内。
           try{ if(typeof window.__v334Omakase==='function'){ window.__v334Omakase(); return; } }catch(e){}
-          try{ getUI().setStatus('おまかせ生成(AIが世界とキャラを自動生成)は近日追加します'); }catch(e){}
+          try{ getUI().setStatus('この機能は近日追加します。いまはホームの「✎ シナリオを作る」からご用意ください。'); }catch(e){}
         };
         row.appendChild(bOma);
         hub.appendChild(row);

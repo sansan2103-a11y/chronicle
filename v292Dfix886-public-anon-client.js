@@ -89,7 +89,7 @@
   'use strict';
   if (window.__v292Dfix886) return;
   var TAG = '[v292Dfix886:public-anon]';
-  var VERSION = 'v292Dfix886-20260920-sp14i-v2.1';
+  var VERSION = 'v292Dfix886-20260921-sp16r-v2.2';
 
   var LS_ANON  = 'v292AnonId';
   var LS_PROBE = 'v292Dfix886Probe';
@@ -279,7 +279,10 @@
       return true;
     } catch(e){ return false; }
   }
-  function notice(text){
+  /* ★sp16(C-4): sticky=true のとき自動で消さない。枯渇（anon-daily）は「一時的な失敗」ではなく
+     「今日の終わり」であり、12 秒で消えると player は読み終える前に見失う。
+     node も id も他の style も足さない（同じ 1 面を使い回す = 面は 1 つのまま）。 */
+  function notice(text, sticky){
     var t = String(text == null ? '' : text);
     if (!t) return false;
     try {
@@ -289,15 +292,15 @@
         d.id = NOTICE_ID;
         d.setAttribute('role', 'status');
         d.setAttribute('aria-live', 'polite');
-        d.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);max-width:92vw;padding:10px 16px;border-radius:10px;background:rgba(20,20,24,.92);color:#fff;font-size:14px;line-height:1.6;z-index:99999;cursor:pointer';
+        d.style.cssText = 'position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);max-width:92vw;padding:10px 16px;border-radius:10px;background:rgba(20,20,24,.92);color:#fff;font-size:14px;line-height:1.6;z-index:99999;cursor:pointer';
         d.addEventListener('click', function(){ try { d.style.display = 'none'; } catch(e){} });
         var host = document.body || document.documentElement;
         if (host) host.appendChild(d);
       }
       d.textContent = t;
       d.style.display = '';
-      if (d.__t) { try { clearTimeout(d.__t); } catch(e){} }
-      d.__t = setTimeout(function(){ try { d.style.display = 'none'; } catch(e){} }, NOTICE_MS);
+      if (d.__t) { try { clearTimeout(d.__t); } catch(e){} d.__t = null; }
+      if (!sticky) d.__t = setTimeout(function(){ try { d.style.display = 'none'; } catch(e){} }, NOTICE_MS);
       lastShown = t;
       shown++;
       return true;
@@ -314,7 +317,8 @@
       if (typeof h === 'string' && h) line = copy + ' ' + h;
     }
     void status;
-    return notice(line);
+    /* ★sp16(C-4): 枯渇だけは自動で消さない。それ以外は従来どおり NOTICE_MS で消える。 */
+    return notice(line, code === 'anon-daily');
   }
   function watch(res){
     try {

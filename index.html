@@ -744,7 +744,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260920-sp14j';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20260921-sp16r';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -1018,11 +1018,16 @@ body {
 <div id="story">
   <div id="welcome">
     <h2>CHRONICLE</h2>
-    <p id="welcomeMsg">物語を始めましょう。世界とキャラクターを用意すると、すぐに遊び始められます。</p>
+    <p id="welcomeMsg">ここは、AI と一緒に物語をつくる場所です。<br>下の入力欄に、したいことを書いて「送信 ▶」を押してください。<br>無料お試しには 1 日の利用上限があります。</p>
     <div id="welcomeActions" style="display:none; margin-top:18px;">
       <button class="btn-p" style="min-width:200px" onclick="G.startScene()">▶ 物語を始める</button>
       <div id="quickStarts" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:12px"></div>
     </div>
+    <!-- ★sp16(C-10 / C-11): 匿名の訪問者は設定パネルを開かない（fix886 が自動 open を抑止し、
+         sp14i A-2 が起動時の key-missing auto-open も止める）ので、物語画面から法務面へ到達
+         できる唯一の経路がここになる。#welcomeActions の **外側** に置く（あちらは
+         display:none で始まる）。safe-area は iPhone のホームインジケータ対策。 -->
+    <div id="v888legal" style="margin-top:16px;font-size:11px;line-height:1.8;opacity:.75;padding-bottom:max(8px, env(safe-area-inset-bottom))"><a href="./terms.html" style="color:inherit">利用規約</a> ・ <a href="./privacy.html" style="color:inherit">プライバシー</a> ・ AI: OpenRouter / DeepSeek ・ 画像: Pollinations</div>
   </div>
 </div>
 
@@ -1397,6 +1402,9 @@ body {
         <button class="btn-d" onclick="G.resetStory()">物語リセット（設定は保持）</button>
         <button class="btn-d" onclick="G.resetAll()">完全リセット</button>
       </div>
+      <!-- ★sp16(C-9): attribution.md §3-3 の 1 行版。[data-v15-dev] は付けない（付けると lint の
+           対象外＝ player-facing でなくなり、attribution として成立しない）。 -->
+      <div id="v888legalCfg" style="margin-top:10px;font-size:11px;line-height:1.8;opacity:.75"><a href="./terms.html" style="color:inherit">利用規約</a> ・ <a href="./privacy.html" style="color:inherit">プライバシー</a> ・ AI: OpenRouter / DeepSeek ・ 画像: Pollinations</div>
     </div>
   </div>
 </div>
@@ -3062,6 +3070,11 @@ const G = {
 
     inputEl.value = ''; inputEl.style.height = 'auto';
     UI.setLoading(true); UI.renderBranches([]);
+    /* ★sp16(C-7): 本文生成は最長 150 秒待つ（v292Dfix268）。その間に出る待機文は 1 つだけで、
+       初見の利用者は 2 分半の沈黙を「壊れた」と読む。30 秒で 1 文だけ途中経過を足す。
+       timer 1 本・保存 0・通信 0・新 key 0。finally で必ず解除する。 */
+    try { if (this.__p888) { clearTimeout(this.__p888); this.__p888 = null; } } catch(_p888a){}
+    try { var _self888 = this; this.__p888 = setTimeout(function(){ try { _self888.__p888 = null; var _b888 = document.getElementById('sendBtn'); if (_b888 && _b888.disabled) UI.setStatus('まだ考えています。もう少しお待ちください。'); } catch(_p888c){} }, 30000); } catch(_p888b){}
 
     try {
       /* ★fix748 D2(C10): Planner.build の _userExtensions から
@@ -3296,6 +3309,23 @@ const G = {
       UI.renderBranches(plan.branchCandidates);
       UI.setStatus('');
     } catch(e) {
+      /* ★★sp16(C-4 / 裁定 #LANE19): 匿名の 1 日上限（errorCode = anon-daily / budget）は
+         「失敗した」ではなく「今日は終わった」である。赤トースト（再試行ボタン付き）・黒通知・
+         status bar の三重表示をやめ、**案内 1 面**へ収束させる。errorCode は分岐にだけ使い、
+         画面には 1 文字も出さない（fix886 の約束の外側に居た面を、こちら側で閉じる）。 */
+      var _m888 = String((e && e.message) || e);
+      var _p888j = null; try { var _i888 = _m888.indexOf('{'); if (_i888 >= 0) _p888j = JSON.parse(_m888.slice(_i888)); } catch(_e888a){ _p888j = null; }
+      var _c888 = (_p888j && typeof _p888j.errorCode === 'string') ? _p888j.errorCode : '';
+      if (_c888 === 'anon-daily' || _c888 === 'budget') {
+        console.error(e);
+        var _t888 = (_p888j && typeof _p888j.error === 'string' && _p888j.error.trim()) ? _p888j.error.trim() : '今日はここまでです。明日また遊べます。';
+        try { if (text && !inputEl.value.trim()) inputEl.value = text; } catch(_e888b){}
+        try { var _o888 = document.getElementById('v263toast'); if (_o888) _o888.remove(); } catch(_e888c){}
+        var _n888 = false;
+        try { var _R888 = window.__v292Dfix886; if (_R888 && _R888.api && typeof _R888.api.notice === 'function') _n888 = !!_R888.api.notice(_t888, true); } catch(_e888d){}
+        if (!_n888) { try { var _d888 = document.getElementById('v886notice'); if (!_d888) { _d888 = document.createElement('div'); _d888.id = 'v886notice'; _d888.setAttribute('role', 'status'); _d888.setAttribute('aria-live', 'polite'); _d888.style.cssText = 'position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);max-width:92vw;padding:10px 16px;border-radius:10px;background:rgba(20,20,24,.92);color:#fff;font-size:14px;line-height:1.6;z-index:99999'; (document.body || document.documentElement).appendChild(_d888); } _d888.textContent = _t888; _d888.style.display = ''; } catch(_e888e){} }
+        return;
+      }
       UI.setStatus('うまくいきませんでした。もう一度お試しください', true); console.error(e);
       /* v292Dfix263a: 失敗の可視化+入力復元+再試行(503等のサイレントターン消滅根治。#storyのerr-msgはレンダラに拭われるためbody直付けトースト) */
       try {
@@ -3303,7 +3333,7 @@ const G = {
         var _t263 = document.getElementById('v263toast'); if (_t263) _t263.remove();
         _t263 = document.createElement('div'); _t263.id = 'v263toast';
         _t263.style.cssText = 'position:fixed;left:50%;bottom:90px;transform:translateX(-50%);z-index:99999;background:#3a1418;color:#ffd9d9;border:1px solid #a04040;border-radius:10px;padding:10px 14px;font-size:13px;max-width:86vw;box-shadow:0 4px 16px rgba(0,0,0,.5);display:flex;gap:10px;align-items:center';
-        var _tm263 = document.createElement('span'); var _m268 = String((e && e.message) || e); try { console.warn('[gen] ', _m268); } catch(_w268){} /* ★sp14i-v2 B（Fable 裁定）: 公開文面は **allowlist**。server の error 文字列は画面に出さない（errorCode → 定文の写像だけ）。生 message / HTTP / status / JSON は console のみ。全利用者に適用。 */ var _st268 = '', _cd268 = ''; try { var _hm268 = _m268.match(/HTTP (\d+)/); if (_hm268) _st268 = _hm268[1]; } catch(_h268){} try { var _mm268 = _m268.match(/HTTP \d+: (\{[\s\S]*\})\s*$/); if (_mm268) { var _j268 = JSON.parse(_mm268[1]); if (_j268 && typeof _j268.errorCode === 'string') _cd268 = _j268.errorCode; } } catch(_p268){} if (!_cd268 && (_st268 === '401' || _st268 === '403')) _cd268 = 'auth'; if (!_cd268) { if (/abort/i.test(_m268)) _cd268 = 'timeout'; else if (/Failed to fetch|NetworkError|load failed/i.test(_m268)) _cd268 = 'network'; } var _map268 = { 'anon-daily': '今日はここまで。明日また遊べます。', 'ip-daily': '本日の利用上限に達しました。時間をおいてお試しください。', 'budget': '本日の利用上限に達しました。時間をおいてお試しください。', 'auth': 'ログインまたは招待の状態をご確認ください。', 'timeout': '生成がタイムアウトしました。もう一度お試しください。', 'network': '通信に失敗しました。もう一度お試しください。' }; _tm263.textContent = '⚠ ' + (_map268[_cd268] || '生成に失敗しました。もう一度お試しください。') + '入力は残してあります。'; _t263.appendChild(_tm263);
+        var _tm263 = document.createElement('span'); var _m268 = String((e && e.message) || e); try { console.warn('[gen] ', _m268); } catch(_w268){} /* ★sp14i-v2 B（Fable 裁定）: 公開文面は **allowlist**。server の error 文字列は画面に出さない（errorCode → 定文の写像だけ）。生 message / HTTP / status / JSON は console のみ。全利用者に適用。 */ var _st268 = '', _cd268 = ''; try { var _hm268 = _m268.match(/HTTP (\d+)/); if (_hm268) _st268 = _hm268[1]; } catch(_h268){} try { var _mm268 = _m268.match(/HTTP \d+: (\{[\s\S]*\})\s*$/); if (_mm268) { var _j268 = JSON.parse(_mm268[1]); if (_j268 && typeof _j268.errorCode === 'string') _cd268 = _j268.errorCode; } } catch(_p268){} if (!_cd268 && (_st268 === '401' || _st268 === '403')) _cd268 = 'auth'; if (!_cd268) { if (/abort/i.test(_m268)) _cd268 = 'timeout'; else if (/Failed to fetch|NetworkError|load failed/i.test(_m268)) _cd268 = 'network'; } var _map268 = { 'anon-daily': '今日はここまで。明日また遊べます。', 'ip-daily': '本日の利用上限に達しました。時間をおいてお試しください。', 'budget': '本日の利用上限に達しました。時間をおいてお試しください。', 'auth': 'ログインまたは招待の状態をご確認ください。', 'not-allowed': 'このアカウントはまだ招待されていません。招待をお待ちください。', 'timeout': '生成がタイムアウトしました。もう一度お試しください。', 'network': '通信に失敗しました。もう一度お試しください。' }; _tm263.textContent = '⚠ ' + (_map268[_cd268] || '生成に失敗しました。もう一度お試しください。') + '入力は残してあります。'; _t263.appendChild(_tm263);
         var _tb263 = document.createElement('button'); _tb263.textContent = '再試行'; _tb263.style.cssText = 'background:#a04040;color:#fff;border:0;border-radius:8px;padding:5px 12px;cursor:pointer;flex:none';
         var _g263 = this; _tb263.onclick = function(){ try { _t263.remove(); } catch(_){} _g263.submit(); };
         _t263.appendChild(_tb263);
@@ -3313,7 +3343,7 @@ const G = {
         document.body.appendChild(_t263);
         setTimeout(function(){ try { _t263.remove(); } catch(_){} }, 60000);
       } catch(_e263) {}
-    } finally { UI.setLoading(false); }
+    } finally { try { if (this.__p888) { clearTimeout(this.__p888); this.__p888 = null; } } catch(_p888d){} UI.setLoading(false); }
   },
 
   async cont() {
@@ -4600,11 +4630,11 @@ G.init();
 <script src="v292Dfix330-somatic-guard.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix332-uifold.js?cb=v292Dfix332"></script>
 <script src="v292Dfix333-actor-reality.js?cb=v292Dfix333n"></script>
-<script src="v292Dfix334-entryhub.js?cb=20260919-sp10a"></script>
+<script src="v292Dfix334-entryhub.js?cb=20260921-sp16r"></script>
 <!-- ★lane 15 / sp10A(GPT 裁定 #L15entry): 設定の 3 段畳み + 公開文面。どちらも DOM 移動と文字列だけ。
      kill: localStorage['v292Dfix880Off']='1' / localStorage['v292Dfix881Off']='1' -->
 <script src="v292Dfix880-settings-fold.js?cb=20260919-sp10a"></script>
-<script src="v292Dfix881-public-strings.js?cb=20260919-sp10a"></script>
+<script src="v292Dfix881-public-strings.js?cb=20260921-sp16r"></script>
 <!-- ★lane 15 / sp10B(GPT 裁定 #L15entry F1/F3): BYOK（API キー・provider・モデル・アクセスコード）を
      【開発者向け】へ寄せる。**ACTIVATION_BLOCKED_PUBLIC_AI_ACCESS** — API キー不要の経路が実際に使えるように
      なるまで production では有効化しない。kill: localStorage['v292Dfix884Off']='1' → sp10A と同じ配置へ戻る。 -->
@@ -4857,7 +4887,7 @@ G.init();
      既定 ON だが root JSON の publicAnon が 1 のときだけ作用する（それ以外は sp11a と同じ挿動）。
      ★★WAIT_V44_LIVE_GREEN / BUNDLED_WITH_SP10B_SP11A。
      kill: localStorage[v292Dfix886Off]=1 ／ lane 一括は localStorage[v292PublicAiOff]=1 -->
-<script src="v292Dfix886-public-anon-client.js?cb=20260920-sp14j"></script>
+<script src="v292Dfix886-public-anon-client.js?cb=20260921-sp16r"></script>
 <!-- ★sp14h hotfix（incident: candidate/sp14_g8post_v1.md E1 CRITICAL_FAIL / E2 FAIL）:
      匿名経路が開いている（root JSON publicAnon:1・合言葉なし・Google 無効）ときだけ、
      v292Dfix328-google-login.js の全画面 gate #g250-gate に譲ってもらう。

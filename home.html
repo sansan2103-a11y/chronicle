@@ -195,6 +195,9 @@
            表示されず（f663Fail('popup')）ホームからログインできなかった。物語画面(fix328)は
            renderButton を併用していて入れていたので、ホームにも同じ公式ボタンを置く。 -->
       <div id="g667btn" style="display:none;margin-top:6px"></div>
+      <!-- ★sp16(C-5 / 裁定 #LANE19 強化): 押す前に「これは招待済みの人の入口だ」と分かるようにする。
+           ログイン導線（#gLoginBtn / #g667btn / #loginState）の node・handler は 1 バイトも触らない。 -->
+      <div id="v888invite" style="margin-top:4px;font-size:11px;line-height:1.6;opacity:.75">招待済みの方はこちら</div>
     </div>
     <div id="loginState" style="margin-top:6px;font-size:11px;opacity:.75;line-height:1.5"></div>
     <div id="capMeter" style="margin-top:6px;font-size:11px;opacity:.7;line-height:1.5"></div>
@@ -233,7 +236,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260920-sp14j';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20260921-sp16r';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -2633,7 +2636,7 @@
      appended continuation line. engine only; DOM 0; store/cloud/LS write 0; reuses fix436 request/parseFillJson/normVal only.
      caller = fix825 (button per character card + post-expand offer). kill: localStorage v292Dfix829Off=1. -->
 <script src="v292Dfix829-seed-text-enrichment.js?cb=20260907-fix829r"></script>
-<script src="v292Dfix825-scenario-ui.js?cb=20260919-sp9"></script>
+<script src="v292Dfix825-scenario-ui.js?cb=20260921-sp16r"></script>
 <!-- v292Dfix870(HOME_THREE_CTA_V1・GPT 裁定 #L12entry): HOME の入口を 3 本立てにする。
      DOM は 1 つも消さない（#newBtn / #newCard / #scBtn は node ごと生き残り、id・class・delegation も不変）。
      新 URL 式 0（[3] は data-open を既存 openStory delegation に拾わせる）・localStorage 書込 0。
@@ -2652,5 +2655,15 @@
      ★ログイン導線（#gLoginBtn / #g667btn / #loginState）には 1 バイトも触れない。
      kill = localStorage['v292Dfix885Off']='1'（または 'v292Lane16Off'）→ sp10b と同じ DOM。 -->
 <script src="v292Dfix885-home-data-fold.js?cb=20260919-sp14"></script>
+<!-- ★sp16(C-9 / C-11): 法務フッター 3 行（attribution.md §3-2）。home.html は viewport-fit=cover を
+     宣言しながら env(safe-area-inset-*) を 1 度も使っていなかったので、最下部の block は iPhone の
+     ホームインジケータの下へ潜る。padding-bottom で閉じる。
+     ★[data-v15-dev] は付けない（付けると lint 除外＝ player-facing でなくなり attribution にならない）。
+     ★匿名の訪問者にとって、ここが法務面へ到達する主経路である。 -->
+<footer id="v888footer" style="margin:28px 12px 0;padding:14px 4px;padding-bottom:max(16px, env(safe-area-inset-bottom));border-top:1px solid rgba(255,255,255,.12);font-size:11px;line-height:1.9;opacity:.78;text-align:center">
+  <div><a href="./terms.html" style="color:inherit">利用規約</a> ・ <a href="./privacy.html" style="color:inherit">プライバシー</a></div>
+  <div>本文と画像は AI が生成しています。内容は架空のものです。</div>
+  <div>AI: OpenRouter / DeepSeek ・ 画像: Pollinations</div>
+</footer>
 </body>
 </html>

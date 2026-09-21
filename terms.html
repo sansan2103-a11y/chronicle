@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="index, follow">
+<title>利用規約 — Chronicle</title>
+<style>
+  :root{
+    --bg:#f7f6f3; --fg:#23211e; --dim:#615c55; --line:#d9d4cb;
+    --card:#ffffff; --accent:#6b5b3e; --mark:#f0ead9;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#16151a; --fg:#e8e5df; --dim:#a29c93; --line:#35323b;
+      --card:#1e1d23; --accent:#c9b489; --mark:#2a2720;
+    }
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; padding:0; background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;
+    font-size:16px; line-height:1.85; word-break:normal; overflow-wrap:anywhere;
+  }
+  .wrap{max-width:720px; margin:0 auto; padding:24px 16px 72px}
+  header{border-bottom:1px solid var(--line); padding-bottom:16px; margin-bottom:8px}
+  h1{font-size:23px; line-height:1.4; margin:0 0 6px}
+  .sub{color:var(--dim); font-size:13px; margin:0}
+  h2{
+    font-size:18px; line-height:1.5; margin:36px 0 10px;
+    padding-left:10px; border-left:4px solid var(--accent);
+  }
+  h3{font-size:15px; margin:22px 0 6px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:1.35em}
+  li{margin:6px 0}
+  .note{
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:14px 16px; margin:16px 0;
+  }
+  .todo{
+    background:var(--mark); border-radius:4px; padding:1px 6px;
+    font-weight:700; font-size:.94em; white-space:nowrap;
+  }
+  .small{font-size:13.5px; color:var(--dim)}
+  footer{
+    margin-top:48px; padding-top:16px; border-top:1px solid var(--line);
+    font-size:13px; color:var(--dim);
+  }
+  a{color:var(--accent)}
+  nav.crumb{font-size:13px; margin-bottom:14px}
+  @media (max-width:480px){
+    body{font-size:15.5px}
+    .wrap{padding:18px 14px 64px}
+    h1{font-size:20px}
+    h2{font-size:16.5px; margin-top:30px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="crumb"><a href="./home.html">Chronicle にもどる</a></nav>
+
+<header>
+  <h1>利用規約</h1>
+  <p class="sub">Chronicle（以下「本サービス」）をご利用いただく前に、かならずお読みください。</p>
+  <p class="sub">施行日：本サービスの公開日　／　最終更新：本サービスの公開日</p>
+</header>
+
+<p>本サービスは、個人が趣味として運営している小規模なウェブサービスです。運営者を以下「運営者」と呼びます。</p>
+
+<div class="note">
+  <p><strong>運営者</strong>：Chronicle 運営者（個人）</p>
+  <p><strong>連絡先</strong>：GitHub Issues（https://github.com/sansan2103-a11y/chronicle/issues）</p>
+  <p class="small">法人ではありません。問い合わせへの返信には時間がかかる場合があります。</p>
+</div>
+
+<h2>1. 本サービスについて</h2>
+<p>本サービスは、AI が文章を生成することで進行する、ブラウザ上のテキスト型 TRPG（テーブルトーク・ロールプレイングゲーム）です。あなたが入力した設定や行動をもとに、AI が物語の続きを書きます。</p>
+<ul>
+  <li>生成される物語・登場人物・出来事は、すべて<strong>架空のもの</strong>です。</li>
+  <li>本サービスは娯楽を目的としています。医療・法律・金融・進路など、現実の判断の材料には使えません。</li>
+  <li>本サービスは、事前の告知なく仕様が変わることがあります。</li>
+</ul>
+
+<h2>2. AI について</h2>
+<p>本文の生成には、<strong>OpenRouter</strong> を経由して <strong>DeepSeek</strong> などの第三者の AI モデルを利用しています。画像（表紙やアイコン）の生成には <strong>Pollinations</strong> などの第三者のサービスを利用しています。</p>
+<ul>
+  <li>AI の出力は、<strong>事実である保証がありません</strong>。もっともらしく書かれていても誤りを含むことがあります。</li>
+  <li>同じ入力でも、毎回ちがう結果になります。生成内容を再現できる保証はありません。</li>
+  <li>AI が、意図しない表現・不快な表現・あなたの希望どおりでない展開を出すことがあります。完全に防ぐことはできません。</li>
+  <li>これらの第三者サービスが停止・仕様変更した場合、本サービスも一時的に使えなくなることがあります。</li>
+</ul>
+<p>あなたが入力した内容は、物語を生成するために、これらの第三者サービスへ送信されます。くわしくは<a href="./privacy.html">プライバシーについて</a>をご覧ください。</p>
+
+<h2>3. 対象年齢とコンテンツ方針</h2>
+<p>本サービスの対象年齢は 18 歳以上です。この年齢に満たない方は利用しないでください。</p>
+<p>物語の中には、冒険・緊張・恐怖・戦闘といった演出が含まれることがあります。AI は物語上の必要に応じてそうした描写を書くことがあり、運営者はその内容を事前に確認していません。</p>
+<h3>運営者が意図していない用途</h3>
+<ul>
+  <li>性的に露骨な内容を目的とした利用</li>
+  <li>実在の人物を題材にして、その人を貶める内容を作ること</li>
+  <li>現実の犯罪・自傷・他害の手順を引き出そうとすること</li>
+</ul>
+<p>これらを検知する自動の仕組みは、本サービスには用意されていません。上のような使い方をしないという前提で公開しています。</p>
+<div class="note small">
+  <p><strong>保護者の方へ</strong>：本サービスの生成内容は運営者が事前に確認していません。お子さまが利用される場合は、保護者の方の判断と見守りのもとでご利用ください。</p>
+</div>
+
+<h2>4. やってはいけないこと</h2>
+<p>次の行為はお断りします。</p>
+<ul>
+  <li>法令に違反する行為、または法令に違反する内容を作ろうとする行為</li>
+  <li>他者への嫌がらせ、差別、脅迫、名誉を傷つける行為</li>
+  <li>他人の権利（著作権・肖像権・プライバシーなど）を侵害する内容を投入・公開する行為</li>
+  <li>利用回数・費用の上限など、運営者が設けた制限を回避しようとする行為（自動化ツールによる大量アクセスを含みます）</li>
+  <li>本サービスを、別のサービスやツールの裏側の部品として無断で組み込む行為</li>
+  <li>本サービス、または本サービスが利用している第三者サービスの動作を妨げる行為</li>
+  <li>他人になりすます行為、運営者を装う行為</li>
+</ul>
+<p>本サービスには、一定時間あたり・一日あたりの利用回数の上限があります。上限は運営費用の都合で予告なく変わります。</p>
+
+<h2>5. あなたが書いたもの・AI が書いたもの</h2>
+<h3>5-1. あなたが入力したもの</h3>
+<p>あなたが入力した設定文・キャラクター・行動の文章などの権利は、<strong>あなたのもの</strong>です。運営者がその権利を取り上げることはありません。</p>
+<p>ただし、本サービスを動かすために必要な範囲（生成のための第三者サービスへの送信、あなたの端末やクラウドへの保存、表示）で利用することに同意していただきます。</p>
+<h3>5-2. AI が生成したもの</h3>
+<ul>
+  <li>運営者は、AI が生成した文章・画像について<strong>権利を主張しません</strong>。</li>
+  <li>生成物をあなたが使うこと（保存・公開・二次創作など）を、運営者は妨げません。</li>
+  <li>ただし、生成を行っている第三者の AI サービス側の規約も同時に適用されます。実際にどこまで使えるかは、その規約にも従う必要があります。</li>
+  <li>AI の生成物は、法域によっては著作権が発生しないと扱われることがあります。運営者は、生成物に権利が発生することを保証しません。</li>
+  <li>AI の生成物が、たまたま第三者の権利を侵害する形になることがあります。公開・商用利用の前に、ご自身で確認してください。</li>
+</ul>
+<h3>5-3. 運営者の対応</h3>
+<p>投入された内容が第 4 条に反していると運営者が判断した場合、運営者は、保存されているデータの削除や、利用の停止を行うことがあります。事前の通知はできない場合があります。</p>
+
+<h2>6. 保存されるもの</h2>
+<p>物語の本文や設定は、あなたのブラウザ内に保存されます。ログインして同期を使った場合は、運営者が借りているクラウド上にも保存されます。ログインせずに遊んだ場合、物語がクラウドに保存されることはありません。</p>
+<p>どの情報がどこに保存され、どれくらいの期間残るかは<a href="./privacy.html">プライバシーについて</a>に書いています。</p>
+<p class="small">個人が運営しているため、データのバックアップや永続性は保証できません。大切な物語は、ご自身でも書き出して保管してください。</p>
+
+<h2>7. 保証しないこと（免責）</h2>
+<ul>
+  <li>本サービスは<strong>現状のまま</strong>提供されます。正常に動くこと、いつでも使えること、目的に合うことを保証しません。</li>
+  <li>生成内容の正確性・適切性・品質を保証しません。</li>
+  <li>不具合・障害・第三者サービスの停止・データの消失について、運営者は責任を負いません。</li>
+  <li>本サービスの利用によって生じた損害について、運営者は、法令上免れられない場合を除き、責任を負いません。</li>
+  <li>運営者に賠償責任が生じる場合でも、その範囲は、あなたが本サービスに対して直接支払った金額（無償で利用している場合は 0 円）を上限とします。</li>
+</ul>
+
+<h2>8. サービスの変更・停止</h2>
+<p>運営者は、いつでも、本サービスの内容を変更したり、一時的または恒久的に停止したりすることができます。個人の趣味として運営しているため、予告できないことがあります。</p>
+<p>恒久的に終了する場合は、可能な範囲で、事前に本サービス上でお知らせするよう努めます。</p>
+
+<h2>9. 利用資格の停止</h2>
+<p>第 4 条に反する利用があった場合、運営者は、事前の通知なく、そのアカウントまたは端末からの利用を断ることがあります。</p>
+
+<h2>10. 本規約の変更</h2>
+<p>本規約は変更されることがあります。変更後の規約は、このページに掲載した時点から適用されます。重要な変更があるときは、本サービス上でお知らせするよう努めます。</p>
+
+<h2>11. 準拠法</h2>
+<p>本規約は<strong>日本法</strong>に従って解釈されます。</p>
+
+<h2>12. お問い合わせ</h2>
+<p>本規約、削除の依頼、その他のご連絡は次の窓口へお願いします。</p>
+<p>GitHub Issues（https://github.com/sansan2103-a11y/chronicle/issues）</p>
+
+<footer>
+  <p>Chronicle 運営者（個人）</p>
+  <p><a href="./privacy.html">プライバシーについて</a>　／　<a href="./home.html">Chronicle にもどる</a></p>
+</footer>
+
+</div>
+</body>
+</html>

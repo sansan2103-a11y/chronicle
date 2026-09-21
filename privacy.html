@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="index, follow">
+<title>プライバシーについて — Chronicle</title>
+<style>
+  :root{
+    --bg:#f7f6f3; --fg:#23211e; --dim:#615c55; --line:#d9d4cb;
+    --card:#ffffff; --accent:#6b5b3e; --mark:#f0ead9; --th:#efece5;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#16151a; --fg:#e8e5df; --dim:#a29c93; --line:#35323b;
+      --card:#1e1d23; --accent:#c9b489; --mark:#2a2720; --th:#26242b;
+    }
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; padding:0; background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;
+    font-size:16px; line-height:1.85; word-break:normal; overflow-wrap:anywhere;
+  }
+  .wrap{max-width:720px; margin:0 auto; padding:24px 16px 72px}
+  header{border-bottom:1px solid var(--line); padding-bottom:16px; margin-bottom:8px}
+  h1{font-size:23px; line-height:1.4; margin:0 0 6px}
+  .sub{color:var(--dim); font-size:13px; margin:0}
+  h2{
+    font-size:18px; line-height:1.5; margin:36px 0 10px;
+    padding-left:10px; border-left:4px solid var(--accent);
+  }
+  h3{font-size:15px; margin:22px 0 6px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:1.35em}
+  li{margin:6px 0}
+  .note{
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:14px 16px; margin:16px 0;
+  }
+  .todo{
+    background:var(--mark); border-radius:4px; padding:1px 6px;
+    font-weight:700; font-size:.94em; white-space:nowrap;
+  }
+  .small{font-size:13.5px; color:var(--dim)}
+  .tablewrap{overflow-x:auto; -webkit-overflow-scrolling:touch; margin:14px 0}
+  table{border-collapse:collapse; width:100%; min-width:460px; font-size:14px}
+  th,td{border:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top}
+  th{background:var(--th); font-weight:700; white-space:nowrap}
+  footer{
+    margin-top:48px; padding-top:16px; border-top:1px solid var(--line);
+    font-size:13px; color:var(--dim);
+  }
+  a{color:var(--accent)}
+  nav.crumb{font-size:13px; margin-bottom:14px}
+  @media (max-width:480px){
+    body{font-size:15.5px}
+    .wrap{padding:18px 14px 64px}
+    h1{font-size:20px}
+    h2{font-size:16.5px; margin-top:30px}
+    table{font-size:13px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="crumb"><a href="./home.html">Chronicle にもどる</a></nav>
+
+<header>
+  <h1>プライバシーについて</h1>
+  <p class="sub">Chronicle（以下「本サービス」）が、どの情報をあずかり、どこへ送り、いつ消すのかをまとめたものです。</p>
+  <p class="sub">施行日：本サービスの公開日　／　最終更新：本サービスの公開日</p>
+</header>
+
+<div class="note">
+  <p><strong>運営者</strong>：Chronicle 運営者（個人）</p>
+  <p><strong>連絡先</strong>：GitHub Issues（https://github.com/sansan2103-a11y/chronicle/issues）</p>
+</div>
+
+<h2>1. さいしょに（要点）</h2>
+<ul>
+  <li>ログインせずに遊べます。そのとき運営者が受け取るのは、<strong>あなたの端末をおおまかに見分けるためのランダムな番号</strong>と、<strong>元に戻せない形に変換した接続元アドレス</strong>だけです。</li>
+  <li>ログインせずに遊んだ物語は、<strong>クラウドに保存されません</strong>。あなたのブラウザの中だけに残ります。</li>
+  <li>Google でログインした場合は、同期のためにメールアドレスと物語の本文をクラウドに保存します。</li>
+  <li>あなたが書いた文章は、物語を生成するために<strong>外部の AI サービスへ送られます</strong>。</li>
+  <li>広告は出しません。第三者の行動追跡（トラッキング）も入れていません。</li>
+</ul>
+
+<h2>2. あずかる情報</h2>
+
+<h3>2-1. ログインせずに遊ぶとき</h3>
+<div class="tablewrap">
+<table>
+  <tr><th>情報</th><th>どこに</th><th>なぜ</th></tr>
+  <tr>
+    <td>端末を見分けるためのランダムな番号（個人の情報は含みません）</td>
+    <td>あなたのブラウザの保存領域（ローカルストレージ）</td>
+    <td>一日の利用回数を数えるため</td>
+  </tr>
+  <tr>
+    <td>接続元アドレス（IP アドレス）を<strong>元に戻せない形に変換した値</strong></td>
+    <td>運営者のデータベース</td>
+    <td>同じ回線からの過剰な利用を止めるため</td>
+  </tr>
+  <tr>
+    <td>利用回数と、AI の利用にかかった概算費用</td>
+    <td>運営者のデータベース／利用量の記録</td>
+    <td>一日・一か月の上限を超えないようにするため</td>
+  </tr>
+  <tr>
+    <td>物語の本文・キャラクター・設定</td>
+    <td><strong>あなたのブラウザの中だけ</strong></td>
+    <td>続きから遊べるようにするため</td>
+  </tr>
+</table>
+</div>
+<p class="small">接続元アドレスそのもの（生の IP アドレス）と、端末のランダムな番号そのものは、運営者のデータベースに<strong>一度も保存していません</strong>。保存しているのは、専用の秘密の値を混ぜて変換した、元に戻せない文字列だけです。</p>
+
+<h3>2-2. Google でログインするとき</h3>
+<div class="tablewrap">
+<table>
+  <tr><th>情報</th><th>どこに</th><th>なぜ</th></tr>
+  <tr><td>Google アカウントのメールアドレス</td><td>運営者のデータベース</td><td>あなたを見分けて、同期と利用枠を結びつけるため</td></tr>
+  <tr><td>ログイン状態を保つための一時的な鍵</td><td>あなたのブラウザ／運営者側の記録</td><td>毎回ログインし直さずに済むようにするため</td></tr>
+  <tr><td>物語の本文・キャラクター・設定・シナリオ</td><td>運営者のデータベース</td><td>別の端末から続きを読めるようにするため（同期）</td></tr>
+  <tr><td>生成された画像</td><td>運営者のデータベース</td><td>表紙やアイコンを再表示するため</td></tr>
+  <tr><td>利用回数・概算費用・最終利用日時</td><td>利用量の記録</td><td>上限の管理と、運営費用の把握のため</td></tr>
+</table>
+</div>
+<p class="small">運営者が Google から受け取るのは、<strong>メールアドレスと、そのアドレスが確認済みかどうか</strong>だけです。連絡先リスト・カレンダー・ドライブなど、他の情報は受け取りません。</p>
+
+<h3>2-3. あずからない情報</h3>
+<ul>
+  <li>お支払い情報（本サービスに課金の仕組みはありません）</li>
+  <li>お名前・住所・電話番号</li>
+  <li>位置情報（端末の位置情報は取得しません）</li>
+  <li>Google アカウントのパスワード（運営者には渡りません）</li>
+</ul>
+
+<h2>3. ブラウザの中に置くもの（Cookie とローカルストレージ）</h2>
+<p>本サービスは、広告や行動追跡のための Cookie を置きません。ブラウザの保存領域には、次のようなものを置きます。</p>
+<ul>
+  <li>物語の本文・キャラクター・進行状況（遊びの続きのため）</li>
+  <li>表示や動作の設定（あなたの選んだ設定を覚えておくため）</li>
+  <li>端末を見分けるためのランダムな番号（利用回数を数えるため）</li>
+  <li>ログイン状態を保つための一時的な鍵（ログインした場合のみ）</li>
+</ul>
+<p>これらはすべて、あなたのブラウザの設定から消すことができます。消した場合、その端末に残っていた物語も消えますのでご注意ください。</p>
+<p>Google のログイン画面（Google が提供する部品）は、Google 自身の Cookie を使うことがあります。これは Google のプライバシーポリシーの範囲です。</p>
+
+<h2>4. 外部のサービスへ渡す情報</h2>
+<p>本サービスは、次の外部サービスの上で動いています。それぞれのサービスには、それぞれのプライバシーポリシーが適用されます。</p>
+<div class="tablewrap">
+<table>
+  <tr><th>相手</th><th>渡すもの</th><th>役割</th></tr>
+  <tr>
+    <td>OpenRouter（AI の中継）</td>
+    <td>物語の指示文・これまでの本文・キャラクター設定</td>
+    <td>AI モデルへ要求を取り次ぐ</td>
+  </tr>
+  <tr>
+    <td>DeepSeek ほかの AI モデル提供元</td>
+    <td>同上（OpenRouter 経由で届きます）</td>
+    <td>本文を生成する</td>
+  </tr>
+  <tr>
+    <td>Pollinations（画像生成）</td>
+    <td>画像を作るための短い説明文</td>
+    <td>表紙やアイコンの画像を生成する</td>
+  </tr>
+  <tr>
+    <td>Google（ログイン）</td>
+    <td>ログイン操作の情報、あなたのメールアドレス</td>
+    <td>本人確認</td>
+  </tr>
+  <tr>
+    <td>Cloudflare（サーバー処理・データ保存）</td>
+    <td>上記のうちクラウドに保存する情報、通信の接続元アドレス</td>
+    <td>本サービスのサーバー側の処理とデータベース</td>
+  </tr>
+  <tr>
+    <td>GitHub Pages（配信）</td>
+    <td>ページを読み込むときの通信の情報</td>
+    <td>画面（HTML など）の配信</td>
+  </tr>
+</table>
+</div>
+<p class="small"><strong>AI に送る内容について</strong>：あなたが入力した文章は、物語を作るためにそのまま外部の AI サービスへ送られます。外部の AI サービス側で、その内容がどのように扱われるか（学習に使われるかどうかを含む）は、各社の規約によります。運営者はそれを制御できません。<strong>実名・住所・パスワードなど、他人に知られては困る情報は入力しないでください。</strong></p>
+<p class="small">運営者は、これらの委託先・提供先を除き、あなたの情報を第三者へ販売したり提供したりしません。ただし、法令にもとづく開示の求めがあった場合を除きます。</p>
+
+<h2>5. 保存する期間</h2>
+<div class="tablewrap">
+<table>
+  <tr><th>情報</th><th>期間</th></tr>
+  <tr><td>接続元アドレスを変換した値（利用回数の管理用）</td><td><strong>48 時間</strong>で自動的に削除されます</td></tr>
+  <tr><td>ログイン状態を保つための鍵</td><td>発行から <strong>7 日</strong>で失効します</td></tr>
+  <tr><td>物語・シナリオ・画像（ログインして同期した場合）</td><td>あなたが削除するか、運営者へ削除を依頼するまで</td></tr>
+  <tr><td>メールアドレス・利用回数の記録</td><td>利用を続けている間。削除の依頼があれば削除します</td></tr>
+  <tr><td>ブラウザの中の物語・設定</td><td>あなたが消すまで（あなたの端末の中にあります）</td></tr>
+</table>
+</div>
+<p class="small">個人の運営のため、長期のバックアップ体制はありません。大切な物語は、ご自身でも書き出して保管してください。</p>
+
+<h2>6. 広告と解析について</h2>
+<p>本サービスには、広告も、第三者のアクセス解析（トラッキング用の画像やタグ）も入れていません。運営者が見ているのは、利用回数と概算費用の合計だけで、個々の利用者の行動を追うものではありません。</p>
+<p class="small">ただし、本サービスを配信している GitHub Pages や Cloudflare が、通信の記録を自分たちの運用のために保持することがあります。これらは各社の方針によります。</p>
+
+<h2>7. 削除・確認のご依頼</h2>
+<p>次のことをご希望の場合は、連絡先までご連絡ください。</p>
+<ul>
+  <li>あなたに関して保存されている情報を教えてほしい</li>
+  <li>クラウドに保存された物語やシナリオを削除してほしい</li>
+  <li>アカウント（メールアドレスの登録）ごと削除してほしい</li>
+</ul>
+<p>ご連絡の際は、<strong>ログインに使っている Google アカウントのメールアドレス</strong>をお知らせください。本人確認のため、そのアドレスからご連絡いただく形をお願いすることがあります。</p>
+<p>GitHub Issues（https://github.com/sansan2103-a11y/chronicle/issues）</p>
+<p class="small">端末の中だけに残っているデータは、運営者からは見えず、消すこともできません。ブラウザの設定、または本サービスの画面からご自身で削除してください。</p>
+
+<h2>8. お子さまの利用について</h2>
+<p>本サービスの対象年齢は 18 歳以上です。対象年齢に満たない方の情報を、運営者は意図的にあずかりません。</p>
+<p>対象年齢に満たない方の情報が保存されていることが分かった場合、運営者はその情報を削除します。お心当たりのある保護者の方は、連絡先までご連絡ください。</p>
+
+<h2>9. 情報の安全について</h2>
+<p>通信はすべて暗号化された経路（HTTPS）で行われます。接続元アドレスは、そのままの形では保存しません。とはいえ、本サービスは個人が運営する小規模なサービスであり、<strong>完全な安全は保証できません</strong>。他人に知られては困る情報は入力しないでください。</p>
+
+<h2>10. 本ページの変更</h2>
+<p>本ページの内容は変更されることがあります。変更後の内容は、このページに掲載した時点から適用されます。重要な変更があるときは、本サービス上でお知らせするよう努めます。</p>
+
+<footer>
+  <p>Chronicle 運営者（個人）</p>
+  <p><a href="./terms.html">利用規約</a>　／　<a href="./home.html">Chronicle にもどる</a></p>
+</footer>
+
+</div>
+</body>
+</html>

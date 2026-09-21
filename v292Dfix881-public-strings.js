@@ -23,7 +23,7 @@
   'use strict';
   if (window.__v292Dfix881) return;
   var TAG = '[v292Dfix881:public-strings]';
-  var VERSION = 'v292Dfix881-20260919-sp10a-v1.0';
+  var VERSION = 'v292Dfix881-20260921-sp16r-v1.1';
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix881Off') === '1'; }
@@ -33,6 +33,22 @@
      kind:'has'    … 部分一致したら文全体を to に差し替える（技術詳細を残さない）
      kind:'re'     … 正規表現で部分置換                                        */
   var TABLE = [
+    /* ★★sp16（lane19 C-5 / C-6 / C-8・GPT 裁定 #LANE19）— 新規 3 行。
+       ★順序が意味を持つ: 下にある D-13 の /\bHTTP \d{3}\b/ は **どんな例外文でも先に食う**ので、
+         403 行はここ（HTTP 行より上）でなければ 1 度も発火しない。表は上から 1 回だけ適用される。
+       ★3 行とも to は表のどの pattern にも一致しない（IDEMPOTENT・harness I-2 が実測する）。 */
+    /* S-1 403: worker の allow: に居ない Google アカウント（worker.js:847）。本文に
+       メールアドレスが入るので、丸めるのではなく **理由が分かる文** に置き換える。
+       「うまくつながりませんでした」に丸めると、許可されていないという事実が player に 1 文字も届かない。 */
+    { kind:'re',  from:/\bHTTP 403\b/,
+      to:'このアカウントはまだ招待されていません。招待をお待ちください。' },
+    /* S-2 通信断: Failed to fetch / NetworkError / load failed は HTTP を含まないので D-13 に
+       当たらず、英語のまま player の画面へ出ていた。 */
+    { kind:'re',  from:/Failed to fetch|NetworkError|load failed/i,
+      to:'うまくいきませんでした。通信を確かめて、もう一度お試しください' },
+    /* S-3 停止中: 「(管理者が一時停止しています)」は player の情報ではない（worker.js:5208）。 */
+    { kind:'has', from:'メンテナンス中です',
+      to:'ただいま一時的に休止しています。少し待ってからお試しください' },
     /* D-20 fixP0（sp10A は fixP0 を再配布しないので実行時に直す） */
     { kind:'has', from:'公開API封鎖に失敗したため',
       to:'この機能は一時停止しています。ページを再読み込みしてください。' },

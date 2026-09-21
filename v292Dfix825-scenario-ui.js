@@ -40,7 +40,7 @@
   'use strict';
   if (window.__v292Dfix825) return;
   var TAG = '[v292Dfix825:scenario-ui]';
-  var VERSION = 'v292Dfix825-20260907-ui-v1.2';   /* v1.2: SEED_TEXT_ENRICHMENT_V1 caller（GPT 裁定 58 / 71） */
+  var VERSION = 'v292Dfix825-20260921-sp16r-ui-v1.3';   /* v1.2: SEED_TEXT_ENRICHMENT_V1 caller（GPT 裁定 58 / 71） */
   var SCENE_FIELDS = ['lore', 'loc', 'obj', 'tone'];
   var HERO_FIELDS  = ['name', 'desc', 'gender'];
   var NPC_FIELDS   = ['name', 'desc', 'personality', 'coreDesire', 'coreFear', 'wound', 'gender'];
@@ -123,6 +123,28 @@
   function toStoreInput(d){ return clone(d); }
   function bump(){ S.draftRevision++; S.dirty = (S.savedSnapshot == null) ? true : (JSON.stringify(S.draft) !== S.savedSnapshot); }
 
+  /* ---------- ★sp16 G3: 「中身」の判定（読むだけ。1 バイトも書かない） ----------
+     中身 = scene.lore / scene.loc / scene.obj / cast.hero.name / cast.hero.desc /
+            cast.npcs[].name の 6 つ。1 つでも非空なら「中身あり」。
+     ★title は数えない（title だけで通ってしまうのが現状の穴そのものだから）。
+     ★fix873 の おまかせ（OMAKASE）は scene.lore / cast.hero.desc / cast.npcs を埋めるので、
+       この判定では原理的に false positive にならない（harness G3-3 が実測する）。
+     ★読めないもの・壊れたものは false（＝警告を出さない）に倒す。確認ダイアログは
+       「分からないときに出す」ものではない。 */
+  function looksEmpty(sc){
+    try {
+      if (!isObj(sc)) return false;
+      var scene = isObj(sc.scene) ? sc.scene : {};
+      if (trim(scene.lore) || trim(scene.loc) || trim(scene.obj)) return false;
+      var cast = isObj(sc.cast) ? sc.cast : {};
+      var hero = isObj(cast.hero) ? cast.hero : {};
+      if (trim(hero.name) || trim(hero.desc)) return false;
+      var npcs = isArr(cast.npcs) ? cast.npcs : [];
+      for (var i = 0; i < npcs.length; i++){ if (trim(npcs[i] && npcs[i].name)) return false; }
+      return true;
+    } catch(e){ return false; }
+  }
+
   /* ---------- startability（下流契約からの導出のみ。UI 独自条件 0） ---------- */
   function startability(){
     if (off()) return fail('OFF');
@@ -138,6 +160,11 @@
     var ti = st.toInstantiationInput(r.scenario);
     if (!trim(ti.initialTitle)) return fail('NO_TITLE');         /* fix819 契約: initialTitle 必須 */
     var warnings = [];
+    /* ★★sp16 G3 SCENARIO_LOOKS_EMPTY（lane19 §3 / story_snapshot_projection_design_v1 G3 /
+       GPT 裁定 #LANE19「開始禁止でなく確認 1 枚・new LS key 0」）。
+       返り値契約は変えない: ok は true のまま、warnings に code を 1 つ足すだけ。
+       code は **画面に出さない**（fix867 / fix873 lastFail と同じ扱い）。 */
+    if (looksEmpty(r.scenario)) warnings.push({ code: 'SCENARIO_LOOKS_EMPTY' });
     /* fix819.project は name の無い NPC を落とす（下流契約）。保存済み原本には fix820 validate 上存在しないが導出は残す */
     var npcs = (r.scenario && r.scenario.cast && isArr(r.scenario.cast.npcs)) ? r.scenario.cast.npcs : [];
     for (var i = 0; i < npcs.length; i++){ if (!trim(npcs[i] && npcs[i].name)) warnings.push({ code: 'NPC_WITHOUT_NAME_NOT_PROJECTED', index: i }); }
@@ -806,6 +833,18 @@
     openList();
     return { ok: true };
   }
+  /* ★sp16 G3 の確認 1 枚。既存 overlay（#scOverlay）を使う（fix873 は OVERLAY_NOT_MINE なので
+     こちら＝ fix825 側の実装である）。既定の選択肢は「このまま始める」＝ block ではない。
+     内部 code（SCENARIO_LOOKS_EMPTY）は 1 文字も画面に出さない。 */
+  function emptyStartConfirm(onYes){
+    overlay('<h3>世界がまだ決まっていません</h3><div>このまま始めると、場所も人物も決まっていない状態から物語が動きます。</div>'
+          + '<div class="sc-acts"><button class="sc-btn" data-sc-e="back">もどって書く</button>'
+          + '<button class="sc-btn sc-primary" data-sc-e="go">このまま始める</button></div>',
+      function(p){
+        p.querySelector('[data-sc-e="back"]').addEventListener('click', closeOverlay, false);
+        p.querySelector('[data-sc-e="go"]').addEventListener('click', function(){ closeOverlay(); onYes(); }, false);
+      });
+  }
   function askRemove(){
     confirmBox('このシナリオを削除しますか？（このシナリオから始めた物語は残ります）', function(){ remove(); });
   }
@@ -817,6 +856,20 @@
     if (S.busy) return fail('BUSY');                      /* START_STORY_SINGLE_FLIGHT */
     var sa = startability();
     if (!sa.ok){ setError(sa.code, sa.detail); return sa; }
+    /* ★★sp16 G3: 中身が 1 つも無いときだけ確認を 1 枚。ここは startability() の直後・
+       S.busy を立てる前・home.newStoryRuntime() と fix819.instantiate の **前** なので、
+       確認を出している間に Scenario も Story も 1 バイトも書かれない。
+       「もどって書く」は overlay を閉じるだけ（書込 0 で編集画面に残る）。
+       setError は呼ばない（これは失敗ではないので、赤いエラー面を出さない）。 */
+    if (!opts.emptyOk){
+      var _g3 = false, _w3 = sa.warnings || [];
+      for (var _i3 = 0; _i3 < _w3.length; _i3++){ if (_w3[_i3] && _w3[_i3].code === 'SCENARIO_LOOKS_EMPTY') _g3 = true; }
+      if (_g3){
+        var _f3 = opts.force;
+        emptyStartConfirm(function(){ start({ force: _f3, emptyOk: true }); });
+        return { ok: false, code: 'SCENARIO_LOOKS_EMPTY_CONFIRM', pending: true };
+      }
+    }
     var home = HOME();
     S.busy = 'start'; refreshEdit();
     if (!opts.force){
