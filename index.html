@@ -695,6 +695,15 @@
      canonical 判定が終わるまで **その story の body / aiInstr への書込だけ**を保留する。
      ★起動時の最初の body 書込(v100-patch fixProviderCfg)より前に居る必要があるため head。
      ★fix724 で既定 ON。kill switch=v292Dfix705Off=1 のみ（On キーは効かない） -->
+<!-- ★★sp18 v292Dfix889 SECRET_STORY_VAULT（v7.2）: 可視性 / 解錠 / 直 URL の扉 /
+     画像の保護経路 / 絵の帰属の印づけ。
+     ★fix859 と fix705 より **前**。この document が local 本文を 1 バイトでも読む前に
+       「この物語をいま開いてよいか」を決める必要があるため（裁定 修正必須(5) / D-C3）。
+     ★さらに fix400 / fix402 / fix519 / fix474 / fix523 / fix634 より前でもある。
+       あの 6 本は読み込み時に window.fetch を掴むので、この位置が
+       「絵の送信に物語の印を必ず添える」（D-C4）の成立条件そのものである。
+     ★kill = localStorage['v292Dfix889Off']='1' は **UI だけ**を消す。絞り込みと扉は止まらない。 -->
+<script src="v292Dfix889-secret-vault.js?cb=20260921-sp18r2"></script>
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
 <script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
 <script src="v292Dfix705-canonical-read-gate.js?cb=20260919-sp7"></script>
@@ -744,7 +753,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260921-sp16rr';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20260921-sp18r2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -1447,7 +1456,22 @@ window.__chr6Key = function(){ try { var a = JSON.parse(localStorage.getItem('ch
    ・null のときは home.html へ戻す。ただし遷移前の save race を止めるため gate も必ず併用
    ・read 用 __chr6Key() は互換のため無変更(INV: read/write の分離)
    OFF: localStorage['v292Dfix694Off']==='1' で従来挙動へ戻す */
-(function(){
+/* ★★★BOOT BARRIER 1/2 — BOOT_DEFER_UNTIL_VAULT_PROBE（v292Dfix889 v7 / GL-1 / 裁定 #SP18R_INCIDENT）
+   この直下の block は **この document が書いてよい保存先を決める**（= 物語の本文キーを
+   localStorage から読む）。v292Dfix889 の扉が「この物語をいま開いてよいか」を server に
+   聞き終える前にここが走ると、本文が engine の runtime へ入ってしまう（CSS で隠しても
+   他 script / 要約 / autosave / observer が S.turns を読めてしまう）。
+   そこで **関数にして、走らせる時期だけを外から決められるように**する。
+   ・window.__chrBootDefer !== true（既定）… 従来どおり **この行で即座に**走る。
+     その場合の挙動・順序は patch 前と 1 バイトも変わらない。
+   ・window.__chrBootDefer === true         … 走らない。v292Dfix889 が probe を終えて
+     「開いてよい」と確認できたときだけ window.__chrEngineBoot() から呼ばれる。
+   ★__chrBootDefer は fix889 が <head> で **同期的に**立てる（fix889 はこの inline より前）。
+   ★この関数は **一度しか走らない**（__chrBootStoryKeyRan）。 */
+var __chrBootStoryKeyRan = false;
+function __chrBootStoryKey(){
+  if (__chrBootStoryKeyRan) return false;
+  __chrBootStoryKeyRan = true;
   function f694off(){ try { return localStorage.getItem('v292Dfix694Off') === '1'; } catch(e){ return false; } }
   function f694meta(){
     try { var m = JSON.parse(localStorage.getItem('chr6_slots_meta') || '[]');
@@ -1519,7 +1543,10 @@ window.__chr6Key = function(){ try { var a = JSON.parse(localStorage.getItem('ch
     try { console.warn('[v292Dfix694] no write authority for this document -> home'); } catch(e){}
     try { location.replace('home.html'); } catch(e){}
   }
-})();
+  return true;
+}
+/* ★BOOT BARRIER 1/2（続き）: 既定では **ここで即座に**走る。patch 前と同じ地点・同じ順序。 */
+if (window.__chrBootDefer !== true) __chrBootStoryKey();
 
 // ─────────────────────────────────────────────────────────────
 // State
@@ -3613,7 +3640,25 @@ if (typeof S.cfg.simpleMode === 'undefined') S.cfg.simpleMode = false;
 })();
 
 // Boot
-G.init();
+/* ★★★BOOT BARRIER 2/2 — BOOT_DEFER_UNTIL_VAULT_PROBE
+   engine の最初の起動（保存先キーの決定 ＋ G.init() ＝ S.load()）を **1 つの関数**にまとめる。
+   ここに置く理由: const G は :2858 で宣言されるので、:1450 で G.init() を含む関数を
+   **呼ぶ**と TDZ に当たる。定義も呼び出しも G の後でなければならない。
+   ・window.__chrBootDefer !== true（既定）… 従来どおり **この行で即座に** G.init() まで走る。
+   ・window.__chrBootDefer === true         … 走らない。v292Dfix889 が canonical 一覧で
+     「開いてよい」を確認したあとに 1 度だけ呼ぶ。HIDDEN / 未確認 / 認証なし / timeout では
+     **一度も呼ばれない** ＝ 本文は engine の runtime に入らない。
+   ★idempotent-once: 2 回目以降の呼び出しは何もせず false を返す。 */
+window.__chrEngineBoot = function(){
+  if (window.__chrEngineBoot.__ran) return false;
+  window.__chrEngineBoot.__ran = true;
+  __chrBootStoryKey();        /* 既に走っていれば no-op（__chrBootStoryKeyRan） */
+  G.init();
+  return true;
+};
+window.__chrEngineBoot.__ran = false;
+window.__chrEngineBoot.__deferred = (window.__chrBootDefer === true);
+if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 </script>
 <script id="v100-patch">/* Chronicle v100 — clean consolidated build */
 /* ========================================================================
@@ -4634,7 +4679,7 @@ G.init();
 <!-- ★lane 15 / sp10A(GPT 裁定 #L15entry): 設定の 3 段畳み + 公開文面。どちらも DOM 移動と文字列だけ。
      kill: localStorage['v292Dfix880Off']='1' / localStorage['v292Dfix881Off']='1' -->
 <script src="v292Dfix880-settings-fold.js?cb=20260919-sp10a"></script>
-<script src="v292Dfix881-public-strings.js?cb=20260921-sp16r"></script>
+<script src="v292Dfix881-public-strings.js?cb=20260921-sp18r2"></script>
 <!-- ★lane 15 / sp10B(GPT 裁定 #L15entry F1/F3): BYOK（API キー・provider・モデル・アクセスコード）を
      【開発者向け】へ寄せる。**ACTIVATION_BLOCKED_PUBLIC_AI_ACCESS** — API キー不要の経路が実際に使えるように
      なるまで production では有効化しない。kill: localStorage['v292Dfix884Off']='1' → sp10A と同じ配置へ戻る。 -->
