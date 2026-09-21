@@ -695,15 +695,6 @@
      canonical 判定が終わるまで **その story の body / aiInstr への書込だけ**を保留する。
      ★起動時の最初の body 書込(v100-patch fixProviderCfg)より前に居る必要があるため head。
      ★fix724 で既定 ON。kill switch=v292Dfix705Off=1 のみ（On キーは効かない） -->
-<!-- ★★sp18 v292Dfix889 SECRET_STORY_VAULT（v4）: 可視性 / 解錠 / 直 URL の扉 /
-     画像の保護経路 / 絵の帰属の印づけ。
-     ★fix859 と fix705 より **前**。この document が local 本文を 1 バイトでも読む前に
-       「この物語をいま開いてよいか」を決める必要があるため（裁定 修正必須(5) / D-C3）。
-     ★さらに fix400 / fix402 / fix519 / fix474 / fix523 / fix634 より前でもある。
-       あの 6 本は読み込み時に window.fetch を掴むので、この位置が
-       「絵の送信に物語の印を必ず添える」（D-C4）の成立条件そのものである。
-     ★kill = localStorage['v292Dfix889Off']='1' は **UI だけ**を消す。絞り込みと扉は止まらない。 -->
-<script src="v292Dfix889-secret-vault.js?cb=20260921-sp18r"></script>
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
 <script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
 <script src="v292Dfix705-canonical-read-gate.js?cb=20260919-sp7"></script>
@@ -753,7 +744,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260921-sp18r';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20260921-sp16rr';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4643,7 +4634,7 @@ G.init();
 <!-- ★lane 15 / sp10A(GPT 裁定 #L15entry): 設定の 3 段畳み + 公開文面。どちらも DOM 移動と文字列だけ。
      kill: localStorage['v292Dfix880Off']='1' / localStorage['v292Dfix881Off']='1' -->
 <script src="v292Dfix880-settings-fold.js?cb=20260919-sp10a"></script>
-<script src="v292Dfix881-public-strings.js?cb=20260921-sp18r"></script>
+<script src="v292Dfix881-public-strings.js?cb=20260921-sp16r"></script>
 <!-- ★lane 15 / sp10B(GPT 裁定 #L15entry F1/F3): BYOK（API キー・provider・モデル・アクセスコード）を
      【開発者向け】へ寄せる。**ACTIVATION_BLOCKED_PUBLIC_AI_ACCESS** — API キー不要の経路が実際に使えるように
      なるまで production では有効化しない。kill: localStorage['v292Dfix884Off']='1' → sp10A と同じ配置へ戻る。 -->

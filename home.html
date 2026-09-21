@@ -173,9 +173,6 @@
          SCENARIO_ENTRY = ASIDE_ALWAYS_VISIBLE_AREA（640px 以下で #navs が消えても到達できる位置）。
          hidden = dormant。SCENARIO_UI_OWNER_REACHABLE 解放時に hidden を外す（remote main の QA story absent 確認後）。 -->
     <button class="newbtn" id="scBtn" style="margin-top:8px" title="シナリオを作ると、そこから何度でも新しい物語を始められます。">✎ シナリオを作る</button>
-    <!-- ★★sp18: 秘密の物語の入口。fix825 の #scBtn と同じ ASIDE_ALWAYS_VISIBLE_AREA に置く
-         （640px 以下で #navs が消えても到達できる位置）。挙動は v292Dfix889 が付ける。 -->
-    <button class="newbtn" id="v889openBtn" style="margin-top:8px" title="パスコードで開くと、隠した物語を表示します。">🔒 秘密の物語</button>
     <div class="navttl" id="ttlLib">ライブラリ</div>
     <div id="navs"></div>
     <div class="navttl" id="ttlRecent">最近プレイした物語</div>
@@ -217,13 +214,7 @@
       </select>
       <input class="search" id="q" placeholder="検索（名前・場所・主人公）">
     </div>
-    <!-- ★★sp18 D-C2 / D-C8: クラウドの物語の一覧について「いまどうなっているか」だけを述べる面。
-         題名も件数も出さない。確認できていないときは確認できていないと書く。 -->
-    <div id="v889canon" style="display:none;font-size:12px;opacity:.8;line-height:1.7;padding:8px 2px 2px"></div>
     <div class="grid" id="grid"></div>
-    <!-- ★★sp18: 秘密の物語は **通常の一覧とは別の面**に出す（混ぜない）。
-         解錠しているあいだだけ v292Dfix889 が中身を描く。既定は空・非表示。 -->
-    <div id="v889sec" style="display:none;margin:18px 0 0;padding:14px 0 0;border-top:1px solid rgba(255,255,255,.12)"></div>
   </section>
 
   <!-- ★fix825: Scenario ビュー（中身は v292Dfix825-scenario-ui.js が描く。既存 render()/delegation は触らない） -->
@@ -245,7 +236,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260921-sp18r';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20260921-sp16rr';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -371,9 +362,6 @@
 <!-- v292Dfix823: SEED_EXPANSION_V1 Scenario Seed Adapter（dormant・UI caller 0・kill v292Dfix823Off）。fix436+fix335 の再利用で
      Scenario Original の空欄だけを埋める。transport は実 fix247 runtime authority のみ（home には fix247 が無いので現状は常に AI_UNAVAILABLE = fail-closed）。 -->
 <script src="v292Dfix823-scenario-seed-adapter.js?cb=20260907-schema3"></script>
-<!-- ★★sp18 v292Dfix889 SECRET_STORY_VAULT（v4）: HOME の可視性 authority。
-     ★下の inline script より **前**（あちらは parse 時に render() を呼ぶ）。 -->
-<script src="v292Dfix889-secret-vault.js?cb=20260921-sp18r"></script>
 <script>
 (function(){
   'use strict';
@@ -528,117 +516,11 @@
              fetched: F757.stories.length, hiddenBecauseLocal: F757.hidden,
              shown: f757CloudOnly().length, loggedIn: loggedIn() }; } }; } catch(e){}
 
-  /* ============================================================
-   * ★★2026-09-20 sp18 SECRET_STORY_VAULT（HOME 側の接続だけ。状態と通信は v292Dfix889 が持つ）
-   * ------------------------------------------------------------
-   * GPT 裁定 #SP17_VAULT_CLIENT が sp17 の 3 点を差し戻した。ここはその修正である。
-   *
-   *  D-C1  認証が 1 つも無い端末では、「この端末だけのものだと **証明できる** 物語」だけを描く。
-   *        クラウドに結び付いた物語・素性の分からない物語は、server の返事が来るまで描かない
-   *        （token が切れた端末に隠した物語の local copy が残っている事故を塞ぐ）。
-   *  D-C2  通信できないときはクラウドの物語の一覧を開かない。題名も件数も出さず、
-   *        「オフラインのため、クラウドの物語を確認できません」とだけ出す。
-   *        ★一度クラウドへ上げた物語を、通信が切れただけで「この端末だけ」へ格下げしない。
-   *  D-C8  一覧は 2 種類に分かれる:
-   *          ・クラウドの物語      … server の可視判定が正本。返事が来るまで描かない。
-   *          ・この端末だけの物語  … 「この端末のみ」を添えて、いつでも描く。
-   *
-   * ★sp17 は「返事が来るまで一覧を丸ごと空にする」設計だった。sp18 はそれをやめて
-   *   **分類を分ける**。空の書庫を見せるより、出せるものを出して、出せない側の理由を言う。
-   * ★kill（v292Dfix889Off='1'）は UI を消すだけで、この絞り込みは止まらない。
-   * ★v292Dfix889 が載っていない配布事故のときだけ、local の id cache で隠しを落として
-   *   従来どおり描く。これは **明示した劣化**である。
-   * ========================================================== */
-  function f889(){ try { return window.__v292Dfix889 || null; } catch(e){ return null; } }
-  function f889CacheHidden(){
-    try {
-      var o = J(g('chr6_vault_hidden'), null);
-      var a = (o && Object.prototype.toString.call(o.hidden) === '[object Array]') ? o.hidden : [];
-      var m = {}; for (var i = 0; i < a.length; i++) if (a[i] != null) m[String(a[i])] = true;
-      return m;
-    } catch(e){ return {}; }
-  }
-  /* ★行ごと（id だけでなく cloud 印も見る）。クラウド行は定義上クラウドの物語である。 */
-  function f889ShowRow(x){
-    var F = f889();
-    if (F && typeof F.mayShowRow === 'function') return F.mayShowRow(x) === true;
-    return !f889CacheHidden()[String(x && x.id)];      /* 配布事故時のみ */
-  }
-  function f889LocalOnly(x){
-    var F = f889();
-    if (!F || typeof F.classOfRow !== 'function') return false;
-    try { return F.classOfRow(x) === 'local'; } catch(e){ return false; }
-  }
-  function f889CanonNotice(){
-    var F = f889();
-    try { if (F && typeof F.canonNotice === 'function') return String(F.canonNotice() || ''); } catch(e){}
-    return '';
-  }
-  function f889EmptyText(){
-    var n = f889CanonNotice();
-    return n ? n : '物語がありません。「＋ 新しい物語を始める」から作成してください。';
-  }
-  /* D-C8 の 2 つめの分類を **目に見える形**で出す */
-  function f889OnlyBadge(x){
-    if (!f889LocalOnly(x)) return '';
-    var lb = 'この端末のみ';
-    var F = f889();
-    try { if (F && typeof F.localOnlyLabel === 'function') lb = String(F.localOnlyLabel() || lb); } catch(e){}
-    return '<div class="badge" style="z-index:2;top:auto;bottom:8px">' + esc(lb) + '</div>';
-  }
-  function f889RenderCanon(){
-    var box = el('v889canon'); if (!box) return;
-    var n = f889CanonNotice();
-    if (!n){ box.style.display = 'none'; box.textContent = ''; return; }
-    box.style.display = '';
-    box.textContent = n;
-  }
-  function f889UiOn(){
-    var F = f889();
-    if (!F) return false;
-    try { return !(typeof F.uiOff === 'function' && F.uiOff()); } catch(e){ return false; }
-  }
-  function f889Unlocked(){
-    var F = f889();
-    try { return !!(F && typeof F.unlocked === 'function' && F.unlocked()); } catch(e){ return false; }
-  }
-  function f889HideBtn(x){
-    if (!f889UiOn() || !x || x.cloud === true) return '';
-    return '<button id="v889hideBtn" data-id="' + esc(x.id) + '">この物語を隠す</button>';
-  }
-  function f889RenderVault(){
-    var sec = el('v889sec'); if (!sec) return;
-    if (!f889UiOn() || !f889Unlocked()){ sec.style.display = 'none'; sec.innerHTML = ''; return; }
-    var ids = []; try { ids = f889().hiddenIds() || []; } catch(e){ ids = []; }
-    var meta = readMeta(), byId = {}, i;
-    for (i = 0; i < meta.length; i++) if (meta[i] && meta[i].id != null) byId[String(meta[i].id)] = meta[i];
-    var rows = ids.map(function(id){
-      var m = byId[id];
-      var nm = (m && m.name) ? String(m.name) : '（この端末にはまだありません）';
-      return '<div class="card" data-id="' + esc(id) + '"><div class="cbody">' +
-             '<div class="ctitle">' + esc(nm) + '</div>' +
-             '<div class="cfoot"><button data-open="' + esc(id) + '">開く</button>' +
-             '<button data-v889-unhide="' + esc(id) + '">隠すのをやめる</button></div></div></div>';
-    }).join('');
-    sec.style.display = '';
-    sec.innerHTML = '<div class="h1">秘密の物語</div>' +
-      '<div style="font-size:12px;opacity:.75;line-height:1.7;padding:6px 2px">パスコードで開いているあいだだけ表示します。</div>' +
-      '<div class="grid">' + (rows || '<div class="empty">隠している物語はありません。</div>') + '</div>' +
-      '<div style="margin-top:10px"><button id="v889relockBtn">再ロック</button>' +
-      '<button id="v889rotateBtn" style="margin-left:8px">パスコードを変更</button></div>';
-  }
-  function f889Boot(){
-    var F = f889(); if (!F) return;
-    try { F.onChange(function(){ try { render(); } catch(e){} }); } catch(e){}
-    try { F.refresh(); } catch(e){}
-  }
-
   // 互換用の内部スロット 'default'(chr6) は、中身が無い限り一覧に出さない
   function all(){
     return readMeta().filter(function(m){ return m && m.id && !isTombstoneEntry(m); }).map(story)
       .filter(function(x){ return x.id !== 'default' || x.turns > 0; })
-      .concat(f757CloudOnly())           /* ★fix757: local に無いクラウド story だけ足す */
-      .filter(f889ShowRow);              /* ★★sp18 D-C1/D-C2/D-C8: 分類ごとの可視判定 */
+      .concat(f757CloudOnly());          /* ★fix757: local に無いクラウド story だけ足す */
   }
 
   // 表紙は無料GET(image.pollinations.ai)。同時に殺到するとrate-limitされるので
@@ -724,16 +606,14 @@
 
     // カード
     if(!list.length){
-      /* ★★sp18 D-C2: クラウド側が未確定のあいだ「物語がありません」と言い切らない。
-         0 件なのではなく「まだ確認できていない」ので、そう書く。題名も件数も出さない。 */
-      el('grid').innerHTML = '<div class="empty">'+(q?'見つかりませんでした':f889EmptyText())+'</div>';
+      el('grid').innerHTML = '<div class="empty">'+(q?'見つかりませんでした':'物語がありません。「＋ 新しい物語を始める」から作成してください。')+'</div>';
     } else {
       el('grid').innerHTML = list.map(function(x){
         var u = coverUrl(x.id, x.scene);
         var chars = [].concat(x.hero?[x.hero]:[], x.npcs).filter(Boolean).slice(0,4);
         return '<div class="card'+(SEL===x.id?' sel':'')+'" data-id="'+esc(x.id)+'">'+
           '<div class="cover" style="background:'+gradient(x.name)+'"'+(u?' data-cover="'+esc(u)+'"':'')+'>'+
-            '<div class="badge" style="z-index:2">'+(x.cloud?'☁ クラウド':(x.turns>0?'進行中':'未開始'))+'</div>'+f889OnlyBadge(x)+'</div>'+
+            '<div class="badge" style="z-index:2">'+(x.cloud?'☁ クラウド':(x.turns>0?'進行中':'未開始'))+'</div></div>'+
           '<div class="cbody"><div class="ctitle">'+esc(x.name)+'</div>'+
           '<div class="csum">'+esc(x.summary||'')+'</div>'+
           '<div class="cchars">'+chars.map(function(c,i){ return avatar(c.name,i); }).join('')+
@@ -742,8 +622,6 @@
       }).join('') + '<div class="newcard" id="newCard"><div class="plus">＋</div>新しい物語を始める<div style="font-size:11px;margin-top:4px;opacity:.7">空の世界から始める</div></div>';
     }
     renderDetail(full);
-    f889RenderCanon();                 /* ★★sp18 D-C2: クラウド側の状態を 1 行で述べる */
-    f889RenderVault();                 /* ★★sp18: 解錠しているあいだだけの別面 */
     mountCovers(document);
   }
 
@@ -783,7 +661,7 @@
         ? '<div class="mini" style="color:var(--dim);font-size:12px;line-height:1.6">☁ クラウドの物語です。開いてこの端末へ取り込むと、名前の変更や削除ができます。</div>'
         : '<div class="mini"><button id="favBtn">'+(x.favorite?'★ お気に入り解除':'☆ お気に入り')+'</button>'+
           '<button id="renBtn">名前を変更</button>'+
-          '<button class="danger" id="delBtn">削除</button>'+f889HideBtn(x)+'</div>')+
+          '<button class="danger" id="delBtn">削除</button></div>')+
       '<div class="dsec">この物語のキャラクター</div>'+
       (chars.length ? chars.map(function(o){
         return '<div class="ch">'+avatar(o.c.name)+'<div><div class="nm">'+esc(o.c.name||'')+
@@ -2739,7 +2617,7 @@
     .then(function(r){ return r.text(); })
     .then(function(t){ BUILD = (t||'').trim(); })
     .catch(function(){})
-    .then(function(){ render(); f663RenderLogin(); f661AutoGC(); renderCapacity(); if(!autoPullOnce()) pull(); f757Fetch(); f889Boot(); });
+    .then(function(){ render(); f663RenderLogin(); f661AutoGC(); renderCapacity(); if(!autoPullOnce()) pull(); f757Fetch(); });
   render();
   deletedNotice();
   pendingDeleteNotice();

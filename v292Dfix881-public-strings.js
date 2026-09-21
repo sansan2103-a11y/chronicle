@@ -23,7 +23,7 @@
   'use strict';
   if (window.__v292Dfix881) return;
   var TAG = '[v292Dfix881:public-strings]';
-  var VERSION = 'v292Dfix881-20260921-sp18r-v1.2';
+  var VERSION = 'v292Dfix881-20260921-sp16r-v1.1';
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix881Off') === '1'; }
@@ -33,19 +33,6 @@
      kind:'has'    … 部分一致したら文全体を to に差し替える（技術詳細を残さない）
      kind:'re'     … 正規表現で部分置換                                        */
   var TABLE = [
-    /* ★★sp18（SECRET_STORY_VAULT / GPT 裁定 #SECRET_STORY_VAULT・#LANE18・#SP17_VAULT_CLIENT）
-       — 新規 4 行。★sp16 の 3 行と同じ理由で **ここ（generic な HTTP 行より上）** でなければ
-       1 度も発火しない。★4 行とも to は表のどの pattern にも一致しない（IDEMPOTENT・I-2 が実測）。
-       ★player の画面に vault / hidden / 秘匿 の語を出さない。出してよい語は
-         「秘密の物語」「隠す」だけ（裁定 G5: membership を 1 ビットも漏らさない）。 */
-    { kind:'has', from:'VAULT_MEMBERSHIP_DISABLED',
-      to:'この機能はまだ準備中です' },
-    { kind:'has', from:'VAULT_LOCKED_OUT',
-      to:'入力の回数が多すぎます。しばらく待ってから、もう一度お試しください' },
-    { kind:'has', from:'STORY_UNAVAILABLE',
-      to:'この物語はいま開けません' },
-    { kind:'has', from:'LEGACY_PATH_UNAVAILABLE',
-      to:'この操作はいまご利用になれません。ホームから開き直してください' },
     /* ★★sp16（lane19 C-5 / C-6 / C-8・GPT 裁定 #LANE19）— 新規 3 行。
        ★順序が意味を持つ: 下にある D-13 の /\bHTTP \d{3}\b/ は **どんな例外文でも先に食う**ので、
          403 行はここ（HTTP 行より上）でなければ 1 度も発火しない。表は上から 1 回だけ適用される。
