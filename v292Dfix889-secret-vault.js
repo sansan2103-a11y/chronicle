@@ -1,4 +1,82 @@
-/* v292Dfix889-secret-vault.js — SECRET_STORY_VAULT client **v7.2**
+/* v292Dfix889-secret-vault.js — SECRET_STORY_VAULT client **v7.5**
+ * =====================================================================================
+ * ★★v7.5（2026-09-21・コスト回帰の修正）:
+ *   v7.4 との差は **ns をどこから貰うか 1 点だけ**。扉・BOOT BARRIER・印・backfill・
+ *   imgconfirm の作法は 1 バイトも変えていない。
+ *
+ *   何が問題だったか:
+ *     v7.3 が boot で **無条件に** `op:'imgmanifest'` を 1 本投げていた。ログイン済みの
+ *     訪問者の **全 document**（HOME も含む）に 1 往復増える。これはコスト回帰であり、
+ *     `sp18r_acceptance_v1.mjs` の GP-1（imgmanifest はちょうど 1 本）と
+ *     WK-1（拒否された hide では probe 0 本）が赤くなる原因そのものだった。
+ *     pin は意図して置かれたものなので、**pin ではなく client を直す**。
+ *
+ *   v7.5 の ns 取得（上から順に、安い順）:
+ *     (1) **既に出ている** `imgmanifest` の応答から採る（backfill の probe）。
+ *         もともと聞きに行く document では **往復は 1 本も増えない**。
+ *     (2) 補助 cache `localStorage['v292Dfix891_ns']` = `<ns>:<epoch>:<adoptedAt>`、**TTL 6 時間**。
+ *         HOME や拒否された hide の document では **1 本も投げない**。
+ *         ★形が違う値（v7.3/v7.4 が書いた 2 項形を含む）は **無効として無視**する。
+ *     (3) cache が空 or 期限切れ **かつ** その document が実際に
+ *         「確認できない ns で画像 URL を組み立てようとした」ときだけ、**最大 1 本**の遅延 probe。
+ *         **`load` の後 ＋ 2 秒 idle** まで待ち、**扉が armed のまま未 release の間は投げない**。
+ *         その document で既に imgmanifest が出ていれば **投げない**。
+ *
+ *   ★コスト上限: **端末あたり 6 時間に 1 本**、しかも「backfill を伴わずに legacy ns の画像を
+ *     描く document」だけ。backfill が走る document は **+0**。HOME は **+0**。
+ *   ★`localStorage['v292Dfix400_ns']` は v7.3/v7.4 と同じく **hint として読むだけ**。
+ *   対になる worker: **v46.7-ns-converge / imgNsSpec = w14.1-ns-converge**。
+ * =====================================================================================
+ * ★★v7.4（2026-09-21・GPT 裁定 #W14_IMPL ④ = PRE_ARM_CONFIRM の client 側）:
+ *   v7.3 との差は **1 点だけ**。扉（gate）・BOOT BARRIER・印（token）・backfill・
+ *   ns 収束（swapNs）の作法は 1 バイトも変えていない。
+ *
+ *   なぜ要るか:
+ *     worker（w14.1）は旧 ns の画像 key を「歴代 artStyle enum × この account の全 story ×
+ *     canonical cast name」で再計算し、**ちょうど 1 組**が一致したものだけを『候補』にする。
+ *     しかし 31 bit の hash 一致は帰属の証明にならないので、候補のままでは image_owner に
+ *     昇格しない（裁定「候補生成であり authority ではない」）。
+ *     昇格できるのは「**その物語を実際に開いている認証済みの端末**が、key の原像
+ *     （storyId ＋ canonName ＋ artStyle）を申告し、worker が全部再検証したとき」だけである。
+ *     v7.4 はその申告を送る。
+ *
+ *   どう送るか:
+ *     ・物語が開いた後（認証済み・扉が解けている）に **1 度だけ**、最大 32 件を 1 往復で。
+ *     ・原像は client が **既に持っている**: fix197 の keyFor()（v292Dfix197-avatar-key.js:208）は
+ *       `'n' + hash(resolveVariant764(canonName(name)) + '|' + artStyle())` で key を作っており、
+ *       その 3 つ（正名 / 画風 / 物語 id）はこの document の engine state から読める。
+ *       検証口も公開されている（fix197:599-601 の keyFor / canonName / resolveVariant764）。
+ *     ・画面に出ている <img data-avpk> の pk と keyFor(name) を突き合わせて原像を決める
+ *       （合わないものは送らない）。
+ *     ・**断られても再送しない**（窓が閉じている＝ ARM 済み or 既に hidden が在る、が正常）。
+ *     ・kill（v292Dfix889Off='1'）で止まる。扉・boot には 1 ミリ秒も割り込まない。
+ *     ・★`localStorage['v292Dfix400_ns']` は **hint として読むだけ**。書かない・消さない。
+ *   対になる worker: **v46.7-ns-converge / imgNsSpec = w14.1-ns-converge**。
+ *   ★imgconfirm を知らない worker には 400/501 が返るだけで、**画面には何も起きない**。
+ * =====================================================================================
+ * ★★v7.3（2026-09-21・GPT 裁定 #W14_DESIGN = NS_CONVERGENCE の client 側）:
+ *   v7.2 との差は **画像 URL の ns を server の言うとおりにする 1 点だけ**である。
+ *   扉（gate）・BOOT BARRIER・印（token）・backfill の作法・送信の形は 1 バイトも変えていない。
+ *
+ *   何が壊れていたか（live 実測 / candidate/vault_preARM_live_acceptance_v1.md §3-c）:
+ *     v292Dfix400-img-url.js は ns を `op:'meta'` から **一生に 1 度だけ**取得して
+ *     localStorage['v292Dfix400_ns'] に永久 cache する（fix400:55 の guard）。その後 server 側の
+ *     nsFor() が変わっても client は追従しないので、画面が使う ns と server が解決する ns が
+ *     **互いに素**になる。どちらにも実体が在るので「表示は出るが server からは別物に見える」。
+ *
+ *   v7.3 がすること:
+ *     ・認証済み `op:'imgmanifest'` の応答に w14 が足した `activeNs`（32 hex）を採用する。
+ *     ・fix889 が **既に持っている** `__v292Dfix400.urlFor` の wrapper（:1386-1405）の中で、
+ *       返ってきた URL の `ns=` だけを差し替える（swapNs）。形が違えば **何もしない**。
+ *     ・`localStorage['v292Dfix891_ns']` は初回描画用の補助 cache にすぎない。
+ *       **権威は毎 document の server 応答**で、来たら必ず上書きする。
+ *     ・★`localStorage['v292Dfix400_ns']` は **読まない・書かない・消さない**。
+ *       あれは migrate の hint 源であり、v7.2 へ戻したときの復帰値でもある。
+ *     ・kill は v7.2 のまま（`v292Dfix889Off='1'` は UI だけを止め、絞り込みと扉は止まらない）。
+ *       ns 収束は表示経路なので、ns 単体の kill は置かない（w14 側で CONVERGE を 0 にすれば
+ *       `activeNs` が来なくなり、この hunk は自動的に no-op になる）。
+ *   対になる worker: **v46.7-ns-converge**（candidate/storypass_worker/v22）。
+ *   ★v46.6 以前（activeNs を返さない worker）に対しては **no-op**。先に上げても同時でも動く。
  * =====================================================================================
  * 権威: /tmp/rr/gpt_ruling_SNAPSHOT_SP17.md（#SP17_VAULT_CLIENT の差戻し 8 件） /
  *       gpt_ruling_SECRET_STORY_VAULT.md（両節） / gpt_ruling_LANE18.md /
@@ -366,7 +444,20 @@
                    bootBarrierMissing = barrier が deploy されていないのに document 2 に
                      入ってしまった回数。**0 でなければ deploy 事故**であり、
                      その document は fail-closed で止まっている（v6 へは落ちない）。 */
-                bootDeferred: 0, booted: 0, bootBarrierMissing: 0 };
+                bootDeferred: 0, booted: 0, bootBarrierMissing: 0,
+                /* ★v7.3(NS_CONVERGENCE): nsAdopted = server の activeNs を採用した回数、
+                   nsSwapped = <img> URL の ns= を実際に書き換えた回数、
+                   nsMismatch = 採用値が手元の値と違った回数（＝ 収束が起きた回数）。 */
+                nsAdopted: 0, nsSwapped: 0, nsMismatch: 0,
+                /* ★v7.4(PRE_ARM_CONFIRM): confirmSent = imgconfirm を送った回数（正常は story ごと 1）、
+                   confirmOk = worker が昇格させた key の数、
+                   confirmRefused = 断られた回数（ARM 済み / hidden 在り / 非対応 worker なら正常）。
+                   ★断られたらこの document では二度と送らない（confirmStop）。 */
+                confirmSent: 0, confirmOk: 0, confirmRefused: 0,
+                /* ★v7.5(コスト回帰の修正): nsLazyProbe = 遅延 probe を実際に投げた回数
+                   （正常は 0。cache が空 or 期限切れで、かつ legacy ns の画像を描いた document でだけ 1）、
+                   nsCacheHit / nsCacheStale / nsCacheBad = 補助 cache の読み取り結果。 */
+                nsLazyProbe: 0, nsCacheHit: 0, nsCacheStale: 0, nsCacheBad: 0 };
 
   var LIMIT = { at: 0, retryAfterMs: 0, code: null, keepLocal: false, count: 0 };
 
@@ -871,9 +962,15 @@
   }
   function probeOrphans(keys, cb) {
     backfill.probing = true;
+    NS.seenManifest = true;      /* ★v7.5: 送信した時点で遅延 probe を抑止する（応答待ちでも） */
     stats.probe++;
     post(withVault({ op: 'imgmanifest' }), function (r, e) {
       var man = null;
+      /* ★v7.3 / v7.5 source (1): backfill の probe も imgmanifest なので、**ここで ns を採る**。
+         この document は既に聞きに行っているので **往復は 1 本も増えない**。
+         ★v7.5: 応答が来た時点で seenManifest を立て、遅延 probe を永久に抑止する。 */
+      NS.seenManifest = true;
+      try { if (!e && okOf(r) && r.j && adoptNs(r.j)) nsResweep(); } catch (e2) {}
       if (!e && okOf(r) && r.j && r.j.manifest && typeof r.j.manifest === 'object') man = r.j.manifest;
       if (man) {
         var out = [], i, bf;
@@ -1364,6 +1461,189 @@
   /* ================================================================== images ==== */
   /* 隠した物語の絵は無認証の画像 URL を **組み立てない**。認証付きの取得経路で受け取り、
      Blob → object URL にして <img> へ流す。★再施錠したら object URL を取り消す。 */
+  /* ================================================================== ns convergence ==
+     ★v7.3。NS.active が入っていない間は v7.2 と 1 バイトも同じ挙動（swapNs は素通り）。 */
+  var LS_NS = 'v292Dfix891_ns';
+  var NS_TTL_MS = 6 * 60 * 60 * 1000;   /* ★v7.5: 補助 cache の寿命 = 6 時間 */
+  var NS_IDLE_MS = 2000;                /* ★v7.5: load の後さらに待つ idle */
+  var NS = { active: null, epoch: null, at: 0, probed: false,
+             /* ★v7.5 の観測点:
+                seenManifest … この document で imgmanifest が 1 本でも出たか（出ていれば遅延 probe は投げない）
+                need         … 確認できない ns で画像 URL を組み立てようとしたか
+                stale        … cache が在ったが期限切れだったか
+                lazyArmed    … 遅延 probe を予約済みか（1 document 1 回） */
+             seenManifest: false, need: false, stale: false, lazyArmed: false };
+  function nsValid(v) { return typeof v === 'string' && /^[0-9a-f]{32}$/.test(v); }
+  /* ★v7.5: cache は `<32hex>:<epoch>:<adoptedAt>` の 3 項。TTL 6 時間。
+     ・形が違うもの（v7.3/v7.4 が書いた 2 項形も含む）は **無視**する（malformed 扱い）。
+       2 項形には adoptedAt が無く TTL を判定できないため、採用してはいけない。
+     ・期限切れは採用しない（NS.stale を立てるだけ）。以後は (1) か (3) が ns を決める。 */
+  function nsLoadCache() {
+    try {
+      var raw = String(lsg(LS_NS) || '');
+      if (!raw) return;
+      var m = /^([0-9a-f]{32}):(\d+):(\d+)$/.exec(raw);
+      if (!m) { stats.nsCacheBad++; return; }                 /* malformed ＝ 無いものとして扱う */
+      var at = +m[3];
+      if (!(at > 0) || (Date.now() - at) > NS_TTL_MS) { NS.stale = true; stats.nsCacheStale++; return; }
+      NS.active = m[1]; NS.epoch = +m[2]; NS.at = 0;           /* at=0 ＝ server 未確認の補助値 */
+      stats.nsCacheHit++;
+    } catch (e) {}
+  }
+  /* server 応答から ns を採用する。**権威はここだけ**。 */
+  function adoptNs(j) {
+    if (!j || typeof j !== 'object') return false;
+    if (!nsValid(j.activeNs)) return false;
+    var ep = (typeof j.nsEpoch === 'number' && isFinite(j.nsEpoch)) ? j.nsEpoch : 0;
+    if (NS.active && NS.active !== j.activeNs) stats.nsMismatch++;   /* 収束が起きた回数（観測用） */
+    NS.active = j.activeNs; NS.epoch = ep; NS.at = Date.now();
+    NS.need = false;
+    stats.nsAdopted++;
+    /* ★v7.5: adoptedAt を一緒に書く（TTL 判定に要る） */
+    try { lss(LS_NS, NS.active + ':' + NS.epoch + ':' + Date.now()); } catch (e) {}
+    return true;
+  }
+  /* URL の ns= だけを差し替える。形が合わなければ **原文をそのまま返す**（退行 0）。 */
+  function swapNs(url) {
+    var u = String(url || '');
+    var re = /([?&]ns=)([0-9a-f]{32})(?=&|$)/;
+    var m = re.exec(u);
+    if (!u || !m) return u;
+    if (!NS.active) {
+      /* ★v7.5: 確認できない ns で URL を組み立てようとした。**URL は 1 バイトも変えない**が、
+         この document は「ns を知る必要がある」と印を付け、遅延 probe を 1 本だけ予約する。 */
+      NS.need = true;
+      nsLazyArm();
+      return u;
+    }
+    if (m[2] === NS.active) return u;
+    stats.nsSwapped++;
+    return u.replace(re, '$1' + NS.active);
+  }
+  /* ★★v7.5: 遅延 probe。**この経路以外に imgmanifest を新規に出す口は無い。**
+     条件（すべて満たしたときだけ 1 本）:
+       ・cache から ns を採れていない（NS.active が無い）
+       ・この document で imgmanifest が **まだ 1 本も出ていない**（NS.seenManifest）
+       ・この document が実際に ns を必要とした（NS.need）
+       ・認証済み・kill されていない
+       ・**扉が armed のまま未 release ではない**（gate 中は何も投げない）
+       ・`load` の後 ＋ NS_IDLE_MS の idle を過ぎた */
+  function nsLazyArm() {
+    if (NS.lazyArmed || NS.probed || NS.active) return;
+    NS.lazyArmed = true;
+    var fire = function () {
+      setTimeout(function () {
+        try {
+          if (NS.probed || NS.active || NS.seenManifest) return;
+          if (!NS.need || uiOff() || !loggedIn()) return;
+          if (GATE.armed && !GATE.released) return;
+          NS.probed = true;
+          stats.nsLazyProbe++;
+          NS.seenManifest = true;
+          post(withVault({ op: 'imgmanifest' }), function (r, e) {
+            if (!e && okOf(r) && r.j && adoptNs(r.j)) { try { nsResweep(); } catch (e2) {} }
+          });
+        } catch (e) {}
+      }, NS_IDLE_MS);
+    };
+    try {
+      if (document.readyState === 'complete') fire();
+      else {
+        var once = false;
+        window.addEventListener('load', function () { if (once) return; once = true; fire(); }, false);
+      }
+    } catch (e) { fire(); }
+  }
+  /* ns が変わったら、既に貼られている <img> を fix197/fix199 の sweep で引き直させる。 */
+  function nsResweep() {
+    try {
+      var f = window.__v292Dfix197 || window.__v292Dfix199;
+      if (f && typeof f.sweep === 'function') { f.sweep(); setTimeout(function () { try { f.sweep(); } catch (e) {} }, 800); }
+    } catch (e) {}
+  }
+
+  /* ================================================================= pre-ARM confirm ==
+     ★v7.4。ここで送るのは **key の原像**だけで、worker はそれを 1 つも信用せず再検証する。
+     送らなくても画面は 1 ピクセルも変わらない（昇格は運用のための処理であって表示ではない）。 */
+  var CONFIRM_MAX = 32;
+  var confirmDone = {};          /* storyId ごと・この document で 1 度だけ */
+  var confirmStop = false;       /* 一度断られたらこの document ではもう送らない */
+  function legacyNsHint() {
+    /* ★読むだけ。v292Dfix400_ns は migrate/confirm の hint 源であり、v7.3 と同じく
+       **書かない・消さない**（v7.2 へ戻したときの復帰値でもある）。 */
+    try { var v = String(lsg('v292Dfix400_ns') || ''); return /^[0-9a-f]{32}$/.test(v) ? v : ''; }
+    catch (e) { return ''; }
+  }
+  function confirmItems() {
+    var out = [];
+    var F = null; try { F = window.__v292Dfix197 || window.__v292Dfix199; } catch (e) { F = null; }
+    if (!F || typeof F.keyFor !== 'function') return out;
+    var st = null;
+    try { st = (typeof window.__chronicleGetState === 'function') ? window.__chronicleGetState('v889ns') : null; } catch (e) { st = null; }
+    if (!st) return out;
+    var art = '0';
+    try { art = String((st.cfg && st.cfg.artStyle != null) ? st.cfg.artStyle : 0); } catch (e) { art = '0'; }
+    var names = [];
+    try { if (st.cast && st.cast.hero && st.cast.hero.name) names.push(String(st.cast.hero.name)); } catch (e) {}
+    try {
+      var np = (st.cast && st.cast.npcs) || [];
+      for (var i = 0; i < np.length; i++) { if (np[i] && np[i].name) names.push(String(np[i].name)); }
+    } catch (e) {}
+    if (!names.length) return out;
+    var sid = GATE.id || storyIdOfUrl();
+    if (!sid) return out;
+    /* 画面に実際に出ている pk だけを対象にする */
+    var seen = {}, pks = [];
+    try {
+      var imgs = document.getElementsByTagName('img');
+      for (var j = 0; j < imgs.length; j++) {
+        var a = imgs[j].getAttribute && imgs[j].getAttribute('data-avpk');
+        if (!a) continue;
+        var kk = keyOf(a);
+        if (seen[kk]) continue;
+        seen[kk] = 1; pks.push(kk);
+      }
+    } catch (e) {}
+    for (var p = 0; p < pks.length && out.length < CONFIRM_MAX; p++) {
+      for (var n = 0; n < names.length; n++) {
+        var pk = null;
+        try { pk = F.keyFor(names[n]); } catch (e) { pk = null; }
+        if (!pk || keyOf(pk) !== pks[p]) continue;
+        /* ★送る正名は keyFor() が内部で使うのと同じ形（fix197:208）にそろえる */
+        var cn = names[n];
+        try { if (typeof F.canonName === 'function') cn = F.canonName(cn); } catch (e) {}
+        try { if (typeof F.resolveVariant764 === 'function') cn = F.resolveVariant764(cn); } catch (e) {}
+        out.push({ storyId: sid, canonName: String(cn), artStyle: art, k: pks[p] });
+        break;
+      }
+    }
+    return out;
+  }
+  function confirmTick() {
+    try {
+      if (confirmStop || uiOff() || !loggedIn()) return;
+      if (VIS.state !== 'ready') return;                 /* server の返事が来ていない */
+      if (GATE.armed && !GATE.released) return;           /* 扉が開いていない document では送らない */
+      var sid = GATE.id || storyIdOfUrl();
+      if (!sid || confirmDone[sid]) return;
+      if (isHidden(sid)) return;                          /* hidden は worker 側でも拒否される */
+      var legNs = legacyNsHint();
+      if (!legNs) return;                                 /* 旧 ns を知らない端末は送るものが無い */
+      if (NS.active && NS.active === legNs) return;        /* 収束済み ＝ 送る意味が無い */
+      var items = confirmItems();
+      if (!items.length) return;
+      confirmDone[sid] = 1;                                /* ★送る前に立てる（二重送信させない） */
+      stats.confirmSent++;
+      post(withVault({ op: 'imgconfirm', legacyNs: legNs, items: items }), function (r, e) {
+        if (e || !r || !r.j) { confirmStop = true; return; }
+        if (r.j.ok === true) { stats.confirmOk += (+r.j.confirmed || 0); return; }
+        /* CONFIRM_CLOSED（ARM 済み / 既に hidden が在る）・unsupported・bad-op はすべて
+           「この deploy では送っても意味が無い」を意味する。★再送しない。 */
+        stats.confirmRefused++; confirmStop = true;
+      });
+    } catch (e) {}
+  }
+
   var imgCache = {}, imgWrapped = false;
   function dropImgUrls() {
     for (var k in imgCache) {
@@ -1391,7 +1671,10 @@
     var orig = f.urlFor;
     var w = function (pk) {
       try { if (imgProtected()) { queueImg(pk); return ''; } } catch (e) {}
-      return orig.apply(this, arguments);
+      var u = orig.apply(this, arguments);
+      /* ★v7.3: server が名乗った active ns へ寄せる。NS.active が無ければ原文のまま。 */
+      try { u = swapNs(u); } catch (e) {}
+      return u;
     };
     try {
       Object.getOwnPropertyNames(orig).forEach(function (k) {
@@ -1483,9 +1766,16 @@
   function boot() {
     bootGate();
     bindHome();
+    nsLoadCache();               /* ★v7.3: 初回描画用の補助値（権威ではない） */
     wrapImgUrl();
     setTimeout(wrapImgUrl, 1200);
     setTimeout(wrapImgUrl, 4000);
+    /* ★★v7.5: v7.3 の無条件 boot probe は **削除した**。ns は
+       (1) 既に出ている imgmanifest / (2) TTL 付き cache / (3) 必要になった document だけの
+       遅延 probe 1 本、の順に得る。boot では 1 本も投げない。 */
+    /* ★v7.4: 扉にも engine boot にも割り込まない位置で、開いた後に 1 度だけ試みる。 */
+    setTimeout(confirmTick, 3000);
+    setTimeout(confirmTick, 9000);
     if (!GATE.armed) refresh();
   }
   if (document.readyState === 'loading') {
@@ -1529,9 +1819,17 @@
                ran: !!(B && B.__ran), booted: stats.booted, missing: stats.bootBarrierMissing };
     },
     imgSrc: fetchImg,
+    /* ★v7.3 の観測口（読み取りのみ） */
+    ns: function () { return { active: NS.active, epoch: NS.epoch, confirmed: (NS.at > 0), probed: NS.probed,
+                              seenManifest: NS.seenManifest, need: NS.need, stale: NS.stale, lazyArmed: NS.lazyArmed,
+                              ttlMs: NS_TTL_MS, idleMs: NS_IDLE_MS }; },
+    nsSwap: swapNs,
+    /* ★v7.4 の観測口（読み取りのみ・送信はしない） */
+    confirmItems: confirmItems,
+    confirmState: function () { return { stopped: confirmStop, stories: Object.keys(confirmDone), max: CONFIRM_MAX }; },
     limit: function () { return { code: LIMIT.code, retryAfterMs: LIMIT.retryAfterMs, keepLocal: LIMIT.keepLocal, count: LIMIT.count }; },
     status: function () {
-      return { uiOff: uiOff(), v: 7.2, state: VIS.state, canon: canonState(), open: VIS.open, unlocked: !!session(),
+      return { uiOff: uiOff(), v: 7.5, state: VIS.state, canon: canonState(), open: VIS.open, unlocked: !!session(),
                hidden: Object.keys(VIS.hidden).length, visible: Object.keys(VIS.visible).length,
                loggedIn: loggedIn(), fetchWrapped: fetchWrapped,
                backfill: { running: backfill.running, left: backfill.queue.length, done: backfill.done,
@@ -1541,8 +1839,11 @@
                            probeFail: backfill.probeFail, storyRequired: backfill.storyRequired },
                limit: { code: LIMIT.code, retryAfterMs: LIMIT.retryAfterMs, keepLocal: LIMIT.keepLocal, count: LIMIT.count },
                gate: { armed: GATE.armed, released: GATE.released, reason: GATE.reason },
+               ns: { active: NS.active, epoch: NS.epoch, confirmed: (NS.at > 0), probed: NS.probed,
+                     seenManifest: NS.seenManifest, need: NS.need, stale: NS.stale, lazyArmed: NS.lazyArmed },
+               confirm: { stopped: confirmStop, stories: Object.keys(confirmDone).length },
                stats: stats };
     }
   };
-  try { console.log(TAG, 'loaded v7.2', uiOff() ? 'UI-OFF(filter stays)' : 'ON'); } catch (e) {}
+  try { console.log(TAG, 'loaded v7.5', uiOff() ? 'UI-OFF(filter stays)' : 'ON'); } catch (e) {}
 })();
