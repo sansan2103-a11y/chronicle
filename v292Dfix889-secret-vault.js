@@ -1,4 +1,61 @@
-/* v292Dfix889-secret-vault.js — SECRET_STORY_VAULT client **v7.5**
+/* v292Dfix889-secret-vault.js — SECRET_STORY_VAULT client **v7.7**
+ * =====================================================================================
+ * ★★v7.7（2026-09-26・R-1 の決定: ACTIVE_OWNERLESS_CONFIRM を client から届くようにする）:
+ *   v7.6 との差は **既存の confirm batch（story ごと・document ごとに 1 本）の中身だけ**。
+ *   扉・BOOT BARRIER・印・backfill・ns の取り方（v7.5 のコスト上限）・v7.6 の legacy read fallback は不変。
+ *
+ *   何を送るか（原像だけ。worker w14.2 が全部を server で再検証する）:
+ *     ・この document で **CONVERGE の imgmanifest**（activeNs が 32 hex・nsConverge === 1）を実際に受け取り、
+ *       その行（manifest）を持っているときだけ、画面に描かれた key を行で仕分ける:
+ *         行が在り owned === 0（厳密に数値 0）  → **active item**（legacyNs を付けない）
+ *         行が在りそれ以外（owned 1・欠落・型違い）→ **送らない**（owned 1 は既に帰属済み）
+ *         行が無い                              → legacy item（v7.5/v7.6 と同じく legacyNs 付き・hint がある端末だけ）
+ *     ・manifest を持っていない document（cache hit だけ・w14.1 型の応答・probe 無し）では **v7.6 と同じ**
+ *       （全部 legacy item・hint が無ければ送らない）。★この判定のためだけに imgmanifest を投げることは **無い**。
+ *   どう送るか:
+ *     ・1 story 1 document で **POST 1 本**のまま（混在でも 1 本）。
+ *       active item が 0 なら body は v7.6 と **同形**（body.legacyNs ＋ items）。
+ *       active item が在れば body に legacyNs を **置かず**、legacy item にだけ item ごとの legacyNs を付ける
+ *       （w14.1 / w14.2 とも item.legacyNs → body.legacyNs の順で読むので、legacy item の意味は不変）。
+ *     ・cap 32（従来どおり）。断られたら（CONFIRM_CLOSED / 非対応）その document ではもう送らない。
+ *     ・imgmanifest が来る見込みの間（遅延 probe が予約済み・応答待ち）は 3 秒の tick を見送り、応答の直後に 1 回、
+ *       9 秒の tick は見送らない（どちらでも 1 story 1 本）。
+ *   観測: confirmActiveSent（送った active item 数）/ confirmActiveOk（active item **だけ**の batch で worker が
+ *     昇格させた数。混在 batch は応答が内訳を持たないので confirmOk にだけ入る）。
+ *   ★v292Dfix400_ns は読むだけ（書かない）。
+ * =====================================================================================
+ * ★★v7.6 以前の履歴（以下、原文のまま）
+ * v292Dfix889-secret-vault.js — SECRET_STORY_VAULT client v7.6
+ * =====================================================================================
+ * ★★v7.6（2026-09-26・GPT 裁定 PKT-20260926-W14COV-01 N-2 = legacy read fallback GO）:
+ *   v7.5 との差は **1 点だけ**: active ns の `/img` が読めなかった <img> を、条件つきで
+ *   **1 回だけ**元の legacy URL で読み直す（read availability bridge）。
+ *   扉・BOOT BARRIER・印・backfill・imgconfirm・ns の取り方（v7.5 のコスト上限）は 1 バイトも変えていない。
+ *
+ *   なぜ要るか（live 実測 sp19b N-2）: v7.5 は /img の ns を常に activeNs へ寄せる。server が帰属を
+ *   証明できず移行しなかった legacy-only の絵は、CLOSE=0（legacy がまだ配信されている）の間でも
+ *   activeNs では 404 になる。local の data: 写しが無い端末ではその絵が欠ける。
+ *
+ *   条件（すべて満たしたときだけ・どれか 1 つでも欠けたら何もしない）:
+ *     ・worker が **CLOSE=0 と名乗った**（imgmanifest の nsClose === 0。ns の採用と同じ応答で受け取り、
+ *       ns と一緒に cache する: localStorage['v292Dfix891_nsc'] = `<ns>:<0|1>:<adoptedAt>`、TTL は ns と同じ 6 h、
+ *       ns が一致するときだけ有効）。**CLOSE=1 / 名乗らない（w14.1 以前）/ 不明 ⇒ fallback 0**。
+ *     ・その <img> の src が、この document で **v7.6 自身が legacy → active へ書き換えた URL** であること
+ *       （書き換えていない URL・data: / blob: の local の絵には触らない）。
+ *     ・その key で **この load cycle（document）にまだ 1 度も fallback していない**こと。
+ *   方向は active → legacy の **一方向だけ**。legacy でも読めなければ、既存の onerror（fix197 の
+ *   local 写し → DiceBear 復帰）にそのまま渡す。**再試行も loop もしない**。
+ *   legacy で読めた key は、この document の間だけ legacy URL を返し続ける（active へ戻して 404 を
+ *   繰り返さないため。これも一方向）。
+ *   ★fallback の成功は **所有・confirm・移行の成功として扱わない**（何も送らない・何も書かない・
+ *     ns も変えない。数えるだけ）。
+ *   ★観測（stats）: imgActiveHit / imgActiveMiss / imgLegacyFallback / imgLegacyFallbackOk /
+ *     imgLegacyFallbackFail。active で見えた絵と legacy fallback で見えた絵を **分けて**数える
+ *     （fallback で見えているだけのものを「収束」と誤認しないため）。
+ *   ★要求は 1 本も増えない（nsClose は既に出ている imgmanifest の additive field。fallback 自体は
+ *     従来 v7.2 が使っていた capability URL を 1 key 1 回読むだけ）。
+ *   対になる worker: **v46.7-ns-converge / imgNsSpec = w14.2-ns-converge**（nsClose を返す）。
+ *   ★w14.1 は nsClose を返さない ⇒ v7.6 は「不明」とみなし、fallback 0（= v7.5 と同じ挙動）。
  * =====================================================================================
  * ★★v7.5（2026-09-21・コスト回帰の修正）:
  *   v7.4 との差は **ns をどこから貰うか 1 点だけ**。扉・BOOT BARRIER・印・backfill・
@@ -454,10 +511,17 @@
                    confirmRefused = 断られた回数（ARM 済み / hidden 在り / 非対応 worker なら正常）。
                    ★断られたらこの document では二度と送らない（confirmStop）。 */
                 confirmSent: 0, confirmOk: 0, confirmRefused: 0,
+                /* ★v7.7: confirmActiveSent = legacyNs 無しで送った active item の数、
+                   confirmActiveOk = active item だけの batch で昇格した数（混在 batch は confirmOk にだけ入る）。 */
+                confirmActiveSent: 0, confirmActiveOk: 0,
                 /* ★v7.5(コスト回帰の修正): nsLazyProbe = 遅延 probe を実際に投げた回数
                    （正常は 0。cache が空 or 期限切れで、かつ legacy ns の画像を描いた document でだけ 1）、
                    nsCacheHit / nsCacheStale / nsCacheBad = 補助 cache の読み取り結果。 */
-                nsLazyProbe: 0, nsCacheHit: 0, nsCacheStale: 0, nsCacheBad: 0 };
+                nsLazyProbe: 0, nsCacheHit: 0, nsCacheStale: 0, nsCacheBad: 0,
+                /* ★v7.6(legacy read fallback): imgActiveHit / imgActiveMiss = active ns の /img が読めた / 読めなかった <img> の数、
+                   imgLegacyFallback = legacy URL で 1 回だけ読み直した数（1 key / document 最大 1）、
+                   imgLegacyFallbackOk / Fail = その結果。★Ok は「見えた」だけで、所有・confirm・移行ではない。 */
+                imgActiveHit: 0, imgActiveMiss: 0, imgLegacyFallback: 0, imgLegacyFallbackOk: 0, imgLegacyFallbackFail: 0 };
 
   var LIMIT = { at: 0, retryAfterMs: 0, code: null, keepLocal: false, count: 0 };
 
@@ -964,13 +1028,16 @@
     backfill.probing = true;
     NS.seenManifest = true;      /* ★v7.5: 送信した時点で遅延 probe を抑止する（応答待ちでも） */
     stats.probe++;
+    NS.manPending = true;        /* ★v7.7 */
     post(withVault({ op: 'imgmanifest' }), function (r, e) {
       var man = null;
+      NS.manPending = false;     /* ★v7.7 */
       /* ★v7.3 / v7.5 source (1): backfill の probe も imgmanifest なので、**ここで ns を採る**。
          この document は既に聞きに行っているので **往復は 1 本も増えない**。
          ★v7.5: 応答が来た時点で seenManifest を立て、遅延 probe を永久に抑止する。 */
       NS.seenManifest = true;
-      try { if (!e && okOf(r) && r.j && adoptNs(r.j)) nsResweep(); } catch (e2) {}
+      try { if (!e && okOf(r) && r.j && adoptNs(r.j)) { nsKeepManifest(r.j); nsResweep(); } } catch (e2) {}
+      try { setTimeout(confirmTick, 0); } catch (e3) {}      /* ★v7.7: 行が手に入った直後に 1 回（送るのは story ごと 1 本のまま） */
       if (!e && okOf(r) && r.j && r.j.manifest && typeof r.j.manifest === 'object') man = r.j.manifest;
       if (man) {
         var out = [], i, bf;
@@ -1472,7 +1539,18 @@
                 need         … 確認できない ns で画像 URL を組み立てようとしたか
                 stale        … cache が在ったが期限切れだったか
                 lazyArmed    … 遅延 probe を予約済みか（1 document 1 回） */
-             seenManifest: false, need: false, stale: false, lazyArmed: false };
+             seenManifest: false, need: false, stale: false, lazyArmed: false,
+             /* ★v7.6: worker が名乗った CLOSE（0 / 1）。null = 不明 ⇒ legacy fallback はしない */
+             close: null,
+             /* ★v7.7: この document で CONVERGE の imgmanifest から得た行（持っていなければ null）と、
+                imgmanifest の応答待ちか（confirm の早い tick を見送るため） */
+             man: null, manPending: false };
+  function nsKeepManifest(j) {
+    try {
+      if (j && j.nsConverge === 1 && j.manifest && typeof j.manifest === 'object' && !Array.isArray(j.manifest)) NS.man = j.manifest;
+    } catch (e) {}
+  }
+  var LS_NSC = 'v292Dfix891_nsc';       /* ★v7.6: `<ns>:<0|1>:<adoptedAt>`。ns cache と同じ TTL・ns が一致するときだけ有効 */
   function nsValid(v) { return typeof v === 'string' && /^[0-9a-f]{32}$/.test(v); }
   /* ★v7.5: cache は `<32hex>:<epoch>:<adoptedAt>` の 3 項。TTL 6 時間。
      ・形が違うもの（v7.3/v7.4 が書いた 2 項形も含む）は **無視**する（malformed 扱い）。
@@ -1488,6 +1566,11 @@
       if (!(at > 0) || (Date.now() - at) > NS_TTL_MS) { NS.stale = true; stats.nsCacheStale++; return; }
       NS.active = m[1]; NS.epoch = +m[2]; NS.at = 0;           /* at=0 ＝ server 未確認の補助値 */
       stats.nsCacheHit++;
+      /* ★v7.6: CLOSE の cache。ns が一致し TTL 内のときだけ採る。それ以外は不明（null）のまま。 */
+      try {
+        var mc = /^([0-9a-f]{32}):([01]):(\d+)$/.exec(String(lsg(LS_NSC) || ''));
+        if (mc && mc[1] === NS.active && (+mc[3] > 0) && (Date.now() - (+mc[3])) <= NS_TTL_MS) NS.close = +mc[2];
+      } catch (e2) {}
     } catch (e) {}
   }
   /* server 応答から ns を採用する。**権威はここだけ**。 */
@@ -1501,6 +1584,15 @@
     stats.nsAdopted++;
     /* ★v7.5: adoptedAt を一緒に書く（TTL 判定に要る） */
     try { lss(LS_NS, NS.active + ':' + NS.epoch + ':' + Date.now()); } catch (e) {}
+    /* ★v7.6: 同じ応答の nsClose（w14.2 の additive field）を ns と一緒に採る。
+       0 / 1 以外（無い・型違い）は **不明**。不明なら古い CLOSE cache も捨てる（fallback しない側へ倒す）。 */
+    if (j.nsClose === 0 || j.nsClose === 1) {
+      NS.close = j.nsClose;
+      try { lss(LS_NSC, NS.active + ':' + j.nsClose + ':' + Date.now()); } catch (e) {}
+    } else {
+      NS.close = null;
+      try { localStorage.removeItem(LS_NSC); } catch (e) {}
+    }
     return true;
   }
   /* URL の ns= だけを差し替える。形が合わなければ **原文をそのまま返す**（退行 0）。 */
@@ -1517,8 +1609,14 @@
       return u;
     }
     if (m[2] === NS.active) return u;
+    /* ★v7.6: この document で legacy fallback が **成功した** key は legacy URL のまま返す
+       （active へ戻して 404 を繰り返さない。一方向）。 */
+    var fk = fbKeyOf(u);
+    if (fk && FB.stick[fk] === u) return u;
     stats.nsSwapped++;
-    return u.replace(re, '$1' + NS.active);
+    var sw = u.replace(re, '$1' + NS.active);
+    fbNote(sw, u, fk);
+    return sw;
   }
   /* ★★v7.5: 遅延 probe。**この経路以外に imgmanifest を新規に出す口は無い。**
      条件（すべて満たしたときだけ 1 本）:
@@ -1540,8 +1638,11 @@
           NS.probed = true;
           stats.nsLazyProbe++;
           NS.seenManifest = true;
+          NS.manPending = true;                              /* ★v7.7 */
           post(withVault({ op: 'imgmanifest' }), function (r, e) {
-            if (!e && okOf(r) && r.j && adoptNs(r.j)) { try { nsResweep(); } catch (e2) {} }
+            NS.manPending = false;                           /* ★v7.7 */
+            if (!e && okOf(r) && r.j && adoptNs(r.j)) { nsKeepManifest(r.j); try { nsResweep(); } catch (e2) {} }
+            try { confirmTick(); } catch (e3) {}             /* ★v7.7 */
           });
         } catch (e) {}
       }, NS_IDLE_MS);
@@ -1554,6 +1655,67 @@
       }
     } catch (e) { fire(); }
   }
+  /* ======================================================= legacy read fallback（v7.6）==
+     裁定 PKT-20260926-W14COV-01 N-2。条件と理由は file 先頭の v7.6 節。
+     ・document の **capture** で <img> の error / load を見る（img の onerror より先に走る）。
+     ・fallback するときだけ、その 1 回の error を既存 onerror へ流さず legacy URL を入れる。
+       legacy でも落ちたら、今度は止めずに既存 onerror（fix197 の local 復帰）へそのまま渡す。 */
+  var FB_MAX = 4000;
+  var FB = { orig: Object.create(null), n: 0, tried: Object.create(null), stick: Object.create(null) };
+  function fbKeyOf(u) {
+    var m = /[?&]k=([^&#]*)/.exec(String(u || ''));
+    if (!m) return '';
+    try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+  }
+  /* swapNs が書き換えた URL だけを覚える（書き換えていない URL は fallback の対象にしない） */
+  function fbNote(sw, orig, k) {
+    if (!k || FB.orig[sw] || FB.n >= FB_MAX) return;
+    FB.orig[sw] = { k: k, legacy: orig }; FB.n++;
+  }
+  function fbSrc(el) { try { return String((el.getAttribute && el.getAttribute('src')) || ''); } catch (e) { return ''; } }
+  function fbIsActive(src) {
+    if (!NS.active) return false;
+    var m = /\/img\?(?:[^#]*&)?ns=([0-9a-f]{32})(?=&|#|$)/.exec(src);
+    return !!(m && m[1] === NS.active);
+  }
+  function fbOnError(ev) {
+    try {
+      var el = ev && ev.target;
+      if (!el || String(el.tagName || '').toUpperCase() !== 'IMG') return;
+      var src = fbSrc(el);
+      if (!src || src.indexOf('data:') === 0 || src.indexOf('blob:') === 0) return;   /* ★local の絵には触らない */
+      var st = el.__v889fb;
+      if (st && st.phase === 'legacy' && src === st.legacy) {
+        st.phase = 'failed'; stats.imgLegacyFallbackFail++;
+        return;                                  /* ★止めない ＝ 既存 onerror（local 復帰）へ。再試行しない */
+      }
+      var rec = FB.orig[src];
+      if (!rec) { if (fbIsActive(src)) stats.imgActiveMiss++; return; }
+      stats.imgActiveMiss++;
+      if (NS.close !== 0) return;                /* ★CLOSE=1 / 不明 ⇒ fallback しない */
+      if (FB.tried[rec.k]) return;               /* ★1 key / 1 load cycle 最大 1 回 */
+      FB.tried[rec.k] = 1;
+      stats.imgLegacyFallback++;
+      el.__v889fb = { k: rec.k, legacy: rec.legacy, phase: 'legacy' };
+      try { ev.stopImmediatePropagation(); } catch (e) {}
+      el.src = rec.legacy;                       /* ★active → legacy の一方向。所有・confirm・移行には何もしない */
+    } catch (e) {}
+  }
+  function fbOnLoad(ev) {
+    try {
+      var el = ev && ev.target;
+      if (!el || String(el.tagName || '').toUpperCase() !== 'IMG') return;
+      var src = fbSrc(el);
+      if (!src || src.indexOf('data:') === 0 || src.indexOf('blob:') === 0) return;
+      var st = el.__v889fb;
+      if (st && st.phase === 'legacy' && src === st.legacy) {
+        st.phase = 'ok'; FB.stick[st.k] = st.legacy; stats.imgLegacyFallbackOk++;
+        return;
+      }
+      if (FB.orig[src] || fbIsActive(src)) stats.imgActiveHit++;
+    } catch (e) {}
+  }
+  try { document.addEventListener('error', fbOnError, true); document.addEventListener('load', fbOnLoad, true); } catch (e) {}
   /* ns が変わったら、既に貼られている <img> を fix197/fix199 の sweep で引き直させる。 */
   function nsResweep() {
     try {
@@ -1619,7 +1781,7 @@
     }
     return out;
   }
-  function confirmTick() {
+  function confirmTick(fin) {
     try {
       if (confirmStop || uiOff() || !loggedIn()) return;
       if (VIS.state !== 'ready') return;                 /* server の返事が来ていない */
@@ -1627,16 +1789,38 @@
       var sid = GATE.id || storyIdOfUrl();
       if (!sid || confirmDone[sid]) return;
       if (isHidden(sid)) return;                          /* hidden は worker 側でも拒否される */
+      /* ★v7.7: imgmanifest が来る見込みの間は早い tick を見送る（応答の直後に呼び直される）。最後の tick は見送らない。 */
+      if (fin !== true && (NS.manPending || (NS.lazyArmed && !NS.probed && !NS.active))) return;
       var legNs = legacyNsHint();
-      if (!legNs) return;                                 /* 旧 ns を知らない端末は送るものが無い */
-      if (NS.active && NS.active === legNs) return;        /* 収束済み ＝ 送る意味が無い */
-      var items = confirmItems();
-      if (!items.length) return;
+      var legOk = !!legNs && !(NS.active && NS.active === legNs);   /* 旧 ns を知らない / 収束済み ⇒ legacy item は無い */
+      var man = NS.man;                                   /* CONVERGE の imgmanifest の行（この document で得たものだけ） */
+      var raw = confirmItems();
+      var leg = [], act = [];
+      for (var ri = 0; ri < raw.length; ri++) {
+        var it0 = raw[ri];
+        if (man && Object.prototype.hasOwnProperty.call(man, it0.k)) {
+          var row0 = man[it0.k];
+          if (row0 && typeof row0 === 'object' && row0.owned === 0) act.push(it0);   /* ★厳密に数値 0 */
+          continue;                                       /* owned 1 / 欠落 / 型違い ⇒ 送らない */
+        }
+        if (legOk) leg.push(it0);
+      }
+      if (!leg.length && !act.length) return;
+      var body;
+      if (!act.length) body = { op: 'imgconfirm', legacyNs: legNs, items: leg };     /* v7.5/v7.6 と同形 */
+      else {
+        var its = [];
+        for (var li = 0; li < leg.length; li++) its.push({ storyId: leg[li].storyId, canonName: leg[li].canonName, artStyle: leg[li].artStyle, k: leg[li].k, legacyNs: legNs });
+        for (var ai = 0; ai < act.length; ai++) its.push({ storyId: act[ai].storyId, canonName: act[ai].canonName, artStyle: act[ai].artStyle, k: act[ai].k });
+        body = { op: 'imgconfirm', items: its.slice(0, CONFIRM_MAX) };
+      }
+      var actOnly = !leg.length;
       confirmDone[sid] = 1;                                /* ★送る前に立てる（二重送信させない） */
       stats.confirmSent++;
-      post(withVault({ op: 'imgconfirm', legacyNs: legNs, items: items }), function (r, e) {
+      stats.confirmActiveSent += act.length;
+      post(withVault(body), function (r, e) {
         if (e || !r || !r.j) { confirmStop = true; return; }
-        if (r.j.ok === true) { stats.confirmOk += (+r.j.confirmed || 0); return; }
+        if (r.j.ok === true) { var cn0 = (+r.j.confirmed || 0); stats.confirmOk += cn0; if (actOnly) stats.confirmActiveOk += cn0; return; }
         /* CONFIRM_CLOSED（ARM 済み / 既に hidden が在る）・unsupported・bad-op はすべて
            「この deploy では送っても意味が無い」を意味する。★再送しない。 */
         stats.confirmRefused++; confirmStop = true;
@@ -1775,7 +1959,7 @@
        遅延 probe 1 本、の順に得る。boot では 1 本も投げない。 */
     /* ★v7.4: 扉にも engine boot にも割り込まない位置で、開いた後に 1 度だけ試みる。 */
     setTimeout(confirmTick, 3000);
-    setTimeout(confirmTick, 9000);
+    setTimeout(function () { confirmTick(true); }, 9000);   /* ★v7.7: 最後の tick は manifest を待たない */
     if (!GATE.armed) refresh();
   }
   if (document.readyState === 'loading') {
@@ -1822,14 +2006,18 @@
     /* ★v7.3 の観測口（読み取りのみ） */
     ns: function () { return { active: NS.active, epoch: NS.epoch, confirmed: (NS.at > 0), probed: NS.probed,
                               seenManifest: NS.seenManifest, need: NS.need, stale: NS.stale, lazyArmed: NS.lazyArmed,
-                              ttlMs: NS_TTL_MS, idleMs: NS_IDLE_MS }; },
+                              ttlMs: NS_TTL_MS, idleMs: NS_IDLE_MS, close: NS.close }; },
+    /* ★v7.6 の観測口（読み取りのみ） */
+    fallback: function () { return { close: NS.close, noted: FB.n, tried: Object.keys(FB.tried).length,
+                                     stuck: Object.keys(FB.stick).length, max: FB_MAX }; },
     nsSwap: swapNs,
     /* ★v7.4 の観測口（読み取りのみ・送信はしない） */
     confirmItems: confirmItems,
-    confirmState: function () { return { stopped: confirmStop, stories: Object.keys(confirmDone), max: CONFIRM_MAX }; },
+    confirmState: function () { return { stopped: confirmStop, stories: Object.keys(confirmDone), max: CONFIRM_MAX,
+                                         manifestRows: (NS.man ? Object.keys(NS.man).length : -1) }; },
     limit: function () { return { code: LIMIT.code, retryAfterMs: LIMIT.retryAfterMs, keepLocal: LIMIT.keepLocal, count: LIMIT.count }; },
     status: function () {
-      return { uiOff: uiOff(), v: 7.5, state: VIS.state, canon: canonState(), open: VIS.open, unlocked: !!session(),
+      return { uiOff: uiOff(), v: 7.7, state: VIS.state, canon: canonState(), open: VIS.open, unlocked: !!session(),
                hidden: Object.keys(VIS.hidden).length, visible: Object.keys(VIS.visible).length,
                loggedIn: loggedIn(), fetchWrapped: fetchWrapped,
                backfill: { running: backfill.running, left: backfill.queue.length, done: backfill.done,
@@ -1845,5 +2033,5 @@
                stats: stats };
     }
   };
-  try { console.log(TAG, 'loaded v7.5', uiOff() ? 'UI-OFF(filter stays)' : 'ON'); } catch (e) {}
+  try { console.log(TAG, 'loaded v7.7', uiOff() ? 'UI-OFF(filter stays)' : 'ON'); } catch (e) {}
 })();
