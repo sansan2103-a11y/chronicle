@@ -22,7 +22,23 @@
      iOSの強キャッシュもクエリが変わるので確実に回避できる。 */
   (function(){
     var qs = location.search || '';
-    var extra = qs ? qs.replace(/^\?/, '&') : '';        /* ?code= 等を温存 */
+    /* ★sp21: 招待リンク ?code= をここで取り込む。home.html には取り込み処理（fix247b importCode）が
+       無いため、home 行きでは code が捨てられ匿名お試しになっていた（2026-09-26 Owner 実機で判明）。
+       fix247b と同じ key（v292ProxyPass）へ保存し、保存できたときだけ URL から code を外す。
+       保存できない端末では従来どおり URL に残す（index 行きなら fix247b が取り込む）。 */
+    try{
+      var cq = new URLSearchParams(qs);
+      var code = (cq.get('code') || '').trim();
+      if (code) {
+        localStorage.setItem('v292ProxyPass', code);
+        if (localStorage.getItem('v292ProxyPass') === code) {
+          cq.delete('code');
+          var rest = cq.toString();
+          qs = rest ? ('?' + rest) : '';
+        }
+      }
+    }catch(e){}
+    var extra = qs ? qs.replace(/^\?/, '&') : '';        /* ?story= 等を温存 */
     var hasStory = /[?&]story=/.test(qs);
     function go(v){
       var u = hasStory
