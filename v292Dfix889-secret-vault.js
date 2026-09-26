@@ -1,4 +1,28 @@
-/* v292Dfix889-secret-vault.js — SECRET_STORY_VAULT client **v7.7**
+/* v292Dfix889-secret-vault.js — SECRET_STORY_VAULT client **v7.8**
+ * =====================================================================================
+ * ★★v7.8（2026-09-26・GPT 裁定 PKT-20260926-VAULTS-01: Vault は 1.0 の対象外・CHR_VAULT_ARMED=0 固定）:
+ *   **通常の利用者には Vault の入口を出さない**。変えたのは画面だけで、扉・BOOT BARRIER・印・reload 上限・
+ *   ns の取り方・v7.6 の legacy read fallback・v7.7 の confirm batch・通信は 1 本も変えていない。
+ *   Vault の実装は v2 のために **凍結**（消さない・直さない・片付けない）。
+ *
+ *   切り替え: localStorage['v292Dfix889QA'] === '1' の端末（QA / 内部）だけ、入口を v7.7 と同じに出す。
+ *     ・worker の ARM 状態は **読まない**。読むには新しい往復が要り（HOME を開くたびに 1 本）、
+ *       しかも返事が来るまで入口を出すか決められない（一瞬出てから消える）。1.0 で Vault を出さないのは
+ *       server の状態ではなく製品の範囲の決定なので、端末側で同期的に決め、既定は「出さない」に倒す。
+ *   通常の端末で出さないもの:
+ *     HOME  … 「🔒 秘密の物語」(#v889openBtn)・詳細の「この物語を隠す」(#v889hideBtn)・秘密の物語の面
+ *             (#v889sec と中の「隠すのをやめる」「再ロック」「パスコードを変更」)。<style id="v889entrystyle">
+ *             で display:none（見えない・Tab で届かない）。押された扱いの click も kill と同じく捨てる。
+ *             ★「🔒 秘密の物語」は home.html の markup 側でも既定 display:none（sp19d の derive が足す 1 属性）。
+ *               home.html はこの file を markup の **後**（:376）で読むので、この file だけでは読まれるまでの
+ *               数フレーム入口が見える（offline 実測）。QA の端末では revealEntries() がその既定を外す。
+ *     物語  … 扉の dialog の見出し「秘密の物語」→ 中立の見出し（文と button と probe は同じ）。
+ *             扉が HIDDEN で閉じたときのパスコード入力 → 出さない。「この物語はいま開けません」＋「ホームへ戻る」
+ *             だけの dialog にする（fail-closed のまま: reload 0・boot 0・probe を増やさない・解錠しない）。
+ *   kill（v292Dfix889Off='1'）は従来どおり最優先。kill 中は QA の端末でも入口を出さない。
+ * =====================================================================================
+ * ★★v7.7 以前の履歴（以下、原文のまま）
+ * v292Dfix889-secret-vault.js — SECRET_STORY_VAULT client **v7.7**
  * =====================================================================================
  * ★★v7.7（2026-09-26・R-1 の決定: ACTIVE_OWNERLESS_CONFIRM を client から届くようにする）:
  *   v7.6 との差は **既存の confirm batch（story ごと・document ごとに 1 本）の中身だけ**。
@@ -323,6 +347,31 @@
   function lsg(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lss(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
   function uiOff() { return lsg('v292Dfix889Off') === '1'; }   /* ★UI だけ止まる */
+  /* ★★v7.8（PKT-20260926-VAULTS-01）: Vault の入口を出してよいのは QA / 内部の端末だけ。
+     新しい通信はしない（worker の ARM 状態は読まない）。kill が立っていれば QA でも出さない。 */
+  function vaultUiQa() { return lsg('v292Dfix889QA') === '1'; }
+  function entryHidden() { return uiOff() || !vaultUiQa(); }
+  var ENTRY_STY = 'v889entrystyle';
+  function hideEntries() {
+    try {
+      if (!entryHidden() || document.getElementById(ENTRY_STY)) return;
+      var st = document.createElement('style'); st.id = ENTRY_STY;
+      st.textContent = '#v889openBtn,#v889hideBtn,#v889sec,#v889relockBtn,#v889rotateBtn,[data-v889-unhide]{display:none !important}';
+      (document.head || document.documentElement).appendChild(st);
+    } catch (e) {}
+  }
+  /* QA の端末では HOME の「🔒 秘密の物語」を v7.7 と同じに戻す。
+     ★home.html の markup が既定で display:none を持つ（v292Dfix889 が読まれる前の 1 フレームも出さないため。
+       derive_sp19d_v1.mjs の 1 属性）。v7.8 はそれを QA の端末でだけ外す。 */
+  function revealEntries() {
+    try {
+      if (entryHidden()) return;
+      var b = document.getElementById('v889openBtn');
+      if (b && b.style && b.style.display === 'none') b.style.display = '';
+    } catch (e) {}
+  }
+  /* 扉の dialog の見出し。QA の端末では v7.7 と同じ「秘密の物語」。 */
+  function gateHead(plain) { return vaultUiQa() ? '秘密の物語' : plain; }
 
   function ssGet(k) { try { return (window.sessionStorage && window.sessionStorage.getItem(k)) || ''; } catch (e) { return ''; } }
   function ssSet(k, v) { try { window.sessionStorage.setItem(k, String(v)); return true; } catch (e) { return false; } }
@@ -1266,13 +1315,13 @@
   function gateWaiting() {
     if (uiOff()) return;
     var card = dialog();
-    card.appendChild(mk('h2', null, '秘密の物語'));
+    card.appendChild(mk('h2', null, gateHead('物語を確認しています')));   /* ★v7.8 */
     card.appendChild(mk('p', null, MSG_CHECKING));
   }
   function gateUnconfirmed(kind) {
     if (uiOff()) return;
     var card = dialog();
-    card.appendChild(mk('h2', null, '秘密の物語'));
+    card.appendChild(mk('h2', null, gateHead('物語を開けません')));      /* ★v7.8 */
     card.appendChild(mk('p', null, kind === 'noauth' ? 'この物語を開くには、ログインが必要です。' :
                                    kind === 'offline' ? MSG_OFFLINE_CANON : MSG_UNCONFIRMED));
     var row = mk('div', 'v889row');
@@ -1284,6 +1333,7 @@
   function gateLocked() {
     stats.gateShown++;
     if (uiOff()) return;
+    if (!vaultUiQa()) { gateClosedPlain(); return; }   /* ★v7.8: 通常の端末にはパスコードを求めない */
     askUnlock(function (ok) {
       if (!ok) { gateLockedAgain(); return; }
       /* ★v6: 解錠直後の reload も同じ口を通す（計数され、上限にも掛かる）。
@@ -1293,6 +1343,16 @@
          描いてよいかは次の document の `probeGate()` が canonical 一覧に聞き直す。 */
       gateReload();
     });
+  }
+  /* ★v7.8: 通常の端末で扉が閉じたままのときの dialog。fail-closed のまま（reload・boot・probe・解錠のどれもしない）。 */
+  function gateClosedPlain() {
+    var card = dialog();
+    card.appendChild(mk('h2', null, '物語を開けません'));
+    card.appendChild(mk('p', null, CODE_MSG.STORY_UNAVAILABLE));
+    var row = mk('div', 'v889row');
+    var back = mk('button', 'v889go', 'ホームへ戻る');
+    row.appendChild(back); card.appendChild(row);
+    back.addEventListener('click', function () { try { location.href = 'home.html'; } catch (e) {} }, false);
   }
   function gateLockedAgain() {
     var card = dialog();
@@ -1934,6 +1994,7 @@
         if (!take) return;
         try { ev.preventDefault(); ev.stopPropagation(); } catch (e) {}
         if (uiOff()) return;
+        if (!vaultUiQa()) return;                  /* ★v7.8: 入口は QA / 内部の端末だけ */
         if (take === 'open') { ensureUnlocked(function (ok) { if (ok) refresh(); }); return; }
         if (take === 'relock') { relock(); fire(); refresh(); return; }
         if (take === 'rotate') { ensureUnlocked(function (ok) { if (ok) askRotate(null); }); return; }
@@ -1946,10 +2007,13 @@
   /* ==================================================================== boot ==== */
   wrapFetch();                                /* ★同期。以後に読まれる module が掴む fetch になる */
   armGate();                                  /* ★同期。最初の local 読み取りより前 */
+  hideEntries();                              /* ★v7.8: 同期。扉の後（扉の時機は v7.7 と同じ） */
+  revealEntries();                            /* ★v7.8: QA の端末だけ（HOME の markup の既定 display:none を外す） */
 
   function boot() {
     bootGate();
     bindHome();
+    revealEntries();             /* ★v7.8: QA の端末だけ（DOMContentLoaded 時点でもう一度） */
     nsLoadCache();               /* ★v7.3: 初回描画用の補助値（権威ではない） */
     wrapImgUrl();
     setTimeout(wrapImgUrl, 1200);
@@ -2011,13 +2075,15 @@
     fallback: function () { return { close: NS.close, noted: FB.n, tried: Object.keys(FB.tried).length,
                                      stuck: Object.keys(FB.stick).length, max: FB_MAX }; },
     nsSwap: swapNs,
+    /* ★v7.8 の観測口（読み取りのみ） */
+    entry: function () { return { qa: vaultUiQa(), hidden: entryHidden(), styled: !!document.getElementById(ENTRY_STY) }; },
     /* ★v7.4 の観測口（読み取りのみ・送信はしない） */
     confirmItems: confirmItems,
     confirmState: function () { return { stopped: confirmStop, stories: Object.keys(confirmDone), max: CONFIRM_MAX,
                                          manifestRows: (NS.man ? Object.keys(NS.man).length : -1) }; },
     limit: function () { return { code: LIMIT.code, retryAfterMs: LIMIT.retryAfterMs, keepLocal: LIMIT.keepLocal, count: LIMIT.count }; },
     status: function () {
-      return { uiOff: uiOff(), v: 7.7, state: VIS.state, canon: canonState(), open: VIS.open, unlocked: !!session(),
+      return { uiOff: uiOff(), v: 7.8, state: VIS.state, canon: canonState(), open: VIS.open, unlocked: !!session(),
                hidden: Object.keys(VIS.hidden).length, visible: Object.keys(VIS.visible).length,
                loggedIn: loggedIn(), fetchWrapped: fetchWrapped,
                backfill: { running: backfill.running, left: backfill.queue.length, done: backfill.done,
@@ -2033,5 +2099,5 @@
                stats: stats };
     }
   };
-  try { console.log(TAG, 'loaded v7.7', uiOff() ? 'UI-OFF(filter stays)' : 'ON'); } catch (e) {}
+  try { console.log(TAG, 'loaded v7.8', uiOff() ? 'UI-OFF(filter stays)' : 'ON', vaultUiQa() ? 'QA-ENTRY' : 'ENTRY-HIDDEN'); } catch (e) {}
 })();

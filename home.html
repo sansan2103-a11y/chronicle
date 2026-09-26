@@ -175,7 +175,7 @@
     <button class="newbtn" id="scBtn" style="margin-top:8px" title="シナリオを作ると、そこから何度でも新しい物語を始められます。">✎ シナリオを作る</button>
     <!-- ★★sp18: 秘密の物語の入口。fix825 の #scBtn と同じ ASIDE_ALWAYS_VISIBLE_AREA に置く
          （640px 以下で #navs が消えても到達できる位置）。挙動は v292Dfix889 が付ける。 -->
-    <button class="newbtn" id="v889openBtn" style="margin-top:8px" title="パスコードで開くと、隠した物語を表示します。">🔒 秘密の物語</button>
+    <button class="newbtn" id="v889openBtn" style="margin-top:8px;display:none" title="パスコードで開くと、隠した物語を表示します。">🔒 秘密の物語</button>
     <div class="navttl" id="ttlLib">ライブラリ</div>
     <div id="navs"></div>
     <div class="navttl" id="ttlRecent">最近プレイした物語</div>
@@ -245,7 +245,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260926-sp19c';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20260926-sp19d';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -373,7 +373,7 @@
 <script src="v292Dfix823-scenario-seed-adapter.js?cb=20260907-schema3"></script>
 <!-- ★★sp18 v292Dfix889 SECRET_STORY_VAULT（v7.2）: HOME の可視性 authority。
      ★下の inline script より **前**（あちらは parse 時に render() を呼ぶ）。 -->
-<script src="v292Dfix889-secret-vault.js?cb=20260921-sp18r2"></script>
+<script src="v292Dfix889-secret-vault.js?cb=20260926-sp19d"></script>
 <script>
 (function(){
   'use strict';
