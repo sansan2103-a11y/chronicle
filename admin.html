@@ -2,704 +2,117 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chronicle 管理</title>
-<!-- admin v3.4 (2026-08-31): キー経路(FREE/PAID/AUTO)の見える化。①ヘッダにキー経路chip ②Pollinationsカードにモード別の挙動サマリ(AUTO=毎回primaryから・402のみreserve1回試行・429/timeout/5xxは切替なし=worker v26実装の事実表示) ③無料GET救済(v28)の今月枚数 ④予備キー残高差分（参考）(この端末での前回読込比・正式な有料使用量ではない) ⑤観測不能項目の明示(有料使用回数/直近fallback理由/直近キー種別は現行Worker記録なし)。Worker変更なし・balances既存フィールドのみ使用。 -->
-<!-- admin v3.3 (2026-07-17): +アイコン標準ONトグル(config.fix476Guard・worker v27)。 v3.2: +生成キー切替(通常/予備/自動)+キー予算上限の可視化(worker v26)。 v3.1: +生成遮断器の上限設定(config.genBudget)。 v3: v2 + Pollinationsカード + アイコン生成経路トグル(imgProvider) + ヘッダ経路chip + 台帳偶数行/カード見やすさ改善。worker v22のbalances(pollinations,imgProvider)/config-set(imgProvider)を使用 -->
-<style>
-  :root { color-scheme: dark;
-    --bg:#0d0d1a; --card:#15152a; --line:#2d2d49; --ink:#d6d7ee;
-    --ok:#8ad0a0; --warn:#e8c46a; --bad:#ff9d9d; --accent:#8f86e8;
-  }
-  * { box-sizing: border-box; }
-  body { margin:0; padding:20px 14px 60px; background:var(--bg); color:var(--ink); font:14px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
-  .wrap { max-width:960px; margin:0 auto; }
-  h1 { font-size:18px; letter-spacing:1px; margin:0; }
-  h2 { font-size:14px; opacity:.7; margin:26px 0 10px; border-bottom:1px solid var(--line); padding-bottom:6px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:14px; }
-  label { display:block; font-size:11px; opacity:.65; margin:8px 0 3px; }
-  input[type=text], input[type=password], input[type=number] { width:100%; background:#0f0f20; color:var(--ink); border:1px solid #34344f; border-radius:8px; padding:8px 10px; font-size:13px; }
-  input:focus { outline:none; border-color:#7a7ac0; }
-  button { background:#3a3a5e; color:#e7e7f7; border:1px solid #4a4a72; border-radius:8px; padding:7px 14px; font-size:13px; cursor:pointer; }
-  button:hover { border-color:#7a7ac0; }
-  button.primary { background:#534ab7; border-color:#6a62cf; }
-  button.danger { background:#5e2a2a; border-color:#8a4040; }
-  button.small { padding:3px 9px; font-size:12px; }
-  a.linkbtn { display:inline-block; background:#3a3a5e; color:#e7e7f7; border:1px solid #4a4a72; border-radius:8px; padding:6px 12px; font-size:12px; cursor:pointer; text-decoration:none; margin:4px 6px 0 0; }
-  a.linkbtn:hover { border-color:#7a7ac0; }
-  a.linkbtn.hot { background:#534ab7; border-color:#6a62cf; }
-  table { width:100%; border-collapse:collapse; font-size:13px; min-width:640px; }
-  .tablewrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
-  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid #26263e; white-space:nowrap; }
-  th { font-size:11px; opacity:.6; font-weight:normal; }
-  td.num { text-align:right; font-variant-numeric:tabular-nums; }
-  .muted { opacity:.55; }
-  .off { color:var(--bad); }
-  .on { color:var(--ok); }
-  #status { margin:10px 0 0; min-height:20px; font-size:13px; }
-  #status.err { color:#ffb0b0; }
-  #status.ok { color:#9fe1cb; }
-  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
-  .row > div { flex:1; min-width:140px; }
-  .codechip { font-family:ui-monospace,monospace; background:#0f0f20; padding:2px 7px; border-radius:6px; border:1px solid #34344f; }
-  .killon { background:#3a1418 !important; border-color:#a04040 !important; }
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>この管理コンソールは移転しました</title>
+<!-- =====================================================================
+     ADMIN_RETIREMENT_PAGE v1   (lane 16 / GPT 裁定 #L16entry Q1)
+     設置先 = **player origin の admin.html**（= 旧 origin の同じ path）。
+     候補ファイル。deploy していない。Owner 確認前に production へ出さない。
 
-  /* ---- ダッシュボード ---- */
-  .topbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
-  .topbar .spacer { flex:1; }
-  .chip { font-size:11px; padding:3px 10px; border-radius:999px; border:1px solid var(--line); background:#0f0f20; opacity:.85; }
-  .chip.bad { color:var(--bad); border-color:#8a4040; }
-  .chip.good { color:var(--ok); border-color:#3f6a4e; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
-  .bcard { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; position:relative; }
-  .bcard.warn { border-color:#8a7340; }
-  .bcard.bad { border-color:#a04040; box-shadow:0 0 0 1px #a0404055; }
-  .bcard h3 { margin:0 0 2px; font-size:13px; letter-spacing:.5px; }
-  .bcard .sub { font-size:11px; opacity:.55; margin-bottom:8px; }
-  .big { font-size:24px; font-weight:600; font-variant-numeric:tabular-nums; margin:2px 0; }
-  .big small { font-size:12px; font-weight:normal; opacity:.6; }
-  .gauge { height:8px; background:#0f0f20; border:1px solid #34344f; border-radius:99px; overflow:hidden; margin:8px 0 6px; }
-  .gauge > i { display:block; height:100%; border-radius:99px; background:var(--ok); transition:width .4s; }
-  .gauge.warn > i { background:var(--warn); }
-  .gauge.bad > i { background:var(--bad); }
-  .kv { font-size:12px; opacity:.75; margin:2px 0; }
-  .alertline { font-size:12px; color:var(--bad); margin:6px 0 2px; font-weight:600; }
-  .bar { display:inline-block; vertical-align:middle; width:52px; height:5px; background:#0f0f20; border-radius:99px; overflow:hidden; margin-left:6px; }
-  .bar > i { display:block; height:100%; background:var(--ok); }
-  .bar.warn > i { background:var(--warn); }
-  .bar.bad > i { background:var(--bad); }
-  details.conn summary { cursor:pointer; font-size:13px; opacity:.8; }
-  .foot { margin-top:30px; font-size:11px; opacity:.4; text-align:center; }
-  @media (max-width:520px) { body { padding:14px 8px 50px; } .big { font-size:22px; } }
-  /* ---- v3 追加 ---- */
-  .big { font-size:26px; }
-  .usebadge { font-size:10px; padding:1px 8px; border-radius:999px; background:#2f6a4a; border:1px solid #4e9a70; color:#eafff2; font-weight:600; vertical-align:middle; margin-left:6px; }
-  button.provbtn { margin-right:6px; }
-  button.provbtn.active { background:#2f6a4a; border-color:#4e9a70; color:#eafff2; font-weight:600; }
-  #tbl tbody tr:nth-child(even) td, #atbl tbody tr:nth-child(even) td { background:#101024; }
-  #tbl tbody tr:hover td, #atbl tbody tr:hover td { background:#181834; }
-  .chip.img { color:var(--accent); border-color:#4a4a72; }
-  /* ---- v3.4 キー経路 ---- */
-  .chip.warnc { color:var(--warn); border-color:#8a7340; }
-  .kmbox { background:#0f0f20; border:1px solid #34344f; border-radius:8px; padding:8px 10px; margin-top:6px; font-size:12px; }
-  .kmbox .kmtitle { font-weight:600; font-size:13px; margin-bottom:2px; }
-  .kmbox.kmwarn { border-color:#8a7340; background:#221a10; }
-  @media (max-width:520px) { .grid { grid-template-columns:1fr; } }
+     このページの唯一の仕事は 3 つ:
+       (i)  旧 origin の localStorage に残る admin key を **削除する**
+       (ii) 新しい admin origin への案内を出す
+       (iii) token logic を 1 行も持たない
+
+     ★なぜ新 origin 側で掃除できないのか（設計上の要点）
+       origin が違えば localStorage は別の貯蔵庫になる。
+       新 admin origin から旧 origin の `chrAdminTok` は **読むことも消すこともできない**。
+       したがって「旧 key の掃除」は **旧 origin で動くページ**にしかできない。
+       404 にしてしまうと掃除の機会が永久に失われ、しかも bookmark も壊れる。
+       → 旧 path は 404 ではなく **この退役ページ**にする。
+
+     ★削除対象 key（/tmp/chron_ux4/admin.html を grep した実測 3 種）
+       chrAdminTok      admin.html:210 (読み) / :229 (書き)   ← admin token 平文
+       chrAdminUrl      admin.html:211 (読み) / :230 (書き)   ← Worker URL
+       chrAdminPaidBal  admin.html:410 (読み) / :418 (書き)   ← 残高の前回観測値
+       （念のため、接頭辞 `chrAdmin` の key を全て列挙して消す。
+         player 側の key は `v292*` / `chr_*` 系で、`chrAdmin` 接頭辞は admin.html 専用。）
+
+     ★このページが **しない**こと
+       - token を読まない・保持しない・表示しない・送らない
+       - fetch を 1 回もしない（`/admin` も `/save` も呼ばない）
+       - `x-admin-token` という文字列を **コード中に持たない**
+         （このコメント中の言及だけ。PLAYER_BUNDLE_ADMIN_LEAK_LINT の
+           コメント除外規則により blocking hit にならない）
+     ===================================================================== -->
+<style>
+  :root{--bg:#0d0d1a;--fg:#d6d7ee;--muted:#8b8caa;--accent:#7a7ac0;--card:#16162a;--ok:#4fb477}
+  html,body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);
+    font:15px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}
+  .wrap{max-width:640px;margin:0 auto;padding:40px 20px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:24px}
+  .card{background:var(--card);border:1px solid #26264a;border-radius:10px;padding:16px 18px;margin:14px 0}
+  a.go{display:inline-block;margin-top:6px;padding:10px 16px;border-radius:8px;
+    background:var(--accent);color:#fff;text-decoration:none;font-weight:600}
+  code{background:#1f1f3a;padding:1px 5px;border-radius:4px;font-size:12px}
+  .done{color:var(--ok);font-size:13px}
+  ul{margin:8px 0 0;padding-left:20px;font-size:13px;color:var(--muted)}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="topbar">
-    <h1>◈ CHRONICLE 管理</h1>
-    <span class="chip" id="wver">worker: -</span>
-    <span class="chip img" id="imgchip" style="display:none">🎨 アイコン: -</span>
-    <span class="chip" id="keychip" style="display:none">🔑 -</span>
-    <span class="chip bad" id="killchip" style="display:none">緊急停止中</span>
-    <span class="spacer"></span>
-    <button class="primary" onclick="load()">⟳ 再読込</button>
-  </div>
+  <h1>この管理コンソールは移転しました</h1>
+  <div class="sub">Chronicle 運営コンソール / 旧 URL（プレイヤー用サイトと同じ場所）</div>
 
-  <details class="conn" id="connbox" open>
-    <summary>接続設定（Worker URL / 管理トークン）</summary>
-    <div class="card" style="margin-top:10px">
-      <div class="row">
-        <div style="flex:2">
-          <label>Worker URL</label>
-          <input type="text" id="wurl" value="https://novel-proxy.sansan2103.workers.dev">
-        </div>
-        <div style="flex:2">
-          <label>管理トークン(この端末に記憶されます)</label>
-          <input type="password" id="wtok" placeholder="ADMIN_TOKEN">
-        </div>
-        <div style="flex:0">
-          <button class="primary" onclick="load()">読み込み</button>
-        </div>
-      </div>
-    </div>
-  </details>
-  <div id="status"></div>
-
-  <h2>残高・使用状況</h2>
-  <div class="grid" id="balgrid">
-    <div class="bcard" id="orCard"><h3>OpenRouter（本文生成）</h3><div class="sub muted">読み込み中…</div></div>
-    <div class="bcard" id="tgCard"><h3>Together AI（アイコン生成）</h3><div class="sub muted">読み込み中…</div></div>
-    <div class="bcard" id="plCard"><h3>Pollinations（アイコン生成）</h3><div class="sub muted">読み込み中…</div></div>
-    <div class="bcard" id="sumCard"><h3>今月のまとめ</h3><div class="sub muted">読み込み中…</div></div>
-  </div>
-
-  <h2>台帳 <input type="text" id="q" placeholder="🔍 名前・合言葉・メールで絞り込み" oninput="filterRows()" style="display:inline-block;width:240px;margin-left:10px;font-weight:normal"></h2>
-
-  <div class="muted" style="font-size:12px;margin-bottom:4px">合言葉</div>
   <div class="card">
-    <div class="tablewrap">
-    <table id="tbl">
-      <thead><tr><th>名前</th><th>合言葉</th><th>今月使用</th><th>回数</th><th>上限$</th><th>最終利用</th><th>状態</th><th></th></tr></thead>
-      <tbody id="tbody"><tr><td colspan="8" class="muted">読み込み中…</td></tr></tbody>
-    </table>
+    <div>新しい場所はこちらです。ブックマークを更新してください。</div>
+    <!-- ★ADMIN_ORIGIN_PLACEHOLDER
+         これは **template** である。下の href は置換トークン 1 個だけを持つ。
+         deploy 可能な admin.html を作るのは M/derive_admin_retire_v1.mjs --admin-url <url>
+         であり、そのトークンが **ちょうど 1 回**現れることを確認してから置換する
+         （0 回 / 2 回以上なら異常終了して何も書かない）。
+         入る値は Owner が作る Cloudflare Pages project の公開 URL である。
+         この値は秘密ではない。token（ADMIN_TOKEN）は一切含めない・含めてはならない。 -->
+    <a class="go" id="newLink" href="https://chronicle-admin.pages.dev/">新しい管理コンソールを開く</a>
+    <div style="margin-top:10px;font-size:12px;color:var(--muted)">
+      新しいコンソールはプレイヤー用サイトとは<strong>別の origin</strong> です。
+      そのため、プレイヤー画面のスクリプトからは管理トークンを読み取れません。
     </div>
   </div>
 
-  <div class="muted" style="font-size:12px;margin-bottom:4px">許可メール（Googleログイン）</div>
   <div class="card">
-    <div class="tablewrap">
-    <table id="atbl">
-      <thead><tr><th>名前</th><th>メール</th><th>今月使用</th><th>回数</th><th>上限$</th><th>最終利用</th><th>状態</th><th></th></tr></thead>
-      <tbody id="atbody"><tr><td colspan="8" class="muted">読み込み中…</td></tr></tbody>
-    </table>
-    </div>
+    <div>この端末（プレイヤー用サイト側）に残っていた管理用の保存データを削除します。</div>
+    <div id="result" class="done">…</div>
+    <ul>
+      <li>プレイヤーの物語・キャラクター・設定には一切触れません。</li>
+      <li>削除するのは <code>chrAdmin</code> で始まるキーだけです。</li>
+    </ul>
   </div>
-
-  <h2>新しい合言葉を発行</h2>
-  <div class="card">
-    <div class="row">
-      <div><label>名前(誰用か)</label><input type="text" id="nName" placeholder="例: ともだちA"></div>
-      <div><label>合言葉(空欄=自動生成)</label><input type="text" id="nCode" placeholder="例: yume-abc123"></div>
-      <div><label>月の上限$(0=無制限)</label><input type="number" id="nLimit" value="2" step="0.5" min="0"></div>
-      <div style="flex:0"><button class="primary" onclick="createCode()">発行</button></div>
-    </div>
-  </div>
-
-  <h2>新しい許可メールを追加</h2>
-  <div class="card">
-    <div class="row">
-      <div><label>名前(誰用か)</label><input type="text" id="aName" placeholder="例: ともだちA"></div>
-      <div style="flex:2"><label>Googleアカウントのメール</label><input type="text" id="aEmail" placeholder="例: friend@gmail.com"></div>
-      <div><label>月の上限$(0=無制限)</label><input type="number" id="aLimit" value="2" step="0.5" min="0"></div>
-      <div style="flex:0"><button class="primary" onclick="createAllow()">許可に追加</button></div>
-    </div>
-    <div class="muted" style="margin-top:8px;font-size:12px">相手はこのメールのGoogleアカウントでログインするだけで遊べます（合言葉の配布は不要）。配布リンク: <span class="codechip">https://sansan2103-a11y.github.io/chronicle/start.html</span></div>
-  </div>
-
-  <h2>全体設定</h2>
-  <div class="card">
-    <label>許可モデル(カンマ区切り・空=制限なし)</label>
-    <input type="text" id="cModels" placeholder="deepseek/deepseek-v4-flash, deepseek/deepseek-v4-pro">
-    <label style="margin-top:14px">アイコン生成の経路</label>
-    <div class="row" style="margin-top:2px">
-      <div style="flex:0">
-        <button class="provbtn" id="provTgBtn" onclick="setProvider('together')">Together</button>
-        <button class="provbtn" id="provPlBtn" onclick="setProvider('pollinations')">Pollinations</button>
-      </div>
-    </div>
-    <div class="muted" style="margin-top:6px;font-size:12px">現在の経路が押下（緑）状態です。切替は全ユーザーへ即時反映されます（優先度: リクエスト明示 ＞ この設定 ＞ 既定Together）。</div>
-    <label style="margin-top:14px">アイコン生成の回数上限（1画面あたり・暴走防止の遮断器）</label>
-    <div class="row" style="margin-top:2px">
-      <div style="flex:0;width:160px"><input type="number" id="cGenBudget" min="0" max="999" placeholder="空=既定30"></div>
-    </div>
-    <div class="muted" style="margin-top:6px;font-size:12px">空=既定30。<b>0=無制限（遮断器オフ・暴走防止が切れるので非推奨）</b>。各プレイヤーには次回リロード時に反映。</div>
-    <label style="margin-top:14px">アイコン標準ON（fix476: 3候補→検品→自動選抜を全員に）</label>
-    <div class="row" style="margin-top:2px">
-      <div style="flex:0"><button class="danger" id="fix476Btn" onclick="toggleFix476()">アイコン標準ON: OFF</button></div>
-    </div>
-    <div class="muted" style="margin-top:6px;font-size:12px">ONで全プレイヤーの新規アイコン生成が「3候補→検品→自動選抜」になります。問題があればここでOFFに戻せます（次回リロードで反映）。まず自分の端末で試してから全体ONを推奨。</div>
-    <div class="row" style="margin-top:12px">
-      <div style="flex:0"><button onclick="saveConfig()">設定を保存</button></div>
-      <div style="flex:0"><button class="danger" id="killBtn" onclick="toggleKill()">緊急停止: OFF</button></div>
-    </div>
-    <div class="muted" style="margin-top:8px;font-size:12px">緊急停止ONの間、全員の生成が止まります(管理APIは生きています)</div>
-  </div>
-
-  <div class="foot">Chronicle admin v3.4 (2026-08-31)</div>
 </div>
 
 <script>
-let CONFIG = {};
-let CURRENT_IMG_PROVIDER = 'together';
-let CURRENT_IMG_KEYMODE = 'primary';   // ★v26
-const $ = id => document.getElementById(id);
-const tok = localStorage.getItem('chrAdminTok'); if (tok) $('wtok').value = tok;
-const wu = localStorage.getItem('chrAdminUrl'); if (wu) $('wurl').value = wu;
-
-// 補充・管理ページ(サービス側のURL)
-const LINKS = {
-  orCredits: 'https://openrouter.ai/settings/credits',
-  orKeys: 'https://openrouter.ai/settings/keys',
-  orActivity: 'https://openrouter.ai/activity',
-  tgBilling: 'https://api.together.ai/settings/billing',
-  tgKeys: 'https://api.together.ai/settings/api-keys',
-  plDash: 'https://enter.pollinations.ai',
-};
-
-function setStatus(msg, cls) { const s = $('status'); s.textContent = msg; s.className = cls || ''; }
-
-async function api(payload) {
-  const url = $('wurl').value.replace(/\/+$/, '');
-  const token = $('wtok').value.trim();
-  if (!token) { setStatus('管理トークンを入れてください（接続設定を開いて入力）', 'err'); $('connbox').open = true; throw new Error('no token'); }
-  localStorage.setItem('chrAdminTok', token);
-  localStorage.setItem('chrAdminUrl', url);
-  const r = await fetch(url + '/admin', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
-    body: JSON.stringify(payload),
-  });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) { setStatus('エラー: ' + (j.error || r.status), 'err'); throw new Error(j.error || r.status); }
-  return j;
-}
-
-// ---------- 残高ダッシュボード ----------
-const fmt$ = v => '$' + (+v || 0).toFixed(2);
-const fmt$4 = v => '$' + (+v || 0).toFixed(4);
-const yen = v => '約' + Math.round((+v || 0) * 150) + '円';
-function gaugeCls(pct) { return pct <= 10 ? 'bad' : (pct <= 30 ? 'warn' : ''); }
-
-async function loadBalances() {
-  let b;
+/* 掃除は 1 回だけ。読み取りは「どのキーが残っているか」を数えるためで、
+   値は 1 バイトも変数に入れない・表示しない・送らない。 */
+(function () {
+  var KNOWN = ['chrAdminTok', 'chrAdminUrl', 'chrAdminPaidBal'];
+  var removed = [];
   try {
-    b = await api({ action: 'balances' });
+    /* 1. 既知の 3 キー */
+    for (var i = 0; i < KNOWN.length; i++) {
+      if (localStorage.getItem(KNOWN[i]) !== null) { localStorage.removeItem(KNOWN[i]); removed.push(KNOWN[i]); }
+    }
+    /* 2. 取りこぼし防止: chrAdmin 接頭辞を総ざらい（key 名だけを見る。値は触らない） */
+    var extra = [];
+    for (var k = 0; k < localStorage.length; k++) {
+      var key = localStorage.key(k);
+      if (key && key.indexOf('chrAdmin') === 0 && KNOWN.indexOf(key) < 0) extra.push(key);
+    }
+    for (var j = 0; j < extra.length; j++) { localStorage.removeItem(extra[j]); removed.push(extra[j]); }
+    /* 3. 旧ページが sessionStorage を使っていた可能性への保険 */
+    try { for (var m = sessionStorage.length - 1; m >= 0; m--) {
+      var sk = sessionStorage.key(m);
+      if (sk && sk.indexOf('chrAdmin') === 0) { sessionStorage.removeItem(sk); removed.push('session:' + sk); }
+    } } catch (e) {}
   } catch (e) {
-    const msg = String(e && e.message || e);
-    const hint = msg.indexOf('unknown action') >= 0 ? 'worker v8がまだデプロイされていません' : msg;
-    $('orCard').innerHTML = '<h3>OpenRouter（本文生成）</h3><div class="alertline">取得失敗: ' + esc(hint) + '</div>';
-    $('tgCard').innerHTML = '<h3>Together AI（アイコン生成）</h3><div class="alertline">取得失敗</div>';
-    $('plCard').innerHTML = '<h3>Pollinations（アイコン生成）</h3><div class="alertline">取得失敗</div>';
-    $('sumCard').innerHTML = '<h3>今月のまとめ</h3><div class="alertline">取得失敗</div><div style="margin-top:8px"><button class="small" onclick="loadBalances()">🔄 再試行</button></div>';
+    document.getElementById('result').textContent = 'この端末では保存領域を読めませんでした（プライベートモード等）。削除は不要です。';
     return;
   }
-  CURRENT_IMG_PROVIDER = (b.imgProvider === 'pollinations') ? 'pollinations' : 'together';
-  CURRENT_IMG_KEYMODE = (b.imgKeyMode === 'reserve' || b.imgKeyMode === 'auto') ? b.imgKeyMode : 'primary';   // ★v26
-  window.__PAID_KEY_SET = !!(b.pollinationsPaid && b.pollinationsPaid.keySet);   // ★v26
-  CURRENT_FIX476 = (b.fix476Guard === true); renderFix476();   // ★v27
-  renderOR(b);
-  renderTG(b);
-  renderPL(b);
-  renderSum(b);
-  renderProvider();
-  const plabel = CURRENT_IMG_PROVIDER === 'pollinations' ? 'Pollinations' : 'Together';
-  $('imgchip').textContent = '🎨 アイコン: ' + plabel;
-  $('imgchip').style.display = '';
-  renderKeyChip();
-  $('killchip').style.display = b.killSwitch ? '' : 'none';
-}
-
-// ★v3.4: キー経路chip。設定モードの表示であって「今この瞬間どのキーで生成したか」ではない
-//   (AUTOは毎回primaryから開始・402のみその1回をreserveで再試行。永続的な切替状態は存在しない=worker v26実装)。
-function renderKeyChip() {
-  const el = $('keychip'); if (!el) return;
-  if (CURRENT_IMG_PROVIDER !== 'pollinations') { el.style.display = 'none'; return; }
-  const km = CURRENT_IMG_KEYMODE, paid = !!window.__PAID_KEY_SET;
-  let txt = '', cls = 'chip';
-  if (km === 'reserve') {
-    txt = paid ? '🔑 有料キー固定（全生成が有料）' : '🔑 有料固定設定・予備キー未設定＝実質無料';
-    cls = 'chip warnc';
-  } else if (km === 'auto') {
-    txt = paid ? '🔑 AUTO: 基本 無料 / 402時のみ有料救済' : '🔑 AUTO・予備キー未設定＝救済なし(無料のみ)';
-    cls = paid ? 'chip good' : 'chip warnc';
-  } else {
-    txt = '🔑 無料キー固定';
-    cls = 'chip good';
-  }
-  el.textContent = txt; el.className = cls; el.style.display = '';
-}
-
-function renderOR(b) {
-  const el = $('orCard');
-  const o = b.openrouter || {};
-  let html = '<h3>OpenRouter（本文生成）</h3>';
-  let cls = '';
-  if (!o.keySet) {
-    html += '<div class="alertline">OPENROUTER_KEYが未設定です</div>';
-    cls = 'bad';
-  } else if (!o.ok) {
-    html += '<div class="alertline">⚠ 残高の取得に失敗 (status ' + esc(o.status) + ')</div>' +
-      '<div class="kv">' + esc(o.detail || '') + '</div>' +
-      '<div class="kv">キーが失効している可能性 → 下のボタンで確認を</div>';
-    cls = 'bad';
-  } else {
-    const cr = b.openrouterCredits;
-    let remain = null, total = null, label = '';
-    if (o.limit != null && o.limit > 0) {
-      total = o.limit;
-      remain = (o.limitRemaining != null) ? o.limitRemaining : (o.limit - o.usage);
-      label = 'キー上限';
-    } else if (cr && cr.totalCredits > 0) {
-      total = cr.totalCredits;
-      remain = cr.totalCredits - cr.totalUsage;
-      label = '購入クレジット';
-    }
-    if (remain != null) {
-      const pct = Math.max(0, Math.min(100, remain / total * 100));
-      const g = gaugeCls(pct);
-      cls = g;
-      html += '<div class="sub">' + esc(o.label || '') + (o.isFreeTier ? ' / 無料枠' : '') + '</div>' +
-        '<div class="big">残り ' + fmt$(remain) + ' <small>/ ' + label + ' ' + fmt$(total) + '</small></div>' +
-        '<div class="gauge ' + g + '"><i style="width:' + pct.toFixed(1) + '%"></i></div>' +
-        '<div class="kv">使用済み: ' + fmt$(o.usage) + (cr ? '（口座全体: ' + fmt$(cr.totalUsage) + ' / ' + fmt$(cr.totalCredits) + '）' : '') + '</div>';
-      if (pct <= 10) html += '<div class="alertline">⚠ 残りわずか！下のボタンから補充してください</div>';
-      else if (pct <= 30) html += '<div class="alertline" style="color:var(--warn)">そろそろ補充の検討を</div>';
-    } else {
-      html += '<div class="sub">' + esc(o.label || '') + '</div>' +
-        '<div class="big">使用済み ' + fmt$(o.usage) + '</div>' +
-        '<div class="kv">上限未設定のキーです（残りはOpenRouterのページで確認）</div>';
-    }
-  }
-  html += '<div><a class="linkbtn hot" target="_blank" rel="noopener" href="' + LINKS.orCredits + '">💳 残高を補充/確認 ↗</a>' +
-    '<a class="linkbtn" target="_blank" rel="noopener" href="' + LINKS.orKeys + '">🔑 キー管理 ↗</a>' +
-    '<a class="linkbtn" target="_blank" rel="noopener" href="' + LINKS.orActivity + '">📈 利用履歴 ↗</a></div>';
-  el.className = 'bcard ' + cls;
-  el.innerHTML = html;
-}
-
-function renderTG(b) {
-  const el = $('tgCard');
-  const t = b.together || {};
-  const inUse = CURRENT_IMG_PROVIDER === 'together';
-  let html = '<h3>Together AI（アイコン生成）' + (inUse ? ' <span class="usebadge">✅ 使用中</span>' : '') + '</h3>';
-  let cls = '';
-  if (!t.keySet) {
-    html += '<div class="alertline">TOGETHER_KEYが未設定です（アイコン生成が止まります）</div>';
-    cls = 'bad';
-  } else {
-    html += '<div class="sub">' + esc(String(t.model || '').replace('black-forest-labs/', '')) + '</div>' +
-      '<div class="big">今月 ' + (t.images || 0) + '枚 <small>≒ ' + fmt$4(t.estUsd) + '（' + yen(t.estUsd) + '）</small></div>' +
-      '<div class="kv">単価推計: ' + fmt$4(t.unitUsd) + '/枚' + (t.lastAt ? ' ・ 最終生成: ' + rel(t.lastAt) : '') + '</div>' +
-      '<div class="kv muted">※Togetherは残高APIが無いため推計値。正確な残高は請求ページで</div>' +
-      '<div class="kv"><button class="small" onclick="tgTest()">🔌 キー接続テスト</button> <span id="tgTestOut" class="muted"></span></div>';
-  }
-  html += '<div><a class="linkbtn hot" target="_blank" rel="noopener" href="' + LINKS.tgBilling + '">💳 残高・請求ページ ↗</a>' +
-    '<a class="linkbtn" target="_blank" rel="noopener" href="' + LINKS.tgKeys + '">🔑 キー管理 ↗</a></div>';
-  el.className = 'bcard ' + cls;
-  el.innerHTML = html;
-}
-
-function renderPL(b) {
-  const el = $('plCard');
-  const p = b.pollinations || {};
-  const inUse = CURRENT_IMG_PROVIDER === 'pollinations';
-  let html = '<h3>Pollinations（アイコン生成）' + (inUse ? ' <span class="usebadge">✅ 使用中</span>' : '') + '</h3>';
-  let cls = '';
-  if (!p.keySet) {
-    html += '<div class="alertline">Pollinationsのキーが未設定です（この経路では生成できません）</div>';
-    cls = 'bad';
-  } else if (!p.ok) {
-    html += '<div class="alertline">⚠ 残高の取得に失敗' + (p.status != null ? ' (status ' + esc(p.status) + ')' : '') + '</div>' +
-      (p.detail ? '<div class="kv">' + esc(p.detail) + '</div>' : '') +
-      '<div class="kv">今月 ' + (p.images || 0) + '枚生成</div>';
-    cls = 'bad';
-  } else {
-    const bal = (p.balance != null && isFinite(+p.balance)) ? +p.balance : null;
-    if (bal != null) {
-      const low = bal < 5;
-      cls = low ? 'bad' : (bal < 15 ? 'warn' : '');
-      html += '<div class="sub">残Pollen（$1≒1Pollen）</div>' +
-        '<div class="big">' + bal.toFixed(2) + ' <small>Pollen（約' + Math.round(bal * 150) + '円）</small></div>' +
-        '<div class="kv">今月の生成（キー経由）: ' + (p.images || 0) + '枚</div>';
-      if (low) html += '<div class="alertline">⚠ 残りわずか！下のボタンから補充してください</div>';
-    } else {
-      html += '<div class="sub muted">残Pollenは取得できませんでした</div>' +
-        '<div class="big">今月 ' + (p.images || 0) + '枚</div>' +
-        '<div class="kv muted">正確な残高はダッシュボードで確認してください</div>';
-    }
-  }
-  // ★v26: キー予算上限の可視化(残高が財布と食い違う原因の説明)
-  const ki = b.pollinationsKey || {};
-  if (ki.ok) {
-    html += '<div class="kv muted">キー「' + esc(ki.name || '?') + '」の予算上限: ' + (ki.pollenBudget != null ? esc((+ki.pollenBudget).toFixed(3)) + ' Pollen' : '未取得') + '</div>';
-    html += '<div class="kv muted" style="font-size:10px">※このキーは予算上限まで（財布全体ではない）。上限を上げるかキー再発行で課金分が使えます</div>';
-  }
-  const paid = b.pollinationsPaid || {};
-  const pk = b.pollinationsPaidKey || {};
-  const paidSet = !!paid.keySet;
-  if (paidSet) {
-    const pb = (paid.balance != null && isFinite(+paid.balance)) ? +paid.balance : null;
-    html += '<div class="sub" style="margin-top:6px">予備（有料）キー' + (pk.name ? '「' + esc(pk.name) + '」' : '') + '</div>';
-    html += '<div class="kv">残Pollen: ' + (pb != null ? esc(pb.toFixed(2)) : '?') + (pk.pollenBudget != null ? ' / 予算上限 ' + esc((+pk.pollenBudget).toFixed(2)) : '') + '</div>';
-    // ★v3.4: 前回読込比(この端末のlocalStorage観測)。Workerに有料使用回数の記録が無いため、残高の減少を有料使用の目安として示す。
-    if (pb != null) {
-      let prev = null; try { prev = JSON.parse(localStorage.getItem('chrAdminPaidBal') || 'null'); } catch (e) {}
-      if (prev && isFinite(+prev.b)) {
-        const d = pb - (+prev.b);
-        const when = prev.t ? rel(prev.t) : '前回';
-        if (d < -0.0001) html += '<div class="kv" style="color:var(--warn)">予備キー残高差分（参考）: 前回読込(' + esc(when) + ')比 <b>-' + esc((-d).toFixed(2)) + ' Pollen</b>（正式な有料使用量ではありません・この端末での観測）</div>';
-        else if (d > 0.0001) html += '<div class="kv muted">予備キー残高差分（参考）: 前回読込(' + esc(when) + ')比 +' + esc(d.toFixed(2)) + ' Pollen（補充/上限変更?）</div>';
-        else html += '<div class="kv muted" style="font-size:11px">予備キー残高差分（参考）: 前回読込(' + esc(when) + ')比 変化なし</div>';
-      }
-      try { localStorage.setItem('chrAdminPaidBal', JSON.stringify({ t: new Date().toISOString(), b: pb })); } catch (e) {}
-    }
-  } else {
-    html += '<div class="kv muted" style="margin-top:6px">予備（有料）キー未設定（POLLINATIONS_KEY_PAID）</div>';
-  }
-  // ★v3.4: キー経路モードの挙動サマリ(worker v26実装の事実表示)。
-  //   AUTOは「有料へ切り替わって維持」ではない: 毎回primaryから開始し、HTTP 402のときだけその1回をreserveで再試行。
-  const km = CURRENT_IMG_KEYMODE;
-  let kmHtml = '', kmWarn = false;
-  if (km === 'reserve') {
-    kmHtml += '<div class="kmtitle">設定: 有料固定（PAID）</div>';
-    if (paidSet) { kmHtml += '<div class="alertline" style="margin:2px 0">⚠ すべての生成を予備（有料）キーで実行する設定です</div>'; kmWarn = true; }
-    else { kmHtml += '<div class="alertline" style="margin:2px 0">予備キー未設定のため、実際は通常（無料）キーで動作中</div>'; kmWarn = true; }
-  } else if (km === 'auto') {
-    kmHtml += '<div class="kmtitle">設定: 自動（AUTO）</div>' +
-      '<div class="kv">基本経路: 通常（無料）キー（毎回ここから開始・切替状態は保持されません）</div>' +
-      '<div class="kv">有料救済: HTTP 402（無料キー予算切れ）のときだけ、その1回を予備（有料）キーで再試行</div>' +
-      '<div class="kv muted">429・タイムアウト・5xxでは有料キーへ切替えません（provider障害時は有料でも同じ失敗をするため）</div>';
-    if (!paidSet) { kmHtml += '<div class="alertline" style="margin:2px 0">予備キー未設定のため、402でも救済されません（実質 無料のみ）</div>'; kmWarn = true; }
-  } else {
-    kmHtml += '<div class="kmtitle">設定: 無料固定（FREE）</div>' +
-      '<div class="kv">すべての生成を通常（無料）キーで実行。予備（有料）キーは使いません</div>';
-  }
-  html += '<div class="kmbox' + (kmWarn ? ' kmwarn' : '') + '">' + kmHtml + '</div>';
-  const kmBtn = (v, lab) => '<button class="provbtn' + (km === v ? ' active' : '') + '" onclick="setKeyMode(\'' + v + '\')">' + lab + '</button>';
-  html += '<div class="sub" style="margin-top:8px">生成に使うキー</div>';
-  html += '<div style="margin-top:2px">' + kmBtn('primary', '無料固定') + kmBtn('reserve', '有料固定') + kmBtn('auto', '自動(AUTO)') + '</div>';
-  // ★v3.4: 観測できるもの/できないものを正直に表示(balances既存フィールドのみ・推測や捏造をしない)
-  const ba = (b.together && b.together.imagesAll) || {};
-  const freeN = +ba['pollinations-free'] || 0;
-  const lastAt = b.together && b.together.lastAt;
-  html += '<div class="kv" style="margin-top:8px">無料GET救済（上流失敗時の無認証経路・<b>有料fallbackではありません</b>）: 今月 ' + freeN + '枚</div>';
-  if (lastAt) html += '<div class="kv muted">最終画像生成: ' + esc(rel(lastAt)) + '（全provider共通の記録）</div>';
-  html += '<div class="kv muted" style="font-size:10px">※現行Workerには「今月の有料(reserve)使用回数」「直近fallback理由」「直近生成に使ったキー種別」の記録が無く、この画面では観測できません。上の予備キー残高差分（参考）が目安になります。</div>';
-  html += '<div><a class="linkbtn hot" target="_blank" rel="noopener" href="' + LINKS.plDash + '">💳 補充・ダッシュボード ↗</a></div>';
-  el.className = 'bcard ' + cls;
-  el.innerHTML = html;
-}
-
-async function setKeyMode(m) {
-  if (m !== 'primary' && m !== 'reserve' && m !== 'auto') return;
-  if (m === CURRENT_IMG_KEYMODE) { setStatus('すでにこのモードです', 'ok'); return; }
-  const labels = { primary: '無料固定（通常キーのみ）', reserve: '有料固定（予備キーのみ）', auto: '自動（毎回無料から・402のみ有料で1回再試行）' };
-  if ((m === 'reserve' || m === 'auto') && !window.__PAID_KEY_SET) {
-    if (!confirm('予備（有料）キー POLLINATIONS_KEY_PAID がまだ未設定です。設定するまでこのモードは通常キーで動作します。続けますか？')) return;
-  }
-  if (!confirm('生成キーを「' + labels[m] + '」に切り替えます。全ユーザーに即時反映されます。よろしいですか？')) return;
-  try {
-    await api({ action: 'config-set', imgKeyMode: m });
-    setStatus('生成キーを「' + labels[m] + '」に切り替えました', 'ok');
-    loadBalances();
-  } catch (e) { /* api() が status を表示 */ }
-}
-
-function renderProvider() {
-  const tg = $('provTgBtn'), pl = $('provPlBtn');
-  if (!tg || !pl) return;
-  const isPl = CURRENT_IMG_PROVIDER === 'pollinations';
-  tg.classList.toggle('active', !isPl);
-  pl.classList.toggle('active', isPl);
-}
-
-async function setProvider(p) {
-  if (p !== 'together' && p !== 'pollinations') return;
-  if (p === CURRENT_IMG_PROVIDER) { setStatus('すでに' + (p === 'pollinations' ? 'Pollinations' : 'Together') + 'です', 'ok'); return; }
-  const label = p === 'pollinations' ? 'Pollinations' : 'Together';
-  if (!confirm('アイコン生成を' + label + 'に切り替えます。全ユーザーに即時反映されます。よろしいですか？')) return;
-  try {
-    await api({ action: 'config-set', imgProvider: p });
-    setStatus('アイコン生成を' + label + 'に切り替えました', 'ok');
-    loadBalances();
-  } catch (e) { /* api() が status を表示 */ }
-}
-
-function renderSum(b) {
-  const el = $('sumCard');
-  const L = b.ledger || {};
-  const t = b.together || {};
-  const totalEst = (+L.usd || 0) + (+t.estUsd || 0);
-  let html = '<h3>今月のまとめ <span class="muted" style="font-weight:normal;font-size:11px">(' + esc(b.month || '') + ')</span></h3>' +
-    '<div class="big">' + fmt$(totalEst) + ' <small>（' + yen(totalEst) + '）</small></div>' +
-    '<div class="kv">内訳: 本文 ' + fmt$4(L.usd) + ' ＋ 画像推計 ' + fmt$4(t.estUsd) + '</div>' +
-    '<div class="kv">生成 ' + (L.reqs || 0) + '回 ・ トークン ' + fmtTok(L.tokens) + ' ・ 画像 ' + (t.images || 0) + '枚</div>' +
-    '<div class="kv">稼働ユーザー: ' + (L.activeUsers || 0) + '人（登録 ' + (L.entries || 0) + '件）</div>';
-  if (b.killSwitch) html += '<div class="alertline">⚠ 緊急停止ON（全員の生成が止まっています）</div>';
-  el.className = 'bcard' + (b.killSwitch ? ' bad' : '');
-  el.innerHTML = html;
-}
-
-async function tgTest() {
-  $('tgTestOut').textContent = 'テスト中…';
-  try {
-    const j = await api({ action: 'tg-test' });
-    $('tgTestOut').textContent = (j.ok ? '✅ ' : '❌ ') + (j.hint || j.reason || ('status ' + j.status));
-  } catch (e) { $('tgTestOut').textContent = '❌ ' + String(e && e.message || e); }
-}
-
-function fmtTok(n) {
-  n = +n || 0;
-  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
-  if (n >= 1e3) return (n / 1e3).toFixed(0) + 'k';
-  return String(n);
-}
-function rel(iso) {
-  try {
-    const d = (Date.now() - new Date(iso).getTime()) / 1000;
-    if (!isFinite(d)) return '';
-    if (d < 90) return 'たった今';
-    if (d < 3600) return Math.floor(d / 60) + '分前';
-    if (d < 86400) return Math.floor(d / 3600) + '時間前';
-    return Math.floor(d / 86400) + '日前';
-  } catch (e) { return ''; }
-}
-
-// ---------- worker生存/バージョン ----------
-async function pingWorker() {
-  try {
-    const url = $('wurl').value.replace(/\/+$/, '');
-    const r = await fetch(url + '/?t=' + Date.now());
-    const j = await r.json();
-    $('wver').textContent = 'worker: v' + j.v + (j.v < 8 ? ' (v8未デプロイ)' : '');
-    $('wver').className = 'chip' + (j.v >= 8 ? ' good' : ' bad');
-  } catch (e) { $('wver').textContent = 'worker: 応答なし'; $('wver').className = 'chip bad'; }
-}
-
-// ---------- 台帳 ----------
-async function load() {
-  setStatus('読み込み中…');
-  pingWorker();
-  const p = loadBalances(); // 並行して残高も取得
-  const j = await api({ action: 'list' });
-  CONFIG = j.config || {};
-  $('cModels').value = (CONFIG.allowedModels || []).join(', ');
-  try { $('cGenBudget').value = (CONFIG.genBudget != null) ? CONFIG.genBudget : ''; } catch(e){}
-  renderKill();
-  const tb = $('tbody');
-  tb.innerHTML = '';
-  if (!j.codes.length) tb.innerHTML = '<tr><td colspan="8" class="muted">まだ合言葉がありません(マスターは初回利用後に現れます)</td></tr>';
-  j.codes.sort((a, b) => (b.usedUsd || 0) - (a.usedUsd || 0)).forEach(c => {
-    const tr = document.createElement('tr');
-    c.code = c.code || c.key; // worker v4 unified list field key→code 互換
-    const isMaster = c.code === 'master';
-    tr.dataset.search = ((c.name || '') + ' ' + c.code).toLowerCase();
-    tr.innerHTML =
-      '<td>' + esc(c.name || (isMaster ? 'マスター' : '')) + '</td>' +
-      '<td><span class="codechip">' + esc(isMaster ? '(ACCESS_CODE)' : c.code) + '</span></td>' +
-      '<td class="num">' + usedCell(c) + '</td>' +
-      '<td class="num">' + (c.reqs || 0) + '</td>' +
-      '<td class="num">' + (+c.limitUsd > 0 ? (+c.limitUsd).toFixed(2) : '∞') + '</td>' +
-      '<td class="muted">' + (c.lastUsed ? rel(c.lastUsed) : '-') + '</td>' +
-      '<td class="' + (c.active ? 'on' : 'off') + '">' + (c.active ? '稼働' : '停止') + '</td>' +
-      '<td></td>';
-    const td = tr.lastElementChild;
-    if (!isMaster) {
-      td.appendChild(btn(c.active ? '停止' : '再開', () => upd(c.code, { active: !c.active })));
-      td.appendChild(btn('上限', () => { const v = prompt('月の上限$(0=無制限)', c.limitUsd || 0); if (v != null) upd(c.code, { limitUsd: +v }); }));
-      td.appendChild(btn('🔗リンク', () => { const link = 'https://sansan2103-a11y.github.io/chronicle/start.html?code=' + encodeURIComponent(c.code); if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(link).then(() => setStatus('共有リンクをコピーしました: ' + link, 'ok'), () => prompt('コピー失敗。手動でコピーしてください', link)); } else { prompt('共有リンク（コピーして相手に送ってください）', link); } }));
-      td.appendChild(btn('削除', () => { if (confirm('「' + c.code + '」を削除しますか？')) del(c.code); }, 'danger'));
-    }
-    tb.appendChild(tr);
-  });
-  renderAllows(j.allows || []);
-  filterRows();
-  setStatus('読み込み完了 (合言葉' + j.codes.length + '件 / 許可メール' + ((j.allows || []).length) + '件)', 'ok');
-  $('connbox').open = false;
-  await p;
-}
-
-// 今月使用セル: 金額+上限に対する使用率バー
-function usedCell(c) {
-  const used = +c.usedUsd || 0;
-  let bar = '';
-  if (+c.limitUsd > 0) {
-    const pct = Math.max(0, Math.min(100, used / +c.limitUsd * 100));
-    const cls = pct >= 90 ? 'bad' : (pct >= 70 ? 'warn' : '');
-    bar = '<span class="bar ' + cls + '"><i style="width:' + pct.toFixed(0) + '%"></i></span>';
-  }
-  return '$' + used.toFixed(4) + bar;
-}
-
-function renderAllows(allows) {
-  const tb = $('atbody');
-  tb.innerHTML = '';
-  if (!allows.length) { tb.innerHTML = '<tr><td colspan="8" class="muted">まだ許可メールがありません</td></tr>'; return; }
-  allows.sort((a, b) => (b.usedUsd || 0) - (a.usedUsd || 0)).forEach(c => {
-    const email = c.key;
-    const tr = document.createElement('tr');
-    tr.dataset.search = ((c.name || '') + ' ' + email).toLowerCase();
-    tr.innerHTML =
-      '<td>' + esc(c.name || '') + '</td>' +
-      '<td><span class="codechip">' + esc(email) + '</span></td>' +
-      '<td class="num">' + usedCell(c) + '</td>' +
-      '<td class="num">' + (c.reqs || 0) + '</td>' +
-      '<td class="num">' + (+c.limitUsd > 0 ? (+c.limitUsd).toFixed(2) : '∞') + '</td>' +
-      '<td class="muted">' + (c.lastUsed ? rel(c.lastUsed) : '-') + '</td>' +
-      '<td class="' + (c.active ? 'on' : 'off') + '">' + (c.active ? '稼働' : '停止') + '</td>' +
-      '<td></td>';
-    const td = tr.lastElementChild;
-    td.appendChild(btn(c.active ? '停止' : '再開', () => updAllow(email, { active: !c.active })));
-    td.appendChild(btn('上限', () => { const v = prompt('月の上限$(0=無制限)', c.limitUsd || 0); if (v != null) updAllow(email, { limitUsd: +v }); }));
-    td.appendChild(btn('削除', () => { if (confirm('「' + email + '」を許可から削除しますか？')) delAllow(email); }, 'danger'));
-    tb.appendChild(tr);
-  });
-}
-
-function filterRows() {
-  const q = $('q').value.trim().toLowerCase();
-  ['tbody', 'atbody'].forEach(id => {
-    Array.prototype.forEach.call($(id).children, tr => {
-      if (!tr.dataset || tr.dataset.search == null) return;
-      tr.style.display = (!q || tr.dataset.search.indexOf(q) >= 0) ? '' : 'none';
-    });
-  });
-}
-
-async function createAllow() {
-  const email = $('aEmail').value.trim();
-  if (!email || email.indexOf('@') === -1) { setStatus('メールを正しく入れてください', 'err'); return; }
-  await api({ action: 'allow-create', name: $('aName').value, email, limitUsd: +$('aLimit').value });
-  setStatus('許可に追加しました: ' + email, 'ok');
-  $('aName').value = ''; $('aEmail').value = '';
-  load();
-}
-async function updAllow(email, patch) { await api(Object.assign({ action: 'allow-update', email }, patch)); load(); }
-async function delAllow(email) { await api({ action: 'allow-delete', email }); load(); }
-
-function btn(label, fn, cls) {
-  const b = document.createElement('button');
-  b.textContent = label; b.className = 'small' + (cls ? ' ' + cls : ''); b.style.marginRight = '5px';
-  b.onclick = fn; return b;
-}
-
-async function createCode() {
-  const j = await api({ action: 'create', name: $('nName').value, code: $('nCode').value, limitUsd: +$('nLimit').value });
-  setStatus('発行しました: ' + j.code + ' (この合言葉を相手に渡してください)', 'ok');
-  $('nName').value = ''; $('nCode').value = '';
-  load();
-}
-
-async function upd(code, patch) { await api(Object.assign({ action: 'update', code }, patch)); load(); }
-async function del(code) { await api({ action: 'delete', code }); load(); }
-
-async function saveConfig() {
-  const payload = { action: 'config-set', allowedModels: $('cModels').value };
-  payload.genBudget = $('cGenBudget').value.trim();   // ''=既定(30)へ戻す / 0=無制限 / 1..999
-  const j = await api(payload);
-  CONFIG = j.config; renderKill(); setStatus('設定を保存しました', 'ok');
-}
-
-async function toggleKill() {
-  const next = !CONFIG.killSwitch;
-  if (next && !confirm('全員の生成を止めます。いいですか？')) return;
-  const j = await api({ action: 'config-set', killSwitch: next });
-  CONFIG = j.config; renderKill();
-  setStatus(next ? '緊急停止ON' : '緊急停止を解除しました', 'ok');
-}
-
-function renderKill() {
-  const b = $('killBtn');
-  b.textContent = '緊急停止: ' + (CONFIG.killSwitch ? 'ON(全員停止中)' : 'OFF');
-  b.classList.toggle('killon', !!CONFIG.killSwitch);
-  $('killchip').style.display = CONFIG.killSwitch ? '' : 'none';
-}
-
-// ★v27: fix476標準ON トグル
-let CURRENT_FIX476 = false;
-function renderFix476() {
-  const el = $('fix476Btn'); if (!el) return;
-  el.textContent = 'アイコン標準ON: ' + (CURRENT_FIX476 ? 'ON(全員)' : 'OFF');
-  el.classList.toggle('killon', !!CURRENT_FIX476);
-}
-async function toggleFix476() {
-  const next = !CURRENT_FIX476;
-  if (next && !confirm('全プレイヤーの新規アイコン生成を新経路（3候補→検品→自動選抜）に切り替えます。よいですか？')) return;
-  try {
-    await api({ action: 'config-set', fix476Guard: next });
-    CURRENT_FIX476 = next; renderFix476();
-    setStatus(next ? 'アイコン標準ON（全員）' : 'アイコン標準OFFに戻しました', 'ok');
-  } catch (e) { setStatus('切替に失敗: ' + (e.message || e), 'bad'); }
-}
-
-function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
-
-// トークン保存済みなら自動で読み込み
-if (tok) { load().catch(() => {}); } else { $('connbox').open = true; setStatus('管理トークンを入れて「読み込み」を押してください'); }
+  document.getElementById('result').textContent = removed.length
+    ? ('削除しました: ' + removed.join(' / '))
+    : 'この端末には管理用の保存データは残っていませんでした。';
+})();
 </script>
 </body>
 </html>
