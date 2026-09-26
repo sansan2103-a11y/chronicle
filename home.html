@@ -245,7 +245,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20260926-sp22';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20260926-sp24';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -1076,6 +1076,8 @@
             f713NoteTransport('home:call', body && body.op, r.status, (j && j.errorCode) || null);
           }
         } catch(e){}
+        /* ★sp24/H-4: HTTP status を応答 object に添える（返り値そのものは不変。pull() の未招待判定が読む） */
+        try { if (j && typeof j === 'object' && j.__status === undefined) j.__status = r.status; } catch(e){}
         return j;
       });
     });
@@ -1573,7 +1575,7 @@
     el('sync').className='sync';
     el('sync').textContent = '☁ 確認中…';
     call({op:'meta'}, 15000).then(function(m){
-      if(!m || !m.ok){ throw new Error('meta'); }
+      if(!m || !m.ok){ var em = new Error('meta'); try { em.status = m && m.__status; em.serverError = String((m && m.error) || ''); em.errorCode = (m && m.errorCode) || null; } catch(e){} throw em; }
       var serverRev = +m.rev||0, base = +(g('v292Dfix402_baseRev')||0)||0;
       /* ★fix866 終端①: #note を書き換えずに終わるので、予告だけを外す */
       if(!force && serverRev <= base){ el('sync').textContent='☁ 最新です'; f866ClearTransientNote(); return; }
@@ -1930,8 +1932,19 @@
         pendingDeleteNotice();
       });
     }).catch(function(e){
+      /* ★sp24/H-4（GPT裁定 RRDY-01 §5）: Worker が「まだ許可されていません」(403) を返した未招待アカウントは
+         エラーではなく招待待ちとして案内する。403 すべてを未招待に変換しない（停止中の合言葉等は従来の失敗表示）。
+         「後で自動再試行」は対応する timer が無いので削除。 */
+      var uninvited = false;
+      try { uninvited = !!(e && e.status === 403 && /まだ許可されていません|not[ -]?invited/i.test(String(e.serverError || ''))); } catch(e2){ uninvited = false; }
+      if (uninvited){
+        el('sync').className='sync';
+        el('sync').textContent = '☁ このアカウントはまだ招待されていません。招待をお待ちください。';
+        f866ClearTransientNote();
+        return;
+      }
       el('sync').className='sync err';
-      el('sync').textContent = '☁ 同期できませんでした（後で自動再試行）';
+      el('sync').textContent = '☁ 同期できませんでした';
       f866ClearTransientNote();   /* ★fix866 終端③: meta/get の throw もここへ来る */
     });
   }
@@ -2082,15 +2095,17 @@
       f713Note('home:forceput', overPush713, 'forceput', null);
       var unmeas713 = (overPush713.code === 'LEGACY_PACKAGE_SIZE_UNMEASURABLE');
       el('sync').className='sync err';
+      /* ★sp24/H-3（copy only・GPT裁定 RRDY-01 §4）: 「いま上げる」は物語の通常同期に不要であることを明示。
+         guard / button / package 形式は不変。数値は従来どおり動的。 */
       el('sync').textContent = unmeas713
         ? '☁ 上げられませんでした（大きさを確認できません）'
-        : '☁ 上げられませんでした（データが大きすぎます）';
+        : '☁ 上げられませんでした（この端末のまとめ送信は ' + Math.round(overPush713.limit/1048576) + 'MB までです）';
       try {
         el('note').innerHTML = '<div class="note">'+esc(unmeas713
-          ? 'この端末のデータの大きさを確認できなかったため、安全のため送信していません。データは何も変わっていません。'
-          : ('この端末のデータが ' + Math.round(overPush713.bytes/1048576*100)/100
-             + 'MB あり、クラウドが受け取れる上限（' + Math.round(overPush713.limit/1048576) + 'MB）を超えています。'
-             + 'そのため送信していません。データは何も変わっていません。'))+'</div>';
+          ? '物語はすでに 1 本ずつ自動で同期されています。この操作は不要です。この端末のデータの大きさを確認できなかったため、安全のため送信していません。データは何も変わっていません。'
+          : ('物語はすでに 1 本ずつ自動で同期されています。この操作は不要です。端末のデータが ' + Math.round(overPush713.bytes/1048576*100)/100
+             + 'MB あり、まとめ送信の上限（' + Math.round(overPush713.limit/1048576) + 'MB）を超えているため送信していません。'
+             + 'データは何も変わっていません。'))+'</div>';
       } catch(e){}
       return;
     }

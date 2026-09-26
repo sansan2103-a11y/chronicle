@@ -26,12 +26,27 @@
 //
 // 検証口: window.__v292Dfix846 = { BUILD, off, state, detect, check }
 // kill switch: localStorage v292Dfix846Off='1'（既定 ON）
+//
+// ★sp24 / H-1 SAVE_FAILURE_VISIBILITY（GPT裁定 PKT-20260926-RRDY-01 §1、RCA rca_H1.md §2/§5）:
+//   (1) fix697 の ledger kind の照合を `C_GETSTORY_HTTP_401/403` / `C2_GETSTORY_HTTP_401/403`
+//       （canonical 保存経路の fresh getstory preflight が実際に出す kind）にも広げた。
+//       旧 regex は `HTTP_` / `C_HTTP_` / `C2_HTTP_` しか拾わず、turn 4 の canonical 保存が
+//       403 で止まっても本 module は一度も発火しなかった（実測 defect）。
+//   (2) 3 分の polling 上限（60 tick × 3 s）を撤廃し、document の生存中は同じ 3 s 周期で
+//       監視を続ける。選択理由: 「save mark が増えたら tick を再始動する」案より差分が小さく、
+//       read-only の ledger 走査 1 回/3 s は無視できる負荷（fix758 は既に 5 s 周期で常時 poll）。
+//       出したら止める（state.shown で終了）契約は従来どおり。
+//   (3) 文言の主語を「保存」にする（「クラウドに保存できていません。…」）。
+//       ローカル保持を確認していない状態で「データはこの端末に保持されています」とは言わない
+//       （裁定: 「データは安全です」相当の断定を出さない）。
+//   契約（UI only / read-only observer / wrapper 0 / storage write 0 / network 0）は不変。
+//   rollback = 本ファイルを live bytes（20260914-fix846）へ戻すだけ。
 // =====================================================================
 (function(){
   'use strict';
   if (window.__v292Dfix846) return;
   var TAG = '[v292Dfix846:access-gate-notice]';
-  var BUILD = '20260914-fix846';
+  var BUILD = '20260926-sp24';
   var NOTICE_ID = 'v292Dfix846-notice';
   var F840_NOTICE_ID = 'v292Dfix840-notice';
   var F843_NOTICE_ID = 'v292Dfix843-notice';
@@ -71,8 +86,9 @@
     return null;
   }
 
-  /* fix697: note({kind:'HTTP_'+status | 'C_HTTP_'+status | 'C2_HTTP_'+status, errorCode}) */
-  var HTTP_KIND_RE = /^(?:C_|C2_)?HTTP_(401|403)$/;
+  /* fix697: note({kind:'HTTP_'+status | 'C_HTTP_'+status | 'C2_HTTP_'+status, errorCode})
+     ★sp24/H-1: canonical 経路の preflight が出す 'C_GETSTORY_HTTP_'+status / 'C2_GETSTORY_HTTP_'+status も拾う。 */
+  var HTTP_KIND_RE = /^(?:C_|C2_)?(?:GETSTORY_)?HTTP_(401|403)$/;
   function fromF697(){
     try {
       var A = window.__v292Dfix697;
@@ -110,21 +126,20 @@
   }
 
   function messageFor(hit){
+    /* ★sp24/H-1: 主語は「保存」。ローカル保持の断定（「この端末に保持されています」）は出さない。 */
     if (hit.kind === 'NOT_ALLOWED'){
-      /* ②C1 裁定の文言に合わせる。address が取れているときだけ「Googleアカウント」と名指しする:
+      /* address が取れているときだけ「Googleアカウント」と名指しする:
          403 は Google 未許可のほかに「停止中の合言葉」からも来るため、address が無いときに
          Google と断定してはいけない。 */
       var em = myEmail();
       return em
-        ? '⚠ このGoogleアカウントはまだChronicleの利用許可がありません（' + em + '）。'
-          + 'クラウド保存と同期は止まっています。管理者に利用許可を依頼してください。'
-          + '物語のデータはこの端末に保持されています。'
-        : '⚠ このアカウントはまだChronicleの利用許可がありません。'
-          + 'クラウド保存と同期は止まっています。管理者に利用許可を依頼してください。'
-          + '物語のデータはこの端末に保持されています。';
+        ? '⚠ クラウドに保存できていません。ログイン状態を確認してください。'
+          + 'このGoogleアカウント（' + em + '）はまだChronicleの利用許可がないか、停止されています。管理者に確認してください。'
+        : '⚠ クラウドに保存できていません。ログイン状態を確認してください。'
+          + '（このアカウントは利用許可がないか、アクセスコードが停止中です）';
     }
-    return '⚠ ログイン情報が有効でないため、クラウド保存と同期が止まっています。'
-         + 'ログインし直すか、アクセスコードを設定し直してください。物語のデータはこの端末に保持されています。';
+    return '⚠ クラウドに保存できていません。ログイン状態を確認してください。'
+         + 'ログインし直すか、アクセスコードを設定し直してください。';
   }
 
   function show(hit){
@@ -157,14 +172,15 @@
   }
 
   /* 監視は軽量な polling のみ（既存モジュールへ hook を差し込まない = 挙動非干渉）。
-     上限付きで、出したら止める。1 document あたり最大およそ 3 分。 */
-  var ticks = 0, MAX_TICKS = 60, INTERVAL_MS = 3000;
+     ★sp24/H-1: 3 分上限（MAX_TICKS=60）を撤廃。document の生存中は 3 s 周期で監視を続け、
+     出したら止める。turn 4（load から数分後）の保存失敗も検知するため。 */
+  var ticks = 0, INTERVAL_MS = 3000;
   function tick(){
     try {
       if (off()) return;
       check();
       if (state.shown) return;
-      if (++ticks >= MAX_TICKS) return;
+      ++ticks;
       setTimeout(tick, INTERVAL_MS);
     } catch(e){}
   }

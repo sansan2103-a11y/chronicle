@@ -314,7 +314,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260926-sp22';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20260926-sp24';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -2443,6 +2443,33 @@ const UI = {
 // ─────────────────────────────────────────────────────────────
 // Game
 // ─────────────────────────────────────────────────────────────
+/* ★sp24/H-5 SETTINGS_FLASH_GUARD（GPT裁定 RRDY-01 §6、RCA rca_H345.md H-5）:
+   turns=0 かつ key 無しの document で起動時に設定 modal を自動 open する第 3 分岐を、
+   「?story= で開いた named document で、この端末に本文（chr6 / chr6_slot_<id>）が無い」= fix705 の
+   hydrate（fix755d/f bootstrap: lsg(BODY_KEY)==null）対象のときに抑止する。fix705 が freshLocal / applied を
+   立てているときも同様（belt-and-braces）。すべて read-only の判定。
+   ★fix705 の write HOLD（state.held）そのものは判定に使わない: HOLD は named document なら T0 で必ず
+     installHold され、getstory の往復が終わるまで解除されない（= 100 ms 時点では新規 story でも常に true）ため、
+     それを条件にすると通常の新規 story 作成（home が本文を先に作って index.html?story=<id>&new=1 で開く）の
+     settings 導線まで消える。「本文が無い」は home の新規作成では偽（fix600 が空本文を先に作る）なので導線は維持される。
+   #settingsOv を CSS で隠す実装はしない（手動 ⚙ を殺さない）。rollback = live bytes へ戻す。 */
+function sp24SettingsFlashGuard(){
+  try {
+    var m = String(location.search || '').match(/[?&]story=([^&#]*)/);
+    if (!m) return false;                                              /* named document でなければ従来どおり */
+    var id = decodeURIComponent(m[1] || '').replace(/^"+|"+$/g, '');
+    var bodyKey = (typeof window.__chronicleDocumentStoryKey === 'string' && window.__chronicleDocumentStoryKey)
+                ? window.__chronicleDocumentStoryKey : (id === 'default' || id === 'chr6' ? 'chr6' : ('chr6_slot_' + id));
+    var raw = null; try { raw = localStorage.getItem(bodyKey); } catch(e){ raw = null; }
+    if (raw == null) return true;                                      /* 本文が無い = cloud-only / hydrate 対象 */
+    var F5 = window.__v292Dfix705;
+    if (F5 && typeof F5.status === 'function'){
+      var st5 = F5.status(); var s5 = st5 && st5.state;
+      if (s5 && (s5.freshLocal === true || s5.phase === 'applied' || s5.verdict === 'CANONICAL_APPLIED')) return true;
+    }
+  } catch(e){}
+  return false;
+}
 const G = {
   init() {
     S.load(); this.setMode(S.mode);
@@ -2454,7 +2481,7 @@ const G = {
     });
     if (S.turns.length > 0)    { UI.renderAll(); UI.renderBranches(S.scene.branches); }
     else if (S.cfg.key || S.cfg.naiKey || S.cfg.orKey) { UI._showIntro(); }
-    else                                { setTimeout(() => { if (!(window.__v292Dfix890Early && window.__v292Dfix890Early.css)) UI.openSettings('key-missing'); }, 100); }   /* ★v292Dfix854 ／ ★sp14i A2: 早出し CSS が掛かっている間（= credential を 1 つも持たない訪問者）は起動時の自動 open を行わない。fix890 v3 の E2 脚は fallback として残す */
+    else                                { setTimeout(() => { if (!(window.__v292Dfix890Early && window.__v292Dfix890Early.css) && !sp24SettingsFlashGuard()) UI.openSettings('key-missing'); }, 100); }   /* ★v292Dfix854 ／ ★sp14i A2: 早出し CSS が掛かっている間（= credential を 1 つも持たない訪問者）は起動時の自動 open を行わない。fix890 v3 の E2 脚は fallback として残す ／ ★sp24/H-5: 本文の無い ?story= document（fix705 hydrate 対象）では auto-open しない（hydrate→reload の間に設定 modal が一瞬出る flash の抑止。home が本文を先に作る新規 story の導線は維持） */
   },
 
   startScene() {
@@ -3814,7 +3841,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix843-capability-notice.js?cb=20260909-fix843"></script>
 <!-- v292Dfix846: access gate(401/403)の告知。UIのみ/read-only observer/wrapper無し/storage write 0。
      OFF=v292Dfix846Off / 検証口=window.__v292Dfix846 -->
-<script src="v292Dfix846-access-gate-notice.js?cb=20260914-fix846"></script>
+<script src="v292Dfix846-access-gate-notice.js?cb=20260926-sp24"></script>
 <script src="v292Dfix700-nonauthoritative-mirror.js?cb=20260916-sp2"></script>
 <script src="v292Dfix702-authority-cutover.js?cb=20260916-sp2"></script>
 <!-- ★fix860 STORY_PASSCODE: unlock dialog / passcode 管理 UI（supplier と fix697 の狭い口に依存） -->
@@ -4153,7 +4180,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <script src="v292Dfix192-newengine.js?cb=20260907-fix832"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
-  <script src="v292Dfix197-avatar-key.js?cb=v292Dfix770"></script>
+  <script src="v292Dfix197-avatar-key.js?cb=20260926-sp24"></script>
   <!-- v292Dfix221: モデル文脈の直近会話(recentDialogues)を、表示と同じ権威データ
        _convSays に一本化。fix58の壊れた本文再抽出(speakerに地の文が混入→過去セリフ
        がモデルへ誤供給され全キャラが同じセリフを言う)を発生源から断つ。 -->
@@ -4288,7 +4315,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix338-artstyle.js?cb=20260829-fix748"></script>
 <script src="v292Dfix346-idb-avatars.js?cb=v292Dfix346"></script>
 <script src="v292Dfix356-avatar-eager.js?cb=v292Dfix450"></script>
-<script src="v292Dfix402-invisible-sync.js?cb=20260908-fix837"></script>
+<script src="v292Dfix402-invisible-sync.js?cb=20260926-sp24"></script>
 <script src="v292Dfix405-state-freshness.js?cb=v292Dfix739"></script>
 <script src="v292Dfix406-automode.js?cb=v292Dfix417d"></script>
 <script src="v292Dfix407-load-noconfirm.js?cb=v292Dfix407"></script>
@@ -4392,7 +4419,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix516-regen-local-display.js?cb=v292Dfix516b"></script>
 <script src="v292Dfix517-local-authoritative-avatar.js?cb=v292Dfix517b"></script>
 <script src="v292Dfix519-icon-p2p.js?cb=20260908-fix837"></script>
-<script src="v292Dfix523-icon-sync-versioned.js?cb=20260908-fix837"></script>
+<script src="v292Dfix523-icon-sync-versioned.js?cb=20260926-sp24"></script>
 <script src="v292Dfix525-slot-ownership.js?cb=v292Dfix525"></script>
 <script src="v292Dfix526-story-naming.js?cb=20260829-fix748"></script>
 <script src="v292Dfix631-avatar-inventory.js?cb=fix631"></script>
@@ -4482,7 +4509,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      既存 fix750 の prepare→commitSchema2 で schema2 canonical にする。新batch機構/新op/新endpoint 0本。
      ★既定 ON。KILL=v292Dfix756Off=1。失敗時は自分が作った pre-irreversible journal を畳んで legacy 経路へ戻す。 -->
 <script src="v292Dfix756-new-story-schema2.js?cb=20260905-fix810on"></script>
-<script src="v292Dfix758-cloud-save-pending.js?cb=20260831-fix758"></script>
+<script src="v292Dfix758-cloud-save-pending.js?cb=20260926-sp24"></script>
 <script src="v292Dfix844-provisional-handle-prompt-semantics.js?cb=20260912-fix844v22"></script>
 <script src="v292Dfix845-selfnaming-shadow-observer.js?cb=20260913-f845ss1"></script>
 <script src="v292Dfix850-turn-local-physical.js?cb=20260915-rron850"></script>

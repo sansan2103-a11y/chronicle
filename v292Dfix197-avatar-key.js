@@ -43,6 +43,20 @@
 //   fix767 の toProviderBody が imgProvider / style420 を返してきたときに body へ載せる。
 //   返って来ない（初回・参照不能・v292Dfix770Off='1'）ときは body は従来どおり1バイトも変わらない。
 //   ★コスト注記: style420 の together FLUX.2-dev は有料 model（既定 OFF の QA 限定機能）。
+// ★sp24 / H-2 GENERATION_GATE（GPT裁定 PKT-20260926-RRDY-01 §2、RCA rca_H2.md §2-2/§2-3/§5(a)）:
+//   「取得できなかった」≠「画像が存在しない」。applyOne の自動生成（queue.push）の直前に genGate を置く:
+//   ・ログイン中で fix400 が有効なのに ns が未取得（f400.enabled()=false / urlFor 空）→ 生成しない（deferred。
+//     既存の 1.5 s sweep が再評価。ns 取得は fix400 自身の ensureNs に任せ、本 gate は network を増やさない）。
+//   ・server 画像 GET（<img> の onerror では status が分からない）を **1 回 fetch で probe** し、
+//       200 → server 画像を採用（fix523.pullOnce で local へ取り込み）。生成しない・putimg しない（先着保護）。
+//       404 → definitive。生成前に fix523.pullOnce(pk) を 1 回だけ実行して再確認し、届けば採用、
+//             届かなければ従来どおり 1 回だけ生成を許可。
+//       401/403/5xx/network error/timeout → 生成しない（deferred。15 s→30 s→60 s→120 s の backoff で再 probe）。
+//   ・fix523 が「server に在る」と知っている鍵（既知 rev>0 / 直近 manifest）は生成しない（pull に委ねる）。
+//   ・identity は fix523.identityDetail() を読む: 匿名（何も保存されていない）/ fix400 不在 / fix400 OFF は従来どおり
+//     （gate を通さない = 挙動不変）。ambiguous（失効 Google token + 合言葉）/ none は生成しない（deferred）。
+//   ・明示 ↻（regenFor）は本 gate の対象外（利用者の意図的な再生成。伝播は fix523 の条件付き push）。
+//   観測口: window.__v292Dfix197.genGate() / __test_state(name).gate。rollback = live bytes（v292Dfix770）へ戻す。
 // ---------------------------------------------------------------------
 // fix199 からの改良（おしんFB: 場所ごとに絵が違う／絵柄が前と違う）:
 //   ・キャッシュを【キャラ名＋画風】単位に統一 → 会話ログ/設定/キャラ一覧で同じ1枚を共有。
@@ -417,6 +431,102 @@
     pumpTimer = setTimeout(function(){ pumpTimer = null; lastGenAt = Date.now(); genCount++; genOne(pk); }, wait);
   }
 
+  // ===== ★sp24/H-2: 自動生成 gate（definitive 404 だけが生成できる） =====
+  var genGate = {};                                   // pk -> { st:'probing'|'deferred'|'ok404'|'server', why, at, tries, status }
+  var GATE_BACKOFF_MS = [15000, 30000, 60000, 120000];
+  var PROBE_TIMEOUT_MS = 10000;
+  var gateStats = { probes: 0, s200: 0, s404: 0, deferred: 0, serverKnown: 0, pullAdopted: 0, allowed: 0 };
+  function gate523(){ try { var f = window.__v292Dfix523; return (f && f.__armed) ? f : null; } catch(e){ return null; } }
+  /* identity は fix523.identityDetail()（唯一の実装）を読む。
+       何も保存されていない（匿名）→ 'anon' = gate を通さず従来どおり生成。
+       session / google / pass → server を確認してから生成（下の probe）。
+       ambiguous（失効 Google token + 合言葉）/ none → 生成しない（deferred）。fix523 不在は fail-closed（deferred）。 */
+  function gateIdentity(){
+    try {
+      var f = gate523(); if (!f || typeof f.identityDetail !== 'function') return 'none';
+      var d = f.identityDetail();
+      if (!d.hasSession && !d.hasGoogle && !d.googleStored && !d.hasPass) return 'anon';
+      return String(d.state || 'none');
+    } catch(e){ return 'none'; }
+  }
+  function gateDefer(pk, why, status){
+    var g = genGate[pk] || {};
+    genGate[pk] = { st: 'deferred', why: why, status: (status == null ? null : status), at: Date.now(), tries: (g.tries || 0) + 1 };
+    gateStats.deferred++;
+  }
+  function gateProbe(url){
+    return new Promise(function(resolve){
+      var ac = null, timer = null;
+      try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, PROBE_TIMEOUT_MS); } catch(e){}
+      var opt = { method: 'GET', cache: 'no-store' }; if (ac) opt.signal = ac.signal;
+      var done = function(v){ if (timer) clearTimeout(timer); resolve(v); };
+      try {
+        fetch(url, opt).then(function(r){ try { if (r.body && r.body.cancel) r.body.cancel(); } catch(e){} done(r.status); }, function(){ done(0); });
+      } catch(e){ done(0); }
+    });
+  }
+  /* 戻り値 true = 従来どおり生成してよい。false = 今回は生成しない（gate が非同期に再評価を促す）。 */
+  function genGateAllows(pk){
+    var f400 = null;
+    try { f400 = window.__v292Dfix400; } catch(e){}
+    if (!f400 || typeof f400.enabled !== 'function') return true;                               // fix400 不在 = 従来動作
+    var idst = gateIdentity();
+    if (idst === 'anon') return true;                                                            // 匿名（何も保存されていない）= 従来動作
+    try { if (f400.status && f400.status().off) return true; } catch(e){}                       // fix400 OFF = 従来動作
+    var g = genGate[pk];
+    if (g){
+      if (g.st === 'ok404'){ gateStats.allowed++; genGate[pk] = { st: 'allowed', why: g.why, at: Date.now(), tries: g.tries }; return true; }
+      if (g.st === 'allowed' || g.st === 'server' || g.st === 'probing') return false;
+      if (g.st === 'deferred'){
+        var wait = GATE_BACKOFF_MS[Math.min(g.tries, GATE_BACKOFF_MS.length) - 1] || GATE_BACKOFF_MS[GATE_BACKOFF_MS.length - 1];
+        if (Date.now() - g.at < wait) return false;
+      }
+    }
+    if (idst !== 'session' && idst !== 'google' && idst !== 'pass'){ gateDefer(pk, 'IDENTITY_' + idst.toUpperCase()); return false; }   // ambiguous / none → 生成しない
+    var f523 = gate523();
+    try {
+      if (f523 && typeof f523.serverKnown === 'function' && f523.serverKnown(pk)){
+        gateStats.serverKnown++;
+        genGate[pk] = { st: 'server', why: 'fix523-known', at: Date.now(), tries: (g && g.tries) || 0 };
+        if (typeof f523.pullOnce === 'function') f523.pullOnce(pk, function(ok){ if (ok) gateStats.pullAdopted++; applyAll(); });
+        return false;
+      }
+    } catch(e){}
+    if (!f400.enabled()){ gateDefer(pk, 'NS_PENDING'); return false; }   /* ns は fix400 自身の ensureNs(2.5 s / 6 s / visible) に任せる = 本 gate は network を増やさない */
+    var url = ''; try { url = f400.urlFor(pk) || ''; } catch(e){ url = ''; }
+    if (!url){ gateDefer(pk, 'NO_URL'); return false; }
+    genGate[pk] = { st: 'probing', at: Date.now(), tries: ((g && g.tries) || 0) + 1 };
+    gateStats.probes++;
+    gateProbe(url).then(function(status){
+      if (status === 200){
+        gateStats.s200++;
+        genGate[pk] = { st: 'server', why: 'GET_200', at: Date.now(), tries: genGate[pk].tries };
+        var f = gate523();
+        if (f && typeof f.pullOnce === 'function') f.pullOnce(pk, function(ok){ if (ok) gateStats.pullAdopted++; retryServerUrl(pk); applyAll(); });
+        else { retryServerUrl(pk); applyAll(); }
+        return;
+      }
+      if (status === 404){
+        gateStats.s404++;
+        var f2 = gate523();
+        var finish = function(ok){
+          if (ok){ gateStats.pullAdopted++; genGate[pk] = { st: 'server', why: 'PULL_OK_AFTER_404', at: Date.now(), tries: genGate[pk].tries }; }
+          else genGate[pk] = { st: 'ok404', why: 'GET_404', at: Date.now(), tries: genGate[pk].tries };
+          applyAll();
+        };
+        if (f2 && typeof f2.pullOnce === 'function') f2.pullOnce(pk, finish); else finish(false);
+        return;
+      }
+      gateDefer(pk, status ? ('HTTP_' + status) : 'NET_FAIL', status || null);
+      applyAll();
+    });
+    return false;
+  }
+  /* server 画像が実在すると分かった鍵: 以前 onerror で __av400fail が立った <img> にもう一度 server URL を試させる */
+  function retryServerUrl(pk){
+    try { var imgs = document.querySelectorAll('img[data-avpk]'); for (var i = 0; i < imgs.length; i++){ if (imgs[i].getAttribute('data-avpk') === pk) imgs[i].__av400fail = 0; } } catch(e){}
+  }
+
   function applyOne(img){
     var pk = img.getAttribute('data-avpk'); if(!pk) return;
     var info = jobInfo[pk] || {}; var name = info.name || img.getAttribute('alt') || 'character';
@@ -445,7 +555,7 @@
     if(c!=='pending'){
       var pe=persistGet(pk);
       if(pe && pe.indexOf('data:')===0){ cache[pk]=pe; if(img.getAttribute('src')!==pe){ img.onerror=null; img.src=pe; } return; }
-      if(info.prompt){ cache[pk]='pending'; queue.push(pk); pump(); }  // promptが無いキーは生成しない（legacy URL待ち）
+      if(info.prompt && genGateAllows(pk)){ cache[pk]='pending'; queue.push(pk); pump(); }  // promptが無いキーは生成しない（legacy URL待ち）/ ★sp24: gate が definitive 404 を確認するまで生成しない
     }
     // pending中: legacy pollinations を読ませない（DiceBearを仮表示）
     var dp=diceUrl(name);
@@ -599,7 +709,9 @@
     keyFor: keyFor,
     canonName: canonName,   // ★fix424: 検証口(呼称→正名)
     resolveVariant764: resolveVariant764,   // ★fix764: 検証口(字形差→登録済み表示形・icon局所)
-    __test_state: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; return { pk:pk, pending:(c==='pending'), dice:(c==='dice'), dataUrl:(typeof c==='string'&&c.indexOf('data:')===0), queued:(queue.indexOf(pk)>=0), hasJob:!!jobInfo[pk], jobPrompt:(jobInfo[pk]&&jobInfo[pk].prompt)||'' }; }catch(e){ return null; } },
+    __test_state: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; return { pk:pk, pending:(c==='pending'), dice:(c==='dice'), dataUrl:(typeof c==='string'&&c.indexOf('data:')===0), queued:(queue.indexOf(pk)>=0), hasJob:!!jobInfo[pk], jobPrompt:(jobInfo[pk]&&jobInfo[pk].prompt)||'', gate: genGate[pk] || null }; }catch(e){ return null; } },
+    /* ★sp24/H-2: 生成 gate の観測口（read-only） */
+    genGate: function(){ var o = {}; for (var k in genGate) o[k] = genGate[k]; return { keys: o, stats: JSON.parse(JSON.stringify(gateStats)), genCount: genCount }; },
     cachedFor: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; if(typeof c==='string'&&c.indexOf('data:')===0) return c; var p=persistGet(pk); return (p&&p.indexOf('data:')===0)?p:''; }catch(e){ return ''; } },
     /* ★fix579: 削除候補の列挙に Object.keys(localStorage) を使わない。
        ラッパが localStorage.removeItem = wrapped と代入するため、**メソッド名が own property として

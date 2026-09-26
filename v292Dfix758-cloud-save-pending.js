@@ -4,6 +4,14 @@
  * 本モジュールは「表示のみ」。localStorage への書込 0 / 通信 0 / 保存経路・retry への介入 0。
  * fix697 の read-only 観測口 (__v292Dfix697.status()/.ledger()) を 5 秒 poll で読むだけ。
  * kill switch: localStorage.setItem('v292Dfix758Off','1') → 次回読込で無効。
+ *
+ * ★sp24 / H-1 SAVE_FAILURE_VISIBILITY（GPT裁定 PKT-20260926-RRDY-01 §1、RCA rca_H1.md §2/§5 挿入点 B）:
+ *   ・isFailKind を拡張: HTTP_401/403 / C_HTTP_401/403 / C_GETSTORY_HTTP_* / C2_GETSTORY_HTTP_* /
+ *     NET_FAIL / C_GETSTORY_FAIL / CANONICAL_WRITE_UNSETTLED を「保存失敗/未確認」として数える
+ *     （旧: C2_GETSTORY_FAIL / AUTHORITY_PENDING / CANONICAL_AUTHORITY_UNCONFIRMED / C2_GETSTORY_HTTP_* のみ）。
+ *   ・直近の失敗 kind が 401/403 のときは「クラウドに保存できていません。ログイン状態を確認してください。」
+ *     （待機ではなく明示的な保存失敗）。それ以外の kind は従来の待機文言のまま。
+ *   ・表示のみ / pointer-events:none / kill switch / 5 s poll は不変。rollback = live bytes へ戻す。
  */
 (function () {
   'use strict';
@@ -16,6 +24,9 @@
 
     var BANNER_ID = 'v292Dfix758Banner';
     var MSG = '☁ クラウド保存を待っています。同期完了まで再読み込みや別端末での続きを避けてください。';
+    /* ★sp24/H-1: 401/403（認証・許可の失敗）は待っても直らないので、保存失敗として明示する */
+    var MSG_AUTH = '⚠ クラウドに保存できていません。ログイン状態を確認してください。';
+    var AUTH_KIND_RE = /^(?:C_|C2_)?(?:GETSTORY_)?HTTP_(401|403)$/;
     var CSS = 'position:fixed; left:50%; transform:translateX(-50%); bottom:64px; z-index:99998;'
       + ' background:rgba(180,120,20,.95); color:#fff; padding:8px 14px; border-radius:8px;'
       + ' font-size:13px; max-width:90vw; pointer-events:none;';
@@ -25,6 +36,7 @@
     var lastMarkT = null;   // marks が増えた時刻
     var lastOkT = null;     // 直近の CANONICAL_COMMIT_OK の t
     var lastFailT = null;   // 直近の保存失敗/未確認系の t
+    var lastFailKind = null; // ★sp24: 直近の失敗 kind（401/403 判定用）
     var visible = false;
     var polls = 0;
 
@@ -32,8 +44,16 @@
       return k === 'C2_GETSTORY_FAIL'
         || k === 'AUTHORITY_PENDING'
         || k === 'CANONICAL_AUTHORITY_UNCONFIRMED'
-        || /^C2_GETSTORY_HTTP_/.test(k);
+        || /^C2_GETSTORY_HTTP_/.test(k)
+        /* ★sp24/H-1: shadow 経路 (HTTP_401/403, NET_FAIL) / canonical schema1 (C_HTTP_*, C_GETSTORY_*) /
+           canonical 書込の未確定 (CANONICAL_WRITE_UNSETTLED) も保存失敗として数える */
+        || /^(?:C_)?HTTP_(401|403)$/.test(k)
+        || /^C_GETSTORY_HTTP_/.test(k)
+        || k === 'NET_FAIL'
+        || k === 'C_GETSTORY_FAIL'
+        || k === 'CANONICAL_WRITE_UNSETTLED';
     }
+    function isAuthKind(k) { return AUTH_KIND_RE.test(String(k || '')); }
 
     function findBanner() {
       try { return document.getElementById(BANNER_ID) || null; } catch (e) { return null; }
@@ -60,9 +80,12 @@
       visible = false;
     }
 
-    function show() {
+    function show(authFail) {
       var el = ensureBanner();
       if (!el) return;
+      /* ★sp24/H-1: 401/403 が直近の失敗なら保存失敗文言、それ以外は従来の待機文言 */
+      var msg = authFail ? MSG_AUTH : MSG;
+      if (el.textContent !== msg) el.textContent = msg;
       el.style.display = 'block';
       visible = true;
     }
@@ -93,7 +116,7 @@
             if (ev.kind === 'CANONICAL_COMMIT_OK') {
               if (lastOkT == null || ev.t > lastOkT) lastOkT = ev.t;
             } else if (isFailKind(ev.kind)) {
-              if (lastFailT == null || ev.t > lastFailT) lastFailT = ev.t;
+              if (lastFailT == null || ev.t > lastFailT) { lastFailT = ev.t; lastFailKind = ev.kind; }
             }
           }
         }
@@ -104,7 +127,7 @@
         var pendingByFail = (lastFailT != null)
           && (lastOkT == null || lastOkT < lastFailT);
 
-        if (pendingByMark || pendingByFail) show(); else hide();
+        if (pendingByMark || pendingByFail) show(pendingByFail && isAuthKind(lastFailKind)); else hide();
       } catch (e) {
         try { hide(); } catch (e2) {}
       }
@@ -119,6 +142,7 @@
           lastMarkT: lastMarkT,
           lastOkT: lastOkT,
           lastFailT: lastFailT,
+          lastFailKind: lastFailKind,
           polls: polls
         };
       },

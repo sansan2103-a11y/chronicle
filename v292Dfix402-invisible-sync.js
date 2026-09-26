@@ -52,6 +52,18 @@
 //                     put/forceputのmid付与を無効化する。ただしcallSaveのAbortタイムアウト(本文25s/画像40s)は残る。
 //   v292Dfix411Off  = fix411のpending台帳・retry台帳(v292Dfix402_pimg/_dead・imgRetried)のみOFF。
 //                     画像のputimg送信自体は継続する(取りこぼしの自己修復だけを止める。putimg midは常時付与)。
+// ★sp24 / H-2 IDENTITY_HYGIENE + FIRST_WRITER（GPT裁定 PKT-20260926-RRDY-01 §2、RCA rca_H2.md §5(b')）:
+//   ・putimg は fix523.identityState() が session / google / pass のときだけ送る（有効な identity =
+//     session / 有効な Google / 純 passcode）。「失効した Google token が残っている + 合言葉」= ambiguous と none は
+//     送らない（Google 失効中に黙って合言葉 identity の ns へ画像が書かれ、他端末から 404 になる経路を塞ぐ）。
+//     送らない間も pending 台帳（v292Dfix402_pimg）とメモリ queue は保持し、30 s ごとに再確認（network 0）。
+//   ・putimg が 401/403 を受けたら retry loop に入らず pending 保持のまま（従来の「その他4xx」扱いを明示化）。
+//   ・先着保護: fix523 が「server に既に在る」と知っている鍵（既知 rev>0 または直近 manifest に在る）には
+//     本 module の無条件 putimg（baseRev 無し = last-writer-wins）を送らない。台帳から外して以後の伝播を
+//     fix523 の baseImageRev 付き条件付き push（409→PULL）に委ねる。fix523 が同鍵を送信中/予約中の間は後回し。
+//   ・本文（pkg）の push/pull/fork、Worker、schema、認証名寄せには 1 バイトも触れない。
+//   ・kill: v292Dfix402Off（従来どおり全停止）。identity gate / 先着保護だけを外す口は作らない（衛生規則）。
+//   rollback = live bytes（20260908-fix837）へ戻す。
 // =====================================================================
 (function(){
   'use strict';
@@ -98,6 +110,14 @@
     return h;
   }
   function isLoggedIn(){ var h = authHeaders(); return !!(h['x-google-id'] || h['x-chronicle-pass'] || h['x-chronicle-session']); }
+  /* ★sp24/H-2: 画像 write に使ってよい identity。判定は fix523 の identityState()（唯一の実装）を読む:
+       session / google / pass（純 passcode）→ 送る。ambiguous（失効 Google token が残っている + 合言葉）/ none → 保留。
+     fix523 の API が無い（script 未読込）ときは fail-closed（保留）。 */
+  function imgIdentityState(){ try { var f = f523api(); return (f && typeof f.identityState === 'function') ? String(f.identityState()) : 'none'; } catch(e){ return 'none'; } }
+  function imgIdentityValid(){ var st = imgIdentityState(); return st === 'session' || st === 'google' || st === 'pass'; }
+  var IMG_HOLD_RECHECK_MS = 30000;
+  var imgHold = { since: null, holds: 0, authFail: 0, firstWriterSkips: 0, deferredInFlight: 0, lastState: null };
+  function f523api(){ try { var f = window.__v292Dfix523; return (f && f.__armed) ? f : null; } catch(e){ return null; } }
   // ★fix402e A-4: AbortタイムアウトつきcallSave(本文既定25s・画像は呼び出し側で40s)。
   //   タイムアウト/例外時はrejectして呼び出し側のフラグ(pushing/pulling/applying/imgSending)を解除させる。
   /* ★★fix702(STEP3D): legacy pkg 書込に cutover-aware protocol を申告する。
@@ -1047,6 +1067,13 @@
   function sendImgs(){
     imgTimer = null;
     if (!on() || !isLoggedIn()) { imgQueue = {}; return; }
+    /* ★sp24/H-2: 合言葉だけ（Google/session 無し）の間は送らない。queue と pending 台帳は保持し 30 s 後に再確認。 */
+    if (!imgIdentityValid()) {
+      imgHold.holds++; imgHold.lastState = imgIdentityState(); if (imgHold.since == null) imgHold.since = Date.now();
+      if (Object.keys(imgQueue).length && !imgTimer) imgTimer = setTimeout(sendImgs, IMG_HOLD_RECHECK_MS);
+      return;
+    }
+    imgHold.since = null;
     var keys = Object.keys(imgQueue);
     // ★fix411強化 single-flight: 飛行中なら今回分をqueueへ戻して次タイマーで再送(二重送信しない)
     if (imgSending) {
@@ -1061,6 +1088,25 @@
       var k = keys.shift();
       if (!k) { imgSending = false; return; }     // 全完了→single-flight解除
       var v = null; try { v = localStorage.getItem(k); } catch(e){}
+      /* ★sp24/H-2 先着保護: fix523 が同鍵を送信中/予約中なら後回し（409→PULL の結果を待つ）。
+         server に既に在ると分かっている鍵は無条件 putimg を送らず、台帳から外して fix523 の条件付き push に委ねる。 */
+      var f523 = f523api();
+      if (f523) {
+        try {
+          if (typeof f523.inFlight === 'function' && f523.inFlight(k)) {
+            imgHold.deferredInFlight++;
+            imgQueue[k] = Date.now();
+            if (!imgTimer) imgTimer = setTimeout(sendImgs, IMG_DEBOUNCE_MS);
+            next(); return;
+          }
+          if (typeof f523.serverKnown === 'function' && f523.serverKnown(k)) {
+            imgHold.firstWriterSkips++;
+            pimgDel(k);
+            try { console.log(TAG, 'putimg skip (server copy known; fix523 conditional push owns key)', k); } catch(e){}
+            next(); return;
+          }
+        } catch(e){}
+      }
       if (typeof v === 'string' && v.indexOf('data:image') === 0 && v.length < 2*1024*1024) {
         var h = imgHash(v);                          // sentHash(送信時の実データhash)
         try { pimgSet(k, h); } catch(e){}            // ★fix411強化: 送信直前に実データからh計算→台帳更新(C-2でts整合)
@@ -1092,6 +1138,8 @@
                 console.warn(TAG, 'img hash不一致(server)→pending保持', k, j.hash, h);   // 内容不一致=保持して再送
               } else if (isImgDead(r && r.status, errCode)) {
                 pimgDeadSet(k, r && r.status, j); pimgDel(k);   // ★C-5: too-large/bad-request/unsupportedのみ隔離(無限再送防止)
+              } else if (r && (r.status === 401 || r.status === 403)) {
+                imgHold.authFail++;                    // ★sp24/H-2: 認証/許可失敗 → retry loop に入らず pending 保持（identity 回復後の再送に委ねる）
               } else if (r && (r.status >= 500 || r.status === 429)) {
                 scheduleRetryOnce(k);                  // ★C-5: 5xx/429一時失敗→60秒後1回だけ再queue(pending保持・既存バックオフ)
               }
@@ -1178,6 +1226,9 @@
                hold: autoPutHold(), lastReconcileAskAt: _f828ReconcileAt };
     },
     imgHash: imgHash, sendImgs: sendImgs, scheduleImgPush: scheduleImgPush,   // ★fix411強化: 検証フック
+    /* ★sp24/H-2: 観測口（write 0） */
+    imgIdentityValid: imgIdentityValid, imgIdentityState: imgIdentityState,
+    imgHold: function(){ var o = {}; for (var k in imgHold) o[k] = imgHold[k]; o.queued = Object.keys(imgQueue).length; o.sending = !!imgSending; return o; },
     retryDead: function(k){ try { var m = pimgDeadAll(); if (k in m){ pimgDeadDel(k); try { delete imgRetried[k]; } catch(e){} scheduleImgPush(k); return true; } } catch(e){} return false; },   // ★fix411/C-3検証口(retryDeadでretry解除)
     clearDead: function(k){ pimgDeadDel(k); },
     deadAll: function(){ return pimgDeadAll(); }

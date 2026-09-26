@@ -25,6 +25,21 @@
 //   smallHash = djb2(h=5381; h=((h<<5)+h+c)|0; (h>>>0).toString(36))。
 // 既定ON（伝播が主目的）: localStorage.v292Dfix523Off!=='1'。検証口: window.__v292Dfix523。
 // fix519 との関係: 本モジュールが送受信を一本化。index.html では fix519 を外し fix523 のみ読む。
+//
+// ★sp24 / H-2 IDENTITY_HYGIENE + FIRST_WRITER（GPT裁定 PKT-20260926-RRDY-01 §2、RCA rca_H2.md §2-4/§5(b')）:
+//   ・putimg（pushOne）は identityState() が session / google / pass のときだけ送る。
+//     「失効した Google token が残っている + 合言葉あり」= ambiguous（Google 失効中に黙って合言葉 identity の
+//     ns へ画像が書かれ、他端末（Google identity）から 404 になる = 実測 H-2 の根）と none は送らない。
+//     純 passcode 利用者（Google token が保存されていない）は従来どおり送れる。
+//     送らない代わりに sendQ を保持し、30 s ごとに identity を再確認する（network 0）。受信（manifest / pull）は従来どおり。
+//   ・serverKnown(pk): 既知 rev 台帳（rev>0）または直近 manifest に鍵があれば true。
+//     fix402 の無条件 putimg（baseRev 無し = last-writer-wins）はこれが true の鍵をスキップし、
+//     以後の伝播は本 module の baseImageRev 付き条件付き push（409→PULL）だけが行う = 先着保護。
+//   ・inFlight(pk): 送信予約中/送信中（409→PULL の完了まで含む）。fix402 はこの間は自分の putimg を後回しにする（競合窓の解消）。
+//   ・pullOnce(pk, done): fix197 が「definitive 404 の前に 1 回だけ server を確認」するための口
+//     （pullOne の別名。挙動は同一）。
+//   kill: v292Dfix523Off='1'（従来どおり全停止）。identity gate だけを外す口は作らない（衛生規則）。
+//   rollback = live bytes（20260908-fix837）へ戻す。
 // =====================================================================
 (function(){
   'use strict';
@@ -61,6 +76,31 @@
     return h;
   }
   function loggedIn(){ var h = authHeaders(); return !!(h['x-google-id'] || h['x-chronicle-pass'] || h['x-chronicle-session']); }
+  /* ★sp24/H-2 IDENTITY_STATE（唯一の実装。fix402 / fix197 はこれを読む）:
+       'session'   fix837 session id あり
+       'google'    __chronicleGoogleId() が非空（有効 token かつ worker probe 済み）
+       'ambiguous' Google token が localStorage(v292GoogleToken) に残っているが失効/無効（fix328 valid() false）
+                   かつ 合言葉(v292ProxyPass) あり = iPhone で実測した「黙って合言葉 identity へ落ちる」状態 → HOLD
+       'pass'      合言葉のみ（Google token が 1 つも保存されていない = 合言葉招待の純 passcode 利用者）→ 許可
+       'none'      上記いずれでもない（何も無い / token は保存されているが判定不能・worker 未 ready で無効扱い）→ HOLD
+     読み取りのみ: fix328 の公開口 __chronicleGoogleId / __v292Dfix328api.valid と localStorage 'v292GoogleToken'
+     ({token,exp,...}、fix328 L14/L51 と同じキー) / 'v292ProxyPass' / fix837 supplier。書込 0。 */
+  function identityDetail(){
+    var d = { state: 'none', hasSession: false, hasGoogle: false, googleStored: false, googleValid: false, hasPass: false };
+    try { var h = authHeaders(); d.hasSession = !!h['x-chronicle-session']; d.hasGoogle = !!h['x-google-id']; d.hasPass = !!h['x-chronicle-pass']; } catch(e){}
+    try { var tj = JSON.parse(lsg('v292GoogleToken') || 'null'); d.googleStored = !!(tj && tj.token && tj.exp);
+          if (d.googleStored){ var A = W.__v292Dfix328api; d.googleValid = (A && typeof A.valid === 'function') ? !!A.valid() : ((+tj.exp * 1000) > (Date.now() + 30000)); } } catch(e){}
+    if (d.hasSession) d.state = 'session';
+    else if (d.hasGoogle) d.state = 'google';
+    else if (d.googleStored && !d.googleValid && d.hasPass) d.state = 'ambiguous';
+    else if (d.hasPass && !d.googleStored) d.state = 'pass';
+    else d.state = 'none';
+    return d;
+  }
+  function identityState(){ return identityDetail().state; }
+  function identityValid(){ var st = identityState(); return st === 'session' || st === 'google' || st === 'pass'; }
+  var IDENTITY_RECHECK_MS = 30000;
+  var identityHold = { since: null, held: 0 };
   function nsGet(){ return lsg('v292Dfix400_ns') || ''; }
   function smallHash(s){ var h = 5381; s = String(s || ''); for (var i = 0; i < s.length; i++){ h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }   // ★Worker同一式
   function hashFull(durl){ var s = String(durl || ''); return String(s.length) + ':' + smallHash(s); }   // ★Worker d1PutImg と同一（フルdata文字列）
@@ -74,6 +114,7 @@
   // ---------- 共通 ----------
   var recvMark = {};        // pk -> 受信由来の書込（送信ラップでskip）
   var sending = {};         // pk -> 送信中（受信でskip）
+  var lastManifest = null;  // ★sp24/H-2: 直近に受け取った imgmanifest（メモリのみ）
   function localAv(pk){ try { var v = W.localStorage.getItem(PREFIX + pk); return (typeof v === 'string' && v.indexOf('data:') === 0) ? v : null; } catch(e){ return null; } }
   function fix402Pending(){ try { return JSON.parse(lsg('v292Dfix402_pimg') || '{}') || {}; } catch(e){ return {}; } }
   function applySweep(){ try { var f = W.__v292Dfix197 || W.__v292Dfix199; if (f && f.sweep) f.sweep(); } catch(e){} }
@@ -132,16 +173,19 @@
        「台帳だけserver版・実体は旧local」の状態でpushすると、旧localを新しい変更として
        サーバーへ戻す=rev膨張ピンポンの片翼になるため。解除は releaseBlocked(pk)(人手確認後)。 */
     if (isApplyBlocked(pk)){ try { console.warn(TAG, 'push抑止(apply-blocked):', pk); } catch(e){} if (done) done(false); return; }
+    /* ★sp24/H-2: 有効 identity 無し → putimg を出さない（保留。sendQ 側で再確認される） */
+    if (!identityValid()){ identityHold.held++; if (identityHold.since == null) identityHold.since = Date.now(); sendQ[pk] = 1; if (!sendTimer) sendTimer = setTimeout(flushSend, IDENTITY_RECHECK_MS); if (done) done(false); return; }
     var v = localAv(pk); if (!v || !_fetch){ if (done) done(false); return; }
     sending[pk] = true;
     _fetch(proxyUrl() + '/save', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ op: 'putimg', k: PREFIX + pk, data: v, baseImageRev: revGet(pk) }) })
       .then(function(r){ return r.json().then(function(j){ return { status: r.status, j: j }; }).catch(function(){ return { status: r.status, j: null }; }); })
       .then(function(res){
-        delete sending[pk];
         if (res.status === 409 || (res.j && res.j.errorCode === 'image-conflict')){
           var sr = (res.j && res.j.serverRev != null) ? res.j.serverRev : null;
           try { console.log(TAG, 'push-conflict→pull', pk); } catch(e){}
+          /* ★sp24/H-2: 409→PULL が終わるまで sending[pk] を保つ（fix402 が inFlight(pk) を見て無条件 putimg を後回しにする窓を閉じる） */
           pullOne(pk, sr, function(ok){
+            delete sending[pk];
             if (ok){ conflictN[pk] = 0; }
             else {
               // サーバーに実体が無い(404)以上「サーバーが新しい」は維持できない。revを採って打ち切る。
@@ -153,6 +197,7 @@
           });
           return;
         }
+        delete sending[pk];
         if (res.j && res.j.ok && res.j.imageRev != null){ revSet(pk, res.j.imageRev); try { console.log(TAG, 'push', pk, 'rev', res.j.imageRev); } catch(e){} }
         if (done) done(true);
       })
@@ -164,6 +209,9 @@
   function scheduleSend(pk){ sendQ[pk] = 1; if (sendTimer || !_fetch) return; sendTimer = setTimeout(flushSend, 1500); }
   function flushSend(){
     sendTimer = null; if (!on() || !loggedIn() || !_fetch){ sendQ = {}; return; }
+    /* ★sp24/H-2: 合言葉だけ（Google/session 無し）の間は送らずに保持し、30 s 後に再確認（network 0） */
+    if (!identityValid()){ identityHold.held++; if (identityHold.since == null) identityHold.since = Date.now(); if (Object.keys(sendQ).length) sendTimer = setTimeout(flushSend, IDENTITY_RECHECK_MS); return; }
+    identityHold.since = null;
     var ks = Object.keys(sendQ); sendQ = {};
     ks.forEach(function(pk){
       if ((conflictN[pk] || 0) >= CONFLICT_MAX) return;   // ★fix525: 連続409のキーは送信を止める
@@ -216,6 +264,7 @@
     recvBusy = true;
     fetchManifest(function(man){
       if (!man){ recvBusy = false; return; }
+      lastManifest = man;   // ★sp24/H-2: serverKnown() の材料（メモリのみ）
       var pend = fix402Pending();
       var vis = visiblePks();
       var localKeys = localAvKeys();
@@ -241,6 +290,7 @@
         var lHash = hashFull(loc);
         if (sHash && sHash === lHash){ if (kRev !== sRev) revSet(pk, sRev); cont(); return; }
         if (sRev > kRev){ pullOne(pk, sRev, cont); return; }
+        if (!identityValid()){ cont(); return; }   // ★sp24/H-2: 合言葉だけでは押し返さない（pull 側は従来どおり）
         pushOne(pk, cont);
       })();
     });
@@ -254,12 +304,18 @@
        `typeof f.revSet === 'function'` ガードで無言の no-op になっていた真因（公開し忘れ）。
        GPT裁定=条件付きGO。公開API契約検査+fail-closed は fix633 側に実装。 */
     revSet: revSet,
+    /* ★sp24/H-2: 先着保護・identity 衛生の観測口（write 0） */
+    identityValid: identityValid, identityState: identityState, identityDetail: identityDetail,
+    serverKnown: function(pk){ try { pk = String(pk || ''); if (pk.indexOf(PREFIX) === 0) pk = pk.slice(PREFIX.length); return revGet(pk) > 0 || !!(lastManifest && lastManifest[PREFIX + pk]); } catch(e){ return false; } },
+    inFlight: function(pk){ try { pk = String(pk || ''); if (pk.indexOf(PREFIX) === 0) pk = pk.slice(PREFIX.length); return !!(sending[pk] || sendQ[pk]); } catch(e){ return false; } },
+    pullOnce: function(pk, done){ try { pk = String(pk || ''); if (pk.indexOf(PREFIX) === 0) pk = pk.slice(PREFIX.length); } catch(e){} pullOne(pk, null, done); },
+    identityHold: function(){ return { since: identityHold.since, held: identityHold.held, queued: Object.keys(sendQ).length }; },
     /* ★fix657(2026-08-01): pull read-back 検証の観測口と隔離の解除口 */
     isApplyBlocked: isApplyBlocked,
     applyBlocked: function(){ var out = {}; for (var k in applyBlockedKeys) out[k] = applyBlockedKeys[k]; return out; },
     releaseBlocked: function(pk){ delete applyBlockedKeys[pk]; return !applyBlockedKeys[pk]; },
     counters657: function(){ return { readbackOk: ctr657.readbackOk, applyBlocked: ctr657.applyBlocked, blockedNow: Object.keys(applyBlockedKeys).length }; },
-    status: function(){ return { armed: true, on: on(), loggedIn: loggedIn(), ns: nsGet() ? 'set' : 'none', keys: localAvKeys().length, revs: Object.keys(revMap()).length }; }
+    status: function(){ return { armed: true, on: on(), loggedIn: loggedIn(), identityValid: identityValid(), identityState: identityState(), ns: nsGet() ? 'set' : 'none', keys: localAvKeys().length, revs: Object.keys(revMap()).length }; }
   };
   try {
     if (typeof document !== 'undefined'){
