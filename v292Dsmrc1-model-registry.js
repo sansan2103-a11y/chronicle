@@ -1,59 +1,3 @@
-/* =====================================================================
-   v292Dfix887 — HOME MODEL REGISTRY LOAD  (client 20260919-sp9h)
-   HOME_AI_MODEL_GAP hotfix. home.html only. index.html is NOT changed by this lane.
-   ---------------------------------------------------------------------
-   INCIDENT (live, 2026-09-19):
-     home.html loads v292Dfix436-seed-expand.js, whose request() builds
-       model: (window.__CHR_MODEL_REGISTRY ? ...resolve(cfg.orModel) : cfg.orModel)
-     Before 2026-09-13 that line read  model: cfg.orModel || '<id literal>'  and home
-     worked because of the literal. The dsmrc-1 change (2026-09-13) removed the literal
-     and moved the decision into the model registry. index.html carries that registry as
-     an inline block; home.html never got one and has no state object either, so on home
-     cfg is {} -> model is undefined -> JSON.stringify drops the key -> the API answers
-     HTTP 400 "No models provided". Every AI leg reachable from home fails:
-     the scenario editor's two AI buttons and the fix873 depth chooser's two AI depths.
-   ---------------------------------------------------------------------
-   WHAT THIS FILE IS:
-     the v292Dsmrc1 block of index.html, copied VERBATIM (byte-for-byte, comments and
-     all), wrapped in one home-only loader. No model id, no request policy and no
-     routing rule is re-authored here — reproducing those literals by hand is exactly
-     what the block forbids ("this one block decides the primary model; do not
-     reproduce the literal in each place"). The copy is machine-checked: the acceptance
-     harness asserts this file CONTAINS the frozen index.html block as an exact
-     substring, so the two can never drift silently.
-     Convergence (index.html loading this same file and dropping its inline copy) is a
-     separate client: sp9h must leave index.html byte-identical except its BUILT marker.
-   ---------------------------------------------------------------------
-   CONTRACT:
-     - installs window.__CHR_MODEL_REGISTRY only when it is ABSENT (the copied block
-       opens with its own "if (window.__CHR_MODEL_REGISTRY) return;" guard, and this
-       wrapper checks again before running it). It never replaces an existing registry.
-     - localStorage: reads one key (its own kill switch). Writes 0.
-     - network 0. DOM: the copied block's syncStaticOptions() queries
-       option[data-chr-model], of which home.html has none -> no-op.
-     - no new persistent key, no new storage schema, no wrapper around fetch/XHR.
-   KILL: localStorage['v292Dfix887Off'] = '1'  -> registry not installed; home returns
-     to the broken-but-known sp9 behaviour (AI legs fail honestly, no other change).
-   ===================================================================== */
-(function v292Dfix887(){
-  'use strict';
-  try {
-    if (window.localStorage && window.localStorage.getItem('v292Dfix887Off') === '1'){
-      try { window.__v292Dfix887 = { off: true, installed: false, byThis: false }; } catch(_){}
-      try { console.log('[v292Dfix887:home-model-registry] OFF (kill switch) — registry not installed'); } catch(_){}
-      return;
-    }
-  } catch(e){}
-  var _pre = !!window.__CHR_MODEL_REGISTRY;
-  if (_pre){
-    try { window.__v292Dfix887 = { off: false, installed: true, byThis: false }; } catch(_){}
-    try { console.log('[v292Dfix887:home-model-registry] registry already present — not overridden'); } catch(_){}
-    return;
-  }
-
-/* ===== BEGIN VERBATIM v292Dsmrc1 BLOCK — copied unmodified from the frozen
-   release/20260919-sp9/index.html inline block. Do not edit one byte here; edit it in
-   index.html and re-extract, or the harness equality check fails. ===== */
 (function v292Dsmrc1(){
   'use strict';
   if (window.__CHR_MODEL_REGISTRY) return;
@@ -491,16 +435,4 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncStaticOptions);
   else syncStaticOptions();
   try { console.log('[v292Dsmrc1:model-registry] loaded primary=', PRIMARY_ID); } catch(_){}
-})();
-/* ===== END VERBATIM v292Dsmrc1 BLOCK ===== */
-
-  try {
-    window.__v292Dfix887 = {
-      off: false,
-      installed: !!window.__CHR_MODEL_REGISTRY,
-      byThis: !_pre && !!window.__CHR_MODEL_REGISTRY,
-      version: (window.__CHR_MODEL_REGISTRY && window.__CHR_MODEL_REGISTRY.version) || null
-    };
-  } catch(_){}
-  try { console.log('[v292Dfix887:home-model-registry] loaded'); } catch(_){}
 })();
