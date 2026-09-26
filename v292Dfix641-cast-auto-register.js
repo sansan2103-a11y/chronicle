@@ -86,7 +86,7 @@
     var v = lsg('v292Dfix641Live');
     if (v === '1') return true;
     if (v === '0') return false;    /* 明示 opt-out（端末単位） */
-    return true;                    /* ★既定 ON */
+    return false;                   /* ★sp20 (RR-01 X-5 / 1.0 既定 OFF): 未設定 = 従来の dryRun（書込 0）。'1' = 実書込 / '0' = dryRun。Off='1' / v292DmeOff='1' が最優先 */
   }
 
   function note539(reason, err){

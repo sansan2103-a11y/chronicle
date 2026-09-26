@@ -120,7 +120,7 @@
   function lsg(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lss(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
   function off() { /* ★ge3 ME master kill: v292DmeOff='1' はこの module のどの gate よりも先に効く。 個別 flag は読みも書きも変えないので、master を外せば元の設定へそのまま戻る。 */ return lsg('v292DmeOff') === '1' || lsg(OFF_KEY) === '1'; }
-  function optedIn() { /* ★ge2 (2026-09-14 / ②C1 ME general-enable): 既定だけを変える。未設定 = ON、'0' = 明示 opt-out。Off='1' の最優先は不変。 */ return lsg(ON_KEY) !== '0'; }
+  function optedIn() { /* ★sp20 (RR-01 X-5 / 1.0 既定 OFF へ最小反転): 未設定 = OFF、'1' = 明示 ON、'0' = OFF。Off='1' / v292DmeOff='1' の最優先は不変。ge2 の story 既定（未設定 = 全 story）は不変。 */ return lsg(ON_KEY) === '1'; }
   /* ★起動判定はこの1関数だけ。
        OFF=1                → 停止
        OFF!=1 かつ ON=1     → 起動

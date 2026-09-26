@@ -1063,7 +1063,6 @@
          ・:546-550 resolveDocRev が AUTHORITY_RELOAD_REQUIRED で body write 0
          ・pendingIntent（:366）は **in-memory** なので reload で消える
          ・reload 後は S.save が発火しないので markDirty も立たない
-       ＝ **未同期 local が自動で push されない（stranded）**。実例: smrj0rvnuup turn22 / server rev9。
 
      ■Rev1 → Rev2 の変更（GPT REVISE §2 / §3）
        Rev1 は journal を **strict CAS の直前 1 点**でしか書かなかった。
@@ -1127,7 +1126,6 @@
   var F697P_PRE = 'v292Dfix402_f697p_';    /* ★prefix AUDIT 済み（上記）。collectLS 除外枠に同居 */
   var F697P_VER = 3;                       /* ★Rev3。書込は v:3 */
   /* ★Rev3: v:2(Rev2) の record も **読み取りは受け入れる**。
-     理由: live に残っている PREPARED_LOCAL（smrj0rvnuup / T23 no-confirm）を
      P0-4 の CLEARED_STALE_LANDED で救う必要があるため。v:1(Rev1) は従来どおり無視。 */
   var F697P_VER_ACCEPT = { 2: 1, 3: 1 };
   var F697P_PREPARED = 'PREPARED_LOCAL';   /* prepare 時 snapshot（CAS 未到達でも残す） */

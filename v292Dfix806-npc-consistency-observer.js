@@ -51,7 +51,7 @@
   function remember(map, key, v){ map[key] = v; var ks = Object.keys(map); while (ks.length > SEEN_CAP){ delete map[ks.shift()]; } }
   function ls(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ /* ★ge3 ME master kill: v292DmeOff='1' はこの module のどの gate よりも先に効く。 個別 flag は読みも書きも変えないので、master を外せば元の設定へそのまま戻る。 */ return ls('v292DmeOff') === '1' || ls('v292Dfix806Off') === '1'; }
-  function on(){ /* ★ge2 (2026-09-14 / ②C1 ME general-enable): 既定だけを変える。未設定 = ON、'0' = 明示 opt-out。Off='1' の最優先は不変。 */ return ls('v292Dfix806On') !== '0' && !off(); }
+  function on(){ /* ★sp20 (RR-01 X-5 / 1.0 既定 OFF へ最小反転): 未設定 = OFF、'1' = 明示 ON、'0' = OFF。Off='1' / v292DmeOff='1' の最優先は不変。ge2 の story 既定（未設定 = 全 story）は不変。 */ return ls('v292Dfix806On') === '1' && !off(); }
   function getS(){
     try { var a = window.__chronicleGetState ? window.__chronicleGetState('fix806') : null; if (a) return a; } catch(e){}
     try { return window.S || null; } catch(e){ return null; }

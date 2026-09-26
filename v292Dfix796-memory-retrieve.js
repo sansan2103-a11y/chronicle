@@ -223,7 +223,7 @@
 
   /* ---------- flags（read only。書き込みは一切しない） ---------- */
   function lsg(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
-  function isOn()  { /* ★ge2 (2026-09-14 / ②C1 ME general-enable): 既定だけを変える。未設定 = ON、'0' = 明示 opt-out。Off='1' の最優先は不変。 */ return lsg('v292Dfix796On') !== '0'; }
+  function isOn()  { /* ★sp20 (RR-01 X-5 / 1.0 既定 OFF へ最小反転): 未設定 = OFF、'1' = 明示 ON、'0' = OFF。Off='1' / v292DmeOff='1' の最優先は不変。ge2 の story 既定（未設定 = 全 story）は不変。 */ return lsg('v292Dfix796On') === '1'; }
   function isOff() { /* ★ge3 ME master kill: v292DmeOff='1' はこの module のどの gate よりも先に効く。 個別 flag は読みも書きも変えないので、master を外せば元の設定へそのまま戻る。 */ return lsg('v292DmeOff') === '1' || lsg('v292Dfix796Off') === '1'; }
   /* ★bf1: cooldown backfill の kill switch（'1' で従来の cap→cooldown へ戻す） */
   function backfillOff() { return lsg('v292Dfix796BackfillOff') === '1'; }

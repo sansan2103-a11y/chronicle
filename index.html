@@ -753,7 +753,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260926-sp19d';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20260926-sp20';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4241,12 +4241,12 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix543-save-guard.js?cb=20260829-fix748"></script>
 <!-- v292Dfix802: 3C-3B Refresh Orchestrator (telemetry / write-0). default OFF (opt-in=v292Dfix802On / kill=v292Dfix802Off / story=v292Dfix802Story).
      fix697 (LANDED) / fix670 (RAW_READY) の one-line notify 先なので両者より前に置く。timer 0 / retry 0 / materialize() 0 -->
-<script src="v292Dfix802-refresh-orchestrator.js?cb=20260914-ge3f802"></script>
+<script src="v292Dfix802-refresh-orchestrator.js?cb=20260926-sp20"></script>
 <!-- v292Dfix803: 3C-3B Automatic Materialize (QA canary only / changed:true only / fix793.materialize() 経由).
      default OFF (opt-in=v292Dfix803On / kill=v292Dfix803Off / story=v292Dfix803Story)。fix802 の fire 末尾から onFire で呼ばれる。
      timer 0 / retry 0 / 新 write path 0 / localStorage 書込は fix793.materialize() 経由の v292Dmem1_slot_<sid> のみ -->
-<script src="v292Dfix803-auto-materialize.js?cb=20260914-ge3f803"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20260919-sp7"></script>
+<script src="v292Dfix803-auto-materialize.js?cb=20260926-sp20"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20260926-sp20"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
      OFF=v292Dfix729Off / 検証口=window.__v292Dfix729 -->
 <script src="v292Dfix729-title-sync.js?cb=20260909-fix842"></script>
@@ -4588,7 +4588,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
-  <script src="v292Dfix796-memory-retrieve.js?cb=20260914-ge3f796"></script>
+  <script src="v292Dfix796-memory-retrieve.js?cb=20260926-sp20"></script>
   <script src="v292Dfix192-newengine.js?cb=20260907-fix832"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
@@ -4807,7 +4807,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      say/枚数/順序/meta/過去ターン不触・逆方向なし。★fix616/620 より後ろに置く(外側 wrapper = fix616 の save に相乗り・自前 save 0)。GPT RULING 4B-1 deploy gate 2026-09-05 -->
 <script src="v292Dfix805-speaker-abstain.js?cb=20260905-fix805v2"></script>
 <!-- fix806(4B-2): NPC consistency observer（観測のみ・in-memory・write 0・既定 OFF opt-in v292Dfix806On='1' / kill v292Dfix806Off='1'）。GPT RULING 4A-2+4B-2 2026-09-05: fix805 と同 release・805 bytes 不変 -->
-<script src="v292Dfix806-npc-consistency-observer.js?cb=20260914-ge3f806"></script>
+<script src="v292Dfix806-npc-consistency-observer.js?cb=20260926-sp20"></script>
 <script src="v292Dfix816-posture-transition-observer.js?cb=20260906-fix816b"></script>
 <!-- fix624: 生成の**崩壊**を測る（★読み取り専用・影モード）。
      実データ168ターンで崩壊3件(1.8%)を検出。崩壊は少なくとも3型あり、
@@ -4853,7 +4853,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- fix641: 証拠ベースの cast 自動登録。強2系統×2ターンでだけ昇格。
      hero は対象外。取消=window.__v292Dfix641.undo("名前") / OFF=v292Dfix641Off
      ★fix640 の後に置くこと -->
-<script src="v292Dfix641-cast-auto-register.js?cb=20260914-ge3f641"></script>
+<script src="v292Dfix641-cast-auto-register.js?cb=20260926-sp20"></script>
 <!-- fix643: 崩壊ターンの救済生成。fix624/626 の判定を **保存の前**（Api.call の直後・
      Planner.parsePlan の前）へ移し、hard(7点以上) なら1回だけ書き直させる。2回目も hard なら
      ターンを確定せず案内を出す（入力は残る・ターン番号は増えない）。
@@ -4883,7 +4883,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      OFF=v292Dfix651StreamGuardOff / v292Dfix651ZeroTurnGuardOff / v292Dfix651SlotBackupGuardOff(Bはfix228内) -->
 <script src="v292Dfix651-guards.js?cb=v292Dfix680"></script>
 <!-- v292Dfix670: Memory Engine v0.3 / Phase3A-1 Shadow. UI._renderHooks push only. opt-in=v292Dfix670On / OFF=v292Dfix670Off -->
-<script src="v292Dfix670-memory-engine.js?cb=20260914-ge3f670"></script>
+<script src="v292Dfix670-memory-engine.js?cb=20260926-sp20"></script>
 <!-- v292Dfix801: events story-scoped adapter (GPT Q4). fix670 の後・fix792/793 の前。__v292Dfix801.eventsForStory(sid) READ only -->
 <script src="v292Dfix801-events-story-adapter.js?cb=20260903-fix802"></script>
 <!-- v292Dfix789: Phase3A-2 Semantic Adjudication (shadow). chr6mem は読むだけ・verdict は別DB chr6adj。
@@ -4903,7 +4903,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      memory state = UNLOADED/LOADED_ABSENT/LOADED_VALUE。UNLOADEDからsaveしない(fail-closed)。
      nullは明示clearだけ。unknown-fieldでstrip retryしない。canaryはsmtg00ynsv1のみ。
      ON=v292Dfix793On / OFF=v292Dfix793Off / story=v292Dfix793Story -->
-<script src="v292Dfix793-memory-canonical.js?cb=20260914-ge3f793"></script>
+<script src="v292Dfix793-memory-canonical.js?cb=20260926-sp20"></script>
 <script src="v292Dfix804-memory-preserve.js?cb=20260904-fix804"></script>
 <!-- R118 Phase1: capability constraint telemetry. read-only / memory only. OFF=v292Dfix740Off verbose=chronDiagVerbose -->
 <script src="v292Dfix740-cap-telemetry.js?cb=v292Dfix740"></script>
