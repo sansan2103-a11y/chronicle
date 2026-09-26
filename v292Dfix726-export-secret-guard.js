@@ -47,7 +47,8 @@
 
   /* ---- 契約定数 ---- */
   var SECRET_FIELDS = ['key', 'naiKey', 'orKey', 'pollKey'];
-  var TOPLEVEL_OMIT = ['v292ProxyPass', 'v292GoogleToken', 'v292ProxyUrl', 'v292Dfix702_storyAuth'];
+  /* ★si2（ACCOUNT_IDENTITY dependency map 所見）: fix837 の長寿命 session id（7 日有効の bearer）も端末バックアップへ出さない。 */
+  var TOPLEVEL_OMIT = ['v292ProxyPass', 'v292GoogleToken', 'v292ProxyUrl', 'v292Dfix702_storyAuth', 'v292Dfix837_sess'];
 
   /* ★★fix728(RULING52 §1-§9): DIAGNOSTIC_RUNTIME_LOG != PORTABLE USER BACKUP。
      診断・trace・refusal・dropped-event の記録は、story でも snapshot 復旧資産でも
