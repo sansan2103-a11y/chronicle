@@ -165,7 +165,8 @@
     if (t && t.token && (!t.exp || (t.exp * 1000) > (nowMs() + 30000))) h['x-google-id'] = t.token;
     return h;
   }
-  function loggedIn(){ var h = authHeaders(); return !!(h['x-google-id'] || h['x-chronicle-pass']); }
+  function loggedIn(){ if (window.__v292Dfix893 && window.__v292Dfix893.active) return window.__v292Dfix893.loggedIn();   /* ★fix893 */
+    var h = authHeaders(); return !!(h['x-google-id'] || h['x-chronicle-pass']); }
 
   function callRead(body, ms){
     return new Promise(function(res, rej){
