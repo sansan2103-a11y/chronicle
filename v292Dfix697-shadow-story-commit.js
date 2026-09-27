@@ -2476,6 +2476,7 @@
       if (f == null) return;
       if (lastFp != null && f !== lastFp) markDirty();
       lastFp = f;
+      try { f898Eval('t2-poll'); } catch(e898){}      /* ■fix898: 既存 T2 poll に相乗り（新 poller なし） */
     }, SIDE_POLL_MS);
   } catch(e){}
 
@@ -2552,6 +2553,71 @@
     window.addEventListener('chr:engine-booted', function(){ f895Eval('engine-booted'); }, false);
   } catch(e){}
   try { f895Eval('f697-load'); } catch(e){}
+
+  /* ■■fix898（SA-1a C1・GPT STORAGE_ARCHITECTURE SA-0 GO_WITH_FIXES・kill: v292Dfix898Off='1'）
+     CANONICAL_INVISIBLE_DIRTY_RECONCILE。
+     fix781 layer1 は keySet への書込なら内容を見ずに DIRTY にする（S1）。canonical 外の field
+     （例: cfg.model）だけが変わった書込は commit も収束も起きず DIRTY_LOCAL が残り続けた（S2、sa0 run2a/3a）。
+     ・判定は既存 fix705 resolve781 (f) STALE DIRTY_INTENT と同じ:「DIRTY_* かつ現在の local canonical
+       hash == lastConfirmed.fingerprint」なら未反映の canonical 変更は無い → fix781.transition(CLEAN)。
+       独自の CLEAN 規則は作らない（(f) の条件に、送信中/予約中/journal を除く安全条件を足しただけ）。
+     ・適用点は 2 つだけ: fix705 release 後（'chr:f705-released' / engine boot）と既存 T2 poll（20s）。
+     ・条件（全部）: kill OFF / fix697 on / document story / engine boot 済み / fix705 同一 story・released・
+       error なし / marker が同一 story・DIRTY_INTENT or DIRTY_LOCAL・lastConfirmed.fingerprint あり・
+       inFlightSave なし / fix697 inFlight なし / pushTimer なし / active journal なし /
+       現在の contentHashV2 == lastConfirmed.fingerprint / hash 計算の前後で marker の generation と状態が不変。
+     ・書くのは guard marker だけ（story / sidecar への書込 0）。 */
+  var f898Busy = false, f898Last = null, f898Count = 0;
+  function f898Off(){ try { return lsg('v292Dfix898Off') === '1'; } catch(e){ return false; } }
+  function f898Marker(id){ try { var m = JSON.parse(lsg('v292Dfix402_f781g_' + id) || 'null'); return (m && typeof m === 'object') ? m : null; } catch(e){ return null; } }
+  function f898Skip(why, src){ f898Last = { reconciled: false, why: why, src: src, t: Date.now() }; }
+  function f898Eval(src){
+    if (f898Busy) return;
+    try {
+      if (f898Off()) return f898Skip('KILL', src);
+      if (!on()) return f898Skip('F697_OFF', src);
+      var id = storyId(); if (!id) return f898Skip('NO_STORY', src);
+      var eb = window.__chrEngineBoot;
+      if (typeof eb === 'function' && eb.__ran !== true) return f898Skip('ENGINE_NOT_BOOTED', src);
+      var f7 = window.__v292Dfix705; var st = (f7 && typeof f7.status === 'function') ? f7.status() : null; var s7 = st && st.state;
+      if (!s7 || String(st.storyId) !== String(id)) return f898Skip('F705_OTHER_STORY', src);
+      if (s7.phase !== 'released' || s7.error) return f898Skip('F705_NOT_RELEASED', src);
+      var G = window.__v292Dfix781;
+      if (!G || typeof G.transition !== 'function') return f898Skip('NO_F781', src);
+      var m = f898Marker(id);
+      if (!m) return f898Skip('NO_MARKER', src);
+      if (String(m.storyId || '') !== String(id)) return f898Skip('MARKER_STORY_MISMATCH', src);
+      if (m.state !== 'DIRTY_INTENT' && m.state !== 'DIRTY_LOCAL') return f898Skip('STATE_' + String(m.state), src);
+      var lcFp = (m.lastConfirmed && m.lastConfirmed.fingerprint != null) ? String(m.lastConfirmed.fingerprint) : null;
+      if (!lcFp) return f898Skip('NO_LAST_CONFIRMED', src);
+      if (m.inFlightSave) return f898Skip('MARKER_IN_FLIGHT', src);
+      if (inFlight) return f898Skip('IN_FLIGHT', src);
+      if (pushTimer) return f898Skip('PUSH_PENDING', src);
+      if (f697pRead(id)) return f898Skip('JOURNAL_PRESENT', src);
+      var gen0 = +m.localGeneration || 0, st0 = m.state;
+      f898Busy = true;
+      contentHashV2(id, function(h){
+        f898Busy = false;
+        try {
+          if (!h) return f898Skip('HASH_NULL', src);
+          if (String(h) !== lcFp) return f898Skip('LOCAL_NE_LAST_CONFIRMED', src);
+          var m2 = f898Marker(id);
+          if (!m2 || m2.state !== st0 || (+m2.localGeneration || 0) !== gen0 || m2.inFlightSave) return f898Skip('MARKER_CHANGED_DURING_HASH', src);
+          if (inFlight || pushTimer || f697pRead(id)) return f898Skip('BUSY_AFTER_HASH', src);
+          var ok = false;
+          try { ok = !!G.transition(id, 'CLEAN', { inFlightSave: null }); } catch(e3){ ok = false; }
+          f898Count++;
+          f898Last = { reconciled: ok, src: src, from: st0, gen: gen0, lc: (m2.lastConfirmed && m2.lastConfirmed.serverRev), t: Date.now() };
+          note({ kind: ok ? 'F898_STALE_DIRTY_RECONCILED' : 'F898_RECONCILE_WRITE_FAIL', id: id, src: src, from: st0, gen: gen0,
+                 lcRev: (m2.lastConfirmed && m2.lastConfirmed.serverRev), hash: String(h).slice(0, 16), canonicalDataWrites: 0 });
+        } catch(e4){ f898Skip('ERROR', src); }
+      });
+    } catch(e){ f898Busy = false; f898Skip('ERROR', src); }
+  }
+  try {
+    window.addEventListener('chr:f705-released', function(){ setTimeout(function(){ try { f898Eval('f705-released'); } catch(e){} }, 0); }, false);
+    window.addEventListener('chr:engine-booted', function(){ setTimeout(function(){ try { f898Eval('engine-booted'); } catch(e){} }, 0); }, false);
+  } catch(e){}
 
   /* ★★fix733: boot 時に cache から rev を推定するのをやめた（UNKNOWN のまま開始）。
      代わりに lineage gate の base となる local canonical hash だけを read-only で捉える。 */
@@ -2689,6 +2755,7 @@
     /* ★★fix697p(P1/P2): PREPARED_LOCAL journal の read-only 可視化（write 0 / network 0 / 遷移 0）。
        reset / force / resume を外から撃つ口は **作らない**（guard の無効化を構造的に禁止）。 */
     journal: function(id){ var s = id || storyId(); return s ? f697pRead(s) : null; },
+    f898: function(){ return { off: f898Off(), count: f898Count, last: f898Last ? JSON.parse(JSON.stringify(f898Last)) : null }; },
     journalStats: function(){
       return { off: f697pOff(), enabled: f697pEnabled(), rev: 3,
                key: F697P_PRE + String(storyId() || ''),

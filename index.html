@@ -318,7 +318,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260927-ac6';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20260927-ac7';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -3367,6 +3367,14 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
     } catch(e){}
   })();
 
+  /* ■fix899: メモリ上の S が、この関数が読んだのと同じ story を表しているときだけ正規化する */
+  function __storyKeyMatches899(k){
+    try {
+      var dk = window.__chronicleDocumentStoryKey;
+      if (typeof dk === 'string' && dk) return dk === k;
+      return false;
+    } catch(e){ return false; }
+  }
   function fixProviderCfg(){
     try {
       /* ★fix694: fix692 の個別 resolver を共有 authority へ統合 */
@@ -3405,6 +3413,25 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
         delete cfg.key;
         changed = true;
       }
+      /* ■fix899（SA-1a C2・GPT STORAGE_ARCHITECTURE SA-0 GO_WITH_FIXES・kill: v292Dfix899Off='1'）
+         FALSE_POSITIVE_DIRTY_LOCAL_INTENT の ping-pong を止める。
+         ・メモリ上の S.cfg は既定値（model = claude-haiku…）に保存本文を Object.assign するため、
+           本文から model を消してもメモリには既定の model が残り、次の S.save が本文へ戻していた
+           → 次の open でまた本文を書き換える（sa0 run3a で 3 周実測）。
+         ・openrouter + Anthropic 系 model は無効という既存の目的はそのまま。検出したら
+           保存本文と同じ方針でメモリ上の S.cfg.model も正規化する（本文を書かない場合も含む）。
+         ・canonical projection（HY_CFG_ALLOW / keysFor）は変えない。 */
+      try {
+        if (localStorage.getItem('v292Dfix899Off') !== '1' && typeof S !== 'undefined' && S && S.cfg &&
+            __storyKeyMatches899(__k) && S.cfg.provider === 'openrouter' && S.cfg.model){
+          var mm = String(S.cfg.model).toLowerCase();
+          if (mm.indexOf('claude') !== -1 || mm.indexOf('haiku') !== -1 ||
+              mm.indexOf('sonnet') !== -1 || mm.indexOf('opus') !== -1){
+            delete S.cfg.model;
+            try { window.__v292Dfix899 = { memNormalized: (window.__v292Dfix899 && window.__v292Dfix899.memNormalized || 0) + 1, t: Date.now() }; } catch(e899b){}
+          }
+        }
+      } catch(e899){}
       if (changed){
         _f748RunC('V100_FIX_PROVIDER_CFG', function(){
           localStorage.setItem(__k, JSON.stringify(s));
@@ -3839,7 +3866,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      default OFF (opt-in=v292Dfix803On / kill=v292Dfix803Off / story=v292Dfix803Story)。fix802 の fire 末尾から onFire で呼ばれる。
      timer 0 / retry 0 / 新 write path 0 / localStorage 書込は fix793.materialize() 経由の v292Dmem1_slot_<sid> のみ -->
 <script src="v292Dfix803-auto-materialize.js?cb=20260926-sp20"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20260927-ac4"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20260927-ac7"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
      OFF=v292Dfix729Off / 検証口=window.__v292Dfix729 -->
 <script src="v292Dfix729-title-sync.js?cb=20260909-fix842"></script>
