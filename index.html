@@ -270,6 +270,7 @@
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
 <script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
 <script src="v292Dfix705-canonical-read-gate.js?cb=20260927-ac5"></script>
+<script src="v292Dfix900-hydrate-ui-gate.js?cb=20260928-ac8"></script>
 <!-- ★si1 v292Dfix892 SAVE_INTEGRITY_HELD_INPUT_GUARD（packet SAVE_INTEGRITY_P1_20260927_01 / GPT GO_WITH_FIXES B'）: fix705 HOLD 中は送信を生成前に止める。read-only。★head・fix705 の直後＝送信 UI（#sendBtn 等）より先に同期ロードし、document capture で入口を押さえる（GPT SAVE_INTEGRITY_P1_20260927_02 条件 1 = load-order）。kill=v292Dfix892Off=1 -->
 <script src="v292Dfix892-held-input-guard.js?cb=20260927-si1"></script>
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
@@ -318,7 +319,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260927-ac7';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20260928-ac8';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -3852,6 +3853,29 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   /* Retry once after game's own G.init() completes */
   setTimeout(init, 1000);
   setTimeout(init, 3000);
+  /* ■fix899b（SA-1a C2 production gap・kill: v292Dfix899bOff='1'）
+     本番 PC 実測（smuk33np2as, ac7）: story は fix889 の doc1→reload→doc2 で開き、doc2 では
+     engine boot が deferred（__chrBootDefer）で DOMContentLoaded 後 ~7.4s に走る。上の init()
+     （DOMContentLoaded / +1s / +3s）は全部 boot 前に走り、__chr6WriteKey() がまだ null なので
+     fixProviderCfg は即 return → fix899 のメモリ正規化が一度も動かず、次の S.save が既定 model を
+     本文へ戻していた（Phase B 実測）。rig は boot が ~1.1s なので +1s の init が間に合っていた。
+     対処: engine boot 完了の通知（chr:engine-booted・fix895 が既に dispatch）で fixProviderCfg を
+     1 回だけ呼ぶ。中身は既存関数そのもの（新しい書込経路 0・判定条件の変更 0）。hold 中の本文書込は
+     fix705 が従来どおり捨てる。boot が既に済んでいる document（非 deferred）では何もしない
+     （上の init() が従来どおり拾う）。 */
+  try {
+    if (localStorage.getItem('v292Dfix899bOff') !== '1' && !(window.__chrEngineBoot && window.__chrEngineBoot.__ran)){
+      var __f899bDone = false;
+      window.addEventListener('chr:engine-booted', function(){
+        if (__f899bDone) return; __f899bDone = true;
+        setTimeout(function(){
+          try { fixProviderCfg(); window.__v292Dfix899b = { ran: 1, t: Date.now(), memNormalized: (window.__v292Dfix899 && window.__v292Dfix899.memNormalized) || 0 }; } catch(e){}
+        }, 0);
+      });
+      window.__v292Dfix899b = { armed: 1 };
+    } else { window.__v292Dfix899b = { armed: 0 }; }
+  } catch(e){}
+
 
   console.log(TAG, 'v100 active');
 })();
