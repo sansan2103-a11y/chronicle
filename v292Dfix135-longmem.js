@@ -374,7 +374,15 @@
              (loadEvents().length > 0) || (loadLastBuild() >= 0);
     } catch(e){ return false; }
   }
+  /* ★★fix894(candidate): engine 起動前（fix889 document 1 等）の S は既定値 turns=[] なので、
+     「turns=0 かつ長期記憶あり」を誤検知して longmem / fix77 状態を消してしまう。起動前は何もしない。 */
+  function f894Booted(){
+    try { if (localStorage.getItem('v292Dfix894Off') === '1') return true; } catch(e){}
+    try { var b = window.__chrEngineBoot; if (typeof b === 'function' && b.__ran !== true) return false; } catch(e){}
+    return true;
+  }
   setInterval(function(){
+    if (!f894Booted()) return;                         /* ★fix894 */
     var st = getState();
     if (!st || !st.turns) return;
     if (st.turns.length === 0 && _hasStaleLongMem()){

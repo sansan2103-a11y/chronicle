@@ -23,6 +23,18 @@
   function off(){ try { return localStorage.getItem('v292Dfix325Off') === '1'; } catch(e){ return false; } }
   function getS(){ try { return window.S || (typeof S !== 'undefined' ? S : null); } catch(e){ return null; } }
   function getStore(){ return window.__v292Dfix77Store; }
+  /* ★★fix894(candidate / VAULT_DOC1_STATE_WIPE): engine がこの document でまだ起動していない間は
+     S は既定値（turns=[]）のままで、物語本体を反映していない。fix889 の 2-document boot（document 1 は
+     BOOT BARRIER で G.init() を保留したまま probe → reload）では、この窓で (a) が
+     「状態が物語より先」と誤判定し、空 turns から再導出した {} を永続化していた（実測: 実機 6 例 + offline 同一 PRE の OFF/ON replay）。
+     → engine 起動前は判定も書込も一切しない（lastLen も更新しない）。barrier が無い旧 index では従来どおり。
+     OFF: localStorage v292Dfix894Off='1' */
+  function f894Off(){ try { return localStorage.getItem('v292Dfix894Off') === '1'; } catch(e){ return false; } }
+  function engineBooted(){
+    if (f894Off()) return true;
+    try { var b = window.__chrEngineBoot; if (typeof b === 'function' && b.__ran !== true) return false; } catch(e){}
+    return true;
+  }
   /* ★★fix748(Phase C / C6 = Class C): rederive は S.turns から純関数的に作り直した store を書く。
        RECOMPUTATION_SOURCE  = S.turns（dbg.raw の <state>。durable な物語本体側に載っている）
        RECOMPUTATION_TRIGGER = 直下の 1500ms staleness ポーリング（毎回 maxStoreTurn / turn regression を見る）
@@ -81,6 +93,7 @@
 
   function rederive(reason){
     if (off()) return false;
+    if (!engineBooted()) return false;                 /* ★fix894 */
     var s = getS(); if (!s || !Array.isArray(s.turns)) return false;
     var store = getStore(); if (!store) return false;
     var fresh = deriveFromTurns(s.turns);
@@ -104,6 +117,7 @@
   var lastLen = -1;
   try { setInterval(function(){
     if (off()) return;
+    if (!engineBooted()) return;                       /* ★fix894: 判定も lastLen 更新もしない */
     var s = getS(); if (!s || !Array.isArray(s.turns)) return;
     var curLen = s.turns.length;
     var store = getStore(); if (!store) { lastLen = curLen; return; }
