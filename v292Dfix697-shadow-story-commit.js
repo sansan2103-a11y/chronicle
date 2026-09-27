@@ -2479,6 +2479,80 @@
     }, SIDE_POLL_MS);
   } catch(e){}
 
+  /* ■fix895（2026-09-27・kill = v292Dfix895Off=1）: DIRTY_LOCAL_RESUME_GAP — re-entry resume。
+     ■何が起きていたか（runtime 確定: rig/replay_resume.mjs run4 / GPT ACCOUNT_IDENTITY_P2_20260927_12）
+       送信 → 表示 → debounce（12s）中にアプリ内ホームへ遷移すると pushTimer ごと予約が消える。
+       戻った document では fix705 が CANONICAL_LOCAL_AHEAD（local を正本のまま保存フローへ追い付かせる）と
+       判定するのに、fix697 は load 時 baseline との差分しか見ないため 1 度も markDirty しない
+       → 次のターンまで Cloud に届かない（データは local に在る。失われるのは commit の予約だけ）。
+     ■やること（これだけ）
+       fix705 の「今回 document の判定が released / CANONICAL_LOCAL_AHEAD」と engine boot 完了が
+       両方そろった時点で **1 回だけ**条件を評価し、全部満たすときだけ既存の markDirty() を 1 回呼ぶ。
+       → 既存の commit('debounce') → fix781 / fix705 authority / CAS / lineage をそのまま通る。
+       新しい送信経路・D1/KV 直書き・新しい hash 関数・pre-boot poller は作らない。
+     ■条件（全部）: kill でない / fix697 on・login / document story key 確定 / engine boot 済み /
+       fix705 同一 story・phase=released・verdict=CANONICAL_LOCAL_AHEAD・error なし /
+       marker=DIRTY_LOCAL / marker.lastConfirmed.serverRev == fix705 が今回読んだ Cloud rev /
+       Cloud serverHash == lastConfirmed.fingerprint / fix705 の localHash != lastConfirmed.fingerprint /
+       inFlight=false / pushTimer なし / PREPARED_LOCAL journal なし / この document で未評価。
+       （hash は fix705 が既に計算した serverHash / localHash と fix781 marker の fingerprint を読むだけ）
+     ■dedupe: この document 内の in-memory フラグだけ。永続 dedupe は持たない
+       （commit が失敗して DIRTY_LOCAL が残れば、次の document で再評価される）。
+     ■発火: 'chr:f705-released'（fix705 releaseHold）と 'chr:engine-booted'（index の __chrEngineBoot）
+       の 2 event、および fix697 load 時の 1 回だけ。定期 poll はしない。 */
+  var f895Done = false, f895Last = null;
+  function f895Off(){ try { return lsg('v292Dfix895Off') === '1'; } catch(e){ return false; } }
+  function f895Eval(src){
+    if (f895Done) return;
+    var why = null;
+    try {
+      if (f895Off()) { why = 'KILL'; }
+      else if (!on()) { why = 'F697_OFF'; }
+      else if (!isLoggedIn()) { why = 'NOT_LOGGED_IN'; }
+      else {
+        var id = storyId();
+        var eb = window.__chrEngineBoot;
+        var f7 = window.__v292Dfix705;
+        var st = (f7 && typeof f7.status === 'function') ? f7.status() : null;
+        var s = st && st.state;
+        if (!id) why = 'NO_STORY';
+        else if (typeof eb === 'function' && eb.__ran !== true) why = 'ENGINE_NOT_BOOTED';
+        else if (!s || String(st.storyId) !== String(id)) why = 'F705_OTHER_STORY';
+        else if (s.phase !== 'released' || s.error) why = 'F705_NOT_RELEASED';
+        else if (s.verdict !== 'CANONICAL_LOCAL_AHEAD') { why = 'VERDICT_' + String(s.verdict); f895Done = true; }
+        else {
+          f895Done = true;                               /* ここから先は結果に関わらずこの document では 1 回だけ */
+          var m = null; try { m = JSON.parse(lsg('v292Dfix402_f781g_' + id) || 'null'); } catch(e1){ m = null; }
+          var lc = m && m.lastConfirmed;
+          var srev = (typeof s.serverRev === 'number') ? s.serverRev : null;
+          if (!m) why = 'NO_MARKER';
+          else if (m.state !== 'DIRTY_LOCAL') why = 'MARKER_' + String(m.state);
+          else if (!lc || typeof lc.serverRev !== 'number' || srev == null || lc.serverRev !== srev) why = 'REV_NE_LAST_CONFIRMED';
+          else if (!s.serverHash || lc.fingerprint == null || String(lc.fingerprint) !== String(s.serverHash)) why = 'CLOUD_HASH_NE_LAST_CONFIRMED';
+          else if (!s.localHash || String(s.localHash) === String(lc.fingerprint)) why = 'LOCAL_NOT_AHEAD';
+          else if (inFlight) why = 'IN_FLIGHT';
+          else if (pushTimer) why = 'ALREADY_SCHEDULED';
+          else if (f697pRead(id)) why = 'JOURNAL_PRESENT';
+          else {
+            note({ kind: 'F895_RESUME_RESERVED', id: id, src: src, serverRev: srev,
+                   base: String(lc.fingerprint).slice(0, 16), local: String(s.localHash).slice(0, 16) });
+            f895Last = { reserved: true, src: src, t: Date.now() };
+            try { console.log(TAG, 'fix895: DIRTY_LOCAL を再予約（既存 commit 経路・1 回）', src); } catch(e2){}
+            markDirty();
+            return;
+          }
+        }
+      }
+    } catch(e){ why = 'ERROR'; f895Done = true; }
+    f895Last = { reserved: false, why: why, src: src, t: Date.now() };
+    if (f895Done) note({ kind: 'F895_SKIP', why: why, src: src });
+  }
+  try {
+    window.addEventListener('chr:f705-released', function(){ f895Eval('f705-released'); }, false);
+    window.addEventListener('chr:engine-booted', function(){ f895Eval('engine-booted'); }, false);
+  } catch(e){}
+  try { f895Eval('f697-load'); } catch(e){}
+
   /* ★★fix733: boot 時に cache から rev を推定するのをやめた（UNKNOWN のまま開始）。
      代わりに lineage gate の base となる local canonical hash だけを read-only で捉える。 */
   try { captureInitialLocalHash(); } catch(e){}
@@ -2626,6 +2700,7 @@
                hashProbe: f697pLastHashProbe ? JSON.parse(JSON.stringify(f697pLastHashProbe)) : null,
                stats: JSON.parse(JSON.stringify(f697pStats)) }; },
     flush: function(){ commit('manual'); return true; },
+    f895: function(){ return { off: f895Off(), done: f895Done, last: f895Last ? JSON.parse(JSON.stringify(f895Last)) : null }; },
     /* ★fix718: read-only 可視化（書込 0） */
     canonState: function(){ return { ctx: canonCtx ? JSON.parse(JSON.stringify(canonCtx)) : null,
       holds: JSON.parse(JSON.stringify(canonHold)), cstats: JSON.parse(JSON.stringify(cstats)) }; },

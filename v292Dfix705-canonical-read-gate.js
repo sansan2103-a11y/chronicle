@@ -335,6 +335,8 @@
   function releaseHold(why){
     state.held = false; state.resolved = true; state.phase = 'released';
     note({ hold: 'released', why: why });
+    /* ■fix895: 判定確定の通知だけ（state / storage / network 変更 0）。受け手は fix697 の re-entry resume。 */
+    try { window.dispatchEvent(new Event('chr:f705-released')); } catch(e){}
   }
 
   // =====================================================================
