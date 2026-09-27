@@ -75,7 +75,7 @@
     if (rest.indexOf('/img') === 0 && (rest.length === 4 || rest.charAt(4) === '?')) return null;   /* 画像 URL は認証不要のまま */
     return '/api' + rest;
   }
-  function onAuthFailure() { state.me = null; clearMark(); showGate('expired'); }
+  function onAuthFailure() { state.me = null; clearMark(); unrenderLogout897(); showGate('expired'); }
   function watch(resp) {
     try {
       if (resp && resp.status === 401) {
@@ -135,8 +135,8 @@
   function refreshMe() {
     return api('/auth/me', 'GET').then(function (j) {
       state.checked = true;
-      if (j && j.ok) { state.me = { accountId: j.accountId, entitlement: j.entitlement, status: j.status }; writeMark(state.me); if (!PLAY[j.entitlement]) showGate('entitlement'); else hideGate(); }
-      else if (j && j.__status === 401) { state.me = null; clearMark(); showGate('login'); }
+      if (j && j.ok) { state.me = { accountId: j.accountId, entitlement: j.entitlement, status: j.status }; writeMark(state.me); if (!PLAY[j.entitlement]) showGate('entitlement'); else { hideGate(); renderLogout897(); } }
+      else if (j && j.__status === 401) { state.me = null; clearMark(); unrenderLogout897(); showGate('login'); }
       else { state.lastError = j && (j.errorCode || j.__status); }
       return state.me;
     }).catch(function (e) { state.checked = true; state.lastError = String(e && e.message || e); return state.me; });
@@ -193,6 +193,63 @@
     if (document.body) run(); else document.addEventListener('DOMContentLoaded', run);
   }
   function hideGate() { if (gateEl) gateEl.style.display = 'none'; }
+
+  /* ---- 7. ■fix897: ホームの「ログアウト」（GPT ACCOUNT_IDENTITY_P2_20260927_17 / Gate 7B）
+     この origin では旧ログイン UI（fix328 設定欄・home f663）が無効化されているため、
+     利用可能（PLAY）な account でログイン中の利用者がログアウトする手段が無かった。
+     既存の logout()（POST /api/auth/logout → cookie 消去 → mark 消去）を呼ぶボタンを
+     ホームの #loginState の直後に 1 つだけ置く。新しい認証経路は作らない。
+     ・ホーム以外（物語画面）には出さない（#loginState が無い）。二重生成しない（id で判定）。
+     ・押下 → 二度押し防止 → logout() → reload（ログイン画面が出る）。
+     kill: localStorage v292Dfix897Off='1' → 何も描かない。 */
+  /* ■fix897（GPT _18 Q2）: STALE_LOGIN_STATUS_TEXT。server 認証済み（refreshMe で PLAY を確認）の時だけ、
+     旧 #loginState（旧トークン基準で「未ログイン」と描く）と招待文言 #v888invite を表示制御で隠す。
+     origin では判定しない。node・handler は触らない（display のみ、自分が隠したものだけ戻す）。 */
+  var F897_STALE_IDS = ['loginState', 'v888invite'];
+  function staleUi897(hide) {
+    try {
+      if (lsGet('v292Dfix897Off') === '1') return;
+      F897_STALE_IDS.forEach(function (id) {
+        var e = document.getElementById(id); if (!e) return;
+        if (hide) { if (e.getAttribute('data-f897h') !== '1') { e.setAttribute('data-f897h', '1'); e.style.display = 'none'; } }
+        else if (e.getAttribute('data-f897h') === '1') { e.removeAttribute('data-f897h'); e.style.display = ''; }
+      });
+    } catch (e) {}
+  }
+  function unrenderLogout897() {
+    try { var b = document.getElementById('f897-account'); if (b && b.parentNode) b.parentNode.removeChild(b); } catch (e) {}
+    staleUi897(false);
+  }
+  function renderLogout897() {
+    try {
+      if (lsGet('v292Dfix897Off') === '1') return;
+      var run = function () {
+        try {
+          if (document.getElementById('f897-account')) return;
+          var anchor = document.getElementById('loginState');
+          if (!anchor || !anchor.parentNode) return;
+          var box = document.createElement('div');
+          box.id = 'f897-account';
+          box.style.cssText = 'margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;line-height:1.5';
+          var label = document.createElement('span');
+          label.style.cssText = 'opacity:.75';
+          label.textContent = 'Google アカウントでログイン中';
+          var btn = document.createElement('button');
+          btn.id = 'f897-logout'; btn.type = 'button'; btn.textContent = 'ログアウト';
+          btn.style.cssText = 'font-size:11px;padding:3px 10px;border:1px solid rgba(127,127,160,.55);border-radius:6px;background:transparent;color:inherit;cursor:pointer';
+          btn.onclick = function () {
+            if (btn.disabled) return;
+            btn.disabled = true; btn.textContent = 'ログアウトしています…';
+            logout().then(function () { location.reload(); });
+          };
+          box.appendChild(label); box.appendChild(btn);
+          anchor.parentNode.insertBefore(box, anchor.nextSibling);
+        } catch (e) {}
+        staleUi897(true);
+      };
+      if (document.body) run(); else document.addEventListener('DOMContentLoaded', run);
+    } catch (e) {}
+  }
 
   window.__v292Dfix893 = { active: true, loggedIn: loggedIn, me: function () { return state.me || readMark(); }, refreshMe: refreshMe, logout: logout, loginWithCredential: loginWithCredential, status: function () { return { active: true, checked: state.checked, me: state.me, mark: readMark(), lastError: state.lastError }; } };
   refreshMe();
