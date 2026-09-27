@@ -149,6 +149,87 @@
        ・marker prefix が v292Dfix402_ 配下なのは fix697:74 と同じ collectLS 除外枠に同居させるため */
   var F781_MPRE = 'v292Dfix402_f781g_';
   function f781Off(){ return lsg('v292Dfix781Off') === '1'; }
+
+  /* ■■fix896: CROSS_DEVICE_APPLY_MARKER_STALE（GPT ACCOUNT_IDENTITY_P2_20260927_16 GO_WITH_FIXES）
+     他端末の正当な Cloud 更新を fix705 が apply → reload → CANONICAL_SAME_HASH で取り込んでも、
+     fix781 marker.lastConfirmed が apply 前の rev に残る（→ 次 turn + 離脱で偽 DIVERGED）。
+     SAME_HASH（この document で fix705 が計測した localHash === serverHash）の 1 点でだけ、
+     既存 fix781 confirm() に authoritative serverRev/serverHash を渡して lastConfirmed を前進させる。
+     ・story data / sidecar data への write = 0（書くのは guard marker だけ・fix781 自身が書く）。
+     ・state は変えない：confirm() は inFlightSave 一致時しか CLEAN にしない。fix896 は inFlightSave
+       がある時は呼ばないので、DIRTY_* はそのまま残る（独自 CLEAN 判定を持たない）。
+     ・rev 単調：srev > lc.rev（または lc 無し）だけ前進。== かつ fp 同一は no-op、== で fp 違い / < は SKIP。
+     ・DIVERGED / BOOTSTRAP_HOLD / inFlight / f697p journal / schema != 2 / kill は SKIP。
+     ・■fix896b: marker 無し（初回端末）は同じ SAME_HASH 条件 + journal/inFlight 無しの時だけ confirm() で
+       canonical baseline（CLEAN・lastConfirmed=現 Cloud）を作る（ledger F896_BASELINE_CONFIRMED）。
+     kill: localStorage.v292Dfix896Off = '1' → 呼ばれても即 return（旧挙動と byte 同一）。 */
+  var F896_JPRE = 'v292Dfix402_f697p_';
+  var f896Last = null;
+  function f896Off(){ return lsg('v292Dfix896Off') === '1'; }
+  function f896Skip(why, extra){
+    var row = { f896: 'SKIP', why: why, canonicalDataWrites: 0, markerReconcile: 0 };
+    if (extra) for (var k in extra) row[k] = extra[k];
+    f896Last = row; note(row); return false;
+  }
+  function f896Reconcile(){
+    if (f896Off()) { f896Last = { f896: 'OFF' }; return false; }
+    if (f781Off()) return f896Skip('F781_OFF');
+    if (!STORY_ID) return f896Skip('NO_STORY');
+    if (state.schema !== 2) return f896Skip('SCHEMA_NOT_V2');                       /* fingerprint domain = contentHashV2 のみ */
+    var lh = state.localHash ? String(state.localHash) : null;
+    var sh = state.serverHash ? String(state.serverHash) : null;
+    var srev = (typeof state.serverRev === 'number') ? state.serverRev : null;
+    if (!lh || !sh || lh !== sh) return f896Skip('NOT_SAME_HASH');
+    if (srev == null || !(srev >= 0)) return f896Skip('NO_SERVER_REV');
+    var G = null; try { G = window.__v292Dfix781 || null; } catch(e){ G = null; }
+    if (!G || typeof G.confirm !== 'function') return f896Skip('NO_F781_API');
+    var m = f781Marker();
+    if (!m){
+      /* ■fix896b（GPT _17 GO）: marker 未存在の初回端末 = canonical baseline establishment。
+         「marker 無し」だけでは confirm しない：ここへ来るのは上で lh===sh（この document の SAME_HASH）
+         と serverRev を確認済みの時だけ。journal があれば既存 recovery に任せる。
+         raw marker が存在するのに読めない（未知 version 等）時は作らない（fail-closed）。 */
+      try { if (lsg(F781_MPRE + STORY_ID) != null) return f896Skip('MARKER_UNREADABLE'); } catch(e){ return f896Skip('MARKER_READ_FAIL'); }
+      try {
+        var jr0 = lsg(F896_JPRE + STORY_ID);
+        if (jr0 != null){ var jj0 = null; try { jj0 = JSON.parse(jr0); } catch(e){ jj0 = null; }
+          if (!(jj0 && jj0.cleared === true)) return f896Skip('BASELINE_JOURNAL_PRESENT'); }
+      } catch(e){ return f896Skip('JOURNAL_READ_FAIL'); }
+      try { var W7 = window.__v292Dfix697; var st7 = W7 && typeof W7.status === 'function' ? W7.status() : null;
+            if (st7 && st7.inFlight) return f896Skip('BASELINE_IN_FLIGHT'); } catch(e){}
+      var okb = false;
+      try { okb = !!G.confirm(STORY_ID, srev, sh); } catch(e){ okb = false; }
+      var mb = f781Marker();
+      var rowb = { f896: okb ? 'F896_BASELINE_CONFIRMED' : 'BASELINE_WRITE_FAIL', canonicalDataWrites: 0, markerReconcile: okb ? 1 : 0,
+                   fromRev: null, toRev: srev, stateBefore: null, stateAfter: mb ? mb.state : null };
+      f896Last = rowb; note(rowb);
+      return okb;
+    }
+    if (String(m.storyId || '') !== String(STORY_ID)) return f896Skip('MARKER_STORY_MISMATCH');
+    if (m.state === 'DIVERGED' || m.state === 'BOOTSTRAP_HOLD') return f896Skip('TERMINAL_' + m.state);
+    if (m.inFlightSave) return f896Skip('IN_FLIGHT');
+    try {
+      var jr = lsg(F896_JPRE + STORY_ID);
+      if (jr != null){ var jj = null; try { jj = JSON.parse(jr); } catch(e){ jj = null; }
+        if (!(jj && jj.cleared === true)) return f896Skip('JOURNAL_PRESENT'); }
+    } catch(e){ return f896Skip('JOURNAL_READ_FAIL'); }
+    var lcRev = (m.lastConfirmed && typeof m.lastConfirmed.serverRev === 'number') ? m.lastConfirmed.serverRev : null;
+    var lcFp  = (m.lastConfirmed && m.lastConfirmed.fingerprint != null) ? String(m.lastConfirmed.fingerprint) : null;
+    if (lcRev != null){
+      if (srev < lcRev) return f896Skip('REV_REGRESSION', { lcRev: lcRev, serverRev: srev });
+      if (srev === lcRev){
+        if (lcFp === sh) return f896Skip('NOOP_ALREADY_CONFIRMED', { lcRev: lcRev });
+        return f896Skip('SAME_REV_FP_MISMATCH', { lcRev: lcRev });
+      }
+    }
+    var ok = false;
+    try { ok = !!G.confirm(STORY_ID, srev, sh); } catch(e){ ok = false; }
+    var after = f781Marker();
+    var row = { f896: ok ? 'RECONCILE' : 'RECONCILE_WRITE_FAIL', canonicalDataWrites: 0, markerReconcile: ok ? 1 : 0,
+                fromRev: lcRev, toRev: srev, stateBefore: m.state, stateAfter: after ? after.state : null };
+    f896Last = row; note(row);
+    return ok;
+  }
   function f781Marker(){
     try {
       if (f781Off() || !STORY_ID) return null;
@@ -739,6 +820,7 @@
           stats.sameHash++;
           consumeApplied();
           state.verdict = 'CANONICAL_SAME_HASH';
+          try { f896Reconcile(); } catch(e896){}      /* ■fix896: marker の lastConfirmed を Cloud rev へ（story data write 0） */
           releaseHold('same-hash');
           return cb({ verdict: 'CANONICAL_SAME_HASH', serverRev: state.serverRev });
         }
@@ -1345,6 +1427,7 @@
     classify: classify,
     release: function(why){ releaseHold(why || 'manual'); return true; },
     ledger: function(){ return LEDGER.slice(); },
+    f896: function(){ return { off: f896Off(), last: f896Last ? JSON.parse(JSON.stringify(f896Last)) : null }; },
     /* ■fix781: 観測口（read-only）。__resolve781 は fixture 専用で production の呼び手は
        afterHash の 1 箇所だけ。state を渡さず内部 state を使うので副作用は本番と同一。 */
     f781: { off: f781Off, marker: f781Marker, hold: unsyncedHold781 },
