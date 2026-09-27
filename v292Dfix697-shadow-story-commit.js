@@ -2415,6 +2415,8 @@
 
   // ---- トリガ2: sidecar 指紋 poll（read-only・aiInstr/genderMap 変更を拾う） ----
   var lastFp = null;
+  function f697qOff(){ try { return lsg('v292Dfix697qOff') === '1'; } catch(e){ return false; } }
+  function fnv1a32(str){ var h = 0x811c9dc5; for (var i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0; } return h.toString(16); }
   function fp(){
     var id = storyId(); if (!id) return null;
     var a = readAiInstr(id) || '';          /* ★STEP3C: genderMap は projection に入らないので指紋対象外 */
@@ -2429,6 +2431,16 @@
        ・key mapping は fix743.keysFor を **読むだけ**（新 serializer を作らない）。
        ・指紋の作り方は既存 base と同じ「長さ + 先頭数十文字」だけ（canonical hash ではない）。
        ・781bOff='1' のとき戻り値は従来と byte 同一。 */
+    /* ■fix697q（2026-09-27・kill=v292Dfix697qOff）: BODY DIRTY TRIGGER GAP。
+       body（chr6_slot_<id>）の変更は S.save 相乗り（トリガ1）だけが拾っていたが、S.save は多数の module が
+       時間差で包み直すため、起動直後の 1 手目の保存がその瞬間 fix697 の層を通らないことがある
+       （offline E2E で実測: 表示から 210 秒以上 cloud 0。3 回中 1 回。旧 origin でも同型）。以後保存が無いと永久に commit されない。
+       → body も poll の指紋に入れる（長さ + 全体の FNV-1a 32bit。canonical hash ではない＝変化検知専用）。
+         commit の判定・CAS・authority は markDirty → commit の既存経路のまま（新しい送信経路は作らない）。 */
+    if (!f697qOff()){
+      var bv = null; try { bv = lsg(keyOf(id)); } catch(eq){ bv = null; }
+      base += '|body=' + (bv == null ? 'n' : (bv.length + ':' + fnv1a32(bv)));
+    }
     if (f781bOff()) return base;
     var K = null;
     try { var C = window.__v292DfixCC2; if (C && typeof C.keysFor === 'function') K = C.keysFor(String(id)); }
@@ -2446,6 +2458,17 @@
     }
     return out;
   }
+  /* ■fix697q: 基準の指紋を読み込み時に 1 回取る（最初の poll より前に起きた保存も差分として拾う）。read-only。 */
+  var f697qBaseTries = 0;
+  function f697qBaseline(){
+    try {
+      if (f697qOff() || lastFp != null) return;
+      var f0 = on() ? fp() : null;           /* storyId（__chronicleDocumentStoryKey）が立つ前は null */
+      if (f0 != null){ lastFp = f0; return; }
+      if (++f697qBaseTries < 120) setTimeout(f697qBaseline, 250);   /* captureInitialLocalHash と同じ 250ms × 120 */
+    } catch(e){}
+  }
+  f697qBaseline();
   try {
     setInterval(function(){
       if (!on()) return;
