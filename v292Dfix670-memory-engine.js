@@ -624,12 +624,20 @@
       var r = JSON.parse(lsg('v292Dfix307Roster_slot_' + slotId) || 'null');
       var off786r = (lsg('v292Dfix786Off') === '1');
       if (!off786r && Array.isArray(r)) {
+        /* ★fix908（ME-5 C-c' P3 / GPT 裁定 2026-09-28）: id を持たない roster handle の ME 内部 key は
+           handle の fold key（fix764）。current story roster 内で non-empty かつ一意なときだけ使う。
+           collision / 空は known にしない（→ 解決されず PENDING）。cast / roster へは書かない。
+           kill: v292Dfix908Off='1' → 従来（'char:npc:' + 表示形）。 */
+        var on908 = !f908Off(), fcount908 = {};
+        if (on908) r.forEach(function (e) { if (e && typeof e === 'object' && !e.id) { var k0 = foldStr(nfc(e.handle || e.name || '')); if (k0) fcount908[k0] = (fcount908[k0] || 0) + 1; } });
         r.forEach(function (e) {
           if (!e || typeof e !== 'object') return;
           var rn = nfc(e.handle || e.name || '');
           if (!rn) return;
           var hasId2 = !!e.id;
-          addName(map, rn, entRef(hasId2 ? ('char:' + e.id) : ('char:npc:' + rn), 'character', 'known', 'roster'), hasId2);
+          var rid2 = hasId2 ? ('char:' + e.id) : ('char:npc:' + rn);
+          if (on908 && !hasId2) { var fk908 = foldStr(rn); if (!fk908 || fcount908[fk908] !== 1) return; rid2 = 'char:npc:' + fk908; }
+          addName(map, rn, entRef(rid2, 'character', 'known', 'roster'), hasId2);
         });
       } else if (r && typeof r === 'object') Object.keys(r).forEach(function (k) {
         if (!k) return;
@@ -775,7 +783,10 @@
   function canonAlias(name, kn) {
     var who = nfc(name); if (!who) return null;
     if (PRONOUN.test(who) || GENERIC.test(who)) return null;
-    var names = (kn && kn.castNames) || [], i, n, hit = null;
+    var names = ((kn && kn.castNames) || []).filter(function (x) {
+      if (f908Off()) return true;
+      var ex = kn.byName[x]; return !(ex && ex.sources && ex.sources.length === 1 && ex.sources[0] === 'roster');
+    }), i, n, hit = null;
     var ws = /[\s\u3000]/g, w0 = who.replace(ws, '');
     for (i = 0; i < names.length; i++) {
       if (names[i] === who) return null;                     /* 既に正名＝別名ではない */
@@ -802,6 +813,27 @@
     return e2 ? { entityId: e2.entityId, entityType: e2.entityType, status: e2.status,
                   ambiguous: !!e2.ambiguous, canonical: hit } : null;
   }
+  /* ★fix908: kill と、current story roster（known / 非曖昧 / 出所 roster）への一意な末尾一致。
+     who 2 文字以上、代名詞・総称は除外、比較は fold 後。候補ちょうど 1 件のときだけ返す。 */
+  function f908Off() { return lsg('v292Dfix908Off') === '1'; }
+  function rosterSuffix908(who, kn) {
+    var w = nfc(who); if (!w || w.length < 2) return null;
+    if (PRONOUN.test(w) || GENERIC.test(w)) return null;
+    var fw = foldStr(w), hits = [], seen = {}, k, ex, fn;
+    var by = (kn && kn.byName) || {};
+    for (k in by) {
+      if (!Object.prototype.hasOwnProperty.call(by, k)) continue;
+      ex = by[k];
+      if (!ex || ex.status !== 'known' || ex.ambiguous) continue;
+      if (!ex.sources || ex.sources.indexOf('roster') < 0) continue;
+      fn = foldStr(k);
+      if (fn === fw || fn.length <= fw.length) continue;
+      if (fn.slice(fn.length - fw.length) !== fw) continue;
+      if (seen[ex.entityId]) continue;
+      seen[ex.entityId] = 1; hits.push(ex);
+    }
+    return (hits.length === 1) ? hits[0] : null;
+  }
   /* 呼称 → entityId。**推測はしない**。決まらなければ entityId:null（unresolved）。 */
   function resolveMention(name, kn, depth) {
     var n = nfc(name);
@@ -810,8 +842,18 @@
     if (PRONOUN.test(n)) return { entityId: null, reason: 'pronoun-not-resolved' };
     if (GENERIC.test(n)) return { entityId: null, reason: 'generic-not-resolved' };
     var e = kn && kn.byName ? kn.byName[n] : null;
-    if (e) return { entityId: e.entityId, entityType: e.entityType, status: e.status,
+    /* ★fix908（ME-5 C-c'）: exact 一致が known（cast / roster）ならそのまま。exact 一致が candidate（fix640 台帳）の
+       ときは、先に current roster への一意な末尾一致を試す（exact → unique suffix → 従来の candidate / PENDING）。 */
+    var defer908 = !!(e && e.status !== 'known' && !f908Off());
+    if (e && !defer908) return { entityId: e.entityId, entityType: e.entityType, status: e.status,
                     ambiguous: !!e.ambiguous, raw: n, canonical: e.name, method: 'known-name' };
+    if (defer908) {
+      var rs908 = rosterSuffix908(n, kn);
+      if (rs908) return { entityId: rs908.entityId, entityType: rs908.entityType, status: rs908.status,
+                          ambiguous: false, raw: n, canonical: rs908.name, method: 'roster-suffix' };
+      return { entityId: e.entityId, entityType: e.entityType, status: e.status,
+               ambiguous: !!e.ambiguous, raw: n, canonical: e.name, method: 'known-name' };
+    }
     var fk = foldStr(n), fe = (fk && fixFold()) ? foldUnique(kn, fk) : null;
     if (fe) return { entityId: fe.entityId, entityType: fe.entityType, status: fe.status,
                      ambiguous: !!fe.ambiguous, raw: n, canonical: fe.name, method: 'fold' };
@@ -824,6 +866,11 @@
       if (r && r.entityId) return { entityId: r.entityId, entityType: r.entityType, status: r.status,
                                     ambiguous: !!r.ambiguous, raw: n, canonical: r.canonical, method: 'voice-of' };
       return { entityId: null, reason: 'voice-of-unresolved-base' };
+    }
+    if (!f908Off()) {
+      var rs908b = rosterSuffix908(n, kn);
+      if (rs908b) return { entityId: rs908b.entityId, entityType: rs908b.entityType, status: rs908b.status,
+                           ambiguous: false, raw: n, canonical: rs908b.name, method: 'roster-suffix' };
     }
     var ca = canonAlias(n, kn);
     if (ca) return { entityId: ca.entityId, entityType: ca.entityType, status: ca.status,
@@ -2211,6 +2258,34 @@
                orphans: st.orphans.slice(), versionMismatch: st.versionMismatch, rebuildRecommended: st.rebuildRecommended };
     },
     refreshCounts: function () { return refreshCounts(st.slotId); },
+    /* ★fix908（ME-5 C-c'）: retrieve 用の roster entity 一覧（read-only・書込 0）。
+       current story（resolveSlot の一致が取れた時だけ）の roster known と、say card の who のうち
+       roster へ一意な末尾一致で解決した別名。{ entityId, name } の配列。取れなければ null。 */
+    rosterEntitiesForRetrieve: function () {
+      try {
+        if (f908Off() || !armed()) return null;   /* ME が OFF の page では何もしない */
+        var sl = resolveSlot(); if (!sl || !sl.ok) return null;
+        var kn = decorate(knownEntities(sl.blob, sl.slotId), null), out = [], seen = {}, k, ex;
+        for (k in kn.byName) {
+          if (!Object.prototype.hasOwnProperty.call(kn.byName, k)) continue;
+          ex = kn.byName[k];
+          if (!ex || ex.status !== 'known' || ex.ambiguous || !ex.sources || ex.sources.indexOf('roster') < 0) continue;
+          if (!seen[ex.entityId + '|' + k]) { seen[ex.entityId + '|' + k] = 1; out.push({ entityId: ex.entityId, name: k }); }
+        }
+        var turns = (sl.turns || []), i, j, w, r;
+        for (i = 0; i < turns.length; i++) {
+          var cs = (turns[i] && turns[i]._convSays) || [];
+          for (j = 0; j < cs.length; j++) {
+            w = cs[j] && cs[j].who; if (!w || w === '???') continue;
+            r = resolveMention(w, kn, 0);
+            if (r && r.method === 'roster-suffix' && r.entityId && !seen[r.entityId + '|' + nfc(w)]) {
+              seen[r.entityId + '|' + nfc(w)] = 1; out.push({ entityId: r.entityId, name: nfc(w) });
+            }
+          }
+        }
+        return out;
+      } catch (e) { return null; }
+    },
     /* ★v0.3: family 別の件数。store も index も増やさず、既存 by_slot_type の
        count() を1つの readonly transaction でまとめて発行して足し上げる。 */
     familyCounts: function () {

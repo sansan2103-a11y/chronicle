@@ -318,6 +318,17 @@
     var slotId = (lineages && lineages[0] && lineages[0].slotId) || null;
     return slots.map(function (s) {
       var v = resolveSlot(s, deps, idx);
+      /* ★fix907（ME-5 C-b / GPT 裁定 2026-09-28）: item / place slot を人物 entity（char:）へ解決しない。
+         解けなければ UNRESOLVED → PENDING_REF（fail-closed、wrong ACTIVE を作らない）。
+         kill: v292Dfix907Off='1' → 従来。 */
+      try {
+        var isIP907 = s.slotKind === 'argument' && (s.role === 'item' || s.role === 'place' || s.expectType === 'item' || s.expectType === 'place');
+        if (isIP907 && v && v.resolvedEntityId && /^char[:_]/.test(String(v.resolvedEntityId))
+            && window.localStorage.getItem('v292Dfix907Off') !== '1') {
+          v = { status: STATUS.UNRESOLVED, resolvedEntityId: null, ladder: null,
+                reason: 'char-entity-for-item-place-blocked', candidates: [String(v.resolvedEntityId)] };
+        }
+      } catch (e907) {}
       return {
         refId: (slotId || '') + '|' + s.slotKey,
         slotId: slotId, lineageId: s.lineageId, eventId: s.eventId,

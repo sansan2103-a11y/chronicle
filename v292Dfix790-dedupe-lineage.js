@@ -97,6 +97,16 @@
     return { topic: topic, complement: comp };
   }
 
+  /* ★fix906: claim 命題の正規化キー（空白・句読点・三点リーダ・引用符・先頭の接続詞を除く）。 */
+  var PUNCT906 = /[\s　、。，．,.！!？?…‥・「」『』（）()“”"'〜~ー―—-]+/g;
+  function f906Off() { try { return window.localStorage.getItem('v292Dfix906Off') === '1'; } catch (e) { return false; } }
+  function propKey906(sa) {
+    if (!sa || !sa.speakerEntityId || !sa.kind) return null;
+    if (/^ambiguous:/.test(String(sa.speakerEntityId))) return null;
+    var p = String(sa.normalizedProposition || '').replace(LEAD_CONNECTIVE, '').replace(PUNCT906, '');
+    return (p.length >= 2) ? p : null;
+  }
+
   /* ---------------- lineage key ------------------------------------------ */
   function lineageKeyOf(row, groupTag) {
     return [row.slotId, classOf(row), groupTag].join('|');
@@ -134,7 +144,13 @@
         tags[r.eventId] = 'S:' + sa.kind + ':' + sa.speakerEntityId + ':' +
                           (core.topic == null ? '' : core.topic) + ':' + core.complement;
       } else {
-        tags[r.eventId] = 'E:' + r.eventId;
+        /* ★fix906（ME-5 C-a / GPT 裁定 2026-09-28）: 同一 speaker + 同一 kind + 同一正規化命題の claim を
+           turn を跨いで 1 lineage に束ねる（Rule S の一般化）。構造一致だけで、類似度は使わない。
+           speaker が無い / 命題が空・短すぎる claim は従来どおり singleton。
+           raw は消さない（memberEventIds / sourceTurns / attestationCount に全部残る）。
+           kill: v292Dfix906Off='1' → 従来（NEGATION_CLAIM 以外は singleton）。 */
+        var pk906 = f906Off() ? null : propKey906(sa);
+        tags[r.eventId] = pk906 ? ('P:' + sa.kind + ':' + sa.speakerEntityId + ':' + pk906) : ('E:' + r.eventId);
       }
     }
     return tags;

@@ -719,6 +719,13 @@
                   var c = _S3c2 && _S3c2.cast, out = [], a = (c && c.npcs) || [], i, n;
                   for (i = 0; i < a.length; i++){ n = a[i];
                     if (n && n.id && n.name) out.push({ entityId: 'char:' + n.id, name: String(n.name) }); }
+                  /* ★fix908（ME-5 C-c'）: current story の roster entity（と一意な末尾一致の別名）を read-only で追加。
+                     cast に同じ名前があれば cast を優先（追加しない）。kill: v292Dfix908Off='1'。 */
+                  try {
+                    var _m670 = window.__v292Dfix670, _ro = (_m670 && typeof _m670.rosterEntitiesForRetrieve === 'function') ? _m670.rosterEntitiesForRetrieve() : null;
+                    if (_ro && _ro.length){ var _hv = {}; for (i = 0; i < out.length; i++) _hv[out[i].name] = 1;
+                      for (i = 0; i < _ro.length; i++){ if (_ro[i] && _ro[i].entityId && _ro[i].name && !_hv[_ro[i].name]) { out.push({ entityId: String(_ro[i].entityId), name: String(_ro[i].name) }); _hv[_ro[i].name] = 1; } } }
+                  } catch(_e908){}
                   return out.length ? out : null;
                 } catch(_e){ return null; } })() })
           : null;
