@@ -367,17 +367,34 @@ var installed = false, installMode = 'none', prevSet = null, prevRem = null;
 (function installLayer1(){
   try {
     var W = f654();
+    /* ■fix909b（SA-3・kill v292Dfix909bOff）: exact document story の canonical sidecar key（fix743 keysFor、body は除く）への local write が **成功した後**にだけ、
+       fix697 の既存 commit scheduler へ知らせる（DIRTY intent → commit 予約を 1 契約に戻す）。
+       marker / journal / guard metadata（isSelfKey）・別 story の key・canonical 外 key は isStoryOwned で既に除外。
+       native 書込（fix705 hydrate / fix721 restore / import）はこの chain を通らない。throw 時は呼ばない。 */
+    var bridge909 = function(id, k){
+      try { if (ng('v292Dfix909bOff') === '1') return;
+            /* body は既存の S.save wrap（fix724）と fix697q poll が commit 予約を持つ。bridge は sidecar key だけ
+               （body 内の canonical 外 field（cfg.model 等）で SA-3 scheduler を動かさない）。 */
+            if (String(k) === bodyKeyOf(id)) return;
+            var F = window.__v292Dfix697; if (F && typeof F.canonicalMutation === 'function') F.canonicalMutation(id, String(k)); } catch(e){}
+    };
     var wrappedSet = function(k, v){
+      var own909 = null;
       if (on()){
-        try { var id = storyId(); if (id && isStoryOwned(k, id)) markIntent(id); } catch(e){}
+        try { var id = storyId(); if (id && isStoryOwned(k, id)){ markIntent(id); own909 = id; } } catch(e){}
       }
-      return prevSet ? prevSet.apply(this, arguments) : undefined;   /* ★throw はそのまま伝播 */
+      var r909 = prevSet ? prevSet.apply(this, arguments) : undefined;   /* ★throw はそのまま伝播 */
+      if (own909) bridge909(own909, k);
+      return r909;
     };
     var wrappedRem = function(k){
+      var own909 = null;
       if (on()){
-        try { var id = storyId(); if (id && isStoryOwned(k, id)) markIntent(id); } catch(e){}
+        try { var id = storyId(); if (id && isStoryOwned(k, id)){ markIntent(id); own909 = id; } } catch(e){}
       }
-      return prevRem ? prevRem.apply(this, arguments) : undefined;
+      var r909 = prevRem ? prevRem.apply(this, arguments) : undefined;
+      if (own909) bridge909(own909, k);
+      return r909;
     };
     if (W && typeof W.wrap === 'function'){
       var ps = W.wrap('setItem', wrappedSet, localStorage);

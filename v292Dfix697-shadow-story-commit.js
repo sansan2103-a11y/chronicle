@@ -113,6 +113,60 @@
   function off(){ return lsg('v292Dfix697Off') === '1'; }
   /* ★fix838: 409 分類の kill switch（fix705 と同一キー）。'1' で従来挙動へ完全復帰。 */
   function f838Off(){ return lsg('v292Dfix838Off') === '1'; }
+  /* ■fix909（2026-09-28・SA-3 CANONICAL_SIDECAR_DIRTY_WITHOUT_SCHEDULE）kill:
+       v292Dfix909Off=1  … V2 sidecar-only probe（commit の V1 no-op skip 補正）を停止 = ac10 と同一
+       v292Dfix909bOff=1 … fix781 layer1 → commit scheduler bridge だけ停止 */
+  function f909Off(){ return lsg('v292Dfix909Off') === '1'; }
+  /* ■fix910（2026-09-28・SA-3 STALE_BASE_CANONICAL_OVERWRITE）kill: v292Dfix910Off=1 → ac10 と同一（fresh server を CAS base にして書く）。
+     canonical save が「この端末が最後に確認した Cloud（fix781 lastConfirmed）」より Cloud が進んでいるのに気付かず、
+     fresh の rev を CAS base にして上書きしていた（別端末の turn が Cloud から消え、その端末の reopen で local からも消える）。
+     boot 時の fix705 resolve781 (c) TRUE DIVERGENCE と同じ規則を save 時にも適用する:
+       marker が DIRTY かつ lastConfirmed.serverRev があり、fresh server rev がそれと違い、server 内容 != 送る内容
+       → write 0 / Recovery Draft（server record 同梱）/ marker DIVERGED / banner（fix705 toHold と同じ 3 点）/ この document は hold。 */
+  function f910Off(){ return lsg('v292Dfix910Off') === '1'; }
+  var f910 = { checks: 0, holds: 0, noLc: 0, atBase: 0, noProgress: 0, lastHold: null, lastNoProgress: null };
+  function f910Check(id, srvRev, localHash){
+    try {
+      if (f910Off()) return null;
+      f910.checks++;
+      var G = g781(); var m = (G && typeof G.marker === 'function') ? G.marker(id) : null;
+      if (!m || (m.state !== 'DIRTY_INTENT' && m.state !== 'DIRTY_LOCAL')) return null;
+      var lc = m.lastConfirmed;
+      if (!lc || typeof lc.serverRev !== 'number'){ f910.noLc++; return null; }   /* 従来どおり（新端末 bootstrap 等） */
+      if (lc.serverRev === srvRev){ f910.atBase++; return null; }
+      /* ■fix910b: local の canonical 内容が lastConfirmed そのまま（canonical 外 field の書込で DIRTY になっただけ）なら、
+         送るものは無い。上書きもしないし、衝突（DIVERGED）にもしない（write 0 だけ。marker は fix898 が CLEAN に戻す）。 */
+      if (lc.fingerprint != null && localHash != null && String(localHash) === String(lc.fingerprint))
+        return { noProgress: true, lcRev: lc.serverRev };
+      return { lcRev: lc.serverRev, lcFp: (lc.fingerprint == null ? null : String(lc.fingerprint)), gen: m.localGeneration };
+    } catch(e){ return null; }
+  }
+  function f910NoProgress(id, schema, srvRev, info, why){
+    f910.noProgress++;
+    f910.lastNoProgress = { id: String(id), srvRev: srvRev, lcRev: info.lcRev, why: String(why || ''), t: Date.now() };
+    note({ kind: 'F910_NO_LOCAL_PROGRESS', id: id, srvRev: srvRev, lcRev: info.lcRev, why: why, schema: schema });
+  }
+  function f910Hold(id, schema, srvRev, srvHash, j, info, why){
+    f910.holds++;
+    f910.lastHold = { id: String(id), srvRev: srvRev, lcRev: info.lcRev, why: String(why || ''), t: Date.now() };
+    canonHold[id] = true;
+    note({ kind: 'F910_REMOTE_AHEAD_HOLD', id: id, srvRev: srvRev, lcRev: info.lcRev, why: why, schema: schema });
+    try {
+      var G = g781();
+      if (G && typeof G.transition === 'function')
+        G.transition(id, 'DIVERGED', { pendingServerRev: srvRev, pendingServerHash: srvHash,
+                                       reason: 'SAVE_TIME_SERVER_REV_ADVANCED', detectedAt: Date.now() });
+      if (G && typeof G.draftCreate === 'function')
+        G.draftCreate(id, { schema: schema, serverRev: srvRev, serverHash: srvHash, reason: 'SAVE_TIME_SERVER_REV_ADVANCED',
+                            serverRecord: (j && j.record) ? j.record : null },
+          function(ok, err){ if (!ok){ try { console.warn(TAG, 'fix910: Recovery Draft を作れなかった:', err); } catch(e){} } });
+      if (G && typeof G.banner === 'function') G.banner(id, 'DIVERGED');
+    } catch(e){}
+  }
+  function f909bOff(){ return lsg('v292Dfix909bOff') === '1'; }
+  var f909 = { probes: 0, v2Same: 0, notCanonical2: 0, notDirty: 0, noLc: 0, journal: 0, busy: 0, fires: 0,
+               remoteAhead: 0, bridgeCalls: 0, bridgeScheduled: 0, bridgeDup: 0, bridgeInFlight: 0,
+               bridgeSkip: {} };
   /* ★★fix724(RULING37 §15/§24): FLAG 2-STATE CONTRACT。
      Off==='1' → OFF / それ以外 → DEFAULT ON。これだけ。
      legacy の v292Dfix697On は '1' でも '0' でも effective state に影響させない
@@ -812,6 +866,10 @@
           note({ kind: 'CANONICAL_CONVERGED_NO_WRITE', id: id, rev: srvRev });
           return condClearDirty(fin);
         }
+        /* ■fix910: schema1 も同じ規則（rev だけで判定。fingerprint の domain は V1）。 */
+        var i910s1 = f910Check(id, srvRev, intendedLocalHash);
+        if (i910s1 && i910s1.noProgress){ f910NoProgress(id, 1, srvRev, i910s1, why); return fin(); }
+        if (i910s1){ f910Hold(id, 1, srvRev, srvHash, j, i910s1, why); return fin(); }
         /* ---- 異内容 → fresh 値で strict CAS 1回（force 禁止） ---- */
         var mid = 'pc:' + id + ':' + srvRev + ':' + intendedLocalHash;   // ★決定的（retry で新 mid を作らない）
         cstats.sent++;
@@ -878,7 +936,7 @@
      dirty 追跡（lastSentHash）は従来どおり V1 projection hash で行う:
        V1 hash は body/turns/title の変化を検出でき、schema2 save の成功後に
        「送信 snapshot 以降 local 変化なし」を確認する用途には従来契約のまま使える。 */
-  function canonicalCommit2(id, intendedLocalHash, why){
+  function canonicalCommit2(id, intendedLocalHash, why, opt909){
     inFlight = true; cstats.routedCanonical++;
     g781InFlight(id, intendedLocalHash);                    /* ■fix781: まず V1 hash で記録（v2hash は後で refine） */
     var fin = function(){ inFlight = false; g781Clear(id); f781cDrain(); };   /* ■fix781 / ■fix781c */
@@ -918,6 +976,14 @@
         note({ kind: 'C2_SERVER_NOT_SCHEMA2', id: id, recordSchema: srvSchema }); return fin(); }
       var srvRev = (typeof j.rev === 'number') ? j.rev : 0;
       var srvHash = String(j.serverHash || '');
+      /* ■fix909(S1a): sidecar-only commit は「Cloud が最後に確認した状態のまま」のときだけ書く。
+         別端末が先に進めていたら（remote ahead）write 0 で dirty を保持する（上書きしない / merge しない）。 */
+      if (opt909 && opt909.lc && (srvRev !== opt909.lc.rev || srvHash !== opt909.lc.hash)){
+        f909.remoteAhead++;
+        note({ kind: 'F909_REMOTE_AHEAD', id: id, srvRev: srvRev, lcRev: opt909.lc.rev });
+        f697pClear(id, 'F909_REMOTE_AHEAD');
+        return fin();
+      }
       f697pHashProbe(id, j, 'cas-preflight');            /* ★fix697p Rev3(P0-5): READ-ONLY 診断のみ */
       /* ★★fix697p Rev3(P0-1 / P0-2 SEND PROJECTION SINGLE-SOURCE)
          Rev2 の欠陥（T23 実測 CANONICAL_LANDED_NOCONFIRM の直接原因）:
@@ -954,6 +1020,10 @@
             f697pNotifyLanded(id, srvRev, srvHash, (canonicalSend && canonicalSend.body && canonicalSend.body.turns) ? canonicalSend.body.turns.length : null);   /* ★fix802 Rev2: 4 番目の LANDED 境界（CONVERGED_NO_WRITE） */
             return condClearDirty(fin);
           }
+          /* ■fix910: 別端末が lastConfirmed から Cloud を進めている → 上書きしない（fix705 (c) と同じ HOLD）。 */
+          var i910 = f910Check(id, srvRev, v2hash);
+          if (i910 && i910.noProgress){ f910NoProgress(id, 2, srvRev, i910, why); f697pClear(id, 'F910_NO_LOCAL_PROGRESS'); return fin(); }
+          if (i910){ f697pClear(id, 'F910_REMOTE_AHEAD_HOLD'); f910Hold(id, 2, srvRev, srvHash, j, i910, why); return fin(); }
           /* ---- 異内容 → fresh 値で strict CAS 1回（force 禁止） ---- */
           /* ★★fix697p Rev3(P0-1): **PUT の直前**に ARMED_CAS を durable 化する。
              ここに載る outgoingV2Hash は上の canonicalSendStr（= これから送る body の
@@ -2191,6 +2261,58 @@
       markDirty();
     } catch(e){}
   }
+  /* ■fix909(S1a): V1 no-op skip の後段。canonical schema2 document で、marker が DIRTY かつ
+     current V2 canonical hash != lastConfirmed fingerprint のときだけ、既存 canonicalCommit2 へ 1 回渡す。
+     書く条件は canonicalCommit2 側で「fresh server == lastConfirmed（rev と hash）」に限定する（remote ahead では write 0）。 */
+  function f909Probe(id, v1Hash, why){
+    try {
+      f909.probes++;
+      if (inFlight){ f909.busy++; if (!f781cOff()) f781cPending = true; return; }
+      if (docAuthorityRoute(id) !== 'canonical' || !docAuthoritySchema2(id)){ f909.notCanonical2++; return; }
+      var G = g781(); var m = (G && typeof G.marker === 'function') ? G.marker(id) : null;
+      if (!m || (m.state !== 'DIRTY_INTENT' && m.state !== 'DIRTY_LOCAL')){ f909.notDirty++; return; }
+      var lc = m.lastConfirmed;
+      if (!lc || lc.fingerprint == null || typeof lc.serverRev !== 'number'){ f909.noLc++; return; }
+      if (f697pRead(id)){ f909.journal++; return; }        /* active journal は既存 reconcile 経路に任せる */
+      var p2 = projectionV2(id); if (!p2) return;
+      var s2 = null; try { s2 = canonicalString(p2); } catch(e2){ s2 = null; }
+      if (s2 == null) return;
+      sha256hex(s2, function(v2){
+        try {
+          if (!v2) return;
+          if (v2 === String(lc.fingerprint)){ f909.v2Same++; return; }
+          if (inFlight){ f909.busy++; if (!f781cOff()) f781cPending = true; return; }
+          f909.fires++;
+          note({ kind: 'F909_V2_SIDECAR_DIRTY', id: id, why: why, lcRev: lc.serverRev, v2: String(v2).slice(0, 16) });
+          canonicalCommit2(id, v1Hash, 'f909:' + why, { lc: { rev: lc.serverRev, hash: String(lc.fingerprint) } });
+        } catch(e3){}
+      });
+    } catch(e){}
+  }
+  /* ■fix909b(S1b): fix781 layer1 が「exact document story の canonical key（body + fix743 sidecar）」への
+     local write と判定した直後にだけ呼ばれる。既存 markDirty（debounce）へ 1 回予約するだけ。
+     fix705 hydrate / fix721 restore / import は native 書込で layer1 を通らないので、ここへ来ない。 */
+  function f909bSkip(r){ f909.bridgeSkip[r] = (f909.bridgeSkip[r] || 0) + 1; return false; }
+  function canonicalMutation909(id, key){
+    try {
+      f909.bridgeCalls++;
+      if (f909bOff()) return f909bSkip('OFF');
+      if (!on()) return f909bSkip('F697_OFF');
+      if (!id || storyId() !== String(id)) return f909bSkip('NOT_DOCUMENT_STORY');
+      try { var rj = JSON.parse(lsg('v292Dfix721_txn') || 'null');
+            if (rj && (rj.phase === 'PREPARED' || rj.phase === 'APPLYING')) return f909bSkip('RESTORE_TXN'); } catch(e1){}
+      try { var F5 = window.__v292Dfix705; var st5 = F5 && F5.status && F5.status().state;
+            if (!st5 || st5.phase !== 'released' || st5.held !== false) return f909bSkip('F705_NOT_RELEASED'); }
+      catch(e2){ return f909bSkip('F705_UNKNOWN'); }
+      var G = g781(); var m = (G && typeof G.marker === 'function') ? G.marker(id) : null;
+      if (m && (m.state === 'DIVERGED' || m.state === 'BOOTSTRAP_HOLD')) return f909bSkip('MARKER_' + m.state);
+      if (inFlight){ f909.bridgeInFlight++; if (!f781cOff()) f781cPending = true; return true; }
+      if (pushTimer){ f909.bridgeDup++; return true; }      /* 予約済み: 重複予約しない */
+      f909.bridgeScheduled++;
+      markDirty();
+      return true;
+    } catch(e){ return false; }
+  }
   function commit(why){
     /* ★★fix721.1(STEP4F.1/RULING31): restore transaction中はshadow/canonical writeを発火させない（読取のみ） */
     try { var __rj = JSON.parse(lsg('v292Dfix721_txn') || 'null');
@@ -2205,7 +2327,13 @@
     var str = canonicalString(content);
     sha256hex(str, function(localHash){
       if (!localHash) { stats.netFail++; return; }
-      if (localHash === lastSentHash) return;              // 端末側 no-op skip
+      if (localHash === lastSentHash){                     // 端末側 no-op skip
+        /* ■fix909(S1a): lastSentHash は V1 projection（body + aiInstr）の hash。schema2 の canonical content は
+           sidecar 13key を含むので、sidecar だけが変わった commit intent はここで黙って捨てられていた
+           （ROSTER307_POST_COMMIT_DIRTY の root cause）。V1 が同じときだけ、V2 hash と fix781 lastConfirmed を 1 回比べる。 */
+        if (!f909Off()) f909Probe(id, localHash, why);
+        return;
+      }
       /* ★★fix718(STEP4B): document authority で write path を分離。
          shadow は以下の既存経路のまま（fresh getstory 追加なし・バイト不変）。 */
       var route = docAuthorityRoute(id);
@@ -2751,6 +2879,10 @@
                     return !!(S && S.save && S.save === myWrapper); } catch(e){ return false; } })(),
                   rearmMs: REARM_MS } }; },
     stats: function(){ return JSON.parse(JSON.stringify(stats)); },
+    /* ■fix909 */
+    canonicalMutation: function(id, key){ return canonicalMutation909(id, key); },
+    f909: function(){ return { off: f909Off(), bOff: f909bOff(), pushTimer: !!pushTimer, inFlight: inFlight,
+                               stats: JSON.parse(JSON.stringify(f909)), f910: { off: f910Off(), stats: JSON.parse(JSON.stringify(f910)) } }; },
     ledger: function(){ return LEDGER.slice(); },
     /* ★★fix697p(P1/P2): PREPARED_LOCAL journal の read-only 可視化（write 0 / network 0 / 遷移 0）。
        reset / force / resume を外から撃つ口は **作らない**（guard の無効化を構造的に禁止）。 */
