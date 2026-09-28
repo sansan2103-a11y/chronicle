@@ -57,6 +57,13 @@
     } catch(e){}
   }
   function pending(id){ return !!(pend && (!id || String(pend.id) === String(id))); }
+  function off913(){ try { return localStorage.getItem('v292Dfix913Off') === '1'; } catch(e){ return false; } }
+  function f705Released(){ try { var s5 = window.__v292Dfix705.status().state; return !!(s5 && s5.phase === 'released' && s5.held === false); } catch(e){ return false; } }
+  function inProgress913(id){
+    if (off913() || !id) return false;
+    if (!f705Released()) return true;
+    try { var F = F697(); return !!(F && typeof F.s2InProgress === 'function' && F.s2InProgress(id)); } catch(e){ return false; }
+  }
 
   function idle(){
     try {
@@ -82,6 +89,11 @@
       stats.requests++;
       if (pending(id)) return true;
       var g = ssg(SS_R + id);
+      if (g != null && String(g) === String(remoteRev) && inProgress913(id)){
+        /* ■fix913: 同じ remoteRev の boot S2 がまだ進行中 → conflict ではない。reload も hold もせず WAIT（呼び手は PUT しない・DIRTY は保持） */
+        stats.waitInProgress = (stats.waitInProgress || 0) + 1; stats.last = { act: 'waitInProgress', id: id, remoteRev: remoteRev, t: Date.now() };
+        return true;
+      }
       if (g != null && String(g) === String(remoteRev)){ stats.loopGuard++; stats.last = { act: 'loopGuard', id: id, remoteRev: remoteRev, t: Date.now() }; return false; }
       pend = { id: String(id), remoteRev: remoteRev, src: src || null, t: Date.now() };
       notice(true);
@@ -104,6 +116,17 @@
         var id = sid();
         if (pending(id) || preflightBusy){ stats.blocked++; notice(true); return; }
         var F = F697();
+        /* ■fix913（SA-4a）: boot S2 の途中は preflight / hold を始めない（WAIT）。
+           ・fix705 がまだ released でない → 元の送信へ（fix892 が「保存状態を確認しています」で止める。入力は残る）
+           ・roster stash の書き戻し待ち → 送らない（入力は残す）・短い表示・書き戻しを試みる */
+        if (!off913() && id){
+          if (!f705Released()){ stats.waitAuthority = (stats.waitAuthority || 0) + 1; return orig.apply(self, args); }
+          if (F && typeof F.s2InProgress === 'function' && F.s2InProgress(id)){
+            stats.waitStash = (stats.waitStash || 0) + 1; notice(true);
+            try { if (typeof F.s2ApplyStash === 'function') F.s2ApplyStash('send'); } catch(eA){}
+            return;
+          }
+        }
         if (!id || !F || typeof F.s2PreflightNeeded !== 'function' || !F.s2PreflightNeeded(id)){ stats.preflightSkip++; return orig.apply(self, args); }
         preflightBusy = true; stats.preflights++;
         F.s2Preflight(id, function(r){
@@ -194,6 +217,8 @@
   (function boot(){
     n++;
     try { wrapG(); restoreDraft(); clearGuardIfConverged(); } catch(e){}
+    try { if (!pend && !off913()){ var id9 = sid(); var F9 = F697();
+            if (id9 && document.getElementById(NOTICE_ID) && !(F9 && typeof F9.s2InProgress === 'function' && F9.s2InProgress(id9))) notice(false); } } catch(e9){}
     if (n < 2400) setTimeout(boot, n < 240 ? 250 : 2000);
   })();
 

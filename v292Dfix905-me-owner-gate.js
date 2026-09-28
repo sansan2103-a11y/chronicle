@@ -34,7 +34,14 @@
       return { on: true, why: 'owner-feature' };
     } catch (e) { return { on: false, why: 'threw' }; }
   }
-  function gateOn() { if (meOff()) return false; return serverGate().on; }
+  /* ★fix905c（GPT: AUTH_TRANSITION 契約）: ME が有効な production client は、次の user story action を始める前に
+     server authorization（/auth/me）を再確認し、確認が終わるまで retrieve / generation を始めない。
+     確認が owner + active + features.memoryEngine=true 以外・timeout・通信失敗なら、その action では ME だけ OFF（本編は通常どおり）。
+     deny は次に確認が成功するまで続く。401 / 403（fix893）では fix893 が cached gate を即失効させる。
+     kill: localStorage v292Dfix905cOff='1'（再確認をしない = fix905b の挙動）。v292Dfix905Off は production で ME OFF のまま。 */
+  var deny = false, recheck = { waits: 0, ok: 0, denied: 0, timeouts: 0, errors: 0, skipped: 0, busy: 0, last: null };
+  function c905Off() { return lsg('v292Dfix905cOff') === '1'; }
+  function gateOn() { if (meOff()) return false; if (deny && !c905Off()) return false; return serverGate().on; }
   function allow(localOn) {
     evals++;
     if (killed()) { var kv = prodHost() ? false : !!localOn; lastEval = 'killed:' + kv; return kv; }   /* ★fix905b: production host では kill = ME OFF（ac10 の flag 挙動へは戻さない） */
@@ -47,9 +54,50 @@
     try { if (!fired && !killed() && gateOn()) { fired = true; window.dispatchEvent(new Event('chr:me-gate-on')); } } catch (e) {}
   }
   window.addEventListener('chr:account-me', onAccount);
+  /* story action 入口の再確認（production host・gate が ON か deny 中のときだけ。OFF のときは network 0） */
+  var RECHECK_MS = 5000, rcBusy = false;
+  function needRecheck() { try { if (c905Off() || killed() || !prodHost() || meOff()) return false; return deny || serverGate().on; } catch (e) { return false; } }
+  function recheckThen(cont) {
+    var A = null; try { A = window.__v292Dfix893; } catch (e) { A = null; }
+    if (!A || typeof A.refreshMe !== 'function') { deny = true; recheck.errors++; recheck.last = 'no-account-api'; return cont(); }
+    var done = false; recheck.waits++;
+    var fin = function (why) { if (done) return; done = true; rcBusy = false; recheck.last = why + '@' + Date.now(); try { cont(); } catch (e) {} };
+    var to = setTimeout(function () { deny = true; recheck.timeouts++; fin('timeout'); }, RECHECK_MS);
+    rcBusy = true;
+    try {
+      A.refreshMe().then(function () {
+        clearTimeout(to); if (done) return;
+        var g = serverGate();
+        if (g.on) { deny = false; recheck.ok++; fin('ok'); }
+        else { deny = true; recheck.denied++; fin('deny:' + g.why); }
+      }, function () { clearTimeout(to); deny = true; recheck.errors++; fin('error'); });
+    } catch (e3) { clearTimeout(to); deny = true; recheck.errors++; fin('threw'); }
+  }
+  var wrapped = false, wn = 0;
+  function wrapG() {
+    if (wrapped) return;
+    var g = null; try { g = (typeof G !== 'undefined' && G) ? G : null; } catch (e) { g = null; }
+    if (g) {
+      ['submit', 'cont', 'retry'].forEach(function (name) {
+        var orig = g[name];
+        if (typeof orig !== 'function' || orig.__f905c) return;
+        var w = function () {
+          var self = this, args = arguments;
+          if (!needRecheck()) { recheck.skipped++; return orig.apply(self, args); }
+          if (rcBusy) { recheck.busy++; return; }                 /* 確認中の二重送信は無視（入力は残る） */
+          recheckThen(function () { orig.apply(self, args); });
+        };
+        w.__f905c = true; w.__orig = orig; g[name] = w;
+      });
+      wrapped = true; return;
+    }
+    if (++wn < 600) setTimeout(wrapG, wn < 120 ? 250 : 2000);   /* G ができるまで（fix912 と同じ起動待ち） */
+  }
+  wrapG();
   window.__chrMeGate = {
-    build: '20260928-fix905b', allow: allow, gateOn: gateOn,
-    status: function () { var g = serverGate(); return { killed: killed(), meOff: meOff(), prodHost: prodHost(), server: g, gateOn: gateOn(), fired: fired, lastEval: lastEval, evals: evals }; }
+    build: '20260929-fix905c', allow: allow, gateOn: gateOn,
+    status: function () { var g = serverGate(); return { killed: killed(), meOff: meOff(), prodHost: prodHost(), server: g, gateOn: gateOn(), fired: fired, lastEval: lastEval, evals: evals, deny: deny, c905Off: c905Off(), wrapped: wrapped, recheck: JSON.parse(JSON.stringify(recheck)) }; },
+    invalidate: function (why) { deny = true; recheck.last = 'invalidate:' + String(why || '') + '@' + Date.now(); }
   };
   onAccount();
 })();

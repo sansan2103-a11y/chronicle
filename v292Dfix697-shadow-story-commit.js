@@ -194,7 +194,34 @@
       });
     } catch(e){ f911No('THREW', cb); }
   }
-  function f911Wait(r){ f911.waits[r] = (f911.waits[r] || 0) + 1; return false; }
+  function f911Wait(r){ f911.waits[r] = (f911.waits[r] || 0) + 1; f913LastWait = r; return false; }
+  /* ■fix913（SA-4a S2_BOOT_RECONCILE_RACE）: boot S2 の roster stash がまだ書き戻されていない間は
+     「RECONCILE_IN_PROGRESS」。新しい commit を始めず（lastConfirmed が先に進むと stash が永久に書き戻せなくなる）、
+     書き戻しを先に試みる。書き戻せない状態が確定した（local が Cloud record から動いた・形が壊れた・lc が stash を追い越した）
+     ときは止め続けない（deadlock 防止）: F913_STASH_ORPHANED を記録し stash は消さずに残す。
+     kill = localStorage v292Dfix913Off='1'（従来どおり）。 */
+  function f913Off(){ return lsg('v292Dfix913Off') === '1'; }
+  var f913 = { commitWaits: 0, releaseApplies: 0, orphaned: 0, lastOrphan: null };
+  var F913_TERMINAL = { STASH_PARSE: 1, STASH_SHAPE: 1, LOCAL_ROSTER_NOT_REMOTE: 1, LOCAL_NOT_AT_SERVER: 1, NO_ROSTER_KEY: 1, MARKER_DIVERGED: 1, MARKER_BOOTSTRAP_HOLD: 1 };
+  var f913LastWait = null;
+  function f913StashInProgress(id){
+    try {
+      if (f913Off() || f911Off() || !id) return false;
+      var raw = lsg(F911_SPRE + id); if (raw == null) return false;
+      var st = null; try { st = JSON.parse(raw); } catch(e1){ st = null; }
+      if (!st || st.v !== 2 || String(st.storyId) !== String(id)) return false;
+      var G = g781(); var m = (G && typeof G.marker === 'function') ? G.marker(id) : null;
+      var lc = m && m.lastConfirmed;
+      if (lc && typeof lc.serverRev === 'number' && typeof st.serverRev === 'number' && lc.serverRev > st.serverRev){ f913Orphan(id, 'LC_PASSED_STASH'); return false; }
+      if (f913LastWait && F913_TERMINAL[f913LastWait]){ f913Orphan(id, f913LastWait); return false; }
+      return true;
+    } catch(e){ return false; }
+  }
+  function f913Orphan(id, why){
+    if (f913.lastOrphan && f913.lastOrphan.id === String(id) && f913.lastOrphan.why === String(why)) return;
+    f913.orphaned++; f913.lastOrphan = { id: String(id), why: String(why), t: Date.now() };
+    try { note({ kind: 'F913_STASH_ORPHANED', id: String(id), why: String(why) }); } catch(e){}
+  }
   /* boot で S2 rebase（fix705 apply + reload）が選ばれた後、local が Cloud record そのものに
      なったこと（V2 hash == lastConfirmed.fp、roster == remote）を確かめてから退避した roster だけを書き戻す。 */
   var f911ApplyBusy = false;
@@ -224,7 +251,7 @@
           if (!rk){ f911ApplyBusy = false; return f911Wait('NO_ROSTER_KEY'); }
           localStorage.setItem(rk, st.roster);            /* ★layer1 経由（DIRTY → bridge → 既存 markDirty） */
           try { localStorage.removeItem(F911_SPRE + id); } catch(e4){}
-          f911.applied++; f911.lastApply = { id: String(id), serverRev: st.serverRev, src: src || null, t: Date.now() };
+          f911.applied++; f911.lastApply = { id: String(id), serverRev: st.serverRev, src: src || null, t: Date.now() }; f913LastWait = null;
           note({ kind: 'F911_ROSTER_REAPPLIED', id: id, serverRev: st.serverRev, src: src || null });
           if (!pushTimer && !inFlight) markDirty();
         } catch(e5){}
@@ -1373,6 +1400,10 @@
   var f697pLastHashProbe = null;           /* ★Rev3(P0-5): READ-ONLY 診断の直近結果 */
   var f697pProjRetryTimer = null;          /* ★Rev3e: projection bounded retry の timer（cancel 対象） */
   var f697pLast = null;                    /* 直近 verdict（read-only 可視化） */
+  /* ■fix914（SA-4b）: journal resume の authority 未確定待ち。kill = localStorage v292Dfix914Off='1'（従来の RESUME_HELD_AUTHORITY へ戻る） */
+  function f914Off(){ return lsg('v292Dfix914Off') === '1'; }
+  function f914NotReady(a5){ var ph = String((a5 && a5.phase) || ''); return ph === '' || ph === 'init' || ph === 'held' || ph === 'classifying'; }
+  var f914Armed = false, f914 = { waits: 0, rearmed: 0 };
   var f697pResumeFired = false;            /* この page session で resume を撃ったか（多重発火の構造的禁止） */
   var f697pReconciled = false;
   var f697pWaitTimer = null;               /* barrier / readiness の待機 timer（cancel 可能） */
@@ -2168,6 +2199,26 @@
     }
     /* ■fix705 の safety switch は迂回しない（OFF / unsafe / not fresh / route≠canonical は resume 0）。 */
     var f = fresh705(id);
+    /* ■fix914（SA-4b JOURNAL_RESUME_BEFORE_AUTHORITY_READY）: fix705 がまだ判定途中
+       （phase init / held / classifying・unsafe でない・fresh でない）なのは「HOLD と確定」ではなく
+       「authority 未確定」。ここで失敗終了せず、既存の fix705 release 通知（chr:f705-released）に
+       1 回だけ相乗りして、同じ journal resume を最初からやり直す（新しい poller は作らない）。
+       STOP / error（unsafe）・release 後の not fresh・route≠canonical は従来どおり resume 0。 */
+    if (!f914Off() && !f.err && f.a5 && f.a5.unsafe !== true && f.a5.fresh !== true && f914NotReady(f.a5)){
+      if (!f914Armed){
+        f914Armed = true; f914.waits++;
+        try { note({ kind: 'F914_RESUME_WAIT_AUTHORITY', id: String(id), phase: String(f.a5.phase || '') }); } catch(eN){}
+        try {
+          var h914 = function(){
+            try { window.removeEventListener('chr:f705-released', h914, false); } catch(eR){}
+            f914.rearmed++;
+            setTimeout(function(){ try { f914Armed = false; f697pResume(id, rec, serverRev, 0); } catch(e9){} }, 0);
+          };
+          window.addEventListener('chr:f705-released', h914, false);
+        } catch(eL){}
+      }
+      return;                                                   /* ★verdict を書かない（journal は不変・budget 消費 0） */
+    }
     if (f.err || !f.a5 || f.a5.fresh !== true || f.a5.unsafe === true){
       return f697pNoteVerdict(id, rec, 'RESUME_HELD_AUTHORITY', { err: (f && f.err) || null });
     }
@@ -2464,6 +2515,8 @@
   function commit(why){
     /* ■fix911 v2: S2_RECONCILE_PENDING 中は新しい save を始めない（自動 reload → boot S2 で収束させる）。 */
     try { var sid912 = storyId(); if (sid912 && f912Pending(sid912)){ f911.reloadWaits.COMMIT_DEFERRED = (f911.reloadWaits.COMMIT_DEFERRED || 0) + 1; return; } } catch(e912){}
+    /* ■fix913: boot S2 の roster 書き戻し前は commit を始めない（先に書き戻しを試みる。書き戻し後の markDirty で commit される）。 */
+    try { var sid913 = storyId(); if (sid913 && f913StashInProgress(sid913)){ f913.commitWaits++; try { f911ApplyStash('commit'); } catch(eA){} return; } } catch(e913){}
     /* ★★fix721.1(STEP4F.1/RULING31): restore transaction中はshadow/canonical writeを発火させない（読取のみ） */
     try { var __rj = JSON.parse(lsg('v292Dfix721_txn') || 'null');
           if (__rj && (__rj.phase === 'PREPARED' || __rj.phase === 'APPLYING')) return; } catch(e){}
@@ -2895,6 +2948,8 @@
   }
   try {
     window.addEventListener('chr:f705-released', function(){ setTimeout(function(){ try { f898Eval('f705-released'); } catch(e){} }, 0); }, false);
+    /* ■fix913: fix705 release 直後に 1 回だけ roster stash の書き戻しを試みる（fix896 / fix898 の marker 前進の後。T2 poll は fallback のまま） */
+    window.addEventListener('chr:f705-released', function(){ setTimeout(function(){ try { if (!f913Off() && f911ApplyStash('f705-released')) f913.releaseApplies++; } catch(e){} }, 50); }, false);
     window.addEventListener('chr:engine-booted', function(){ setTimeout(function(){ try { f898Eval('engine-booted'); } catch(e){} }, 0); }, false);
   } catch(e){}
 
@@ -3065,6 +3120,10 @@
     s2Preflight: function(id, cb){ return s2Preflight911(id || storyId(), cb); },
     s2HoldNow: function(id, r, why){ return s2HoldNow911(id || storyId(), r, why); },
     f911: function(){ return { off: f911Off(), stats: JSON.parse(JSON.stringify(f911)) }; },
+    f913: function(){ return { off: f913Off(), lastWait: f913LastWait, stats: JSON.parse(JSON.stringify(f913)) }; },
+    s2InProgress: function(id){ return f913StashInProgress(id || storyId()); },
+    s2ApplyStash: function(src){ return f911ApplyStash(src || 'api'); },
+    f914: function(){ return { off: f914Off(), armed: f914Armed, stats: JSON.parse(JSON.stringify(f914)) }; },
     /* ★fix871 診断口（read-only・書込 0・通信 0）。harness と現場の切り分け用。 */
     originState: function(){ return { fix: 'v292Dfix871', off: f871Off(),
                                       workerSupported: f871WorkerOrigin, projecting: f871Supported() }; },

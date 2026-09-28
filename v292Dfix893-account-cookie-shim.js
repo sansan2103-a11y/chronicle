@@ -75,11 +75,15 @@
     if (rest.indexOf('/img') === 0 && (rest.length === 4 || rest.charAt(4) === '?')) return null;   /* 画像 URL は認証不要のまま */
     return '/api' + rest;
   }
-  function onAuthFailure() { state.me = null; clearMark(); unrenderLogout897(); showGate('expired'); }
+  function onAuthFailure() { state.me = null; state.features = null; clearMark(); unrenderLogout897(); showGate('expired'); try { if (window.__chrMeGate && window.__chrMeGate.invalidate) window.__chrMeGate.invalidate('401'); } catch (e905) {} }
   function watch(resp) {
     try {
       if (resp && resp.status === 401) {
         resp.clone().json().then(function (j) { if (j && (j.errorCode === 'SESSION_INVALID' || j.errorCode === 'NO_SESSION')) onAuthFailure(); }).catch(function () {});
+      }
+      /* ★fix905c: 403（利用権なし・停止・利用記録なし）を受けたら ME gate を即失効させ、/auth/me を取り直す（表示は refreshMe の既存処理） */
+      else if (resp && resp.status === 403) {
+        resp.clone().json().then(function (j) { if (j && (j.errorCode === 'ENTITLEMENT_REQUIRED' || j.errorCode === 'ACCOUNT_SUSPENDED' || j.errorCode === 'ACCOUNT_LEDGER_MISSING')) { state.features = null; try { if (window.__chrMeGate && window.__chrMeGate.invalidate) window.__chrMeGate.invalidate(j.errorCode); } catch (e1) {} try { refreshMe(); } catch (e2) {} } }).catch(function () {});
       }
     } catch (e) {}
     return resp;
