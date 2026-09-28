@@ -50,8 +50,18 @@
   /* ---------------- state（story ごと・in-memory・永続化しない） ---------------- */
   var halted = {};            /* sid -> reason（session 内停止・retry 0） */
   var materializedFor = {};   /* sid -> turnCount（1 successful turn につき materialize <=1） */
+  /* ★fix904(ME-2b): fix793 が REJECT した candidate hash（in-memory のみ）。同じ hash のあいだは
+     materialize を呼ばない。candidate hash が変われば自然に再評価。kill: v292Dfix904Off='1'。 */
+  var rejectedCand = {};      /* sid -> { hash, reason, turnCount, at } */
+  function f904Off() { return ls('v292Dfix904Off') === '1'; }
+  function isReject904(reason) { return reason === 'REJECTED_OVERSIZE' || reason === 'REJECTED_INVALID'; }
+  function noteReject904(sid, o, tc) {
+    if (f904Off() || !isReject904(o.materializeReason) || !o.candHash16) return;
+    rejectedCand[sid] = { hash: o.candHash16, reason: o.materializeReason, turnCount: tc, at: Date.now() };
+    T.rejects904++;
+  }
   var T = { fires: 0, changed: 0, unchanged: 0, nullSkips: 0, bootstraps: 0, srvProbes: 0, srvLast: null, materialized: 0, driftStops: 0,
-            matFailed: 0, skipped: 0, skipReasons: {}, domainMismatch: 0, lastRun: null, errors: [] };
+            matFailed: 0, rejects904: 0, rejectSkips904: 0, skipped: 0, skipReasons: {}, domainMismatch: 0, lastRun: null, errors: [] };
   function skip(reason) { T.skipped++; T.skipReasons[reason] = (T.skipReasons[reason] || 0) + 1; return 'skipped:' + reason; }
   function err(sid, tc, stage, e) {
     T.errors.push({ at: Date.now(), storyId: sid, turnCount: tc, stage: stage,
@@ -262,8 +272,13 @@
       o.candHash16 = ch;
       o.domainMatch = (o.fix802Hash16 == null) ? null : (o.fix802Hash16 === ch);
       if (o.domainMatch === false) { T.domainMismatch++; err(sid, tc, 'domain', new Error('fix802 candHash16 != fix803 candHash16')); }
+      /* ★fix904: 直前に REJECT された candidate と同じ hash なら materialize しない（write 0・retry 0） */
+      if (!f904Off() && rejectedCand[sid] && rejectedCand[sid].hash === ch) { o.rejectSkip904 = rejectedCand[sid].reason; return null; }
       return hashLocal(sid);
     }).then(function (cur) {
+      if (cur === null && o.rejectSkip904) { T.rejectSkips904++; T.skipReasons['rejected-same-candidate'] = (T.skipReasons['rejected-same-candidate'] || 0) + 1;
+        return finish(sid, tc, o, 'rejected-same-candidate:' + o.rejectSkip904, t0); }
+      if (rejectedCand[sid]) delete rejectedCand[sid];              /* candidate が変わった → 記録を外して通常評価 */
       o.curHash16 = cur.hash; o.localReason = cur.reason;
       /* ★local 不在 / 壊れ（null）→ 原則 write 0（GPT 明示）。
          ★★fix803B(②C1 裁定 2): ただし **bootstrap 条件を全て満たすときだけ** 初回生成を許す。
@@ -277,7 +292,7 @@
         return Promise.resolve(m793.materialize(sid)).then(function (r) {
           o.materializeOk = !!(r && r.ok);
           o.materializeReason = (r && r.reason) ? String(r.reason) : null;
-          if (!o.materializeOk) { T.matFailed++; return finish(sid, tc, o, 'bootstrap-failed:' + (o.materializeReason || 'unknown'), t0); }
+          if (!o.materializeOk) { T.matFailed++; noteReject904(sid, o, tc); return finish(sid, tc, o, 'bootstrap-failed:' + (o.materializeReason || 'unknown'), t0); }
           return hashLocal(sid).then(function (post) {
             o.postHash16 = post.hash;
             if (post.hash !== o.candHash16) {
@@ -299,7 +314,7 @@
       return Promise.resolve(m793.materialize(sid)).then(function (r) {
         o.materializeOk = !!(r && r.ok);
         o.materializeReason = (r && r.reason) ? String(r.reason) : null;
-        if (!o.materializeOk) { T.matFailed++; return finish(sid, tc, o, 'materialize-failed:' + (o.materializeReason || 'unknown'), t0); }
+        if (!o.materializeOk) { T.matFailed++; noteReject904(sid, o, tc); return finish(sid, tc, o, 'materialize-failed:' + (o.materializeReason || 'unknown'), t0); }
         /* ★write authority の最低条件: dry candidate hash == materialize 後 local hash */
         return hashLocal(sid).then(function (post) {
           o.postHash16 = post.hash;
@@ -325,15 +340,16 @@
              fires: T.fires, changed: T.changed, unchanged: T.unchanged, nullSkips: T.nullSkips, bootstraps: T.bootstraps,
              srvProbes: T.srvProbes, srvLast: T.srvLast, srvMem: JSON.parse(JSON.stringify(srvMem)),
              materialized: T.materialized, driftStops: T.driftStops, matFailed: T.matFailed,
+             rejects904: T.rejects904, rejectSkips904: T.rejectSkips904, rejectedCand: JSON.parse(JSON.stringify(rejectedCand)), f904Off: f904Off(),
              skipped: T.skipped, skipReasons: JSON.parse(JSON.stringify(T.skipReasons)),
              domainMismatch: T.domainMismatch, materializedFor: JSON.parse(JSON.stringify(materializedFor)),
              lastRun: T.lastRun, errors: T.errors.slice() };
   }
   function reset() {
-    halted = {}; materializedFor = {};
+    halted = {}; materializedFor = {}; rejectedCand = {};
     srvMem = {};
     T = { fires: 0, changed: 0, unchanged: 0, nullSkips: 0, bootstraps: 0, srvProbes: 0, srvLast: null, materialized: 0, driftStops: 0,
-          matFailed: 0, skipped: 0, skipReasons: {}, domainMismatch: 0, lastRun: null, errors: [] };
+          matFailed: 0, rejects904: 0, rejectSkips904: 0, skipped: 0, skipReasons: {}, domainMismatch: 0, lastRun: null, errors: [] };
   }
 
   window.__v292Dfix803 = {

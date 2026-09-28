@@ -691,7 +691,19 @@
     if (st){
       var _mem3c2 = '', _grd3c2 = '';
       try {
-        var _sid3c2 = localStorage.getItem('chr6_active_slot');
+        /* ■fix903（ME-1 Story isolation FAIL の修正・kill: v292Dfix903Off='1'）
+           実測（rig/me1 iso1/iso2）: 送信前に別タブで B を開いていると、A の document なのに
+           chr6_active_slot=B を読み、B の記憶が A の prompt に入った（A の記憶は消えた）。
+           C4（fix902）と同じ原則: document story key → URL の story → chr6_active_slot（両方無い時だけ）。 */
+        var _sid3c2 = null;
+        try {
+          if (localStorage.getItem('v292Dfix903Off') !== '1'){
+            var _dk903 = window.__chronicleDocumentStoryKey;
+            if (typeof _dk903 === 'string' && _dk903) _sid3c2 = JSON.stringify(_dk903 === 'chr6' ? 'default' : _dk903.replace(/^chr6_slot_/, ''));
+            if (!_sid3c2){ var _u903 = (location.search.match(/[?&]story=([A-Za-z0-9_-]{1,80})/) || [])[1]; if (_u903) _sid3c2 = JSON.stringify(_u903); }
+          }
+        } catch(_e903){ _sid3c2 = null; }
+        if (!_sid3c2) _sid3c2 = localStorage.getItem('chr6_active_slot');
         var _S3c2 = getS();
         var _ct3c2 = (_S3c2 && Array.isArray(_S3c2.turns)) ? _S3c2.turns.length : null;
         var _b3c2 = (window.__v292Dfix796 && typeof window.__v292Dfix796.canaryBlocks === 'function')

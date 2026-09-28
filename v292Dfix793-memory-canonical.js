@@ -495,6 +495,39 @@
       q.onerror = function () { rej(q.error); };
     });
   }
+  /* ★fix904: materialize 境界の candidate 検査（read-only・書込 0） */
+  var REJECT904 = { OVERSIZE: 'REJECTED_OVERSIZE', INVALID: 'REJECTED_INVALID' };
+  var _rej904 = {};          /* sid -> 最新の reject（in-memory のみ・永続化しない） */
+  var _rej904Ring = [];      /* 直近 20 件 */
+  function f904Off() { return lsg('v292Dfix904Off') === '1'; }
+  function invalidReason904(v, sid) {
+    if (!validShape(v)) return 'bad-shape';
+    var seen = {}, i, r;
+    for (i = 0; i < v.records.length; i++) {
+      r = v.records[i];
+      if (!r || typeof r !== 'object' || Array.isArray(r)) return 'record-not-object';
+      if (typeof r.memoryId !== 'string' || r.memoryId.length < 6 || r.memoryId.indexOf('cmem:') !== 0) return 'bad-memoryId';
+      if (seen[r.memoryId]) return 'duplicate-memoryId';
+      seen[r.memoryId] = 1;
+      if (String(r.storyId) !== String(sid)) return 'storyId-mismatch';
+      if (r.lifecycle !== LIFECYCLE.ACTIVE && r.lifecycle !== LIFECYCLE.PENDING) return 'bad-lifecycle';
+      if (Object.prototype.toString.call(r.refs) !== '[object Array]') return 'bad-refs';
+      if (!r.source || !isFinite(r.source.firstTurn) || !isFinite(r.source.lastTurn)) return 'bad-source-turn';
+    }
+    for (i = 0; i < v.edges.length; i++) {
+      if (!v.edges[i] || typeof v.edges[i] !== 'object' || Array.isArray(v.edges[i])) return 'edge-not-object';
+    }
+    return null;
+  }
+  function reject904(sid, code, bytes, detail) {
+    var prev = _rej904[sid];
+    var e = { sid: sid, code: code, bytes: bytes, detail: detail || null, at: Date.now(),
+              count: (prev && prev.code === code) ? (prev.count + 1) : 1,
+              keptState: stateOf(sid).state };
+    _rej904[sid] = e;
+    _rej904Ring.push(e); if (_rej904Ring.length > 20) _rej904Ring.shift();
+    return { ok: false, reason: code, bytes: bytes, detail: detail || null, wrote: 0, rejected: true };
+  }
   function materialize(storyId) {
     var sid = String(storyId || '');
     if (!armed()) return Promise.resolve({ ok: false, reason: HOLD.DISABLED });
@@ -516,9 +549,19 @@
       var v = materializeFrom({ storyId: sid, lineages: a[0], events: a[1],
                                 relations: a[2], resolutions: a[3] });
       var bytes = byteLen(v);
+      /* ★fix904(ME-2b / GPT 裁定 2026-09-28 第三案): materialize 境界で invalid / oversize の
+         candidate を REJECT する。v292Dmem1_slot_ へは書かない・in-memory state（last-known-good）も
+         変えない・canonical projection / saveGate は不変。理由と bytes は in-memory の status にだけ残す。
+         kill: v292Dfix904Off='1' → 従来（oversize は TOO_LARGE で書かない・invalid 検査なし）。 */
+      if (!f904Off()) {
+        var _inv = (bytes < 0) ? 'serialize-failed' : invalidReason904(v, sid);
+        if (_inv) return reject904(sid, REJECT904.INVALID, bytes, _inv);
+        if (bytes > MAX_BYTES) return reject904(sid, REJECT904.OVERSIZE, bytes, null);
+      }
       if (bytes > MAX_BYTES) { setState(sid, stateOf(sid).state, stateOf(sid).value, 'too-large');
         return { ok: false, reason: HOLD.TOO_LARGE, bytes: bytes }; }
       var wrote = lss(keyFor(sid), JSON.stringify(v));
+      if (!f904Off()) { try { delete _rej904[sid]; } catch (e904c) {} }
       setState(sid, STATE.LOADED_VALUE, v, 'materialize');
       var counts = { records: v.records.length, edges: v.edges.length, ACTIVE: 0, PENDING_REF: 0 };
       for (var i = 0; i < v.records.length; i++) counts[v.records[i].lifecycle]++;
@@ -559,6 +602,11 @@
     clearRing: function () { return _clearRing.slice(); },
     onUnknownFieldError: onUnknownFieldError,
     materialize: materialize, byteLen: byteLen,
+    /* ★fix904 観測口（read-only） */
+    rejectStatus: function (storyId) { var sid = String(storyId || ''); var e = _rej904[sid];
+      return { sid: sid, off: f904Off(), last: e ? JSON.parse(JSON.stringify(e)) : null, maxBytes: MAX_BYTES }; },
+    rejectRing: function () { return JSON.parse(JSON.stringify(_rej904Ring)); },
+    REJECT904: REJECT904,
     __test: { materializeFrom: materializeFrom, criticalRefsOf: criticalRefsOf,
               validShape: validShape, setState: setState, LIFECYCLE: LIFECYCLE,
               AUTHORITY: AUTHORITY, MAX_BYTES: MAX_BYTES, CANARY_DEFAULT: CANARY_DEFAULT,
