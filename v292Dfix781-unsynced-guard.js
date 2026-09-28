@@ -332,6 +332,18 @@ function confirm(id, serverRev, fingerprint){
              inflGen: infl ? infl.generation : null, fpMatch: !!(infl && fp != null && String(infl.fingerprint) === fp) });
     }
     m.inFlightSave = null;
+    /* ■fix911 v2（S2・kill v292Dfix911Off）: CLEAN（= local が lastConfirmed そのもの）のときだけ、
+       lastConfirmed 時点の base roster307 の canonical 値そのものを残す（過大なら tooLarge = S2 無効）。
+       CLEAN でなければ null（base 不明 = S2 は使わない）。 */
+    try {
+      m.lcRoster = null;
+      if (ng('v292Dfix911Off') !== '1' && m.state === STATE.CLEAN && rev != null && fp != null){
+        var F911 = window.__v292Dfix697;
+        var b911 = (F911 && typeof F911.s2BaseRoster === 'function') ? F911.s2BaseRoster(String(id)) : null;
+        if (b911 && b911.tooLarge) m.lcRoster = { rev: rev, fp: fp, tooLarge: true };
+        else if (b911 && typeof b911.v === 'string') m.lcRoster = { rev: rev, fp: fp, v: b911.v };
+      }
+    } catch(e911){ m.lcRoster = null; }
     return writeMarker(id, m);
   } catch(e){ return false; }
 }

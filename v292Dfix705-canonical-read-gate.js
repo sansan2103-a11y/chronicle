@@ -575,6 +575,26 @@
   //   判定順（裁定）: x(adopt) → y(keep-local) → e(lost ACK) → f(stale intent)
   //                   → d(clean) → a(bootstrap) → b(server at base) → c(diverged)
   // =====================================================================
+  /* ■fix911 v2 helpers（S2 boot 経路） */
+  var F911_SPRE = 'v292Dfix402_f911_';
+  var f911Asked = false, f911Res = null;
+  function f911Off(){ return lsg('v292Dfix911Off') === '1'; }
+  function f911Need(j){
+    try {
+      if (f911Off() || f781Off() || state.schema !== 2 || !j || !j.record) return false;
+      var W = window.__v292Dfix697; if (!W || typeof W.s2Proof !== 'function') return false;
+      var m = f781Marker(); if (!m) return false;
+      if (m.state !== 'DIRTY_INTENT' && m.state !== 'DIRTY_LOCAL') return false;
+      var lcRev = (m.lastConfirmed && typeof m.lastConfirmed.serverRev === 'number') ? m.lastConfirmed.serverRev : null;
+      var srev = (typeof state.serverRev === 'number') ? state.serverRev : null;
+      return (lcRev != null && srev != null && srev !== lcRev);
+    } catch(e){ return false; }
+  }
+  function lss911(k, v){
+    try { var W = window.__v292Dfix654; var nat = (W && typeof W._native === 'function') ? W._native('setItem') : null;
+          if (typeof nat === 'function'){ nat.call(localStorage, k, v); return lsg(k) === v; } } catch(e){}
+    try { Storage.prototype.setItem.call(localStorage, k, v); return lsg(k) === v; } catch(e2){ return false; }
+  }
   function resolve781(j){
     if (f781Off()) return null;
     /* ■fix781d ★QA専用 fault injection（fixture/実機受入で「意図的throw→fail-closed」を実測するための検証口。
@@ -677,8 +697,23 @@
 
     /* (c) TRUE DIVERGENCE — local が dirty かつ server rev が lastConfirmed から進んでいる。
            どちらも捨てられないので Draft を作って止め、ユーザーに選ばせる。 */
-    if (isDirtyState(m.state))
+    if (isDirtyState(m.state)){
+      /* ■fix911 v2（SA-3 S2）: exact 証明が成立したときだけ、remote（別端末の新 turn）を apply し、
+         local roster307 は stash して apply 後（reload 後）に fix697 が書き戻す。それ以外は従来どおり DIVERGED。 */
+      if (f911Res && f911Res.ok === true && typeof f911Res.localRosterRaw === 'string' && lcRev != null){
+        try {
+          var okS = lss911(F911_SPRE + STORY_ID, JSON.stringify({ v: 2, storyId: String(STORY_ID), roster: f911Res.localRosterRaw,
+                    remoteRosterV: f911Res.remoteRosterV, serverRev: srev, serverHash: sh, lcRev: lcRev, createdAt: Date.now() }));
+          /* local の差分は roster307 だけ（exact 証明済み）で、その raw は stash に readback 済み。
+             Recovery Draft は apply と競合して作れない（FINGERPRINT_RECHECK_MISMATCH）ので作らない。 */
+          if (okS){
+            note({ f911: 'S2_ROSTER_REBASE', lcRev: lcRev, serverRev: srev });
+            return { action:'ALLOW', reason:'S2_ROSTER_REBASE' };
+          }
+        } catch(e911){}
+      }
       return toHold('DIVERGED', (lcRev == null) ? 'DIRTY_WITH_NO_LAST_CONFIRMED' : 'SERVER_REV_ADVANCED');
+    }
 
     /* 上のどれにも当てはまらない（CLEAN なのに lh != lastConfirmed.fingerprint 等）。
        marker の外で local が書き換わった可能性があり安全側を判定できないので fail-closed。 */
@@ -865,6 +900,19 @@
         return afterHash();
 
         function afterHash(){
+        /* ■fix911 v2（S2・kill v292Dfix911Off）: DIRTY かつ Cloud が lastConfirmed から進んでいるときだけ、
+           resolve781 の前に fix697 の exact 証明（非同期・書込 0・network 0）を 1 回だけ求める。 */
+        if (!f911Asked && f911Need(j)){
+          f911Asked = true;
+          try {
+            window.__v292Dfix697.s2Proof(STORY_ID, j.record, f781Marker(), function(r){
+              f911Res = r || { ok: false, why: 'NO_RESULT' };
+              try { note({ f911: 'PROOF', ok: !!f911Res.ok, why: f911Res.why || null }); } catch(eN){}
+              afterHash();
+            });
+            return;
+          } catch(eP){ f911Res = { ok: false, why: 'PROOF_THREW' }; }
+        }
 
         /* ■fix781(Phase 2.5A): ここが破壊的 apply の唯一の入口。
            serverHash / serverRev / localHash が全部揃った **この 1 点** で

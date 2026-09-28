@@ -141,6 +141,141 @@
       return { lcRev: lc.serverRev, lcFp: (lc.fingerprint == null ? null : String(lc.fingerprint)), gen: m.localGeneration };
     } catch(e){ return null; }
   }
+  /* ■fix911 v2（SA-3 S2・roster307 限定、kill v292Dfix911Off）— GPT 裁定: 弱い hash を merge の根拠にしない。
+     ・base = fix781 CLEAN confirm 時に保存した base roster307 の canonical 値そのもの（m.lcRoster.v）。
+     ・roster-only の証明 = 現在の local V2 projection の roster307 を base に戻した仮想 V2 の sha256 が
+       lastConfirmed.fingerprint と完全一致すること。
+     ・remote roster 未変更の証明 = fresh remote record の roster307 canonical 値 == base（exact）。
+     ・分からない時は merge しない（どれか欠ければ not ok）。 */
+  function f911Off(){ return lsg('v292Dfix911Off') === '1'; }
+  var F911_SPRE = 'v292Dfix402_f911_';                 /* collectLS 除外 prefix（同期に載らない） */
+  var F911_MAX = 32768;                                /* base roster の保存上限（超えたら S2 無効 = 従来 DIVERGED） */
+  var f911 = { proofs: 0, proofOk: 0, proofNo: {}, stashSeen: 0, applied: 0, waits: {}, lastApply: null, lastProof: null,
+               inSession: 0, reloads: 0, reloadWaits: {} };
+  function rosterCanon911(sc){
+    var v = (sc && typeof sc === 'object' && Object.prototype.hasOwnProperty.call(sc, 'roster307')) ? sc.roster307 : null;
+    if (v == null) v = [];
+    return canonicalString(v);
+  }
+  function baseRoster911(id){
+    try { var p2 = projectionV2(id); if (!p2) return null; var v = rosterCanon911(p2.sidecar);
+          return (v.length > F911_MAX) ? { tooLarge: true } : { v: v }; } catch(e){ return null; }
+  }
+  function f911No(why, cb){ f911.proofNo[why] = (f911.proofNo[why] || 0) + 1; f911.lastProof = { ok: false, why: why, t: Date.now() }; cb({ ok: false, why: why }); }
+  /* cb({ok, why, localRosterRaw, remoteRosterV}) — 書込 0 / network 0 */
+  function s2Proof911(id, remoteRec, m, cb){
+    try {
+      f911.proofs++;
+      if (f911Off()) return f911No('OFF', cb);
+      if (!m || !m.lastConfirmed) return f911No('NO_LC', cb);
+      var lc = m.lastConfirmed, b = m.lcRoster;
+      if (!b || typeof b.v !== 'string' || b.tooLarge) return f911No('NO_BASE', cb);
+      if (b.rev !== lc.serverRev || String(b.fp) !== String(lc.fingerprint)) return f911No('BASE_NOT_AT_LC', cb);
+      if (!remoteRec || typeof remoteRec !== 'object') return f911No('NO_REMOTE_RECORD', cb);
+      var remoteV = rosterCanon911(remoteRec.sidecar);
+      if (remoteV !== b.v) return f911No('REMOTE_ROSTER_CHANGED', cb);
+      var p2 = projectionV2(id); if (!p2) return f911No('NO_LOCAL_PROJECTION', cb);
+      var localV = rosterCanon911(p2.sidecar);
+      if (localV === b.v) return f911No('LOCAL_ROSTER_UNCHANGED', cb);
+      var baseVal = null; try { baseVal = JSON.parse(b.v); } catch(eP){ return f911No('BASE_PARSE', cb); }
+      var sc2 = {}, k; for (k in p2.sidecar){ if (Object.prototype.hasOwnProperty.call(p2.sidecar, k)) sc2[k] = p2.sidecar[k]; }
+      sc2.roster307 = baseVal;
+      var virt = {}; for (k in p2){ if (Object.prototype.hasOwnProperty.call(p2, k)) virt[k] = p2[k]; }
+      virt.sidecar = sc2;
+      var vs = null; try { vs = canonicalString(virt); } catch(eS){ return f911No('VIRT_SERIALIZE', cb); }
+      sha256hex(vs, function(vh){
+        if (!vh) return f911No('VIRT_HASH_FAIL', cb);
+        if (vh !== String(lc.fingerprint)) return f911No('LOCAL_NON_ROSTER_CHANGED', cb);
+        var rk = null; try { rk = String(window.__v292DfixCC2.keysFor(String(id)).roster307); } catch(eK){ rk = null; }
+        var raw = rk ? lsg(rk) : null;
+        if (raw == null) return f911No('NO_LOCAL_ROSTER_RAW', cb);
+        f911.proofOk++; f911.lastProof = { ok: true, t: Date.now(), lcRev: lc.serverRev };
+        cb({ ok: true, localRosterRaw: raw, remoteRosterV: remoteV, localRosterV: localV });
+      });
+    } catch(e){ f911No('THREW', cb); }
+  }
+  function f911Wait(r){ f911.waits[r] = (f911.waits[r] || 0) + 1; return false; }
+  /* boot で S2 rebase（fix705 apply + reload）が選ばれた後、local が Cloud record そのものに
+     なったこと（V2 hash == lastConfirmed.fp、roster == remote）を確かめてから退避した roster だけを書き戻す。 */
+  var f911ApplyBusy = false;
+  function f911ApplyStash(src){
+    try {
+      if (f911Off() || !on() || f911ApplyBusy) return false;
+      var id = storyId(); if (!id) return false;
+      var raw = lsg(F911_SPRE + id); if (raw == null) return false;
+      f911.stashSeen++;
+      var st = null; try { st = JSON.parse(raw); } catch(e1){ return f911Wait('STASH_PARSE'); }
+      if (!st || st.v !== 2 || String(st.storyId) !== String(id) || typeof st.roster !== 'string' || typeof st.remoteRosterV !== 'string') return f911Wait('STASH_SHAPE');
+      try { var F5 = window.__v292Dfix705; var s5 = F5 && F5.status && F5.status().state;
+            if (!s5 || s5.phase !== 'released' || s5.held !== false) return f911Wait('F705_NOT_RELEASED'); } catch(e2){ return f911Wait('F705_UNKNOWN'); }
+      var G = g781(); var m = (G && typeof G.marker === 'function') ? G.marker(id) : null;
+      if (!m) return f911Wait('NO_MARKER');
+      if (m.state === 'DIVERGED' || m.state === 'BOOTSTRAP_HOLD') return f911Wait('MARKER_' + m.state);
+      var lc = m.lastConfirmed;
+      if (!lc || lc.serverRev !== st.serverRev || String(lc.fingerprint) !== String(st.serverHash)) return f911Wait('LC_NOT_AT_STASH');
+      if (inFlight || f697pRead(id)) return f911Wait('BUSY');
+      var p2 = projectionV2(id); if (!p2) return f911Wait('NO_LOCAL_PROJECTION');
+      if (rosterCanon911(p2.sidecar) !== st.remoteRosterV) return f911Wait('LOCAL_ROSTER_NOT_REMOTE');
+      f911ApplyBusy = true;
+      sha256hex(canonicalString(p2), function(h){
+        try {
+          if (!h || h !== String(st.serverHash)){ f911ApplyBusy = false; return f911Wait('LOCAL_NOT_AT_SERVER'); }
+          var rk = null; try { rk = String(window.__v292DfixCC2.keysFor(String(id)).roster307); } catch(e3){ rk = null; }
+          if (!rk){ f911ApplyBusy = false; return f911Wait('NO_ROSTER_KEY'); }
+          localStorage.setItem(rk, st.roster);            /* ★layer1 経由（DIRTY → bridge → 既存 markDirty） */
+          try { localStorage.removeItem(F911_SPRE + id); } catch(e4){}
+          f911.applied++; f911.lastApply = { id: String(id), serverRev: st.serverRev, src: src || null, t: Date.now() };
+          note({ kind: 'F911_ROSTER_REAPPLIED', id: id, serverRev: st.serverRev, src: src || null });
+          if (!pushTimer && !inFlight) markDirty();
+        } catch(e5){}
+        f911ApplyBusy = false;
+      });
+      return true;
+    } catch(e){ f911ApplyBusy = false; return false; }
+  }
+  /* ■fix911 v2 in-session: exact 証明が成立したら PUT せず fix912（S2_RECONCILE_PENDING → idle で自動 reload → boot S2）へ渡す。
+     fix912 が無い / kill / loop guard に当たった → false（呼び手は従来の fail-closed 経路を続ける）。 */
+  function f911RequestInSession(id, srvRev, src){
+    try { var R = window.__v292Dfix912; if (!R || typeof R.request !== 'function') return false;
+          var ok = R.request(String(id), srvRev, src) === true;
+          if (ok){ f911.inSession++; note({ kind: 'F911_INSESSION_S2', id: id, srvRev: srvRev, src: src }); }
+          return ok; } catch(e){ return false; }
+  }
+  function f912Pending(id){ try { var R = window.__v292Dfix912; return !!(R && typeof R.pending === 'function' && R.pending(String(id))); } catch(e){ return false; } }
+  function s2PreflightNeeded911(id){
+    try {
+      if (f911Off() || !on() || !id || storyId() !== String(id)) return false;
+      var G = g781(); var m = (G && typeof G.marker === 'function') ? G.marker(id) : null;
+      if (!m || (m.state !== 'DIRTY_INTENT' && m.state !== 'DIRTY_LOCAL')) return false;
+      var lc = m.lastConfirmed, b = m.lcRoster;
+      return !!(lc && typeof lc.serverRev === 'number' && b && typeof b.v === 'string' && !b.tooLarge &&
+                b.rev === lc.serverRev && String(b.fp) === String(lc.fingerprint));
+    } catch(e){ return false; }
+  }
+  /* send 前の one-shot fresh getstory（書込 0）。cb({error}|{remoteAhead:false}|{remoteAhead:true,safe,why,srvRev,srvHash,j,lcRev}) */
+  function s2Preflight911(id, cb){
+    try {
+      if (!s2PreflightNeeded911(id)) return cb({ skip: true });
+      var G = g781(); var m = G.marker(id); var lc = m.lastConfirmed;
+      postSaveOnce({ op: 'getstory', id: String(id), clientCanonicalSchemaMax: 2 }, function(g, gerr){
+        try {
+          if (gerr || !g || g.status !== 200 || !(g.j && g.j.ok)) return cb({ error: gerr || ('HTTP_' + (g && g.status)) });
+          var j = g.j; var srvRev = (typeof j.rev === 'number') ? j.rev : 0; var srvHash = String(j.serverHash || '');
+          if (String(j.authority || 'shadow') !== 'canonical' || j.deleted) return cb({ error: 'NOT_CANONICAL' });
+          if (srvRev === lc.serverRev) return cb({ remoteAhead: false });
+          var m2 = G.marker(id);
+          s2Proof911(id, j.record, m2, function(r){
+            cb({ remoteAhead: true, safe: !!(r && r.ok), why: r && r.why, srvRev: srvRev, srvHash: srvHash, j: j, lcRev: lc.serverRev });
+          });
+        } catch(e2){ cb({ error: 'THREW' }); }
+      });
+    } catch(e){ cb({ error: 'THREW' }); }
+  }
+  function s2HoldNow911(id, r, why){
+    try { if (!r || r.srvRev == null) return false;
+          canonHold[id] = true;
+          f910Hold(id, 2, r.srvRev, r.srvHash, r.j, { lcRev: r.lcRev }, why || 'preflight'); return true; } catch(e){ return false; }
+  }
   function f910NoProgress(id, schema, srvRev, info, why){
     f910.noProgress++;
     f910.lastNoProgress = { id: String(id), srvRev: srvRev, lcRev: info.lcRev, why: String(why || ''), t: Date.now() };
@@ -982,7 +1117,12 @@
         f909.remoteAhead++;
         note({ kind: 'F909_REMOTE_AHEAD', id: id, srvRev: srvRev, lcRev: opt909.lc.rev });
         f697pClear(id, 'F909_REMOTE_AHEAD');
-        return fin();
+        if (f911Off()) return fin();
+        var G909 = g781(); var m909 = (G909 && typeof G909.marker === 'function') ? G909.marker(id) : null;
+        return s2Proof911(id, j.record, m909, function(r909){
+          if (r909 && r909.ok) f911RequestInSession(id, srvRev, 'f909');   /* 失敗しても従来どおり write 0・DIRTY 保持 */
+          fin();
+        });
       }
       f697pHashProbe(id, j, 'cas-preflight');            /* ★fix697p Rev3(P0-5): READ-ONLY 診断のみ */
       /* ★★fix697p Rev3(P0-1 / P0-2 SEND PROJECTION SINGLE-SOURCE)
@@ -1023,7 +1163,15 @@
           /* ■fix910: 別端末が lastConfirmed から Cloud を進めている → 上書きしない（fix705 (c) と同じ HOLD）。 */
           var i910 = f910Check(id, srvRev, v2hash);
           if (i910 && i910.noProgress){ f910NoProgress(id, 2, srvRev, i910, why); f697pClear(id, 'F910_NO_LOCAL_PROGRESS'); return fin(); }
-          if (i910){ f697pClear(id, 'F910_REMOTE_AHEAD_HOLD'); f910Hold(id, 2, srvRev, srvHash, j, i910, why); return fin(); }
+          if (i910){
+            f697pClear(id, 'F910_REMOTE_AHEAD_HOLD');
+            if (f911Off()){ f910Hold(id, 2, srvRev, srvHash, j, i910, why); return fin(); }
+            var G910 = g781(); var m910 = (G910 && typeof G910.marker === 'function') ? G910.marker(id) : null;
+            return s2Proof911(id, j.record, m910, function(r910){
+              if (!(r910 && r910.ok && f911RequestInSession(id, srvRev, 'f910'))) f910Hold(id, 2, srvRev, srvHash, j, i910, why);
+              fin();
+            });
+          }
           /* ---- 異内容 → fresh 値で strict CAS 1回（force 禁止） ---- */
           /* ★★fix697p Rev3(P0-1): **PUT の直前**に ARMED_CAS を durable 化する。
              ここに載る outgoingV2Hash は上の canonicalSendStr（= これから送る body の
@@ -2314,6 +2462,8 @@
     } catch(e){ return false; }
   }
   function commit(why){
+    /* ■fix911 v2: S2_RECONCILE_PENDING 中は新しい save を始めない（自動 reload → boot S2 で収束させる）。 */
+    try { var sid912 = storyId(); if (sid912 && f912Pending(sid912)){ f911.reloadWaits.COMMIT_DEFERRED = (f911.reloadWaits.COMMIT_DEFERRED || 0) + 1; return; } } catch(e912){}
     /* ★★fix721.1(STEP4F.1/RULING31): restore transaction中はshadow/canonical writeを発火させない（読取のみ） */
     try { var __rj = JSON.parse(lsg('v292Dfix721_txn') || 'null');
           if (__rj && (__rj.phase === 'PREPARED' || __rj.phase === 'APPLYING')) return; } catch(e){}
@@ -2605,6 +2755,7 @@
       if (lastFp != null && f !== lastFp) markDirty();
       lastFp = f;
       try { f898Eval('t2-poll'); } catch(e898){}      /* ■fix898: 既存 T2 poll に相乗り（新 poller なし） */
+      try { f911ApplyStash('t2-poll'); } catch(e911){}  /* ■fix911: 同じ T2 poll に相乗り（新 poller なし） */
     }, SIDE_POLL_MS);
   } catch(e){}
 
@@ -2907,6 +3058,13 @@
     canonicalStoryCfg: canonicalStoryCfg,
     projection: projection,
     canonicalString: canonicalString,
+    /* ■fix911 v2 */
+    s2BaseRoster: function(id){ return baseRoster911(id || storyId()); },
+    s2Proof: function(id, remoteRec, m, cb){ return s2Proof911(id, remoteRec, m, cb); },
+    s2PreflightNeeded: function(id){ return s2PreflightNeeded911(id || storyId()); },
+    s2Preflight: function(id, cb){ return s2Preflight911(id || storyId(), cb); },
+    s2HoldNow: function(id, r, why){ return s2HoldNow911(id || storyId(), r, why); },
+    f911: function(){ return { off: f911Off(), stats: JSON.parse(JSON.stringify(f911)) }; },
     /* ★fix871 診断口（read-only・書込 0・通信 0）。harness と現場の切り分け用。 */
     originState: function(){ return { fix: 'v292Dfix871', off: f871Off(),
                                       workerSupported: f871WorkerOrigin, projecting: f871Supported() }; },
