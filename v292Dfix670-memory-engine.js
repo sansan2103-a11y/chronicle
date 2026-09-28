@@ -94,6 +94,8 @@
  * =================================================================== */
 (function () {
   'use strict';
+  /* ★fix905 / 905b（ME Owner gate）: production host では server 由来の owner gate だけが ON を決める。端末 On flag は QA host の override のみ。production host で gate が無い・壊れた・kill 時は OFF。 */
+  function __f905Allow(localOn) { try { var G = window.__chrMeGate; if (G && typeof G.allow === 'function') return G.allow(!!localOn) === true; } catch (e905) {} var ph = true; try { ph = (String(location.hostname) === 'chronicle-app.pages.dev'); } catch (e905h) {} return ph ? false : !!localOn; }   /* ★fix905b: production host で gate が無い / 壊れた時は OFF（local flag へ fallback しない） */
   /* ★二重読込の防止は __loaded で行う。__armed は「この端末で起動したか」を表すので、
      未武装（opt-in していない）ときは false になる。 */
   if (window.__v292Dfix670 && window.__v292Dfix670.__loaded) return;
@@ -120,7 +122,7 @@
   function lsg(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lss(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
   function off() { /* ★ge3 ME master kill: v292DmeOff='1' はこの module のどの gate よりも先に効く。 個別 flag は読みも書きも変えないので、master を外せば元の設定へそのまま戻る。 */ return lsg('v292DmeOff') === '1' || lsg(OFF_KEY) === '1'; }
-  function optedIn() { /* ★sp20 (RR-01 X-5 / 1.0 既定 OFF へ最小反転): 未設定 = OFF、'1' = 明示 ON、'0' = OFF。Off='1' / v292DmeOff='1' の最優先は不変。ge2 の story 既定（未設定 = 全 story）は不変。 */ return lsg(ON_KEY) === '1'; }
+  function optedIn() { /* ★sp20 (RR-01 X-5 / 1.0 既定 OFF へ最小反転): 未設定 = OFF、'1' = 明示 ON、'0' = OFF。Off='1' / v292DmeOff='1' の最優先は不変。ge2 の story 既定（未設定 = 全 story）は不変。 */ return __f905Allow(lsg(ON_KEY) === '1'); }
   /* ★起動判定はこの1関数だけ。
        OFF=1                → 停止
        OFF!=1 かつ ON=1     → 起動
@@ -2132,9 +2134,16 @@
   /* ★Canary: v292Dfix670On === '1' の端末だけ起動する。
      未設定なら hook も timer も作らず、IndexedDB も localStorage も触らない。
      ゲーム本体（保存・描画・同期・生成）には何もしない。 */
+  /* ★fix905: 起動処理を 1 関数にまとめ、読込時に gate 未確定（/auth/me 応答前）でも、
+     後で owner gate が ON になった時に 1 回だけ起動できるようにする（chr:me-gate-on）。
+     起動内容は従来と 1 byte も変えない。 */
+  var __f905Armed = false;
+  function __f905Boot() {
   try {
+    if (__f905Armed) return;
     st.armed = armed() && !st.degraded;
     if (st.armed) {
+      __f905Armed = true;
       if (Array.isArray(window.UI && window.UI._renderHooks) || (typeof UI !== 'undefined' && Array.isArray(UI._renderHooks))) {
         var HK = (typeof UI !== 'undefined' && Array.isArray(UI._renderHooks)) ? UI._renderHooks : window.UI._renderHooks;
         /* ★index.html:1404 は renderAll から null、:1416 は appendTurn から turn。
@@ -2152,6 +2161,9 @@
       }, 2500);
     }
   } catch (e) { degrade('boot:' + (e && e.message)); }
+  }
+  __f905Boot();
+  try { window.addEventListener('chr:me-gate-on', function () { try { __f905Boot(); } catch (e905) {} }); } catch (e905b) {}
 
   /* ==================================================================
    * 公開 API

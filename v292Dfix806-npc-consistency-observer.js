@@ -31,6 +31,8 @@
 // =====================================================================
 (function(){
   'use strict';
+  /* ★fix905 / 905b（ME Owner gate）: production host では server 由来の owner gate だけが ON を決める。端末 On flag は QA host の override のみ。production host で gate が無い・壊れた・kill 時は OFF。 */
+  function __f905Allow(localOn) { try { var G = window.__chrMeGate; if (G && typeof G.allow === 'function') return G.allow(!!localOn) === true; } catch (e905) {} var ph = true; try { ph = (String(location.hostname) === 'chronicle-app.pages.dev'); } catch (e905h) {} return ph ? false : !!localOn; }   /* ★fix905b: production host で gate が無い / 壊れた時は OFF（local flag へ fallback しない） */
   if (window.__v292Dfix806) return;
   var TAG = '[v292Dfix806:npc-observer]';
   var CAP = 128;      // candidate ring（in-memory・hard cap）
@@ -51,7 +53,7 @@
   function remember(map, key, v){ map[key] = v; var ks = Object.keys(map); while (ks.length > SEEN_CAP){ delete map[ks.shift()]; } }
   function ls(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ /* ★ge3 ME master kill: v292DmeOff='1' はこの module のどの gate よりも先に効く。 個別 flag は読みも書きも変えないので、master を外せば元の設定へそのまま戻る。 */ return ls('v292DmeOff') === '1' || ls('v292Dfix806Off') === '1'; }
-  function on(){ /* ★sp20 (RR-01 X-5 / 1.0 既定 OFF へ最小反転): 未設定 = OFF、'1' = 明示 ON、'0' = OFF。Off='1' / v292DmeOff='1' の最優先は不変。ge2 の story 既定（未設定 = 全 story）は不変。 */ return ls('v292Dfix806On') === '1' && !off(); }
+  function on(){ /* ★sp20 (RR-01 X-5 / 1.0 既定 OFF へ最小反転): 未設定 = OFF、'1' = 明示 ON、'0' = OFF。Off='1' / v292DmeOff='1' の最優先は不変。ge2 の story 既定（未設定 = 全 story）は不変。 */ return __f905Allow(ls('v292Dfix806On') === '1') && !off(); }
   function getS(){
     try { var a = window.__chronicleGetState ? window.__chronicleGetState('fix806') : null; if (a) return a; } catch(e){}
     try { return window.S || null; } catch(e){ return null; }

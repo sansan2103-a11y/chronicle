@@ -30,7 +30,7 @@
   var CRED_KEYS = ['v292ProxyPass', 'v292GoogleToken'];
   var CRED_HEADERS = { 'x-chronicle-pass': 1, 'x-google-id': 1, 'x-chronicle-session': 1 };
   var PLAY = { beta: 1, paid: 1, owner: 1 };
-  var state = { me: null, checked: false, lastError: null };
+  var state = { me: null, checked: false, lastError: null, features: null };   /* ★fix905: features は in-memory のみ（mark / localStorage へ書かない） */
 
   function readMark() { try { var o = JSON.parse(lsGet(MARK_KEY) || 'null'); return (o && o.sid === 'cookie' && o.acct) ? o : null; } catch (e) { return null; } }
   function writeMark(me) { lsSet(MARK_KEY, JSON.stringify({ sid: 'cookie', acct: me.accountId, ent: me.entitlement, ts: Date.now() })); }
@@ -135,11 +135,12 @@
   function refreshMe() {
     return api('/auth/me', 'GET').then(function (j) {
       state.checked = true;
-      if (j && j.ok) { state.me = { accountId: j.accountId, entitlement: j.entitlement, status: j.status }; writeMark(state.me); if (!PLAY[j.entitlement]) showGate('entitlement'); else { hideGate(); renderLogout897(); } }
-      else if (j && j.__status === 401) { state.me = null; clearMark(); unrenderLogout897(); showGate('login'); }
-      else { state.lastError = j && (j.errorCode || j.__status); }
+      if (j && j.ok) { state.me = { accountId: j.accountId, entitlement: j.entitlement, status: j.status }; state.features = (j.features && typeof j.features === 'object') ? { memoryEngine: j.features.memoryEngine === true } : null; writeMark(state.me); if (!PLAY[j.entitlement]) showGate('entitlement'); else { hideGate(); renderLogout897(); } }
+      else if (j && j.__status === 401) { state.me = null; state.features = null; clearMark(); unrenderLogout897(); showGate('login'); }
+      else { state.lastError = j && (j.errorCode || j.__status); state.features = null; }
+      try { window.dispatchEvent(new Event('chr:account-me')); } catch (e905) {}
       return state.me;
-    }).catch(function (e) { state.checked = true; state.lastError = String(e && e.message || e); return state.me; });
+    }).catch(function (e) { state.checked = true; state.lastError = String(e && e.message || e); state.features = null; try { window.dispatchEvent(new Event('chr:account-me')); } catch (e905) {} return state.me; });
   }
   function loginWithCredential(cred) {
     return api('/auth/google', 'POST', { credential: cred }).then(function (j) {
@@ -251,6 +252,6 @@
     } catch (e) {}
   }
 
-  window.__v292Dfix893 = { active: true, loggedIn: loggedIn, me: function () { return state.me || readMark(); }, refreshMe: refreshMe, logout: logout, loginWithCredential: loginWithCredential, status: function () { return { active: true, checked: state.checked, me: state.me, mark: readMark(), lastError: state.lastError }; } };
+  window.__v292Dfix893 = { active: true, loggedIn: loggedIn, me: function () { return state.me || readMark(); }, serverMe: function () { return state.me; }, features: function () { return state.features; }, refreshMe: refreshMe, logout: logout, loginWithCredential: loginWithCredential, status: function () { return { active: true, checked: state.checked, me: state.me, features: state.features, mark: readMark(), lastError: state.lastError }; } };
   refreshMe();
 })();

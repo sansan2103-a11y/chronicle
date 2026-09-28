@@ -38,6 +38,8 @@
  * ===================================================================== */
 (function () {
   'use strict';
+  /* ★fix905 / 905b（ME Owner gate）: production host では server 由来の owner gate だけが ON を決める。端末 On flag は QA host の override のみ。production host で gate が無い・壊れた・kill 時は OFF。 */
+  function __f905Allow(localOn) { try { var G = window.__chrMeGate; if (G && typeof G.allow === 'function') return G.allow(!!localOn) === true; } catch (e905) {} var ph = true; try { ph = (String(location.hostname) === 'chronicle-app.pages.dev'); } catch (e905h) {} return ph ? false : !!localOn; }   /* ★fix905b: production host で gate が無い / 壊れた時は OFF（local flag へ fallback しない） */
   var TAG = '[fix789.adj]';
   var ADJ_VERSION = 'adj-1.0.0';
   var ME1_URL = 'v292Dfix789-me1-semantics-2.0.0.js';   /* me1-semantics-2.0.0 を byte 同一で配置したもの */
@@ -55,7 +57,7 @@
     lastRun: null, counts: null, degraded: false, reason: null
   };
 
-  function optedIn() { return lsg('v292Dfix670On') === '1'; }
+  function optedIn() { return __f905Allow(lsg('v292Dfix670On') === '1'); }
   function off() { return lsg('v292Dfix789Off') === '1'; }
   function armed() { return optedIn() && !off(); }
 

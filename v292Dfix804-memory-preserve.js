@@ -45,6 +45,8 @@
  */
 (function () {
   'use strict';
+  /* ★fix905 / 905b（ME Owner gate）: production host では server 由来の owner gate だけが ON を決める。端末 On flag は QA host の override のみ。production host で gate が無い・壊れた・kill 時は OFF。 */
+  function __f905Allow(localOn) { try { var G = window.__chrMeGate; if (G && typeof G.allow === 'function') return G.allow(!!localOn) === true; } catch (e905) {} var ph = true; try { ph = (String(location.hostname) === 'chronicle-app.pages.dev'); } catch (e905h) {} return ph ? false : !!localOn; }   /* ★fix905b: production host で gate が無い / 壊れた時は OFF（local flag へ fallback しない） */
   if (typeof window === 'undefined') return;
   if (window.__v292Dfix804) return;                 /* 二重install防止 */
 
@@ -83,7 +85,7 @@
        ㉗「793 OFF / kill + PENDING → barrier() を 1 度も読まない」
        ㉘「非 canary story → barrier() を読まない（他 story 挙動 0）」
      を 1 つも壊さない。 */
-  function armedMirror() { return lsg('v292Dfix793On') === '1' && lsg('v292Dfix793Off') !== '1'; }
+  function armedMirror() { return __f905Allow(lsg('v292Dfix793On') === '1') && lsg('v292Dfix793Off') !== '1'; }
 
   /* barrier は fix793 と同じ判定を **読むだけ**（fix745 GWS）。open でなければ preserve しない。 */
   function barrierOpen() {

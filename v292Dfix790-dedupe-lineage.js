@@ -38,6 +38,8 @@
  * ===================================================================== */
 (function () {
   'use strict';
+  /* ★fix905 / 905b（ME Owner gate）: production host では server 由来の owner gate だけが ON を決める。端末 On flag は QA host の override のみ。production host で gate が無い・壊れた・kill 時は OFF。 */
+  function __f905Allow(localOn) { try { var G = window.__chrMeGate; if (G && typeof G.allow === 'function') return G.allow(!!localOn) === true; } catch (e905) {} var ph = true; try { ph = (String(location.hostname) === 'chronicle-app.pages.dev'); } catch (e905h) {} return ph ? false : !!localOn; }   /* ★fix905b: production host で gate が無い / 壊れた時は OFF（local flag へ fallback しない） */
   var TAG = '[fix790.lineage]';
   var DEDUPE_VERSION = 'dedupe-1.0.0';
   var DB_NAME = 'chr6lin';          /* ★fix670(chr6mem) / fix789(chr6adj) とは別 DB */
@@ -46,7 +48,7 @@
 
   function lsg(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
   function nowMs() { try { return Date.now(); } catch (e) { return 0; } }
-  function optedIn() { return lsg('v292Dfix670On') === '1'; }
+  function optedIn() { return __f905Allow(lsg('v292Dfix670On') === '1'); }
   function off() { return lsg('v292Dfix790Off') === '1'; }
   function armed() { return optedIn() && !off(); }
 

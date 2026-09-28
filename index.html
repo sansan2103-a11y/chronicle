@@ -11,7 +11,8 @@
      OFF=v292Dfix654Off -->
 <script src="v292Dfix654-storage-trap.js?cb=v292Dfix731"></script>
 <!-- v292Dfix893: Pages origin（*.pages.dev）でだけ動く cookie session shim。github.io では何もしない。 -->
-<script src="v292Dfix893-account-cookie-shim.js?cb=20260927-ac6"></script>
+<script src="v292Dfix893-account-cookie-shim.js?cb=20260928-ac13"></script>
+<script src="v292Dfix905-me-owner-gate.js?cb=20260928-ac13"></script>
 <!-- ★v292Dsmrc1 block / 版 dsmrc-2b(2026-09-13) MODEL ROUTING CENTRALIZATION 第2段b
      = primary を DS V4.1 Flash へ切り替える（dsmrc-2）＋ MODEL-SPECIFIC REQUEST POLICY（dsmrc-2b）。
      block の場所・IIFE 名・公開名は M1 のまま。
@@ -319,7 +320,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260928-ac12';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20260928-ac13';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -3885,11 +3886,11 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix543-save-guard.js?cb=20260829-fix748"></script>
 <!-- v292Dfix802: 3C-3B Refresh Orchestrator (telemetry / write-0). default OFF (opt-in=v292Dfix802On / kill=v292Dfix802Off / story=v292Dfix802Story).
      fix697 (LANDED) / fix670 (RAW_READY) の one-line notify 先なので両者より前に置く。timer 0 / retry 0 / materialize() 0 -->
-<script src="v292Dfix802-refresh-orchestrator.js?cb=20260926-sp20"></script>
+<script src="v292Dfix802-refresh-orchestrator.js?cb=20260928-ac13"></script>
 <!-- v292Dfix803: 3C-3B Automatic Materialize (QA canary only / changed:true only / fix793.materialize() 経由).
      default OFF (opt-in=v292Dfix803On / kill=v292Dfix803Off / story=v292Dfix803Story)。fix802 の fire 末尾から onFire で呼ばれる。
      timer 0 / retry 0 / 新 write path 0 / localStorage 書込は fix793.materialize() 経由の v292Dmem1_slot_<sid> のみ -->
-<script src="v292Dfix803-auto-materialize.js?cb=20260928-ac10"></script>
+<script src="v292Dfix803-auto-materialize.js?cb=20260928-ac13"></script>
 <script src="v292Dfix697-shadow-story-commit.js?cb=20260928-ac12"></script>
 <!-- ★fix912 SA-3 S2 in-session reconcile（fix697 の後・kill v292Dfix912Off / v292Dfix911Off） -->
 <script src="v292Dfix912-s2-insession.js?cb=20260928-ac12"></script>
@@ -4234,7 +4235,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
-  <script src="v292Dfix796-memory-retrieve.js?cb=20260926-sp20"></script>
+  <script src="v292Dfix796-memory-retrieve.js?cb=20260928-ac13"></script>
   <script src="v292Dfix192-newengine.js?cb=20260928-ac10"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
@@ -4453,7 +4454,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      say/枚数/順序/meta/過去ターン不触・逆方向なし。★fix616/620 より後ろに置く(外側 wrapper = fix616 の save に相乗り・自前 save 0)。GPT RULING 4B-1 deploy gate 2026-09-05 -->
 <script src="v292Dfix805-speaker-abstain.js?cb=20260905-fix805v2"></script>
 <!-- fix806(4B-2): NPC consistency observer（観測のみ・in-memory・write 0・既定 OFF opt-in v292Dfix806On='1' / kill v292Dfix806Off='1'）。GPT RULING 4A-2+4B-2 2026-09-05: fix805 と同 release・805 bytes 不変 -->
-<script src="v292Dfix806-npc-consistency-observer.js?cb=20260926-sp20"></script>
+<script src="v292Dfix806-npc-consistency-observer.js?cb=20260928-ac13"></script>
 <script src="v292Dfix816-posture-transition-observer.js?cb=20260906-fix816b"></script>
 <!-- fix624: 生成の**崩壊**を測る（★読み取り専用・影モード）。
      実データ168ターンで崩壊3件(1.8%)を検出。崩壊は少なくとも3型あり、
@@ -4529,28 +4530,28 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      OFF=v292Dfix651StreamGuardOff / v292Dfix651ZeroTurnGuardOff / v292Dfix651SlotBackupGuardOff(Bはfix228内) -->
 <script src="v292Dfix651-guards.js?cb=v292Dfix680"></script>
 <!-- v292Dfix670: Memory Engine v0.3 / Phase3A-1 Shadow. UI._renderHooks push only. opt-in=v292Dfix670On / OFF=v292Dfix670Off -->
-<script src="v292Dfix670-memory-engine.js?cb=20260926-sp20"></script>
+<script src="v292Dfix670-memory-engine.js?cb=20260928-ac13"></script>
 <!-- v292Dfix801: events story-scoped adapter (GPT Q4). fix670 の後・fix792/793 の前。__v292Dfix801.eventsForStory(sid) READ only -->
 <script src="v292Dfix801-events-story-adapter.js?cb=20260903-fix802"></script>
 <!-- v292Dfix789: Phase3A-2 Semantic Adjudication (shadow). chr6mem は読むだけ・verdict は別DB chr6adj。
      Extractor ではない（fix670 不変）。自動実行しない。opt-in=v292Dfix670On / OFF=v292Dfix789Off -->
-<script src="v292Dfix789-semantic-adjudication.js?cb=20260901-fix789"></script>
+<script src="v292Dfix789-semantic-adjudication.js?cb=20260928-ac13"></script>
 <!-- v292Dfix790: Phase3A-2 Dedupe / lineage (shadow). chr6mem・chr6adj は読むだけ・lineage は別DB chr6lin。
      raw は削除しない。claim と world fact は別 lineageClass。自動実行しない。OFF=v292Dfix790Off -->
-<script src="v292Dfix790-dedupe-lineage.js?cb=20260901-fix790"></script>
+<script src="v292Dfix790-dedupe-lineage.js?cb=20260928-ac13"></script>
 <!-- v292Dfix791: Phase3A-2 Update/Conflict (shadow). lineage 同士の関係のみ。真偽を決めない。
      chr6mem/chr6adj/chr6lin は読むだけ・relation は別DB chr6rel。自動実行しない。OFF=v292Dfix791Off -->
-<script src="v292Dfix791-lineage-relations.js?cb=20260901-fix791"></script>
+<script src="v292Dfix791-lineage-relations.js?cb=20260928-ac13"></script>
 <!-- v292Dfix792: Phase3A-2 Referent Resolution (shadow). 解けるものだけ安全に解く。
      誤 resolve より UNRESOLVED を優先。new entity を作らない。chr6mem/chr6lin は読むだけ・
      resolution は別DB chr6ref。自動実行しない。OFF=v292Dfix792Off -->
-<script src="v292Dfix792-referent-resolution.js?cb=20260903-fix802"></script>
+<script src="v292Dfix792-referent-resolution.js?cb=20260928-ac13"></script>
 <!-- v292Dfix793: Phase3B-1 QA限定 Canonical Memory canary (client). 既定OFF・呼び出し側0本。
      memory state = UNLOADED/LOADED_ABSENT/LOADED_VALUE。UNLOADEDからsaveしない(fail-closed)。
      nullは明示clearだけ。unknown-fieldでstrip retryしない。canaryはsmtg00ynsv1のみ。
      ON=v292Dfix793On / OFF=v292Dfix793Off / story=v292Dfix793Story -->
-<script src="v292Dfix793-memory-canonical.js?cb=20260928-ac10"></script>
-<script src="v292Dfix804-memory-preserve.js?cb=20260904-fix804"></script>
+<script src="v292Dfix793-memory-canonical.js?cb=20260928-ac13"></script>
+<script src="v292Dfix804-memory-preserve.js?cb=20260928-ac13"></script>
 <!-- R118 Phase1: capability constraint telemetry. read-only / memory only. OFF=v292Dfix740Off verbose=chronDiagVerbose -->
 <script src="v292Dfix740-cap-telemetry.js?cb=v292Dfix740"></script>
 <!-- R118 Phase2-S: severity consequence lane. fix414 hook 経由。OFF=v292Dfix741Off / feature=v292Dfix414SeverityS (default OFF) -->
