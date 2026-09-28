@@ -633,8 +633,23 @@
   var NATIVE_FETCH = (typeof window.fetch === 'function') ? window.fetch : null;
   var fetchWrapped = false;
 
+  /* ■fix902（SA-2 C4-3・GPT C4 GO_WITH_FIXES・kill: v292Dfix902Off='1'）
+     実測（rig/sa2 run_c43b）: 物語 A の document から送った絵が、別タブが B を開いていると
+     image_owner に B で登録された（R2 優先・URL は fallback だった）。
+     authority 順 = document story key → URL の story → chr6_active_slot（document も URL も無い時だけ）。 */
   function activeStoryId() {
     var s = '';
+    var off902 = false;
+    try { off902 = (lsg('v292Dfix902Off') === '1'); } catch (e) { off902 = false; }
+    if (!off902) {
+      try {
+        var dk902 = window.__chronicleDocumentStoryKey;
+        if (typeof dk902 === 'string' && dk902) s = (dk902 === 'chr6') ? 'chr6' : dk902.replace(/^chr6_slot_/, '');
+      } catch (e) { s = ''; }
+      if (!s) { try { s = String(storyIdOfUrl() || ''); } catch (e) { s = ''; } }
+      if (s === 'chr6') s = 'default';
+      if (s) return s;
+    }
     try { s = String(lsg('chr6_active_slot') || '').replace(/^"|"$/g, ''); } catch (e) { s = ''; }
     if (!s) { try { s = String(storyIdOfUrl() || ''); } catch (e) { s = ''; } }
     if (s === 'chr6') s = 'default';        /* 内部 slot の id は一覧側では 'default' */

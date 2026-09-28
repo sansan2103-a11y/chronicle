@@ -114,7 +114,20 @@
        読み直す**(自己修復)。前の物語のメモリ内容は破棄する = 別物語のものなのでそれが正しい。
      非破壊: 消すのはメモリ上の中身だけで localStorage は一切消さない。参照は保つ(他fixが掴んでいるため)。
      OFF: localStorage v292Dfix532Off='1' */
+  /* ■fix901（SA-2 C4-1・GPT C4 GO_WITH_FIXES・kill: v292Dfix901Off='1'）
+     実測（rig/sa2 run_c41e）: 書込先 LSKEY は fix246 が document story key（R1）で解決するのに、
+     この guard だけが共有ポインタ chr6_active_slot（R2）を見ていた。別タブが別物語を開くと
+     「物語切替」と誤認して、この document の正当な <state> 更新を local / Cloud とも無言で捨てた
+     （fix525 が R2 を戻す時にもう 1 回）。→ guard も書込先と同じ document authority を見る。
+     document key が無い間（boot 前）は従来どおり R2。loaded 時の suffix が本当に別物語なら従来どおり
+     書かずに読み直す（安全装置は残す）。 */
   function curSfx(){
+    try {
+      if (localStorage.getItem('v292Dfix901Off') !== '1'){
+        var dk901 = window.__chronicleDocumentStoryKey;
+        if (typeof dk901 === 'string' && dk901) return (dk901 !== 'chr6') ? dk901.replace(/^chr6/, '') : '';
+      }
+    } catch(e901){}
     try {
       if (typeof window.__chr6Key === 'function'){ var k = window.__chr6Key(); return (k && k !== 'chr6') ? k.replace(/^chr6/, '') : ''; }
       var a = JSON.parse(localStorage.getItem('chr6_active_slot') || 'null');
@@ -147,6 +160,30 @@
       localStorage.setItem(LSKEY, JSON.stringify(store));
     } catch(e){}
   }
+  /* ■fix901b（SA-2 C4-1・kill は fix901 と共通 v292Dfix901Off）
+     実測（rig/sa2 c41h_ac8）: doc2 では engine boot（document story key の確定）より前にこの file が
+     読まれ、store は fix246 の R2 解決で読まれる。その間に別タブが別物語を開いていると、
+     この document の memory に**別物語の states77 が載り**、最初の turn で fix190（features.js
+     captureExt）が guard を通らずに persist → 自分の物語の key と Cloud に別物語の状態が混入した。
+     → boot 完了（chr:engine-booted、document key 確定）の時点で、読込時の suffix と document の
+       suffix が違えば、capture が始まる前に store を document の key から読み直す（書込 0）。 */
+  function rebind901(){
+    try {
+      if (localStorage.getItem('v292Dfix901Off') === '1') return;
+      var now = curSfx();
+      if (now === loadedSfx) return;
+      var fresh = {};
+      try { fresh = JSON.parse(localStorage.getItem(LSKEY) || '{}') || {}; } catch(e2){ fresh = {}; }
+      var dropped = Object.keys(store).length;
+      Object.keys(store).forEach(function(k){ delete store[k]; });
+      Object.keys(fresh).forEach(function(k){ store[k] = fresh[k]; });
+      stats.bootRebinds = (stats.bootRebinds || 0) + 1;
+      stats.bootRebindDropped = (stats.bootRebindDropped || 0) + dropped;
+      try { console.log(TAG, 'fix901b: 読込時の物語と document の物語が違う → boot 時に store を読み直した', loadedSfx, '->', now); } catch(_){}
+      loadedSfx = now;
+    } catch(e){}
+  }
+  try { window.addEventListener('chr:engine-booted', rebind901); } catch(e){}
   window.__v292Dfix77Store = store;
   /* ★R118F Phase B(RULING118F-PREP Q3): 共有guarded commit(単一書込みゲート)。
      - raw persist(=setItem直呼び)は公開しない。公開するのは fix532 guard を必ず通る commit のみ。
@@ -167,7 +204,7 @@
     } catch(e){ return false; }
   };
   window.__v292Dfix532 = { loadedSfx: function(){ return loadedSfx; }, curSfx: curSfx, off: off532,
-    stats: function(){ return { slotMismatchReloads: stats.slotMismatchReloads, stateUpdatesDroppedOnReload: stats.stateUpdatesDroppedOnReload }; } };
+    stats: function(){ return { slotMismatchReloads: stats.slotMismatchReloads, stateUpdatesDroppedOnReload: stats.stateUpdatesDroppedOnReload, bootRebinds: stats.bootRebinds || 0, bootRebindDropped: stats.bootRebindDropped || 0 }; }, rebind: rebind901 };
 
   function attr(tag, name){
     var m = tag.match(new RegExp(name + '\\s*=\\s*"([^"]*)"'));
