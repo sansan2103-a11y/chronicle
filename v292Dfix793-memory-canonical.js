@@ -102,9 +102,31 @@
 
   /* ★server hydrate: server record の memoryV1 を canonical source として採用する。
      **shadow DB が無くても server の memoryV1 を保持できる**（GPT 指定 D）。 */
-  function hydrateFromServerRecord(storyId, record) {
+  function hydrateFromServerRecord(storyId, record, opts) {
     var sid = String(storyId || '');
     if (!sid) return { ok: false, reason: 'no-story' };
+    /* ■fix916（B1 ME_HYDRATE_MEMORYV1_INMEMORY_STALE）: opts.noWrite=true は fix705 の schema2 apply 専用。
+       local key は fix705 が native に書いた後なので、ここでは **書かない**（network 0 / write 0 / markDirty 0）。
+       key が server の値と一致することだけを確かめて in-memory state を server record に揃える。
+       一致しなければ ok:false（呼び出し側が APPLY_PARTIAL で止める）。 */
+    if (opts && opts.noWrite === true) {
+      var sc916 = record && record.sidecar, k916 = keyFor(sid), cur916 = null;
+      try { cur916 = Storage.prototype.getItem.call(window.localStorage, k916); } catch (e916) { return { ok: false, reason: 'key-read-failed' }; }
+      if (!sc916 || !Object.prototype.hasOwnProperty.call(sc916, 'memoryV1')) {
+        setState(sid, STATE.LOADED_ABSENT, null, 'server-absent-916');
+        return { ok: true, state: STATE.LOADED_ABSENT, wrote: false };
+      }
+      var v916 = sc916.memoryV1;
+      if (v916 === null) {
+        if (cur916 !== null) return { ok: false, reason: 'key-not-removed' };
+        setState(sid, STATE.LOADED_ABSENT, null, 'server-null-916');
+        return { ok: true, state: STATE.LOADED_ABSENT, wrote: false };
+      }
+      if (!validShape(v916)) return { ok: false, reason: 'bad-shape' };
+      if (cur916 !== JSON.stringify(v916)) return { ok: false, reason: 'key-mismatch' };
+      setState(sid, STATE.LOADED_VALUE, v916, 'server-916');
+      return { ok: true, state: STATE.LOADED_VALUE, wrote: false };
+    }
     var sc = record && record.sidecar;
     if (!sc || !Object.prototype.hasOwnProperty.call(sc, 'memoryV1')) {
       /* server に無い＝「無いことが分かった」→ LOADED_ABSENT（UNLOADED ではない） */

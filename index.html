@@ -12,7 +12,7 @@
 <script src="v292Dfix654-storage-trap.js?cb=v292Dfix731"></script>
 <!-- v292Dfix893: Pages origin（*.pages.dev）でだけ動く cookie session shim。github.io では何もしない。 -->
 <script src="v292Dfix893-account-cookie-shim.js?cb=20260929-ac14"></script>
-<script src="v292Dfix905-me-owner-gate.js?cb=20260929-ac14"></script>
+<script src="v292Dfix905-me-owner-gate.js?cb=20260929-ac17"></script>
 <!-- ★v292Dsmrc1 block / 版 dsmrc-2b(2026-09-13) MODEL ROUTING CENTRALIZATION 第2段b
      = primary を DS V4.1 Flash へ切り替える（dsmrc-2）＋ MODEL-SPECIFIC REQUEST POLICY（dsmrc-2b）。
      block の場所・IIFE 名・公開名は M1 のまま。
@@ -270,7 +270,7 @@
 <script src="v292Dfix889-secret-vault.js?cb=20260928-ac9"></script>
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
 <script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
-<script src="v292Dfix705-canonical-read-gate.js?cb=20260928-ac12"></script>
+<script src="v292Dfix705-canonical-read-gate.js?cb=20260929-ac17"></script>
 <script src="v292Dfix900-hydrate-ui-gate.js?cb=20260928-ac8"></script>
 <!-- ★si1 v292Dfix892 SAVE_INTEGRITY_HELD_INPUT_GUARD（packet SAVE_INTEGRITY_P1_20260927_01 / GPT GO_WITH_FIXES B'）: fix705 HOLD 中は送信を生成前に止める。read-only。★head・fix705 の直後＝送信 UI（#sendBtn 等）より先に同期ロードし、document capture で入口を押さえる（GPT SAVE_INTEGRITY_P1_20260927_02 条件 1 = load-order）。kill=v292Dfix892Off=1 -->
 <script src="v292Dfix892-held-input-guard.js?cb=20260927-si1"></script>
@@ -320,7 +320,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260929-ac16';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20260929-ac17';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4550,7 +4550,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      memory state = UNLOADED/LOADED_ABSENT/LOADED_VALUE。UNLOADEDからsaveしない(fail-closed)。
      nullは明示clearだけ。unknown-fieldでstrip retryしない。canaryはsmtg00ynsv1のみ。
      ON=v292Dfix793On / OFF=v292Dfix793Off / story=v292Dfix793Story -->
-<script src="v292Dfix793-memory-canonical.js?cb=20260929-ac16"></script>
+<script src="v292Dfix793-memory-canonical.js?cb=20260929-ac17"></script>
 <script src="v292Dfix804-memory-preserve.js?cb=20260928-ac13"></script>
 <!-- R118 Phase1: capability constraint telemetry. read-only / memory only. OFF=v292Dfix740Off verbose=chronDiagVerbose -->
 <script src="v292Dfix740-cap-telemetry.js?cb=v292Dfix740"></script>

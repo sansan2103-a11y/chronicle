@@ -74,20 +74,52 @@
     } catch (e3) { clearTimeout(to); deny = true; recheck.errors++; fin('threw'); }
   }
   var wrapped = false, wn = 0;
+  /* ■fix917（B2 F905C_WRAPPED_SUBMIT_NOT_AWAITED・GPT 裁定 2026-09-29 GO_WITH_FIXES）:
+     旧 wrapper は ME ON のとき再確認を始めて即 undefined を返したため、G.cont の `await this.submit()` が
+     本物の submit より先に解決し、mode 戻し・入力クリアが先に走って「続きを書く」/ automode が空振りした。
+     ・wrapper は実際に story action へ入る最終境界 **submit だけ**に置く（cont / retry は submit を await するので不要）。
+     ・Promise を返し、fresh auth の後に original submit の完了（return / throw / reject）までそのまま待つ。
+     ・deny / timeout でも ME だけ OFF にして本編 action は実行する（recheckThen の既存契約）。
+     kill: v292Dfix917Off='1' → 従来 wrapper（submit / cont / retry・非 Promise）。起動時に評価。 */
+  function f917Off() { try { return window.localStorage.getItem('v292Dfix917Off') === '1'; } catch (e) { return false; } }
+  var f917 = { on: null, names: null, calls: 0, resolved: 0, rejected: 0, busyDrops: 0 };
   function wrapG() {
     if (wrapped) return;
     var g = null; try { g = (typeof G !== 'undefined' && G) ? G : null; } catch (e) { g = null; }
     if (g) {
-      ['submit', 'cont', 'retry'].forEach(function (name) {
+      var on917 = !f917Off();
+      f917.on = on917; f917.names = on917 ? ['submit'] : ['submit', 'cont', 'retry'];
+      f917.names.forEach(function (name) {
         var orig = g[name];
         if (typeof orig !== 'function' || orig.__f905c) return;
-        var w = function () {
+        var w = on917 ? function () {
+          var self = this, args = arguments;
+          if (!needRecheck()) { recheck.skipped++; return orig.apply(self, args); }
+          if (rcBusy) { recheck.busy++; f917.busyDrops++; return Promise.resolve(undefined); }   /* 確認中の二重送信は無視（入力は残る） */
+          f917.calls++;
+          return new Promise(function (resolve, reject) {
+            recheckThen(function () {
+              var r;
+              try { r = orig.apply(self, args); } catch (e) { f917.rejected++; reject(e); return; }
+              Promise.resolve(r).then(function (v) { f917.resolved++; resolve(v); }, function (e) { f917.rejected++; reject(e); });
+            });
+          });
+        } : function () {
           var self = this, args = arguments;
           if (!needRecheck()) { recheck.skipped++; return orig.apply(self, args); }
           if (rcBusy) { recheck.busy++; return; }                 /* 確認中の二重送信は無視（入力は残る） */
           recheckThen(function () { orig.apply(self, args); });
         };
         w.__f905c = true; w.__orig = orig; g[name] = w;
+      });
+      /* ■fix917: cont / retry には auth wrapper を置かない（中で submit を await する）。
+         ただし submit の再確認中（rcBusy）に押された cont / retry は、入力欄・mode を書き換える前に落とす
+         （二度押しで先の submit の入力を消さない）。/auth/me は増やさない。 */
+      if (on917) ['cont', 'retry'].forEach(function (name) {
+        var orig2 = g[name];
+        if (typeof orig2 !== 'function' || orig2.__f917g) return;
+        var gw = function () { if (rcBusy) { f917.busyDrops++; return Promise.resolve(undefined); } return orig2.apply(this, arguments); };
+        gw.__f917g = true; gw.__orig = orig2; g[name] = gw;
       });
       wrapped = true; return;
     }
@@ -96,7 +128,7 @@
   wrapG();
   window.__chrMeGate = {
     build: '20260929-fix905c', allow: allow, gateOn: gateOn,
-    status: function () { var g = serverGate(); return { killed: killed(), meOff: meOff(), prodHost: prodHost(), server: g, gateOn: gateOn(), fired: fired, lastEval: lastEval, evals: evals, deny: deny, c905Off: c905Off(), wrapped: wrapped, recheck: JSON.parse(JSON.stringify(recheck)) }; },
+    status: function () { var g = serverGate(); return { f917: JSON.parse(JSON.stringify(f917)), killed: killed(), meOff: meOff(), prodHost: prodHost(), server: g, gateOn: gateOn(), fired: fired, lastEval: lastEval, evals: evals, deny: deny, c905Off: c905Off(), wrapped: wrapped, recheck: JSON.parse(JSON.stringify(recheck)) }; },
     invalidate: function (why) { deny = true; recheck.last = 'invalidate:' + String(why || '') + '@' + Date.now(); }
   };
   onAccount();

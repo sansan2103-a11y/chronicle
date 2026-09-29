@@ -166,6 +166,27 @@
   var F896_JPRE = 'v292Dfix402_f697p_';
   var f896Last = null;
   function f896Off(){ return lsg('v292Dfix896Off') === '1'; }
+  /* ■fix916（B1 ME_HYDRATE_MEMORYV1_INMEMORY_STALE・GPT 裁定 2026-09-29 GO_WITH_FIXES）:
+     schema2 apply は native key を書くが、fix743.buildSchema2Record の memoryV1 は fix793 の
+     in-memory state（saveGate）から取られる。ME ON の端末では起動時に読んだ古い memoryV1 が残り、
+     post-apply V2 hash が server hash と一致せず APPLY_NOT_CONVERGED で止まっていた。
+     native write plan の後・V2 再計算の前に fix793.hydrateFromServerRecord(STORY_ID, rec, {noWrite:true}) で
+     in-memory state も server record に揃える（network 0 / write 0 / markDirty 0）。
+     helper 不在・throw・story 不一致・key 不一致 → release しない（APPLY_PARTIAL・fail-closed）。
+     kill: v292Dfix916Off='1' → 従来（hydrate しない）。 */
+  function f916Off(){ return lsg('v292Dfix916Off') === '1'; }
+  function hydrate916(rec){
+    var M = null; try { M = window.__v292Dfix793 || null; } catch(e){ M = null; }
+    if (!M || typeof M.hydrateFromServerRecord !== 'function') return { ok: false, reason: 'NO_FIX793_HELPER' };
+    var rid = rec ? (rec.id != null ? rec.id : rec.storyId) : null;
+    if (rid != null && String(rid) !== String(STORY_ID)) return { ok: false, reason: 'STORY_MISMATCH' };
+    var r = null;
+    try { r = M.hydrateFromServerRecord(STORY_ID, rec, { noWrite: true }); }
+    catch(e){ return { ok: false, reason: 'HYDRATE_THREW', detail: String(e && e.message || e) }; }
+    if (!r || r.ok !== true) return { ok: false, reason: (r && r.reason) || 'HYDRATE_FAILED' };
+    if (r.wrote) return { ok: false, reason: 'HYDRATE_WROTE' };
+    return { ok: true, state: r.state };
+  }
   function f896Skip(why, extra){
     var row = { f896: 'SKIP', why: why, canonicalDataWrites: 0, markerReconcile: 0 };
     if (extra) for (var k in extra) row[k] = extra[k];
@@ -1215,6 +1236,18 @@
       if (fail755){
         stats.partial++;
         return cb(stop('APPLY_PARTIAL', { schema: 2, wrote: wrote755, skipped: skipped755, fail: fail755 }));
+      }
+      /* ■fix916: fix793 の in-memory memoryV1 を server record に揃えてから V2 hash を取る */
+      if (!f916Off()){
+        var h916 = hydrate916(rec);
+        stats.f916 = stats.f916 || { hydrated: 0, failed: 0, last: null };
+        if (!h916.ok){
+          stats.f916.failed++; stats.f916.last = h916.reason;
+          stats.partial++;
+          return cb(stop('APPLY_PARTIAL', { schema: 2, wrote: wrote755, skipped: skipped755,
+                                            fail: { stage: 'fix916-hydrate', reason: h916.reason, detail: h916.detail || null } }));
+        }
+        stats.f916.hydrated++; stats.f916.last = 'ok:' + h916.state;
       }
       writeApplied({ storyId: STORY_ID, serverHash: state.serverHash, serverRev: state.serverRev });
       return localHashV2(function(lhV2, herrV2){
