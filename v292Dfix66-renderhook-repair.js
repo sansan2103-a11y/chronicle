@@ -1373,6 +1373,34 @@
   // 「『…』と、カエデは冷静に呟いた」で誤割当が保存される(実例: カエデの台詞がミリアに)。
   // 既存の resolvePostQuoteSpeaker(fix97) を保存データに起動時一回適用して決定的に修正。
   // 冪等(再実行しても同じ結果)。SAY入力ターンの先頭エントリ(=主人公の実発話, fix193確定)は触らない。
+  /* ■fix922 CONVLOG_SPEAKER_REWRITE_WRONG_PERSON（GPT 裁定 GO_WITH_FIXES）:
+     fix915（fix670 prov915）と同じ「強い直接の話者根拠」を持つ card は、後置 heuristic（resolvePostQuoteSpeaker）で書き換えない。
+     強い根拠 = _convSayMeta[j] が sourceKind 'say-tag' / tagMappingConfidence 'exact' / speakerRevision 0 /
+                sourceWhoRaw（NFC）== 現在の who（NFC）/ meta と _convSays の長さが一致 / player 入力の写しではない。
+     meta が無い・弱い card は従来どおり（fix66 の heuristic を殺さない）。書き換えを止めるだけで、新しい書込口は無い。
+     kill: localStorage v292Dfix922Off='1' → 従来。telemetry: window.__v292Dfix922.status()。 */
+  var F922 = { protectedCards: 0, rewritten: 0, last: null };
+  function f922Off(){ try { return localStorage.getItem('v292Dfix922Off') === '1'; } catch(e){ return false; } }
+  function nfc922(x){ try { return String(x == null ? '' : x).normalize('NFC').trim(); } catch(e){ return String(x == null ? '' : x).trim(); } }
+  function sayNorm922(x){ return String(x || '').replace(/[\s\u3000。、！？!?…・「」『』]/g, ''); }
+  function strongTag922(t, j){
+    if (f922Off()) return false;
+    try {
+      var metaA = Array.isArray(t && t._convSayMeta) ? t._convSayMeta : null;
+      var saysA = Array.isArray(t && t._convSays) ? t._convSays : null;
+      if (!metaA || !saysA || metaA.length !== saysA.length) return false;
+      var m = metaA[j], c = saysA[j];
+      if (!m || !c) return false;
+      if (m.sourceKind !== 'say-tag') return false;
+      if (m.tagMappingConfidence !== 'exact') return false;
+      if ((+m.speakerRevision || 0) > 0) return false;
+      if (!c.who || nfc922(m.sourceWhoRaw) !== nfc922(c.who)) return false;
+      var sn = sayNorm922(c.say), pn = sayNorm922(t.playerText);
+      if (sn.length >= 6 && pn.indexOf(sn) >= 0) return false;   /* player の写し（fix915 player-echo）は弱い */
+      return true;
+    } catch(e){ return false; }
+  }
+  try { window.__v292Dfix922 = { status: function(){ return { off: f922Off(), protectedCards: F922.protectedCards, rewritten: F922.rewritten, last: F922.last }; }, strong: strongTag922 }; } catch(e){}
   function migrateConvSaysPostfix(){
     try {
       var st = getState();
@@ -1390,7 +1418,10 @@
           var c = t._convSays[j];
           if (!c || !c.say) continue;
           var rs = resolvePostQuoteSpeaker(pn, String(c.say), names);
-          if (rs && rs !== c.who){ c.who = rs; changed++; }
+          if (rs && rs !== c.who){
+            if (strongTag922(t, j)) { F922.protectedCards++; F922.last = { turn: i, card: j, keep: String(c.who), proposed: String(rs) }; continue; }   /* ■fix922 */
+            c.who = rs; changed++; F922.rewritten++;
+          }
         }
       }
       if (changed){
