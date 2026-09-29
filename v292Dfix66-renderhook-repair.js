@@ -899,8 +899,18 @@
     try { var _ask = activeStoreKey(); var c = JSON.parse((_ask ? localStorage.getItem(_ask) : null) || '{}'); key = (c.cfg && c.cfg.orKey) || ''; } catch(e){}
     if (!key){ cb(null); return; }
     var body;
-    try { body = JSON.stringify({ model: bModel(), temperature: 0, max_tokens: 900,
-      messages: [{ role: 'user', content: bBuildPrompt(narr, names) }] }); } catch(e){ cb(null); return; }
+    try {
+      var _m = bModel();
+      var _b = { model: _m, temperature: 0, max_tokens: 900,
+        messages: [{ role: 'user', content: bBuildPrompt(narr, names) }] };
+      /* ■RP-1 REQUEST_POLICY_COVERAGE（GPT 裁定 2026-09-29）: 主経路と同じ model-specific request policy を適用。
+         未適用だと DS V4.1 Flash の推論が max_tokens 900 を使い切り content=null → 背景で空振りを繰り返す。
+         registry 不在なら従来 body（fail-open）。kill: v292Drp1Off='1'。 */
+      if (localStorage.getItem('v292Drp1Off') !== '1') {
+        try { var _R = window.__CHR_MODEL_REGISTRY; if (_R && _R.applyRequestPolicy) _R.applyRequestPolicy(_b, _m); } catch(e){}
+      }
+      body = JSON.stringify(_b);
+    } catch(e){ cb(null); return; }
     try {
       var xhr = new XMLHttpRequest();
       xhr.open('POST', B_ENDPOINT, true);
@@ -942,20 +952,35 @@
       else if (B_DIRTY){ B_DIRTY = false; try { bFullRebuild(); } catch(e){} }
     });
   }
+  var RP1B = { scans: 0, queuedTotal: 0, malformedSeen: 0, last: null };   // ★RP-1b diagnostics（読み取り専用で公開）
   function bSchedule(turns, names){
     if (!turns || !turns.length){
       if (Object.keys(B_CACHE).length){ B_CACHE = {}; bSaveCache(); }  // story reset → clean
       return;
     }
     if (!bEnabled()) return;
+    /* ★RP-1b: 背景backfill(LLM)の対象判定を「modern authoritative field(_convSays)の存在/validity」で行う。
+         - _convSays が配列(空配列[]を含む) → modern turn。会話ログは _convSays が正本なので backfill しない。
+         - _convSays が存在しない            → legacy turn。従来どおり backfill 対象。
+         - _convSays が存在するが配列でない  → malformed。LLMで補完しない。diagnosticを残して skip。
+         length では判定しない。kill: localStorage v292Drp1bOff='1' → 従来動作(全turn対象)。 */
+    var rp1bOn = true; try { rp1bOn = localStorage.getItem('v292Drp1bOff') !== '1'; } catch(e){}
+    var scan = { on: rp1bOn, turns: turns.length, modern: 0, empty: 0, malformed: 0, legacy: 0, queued: 0, malformedIdx: [] };
     for (var i = 0; i < turns.length; i++){
       var t = turns[i]; if (!t || !t.narrative) continue;
+      if (rp1bOn && Object.prototype.hasOwnProperty.call(t, '_convSays')){
+        if (Array.isArray(t._convSays)){ if (t._convSays.length) scan.modern++; else scan.empty++; }
+        else { scan.malformed++; if (scan.malformedIdx.length < 20) scan.malformedIdx.push(i); RP1B.malformedSeen++; }
+        continue;
+      }
+      scan.legacy++;
       var pre = preprocessNarrative(t.narrative);
       if (!bHasQuote(pre)) continue;
       var h = ncHash(pre);
       if (B_CACHE[h] || B_PENDING[h] || (B_FAILS[h] || 0) >= B_MAX_FAILS) continue;
-      B_QUEUE.push({ hash: h, narr: pre, names: names });
+      B_QUEUE.push({ hash: h, narr: pre, names: names }); scan.queued++;
     }
+    RP1B.scans++; RP1B.last = scan; RP1B.queuedTotal += scan.queued;
     bProcess();
   }
 
@@ -1428,6 +1453,8 @@
     ncAppearanceFor: function(name){ try { return ncAppearance(name, NC_NARR); } catch(e){} return ''; },
     // v292Dfix104: manual extraction trigger (also bypasses any repair() wrapper,
     // so it can be invoked directly to (re)build the LLM dialogue cache).
+    // ★RP-1b 検証口（読み取りのみ）
+    rp1bStatus: function(){ try { return JSON.parse(JSON.stringify({ rp1b: RP1B, cacheSize: Object.keys(B_CACHE).length, queue: B_QUEUE.length, pending: Object.keys(B_PENDING).length, fails: Object.keys(B_FAILS).length })); } catch(e){ return null; } },
     runExtraction: function(){
       try { var st = getState(); bSchedule((st && st.turns) || [], castNameList()); } catch(e){}
     }

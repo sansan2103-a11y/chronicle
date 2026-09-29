@@ -41,12 +41,21 @@
     if (!key){ cb(null); return; }
     var body;
     try {
-      body = JSON.stringify({
-        model: getModel(),
+      var _m = getModel();
+      var _b = {
+        model: _m,
         temperature: temp != null ? temp : 0.85,
         max_tokens: maxTok || 500,
         messages: [{ role: 'user', content: prompt }]
-      });
+      };
+      /* ■RP-1 REQUEST_POLICY_COVERAGE（GPT 裁定 2026-09-29）: 主経路・longmem・roster と同じく
+         model-specific request policy（DS V4.1 Flash = reasoning:{effort:'none'}）を 1 回だけ適用する。
+         未適用だと推論が max_tokens を使い切り、HTTP 200 でも content=null →「提案を取得できませんでした」。
+         registry 不在なら従来 body（fail-open）。kill: v292Drp1Off='1' → 従来どおり適用しない。 */
+      if (localStorage.getItem('v292Drp1Off') !== '1') {
+        try { var _R = window.__CHR_MODEL_REGISTRY; if (_R && _R.applyRequestPolicy) _R.applyRequestPolicy(_b, _m); } catch(e){}
+      }
+      body = JSON.stringify(_b);
     } catch(e){ cb(null); return; }
     try {
       var xhr = new XMLHttpRequest();
