@@ -1189,13 +1189,42 @@
   function sayNorm(s) { return String(s || '').replace(/[\s\u3000。、！？!?…・「」『』]/g, ''); }
 
   /* 1ターン分の say カード（構造化済みのものだけ） */
+  /* ■fix915（ME-6 speech provenance の最低限の門）: 話者の由来を card に付ける。
+     'direct-tag' = 生出力の <say who> がそのまま当たっている（fix616 _convSayMeta: say-tag / exact / speakerRevision 0 /
+                    sourceWhoRaw == who）かつ、その台詞が今回の player 入力の写しではない。
+     'hero-input' = SAY 入力そのもの。それ以外（bare-inferred / react-voice / 後段で書き換え / meta 無し / player の写し）は弱い由来。
+     弱い由来の claim は fix793 で ACTIVE にしない（覚えないことは許す・違う人物の記憶として定着させない）。
+     kill: localStorage v292Dfix915Off='1' → 由来を付けない（従来）。 */
+  function f915Off() { return lsg('v292Dfix915Off') === '1'; }
+  function prov915(turn, i, who) {
+    try {
+      var metaA = (turn && Array.isArray(turn._convSayMeta)) ? turn._convSayMeta : null;
+      var saysA = (turn && Array.isArray(turn._convSays)) ? turn._convSays : null;
+      if (!metaA || !saysA || metaA.length !== saysA.length) return 'no-meta';
+      var m = metaA[i]; if (!m) return 'no-meta';
+      if (m.sourceKind !== 'say-tag') return String(m.sourceKind || 'unknown');
+      if (m.tagMappingConfidence !== 'exact') return 'tag-' + String(m.tagMappingConfidence || 'none');
+      if ((+m.speakerRevision || 0) > 0) return 'speaker-revised';
+      if (!who || nfc(m.sourceWhoRaw) !== who) return 'who-mismatch';
+      var sn = sayNorm(saysA[i] && saysA[i].say), pn = sayNorm(turn && turn.playerText);
+      if (sn.length >= 6 && pn.indexOf(sn) >= 0) {
+        /* player が入力した台詞の写し = 主人公の発話の疑い。ただし入力が「相手に言ってもらう」形
+           （「…」と言ってもらう / 言わせる / させる）なら、その台詞は相手のもの（写しではない）。 */
+        var raw = String(turn.playerText || ''), core = String(saysA[i].say || '').replace(/^[\s\u3000…‥、。「」『』]+|[\s\u3000…‥、。「」『』]+$/g, '');
+        var at = core ? raw.indexOf(core) : -1;
+        if (at >= 0 && /(もら|させ|言わせ|聞かせ)/.test(raw.slice(at + core.length, at + core.length + 14))) return 'direct-tag';
+        return 'player-echo';
+      }
+      return 'direct-tag';
+    } catch (e) { return 'error'; }
+  }
   function sayCards(turn) {
     var out = [], a = (turn && Array.isArray(turn._convSays)) ? turn._convSays : [], i, c, who, say;
     var heroDup = null;
     if (String((turn && turn.inputType) || '') === 'SAY') {
       say = String((turn && turn.playerText) || '');
       if (say.trim() && say.length <= SAY_MAX) {
-        out.push({ who: null, heroSelf: true, say: say, card: -1 });
+        out.push({ who: null, heroSelf: true, say: say, card: -1, prov915: 'hero-input' });
         heroDup = sayNorm(say);
       }
     }
@@ -1206,7 +1235,7 @@
       if (heroDup && sayNorm(say) === heroDup) continue;     /* SAY 入力の写しは1回だけ */
       who = (c.who == null) ? null : nfc(c.who);
       if (who === '???' || who === '') who = null;            /* fix195 の未確定プレースホルダ */
-      out.push({ who: who, heroSelf: false, say: say, card: i });
+      out.push({ who: who, heroSelf: false, say: say, card: i, prov915: f915Off() ? null : prov915(turn, i, who) });
     }
     return out;
   }
@@ -1331,7 +1360,8 @@
             normalizedProposition: clause,
             propositionTruncated: !!prop.truncated,
             sourceTurn: idx, sourceMode: 'DIALOGUE',
-            cardIndex: c.card
+            cardIndex: c.card,
+            speakerProvenance: c.prov915 || null
           },
           /* ★(d) knownTo は speaker + 明示 addressee だけ。audience 不明は UNKNOWN のまま */
           knownTo: (ok ? [sp.entityId] : []).concat(addr),
@@ -1387,7 +1417,8 @@
               addresseeEntityIds: addr2.slice(),
               normalizedProposition: prop2.text,
               propositionTruncated: !!prop2.truncated,
-              sourceTurn: idx, sourceMode: 'DIALOGUE', cardIndex: c.card
+              sourceTurn: idx, sourceMode: 'DIALOGUE', cardIndex: c.card,
+              speakerProvenance: c.prov915 || null
             },
             knownTo: (ok ? [sp.entityId] : []).concat(addr2),
             audience: addr2.length ? 'EXPLICIT' : 'UNKNOWN',

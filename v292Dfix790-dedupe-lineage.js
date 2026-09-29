@@ -99,6 +99,7 @@
 
   /* ★fix906: claim 命題の正規化キー（空白・句読点・三点リーダ・引用符・先頭の接続詞を除く）。 */
   var PUNCT906 = /[\s　、。，．,.！!？?…‥・「」『』（）()“”"'〜~ー―—-]+/g;
+  function f915Off() { try { return window.localStorage.getItem('v292Dfix915Off') === '1'; } catch (e) { return false; } }
   function f906Off() { try { return window.localStorage.getItem('v292Dfix906Off') === '1'; } catch (e) { return false; } }
   function propKey906(sa) {
     if (!sa || !sa.speakerEntityId || !sa.kind) return null;
@@ -211,6 +212,10 @@
       if (classOf(r) === CLASS_CLAIM) {
         /* Speech 側: 既存 safety contract を保った candidate のみ。
            ★claim を world fact 扱いしない担保として worldFactPromotion を確認する。 */
+        /* ■fix915（ME-6 RESOLVED_SPEECH_DROPPED_FROM_LINEAGE）: 話者が解決した speech は fix670 で recordKind='event' になるため、
+           従来の条件では「話者が確定した約束ほど記憶に入らない」逆転が起きていた。入口を recordKind から切り離す。
+           claim を world fact にしない担保（worldFactPromotion === false・lineageClass 分離）は維持。kill: v292Dfix915Off='1' → 従来。 */
+        if (!f915Off()) return r.worldFactPromotion === false;
         return r.recordKind === 'candidate' && r.worldFactPromotion === false;
       }
       /* Narration 側: semantic gate を **PASS したものだけ**。 */
@@ -234,6 +239,9 @@
         lineageId: key, slotId: head.slotId, lineageClass: cls,
         kind: sa ? sa.kind : head.type, family: head.family,
         speakerEntityId: sa ? (sa.speakerEntityId || null) : null,
+        /* ■fix915: 束ねた全 member が直接の <say who>（または SAY 入力）由来のときだけ 'direct'。1 件でも弱い由来があれば 'weak'。 */
+        speakerProvenance: sa ? (g.every(function (x) { var p = x.speechAct && x.speechAct.speakerProvenance; return p === 'direct-tag' || p === 'hero-input'; }) ? 'direct'
+                                 : (g.some(function (x) { return x.speechAct && x.speechAct.speakerProvenance; }) ? 'weak' : null)) : null,
         subjectId: head.subjectId || null,
         /* ★attestation = 束ねた raw の参照。raw 自体は消していない。 */
         memberEventIds: g.map(function (x) { return x.eventId; }),

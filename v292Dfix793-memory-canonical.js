@@ -303,6 +303,7 @@
   var LIFECYCLE = { ACTIVE: 'ACTIVE', PENDING: 'PENDING_REF' };
   var AUTHORITY = 'HISTORY_ONLY';
 
+  function f915Off793() { try { return window.localStorage.getItem('v292Dfix915Off') === '1'; } catch (e) { return false; } }
   function criticalRefsOf(lin, rawById, resByLineage) {
     var refs = [], res = resByLineage[lin.lineageId] || [], i, k;
     function findRes(kind, role) {
@@ -323,6 +324,19 @@
         entityId: lin.speakerEntityId || (sp && sp.resolvedEntityId) || null,
         resolutionStatus: (_spk0 && !_spkCand) ? 'RESOLVED_EXISTING' : (_spkCand ? 'UNRESOLVED' : (sp ? sp.status : 'UNRESOLVED')),
         pendingReasonCode: (_spk0 && !_spkCand) ? null : (_spkCand ? 'candidate-entity-not-canonical' : (sp ? sp.reason : 'speaker-not-structured')) });
+      /* ■fix915（ME-6 speech provenance の最低限の門）: 直接の <say who> 由来でない話者は ACTIVE にしない（PENDING_REF）。
+         speakerProvenance が null（fix915 以前の raw・kill 時）も直接とは扱わない。
+         ・命題が空に近い断片（「よ」など、句読点・空白を除いて 4 文字未満）も ACTIVE にしない。
+         kill: v292Dfix915Off='1' → 従来。 */
+      if (!f915Off793()) {
+        if (lin.speakerProvenance !== 'direct' && refs.length && refs[0].resolutionStatus === 'RESOLVED_EXISTING') {
+          refs[0] = { role: 'speaker', entityId: refs[0].entityId, resolutionStatus: 'UNRESOLVED',
+                      pendingReasonCode: 'speaker-provenance-weak' };
+        }
+        var np915 = String(lin.normalizedProposition || '').replace(/[\s\u3000、。，．,.！!？?…‥・「」『』（）()“”"'〜~ー―—-]+/g, '');
+        if (np915.length < 4) refs.push({ role: 'proposition', entityId: null, resolutionStatus: 'UNRESOLVED',
+                                          pendingReasonCode: 'proposition-too-short' });
+      }
       if (lin.kind === 'NEGATION_CLAIM') {
         var tp = findRes('claim_topic', 'topic');
         if (tp) refs.push({ role: 'topic', entityId: tp.resolvedEntityId || null,

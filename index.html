@@ -320,7 +320,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20260929-ac15';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20260929-ac16';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4530,7 +4530,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      OFF=v292Dfix651StreamGuardOff / v292Dfix651ZeroTurnGuardOff / v292Dfix651SlotBackupGuardOff(Bはfix228内) -->
 <script src="v292Dfix651-guards.js?cb=v292Dfix680"></script>
 <!-- v292Dfix670: Memory Engine v0.3 / Phase3A-1 Shadow. UI._renderHooks push only. opt-in=v292Dfix670On / OFF=v292Dfix670Off -->
-<script src="v292Dfix670-memory-engine.js?cb=20260929-ac15"></script>
+<script src="v292Dfix670-memory-engine.js?cb=20260929-ac16"></script>
 <!-- v292Dfix801: events story-scoped adapter (GPT Q4). fix670 の後・fix792/793 の前。__v292Dfix801.eventsForStory(sid) READ only -->
 <script src="v292Dfix801-events-story-adapter.js?cb=20260903-fix802"></script>
 <!-- v292Dfix789: Phase3A-2 Semantic Adjudication (shadow). chr6mem は読むだけ・verdict は別DB chr6adj。
@@ -4538,7 +4538,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix789-semantic-adjudication.js?cb=20260928-ac13"></script>
 <!-- v292Dfix790: Phase3A-2 Dedupe / lineage (shadow). chr6mem・chr6adj は読むだけ・lineage は別DB chr6lin。
      raw は削除しない。claim と world fact は別 lineageClass。自動実行しない。OFF=v292Dfix790Off -->
-<script src="v292Dfix790-dedupe-lineage.js?cb=20260929-ac15"></script>
+<script src="v292Dfix790-dedupe-lineage.js?cb=20260929-ac16"></script>
 <!-- v292Dfix791: Phase3A-2 Update/Conflict (shadow). lineage 同士の関係のみ。真偽を決めない。
      chr6mem/chr6adj/chr6lin は読むだけ・relation は別DB chr6rel。自動実行しない。OFF=v292Dfix791Off -->
 <script src="v292Dfix791-lineage-relations.js?cb=20260928-ac13"></script>
@@ -4550,7 +4550,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      memory state = UNLOADED/LOADED_ABSENT/LOADED_VALUE。UNLOADEDからsaveしない(fail-closed)。
      nullは明示clearだけ。unknown-fieldでstrip retryしない。canaryはsmtg00ynsv1のみ。
      ON=v292Dfix793On / OFF=v292Dfix793Off / story=v292Dfix793Story -->
-<script src="v292Dfix793-memory-canonical.js?cb=20260928-ac13"></script>
+<script src="v292Dfix793-memory-canonical.js?cb=20260929-ac16"></script>
 <script src="v292Dfix804-memory-preserve.js?cb=20260928-ac13"></script>
 <!-- R118 Phase1: capability constraint telemetry. read-only / memory only. OFF=v292Dfix740Off verbose=chronDiagVerbose -->
 <script src="v292Dfix740-cap-telemetry.js?cb=v292Dfix740"></script>
