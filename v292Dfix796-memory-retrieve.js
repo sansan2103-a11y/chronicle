@@ -322,13 +322,27 @@
   /* ==================================================================
    * index（構造的排除）: ACTIVE だけを **push する**。PENDING_REF は入れない。
    * ================================================================== */
+  /* ■fix918 WIRE_SAFE_IMMEDIATE: fix793 の共有判定（precisionReason918）に当たる dialogue_claim は、
+     保存 memoryV1 がまだ ACTIVE でも index に入れない（read-only・書込 0・dirty 0・新しい trigger 0）。
+     保存 memoryV1 は次の通常 fire で fix793 が PENDING_REF に書き換える（MATERIALIZED_REPAIRED）。
+     判定は fix793 のものだけを使う（ここで規則を持たない）。kill: v292Dfix918Off（fix793 側と同じ 1 つの flag）。 */
+  var F918W = { filtered: 0, last: null };
+  function f918Reason(r) {
+    try {
+      var P = window.__v292Dfix793 && window.__v292Dfix793.f918;
+      if (!P || typeof P.reason !== 'function') return null;
+      if (!r || r.lineageClass !== 'dialogue_claim') return null;
+      return P.reason(r.type, r.normalizedProposition);
+    } catch (e) { return null; }
+  }
   function buildIndex(memoryV1, storyId) {
-    var out = [], recs = memoryV1 ? arr(memoryV1.records) : [], i, r, sid = str(storyId);
+    var out = [], recs = memoryV1 ? arr(memoryV1.records) : [], i, r, sid = str(storyId), w918;
     for (i = 0; i < recs.length; i++) {
       r = recs[i];
       if (!r || typeof r !== 'object') continue;
       if (r.lifecycle !== LIFECYCLE_ACTIVE) continue;                /* ★構造的排除 */
       if (sid && r.storyId && str(r.storyId) !== sid) continue;
+      if ((w918 = f918Reason(r))) { F918W.filtered++; F918W.last = { memoryId: r.memoryId, reason: w918 }; continue; }   /* ■fix918 */
       out.push(r);
     }
     return out;
@@ -1279,6 +1293,7 @@
         limits: LIMITS, keyPrefix: KEY_PREFIX,
         lastLog: _lastLog,
         lastBlocks: _lastBlocks,          /* ★Rev6: canaryBlocks の最終 telemetry */
+        f918Wire: { filtered: F918W.filtered, last: F918W.last },   /* ■fix918 WIRE_SAFE_IMMEDIATE telemetry */
         note: 'shadow only / index=ACTIVE all / PENDING_REF structurally excluded / '
             + 'exact entityId match only / world_event excluded at render / '
             + 'knownTo is provenance only / read-only localStorage / no hook / '

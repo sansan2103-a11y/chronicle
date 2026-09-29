@@ -325,6 +325,48 @@
   var LIFECYCLE = { ACTIVE: 'ACTIVE', PENDING: 'PENDING_REF' };
   var AUTHORITY = 'HISTORY_ONLY';
 
+  /* ■fix918 SPEECH_PRECISION_GATE（GPT 裁定 2026-09-29 E1 / E2 / ME-7c）
+     ・誤った ACTIVE を作らない「精度の門」。raw / fix670 / EXTRACTOR_VERSION は触らない。記録は消さず PENDING_REF に倒すだけ。
+     ・**唯一の判定関数**（precisionReason918）。fix793 の materialize（criticalRefsOf）と fix796 の wire index が**同じ関数**を使う。
+       kill: localStorage v292Dfix918Off='1' → 両方とも従来（片側だけ効く状態は作らない）。
+     ・入力は record と同じ語彙: type（= lineage kind: PROHIBITION / COMMITMENT / DISCLOSURE_CLAIM / …）と normalizedProposition。
+     E1（type==='PROHIBITION' だけ）: 禁止ではない「〜な」「〜ちゃならん」を除く（実データで作った狭い規則。一般化しない）。
+       R1a 進行・状態  (かな|見来寝出居着似煮干射)(て|で)(い|お)?る＋な(よ)?＋文末   … 腫れてるな / 知ってるな / 見てるな / 手を入れておるな
+       R1b 方言の進行  (っ|し|ん|ち)(と|ど)る＋な / ちょるな                        … 持っとるな / 顔をしとるな
+       R1c 存在        (いる|ある|おる)＋な(よ)?＋文末                               … 誰かいるな / 来たことがあるな / おるな
+       R2  義務        な(く|け)(ちゃ|じゃ)(なら|いけ|だめ)                          … 行かなくちゃならん
+       R3  連体        (て|で|ちゃ|じゃ)は?(なら|いけ)(ない|ぬ|ん|ねえ) の直後が 漢字・カナ・もの・こと・ところ・とき … いけない火 / 見てはいけないもの
+       R4  引用・報告  (な|ならん|いけない|くれ|ください…)＋(と|って)＋(言|止|叫|告|命|頼|書|怒鳴|教) … 行くな と止められなかった / ならんと言うた
+     E2（全 speech kind）: 疑問符の無い疑問（なぜ / なんで / どうして / どの / どういう、または 何 / 誰 / どこ / いつ / どう / どれ の疑問用法）。
+       不定・否定の用法（何も / 何か / どこか / どころ / いつも / どうか / 誰にも / どこにも / なぜか / どうしても …）は除く。埋め込み疑問が PENDING になるのは許容（safe miss）。
+     ME-7c（type が COMMITMENT / DISCLOSURE_CLAIM）: marker を cut した残りが助詞止め（の / に / と / から / へ / を / で）で述語が無い → PENDING。 */
+  var F918_RULE_REV = '918';
+  var P918 = {
+    R1a: /(?:[ぁ-ん]|[見来寝出居着似煮干射])[てで](?:い|お)?るな(?:よ)?(?=[。！？!?…」』\s]|$)/,
+    R1b: /(?:[っしんち][とど]|ちょ)るな(?:よ)?(?=[。！？!?…」』\s]|$)/,
+    R1c: /(?:いる|ある|おる)な(?:よ)?(?=[。！？!?…」』\s]|$)/,
+    R2:  /な(?:く|け)(?:ちゃ|じゃ)(?:なら|いけ|だめ|ダメ)/,
+    R3:  /(?:て|で|ちゃ|じゃ)は?(?:なら|いけ)(?:ない|ぬ|ん|ねえ|ねぇ)(?=[一-龠々ァ-ヶ]|もの|こと|ところ|とき|\s*[一-龠々ァ-ヶ])/,
+    R4:  /(?:な|なよ|ならん|ならない|ならねえ|いけない|いけねえ|だめ|ダメ|くれ|ください)\s*(?:と|って)\s*(?:言|い[うっわ]|止|叫|告|命|頼|書|怒鳴|教)/,
+    WHQ: /(?:なぜ(?!か)|なんで(?!も)|どうして(?!も)|どの|どういう|どこ(?![かもろ]|(?:に|で|と|から|へ|まで)?(?:でも|も|か))|誰(?![かも]|(?:に|で|と|から|へ|まで)?(?:でも|も|か))|何(?![かもとで度]|(?:に|で|と|から|へ|まで)?(?:でも|も|か))|いつ(?![かもの]|(?:に|で|と|から|へ|まで)?(?:でも|も|か))|どう(?![かもぞやらせ]|しても)|どれ(?![かも]|(?:に|で|と|から|へ|まで)?(?:でも|も|か)))/,
+    NOPRED: /(?:の|に|と|から|へ|を|で)$/
+  };
+  function f918Off() { return lsg('v292Dfix918Off') === '1'; }
+  var _f918 = { evals: 0, hits: {}, last: null };
+  function precisionReason918(type, np) {
+    if (f918Off()) return null;
+    var p = String(np == null ? '' : np).replace(/[…‥]+/g, '');
+    if (!p) return null;
+    var t = String(type || ''), why = null;
+    if (t === 'PROHIBITION' && (P918.R1a.test(p) || P918.R1b.test(p) || P918.R1c.test(p)
+                                 || P918.R2.test(p) || P918.R3.test(p) || P918.R4.test(p))) why = 'prohibition-not-directive';
+    else if (P918.WHQ.test(p)) why = 'speech-question-no-qmark';
+    else if ((t === 'COMMITMENT' || t === 'DISCLOSURE_CLAIM')
+             && P918.NOPRED.test(p.replace(/[\s　、。，,．.！!？?」』]+$/, ''))) why = 'proposition-no-predicate';
+    _f918.evals++;
+    if (why) { _f918.hits[why] = (_f918.hits[why] || 0) + 1; _f918.last = { type: t, reason: why }; }
+    return why;
+  }
   function f915Off793() { try { return window.localStorage.getItem('v292Dfix915Off') === '1'; } catch (e) { return false; } }
   function criticalRefsOf(lin, rawById, resByLineage) {
     var refs = [], res = resByLineage[lin.lineageId] || [], i, k;
@@ -359,6 +401,10 @@
         if (np915.length < 4) refs.push({ role: 'proposition', entityId: null, resolutionStatus: 'UNRESOLVED',
                                           pendingReasonCode: 'proposition-too-short' });
       }
+      /* ■fix918: 精度の門（kill: v292Dfix918Off）。当たれば PENDING_REF（記録は残す）。 */
+      var pr918 = precisionReason918(lin.kind, lin.normalizedProposition);
+      if (pr918 && !refs.some(function (x) { return x && x.role === 'proposition'; })) refs.push({ role: 'proposition', entityId: null, resolutionStatus: 'UNRESOLVED',
+                             pendingReasonCode: pr918 });
       if (lin.kind === 'NEGATION_CLAIM') {
         var tp = findRes('claim_topic', 'topic');
         if (tp) refs.push({ role: 'topic', entityId: tp.resolvedEntityId || null,
@@ -468,8 +514,11 @@
       byMemoryId[toId].relationRefs.push(rel.relationId);
       /* ★relation は ACTIVE 昇格を強制しない（lifecycle に触れない） */
     }
-    return { schemaVersion: MEMORY_SCHEMA_VERSION, materializerVersion: MEMORY_VERSION,
+    var out918 = { schemaVersion: MEMORY_SCHEMA_VERSION, materializerVersion: MEMORY_VERSION,
              records: records, edges: edges };
+    /* ■fix918: provenance だけ（candCanon = records / edges には入らない・fire の契機にもしない）。kill 時は付けない（従来と同じ）。 */
+    if (!f918Off()) out918.materializerRuleRev = F918_RULE_REV;
+    return out918;
   }
 
   /* ==================================================================
@@ -645,6 +694,10 @@
       return { sid: sid, off: f904Off(), last: e ? JSON.parse(JSON.stringify(e)) : null, maxBytes: MAX_BYTES }; },
     rejectRing: function () { return JSON.parse(JSON.stringify(_rej904Ring)); },
     REJECT904: REJECT904,
+    /* ■fix918 共有判定（fix796 の wire index もこれだけを使う）＋観測口（read-only） */
+    f918: { reason: precisionReason918, off: f918Off, RULE_REV: F918_RULE_REV,
+            status: function () { return { off: f918Off(), ruleRev: F918_RULE_REV, evals: _f918.evals,
+                                           hits: JSON.parse(JSON.stringify(_f918.hits)), last: _f918.last }; } },
     __test: { materializeFrom: materializeFrom, criticalRefsOf: criticalRefsOf,
               validShape: validShape, setState: setState, LIFECYCLE: LIFECYCLE,
               AUTHORITY: AUTHORITY, MAX_BYTES: MAX_BYTES, CANARY_DEFAULT: CANARY_DEFAULT,
