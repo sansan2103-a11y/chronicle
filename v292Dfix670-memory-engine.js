@@ -1270,9 +1270,44 @@
     if (act.cut) pick = pick.replace(act.cut, ' ');
     pick = pick.replace(/[\s\u3000]+/g, ' ')
                .replace(/^[\s、,と て]+/, '').replace(/[。、，,！？!?…・\s]+$/, '').trim();
+    /* ■fix919 ME-7a NEXT_SENTENCE_IN_SAME_CARD（GPT 裁定 2026-09-29）
+       「約束だよ。〈中身〉」のように marker 文を cut した残りが空に近い（np915 < 4）ときだけ、
+       **同じ say カードの直後の最初の非空 1 文**を命題にする（1 文・1 回だけ・連結しない・前の文は見ない＝ME-7b HOLD）。
+       その 1 文は: 別の speech-act marker を含まない / 同じ門（speechGateBlocked(act.gate)）を通る /
+       依頼・命令で終わらない / 理由・補足（から・ので・し・けど…）で終わらない / 自身が np915 >= 4。
+       満たさなければ従来どおり（PENDING_REF のまま = safe miss）。speaker / card は跨がない（入力が 1 カードだけ）。
+       EXTRACTOR_VERSION は上げない（新しい turn だけに効く）。kill: localStorage v292Dfix919Off='1'。 */
+    var src919 = null, mIdx919 = i, pIdx919 = null;
+    if (act.cut && f919Off() === false && np919(pick).length < 4 && i < parts.length) {
+      var j919, cand919 = null;
+      for (j919 = i + 1; j919 < parts.length; j919++) { if (np919(parts[j919]).length > 0) { cand919 = parts[j919]; break; } }
+      if (cand919 != null && next919Ok(cand919, act)) {
+        var c919 = cand919.replace(/[\s\u3000]+/g, ' ').replace(/^[\s、,と て]+/, '').replace(/[。、，,！？!?…・\s]+$/, '').trim();
+        if (np919(c919).length >= 4) { pick = c919; src919 = 'next-sentence'; pIdx919 = j919; F919.used++; }
+        else F919.skipped['too-short']++;
+      } else if (cand919 == null) F919.skipped['no-next']++;
+    }
     var truncated = false;
     if (pick.length > PROP_MAX) { pick = pick.slice(0, PROP_MAX) + '…'; truncated = true; }
-    return { text: pick, truncated: truncated, clause: clause };
+    var out919 = { text: pick, truncated: truncated, clause: clause };
+    if (src919) { out919.propositionSource = src919; out919.markerSentenceIndex = mIdx919; out919.propositionSentenceIndex = pIdx919; }
+    return out919;
+  }
+  /* ■fix919 helpers */
+  function f919Off() { return lsg('v292Dfix919Off') === '1'; }
+  try { window.__v292Dfix919 = { status: function () { return { off: f919Off(), used: F919.used, skipped: JSON.parse(JSON.stringify(F919.skipped)) }; } }; } catch (e919) {}
+  function np919(s) { return String(s || '').replace(/[\s\u3000、。，．,.！!？?…‥・「」『』（）()“”"'〜~ー―—-]+/g, ''); }
+  var F919 = { used: 0, skipped: { 'no-next': 0, 'too-short': 0, marker: 0, gate: 0, request: 0, reason: 0 } };
+  var REQ919 = /(?:てくれ|でくれ|て(?:ください|下さい)|で(?:ください|下さい)|ておくれ|でおくれ|てちょうだい|なさい|[てで]|[えけげせてねべめれ]|ろ|[うくぐすつぬぶむる]な)(?:よ|ね|な)?$/;
+  var RSN919 = /(?:から|ので|んで|し|けど|けれど|けれども|が|のに)(?:な|ね|よ|さ)?$/;
+  function next919Ok(sent, act) {
+    var t;
+    for (t = 0; t < SPEECH_ACTS.length; t++) if (SPEECH_ACTS[t].re.test(sent)) { F919.skipped.marker++; return false; }
+    if (speechGateBlocked(sent, act.gate)) { F919.skipped.gate++; return false; }
+    var e = String(sent).replace(/[\s\u3000。、，,！？!?…‥・」』]+$/, '');
+    if (REQ919.test(e)) { F919.skipped.request++; return false; }
+    if (RSN919.test(e)) { F919.skipped.reason++; return false; }
+    return true;
   }
   /* ★(d) 明示 addressee だけ。「その場にいた」の自動追加は禁止。 */
   function addresseesOf(sayText, kn, speakerId) {
@@ -1371,6 +1406,11 @@
           /* ★raw 台詞は残さない。evidence は null（v0.2 の evidence 規律より強い） */
           prov: { kind: 'say_card', authority: 4, confidence: ok ? 0.9 : 0.5, evidence: null }
         };
+        if (prop.propositionSource) {                    /* ■fix919 診断（next-sentence のときだけ付く） */
+          rec.speechAct.propositionSource = prop.propositionSource;
+          rec.speechAct.markerSentenceIndex = prop.markerSentenceIndex;
+          rec.speechAct.propositionSentenceIndex = prop.propositionSentenceIndex;
+        }
         out.push(rec);
         seen[sayNorm(prop.clause)] = 1;                 /* ■fix787: 同じ節の二重計上を防ぐ */
       }
