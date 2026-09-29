@@ -133,6 +133,11 @@ function makeWrapper(orig){
         return resp || failResp();
       }
       if(!resp || !resp.ok){                          /* ★fix502: null(予算切れ等)でも落ちない */
+        /* ★fix923 BUDGET_ERROR_UX / FAIL_FAST（GPT 裁定）: 402（account の月上限 errorCode BUDGET など）は
+           数秒待って再送しても通らない。自動再送 0・1 回目で即終了して呼び出し元へ返す。
+           429 / 5xx / 例外の既存 retry は不変。kill: localStorage v292Dfix923Off='1' → 従来（402 も再送）。 */
+        if(resp && resp.status === 402){ var off923 = false; try{ off923 = (localStorage.getItem('v292Dfix923Off') === '1'); }catch(e){}
+          if(!off923){ try{ window.__v292Dfix923 = window.__v292Dfix923 || { failFast: 0 }; window.__v292Dfix923.failFast++; }catch(e){} return resp; } }
         last = resp || last;
         if(attempt < MAX - 1){ await sleep((resp && resp.status === 429) ? 2500 * (attempt + 1) : 1200); continue; }
         return resp || failResp();
