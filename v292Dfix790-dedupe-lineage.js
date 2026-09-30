@@ -218,6 +218,8 @@
   var F924 = { builds: 0, replaced: 0, pruned: 0, rawBehind: 0, failed: 0, last: null };
   function f924Off() { return lsg('v292Dfix924Off') === '1'; }
   function revKey924(slotId) { return 'v292Dfix924LinRev_slot_' + String(slotId); }
+  /* ■fix925a: 分類規則が変わったので build revision を '925' に上げる（kill v292Dfix925aOff='1' → '924'）。 */
+  function curRev925() { try { return window.localStorage.getItem('v292Dfix925aOff') === '1' ? LINEAGE_BUILD_REV924 : '925'; } catch (e) { return '925'; } }
   function rawReady924(slotId) {
     try {
       var m = window.__v292Dfix670, s = (m && typeof m.status === 'function') ? m.status() : null;
@@ -315,7 +317,7 @@
           F924.builds++;
           write924 = replaceLineages924(slotId, lin).then(function (r) {
             F924.replaced++; F924.pruned += r.pruned;
-            try { window.localStorage.setItem(revKey924(slotId), LINEAGE_BUILD_REV924); } catch (e) {}
+            try { window.localStorage.setItem(revKey924(slotId), curRev925()); } catch (e) {}   /* ■fix925a: '925'（kill 時 '924'） */
             F924.last = { slotId: slotId, mode: 'replace', put: r.put, pruned: r.pruned, prunedIds: r.prunedIds, at: Date.now() };
             return r;
           }, function (e) {
@@ -374,7 +376,7 @@
                active: armed(), db: DB_NAME, lastRun: st.lastRun, counts: st.counts,
                rules: ['N:same-turn narration+player', 'S:NEGATION_CLAIM restatement (same speaker + same core)'],
                note: 'raw は削除しない / claim と world fact は別 lineageClass',
-               f924: { off: f924Off(), rev: LINEAGE_BUILD_REV924, builds: F924.builds, replaced: F924.replaced, pruned: F924.pruned,
+               f924: { off: f924Off(), rev: curRev925(), builds: F924.builds, replaced: F924.replaced, pruned: F924.pruned,
                        rawBehind: F924.rawBehind, failed: F924.failed, last: F924.last } };
     },
     build: build, summary: summary, clear: clear,

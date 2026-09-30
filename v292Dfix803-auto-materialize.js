@@ -317,12 +317,13 @@
            これが無いと、内容が既に clean な story は rev が付かず fix796 の HOLD が解けない。
            kill: localStorage v292Dfix924Off='1' → 従来（unchanged なら write 0）。 */
       var force924 = false;
+      var cur925 = '925'; try { if (window.localStorage.getItem('v292Dfix925aOff') === '1') cur925 = '924'; } catch (e925) {}   /* ■fix925a: 現行の build revision */
       if (cur.hash === o.candHash16) {
         try {
           if (window.localStorage.getItem('v292Dfix924Off') !== '1'
-              && window.localStorage.getItem('v292Dfix924LinRev_slot_' + sid) === '924') {
+              && window.localStorage.getItem('v292Dfix924LinRev_slot_' + sid) === cur925) {
             var lv924 = readLocal(sid);
-            force924 = !!(lv924.present && lv924.value && lv924.value.lineageBuildRev !== '924');
+            force924 = !!(lv924.present && lv924.value && lv924.value.lineageBuildRev !== cur925);
           }
         } catch (e924) { force924 = false; }
         if (!force924) { T.unchanged++; return finish(sid, tc, o, 'unchanged', t0); }

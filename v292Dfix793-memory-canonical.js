@@ -361,7 +361,27 @@
   var F924_LINEAGE_BUILD_REV = '924';
   var F924M = { noMemberSkipped: 0, last: null };
   function f924Off793() { return lsg('v292Dfix924Off') === '1'; }
-  function linRevOk924(sid) { return !!sid && lsg('v292Dfix924LinRev_slot_' + String(sid)) === F924_LINEAGE_BUILD_REV; }
+  /* ■■fix925a（GPT 裁定 FIX925A/B_OFFLINE_DESIGN・2026-09-30）: 分類の意味が変わるので build / rule revision を '925' に上げる。
+     925a ON のとき: slot の LINEAGE_BUILD_REV と memoryV1.lineageBuildRev / materializerRuleRev は '925'。
+     rev '924' の旧 memoryV1 は fix796 が wire で HOLD → 次の landing で fix790 完全置換 + fix803 clean materialize が '925' を付ける（fix924 と同じ upgrade 形）。
+     kill: localStorage v292Dfix925aOff='1' → 精度判定は fix918 のまま・rev は '924'（fix796 は '924' / '925' の両方を受け入れる）。 */
+  function f925aOff793() { return lsg('v292Dfix925aOff') === '1'; }
+  function curLinRev925() { return f925aOff793() ? F924_LINEAGE_BUILD_REV : '925'; }
+  function linRevOk924(sid) { return !!sid && lsg('v292Dfix924LinRev_slot_' + String(sid)) === curLinRev925(); }
+  /* ■fix925a 意味クラス（文言の列挙ではなく、発話行為のクラスとして分ける）:
+     REASSURANCE_REQUEST_FULL_PROPOSITION = 命題の全体が「対象を持たない、安心させる依頼」（気にしないで / 心配しないで 系）。
+     命題の一部として現れるもの（「その箱を開けないでくれ」「心配しないで、必ず戻る」「気にしないでくれ、あの人のことは」）や
+     行為の禁止（「行かないでくれ」）は当てない。曖昧なもの（「馬鹿言うな」）は分類しない（現状維持）。 */
+  var SEM925A = {
+    REASSURANCE_REQUEST_FULL_PROPOSITION: /^(?:どうか|頼むから|もう)?(?:気に|心配)(?:し|す)ないで(?:くれ|ください|くださいね|くれよ|ね|よ)?$/
+  };
+  var PUNCT925A = /[\s\u3000、。，．,.！!？?…‥・「」『』（）()“”"'〜~ー―—-]+/g;
+  function semClass925a(np) {
+    var p = String(np == null ? '' : np).replace(PUNCT925A, '');
+    if (!p) return null;
+    for (var k in SEM925A) { if (Object.prototype.hasOwnProperty.call(SEM925A, k) && SEM925A[k].test(p)) return k; }
+    return null;
+  }
   var _f918 = { evals: 0, hits: {}, last: null };
   function precisionReason918(type, np) {
     if (f918Off()) return null;
@@ -370,6 +390,7 @@
     var t = String(type || ''), why = null;
     if (t === 'PROHIBITION' && (P918.R1a.test(p) || P918.R1b.test(p) || P918.R1c.test(p)
                                  || P918.R2.test(p) || P918.R3.test(p) || P918.R4.test(p))) why = 'prohibition-not-directive';
+    else if (t === 'PROHIBITION' && !f925aOff793() && semClass925a(p) === 'REASSURANCE_REQUEST_FULL_PROPOSITION') why = 'prohibition-reassurance-request';   /* ■fix925a */
     else if (P918.WHQ.test(p)) why = 'speech-question-no-qmark';
     else if ((t === 'COMMITMENT' || t === 'DISCLOSURE_CLAIM')
              && P918.NOPRED.test(p.replace(/[\s　、。，,．.！!？?」』]+$/, ''))) why = 'proposition-no-predicate';
@@ -531,8 +552,8 @@
     var out918 = { schemaVersion: MEMORY_SCHEMA_VERSION, materializerVersion: MEMORY_VERSION,
              records: records, edges: edges };
     /* ■fix918: provenance だけ（candCanon = records / edges には入らない・fire の契機にもしない）。kill 時は付けない（従来と同じ）。 */
-    if (!f918Off()) out918.materializerRuleRev = F918_RULE_REV;
-    if (!f924Off793() && linRevOk924(storyId)) out918.lineageBuildRev = F924_LINEAGE_BUILD_REV;   /* ■fix924 */
+    if (!f918Off()) out918.materializerRuleRev = f925aOff793() ? F918_RULE_REV : '925';   /* ■fix925a: rule rev */
+    if (!f924Off793() && linRevOk924(storyId)) out918.lineageBuildRev = curLinRev925();   /* ■fix924 / fix925a */
     return out918;
   }
 
@@ -710,6 +731,7 @@
     rejectRing: function () { return JSON.parse(JSON.stringify(_rej904Ring)); },
     REJECT904: REJECT904,
     /* ■fix918 共有判定（fix796 の wire index もこれだけを使う）＋観測口（read-only） */
+    f925a: { off: f925aOff793, rev: curLinRev925, semClass: semClass925a, CLASSES: Object.keys(SEM925A) },
     f924: { off: f924Off793, REV: F924_LINEAGE_BUILD_REV, linRevOk: linRevOk924,
             status: function () { return { off: f924Off793(), rev: F924_LINEAGE_BUILD_REV, noMemberSkipped: F924M.noMemberSkipped, last: F924M.last }; } },
     f918: { reason: precisionReason918, off: f918Off, RULE_REV: F918_RULE_REV,

@@ -450,7 +450,14 @@
     return false;
   }
   function f924Off796() { try { return window.localStorage.getItem('v292Dfix924Off') === '1'; } catch (e) { return false; } }
-  function oldRev924(mem) { return !mem || mem.lineageBuildRev !== '924'; }
+  /* ■fix925a: 現行の build revision は '925'。kill（v292Dfix925aOff='1'）中は '924' と '925' の両方を受け入れる
+     （'925' の memoryV1 は 925a の精度判定で PENDING が増えただけの safe 側なので、kill で HOLD に倒さない）。 */
+  function f925aOff796() { try { return window.localStorage.getItem('v292Dfix925aOff') === '1'; } catch (e) { return false; } }
+  function oldRev924(mem) {
+    if (!mem) return true;
+    var r = mem.lineageBuildRev;
+    return f925aOff796() ? (r !== '924' && r !== '925') : (r !== '925');
+  }
   function buildIndex(memoryV1, storyId) {
     var out = [], recs = memoryV1 ? arr(memoryV1.records) : [], i, r, sid = str(storyId), w918;
     var hold924 = !f924Off796() && oldRev924(memoryV1), turns924;
@@ -604,6 +611,22 @@
    *   relationHit は「選択済みとの 1 hop」なので貪欲に 1 件ずつ確定する
    *   （各ラウンドで最大 score・同点は memoryId 昇順 → 決定的）。
    * ================================================================== */
+  /* ■fix925b（GPT 裁定 FIX925A/B_OFFLINE_DESIGN）: 同点の決め方。memoryId（hash / rebuild で振り直される key）で意味のある選択を決めない。 */
+  var F925B = { ties: 0, lastTurnDecided: 0, semKeyDecided: 0 };
+  function f925bOff() { try { return window.localStorage.getItem('v292Dfix925bOff') === '1'; } catch (e) { return false; } }
+  function semKey925b(r) {
+    var src = (r && r.source) || {};
+    return str(r && r.type) + '\u0001' + str(src.speakerEntityId) + '\u0001' + str(r && r.normalizedProposition);
+  }
+  function tieBetter925b(a, b) {
+    F925B.ties++;
+    var la = (a && a.source && isNum(a.source.lastTurn)) ? a.source.lastTurn : -1;
+    var lb = (b && b.source && isNum(b.source.lastTurn)) ? b.source.lastTurn : -1;
+    if (la !== lb) { F925B.lastTurnDecided++; return la > lb; }
+    var ka = semKey925b(a), kb = semKey925b(b);
+    if (ka !== kb) { F925B.semKeyDecided++; return ka < kb; }
+    return false;                                                     /* 完全に同じ key → memoryId 昇順（先着）のまま */
+  }
   function select(storyId, memoryV1, turnCtx, opts) {
     var out = [];
     var log = setLog(newLog(storyId, turnCtx));
@@ -683,10 +706,15 @@
       var chosenRecords = [];
       while (out.length < LIMITS.MAX_ITEMS && remaining.length) {
         var bestIdx = -1, best = null;
+        var tie925b = !f925bOff();
         for (var i = 0; i < remaining.length; i++) {
           var d = scoreDetail(remaining[i], keys, chosenRecords);
           /* remaining は memoryId 昇順。厳密な > のみで置換 → 同点は先着（=memoryId 昇順）*/
           if (best === null || d.total > best.total) { best = d; bestIdx = i; }
+          /* ■fix925b TIE_ORDER（ME_MEMORY_ID_TIE_ORDER_INSTABILITY）: score が完全に同点のときだけ
+             lastTurn DESC → stable semantic key（kind + speaker + normalizedProposition）ASC → memoryId ASC（先着のまま）。
+             score / weight / MIN_SCORE / MAX_ITEMS は不変。memoryId は最後の完全な fallback だけ。kill: v292Dfix925bOff='1'。 */
+          else if (tie925b && d.total === best.total && tieBetter925b(remaining[i], remaining[bestIdx])) { best = d; bestIdx = i; }
         }
         if (best === null || best.total < LIMITS.MIN_SCORE) break;    /* score<4 は 0 件側 */
         var rec = remaining.splice(bestIdx, 1)[0];
@@ -1423,7 +1451,8 @@
         lastBlocks: _lastBlocks,          /* ★Rev6: canaryBlocks の最終 telemetry */
         f918Wire: { filtered: F918W.filtered, last: F918W.last },   /* ■fix918 WIRE_SAFE_IMMEDIATE telemetry */
         f921Wire: { off: f921Off(), f918Killed: f918Killed921(), held: F921W.held, releasedUnchanged: F921W.releasedUnchanged, last: F921W.last },
-        f924Wire: { off: f924Off796(), held: F924W.held, ungrounded: F924W.ungrounded, last: F924W.last },   /* ■fix924 OLD REVISION MEMORY HOLD telemetry */   /* ■fix921 STALE_MEMORY_WIRE_HOLD telemetry */
+        f924Wire: { off: f924Off796(), held: F924W.held, ungrounded: F924W.ungrounded, last: F924W.last },
+        f925: { aOff: f925aOff796(), bOff: f925bOff(), ties: F925B.ties, lastTurnDecided: F925B.lastTurnDecided, semKeyDecided: F925B.semKeyDecided },   /* ■fix924 OLD REVISION MEMORY HOLD telemetry */   /* ■fix921 STALE_MEMORY_WIRE_HOLD telemetry */
         note: 'shadow only / index=ACTIVE all / PENDING_REF structurally excluded / '
             + 'exact entityId match only / world_event excluded at render / '
             + 'knownTo is provenance only / read-only localStorage / no hook / '
@@ -1448,7 +1477,7 @@
     __test: {
       BUILD: BUILD, LIMITS: LIMITS, HEAD: HEAD, FOOT: FOOT, ELLIPSIS: ELLIPSIS,
       INV: INV, REASON: REASON,
-      grounded924: grounded924, n924: n924, buildIndex: buildIndex, verifyIndex: verifyIndex, candidatesFromIndex: candidatesFromIndex,
+      grounded924: grounded924, n924: n924, tieBetter925b: tieBetter925b, semKey925b: semKey925b, oldRev924: oldRev924, buildIndex: buildIndex, verifyIndex: verifyIndex, candidatesFromIndex: candidatesFromIndex,
       resolveMemory: resolveMemory, keyFor: keyFor,
       displayNameOf: displayNameOf, entityIdsOf: entityIdsOf, truncate: truncate,
       idInList: idInList,
