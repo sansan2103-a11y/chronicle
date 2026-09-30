@@ -101,19 +101,9 @@
     }catch(e){ return String(v==null?'':v); }
   }
 
-  /* ★★fix930 c1（GPT裁定827/843 STATE_LINE_TRUNCATION）:
-     状態行は fix850 の shadow（karada に今ターンの地の文を追記した写し）ではなく実 store を読む。
-     項目順を 傷 → からだ → こころ → 本能 → 目的 → 関係 → 未解決 にし、fix277 の 124 字圧縮で傷が落ちないようにする。
-     身体の検出器（【身体状態・正史】【制約】）は従来どおり shadow を読む。OFF: localStorage v292Dfix930Off='1'。 */
-  /* ★fix931L（dark live 専用）: 指定 test story + local opt-in のときだけ c1 を ON */
-  function gate931(){ try{ var L='smuogc030wv'; if(!/^[a-z0-9]{6,32}$/.test(L)) return false; var dk=window.__chronicleDocumentStoryKey, op=localStorage.getItem('v292Dfix931LiveStory'); return typeof dk==='string' && typeof op==='string' && op===L && dk===('chr6_slot_'+L); }catch(e){ return false; } }
-  function off930(){ try { if (!gate931()) return true; return localStorage.getItem('v292Dfix930Off') === '1'; } catch(e){ return true; } }
   function stateBlock(){
     try{
-      var c930 = !off930();
-      var store = window.__v292Dfix77Store;
-      if (c930){ try { var X = window.__v292Dfix850x; if (X && typeof X.realStore === 'function'){ var rs = X.realStore(); if (rs) store = rs; } } catch(_x930){} }
-      if(!store) return '';
+      var store = window.__v292Dfix77Store; if(!store) return '';
       var lines=[];
       Object.keys(store).forEach(function(n){
         var s=store[n]||{}; if(!s || typeof s!=='object') return;
@@ -121,12 +111,11 @@
         var ka=clean223(s.karada||s['からだ']), ko=clean223(s.kokoro||s['こころ']), ho=clean223(s.honno||s['本能']);
         var ki=clean223(s.kizu||s['傷']), kn=clean223(s.kankei||s['関係']), mi=clean223(s.mikaiketsu||s['未解決']);
         var mo=clean223(s.mokuteki||s['目的']); /* v292Dfix223b */
-        if(c930 && ki) parts.push('傷:'+ki);
         if(ka) parts.push('からだ:'+ka);
         if(ko) parts.push('こころ:'+ko);
         if(ho) parts.push('本能:'+ho);
         if(mo) parts.push('目的:'+mo);
-        if(!c930 && ki) parts.push('傷:'+ki);
+        if(ki) parts.push('傷:'+ki);
         if(kn) parts.push('関係:'+kn);
         if(mi) parts.push('未解決:'+mi);
         if(parts.length) lines.push('・'+n+'｜'+parts.join(' ／ '));
