@@ -398,14 +398,73 @@
       return sha256hex16sync921(M.__test.candCanon(mem)) === lr.curHash16;
     } catch (e) { return false; }
   }
+  /* ■■fix924 OLD REVISION MEMORY = HOLD（GPT 裁定 2026-09-30 LINEAGE_UPSERT_NO_PRUNE）
+     memoryV1.lineageBuildRev が '924' でない（= fix790 の完全置換 build → clean materialize を経ていない）memoryV1 は、
+     lineage 由来の memory 全体（dialogue_claim も world_event も）を wire に出さない（safe miss）。
+     RELEASE は「完全置換 build 成功 → clean materialize（rev '924'）」だけ。unchanged の証拠などでは解除しない。
+     kill: localStorage v292Dfix924Off='1' → 従来（hold しない）。telemetry: status().f924Wire。 */
+  var F924W = { held: 0, ungrounded: 0, last: null };
+  /* ■fix924 GROUNDING（D-retry の race を閉じる。GPT 条件「D-retry: actual wire 0」）:
+     dialogue_claim の record は、今の story の source turn（firstTurn〜lastTurn）の本文に
+     その proposition が現にあるときだけ wire に出す。やり直す / 取消 / 旧規則の遡及で本文から消えた発話は、
+     memoryV1 の掃除（pipeline）が終わる前でも wire に出ない（safe miss）。確かめられないときも出さない。
+     比較は空白・句読点・括弧類を除いた NFC 文字列の部分一致（proposition は本文の部分列）。 */
+  var PUNCT924 = /[\s\u3000、。，．,.！!？?…‥・「」『』（）()“”"'〜~ー―—\-<>=\/]+/g;
+  function n924(x) { try { return String(x == null ? '' : x).normalize('NFC').replace(PUNCT924, ''); } catch (e) { return String(x == null ? '' : x).replace(PUNCT924, ''); } }
+  function currentTurns924(sid) {
+    try {
+      var c = (typeof window.__chronicleGetStateContext === 'function') ? window.__chronicleGetStateContext('fix924') : null;
+      var S = c && c.state;
+      if (!S || !Array.isArray(S.turns)) return null;
+      var want = (sid === 'chr6') ? 'chr6' : ('chr6_slot_' + sid);
+      if (!sid || str(c.slotKey) !== want) return null;                  /* ★別 story の本文では確かめない */
+      return S.turns;
+    } catch (e) { return null; }
+  }
+  function turnText924(t) {
+    if (!t || typeof t !== 'object') return '';
+    var parts = [str(t.playerText)], nar = t.plan && t.plan.narrative, cs = t._convSays, i;
+    if (Array.isArray(nar)) parts.push(nar.join('\n')); else if (nar) parts.push(str(nar));
+    if (Array.isArray(cs)) for (i = 0; i < cs.length; i++) if (cs[i]) parts.push(str(cs[i].say));
+    return n924(parts.join('\n'));
+  }
+  /* proposition は抽出時に marker（「と約束する」など）を抜いた所へ空白を入れることがある
+     （例: 本文「夜明けに…連れてくると約束するよ」→ proposition「夜明けに…連れてくる よ」）。
+     そこで空白で区切った各片が、本文の中に **同じ順序で** 現れることを条件にする。 */
+  function segs924(prop) {
+    var raw = String(prop == null ? '' : prop).split(/[\s\u3000]+/), out = [], i, x;
+    for (i = 0; i < raw.length; i++) { x = n924(raw[i]); if (x) out.push(x); }
+    return out;
+  }
+  function inOrder924(text, segs) {
+    var pos = 0, i, k;
+    for (i = 0; i < segs.length; i++) { k = text.indexOf(segs[i], pos); if (k < 0) return false; pos = k + segs[i].length; }
+    return true;
+  }
+  function grounded924(r, turns) {
+    var sg = segs924(r.normalizedProposition);
+    if (sg.join('').length < 2) return false;
+    var src = r.source || {}, t0 = src.firstTurn, t1 = src.lastTurn, t;
+    if (!isNum(t0) || !isNum(t1) || t0 < 0 || t1 < t0 || t1 - t0 > 2000) return false;
+    for (t = t0; t <= t1 && t < turns.length; t++) { if (inOrder924(turnText924(turns[t]), sg)) return true; }
+    return false;
+  }
+  function f924Off796() { try { return window.localStorage.getItem('v292Dfix924Off') === '1'; } catch (e) { return false; } }
+  function oldRev924(mem) { return !mem || mem.lineageBuildRev !== '924'; }
   function buildIndex(memoryV1, storyId) {
     var out = [], recs = memoryV1 ? arr(memoryV1.records) : [], i, r, sid = str(storyId), w918;
+    var hold924 = !f924Off796() && oldRev924(memoryV1), turns924;
     var hold921 = !f921Off() && !f918Killed921() && legacyRuleRev921(memoryV1), proof921 = null;
     for (i = 0; i < recs.length; i++) {
       r = recs[i];
       if (!r || typeof r !== 'object') continue;
       if (r.lifecycle !== LIFECYCLE_ACTIVE) continue;                /* ★構造的排除 */
       if (sid && r.storyId && str(r.storyId) !== sid) continue;
+      if (hold924) { F924W.held++; F924W.last = { storyId: sid, memoryId: r.memoryId, reason: 'old-lineage-build-rev' }; continue; }   /* ■fix924 */
+      if (!f924Off796() && r.lineageClass === 'dialogue_claim') {   /* ■fix924 GROUNDING */
+        if (turns924 === undefined) turns924 = currentTurns924(sid);
+        if (!turns924 || !grounded924(r, turns924)) { F924W.ungrounded++; F924W.last = { storyId: sid, memoryId: r.memoryId, reason: turns924 ? 'ungrounded' : 'turns-unavailable' }; continue; }
+      }
       if ((w918 = f918Reason(r))) { F918W.filtered++; F918W.last = { memoryId: r.memoryId, reason: w918 }; continue; }   /* ■fix918 */
       if (hold921 && r.lineageClass === 'dialogue_claim') {         /* ■fix921 */
         if (proof921 === null) proof921 = unchangedProof921(memoryV1, sid);
@@ -1363,7 +1422,8 @@
         lastLog: _lastLog,
         lastBlocks: _lastBlocks,          /* ★Rev6: canaryBlocks の最終 telemetry */
         f918Wire: { filtered: F918W.filtered, last: F918W.last },   /* ■fix918 WIRE_SAFE_IMMEDIATE telemetry */
-        f921Wire: { off: f921Off(), f918Killed: f918Killed921(), held: F921W.held, releasedUnchanged: F921W.releasedUnchanged, last: F921W.last },   /* ■fix921 STALE_MEMORY_WIRE_HOLD telemetry */
+        f921Wire: { off: f921Off(), f918Killed: f918Killed921(), held: F921W.held, releasedUnchanged: F921W.releasedUnchanged, last: F921W.last },
+        f924Wire: { off: f924Off796(), held: F924W.held, ungrounded: F924W.ungrounded, last: F924W.last },   /* ■fix924 OLD REVISION MEMORY HOLD telemetry */   /* ■fix921 STALE_MEMORY_WIRE_HOLD telemetry */
         note: 'shadow only / index=ACTIVE all / PENDING_REF structurally excluded / '
             + 'exact entityId match only / world_event excluded at render / '
             + 'knownTo is provenance only / read-only localStorage / no hook / '
@@ -1388,7 +1448,7 @@
     __test: {
       BUILD: BUILD, LIMITS: LIMITS, HEAD: HEAD, FOOT: FOOT, ELLIPSIS: ELLIPSIS,
       INV: INV, REASON: REASON,
-      buildIndex: buildIndex, verifyIndex: verifyIndex, candidatesFromIndex: candidatesFromIndex,
+      grounded924: grounded924, n924: n924, buildIndex: buildIndex, verifyIndex: verifyIndex, candidatesFromIndex: candidatesFromIndex,
       resolveMemory: resolveMemory, keyFor: keyFor,
       displayNameOf: displayNameOf, entityIdsOf: entityIdsOf, truncate: truncate,
       idInList: idInList,

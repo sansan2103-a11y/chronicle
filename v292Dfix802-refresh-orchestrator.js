@@ -139,7 +139,7 @@
   }
 
   function fire(sid, l) {
-    var landed = l.landed, tc = landed.turnCount, ms = {}, out = {};
+    var landed = l.landed, tc = landed.turnCount, ms = {}, out = {}, chainAtFire924 = chainNow924(sid);
     l.running = true;
     var tAll = nowMs();
     /* ★boundary guard: landed boundary より未来の raw があるならこの settle では走らせない */
@@ -179,7 +179,7 @@
               var changed = (prev == null) ? null : (h16 !== prev);   /* 初回 fire は比較対象なし = null */
               lastHash[sid] = h16;
               T.fires++;
-              l.refreshedFor = tc;
+              l.refreshedFor = tc; l.refreshedChain = chainAtFire924;
               T.lastFire = { storyId: sid, turnCount: tc, rev: landed.rev, hash16: landed.hash16,
                              ms: { 789: ms[789], 790: ms[790], 791: ms[791], 792: ms[792], read: ms.read, mat: ms.mat, total: nowMs() - tAll },
                              candHash16: h16, prevHash16: prev || null, changed: changed, raw0: raw0,
@@ -190,7 +190,7 @@
                                      reason792: (out[792] && out[792].reason) || null },
                              at: Date.now() };
               /* ★fix803 hook（fire 末尾 1 点・分岐追加 0）: changed 判定と materialize は fix803 側。ここは chain するだけ。 */
-              return f802Notify803({ storyId: sid, turnCount: tc, cand: cand, candHash16: h16, rev: landed.rev }).then(function () { l.running = false; return 'fired'; });
+              return f802Notify803({ storyId: sid, turnCount: tc, cand: cand, candHash16: h16, rev: landed.rev, chainKey: chainAtFire924 }).then(function () { l.running = false; return 'fired'; });
             });
           });
       });
@@ -202,13 +202,22 @@
     });
   }
 
+  /* ■fix924（GPT 裁定 2026-09-30 D-retry）: やり直す は turnCount を変えないため、従来の「同じ turnCount は処理済み」で
+     pipeline が走らず、捨てた生成の lineage / memoryV1 が次の landing まで残った。
+     処理済みの判定に fix670 の chainKey（全 turn 本文の鎖の hash）を加え、本文が変われば同じ turnCount でも再実行する。
+     kill: localStorage v292Dfix924Off='1' → 従来（turnCount だけで判定）。 */
+  function chainNow924(sid) {
+    try { if (ls('v292Dfix924Off') === '1') return null;
+      var m = window.__v292Dfix670, s = (m && typeof m.status === 'function') ? m.status() : null;
+      return (s && s.slot && String(s.slot.id) === String(sid)) ? (s.slot.chainKey || null) : null; } catch (e) { return null; }
+  }
   function tryFire(sid) {
     var l = L(sid);
     if (!l.landed || !l.raw) return skip('latch-incomplete');
     if (typeof l.landed.turnCount !== 'number') return skip('turnCount-null');
     if (!(l.raw.processedCount >= l.landed.turnCount)) return skip('raw-behind');
     if (l.running) return dup('running');
-    if (l.refreshedFor === l.landed.turnCount) return dup('same-turnCount');
+    if (l.refreshedFor === l.landed.turnCount && (ls('v292Dfix924Off') === '1' || l.refreshedChain === chainNow924(sid))) return dup('same-turnCount');
     /* ★Rev2 dependency fail-closed: fix801 が無ければ何も走らせない（789〜793 call 0・latch そのまま・retry 0） */
     if (!storyScopedReader()) { T.dependencySkip++; T.lastSkip = 'NO_STORY_SCOPED_EVENTS'; return 'skipped:NO_STORY_SCOPED_EVENTS'; }
     return fire(sid, l);

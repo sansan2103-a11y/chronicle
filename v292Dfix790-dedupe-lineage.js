@@ -202,6 +202,53 @@
     });
   }
 
+  /* ■■fix924 LINEAGE_FULL_REPLACE（GPT 裁定 2026-09-30 LINEAGE_UPSERT_NO_PRUNE / canonical repair = A 案）
+     旧: build は put（upsert）だけで、今回の build が生成しなかった旧 lineage を消さなかった。
+         再抽出で lineage key が変わる（やり直す / 取消 / 規則の遡及 / Entity 文脈の変化）と、旧 lineage が残り
+         fix793 が record 化して、捨てた生成・旧 proposition・旧 speaker が ACTIVE のまま wire に出た（offline 再現）。
+     新: build(slotId) は「その slot の全 raw + verdict から作った desired 集合」で、その slot の lineage を完全置換する。
+         1 つの readwrite transaction の中で「slot の旧 lineage のうち desired に無い key を delete → desired を put」。
+         途中で失敗すれば transaction 全体が rollback され、旧 lineage 集合は壊れない。
+         成功したときだけ slot の LINEAGE_BUILD_REV（localStorage v292Dfix924LinRev_slot_<slot> = '924'）を立てる。
+         raw が完了していない（fix670 の slot / processedCount / lastStop が揃わない）ときは prune しない:
+         従来どおり upsert だけ行い、rev を外す（→ fix796 が旧 rev の memory を wire に出さない）。
+     kill: localStorage v292Dfix924Off='1' → 従来（upsert のみ・rev に触れない）。 */
+  var LINEAGE_BUILD_REV924 = '924';
+  var RAW_OK_STOPS924 = { 'ok': 1, 'up-to-date': 1, 'nochange': 1, 'fast-nochange': 1 };
+  var F924 = { builds: 0, replaced: 0, pruned: 0, rawBehind: 0, failed: 0, last: null };
+  function f924Off() { return lsg('v292Dfix924Off') === '1'; }
+  function revKey924(slotId) { return 'v292Dfix924LinRev_slot_' + String(slotId); }
+  function rawReady924(slotId) {
+    try {
+      var m = window.__v292Dfix670, s = (m && typeof m.status === 'function') ? m.status() : null;
+      if (!s || !s.slot || s.degraded) return false;
+      if (String(s.slot.id) !== String(slotId)) return false;
+      if (typeof s.slot.processedCount !== 'number' || typeof s.slot.turns !== 'number' || s.slot.turns < 0) return false;
+      return s.slot.processedCount >= s.slot.turns && RAW_OK_STOPS924[String(s.lastStop)] === 1;
+    } catch (e) { return false; }
+  }
+  function replaceLineages924(slotId, list) {
+    return openLin().then(function (db) {
+      return new Promise(function (res, rej) {
+        var tx = db.transaction([STORE], 'readwrite');
+        var os = tx.objectStore(STORE);
+        var want = {}, pruned = [], done = false;
+        list.forEach(function (l) { want[l.lineageId] = 1; });
+        var g = os.getAll();
+        g.onsuccess = function () {
+          (g.result || []).forEach(function (r) {
+            if (!r || r.slotId !== slotId) return;                 /* ★他 slot には触れない */
+            if (!want[r.lineageId]) { os.delete(r.lineageId); pruned.push(r.lineageId); }
+          });
+          list.forEach(function (l) { os.put(l); });
+        };
+        tx.oncomplete = function () { done = true; db.close(); res({ put: list.length, pruned: pruned.length, prunedIds: pruned.slice(0, 20) }); };
+        tx.onabort = function () { if (!done) { db.close(); rej(tx.error || new Error('fix924 tx abort')); } };
+        tx.onerror = function () { /* onabort が続く */ };
+      });
+    });
+  }
+
   /* ---------------- build ------------------------------------------------- */
   function buildLineages(rawRows, verdictRows) {
     var vBy = {};
@@ -261,7 +308,30 @@
     return Promise.all([readAll('chr6mem', 'events', slotId), readAll('chr6adj', 'verdicts', slotId)])
       .then(function (a) {
         var lin = buildLineages(a[0], a[1]);
-        return putLineages(lin).then(function () {
+        /* ■fix924: raw が完了しているときだけ完全置換。そうでなければ従来の upsert（prune しない）+ rev を外す。 */
+        var mode924 = f924Off() ? 'off' : (rawReady924(slotId) ? 'replace' : 'raw-behind');
+        var write924;
+        if (mode924 === 'replace') {
+          F924.builds++;
+          write924 = replaceLineages924(slotId, lin).then(function (r) {
+            F924.replaced++; F924.pruned += r.pruned;
+            try { window.localStorage.setItem(revKey924(slotId), LINEAGE_BUILD_REV924); } catch (e) {}
+            F924.last = { slotId: slotId, mode: 'replace', put: r.put, pruned: r.pruned, prunedIds: r.prunedIds, at: Date.now() };
+            return r;
+          }, function (e) {
+            F924.failed++;
+            F924.last = { slotId: slotId, mode: 'failed', error: String((e && e.message) || e).slice(0, 120), at: Date.now() };
+            throw e;                                        /* ★rev は立てない・旧集合は tx rollback で不変 */
+          });
+        } else {
+          if (mode924 === 'raw-behind') {
+            F924.rawBehind++;
+            try { window.localStorage.removeItem(revKey924(slotId)); } catch (e) {}
+            F924.last = { slotId: slotId, mode: 'raw-behind', at: Date.now() };
+          }
+          write924 = putLineages(lin);
+        }
+        return write924.then(function () {
           var c = { rawTotal: a[0].length, verdicts: a[1].length, lineages: lin.length,
                     merged: lin.filter(function (l) { return l.attestationCount > 1; }).length,
                     attestations: lin.reduce(function (n, l) { return n + l.attestationCount; }, 0),
@@ -303,14 +373,17 @@
       return { build: st.build, dedupeVersion: DEDUPE_VERSION, on: optedIn(), off: off(),
                active: armed(), db: DB_NAME, lastRun: st.lastRun, counts: st.counts,
                rules: ['N:same-turn narration+player', 'S:NEGATION_CLAIM restatement (same speaker + same core)'],
-               note: 'raw は削除しない / claim と world fact は別 lineageClass' };
+               note: 'raw は削除しない / claim と world fact は別 lineageClass',
+               f924: { off: f924Off(), rev: LINEAGE_BUILD_REV924, builds: F924.builds, replaced: F924.replaced, pruned: F924.pruned,
+                       rawBehind: F924.rawBehind, failed: F924.failed, last: F924.last } };
     },
     build: build, summary: summary, clear: clear,
     getLineages: function (slotId) { return readAll(DB_NAME, STORE, slotId); },
     __test: { buildLineages: buildLineages, groupTagsFor: groupTagsFor, negCore: negCore,
               classOf: classOf, lineageKeyOf: lineageKeyOf, isPlayerSource: isPlayerSource,
               isNarrationSource: isNarrationSource, CLASS_WORLD: CLASS_WORLD,
-              CLASS_CLAIM: CLASS_CLAIM, DEDUPE_VERSION: DEDUPE_VERSION, DB_NAME: DB_NAME }
+              CLASS_CLAIM: CLASS_CLAIM, DEDUPE_VERSION: DEDUPE_VERSION, DB_NAME: DB_NAME,
+              rawReady924: rawReady924, revKey924: revKey924, LINEAGE_BUILD_REV924: LINEAGE_BUILD_REV924 }
   };
   /* ★自動実行しない。build() を明示的に呼んだときだけ走る。 */
 })();

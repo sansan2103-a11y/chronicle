@@ -353,6 +353,15 @@
     NOPRED: /(?:の|に|と|から|へ|を|で)$/
   };
   function f918Off() { return lsg('v292Dfix918Off') === '1'; }
+  /* ■■fix924 LINEAGE_BUILD_REV（GPT 裁定 2026-09-30）: fix790 が完全置換 build に成功した slot だけ
+     memoryV1.lineageBuildRev = '924' を付ける（provenance。candCanon = records / edges には入らない）。
+     fix796 は '924' の無い memoryV1 を wire に出さない（OLD REVISION MEMORY = HOLD）。
+     第二防衛線: member event が 1 件も現存しない lineage は record にしない（shared-member の旧 key は fix790 の完全置換が本修正）。
+     kill: localStorage v292Dfix924Off='1' → 従来（rev を付けない・member filter なし）。 */
+  var F924_LINEAGE_BUILD_REV = '924';
+  var F924M = { noMemberSkipped: 0, last: null };
+  function f924Off793() { return lsg('v292Dfix924Off') === '1'; }
+  function linRevOk924(sid) { return !!sid && lsg('v292Dfix924LinRev_slot_' + String(sid)) === F924_LINEAGE_BUILD_REV; }
   var _f918 = { evals: 0, hits: {}, last: null };
   function precisionReason918(type, np) {
     if (f918Off()) return null;
@@ -459,6 +468,10 @@
         return r.resolutionStatus !== 'RESOLVED_EXISTING' || !r.entityId; });
       var members = (lin.memberEventIds || []).map(function (x) { return rawById[x]; })
         .filter(function (x) { return !!x; });
+      if (!f924Off793() && (lin.memberEventIds || []).length && !members.length) {   /* ■fix924 第二防衛線 */
+        F924M.noMemberSkipped++; F924M.last = { storyId: storyId, lineageId: lin.lineageId, at: Date.now() };
+        continue;
+      }
       var first = members[0] || {};
       var knownTo = [];
       for (var m = 0; m < members.length; m++) {
@@ -519,6 +532,7 @@
              records: records, edges: edges };
     /* ■fix918: provenance だけ（candCanon = records / edges には入らない・fire の契機にもしない）。kill 時は付けない（従来と同じ）。 */
     if (!f918Off()) out918.materializerRuleRev = F918_RULE_REV;
+    if (!f924Off793() && linRevOk924(storyId)) out918.lineageBuildRev = F924_LINEAGE_BUILD_REV;   /* ■fix924 */
     return out918;
   }
 
@@ -696,6 +710,8 @@
     rejectRing: function () { return JSON.parse(JSON.stringify(_rej904Ring)); },
     REJECT904: REJECT904,
     /* ■fix918 共有判定（fix796 の wire index もこれだけを使う）＋観測口（read-only） */
+    f924: { off: f924Off793, REV: F924_LINEAGE_BUILD_REV, linRevOk: linRevOk924,
+            status: function () { return { off: f924Off793(), rev: F924_LINEAGE_BUILD_REV, noMemberSkipped: F924M.noMemberSkipped, last: F924M.last }; } },
     f918: { reason: precisionReason918, off: f918Off, RULE_REV: F918_RULE_REV,
             status: function () { return { off: f918Off(), ruleRev: F918_RULE_REV, evals: _f918.evals,
                                            hits: JSON.parse(JSON.stringify(_f918.hits)), last: _f918.last }; } },

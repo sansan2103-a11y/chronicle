@@ -261,7 +261,9 @@
     if (halted[sid]) return Promise.resolve(skip('halted'));
     var tc = a.turnCount;
     if (typeof tc !== 'number' || !isFinite(tc)) return Promise.resolve(skip('turnCount-null'));
-    if (materializedFor[sid] === tc) return Promise.resolve(skip('same-turnCount'));
+    /* ■fix924: やり直す（同じ turnCount・本文が変化）でも materialize できるよう、chainKey を鍵に加える。kill 時は従来。 */
+    var mk924 = (function () { try { return window.localStorage.getItem('v292Dfix924Off') === '1'; } catch (e) { return false; } })() ? tc : (tc + '|' + (a.chainKey == null ? '' : String(a.chainKey)));
+    if (materializedFor[sid] === mk924) return Promise.resolve(skip('same-turnCount'));
     var cand = a.cand;
     if (!shapeOk(cand)) return Promise.resolve(skip('bad-candidate'));
     var m793 = null; try { m793 = window.__v292Dfix793; } catch (e) { m793 = null; }
@@ -290,7 +292,7 @@
         if (bReason !== null) { T.nullSkips++; o.bootstrapSkip = bReason;
           return finish(sid, tc, o, 'null-skip:' + (cur.reason || 'absent'), t0); }
         T.bootstraps++; o.bootstrap = true;
-        materializedFor[sid] = tc;                                   /* ★write exactly once（同一 turnCount 再入を封じる） */
+        materializedFor[sid] = mk924;                                   /* ★write exactly once（同一 turnCount 再入を封じる） */
         return Promise.resolve(m793.materialize(sid)).then(function (r) {
           o.materializeOk = !!(r && r.ok);
           o.materializeReason = (r && r.reason) ? String(r.reason) : null;
@@ -308,11 +310,27 @@
         });
         });
       }
-      /* ★changed:false → write 0 */
-      if (cur.hash === o.candHash16) { T.unchanged++; return finish(sid, tc, o, 'unchanged', t0); }
+      /* ★changed:false → write 0
+         ■fix924（GPT 裁定 2026-09-30 LINEAGE_BUILD_REV）: records / edges が同じでも、
+           fix790 の完全置換 build が成功済み（slot rev '924'）なのに保存中の memoryV1 が旧 rev のときは
+           clean materialize を 1 回だけ行う（既存の fix793.materialize と同じ write path・post hash 検査も同じ）。
+           これが無いと、内容が既に clean な story は rev が付かず fix796 の HOLD が解けない。
+           kill: localStorage v292Dfix924Off='1' → 従来（unchanged なら write 0）。 */
+      var force924 = false;
+      if (cur.hash === o.candHash16) {
+        try {
+          if (window.localStorage.getItem('v292Dfix924Off') !== '1'
+              && window.localStorage.getItem('v292Dfix924LinRev_slot_' + sid) === '924') {
+            var lv924 = readLocal(sid);
+            force924 = !!(lv924.present && lv924.value && lv924.value.lineageBuildRev !== '924');
+          }
+        } catch (e924) { force924 = false; }
+        if (!force924) { T.unchanged++; return finish(sid, tc, o, 'unchanged', t0); }
+        T.rev924Upgrades = (T.rev924Upgrades || 0) + 1; o.rev924Upgrade = true;
+      }
       /* ★changed:true → 既存 fix793.materialize() のみ（新 write path 0・1 turn 1 回・retry 0） */
       T.changed++;
-      materializedFor[sid] = tc;
+      materializedFor[sid] = mk924;
       return Promise.resolve(m793.materialize(sid)).then(function (r) {
         o.materializeOk = !!(r && r.ok);
         o.materializeReason = (r && r.reason) ? String(r.reason) : null;
@@ -341,7 +359,7 @@
              halted: JSON.parse(JSON.stringify(halted)),
              fires: T.fires, changed: T.changed, unchanged: T.unchanged, nullSkips: T.nullSkips, bootstraps: T.bootstraps,
              srvProbes: T.srvProbes, srvLast: T.srvLast, srvMem: JSON.parse(JSON.stringify(srvMem)),
-             materialized: T.materialized, driftStops: T.driftStops, matFailed: T.matFailed,
+             materialized: T.materialized, driftStops: T.driftStops, matFailed: T.matFailed, rev924Upgrades: T.rev924Upgrades || 0,
              rejects904: T.rejects904, rejectSkips904: T.rejectSkips904, rejectedCand: JSON.parse(JSON.stringify(rejectedCand)), f904Off: f904Off(),
              skipped: T.skipped, skipReasons: JSON.parse(JSON.stringify(T.skipReasons)),
              domainMismatch: T.domainMismatch, materializedFor: JSON.parse(JSON.stringify(materializedFor)),
