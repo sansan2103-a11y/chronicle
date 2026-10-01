@@ -101,9 +101,17 @@
     }catch(e){ return String(v==null?'':v); }
   }
 
-  function stateBlock(){
+  /* ★★fix930 c1（GPT裁定827/843 STATE_LINE_TRUNCATION）:
+     状態行は fix850 の shadow（karada に今ターンの地の文を追記した写し）ではなく実 store を読む。
+     項目順を 傷 → からだ → こころ → 本能 → 目的 → 関係 → 未解決 にし、fix277 の 124 字圧縮で傷が落ちないようにする。
+     身体の検出器（【身体状態・正史】【制約】）は従来どおり shadow を読む。OFF: localStorage v292Dfix930Off='1'。 */
+  function off930(){ try { return localStorage.getItem('v292Dfix930Off') === '1'; } catch(e){ return false; } }
+  function stateBlock(legacyStore){
     try{
-      var store = window.__v292Dfix77Store; if(!store) return '';
+      var c930 = !off930() && !legacyStore; /* ★fix932: legacyStore=true は ac27 と同じ（shadow を読む・旧項目順）判定専用 */
+      var store = window.__v292Dfix77Store;
+      if (c930){ try { var X = window.__v292Dfix850x; if (X && typeof X.realStore === 'function'){ var rs = X.realStore(); if (rs) store = rs; } } catch(_x930){} }
+      if(!store) return '';
       var lines=[];
       Object.keys(store).forEach(function(n){
         var s=store[n]||{}; if(!s || typeof s!=='object') return;
@@ -111,11 +119,12 @@
         var ka=clean223(s.karada||s['からだ']), ko=clean223(s.kokoro||s['こころ']), ho=clean223(s.honno||s['本能']);
         var ki=clean223(s.kizu||s['傷']), kn=clean223(s.kankei||s['関係']), mi=clean223(s.mikaiketsu||s['未解決']);
         var mo=clean223(s.mokuteki||s['目的']); /* v292Dfix223b */
+        if(c930 && ki) parts.push('傷:'+ki);
         if(ka) parts.push('からだ:'+ka);
         if(ko) parts.push('こころ:'+ko);
         if(ho) parts.push('本能:'+ho);
         if(mo) parts.push('目的:'+mo);
-        if(ki) parts.push('傷:'+ki);
+        if(!c930 && ki) parts.push('傷:'+ki);
         if(kn) parts.push('関係:'+kn);
         if(mi) parts.push('未解決:'+mi);
         if(parts.length) lines.push('・'+n+'｜'+parts.join(' ／ '));
@@ -688,7 +697,15 @@
        未ロード / OFF / 非 canary story / 例外 / memory 0 件 → 両方 '' ＝ この関数の
        出力は 1 バイトも変わらない。**guard だけを単独で出すことは無い**。
        write-free 維持: 追加した localStorage アクセスは getItem 1 本のみ。 */
-    if (st){
+    /* ★fix932（MEMORY_CANARY_GATE_PRESERVE・kill: v292Dfix932Off='1'）: fix930 c1 で st が実 store を読むようになり、
+       実 store が空で shadow だけに行がある turn では st='' となって、下の Memory canary block ごと飛んでいた（ac27 との差、
+       実測 rig/f928reg ME6_S / ME5_C1_ROSTER）。canary の呼び出し可否だけは ac27 と同じ判定（shadow を読む stateBlock）で決め、
+       状態行そのもの（st）は c1 のまま（shadow の行は出さない）。930Off のときは st 自体が旧判定なので何も変わらない。 */
+    /* fix932b: 案 a（shadow を読む旧判定）は b1-H で shadow 自体が空になる turn を救えなかった（rig/f932reg ME5_C1_ROSTER）。
+       canary の呼び出しを st から切り離す（Memory の出す／出さないは fix796 側の判定だけに任せる）。 */
+    var _gate932 = st;
+    try { if (!_gate932 && localStorage.getItem('v292Dfix932Off') !== '1' && !off930()) _gate932 = true; } catch(_e932){}
+    if (_gate932){
       var _mem3c2 = '', _grd3c2 = '';
       try {
         /* ■fix903（ME-1 Story isolation FAIL の修正・kill: v292Dfix903Off='1'）
@@ -735,7 +752,7 @@
         }
       } catch(_e3c2){ _mem3c2 = ''; _grd3c2 = ''; }
       if (_mem3c2){ blocks.push(''); blocks.push(_mem3c2); }
-      blocks.push(''); blocks.push(st);
+      if (st){ blocks.push(''); blocks.push(st); } /* fix932: st が空（c1 で実 store 空）のときは状態行を出さない */
       if (_grd3c2){ blocks.push(''); blocks.push(_grd3c2); }
     }
     if (seed){ blocks.push(''); blocks.push(seed); }     /* v292Dfix223a */

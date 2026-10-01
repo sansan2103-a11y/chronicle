@@ -158,6 +158,45 @@
      新実装: 文（。/改行）で切り、文の中では **名前の出現位置から次の名前まで**
        のスライスだけをその人物へ帰属する。名前が 1 つも無い文は主人公へ。
        fix414 の G-1/G-2「部位ローカル文脈」と同じ考え方。 */
+  /* ★★fix929 b1-H（GPT裁定840/843 PROVENANCE_AWARE_ATTRIBUTION）:
+     実測 BODYCANON_SUBJECTLESS_DEFAULT_TO_HERO（名前の無い文を主人公へ帰属 → 主人公に偽の負傷・拘束・姿勢）を止める。
+     ・playerText 由来: 人名か主人公 marker（あなた／主人公／自分）がある文だけ帰属する。無ければ誰にも帰属しない
+       （PLAYER_DO_IS_NOT_PROVENANCE。STORY 入力も #inp のユーザー入力）。
+     ・地の文由来: 明示された人物を優先。省略主語は、同じ段落で直前の文の actor が 1 人に確定しているときだけ引き継ぐ。
+       2 人以上が出た文の後は actor 不明。actor 不明は safe miss。「名前が分からないから主人公」はしない。
+     ・既知の safe miss: F2_OMITTED_HERO_NARRATIVE_MISS（主語なしで書かれた主人公の結果の地の文）= MONITOR。
+     ・FIX929_H_REQUIRES_FIX930_FOR_PRODUCTION: fix930（c1）が OFF のときは H も OFF（旧帰属）。H 単独では動かない。
+     OFF: localStorage v292Dfix929Off='1'（または v292Dfix930Off='1'）→ 従来の帰属。 */
+  function b1HOn(){ return ls('v292Dfix929Off') !== '1' && ls('v292Dfix930Off') !== '1'; }
+  var HERO_MARK_P929 = /あなた|主人公|自分/, HERO_MARK_N929 = /あなた|主人公/;
+  function attributeH(text, hero, others, push, src){
+    var names = [hero].concat(others);
+    str(text).split(/\n+/).forEach(function(para){
+      var actor = null;
+      para.split('。').map(function(x){ return x.trim(); }).filter(function(x){ return !!x; }).forEach(function(sent){
+        var hits = [], i, n, at;
+        for (i = 0; i < names.length; i++){
+          n = names[i]; if (!n) continue;
+          at = sent.indexOf(n);
+          while (at >= 0){ hits.push({ at: at, n: n }); at = sent.indexOf(n, at + n.length); }
+        }
+        if (!hits.length){
+          var mark = (src === 'player') ? HERO_MARK_P929 : HERO_MARK_N929;
+          if (mark.test(sent)){ push(hero, sent); actor = hero; return; }
+          if (src === 'narr' && actor){ push(actor, sent); }
+          return;                                   /* actor 不明 = safe miss */
+        }
+        hits.sort(function(x, y){ return x.at - y.at; });
+        for (var j = 0; j < hits.length; j++){
+          var start = hits[j].at, end = (j + 1 < hits.length) ? hits[j + 1].at : sent.length;
+          var frag = sent.slice(start, end);
+          if (frag) push(hits[j].n, frag);
+        }
+        var distinct = {}; hits.forEach(function(h){ distinct[h.n] = 1; });
+        actor = (Object.keys(distinct).length === 1) ? hits[0].n : null;
+      });
+    });
+  }
   function attribute(text, hero, others, push){
     var names = [hero].concat(others);
     sentences(text).forEach(function(sent){
@@ -190,6 +229,8 @@
   function buildOverlay(playerText, mode){
     /* 地の文: タグを落とし → 「」内の発話を落とし → 仮定/否定の節を落とす */
     var narr = evidenceOnly(stripQuoted(proseOnly(lastNarrative())));
+    /* fix929: 段落（改行）を保った地の文。H の「同じ段落の直前 actor」判定に使う */
+    var narrP = str(stripQuoted(proseOnly(lastNarrative()))).split(/\n+/).map(function(p){ return evidenceOnly(p); }).filter(function(p){ return !!p; }).join('\n');
     /* ★入力種別による証拠採否（実測: Planner.build(mode, text) の mode は
        'STORY' / 'DO' / 'SAY' のいずれかの文字列。QA 実機で確認済み）。
        本エンジンには既に確立した意味論がある —— fix333 authorityBlock の
@@ -214,8 +255,13 @@
       if (ov[name].indexOf(frag) < 0) ov[name].push(frag);
     }
 
-    if (ptxt) attribute(ptxt, hn, others, push);
-    if (narr) attribute(narr, hn, others, push);
+    if (b1HOn()){
+      if (ptxt) attributeH(ptxt, hn, others, push, 'player');
+      if (narrP) attributeH(narrP, hn, others, push, 'narr');
+    } else {
+      if (ptxt) attribute(ptxt, hn, others, push);
+      if (narr) attribute(narr, hn, others, push);
+    }
 
     var outv = {}, any = false;
     Object.keys(ov).forEach(function(n){
@@ -258,6 +304,7 @@
      本 fix は自分のラッパへ `__f379` を引き継ぐので、watchdog に再ラップされて
      外側を奪われることはない。 */
   var _lateWrap = false;
+  var _real930 = null;
   function depsReady(){
     try {
       var P = G.Planner;
@@ -282,6 +329,7 @@
     var w = function(){
       if (!on()) return orig.apply(this, arguments);
       var prev = G.__v292Dfix77Store, swapped = false;
+      _real930 = prev; /* ★fix930 c1: build 中の実 store（shadow ではない）を公開 */
       try {
         var ov = buildOverlay(arguments[1], arguments[0]);
         if (ov){
@@ -293,6 +341,7 @@
         return orig.apply(this, arguments);
       } finally {
         if (swapped){ G.__v292Dfix77Store = prev; }
+        _real930 = null;
       }
     };
     /* 既存ラッパのマーカーを引き継ぐ。落とすと fix379 keeper 等が
@@ -340,6 +389,8 @@
     _stripQuoted: stripQuoted,
     lastOverlay: function(){ return _lastOverlay; },
     shadowOf: shadowOf,
+    realStore: function(){ return _real930 || G.__v292Dfix77Store; },
+    b1HOn: b1HOn,
     _heroName: heroName,
     _otherNames: otherNames
   };
