@@ -48,6 +48,38 @@
      旧 On='1' も引き続き有効。語彙・軸・上限・出力文面は 1 文字も変えていない。 */
   function on(){ if (off()) return false; return ls('v292Dfix852On') !== '0'; }
   function str(v){ return String(v == null ? '' : v); }
+
+  /* ★fix936（RR_EVIDENCE_SUBJECT_GATE・候補・未出荷、kill: v292Dfix936Off）:
+     fix333 の states[n].karada は「実 store の karada ＋ fix850 overlay（直近の本文から帰属した断片）」の写し。
+     overlay には主語の無い文の carry（例: 奥で、何かが倒れる軽い音がした → 女将）も入るため、
+     RR の根拠には「実 store の karada」と「overlay のうち本人が主語として明示された文（Xは / Xが）」だけを使う。
+     主人公は 主人公 / あなた / cast の名前のいずれでも明示とみなす。体勢移行（立ち上がり 等）も同じ規則で読む。 */
+  function off936(){ try { return localStorage.getItem('v292Dfix936Off') === '1'; } catch(e){ return false; } }
+  function heroAliases936(){
+    var a = ['主人公', 'あなた'];
+    try { var X = G.__v292Dfix850x; var h = X && typeof X._heroName === 'function' ? X._heroName() : ''; if (h) a.push(h); } catch(e){}
+    try { var S = G.__chronicleGetState && G.__chronicleGetState(); var hn = S && S.cast && S.cast.hero && S.cast.hero.name; if (hn) a.push(String(hn)); } catch(e){}
+    return a;
+  }
+  function rrKarada936(n, merged){
+    var mk = str(merged);
+    if (off936()) return mk;
+    var real = null; try { real = (G.__v292Dfix77Store || {})[n]; } catch(e){}
+    var rk = real ? str(real.karada) : '';
+    var ov;
+    if (!rk) ov = mk;
+    else if (mk.indexOf(rk) === 0) ov = mk.slice(rk.length);
+    else return mk;                                   /* 合成の形が想定外 → 従来どおり */
+    ov = ov.replace(/^。+/, '');
+    if (!ov) return rk;
+    var names = [n];
+    var ha = heroAliases936(); if (ha.indexOf(n) >= 0) names = ha;
+    var kept = ov.split('。').filter(function(s){
+      for (var i = 0; i < names.length; i++){ if (names[i] && (s.indexOf(names[i] + 'は') >= 0 || s.indexOf(names[i] + 'が') >= 0)) return true; }
+      return false;
+    });
+    return rk + (kept.length ? (rk ? '。' : '') + kept.join('。') : '');
+  }
   function store(){ try { return G.__v292Dfix77Store || {}; } catch(e){ return {}; } }
 
   /* ---- 証拠フィルタ（否定・仮定・引用の精神状態を制約にしない） ---- */
@@ -119,7 +151,7 @@
     Object.keys(names).forEach(function(n){
       var e = st[n] || {};
       var s = (states && states[n]) || {};
-      var hits = classify(e.kokoro, s.karada || e.karada);
+      var hits = classify(e.kokoro, (s.karada ? rrKarada936(n, s.karada) : '') || e.karada);
       if (hits){ out[n] = hits; any = true; }
     });
     return any ? out : null;
