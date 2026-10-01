@@ -1108,10 +1108,38 @@
 
   // ---- fix277: sys後処理(状態ブロックの窓制御 + 準登録の許可行) ----
   var HEAD = '【各キャラの現在の状態';
+  /* ★fix928 (N10 a1 / GPT裁定827・候補・未出荷): NEW_NPC_STATE_WITHHELD_FROM_WIRE。
+     準登録(累計3登場)前の非キャスト NPC でも、fix77 entry が FRESH（直近2ターン内に書かれた = entry.turn ∈ [cur-2, cur-1]）
+     かつ名前が直近2ターンの narrative/playerText に出ていれば、状態行を準登録と同じ扱い（124字圧縮・600字予算）で残す。
+     主人公系の名前は対象外（NPC 限定）。stamp ≥ cur（汚染 stamp）は対象外。
+     OFF: localStorage v292Dfix928Off='1' → 従来どおり（準登録のみ）。 */
+  var CRIT928 = /傷:|締め上げ|拘束|縛ら|押さえつけ|下敷き|身動き|立てな|立ち上がれ|動けな|骨折|出血|使えな/;
+  function off928(){ try { return localStorage.getItem('v292Dfix928Off') === '1'; } catch(e){ return false; } }
+  function fresh928(cast){
+    var out = {};
+    try {
+      if (off928()) return out;
+      var S = getS(); var cur = (S && Array.isArray(S.turns)) ? S.turns.length : 0;
+      if (!cur) return out;
+      var hero = ''; try { hero = String((S.cast && S.cast.hero && S.cast.hero.name) || ''); } catch(e0){}
+      var recent = S.turns.slice(-2).map(function(t){ return String((t && t.narrative) || '') + '\n' + String((t && t.playerText) || ''); }).join('\n');
+      var st = window.__v292Dfix77Store || {};
+      Object.keys(st).forEach(function(n){
+        if (!n || n === '主人公' || n === 'あなた' || (hero && n === hero)) return;
+        if (cast.indexOf(n) >= 0) return;
+        var e = st[n]; if (!e || typeof e !== 'object' || typeof e.turn !== 'number') return;
+        if (e.turn < cur - 2 || e.turn >= cur) return;
+        if (recent.indexOf(n) < 0) return;
+        out[n] = cur;
+      });
+    } catch(e){}
+    return out;
+  }
   function surgery(sys){
     try {
       if (offQ() || typeof sys !== 'string' || !sys) return sys;
       var cast = castNames();
+      var fr928 = fresh928(cast);
       var rec = quasiRecent();
       var qNames = rec.map(function(r){ return r.name; }).slice(0, 8);
       var lastOf = {}; rec.forEach(function(r){ lastOf[r.name] = r.last; });
@@ -1141,10 +1169,23 @@
           qLines.push({ nm: nm, ln: cl });
           continue;
         }
+        if (fr928[nm]){ /* ★fix928 a1: FRESH な非キャスト NPC は準登録と同じ扱いで残す */
+          var cl928 = ln.length > 126 ? (ln.slice(0, 124) + '…') : ln;
+          if (cl928 !== ln) changed = true;
+          lastOf[nm] = Math.max(lastOf[nm] || 0, fr928[nm]);
+          /* ★fix928b（裁定 852・crowded budget）: a1 の暫定行は 600 字予算で既存の準登録の後ろに並べる。
+             暫定行どうしでは critical（傷 / 拘束・行動不能）を先にする。準登録どうしの順序は従来どおり。 */
+          qLines.push({ nm: nm, ln: cl928, prov928: (CRIT928.test(cl928) ? 1 : 2) });
+          continue;
+        }
         changed = true; /* キャスト外かつ準登録(直近)でない状態行は注入しない(肥大・汚染ガード) */
       }
       /* 準登録の合計600字ガード: 最終登場が古い順に切る */
-      qLines.sort(function(a, b){ return (lastOf[b.nm] || 0) - (lastOf[a.nm] || 0); });
+      qLines.sort(function(a, b){
+        var ta = a.prov928 || 0, tb = b.prov928 || 0;   /* fix928b: 準登録(0) → 暫定 critical(1) → 暫定(2)。a1 行が無ければ従来と同一 */
+        if (ta !== tb) return ta - tb;
+        return (lastOf[b.nm] || 0) - (lastOf[a.nm] || 0);
+      });
       var budget = 600, kept = [];
       qLines.forEach(function(q){ if (budget - q.ln.length >= 0){ budget -= q.ln.length; kept.push(q.ln); } else { changed = true; } });
       if (kept.length){
