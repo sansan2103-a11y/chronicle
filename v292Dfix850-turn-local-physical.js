@@ -169,6 +169,55 @@
      OFF: localStorage v292Dfix929Off='1'（または v292Dfix930Off='1'）→ 従来の帰属。 */
   function b1HOn(){ return ls('v292Dfix929Off') !== '1' && ls('v292Dfix930Off') !== '1'; }
   var HERO_MARK_P929 = /あなた|主人公|自分/, HERO_MARK_N929 = /あなた|主人公/;
+  /* ★fix934（ATTRIBUTION REPAIR・裁定 854、kill: v292Dfix934Off）:
+     (B) NAME_MENTION_TREATED_AS_ACTOR: 「Xの…」（所有格の言及）は行為者の印ではない。所有格だけの hit は、
+         同じ文の行為者（は/が 等で現れる名前）の断片に含める。文頭の所有格の部分は、文中で最初の行為者へ渡す。
+         行為者の hit が 1 つも無い文（例: 甚八の右脚が折れた）は従来どおり所有格の名前に帰属する。
+     (A) INJURY_OBJECT_ATTRIBUTED_TO_OBSERVER: 行為者 X の断片で、負傷語が「目的語の名詞句の修飾」の位置
+         （負傷語 …{0,10} を|へ|に）にだけ現れ、その名詞句が X 自身のもの（自分の / 己の / Xの）でないときは、
+         負傷の対象は X ではない → X には渡さない。名詞句に別の名前 Y の所有格（Yの）があれば Y に渡す。
+         無ければ safe miss。負傷語が述語の位置（例: 右足を折った / 右足が折れた）のときは従来どおり X。 */
+  var INJ934 = /出血|骨折|刺さ|裂け|抉|損傷|負傷|折れ|潰れ|火傷/g;
+  /* ★fix934L（dark live 専用）: 指定 test story の document、かつ local opt-in があるときだけ fix934 を ON */
+  function gate934(){ try{ var L='smuoxtxq7xm'; if(!/^[a-z0-9]{6,32}$/.test(L)) return false; var dk=window.__chronicleDocumentStoryKey, op=localStorage.getItem('v292Dfix934LiveStory'); return typeof dk==='string' && typeof op==='string' && op===L && dk===('chr6_slot_'+L); }catch(e){ return false; } }
+  function off934(){ try { return localStorage.getItem('v292Dfix934Off') === '1'; } catch(e){ return false; } }
+  function objectInjury934(frag, owner, names){
+    /* 返り値: null = 対象外（述語位置の負傷 or 負傷語なし）/ { to: 'Y' | null } = 目的語位置の負傷のみ */
+    INJ934.lastIndex = 0; var m, any = false, allObj = true, poss = null;
+    while ((m = INJ934.exec(frag))){
+      any = true;
+      var tail = frag.slice(m.index, m.index + m[0].length + 12);
+      var pm = tail.slice(m[0].length).match(/^[^。、を へに]{0,10}?(を|へ|に)/);
+      if (!pm){ allObj = false; break; }
+      var np = frag.slice(Math.max(0, m.index - 10), m.index + m[0].length + pm[0].length);
+      if (/自分の|己の/.test(np) || (owner && np.indexOf(owner + 'の') >= 0)){ allObj = false; break; }
+      for (var i = 0; i < names.length; i++){ var y = names[i]; if (y && y !== owner && np.indexOf(y + 'の') >= 0){ poss = y; break; } }
+    }
+    if (!any || !allObj) return null;
+    return { to: poss };
+  }
+  function attrFrag934(sent, hits, push){
+    var names = []; hits.forEach(function(h){ if (names.indexOf(h.n) < 0) names.push(h.n); });
+    /* 所有格（Xの）と目的語（Xを）の言及は行為者の印にしない */
+    /* 「XとYの…」（並列の所有格。例: 女将と主人公の間）の X も所有格として扱う */
+    var possCoord = function(h){
+      if (sent.charAt(h.at + h.n.length) !== 'と') return false;
+      var nx = h.at + h.n.length + 1;
+      for (var q = 0; q < hits.length; q++){ var g = hits[q]; if (g.at === nx && sent.charAt(g.at + g.n.length) === 'の') return true; }
+      return false;
+    };
+    var actorHits = hits.filter(function(h){ var c = sent.charAt(h.at + h.n.length); return c !== 'の' && c !== 'を' && !possCoord(h); });
+    if (!actorHits.length) actorHits = hits.slice();          /* 所有格だけの文 = 従来どおり */
+    for (var j = 0; j < actorHits.length; j++){
+      var start = (j === 0) ? hits[0].at : actorHits[j].at;   /* 文頭（最初の名前より前）は従来どおり誰にも渡さない */
+      var end = (j + 1 < actorHits.length) ? actorHits[j + 1].at : sent.length;
+      var frag = sent.slice(start, end); if (!frag) continue;
+      var owner = actorHits[j].n, oi = objectInjury934(frag, owner, names);
+      if (!oi){ push(owner, frag); continue; }
+      if (oi.to) push(oi.to, frag);                          /* 負傷の対象は所有格の Y */
+      /* else: 対象不明 = safe miss（観察者 X には渡さない） */
+    }
+  }
   function attributeH(text, hero, others, push, src){
     var names = [hero].concat(others);
     str(text).split(/\n+/).forEach(function(para){
@@ -187,12 +236,16 @@
           return;                                   /* actor 不明 = safe miss */
         }
         hits.sort(function(x, y){ return x.at - y.at; });
-        for (var j = 0; j < hits.length; j++){
-          var start = hits[j].at, end = (j + 1 < hits.length) ? hits[j + 1].at : sent.length;
-          var frag = sent.slice(start, end);
-          if (frag) push(hits[j].n, frag);
+        if (!off934() && gate934()){
+          attrFrag934(sent, hits, push);
+        } else {
+          for (var j = 0; j < hits.length; j++){
+            var start = hits[j].at, end = (j + 1 < hits.length) ? hits[j + 1].at : sent.length;
+            var frag = sent.slice(start, end);
+            if (frag) push(hits[j].n, frag);
+          }
         }
-        var distinct = {}; hits.forEach(function(h){ distinct[h.n] = 1; });
+        var distinct = {}; hits.forEach(function(h){ distinct[h.n] = 1; });   /* carry の判定は従来どおり全 hit で数える */
         actor = (Object.keys(distinct).length === 1) ? hits[0].n : null;
       });
     });
