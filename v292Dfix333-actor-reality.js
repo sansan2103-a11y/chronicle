@@ -207,7 +207,14 @@
       var p=pending; pending=null;
       if(p && !isOff() && mode()==='active' && typeof sys==='string'){
         try{
-          var authority=authorityBlock(p.states);
+          /* ★fix927 (RR_WIRE_CONNECTIVITY_REPAIR d1 / GPT裁定827・候補・未出荷):
+             fix851(姿勢) / fix852(認知) は公開 api.authorityBlock を wrap するが、ここは closure-local を呼んでいたため
+             wrap 結果が wire に届いていなかった（RR2/RR3_WIRE_CONNECTIVITY = FAIL / CONFIRMED）。
+             → 公開 api 側（wrap 済みなら wrap 済み）を使う。marker・重複 guard・注入位置は不変。
+             OFF: localStorage v292Dfix927Off='1' → 従来どおり closure-local。 */
+          var _ab927=authorityBlock;
+          try{ if(localStorage.getItem('v292Dfix927Off')!=='1' && window.__v292Dfix333api && typeof window.__v292Dfix333api.authorityBlock==='function') _ab927=window.__v292Dfix333api.authorityBlock; }catch(_e927){}
+          var authority=_ab927(p.states);
           if(authority && sys.indexOf('【身体状態・正史')<0) sys=sys+'\n\n'+authority;
           if(npcAutonomyOn()){
             var sel=selectForeground(p.states, p.text, p.turnNum);
