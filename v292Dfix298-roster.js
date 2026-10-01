@@ -143,6 +143,42 @@
 
   function reopen(){ try{ if(window.__charlist&&typeof window.__charlist.open==='function') window.__charlist.open(); }catch(e){} }
 
+  /* ★LB-ROSTER-AUTH（lane B の patch 候補。GPT VAULT_V2_LANEB_20261001_21 Q83 / Q85②。本線への統合は Session A が判断する）
+     実測（DEPS）: Vault v2 の authority が UNKNOWN の間に「🚪 退場」を押すと、roster の初回保存が CopyGate に拒否され、
+     無言で失われていた（authority 確定後の roster は dismissed {}）。
+     対策: CopyGate がある page で authority が UNKNOWN の間は、退場 / 復活 ボタンを **押せない状態で明示**する
+     （「準備中」の表示と説明。クリックを黙って捨てるのではない）。authority が確定したら、開いている一覧を描き直して押せるようにする。
+     CopyGate が無い page（今の production）では何も変わらない。kill: localStorage v292DlbRosterAuthOff='1'。 */
+  function rosterAuthOff(){ try{ return localStorage.getItem('v292DlbRosterAuthOff')==='1'; }catch(e){ return false; } }
+  function rosterAuthPending(){
+    try{
+      if(rosterAuthOff()) return false;
+      var G=window.__v292Dvault2CopyGate; if(!G||typeof G.status!=='function') return false;
+      return G.status().effective==='unknown';
+    }catch(e){ return false; }
+  }
+  function docStoryId(){
+    try{
+      var k=window.__chronicleDocumentStoryKey;
+      if(typeof k==='string'){ if(k==='chr6') return 'default'; if(k.indexOf('chr6_slot_')===0) return k.slice(10); }
+      var q=new URL(location.href).searchParams.get('story'); if(q&&/^[A-Za-z0-9_-]{1,80}$/.test(q)) return q;
+    }catch(e){}
+    return null;
+  }
+  var rosterAuthWaiting=false;
+  function armRosterAuthReopen(){
+    if(rosterAuthWaiting) return;
+    var G=window.__v292Dvault2CopyGate; if(!G||typeof G.whenAuthority!=='function') return;
+    var sid=docStoryId(), ep=window.__chrEpoch; if(!sid||typeof ep!=='number') return;
+    rosterAuthWaiting=true;
+    G.whenAuthority(sid, ep).then(function(r){
+      rosterAuthWaiting=false;
+      if(r&&(r.effective==='novault'||r.effective==='visible')){
+        try{ if(document.querySelector('.v292Dfix145-card')) reopen(); }catch(e){}   /* 開いている時だけ描き直す */
+      }
+    }, function(){ rosterAuthWaiting=false; });
+  }
+
   // ---- 描画後モーダルの拡張 ----
   function augment(modal){
     try{
@@ -171,7 +207,15 @@
         // 退場 / 復活 ボタン
         if(btnRow && btnRow.querySelector && btnRow.querySelector('button')){
           var b=document.createElement('button');
-          if(dismissed){
+          if(rosterAuthPending()){
+            /* ★LB-ROSTER-AUTH: authority 確定前は押せない（理由を表示）。確定したら描き直す */
+            b.textContent=dismissed?'↩ 復活（準備中）':'🚪 退場（準備中）';
+            b.disabled=true; b.setAttribute('aria-disabled','true');
+            b.title='保存の準備をしています。少し待ってからもう一度お試しください';
+            b.style.cssText='background:#444;border:1px solid #555;color:#bbb;padding:4px 10px;border-radius:4px;cursor:not-allowed;font-size:11px;opacity:0.7;';
+            b.onclick=function(e){ e.stopPropagation(); };
+            armRosterAuthReopen();
+          } else if(dismissed){
             b.textContent='↩ 復活'; b.style.cssText='background:#3a5a3a;border:1px solid #4a7a4a;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;';
             b.onclick=function(e){ e.stopPropagation(); setDismiss(name,false); reopen(); };
             card.style.opacity='0.7';

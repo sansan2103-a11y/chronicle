@@ -1881,6 +1881,51 @@
   /* ==================================================================
    * reconcile
    * ================================================================ */
+  /* ★LB-ME-AUTH r3（lane B の patch 候補。GPT VAULT_V2_LANEB_20261001_21 Q83 / _22 Q87 / _23 Q93。本線への統合は Session A が判断する）
+     Vault v2 の CopyGate が読み込まれている page だけ、story を持つ ME の persistent write を
+     authority の確定後に始める。boot 全体は止めない。CopyGate が無い page（今の production）では何もしない。
+       NOVAULT / VISIBLE  → 始める（待っていた場合は pendingFull で 1 回 reconcile）
+       HIDDEN             → この story では persistent ME を書かない（degraded にしない・lastStop = authority-hidden）
+       UNKNOWN / ERROR    → 待つ（transaction を開かない = processed / chain を成功として確定しない）
+       story / epoch が変わった（stale）→ 決めない（次の reconcile で新しい story について聞き直す）
+     一度決めた後も、reconcile ごとに CopyGate の現在の状態で確かめ直す:
+       go の story が hidden になった → authority-hidden / authority が UNKNOWN に戻った → 待ち直す。
+       hidden の story を CopyGate が hidden と言わなくなった（unhide）→ whenAuthority に聞き直し、その答えが VISIBLE / NOVAULT の時だけ再開（r3）。
+     kill: localStorage v292DlbMeAuthOff='1' → 従来どおり（gate なし）。 */
+  var meAuth = { waiting: false, sid: null, ep: null, decided: null, lastEffective: null, waits: 0, revoked: 0, resumed: 0 };
+  function meAuthOff() { return lsg('v292DlbMeAuthOff') === '1'; }
+  function meAuthNow(G, sid) {           /* CopyGate の現在の状態（同期・読むだけ）: 'go' | 'hidden' | 'unknown' */
+    var s = null; try { s = G.status && G.status(); } catch (e) { s = null; }
+    if (!s || s.effective === 'unknown') return 'unknown';
+    if (s.effective === 'novault') return 'go';
+    return (Array.isArray(s.hidden) && s.hidden.indexOf(sid) >= 0) ? 'hidden' : 'go';
+  }
+  function meAuthGate(slotId) {
+    if (meAuthOff()) return 'go';
+    var G = window.__v292Dvault2CopyGate;
+    if (!G || typeof G.whenAuthority !== 'function') return 'go';
+    var sid = (slotId === 'chr6') ? 'default' : String(slotId);
+    var ep = window.__chrEpoch;
+    if (typeof ep !== 'number') { armTimer(1500); return 'wait'; }      /* epoch がまだ無い: 少し後でもう一度 */
+    if (meAuth.decided && meAuth.sid === sid && meAuth.ep === ep) {
+      var now = meAuthNow(G, sid);
+      if (now === meAuth.decided) return meAuth.decided;
+      if (now === 'hidden') { meAuth.decided = 'hidden'; meAuth.lastEffective = 'hidden'; meAuth.revoked++; return 'hidden'; }
+      if (now === 'unknown') { meAuth.decided = null; meAuth.revoked++; }  /* 下へ: 待ち直す */
+      else if (meAuth.decided === 'hidden') { meAuth.decided = null; meAuth.resumed++; }  /* CopyGate が hidden と言わなくなった: 下で whenAuthority に聞き直す（go への戻しはその新しい答えだけで行う） */
+    }
+    if (meAuth.waiting && meAuth.sid === sid && meAuth.ep === ep) return 'wait';
+    meAuth.waiting = true; meAuth.sid = sid; meAuth.ep = ep; meAuth.decided = null; meAuth.waits++;
+    G.whenAuthority(sid, ep).then(function (r) {
+      if (meAuth.sid !== sid || meAuth.ep !== ep) return;                /* 別の story / epoch の待ちに置き換わった */
+      meAuth.waiting = false; meAuth.lastEffective = r && r.effective;
+      if (r && (r.effective === 'novault' || r.effective === 'visible')) { meAuth.decided = 'go'; pendingFull = true; armTimer(0); return; }
+      if (r && r.effective === 'hidden') { meAuth.decided = 'hidden'; return; }
+      meAuth.sid = null;                                                 /* stale / BAD_* : 決めない */
+    }, function () { meAuth.waiting = false; meAuth.sid = null; });
+    return 'wait';
+  }
+
   function reconcile() {
     if (off()) { st.lastStop = 'off'; return Promise.resolve('off'); }          /* ★OFF が最優先 */
     if (!optedIn()) { st.lastStop = 'not-armed'; return Promise.resolve('not-armed'); }
@@ -1893,6 +1938,9 @@
     var sl = resolveSlot();
     st.prof.resolve += nowMs() - tp;
     if (!sl.ok) { st.lastStop = sl.code; running = false; rearmIfPending(); return Promise.resolve(sl.code); }
+    /* ★LB-ME-AUTH r3: authority が NOVAULT / VISIBLE と確定するまで transaction を開かない。HIDDEN は書かない */
+    var agLB = meAuthGate(sl.slotId);
+    if (agLB !== 'go') { st.lastStop = 'authority-' + agLB; running = false; if (agLB === 'wait') pendingFull = true; return Promise.resolve(st.lastStop); }
     var slotChanged = (st.slotId !== sl.slotId);
     st.slotId = sl.slotId; st.turns = sl.turns.length;
     if (slotChanged) { st.countsFresh = false; dropCache(); memoReset(sl.slotId); blobForget(); ctxForget(); }
@@ -2326,7 +2374,8 @@
                timings: st.timings, reconciles: st.reconciles, extracts: st.extracts,
                shaCalls: st.shaCalls, chunks: st.chunks, busyMs: st.busyMs, prof: st.prof,
                ctxRebuilds: st.ctxRebuilds, entityContextHash: st.entityContextHash,
-               orphans: st.orphans.slice(), versionMismatch: st.versionMismatch, rebuildRecommended: st.rebuildRecommended };
+               orphans: st.orphans.slice(), versionMismatch: st.versionMismatch, rebuildRecommended: st.rebuildRecommended,
+               lbMeAuth: { rev: 3, off: meAuthOff(), waiting: meAuth.waiting, decided: meAuth.decided, lastEffective: meAuth.lastEffective, waits: meAuth.waits, revoked: meAuth.revoked, resumed: meAuth.resumed } };
     },
     refreshCounts: function () { return refreshCounts(st.slotId); },
     /* ★fix908（ME-5 C-c'）: retrieve 用の roster entity 一覧（read-only・書込 0）。
