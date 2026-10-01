@@ -206,6 +206,32 @@
   window.__v292Dfix532 = { loadedSfx: function(){ return loadedSfx; }, curSfx: curSfx, off: off532,
     stats: function(){ return { slotMismatchReloads: stats.slotMismatchReloads, stateUpdatesDroppedOnReload: stats.stateUpdatesDroppedOnReload, bootRebinds: stats.bootRebinds || 0, bootRebindDropped: stats.bootRebindDropped || 0 }; }, rebind: rebind901 };
 
+
+  /* ★fix938（STATE_TAG_SYNTAX_NORMALIZATION・候補・未出荷、GPT 裁定 871、kill: v292Dfix938Off）:
+     model が <state> に書いた key / value の「表記の揺れ」だけを、正規の key="value" へ戻す（意味の推測はしない）。
+       ・全角引用符  key=“値” / key=”値”
+       ・コロン形    key:"値" / key："値"
+       ・引用 key    "key"="値" / "key":"値"
+     who は対象外（壊れた who は救済しない＝その tag は従来どおり保存されない）。
+     その key が既に正規形（key=" …）で書かれている tag では触らない（重複 field の優先順位を新設しない）。
+     置換は key ごとに最初の 1 箇所だけ。保存契約（fix77 / fix190）は不変。 */
+  var KEYS938 = ['からだ','こころ','本能','目的','傷','関係','未解決'];
+  function off938(){ try { return localStorage.getItem('v292Dfix938Off') === '1'; } catch(e){ return false; } }
+  function norm938(tag){
+    var t = String(tag == null ? '' : tag);
+    if (off938()) return t;
+    try {
+      for (var i = 0; i < KEYS938.length; i++){
+        var k = KEYS938[i];
+        if (new RegExp(k + '\\s*=\\s*"').test(t)) continue;                      /* 正規形がある key は触らない */
+        var r = t.replace(new RegExp('"' + k + '"\\s*[=:：]\\s*"([^"]*)"'), k + '="$1"');
+        if (r === t) r = t.replace(new RegExp('(^|[\\s,、，])' + k + '\\s*[:：]\\s*"([^"]*)"'), '$1' + k + '="$2"');
+        if (r === t) r = t.replace(new RegExp(k + '\\s*[=:：]\\s*[“”]([^“”"]*)[“”]'), k + '="$1"');
+        t = r;
+      }
+    } catch(e){ return String(tag); }
+    return t;
+  }
   function attr(tag, name){
     var m = tag.match(new RegExp(name + '\\s*=\\s*"([^"]*)"'));
     return m ? m[1].trim() : '';
@@ -244,7 +270,7 @@
       var src = (ctx && typeof ctx.raw === 'string' && ctx.raw) ? ctx.raw : plan.narrative.join('\n');
       re.lastIndex = 0;
       while ((m = re.exec(src)) !== null){
-        var tag = m[0];
+        var tag = norm938(m[0]);
         var who = attr(tag,'who');
         if (who){
           var cur = store[who] || {};
@@ -268,6 +294,7 @@
     return plan;
   }
   captureState.__v292Dfix77 = true;
+  try { window.__v292Dfix938x = { norm: norm938, off: off938 }; } catch(_e938){}
 
   // ---- (emit + feedback) system 追記 ----
   var EMIT =

@@ -3055,6 +3055,33 @@
     var FIELDS = [['傷','kizu'], ['関係','kankei'], ['未解決','mikaiketsu']];
     function store(){ try { window.__v292Dfix77Store = window.__v292Dfix77Store || {}; return window.__v292Dfix77Store; } catch(e){ return {}; } }
     function attrOf(tag, name){ try { var m = String(tag).match(new RegExp(name + '\\s*=\\s*"([^"]*)"')); return m ? m[1].trim() : ''; } catch(e){ return ''; } }
+
+    /* ★fix938（STATE_TAG_SYNTAX_NORMALIZATION・候補・未出荷、GPT 裁定 871、kill: v292Dfix938Off）:
+       model が <state> に書いた key / value の「表記の揺れ」だけを、正規の key="value" へ戻す（意味の推測はしない）。
+         ・全角引用符  key=“値” / key=”値”
+         ・コロン形    key:"値" / key："値"
+         ・引用 key    "key"="値" / "key":"値"
+       who は対象外（壊れた who は救済しない＝その tag は従来どおり保存されない）。
+       その key が既に正規形（key=" …）で書かれている tag では触らない（重複 field の優先順位を新設しない）。
+       置換は key ごとに最初の 1 箇所だけ。保存契約（fix77 / fix190）は不変。 */
+    var KEYS938_190 = ['からだ','こころ','本能','目的','傷','関係','未解決'];
+    function off938_190(){ try { return localStorage.getItem('v292Dfix938Off') === '1'; } catch(e){ return false; } }
+    function norm938_190(tag){
+      var t = String(tag == null ? '' : tag);
+      if (off938_190()) return t;
+      try {
+        for (var i = 0; i < KEYS938_190.length; i++){
+          var k = KEYS938_190[i];
+          if (new RegExp(k + '\\s*=\\s*"').test(t)) continue;                      /* 正規形がある key は触らない */
+          var r = t.replace(new RegExp('"' + k + '"\\s*[=:：]\\s*"([^"]*)"'), k + '="$1"');
+          if (r === t) r = t.replace(new RegExp('(^|[\\s,、，])' + k + '\\s*[:：]\\s*"([^"]*)"'), '$1' + k + '="$2"');
+          if (r === t) r = t.replace(new RegExp(k + '\\s*[=:：]\\s*[“”]([^“”"]*)[“”]'), k + '="$1"');
+          t = r;
+        }
+      } catch(e){ return String(tag); }
+      return t;
+    }
+
     /* ★★fix748 + 裁定11 GATE1 の再分類: fix190 は **Class D** です。
        当初 Class C（SOURCE = 共有ストア）としましたが、裁定11 の
        「memory object を durable source と数えない」に照らすと成立しません:
@@ -3118,7 +3145,7 @@
         if (!raw || raw.indexOf('<state') < 0) return plan;
         var st = store(), found = 0, re = /<state\b[^>]*?\/?>/g, m;
         while ((m = re.exec(raw)) !== null){
-          var tag = m[0], who = attrOf(tag, 'who'); if (!who) continue;
+          var tag = norm938_190(m[0]), who = attrOf(tag, 'who'); if (!who) continue;
           var cur = st[who] || {};
           FIELDS.forEach(function(f){ var v = attrOf(tag, f[0]); if (v) cur[f[1]] = v; });  // 該当があった時だけ更新=永続
           st[who] = cur; found++;
