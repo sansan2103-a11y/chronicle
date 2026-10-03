@@ -22,7 +22,8 @@
   try { console.log(TAG, 'boot v487b'); } catch(e){}
   function on(){ try { return localStorage.getItem('v292Dfix487OnV1') === '1'; } catch(e){ return false; } }
   function iconOff(){ try { return localStorage.getItem('v292Dfix487IconOff') === '1'; } catch(e){ return false; } }
-  function active(){ return on() && !iconOff(); }
+  function __av2Doc(){ try { var M = window.__v292Dav2Map; return (M && typeof M.docSchema2 === 'function') ? M.docSchema2() : false; } catch(e){ return false; } }   /* ★av2 C2 (GPT 911): Asset-v2 document → this legacy portrait path stops (canonical-derived, never the local flag) */
+  function active(){ return on() && !iconOff() && __av2Doc() !== true; }
 
   // ---- 画風6で生成した「顔なし逆光バスト」4種（おしん承認・2026-07-17）----
   var SILH_URLS = [
@@ -155,7 +156,14 @@
         .catch(function(){});
     } catch(e){}
   }
-  function warmSilCache(){ for (var i = 0; i < SILH_URLS.length; i++) loadSilCache(i); }
+  var warmTries = 0;
+  function warmSilCache(){
+    /* ★av2 C2: no provider fetch on an Asset-v2 document. Undecidable at boot (state not hydrated) → wait; fetch only on a legacy document. */
+    var d = __av2Doc();
+    if (d === true) return;
+    if (d !== false){ if (warmTries++ < 20) setTimeout(warmSilCache, 1500); return; }
+    for (var i = 0; i < SILH_URLS.length; i++) loadSilCache(i);
+  }
 
   // ---- 1枚のimgを中立シルエットへ固定（他のsweepに再描画させない） ----
   function neutralizeImg(img){

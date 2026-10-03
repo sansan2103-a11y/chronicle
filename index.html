@@ -269,9 +269,11 @@
        「絵の送信に物語の印を必ず添える」（D-C4）の成立条件そのものである。
      ★kill = localStorage['v292Dfix889Off']='1' は **UI だけ**を消す。絞り込みと扉は止まらない。 -->
 <script src="v292Dfix889-secret-vault.js?cb=20260928-ac9"></script>
+<!-- ★av2 (GPT 904 C1): Asset v2 client data plane. save core (fix697/fix705/fix743) が呼ぶ純関数 + registrar。kill = localStorage v292Dav2Off=1 -->
+<script src="v292Dav2-data.js?cb=20261002-ac36"></script>
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
 <script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
-<script src="v292Dfix705-canonical-read-gate.js?cb=20260929-ac17"></script>
+<script src="v292Dfix705-canonical-read-gate.js?cb=20261002-ac36"></script>
 <script src="v292Dfix900-hydrate-ui-gate.js?cb=20260928-ac8"></script>
 <!-- ★si1 v292Dfix892 SAVE_INTEGRITY_HELD_INPUT_GUARD（packet SAVE_INTEGRITY_P1_20260927_01 / GPT GO_WITH_FIXES B'）: fix705 HOLD 中は送信を生成前に止める。read-only。★head・fix705 の直後＝送信 UI（#sendBtn 等）より先に同期ロードし、document capture で入口を押さえる（GPT SAVE_INTEGRITY_P1_20260927_02 条件 1 = load-order）。kill=v292Dfix892Off=1 -->
 <script src="v292Dfix892-held-input-guard.js?cb=20260927-si1"></script>
@@ -321,7 +323,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261001-ac35';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261002-ac36';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -3612,6 +3614,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   }
 
   function generateHeroAvatar(){
+    /* ★av2 C2 (GPT 913): Asset-v2 document → the legacy ⟳ never writes cast.avatar (undecidable → no-op too) */
+    try { var __m2 = window.__v292Dav2Map; if (__m2 && typeof __m2.docSchema2 === 'function' && __m2.docSchema2() !== false) return; } catch(e2){ return; }
     try {
       /* ★fix694 */
       var __k = (window.__chr6WriteKey ? window.__chr6WriteKey() : null);
@@ -3636,6 +3640,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   }
 
   function generateNpcAvatar(idx){
+    /* ★av2 C2 (GPT 913): Asset-v2 document → the legacy ⟳ never writes cast.avatar (undecidable → no-op too) */
+    try { var __m2 = window.__v292Dav2Map; if (__m2 && typeof __m2.docSchema2 === 'function' && __m2.docSchema2() !== false) return; } catch(e2){ return; }
     try {
       /* ★fix694 */
       var __k = (window.__chr6WriteKey ? window.__chr6WriteKey() : null);
@@ -3685,9 +3691,13 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
       '<div class="v100-info"><div class="v100-name">' + name.replace(/</g,'&lt;') + '</div>' +
       '<div>' + (url ? '⟳ で再生成' : '⟳ で生成') + '</div></div>' +
       '<button class="v100-btn" type="button" data-v100-act="hero-regen">⟳</button>';
+    /* ★av2 C2 (GPT 913): on an Asset-v2 document the legacy ⟳ is not offered (hidden, click inert) */
+    var __av2doc = false; try { var __m3 = window.__v292Dav2Map; __av2doc = !!(__m3 && typeof __m3.docSchema2 === 'function' && __m3.docSchema2() === true); } catch(e3){}
     hav.querySelectorAll('[data-v100-act="hero-regen"]').forEach(function(el){
+      if (__av2doc){ el.onclick = null; if (el.tagName === 'BUTTON'){ el.style.display = 'none'; el.disabled = true; } el.setAttribute('data-av2-inert', '1'); return; }
       el.onclick = generateHeroAvatar;
     });
+    if (__av2doc){ try { hav.querySelectorAll('div').forEach(function(d){ if (/^⟳ で(再)?生成$/.test((d.textContent || '').trim())) d.style.display = 'none'; }); } catch(e4){} }
   }
 
   /* ─── 9. NPC AVATAR WIDGETS ────────────────────────────────────── */
@@ -3714,7 +3724,9 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
       var firstChild = card.firstChild;
       card.insertBefore(w, firstChild);
       /* Wire clicks */
+      var __av2docN = false; try { var __m5 = window.__v292Dav2Map; __av2docN = !!(__m5 && typeof __m5.docSchema2 === 'function' && __m5.docSchema2() === true); } catch(e5){}   /* ★av2 C2 (GPT 913) */
       w.querySelectorAll('[data-v100-npc]').forEach(function(el){
+        if (__av2docN){ el.onclick = null; if (el.tagName === 'BUTTON'){ el.style.display = 'none'; el.disabled = true; } el.setAttribute('data-av2-inert', '1'); return; }
         el.onclick = function(){ generateNpcAvatar(idx); };
       });
     });
@@ -3892,7 +3904,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      default OFF (opt-in=v292Dfix803On / kill=v292Dfix803Off / story=v292Dfix803Story)。fix802 の fire 末尾から onFire で呼ばれる。
      timer 0 / retry 0 / 新 write path 0 / localStorage 書込は fix793.materialize() 経由の v292Dmem1_slot_<sid> のみ -->
 <script src="v292Dfix803-auto-materialize.js?cb=20260930-ac25"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20260929-ac14"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20261002-ac36"></script>
 <!-- ★fix912 SA-3 S2 in-session reconcile（fix697 の後・kill v292Dfix912Off / v292Dfix911Off） -->
 <script src="v292Dfix912-s2-insession.js?cb=20260929-ac14"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
@@ -3948,7 +3960,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
        fix659 は別 id + __f527 マーカーを立てるので干渉しない、という関係をこの並びで示す。
      読出=window.__v292Dfix659.status()/.selfTest() / OFF=v292Dfix659Off -->
 <script src="v292Dfix659-fork-choice.js?cb=v292Dfix680"></script>
-<script src="features.js?cb=20261001-ac35"></script>
+<script src="features.js?cb=20261002-ac36"></script>
 <script>
 /* ============================================================================
  * v292DfixP0-inline : シナリオテンプレ適用の緊急封鎖（L2 + L2b）
@@ -4240,7 +4252,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <script src="v292Dfix192-newengine.js?cb=20261001-ac28"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
-  <script src="v292Dfix197-avatar-key.js?cb=20260926-sp24"></script>
+  <script src="v292Dfix197-avatar-key.js?cb=20261002-ac36"></script>
   <!-- v292Dfix221: モデル文脈の直近会話(recentDialogues)を、表示と同じ権威データ
        _convSays に一本化。fix58の壊れた本文再抽出(speakerに地の文が混入→過去セリフ
        がモデルへ誤供給され全キャラが同じセリフを言う)を発生源から断つ。 -->
@@ -4252,7 +4264,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
        復元= console で window.__v292Restore() / 一覧= window.__v292Gens() -->
   <script src="v292Dfix228-slot-generations.js?cb=20260901-fix783"></script>
   <!-- v292Dfix237: 別キャラ同一アイコンの根治(運搬URLのalt/seed整合ガード)。OFF=v292AvCarrierGuardOff -->
-  <script src="v292Dfix237-avatar-carrier-guard.js?cb=v292Dfix237b"></script>
+  <script src="v292Dfix237-avatar-carrier-guard.js?cb=20261002-ac36"></script>
   <!-- v292Dfix239: 未登録キャラ(少女/店主等)のアイコン怪物化根治(genAsync判定待ちのレース封じ)。OFF=v292NcAvRaceOff -->
   <script src="v292Dfix239-noncast-avatar-race.js?cb=v292Dfix239"></script>
   <!-- v292Dfix243: トップバー折りたたみ(モバイル縦幅対策・「🎛調整」トグル。fix253で⚙→🎛)。OFF=v292TopbarCollapseOff -->
@@ -4284,7 +4296,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- v292Dfix830(ENTITY_MATCH_RESOLVER_V1 / GPT ruling 73+74): one shared read-time predicate for "is this name an entity we already know". Auto-merge only on EXACT / ALIAS_EXACT / FOLDED_EXACT; fix445 castMatch (prefix/suffix) is classified as LEGACY_PARTIAL and never auto-merges. No new persistent state, no Story schema change. kill: localStorage v292Dfix830Off=1. -->
 <script src="v292Dfix830-entity-match-resolver.js?cb=20260907-fix832"></script>
 <script src="v292Dfix766-canonical-appearance.js?cb=20260901-fix783"></script>
-<script src="v292Dfix767-icon-recipe-adapter.js?cb=v292Dfix778"></script>
+<script src="v292Dfix767-icon-recipe-adapter.js?cb=20261002-ac36"></script>
 <script src="v292Dfix307-npc-roster.js?cb=20260913-dsmrc2b"></script>
 <script src="v292Dfix308-creepy-toggle.js?cb=v292Dfix308"></script>
 <script src="v292Dfix309-progression.js?cb=v292Dfix419c"></script>
@@ -4366,7 +4378,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix388-first-person-speaker.js?cb=20260829-fix748"></script>
 <script src="v292Dfix389-npc-relations.js?cb=v292Dfix389"></script>
 <script src="v292Dfix390-speaker-fullname.js?cb=20260829-fix748"></script>
-<script src="v292Dfix393-restyle-unify.js?cb=v292Dfix397"></script>
+<script src="v292Dfix393-restyle-unify.js?cb=20261002-ac36"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=20260901-fix783"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
 <script src="v292Dfix399-cloudsync.js?cb=20260908-fix837"></script>
@@ -4388,7 +4400,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix417-reaction-unified.js?cb=v292Dfix426"></script>
 <script src="v292Dfix418-genkeep.js?cb=v292Dfix418"></script>
 <script src="v292Dfix420-stylelora.js?cb=v292Dfix420v2"></script>
-<script src="v292Dfix474-candidate.js?cb=v292Dfix474d"></script>
+<script src="v292Dfix474-candidate.js?cb=20261002-ac36"></script>
 <script src="v292Dfix475-recipe-v3.js?cb=v292Dfix486"></script>
 <script src="v292Dfix477-autocomplete-off.js?cb=v292Dfix477"></script>
 <script src="v292Dfix478-imggen-retry.js?cb=v292Dfix478b"></script>
@@ -4399,7 +4411,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix427-output-sanitize.js?cb=v292Dfix427"></script>
 <script src="v292Dfix430-carrier-block.js?cb=v292Dfix430"></script>
 <script src="v292Dfix436-seed-expand.js?cb=20260913-dsmrc2b"></script>
-<script src="v292Dfix437-regen-instant.js?cb=v292Dfix437"></script>
+<script src="v292Dfix437-regen-instant.js?cb=20261002-ac36"></script>
 <script src="v292Dfix438-inline-dialogue.js?cb=v292Dfix438"></script>
 <script src="v292Dfix439-readability.js?cb=v292Dfix457"></script>
 <script src="v292Dfix440-block-rescue.js?cb=v292Dfix457"></script>
@@ -4422,7 +4434,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix458-dash-post.js?cb=20260901-fix784"></script>
 <script src="v292Dfix459-sys-v2.js?cb=20260915-f459c"></script>
 <script src="v292Dfix460-slotgrid.js?cb=v292Dfix460"></script>
-<script src="v292Dfix461-appearance-en.js?cb=20260913-dsmrc2b"></script>
+<script src="v292Dfix461-appearance-en.js?cb=20261002-ac36"></script>
 <script src="v292Dfix462-bare-speaker.js?cb=20260829-fix748"></script>
 <script src="v292Dfix463-human-guard.js?cb=v292Dfix463"></script>
 <script src="v292Dfix464-say-promote.js?cb=v292Dfix465"></script>
@@ -4467,7 +4479,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix470-style-tail.js?cb=v292Dfix470e"></script>
 <script src="v292Dfix471-style-c.js?cb=v292Dfix472"></script>
 <script src="v292Dfix472-icon-protect.js?cb=v292Dfix472"></script>
-<script src="v292Dfix487-unknown-guard.js?cb=v292Dfix487h4"></script>
+<script src="v292Dfix487-unknown-guard.js?cb=20261002-ac36"></script>
 <script src="v292Dfix488-nonhuman-detail.js?cb=v292Dfix488b"></script>
 <script src="v292Dfix456-name-space.js?cb=v292Dfix456"></script>
 <script src="v292Dfix482-output-quality.js?cb=v292Dfix503"></script>
@@ -4476,8 +4488,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix492-genfail-toast.js?cb=v292Dfix492"></script>
 <script src="v292Dfix501-legacy-appearance-probe.js?cb=v292Dfix501"></script>
 <script src="v292Dfix515-icon-persist-probe.js?cb=v292Dfix515"></script>
-<script src="v292Dfix516-regen-local-display.js?cb=v292Dfix516b"></script>
-<script src="v292Dfix517-local-authoritative-avatar.js?cb=v292Dfix517b"></script>
+<script src="v292Dfix516-regen-local-display.js?cb=20261002-ac36"></script>
+<script src="v292Dfix517-local-authoritative-avatar.js?cb=20261002-ac36"></script>
 <script src="v292Dfix519-icon-p2p.js?cb=20260908-fix837"></script>
 <script src="v292Dfix523-icon-sync-versioned.js?cb=20260926-sp24"></script>
 <script src="v292Dfix525-slot-ownership.js?cb=v292Dfix525"></script>
@@ -4562,7 +4574,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- v292Dfix797: 4A Layer2 v1 hard capability contradiction (N1P: persistent 3 属性 = 傷/関係/未解決 を parse 前に original 継承). 既定 OFF=v292Dfix797On / kill=v292Dfix797Off -->
 <script src="v292Dfix797-layer2-contradiction.js?cb=20260906-fix817"></script>
 <!-- CLOUD_CANONICAL C1 client (C1-a builder + C1-b hydrator)。DEPLOY != ENABLE：呼び出し側0本・load時storage読取0。OFF=v292Dfix743Off / feature=v292DfixCC2On (default OFF) -->
-<script src="v292Dfix743-cc2-client.js?cb=20260901-fix793"></script>
+<script src="v292Dfix743-cc2-client.js?cb=20261002-ac36"></script>
 <!-- CLOUD_CANONICAL C1 write path wiring（裁定30/31/32）。DEPLOY != ENABLE：caller 0本・自動実行0・load時storage読取0。prepare()/commitSchema2() は明示呼出のみ。ON=v292Dfix750On / KILL=v292Dfix750Off (default OFF) -->
 <script src="v292Dfix750-c1-materialize.js?cb=20260830-fix756"></script>
 <!-- v292Dfix756(M1 NEW_STORY_SCHEMA2_DEFAULT): server row が無い story(fix705 verdict NOT_FOUND)だけを
@@ -4576,6 +4588,11 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix851-posture-directive.js?cb=20261001-ac33"></script>
 <script src="v292Dfix852-mental-capability.js?cb=20261001-ac33"></script>
 <script src="v292Dfix853-truncated-name-guard.js?cb=20260915-tng853"></script>
+<!-- ★av2 C2 (GPT 911): Asset v2 presentation plane (portrait.list / asset.get / IDB / placeholder / reason display / addBinding / explicit delete UI).
+     Acts ONLY on assetSchema-2 documents (canonical-derived; never the local flag). Legacy stories: no DOM work at all.
+     kill: localStorage[v292Dav2pOff]=1 (legacy generation guards stay) -->
+<script src="v292Dav2-portrait.js?cb=20261002-ac36"></script>
+<script src="v292Dav2-migrate-ui.js?cb=20261002-ac36"></script>
 <!-- ★lane PUBLIC_AI_ACCESS / sp12: worker v44 の匿名経路の client 側。
      既定 ON だが root JSON の publicAnon が 1 のときだけ作用する（それ以外は sp11a と同じ挿動）。
      ★★WAIT_V44_LIVE_GREEN / BUNDLED_WITH_SP10B_SP11A。

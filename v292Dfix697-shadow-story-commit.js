@@ -471,6 +471,9 @@
        （= sp6 以前と byte 同一の projection）。worker v42 も同じ条件で同じ 2 key だけを残す。 */
     var f871o = f871Origin(d.origin);
     if (f871o) body.origin = f871o;
+    /* ★av2(GPT 904 D1): local cast.av2 sidecar → canonical body.assetSchema / body.bindings（無ければ同一 object） */
+    body = av2Push(body, id);
+    if (!body) return null;                                   // fail-closed: never project a half-mapped schema-2 body
     return {
       schema: 1,
       id: String(id),
@@ -487,6 +490,16 @@
       turnCount: turns.length,
       snippet: snippetOf(body)
     };
+  }
+  function av2Push(b, id){
+    var M = null; try { M = window.__v292Dav2Map || null; } catch(e){ M = null; }
+    if (!M || typeof M.push !== 'function') return (b && b.cast && typeof b.cast === 'object' && b.cast.av2 !== undefined) ? null : b;
+    try { return M.push(b, id); } catch(e){ return null; }
+  }
+  /* ★av2(GPT 904 D2): schema-2 で id の無い entry があれば通常の canonical push を HOLD（dirty は保持）。 */
+  function av2Hold(id, content){
+    try { var M = window.__v292Dav2Map; return !!(M && typeof M.holdCanonical === 'function' && M.holdCanonical(id, content)); }
+    catch(e){ return false; }
   }
   function projection(){
     var id = storyId();
@@ -989,6 +1002,7 @@
                    clientMeta: { device: (navigator.userAgent || '').slice(0, 60), build: BUILD } }, cb);
   }
   function canonicalCommit(id, content, intendedLocalHash, why){
+    if (av2Hold(id, content)){ cstats.av2Held = (cstats.av2Held || 0) + 1; note({ kind: 'AV2_CANONICAL_HELD', id: id, why: why }); return; }
     inFlight = true; cstats.routedCanonical++;
     g781InFlight(id, intendedLocalHash);                    /* ■fix781: 送信開始を durable 化 */
     var fin = function(){ inFlight = false; g781Clear(id); f781cDrain(); };   /* ■fix781 / ■fix781c */
@@ -1099,6 +1113,7 @@
        V1 hash は body/turns/title の変化を検出でき、schema2 save の成功後に
        「送信 snapshot 以降 local 変化なし」を確認する用途には従来契約のまま使える。 */
   function canonicalCommit2(id, intendedLocalHash, why, opt909){
+    if (av2Hold(id, projectionOf(id))){ cstats.av2Held = (cstats.av2Held || 0) + 1; note({ kind: 'AV2_CANONICAL_HELD', id: id, why: why }); return; }
     inFlight = true; cstats.routedCanonical++;
     g781InFlight(id, intendedLocalHash);                    /* ■fix781: まず V1 hash で記録（v2hash は後で refine） */
     var fin = function(){ inFlight = false; g781Clear(id); f781cDrain(); };   /* ■fix781 / ■fix781c */
@@ -3053,8 +3068,67 @@
     postSaveOnce(body, cb);
   }
 
+  /* ★av2 C2 (GPT 911): Asset v2 READ port for the presentation plane. Exactly two read ops (portrait.list / asset.get),
+     same transport + auth headers as postSaveOnce. No write op can pass here. asset.get returns raw image bytes. */
+  function assetV2ReadImpl(op, args, cb){
+    cb = (typeof cb === 'function') ? cb : function(){};
+    if (op !== 'portrait.list' && op !== 'asset.get' && op !== 'portrait.candidates'){ cb(null, 'OP_NOT_ALLOWED'); return; }   /* ★GPT 915: candidates (read) for the migration UI */
+    if (!isLoggedIn()){ cb(null, 'NOT_LOGGED_IN'); return; }
+    var a = (args && typeof args === 'object') ? args : {};
+    var body = { op: op };
+    if (op === 'portrait.list'){ if (typeof a.story_id !== 'string' || !a.story_id){ cb(null, 'BAD_STORY_ID'); return; } body.story_id = a.story_id; }
+    else if (op === 'portrait.candidates'){ if (typeof a.story_id !== 'string' || !a.story_id || typeof a.character_id !== 'string' || !/^ch_[A-Za-z0-9_-]{8,64}$/.test(a.character_id)){ cb(null, 'BAD_ARGS'); return; } body.story_id = a.story_id; body.character_id = a.character_id; }
+    else { if (typeof a.asset_id !== 'string' || !a.asset_id){ cb(null, 'BAD_ASSET_ID'); return; } body.asset_id = a.asset_id; }
+    var ac = null, timer = null;
+    try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, TIMEOUT_MS); } catch(e){}
+    var opts = { method: 'POST', headers: authHeaders(body), body: JSON.stringify(body) };
+    if (ac) opts.signal = ac.signal;
+    fetch(proxyUrl() + '/save', opts).then(function(res){
+      var ct = ''; try { ct = res.headers.get('content-type') || ''; } catch(e){}
+      if (op === 'asset.get' && res.status === 200) return res.arrayBuffer().then(function(buf){ return { status: 200, bytes: buf, type: ct }; });
+      return res.json().then(function(j){ return { status: res.status, j: j }; }, function(){ return { status: res.status, j: null }; });
+    }).then(function(r){ if (timer) clearTimeout(timer); cb(r, null); })['catch'](function(){ if (timer) clearTimeout(timer); cb(null, 'NETWORK_FAILED'); });
+  }
+
+  /* ★av2 write port (GPT 913 Q3 ensure_first / GPT 915 minimal Owner migration UI): the ONLY Asset v2 write ops the client may send —
+     explicit Owner actions only (callers: __chronicleAssetV2.ensureFirst / secureCharacter / adoptCandidate). Exact op list, fixed body
+     shape per op, no retry here. Longer timeout: ensure_first generates one image on the server. */
+  var AV2_EF_TIMEOUT_MS = 90000;
+  var AV2_CID_RE = /^ch_[A-Za-z0-9_-]{8,64}$/, AV2_LK_RE = /^v292av2_n[0-9a-z]{1,13}(?:_s[0-9a-z]{1,13})?$/, AV2_AID_RE = /^[A-Za-z0-9_-]{4,80}$/;
+  function assetV2WriteImpl(op, args, cb){
+    cb = (typeof cb === 'function') ? cb : function(){};
+    if (!isLoggedIn()){ cb(null, 'NOT_LOGGED_IN'); return; }
+    var a = (args && typeof args === 'object') ? args : {};
+    if (typeof a.story_id !== 'string' || !a.story_id){ cb(null, 'BAD_STORY_ID'); return; }
+    if (typeof a.character_id !== 'string' || !AV2_CID_RE.test(a.character_id)){ cb(null, 'BAD_CHARACTER_ID'); return; }
+    var body = { op: op, story_id: a.story_id, character_id: a.character_id };
+    if (op === 'portrait.ensure_first'){ if (a.owner_confirmed_empty_profile === true) body.owner_confirmed_empty_profile = true; }
+    else if (op === 'portrait.import_legacy'){ if (typeof a.legacy_k !== 'string' || !AV2_LK_RE.test(a.legacy_k)){ cb(null, 'BAD_LEGACY_KEY'); return; } body.legacy_k = a.legacy_k; }
+    else if (op === 'portrait.import_device_copy'){
+      if (typeof a.data !== 'string' || a.data.indexOf('data:image/') !== 0){ cb(null, 'BAD_DATA'); return; }
+      body.data = a.data; body.owner_explicit = true; if (typeof a.legacy_k === 'string' && AV2_LK_RE.test(a.legacy_k)) body.legacy_k = a.legacy_k;
+    }
+    else if (op === 'portrait.adopt'){
+      if (typeof a.asset_id !== 'string' || !AV2_AID_RE.test(a.asset_id)){ cb(null, 'BAD_ASSET_ID'); return; }
+      if (typeof a.expected_rev !== 'number' || !(a.expected_rev >= 0)){ cb(null, 'BAD_EXPECTED_REV'); return; }
+      body.asset_id = a.asset_id; body.expected_rev = a.expected_rev;
+    }
+    else { cb(null, 'OP_NOT_ALLOWED'); return; }
+    var ac = null, timer = null;
+    try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, op === 'portrait.ensure_first' ? AV2_EF_TIMEOUT_MS : TIMEOUT_MS); } catch(e){}
+    var opts = { method: 'POST', headers: authHeaders(body), body: JSON.stringify(body) };
+    if (ac) opts.signal = ac.signal;
+    fetch(proxyUrl() + '/save', opts).then(function(res){
+      return res.json().then(function(j){ return { status: res.status, j: j }; }, function(){ return { status: res.status, j: null }; });
+    }).then(function(r){ if (timer) clearTimeout(timer); cb(r, null); })['catch'](function(){ if (timer) clearTimeout(timer); cb(null, 'NETWORK_FAILED'); });
+  }
+  function assetV2EnsureFirstImpl(args, cb){ assetV2WriteImpl('portrait.ensure_first', args, cb); }
+
   window.__v292Dfix697 = {
     __armed: true,
+    assetV2Read: assetV2ReadImpl,
+    assetV2EnsureFirst: assetV2EnsureFirstImpl,
+    assetV2Write: assetV2WriteImpl,
     /* ★★fix733: side-port 側から current document の rev authority を無効化するための口。
        **進めることは決してしない**（UNKNOWN へ落とすだけ）。fix702 / fix729 からも呼べる。 */
     invalidateDocRevAuthority: invalidateDocRevAuthority,

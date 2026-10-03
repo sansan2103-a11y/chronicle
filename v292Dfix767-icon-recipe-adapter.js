@@ -538,8 +538,10 @@
    *   ③ fix197.regenFor(name) を1回だけ呼ぶ（生成キューへ載せるのは fix197 の役目・ここでは生成しない）。
    *   kill(v292Dfix773Off='1') は完全 no-op（rebuildAppearance も呼ばない＝revision も動かさない）。
    */
+  function __av2Doc(){ try { var M = window.__v292Dav2Map; return (M && typeof M.docSchema2 === 'function') ? M.docSchema2() : false; } catch(e){ return false; } }   /* ★av2 C2 (GPT 911): Asset-v2 document → this legacy portrait path stops (canonical-derived, never the local flag) */
   function rebuildAndRegen(name){
     var out = { ok: false, revision: 0 };
+    if (__av2Doc() !== false) return out;   /* ★av2 C2 */
     try {
       if (off773()) return out;                                  // kill: 何もしない
       var f = f766(); if (!f || typeof f.rebuildAppearance !== 'function') return out;

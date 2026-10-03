@@ -355,7 +355,11 @@
     } catch(e){ try{ cache[pk]='dice'; }catch(_){} }
     try { delete regenPrev[pk]; } catch(e){}
   }
+  function __av2Doc(){ try { var M = window.__v292Dav2Map; return (M && typeof M.docSchema2 === 'function') ? M.docSchema2() : false; } catch(e){ return false; } }   /* ★av2 C2 (GPT 911): Asset-v2 document → this legacy portrait path stops (canonical-derived, never the local flag) */
   function genOne(pk){
+    var __d2 = __av2Doc();   /* ★av2 C2: money backstop. Asset-v2 document → never generate; undecidable (boot) → retry later, do not drop */
+    if (__d2 === true){ restorePreviousOrDice(pk); active--; applyAll(); pump(); return; }
+    if (__d2 !== false){ active--; setTimeout(function(){ if (cache[pk] === 'pending'){ queue.unshift(pk); } pump(); }, 1500); return; }
     var info = jobInfo[pk] || {};
     var key = pollKey();
     if(!key){ restorePreviousOrDice(pk); active--; applyAll(); pump(); return; }   // ★fix197 F-2: キー無しでも明示↻の旧画像を保持
@@ -528,6 +532,7 @@
   }
 
   function applyOne(img){
+    if (__av2Doc() === true) return; 
     var pk = img.getAttribute('data-avpk'); if(!pk) return;
     var info = jobInfo[pk] || {}; var name = info.name || img.getAttribute('alt') || 'character';
     // ★fix400: サーバーURL優先(iOSのIndexedDB地雷を回避)。fix400が有効かつns取得済み・当imgが未失敗なら
@@ -564,6 +569,7 @@
   }
 
   function fixImg(img){
+    if (__av2Doc() === true) return; 
     var src = img.getAttribute('src') || '';
     // v292Dfix209: legacy URLは src でなく data-av-legacy 属性でも運べる（ブラウザにfetchさせず
     //   プロンプト/seedだけ受け取る＝ロード時402の根絶。書き手側はfix66 buildCard等）。
@@ -604,6 +610,7 @@
   }
 
   function applyAll(){
+    if (__av2Doc() === true) return; 
     try{ var imgs=document.getElementsByTagName('img'); for(var i=0;i<imgs.length;i++){ if(imgs[i].getAttribute('data-avpk')) applyOne(imgs[i]); } }catch(e){}
     // ★fix421: 会話ログのアバター(src焼き込み・data-avpk無し)にも再生成結果を即時反映。
     //   条件を「ログカード内のimg+alt一致+cacheに新data:URLあり」に絞り、他モジュールの画像に触れない。
@@ -634,6 +641,7 @@
 
   // ↻ 再生成: features.js と同じクリック検知で、このキャラのキャッシュを破棄して作り直す
   function regenFor(name){
+    if (__av2Doc() !== false) return; 
     if(!name) return;
     var pk=keyFor(name);
     // v292Dfix524: フライトロック。同一キャラの↻連打/多重発火を2秒デバウンス(二重生成・二重課金防止・persist/putimg一回)。

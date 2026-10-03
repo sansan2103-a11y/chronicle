@@ -175,10 +175,13 @@ function buildSchema2Record(deps, storyId){
   const HY_CFG_ALLOW = ['authorNote','bannedPhrases','creepyMode','dialogueLevel','dramaLevel','engineMode','genrePresets','outLen','reactionLevel','toneKey'];
   let cfg = null;
   if (isPlainObject(body.cfg)){ cfg = {}; for (const k of HY_CFG_ALLOW){ if (body.cfg[k] !== undefined) cfg[k] = body.cfg[k]; } }
-  const record = { schema: 2, title, deleted: false,
-    body: { cfg, cast: (body.cast === undefined ? null : body.cast), scene: (body.scene === undefined ? null : body.scene),
-            turns: Array.isArray(body.turns) ? body.turns : [], mode: (body.mode === undefined ? null : body.mode) },
-    sidecar };
+  let rbody = { cfg, cast: (body.cast === undefined ? null : body.cast), scene: (body.scene === undefined ? null : body.scene),
+            turns: Array.isArray(body.turns) ? body.turns : [], mode: (body.mode === undefined ? null : body.mode) };
+  /* ★av2(GPT 904 D1): cast.av2 sidecar → body.assetSchema / body.bindings（無ければ同一 object） */
+  { const M = (typeof window !== 'undefined') ? window.__v292Dav2Map : null;
+    if (M && typeof M.push === 'function'){ try { rbody = M.push(rbody, storyId); } catch (e){ return { hold: { code: 'AV2_PUSH_THREW' } }; } }
+    else if (isPlainObject(rbody.cast) && rbody.cast.av2 !== undefined) return { hold: { code: 'AV2_MAP_MISSING' } }; }
+  const record = { schema: 2, title, deleted: false, body: rbody, sidecar };
   return { record, sources };
 }
 
@@ -221,7 +224,11 @@ function buildWritePlan(storyId, rec, deps){
   const mergedCfg = {};
   if (isPlainObject(locCfg)) for (const k in locCfg){ if (HY_CFG_ALLOW.indexOf(k) < 0) mergedCfg[k] = locCfg[k]; }
   if (isPlainObject(rec.body.cfg)) for (const k in rec.body.cfg){ if (HY_CFG_ALLOW.indexOf(k) >= 0) mergedCfg[k] = rec.body.cfg[k]; }
-  const bodyStr = JSON.stringify({ cfg: mergedCfg, cast: (rec.body.cast === undefined ? null : rec.body.cast),
+  /* ★av2(GPT 904 D1): body.assetSchema / body.bindings → local cast.av2 sidecar（schema-2 でなければ同一） */
+  let castLocal = (rec.body.cast === undefined ? null : rec.body.cast);
+  { const M = (typeof window !== 'undefined') ? window.__v292Dav2Map : null;
+    if (rec.body.assetSchema === 2 || rec.body.assetIdPrep === 1){ if (!M || typeof M.pullCast !== 'function') throw new Error('AV2_MAP_MISSING'); castLocal = M.pullCast(rec.body, storyId); } }
+  const bodyStr = JSON.stringify({ cfg: mergedCfg, cast: castLocal,
     scene: (rec.body.scene === undefined ? null : rec.body.scene),
     turns: Array.isArray(rec.body.turns) ? rec.body.turns : [], mode: (rec.body.mode === undefined ? null : rec.body.mode) });
   plan.push({ key: K.body, newValue: bodyStr, field: 'body' });

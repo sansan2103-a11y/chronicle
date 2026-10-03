@@ -201,8 +201,10 @@
   //     fix197 が入れた【新data:】をスピナーへ引き戻し→fix197 が再度書く→…の
   //     ピンポン無限ループになる(実測: 自己テストがハングして発覚)。
   //     decide() は「今のsrcが許されない値のときだけ」強制値を返す = 必ず収束する。
+  function __av2Doc(){ try { var M = window.__v292Dav2Map; return (M && typeof M.docSchema2 === 'function') ? M.docSchema2() : false; } catch(e){ return false; } }   /* ★av2 C2 (GPT 911): Asset-v2 document → this legacy portrait path stops (canonical-derived, never the local flag) */
   function applyToDom(){
     try {
+      if (__av2Doc() === true) return; 
       var imgs = document.getElementsByTagName('img');
       for (var i = 0; i < imgs.length; i++){
         var img = imgs[i];
@@ -237,6 +239,7 @@
 
   function sweep(){
     swept++;
+    if (__av2Doc() === true) return; 
     if (off()){ if (Object.keys(reg).length) restoreAll(); return; }
     poll();
     applyToDom();

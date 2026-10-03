@@ -307,8 +307,10 @@
     });
   }
 
+  function __av2Doc(){ try { var M = window.__v292Dav2Map; return (M && typeof M.docSchema2 === 'function') ? M.docSchema2() : false; } catch(e){ return false; } }   /* ★av2 C2 (GPT 911): Asset-v2 document → this legacy portrait path stops (canonical-derived, never the local flag) */
   function injectBtn(){
     try {
+      if (__av2Doc() === true) return; 
       if (!onV1()) return;
       if (document.querySelector('.v292Dfix474-btn')) return;
       var host=document.getElementById('npcList'); if(!host||!host.parentNode) return;

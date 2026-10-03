@@ -86,8 +86,10 @@
   }
 
   // ---------- (B) 保険 forceLocal(DOM有時のみ) ----------
+  function __av2Doc(){ try { var M = window.__v292Dav2Map; return (M && typeof M.docSchema2 === 'function') ? M.docSchema2() : false; } catch(e){ return false; } }   /* ★av2 C2 (GPT 911): Asset-v2 document → this legacy portrait path stops (canonical-derived, never the local flag) */
   function forceLocalSweep(){
     try {
+      if (__av2Doc() === true) return; 
       if (!on() || typeof document === 'undefined' || !document.getElementsByTagName) return;
       var imgs = document.getElementsByTagName('img');
       for (var i = 0; i < imgs.length; i++){

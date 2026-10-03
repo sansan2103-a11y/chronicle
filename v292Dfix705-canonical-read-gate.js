@@ -297,6 +297,12 @@
   function aiKeyOf(id){ return (id === 'default') ? 'v292aiInstr' : ('v292aiInstr_slot_' + id); }
 
   var STORY_ID = urlStoryId();
+  function av2PullCast(body){
+    if (!body || (body.assetSchema !== 2 && body.assetIdPrep !== 1)) return (body.cast === undefined ? null : body.cast);   /* ★av2d: S9a prepared body too */
+    var M = window.__v292Dav2Map;
+    if (!M || typeof M.pullCast !== 'function') throw new Error('AV2_MAP_MISSING');   // caught by the apply try → fail recorded, no silent downgrade
+    return M.pullCast(body, STORY_ID);
+  }
   var BODY_KEY = STORY_ID ? bodyKeyOf(STORY_ID) : null;
   var AI_KEY   = STORY_ID ? aiKeyOf(STORY_ID) : null;
 
@@ -1283,7 +1289,7 @@
          ★server record に origin が無ければ key を作らない（= 従来と byte 同一）。 */
       var __f871body = {
         cfg:   hydrateMergedCfg(__locCfg, (body.cfg === undefined ? null : body.cfg)),
-        cast:  (body.cast  === undefined ? null : body.cast),
+        cast:  av2PullCast(body),          /* ★av2(GPT 904 D1): schema-2 なら cast.av2 sidecar へ。それ以外は従来と同一 */
         scene: (body.scene === undefined ? null : body.scene),
         turns: (Object.prototype.toString.call(body.turns) === '[object Array]') ? body.turns : [],
         mode:  (body.mode  === undefined ? null : body.mode)

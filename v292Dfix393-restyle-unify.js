@@ -119,8 +119,10 @@
   }
 
   // 全キャラを直列で描き直し
+  function __av2Doc(){ try { var M = window.__v292Dav2Map; return (M && typeof M.docSchema2 === 'function') ? M.docSchema2() : false; } catch(e){ return false; } }   /* ★av2 C2 (GPT 911): Asset-v2 document → this legacy portrait path stops (canonical-derived, never the local flag) */
   function unifyAll(opts){
     opts=opts||{};
+    if (__av2Doc() !== false) return; 
     if (off()) { alert('この機能は無効化されています(v292Dfix393Off)'); return; }
     var cast=castList();
     if (!cast.length){ alert('キャラが見つかりません'); return; }
@@ -159,6 +161,7 @@
   // ---- ボタン注入（設定→キャラ欄・v292Dfix397でツールバーから移動）----
   function injectBtn(){
     try {
+      if (__av2Doc() === true) return; 
       if (off()) return;   // ボタンは既定表示（押す=確認ダイアログ+生成なので安全・iPhoneでもスイッチ不要）
       if (document.querySelector('.v292Dfix393-btn')) return;
       var host=document.getElementById('npcList');   // v292Dfix397: 設定→キャラ欄へ移動(ツールバー撤去)

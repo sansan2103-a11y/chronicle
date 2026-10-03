@@ -3289,6 +3289,8 @@
     function autofill(){
       try {
         if (typeof S === 'undefined' || !S || !S.cast) return 0;
+        /* ★av2d (GPT 913 Q2: SCHEMA2_PORTRAIT_AUTHORITY = ASSET_V2_ONLY / EFXF run1): never write a legacy avatar URL into an Asset-v2 (or undecidable) document */
+        try { var __av2m = window.__v292Dav2Map; if (__av2m && typeof __av2m.docSchema2 === 'function' && __av2m.docSchema2() !== false) return 0; } catch(__e){}
         var n = 0;
         function fillFor(c){
           if (!c || !c.name) return;
@@ -4828,6 +4830,8 @@
     opts = opts || {};
     try {
       if (typeof S === 'undefined' || !S || !S.cast) return 0;
+      /* ★av2d (GPT 913 Q2: SCHEMA2_PORTRAIT_AUTHORITY = ASSET_V2_ONLY / EFXF run1): never write a legacy avatar URL into an Asset-v2 (or undecidable) document */
+      try { var __av2m = window.__v292Dav2Map; if (__av2m && typeof __av2m.docSchema2 === 'function' && __av2m.docSchema2() !== false) return 0; } catch(__e){}
       var n = 0;
       function fillFor(c){
         if (!c || !c.name) return;
