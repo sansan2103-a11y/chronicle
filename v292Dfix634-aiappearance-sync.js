@@ -50,6 +50,36 @@
   var TKEY  = 'v292Dfix634_t';         // { lsKey: 世代ms }
   var MAX_VAL = 2000, MAX_ENTRIES = 800, MAX_BYTES = 1500000;
   var DEBOUNCE_MS = 8000, FIRST_MS = 12000, PERIOD_MS = 30000;
+  /* ★fix634r1 (FIX634_AIAV_CROSS_DEVICE_OVERWRITE_RACE): AIAV AUTHORITY GATE
+     真因: features.js __aiAvatar の 1.2s sweep / MutationObserver が、この module の初回 pull(12s)より先に
+     走り、server に既存の外見文があっても cache miss として LLM で再生成 → setItem wrapper が t=now を
+     記録 → merge で local が勝ち → server を上書き（端末間で外見文が揺れる）。
+     対策: (a) 初回 sweep を「loggedIn && ns が揃った瞬間」に前倒し (b) server/cache authority が確定する
+     までは genAsync を保留する holdGen() を公開（features.js は 1 行でこれを見る）
+     (c) pull の結果 local 束 == server 束 なら push しない（閲覧だけの端末が putimg を出さない）。
+     off / 未ログイン / fail(HOLD_MAX_MS 超過・manifest 取得不能) では保留しない = 従来挙動へ fail-open。 */
+  var HOLD_MAX_MS = 20000, EARLY_POLL_MS = 400;
+  var gate = { state: 'PENDING', since: Date.now(), reason: null, settledAt: 0, sweeps: 0 };
+  var badPayload = 0;   /* ★r3 (audit D-4): consecutive undecodable server bundles → fall back to the 30 s period */
+  var unconfirmedSweeps = 0, RETRY_MAX = 6;   /* ★r4 (audit B-2): the 10 s retry stops after RETRY_MAX unconfirmed sweeps (30 s period remains) */
+  var PROVKEY = 'v292Dfix634_prov';   /* ★r2: keys generated while server authority was unknown (TIMEOUT / UNAVAILABLE) → local-only until the server answers */
+  function gateSettle(state, reason){
+    var terminal = (gate.state === 'SYNCED' || gate.state === 'LOCAL_FIRST');
+    if (terminal) return;                                              // authority once confirmed never regresses
+    if (gate.state !== 'PENDING' && (state === 'UNAVAILABLE' || state === 'TIMEOUT')) return;   // keep the first non-terminal reason
+    gate.state = state; gate.reason = reason || null; gate.settledAt = Date.now();
+    try { console.log(TAG, 'authority gate ->', state, reason || ''); } catch(e){}
+    if (state === 'LOCAL_FIRST') provClear();                          // server has nothing → provisional keys are ordinary local keys
+    if (state === 'SYNCED') provPromote();                             // ★r3 (audit D-2): leftovers after a reconciled sync are genuinely new
+  }
+  function provPromote(){
+    try { var pv = prov(), ks = Object.keys(pv); if (!ks.length) return; var tm = tmap(); for (var i = 0; i < ks.length; i++) tm[ks[i]] = Date.now(); tmapSet(tm); provClear(); } catch(e){}
+  }
+  /* ★r2 (GPT #31): server publish only once authority is CONFIRMED (SYNCED / explicit LOCAL_FIRST). "server を確認できなかった" ≠ "server に何もない". */
+  function publishAllowed(){ return gate.state === 'SYNCED' || gate.state === 'LOCAL_FIRST'; }
+  function prov(){ try { var o = JSON.parse(lsg(PROVKEY) || '{}'); return (o && typeof o === 'object') ? o : {}; } catch(e){ return {}; } }
+  function provSet(o){ try { lss(PROVKEY, JSON.stringify(o || {})); } catch(e){} }
+  function provClear(){ try { if (lsg(PROVKEY) != null) W.localStorage.removeItem(PROVKEY); } catch(e){} }
 
   var _ls = null, _get = null, _set = null;
   try { _ls = W.localStorage; _get = _ls.getItem.bind(_ls); _set = _ls.setItem.bind(_ls); } catch(e){}
@@ -165,7 +195,7 @@
   function merge(remote){
     var res = { applied: 0, skipped: 0, aborted: false, conflicts: 0 };
     if (!remote || !remote.m) return res;
-    var lm = localMap(), tm = tmap(), ks = Object.keys(remote.m), i, dirtyT = false;
+    var lm = localMap(), tm = tmap(), ks = Object.keys(remote.m), i, dirtyT = false, pv = prov(), pvDirty = false;
     for (i = 0; i < ks.length; i++){
       var k = ks[i];
       if (String(k).indexOf(LSP) !== 0){ res.skipped++; continue; }     // ★chrAiAv4: 以外は絶対に書かない
@@ -183,12 +213,14 @@
       if (lv === rv){ if (lt === 0 && rt > 0){ tm[k] = rt; dirtyT = true; } continue; }
       res.conflicts++;
       var take = (rt > lt) || (rt === lt && rv < lv);                   // 同値なら文字列小さい方(決定的)
+      if (pv[k]){ take = true; res.provisionalReplaced = (res.provisionalReplaced || 0) + 1; }   /* ★r2: local は authority 未確定中の生成 → server が authority */
       if (take){
         if (!lss(k, rv)){ res.aborted = true; break; }
         tm[k] = rt; dirtyT = true; res.applied++;
       }
     }
     if (dirtyT) tmapSet(tm);
+    if (!res.aborted){ var pks = Object.keys(pv); if (pks.length){ for (i = 0; i < pks.length; i++){ if (!remote.m[pks[i]]) tm[pks[i]] = Date.now(); } tmapSet(tm); provClear(); } }   /* ★r2: server answered → leftovers are genuinely new (union) */
     if (res.aborted){ try { console.warn(TAG, 'merge aborted (write failed)'); } catch(e){} }
     return res;
   }
@@ -197,6 +229,7 @@
   var pushing = false;
   function pushNow(force, done){
     if (!on() || !_fetch || !loggedIn()){ if (done) done({ skipped: 'off-or-anon' }); return; }
+    if (!publishAllowed()){ if (done) done({ skipped: 'authority-unknown', gate: gate.state }); return; }   /* ★r2: putimg 0 until SYNCED / LOCAL_FIRST */
     if (pushing){ if (done) done({ skipped: 'busy' }); return; }
     var b = bundle();
     var keys = Object.keys(b.m);
@@ -213,11 +246,12 @@
         pushing = false;
         if (res.status === 409 || (res.j && res.j.errorCode === 'image-conflict')){
           try { console.log(TAG, 'push-conflict -> pull & merge & retry once'); } catch(e){}
-          pullNow(function(){
+          pullNow(function(pr){
+            if (!(pr && pr.ok)){ if (done) done({ conflict: true, retried: false, skipped: 'pull-failed' }); return; }   /* ★r3: never resend over an unseen server bundle */
             var b2 = bundle(), s2 = st();
             if (s2.hash === bundleHash(b2)){ if (done) done({ conflict: true, resolved: 'server-wins' }); return; }
             pushOnce(b2, function(r2){ if (done) done({ conflict: true, retried: true, result: r2 }); });
-          });
+          }, null, true);
           return;
         }
         if (res.j && res.j.ok){
@@ -233,6 +267,7 @@
   }
   // 409後の1回だけの再送(再帰しない)
   function pushOnce(b, done){
+    if (!publishAllowed()){ if (done) done({ skipped: 'authority-unknown' }); return; }   /* ★r2 */
     var data = encode(b), s = st(), bh = bundleHash(b);
     if (data.length > MAX_BYTES){ if (done) done({ skipped: 'too-large' }); return; }
     _fetch(proxyUrl() + '/save', { method: 'POST', headers: authHeaders(),
@@ -253,24 +288,36 @@
   // ---- 受信 ----
   //   seenHash: 取り込んだ時点のサーバー側hash。次のsweepで同じhashなら**引き直さない**
   //   (これが無いと、相手端末が最後に置いた版を毎回GETし続ける)
-  function pullNow(done, seenHash){
+  function pullNow(done, seenHash, expectBundle){
     if (!on() || !_fetch){ if (done) done({ skipped: 'off' }); return; }
     var ns = nsGet();
     if (!ns){ if (done) done({ skipped: 'no-ns' }); return; }
     _fetch(proxyUrl() + '/img?ns=' + encodeURIComponent(ns) + '&k=' + encodeURIComponent(SRVKEY), { cache: 'no-store' })
-      .then(function(r){ if (!r.ok) return null; return r.arrayBuffer(); })
+      .then(function(r){
+        /* ★r3 (audit D-1): only a literal 404 may mean "no bundle"; every other non-OK status is "server not confirmed".
+           And a 404 right after the manifest said the bundle exists (expectBundle) is an inconsistency, not an absence. */
+        if (r.status === 404) return { nf: true };
+        if (!r.ok) { var e = new Error('http ' + r.status); e.httpStatus = r.status; throw e; }
+        return r.arrayBuffer();
+      })
       .then(function(buf){
-        if (!buf){ if (done) done({ skipped: 'not-found' }); return; }
+        if (buf && buf.nf){
+          if (expectBundle){ gateSettle('UNAVAILABLE', 'img-404-despite-manifest'); if (done) done({ ok: false, skipped: 'not-found-despite-manifest' }); return; }
+          gateSettle('LOCAL_FIRST', 'img-not-found'); if (done) done({ skipped: 'not-found' }); return;
+        }
+        if (!buf){ gateSettle('UNAVAILABLE', 'img-empty'); if (done) done({ ok: false, skipped: 'empty' }); return; }
         var remote = decode(bytesToStr(buf));
-        if (!remote){ if (done) done({ skipped: 'bad-payload' }); return; }
+        if (!remote){ badPayload++; gateSettle('UNAVAILABLE', 'bad-payload'); if (done) done({ skipped: 'bad-payload' }); return; }
+        badPayload = 0;
         var m = merge(remote);
         var s = st();
         if (!m.aborted && seenHash) s.seen = String(seenHash);
         s.at = Date.now(); stSet(s);                    // ★s.hash は「最後にpushした束」の意味なので触らない
         try { console.log(TAG, 'pull applied', m.applied, 'conflicts', m.conflicts); } catch(e){}
-        if (done) done({ ok: true, merged: m });
+        var rh = ''; try { rh = bundleHash(remote); } catch(e){ rh = ''; }   /* ★fix634r1: server 束の内容 hash */
+        if (done) done({ ok: true, merged: m, remoteHash: rh });
       })
-      .catch(function(){ if (done) done({ ok: false, error: 'network' }); });
+      .catch(function(e){ gateSettle('UNAVAILABLE', (e && e.httpStatus) ? ('pull-http-' + e.httpStatus) : 'pull-network'); if (done) done({ ok: false, error: 'network' }); });
   }
 
   // ---- 差分検出(manifest経由・fix633のキャッシュを共用) ----
@@ -285,18 +332,28 @@
       .then(function(j){ cb(j && j.manifest ? j.manifest : null); })
       .catch(function(){ cb(null); });
   }
+  function holdGen(){
+    if (gate.state !== 'PENDING') return false;
+    if (!on() || !_fetch) return false;                       // module off → 従来どおり
+    if (!loggedIn()) return false;                            // 匿名 → server authority が無い → 従来どおり
+    if (Date.now() - gate.since > HOLD_MAX_MS){ gateSettle('TIMEOUT', 'hold-max'); return false; }   // fail-open
+    return true;
+  }
   var sweeping = false;
   function sweep(done){
     if (!on() || sweeping || !loggedIn() || !nsGet() || !_fetch){ if (done) done({ skipped: 'idle' }); return; }
-    sweeping = true;
+    sweeping = true; gate.sweeps++; if (!publishAllowed()) unconfirmedSweeps++;
     manifest(function(man){
-      if (!man){ sweeping = false; if (done) done({ skipped: 'no-manifest' }); return; }
+      if (!man){ sweeping = false; gateSettle('UNAVAILABLE', 'no-manifest'); if (done) done({ skipped: 'no-manifest' }); return; }
       var srv = man[SRVKEY], s = st();
       var b = bundle(), bh = bundleHash(b);
       var finish = function(r){ sweeping = false; if (done) done(r); };
       if (!srv){
         // サーバーにまだ束が無い → 自分の分を1回だけ置く
+        gateSettle('LOCAL_FIRST', 'server-has-no-bundle');
         if (!Object.keys(b.m).length){ finish({ skipped: 'nothing-to-publish' }); return; }
+        /* ★fix634r1: 同じ束を既に publish 済み（manifest cache が古いだけ）なら二重 publish しない */
+        if (s.hash === bh && (+s.rev || 0) > 0){ finish({ skipped: 'already-published' }); return; }
         pushNow(true, function(r){ finish({ published: true, result: r }); });
         return;
       }
@@ -305,16 +362,27 @@
       //   一致していれば**サーバーは前回から動いていない**ので引き直さない。
       var reconciled = !!(sHash && (sHash === s.srvHash || sHash === s.seen));
       if (reconciled){
+        gateSettle('SYNCED', 'reconciled');
         var s2 = st(); s2.rev = sRev; stSet(s2);
         if (s2.hash === bh){ finish({ same: true }); return; }     // ローカルも当時のまま → 何もしない
         pushNow(false, function(r){ finish({ pushed: r }); });     // ローカルだけ進んだ → 送る
         return;
       }
       // 他端末が置いた(または初回) → 取り込んでマージし、ローカルが勝っている分を送り返す
-      pullNow(function(){
-        var s3 = st(); s3.rev = sRev; stSet(s3);
+      pullNow(function(pr){
+        var s3 = st(); if (pr && pr.ok && !(pr.merged && pr.merged.aborted)) s3.rev = sRev;   /* ★r4 (audit B-1 / B-11): never adopt the server rev without having fully absorbed the bundle (CAS must not pass on a stale/partial state) */
+        /* ★fix634r1: マージ後の local 束が server 束と同一なら「server は既にこの内容を持っている」。
+           s.hash（最後に push した束）を server 束の hash に合わせ、push を出さない（putimg 0）。 */
+        var rh = (pr && pr.remoteHash) ? String(pr.remoteHash) : '';
+        var converged = !!(rh && pr && pr.ok && !(pr.merged && pr.merged.aborted) && bundleHash(bundle()) === rh);
+        if (converged){ s3.hash = rh; s3.srvHash = sHash; }
+        stSet(s3);
+        if (!(pr && pr.ok)){ gateSettle('UNAVAILABLE', 'pull-failed'); finish({ pulled: false, skipped: 'pull-failed' }); return; }   /* ★r2: the server bundle was not seen → no publish */
+        if (pr.merged && pr.merged.aborted){ gateSettle('UNAVAILABLE', 'merge-aborted'); finish({ pulled: true, skipped: 'merge-aborted' }); return; }   /* ★r4 (audit B-3): partial merge (quota) must not publish a partial union */
+        gateSettle('SYNCED', converged ? 'pulled-converged' : 'pulled-local-ahead');
+        if (converged){ finish({ pulled: true, converged: true }); return; }
         pushNow(false, function(r){ finish({ pulled: true, pushed: r }); });
-      }, sHash);
+      }, sHash, true);
     });
   }
 
@@ -335,7 +403,11 @@
         if (isav && on()){ try { old = _get(k); } catch(e){ old = null; } }
         var r = _set(k, v);
         if (isav && on() && old !== v){
-          try { noteT(k, Date.now()); } catch(e){}    // ★この端末で作られた/作り直された世代
+          if (loggedIn() && !publishAllowed()){                       /* ★r2: generated while server authority unknown → provisional (t=0, local-only) */
+            try { var pv = prov(); pv[k] = 1; provSet(pv); var tm0 = tmap(); if (tm0[k]) { delete tm0[k]; tmapSet(tm0); } } catch(e){}
+          } else {
+            try { noteT(k, Date.now()); } catch(e){}    // ★この端末で作られた/作り直された世代
+          }
           schedule();
         }
         return r;
@@ -352,6 +424,7 @@
     hashFull: hashFull, bundle: bundle, bundleHash: bundleHash, encode: encode, decode: decode,
     localMap: localMap, merge: merge, pushNow: pushNow, pullNow: pullNow, sweep: sweep,
     tmap: tmap, noteT: noteT, state: st,
+    holdGen: holdGen, publishAllowed: publishAllowed, loggedIn: loggedIn, gate: function(){ return { state: gate.state, reason: gate.reason, since: gate.since, settledAt: gate.settledAt, sweeps: gate.sweeps, holding: holdGen(), publishAllowed: publishAllowed(), provisional: Object.keys(prov()).length }; },
     status: function(){
       var b = bundle(), s = st();
       return { armed: true, on: on(), loggedIn: loggedIn(), ns: nsGet() ? 'set' : 'none',
@@ -363,6 +436,22 @@
   try {
     if (typeof document !== 'undefined'){
       if (typeof setTimeout === 'function') setTimeout(function(){ sweep(); }, FIRST_MS);
+      /* ★fix634r1: loggedIn && ns が揃い次第すぐ初回 sweep（12s 待たない）。揃わないまま HOLD_MAX_MS を過ぎたら
+         holdGen() 側で TIMEOUT → 従来挙動。 */
+      if (typeof setInterval === 'function'){
+        var early = setInterval(function(){
+          try {
+            if (gate.state !== 'PENDING'){ clearInterval(early); return; }
+            if (!on() || !_fetch){ clearInterval(early); return; }
+            if (Date.now() - gate.since > HOLD_MAX_MS){ clearInterval(early); return; }
+            if (loggedIn() && nsGet()){ clearInterval(early); sweep(); }
+          } catch(e){ clearInterval(early); }
+        }, EARLY_POLL_MS);
+        /* ★r2: while authority is still unconfirmed (UNAVAILABLE / TIMEOUT) retry the server every 10 s (bounded by the 30 s period otherwise) */
+        var retry = setInterval(function(){
+          try { if (publishAllowed() || !on() || badPayload >= 3 || unconfirmedSweeps >= RETRY_MAX) { clearInterval(retry); return; } if (gate.state !== 'PENDING' && loggedIn() && nsGet()) sweep(); } catch(e){}
+        }, 10000);
+      }
       if (typeof setInterval === 'function') setInterval(function(){ sweep(); }, PERIOD_MS);
       if (document.addEventListener){
         document.addEventListener('visibilitychange', function(){

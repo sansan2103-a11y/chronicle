@@ -11101,6 +11101,14 @@
     return '';
   }
   function genAsync(name, desc){
+    /* ★fix634r1 (FIX634_AIAV_CROSS_DEVICE_OVERWRITE_RACE / AV2_WRAP118_BOOT_ORDER_GAP):
+       (1) Asset v2 document（docSchema2() === true）では legacy AI avatar を生成しない。av2-portrait の wrap118 と同じ規約
+           （undecidable = null も fail-closed）。wrap118 は最初の sweep（MutationObserver +40ms）で入るため、boot 直後の
+           fix66 lookupAvatar → urlFor → genAsync が wrap より先に走って schema2 文書でも LLM 生成していた（本番 2 call の正体）。
+       (2) schema1 文書では fix634 の authority gate（server 束の pull 完了前）を待つ。どちらも pending を解いて return
+           するので、gate 解除後の 1.2s sweep が拾い直す（従来の生成は遅延するだけで失われない）。 */
+    try { var M634 = window.__v292Dav2Map; if (M634 && typeof M634.docSchema2 === 'function'){ var d634 = M634.docSchema2(); if (d634 === true){ delete pending[name]; return; } if (d634 === null){ var li634 = false; try { li634 = !!((typeof window.__chronicleSessionId === 'function' && window.__chronicleSessionId()) || (typeof window.__chronicleGoogleId === 'function' && window.__chronicleGoogleId()) || (window.__v292Dfix634 && typeof window.__v292Dfix634.loggedIn === 'function' && window.__v292Dfix634.loggedIn())); } catch(e634){}   /* ★r4 (audit R3-1 / B-5): same logged-in predicate as fix634 (session | google token | pass), evaluated only while undecidable */ if (li634){ delete pending[name]; return; } } } } catch(e){}   /* ★r3 (audit D-3): schema2 = never; undecidable = hold only for logged-in users (anonymous keeps production timing) */
+    try { var F634 = window.__v292Dfix634; if (F634 && typeof F634.holdGen === 'function' && F634.holdGen()){ delete pending[name]; return; } } catch(e){}
     var st = getS(); var cfg = (st && st.cfg) || {};
     if (cfg.provider !== 'openrouter' || !cfg.orKey){ delete pending[name]; return; }
     var tone = ''; try { if (st && st.scene && st.scene.tone) tone = String(st.scene.tone).trim(); } catch(e){}
