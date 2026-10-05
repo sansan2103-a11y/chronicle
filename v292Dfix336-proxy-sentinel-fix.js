@@ -55,7 +55,16 @@
     if (!st.cfg.orKey){ st.cfg.orKey='__proxy__'; ch=true; }
     if (!st.cfg.pollKey){ st.cfg.pollKey='__proxy__'; ch=true; }
     if (st.cfg.provider!=='openrouter'){ st.cfg.provider='openrouter'; ch=true; }
-    if (ch){ try{ st.save && (typeof st.saveC==='function'?st.saveC('fix336.sentinelCfg'):st.save()); }catch(e){} try{ console.log(TAG,'sentinel filled via getS()'); }catch(_){} }
+    /* ★LPS-OPEN candidate (offline, GPT #62/#63 LPS_PER_OPEN_PACKAGE_PUT): the sentinel is RUNTIME-ONLY
+       (fix726 strips key/orKey/pollKey from every export and the canonical cfg never carries them, so a boot
+       hydrate always arrives without it). Persisting it called S.saveC on every boot → fix402 markDirty →
+       one full package PUT per story open. Fill memory only (same contract as fix886 sentinel()).
+       kill switch: localStorage v292Dfix336MemOnlyOff='1' → legacy save. */
+    if (ch){
+      var legacy = false; try { legacy = localStorage.getItem('v292Dfix336MemOnlyOff') === '1'; } catch(e){}
+      if (legacy){ try{ st.save && (typeof st.saveC==='function'?st.saveC('fix336.sentinelCfg'):st.save()); }catch(e){} }
+      try{ console.log(TAG, legacy ? 'sentinel filled via getS() (legacy save)' : 'sentinel filled via getS() (memory only)'); }catch(_){}
+    }
   }
   // 起動直後に速く効かせる(ゲートを押す前に埋める)＋常駐で保険
   setTimeout(ensureSentinel, 300);
