@@ -569,6 +569,91 @@
   }
 
   /* ================= explicit binding addition (GPT 905: data-plane op; additive only; C2 UI calls it) ================= */
+  /* ================= ★cand_sideport_authority (GPT #31-c, fix697 / canonical authority 共通 lane) =================
+     SIDEPORT_WRITE_INVALIDATES_FIX697_AUTHORITY_ON_DRIFT の共通修正。addBinding / deleteCharacter / setProfile は全てこの helper を通る。
+     契約（GPT #31-c）:
+       1. authority 判定は **fresh server canonical と persisted canonical slot**（buildRecord = local keys から組んだ projection）。runtime memory（S）は見ない。
+       2. persisted != fresh server → LOCAL_NOT_SYNCED、side-port request 0。
+       3. runtime-only drift を side-port の前後で canonical 化しない: pre-write の S.save() / F.flush() を呼ばない。
+       4. 成功後の persisted mirror は **server が受理した readback** を authority にする: delta path だけを readback の値で persisted slot へ書く
+          （generic S.save() で runtime 全体を書かない）。
+       5. memory（S）には対象 delta だけ追従させる。
+       6. unrelated field の canonical mutation 0（送る body = persisted projection + delta のみ。post-check: persisted projection == readback）。
+       7. 409 = 最大 1 rebase（fresh read → 前提 2 を再確認 → もう 1 回だけ CAS）、それ以上 retry 0。
+     op = { kind, id, S, F, schema, mutate(sentBody) → true|{code}, mid(rev), mirror(S, slotObj, readbackBody) → true|{code}, expectBody(readbackBody) → bool } */
+  function sidePortCommit(op, cb){
+    cb = (typeof cb === 'function') ? cb : function(){};
+    var id = op.id, S = op.S, F = op.F;
+    var attempt = 0;
+    var done = function(o){ note({ kind: 'AV2_SIDEPORT_' + String(op.kind).toUpperCase() + '_' + (o.ok ? 'OK' : o.code), id: id, attempt: attempt }); cb(o); };
+    function once(){
+      attempt++;
+      F.getStoryV2Once(id, function(g, gerr){
+        var j = g && g.j;
+        if (gerr || !g || g.status !== 200 || !j || !j.ok || !j.record) return done({ ok: false, code: 'READ_FAIL' });
+        if (String(j.authority || '') !== 'canonical' || j.deleted) return done({ ok: false, code: 'NOT_CANONICAL_ROW' });   /* ★audit B1: shadow / deleted row → request 0 (same gate as the registrar) */
+        var b0 = j.record.body || {};
+        /* ★r5 (GPT #31-d): per-op phase. setProfile = PREP + schema2 (the Owner must be able to confirm an appearance before S9b);
+           addBinding / deleteCharacter keep the production contract (schema2 only). */
+        var srvMode = modeOf(b0);
+        if (!(srvMode === 'S2' || (srvMode === 'PREP' && op.allowPrep === true))) return done({ ok: false, code: srvMode === 'PREP' ? 'NOT_SCHEMA2_DOCUMENT' : 'SERVER_NOT_SCHEMA2' });
+        var schema = (j.recordSchema === 2) ? 2 : 1;
+        if (schema !== 2) return done({ ok: false, code: 'SERVER_NOT_SCHEMA2' });   /* ★audit B4: the full-record hash check exists only for schema 2 → refuse anything else */
+        var rec = buildRecord(F, id, schema);                           // persisted canonical slot (NOT runtime memory)
+        if (!rec || !isObj(rec.body)) return done({ ok: false, code: 'NO_LOCAL_RECORD' });
+        if (!same(rec.body, b0)) return done({ ok: false, code: 'LOCAL_NOT_SYNCED', serverRev: j.rev });   // contract 2: request 0
+        if (idlessPaths(rec.body).length) return done({ ok: false, code: 'REGISTRATION_PENDING' });
+        /* ★audit D1 (SP r2): the body alone is not the record — title + the 13-field sidecar are PUT and hashed too. Require the
+           persisted record's client hash (fix705's CANONICAL_SAME_HASH domain = F.contentHashV2) == serverHash before writing. */
+        if (schema === 2 && typeof F.contentHashV2 === 'function'){
+          return F.contentHashV2(id, function(h){ if (!h || h !== String(j.serverHash || '')) return done({ ok: false, code: 'LOCAL_NOT_SYNCED', serverRev: j.rev, why: 'RECORD_HASH' }); proceed(); });
+        }
+        proceed();
+        function proceed(){
+        var sentBody = clone(rec.body);
+        var m; try { m = op.mutate(sentBody, b0); } catch(em){ m = { ok: false, code: 'MUTATE_THREW' }; }   /* ★audit D6 */
+        if (m !== true) return done(isObj(m) ? m : { ok: false, code: 'MUTATE_FAILED' });
+        if (same(sentBody, b0)) return done({ ok: true, noop: true, serverRev: j.rev });
+        rec.body = sentBody;
+        F.putCanonicalOnce({ id: id, expectedRev: +j.rev || 0, expectedHash: String(j.serverHash || ''), record: rec, mid: op.mid(+j.rev || 0) }, function(w, werr){
+          var wst = w && w.status;
+          F.getStoryV2Once(id, function(g2){                            // readback is the authority (never re-send on unknown)
+            var j2 = g2 && g2.j; var b2 = j2 && j2.record && j2.record.body;
+            if (!b2) return done({ ok: false, code: 'READBACK_FAIL', status: wst || null, err: werr || null });
+            if (!same(b2, sentBody)){
+              var ec = w && w.j && (w.j.errorCode || w.j.error);
+              var moved = (+j2.rev || 0) > (+j.rev || 0);
+              if (wst === 409 && attempt < 2 && moved && !SP_NO_REBASE_409[ec]) return once();   // ★R3-2: rebase only on staleness evidence (server rev advanced), never on a row-state refusal; contract 7: exactly one rebase (re-read + re-check + one CAS); never on a definitive refusal (★audit D5)
+              if (wst === 200 && entryDeltaLanded(b2, sentBody, b0, op)) return done({ ok: false, code: 'APPLIED_SERVER_MOVED', status: wst, serverRev: j2.rev });   /* ★audit D4: our delta is on the server but another device moved it again — mirror 0, reload re-hydrates */
+              return done({ ok: false, code: (wst === 409) ? ((ec && (DEFINITIVE_409[ec] || SP_NO_REBASE_409[ec])) ? String(ec) : 'CONFLICT') : 'NOT_APPLIED', status: wst || null, err: werr || ec || null });   /* ★R3-5 */
+            }
+            /* contract 4 + 5: persisted slot ← readback (delta path only), memory ← delta only. No S.save(). */
+            var mk = (window.__v292DfixCC2 && typeof window.__v292DfixCC2.keysFor === 'function') ? window.__v292DfixCC2.keysFor(String(id)) : null;
+            var slotKey = mk && mk.body; if (!slotKey) return done({ ok: true, serverRev: j2.rev, mirror: 'NO_SLOT_KEY' });
+            var slotRaw = lsg(slotKey), slot = null; try { slot = JSON.parse(slotRaw || 'null'); } catch(e){}
+            if (!isObj(slot)) return done({ ok: true, serverRev: j2.rev, mirror: 'SLOT_UNREADABLE' });
+            var mr; try { mr = op.mirror(S, slot, b2); } catch(emr){ mr = { code: 'MIRROR_THREW' }; }   /* ★audit D6 */
+            if (mr !== true) return done({ ok: true, serverRev: j2.rev, mirror: 'MIRROR_FAILED:' + (isObj(mr) && mr.code || '?') });
+            if (!lss(slotKey, JSON.stringify(slot))) return done({ ok: true, serverRev: j2.rev, mirror: 'SLOT_WRITE_FAILED' });
+            var rec2 = buildRecord(F, id, schema); var post = !!(rec2 && isObj(rec2.body) && same(rec2.body, b2));   // contract 6 post-check
+            try { if (typeof op.after === 'function') op.after(b2); } catch(e){}
+            done({ ok: true, serverRev: j2.rev, mirror: post ? 'PERSISTED_EQUALS_READBACK' : 'PERSISTED_DIVERGED', reloadRequired: true });   /* ★R3-4: fix733 TYPE A → the document must be re-read before the next push */
+          });
+        });
+        }
+      });
+    }
+    once();
+  }
+  /* ★audit D5 / B2: codes a rebase can never cure. The registrar's DEFINITIVE_409 (above) is the base set; side-port adds the
+     canonical-row refusals (★audit B1). Distinct name — never re-declare DEFINITIVE_409 in this scope (hoisting replaced the 23-key map). */
+  var SP_NO_REBASE_409 = { 'canonical-deleted': 1, 'not-canonical': 1, 'not-found': 1, DELETED_IS_FINAL: 1, ALIASES_ON_EXISTING_ID: 1, CLONE_ORIGIN_IMMUTABLE: 1, ASSET_SCHEMA_DOWNGRADE_FORBIDDEN: 1, AV2_PREPARE_REQUIRED: 1 };   /* row-state refusals: a rebase can never cure them */
+  /* ★audit D4: did OUR delta land even though the readback differs elsewhere? (op.landed = the op's own predicate on the readback) */
+  function entryDeltaLanded(b2, sent, b0, op){ try { return typeof op.landed === 'function' ? op.landed(b2) === true : false; } catch(e){ return false; } }
+  /* persisted-slot patch helpers: write ONLY the given entry / field from the readback */
+  function entryOfBody(body, characterId){ var t = entriesOf((body && body.cast) || {}).filter(function(x){ return x.e.character_id === characterId; })[0]; return t ? t.e : null; }
+  function setEntryField(target, path, fieldsFrom){ var e = getAt(target.cast || {}, path); if (!isObj(e)) return false; for (var k in fieldsFrom) if (Object.prototype.hasOwnProperty.call(fieldsFrom, k)){ if (fieldsFrom[k] === undefined) delete e[k]; else e[k] = clone(fieldsFrom[k]); } return true; }
+
   function addBinding(name, characterId, cb){
     cb = (typeof cb === 'function') ? cb : function(){};
     if (off()) return cb({ ok: false, code: 'AV2_OFF' });
@@ -577,41 +662,28 @@
     if (!id || !S || !isSchema2Local(S.cast, id) || !F) return cb({ ok: false, code: 'NOT_SCHEMA2_DOCUMENT' });
     if (reg.busy || loadPending(id)) return cb({ ok: false, code: 'REGISTRATION_IN_PROGRESS' });
     var key = (typeof name === 'string') ? name.normalize('NFC').trim() : '';
-    if (!key || key.length > 80 || key === '__proto__') return cb({ ok: false, code: 'BAD_BINDING_KEY' });
+    if (!key || key.length > 80 || key === '__proto__' || key === 'constructor' || key === 'prototype') return cb({ ok: false, code: 'BAD_BINDING_KEY' });   /* ★audit B3 */
     if (typeof characterId !== 'string' || !CID_RE.test(characterId)) return cb({ ok: false, code: 'BAD_CHARACTER_ID' });
     reg.busy = true;
     var done = function(o){ reg.busy = false; note({ kind: 'AV2_ADD_BINDING_' + (o.ok ? 'OK' : o.code), id: id }); cb(o); };
-    F.getStoryV2Once(id, function(g, gerr){
-      var j = g && g.j;
-      if (gerr || !g || g.status !== 200 || !j || !j.ok || !j.record) return done({ ok: false, code: 'READ_FAIL' });
-      var b0 = j.record.body || {}; var sb = b0.bindings || {};
-      if (b0.assetSchema !== 2) return done({ ok: false, code: 'SERVER_NOT_SCHEMA2' });
-      if (Object.prototype.hasOwnProperty.call(sb, key)) return done(sb[key] === characterId ? { ok: true, noop: true } : { ok: false, code: 'BINDING_REBIND' });
-      var target = entriesOf(b0.cast).filter(function(x){ return x.e.character_id === characterId; })[0];
-      if (!target) return done({ ok: false, code: 'UNKNOWN_CHARACTER_ID' });
-      if (target.e.status === 'DELETED') return done({ ok: false, code: 'BINDING_TO_DELETED' });
-      if (!same(S.cast.av2.bindings || {}, sb)) return done({ ok: false, code: 'LOCAL_BINDINGS_STALE' });   // reload / reconcile first
-      var schema = (j.recordSchema === 2) ? 2 : 1;
-      var rec = buildRecord(F, id, schema);                          // persisted local document (unchanged)
-      if (!rec || !isObj(rec.body)) return done({ ok: false, code: 'NO_LOCAL_RECORD' });
-      if (!same(rec.body.bindings || {}, sb)) return done({ ok: false, code: 'LOCAL_BINDINGS_STALE' });
-      var nbind = {}; for (var bk in (rec.body.bindings || {})) nbind[bk] = rec.body.bindings[bk];
-      nbind[key] = characterId; rec.body.bindings = nbind;            // + the one additive binding (outgoing copy only;
-                                                                      //   local changes only after the server readback)
-      if (idlessPaths(rec.body).length) return done({ ok: false, code: 'REGISTRATION_PENDING' });
-      F.putCanonicalOnce({ id: id, expectedRev: +j.rev || 0, expectedHash: String(j.serverHash || ''), record: rec,
-                           mid: 'av2bind:' + id + ':' + (+j.rev || 0) + ':' + digest(key + '|' + characterId) }, function(w){
-        var wst = w && w.status;
-        F.getStoryV2Once(id, function(g2){
-          var j2 = g2 && g2.j; var b2 = j2 && j2.record && j2.record.body;
-          if (!b2 || !b2.bindings || b2.bindings[key] !== characterId) return done({ ok: false, code: wst === 409 ? 'CONFLICT' : 'NOT_APPLIED', status: wst });
-          S.cast.av2.bindings = clone(b2.bindings);
-          try { S.save(); } catch(e){}
-          try { F.flush(); } catch(e){}
-          done({ ok: true });
-        });
-      });
-    });
+    sidePortCommit({ kind: 'bind', id: id, S: S, F: F,
+      mutate: function(sent, b0){
+        var sb = b0.bindings || {};
+        if (Object.prototype.hasOwnProperty.call(sb, key)) return (sb[key] === characterId) ? true : { ok: false, code: 'BINDING_REBIND' };   // same → noop (sent == b0)
+        var target = entriesOf(b0.cast || {}).filter(function(x){ return x.e.character_id === characterId; })[0];
+        if (!target) return { ok: false, code: 'UNKNOWN_CHARACTER_ID' };
+        if (target.e.status === 'DELETED') return { ok: false, code: 'BINDING_TO_DELETED' };
+        var nbind = {}; for (var bk in (sent.bindings || {})) nbind[bk] = sent.bindings[bk];
+        nbind[key] = characterId; sent.bindings = nbind; return true;                      // + the one additive binding
+      },
+      mid: function(rev){ return 'av2bind:' + id + ':' + rev + ':' + digest(key + '|' + characterId); },
+      landed: function(b2){ return !!(b2.bindings && b2.bindings[key] === characterId); },
+      mirror: function(S1, slot, b2){                                                        // delta = bindings only (from the readback)
+        if (!isObj(slot.cast) || !isObj(slot.cast.av2)) return { code: 'NO_SIDECAR' };
+        slot.cast.av2.bindings = clone(b2.bindings);
+        if (isObj(S1.cast) && isObj(S1.cast.av2)) S1.cast.av2.bindings = clone(b2.bindings);
+        return true;
+      } }, done);   /* contract 3: no F.flush() after a side-port either (it would push runtime drift) */
   }
 
   /* ================= C2: explicit DELETE (GPT 911: server success + fresh readback FIRST, then local retire) ================= */
@@ -626,47 +698,34 @@
     if (loadConflict(id)) return cb({ ok: false, code: 'REBASE_REQUIRED' });
     reg.busy = true;
     var done = function(o){ reg.busy = false; note({ kind: 'AV2_DELETE_' + (o.ok ? 'OK' : o.code), id: id }); cb(o); };
-    F.getStoryV2Once(id, function(g, gerr){
-      var j = g && g.j;
-      if (gerr || !g || g.status !== 200 || !j || !j.ok || !j.record) return done({ ok: false, code: 'READ_FAIL' });
-      var b0 = j.record.body || {};
-      if (b0.assetSchema !== 2) return done({ ok: false, code: 'SERVER_NOT_SCHEMA2' });
-      var tgt = entriesOf(b0.cast || {}).filter(function(x){ return x.e.character_id === characterId; })[0];
-      if (!tgt) return done({ ok: false, code: 'UNKNOWN_CHARACTER_ID' });
-      if (tgt.path === 'hero') return done({ ok: false, code: 'HERO_NOT_DELETABLE' });
-      if (tgt.e.status === 'DELETED') return done({ ok: false, code: 'ALREADY_DELETED' });
-      var schema = (j.recordSchema === 2) ? 2 : 1;
-      var rec = buildRecord(F, id, schema);                                 // persisted local document
-      if (!rec || !isObj(rec.body)) return done({ ok: false, code: 'NO_LOCAL_RECORD' });
-      if (!same(rec.body, b0)) return done({ ok: false, code: 'LOCAL_NOT_SYNCED' });   // the delete carries ONLY the status change
-      var sentBody = clone(rec.body);
-      var te = entriesOf(sentBody.cast).filter(function(x){ return x.e.character_id === characterId; })[0];
-      te.e.status = 'DELETED';
-      /* canonical form = active entries first, retired (DEPARTED / DELETED) after them — exactly what push() emits after
-         the local retire. Moving the entry to the end keeps local == server after the retire (run1: an in-place DELETED
-         entry in the middle made the next local push a reorder → DIVERGED). Reorder keeps every id (contract-legal). */
-      var tp = /^npcs\[(\d+)\]$/.exec(te.path);
-      if (tp && isArr(sentBody.cast.npcs)){ var moved = sentBody.cast.npcs.splice(+tp[1], 1)[0]; sentBody.cast.npcs.push(moved); }
-      rec.body = sentBody;
-      F.putCanonicalOnce({ id: id, expectedRev: +j.rev || 0, expectedHash: String(j.serverHash || ''), record: rec,
-                           mid: 'av2del:' + id + ':' + (+j.rev || 0) + ':' + digest(characterId) }, function(w, werr){
-        var wst = w && w.status;
-        F.getStoryV2Once(id, function(g2){                                   // readback is the authority (no re-send)
-          var j2 = g2 && g2.j; var b2 = j2 && j2.record && j2.record.body;
-          if (!b2 || !same(b2, sentBody)) return done({ ok: false, code: (wst === 409) ? 'CONFLICT' : 'NOT_APPLIED', status: wst || null, err: werr || null });
-          /* server confirmed → local retire: out of the active cast, into the sidecar as DELETED */
-          try {
-            if (isArr(S.cast.npcs)) S.cast.npcs = S.cast.npcs.filter(function(n){ return !(isObj(n) && n.character_id === characterId); });
-            var c2 = pullCast(b2, id);
-            if (!isObj(S.cast.av2) || S.cast.av2.sid !== String(id)) S.cast.av2 = { assetSchema: 2, sid: String(id) };
-            S.cast.av2.bindings = c2.av2.bindings; S.cast.av2.known = c2.av2.known; S.cast.av2.retired = c2.av2.retired;
-            S.save();
-          } catch(e){ return done({ ok: false, code: 'LOCAL_RETIRE_FAILED' }); }
-          try { F.flush(); } catch(e){}
-          done({ ok: true, serverRev: j2.rev });
-        });
-      });
-    });
+    sidePortCommit({ kind: 'delete', id: id, S: S, F: F,
+      mutate: function(sent, b0){
+        var tgt = entriesOf(b0.cast || {}).filter(function(x){ return x.e.character_id === characterId; })[0];
+        if (!tgt) return { ok: false, code: 'UNKNOWN_CHARACTER_ID' };
+        if (tgt.path === 'hero') return { ok: false, code: 'HERO_NOT_DELETABLE' };
+        if (tgt.e.status === 'DELETED') return { ok: false, code: 'ALREADY_DELETED' };
+        var te = entriesOf(sent.cast).filter(function(x){ return x.e.character_id === characterId; })[0];
+        te.e.status = 'DELETED';
+        /* canonical form = active entries first, retired after them (unchanged from the previous implementation) */
+        var tp = /^npcs\[(\d+)\]$/.exec(te.path);
+        if (tp && isArr(sent.cast.npcs)){ var moved = sent.cast.npcs.splice(+tp[1], 1)[0]; sent.cast.npcs.push(moved); }
+        return true;
+      },
+      mid: function(rev){ return 'av2del:' + id + ':' + rev + ':' + digest(characterId); },
+      landed: function(b2){ var e = entryOfBody(b2, characterId); return !!(e && e.status === 'DELETED'); },
+      mirror: function(S1, slot, b2){                                                        // delta = this entry out of the active cast + sidecar from the readback
+        var c2 = pullCast(b2, id);
+        var retire = function(cast){
+          if (!isObj(cast)) return false;
+          if (isArr(cast.npcs)) cast.npcs = cast.npcs.filter(function(n){ return !(isObj(n) && n.character_id === characterId); });
+          if (!isObj(cast.av2) || cast.av2.sid !== String(id)) cast.av2 = { assetSchema: 2, sid: String(id) };
+          cast.av2.bindings = clone(c2.av2.bindings); cast.av2.known = clone(c2.av2.known); cast.av2.retired = clone(c2.av2.retired);
+          return true;
+        };
+        if (!retire(slot.cast)) return { code: 'NO_SLOT_CAST' };
+        retire(S1.cast);
+        return true;
+      } }, done);   /* contract 3: no F.flush() after a side-port either (it would push runtime drift) */
   }
 
   /* ================= ensure_first minimal entry (GPT 913 Q3): explicit Owner action only, never automatic =================
@@ -689,7 +748,7 @@
     var tgt = entriesOf(S.cast).filter(function(x){ return x.e.character_id === characterId; })[0];
     if (!tgt) return cb({ ok: false, code: 'UNKNOWN_CHARACTER_ID' });                       // retired (DEPARTED / DELETED) are not in the active cast
     if (tgt.e.status === 'DELETED') return cb({ ok: false, code: 'CHARACTER_DELETED' });
-    if (efBusy[characterId]) return cb({ ok: false, code: 'IN_PROGRESS' });
+    if (efBusy[characterId] || ndBusy[characterId]) return cb({ ok: false, code: 'IN_PROGRESS' });   /* ★audit P2C I2: not while an explicit new draw runs */
     efBusy[characterId] = true;
     var done = function(o){ delete efBusy[characterId]; note({ kind: 'AV2_ENSURE_FIRST_' + (o.ok ? 'OK' : o.code), id: id, cid: characterId }); cb(o); };
     var hasPointer = function(cb2){ F.assetV2Read('portrait.list', { story_id: id }, function(r, err){
@@ -698,11 +757,16 @@
     hasPointer(function(h0){
       if (h0 === null) return done({ ok: false, code: 'READ_FAIL' });
       if (h0 === true) return done({ ok: true, code: 'EXISTS', calls: 0 });
-      F.assetV2EnsureFirst({ story_id: id, character_id: characterId, owner_confirmed_empty_profile: opts.confirmEmptyProfile === true }, function(r, err){
+      /* ★av2f client (GPT #31 / #31-b): owner_confirmed_empty_profile is NEVER sent. 「外見情報が無いことの確認」≠「AI に人物を発明させてよい承認」.
+         An empty profile answers UNGROUNDED_REQUIRES_EXPLICIT_NEW_DRAW (av2f) — or, against the older Worker, PROFILE_EMPTY_CONFIRM_REQUIRED —
+         and in both cases the client stops here (provider call 0). The Owner either sets the appearance (setProfile) or presses the explicit
+         「新しいデザインを生成（候補のみ）」 (newDraw → portrait.regenerate + explicit_new_draw, candidate only, never adopted). */
+      F.assetV2EnsureFirst({ story_id: id, character_id: characterId }, function(r, err){
         var j = r && r.j, st = r && r.status;
         if (!err && st === 200 && j && j.ok){
           if (j.status === 'CREATED' || j.status === 'EXISTS') return done({ ok: true, code: j.status, calls: 1 });
-          return done({ ok: false, code: String(j.status || 'UNKNOWN_STATUS'), calls: 1 });   // PROFILE_* / CANDIDATES_PENDING / IN_FLIGHT / LOST_RACE
+          if (j.status === 'PROFILE_EMPTY_CONFIRM_REQUIRED') return done({ ok: false, code: 'UNGROUNDED_REQUIRES_EXPLICIT_NEW_DRAW', calls: 1, legacyStatus: j.status });   // older Worker: same decision, no confirm dialog
+          return done({ ok: false, code: String(j.status || 'UNKNOWN_STATUS'), calls: 1 });   // UNGROUNDED_REQUIRES_EXPLICIT_NEW_DRAW / PROFILE_REVIEW_REQUIRED / CANDIDATES_PENDING / IN_FLIGHT / LOST_RACE
         }
         var code = j && (j.errorCode || j.error);
         if (!err && st === 402) return done({ ok: false, code: 'BUDGET', calls: 1 });
@@ -715,6 +779,111 @@
           done({ ok: false, code: 'OUTCOME_UNKNOWN', calls: 1, status: st || null, err: err || code || null });
         });
       });
+    });
+  }
+
+  /* ================= ★av2f client follow-up (GPT #31-b, same integration gate as Worker av2f): profile review + explicit new draw =================
+     Contract: chrAiAv4 / cast.desc are REVIEW SUGGESTIONS only — never written into profile.appearance by code. profile.appearance is
+     written only by setProfile(), i.e. after the Owner has read / edited / confirmed the text. source_appearance_present then means
+     「レビュー済み appearance が存在する」. newDraw() is the ONLY path that sends explicit_new_draw === true; it never adopts. */
+  var PROFILE_APPEARANCE_MAX = 400;
+  function genderOf(v){ return (v === '女性' || v === '男性') ? v : ''; }   /* ★audit P2C D1: strict equality — never an object lookup (inherited keys) */
+  function cleanAppearance(v){
+    if (typeof v !== 'string') return '';
+    var s = v.normalize('NFC').replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}|]+/gu, ' ').replace(/\s+/g, ' ').trim();   /* ★audit P2C D4: same classes as the Worker sanitizer */
+    if (s.length > PROFILE_APPEARANCE_MAX) s = s.slice(0, PROFILE_APPEARANCE_MAX); if (/[\ud800-\udbff]$/.test(s)) s = s.slice(0, -1);
+    return s.trim();
+  }
+  /* read-only: what this device can show the Owner as reference text (never sent anywhere by this function) */
+  function suggestAppearance(characterId){
+    var id = curStoryId(); var S = state();
+    if (!id || !S || !isObj(S.cast)) return { ok: false, code: 'NO_DOCUMENT' };
+    var tgt = entriesOf(S.cast).filter(function(x){ return x.e.character_id === characterId; })[0];
+    if (!tgt) return { ok: false, code: 'UNKNOWN_CHARACTER_ID' };
+    var e = tgt.e, name = (typeof e.name === 'string') ? e.name : '';
+    var legacy = null;
+    try { var pre = 'chrAiAv4:' + name + '::'; for (var i = 0; i < localStorage.length; i++){ var k = localStorage.key(i); if (k && k.indexOf(pre) === 0){ var v = localStorage.getItem(k); if (typeof v === 'string' && v.trim()){ legacy = v.trim().slice(0, 1200); break; } } } } catch(e1){}
+    var p = isObj(e.profile) ? e.profile : {};
+    return { ok: true, name: name, gender: genderOf(e.gender), desc: (typeof e.desc === 'string') ? e.desc.trim().slice(0, 1200) : '', legacy: legacy,
+             current: { gender: genderOf(p.gender), appearance: (typeof p.appearance === 'string') ? p.appearance : '' }, reviewed: e.source_appearance_present === true };
+  }
+  /* explicit Owner action: fresh read → local == server → one CAS putcanonical carrying ONLY this entry's profile → readback is the authority */
+  function setProfile(characterId, input, cb){
+    cb = (typeof cb === 'function') ? cb : function(){};
+    if (off()) return cb({ ok: false, code: 'AV2_OFF' });
+    if (!flagOn()) return cb({ ok: false, code: 'AV2_FLAG_OFF' });
+    var id = curStoryId(); var S = state(); var F = F697();
+    if (!id || !S || !isIdentityLocal(S.cast, id) || !F || !F.getStoryV2Once || !F.putCanonicalOnce) return cb({ ok: false, code: 'NOT_SCHEMA2_DOCUMENT' });   /* ★r5: PREP or schema2 (identity present) */
+    if (typeof characterId !== 'string' || !CID_RE.test(characterId)) return cb({ ok: false, code: 'BAD_CHARACTER_ID' });
+    input = isObj(input) ? input : {};
+    var appearance = cleanAppearance(input.appearance);
+    var gender = genderOf(input.gender);
+    if (!appearance) return cb({ ok: false, code: 'EMPTY_APPEARANCE' });
+    if (input.ownerConfirmed !== true) return cb({ ok: false, code: 'OWNER_CONFIRM_REQUIRED' });   // the UI passes this only from the explicit 「この外見で確定」 button
+    if (reg.busy || loadPending(id)) return cb({ ok: false, code: 'REGISTRATION_IN_PROGRESS' });
+    if (loadConflict(id)) return cb({ ok: false, code: 'REBASE_REQUIRED' });
+    reg.busy = true;
+    var prof = { v: 1, appearance: appearance }; if (gender) prof.gender = gender;
+    var done = function(o){ reg.busy = false; note({ kind: 'AV2_SET_PROFILE_' + (o.ok ? 'OK' : o.code), id: id, cid: characterId }); cb(o); };
+    /* ★cand_sideport_authority: no S.save() / F.flush() before the write (GPT #31-c contract 3). The persisted slot is compared with the
+       fresh server inside sidePortCommit; runtime drift stays in memory and is never canonicalised by this operation. */
+    sidePortCommit({ kind: 'profile', id: id, S: S, F: F, allowPrep: true,
+      mutate: function(sent, b0){
+        var tgt = entriesOf(b0.cast || {}).filter(function(x){ return x.e.character_id === characterId; })[0];
+        if (!tgt) return { ok: false, code: 'UNKNOWN_CHARACTER_ID' };
+        if (tgt.e.status === 'DELETED') return { ok: false, code: 'CHARACTER_DELETED' };
+        var te = entriesOf(sent.cast).filter(function(x){ return x.e.character_id === characterId; })[0];
+        te.e.profile = clone(prof); te.e.source_appearance_present = true;              // = a REVIEWED appearance exists (GPT #31)
+        return true;
+      },
+      mid: function(rev){ return 'av2prof:' + id + ':' + rev + ':' + digest(characterId + '|' + stable(prof)); },
+      landed: function(b2){ var e = entryOfBody(b2, characterId); return !!(e && same(e.profile, prof) && e.source_appearance_present === true); },
+      mirror: function(S1, slot, b2){                                                        // delta = this entry's profile + flag, values from the readback
+        var se = entryOfBody(b2, characterId); if (!se) return { code: 'ENTRY_MISSING_IN_READBACK' };
+        var fields = { profile: se.profile, source_appearance_present: se.source_appearance_present };
+        /* ★audit D2: a DEPARTED character is in the server cast but locally in cast.av2.retired — patch there */
+        var patchRetired = function(cast){ var r = (cast && isObj(cast.av2) && isArr(cast.av2.retired)) ? cast.av2.retired.filter(function(x){ return isObj(x) && x.character_id === characterId; })[0] : null; if (!r) return false; for (var k in fields) if (Object.prototype.hasOwnProperty.call(fields, k)){ if (fields[k] === undefined) delete r[k]; else r[k] = clone(fields[k]); } return true; };
+        var pt = entriesOf(slot.cast || {}).filter(function(x){ return x.e.character_id === characterId; })[0];
+        if (pt) setEntryField(slot, pt.path, fields); else if (!patchRetired(slot.cast)) return { code: 'ENTRY_MISSING_IN_SLOT' };
+        var lt = entriesOf(S1.cast || {}).filter(function(x){ return x.e.character_id === characterId; })[0]; if (lt) setEntryField(S1, lt.path, fields); else patchRetired(S1.cast);
+        return true;
+      } }, function(r){ if (r && r.ok) r.profile = clone(prof); done(r); });   /* contract 3: no F.flush() after a side-port */
+  }
+  /* explicit Owner action = 「新しいデザインを生成（候補のみ）」: ONE portrait.regenerate with explicit_new_draw === true. The result is a
+     CANDIDATE (pointer untouched); adoption stays a separate explicit choice (adoptCandidate). Sent at most once per invocation; an
+     unknown outcome is NOT re-sent (the Owner opens the picker to look). */
+  var ndBusy = {};
+  function newDraw(characterId, opts, cb){
+    cb = (typeof cb === 'function') ? cb : function(){};
+    opts = isObj(opts) ? opts : {};
+    if (off()) return cb({ ok: false, code: 'AV2_OFF' });
+    if (!flagOn()) return cb({ ok: false, code: 'AV2_FLAG_OFF' });
+    var id = curStoryId(); var S = state(); var F = F697();
+    if (!id || !S || !isIdentityLocal(S.cast, id) || !F || typeof F.assetV2Write !== 'function') return cb({ ok: false, code: 'NOT_SCHEMA2_DOCUMENT' });
+    if (typeof characterId !== 'string' || !CID_RE.test(characterId)) return cb({ ok: false, code: 'BAD_CHARACTER_ID' });
+    if (opts.ownerExplicit !== true) return cb({ ok: false, code: 'OWNER_CONFIRM_REQUIRED' });
+    if (reg.busy || loadPending(id)) return cb({ ok: false, code: 'REGISTRATION_IN_PROGRESS' });
+    if (loadConflict(id)) return cb({ ok: false, code: 'REBASE_REQUIRED' });
+    if (loadBlocked(id)) return cb({ ok: false, code: 'REGISTRATION_BLOCKED' });
+    var tgt = entriesOf(S.cast).filter(function(x){ return x.e.character_id === characterId; })[0];
+    if (!tgt) return cb({ ok: false, code: 'UNKNOWN_CHARACTER_ID' });
+    if (tgt.e.status === 'DELETED') return cb({ ok: false, code: 'CHARACTER_DELETED' });
+    if (ndBusy[characterId] || efBusy[characterId]) return cb({ ok: false, code: 'IN_PROGRESS' });
+    ndBusy[characterId] = true;
+    var done = function(o){ delete ndBusy[characterId]; note({ kind: 'AV2_NEW_DRAW_' + (o.ok ? 'OK' : o.code), id: id, cid: characterId }); cb(o); };
+    F.assetV2Write('portrait.regenerate', { story_id: id, character_id: characterId, explicit_new_draw: true }, function(r, err){
+      var j = r && r.j, st = r && r.status;
+      if (!err && st === 200 && j && j.ok){
+        if (j.status === 'CANDIDATE_CREATED' || (j.candidate && typeof j.candidate === 'string')) return done({ ok: true, code: 'CANDIDATE_CREATED', calls: 1, candidate: j.candidate || null, grounded: j.grounded === true });
+        return done({ ok: false, code: String(j.status || 'UNKNOWN_STATUS'), calls: 1 });   // IN_FLIGHT / LOST_RACE
+      }
+      var code = j && (j.errorCode || j.error);
+      if (!err && st === 400 && code === 'EXPLICIT_NEW_DRAW_REQUIRED') return done({ ok: false, code: 'EXPLICIT_NEW_DRAW_REQUIRED', calls: 1 });   // should never happen (flag is always sent)
+      if (!err && st === 402) return done({ ok: false, code: 'BUDGET', calls: 1 });
+      if (!err && st === 429) return done({ ok: false, code: 'RATE_LIMITED', calls: 1 });
+      if (!err && st === 502) return done({ ok: false, code: 'GENERATION_FAILED', calls: 1 });
+      if (!err && (st === 501 || st === 403 || st === 404)) return done({ ok: false, code: st === 404 ? 'NOT_FOUND' : 'ASSET_V2_UNAVAILABLE', calls: 1 });
+      done({ ok: false, code: 'OUTCOME_UNKNOWN', calls: 1, status: st || null, err: err || code || null });
     });
   }
 
@@ -993,6 +1162,7 @@
                            holdCanonical: holdCanonical, off: off, docSchema2: docSchema2 };
   window.__chronicleAssetV2 = {
     migrate: migrate, prepare: migrate, switchToSchema2: switchToSchema2, ensureFirst: ensureFirst,
+    suggestAppearance: suggestAppearance, setProfile: setProfile, newDraw: newDraw,
     migrationStatus: migrationStatus, secureCharacter: secureCharacter, adoptCandidate: adoptCandidate, waiveCharacter: waiveCharacter, listCandidates: listCandidates, reportSecured: reportSecured, addBinding: addBinding, deleteCharacter: deleteCharacter,
     /* readback / reconcile only (never a second write): C2 offers it as 「再照合」 */
     reconcile: function(){ var id = curStoryId(); var F = F697(); var pd = id ? loadPending(id) : null;

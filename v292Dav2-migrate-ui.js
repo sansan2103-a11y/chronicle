@@ -37,9 +37,40 @@
     READ_FAIL: 'サーバーに接続できませんでした', SERVER_UNAVAILABLE: 'この account では古い絵を取り込めません', DEVICE_UNAVAILABLE: 'この account では古い絵を取り込めません',
     SERVER_UNKNOWN: '取り込みの結果を確認できませんでした', DEVICE_UNKNOWN: '取り込みの結果を確認できませんでした', NO_LEGACY_KEY: '古い絵の場所が分かりません', IN_PROGRESS: '処理中です',
     OUTCOME_UNKNOWN: '結果を確認できませんでした', ALREADY: '既にこの絵です', ADOPTED: 'この絵にしました', ADOPTED_CONFIRMED: 'この絵にしました', IMPORTED: '候補として確保しました', NOTHING_TO_SECURE: '古い絵はありません（確保済み扱い）',
-    CREATED: '絵を作りました', CREATED_CONFIRMED: '絵を作りました', EXISTS: '既に絵があります', PROFILE_REVIEW_REQUIRED: '外見の情報を確認してから作ってください', CANDIDATES_PENDING: '候補の絵があります。候補から選んでください',
+    CREATED: '絵を作りました', CREATED_CONFIRMED: '絵を作りました', EXISTS: '既に絵があります', PROFILE_REVIEW_REQUIRED: '外見の情報を確認してから作ってください（下の「外見を設定」）', UNGROUNDED_REQUIRES_EXPLICIT_NEW_DRAW: '外見の情報が無いので、この操作では絵を作りません。下の「外見を設定」で外見を確定してから「新しく描く」を押してください', CANDIDATES_PENDING: '候補の絵があります。候補から選んでください',
     GENERATION_FAILED: '絵を作れませんでした', BUDGET: '今月の画像生成の上限に達しています', AV2_FLAG_OFF: 'この端末ではこの操作はできません', AV2_OFF: 'この端末ではこの操作はできません' };
   function say(res){ return (res && CODE[res.code]) || (res && res.ok ? 'できました' : 'できませんでした'); }
+  /* ★cand_sideport_authority r6 (audit D C-1): appearance editor for the migration row (PREP + schema2). Suggestions (cast.desc / legacy
+     chrAiAv4 text) are shown as reference only; profile.appearance is written only by the explicit 「この外見で確定」 → setProfile
+     (side-port helper: fresh canonical × persisted slot, delta only). After PERSISTED_EQUALS_READBACK the page reloads once (fix733 TYPE A),
+     never while a generation is in flight or the composer holds a draft. */
+  function showProfileEditor(row, rw, msg){
+    var old = row.querySelector('[data-av2-mig="profile-editor"]'); if (old){ old.style.display = old.style.display === 'none' ? '' : 'none'; return; }
+    var ed = document.createElement('div'); ed.setAttribute('data-av2-mig', 'profile-editor'); ed.style.cssText = 'margin:6px 0 2px 0;padding:6px;border:1px solid #444;border-radius:6px;background:#15151c;font-size:12px;color:#ccc;';
+    var sug = (A() && typeof A().suggestAppearance === 'function') ? (A().suggestAppearance(rw.id) || {}) : {};
+    var ttl = document.createElement('div'); ttl.textContent = '外見の設定（絵の根拠になる文。保存するまで何も生成しません）'; ed.appendChild(ttl);
+    var gsel = document.createElement('select'); gsel.setAttribute('data-av2-prof', 'gender'); gsel.style.cssText = 'background:#1a1a22;color:#eee;border:1px solid #555;border-radius:4px;font-size:12px;margin:4px 6px 0 0;';
+    [['', '性別: 未設定'], ['女性', '性別: 女性'], ['男性', '性別: 男性']].forEach(function(o){ var op = document.createElement('option'); op.value = o[0]; op.textContent = o[1]; gsel.appendChild(op); });
+    gsel.value = (sug.current && sug.current.gender) || sug.gender || ''; ed.appendChild(gsel);
+    var ta = document.createElement('textarea'); ta.setAttribute('data-av2-prof', 'appearance'); ta.rows = 3; ta.maxLength = 400; ta.placeholder = '例: 黒髪の短髪、細身、灰色の着物、左頬に古い傷';
+    ta.style.cssText = 'display:block;width:96%;margin-top:4px;background:#1a1a22;border:1px solid #555;color:#eee;padding:4px;border-radius:4px;font-size:12px;';
+    ta.value = (sug.current && sug.current.appearance) || ''; ed.appendChild(ta);
+    var refs = []; if (sug.desc) refs.push(['設定の説明文（参考）', sug.desc]); if (sug.legacy) refs.push(['以前のAIアイコン用の外見文（参考・自動推定なので要確認）', sug.legacy]);
+    refs.forEach(function(r){ var rb = document.createElement('div'); rb.setAttribute('data-av2-prof', 'suggestion'); rb.style.cssText = 'margin-top:4px;color:#aaa;';
+      var lab = document.createElement('div'); lab.textContent = r[0]; rb.appendChild(lab); var tx = document.createElement('div'); tx.style.cssText = 'white-space:pre-wrap;color:#999;border-left:2px solid #555;padding-left:6px;'; tx.textContent = r[1]; rb.appendChild(tx);
+      var cp = btn('この文を編集欄へ入れる', '#3a3a4a'); cp.setAttribute('data-av2-prof', 'copy'); cp.onclick = function(){ ta.value = r[1].slice(0, 400); ta.focus(); }; rb.appendChild(cp); ed.appendChild(rb); });
+    var pmsg = document.createElement('span'); pmsg.style.cssText = 'margin-left:6px;color:#e0c080;';
+    var okB = btn('この外見で確定', '#3a5a4a'); okB.setAttribute('data-av2-prof', 'confirm');
+    okB.onclick = function(){ if (okB.disabled) return; var okc = false; try { okc = window.confirm('「' + (rw.name || '') + '」の外見をこの内容で確定します。\n（絵の生成はまだ行いません）'); } catch(e){} if (!okc) return;
+      okB.disabled = true; pmsg.textContent = '…';
+      A().setProfile(rw.id, { gender: gsel.value, appearance: ta.value, ownerConfirmed: true }, function(res){
+        note({ kind: 'UI_MIG_SET_PROFILE', cid: rw.id, ok: !!(res && res.ok), code: res && res.code }); okB.disabled = false;
+        if (!res || !res.ok){ pmsg.textContent = (res && CODE[res.code]) || (res && res.code === 'EMPTY_APPEARANCE' ? '外見の文を入力してください' : (res && res.code === 'LOCAL_NOT_SYNCED' ? '保存が終わってからお試しください' : 'できませんでした')); return; }
+        var busy = false; try { var S0 = window.__chronicleGetState ? window.__chronicleGetState('av2mig') : null; busy = !!(S0 && S0.inFlight); var inp = document.getElementById('inp'); if (inp && String(inp.value || '').trim()) busy = true; } catch(e){}
+        if (res.mirror === 'PERSISTED_EQUALS_READBACK' && !busy){ pmsg.textContent = '外見を保存しました（反映のため再読み込みします）'; msg.textContent = pmsg.textContent; setTimeout(function(){ try { location.reload(); } catch(e){} }, 1200); return; }
+        pmsg.textContent = busy ? 'サーバーには保存されました。生成や入力が終わったら、ページを再読み込みしてください' : 'サーバーには保存されました。この端末の表示を揃えるため、ページを再読み込みしてください'; msg.textContent = pmsg.textContent; }); };
+    ed.appendChild(okB); ed.appendChild(pmsg); row.appendChild(ed);
+  }
   function btn(label, bg){ var b = document.createElement('button'); b.type = 'button'; b.textContent = label;
     b.style.cssText = 'background:' + bg + ';border:1px solid #666;color:#fff;padding:5px 10px;border-radius:5px;cursor:pointer;font-size:12px;margin:4px 6px 0 0;'; return b; }
   var thumbs = {};
@@ -119,13 +150,20 @@
         }
         if (!rw.pointer && !rw.candidates.length && (rw.state === 'NO_LEGACY_IMAGE' || rw.unavailable)){
           var eb = btn('新しく描く', '#3a5a4a'); eb.setAttribute('data-av2-mig', 'ensure');
-          eb.onclick = function(){ var ok = false; try { ok = window.confirm('「' + (rw.name || '') + '」の絵を新しく作ります。\n画像生成を1回使います。よろしいですか？'); } catch(e){} if (!ok) return;
+          eb.onclick = function(){ var ok = false; try { ok = window.confirm('「' + (rw.name || '') + '」の絵を新しく作ります。\n外見の情報がある場合だけ画像生成を1回使います。よろしいですか？'); } catch(e){} if (!ok) return;
             eb.disabled = true; msg.textContent = '…';
-            var go = function(conf){ A().ensureFirst(rw.id, { confirmEmptyProfile: conf === true }, function(r){
-              if (r && !r.ok && r.code === 'PROFILE_EMPTY_CONFIRM_REQUIRED' && conf !== true){ var ok2 = false; try { ok2 = window.confirm('外見の情報がありません。このまま作りますか？（画像生成を1回使います）'); } catch(e){} if (ok2) return go(true); msg.textContent = '中止しました'; eb.disabled = false; return; }
-              msg.textContent = say(r); note({ kind: 'UI_MIG_ENSURE', cid: rw.id, ok: !!(r && r.ok), code: r && r.code }); setTimeout(function(){ if (panel) render(body); }, 300); }); };
-            go(false); };
+            /* ★av2f client (GPT #31-b): never confirmEmptyProfile; an empty profile stops here (provider call 0) and the Owner sets
+               the appearance below (PREP: the character list card is not augmented, so the editor lives here — audit D C-1). */
+            A().ensureFirst(rw.id, {}, function(r){
+              msg.textContent = say(r); note({ kind: 'UI_MIG_ENSURE', cid: rw.id, ok: !!(r && r.ok), code: r && r.code });
+              if (r && !r.ok && (r.code === 'UNGROUNDED_REQUIRES_EXPLICIT_NEW_DRAW' || r.code === 'PROFILE_REVIEW_REQUIRED')){ eb.disabled = false; showProfileEditor(row, rw, msg); return; }
+              setTimeout(function(){ if (panel) render(body); }, 300); }); };
           row.appendChild(eb);
+        }
+        if (!rw.pointer && rw.state !== 'OWNER_WAIVED_DONE'){                 /* ★r6: appearance review is independent of the legacy picture */
+          var pb = btn('外見を設定', '#3a4a5a'); pb.setAttribute('data-av2-mig', 'profile');
+          pb.onclick = function(){ showProfileEditor(row, rw, msg); };
+          row.appendChild(pb);
         }
         row.appendChild(msg); list.appendChild(row);
       });

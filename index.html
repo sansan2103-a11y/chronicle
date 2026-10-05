@@ -270,7 +270,7 @@
      ★kill = localStorage['v292Dfix889Off']='1' は **UI だけ**を消す。絞り込みと扉は止まらない。 -->
 <script src="v292Dfix889-secret-vault.js?cb=20260928-ac9"></script>
 <!-- ★av2 (GPT 904 C1): Asset v2 client data plane. save core (fix697/fix705/fix743) が呼ぶ純関数 + registrar。kill = localStorage v292Dav2Off=1 -->
-<script src="v292Dav2-data.js?cb=20261002-ac36"></script>
+<script src="v292Dav2-data.js?cb=20261005-c3"></script>
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
 <script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
 <script src="v292Dfix705-canonical-read-gate.js?cb=20261002-ac36"></script>
@@ -323,7 +323,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261005-c2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261005-c3';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -3904,7 +3904,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      default OFF (opt-in=v292Dfix803On / kill=v292Dfix803Off / story=v292Dfix803Story)。fix802 の fire 末尾から onFire で呼ばれる。
      timer 0 / retry 0 / 新 write path 0 / localStorage 書込は fix793.materialize() 経由の v292Dmem1_slot_<sid> のみ -->
 <script src="v292Dfix803-auto-materialize.js?cb=20260930-ac25"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20261002-ac36"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20261005-c3"></script>
 <!-- ★fix912 SA-3 S2 in-session reconcile（fix697 の後・kill v292Dfix912Off / v292Dfix911Off） -->
 <script src="v292Dfix912-s2-insession.js?cb=20260929-ac14"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
@@ -4591,8 +4591,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- ★av2 C2 (GPT 911): Asset v2 presentation plane (portrait.list / asset.get / IDB / placeholder / reason display / addBinding / explicit delete UI).
      Acts ONLY on assetSchema-2 documents (canonical-derived; never the local flag). Legacy stories: no DOM work at all.
      kill: localStorage[v292Dav2pOff]=1 (legacy generation guards stay) -->
-<script src="v292Dav2-portrait.js?cb=20261002-ac36"></script>
-<script src="v292Dav2-migrate-ui.js?cb=20261002-ac36"></script>
+<script src="v292Dav2-portrait.js?cb=20261005-c3"></script>
+<script src="v292Dav2-migrate-ui.js?cb=20261005-c3"></script>
 <!-- ★lane PUBLIC_AI_ACCESS / sp12: worker v44 の匿名経路の client 側。
      既定 ON だが root JSON の publicAnon が 1 のときだけ作用する（それ以外は sp11a と同じ挿動）。
      ★★WAIT_V44_LIVE_GREEN / BUNDLED_WITH_SP10B_SP11A。

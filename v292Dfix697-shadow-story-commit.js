@@ -3102,7 +3102,7 @@
     if (typeof a.story_id !== 'string' || !a.story_id){ cb(null, 'BAD_STORY_ID'); return; }
     if (typeof a.character_id !== 'string' || !AV2_CID_RE.test(a.character_id)){ cb(null, 'BAD_CHARACTER_ID'); return; }
     var body = { op: op, story_id: a.story_id, character_id: a.character_id };
-    if (op === 'portrait.ensure_first'){ if (a.owner_confirmed_empty_profile === true) body.owner_confirmed_empty_profile = true; }
+    if (op === 'portrait.ensure_first'){ /* ★av2f client (audit P2C D3): owner_confirmed_empty_profile is never forwarded — 「外見情報が無いことの確認」は人物発明の承認ではない */ }
     else if (op === 'portrait.import_legacy'){ if (typeof a.legacy_k !== 'string' || !AV2_LK_RE.test(a.legacy_k)){ cb(null, 'BAD_LEGACY_KEY'); return; } body.legacy_k = a.legacy_k; }
     else if (op === 'portrait.import_device_copy'){
       if (typeof a.data !== 'string' || a.data.indexOf('data:image/') !== 0){ cb(null, 'BAD_DATA'); return; }
@@ -3113,9 +3113,15 @@
       if (typeof a.expected_rev !== 'number' || !(a.expected_rev >= 0)){ cb(null, 'BAD_EXPECTED_REV'); return; }
       body.asset_id = a.asset_id; body.expected_rev = a.expected_rev;
     }
+    else if (op === 'portrait.regenerate'){
+      /* ★av2f client (GPT #31-b): the only regenerate the client may send is the Owner's explicit 「新しいデザインを生成（候補のみ）」.
+         explicit_new_draw must be the boolean true (the Worker is strict too); nothing else is forwarded. */
+      if (a.explicit_new_draw !== true){ cb(null, 'EXPLICIT_NEW_DRAW_REQUIRED'); return; }
+      body.explicit_new_draw = true;
+    }
     else { cb(null, 'OP_NOT_ALLOWED'); return; }
     var ac = null, timer = null;
-    try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, op === 'portrait.ensure_first' ? AV2_EF_TIMEOUT_MS : TIMEOUT_MS); } catch(e){}
+    try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, (op === 'portrait.ensure_first' || op === 'portrait.regenerate') ? AV2_EF_TIMEOUT_MS : TIMEOUT_MS); } catch(e){}
     var opts = { method: 'POST', headers: authHeaders(body), body: JSON.stringify(body) };
     if (ac) opts.signal = ac.signal;
     fetch(proxyUrl() + '/save', opts).then(function(res){

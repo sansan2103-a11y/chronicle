@@ -186,12 +186,28 @@
               BINDING_TO_DELETED: '削除済みのキャラクターには追加できません', HERO_NOT_DELETABLE: '主人公は削除できません', ALREADY_DELETED: '既に削除されています',
               /* ensure_first (GPT 913 Q3) */
               ok_first: '絵を作りました', EXISTS: '既に絵があります', CREATED_CONFIRMED: '絵を作りました', REGISTRATION_BLOCKED: '登録内容が拒否されています。先に名前などを直してください',
-              PROFILE_REVIEW_REQUIRED: '外見の情報を確認してから作ってください', CANDIDATES_PENDING: '候補の絵があります。候補から選んでください',
+              PROFILE_REVIEW_REQUIRED: '外見の情報を確認してから作ってください（下の「外見を設定」）', CANDIDATES_PENDING: '候補の絵があります。候補から選んでください',
+              /* ★av2f client (GPT #31-b): empty profile never renders from 「最初の絵を作る」 */
+              UNGROUNDED_REQUIRES_EXPLICIT_NEW_DRAW: '外見の情報が無いので、この操作では絵を作りません。「外見を設定」してから作るか、「新しいデザインを生成（候補のみ）」を使ってください',
+              CANDIDATE_CREATED: '候補を1枚作りました（まだ採用していません）。「候補から選ぶ」で確認してください', EXPLICIT_NEW_DRAW_REQUIRED: '明示的な指示が必要です',
+              EMPTY_APPEARANCE: '外見の文を入力してください', OWNER_CONFIRM_REQUIRED: '確認が必要です', LOCAL_NOT_SYNCED: '保存が終わってからお試しください', SERVER_NOT_SCHEMA2: 'この物語では使えません',
+              REGISTRATION_PENDING: '登録の確認が終わってからお試しください', CHARACTER_DELETED: '削除済みのキャラクターです', UNKNOWN_CHARACTER_ID: 'このキャラクターは登録されていません', ok_profile: '外見を保存しました。「最初の絵を作る」で絵を作れます',
+              /* ★cand_sideport_authority R3-1 */ APPLIED_SERVER_MOVED: '保存されましたが、別の端末も更新しています。ページを再読み込みしてください', NOT_CANONICAL_ROW: 'この物語はサーバー側で編集できない状態です（非表示または削除済み）', READBACK_FAIL: '保存結果を確認できませんでした。ページを再読み込みしてください', 'canonical-deleted': 'この物語は削除されています', 'not-canonical': 'この物語はまだサーバーの正本になっていません',
               IN_FLIGHT: '作成中です。少し待ってから確認してください', IN_PROGRESS: '作成中です', LOST_RACE: '別の操作で絵が決まりました',
               BUDGET: '今月の画像生成の上限に達しています', RATE_LIMITED: '少し時間をおいてからお試しください', GENERATION_FAILED: '絵を作れませんでした',
               OUTCOME_UNKNOWN: '結果を確認できませんでした。しばらくしてから表示を確認してください', READ_FAIL: 'サーバーに接続できませんでした',
               ASSET_V2_UNAVAILABLE: 'この物語では使えません', NOT_FOUND: 'この物語では使えません' };
   function msgFor(res, okKey){ if (res && res.ok) return MSG[okKey]; return (res && MSG[res.code]) || 'できませんでした'; }
+  /* ★cand_sideport_authority (audit D7 / D3-a): after a side-port write the document must be re-read (fix733 TYPE A: ordinary pushes are held
+     until reload). On PERSISTED_EQUALS_READBACK reload once; on any other mirror outcome tell the Owner to reload (the server has the change). */
+  function afterSidePort(res, msgEl){
+    if (!res || res.noop) return;
+    if (!res.ok){ if (res.code === 'APPLIED_SERVER_MOVED' && msgEl) msgEl.textContent = MSG.APPLIED_SERVER_MOVED; return; }
+    /* ★R3-3: never reload while a generation is in flight or the composer holds an unsent draft — tell the Owner instead */
+    var busy = false; try { var S0 = window.__chronicleGetState ? window.__chronicleGetState('av2ui') : null; busy = !!(S0 && S0.inFlight); var inp = document.getElementById('inp'); if (inp && String(inp.value || '').trim()) busy = true; } catch(e){}
+    if (res.mirror === 'PERSISTED_EQUALS_READBACK' && !busy){ if (msgEl) msgEl.textContent = (msgEl.textContent || '') + '（反映のため再読み込みします）'; setTimeout(function(){ try { location.reload(); } catch(e){} }, 1200); return; }
+    if (msgEl){ msgEl.textContent = busy ? 'サーバーには保存されました。生成や入力が終わったら、ページを再読み込みしてください' : 'サーバーには保存されました。この端末の表示を揃えるため、ページを再読み込みしてください'; msgEl.title = String(res.mirror || ''); }
+  }
   function mkBtn(label, bg){ var b = document.createElement('button'); b.type = 'button'; b.textContent = label;
     b.style.cssText = 'background:' + bg + ';border:1px solid #666;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;margin:4px 6px 0 0;'; return b; }
   function augmentCard(m, card){
@@ -220,7 +236,7 @@
     var addB = mkBtn('呼び名を追加', '#3a4a6a');
     addB.onclick = function(ev){ ev.stopPropagation(); var v = inp.value; if (!key(v)) return;
       addB.disabled = true; msg.textContent = '…';
-      A().addBinding(v, e.id, function(res){ addB.disabled = false; msg.textContent = msgFor(res, 'ok_bind'); msg.title = (res && res.code) || ''; note({ kind: 'UI_ADD_BINDING', ok: !!(res && res.ok), code: res && res.code }); if (res && res.ok) inp.value = ''; schedule(); }); };
+      A().addBinding(v, e.id, function(res){ addB.disabled = false; msg.textContent = msgFor(res, 'ok_bind'); msg.title = (res && res.code) || ''; note({ kind: 'UI_ADD_BINDING', ok: !!(res && res.ok), code: res && res.code }); if (res && res.ok) inp.value = ''; afterSidePort(res, msg); schedule(); }); };
     box.appendChild(inp); box.appendChild(addB);
     var pkB = mkBtn('候補から選ぶ', '#4a4a2a'); pkB.setAttribute('data-av2-pick', '1');          // GPT 917 Q3: minimal candidate picker
     pkB.onclick = function(ev){ ev.stopPropagation(); openPicker(e, name, msg); };
@@ -228,24 +244,85 @@
     if (noPtr){
       var efB = mkBtn('最初の絵を作る', '#3a5a4a'); efB.setAttribute('data-av2-ef', '1');
       if (regBusy){ efB.disabled = true; efB.style.opacity = '.5'; efB.title = '保存の確認が終わるまで使えません'; }
-      var runEF = function(confirmEmpty){
+      /* ★av2f client (GPT #31-b): no 「このまま作りますか」 dialog any more — an empty profile is answered by the server with
+         UNGROUNDED_REQUIRES_EXPLICIT_NEW_DRAW (provider call 0) and the card then shows the two explicit ways forward. */
+      var runEF = function(){
         efB.disabled = true; msg.textContent = '…';
-        A().ensureFirst(e.id, { confirmEmptyProfile: confirmEmpty === true }, function(res){
+        A().ensureFirst(e.id, {}, function(res){
           note({ kind: 'UI_ENSURE_FIRST', ok: !!(res && res.ok), code: res && res.code, calls: res && res.calls });
-          if (res && !res.ok && res.code === 'PROFILE_EMPTY_CONFIRM_REQUIRED' && confirmEmpty !== true){
-            var ok2 = false; try { ok2 = window.confirm('「' + name + '」には外見の情報がありません。\nこのまま絵を作りますか？（画像生成を1回使います）'); } catch(e3){}
-            if (ok2) return runEF(true);
-            efB.disabled = false; msg.textContent = '中止しました'; return;
-          }
           msg.textContent = (res && res.ok) ? (MSG[res.code] || MSG.ok_first) : msgFor(res); msg.title = (res && res.code) || '';
           if (res && res.ok){ listed = null; card.__av2Key = null; } else efB.disabled = false;
+          if (res && !res.ok && (res.code === 'UNGROUNDED_REQUIRES_EXPLICIT_NEW_DRAW' || res.code === 'PROFILE_REVIEW_REQUIRED')) showProfileTools(true);
           schedule(); });
       };
       efB.onclick = function(ev){ ev.stopPropagation(); if (efB.disabled) return;
-        var okc = false; try { okc = window.confirm('「' + name + '」の最初の絵を作ります。\n画像生成を1回使います。よろしいですか？'); } catch(e1){}
-        if (!okc) return; runEF(false); };
+        var okc = false; try { okc = window.confirm('「' + name + '」の最初の絵を作ります。\n外見の情報がある場合だけ画像生成を1回使います。よろしいですか？'); } catch(e1){}
+        if (!okc) return; runEF(); };
       box.appendChild(efB);
     }
+    /* ★av2f client (GPT #31-b): 「外見を設定」 (review suggestion → Owner edits → explicit confirm → setProfile) and
+       「新しいデザインを生成（候補のみ）」 (newDraw: explicit_new_draw, candidate only, never adopted). Shown for every registered entry. */
+    var tools = null;
+    function showProfileTools(open){
+      if (tools){ tools.style.display = open ? '' : 'none'; return; }
+      if (!open) return;
+      tools = document.createElement('div'); tools.setAttribute('data-av2-ui', 'profile'); tools.style.cssText = 'margin-top:6px;padding:6px;border:1px solid #444;border-radius:6px;background:#15151c;';
+      tools.onclick = function(ev){ ev.stopPropagation(); };
+      var sug = A().suggestAppearance(e.id) || {};
+      var ttl = document.createElement('div'); ttl.style.cssText = 'color:#ddd;margin-bottom:4px;'; ttl.textContent = '外見の設定（絵の根拠になる文。保存するまで何も生成しません）'; tools.appendChild(ttl);
+      var gsel = document.createElement('select'); gsel.setAttribute('data-av2-prof', 'gender'); gsel.style.cssText = 'background:#1a1a22;color:#eee;border:1px solid #555;border-radius:4px;font-size:11px;margin-right:6px;';
+      [['', '性別: 未設定'], ['女性', '性別: 女性'], ['男性', '性別: 男性']].forEach(function(o){ var op = document.createElement('option'); op.value = o[0]; op.textContent = o[1]; gsel.appendChild(op); });
+      gsel.value = (sug.current && sug.current.gender) || sug.gender || '';                    // cast.gender = prefill only (canonical value)
+      tools.appendChild(gsel);
+      var ta = document.createElement('textarea'); ta.setAttribute('data-av2-prof', 'appearance'); ta.rows = 3; ta.maxLength = 400; ta.placeholder = '例: 黒髪の短髪、細身、灰色の着物、左頬に古い傷';
+      ta.style.cssText = 'display:block;width:96%;margin-top:4px;background:#1a1a22;border:1px solid #555;color:#eee;padding:4px;border-radius:4px;font-size:11px;';
+      ta.value = (sug.current && sug.current.appearance) || '';                                 // ONLY a previously confirmed appearance is prefilled
+      tools.appendChild(ta);
+      var refs = [];
+      if (sug.desc) refs.push(['設定の説明文（参考）', sug.desc]);
+      if (sug.legacy) refs.push(['以前のAIアイコン用の外見文（参考・自動推定なので要確認）', sug.legacy]);
+      refs.forEach(function(r){
+        var rb = document.createElement('div'); rb.setAttribute('data-av2-prof', 'suggestion'); rb.style.cssText = 'margin-top:4px;color:#aaa;font-size:11px;';
+        var lab = document.createElement('div'); lab.textContent = r[0]; rb.appendChild(lab);
+        var tx = document.createElement('div'); tx.style.cssText = 'white-space:pre-wrap;color:#999;border-left:2px solid #555;padding-left:6px;'; tx.textContent = r[1]; rb.appendChild(tx);
+        var cp = mkBtn('この文を編集欄へ入れる', '#3a3a4a'); cp.setAttribute('data-av2-prof', 'copy');
+        cp.onclick = function(ev){ ev.stopPropagation(); ta.value = r[1].slice(0, 400); ta.focus(); };   // Owner action: goes into the EDIT box, never straight to the profile
+        rb.appendChild(cp); tools.appendChild(rb);
+      });
+      var pmsg = document.createElement('span'); pmsg.style.cssText = 'margin-left:4px;color:#e0c080;';
+      var okB = mkBtn('この外見で確定', '#3a5a4a'); okB.setAttribute('data-av2-prof', 'confirm');
+      okB.onclick = function(ev){ ev.stopPropagation(); if (okB.disabled) return;
+        var okc = false; try { okc = window.confirm('「' + name + '」の外見をこの内容で確定します。\n（絵の生成はまだ行いません）'); } catch(e1){}
+        if (!okc) return;
+        okB.disabled = true; pmsg.textContent = '…';
+        A().setProfile(e.id, { gender: gsel.value, appearance: ta.value, ownerConfirmed: true }, function(res){
+          note({ kind: 'UI_SET_PROFILE', ok: !!(res && res.ok), code: res && res.code });
+          okB.disabled = false; pmsg.textContent = (res && res.ok) ? MSG.ok_profile : msgFor(res); pmsg.title = (res && res.code) || '';
+          if (res && res.ok){ msg.textContent = MSG.ok_profile; var efB2 = card.querySelector('[data-av2-ef]'); if (efB2) efB2.disabled = false; afterSidePort(res, pmsg); } });
+      };
+      tools.appendChild(okB);
+      var ndB = mkBtn('新しいデザインを生成（候補のみ）', '#5a3a3a'); ndB.setAttribute('data-av2-nd', '1');
+      ndB.onclick = function(ev){ ev.stopPropagation(); if (ndB.disabled) return;
+        /* wording follows the CURRENT confirmed profile (re-read: the Owner may have just confirmed one); the flag sent is the same
+           explicit_new_draw === true either way — it is the Owner's explicit draw, and the server records grounded / ungrounded itself */
+        var now = A().suggestAppearance(e.id) || {}; var hasApp = !!(now.current && now.current.appearance);
+        var okc = false; try { okc = window.confirm(hasApp
+          ? '「' + name + '」の確定済みの外見をもとに、新しい候補を1枚作ります。\n画像生成を1回使います。候補を作るだけで、絵として採用はしません（採用は「候補から選ぶ」で行います）。よろしいですか？'
+          : '「' + name + '」の外見の情報なしで、AIが考えたデザインを候補として1枚作ります。\n画像生成を1回使います。候補を作るだけで、絵として採用はしません（採用は「候補から選ぶ」で行います）。よろしいですか？'); } catch(e1){}
+        if (!okc) return;
+        ndB.disabled = true; pmsg.textContent = '…';
+        A().newDraw(e.id, { ownerExplicit: true }, function(res){
+          note({ kind: 'UI_NEW_DRAW', ok: !!(res && res.ok), code: res && res.code, calls: res && res.calls });
+          ndB.disabled = false; pmsg.textContent = (res && res.ok) ? MSG.CANDIDATE_CREATED : msgFor(res); pmsg.title = (res && res.code) || '';
+          if (res && res.ok) msg.textContent = MSG.CANDIDATE_CREATED;                           // no adopt, no card rebuild: the pointer did not change
+        });
+      };
+      tools.appendChild(ndB); tools.appendChild(pmsg);
+      box.appendChild(tools);
+    }
+    var tgB = mkBtn('外見を設定', '#3a4a5a'); tgB.setAttribute('data-av2-prof', 'toggle');
+    tgB.onclick = function(ev){ ev.stopPropagation(); showProfileTools(!tools || tools.style.display === 'none'); };
+    box.appendChild(tgB);
     if (!e.hero){
       var delB = mkBtn('削除', '#6a3a3a');
       delB.onclick = function(ev){ ev.stopPropagation();
@@ -253,7 +330,8 @@
         if (!okc) return;
         delB.disabled = true; msg.textContent = '…';
         A().deleteCharacter(e.id, function(res){ delB.disabled = false; msg.textContent = msgFor(res, 'ok_del'); msg.title = (res && res.code) || ''; note({ kind: 'UI_DELETE', ok: !!(res && res.ok), code: res && res.code });
-          if (res && res.ok){ try { if (window.__charlist && typeof window.__charlist.open === 'function') setTimeout(function(){ window.__charlist.open(); }, 300); } catch(e2){} } }); };
+          afterSidePort(res, msg);
+          if (res && res.ok && res.mirror !== 'PERSISTED_EQUALS_READBACK'){ try { if (window.__charlist && typeof window.__charlist.open === 'function') setTimeout(function(){ window.__charlist.open(); }, 300); } catch(e2){} } }); };
       box.appendChild(delB);
     }
     box.appendChild(msg);
