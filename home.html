@@ -246,7 +246,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261005-c1';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261005-c2';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -784,6 +784,10 @@
       '<div class="drow"><span>総ターン数</span><b>'+x.turns+'</b></div>'+
       '<div class="drow"><span>場所</span><b>'+esc(x.loc||'—')+'</b></div>'+
       '<button class="play" id="playBtn">'+(f759Cloud(x)?'開いてこの端末へ取り込む':(x.turns>0?'続きから始める':'この物語を始める'))+'</button>'+
+      /* ★P3 (ASSET_PORTRAIT_OFFICIAL_INSPECTION = READ_ONLY_SURFACE): plain navigation to the read-only portrait page.
+         Not a button of the delegated handler (openStory / newStory write chr6_active_slot and boot the engine); the handler
+         short-circuits on <a data-p3> so a click never falls through to the card's 2nd-click open. No write, no engine. */
+      (/^[A-Za-z0-9]{6,32}$/.test(String(x.id||'')) ? '<a class="mini" data-p3="1" href="portraits.html?story='+encodeURIComponent(String(x.id))+'" style="display:inline-block;margin-top:8px;color:#b39ddb;text-decoration:none;font-size:13px">🖼 絵を見る（読み取り専用）</a>' : '')+
       (f759Cloud(x)
         ? '<div class="mini" style="color:var(--dim);font-size:12px;line-height:1.6">☁ クラウドの物語です。開いてこの端末へ取り込むと、名前の変更や削除ができます。</div>'
         : '<div class="mini"><button id="favBtn">'+(x.favorite?'★ お気に入り解除':'☆ お気に入り')+'</button>'+
@@ -936,6 +940,7 @@
 
   document.addEventListener('click', function(e){
     var t = e.target;
+    if(t.closest && t.closest('a[data-p3]')) return;     /* ★P3: plain link, let the browser navigate (no openStory / no save) */
     var nav = t.closest && t.closest('[data-v]');       if(nav){ VIEW = nav.getAttribute('data-v'); render(); return; }
     var rec = t.closest && t.closest('[data-open]');    if(rec){ openStory(rec.getAttribute('data-open')); return; }
     if(t.id==='newBtn' || (t.closest && t.closest('#newCard'))){ newStory(); return; }
