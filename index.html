@@ -323,7 +323,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261006-a0';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261006-h1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -3952,7 +3952,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
 <!-- v292Dfix600: 新しい物語(?new=1)に別の物語の中身が混入したら保存を止める。 2026-07-27の実機事故（タブ2枚で新物語に他物語のキャラが丸ごと入った）の再発防止。 features.js より前に置き、S.save を待ち受けて包む。OFF=v292Dfix600Off -->
 <script src="v292Dfix600-new-story-guard.js?cb=v292Dfix601"></script>
-<script src="v292Dfix527-story-url.js?cb=20260829-fix748"></script>
+<script src="v292Dfix527-story-url.js?cb=20261006-h1"></script>
 <!-- ★fix659: 分岐(fork)バナーの作り直し。平易な文言＋「☁ クラウド側を取り込む」が
      home.html?autopull=1 へ渡って**取り込みまで完走**する。物語画面で pull しないのは
      fix527 [3] の設計どおり（ここは変えない）。

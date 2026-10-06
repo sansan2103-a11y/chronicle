@@ -171,7 +171,20 @@
       try { b.className = anchor.className || ''; } catch(e){}
       b.style.cssText = (anchor.getAttribute('style') || '') + ';cursor:pointer';
       b.addEventListener('click', function(){
-        try { var S = window.S || (0,eval)('typeof S!=="undefined"?S:null'); if (S && typeof S.save === 'function') (typeof S.saveD==='function'?S.saveD('fix527.injectHomeButton'):S.save()); } catch(e){}
+        try { var S = window.S || (0,eval)('typeof S!=="undefined"?S:null');
+          if (S && typeof S.save === 'function'){
+            /* ★2026-10-06 H (LPS_PER_OPEN_PACKAGE_PUT): 物語を開いて何もせず「ホーム」を押しただけでも、ここの保存が
+               fix402 markDirty を立て、開いた時刻などの表示用の値だけが違う package を毎回クラウドへ送っていた（production canary 実測）。
+               保存先の本文が今のメモリ状態と 1 バイトも違わないときは保存しない（＝書くものが無い）。少しでも違えば従来どおり保存する。
+               kill: localStorage v292Dfix527NoopHomeSaveOff='1' → 常に保存（従来）。 */
+            var same = false;
+            try { if (localStorage.getItem('v292Dfix527NoopHomeSaveOff') !== '1'){
+              var wk = (typeof window.__chr6WriteKey === 'function') ? window.__chr6WriteKey() : null;
+              if (wk){ var cur = localStorage.getItem(wk);
+                same = (cur != null) && cur === JSON.stringify({ cfg: S.cfg, cast: S.cast, scene: S.scene, turns: S.turns, mode: S.mode }); } } } catch(e2){ same = false; }
+            if (same){ try { console.log(TAG, 'home: 変更なし → 保存しない'); } catch(e3){} }
+            else (typeof S.saveD==='function'?S.saveD('fix527.injectHomeButton'):S.save());
+          } } catch(e){}
         setTimeout(function(){ try { location.href = HOME; } catch(e){} }, 150);
       });
       anchor.parentNode.insertBefore(b, anchor);
