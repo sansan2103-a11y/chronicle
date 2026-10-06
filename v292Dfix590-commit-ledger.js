@@ -402,12 +402,42 @@
     try { var g = JSON.parse(lsg(GATE_KEY) || 'null'); return (g && g.reason) ? g : null; }
     catch(e){ return null; }
   }
+  /* ★★2026-10-06 LPS-GATE（GPT #77）: gate の identity を照合側と同じ 'id_ns_<fp>' 形に揃える。
+     fix399 は gate を **生の ns（32 hex）** で開いていたため、closeGateByPullConvergence の
+     identityOf()='id_ns_<fp>' と必ず食い違い、pull 収束で関門が閉じなかった（＋生 ns が localStorage に残る＝fix597 違反）。
+     ・既に 'id_' 形 → そのまま
+     ・exact 32hex で、このページが同じ ns を learn 済み（NS_RAW 一致・NS_FP あり）→ 'id_ns_'+NS_FP
+     ・それ以外 → 'IDENTITY_NORMALIZATION_FAILED'（生の値は保存しない。閉じる側では一致しない＝HOLD）
+     kill: localStorage v292DlpsGate1Off='1' → 従来どおり受け取った値をそのまま保存。 */
+  function lpsGateOff(){ try { return localStorage.getItem('v292DlpsGate1Off') === '1'; } catch(e){ return false; } }
+  var GATE_ID_FAIL = 'IDENTITY_NORMALIZATION_FAILED';
+  function normalizeGateIdentity(v){
+    if (v == null || v === '') return null;
+    var raw = String(v);
+    if (lpsGateOff()) return raw;
+    if (/^id_/.test(raw)) return raw;
+    if (/^[0-9a-f]{32}$/.test(raw) && NS_RAW === raw && NS_FP){ stats.gateIdentityNormalized = (stats.gateIdentityNormalized || 0) + 1; return 'id_ns_' + NS_FP; }
+    stats.gateIdentityNormFailed = (stats.gateIdentityNormFailed || 0) + 1;
+    note({ act:'gate-identity-normalization-failed' });
+    return GATE_ID_FAIL;
+  }
+  /* 旧来の生 ns 関門の照合用: 保存値（生 ns）から ns 指紋を **別に** 計算して覚えるだけ（NS_RAW / 保存済み指紋は変えない）。
+     closeGateByPullConvergence は同期関数なので、home が pull の前にこれを await しておく。 */
+  var LEGACY_GATE_FP = {};
+  function prepareLegacyGateIdentity(){
+    try {
+      if (lpsGateOff()) return Promise.resolve(false);
+      var g0 = readGate(); if (!g0 || !g0.identity || !/^[0-9a-f]{32}$/.test(String(g0.identity))) return Promise.resolve(false);
+      var raw0 = String(g0.identity);
+      return nsFingerprint(raw0).then(function(fp){ if (fp) LEGACY_GATE_FP[raw0] = fp; return !!fp; }, function(){ return false; });
+    } catch(e){ return Promise.resolve(false); }
+  }
   function openGate(o){
     o = o || {};
     var g = { reason: String(o.reason || 'needs-pull'),
               conflictState: o.conflictState || null,
               remoteRev: (o.remoteRev == null ? null : +o.remoteRev),
-              identity: o.identity || null,
+              identity: normalizeGateIdentity(o.identity),
               since: Date.now() };
     try { localStorage.setItem(GATE_KEY, JSON.stringify(g)); } catch(e){ stats.persistFailed++; }
     stats.gateOpened++;
@@ -829,6 +859,26 @@
       note({ act:'gate-close-rejected', why:'identity-unverified' });
       return { ok:false, code:'identity-unverified' };
     }
+    /* ★★LPS-GATE: 旧来の生 ns で開かれた関門（production の既存記録）を救うのは、
+       保存値が exact 32hex かつ このページが learn 済みの NS_RAW と完全一致し、
+       'id_ns_'+NS_FP が今回の照合 identity（idNow）と一致する場合だけ。照合後は正規化して書き戻す（生 ns を残さない）。 */
+    if (!lpsGateOff() && g.identity && idNow && /^[0-9a-f]{32}$/.test(String(g.identity))){
+      var rawG = String(g.identity);
+      var fpRaw = (NS_RAW === rawG && NS_FP) ? NS_FP : (LEGACY_GATE_FP[rawG] || null);
+      if (fpRaw && ('id_ns_' + fpRaw) === String(idNow)){
+        g.identity = 'id_ns_' + fpRaw;
+        try { localStorage.setItem(GATE_KEY, JSON.stringify(g)); } catch(e){}
+        stats.gateIdentityLegacyRescued = (stats.gateIdentityLegacyRescued || 0) + 1;
+        note({ act:'gate-identity-legacy-rescued' });
+      } else {
+        note({ act:'gate-close-rejected', why:'identity-normalization-failed' });
+        return { ok:false, code:GATE_ID_FAIL };
+      }
+    }
+    if (g.identity === GATE_ID_FAIL && !lpsGateOff()){
+      note({ act:'gate-close-rejected', why:'identity-normalization-failed' });
+      return { ok:false, code:GATE_ID_FAIL };
+    }
     if (g.identity && idNow && String(g.identity) !== String(idNow)){
       note({ act:'gate-close-rejected', why:'identity-mismatch' });
       return { ok:false, code:'identity-mismatch' };
@@ -957,6 +1007,56 @@
    */
   /* ★fix597: ns を渡された場合、指紋の計算が終わるまで identity を確定できない。
      ここで一度だけ待ってから本体へ入る（本体は同期的に identityOf を使える）。 */
+  /* ★★LPS-ID (lpsid1, GPT #51 / LEGACY_PACKAGE_SYNC_STUCK_PENDING の identity 部分だけ):
+     fix402 は put の pending を **ヘッダ由来** identity（pages.dev では x-google-id = 'cookie:<accountId>'
+     → 'id_google_<uint32>'）で記録し、照合は commitstate の ns（'id_ns_<fp>'）で行う。
+     その結果、自分の pending が永久に identity-mismatch になる。
+     ここでは「2つの形が両方ある」ことを一致とみなさない。**同じ account だと server session で
+     確かめられた場合だけ**別名として扱う。必要な証拠（すべて必須）:
+       ① pending.identity が 'id_google_' 形、現在の identity が 'id_ns_' 形
+       ② 現在の 'id_ns_' は **この照合の read-back（commitstate）応答の ns** から作られたもの
+       ③ fix893 cookie session が有効で、このページが /auth/me で確かめた accountId がある
+          （localStorage の mark ではなく server 応答 = serverMe()）
+       ④ この照合で送ったヘッダ identity が 'cookie:<その accountId>' と同じ
+       ⑤ identityKey('cookie:<accountId>', 'google') === pending.identity
+       ⑥ read-back の**後**にもう一度 GET /api/auth/me を読み、同じ accountId が返る
+     どれか1つでも欠けたら従来どおり identity-mismatch（何も変えない）。
+     一致したら、その後は既存の分類（case A/B/三者一致）がそのまま走る。新しい分類は作らない。
+     kill: localStorage v292Dlpsid1Off='1' で従来挙動（別名判定を呼ばない）。 */
+  function lpsidOff(){ try { return localStorage.getItem('v292Dlpsid1Off') === '1'; } catch(e){ return false; } }
+  function lpsidAccountAlias(led, o, idNow){
+    function no(why){
+      stats.identityAliasRejected = (stats.identityAliasRejected || 0) + 1;
+      bump('identity-alias-rejected:' + why);
+      note({ act:'identity-alias', ok:false, why:why });
+      return { ok:false, why:why };
+    }
+    try {
+      var pid = String(led && led.identity || ''), cur = String(idNow || '');
+      if (pid.indexOf('id_google_') !== 0) return Promise.resolve(no('pending-not-google-form'));      /* ① */
+      if (cur.indexOf('id_ns_') !== 0) return Promise.resolve(no('current-not-ns-form'));
+      if (!o.ns || NS_RAW !== String(o.ns) || !NS_FP || cur !== 'id_ns_' + NS_FP)
+        return Promise.resolve(no('ns-not-from-this-readback'));                                      /* ② */
+      var A = window.__v292Dfix893;
+      if (!A || A.active !== true || typeof A.serverMe !== 'function')
+        return Promise.resolve(no('no-cookie-session'));                                              /* ③ */
+      var me = A.serverMe();
+      if (!me || !me.accountId) return Promise.resolve(no('session-not-verified'));
+      var acct = String(me.accountId), hdr = 'cookie:' + acct;
+      if (String(o.identity == null ? '' : o.identity) !== hdr)
+        return Promise.resolve(no('header-not-this-session'));                                        /* ④ */
+      if (identityKey(hdr, 'google') !== pid) return Promise.resolve(no('pending-not-this-account')); /* ⑤ */
+      return fetch('/api/auth/me', { method:'GET', credentials:'same-origin', cache:'no-store' })     /* ⑥ */
+        .then(function(r){ return (r && r.status === 200) ? r.json() : null; })
+        .then(function(j){
+          if (!j || j.ok !== true || String(j.accountId) !== acct) return no('session-changed');
+          stats.identityAliasAccepted = (stats.identityAliasAccepted || 0) + 1;
+          bump('identity-alias-accepted');
+          note({ act:'identity-alias', ok:true, form:'cookie-google->ns' });
+          return { ok:true };
+        }, function(){ return no('session-recheck-failed'); });
+    } catch(e){ return Promise.resolve(no('threw')); }
+  }
   function classify(o){
     o = o || {};
     if (o.ns && !identityResolvable(o)){
@@ -1015,7 +1115,24 @@
       stats.identityUnverified++;
       return ng('identity-unverified', { releasePending:false, mutatePending:false, needsIdentity:true });
     }
-    if (led.identity && idNow && led.identity !== idNow) return ng('identity-mismatch');
+    if (led.identity && idNow && led.identity !== idNow){
+      if (lpsidOff()) return ng('identity-mismatch');
+      /* ★LPS-ID: 同じ account の証拠がそろったときだけ先へ進む。待っている間に台帳が変わったら使わない。 */
+      return lpsidAccountAlias(led, o, idNow).then(function(al){
+        if (!al || !al.ok) return ng('identity-mismatch');
+        var led2 = read();
+        if (!led2 || led2.status !== 'awaiting-result' ||
+            String(led2.commitOpId) !== String(led.commitOpId) ||
+            String(led2.payloadHash) !== String(led.payloadHash) ||
+            String(led2.identity) !== String(led.identity)){
+          stats.reconcileStale++;
+          return ng('reconcile-stale');
+        }
+        return afterIdentity();
+      }, function(){ return ng('identity-mismatch'); });
+    }
+    return afterIdentity();
+    function afterIdentity(){
 
     var applied = +o.appliedRev || 0;
     /* ★rev は巻き戻さない。remoteRev < appliedRev は異常として、昇格も pending 解除もしない。 */
@@ -1131,6 +1248,7 @@
                releasePending:true, resolved:true, commitOutcome:'unknown',
                syncDirty:false, needsPull:false, openGate:null };
     }, function(){ return ng('hash-failed'); });
+    }   /* ★LPS-ID: afterIdentity */
   }
 
   /* ★旧名 reconcile() は fix593 の呼び出し側が使っているので、形を保って残す。
@@ -1352,7 +1470,9 @@
     /* ★fix596: Worker v25 の commitstate と繋いだので、復帰へ配線済み。 */
     wiredIntoRecovery: true,
     /* ★fix597: GPT裁定 D1〜D3 / ns / pkgTs を反映済み。 */
-    verdictApplied: 'fix599+fix828'
+    verdictApplied: 'fix599+fix828',
+    /* ★LPS-ID: 診断口（読むだけ） */
+    lpsid1: true, lpsidOff: lpsidOff, lpsGate1: true, lpsGateOff: lpsGateOff, normalizeGateIdentity: normalizeGateIdentity, prepareLegacyGateIdentity: prepareLegacyGateIdentity
   };
   /* ---- ★fix597: 旧キーに残っている**生の ns** を、どのページからでも必ず片付ける ----
    * 2026-07-27 の実機で見つけた: fix596 が `v292Dfix596_ns` に ns の生値を保存していた。

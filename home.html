@@ -246,7 +246,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261006-h1';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261006-n1';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -298,7 +298,7 @@
 <!-- ★fix660(B): BackupGC。削除候補を選ぶ層。分類は fix562 が唯一の正なのでその後ろ -->
 <script src="v292Dfix660-backup-gc.js?cb=v292Dfix680"></script>
 <script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix680"></script>
-<script src="v292Dfix590-commit-ledger.js?cb=20260907-fix828"></script>
+<script src="v292Dfix590-commit-ledger.js?cb=20261006-n1"></script>
 <!-- ★★fix708(STEP3F / GPT裁定 Q1 = CONDITIONAL GO): fix587 の削除トランザクションが
      **live のうちに** canonical hash を確定するために、fix697 の read-only 契約口
      (projectionOf / contentHashOf / shadowRequest) だけを使う。
@@ -1581,6 +1581,100 @@
     return out;
   }
 
+  /* ★★2026-10-06 G2_CANONICAL_BACKED_LOCAL_DELTA + LPS-POSTPULL（GPT #77）
+     目的: 関門（fix590 gate）が開いている端末で「いま取り込む」をしたとき、
+       remote package に無い local 物語を **一律に local 差分** と数えると、canonical に存在する物語を
+       抱えた端末（Owner PC：38 中 35）は永久に関門を閉じられず、出口が forceput しか無くなる。
+     ここでは **厳しい条件をすべて満たした物語だけ** を「PC だけの未知の物語ではない」と分類し、
+       local 差分に数えない（neutral）。canonical を正本として採用するのではない（分類の証拠に使うだけ）。
+       条件: 同じ account の server session（fix893 serverMe）/ story_shadow に存在 / deleted=0 /
+             local chr6_slot_<sid> が存在 / local の projection hash（fix697 contentHashOf か contentHashV2）が serverHash と一致。
+     追加の関門条件（apply 後に判定）: remote package の全 key が local に残り、重なる key は remote の値と一致 /
+       remote に無い local の package 対象 key は、neutral 物語の既知 family か既知の global key だけ。1 つでも外れたら閉じない。
+     関門が閉じた場合だけ（LPS-POSTPULL）、fix402 の持ち越し dirty を消化する（pushedTs=now / lastHash=取り込んだ package の hash）。
+       merge / forceput / local 削除はしない。real save の dirty はその後ふつうに立つ。
+     kill: v292DlpsG2Off='1'（G2 判定をしない＝従来どおり全部 local 差分）/ v292DlpsPostpull1Off='1'（dirty 消化をしない）。 */
+  var G2 = null;
+  function g2Off(){ return g('v292DlpsG2Off') === '1'; }
+  function g2Prepare(r){
+    /* ★LPS-GATE: 旧来の生 ns 関門なら、照合用の指紋を先に計算しておく（closeGate は同期のため） */
+    var L0 = null; try { L0 = window.__v292Dfix590; } catch(e){}
+    var p0 = (L0 && typeof L0.prepareLegacyGateIdentity === 'function') ? Promise.resolve().then(function(){ return L0.prepareLegacyGateIdentity(); }).then(null, function(){ return false; }) : Promise.resolve(false);
+    return p0.then(function(){ return g2PrepareInner(r); });
+  }
+  function g2PrepareInner(r){
+    G2 = null;
+    try {
+      if (g2Off()) return Promise.resolve();
+      var L = window.__v292Dfix590;
+      if (!L || typeof L.gateState !== 'function' || !L.gateState()) return Promise.resolve();   /* 関門が無いなら何もしない */
+      var me = null; try { me = window.__v292Dfix893 && window.__v292Dfix893.serverMe && window.__v292Dfix893.serverMe(); } catch(e){ me = null; }
+      if (!me || !me.accountId){ G2 = { off:false, why:'no-server-session', backed:{}, failed:{} }; return Promise.resolve(); }
+      var F = window.__v292Dfix697;
+      if (!F || typeof F.contentHashOf !== 'function'){ G2 = { off:false, why:'no-fix697', backed:{}, failed:{} }; return Promise.resolve(); }
+      var ls = (r && r.data && r.data.ls) || {};
+      var rm = J(ls['chr6_slots_meta'], null), lm = J(g('chr6_slots_meta'), null);
+      if (!Array.isArray(lm)){ G2 = { off:false, why:'no-local-meta', backed:{}, failed:{} }; return Promise.resolve(); }
+      var rIds = {}; if (Array.isArray(rm)) rm.forEach(function(e){ if (e && e.id != null) rIds[String(e.id)] = 1; });
+      var cands = []; lm.forEach(function(e){ if (e && e.id != null && !rIds[String(e.id)] && !e.deleted) cands.push(String(e.id)); });
+      var st = { off:false, why:null, backed:{}, failed:{}, acct: true, remoteIds: rIds, cands: cands.length };
+      if (!cands.length){ G2 = st; return Promise.resolve(); }
+      return call({ op:'listshadow' }, 20000).then(function(x){
+        if (!x || !x.ok || !Array.isArray(x.stories)){ st.why = 'listshadow-failed'; G2 = st; return; }
+        var rows = {}; x.stories.forEach(function(row){ if (row && row.id != null) rows[String(row.id)] = row; });
+        var hashOf = function(fn, sid){ return new Promise(function(res){ try { F[fn](sid, function(h){ res(h || null); }); } catch(e){ res(null); } }); };
+        return Promise.all(cands.map(function(sid){
+          var row = rows[sid];
+          if (!row){ st.failed[sid] = 'canonical-missing'; return null; }
+          if (row.deleted){ st.failed[sid] = 'server-deleted'; return null; }
+          if (!row.serverHash){ st.failed[sid] = 'no-server-hash'; return null; }
+          if (g('chr6_slot_' + sid) == null){ st.failed[sid] = 'no-local-slot'; return null; }
+          return Promise.all([hashOf('contentHashOf', sid), (typeof F.contentHashV2 === 'function') ? hashOf('contentHashV2', sid) : Promise.resolve(null)]).then(function(hs){
+            if ((hs[0] && hs[0] === row.serverHash) || (hs[1] && hs[1] === row.serverHash)) st.backed[sid] = 1;
+            else st.failed[sid] = 'hash-mismatch';
+          });
+        })).then(function(){ G2 = st; });
+      }).catch(function(){ st.why = 'listshadow-threw'; G2 = st; });
+    } catch(e){ G2 = { off:false, why:'threw', backed:{}, failed:{} }; return Promise.resolve(); }
+  }
+  /* apply 後の関門条件（remote keys ⊆ local・重なりは remote 値・余分は既知 family だけ）。違反の件数を返す。 */
+  var G2_GLOBAL_RE = /^(v292avrec_|v292appr_)/;
+  var G2_FAMILY = function(k, sid){
+    return k === 'chr6_slot_' + sid || k === 'chr6_v292Dfix54_genderMap_"' + sid + '"' || k === 'chr6_v292Dfix54_genderMap_' + sid
+        || (new RegExp('^chr6_[a-z_]+_' + sid + '$')).test(k) || (new RegExp('^v292Dfix\\d+[A-Za-z0-9]*_slot_' + sid + '$')).test(k);
+  };
+  function g2Belongs(k, id){
+    var at = 0;
+    for (;;){ var p = k.indexOf(id, at); if (p < 0) return false;
+      var a = (p === 0) ? '' : k.charAt(p - 1), b = k.charAt(p + id.length);
+      if (!/[A-Za-z0-9]/.test(a) && !/[A-Za-z0-9]/.test(b)) return true; at = p + 1; }
+  }
+  function g2KeyCheck(ls){
+    var bad = [], rIds = (G2 && G2.remoteIds) || {}, backed = (G2 && G2.backed) || {};
+    try {
+      for (var k in ls){ if (!Object.prototype.hasOwnProperty.call(ls, k)) continue;
+        if (k === 'chr6_slots_meta') continue;                                  /* meta は fix599 の規則で数える */
+        if (g(k) !== ls[k]) bad.push('remote-key-not-kept:' + k.slice(0, 40)); }
+      var lm = J(g('chr6_slots_meta'), []) || [], ids = {};
+      lm.forEach(function(e){ if (e && e.id != null) ids[String(e.id)] = 1; });
+      for (var id in rIds) ids[id] = 1;
+      for (var i = 0; i < LS.length; i++){
+        var kk = LS.key(i); if (!kk || Object.prototype.hasOwnProperty.call(ls, kk)) continue;
+        if (/^(__gen_|chr6_bk_|v292Dfix399_|v292Dfix402_)/.test(kk)) continue;
+        var owner = null; for (var sid in ids){ if (g2Belongs(kk, sid)){ owner = sid; break; } }
+        if (owner == null){
+          if (kk === 'chr6_active_slot' || kk === 'chr6_epoch' || /genderMap_"?default"?$/.test(kk)) continue;   /* 端末側の既知 global */
+          if (G2_GLOBAL_RE.test(kk)) continue;
+          continue;                                                             /* package 対象外のキー */
+        }
+        if (!backed[owner]){ bad.push((rIds[owner] ? 'extra-key-of-remote-story:' : 'unknown-story-key:') + kk.slice(0, 40)); continue; }
+        if (!G2_FAMILY(kk, owner)) bad.push('unknown-family:' + kk.slice(0, 40));
+      }
+    } catch(e){ bad.push('keycheck-threw'); }
+    return bad;
+  }
+  function lpsPostpullOff(){ return g('v292DlpsPostpull1Off') === '1'; }
+  function h402(str){ var h = 0; str = String(str || ''); for (var i = 0; i < str.length; i++){ h = ((h << 5) - h + str.charCodeAt(i)) | 0; } return String(str.length) + ':' + String(h >>> 0); }
   function pull(force, adoptSlotId){
     if(!loggedIn()){ noteNotLoggedIn(); return; }
     var f659adoptKeyOnly = f659adoptKey(adoptSlotId);   /* ★fix659: 保護を外してよい唯一のキー(無ければ null) */
@@ -1592,7 +1686,7 @@
       /* ★fix866 終端①: #note を書き換えずに終わるので、予告だけを外す */
       if(!force && serverRev <= base){ el('sync').textContent='☁ 最新です'; f866ClearTransientNote(); return; }
       el('sync').textContent = '☁ 取り込み中…';
-      return call({op:'get'}, 40000).then(function(r){
+      return call({op:'get'}, 40000).then(function(r){ return g2Prepare(r).then(function(){ return r; }, function(){ return r; }); }).then(function(r){
         if(!r || !r.ok || !r.data || !r.data.ls) throw new Error('get');
         /* ★★v292Dfix826 F3（GPT裁定52）: 応答が届くまでの間に、この端末の別経路が
            より新しい版を確定させていることがある（実観測: rev69 の pull 応答が
@@ -1659,7 +1753,7 @@
           return false;
         }
         /* ★fix599: 保持したローカル差分の件数（0 のときだけ remote の完全採用と言える） */
-        var retainedLocalDelta = 0;
+        var retainedLocalDelta = 0, g2Neutral = 0, g2Bad = [];
         try {
           if (!Object.prototype.hasOwnProperty.call(ls, 'chr6_slots_meta')) metaAbsent = true;
           if (Object.prototype.hasOwnProperty.call(ls, 'chr6_slots_meta')){
@@ -1682,7 +1776,7 @@
                   for (var mi = 0; mi < mg.length; mi++){
                     var me = mg[mi]; if (!me || me.id == null) continue;
                     var rr = rIdx[String(me.id)];
-                    if (!rr){ retainedLocalDelta++; continue; }                          /* remote に無い */
+                    if (!rr){ if (G2 && G2.backed && G2.backed[String(me.id)] && !me.deleted){ g2Neutral++; continue; } retainedLocalDelta++; continue; }   /* remote に無い（★G2: canonical-backed は neutral） */
                     if (!!me.deleted !== !!rr.deleted){ retainedLocalDelta++; continue; } /* 墓標の有無が違う */
                     if ((+me.updatedAt || 0) > (+rr.updatedAt || 0)) retainedLocalDelta++; /* ローカルが新しい */
                   }
@@ -1754,6 +1848,9 @@
               if (!Object.prototype.hasOwnProperty.call(wroteVals, rk)) continue;
               if (g(rk) !== wroteVals[rk]){ readBackOk = false; break; }
             }
+            /* ★G2: neutral を使った回だけ、apply 後の key 条件を確かめる（違反は local 差分として数える＝閉じない） */
+            if (g2Neutral > 0){ g2Bad = g2KeyCheck(ls); if (g2Bad.length) retainedLocalDelta += g2Bad.length; }
+            try { if (G2) console.log('[home][G2] 判定:', JSON.stringify({ neutral: g2Neutral, backed: Object.keys(G2.backed || {}).length, failed: G2.failed, why: G2.why, keyViolations: g2Bad.slice(0, 8) })); } catch(e){}
             var proof = L590.provePullConvergence({
               remoteRev: +serverRev || 0,
               currentSharedRev: L590.sharedRev(),
@@ -1833,6 +1930,13 @@
                     remoteRev: +serverRev || 0, proof: proof, ns: ns828,
                     postApply: true, readBackOk: readBackOk, recheckReadBack: recheck828 });
                   try { console.log('[home] 関門(pull収束):', JSON.stringify(gc828)); } catch(e){}
+                  /* ★★LPS-POSTPULL: 関門が pull 収束で閉じた（= local が取り込んだ remote を完全に含むと証明済み）ときだけ、
+                     fix402 の持ち越し dirty を消化する。これをしないと、次の物語画面の起動で古い dirty が flush され、
+                     pull 直後に local package 全体が自動 put される（実験 E2）。real save の dirty はその後ふつうに立つ。 */
+                  if (gc828 && gc828.ok === true && !lpsPostpullOff()){
+                    try { s('v292Dfix402_lastHash', h402(JSON.stringify(ls))); s('v292Dfix402_pushedTs', String(Date.now()));
+                          console.log('[home][LPS-POSTPULL] 持ち越しの未送信印を消化しました（自動送信はしません）'); } catch(e){}
+                  }
                 }
               } catch(e){}
             } else {
