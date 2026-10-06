@@ -246,7 +246,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261006-n1';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261006-n2';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -1612,12 +1612,33 @@
       if (!me || !me.accountId){ G2 = { off:false, why:'no-server-session', backed:{}, failed:{} }; return Promise.resolve(); }
       var F = window.__v292Dfix697;
       if (!F || typeof F.contentHashOf !== 'function'){ G2 = { off:false, why:'no-fix697', backed:{}, failed:{} }; return Promise.resolve(); }
+      /* ★N2: schema 2 の canonical（production の 36 件すべて）は fix697.contentHashV2 で照合するが、これは fix743（CC2）を要する。
+         home は fix743 を読み込んでいないため、N1 では schema 2 が常に hash-mismatch になっていた（2026-10-06 実測）。
+         gate が開いていて候補があるときだけ、副作用の無い純関数モジュール fix743 をこのページに読み込む。読めなければ照合しない（fail-closed）。 */
+      return g2LoadCC2().then(function(cc2ok){ return g2Check(r, F, cc2ok); });
+    } catch(e){ G2 = { off:false, why:'threw', backed:{}, failed:{} }; return Promise.resolve(); }
+  }
+  function g2LoadCC2(){
+    try {
+      if (window.__v292DfixCC2 && typeof window.__v292DfixCC2.buildSchema2Record === 'function') return Promise.resolve(true);
+      return new Promise(function(res){
+        var done = false, fin = function(v){ if (!done){ done = true; res(v); } };
+        var sc = document.createElement('script'); sc.src = 'v292Dfix743-cc2-client.js?cb=20261006-n2';
+        sc.onload = function(){ fin(!!(window.__v292DfixCC2 && typeof window.__v292DfixCC2.buildSchema2Record === 'function')); };
+        sc.onerror = function(){ fin(false); };
+        setTimeout(function(){ fin(false); }, 8000);
+        document.head.appendChild(sc);
+      });
+    } catch(e){ return Promise.resolve(false); }
+  }
+  function g2Check(r, F, cc2ok){
+    try {
       var ls = (r && r.data && r.data.ls) || {};
       var rm = J(ls['chr6_slots_meta'], null), lm = J(g('chr6_slots_meta'), null);
       if (!Array.isArray(lm)){ G2 = { off:false, why:'no-local-meta', backed:{}, failed:{} }; return Promise.resolve(); }
       var rIds = {}; if (Array.isArray(rm)) rm.forEach(function(e){ if (e && e.id != null) rIds[String(e.id)] = 1; });
       var cands = []; lm.forEach(function(e){ if (e && e.id != null && !rIds[String(e.id)] && !e.deleted) cands.push(String(e.id)); });
-      var st = { off:false, why:null, backed:{}, failed:{}, acct: true, remoteIds: rIds, cands: cands.length };
+      var st = { off:false, why:null, backed:{}, failed:{}, acct: true, remoteIds: rIds, cands: cands.length, cc2: !!cc2ok };
       if (!cands.length){ G2 = st; return Promise.resolve(); }
       return call({ op:'listshadow' }, 20000).then(function(x){
         if (!x || !x.ok || !Array.isArray(x.stories)){ st.why = 'listshadow-failed'; G2 = st; return; }
