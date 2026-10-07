@@ -419,6 +419,55 @@
      既定 OFF。ON = v292Dfix821On='1' / kill = v292Dfix821Off='1'。
      ================================================================== */
   var F821_DENY = /^(chrAdminTok|chrAdminUrl)$/;
+  /* ★★PAF（PACKAGE_AUTHORITY_FILTER、GPT #108/#109、T1）: 端末 local-derived の family を cross-device package
+     （fix402 自動 put / fix399 手動 put / home 「いま上げる」forceput）へ**運ばない**。local の key は消さない
+     （再生成は各 fix が行う。receiver も削除しない）。対象 = PACKAGE_AUTHORITY_MATRIX_V1 の C/B(派生) family:
+       longmem fix135/136/137 ・ Quasi(277) ・ snap/snapd(564) ・ LinRev(924) ・ 307Last ・ 640Evid ・ genderMap(54) ・ dlg(104)
+     既定 ON。kill = v292DpafOff='1'。3 か所（home / fix402 / fix399）へ同じ正規表現を局所実装する（fix821 と同じ流儀）。 */
+  var F_PAF_DENY = /^(chr6_v292Dfix13[567]_|v292Dfix277Quasi_slot_|chr6_snapd?_|v292Dfix924LinRev_slot_|v292Dfix307Last_slot_|v292Dfix640Evid_slot_|chr6_v292Dfix54_genderMap_|chr6_v292Dfix104_dlg_slot_)/;
+  function pafOn(){ try { return localStorage.getItem('v292DpafOff') !== '1'; } catch(e){ return true; } }
+
+  /* ★★PCP V2（PACKAGE_PRECANONICAL_PUBLISH、GPT #108/#111/#112、T1）: UNCOMMITTED_CANONICAL_BODY MUST NOT ENTER PACKAGE。
+     package を公開できる全入口（fix402 auto put / fix399 手動 put / home forceput）で同じ predicate を使う（局所実装 ×3）。
+       predicate = (1) 現在の document で fix697 の commit が pending / inFlight
+                   (2) body-backed story の fix781 marker が DIRTY_INTENT / DIRTY_LOCAL / DIVERGED / BOOTSTRAP_HOLD または inFlightSave あり、かつ
+                       現在の local canonical（fix697.contentHashV2 = projectionV2 の sha256）≠ marker.lastConfirmed.fingerprint
+                   （local = lastConfirmed の stale dirty は通す。meta だけの dirty は通す）
+       auto = HOLD して 3 秒後に再評価 / 手動 = reject / forceput = reject。canonical 着地後は従来どおり。
+     読むだけ（書込 0・通信 0）。fix697 / fix781 / Worker / CAS には触らない。既定 ON。kill = v292DpcpOff='1'。 */
+  function pcpOn(){ try { return localStorage.getItem('v292DpcpOff') !== '1'; } catch(e){ return true; } }
+  function pcpMarker(id){ try { var m = JSON.parse(localStorage.getItem('v292Dfix402_f781g_' + id) || 'null'); return (m && typeof m === 'object') ? m : null; } catch(e){ return null; } }
+  function pcpPredicate(ids){
+    var F = null; try { F = window.__v292Dfix697 || null; } catch(e){ F = null; }
+    if (!F || typeof F.contentHashV2 !== 'function') return Promise.resolve({ id: '-', reason: 'NO_API' });
+    try { var f9 = (typeof F.f909 === 'function') ? F.f909() : null;
+          if (f9 && (f9.pushTimer || f9.inFlight)) return Promise.resolve({ id: 'current', reason: f9.inFlight ? 'COMMIT_IN_FLIGHT' : 'COMMIT_PENDING' }); } catch(e){}
+    var cand = [];
+    for (var i = 0; i < (ids || []).length; i++){
+      var id = String(ids[i] == null ? '' : ids[i]); if (!id || id === 'chr6') continue;
+      var m = pcpMarker(id); if (!m) continue;
+      var st = String(m.state || '');
+      if (!(st === 'DIRTY_INTENT' || st === 'DIRTY_LOCAL' || st === 'DIVERGED' || st === 'BOOTSTRAP_HOLD' || !!m.inFlightSave)) continue;
+      try { if (localStorage.getItem('chr6_slot_' + id) == null) continue; } catch(e){ continue; }
+      cand.push({ id: id, state: st, lc: (m.lastConfirmed && m.lastConfirmed.fingerprint) ? String(m.lastConfirmed.fingerprint) : null, infl: !!m.inFlightSave });
+    }
+    var k = 0;
+    function step(){
+      if (k >= cand.length) return Promise.resolve(null);
+      var c = cand[k++];
+      if (c.infl) return Promise.resolve({ id: c.id, reason: 'IN_FLIGHT_SAVE', state: c.state });
+      return new Promise(function(res){ try { F.contentHashV2(c.id, function(h, err){ res(h || null); }); } catch(e){ res(null); } }).then(function(h){
+        if (!h) return { id: c.id, reason: 'NO_HASH', state: c.state };
+        if (c.lc && h === c.lc) return step();
+        return { id: c.id, reason: 'UNCOMMITTED_BODY', state: c.state, local: h.slice(0, 16), lc: c.lc ? c.lc.slice(0, 16) : null };
+      });
+    }
+    return step();
+  }
+  var PCP_WAIT_MS = 3000;
+  var pcpStats = { gates: 0, holds: 0, passes: 0, noApi: 0, lastHold: null, lastPass: null, holdSince: 0 };
+  var pcpBypass = false;
+
   var F821_DEFAULT_ON = true;
   function f821On(){
     try { if (lsGet('v292Dfix821Off') === '1') return false; } catch(e){ return false; }
@@ -488,6 +537,7 @@
       if (/^v292Dfix399_/.test(k)) continue;
       if (/^v292Dfix402_/.test(k)) continue;
       if (use821 && F821_DENY.test(k)) continue;              /* ★fix821③ */
+      if (pafOn() && F_PAF_DENY.test(k)) continue;            /* ★PAF: local-derived family は運ばない */
       /* ★fix588: package を組み立てる最後の関門でも、墓標スロットの実体を落とす
          （slotIdの列挙側だけの除外に頼らない＝GPT指定の二重の防壁） */
       if (isDeadSlotKey(k, dead)) continue;
@@ -571,6 +621,25 @@
       askReconcile('fix828:' + hold828);
       try { console.log(TAG, 'auto put を保留（' + hold828 + '・' + (why || '') + '）: 決着まで送りません'); } catch(e){}
       return Promise.resolve('hold-' + hold828);
+    }
+    if (pcpOn() && !pcpBypass){
+      pcpStats.gates++;
+      var ids402 = []; try { ids402 = f821On() ? f821PackageSlotIds(tombstonedIds(), null) : allSlotIds(); } catch(e){ ids402 = []; }
+      var seqAtGate = mutationSeq;                       /* ★PCP V2.1（GPT #113）: predicate の非同期区間に save が入ったら pass を無効にする */
+      return pcpPredicate(ids402).then(function(blk){
+        if (blk && blk.reason === 'NO_API'){ pcpStats.noApi++; blk = null; }      /* fix697 が無いページは従来どおり（index では必ず在る） */
+        if (!blk && mutationSeq !== seqAtGate){ blk = { id: 'current', reason: 'SAVE_DURING_GATE', seq: [seqAtGate, mutationSeq] }; pcpStats.raceHolds = (pcpStats.raceHolds || 0) + 1; }
+        if (blk){
+          pcpStats.holds++; pcpStats.lastHold = { at: Date.now(), why: why || '', blk: blk }; if (!pcpStats.holdSince) pcpStats.holdSince = Date.now();
+          if (pushTimer) clearTimeout(pushTimer);
+          pushTimer = setTimeout(function(){ flush('pcp-wait'); }, PCP_WAIT_MS);
+          try { if (pcpStats.holds % 20 === 1) console.log(TAG, 'PCP: auto put を保留（' + blk.reason + ' ' + blk.id + '・' + (why || '') + '）: canonical 着地まで送りません'); } catch(e){}
+          return 'pcp-hold:' + blk.reason;
+        }
+        pcpStats.passes++; pcpStats.lastPass = { at: Date.now(), why: why || '', heldMs: pcpStats.holdSince ? (Date.now() - pcpStats.holdSince) : 0 }; pcpStats.holdSince = 0;
+        pcpBypass = true;
+        try { return flush(why); } finally { pcpBypass = false; }
+      });
     }
     if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
     var f402dOn = (lsGet('v292Dfix402dOff') !== '1');
@@ -1208,6 +1277,7 @@
 
   window.__v292Dfix402 = {
     __real: true,
+    pcp: function(){ return { on: pcpOn(), waitMs: PCP_WAIT_MS, stats: JSON.parse(JSON.stringify(pcpStats)) }; },
     perf: null,
     status: function(){ return { on: on(), defaultOn: DEFAULT_ON, loggedIn: isLoggedIn(), baseRev: baseRev(), dirty: isDirty(), proxy: proxyUrl() }; },
     state: function(){ return { baseRev: baseRev(), lastHash: (lsGet('v292Dfix402_lastHash')||'').slice(0,12), dirtyTs: getNum('v292Dfix402_dirtyTs'), pushedTs: getNum('v292Dfix402_pushedTs'), mutationSeq: mutationSeq }; },

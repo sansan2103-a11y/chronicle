@@ -157,6 +157,53 @@
      既定 OFF。ON = v292Dfix821On='1' / kill = v292Dfix821Off='1'。
      ================================================================== */
   var F821_DENY = /^(chrAdminTok|chrAdminUrl)$/;
+  /* ★★PAF（PACKAGE_AUTHORITY_FILTER、GPT #108/#109、T1）: 端末 local-derived の family を cross-device package
+     （fix402 自動 put / fix399 手動 put / home 「いま上げる」forceput）へ**運ばない**。local の key は消さない
+     （再生成は各 fix が行う。receiver も削除しない）。対象 = PACKAGE_AUTHORITY_MATRIX_V1 の C/B(派生) family:
+       longmem fix135/136/137 ・ Quasi(277) ・ snap/snapd(564) ・ LinRev(924) ・ 307Last ・ 640Evid ・ genderMap(54) ・ dlg(104)
+     既定 ON。kill = v292DpafOff='1'。3 か所（home / fix402 / fix399）へ同じ正規表現を局所実装する（fix821 と同じ流儀）。 */
+  var F_PAF_DENY = /^(chr6_v292Dfix13[567]_|v292Dfix277Quasi_slot_|chr6_snapd?_|v292Dfix924LinRev_slot_|v292Dfix307Last_slot_|v292Dfix640Evid_slot_|chr6_v292Dfix54_genderMap_|chr6_v292Dfix104_dlg_slot_)/;
+  function pafOn(){ try { return localStorage.getItem('v292DpafOff') !== '1'; } catch(e){ return true; } }
+
+  /* ★★PCP V2（PACKAGE_PRECANONICAL_PUBLISH、GPT #108/#111/#112、T1）: UNCOMMITTED_CANONICAL_BODY MUST NOT ENTER PACKAGE。
+     package を公開できる全入口（fix402 auto put / fix399 手動 put / home forceput）で同じ predicate を使う（局所実装 ×3）。
+       predicate = (1) 現在の document で fix697 の commit が pending / inFlight
+                   (2) body-backed story の fix781 marker が DIRTY_INTENT / DIRTY_LOCAL / DIVERGED / BOOTSTRAP_HOLD または inFlightSave あり、かつ
+                       現在の local canonical（fix697.contentHashV2 = projectionV2 の sha256）≠ marker.lastConfirmed.fingerprint
+                   （local = lastConfirmed の stale dirty は通す。meta だけの dirty は通す）
+       auto = HOLD して 3 秒後に再評価 / 手動 = reject / forceput = reject。canonical 着地後は従来どおり。
+     読むだけ（書込 0・通信 0）。fix697 / fix781 / Worker / CAS には触らない。既定 ON。kill = v292DpcpOff='1'。 */
+  function pcpOn(){ try { return localStorage.getItem('v292DpcpOff') !== '1'; } catch(e){ return true; } }
+  function pcpMarker(id){ try { var m = JSON.parse(localStorage.getItem('v292Dfix402_f781g_' + id) || 'null'); return (m && typeof m === 'object') ? m : null; } catch(e){ return null; } }
+  function pcpPredicate(ids){
+    var F = null; try { F = window.__v292Dfix697 || null; } catch(e){ F = null; }
+    if (!F || typeof F.contentHashV2 !== 'function') return Promise.resolve({ id: '-', reason: 'NO_API' });
+    try { var f9 = (typeof F.f909 === 'function') ? F.f909() : null;
+          if (f9 && (f9.pushTimer || f9.inFlight)) return Promise.resolve({ id: 'current', reason: f9.inFlight ? 'COMMIT_IN_FLIGHT' : 'COMMIT_PENDING' }); } catch(e){}
+    var cand = [];
+    for (var i = 0; i < (ids || []).length; i++){
+      var id = String(ids[i] == null ? '' : ids[i]); if (!id || id === 'chr6') continue;
+      var m = pcpMarker(id); if (!m) continue;
+      var st = String(m.state || '');
+      if (!(st === 'DIRTY_INTENT' || st === 'DIRTY_LOCAL' || st === 'DIVERGED' || st === 'BOOTSTRAP_HOLD' || !!m.inFlightSave)) continue;
+      try { if (localStorage.getItem('chr6_slot_' + id) == null) continue; } catch(e){ continue; }
+      cand.push({ id: id, state: st, lc: (m.lastConfirmed && m.lastConfirmed.fingerprint) ? String(m.lastConfirmed.fingerprint) : null, infl: !!m.inFlightSave });
+    }
+    var k = 0;
+    function step(){
+      if (k >= cand.length) return Promise.resolve(null);
+      var c = cand[k++];
+      if (c.infl) return Promise.resolve({ id: c.id, reason: 'IN_FLIGHT_SAVE', state: c.state });
+      return new Promise(function(res){ try { F.contentHashV2(c.id, function(h, err){ res(h || null); }); } catch(e){ res(null); } }).then(function(h){
+        if (!h) return { id: c.id, reason: 'NO_HASH', state: c.state };
+        if (c.lc && h === c.lc) return step();
+        return { id: c.id, reason: 'UNCOMMITTED_BODY', state: c.state, local: h.slice(0, 16), lc: c.lc ? c.lc.slice(0, 16) : null };
+      });
+    }
+    return step();
+  }
+  var pcpRejects = 0, pcpLast = null;
+
   var F821_DEFAULT_ON = true;
   function f821On(){
     try { if (localStorage.getItem('v292Dfix821Off') === '1') return false; } catch(e){ return false; }
@@ -232,6 +279,8 @@
       if (/^chr6_bk_/.test(k)) continue;
       if (/^v292Dfix399_/.test(k)) continue;     // 同期状態は運ばない
       if (use821 && F821_DENY.test(k)) continue;              /* ★fix821③ */
+      if (pafOn() && F_PAF_DENY.test(k)) continue;            /* ★PAF: local-derived family は運ばない */
+      if (pafOn() && /^v292Dfix402_/.test(k)) continue;      /* ★PAF(2): 同期 marker（v292Dfix402_f781g_ 等）は fix402 / home と同じく運ばない（従来は fix399 だけが運んでいた） */
       if (isDeadSlotKey(k, dead)) continue;      // ★fix588: 削除済みスロットの実体は送らない
       var isSlot = false;
       for (var j = 0; j < ids.length; j++){ if (use821 ? f821SlotKeyMatch(k, ids[j]) : slotKeyMatch(k, ids[j])){ isSlot = true; break; } }
@@ -805,10 +854,31 @@
       lastServerRev = (meta && meta.rev != null) ? (+meta.rev || 0) : null;
       return idbReadKeys();
     }).then(function(imgKeys){
+      /* ★PCP V2: 手動 put も precanonical predicate を通す。未 commit の body があれば **送らずに reject**（UI に理由を返す）。 */
+      if (!pcpOn()) return imgKeys;
+      var ids399 = []; try { ids399 = f821On() ? f821PackageSlotIds(deadSlotIds(), null) : liveSlotIds(); } catch(e){ ids399 = []; }
+      return pcpPredicate(ids399).then(function(blk){
+        if (blk){ var epc = new Error('PRECANONICAL_HOLD'); epc.precanonical = true; epc.pcp = blk; pcpRejects++; pcpLast = blk;
+          try { console.warn(TAG, 'PCP: 手動 put を中止（' + blk.reason + ' ' + blk.id + '）: 物語の保存がクラウドに確定するまで送りません'); } catch(e){}
+          throw epc; }
+        return imgKeys;
+      });
+    }).then(function(imgKeys){
       var curHash = hash(imgKeys.slice().sort().join('|'));
       var needFull = force || (curHash !== imgHashStored()) || (workerVer < 11); // v11未満/未検出は安全側でfull
       var build = needFull ? collectFull(ts) : Promise.resolve(collectLight(ts));
-      return build.then(function(pkg){ return { pkg: pkg, needFull: needFull, curHash: curHash }; });
+      return build.then(function(pkg){
+        /* ★PCP V2.1（GPT #113）: snapshot（pkg）を作った**後**にもう一度 predicate を通す。
+           snapshot 後に pass すれば、snapshot に含まれる body は確定済み（間に save があれば pending commit で block される）。 */
+        if (!pcpOn()) return { pkg: pkg, needFull: needFull, curHash: curHash };
+        var ids399b = []; try { ids399b = f821On() ? f821PackageSlotIds(deadSlotIds(), null) : liveSlotIds(); } catch(e){ ids399b = []; }
+        return pcpPredicate(ids399b).then(function(blk){
+          if (blk){ var epc2 = new Error('PRECANONICAL_HOLD'); epc2.precanonical = true; epc2.pcp = blk; epc2.postSnapshot = true; pcpRejects++; pcpLast = blk;
+            try { console.warn(TAG, 'PCP: 手動 put を中止（snapshot 後の再判定 ' + blk.reason + ' ' + blk.id + '）'); } catch(e){}
+            throw epc2; }
+          return { pkg: pkg, needFull: needFull, curHash: curHash };
+        });
+      });
     }).then(function(o){
       /* ★★fix605(GPT裁定の緊急封じ込め): **不完全なパッケージで canonical を置き換えない**。
          これが無いと、いま開いている物語しか入っていない put が
@@ -1426,7 +1496,7 @@
     } catch(e){}
   }
   window.__v292Dfix399x = {
-    collectLight: collectLight, push: push, pull: pullData, applySave: applySave, bootPull: function(){ bootPullDone=false; bootPull(); },
+    collectLight: collectLight, push: push, pull: pullData, applySave: applySave, pcp: function(){ return { on: pcpOn(), rejects: pcpRejects, last: pcpLast }; }, bootPull: function(){ bootPullDone=false; bootPull(); },
     /* ★fix605: 「送ろうとしたパッケージが完全だったか」を読める口（診断専用・書き込みなし） */
     completeness: function(){ return lastCompleteness ? JSON.parse(JSON.stringify(lastCompleteness)) : null; },
     liveSlotIds: liveSlotIds,
