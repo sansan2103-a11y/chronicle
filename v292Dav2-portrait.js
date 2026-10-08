@@ -398,6 +398,7 @@
     var a = A(); if (!a) return null;
     var c = a.conflict ? a.conflict() : null, b = a.blocked ? a.blocked() : null, p = a.pending ? a.pending() : null;
     if (c) return { k: 'conflict', t: 'サーバー側の物語が更新されています。内容の確認が必要です' };
+    if (b && b.reason === 'EMPTY_NAME') return { k: 'blocked', t: '名前のない登場人物があります。名前を入力するとクラウドに登録されます' };   /* ★fixBND */
     if (b) return { k: 'blocked', t: 'この登録内容は拒否されています。名前などを変更してください' + (b.key ? '（「' + b.key + '」は既に使われている名前です）' : '') };
     if (p) return (p.polls || 0) >= 5 ? { k: 'pending_stalled', t: '保存状態を確定できません。この物語では操作を続けず、内容を確認してください' } : { k: 'pending', t: '保存結果を確認しています' };   /* F-FZ1 / GPT: a permanent pending is an explicit stop, not a silent 「確認中」 */
     return null;

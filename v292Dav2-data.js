@@ -283,6 +283,13 @@
     /* identity story on the server: keep its mode / bindings / every server entry (server content), append the genuinely new local
        entries. Entry ORDER follows this device's projection so that, when nothing else changed, the result equals what the ordinary
        push would send (local == server afterwards → converged, write 0); server entries this device has not pulled are kept after them. */
+    /* ★fixBND (NPC canary Phase A 14:45:13, GPT #124-A): a registration is a COMPLETE one or none. An id-less entry without a name
+       (a card just added, not yet named) must never be registered — the Worker (C7) mints its id but can create no binding for an
+       empty name, and bindings are append-only afterwards (the production 乙 gap). While such an entry exists the registration is
+       BLOCKED (write 0, fp-bound: typing the name changes the fingerprint and re-runs it; an explicit save drops nameless cards).
+       The S9a prepare path is untouched (s9aDivergence already refuses EMPTY_NAME). kill: localStorage v292DbndOff = '1' */
+    try { if (lsg('v292DbndOff') !== '1'){ for (var bi = 0; bi < localPaths.length; bi++){ var be = getAt(rec.body.cast, localPaths[bi]);
+      if (isObj(be) && be.status !== 'DELETED' && !nameKey(be)) return { stop: 'AV2_REGISTRATION_BLOCKED', extra: { reason: 'EMPTY_NAME', path: localPaths[bi] } }; } } } catch(e){}
     var srvById = {}; var srvBind = isObj(b0.bindings) ? b0.bindings : {};
     entriesOf(b0.cast || {}).forEach(function(x){ if (typeof x.e.character_id === 'string') srvById[x.e.character_id] = x; });
     var localIds = {}; entriesOf(S.cast).forEach(function(x){ if (typeof x.e.character_id === 'string') localIds[x.e.character_id] = 1; });
@@ -1169,6 +1176,12 @@
       if (!pd || !F || reg.busy || off()) return false; reg.busy = true; reg.manual = (reg.manual || 0) + 1; readback(F, id, pd); return true; },
     pending: function(){ var id = curStoryId(); return id ? loadPending(id) : null; },
     blocked: function(){ var id = curStoryId(); return id ? loadBlocked(id) : null; },
+    /* ★fixBND read-only diagnostic: registered (cid-bearing) non-DELETED entries of the local cast whose id has NO binding key at all
+       (what the registrar would have created had the name been present). Never writes; the repair stays the explicit addBinding. */
+    bindingGaps: function(){ try { var S = state(); var id = curStoryId(); if (!S || !isObj(S.cast) || !id || !isIdentityLocal(S.cast, id)) return null;
+      var a = av2Of(S.cast, id); var bd = (a && isObj(a.bindings)) ? a.bindings : {}; var bound = {}; for (var k in bd) if (typeof bd[k] === 'string') bound[bd[k]] = 1;
+      return entriesOf(S.cast).filter(function(x){ return typeof x.e.character_id === 'string' && x.e.status !== 'DELETED' && !bound[x.e.character_id]; })
+        .map(function(x){ return { path: x.path, character_id: x.e.character_id, name: nameKey(x.e), status: x.e.status || 'ACTIVE' }; }); } catch(e){ return null; } },
     conflict: function(){ var id = curStoryId(); return id ? loadConflict(id) : null; },
     status: function(){ var id = curStoryId(), S = state();
       return { off: off(), flag: flagOn(), storyId: id, schema2: !!(S && id && isSchema2Local(S.cast, id)), mode: (S && id && isObj(S.cast)) ? modeOf(av2Of(S.cast, id)) : null,
