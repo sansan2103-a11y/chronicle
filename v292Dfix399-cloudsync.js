@@ -877,9 +877,52 @@
     } catch(e){}
   }
 
+
+  /* ★★BBH（BOOT_BARRIER_PACKAGE_HOLD、GPT #125-H、2026-10-08）: fix889（旧 Vault）の BOOT BARRIER 中は、扉の罠
+     （Storage.prototype の getItem / setItem / removeItem）が当該物語の slot を null に見せる。その間に package を組むと、
+     その物語が「無い」扱いで package から落ち、Worker の put（main blob の全体置換）で package から消える（offline 実測）。
+     → story document からの package 送信（自動 put・forceput）を、(1) 組み立て前 (2) 送信直前 の 2 か所で検査し、
+       ・__v292Dfix889.gate() が armed かつ released でない（扉の罠が有効）
+       ・組んだ package（full / 部分を問わない。kill 時の部分 package も含む）に、localStorage に列挙される生存 slot（墓標でない chr6_slot_*）の本文が 1 件でも欠けている
+       のどちらかなら **送らず保留**（dirty / pushedTs / lastHash に触らない・成功扱いにしない・組んだ payload は捨てる）。
+       再開は既存の契機（次の保存・reload 後の document の起動時 flush・既存 timer）だけ。新しい polling は足さない。
+     Vault 本体・Worker・PCP・CAS・PAF は不変。読むだけ。kill = v292DbbhOff='1'。 */
+  var bbhStats = { holds: 0, last: null };
+  function bbhOff(){ try { return localStorage.getItem('v292DbbhOff') === '1'; } catch(e){ return false; } }
+  function bbhBarrier(){
+    try {
+      var V = window.__v292Dfix889; if (!V) return null;
+      if (typeof V.gate !== 'function') return 'VAULT_GATE_UNKNOWN';
+      var g = V.gate(); if (g && g.armed && !g.released) return 'VAULT_BOOT_BARRIER';
+    } catch(e){ return 'VAULT_GATE_UNKNOWN'; }
+    return null;
+  }
+  function bbhMissing(pkg){
+    var miss = [];
+    try {
+      if (!pkg) return ['NO_PKG'];                             /* Worker の put / forceput は main blob の全体置換（merge API は無い）→ 部分 package も例外にしない */
+      var dead = deadSlotIds(), ls = pkg.ls || {};
+      for (var i = 0; i < localStorage.length; i++){
+        var k = localStorage.key(i); var m = k && /^chr6_slot_([A-Za-z0-9]+)$/.exec(k); if (!m) continue;
+        if (dead[m[1]] || isDeadSlotKey(k, dead)) continue;
+        if (ls[k] == null) miss.push(m[1]);
+      }
+    } catch(e){ return ['ERR']; }
+    return miss;
+  }
+  function bbhHold(pkg, where){
+    if (bbhOff()) return null;
+    var b = bbhBarrier();
+    if (!b && pkg){ var mi = bbhMissing(pkg); if (mi.length) b = 'SLOT_MASKED:' + mi.slice(0, 3).join(','); }
+    if (b){ bbhStats.holds++; bbhStats.last = { at: Date.now(), why: b, where: where || '' };
+      try { console.log(TAG, 'BBH: package 送信を保留（' + b + '・' + (where || '') + '）: 物語の確認が終わるまで送りません（データは変更しません）'); } catch(e){} }
+    return b;
+  }
   function push(force){
     if (!isLoggedIn()) return Promise.reject(new Error('ログインが必要です'));
     if (pushing) return Promise.reject(new Error('同期中'));
+    var bbh0 = bbhHold(null, 'push:pre');   /* ★BBH (1) 組み立て前 */
+    if (bbh0){ var eb0 = new Error('VAULT_BARRIER_HOLD'); eb0.vaultHold = true; eb0.why = bbh0; return Promise.reject(eb0); }
     pushing = true;
     var ts = Date.now();
     var c = fix582Off() ? null : coord();
@@ -933,6 +976,8 @@
         });
       });
     }).then(function(o){
+      var bbh1 = bbhHold(o && o.pkg, 'push:send');   /* ★BBH (2) 送信直前（この pkg は捨てる） */
+      if (bbh1){ var eb1 = new Error('VAULT_BARRIER_HOLD'); eb1.vaultHold = true; eb1.why = bbh1; throw eb1; }
       /* ★★fix605(GPT裁定の緊急封じ込め): **不完全なパッケージで canonical を置き換えない**。
          これが無いと、いま開いている物語しか入っていない put が
          **他の物語の本体をクラウドから消す**（本番で実際に起きた）。
@@ -1553,7 +1598,7 @@
     } catch(e){}
   }
   window.__v292Dfix399x = {
-    collectLight: collectLight, push: push, pull: pullData, applySave: applySave, pcp: function(){ return { on: pcpOn(), rejects: pcpRejects, last: pcpLast }; }, bootPull: function(){ bootPullDone=false; bootPull(); },
+    collectLight: collectLight, push: push, pull: pullData, applySave: applySave, pcp: function(){ return { on: pcpOn(), rejects: pcpRejects, last: pcpLast }; }, bbh: function(){ return { off: bbhOff(), barrier: bbhBarrier(), stats: JSON.parse(JSON.stringify(bbhStats)) }; }, bootPull: function(){ bootPullDone=false; bootPull(); },
     /* ★fix605: 「送ろうとしたパッケージが完全だったか」を読める口（診断専用・書き込みなし） */
     completeness: function(){ return lastCompleteness ? JSON.parse(JSON.stringify(lastCompleteness)) : null; },
     liveSlotIds: liveSlotIds,

@@ -661,6 +661,47 @@
     try { var j = JSON.parse(localStorage.getItem('v292Dfix721_txn') || 'null');
           return !!(j && (j.phase === 'PREPARED' || j.phase === 'APPLYING')); } catch(e){ return false; }
   }
+
+  /* ★★BBH（BOOT_BARRIER_PACKAGE_HOLD、GPT #125-H、2026-10-08）: fix889（旧 Vault）の BOOT BARRIER 中は、扉の罠
+     （Storage.prototype の getItem / setItem / removeItem）が当該物語の slot を null に見せる。その間に package を組むと、
+     その物語が「無い」扱いで package から落ち、Worker の put（main blob の全体置換）で package から消える（offline 実測）。
+     → story document からの package 送信（自動 put・forceput）を、(1) 組み立て前 (2) 送信直前 の 2 か所で検査し、
+       ・__v292Dfix889.gate() が armed かつ released でない（扉の罠が有効）
+       ・組んだ package（full / 部分を問わない。kill 時の部分 package も含む）に、localStorage に列挙される生存 slot（墓標でない chr6_slot_*）の本文が 1 件でも欠けている
+       のどちらかなら **送らず保留**（dirty / pushedTs / lastHash に触らない・成功扱いにしない・組んだ payload は捨てる）。
+       再開は既存の契機（次の保存・reload 後の document の起動時 flush・既存 timer）だけ。新しい polling は足さない。
+     Vault 本体・Worker・PCP・CAS・PAF は不変。読むだけ。kill = v292DbbhOff='1'。 */
+  var bbhStats = { holds: 0, last: null };
+  function bbhOff(){ try { return localStorage.getItem('v292DbbhOff') === '1'; } catch(e){ return false; } }
+  function bbhBarrier(){
+    try {
+      var V = window.__v292Dfix889; if (!V) return null;
+      if (typeof V.gate !== 'function') return 'VAULT_GATE_UNKNOWN';
+      var g = V.gate(); if (g && g.armed && !g.released) return 'VAULT_BOOT_BARRIER';
+    } catch(e){ return 'VAULT_GATE_UNKNOWN'; }
+    return null;
+  }
+  function bbhMissing(pkg){
+    var miss = [];
+    try {
+      if (!pkg) return ['NO_PKG'];                             /* Worker の put / forceput は main blob の全体置換（merge API は無い）→ 部分 package も例外にしない */
+      var dead = tombstonedIds(), ls = pkg.ls || {};
+      for (var i = 0; i < localStorage.length; i++){
+        var k = localStorage.key(i); var m = k && /^chr6_slot_([A-Za-z0-9]+)$/.exec(k); if (!m) continue;
+        if (dead[m[1]] || isDeadSlotKey(k, dead)) continue;
+        if (ls[k] == null) miss.push(m[1]);
+      }
+    } catch(e){ return ['ERR']; }
+    return miss;
+  }
+  function bbhHold(pkg, where){
+    if (bbhOff()) return null;
+    var b = bbhBarrier();
+    if (!b && pkg){ var mi = bbhMissing(pkg); if (mi.length) b = 'SLOT_MASKED:' + mi.slice(0, 3).join(','); }
+    if (b){ bbhStats.holds++; bbhStats.last = { at: Date.now(), why: b, where: where || '' };
+      try { console.log(TAG, 'BBH: package 送信を保留（' + b + '・' + (where || '') + '）: 物語の確認が終わるまで送りません（データは変更しません）'); } catch(e){} }
+    return b;
+  }
   function flush(why){
     if (restoreHold()) return Promise.resolve('restore-hold');   /* ★fix721.1 */
     if (!on() || !isLoggedIn() || pushing) return Promise.resolve('skip');
@@ -674,6 +715,8 @@
       try { console.log(TAG, 'auto put を保留（' + hold828 + '・' + (why || '') + '）: 決着まで送りません'); } catch(e){}
       return Promise.resolve('hold-' + hold828);
     }
+    var bbh0 = bbhHold(null, 'flush:pre:' + (why || ''));   /* ★BBH (1) 組み立て前 */
+    if (bbh0) return Promise.resolve('hold-bbh:' + bbh0);
     if (pcpOn() && !pcpBypass){
       pcpStats.gates++;
       var ids402 = []; try { ids402 = f821On() ? f821PackageSlotIds(tombstonedIds(), null) : allSlotIds(); } catch(e){ ids402 = []; }
@@ -749,6 +792,8 @@
         try { console.log(TAG, 'PCP: snapshot 後の再評価で auto put を保留（' + blk2.reason + ' ' + blk2.id + '）'); } catch(e){}
         return 'pcp-hold-post:' + blk2.reason;
       }
+    var bbh1 = bbhHold(pkg, 'flush:send:' + (why || ''));   /* ★BBH (2) 送信直前（この pkg は捨てる。再開時は作り直す） */
+    if (bbh1){ pushing = false; return 'hold-bbh:' + bbh1; }
     /* ★★fix828 R2A: **fetch より前に** 意図を durable 記録する（逆順は禁止）。 */
     return notePutFirst('put', pkg, _base828).then(function(intent){
       if (intent && intent.blocked){
@@ -1027,7 +1072,9 @@
     var forceSeq = mutationSeq;                            // ★開始時のseqを記録
     var finished = false;
     var done = function(ok){ if (finished) return; finished = true; pushing = false; if (onDone) onDone(ok); };   // ★finally相当: 必ずpushing解除
+    if (bbhHold(null, 'forceput:pre')){ done(false); return Promise.resolve(false); }   /* ★BBH (1) */
     var pkg = collectLight(Date.now());
+    if (bbhHold(pkg, 'forceput:send')){ done(false); return Promise.resolve(false); }   /* ★BBH (2) 組んだ pkg は捨てる */
     // ★C1-1: forceputにもmid付与。put mid(素のhash)との衝突を避けるため 'fp:' 接頭を付ける。
     //   f402dOff時は世代ガードごとOFF=mid無し(後方互換)。連投で内容同一ならidemで単一化。
     var _fpMid = (lsGet('v292Dfix402dOff') !== '1') ? ('fp:' + lsHash(JSON.stringify(pkg.ls || {}))) : undefined;
@@ -1352,6 +1399,7 @@
   window.__v292Dfix402 = {
     __real: true,
     pcp: function(){ return { on: pcpOn(), waitMs: PCP_WAIT_MS, stats: JSON.parse(JSON.stringify(pcpStats)) }; },
+    bbh: function(){ return { off: bbhOff(), barrier: bbhBarrier(), stats: JSON.parse(JSON.stringify(bbhStats)) }; },
     perf: null,
     status: function(){ return { on: on(), defaultOn: DEFAULT_ON, loggedIn: isLoggedIn(), baseRev: baseRev(), dirty: isDirty(), proxy: proxyUrl() }; },
     state: function(){ return { baseRev: baseRev(), lastHash: (lsGet('v292Dfix402_lastHash')||'').slice(0,12), dirtyTs: getNum('v292Dfix402_dirtyTs'), pushedTs: getNum('v292Dfix402_pushedTs'), mutationSeq: mutationSeq }; },
