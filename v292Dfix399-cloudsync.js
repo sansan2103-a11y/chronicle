@@ -179,6 +179,53 @@
      送る直前に同期で比べる。別 document の save / CAS が snapshot 後に入っていれば SNAPSHOT_STALE。読むだけ。 */
   function pcpSnapOf(ids){ var o = {}; for (var i = 0; i < (ids || []).length; i++){ var id = String(ids[i] == null ? '' : ids[i]); if (!id || id === 'chr6') continue; var m = pcpMarker(id); o[id] = m ? [String(m.state || ''), +m.localGeneration || 0, (m.lastConfirmed && m.lastConfirmed.serverRev != null) ? +m.lastConfirmed.serverRev : null, (m.lastConfirmed && m.lastConfirmed.fingerprint) ? String(m.lastConfirmed.fingerprint) : null, !!m.inFlightSave] : null; } return o; }
   function pcpSnapDrift(snap){ try { for (var id in snap){ if (!Object.prototype.hasOwnProperty.call(snap, id)) continue; var m = pcpMarker(id); var now = m ? [String(m.state || ''), +m.localGeneration || 0, (m.lastConfirmed && m.lastConfirmed.serverRev != null) ? +m.lastConfirmed.serverRev : null, (m.lastConfirmed && m.lastConfirmed.fingerprint) ? String(m.lastConfirmed.fingerprint) : null, !!m.inFlightSave] : null; if (JSON.stringify(now) !== JSON.stringify(snap[id])) return { id: id, reason: 'SNAPSHOT_STALE', was: snap[id], now: now }; } } catch(e){} return null; }
+  /* ★★PCP1（GPT #125-F G2 / SCHEMA1_CONFIRMED_FALLBACK、2026-10-08）: PCP V2 は local を contentHashV2（schema2 projection）で
+     marker.lastConfirmed.fingerprint と比べるが、shadow lane（Worker: schema1 凍結、SHADOW_SCHEMA2_UNSUPPORTED）で確定した物語の
+     fingerprint は fix697 shadow commit の schema1 hash なので、確定済みでも必ず不一致 = 偽 UNCOMMITTED_BODY になる。
+     V2 不一致のときに限り、次を **全部** 満たす物語だけ schema1 hash（fix697.contentHashOf）でも比べ、一致なら確定済みとして通す:
+       ・fix781 marker の storyId 一致、state DIRTY_LOCAL / DIRTY_INTENT（DIVERGED / BOOTSTRAP_HOLD は従来どおり拒否）、inFlightSave なし
+       ・lastConfirmed.serverRev が数値、fingerprint が sha256 hex、fix697 の rev 台帳 v292Dfix402_storyRevs[id] = lastConfirmed.serverRev
+       ・server authority cache（fix702 v292Dfix702_storyAuth[id]）が shadow（= server record は schema1）で、その rev が lastConfirmed より先へ進んでいない
+       ・local slot に schema2 の痕跡なし（cast.av2 / assetSchema / assetIdPrep / bindings なし）かつ av2 契約 isIdentityLocal = false（av2 module 不在は拒否）
+       ・この document の fix945 が当該 story を STALE にしていない
+       ・contentHashOf(id) = lastConfirmed.fingerprint
+     schema2 / 移行途中 / 不明は従来どおり V2 判定だけ（= 拒否）。読むだけ（書込 0・通信 0）。kill = v292Dpcp1Off='1'（この追加判定だけ OFF、PCP 本体は不変）。 */
+  var PCP1_STATS = { checks: 0, pass: 0, last: null };
+  try { (window.__v292Dpcp1 = window.__v292Dpcp1 || {})['f399'] = PCP1_STATS; } catch(e){}
+  function pcp1Schema1Confirmed(F, id){
+    PCP1_STATS.checks++;
+    function no(why){ PCP1_STATS.last = { id: id, r: why, t: Date.now() }; return Promise.resolve(why); }
+    var m = null;
+    try {
+      if (localStorage.getItem('v292Dpcp1Off') === '1') return no('PCP1_OFF');
+      if (!F || typeof F.contentHashOf !== 'function') return no('NO_V1_API');
+      m = pcpMarker(id);
+      if (!m || String(m.storyId) !== String(id)) return no('MARKER_ID');
+      var st = String(m.state || '');
+      if (!(st === 'DIRTY_LOCAL' || st === 'DIRTY_INTENT')) return no('STATE_' + st);
+      if (m.inFlightSave) return no('IN_FLIGHT');
+      var lc = m.lastConfirmed;
+      if (!lc || typeof lc.serverRev !== 'number' || !/^[0-9a-f]{64}$/.test(String(lc.fingerprint || ''))) return no('NO_LC');
+      var revs = JSON.parse(localStorage.getItem('v292Dfix402_storyRevs') || 'null');
+      if (!revs || typeof revs !== 'object' || revs[id] !== lc.serverRev) return no('REV_MISMATCH');
+      var am = JSON.parse(localStorage.getItem('v292Dfix702_storyAuth') || 'null');
+      var a = (am && typeof am === 'object') ? am[id] : null;
+      if (!a || a.authority !== 'shadow') return no('NOT_SHADOW');
+      if (typeof a.rev === 'number' && a.rev > lc.serverRev) return no('AUTH_AHEAD');
+      var sl = JSON.parse(localStorage.getItem('chr6_slot_' + id) || 'null');
+      if (!sl || typeof sl !== 'object' || !sl.cast || typeof sl.cast !== 'object') return no('NO_SLOT');
+      if (sl.cast.av2 !== undefined || sl.assetSchema !== undefined || sl.assetIdPrep !== undefined || sl.bindings !== undefined) return no('SCHEMA2_TRACE');
+      var M = window.__v292Dav2Map;
+      if (!M || typeof M.isIdentityLocal !== 'function' || M.isIdentityLocal(sl.cast, id)) return no('AV2_UNKNOWN');
+      var X = window.__v292Dfix945;
+      if (X && typeof X.state === 'function'){ var xs = X.state(); if (!xs || (xs.stale && xs.stale[id])) return no('XTAB_STALE'); }
+    } catch(e){ return no('ERR'); }
+    return new Promise(function(res){ try { F.contentHashOf(id, function(h){ res(h || null); }); } catch(e){ res(null); } }).then(function(h1){
+      if (!h1){ PCP1_STATS.last = { id: id, r: 'NO_V1_HASH', t: Date.now() }; return 'NO_V1_HASH'; }
+      if (h1 !== String(m.lastConfirmed.fingerprint)){ PCP1_STATS.last = { id: id, r: 'V1_MISMATCH', t: Date.now() }; return 'V1_MISMATCH'; }
+      PCP1_STATS.pass++; PCP1_STATS.last = { id: id, r: 'PASS', t: Date.now() }; return true;
+    });
+  }
   function pcpPredicate(ids){
     var F = null; try { F = window.__v292Dfix697 || null; } catch(e){ F = null; }
     if (!F || typeof F.contentHashV2 !== 'function') return Promise.resolve({ id: '-', reason: 'NO_API' });
@@ -201,7 +248,8 @@
       return new Promise(function(res){ try { F.contentHashV2(c.id, function(h, err){ res(h || null); }); } catch(e){ res(null); } }).then(function(h){
         if (!h) return { id: c.id, reason: 'NO_HASH', state: c.state };
         if (c.lc && h === c.lc) return step();
-        return { id: c.id, reason: 'UNCOMMITTED_BODY', state: c.state, local: h.slice(0, 16), lc: c.lc ? c.lc.slice(0, 16) : null };
+        return pcp1Schema1Confirmed(F, c.id).then(function(ok1){ if (ok1 === true) return step();
+          return { id: c.id, reason: 'UNCOMMITTED_BODY', state: c.state, local: h.slice(0, 16), lc: c.lc ? c.lc.slice(0, 16) : null, s1: ok1 }; });
       });
     }
     return step();
