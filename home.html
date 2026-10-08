@@ -246,7 +246,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261008-paf1pcp2';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261008-pcp23mt1';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -2310,11 +2310,17 @@
       pushAfterPcp();
     });
   }
+  /* ★PCP V2.3（GPT #118 A-2）: snapshot 時点の marker（state / gen / lastConfirmed rev+fp / inFlight）を控え、
+     送る直前に同期で比べる。別 document の save / CAS が snapshot 後に入っていれば SNAPSHOT_STALE。読むだけ。 */
+  function pcpSnapOf(ids){ var o = {}; for (var i = 0; i < (ids || []).length; i++){ var id = String(ids[i] == null ? '' : ids[i]); if (!id || id === 'chr6') continue; var m = pcpMarker(id); o[id] = m ? [String(m.state || ''), +m.localGeneration || 0, (m.lastConfirmed && m.lastConfirmed.serverRev != null) ? +m.lastConfirmed.serverRev : null, (m.lastConfirmed && m.lastConfirmed.fingerprint) ? String(m.lastConfirmed.fingerprint) : null, !!m.inFlightSave] : null; } return o; }
+  function pcpSnapDrift(snap){ try { for (var id in snap){ if (!Object.prototype.hasOwnProperty.call(snap, id)) continue; var m = pcpMarker(id); var now = m ? [String(m.state || ''), +m.localGeneration || 0, (m.lastConfirmed && m.lastConfirmed.serverRev != null) ? +m.lastConfirmed.serverRev : null, (m.lastConfirmed && m.lastConfirmed.fingerprint) ? String(m.lastConfirmed.fingerprint) : null, !!m.inFlightSave] : null; if (JSON.stringify(now) !== JSON.stringify(snap[id])) return { id: id, reason: 'SNAPSHOT_STALE', was: snap[id], now: now }; } } catch(e){} return null; }
+  var pcpSnapHome = null;
   var pcpRejects = 0, pcpLast = null;
   function pushAfterPcp(pkgPre){
     el('sync').className='sync'; el('sync').textContent='☁ 上げています…';
     var pkg = pkgPre || { schema:1, updatedAt:Date.now(), device:(navigator.userAgent||'').slice(0,60),
                 activeSlot:(J(g('chr6_active_slot'),'chr6')||'chr6'), ls:collectLS(), full:true };
+    if (!pkgPre){ pcpSnapHome = null; try { if (pcpOn()){ var idsH = f821On() ? f821PackageSlotIds(tombstonedIds(), normSlotId) : allSlotIds(); pcpSnapHome = pcpSnapOf(idsH); } } catch(e){ pcpSnapHome = null; } }   /* ★PCP V2.3: snapshot 時点の marker */
     /* ★PCP V2.1（GPT #113）: snapshot（pkg）を先に作り、その**後**に predicate を通し、pass したら**その snapshot をそのまま送る**
        （predicate の非同期区間に save が入っても、snapshot は確定済みの body のまま。snapshot 後の save は pending commit として block される）。 */
     if (pcpOn() && !pkgPre){
@@ -2353,6 +2359,10 @@
       return;
     }
     call({op:'meta'},15000).then(function(m){
+      /* ★PCP V2.3（GPT #118 A-2）: 送る直前に snapshot 時点の marker と同期比較。別 document の save / CAS が入っていれば送らない。 */
+      if (pcpSnapHome){ var driftH = pcpSnapDrift(pcpSnapHome); if (driftH){ pcpRejects++; pcpLast = driftH;
+          try { console.warn('[home][PCP] forceput中止（送信直前の再判定 SNAPSHOT_STALE）:', driftH); } catch(e){}
+          return { ok:false, error:'物語「' + String(driftH.id).slice(0, 12) + '」が送る直前に別の画面で更新されたため、クラウドへの上書きを中止しました。少し待ってからもう一度お試しください。', errorCode:'PRECANONICAL_HOLD', pcp: driftH }; } }
       /* ★★fix596(GPT指定1): 「いま上げる」は forceput なので、**曖昧コミットはここでも起きる**。
          put と同じ commit ledger を通し、commitOpId を付けて送る。
          未解決の pending が残っているなら、上書きせずに中止する（前回の証拠を消さない）。 */
@@ -2396,6 +2406,11 @@
           });
         });
     }).then(function(r){
+      if (r && r.ok !== true && r.errorCode === 'PRECANONICAL_HOLD'){   /* ★PCP V2.3: 送信直前の中止を画面に出す（黙らせない） */
+        el('sync').className='sync err'; el('sync').textContent='⚠ 上げませんでした（物語の保存が未確定）';
+        try { el('note').innerHTML = '<div class="note">'+esc(String(r.error || ''))+'</div>'; } catch(e){}
+        return;
+      }
       if(!r || !r.ok) throw new Error(r&&r.errorCode||'push');
       /* ★★v292Dfix826 F2（GPT裁定52）: fork 応答を「main へ保存できた」ことにしない。
          fork の rev は **サーバの現在値**であって、自分の package が main になった証明ではない。

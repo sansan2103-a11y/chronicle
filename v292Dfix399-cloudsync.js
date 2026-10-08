@@ -175,6 +175,10 @@
      読むだけ（書込 0・通信 0）。fix697 / fix781 / Worker / CAS には触らない。既定 ON。kill = v292DpcpOff='1'。 */
   function pcpOn(){ try { return localStorage.getItem('v292DpcpOff') !== '1'; } catch(e){ return true; } }
   function pcpMarker(id){ try { var m = JSON.parse(localStorage.getItem('v292Dfix402_f781g_' + id) || 'null'); return (m && typeof m === 'object') ? m : null; } catch(e){ return null; } }
+  /* ★PCP V2.3（GPT #118 A-2）: snapshot 時点の marker（state / gen / lastConfirmed rev+fp / inFlight）を控え、
+     送る直前に同期で比べる。別 document の save / CAS が snapshot 後に入っていれば SNAPSHOT_STALE。読むだけ。 */
+  function pcpSnapOf(ids){ var o = {}; for (var i = 0; i < (ids || []).length; i++){ var id = String(ids[i] == null ? '' : ids[i]); if (!id || id === 'chr6') continue; var m = pcpMarker(id); o[id] = m ? [String(m.state || ''), +m.localGeneration || 0, (m.lastConfirmed && m.lastConfirmed.serverRev != null) ? +m.lastConfirmed.serverRev : null, (m.lastConfirmed && m.lastConfirmed.fingerprint) ? String(m.lastConfirmed.fingerprint) : null, !!m.inFlightSave] : null; } return o; }
+  function pcpSnapDrift(snap){ try { for (var id in snap){ if (!Object.prototype.hasOwnProperty.call(snap, id)) continue; var m = pcpMarker(id); var now = m ? [String(m.state || ''), +m.localGeneration || 0, (m.lastConfirmed && m.lastConfirmed.serverRev != null) ? +m.lastConfirmed.serverRev : null, (m.lastConfirmed && m.lastConfirmed.fingerprint) ? String(m.lastConfirmed.fingerprint) : null, !!m.inFlightSave] : null; if (JSON.stringify(now) !== JSON.stringify(snap[id])) return { id: id, reason: 'SNAPSHOT_STALE', was: snap[id], now: now }; } } catch(e){} return null; }
   function pcpPredicate(ids){
     var F = null; try { F = window.__v292Dfix697 || null; } catch(e){ F = null; }
     if (!F || typeof F.contentHashV2 !== 'function') return Promise.resolve({ id: '-', reason: 'NO_API' });
@@ -868,15 +872,16 @@
       var needFull = force || (curHash !== imgHashStored()) || (workerVer < 11); // v11未満/未検出は安全側でfull
       var build = needFull ? collectFull(ts) : Promise.resolve(collectLight(ts));
       return build.then(function(pkg){
+        var snap399 = null; try { if (pcpOn()){ var idsS = f821On() ? f821PackageSlotIds(deadSlotIds(), null) : liveSlotIds(); snap399 = pcpSnapOf(idsS); } } catch(e){ snap399 = null; }   /* ★PCP V2.3 */
         /* ★PCP V2.1（GPT #113）: snapshot（pkg）を作った**後**にもう一度 predicate を通す。
            snapshot 後に pass すれば、snapshot に含まれる body は確定済み（間に save があれば pending commit で block される）。 */
-        if (!pcpOn()) return { pkg: pkg, needFull: needFull, curHash: curHash };
+        if (!pcpOn()) return { pkg: pkg, needFull: needFull, curHash: curHash, snap: snap399 };
         var ids399b = []; try { ids399b = f821On() ? f821PackageSlotIds(deadSlotIds(), null) : liveSlotIds(); } catch(e){ ids399b = []; }
         return pcpPredicate(ids399b).then(function(blk){
           if (blk){ var epc2 = new Error('PRECANONICAL_HOLD'); epc2.precanonical = true; epc2.pcp = blk; epc2.postSnapshot = true; pcpRejects++; pcpLast = blk;
             try { console.warn(TAG, 'PCP: 手動 put を中止（snapshot 後の再判定 ' + blk.reason + ' ' + blk.id + '）'); } catch(e){}
             throw epc2; }
-          return { pkg: pkg, needFull: needFull, curHash: curHash };
+          return { pkg: pkg, needFull: needFull, curHash: curHash, snap: snap399 };
         });
       });
     }).then(function(o){
@@ -950,6 +955,10 @@
             throw eb;
           }
           if (pr && pr.ok && pr.commitOpId) body.commitOpId = pr.commitOpId;
+          /* ★PCP V2.3（GPT #118 A-2）: 送る直前に snapshot 時点の marker と同期比較。別 document の save / CAS が入っていれば送らない。 */
+          if (o.snap){ var drift399 = pcpSnapDrift(o.snap); if (drift399){ var epc3 = new Error('PRECANONICAL_HOLD'); epc3.precanonical = true; epc3.pcp = drift399; epc3.postSnapshot = true; epc3.preSend = true; pcpRejects++; pcpLast = drift399;
+              try { console.warn(TAG, 'PCP: 手動 put を中止（送信直前の再判定 SNAPSHOT_STALE ' + drift399.id + '）'); } catch(e){}
+              throw epc3; } }
           return callSave(body);
         }).then(function(r){
           if (r.status !== 200 || !r.json) throw new Error('HTTP ' + r.status);

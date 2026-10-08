@@ -464,6 +464,10 @@
     }
     return step();
   }
+  /* ★PCP V2.3（GPT #118 A-2）: snapshot 時点の marker（state / gen / lastConfirmed rev+fp / inFlight）を控え、
+     送る直前に同期で比べる。別 document の save / CAS が snapshot 後に入っていれば SNAPSHOT_STALE。読むだけ。 */
+  function pcpSnapOf(ids){ var o = {}; for (var i = 0; i < (ids || []).length; i++){ var id = String(ids[i] == null ? '' : ids[i]); if (!id || id === 'chr6') continue; var m = pcpMarker(id); o[id] = m ? [String(m.state || ''), +m.localGeneration || 0, (m.lastConfirmed && m.lastConfirmed.serverRev != null) ? +m.lastConfirmed.serverRev : null, (m.lastConfirmed && m.lastConfirmed.fingerprint) ? String(m.lastConfirmed.fingerprint) : null, !!m.inFlightSave] : null; } return o; }
+  function pcpSnapDrift(snap){ try { for (var id in snap){ if (!Object.prototype.hasOwnProperty.call(snap, id)) continue; var m = pcpMarker(id); var now = m ? [String(m.state || ''), +m.localGeneration || 0, (m.lastConfirmed && m.lastConfirmed.serverRev != null) ? +m.lastConfirmed.serverRev : null, (m.lastConfirmed && m.lastConfirmed.fingerprint) ? String(m.lastConfirmed.fingerprint) : null, !!m.inFlightSave] : null; if (JSON.stringify(now) !== JSON.stringify(snap[id])) return { id: id, reason: 'SNAPSHOT_STALE', was: snap[id], now: now }; } } catch(e){} return null; }
   var PCP_WAIT_MS = 3000;
   var pcpStats = { gates: 0, holds: 0, passes: 0, noApi: 0, lastHold: null, lastPass: null, holdSince: 0 };
   var pcpBypass = false;
@@ -645,6 +649,8 @@
     var f402dOn = (lsGet('v292Dfix402dOff') !== '1');
     var sentSeq = mutationSeq;                       // ★fix402d: pkg構築"前"にseqを記録(飛行中の新規保存検出用)
     var pkg = collectLight(Date.now());
+    var _snapIds = []; try { _snapIds = f821On() ? f821PackageSlotIds(tombstonedIds(), null) : allSlotIds(); } catch(e){ _snapIds = []; }
+    var _snap402 = pcpOn() ? pcpSnapOf(_snapIds) : null;   /* ★PCP V2.3: snapshot 時点の marker */
     // ★fix402c堅牢化: 空ガード刷新。収集済みpkgの全スロット合計turns===0 && baseRev>0 でskip
     //   (parse不能スロットありなら従来のactiveSlotTurnsガードにフォールバック)
     var ti = pkgTurnsInfo(pkg);
@@ -676,6 +682,25 @@
     //   Worker v17のidem表で同一midの再送は同一応答を返し二重fork/二重revを防ぐ(旧Worker=mid無視で後方互換)。
     var _putMid = f402dOn ? h : undefined;
     var _base828 = baseRev();
+    /* ★PCP V2.2（GPT #117 lane A・fx_mt MT2A）: snapshot（collectLight）の **後** に predicate を再評価する（fix399 V2.1 の postSnapshot と同型）。
+       別 document（他タブ / home）が predicate の非同期区間に本文を書くと mutationSeq では検出できないため、
+       送る直前の LS を marker + hash でもう一度見る。block なら送らず hold（PCP_WAIT_MS 後に再評価）。読むだけ・書込 0。 */
+    var _postGate = Promise.resolve(null);
+    if (pcpOn() && pcpBypass){
+      var _ids2 = []; try { _ids2 = f821On() ? f821PackageSlotIds(tombstonedIds(), null) : allSlotIds(); } catch(e){ _ids2 = []; }
+      _postGate = pcpPredicate(_ids2).then(function(b2){ if (b2 && b2.reason === 'NO_API') return null; return b2 || null; }, function(){ return null; });
+    }
+    return _postGate.then(function(blk2){
+      if (!blk2 && _snap402){ var _dr = pcpSnapDrift(_snap402); if (_dr) blk2 = _dr; }   /* ★PCP V2.3: 送る直前の同期比較 */
+      if (blk2){
+        pushing = false;
+        blk2.postSnapshot = true;
+        pcpStats.holds++; pcpStats.postHolds = (pcpStats.postHolds || 0) + 1; pcpStats.lastHold = { at: Date.now(), why: (why || '') + ':post', blk: blk2 }; if (!pcpStats.holdSince) pcpStats.holdSince = Date.now();
+        if (pushTimer) clearTimeout(pushTimer);
+        pushTimer = setTimeout(function(){ flush('pcp-wait'); }, PCP_WAIT_MS);
+        try { console.log(TAG, 'PCP: snapshot 後の再評価で auto put を保留（' + blk2.reason + ' ' + blk2.id + '）'); } catch(e){}
+        return 'pcp-hold-post:' + blk2.reason;
+      }
     /* ★★fix828 R2A: **fetch より前に** 意図を durable 記録する（逆順は禁止）。 */
     return notePutFirst('put', pkg, _base828).then(function(intent){
       if (intent && intent.blocked){
@@ -723,6 +748,7 @@
         if (!retryTimer) retryTimer = setTimeout(function(){ retryTimer = null; if (dirtySince) flush('retry'); }, 30000);
         return 'error';
       });
+    });
     });
   }
   function isDirty(){ return getNum('v292Dfix402_dirtyTs') > getNum('v292Dfix402_pushedTs'); }
