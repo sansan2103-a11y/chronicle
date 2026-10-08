@@ -2382,6 +2382,19 @@
     var DESCS_F = ['18歳。意志が強い記録官見習い。','16歳。他人の感情に敏感。','20歳。踊り手。','17歳。天才的だが壊れやすい魔法使い。','少女のような外見の珍財ハンター。'];
     var DESCS_M = ['老齢の元兵士。皮肉屋。','15歳の魔法使い見習い。','真面目な役人。','無口だが仲間思いの元傭兵。'];
     function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
+    /* ■fixNGS（NPC_GENDER_POSITIONAL_SHIFT_ON_DELETE, offline candidate・未出荷）:
+       NPC の性別を「保存済み localStorage の写しの並び順」で引かない。カードは毎回 S.cast.npcs から描かれ
+       card.dataset.npcIdx が描画時の位置なので、その位置の **in-memory の NPC object** を使う（character_id があればそれを優先）。
+       kill = localStorage v292DngsOff='1'（旧挙動）。 */
+    function ngsOff(){ try { return localStorage.getItem('v292DngsOff') === '1'; } catch(e){ return false; } }
+    function ngsArr(){ try { if (typeof S !== 'undefined' && S && S.cast && Array.isArray(S.cast.npcs)) return S.cast.npcs; } catch(e){} return null; }
+    function ngsObjForCard(card, fallbackIdx){
+      var arr = ngsArr(); if (!arr || !card) return null;
+      var cid = card.getAttribute && card.getAttribute('data-ngs-cid');
+      if (cid){ var hit = null, n = 0; for (var q = 0; q < arr.length; q++){ if (arr[q] && arr[q].character_id === cid){ hit = arr[q]; n++; } } if (n === 1) return hit; if (n > 1) return null; }
+      var i = parseInt(card.getAttribute && card.getAttribute('data-npc-idx'), 10); if (!(i >= 0)) i = fallbackIdx;
+      return (i >= 0 && arr[i]) ? arr[i] : null;
+    }
     /* ★fix694: read/write ともこの document の権限キーへ固定。権限が無ければ触らない */
     function f694key(){ try { return window.__chr6WriteKey ? window.__chr6WriteKey() : (window.__chr6Key ? window.__chr6Key() : 'chr6'); } catch(e){ return null; } }
     function getCast(){ try { var k = f694key(); if (!k) return {}; return JSON.parse(localStorage.getItem(k) || '{}'); } catch(e){ return {}; } }
@@ -2405,7 +2418,9 @@
         ov.querySelectorAll('.npc-card').forEach(function(card, idx){
           var anchor = card.querySelector('textarea') || card.querySelector('input');
           if (!anchor) return;
+          if (!ngsOff()){ try { var __o0 = ngsObjForCard(card, idx); if (__o0 && __o0.character_id) card.setAttribute('data-ngs-cid', String(__o0.character_id)); else card.removeAttribute('data-ngs-cid'); } catch(e){} }
           var npcRow = buildRow('NPC', 'npc' + idx, function(){
+            if (!ngsOff()){ var __o = ngsObjForCard(card, idx); return (__o && __o.gender) || ''; }
             var n = ((getCast().cast || {}).npcs || [])[idx] || {};
             return n.gender || '';
           });
@@ -2436,6 +2451,11 @@
           if (target === 'hero'){
             s.cast.hero = s.cast.hero || {};
             s.cast.hero.gender = r.value;
+          } else if (!ngsOff()) {
+            /* fixNGS: 選んだ値（'' = 未設定を含む）をそのカードの in-memory object に入れる。localStorage の写しへ位置で直書きしない
+               （確定は保存操作 = UI.saveSettings / fix351 commit が行う）。 */
+            try { var __oc = ngsObjForCard(r.closest('.npc-card')); if (__oc) __oc.gender = r.value; } catch(e){}
+            return;
           } else {
             // v292Dfix201b: index は記名時の値でなく変更時のDOM位置から取る（カード削除でズレるため）
             var i = parseInt(target.replace('npc', ''), 10);
@@ -2508,7 +2528,32 @@
               S.cast.hero.gender = hg.value;
             }
           } catch(e){}
+          /* fixNGS: origSS（名前の無い NPC を filter で落とす）の **前に**、カードごとに「どの NPC object か」と選ばれている値を対にしておく。 */
+          var __ngsPairs = null;
+          if (!ngsOff()){
+            try {
+              __ngsPairs = [];
+              document.querySelectorAll('#npcList .npc-card').forEach(function(card, idx){
+                var o = ngsObjForCard(card, idx); if (!o) return;
+                var gv = null; var rads = card.querySelectorAll('.v292-grow input[type="radio"]');
+                for (var q = 0; q < rads.length; q++){ if (rads[q].checked){ gv = rads[q].value; break; } }
+                __ngsPairs.push({ o: o, g: gv });
+              });
+            } catch(e){ __ngsPairs = null; }
+          }
           var r = origSS.apply(this, arguments);
+          if (__ngsPairs){
+            try {
+              if (typeof S !== 'undefined' && S.cast && S.cast.hero && S.cast.hero.gender === undefined && __gsnap['\u0000hero'] !== undefined){
+                S.cast.hero.gender = __gsnap['\u0000hero'];
+              }
+              var arrNow = (typeof S !== 'undefined' && S.cast && Array.isArray(S.cast.npcs)) ? S.cast.npcs : [];
+              /* 落とされた（名前の無い）NPC の object は配列に居ないので書かない。radio が無い（null）なら object の値をそのまま残す。 */
+              __ngsPairs.forEach(function(pr){ if (pr.g !== null && arrNow.indexOf(pr.o) >= 0) pr.o.gender = pr.g; });
+              if (typeof S !== 'undefined' && typeof S.save === 'function') (typeof S.saveD==='function'?S.saveD('features.npcGenderForm'):S.save());
+            } catch(e){}
+            return r;
+          }
           // origSS が S.cast.npcs を rebuild した後、NPC ごとの gender を入れる
           try {
             if (typeof S !== 'undefined' && S.cast && S.cast.hero && S.cast.hero.gender === undefined && __gsnap['\u0000hero'] !== undefined){
@@ -10608,6 +10653,8 @@
           var el = cards[i].querySelector('[data-f="' + FIELDS[j] + '"]');
           if (el) st.cast.npcs[i][FIELDS[j]] = el.value;
         }
+        /* fixNGS: 性別もカードと一緒に object へ移す（'' = 未設定を含む）。値が変わるときだけ書く（性別の key が無い旧 NPC に '' を足して canonical を動かさない。独立監査 F1）。kill = v292DngsOff */
+        try { if (localStorage.getItem('v292DngsOff') !== '1'){ var gr = cards[i].querySelector('.v292-grow input[type="radio"]:checked'); if (gr && gr.value !== (st.cast.npcs[i].gender || '')) st.cast.npcs[i].gender = gr.value; } } catch(e){}
       }
     } catch(e){}
   }

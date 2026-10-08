@@ -85,7 +85,13 @@
       var ov = document.getElementById('settingsOv');
       if (!ov || !ov.contains(ev.target)) return;
       if (debTimer) clearTimeout(debTimer);
-      debTimer = setTimeout(function(){ debTimer = null; commitDraft('input'); }, 800);
+      debTimer = setTimeout(function(){ debTimer = null;
+        /* ★fix351d（NPC_DELETE_IDENTITY_SHIFT_AFTER_DELAYED_COMMIT、fx_ngs2 S13b）: 入力から 800 ms 以内に「保存してゲーム開始」が
+           走ると、保存が名無し NPC を間引いた**後**にこの遅延 commit が閉じた画面の DOM からカード一覧を作り直し、
+           名無し NPC を復活させ・後ろの NPC の性別 key を落として S.save していた。設定が閉じていれば入力の遅延 commit はしない
+           （閉じる / Esc は capture で先に commitDraft('close'/'esc') 済み。保存は DOM を自分で読む）。kill: v292Dfix351dOff='1' */
+        try { if (!ovOpen() && localStorage.getItem('v292Dfix351dOff') !== '1') { try { console.log(TAG, 'input commit skipped: settings closed'); } catch(_){} return; } } catch(_){}
+        commitDraft('input'); }, 800);
     } catch(_){}
   }, true);
 

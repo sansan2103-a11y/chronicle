@@ -1393,6 +1393,36 @@
     return false;
   }
 
+  /* ■fix705bd(FIX705_BOOT_DEFER_RACE_NO_FRESH_AUTHORITY, offline candidate — 未出荷・GPT 裁定待ち):
+     fix889 が BOOT_DEFER（window.__chrBootDefer === true）で engine の最初の起動を server probe の後まで止めている間は、
+     fix694 の document key（__chronicleDocumentStoryKey）がまだ決まっていないだけで「story authority の無い document」ではない。
+     この間は restoreHold721 / unsyncedHold781 と同じく **bootN を消費せず待つ**（hold は掛かったまま = 書込は fail-closed）。
+     待つのは: defer 要求あり・engine 未起動（__chrEngineBoot.__ran !== true）・fix889 gate が armed で終端理由でない間だけ。
+     終端（HIDDEN / RELOAD_CAPPED / BOOT_BARRIER_MISSING、および鍵の開いていない CACHED_HIDDEN = この document では engine が起動しない）・gate 不明・上限超過のときは従来どおり数える。
+     上限 BD_MAX_MS（10 分）を超えたら従来の判定に戻る（永久待ちにしない）。releaseHold / stop の条件そのものは変えない。
+     kill = localStorage v292Dfix705bdOff='1'（従来と byte 同等の挙動）。 */
+  /* 終端 = この document で engine が起動し得ない理由だけ。UNCONFIRMED / NO_AUTH は利用者の「もう一度確認する」/ ログインで同じ document のまま
+     openWithBoot() へ進み得るので終端にしない（fixture: 45 s probe 遅延 → UNCONFIRMED → 再確認 → 同じ document で engine 起動）。 */
+  var BD_TERMINAL = { HIDDEN: 1, RELOAD_CAPPED: 1, BOOT_BARRIER_MISSING: 1 };
+  var BD_MAX_MS = 600000, bdSince = 0, bdWaits = 0;
+  function bootDeferPending705(){
+    try {
+      if (lsg('v292Dfix705bdOff') === '1') return false;
+      if (window.__chrBootDefer !== true) return false;
+      var B = window.__chrEngineBoot; if (B && B.__ran === true) return false;
+      if (typeof window.__chronicleDocumentStoryKey === 'string' && window.__chronicleDocumentStoryKey) return false;
+      var V = window.__v292Dfix889; var g = (V && typeof V.gate === 'function') ? V.gate() : null;
+      try { state.bootDeferLast = { reason: g && g.reason, armed: g && g.armed, at: Date.now() }; } catch(e0){}
+      if (!g || g.armed !== true || BD_TERMINAL[String(g.reason || '')]) return false;
+      /* ■fix705bd v2（fixture 実測: vault2 で隠された物語を鍵が掛かった端末で開くと gate 理由は CACHED_HIDDEN のまま gateLocked になり、
+         この document では engine が起動しない）。鍵が開いていない CACHED_HIDDEN も終端として扱う。
+         鍵が開いている（vault session あり）CACHED_HIDDEN は fix889 が probe をやり直し、同じ document で開き得るので待つ。 */
+      if (String(g.reason || '') === 'CACHED_HIDDEN') { var unl = false; try { unl = !!(V && typeof V.unlocked === 'function' && V.unlocked()); } catch(e1){ unl = false; } if (!unl) return false; }
+      if (!bdSince) bdSince = Date.now();
+      if (Date.now() - bdSince > BD_MAX_MS) return false;
+      return true;
+    } catch(e){ return false; }
+  }
   (function bootPoll(){
     /* ★fix721.2: restore journal PREPARED/APPLYING 中は分類を開始せず待機だけ続ける
        （getstory 0 / apply 0 / body write 0。bootN も消費しない）。 */
@@ -1400,6 +1430,7 @@
     /* ■fix781: unsynced terminal hold 中は分類を開始せず待機だけ続ける
        （getstory 0 / apply 0 / body write 0。bootN も消費しない。banner でユーザーが決める）。 */
     try { if (unsyncedHold781()) { setTimeout(bootPoll, 250); return; } } catch(e){}
+    try { if (bootDeferPending705()) { bdWaits++; state.bootDefer = { waits: bdWaits, since: bdSince }; setTimeout(bootPoll, 250); return; } } catch(e){}
     bootN++;
     try {
       if (!on() || !STORY_ID || state.phase === 'stopped') return;
