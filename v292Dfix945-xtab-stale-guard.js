@@ -35,7 +35,12 @@
   function current(){ return urlStory() || readPtr(); }
   function fnv(s){ var h = 0x811c9dc5; s = String(s == null ? '' : s); for (var i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return s.length + ':' + h.toString(16); }
   function marker(id){ try { var m = JSON.parse(lsg('v292Dfix402_f781g_' + id) || 'null'); return (m && typeof m === 'object') ? m : null; } catch(e){ return null; } }
-  function view(id){ var m = marker(id); return { body: fnv(lsg('chr6_slot_' + id)), gen: m ? (+m.localGeneration || 0) : -1, rev: (m && m.lastConfirmed) ? (m.lastConfirmed.serverRev == null ? null : +m.lastConfirmed.serverRev) : null, fp: (m && m.lastConfirmed && m.lastConfirmed.fingerprint) ? String(m.lastConfirmed.fingerprint) : null }; }
+  /* ★v2.3（SAVE P1 / GPT #125）: marker 不在 = fix781 の初期値（ensureMarker の localGeneration 0）と同じ基準 0 として扱う。
+     旧 v2.2 は不在を -1 にしていたため、marker の無い story（新規作成で promotion が通らず shadow のまま等）で
+     この document 自身の最初の story-owned write（fix781 markIntent: 0→1）が before -1 / after 1 = gen-jump と誤判定され、
+     以後の S.save / sidecar write を全部 STALE で止めていた（offline 再現 NEWPLAY_pf*）。別 document の書込判定は変えない
+     （別 document が marker を作れば gen 1 以上になり、こちらの基準 0 と食い違う = 従来どおり STALE）。 */
+  function view(id){ var m = marker(id); return { body: fnv(lsg('chr6_slot_' + id)), gen: m ? (+m.localGeneration || 0) : 0, rev: (m && m.lastConfirmed) ? (m.lastConfirmed.serverRev == null ? null : +m.lastConfirmed.serverRev) : null, fp: (m && m.lastConfirmed && m.lastConfirmed.fingerprint) ? String(m.lastConfirmed.fingerprint) : null }; }
   function refresh(id){ if (!id) return; seen[id] = view(id); stats.refreshes++; }
   /* 判定は marker の generation / lastConfirmed(rev, fp) だけで行う。別 document の fix781 付き save は必ず gen を進め、
      別 document の CAS は rev/fp を進める。本文だけの差（gen/rev/fp 不変）は同一 document の native 正規化（boot 時に実測）でも
@@ -97,7 +102,7 @@
         stats.blockedSave++;
         try { console.warn(TAG, 'S.save blocked: story ' + id + ' ' + JSON.stringify(stale[id])); } catch(e){}
         banner(id);
-        return undefined;                               /* ★書かない・reload しない・merge しない */
+        return { hold: true, code: 'XTAB_STALE', wrote: 0, storyId: id };   /* ★書かない・reload しない・merge しない。★v2.3: caller が成功扱いしないよう hold を返す（fix748 refuse と同じ形） */
       }
       var r = inner.apply(this, arguments);
       if (id && id !== 'default') refresh(id);          /* 自分の書込後の状態を基準にする（chain 観測でも更新される） */
@@ -116,7 +121,23 @@
   var prevSet = null, prevRem = null;
   function guardWrite(k, isRem, apply){
     if (off() || isSelf(k)) return apply();
-    var id = current(); if (!id || id === 'default' || !owned(k, id)) return apply();
+    var id = current(); if (!id || id === 'default') return apply();
+    if (!owned(k, id)){
+      /* ★v2.3（SAVE P1 / GPT #125、本番ログ「S.save ["gen:6>7"]」の再現経路）: key 名だけでは story-owned と判定できない write が
+         下層の wrapper（fix246 の slot 接尾辞 redirect: 'v292Dfix77States' → 'v292Dfix77States_slot_<id>' 等）で story-owned key に
+         変わり、fix781 が gen を +1 する。旧 v2.2 はこの write を素通しして seen を更新しなかったため、次の S.save が自分自身の
+         gen 進行を「別 document」と誤判定した。ここでは **この呼出しの中で** gen が進んだかを前後で測る:
+           +1 ちょうど かつ 呼出し前の LS が seen と一致（= 外部更新なし）→ 自分の確定操作として seen を更新
+           +2 以上 → gen-jump（従来どおり別 document の割込）
+           呼出し前の時点で seen と食い違っていた → 外部更新（STALE）。generation への無条件追従はしない。 */
+      var b0 = view(id); var r0 = apply(); var a0 = view(id);
+      if (a0.gen !== b0.gen){
+        if (a0.gen > b0.gen + 1) markStale(id, 'gen-jump', [b0.gen, a0.gen]);
+        else if (seen[id] && !stale[id]){ var d0 = diff(seen[id], b0); if (d0.length) markStale(id, 'pre-redirect', d0); }
+        if (!stale[id]) refresh(id);
+      }
+      return r0;
+    }
     if (checkNow(id, isRem ? 'removeItem' : 'setItem')){
       var isBody = (String(k) === 'chr6_slot_' + id);
       stats.blockedSidecar++;
@@ -158,7 +179,7 @@
         return r; }; G.__f945c = true; return; } if (++n < 240) setTimeout(tryWrap, 250); })();
   })();
   window.__v292Dfix945 = {
-    BUILD: 'fix945.2',
+    BUILD: 'fix945.3',
     state: function(){ return { on: !off(), evtOn: !evtOff(), wrapped: wrapped, current: current(), stale: JSON.parse(JSON.stringify(stale)), seen: JSON.parse(JSON.stringify(seen)), stats: JSON.parse(JSON.stringify(stats)) }; },
     isStale: function(id){ return !!stale[id || current()]; },
     check: function(id){ return checkNow(id || current(), 'manual'); },
