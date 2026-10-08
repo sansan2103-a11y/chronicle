@@ -882,6 +882,7 @@
           stats.sameHash++;
           consumeApplied();
           state.verdict = 'CANONICAL_SAME_HASH';
+          try { var Mk = window.__v292Dav2Map; if (Mk && typeof Mk.confirmedCanonical === 'function') Mk.confirmedCanonical(STORY_ID, j.record.body, 'f705-same-hash'); } catch(eKnw){}   /* ★fixKNW: confirmed canonical → av2 known refresh (memory only, write 0) */
           try { f896Reconcile(); } catch(e896){}      /* ■fix896: marker の lastConfirmed を Cloud rev へ（story data write 0） */
           releaseHold('same-hash');
           return cb({ verdict: 'CANONICAL_SAME_HASH', serverRev: state.serverRev });

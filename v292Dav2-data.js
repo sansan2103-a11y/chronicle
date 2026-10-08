@@ -1165,8 +1165,53 @@
     });
   }
 
+  /* ================= ★fixKNW (GPT #124-D, AV2_KNOWN_STALE_SNAPSHOT T1) =================
+     cast.av2.known = the per-id snapshot push (F5) re-emits as DEPARTED when legacy code removes an entry. It was refreshed only by
+     an APPLIED hydration / registrar readback / delete side-port, never by a SAME_HASH boot or an ordinary pc2 landing — so it could
+     hold the registration-time content (the production QA 乙: name '' from the nameless registration) and a later delete published
+     that stale snapshot. Here: when a canonical body is CONFIRMED (fix705 SAME_HASH = local projection hash == server hash;
+     fix697 pc2 landed = ACK / readback / converged hash == sent hash), each ACTIVE entry of that body whose local entry (same
+     character_id) is still deep-equal to it refreshes known[cid]. Never: unconfirmed content (local moved on → skipped), DEPARTED /
+     DELETED entries, ids not already in known, bindings / npcs / retired, any write (memory only; the next natural save carries it,
+     and the next SAME_HASH boot recomputes it). push() output is unchanged (only ids present locally are refreshed) → no extra CAS.
+     kill: localStorage v292DknwOff = '1' */
+  var knw = { seq: 0, pend: {}, applied: 0, refreshed: 0, skipped: 0, notReady: 0, last: null };
+  function knwOff(){ return lsg('v292DknwOff') === '1'; }
+  function refreshKnownNow(id, body){
+    var S = state(); if (!S || !isObj(S.cast) || curStoryId() !== id) return null;                       // app not ready yet
+    if (!isIdentityLocal(S.cast, id) || !isIdentityBody(body) || !isObj(body.cast)) return { n: 0, skip: 0, why: 'NOT_IDENTITY' };
+    var a = S.cast.av2; if (!isObj(a) || !isObj(a.known)) return { n: 0, skip: 0, why: 'NO_KNOWN' };
+    var loc = {}; entriesOf(S.cast).forEach(function(x){ if (typeof x.e.character_id === 'string') loc[x.e.character_id] = x.e; });
+    var n = 0, skip = 0;
+    entriesOf(body.cast).forEach(function(x){
+      var e = x.e, cid = e.character_id;
+      if (typeof cid !== 'string' || e.status === 'DEPARTED' || e.status === 'DELETED') return;
+      if (!Object.prototype.hasOwnProperty.call(a.known, cid)) { skip++; return; }                       // never add an id
+      var le = loc[cid]; if (!isObj(le) || !same(le, e)) { skip++; return; }                              // local moved on: not confirmed
+      var snap = clone(e); delete snap.character_id;
+      if (same(a.known[cid], snap)) return;
+      a.known[cid] = snap; n++;
+    });
+    return { n: n, skip: skip };
+  }
+  function confirmedCanonical(id, body, src){
+    try {
+      if (off() || knwOff() || !id || !isObj(body)) return false;
+      var my = ++knw.seq; var b = clone(body); var tries = 0;
+      knw.pend[id] = my;
+      var go = function(){
+        if (knw.pend[id] !== my) return;                                                                   // a newer confirmation superseded
+        var r = null; try { r = refreshKnownNow(id, b); } catch(e){ r = { n: 0, skip: 0, why: 'THREW' }; }
+        if (r === null){ if (++tries <= 60){ knw.notReady++; return setTimeout(go, 1000); } r = { n: 0, skip: 0, why: 'NOT_READY' }; }
+        delete knw.pend[id]; knw.applied++; knw.refreshed += r.n; knw.skipped += r.skip;
+        knw.last = { id: id, src: String(src || ''), n: r.n, skip: r.skip, why: r.why || null, t: Date.now() };
+        if (r.n) note({ kind: 'AV2_KNOWN_REFRESHED', id: id, src: String(src || ''), n: r.n });
+      };
+      go(); return true;
+    } catch(e){ return false; }
+  }
   window.__v292Dav2Map = { push: push, pullCast: pullCast, isSchema2Local: isSchema2Local, isIdentityLocal: isIdentityLocal, modeOf: modeOf, idlessPaths: idlessPaths,
-                           holdCanonical: holdCanonical, off: off, docSchema2: docSchema2 };
+                           holdCanonical: holdCanonical, off: off, docSchema2: docSchema2, confirmedCanonical: confirmedCanonical };
   window.__chronicleAssetV2 = {
     migrate: migrate, prepare: migrate, switchToSchema2: switchToSchema2, ensureFirst: ensureFirst,
     suggestAppearance: suggestAppearance, setProfile: setProfile, newDraw: newDraw,
@@ -1178,6 +1223,7 @@
     blocked: function(){ var id = curStoryId(); return id ? loadBlocked(id) : null; },
     /* ★fixBND read-only diagnostic: registered (cid-bearing) non-DELETED entries of the local cast whose id has NO binding key at all
        (what the registrar would have created had the name been present). Never writes; the repair stays the explicit addBinding. */
+    knownState: function(){ return { off: knwOff(), seq: knw.seq, applied: knw.applied, refreshed: knw.refreshed, skipped: knw.skipped, notReady: knw.notReady, last: knw.last }; },   /* ★fixKNW read-only */
     bindingGaps: function(){ try { var S = state(); var id = curStoryId(); if (!S || !isObj(S.cast) || !id || !isIdentityLocal(S.cast, id)) return null;
       var a = av2Of(S.cast, id); var bd = (a && isObj(a.bindings)) ? a.bindings : {}; var bound = {}; for (var k in bd) if (typeof bd[k] === 'string') bound[bd[k]] = 1;
       return entriesOf(S.cast).filter(function(x){ return typeof x.e.character_id === 'string' && x.e.status !== 'DELETED' && !bound[x.e.character_id]; })

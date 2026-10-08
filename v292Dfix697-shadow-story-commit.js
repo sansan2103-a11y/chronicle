@@ -1199,6 +1199,7 @@
             cstats.convergedNoWrite++; canonCtx = { id: id, rev: srvRev, hash: srvHash };
             note({ kind: 'CANONICAL_CONVERGED_NO_WRITE', id: id, rev: srvRev, schema: 2 });
             f697pClear(id, 'CONVERGED_NO_WRITE');            /* ★fix697p: server 側が最新 = journal 完了 */
+            f697kLanded(id, canonicalSend, 'f697-converged');
             f697pNotifyLanded(id, srvRev, srvHash, (canonicalSend && canonicalSend.body && canonicalSend.body.turns) ? canonicalSend.body.turns.length : null);   /* ★fix802 Rev2: 4 番目の LANDED 境界（CONVERGED_NO_WRITE） */
             return condClearDirty(fin);
           }
@@ -1242,6 +1243,7 @@
                   else cstats.confirmedByReadback++;
                   note({ kind: kindOk, id: id, rev: j2.rev, schema: 2 });
                   f697pClear(id, kindOk);                    /* ★fix697p: readback で着地確認 = journal 完了 */
+                  f697kLanded(id, canonicalSend, 'f697-readback');
                   f697pNotifyLanded(id, canonCtx.rev, canonCtx.hash, (canonicalSend && canonicalSend.body && canonicalSend.body.turns) ? canonicalSend.body.turns.length : null);   /* ★fix802 */
                   return condClearDirty(fin);
                 }
@@ -1282,6 +1284,7 @@
               if (jj.noop) cstats.noop++; else cstats.ok++;
               note({ kind: 'CANONICAL_COMMIT_OK', id: id, rev: jj.rev, noop: !!jj.noop, why: why, schema: 2 });
               f697pClear(id, 'CANONICAL_COMMIT_OK');         /* ★fix697p: ACK 確定 = journal 完了 */
+              f697kLanded(id, canonicalSend, 'f697-ack');
               f697pNotifyLanded(id, canonCtx.rev, canonCtx.hash, (canonicalSend && canonicalSend.body && canonicalSend.body.turns) ? canonicalSend.body.turns.length : null);   /* ★fix802 */
               return condClearDirty(fin);
             }
@@ -2109,6 +2112,8 @@
       return okd;
     } catch(e){ f697pStats.clearFails++; return false; }
   }
+  /* ★fixKNW: a pc2 landing (ACK hash == sent / readback == sent / converged no-write) confirms canonicalSend.body → av2 known refresh (memory only) */
+  function f697kLanded(id, cs, src){ try { var Mk = window.__v292Dav2Map; if (Mk && typeof Mk.confirmedCanonical === 'function' && cs && cs.body) Mk.confirmedCanonical(id, cs.body, src); } catch(_){} }
   function f697pNotifyLanded(id, rev, hash, turnCount){ try{ var o=window.__v292Dfix802; o && o.onLanded && o.onLanded(id, rev, hash, turnCount); }catch(_){} }   /* ★fix802: REFRESH_SETTLED one-line notify（Orchestrator 不在なら no-op・判断ロジック 0） */
 
   /* ■fix745/748/798 barrier: fix793(:344-351) と同一の read-only 述語。
