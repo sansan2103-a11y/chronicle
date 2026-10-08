@@ -396,6 +396,145 @@
     });
   }
 
+
+  // =====================================================================
+  // ★★fix756r SHADOW_PROMOTION_RESUME（GPT #125-N 案 A、2026-10-08）
+  //   症状: 新規物語の fix750 prepare が shadow r1 を書いた直後、engine の初回保存（cfg allowlist 項目・scene.laws 等）が
+  //     local を変え、fix702 promote() が HASH_MISMATCH で request 0 → PROMOTION_DID_NOT_TAKE_EFFECT で hold →
+  //     上の gate は ROW_ABSENT でしか起動しないので、以後どの open でも昇格されず永久に shadow。
+  //   対処: **初回 prepare の再実行ではなく、既存 shadow を保ったままの昇格ステップの再開**。
+  //     prepare() は開始時点の fresh 分類が SHADOW_S1 なら shadow 書込（preimage での上書き）をせず
+  //     stepPromotion から進む（fix750 既存契約）。ここではその入口を安全条件つきで 1 回だけ開く。
+  //   条件（全部）: fix756 ON・kill v292Dfix756rOff 以外 / document story（default・暫定 authority 除外）/
+  //     この session で再開を開始していない（未開始の見送りは何度でも再評価）/ fix705 fresh 分類 = present・shadow・schema1・非 tombstone /
+  //     fix750 由来（fix564 snapshot の reason 'fix750 C1 prepare preimage' が当該 slot に在る）/ fix750 journal なし /
+  //     fix697 commit pending・inFlight なし / fix945 STALE なし / fix781 marker inFlight なし /
+  //     local schema1 hash（fix697.contentHashOf）= server hash（boot は fix705 分類値、保存確定後は confirm の値）。
+  //   評価の契機: boot の分類完了時と、fix697 の shadow 保存確定（fix781.confirm）だけ。polling・timer 追加なし。
+  //   作用: 既存の run()（autoNewStoryPermit → prepare → commitSchema2）をそのまま呼ぶ。新 op / 新 permit / 新 Worker なし。
+  //     promote() 自身も送信直前に fresh getstory と local hash を照合する（不一致なら request 0）。
+  // =====================================================================
+  var R_STARTED = 'v292Dfix756r_started:';
+  var rstats = { checks: 0, started: 0, skips: {}, last: null, hooked: false };
+  function rOff(){ return lsg('v292Dfix756rOff') === '1'; }
+  function rSkip(code, extra){ rstats.skips[code] = (rstats.skips[code] || 0) + 1; rstats.last = { at: Date.now(), code: code, extra: extra || null }; return { ok: false, code: code }; }
+  function fix750Origin(id){
+    try {
+      var pre = 'chr6_snap_' + id + '_';
+      for (var i = 0; i < localStorage.length; i++){
+        var k = localStorage.key(i); if (!k || k.indexOf(pre) !== 0) continue;
+        var m = null; try { m = JSON.parse(lsg(k)); } catch(e){ m = null; }
+        if (m && m.reason === 'fix750 C1 prepare preimage' && String(m.slotId) === String(id)) return (typeof m.createdAt === 'number') ? m.createdAt : 0;
+      }
+    } catch(e){}
+    return null;
+  }
+  /* ★既存の shadow（常世百鬼夜行 2 件・Shadow D 行など、この版より前に作られた物語）には **自動では作用しない**（GPT #125-N）。
+     対象は R_EPOCH 以降に fix750 が作った物語だけ。既存 shadow を昇格させるときは、別裁定の上で
+     localStorage['v292Dfix756rAllow'] にその story id を明示（カンマ区切り）した端末だけが対象になる。 */
+  var R_EPOCH = Date.UTC(2026, 9, 8, 15, 0, 0);   /* 2026-10-09 00:00 JST */
+  function rAllowed(id){ try { return String(lsg('v292Dfix756rAllow') || '').split(',').map(function(x){ return x.trim(); }).indexOf(String(id)) >= 0; } catch(e){ return false; } }
+  function rGate(srv){
+    if (!on() || rOff()) return rSkip('OFF');
+    /* この document で初回 run が走った場合は、『昇格要求を送らずに終わった hold』（PROMOTION_DID_NOT_TAKE_EFFECT /
+       PROMOTION_REFUSED = 未実行）のときだけ再評価してよい。それ以外（実行中・成功・canonical 書込後の hold 等）は触らない。 */
+    var sameDocHold = RAN && state.phase === 'done' && state.verdict === 'PREPARE_HOLD' &&
+                      (state.code === 'PROMOTION_DID_NOT_TAKE_EFFECT' || state.code === 'PROMOTION_REFUSED');
+    if (RAN && !sameDocHold) return rSkip('ALREADY_RAN_THIS_DOCUMENT');
+    var id = docStoryId();
+    if (!id || id === 'default') return rSkip('NO_DOCUMENT_STORY');
+    if (provisional694()) return rSkip('PROVISIONAL_AUTHORITY');
+    if (ssGet(R_STARTED + id) != null) return rSkip('RESUME_STARTED_THIS_SESSION');
+    if (ssGet(DONE_PREFIX + id) != null) return rSkip('DONE_THIS_SESSION');
+    var F750 = f750(), F697 = f697(), C = f743(), S = f564(), G = gws(), F5 = f705();
+    if (!F750 || typeof F750.autoNewStoryPermit !== 'function' || typeof F750.journal !== 'function') return rSkip('NO_FIX750');
+    if (!F697 || typeof F697.contentHashOf !== 'function' || typeof F697.projectionV2 !== 'function') return rSkip('NO_FIX697');
+    if (!C || typeof C.buildSchema2Record !== 'function') return rSkip('NO_FIX743');
+    if (!S || typeof S.create !== 'function') return rSkip('NO_FIX564');
+    if (!G || typeof G.runMaterialization !== 'function') return rSkip('NO_GWS');
+    if (!F5 || typeof F5.docAuthority !== 'function') return rSkip('NO_FIX705');
+    var a5 = null; try { a5 = F5.docAuthority(); } catch(e){ return rSkip('FIX705_THREW'); }
+    if (!a5 || String(a5.id) !== String(id)) return rSkip('FIX705_NO_AUTHORITY');
+    if (a5.unsafe === true || a5.fresh !== true) return rSkip('FIX705_NOT_FRESH');
+    if (!sameDocHold){
+      /* 別 document（reload 後・再訪）: fix705 の fresh 分類が shadow であること（shadow lane は Worker 契約で schema1 固定。
+         分類は shadow の schema を持たないので null を許し、2 だけを拒否する）。 */
+      if (a5.present !== true) return rSkip('SERVER_ROW_ABSENT');                /* ROW_ABSENT は上の通常経路の担当 */
+      if (String(a5.authority || '') !== 'shadow') return rSkip('NOT_SHADOW');
+      if (a5.schema === 2) return rSkip('NOT_SCHEMA1');
+      if (a5.deleted === true) return rSkip('SERVER_TOMBSTONE');
+    } else if (!srv){
+      return rSkip('SAME_DOC_NEEDS_CONFIRM');    /* 同じ document の再評価は保存確定（confirm の rev / hash）でだけ行う */
+    }
+    /* どちらの場合も prepare() が開始時に fresh getstory で SHADOW_S1 を再確認し、promote() が送信直前に
+       fresh getstory と local hash を再照合する（不一致・shadow 以外なら request 0）。 */
+    var oAt = fix750Origin(id);
+    if (oAt == null) return rSkip('NOT_FIX750_ORIGIN');
+    if (!(oAt >= R_EPOCH) && !rAllowed(id)) return rSkip('PRE_EPOCH_SHADOW_NOT_ALLOWED');
+    var j = null; try { j = F750.journal(); } catch(e){ return rSkip('JOURNAL_READ_THREW'); }
+    if (j != null) return rSkip('PREEXISTING_JOURNAL');
+    try { var f9 = (typeof F697.f909 === 'function') ? F697.f909() : null; if (f9 && (f9.pushTimer || f9.inFlight)) return rSkip('COMMIT_PENDING'); } catch(e){ return rSkip('F909_THREW'); }
+    try { var X = window.__v292Dfix945; if (X && typeof X.state === 'function'){ var xs = X.state(); if (!xs || (xs.stale && xs.stale[id])) return rSkip('XTAB_STALE'); } } catch(e){ return rSkip('XTAB_UNKNOWN'); }
+    try { var mk = JSON.parse(lsg('v292Dfix402_f781g_' + id) || 'null'); if (mk && mk.inFlightSave) return rSkip('MARKER_IN_FLIGHT'); } catch(e){ return rSkip('MARKER_UNREADABLE'); }
+    var sh = (srv && srv.hash) ? String(srv.hash) : (a5.hash ? String(a5.hash) : '');
+    if (!/^[0-9a-f]{64}$/.test(sh)) return rSkip('NO_SERVER_HASH');
+    return { ok: true, storyId: id, serverHash: sh };
+  }
+  function rCheck(src, srv){
+    rstats.checks++;
+    var g = rGate(srv); if (!g.ok) return;
+    var F697 = f697();
+    try {
+      F697.contentHashOf(g.storyId, function(h){
+        try {
+          if (!h || h !== g.serverHash){ rSkip('LOCAL_NE_SERVER', { src: src }); return; }   /* 未開始: 次の保存確定で再評価 */
+          var g2 = rGate(srv); if (!g2.ok || g2.storyId !== g.storyId || g2.serverHash !== g.serverHash) return;
+          ssSet(R_STARTED + g.storyId, String(Date.now()));
+          rstats.started++; rstats.last = { at: Date.now(), code: 'STARTED', extra: { src: src } };
+          note({ kind: 'RESUME_START', storyId: g.storyId, src: src });
+          try { console.log(TAG, 'fix756r: shadow 物語の昇格を再開します（' + src + '）'); } catch(e){}
+          RUN_P = run(g.storyId);
+        } catch(e){ rSkip('THREW'); }
+      });
+    } catch(e){ rSkip('HASH_THREW'); }
+  }
+  function rHook(){
+    if (rstats.hooked) return;
+    try {
+      var G = window.__v292Dfix781;
+      if (!G || typeof G.confirm !== 'function' || G.__f756rHooked) return;
+      var orig = G.confirm;
+      G.confirm = function(id, rev, fp){
+        var r = orig.apply(this, arguments);
+        try { if (!rOff() && String(id) === String(docStoryId()) && r){ var srv = { rev: rev, hash: fp }; setTimeout(function(){ rCheck('confirm', srv); }, 0); } } catch(e){}
+        return r;
+      };
+      G.__f756rHooked = true; rstats.hooked = true;
+    } catch(e){}
+  }
+
+  /* boot 時の 1 回評価: 既存 bootPoll は document story 未確定（NO_DOCUMENT_STORY）で終わることがあるので、
+     同じ上限（POLL_MS × POLL_MAX、既存と同じ有界待ち）で「document story と fix705 の fresh 分類」が揃うのを待ち、1 回だけ rCheck する。 */
+  var rBootDone = false;
+  function rBoot(){
+    var n = 0;
+    (function tick(){
+      try {
+        if (rBootDone || rOff() || !on()) return;
+        n++;
+        var id = docStoryId(), F5 = f705(), a5 = null;
+        try { a5 = (id && F5 && typeof F5.docAuthority === 'function') ? F5.docAuthority() : null; } catch(e){ a5 = null; }
+        if (id && a5 && String(a5.id) === String(id) && (a5.fresh === true || a5.unsafe === true)){
+          rBootDone = true;
+          if (a5.present === true && RAN === false) rCheck('boot', null);
+          return;
+        }
+        if (n >= 200){ rBootDone = true; rSkip('BOOT_WAIT_TIMEOUT'); return; }
+      } catch(e){ rBootDone = true; return; }
+      try { setTimeout(tick, 250); } catch(e){}
+    })();
+  }
+
   // =====================================================================
   // (5) boot poll — fix705 の分類完了（auth-ready 込み）を待つだけ
   //   ★独自の auth 判定・独自の getstory を持たない。
@@ -438,6 +577,7 @@
     whenSettled: function(){ return RUN_P ? RUN_P : Promise.resolve(JSON.parse(JSON.stringify(state))); },
     stats: function(){ return JSON.parse(JSON.stringify(stats)); },
     ledger: function(){ return LEDGER.slice(); },
+    resume: function(){ return { off: rOff(), stats: JSON.parse(JSON.stringify(rstats)) }; },
     status: function(){
       return { build: BUILD, on: on(), off: off(),
                documentStoryKey: docStoryKey(), documentStory: docStoryId(),
@@ -449,5 +589,6 @@
                log: LEDGER.slice(-8) };
     }
   };
+  try { if (on() && !rOff()){ rHook(); rBoot(); } } catch(e){}   /* ★fix756r */
   try { console.log(TAG, 'loaded (new-story schema2 default ON / kill=v292Dfix756Off=1)'); } catch(e){}
 })();
