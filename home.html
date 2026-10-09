@@ -76,6 +76,10 @@
   .cover{height:132px;background:#161628;background-size:cover;background-position:center;position:relative;overflow:hidden}
   .cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .45s}
   .cover img.on{opacity:1}
+  /* ★P8A: 最近の欄・詳細の表紙も img で読む（CSS background-image では Referrer を制御できない） */
+  .recent .rc[data-p8a],.dcover[data-p8a]{position:relative;overflow:hidden}
+  .rc[data-p8a] img,.dcover[data-p8a] img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .45s}
+  .rc[data-p8a] img.on,.dcover[data-p8a] img.on{opacity:1}
   .cover .badge{position:absolute;top:8px;left:8px;font-size:10px;padding:3px 8px;border-radius:5px;
         background:rgba(8,8,16,.72);color:var(--tx);letter-spacing:.06em}
   .cbody{padding:11px 13px 13px}
@@ -412,7 +416,12 @@
       'cinematic key art, atmospheric lighting, detailed, no text, no people, no watermark'];
     return parts.filter(Boolean).join(', ').slice(0,210);
   }
+  /* ★P8A（Phase 8 COVER_THIRD_PARTY_SEND、offline 候補）: 表紙は scene.loc / lore / tone の本文を image.pollinations.ai（第三者）へ
+     GET の URL として送っていた（home を開くたび・物語ごと）。既定では送らない（従来の gradient 表紙）。
+     端末で明示的に許可したとき（localStorage v292DcoverExtOn='1'）だけ従来どおり外部表紙を使う。 */
+  function coverExtOn(){ try { return g('v292DcoverExtOn') === '1'; } catch(e){ return false; } }
   function coverUrl(id, sc){
+    if (!coverExtOn()) return '';
     var p = coverPrompt(sc); if(!p) return '';
     var seed = g('v292cover_seed_'+id) || String(hashN(p)%100000);   // 決定的＝毎回同じ絵＝ブラウザキャッシュが効く
     return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(p)+
@@ -649,12 +658,13 @@
   // 表紙は無料GET(image.pollinations.ai)。同時に殺到するとrate-limitされるので
   // カードごとに少しずらして読み、失敗したら間隔を空けて2回まで再試行する(fix310と同じ作法)。
   function mountCovers(root){
-    var cs = (root||document).querySelectorAll('.cover[data-cover]');
+    var cs = (root||document).querySelectorAll('.cover[data-cover],.rc[data-cover],.dcover[data-cover]');
     for (var i=0;i<cs.length;i++){
       (function(c, idx){
         var url = c.getAttribute('data-cover'); if(!url) return;
         c.removeAttribute('data-cover');
         var img = new Image(), tries = 0;
+        try { img.referrerPolicy = 'no-referrer'; } catch(eR){}
         img.alt='';
         img.addEventListener('load', function(){ if(img.naturalWidth>0) img.classList.add('on'); });
         img.addEventListener('error', function(){
@@ -723,7 +733,7 @@
                   .sort(function(a,b){ return b.opened-a.opened; }).slice(0,6);
     el('recent').innerHTML = rec.map(function(x){
       var u = coverUrl(x.id, x.scene);
-      return '<div class="r" data-open="'+esc(x.id)+'"><div class="rc" style="background-image:'+(u?"url('"+u+"')":gradient(x.name))+'"></div>'+
+      return '<div class="r" data-open="'+esc(x.id)+'"><div class="rc" style="background:'+gradient(x.name)+'"'+(u?' data-p8a="1" data-cover="'+esc(u)+'"':'')+'></div>'+
              '<div class="rt">'+esc(x.name)+'<span>'+ago(x.opened)+'</span></div></div>';
     }).join('') || '<div style="font-size:12px;color:var(--dim);padding:4px 8px">まだありません</div>';
 
@@ -777,7 +787,7 @@
     var u = coverUrl(x.id, x.scene);
     var chars = [].concat(x.hero?[{c:x.hero,role:'主人公'}]:[], x.npcs.map(function(n){ return {c:n,role:'NPC'}; })).slice(0,6);
     el('detail').innerHTML =
-      '<div class="dcover" style="'+(u?"background-image:url('"+u+"')":'background:'+gradient(x.name))+'"></div>'+
+      '<div class="dcover" style="background:'+gradient(x.name)+'"'+(u?' data-p8a="1" data-cover="'+esc(u)+'"':'')+'></div>'+
       '<div class="dtitle">'+esc(x.name)+'</div>'+
       '<div class="drow"><span>作成日</span><b>'+dt(x.created)+'</b></div>'+
       '<div class="drow"><span>最終更新</span><b>'+dt(x.updated)+'</b></div>'+
