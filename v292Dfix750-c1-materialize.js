@@ -283,7 +283,26 @@
     if (p.schema !== 1) return { error: 'PROJECTION_NOT_SCHEMA1', detail: p.schema };
     return { projection: p };
   }
+  /* ★fixORGF（GPT #125-Q 限定調査）: fix871 の origin capability flag は fix697 自身の getstory / listshadow 成功応答でしか
+     学習しない。新規物語の初回 shadow write の時点ではまだ 1 度も学習しておらず（Vault の listshadow は fix697 を通らない、
+     getstory は 404）、origin 抜きで書いた直後の readback で flag が true になり promote の local hash が不一致になる。
+     未学習のときだけ、既存の read 口（fix697 storyLockList = listshadow 1 回、書込 0）で capability を学習してから書く。
+     読めなくても従来どおり書く（fail-open = 現行挙動。以後は S1R resume が拾う）。kill: v292DfixOrgfOff='1'。 */
+  function f871LearnBeforeWrite(){
+    return new Promise(function(resolve){
+      try {
+        if (localStorage.getItem('v292DfixOrgfOff') === '1') return resolve('OFF');
+        var F = f697(); var st = (F && typeof F.originState === 'function') ? F.originState() : null;
+        if (!st || st.learned === true || st.off === true || typeof F.storyLockList !== 'function') return resolve(st ? 'SKIP' : 'NO_STATE');
+        var done = false; var tm = setTimeout(function(){ if (!done){ done = true; resolve('TIMEOUT'); } }, 5000);
+        F.storyLockList(function(){ if (!done){ done = true; clearTimeout(tm); resolve('LEARNED'); } });
+      } catch(e){ resolve('ERR'); }
+    });
+  }
   function stepShadowWrite(storyId, ctx){
+    return f871LearnBeforeWrite().then(function(lr){ try { ctx.f871Learn = lr; } catch(e){} return stepShadowWrite0(storyId, ctx); });
+  }
+  function stepShadowWrite0(storyId, ctx){
     return new Promise(function(resolve){
       var F = f697();
       if (!F || typeof F.putStoryOnce !== 'function') return resolve(refuse('NO_PUTSTORY_PATH'));

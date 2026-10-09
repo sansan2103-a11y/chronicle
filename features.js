@@ -6165,6 +6165,37 @@
     return !!raw;
   }
 
+  // ---- fixORG helpers（document 内だけの read-only cache。書込は S.save の payload に 2 key を足すだけ）----
+  var orgCache = {}, orgStat = { kept: 0, fromCache: 0, unreadable: 0, parseFail: 0, refusedNotMasked: 0, refusedTomb: 0, refusedKey: 0 };
+  function orgValid(o){
+    if (!o || typeof o !== 'object' || Object.prototype.toString.call(o) === '[object Array]') return null;
+    var oid = o.scenarioId, orv = o.scenarioRev;
+    if (typeof oid === 'string' && oid.length >= 1 && oid.length <= 64 && /^[A-Za-z0-9_-]+$/.test(oid) &&
+        typeof orv === 'number' && isFinite(orv) && Math.floor(orv) === orv && orv >= 0 && orv <= 2147483647) return { scenarioId: oid, scenarioRev: orv };
+    return null;
+  }
+  function orgCacheSet(k, v){ orgCache[k] = v ? { scenarioId: v.scenarioId, scenarioRev: v.scenarioRev } : null; }
+  function orgCacheGet(k){ return Object.prototype.hasOwnProperty.call(orgCache, k) ? orgCache[k] : null; }
+  /* cache を使ってよいのは「対象 slot が一時的に隠されている」と確証できるときだけ（#125-R B）:
+     ・この document の authority key（__chr6WriteKey）が同じ key（= story ID 完全一致）
+     ・key は localStorage に実在する（enumerate に出る）のに getItem だけ null = mask（実削除なら key 自体が無い）
+     ・meta が tombstone（deleted:true）でない
+     どれか欠ければ cache は使わない（= 従来どおり origin なしで書く）。 */
+  function orgMaskConfirmed(k){
+    try {
+      var cur = (typeof window.__chr6WriteKey === 'function') ? window.__chr6WriteKey() : null;
+      if (cur !== k){ orgStat.refusedKey++; return false; }
+      var present = false;
+      for (var i = 0; i < localStorage.length; i++){ if (localStorage.key(i) === k){ present = true; break; } }
+      if (!present){ orgStat.refusedNotMasked++; return false; }
+      var sid = k.indexOf('chr6_slot_') === 0 ? k.slice(10) : null; if (!sid){ orgStat.refusedKey++; return false; }
+      var meta = []; try { meta = JSON.parse(localStorage.getItem('chr6_slots_meta') || '[]') || []; } catch(e){ meta = []; }
+      for (var j = 0; j < meta.length; j++){ var e2 = meta[j]; if (e2 && String(e2.id) === sid && e2.deleted === true){ orgStat.refusedTomb++; return false; } }
+      return true;
+    } catch(e){ return false; }
+  }
+  try { window.__v292DfixOrg = { stats: function(){ return JSON.parse(JSON.stringify(orgStat)); }, cached: function(k){ return orgCacheGet(k); }, build: 'org3' }; } catch(e){}
+
   // ---- S.save wrapping ----
   function wrapSave(){
     if (typeof S === 'undefined' || !S || typeof S.save !== 'function') return false;
@@ -6261,6 +6292,22 @@
       // named slot: write to the authority key
       try {
         var payload = { cfg: this.cfg, cast: this.cast, scene: this.scene, turns: this.turns, mode: this.mode };
+        /* ★fixORG（GPT #125-O / #125-Q ORIGIN_PRESERVATION LOCAL_FIRST、2026-10-09）: fix819 instantiate が slot に書いた
+           body.origin（scenarioId / scenarioRev = シナリオ由来の provenance）を、engine の保存が丸ごと上書きで落としていた。
+           既存 slot に **妥当な** origin があるときだけ、同じ whitelist（fix871 と同一: id は英数 _ - 1〜64 字、rev は 0〜2^31-1
+           の整数）を通した 2 key だけを引き継ぐ。無ければ何も足さない（合成しない）。kill = v292DfixOrgOff='1'。
+           ・slot が読めない（null）とき、mask と確証できた場合（orgMaskConfirmed）だけ、この document で同じ key から最後に読めた origin を使う。
+             読めた slot に origin が無ければ cache も null（消えた origin を後から復活させない）。壊れた slot は補わない。永続 cache・timer なし。 */
+        try {
+          if (localStorage.getItem('v292DfixOrgOff') !== '1'){
+            var prevRaw = localStorage.getItem(wk), oKeep = null;
+            if (prevRaw == null){ orgStat.unreadable++; oKeep = orgMaskConfirmed(wk) ? orgCacheGet(wk) : null; orgStat.fromCache += oKeep ? 1 : 0; }
+            else { var prevD = null, prevOk = false; try { prevD = JSON.parse(prevRaw); prevOk = true; } catch(eP){ prevOk = false; }
+                   if (prevOk){ oKeep = orgValid(prevD && typeof prevD === 'object' ? prevD.origin : null); orgCacheSet(wk, oKeep); }
+                   else { oKeep = null; orgStat.parseFail++; } }
+            if (oKeep){ payload.origin = { scenarioId: oKeep.scenarioId, scenarioRev: oKeep.scenarioRev }; orgStat.kept++; }
+          }
+        } catch(eO){}
         lsSet(wk, payload);
         touchSlot(wk.indexOf('chr6_slot_') === 0 ? wk.slice(10) : 'default');
       } catch(e){

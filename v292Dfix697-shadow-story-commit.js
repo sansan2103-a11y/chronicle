@@ -426,11 +426,20 @@
      ================================================================== */
   var F871_ID_RE = /^[A-Za-z0-9_-]+$/;
   var f871WorkerOrigin = false;                 /* 既定 false = 未確認は「非対応」と読む */
+  var f871Learned = false;                      /* ★fixORGF: この document で成功 envelope を 1 度でも見たか（診断・fix750 用） */
   function f871Off(){ try { return lsg('v292Dfix871Off') === '1'; } catch(e){ return false; } }
   function f871Supported(){ return f871WorkerOrigin === true && !f871Off(); }
-  function f871NoteEnvelope(op, j){
+  function f871NoteEnvelope(op, j, status){
     if (op !== 'getstory' && op !== 'listshadow') return;      /* marker を載せる op だけ */
+    /* ★fixORGF（GPT #125-Q 限定調査）: not-found / error の envelope（Worker の bad() = 404 等）は どの build でも
+       originSupported を持たない = capability について何も言っていない。それで false へ戻すと、新規物語で
+       listshadow(true) → getstory 404(false) → 初回 shadow write は origin 抜き → readback getstory 200(true) → promote の
+       local projection は origin 入り = HASH_MISMATCH になる。成功応答（HTTP 200）だけで flag を更新する。
+       kill: v292DfixOrgfOff='1' → 従来どおり全応答で更新。 */
+    var orgfOff = false; try { orgfOff = lsg('v292DfixOrgfOff') === '1'; } catch(eF){}
+    if (!orgfOff && status !== 200) return;
     f871WorkerOrigin = !!(j && j.originSupported === true);
+    if (status === 200) f871Learned = true;
   }
   function f871Origin(raw){
     if (!f871Supported()) return null;
@@ -3035,7 +3044,7 @@
       if (timer) clearTimeout(timer);
       /* ★fix871: callback（= projection を作る側）より **前**に capability を確定させる。
          ここ 1 箇所で全 op を覆うので、各 getstory callback に手を入れずに済む。 */
-      try { f871NoteEnvelope(body && body.op, r.j); } catch(e2){}
+      try { f871NoteEnvelope(body && body.op, r.j, r.status); } catch(e2){}
       cb({ status: r.status, j: r.j || {} }, null);
     })['catch'](function(e){
       if (timer) clearTimeout(timer);
@@ -3211,8 +3220,8 @@
     f914: function(){ return { off: f914Off(), armed: f914Armed, stats: JSON.parse(JSON.stringify(f914)) }; },
     /* ★fix871 診断口（read-only・書込 0・通信 0）。harness と現場の切り分け用。 */
     originState: function(){ return { fix: 'v292Dfix871', off: f871Off(),
-                                      workerSupported: f871WorkerOrigin, projecting: f871Supported() }; },
-    __f871NoteEnvelope: function(op, j){ f871NoteEnvelope(op, j); },
+                                      workerSupported: f871WorkerOrigin, projecting: f871Supported(), learned: f871Learned }; },
+    __f871NoteEnvelope: function(op, j, st){ f871NoteEnvelope(op, j, st === undefined ? 200 : st); },
     contentHash: function(cb){ var c = projection(); if (!c) return cb(null); sha256hex(canonicalString(c), cb); },
     /* ★★fix708(STEP3F): 削除トランザクション用の read-only 口。
        どちらも **読むだけ**（書込 0 / 通信 0 / commit 0 / marker 更新 0）。 */
