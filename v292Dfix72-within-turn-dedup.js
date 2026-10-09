@@ -23,6 +23,10 @@
       if (!plan || !Array.isArray(plan.narrative)) return plan;
       var seen = Object.create(null);
       var dropped = 0;
+      /* ★CL1-h（GPT #125-BG 残件・fix72）: 台詞の同文は「直前の文と続けて同じ」時だけ落とす（壊れた連続）。間に別の文を挟んだ繰り返し
+         （呼びかけ・念押し）は残す。地の文は従来どおり。OFF: v292DfixCL1hOff='1'。 */
+      var off1h = false; try { off1h = localStorage.getItem('v292DfixCL1hOff') === '1'; } catch(_e1h){}
+      var lastK = null;
       plan.narrative = plan.narrative.map(function(line){
         if (typeof line !== 'string') return line;
         var parts = splitSentences(line);
@@ -30,8 +34,10 @@
         for (var i=0;i<parts.length;i++){
           var s = parts[i];
           var k = norm(s);
-          if (k.length >= 8 && seen[k]){ dropped++; continue; }
+          var dlg = !off1h && /[「」『』]|<\/?say\b/.test(s);
+          if (k.length >= 8 && seen[k] && (!dlg || lastK === k)){ dropped++; continue; }
           if (k.length >= 8) seen[k] = 1;
+          if (k) lastK = k;
           kept.push(s);
         }
         return kept.join('').trim();

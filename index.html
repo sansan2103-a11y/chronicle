@@ -324,7 +324,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261009-p8d2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261009-bh1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -2027,7 +2027,18 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
     }
     // SAY以外のモードでAIが主人公に勝手にセリフを追加するのを防ぐ
     if (heroName && inputType !== 'SAY' && inputType !== 'STORY') {
-      plan.narrative = plan.narrative.filter(s => !new RegExp(`${heroName}[はが].*「`).test(s));
+      /* ★CL1-e（GPT #125-BG 残件・主人公行フィルタ）: 主人公ロックの意図（AI が主人公に勝手に台詞を言わせない）は維持し、
+         巻き添えだけを止める。行を消すのは「主人公が主語で、その主語と「の間に別の登場人物名が無い」行だけ
+         （例: 涼太が振り返ると、澪が「行こう」と囁いた → 澪の台詞なので残す）。OFF: v292DfixCL1eOff='1'。 */
+      const _off1e = (function(){ try { return localStorage.getItem('v292DfixCL1eOff') === '1'; } catch(_x){ return false; } })();
+      const _oth1e = ((S.cast && S.cast.npcs) || []).map(n => n && n.name).filter(n => n && n !== heroName);
+      plan.narrative = plan.narrative.filter(s => {
+        if (_off1e) return !new RegExp(`${heroName}[はが].*「`).test(s);
+        if (typeof s !== 'string') return true;
+        const m = s.match(new RegExp(`${heroName}[はが]([^「]*)「`)); if (!m) return true;
+        const mid = m[1]; if (_oth1e.some(n => new RegExp(n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[はがも]').test(mid))) return true;   /* 別の人物が「主語」として間に居る＝その人の台詞 */
+        return false;
+      });
     }
     // 言語フィルタ: 英単語・中国簡体字・コード片を除去
     plan.narrative = plan.narrative.map(line => {
@@ -2046,14 +2057,27 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
       // 英字3文字以上の連続を削除
       t = t.replace(/[A-Za-z][]{2,}/g, '');
       // 中国簡体字（日本語で使わないもの）を削除h
+      const _cn1f = /[过这现还说让对给从们东几亲爱觉吗么吧呢哪谁怎样围]/.test(t);   /* ★CL1-f: 中国語専用字を含んでいた行は下の短い台詞の保護の対象にしない */
       t = t.replace(/[过这现还说让对给从们东几亲爱觉吗么吧呢哪谁怎样围]/g, '');
+      if (_cn1f && !/[぀-ゟ゠-ヿ]/.test(t)) return '';
       // 連続スペースを1つに
       t = t.replace(/\s+/g, ' ').trim();
       return t;
     }).filter(line => {
       if (!line || line.length < 2) return false;
       // ひらがなまたはカタカナを最低1つ含む行だけ残す
-      return /[぀-ゟ゠-ヿ]/.test(line);
+      if (/[぀-ゟ゠-ヿ]/.test(line)) return true;
+      /* ★CL1-f（GPT #125-BG 残件・かな無し台詞行）: 日本語の短い台詞「何？」「嘘……」<say>本当！</say> を守る。
+         対象は台詞行だけ・中身が漢字 1〜4 字（記号を除く）・中国語専用の字を含まない時だけ。地の文の言語フィルタは不変。OFF: v292DfixCL1fOff='1'。 */
+      try {
+        if (localStorage.getItem('v292DfixCL1fOff') === '1') return false;
+        const q = line.match(/^\s*(?:<say\b[^>]*>\s*([^<]*?)\s*<\/say>|[「『]([^」』]*)[」』])\s*$/);
+        if (!q) return false;
+        const inner = String(q[1] != null ? q[1] : q[2] || '').replace(/[\s　。、．，！？!?…‥・ー〜「」『』]/g, '');
+        if (!inner || inner.length > 4 || !/^[一-鿿々]+$/.test(inner)) return false;
+        if (/[你您们这那么吗呢吧没说话还让给对从东几亲爱觉哪谁怎样围过现谢请问听见时间什]/.test(inner)) return false;
+        return true;
+      } catch(_e1f){ return false; }
     });
     if (plan.narrative.length === 0) plan.narrative = ['…'];
     plan.narrative = plan.narrative.slice(0, 40); /* v292Dfix262: 8段落キャップ→40 (DeepSeek長文で本文後半欠落の真因) */
@@ -2770,7 +2794,7 @@ const G = {
         var _F833_DEFAULT_ON = true;  var _neg833 = function(p, q){ try { if (localStorage.getItem('v292Dfix833Off') === '1') return false; if (!_F833_DEFAULT_ON) return false; if (!(_L217.negSpeech2 && _L217.negSpeech2.test(p))) return false; try { var _o833 = (window.__v292Dfix833 = window.__v292Dfix833 || { suppressed: 0, last: null }); _o833.suppressed++; _o833.last = { q: String(q || '').slice(0, 24), post: String(p || '').slice(0, 32) }; } catch(e2){} return true; } catch(e){ return false; } };  var _F811_DEFAULT_ON = true;  var _neg811 = function(p, q){ try { if (localStorage.getItem('v292Dfix811Off') === '1') return false; if (!_F811_DEFAULT_ON && localStorage.getItem('v292Dfix811On') !== '1') return false; if (!(_L217.negSpeech && _L217.negSpeech.test(p))) return false; try { var _o811 = (window.__v292Dfix811 = window.__v292Dfix811 || { suppressed: 0, last: null }); _o811.suppressed++; _o811.last = { q: String(q || '').slice(0, 24), post: String(p || '').slice(0, 24) }; } catch(_e){} return true; } catch(e){ return false; } }; /* v292Dfix811: 否定された発話動詞の引用は _mk218（後置話者型）にしない。独立行 _lh217・say タグ・react 声は不変。in-memory counter のみ（永続 0） */
         while ((_sm = _sayRe.exec(_body))) {
           var _ss2 = String((_sm[1] != null ? _sm[2] : _sm[3]) || '').trim().slice(0, 80).replace(/([？！。…」])と(聞い|言っ|尋ね|呟い|囁い|叫ん|答え|返し|告げ)(た|だ)$/, '$1'); /* v292Dfix255c: モデルがsayタグ内に書いたト書き尻尾「？と聞いた」を切除(実測T6)。句読点直後のみ=「大丈夫だと言った」型の本物の伝聞セリフは残す */
-          var _sw, _conf218 = false; if (_sm[1] != null){ _sw = String(_sm[1] || '').trim().slice(0, 24); _conf218 = true; try { if (localStorage.getItem('v292TagFixOff') !== '1' && _names.indexOf(_sw) >= 0){ var _tp273 = _body.slice(0, _sm.index); var _ct273 = Math.max(_tp273.lastIndexOf('。'), _tp273.lastIndexOf('\n')); var _sg273 = (_ct273 >= 0 ? _tp273.slice(_ct273 + 1) : _tp273).slice(-80); if (/(ながら|つつ)[、，,\s　]*$/.test(_sg273)){ var _sj273 = null, _sx273 = -1; _names.forEach(function(n){ var p = _sg273.lastIndexOf(n); if (p >= 0 && /^[\s　]*は/.test(_sg273.slice(p + n.length)) && p > _sx273){ _sx273 = p; _sj273 = n; } }); if (_sj273 && _sj273 !== _sw){ try { console.log('[v292Dfix273]', 'tag-who矯正(行動主体):', _sw, '->', _sj273); } catch(_e){} _sw = _sj273; } } } } catch(_e273){} /* v292Dfix273: 「Xは…しながら<say who=Y>」型=タグwho自体の書き間違い(実測:心臓のあたり=カエデの所見がリナに)。同文の行動主体X(は限定)とタグwhoが共にCAST内で食い違う時だけwhoをXへ矯正。OFF: v292TagFixOff */ } else { var _pre = _body.slice(0, _sm.index); var _after218 = _body.slice(_sm.index + _sm[0].length); var _lh217 = /(^|\n)[\s　]*$/.test(_pre) && /^[\s　]*(\n|$)/.test(_after218); /* v292Dfix217: 独立セリフ行=行全体が引用のみ */ var _nm218 = _L217.namingPre.test(_pre); /* v292Dfix218: 「Xを「…」と呼ぶ」命名構文=発話でない */ var _post = _after218.slice(0, 50).replace(/^[\s　」』]+/, ''); var _pst = _post.search(/[「。\n]/); if (_pst >= 0) _post = _post.slice(0, _pst); var _mk218 = false; _sw = null; if (_L217.quoteLead.test(_post) && _L217.speechVerb.test(_post) && !(_L217.nonSpeech && _L217.nonSpeech.test(_post)) && !_neg811(_post, _ss2) && !_neg833(_post, _ss2)){ _mk218 = true; var _vm218 = _post.match(_L217.speechVerb); var _seg218 = _vm218 ? _post.slice(0, _vm218.index + 1) : _post; _cands218.forEach(function(n){ if (_seg218.indexOf(n) >= 0) _sw = n; }); if (!_sw){ var _cm218 = _post.match(/のは([^。、\s　]{1,24})/); if (_cm218){ _cands218.forEach(function(n){ if (_cm218[1].indexOf(n) === 0) _sw = n; }); } } } /* v292Dfix200b改: 後置話者は「と〜発話動詞」区間内の名前だけ(次節の主語「…と呟いた刹那、妖怪は」を拾わない)+「呼んだのはX」のは構文 */ _cands218.forEach(function(n){ if (_post.indexOf(n) === 0 && (_post.slice(n.length).match(_L217.voiceNoun) || _post.slice(n.length).match(_L217.voicePost) || (_lh217 && /^[はがも]/.test(_post.slice(n.length)) && _L217.speechVerb.test(_post.slice(n.length).replace(/(言葉|声)(を失|に詰ま|が出|を呑|を飲)/g,'')) && !(_L217.nonSpeech && _L217.nonSpeech.test(_post))))) { _mk218 = true; _sw = n; } }); /* v292Dfix255a: 独立セリフ行の次文後置話者「Xは…呟いた」型(と接続なし)を追加。実測:「何て強烈な力を……」\nリナは息を飲むように呟いた→旧は対象外で近接カエデに誤帰属。「言葉を失った/声を失った」型の非発話は除外 */ /* v292Dfix206: 「Xの金切り声が」型 + fix218b: 「Xが驚愕の声を上げた」型(主語+発声動詞) */ var _utt217 = !_nm218 && (_lh217 || _mk218); if (_utt217 && _mk218 && !_sw){ var _bs218 = -1, _bv218 = -1, _swS218 = null, _swV218 = null; _cands218.forEach(function(n){ var p = _pre.indexOf(n); while (p >= 0){ var _tl = _pre.slice(p + n.length, p + n.length + 8); if (_L217.voiceAfter.test(_tl)){ if (p > _bv218){ _bv218 = p; _swV218 = n; } } else if (_L217.subjAfter.test(_tl) && p > _bs218){ _bs218 = p; _swS218 = n; } p = _pre.indexOf(n, p + 1); } }); _sw = _swV218 || _swS218; } /* v292Dfix218: 文中型の前方解決=「Xの声」型(発声手がかり)優先、次に「が/は」主語(「カエデへ」等の目的語を話者にしない) */ if (_sw){ _conf218 = true; } else if (_utt217 && _lh217){ var _w218 = _pre.slice(-200), _list218 = [], _near218 = null, _ni218 = -1, _subj218 = null, _si218 = -1, _voi218 = null, _vi218 = -1; _cands218.forEach(function(n){ var p2 = _w218.lastIndexOf(n); if (p2 >= 0){ _list218.push(n); if (p2 > _ni218){ _ni218 = p2; _near218 = n; } } var q2 = _w218.indexOf(n); while (q2 >= 0){ var _t2 = _w218.slice(q2 + n.length, q2 + n.length + 8); if (_L217.voiceAfter.test(_t2)){ if (q2 > _vi218){ _vi218 = q2; _voi218 = n; } } else if (_L217.subjAfter.test(_t2) && q2 > _si218){ _si218 = q2; _subj218 = n; } q2 = _w218.indexOf(n, q2 + 1); } }); if (_voi218){ _sw = _voi218; _conf218 = true; } else if (!_list218.length){ _sw = _heroNm; _conf218 = true; } else if (_list218.length === 1){ _sw = _list218[0]; _conf218 = true; } else if (_subj218 && _subj218 === _near218){ _sw = _subj218; _conf218 = true; } } /* v292Dfix218b: 独立セリフ行=窓内に「Xの声」型(アリアの声は空気を切り裂く等)があればその人が最優先。無ければ登場者0人→主人公/1人→その人/複数→主語と近接一致時のみ確信。不一致は保留→第2層が意味で判定 */ }
+          var _sw, _conf218 = false, _win218 = false; if (_sm[1] != null){ _sw = String(_sm[1] || '').trim().slice(0, 24); _conf218 = true; try { if (localStorage.getItem('v292TagFixOff') !== '1' && _names.indexOf(_sw) >= 0){ var _tp273 = _body.slice(0, _sm.index); var _ct273 = Math.max(_tp273.lastIndexOf('。'), _tp273.lastIndexOf('\n')); var _sg273 = (_ct273 >= 0 ? _tp273.slice(_ct273 + 1) : _tp273).slice(-80); if (/(ながら|つつ)[、，,\s　]*$/.test(_sg273)){ var _sj273 = null, _sx273 = -1; _names.forEach(function(n){ var p = _sg273.lastIndexOf(n); if (p >= 0 && /^[\s　]*は/.test(_sg273.slice(p + n.length)) && p > _sx273){ _sx273 = p; _sj273 = n; } }); if (_sj273 && _sj273 !== _sw){ try { console.log('[v292Dfix273]', 'tag-who矯正(行動主体):', _sw, '->', _sj273); } catch(_e){} _sw = _sj273; } } } } catch(_e273){} /* v292Dfix273: 「Xは…しながら<say who=Y>」型=タグwho自体の書き間違い(実測:心臓のあたり=カエデの所見がリナに)。同文の行動主体X(は限定)とタグwhoが共にCAST内で食い違う時だけwhoをXへ矯正。OFF: v292TagFixOff */ } else { var _pre = _body.slice(0, _sm.index); var _after218 = _body.slice(_sm.index + _sm[0].length); var _lh217 = /(^|\n)[\s　]*$/.test(_pre) && /^[\s　]*(\n|$)/.test(_after218); /* v292Dfix217: 独立セリフ行=行全体が引用のみ */ var _nm218 = _L217.namingPre.test(_pre); /* v292Dfix218: 「Xを「…」と呼ぶ」命名構文=発話でない */ var _post = _after218.slice(0, 50).replace(/^[\s　」』]+/, ''); var _pst = _post.search(/[「。\n]/); if (_pst >= 0) _post = _post.slice(0, _pst); var _mk218 = false; _sw = null; if (_L217.quoteLead.test(_post) && _L217.speechVerb.test(_post) && !(_L217.nonSpeech && _L217.nonSpeech.test(_post)) && !_neg811(_post, _ss2) && !_neg833(_post, _ss2)){ _mk218 = true; var _vm218 = _post.match(_L217.speechVerb); var _seg218 = _vm218 ? _post.slice(0, _vm218.index + 1) : _post; _cands218.forEach(function(n){ if (_seg218.indexOf(n) >= 0) _sw = n; }); if (!_sw){ var _cm218 = _post.match(/のは([^。、\s　]{1,24})/); if (_cm218){ _cands218.forEach(function(n){ if (_cm218[1].indexOf(n) === 0) _sw = n; }); } } } /* v292Dfix200b改: 後置話者は「と〜発話動詞」区間内の名前だけ(次節の主語「…と呟いた刹那、妖怪は」を拾わない)+「呼んだのはX」のは構文 */ _cands218.forEach(function(n){ if (_post.indexOf(n) === 0 && (_post.slice(n.length).match(_L217.voiceNoun) || _post.slice(n.length).match(_L217.voicePost) || (_lh217 && /^[はがも]/.test(_post.slice(n.length)) && _L217.speechVerb.test(_post.slice(n.length).replace(/(言葉|声)(を失|に詰ま|が出|を呑|を飲)/g,'')) && !(_L217.nonSpeech && _L217.nonSpeech.test(_post)) && ((function(){ try { return localStorage.getItem('v292DfixCL1dOff') === '1'; } catch(_x){ return false; } })() || !/^[はがも][^。「]{0,12}?(答え|言わ|話さ|喋ら|口を開か|返事をし|声を出さ)(ない|なかった|ず|ぬ)/.test(_post.slice(n.length)))))) { _mk218 = true; _sw = n; } }); /* ★CL1-d: 「Xは答えない／言わなかった」＝話していない人を後置話者にしない */ /* v292Dfix255a: 独立セリフ行の次文後置話者「Xは…呟いた」型(と接続なし)を追加。実測:「何て強烈な力を……」\nリナは息を飲むように呟いた→旧は対象外で近接カエデに誤帰属。「言葉を失った/声を失った」型の非発話は除外 */ /* v292Dfix206: 「Xの金切り声が」型 + fix218b: 「Xが驚愕の声を上げた」型(主語+発声動詞) */ var _utt217 = !_nm218 && (_lh217 || _mk218); if (_utt217 && _mk218 && !_sw){ var _bs218 = -1, _bv218 = -1, _swS218 = null, _swV218 = null; _cands218.forEach(function(n){ var p = _pre.indexOf(n); while (p >= 0){ var _tl = _pre.slice(p + n.length, p + n.length + 8); if (_L217.voiceAfter.test(_tl)){ if (p > _bv218){ _bv218 = p; _swV218 = n; } } else if (_L217.subjAfter.test(_tl) && p > _bs218){ _bs218 = p; _swS218 = n; } p = _pre.indexOf(n, p + 1); } }); _sw = _swV218 || _swS218; } /* v292Dfix218: 文中型の前方解決=「Xの声」型(発声手がかり)優先、次に「が/は」主語(「カエデへ」等の目的語を話者にしない) */ if (_sw){ _conf218 = true; } else if (_utt217 && _lh217){ var _w218 = _pre.slice(-200), _list218 = [], _near218 = null, _ni218 = -1, _subj218 = null, _si218 = -1, _voi218 = null, _vi218 = -1; _cands218.forEach(function(n){ var p2 = _w218.lastIndexOf(n); if (p2 >= 0){ _list218.push(n); if (p2 > _ni218){ _ni218 = p2; _near218 = n; } } var q2 = _w218.indexOf(n); while (q2 >= 0){ var _t2 = _w218.slice(q2 + n.length, q2 + n.length + 8); if (_L217.voiceAfter.test(_t2)){ if (q2 > _vi218){ _vi218 = q2; _voi218 = n; } } else if (_L217.subjAfter.test(_t2) && q2 > _si218){ _si218 = q2; _subj218 = n; } q2 = _w218.indexOf(n, q2 + 1); } }); if (_voi218){ _sw = _voi218; _conf218 = true; } else if (!_list218.length){ _sw = _heroNm; _conf218 = true; _win218 = true; } else if (_list218.length === 1){ var _ls1d = (function(){ try { return localStorage.getItem('v292DfixCL1dOff') === '1'; } catch(_x){ return false; } })() ? '' : (function(){ var p = _pre.replace(/[\s\u3000]+$/, ''); var k = Math.max(p.lastIndexOf('。', p.length - 2), p.lastIndexOf('\n')); return p.slice(k + 1); })(); if (_ls1d && /あなた(は|が)/.test(_ls1d)){ if (_ls1d.indexOf(_list218[0]) >= 0){ _sw = '???'; } else { _sw = _heroNm; } _conf218 = true; _win218 = true; try { console.log('[CL1-d]', '引用直前の文の主語が「あなた」', _sw || '(名前なし→???)'); } catch(_l1d){} } else { _sw = _list218[0]; _conf218 = true; _win218 = true; } } /* ★CL1-d: 引用の直前の 1 文の主語が「あなたは/が」の時だけ主人公（名前が空なら ???）。同じ文に候補 NPC も居れば曖昧＝???（abstain）。それ以外は従来の単独候補 */ else if (_subj218 && _subj218 === _near218){ _sw = _subj218; _conf218 = true; _win218 = true; } } /* v292Dfix218b: 独立セリフ行=窓内に「Xの声」型(アリアの声は空気を切り裂く等)があればその人が最優先。無ければ登場者0人→主人公/1人→その人/複数→主語と近接一致時のみ確信。不一致は保留→第2層が意味で判定 */ }
           var _ss = _ss2; if (!_ss2) continue; if (_sm[1] == null && !_utt217) continue; /* v292Dfix217: 発話判別器を通らない裸「」は収穫しない(地の文の引用を発話化しない=「助けられなかった」誤帰属の根治) */ if (_sm[1] == null && _tagNorm[_ss2.replace(/[\s　。、！？!?…・「」『』]/g,'')]) continue; /* v292Dfix213: タグ版が存在する裸「」は同一セリフの重複＝スキップ(話者はタグが正) */
           /* ★v292Dfix807(4B1B_REFERENTIAL_REQUOTE_SUPPRESSION v1・GPT 2026-09-05): 「既発話について語っている引用」を新発話として収穫しない。
              R1 relative-reference（v1 REVISE・GPT 2026-09-05）= past-reference（さっき/先ほど/先刻/あの時/最初に/前に）＋「Q」と言った声＋comparison/reference（同じ/似/重な/違/そのもの/覚え）の 3 点が揃うときだけ（gold #1: さっき「やめろ」と言った声と同じだ）。「Q」と言った声がした/響いた/聞こえた は新発話として KEEP。
@@ -2781,7 +2805,7 @@ const G = {
           var _sk = (_sw || '?') + '' + _ss;
           if (_seenSay[_sk]) continue; _seenSay[_sk] = 1;
           if (_sm[1] == null && _ss2.length <= 12 && _convSays.some(function(_c){ return _c && !_c._b && _c.say && String(_c.say).indexOf(_ss2) >= 0; })) continue; /* v292Dfix263b: 強調引用の断片dup(「普通」と言い切った型)を採らない */
-          if (_conf218){ _convSays.push({ who: _sw || _heroNm || '???', say: _ss2, _b: (_sm[1] == null ? 1 : undefined) }); } else if (_ss2.replace(/[\s　。、！？!?…・ッぁぃぅぇぉ「」『』]/g,'')) { var _ph218 = { who: null, say: _ss2 }; _convSays.push(_ph218); _pend218.push(_ph218); } /* v292Dfix218: 不確信は保留(第2層で帰属照会)。文書順は維持。記号/息だけの引用は照会せず捨てる。_b=裸引用解決マーカー(fix234用・undefinedなら保存に乗らない) */
+          if (_conf218){ _convSays.push({ who: _sw || _heroNm || '???', say: _ss2, _b: (_sm[1] == null ? 1 : undefined), _bw: (_win218 ? 1 : undefined) }); } /* ★CL1-d: _bw = 200 字窓の推測で決めた（明示の証拠なし）。fix234 の振替はこれだけに限る */ else if (_ss2.replace(/[\s　。、！？!?…・ッぁぃぅぇぉ「」『』]/g,'')) { var _ph218 = { who: null, say: _ss2 }; _convSays.push(_ph218); _pend218.push(_ph218); } /* v292Dfix218: 不確信は保留(第2層で帰属照会)。文書順は維持。記号/息だけの引用は照会せず捨てる。_b=裸引用解決マーカー(fix234用・undefinedなら保存に乗らない) */
         }
         /* v292Dfix231: react属性「声」の実セリフ収穫。実測: ミリア「さっきからずっと…誰かに見られている気がしてた」が
            react声にだけ存在し、本文にもログにも出ず消失していた。whoが明示された一次情報=誤帰属リスクなし。
@@ -2876,15 +2900,16 @@ const G = {
       try {
         var _hist234 = {};
         S.turns.slice(-4).forEach(function(pt){ ((pt && pt._convSays) || []).forEach(function(pc){ var n = String((pc && pc.say) || '').replace(/[\s　。、！？!?…・「」『』]/g, ''); if (n && !_hist234[n]) _hist234[n] = String(pc.who || ''); }); });
-        _convSays.forEach(function(c){ if (!c) return; if (c._b){ var n = String(c.say || '').replace(/[\s　。、！？!?…・「」『』]/g, ''); var ow = _hist234[n]; if (ow && ow !== c.who){ try { console.log('[v292Dfix234]', 'speaker-flip corrected:', c.who, '->', ow); } catch(e){} c.who = ow; } } delete c._b; });
+        _convSays.forEach(function(c){ if (!c) return; if (c._b && (c._bw || (function(){ try { return localStorage.getItem('v292DfixCL1dOff') === '1'; } catch(_x){ return false; } })())){ var n = String(c.say || '').replace(/[\s　。、！？!?…・「」『』]/g, ''); var ow = _hist234[n]; if (ow && ow !== c.who){ try { console.log('[v292Dfix234]', 'speaker-flip corrected:', c.who, '->', ow); } catch(e){} c.who = ow; } } delete c._b; delete c._bw; });
       } catch(_e234){}
       /* v292Dfix215: ターン跨ぎのセリフ重複を遮断。モデルが直前ターンの締めセリフを次ターン冒頭で再掲する癖があり、再掲側は近接判定で話者が裏返って「同じセリフが別話者で2枚」になる(実測)。直近2ターンの_convSaysに同じ正規化テキストがあれば新ターン側を捨てる(初出が権威)。プレイヤーのSAY入力(意図的な繰り返し)は対象外。 */
+      var _rel240 = [];   /* ★CL1-b: fix240 の前ターン変更の保留リスト（commit 内で適用） */
       try {
         var _norm215 = function(s){ return String(s||'').replace(/[\s　。、！？!?…・「」『』]/g,''); };
         var _prev215 = {};
         S.turns.slice(-1).forEach(function(pt){ ((pt && pt._convSays) || []).forEach(function(pc){ var n = _norm215(pc.say); if (n) _prev215[String(pc.who||'') + '|' + n] = { pt: pt, pc: pc, rv: !!(pc && pc._rv), who: String(pc.who||'') }; }); }); /* v292Dfix232: 窓を直前1ターンに縮小(2ターン前の再演=意味のある反復として許可)。v292Dfix240: 値を参照オブジェクト化(react声予告の引っ越しに使う) */
         var _heroSay215 = (S.mode === 'SAY' && text) ? _norm215(text) : null;
-        _convSays = _convSays.filter(function(c, _i232){ var n = _norm215(c.say); if (!n) return false; if (_heroSay215 && n === _heroSay215 && S.cast && S.cast.hero && c.who === S.cast.hero.name) return true; var _h240 = _prev215[String(c.who||'') + '|' + n]; if (_h240 && _h240.rv){ try { var _arr240 = (_h240.pt && _h240.pt._convSays) || []; var _ix240 = _arr240.indexOf(_h240.pc); if (_ix240 >= 0) _arr240.splice(_ix240, 1); if (_h240.who) c.who = _h240.who; delete c._rv; console.log('[v292Dfix240]', 'react-voice precast relocated to prose turn:', c.who); } catch(_e240){} return true; } if (_i232 <= 1 && _h240) return false; return true; }); /* v292Dfix232(おしん要望): 遮断は「直前ターンの同文を新ターンの冒頭(先頭2件)で再掲」=モデルの再掲癖の署名だけに限定。ターン中盤以降の同文再演(念押し・連呼・意味のある繰り返し)は会話ログに残す */
+        _convSays = _convSays.filter(function(c, _i232){ var n = _norm215(c.say); if (!n) return false; if (_heroSay215 && n === _heroSay215 && S.cast && S.cast.hero && c.who === S.cast.hero.name) return true; var _h240 = _prev215[String(c.who||'') + '|' + n]; if (_h240 && _h240.rv){ try { var _arr240 = (_h240.pt && _h240.pt._convSays) || []; if (window.__v292DfixCL1bOff === true || (function(){ try { return localStorage.getItem('v292DfixCL1bOff') === '1'; } catch(_x){ return false; } })()) { var _ix240 = _arr240.indexOf(_h240.pc); if (_ix240 >= 0) _arr240.splice(_ix240, 1); } else { _rel240.push({ pt: _h240.pt, pc: _h240.pc }); } /* ★CL1-b（GPT #125-BF）: 前ターンのカードの引っ越しは commit 確定まで保留（下の TURN_COMMIT 内で実行。取消・保留・失敗では前ターンを壊さない） */ if (_h240.who) c.who = _h240.who; delete c._rv; console.log('[v292Dfix240]', 'react-voice precast relocated to prose turn:', c.who); } catch(_e240){} return true; } if (_i232 <= 1 && _h240) return false; return true; }); /* v292Dfix232(おしん要望): 遮断は「直前ターンの同文を新ターンの冒頭(先頭2件)で再掲」=モデルの再掲癖の署名だけに限定。ターン中盤以降の同文再演(念押し・連呼・意味のある繰り返し)は会話ログに残す */
       } catch(_e215){}
 
       // v292Dfix175: 本文から <say> タグを除去する（会話ログは上の genConvLog で取得済なので本文の
@@ -2896,7 +2921,7 @@ const G = {
           .replace(/<say\b[^>]*>\s*([\s\S]*?)\s*<\/say>/gi, function(_m, c){
             c = String(c || '').trim();
             if (!c) return '';
-            var _nrm213 = c.replace(/[\s　。、！？!?…・「」『』]/g,''); try { if (_nrm213 && (narr.match(/「[^」]*」/g)||[]).some(function(q){ return q.replace(/[\s　。、！？!?…・「」『』]/g,'') === _nrm213; })) return ''; } catch(e){} /* v292Dfix213: 同文の裸「」が本文に既にあればタグ変換を捨てる(本文のセリフ二重化の根治) */ return /^[「『]/.test(c) ? c : ('「' + c + '」');
+            var _nrm213 = c.replace(/[\s　。、！？!?…・「」『』]/g,''); try { if (_nrm213 && (((function(){ try { return localStorage.getItem('v292DfixCL1cOff') === '1'; } catch(_x){ return false; } })() ? narr : narr.replace(/<say\b[^>]*>[\s\S]*?<\/say>/gi, '')).match(/「[^」]*」/g)||[]).some(function(q){ return q.replace(/[\s　。、！？!?…・「」『』]/g,'') === _nrm213; })) return ''; } catch(e){} /* v292Dfix213: 同文の裸「」が本文に既にあればタグ変換を捨てる(本文のセリフ二重化の根治) */ /* ★CL1-c: 照合相手から <say>…</say> 自身を除く（タグの中の「」と自己一致して台詞を消していた） */ return /^[「『]/.test(c) ? c : ('「' + c + '」');
           })
           .replace(/<\/?say\b[^>]*>?/gi, '')   // 残り/不完全な say 断片を除去
           .replace(/「\s*」/g, '')              // 空の「」
@@ -2907,6 +2932,24 @@ const G = {
           .replace(/[ \t]*\n{3,}/g, '\n\n')
           .trim();
       } catch(_e175){}
+      /* ★CL1-c（GPT #125-BF DIALOGUE_RV_AND_PARSE_FIX）: 会話カードと最終本文の対応契約。
+         カードは「最終本文に（空白・句読点・括弧・ダッシュを除いて）含まれる台詞」だけ。本文に無い声（react の声だけの _rv 等）は
+         カードにしない。本文へ台詞を追記はしない。主人公の SAY 入力そのもの（入力の写し）は例外として残す。
+         落としたものは plan._cl1Dropped に記録（診断）。OFF: localStorage v292DfixCL1cOff='1'。 */
+      try {
+        if (localStorage.getItem('v292DfixCL1cOff') !== '1'){
+          var _n1c = function(s){ return String(s || '').replace(/[\s\u3000。、．，,.・…‥—―–‐－\-〜～！？!?「」『』（）()【】“”"'’‘<>]/g, ''); };
+          var _body1c = _n1c(narr), _hero1c = (S.cast && S.cast.hero && S.cast.hero.name) || '', _say1c = (S.mode === 'SAY' && text) ? _n1c(text) : null;
+          var _drop1c = [];
+          _convSays = _convSays.filter(function(c){
+            var k = _n1c(c && c.say); if (!k) return false;
+            if (_say1c && k === _say1c && (!_hero1c || c.who === _hero1c)) return true;
+            if (_body1c.indexOf(k) >= 0) return true;
+            _drop1c.push({ who: String(c.who || ''), rv: !!c._rv, len: k.length }); return false;
+          });
+          if (_drop1c.length){ try { plan._cl1Dropped = _drop1c; } catch(_p1c){} try { console.log('[CL1-c]', 'card(s) not in final narrative dropped:', _drop1c.length); } catch(_l1c){} }
+        }
+      } catch(_e1c){}
 
       const turn = {
         inputType:       S.mode,
@@ -2922,13 +2965,22 @@ const G = {
          ★BUSY / isolation HOLD なら **push もしない**（turn を成立させない = silent success 禁止）。 */
       const _c748 = await this._dadmRun('TURN_COMMIT', () => {
         S.turns.push(turn);
+        /* ★CL1-b: 保留していた fix240 の引っ越し（前ターンの _rv カードを外す）を、このターンの確定と同じ transaction で行う。
+           _convSayMeta は _convSays と同じ添字の並行配列（fix616）なので、長さが揃っている時は同じ位置を外す。 */
+        var _undo240 = [];
+        try { _rel240.forEach(function(r){ var a = (r.pt && r.pt._convSays) || []; var ix = a.indexOf(r.pc); if (ix < 0) return;
+          var m = r.pt._convSayMeta, mv = null; if (Array.isArray(m) && m.length === a.length){ mv = m[ix]; m.splice(ix, 1); } a.splice(ix, 1); _undo240.push({ a: a, ix: ix, pc: r.pc, m: (mv !== null ? m : null), mv: mv }); }); } catch(_e240c){}
+        /* ★CL1-b: 本文の保存が失敗（S.save の hold 返り値／fix543 の未保存検出／例外）したら、前ターンのカード変更だけを元に戻す（逆順）。 */
+        var _rb240 = function(){ try { for (var k = _undo240.length - 1; k >= 0; k--){ var u = _undo240[k]; u.a.splice(u.ix, 0, u.pc); if (u.m) u.m.splice(u.ix, 0, u.mv); } _undo240 = []; } catch(_e240r){} };
         /* ★★fix732(RULING85): 唯一の新ターン生成口。このターンが session 中に生成されたことを ephemeral に記録する。
            localStorage / story body / hash へは 1 バイトも書かない。 */
         try { if (window.__v292Dfix732Scope) window.__v292Dfix732Scope.markNew(turn); } catch(_e732){}
         /* ★★fix763(QG-7): S.save()より前に清書を確定（詳細=v292Dfix458-dash-post.js冒頭）。OFF=v292Dfix763Off */
         try { if (window.__v292Dfix458 && typeof window.__v292Dfix458.cleanTurn === 'function') window.__v292Dfix458.cleanTurn(turn); } catch(_e763){}
         S.scene.branches = plan.branchCandidates || [];
-        S.save();
+        var _sv240;
+        try { _sv240 = S.save(); } catch(_es240){ _rb240(); throw _es240; }
+        try { var _f543 = window.__v292Dfix543; if ((_sv240 && _sv240.hold) || (_f543 && typeof _f543.unsaved === 'function' && _f543.unsaved() && _f543.unsaved().active)) _rb240(); } catch(_ec240){}
         return true;
       });
       if (!_c748.ran) { this._dadmHold(_c748, inputEl, text); return; }
@@ -4222,15 +4274,15 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=20260912-q119s4"></script>
-  <script src="v292Dfix66-renderhook-repair.js?cb=20260929-ac22"></script>
+  <script src="v292Dfix66-renderhook-repair.js?cb=20261009-bh1"></script>
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
     <!-- v292Dfix189c: fix70(dialogue-order, 本文ベースの並べ替え)を無効化。fix70bが
          _convSays由来の正しい時系列で並べ替えを一本化しており、fix70(本文ベース=誤順)の
          2秒tickがfix70bと互いのMutationObserverで反応し合い会話ログが点滅していた。
          並べ替えはfix70bに集約。 (旧: v292Dfix70-dialogue-order.js?cb=v292Dfix70) -->
-    <script src="v292Dfix71-anti-recap.js?cb=v292Dfix71"></script>
-    <script src="v292Dfix72-within-turn-dedup.js?cb=v292Dfix72"></script>
+    <script src="v292Dfix71-anti-recap.js?cb=20261009-bh1"></script>
+    <script src="v292Dfix72-within-turn-dedup.js?cb=20261009-bh1"></script>
     <!-- v292Dfix229(P3): solo時no-opのためfix73/70b退役。復活=コメント解除
     <script src="v292Dfix73-card-dedup.js?cb=v292Dfix200"></script>
     <script src="v292Dfix70b-order-convsays.js?cb=v292Dfix200"></script> -->
@@ -4289,7 +4341,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix297-ai-instructions.js?cb=20260901-fix783"></script>
 <script src="v292Dfix300-readability.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix301-longmem-stale-guard.js?cb=v292Dfix301"></script>
-<script src="v292Dfix302-undo-state-rollback.js?cb=20260930-ac27"></script>
+<script src="v292Dfix302-undo-state-rollback.js?cb=20261009-bh1"></script>
 <script src="v292Dfix732-session-turn-scope.js?cb=v292Dfix732"></script>
 <script src="v292Dfix303-speaker-backref.js?cb=20260829-fix748"></script>
 <script src="v292Dfix304-emotion.js?cb=v292Dfix419c"></script>
@@ -4300,7 +4352,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix830-entity-match-resolver.js?cb=20260907-fix832"></script>
 <script src="v292Dfix766-canonical-appearance.js?cb=20260901-fix783"></script>
 <script src="v292Dfix767-icon-recipe-adapter.js?cb=20261002-ac36"></script>
-<script src="v292Dfix307-npc-roster.js?cb=20260913-dsmrc2b"></script>
+<script src="v292Dfix307-npc-roster.js?cb=20261009-bh1"></script>
+<script src="v292DfixSC1-sidecar-eligibility.js?cb=20261009-bh1"></script>
 <script src="v292Dfix308-creepy-toggle.js?cb=v292Dfix308"></script>
 <script src="v292Dfix309-progression.js?cb=v292Dfix419c"></script>
 <!-- fix577: 物語削除の入口を1つに寄せる。B(gallery)/C(features clearSlot)の独自削除を停止し、
@@ -4330,7 +4383,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix322-state-line-strip.js?cb=20260829-fix748"></script>
 <script src="v292Dfix323-boundary-guards.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix324-show-dont-tell.js?cb=v292Dfix419c"></script>
-<script src="v292Dfix325-state-rederive.js?cb=20260927-ac3"></script>
+<script src="v292Dfix325-state-rederive.js?cb=20261009-bh1"></script>
 <script src="v292Dfix326-story-scroll.js?cb=v292Dfix326"></script>
 <script src="v292Dfix327-turn-counter.js?cb=v292Dfix327"></script>
 <script src="v292Dfix328-google-login.js?cb=20260908-fix837"></script>
@@ -4485,7 +4538,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix487-unknown-guard.js?cb=20261002-ac36"></script>
 <script src="v292Dfix488-nonhuman-detail.js?cb=v292Dfix488b"></script>
 <script src="v292Dfix456-name-space.js?cb=v292Dfix456"></script>
-<script src="v292Dfix482-output-quality.js?cb=v292Dfix503"></script>
+<script src="v292Dfix482-output-quality.js?cb=20261009-bh1"></script>
 <script src="v292Dfix489-convlog-gate.js?cb=20260901-fix784"></script>
 <script src="v292Dfix490-slot-write-guard.js?cb=v292Dfix565"></script>
 <script src="v292Dfix492-genfail-toast.js?cb=v292Dfix492"></script>

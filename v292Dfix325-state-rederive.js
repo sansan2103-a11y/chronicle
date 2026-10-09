@@ -83,7 +83,7 @@
         var tag = m[0]; var who = attr(tag, 'who'); if (!who) continue;
         var cur = fresh[who] || {};
         for (var f = 0; f < FA.length; f++){ var v = attr(tag, FA[f][0]); if (v) cur[FA[f][1]] = v; }
-        cur.turn = turns.length;
+        cur.turn = (function(){ try { var X = window.__v292DfixSC1; return (X && !X.off()) ? i : turns.length; } catch(e){ return turns.length; } })();   /* ★v292DfixSC1: fix77 と同じ「そのターンの番号」。SC1 OFF なら従来値 */
         fresh[who] = cur;
       }
     }

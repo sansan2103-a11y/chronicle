@@ -149,6 +149,35 @@
     return { text: r.text, changed: r.count > 0 && r.text !== text, ruby: r.count };
   }
 
+  // --- ★fix482m（Offline 候補・GPT 裁定 2026-10-09「明白なマークアップ残骸」）-----------
+  //   LLM の道具呼び出し・会話制御の記法が本文へ漏れたものだけを検出する（実測: 15T の T12 末尾に </parameter>）。
+  //   Chronicle 自身のタグ（say / react / state / br 等）・《》・「」・HTML 風の一般語は対象外。
+  //   修復は「その記法トークンだけ」を外す（前後の文は 1 文字も変えない）。トークンだけの行は行ごと消す。
+  //   検出数は assess().markup に載せるだけ（degenerate にしない＝再生成の引き金にしない）。
+  //   OFF: localStorage v292Dfix482mOff='1'（検出・修復とも止める。従来と byte 一致）
+  var MARKUP_NAMES = 'parameter|invoke|function_calls|function_results|antml:[a-z_]+|tool_calls?|tool_use|tool_result|tool_response|function_call';
+  var RE_MARKUP = new RegExp(
+      '<\\/?(?:' + MARKUP_NAMES + ')(?:\\s+name="[^"\\n<>]{0,60}")?\\s*\\/?>'     // <parameter name="x"> / </parameter> / <invoke ...>
+    + '|<\\|(?:im_start|im_end|im_sep|endoftext|eot_id|start_header_id|end_header_id|eom_id|begin_of_text|end_of_text)\\|>'   // 会話制御トークン
+    + '|\\[\\/?INST\\]|<<\\/?SYS>>',
+    'g');
+  function markupOff(){ return ls('v292Dfix482mOff') === '1'; }
+  function detectMarkup(text){
+    if (typeof text !== 'string' || !text) return { count: 0, tokens: [] };
+    var m = text.match(RE_MARKUP) || [];
+    return { count: m.length, tokens: m.slice(0, 8) };
+  }
+  function stripMarkup(text){
+    if (typeof text !== 'string' || !text) return { text: text, count: 0 };
+    var n = 0;
+    var out = text.split('\n').map(function(line){
+      var had = false;
+      var l2 = line.replace(RE_MARKUP, function(){ n++; had = true; return ''; });
+      return (had && !l2.trim()) ? null : l2;                  // 記法だけの行は行ごと
+    }).filter(function(l){ return l !== null; }).join('\n');
+    return n ? { text: out, count: n } : { text: text, count: 0 };
+  }
+
   // --- 文単位の重複率 --------------------------------------------------
   function dupSentenceRatio(text){
     var parts = String(text || '').split(/[。．！？!?]/)
@@ -168,8 +197,10 @@
                   || (d.removableMulti >= 40)
                   || (d.maxSingleRun > SINGLE_MAX_RUN)
                   || (dup > 0.5);
-    return { degenerate: degenerate, removable: d.removable, removableMulti: d.removableMulti,
+    var r = { degenerate: degenerate, removable: d.removable, removableMulti: d.removableMulti,
              maxReps: d.maxRepsMulti, maxSingleRun: d.maxSingleRun, dupRatio: dup };
+    if (!markupOff()){ var mk = detectMarkup(text); if (mk.count) r.markup = mk.count; }   /* ★fix482m: 計測のみ（degenerate にしない＝再生成の引き金にしない。GPT #125-BF: 自動 LLM 再生成は禁止） */
+    return r;
   }
 
   // --- 採用判定(辞書式: degenerate → dupRatio → maxReps → removable) ---
@@ -323,6 +354,8 @@
         var content = adoptedEx.content;
         var ruby = sanitizeRuby(content);
         content = ruby.text;
+        var mkFixed = 0;                                          /* ★fix482m: 明白な記法トークンだけ外す */
+        if (!markupOff()){ var mk = stripMarkup(content); if (mk.count){ content = mk.text; mkFixed = mk.count; stats.markupFixed = (stats.markupFixed || 0) + 1; } }
         var collapsed = false;
         if (aAdopted.degenerate){
           var c = collapsePathological(content);
@@ -333,12 +366,12 @@
         if (collapsed) stats.collapsed++;
 
         last = { first: aFirst, retry: aRetry, adoptedRetry: usedRetry,
-                 ruby: ruby.ruby, collapsed: collapsed };
+                 ruby: ruby.ruby, collapsed: collapsed, markup: mkFixed };
 
         if (!changed) return adoptedRes;            // 無変更なら採用Responseをそのまま返す
 
         try { console.log(TAG, 'repaired:', JSON.stringify({
-          deg: aAdopted.degenerate, retry: usedRetry, ruby: ruby.ruby, collapsed: collapsed })); } catch(e){}
+          deg: aAdopted.degenerate, retry: usedRetry, ruby: ruby.ruby, collapsed: collapsed, markup: mkFixed })); } catch(e){}
         return new Response(rebuild(adoptedEx, content), {
           status: adoptedRes.status, statusText: adoptedRes.statusText,
           headers: safeHeaders(adoptedRes) });
@@ -379,6 +412,8 @@
     stripRuby: stripRuby,
     sanitizeRuby: sanitizeRuby,
     dupSentenceRatio: dupSentenceRatio,
+    detectMarkup: detectMarkup,
+    stripMarkup: stripMarkup,
     assess: assess,
     better: better,
     isChronicleNarrative: isChronicleNarrative,

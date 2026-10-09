@@ -1891,6 +1891,22 @@
 (function(){
   try { if (localStorage.getItem('v292ReconcileOff') === '1') return; } catch(e){}
   var norm233 = function(s){ return String(s || '').replace(/[\s　。、！？!?…・「」『』]/g, ''); };
+  /* ★CL1-a（GPT #125-BF DIALOGUE_ORPHAN_FIX）: この IIFE は fix457 の idKey457（上の別 IIFE・L447-456 の内側）を
+     参照していたため、カードが 1 枚でもあると ReferenceError → 下の catch(e){} が握りつぶし、fix457 以降
+     reconcile は一度も動いていなかった（合成 fixture で再現）。グローバルへは出さず、同じ規則をここに置く。
+     規則は L447-456 と同一（変える時は両方）: v292Dfix457Off='1' なら素の名前、そうでなければ fix445 canonLive の正名 → 空白除去。
+     OFF: localStorage v292DfixCL1aOff='1' → 従来（＝参照エラーで何もしない）と同じ挙動。 */
+  function offCL1a(){ try { return localStorage.getItem('v292DfixCL1aOff') === '1'; } catch(e){ return false; } }
+  function canon457r(n){
+    var raw = String(n == null ? '' : n).trim();
+    try {
+      if (localStorage.getItem('v292Dfix457Off') === '1') return raw;
+      var f = window.__v292Dfix445;
+      if (f && typeof f.canonLive === 'function'){ var c = f.canonLive(raw); if (c) return c; }
+    } catch(e){}
+    return raw;
+  }
+  function idKey457(n){ if (offCL1a()) throw new ReferenceError('idKey457 is not defined'); return canon457r(n).replace(/[\s\u3000]/g, ''); }
   function getStateSafe(){
     try { var a = window.__chronicleGetState ? window.__chronicleGetState('fix66') : null; if (a) return a; } catch(e){}
     try { return window.S || (0,eval)('typeof S!=="undefined"?S:null'); } catch(e){ return null; }
@@ -1945,6 +1961,11 @@
           if (t.playerText) validText[norm233(t.playerText)] = 1;
         });
       }
+      /* ★CL1-a: _convSays を持たない旧形式ターンのカード（本文の「」抽出・backfill 由来）は、そのターンの本文に
+         含まれていれば正当（reconcile が実際に動くようになったため、旧ターンのカードを消して repair が足し直す
+         点滅を起こさない）。 */
+      var legacyNarr = '';
+      if (!offCL1a()) S.turns.forEach(function(t){ if (t && !Array.isArray(t._convSays) && t.narrative) legacyNarr += norm233(Array.isArray(t.narrative) ? t.narrative.join('') : t.narrative) + '\u0001'; });
       var cards = stream.querySelectorAll('.v292-dlg-card');
       var removed = 0;
       for (var i = 0; i < cards.length; i++){
@@ -1965,11 +1986,42 @@
         // 話者表記ゆれは許容（本文が正なら残す）。ただし「はい」等の短い共通台詞は
         // 別話者・別ターンで衝突しうるため、6文字以上の本文に限る（GPT-5.6監査の指摘）。
         if (f455 && ntext && ntext.length >= 6 && validText[ntext]) continue;
+        if (!offCL1a()){
+          if (legacyNarr && ntext && legacyNarr.indexOf(ntext) >= 0) continue;
+          /* ★CL1-a 安全網: 同じカードを 3 回以上消している＝別の処理が足し直している（追加/削除の点滅）。以後は消さず記録だけ。 */
+          var rk = spk457 + '|' + ntext;
+          reconcile.__rm = reconcile.__rm || {};
+          if ((reconcile.__rm[rk] = (reconcile.__rm[rk] || 0) + 1) > 2){
+            if (!reconcile.__loopNoted){ reconcile.__loopNoted = true; try { console.warn('[v292Dfix233]', 'add/remove loop suspected; stop removing', rk.slice(0, 40)); } catch(_){} }
+            continue;
+          }
+        }
         try { card.remove(); removed++; } catch(e){}
       }
       if (removed){ try { console.log('[v292Dfix233]', 'removed', removed, 'orphan card(s) (retry/undo reconcile)'); } catch(e){} }
-    } catch(e){}
+      return removed;
+    } catch(e){
+      /* ★CL1-a: 黙って握りつぶさない（1 回だけ記録）。 */
+      if (!reconcile.__err){ reconcile.__err = true; try { console.warn('[v292Dfix233]', 'reconcile error', e && e.message); } catch(_){} }
+      return -1;
+    }
   }
   try { setInterval(reconcile, 2500); } catch(e){}
   setTimeout(reconcile, 1500);
+  /* ★CL1-a: 取消・やり直しの直後に同期で 1 回（2.5 秒周期と S.inFlight 中の skip を待たない）。 */
+  function wireCL1a(){
+    try {
+      var g = window.G || (0,eval)('typeof G!=="undefined"?G:null');
+      if (!g) return false;
+      ['undo', 'retryRollback'].forEach(function(fn){
+        if (typeof g[fn] !== 'function' || g[fn].__cl1a) return;
+        var o = g[fn];
+        g[fn] = function(){ var r = o.apply(this, arguments); try { if (!offCL1a()) reconcile(); } catch(e){} return r; };
+        g[fn].__cl1a = true;
+      });
+      return true;
+    } catch(e){ return false; }
+  }
+  (function w(){ w._n = (w._n || 0) + 1; if (wireCL1a()) return; if (w._n > 120) return; setTimeout(w, 500); })();
+  try { window.__v292Dfix233 = { reconcile: reconcile }; } catch(e){}   /* 検証口（関数 1 つ。idKey457 は出さない） */
 })();

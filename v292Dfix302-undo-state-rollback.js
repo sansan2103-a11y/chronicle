@@ -138,6 +138,7 @@
       if(typeof g[fn]!=='function') return;
       var orig=g[fn].bind(g);
       g[fn]=function(){
+        try{ if(window.__v292DfixSC1) window.__v292DfixSC1.beforeRollback(fn); }catch(_sc1b){}   /* ★v292DfixSC1: 取消前の sidecar 保存値（本文の保存失敗時に戻す） */
         // popされる前に「巻き戻り先=現ターン数-1」の状態へ先に復元(retryの再生成にも効く)
         /* ★fix748: 復元が hold されたら **上位操作も成功させない**（pop も save もしない）。 */
         try{
@@ -160,6 +161,8 @@
           }
         }catch(e){}
         var _ret926=orig.apply(this,arguments);
+        /* ★v292DfixSC1: pop 直後・下の seed より前に、本文の長さ/目印に合わない sidecar を退避（admission の内側・同期）。SC1 未 load / OFF なら素通り。 */
+        try{ if(window.__v292DfixSC1 && !(_ret926 && _ret926.hold===true)) window.__v292DfixSC1.afterRollback(fn); }catch(_sc1){}
         /* ★fix926 rev C: rollback（pop）直後、現在長の snapshot が無ければ今の store で 1 回だけ seed する（既存 key は上書きしない）。
            rev B 実測（CA1_REOPEN）: 復元できなかった取消の後、旧 polling は snaps[len] を埋めていたが A2 では空のままで、
            次の「turn → 取消」で取り消した turn の state が残った（OFF より悪化）。論理境界での seed に置き換える。 */
@@ -182,7 +185,7 @@
       var run926=function(label, fn){
         if(label==='TURN_COMMIT' && typeof fn==='function' && !off() && !off926()){
           var inner=fn;
-          fn=function(){ var r=inner.apply(this, arguments); try{ if(r===true) commitSnap(); }catch(e){} return r; };
+          fn=function(){ var r=inner.apply(this, arguments); try{ if(r===true && window.__v292DfixSC1) window.__v292DfixSC1.onCommitted(); }catch(_sc1){} /* ★v292DfixSC1: snapshot に目印を含める */ try{ if(r===true) commitSnap(); }catch(e){} return r; };
         }
         return origRun.call(this, label, fn);
       };

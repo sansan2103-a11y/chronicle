@@ -118,7 +118,9 @@
   function canSave(){ try{ var ep=+(localStorage.getItem('chr6_epoch')||0); if(window.__chrEpoch&&ep>window.__chrEpoch) return false; }catch(e){} return true; }
   function getKey(){ try{ var c=JSON.parse(localStorage.getItem((typeof window.__chr6Key==='function'?window.__chr6Key():'chr6'))||'{}').cfg||{}; return c.orKey||''; }catch(e){ return ''; } }
 
-  function loadRoster(){ var k=STORE(); if(k===null) return []; try{ return JSON.parse(localStorage.getItem(k)||'[]')||[]; }catch(e){ return []; } }
+  function loadRosterRaw(){ var k=STORE(); if(k===null) return []; try{ return JSON.parse(localStorage.getItem(k)||'[]')||[]; }catch(e){ return []; } }
+  /* ★v292DfixSC1: 読み手（注入・表示・抽出の既存行）へは「今の履歴に実在する」項目だけを見せる。書き戻しは loadRosterK / loadRosterRaw（原本）。 */
+  function loadRoster(){ var a=loadRosterRaw(); try{ var X=window.__v292DfixSC1; if(X && typeof X.viewRoster==='function') return X.viewRoster(a); }catch(e){} return a; }
   function saveRoster(a){ var k=STORE(); if(k===null) return; if(!canSave())return; var g748=f748Skip('fix307.saveRoster'); if(g748&&(g748.skip||g748.hold)) return g748; try{ localStorage.setItem(k, JSON.stringify((a||[]).slice(0,CAP))); }catch(e){} }
   function loadLast(){ var k=LASTK(); if(k===null) return -1; try{ return parseInt(localStorage.getItem(k)||'-1',10); }catch(e){ return -1; } }
   function saveLast(i){ var k=LASTK(); if(k===null) return; if(!canSave())return; var g748=f748Skip('fix307.saveLast'); if(g748&&(g748.skip||g748.hold)) return g748; try{ localStorage.setItem(k, String(i)); }catch(e){} }
@@ -152,7 +154,7 @@
   // ★fix408強化(2026-07-11): 既存台帳を「呼称: 外見」の行形式でLLMへ渡す(新呼称乱立の抑止=二重登録防止)。
   //   量は件数でなく総文字数2,800字上限(超えたら新しい順=lastTurn降順を優先して古い行を切る)。apprの改行は1行化(→「/」)。
   function buildExistingLines(){
-    var rs=(loadRoster()||[]).filter(function(r){return r&&r.handle;});
+    var rs=(function(){ var a=loadRosterRaw(); try{ var X=window.__v292DfixSC1; if(X && typeof X.viewRoster==='function') return X.viewRoster(a, true); }catch(e){} return a; })().filter(function(r){return r&&r.handle;});   /* ★v292DfixSC1: 隠れた人物も呼称だけは既存台帳に残す（外見は出さない）＝別呼称を作らせない */
     rs.sort(function(a,b){ var la=(typeof a.lastTurn==='number'?a.lastTurn:-1), lb=(typeof b.lastTurn==='number'?b.lastTurn:-1); return lb-la; });
     var lines=[], total=0, CAPC=2800;
     for(var i=0;i<rs.length;i++){
@@ -308,6 +310,9 @@
     if(ct<=last) return;                     // 新ターン無し
     if(last>=0 && (ct-last)<INTERVAL) return; // INTERVALターン待つ
     var tr=recentTranscript(); if(!tr) return;
+    /* ★v292DfixSC1: 抽出を始めた時点の本文の先頭（長さ+最終ターンの目印）。適用時に違えば書かない（abort には頼らない）。 */
+    var h0sc1=null; try{ var X0=window.__v292DfixSC1; if(X0 && typeof X0.mark==='function') h0sc1=X0.mark(); }catch(e){}
+    function staleSc1(){ try{ var X1=window.__v292DfixSC1; var st=!!(h0sc1 && X1 && X1.staleSince(h0sc1)); if(st && X1.noteStaleRoster) X1.noteStaleRoster(); return st; }catch(e){ return false; } }
     /* ★fix748(C5): カーソル前進は「この run が ct を予約した」という mutation。
        書けなかった場合は **LLM を撃たない**（二重発火防止が効かなくなるため）。
        次の run が同じ ct で再試行する = SKIP_THIS_PERSIST の TRIGGER。 */
@@ -327,9 +332,13 @@
       if(slotSfx()!==sfx) return;                                   // アクティブスロットが変わった
       var arr=parseArr(out);
       if(!arr) return;                       // 失敗時は次INTERVALで再試行
+      if(staleSc1()){ try{ console.log(TAG,'SC1: 抽出中に本文の履歴が変わったので、この結果は書かない'); }catch(e){} return; }
       /* ★fix748(C5): roster 書込は Class C transaction。network(callLLM) は **この外**で終わっている。 */
       f748RunC('FIX307_ROSTER', function(){
-        var merged=mergeRoster(loadRosterK(storeK), arr);
+        if(staleSc1()) return { merged: [], w: { skip:true, sc1:'STALE_ASYNC' } };   /* ★v292DfixSC1: lock 待ちの間の取消も見る */
+        var ex0=loadRosterK(storeK); try{ var X3=window.__v292DfixSC1; if(X3 && typeof X3.preMerge==='function') X3.preMerge(ex0, ct); }catch(e){}   /* ★v292DfixSC1: 隠れている外見を退避してから merge（再抽出で古い外見を復活させない） */
+        var merged=mergeRoster(ex0, arr);
+        try{ var X2=window.__v292DfixSC1; if(X2 && typeof X2.stampRoster==='function') X2.stampRoster(merged, ct); }catch(e){}
         var w = saveRosterK(storeK, merged);
         return { merged: merged, w: w };
       }).then(function(x){
@@ -403,6 +412,6 @@
   installWiShim();
   try{ window.addEventListener('focus', function(){ try{ run(); }catch(e){} }); }catch(e){}
 
-  window.__v292Dfix307api={ loadRoster:loadRoster, saveRoster:saveRoster, run:run, mergeRoster:mergeRoster, dedupe764:dedupe764, fkey764:fkey764, parseArr:parseArr, recentTranscript:recentTranscript, installWiShim:installWiShim, SYS:SYS, buildExistingLines:buildExistingLines, buildUserPrompt:buildUserPrompt };
+  window.__v292Dfix307api={ loadRoster:loadRoster, loadRosterRaw:loadRosterRaw, saveRoster:saveRoster, run:run, mergeRoster:mergeRoster, dedupe764:dedupe764, fkey764:fkey764, parseArr:parseArr, recentTranscript:recentTranscript, installWiShim:installWiShim, SYS:SYS, buildExistingLines:buildExistingLines, buildUserPrompt:buildUserPrompt };
   try{ console.log(TAG,'loaded (fix307e slot-strict)'); }catch(e){}
 })();

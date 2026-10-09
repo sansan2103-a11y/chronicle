@@ -25,12 +25,15 @@
       if (!plan || !Array.isArray(plan.narrative)) return plan;
       var S = (ctx && ctx.state) || getState();
       var turns = (S && S.turns) || [];
-      var prev = Object.create(null);
-      turns.forEach(function(t){ splitSentences(String(t&&t.narrative||'')).forEach(function(s){ var k=norm(s); if(k.length>=8) prev[k]=1; }); });
+      var prev = Object.create(null), prevLast = Object.create(null);
+      turns.forEach(function(t, ti){ splitSentences(String(t&&t.narrative||'')).forEach(function(s){ var k=norm(s); if(k.length>=8){ prev[k]=1; if (ti === turns.length - 1) prevLast[k]=1; } }); });
+      /* ★CL1-g（GPT #125-BG 残件・fix71）: 台詞（「」や say を含む文）は、直前 1 ターンの同文（再掲癖）だけを落とす。
+         何ターンも前と同じ台詞（問い直し・口癖・呼びかけ）は残す。地の文は従来どおり全ターンと照合。OFF: v292DfixCL1gOff='1'。 */
+      var off1g = false; try { off1g = localStorage.getItem('v292DfixCL1gOff') === '1'; } catch(_e1g){}
       var dropped = 0;
       plan.narrative = plan.narrative.map(function(line){
         if (typeof line!=='string') return line;
-        var kept = splitSentences(line).filter(function(s){ var k=norm(s); if(k.length>=8 && prev[k]){ dropped++; return false; } return true; });
+        var kept = splitSentences(line).filter(function(s){ var k=norm(s); var dlg = !off1g && /[「」『』]|<\/?say\b/.test(s); if(k.length>=8 && (dlg ? prevLast[k] : prev[k])){ dropped++; return false; } return true; });
         return kept.join('').trim();
       }).filter(function(l){ return l && String(l).trim().length>1; });
       if (dropped>0){ try{ console.log(TAG,'cross-turn dedup removed',dropped,'recap sentence(s)'); }catch(_){} }
