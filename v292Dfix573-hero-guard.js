@@ -132,6 +132,20 @@
   }
 
   /* ---- 復元候補を控えから探す（読み取り専用） --------------------------- */
+  /* ★fix573b（GPT #125-Y P1 / 2026-10-09）: 控えの「物語の帰属」を確かめる。
+     本番 canary で、新規物語（主人公名なし）の起動点検が **別物語（常世）の snapshot / fix458 控え** の主人公名を
+     復元候補として表示した。原因 = 直接 slot の写し（o.cast / o.blob）を key の物語に関係なく拾っていた。
+     ・直接の写しは、控えの key 名に **いまの物語 ID が区切り付きで入っているときだけ**候補にする
+       （chr6_bk_fix573_hero_<id>_<ts> / chr6_bk_fix458_<id>_<ts> / chr6_snapd_<id>_<ts>_<n>）。
+     ・物語 ID の無い key（home の package 控え等）は、従来どおり o.ls[いまの key] の中身だけ（もともと物語別）。
+     ・帰属が証明できない控えは候補にしない（消さない・移さない・自動適用しない）。kill: v292Dfix573bOff='1'。 */
+  function f573bOff(){ return lsg('v292Dfix573bOff') === '1'; }
+  function belongs(k, key){
+    if (f573bOff()) return true;
+    var id = (key === 'chr6') ? 'chr6' : (key.indexOf('chr6_slot_') === 0 ? key.slice(10) : null);
+    if (!id) return false;
+    return k.indexOf('_' + id + '_') > 0;
+  }
   function candidates(slotKey){
     var key = slotKey || activeStoryKey();
     var out = [];
@@ -139,10 +153,11 @@
       if (k.indexOf('chr6_bk_') !== 0 && k.indexOf('chr6_snapd_') !== 0) return;
       var raw = lsg(k); if (raw == null) return;
       var picks = [];
+      var mine = belongs(k, key);
       try {
         var o = JSON.parse(raw);
-        if (o && o.cast) picks.push(o);
-        if (o && o.blob){ try { var b = JSON.parse(o.blob); if (b && b.cast) picks.push(b); } catch(e){} }
+        if (mine && o && o.cast) picks.push(o);
+        if (mine && o && o.blob){ try { var b = JSON.parse(o.blob); if (b && b.cast) picks.push(b); } catch(e){} }
         if (o && o.ls){ Object.keys(o.ls).forEach(function(x){
           if (x === key){ try { var v = JSON.parse(o.ls[x]); if (v && v.cast) picks.push(v); } catch(e){} } }); }
       } catch(e){ return; }
@@ -160,6 +175,9 @@
     return out;
   }
   function activeStoryKey(){
+    /* ★fix573b: この document の物語＝ __chr6WriteKey（fix694 の authority・document ごとに固定）を最優先。
+       __chr6Key は chr6_active_slot（タブ共有のポインタ）なので、別タブ操作で別の物語を指し得る。 */
+    try { if (!f573bOff() && typeof window.__chr6WriteKey === 'function'){ var wk = window.__chr6WriteKey(); if (wk) return wk; } } catch(e){}
     try { if (typeof window.__chr6Key === 'function') return window.__chr6Key(); } catch(e){}
     try { var a = JSON.parse(lsg('chr6_active_slot') || 'null');
       return (a && a !== 'default') ? ('chr6_slot_' + a) : 'chr6'; } catch(e){ return 'chr6'; }
