@@ -89,11 +89,21 @@
   }
   function getSeed(id,prompt){ var s=lsg('v292cover_seed_'+id); if(s) return s; return String(hashN(prompt)%100000); }
 
+  /* ★P8B（Phase 8・第三者送信、P8A と同じ方針）: ギャラリーの外部表紙は、物語の場所・世界観（90 字）・雰囲気の文を
+     image.pollinations.ai の URL に入れて送る。既定ではもう送らない（グラデのまま）。端末で明示許可したとき
+     （localStorage v292DcoverExtOn='1'、Home の P8A と同じフラグ）だけ従来どおり。許可時も Referer は送らない。 */
+  function coverExtOn(){ try{ return lsg('v292DcoverExtOn')==='1'; }catch(e){ return false; } }
+  /* ★P8B（GPT #125-AF）: 端末の許可だけでは、秘密・非公開の物語は送らない。fix889 の可視判定（mayShow: 隠した物語は false、
+     クラウドの可視状態が未確定なら canonical 物語も false）が true を返した物語だけ。判定器が無い・例外 = 送らない（fail-closed）。 */
+  function storyMaySend(id){ try{ var F=window.__v292Dfix889; return !!(F && typeof F.mayShow==='function' && F.mayShow(id)===true); }catch(e){ return false; } }
   function attachCover(cover, id, scene, idx){
+    if(!coverExtOn()) return; // ★P8B: 既定 = 外部へ送らず、グラデのまま
+    if(!storyMaySend(id)) return; // ★P8B: 秘密・非公開・判定不能の物語は許可時も送らない
     var prompt=buildPrompt(scene);
     if(!prompt) return; // 空スロット=グラデのまま
     var seed=getSeed(id,prompt);
     var img=document.createElement('img'); img.alt=''; var tries=0;
+    try{ img.referrerPolicy='no-referrer'; }catch(eR){}
     img.addEventListener('load', function(){ if(img.naturalWidth>0) img.classList.add('on'); });
     img.addEventListener('error', function(){ if(tries<3){ tries++; setTimeout(function(){ img.classList.remove('on'); img.src=coverUrl(prompt,seed)+'&r='+tries+'_'+Date.now(); }, 1400*tries+Math.random()*900); } });
     // 同時リクエストでpollinationsがrate-limitするのを避け、カードごとに少しずらして発火
