@@ -347,6 +347,39 @@ function confirm(id, serverRev, fingerprint){
     return writeMarker(id, m);
   } catch(e){ return false; }
 }
+/* ■fix729t(#125-BU/BV 候補・kill v292Dfix729tOff='1'): TITLE-ONLY ACK を lastConfirmed へ写す狭い口。
+   fix729 が「title だけの CAS が成功し、readback でも同じ rev/hash」と確認した 1 点でだけ呼ぶ。
+   ・lastConfirmed が title CAS の直前 server 状態（preRev / preHash）と完全一致するときだけ進める
+     （= server は lastConfirmed から title だけ変わった。Worker setstorytitle は title 以外を変えない契約）。
+   ・newRev は preRev + 1 のみ。newHash は空でなく preHash と異なること。
+   ・送信中（inFlightSave あり）・DIVERGED・BOOTSTRAP_HOLD は進めない（従来どおり）。
+   ・state / localGeneration / userChoice は変えない。DIRTY は DIRTY のまま（未保存の本文変更を CLEAN にしない）。
+   ・fix911 の base roster（lcRoster）は rev が変わるので捨てる（S2 は従来の DIVERGED 側へ倒れるだけ）。
+   ・条件が 1 つでも欠ければ何もしない＝現行動作。 */
+function titleAdvance(id, a){
+  try {
+    if (!on() || !id || !a) return { ok:false, why:'OFF_OR_BAD' };
+    if (ng('v292Dfix729tOff') === '1') return { ok:false, why:'KILL' };
+    var m = readMarker(id);
+    if (!m) return { ok:false, why:'NO_MARKER' };
+    if (m.state === STATE.DIVERGED || m.state === STATE.BOOTSTRAP_HOLD) return { ok:false, why:'HELD_' + m.state };
+    if (m.inFlightSave) return { ok:false, why:'IN_FLIGHT' };
+    var lc = m.lastConfirmed;
+    var preRev = +a.preRev, newRev = +a.newRev;
+    var preHash = (a.preHash == null) ? '' : String(a.preHash), newHash = (a.newHash == null) ? '' : String(a.newHash);
+    if (!lc || typeof lc.serverRev !== 'number' || lc.fingerprint == null) return { ok:false, why:'NO_LC' };
+    if (!(preRev >= 0) || lc.serverRev !== preRev) return { ok:false, why:'LC_REV_MISMATCH' };
+    if (!preHash || String(lc.fingerprint) !== preHash) return { ok:false, why:'LC_HASH_MISMATCH' };
+    if (newRev !== preRev + 1) return { ok:false, why:'REV_NOT_PLUS_ONE' };
+    if (!newHash || newHash === preHash) return { ok:false, why:'BAD_NEW_HASH' };
+    m.lastConfirmed = { serverRev: newRev, fingerprint: newHash };
+    m.lcRoster = null;
+    var ok = writeMarker(id, m);
+    stats.titleAdvances = (stats.titleAdvances || 0) + 1;
+    note({ k:'TITLE_ADVANCE', id:String(id), from:preRev, to:newRev, state:m.state, ok:ok });
+    return { ok: !!ok, why: ok ? 'ADVANCED' : 'WRITE_FAILED', state: m.state };
+  } catch(e){ return { ok:false, why:'THROW' }; }
+}
 /* 任意遷移（fix705 の resolve781 / banner ボタンからのみ使う） */
 function transition(id, next, patch){
   if (!id || !STATE[next]) return false;
@@ -664,6 +697,7 @@ window.__v292Dfix781 = {
   noteInFlight: noteInFlight, refineInFlight: refineInFlight,
   clearInFlight: clearInFlight, confirm: confirm,
   draftCreate: draftCreate, draftGet: idbGet,
+  titleAdvance: titleAdvance,                     /* ■fix729t */
   banner: banner, removeBanner: removeBanner,
   installed: function(){ return { installed: installed, mode: installMode }; },
   stats: function(){ try { return JSON.parse(JSON.stringify(stats)); } catch(e){ return null; } },

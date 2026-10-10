@@ -178,8 +178,20 @@
         try { if (mine && !stale[sid]) refresh(sid); } catch(e){}
         return r; }; G.__f945c = true; return; } if (++n < 240) setTimeout(tryWrap, 250); })();
   })();
+  /* ---- ■fix729t: 自分の title-only ACK（fix729 → __v292Dfix781.titleAdvance）でも seen.rev/fp を更新する ----
+     confirm と同じ扱い。titleAdvance が lastConfirmed を進めたとき（ok:true）だけ refresh。
+     呼ぶ前に別 document の gen 進行が無かったかを見る（confirm-pre と同じ）。kill は fix781 側の v292Dfix729tOff。 */
+  (function wrapTitleAdvance(){
+    var n = 0; (function tryWrap(){ var G = window.__v292Dfix781; if (G && typeof G.titleAdvance === 'function' && !G.__f945t){ var orig = G.titleAdvance; G.titleAdvance = function(id){
+        var sid = (id != null) ? String(id) : null, mine = (sid && sid === current());
+        try { if (mine && seen[sid] && !stale[sid]){ var v0 = view(sid); if (v0.gen !== seen[sid].gen) markStale(sid, 'title-pre', ['gen:' + seen[sid].gen + '>' + v0.gen]); } } catch(e){}
+        if (mine && stale[sid]) return { ok: false, why: 'XTAB_STALE' };
+        var r = orig.apply(this, arguments);
+        try { if (mine && !stale[sid] && r && r.ok) refresh(sid); } catch(e){}
+        return r; }; G.__f945t = true; return; } if (G && typeof G.confirm === 'function' && typeof G.titleAdvance !== 'function') return; if (++n < 240) setTimeout(tryWrap, 250); })();
+  })();
   window.__v292Dfix945 = {
-    BUILD: 'fix945.3',
+    BUILD: 'fix945.3+729t',
     state: function(){ return { on: !off(), evtOn: !evtOff(), wrapped: wrapped, current: current(), stale: JSON.parse(JSON.stringify(stale)), seen: JSON.parse(JSON.stringify(seen)), stats: JSON.parse(JSON.stringify(stats)) }; },
     isStale: function(id){ return !!stale[id || current()]; },
     check: function(id){ return checkNow(id || current(), 'manual'); },

@@ -215,8 +215,23 @@
       return proceed();
     });
 
-    /* ---- 1) fresh getstory。過去に観測した rev/hash を authority にしない。 ---- */
+    /* ■fix729t-L(#125-BW 候補・kill v292Dfix729tOff='1'): この document の story なら、fix697 の titleLockAcquire で
+       本文 commit と直列化してから title CAS へ進む（イベント駆動。ポーリングしない）。
+       lock 中は本文 commit が f781cPending へ回り、done（成功・失敗・skip すべて）で release → 1 回だけ再発火。
+       fix697 が古い（titleLockAcquire なし）・kill・別 story のときは従来どおり直ちに進む。 */
     function proceed(){
+      var FL = port();
+      if (lsg('v292Dfix729tOff') === '1' || !FL || typeof FL.titleLockAcquire !== 'function') return proceedNow();
+      FL.titleLockAcquire(sid, function(release){
+        if (typeof release === 'function'){
+          var d0 = done;
+          done = function(r){ try { if (r && typeof r === 'object') r.titleLock = true; } catch(e){} var out = d0(r); try { release('done'); } catch(e){} return out; };
+        }
+        proceedNow();
+      });
+    }
+    /* ---- 1) fresh getstory。過去に観測した rev/hash を authority にしない。 ---- */
+    function proceedNow(){
     stats.reads++;
     f842Read(F, sid, function(res, err){
       if (err || !res || res.status !== 200 || !res.j || !res.j.ok){
@@ -292,14 +307,28 @@
             var validated = !!(res4 && res4.status === 200 && b4 && b4.ok && t4 === title
                                && String(b4.authority || '') === auth && !b4.deleted);
             if (validated) stats.ok++; else stats.fail++;
-            return done({ ok: validated, stage: 'readback', pre: pre,
+            /* ■fix729t(#125-BU/BV 候補・kill v292Dfix729tOff='1'): title だけ進んだ server rev を fix781 の
+               lastConfirmed へ写す。ACK と readback が同じ rev/hash（= その間に他の書込なし）で、
+               ACK rev = 事前 rev + 1 のときだけ fix781 に判断を渡す（marker を書くのは fix781 だけ）。 */
+            var t729 = null;
+            try {
+              var G781 = window.__v292Dfix781;
+              if (validated && lsg('v292Dfix729tOff') !== '1' && G781 && typeof G781.titleAdvance === 'function'
+                  && typeof j2.rev === 'number' && j2.serverHash && b4 && b4.rev === j2.rev
+                  && String(b4.serverHash || '') === String(j2.serverHash)){
+                t729 = G781.titleAdvance(sid, { preRev: rev, preHash: hash, newRev: j2.rev, newHash: String(j2.serverHash) });
+              } else {
+                t729 = { ok: false, why: !validated ? 'NOT_VALIDATED' : (!G781 ? 'NO_GUARD' : 'ACK_READBACK_MISMATCH') };
+              }
+            } catch(e729t){ t729 = { ok: false, why: 'THROW' }; }
+            return done({ ok: validated, stage: 'readback', pre: pre, f781Advance: t729,
                           post: b4 ? { rev: b4.rev, authority: b4.authority, deleted: !!b4.deleted } : null,
                           titleChanged: 1,
                           revDelta: b4 ? ((+b4.rev || 0) - rev) : null });
           });
         });
     });
-    }   /* end proceed() */
+    }   /* end proceedNow() */
   }
 
   /* ---- features.js から呼ばれる hook（1 行だけ） ---- */

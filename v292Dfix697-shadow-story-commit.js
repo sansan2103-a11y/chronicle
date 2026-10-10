@@ -1011,6 +1011,7 @@
                    clientMeta: { device: (navigator.userAgent || '').slice(0, 60), build: BUILD } }, cb);
   }
   function canonicalCommit(id, content, intendedLocalHash, why){
+    if (titleLock){ tlStats.deferredCommits++; if (!f781cOff()) f781cPending = true; note({ kind: 'COMMIT_DEFERRED_TITLE_LOCK', id: id, why: why }); return; }   /* ■fix729t-L */
     if (av2Hold(id, content)){ cstats.av2Held = (cstats.av2Held || 0) + 1; note({ kind: 'AV2_CANONICAL_HELD', id: id, why: why }); return; }
     inFlight = true; cstats.routedCanonical++;
     g781InFlight(id, intendedLocalHash);                    /* ■fix781: 送信開始を durable 化 */
@@ -1122,6 +1123,7 @@
        V1 hash は body/turns/title の変化を検出でき、schema2 save の成功後に
        「送信 snapshot 以降 local 変化なし」を確認する用途には従来契約のまま使える。 */
   function canonicalCommit2(id, intendedLocalHash, why, opt909){
+    if (titleLock){ tlStats.deferredCommits++; if (!f781cOff()) f781cPending = true; note({ kind: 'COMMIT_DEFERRED_TITLE_LOCK', id: id, why: why }); return; }   /* ■fix729t-L */
     if (av2Hold(id, projectionOf(id))){ cstats.av2Held = (cstats.av2Held || 0) + 1; note({ kind: 'AV2_CANONICAL_HELD', id: id, why: why }); return; }
     inFlight = true; cstats.routedCanonical++;
     g781InFlight(id, intendedLocalHash);                    /* ■fix781: まず V1 hash で記録（v2hash は後で refine） */
@@ -2478,8 +2480,53 @@
      ・network retry ではない（同じ payload の再送ではなく、現在の local を改めて評価し直す）。
      ・無限ループ防止に document 単位の上限を置く。 */
   var f781cPending = false, f781cCount = 0, F781C_MAX = 20;
+  /* ■fix729t-L(#125-BW GO_WITH_FIXES 候補・kill v292Dfix729tOff='1'): この document の story の
+     title CAS（fix729）と本文 commit を、既存の inFlight / f781cPending の直列化でお互いに待たせる。
+     ・title 側は titleLockAcquire で inFlight を取る（本文送信中なら、本文の後片付け〔f781cDrain〕で順番が来る）。
+     ・title 送信中に来た本文 commit は、既存どおり f781cPending に回り、title の release 後に 1 回だけ再発火する。
+     ・ポーリングはしない。時間で lock を外すことはしない（#125-BX: title の通信が未確定のまま本文を再開させない）。
+       title 側の通信（getstory / setstorytitle / readback）はすべて postSaveOnce を通り、既存の TIMEOUT_MS（25 s）で
+       abort されて必ず callback が返るので、done → release は必ず 1 回だけ来る。
+       それでも release が来ない（想定外の例外など）ときは解放せず安全停止する（本文は local に DIRTY のまま残り、
+       次の読み込みで通常どおり commit される）。120 s を超えたら診断用に TITLE_LOCK_STUCK を 1 回だけ記録する。
+     ・別 story（セーブ管理で開いていない slot の改名）は lock しない（この document の commit とは無関係）。 */
+  var titleLock = null, titleWaiters = [], tlStats = { acquired: 0, queued: 0, granted: 0, released: 0, doubleRelease: 0, stuck: 0, deferredCommits: 0 };
+  function tlOff(){ return lsg('v292Dfix729tOff') === '1'; }
+  function tlGrant(id, cb){
+    var me = { id: String(id), t: Date.now(), done: false, timer: null };
+    titleLock = me; inFlight = true; tlStats.acquired++;
+    var release = function(why){
+      if (me.done){ tlStats.doubleRelease = (tlStats.doubleRelease || 0) + 1; return; }
+      me.done = true;
+      try { if (me.timer) clearTimeout(me.timer); } catch(e){}
+      if (titleLock === me){ titleLock = null; inFlight = false; }
+      tlStats.released++;
+      note({ kind: 'TITLE_LOCK_RELEASE', id: me.id, why: why || 'done', heldMs: Date.now() - me.t });
+      f781cDrain();
+    };
+    /* 診断のみ（解放しない）。 */
+    try { me.timer = setTimeout(function(){ if (!me.done){ tlStats.stuck = (tlStats.stuck || 0) + 1; note({ kind: 'TITLE_LOCK_STUCK', id: me.id, heldMs: Date.now() - me.t }); } }, 120000); } catch(e){}
+    note({ kind: 'TITLE_LOCK_ACQUIRE', id: me.id });
+    try { cb(release); } catch(e){ release('throw'); }
+  }
+  function titleLockAcquire(id, cb){
+    try {
+      if (off() || tlOff() || id == null || String(id) !== String(storyId())) { cb(null); return; }
+      if (!inFlight && !titleLock){ tlGrant(id, cb); return; }
+      tlStats.queued++; titleWaiters.push({ id: String(id), cb: cb });
+      note({ kind: 'TITLE_LOCK_QUEUED', id: String(id), bodyInFlight: !!inFlight && !titleLock });
+    } catch(e){ try { cb(null); } catch(_){} }
+  }
+  function tlDrain(){
+    try {
+      if (inFlight || titleLock || !titleWaiters.length) return false;
+      var w = titleWaiters.shift(); tlStats.granted++;
+      tlGrant(w.id, w.cb); return true;
+    } catch(e){ return false; }
+  }
   function f781cDrain(){
     try {
+      if (tlDrain()) return;                                 /* ■fix729t-L: 待っている title を先に通す（本文は release 後に再発火） */
       if (!f781cPending) return;
       f781cPending = false;                                  /* ★consume してから発火（1 回のみ） */
       if (f781cOff()) return;
@@ -2602,6 +2649,7 @@
       var payload = { op: 'putstory', id: id, baseStoryRev: baseRev,
                       record: content, shadow: true, mid: mid,
                       clientMeta: { device: (navigator.userAgent || '').slice(0, 60), build: BUILD } };
+      if (titleLock){ tlStats.deferredCommits++; if (!f781cOff()) f781cPending = true; return; }   /* ■fix729t-L */
       inFlight = true; stats.commits++;
       g781InFlight(id, localHash);                           /* ■fix781: 送信開始を durable 化（shadow 経路） */
       var ac = null, timer = null;
@@ -3386,6 +3434,8 @@
            markDirty を呼ばない。id は caller が明示的に渡す（cross-document 対応のため）。
          ・この port から normal body commit を呼ばない。
          ・endpoint / auth / request 実装は postSaveOnce（既存単一実装）を共有。新 auth・新 endpoint 0。 */
+    titleLockAcquire: titleLockAcquire,                  /* ■fix729t-L */
+    titleLockStats: function(){ return { lock: titleLock ? { id: titleLock.id, heldMs: Date.now() - titleLock.t } : null, waiters: titleWaiters.length, stats: JSON.parse(JSON.stringify(tlStats)) }; },
     setStoryTitleOnce: function(payload, cb){
       var p = (payload && typeof payload === 'object') ? payload : null;
       if (!p) { cb(null, 'BAD_PAYLOAD'); return; }
