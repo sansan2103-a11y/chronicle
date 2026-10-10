@@ -265,7 +265,19 @@
           if (g){ e.est.g = g.g; e.est.gsrc = g.src; dirty = true; }
         }
         var got = learnFp(n, e.est.g || '');
-        if (got && (e.est.fp !== got.fp || e.est.fpn !== got.n)){
+        /* ★GQ1-a（GAME QUALITY・一人称の漂流）: 未登録キャラの一人称は「最初に 2 回以上で確定した値」を保持する（A 経路と同じ save-once）。
+           旧実装は毎回の多数決で est.fp を上書きしていたため、モデルの揺れ（私→俺）にそのまま追随し、錨にならなかった。
+           回数（fpn）は更新してよい。kill: v292DfixGQ1aOff='1' → 従来（毎回上書き）。 */
+        var gq1a = true; try { gq1a = localStorage.getItem('v292DfixGQ1aOff') !== '1'; } catch(_g1){}
+        if (got && gq1a && e.est.fp && (e.est.fpn || 0) >= 2){
+          if (got.fp === e.est.fp){ if (e.est.fpn !== got.n){ e.est.fpn = got.n; dirty = true; } }
+          else {
+            /* GPT #125-BI 条件: 少数の誤観測を永久固定しない。新しい一人称が「持続した変化」（5 回以上かつ旧値の 3 倍以上）なら乗り換える。
+               それ未満（1〜数回の揺れ）は漂流として無視する。 */
+            var oldN = (fpCounts(n) || {})[e.est.fp] || 0;
+            if (got.n >= 5 && got.n >= oldN * 3){ e.est.fp = got.fp; e.est.fpn = got.n; e.est.fpSw = (e.est.fpSw || 0) + 1; dirty = true; }
+          }
+        } else if (got && (e.est.fp !== got.fp || e.est.fpn !== got.n)){
           e.est.fp = got.fp; e.est.fpn = got.n; dirty = true;
         }
       });
@@ -325,6 +337,17 @@
         var QP = window.__v292QuasiPack;
         var qs = QP ? (QP.store() || {}) : {};
         var scn = sceneText(S, 2);
+        /* ★GQ1-b: 直近 2 ターンの会話カードの話者（_convSays.who）も「場面に居る」証拠にする（本文に名前が出ずに台詞だけの人物を落とさない）。
+           GPT #125-BL: 過去の発話は現在の同席を保証しないため、初回は既定 OFF。opt-in v292DfixGQ1bOn='1' かつ v292DfixGQStories に物語 id／kill v292DfixGQ1bOff='1'（kill 優先）。 */
+        try { if (localStorage.getItem('v292DfixGQ1bOff') !== '1' && localStorage.getItem('v292DfixGQ1bOn') === '1' && (function(){ try { var k = window.__chronicleDocumentStoryKey; var id = (typeof k === 'string' && k.indexOf('chr6_slot_') === 0) ? k.slice(10) : null; if (!id) return false; var list = String(localStorage.getItem('v292DfixGQStories') || '').split(',').map(function(x){ return x.trim(); }).filter(Boolean); return list.indexOf(id) >= 0; } catch(e){ return false; } })()){ var ts2 = S.turns || []; for (var ti2 = Math.max(0, ts2.length - 2); ti2 < ts2.length; ti2++){
+          var cs2 = (ts2[ti2] && ts2[ti2]._convSays) || [], mt2 = (ts2[ti2] && ts2[ti2]._convSayMeta) || null;
+          cs2.forEach(function(c2, j2){
+            /* GPT #125-BI 条件: 確定済みの話者だけ（??? と _rv は除外。fix616 の来歴があれば say-tag 由来のみ。推測帰属は証拠にしない） */
+            if (!c2 || !c2.who || c2.who === '???' || c2._rv) return;
+            var m2 = (Array.isArray(mt2) && mt2.length === cs2.length) ? mt2[j2] : null;
+            if (m2 && m2.sourceKind && !/say-tag|saytag|react/.test(String(m2.sourceKind))) return;
+            scn += '\u0001' + String(c2.who) + '\u0001';
+          }); } } } catch(_g2){}
         var castn = castNames();
         recentQuasi().forEach(function(n){
           if (lines.length >= 8) return;

@@ -324,7 +324,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261009-bh1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261010-gq1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4304,7 +4304,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
   <script src="v292Dfix796-memory-retrieve.js?cb=20260930-ac25"></script>
-  <script src="v292Dfix192-newengine.js?cb=20261001-ac28"></script>
+  <script src="v292Dfix192-newengine.js?cb=20261010-gq1"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
   <script src="v292Dfix197-avatar-key.js?cb=20261002-ac36"></script>
@@ -4354,6 +4354,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix767-icon-recipe-adapter.js?cb=20261002-ac36"></script>
 <script src="v292Dfix307-npc-roster.js?cb=20261009-bh1"></script>
 <script src="v292DfixSC1-sidecar-eligibility.js?cb=20261009-bh1"></script>
+<script src="v292DfixGQ4-summary-request.js?cb=20261010-gq1"></script>
+<script src="v292DfixCTX-context-restore.js?cb=20261010-gq1"></script>
 <script src="v292Dfix308-creepy-toggle.js?cb=v292Dfix308"></script>
 <script src="v292Dfix309-progression.js?cb=v292Dfix419c"></script>
 <!-- fix577: 物語削除の入口を1つに寄せる。B(gallery)/C(features clearSlot)の独自削除を停止し、
@@ -4417,7 +4419,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix372-gender-radio-guard.js?cb=v292Dfix372"></script>
 <script src="v292Dfix374-default-style-guard.js?cb=20260901-fix783"></script>
 <script src="v292Dfix376-speaker-guard.js?cb=20260902-fix800"></script>
-<script src="v292Dfix377-voice-anchor.js?cb=20260829-fix748"></script>
+<script src="v292Dfix377-voice-anchor.js?cb=20261010-gq1"></script>
 <script src="v292Dfix378-species-judge.js?cb=v292Dfix378"></script>
 <script src="v292Dfix379-wrap-keeper.js?cb=v292Dfix646"></script>
 <!-- v292Dfix822: START_RULES_V1（GPT 裁定 2026-09-06(20)(21)）。keeper prio1 で【開始ルール】(毎turn)・【開始時の状況】(T0のみ) を
@@ -4488,7 +4490,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix453-src-coalesce.js?cb=v292Dfix453"></script>
 <script src="v292Dfix454-dash.js?cb=v292Dfix457"></script>
 <script src="v292Dfix458-dash-post.js?cb=20260901-fix784"></script>
-<script src="v292Dfix459-sys-v2.js?cb=20260915-f459c"></script>
+<script src="v292Dfix459-sys-v2.js?cb=20261010-gq1"></script>
 <script src="v292Dfix460-slotgrid.js?cb=v292Dfix460"></script>
 <script src="v292Dfix461-appearance-en.js?cb=20261002-ac36"></script>
 <script src="v292Dfix462-bare-speaker.js?cb=20260829-fix748"></script>
@@ -4629,7 +4631,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- R118 Phase3-A: existing physical signal bridge. fix414 hook 経由。OFF=v292Dfix742Off / feature=v292Dfix414PhysP (default OFF) -->
 <script src="v292Dfix742-physical-bridge.js?cb=v292Dfix742"></script>
 <!-- v292Dfix797: 4A Layer2 v1 hard capability contradiction (N1P: persistent 3 属性 = 傷/関係/未解決 を parse 前に original 継承). 既定 OFF=v292Dfix797On / kill=v292Dfix797Off -->
-<script src="v292Dfix797-layer2-contradiction.js?cb=20260906-fix817"></script>
+<script src="v292Dfix797-layer2-contradiction.js?cb=20261010-gq1"></script>
 <!-- CLOUD_CANONICAL C1 client (C1-a builder + C1-b hydrator)。DEPLOY != ENABLE：呼び出し側0本・load時storage読取0。OFF=v292Dfix743Off / feature=v292DfixCC2On (default OFF) -->
 <script src="v292Dfix743-cc2-client.js?cb=20261002-ac36"></script>
 <!-- CLOUD_CANONICAL C1 write path wiring（裁定30/31/32）。DEPLOY != ENABLE：caller 0本・自動実行0・load時storage読取0。prepare()/commitSchema2() は明示呼出のみ。ON=v292Dfix750On / KILL=v292Dfix750Off (default OFF) -->

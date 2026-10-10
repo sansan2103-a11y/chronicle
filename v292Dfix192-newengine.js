@@ -255,12 +255,54 @@
   }
   (function waitP254(){ if(installParse254()) return; setTimeout(waitP254, 400); })();
 
+  /* ★B0 CAST_FALLBACK_B0（GPT #125-BJ LIMITED_OFFLINE_GO・読み手は agenda の 1 箇所だけ）:
+     cast.npcs が空の物語（旧物語）でだけ、検証できる名前を NPC 一覧の代わりに使う。
+     名前の出どころ: 明示 say-tag 話者（_convSayMeta[i].sourceKind==='say-tag'、meta の無い旧ターンは narrative に <say who="名前"> が実在）で、
+     2 つ以上の別ターンに出た名前で、最後の明示発話が直近 12 ターン以内のもの。'???'・空・hero 名・_rv・推測帰属（bare-inferred / harvest 等）は使わない。
+     同席・活動可能性は決めない（在場判定は従来の agenda の規則＝直近 2 ターンの本文照合のまま）。
+     性別・年齢・外見・一人称・同席・目的・関係は推測しない（目的/傷は従来どおり fix77 store の値だけ）。cast への書込 0・新 Store 0。
+     既定 OFF（opt-in v292DfixB0On='1' かつ v292DfixGQStories に物語 id）／kill v292DfixB0Off='1'。cast が 1 人でもあれば従来どおり（この関数は呼ばれない）。 */
+  function gqScopeB0(){ try { var k = window.__chronicleDocumentStoryKey; var id = (typeof k === 'string' && k.indexOf('chr6_slot_') === 0) ? k.slice(10) : null; if (!id) return false; var list = String(localStorage.getItem('v292DfixGQStories') || '').split(',').map(function(x){ return x.trim(); }).filter(Boolean); return list.indexOf(id) >= 0; } catch(e){ return false; } } /* GPT #125-BL: opt-in 機能は QA 物語だけ（v292DfixGQStories にカンマ区切りで物語 id。未設定なら動かない） */
+  function b0On(){ try{ return localStorage.getItem('v292DfixB0Off')!=='1' && localStorage.getItem('v292DfixB0On')==='1' && gqScopeB0(); }catch(e){ return false; } }
+  function b0Names(S){
+    try{
+      if(!b0On()) return [];
+      var turns=(S&&Array.isArray(S.turns))?S.turns:[]; if(!turns.length) return [];
+      var hero=''; try{ hero=String((S.cast&&S.cast.hero&&S.cast.hero.name)||'').replace(/[\s　]/g,''); }catch(eh){}
+      var seen={}, lastAt={};
+      for(var i=0;i<turns.length;i++){
+        var t=turns[i]||{}; var cs=t._convSays||[]; var mm=t._convSayMeta; var hasMeta=Array.isArray(mm)&&mm.length===cs.length;
+        var narr=String(t.narrative||'');
+        var inTurn={};
+        for(var j=0;j<cs.length;j++){
+          var c=cs[j]; if(!c||c._rv) continue;
+          var w=String(c.who==null?'':c.who).trim(); if(!w||/^[?？]+$/.test(w)) continue;
+          if(w.replace(/[\s　]/g,'')===hero) continue;
+          var okTag=false;
+          if(hasMeta){ okTag=!!(mm[j]&&mm[j].sourceKind==='say-tag'); }
+          else { okTag=narr.indexOf('<say who="'+w+'"')>=0 || narr.indexOf("<say who='"+w+"'")>=0; }
+          if(okTag) inTurn[w]=1;
+        }
+        for(var k in inTurn){ seen[k]=(seen[k]||0)+1; lastAt[k]=i; }
+      }
+      /* 証拠不足の除外（#125-BK 境界 QA）: 最後の明示発話が agenda の窓（直近 12 ターン）より古い名前は候補にしない（退場済み・遠い過去の話者を同席へ誤変換しない） */
+      var out=[]; for(var n in seen){ if(seen[n]>=2 && (turns.length-1-lastAt[n])<12) out.push(n); }
+      out.sort();
+      return out;
+    }catch(e){ return []; }
+  }
+  function agendaNpcs(S){
+    var npcs=(S&&S.cast&&Array.isArray(S.cast.npcs))?S.cast.npcs.filter(function(n){return n&&n.name;}):[];
+    if(!npcs.length){ var fb=b0Names(S); if(fb.length) npcs=fb.map(function(n){ return { name:n, _b0:1 }; }); }
+    return npcs;
+  }
   function agendaPressures(){
     try{
       var S=getS(); if(!S||!Array.isArray(S.turns)||!S.turns.length) return null;
-      var npcs=(S.cast&&Array.isArray(S.cast.npcs))?S.cast.npcs.filter(function(n){return n&&n.name;}):[];
+      var npcs=agendaNpcs(S); /* ★B0: cast が空なら検証済み say-tag 話者（既定 OFF） */
       if(!npcs.length) return null;
       var names=npcs.map(function(n){return String(n.name);});
+      var b0set={}; npcs.forEach(function(n){ if(n&&n._b0) b0set[String(n.name)]=1; }); /* ★B0: 代替名は _v254who（cast 名だけで収穫済み）に入り得ないので本文照合へ落とす */
       /* 部分文字列衝突対策(実キャスト例: リナ⊂カリナ): 判定前に、対象名を含むより長い他名を潰す */
       function narrHas(narr, name){
         if(!narr) return false;
@@ -271,7 +313,7 @@
       /* v292Dfix254b: 収穫済みターンはタグ権威(_v254who)・無ければnarrativeフォールバック */
       function appeared(t, name){
         if(!t) return false;
-        if(t.plan && Array.isArray(t.plan._v254who)) return t.plan._v254who.indexOf(name)>=0;
+        if(t.plan && Array.isArray(t.plan._v254who) && !b0set[name]) return t.plan._v254who.indexOf(name)>=0;
         return narrHas(String(t.narrative||''), name);
       }
       var turns=S.turns, out={}, win=turns.slice(-2); /* 在場判定窓=直近2ターン */
@@ -359,7 +401,7 @@
       try{ if(localStorage.getItem('v292AgendaOff')==='1') return ''; }catch(e){}
       var S=getS(); if(!S||!S.cast||!Array.isArray(S.cast.npcs)) return '';
       var pr=agendaPressures(); if(!pr) return '';
-      var npcs=S.cast.npcs.filter(function(n){return n&&n.name;});
+      var npcs=agendaNpcs(S); /* ★B0 */
       var cur=(S.turns||[]).length;
       var st77=window.__v292Dfix77Store||{};
       var cands=[];
@@ -626,11 +668,17 @@
     var m = String(mode||'').toUpperCase();
     var inText = t.slice(0,80);
     var hero = heroName ? ('〈'+heroName+'〉') : '主人公';
+    /* ★GQ2（GAME QUALITY・名前の無い主人公。GPT #125-BI: 二人称「あなた」は REJECTED、三人称叙述を維持）:
+       (a) DO 行の「主人公主人公が」二重を直す（名前なしのときは '主人公' を 1 回だけ）。
+       (b) 名前が無いときだけ【守ること】に 1 行: 地の文で管理ラベル「主人公」を主語として書かず、日本語の主語省略で描く（三人称のまま）。タグの who="主人公" は従来どおり。
+       名前がある物語の出力は byte 同一。kill: v292DfixGQ2Off='1'。 */
+    var gq2 = false; try { gq2 = !heroName && localStorage.getItem('v292DfixGQ2Off') !== '1'; } catch(_g2){ gq2 = false; }
+    var heroDo = gq2 ? '主人公' : ('主人公' + hero);
     var inputLine = '';
     if (m==='SAY' && inText){
       inputLine = '【プレイヤー入力＝主人公の発話】'+hero+'が「'+inText+'」と発話した。これは主人公の台詞。主人公が口にしたものとして本文に書き、絶対に他のキャラの発言・声にしない。';
     } else if (m==='DO' && inText){
-      inputLine = '【プレイヤー入力＝主人公の行動】主人公'+hero+'が「'+inText+'」という行動をとった。主人公の行動として本文に反映し、他キャラの行動にしない。';
+      inputLine = '【プレイヤー入力＝主人公の行動】'+heroDo+'が「'+inText+'」という行動をとった。主人公の行動として本文に反映し、他キャラの行動にしない。';
     } else if (m==='STORY' && inText && !isCont){
       inputLine = '【プレイヤー入力＝場面の方向づけ】プレイヤーが「'+inText+'」と場面を方向づけた。その方向で場面を進める。';
     }
@@ -806,6 +854,7 @@
       '',
       '【守ること】',
       '・既に名前のあるキャラを「???」「謎の人物」などの新キャラ扱いにしない。必ず名前で扱う。',
+      (gq2 ? '・主人公の名前は未設定。本文（地の文）に「主人公」という管理ラベルを主語として書かない。主人公の行動は主語を省いた三人称の文で描く（例: 「主人公は扉を開けた」ではなく「扉を開けると、廊下の奥から物音が響いた」）。他のキャラが呼びかけるときは関係に合う呼び方（「あんた」「お前」「旦那」など）にする。タグの who="主人公" はそのまま。' : null),
       '・直前のターンの文章やセリフをそのまま引用・再掲して書き始めない。前ターンの続きの瞬間から書く。',
       '・物理的に矛盾させない（位置・負傷・人物・所持が前の場面と食い違わない）。',
       '・このメッセージのルールや、説明・要約・メモ・チェックリスト・【】ラベルを本文に書かない。「未解決事項:」のようなGM的な運営コメント・判断の独り言も本文ではない。本文はあくまで物語の地の文とセリフだけ。',
@@ -813,7 +862,7 @@
       '',
       miniEx() + '\n\n' + pickExamples()   // v292Dfix208: 🎭トーンで見本切替 / fix223d改: ミニ見本先・トーン見本後 / fix224: 強制リマインドは実測無効 / fix249: 長文時はフル尺見本(長さは見本で引っ張る)
     ]);
-    return blocks.join('\n');
+    return blocks.filter(function(b){ return b !== null; }).join('\n');   /* ★GQ2: 条件付きの行（null）は落とす。従来は null が無いので同一 */
   }
 
   // Planner.build を最外でラップ。engineMode=1 のとき sys を丸ごと差し替える。

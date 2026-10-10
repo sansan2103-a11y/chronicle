@@ -94,6 +94,8 @@
     // fix496/fix645 と同じ理由で正式 MARKER 登録。dropA/B/C/D のどれにも無いので認識後は生存してモデルへ届く。
     '【開始ルール】',
     '【開始時の状況】',
+    // ★GQ4: <summary> 要求ブロック（keeper prio1）。未登録だと直前ブロックへ吸収されるため正式登録。
+    '【要約】',
     // ★fix459c(2026-09-15・②C1 裁定 FIX459_AUTHORITY_MARKER_COMPAT = CONFIRMED_EXISTING_BUG / FIX_GO):
     // fix333 の authorityBlock が出す見出し。未登録だったため未知マーカーとして直前ブロックへ吸収され、
     // 実測ではその吸収先が dropD の【描写の作り方（説明せず"見せる"・最優先）】だったため

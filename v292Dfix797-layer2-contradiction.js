@@ -365,7 +365,7 @@
     try { if (typeof window.__chr6Key === 'function') { var k2 = window.__chr6Key(); if (k2) return String(k2); } } catch (e) {}
     return '';
   }
-  function heroOf(st) { try { return (st && st.cast && st.cast.hero && st.cast.hero.name) || ''; } catch (e) { return ''; } }
+  function heroOf(st) { try { var n = (st && st.cast && st.cast.hero && st.cast.hero.name) || ''; if (!n){ try { if (localStorage.getItem('v292DfixGQ3Off') !== '1') n = '主人公'; } catch (_g3) {} } return n; } catch (e) { return ''; } }   /* ★GQ3: 名前の無い主人公は fix333n / fix850 と同じ '主人公' で照合（<state who="主人公"> の傷を前ターンから引ける）。kill: v292DfixGQ3Off='1' */
   function turnOf(st) { try { return (st && st.turns) ? st.turns.length : -1; } catch (e) { return -1; } }
 
   /* index.html の G.submit（Planner.build の後・最初の Api.call の直前）から 1 行で呼ばれる。
