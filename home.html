@@ -250,7 +250,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261010-hr1';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261012-hf1';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -512,13 +512,35 @@
     return out;
   }
   /* listshadow を 1 回だけ呼ぶ。成功したときだけ再描画する。 */
-  function f757Fetch(){
+  /* ★UI1 (GPT #125-DQ): the account principal of this page (cookie session on the Pages origin only). null = none / unknown. */
+  function f757Who(){
+    return fetch('/api/auth/me', { method: 'GET', credentials: 'same-origin', cache: 'no-store', headers: { 'x-chronicle-csrf': '1' } })
+      .then(function(r){ return r.ok ? r.json() : null; }, function(){ return null; })
+      .then(function(j){ return (j && j.ok === true && j.accountId) ? String(j.accountId) : null; }, function(){ return null; });
+  }
+  function f757Fetch(verify){
     if (f757off() || F757.tried) return;
     F757.tried = true;
     if (!loggedIn()){ F757.code = 'NOT_LOGGED_IN'; return; }
-    var p = null;
+    /* ★UI1 (GPT #125-DQ / #125-DR): the first load is guarded the same way on the Pages origin, where fix893 makes the
+       cookie session the ONLY lane: the account seen when the fetch starts must still be the account when the answer
+       arrives. A failed principal check on this lane (no answer / not ok at start or at apply) = rows stay absent
+       (never a fallback to the unguarded path). Hosts without fix893 (the old passcode / token lanes) are unchanged. */
+    if (typeof verify !== 'function' && window.__v292Dfix893 && window.__v292Dfix893.active){
+      var who0 = f757Who();
+      verify = function(){ return who0.then(function(a0){ if (!a0) return false; return f757Who().then(function(a1){ return !!a1 && a1 === a0; }); }); };
+    }
+    var p = null, gen757 = (F757.gen = (F757.gen || 0) + 1);
     try { p = call({ op: 'listshadow' }, 20000); } catch(e){ F757.code = 'CALL_THREW'; return; }
+    /* ★UI1 (GPT #125-DP): a refresh started by the Vault UI passes verify(); its answer is applied only if no newer
+       fetch started meanwhile AND the page's principal is still the expected account at apply time (an answer that
+       arrives after an account switch is dropped; rows stay absent = unconfirmed). The first load passes nothing. */
     Promise.resolve(p).then(function(j){
+      if (gen757 !== F757.gen) return null;
+      if (typeof verify !== 'function') return j;
+      return Promise.resolve(verify()).then(function(ok){ if (ok === true && gen757 === F757.gen) return j; F757.code = 'STALE_PRINCIPAL'; return null; }, function(){ F757.code = 'STALE_PRINCIPAL'; return null; });
+    }).then(function(j){
+      if (j === null) return;
       if (!j || j.ok !== true || Object.prototype.toString.call(j.stories) !== '[object Array]'){
         F757.code = (j && j.errorCode) || 'BAD_RESPONSE'; return;
       }
@@ -537,6 +559,16 @@
       render();
     })['catch'](function(e){ F757.code = 'NETWORK'; });
   }
+  /* ★UI1 (2026-10-11, GPT #125-DS HOME_INITIAL_CARD_DELAY の原因): fix893 の /auth/me がまだ返っていない間に f757Fetch が
+     走ると loggedIn() が false で NOT_LOGGED_IN のまま二度と取りに行かず、fix889 も noauth のままになり、クラウドの物語が
+     HOME に出ない（local で再現、診断記録で確定）。fix893 が /auth/me の結果を知らせた時（chr:account-me）に、その時点で
+     ログイン中なら 1 回だけ取り直す。f757 は NOT_LOGGED_IN の時だけ、fix889 は noauth の時だけ。それ以外は何もしない。 */
+  try { window.addEventListener('chr:account-me', function(){
+    try { if (!loggedIn()) return;
+      if (F757.code === 'NOT_LOGGED_IN' && !f757off()){ F757.tried = false; f757Fetch(); }
+      var F9 = f889(); if (F9 && typeof F9.status === 'function' && typeof F9.refresh === 'function'){ var s9 = F9.status(); if (s9 && s9.state === 'noauth') F9.refresh(); }
+    } catch(e){}
+  }); } catch(e){}
   try { window.__v292Dfix757 = { status: function(){
     return { off: f757off(), tried: F757.tried, ok: F757.ok, code: F757.code,
              fetched: F757.stories.length, hiddenBecauseLocal: F757.hidden,
