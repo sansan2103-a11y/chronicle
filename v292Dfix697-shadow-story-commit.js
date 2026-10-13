@@ -2729,6 +2729,35 @@
     pushTimer = setTimeout(function(){ pushTimer = null; firstDirtyTs = 0; commit('debounce'); }, wait);
   }
 
+  /* ■SN1(a)（2026-10-11, GPT #125-CY, kill: v292DfixSN1aOff='1'）flushForNav(maxMs) → Promise<{ok, why, ms}>
+     アプリ内の物語切替・HOME 遷移の直前に呼ぶ。予約中（pushTimer）の commit を既存の commit 経路ですぐ始め、
+     server の ACK（fix781 marker が CLEAN になる = g781Confirm）を最大 maxMs 待つ。
+     ・保存先は今の document の story（storyId()）。遷移先へは切り替わらない（遷移は待ちの後）。
+     ・authority 未確定・DIVERGED・409 などは既存 commit の判定のまま（ここで迂回しない）→ ok:false。
+     ・maxMs を超えたら ok:false（timeout）。保存完了とはみなさない。marker は DIRTY のまま残り、再訪時に fix895 が拾う。
+     ・新しいキュー・Store・retry は作らない。in-flight 中の intent は既存 fix781c がまとめる。 */
+  function sn1Marker(id){ try { var m = JSON.parse(lsg('v292Dfix402_f781g_' + id) || 'null'); return (m && typeof m === 'object') ? m : null; } catch(e){ return null; } }
+  function flushForNav(maxMs){
+    var t0 = Date.now(); maxMs = Math.max(500, Math.min(10000, +maxMs || 3000));
+    return new Promise(function(resolve){
+      var id = null; try { id = storyId(); } catch(e){}
+      if (lsg('v292DfixSN1aOff') === '1' || !on() || !id) { resolve({ ok: false, why: !id ? 'NO_STORY' : 'OFF', ms: 0 }); return; }
+      var m0 = sn1Marker(id);
+      if (!pushTimer && !inFlight && (!m0 || m0.state === 'CLEAN')) { resolve({ ok: true, why: 'NOTHING_PENDING', ms: 0 }); return; }
+      if (pushTimer) { try { clearTimeout(pushTimer); } catch(e){} pushTimer = null; firstDirtyTs = 0; commit('nav-flush'); }
+      var sawFlight = inFlight;
+      (function poll(){
+        var m = sn1Marker(id), ms = Date.now() - t0;
+        if (inFlight) sawFlight = true;
+        if (!inFlight && !pushTimer && m && m.state === 'CLEAN') { note({ kind: 'SN1_NAV_FLUSH', id: id, ok: true, ms: ms }); resolve({ ok: true, why: 'ACK', ms: ms }); return; }
+        if (!inFlight && !pushTimer && ms >= 600 && !sawFlight) { note({ kind: 'SN1_NAV_FLUSH', id: id, ok: false, why: 'NOT_SENT', state: m && m.state, ms: ms }); resolve({ ok: false, why: 'NOT_SENT', state: m && m.state, ms: ms }); return; }
+        if (!inFlight && sawFlight && ms >= 200 && !(m && m.state === 'CLEAN')) { note({ kind: 'SN1_NAV_FLUSH', id: id, ok: false, why: 'NOT_CONFIRMED', state: m && m.state, ms: ms }); resolve({ ok: false, why: 'NOT_CONFIRMED', state: m && m.state, ms: ms }); return; }
+        if (ms >= maxMs) { note({ kind: 'SN1_NAV_FLUSH', id: id, ok: false, why: 'TIMEOUT', ms: ms }); resolve({ ok: false, why: 'TIMEOUT', state: m && m.state, ms: ms }); return; }
+        setTimeout(poll, 100);
+      })();
+    });
+  }
+
   // ---- トリガ1: S.save 相乗り ----
   /* ★★fix724(RULING37 §21-C): SAVE_CHAIN_TRUNCATED_AT_FEATURES_JS_FOR_NAMED_SLOTS 対策。
      ■何が起きていたか（RULING37 で確定した root cause）
@@ -2948,7 +2977,13 @@
                    base: String(lc.fingerprint).slice(0, 16), local: String(s.localHash).slice(0, 16) });
             f895Last = { reserved: true, src: src, t: Date.now() };
             try { console.log(TAG, 'fix895: DIRTY_LOCAL を再予約（既存 commit 経路・1 回）', src); } catch(e2){}
-            markDirty();
+            /* ■SN1(b)（2026-10-11, GPT #125-CY SAVE_EARLY_NAV_FIX_A_B, kill: v292DfixSN1bOff='1' → 従来の 12 s debounce）
+               ここに来るのは fix705 released・CANONICAL_LOCAL_AHEAD・marker DIRTY_LOCAL・lastConfirmed.serverRev == Cloud rev・
+               Cloud hash == lastConfirmed.fingerprint・local ahead・inFlight なし・予約なし・journal なしが全部そろった時だけ
+               （= authority が確認できて、送ってよいと判定済み）。この時だけ 12 s を待たず、既存の commit 経路を 1 回すぐ走らせる。
+               marker なし・DIVERGED・AUTHORITY_UNCONFIRMED はここに来ない（従来どおり送らない）。 */
+            if (lsg('v292DfixSN1bOff') === '1') { markDirty(); }
+            else { f895Last.immediate = true; try { if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; } firstDirtyTs = 0; } catch(e3){} commit('f895-resume'); }
             return;
           }
         }
@@ -3005,7 +3040,9 @@
       if (f697pRead(id)) return f898Skip('JOURNAL_PRESENT', src);
       var gen0 = +m.localGeneration || 0, st0 = m.state;
       f898Busy = true;
-      contentHashV2(id, function(h){
+      /* ■S1A: fix705 が今 schema 1 と分類した物語は V1 の hash（fix705・fix781 と同じ領域）で比べる。kill v292DfixS1AOff='1' → 従来（V2 のみ）。 */
+      var s1a = (s7.schema === 1 && lsg('v292DfixS1AOff') !== '1');
+      (s1a ? function(_id, cb){ var c = projection(); if (!c) return cb(null); sha256hex(canonicalString(c), cb); } : contentHashV2)(id, function(h){
         f898Busy = false;
         try {
           if (!h) return f898Skip('HASH_NULL', src);
@@ -3247,6 +3284,7 @@
                hashProbe: f697pLastHashProbe ? JSON.parse(JSON.stringify(f697pLastHashProbe)) : null,
                stats: JSON.parse(JSON.stringify(f697pStats)) }; },
     flush: function(){ commit('manual'); return true; },
+    flushForNav: function(maxMs){ return flushForNav(maxMs); },   /* ■SN1(a) */
     f895: function(){ return { off: f895Off(), done: f895Done, last: f895Last ? JSON.parse(JSON.stringify(f895Last)) : null }; },
     /* ★fix718: read-only 可視化（書込 0） */
     canonState: function(){ return { ctx: canonCtx ? JSON.parse(JSON.stringify(canonCtx)) : null,

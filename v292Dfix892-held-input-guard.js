@@ -62,6 +62,16 @@
         b.setAttribute('style', 'margin-left:10px;padding:3px 12px;border-radius:6px;border:1px solid #ffb3b3;background:#6a2e2e;color:#fff;cursor:pointer;');
         b.onclick = function(){ try { location.reload(); } catch(e){} };
         d.appendChild(b);
+        /* ■S1B（2026-10-11, GPT #125-DA FIX892_HOME_ESCAPE, kill: v292DfixS1BOff='1'）: 遮断中でもホームへ離れられる口。
+           離脱だけ（保存しない・保存拒否を解除しない・競合を解決しない・端末内のデータを消さない）。 */
+        if (localStorage.getItem('v292DfixS1BOff') !== '1'){
+          var h = document.createElement('button');
+          h.id = 'v292Dfix892-home';
+          h.textContent = 'ホームへ戻る（この端末の内容は残ります）';
+          h.setAttribute('style', 'margin-left:8px;padding:3px 12px;border-radius:6px;border:1px solid #ffb3b3;background:transparent;color:#fff;cursor:pointer;');
+          h.onclick = function(){ try { location.href = 'home.html'; } catch(e){} };
+          d.appendChild(h);
+        }
       }
       (document.body || document.documentElement).appendChild(d);
     } catch(e){}

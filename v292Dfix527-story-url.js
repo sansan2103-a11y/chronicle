@@ -158,6 +158,27 @@
   // ★おしん要望(2026-07-25): トップバーの「セーブ」を「ホーム」に置き換える。
   //   物語の一覧・読込・新規作成・削除・書き出し/取り込み・同期は すべてホームへ集約したため、
   //   物語画面にセーブ管理を残す理由が無い(元のボタンは display:none で残す＝他fixのanchor探索を壊さない)。
+  /* ■SN1(a)（2026-10-11, GPT #125-CY SAVE_EARLY_NAV, kill: v292DfixSN1aOff='1' → 従来の 150 ms 後遷移）
+     ホームへ移る前に、今の物語の未送信の保存（fix697 の 12 s 予約）を既存の commit 経路ですぐ送り、server の ACK を最大 3 s 待つ。
+     ACK が無いまま 3 s を超えた・送れなかった時は「保存完了」と扱わず、端末内の未同期のまま遷移し、ホームで一度だけ知らせる
+     （既存の chr6_home_notice。#125-CZ: 開き直せば必ず保存されるとは断定しない文言）。二重押しは 1 回にまとめる。 */
+  var sn1Going = false;
+  function sn1GoHome(btn){
+    if (sn1Going) return; sn1Going = true;
+    var go = function(){ try { location.href = HOME; } catch(e){} };
+    var f = window.__v292Dfix697;
+    if (localStorage.getItem('v292DfixSN1aOff') === '1' || !f || typeof f.flushForNav !== 'function') { setTimeout(go, 150); return; }
+    try { if (btn) { btn.disabled = true; btn.textContent = '☁ 保存中…'; } } catch(e){}
+    setTimeout(function(){
+      var p; try { p = f.flushForNav(3000); } catch(e){ p = null; }
+      if (!p || typeof p.then !== 'function') { go(); return; }
+      p.then(function(r){
+        if (!r || !r.ok) { try { sessionStorage.setItem('chr6_home_notice', '最新のターンはこの端末に残っていますが、クラウドへの同期は完了していません。物語を開き直すと同期を再確認できます。'); } catch(e){} }
+        try { console.log(TAG, 'SN1 nav flush', r && r.ok, r && r.why, r && r.ms); } catch(e){}
+        go();
+      }, function(){ go(); });
+    }, 150);
+  }
   function injectHomeButton(){
     try {
       var anchor = document.querySelector('[title^="セーブ管理"]') || document.getElementById('v30-topbar-btn');
@@ -185,7 +206,7 @@
             if (same){ try { console.log(TAG, 'home: 変更なし → 保存しない'); } catch(e3){} }
             else (typeof S.saveD==='function'?S.saveD('fix527.injectHomeButton'):S.save());
           } } catch(e){}
-        setTimeout(function(){ try { location.href = HOME; } catch(e){} }, 150);
+        sn1GoHome(b);
       });
       anchor.parentNode.insertBefore(b, anchor);
       anchor.style.display = 'none';                 // 「セーブ」を隠して同じ位置に「ホーム」を置く
@@ -209,7 +230,7 @@
         nb.textContent = '🏠 ホームで取り込む';
         nb.addEventListener('click', function(){
           try { var S = window.S || (0,eval)('typeof S!=="undefined"?S:null'); if (S && typeof S.save === 'function') (typeof S.saveD==='function'?S.saveD('fix527.fixForkBanner'):S.save()); } catch(e){}
-          setTimeout(function(){ try { location.href = HOME; } catch(e){} }, 150);
+          sn1GoHome(nb);
         });
         b.parentNode.replaceChild(nb, b);
         try { console.log(TAG, 'fork banner: 別端末のつづき → ホームで取り込む'); } catch(e){}

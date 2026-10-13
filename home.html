@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<script src="v292Dvault2-copygate.js?cb=20261001-ac34"></script>
+<script src="v292Dvault2-sendgate.js?cb=sgh2b"></script>
+<script src="v292Dvault2-copygate.js?cb=20261011-ab8"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
 <meta name="robots" content="noindex">
@@ -250,7 +251,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261012-hf1';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261013-vm1';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -316,7 +317,7 @@
 <script src="v292Dav2-data.js?cb=20261005-c3"></script>
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
 <script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20261005-c3"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20261011-s1a"></script>
 <!-- ★fix860 STORY_PASSCODE: unlock dialog / passcode 管理 UI（supplier と fix697 の狭い口に依存） -->
 <script src="v292Dfix860-story-unlock-ui.js?cb=20260916-sp2"></script>
 <script src="v292Dfix729-title-sync.js?cb=20260909-fix842"></script>
@@ -572,7 +573,12 @@
   try { window.__v292Dfix757 = { status: function(){
     return { off: f757off(), tried: F757.tried, ok: F757.ok, code: F757.code,
              fetched: F757.stories.length, hiddenBecauseLocal: F757.hidden,
-             shown: f757CloudOnly().length, loggedIn: loggedIn() }; } }; } catch(e){}
+             shown: f757CloudOnly().length, loggedIn: loggedIn() }; },
+    /* ★UI1 (2026-10-11, GPT #125-DN HOME_LIST_REFRESH_BEFORE_QA): Vault v2 UI が unlock / hide / unhide / relock の後に呼ぶ。
+       クラウドの行だけを捨てて描き直し（古い hidden の行を残さない）、listshadow をもう 1 回だけ取る。
+       失敗したら行は空のまま（未確認として扱う）。local slot・本文・同期・CopyGate には触れない。reload しない。 */
+    refresh: function(verify){ if (f757off()) return false; F757.ok = false; F757.stories = []; F757.tried = false; F757.code = 'REFRESH';
+      try { render(); } catch(e){} f757Fetch(verify); return true; } }; } catch(e){}
 
   /* ============================================================
    * ★★2026-09-20 sp18 SECRET_STORY_VAULT（HOME 側の接続だけ。状態と通信は v292Dfix889 が持つ）
@@ -769,6 +775,7 @@
              '<div class="rt">'+esc(x.name)+'<span>'+ago(x.opened)+'</span></div></div>';
     }).join('') || '<div style="font-size:12px;color:var(--dim);padding:4px 8px">まだありません</div>';
 
+    hs1SettleSel(full);                /* ★HS1: settle SEL before the cards are written */
     // カード
     if(!list.length){
       /* ★★sp18 D-C2: クラウド側が未確定のあいだ「物語がありません」と言い切らない。
@@ -811,9 +818,24 @@
   function f759off(){ return g('v292Dfix759Off') === '1'; }
   function f759Cloud(x){ return !f759off() && !!(x && x.cloud === true); }
 
+  /* ★HS1 (2026-10-13, GPT #125-FM HOME_FALLBACK_SELECTION P2): renderDetail() used to move SEL to the most recently opened
+     story AFTER the cards were written (e.g. when the selected story left the list on relock), so that story was selected but its
+     card had no highlight, and one click on it opened the story (the 2nd-click rule). Settle SEL here first, with the very same
+     rule, so the highlighted card, the detail panel and the click rule always use one SEL. Kill: localStorage v292Dhs1Off = '1'. */
+  function hs1SettleSel(full){
+    try { if (localStorage.getItem('v292Dhs1Off') === '1') return; } catch(e){}
+    for(var i=0;i<full.length;i++){ if(full[i].id===SEL) return; }
+    if(SEL && F757.code === 'REFRESH') return;          /* same UI3 guard as renderDetail: keep the selection while the list refreshes */
+    var s = full.slice().sort(function(a,b){ return b.opened-a.opened; }); SEL = s[0] ? s[0].id : null;
+  }
   function renderDetail(full){
     var x = null;
     for(var i=0;i<full.length;i++){ if(full[i].id===SEL){ x=full[i]; break; } }
+    /* ★UI3 (2026-10-12, GPT #125-EL PC_RESELECTION): while the Vault list refresh is in flight (cloud rows dropped on
+       purpose by refresh()), keep the user's selection instead of picking another story. Otherwise the selection jumps to
+       a different card under the cursor and the user's next single click OPENS that story. Once the refresh answers
+       (OK or any error code) the normal fallback below applies again. Nothing else changes. */
+    if(!x && SEL && F757.code === 'REFRESH'){ el('detail').innerHTML=''; return; }
     if(!x){ full = full.slice().sort(function(a,b){ return b.opened-a.opened; }); x = full[0] || null; SEL = x?x.id:null; }
     if(!x){ el('detail').innerHTML=''; return; }
     var u = coverUrl(x.id, x.scene);
@@ -3176,5 +3198,6 @@
   <div>本文と画像は AI が生成しています。内容は架空のものです。</div>
   <div>AI: OpenRouter / DeepSeek ・ 画像: Pollinations</div>
 </footer>
+<script src="v292Dvault2-ui.js?cb=20261013-ms1"></script>
 </body>
 </html>

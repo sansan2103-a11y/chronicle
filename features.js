@@ -6892,6 +6892,23 @@
     try {
       if (typeof S === 'undefined' || !S) return false;
       var act = getActive();
+      /* ★fix205g (2026-10-11, GPT #125-CR part 2 FIX205_CANONICAL_STORY_GUARD): when this document has a canonical
+         story key (fix694 / fix527: the URL story), never boot a DIFFERENT story from the shared compat mirror
+         chr6_active_slot. The mirror can be stale (its write refused / failed, back-forward, another tab); booting it
+         put story A's body into story B's document (shown / sent / saved under B). S.load already reads the document
+         key (fix784); this makes the fix205 re-load use the same authority. No document key => unchanged (legacy).
+         kill: localStorage v292Dfix205gOff='1'. */
+      try {
+        if (localStorage.getItem('v292Dfix205gOff') !== '1'){
+          var dk205 = window.__chronicleDocumentStoryKey;
+          var did205 = (typeof dk205 === 'string' && dk205) ? (dk205 === 'chr6' ? 'default' : (dk205.indexOf('chr6_slot_') === 0 ? dk205.slice(10) : null)) : null;
+          if (did205 && did205 !== act){
+            window.__v292Dfix205g = { mismatch: true, mirror: String(act).slice(0, 40), doc: did205.slice(0, 40), at: Date.now() };
+            try { console.warn('[v292Dfix205g] stale active-slot mirror ignored; booting the document story'); } catch(e){}
+            act = did205;
+          }
+        }
+      } catch(e205){}
       if (!act || act === 'default') return true;   // デフォルトは従来通り(S.loadが読み済み)
       var ok;
       if (!slotHasData(act)){

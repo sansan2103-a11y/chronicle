@@ -75,7 +75,7 @@
   if (!hostOk || g('v292Dfix893Off') === '1') { try { window.__v292Dvault2CopyGateScope = { scope: 'OUT_OF_SCOPE', reason: hostOk ? 'fix893-off' : 'unsupported-host' }; } catch (e) {} return; }
 
   var V2_CLIENT_MODE = 'strict';   /* build constant: 'compat' (PRE_ACTIVATION_COMPAT_ONLY) | 'strict' */
-  var AUTH_TTL = 30000, TICK = 15000, AUTH_KEY = 'v292Dvault2_auth';
+  var AUTH_TTL = 30000, AUTH_SKEW = 5000, TICK = 15000, AUTH_KEY = 'v292Dvault2_auth';
   var WORKER = 'https://novel-proxy.sansan2103.workers.dev';
   var nativeFetch = window.fetch.bind(window);
   var st = { state: 'unknown', hidden: [], lastAt: 0, answeredAt: 0, refreshes: 0, unknownDenied: 0, denied: { ls: 0, idb: 0, exportEntries: 0, exportRefused: 0 }, allowedExisting: 0, log: [] };
@@ -97,11 +97,22 @@
     var url = onPagesDev() ? '/api/save' : WORKER + '/save';
     var headers = { 'Content-Type': 'application/json' }; if (onPagesDev()) headers['x-chronicle-csrf'] = '1';
     var ac = null; try { ac = new AbortController(); setTimeout(function () { try { ac.abort(); } catch (e) {} }, 8000); } catch (e) {}
-    return nativeFetch(url, { method: 'POST', credentials: 'same-origin', headers: headers, body: JSON.stringify({ op: 'vault2visible', ids: ids }), signal: ac ? ac.signal : undefined })
+    return nativeFetch(url, { method: 'POST', credentials: 'same-origin', headers: headers, body: JSON.stringify(scope.acctId && !abOff() ? { op: 'vault2visible', ids: ids, expectAcct: scope.acctId } : { op: 'vault2visible', ids: ids }), signal: ac ? ac.signal : undefined })
       .then(function (r) {
         if (r.status === 400) return r.json().then(function (j) { return (V2_CLIENT_MODE === 'compat' && j && j.errorCode === 'bad-op') ? { ok: true, hasVault: false, visible: ids } : null; }, function () { return null; });
-        return r.ok ? r.json().then(function (j) { return (j && j.ok && Array.isArray(j.visible)) ? { ok: true, hasVault: j.hasVault === true, visible: j.visible } : null; }, function () { return null; }) : null;
+        return r.ok ? r.json().then(function (j) { return (j && j.ok && Array.isArray(j.visible)) ? { ok: true, hasVault: j.hasVault === true, visible: j.visible, acct: typeof j.acct === 'string' ? j.acct : null } : null; }, function () { return null; }) : null;
       }, function () { return null; });
+  }
+  /* OD (#125-CE OFF_DEVICE_HIDDEN_SCOPE): stories this device knows as hidden but holds no slot/meta for (kill event, or the
+     last persisted vault answer) are included in the probe, so the server decides them; leaving them out made the next
+     answer drop them (not asked != visible). Ids only, no new store. Kill v292Dvault2ODOff='1'. */
+  function odKnownHidden(local) {
+    try { if (g('v292Dvault2ODOff') === '1') return []; } catch (e) {}
+    var u = {}, out = [];
+    (st.hidden || []).forEach(function (x) { if (typeof x === 'string') u[x] = 1; });
+    try { var pa = JSON.parse(nGet.call(LS, AUTH_KEY) || 'null'); if (pa && pa.state === 'vault' && Array.isArray(pa.hidden) && (abOff() || (scope.tag && pa.acct === scope.tag))) pa.hidden.forEach(function (x) { if (typeof x === 'string') u[x] = 1; }); if (!abOff() && scope.tag) (abReadPrior(pa)[scope.tag] || []).forEach(function (x) { u[x] = 1; }); } catch (e) {}
+    Object.keys(u).forEach(function (x) { if (ID_RE.test(x) && x !== 'default' && local.indexOf(x) < 0) out.push(x); });
+    return out;
   }
   var refreshing = null;
   function refresh(why) {
@@ -109,24 +120,88 @@
     if (scope.s !== 'IN_SCOPE') { if (scope.s === 'PENDING' || scope.s === 'SESSION_INVALID') scopeCheck(why); return Promise.resolve(); }   /* r5.3-scope: no probe before acct is confirmed */
     if (refreshing) return refreshing;
     st.refreshes++;
-    var ids = localIds(); var batches = []; for (var i = 0; i < ids.length; i += 50) batches.push(ids.slice(i, i + 50)); if (!batches.length) batches.push([]);
-    refreshing = Promise.all(batches.map(probeBatch)).then(function (res) {
+    var ids = localIds(), odAll = [], reqTag = scope.tag, killSeq0 = st.killSeq || 0;
+    try { odAll = odKnownHidden(ids); } catch (e) {}
+    refreshing = abRecheck(odAll.length > 0).then(function (ok) {
+      if (scope.tag !== reqTag) { try { odAll = odKnownHidden(ids); } catch (e) { odAll = []; } }   // account switched: the previous account's ids are not this account's
+      reqTag = scope.tag;
+      var send = ok ? odAll : [];
+      ids = ids.concat(send.slice(0, 200)); var batches = []; for (var i = 0; i < ids.length; i += 50) batches.push(ids.slice(i, i + 50)); if (!batches.length) batches.push([]);
+      return Promise.all(batches.map(probeBatch));
+    }).then(function (res) {
       refreshing = null;
+      if (!abOff() && scope.tag !== reqTag) { note('ab-late-answer-dropped', why); return; }
+      /* AB6: (1) when the Worker names the principal of the answer (acct), it must be the account this request was made
+         for; the client tag alone is never treated as proof. (2) an answer that was in flight while this page received
+         a hide (kill event) is stale and is not applied; a fresh refresh follows. */
+      if (!abOff() && res.some(function (r) { return r && r.acct != null && acctTag(r.acct) !== reqTag; })) { note('ab-answer-other-principal', why); return; }
+      if (!abOff() && (st.killSeq || 0) !== killSeq0) { note('ab-answer-stale-after-hide', why); setTimeout(function () { refresh('after-hide'); }, 0); return; }   // AB: an answer for another account never lands
       if (res.some(function (r) { return !r; })) { note('refresh-unanswered', why); return; }   // keep the deny-list; the TTL decides when authority is lost
       var hasVault = res.some(function (r) { return r.hasVault; });
       if (!hasVault) { st.state = 'novault'; setHidden([]); }
       else {
         st.state = 'vault';
         var vis = {}; res.forEach(function (r) { r.visible.forEach(function (x) { vis[x] = 1; }); });
-        setHidden(ids.filter(function (x) { return !vis[x]; }).concat(st.hidden.filter(function (x) { return ids.indexOf(x) < 0; })));
+        setHidden(ids.filter(function (x) { return !vis[x]; }).concat(st.hidden.concat(odAll).filter(function (x) { return ids.indexOf(x) < 0; })));   /* OD: ids beyond the probe cap are kept, never assumed visible */
       }
       st.lastAt = st.answeredAt = Date.now(); note('refresh', why + ':' + st.state + ':' + st.hidden.length);
-      try { nSet.call(LS, AUTH_KEY, JSON.stringify({ state: st.state, hidden: st.hidden, at: st.answeredAt })); } catch (e) {}
+      st.answeredHere = true;
+      try { var rec = { state: st.state, hidden: st.hidden, at: st.answeredAt }; if (scope.tag && !abOff()) { rec.acct = scope.tag; var pr = abPrior(); if (pr) rec.prior = pr; } nSet.call(LS, AUTH_KEY, JSON.stringify(rec)); } catch (e) {}
       flushWaiters();
     });
     return refreshing;
   }
   /* ---- r5.3-scope: applicability (server-authoritative principal) ---- */
+  /* AB (#125-CG CROSS_ACCOUNT_HIDDEN_ID_QUERY): the persisted answer carries a short one-way tag of the account that got it
+     (never the account id). Ids from a persisted answer are sent to the server (OD) only when its tag equals the account
+     confirmed on this page; an answer restored at boot that turns out to belong to another (or an untagged) account is
+     dropped as authority when the account is confirmed (UNKNOWN until this account answers). Deny-only uses (F1 / GK) are
+     unchanged. Kill v292Dvault2ABOff='1'. */
+  /* AB: hidden ids learned under another (or an unknown, 'legacy') account are kept per account tag in 'prior': never
+     sent while a different account is signed in, used only as deny reasons while UNKNOWN (F1 / GK), and sent again
+     (attributed) when that account is the confirmed one, after which its list is merged into the fresh answer. */
+  function abReadPrior(pa) { var o = {}; if (pa && pa.prior && typeof pa.prior === 'object' && !Array.isArray(pa.prior)) Object.keys(pa.prior).slice(-4).forEach(function (t) { var l = pa.prior[t]; if (/^[0-9a-f]{16}$|^legacy$/.test(t) && Array.isArray(l)) o[t] = l.filter(function (x) { return typeof x === 'string' && ID_RE.test(x) && x !== 'default'; }).slice(0, 200); }); return o; }
+  function abPrior() {
+    var prev = null; try { prev = JSON.parse(nGet.call(LS, AUTH_KEY) || 'null'); } catch (e) {}
+    var o = abReadPrior(prev);
+    if (prev && prev.state === 'vault' && Array.isArray(prev.hidden) && prev.acct !== scope.tag) {
+      var t = (typeof prev.acct === 'string' && /^[0-9a-f]{16}$/.test(prev.acct)) ? prev.acct : 'legacy', u = {};
+      prev.hidden.concat(o[t] || []).forEach(function (x) { if (typeof x === 'string' && ID_RE.test(x) && x !== 'default') u[x] = 1; });
+      delete o[t]; o[t] = Object.keys(u).slice(0, 200);   // most recent account last, its newest ids first
+    }
+    delete o[scope.tag];
+    var ks = Object.keys(o).filter(function (t) { return o[t].length; }); if (!ks.length) return null;
+    var r = {}; ks.slice(-4).forEach(function (t) { r[t] = o[t]; }); return r;
+  }
+  function abPriorAll(pa) { var o = abReadPrior(pa), out = []; Object.keys(o).forEach(function (t) { out = out.concat(o[t]); }); return out; }
+  function abOff() { try { return g('v292Dvault2ABOff') === '1'; } catch (e) { return false; } }
+  function acctTag(id) { var h1 = 0x811c9dc5, h2 = 0x01000193; id = String(id); for (var i = 0; i < id.length; i++) { var c = id.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619) >>> 0; h2 = Math.imul(h2 ^ c, 2246822519) >>> 0; } return ('0000000' + h1.toString(16)).slice(-8) + ('0000000' + h2.toString(16)).slice(-8); }
+  /* AB-R1: before off-device ids are sent, the signed-in account is confirmed again with the existing /api/auth/me
+     (only right before a send that carries off-device ids; no new polling). A different account is treated as
+     a switch: authority -> UNKNOWN, the previous account's ids stay in the stored answer (later moved to prior, deny-only).
+     Unconfirmed (network / 401) -> off-device ids are not sent this round. Resolves true only when it is safe to send. */
+  var abLast = { at: 0, ok: false };
+  function abRecheck(need) {
+    if (!need || abOff()) return Promise.resolve(true);
+    /* AB7 (#125-CI): no cache — re-confirmed right before every send that carries off-device ids. */
+    var ac = null; try { ac = new AbortController(); setTimeout(function () { try { ac.abort(); } catch (e) {} }, 8000); } catch (e) {}
+    return nativeFetch('/api/auth/me', { method: 'GET', credentials: 'same-origin', headers: { 'x-chronicle-csrf': '1' }, signal: ac ? ac.signal : undefined })
+      .then(function (r) { return r.ok ? r.json().catch(function () { return null; }) : null; }, function () { return null; })
+      .then(function (j) {
+        if (!j || !j.ok || !j.accountId) { abLast = { at: 0, ok: false }; note('ab-recheck-unconfirmed', ''); return false; }
+        var t = acctTag(j.accountId); scope.acctId = String(j.accountId);
+        if (t !== scope.tag) { scope.tag = t; st.state = 'unknown'; st.answeredAt = 0; st.killed = {}; setHidden([]); note('ab-account-switched', ''); }
+        abLast = { at: Date.now(), ok: true }; return true;
+      }, function () { return false; });
+  }
+  function abConfirm(accountId) {
+    try {
+      if (!accountId) return; scope.tag = acctTag(accountId); scope.acctId = String(accountId); if (abOff()) return;
+      if (st.restored && st.restoredTag === scope.tag && !st.answeredHere && authFresh(st.restored.at)) { st.state = st.restored.state; st.answeredAt = st.restored.at; note('ab-restored-same-account', st.state); }
+      st.restored = null;
+      if (st.restoredTag !== undefined && st.restoredTag !== scope.tag && !st.answeredHere) { st.state = 'unknown'; st.answeredAt = 0; setHidden(st.hidden.filter(function (x) { return st.killed && st.killed[x]; })); note('ab-restored-other-account', 'dropped'); }
+    } catch (e) {}
+  }
   function setScope(v, why) {
     if (scope.s === v || scope.s === 'IN_SCOPE') return;   /* IN_SCOPE is latched: never downgrade */
     if (scope.s === 'SESSION_INVALID' && v === 'OUT_OF_SCOPE') return;   /* r5.3b: an invalid acct session never becomes anon on this page */
@@ -141,26 +216,43 @@
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { st: r.status, j: j }; }); }, function () { return { st: 'network', j: null }; })
       .then(function (x) {
         scope.inflight = false; scope.last = x.st;
-        if (x.st === 200 && x.j && x.j.ok && x.j.accountId) setScope('IN_SCOPE', 'auth-me');
+        if (x.st === 200 && x.j && x.j.ok && x.j.accountId) { if (scope.s !== 'IN_SCOPE') abConfirm(x.j.accountId); setScope('IN_SCOPE', 'auth-me'); }
         else if (x.st === 401 && x.j && x.j.errorCode === 'NO_SESSION') setScope('OUT_OF_SCOPE', 'auth-me-401-no-session');
         else if (x.st === 401) setScope('SESSION_INVALID', 'auth-me-401-' + String(x.j && x.j.errorCode || 'unknown').slice(0, 24));
         else note('scope-pending', String(x.st) + ':' + why);
       });
   }
-  window.addEventListener('chr:account-me', function () { try { var F = window.__v292Dfix893; var m = F && typeof F.serverMe === 'function' ? F.serverMe() : null; if (m && m.accountId) setScope('IN_SCOPE', 'fix893'); } catch (e) {} });
+  window.addEventListener('chr:account-me', function () { try { var F = window.__v292Dfix893; var m = F && typeof F.serverMe === 'function' ? F.serverMe() : null; if (m && m.accountId) { if (scope.s !== 'IN_SCOPE') abConfirm(m.accountId); setScope('IN_SCOPE', 'fix893'); } } catch (e) {} });
   var hiddenRe = [];
   function esc(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
   function setHidden(list) {
     var u = {}; list.forEach(function (x) { if (ID_RE.test(String(x))) u[x] = 1; });
     st.hidden = Object.keys(u);
     hiddenRe = st.hidden.map(function (h) { return { h: h, re: new RegExp('(^|[^A-Za-z0-9])' + esc(h) + '($|[^A-Za-z0-9])') }; });
+    allCache = null;   // GK: the UNKNOWN guard set follows hidden-list changes at once
   }
-  function effState() { if (scope.s === 'OUT_OF_SCOPE') return 'novault'; if (scope.s === 'SESSION_INVALID') return 'unknown'; return (Date.now() - st.answeredAt > AUTH_TTL) ? 'unknown' : st.state; }
+  function effState() { if (scope.s === 'OUT_OF_SCOPE') return 'novault'; if (scope.s === 'SESSION_INVALID') return 'unknown'; return authFresh(st.answeredAt) ? st.state : 'unknown'; }
+  /* O-1 (#125-CE): an answer is authority only while 0 - AUTH_SKEW <= age <= AUTH_TTL. A stamp more than AUTH_SKEW in the
+     future (clock set back, or a stored stamp ahead of this clock) or a non-numeric stamp is not authority (UNKNOWN);
+     AUTH_SKEW = the 5 s already used for the focus-refresh throttle. Kill v292Dvault2O1Off='1'. */
+  function authFresh(at) { var age = Date.now() - at; try { if (g('v292Dvault2O1Off') === '1') return age <= AUTH_TTL; } catch (e) {} return age >= -AUTH_SKEW && age <= AUTH_TTL; }
   /* UNKNOWN: every story on this device is treated as possibly hidden (no new copies of any of them) */
   var allCache = null, allAt = 0;
+  /* GK (#125-CF OFF_DEVICE_HIDDEN_GENERIC_WRITE): while UNKNOWN, stories this device already knows as hidden (kept in memory
+     across the TTL, or in the last persisted vault answer) are guarded like local stories even when no slot/meta of theirs
+     is on the device, so a NEW story-bearing key for them is refused (old-value rule unchanged). Used only as a reason to
+     deny; an answered refresh that lists the story as visible removes it. Kill v292Dvault2GKOff='1'. */
+  function gkKnownHidden() {
+    try { if (g('v292Dvault2GKOff') === '1') return []; } catch (e) {}
+    var u = {};
+    (st.hidden || []).forEach(function (x) { if (typeof x === 'string') u[x] = 1; });
+    try { var pa = JSON.parse(nGet.call(LS, AUTH_KEY) || 'null'); if (pa && pa.state === 'vault' && Array.isArray(pa.hidden)) pa.hidden.forEach(function (x) { if (typeof x === 'string') u[x] = 1; }); abPriorAll(pa).forEach(function (x) { u[x] = 1; }); } catch (e) {}
+    return Object.keys(u).filter(function (x) { return ID_RE.test(x) && x !== 'default'; });
+  }
   function allLocalRe() {
     if (allCache && Date.now() - allAt < 2000) return allCache;
-    allCache = localIds().map(function (h) { return { h: h, re: new RegExp('(^|[^A-Za-z0-9])' + esc(h) + '($|[^A-Za-z0-9])') }; }); allAt = Date.now();
+    var ids = localIds(); try { gkKnownHidden().forEach(function (h) { if (ids.indexOf(h) < 0) ids.push(h); }); } catch (e) {}
+    allCache = ids.map(function (h) { return { h: h, re: new RegExp('(^|[^A-Za-z0-9])' + esc(h) + '($|[^A-Za-z0-9])') }; }); allAt = Date.now();
     return allCache;
   }
   function guardSet() { return effState() === 'unknown' ? allLocalRe() : hiddenRe; }
@@ -195,6 +287,39 @@
   /* r2 (_06 Q27/Q29): old-value-aware. A write may carry hidden story X only if the OLD value under the same key
      already carried X (same key naming X with an existing value, or old value containing X's body / id).
      New keys and overwrites that bring X into a key for the first time are dropped. Removals always pass. */
+  /* F1 (GPT VAULT_V2_LANEB _32 F1_KNOWN_HIDDEN_AFTER_TTL / #125-BZ COPYGATE_F1 OFFLINE_GO, kill v292Dvault2F1Off='1'):
+     the two UNKNOWN-only exceptions below (fix889 markers, fix697 journal) must not open for a story this device
+     already knows to be hidden. "Known hidden" = in st.hidden (kept across the TTL downgrade; only an answered refresh
+     that lists the story as visible, or a novault answer, removes it) or in the last persisted answer (AUTH_KEY,
+     state 'vault') even if that answer is older than the TTL. An unreadable persisted answer counts as known-hidden
+     (fail-closed). UNKNOWN is never treated as visible; nothing else in CopyGate changes.
+     R-1 (#125-CC): three outcomes for those exact keys while UNKNOWN: DENY_KNOWN_HIDDEN (f1Final true -> setItem
+     throws SecurityError itself, so the later generic check, which only knows stories with a local slot/meta, can
+     not let it through), ALLOW_EXCEPTION (the unchanged r5.3c/r5.3d checks), NOT_APPLICABLE (generic CopyGate,
+     including an overwrite of an already existing key, which the r2 old-value rule keeps deciding). */
+  function f1KnownHidden(cur) {
+    try { if (g('v292Dvault2F1Off') === '1') return null; } catch (e) {}
+    if (st.hidden && st.hidden.indexOf(cur) >= 0) return 'session';
+    var raw = null; try { raw = nGet.call(LS, AUTH_KEY); } catch (e) { return 'unreadable'; }
+    if (raw == null) return null;
+    try { var pa = JSON.parse(raw); if (!pa || typeof pa !== 'object' || Array.isArray(pa) || (pa.state !== 'vault' && pa.state !== 'novault') || !Array.isArray(pa.hidden)) return 'unreadable';
+      if ((pa.state === 'vault' && pa.hidden.indexOf(cur) >= 0) || abPriorAll(pa).indexOf(cur) >= 0) return 'persisted'; return null; }
+    catch (e) { return 'unreadable'; }
+  }
+  function f1Deny(cur, which) { var w = f1KnownHidden(cur); if (!w) return false; st.f1Denied = (st.f1Denied || 0) + 1; note('f1-deny-' + which, cur + ':' + w); return true; }
+  function f1Final(store, k) {
+    try {
+      if (store !== LS && store !== SS) return false;
+      var cur = curStory(); if (!cur || cur === 'default' || !ID_RE.test(cur)) return false;
+      k = String(k);
+      var which = (store === LS && k === 'v292Dfix402_f697p_' + cur) ? 'f697p' : (store === SS && (k === 'v889rel:' + cur || k === 'v889relN:' + cur)) ? 'f889' : null;
+      if (!which || effState() !== 'unknown') return false;
+      var old = null; try { old = nGet.call(store, k); } catch (e) {}
+      if (old !== null) return f1KnownHidden(cur) ? 'generic' : false;   // existing key of a known-hidden story: no exception, r2 old-value rule decides
+      return f1Deny(cur, which) ? 'deny' : false;
+    } catch (e) {}
+    return false;
+  }
   /* r5.3c: fix889 boot reload markers (exact key, exact serialization, sessionStorage, current document story, UNKNOWN only) */
   var F889_TS = /^[0-9]{10,16}$/, F889_N = /^\{"n":[0-9]{1,3},"at":[0-9]{10,16}\}$/;
   function fix889Marker(store, k, v, set) {
@@ -204,6 +329,21 @@
       k = String(k); v = String(v);
       if (k === 'v889rel:' + cur) return F889_TS.test(v);
       if (k === 'v889relN:' + cur) return F889_N.test(v);
+    } catch (e) {}
+    return false;
+  }
+  /* AB8 (2026-10-11, Session A): fix527 mirror of the CURRENT document story (exact key, exact serialization,
+     localStorage, UNKNOWN only, not a known-hidden story). AB6 lengthened the boot UNKNOWN window (PENDING), so the
+     generic rule refused fix527's mirror write; features.js fix205 then booted the STALE pointer's story into this
+     document (wrong story shown / sent / saved under this document's key). The pointer copies no story content.
+     kill: localStorage v292Dvault2AB8Off='1'. */
+  function activePointer(store, k, v, set) {
+    try {
+      if (store !== LS || set === hiddenRe || String(k) !== 'chr6_active_slot') return false;
+      if (g('v292Dvault2AB8Off') === '1') return false;
+      var cur = curStory(); if (!cur || cur === 'default' || !ID_RE.test(cur)) return false;
+      if (String(v) !== JSON.stringify(cur)) return false;
+      return !f1KnownHidden(cur);
     } catch (e) {}
     return false;
   }
@@ -236,8 +376,11 @@
   }
   SP.setItem = function (k, v) {
     var set = (this === LS || this === SS) ? guardSet() : null;
-    if (set && set.length && k !== AUTH_KEY && fix697Journal(this, k, v, set)) { st.f697pAllowed = (st.f697pAllowed || 0) + 1; note('unknown-f697p-journal', String(k).slice(0, 60)); return nSet.apply(this, arguments); }
-    if (set && set.length && k !== AUTH_KEY && fix889Marker(this, k, v, set)) { st.f889Allowed = (st.f889Allowed || 0) + 1; note('unknown-f889-marker', String(k).slice(0, 60)); return nSet.apply(this, arguments); }
+    var f1 = (set && k !== AUTH_KEY) ? f1Final(this, k) : false;
+    if (f1 === 'deny') { st.denied.ls++; st.unknownDenied++; note('unknown-f1-deny', String(k).slice(0, 60)); throw new DOMException('この控えはいま保存できません', 'SecurityError'); }
+    if (f1 !== 'generic' && set && set.length && k !== AUTH_KEY && fix697Journal(this, k, v, set)) { st.f697pAllowed = (st.f697pAllowed || 0) + 1; note('unknown-f697p-journal', String(k).slice(0, 60)); return nSet.apply(this, arguments); }
+    if (f1 !== 'generic' && set && set.length && k !== AUTH_KEY && activePointer(this, k, v, set)) { st.ab8Allowed = (st.ab8Allowed || 0) + 1; note('unknown-ab8-pointer', String(v).slice(0, 40)); return nSet.apply(this, arguments); }
+    if (f1 !== 'generic' && set && set.length && k !== AUTH_KEY && fix889Marker(this, k, v, set)) { st.f889Allowed = (st.f889Allowed || 0) + 1; note('unknown-f889-marker', String(k).slice(0, 60)); return nSet.apply(this, arguments); }
     if (set && set.length && k !== AUTH_KEY) {
       var now = carried(k, v, set);
       if (now.length) {
@@ -334,13 +477,13 @@
 
   /* ---- refresh schedule ---- */
   window.addEventListener('chr:vault2-blocked', function (ev) {
-    try { var d = ev && ev.detail; if (d && d.storyId) addHidden(d.storyId); } catch (e) {}
+    try { var d = ev && ev.detail; if (d && d.storyId) { addHidden(d.storyId); st.killed = st.killed || {}; st.killed[String(d.storyId)] = 1; st.killSeq = (st.killSeq || 0) + 1; } } catch (e) {}
     refresh('kill');
   });
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') refresh('visible'); });
   window.addEventListener('focus', function () { if (Date.now() - st.lastAt > 5000) refresh('focus'); });
   /* last answer from this device (any tab) is reused only while it is inside the TTL */
-  try { var pa = JSON.parse(g(AUTH_KEY) || 'null'); if (pa && (pa.state === 'vault' || pa.state === 'novault') && Date.now() - (+pa.at || 0) <= AUTH_TTL) { st.state = pa.state; st.answeredAt = +pa.at; setHidden(Array.isArray(pa.hidden) ? pa.hidden : []); note('auth-restored', pa.state); } } catch (e) {}
+  try { var pa = JSON.parse(g(AUTH_KEY) || 'null'); if (pa && (pa.state === 'vault' || pa.state === 'novault') && authFresh(+pa.at || 0)) { st.restoredTag = typeof pa.acct === 'string' ? pa.acct : null; if (abOff()) { st.state = pa.state; st.answeredAt = +pa.at; } else st.restored = { state: pa.state, at: +pa.at }; setHidden(Array.isArray(pa.hidden) ? pa.hidden : []); note('auth-restored', pa.state); } } catch (e) {}
   (function tick() {
     refresh('tick');
     setTimeout(tick, TICK);
@@ -387,7 +530,7 @@
   }
 
   window.__v292Dvault2CopyGate = {
-    status: function () { return { mode: V2_CLIENT_MODE, f889Allowed: st.f889Allowed || 0, f697pAllowed: st.f697pAllowed || 0, scope: scope.s, scopeWhy: scope.why, scopeChecks: scope.checks, scopeLast: scope.last, state: st.state, effective: effState(), answeredAt: st.answeredAt, unknownDenied: st.unknownDenied, hidden: st.hidden.slice(), lastAt: st.lastAt, refreshes: st.refreshes, denied: JSON.parse(JSON.stringify(st.denied)), allowedExisting: st.allowedExisting, log: st.log.slice(-40) }; },
+    status: function () { return { mode: V2_CLIENT_MODE, f1Denied: st.f1Denied || 0, f889Allowed: st.f889Allowed || 0, f697pAllowed: st.f697pAllowed || 0, scope: scope.s, scopeWhy: scope.why, scopeChecks: scope.checks, scopeLast: scope.last, state: st.state, effective: effState(), answeredAt: st.answeredAt, unknownDenied: st.unknownDenied, hidden: st.hidden.slice(), lastAt: st.lastAt, refreshes: st.refreshes, denied: JSON.parse(JSON.stringify(st.denied)), allowedExisting: st.allowedExisting, log: st.log.slice(-40) }; },
     refresh: refresh,
     whenAuthority: whenAuthority,
     pendingAuthorityWaits: function () { return waiters.length; }

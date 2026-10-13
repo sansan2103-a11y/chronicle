@@ -196,7 +196,13 @@
     if (f896Off()) { f896Last = { f896: 'OFF' }; return false; }
     if (f781Off()) return f896Skip('F781_OFF');
     if (!STORY_ID) return f896Skip('NO_STORY');
-    if (state.schema !== 2) return f896Skip('SCHEMA_NOT_V2');                       /* fingerprint domain = contentHashV2 のみ */
+    /* ■S1A（2026-10-11, GPT #125-DA SCHEMA1_FIX896_EXTENSION, kill: v292DfixS1AOff='1' → 従来の schema 2 限定）
+       schema 1 の物語にも同じ reconcile を許す。根拠: schema 1 では fix705 の localHash（fix697.contentHash = canonicalString の SHA-256）、
+       fix697 の schema 1 commit が送る hash、Worker の serverHash（parity 検査）、fix781 の fingerprint がすべて同じ V1 の領域。
+       server row の schema は 1→2 にしか進まないので、server が今 schema 1 なら、この物語の marker の fingerprint は V1 だけ。
+       条件は schema 2 と同じ（この document での新鮮な SAME_HASH・serverRev あり・rev 単調・journal / inFlight なし・
+       DIVERGED / BOOTSTRAP_HOLD は SKIP）。動かすのは marker の lastConfirmed だけ（story data の書込 0、送信の許可ではない）。 */
+    if (state.schema !== 2 && !(state.schema === 1 && lsg('v292DfixS1AOff') !== '1')) return f896Skip('SCHEMA_NOT_V2');
     var lh = state.localHash ? String(state.localHash) : null;
     var sh = state.serverHash ? String(state.serverHash) : null;
     var srev = (typeof state.serverRev === 'number') ? state.serverRev : null;
@@ -228,7 +234,23 @@
     }
     if (String(m.storyId || '') !== String(STORY_ID)) return f896Skip('MARKER_STORY_MISMATCH');
     if (m.state === 'DIVERGED' || m.state === 'BOOTSTRAP_HOLD') return f896Skip('TERMINAL_' + m.state);
-    if (m.inFlightSave) return f896Skip('IN_FLIGHT');
+    if (m.inFlightSave) {
+      /* ■S1A（schema 1 のみ）: 送信が ACK を受け取れないまま残った inFlightSave の内容が、この document で実測した
+         SAME_HASH の server 内容そのもの（fingerprint === serverHash、V1 領域）で、server rev が lastConfirmed より進んでいる
+         なら、それは fix781 resolve781 の (e) LOST ACK と同じ「送った内容が server に載った」事実。既存の G.confirm に渡し、
+         CLEAN にするかは confirm 自身が inFlightSave と generation で決める（二重実装しない）。schema 2 は既存 journal に任せる。 */
+      var lcRevI = (m.lastConfirmed && typeof m.lastConfirmed.serverRev === 'number') ? m.lastConfirmed.serverRev : null;
+      if (state.schema === 1 && lsg('v292DfixS1AOff') !== '1' && m.state !== 'DIVERGED' && m.state !== 'BOOTSTRAP_HOLD'
+          && m.inFlightSave.fingerprint != null && String(m.inFlightSave.fingerprint) === sh && (lcRevI == null || srev > lcRevI)){
+        var okI = false; try { okI = !!G.confirm(STORY_ID, srev, sh); } catch(eI){ okI = false; }
+        var afI = f781Marker();
+        var rowI = { f896: okI ? 'S1A_LOST_ACK_CONFIRMED' : 'S1A_LOST_ACK_WRITE_FAIL', canonicalDataWrites: 0, markerReconcile: okI ? 1 : 0,
+                     fromRev: lcRevI, toRev: srev, stateBefore: m.state, stateAfter: afI ? afI.state : null };
+        f896Last = rowI; note(rowI);
+        return okI;
+      }
+      return f896Skip('IN_FLIGHT');
+    }
     try {
       var jr = lsg(F896_JPRE + STORY_ID);
       if (jr != null){ var jj = null; try { jj = JSON.parse(jr); } catch(e){ jj = null; }
