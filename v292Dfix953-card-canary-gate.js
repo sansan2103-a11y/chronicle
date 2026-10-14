@@ -21,15 +21,32 @@
 (function(){
   'use strict';
   if (window.__v292Dfix953) return;
-  var VERSION = 'fix953-r2-20261014';
+  var VERSION = 'fix953-r3-20261015';
   var TAG = '[v292Dfix953:card-canary]';
   var FLAG = 'v292Dfix953On';
+  // ★r3（GPT #126-R: カード腕 A の一般適用 条件付き GO・Owner 方針 2026-10-14 23:50）: 全体既定 ON。
+  //   GLOBAL_ON = true … カードを 1 枚以上持つ物語の画面なら、flag・allowlist なしで true（腕 A）。
+  //                      カード 0 枚の物語・ホーム・物語 ID なしは false（＝従来と同じ）。
+  //   GLOBAL_ON = false … r2 と同じ canary 動作（flag＋ALLOW）に戻る＝配信側の全体スイッチ（この js 1 本の差し替え）。
+  //   端末ごとの停止: localStorage v292Dfix953Off === '1'（常に優先して false）。
+  //   r3 では状態を読むだけで S.scene.cards の件数を見る（書かない）。
+  var GLOBAL_ON = true;
+  var KILL = 'v292Dfix953Off';
   var ALLOW = [/*CANARY_ALLOW_BEGIN*/ 'smv82tjjai8', 'smv85pfjasb' /*CANARY_ALLOW_END*/];
   var DENY = ['smv6r10s7u9'];
   var ID_RE = /^[A-Za-z0-9_-]{1,80}$/;
   var st = { calls: 0, trueCalls: 0, errors: 0 };
 
   function flagOn(){ try { return localStorage.getItem(FLAG) === '1'; } catch(e){ return false; } }
+  function killed(){ try { return localStorage.getItem(KILL) === '1'; } catch(e){ return true; } }
+  function cardCount(){
+    try {
+      var S = (typeof window.__chronicleGetState === 'function') ? window.__chronicleGetState('fix953') : null;
+      if (!S) { try { S = (0, eval)('typeof S!=="undefined"?S:null'); } catch(e2){ S = null; } }
+      var c = S && S.scene && S.scene.cards;
+      return Array.isArray(c) ? c.filter(function(x){ return x && (String(x.entry || '').trim() || String(x.name || '').trim()); }).length : 0;
+    } catch(e){ return 0; }
+  }
   function isHome(){ try { return /\/home(\.html)?$/i.test(location.pathname); } catch(e){ return true; } }
   function docStoryId(){
     try {
@@ -48,9 +65,16 @@
   function active(){
     st.calls++;
     try {
-      if (!ALLOW.length) return false;            // allowlist が空の配信物では、常に本番どおり
-      if (!flagOn()) return false;
+      if (killed()) return false;                 // 端末の停止（常に優先）
       if (isHome()) return false;
+      if (GLOBAL_ON) {
+        if (!docStoryId()) return false;          // 物語 ID の無い文書は従来どおり
+        if (cardCount() < 1) return false;        // カード 0 枚は従来どおり（何もしない）
+        st.trueCalls++;
+        return true;
+      }
+      if (!ALLOW.length) return false;            // 以下 r2 と同じ（GLOBAL_ON=false の時）
+      if (!flagOn()) return false;
       if (!allowed(docStoryId())) return false;
       st.trueCalls++;
       return true;
@@ -59,9 +83,10 @@
   function status(){
     var id = docStoryId();
     return { version: VERSION, flagOn: flagOn(), docStoryId: id, storyAllowed: allowed(id), denied: !!id && DENY.indexOf(id) >= 0,
-             allowCount: ALLOW.length, home: isHome(), active: (function(){ try { return !!ALLOW.length && flagOn() && !isHome() && allowed(id); } catch(e){ return false; } })(),
+             allowCount: ALLOW.length, home: isHome(), globalOn: GLOBAL_ON, killed: killed(), cards: cardCount(),
+             active: (function(){ try { if (killed() || isHome()) return false; if (GLOBAL_ON) return !!id && cardCount() >= 1; return !!ALLOW.length && flagOn() && allowed(id); } catch(e){ return false; } })(),
              calls: st.calls, trueCalls: st.trueCalls, errors: st.errors };
   }
   window.__v292Dfix953 = { __armed: true, version: VERSION, active: active, status: status };
-  try { console.log(TAG, VERSION, 'allow=' + ALLOW.length); } catch(e){}
+  try { console.log(TAG, VERSION, 'global=' + GLOBAL_ON, 'allow=' + ALLOW.length); } catch(e){}
 })();

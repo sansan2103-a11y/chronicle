@@ -22,18 +22,21 @@
 //   ・本文・引用の文字・数・順序は変えない。動かすのは話者の決め方だけ。
 //   ・タグ付き <say who> は対象外（モデルのタグ誤りはここでは直さない＝別原因として記録）。
 //   ・既存セーブは書き換えない（新しいターンの組み立て時だけ）。
-//   ・既定 OFF（r3）。ON: localStorage v292Dfix957On='1'。OFF: v292Dfix957Off='1'（On より優先）
+//   ・r4: 全ユーザー既定 ON（DEFAULT_ON）。端末の停止: v292Dfix957Off='1'。全体の停止: DEFAULT_ON=false の js を上げ直す
 // 観測: window.__v292Dfix957.stats() / last()
 // =====================================================================
 (function(){
   'use strict';
   var G = (typeof window !== 'undefined') ? window : globalThis;
   if (G.__v292Dfix957 && G.__v292Dfix957.__installed) return;
-  var VERSION = 'fix957-r3-20261014';
+  var VERSION = 'fix957-r4-20261015';
   var st = { calls: 0, strong: 0, abstain: 0, none: 0, errors: 0, fallback: 0, resolved: 0 }, lastRec = null;
   var pend = {};   // 保留にした引用 → 元の窓推測（第 2 層で決まらなかった時に戻す＝引用数を減らさない）
-  // r3: 初回配信は既定 OFF（GPT #126-P）。この端末で localStorage v292Dfix957On='1' の時だけ動く。v292Dfix957Off='1' は常に優先して止める。
-  function off(){ try { var ls = G.localStorage; if (!ls) return true; if (ls.getItem('v292Dfix957Off') === '1') return true; return ls.getItem('v292Dfix957On') !== '1'; } catch(e){ return true; } }
+  // r4（GPT 裁定変更・FIX957_DEFAULT_ON）: 全ユーザー既定 ON。
+  //   配信側の全体スイッチ = DEFAULT_ON。false にしたこの js を 1 本上げ直せば、全端末で次の読み込みから止まる（Cache-Control: max-age=0, must-revalidate を確認済み）。
+  //   端末ごとの停止 = localStorage v292Dfix957Off='1'（常に優先）。DEFAULT_ON=false の時だけ v292Dfix957On='1' の端末で動く。
+  var DEFAULT_ON = true;
+  function off(){ try { var ls = G.localStorage; if (!ls) return true; if (ls.getItem('v292Dfix957Off') === '1') return true; if (DEFAULT_ON) return false; return ls.getItem('v292Dfix957On') !== '1'; } catch(e){ return true; } }
 
   // フルネーム → 照合に使う呼び名（重複する呼び名は使わない）
   function aliasMap(names){
