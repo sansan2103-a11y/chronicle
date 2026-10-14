@@ -66,7 +66,7 @@
   //   GM の扱い: localStorage.v292Dfix951Gm = 'rule'(既定) | 'withhold'(送らない)
   //   トリガー源: localStorage.v292Dfix951Src = 'scene'(既定: 入力・T0開始条件・直近・現在地) | 'legacy'(直近6ターンのみ)
   // =====================================================================
-  var VERSION951='fix951-r3-20261014';
+  var VERSION951='fix951-r4c-20261014';
   var ARMS={
     A:{ alwaysTotal:2400, gmTotal:1200, gmTrigReserve:400, trigMax:4, trigTotal:1200, minTrig:1 },
     B:{ alwaysTotal:3800, gmTotal:2600, gmTrigReserve:600, trigMax:4, trigTotal:1200, minTrig:1 }
@@ -176,10 +176,23 @@
   //   pool: { kind, cap, maxCap(永久判定用), kmax(件数上限・トリガーだけ), needFirst(概要が入らない札の詳細を入れない) }
   function pickLevels(units, pool, skipped, short, levelUse){
     var groups={}, keys=[];
-    units.forEach(function(u){ var f=(u.first||!pool.needFirst)?1:0, k=u.level+'|'+u.pr+'|'+f; if(!groups[k]){ groups[k]=[]; keys.push({ k:k, level:u.level, pr:u.pr, f:f }); } groups[k].push(u); });
+    var an=pool.anchor||null;   // ★r4b（fix954 場面の要約）: pool.anchor が無い時（r3・fix954 停止）は r3 と同じ動き
+    units.forEach(function(u){ if(an && u===an.unit) return; var f=(u.first||!pool.needFirst)?1:0, k=u.level+'|'+u.pr+'|'+f; if(!groups[k]){ groups[k]=[]; keys.push({ k:k, level:u.level, pr:u.pr, f:f }); } groups[k].push(u); });
     keys.sort(function(a,z){ return (a.level-z.level)||(z.pr-a.pr)||(z.f-a.f); });
-    var used=0, n=0, firstTaken={}, firstTried={};
+    var used=0, n=0, firstTaken={}, firstTried={}, reserve=0, anStage=0;
+    // 場面の要約: 段1 が使った後に ANCHOR_MIN 字を取り置き（段2・段3 はその残りで選ぶ）→ 段4 の最初に、全文が入れば全文、入らなければ文の区切りで抜粋（ANCHOR_MAX 字まで）
+    function anReserve(){ if(!an||anStage!==0) return; anStage=1; reserve=Math.min(an.min, Math.max(0,pool.cap-used)); an.res.reserve=reserve; an.res.roomAfterL1=pool.cap-used; }
+    function anTake(){ if(!an||anStage===2) return; if(anStage===0) anReserve(); anStage=2; reserve=0;
+      var u=an.unit, room=pool.cap-used; an.res.room=room;
+      if(u.cost<=room){ u.taken=true; u.anchor=true; used+=u.cost; n++; firstTaken[u.idx]=true; levelUse[u.level]=(levelUse[u.level]||0)+u.cost; an.res.mode='full'; an.res.len=u.cost; return; }
+      var ex=an.excerpt(Math.min(an.max, room));
+      if(ex){ ex.taken=true; ex.anchor=true; ex.excerpt=true; units.push(ex); used+=ex.cost; n++; firstTaken[u.idx]=true; levelUse[u.level]=(levelUse[u.level]||0)+ex.cost; an.res.mode='excerpt'; an.res.len=ex.cost; an.res.full=u.cost;
+        skipped.push({ name:u.name, kind:pool.kind, sec:u.sec, level:u.level, head:u.head, why:'場面の要約として抜粋（'+ex.cost+'字）で届けた（全文 '+u.cost+'字は段1・段3 の後の残り '+room+'字に入らない）', len:u.cost, important:true, anchorReplaced:true }); return; }
+      an.res.mode='none';
+      short.push({ name:u.name, kind:pool.kind, sec:u.sec, level:u.level, len:u.cost, cap:room, permanent:false, important:true, anchor:true, note:'場面の要約: 段1・段3 の後の残り '+room+'字に最初の 1 文も入らない' });
+      skipped.push({ name:u.name, kind:pool.kind, sec:u.sec, level:u.level, head:u.head, why:'場面の要約: 段1・段3 の後の残り'+room+'字に入らない', len:u.cost, important:true, anchorShort:true }); }
     keys.forEach(function(g){ var us=groups[g.k];
+      if(an){ if(g.level>=2) anReserve(); if(g.level>=4) anTake(); }
       us=us.filter(function(u){
         if(u.cost>pool.maxCap){ var permanent=true;
           short.push({ name:u.name, kind:pool.kind, sec:u.sec, level:u.level, len:u.cost, cap:pool.maxCap, permanent:permanent, important:u.level<=4 });
@@ -188,23 +201,25 @@
         if(pool.needFirst && !g.f && u.level>1 && !firstTaken[u.idx]){
           skipped.push({ name:u.name, kind:pool.kind, sec:u.sec, level:u.level, head:u.gm?null:u.head, why:'同じ札の概要の節が'+pool.kind+'の枠に入らなかった（段'+u.level+'）', len:u.cost, important:true }); return false; }
         return true; });
-      var room=pool.cap-used, kroom=(pool.kmax==null)?null:(pool.kmax-n);
+      var room=pool.cap-used-reserve, kroom=(pool.kmax==null)?null:(pool.kmax-n);
       var take=bestFit(us, room, kroom);
       us.forEach(function(u,i){ if(take[i]){ u.taken=true; used+=u.cost; n++; if(u.first) firstTaken[u.idx]=true; levelUse[u.level]=(levelUse[u.level]||0)+u.cost; }
         else { var why;
           if(kroom!=null && kroom<=0) why='件数上限('+pool.kmax+'枚)（段'+u.level+'・'+LV_NAME[u.level]+'）';
-          else if(u.cost>room) why=pool.kind+'の枠('+pool.cap+'字)に入らない（段'+u.level+'・'+LV_NAME[u.level]+(u.first?'・概要':'・詳細')+'の'+(pool.unit||'節')+'。上の段・小段で'+(pool.cap-room)+'字使用済み）';
+          else if(u.cost>room) why=pool.kind+'の枠('+pool.cap+'字)に入らない（段'+u.level+'・'+LV_NAME[u.level]+(u.first?'・概要':'・詳細')+'の'+(pool.unit||'節')+'。上の段・小段で'+(pool.cap-room)+'字使用済み'+(reserve?'（うち場面の要約の取り置き '+reserve+'字）':'')+'）';
           else why=pool.kind+'の枠('+pool.cap+'字)の残り'+room+'字で、同じ段の組み合わせから外れた（段'+u.level+'・'+LV_NAME[u.level]+'）';
           skipped.push({ name:u.name, kind:pool.kind, sec:u.sec, level:u.level, head:u.gm?null:u.head, why:why, len:u.cost, important:true, score:u.score }); } }); });
+    if(an) anTake();
     return { used:used, n:n };
   }
   function headOf(text){ var m=HEAD_RE.exec(text); return m ? safe(m[0]).slice(0,40) : null; }
   var lastSel=null;
-  function select(input){
+  function select(input, opt){
     var b=budget(), cards=getCards(), names=castNames(), cast=castList(), src=sources(input);
     var gmMode=(lsGet('v292Dfix951Gm')==='withhold')?'withhold':'rule';
-    var pres=presence(input, cards, cast), present=pres.present;
-    var aU=[], gA=[], tU=[], gT=[], skipped=[], short=[], trigCards=[];
+    var pres=(opt&&opt.pres)?opt.pres:presence(input, cards, cast), present=pres.present;   // r4: fix954 の登場判定（N2）と同じものを使う
+    var delivered=(opt&&opt.delivered)||null;   // r4: user の cast.npcs で実際に届く人物像（名前 → 5 欄の本文）
+    var aU=[], gA=[], tU=[], gT=[], skipped=[], short=[], trigCards=[], dedupLog=[];
     // 場面の語（段4 の判定）: 現在地・登場中の人物名・今回当たったトリガー語
     var sceneWords=[]; try{ var s0=getS(); if(s0&&s0.scene&&s0.scene.loc && String(s0.scene.loc).trim().length>=2) sceneWords.push(String(s0.scene.loc).trim()); }catch(e){}
     Object.keys(present).forEach(function(nm){ sceneWords.push(nm); });
@@ -222,6 +237,20 @@
       if(gsum && gmS.length) gmS=[{ idx:gmS[0].idx, gm:true, headed:false, text:gsum, summary:true }];
       var person=personOf(c, cast), who=baseName(name);
       var isPresent = person ? !!present[person.name] : !!pres.who[who];
+      // ★r4b（fix954 重複除去・GPT #125-GY）: 人物の札の公開の節から、登録の 5 欄（desc・personality・coreDesire・coreFear・wound）と
+      //   「完全に同じ文・項目」だけを除く（札にしか無い情報〔しないこと・秘密・口調・内面 など〕は残す）。節を丸ごと外すのは、全文が完全一致の時だけ。
+      //   登場中 → user の cast.npcs で届く分を除く。未登場 → 人物像（登録の欄と同じ文）は送らない。ただし今の出来事に関係する未登場の人物
+      //   （名前が今回の入力・開始時の状況・直近 2 ターンに出た／札のトリガー語が当たった。最大 REL_MAX 人）は r3 どおり段5 で残す（登場扱いにはしない）。
+      var dv=(person && delivered) ? delivered[person.name] : null;
+      var relAbs=!!(person && !isPresent && opt && opt.relevant && opt.relevant[person.name]);
+      var pref=dv ? dv : ((person && opt && opt.dropAbsent && !isPresent && !relAbs && opt.profile) ? opt.profile[person.name] : null);
+      if(person && pref){ var nx=[]; pubS.forEach(function(sx){ var dd=exactDedup(sx.text, pref);
+          if(!dd.removed){ nx.push(sx); return; }
+          var lv0=isPresent?3:5, why0=(dv?'user の cast.npcs で届く文・項目（完全一致）を除いた':'未登場の人物の人物像（登録の欄と完全に同じ文）は送らない（登場したら user の cast.npcs で渡す）');
+          dedupLog.push({ name:name, sec:sx.idx, level:lv0, before:sx.text.length, after:dd.text.length, removedSents:dd.removed, removedChars:dd.removedChars, keptSents:dd.kept, present:isPresent });
+          if(!dd.text){ skipped.push({ name:name, kind:always?'常時':'トリガー', sec:sx.idx, level:lv0, head:headOf(sx.text), why:why0+'（節の全文が一致）', len:('■ '+safe(name)+'（常時）：'+safe(sx.text)).length+1, important:false, dedup:true }); return; }
+          nx.push({ idx:sx.idx, gm:false, headed:sx.headed, text:dd.text, dedupFrom:sx.text.length }); });
+        pubS=nx; }
       trigCards.push({ c:c, name:name, idx:idx, pr:pr, always:always, score:score, why:why, word:hitWord, pub:pubS, gm:gmS, person:person, present:isPresent });
     });
     hitWords.forEach(function(w){ if(sceneWords.indexOf(w)<0) sceneWords.push(w); });
@@ -232,7 +261,7 @@
         tc.pub.forEach(function(s,k){ var ev=ruleEvidence(name, s, true), lv;
           if(ev.rule) lv=1; else if(tc.person) lv=tc.present?3:5; else lv=(k===0||hasScene(s.text))?4:5;
           var line='■ '+safe(name)+'（常時）：'+safe(s.text);
-          aU.push({ name:name, idx:idx, sec:s.idx, pr:pr, level:lv, ev:ev.ev, first:k===0, gm:false, head:headOf(s.text), line:line, cost:line.length+1 }); });
+          aU.push({ name:name, idx:idx, sec:s.idx, pr:pr, level:lv, ev:ev.ev, first:k===0, gm:false, head:headOf(s.text), line:line, cost:line.length+1, text:s.text, dedupFrom:s.dedupFrom||null }); });
         tc.gm.forEach(function(s,k){ var ev=ruleEvidence(name, s, true), lv;
           if(ev.rule) lv=1; else if(tc.person) lv=tc.present?3:5; else lv=(k===0||hasScene(s.text))?4:5;
           var line='■ GM専用：'+safe(name)+'：'+safe(s.text);
@@ -251,7 +280,27 @@
     var byScore=function(a,z){ return (z.score-a.score)||(a.idx-z.idx); }; tU.sort(byScore); gT.sort(byScore);
     var lvA={}, lvT={}, lvGA={}, lvGT={};
     // ---- 常時（公開の節） ----
-    var rA=pickLevels(aU, { kind:'常時', cap:b.alwaysTotal, maxCap:b.alwaysTotal, needFirst:true }, skipped, short, lvA);
+    // ★r4b（fix954 場面の要約・GPT #125-GY）: 人物の情報を優先しても、公開の世界観・場面の概要が押し出されないよう、常時の枠の中に
+    //   ANCHOR_MIN〜ANCHOR_MAX 字の「場面の要約」を取り置く（枠の上限は上げない）。元は人物以外の常時の札の最初の公開の節（段4）。GM の節は使わない。
+    var anchorRes=null, anchorOpt=null;
+    if(opt && opt.anchor){
+      var cands=aU.filter(function(u){ return u.level===4 && u.first && !u.gm; });
+      cands.forEach(function(u){ u.sceneHit=hasScene(u.text)?1:0; });
+      cands.sort(function(a,z){ return (z.sceneHit-a.sceneHit)||(z.pr-a.pr)||(a.idx-z.idx)||(a.sec-z.sec); });
+      anchorRes={ mode:'none', name:null, sec:null, reserve:0, min:ANCHOR_MIN, max:ANCHOR_MAX, cands:cands.length };
+      if(cands.length){ var au=cands[0]; anchorRes.name=au.name; anchorRes.sec=au.sec;
+        anchorOpt={ unit:au, min:ANCHOR_MIN, max:ANCHOR_MAX, res:anchorRes, excerpt:function(cap){ return anchorExcerpt(au, cap); } }; }
+    }
+    var rA;
+    if(anchorOpt){
+      // 取り置きで押し出された節（取り置きが無ければ入っていた節）を budgetShort に残す（dry run は複製で行い、本物には影響しない）
+      var dryU=aU.map(function(u){ var o={}, k; for(k in u) o[k]=u[k]; o.taken=false; return o; }), dryS=[], dryB=[], dryL={};
+      pickLevels(dryU, { kind:'常時', cap:b.alwaysTotal, maxCap:b.alwaysTotal, needFirst:true }, dryS, dryB, dryL);
+      rA=pickLevels(aU, { kind:'常時', cap:b.alwaysTotal, maxCap:b.alwaysTotal, needFirst:true, anchor:anchorOpt }, skipped, short, lvA);
+      aU.forEach(function(u,i){ if(i<dryU.length && dryU[i].taken && !u.taken && u!==anchorOpt.unit){
+        short.push({ name:u.name, kind:'常時', sec:u.sec, level:u.level, len:u.cost, cap:b.alwaysTotal, permanent:false, important:u.level<=4, byAnchor:true, note:'場面の要約（'+(anchorRes.len||0)+'字）の取り置きで押し出された' });
+        skipped.forEach(function(x){ if(x.kind==='常時' && x.name===u.name && x.sec===u.sec && !x.dedup) x.byAnchor=true; }); } });
+    } else rA=pickLevels(aU, { kind:'常時', cap:b.alwaysTotal, maxCap:b.alwaysTotal, needFirst:true }, skipped, short, lvA);
     // ---- トリガー（公開の部分。札は丸ごと） ----
     var rT=pickLevels(tU, { kind:'トリガー', cap:b.trigTotal, maxCap:b.trigTotal, kmax:b.trigMax, needFirst:false, unit:'枚' }, skipped, short, lvT);
     // ---- GM: 常時の札の GM 節（枠 = gmTotal − gmTrigReserve）→ トリガーの札の GM 部分（枠 = gmTotal − 常時 GM の使用分） ----
@@ -270,19 +319,20 @@
     }
     // 出力の順: 常時（札の並び順・節の順）→ トリガー（重み順）→ GM 常時（札の並び順）→ GM トリガー（重み順）
     var ord=function(a,z){ return (a.idx-z.idx)||(a.sec-z.sec); };
-    var outA=aU.filter(function(u){ return u.taken; }).sort(ord).map(function(u){ return { name:u.name, key:safe(u.name), line:u.line, sec:u.sec, level:u.level, ev:u.ev, len:u.cost }; });
+    var outA=aU.filter(function(u){ return u.taken; }).sort(ord).map(function(u){ var o={ name:u.name, key:safe(u.name), line:u.line, sec:u.sec, level:u.level, ev:u.ev, len:u.cost }; if(u.anchor) o.anchor=u.excerpt?'excerpt':'full'; if(u.dedupFrom) o.dedupFrom=u.dedupFrom; return o; });
     var outT=tU.filter(function(u){ return u.taken; }).map(function(u){ return { name:u.name, key:u.key, line:u.line, why:u.why, level:u.level, ev:u.ev, len:u.cost }; });
     var outGA=gA.filter(function(u){ return u.taken; }).sort(ord).map(function(u){ return { name:u.name, key:'GM専用：'+safe(u.name), line:u.line, sec:u.sec, level:u.level, ev:u.ev, len:u.cost }; });
     var outGT=gT.filter(function(u){ return u.taken; }).map(function(u){ return { name:u.name, key:u.key, line:u.line, level:u.level, ev:u.ev, len:u.cost }; });
     var picked=outA.concat(outT).concat(outGA).concat(outGT);
     var uniq=function(a){ var o=[]; a.forEach(function(x){ if(o.indexOf(x.name)<0) o.push(x.name); }); return o.length; };
-    var kept=outA.map(function(p){ return { name:p.name, kind:'常時', sec:p.sec, level:p.level, ev:p.ev, len:p.len }; }).concat(outT.map(function(p){ return { name:p.name, kind:'トリガー', sec:null, why:p.why, level:p.level, ev:p.ev, len:p.len }; }))
+    var kept=outA.map(function(p){ var o={ name:p.name, kind:'常時', sec:p.sec, level:p.level, ev:p.ev, len:p.len }; if(p.anchor) o.anchor=p.anchor; if(p.dedupFrom) o.dedupFrom=p.dedupFrom; return o; }).concat(outT.map(function(p){ return { name:p.name, kind:'トリガー', sec:null, why:p.why, level:p.level, ev:p.ev, len:p.len }; }))
       .concat(outGA.map(function(p){ return { name:p.name, kind:'GM常時', sec:p.sec, level:p.level, ev:p.ev, len:p.len }; })).concat(outGT.map(function(p){ return { name:p.name, kind:'GMトリガー', sec:null, level:p.level, ev:p.ev, len:p.len }; }));
     lastSel={ at:Date.now(), version:VERSION951, arm:b.arm, budget:b, gmMode:gmMode, names:picked.map(function(p){ return p.key; }), kept:kept,
       always:uniq(outA), alwaysSecs:outA.length, trig:outT.length, gm:uniq(outGA.concat(outGT)), gmSecs:outGA.length+outGT.length,
       chars:{ always:rA.used, trig:rT.used, gm:usedGA+usedGT, gmAlways:usedGA, gmTrig:usedGT }, gmWithheld:gmWithheld,
       levels:{ always:lvA, trig:lvT, gmAlways:lvGA, gmTrig:lvGT }, caps:{ always:b.alwaysTotal, trig:b.trigTotal, trigMax:b.trigMax, gmAlways:(gmMode==='withhold'?0:Math.max(0,b.gmTotal-b.gmTrigReserve)), gmTrig:(gmMode==='withhold'?0:b.gmTotal-usedGA) }, present:present,
       budgetShort:short, skipped:skipped, cut:[] };
+    if(opt && (opt.anchor!==undefined || opt.delivered || opt.dropAbsent)){ lastSel.anchor=anchorRes; lastSel.dedup=dedupLog; lastSel.relevant=opt.relevantNames?opt.relevantNames.slice():(opt.relevant?Object.keys(opt.relevant):[]); lastSel.relevantInCards=opt.relevant?Object.keys(opt.relevant):[]; }
     try{ var sig=skipped.filter(function(x){ return x.kind!=='トリガー'; }).map(function(x){ return x.kind+':'+x.name+(x.sec!=null?'#'+x.sec:''); }).join('|');
       if(sig && sig!==warnedSig){ warnedSig=sig; console.warn(TAG,'枠に入らず送らなかった節・札があります（lastSelection().skipped）', sig); } }catch(e){}
     try{ var ss=short.filter(function(x){ return x.important; }).map(function(x){ return x.kind+':'+x.name+(x.sec!=null?'#'+x.sec:'')+'('+x.len+'>'+x.cap+(x.permanent?'':'?')+')'; }).join('|');
@@ -290,16 +340,403 @@
     return picked;
   }
   var warnedSig='', warnedShort='';
-  function buildBlock(input){
+  function buildBlock(input){ return buildBlockWith(input, undefined, null); }
+  // act: canary951() の結果（undefined なら、ここで 1 回だけ聞く）。opt: { pres, delivered }（r4 の fix954）
+  function buildBlockWith(input, act, opt){
     if(off()) return '';
-    if(!canary951() || f951off()){ lastSel=null; return buildBlockLegacy(); }   // 本番の組み立て（canary 外・選択器 OFF）
+    if(act===undefined) act=canary951();
+    if(!act || f951off()){ lastSel=null; return buildBlockLegacy(); }   // 本番の組み立て（canary 外・選択器 OFF）
     var cards=getCards(); if(!cards.length){ lastSel=null; return ''; }
-    var picked=select(input);
+    var picked=select(input, opt);
     if(!picked.length) return '';
     var hasGm=picked.some(function(p){ return p.key.indexOf('GM専用：')===0; });
     var rule=hasGm?RULE:RULE.split('\n')[0];
     return '\n\n'+MARK+'（常に効く確定設定・事典。参照用。本文に説明書きを混ぜない）】\n'+rule+'\n'+picked.map(function(p){ return p.line; }).join('\n');
   }
+  // =====================================================================
+  // ★fix954 r4b（2026-10-14・GPT 裁定 #125-GX → #125-GY の必須変更）: canary r4b の一部。fix953 の関所が true の時（canary 物語・開発者 PC）だけ動く。
+  //   false の時・v292Dfix954Off='1' の時は 1 バイトも動かない（r3 と同じ）。保存しない・S を書き換えない・送信しない。読むのは S と localStorage のスイッチだけ。
+  //   (1) 場面の要約（既定 ON）: 常時の枠（上限は上げない）の中に ANCHOR_MIN〜ANCHOR_MAX 字の公開の世界観・場面の概要を取り置く。
+  //       順: 段1（規則）→ 取り置き ANCHOR_MIN → 段2・段3（登場中の人物の内面など）→ 段4 の先頭で場面の要約（全文が入れば全文、入らなければ文の区切りで抜粋）。
+  //       元は人物以外の常時の札の最初の公開の節（GM の節は使わない）。押し出した節は lastSelection().budgetShort に byAnchor で残す。
+  //   (2) 登場判定（N2・厳格化）: いま登場中 =
+  //         ・直近 2 ターンの会話ログ・話者タグの確定話者（完全名・登録された別名）
+  //         ・T0: 開始時の状況（startCondition）で「同席している」と明示された NPC（行方不明・探している・待っている・別の場所・伝聞は数えない）
+  //         ・T1: 上と同じ。ただし 0 ターン目で場面が続き、その NPC の退場・移動・不在の兆しが無い時だけ
+  //       今回の入力・直近 2 ターンの本文に名前が出ただけでは登場扱いにしない。fix95 の消えない印（appeared）だけでも登場扱いにしない（印は書き換えない）。
+  //   (3) psychAnchors: 既定は触らない（本番の値のまま）。v292Dfix954PsychSync='1' で cast.npcs と同じ顔ぶれに値つきで合わせる／
+  //       v292Dfix954PsychRef='1' で r4 と同じく NPC の値を繰り返さない（ref）。
+  //   (4) 未登場の NPC: 人物像（登録の欄と同じ文）は既定で送らない。今の出来事に関係する未登場の NPC（名前が今回の入力・開始時の状況・直近 2 ターンに
+  //       出た／札のトリガー語が当たった。最大 REL_MAX 人）だけ、札の人物像を r3 どおり段5 で残す。cast.npcs には入れない（登場扱いにしない）。
+  //   (5) 重複除去: 人物の札の節から、登録の 5 欄と完全に同じ文・項目だけを除く（8 割で節ごと外す r4 の規則は廃止）。
+  //   スイッチ（localStorage・canary の中だけ）: v292Dfix954Off='1'（全部止める＝r3）／v292Dfix954Anchor='off'／v292Dfix954Pres='r4'（r4 の広い登場判定）／
+  //     v292Dfix954N2='off'（fix95・r3 の判定）／v292Dfix954Mode='union'（fix95 の印の人物も残す）／v292Dfix954StartWin='1'（開始時の状況は T0 だけ）／
+  //     v292Dfix954PsychSync='1'／v292Dfix954PsychRef='1'／v292Dfix954AbsentRel='off'（関係する未登場の人物も人物像を送らない）／
+  //     v292Dfix954Absent='keep'（未登場の人物の人物像を全員 r3 どおり）／v292Dfix954Dedup='off'（カードの重複除去を止める）
+  //   ★r4c（2026-10-14・GPT 裁定 #126-C）: (A) 登場中の判定は「入った証拠 → 明示の退場・場面の切れ目まで続く」（黙っている・名前が出ないのは退場ではない。
+  //     直近 CARRY_WIN ターンを毎回読み直す。保存しない）。送信 sys の fix192【自発】に出た NPC は登場中にそろえる。(B) 関係する未登場の NPC（最大 REL_MAX 人）は
+  //     user の cast.offstage に REL_PROF_MIN〜REL_PROF_MAX 字の関係プロフィールで渡す（cast.npcs とは別・登場させない注記つき。v292Dfix954Offstage='off' で r4b どおり札の段5）。
+  //     (D) 開始時の状況で主語が動作しているだけ（場所が主人公と同じと明示されない）は同席にしない（関係する人物）。(E) psychAnchors は保存値を変えず、
+  //     送信時に登場中・関係する NPC の欄だけ残す（v292Dfix954PsychFilter='off' で止める）。v292Dfix954Pres='r4b' で r4b の登場判定。
+  //   検証口（読むだけ・本文は出さない）: window.__v292Dfix954.last()
+  // =====================================================================
+  var VERSION954='fix954-r4h-20261015', N2_WIN=PRESENT_WIN, ANCHOR_MIN=200, ANCHOR_MAX=400, REL_MAX=2, CARRY_WIN=8, LOOKBACK_MAX=60, REL_PROF_MIN=100, REL_PROF_MAX=150;
+  // ★r4d（GPT #126-E）: CARRY_WIN は登場の有効期限ではない。読み直しの範囲は「最後の場面の切れ目」まで（最大 LOOKBACK_MAX ターン）。
+  //   【自発】（fix192）は登場の根拠にしない（info.agendaNotPresent に記録だけ）。psychAnchors の絞り込みは既定 OFF（'on' で有効）。cast.offstage の注記は自然な登場を妨げない文に。
+  var NOTE24='各キャラの恐怖・欲望・傷は narrative の地の文に間接的に滲ませる。クリシェ反応(鼓動が速まる/息を呑む/身体が冷える 等)ではなく、そのキャラ固有の身体記憶・連想・過去の傷との結びつきで表現する。';
+  var REF954='NPC の coreFear / coreDesire / wound は cast.npcs の同名の欄にある（ここでは繰り返さない）';
+  var last954=null, done954=(typeof WeakMap==='function')?new WeakMap():null;   // build の結果 r → { pres, delivered, relevant }（同じ r を 2 回書き換えない）
+  // ★r4h（BUNDLE2・2026-10-15）: 既定 OFF で配信（GPT #126-S: NPC は生成比較の後に既定を判断）。この端末で v292Dfix954On='1' の時だけ動く。
+  //   DEFAULT_ON954 を true にした js 1 本で全体 ON に切り替える。v292Dfix954Off='1' は常に優先して止める。
+  var DEFAULT_ON954 = false;
+  function f954off(){ if(lsGet('v292Dfix954Off')==='1') return true; if(DEFAULT_ON954) return false; return lsGet('v292Dfix954On')!=='1'; }
+  // fix533b と同じ許可方式（前: 語を作る文字でない／後: 行末・空白・閉じ括弧・句読点・助詞・敬称）
+  var PRE_BAD=/[一-鿿゠-ヿｦ-ﾝーA-Za-z0-9０-９ａ-ｚＡ-Ｚ]/;
+  var POST_OK=/[\s　」』）)】\]〉》〕｝}・…—―、。，．！？!?:：;；\n\r]/;
+  var POST_PARTICLE=/^(?:は|が|を|に|へ|と|も|で|の|や|ね|よ|か|から|まで|より|こそ|さえ|しか|だけ|さん|ちゃん|くん|君|様|さま|殿|氏|先輩|先生|たち|達|ら)/;
+  function okAt(s, i, w){ var before=(i===0)?'':s.charAt(i-1), rest=s.slice(i+w.length);
+    return (before===''||!PRE_BAD.test(before)) && (rest===''||POST_OK.test(rest.charAt(0))||POST_PARTICLE.test(rest)); }
+  function usedAsPerson(text, w){ if(!text||!w) return false; var s=String(text), i=s.indexOf(w);
+    while(i>=0){ if(okAt(s, i, w)) return true; i=s.indexOf(w, i+1); }
+    return false; }
+  var KANJI_ONLY=/^[々〆一-鿿㐀-䶿豈-﫿]+$/, KANA_ONLY=/^[ぁ-ゟ゠-ヿｦ-ﾟ]+$/, HAS_KANJI=/[一-鿿㐀-䶿]/;
+  function aliasesOf(name, n){ var out=[];
+    try{ var m=String(n&&n.desc||'').match(/(^|\n)[\s　]*別名[:：]([^\n]+)/); if(m) m[2].split(/[、,，・\/／]/).forEach(function(a){ a=String(a).trim(); if(a && a!==name && a.length<=12) out.push(a); }); }catch(e){}
+    try{ var qp=window.__v292QuasiPack; if(qp && typeof qp.aliasMap==='function'){ var am=qp.aliasMap()||{}; Object.keys(am).forEach(function(a){ if(am[a]===name && a && a!==name && out.indexOf(a)<0) out.push(a); }); } }catch(e){}
+    return out; }
+  // 名前の形: { w, kind: 'full' | 'part' | 'guess' | 'alias' | 'trig', plain: 素の一致か }
+  function nameForms(n, cards){
+    var name=String(n.name).trim(), forms=[], seen={};
+    function add(w, kind){ w=String(w||'').trim(); if(!w || seen[w]) return; if(kind!=='full' && w.length<2) return; seen[w]=1;
+      var plain=(kind==='full' && w.length>=3 && HAS_KANJI.test(w) && !KANA_ONLY.test(w));
+      forms.push({ w:w, kind:kind, plain:plain }); }
+    add(name,'full'); add(name.replace(/[\s　]+/g,''),'full');
+    if(/[\s　・･]/.test(name)) name.split(/[\s　・･]+/).forEach(function(p){ add(p,'part'); });
+    else if(KANJI_ONLY.test(name) && name.length>=3 && name.length<=6){ for(var k=2;k<name.length;k++){ add(name.slice(0,k),'guess'); add(name.slice(name.length-k),'guess'); } }
+    aliasesOf(name, n).forEach(function(a){ add(a,'alias'); });
+    (cards||[]).forEach(function(c){ if(personOf(c,[{ name:name, hero:false }])) trigWords(c).forEach(function(t){ add(t,'trig'); }); });
+    return forms; }
+  function formHit(text, f){ return f.plain ? String(text||'').indexOf(f.w)>=0 : usedAsPerson(text, f.w); }
+  function hitsOf(text, f){ var s=String(text||''), out=[], i=s.indexOf(f.w); while(i>=0){ if(f.plain || okAt(s, i, f.w)) out.push(i); i=s.indexOf(f.w, i+1); } return out; }
+  // ---- 開始時の状況の読み方（r4b）: 名前の出た節（読点・句点で区切った 1 区切り）の手がかりの語で分ける ----
+  var SC_STRONG_ABS=/行方不明|失踪|消息を絶|消息不明|消息が途絶|姿を消|消えた|消えて|いなくな|亡くな|死ん|死去|他界|不在|来ない|来なかった|来られない|連絡が(取れ|つか|途絶)|音信不通|戻らな|戻って(こ|来)な|帰らな|帰って(こ|来)な|見つから|攫われ|さらわれ|連れ去|囚われ|捕らわれ|閉じ込め/;
+  var SC_CO=/一緒|いっしょ|隣|となり|傍ら|かたわら|そば|側に|並んで|同行|連れ立|向かい合|向かいに|共に|ともに|二人で|三人で|四人で|と(いる|居る)|合流し(た|て)|目の前/;   // r4c: 「〜がいる」「〜もいる」だけでは主人公と同じ場か分からないので外した
+  var SC_ACT=/座って|立って|佇ん|たたずん|笑って|話して|歩いて|構えて|振り返|俯い|うつむ|手を振|駆け寄|覗き込|見つめ|微笑|頷|うなず/;
+  var SC_WEAK_ABS=/探し|探す|探さ|捜し|捜す|捜さ|捜索|待ち合わせ|待ち合せ|待って|待つ|待ち|向かっている|向かう途中|遅れ|別の場所|離れ|遠く|会いに|会う約束|約束|来る予定|来るはず|到着|合流する|合流予定|現れ(る|ない)|後から|あとから/;
+  var SC_HEARSAY=/と言って|と言った|らしい|そうだ|と聞い|という話|噂|によると|からの(連絡|メッセージ|電話)|メッセージ|電話|メール|LINE|手紙/;
+  var SC_BREAK=/<scene_move|場面が変わ|場面転換|翌日|翌朝|翌晩|翌週|数日後|数時間後|一週間後|一か月後|その夜|後日|◇◇|◆◆|＊＊＊|\*\*\*|――――/;
+  // ★r4e（#126-F B）: 実行済みの場面移動（モデルの <scene_move> タグ）だけを同席の解除にする。時間の経過・区切り線・plan の移動の記録は「同席の再確認が要る」に
+  // ★r4f（#126-G の確認）: <scene_move> は fix645 の「主人公が移動を完了した」印で、S.save の時に turn.narrative から剥がされ（t.__f645nprev・plan.narrative に残る）、
+  //   本文との一致で受理された物だけ端末の v292Dfix645_log に記録される。主人公と一緒に NPC が移ることもあるので **NPC の退場の証拠にはしない**（同席の再確認にする）。
+  var SC_MOVE_EXEC=/<scene_move/, SC_TIMESKIP=/場面が変わ|場面転換|翌日|翌朝|翌晩|翌週|数日後|数時間後|一週間後|一か月後|その夜|後日|◇◇|◆◆|＊＊＊|\*\*\*|――――/;
+  var SC_EXIT=/去っ|去る|去り|立ち去|帰っ|帰る|帰宅|出て行|出ていっ|出ていく|別れ|離れ|姿を消|いなくな|見えなくな|行ってしま|走り去|消え/;
+  var SC_MOVE_IN=/向かう|移動|出かけ|出発|立ち去|帰る|帰宅|別れ|離れる/;
+  function spanOf(s, i, re){ var a=i, b=i; while(a>0 && !re.test(s.charAt(a-1))) a--; while(b<s.length && !re.test(s.charAt(b))) b++; return s.slice(a, Math.min(s.length, b+1)); }
+  var CLAUSE_END=/[。！？!?\n、，,]/, SENT_END=/[。！？!?\n]/;
+  // 戻り: null（名前が無い）| 'present' | 'absent:missing' | 'absent:elsewhere' | 'mention:hearsay' | 'mention:ambiguous' | 'mention:neutral'
+  function classifyStart(text, forms){
+    var s=String(text||''), tags=[];
+    forms.forEach(function(f){ hitsOf(s, f).forEach(function(i){ var cl=spanOf(s, i, CLAUSE_END), se=spanOf(s, i, SENT_END), c;
+      var subj=new RegExp(f.w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?:さん|ちゃん|くん)?(?:が|は|も)').test(cl);
+      if(SC_STRONG_ABS.test(cl)) c='absent:missing';
+      else if(SC_CO.test(cl)) c='present';
+      else if(subj && SC_ACT.test(cl) && !SC_WEAK_ABS.test(cl)) c='mention:ambiguous';   // r4c（#126-C D）: 主語で動作していても主人公と同じ場と明示されていなければ同席にしない（関係する人物として扱う）
+      else if(SC_WEAK_ABS.test(cl)) c='absent:elsewhere';
+      else if(SC_HEARSAY.test(cl)) c='mention:hearsay';
+      else if(SC_CO.test(se) && !SC_STRONG_ABS.test(se) && !SC_WEAK_ABS.test(se) && !SC_HEARSAY.test(se)) c='present';
+      else c='mention:neutral';
+      tags.push(c); }); });
+    if(!tags.length) return null;
+    if(tags.indexOf('absent:missing')>=0) return 'absent:missing';
+    if(tags.indexOf('present')>=0) return 'present';
+    if(tags.indexOf('absent:elsewhere')>=0) return 'absent:elsewhere';
+    return tags[0];
+  }
+  function sceneContinues(t0, input){
+    var why=[];
+    try{ var nar=String(t0&&t0.narrative||''); if(SC_BREAK.test(nar)) why.push('0ターン目に場面の切れ目'); }catch(e){}
+    try{ var p=t0&&t0.plan; if(p && Object.keys(p).some(function(k){ return /scene_?move|moveTo|newLoc/i.test(k) && p[k]; })) why.push('0ターン目に移動の記録'); }catch(e){}
+    if(input && SC_MOVE_IN.test(String(input))) why.push('今回の入力に移動の語');
+    return { ok:!why.length, why:why };
+  }
+  function exitIn(t0, forms){ var txt=String(t0&&t0.narrative||'')+'\n'+String(t0&&(t0.playerText||t0.player)||''), bad=false;
+    forms.forEach(function(f){ hitsOf(txt, f).forEach(function(i){ var cl=spanOf(txt, i, CLAUSE_END); if(SC_EXIT.test(cl) || SC_STRONG_ABS.test(cl)) bad=true; }); }); return bad; }
+  function whoOf(rec){ var who={}; rec.forEach(function(t){
+      try{ (t&&t._convSays||[]).forEach(function(c){ if(c&&c.who) who[String(c.who).trim()]=true; }); }catch(e){}
+      try{ ((t&&t.plan&&t.plan._v254who)||[]).forEach(function(w){ if(w) who[String(w).trim()]=true; }); }catch(e){} }); return who; }
+  // r4b の登場判定（厳格）。戻り { present:{名前:理由}, who, ev:{名前:{why,kind}}, start:{名前:分類}, mentioned:{名前:[出所]}, scene:{ok,why} }
+  function presentStrict(input){
+    var s=getS(), turns=(s&&Array.isArray(s.turns))?s.turns:[], cast=castList(), cards=getCards(), out={}, ev={}, start={}, mentioned={};
+    var npcs=(s&&s.cast&&Array.isArray(s.cast.npcs))?s.cast.npcs:[];
+    var sw=(lsGet('v292Dfix954StartWin')==='1')?1:N2_WIN;   // 開始時の状況を見る期間（既定 2 = T0 と T1。'1' = T0 だけ）
+    var useStart=(turns.length<sw && s && s.scene), sc=(turns.length===0)?{ ok:true, why:[] }:sceneContinues(turns[0], input);
+    var stext=useStart?String(s.scene.startCondition||''):'';
+    var rec=turns.slice(-N2_WIN), who=whoOf(rec);
+    var recText=rec.map(function(t){ return (t&&t.narrative||'')+'\n'+(t&&(t.playerText||t.player)||''); }).join('\n');
+    cast.forEach(function(m){ if(m.hero) out[m.name]='主人公'; });
+    npcs.forEach(function(n){ if(!n||!n.name) return; var name=String(n.name), forms=nameForms(n, cards);
+      if(out[name]) return;
+      var mm=[]; if(input && forms.some(function(f){ return formHit(input, f); })) mm.push('今回の入力');
+      if(stext && forms.some(function(f){ return formHit(stext, f); })) mm.push('開始時の状況');
+      if(recText && forms.some(function(f){ return formHit(recText, f); })) mm.push('直近'+N2_WIN+'ターン');
+      if(mm.length) mentioned[name]=mm;
+      for(var a=0;a<forms.length;a++){ var f=forms[a]; if((f.kind==='full'||f.kind==='alias') && who[f.w]){ out[name]='会話ログの話者'; ev[name]={ why:'会話ログの話者', kind:f.kind }; return; } }
+      if(stext){ var c=classifyStart(stext, forms); if(c) start[name]=c;
+        if(c==='present'){
+          if(turns.length===0){ out[name]='開始時の状況（同席）'; ev[name]={ why:out[name], kind:'start' }; return; }
+          if(sc.ok && !exitIn(turns[0], forms)){ out[name]='開始時の状況（T1・場面が続く）'; ev[name]={ why:out[name], kind:'start' }; return; }
+          start[name]=c+(sc.ok?'/退場の兆し':'/場面が切れた'); } }
+    });
+    return { present:out, who:who, ev:ev, start:start, mentioned:mentioned, scene:sc };
+  }
+  // r4 の登場判定（v292Dfix954Pres='r4' の時だけ・A/B 用）
+  function presentR4(input){
+    var s=getS(), turns=(s&&Array.isArray(s.turns))?s.turns:[], cast=castList(), cards=getCards(), out={}, ev={}, texts=[];
+    var npcs=(s&&s.cast&&Array.isArray(s.cast.npcs))?s.cast.npcs:[];
+    if(input) texts.push({ why:'今回の入力', text:String(input) });
+    var sw=(lsGet('v292Dfix954StartWin')==='1')?1:N2_WIN;
+    if(turns.length<sw && s&&s.scene) texts.push({ why:'開始時の状況', text:[s.scene.startCondition, s.scene.startRules, s.scene.obj].map(function(x){ return String(x||''); }).join('\n') });
+    var rec=turns.slice(-N2_WIN), who=whoOf(rec);
+    rec.forEach(function(t){ texts.push({ why:'直近'+N2_WIN+'ターン', text:(t&&t.narrative||'')+'\n'+(t&&(t.playerText||t.player)||'') }); });
+    cast.forEach(function(m){ if(m.hero) out[m.name]='主人公'; });
+    npcs.forEach(function(n){ if(!n||!n.name) return; var name=String(n.name), forms=nameForms(n, cards);
+      if(out[name]) return;
+      for(var a=0;a<forms.length;a++){ var f=forms[a]; if(f.kind==='full'||f.kind==='alias'){ if(who[f.w]){ out[name]='会話ログの話者'; ev[name]={ why:'会話ログの話者', kind:f.kind }; return; } } }
+      for(var i=0;i<texts.length;i++){ for(var j=0;j<forms.length;j++){ if(formHit(texts[i].text, forms[j])){ out[name]=texts[i].why; ev[name]={ why:texts[i].why, kind:forms[j].kind }; return; } } }
+    });
+    return { present:out, who:who, ev:ev, start:{}, mentioned:{}, scene:null };
+  }
+  // ---- r4c（GPT #126-C）: 登場判定 = 入った証拠 → 明示の退場・場面の切れ目まで続く（黙っていること・名前が出ないことは退場ではない）----
+  //   入った証拠: 直近 CARRY_WIN ターンの中の 会話ログの確定話者／本文で名前の区切りに登場の語（現れた・やって来た・駆け寄った・合流した 等）／
+  //     fix192 と同じ在場の窓（直近 2 ターン）で本文に名前が出て、その区切りが遠隔（電話・写真・噂 等）・不在・退場でない／T0 の開始時の状況で同席と明示。
+  //   出た証拠: 名前の区切りに退場の語（立ち去った・帰った・別れた 等）・強い不在の語／その後の場面の切れ目（翌朝・<scene_move> 等）／
+  //     プレイヤーの入力が「一人で・置いて・別れて」＋移動（主人公だけが離れる）。
+  //   さらに、送信 sys の fix192【自発】に名前が出た NPC は登場中にそろえる（sys で動くよう促す人を cast.npcs から外さない）。
+  //   入力・直近の本文に名前が出ただけ（遠隔の言及）・fix95 の印だけ は登場扱いにしない（関係する未登場の候補）。保存しない（毎回 S.turns から組み立てる）。
+  var SC_ENTER=/現れ|やって来|やってき|入って来|入ってき|駆け寄|駆けて来|駆けてく|姿を見せ|姿を現|合流し|顔を出|戻って来|戻ってき|追いつ|到着し|近づいてき|近づいて来/;
+  var SC_REMOTE=/電話|メッセージ|メール|LINE|手紙|写真|思い出|噂|話題|名前を|と言って|と言った|らしい|夢|画面|スマホ|通知|SNS|記憶|昔|かつて|聞いた|聞かされ/;
+  var SC_CALL=/電話|通話|受話器|メッセージ|メール|LINE|手紙|画面|スマホ|通知|SNS|写真|ビデオ/;   // ★r4g: 通話・文字・画像越し（不在）。噂・回想・伝聞は同席未確認
+  var SC_LEAVE_IN=/(一人で|ひとりで|置いて|別れて|別れ、|残して)/;
+  function sysAgendaNames(sys){ var out={}; try{ var s=String(sys||''), at=s.indexOf('【自発('); if(at<0) return out; var nx=s.indexOf('\n【', at+1), blk=s.slice(at, nx>=0?nx:s.length);
+      blk.split('\n').forEach(function(l){ var m=/^・(.+?)は(内心『|傷\()/.exec(l); if(m) out[m[1]]=true; }); }catch(e){} return out; }
+  function presentR4c(input, sys){
+    var s=getS(), turns=(s&&Array.isArray(s.turns))?s.turns:[], cast=castList(), cards=getCards(), out={}, ev={}, start={}, mentioned={}, track={};
+    var npcs=(s&&s.cast&&Array.isArray(s.cast.npcs))?s.cast.npcs:[];
+    var base=Math.max(0, turns.length-LOOKBACK_MAX), rec2=turns.length-N2_WIN;
+    if(lsGet('v292Dfix954Carry')==='win') base=Math.max(0, turns.length-CARRY_WIN);   // r4c と同じ 8 ターン窓（A/B 用）
+    // ★r4f: 読み直しの起点を場面移動で切らない（主人公の移動は NPC の退場ではない）。上限 LOOKBACK_MAX ターンだけ
+    var capped=(lsGet('v292Dfix954Carry')!=='win' && base===Math.max(0, turns.length-LOOKBACK_MAX) && base>0);
+    var sw=(lsGet('v292Dfix954StartWin')==='1')?1:N2_WIN;
+    var useStartMention=(turns.length<sw && s && s.scene);
+    var stext=(s && s.scene)?String(s.scene.startCondition||''):'';
+    var formsBy={}, callOnly={}; npcs.forEach(function(n){ if(n&&n.name) formsBy[String(n.name)]=nameForms(n, cards); });
+    var names=Object.keys(formsBy);
+    cast.forEach(function(m){ if(m.hero) out[m.name]='主人公'; });
+    function setIn(nm, why, at){ track[nm]={ st:'in', why:why, at:at }; }
+    function setOut(nm, why, at){ if(track[nm] && (track[nm].st==='in'||track[nm].st==='recheck')) track[nm]={ st:'out', why:why, at:at }; }
+    function setRecheck(nm, why, at){ if(track[nm] && track[nm].st==='in') track[nm]={ st:'recheck', why:why, at:at, was:track[nm].why }; }
+    // 開始時の状況（T0 の前）: 同席と明示された NPC だけ入る。T0・T1 では言及を「関係する」の候補にする
+    if(stext && base===0) names.forEach(function(nm){ var c=classifyStart(stext, formsBy[nm]); if(!c) return; start[nm]=c;
+      if(c==='present') setIn(nm, '開始時の状況（同席）', -1); });
+    if(stext && useStartMention) names.forEach(function(nm){ if(start[nm]) (mentioned[nm]=mentioned[nm]||[]).push('開始時の状況'); });
+    for(var i=base;i<turns.length;i++){ var t=turns[i]||{}, nar=String(t.narrative||''), pt=String(t.playerText||t.player||'');
+      var mvTag=SC_MOVE_EXEC.test(nar) || SC_MOVE_EXEC.test(String(t.__f645nprev||'')) || SC_MOVE_EXEC.test(String((t.plan&&t.plan.narrative)||''));
+      var mvx=false, tsk=mvTag || SC_TIMESKIP.test(nar), pmv=false;   // ★r4f: 主人公の移動（<scene_move>）は時間の経過と同じ「同席の再確認」 try{ var p=t.plan; if(p && Object.keys(p).some(function(k){ return /scene_?move|moveTo|newLoc/i.test(k) && p[k]; })) pmv=true; }catch(e){}
+      if(mvx || (pt && SC_LEAVE_IN.test(pt) && SC_MOVE_IN.test(pt))) names.forEach(function(nm){ setOut(nm, mvx?'場面移動（実行済み）':'主人公だけが離れた（入力）', i); });
+      else if(tsk || pmv) names.forEach(function(nm){ setRecheck(nm, mvTag?'主人公が移動した（同席は再確認が要る）':(tsk?'時間の経過・場面の区切り（同席は再確認が要る）':'plan の移動の記録（実行は未確認）'), i); });
+      var who=whoOf([t]);
+      names.forEach(function(nm){ var fs=formsBy[nm], spoke=false;
+        for(var a=0;a<fs.length;a++){ if((fs[a].kind==='full'||fs[a].kind==='alias') && who[fs[a].w]){ spoke=true; break; } }
+        if(spoke) setIn(nm, '会話ログの話者', i);
+        var exitHit=false, enterHit=false, inScene=false, remote=false, callHit=false;
+        fs.forEach(function(f){ hitsOf(nar, f).forEach(function(k){ var cl=spanOf(nar, k, CLAUSE_END);
+          if(SC_EXIT.test(cl) || SC_STRONG_ABS.test(cl)) exitHit=true;
+          else if(SC_REMOTE.test(cl) || SC_WEAK_ABS.test(cl) || SC_HEARSAY.test(cl)){ remote=true; if(SC_CALL.test(cl)) callHit=true; }
+          else if(SC_ENTER.test(cl)) enterHit=true;
+          else inScene=true; }); });
+        if(!spoke && enterHit) setIn(nm, '本文で登場', i);
+        else if(!spoke && inScene && i>=rec2) setIn(nm, '場面にいる（直近 '+N2_WIN+' ターンの本文・fix192 と同じ窓）', i);
+        if(exitHit) setOut(nm, '本文で退場', i);
+        if(i>=rec2 && (remote||enterHit||inScene||exitHit) && (mentioned[nm]||[]).indexOf('直近'+N2_WIN+'ターン')<0) (mentioned[nm]=mentioned[nm]||[]).push('直近'+N2_WIN+'ターン');
+        if(i>=rec2 && callHit && !inScene && !enterHit) callOnly[nm]=true; else if(i>=rec2 && (inScene||enterHit)) delete callOnly[nm];
+      });
+    }
+    if(input && SC_LEAVE_IN.test(String(input)) && SC_MOVE_IN.test(String(input))) names.forEach(function(nm){ setOut(nm, '主人公だけが離れる（今回の入力）', turns.length); });
+    var ag=sysAgendaNames(sys), agendaNot=[], recheck={}, unknown={};
+    names.forEach(function(nm){
+      if(input && formsBy[nm].some(function(f){ return formHit(input, f); })) (mentioned[nm]=mentioned[nm]||[]).unshift('今回の入力');
+      if(track[nm] && track[nm].st==='in'){ out[nm]=track[nm].why; ev[nm]={ why:track[nm].why, at:track[nm].at }; }
+      else if(ag[nm]) agendaNot.push(nm);   // ★r4d: 【自発】は登場の根拠にしない（記録だけ）
+      if(track[nm] && track[nm].st==='recheck'){ recheck[nm]=track[nm].why; (mentioned[nm]=mentioned[nm]||[]).push('同席の再確認'); }
+    });
+    var gone={}; names.forEach(function(nm){ if(track[nm] && track[nm].st==='out') gone[nm]=track[nm].why; });
+    // ★r4e（#126-F A）: 探索の上限の外でだけ登場していた人は「存在不明」（退場ではない・cast.npcs には入れない・記録だけ）
+    if(capped){ names.forEach(function(nm){ if(out[nm] || track[nm]) return; var fs=formsBy[nm], seen=false;
+      for(var j=Math.max(0, base-LOOKBACK_MAX); j<base && !seen; j++){ var tt=turns[j]||{}, w=whoOf([tt]); for(var a=0;a<fs.length;a++){ if((fs[a].kind==='full'||fs[a].kind==='alias') && w[fs[a].w]){ seen=true; break; } } }
+      if(seen) unknown[nm]='探索範囲（'+LOOKBACK_MAX+' ターン）の外で話者（存在不明）'; }); }
+    return { present:out, who:whoOf(turns.slice(-N2_WIN)), ev:ev, start:start, mentioned:mentioned, scene:null, gone:gone, agendaNotPresent:agendaNot, lookbackFrom:base, recheck:recheck, unknown:unknown, callOnly:callOnly };
+  }
+  // 関係する未登場の NPC（最大 REL_MAX 人。入力 → 開始時の状況 → 直近 の順、同じなら登録順）。登場扱いにはしない
+  function relevantOf(pres){ var s=getS(), npcs=(s&&s.cast&&Array.isArray(s.cast.npcs))?s.cast.npcs:[], cand=[];
+    npcs.forEach(function(n, i){ if(!n||!n.name) return; var nm=String(n.name); if(pres.present[nm]) return; var mm=pres.mentioned&&pres.mentioned[nm]; if(!mm||!mm.length) return;
+      var rank=mm.indexOf('今回の入力')>=0?0:(mm.indexOf('開始時の状況')>=0?1:(mm.indexOf('同席の再確認')>=0?1.5:2)); cand.push({ nm:nm, rank:rank, i:i }); });
+    cand.sort(function(a,z){ return (a.rank-z.rank)||(a.i-z.i); });
+    var out={}; cand.slice(0, REL_MAX).forEach(function(c){ out[c.nm]=true; }); return out; }
+  // ---- 重複除去（完全一致の文・項目だけ）----
+  var SENT_RE=/[^。！？!?]+[。！？!?」』）)]*|[。！？!?]+/g;
+  var LABEL_RE=/^([\s　]*(?:[・\-－●◆■○◇※][\s　]*)?)([^：:「」『』\s　。、]{1,8}[：:][\s　]*)?([\s\S]*)$/;
+  function normS(x){ return String(x||'').replace(/^[\s　]+|[\s　]+$/g,'').replace(/^[・\-－●◆■○◇※][\s　]*/,''); }
+  // 比べる形: 前後の空白・行頭の記号を除き、文末の句点（。．.）の有無だけは同じとみなす（それ以外は 1 字でも違えば別の文として残す）
+  function keyS(x){ return normS(x).replace(/[。．.]+$/,''); }
+  function sentsOf(x){ return String(x||'').match(SENT_RE)||[]; }
+  function fieldSet(fields){ var set={}; String(fields||'').split('\n').forEach(function(l){ var q=keyS(l); if(q) set[q]=1; sentsOf(l).forEach(function(x){ var p=keyS(x); if(p) set[p]=1; }); }); return set; }
+  // 戻り { text: 残った本文（'' = 節ごと一致）, removed: 除いた文の数, removedChars, kept: 残した文の数 }
+  function exactDedup(text, fields){
+    var set=fieldSet(fields), out=[], removed=0, rc=0, kept=0, bodyLeft=0;
+    String(text||'').split('\n').forEach(function(line){
+      var hm=HEAD_RE.exec(line), head=hm?hm[0]:'', rest=hm?line.slice(head.length):line;
+      var m=LABEL_RE.exec(rest), pre=m[1]||'', lab=m[2]||'', body=m[3]||'';
+      if(!normS(body)){ out.push(line); if(!head && normS(rest)) bodyLeft++; return; }
+      if(set[keyS(body)]){ removed+=Math.max(1, sentsOf(body).length); rc+=normS(body).length; if(head) out.push(head); return; }
+      var ks=[]; sentsOf(body).forEach(function(x){ var q=keyS(x); if(q && set[q]){ removed++; rc+=normS(x).length; } else { ks.push(x); if(q) kept++; } });
+      if(!ks.length || !normS(ks.join(''))){ if(head) out.push(head); return; }
+      out.push(head+pre+lab+ks.join('')); bodyLeft++; });
+    var t=out.join('\n').replace(/^\s+|\s+$/g,'');
+    if(!bodyLeft) t='';
+    return { text:removed?t:String(text||''), removed:removed, removedChars:rc, kept:kept };
+  }
+  // 場面の要約の抜粋（文の区切りで、行の長さ cap 以下。最初の 1 文が入らなければ null）
+  function anchorExcerpt(u, cap){
+    var label='■ '+safe(u.name)+'（常時・場面の要約・抜粋）：', parts=sentsOf(u.text), acc='';
+    for(var i=0;i<parts.length;i++){ var nx=acc+parts[i]; if((label+safe(nx.replace(/\s+$/,''))).length+1>cap) break; acc=nx; }
+    acc=acc.replace(/\s+$/,''); if(!acc || !normS(acc.replace(HEAD_RE,''))) return null;
+    var line=label+safe(acc);
+    return { name:u.name, idx:u.idx, sec:u.sec, pr:u.pr, level:u.level, ev:(u.ev||[]).concat(['場面の要約・抜粋']), first:true, gm:false, head:u.head, line:line, cost:line.length+1, text:acc };
+  }
+  function profileMap(){ var s=getS(), m={}; try{ ((s&&s.cast&&s.cast.npcs)||[]).forEach(function(n){ if(n&&n.name&&!m[n.name]) m[n.name]=fieldsText(n); }); }catch(e){} return m; }
+  function fieldsText(e){ return ['desc','personality','coreDesire','coreFear','wound'].map(function(k){ return (e&&typeof e[k]==='string')?e[k]:''; }).join('\n'); }
+  // ---- r4c（#126-C B）: 関係する未登場の NPC の短い関係プロフィール（登録の desc の先頭の文から REL_PROF_MIN〜REL_PROF_MAX 字。保存しない）----
+  var OFFSTAGE_NOTE='いまこの場面での同席が確認できていない人物（関係の参照）。到着する・呼ばれて来る・場面が移るなど、登場が成り立つまでは、この場の会話・行動に参加させない。';
+  // ★r4f（#126-G）: 不在と同席未確認を注記で分ける（キーは増やさない。各人の status と、条件に合わせた note）
+  var OFFSTAGE_NOTE_ABSENT='いまこの場面にはいない人物（関係の参照）。到着する・呼ばれて来る・場面が移るなど、登場が成り立つまでは、この場の会話・行動に参加させない。';
+  var OFFSTAGE_NOTE_RECHECK='現在の同席が未確認の人物。退場・不在が確定したわけではない。場面内で存在が確認されるまでは、その場での発話や身体行動を確定させない。自然な登場・同席の再確認は妨げない。';
+  var OFFSTAGE_NOTE_MIXED='status が「不在」の人物はいまこの場面にいない。「同席未確認」の人物は退場・不在が確定したわけではなく、場面内で存在が確認されるまでは、その場での発話や身体行動を確定させない。どちらも、到着する・呼ばれて来る・場面が移るなど登場が成り立てば参加できる。';
+  var REL_WHY={ 'absent:elsewhere':'開始時の状況: 待ち合わせ・別の場所（まだこの場にいない）', 'absent:missing':'開始時の状況: 行方不明・不在', 'mention:hearsay':'開始時の状況: 話に出ている',
+    'mention:ambiguous':'開始時の状況: 名前が出ている（同席は未確定）', 'mention:neutral':'開始時の状況: 名前が出ている（同席は未確定）', 'present':'開始時の状況: 同席（この場面では続いていない）' };
+  function relProfile(n){
+    var parts=[];
+    if(lsGet('v292Dfix954RelProf')!=='desc'){   // ★r4e（#126-F）: mix を既定に（'desc' で r4c/r4d の desc 先頭）
+      // ★r4d（#126-E）: 外見に偏らないよう、desc・personality・coreDesire の先頭の文を 1 つずつ順に（足りなければ各欄の 2 文目以降）
+      var by=['desc','personality','coreDesire'].map(function(k){ var a=[]; String(n&&n[k]||'').split('\n').forEach(function(l){ sentsOf(l).forEach(function(x){ x=x.replace(/^[\s　]+|[\s　]+$/g,''); if(x) a.push(x); }); }); return a; });
+      for(var r=0; r<4; r++) by.forEach(function(a){ if(a[r]) parts.push(a[r]); });
+      var acc='';
+      for(var q=0;q<parts.length;q++){ if((acc+parts[q]).length<=REL_PROF_MAX) acc+=parts[q]; }
+      if(acc.length>=Math.min(REL_PROF_MIN, 40)) return acc;
+      parts=[];
+    }
+    ['desc','personality'].forEach(function(k){ String(n&&n[k]||'').split('\n').forEach(function(l){ sentsOf(l).forEach(function(x){ x=x.replace(/^[\s　]+|[\s　]+$/g,''); if(x) parts.push(x); }); }); });
+    var out='';
+    for(var i=0;i<parts.length;i++){ if((out+parts[i]).length<=REL_PROF_MAX){ out+=parts[i]; if(out.length>=REL_PROF_MIN) break; } else if(out) break; else { var cut=parts[i].slice(0, REL_PROF_MAX-1), k=Math.max(cut.lastIndexOf('、'), cut.lastIndexOf('，')); out=(k>=REL_PROF_MIN/2?cut.slice(0,k):cut)+'…'; break; } }
+    return out; }
+  // ★r4f: 不在（退場・行方不明・別の場所・伝聞・遠隔の言及）か、同席未確認（時間の経過・主人公の移動・入力だけ・開始時の状況で同席が曖昧）か
+  function offStatus(nm, pres){ var mm=(pres.mentioned&&pres.mentioned[nm])||[], st=pres.start&&pres.start[nm], g=pres.gone&&pres.gone[nm];
+    if(g) return '不在'; if(pres.recheck && pres.recheck[nm]) return '同席未確認';
+    if(st && /^absent:/.test(st)) return '不在';   // ★r4g（#126-H）: 伝聞（mention:hearsay）は不在と断定しない → 下で同席未確認
+    if(mm.indexOf('今回の入力')>=0) return '同席未確認';
+    if(pres.callOnly && pres.callOnly[nm]) return '不在';   // 電話・メッセージ・画面越しだけ（★r4h: 開始時の状況の「話に出ている」より新しい直近の証拠なので先に見る）
+    if(st && /^mention:/.test(st)) return '同席未確認';
+    if(g===undefined && mm.some(function(x){ return /^直近/.test(x); })) return '同席未確認';   // ★r4g: 直近の本文で話題になっただけ（遠隔かどうかは本文の語しだい）も不在と断定しない
+    return '不在'; }
+  function relWhy(nm, pres){ var mm=(pres.mentioned&&pres.mentioned[nm])||[], st=pres.start&&pres.start[nm], g=pres.gone&&pres.gone[nm];
+    if(g) return /主人公だけが離れ/.test(g) ? '主人公だけが別の場所へ移った（この人物が退場したわけではない）' : '退場した（'+g+'）'; if(pres.recheck && pres.recheck[nm]) return '時間が経過した（いまの同席は未確認）'; if(mm.indexOf('今回の入力')>=0) return '今回の入力で話題'; if(st && REL_WHY[st.split('/')[0]]) return REL_WHY[st.split('/')[0]]; return (pres.callOnly && pres.callOnly[nm]) ? '直近の本文で電話・メッセージ越し（この場にはいない）' : '直近の本文で話題（同席は未確認）'; }
+  function psychMode(){ return lsGet('v292Dfix954PsychRef')==='1' ? 'ref' : (lsGet('v292Dfix954PsychSync')==='1' ? 'sync' : 'raw'); }
+  // user の cast.npcs（と、スイッチが ON の時だけ psychAnchors）を N2 の人物に組み直す。戻り: { obj, user, info }。書き換えない時は user=null
+  function applyN2(user, pres, rel){
+    var info={ skipped:null, inner:[], final:[], added:[], removed:[] };
+    var obj=null; try{ obj=JSON.parse(user); }catch(e){ info.skipped='user が JSON でない'; return { obj:null, user:null, info:info }; }
+    if(!obj || !obj.cast || !Array.isArray(obj.cast.npcs)){ info.skipped='user に cast.npcs が無い'; return { obj:null, user:null, info:info }; }
+    if(JSON.stringify(obj,null,2)!==user){ info.skipped='user の形が想定と違う（JSON.stringify(obj,null,2) でない）'; return { obj:obj, user:null, info:info }; }
+    var s=getS(), full=(s&&s.cast&&Array.isArray(s.cast.npcs))?s.cast.npcs:[];
+    var n2on=(lsGet('v292Dfix954N2')!=='off'), union=(lsGet('v292Dfix954Mode')==='union'), pm=psychMode();
+    var innerBy={}; obj.cast.npcs.forEach(function(e){ if(e&&e.name&&!innerBy[e.name]){ innerBy[e.name]=e; info.inner.push(String(e.name)); } });
+    var srcBy={}; full.forEach(function(n){ if(n&&n.name&&!srcBy[n.name]) srcBy[n.name]=n; });
+    var list;
+    if(!n2on) list=obj.cast.npcs.slice();
+    else { list=[]; var used={};
+      full.forEach(function(n){ if(!n||!n.name||used[n.name]) return; var nm=String(n.name);
+        if(pres.present[nm] || (union && innerBy[nm])){ used[nm]=1;
+          if(innerBy[nm]) list.push(innerBy[nm]);
+          else { var e={ name:n.name, desc:n.desc, personality:n.personality, coreDesire:n.coreDesire, coreFear:n.coreFear, wound:n.wound };
+            if(typeof n.gender==='string' && n.gender) e.gender=n.gender;
+            list.push(e); info.added.push(nm); } } });
+      info.inner.forEach(function(nm){ if(!used[nm]) info.removed.push(nm); });
+    }
+    obj.cast.npcs=list; info.final=list.map(function(e){ return String(e&&e.name); }); info.psych=pm;
+    // r4c（#126-C B）: 関係する未登場の NPC を cast.offstage に（cast.npcs とは別。登場扱いにしない）。v292Dfix954Offstage='off' で入れない
+    info.offstage=[];
+    if(n2on && rel && lsGet('v292Dfix954Offstage')!=='off'){ var offs=[]; full.forEach(function(n){ if(!n||!n.name) return; var nm=String(n.name); if(!rel[nm] || pres.present[nm]) return;
+        var pf=relProfile(n); if(!pf) return; var stt=offStatus(nm, pres); offs.push({ name:n.name, status:stt, why:relWhy(nm, pres), profile:pf }); info.offstage.push(nm); });
+      if(offs.length){ var nR=offs.filter(function(o){ return o.status==='同席未確認'; }).length, note=(nR===0)?OFFSTAGE_NOTE_ABSENT:(nR===offs.length?OFFSTAGE_NOTE_RECHECK:OFFSTAGE_NOTE_MIXED);
+        var c2={}; Object.keys(obj.cast).forEach(function(k){ if(k==='offstage') return; c2[k]=obj.cast[k]; if(k==='npcs') c2.offstage={ note:note, chars:offs }; }); obj.cast=c2; } }
+    // r4c（#126-C E）: psychAnchors の送信時の絞り込み（保存された値は変えない）。既定 ON・v292Dfix954PsychFilter='off' で止める。
+    //   raw の時だけ: 主人公の欄と、登場中・cast.npcs に入れた・関係する未登場の NPC の欄だけ残す（値は 1 字も変えない）。NPC の欄が全部外れて主人公の欄も無ければ psychAnchors ごと送らない（fix24 が作らない時と同じ形）。
+    info.psychFiltered=[];
+    if(pm==='raw' && n2on && lsGet('v292Dfix954PsychFilter')==='on' && obj.psychAnchors && Array.isArray(obj.psychAnchors.chars)){
+      var keepC=obj.psychAnchors.chars.filter(function(c){ var w=String(c&&c.who||''); if(/\(主人公\)$/.test(w)) return true; var nm=w.replace(/\(NPC\)$/,'');
+        var ok=!!(pres.present[nm] || (rel && rel[nm]) || info.final.indexOf(nm)>=0); if(!ok) info.psychFiltered.push(nm); return ok; });   // cast.npcs に残した人（union 等）の欄も残す
+      if(info.psychFiltered.length){ if(keepC.length) obj.psychAnchors.chars=keepC; else delete obj.psychAnchors; } }
+    // psychAnchors（既定 raw = 触らない。sync/ref の時だけ、fix24 が動いた＝inputSeed がある時に fix24 と同じ位置・同じ組み立てで作り直す）
+    if(pm!=='raw' && Object.prototype.hasOwnProperty.call(obj,'inputSeed')){
+      var keep=(pm==='sync'), old=obj.psychAnchors, oldChars=(old&&Array.isArray(old.chars))?old.chars:[];
+      var anchors=oldChars.filter(function(c){ return /\(主人公\)$/.test(String(c&&c.who)); });
+      var anyNpc=false;
+      list.forEach(function(e){ var n=srcBy[e.name]||e; if(!(n.coreFear||n.coreDesire||n.wound)) return; anyNpc=true;
+        if(keep){ var prev=oldChars.filter(function(c){ return String(c&&c.who)===String(n.name||'NPC')+'(NPC)'; })[0];
+          anchors.push(prev||{ who:(n.name||'NPC')+'(NPC)', coreFear:n.coreFear||null, coreDesire:n.coreDesire||null, wound:n.wound||null }); }
+        else anchors.push({ who:(n.name||'NPC')+'(NPC)' }); });
+      if(anchors.length){
+        var pa={ note:(old&&typeof old.note==='string')?old.note:NOTE24 }; if(!keep && anyNpc) pa.ref=REF954; pa.chars=anchors;
+        if(old) obj.psychAnchors=pa;
+        else { var o2={}; Object.keys(obj).forEach(function(k){ o2[k]=obj[k]; if(k==='inputSeed') o2.psychAnchors=pa; }); obj=o2; }
+      } else if(old) delete obj.psychAnchors;
+    }
+    return { obj:obj, user:JSON.stringify(obj,null,2), info:info };
+  }
+  // fix313 の最外ラップから呼ぶ。関所の問い合わせは 1 回（r3 と同じ回数）
+  function buildBlockR4(input, r){
+    if(off()) return '';
+    var act=canary951();
+    if(!act || f951off() || f954off()){ last954=null; return buildBlockWith(input, act, null); }   // r3 と同じ
+    var pv=lsGet('v292Dfix954Pres');
+    var info={ at:Date.now(), version:VERSION954, n2:lsGet('v292Dfix954N2')!=='off', pres:(pv==='r4'||pv==='r4b')?pv:'r4c', offstage:lsGet('v292Dfix954Offstage')!=='off', psychFilter:lsGet('v292Dfix954PsychFilter')==='on', relProf:(lsGet('v292Dfix954RelProf')==='desc')?'desc':'mix', mode:(lsGet('v292Dfix954Mode')==='union')?'union':'present',
+               psych:psychMode(), dedup:lsGet('v292Dfix954Dedup')!=='off', absent:(lsGet('v292Dfix954Absent')==='keep')?'keep':'drop', absentRel:lsGet('v292Dfix954AbsentRel')!=='off',
+               anchor:lsGet('v292Dfix954Anchor')!=='off', present:{}, ev:{}, start:{}, mentioned:{}, relevant:[], userBefore:0, userAfter:0 };
+    var pres=null, delivered=null, relevant={}, offDone=false;
+    // カードへ渡す「関係する未登場」: r4c の既定（cast.offstage で渡す）では札の人物像を段5 に残さない（重複させない）。Offstage='off' か user を書き換えられなかった時は r4b どおり
+    var mk=function(p, dlv, rel, offDone){ return { pres:p, delivered:info.dedup?dlv:null, dropAbsent:info.dedup && info.absent==='drop', profile:profileMap(), relevant:(info.absentRel && !offDone?rel:{}), relevantNames:(info.absentRel?Object.keys(rel||{}):[]), anchor:info.anchor }; };
+    // fix313 のラップが二重の時（内側が付けたカードを間の部品が外し、外側が付け直す）: user は 1 回だけ書き換え、カードは同じ判定で作り直す
+    if(done954 && r && done954.has(r)){ var memo=done954.get(r); return buildBlockWith(input, act, mk(memo.pres, memo.delivered, memo.relevant||{}, memo.offDone)); }
+    try{
+      if(info.n2){ pres=(info.pres==='r4')?presentR4(input):(info.pres==='r4b'?presentStrict(input):presentR4c(input, r&&r.sys)); info.present=pres.present; info.ev=pres.ev; info.start=pres.start; info.mentioned=pres.mentioned; info.scene=pres.scene; info.gone=pres.gone||{}; info.agendaNotPresent=pres.agendaNotPresent||[]; info.recheck=pres.recheck||{}; info.unknown=pres.unknown||{}; info.lookbackFrom=(pres.lookbackFrom!=null)?pres.lookbackFrom:null;
+        relevant=info.absentRel?relevantOf(pres):{}; info.relevant=Object.keys(relevant); }   // N2 を止めた時は、カードの段3 も r3 の判定（presence）に戻す
+      else pres={ present:{}, who:{}, ev:{} };
+      if(r && typeof r.user==='string'){
+        info.userBefore=r.user.length;
+        var res=applyN2(r.user, pres, relevant); Object.keys(res.info).forEach(function(k){ info[k]=res.info[k]; });
+        info.userChanged=(res.user!=null && res.user!==r.user);
+        if(info.userChanged){ r.user=res.user; }
+        info.userAfter=r.user.length;
+        var o=res.obj; if(o && o.cast && Array.isArray(o.cast.npcs)){ delivered={}; o.cast.npcs.forEach(function(e){ if(e&&e.name) delivered[e.name]=fieldsText(e); }); }
+        offDone=!!(info.offstage && res.user!=null && Object.keys(relevant).every(function(nm){ return (res.info.offstage||[]).indexOf(nm)>=0; }));   // 関係する人が全員 cast.offstage に入った時だけ、札の人物像を段5 に残さない
+        if(done954) done954.set(r, { pres:info.n2?pres:null, delivered:delivered, relevant:relevant, offDone:offDone });
+      }
+    }catch(e){ info.error=String(e&&e.message||e); }
+    last954=info;
+    if(!info.n2) pres=null;
+    return buildBlockWith(input, act, mk(pres, delivered, relevant, offDone));
+  }
+  window.__v292Dfix954={ version:VERSION954, last:function(){ return last954; }, presentNow:function(input, sys){ return presentR4c(input, sys); }, presentR4b:function(input){ return presentStrict(input); }, relProfileLimits:{ min:REL_PROF_MIN, max:REL_PROF_MAX }, carryWin:CARRY_WIN, presentR4:function(input){ return presentR4(input); }, isOff:f954off, nameForms:function(n){ return nameForms(n, getCards()); }, usedAsPerson:usedAsPerson,
+    classifyStart:function(text, name){ return classifyStart(text, nameForms({ name:name }, [])); }, exactDedup:exactDedup, anchorLimits:{ min:ANCHOR_MIN, max:ANCHOR_MAX }, relMax:REL_MAX };
   window.__v292Dfix951={ version:VERSION951, lastSelection:function(){ return lastSel; }, select:select, isOff:f951off, isCanary:canary951, budget:budget, arm:armName, splitGm:splitGm, sections:sectionsOf, ruleEvidence:ruleEvidence, levelNames:LV_NAME };
   // 注入はfix309/300/304と同型のPlanner.build最外ラップで行う。
   // (Planner._extensionsは現行の送信経路で適用されないことを実機傍受で確認したため不採用。)
@@ -311,7 +748,7 @@
       var inner=P.build.bind(P);
       var wrapped=function(){
         var r=inner.apply(this,arguments);
-        try{ if(r&&typeof r.sys==='string'){ var b=buildBlock(arguments[1]); if(b && r.sys.indexOf(MARK)<0) r.sys=r.sys+b; } }catch(e){}
+        try{ if(r&&typeof r.sys==='string'){ var b=buildBlockR4(arguments[1], r); if(b && r.sys.indexOf(MARK)<0) r.sys=r.sys+b; } }catch(e){}
         return r;
       };
       try{ Object.keys(P.build).forEach(function(k){ wrapped[k]=P.build[k]; }) /* fix419c: 全プロパティ継承(9者相互ラップダンスの根治) */; }catch(e){}

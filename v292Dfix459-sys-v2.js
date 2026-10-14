@@ -128,11 +128,47 @@
     if (flag('v292Dfix951Off')) return false;
     return !!(g && typeof g.active === 'function' && g.active() === true); } catch(e){ return false; } }
 
+  // ★fix958（2026-10-15・GPT #126-R 記憶ブロック修正 Local GO／#126-S BUNDLE2 統合可）: fix314【記憶】の見出しを登録する。
+  //   未登録だったため、sys の末尾に足される記憶ブロックが直前の登録ブロックへ吸収され、それが dropC【展開の推進ルール】
+  //   などだと道連れで毎ターン消えていた（fix950 memory: DROPPED・headerLost を Local と本番相当で実測）。
+  //   文字列は fix314 の literal（MARK＋'。常に踏まえ、本文に説明書きとして混ぜない）】'）と完全一致。dropA/B/C/D に入れない → 独立して残る。
+  //   予算: 記憶ブロックは見出し込み MEM958_CAP 字まで。超えた分は行単位で**先頭（古い側）から**落とし、何行・何字落としたかを last958 に記録する
+  //   （r2・GPT #126-T: memoryNote は Owner が手で書く 1 つの textarea で、自動追記はない。書き足しは末尾に付くのが普通なので、直近の事実を残す）。
+  //   （新しい要約・永続記憶はしない）。記憶が空の物語は fix314 がブロックを出さないので従来と byte 一致。
+  //   戻し: localStorage.v292Dfix958Off = '1'（送信ごとに評価・デプロイ不要）。
+  var MARKERS_MEM958 = ['【記憶（この物語で確定している事実。常に踏まえ、本文に説明書きとして混ぜない）】'];
+  var MEM958_CAP = 2000;
+  var last958 = null;
+  function mem958On(){ return !flag('v292Dfix958Off'); }
+  function capMem958(text){
+    var tail = /\s*$/.exec(text)[0];
+    var body = text.slice(0, text.length - tail.length);
+    var rec = { at: Date.now(), chars: body.length, cap: MEM958_CAP, dropFrom: 'head', droppedLines: 0, droppedChars: 0, keptLines: 0 };
+    if (body.length <= MEM958_CAP){ rec.keptLines = body.split('\n').length - 1; last958 = rec; return text; }
+    var lines = body.split('\n');
+    var head = lines[0];                      // 見出し行は必ず残す
+    var used = head.length, keep = [];
+    for (var i = lines.length - 1; i >= 1; i--){
+      var add = 1 + lines[i].length;
+      if (used + add > MEM958_CAP) break;     // 末尾（新しい側）から連続して入るだけ残す
+      keep.unshift(lines[i]); used += add;
+    }
+    if (!keep.length && lines.length > 1){    // 最後の 1 行だけで上限を超える場合: その行の先頭から入る分だけ
+      var room = Math.max(0, MEM958_CAP - head.length - 1);
+      keep = [lines[lines.length - 1].slice(0, room)]; used = head.length + 1 + keep[0].length; rec.cutLastLine = true;
+    }
+    rec.keptLines = keep.length; rec.droppedLines = (lines.length - 1) - keep.length + (rec.cutLastLine ? 1 : 0);
+    rec.droppedChars = body.length - used; rec.charsAfter = used; last958 = rec;
+    try { console.log(TAG, 'fix958 記憶 ' + body.length + '→' + used + '字（古い側の ' + rec.droppedLines + '行を予算で省略）'); } catch(e){}
+    return [head].concat(keep).join('\n') + tail;
+  }
+
   function detOn459(){ try { return localStorage.getItem('v292Dfix190Det') === '1'; } catch(e){ return false; } }
   function activeMarkers(){
     /* R118F-G/G5: flag ON のときだけ fix190 の2 marker を足す。OFF なら配列は完全に従来どおり。 */
     var mk = detOn459() ? MARKERS.concat(MARKERS_FIX190_DET) : MARKERS;
     if (canary952() && !flag('v292Dfix952Off')) mk = mk.concat(MARKERS_CARDS952);   // fix952（canary 限定）
+    if (mem958On()) mk = mk.concat(MARKERS_MEM958);                                   // fix958（記憶）
     return mk;
   }
   function parse(sys){
@@ -302,6 +338,7 @@
       if (C && dropC.indexOf(b.mk) >= 0) continue;
       if (D && dropD.indexOf(b.mk) >= 0) continue;
       if (C && b.mk === '【良い1ターンの形】'){ kept.push(trimGoodTurn(b.text)); continue; }
+      if (b.mk === MARKERS_MEM958[0]){ kept.push(capMem958(b.text)); continue; }    // fix958: 記憶は予算内で残す
       kept.push(b.text);
     }
 
@@ -346,6 +383,7 @@
     rewrite: rewrite,
     parse: parse,
     last: function(){ return last; },
+    last958: function(){ return last958; },
     isOff: off
   };
   try { console.log(TAG, 'armed (sys v2 at send boundary)'); } catch(e){}

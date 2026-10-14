@@ -396,10 +396,41 @@
       return out;
     }catch(e){ return null; }
   }
+  /* ★v292Dfix956 AGENDA_PRESENCE_CONSISTENCY_V1（2026-10-14・Local・GPT #126-G GO）
+     【自発】の候補（在場かつ内圧 2 以上）から、「直近 2 ターンでその場にいる証拠が無い」NPC だけを外す（候補を減らす方向だけ: eligible_ON ⊆ eligible_OFF）。
+     その場にいる証拠: その turn の本文（plan.narrative か narrative）で、名前の区切り（読点・句点・改行）が遠隔（電話・メッセージ・写真・噂・回想 等）・不在・退場の語でない／
+       名前が本文に無く who タグ（_v254who・_convSays）だけの時は、その turn に通話・画面越しの語が無いこと。
+     内圧・閾値・並び・上位 2・注入文・直近 2 ターンの窓は変えない。不在の NPC の遠隔の動き（連絡・噂）は禁じない（【自発】を出さないだけ）。保存しない・新しい状態なし。
+     kill: localStorage v292Dfix956Off='1'（従来と byte 一致）。診断: window.__v292Dfix956.last() */
+  var F956_REMOTE=/電話|通話|受話器|スピーカー|声だけ|声しか|声が聞こえ|声がした|映る|映って|映し出|モニター|端末|メッセージ|メール|LINE|手紙|写真|画面|スマホ|通知|SNS|噂|話題|思い出|回想|記憶|夢|昔|かつて|と言って|と言った|らしい|聞いた|聞かされ|名前を/;
+  var F956_ABSENT=/行方不明|失踪|消息|姿を消|いなくな|亡くな|死ん|不在|来ない|来なかった|戻らな|帰らな|見つから|攫われ|さらわれ|連れ去|探し|探す|捜し|待って|待つ|待ち合わせ|別の場所|遠く|会いに|向かっている|向かう途中/;
+  var F956_EXIT=/去っ|去る|去り|立ち去|帰っ|帰る|帰宅|出て行|出ていっ|出ていく|別れ|離れ|見えなくな|行ってしま|走り去|消え/;
+  var F956_CALL=/電話|通話|受話器|スピーカー越し|画面越し|ビデオ通話|オンライン|声だけ|声しか|映る|映って|映し出|モニター|端末/;
+  /* ★r2（GPT #126-H）: 名前つきの who タグだけでは物理的な同席の証拠にしない（既定）。'keep' で r1 と同じ（タグだけでも在場） */
+  function tagOnlyKeep956(){ try{ return localStorage.getItem('v292Dfix956TagOnly')==='keep'; }catch(e){ return false; } }
+  var last956=null;
+  // ★BUNDLE2（2026-10-15）: 既定 OFF で配信（GPT #126-S: 生成比較の後に既定を判断）。v292Dfix956On='1' の端末だけ動く。DEFAULT_ON956=true の js 1 本で全体 ON。v292Dfix956Off='1' は常に優先。
+  var DEFAULT_ON956 = false;
+  function off956(){ try{ if(localStorage.getItem('v292Dfix956Off')==='1') return true; if(DEFAULT_ON956) return false; return localStorage.getItem('v292Dfix956On')!=='1'; }catch(e){ return true; } }
+  function clauses956(text, name){ var s=String(text||''), out=[], i=s.indexOf(name), END=/[。！？!?\n、，,]/;
+    while(i>=0){ var a=i, b=i+name.length; while(a>0 && !END.test(s.charAt(a-1))) a--; while(b<s.length && !END.test(s.charAt(b))) b++; out.push(s.slice(a, Math.min(s.length, b+1))); i=s.indexOf(name, i+name.length); }
+    return out; }
+  function scenePresent956(turns, name){
+    var win=turns.slice(-2), why=null;
+    for(var k=win.length-1;k>=0;k--){ var t=win[k]||{};
+      var txt=String((t.plan&&typeof t.plan.narrative==='string'&&t.plan.narrative)||t.narrative||'');
+      var cl=clauses956(txt, name);
+      if(cl.length){ for(var j=0;j<cl.length;j++){ var c=cl[j]; if(!F956_REMOTE.test(c) && !F956_ABSENT.test(c) && !F956_EXIT.test(c)) return { ok:true, why:'本文で場にいる' }; } why='本文の言及が遠隔・不在・退場だけ'; continue; }
+      var tagged=false; try{ tagged=((t.plan&&Array.isArray(t.plan._v254who))?t.plan._v254who:[]).indexOf(name)>=0 || ((t._convSays)||[]).some(function(c){ return c && c.who===name; }); }catch(e){}
+      if(tagged){ if(tagOnlyKeep956() && !F956_CALL.test(txt)) return { ok:true, why:'who タグ' }; why=F956_CALL.test(txt)?'who タグだけで通話・画面越しの語あり':'who タグだけ（本文にその場の証拠なし）'; }
+    }
+    return { ok:false, why:why||'直近 2 ターンにその場の証拠なし' }; }
+  try{ window.__v292Dfix956={ version:'fix956-r2-20261014', last:function(){ return last956; }, scenePresent:function(name){ var S=getS(); return scenePresent956((S&&S.turns)||[], name); }, isOff:off956 }; }catch(e){}
   function agendaBlock(){
     try{
       try{ if(localStorage.getItem('v292AgendaOff')==='1') return ''; }catch(e){}
       var S=getS(); if(!S||!S.cast||!Array.isArray(S.cast.npcs)) return '';
+      last956=null;
       var pr=agendaPressures(); if(!pr) return '';
       var npcs=agendaNpcs(S); /* ★B0 */
       var cur=(S.turns||[]).length;
@@ -407,6 +438,7 @@
       var cands=[];
       npcs.forEach(function(n,i){
         var info=pr[n.name]; if(!info||!info.present||info.pressure<2) return;
+        if(!off956()){ var sp956=scenePresent956(S.turns||[], String(n.name)); if(!sp956.ok){ (last956=last956||{ at:Date.now(), dropped:[] }).dropped.push({ name:String(n.name), why:sp956.why }); return; } }   /* ★fix956: 候補から外すだけ */
         var s=st77[n.name]||{};
         var desire=clean223(n.coreDesire||'')||clean223(s.mokuteki||s['目的']||'')||clean223(s.mikaiketsu||s['未解決']||'');
         var wound=clean223(n.wound||'')||clean223(s.kizu||s['傷']||'');

@@ -10088,6 +10088,33 @@
     } catch(e){ return ''; }
   }
 
+  // ★v292Dfix955（2026-10-14・Local・GPT #125-GY ⑥）: fix95 の誤爆止め。短い名前（2 字以下）・漢字を含まない名前（かなだけ等）が、
+  //   別の語の一部（例: アン→アンテナ／マリアン、ひなた→ひなたぼっこ、澪→澪標）に当たり、消えない appeared 印を立てていた。
+  //   ・これから立てる印についてだけ、名前の前後を見る（前が漢字・カタカナ・英数・長音でない／後ろが行末・空白・括弧・引用符・句読点・助詞・敬称）。
+  //   ・3 字以上で漢字を含む名前は従来どおり素の一致（判定は 1 バイトも変わらない）。既に立っている印は読むだけで、書き換えも消去もしない。
+  //   ・名前の形（名・姓・別名）は増やさない（印が増える方向の変更はしない）。
+  //   戻し: localStorage v292Dfix955Off='1' → 従来の ctx.indexOf(n.name) >= 0 に戻る。
+  var F955_HAS_KANJI = /[\u4E00-\u9FFF\u3400-\u4DBF]/;
+  var F955_PRE_BAD = /[\u4E00-\u9FFF\u3400-\u4DBF\u3005\u3006\u30A0-\u30FF\uFF66-\uFF9DA-Za-z0-9\uFF10-\uFF19\uFF21-\uFF3A\uFF41-\uFF5A]/;
+  var F955_POST_OK = /[\s\u3000\u300D\u300F\uFF09)\u3011\]\u3009\u300B\u3015\uFF5D}\u30FB\u2026\u2014\u2015\u3001\u3002\uFF0C\uFF0E\uFF01\uFF1F!?:\uFF1A;\uFF1B"'<>\uFF02\u300C\u300E]/;
+  var F955_POST_PARTICLE = /^(?:\u306F|\u304C|\u3092|\u306B|\u3078|\u3068|\u3082|\u3067|\u306E|\u3084|\u306D|\u3088|\u304B|\u304B\u3089|\u307E\u3067|\u3088\u308A|\u3053\u305D|\u3055\u3048|\u3057\u304B|\u3060\u3051|\u3055\u3093|\u3061\u3083\u3093|\u304F\u3093|\u541B|\u69D8|\u3055\u307E|\u6BBF|\u6C0F|\u5148\u8F29|\u5148\u751F|\u305F\u3061|\u9054|\u3089)/;
+  //   ★BUNDLE2（2026-10-15）: 既定 OFF。有効化は端末の localStorage v292Dfix955On='1'。v292Dfix955Off='1' が最優先で停止。全体で既定 ON にするときは DEFAULT_ON955 = true の 1 行だけ変える。
+  var DEFAULT_ON955 = false;
+  function f955off(){ try { if (localStorage.getItem('v292Dfix955Off') === '1') return true; if (DEFAULT_ON955) return false; return localStorage.getItem('v292Dfix955On') !== '1'; } catch(e){ return true; } }
+  function nameHit955(ctx, name){
+    ctx = String(ctx || ''); name = String(name || '');
+    if (!name) return false;
+    if (f955off() || (name.length >= 3 && F955_HAS_KANJI.test(name))) return ctx.indexOf(name) >= 0;   // 従来どおり
+    var i = ctx.indexOf(name);
+    while (i >= 0){
+      var before = (i === 0) ? '' : ctx.charAt(i - 1), rest = ctx.slice(i + name.length);
+      if ((before === '' || !F955_PRE_BAD.test(before)) && (rest === '' || F955_POST_OK.test(rest.charAt(0)) || F955_POST_PARTICLE.test(rest))) return true;
+      i = ctx.indexOf(name, i + 1);
+    }
+    return false;
+  }
+  try { window.__v292Dfix955 = { version: 'fix955-r1b-20261015', nameHit: nameHit955, isOff: f955off }; } catch(e){}
+
   function wrap(){
     var P = getPlanner();
     if (!P || typeof P.build !== 'function') return false;
@@ -10104,7 +10131,7 @@
       var active = npcs.filter(function(n){
         if (!n || !n.name) return false;
         if (n.appeared === true) return true;
-        if (ctx.indexOf(n.name) >= 0){ n.appeared = true; changed = true; return true; }
+        if (nameHit955(ctx, n.name)){ n.appeared = true; changed = true; return true; }
         return false;
       });
       if (changed){ try { if (typeof st.save === 'function') (typeof st.saveC==='function'?st.saveC('features.npcAppearedMark'):st.save()); } catch(e){} }
