@@ -251,7 +251,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261014-c953r3';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261014-iso2b-c953r3';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -276,6 +276,7 @@
 <script src="v292Dfix654-storage-trap.js?cb=v292Dfix731"></script>
 <!-- v292Dfix893: Pages origin（*.pages.dev）でだけ動く cookie session shim。github.io では何もしない。 -->
 <script src="v292Dfix893-account-cookie-shim.js?cb=20260929-ac14"></script>
+<script src="v292Diso2-owner-send-guard.js?cb=20261014-iso2b"></script>
 <!-- ★v292Dsmrc1 model registry（X-6 MODEL_REGISTRY_CONVERGENCE / client 20260926-sp20m / RULING_ID PKT-20260926-RR-01）:
      index.html と home.html が **同じ 1 file** を読む。model の正本（primary / fallback / request policy）はこの file だけ。
      home の AI 経路（シナリオ編集の「🌱 AIで残りを広げる」「🎲 全部おまかせ」・fix873 の「おまかせで作る」
@@ -1561,6 +1562,25 @@
       return (green >= lack) ? 0 : lack;      /* GREEN で足りるなら通常の pre-flight に任せる */
     } catch(e){ return 0; }
   }
+  /* ★★iso2（GPT #125-GY、2026-10-14）: home の送信入口（f662 の自動 put・「☁ いま上げる」の forceput）でも、送る中身の持ち主と送信先の
+     アカウントを確かめる（共通ガード __v292Diso2.check()。home は fix946 を読まないので、端末の画像の持ち主は印 v292iso946_owner を読むだけ）。
+     一致しない／確かめられないなら**送らずに中止**（データは 1 byte も変えない）。commit 台帳の予約より前で呼ぶ。
+     共通ガードが無い（古い HTML）時は従来どおり（home には fix946 が無い）。kill = v292Diso2Off='1'。 */
+  var iso2HomeStats = { holds: 0, last: null };
+  function iso2Hold(where, body){
+    try { if (g('v292Diso2Off') === '1') return null; } catch(e){}
+    var why = null;
+    try { var G = window.__v292Diso2; if (G && G.__armed && typeof G.check === 'function') why = G.check(body || null, 'home:' + (where || '')); }
+    catch(e){ why = 'ISO2_UNKNOWN'; }
+    if (!why) return null;
+    iso2HomeStats.holds++; iso2HomeStats.last = { at: Date.now(), why: String(why).slice(0, 160), where: where || '' };
+    try { console.log('[home][iso2]', '送信を中止（' + why + '・' + (where || '') + '）'); } catch(e){}
+    return why;
+  }
+  var ISO2_HOME_MSG = 'この端末のデータの中に、いまログインしているアカウントのものと確かめられないもの（別のアカウントで作った物語・アイコンなど）があるため、クラウドへ送りませんでした。データは何も変えていません。別のタブでアカウントを切り替えた場合は、このページを読み込み直してください。';
+  /* ★iso2b（GPT #125-GZ）: 理由に合った文（アカウントの切替／持ち主を確かめられない古いデータ＝まとめての同期だけ止める）を共通ガードから受け取る */
+  function iso2Msg(why){ try { var G = window.__v292Diso2; if (G && typeof G.messageFor === 'function') return G.messageFor(why); } catch(e){} return ISO2_HOME_MSG; }
+  function iso2Label(why){ return /^(ACCOUNT_CHANGED|ACCOUNT_CONFLICT|BOOT_CONFLICT|SERVER_ACCOUNT_MISMATCH)/.test(String(why || '')) ? '⚠ 上げませんでした（アカウントを確かめられません）' : '⚠ まとめての同期を止めています（持ち主を確かめられないデータ）'; }
   /* ①サーバーへ現状を保存する。成功したら証明トークンを返す(失敗は null) */
   function f662ServerBackup(){
     try {
@@ -1573,6 +1593,8 @@
         f713Note('home:f662-server-backup', over662, 'put', null);
         return Promise.resolve(null);
       }
+      /* ★iso2: 送る中身（この pkg）の持ち主と送信先のアカウントが一致しない／確かめられないなら送らない。null＝「控えを取れた証明なし」＝呼び出し側は 1 バイトも消さない（既存の契約） */
+      if (iso2Hold('f662-server-backup', { op: 'put', pkg: pkg })) return Promise.resolve(null);
       /* ★★fix828 R3(GPT 裁定 61 `R3_F662_TRUSTED_REV_AND_GATE`):
          ① baseRev は fix826 の trustedRev()（= max(580, 402)）を優先する。
             402 だけを直読みしていると、index 側で 580 だけが進んだ状態のとき
@@ -2413,6 +2435,14 @@
   }
   function push(){
     if(!loggedIn()){ noteNotLoggedIn(); alert(whyNotLoggedIn()); return; }
+    /* ★iso2 (1) 入口: アカウントが別のタブで切り替わった画面からは送らない（理由を画面に出す） */
+    var iso2p = iso2Hold('push:pre', { op: 'forceput' });
+    if (iso2p){
+      try { el('sync').className='sync err'; el('sync').textContent=iso2Label(iso2p); } catch(e){}
+      try { el('note').innerHTML = '<div class="note">'+esc(iso2Msg(iso2p))+'</div>'; } catch(e){}
+      alert(iso2Msg(iso2p));
+      return;
+    }
     /* ★★fix602(2): 「☁ いま上げる」は forceput ＝**明示的な正本上書き**。
        背景同期の fail-open（分類器が居なければ従来どおり送る）をここへ持ち込むと、
        削除済みの物語の本体がクラウドの正本として復活し、全端末へ配られる。
@@ -2503,6 +2533,9 @@
       /* ★★fix596(GPT指定1): 「いま上げる」は forceput なので、**曖昧コミットはここでも起きる**。
          put と同じ commit ledger を通し、commitOpId を付けて送る。
          未解決の pending が残っているなら、上書きせずに中止する（前回の証拠を消さない）。 */
+      /* ★iso2 (2) 送る直前（commit 台帳の予約より前）: 送る中身（この pkg）の持ち主と送信先のアカウント */
+      var iso2s = iso2Hold('push:send', { op: 'forceput', pkg: pkg });
+      if (iso2s) return { ok:false, error: iso2Msg(iso2s), errorCode:'OWNER_GUARD_HOLD', why: iso2s };
       var body596 = { op:'forceput', baseRev:(m&&m.rev)||0, pkg:pkg };
       var L596 = null; try { L596 = window.__v292Dfix590; } catch(e){}
       if (!(L596 && typeof L596.notePut === 'function')) return call(body596, 60000);
@@ -2543,6 +2576,11 @@
           });
         });
     }).then(function(r){
+      if (r && r.ok !== true && r.errorCode === 'OWNER_GUARD_HOLD'){   /* ★iso2: 送信直前の中止を画面に出す（黙らせない） */
+        el('sync').className='sync err'; el('sync').textContent=iso2Label(r.why);
+        try { el('note').innerHTML = '<div class="note">'+esc(String(r.error || ''))+'</div>'; } catch(e){}
+        return;
+      }
       if (r && r.ok !== true && r.errorCode === 'PRECANONICAL_HOLD'){   /* ★PCP V2.3: 送信直前の中止を画面に出す（黙らせない） */
         el('sync').className='sync err'; el('sync').textContent='⚠ 上げませんでした（物語の保存が未確定）';
         try { el('note').innerHTML = '<div class="note">'+esc(String(r.error || ''))+'</div>'; } catch(e){}

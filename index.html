@@ -4,7 +4,7 @@
 <script src="v292Dvault2-sendgate.js?cb=sgh2b"></script>
 <script src="v292Dvault2-copygate.js?cb=20261011-ab8"></script>
 <script src="v292Dfix950-card-delivery-probe.js?cb=20261014-f950r2"></script><!-- v292Dfix950: card/memory delivery probe (record-only; request body unchanged). OFF=localStorage v292Dfix950Off=1 -->
-<script src="v292Dfix953-card-canary-gate.js?cb=20261014-c953r3"></script><!-- v292Dfix953: card canary gate (fix952/fix951/fix444g run ONLY when localStorage v292Dfix953On=1 AND this document story id is in the baked allowlist; otherwise byte-identical to production) -->
+<script src="v292Dfix953-card-canary-gate.js?cb=20261014-iso2b-c953r3"></script><!-- v292Dfix953: card canary gate (fix952/fix951/fix444g run ONLY when localStorage v292Dfix953On=1 AND this document story id is in the baked allowlist; otherwise byte-identical to production) -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
@@ -16,6 +16,9 @@
 <script src="v292Dfix654-storage-trap.js?cb=v292Dfix731"></script>
 <!-- v292Dfix893: Pages origin（*.pages.dev）でだけ動く cookie session shim。github.io では何もしない。 -->
 <script src="v292Dfix893-account-cookie-shim.js?cb=20260929-ac14"></script>
+<!-- ★fix946 第1段(2026-10-14 / GPT #125-GR): アイコン画像のアカウント境界だけ（M3）。キーは不変。fix889 より前（fetch の関所）・fix197/346 より前（退避が mem 読込より先）。kill: localStorage v292Dfix946Off=1 -->
+<script src="v292Dfix946-img-isolation.js?cb=20261014-iso1c"></script>
+<script src="v292Diso2-owner-send-guard.js?cb=20261014-iso2b"></script>
 <script src="v292Dp8d-image-egress-guard.js?cb=20261009-p8d2"></script>
 <script src="v292Dfix905-me-owner-gate.js?cb=20260929-ac17"></script>
 <!-- ★v292Dsmrc1 block / 版 dsmrc-2b(2026-09-13) MODEL ROUTING CENTRALIZATION 第2段b
@@ -327,7 +330,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261014-c953r3';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261014-iso2b-c953r3';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4310,7 +4313,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <script src="v292Dfix192-newengine.js?cb=20261010-gq1"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
-  <script src="v292Dfix197-avatar-key.js?cb=20261002-ac36"></script>
+  <script src="v292Dfix197-avatar-key.js?cb=20261014-iso1c"></script>
   <!-- v292Dfix221: モデル文脈の直近会話(recentDialogues)を、表示と同じ権威データ
        _convSays に一本化。fix58の壊れた本文再抽出(speakerに地の文が混入→過去セリフ
        がモデルへ誤供給され全キャラが同じセリフを言う)を発生源から断つ。 -->
@@ -4379,7 +4382,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 
 <script src="v292Dfix577-delete-entry-guard.js?cb=v292Dfix577"></script>
 <script src="v292Dfix310-gallery.js?cb=20261009-p8b2"></script>
-<script src="v292Dfix313-story-cards.js?cb=20261014-c953r3"></script>
+<script src="v292Dfix313-story-cards.js?cb=20261014-iso2b-c953r3"></script>
 <script src="v292Dfix314-memory.js?cb=20260829-fix748"></script>
 <script src="v292Dfix315-see.js?cb=v292Dfix315b2"></script>
 <script src="v292Dfix316-gallery-search.js?cb=v292Dfix316"></script>
@@ -4442,13 +4445,13 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix393-restyle-unify.js?cb=20261002-ac36"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=20260901-fix783"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
-<script src="v292Dfix399-cloudsync.js?cb=20261008-g3"></script>
-  <script src="v292Dfix400-img-url.js?cb=20260908-fix837"></script>
+<script src="v292Dfix399-cloudsync.js?cb=20261014-iso2b"></script>
+  <script src="v292Dfix400-img-url.js?cb=20261014-iso1c"></script>
 <script src="v292Dfix336-proxy-sentinel-fix.js?cb=20261006-a0"></script>
 <script src="v292Dfix338-artstyle.js?cb=20260829-fix748"></script>
-<script src="v292Dfix346-idb-avatars.js?cb=v292Dfix346"></script>
+<script src="v292Dfix346-idb-avatars.js?cb=20261014-iso1c"></script>
 <script src="v292Dfix356-avatar-eager.js?cb=v292Dfix450"></script>
-<script src="v292Dfix402-invisible-sync.js?cb=20261008-g3"></script>
+<script src="v292Dfix402-invisible-sync.js?cb=20261014-iso2b"></script>
 <script src="v292Dfix405-state-freshness.js?cb=v292Dfix739"></script>
 <script src="v292Dfix406-automode.js?cb=v292Dfix417d"></script>
 <script src="v292Dfix407-load-noconfirm.js?cb=v292Dfix407"></script>
@@ -4485,7 +4488,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix442-folklore.js?cb=v292Dfix442"></script>
 <script src="v292Dfix443-drama-rescue.js?cb=v292Dfix443"></script>
 <script src="v292Dfix483-beat-director.js?cb=v292Dfix483"></script>
-<script src="v292Dfix444-world-law.js?cb=20261014-c953r3"></script>
+<script src="v292Dfix444-world-law.js?cb=20261014-iso2b-c953r3"></script>
 <script src="v292Dfix445-handle-lock.js?cb=20260901-fix784"></script>
 <script src="v292Dfix446-fill-robust.js?cb=v292Dfix446"></script>
 <script src="v292Dfix447-json-force.js?cb=v292Dfix447"></script>
@@ -4493,7 +4496,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix453-src-coalesce.js?cb=v292Dfix453"></script>
 <script src="v292Dfix454-dash.js?cb=v292Dfix457"></script>
 <script src="v292Dfix458-dash-post.js?cb=20260901-fix784"></script>
-<script src="v292Dfix459-sys-v2.js?cb=20261014-c953r3"></script>
+<script src="v292Dfix459-sys-v2.js?cb=20261014-iso2b-c953r3"></script>
 <script src="v292Dfix460-slotgrid.js?cb=v292Dfix460"></script>
 <script src="v292Dfix461-appearance-en.js?cb=20261002-ac36"></script>
 <script src="v292Dfix462-bare-speaker.js?cb=20260829-fix748"></script>
@@ -4552,7 +4555,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix516-regen-local-display.js?cb=20261002-ac36"></script>
 <script src="v292Dfix517-local-authoritative-avatar.js?cb=20261002-ac36"></script>
 <script src="v292Dfix519-icon-p2p.js?cb=20260908-fix837"></script>
-<script src="v292Dfix523-icon-sync-versioned.js?cb=20260926-sp24"></script>
+<script src="v292Dfix523-icon-sync-versioned.js?cb=20261014-iso1c"></script>
 <script src="v292Dfix525-slot-ownership.js?cb=v292Dfix525"></script>
 <script src="v292Dfix945-xtab-stale-guard.js?cb=20261010-rs1"></script>
 <script src="v292Dfix526-story-naming.js?cb=20260829-fix748"></script>
