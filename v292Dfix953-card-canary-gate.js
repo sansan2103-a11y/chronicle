@@ -24,7 +24,7 @@
   var VERSION = 'fix953-r2-20261014';
   var TAG = '[v292Dfix953:card-canary]';
   var FLAG = 'v292Dfix953On';
-  var ALLOW = [/*CANARY_ALLOW_BEGIN*/ /*CANARY_ALLOW_END*/];
+  var ALLOW = [/*CANARY_ALLOW_BEGIN*/ 'smv82tjjai8' /*CANARY_ALLOW_END*/];
   var DENY = ['smv6r10s7u9'];
   var ID_RE = /^[A-Za-z0-9_-]{1,80}$/;
   var st = { calls: 0, trueCalls: 0, errors: 0 };
