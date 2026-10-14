@@ -330,7 +330,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261015-bundle3-npc-s2prov';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261015-bundle4-quote959';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -2929,7 +2929,7 @@ const G = {
           .replace(/<say\b[^>]*>\s*([\s\S]*?)\s*<\/say>/gi, function(_m, c){
             c = String(c || '').trim();
             if (!c) return '';
-            var _nrm213 = c.replace(/[\s　。、！？!?…・「」『』]/g,''); try { if (_nrm213 && (((function(){ try { return localStorage.getItem('v292DfixCL1cOff') === '1'; } catch(_x){ return false; } })() ? narr : narr.replace(/<say\b[^>]*>[\s\S]*?<\/say>/gi, '')).match(/「[^」]*」/g)||[]).some(function(q){ return q.replace(/[\s　。、！？!?…・「」『』]/g,'') === _nrm213; })) return ''; } catch(e){} /* v292Dfix213: 同文の裸「」が本文に既にあればタグ変換を捨てる(本文のセリフ二重化の根治) */ /* ★CL1-c: 照合相手から <say>…</say> 自身を除く（タグの中の「」と自己一致して台詞を消していた） */ return /^[「『]/.test(c) ? c : ('「' + c + '」');
+            var _nrm213 = c.replace(/[\s　。、！？!?…・「」『』]/g,''); try { if (_nrm213 && (((function(){ try { return localStorage.getItem('v292DfixCL1cOff') === '1'; } catch(_x){ return false; } })() ? narr : narr.replace(/<say\b[^>]*>[\s\S]*?<\/say>/gi, '')).match(/「[^」]*」/g)||[]).some(function(q){ return q.replace(/[\s　。、！？!?…・「」『』]/g,'') === _nrm213; })) return ''; } catch(e){} /* v292Dfix213: 同文の裸「」が本文に既にあればタグ変換を捨てる(本文のセリフ二重化の根治) */ /* ★CL1-c: 照合相手から <say>…</say> 自身を除く（タグの中の「」と自己一致して台詞を消していた） */ return ((function(){ try { return localStorage.getItem('v292Dfix959Off') === '1'; } catch(_y){ return false; } })() ? /^[「『]/.test(c) : (/^「/.test(c) || /^『[^『』]*』$/.test(c))) ? c : ('「' + c + '」'); /* ★v292Dfix959: 『…』で始まり後ろに続きがある台詞（『禁足地』って書いてある 等）にも「」を付ける。「で始まる台詞と、全体が 1 つの『…』だけの台詞は従来どおり。戻し: v292Dfix959Off=1 */
           })
           .replace(/<\/?say\b[^>]*>?/gi, '')   // 残り/不完全な say 断片を除去
           .replace(/「\s*」/g, '')              // 空の「」
@@ -4023,7 +4023,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
        fix659 は別 id + __f527 マーカーを立てるので干渉しない、という関係をこの並びで示す。
      読出=window.__v292Dfix659.status()/.selfTest() / OFF=v292Dfix659Off -->
 <script src="v292Dfix659-fork-choice.js?cb=v292Dfix680"></script>
-<script src="features.js?cb=20261015-bundle3-npc-s2prov"></script>
+<script src="features.js?cb=20261015-bundle4-quote959"></script>
 <script>
 /* ============================================================================
  * v292DfixP0-inline : シナリオテンプレ適用の緊急封鎖（L2 + L2b）
@@ -4312,10 +4312,10 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
   <script src="v292Dfix796-memory-retrieve.js?cb=20260930-ac25"></script>
-  <script src="v292Dfix192-newengine.js?cb=20261015-bundle3-npc-s2prov"></script>
+  <script src="v292Dfix192-newengine.js?cb=20261015-bundle4-quote959"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
-  <script src="v292Dfix197-avatar-key.js?cb=20261015-bundle3-npc-s2prov"></script>
+  <script src="v292Dfix197-avatar-key.js?cb=20261015-bundle4-quote959"></script>
   <!-- v292Dfix221: モデル文脈の直近会話(recentDialogues)を、表示と同じ権威データ
        _convSays に一本化。fix58の壊れた本文再抽出(speakerに地の文が混入→過去セリフ
        がモデルへ誤供給され全キャラが同じセリフを言う)を発生源から断つ。 -->
@@ -4384,7 +4384,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 
 <script src="v292Dfix577-delete-entry-guard.js?cb=v292Dfix577"></script>
 <script src="v292Dfix310-gallery.js?cb=20261009-p8b2"></script>
-<script src="v292Dfix313-story-cards.js?cb=20261015-bundle3-npc-s2prov"></script>
+<script src="v292Dfix313-story-cards.js?cb=20261015-bundle4-quote959"></script>
 <script src="v292Dfix314-memory.js?cb=20260829-fix748"></script>
 <script src="v292Dfix315-see.js?cb=v292Dfix315b2"></script>
 <script src="v292Dfix316-gallery-search.js?cb=v292Dfix316"></script>
@@ -4478,7 +4478,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix430-carrier-block.js?cb=v292Dfix430"></script>
 <script src="v292Dfix436-seed-expand.js?cb=20260913-dsmrc2b"></script>
 <script src="v292Dfix437-regen-instant.js?cb=20261002-ac36"></script>
-<script src="v292Dfix438-inline-dialogue.js?cb=v292Dfix438"></script>
+<script src="v292Dfix438-inline-dialogue.js?cb=20261015-bundle4-quote959"></script>
 <script src="v292Dfix439-readability.js?cb=v292Dfix457"></script>
 <script src="v292Dfix440-block-rescue.js?cb=v292Dfix457"></script>
 <script src="v292Dfix500-sys-dedup.js?cb=v292Dfix500"></script>
@@ -4498,7 +4498,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix453-src-coalesce.js?cb=v292Dfix453"></script>
 <script src="v292Dfix454-dash.js?cb=v292Dfix457"></script>
 <script src="v292Dfix458-dash-post.js?cb=20260901-fix784"></script>
-<script src="v292Dfix459-sys-v2.js?cb=20261015-bundle3-npc-s2prov"></script>
+<script src="v292Dfix459-sys-v2.js?cb=20261015-bundle4-quote959"></script>
 <script src="v292Dfix460-slotgrid.js?cb=v292Dfix460"></script>
 <script src="v292Dfix461-appearance-en.js?cb=20261002-ac36"></script>
 <script src="v292Dfix462-bare-speaker.js?cb=20260829-fix748"></script>

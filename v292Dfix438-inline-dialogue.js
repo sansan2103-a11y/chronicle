@@ -126,6 +126,15 @@
       (document.head || document.documentElement).appendChild(st);
     } catch(e){}
   }
+  /* ★v292Dfix959（2026-10-15）: 『…』で始まり後ろに続きがある台詞（例: 『禁足地』って書いてある）に「」が付かず、
+       地の文と区別できなかった。「で始まる台詞と、全体が 1 つの『…』だけの台詞は従来どおりそのまま。それ以外は「」で包む。
+       index.html の fix175（本文への変換）と同じ規則。戻し: localStorage v292Dfix959Off='1'（従来の /^[「『]/ 判定）。 */
+  function wrap959(text){
+    var t = String(text == null ? '' : text), off = false;
+    try { off = localStorage.getItem('v292Dfix959Off') === '1'; } catch(e){}
+    var keep = off ? /^[「『]/.test(t) : (/^「/.test(t) || /^『[^『』]*』$/.test(t));
+    return keep ? t : ('「' + t + '」');
+  }
   function makeSayEl(who, text){
     var d = document.createElement('div');
     d.classList.add('v292Dfix438-say');                 // ★className丸ごと上書き禁止(fix329の教訓)
@@ -137,7 +146,7 @@
     }
     var b = document.createElement('span');
     b.classList.add('v292Dfix438-body');
-    b.textContent = /^[「『]/.test(text) ? text : ('「' + text + '」');
+    b.textContent = wrap959(text);
     d.appendChild(b);
     return d;
   }
