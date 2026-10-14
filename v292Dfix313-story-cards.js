@@ -388,7 +388,7 @@
   var last954=null, done954=(typeof WeakMap==='function')?new WeakMap():null;   // build の結果 r → { pres, delivered, relevant }（同じ r を 2 回書き換えない）
   // ★r4h（BUNDLE2・2026-10-15）: 既定 OFF で配信（GPT #126-S: NPC は生成比較の後に既定を判断）。この端末で v292Dfix954On='1' の時だけ動く。
   //   DEFAULT_ON954 を true にした js 1 本で全体 ON に切り替える。v292Dfix954Off='1' は常に優先して止める。
-  var DEFAULT_ON954 = false;
+  var DEFAULT_ON954 = true;   // ★BUNDLE3（2026-10-15・NPC 生成比較で悪化なし）: 既定 ON。停止 v292Dfix954Off=1
   function f954off(){ if(lsGet('v292Dfix954Off')==='1') return true; if(DEFAULT_ON954) return false; return lsGet('v292Dfix954On')!=='1'; }
   // fix533b と同じ許可方式（前: 語を作る文字でない／後: 行末・空白・閉じ括弧・句読点・助詞・敬称）
   var PRE_BAD=/[一-鿿゠-ヿｦ-ﾝーA-Za-z0-9０-９ａ-ｚＡ-Ｚ]/;

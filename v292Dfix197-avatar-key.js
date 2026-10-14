@@ -411,6 +411,7 @@
         /* ★fix946 M3: 依頼した時と持ち主が違う（途中で切り替わった）→ 表示にも保存にも入れない */
         if (F946g && !F946g.sameEpoch(ep946)){ try{ F946g.noteStale(); }catch(e){} delete regenPrev[pk]; return; }
         var d=b64ToDataUrl(b); cache[pk]=d; persistSet(pk,d);
+        prov0Note(pk, d, F946g, ep946);   // ★avprov Phase 0: 書き込み専用（表示・保存・通信は変えない）
         // ★fix403: 作り直し成功→レシピのseed/prompt/modelを実際に使った値へ(復元で旧絵に戻さない)
         try { if (fresh403) { var rk403='v292avrec_'+pk, ro403=JSON.parse(localStorage.getItem(rk403)||'null'); if (ro403) { ro403.s=body.seed; ro403.p=body.prompt; ro403.m=body.model; localStorage.setItem(rk403, JSON.stringify(ro403)); } else { localStorage.setItem(rk403, JSON.stringify({ s:body.seed, p:body.prompt, m:body.model })); } } } catch(e){} })  // ★fix403c: レシピ未存在なら初回レシピを新規保存(復元/画風切替で新絵を保持)
       .catch(function(){
@@ -433,7 +434,43 @@
     } catch(e){}
     return GEN_BUDGET;
   }
-  var MIN_INTERVAL = 1500;  // 生成と生成の最小間隔(ms)
+  var MIN_INTERVAL = 1500;
+  // ★iconS2（2026-10-15・BUNDLE3・GPT #126-T）: 既定 ON。kill: localStorage.v292DiconS2Off='1' で従来動作へ完全復帰（送信ごとに評価）。
+  function s2On197(){ try { return localStorage.getItem('v292DiconS2Off') !== '1'; } catch(e){ return false; } }
+  var s2stats197 = { localDefer: 0 };
+  /* ★avprov Phase 0（2026-10-15・BUNDLE3・GPT #126-U (a)）: 出自台帳 v292avprov_v1 に「この端末で新しく生成して保存できた絵」だけを記録する。
+       { pk: { s: 物語 ID（document の物語）, o: 持ち主の印（fix946 の bootOwner）, h: 画像の hash（fix523/Worker と同一式）, at } }
+     ・書き込み専用。キー・読み込み先・採用・表示・通信は一切変えない。この台帳を読む処理は無い（将来の M2 の判定材料。単独では移行の証拠にしない）。
+     ・記録するのは genOne の生成成功で、表示キャッシュと端末保存（v292av2_）に同じ bytes が入ったことを読み戻して確かめた時だけ。
+       キャッシュの再利用・pull・復元・候補採用・保存失敗・fix946 が無い/止まっている・持ち主が決まらない・fence 後（持ち主が変わった）は書かない。
+     ・上限 PROV0_MAX 件（古い順に捨てる）。kill: localStorage.v292DavProvOff='1'。fix946 は v292avprov_v1 を持ち主つきの退避対象に入れている。 */
+  var PROV0 = 'v292avprov_v1', PROV0_MAX = 500;
+  var prov0stats = { written: 0, skipped: {} };
+  function prov0On(){ try { return localStorage.getItem('v292DavProvOff') !== '1'; } catch(e){ return false; } }
+  function prov0Skip(why){ prov0stats.skipped[why] = (prov0stats.skipped[why] || 0) + 1; return false; }
+  function prov0Hash(d){ var s = String(d || ''), h = 5381; for (var i = 0; i < s.length; i++){ h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return String(s.length) + ':' + (h >>> 0).toString(36); }   // fix523 hashFull / Worker d1PutImg と同一
+  function prov0Story(){ try { var dk = window.__chronicleDocumentStoryKey; if (typeof dk !== 'string' || !dk) return null; if (dk === 'chr6') return 'default'; var s = dk.replace(/^chr6_slot_/, ''); return s || null; } catch(e){ return null; } }
+  function prov0Note(pk, d, F, ep){
+    try {
+      if (!prov0On()) return prov0Skip('OFF');
+      if (!F) return prov0Skip('NO_946');                                  // 持ち主が分からない（fix946 が無い・止まっている）
+      if (!F.sameEpoch(ep)) return prov0Skip('FENCED');                    // 依頼後に持ち主が変わった
+      var o = (typeof F.bootOwner === 'function') ? F.bootOwner() : null;
+      if (!o || o === 'conflict') return prov0Skip('NO_OWNER');
+      try { if (typeof F.holding === 'function' && F.holding()) return prov0Skip('HOLD'); } catch(e){}
+      var sid = prov0Story(); if (!sid) return prov0Skip('NO_STORY');
+      if (cache[pk] !== d) return prov0Skip('NOT_CACHED');
+      var saved = null; try { saved = localStorage.getItem(LS_PREFIX + pk); } catch(e){ saved = null; }
+      if (saved !== d) return prov0Skip('NOT_SAVED');                     // 端末保存に失敗（容量など）＝根拠にしない
+      var m = null; try { m = JSON.parse(localStorage.getItem(PROV0) || 'null'); } catch(e){ m = null; }
+      if (!m || typeof m !== 'object' || Object.prototype.toString.call(m) === '[object Array]') m = {};
+      m[pk] = { s: sid, o: o, h: prov0Hash(d), at: Date.now() };
+      var ks = Object.keys(m);
+      if (ks.length > PROV0_MAX){ ks.sort(function(a, b){ return ((m[a] && m[a].at) || 0) - ((m[b] && m[b].at) || 0); }); for (var i = 0; i < ks.length - PROV0_MAX; i++) delete m[ks[i]]; }
+      try { localStorage.setItem(PROV0, JSON.stringify(m)); } catch(e){ return prov0Skip('WRITE_FAILED'); }
+      prov0stats.written++; return true;
+    } catch(e){ return prov0Skip('ERR'); }
+  }  // 生成と生成の最小間隔(ms)
   var genCount = 0, lastGenAt = 0, pumpTimer = null;
   function pump(){
     if(active >= 1 || !queue.length || pumpTimer) return;
@@ -472,6 +509,19 @@
     genGate[pk] = { st: 'deferred', why: why, status: (status == null ? null : status), at: Date.now(), tries: (g.tries || 0) + 1 };
     gateStats.deferred++;
   }
+  /* ★iconS2(2026-10-15): 「ns 未取得(NS_PENDING)」「URL を作れない(NO_URL)」は**この端末の状態**であって
+     サーバの失敗ではない。判定は localStorage の読み取りだけ（network 0）なので、15 s→30 s→… の backoff を
+     掛けずに、次の sweep（1.5 s 周期・fix400 が ns 取得直後に triggerSweep する）で再評価する。
+     ・「definitive 404 を確認するまで生成しない」契約は不変（ns が無い間は false を返し続ける）
+     ・tries を増やさない（後で本当にサーバが失敗したときの backoff を水増ししない）
+     ・GET /img・pullOnce の本数は増えない（probe は ns 取得後に 1 回だけ。従来と同じ）
+     ・gateStats.deferred は数えない（観測は s2stats.localDefer）。S1・S3（Local 案）は入れていない。 */
+  function gateDeferLocal(pk, why){
+    if (!s2On197()) { gateDefer(pk, why); return; }
+    var g = genGate[pk] || {};
+    genGate[pk] = { st: 'deferred', why: why, status: null, at: Date.now(), tries: (g.tries || 0), local: true };
+    s2stats197.localDefer++;
+  }
   function gateProbe(url){
     return new Promise(function(resolve){
       var ac = null, timer = null;
@@ -495,7 +545,7 @@
     if (g){
       if (g.st === 'ok404'){ gateStats.allowed++; genGate[pk] = { st: 'allowed', why: g.why, at: Date.now(), tries: g.tries }; return true; }
       if (g.st === 'allowed' || g.st === 'server' || g.st === 'probing') return false;
-      if (g.st === 'deferred'){
+      if (g.st === 'deferred' && !(g.local && s2On197())){   // ★iconS2: ローカル状態の保留は backoff を掛けない
         var wait = GATE_BACKOFF_MS[Math.min(g.tries, GATE_BACKOFF_MS.length) - 1] || GATE_BACKOFF_MS[GATE_BACKOFF_MS.length - 1];
         if (Date.now() - g.at < wait) return false;
       }
@@ -510,9 +560,9 @@
         return false;
       }
     } catch(e){}
-    if (!f400.enabled()){ gateDefer(pk, 'NS_PENDING'); return false; }   /* ns は fix400 自身の ensureNs(2.5 s / 6 s / visible) に任せる = 本 gate は network を増やさない */
+    if (!f400.enabled()){ gateDeferLocal(pk, 'NS_PENDING'); return false; }   // ★iconS2   /* ns は fix400 自身の ensureNs(2.5 s / 6 s / visible) に任せる = 本 gate は network を増やさない */
     var url = ''; try { url = f400.urlFor(pk) || ''; } catch(e){ url = ''; }
-    if (!url){ gateDefer(pk, 'NO_URL'); return false; }
+    if (!url){ gateDeferLocal(pk, 'NO_URL'); return false; }   // ★iconS2
     genGate[pk] = { st: 'probing', at: Date.now(), tries: ((g && g.tries) || 0) + 1 };
     gateStats.probes++;
     gateProbe(url).then(function(status){
@@ -755,7 +805,7 @@
     resolveVariant764: resolveVariant764,   // ★fix764: 検証口(字形差→登録済み表示形・icon局所)
     __test_state: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; return { pk:pk, pending:(c==='pending'), dice:(c==='dice'), dataUrl:(typeof c==='string'&&c.indexOf('data:')===0), queued:(queue.indexOf(pk)>=0), hasJob:!!jobInfo[pk], jobPrompt:(jobInfo[pk]&&jobInfo[pk].prompt)||'', gate: genGate[pk] || null }; }catch(e){ return null; } },
     /* ★sp24/H-2: 生成 gate の観測口（read-only） */
-    genGate: function(){ var o = {}; for (var k in genGate) o[k] = genGate[k]; return { keys: o, stats: JSON.parse(JSON.stringify(gateStats)), genCount: genCount }; },
+    genGate: function(){ var o = {}; for (var k in genGate) o[k] = genGate[k]; return { keys: o, stats: JSON.parse(JSON.stringify(gateStats)), genCount: genCount, iconS2: s2On197(), s2stats: JSON.parse(JSON.stringify(s2stats197)), avProv: prov0On(), provStats: JSON.parse(JSON.stringify(prov0stats)) }; },
     cachedFor: function(name){ try{ if (fenced946()) return ''; var pk=keyFor(name); var c=cache[pk]; if(typeof c==='string'&&c.indexOf('data:')===0) return c; var p=persistGet(pk); return (p&&p.indexOf('data:')===0)?p:''; }catch(e){ return ''; } },
     /* ★fix579: 削除候補の列挙に Object.keys(localStorage) を使わない。
        ラッパが localStorage.removeItem = wrapped と代入するため、**メソッド名が own property として

@@ -10099,7 +10099,7 @@
   var F955_POST_OK = /[\s\u3000\u300D\u300F\uFF09)\u3011\]\u3009\u300B\u3015\uFF5D}\u30FB\u2026\u2014\u2015\u3001\u3002\uFF0C\uFF0E\uFF01\uFF1F!?:\uFF1A;\uFF1B"'<>\uFF02\u300C\u300E]/;
   var F955_POST_PARTICLE = /^(?:\u306F|\u304C|\u3092|\u306B|\u3078|\u3068|\u3082|\u3067|\u306E|\u3084|\u306D|\u3088|\u304B|\u304B\u3089|\u307E\u3067|\u3088\u308A|\u3053\u305D|\u3055\u3048|\u3057\u304B|\u3060\u3051|\u3055\u3093|\u3061\u3083\u3093|\u304F\u3093|\u541B|\u69D8|\u3055\u307E|\u6BBF|\u6C0F|\u5148\u8F29|\u5148\u751F|\u305F\u3061|\u9054|\u3089)/;
   //   ★BUNDLE2（2026-10-15）: 既定 OFF。有効化は端末の localStorage v292Dfix955On='1'。v292Dfix955Off='1' が最優先で停止。全体で既定 ON にするときは DEFAULT_ON955 = true の 1 行だけ変える。
-  var DEFAULT_ON955 = false;
+  var DEFAULT_ON955 = true;   // ★BUNDLE3（2026-10-15）: 既定 ON。停止 v292Dfix955Off=1
   function f955off(){ try { if (localStorage.getItem('v292Dfix955Off') === '1') return true; if (DEFAULT_ON955) return false; return localStorage.getItem('v292Dfix955On') !== '1'; } catch(e){ return true; } }
   function nameHit955(ctx, name){
     ctx = String(ctx || ''); name = String(name || '');
