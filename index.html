@@ -3,6 +3,7 @@
 <head>
 <script src="v292Dvault2-sendgate.js?cb=sgh2b"></script>
 <script src="v292Dvault2-copygate.js?cb=20261011-ab8"></script>
+<script src="v292Dfix950-card-delivery-probe.js?cb=20261014-f950r2"></script><!-- v292Dfix950: card/memory delivery probe (record-only; request body unchanged). OFF=localStorage v292Dfix950Off=1 -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
@@ -325,7 +326,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261013-vm1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261014-f950r2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
