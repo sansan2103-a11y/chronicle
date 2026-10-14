@@ -49,6 +49,7 @@
   var W = (typeof window !== 'undefined') ? window : this;
   if (W.__v292Dfix523 && W.__v292Dfix523.__armed) return;
   var TAG = '[v292Dfix523:icon-sync]';
+  var hold960 = { n: 0, last: null };   // ★v292Dfix960: 競合ではない 409 で PULL を止めた回数（観測）
   var PREFIX = 'v292av2_';
   var REVLS = 'v292Dfix523_rev';
 
@@ -189,6 +190,20 @@
     _fetch(proxyUrl() + '/save', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ op: 'putimg', k: PREFIX + pk, data: v, baseImageRev: revGet(pk) }) })
       .then(function(r){ return r.json().then(function(j){ return { status: r.status, j: j }; }).catch(function(){ return { status: r.status, j: null }; }); })
       .then(function(res){
+        /* ★v292Dfix960（2026-10-15）: 409 でも「他端末が先に公開した」（image-conflict）以外は PULL しない。
+             OWNER_ACCOUNT_MISMATCH / CLIENT_UPDATE_REQUIRED / OWNER_FENCED / idem-* / 物語の封鎖など「書けなかった」だけの 409 で
+             サーバの古い絵を取り込むと、端末で新しく描いた絵が上書きされて失われる（Worker の所有者必須化 ON の前提条件）。
+             errorCode の無い 409（旧 Worker）は従来どおり conflict とみなす。止めた分は端末の絵と送信予定を残す（次の保存・起動で再送）。
+             戻し: localStorage v292Dfix960Off='1'（従来どおり 409 は全部 PULL）。 */
+        var ec960 = (res.j && res.j.errorCode) || null;
+        var off960 = (lsg('v292Dfix960Off') === '1');
+        if (!off960 && res.status === 409 && ec960 && ec960 !== 'image-conflict'){
+          delete sending[pk];
+          hold960.n++; hold960.last = { pk: pk, code: String(ec960).slice(0, 40), at: Date.now() };
+          try { console.warn(TAG, 'push 409（' + ec960 + '）: 競合ではないので PULL しない・端末の絵は保持', pk); } catch(e){}
+          if (done) done(false);
+          return;
+        }
         if (res.status === 409 || (res.j && res.j.errorCode === 'image-conflict')){
           var sr = (res.j && res.j.serverRev != null) ? res.j.serverRev : null;
           try { console.log(TAG, 'push-conflict→pull', pk); } catch(e){}
@@ -310,6 +325,7 @@
   }
 
   W.__v292Dfix523 = {
+    hold960: function(){ return JSON.parse(JSON.stringify(hold960)); },
     __armed: true, on: on, smallHash: smallHash, hashFull: hashFull,
     recvSweep: recvSweep, flushSend: flushSend, pullOne: pullOne, pushOne: pushOne,
     revMap: revMap, revGet: revGet,
