@@ -108,10 +108,32 @@
     '【身体状態・正史(絶対に覆らない)】'
   ];
 
+
+  // ★fix952（旧 Local 案 fix459d を改番。本番 v292Dfix459DOff と大文字小文字だけ違う衝突を避ける）
+  //   (2026-10-14・GPT 裁定 #125-GP / #125-GU Canary 準備 GO / #125-GV r2): fix313【設定カード】の見出しを登録する。
+  //   未登録だったため直前の fix309【展開の推進ルール】(dropC)へ吸収され、毎ターン道連れ削除されていた
+  //   （本番 fix950 r2 の実機記録 2026-10-14 09:10: 送信前 15,158 字 → 送信 9,533 字・常時カード 7 項目 DROPPED）。
+  //   文字列は fix313 の literal と完全一致。dropA/B/C/D のどれにも入れない → 独立ブロックとして残る。
+  //   ★r2（#125-GV）: fix314【記憶】の見出しは登録しない（記憶を新たに無制限で注入しない）。記憶の扱いは本番のまま。
+  //   ★canary 限定: fix953（v292Dfix953-card-canary-gate.js）が「この文書の物語が allowlist にあり、かつ端末の
+  //     localStorage.v292Dfix953On === '1'」と答えた時だけ登録する。それ以外（既定・ほかの全物語・全端末）は
+  //     MARKERS が本番と 1 要素も変わらない＝送信 body は本番と byte 一致。fix953 が無い・例外 → 登録しない（fail-closed）。
+  //   戻し（canary 中でも）: localStorage.v292Dfix952Off = '1' → この見出しを認識しない（デプロイ不要・送信ごとに評価）。
+  var MARKERS_CARDS952 = ['【設定カード（常に効く確定設定・事典。参照用。本文に説明書きを混ぜない）】'];
+  //   ★r2: 選択器（fix951 r2。カード本文の【】を〔〕に変え、GM の節に規則を付ける）が読み込まれていて、止められていない時だけ
+  //     登録する。古い fix313 がキャッシュに残った端末や v292Dfix951Off='1' の時に、加工していない全文（GM を含み、規則なし）を
+  //     独立ブロックとして通さないため（その時は本番と同じ扱い＝カードは今までどおり届かない）。
+  function canary952(){ try { var g = window.__v292Dfix953, f = window.__v292Dfix951;
+    if (!(f && typeof f.isCanary === 'function' && typeof f.sections === 'function')) return false;
+    if (flag('v292Dfix951Off')) return false;
+    return !!(g && typeof g.active === 'function' && g.active() === true); } catch(e){ return false; } }
+
   function detOn459(){ try { return localStorage.getItem('v292Dfix190Det') === '1'; } catch(e){ return false; } }
   function activeMarkers(){
     /* R118F-G/G5: flag ON のときだけ fix190 の2 marker を足す。OFF なら配列は完全に従来どおり。 */
-    return detOn459() ? MARKERS.concat(MARKERS_FIX190_DET) : MARKERS;
+    var mk = detOn459() ? MARKERS.concat(MARKERS_FIX190_DET) : MARKERS;
+    if (canary952() && !flag('v292Dfix952Off')) mk = mk.concat(MARKERS_CARDS952);   // fix952（canary 限定）
+    return mk;
   }
   function parse(sys){
     var hits = [];
@@ -126,7 +148,28 @@
       var end = (j + 1 < hits.length) ? hits[j + 1].at : sys.length;
       blocks.push({ mk: hits[j].mk, at: hits[j].at, end: end, text: sys.slice(hits[j].at, end) });
     }
-    return { head: hits.length ? sys.slice(0, hits[0].at) : sys, blocks: blocks };
+    var head = hits.length ? sys.slice(0, hits[0].at) : sys;
+    if (MK !== MARKERS && MK.indexOf(MARKERS_CARDS952[0]) >= 0) head = fence952(blocks, head);
+    return { head: head, blocks: blocks };
+  }
+  // ★fix952 r2（#125-GV）: 【設定カード】ブロックは自分の中身だけを持つ。
+  //   canary の選択器（fix951）はカード本文の【】を〔〕に変えるので、見出し行の後ろに【が現れたら、そこから先は
+  //   カードではない後続の未登録ブロック（例: fix314【記憶】）である。本番ではそれらはカードと一緒に直前の登録ブロックへ
+  //   吸収されていた。その扱いを変えないため、後続部分は「カードブロックの直前のブロック」（無ければ head）へ戻す。
+  //   → 記憶など未登録ブロックの行き先（残る／道連れで消える）は本番と同じ。カードブロックだけが独立して残る。
+  function fence952(blocks, head){
+    var CM = MARKERS_CARDS952[0];
+    for (var j = 0; j < blocks.length; j++){
+      var b = blocks[j]; if (b.mk !== CM) continue;
+      var k = b.text.indexOf('【', CM.length); if (k < 0) continue;
+      var cut = k; while (cut > CM.length && b.text.charAt(cut - 1) === '\n') cut--;
+      var tail = /\s*$/.exec(b.text)[0];                                   // ブロック末尾の改行は、後続が無い時と同じくカード側に残す
+      var moved = b.text.slice(cut, b.text.length - tail.length);
+      b.text = b.text.slice(0, cut) + tail;
+      if (j > 0){ var pv = blocks[j - 1], pt = /\s*$/.exec(pv.text)[0]; pv.text = pv.text.slice(0, pv.text.length - pt.length) + moved + pt; }
+      else { var ht = /\s*$/.exec(head)[0]; head = head.slice(0, head.length - ht.length) + moved + ht; }
+    }
+    return head;
   }
 
   // ---- 動的情報の取り出し（旧ブロックから名前の一覧を拾う） ----

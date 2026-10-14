@@ -45,6 +45,14 @@
 //           (fix425 の isNonAcuteContext と同じ流儀: 一致語を含む【文】で判定)
 //   OFF : localStorage v292Dfix451Off='1' → ルールDを無効化(= fix444 従来動作)
 //
+// ★v292Dfix444g(2026-10-14・GPT 裁定 #125-GU: fix953 canary の物語だけで有効): GM 専用の記述を掟の抽出元から外す。
+//   実測(Local ハーネス): GM 専用カード（名前に「（GM）」/本文が「GM専用」「【GM…】」で始まる/
+//   本文中の【GM】行）の禁忌・条件文が台帳に入り、【世界の掟】として「この世界には掟がある」
+//   「いま…が破られた。掟…に従い代償（…）を描いてよい」の形で GM 規則なしに sys へ出ていた。
+//   対策: ①抽出元(cardsOf/loreOf)から GM 部分を除く（判定は fix951 r2 の sectionsOf と同じ規則・節単位）
+//         ②既存の台帳に残っている GM 由来の掟は、注入(buildBlock)と発動判定(stepStates)で使わない
+//           （台帳は書き換えない・消さない。kill すれば元どおり使われる）
+//   OFF : localStorage v292Dfix444gOff='1'（live 評価 = fix444 従来動作）
 // 冪等: window.__v292Dfix444
 // OFF : localStorage v292Dfix444Off='1'(live評価。注入も台帳更新も完全素通し)
 // UI  : 作らない(不可視の自動化)。デバッグは window.__v292Dfix444.dump()
@@ -66,6 +74,11 @@
   function off(){ try { return localStorage.getItem('v292Dfix444Off') === '1'; } catch(e){ return false; } }
   // ★fix451: ルールD(自動詞タブー)だけを切るスイッチ。live評価。
   function off451(){ try { return localStorage.getItem('v292Dfix451Off') === '1'; } catch(e){ return false; } }
+  // ★fix444g: GM 除外だけを切るスイッチ。live評価。
+  //   ★canary 限定（GPT 裁定 #125-GU）: fix953 が active と答えた物語だけで GM 除外を行う。それ以外は fix444 従来動作
+  //     （台帳への追記・注入・発動判定とも本番と同一）。fix953 が無い・例外 → 従来動作（fail-closed）。
+  function canary444g(){ try { var g = window.__v292Dfix953; return !!(g && typeof g.active === 'function' && g.active() === true); } catch(e){ return false; } }
+  function off444g(){ try { if (!canary444g()) return true; return localStorage.getItem('v292Dfix444gOff') === '1'; } catch(e){ return true; } }
   function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined" ? S : null'); } catch(e){ return null; } }
   function trim(v){ return String(v == null ? '' : v).replace(/^[\s　]+|[\s　]+$/g, ''); }
   function clamp(s, n){ s = String(s == null ? '' : s); return s.length > n ? s.slice(0, n) : s; }
@@ -444,18 +457,99 @@
     if (!isArr(S.scene.laws)) S.scene.laws = [];
     return S.scene.laws;
   }
-  function loreOf(S){ try { return (S && S.scene && S.scene.lore) ? String(S.scene.lore) : ''; } catch(e){ return ''; } }
+  // ★fix444g r2（#125-GV）: カード本文を「表に出してよい部分」と「GM 専用部分」に節ごとに分ける（fix951 r2 の sectionsOf と同じ規則。
+  //   QA で 2 つの出力が実物 39 枚＋lore＋合成の例で一致することを確かめている）
+  //   節 = 行頭の見出し・ラベル【…】から次の見出しまで（見出しの無い先頭部分も 1 節。空行や見出しの無い行は直前の節の続き）。
+  //   GM の節 = 見出しに GM の語がある（【GM】【GM秘密】【GM専用：…】【…（GM）】など）、または「GM専用：」「GM：」で始まる行の節。
+  //   カード名の（GM）/(GM)/GM専用 は「見出しの無い先頭部分」だけを GM にする（GM 以外の見出しの節は公開）。
+  var GM_NAME  = /（\s*(GM|ＧＭ)\s*）|\(\s*(GM|ＧＭ)\s*\)|(GM|ＧＭ)専用|【\s*(GM|ＧＭ)/;
+  var HEAD_RE  = /^\s*[【［\[]([^】］\]\n]{0,60})[】］\]]/;
+  var GM_TOKEN = /(^|[^A-Za-z])(GM|ＧＭ)(?![A-Za-z])/;
+  var GM_LEAD  = /^\s*(GM|ＧＭ)\s*(専用|秘密|メモ|向け|情報)?\s*[：:]|^\s*(GM|ＧＭ)専用/;
+  function sectionsOf(name, entry){
+    var nameGm = GM_NAME.test(String(name == null ? '' : name));
+    var lines = String(entry == null ? '' : entry).replace(/^\s+|\s+$/g, '').split('\n'), secs = [], cur = null, i, L, m;
+    for (i = 0; i < lines.length; i++){
+      L = lines[i]; m = HEAD_RE.exec(L);
+      if (m){ cur = { gm: GM_TOKEN.test(m[1]), lines: [L] }; secs.push(cur); continue; }
+      if (GM_LEAD.test(L)){ cur = { gm: true, lines: [L] }; secs.push(cur); continue; }
+      if (!cur){ if (!L.trim()) continue; cur = { gm: nameGm, lines: [L] }; secs.push(cur); continue; }
+      cur.lines.push(L);
+    }
+    var out = [];
+    for (i = 0; i < secs.length; i++){ var t = secs[i].lines.join('\n').replace(/^\s+|\s+$/g, ''); if (t) out.push({ gm: secs[i].gm, text: t }); }
+    return out;
+  }
+  function splitGm(name, entry){
+    var secs = sectionsOf(name, entry), pub = [], gm = [], i;
+    for (i = 0; i < secs.length; i++) (secs[i].gm ? gm : pub).push(secs[i].text);
+    return { pub: pub.join('\n'), gm: gm.join('\n') };
+  }
+  function loreRaw(S){ try { return (S && S.scene && S.scene.lore) ? String(S.scene.lore) : ''; } catch(e){ return ''; } }
+  function cardsRaw(S){ try { return (S && S.scene && isArr(S.scene.cards)) ? S.scene.cards : []; } catch(e){ return []; } }
+  function loreOf(S){
+    var t = loreRaw(S);
+    if (off444g() || !t) return t;
+    try { return splitGm('', t).pub; } catch(e){ return t; }
+  }
   function cardsOf(S){
-    var out = [], i, c;
+    var out = [], i, c, sp, g = !off444g();
     try {
-      var cs = (S && S.scene && isArr(S.scene.cards)) ? S.scene.cards : [];
+      var cs = cardsRaw(S);
       for (i = 0; i < cs.length; i++){
         c = cs[i];
-        if (c && c.entry && trim(c.entry)) out.push(String(c.entry));
+        if (!(c && c.entry && trim(c.entry))) continue;
+        if (!g){ out.push(String(c.entry)); continue; }
+        sp = splitGm(c.name, c.entry);
+        if (sp.pub) out.push(sp.pub);
       }
     } catch(e){}
     return out;
   }
+  // GM 部分だけのテキスト（既存の台帳に残る GM 由来の掟を見分けるため）
+  function gmTextsOf(S){
+    var out = [], i, c, sp;
+    try {
+      var lt = loreRaw(S); if (lt){ sp = splitGm('', lt); if (sp.gm) out.push(sp.gm); }
+      var cs = cardsRaw(S);
+      for (i = 0; i < cs.length; i++){
+        c = cs[i];
+        if (!(c && c.entry && trim(c.entry))) continue;
+        sp = splitGm(c.name, c.entry);
+        if (sp.gm) out.push(sp.gm);
+      }
+    } catch(e){}
+    return out;
+  }
+  function hasGmMark(S){
+    var t = loreRaw(S), cs = cardsRaw(S), i, c;
+    if (t.indexOf('GM') >= 0 || t.indexOf('ＧＭ') >= 0) return true;
+    for (i = 0; i < cs.length; i++){
+      c = cs[i]; if (!c) continue;
+      if (String(c.name || '').indexOf('GM') >= 0 || String(c.name || '').indexOf('ＧＭ') >= 0) return true;
+      if (String(c.entry || '').indexOf('GM') >= 0 || String(c.entry || '').indexOf('ＧＭ') >= 0) return true;
+    }
+    return false;
+  }
+  // 「GM 部分からしか出てこない cond」の集合。台帳は読むだけ。lore/カードが変わった時だけ作り直す。
+  var gmCache = { sig: null, set: {} };
+  function gmOnlyConds(S){
+    if (off444g()) return {};
+    try {
+      if (!hasGmMark(S)) return {};                                  // GM の印が 1 つも無ければ何もしない（ほとんどの物語）
+      var cs = cardsRaw(S), i, h = 0x811c9dc5, t = loreRaw(S) + '\u0001' + cs.length;
+      for (i = 0; i < cs.length; i++){ var c = cs[i]; t += '\u0001' + (c && c.name ? String(c.name) : '') + '\u0002' + (c && c.entry ? String(c.entry) : ''); }
+      for (i = 0; i < t.length; i++){ h ^= t.charCodeAt(i); h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0; }
+      var sig = t.length + ':' + h;
+      if (gmCache.sig === sig) return gmCache.set;
+      var gm = extractLaws(gmTextsOf(S).join('\n'), []), pub = extractLaws(loreOf(S), cardsOf(S)), pubSet = {}, set = {};
+      for (i = 0; i < pub.length; i++) pubSet[pub[i].cond] = 1;
+      for (i = 0; i < gm.length; i++) if (!pubSet[gm[i].cond]) set[gm[i].cond] = 1;
+      gmCache = { sig: sig, set: set };
+      return set;
+    } catch(e){ return {}; }
+  }
+  function isGmLaw(L, set){ return !!(L && L.cond && L.src !== 'manual' && set && set[L.cond]); }
 
   // 抽出結果を台帳へマージ(既存idは保持・同一condは更新しない)
   function mergeLaws(laws, found, turn){
@@ -494,7 +588,7 @@
 
   // 状態機械(ターン確定後にのみ呼ぶ)
   //   idle → armed(対象に接近) → fired(実際に破られた) → cooldown → idle
-  function stepStates(laws, turn, playerText, narrative){
+  function stepStates(laws, turn, playerText, narrative, gmSet){
     var i, L;
 
     // (a) 前ターンに発動したものを消費 → cooldown
@@ -513,6 +607,7 @@
       L = laws[i];
       if (!L || !L.cond) continue;
       if (L.state === 'cooldown' || L.state === 'fired') continue;   // クールダウン中は再発動しない
+      if (isGmLaw(L, gmSet)) continue;                                // ★fix444g: GM 由来は発動させない（台帳は残す）
       var r = detectTrigger(L, playerText, narrative);
       if (r === 'fire'){
         var sc = (detectIn(L, norm(playerText || '')) === 'fire') ? 100 : 50; // 入力での発動を優先
@@ -576,9 +671,11 @@
       if (!laws.length) return '';
 
       var i, L, fired = null, armed = [], idle = [], cool = [];
+      var gmSet = gmOnlyConds(S);                                     // ★fix444g（読むだけ）
       for (i = 0; i < laws.length; i++){
         L = laws[i];
         if (!L || !L.text || !L.cond) continue;
+        if (isGmLaw(L, gmSet)) continue;                              // ★fix444g: GM 由来は sys に出さない
         if (L.state === 'fired'){ if (!fired) fired = L; }
         else if (L.state === 'armed')    armed.push(L);
         else if (L.state === 'cooldown') cool.push(L);
@@ -618,7 +715,7 @@
       var t = (S.turns && S.turns.length) ? S.turns[S.turns.length - 1] : null;
       var pt = t ? (t.playerText || t.player || '') : '';
       var nr = t ? (t.narrative || '') : '';
-      fired = stepStates(laws, turn, pt, nr);
+      fired = stepStates(laws, turn, pt, nr, gmOnlyConds(S));
       S.scene.lawT = turn;
     } else if (turn < lawT){
       S.scene.lawT = turn;      // undo等でターンが減った → クロックを戻すだけ
@@ -680,6 +777,9 @@
     armKeeper: armKeeper,
     off: off,
     off451: off451,
+    off444g: off444g,
+    splitGm: splitGm,
+    gmOnlyConds: function(){ return gmOnlyConds(getS()); },
     guardedActHit: guardedActHit,
     sentenceAt: sentenceAt,
     scopeOf: scopeOf,
@@ -707,7 +807,7 @@
       for (i = 0; i < laws.length; i++){
         L = laws[i];
         out.push({ id: L.id, text: L.text, cond: L.cond, cost: L.cost, src: L.src,
-                   state: L.state, fired: L.fired, last: L.last, t0: L.t0 });
+                   state: L.state, fired: L.fired, last: L.last, t0: L.t0, gmOnly: isGmLaw(L, gmOnlyConds(S)) });
       }
       var blk = buildBlock();
       return { off: off(), lawT: (S && S.scene) ? S.scene.lawT : undefined,
