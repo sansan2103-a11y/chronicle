@@ -40,6 +40,9 @@
 //     （pullOne の別名。挙動は同一）。
 //   kill: v292Dfix523Off='1'（従来どおり全停止）。identity gate だけを外す口は作らない（衛生規則）。
 //   rollback = live bytes（20260908-fix837）へ戻す。
+// ★fix946(2026-10-14 / GPT #125-GQ M3・#125-GR 第 1 段): 持ち主が変わった document（fence）では送受信しない。
+//   pull / manifest は依頼時の epoch を覚え、応答が届いた時に持ち主が変わっていれば捨てる（ローカルにも台帳にも入れない）。
+//   起動時の持ち主違いでは v292Dfix946 が rev 台帳（v292Dfix523_rev）を退避して空にする。kill: v292Dfix946Off='1'。
 // =====================================================================
 (function(){
   'use strict';
@@ -50,6 +53,8 @@
   var REVLS = 'v292Dfix523_rev';
 
   function lsg(k){ try { return W.localStorage.getItem(k); } catch(e){ return null; } }
+  function f946(){ try { var F = W.__v292Dfix946; return (F && F.__armed && F.on() && F.m3On()) ? F : null; } catch(e){ return null; } }
+  function fenced946(){ try { var F = f946(); return !!(F && F.fenced()); } catch(e){ return false; } }
   function off(){ return lsg('v292Dfix523Off') === '1'; }
   function on(){ return !off(); }   // ★既定ON（伝播が主目的）。緊急停止= v292Dfix523Off='1'。
   function proxyUrl(){
@@ -134,10 +139,13 @@
   function pullOne(pk, serverRev, done){
     var ns = nsGet(); if (!ns || !_fetch){ if (done) done(false); return; }
     if (isApplyBlocked(pk)){ if (done) done(false); return; }   // ★fix657: 隔離中は再pullもしない
+    if (fenced946()){ if (done) done(false); return; }           // ★fix946 M3
+    var F946p = f946(), ep946 = F946p ? F946p.epoch() : 0;
     _fetch(proxyUrl() + '/img?ns=' + encodeURIComponent(ns) + '&k=' + encodeURIComponent(PREFIX + pk), { cache: 'no-store' })
       .then(function(r){ if (!r.ok) return null; var ct = r.headers.get('Content-Type') || 'image/png'; return r.arrayBuffer().then(function(buf){ return { ct: ct, buf: buf }; }); })
       .then(function(o){
         var ok = false;
+        if (F946p && !F946p.sameEpoch(ep946)){ try { F946p.noteStale(); } catch(e){} if (done) done(false); return; }   // ★fix946: 遅れて届いた前の持ち主の絵
         if (o && o.buf && o.buf.byteLength){
           try {
             var arr = new Uint8Array(o.buf), bin = ''; for (var j = 0; j < arr.length; j++) bin += String.fromCharCode(arr[j]);
@@ -173,6 +181,7 @@
        「台帳だけserver版・実体は旧local」の状態でpushすると、旧localを新しい変更として
        サーバーへ戻す=rev膨張ピンポンの片翼になるため。解除は releaseBlocked(pk)(人手確認後)。 */
     if (isApplyBlocked(pk)){ try { console.warn(TAG, 'push抑止(apply-blocked):', pk); } catch(e){} if (done) done(false); return; }
+    if (fenced946()){ if (done) done(false); return; }           // ★fix946 M3
     /* ★sp24/H-2: 有効 identity 無し → putimg を出さない（保留。sendQ 側で再確認される） */
     if (!identityValid()){ identityHold.held++; if (identityHold.since == null) identityHold.since = Date.now(); sendQ[pk] = 1; if (!sendTimer) sendTimer = setTimeout(flushSend, IDENTITY_RECHECK_MS); if (done) done(false); return; }
     var v = localAv(pk); if (!v || !_fetch){ if (done) done(false); return; }
@@ -209,6 +218,7 @@
   function scheduleSend(pk){ sendQ[pk] = 1; if (sendTimer || !_fetch) return; sendTimer = setTimeout(flushSend, 1500); }
   function flushSend(){
     sendTimer = null; if (!on() || !loggedIn() || !_fetch){ sendQ = {}; return; }
+    if (fenced946()){ sendQ = {}; return; }                       // ★fix946 M3
     /* ★sp24/H-2: 合言葉だけ（Google/session 無し）の間は送らずに保持し、30 s 後に再確認（network 0） */
     if (!identityValid()){ identityHold.held++; if (identityHold.since == null) identityHold.since = Date.now(); if (Object.keys(sendQ).length) sendTimer = setTimeout(flushSend, IDENTITY_RECHECK_MS); return; }
     identityHold.since = null;
@@ -230,7 +240,7 @@
         var r = _set(k, v);
         if (isav && on()){
           if (recvMark[pk]){ delete recvMark[pk]; }        // 受信由来→送信しない
-          else if (changed){ scheduleSend(pk); }           // regen/新規→PUSH
+          else if (changed && !fenced946()){ scheduleSend(pk); }           // regen/新規→PUSH（★fix946: fence 中は送らない）
         }
         return r;
       };
@@ -261,9 +271,12 @@
   function recvSweep(){
     if (recvBusy || !on() || !loggedIn() || !_fetch || typeof document === 'undefined') return;
     if (!nsGet()) return;
+    if (fenced946()) return;                                      // ★fix946 M3
+    var F946r = f946(), ep946r = F946r ? F946r.epoch() : 0;
     recvBusy = true;
     fetchManifest(function(man){
       if (!man){ recvBusy = false; return; }
+      if (F946r && !F946r.sameEpoch(ep946r)){ recvBusy = false; return; }   // ★fix946
       lastManifest = man;   // ★sp24/H-2: serverKnown() の材料（メモリのみ）
       var pend = fix402Pending();
       var vis = visiblePks();

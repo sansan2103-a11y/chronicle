@@ -702,6 +702,30 @@
       try { console.log(TAG, 'BBH: package 送信を保留（' + b + '・' + (where || '') + '）: 物語の確認が終わるまで送りません（データは変更しません）'); } catch(e){} }
     return b;
   }
+  /* ★★iso2（GPT #125-GY、2026-10-14）: 送信時点の帰属確認（統合版。iso1c-pkg の package 保留を含む）。
+     共通ガード __v292Diso2.check() に「送る中身」を渡し、送信元データの持ち主（物語の本文の帰属の記録・端末の画像の持ち主の印）と
+     送信先のアカウントが一致しない／確かめられないなら**送らずに保留**する。止め方は BBH と同じ:
+     dirty / pushedTs / lastHash / commit 台帳に触らない・成功扱いにしない・組んだ payload は捨てる（データは変更しない）。
+     呼ぶ場所は commit 台帳の予約（notePut）より**前**（予約だけ残る状態を作らない）。送信の直前の最後の確認は共通ガードの fetch の関所。
+     共通ガードが無い（古い HTML が新しい js を読んだ）時は、iso1c-pkg と同じく fix946 が fence / 保留している document からは送らない。
+     kill: v292Diso2Off='1'（共通ガードも置かれない＝iso1c と同じ）。 */
+  var iso2Stats = { holds: 0, last: null };
+  function iso2Hold(where, body){
+    try { if (localStorage.getItem('v292Diso2Off') === '1') return null; } catch(e){}
+    var why = null;
+    try {
+      var G = window.__v292Diso2;
+      if (G && G.__armed && typeof G.check === 'function') why = G.check(body || null, 'fix402:' + (where || ''));
+      else {
+        var F = window.__v292Dfix946;
+        if (F && F.__armed && typeof F.fenced === 'function' && !(typeof F.m3On === 'function' && !F.m3On()) && F.fenced()) why = 'IMG_OWNER_FENCED(no-guard)';
+      }
+    } catch(e){ why = 'ISO2_UNKNOWN'; }   /* 判定が例外 = 持ち主を確かめられない → 送らない（fail-closed） */
+    if (!why) return null;
+    iso2Stats.holds++; iso2Stats.last = { at: Date.now(), why: String(why).slice(0, 160), where: where || '' };
+    try { console.log(TAG, 'iso2: package 送信を保留（' + why + '・' + (where || '') + '）: 送る中身の持ち主と送信先のアカウントを確かめられないため送りません（データは変更しません）'); } catch(e){}
+    return why;
+  }
   function flush(why){
     if (restoreHold()) return Promise.resolve('restore-hold');   /* ★fix721.1 */
     if (!on() || !isLoggedIn() || pushing) return Promise.resolve('skip');
@@ -717,6 +741,8 @@
     }
     var bbh0 = bbhHold(null, 'flush:pre:' + (why || ''));   /* ★BBH (1) 組み立て前 */
     if (bbh0) return Promise.resolve('hold-bbh:' + bbh0);
+    var iso0 = iso2Hold('flush:pre:' + (why || ''), { op: 'put' });   /* ★iso2 (1) 組み立て前（アカウントの整合） */
+    if (iso0){ if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; } return Promise.resolve('hold-iso2:' + iso0); }
     if (pcpOn() && !pcpBypass){
       pcpStats.gates++;
       var ids402 = []; try { ids402 = f821On() ? f821PackageSlotIds(tombstonedIds(), null) : allSlotIds(); } catch(e){ ids402 = []; }
@@ -794,6 +820,8 @@
       }
     var bbh1 = bbhHold(pkg, 'flush:send:' + (why || ''));   /* ★BBH (2) 送信直前（この pkg は捨てる。再開時は作り直す） */
     if (bbh1){ pushing = false; return 'hold-bbh:' + bbh1; }
+    var iso1 = iso2Hold('flush:send:' + (why || ''), { op: 'put', pkg: pkg });   /* ★iso2 (2) 送る中身の帰属（台帳の予約より前。この pkg は捨てる） */
+    if (iso1){ pushing = false; if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; } return 'hold-iso2:' + iso1; }
     /* ★★fix828 R2A: **fetch より前に** 意図を durable 記録する（逆順は禁止）。 */
     return notePutFirst('put', pkg, _base828).then(function(intent){
       if (intent && intent.blocked){
@@ -1075,6 +1103,7 @@
     if (bbhHold(null, 'forceput:pre')){ done(false); return Promise.resolve(false); }   /* ★BBH (1) */
     var pkg = collectLight(Date.now());
     if (bbhHold(pkg, 'forceput:send')){ done(false); return Promise.resolve(false); }   /* ★BBH (2) 組んだ pkg は捨てる */
+    if (iso2Hold('forceput:send', { op: 'forceput', pkg: pkg })){ done(false); return Promise.resolve(false); }   /* ★iso2: 送る中身の帰属（組んだ pkg は捨てる） */
     // ★C1-1: forceputにもmid付与。put mid(素のhash)との衝突を避けるため 'fp:' 接頭を付ける。
     //   f402dOff時は世代ガードごとOFF=mid無し(後方互換)。連投で内容同一ならidemで単一化。
     var _fpMid = (lsGet('v292Dfix402dOff') !== '1') ? ('fp:' + lsHash(JSON.stringify(pkg.ls || {}))) : undefined;
@@ -1400,6 +1429,8 @@
     __real: true,
     pcp: function(){ return { on: pcpOn(), waitMs: PCP_WAIT_MS, stats: JSON.parse(JSON.stringify(pcpStats)) }; },
     bbh: function(){ return { off: bbhOff(), barrier: bbhBarrier(), stats: JSON.parse(JSON.stringify(bbhStats)) }; },
+    /* ★iso2: 観測口（write 0） */
+    iso2: function(){ var off = false; try { off = localStorage.getItem('v292Diso2Off') === '1'; } catch(e){} return { off: off, stats: JSON.parse(JSON.stringify(iso2Stats)) }; },
     perf: null,
     status: function(){ return { on: on(), defaultOn: DEFAULT_ON, loggedIn: isLoggedIn(), baseRev: baseRev(), dirty: isDirty(), proxy: proxyUrl() }; },
     state: function(){ return { baseRev: baseRev(), lastHash: (lsGet('v292Dfix402_lastHash')||'').slice(0,12), dirtyTs: getNum('v292Dfix402_dirtyTs'), pushedTs: getNum('v292Dfix402_pushedTs'), mutationSeq: mutationSeq }; },

@@ -57,6 +57,10 @@
 //     （gate を通さない = 挙動不変）。ambiguous（失効 Google token + 合言葉）/ none は生成しない（deferred）。
 //   ・明示 ↻（regenFor）は本 gate の対象外（利用者の意図的な再生成。伝播は fix523 の条件付き push）。
 //   観測口: window.__v292Dfix197.genGate() / __test_state(name).gate。rollback = live bytes（v292Dfix770）へ戻す。
+// ★fix946 第 1 段（2026-10-14 / GPT #125-GR 段階リリース: M3 だけ）: アカウント境界（本体は v292Dfix946）。
+//   キー（keyFor）は 1 バイトも変えない。持ち主が途中で変わったら（fence）表示キャッシュを捨てて仮アイコンへ戻し、
+//   依頼後に持ち主が変わった生成結果は表示にも保存にも入れない。起動時の退避／復帰の間は描かない。
+//   kill: v292Dfix946Off='1'（このファイルの変更点もすべて修正前と同じ挙動に戻る）。M1（物語つきキー）・M2（移行）は入れていない。
 // ---------------------------------------------------------------------
 // fix199 からの改良（おしんFB: 場所ごとに絵が違う／絵柄が前と違う）:
 //   ・キャッシュを【キャラ名＋画風】単位に統一 → 会話ログ/設定/キャラ一覧で同じ1枚を共有。
@@ -80,6 +84,9 @@
   var LS_PREFIX = 'v292av2_';
 
   function getS(){ try{ return window.S || (0,eval)('S'); }catch(e){ return null; } }
+  /* ★fix946 第 1 段: 共通部（無い／kill 中は null = 修正前と同じ挙動） */
+  function f946(){ try{ var F = window.__v292Dfix946; return (F && F.__armed && F.on() && F.m3On()) ? F : null; }catch(e){ return null; } }
+  function fenced946(){ try{ var F = f946(); return !!(F && F.fenced()); }catch(e){ return false; } }
   function pollKey(){ try{ var S=getS(); var k=(S&&S.cfg&&S.cfg.pollKey)||''; return String(k).trim(); }catch(e){ return ''; } }
   function artStyle(){ try{ var S=getS(); return String((S&&S.cfg&&S.cfg.artStyle)!=null ? S.cfg.artStyle : 0); }catch(e){ return '0'; } }
   /* ★v292Dfix457b(2026-07-13): DiceBear(外部CDN)をやめ、**ローカル生成のSVG**を仮アイコンにする。
@@ -361,6 +368,10 @@
     if (__d2 === true){ restorePreviousOrDice(pk); active--; applyAll(); pump(); return; }
     if (__d2 !== false){ active--; setTimeout(function(){ if (cache[pk] === 'pending'){ queue.unshift(pk); } pump(); }, 1500); return; }
     var info = jobInfo[pk] || {};
+    /* ★fix946 M3: fence 中は描かない（費用 0）。開始時の epoch を覚え、届いた時に違えば捨てる */
+    var F946g = f946();
+    if (F946g && F946g.fenced()){ cache[pk]='dice'; active--; applyAll(); pump(); return; }
+    var ep946 = F946g ? F946g.epoch() : 0;
     var key = pollKey();
     if(!key){ restorePreviousOrDice(pk); active--; applyAll(); pump(); return; }   // ★fix197 F-2: キー無しでも明示↻の旧画像を保持
     var body = { model: info.model||'flux', prompt: info.prompt||'portrait', n:1, size:'384x384' };
@@ -397,11 +408,14 @@
     fetch(API, { method:'POST', headers:{ 'Authorization':'Bearer '+key, 'Content-Type':'application/json' }, body: JSON.stringify(body) })
       .then(function(r){ if(!r.ok) throw r.status; return r.json(); })
       .then(function(j){ var b=j&&j.data&&j.data[0]&&j.data[0].b64_json; if(!b) throw 'nob64';
+        /* ★fix946 M3: 依頼した時と持ち主が違う（途中で切り替わった）→ 表示にも保存にも入れない */
+        if (F946g && !F946g.sameEpoch(ep946)){ try{ F946g.noteStale(); }catch(e){} delete regenPrev[pk]; return; }
         var d=b64ToDataUrl(b); cache[pk]=d; persistSet(pk,d);
         // ★fix403: 作り直し成功→レシピのseed/prompt/modelを実際に使った値へ(復元で旧絵に戻さない)
         try { if (fresh403) { var rk403='v292avrec_'+pk, ro403=JSON.parse(localStorage.getItem(rk403)||'null'); if (ro403) { ro403.s=body.seed; ro403.p=body.prompt; ro403.m=body.model; localStorage.setItem(rk403, JSON.stringify(ro403)); } else { localStorage.setItem(rk403, JSON.stringify({ s:body.seed, p:body.prompt, m:body.model })); } } } catch(e){} })  // ★fix403c: レシピ未存在なら初回レシピを新規保存(復元/画風切替で新絵を保持)
       .catch(function(){
         // ★fix197 F-2: 明示↻の生成失敗時は共通関数で旧画像へ復元(DiceBearに落とさない)
+        if (F946g && !F946g.sameEpoch(ep946)) { delete regenPrev[pk]; return; }   // ★fix946: fence 後は復元もしない
         restorePreviousOrDice(pk);
       })
       .then(function(){ delete regenPrev[pk]; active--; applyAll(); pump(); });   // 成功時のregenPrev掃除も維持(二重deleteは無害)
@@ -531,8 +545,14 @@
     try { var imgs = document.querySelectorAll('img[data-avpk]'); for (var i = 0; i < imgs.length; i++){ if (imgs[i].getAttribute('data-avpk') === pk) imgs[i].__av400fail = 0; } } catch(e){}
   }
 
+  /* ★fix946 M3: 仮アイコンへ戻す（持ち主が変わった document／起動時の退避中） */
+  function placeholder946(img){
+    try { var nm = img.getAttribute('alt') || 'character'; var d = diceUrl(nm); if (img.getAttribute('src') !== d){ img.onerror = null; img.src = d; } } catch(e){}
+  }
+
   function applyOne(img){
     if (__av2Doc() === true) return; 
+    if (fenced946()){ placeholder946(img); return; }   // ★fix946 M3: 持ち主が変わった document では何も見せない
     var pk = img.getAttribute('data-avpk'); if(!pk) return;
     var info = jobInfo[pk] || {}; var name = info.name || img.getAttribute('alt') || 'character';
     // ★fix400: サーバーURL優先(iOSのIndexedDB地雷を回避)。fix400が有効かつns取得済み・当imgが未失敗なら
@@ -560,6 +580,7 @@
     if(c!=='pending'){
       var pe=persistGet(pk);
       if(pe && pe.indexOf('data:')===0){ cache[pk]=pe; if(img.getAttribute('src')!==pe){ img.onerror=null; img.src=pe; } return; }
+      try { var Fq = f946(); if (Fq && Fq.quarantining && Fq.quarantining()){ placeholder946(img); return; } } catch(eq){}   // ★fix946 M3: 起動時の退避／復帰が終わるまで描かない（戻ってくる絵を描き直さない）
       if(info.prompt && genGateAllows(pk)){ cache[pk]='pending'; queue.push(pk); pump(); }  // promptが無いキーは生成しない（legacy URL待ち）/ ★sp24: gate が definitive 404 を確認するまで生成しない
     }
     // pending中: legacy pollinations を読ませない（DiceBearを仮表示）
@@ -643,6 +664,7 @@
   function regenFor(name){
     if (__av2Doc() !== false) return; 
     if(!name) return;
+    if (fenced946()) return;                         // ★fix946 M3
     var pk=keyFor(name);
     // v292Dfix524: フライトロック。同一キャラの↻連打/多重発火を2秒デバウンス(二重生成・二重課金防止・persist/putimg一回)。
     try { var _n524=Date.now(); if(!regenFor.__lock524) regenFor.__lock524={}; if(regenFor.__lock524[pk] && (_n524 - regenFor.__lock524[pk] < 2000)){ try{ console.log('[v292Dfix524] regen debounced', pk); }catch(e){} return; } regenFor.__lock524[pk]=_n524; } catch(e){}
@@ -695,6 +717,20 @@
     }, true);
   }catch(e){}
 
+  /* ★fix946 M3: 持ち主が変わったら、この document の表示キャッシュ・待ち行列を捨てて仮アイコンへ戻す
+     ★iso1(2026-10-14): genGate は空にしない。probe（GET /img）の応答処理が genGate[pk].tries を読むため、fence が
+       probe の途中で起きると TypeError（unhandled rejection）になっていた（PROD_IMGISO1 qa/gate_fence.js で再現）。
+       fence 後の document は生成も表示もしない（pump・applyOne・regenFor が止まる）ので、gate の記憶が残っても使われない。 */
+  try {
+    var F946f = window.__v292Dfix946;
+    if (F946f && F946f.__armed && typeof F946f.onFence === 'function') F946f.onFence(function(){
+      cache = {}; jobInfo = {}; queue = []; regenPrev = {}; freshSeed403 = {};
+      try { var imgs = document.getElementsByTagName('img'); for (var i = 0; i < imgs.length; i++){ var im = imgs[i]; if (im.getAttribute('data-avpk')) placeholder946(im); } } catch(e){}
+      try { var logs = document.querySelectorAll('.v292-dlg-card img[alt], .dlg-av img[alt]'); for (var L = 0; L < logs.length; L++) placeholder946(logs[L]); } catch(e){}
+      try { var V = window.__v292Dfix889; if (V && typeof V.relock === 'function') V.relock(); } catch(e){}   // 隠した物語の object URL（L13）を取り消す
+    });
+  } catch(e){}
+
   function start(){
     try{
       var obs=new MutationObserver(function(muts){
@@ -720,7 +756,7 @@
     __test_state: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; return { pk:pk, pending:(c==='pending'), dice:(c==='dice'), dataUrl:(typeof c==='string'&&c.indexOf('data:')===0), queued:(queue.indexOf(pk)>=0), hasJob:!!jobInfo[pk], jobPrompt:(jobInfo[pk]&&jobInfo[pk].prompt)||'', gate: genGate[pk] || null }; }catch(e){ return null; } },
     /* ★sp24/H-2: 生成 gate の観測口（read-only） */
     genGate: function(){ var o = {}; for (var k in genGate) o[k] = genGate[k]; return { keys: o, stats: JSON.parse(JSON.stringify(gateStats)), genCount: genCount }; },
-    cachedFor: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; if(typeof c==='string'&&c.indexOf('data:')===0) return c; var p=persistGet(pk); return (p&&p.indexOf('data:')===0)?p:''; }catch(e){ return ''; } },
+    cachedFor: function(name){ try{ if (fenced946()) return ''; var pk=keyFor(name); var c=cache[pk]; if(typeof c==='string'&&c.indexOf('data:')===0) return c; var p=persistGet(pk); return (p&&p.indexOf('data:')===0)?p:''; }catch(e){ return ''; } },
     /* ★fix579: 削除候補の列挙に Object.keys(localStorage) を使わない。
        ラッパが localStorage.removeItem = wrapped と代入するため、**メソッド名が own property として
        列挙される**（実機で removeItem/getItem/setItem が「キー」として出た）。

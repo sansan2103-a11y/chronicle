@@ -12,6 +12,10 @@
 //     ローカル(cache/persist)→DiceBearへ後方互換フォールバック(fix400c)。
 // スイッチ: 既定ON。全体OFF = localStorage v292Dfix400Off = '1'。★fix400d: 画像キーは v292av2_ 付きで要求(実データで200確認済)。
 // 検証: window.__v292Dfix400 = { enabled, urlFor, ns, ensureNs, status }
+// ★fix946(2026-10-14 / GPT #125-GQ M3・#125-GR 第 1 段): ns はアカウントの値。持ち主が変わった document（fence）では
+//   配信 URL を作らない・ns を取りに行かない。依頼後に持ち主が変わった meta 応答の ns は保存しない。
+//   起動時の持ち主違いでは v292Dfix946 が v292Dfix400_ns を退避して空にするので、ensureNs が今の持ち主の ns を取り直す
+//   （「一生に 1 回」の guard は ns が空なら外れる＝従来どおり）。kill: v292Dfix946Off='1'。
 // =====================================================================
 (function(){
   'use strict';
@@ -47,16 +51,21 @@
   }
   function isLoggedIn(){ var h = authHeaders(); return !!(h['x-google-id'] || h['x-chronicle-pass'] || h['x-chronicle-session']); }
   function getNs(){ try { return localStorage.getItem('v292Dfix400_ns') || ''; } catch(e){ return ''; } }
+  function f946(){ try { var F = window.__v292Dfix946; return (F && F.__armed && F.on() && F.m3On()) ? F : null; } catch(e){ return null; } }
+  function fenced946(){ try { var F = f946(); return !!(F && F.fenced()); } catch(e){ return false; } }
   function setNs(ns){ try { localStorage.setItem('v292Dfix400_ns', String(ns)); } catch(e){} }
 
   var fetchingNs = false;
   function ensureNs(){
     try {
       if (off() || !isLoggedIn() || getNs() || fetchingNs) return;
+      if (fenced946()) return;                                    // ★fix946 M3
+      var F946 = f946(), ep946 = F946 ? F946.epoch() : 0;
       fetchingNs = true;
       fetch(proxyUrl() + '/save', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ op: 'meta' }) })
         .then(function(r){ return r.json(); })
-        .then(function(j){ if (j && j.ns) { setNs(j.ns); try { console.log(TAG, 'ns acquired'); } catch(e){} triggerSweep(); } })
+        .then(function(j){ if (F946 && !F946.sameEpoch(ep946)) { try { F946.noteStale(); } catch(e){} return; }   // ★fix946: 前の持ち主の ns を保存しない
+          if (j && j.ns) { setNs(j.ns); try { console.log(TAG, 'ns acquired'); } catch(e){} triggerSweep(); } })
         .catch(function(){})
         .then(function(){ fetchingNs = false; });
     } catch(e){ fetchingNs = false; }
@@ -65,8 +74,8 @@
 
   window.__v292Dfix400 = {
     __real: true,
-    enabled: function(){ return !off() && !!getNs(); },
-    urlFor: function(pk){ var ns = getNs(); if (off() || !ns || !pk) return ''; var k = /^v292av2_/.test(pk) ? pk : ('v292av2_' + pk); return proxyUrl() + '/img?ns=' + encodeURIComponent(ns) + '&k=' + encodeURIComponent(k); },  // ★fix400d: 画像キーは実データ上 v292av2_ プレフィックス付き(pkg.idb/IDB store keyに一致)。無しだと404。
+    enabled: function(){ return !off() && !!getNs() && !fenced946(); },
+    urlFor: function(pk){ var ns = getNs(); if (off() || !ns || !pk) return ''; if (fenced946()) return ''; var k = /^v292av2_/.test(pk) ? pk : ('v292av2_' + pk); return proxyUrl() + '/img?ns=' + encodeURIComponent(ns) + '&k=' + encodeURIComponent(k); },  // ★fix400d: 画像キーは実データ上 v292av2_ プレフィックス付き(pkg.idb/IDB store keyに一致)。無しだと404。
     ns: getNs,
     ensureNs: ensureNs,
     status: function(){ return { off: off(), loggedIn: isLoggedIn(), ns: getNs() ? 'set' : 'none', proxy: proxyUrl() }; }

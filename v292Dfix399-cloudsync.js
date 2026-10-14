@@ -918,11 +918,39 @@
       try { console.log(TAG, 'BBH: package 送信を保留（' + b + '・' + (where || '') + '）: 物語の確認が終わるまで送りません（データは変更しません）'); } catch(e){} }
     return b;
   }
+  /* ★★iso2（GPT #125-GY、2026-10-14）: fix402 と同じ判定（共通ガード __v292Diso2.check()）。ここは pkg.idb（IndexedDB chr6av の絵）を
+     画像層を通らずに読んで送る経路でもあるので、送る中身の持ち主と送信先のアカウントが一致しない／確かめられないなら送らずに理由を返す
+     （データは変更しない）。共通ガードが無い時は iso1c-pkg と同じく fix946 の fence / 保留で止める。kill = v292Diso2Off='1'。 */
+  var iso2Stats = { holds: 0, last: null };
+  function iso2Hold(where, body){
+    try { if (localStorage.getItem('v292Diso2Off') === '1') return null; } catch(e){}
+    var why = null;
+    try {
+      var G = window.__v292Diso2;
+      if (G && G.__armed && typeof G.check === 'function') why = G.check(body || null, 'fix399:' + (where || ''));
+      else {
+        var F = window.__v292Dfix946;
+        if (F && F.__armed && typeof F.fenced === 'function' && !(typeof F.m3On === 'function' && !F.m3On()) && F.fenced()) why = 'IMG_OWNER_FENCED(no-guard)';
+      }
+    } catch(e){ why = 'ISO2_UNKNOWN'; }
+    if (!why) return null;
+    iso2Stats.holds++; iso2Stats.last = { at: Date.now(), why: String(why).slice(0, 160), where: where || '' };
+    try { console.log(TAG, 'iso2: put を中止（' + why + '・' + (where || '') + '）'); } catch(e){}
+    return why;
+  }
+  function iso2Error(why){
+    /* ★iso2b（GPT #125-GZ）: 理由に合った文を共通ガードから受け取る（アカウントの切替／持ち主を確かめられない古いデータ） */
+    var msg = null; try { var G = window.__v292Diso2; if (G && typeof G.messageFor === 'function') msg = G.messageFor(why); } catch(e0){ msg = null; }
+    var e = new Error(msg || 'アカウントの切り替わりなどで、送る中身の持ち主とログイン中のアカウントが一致することを確かめられないため、クラウドへ送りませんでした（データは変更していません）。ページを読み込み直してからもう一度お試しください。');
+    e.ownerHold = true; e.errorCode = 'OWNER_GUARD_HOLD'; e.why = why; return e;
+  }
   function push(force){
     if (!isLoggedIn()) return Promise.reject(new Error('ログインが必要です'));
     if (pushing) return Promise.reject(new Error('同期中'));
     var bbh0 = bbhHold(null, 'push:pre');   /* ★BBH (1) 組み立て前 */
     if (bbh0){ var eb0 = new Error('VAULT_BARRIER_HOLD'); eb0.vaultHold = true; eb0.why = bbh0; return Promise.reject(eb0); }
+    var iso0 = iso2Hold('push:pre', { op: 'put' });       /* ★iso2 (1) 組み立て前（通信 0・アカウントの整合） */
+    if (iso0) return Promise.reject(iso2Error(iso0));
     pushing = true;
     var ts = Date.now();
     var c = fix582Off() ? null : coord();
@@ -1004,6 +1032,8 @@
           e713.bytes = overAtt713.bytes; e713.limit = overAtt713.limit;
           throw e713;
         }
+        /* ★iso2 (2) 送る前（meta・IndexedDB 読みの非同期の間の切替も含め、送る中身そのものの帰属）。★commit 台帳の予約（notePut）より**前** */
+        var iso2 = iso2Hold('push:send', { op: 'put', pkg: o.pkg }); if (iso2) throw iso2Error(iso2);
         var body = { op: 'put', pkg: o.pkg };
         if (c) body.baseRev = c.rev();          /* ★これが無いとサーバは競合検査をしない */
         /* ★fix590: 「何を送ったか」を put の**直前に永続化**する。
@@ -1122,7 +1152,7 @@
            ここで照合を走らせると、決着しないまま通信を繰り返すだけになる。
            不変条件違反も同じで、直すべきは呼び出し側なので照合対象ではない。 */
         /* ★fix713: 容量超過は「送っていない」ことが確定しているので、照合の通信も出さない。 */
-        var noReconcile = isFork || !!(err && (err.resolutionRequired || err.invariant || err.legacyPackageTooLarge));
+        var noReconcile = isFork || !!(err && (err.resolutionRequired || err.invariant || err.legacyPackageTooLarge || err.ownerHold));   /* ★iso2: 送っていない＝照合しない */
         if (!noReconcile) setTimeout(function(){ reconcileNow(err && err.pendingCommit ? 'pending-blocked' : 'io-error'); }, 0);
       } catch(e){}
       throw err;
@@ -1637,6 +1667,8 @@
                rev: (c && typeof c.rev === 'function') ? c.rev() : null,
                casEnabled: !!(c && typeof c.rev === 'function') && !fix582Off() };
     },
+    /* ★iso2: 観測口（write 0） */
+    iso2: function(){ var o = false; try { o = localStorage.getItem('v292Diso2Off') === '1'; } catch(e){} return { off: o, stats: JSON.parse(JSON.stringify(iso2Stats)) }; },
     status: function(){ return { off: off(), autoOff: autoOff(), loggedIn: isLoggedIn(), proxy: proxyUrl(), activeSlot: activeSlot() }; }
   };
   try { console.log(TAG, 'loaded', off()?'OFF':(autoOff()?'manual-only':'AUTO'), '(login='+isLoggedIn()+')'); } catch(e){}
