@@ -117,15 +117,57 @@
     return { text: res, removed: removed, aborted: false };
   }
 
+  // ===================================================================
+  // ★fix975（K2・GPT #127-AN Local GO）: モデルの「書き直し版」見出しから後ろを本文から外す
+  //   実測（QA 物語 smv96jazgcc T8・全 27 物語 162 ターン中 1 件）:
+  //     本文の後に「■タグ修正版（出力形式準拠）」という見出しと、同じ場面の書き直し 3 文が続き、プレイヤーに見えた。
+  //   すべて満たす時だけ、見出しの行とそれより後ろを落とす（1 つでも外れたら何もしない）:
+  //     ① 見出しの行が 2 行目以降にあり、40 字以内、「」『』< を含まない
+  //     ② 行頭が ■□◆◇#＃ のどれか
+  //     ③ 書き直しを表す語（修正|書き直|再出力|リライト|訂正）と、出力形式を表す語（タグ|出力形式|形式準拠|フォーマット）の両方を含む
+  //        （「修正版」などの一般語だけでは切らない）
+  //     ④ 見出しより後ろの say/state/react タグの数が、前の部分より多くない（タグ付きの正しい版を捨てない）
+  //     ⑤ 見出しより後ろの字数が、前の部分の字数以下（書き直しの断片であって、話の続きではない）
+  //     ⑥ 残る本文が元の半分以上
+  //   state などのタグは parsePlan の中で先に取り出されているので、ここで本文を切っても状態の取り込みは変わらない。
+  //   端末の停止: localStorage v292Dfix975Off='1'（fix427 全体の停止 v292Dfix427Off でも止まる）。
+  // ===================================================================
+  var RE_RW_HEAD = /^[■□◆◇#＃]/;
+  var RE_RW_REV  = /(修正|書き直|再出力|リライト|訂正)/;
+  var RE_RW_FMT  = /(タグ|出力形式|形式準拠|フォーマット)/;
+  function off975(){ return ls('v292Dfix975Off') === '1'; }
+  function rewriteCut(arr){
+    try {
+      if (!Array.isArray(arr) || arr.length < 2) return null;
+      var k = -1;
+      for (var i = 1; i < arr.length; i++){
+        var t = String(arr[i] == null ? '' : arr[i]).trim();
+        if (t.length <= 40 && RE_RW_HEAD.test(t) && !/[「」『』<]/.test(t) && RE_RW_REV.test(t) && RE_RW_FMT.test(t)){ k = i; break; }
+      }
+      if (k < 1) return null;
+      var before = arr.slice(0, k).join('\n'), after = arr.slice(k + 1).join('\n');
+      var tags = function(x){ return (x.match(/<(say|state|react)\b/g) || []).length; };
+      if (tags(after) > tags(before)) return null;
+      var len = function(x){ return x.replace(/<[^>]*>/g, '').replace(/[\s　]/g, '').length; };
+      var lb = len(before), la = len(after), lh = len(String(arr[k]));
+      if (!lb || la > lb) return null;
+      if (lb < (lb + la + lh) * 0.5) return null;
+      return { keep: arr.slice(0, k), head: String(arr[k]), dropped: arr.length - k };
+    } catch(e){ return null; }
+  }
+  var _last975 = null;
+
   // plan.narrative(配列) へ適用。変更したら true。
   function sanitizePlan(plan){
     if (!plan || !Array.isArray(plan.narrative) || !plan.narrative.length) return false;
+    var _c975 = false;
+    if (!off975()){ var _r975 = rewriteCut(plan.narrative); if (_r975 && _r975.keep.length){ plan.narrative = _r975.keep; _last975 = { head: _r975.head.slice(0, 40), dropped: _r975.dropped }; _c975 = true; try { console.log(TAG, 'fix975 rewrite tail removed:', _r975.dropped, 'line(s)'); } catch(_){} } }
     var joined = plan.narrative.join('\n');
     var r = sanitizeNarrative(joined);
-    if (r.aborted) return false;
-    if (!r.removed.length && r.text === joined) return false;
+    if (r.aborted) return _c975;
+    if (!r.removed.length && r.text === joined) return _c975;
     var arr = r.text.split('\n').filter(function(x){ return String(x == null ? '' : x).trim(); });
-    if (!arr.length) return false;   // 安全網: 全消えは避ける
+    if (!arr.length) return _c975;   // 安全網: 全消えは避ける
     plan.narrative = arr;
     _lastRemoved = r.removed;
     return true;
@@ -420,6 +462,8 @@
   G.__v292Dfix427 = {
     sanitizeNarrative: sanitizeNarrative,
     sanitizePlan:      sanitizePlan,
+    rewriteCut:        rewriteCut,
+    last975: function(){ return _last975; },
     regroupSpeakers:   regroupSpeakers,
     findCastInProse:   findCastInProse,
     nameHits:          nameHits,

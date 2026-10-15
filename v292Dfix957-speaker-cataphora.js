@@ -29,7 +29,7 @@
   'use strict';
   var G = (typeof window !== 'undefined') ? window : globalThis;
   if (G.__v292Dfix957 && G.__v292Dfix957.__installed) return;
-  var VERSION = 'fix957-r4-20261015';
+  var VERSION = 'fix957-r5-fix974-20261015';
   var st = { calls: 0, strong: 0, abstain: 0, none: 0, errors: 0, fallback: 0, resolved: 0 }, lastRec = null;
   var pend = {};   // 保留にした引用 → 元の窓推測（第 2 層で決まらなかった時に戻す＝引用数を減らさない）
   // r4（GPT 裁定変更・FIX957_DEFAULT_ON）: 全ユーザー既定 ON。
@@ -65,8 +65,31 @@
     if (out.length < 2 && buf.trim()) out.push(buf.trim());
     return out.slice(0, 2);
   }
+  // ★fix974: 強い証拠の文が「次の引用の手前の最後の文」で、その直後が同じ人物の <say who> なら導入文とみなす
+  function k1IsIntro(after, ev, who){
+    try {
+      if (k1Off()) return false;
+      var s = String(after || '').replace(/^[\s　」』]+/, '');
+      var q = s.search(/[「<]/); if (q < 0) return false;
+      var head = s.slice(0, q), p = head.lastIndexOf(ev); if (p < 0) return false;
+      if (/[。\n][\s　]*[^\s　]/.test(head.slice(p + ev.length))) return false;   // 証拠の後ろにまだ別の文がある＝導入文ではない
+      return k1Intro(s.slice(q), who);
+    } catch(e){ return false; }
+  }
   var SPEECH = '(言った|言って|言う|呟いた|呟く|つぶやいた|囁いた|ささやいた|尋ねた|訊ねた|訊いた|問うた|答えた|叫んだ|返した|応じた|告げた|続けた|付け加えた|口にした|言い添えた|声をかけた|声を掛けた|声を上げた)';
   function esc(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  // ★fix974（K1・GPT #127-AN Local GO）: 「次の台詞の導入文」を前の台詞の話者の証拠に使わない。
+  //   判定は明示の say タグだけ：導入文の直後（空白を除く）が <say who="X"> で、X が証拠の人物と同じ時に限る。
+  //   タグの無い「」は誰の台詞か分からないので使わない（推測どうしを証拠にする循環を作らない）。
+  //   端末の停止: localStorage v292Dfix974Off='1'（fix957 の ON/OFF とは独立）。
+  function k1Off(){ try { return G.localStorage && G.localStorage.getItem('v292Dfix974Off') === '1'; } catch(e){ return true; } }
+  function k1Intro(rest, name){
+    try {
+      if (k1Off()) return false;
+      var m = String(rest || '').replace(/^[\s　]+/, '').match(/^<say\b[^>]*?\bwho="([^"]*)"/);
+      return !!(m && name && m[1].trim() === String(name).trim());
+    } catch(e){ return false; }
+  }
   function decide(o){
     st.calls++;
     try {
@@ -95,6 +118,7 @@
           var tailStr = text.slice(m.index + m[0].length, m.index + m[0].length + 4);
           if (/^(ない|なかった|ず)/.test(tailStr)) continue;
           var who = al[m[1]];
+          if (who && k1IsIntro(o.after, m[0], who)){ st.k1skip = (st.k1skip || 0) + 1; lastRec = { kind: 'k1-intro', who: who, from: sw, ev: m[0].slice(0, 30) }; continue; }   // ★fix974: 次の <say who=X> の導入文＝前の台詞の証拠にしない
           if (who){ st.strong++; lastRec = { kind: 'strong', who: who, from: sw, ev: m[0].slice(0, 30) }; return { who: who, kind: 'strong', ev: m[0] }; }
         }
       }
@@ -123,7 +147,7 @@
       pend = {}; return n;
     } catch(e){ st.errors++; pend = {}; return 0; }
   }
-  G.__v292Dfix957 = { __installed: true, version: VERSION, decide: decide, restore: restore, aliasMap: aliasMap, afterSentences: afterSentences,
+  G.__v292Dfix957 = { __installed: true, version: VERSION, decide: decide, restore: restore, aliasMap: aliasMap, afterSentences: afterSentences, k1Intro: k1Intro, k1IsIntro: k1IsIntro,
     stats: function(){ var o = {}; for (var k in st) o[k] = st[k]; o.off = off(); o.version = VERSION; return o; },
     last: function(){ return lastRec; }, isOff: off };
   try { console.log('[v292Dfix957]', VERSION); } catch(e){}

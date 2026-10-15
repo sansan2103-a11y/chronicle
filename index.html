@@ -330,7 +330,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261015-bundle9-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261015-bundle10-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -2800,7 +2800,7 @@ const G = {
         var _F833_DEFAULT_ON = true;  var _neg833 = function(p, q){ try { if (localStorage.getItem('v292Dfix833Off') === '1') return false; if (!_F833_DEFAULT_ON) return false; if (!(_L217.negSpeech2 && _L217.negSpeech2.test(p))) return false; try { var _o833 = (window.__v292Dfix833 = window.__v292Dfix833 || { suppressed: 0, last: null }); _o833.suppressed++; _o833.last = { q: String(q || '').slice(0, 24), post: String(p || '').slice(0, 32) }; } catch(e2){} return true; } catch(e){ return false; } };  var _F811_DEFAULT_ON = true;  var _neg811 = function(p, q){ try { if (localStorage.getItem('v292Dfix811Off') === '1') return false; if (!_F811_DEFAULT_ON && localStorage.getItem('v292Dfix811On') !== '1') return false; if (!(_L217.negSpeech && _L217.negSpeech.test(p))) return false; try { var _o811 = (window.__v292Dfix811 = window.__v292Dfix811 || { suppressed: 0, last: null }); _o811.suppressed++; _o811.last = { q: String(q || '').slice(0, 24), post: String(p || '').slice(0, 24) }; } catch(_e){} return true; } catch(e){ return false; } }; /* v292Dfix811: 否定された発話動詞の引用は _mk218（後置話者型）にしない。独立行 _lh217・say タグ・react 声は不変。in-memory counter のみ（永続 0） */
         while ((_sm = _sayRe.exec(_body))) {
           var _ss2 = String((_sm[1] != null ? _sm[2] : _sm[3]) || '').trim().slice(0, 80).replace(/([？！。…」])と(聞い|言っ|尋ね|呟い|囁い|叫ん|答え|返し|告げ)(た|だ)$/, '$1'); /* v292Dfix255c: モデルがsayタグ内に書いたト書き尻尾「？と聞いた」を切除(実測T6)。句読点直後のみ=「大丈夫だと言った」型の本物の伝聞セリフは残す */
-          var _sw, _conf218 = false, _win218 = false; if (_sm[1] != null){ _sw = String(_sm[1] || '').trim().slice(0, 24); _conf218 = true; try { if (localStorage.getItem('v292TagFixOff') !== '1' && _names.indexOf(_sw) >= 0){ var _tp273 = _body.slice(0, _sm.index); var _ct273 = Math.max(_tp273.lastIndexOf('。'), _tp273.lastIndexOf('\n')); var _sg273 = (_ct273 >= 0 ? _tp273.slice(_ct273 + 1) : _tp273).slice(-80); if (/(ながら|つつ)[、，,\s　]*$/.test(_sg273)){ var _sj273 = null, _sx273 = -1; _names.forEach(function(n){ var p = _sg273.lastIndexOf(n); if (p >= 0 && /^[\s　]*は/.test(_sg273.slice(p + n.length)) && p > _sx273){ _sx273 = p; _sj273 = n; } }); if (_sj273 && _sj273 !== _sw){ try { console.log('[v292Dfix273]', 'tag-who矯正(行動主体):', _sw, '->', _sj273); } catch(_e){} _sw = _sj273; } } } } catch(_e273){} /* v292Dfix273: 「Xは…しながら<say who=Y>」型=タグwho自体の書き間違い(実測:心臓のあたり=カエデの所見がリナに)。同文の行動主体X(は限定)とタグwhoが共にCAST内で食い違う時だけwhoをXへ矯正。OFF: v292TagFixOff */ } else { var _pre = _body.slice(0, _sm.index); var _after218 = _body.slice(_sm.index + _sm[0].length); var _lh217 = /(^|\n)[\s　]*$/.test(_pre) && /^[\s　]*(\n|$)/.test(_after218); /* v292Dfix217: 独立セリフ行=行全体が引用のみ */ var _nm218 = _L217.namingPre.test(_pre); /* v292Dfix218: 「Xを「…」と呼ぶ」命名構文=発話でない */ var _post = _after218.slice(0, 50).replace(/^[\s　」』]+/, ''); var _pst = _post.search(/[「。\n]/); if (_pst >= 0) _post = _post.slice(0, _pst); var _mk218 = false; _sw = null; if (_L217.quoteLead.test(_post) && _L217.speechVerb.test(_post) && !(_L217.nonSpeech && _L217.nonSpeech.test(_post)) && !_neg811(_post, _ss2) && !_neg833(_post, _ss2)){ _mk218 = true; var _vm218 = _post.match(_L217.speechVerb); var _seg218 = _vm218 ? _post.slice(0, _vm218.index + 1) : _post; _cands218.forEach(function(n){ if (_seg218.indexOf(n) >= 0) _sw = n; }); if (!_sw){ var _cm218 = _post.match(/のは([^。、\s　]{1,24})/); if (_cm218){ _cands218.forEach(function(n){ if (_cm218[1].indexOf(n) === 0) _sw = n; }); } } } /* v292Dfix200b改: 後置話者は「と〜発話動詞」区間内の名前だけ(次節の主語「…と呟いた刹那、妖怪は」を拾わない)+「呼んだのはX」のは構文 */ _cands218.forEach(function(n){ if (_post.indexOf(n) === 0 && (_post.slice(n.length).match(_L217.voiceNoun) || _post.slice(n.length).match(_L217.voicePost) || (_lh217 && /^[はがも]/.test(_post.slice(n.length)) && _L217.speechVerb.test(_post.slice(n.length).replace(/(言葉|声)(を失|に詰ま|が出|を呑|を飲)/g,'')) && !(_L217.nonSpeech && _L217.nonSpeech.test(_post)) && ((function(){ try { return localStorage.getItem('v292DfixCL1dOff') === '1'; } catch(_x){ return false; } })() || !/^[はがも][^。「]{0,12}?(答え|言わ|話さ|喋ら|口を開か|返事をし|声を出さ)(ない|なかった|ず|ぬ)/.test(_post.slice(n.length)))))) { _mk218 = true; _sw = n; } }); /* ★CL1-d: 「Xは答えない／言わなかった」＝話していない人を後置話者にしない */ /* v292Dfix255a: 独立セリフ行の次文後置話者「Xは…呟いた」型(と接続なし)を追加。実測:「何て強烈な力を……」\nリナは息を飲むように呟いた→旧は対象外で近接カエデに誤帰属。「言葉を失った/声を失った」型の非発話は除外 */ /* v292Dfix206: 「Xの金切り声が」型 + fix218b: 「Xが驚愕の声を上げた」型(主語+発声動詞) */ var _utt217 = !_nm218 && (_lh217 || _mk218); if (_utt217 && _mk218 && !_sw){ var _bs218 = -1, _bv218 = -1, _swS218 = null, _swV218 = null; _cands218.forEach(function(n){ var p = _pre.indexOf(n); while (p >= 0){ var _tl = _pre.slice(p + n.length, p + n.length + 8); if (_L217.voiceAfter.test(_tl)){ if (p > _bv218){ _bv218 = p; _swV218 = n; } } else if (_L217.subjAfter.test(_tl) && p > _bs218){ _bs218 = p; _swS218 = n; } p = _pre.indexOf(n, p + 1); } }); _sw = _swV218 || _swS218; } /* v292Dfix218: 文中型の前方解決=「Xの声」型(発声手がかり)優先、次に「が/は」主語(「カエデへ」等の目的語を話者にしない) */ if (_sw){ _conf218 = true; } else if (_utt217 && _lh217){ var _w218 = _pre.slice(-200), _list218 = [], _near218 = null, _ni218 = -1, _subj218 = null, _si218 = -1, _voi218 = null, _vi218 = -1; _cands218.forEach(function(n){ var p2 = _w218.lastIndexOf(n); if (p2 >= 0){ _list218.push(n); if (p2 > _ni218){ _ni218 = p2; _near218 = n; } } var q2 = _w218.indexOf(n); while (q2 >= 0){ var _t2 = _w218.slice(q2 + n.length, q2 + n.length + 8); if (_L217.voiceAfter.test(_t2)){ if (q2 > _vi218){ _vi218 = q2; _voi218 = n; } } else if (_L217.subjAfter.test(_t2) && q2 > _si218){ _si218 = q2; _subj218 = n; } q2 = _w218.indexOf(n, q2 + 1); } }); if (_voi218){ _sw = _voi218; _conf218 = true; } else if (!_list218.length){ _sw = _heroNm; _conf218 = true; _win218 = true; } else if (_list218.length === 1){ var _ls1d = (function(){ try { return localStorage.getItem('v292DfixCL1dOff') === '1'; } catch(_x){ return false; } })() ? '' : (function(){ var p = _pre.replace(/[\s\u3000]+$/, ''); var k = Math.max(p.lastIndexOf('。', p.length - 2), p.lastIndexOf('\n')); return p.slice(k + 1); })(); if (_ls1d && /あなた(は|が)/.test(_ls1d)){ if (_ls1d.indexOf(_list218[0]) >= 0){ _sw = '???'; } else { _sw = _heroNm; } _conf218 = true; _win218 = true; try { console.log('[CL1-d]', '引用直前の文の主語が「あなた」', _sw || '(名前なし→???)'); } catch(_l1d){} } else { _sw = _list218[0]; _conf218 = true; _win218 = true; } } /* ★CL1-d: 引用の直前の 1 文の主語が「あなたは/が」の時だけ主人公（名前が空なら ???）。同じ文に候補 NPC も居れば曖昧＝???（abstain）。それ以外は従来の単独候補 */ else if (_subj218 && _subj218 === _near218){ _sw = _subj218; _conf218 = true; _win218 = true; } } /* v292Dfix218b: 独立セリフ行=窓内に「Xの声」型(アリアの声は空気を切り裂く等)があればその人が最優先。無ければ登場者0人→主人公/1人→その人/複数→主語と近接一致時のみ確信。不一致は保留→第2層が意味で判定 */ }
+          var _sw, _conf218 = false, _win218 = false; if (_sm[1] != null){ _sw = String(_sm[1] || '').trim().slice(0, 24); _conf218 = true; try { if (localStorage.getItem('v292TagFixOff') !== '1' && _names.indexOf(_sw) >= 0){ var _tp273 = _body.slice(0, _sm.index); var _ct273 = Math.max(_tp273.lastIndexOf('。'), _tp273.lastIndexOf('\n')); var _sg273 = (_ct273 >= 0 ? _tp273.slice(_ct273 + 1) : _tp273).slice(-80); if (/(ながら|つつ)[、，,\s　]*$/.test(_sg273)){ var _sj273 = null, _sx273 = -1; _names.forEach(function(n){ var p = _sg273.lastIndexOf(n); if (p >= 0 && /^[\s　]*は/.test(_sg273.slice(p + n.length)) && p > _sx273){ _sx273 = p; _sj273 = n; } }); if (_sj273 && _sj273 !== _sw){ try { console.log('[v292Dfix273]', 'tag-who矯正(行動主体):', _sw, '->', _sj273); } catch(_e){} _sw = _sj273; } } } } catch(_e273){} /* v292Dfix273: 「Xは…しながら<say who=Y>」型=タグwho自体の書き間違い(実測:心臓のあたり=カエデの所見がリナに)。同文の行動主体X(は限定)とタグwhoが共にCAST内で食い違う時だけwhoをXへ矯正。OFF: v292TagFixOff */ } else { var _pre = _body.slice(0, _sm.index); var _after218 = _body.slice(_sm.index + _sm[0].length); var _lh217 = /(^|\n)[\s　]*$/.test(_pre) && /^[\s　]*(\n|$)/.test(_after218); /* v292Dfix217: 独立セリフ行=行全体が引用のみ */ var _nm218 = _L217.namingPre.test(_pre); /* v292Dfix218: 「Xを「…」と呼ぶ」命名構文=発話でない */ var _post = _after218.slice(0, 50).replace(/^[\s　」』]+/, ''); var _pst = _post.search(/[「。\n]/); if (_pst >= 0) _post = _post.slice(0, _pst); var _mk218 = false; _sw = null; if (_L217.quoteLead.test(_post) && _L217.speechVerb.test(_post) && !(_L217.nonSpeech && _L217.nonSpeech.test(_post)) && !_neg811(_post, _ss2) && !_neg833(_post, _ss2)){ _mk218 = true; var _vm218 = _post.match(_L217.speechVerb); var _seg218 = _vm218 ? _post.slice(0, _vm218.index + 1) : _post; _cands218.forEach(function(n){ if (_seg218.indexOf(n) >= 0) _sw = n; }); if (!_sw){ var _cm218 = _post.match(/のは([^。、\s　]{1,24})/); if (_cm218){ _cands218.forEach(function(n){ if (_cm218[1].indexOf(n) === 0) _sw = n; }); } } } /* v292Dfix200b改: 後置話者は「と〜発話動詞」区間内の名前だけ(次節の主語「…と呟いた刹那、妖怪は」を拾わない)+「呼んだのはX」のは構文 */ _cands218.forEach(function(n){ if (_post.indexOf(n) === 0 && (_post.slice(n.length).match(_L217.voiceNoun) || _post.slice(n.length).match(_L217.voicePost) || (_lh217 && /^[はがも]/.test(_post.slice(n.length)) && _L217.speechVerb.test(_post.slice(n.length).replace(/(言葉|声)(を失|に詰ま|が出|を呑|を飲)/g,'')) && !(_L217.nonSpeech && _L217.nonSpeech.test(_post)) && ((function(){ try { return localStorage.getItem('v292DfixCL1dOff') === '1'; } catch(_x){ return false; } })() || !/^[はがも][^。「]{0,12}?(答え|言わ|話さ|喋ら|口を開か|返事をし|声を出さ)(ない|なかった|ず|ぬ)/.test(_post.slice(n.length)))))) { if (!(function(){ try { var F = window.__v292Dfix957; if (!F || !F.k1Intro) return false; var ls = String(_after218 || '').split('\n').slice(1).map(function(x){ return x.trim(); }).filter(Boolean); return ls.length >= 2 && ls[0].indexOf(n) >= 0 && /(応|答|返)/.test(ls[0]) && F.k1Intro(ls[1], n); } catch(_x974){ return false; } })()) { _mk218 = true; _sw = n; } } }); /* ★fix974-A（K1・fix973 を置換）: 次の行が「Xは…応えた／答えた／返した」で、その次が X の <say who> なら、それは次の台詞の導入＝この台詞の後置話者にしない（従来の推測へ）。判定は fix957 の k1Intro（明示タグだけ）。停止 v292Dfix974Off */ /* ★CL1-d: 「Xは答えない／言わなかった」＝話していない人を後置話者にしない */ /* v292Dfix255a: 独立セリフ行の次文後置話者「Xは…呟いた」型(と接続なし)を追加。実測:「何て強烈な力を……」\nリナは息を飲むように呟いた→旧は対象外で近接カエデに誤帰属。「言葉を失った/声を失った」型の非発話は除外 */ /* v292Dfix206: 「Xの金切り声が」型 + fix218b: 「Xが驚愕の声を上げた」型(主語+発声動詞) */ var _utt217 = !_nm218 && (_lh217 || _mk218); if (_utt217 && _mk218 && !_sw){ var _bs218 = -1, _bv218 = -1, _swS218 = null, _swV218 = null; _cands218.forEach(function(n){ var p = _pre.indexOf(n); while (p >= 0){ var _tl = _pre.slice(p + n.length, p + n.length + 8); if (_L217.voiceAfter.test(_tl)){ if (p > _bv218){ _bv218 = p; _swV218 = n; } } else if (_L217.subjAfter.test(_tl) && p > _bs218){ _bs218 = p; _swS218 = n; } p = _pre.indexOf(n, p + 1); } }); _sw = _swV218 || _swS218; } /* v292Dfix218: 文中型の前方解決=「Xの声」型(発声手がかり)優先、次に「が/は」主語(「カエデへ」等の目的語を話者にしない) */ if (_sw){ _conf218 = true; } else if (_utt217 && _lh217){ var _w218 = _pre.slice(-200), _list218 = [], _near218 = null, _ni218 = -1, _subj218 = null, _si218 = -1, _voi218 = null, _vi218 = -1; _cands218.forEach(function(n){ var p2 = _w218.lastIndexOf(n); if (p2 >= 0){ _list218.push(n); if (p2 > _ni218){ _ni218 = p2; _near218 = n; } } var q2 = _w218.indexOf(n); while (q2 >= 0){ var _t2 = _w218.slice(q2 + n.length, q2 + n.length + 8); if (_L217.voiceAfter.test(_t2) && !(function(){ try { var F = window.__v292Dfix957; if (!F || !F.k1Intro) return false; var k = _w218.indexOf('。', q2), nl = _w218.indexOf('\n', q2); if (k < 0 || (nl >= 0 && nl < k)) k = nl; return k >= 0 && F.k1Intro(_w218.slice(k + 1), n); } catch(_x974c){ return false; } })()){ if (q2 > _vi218){ _vi218 = q2; _voi218 = n; } } /* ★fix974-C: 「Xの声が…」の文の直後が X の <say who> なら、それはその台詞の導入＝この台詞の声の手がかりにしない */ else if (_L217.subjAfter.test(_t2) && q2 > _si218){ _si218 = q2; _subj218 = n; } q2 = _w218.indexOf(n, q2 + 1); } }); if (_voi218){ _sw = _voi218; _conf218 = true; } else if (!_list218.length){ _sw = _heroNm; _conf218 = true; _win218 = true; } else if (_list218.length === 1){ var _ls1d = (function(){ try { return localStorage.getItem('v292DfixCL1dOff') === '1'; } catch(_x){ return false; } })() ? '' : (function(){ var p = _pre.replace(/[\s\u3000]+$/, ''); var k = Math.max(p.lastIndexOf('。', p.length - 2), p.lastIndexOf('\n')); return p.slice(k + 1); })(); if (_ls1d && /あなた(は|が)/.test(_ls1d)){ if (_ls1d.indexOf(_list218[0]) >= 0){ _sw = '???'; } else { _sw = _heroNm; } _conf218 = true; _win218 = true; try { console.log('[CL1-d]', '引用直前の文の主語が「あなた」', _sw || '(名前なし→???)'); } catch(_l1d){} } else { _sw = _list218[0]; _conf218 = true; _win218 = true; } } /* ★CL1-d: 引用の直前の 1 文の主語が「あなたは/が」の時だけ主人公（名前が空なら ???）。同じ文に候補 NPC も居れば曖昧＝???（abstain）。それ以外は従来の単独候補 */ else if (_subj218 && _subj218 === _near218){ _sw = _subj218; _conf218 = true; _win218 = true; } } /* v292Dfix218b: 独立セリフ行=窓内に「Xの声」型(アリアの声は空気を切り裂く等)があればその人が最優先。無ければ登場者0人→主人公/1人→その人/複数→主語と近接一致時のみ確信。不一致は保留→第2層が意味で判定 */ }
           try { if (_sm[1] == null && _win218 && typeof window !== 'undefined' && window.__v292Dfix957) { var _d957 = window.__v292Dfix957.decide({ after: _after218, sw: _sw, hero: _heroNm, names: _names, say: _ss2 }); if (_d957 && _d957.who){ _sw = _d957.who; _conf218 = true; _win218 = false; } else if (_d957 && _d957.abstain){ _sw = null; _conf218 = false; _win218 = false; } } } catch(_e957){} /* v292Dfix957: 窓推測で決めた独立行の裸「」だけ、引用の後ろ1〜2文で確かめる（強い証拠=その人／弱い証拠が別人=保留→第2層）。既定OFF・ON: v292Dfix957On=1・OFF: v292Dfix957Off */
           var _ss = _ss2; if (!_ss2) continue; if (_sm[1] == null && !_utt217) continue; /* v292Dfix217: 発話判別器を通らない裸「」は収穫しない(地の文の引用を発話化しない=「助けられなかった」誤帰属の根治) */ if (_sm[1] == null && _tagNorm[_ss2.replace(/[\s　。、！？!?…・「」『』]/g,'')]) continue; /* v292Dfix213: タグ版が存在する裸「」は同一セリフの重複＝スキップ(話者はタグが正) */
           /* ★v292Dfix807(4B1B_REFERENTIAL_REQUOTE_SUPPRESSION v1・GPT 2026-09-05): 「既発話について語っている引用」を新発話として収穫しない。
@@ -4023,7 +4023,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
        fix659 は別 id + __f527 マーカーを立てるので干渉しない、という関係をこの並びで示す。
      読出=window.__v292Dfix659.status()/.selfTest() / OFF=v292Dfix659Off -->
 <script src="v292Dfix659-fork-choice.js?cb=v292Dfix680"></script>
-<script src="features.js?cb=20261015-bundle9-a"></script>
+<script src="features.js?cb=20261015-bundle10-a"></script>
 <script>
 /* ============================================================================
  * v292DfixP0-inline : シナリオテンプレ適用の緊急封鎖（L2 + L2b）
@@ -4261,7 +4261,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixP0-scenario-blocker.js?cb=v292Dfix680"></script>
 <script src="v292Dfix135-longmem.js?cb=20260927-ac3"></script>
 <script src="v292Dfix138-continue.js?cb=20260929-ac18"></script>
-<script src="v292Dfix145-charlist.js?cb=20261015-bundle9-a"></script>
+<script src="v292Dfix145-charlist.js?cb=20261015-bundle10-a"></script>
 <script src="v292Dfix777-icon-lightbox.js?cb=v292Dfix777"></script>
 <!-- v292Dfix226(P1): fix52(可読性v1)はfix53(包括v2)に内包されるため退役。問題があれば下行のコメントを外す
 <script src="v292Dfix52-readability.js?cb=v292Dfix52"></script> -->
@@ -4295,7 +4295,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
     <script src="v292Dfix73-card-dedup.js?cb=v292Dfix200"></script>
     <script src="v292Dfix70b-order-convsays.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix75-history-dedup.js?cb=v292Dfix75"></script>
-<script src="v292Dfix76-human-foundation.js?cb=v292Dfix76b"></script>  <script src="v292Dfix77-state-memory.js?cb=20261015-bundle9-a"></script>
+<script src="v292Dfix76-human-foundation.js?cb=v292Dfix76b"></script>  <script src="v292Dfix77-state-memory.js?cb=20261015-bundle10-a"></script>
   <script src="v292Dfix78-tag-case-normalize.js?cb=20260912-q119s4"></script>
   <script src="v292Dfix79-momentum-anchor.js?cb=v292Dfix79"></script>
   <script src="v292Dfix80-gen-gate-retry.js?cb=20260929-ac23"></script>
@@ -4312,10 +4312,10 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
   <script src="v292Dfix796-memory-retrieve.js?cb=20260930-ac25"></script>
-  <script src="v292Dfix192-newengine.js?cb=20261015-bundle9-a"></script>
+  <script src="v292Dfix192-newengine.js?cb=20261015-bundle10-a"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
-  <script src="v292Dfix197-avatar-key.js?cb=20261015-bundle9-a"></script>
+  <script src="v292Dfix197-avatar-key.js?cb=20261015-bundle10-a"></script>
   <!-- v292Dfix221: モデル文脈の直近会話(recentDialogues)を、表示と同じ権威データ
        _convSays に一本化。fix58の壊れた本文再抽出(speakerに地の文が混入→過去セリフ
        がモデルへ誤供給され全キャラが同じセリフを言う)を発生源から断つ。 -->
@@ -4358,8 +4358,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix764-name-variant-fold.js?cb=v292Dfix764"></script>
 <!-- v292Dfix830(ENTITY_MATCH_RESOLVER_V1 / GPT ruling 73+74): one shared read-time predicate for "is this name an entity we already know". Auto-merge only on EXACT / ALIAS_EXACT / FOLDED_EXACT; fix445 castMatch (prefix/suffix) is classified as LEGACY_PARTIAL and never auto-merges. No new persistent state, no Story schema change. kill: localStorage v292Dfix830Off=1. -->
 <script src="v292Dfix830-entity-match-resolver.js?cb=20260907-fix832"></script>
-<script src="v292Dfix766-canonical-appearance.js?cb=20261015-bundle9-a"></script>
-<script src="v292Dfix767-icon-recipe-adapter.js?cb=20261015-bundle9-a"></script>
+<script src="v292Dfix766-canonical-appearance.js?cb=20261015-bundle10-a"></script>
+<script src="v292Dfix767-icon-recipe-adapter.js?cb=20261015-bundle10-a"></script>
 <script src="v292Dfix307-npc-roster.js?cb=20261009-bh1"></script>
 <script src="v292DfixSC1-sidecar-eligibility.js?cb=20261009-bh1"></script>
 <script src="v292DfixGQ4-summary-request.js?cb=20261010-gq1"></script>
@@ -4384,7 +4384,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 
 <script src="v292Dfix577-delete-entry-guard.js?cb=v292Dfix577"></script>
 <script src="v292Dfix310-gallery.js?cb=20261009-p8b2"></script>
-<script src="v292Dfix313-story-cards.js?cb=20261015-bundle9-a"></script>
+<script src="v292Dfix313-story-cards.js?cb=20261015-bundle10-a"></script>
 <script src="v292Dfix314-memory.js?cb=20260829-fix748"></script>
 <script src="v292Dfix315-see.js?cb=v292Dfix315b2"></script>
 <script src="v292Dfix316-gallery-search.js?cb=v292Dfix316"></script>
@@ -4393,7 +4393,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix322-state-line-strip.js?cb=20260829-fix748"></script>
 <script src="v292Dfix323-boundary-guards.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix324-show-dont-tell.js?cb=v292Dfix419c"></script>
-<script src="v292Dfix325-state-rederive.js?cb=20261015-bundle9-a"></script>
+<script src="v292Dfix325-state-rederive.js?cb=20261015-bundle10-a"></script>
 <script src="v292Dfix326-story-scroll.js?cb=v292Dfix326"></script>
 <script src="v292Dfix327-turn-counter.js?cb=v292Dfix327"></script>
 <script src="v292Dfix328-google-login.js?cb=20260908-fix837"></script>
@@ -4436,7 +4436,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix822-start-rules-block.js?cb=20260906-fix822"></script>
 <script src="v292Dfix381-reaction.js?cb=v292Dfix381"></script>
 <script src="v292Dfix382-auto-dial.js?cb=20260901-fix783"></script>
-<script src="v292Dfix383-vocative-fix.js?cb=20261015-bundle9-a"></script>
+<script src="v292Dfix383-vocative-fix.js?cb=20261015-bundle10-a"></script>
 <script src="v292Dfix384-auto-restore.js?cb=20260901-fix783"></script>
 <script src="v292Dfix385-voice-correction.js?cb=v292Dfix385"></script>
 <script src="v292Dfix386-relation-gauge.js?cb=v292Dfix386b"></script>
@@ -4454,13 +4454,13 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix346-idb-avatars.js?cb=20261014-iso1c"></script>
 <script src="v292Dfix356-avatar-eager.js?cb=v292Dfix450"></script>
 <script src="v292Dfix402-invisible-sync.js?cb=20261014-iso2b"></script>
-<script src="v292Dfix405-state-freshness.js?cb=20261015-bundle9-a"></script>
+<script src="v292Dfix405-state-freshness.js?cb=20261015-bundle10-a"></script>
 <script src="v292Dfix406-automode.js?cb=v292Dfix417d"></script>
 <script src="v292Dfix407-load-noconfirm.js?cb=v292Dfix407"></script>
 <script src="v292Dfix409-handle-merge.js?cb=20260901-fix784"></script>
 <script src="v292Dfix414-constraint-engine.js?cb=v292Dfix428"></script>
 <!-- v292Dfix77X(R118F/D1): 明示的な傷の解除 傷解消="部位"。既定OFF(v292Dfix77XClear='1'で有効)。OFF時は契約文言もparse分岐も出ない=byte-inert。書込みはfix77のguarded commitのみ。 -->
-<script src="v292Dfix77X-clear.js?cb=20261015-bundle9-a"></script>
+<script src="v292Dfix77X-clear.js?cb=20261015-bundle10-a"></script>
 <script src="v292Dfix415-opening-mask.js?cb=v292Dfix415b"></script>
 <script src="v292Dfix416-pain-style.js?cb=v292Dfix428"></script>
 <script src="v292Dfix417-reaction-unified.js?cb=v292Dfix426"></script>
@@ -4474,11 +4474,11 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix476-pipeline.js?cb=v292Dfix779"></script>
 <script src="v292Dfix481-provider-switch.js?cb=v292Dfix481"></script>
 <script src="v292Dfix483-genbudget-sync.js?cb=v292Dfix495"></script>
-<script src="v292Dfix427-output-sanitize.js?cb=v292Dfix427"></script>
+<script src="v292Dfix427-output-sanitize.js?cb=20261015-bundle10-a"></script>
 <script src="v292Dfix430-carrier-block.js?cb=v292Dfix430"></script>
 <script src="v292Dfix436-seed-expand.js?cb=20260913-dsmrc2b"></script>
 <script src="v292Dfix437-regen-instant.js?cb=20261002-ac36"></script>
-<script src="v292Dfix438-inline-dialogue.js?cb=20261015-bundle9-a"></script>
+<script src="v292Dfix438-inline-dialogue.js?cb=20261015-bundle10-a"></script>
 <script src="v292Dfix439-readability.js?cb=v292Dfix457"></script>
 <script src="v292Dfix440-block-rescue.js?cb=v292Dfix457"></script>
 <script src="v292Dfix500-sys-dedup.js?cb=v292Dfix500"></script>
@@ -4498,7 +4498,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix453-src-coalesce.js?cb=v292Dfix453"></script>
 <script src="v292Dfix454-dash.js?cb=v292Dfix457"></script>
 <script src="v292Dfix458-dash-post.js?cb=20260901-fix784"></script>
-<script src="v292Dfix459-sys-v2.js?cb=20261015-bundle9-a"></script>
+<script src="v292Dfix459-sys-v2.js?cb=20261015-bundle10-a"></script>
 <script src="v292Dfix460-slotgrid.js?cb=v292Dfix460"></script>
 <script src="v292Dfix461-appearance-en.js?cb=20261002-ac36"></script>
 <script src="v292Dfix462-bare-speaker.js?cb=20260829-fix748"></script>
@@ -4523,7 +4523,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      新ターンは確定時に自動。過去ターンは __v292Dfix620.repairPast({apply:true}) を呼んだときだけ。
      復元=__v292Dfix620.undoPast() / OFF=v292Dfix620ApplyOff（fix619側のOFFでも止まる）
      ★fix611 の後に置くこと -->
-<script src="v292Dfix957-speaker-cataphora.js?cb=20261015-bundle1-cardA-f957on"></script><!-- v292Dfix957: 独立行の裸「」の後方照応（既定OFF・ON: localStorage v292Dfix957On=1） -->
+<script src="v292Dfix957-speaker-cataphora.js?cb=20261015-bundle10-a"></script><!-- v292Dfix957: 独立行の裸「」の後方照応（既定OFF・ON: localStorage v292Dfix957On=1） -->
 <script src="v292Dfix620-speaker-apply.js?cb=20260901-fix783"></script>
 <!-- fix616: 話者の由来をターンへ記録（GPT実装順②）。並行配列 turn._convSayMeta に書き、
      _convSays / who / say / DOM は触らない。**新ターンだけ**・自分から保存しない。
@@ -4549,7 +4549,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix487-unknown-guard.js?cb=20261002-ac36"></script>
 <script src="v292Dfix488-nonhuman-detail.js?cb=v292Dfix488b"></script>
 <script src="v292Dfix456-name-space.js?cb=v292Dfix456"></script>
-<script src="v292Dfix482-output-quality.js?cb=20261015-bundle9-a"></script>
+<script src="v292Dfix482-output-quality.js?cb=20261015-bundle10-a"></script>
 <script src="v292Dfix489-convlog-gate.js?cb=20260901-fix784"></script>
 <script src="v292Dfix490-slot-write-guard.js?cb=v292Dfix565"></script>
 <script src="v292Dfix492-genfail-toast.js?cb=v292Dfix492"></script>
@@ -4558,7 +4558,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix516-regen-local-display.js?cb=20261002-ac36"></script>
 <script src="v292Dfix517-local-authoritative-avatar.js?cb=20261002-ac36"></script>
 <script src="v292Dfix519-icon-p2p.js?cb=20260908-fix837"></script>
-<script src="v292Dfix523-icon-sync-versioned.js?cb=20261015-bundle9-a"></script>
+<script src="v292Dfix523-icon-sync-versioned.js?cb=20261015-bundle10-a"></script>
 <script src="v292Dfix525-slot-ownership.js?cb=v292Dfix525"></script>
 <script src="v292Dfix945-xtab-stale-guard.js?cb=20261010-rs1"></script>
 <script src="v292Dfix526-story-naming.js?cb=20260829-fix748"></script>
@@ -4674,7 +4674,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      ★fix886 の 1 つ後ろに置く。fix886 の probe 結果（publicAnon）を読むため。
      kill: localStorage[v292Dfix890]=0 → 何もしない（fix328 は sp14 と同じ挙動に戻る） -->
 <script src="v292Dfix890-anon-gate-yield.js?cb=20260920-sp14j"></script>
-<script src="v292Dfix970-state-intake-shadow.js?cb=20261015-bundle9-a"></script>
+<script src="v292Dfix970-state-intake-shadow.js?cb=20261015-bundle10-a"></script>
 </body>
 </html>
 
