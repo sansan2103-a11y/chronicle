@@ -58,6 +58,73 @@
   }
 
   var PUNCT = '、。！？!?…っッ―—';
+  /* ★fix972(2026-10-15・GPT #127-AD): 来歴の高いカードは触らない。
+     実測(QA 物語 T21): モデルの <say who="おしず">……惣助です。惣助と、おしず</say> が、
+     自己紹介の「おしず」を呼びかけと見なされて 宗一 へ振り替えられた。
+     本 fix の「<say>タグ由来(rv===1)は不触」は、今のパイプラインでは say-tag カードに _rv が付かない
+     (手元 541 枚中 0 枚)ため働いていなかった。
+     判定: ①_convSayMeta[j].sourceKind（meta とカードの枚数が一致する時だけ）が fix469 の TG_PROTECT と同じ集合
+             (say-tag / hero-utterance / react-voice) で、その主張を plan.narrative で確かめられた時
+             （say-tag＝同じ本文の <say who> が一意に今の who、react-voice＝声 を含む <react who> が一意に今の who、
+               hero-utterance＝SAY ターンの入力文と一致）
+           ②meta が無い時は、plan.narrative の <say who="X"> で本文が一致するタグが一意に今の who のカード(=モデル本人申告)
+     どちらかなら対象外。確かめられない時は保護しない（従来どおり）。裸の台詞も従来どおり。kill: localStorage v292Dfix972Off='1' */
+  function f972Off(){ try { return localStorage.getItem('v292Dfix972Off') === '1'; } catch(e){ return false; } }
+  var F972_PROTECT = { 'say-tag': 1, 'hero-utterance': 1, 'react-voice': 1 };
+  function f972Loose(s){ return String(s == null ? '' : s).replace(/[\s　「」『』]/g, ''); }
+  function f972Raw(t){
+    var pn = t && t.plan && t.plan.narrative;
+    return Array.isArray(pn) ? pn.join('\n') : String(pn || '');
+  }
+  /* plan.narrative の <say who="X">本文</say> のうち、本文がカードと一致するものの who 一覧 */
+  function f972SayWhos(t, say){
+    var out = [], raw = f972Raw(t), want = f972Loose(say);
+    if (!want || raw.indexOf('<say') < 0) return out;
+    var re = /<say\s+who="([^"]{1,40})"\s*>([\s\S]{0,400}?)<\/say>/g, m;
+    while ((m = re.exec(raw))){ if (f972Loose(m[2]) === want) out.push(String(m[1]).trim()); }
+    return out;
+  }
+  /* plan.narrative の <react who="X" … 声="…"> のうち、声にカードの本文を含むものの who 一覧 */
+  function f972ReactWhos(t, say){
+    var out = [], raw = f972Raw(t), want = f972Loose(say);
+    if (!want || raw.indexOf('<react') < 0) return out;
+    var re = /<react\b[^>]*>/g, m;
+    while ((m = re.exec(raw))){
+      var tag = m[0], w = tag.match(/who\s*=\s*"([^"]*)"/), v = tag.match(/声\s*=\s*"([^"]*)"/);
+      if (w && v && f972Loose(v[1]).indexOf(want) >= 0) out.push(String(w[1]).trim());
+    }
+    return out;
+  }
+  /* 一致する候補がちょうど 1 つ（または全部同じ who）で、それが今の who と同じ時だけ true */
+  function f972Unique(list, who){
+    if (!list.length) return false;
+    for (var i = 0; i < list.length; i++){ if (list[i] !== who) return false; }
+    return true;
+  }
+  function f972Protected(t, s, j){
+    if (f972Off()) return false;
+    try {
+      var who = String((s && s.who) || '').trim(), say = s && s.say;
+      if (!who) return false;
+      /* meta はカードと同じ枚数の時だけ読む（別のカードの meta を流用しない） */
+      var cs = t && t._convSays, ms = t && t._convSayMeta;
+      var mt = (Array.isArray(cs) && Array.isArray(ms) && ms.length === cs.length) ? ms[j] : null;
+      if (mt && F972_PROTECT[mt.sourceKind] === 1){
+        /* meta の主張を本文で確かめられた時だけ保護する（対応が確かめられなければ従来どおり） */
+        if (mt.sourceKind === 'say-tag')
+          return String(mt.sourceWhoRaw || '').trim() === who && f972Unique(f972SayWhos(t, say), who);
+        if (mt.sourceKind === 'react-voice')
+          return f972Unique(f972ReactWhos(t, say), who);
+        if (mt.sourceKind === 'hero-utterance'){
+          var pt = f972Loose(t && t.playerText), sl = f972Loose(say);
+          return !!(pt && sl && String((t && t.inputType) || '').toLowerCase() === 'say' && (sl.indexOf(pt) >= 0 || pt.indexOf(sl) >= 0));
+        }
+        return false;
+      }
+      if (!mt) return f972Unique(f972SayWhos(t, say), who);   /* meta 無し：本人申告のタグが一意に一致する時だけ */
+    } catch(e){}
+    return false;
+  }
   function findFixes(t){
     var fixes = [];
     try {
@@ -66,6 +133,7 @@
       var all = names();
       cs.forEach(function(s, j){
         if (!s || s._rv === 1) return;
+        if (f972Protected(t, s, j)) return;   /* ★fix972 */
         var who = String(s.who || ''), say = String(s.say || '');
         if (!who || who.length < 2 || say.indexOf(who) < 0) return;
         // A) 呼びかけ形か（名前の直後が句読点/文末）
