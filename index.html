@@ -330,7 +330,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261015-bundle6-q123';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261015-bundle7-p1c';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4023,7 +4023,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
        fix659 は別 id + __f527 マーカーを立てるので干渉しない、という関係をこの並びで示す。
      読出=window.__v292Dfix659.status()/.selfTest() / OFF=v292Dfix659Off -->
 <script src="v292Dfix659-fork-choice.js?cb=v292Dfix680"></script>
-<script src="features.js?cb=20261015-bundle6-q123"></script>
+<script src="features.js?cb=20261015-bundle7-p1c"></script>
 <script>
 /* ============================================================================
  * v292DfixP0-inline : シナリオテンプレ適用の緊急封鎖（L2 + L2b）
@@ -4261,7 +4261,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixP0-scenario-blocker.js?cb=v292Dfix680"></script>
 <script src="v292Dfix135-longmem.js?cb=20260927-ac3"></script>
 <script src="v292Dfix138-continue.js?cb=20260929-ac18"></script>
-<script src="v292Dfix145-charlist.js?cb=v292Dfix773"></script>
+<script src="v292Dfix145-charlist.js?cb=20261015-bundle7-p1c"></script>
 <script src="v292Dfix777-icon-lightbox.js?cb=v292Dfix777"></script>
 <!-- v292Dfix226(P1): fix52(可読性v1)はfix53(包括v2)に内包されるため退役。問題があれば下行のコメントを外す
 <script src="v292Dfix52-readability.js?cb=v292Dfix52"></script> -->
@@ -4295,7 +4295,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
     <script src="v292Dfix73-card-dedup.js?cb=v292Dfix200"></script>
     <script src="v292Dfix70b-order-convsays.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix75-history-dedup.js?cb=v292Dfix75"></script>
-<script src="v292Dfix76-human-foundation.js?cb=v292Dfix76b"></script>  <script src="v292Dfix77-state-memory.js?cb=20261015-bundle6-q123"></script>
+<script src="v292Dfix76-human-foundation.js?cb=v292Dfix76b"></script>  <script src="v292Dfix77-state-memory.js?cb=20261015-bundle7-p1c"></script>
   <script src="v292Dfix78-tag-case-normalize.js?cb=20260912-q119s4"></script>
   <script src="v292Dfix79-momentum-anchor.js?cb=v292Dfix79"></script>
   <script src="v292Dfix80-gen-gate-retry.js?cb=20260929-ac23"></script>
@@ -4312,10 +4312,10 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
   <script src="v292Dfix796-memory-retrieve.js?cb=20260930-ac25"></script>
-  <script src="v292Dfix192-newengine.js?cb=20261015-bundle6-q123"></script>
+  <script src="v292Dfix192-newengine.js?cb=20261015-bundle7-p1c"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
-  <script src="v292Dfix197-avatar-key.js?cb=20261015-bundle6-q123"></script>
+  <script src="v292Dfix197-avatar-key.js?cb=20261015-bundle7-p1c"></script>
   <!-- v292Dfix221: モデル文脈の直近会話(recentDialogues)を、表示と同じ権威データ
        _convSays に一本化。fix58の壊れた本文再抽出(speakerに地の文が混入→過去セリフ
        がモデルへ誤供給され全キャラが同じセリフを言う)を発生源から断つ。 -->
@@ -4358,8 +4358,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix764-name-variant-fold.js?cb=v292Dfix764"></script>
 <!-- v292Dfix830(ENTITY_MATCH_RESOLVER_V1 / GPT ruling 73+74): one shared read-time predicate for "is this name an entity we already know". Auto-merge only on EXACT / ALIAS_EXACT / FOLDED_EXACT; fix445 castMatch (prefix/suffix) is classified as LEGACY_PARTIAL and never auto-merges. No new persistent state, no Story schema change. kill: localStorage v292Dfix830Off=1. -->
 <script src="v292Dfix830-entity-match-resolver.js?cb=20260907-fix832"></script>
-<script src="v292Dfix766-canonical-appearance.js?cb=20260901-fix783"></script>
-<script src="v292Dfix767-icon-recipe-adapter.js?cb=20261002-ac36"></script>
+<script src="v292Dfix766-canonical-appearance.js?cb=20261015-bundle7-p1c"></script>
+<script src="v292Dfix767-icon-recipe-adapter.js?cb=20261015-bundle7-p1c"></script>
 <script src="v292Dfix307-npc-roster.js?cb=20261009-bh1"></script>
 <script src="v292DfixSC1-sidecar-eligibility.js?cb=20261009-bh1"></script>
 <script src="v292DfixGQ4-summary-request.js?cb=20261010-gq1"></script>
@@ -4384,7 +4384,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 
 <script src="v292Dfix577-delete-entry-guard.js?cb=v292Dfix577"></script>
 <script src="v292Dfix310-gallery.js?cb=20261009-p8b2"></script>
-<script src="v292Dfix313-story-cards.js?cb=20261015-bundle6-q123"></script>
+<script src="v292Dfix313-story-cards.js?cb=20261015-bundle7-p1c"></script>
 <script src="v292Dfix314-memory.js?cb=20260829-fix748"></script>
 <script src="v292Dfix315-see.js?cb=v292Dfix315b2"></script>
 <script src="v292Dfix316-gallery-search.js?cb=v292Dfix316"></script>
@@ -4393,7 +4393,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix322-state-line-strip.js?cb=20260829-fix748"></script>
 <script src="v292Dfix323-boundary-guards.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix324-show-dont-tell.js?cb=v292Dfix419c"></script>
-<script src="v292Dfix325-state-rederive.js?cb=20261015-bundle6-q123"></script>
+<script src="v292Dfix325-state-rederive.js?cb=20261015-bundle7-p1c"></script>
 <script src="v292Dfix326-story-scroll.js?cb=v292Dfix326"></script>
 <script src="v292Dfix327-turn-counter.js?cb=v292Dfix327"></script>
 <script src="v292Dfix328-google-login.js?cb=20260908-fix837"></script>
@@ -4454,13 +4454,13 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix346-idb-avatars.js?cb=20261014-iso1c"></script>
 <script src="v292Dfix356-avatar-eager.js?cb=v292Dfix450"></script>
 <script src="v292Dfix402-invisible-sync.js?cb=20261014-iso2b"></script>
-<script src="v292Dfix405-state-freshness.js?cb=20261015-bundle6-q123"></script>
+<script src="v292Dfix405-state-freshness.js?cb=20261015-bundle7-p1c"></script>
 <script src="v292Dfix406-automode.js?cb=v292Dfix417d"></script>
 <script src="v292Dfix407-load-noconfirm.js?cb=v292Dfix407"></script>
 <script src="v292Dfix409-handle-merge.js?cb=20260901-fix784"></script>
 <script src="v292Dfix414-constraint-engine.js?cb=v292Dfix428"></script>
 <!-- v292Dfix77X(R118F/D1): 明示的な傷の解除 傷解消="部位"。既定OFF(v292Dfix77XClear='1'で有効)。OFF時は契約文言もparse分岐も出ない=byte-inert。書込みはfix77のguarded commitのみ。 -->
-<script src="v292Dfix77X-clear.js?cb=20261015-bundle6-q123"></script>
+<script src="v292Dfix77X-clear.js?cb=20261015-bundle7-p1c"></script>
 <script src="v292Dfix415-opening-mask.js?cb=v292Dfix415b"></script>
 <script src="v292Dfix416-pain-style.js?cb=v292Dfix428"></script>
 <script src="v292Dfix417-reaction-unified.js?cb=v292Dfix426"></script>
@@ -4478,7 +4478,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix430-carrier-block.js?cb=v292Dfix430"></script>
 <script src="v292Dfix436-seed-expand.js?cb=20260913-dsmrc2b"></script>
 <script src="v292Dfix437-regen-instant.js?cb=20261002-ac36"></script>
-<script src="v292Dfix438-inline-dialogue.js?cb=20261015-bundle6-q123"></script>
+<script src="v292Dfix438-inline-dialogue.js?cb=20261015-bundle7-p1c"></script>
 <script src="v292Dfix439-readability.js?cb=v292Dfix457"></script>
 <script src="v292Dfix440-block-rescue.js?cb=v292Dfix457"></script>
 <script src="v292Dfix500-sys-dedup.js?cb=v292Dfix500"></script>
@@ -4498,7 +4498,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix453-src-coalesce.js?cb=v292Dfix453"></script>
 <script src="v292Dfix454-dash.js?cb=v292Dfix457"></script>
 <script src="v292Dfix458-dash-post.js?cb=20260901-fix784"></script>
-<script src="v292Dfix459-sys-v2.js?cb=20261015-bundle6-q123"></script>
+<script src="v292Dfix459-sys-v2.js?cb=20261015-bundle7-p1c"></script>
 <script src="v292Dfix460-slotgrid.js?cb=v292Dfix460"></script>
 <script src="v292Dfix461-appearance-en.js?cb=20261002-ac36"></script>
 <script src="v292Dfix462-bare-speaker.js?cb=20260829-fix748"></script>
@@ -4549,7 +4549,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix487-unknown-guard.js?cb=20261002-ac36"></script>
 <script src="v292Dfix488-nonhuman-detail.js?cb=v292Dfix488b"></script>
 <script src="v292Dfix456-name-space.js?cb=v292Dfix456"></script>
-<script src="v292Dfix482-output-quality.js?cb=20261015-bundle6-q123"></script>
+<script src="v292Dfix482-output-quality.js?cb=20261015-bundle7-p1c"></script>
 <script src="v292Dfix489-convlog-gate.js?cb=20260901-fix784"></script>
 <script src="v292Dfix490-slot-write-guard.js?cb=v292Dfix565"></script>
 <script src="v292Dfix492-genfail-toast.js?cb=v292Dfix492"></script>
@@ -4558,7 +4558,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix516-regen-local-display.js?cb=20261002-ac36"></script>
 <script src="v292Dfix517-local-authoritative-avatar.js?cb=20261002-ac36"></script>
 <script src="v292Dfix519-icon-p2p.js?cb=20260908-fix837"></script>
-<script src="v292Dfix523-icon-sync-versioned.js?cb=20261015-bundle6-q123"></script>
+<script src="v292Dfix523-icon-sync-versioned.js?cb=20261015-bundle7-p1c"></script>
 <script src="v292Dfix525-slot-ownership.js?cb=v292Dfix525"></script>
 <script src="v292Dfix945-xtab-stale-guard.js?cb=20261010-rs1"></script>
 <script src="v292Dfix526-story-naming.js?cb=20260829-fix748"></script>

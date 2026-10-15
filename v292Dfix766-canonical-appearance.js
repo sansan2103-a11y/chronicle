@@ -179,7 +179,7 @@
     faceShape:          ['ROUND','OVAL','LONG','SQUARE','ANGULAR'],
     hairColor:          ['BLACK','DARK_BROWN','BROWN','GRAY','WHITE','SILVER','RED','BLONDE'],
     hairLength:         ['BALD','VERY_SHORT','SHORT','MEDIUM','SHOULDER','LONG'],
-    hairShape:          ['STRAIGHT','WAVY','CURLY','TIED_BACK','BUN','MESSY','THINNING'],
+    hairShape:          ['STRAIGHT','WAVY','CURLY','TIED_BACK','BUN','MESSY','THINNING','BOB'],   /* ★fix965: BOB は明示語のときだけ（抽選重み 0・末尾追加＝既存の抽選結果は不変） */
     clothingArchetype:  ['FISHER_WORKWEAR','FARMER_WORKWEAR','OFFICE_WORKER','STUDENT_CASUAL','TRADITIONAL_JAPANESE','SHRINE_PRIEST','MERCHANT','ELEGANT','PLAIN_CASUAL','SHABBY_WORN'],
     clothingCondition:  ['NEAT','WORN','WEATHERED','RAGGED'],
     posture:            ['UPRIGHT','RELAXED','STOOPED','GUARDED'],
@@ -550,7 +550,7 @@
     faceShape:          { ROUND:20, OVAL:22, LONG:19, SQUARE:19, ANGULAR:18 },
     hairColor:          { BLACK:20, DARK_BROWN:16, BROWN:15, GRAY:12, WHITE:10, SILVER:8, RED:8, BLONDE:9 },
     hairLength:         { BALD:6, VERY_SHORT:14, SHORT:22, MEDIUM:21, SHOULDER:18, LONG:17 },
-    hairShape:          { STRAIGHT:20, WAVY:17, CURLY:15, TIED_BACK:16, BUN:12, MESSY:14, THINNING:8 },
+    hairShape:          { STRAIGHT:20, WAVY:17, CURLY:15, TIED_BACK:16, BUN:12, MESSY:14, THINNING:8, BOB:0 },
     clothingArchetype:  { FISHER_WORKWEAR:10, FARMER_WORKWEAR:10, OFFICE_WORKER:12, STUDENT_CASUAL:10,
                           TRADITIONAL_JAPANESE:11, SHRINE_PRIEST:8, MERCHANT:10, ELEGANT:9, PLAIN_CASUAL:12, SHABBY_WORN:9 },
     clothingCondition:  { NEAT:26, WORN:28, WEATHERED:24, RAGGED:14 },
@@ -682,6 +682,45 @@
 
   function mkVal(v, source){ return { value: v, source: source, locked: false }; }
 
+  /* ★fix965（ICON-001・2026-10-15・Owner 実プレイ「ショートボブなのに坊主」）
+     実測（本番 BUNDLE6・CANARY の 戸倉美咲）: 説明「明るい茶色のショートボブ」が髪の語彙に 1 つも当たらず、
+     髪の色・長さ・形がすべて RANDOM_FILL → hairLength=BALD（髪色が明示扱いでないため BALD 除外も効かない）
+     → fix767 の最終 prompt に 'bald'。fix461 の正しい英訳（short light brown bob）は record があると使われない。
+     直すこと（最小）:
+       ① 語彙: ボブ/おかっぱ → hairShape BOB（抽選重み 0）、ショートボブ/ショートカット → SHORT、ベリーショート → VERY_SHORT、
+          茶色の(ショート)ボブ/髪・ライトブラウン・明るい茶髪 → BROWN、ツインテール/三つ編み/おさげ → TIED_BACK、
+          目印に 八重歯 → snaggletooth、丸い大きな目 → large round eyes、大きな目 → large eyes
+       ② 抽選: BALD は明示されたときだけ（抽選しない）。説明に髪の記述がある人物は、髪の色・長さ・形を抽選で埋めない
+          （読めなかった髪の属性を勝手に作らない）
+       ③ 既存 record: 保存済みの record は書き換えない。読むたびに、説明から明示値が取れる軸で RANDOM_FILL のものだけを
+          明示値に重ね、説明の髪が今回はじめて読めた人物は抽選済みの髪属性を外し、抽選の BALD を外した「写し」を返す
+          （ロック・明示値・revision・採用画像は不触。kill で即座に保存済みの値へ戻る）。
+     kill: localStorage v292Dfix965Off='1' → 抽出・抽選・既存 record とも従来どおり */
+  /* ★fix967（RANDOM_FILL 方針・GPT #127-C RANDOM_FILL_POLICY = NO_UNREQUESTED_CANONICAL_ATTRIBUTES）
+     ユーザーが外見（説明）を書いた登録キャラは、書かれていない属性を内部抽選で正式な外見 record に足さない。
+     ・新しく作る record: 抽選で埋めない（書かれている属性・目印・性別だけ）
+     ・既存 record: 保存値は書き換えない。読み出し時の写しから「抽選で入った属性（ロック無し）」を外す
+     ・完全自動の NPC（説明の無い人物・物語から拾った人物）は従来どおり（抽選あり）
+     ・既存の採用画像は一括再生成しない（このコードは画像を作らない。次に ↻ した時の指示が変わるだけ）
+     kill: localStorage v292Dfix967Off='1' → 従来どおり */
+  function off967(){ try { return localStorage.getItem('v292Dfix967Off') === '1'; } catch(e){ return false; } }
+  function userDescribed967(text){ return !off967() && String(text == null ? '' : text).replace(/\s+/g, '').length > 0; }
+  function off965(){ try { return localStorage.getItem('v292Dfix965Off') === '1'; } catch(e){ return false; } }
+  var RULES_965 = [
+    [/ベリーショート/,                                                     'hairLength', 'VERY_SHORT'],
+    [/ショートボブ|ショートカット/,                                         'hairLength', 'SHORT'],
+    [/ショートボブ|ロングボブ|ボブカット|ボブヘア|[のな]ボブ|ボブの髪|おかっぱ/,          'hairShape',  'BOB'],   /* 人名「ボブ」に当てない */
+    [/ツインテール|三つ編み|おさげ/,                                        'hairShape',  'TIED_BACK'],
+    [/茶色の?(?:ショート|ロング|セミロング)?(?:ボブ|ヘア|髪)|ライトブラウン|明るい茶髪/, 'hairColor', 'BROWN']
+  ];
+  var FEATURE_RULES_965 = [
+    [/八重歯/,                                   'snaggletooth'],
+    [/丸い大きな目|大きな丸い目|丸く大きな目/,      'large round eyes'],
+    [/大きな目|大きい目|大きな瞳|大きい瞳/,         'large eyes', 'large round eyes']   /* 3 番目 = より具体的な語が既にあれば足さない */
+  ];
+  var HAIR_MENTION_965 = /髪|ヘア|ボブ|おかっぱ|坊主|ツインテール|三つ編み|おさげ|ポニーテール|スキンヘッド|ショートカット|ベリーショート/;
+  var HAIR_KEYS_965 = { hairColor: 1, hairLength: 1, hairShape: 1 };
+
   /**
    * extractExplicit(text, source)
    *   日本語の自由文（cast desc / roster appr）から、**書いてあることだけ** を構造化して返す。
@@ -706,6 +745,12 @@
 
     for (var i=0; i<RULES.length; i++){
       if (RULES[i][0].test(t)) setIfAbsent(RULES[i][1], RULES[i][2]);
+    }
+    /* ★fix965: 実プレイで取りこぼした髪の語（既存 RULES が先＝既存の抽出結果は不変） */
+    if (!off965()){
+      for (var i965=0; i965<RULES_965.length; i965++){
+        if (RULES_965[i965][0].test(t)) setIfAbsent(RULES_965[i965][1], RULES_965[i965][2]);
+      }
     }
 
     /* ★fix776: 明示性別語だけ（推測は一切しない・kill 中は何も足さない）。
@@ -733,9 +778,11 @@
       for (var s=0; s<SCAR_POS.length; s++){ if (SCAR_POS[s][0].test(win)){ label = SCAR_POS[s][1]; break; } }
       out.distinctiveFeatures.push({ value: label, source: src, locked: false });
     }
-    for (var f=0; f<FEATURE_RULES.length; f++){
-      if (FEATURE_RULES[f][0].test(t)){
-        var v = FEATURE_RULES[f][1];
+    var FR = off965() ? FEATURE_RULES : FEATURE_RULES.concat(FEATURE_RULES_965);   /* ★fix965 */
+    for (var f=0; f<FR.length; f++){
+      if (FR[f][0].test(t)){
+        if (FR[f][2] && (function(){ for (var q2=0; q2<out.distinctiveFeatures.length; q2++){ if (out.distinctiveFeatures[q2].value === FR[f][2]) return true; } return false; })()) continue;   /* より具体的な語が既にある */
+        var v = FR[f][1];
         var dup = false;
         for (var q=0; q<out.distinctiveFeatures.length; q++){ if (out.distinctiveFeatures[q].value === v){ dup = true; break; } }
         if (!dup) out.distinctiveFeatures.push({ value: v, source: src, locked: false });
@@ -830,7 +877,11 @@
       if (cur && cur.locked) continue;                                   // locked は不触
       if (cur && cur.source && cur.source !== 'RANDOM_FILL') continue;    // EXPLICIT は不触
       if (cur && cur.value) continue;                                    // 既に埋まっている RANDOM_FILL も保持
-      record.attrs[k] = { value: pickWeighted(k, rosterCounts, r, exclusionsFor(record, k)), source: 'RANDOM_FILL', locked: false };
+      if (record.noFill967 && !off967()) continue;                      /* ★fix967: 説明のある登録キャラは抽選しない */
+      if (!off965() && record.hairMentioned965 && HAIR_KEYS_965[k]){ pickWeighted(k, rosterCounts, r, null); continue; }   /* ★fix965 ②: 髪の記述がある人は髪を抽選しない（乱数は従来どおり 1 回消費＝他の軸の値は変わらない） */
+      var ex965 = exclusionsFor(record, k);
+      if (!off965() && k === 'hairLength'){ ex965 = ex965 || {}; ex965.BALD = 1; }   /* ★fix965 ②: BALD は明示のときだけ */
+      record.attrs[k] = { value: pickWeighted(k, rosterCounts, r, ex965), source: 'RANDOM_FILL', locked: false };
     }
     return record;
   }
@@ -956,7 +1007,70 @@
     var st = _load();
     if (!Object.prototype.hasOwnProperty.call(st.entities, who)) return null;
     var rec = backfillGender(who, st.entities[who]);    // ★fix776: gender が無い既存 record だけ直す
-    return backfillEntityType(who, rec);                // ★fix778: entityType が無い既存 record だけ直す
+    rec = backfillEntityType(who, rec);                 // ★fix778: entityType が無い既存 record だけ直す
+    rec = backfill965(who, rec);                        // ★fix965: 抽選で埋まった軸のうち、説明に明示があるものだけ直す
+    return drop967(who, rec);                           // ★fix967: 説明のある登録キャラは抽選値を使わない（写しで外す）
+  }
+  function drop967(who, rec0){
+    try {
+      if (!rec0 || !rec0.attrs || off967() || !on()) return rec0;
+      if (entityTypeOf(rec0) !== 'HUMAN') return rec0;
+      if (!userDescribed967(castDescOf(who))) return rec0;
+      var rec = null, k;
+      for (k in rec0.attrs){
+        if (!Object.prototype.hasOwnProperty.call(rec0.attrs, k)) continue;
+        var a = rec0.attrs[k];
+        if (a && a.source === 'RANDOM_FILL' && !a.locked){
+          if (!rec) rec = JSON.parse(JSON.stringify(rec0));
+          delete rec.attrs[k];
+        }
+      }
+      if (!rec) return rec0;
+      rec.overlay967 = true;
+      return rec;
+    } catch(e){ return rec0; }
+  }
+  /* ★fix965b（GPT #127-C）: 既存 record は**書き換えない**。読むたびに、説明の明示値を上から重ねた写しを返すだけ
+     （保存済みの record・revision・ロック・採用画像は 1 バイトも変わらない。kill で即座に従来の値へ戻る）。 */
+  function backfill965(who, rec0){
+    var rec = rec0;
+    try {
+      if (!rec0 || !rec0.attrs) return rec0;
+      if (off965() || !on()) return rec0;
+      if (entityTypeOf(rec0) !== 'HUMAN') return rec0;
+      rec = JSON.parse(JSON.stringify(rec0));
+      var ut = castDescOf(who), stx = rosterApprOf(who);
+      var exU = extractExplicit(ut, 'USER_EXPLICIT'), exS = extractExplicit(stx, 'STORY_EXPLICIT');
+      var changed = false, hairFixed = false, k, i;
+      for (i = 0; i < ATTR_KEYS.length; i++){
+        k = ATTR_KEYS[i];
+        var want = exU.attrs[k] || exS.attrs[k];
+        var cur = rec.attrs[k];
+        if (!want) continue;
+        if (cur && (cur.locked || (cur.source && cur.source !== 'RANDOM_FILL'))) continue;   // ロック・明示は不触
+        if (cur && cur.value === want.value && cur.source === want.source) continue;
+        rec.attrs[k] = want; changed = true;
+        if (HAIR_KEYS_965[k]) hairFixed = true;
+      }
+      /* 髪の抽選値を外すのは「説明の髪が今回はじめて読めた人」だけ（既に髪が読めていた人の絵は変えない）。
+         抽選の BALD は誰でも外す（明示されていない丸坊主は作らない）。 */
+      var hm = hairFixed && HAIR_MENTION_965.test(String(ut) + '\n' + String(stx));
+      for (k in HAIR_KEYS_965){
+        var c2 = rec.attrs[k];
+        if (!c2 || c2.locked || c2.source !== 'RANDOM_FILL') continue;
+        if (hm || (k === 'hairLength' && c2.value === 'BALD')){ delete rec.attrs[k]; changed = true; }
+      }
+      if (hm && !rec.hairMentioned965){ rec.hairMentioned965 = true; changed = true; }
+      if (!rec.distinctiveFeatures) rec.distinctiveFeatures = [];
+      var adds = exU.distinctiveFeatures.concat(exS.distinctiveFeatures);
+      for (i = 0; i < adds.length; i++){
+        var dup = false;
+        for (var q = 0; q < rec.distinctiveFeatures.length; q++){ if (rec.distinctiveFeatures[q] && rec.distinctiveFeatures[q].value === adds[i].value){ dup = true; break; } }
+        if (!dup){ rec.distinctiveFeatures.push(adds[i]); changed = true; }
+      }
+      if (changed){ rec.overlay965 = true; return rec; }
+      return rec0;
+    } catch(e){ return rec0; }
   }
 
   /* 既に保存済みの他キャラの分布（多様性ペナルティの材料） */
@@ -1030,6 +1144,8 @@
     /* ★fix778: 導出できた entityType を record 直下へも写す（fix767 の recipe が読む口）。
        明示語が無ければ 'HUMAN' のまま＝人間 record は 1バイトも変わらない。 */
     if (rec.attrs.entityType && rec.attrs.entityType.value) rec.entityType = rec.attrs.entityType.value;
+    if (!off965() && HAIR_MENTION_965.test(String(userText || '') + '\n' + String(storyText || ''))) rec.hairMentioned965 = true;   /* ★fix965 */
+    if (userDescribed967(userText)) rec.noFill967 = true;                                                                              /* ★fix967 */
     fillMissing(rec, counts, rng(appearanceSeed(entityKey, 1)));
     rec.updatedAt = nowMs();
     return rec;
@@ -1067,6 +1183,7 @@
     }
     rec.attrs = kept;
     rec.appearanceRevision = (rec.appearanceRevision || 1) + 1;
+    try { if (!off965() && HAIR_MENTION_965.test(castDescOf(who) + '\n' + rosterApprOf(who))) rec.hairMentioned965 = true; } catch(e965){}   /* ★fix965 */
     fillMissing(rec, _rosterCounts(who), rng(appearanceSeed(who, rec.appearanceRevision)));
     rec.updatedAt = nowMs();
     _put(who, rec);
@@ -1079,6 +1196,8 @@
     ensureFor: ensureFor, get: get, rebuildAppearance: rebuildAppearance,
     extractExplicit: extractExplicit, fillMissing: fillMissing, buildRecord: buildRecord,
     appearanceSeed: appearanceSeed, rng: rng, hash32: hash32,
+    off967: off967, drop967: drop967,   /* ★fix967 */
+    off965: off965, backfill965: backfill965, RULES_965: RULES_965, FEATURE_RULES_965: FEATURE_RULES_965, HAIR_MENTION_965: HAIR_MENTION_965,   /* ★fix965 */
     ENUMS: ENUMS, ATTR_KEYS: ATTR_KEYS, BASE_WEIGHTS: BASE_WEIGHTS,
     /* ★fix776: gender（12軸の外側・明示語のみ・kill=v292Dfix776Off） */
     isOff776: isOff776, GENDER_WORDS: GENDER_WORDS,

@@ -233,7 +233,15 @@
           '<button type="submit" class="v2uiPrimary"' + (S.busy ? ' disabled' : '') + '>合言葉を決める</button></form>' +
           '<button type="button" class="v2uiGhost" data-v2="close">やめる</button>';
       } else {
-        h += '<h2>物語を隠せるようにする</h2>' + msg + '<p class="v2uiNote">いまは合言葉を設定できません。</p><button type="button" class="v2uiGhost" data-v2="close">閉じる</button>';
+        /* ★fix964（HIDE-001・2026-10-15）文言だけ: 「設定できない」理由を利用者に分かる言葉で出す。
+           実測: 本番の vault2status は owner・金庫なし・writeAvailable=false（= サーバー側の Vault ARM が OFF。
+           Vault ARM は Owner/GPT 管理の HOLD 項目で、ここでは触らない）。状態を取れなかった時（st なし）は別の文言。
+           判定・送信・保存は 1 バイトも変えない。OFF: localStorage v292Dfix964Off='1'（従来の 1 行に戻る） */
+        var off964 = false; try { off964 = !!(LS && LS.getItem('v292Dfix964Off') === '1'); } catch (e) {}
+        var why964 = off964 ? '' : (st
+          ? '<p class="v2uiNote">この機能は、安全確認が終わるまでサーバー側で止めています。物語やセーブには影響ありません。使えるようになると、この画面から合言葉を決められます。</p>'
+          : '<p class="v2uiNote">いまは状態を確認できませんでした。通信状態を確かめて、ホームを開き直してください。</p>');
+        h += '<h2>物語を隠せるようにする</h2>' + msg + '<p class="v2uiNote">いまは合言葉を設定できません。</p>' + why964 + '<button type="button" class="v2uiGhost" data-v2="close">閉じる</button>';
       }
     } else if (sheetMode === 'menu') {
       var x = storyOf(sheetId), a = actionFor(sheetId), t = cardTitle(sheetId) || (x && x.title) || '';

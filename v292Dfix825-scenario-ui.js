@@ -322,7 +322,10 @@
     var st = ST();
     var html = '<div class="sc-head"><div class="sc-h1">シナリオ</div>' +
       '<button class="sc-btn" data-sc-act="toStories">← 物語一覧へ</button>' +
-      '<button class="sc-btn sc-primary" data-sc-act="new">＋ シナリオを作る</button></div>';
+      '<button class="sc-btn sc-primary" data-sc-act="new">＋ シナリオを作る</button>' +
+      (sync966Available() ? '<button class="sc-btn" data-sc-act="cloudSync" title="同じ Google アカウントの他の端末とシナリオを共有します"' + (S966.running ? ' disabled' : '') + '>☁ 端末間で同期</button>' : '') +
+      '</div>';
+    if (S966.note) html += '<div class="sc-msg ' + (S966.err ? 'sc-err' : 'sc-note') + '">' + esc(S966.note) + '</div>';   /* ★fix966 */
     if (!st){ html += '<div class="sc-msg sc-err">' + esc(msg('FIX820_UNAVAILABLE')) + '</div>'; root.innerHTML = html; return; }
     var r = st.list();
     if (!r.ok){ html += '<div class="sc-msg sc-err">' + esc(msg(r.code, r.detail)) + '</div>'; root.innerHTML = html; return; }
@@ -591,7 +594,7 @@
 
   /* ---------- 操作（DOM 非依存の core。fixture は api 経由で同じ関数を呼ぶ） ---------- */
   function ensureRoot(){ if (!root && !S.wired) wire(); return !!root; }
-  function openList(){ if (off()) return fail('OFF'); if (!ensureRoot()) return fail('HOST_DOM_MISSING'); closeOverlay(); S.view = 'SC_LIST'; showView('SC_LIST'); renderList(); return { ok: true }; }
+  function openList(){ if (off()) return fail('OFF'); if (!ensureRoot()) return fail('HOST_DOM_MISSING'); closeOverlay(); S.view = 'SC_LIST'; showView('SC_LIST'); renderList(); auto966(); return { ok: true }; }
   function toStories(){ closeOverlay(); showView('LIST'); }
   function openNew(){
     if (off()) return fail('OFF'); if (!ensureRoot()) return fail('HOST_DOM_MISSING');
@@ -919,7 +922,165 @@
       case 'save': save(); return;
       case 'start': start(); return;
       case 'delete': askRemove(); return;
+      case 'cloudSync': ask966(); return;   /* ★fix966 */
     }
+  }
+
+  /* ★fix966（SCN-001・2026-10-15・GPT #127-C 条件付き）シナリオを端末間で共有する入口（利用者が選んだ時だけ）。
+     実測: PC の「常世百鬼夜行」（sc-muz9y9bu-lt）はこの PC の localStorage にだけあり、iPhone からは見えない。
+     クラウド同期の部品（fix872・Worker の scenario 表）は本番にあるが、既定 OFF で呼び手も 0 だった。
+     新しい同期の仕組みは作らず、既存の fix872 を次の条件でだけ動かす:
+       ・保存先＝いまログインしているアカウント（/api/auth/me の accountId）を画面に出す
+       ・クラウドへ送るシナリオは、利用者が一覧から 1 件ずつ選んだものだけ（既定は未選択）。
+         他の端末で作られてクラウドから届いたシナリオ（そのアカウントのもの）は取り込む
+       ・同意は「アカウントごと」に記録する（v292Dfix966Consent = {acct, ids}）。別アカウントに切り替わったら
+         以前の同意は使わず、何も送らない（もう一度選び直す）
+       ・以後の自動同期（一覧を開いた時 1 回）も、同じアカウントで選んだシナリオだけを送る
+       ・送受信・競合の規則は fix872 のまま（上書きしない・混ぜない・ダウングレードしない・競合は 2 択）
+     止め方: v292Dfix872Off='1'（同期そのもの）／ v292Dfix966Off='1'（このボタンと自動 1 回だけ） */
+  var S966 = { running: false, note: '', err: false, auto: false, prepNote: '' };
+  var CONSENT966 = 'v292Dfix966Consent';
+  function off966(){ try { return localStorage.getItem('v292Dfix966Off') === '1'; } catch(e){ return true; } }
+  function f872(){ try { return window.__v292Dfix872 || null; } catch(e){ return null; } }
+  function sync966Available(){
+    if (off966()) return false;
+    var F = f872(); if (!F || typeof F.syncOnce !== 'function') return false;
+    try { if (localStorage.getItem('v292Dfix872Off') === '1') return false; } catch(e){ return false; }
+    return true;
+  }
+  function on966(){ try { return localStorage.getItem('v292Dfix872On') === '1'; } catch(e){ return false; } }
+  function consent966(){ try { var c = JSON.parse(localStorage.getItem(CONSENT966) || 'null'); return (c && typeof c.acct === 'string' && c.acct && Array.isArray(c.ids)) ? c : null; } catch(e){ return null; } }
+  function saveConsent966(c){ try { localStorage.setItem(CONSENT966, JSON.stringify(c)); return true; } catch(e){ return false; } }
+  function me966(cb){
+    try {
+      fetch('/api/auth/me', { method: 'GET', credentials: 'same-origin', cache: 'no-store', headers: { 'x-chronicle-csrf': '1' } })
+        .then(function(r){ return r.ok ? r.json() : null; }, function(){ return null; })
+        .then(function(j){ cb((j && j.ok === true && typeof j.accountId === 'string' && j.accountId) ? j.accountId : null); }, function(){ cb(null); });
+    } catch(e){ cb(null); }
+  }
+  function acctLabel966(a){ a = String(a || ''); return a ? ('ID 末尾 ' + a.slice(-6)) : '不明'; }
+  function note966(t, err){ S966.note = t || ''; S966.err = !!err; if (S.view === 'SC_LIST') renderList(); }
+  function run966(acct, quiet){
+    var F = f872(); if (!F) return;
+    if (S966.running) return;
+    var c = consent966();
+    if (!c || c.acct !== acct){ if (!quiet) note966('このアカウントではまだ同期の対象を選んでいません。「☁ 端末間で同期」から選んでください。', true); return; }
+    var allowed = {}; c.ids.forEach(function(id){ allowed[String(id)] = 1; });
+    S966.running = true; if (!quiet) note966('同期しています…');
+    F.syncOnce(function(rep){
+      S966.running = false;
+      if (!rep || (rep.ok === false && rep.code)){
+        var code = rep && rep.code;
+        var m = (code === 'NOT_LOGGED_IN') ? 'Google ログインが必要です。ホームでログインしてから、もう一度押してください。'
+              : (code === 'WORKER_TOO_OLD') ? 'サーバー側がまだ対応していません。'
+              : (code === 'BUSY') ? '同期中です。少し待ってから押してください。'
+              : '同期できませんでした（' + (code || '不明') + '）。この端末のシナリオはそのままです。';
+        note966(m, true); return;
+      }
+      /* クラウドから届いたシナリオはこのアカウントのもの＝以後この端末から変更を送ってよい対象に加える */
+      try {
+        var c2 = consent966();
+        if (c2 && c2.acct === acct && rep.plan){
+          rep.plan.forEach(function(a){ if (a && a.action === 'PULL' && c2.ids.indexOf(a.id) < 0) c2.ids.push(a.id); });
+          saveConsent966(c2);
+        }
+      } catch(e){}
+      var parts = [];
+      if (rep.pushed) parts.push('この端末から ' + rep.pushed + ' 件を保存');
+      if (rep.pulled) parts.push('他の端末から ' + rep.pulled + ' 件を取り込み');
+      if (rep.conflicts && rep.conflicts.length) parts.push(rep.conflicts.length + ' 件は両方で変更があったため確認待ち');
+      if (rep.errors && rep.errors.length) parts.push(rep.errors.length + ' 件は失敗（元のまま）');
+      var pn = S966.prepNote || ''; S966.prepNote = '';
+      note966('同期しました' + (parts.length ? '：' + parts.join('、') : '（変更なし）') + '。' + (pn ? ' ' + pn : ''), !!(rep.errors && rep.errors.length));
+    }, { pushAllow: function(id){ return !!allowed[String(id)]; } });
+  }
+  function ask966(){
+    if (!sync966Available()) return;
+    me966(function(acct){
+      if (!acct){ note966('ログインしているアカウントを確認できませんでした。ホームで Google ログインしてから、もう一度押してください。', true); return; }
+      var st = ST(); var r = st ? st.list() : null;
+      var rows = (r && r.ok) ? r.scenarios : [];
+      var c = consent966(); var prev = {};
+      if (c && c.acct === acct) c.ids.forEach(function(id){ prev[String(id)] = 1; });
+      var list = rows.length ? rows.map(function(m){
+        return '<label class="sc-g" style="display:block;margin:6px 0"><input type="checkbox" data-sc966="' + esc(m.scenarioId) + '"' + (prev[m.scenarioId] ? ' checked' : '') + '> ' + esc(m.title || '(無題)') + '</label>';
+      }).join('') : '<div>この端末にシナリオはありません（他の端末のシナリオの取り込みだけ行います）。</div>';
+      overlay('<h3>シナリオを端末間で同期</h3>' +
+        '<div>保存先：いまログインしているアカウント（' + esc(acctLabel966(acct)) + '）</div>' +
+        '<div style="margin-top:8px">クラウドに保存して他の端末でも使うシナリオを選んでください（選んだものだけ送ります）。持ち主の記録が無い古いシナリオは、元を移動・変更せず、選択したシナリオのコピーを現在のアカウントへ保存して共有します。この端末のシナリオは消えません。他の端末から届くシナリオはこの一覧に追加されます。同じシナリオを両方で別々に変更していた場合は、自動で上書きせず、どちらを使うか確認します。</div>' +
+        '<div style="margin-top:8px" data-sc966-list>' + list + '</div>' +
+        '<div class="sc-acts"><button class="sc-btn" data-sc-c="no">やめる</button><button class="sc-btn sc-primary" data-sc-c="yes">選んだシナリオで同期する</button></div>',
+        function(p){
+          p.querySelector('[data-sc-c="no"]').addEventListener('click', closeOverlay, false);
+          p.querySelector('[data-sc-c="yes"]').addEventListener('click', function(){
+            var ids = [];
+            var cbs = p.querySelectorAll('[data-sc966]');
+            for (var i = 0; i < cbs.length; i++){ if (cbs[i].checked) ids.push(cbs[i].getAttribute('data-sc966')); }
+            closeOverlay();
+            try { localStorage.setItem('v292Dfix872On', '1'); } catch(e){ note966('この端末の設定を保存できませんでした。', true); return; }
+            /* ★fix966r3（GPT #127-E）: 送信前の関所（iso2）で帰属を確かめる。持ち主の記録が無い古いシナリオは、
+               元を変えずに「このアカウント用の写し」を作って共有する（作成時に iso2 がこのアカウントを作成者として記録する）。
+               別アカウントの記録があるものは共有しない。元のシナリオ・既存の記録は 1 バイトも変えない。 */
+            var res = prep966(ids, rows, acct);
+            if (!saveConsent966({ acct: acct, ids: res.ids, at: Date.now() })){ note966('この端末の設定を保存できませんでした。', true); return; }
+            S966.prepNote = res.note;
+            run966(acct, false);
+          }, false);
+        });
+    });
+  }
+  function iso2Why966(id){
+    try { var G = window.__v292Diso2; if (!G || typeof G.check !== 'function') return null;
+          return G.check({ op: 'putscenario', id: String(id), record: {} }, 'fix966') || null; } catch(e){ return 'ISO2_ERROR'; }
+  }
+  function copy966(id, title){
+    try {
+      var st = ST(), F = f872(); if (!st || !F || typeof st.f872RawBody !== 'function' || typeof F.inputFromBody !== 'function') return { ok: false, code: 'NO_API' };
+      var b = st.f872RawBody(id); if (!b || !b.ok) return { ok: false, code: (b && b.code) || 'READ_FAILED' };
+      var c = st.create(F.inputFromBody(title, b.body));
+      return (c && c.ok) ? { ok: true, id: c.scenarioId } : { ok: false, code: (c && c.code) || 'CREATE_FAILED' };
+    } catch(e){ return { ok: false, code: 'EXCEPTION' }; }
+  }
+  /* ★fix966r3b（GPT #127-F）: 写しは「元の ID × アカウント」ごとに 1 本だけ。対応表を先に保存し、
+     通信失敗→再試行→再読込→再同期でも同じ写しを使い回す（写しが消えていた時だけ作り直す）。 */
+  var COPYMAP966 = 'v292Dfix966CopyOf';
+  function copyMap966(){ try { var o = JSON.parse(localStorage.getItem(COPYMAP966) || 'null'); return (o && typeof o === 'object') ? o : {}; } catch(e){ return {}; } }
+  function saveCopyMap966(o){ try { localStorage.setItem(COPYMAP966, JSON.stringify(o)); return true; } catch(e){ return false; } }
+  function prep966(ids, rows, acct){
+    var out = [], copied = [], refused = [], reused = [];
+    var exists = {}; (rows || []).forEach(function(m){ exists[m.scenarioId] = 1; });
+    var cm = copyMap966(), mine = (acct && cm[acct] && typeof cm[acct] === 'object') ? cm[acct] : {};
+    var titleOf = {}; (rows || []).forEach(function(m){ titleOf[m.scenarioId] = m.title || ''; });
+    ids.forEach(function(id){
+      var why = iso2Why966(id);
+      if (!why){ out.push(id); return; }
+      if (/UNATTRIBUTED$/.test(String(why))){
+        if (!acct){ refused.push(titleOf[id] || id); return; }
+        var prevCopy = mine[id];
+        if (prevCopy && exists[prevCopy]){ if (out.indexOf(prevCopy) < 0) out.push(prevCopy); reused.push(titleOf[id] || id); return; }
+        var c = copy966(id, titleOf[id]);
+        if (c.ok){
+          mine[id] = c.id; cm[acct] = mine;
+          if (!saveCopyMap966(cm)){ refused.push(titleOf[id] || id); return; }   /* 対応表を保存できない時は共有しない（次回の重複を防ぐ） */
+          out.push(c.id); copied.push(titleOf[id] || id); return;
+        }
+      }
+      refused.push(titleOf[id] || id);
+    });
+    var note = '';
+    if (copied.length) note += '持ち主の記録が無い古いシナリオ（' + copied.join('・') + '）は、元をそのまま残し、選択したシナリオのコピーを現在のアカウントへ保存して共有しました。';
+    if (reused.length) note += (note ? ' ' : '') + '前に作ったコピー（' + reused.join('・') + '）を使いました（新しいコピーは作っていません）。';
+    if (refused.length) note += (note ? ' ' : '') + '共有できなかったシナリオ: ' + refused.join('・') + '（別のアカウントの記録があるか、確認できませんでした）。';
+    return { ids: out, note: note };
+  }
+  /* シナリオ一覧を開いた時、同じアカウントで同意済みなら 1 ページ 1 回だけ同期（選んだシナリオだけ送る） */
+  function auto966(){
+    try {
+      if (S966.auto || !sync966Available() || !on966()) return;
+      var c = consent966(); if (!c) return;
+      S966.auto = true;
+      me966(function(acct){ if (acct && acct === c.acct) run966(acct, false); });
+    } catch(e){}
   }
   function onRootInput(e){
     var t = e.target; var path = t && t.getAttribute && t.getAttribute('data-sc-field');
@@ -971,6 +1132,8 @@
            remove: remove, start: start, toStories: toStories, draft: function(){ return S.draft ? clone(S.draft) : null; },
            /* ★fix872（sp8）: 衝突ダイアログ。fix825 の既存経路からは呼ばれない。 */
            f872Conflict: f872ConflictDialog,
+           /* ★fix966r3 検証口（選択済み ID の帰属確認と写しの作成。UI の「選んだシナリオで同期する」と同じ処理） */
+           f966Prep: function(ids, acct){ var st = ST(); var r = st ? st.list() : null; return prep966(ids || [], (r && r.ok) ? r.scenarios : [], acct); },
            /* SEED_TEXT_ENRICHMENT_V1 */
            enrich: enrichRun, acceptEnrich: acceptEnrich, discardEnrich: discardEnrich,
            enrichTargets: enrichTargets, enrichOfferCount: enrichOfferCount, maybeOfferEnrich: maybeOfferEnrich,

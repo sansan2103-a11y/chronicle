@@ -760,8 +760,50 @@
   }
 
   // ---------- inject header button ----------
+  /* ★fix963（UI-002・2026-10-15）「👥 キャラ」ボタンが途中から消える件。
+     実測（本番 BUNDLE6・PC で再現）: このボタンは「進行」ノブ（#v292-drama-sel）の隣に差し込むが、
+     fix880 がそのノブを ⚙設定 の「詳細設定」（既定で閉じた欄）へ移す。ボタンが一度でも消えて
+     4 秒ごとの再注入が走る／読み込みが遅く fix880 が先に動くと、ボタンは設定の閉じた欄の中に作られて
+     見えなくなり、以後「もうある」と判断されて二度と上部バーへ戻らない。
+     → ボタンの置き場所を上部バー（#topbar）の ⚙設定 の直前に固定し、上部バー以外にあれば上部バーへ戻す。
+     一覧の中身・データ・保存には触らない。fix243 の折りたたみは「👥 キャラ」を常時表示の対象にしている。
+     OFF: localStorage v292Dfix963Off='1'（従来の差し込み方） */
+  function off963(){ try { return localStorage.getItem('v292Dfix963Off') === '1'; } catch(e){ return false; } }
+  function settingsBtnIn(bar){
+    var kids = bar ? bar.children : [];
+    for (var i = 0; i < kids.length; i++){
+      if (kids[i].classList && kids[i].classList.contains('v292Dfix145-charlist-btn')) continue;
+      var txt = (kids[i].textContent || '').trim();
+      if (/設定$/.test(txt) || txt.indexOf('⚙') === 0) return kids[i];
+    }
+    return null;
+  }
+  function placeInTopbar963(b){
+    var bar = document.getElementById('topbar');
+    if (!bar) return false;
+    if (b.parentNode === bar) return true;
+    var s = settingsBtnIn(bar);
+    if (s) bar.insertBefore(b, s); else bar.appendChild(b);
+    try { console.log(TAG, 'fix963: 👥 キャラ を上部バーへ配置'); } catch(_){}
+    return true;
+  }
   function injectHeaderButton(){
     try {
+      if (!off963()){
+        var ex963 = document.querySelector('.v292Dfix145-charlist-btn');
+        if (ex963){ placeInTopbar963(ex963); return; }
+        if (document.getElementById('topbar')){
+          var b963 = document.createElement('button');
+          b963.className = 'v292Dfix145-charlist-btn';
+          b963.textContent = '👥 キャラ';
+          b963.title = '登場キャラ一覧';
+          b963.style.cssText = 'margin:0 4px; padding:6px 10px; background:#2a2a3a; border:1px solid #555; color:#e0e0e0; border-radius:6px; cursor:pointer; font-size:13px;';
+          b963.onclick = function(e){ e.preventDefault(); renderModal(); };
+          placeInTopbar963(b963);
+          try { console.log(TAG, '👥 キャラ button injected (fix963 topbar)'); } catch(_){}
+          return;
+        }
+      }
       if (document.querySelector('.v292Dfix145-charlist-btn')) return;
       // find an existing topbar selector (e.g., 進行 select) to anchor next to
       var sel = document.getElementById('v292-drama-sel') || document.getElementById('v292-react-sel') || document.querySelector('#v292-style-sel');

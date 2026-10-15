@@ -160,7 +160,7 @@
     faceShape: { ROUND:'round', OVAL:'oval', LONG:'long', SQUARE:'square', ANGULAR:'angular' },
     hairColor: { BLACK:'black', DARK_BROWN:'dark brown', BROWN:'brown', GRAY:'gray', WHITE:'white', SILVER:'silver', RED:'red', BLONDE:'blonde' },
     hairLength: { BALD:'bald', VERY_SHORT:'very short', SHORT:'short', MEDIUM:'medium length', SHOULDER:'shoulder length', LONG:'long' },
-    hairShape: { STRAIGHT:'straight', WAVY:'wavy', CURLY:'curly', TIED_BACK:'tied back', BUN:'in a bun', MESSY:'messy', THINNING:'thinning' },
+    hairShape: { STRAIGHT:'straight', WAVY:'wavy', CURLY:'curly', TIED_BACK:'tied back', BUN:'in a bun', MESSY:'messy', THINNING:'thinning', BOB:'bob' },   /* ★fix965: BOB（fix766 で明示語のときだけ立つ） */
     clothingArchetype: {
       FISHER_WORKWEAR:"fisherman's work clothes", FARMER_WORKWEAR:"farmer's work clothes",
       OFFICE_WORKER:'plain office clothes', STUDENT_CASUAL:'casual student clothes',

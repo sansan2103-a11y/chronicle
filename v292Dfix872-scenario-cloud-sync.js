@@ -272,7 +272,9 @@
   /* ================= 実行 ================= */
   var S = { running: false, lastReport: null, conflicts: {} };
 
-  function syncOnce(cb){
+  /* ★fix966b（GPT #127-C）: opts.pushAllow(id) が false の PUSH_* は送らない（NOOP 扱い・skippedNotApproved に数える）。
+     opts を渡さない呼び手は従来どおり（全件）。PULL / PULL_DELETE / CONFLICT の規則は 1 文字も変えない。 */
+  function syncOnce(cb, opts){
     var done = function(rep){ S.running = false; S.lastReport = rep; if (cb) cb(rep); };
     if (S.running){ if (cb) cb({ ok: false, code: 'BUSY' }); return; }
     if (!enabled()){ if (cb) cb({ ok: false, code: killed() ? 'KILLED' : 'OFF' }); return; }
@@ -288,17 +290,19 @@
         var local = st.listAll();
         if (!local.ok){ done({ ok: false, code: local.code }); return; }
         var acts = plan(local.scenarios, res.j.scenarios || []);
-        runActions(acts, function(rep){ rep.plan = acts; done(rep); });
+        runActions(acts, function(rep){ rep.plan = acts; done(rep); }, opts);
       });
     });
   }
 
-  function runActions(acts, cb){
-    var i = 0, rep = { ok: true, pushed: 0, pulled: 0, deletedLocal: 0, deletedRemote: 0, conflicts: [], noop: 0, errors: [] };
+  function runActions(acts, cb, opts){
+    var i = 0, rep = { ok: true, pushed: 0, pulled: 0, deletedLocal: 0, deletedRemote: 0, conflicts: [], noop: 0, errors: [], skippedNotApproved: 0 };
+    var allow = (opts && typeof opts.pushAllow === 'function') ? opts.pushAllow : null;
     function next(){
       if (i >= acts.length){ S.conflicts = {}; for (var c = 0; c < rep.conflicts.length; c++) S.conflicts[rep.conflicts[c].id] = rep.conflicts[c]; cb(rep); return; }
       var a = acts[i++];
       if (a.action === 'NOOP'){ rep.noop++; next(); return; }
+      if (allow && /^PUSH_/.test(a.action)){ var okA = false; try { okA = !!allow(a.id); } catch(eA){ okA = false; } if (!okA){ rep.skippedNotApproved++; next(); return; } }
       if (a.action === 'CONFLICT'){ rep.conflicts.push(a); notifyConflict(a); next(); return; }
       if (a.action === 'PULL'){ doPull(a, rep, next); return; }
       if (a.action === 'PULL_DELETE'){ doPullDelete(a, rep, next); return; }
