@@ -172,6 +172,7 @@
       while ((m = re.exec(raw)) !== null){
         var tag = m[0], who = attrOf(tag, 'who'); if (!who) continue;
         var scope = attrOf(tag, ATTR); if (scope == null) continue;
+        try { if (window.__v292Dfix961 && window.__v292Dfix961.hold(who, store, 'fix77X')) continue; } catch(_961){}   /* ★fix961 */
         var cur = store[who] || {};
         var d = decide(cur.kizu, scope, attrOf(tag, '傷'));
         tel[d.reason] = (tel[d.reason] || 0) + 1;

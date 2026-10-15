@@ -54,6 +54,28 @@
     '・who は cast の名前。3軸は今この瞬間の状態を簡潔な自由記述で。\n' +
     '・このタグは本文（地の文・セリフ）には絶対に含めない。必ず本文の後に独立して置く。';
 
+  /* ★fix962（GPT #127-A Q1_STATE_EMISSION・2026-10-15・既定 OFF）<state> 出力指示の最小の文言変更。
+     実ログ（2026-10-06・smukqn）: 名前も台詞も無い負傷者（泥の若い女）が状態に一度も載らず、後のターンで
+     説明なく回復した／主人公の状態が 7 ターン目のまま止まった。→ 2 行だけ言い換える（新しいブロックは足さない）:
+       ・けが・出血・痛み・意識・体の動きが変わった人物は、主人公も喋らない人物も必ず出す
+       ・既に使った名前・一覧の名前を優先。名前の無い人物は呼び名を 1 つに決めて同じ場面では変えない
+     fix77（一時：からだ/こころ/本能）と fix190（持続：傷/関係/未解決）の区別・形式は変えない。
+     ON : localStorage v292Dfix962On='1'（既定 OFF＝従来とバイト一致）／ OFF 強制: v292Dfix962Off='1' */
+  var DEFAULT_ON962 = false;
+  function on962(){
+    try {
+      if (localStorage.getItem('v292Dfix962Off') === '1') return false;
+      return DEFAULT_ON962 || localStorage.getItem('v292Dfix962On') === '1';
+    } catch(e){ return false; }
+  }
+  var EMIT405_Q1 =
+    '\n\n【状態の出力（fix77・必須）】\n' +
+    '本文の最後に、今ターンで状態が動いたキャラだけ次形式で1行ずつ出力する（変化が無いキャラは省略可）。けが・出血・痛み・意識・体の動きが変わった人物は、主人公も、喋らない人物も必ず出す:\n' +
+    '<state who="名前" からだ="…" こころ="…" 本能="…"/>\n' +
+    '・who は cast の名前。既に使った名前があればそれを使う。名前の無い人物は呼び名を1つに決め、同じ場面では変えない（「女」「娘」「若い女」を別人として出さない）。3軸は今この瞬間の状態を簡潔な自由記述で。\n' +
+    '・このタグは本文（地の文・セリフ）には絶対に含めない。必ず本文の後に独立して置く。';
+  function emit405(){ return on962() ? EMIT405_Q1 : EMIT405; }
+
   // ---- statesBlock405: fix77 の buildStatesBlock と同一ロジック(store=window.__v292Dfix77Store) ----
   function statesBlock405(){
     try {
@@ -86,7 +108,7 @@
       for (var i = 0; i < reg.length; i++){ if (reg[i] && reg[i].marker === MARKER) return; } // 二重登録回避
       reg.push({ off: 'v292Dfix405Off', marker: MARKER, prio: 1, text: function(){
         if (d1Suppress405()) return '';   /* ★U2: D1 boundary（keeper は空文字を skip する） */
-        return slim() ? (EMIT405 + SLIM_LINE) : (EMIT405 + statesBlock405()); } });
+        return slim() ? (emit405() + SLIM_LINE) : (emit405() + statesBlock405()); } });   /* ★fix962: 既定は EMIT405 のまま */
       try { console.log(TAG, 'registered to __f379reg (prio1)'); } catch(_){}
     } catch(e){}
   })();

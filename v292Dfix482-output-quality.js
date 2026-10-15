@@ -178,6 +178,91 @@
     return n ? { text: out, count: n } : { text: text, count: 0 };
   }
 
+  // --- ★fix482s（GPT #127-A Q3・2026-10-15）高確度の構造異常だけを「取り直し候補」にする ----------
+  //   対象は 2 種だけ:
+  //    ① 本文に漏れた道具呼び出し・会話制御の記法（RE_MARKUP と同じ集合）。ただし
+  //       ``` 囲み・`…`・「」『』の中にあるものは正当な引用・コードとして数えない（certain にしない）。
+  //    ② 明確な途中切れ: finish_reason が長さ打ち切り（length / max_tokens）／本文の末尾が「、」等で
+  //       終わる／閉じていない <say>・タグ・括弧で終わる／{ で始まる JSON が閉じずに終わる。
+  //   判定しないもの: 歴史的仮名遣いだけ・句点が無いだけ（末尾が普通の文字で終わるものは suspect として
+  //     記録だけ＝再生成の引き金にしない）。
+  //   再生成そのものは既存 fix482 の経路（retryOn=opt-in・fix494 共通予算・60 秒制限）を通るだけ。
+  //   新しい再送枠・費用は作らない。OFF: localStorage v292Dfix482sOff='1'（従来と同じ動き）。
+  function structOff(){ return ls('v292Dfix482sOff') === '1'; }
+  var RE_TRAIL_TAGS = /(?:\s*<(?:react|state)\b[^<>]*\/?>\s*|\s*<\/(?:react|state)>\s*)+$/;
+  function maskQuoted(text){
+    // 正当な引用・コードの範囲を空白で塗る（位置は保つ）
+    return String(text)
+      .replace(/```[\s\S]*?```/g, function(m){ return m.replace(/[^\n]/g, ' '); })
+      .replace(/`[^`\n]{1,200}`/g, function(m){ return m.replace(/./g, ' '); })
+      .replace(/「[^「」]{0,400}」/g, function(m){ return m.replace(/[^\n]/g, ' '); })
+      .replace(/『[^『』]{0,400}』/g, function(m){ return m.replace(/[^\n]/g, ' '); });
+  }
+  function proseOf(content){
+    // 返り値: { prose, jsonCut }（JSON 形式なら narrative、素の形式なら末尾の react/state タグを外した本文）
+    var s = String(content == null ? '' : content).replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
+    var t = s.trim();
+    if (t.charAt(0) === '{'){
+      try {
+        var j = JSON.parse(t);
+        var nv = j && (j.narrative != null ? j.narrative : (j.plan && j.plan.narrative));
+        if (Array.isArray(nv)) nv = nv.filter(function(x){ return typeof x === 'string'; }).join('\n');
+        return { prose: (typeof nv === 'string') ? nv : null, jsonCut: false };
+      } catch(e){
+        return { prose: null, jsonCut: !/\}\s*$/.test(t) };
+      }
+    }
+    return { prose: t.replace(RE_TRAIL_TAGS, ''), jsonCut: false };
+  }
+  var RE_END_COMMA = /[、，,]$/;
+  var RE_TERMINAL  = /[。．！？!?…‥」』）)】〕〉》"'”’〜ー―—\-.~♪☆★]$/;
+  function structural(content, finish){
+    var r = { certain: false, markup: 0, markupQuoted: 0, trunc: null, suspect: null };
+    if (typeof content !== 'string' || !content) return r;
+    // ① 漏れた記法
+    var all = (content.match(RE_MARKUP) || []).length;
+    if (all){
+      var bare = (maskQuoted(content).match(RE_MARKUP) || []).length;
+      r.markup = bare; r.markupQuoted = all - bare;
+    }
+    // ② 途中切れ
+    var f = String(finish || '').toLowerCase();
+    if (f === 'length' || f === 'max_tokens' || f === 'max_output_tokens') r.trunc = 'finish_length';
+    else {
+      var p = proseOf(content);
+      if (p.jsonCut) r.trunc = 'json_cut';
+      else if (typeof p.prose === 'string'){
+        var q = p.prose.replace(/\s+$/, '');
+        if (q){
+          var tailLine = q.slice(q.lastIndexOf('\n') + 1);
+          var endsWithTag = /<[^<>]*>$/.test(q);                                        // </say> や …/> で終わる＝文の終わりとして扱う
+          if (/<[a-zA-Z][^<>]*$/.test(tailLine)) r.trunc = 'open_tag';              // <say who="… で終わる
+          else if (endsWithTag) { /* 完結したタグで終わる＝途中切れとみなさない */ }
+          else if (/<say\b[^<>]*>(?:(?!<\/say>)[\s\S])*$/.test(q) && !RE_TERMINAL.test(q)) r.trunc = 'open_say'; // </say> も終端記号も無いまま終わる
+          else if (RE_END_COMMA.test(q)) r.trunc = 'comma';
+          else {
+            var tail = q.slice(-200);
+            var oq = (tail.match(/「/g) || []).length - (tail.match(/」/g) || []).length;
+            var lastOpen = Math.max(q.lastIndexOf('「'), q.lastIndexOf('『'));
+            var lastClose = Math.max(q.lastIndexOf('」'), q.lastIndexOf('』'));
+            if (oq > 0 && lastOpen > lastClose && q.length - lastOpen <= 200) r.trunc = 'open_bracket';
+            else if (!RE_TERMINAL.test(q)) r.suspect = 'no_terminal';             // 記録だけ（再生成しない）
+          }
+        }
+      }
+    }
+    r.certain = (r.markup > 0) || !!r.trunc;
+    return r;
+  }
+  function adoptRetry(aR, sR, aF, sF){
+    if (sF && sF.certain){
+      if (sR && sR.certain) return false;                 // 取り直しても構造異常なら初回のまま
+      if (aR.degenerate && !aF.degenerate) return false;  // 取り直しで新たに崩壊したら初回のまま
+      return true;
+    }
+    return better(aR, aF);
+  }
+
   // --- 文単位の重複率 --------------------------------------------------
   function dupSentenceRatio(text){
     var parts = String(text || '').split(/[。．！？!?]/)
@@ -255,6 +340,12 @@
     } catch(e){}
     return null;
   }
+  function finishOf(json){   /* ★fix482s: 取れる時だけ（無ければ null。推測しない） */
+    try {
+      var c = json && json.choices && json.choices[0];
+      return (c && (c.finish_reason || c.native_finish_reason || c.stop_reason)) || null;
+    } catch(e){ return null; }
+  }
   function rebuild(ex, content){
     ex.json.choices[0].message.content = content;
     return ex.pad + JSON.stringify(ex.json);
@@ -267,7 +358,7 @@
     return h;
   }
 
-  function makeRetryInit(init){
+  function makeRetryInit(init, why){
     try {
       var body = JSON.parse(init.body);
       body.temperature = 0.7;
@@ -277,7 +368,9 @@
       if (body.messages && body.messages[0] && body.messages[0].role === 'system'
           && typeof body.messages[0].content === 'string'
           && body.messages[0].content.indexOf('【再生成】') < 0){
-        body.messages[0].content += '\n【再生成】直前の出力は同じ語の機械的な繰り返しで壊れていた。同じ語や同じ言い回しを続けて繰り返さず、普通の文章で書き直す。';
+        body.messages[0].content += (why === 'structural')   /* ★fix482s: 構造異常の取り直し文言（崩壊時の文言は従来のまま） */
+          ? '\n【再生成】直前の出力は途中で切れていたか、内部の記法が混じっていた。物語の本文だけを最後の文まで書き切り、そのあとに決まったタグを置く。'
+          : '\n【再生成】直前の出力は同じ語の機械的な繰り返しで壊れていた。同じ語や同じ言い回しを続けて繰り返さず、普通の文章で書き直す。';
       }
       var init2 = {};
       for (var k in init){ if (Object.prototype.hasOwnProperty.call(init, k)) init2[k] = init[k]; }
@@ -316,17 +409,24 @@
         var aFirst = assess(ex.content);
         var adoptedRes = res, adoptedRaw = raw, adoptedEx = ex, aAdopted = aFirst;
         var usedRetry = false, aRetry = null;
+        var sFirst = null, sRetry = null;                 /* ★fix482s */
+        if (!structOff()){
+          sFirst = structural(ex.content, finishOf(ex.json));
+          if (sFirst.certain) stats.structural = (stats.structural || 0) + 1;
+          else if (sFirst.suspect) stats.structSuspect = (stats.structSuspect || 0) + 1;
+        }
+        var sCertain = !!(sFirst && sFirst.certain);
 
         if (aFirst.degenerate) stats.degenerate++;  // RetryOffでも計上(軽微指摘)
 
-        if (aFirst.degenerate && res.ok && retryOn()){
+        if ((aFirst.degenerate || sCertain) && res.ok && retryOn()){
           var now = Date.now();
           if (budget && budget.remaining <= 0){
             stats.budgetSkips++;                    // ★fix494: 共通予算切れ→再生成しない(物理送信の暴発根絶)
           } else if (now - lastRetryAt < RETRY_COOLDOWN_MS){
             stats.rateLimitSkips++;                 // 課金暴発ガード(60秒レートリミット)
           } else {
-            var init2 = makeRetryInit(init);
+            var init2 = makeRetryInit(init, (sCertain && !aFirst.degenerate) ? 'structural' : undefined);
             if (init2){
               lastRetryAt = now;
               stats.retried++;
@@ -338,10 +438,11 @@
                   var ex2 = extract(raw2);
                   if (ex2){
                     aRetry = assess(ex2.content);
-                    if (better(aRetry, aFirst)){
+                    if (sCertain) sRetry = structural(ex2.content, finishOf(ex2.json));
+                    if (sCertain ? adoptRetry(aRetry, sRetry, aFirst, sFirst) : better(aRetry, aFirst)){
                       adoptedRes = res2; adoptedRaw = raw2; adoptedEx = ex2;
                       aAdopted = aRetry; usedRetry = true;
-                      if (!aRetry.degenerate) stats.retryFixed++;
+                      if (!aRetry.degenerate && !(sRetry && sRetry.certain)) stats.retryFixed++;
                     }
                   }
                 }
@@ -367,6 +468,10 @@
 
         last = { first: aFirst, retry: aRetry, adoptedRetry: usedRetry,
                  ruby: ruby.ruby, collapsed: collapsed, markup: mkFixed };
+        if (sFirst){ last.structFirst = sFirst; last.structRetry = sRetry; }   /* ★fix482s（OFF 時は従来と同形） */
+        if (sFirst && (sFirst.certain || sFirst.suspect)){
+          try { console.log(TAG, 'structural:', JSON.stringify({ first: sFirst, retry: sRetry, adopted: usedRetry, retryOn: retryOn() })); } catch(e){}
+        }
 
         if (!changed) return adoptedRes;            // 無変更なら採用Responseをそのまま返す
 
@@ -418,6 +523,7 @@
     better: better,
     isChronicleNarrative: isChronicleNarrative,
     makeRetryInit: makeRetryInit,
+    structural: structural, proseOf: proseOf, adoptRetry: adoptRetry, finishOf: finishOf,   /* ★fix482s */
     stats: stats,
     get last(){ return last; }
   };

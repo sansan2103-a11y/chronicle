@@ -3191,6 +3191,7 @@
         var st = store(), found = 0, re = /<state\b[^>]*?\/?>/g, m;
         while ((m = re.exec(raw)) !== null){
           var tag = norm938_190(m[0]), who = attrOf(tag, 'who'); if (!who) continue;
+          try { if (window.__v292Dfix961 && window.__v292Dfix961.hold(who, st, 'fix190')) continue; } catch(_961){}   /* ★fix961 */
           var cur = st[who] || {};
           FIELDS.forEach(function(f){ var v = attrOf(tag, f[0]); if (v) cur[f[1]] = v; });  // 該当があった時だけ更新=永続
           st[who] = cur; found++;

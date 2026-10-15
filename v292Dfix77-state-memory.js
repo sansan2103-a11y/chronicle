@@ -185,6 +185,85 @@
   }
   try { window.addEventListener('chr:engine-booted', rebind901); } catch(e){}
   window.__v292Dfix77Store = store;
+  /* ★fix961（GPT #127-A Q2_IDENTITY_INTAKE_FIX・2026-10-15）<state who> の取り込みで、
+     「既存の人物に一致しない・既存の人物名が他の文字種で崩れた形」を新しい人物として保存しない。
+     実例（2026-10-06 バックアップ smujk9）: 「藍色の作務衣の初老の男」に対し who="藍色の作務衣의 初老의 남자"
+       が別人として保存され、10 ターン以上 状態ブロックに残った。
+     判定（すべて満たす時だけ保留）:
+       ① store に同じ名前が無い（既存の行は従来どおり更新＝過去の正本は一括変更しない）
+       ② cast・store・fix277 準登録（名前と登録済み別名）のどれとも完全一致しない
+       ③ 日本語の文字（かな・漢字）と、それ以外の文字（ハングル・ラテン等）が 1 つの名前に混ざる
+       ④ 既存の人物名と 3 文字以上・その名前の半分以上が順に一致する（＝既存人物の崩れた形）
+     → 文字種だけでは弾かない（「김민수」「Alice」「김さん」等の新しい人物はそのまま保存）。
+     保留した who は保存しない（その tag だけ。本文・他の人物は不変）。記録はメモリ上の診断だけ（新ストアなし）。
+     OFF: localStorage v292Dfix961Off='1'（従来と同じ動き） */
+  (function(){
+    var RE_JP = /[぀-ヿ㐀-䶿一-鿿豈-﫿々〆ヶー]/;
+    var RE_L = null; try { RE_L = new RegExp('\\p{L}', 'u'); } catch(e){ RE_L = null; }
+    var held = [], counts = { held: 0, checked: 0 };
+    function off961(){ try { return localStorage.getItem('v292Dfix961Off') === '1'; } catch(e){ return false; } }
+    function chars(s){ return Array.from ? Array.from(String(s)) : String(s).split(''); }
+    function isOtherLetter(c){
+      if (RE_JP.test(c)) return false;
+      if (RE_L) return RE_L.test(c);
+      return /[A-Za-zÀ-ɏͰ-ϿЀ-ӿ฀-๿؀-ۿᄀ-ᇿ㄰-㆏가-힯]/.test(c);
+    }
+    function lcs(a, b){
+      var A = chars(a), B = chars(b), prev = new Array(B.length + 1).fill(0);
+      for (var i = 1; i <= A.length; i++){
+        var cur = [0];
+        for (var j = 1; j <= B.length; j++){
+          cur[j] = (A[i-1] === B[j-1]) ? prev[j-1] + 1 : Math.max(prev[j], cur[j-1]);
+        }
+        prev = cur;
+      }
+      return prev[B.length];
+    }
+    function knownNames(st){
+      var out = [];
+      try { Object.keys(st || {}).forEach(function(k){ out.push(k); }); } catch(e){}
+      try { var S0 = getS77(); var c = S0 && S0.cast;
+            if (c){ if (c.hero && c.hero.name) out.push(String(c.hero.name));
+                    (c.npcs || []).forEach(function(n){ if (n && n.name) out.push(String(n.name)); }); } } catch(e){}
+      try { var Q = window.__v292QuasiPack; var q = (Q && typeof Q.store === 'function') ? (Q.store() || {}) : {};
+            Object.keys(q).forEach(function(k){ out.push(k); var a = q[k] && q[k].ali; if (Array.isArray(a)) a.forEach(function(x){ if (x) out.push(String(x)); }); }); } catch(e){}
+      return out;
+    }
+    // 純関数（検証口）: who と既知の名前一覧から判定
+    function judge(who, known){
+      var w = String(who || '').trim();
+      if (!w) return { hold: false, why: 'empty' };
+      if (known.indexOf(w) >= 0) return { hold: false, why: 'known' };
+      var cs = chars(w), jp = 0, oth = 0;
+      for (var i = 0; i < cs.length; i++){ if (RE_JP.test(cs[i])) jp++; else if (isOtherLetter(cs[i])) oth++; }
+      if (!(jp > 0 && oth > 0)) return { hold: false, why: 'not-mixed' };
+      var best = null, bestL = 0;
+      for (var k = 0; k < known.length; k++){
+        var K = known[k]; if (!K || K === w) continue;
+        var kl = chars(K).length; if (kl < 2) continue;
+        var l = lcs(w, K);
+        if (l >= 3 && l >= Math.ceil(kl * 0.5) && l > bestL){ best = K; bestL = l; }
+      }
+      return best ? { hold: true, why: 'mixed-variant', near: best, lcs: bestL } : { hold: false, why: 'mixed-new' };
+    }
+    // 取り込み側の入口: true = この who は保存しない
+    function hold(who, st, site){
+      try {
+        if (off961()) return false;
+        if (st && Object.prototype.hasOwnProperty.call(st, who)) return false;   // ① 既存の行は従来どおり
+        counts.checked++;
+        var r = judge(who, knownNames(st));
+        if (!r.hold) return false;
+        counts.held++;
+        held.push({ who: String(who).slice(0, 40), near: r.near, site: site || '', at: Date.now() });
+        if (held.length > 20) held.shift();
+        try { console.warn('[v292Dfix961:who-intake]', 'held (not stored as a new person):', JSON.stringify({ who: who, near: r.near, site: site })); } catch(_){}
+        return true;
+      } catch(e){ return false; }                                                  // 例外時は従来どおり保存
+    }
+    window.__v292Dfix961 = { hold: hold, judge: judge, knownNames: knownNames, lcs: lcs, off: off961,
+                             held: function(){ return held.slice(); }, stats: function(){ return { held: counts.held, checked: counts.checked }; } };
+  })();
   /* ★R118F Phase B(RULING118F-PREP Q3): 共有guarded commit(単一書込みゲート)。
      - raw persist(=setItem直呼び)は公開しない。公開するのは fix532 guard を必ず通る commit のみ。
      - 書き先スロットは persist 内部(curSfx)で導出。呼び出し側からキー指定は不可。
@@ -272,6 +351,7 @@
       while ((m = re.exec(src)) !== null){
         var tag = norm938(m[0]);
         var who = attr(tag,'who');
+        if (who && window.__v292Dfix961 && window.__v292Dfix961.hold(who, store, 'fix77')) who = '';   /* ★fix961 */
         if (who){
           var cur = store[who] || {};
           var ka = attr(tag,'からだ'), ko = attr(tag,'こころ'), ho = attr(tag,'本能');

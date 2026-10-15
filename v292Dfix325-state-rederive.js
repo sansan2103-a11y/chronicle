@@ -81,6 +81,9 @@
       var re = /<state\b[^>]*?\/?>/g, m;
       while ((m = re.exec(raw)) !== null){
         var tag = m[0]; var who = attr(tag, 'who'); if (!who) continue;
+        try { var D961 = window.__v292Dfix961;                                       /* ★fix961: 今の store にある名前は従来どおり（過去の正本は変えない） */
+              if (D961 && !Object.prototype.hasOwnProperty.call(fresh, who)
+                  && D961.hold(who, Object.assign({}, getStore() || {}, fresh), 'fix325')) continue; } catch(_961){}
         var cur = fresh[who] || {};
         for (var f = 0; f < FA.length; f++){ var v = attr(tag, FA[f][0]); if (v) cur[FA[f][1]] = v; }
         cur.turn = (function(){ try { var X = window.__v292DfixSC1; return (X && !X.off()) ? i : turns.length; } catch(e){ return turns.length; } })();   /* ★v292DfixSC1: fix77 と同じ「そのターンの番号」。SC1 OFF なら従来値 */
