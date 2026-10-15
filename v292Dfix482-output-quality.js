@@ -178,6 +178,31 @@
     return n ? { text: out, count: n } : { text: text, count: 0 };
   }
 
+  // --- ★fix971（QA127S 実プレイ観測・2026-10-15）state 属性の断片だけの行を外す ----------------------------
+  //   実測（本番 BUNDLE7 r4・QA 物語 smv92e8vv1f T2）: 本文の末尾に「<関係=主人公である宗一への信頼"/>」が
+  //   そのまま表示された。モデルが <state …> の属性名をタグ名のように書いた断片で、buildProsePlan（state/react/summary
+  //   タグと半角英字の属性行だけを外す）にも fix482m（道具呼び出しの記法だけ）にも掛からない。
+  //   対象は「行の全体が、state の属性ラベル（からだ/こころ/本能/目的/傷/関係/未解決）＋ '=' で始まる断片」だけ:
+  //     ・'<ラベル=' で始まり '>'／'/>' で閉じてそこで行が終わる（例: <関係=…"/>）、または
+  //       'ラベル="…"' の後に '/>' か '>' だけが続いて行が終わる（例: 関係="…"/>）行
+  //     ・<state / <say / <react を含む行・地の文・セリフ（「」）を含む行は触らない
+  //   行ごと外す（他の行は 1 文字も変えない）。断片の中身を state として救済はしない（帰属が不明なため）。
+  //   OFF: localStorage v292Dfix971Off='1'（従来と byte 一致）
+  /* ★GPT #127-T: 断片「だけ」の行に限る。閉じ（> または />）の後ろに文字が続く行・閉じていない行・断片と本文が同じ行に
+     ある行は、安全に分けられないので触らない（不変）。 */
+  var RE_STATE_FRAG = /^\s*(?:<\s*(?:からだ|こころ|本能|目的|傷|関係|未解決)\s*=[^<>\n]*\/?>|(?:からだ|こころ|本能|目的|傷|関係|未解決)\s*=\s*"[^"<>\n]*"\s*\/?>)\s*$/;
+  function fragOff(){ return ls('v292Dfix971Off') === '1'; }
+  function stripStateFrag(text){
+    if (typeof text !== 'string' || !text) return { text: text, count: 0 };
+    var n = 0;
+    var out = text.split('\n').filter(function(line){
+      if (/<state\b|<say\b|<react\b|「|」/.test(line)) return true;
+      if (RE_STATE_FRAG.test(line)){ n++; return false; }
+      return true;
+    }).join('\n');
+    return n ? { text: out, count: n } : { text: text, count: 0 };
+  }
+
   // --- ★fix482s（GPT #127-A Q3・2026-10-15）高確度の構造異常だけを「取り直し候補」にする ----------
   //   対象は 2 種だけ:
   //    ① 本文に漏れた道具呼び出し・会話制御の記法（RE_MARKUP と同じ集合）。ただし
@@ -457,6 +482,7 @@
         content = ruby.text;
         var mkFixed = 0;                                          /* ★fix482m: 明白な記法トークンだけ外す */
         if (!markupOff()){ var mk = stripMarkup(content); if (mk.count){ content = mk.text; mkFixed = mk.count; stats.markupFixed = (stats.markupFixed || 0) + 1; } }
+        if (!fragOff()){ var sf = stripStateFrag(content); if (sf.count){ content = sf.text; stats.stateFragFixed = (stats.stateFragFixed || 0) + sf.count; } }   /* ★fix971 */
         var collapsed = false;
         if (aAdopted.degenerate){
           var c = collapsePathological(content);
@@ -519,6 +545,7 @@
     dupSentenceRatio: dupSentenceRatio,
     detectMarkup: detectMarkup,
     stripMarkup: stripMarkup,
+    stripStateFrag: stripStateFrag,
     assess: assess,
     better: better,
     isChronicleNarrative: isChronicleNarrative,
