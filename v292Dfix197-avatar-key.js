@@ -366,7 +366,7 @@
   function genOne(pk){
     var __d2 = __av2Doc();   /* ★av2 C2: money backstop. Asset-v2 document → never generate; undecidable (boot) → retry later, do not drop */
     if (__d2 === true){ restorePreviousOrDice(pk); active--; applyAll(); pump(); return; }
-    if (__d2 !== false){ active--; setTimeout(function(){ if (cache[pk] === 'pending'){ queue.unshift(pk); } pump(); }, 1500); return; }
+    if (__d2 !== false){ if (on978()){ stats978.waits++; if (++waitN978 > WAIT_MAX978){ stats978.waitCapped++; restorePreviousOrDice(pk); active--; applyAll(); pump(); return; } } active--; setTimeout(function(){ if (cache[pk] === 'pending'){ queue.unshift(pk); } pump(); }, 1500); return; }   /* ★fix978: 判定待ちは予算に数えない代わりに別上限 */
     var info = jobInfo[pk] || {};
     /* ★fix946 M3: fence 中は描かない（費用 0）。開始時の epoch を覚え、届いた時に違えば捨てる */
     var F946g = f946();
@@ -405,6 +405,7 @@
     // ★fix484: 診断タグ(mode=auto|regen)。fix484が有効なときだけ付与し、fix484が送信直前に必ず除去する
     //   （fix484不在/OFFなら付けない=外部APIへ内部フィールドを漏らさない）。秘密情報は含まない。
     try { var d484 = window.__v292Dfix484; if (d484 && d484.__armed && d484.active && d484.active()) body.__diag484 = { m: fresh403 ? 'regen' : 'auto' }; } catch(e){}
+    if (on978()){ genCount++; stats978.sends++; }   // ★fix978: provider への実送信だけを GEN_BUDGET に数える
     fetch(API, { method:'POST', headers:{ 'Authorization':'Bearer '+key, 'Content-Type':'application/json' }, body: JSON.stringify(body) })
       .then(function(r){ if(!r.ok) throw r.status; return r.json(); })
       .then(function(j){ var b=j&&j.data&&j.data[0]&&j.data[0].b64_json; if(!b) throw 'nob64';
@@ -472,6 +473,18 @@
     } catch(e){ return prov0Skip('ERR'); }
   }  // 生成と生成の最小間隔(ms)
   var genCount = 0, lastGenAt = 0, pumpTimer = null;
+  /* ★fix976（F1・GPT #127-AW Local GO）: 初回生成の起動を <img> の 404 error 待ちに依存させない。
+       端末に画像が無いキーは、サーバ URL を表示に入れるのと同時に gate（fetch で GET /img を確認）を走らせる。
+       200 → 既存どおり server（pullOnce。採用規則は従来と同じ・本 fix で採用権限は増やさない）／404 → 既存どおり生成を許可／
+       それ以外 → 既存どおり deferred。200 でも Content-Type が image/* でない応答は成功扱いしない（deferred 'HTTP_200_NONIMAGE'）。
+       同一キーの重複は gate の状態（probing/allowed/server）と cache 'pending' で防ぐ。kill: localStorage v292Dfix976Off='1'。
+     ★fix978（F4）: GEN_BUDGET は「provider へ実際に送った回数」だけで数える（従来は pump の時点で数えていたため、
+       Asset v2 判定待ちの空回りでも消費されていた）。判定待ちの再試行には別の上限 WAIT_MAX978 を設け、無限待ちにしない。
+       kill: localStorage v292Dfix978Off='1'（従来の数え方へ）。 */
+  function on976(){ try { return localStorage.getItem('v292Dfix976Off') !== '1'; } catch(e){ return false; } }
+  function on978(){ try { return localStorage.getItem('v292Dfix978Off') !== '1'; } catch(e){ return false; } }
+  var stats976 = { kicked: 0, nonImage200: 0 }, stats978 = { sends: 0, waits: 0, waitCapped: 0 };
+  var WAIT_MAX978 = 200, waitN978 = 0;
   function pump(){
     if(active >= 1 || !queue.length || pumpTimer) return;
     if(genCount >= liveGenBudget()){
@@ -483,7 +496,7 @@
     if(cache[pk] !== 'pending'){ pump(); return; }
     active++;
     var wait = Math.max(0, MIN_INTERVAL - (Date.now() - lastGenAt));
-    pumpTimer = setTimeout(function(){ pumpTimer = null; lastGenAt = Date.now(); genCount++; genOne(pk); }, wait);
+    pumpTimer = setTimeout(function(){ pumpTimer = null; lastGenAt = Date.now(); if (!on978()) genCount++; genOne(pk); }, wait);   // ★fix978: 数えるのは実送信の直前（genOne 内）
   }
 
   // ===== ★sp24/H-2: 自動生成 gate（definitive 404 だけが生成できる） =====
@@ -529,7 +542,7 @@
       var opt = { method: 'GET', cache: 'no-store' }; if (ac) opt.signal = ac.signal;
       var done = function(v){ if (timer) clearTimeout(timer); resolve(v); };
       try {
-        fetch(url, opt).then(function(r){ try { if (r.body && r.body.cancel) r.body.cancel(); } catch(e){} done(r.status); }, function(){ done(0); });
+        fetch(url, opt).then(function(r){ try { if (r.body && r.body.cancel) r.body.cancel(); } catch(e){} var ct976 = ''; try { ct976 = (r.headers && r.headers.get('content-type')) || ''; } catch(e){} if (r.status === 200 && on976() && !/^image\//i.test(ct976)){ stats976.nonImage200++; done('200_NONIMAGE'); return; } done(r.status); }, function(){ done(0); });   // ★fix976: 200 でも画像でない応答は成功扱いしない
       } catch(e){ done(0); }
     });
   }
@@ -585,7 +598,7 @@
         if (f2 && typeof f2.pullOnce === 'function') f2.pullOnce(pk, finish); else finish(false);
         return;
       }
-      gateDefer(pk, status ? ('HTTP_' + status) : 'NET_FAIL', status || null);
+      gateDefer(pk, status ? ('HTTP_' + status) : 'NET_FAIL', (typeof status === 'number' && status) ? status : null);
       applyAll();
     });
     return false;
@@ -616,6 +629,16 @@
       if (f400 && f400.enabled() && !img.__av400fail && !fresh403v) {
         var ss = f400.urlFor(pk);
         if (ss) {
+          /* ★fix976（F1）: 端末に画像が無ければ、<img> の error を待たずに gate を走らせる（下の従来経路と同じ条件・同じ gate） */
+          try {
+            if (on976() && info.prompt && cache[pk] !== 'pending' && cache[pk] !== 'dice'){
+              var pe976 = persistGet(pk);
+              if (!(pe976 && pe976.indexOf('data:') === 0)){
+                var Fq976 = f946();
+                if (!(Fq976 && Fq976.quarantining && Fq976.quarantining()) && genGateAllows(pk)){ cache[pk] = 'pending'; queue.push(pk); stats976.kicked++; pump(); }
+              }
+            }
+          } catch(e976){}
           if (img.getAttribute('src') !== ss) {
             img.onerror = function(){ this.onerror = null; this.__av400fail = 1; try { var nm2 = this.getAttribute('alt') || (jobInfo[pk] && jobInfo[pk].name) || 'character'; var loc2 = cache[pk]; if (!(typeof loc2 === 'string' && loc2.indexOf('data:') === 0)) { var pe2 = persistGet(pk); loc2 = (pe2 && pe2.indexOf('data:') === 0) ? pe2 : ''; } this.src = loc2 || diceUrl(nm2); } catch(e){} };  // ★fix400c: 生成経路に落とさずローカル(cache/persist)→DiceBearへ。再生成による絵柄変化を防止。
             img.src = ss;
@@ -805,7 +828,7 @@
     resolveVariant764: resolveVariant764,   // ★fix764: 検証口(字形差→登録済み表示形・icon局所)
     __test_state: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; return { pk:pk, pending:(c==='pending'), dice:(c==='dice'), dataUrl:(typeof c==='string'&&c.indexOf('data:')===0), queued:(queue.indexOf(pk)>=0), hasJob:!!jobInfo[pk], jobPrompt:(jobInfo[pk]&&jobInfo[pk].prompt)||'', gate: genGate[pk] || null }; }catch(e){ return null; } },
     /* ★sp24/H-2: 生成 gate の観測口（read-only） */
-    genGate: function(){ var o = {}; for (var k in genGate) o[k] = genGate[k]; return { keys: o, stats: JSON.parse(JSON.stringify(gateStats)), genCount: genCount, iconS2: s2On197(), s2stats: JSON.parse(JSON.stringify(s2stats197)), avProv: prov0On(), provStats: JSON.parse(JSON.stringify(prov0stats)) }; },
+    genGate: function(){ var o = {}; for (var k in genGate) o[k] = genGate[k]; return { keys: o, stats: JSON.parse(JSON.stringify(gateStats)), genCount: genCount, f976: { on: on976(), kicked: stats976.kicked, nonImage200: stats976.nonImage200 }, f978: { on: on978(), sends: stats978.sends, waits: stats978.waits, waitCapped: stats978.waitCapped }, iconS2: s2On197(), s2stats: JSON.parse(JSON.stringify(s2stats197)), avProv: prov0On(), provStats: JSON.parse(JSON.stringify(prov0stats)) }; },
     cachedFor: function(name){ try{ if (fenced946()) return ''; var pk=keyFor(name); var c=cache[pk]; if(typeof c==='string'&&c.indexOf('data:')===0) return c; var p=persistGet(pk); return (p&&p.indexOf('data:')===0)?p:''; }catch(e){ return ''; } },
     /* ★fix579: 削除候補の列挙に Object.keys(localStorage) を使わない。
        ラッパが localStorage.removeItem = wrapped と代入するため、**メソッド名が own property として

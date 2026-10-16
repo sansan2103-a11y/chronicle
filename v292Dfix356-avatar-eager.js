@@ -33,6 +33,7 @@
 
   var SELECTORS = '.v292-dlg-card img, .conv-card img, .conv-log-item img, [class*="dlg-card"] img, [class*="conv-card"] img';
   var blobCache = {};
+  var stats977 = { skipped: 0 };   // ★fix977
   var RECHECK_MS = 300;   // ★fix450: 保険の判定までの猶予(data:/blob: は即時デコードされる)
 
   function isCDN(u){
@@ -67,7 +68,17 @@
       setTimeout(function(){
         try {
           // 本当にロードされなかった時だけ保険を撃つ(1回きり。Doneフラグは立ったまま)
-          if (img.isConnected && !img.naturalWidth) rebind(img, src);
+          if (img.isConnected && !img.naturalWidth){
+            /* ★fix977（F2・GPT #127-AW Local GO）: 次の場合は保険の付け直しをしない。
+                 ・サーバ画像（workers.dev/img）… 読み込みは eager で進んでいる。付け直すと読み込みが最初からやり直しになり、
+                   404 の error が出ないまま fix197 の gate（初回生成）を遅らせていた（本番 QA で最大 85.7 秒）
+                 ・fix197 がサーバ画像を失敗と判定済み（__av400fail）… 404 の URL を再投入して仮アイコンと往復していた
+                 ・付け直す値が今の src と違う（別の書き手が既に次の値へ進めた）… 古い値の再投入になる
+               data:／blob: の遅延読み込み対策（本来の目的）はそのまま。kill: localStorage v292Dfix977Off='1'。 */
+            var skip977 = false;
+            try { if (localStorage.getItem('v292Dfix977Off') !== '1'){ var cur977 = img.getAttribute('src') || ''; skip977 = /workers\.dev\/img\?/.test(src) || !!img.__av400fail || cur977 !== src; if (skip977) stats977.skipped++; } } catch(e977){ skip977 = false; }
+            if (!skip977) rebind(img, src);
+          }
         } catch(e){}
       }, RECHECK_MS);
       return;
@@ -135,7 +146,7 @@
   // 検証口(挙動テスト用。UIは作らない)
   try {
     window.__v292Dfix356 = {
-      fixImg: fixImg, scan: scan, off: off, off450: off450, isCDN: isCDN, RECHECK_MS: RECHECK_MS
+      fixImg: fixImg, scan: scan, off: off, off450: off450, isCDN: isCDN, RECHECK_MS: RECHECK_MS, stats977: function(){ return { on: (function(){ try { return localStorage.getItem('v292Dfix977Off') !== '1'; } catch(e){ return false; } })(), skipped: stats977.skipped }; }
     };
   } catch(e){}
 
