@@ -48,6 +48,10 @@
   function artNow(){ try { var f = f197(); if (f && f.artStyleNow) return String(f.artStyleNow()); } catch(e){} return '0'; }
   function canon(n){ try { var f = f197(); var c = f && f.canonName ? f.canonName(n) : n; return f && f.resolveVariant764 ? f.resolveVariant764(c) : c; } catch(e){ return String(n || ''); } }
   function pkS(sid, token, art){ return 'r1_' + token + '_a' + art + '_s' + hash(sid); }
+  /* ★r2（GPT #127-BX 案 A）：採用キーから画風を外す。画風（cfg.artStyle）は端末ごとの設定で、物語の正本に入らない
+     （fix697／fix719 の allowlist が除外）。画風をキーに含めると、端末で画風が違うだけで別のキーを探してしまう（本番 BUNDLE17 で実測：iPhone a0／PC a6）。
+     新しく採用した絵は ax に保存する。BUNDLE17 で書かれた a<数字> のキーは読み取りだけ互換にする（移行・削除・複製はしない）。 */
+  function pkX(sid, token){ return 'r1_' + token + '_ax_s' + hash(sid); }
 
   /* ---------- 人物の識別（名前だけで推測しない） ---------- */
   function resolve(nameCanon){
@@ -85,7 +89,8 @@
       if (!any) return '';
       if (av2Doc() === true) return '';
       var r = resolve(nameCanon); if (!r.ok) return '';
-      var e = m[ledKey(sid, r.token, String(art))];
+      /* 優先順：ax（画風に依存しない採用）→ L（manifest で 1 件だけ見つかった旧 a<数字> のキー）→ この端末が BUNDLE17 で採用した a<今の画風> */
+      var e = m[ledKey(sid, r.token, 'x')] || m[ledKey(sid, r.token, 'L')] || m[ledKey(sid, r.token, String(art))];
       return (e && e.pk) ? e.pk : '';
     } catch(e){ return ''; }
   }
@@ -160,17 +165,17 @@
       if (fenced() || av2Doc() === true) return done({ ok: false, why: 'notready' });
       var sid = storyId(), art = artNow(), r = resolve(canon(cand.name));
       if (cand.ep !== epoch() || cand.sid !== sid || cand.art !== art || !r.ok || r.token !== cand.token) return done({ ok: false, why: 'changed' });
-      var pk = pkS(sid, cand.token, art), hsh = F.hashFull(cand.data);
+      var pk = pkX(sid, cand.token), hsh = F.hashFull(cand.data);   // ★r2：保存先は画風に依存しない ax
       F.fetchManifest(function(man){
         if (!man) return done({ ok: false, why: 'offline' });
         if (cand.ep !== epoch()) return done({ ok: false, why: 'changed' });
         var srv = man[PREFIX + pk]; var base = srv ? (+srv.rev || 0) : 0;
-        lss(JRN, JSON.stringify({ cid: cand.id, slot: cand.slot, pk: pk, sid: sid, token: cand.token, art: art, hash: hsh, state: 'sending', at: Date.now() }));
+        lss(JRN, JSON.stringify({ cid: cand.id, slot: cand.slot, pk: pk, sid: sid, token: cand.token, art: art, ax: 1, hash: hsh, state: 'sending', at: Date.now() }));
         F.putScoped(pk, cand.data, base, sid, function(res){
           if (res && res.ok && res.j && res.j.imageRev != null){
             try { F.revSetExt(pk, res.j.imageRev); } catch(e){}
             try { F.markRecv(pk); } catch(e){}
-            ledSet(sid, cand.token, art, { pk: pk, rev: res.j.imageRev, hash: hsh, at: Date.now() }); ledCache = null;
+            ledSet(sid, cand.token, 'x', { pk: pk, rev: res.j.imageRev, hash: hsh, at: Date.now() }); ledCache = null;
             G.adoptLocal(pk, cand.data);
             lsd(JRN); candDel(cand.slot); stats.adopted++;
             try { G.sweep && G.sweep(); } catch(e){}
@@ -192,8 +197,8 @@
       var srv = man[PREFIX + J.pk];
       if (srv && String(srv.hash) === String(J.hash)){
         try { F.revSetExt(J.pk, +srv.rev || 0); } catch(e){}
-        ledSet(J.sid, J.token, J.art, { pk: J.pk, rev: +srv.rev || 0, hash: J.hash, at: Date.now() }); ledCache = null;
-        candGet(J.slot).then(function(c){ if (c && c.data && J.sid === storyId() && J.art === artNow()){ try { F.markRecv(J.pk); } catch(e){} G.adoptLocal(J.pk, c.data); } candDel(J.slot); });
+        ledSet(J.sid, J.token, J.ax ? 'x' : J.art, { pk: J.pk, rev: +srv.rev || 0, hash: J.hash, at: Date.now() }); ledCache = null;
+        candGet(J.slot).then(function(c){ if (c && c.data && J.sid === storyId() && (J.ax || J.art === artNow())){ try { F.markRecv(J.pk); } catch(e){} G.adoptLocal(J.pk, c.data); } candDel(J.slot); });
         stats.recovered++; lsd(JRN);
         try { G.sweep && G.sweep(); } catch(e){}
       } else { lsd(JRN); }   // 採用されていない → 候補は残したまま（自動では送り直さない）
@@ -208,12 +213,25 @@
     F.fetchManifest(function(man){
       if (!man || storyId() !== sid) return;
       var names = []; try { if (c.hero && c.hero.name) names.push(c.hero.name); (c.npcs || []).forEach(function(n){ if (n && n.name) names.push(n.name); }); } catch(e){}
-      var added = 0, m = ledger();
+      var added = 0, m = ledger(), suf = '_s' + hash(sid);
+      function up(token, tag, pk, srv){
+        var lk = ledKey(sid, token, tag), cur = m[lk];
+        if (!cur || cur.pk !== pk || (+srv.rev || 0) > (+cur.rev || 0)){ m[lk] = { pk: pk, rev: +srv.rev || 0, hash: String(srv.hash || ''), at: Date.now() }; added++; }
+      }
       names.forEach(function(n){
         var r = resolve(canon(n)); if (!r.ok) return;
-        var pk = pkS(sid, r.token, art), srv = man[PREFIX + pk]; if (!srv) return;
-        var lk = ledKey(sid, r.token, art), cur = m[lk];
-        if (!cur || (+srv.rev || 0) > (+cur.rev || 0)){ m[lk] = { pk: pk, rev: +srv.rev || 0, hash: String(srv.hash || ''), at: Date.now() }; added++; }
+        /* ★r2：ax があればそれだけを使う */
+        var px = pkX(sid, r.token), sx = man[PREFIX + px];
+        if (sx){ up(r.token, 'x', px, sx); return; }
+        /* ★r2：ax が無いときだけ、BUNDLE17 の a<数字> を画風を問わず探す（この物語のこの人物に限る）。
+           1 件だけなら使う。2 件以上なら自動では選ばない（競合として数えるだけ。台帳も表示も変えない） */
+        var pre = PREFIX + 'r1_' + r.token + '_a', found = [];
+        for (var k in man){
+          if (k.indexOf(pre) !== 0 || k.length <= pre.length + suf.length || k.slice(-suf.length) !== suf) continue;
+          if (/^\d+$/.test(k.slice(pre.length, k.length - suf.length))) found.push(k);
+        }
+        if (found.length === 1){ up(r.token, 'L', found[0].slice(PREFIX.length), man[found[0]]); }
+        else if (found.length > 1){ stats.legacyConflict = (stats.legacyConflict || 0) + 1; }
       });
       if (added){ lss(LED, JSON.stringify(m)); ledCache = null; stats.discovered += added; try { G.sweep && G.sweep(); } catch(e){} try { F.recvSweep && F.recvSweep(); } catch(e){} }
     });
@@ -335,7 +353,7 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true }); else boot();
 
   window.__v292DfixRC = {
-    __armed: true, version: 'fixRC-r1', on: on, scopedFor: scopedFor, resolve: resolve, pkS: pkS, storyId: storyId,
+    __armed: true, version: 'fixRC-r2', on: on, scopedFor: scopedFor, resolve: resolve, pkS: pkS, storyId: storyId,
     discover: discover, recover: recover, openFlow: openFlow, ledger: ledger, journal: journal,
     stats: function(){ return JSON.parse(JSON.stringify(stats)); }
   };
