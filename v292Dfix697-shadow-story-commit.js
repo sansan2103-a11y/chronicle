@@ -124,21 +124,47 @@
        marker が DIRTY かつ lastConfirmed.serverRev があり、fresh server rev がそれと違い、server 内容 != 送る内容
        → write 0 / Recovery Draft（server record 同梱）/ marker DIVERGED / banner（fix705 toHold と同じ 3 点）/ この document は hold。 */
   function f910Off(){ return lsg('v292Dfix910Off') === '1'; }
-  var f910 = { checks: 0, holds: 0, noLc: 0, atBase: 0, noProgress: 0, lastHold: null, lastNoProgress: null };
+  /* ■fix910c（GPT #127-CK・P0 候補：何も変更していない古い端末が、新しい canonical を古い内容で上書きする）
+     従来の f910Check は marker が DIRTY のときしか働かず、CLEAN だと素通し → canonicalCommit が直前の fresh getstory の
+     rev／hash で CAS を送るため、「古い local で最新を上書き」になっていた（Local 模擬 hs5 idle で再現）。
+     CLEAN（＝この端末には未送信の変更が無い）でも、最後に確かめた正本（lastConfirmed）・今のサーバ・今の local の 3 つで判定する：
+       サーバが lastConfirmed のまま        ＋ local 変更なし → ここには来ない（収束済みで write 0）
+       サーバが lastConfirmed から進んだ    ＋ local 変更なし → write 0（古い本文を書き戻さない。lastConfirmed は更新しない）
+       サーバが lastConfirmed から進んだ    ＋ local 変更あり → 書込停止・DIVERGED・Draft（従来の hold と同じ）
+       サーバが lastConfirmed のまま        ＋ local 変更あり → 従来どおり CAS 保存へ進む
+       CLEAN で lastConfirmed が無い／不明  → 推測で PUT しない（write 0）
+     kill: localStorage v292Dfix910cOff='1'（従来の DIRTY だけの判定へ戻る）。 */
+  function f910cOff(){ return lsg('v292Dfix910cOff') === '1'; }
+  var f910 = { checks: 0, holds: 0, noLc: 0, atBase: 0, noProgress: 0, lastHold: null, lastNoProgress: null,
+               cleanChecks: 0, cleanNoLc: 0, cleanAheadNoWrite: 0, cleanAheadHold: 0 };
   function f910Check(id, srvRev, localHash){
     try {
       if (f910Off()) return null;
       f910.checks++;
       var G = g781(); var m = (G && typeof G.marker === 'function') ? G.marker(id) : null;
-      if (!m || (m.state !== 'DIRTY_INTENT' && m.state !== 'DIRTY_LOCAL')) return null;
+      if (!m) return null;                                                           /* marker なし＝従来どおり */
+      var dirty = (m.state === 'DIRTY_INTENT' || m.state === 'DIRTY_LOCAL');
+      var clean = (m.state === 'CLEAN' && !f910cOff());
+      if (!dirty && !clean) return null;
+      if (clean) f910.cleanChecks++;
       var lc = m.lastConfirmed;
-      if (!lc || typeof lc.serverRev !== 'number'){ f910.noLc++; return null; }   /* 従来どおり（新端末 bootstrap 等） */
+      if (!lc || typeof lc.serverRev !== 'number'){
+        if (clean){ f910.cleanNoLc++; return { noProgress: true, lcRev: null, clean: true, why910c: 'CLEAN_NO_BASE' }; }
+        f910.noLc++; return null;                                                    /* 従来どおり（新端末 bootstrap 等） */
+      }
       if (lc.serverRev === srvRev){ f910.atBase++; return null; }
       /* ■fix910b: local の canonical 内容が lastConfirmed そのまま（canonical 外 field の書込で DIRTY になっただけ）なら、
          送るものは無い。上書きもしないし、衝突（DIVERGED）にもしない（write 0 だけ。marker は fix898 が CLEAN に戻す）。 */
-      if (lc.fingerprint != null && localHash != null && String(localHash) === String(lc.fingerprint))
-        return { noProgress: true, lcRev: lc.serverRev };
-      return { lcRev: lc.serverRev, lcFp: (lc.fingerprint == null ? null : String(lc.fingerprint)), gen: m.localGeneration };
+      if (lc.fingerprint != null && localHash != null && String(localHash) === String(lc.fingerprint)){
+        if (clean) f910.cleanAheadNoWrite++;
+        return { noProgress: true, lcRev: lc.serverRev, clean: clean };
+      }
+      if (clean){
+        f910.cleanAheadHold++;
+        /* CLEAN なのに local が lastConfirmed と違い、しかもサーバが進んでいる：どちらが正しいか決められない → 書かずに守る */
+        if (lc.fingerprint == null) return { noProgress: true, lcRev: lc.serverRev, clean: true, why910c: 'CLEAN_NO_FP' };
+      }
+      return { lcRev: lc.serverRev, lcFp: (lc.fingerprint == null ? null : String(lc.fingerprint)), gen: m.localGeneration, clean: clean };
     } catch(e){ return null; }
   }
   /* ■fix911 v2（SA-3 S2・roster307 限定、kill v292Dfix911Off）— GPT 裁定: 弱い hash を merge の根拠にしない。
@@ -2901,7 +2927,13 @@
     try {
       if (f697qOff() || lastFp != null) return;
       var f0 = on() ? fp() : null;           /* storyId（__chronicleDocumentStoryKey）が立つ前は null */
-      if (f0 != null){ lastFp = f0; return; }
+      /* ■fix697q2（GPT #127-CK・B）：sidecar のキーを返す fix743（__v292DfixCC2.keysFor）が読み込まれる前に基準を取ると、
+         最初の poll で指紋が変わったと誤判定して、開いてから約 30 秒後に変化のない commit が走る。
+         fix743 が使えるようになってから（または fix781b が OFF のとき）基準を取る。最大 10 秒待って、それでも無ければ従来どおり。
+         kill: v292Dfix697q2Off='1'。 */
+      var q2Off = false; try { q2Off = lsg('v292Dfix697q2Off') === '1'; } catch(eQ){}
+      var ccReady = q2Off || f781bOff() || !!(window.__v292DfixCC2 && typeof window.__v292DfixCC2.keysFor === 'function');
+      if (f0 != null && (ccReady || f697qBaseTries >= 40)){ lastFp = f0; return; }
       if (++f697qBaseTries < 120) setTimeout(f697qBaseline, 250);   /* captureInitialLocalHash と同じ 250ms × 120 */
     } catch(e){}
   }
