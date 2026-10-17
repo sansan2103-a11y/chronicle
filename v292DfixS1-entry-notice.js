@@ -38,6 +38,7 @@
     box.appendChild(el('div', 'font-weight:700;margin-bottom:4px', 'Chronicle の入口が新しくなりました'));
     box.appendChild(el('div', '', '今後は新しい入口（chronicle-app.pages.dev）をご利用ください。'));
     box.appendChild(el('div', 'color:#b9b4d9;font-size:12px;margin-top:4px', 'この入口に保存された端末内データは、新しい入口へ自動では引き継がれません。この案内によって削除されることはなく、この入口（github.io）でも引き続き確認できます。'));
+    box.appendChild(el('div', 'color:#f0d68a;font-size:12px;margin-top:4px', '旧入口に保存された物語やシナリオは、新しい入口には自動で表示されません。現在、移行方法を準備していますので、旧入口のデータは削除せずにお待ちください。'));
     var row = el('div', 'display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-wrap:wrap');
     var go = el('a', 'background:#6d5df0;color:#fff;border-radius:8px;padding:8px 14px;text-decoration:none;font-weight:700', '新しい入口で開く');
     go.href = officialUrl(location); go.rel = 'noopener';
@@ -55,6 +56,6 @@
     if (dismissed()){ stats.skipped = 'dismissed'; return; }
     show();
   }
-  window.__v292DfixS1 = { __armed: true, version: 'fixS1-r2', officialUrl: officialUrl, isLegacyHost: isLegacyHost, stats: function(){ return JSON.parse(JSON.stringify(stats)); } };
+  window.__v292DfixS1 = { __armed: true, version: 'fixS1-r3', officialUrl: officialUrl, isLegacyHost: isLegacyHost, stats: function(){ return JSON.parse(JSON.stringify(stats)); } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();
