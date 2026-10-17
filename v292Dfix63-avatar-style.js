@@ -90,18 +90,25 @@ setTimeout(inject, 2000);
  *   ・対象は「人の顔の絵」だけ: 実画像（data:png/jpeg/webp・blob:・サーバ画像）で、fix487 の汎用ラベル（???／人影 等）でなく、
  *     外見記録（fix766・読み取りだけ）が HUMAN か、記録が無く登録キャストの名前のもの。人外・仮アイコン（SVG）・シルエットは対象外。
  *   ・目印は img の data-f979="1"（この属性が無ければ従来と同じ表示）。
- *   kill: localStorage v292Dfix979Off='1'（目印を外し、従来の表示に戻る）。調整: v292Dfix979Scale（1.0〜1.8、既定 1.4）。 */
+ *   kill: localStorage v292Dfix979Off='1'（目印を外し、従来の表示に戻る）。調整: v292Dfix979Scale（1.0〜1.8、既定 1.15 ＝ fix982）。 */
 (function v292Dfix979(){
   if (window.__v292Dfix979) return;
   var ST_ID = 'v292Dfix979-face-zoom';
   var stats = { marked: 0, skippedNonHuman: 0, skippedPlaceholder: 0 };
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix979Off') === '1'; }
-  function scale(){ var v = parseFloat(lsg('v292Dfix979Scale')); return (isFinite(v) && v >= 1 && v <= 1.8) ? v : 1.4; }
+  // ★fix982 r2（GPT #127-BE）：iPhone 幅（<768px＝円 56px）だけ既定 1.15・基点 50% 30%。PC（>=768px＝円 72px）は BUNDLE12 と同じ 1.4・50% 28% のまま。
+  //   境界 768px は fix63 本体の 56px／72px の切り替えと同じ。v292Dfix979Scale（1.0〜1.8）を置いた端末では、両方ともその値になる。
+  function override(){ var v = parseFloat(lsg('v292Dfix979Scale')); return (isFinite(v) && v >= 1 && v <= 1.8) ? v : null; }
+  function scaleSp(){ var o = override(); return o != null ? o : 1.15; }
+  function scalePc(){ var o = override(); return o != null ? o : 1.4; }
+  function scale(){ return scaleSp(); }
+  function rule(sc, org){ return '.v292-dlg-card .dlg-av img[data-f979="1"] { transform: scale(' + sc + ') !important; transform-origin: ' + org + ' !important;'
+         + ' filter: brightness(1.12) contrast(1.06) !important; }'; }
   function css(){
     return '.v292-dlg-card .dlg-av { box-shadow: 0 0 0 1.5px rgba(200,190,255,.30) !important; }\n'
-         + '.v292-dlg-card .dlg-av img[data-f979="1"] { transform: scale(' + scale() + ') !important; transform-origin: 50% 28% !important;'
-         + ' filter: brightness(1.12) contrast(1.06) !important; }';
+         + rule(scaleSp(), '50% 30%') + '\n'
+         + '@media (min-width: 768px) { ' + rule(scalePc(), '50% 28%') + ' }';
   }
   function ensureStyle(){
     var el = document.getElementById(ST_ID);
@@ -147,7 +154,7 @@ setTimeout(inject, 2000);
   }
   setInterval(sweep, 1500);
   setTimeout(sweep, 300);
-  window.__v292Dfix979 = { sweep: sweep, stats: function(){ return { on: !off(), scale: scale(), marked: stats.marked, skippedNonHuman: stats.skippedNonHuman, skippedPlaceholder: stats.skippedPlaceholder }; } };
+  window.__v292Dfix979 = { sweep: sweep, stats: function(){ return { on: !off(), scale: scale(), scaleSp: scaleSp(), scalePc: scalePc(), marked: stats.marked, skippedNonHuman: stats.skippedNonHuman, skippedPlaceholder: stats.skippedPlaceholder }; } };
 })();
 })();
 

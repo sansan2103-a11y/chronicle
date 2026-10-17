@@ -34,6 +34,14 @@
   var SELECTORS = '.v292-dlg-card img, .conv-card img, .conv-log-item img, [class*="dlg-card"] img, [class*="conv-card"] img';
   var blobCache = {};
   var stats977 = { skipped: 0 };   // ★fix977
+  function known404_981(img){
+    try {
+      var pk = img.getAttribute('data-avpk'); if (!pk) return false;
+      var f = window.__v292Dfix197; if (!f || typeof f.genGate !== 'function') return false;
+      var g = f.genGate().keys[pk];
+      return !!(g && (g.st === 'ok404' || g.st === 'allowed'));
+    } catch(e){ return false; }
+  }
   var RECHECK_MS = 300;   // ★fix450: 保険の判定までの猶予(data:/blob: は即時デコードされる)
 
   function isCDN(u){
@@ -76,7 +84,11 @@
                  ・付け直す値が今の src と違う（別の書き手が既に次の値へ進めた）… 古い値の再投入になる
                data:／blob: の遅延読み込み対策（本来の目的）はそのまま。kill: localStorage v292Dfix977Off='1'。 */
             var skip977 = false;
-            try { if (localStorage.getItem('v292Dfix977Off') !== '1'){ var cur977 = img.getAttribute('src') || ''; skip977 = /workers\.dev\/img\?/.test(src) || !!img.__av400fail || cur977 !== src; if (skip977) stats977.skipped++; } } catch(e977){ skip977 = false; }
+            try { if (localStorage.getItem('v292Dfix977Off') !== '1'){ var cur977 = img.getAttribute('src') || ''; skip977 = !!img.__av400fail || cur977 !== src || (/workers\.dev\/img\?/.test(src) && known404_981(img)); if (skip977) stats977.skipped++; } } catch(e977){ skip977 = false; }
+            /* ★fix981（r2・2026-10-17 Owner の iPhone 観測）: サーバ画像（workers.dev/img）を一律に付け直し対象から外すと、
+                 iPhone（WebKit）で、サーバにある画像が読み込まれないまま残った（P5 の早瀬・圭吾）。付け直しはもともと WebKit の
+                 遅延読み込み対策なので、サーバに画像が「無い」と分かったキー（gate が 404 を確認＝ok404／allowed）だけを外す。
+                 サーバに画像がある・まだ分からないキーは BUNDLE10 と同じく付け直す。kill は従来どおり v292Dfix977Off='1'。 */
             if (!skip977) rebind(img, src);
           }
         } catch(e){}

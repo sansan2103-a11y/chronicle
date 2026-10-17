@@ -631,7 +631,10 @@
         if (ss) {
           /* ★fix976（F1）: 端末に画像が無ければ、<img> の error を待たずに gate を走らせる（下の従来経路と同じ条件・同じ gate） */
           try {
-            if (on976() && info.prompt && cache[pk] !== 'pending' && cache[pk] !== 'dice'){
+            /* ★fix976 r2（2026-10-17・WebKit 再現で発見）: 未ログイン（anon）の端末では gate がサーバを確認せずに生成を許すので、
+                 F1 を通すと「サーバに画像があるのに生成する」になる（端末にサーバの ns だけが残っている場合）。anon では F1 を使わない
+                 （従来どおり、サーバ画像が読めなかった時だけ下の経路で判断する）。 */
+            if (on976() && info.prompt && cache[pk] !== 'pending' && cache[pk] !== 'dice' && gateIdentity() !== 'anon'){
               var pe976 = persistGet(pk);
               if (!(pe976 && pe976.indexOf('data:') === 0)){
                 var Fq976 = f946();
