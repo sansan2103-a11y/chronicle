@@ -227,6 +227,9 @@
   function keyFor(name){
     /* ★fix764: canonName で解決しなかった字形差だけの別名を、登録済み表示形へ寄せてからキー化する */
     var base = 'n' + hash(resolveVariant764(canonName(name)) + '|' + artStyle());
+    /* ★fixRC（GPT #127-BT・R1-min）：この物語のこの人物に「候補から採用した絵」があれば、物語・人物ごとのキーを使う。
+       無ければ従来どおり（kill: v292DfixRCOff='1' で scopedFor は常に ''）。名前だけで人物を推測しない（RC 側で fail-closed）。 */
+    try { var RC = window.__v292DfixRC; if (RC && typeof RC.scopedFor === 'function'){ var sk = RC.scopedFor(resolveVariant764(canonName(name)), artStyle()); if (sk) return sk; } } catch(eRC){}
     try {
       if (localStorage.getItem('v292Dfix493OnV1') === '1' && localStorage.getItem('v292Dfix493Off') !== '1') {
         var f487 = window.__v292Dfix487;   // live参照(fix487はfix197より後にロード＝固定禁止)
@@ -827,6 +830,9 @@
   window.__v292Dfix197 = { sweep: sweep, fixImg: fixImg, diceUrl: diceUrl, pollKey: pollKey, regenFor: regenFor, buildPrompt412: buildPrompt412, buildCurrentAppearancePrompt: buildCurrentAppearancePrompt, restorePreviousOrDice: restorePreviousOrDice,
     // v292Dfix209: 書き手(fix66等)が初期srcに使うキャッシュ済みdata:URLの取得口
     keyFor: keyFor,
+    /* ★fixRC: 候補を採用したときだけ使う書き込み口（サーバの CAS 成功後に呼ぶ）。fence 中は書かない */
+    adoptLocal: function(pk, d){ try { if (fenced946() || !pk || String(d||'').indexOf('data:') !== 0) return false; cache[pk] = d; persistSet(pk, d); applyAll(); return true; } catch(e){ return false; } },
+    artStyleNow: function(){ return artStyle(); },
     canonName: canonName,   // ★fix424: 検証口(呼称→正名)
     resolveVariant764: resolveVariant764,   // ★fix764: 検証口(字形差→登録済み表示形・icon局所)
     __test_state: function(name){ try{ var pk=keyFor(name); var c=cache[pk]; return { pk:pk, pending:(c==='pending'), dice:(c==='dice'), dataUrl:(typeof c==='string'&&c.indexOf('data:')===0), queued:(queue.indexOf(pk)>=0), hasJob:!!jobInfo[pk], jobPrompt:(jobInfo[pk]&&jobInfo[pk].prompt)||'', gate: genGate[pk] || null }; }catch(e){ return null; } },

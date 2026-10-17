@@ -328,6 +328,19 @@
     hold960: function(){ return JSON.parse(JSON.stringify(hold960)); },
     __armed: true, on: on, smallHash: smallHash, hashFull: hashFull,
     recvSweep: recvSweep, flushSend: flushSend, pullOne: pullOne, pushOne: pushOne,
+    /* ★fixRC（GPT #127-BT）：候補を採用するときの CAS 送信口。自動再送しない・409 はそのまま返す */
+    revGetExt: revGet, revSetExt: revSet, markRecv: function(pk){ recvMark[pk] = 1; }, fetchManifest: fetchManifest,
+    putScoped: function(pk, data, baseRev, storyId, cb){
+      cb = cb || function(){};
+      try {
+        if (!on() || !_fetch || fenced946() || !loggedIn() || !identityValid()){ cb({ ok: false, reason: 'not-ready' }); return; }
+        sending[pk] = 1;
+        _fetch(proxyUrl() + '/save', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ op: 'putimg', k: PREFIX + pk, data: data, baseImageRev: +baseRev || 0, storyId: String(storyId || '') }) })
+          .then(function(r){ return r.json().catch(function(){ return null; }).then(function(j){ return { status: r.status, j: j }; }); })
+          .then(function(res){ delete sending[pk]; cb({ ok: !!(res.j && res.j.ok), status: res.status, j: res.j }); })
+          .catch(function(e){ delete sending[pk]; cb({ ok: false, reason: 'network' }); });
+      } catch(e){ try { delete sending[pk]; } catch(_){} cb({ ok: false, reason: 'exception' }); }
+    },
     revMap: revMap, revGet: revGet,
     /* ★fix655(2026-08-01): revSet を公開。fix633 の rev-only 採用が
        `typeof f.revSet === 'function'` ガードで無言の no-op になっていた真因（公開し忘れ）。
