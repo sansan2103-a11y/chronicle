@@ -133,16 +133,57 @@
        サーバが lastConfirmed から進んだ    ＋ local 変更あり → 書込停止・DIVERGED・Draft（従来の hold と同じ）
        サーバが lastConfirmed のまま        ＋ local 変更あり → 従来どおり CAS 保存へ進む
        CLEAN で lastConfirmed が無い／不明  → 推測で PUT しない（write 0）
-     kill: localStorage v292Dfix910cOff='1'（従来の DIRTY だけの判定へ戻る）。 */
+     kill: localStorage v292Dfix910cOff='1'（従来の DIRTY だけの判定へ戻る）。
+     ■fix910c r2（GPT #127-CL：marker の有無に依存しない最終 PUT 前の鮮度チェック）
+     boot で baseline marker が作られなかった document（fix896b の skip：journal 残り・in-flight・SAME_HASH 以外の判定など）では、
+     local を変更すると markIntent が lastConfirmed の無い DIRTY marker を作り、従来は「新端末 bootstrap」扱いで素通し
+     → 直前の fresh getstory を CAS base にして、別端末が進めた最新を上書きしていた（Local 模擬 hs5 nomarker case 2 で再現）。
+     lastConfirmed が無いときは、この document が boot 時に fix705 で実測した server（rev／hash）を基準にする：
+       fresh server rev == boot rev ＋ boot 時 local == boot server hash（SAME_HASH で開いた）→ 従来どおり CAS
+       fresh server rev == boot rev ＋ boot 時 local != boot server hash                       → 書込停止・DIVERGED・Draft
+         （GPT #127-CM：rev が動いていないことは「boot 時の local が server と同じだった」証明にならない。
+           lastConfirmed なしで、boot 時点ですでに違っていた local を CAS で送らない＝fail-closed）
+       fresh server rev != boot rev ＋ local == boot hash → write 0（送るものが無い）
+       fresh server rev != boot rev ＋ local != boot hash → 書込停止・DIVERGED・Draft（従来の hold と同じ）
+       boot の実測が無い                                   → 推測で PUT しない（write 0・local は保持）
+     marker 自体が読めない（書込失敗など）ときも同じ規則。fix781 が off のときと v292Dfix910cOff='1' のときは従来どおり。 */
+  function f910BootBase(id){
+    try {
+      var F5 = window.__v292Dfix705; var st = (F5 && typeof F5.status === 'function') ? F5.status() : null; var s5 = st && st.state;
+      if (!s5) return null;
+      if (String(st.storyId == null ? (s5.storyId == null ? '' : s5.storyId) : st.storyId) !== String(id)) return null;
+      if (typeof s5.serverRev !== 'number') return null;
+      return { rev: s5.serverRev, hash: (s5.serverHash ? String(s5.serverHash) : null), lhash: (s5.localHash ? String(s5.localHash) : null), verdict: s5.verdict || null };
+    } catch(e){ return null; }
+  }
+  function f910NoBase(id, srvRev, localHash, m, why){
+    f910.noBaseChecks++;
+    var b = f910BootBase(id);
+    if (!b){ f910.noBaseNoBoot++; return { noProgress: true, lcRev: null, why910c: why + '_NO_BOOT_BASE' }; }
+    if (b.rev === srvRev){
+      if (b.hash != null && b.lhash != null && b.lhash === b.hash){ f910.noBaseAtBoot++; return null; }
+      f910.noBaseBootDiff++;
+      return { lcRev: b.rev, lcFp: b.hash, gen: (m ? m.localGeneration : null), clean: false, why910c: why + '_BOOT_NOT_SAME_HASH' };
+    }
+    if (b.hash != null && localHash != null && String(localHash) === b.hash){
+      f910.noBaseNoWrite++; return { noProgress: true, lcRev: b.rev, why910c: why + '_LOCAL_AT_BOOT' }; }
+    f910.noBaseHold++;
+    return { lcRev: b.rev, lcFp: b.hash, gen: (m ? m.localGeneration : null), clean: false, why910c: why + '_SERVER_AHEAD_OF_BOOT' };
+  }
   function f910cOff(){ return lsg('v292Dfix910cOff') === '1'; }
   var f910 = { checks: 0, holds: 0, noLc: 0, atBase: 0, noProgress: 0, lastHold: null, lastNoProgress: null,
-               cleanChecks: 0, cleanNoLc: 0, cleanAheadNoWrite: 0, cleanAheadHold: 0 };
+               cleanChecks: 0, cleanNoLc: 0, cleanAheadNoWrite: 0, cleanAheadHold: 0,
+               noBaseChecks: 0, noBaseNoBoot: 0, noBaseAtBoot: 0, noBaseBootDiff: 0, noBaseNoWrite: 0, noBaseHold: 0 };
   function f910Check(id, srvRev, localHash){
     try {
       if (f910Off()) return null;
       f910.checks++;
       var G = g781(); var m = (G && typeof G.marker === 'function') ? G.marker(id) : null;
-      if (!m) return null;                                                           /* marker なし＝従来どおり */
+      if (!m){
+        /* ■fix910c r2: marker が読めない＝基準が無い。fix781 off（完全従来）と kill のときだけ従来どおり素通し */
+        if (f910cOff() || !G || (typeof G.off === 'function' && G.off())) return null;
+        return f910NoBase(id, srvRev, localHash, null, 'NO_MARKER');
+      }
       var dirty = (m.state === 'DIRTY_INTENT' || m.state === 'DIRTY_LOCAL');
       var clean = (m.state === 'CLEAN' && !f910cOff());
       if (!dirty && !clean) return null;
@@ -150,7 +191,9 @@
       var lc = m.lastConfirmed;
       if (!lc || typeof lc.serverRev !== 'number'){
         if (clean){ f910.cleanNoLc++; return { noProgress: true, lcRev: null, clean: true, why910c: 'CLEAN_NO_BASE' }; }
-        f910.noLc++; return null;                                                    /* 従来どおり（新端末 bootstrap 等） */
+        f910.noLc++;
+        if (f910cOff()) return null;                                                 /* kill: 従来どおり（新端末 bootstrap 等） */
+        return f910NoBase(id, srvRev, localHash, m, 'DIRTY_NO_LC');                  /* ■fix910c r2 */
       }
       if (lc.serverRev === srvRev){ f910.atBase++; return null; }
       /* ■fix910b: local の canonical 内容が lastConfirmed そのまま（canonical 外 field の書込で DIRTY になっただけ）なら、
@@ -332,13 +375,13 @@
   function f910NoProgress(id, schema, srvRev, info, why){
     f910.noProgress++;
     f910.lastNoProgress = { id: String(id), srvRev: srvRev, lcRev: info.lcRev, why: String(why || ''), t: Date.now() };
-    note({ kind: 'F910_NO_LOCAL_PROGRESS', id: id, srvRev: srvRev, lcRev: info.lcRev, why: why, schema: schema });
+    note({ kind: 'F910_NO_LOCAL_PROGRESS', id: id, srvRev: srvRev, lcRev: info.lcRev, why: why, schema: schema, why910c: info.why910c || null });
   }
   function f910Hold(id, schema, srvRev, srvHash, j, info, why){
     f910.holds++;
     f910.lastHold = { id: String(id), srvRev: srvRev, lcRev: info.lcRev, why: String(why || ''), t: Date.now() };
     canonHold[id] = true;
-    note({ kind: 'F910_REMOTE_AHEAD_HOLD', id: id, srvRev: srvRev, lcRev: info.lcRev, why: why, schema: schema });
+    note({ kind: 'F910_REMOTE_AHEAD_HOLD', id: id, srvRev: srvRev, lcRev: info.lcRev, why: why, schema: schema, why910c: info.why910c || null });
     try {
       var G = g781();
       if (G && typeof G.transition === 'function')
