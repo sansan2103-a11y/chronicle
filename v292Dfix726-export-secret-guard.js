@@ -38,7 +38,7 @@
   'use strict';
   if (window.__v292Dfix726) return;
   var TAG = '[v292Dfix726:export-secret-guard]';
-  var BUILD = 'fix728';
+  var BUILD = 'fix728+bk1';
 
   /* ★read 専用。この module は localStorage へ 1 バイトも書かない。 */
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
@@ -68,7 +68,10 @@
      「復旧資産でない / 再生成される / portability 価値 0 / key ambiguity を持つ」
      という export 側独自の理由による。 */
   var DIAGNOSTIC_OMIT = ['v292Dfix651Trace', 'v292Dfix587_refusals',
-                         'v292Dfix515log', 'v292Dfix490_dropped'];
+                         'v292Dfix515log', 'v292Dfix490_dropped',
+                         /* ★fixBK（GPT #127-CH）：fix573 の主人公ガードの記録（上限 20 件の診断ログ）。旧入口の実データで
+                            UNKNOWN_KEY_PROPERTY になり、書き出し全体が止まっていた（PC の github.io・読み取りの予行で実測）。 */
+                         'v292Dfix573_log'];
   var STORY_FIELDS  = ['cfg', 'cast', 'scene', 'turns', 'mode'];
 
   /* known story family（§12）。ここに載っていない key の中身は触らない。 */

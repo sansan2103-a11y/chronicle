@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chronicle 端末データの書き出し</title>
+<!-- v292DfixBK（GPT #127-CH Q3）：アプリを起動しない静的な書き出しページ。
+     ・この端末・この入口（origin）に保存された localStorage と IndexedDB の全件を「読むだけ」で集め、JSON ファイルにする。
+     ・localStorage / IndexedDB / サーバへの書込は 0（読み取り専用。存在しない DB を作らないよう、作成になる open は中止する）。
+     ・認証情報は fix726（唯一の除去ポリシー）で除き、IndexedDB 内の物語本体も同じ規則で除去する。残っていたら保存しない（FAIL CLOSED）。
+     ・Blob / ArrayBuffer / 型付き配列 / Date / Map / Set は型の印つきで書き出す（JSON で欠落させない）。
+     ・件数と SHA-256 を記録し、作ったファイルを読み戻して照合してから保存ボタンを出す。
+     ・外部への送信はしない。アプリのスクリプトは読み込まない（fix726 だけ）。 -->
+<script src="v292Dfix726-export-secret-guard.js?cb=20261017-bundle21-a"></script>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0d0c14; color: #e8e6f2; font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  p { margin: 6px 0; color: #c9c5df; }
+  .box { background: #17152a; border: 1px solid #3a3560; border-radius: 12px; padding: 14px; margin: 14px 0; }
+  button { font: inherit; font-weight: 700; border-radius: 10px; padding: 10px 16px; border: 0; cursor: pointer; }
+  .go { background: #6d5df0; color: #fff; }
+  .save { background: #3f8f5a; color: #fff; }
+  button[disabled] { opacity: .45; cursor: default; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  td, th { border-bottom: 1px solid #2c2846; padding: 4px 6px; text-align: left; vertical-align: top; }
+  .ok { color: #8fe0a5; } .ng { color: #ff9a9a; } .mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-all; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Chronicle 端末データの書き出し</h1>
+  <p>この端末のこの入口（<span id="origin" class="mono"></span>）に保存されている物語・シナリオ・キャラ・画像・記憶などを、ファイルに書き出します。</p>
+  <p>読み取るだけです。この端末のデータもサーバーのデータも変更しません。ゲームは起動しません。</p>
+  <p>ログイン情報や API キーなどは、書き出すファイルに入りません。</p>
+  <div class="box">
+    <button id="scan" class="go" type="button">① 読み取って確認する</button>
+    <div id="status" style="margin-top:10px"></div>
+    <div id="summary"></div>
+  </div>
+  <div class="box">
+    <button id="save" class="save" type="button" disabled>② ファイルに保存する</button>
+    <p style="font-size:13px">保存したファイルは、端末の「ダウンロード」などに入ります。消さずに保管してください。</p>
+  </div>
+</main>
+<script>
+(function(){
+  'use strict';
+  var FORMAT = 'chronicle-full-device-backup';
+  var VERSION = 'fixBK-r2';
+  var FALLBACK_DBS = ['chr6av', 'chr6mem', 'chr6lin', 'chr6rel', 'chr6ref', 'chr6adj', 'chr6_unsynced_recovery', 'chr6rc', 'chr6cand'];
+  var UNAMBIGUOUS = ['naiKey', 'orKey', 'pollKey'];
+  var state = { text: null, name: null, stats: { lsKeys: 0, dbs: 0, stores: 0, records: 0, blobs: 0, sanitizedStoryBodies: 0 } };
+  window.__v292DfixBK = { __armed: true, version: VERSION, state: function(){ return JSON.parse(JSON.stringify({ stats: state.stats, name: state.name, bytes: state.text ? state.text.length : 0 })); } };
+
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function setStatus(html){ $('status').innerHTML = html; }
+
+  /* ---------- SHA-256 ---------- */
+  function sha256(text){
+    var buf = new TextEncoder().encode(text);
+    return crypto.subtle.digest('SHA-256', buf).then(function(h){ return Array.from(new Uint8Array(h)).map(function(x){ return x.toString(16).padStart(2, '0'); }).join(''); });
+  }
+  function b64FromBuf(buf){
+    var u = new Uint8Array(buf), s = '', CH = 0x8000;
+    for (var i = 0; i < u.length; i += CH) s += String.fromCharCode.apply(null, u.subarray(i, i + CH));
+    return btoa(s);
+  }
+
+  /* ---------- 型つきエンコード（構造化複製の値 → JSON に落とせる形）---------- */
+  function enc(v, depth){
+    if (depth > 200) throw new Error('TOO_DEEP');
+    if (v === null) return Promise.resolve(null);
+    var t = typeof v;
+    if (t === 'undefined') return Promise.resolve({ $b: 'undef' });
+    if (t === 'number'){ if (!isFinite(v)) return Promise.resolve({ $b: 'num', v: String(v) }); return Promise.resolve(v); }
+    if (t === 'string' || t === 'boolean') return Promise.resolve(v);
+    if (t === 'bigint') return Promise.resolve({ $b: 'bigint', v: String(v) });
+    if (typeof Blob !== 'undefined' && v instanceof Blob){
+      state.stats.blobs++;
+      return v.arrayBuffer().then(function(ab){ var o = { $b: 'blob', type: v.type || '', size: v.size, b64: b64FromBuf(ab) }; if (typeof File !== 'undefined' && v instanceof File){ o.$b = 'file'; o.name = v.name; o.lastModified = v.lastModified; } return o; });
+    }
+    if (v instanceof ArrayBuffer) return Promise.resolve({ $b: 'ab', b64: b64FromBuf(v) });
+    if (ArrayBuffer.isView(v)){
+      var name = v.constructor && v.constructor.name || 'Uint8Array';
+      return Promise.resolve({ $b: 'view', ctor: name, b64: b64FromBuf(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength)) });
+    }
+    if (v instanceof Date) return Promise.resolve({ $b: 'date', v: isNaN(v.getTime()) ? null : v.toISOString() });
+    if (v instanceof RegExp) return Promise.resolve({ $b: 'regexp', source: v.source, flags: v.flags });
+    if (v instanceof Map){
+      var me = []; v.forEach(function(val, key){ me.push([key, val]); });
+      return Promise.all(me.map(function(p){ return Promise.all([enc(p[0], depth + 1), enc(p[1], depth + 1)]); })).then(function(e){ return { $b: 'map', e: e }; });
+    }
+    if (v instanceof Set){
+      var se = []; v.forEach(function(val){ se.push(val); });
+      return Promise.all(se.map(function(x){ return enc(x, depth + 1); })).then(function(e){ return { $b: 'set', e: e }; });
+    }
+    if (Array.isArray(v)) return Promise.all(v.map(function(x){ return enc(x, depth + 1); }));
+    if (t === 'object'){
+      var ks = Object.keys(v);
+      return Promise.all(ks.map(function(k){ return enc(v[k], depth + 1); })).then(function(vals){
+        var o = {}; ks.forEach(function(k, i){ o[k] = vals[i]; });
+        return Object.prototype.hasOwnProperty.call(v, '$b') ? { $b: 'obj', v: o } : o;
+      });
+    }
+    return Promise.resolve({ $b: 'unsupported', type: t });
+  }
+
+  /* ---------- IndexedDB 内の物語本体も fix726 の規則で除去する（値を変えるのは書き出す写しだけ） ---------- */
+  function sanitizeDeep(v, G, depth){
+    if (depth > 60 || v === null || typeof v !== 'object') {
+      if (typeof v === 'string' && v.length > 2 && (v.charAt(0) === '{') && /"cfg"/.test(v)){
+        try { var p = JSON.parse(v); if (G.isStoryBodyLike(p)){ var r = G.sanitizeStoryBody(p); if (!r.ok) throw new Error('SANITIZE_FAILED'); if (r.removed) state.stats.sanitizedStoryBodies++; return JSON.stringify(r.value); } } catch(e){ if (String(e && e.message) === 'SANITIZE_FAILED') throw e; }
+      }
+      return v;
+    }
+    /* 素のオブジェクトと配列だけを辿る。Blob・ArrayBuffer・Date・Map・Set などはそのまま（ここで触ると中身が消える） */
+    var proto = Object.getPrototypeOf(v);
+    if (!Array.isArray(v) && proto !== Object.prototype && proto !== null) return v;
+    if (G.isStoryBodyLike(v)){
+      var r2 = G.sanitizeStoryBody(v); if (!r2.ok) throw new Error('SANITIZE_FAILED');
+      if (r2.removed) state.stats.sanitizedStoryBodies++;
+      v = r2.value;
+    }
+    if (Array.isArray(v)) return v.map(function(x){ return sanitizeDeep(x, G, depth + 1); });
+    var o = {}; Object.keys(v).forEach(function(k){ o[k] = sanitizeDeep(v[k], G, depth + 1); }); return o;
+  }
+
+  /* ---------- 読み取り ---------- */
+  function listDbs(){
+    if (indexedDB.databases){
+      return indexedDB.databases().then(function(a){ return { names: a.map(function(d){ return d.name; }).filter(Boolean), method: 'databases()' }; }, function(){ return { names: FALLBACK_DBS.slice(), method: 'fallback' }; });
+    }
+    return Promise.resolve({ names: FALLBACK_DBS.slice(), method: 'fallback' });
+  }
+  function openExisting(name){
+    return new Promise(function(res){
+      var created = false, req;
+      try { req = indexedDB.open(name); } catch(e){ return res(null); }
+      /* 存在しない DB の open は「作成」になる → その場で中止して、何も作らない */
+      req.onupgradeneeded = function(){ created = true; try { req.transaction.abort(); } catch(e){} };
+      req.onsuccess = function(){ if (created){ try { req.result.close(); } catch(e){} return res(null); } res(req.result); };
+      req.onerror = function(e){ try { e.preventDefault(); } catch(x){} res(null); };
+      req.onblocked = function(){ res(null); };
+    });
+  }
+  function readStore(db, storeName){
+    return new Promise(function(res, rej){
+      try {
+        var tx = db.transaction(storeName, 'readonly'), st = tx.objectStore(storeName);
+        var info = { keyPath: st.keyPath, autoIncrement: st.autoIncrement, indexes: Array.from(st.indexNames).map(function(n){ var ix = st.index(n); return { name: n, keyPath: ix.keyPath, unique: ix.unique, multiEntry: ix.multiEntry }; }) };
+        var keys = null, vals = null;
+        var rk = st.getAllKeys(); rk.onsuccess = function(){ keys = rk.result; };
+        var rv = st.getAll(); rv.onsuccess = function(){ vals = rv.result; };
+        tx.oncomplete = function(){ res({ info: info, keys: keys || [], vals: vals || [] }); };
+        tx.onerror = function(){ rej(tx.error); };
+        tx.onabort = function(){ rej(tx.error || new Error('ABORT')); };
+      } catch(e){ rej(e); }
+    });
+  }
+
+  function scan(){
+    var G = window.__v292Dfix726;
+    $('save').disabled = true; state.text = null;
+    state.stats = { lsKeys: 0, dbs: 0, stores: 0, records: 0, blobs: 0, sanitizedStoryBodies: 0 };
+    if (!G || typeof G.sanitizeDeviceBackupMap !== 'function'){ setStatus('<span class="ng">保護機能を読み込めなかったため、書き出しを中止しました（何も変更していません）。</span>'); return; }
+    setStatus('読み取り中…');
+    /* localStorage（detached copy → fix726） */
+    var ls = {};
+    try { for (var i = 0; i < localStorage.length; i++){ var k = localStorage.key(i); ls[k] = localStorage.getItem(k); } } catch(e){ setStatus('<span class="ng">この端末の保存領域を読めませんでした。</span>'); return; }
+    var lsRawCount = Object.keys(ls).length;
+    var sr = G.sanitizeDeviceBackupMap(ls);
+    if (!sr.ok){ setStatus('<span class="ng">安全確認に通らなかったため、書き出しを中止しました（' + esc(sr.error || '') + '）。</span>'); return; }
+    var lsOut = sr.map; state.stats.lsKeys = Object.keys(lsOut).length;
+    /* 除いた保存項目は、名前と理由（fix726 の分類）だけを記録する。値は入れない */
+    var omitted = Object.keys(ls).filter(function(k){ return !Object.prototype.hasOwnProperty.call(lsOut, k); }).sort().map(function(k){ var c = 'OTHER'; try { c = G.classifyKey(k); } catch(e){} return { key: k, reason: c, chars: String(ls[k] || '').length }; });
+    var dbsOut = [], listing;
+    listDbs().then(function(l){
+      listing = l;
+      return l.names.reduce(function(p, name){
+        return p.then(function(){
+          return openExisting(name).then(function(db){
+            if (!db) return;
+            state.stats.dbs++;
+            var d = { name: name, version: db.version, stores: [] };
+            var names = Array.from(db.objectStoreNames);
+            return names.reduce(function(p2, sn){
+              return p2.then(function(){
+                return readStore(db, sn).then(function(r){
+                  state.stats.stores++; state.stats.records += r.vals.length;
+                  var clean = sanitizeDeep(r.vals, G, 0);
+                  return Promise.all([enc(r.keys, 0), enc(clean, 0)]).then(function(kv){
+                    d.stores.push({ name: sn, keyPath: r.info.keyPath, autoIncrement: r.info.autoIncrement, indexes: r.info.indexes, count: r.vals.length, keys: kv[0], values: kv[1] });
+                  });
+                });
+              });
+            }, Promise.resolve()).then(function(){ try { db.close(); } catch(e){} dbsOut.push(d); });
+          });
+        });
+      }, Promise.resolve());
+    }).then(function(){
+      /* 物ごとの hash（書き出したものを、あとで照合できるように） */
+      var lsKeys = Object.keys(lsOut).sort();
+      var parts = [];
+      lsKeys.forEach(function(k){ parts.push(sha256('ls\u0000' + k + '\u0000' + lsOut[k]).then(function(h){ return ['ls', k, h]; })); });
+      dbsOut.forEach(function(d){ d.stores.forEach(function(s){ parts.push(sha256(JSON.stringify(s.values)).then(function(h){ s.sha256 = h; return ['idb', d.name + '/' + s.name, h]; })); }); });
+      return Promise.all(parts);
+    }).then(function(hashes){
+      var lsHashes = {}; hashes.forEach(function(x){ if (x[0] === 'ls') lsHashes[x[1]] = x[2]; });
+      var doc = {
+        kind: FORMAT, format: VERSION, origin: location.origin, takenAt: new Date().toISOString(), userAgent: navigator.userAgent,
+        dbListing: listing.method, counts: { lsRaw: lsRawCount, ls: state.stats.lsKeys, dbs: state.stats.dbs, stores: state.stats.stores, records: state.stats.records, blobs: state.stats.blobs },
+        omittedLs: omitted, ls: lsOut, lsSha256: lsHashes, idb: dbsOut
+      };
+      var text = JSON.stringify(doc);
+      /* 層1：localStorage 部分は fix726 の検査（{ls} の形で渡す） */
+      var v1 = G.verifyExportText(JSON.stringify({ ls: lsOut }));
+      if (!v1.ok) throw new Error('VERIFY_LS:' + (v1.found || []).join(','));
+      /* 層2：全体に、曖昧でない秘密の field 名が残っていない */
+      var leak = UNAMBIGUOUS.filter(function(n){ return new RegExp('(^|[^A-Za-z0-9_$])' + n + '([^A-Za-z0-9_$]|$)').test(text); });
+      if (leak.length) throw new Error('VERIFY_TEXT:' + leak.join(','));
+      /* 読み戻し照合：作った文字列を parse して、件数と hash が一致するか */
+      var back = JSON.parse(text);
+      var cnt = 0; back.idb.forEach(function(d){ d.stores.forEach(function(s){ cnt += s.values.length; }); });
+      if (Object.keys(back.ls).length !== state.stats.lsKeys || cnt !== state.stats.records) throw new Error('READBACK_COUNT');
+      var checks = [];
+      back.idb.forEach(function(d){ d.stores.forEach(function(s){ checks.push(sha256(JSON.stringify(s.values)).then(function(h){ if (h !== s.sha256) throw new Error('READBACK_HASH ' + d.name + '/' + s.name); })); }); });
+      return Promise.all(checks).then(function(){ return sha256(text).then(function(fileHash){ return { text: text, doc: doc, fileHash: fileHash }; }); });
+    }).then(function(r){
+      state.text = r.text;
+      var host = location.hostname.replace(/[^a-z0-9.-]/gi, '_');
+      state.name = 'chronicle_full_backup_' + host + '_' + new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '') + '.json';
+      var stories = Object.keys(r.doc.ls).filter(function(k){ return /^chr6_slot_/.test(k); }).length;
+      var scen = Object.keys(r.doc.ls).filter(function(k){ return /^chr6_scenario_sc-/.test(k); }).length;
+      var rows = '<tr><th>対象</th><th>件数</th></tr>' +
+        '<tr><td>物語（本体）</td><td>' + stories + '</td></tr>' +
+        '<tr><td>シナリオ</td><td>' + scen + '</td></tr>' +
+        '<tr><td>保存項目（localStorage）</td><td>' + state.stats.lsKeys + ' / ' + r.doc.counts.lsRaw + '（ログイン情報などを除いた数）</td></tr>' +
+        '<tr><td>除いた項目</td><td class="mono">' + r.doc.omittedLs.map(function(o){ return esc(o.key + '（' + o.reason + '）'); }).join('<br>') + '</td></tr>';
+      r.doc.idb.forEach(function(d){ d.stores.forEach(function(s){ rows += '<tr><td class="mono">' + esc(d.name + ' / ' + s.name) + '</td><td>' + s.count + '</td></tr>'; }); });
+      $('summary').innerHTML = '<table>' + rows + '</table><p class="mono">画像などのバイナリ ' + state.stats.blobs + ' 件・ファイルの大きさ ' + Math.round(r.text.length / 1024) + ' KB<br>SHA-256 ' + r.fileHash + '</p>';
+      setStatus('<span class="ok">読み取りと確認が終わりました。何も変更していません。②で保存できます。</span>');
+      $('save').disabled = false;
+      window.__v292DfixBK.fileHash = r.fileHash;
+    }).catch(function(e){
+      var m = String(e && e.message || e);
+      setStatus('<span class="ng">確認に通らなかったため、保存しません（' + esc(m) + '）。何も変更していません。</span>');
+    });
+  }
+  function save(){
+    if (!state.text) return;
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([state.text], { type: 'application/json' }));
+    a.download = state.name;
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+    setStatus('<span class="ok">保存しました：' + esc(state.name) + '</span>');
+  }
+  $('origin').textContent = location.origin;
+  $('scan').addEventListener('click', scan);
+  $('save').addEventListener('click', save);
+})();
+</script>
+</body>
+</html>
