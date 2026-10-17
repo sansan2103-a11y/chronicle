@@ -128,6 +128,38 @@
   function off773(){ try{ return localStorage.getItem('v292Dfix773Off')==='1'; }catch(e){ return false; } }
   /* ★fix778: 人外分岐だけの kill。ON にすると entityType は常に HUMAN 扱い＝従来の人物 prompt。 */
   function off778(){ try{ return localStorage.getItem('v292Dfix778Off')==='1'; }catch(e){ return false; } }
+  /* ★fix983（I-0 B・GPT #127-BH）：設定文の外見を英語句にして属性語の位置へ入れる（読み取りのみ・保存しない）。
+       ・対応表（window.__v292Dfix983）＋ fix461 のキャッシュ（tagsFor＝localStorage を読むだけ・新しい送信 0）
+       ・数字の年齢が設定文に明記されているときだけ主語を「N-year-old …」にする（ageBand から数字を作らない）
+       ・kill: localStorage.v292Dfix983Off='1' で従来と同じ prompt（バイト一致） */
+  function off983(){ try{ return localStorage.getItem('v292Dfix983Off')==='1'; }catch(e){ return false; } }
+  function offFrame983(){ try{ return localStorage.getItem('v292Dfix983FrameOff')==='1'; }catch(e){ return false; } }   // ★r12 kill：構図フィルタだけ止める（r11B2 と同じ）
+  var diag983 = { last: {}, used: 0, skipped: 0, errors: 0 };
+  function descOf983(name){
+    var d = '', a = '';
+    try { var S = getS767(); var c = S && S.cast;
+      if (c){ if (c.hero && c.hero.name === name) d = String(c.hero.desc || ''); (c.npcs || []).forEach(function(n){ if (n && n.name === name) d = String(n.desc || ''); }); } } catch(e){}
+    try { var ro = (window.__v292Dfix307api && window.__v292Dfix307api.loadRoster && window.__v292Dfix307api.loadRoster()) || [];
+      for (var i=0;i<ro.length;i++){ if (ro[i] && ro[i].handle === name){ a = String(ro[i].appr || ''); break; } } } catch(e){}
+    return d || a;          // fix766 と同じ優先（cast の desc → roster の appr）
+  }
+  function getS767(){ try { return window.__chronicleGetState ? window.__chronicleGetState() : (window.S || null); } catch(e){ return null; } }
+  function compose983(recipe){
+    if (off983()) return null;
+    var X = window.__v292Dfix983; if (!X || typeof X.compose !== 'function') return null;
+    var who = recipe.entityKey, desc = descOf983(who);
+    if (!desc) { diag983.skipped++; return null; }
+    var en = '';
+    try { var f461 = window.__v292Dfix461; if (f461 && typeof f461.tagsFor === 'function') en = f461.tagsFor(who) || ''; } catch(e){}
+    var c = X.compose(desc, recipe.gender || '', who, en || null, { maxLen: 420 });
+    if (!c) { diag983.skipped++; return null; }
+    c.rawPhrase = c.phrase || '';
+    if (!offFrame983() && typeof X.frameFilter === 'function') {   /* ★r12：顔アイコン用に、写らない項目を指示文から省く（人型の経路だけで使う） */
+      try { var fr = X.frameFilter(c.phrase || ''); c.phrase = fr.phrase; c.frame = true; c.log = c.log || {}; c.log.frame = { dropped: fr.dropped, trimmed: fr.trimmed }; } catch(eF){ c.frame = false; }
+    }
+    diag983.used++; diag983.last[who] = { subject: c.subject, phrase: c.phrase, rawPhrase: c.rawPhrase, log: c.log, at: Date.now() };
+    return c;
+  }
 
   function hash32(s){ var h=2166136261; s=String(s); for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=(h*16777619)>>>0; } return h>>>0; }
   function artStyleId(){ try{ var S=getS(); return String((S&&S.cfg&&S.cfg.artStyle)!=null ? S.cfg.artStyle : 0); }catch(e){ return '0'; } }
@@ -447,6 +479,7 @@
     var tail = legacy ? '' : styleTail();  // '' なら tail 無し（＝従来の framing を使う）
     var g = recipe.gender === '男性' ? 'male' : (recipe.gender === '女性' ? 'female' : '');
     var parts = [];
+    var c983 = null, F983 = null, rnd983 = function(){ return false; };
 
     /* ① 誰か（★fix769: 画風→主語 の順で始める。写真キャプション調の語で始めない） */
     if (legacy){
@@ -454,45 +487,65 @@
       var age = w('ageBand', av(recipe,'ageBand'));
       parts.push(age ? (head + ' of ' + age) : head);
     } else {
-      parts.push(HEAD_PREFIX + subjectPhrase(av(recipe,'ageBand'), g));
+      try { c983 = compose983(recipe); } catch(e983){ diag983.errors++; c983 = null; }
+      F983 = c983 ? c983.fields : null;
+      /* 設定文から外見の句が作れたときは、fix766 が乱数で埋めた項目（RANDOM_FILL）を出さない。
+         書かれていない属性を作らない（GPT #127-BH）。句が空（設定に外見が無い）ときは従来どおり乱数の項目を使う。 */
+      var drop983 = !!(c983 && (c983.rawPhrase || c983.phrase));   // ★r12：構図フィルタで句が空になっても「設定に外見がある」判定は元の句で行う
+      rnd983 = function(k){ var a = recipe.attrs && recipe.attrs[k]; return drop983 && a && a.source === 'RANDOM_FILL'; };
+      /* ★fix983 r10（GPT #127-BJ）：主語の年齢の優先順
+           ① 設定文の今の数字の年齢 ② 書かれた学年・年代 ③ 設定由来の ageBand（fix766 の EXPLICIT）
+           ④ 年齢が分からない（ageBand が乱数）ときは、年齢を断定しない主語（female/male character）。woman/man は大人を示すので使わない。 */
+      var subj983 = null;
+      if (c983 && c983.subject) subj983 = c983.subject;
+      else if (c983 && !off983()) {
+        var ab = recipe.attrs && recipe.attrs.ageBand;
+        if (!(ab && ab.value && ab.source && ab.source !== 'RANDOM_FILL')) { try { subj983 = window.__v292Dfix983.neutralSubject(recipe.gender || ''); } catch(eS){ subj983 = null; } }
+      }
+      parts.push(HEAD_PREFIX + (subj983 || subjectPhrase(av(recipe,'ageBand'), g)));
       parts.push(MEDIUM_WORD_FN());   /* ★fix774: style lock 3句込み(kill=v292Dfix774Off) */
     }
 
     /* ② 体（身長印象＋体格＋シルエット） */
-    var h = w('heightImpression', av(recipe,'heightImpression'));
-    var b = w('bodyBuild', av(recipe,'bodyBuild'));
-    if (h || b) parts.push([h, b, 'build'].filter(Boolean).join(' '));
-    var si = w('silhouette', av(recipe,'silhouette'));
+    var fr983 = !!(c983 && c983.frame && drop983);   // ★r12：顔アイコン用の構図（身長・全身の体格・シルエットは写らない）
+    var h = (rnd983('heightImpression') || fr983) ? '' : w('heightImpression', av(recipe,'heightImpression'));
+    var b = rnd983('bodyBuild') ? '' : w('bodyBuild', av(recipe,'bodyBuild'));
+    if (fr983 && b) { var vb = false; try { vb = window.__v292Dfix983.visibleBuild(b); } catch(eV){ vb = false; } if (!vb || String(c983.phrase || '').toLowerCase().indexOf(b) >= 0) b = ''; }   // 句に同じ体格語があれば重ねない
+    if ((h || b) && !(F983 && F983.build.length)) parts.push([h, b, 'build'].filter(Boolean).join(' '));
+    var si = (rnd983('silhouette') || fr983 || (F983 && F983.build.length)) ? '' : w('silhouette', av(recipe,'silhouette'));
     if (si) parts.push(si + ' silhouette');
 
     /* ③ 顔 */
-    var fs = w('faceShape', av(recipe,'faceShape'));
-    if (fs) parts.push(fs + ' face');
+    var fs = rnd983('faceShape') ? '' : w('faceShape', av(recipe,'faceShape'));
+    if (fs && !(F983 && F983.face.length)) parts.push(fs + ' face');
 
     /* ④ 髪（★「<色> hair」が必ず連続するように色を hair の直前へ置く） */
-    var hl = w('hairLength', av(recipe,'hairLength'));
-    var hs = w('hairShape', av(recipe,'hairShape'));
-    var hc = w('hairColor', av(recipe,'hairColor'));
-    if (av(recipe,'hairLength') === 'BALD') parts.push('bald');
+    var hl = rnd983('hairLength') ? '' : w('hairLength', av(recipe,'hairLength'));
+    var hs = rnd983('hairShape') ? '' : w('hairShape', av(recipe,'hairShape'));
+    var hc = rnd983('hairColor') ? '' : w('hairColor', av(recipe,'hairColor'));
+    if (F983 && (F983.hair.length || F983.hairColor.length)) { /* fix983 の髪の句を使う */ }
+    else if (av(recipe,'hairLength') === 'BALD' && !rnd983('hairLength')) parts.push('bald');
     else {
       var hair = [hl, hs, hc].filter(Boolean).join(' ');
       if (hair) parts.push(hair + ' hair');
     }
 
     /* ⑤ 服 */
-    var ca = w('clothingArchetype', av(recipe,'clothingArchetype'));
-    var cc = w('clothingCondition', av(recipe,'clothingCondition'));
-    if (ca) parts.push('wearing ' + (cc ? cc + ' ' : '') + ca);
+    var ca = rnd983('clothingArchetype') ? '' : w('clothingArchetype', av(recipe,'clothingArchetype'));
+    var cc = rnd983('clothingCondition') ? '' : w('clothingCondition', av(recipe,'clothingCondition'));
+    if (ca && !(F983 && (F983.top.length || F983.roleTop.length))) parts.push('wearing ' + (cc ? cc + ' ' : '') + ca);
 
     /* ⑥ 姿勢・表情 */
-    var po = w('posture', av(recipe,'posture'));
+    var po = rnd983('posture') ? '' : w('posture', av(recipe,'posture'));
     if (po) parts.push(po + ' posture');
-    var ex = w('expressionBaseline', av(recipe,'expressionBaseline'));
-    if (ex) parts.push(ex + ' expression');
+    var ex = rnd983('expressionBaseline') ? '' : w('expressionBaseline', av(recipe,'expressionBaseline'));
+    if (ex && !(F983 && F983.expression.length)) parts.push(ex + ' expression');
+    if (c983 && c983.phrase) parts.push(c983.phrase);
 
     /* ⑦ 目印（EXPLICIT な傷・ほくろ等はここで必ず本文に出る） */
     var df = recipe.distinctiveFeatures || [];
-    for (var i=0;i<df.length;i++){ var v = df[i] && df[i].value; if (v) parts.push(String(v)); }
+    var ph983 = (c983 && c983.phrase || '').toLowerCase();
+    for (var i=0;i<df.length;i++){ var v = df[i] && df[i].value; if (!v) continue; var vw = String(v).toLowerCase().match(/[a-z]{3,}/g) || []; if (ph983 && vw.length && vw.every(function(t){ return ph983.indexOf(t) >= 0; })) continue; parts.push(String(v)); }
 
     /* ⑧ hardConstraints は肯定形のものだけ本文へ（否定形は送らない＝上のヘッダ参照） */
     var hcs = recipe.hardConstraints || [];
@@ -574,7 +627,7 @@
     pkOf: pkOf, hash32: hash32,
     /* ★fix769/fix770 の検証口（読み取り専用の定数と純関数のみ） */
     PROMPT_CONTRACT: PROMPT_CONTRACT, HEAD_PREFIX: HEAD_PREFIX, MEDIUM_WORD: MEDIUM_WORD,
-    SHOT_ANIME: SHOT_ANIME, AGE_ADJ: AGE_ADJ, subjectPhrase: subjectPhrase, refUrlFor: refUrlFor,
+    SHOT_ANIME: SHOT_ANIME, AGE_ADJ: AGE_ADJ, subjectPhrase: subjectPhrase, refUrlFor: refUrlFor, diag983: function(){ return diag983; },
     /* ★fix773 */
     rebuildAndRegen: rebuildAndRegen,
     /* ★fix776: gender 解決の検証口（読み取りのみ・castへは書き戻さない） */
