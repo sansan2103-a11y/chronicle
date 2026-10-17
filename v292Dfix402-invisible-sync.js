@@ -1094,7 +1094,41 @@
 
   // ★fix402e A-2: forceput(この端末で統一)を世代化+共通化。連打防止・飛行中の新規保存の誤clean防止。
   //   __v292Dfix402.forcePut として公開。onDone(ok)で完了通知(fork bannerのトースト表示に使用)。
+  /* ■fix925（GPT #127-CP・BUNDLE24）: 旧パッケージの「この端末のつづきで進める」（forcePut）を、canonical の保護と矛盾させない。
+     実測（hs5 forceput FP1）: canonical の物語が DIVERGED（F910／fix924 の hold 中）でも fix402.forcePut は PCP を通らず、
+       未確定の本文を旧パッケージ（saves）へ公開していた（Worker の forceput は story_shadow には触れないので canonical 自体は不変）。
+     対処（既存の PCP predicate の再利用だけ。新しい判定は作らない）:
+       (1) forcePut の送信前に pcpPredicate（auto put と同じ）を通す。block なら送らない（onDone(false)）。
+       (2) 今の document の物語の fix781 marker が DIVERGED／BOOTSTRAP_HOLD の間は、旧式の分岐バナー（fix659／従来）を出さない
+           （差分バナー（v781banner）の 2 択へ一本化する）。
+     kill: localStorage v292Dfix925Off='1'。 */
+  function f925Off(){ return lsGet('v292Dfix925Off') === '1'; }
+  var f925 = { forceBlocks: 0, bannerSkips: 0, last: null };
+  function f925CurConflict(){
+    try {
+      var G = window.__v292Dfix781; var st = (G && typeof G.state === 'function') ? G.state() : null;
+      return (st === 'DIVERGED' || st === 'BOOTSTRAP_HOLD') ? st : null;
+    } catch(e){ return null; }
+  }
   function doForcePut(onDone){
+    if (!f925Off() && pcpOn()){
+      var c925 = f925CurConflict();
+      var ids925 = []; try { ids925 = f821On() ? f821PackageSlotIds(tombstonedIds(), null) : allSlotIds(); } catch(e){ ids925 = []; }
+      return pcpPredicate(ids925).then(function(blk){
+        if (blk && blk.reason === 'NO_API') blk = null;
+        if (!blk && c925) blk = { id: 'current', reason: 'MARKER_' + c925 };
+        if (blk){
+          f925.forceBlocks++; f925.last = { at: Date.now(), blk: blk };
+          try { console.warn(TAG, 'fix925: forcePut を中止（' + blk.reason + ' ' + blk.id + '）: canonical の未確定・競合中は旧パッケージへ公開しません'); } catch(e){}
+          if (onDone) onDone(false);
+          return false;
+        }
+        return doForcePut0(onDone);
+      }, function(){ if (onDone) onDone(false); return false; });
+    }
+    return doForcePut0(onDone);
+  }
+  function doForcePut0(onDone){
     if (pushing) { if (onDone) onDone(false); return; }   // ★連打/多重防止(flightは常に1本)
     pushing = true;
     var forceSeq = mutationSeq;                            // ★開始時のseqを記録
@@ -1142,6 +1176,7 @@
   // ---- 真の分岐(fork)だけ出す非モーダル選択UI(confirm不使用) ----
   var bannerEl = null;
   function forkBanner(server){
+    if (!f925Off() && f925CurConflict()){ f925.bannerSkips++; try { console.log(TAG, 'fix925: canonical の競合中なので旧式の分岐バナーは出さない（差分バナーへ一本化）'); } catch(e){} return; }   /* ■fix925 */
     /* ★fix659: 平易な文言＋「クラウド側を取り込む」が本当に完走する新バナー。描けたら(true)ここで終わる。
        fix659 が居ない/OFF/例外なら false が返り、以下の従来バナー(+fix527cの付け替え)へ完全フォールバックする。 */
     try { if (window.__v292Dfix659 && window.__v292Dfix659.renderForkBanner && window.__v292Dfix659.renderForkBanner(server)) return; } catch(e){}
@@ -1439,6 +1474,7 @@
     pullApply: function(force){ lastPullCheck = 0; return pullApplyReload('手動取込', { force: !!force }); },   // ★fix402d: 明示pull(forceでturns/conflictガード迂回)
     forkBanner: forkBanner,
     forcePut: doForcePut,   // ★fix402e A-2: 世代化forceput
+    f925: function(){ return { off: f925Off(), stats: JSON.parse(JSON.stringify(f925)) }; },   /* ■fix925 */
     /* ★★fix828: 診断口（write 0）。fixture と smoke がここを見る。 */
     f828: function(){
       var L = f590();

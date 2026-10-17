@@ -12,6 +12,14 @@
  *   ・直近の失敗 kind が 401/403 のときは「クラウドに保存できていません。ログイン状態を確認してください。」
  *     （待機ではなく明示的な保存失敗）。それ以外の kind は従来の待機文言のまま。
  *   ・表示のみ / pointer-events:none / kill switch / 5 s poll は不変。rollback = live bytes へ戻す。
+ *
+ * ★fix758b（GPT #127-CO・BUNDLE24・S-5 P1「待機バナーの残留」）kill: v292Dfix758bOff='1'
+ *   ・「保存済み」と数える kind を広げる: CANONICAL_COMMIT_OK に加えて
+ *     CANONICAL_COMMIT_CONFIRMED_BY_READBACK（応答を失ったが readback で着地を確認）／
+ *     CANONICAL_CONVERGED_AFTER_CONFLICT（409 だが server は自分の内容）／CANONICAL_CONVERGED_NO_WRITE（server == local）／
+ *     F910_NO_LOCAL_PROGRESS（送るべき変更が無い）。どれも「この端末に未保存の進行は無い」事実。
+ *   ・marker が DIVERGED／BOOTSTRAP_HOLD で、差分バナー（v781banner）が出ている間は待機バナーを出さない
+ *     （待っても保存されない状態なので、差分バナーの 2 択に一本化する）。
  */
 (function () {
   'use strict';
@@ -54,6 +62,23 @@
         || k === 'CANONICAL_WRITE_UNSETTLED';
     }
     function isAuthKind(k) { return AUTH_KIND_RE.test(String(k || '')); }
+    var B_OFF = false;
+    try { B_OFF = (localStorage.getItem('v292Dfix758bOff') === '1'); } catch (e) { B_OFF = false; }
+    function isOkKind(k) {
+      if (k === 'CANONICAL_COMMIT_OK') return true;
+      if (B_OFF) return false;
+      return k === 'CANONICAL_COMMIT_CONFIRMED_BY_READBACK' || k === 'CANONICAL_CONVERGED_AFTER_CONFLICT'
+        || k === 'CANONICAL_CONVERGED_NO_WRITE' || k === 'F910_NO_LOCAL_PROGRESS';
+    }
+    function divergedBannerShown() {
+      if (B_OFF) return false;
+      try {
+        var G = window.__v292Dfix781; var st = (G && typeof G.state === 'function') ? G.state() : null;
+        if (st !== 'DIVERGED' && st !== 'BOOTSTRAP_HOLD') return false;
+        var b = document.getElementById('v781banner');
+        return !!(b && b.isConnected && b.style.display !== 'none');
+      } catch (e) { return false; }
+    }
 
     function findBanner() {
       try { return document.getElementById(BANNER_ID) || null; } catch (e) { return null; }
@@ -113,7 +138,7 @@
           for (var i = 0; i < led.length; i++) {
             var ev = led[i];
             if (!ev || typeof ev.t !== 'number' || typeof ev.kind !== 'string') continue;
-            if (ev.kind === 'CANONICAL_COMMIT_OK') {
+            if (isOkKind(ev.kind)) {
               if (lastOkT == null || ev.t > lastOkT) lastOkT = ev.t;
             } else if (isFailKind(ev.kind)) {
               if (lastFailT == null || ev.t > lastFailT) { lastFailT = ev.t; lastFailKind = ev.kind; }
@@ -127,6 +152,7 @@
         var pendingByFail = (lastFailT != null)
           && (lastOkT == null || lastOkT < lastFailT);
 
+        if (divergedBannerShown()) { hide(); return; }   /* ★fix758b */
         if (pendingByMark || pendingByFail) show(pendingByFail && isAuthKind(lastFailKind)); else hide();
       } catch (e) {
         try { hide(); } catch (e2) {}

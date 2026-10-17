@@ -394,6 +394,37 @@
       if (G && typeof G.banner === 'function') G.banner(id, 'DIVERGED');
     } catch(e){}
   }
+  /* ■fix924（GPT #127-CO・BUNDLE24・S-5 P1）409 の CAS 競合で local の変更を守る。
+     従来：putcanonical が 409（rev-mismatch／hash-mismatch／cas-lost）→ readback 1 回 → server が自分の内容でなければ
+           CANONICAL_WRITE_CONFLICT・canonHold だけ（Recovery Draft も 2 択のバナーも無く、「クラウド保存を待っています」が続く）。
+     修正：その場合だけ、F910 の hold と同じ 3 点（marker DIVERGED・Recovery Draft（server record を同梱）・差分バナー）を行う。
+           送信 0・自動の再送 0・server は 1 byte も変えない（readback の内容を Draft に畳むだけ）。
+           CAS 以外の 409（持ち主の関所・送信停止・schema の契約など）は対象外（従来どおり）。
+     kill: localStorage v292Dfix924Off='1'。 */
+  function f924Off(){ return lsg('v292Dfix924Off') === '1'; }
+  var F924_CAS = { 'rev-mismatch': 1, 'hash-mismatch': 1, 'cas-lost': 1 };
+  var f924 = { protects: 0, skips: 0, last: null };
+  var f924LastCode = null;
+  function f924Protect(id, schema, j2, code){
+    try {
+      if (f924Off()){ f924.skips++; return false; }
+      if (!F924_CAS[String(code || '')]){ f924.skips++; note({ kind: 'F924_SKIP', id: id, errorCode: code || null, schema: schema }); return false; }
+      var G = g781(); if (!G) return false;
+      var srvRev = (j2 && typeof j2.rev === 'number') ? j2.rev : null;
+      var srvHash = String((j2 && j2.serverHash) || '');
+      f924.protects++; f924.last = { id: String(id), srvRev: srvRev, code: String(code), schema: schema, t: Date.now() };
+      note({ kind: 'F924_CONFLICT_PROTECTED', id: id, srvRev: srvRev, errorCode: code, schema: schema });
+      if (typeof G.transition === 'function')
+        G.transition(id, 'DIVERGED', { pendingServerRev: srvRev, pendingServerHash: srvHash,
+                                       reason: 'SAVE_TIME_CAS_CONFLICT', detectedAt: Date.now() });
+      if (typeof G.draftCreate === 'function')
+        G.draftCreate(id, { schema: schema, serverRev: srvRev, serverHash: srvHash, reason: 'SAVE_TIME_CAS_CONFLICT',
+                            serverRecord: (j2 && j2.record) ? j2.record : null },
+          function(ok, err){ if (!ok){ try { console.warn(TAG, 'fix924: Recovery Draft を作れなかった:', err); } catch(e){} } });
+      if (typeof G.banner === 'function') G.banner(id, 'DIVERGED');
+      return true;
+    } catch(e){ return false; }
+  }
   function f909bOff(){ return lsg('v292Dfix909bOff') === '1'; }
   var f909 = { probes: 0, v2Same: 0, notCanonical2: 0, notDirty: 0, noLc: 0, journal: 0, busy: 0, fires: 0,
                remoteAhead: 0, bridgeCalls: 0, bridgeScheduled: 0, bridgeDup: 0, bridgeInFlight: 0,
@@ -1145,6 +1176,7 @@
                 cstats.conflicts++; canonHold[id] = true;
                 note({ kind: 'CANONICAL_WRITE_CONFLICT', id: id, serverRev: j2.rev,
                        serverHash: String(j2.serverHash || '').slice(0, 16) });
+                { var c924 = f924LastCode; f924LastCode = null; f924Protect(id, 1, j2, c924); }   /* ■fix924 */
               } else {
                 cstats.ambiguous++; note({ kind: kindKeep, id: id, serverRev: j2.rev });
               }
@@ -1163,6 +1195,7 @@
             return condClearDirty(fin);
           }
           if (r.status === 409){ /* rev/hash mismatch ・cas-lost 等 → readback 最大 1 回で収束判定 */
+            f924LastCode = (jj && jj.errorCode) ? String(jj.errorCode) : null;   /* ■fix924 */
             /* ★fix838: 収束判定は従来どおり必ず実行する。理由コードを捨てないだけ。 */
             if (!f838Off() && jj && jj.errorCode){
               cstats.contractFail = (cstats.contractFail || 0) + 1;
@@ -1334,6 +1367,7 @@
                   /* ★fix697p Rev2(GPT REVISE 3-(2)): journal を消さず HOLD_CONFLICT にする。
                      自動 resume は永久に禁止。fresh GET で CONVERGED になったときだけ clear。 */
                   f697pMarkConflict(id, j2.rev, String(j2.serverHash || ''));
+                  { var c924b = f924LastCode; f924LastCode = null; f924Protect(id, 2, j2, c924b); }   /* ■fix924 */
                 } else {
                   cstats.ambiguous++; note({ kind: kindKeep, id: id, serverRev: j2.rev });
                 }
@@ -1369,6 +1403,7 @@
               return condClearDirty(fin);
             }
             if (r.status === 409){
+              f924LastCode = (jj && jj.errorCode) ? String(jj.errorCode) : null;   /* ■fix924 */
               /* ★fix838: 収束判定は従来どおり必ず実行する。理由コードを捨てないだけ。 */
               if (!f838Off() && jj && jj.errorCode){
                 cstats.contractFail = (cstats.contractFail || 0) + 1;
@@ -3359,6 +3394,7 @@
                hashProbe: f697pLastHashProbe ? JSON.parse(JSON.stringify(f697pLastHashProbe)) : null,
                stats: JSON.parse(JSON.stringify(f697pStats)) }; },
     flush: function(){ commit('manual'); return true; },
+    f924: function(){ return { off: f924Off(), stats: JSON.parse(JSON.stringify(f924)) }; },   /* ■fix924 */
     flushForNav: function(maxMs){ return flushForNav(maxMs); },   /* ■SN1(a) */
     f895: function(){ return { off: f895Off(), done: f895Done, last: f895Last ? JSON.parse(JSON.stringify(f895Last)) : null }; },
     /* ★fix718: read-only 可視化（書込 0） */
