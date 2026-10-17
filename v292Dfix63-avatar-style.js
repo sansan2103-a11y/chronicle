@@ -106,8 +106,7 @@ setTimeout(inject, 2000);
   function rule(sc, org){ return '.v292-dlg-card .dlg-av img[data-f979="1"] { transform: scale(' + sc + ') !important; transform-origin: ' + org + ' !important;'
          + ' filter: brightness(1.12) contrast(1.06) !important; }'; }
   function css(){
-    return '.v292-dlg-card .dlg-av { box-shadow: 0 0 0 1.5px rgba(200,190,255,.30) !important; }\n'
-         + rule(scaleSp(), '50% 30%') + '\n'
+    return rule(scaleSp(), '50% 30%') + '\n'   // ★fix985（Owner 実機 10/17 13:05「縁なぞってるのいらない」）：会話ログの円の縁取り（box-shadow の輪）をやめた。拡大と明るさの補正はそのまま
          + '@media (min-width: 768px) { ' + rule(scalePc(), '50% 28%') + ' }';
   }
   function ensureStyle(){
