@@ -268,7 +268,39 @@
 
   // ---------- fetchラッパ（最内側。fix247がこれを _fetch として捕獲する） ----------
   var _origFetch = W.fetch;
+  /* ★fix980（2026-10-17・本番実測）: 画像生成の seed を 0〜2147483647 に収める。
+       Pollinations が seed の上限検証（< 2147483647）を始め、fix767 のレシピ seed（0〜4294967295）の約半分が
+       400 BAD_REQUEST → Worker 502（poll-upstream）で失敗していた（10/15 22:40 までは同じ大きさで成功していた）。
+       変換は範囲外の seed だけ ((floor(seed) mod 2147483647) + 2147483647) mod 2147483647（決定的・結果は必ず 0〜2147483646。範囲内の seed は 1 bit も変わらない）。prompt・その他の項目は触らない。
+       対象：gen.pollinations.ai/v1/images/generations・workers.dev の /image・同一オリジンの /api/image への POST（JSON 本文）。
+       kill: localStorage v292Dfix980Off='1'。観測: window.__v292Dfix484.seed980() */
+  var stats980 = { clamped: 0, seen: 0 };
+  function off980(){ try { return W.localStorage && W.localStorage.getItem('v292Dfix980Off') === '1'; } catch(e){ return false; } }
+  function isImagePost980(url, init){
+    try {
+      if (!(init && init.method === 'POST' && typeof init.body === 'string')) return false;
+      var u = String((url && url.url) || url || '');
+      return u.indexOf('gen.pollinations.ai/v1/images/generations') >= 0 || (/workers\.dev/.test(u) && /\/image(\?|$)/.test(u)) || /^(https:\/\/[^\/]*pages\.dev)?\/api\/image(\?|$)/.test(u);
+    } catch(e){ return false; }
+  }
+  function clampSeed980(url, init){
+    try {
+      if (off980() || !isImagePost980(url, init)) return init;
+      var b = JSON.parse(String(init.body)); if (!b || typeof b !== 'object') return init;
+      stats980.seen++;
+      if (typeof b.seed === 'number' && isFinite(b.seed) && (b.seed > 2147483646 || b.seed < 0)){
+        /* 範囲外だけを決定的に 0〜2147483646 へ（GPT #127-AZ）。整数へ切り下げてから 2147483647 を法として正規化する（負数も 0 以上へ）。
+           範囲内（0〜2147483646）の seed は小数でも 1 bit も変えない。数値でない・NaN・Infinity の seed は従来どおり触らない。 */
+        var M980 = 2147483647;
+        b.seed = ((Math.floor(b.seed) % M980) + M980) % M980;
+        stats980.clamped++;
+        return Object.assign({}, init, { body: JSON.stringify(b) });
+      }
+    } catch(e){}
+    return init;
+  }
   var wrapped = function(url, init){
+    init = clampSeed980(url, init);   // ★fix980（下の正規化より先・対象外は init をそのまま返す）
     try {
       if (isImageGen(url, init)){
         var b = null;
@@ -314,7 +346,8 @@
     normalizeBody: normalizeBody,
     isImageGen: isImageGen,
     active: active,
-    status: function(){ return { armed: true, active: active(), diag: diagOn(), canon: CANON_VERSION }; }
+    status: function(){ return { armed: true, active: active(), diag: diagOn(), canon: CANON_VERSION }; },
+    seed980: function(){ return { on: !off980(), seen: stats980.seen, clamped: stats980.clamped }; }, clampSeed980: clampSeed980
   };
   try { console.log(TAG, 'armed; active:', active() ? 'on' : 'OFF(kill switch)'); } catch(e){}
 })();
