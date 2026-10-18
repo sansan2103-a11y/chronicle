@@ -239,6 +239,7 @@
     /* 1) body */
     stage = 'BODY_WRITE_FAILED';
     var bodyStr;
+    try { if (window.__v292Dbav2 && window.__v292Dbav2.stampNew) body = window.__v292Dbav2.stampNew(body, id); } catch(eB){}   /* ★BAV2: beta starts on Asset v2 (schema 2) */
     try { bodyStr = JSON.stringify(body); } catch(e){ return { ok: false, code: 'SERIALIZE_ERROR' }; }
     if (!lss(BODY_PREFIX + id, bodyStr)) return rollback(stage);
     wroteBody = true;

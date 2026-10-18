@@ -139,7 +139,7 @@
   function refreshMe() {
     return api('/auth/me', 'GET').then(function (j) {
       state.checked = true;
-      if (j && j.ok) { state.me = { accountId: j.accountId, entitlement: j.entitlement, status: j.status }; state.features = (j.features && typeof j.features === 'object') ? { memoryEngine: j.features.memoryEngine === true } : null; writeMark(state.me); if (!PLAY[j.entitlement]) showGate('entitlement'); else { hideGate(); renderLogout897(); } }
+      if (j && j.ok) { state.me = { accountId: j.accountId, entitlement: j.entitlement, status: j.status }; state.features = (j.features && typeof j.features === 'object') ? { memoryEngine: j.features.memoryEngine === true, assetV2Beta: j.features.assetV2Beta === true } : null;   /* ★BAV2: carry the server's beta Asset v2 answer (v292Dbav2-beta.js) */ writeMark(state.me); if (!PLAY[j.entitlement]) showGate('entitlement'); else { hideGate(); renderLogout897(); } }
       else if (j && j.__status === 401) { state.me = null; state.features = null; clearMark(); unrenderLogout897(); showGate('login'); }
       else { state.lastError = j && (j.errorCode || j.__status); state.features = null; }
       try { window.dispatchEvent(new Event('chr:account-me')); } catch (e905) {}

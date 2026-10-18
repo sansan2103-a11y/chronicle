@@ -988,7 +988,7 @@
         if (!err2 && r2 && r2.status === 200 && j2 && j2.ok && typeof j2.candidate === 'string'){ out.device = 'IMPORTED'; out.candidates.push(j2.candidate); }
         else if (!err2 && r2 && r2.status === 403) out.device = 'UNAVAILABLE';
         else out.device = 'UNKNOWN';
-        var ok = out.device === 'IMPORTED' && (out.server === 'IMPORTED' || out.server === 'NONE');
+        var ok = out.device === 'IMPORTED' && (out.server === 'IMPORTED' || out.server === 'NONE' || out.server === 'UNAVAILABLE');   /* ★B1c (GPT #127-DS): Vault account — import_legacy stays 403 (I13) but the device copy was imported → secured (same rule as migrationStatus) */
         done({ ok: ok, code: ok ? 'IMPORTED' : (out.device !== 'IMPORTED' ? 'DEVICE_' + out.device : 'SERVER_' + out.server), candidates: out.candidates });
       });
     });
