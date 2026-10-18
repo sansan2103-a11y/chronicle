@@ -1052,7 +1052,9 @@
   var stats = { commits: 0, ok: 0, noop: 0, parityPass: 0, parityFail: 0,
                 seedEquivalent: 0, shadowConflict: 0, netFail: 0, skipped: 0 };
   var LEDGER = [], LEDGER_CAP = 50;
-  function note(row){ row.t = Date.now(); LEDGER.push(row); while (LEDGER.length > LEDGER_CAP) LEDGER.shift(); }
+  function note(row){ row.t = Date.now(); LEDGER.push(row); while (LEDGER.length > LEDGER_CAP) LEDGER.shift();
+    try { f928OnNote(row); } catch(e928){}   /* ■fix928: 通信失敗／成功／競合を見て、限られた再試行を予約・解除する */
+  }
   /* ★STEP3C SUCCESS LEDGER（裁定: canary observability 目的のみ）
      in-memory only / 永続化しない / localStorage に書かない / network 追加なし /
      canonical payload に混ぜない / 本文・aiInstr 実内容は記録しない（hash と長さのみ）。 */
@@ -2853,6 +2855,86 @@
     pushTimer = setTimeout(function(){ pushTimer = null; firstDirtyTs = 0; commit('debounce'); }, wait);
   }
 
+  /* ■fix928（BUNDLE26・GPT #127-CX、kill: v292Dfix928Off='1'）オフライン復帰の自動保存。
+     いままで：オフライン中の保存失敗（getstory が届かない等）の後、debounce の予約は消費済みで、
+       次の内容変更か再読込まで送られなかった（hs5 OF3b）。
+     ここでは新しい送信経路を作らない。次の契機で **既存の commit('online-resume') を 1 回**呼ぶだけ：
+       ① window 'online'　② visibilitychange（visible）　③ 通信失敗の後の限られた再試行（15s → 60s → 5min・最大 3 回）
+     送る・送らないの判断は、既存の commit（fix781 marker・fix705 authority・f910Check・CAS・fix924）がそのまま行う。
+     呼ばない条件：marker が DIRTY 以外（CLEAN・DIVERGED・BOOTSTRAP_HOLD）／KEEP_LOCAL 中／409・canonHold／
+       fix705 が released でない／送信中・debounce 予約中／ログインしていない／navigator.onLine === false。
+     409（CAS 競合）・hold の後は再試行を予約しない（予約済みのものも取り消す）。成功で回数を戻す。 */
+  function f928Off(){ return lsg('v292Dfix928Off') === '1'; }
+  var F928_DELAYS = [15000, 60000, 300000];
+  var F928_NETFAIL = { C_GETSTORY_FAIL: 1, C2_GETSTORY_FAIL: 1, CANONICAL_WRITE_AMBIGUOUS: 1, NET_FAIL: 1 };
+  var F928_OK = { CANONICAL_COMMIT_OK: 1, CANONICAL_COMMIT_CONFIRMED_BY_READBACK: 1, CANONICAL_CONVERGED_AFTER_CONFLICT: 1, SUCCESS: 1, SEED_EQUIVALENT: 1,
+                  CANONICAL_CONVERGED_NO_WRITE: 1, F910_NO_LOCAL_PROGRESS: 1, F927_KEEP_LOCAL_PAUSED: 1 };   /* 収束・write 0 で解決 */
+  var F928_STOP = { CANONICAL_WRITE_CONFLICT: 1, CANONICAL_409: 1, CONTRACT_409: 1, SHADOW_CONFLICT: 1, F924_CONFLICT_PROTECTED: 1,
+                    CANONICAL_ROW_MISSING: 1, CANONICAL_AUTHORITY_DRIFT: 1, CANONICAL_WRITE_UNSETTLED: 1,
+                    F697P_HOLD_CONFLICT: 1, BOOTSTRAP_CONTENT_DIVERGENCE: 1, AV2_CANONICAL_HELD: 1 };
+  var f928 = { tries: 0, timer: null, timerId: null, scheduled: 0, fired: {}, skipped: {}, stops: 0, resets: 0, last: null,
+              netFail: false,      /* 未解決のネットワーク失敗がある（online／visible はこのときだけ動く） */
+              busyUntil: 0 };      /* f928 が呼んだ commit の結果待ち（重複した契機を 1 本にまとめる） */
+  function f928Cancel(why){
+    if (f928.timer){ try { clearTimeout(f928.timer); } catch(e){} f928.timer = null; f928.timerId = null; f928.last = { cancel: why, t: Date.now() }; }
+  }
+  function f928OnNote(row){
+    if (!row || !row.kind || f928Off()) return;
+    var k = String(row.kind);
+    if (F928_OK[k]){ if (f928.tries || f928.timer){ f928.resets++; } f928.tries = 0; f928.netFail = false; f928.busyUntil = 0; f928Cancel('OK:' + k); return; }
+    if (F928_STOP[k] || /^F910_.*HOLD/.test(k) || /^C2?_HTTP_4\d\d$/.test(k) || /^C2?_GETSTORY_HTTP_4\d\d$/.test(k) || /^HTTP_4\d\d$/.test(k)){ f928.stops++; f928.netFail = false; f928.busyUntil = 0; f928Cancel('STOP:' + k); return; }
+    var net = !!F928_NETFAIL[k] || /^C2?_HTTP_(5\d\d|0)$/.test(k) || /^C2?_GETSTORY_HTTP_(5\d\d|0)$/.test(k) || /^HTTP_(5\d\d|0)$/.test(k);
+    if (!net) return;
+    f928.netFail = true; f928.busyUntil = 0;
+    if (f928.timer) return;                                      /* 予約済み：重ねない */
+    if (f928.tries >= F928_DELAYS.length){ f928.skipped.BUDGET = (f928.skipped.BUDGET || 0) + 1; return; }
+    var d = F928_DELAYS[f928.tries]; f928.tries++; f928.scheduled++;
+    var sid = null; try { sid = storyId(); } catch(e){}
+    f928.timerId = sid;
+    f928.timer = setTimeout(function(){ f928.timer = null; var t = f928.timerId; f928.timerId = null;
+      try { if (t && storyId() !== t){ f928Skip('STORY_CHANGED', 'retry'); return; } } catch(e){}
+      f928Fire('retry'); }, d);
+    f928.last = { scheduled: d, n: f928.tries, after: k, t: Date.now() };
+    try { LEDGER.push({ kind: 'F928_RETRY_SCHEDULED', id: row.id || sid, n: f928.tries, ms: d, after: k, t: Date.now() }); while (LEDGER.length > LEDGER_CAP) LEDGER.shift(); } catch(e){}
+  }
+  function f928Skip(why, src){
+    f928.skipped[why] = (f928.skipped[why] || 0) + 1; f928.last = { skip: why, src: src, t: Date.now() };
+    return false;
+  }
+  function f928Fire(src){
+    try {
+      if (f928Off()) return f928Skip('OFF', src);
+      if (!f928.netFail) return f928Skip('NO_NET_FAIL', src);                 /* 直前の commit がネットワーク失敗のときだけ */
+      if (Date.now() < f928.busyUntil) return f928Skip('BUSY', src);           /* online・visible・timer の重複は 1 本に */
+      if (!on()) return f928Skip('ENGINE_OFF', src);
+      try { if (navigator.onLine === false) return f928Skip('NAVIGATOR_OFFLINE', src); } catch(e0){}
+      var id = storyId(); if (!id) return f928Skip('NO_STORY', src);
+      if (!isLoggedIn()) return f928Skip('NOT_LOGGED_IN', src);
+      try { var rj = JSON.parse(lsg('v292Dfix721_txn') || 'null');
+            if (rj && (rj.phase === 'PREPARED' || rj.phase === 'APPLYING')) return f928Skip('RESTORE_TXN', src); } catch(e1){}
+      try { var F5 = window.__v292Dfix705; var st5 = F5 && F5.status && F5.status().state;
+            if (!st5 || st5.phase !== 'released' || st5.held !== false) return f928Skip('F705_NOT_RELEASED', src); }
+      catch(e2){ return f928Skip('F705_UNKNOWN', src); }
+      if (canonHold[id]) return f928Skip('CANON_HOLD', src);
+      var G = g781(); var m = (G && typeof G.marker === 'function') ? G.marker(id) : null;
+      if (!m) return f928Skip('NO_MARKER', src);
+      if (m.userChoice && m.userChoice.kind === 'KEEP_LOCAL') return f928Skip('KEEP_LOCAL', src);
+      if (m.state !== 'DIRTY_INTENT' && m.state !== 'DIRTY_LOCAL') return f928Skip('MARKER_' + m.state, src);
+      if (inFlight) return f928Skip('IN_FLIGHT', src);
+      if (pushTimer) return f928Skip('DEBOUNCE_PENDING', src);
+      f928.fired[src] = (f928.fired[src] || 0) + 1; f928.last = { fire: src, t: Date.now() }; f928.busyUntil = Date.now() + 30000;
+      try { LEDGER.push({ kind: 'F928_RESUME', id: id, src: src, t: Date.now() }); while (LEDGER.length > LEDGER_CAP) LEDGER.shift(); } catch(e3){}
+      commit('online-resume');
+      return true;
+    } catch(e){ return f928Skip('ERROR', src); }
+  }
+  try {
+    window.addEventListener('online', function(){ setTimeout(function(){ try { f928Fire('online'); } catch(e){} }, 300); }, false);
+    document.addEventListener('visibilitychange', function(){
+      try { if (document.visibilityState === 'visible') setTimeout(function(){ try { f928Fire('visible'); } catch(e){} }, 300); } catch(e){}
+    }, false);
+  } catch(e){}
+
   /* ■SN1(a)（2026-10-11, GPT #125-CY, kill: v292DfixSN1aOff='1'）flushForNav(maxMs) → Promise<{ok, why, ms}>
      アプリ内の物語切替・HOME 遷移の直前に呼ぶ。予約中（pushTimer）の commit を既存の commit 経路ですぐ始め、
      server の ACK（fix781 marker が CLEAN になる = g781Confirm）を最大 maxMs 待つ。
@@ -3415,6 +3497,7 @@
                stats: JSON.parse(JSON.stringify(f697pStats)) }; },
     flush: function(){ commit('manual'); return true; },
     f924: function(){ return { off: f924Off(), stats: JSON.parse(JSON.stringify(f924)) }; },   /* ■fix924 */
+    f928: function(){ return { off: f928Off(), netFail: f928.netFail, busy: Date.now() < f928.busyUntil, tries: f928.tries, pending: !!f928.timer, scheduled: f928.scheduled, fired: JSON.parse(JSON.stringify(f928.fired)), skipped: JSON.parse(JSON.stringify(f928.skipped)), stops: f928.stops, resets: f928.resets, last: f928.last }; },   /* ■fix928 */
     flushForNav: function(maxMs){ return flushForNav(maxMs); },   /* ■SN1(a) */
     f895: function(){ return { off: f895Off(), done: f895Done, last: f895Last ? JSON.parse(JSON.stringify(f895Last)) : null }; },
     /* ★fix718: read-only 可視化（書込 0） */

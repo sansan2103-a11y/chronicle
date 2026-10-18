@@ -251,7 +251,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261018-bundle25-a';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261018-bundle26-a';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -276,7 +276,7 @@
 <script src="v292Dfix654-storage-trap.js?cb=v292Dfix731"></script>
 <!-- v292Dfix893: Pages origin（*.pages.dev）でだけ動く cookie session shim。github.io では何もしない。 -->
 <script src="v292Dfix893-account-cookie-shim.js?cb=20260929-ac14"></script>
-<script src="v292DfixS1-entry-notice.js?cb=20261018-bundle25-a"></script><!-- v292DfixS1: github.io でだけ正式な入口の案内（自動転送なし）。OFF=localStorage v292DfixS1Off=1 -->
+<script src="v292DfixS1-entry-notice.js?cb=20261018-bundle26-a"></script><!-- v292DfixS1: github.io でだけ正式な入口の案内（自動転送なし）。OFF=localStorage v292DfixS1Off=1 -->
 <script src="v292Diso2-owner-send-guard.js?cb=20261014-iso2b"></script>
 <!-- ★v292Dsmrc1 model registry（X-6 MODEL_REGISTRY_CONVERGENCE / client 20260926-sp20m / RULING_ID PKT-20260926-RR-01）:
      index.html と home.html が **同じ 1 file** を読む。model の正本（primary / fallback / request policy）はこの file だけ。
@@ -300,7 +300,7 @@
      NON-DESTRUCTIVE MERGE + default-deny + durable journal + boot rollbackで復元する。
      配置契約(RULING31/32): fix564直後・全writer(291/587/399/402)より前 = RECOVERY EARLY。
      観測=window.__v292Dfix721.status() / OFF=v292Dfix721Off -->
-<script src="v292Dfix726-export-secret-guard.js?cb=20261018-bundle25-a"></script>
+<script src="v292Dfix726-export-secret-guard.js?cb=20261018-bundle26-a"></script>
 <script src="v292Dfix721-safe-restore.js?cb=v292Dfix726"></script>
 <!-- ★fix660(B): BackupGC。削除候補を選ぶ層。分類は fix562 が唯一の正なのでその後ろ -->
 <script src="v292Dfix660-backup-gc.js?cb=v292Dfix680"></script>
@@ -319,7 +319,7 @@
 <script src="v292Dav2-data.js?cb=20261005-c3"></script>
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
 <script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20261018-bundle25-a"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20261018-bundle26-a"></script>
 <!-- ★fix860 STORY_PASSCODE: unlock dialog / passcode 管理 UI（supplier と fix697 の狭い口に依存） -->
 <script src="v292Dfix860-story-unlock-ui.js?cb=20260916-sp2"></script>
 <script src="v292Dfix729-title-sync.js?cb=20260909-fix842"></script>
@@ -379,7 +379,7 @@
      載せるだけでは 1 バイトも通信しない（起動時の自動同期・自動 caller は 0）。
      配置 = fix820 の直後（f872* bridge に依存するため読み順だけを揃える）・fix825 より前。
      index.html には載せない（Scenario の owner は home 側）。 -->
-<script src="v292Dfix872-scenario-cloud-sync.js?cb=20261018-bundle25-a"></script>
+<script src="v292Dfix872-scenario-cloud-sync.js?cb=20261018-bundle26-a"></script>
 <!-- v292Dfix823: SEED_EXPANSION_V1 Scenario Seed Adapter（dormant・UI caller 0・kill v292Dfix823Off）。fix436+fix335 の再利用で
      Scenario Original の空欄だけを埋める。transport は実 fix247 runtime authority のみ（home には fix247 が無いので現状は常に AI_UNAVAILABLE = fail-closed）。 -->
 <script src="v292Dfix823-scenario-seed-adapter.js?cb=20260907-schema3"></script>
@@ -3271,7 +3271,7 @@
      appended continuation line. engine only; DOM 0; store/cloud/LS write 0; reuses fix436 request/parseFillJson/normVal only.
      caller = fix825 (button per character card + post-expand offer). kill: localStorage v292Dfix829Off=1. -->
 <script src="v292Dfix829-seed-text-enrichment.js?cb=20260907-fix829r"></script>
-<script src="v292Dfix825-scenario-ui.js?cb=20261018-bundle25-a"></script>
+<script src="v292Dfix825-scenario-ui.js?cb=20261018-bundle26-a"></script>
 <!-- v292Dfix870(HOME_THREE_CTA_V1・GPT 裁定 #L12entry): HOME の入口を 3 本立てにする。
      DOM は 1 つも消さない（#newBtn / #newCard / #scBtn は node ごと生き残り、id・class・delegation も不変）。
      新 URL 式 0（[3] は data-open を既存 openStory delegation に拾わせる）・localStorage 書込 0。
@@ -3300,6 +3300,6 @@
   <div>本文と画像は AI が生成しています。内容は架空のものです。</div>
   <div>AI: OpenRouter / DeepSeek ・ 画像: Pollinations</div>
 </footer>
-<script src="v292Dvault2-ui.js?cb=20261018-bundle25-a"></script>
+<script src="v292Dvault2-ui.js?cb=20261018-bundle26-a"></script>
 </body>
 </html>
