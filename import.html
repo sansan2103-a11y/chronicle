@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chronicle 旧入口の物語を取り込む</title>
+<!-- v292DfixIM（GPT #127-DC／#127-DD）：旧入口（github.io）の端末バックアップ（fixBK-r2）から、選んだ物語 1 本を
+     新しい Story ID でこの端末（pages.dev）へコピーする静的ページ。アプリのスクリプトは読み込まない（fix726 だけ）。
+     ・バックアップ ファイルは端末の中で読むだけ（File API）。外部へ送らない。元のファイル・旧入口・D1 の既存行は変更しない。
+     ・サーバーへの通信は、認証済みの getstory（新しい ID が空いているかの確認）だけ。D1 への書込は 0。
+       D1 への作成は、利用者が「開く」を押した後に、アプリの既存の新規物語の経路（fix756）が行う。
+     ・照合済みの一覧（import_manifest.json：ID・本文の sha256・分類だけ）と一致した物語だけ取り込める。
+       ※一覧は公開しない（GPT #127-DE）。Owner の PC にあるファイルを、バックアップと一緒に選んでもらう（File API・送信しない）。
+     ・新しい ID = 'si' + sha256(元 origin + '|' + 元 ID) の先頭 16 桁。同じ物語を何度・どの端末で取り込んでも同じ ID になる。
+       その ID がサーバーにある（削除済みを含む）・確認できない → 何も書かない。
+     ・この端末に同じキーが 1 つでもある → 何も書かない。書込の途中で失敗 → 書いた分を消して元に戻す。
+     ・アイコン（名前で引く画像）は移さない（同名の別人を取り違えないため。物語を開いた後に作り直せる）。
+     kill：localStorage v292DfixIMOff='1'（ページが何もしない） -->
+<script src="v292Dfix726-export-secret-guard.js?cb=20261018-im-a"></script>
+<!-- iso2（持ち主の関所）：この端末・このアカウントで新しく作る物語として、作成の記録（c=w=今のアカウント）を付ける。
+     記録が付かなければ取り込まない（記録の無い物語は、アプリの送信の関所で保留になり、クラウドに作られないため）。 -->
+<script src="v292Diso2-owner-send-guard.js?cb=20261018-im-a"></script>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0d0c14; color: #e8e6f2; font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  p { margin: 6px 0; color: #c9c5df; }
+  .box { background: #17152a; border: 1px solid #3a3560; border-radius: 12px; padding: 14px; margin: 14px 0; }
+  button { font: inherit; font-weight: 700; border-radius: 10px; padding: 8px 14px; border: 0; cursor: pointer; background: #6d5df0; color: #fff; }
+  button.sub { background: #3a3560; }
+  button[disabled] { opacity: .45; cursor: default; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  td, th { border-bottom: 1px solid #2c2846; padding: 5px 6px; text-align: left; vertical-align: top; }
+  .ok { color: #8fe0a5; } .ng { color: #ff9a9a; } .hold { color: #f2c46d; }
+  .mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-all; }
+  label { display: block; margin: 8px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>旧入口の物語を取り込む</h1>
+  <p>旧入口（github.io）で書き出したバックアップ ファイルから、物語を 1 本ずつ、この入口へコピーします。</p>
+  <p>ファイルはこの端末の中で読むだけです。元のファイルや旧入口のデータは変わりません。</p>
+  <div class="box">
+    <label>① バックアップ ファイルと照合済みの一覧（import_manifest.json）を、2 つ一緒に選ぶ <input id="file" type="file" multiple accept=".json,application/json"></label>
+    <div id="status"></div>
+  </div>
+  <div class="box" id="listBox" style="display:none">
+    <div>② 取り込む物語を選ぶ（1 本ずつ）</div>
+    <table id="list"><thead><tr><th>物語</th><th>ターン</th><th>状態</th><th></th></tr></thead><tbody></tbody></table>
+  </div>
+  <div class="box" id="resultBox" style="display:none">
+    <div id="result"></div>
+    <div id="openArea" style="display:none">
+      <label><input id="openAgree" type="checkbox"> 開くと、この物語がクラウド（このアカウント）に保存され始めます。了解しました。</label>
+      <button id="open" type="button" disabled>③ この物語を開く</button>
+      <button id="undo" class="sub" type="button">取り込みを取り消す（まだ開いていない場合だけ）</button>
+    </div>
+  </div>
+</main>
+<script>
+(function(){
+  'use strict';
+  var VERSION = 'fixIM-r1';
+  var FORMAT = 'chronicle-full-device-backup', BK_VERSION = 'fixBK-r2';
+  var LEDGER = 'v292Dimport_ledger';
+  /* 物語ごとのキー（新入口が使っている名前だけ）。<ID> を付け替える。 */
+  var KEY_PATTERNS = [
+    'chr6_slot_<ID>', 'v292Dfix77States_slot_<ID>', 'v292Dfix307Roster_slot_<ID>',
+    'chr6_relations_<ID>', 'chr6_char_states_<ID>', 'chr6_char_flags_<ID>', 'chr6_pending_dice_<ID>',
+    'chr6_turn_summaries_<ID>', 'chr6_chapter_titles_<ID>', 'chr6_scene_breaks_<ID>', 'chr6_scene_summaries_<ID>',
+    'v292aiInstr_slot_<ID>', 'v292cover_seed_<ID>', 'v292Dmem1_slot_<ID>',
+    'chr6_v292Dfix104_dlg_slot_<ID>', 'chr6_v292Dfix135_last_slot_<ID>', 'chr6_v292Dfix135_sum_slot_<ID>',
+    'chr6_v292Dfix136_wi_slot_<ID>', 'chr6_v292Dfix137_ev_slot_<ID>', 'chr6_v292Dfix54_genderMap_"<ID>"',
+    'v292Dfix277Quasi_slot_<ID>', 'v292Dfix298_slot_<ID>', 'v292Dfix307Last_slot_<ID>',
+    'v292Dfix374Chosen_chr6_slot_<ID>', 'v292capp_slot_<ID>'
+  ];
+  var CLS_TEXT = {
+    MATCH: ['ok', '取り込めます（クラウドの旧データと一致を確認済み）'],
+    ORPHAN: ['ok', '取り込めます（旧入口の一覧に無かった物語・この端末のバックアップだけにある）'],
+    SIDECAR_DIFF: ['hold', '保留：クラウドの旧データと付帯情報（人物一覧など）に違いがあります'],
+    MEMORY_DIFF: ['hold', '保留：クラウドの旧データにある「記憶」がバックアップにありません'],
+    SCHEMA1: ['hold', '保留：古い保存形式です（変換の確認待ち）'],
+    UNVERIFIED: ['hold', '保留：照合済みの一覧と内容が一致しません']
+  };
+  var IMPORTABLE = { MATCH: 1, ORPHAN: 1 };
+  var st = { origin: null, ls: null, manifest: null, rows: [], last: null, busy: false };
+
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function off(){ return lsg('v292DfixIMOff') === '1'; }
+  function setStatus(h){ $('status').innerHTML = h; }
+  function sha256hex(text){
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(text))).then(function(b){
+      return Array.from(new Uint8Array(b)).map(function(x){ return x.toString(16).padStart(2, '0'); }).join(''); });
+  }
+  function keysOf(id){ return KEY_PATTERNS.map(function(p){ return p.split('<ID>').join(id); }); }
+  function newIdFor(origin, oldId){ return sha256hex(origin + '|' + oldId).then(function(h){ return 'si' + h.slice(0, 16); }); }
+
+  /* ---- 認証（アプリと同じヘッダー。読むだけ） ---- */
+  function proxyUrl(){ var u = (lsg('v292ProxyUrl') || '').replace(/\s+/g, ''); return (u || 'https://novel-proxy.sansan2103.workers.dev').replace(/\/+$/, ''); }
+  function authHeaders(){
+    var h = { 'Content-Type': 'application/json' };
+    try { var t = JSON.parse(lsg('v292GoogleToken') || 'null'); if (t && t.token && t.exp && (t.exp * 1000) > (Date.now() + 30000)) h['x-google-id'] = String(t.token); } catch(e){}   /* fix697 googleTokenFromLS と同じ */
+    var p = (lsg('v292ProxyPass') || '').trim(); if (p) h['x-chronicle-pass'] = p;
+    try { var o = JSON.parse(lsg('v292Dfix837_sess') || 'null'); if (o && o.sid && o.ts && (Date.now() - o.ts) < 604800000) h['x-chronicle-session'] = o.sid; } catch(e){}
+    return h;
+  }
+  function loggedIn(h){ return !!(h['x-google-id'] || h['x-chronicle-pass'] || h['x-chronicle-session']); }
+  /* 新しい ID がサーバーで空いているか。空き＝404 not-found だけ。ほかは全部「確認できない」で止める。 */
+  function serverCheck(newId){
+    var h = authHeaders();
+    if (!loggedIn(h)) return Promise.resolve({ free: false, why: 'NOT_LOGGED_IN' });
+    var ac = new AbortController(); var tm = setTimeout(function(){ try { ac.abort(); } catch(e){} }, 15000);
+    return fetch(proxyUrl() + '/save', { method: 'POST', headers: h, signal: ac.signal,
+                                         body: JSON.stringify({ op: 'getstory', id: newId, clientCanonicalSchemaMax: 2 }) })
+      .then(function(r){ clearTimeout(tm); return r.json().then(function(j){ return { s: r.status, j: j || {} }; }, function(){ return { s: r.status, j: {} }; }); })
+      .then(function(x){
+        if (x.s === 404 && x.j.errorCode === 'not-found') return { free: true };   /* ※vault で隠された物語も同じ 404 になる。その場合は「開く」後の作成が既存行との競合で止まる（上書きしない） */
+        if (x.s === 200 && x.j.ok) return { free: false, why: x.j.deleted ? 'EXISTS_DELETED' : 'EXISTS', rev: x.j.rev, serverHash: x.j.serverHash || null };
+        if (x.s === 409 && x.j.deleted) return { free: false, why: 'EXISTS_DELETED' };
+        return { free: false, why: 'HTTP_' + x.s + (x.j.errorCode ? ':' + x.j.errorCode : '') };
+      }, function(){ clearTimeout(tm); return { free: false, why: 'NETWORK' }; });
+  }
+
+  /* ---- ① ファイルを読む ---- */
+  function readText(f){ return new Promise(function(res, rej){ var rd = new FileReader(); rd.onerror = function(){ rej(new Error('READ')); }; rd.onload = function(){ res(String(rd.result)); }; rd.readAsText(f); }); }
+  function onFile(ev){
+    if (off()){ setStatus('<span class="ng">この機能は止められています。</span>'); return; }
+    var fs = ev.target.files ? Array.prototype.slice.call(ev.target.files) : []; if (!fs.length) return;
+    setStatus('読み込み中…'); $('listBox').style.display = 'none'; $('resultBox').style.display = 'none';
+    Promise.all(fs.map(readText)).then(function(texts){
+      var bk = null, man = null;
+      texts.forEach(function(t){ var d = null; try { d = JSON.parse(t); } catch(e){ d = null; }
+        if (d && d.kind === FORMAT && d.format === BK_VERSION && d.ls && typeof d.ls === 'object') bk = d;
+        else if (d && d.v === 1 && d.stories && typeof d.stories === 'object' && typeof d.origin === 'string') man = d; });
+      if (!bk){ setStatus('<span class="ng">Chronicle の端末バックアップ（' + BK_VERSION + '）が選ばれていません。</span>'); return; }
+      if (!man){ setStatus('<span class="ng">照合済みの一覧（import_manifest.json）が選ばれていません。2 つ一緒に選んでください。</span>'); return; }
+      st.origin = String(bk.origin || ''); st.ls = bk.ls; st.manifest = man;
+      return analyze();
+    }).catch(function(){ setStatus('<span class="ng">ファイルを読めませんでした。</span>'); });
+  }
+  function analyze(){
+    var ls = st.ls, meta = []; try { meta = JSON.parse(ls.chr6_slots_meta || '[]') || []; } catch(e){ meta = []; }
+    var names = {}; meta.forEach(function(x){ if (x && x.id) names[x.id] = x.name; });
+    var ids = Object.keys(ls).filter(function(k){ return k.indexOf('chr6_slot_') === 0 && k !== 'chr6_slot_'; }).map(function(k){ return k.slice(10); });
+    var M = (st.manifest && st.manifest.stories) || {};
+    var originOk = st.manifest && st.manifest.origin === st.origin;
+    return Promise.all(ids.map(function(id){
+      return sha256hex(ls['chr6_slot_' + id]).then(function(h){
+        var b = null; try { b = JSON.parse(ls['chr6_slot_' + id]); } catch(e){}
+        var turns = (b && b.turns && b.turns.length) || 0;
+        var hero = (b && b.cast && b.cast.hero && b.cast.hero.name) || '';
+        var m = M[id]; var cls = (originOk && m && m.bodySha256 === h) ? m.cls : 'UNVERIFIED';
+        return { id: id, turns: turns, hero: hero, title: names[id] || '', cls: cls, bodySha256: h };
+      });
+    })).then(function(rows){
+      rows.sort(function(a, b){ return b.turns - a.turns; }); st.rows = rows;
+      var tb = $('list').querySelector('tbody'); tb.innerHTML = '';
+      rows.forEach(function(r){
+        var t = CLS_TEXT[r.cls] || CLS_TEXT.UNVERIFIED;
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + esc(r.title || ('（一覧に名前なし）' + (r.hero ? ' 主人公：' + r.hero : ''))) + '<div class="mono">' + esc(r.id) + '</div></td><td>' + r.turns + '</td><td class="' + t[0] + '">' + esc(t[1]) + '</td><td></td>';
+        if (IMPORTABLE[r.cls]){ var bt = document.createElement('button'); bt.type = 'button'; bt.textContent = '取り込む'; bt.setAttribute('data-im', r.id); bt.addEventListener('click', function(){ doImport(r); }); tr.lastChild.appendChild(bt); }
+        tb.appendChild(tr);
+      });
+      $('listBox').style.display = '';
+      setStatus('<span class="ok">読み込みました：物語 ' + rows.length + ' 本。</span>' + (originOk ? '' : ' <span class="ng">（照合済みの一覧と入口が違うため、すべて保留です）</span>'));
+    });
+  }
+
+  /* ---- ② 1 本を取り込む（この端末へのコピーだけ。D1 への書込 0） ---- */
+  function showResult(h){ $('resultBox').style.display = ''; $('result').innerHTML = h; }
+  function doImport(r){
+    if (st.busy || off()) return; st.busy = true;
+    Array.prototype.forEach.call(document.querySelectorAll('button[data-im]'), function(b){ b.disabled = true; });
+    var fin = function(h){ st.busy = false; showResult(h); Array.prototype.forEach.call(document.querySelectorAll('button[data-im]'), function(b){ b.disabled = false; }); };
+    newIdFor(st.origin, r.id).then(function(newId){
+      var src = keysOf(r.id), dst = keysOf(newId), plan = [];
+      for (var i = 0; i < src.length; i++){ if (Object.prototype.hasOwnProperty.call(st.ls, src[i])) plan.push({ from: src[i], to: dst[i], v: st.ls[src[i]] }); }
+      var skipped = Object.keys(st.ls).filter(function(k){ return k.indexOf(r.id) >= 0 && src.indexOf(k) < 0; });
+      /* 秘密の除去（fix726）。除くものが無ければ元の文字列のまま書く。 */
+      var G = window.__v292Dfix726;
+      if (!G || typeof G.sanitizeStoryBody !== 'function') return fin('<span class="ng">安全確認の部品を読めませんでした。何も書いていません。</span>');
+      var body; try { body = JSON.parse(plan.filter(function(p){ return p.from === 'chr6_slot_' + r.id; })[0].v); } catch(e){ return fin('<span class="ng">本文を読めませんでした。何も書いていません。</span>'); }
+      var san = G.sanitizeStoryBody(body); if (!san.ok) return fin('<span class="ng">本文の安全確認に失敗しました。何も書いていません。</span>');
+      if (san.removed > 0) plan.forEach(function(p){ if (p.from === 'chr6_slot_' + r.id) p.v = JSON.stringify(san.value); });
+      /* この端末に同じキーが 1 つでもあれば止める */
+      var clash = dst.filter(function(k){ return lsg(k) !== null; });
+      if (clash.length) return fin('<span class="ng">この端末に同じ物語のデータが既にあります（取り込み済みの可能性）。何も書いていません。</span>');
+      var led = []; try { led = JSON.parse(lsg(LEDGER) || '[]') || []; } catch(e){ led = []; }
+      if (led.some(function(x){ return x && x.newId === newId && x.state !== 'UNDONE'; })) return fin('<span class="ng">この物語はこの端末で取り込み済みです。何も書いていません。</span>');
+      return serverCheck(newId).then(function(sc){
+        if (!sc.free){
+          var why = { NOT_LOGGED_IN: 'ログインしていません。新しい入口でログインしてから、もう一度試してください。', EXISTS: 'この物語は既に取り込まれています（クラウドにあります）。', EXISTS_DELETED: 'この物語は以前取り込んだ後に削除されています。生き返らせないため、取り込みません。', NETWORK: 'クラウドに確認できませんでした（通信）。' }[sc.why] || ('クラウドに確認できませんでした（' + esc(sc.why) + '）。');
+          return fin('<span class="ng">' + why + ' 何も書いていません。</span>');
+        }
+        /* 書込（全部新しいキー。途中で失敗したら書いた分を消す） */
+        var written = [];
+        try {
+          plan.forEach(function(p){ localStorage.setItem(p.to, p.v); written.push(p.to); });
+          var meta = []; try { meta = JSON.parse(lsg('chr6_slots_meta') || '[]') || []; } catch(e){ throw new Error('META_PARSE'); }
+          if (!Array.isArray(meta)) throw new Error('META_SHAPE');
+          var title = r.title || ('旧入口から：' + (r.hero || '物語') + '（' + r.turns + 'ターン）');
+          meta.push({ id: newId, name: title, key: 'chr6_slot_' + newId, updatedAt: new Date().toISOString() });
+          localStorage.setItem('chr6_slots_meta', JSON.stringify(meta));
+          led.push({ v: VERSION, state: 'COPIED', at: Date.now(), srcOrigin: st.origin, srcId: r.id, srcBodySha256: r.bodySha256, newId: newId, keys: written.slice(), skipped: skipped, title: title });
+          localStorage.setItem(LEDGER, JSON.stringify(led));
+        } catch(e){
+          written.forEach(function(k){ try { localStorage.removeItem(k); } catch(e2){} });
+          try { var m2 = JSON.parse(lsg('chr6_slots_meta') || '[]'); if (Array.isArray(m2)) localStorage.setItem('chr6_slots_meta', JSON.stringify(m2.filter(function(x){ return !x || x.id !== newId; }))); } catch(e3){}
+          return fin('<span class="ng">書込に失敗したため、元に戻しました（' + esc(String(e && e.message || e).slice(0, 40)) + '）。</span>');
+        }
+        /* iso2 の作成記録（c=w=今のアカウント）が付いたか。付かなければ取り込みを戻す（fail closed） */
+        var I2 = window.__v292Diso2, own = null, stamp = null;
+        try { own = I2 && I2.owner ? I2.owner() : null; stamp = I2 && I2.stampOf ? I2.stampOf(newId, 's') : null; } catch(e){}
+        if (!own || own.bad || own.docKind !== 'acct' || !stamp || stamp.c !== own.doc || stamp.w !== own.doc){
+          written.forEach(function(k){ try { localStorage.removeItem(k); } catch(e2){} });
+          try { var m3 = JSON.parse(lsg('chr6_slots_meta') || '[]'); if (Array.isArray(m3)) localStorage.setItem('chr6_slots_meta', JSON.stringify(m3.filter(function(x){ return !x || x.id !== newId; }))); } catch(e3){}
+          try { var l3 = JSON.parse(lsg(LEDGER) || '[]') || []; l3 = l3.filter(function(x){ return !(x && x.newId === newId && x.state === 'COPIED'); }); localStorage.setItem(LEDGER, JSON.stringify(l3)); } catch(e4){}
+          return fin('<span class="ng">このアカウントの物語として記録できませんでした（' + esc(!own ? 'NO_ISO2' : (own.bad || (own.docKind !== 'acct' ? 'NOT_ACCOUNT' : 'NO_STAMP'))) + '）。元に戻しました。新しい入口でログインしてから試してください。</span>');
+        }
+        st.last = { newId: newId, keys: written };
+        var bd2 = null; try { bd2 = JSON.parse(lsg('chr6_slot_' + newId)); } catch(e){}
+        var npc2 = (bd2 && bd2.cast && bd2.cast.npcs && bd2.cast.npcs.length) || 0;
+        fin('<span class="ok">この端末にコピーしました（クラウドにはまだ何も作っていません）。</span>'
+            + '<table><tr><td>元の物語</td><td class="mono">' + esc(r.id) + '</td></tr><tr><td>新しい ID</td><td class="mono">' + esc(newId) + '</td></tr>'
+            + '<tr><td>中身</td><td>' + r.turns + ' ターン・主人公 1＋登場人物 ' + npc2 + '・データ ' + written.length + ' 個</td></tr>'
+            + '<tr><td>アイコン</td><td class="hold">移していません（物語を開いた後に作り直せます）</td></tr>'
+            + '<tr><td>「開く」を押すと</td><td class="hold">この物語が、ログイン中のアカウントのクラウドに新しく作られます</td></tr></table>'
+            + (skipped.length ? '<div class="hold">移さなかった端末用のデータ：' + skipped.length + ' 個（作業記録など）</div>' : '')
+            );
+        $('openArea').style.display = ''; $('openAgree').checked = false; $('open').disabled = true;
+      });
+    }).catch(function(e){ fin('<span class="ng">取り込めませんでした（' + esc(String(e && e.message || e).slice(0, 60)) + '）。</span>'); });
+  }
+
+  /* ---- 取り消し（まだクラウドに作られていない場合だけ） ---- */
+  function undo(){
+    var L = st.last; if (!L || st.busy) return; st.busy = true;
+    serverCheck(L.newId).then(function(sc){
+      st.busy = false;
+      if (!sc.free) return showResult('<span class="ng">取り消せません：クラウドに既に作られているか、確認できませんでした（' + esc(sc.why) + '）。</span>');
+      L.keys.forEach(function(k){ try { localStorage.removeItem(k); } catch(e){} });
+      try { var m = JSON.parse(lsg('chr6_slots_meta') || '[]'); if (Array.isArray(m)) localStorage.setItem('chr6_slots_meta', JSON.stringify(m.filter(function(x){ return !x || x.id !== L.newId; }))); } catch(e){}
+      try { var led = JSON.parse(lsg(LEDGER) || '[]') || []; led.forEach(function(x){ if (x && x.newId === L.newId && x.state === 'COPIED') { x.state = 'UNDONE'; x.undoneAt = Date.now(); } }); localStorage.setItem(LEDGER, JSON.stringify(led)); } catch(e){}
+      st.last = null; $('openArea').style.display = 'none';
+      showResult('<span class="ok">取り消しました（この端末のコピーを消しました）。</span>');
+    });
+  }
+
+  $('file').addEventListener('change', onFile);
+  $('openAgree').addEventListener('change', function(){ $('open').disabled = !this.checked; });
+  $('open').addEventListener('click', function(){ if (st.last && $('openAgree').checked) location.href = 'index.html?story=' + encodeURIComponent(st.last.newId); });
+  $('undo').addEventListener('click', undo);
+  window.__v292DfixIM = { __armed: true, version: VERSION, state: function(){ return { rows: st.rows.map(function(r){ return { id: r.id, turns: r.turns, cls: r.cls }; }), last: st.last ? { newId: st.last.newId, keys: st.last.keys.length } : null }; }, newIdFor: newIdFor };
+})();
+</script>
+</body>
+</html>
