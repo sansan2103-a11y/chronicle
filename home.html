@@ -251,7 +251,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261017-bundle24-a';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261018-bundle24b-a';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -276,7 +276,7 @@
 <script src="v292Dfix654-storage-trap.js?cb=v292Dfix731"></script>
 <!-- v292Dfix893: Pages origin（*.pages.dev）でだけ動く cookie session shim。github.io では何もしない。 -->
 <script src="v292Dfix893-account-cookie-shim.js?cb=20260929-ac14"></script>
-<script src="v292DfixS1-entry-notice.js?cb=20261017-bundle24-a"></script><!-- v292DfixS1: github.io でだけ正式な入口の案内（自動転送なし）。OFF=localStorage v292DfixS1Off=1 -->
+<script src="v292DfixS1-entry-notice.js?cb=20261018-bundle24b-a"></script><!-- v292DfixS1: github.io でだけ正式な入口の案内（自動転送なし）。OFF=localStorage v292DfixS1Off=1 -->
 <script src="v292Diso2-owner-send-guard.js?cb=20261014-iso2b"></script>
 <!-- ★v292Dsmrc1 model registry（X-6 MODEL_REGISTRY_CONVERGENCE / client 20260926-sp20m / RULING_ID PKT-20260926-RR-01）:
      index.html と home.html が **同じ 1 file** を読む。model の正本（primary / fallback / request policy）はこの file だけ。
@@ -300,7 +300,7 @@
      NON-DESTRUCTIVE MERGE + default-deny + durable journal + boot rollbackで復元する。
      配置契約(RULING31/32): fix564直後・全writer(291/587/399/402)より前 = RECOVERY EARLY。
      観測=window.__v292Dfix721.status() / OFF=v292Dfix721Off -->
-<script src="v292Dfix726-export-secret-guard.js?cb=20261017-bundle24-a"></script>
+<script src="v292Dfix726-export-secret-guard.js?cb=20261018-bundle24b-a"></script>
 <script src="v292Dfix721-safe-restore.js?cb=v292Dfix726"></script>
 <!-- ★fix660(B): BackupGC。削除候補を選ぶ層。分類は fix562 が唯一の正なのでその後ろ -->
 <script src="v292Dfix660-backup-gc.js?cb=v292Dfix680"></script>
@@ -319,7 +319,7 @@
 <script src="v292Dav2-data.js?cb=20261005-c3"></script>
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
 <script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20261017-bundle24-a"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20261018-bundle24b-a"></script>
 <!-- ★fix860 STORY_PASSCODE: unlock dialog / passcode 管理 UI（supplier と fix697 の狭い口に依存） -->
 <script src="v292Dfix860-story-unlock-ui.js?cb=20260916-sp2"></script>
 <script src="v292Dfix729-title-sync.js?cb=20260909-fix842"></script>
@@ -379,7 +379,7 @@
      載せるだけでは 1 バイトも通信しない（起動時の自動同期・自動 caller は 0）。
      配置 = fix820 の直後（f872* bridge に依存するため読み順だけを揃える）・fix825 より前。
      index.html には載せない（Scenario の owner は home 側）。 -->
-<script src="v292Dfix872-scenario-cloud-sync.js?cb=20261017-bundle24-a"></script>
+<script src="v292Dfix872-scenario-cloud-sync.js?cb=20261018-bundle24b-a"></script>
 <!-- v292Dfix823: SEED_EXPANSION_V1 Scenario Seed Adapter（dormant・UI caller 0・kill v292Dfix823Off）。fix436+fix335 の再利用で
      Scenario Original の空欄だけを埋める。transport は実 fix247 runtime authority のみ（home には fix247 が無いので現状は常に AI_UNAVAILABLE = fail-closed）。 -->
 <script src="v292Dfix823-scenario-seed-adapter.js?cb=20260907-schema3"></script>
@@ -1831,6 +1831,60 @@
   }
   function lpsPostpullOff(){ return g('v292DlpsPostpull1Off') === '1'; }
   function h402(str){ var h = 0; str = String(str || ''); for (var i = 0; i < str.length; i++){ h = ((h << 5) - h + str.charCodeAt(i)) | 0; } return String(str.length) + ':' + String(h >>> 0); }
+  /* ■fix926（GPT #127-CR・BUNDLE24b）: 旧パッケージの取り込みで、端末内の canonical の物語を古い内容へ戻さない。
+     実測（hs5 sidecar・SC_INJECT／SC_BODY）: home の取り込みは canonical の物語を除外しておらず（本文は「ターン数が多い側を守る」だけ）、
+       古い端末の旧パッケージで relations などの sidecar と、同じターン数の本文が古い値に書き換わった（server は fix705 が守った）。
+     規則（物語ごと。listshadow 1 回＋fix702 の canonical cache で判定）:
+       canonical と確認済み（listshadow の行が canonical、または cache が canonical） → 物語単位の key（fix743 keysFor の 14 本＋genderMap）を取り込まない
+       shadow と確認済み（listshadow の行が shadow）／server に行が無い（listshadow 成功・該当なし＝旧パッケージだけの物語） → 従来どおり
+       判定できない（listshadow 失敗） → canonical と分かっていなくても取り込まない（保留・端末の値を保持・「未反映」として数える）
+     kill: localStorage v292Dfix926Off='1'。 */
+  var F926 = null;
+  try { window.__v292Dfix926 = { status: function(){ try { return F926 ? JSON.parse(JSON.stringify({ canon: Object.keys(F926.canon), hold: Object.keys(F926.hold), gone: Object.keys(F926.gone || {}), why: F926.why, ids: F926.ids, skips: F926.skips, holds: F926.holds, goneSkips: F926.goneSkips, metaDropped: F926.metaDropped, keysFrom: F926.keysFrom })) : null; } catch(e){ return null; } }, keys: function(id){ return f926Keys(id); }, fallback: function(){ return F926_FALLBACK.slice(); } }; } catch(e){}
+  var F926_FALLBACK = ['chr6_slot_', 'chr6_relations_', 'chr6_char_states_', 'chr6_char_flags_', 'chr6_pending_dice_',
+    'v292Dfix77States_slot_', 'v292Dfix307Roster_slot_', 'chr6_turn_summaries_', 'chr6_chapter_titles_', 'chr6_scene_breaks_',
+    'chr6_scene_summaries_', 'v292aiInstr_slot_', 'v292cover_seed_', 'v292Dmem1_slot_'];
+  function f926Off(){ return g('v292Dfix926Off') === '1'; }
+  function f926Keys(id){
+    var out = [];
+    try { var C = window.__v292DfixCC2; if (C && typeof C.keysFor === 'function'){ var K = C.keysFor(String(id)); for (var f in K){ if (Object.prototype.hasOwnProperty.call(K, f)) out.push(String(K[f])); } } } catch(e){ out = []; }
+    if (!out.length) for (var i = 0; i < F926_FALLBACK.length; i++) out.push(F926_FALLBACK[i] + id);
+    out.push('chr6_v292Dfix54_genderMap_"' + id + '"'); out.push('chr6_v292Dfix54_genderMap_' + id);
+    return out;
+  }
+  function f926Classify(r){
+    F926 = null;
+    try {
+      if (f926Off()) return Promise.resolve();
+      var ls = (r && r.data && r.data.ls) || {};
+      var ids = {};
+      for (var k in ls){ var m = /^chr6_slot_(.+)$/.exec(k); if (m) ids[m[1]] = 1; }
+      var idList = Object.keys(ids);
+      var st = { canon: {}, hold: {}, gone: {}, owner: {}, why: null, ids: idList.length, skips: 0, holds: 0, goneSkips: 0, metaDropped: 0, keysFrom: null };
+      if (!idList.length){ F926 = st; return Promise.resolve(); }
+      var cache = {}; try { cache = JSON.parse(g('v292Dfix702_storyAuth') || '{}') || {}; } catch(e){ cache = {}; }
+      var cc2 = (typeof g2LoadCC2 === 'function') ? g2LoadCC2() : Promise.resolve(false);
+      return cc2.then(function(){
+        return call({ op: 'listshadow' }, 20000).then(function(x){ return x; }, function(){ return null; });
+      }).then(function(x){
+        var rows = null;
+        if (x && x.ok && Array.isArray(x.stories)){ rows = {}; x.stories.forEach(function(row){ if (row && row.id != null) rows[String(row.id)] = row; }); }
+        else st.why = 'listshadow-failed';
+        idList.forEach(function(id){
+          var c = cache[id]; var cachedCanon = !!(c && c.authority === 'canonical');
+          var row = rows ? rows[id] : null;
+          var serverCanon = !!(row && String(row.authority || '') === 'canonical');
+          if (row && row.deleted) st.gone[id] = 1;                 /* server で削除済み → 再出現させない */
+          else if (cachedCanon || serverCanon) st.canon[id] = 1;
+          else if (!rows) st.hold[id] = 1;
+        });
+        try { var C = window.__v292DfixCC2; st.keysFrom = (C && typeof C.keysFor === 'function') ? 'keysFor' : 'fallback'; } catch(e){ st.keysFrom = 'fallback'; }
+        Object.keys(st.canon).concat(Object.keys(st.hold), Object.keys(st.gone)).forEach(function(id){ f926Keys(id).forEach(function(kk){ st.owner[kk] = id; }); });
+        F926 = st;
+        try { console.log('[home][fix926] 判定:', JSON.stringify({ ids: st.ids, canon: Object.keys(st.canon).length, hold: Object.keys(st.hold).length, gone: Object.keys(st.gone).length, why: st.why, keys: st.keysFrom })); } catch(e){}
+      });
+    } catch(e){ F926 = { canon: {}, hold: {}, owner: {}, why: 'threw', ids: 0, skips: 0, holds: 0 }; return Promise.resolve(); }
+  }
   function pull(force, adoptSlotId){
     if(!loggedIn()){ noteNotLoggedIn(); return; }
     var f659adoptKeyOnly = f659adoptKey(adoptSlotId);   /* ★fix659: 保護を外してよい唯一のキー(無ければ null) */
@@ -1842,7 +1896,7 @@
       /* ★fix866 終端①: #note を書き換えずに終わるので、予告だけを外す */
       if(!force && serverRev <= base){ el('sync').textContent='☁ 最新です'; f866ClearTransientNote(); return; }
       el('sync').textContent = '☁ 取り込み中…';
-      return call({op:'get'}, 40000).then(function(r){ return g2Prepare(r).then(function(){ return r; }, function(){ return r; }); }).then(function(r){
+      return call({op:'get'}, 40000).then(function(r){ return g2Prepare(r).then(function(){ return r; }, function(){ return r; }); }).then(function(r){ return f926Classify(r).then(function(){ return r; }, function(){ return r; }); }).then(function(r){
         if(!r || !r.ok || !r.data || !r.data.ls) throw new Error('get');
         /* ★★v292Dfix826 F3（GPT裁定52）: 応答が届くまでの間に、この端末の別経路が
            より新しい版を確定させていることがある（実観測: rev69 の pull 応答が
@@ -1915,6 +1969,8 @@
           if (Object.prototype.hasOwnProperty.call(ls, 'chr6_slots_meta')){
             var T = window.__v292Dfix579;
             var lm = J(g('chr6_slots_meta'), null), rm = J(ls['chr6_slots_meta'], null);
+            /* ■fix926: server で削除済みの物語は、旧パッケージの登録簿から再出現させない（端末側の登録はそのまま） */
+            if (F926 && F926.gone && Array.isArray(rm)){ var rm0 = rm.length; rm = rm.filter(function(e){ return !(e && e.id != null && F926.gone[String(e.id)]); }); F926.metaDropped += (rm0 - rm.length); }
             if (rm == null) metaAbsent = true;
             if (T && typeof T.mergeMeta === 'function' && Array.isArray(lm) && Array.isArray(rm)){
               var mg = T.mergeMeta(lm, rm);
@@ -1971,6 +2027,13 @@
           if(B602.blocked[k]){
             if(B602.mode==='halt') haltBlocked++; else tombBlocked++;
             continue;
+          }
+          /* ■fix926: canonical の物語単位の key は取り込まない（端末の値を保持）。判定できない物語は保留（未反映として数える） */
+          if(F926 && F926.owner && Object.prototype.hasOwnProperty.call(F926.owner, k)){
+            var o926 = F926.owner[k];
+            if(F926.canon[o926]){ F926.skips++; continue; }
+            if(F926.hold[o926]){ F926.holds++; retainedLocalDelta++; continue; }
+            if(F926.gone && F926.gone[o926]){ F926.goneSkips++; continue; }
           }
           if(k==='chr6_slots_meta'){
             if(metaGuarded) continue;                                // ★墓標を消さない側へ倒す
@@ -3208,7 +3271,7 @@
      appended continuation line. engine only; DOM 0; store/cloud/LS write 0; reuses fix436 request/parseFillJson/normVal only.
      caller = fix825 (button per character card + post-expand offer). kill: localStorage v292Dfix829Off=1. -->
 <script src="v292Dfix829-seed-text-enrichment.js?cb=20260907-fix829r"></script>
-<script src="v292Dfix825-scenario-ui.js?cb=20261017-bundle24-a"></script>
+<script src="v292Dfix825-scenario-ui.js?cb=20261018-bundle24b-a"></script>
 <!-- v292Dfix870(HOME_THREE_CTA_V1・GPT 裁定 #L12entry): HOME の入口を 3 本立てにする。
      DOM は 1 つも消さない（#newBtn / #newCard / #scBtn は node ごと生き残り、id・class・delegation も不変）。
      新 URL 式 0（[3] は data-open を既存 openStory delegation に拾わせる）・localStorage 書込 0。
@@ -3237,6 +3300,6 @@
   <div>本文と画像は AI が生成しています。内容は架空のものです。</div>
   <div>AI: OpenRouter / DeepSeek ・ 画像: Pollinations</div>
 </footer>
-<script src="v292Dvault2-ui.js?cb=20261017-bundle24-a"></script>
+<script src="v292Dvault2-ui.js?cb=20261018-bundle24b-a"></script>
 </body>
 </html>

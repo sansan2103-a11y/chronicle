@@ -104,20 +104,46 @@
   //     fix402 側へ canonical 保護を入れてある（P0-2 の第二の防壁）。
   // =====================================================================
   var maskStats = { calls: 0, blockedKeys: 0, lastBlocked: null, installed: false, mode: 'none' };
-  function canonicalKeySet(){
+  /* ■fix926（GPT #127-CR・BUNDLE24b）: home と同じ物語単位の除外。canonical の物語は fix743 keysFor の 14 本（＋genderMap）を除く。
+     判定できない物語（この端末の cache に authority が無い）も、旧パッケージの値で本文を書き換えない（保留）。
+     kill: v292Dfix926Off='1'（従来の本文・aiInstr・genderMap だけの mask へ戻る）。 */
+  var F926_FALLBACK = ['chr6_slot_', 'chr6_relations_', 'chr6_char_states_', 'chr6_char_flags_', 'chr6_pending_dice_',
+    'v292Dfix77States_slot_', 'v292Dfix307Roster_slot_', 'chr6_turn_summaries_', 'chr6_chapter_titles_', 'chr6_scene_breaks_',
+    'chr6_scene_summaries_', 'v292aiInstr_slot_', 'v292cover_seed_', 'v292Dmem1_slot_'];
+  function f926Off(){ return lsg('v292Dfix926Off') === '1'; }
+  function f926Keys(id){
+    var out = [];
+    try { var C = window.__v292DfixCC2; if (C && typeof C.keysFor === 'function'){ var K = C.keysFor(String(id)); for (var f in K){ if (Object.prototype.hasOwnProperty.call(K, f)) out.push(String(K[f])); } } } catch(e){ out = []; }
+    if (!out.length) for (var i = 0; i < F926_FALLBACK.length; i++) out.push(F926_FALLBACK[i] + id);
+    return out;
+  }
+  function canonicalKeySet(ls){
     var ids = canonicalIds(), set = {};
     for (var i = 0; i < ids.length; i++){
       set[bodyKeyOf(ids[i])] = 1;
       set[aiKeyOf(ids[i])] = 1;
       var gk = genderKeysOf(ids[i]);
       for (var j = 0; j < gk.length; j++) set[gk[j]] = 1;
+      if (!f926Off()){ var kk = f926Keys(ids[i]); for (var q = 0; q < kk.length; q++) set[kk[q]] = 1; }
+    }
+    if (!f926Off() && ls && typeof ls === 'object'){
+      var mm = markerMap();
+      for (var k in ls){
+        var m = /^chr6_slot_(.+)$/.exec(k); if (!m) continue;
+        var id = m[1];
+        /* ■fix926（#127-CS ②）: この端末の cache の shadow は古いことがある（実測 PC：cache canonical 46／D1 50）。
+           index（旧互換の画面）では server へ問い合わせないので、canonical と確認できない物語は shadow を含めてすべて保留する。
+           旧パッケージからの物語の取り込みは home（listshadow で判定）だけで行う。 */
+        var k2 = f926Keys(id); for (var q2 = 0; q2 < k2.length; q2++) set[k2[q2]] = 1;
+        var g2 = genderKeysOf(id); for (var j2 = 0; j2 < g2.length; j2++) set[g2[j2]] = 1;
+      }
     }
     return set;
   }
   function maskIncoming(ls){
     var out = {}, blocked = [];
     if (!ls || typeof ls !== 'object') return { ls: ls, blocked: blocked };
-    var set = canonicalKeySet();
+    var set = canonicalKeySet(ls);
     for (var k in ls){
       if (!Object.prototype.hasOwnProperty.call(ls, k)) continue;
       if (set[k]) { blocked.push(k); continue; }     /* ★canonical story の内容は書き戻さない */
