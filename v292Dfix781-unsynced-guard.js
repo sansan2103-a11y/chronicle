@@ -613,6 +613,7 @@ function banner(id, kind){
     try {
       if (!document || !document.body) { setTimeout(build, 300); return; }
       removeBanner();
+      f927RemoveLegacyFork();   /* ■fix927 C */
       var d = document.createElement('div');
       d.id = 'v781banner';
       d.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:100000;'
@@ -635,7 +636,8 @@ function banner(id, kind){
           idbGet(m.draftId, function(back){
             if (!back){ msg.textContent = 'ローカルの退避を確認できませんでした。中止します。'; b1.disabled = false; return; }
             var mm = ensureMarker(id);
-            mm.adopt = { draftId: m.draftId, at: Date.now(), serverRev: (m.pendingServerRev == null ? null : m.pendingServerRev) };
+            mm.adopt = { draftId: m.draftId, at: Date.now(), serverRev: (m.pendingServerRev == null ? null : m.pendingServerRev),
+                         serverHash: (m.pendingServerHash == null ? null : String(m.pendingServerHash)) };   /* ■fix927: 同じ rev の矛盾検出用 */
             mm.state = STATE.CLEAN;                 /* = 裁定の CLEAN_BOOTSTRAP 扱い */
             mm.userChoice = { kind:'ADOPT_SERVER', at: Date.now() };
             writeMarker(id, mm);
@@ -657,7 +659,8 @@ function banner(id, kind){
           var mm = ensureMarker(id);
           mm.state = STATE.DIRTY_LOCAL;
           mm.userChoice = { kind:'KEEP_LOCAL', at: Date.now(),
-                            atServerRev: (mm.pendingServerRev == null ? null : mm.pendingServerRev) };
+                            atServerRev: (mm.pendingServerRev == null ? null : mm.pendingServerRev),
+                            atServerHash: (mm.pendingServerHash == null ? null : String(mm.pendingServerHash)) };   /* ■fix927 */
           mm.adopt = null;
           writeMarker(id, mm);
           note({ k:'USER_KEEP_LOCAL', id:String(id), atServerRev: mm.userChoice.atServerRev });
@@ -679,6 +682,84 @@ function banner(id, kind){
   return true;
 }
 
+/* ■fix927（GPT #127-CV B／C）kill: localStorage v292Dfix927Off='1'
+   B: 「このままローカルで続ける」は「この端末だけで続きを遊ぶ。クラウドには保存しない」。その間は落ち着いた常設の表示を出す。
+      ボタンは「クラウド版に戻す（この端末の内容は退避）」だけ（＝既存の ADOPT と同じ手順）。クラウドへ置き換える操作は置かない。
+   C: 差分バナー／この表示を出すときは、旧式の分岐バナー（fix659／fix402-fork）を取り除く（以後は fix925 が再表示と forcePut を止める）。 */
+function f927On(){ return ng('v292Dfix927Off') !== '1'; }
+function f927RemoveLegacyFork(){
+  if (!f927On()) return 0;
+  var n = 0;
+  try { ['v292Dfix659-fork', 'v292Dfix402-fork'].forEach(function(eid){ var el = document.getElementById(eid); if (el && el.parentNode){ el.parentNode.removeChild(el); n++; } }); } catch(e){}
+  if (n) { stats.f927ForkRemoved = (stats.f927ForkRemoved || 0) + n; note({ k:'F927_LEGACY_FORK_REMOVED', n:n }); }
+  return n;
+}
+var keepEl = null;
+function keepLocalNotice(id){
+  if (!on() || !f927On() || !id) return false;
+  var build = function(){
+    try {
+      if (!document || !document.body) { setTimeout(build, 300); return; }
+      f927RemoveLegacyFork();
+      if (keepEl && keepEl.parentNode) return;
+      if (document.getElementById('v927keep')) return;
+      var d = document.createElement('div');
+      d.id = 'v927keep';
+      d.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:99990;'
+        + 'background:#1f2a24;color:#dcefe2;border:1px solid #4f7a5e;border-radius:10px;'
+        + 'padding:8px 12px;font-size:12.5px;max-width:92vw;box-shadow:0 4px 14px rgba(0,0,0,.45);'
+        + 'display:flex;gap:10px;align-items:center;flex-wrap:wrap';
+      var msg = document.createElement('span');
+      msg.textContent = 'この物語は現在、この端末だけで進行しています。クラウド版とは別の進行です。他の端末には反映されません。この端末で新しく進めた内容を、クラウド版へ反映する機能はまだありません。';
+      d.appendChild(msg);
+      var b = document.createElement('button');
+      b.textContent = 'クラウド版に戻す（この端末の内容は退避）';
+      b.style.cssText = 'background:#3c5a48;color:#fff;border:0;border-radius:8px;padding:4px 10px;cursor:pointer;flex:none';
+      b.onclick = function(){
+        try {
+          b.disabled = true;
+          /* ★GPT #127-CW: KEEP_LOCAL の間に進めたターンも退避する。押した**今の**端末の内容で Recovery Draft を新しく作り、
+             読み戻し・指紋の再確認（draftCreate の既存手順）が通ったときだけクラウド版へ切り替える。失敗したら切り替えない。 */
+          var sch = 1; try { var F5 = window.__v292Dfix705; var st5 = F5 && F5.status && F5.status().state; if (st5 && st5.schema === 2) sch = 2; } catch(eS){}
+          msg.textContent = 'この端末の内容を退避しています…';
+          draftCreate(id, { schema: sch, reason: 'KEEP_LOCAL_ADOPT_SERVER' }, function(okD, errD, newDraftId){
+            if (!okD || !newDraftId){ msg.textContent = 'この端末の内容を退避できなかったため、クラウド版には戻していません（' + String(errD || '') + '）。'; b.disabled = false; return; }
+            var m = readMarker(id);
+            var mm = ensureMarker(id);
+            var atRev = (mm.userChoice && mm.userChoice.atServerRev != null) ? mm.userChoice.atServerRev : (mm.pendingServerRev == null ? null : mm.pendingServerRev);
+            var atHash = (mm.userChoice && mm.userChoice.atServerHash) ? mm.userChoice.atServerHash : (mm.pendingServerHash == null ? null : String(mm.pendingServerHash));
+            mm.adopt = { draftId: newDraftId, at: Date.now(), serverRev: atRev, serverHash: atHash };
+            mm.state = STATE.CLEAN;
+            mm.userChoice = { kind:'ADOPT_SERVER', at: Date.now() };
+            writeMarker(id, mm);
+            note({ k:'USER_ADOPT_SERVER', id:String(id), draftId: newDraftId, from:'keep-local' });
+            try { location.reload(); } catch(e){}
+          });
+        } catch(e){ b.disabled = false; }
+      };
+      d.appendChild(b);
+      document.body.appendChild(d);
+      keepEl = d;
+      stats.f927KeepNotice = (stats.f927KeepNotice || 0) + 1;
+      note({ k:'F927_KEEP_LOCAL_NOTICE', id:String(id) });
+    } catch(e){}
+  };
+  try { if (document && document.body) build(); else if (document) document.addEventListener('DOMContentLoaded', build); } catch(e){}
+  return true;
+}
+/* KEEP_LOCAL が有効か（userChoice KEEP_LOCAL・DIRTY）。srvRev／srvHash を渡すと「判断したときの server のまま」かも返す。 */
+function keepLocalState(id, srvRev, srvHash){
+  try {
+    if (!on() || !f927On()) return null;
+    var m = readMarker(id || storyId());
+    if (!m || !m.userChoice || m.userChoice.kind !== 'KEEP_LOCAL') return null;
+    if (!(m.state === STATE.DIRTY_INTENT || m.state === STATE.DIRTY_LOCAL)) return null;
+    var at = m.userChoice.atServerRev, ah = m.userChoice.atServerHash || null;
+    var same = (srvRev != null && at != null && +at === +srvRev && (!ah || srvHash == null || String(ah) === String(srvHash)));
+    return { atServerRev: at, atServerHash: ah, sameAsChoice: !!same };
+  } catch(e){ return null; }
+}
+
 // =====================================================================
 // (9) 公開口
 // =====================================================================
@@ -694,6 +775,7 @@ window.__v292Dfix781 = {
   generation: function(id){ var m = readMarker(id || storyId()); return m ? (+m.localGeneration || 0) : 0; },
   hold: hold,
   transition: transition,
+  keepLocalNotice: keepLocalNotice, keepLocalState: keepLocalState, f927RemoveLegacyFork: f927RemoveLegacyFork,   /* ■fix927 */
   noteInFlight: noteInFlight, refineInFlight: refineInFlight,
   clearInFlight: clearInFlight, confirm: confirm,
   draftCreate: draftCreate, draftGet: idbGet,

@@ -174,11 +174,26 @@
   var f910 = { checks: 0, holds: 0, noLc: 0, atBase: 0, noProgress: 0, lastHold: null, lastNoProgress: null,
                cleanChecks: 0, cleanNoLc: 0, cleanAheadNoWrite: 0, cleanAheadHold: 0,
                noBaseChecks: 0, noBaseNoBoot: 0, noBaseAtBoot: 0, noBaseBootDiff: 0, noBaseNoWrite: 0, noBaseHold: 0 };
-  function f910Check(id, srvRev, localHash){
+  function f910Check(id, srvRev, localHash, srvHash){
     try {
       if (f910Off()) return null;
       f910.checks++;
       var G = g781(); var m = (G && typeof G.marker === 'function') ? G.marker(id) : null;
+      /* ■fix927（GPT #127-CV B）: 「このままローカルで続ける」の間は canonical へ PUT しない。
+         server が利用者の判断したときの版のままなら、DIVERGED に戻さず write 0（この端末だけで続ける）。
+         server がその後さらに進んでいたら、無断で同期せず、新しい競合判断（従来の hold・Draft）へ戻す。 */
+      try {
+        var K927 = (G && typeof G.keepLocalState === 'function') ? G.keepLocalState(id, srvRev, srvHash) : null;
+        if (K927){
+          if (K927.sameAsChoice){
+            f910.keepPause = (f910.keepPause || 0) + 1;
+            try { if (typeof G.keepLocalNotice === 'function') G.keepLocalNotice(id); } catch(eN){}
+            return { noProgress: true, lcRev: K927.atServerRev, why910c: 'KEEP_LOCAL_PAUSED', keep: true };
+          }
+          f910.keepAdvanced = (f910.keepAdvanced || 0) + 1;
+          return { lcRev: K927.atServerRev, lcFp: null, gen: (m ? m.localGeneration : null), clean: false, why910c: 'KEEP_LOCAL_SERVER_ADVANCED' };
+        }
+      } catch(e927){}
       if (!m){
         /* ■fix910c r2: marker が読めない＝基準が無い。fix781 off（完全従来）と kill のときだけ従来どおり素通し */
         if (f910cOff() || !G || (typeof G.off === 'function' && G.off())) return null;
@@ -378,6 +393,11 @@
     note({ kind: 'F910_NO_LOCAL_PROGRESS', id: id, srvRev: srvRev, lcRev: info.lcRev, why: why, schema: schema, why910c: info.why910c || null });
   }
   function f910Hold(id, schema, srvRev, srvHash, j, info, why){
+    /* ■fix927: KEEP_LOCAL 中で、server が判断したときの版のままなら DIVERGED に戻さない（どの経路から呼ばれても同じ） */
+    try { var G0 = g781(); var K0 = (G0 && typeof G0.keepLocalState === 'function') ? G0.keepLocalState(id, srvRev, srvHash) : null;
+          if (K0 && K0.sameAsChoice){ f910.keepPause = (f910.keepPause || 0) + 1;
+            note({ kind: 'F927_KEEP_LOCAL_PAUSED', id: id, srvRev: srvRev, why: why, schema: schema });
+            try { if (typeof G0.keepLocalNotice === 'function') G0.keepLocalNotice(id); } catch(eN){} return; } } catch(e0){}
     f910.holds++;
     f910.lastHold = { id: String(id), srvRev: srvRev, lcRev: info.lcRev, why: String(why || ''), t: Date.now() };
     canonHold[id] = true;
@@ -1153,7 +1173,7 @@
           return condClearDirty(fin);
         }
         /* ■fix910: schema1 も同じ規則（rev だけで判定。fingerprint の domain は V1）。 */
-        var i910s1 = f910Check(id, srvRev, intendedLocalHash);
+        var i910s1 = f910Check(id, srvRev, intendedLocalHash, srvHash);
         if (i910s1 && i910s1.noProgress){ f910NoProgress(id, 1, srvRev, i910s1, why); return fin(); }
         if (i910s1){ f910Hold(id, 1, srvRev, srvHash, j, i910s1, why); return fin(); }
         /* ---- 異内容 → fresh 値で strict CAS 1回（force 禁止） ---- */
@@ -1317,7 +1337,7 @@
             return condClearDirty(fin);
           }
           /* ■fix910: 別端末が lastConfirmed から Cloud を進めている → 上書きしない（fix705 (c) と同じ HOLD）。 */
-          var i910 = f910Check(id, srvRev, v2hash);
+          var i910 = f910Check(id, srvRev, v2hash, srvHash);
           if (i910 && i910.noProgress){ f910NoProgress(id, 2, srvRev, i910, why); f697pClear(id, 'F910_NO_LOCAL_PROGRESS'); return fin(); }
           if (i910){
             f697pClear(id, 'F910_REMOTE_AHEAD_HOLD');

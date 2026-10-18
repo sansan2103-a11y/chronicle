@@ -1107,7 +1107,10 @@
   function f925CurConflict(){
     try {
       var G = window.__v292Dfix781; var st = (G && typeof G.state === 'function') ? G.state() : null;
-      return (st === 'DIVERGED' || st === 'BOOTSTRAP_HOLD') ? st : null;
+      if (st === 'DIVERGED' || st === 'BOOTSTRAP_HOLD') return st;
+      /* ■fix927 C: 「このままローカルで続ける」の間も、旧式の分岐バナーと forcePut を止める */
+      if (lsGet('v292Dfix927Off') !== '1' && G && typeof G.keepLocalState === 'function' && G.keepLocalState()) return 'KEEP_LOCAL';
+      return null;
     } catch(e){ return null; }
   }
   function doForcePut(onDone){

@@ -166,6 +166,7 @@
   var F896_JPRE = 'v292Dfix402_f697p_';
   var f896Last = null;
   function f896Off(){ return lsg('v292Dfix896Off') === '1'; }
+  function f927On(){ return lsg('v292Dfix927Off') !== '1'; }   /* ■fix927（GPT #127-CV） */
   /* ■fix916（B1 ME_HYDRATE_MEMORYV1_INMEMORY_STALE・GPT 裁定 2026-09-29 GO_WITH_FIXES）:
      schema2 apply は native key を書くが、fix743.buildSchema2Record の memoryV1 は fix793 の
      in-memory state（saveGate）から取られる。ME ON の端末では起動時に読んだ古い memoryV1 が残り、
@@ -690,8 +691,19 @@
 
     /* (x) ADOPT_SERVER — banner ①「ローカルを退避してクラウド版を開く」を押した後の boot。
            押した時点の serverRev と今回の serverRev が同じときだけ apply を許す。 */
-    if (m && m.adopt && m.adopt.serverRev != null && srev != null && +m.adopt.serverRev === srev)
+    if (m && m.adopt && m.adopt.serverRev != null && srev != null && +m.adopt.serverRev === srev){
+      /* ■fix927（GPT #127-CV A）: 同じ rev なのに hash が押したときと違う＝矛盾 → 止める（apply しない） */
+      if (f927On() && m.adopt.serverHash && sh && String(m.adopt.serverHash) !== String(sh)) return toHold('DIVERGED', 'ADOPT_SAME_REV_HASH_MISMATCH');
       return { action:'ALLOW', reason:'USER_ADOPT_SERVER' };
+    }
+    /* ■fix927（GPT #127-CV A）: 「ローカルを退避してクラウド版を開く」は、押した後に server が進んでいても、
+       今回の boot で取得した最新の正本を 1 回で開く。条件：退避（draftId・押した時点で読み戻し確認済み）があり、
+       今の server rev が押した時点の rev 以上（巻き戻りは止める）。apply は従来の経路（PUT 0）。lastConfirmed は apply 後の
+       SAME_HASH boot（fix896）でだけ更新される。kill: v292Dfix927Off='1'。 */
+    if (f927On() && m && m.adopt && m.adopt.draftId && m.adopt.serverRev != null && srev != null && srev > +m.adopt.serverRev){
+      note({ f927: 'ADOPT_LATEST', fromRev: +m.adopt.serverRev, toRev: srev });
+      return { action:'ALLOW', reason:'USER_ADOPT_SERVER_LATEST' };
+    }
 
     /* (y) KEEP_LOCAL — banner ②「このままローカルで続ける」を押した後の boot。
            明示同意なので auto merge ではない。押した時点の serverRev と同じときだけ有効。 */
@@ -1012,6 +1024,7 @@
                  lastConfirmedRev: g781.lastConfirmedRev, gen: g781.gen });
           try { console.warn(TAG, 'fix781: local が未同期のまま先行 — server canonical を apply しない（local 保持 / 保存フローに任せる）'); } catch(e){}
           releaseHold('fix781-local-ahead');
+          if (f927On() && g781.reason === 'USER_KEEP_LOCAL'){ try { var G927 = window.__v292Dfix781; if (G927 && typeof G927.keepLocalNotice === 'function') G927.keepLocalNotice(STORY_ID); } catch(e927){} }   /* ■fix927 */
           return cb({ verdict: 'CANONICAL_LOCAL_AHEAD', serverRev: state.serverRev,
                       unsynced: true, reason: g781.reason });
         }
