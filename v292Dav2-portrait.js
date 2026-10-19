@@ -301,6 +301,34 @@
           if (res && res.ok){ msg.textContent = MSG.ok_profile; var efB2 = card.querySelector('[data-av2-ef]'); if (efB2) efB2.disabled = false; afterSidePort(res, pmsg); } });
       };
       tools.appendChild(okB);
+      /* ★fix993 (GPT #127-EP C): 「確定してアイコンを作る」= この外見で確定 → サーバーで保存を確認 → ensureFirst を 1 回。
+         絵がまだ無いキャラだけ（noPtr）。保存が確定しなければ生成しない。連打は 1 回にまとめる。既にある絵は上書きしない（ensureFirst は EXISTS で止まる）。
+         自動 adopt なし・一斉生成なし。再読み込み（afterSidePort）は生成の結果が出てから。kill: localStorage v292Dfix993Off='1' */
+      var f993Off = false; try { f993Off = localStorage.getItem('v292Dfix993Off') === '1'; } catch(e0){}
+      if (noPtr && !f993Off){
+        var oneB = mkBtn('確定してアイコンを作る', '#3a6a5a'); oneB.setAttribute('data-av2-prof', 'confirm-and-first');
+        var oneBusy = false;
+        oneB.onclick = function(ev){ ev.stopPropagation(); if (oneBusy || oneB.disabled) return;
+          var okc = false; try { okc = window.confirm('「' + name + '」の外見をこの内容で確定し、その外見で最初の絵を1枚作ります。\n画像生成を1回使います。よろしいですか？'); } catch(e1){}
+          if (!okc) return;
+          oneBusy = true; oneB.disabled = true; okB.disabled = true; pmsg.textContent = '保存しています…';
+          var finish = function(){ oneBusy = false; oneB.disabled = false; okB.disabled = false; };
+          A().setProfile(e.id, { gender: gsel.value, appearance: ta.value, ownerConfirmed: true }, function(res){
+            note({ kind: 'UI_SET_PROFILE_ONE', ok: !!(res && res.ok), code: res && res.code });
+            if (!(res && res.ok)){ pmsg.textContent = msgFor(res); pmsg.title = (res && res.code) || ''; afterSidePort(res, pmsg); finish(); return; }   // 保存が確定しない → 生成しない
+            pmsg.textContent = '保存しました。絵を作っています…'; msg.textContent = MSG.ok_profile;
+            A().ensureFirst(e.id, {}, function(r2){
+              note({ kind: 'UI_ENSURE_FIRST_ONE', ok: !!(r2 && r2.ok), code: r2 && r2.code, calls: r2 && r2.calls });
+              pmsg.textContent = (r2 && r2.ok) ? (MSG[r2.code] || MSG.ok_first) : msgFor(r2); pmsg.title = (r2 && r2.code) || '';
+              msg.textContent = pmsg.textContent;
+              if (r2 && r2.ok){ listed = null; card.__av2Key = null; oneB.style.display = 'none'; var efB3 = card.querySelector('[data-av2-ef]'); if (efB3) efB3.style.display = 'none'; }
+              finish(); schedule();
+              afterSidePort(res, pmsg);   // 表示を揃える再読み込みは、生成の結果が出てから
+            });
+          });
+        };
+        tools.appendChild(oneB);
+      }
       var ndB = mkBtn('新しいデザインを生成（候補のみ）', '#5a3a3a'); ndB.setAttribute('data-av2-nd', '1');
       ndB.onclick = function(ev){ ev.stopPropagation(); if (ndB.disabled) return;
         /* wording follows the CURRENT confirmed profile (re-read: the Owner may have just confirmed one); the flag sent is the same

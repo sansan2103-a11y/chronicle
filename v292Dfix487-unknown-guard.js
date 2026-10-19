@@ -159,6 +159,7 @@
   var warmTries = 0;
   function warmSilCache(){
     /* ★av2 C2: no provider fetch on an Asset-v2 document. Undecidable at boot (state not hydrated) → wait; fetch only on a legacy document. */
+    if (!on() || iconOff()) return;   /* ★fix994 (GPT #127-EP G3): 影絵を使わない端末（opt-in OFF＝Owner の PC 以外の全員）では、固定の影絵 4 枚を外部（pollinations）へ取りに行かない */
     var d = __av2Doc();
     if (d === true) return;
     if (d !== false){ if (warmTries++ < 20) setTimeout(warmSilCache, 1500); return; }
