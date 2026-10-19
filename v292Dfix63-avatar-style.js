@@ -101,7 +101,7 @@ setTimeout(inject, 2000);
   //   境界 768px は fix63 本体の 56px／72px の切り替えと同じ。v292Dfix979Scale（1.0〜1.8）を置いた端末では、両方ともその値になる。
   function override(){ var v = parseFloat(lsg('v292Dfix979Scale')); return (isFinite(v) && v >= 1 && v <= 1.8) ? v : null; }
   function scaleSp(){ var o = override(); return o != null ? o : 1.0; }   // ★fix984（Owner 実機 10/17 11:08「まだ近すぎ」）：iPhone 幅は拡大なし＝キャラ一覧と同じ写り。明るさ・縁取りは残す
-  function scalePc(){ var o = override(); return o != null ? o : 1.4; }
+  function scalePc(){ var o = override(); return o != null ? o : 1.0; }   // ★fix992（Owner 10/19 09:42「PC の会話ログのアイコンの引き具合を iPhone と同じに」）：PC 幅も拡大なし
   function scale(){ return scaleSp(); }
   function rule(sc, org){ return '.v292-dlg-card .dlg-av img[data-f979="1"] { transform: scale(' + sc + ') !important; transform-origin: ' + org + ' !important;'
          + ' filter: brightness(1.12) contrast(1.06) !important; }'; }

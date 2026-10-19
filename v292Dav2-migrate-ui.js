@@ -38,7 +38,7 @@
     SERVER_UNKNOWN: '取り込みの結果を確認できませんでした', DEVICE_UNKNOWN: '取り込みの結果を確認できませんでした', NO_LEGACY_KEY: '古い絵の場所が分かりません', IN_PROGRESS: '処理中です',
     OUTCOME_UNKNOWN: '結果を確認できませんでした', ALREADY: '既にこの絵です', ADOPTED: 'この絵にしました', ADOPTED_CONFIRMED: 'この絵にしました', IMPORTED: '候補として確保しました', NOTHING_TO_SECURE: '古い絵はありません（確保済み扱い）',
     CREATED: '絵を作りました', CREATED_CONFIRMED: '絵を作りました', EXISTS: '既に絵があります', PROFILE_REVIEW_REQUIRED: '外見の情報を確認してから作ってください（下の「外見を設定」）', UNGROUNDED_REQUIRES_EXPLICIT_NEW_DRAW: '外見の情報が無いので、この操作では絵を作りません。下の「外見を設定」で外見を確定してから「新しく描く」を押してください', CANDIDATES_PENDING: '候補の絵があります。候補から選んでください',
-    GENERATION_FAILED: '絵を作れませんでした', BUDGET: '今月の画像生成の上限に達しています', AV2_FLAG_OFF: 'この端末ではこの操作はできません', AV2_OFF: 'この端末ではこの操作はできません' };
+    PROFILE_NOT_ENGLISH: '外見の文の中に、絵の指示に直せない言葉がありました（絵は作っていません・費用はかかっていません）。「外見を設定」で、髪・目・服・体格などの見た目だけを短く書き直してください（例：黒髪の長髪の少女、細身、白いドレス）', LEDGER_UNHEALTHY: '利用記録の確認中のため、画像の作成を一時的に止めています。しばらくしてからお試しください', GENERATION_FAILED: '絵を作れませんでした', BUDGET: '今月の画像生成の上限に達しています', AV2_FLAG_OFF: 'この端末ではこの操作はできません', AV2_OFF: 'この端末ではこの操作はできません' };
   function say(res){ return (res && CODE[res.code]) || (res && res.ok ? 'できました' : 'できませんでした'); }
   /* ★cand_sideport_authority r6 (audit D C-1): appearance editor for the migration row (PREP + schema2). Suggestions (cast.desc / legacy
      chrAiAv4 text) are shown as reference only; profile.appearance is written only by the explicit 「この外見で確定」 → setProfile

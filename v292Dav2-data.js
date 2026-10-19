@@ -778,6 +778,8 @@
         var code = j && (j.errorCode || j.error);
         if (!err && st === 402) return done({ ok: false, code: 'BUDGET', calls: 1 });
         if (!err && st === 429) return done({ ok: false, code: 'RATE_LIMITED', calls: 1 });
+        if (!err && st === 422 && code === 'PROFILE_NOT_ENGLISH') return done({ ok: false, code: 'PROFILE_NOT_ENGLISH', calls: 0 });   /* ★fix991 (GPT #127-EN B): the Worker stopped before the provider (P8E) — not an unknown outcome */
+        if (!err && st === 503 && code === 'LEDGER_UNHEALTHY') return done({ ok: false, code: 'LEDGER_UNHEALTHY', calls: 0 });
         if (!err && st === 502) return done({ ok: false, code: 'GENERATION_FAILED', calls: 1 });
         if (!err && (st === 501 || st === 403 || st === 404)) return done({ ok: false, code: st === 404 ? 'NOT_FOUND' : 'ASSET_V2_UNAVAILABLE', calls: 1 });
         /* outcome unknown: ONE read-only reconcile, no re-send */
@@ -888,6 +890,8 @@
       if (!err && st === 400 && code === 'EXPLICIT_NEW_DRAW_REQUIRED') return done({ ok: false, code: 'EXPLICIT_NEW_DRAW_REQUIRED', calls: 1 });   // should never happen (flag is always sent)
       if (!err && st === 402) return done({ ok: false, code: 'BUDGET', calls: 1 });
       if (!err && st === 429) return done({ ok: false, code: 'RATE_LIMITED', calls: 1 });
+      if (!err && st === 422 && code === 'PROFILE_NOT_ENGLISH') return done({ ok: false, code: 'PROFILE_NOT_ENGLISH', calls: 0 });   /* ★fix991 (GPT #127-EN B): the Worker stopped before the provider (P8E) — not an unknown outcome */
+      if (!err && st === 503 && code === 'LEDGER_UNHEALTHY') return done({ ok: false, code: 'LEDGER_UNHEALTHY', calls: 0 });
       if (!err && st === 502) return done({ ok: false, code: 'GENERATION_FAILED', calls: 1 });
       if (!err && (st === 501 || st === 403 || st === 404)) return done({ ok: false, code: st === 404 ? 'NOT_FOUND' : 'ASSET_V2_UNAVAILABLE', calls: 1 });
       done({ ok: false, code: 'OUTCOME_UNKNOWN', calls: 1, status: st || null, err: err || code || null });
