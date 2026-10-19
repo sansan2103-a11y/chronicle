@@ -87,7 +87,7 @@
   'use strict';
   if (window.__v292Dfix820) return;
   var TAG = '[v292Dfix820:scenario-original-store]';
-  var VERSION = 'v292Dfix820-20260907-store-v1.3';
+  var VERSION = 'v292Dfix820-20261019-store-v1.4-s4b';   /* v1.4: S-4b（f872On の自動判定・f872MarkPushed keepDirty） */
 
   var META_KEY    = 'chr6_scenario_meta';
   var KEY_PREFIX  = 'chr6_scenario_';
@@ -155,7 +155,37 @@
      （同期は走らないが、削除が「墓標として残る」ので後から同期を足しても復活しない）。 */
   function f872On(){
     if (lsg('v292Dfix872Off') === '1') return false;
-    return lsg('v292Dfix872On') === '1';
+    if (lsg('v292Dfix872On') === '1') return true;
+    /* ★★S-4b（GPT #127-FT）: ログイン中（owner / beta）は自動同期が既定で ON。同期の作法（墓標・dirty）も同じ条件で ON にする。
+       ・一度でもクラウドと結び付いた（cloudRev>0 / 墓標がある）端末は、ログアウト中も墓標の作法を続ける
+         （hard delete にすると、次にログインした時にクラウドから「復活」するため）。
+       ・v292Dfix872AutoOff='1' は「自動だけ止める」。既に結び付いた端末の墓標の作法はそのまま（安全側）。 */
+    if (f872MetaHasCloudState()) return true;
+    if (lsg('v292Dfix872AutoOff') === '1') return false;
+    return f872AutoAccount();
+  }
+  /* fix893（Pages origin の cookie session）が「ログイン中・利用可能な owner / beta」と言っているか（同期・読むだけ） */
+  function f872AutoAccount(){
+    try {
+      var F = window.__v292Dfix893;
+      if (!F || !F.active || typeof F.me !== 'function') return false;
+      var m = F.me();
+      if (!m) return false;
+      var ent = String(m.entitlement || m.ent || '');
+      if (ent !== 'owner' && ent !== 'beta') return false;
+      if (m.status != null && String(m.status) !== 'active') return false;
+      return true;
+    } catch(e){ return false; }
+  }
+  function f872MetaHasCloudState(){
+    var raw = lsg('chr6_scenario_meta'); if (raw == null) return false;
+    var a = null; try { a = JSON.parse(raw); } catch(e){ return false; }
+    if (Object.prototype.toString.call(a) !== '[object Array]') return false;
+    for (var i = 0; i < a.length; i++){
+      var e = a[i]; if (!e || typeof e !== 'object') continue;
+      if ((typeof e.cloudRev === 'number' && e.cloudRev > 0) || e.deleted === true) return true;
+    }
+    return false;
   }
   /* ★npc.wound は「cast の初期定義フィールド」。fix190 の永続「傷」ではない（fix819 から継続） */
   var SECRET_NAMES = ['orKey', 'naiKey', 'pollKey', 'apiKey', 'provider', 'cfg'];
@@ -846,7 +876,7 @@
     return { ok: true, scenarioId: id, cloudRev: entry.cloudRev, deleted: true };
   }
   /* push 成功後: server が返した cloudRev を格納して dirty を降ろす。**内容は 1 バイトも触らない**。 */
-  function f872MarkPushed(id0, cloudRev){
+  function f872MarkPushed(id0, cloudRev, opt){
     if (off()) return err('OFF');
     if (!f872On()) return err('F872_OFF');
     var id = trim(id0); if (!id) return err('NO_ID');
@@ -856,7 +886,8 @@
     var e = listArr[idx], out = {};
     for (var k in e){ if (Object.prototype.hasOwnProperty.call(e, k)) out[k] = e[k]; }
     out.cloudRev = Math.max(0, Math.floor(+cloudRev || 0));
-    out.dirty = false;
+    /* ★S-4b: 送っている間に同じシナリオが再び保存された時は dirty を降ろさない（新しい編集を次の同期で送る） */
+    out.dirty = !!(opt && opt.keepDirty === true);
     listArr[idx] = out;
     if (!f872WriteMeta(listArr)) return err('META_WRITE_FAILED');
     return { ok: true, scenarioId: id, cloudRev: out.cloudRev, deleted: !!out.deleted };

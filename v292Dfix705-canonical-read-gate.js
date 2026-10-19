@@ -1139,7 +1139,8 @@
      local の provider runtime / secret-capable / UI-device cfg（=非 allowlist field）は保持する。
      merge 規約はこの1本のみ（fix705 特殊 merge を増やさない）。 */
   var HY_CFG_ALLOW = ['authorNote','bannedPhrases','creepyMode','dialogueLevel',
-    'dramaLevel','engineMode','genrePresets','outLen','reactionLevel','toneKey'];
+    'dramaLevel','engineMode','genrePresets','outLen','reactionLevel','toneKey',
+    'artPreset'];   /* ★FG-3 (GPT #127-FR): fix697 CANONICAL_CFG_ALLOW・fix743・Worker と同じ 11 本 */
   function hydrateMergedCfg(localRaw, serverStoryCfg){
     var loc = (localRaw && typeof localRaw === 'object' && Object.prototype.toString.call(localRaw) !== '[object Array]') ? localRaw : null;
     var srv = (serverStoryCfg && typeof serverStoryCfg === 'object' && Object.prototype.toString.call(serverStoryCfg) !== '[object Array]') ? serverStoryCfg : null;

@@ -172,7 +172,7 @@ function buildSchema2Record(deps, storyId){
     sources[f] = g.explicitClear ? 'OPTIONAL_EXPLICIT_CLEAR' : 'OPTIONAL_PRESENT';
   }
   /* 送信payload最小化: cfgはHY_CFG_ALLOWで絞る（秘密を載せない。hashはWorker側allowlistが正） */
-  const HY_CFG_ALLOW = ['authorNote','bannedPhrases','creepyMode','dialogueLevel','dramaLevel','engineMode','genrePresets','outLen','reactionLevel','toneKey'];
+  const HY_CFG_ALLOW = ['authorNote','bannedPhrases','creepyMode','dialogueLevel','dramaLevel','engineMode','genrePresets','outLen','reactionLevel','toneKey','artPreset'];   /* ★FG-3: fix697 / fix705 / Worker と同じ 11 本 */
   let cfg = null;
   if (isPlainObject(body.cfg)){ cfg = {}; for (const k of HY_CFG_ALLOW){ if (body.cfg[k] !== undefined) cfg[k] = body.cfg[k]; } }
   let rbody = { cfg, cast: (body.cast === undefined ? null : body.cast), scene: (body.scene === undefined ? null : body.scene),
@@ -218,7 +218,7 @@ function buildWritePlan(storyId, rec, deps){
   const K = keysFor(storyId);
   const plan = [];
   /* body（cfg=hydrateMergedCfg: server権威=allowlist通過分のみ・local非allowlistは保持） */
-  const HY_CFG_ALLOW = ['authorNote','bannedPhrases','creepyMode','dialogueLevel','dramaLevel','engineMode','genrePresets','outLen','reactionLevel','toneKey'];
+  const HY_CFG_ALLOW = ['authorNote','bannedPhrases','creepyMode','dialogueLevel','dramaLevel','engineMode','genrePresets','outLen','reactionLevel','toneKey','artPreset'];   /* ★FG-3: fix697 / fix705 / Worker と同じ 11 本 */
   let locCfg = null;
   try { const lb = JSON.parse(deps.nativeGet(K.body) || 'null'); locCfg = lb && lb.cfg; } catch (e){ locCfg = null; }
   const mergedCfg = {};

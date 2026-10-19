@@ -13,6 +13,17 @@
  *                    v42 以前は key 自体が無い＝「無い＝非対応」と読んで fail-closed（fix871 と同じ作法）。
  *   ★Owner 承認前の canary 手順: Owner が自分の端末で 2 を立てる → 数日観察 → 既定 ON は別 release。
  *
+ *   ── ★★S-4b（GPT #127-FT・2026-10-19）: ログイン中は自動同期 ──
+ *     2' 自動     : この document で /auth/me が active な owner / beta と答えた（fix893 serverMe）なら、
+ *                   v292Dfix872On が無くても ON。kill（v292Dfix872Off='1'）と server の kill（scenarioSupported=0）は従来どおり最優先。
+ *                   自動だけ止める端末 kill = v292Dfix872AutoOff='1'（手動の「☁ 端末間で同期」は残る）。
+ *     きっかけ    : HOME を開いた時（1 ページ 1 回・非同期）／シナリオの保存・削除の直後（local を確定してから）／
+ *                   シナリオから物語を始める直前（その 1 本だけ。衝突・削除済みなら始めない。通信できない時は local の版で始め、未同期を表示）。
+ *     送る物      : 作成時に iso2 が記録した持ち主（c=w=いまのアカウント）のシナリオだけ。持ち主の記録が無い古いシナリオは
+ *                   自動では送らない（手動の選択＝ fix966 の写しだけ）。別のアカウントの物は送らない・取り込みで上書きしない。
+ *     衝突        : 自動で上書きしない（2 択の UI）。応答を取り逃した送信だけは同じ mid の再送（idem2 の replay）で 1 回だけ確かめる。
+ *     再試行      : きっかけ 1 回につき最大 1 回。タイマーで繰り返さない。
+ *
  *   ── revision 2 層（GPT 裁定 #SP8）──
  *     scenarioRev … fix820 META の `rev`。Scenario 内容の版。Story `origin.scenarioRev` と同じ意味。
  *                   **この module は scenarioRev を採番しない**（採番するのは fix820.create/edit だけ）。
@@ -47,12 +58,28 @@
   'use strict';
   if (window.__v292Dfix872) return;
   var TAG = '[v292Dfix872:scenario-cloud-sync]';
-  var VERSION = 'v292Dfix872-20260919-sync-v1.0';
+  var VERSION = 'v292Dfix872-20261019-s4b-auto-v1.1';
   var TIMEOUT_MS = 20000;
+  var START_TIMEOUT_MS = 8000;      /* ★S-4b: 物語を始める直前の照合は短く待つ（通信できない時に始められなくしない） */
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function killed(){ return lsg('v292Dfix872Off') === '1'; }
-  function enabled(){ return !killed() && lsg('v292Dfix872On') === '1'; }
+  /* ★★S-4b: ログイン中（この document の /auth/me = active な owner / beta）は既定で ON。mark ではなく server の答えだけを見る。 */
+  var AUTO_ENT = { owner: 1, beta: 1 };
+  function autoOff(){ return lsg('v292Dfix872AutoOff') === '1'; }
+  function serverAccount(){
+    try {
+      var F = window.__v292Dfix893;
+      if (!F || !F.active || typeof F.serverMe !== 'function') return null;
+      var m = F.serverMe();
+      if (!m || !m.accountId) return null;
+      if (!AUTO_ENT[String(m.entitlement || '')]) return null;
+      if (m.status != null && String(m.status) !== 'active') return null;
+      return String(m.accountId);
+    } catch(e){ return null; }
+  }
+  function autoActive(){ return !killed() && !autoOff() && !!serverAccount(); }
+  function enabled(){ return !killed() && (lsg('v292Dfix872On') === '1' || autoActive()); }
   function ST(){ return window.__v292Dfix820 || null; }
 
   /* ================= transport（fix697 と同一の作法・story session header は付けない） ================= */
@@ -100,7 +127,7 @@
     if (!enabled()){ cb(null, 'OFF'); return; }
     if (!isLoggedIn()){ cb(null, 'NOT_LOGGED_IN'); return; }
     var ac = null, timer = null;
-    try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, TIMEOUT_MS); } catch(e){}
+    try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, (S.runTimeout > 0 ? S.runTimeout : TIMEOUT_MS)); } catch(e){}
     var opts = { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) };
     if (ac) opts.signal = ac.signal;
     try {
@@ -115,15 +142,21 @@
   }
 
   /* ================= capability gate（worker v43 であること） ================= */
-  var CAP = { checked: false, supported: false };
+  var CAP = { checked: false, supported: false, netFails: 0 };
+  /* ★S-4b: cb(supported, netFail)。答え（JSON）を受け取れた時だけ記憶する（server kill = scenarioSupported 0 は
+     このページの間ずっと「非対応」= 以後 scenario の通信 0）。通信失敗は記憶しない（次のきっかけで 1 回だけ聞き直す）。 */
   function checkCapability(cb){
-    if (CAP.checked){ cb(CAP.supported); return; }
-    if (!enabled()){ cb(false); return; }
+    if (CAP.checked){ cb(CAP.supported, false); return; }
+    if (!enabled()){ cb(false, false); return; }
+    var ac = null, timer = null;
+    try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, (S.runTimeout > 0 ? S.runTimeout : TIMEOUT_MS)); } catch(e){}
+    var o = { method: 'GET' }; if (ac) o.signal = ac.signal;
+    var netFail = function(){ if (timer) clearTimeout(timer); CAP.netFails++; cb(false, true); };
     try {
-      window.fetch(proxyUrl() + '/', { method: 'GET' }).then(function(res){ return res.json(); })
-        .then(function(j){ CAP.checked = true; CAP.supported = !!(j && j.scenarioSupported === 1); cb(CAP.supported); })
-        ['catch'](function(){ CAP.checked = true; CAP.supported = false; cb(false); });
-    } catch(e){ CAP.checked = true; CAP.supported = false; cb(false); }
+      window.fetch(proxyUrl() + '/', o).then(function(res){ return res.json(); })
+        .then(function(j){ if (timer) clearTimeout(timer); CAP.checked = true; CAP.supported = !!(j && j.scenarioSupported === 1); cb(CAP.supported, false); })
+        ['catch'](netFail);
+    } catch(e){ netFail(); }
   }
 
   /* ================= CLIENT_CANONICAL_PROJECTION_V1 =================
@@ -233,7 +266,7 @@
     var rc = Rm ? cloudRevOfRow(Rm) : 0;                   /* ★cloudRev を primary に読む */
     var rdel = Rm ? !!Rm.deleted : false;
     var base = { id: p.id, localCloudRev: lc, remoteCloudRev: rc, dirty: ld,
-                 localDeleted: ldel, remoteDeleted: rdel, remoteHash: Rm ? contentHashOfRow(Rm) : null };
+                 localDeleted: ldel, remoteDeleted: rdel, remoteHash: Rm ? contentHashOfRow(Rm) : null, hasLocal: !!L };
 
     if (!Rm){
       /* remote に行が無い */
@@ -245,6 +278,12 @@
       /* local に無い（別端末で作られた） */
       if (rdel) return mk(base, 'NOOP', 'remote tombstone with no local row');
       return mk(base, 'PULL', 'remote only → getscenario');
+    }
+    /* ★★S-4b（裁定 C）: この端末で一度もクラウドと結び付いていない（cloudRev=0）シナリオと同じ ID の行がクラウドにある。
+       中身が同じだと証明できた時（PULL_ADOPT）だけ結び付ける。違う・削除済み → 衝突（自動で上書きも削除もしない）。 */
+    if (lc === 0 && !ldel && !ld){
+      if (rdel){ base.deviceOnly = true; return mk(base, 'CONFLICT', 'この端末だけのシナリオと同じ ID がクラウドで削除済み（自動で消さない）'); }
+      return mk(base, 'PULL_ADOPT', 'この端末だけのシナリオと同じ ID がクラウドにある → 中身が同じ時だけ結び付ける');
     }
     if (rdel){
       if (ldel) return mk(base, 'NOOP', 'both deleted');
@@ -273,56 +312,156 @@
   var S = { running: false, lastReport: null, conflicts: {} };
 
   /* ★fix966b（GPT #127-C）: opts.pushAllow(id) が false の PUSH_* は送らない（NOOP 扱い・skippedNotApproved に数える）。
-     opts を渡さない呼び手は従来どおり（全件）。PULL / PULL_DELETE / CONFLICT の規則は 1 文字も変えない。 */
+     opts を渡さない呼び手は従来どおり（全件）。PULL / PULL_DELETE / CONFLICT の規則は 1 文字も変えない。
+     ★★S-4b の opts（自動同期の呼び手だけが渡す。手動の呼び手は渡さない＝従来どおり）:
+       expectAccount  … 一覧を受け取った後・書き込む前に /auth/me をもう一度聞き、この accountId のままか確かめる
+       onlyId         … その 1 本だけを処理する（始める直前の照合）
+       timeoutMs      … この 1 回の通信の待ち時間
+       quietConflicts … 衝突を画面に出さず記録だけ（シナリオを開いた時・始める時に 2 択を出す）。interactiveIds の ID は出す
+       replayConflicts… 未同期の編集がある衝突は、同じ mid で 1 回だけ再送（応答を取り逃した自分の送信なら idem2 が同じ 200 を返す）
+       ownerGuard     … 別のアカウントの持ち主記録がある local には取り込みで書かない（保留）
+       skipPull(id)   … 編集画面で開いているシナリオには取り込みで書かない（次のきっかけへ回す） */
   function syncOnce(cb, opts){
-    var done = function(rep){ S.running = false; S.lastReport = rep; if (cb) cb(rep); };
+    opts = opts || {};
+    var done = function(rep){ S.running = false; S.runTimeout = 0; S.lastReport = rep; if (cb) cb(rep); };
     if (S.running){ if (cb) cb({ ok: false, code: 'BUSY' }); return; }
     if (!enabled()){ if (cb) cb({ ok: false, code: killed() ? 'KILLED' : 'OFF' }); return; }
     var st = ST();
     if (!st || typeof st.listAll !== 'function'){ if (cb) cb({ ok: false, code: 'NO_STORE' }); return; }
     if (!st.f872On || !st.f872On()){ if (cb) cb({ ok: false, code: 'STORE_GATE_OFF' }); return; }
-    S.running = true;
-    checkCapability(function(supported){
-      if (!supported){ done({ ok: false, code: 'WORKER_TOO_OLD' }); return; }
+    var hold0 = opts.expectAccount ? accountHold(opts.expectAccount) : null;
+    if (hold0){ if (cb) cb({ ok: false, code: 'ACCOUNT_HOLD', why: hold0 }); return; }
+    S.running = true; S.runTimeout = (opts.timeoutMs > 0) ? opts.timeoutMs : 0;
+    checkCapability(function(supported, netFail){
+      if (!supported){ done({ ok: false, code: netFail ? 'NETWORK_FAILED' : 'WORKER_TOO_OLD' }); return; }
       post({ op: 'listscenario' }, function(res, err){
         if (err || !res){ done({ ok: false, code: err || 'NO_RESPONSE' }); return; }
         if (res.status !== 200 || !res.j || res.j.ok !== true){ done({ ok: false, code: 'LIST_FAILED', status: res.status, errorCode: res.j && res.j.errorCode }); return; }
-        var local = st.listAll();
-        if (!local.ok){ done({ ok: false, code: local.code }); return; }
-        var acts = plan(local.scenarios, res.j.scenarios || []);
-        runActions(acts, function(rep){ rep.plan = acts; done(rep); }, opts);
+        var go = function(){
+          var local = st.listAll();
+          if (!local.ok){ done({ ok: false, code: local.code }); return; }
+          var acts = plan(local.scenarios, res.j.scenarios || []);
+          runActions(acts, function(rep){ rep.plan = acts; done(rep); }, opts);
+        };
+        if (!opts.expectAccount){ go(); return; }
+        whoNow(function(acct, wNet){
+          if (!acct){ done({ ok: false, code: wNet ? 'NETWORK_FAILED' : 'ACCOUNT_UNCONFIRMED' }); return; }
+          if (acct !== opts.expectAccount){ done({ ok: false, code: 'ACCOUNT_CHANGED' }); return; }
+          var h1 = accountHold(opts.expectAccount);
+          if (h1){ done({ ok: false, code: 'ACCOUNT_HOLD', why: h1 }); return; }
+          go();
+        });
       });
     });
   }
 
+  /* ★S-4b: この page の Pages origin の /auth/me（fix966 / f757 と同じ口）。cb(accountId|null, netFail) */
+  function whoNow(cb){
+    var ac = null, timer = null, fired = false;
+    var fin = function(a, n){ if (fired) return; fired = true; if (timer) clearTimeout(timer); cb(a, n); };
+    try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, (S.runTimeout > 0 ? S.runTimeout : TIMEOUT_MS)); } catch(e){}
+    var o = { method: 'GET', credentials: 'same-origin', cache: 'no-store', headers: { 'x-chronicle-csrf': '1' } }; if (ac) o.signal = ac.signal;
+    try {
+      window.fetch('/api/auth/me', o).then(function(r){ return r.json().then(function(j){ return { s: r.status, j: j }; }, function(){ return { s: r.status, j: null }; }); })
+        .then(function(x){ var j = x && x.j; fin((j && j.ok === true && typeof j.accountId === 'string' && j.accountId) ? j.accountId : null, false); },
+              function(){ fin(null, true); });
+    } catch(e){ fin(null, true); }
+  }
+  /* ★S-4b: 送信の関所（iso2）とこの document のアカウントが揃っているか。揃わなければ理由（何も送らない・書かない） */
+  function iso2(){ try { var G = window.__v292Diso2; return (G && G.__armed && typeof G.check === 'function' && typeof G.owner === 'function') ? G : null; } catch(e){ return null; } }
+  function markAcct(){ try { var o = JSON.parse(lsg('v292Dfix837_sess') || 'null'); return (o && o.sid === 'cookie' && o.acct) ? String(o.acct) : ''; } catch(e){ return ''; } }
+  function accountHold(expect){
+    if (serverAccount() !== expect) return 'SERVER_ME_CHANGED';
+    if (markAcct() !== expect) return 'MARK_MISMATCH';
+    var G = iso2();
+    if (!G) return null;      /* iso2 が無い端末: 持ち主の記録が無い＝送信は 0 件（stampOk が false）。取り込みだけ */
+    var why = null; try { why = G.check({ op: 'listscenario' }, 'fix872:auto'); } catch(e){ why = 'ISO2_ERROR'; }
+    if (why) return 'ISO2:' + String(why).slice(0, 40);
+    var o = null; try { o = G.owner(); } catch(e){ o = null; }
+    if (!o || o.bad || o.now !== o.doc) return 'ISO2_OWNER';
+    return null;
+  }
+  /* 作成時に iso2 が記録した持ち主（c）と最後に書いた人（w）が、どちらもいまのアカウントか（送信の関所の判定も通るか） */
+  function stampOk(id){
+    var G = iso2(); if (!G || typeof G.stampOf !== 'function') return false;
+    var o = null; try { o = G.owner(); } catch(e){ o = null; }
+    if (!o || o.bad || o.now !== o.doc) return false;
+    var s = null; try { s = G.stampOf(String(id), 'c'); } catch(e){ s = null; }
+    if (!s || s.c !== o.doc || s.w !== o.doc) return false;
+    var why = null; try { why = G.check({ op: 'putscenario', id: String(id), record: {} }, 'fix872:auto'); } catch(e){ why = 'ISO2_ERROR'; }
+    return !why;
+  }
+  /* 別のアカウントの持ち主記録がある local か（記録が無い＝ false） */
+  function localForeign(id){
+    var G = iso2(); if (!G || typeof G.stampOf !== 'function') return false;
+    var o = null, s = null;
+    try { o = G.owner(); s = G.stampOf(String(id), 'c'); } catch(e){ return true; }
+    return !!(s && o && (s.c !== o.doc || s.w !== o.doc));
+  }
+  function metaOf(id){
+    var st = ST(); if (!st) return null;
+    var all = st.listAll(); if (!all || !all.ok) return null;
+    for (var i = 0; i < all.scenarios.length; i++){ if (all.scenarios[i].scenarioId === id) return all.scenarios[i]; }
+    return null;
+  }
+  /* 計画を立てた後に local が変わっていないか（取り込みで書く直前に確かめる。変わっていたら書かない＝次のきっかけへ） */
+  function localMoved(a){
+    var m = metaOf(a.id);
+    if (!a.hasLocal) return !!(m && !m.deleted);
+    if (!m) return true;
+    return (!!m.dirty !== !!a.dirty) || ((+m.cloudRev || 0) !== (+a.localCloudRev || 0)) || (!!m.deleted !== !!a.localDeleted);
+  }
+
   function runActions(acts, cb, opts){
-    var i = 0, rep = { ok: true, pushed: 0, pulled: 0, deletedLocal: 0, deletedRemote: 0, conflicts: [], noop: 0, errors: [], skippedNotApproved: 0 };
-    var allow = (opts && typeof opts.pushAllow === 'function') ? opts.pushAllow : null;
+    opts = opts || {};
+    var i = 0, rep = { ok: true, pushed: 0, pulled: 0, adopted: 0, replayed: 0, deletedLocal: 0, deletedRemote: 0, conflicts: [], noop: 0, errors: [], skippedNotApproved: 0,
+                       deferred: 0, held: [], pushedIds: [], pulledIds: [], deletedLocalIds: [], onlyId: opts.onlyId ? String(opts.onlyId) : null };
+    var allow = (typeof opts.pushAllow === 'function') ? opts.pushAllow : null;
+    var only = rep.onlyId;
+    function allowed(id){ if (!allow) return true; try { return !!allow(id); } catch(eA){ return false; } }
+    function skipPull(id){ if (typeof opts.skipPull !== 'function') return false; try { return !!opts.skipPull(id); } catch(e){ return true; } }
+    function finish(){
+      if (only) delete S.conflicts[only]; else S.conflicts = {};
+      for (var c = 0; c < rep.conflicts.length; c++) S.conflicts[rep.conflicts[c].id] = rep.conflicts[c];
+      cb(rep);
+    }
     function next(){
-      if (i >= acts.length){ S.conflicts = {}; for (var c = 0; c < rep.conflicts.length; c++) S.conflicts[rep.conflicts[c].id] = rep.conflicts[c]; cb(rep); return; }
+      if (i >= acts.length){ finish(); return; }
       var a = acts[i++];
+      if (only && a.id !== only){ next(); return; }
       if (a.action === 'NOOP'){ rep.noop++; next(); return; }
-      if (allow && /^PUSH_/.test(a.action)){ var okA = false; try { okA = !!allow(a.id); } catch(eA){ okA = false; } if (!okA){ rep.skippedNotApproved++; next(); return; } }
-      if (a.action === 'CONFLICT'){ rep.conflicts.push(a); notifyConflict(a); next(); return; }
-      if (a.action === 'PULL'){ doPull(a, rep, next); return; }
+      var pullLike = (a.action === 'PULL' || a.action === 'PULL_DELETE' || a.action === 'PULL_ADOPT');
+      if (pullLike && skipPull(a.id)){ rep.deferred++; next(); return; }
+      if (pullLike && opts.ownerGuard && a.hasLocal && localForeign(a.id)){ rep.held.push({ id: a.id, code: 'LOCAL_OWNER_OTHER' }); next(); return; }
+      if (/^PUSH_/.test(a.action) && !allowed(a.id)){ rep.skippedNotApproved++; next(); return; }
+      if (a.action === 'CONFLICT'){
+        /* ★S-4b: 未同期の編集がある衝突は、同じ mid で 1 回だけ再送する。応答を取り逃した自分の送信なら idem2 が
+           同じ 200 を返す（rev は 2 回進まない）。別の端末の変更なら CAS が 409 → 従来どおり衝突（自動上書きなし）。 */
+        if (opts.replayConflicts && a.dirty && !a.localDeleted && !a.remoteDeleted && !a.deviceOnly && allowed(a.id)){ a.replay = true; doPush(a, rep, next, opts); return; }
+        rep.conflicts.push(a); notifyConflict(a, opts); next(); return;
+      }
+      if (a.action === 'PULL'){ doPull(a, rep, next, opts); return; }
       if (a.action === 'PULL_DELETE'){ doPullDelete(a, rep, next); return; }
-      if (a.action === 'PUSH_CREATE' || a.action === 'PUSH_UPDATE'){ doPush(a, rep, next); return; }
+      if (a.action === 'PULL_ADOPT'){ doPullAdopt(a, rep, next, opts); return; }
+      if (a.action === 'PUSH_CREATE' || a.action === 'PUSH_UPDATE'){ doPush(a, rep, next, opts); return; }
       if (a.action === 'PUSH_DELETE'){ doPushDelete(a, rep, next); return; }
       rep.errors.push({ id: a.id, code: 'UNKNOWN_ACTION' }); next();
     }
     next();
   }
 
-  function doPull(a, rep, next){
+  function doPull(a, rep, next, opts){
     post({ op: 'getscenario', id: a.id }, function(res, err){
       if (err || !res || res.status !== 200 || !res.j || res.j.ok !== true){
         rep.ok = false; rep.errors.push({ id: a.id, code: 'GET_FAILED', status: res && res.status }); next(); return;
       }
+      /* ★S-4b: 待っている間に local が変わった（保存された等）なら書かない（未同期の編集を消さない） */
+      if (localMoved(a) || (opts && opts.ownerGuard && a.hasLocal && localForeign(a.id))){ rep.deferred++; next(); return; }
       if (res.j.deleted === true){ applyRemoteDelete(a, rep, cloudRevOfRow(res.j), next); return; }
       var st = ST();
       var r = st.f872ApplyRemote(a.id, inputFromRecord(res.j.record), cloudRevOfRow(res.j), +res.j.scenarioRev || 0);
       if (!r.ok){ rep.ok = false; rep.errors.push({ id: a.id, code: r.code || 'APPLY_FAILED' }); }
-      else rep.pulled++;
+      else { rep.pulled++; rep.pulledIds.push(a.id); }
       next();
     });
   }
@@ -330,12 +469,41 @@
     var st = ST();
     var r = st.f872ApplyRemoteDelete(a.id, +cloudRev || 0);
     if (!r.ok){ rep.ok = false; rep.errors.push({ id: a.id, code: r.code || 'APPLY_DELETE_FAILED' }); }
-    else rep.deletedLocal++;
+    else { rep.deletedLocal++; rep.deletedLocalIds.push(a.id); }
     next();
   }
-  function doPullDelete(a, rep, next){ applyRemoteDelete(a, rep, a.remoteCloudRev, next); }
+  function doPullDelete(a, rep, next){
+    if (localMoved(a)){ rep.deferred++; next(); return; }
+    applyRemoteDelete(a, rep, a.remoteCloudRev, next);
+  }
+  /* ★★S-4b PULL_ADOPT: この端末だけのシナリオ（cloudRev 0）と同じ ID の行がクラウドにある。
+     両方を同じ canonical 規則（canonicalOf）で文字列にして **完全に同じ時だけ** 結び付ける（中身は 1 文字も変わらない）。
+     違う・読めない・削除済み → 衝突（自動で上書きしない。2 択）。 */
+  function doPullAdopt(a, rep, next, opts){
+    post({ op: 'getscenario', id: a.id }, function(res, err){
+      if (err || !res || res.status !== 200 || !res.j || res.j.ok !== true){
+        rep.ok = false; rep.errors.push({ id: a.id, code: 'GET_FAILED', status: res && res.status }); next(); return;
+      }
+      if (localMoved(a)){ rep.deferred++; next(); return; }
+      var st = ST();
+      var cf = function(why){
+        var c = { id: a.id, action: 'CONFLICT', deviceOnly: true, localCloudRev: 0, remoteCloudRev: cloudRevOfRow(res.j),
+                  remoteScenarioRev: +res.j.scenarioRev || 0, dirty: !!a.dirty, localDeleted: false, remoteDeleted: res.j.deleted === true, why: why };
+        rep.conflicts.push(c); notifyConflict(c, opts); next();
+      };
+      if (res.j.deleted === true) return cf('この端末だけのシナリオと同じ ID がクラウドで削除済み');
+      var body = st.f872RawBody(a.id), meta = metaOf(a.id);
+      var lcs = (body && body.ok && meta) ? canonicalOf(a.id, inputFromBody(meta.title, body.body)) : null;
+      var rcs = canonicalOf(a.id, inputFromRecord(res.j.record));
+      if (lcs == null || rcs == null || lcs !== rcs) return cf('この端末だけのシナリオと同じ ID の別の中身がクラウドにある');
+      var r = st.f872ApplyRemote(a.id, inputFromRecord(res.j.record), cloudRevOfRow(res.j), +res.j.scenarioRev || 0);
+      if (!r.ok){ rep.ok = false; rep.errors.push({ id: a.id, code: r.code || 'APPLY_FAILED' }); }
+      else rep.adopted++;
+      next();
+    });
+  }
 
-  function doPush(a, rep, next){
+  function doPush(a, rep, next, opts){
     var st = ST();
     var body = st.f872RawBody(a.id);
     if (!body.ok){ rep.ok = false; rep.errors.push({ id: a.id, code: body.code || 'BODY_UNREADABLE' }); next(); return; }
@@ -346,19 +514,24 @@
     var canon = canonicalOf(a.id, input);
     if (canon == null){ rep.ok = false; rep.errors.push({ id: a.id, code: 'LOCAL_INVALID' }); next(); return; }
     var mid = midFor(a.id, a.localCloudRev, localHash(canon));
+    var sentRev = (+meta.rev || 0), sentAt = meta.updatedAt;
     post({ op: 'putscenario', id: a.id, expectedRev: a.localCloudRev, scenarioRev: (+meta.rev || 0),
            record: input, mid: mid, clientMeta: { build: buildTag() } }, function(res, err){
       if (err || !res){ rep.ok = false; rep.errors.push({ id: a.id, code: err || 'NO_RESPONSE' }); next(); return; }
       if (res.status === 200 && res.j && res.j.ok === true){
-        var m = st.f872MarkPushed(a.id, cloudRevOfRow(res.j));
+        /* ★S-4b: 送っている間に同じシナリオがもう一度保存されていたら、cloudRev だけ進めて dirty は残す（次の同期で送る） */
+        var now = metaOf(a.id);
+        var moved = !!(now && ((+now.rev || 0) !== sentRev || now.updatedAt !== sentAt));
+        var m = st.f872MarkPushed(a.id, cloudRevOfRow(res.j), moved ? { keepDirty: true } : undefined);
         if (!m.ok){ rep.ok = false; rep.errors.push({ id: a.id, code: m.code || 'MARK_FAILED' }); }
-        else rep.pushed++;
+        else { rep.pushed++; rep.pushedIds.push(a.id); if (a.replay) rep.replayed++; }
         next(); return;
       }
       rep.ok = false;
       var code = (res.j && res.j.errorCode) || ('HTTP_' + res.status);
-      /* ★409 は **自動解決しない**。UI へ渡して Owner に 2 択を出す。 */
-      if (res.status === 409 && (code === 'scenario-rev-mismatch' || code === 'scenario-exists' || code === 'scenario-deleted')){
+      /* ★409 は **自動解決しない**。UI へ渡して Owner に 2 択を出す。
+         ★S-4b: idem-key-reuse（同じ mid・違う内容版）も衝突として扱う（上書きしない）。 */
+      if (res.status === 409 && (code === 'scenario-rev-mismatch' || code === 'scenario-exists' || code === 'scenario-deleted' || code === 'idem-key-reuse')){
         var cf = { id: a.id, action: 'CONFLICT', errorCode: code,
                    localCloudRev: a.localCloudRev, remoteCloudRev: (res.j && res.j.serverRev) || 0,
                    remoteScenarioRev: (res.j && res.j.serverScenarioRev) || 0, dirty: true,
@@ -366,7 +539,7 @@
                    /* ★409 scenario-deleted も「remote で削除された」衝突として UI へ渡す（文面が変わる） */
                    remoteDeleted: (code === 'scenario-deleted'),
                    why: 'server が 409 を返した（書き込み 0）' };
-        rep.conflicts.push(cf); notifyConflict(cf); next(); return;
+        rep.conflicts.push(cf); notifyConflict(cf, opts); next(); return;
       }
       rep.errors.push({ id: a.id, code: code, status: res.status });
       next();
@@ -401,7 +574,13 @@
   }
 
   /* ================= 衝突 UI への受け渡し（fix825 が描く・この module は描かない） ================= */
-  function notifyConflict(info){
+  function notifyConflict(info, opts){
+    /* ★S-4b: 自動同期の衝突は記録だけ（HOME で急に 2 択を出さない）。シナリオを開いた時・始める時に fix825 が 2 択を出す。
+       保存・開始など、その ID を利用者がいま操作している時（interactiveIds）はその場で出す。 */
+    if (opts && opts.quietConflicts && !(opts.interactiveIds && info && opts.interactiveIds[String(info.id)])){
+      try { console.log(TAG, 'CONFLICT recorded (shown when the scenario is opened)', info && info.id); } catch(e){}
+      return;
+    }
     try {
       if (typeof window.__v292Dfix825ScenarioConflict === 'function'){ window.__v292Dfix825ScenarioConflict(info); return; }
       if (window.__v292Dfix825 && window.__v292Dfix825.api && typeof window.__v292Dfix825.api.f872Conflict === 'function'){
@@ -444,8 +623,107 @@
       else applied = st.f872ApplyRemote(id, inputFromRecord(res.j.record), cloudRevOfRow(res.j), +res.j.scenarioRev || 0);
       if (!applied.ok) return done({ ok: false, code: applied.code || 'APPLY_FAILED', forkedTo: forked });
       delete S.conflicts[id];
+      /* ★S-4b: 解決した結果（新しい ID の写し）を 1 回だけ送る（自動同期が有効な時だけ） */
+      if (autoActive()){ try { requestSync('resolve', {}); } catch(eR){} }
       return done({ ok: true, id: id, choice: choice, forkedTo: forked, cloudRev: applied.cloudRev });
     });
+  }
+
+  /* ================= ★★S-4b 自動同期の orchestrator（GPT #127-FT） =================
+     ・きっかけ: home（1 ページ 1 回）/ save / delete / list（直近に成功していれば省く）/ start（その 1 本）/ resolve / manual
+     ・同時に 1 本だけ。走っている間に来たきっかけは 1 本にまとめて、終わった後に 1 回だけ走らせる（タイマーの再試行は無い）。
+     ・送る物: stampOk（作成時の持ち主＝いまのアカウント）＋ 呼び手が明示した extraAllow（fix966 の手動選択）だけ。 */
+  var AUTO = { homeDone: false, running: false, queue: [], runs: 0, lastDoneAt: 0, lastOk: null, lastCode: null, lastReason: null, log: [] };
+  function editingId(){ try { var U = window.__v292Dfix825; var s = U && U.state && U.state(); return (s && s.view === 'SC_EDIT' && s.scenarioId) ? String(s.scenarioId) : null; } catch(e){ return null; } }
+  function requestSync(reason, o, cb){
+    o = o || {};
+    if (killed()){ if (cb) cb({ ok: false, code: 'KILLED' }); return false; }
+    if (!autoActive()){ if (cb) cb({ ok: false, code: autoOff() ? 'AUTO_OFF' : 'NOT_ELIGIBLE' }); return false; }
+    if (o.minGapMs > 0 && (AUTO.running || AUTO.queue.length || (AUTO.lastOk && (Date.now() - AUTO.lastDoneAt) < o.minGapMs))){
+      if (cb) cb({ ok: true, skipped: AUTO.running || AUTO.queue.length ? 'RUNNING' : 'RECENT' }); return false;
+    }
+    AUTO.queue.push({ reason: String(reason || ''), o: o, cb: cb || null });
+    setTimeout(pump, 0);      /* 呼び手の local 書込（保存・削除）が確定してから走らせる */
+    return true;
+  }
+  function pump(){
+    if (AUTO.running || !AUTO.queue.length) return;
+    var batch = AUTO.queue.splice(0, AUTO.queue.length);
+    var only = null, full = false, tmo = 0, inter = {}, extras = [], reasons = [];
+    for (var i = 0; i < batch.length; i++){
+      var b = batch[i].o; reasons.push(batch[i].reason);
+      if (b.onlyId){ if (only === null) only = String(b.onlyId); else if (only !== String(b.onlyId)) full = true; } else full = true;
+      if (b.timeoutMs > 0) tmo = tmo ? Math.min(tmo, b.timeoutMs) : b.timeoutMs;
+      if (b.interactiveId) inter[String(b.interactiveId)] = 1;
+      if (typeof b.extraAllow === 'function') extras.push(b.extraAllow);
+    }
+    if (full) only = null;
+    var acct = serverAccount();
+    if (!acct || killed() || autoOff()){
+      var r0 = { ok: false, code: killed() ? 'KILLED' : (autoOff() ? 'AUTO_OFF' : 'NOT_ELIGIBLE') };
+      for (var k0 = 0; k0 < batch.length; k0++){ try { if (batch[k0].cb) batch[k0].cb(r0); } catch(e){} }
+      return;
+    }
+    AUTO.running = true; AUTO.runs++;
+    var reason = reasons.join('+');
+    syncOnce(function(rep){
+      AUTO.running = false; AUTO.lastDoneAt = Date.now(); AUTO.lastReason = reason;
+      AUTO.lastOk = !!(rep && !rep.code && !(rep.errors && rep.errors.length)); AUTO.lastCode = rep ? (rep.code || (rep.errors && rep.errors.length ? rep.errors[0].code : null)) : 'NO_REPORT';
+      var sum = summary(rep, reason);
+      AUTO.log.push(sum); if (AUTO.log.length > 20) AUTO.log.shift();
+      try { console.log(TAG, 'auto sync', JSON.stringify(sum)); } catch(e){}
+      try { window.dispatchEvent(new CustomEvent('chr:scenario-sync', { detail: sum })); } catch(e){}
+      for (var k = 0; k < batch.length; k++){ try { if (batch[k].cb) batch[k].cb(rep || { ok: false, code: 'NO_REPORT' }); } catch(e){} }
+      setTimeout(pump, 0);
+    }, { expectAccount: acct, onlyId: only, timeoutMs: tmo, quietConflicts: true, interactiveIds: inter, replayConflicts: true, ownerGuard: true,
+         pushAllow: function(id){ if (stampOk(id)) return true; for (var x = 0; x < extras.length; x++){ try { if (extras[x](id)) return true; } catch(e){} } return false; },
+         skipPull: function(id){ return !inter[String(id)] && editingId() === String(id); } });
+  }
+  function summary(rep, reason){
+    rep = rep || {};
+    return { reason: reason, at: Date.now(), ok: !rep.code && !(rep.errors && rep.errors.length), code: rep.code || null, why: rep.why || null,
+             pushed: rep.pushed || 0, pulled: rep.pulled || 0, adopted: rep.adopted || 0, replayed: rep.replayed || 0,
+             deletedLocal: rep.deletedLocal || 0, deletedRemote: rep.deletedRemote || 0,
+             conflicts: (rep.conflicts || []).map(function(c){ return c.id; }), errors: (rep.errors || []).length,
+             errorCodes: (rep.errors || []).map(function(e){ return e.code; }).slice(0, 5),
+             held: (rep.held || []).length, deferred: rep.deferred || 0, notApproved: rep.skippedNotApproved || 0,
+             pulledIds: rep.pulledIds || [], deletedLocalIds: rep.deletedLocalIds || [], onlyId: rep.onlyId || null };
+  }
+  /* HOME を開いた時の 1 回（/auth/me の答えが来てから・DOM ができてから。二重に始めない） */
+  function homeTrigger(){
+    if (AUTO.homeDone) return;
+    if (document.readyState === 'loading') return;      /* DOMContentLoaded でもう一度呼ばれる */
+    if (!autoActive()) return;                          /* /auth/me の答えが来たら chr:account-me でもう一度呼ばれる */
+    AUTO.homeDone = true;
+    requestSync('home', {});
+  }
+  try { window.addEventListener('chr:account-me', homeTrigger, false); } catch(e){}
+  try { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', homeTrigger, false); else setTimeout(homeTrigger, 0); } catch(e){}
+
+  /* 物語を始める直前の照合（その 1 本だけ）。cb({ ok, block?, unsynced?, code?, conflict? })
+       block 'CONFLICT' … 未解決の衝突（始めない。2 択を出す）
+       block 'DELETED'  … 別の端末で削除された（始めない）
+       block 'UPDATED'  … 別の端末の新しい版を取り込んだ（始めない。内容を確かめてから押し直す）
+       unsynced         … 通信できない等で照合できなかった（この端末の版で始めてよい。未同期を表示する） */
+  function preStart(id, cb){
+    id = String(id || '');
+    var fired = false, guard = null;
+    var fin = function(r){ if (fired) return; fired = true; if (guard) clearTimeout(guard); try { cb(r); } catch(e){} };
+    if (S.conflicts[id]) return fin({ ok: false, block: 'CONFLICT', conflict: S.conflicts[id], code: 'KNOWN_CONFLICT' });
+    if (!autoActive()) return fin({ ok: true, skipped: true, code: killed() ? 'KILLED' : (autoOff() ? 'AUTO_OFF' : 'NOT_ELIGIBLE') });
+    /* 照合がどうしても返らない時の上限（通信できない時に始められなくしない）。この時は未同期として始める */
+    guard = setTimeout(function(){ fin({ ok: true, unsynced: true, code: 'TIMEOUT' }); }, START_TIMEOUT_MS * 4);
+    var queued = requestSync('start', { onlyId: id, timeoutMs: START_TIMEOUT_MS, interactiveId: id }, function(rep){
+      var st = ST();
+      if (S.conflicts[id]) return fin({ ok: false, block: 'CONFLICT', conflict: S.conflicts[id], rep: rep });
+      var rd = st ? st.read(id) : null;
+      if (rd && !rd.ok && rd.code === 'NOT_FOUND') return fin({ ok: false, block: 'DELETED', rep: rep });
+      if (rep && rep.pulledIds && rep.pulledIds.indexOf(id) >= 0) return fin({ ok: false, block: 'UPDATED', rep: rep });
+      if (!rep || rep.code || (rep.errors && rep.errors.length)) return fin({ ok: true, unsynced: true, code: (rep && (rep.code || (rep.errors && rep.errors[0] && rep.errors[0].code))) || 'SYNC_INCOMPLETE', rep: rep });
+      if ((rep.held && rep.held.length) || rep.deferred) return fin({ ok: true, unsynced: true, code: 'HELD', rep: rep });
+      fin({ ok: true, rep: rep });
+    });
+    if (!queued && !fired) fin({ ok: true, skipped: true, code: 'NOT_QUEUED' });
   }
 
   window.__v292Dfix872 = {
@@ -464,19 +742,31 @@
     /* 実行 */
     syncOnce: syncOnce,
     resolveConflict: resolveConflict,
+    /* ★S-4b 自動同期 */
+    autoActive: autoActive,
+    requestSync: requestSync,
+    preStart: preStart,
+    canAutoSend: stampOk,
+    accountOk: function(a){ return !!a && !accountHold(String(a)); },   /* ★#127-FV: ☁ で登録する時のアカウント再確認（server の答え・端末の印・iso2 がそろっているか） */
+    conflictOf: function(id){ var c = S.conflicts[String(id || '')]; return c ? JSON.parse(JSON.stringify(c)) : null; },
+    autoState: function(){ var a = serverAccount();
+      return { active: autoActive(), killed: killed(), autoOff: autoOff(), account: a ? ('…' + a.slice(-6)) : null, homeDone: AUTO.homeDone,
+               running: AUTO.running, queued: AUTO.queue.length, runs: AUTO.runs, lastDoneAt: AUTO.lastDoneAt, lastOk: AUTO.lastOk,
+               lastCode: AUTO.lastCode, lastReason: AUTO.lastReason, log: JSON.parse(JSON.stringify(AUTO.log)),
+               capability: { checked: CAP.checked, supported: CAP.supported, netFails: CAP.netFails } }; },
     conflicts: function(){ var o = [], k; for (k in S.conflicts){ if (Object.prototype.hasOwnProperty.call(S.conflicts, k)) o.push(S.conflicts[k]); } return o; },
     state: function(){
       return { version: VERSION, enabled: enabled(), killed: killed(), running: S.running,
                loggedIn: isLoggedIn(), proxyUrl: proxyUrl(), capability: { checked: CAP.checked, supported: CAP.supported },
                storeReady: !!(ST() && ST().f872On && ST().f872On()),
                lastReport: S.lastReport, conflictCount: (function(){ var n = 0, k; for (k in S.conflicts) n++; return n; })(),
-               /* ★この module は起動時に 1 バイトも通信しない。syncOnce を誰かが呼んだときだけ動く。 */
-               autoSync: false };
+               /* ★S-4b: ログイン中（owner / beta）は HOME 表示・保存・削除・開始の直前に自動で同期する。kill / AutoOff で止まる。 */
+               autoSync: autoActive() };
     }
   };
   try {
     console.log(TAG, 'loaded ('
-      + (killed() ? 'KILLED v292Dfix872Off=1' : (enabled() ? 'ENABLED (v292Dfix872On=1)' : 'dormant — set v292Dfix872On=1 to enable'))
-      + '; no caller runs automatically)');
+      + (killed() ? 'KILLED v292Dfix872Off=1' : (lsg('v292Dfix872On') === '1' ? 'ENABLED (v292Dfix872On=1)' : (autoOff() ? 'auto OFF (v292Dfix872AutoOff=1)' : 'auto: ON after /auth/me (owner/beta)')))
+      + '; S-4b automatic triggers: home / save / delete / start)');
   } catch(e){}
 })();

@@ -133,12 +133,16 @@
   try { window.addEventListener('chr:account-me', function () { try { applyFlag(); } catch (e) {} }); } catch (e) {}
   /* creation hook (home newStory / fix819 instantiate): stamp the schema-2 sidecar into the body BEFORE it is first written,
      only when the server said true (never on the provisional mark). Returns the same object. */
+  function artOk() { try { var F = window.__v292Dfix893; var f = F && typeof F.features === 'function' ? F.features() : null; return !!(f && f.artPresetV1 === true); } catch (e) { return false; } }   /* ★FG-3 */
   function stampNew(body, id) {
     try { if (mode() !== true || !body || typeof body !== 'object' || !id) return body;
       if (!body.cast || typeof body.cast !== 'object' || Array.isArray(body.cast)) body.cast = {};
-      if (!body.cast.av2) { body.cast.av2 = { assetSchema: 2, sid: String(id), bindings: {}, known: {}, retired: [] }; st.stamped = (st.stamped || 0) + 1; }
+      if (!body.cast.av2) { body.cast.av2 = { assetSchema: 2, sid: String(id), bindings: {}, known: {}, retired: [] }; st.stamped = (st.stamped || 0) + 1;
+        /* ★FG-3 (GPT #127-FR): 新しい S2 の物語は画風「デフォルト」(beautiful) を作成時に明示して保存する。server が artPresetV1 を
+           名乗るときだけ（未対応の Worker へ送ると canonical の hash が合わなくなるため）。既存の物語には触らない（key 無し＝dark）。 */
+        if (artOk()) { if (!body.cfg || typeof body.cfg !== 'object' || Array.isArray(body.cfg)) body.cfg = {}; if (body.cfg.artPreset === undefined) { body.cfg.artPreset = 'beautiful'; st.artStamped = (st.artStamped || 0) + 1; } } }
     } catch (e) {}
     return body;
   }
-  window.__v292Dbav2 = { stampNew: stampNew, preparing: function () { return prep.on && !prep.done; }, prep: function () { return JSON.parse(JSON.stringify(prep)); }, status: function () { return { mode: mode(), flag: g('v292Dav2On'), mine: g('v292DbAv2'), flagSet: st.flagSet, flagCleared: st.flagCleared, held: st.held, stamped: st.stamped || 0 }; } };
+  window.__v292Dbav2 = { stampNew: stampNew, preparing: function () { return prep.on && !prep.done; }, prep: function () { return JSON.parse(JSON.stringify(prep)); }, status: function () { return { mode: mode(), flag: g('v292Dav2On'), mine: g('v292DbAv2'), flagSet: st.flagSet, flagCleared: st.flagCleared, held: st.held, stamped: st.stamped || 0, artStamped: st.artStamped || 0 }; } };
 })();

@@ -573,7 +573,8 @@
     return { scenarioId: id, scenarioRev: rv };
   }
   var CANONICAL_CFG_ALLOW = ['authorNote','bannedPhrases','creepyMode','dialogueLevel',
-    'dramaLevel','engineMode','genrePresets','outLen','reactionLevel','toneKey'];
+    'dramaLevel','engineMode','genrePresets','outLen','reactionLevel','toneKey',
+    'artPreset'];   /* ★FG-3 (GPT #127-FR): 物語ごとの画風。Worker CHR_CANONICAL_CFG_ALLOW・fix705 / fix743 の HY_CFG_ALLOW と同じ版・同じ 11 本 */
   function canonicalStoryCfg(raw){
     if (raw == null || typeof raw !== 'object' || Object.prototype.toString.call(raw) === '[object Array]') return null;
     var out = {};

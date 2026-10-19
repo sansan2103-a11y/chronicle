@@ -40,7 +40,7 @@
   'use strict';
   if (window.__v292Dfix825) return;
   var TAG = '[v292Dfix825:scenario-ui]';
-  var VERSION = 'v292Dfix825-20260921-sp16r-ui-v1.3';   /* v1.2: SEED_TEXT_ENRICHMENT_V1 caller（GPT 裁定 58 / 71） */
+  var VERSION = 'v292Dfix825-20261019-s4b-ui-v1.4';   /* v1.4: S-4b 自動同期の UI（保存・削除の直後／始める直前の照合・衝突の表示） */   /* v1.2: SEED_TEXT_ENRICHMENT_V1 caller（GPT 裁定 58 / 71） */
   var SCENE_FIELDS = ['lore', 'loc', 'obj', 'tone'];
   var HERO_FIELDS  = ['name', 'desc', 'gender'];
   var NPC_FIELDS   = ['name', 'desc', 'personality', 'coreDesire', 'coreFear', 'wound', 'gender'];
@@ -248,6 +248,10 @@
       case 'GATE_REQUIRED': return 'Google ログインの有効期限が切れています。ホームのログインボタンからログインしてください';
       case 'HARD_STOP': return '前の操作で復旧できない失敗が起きています。ページを再読み込みしてください';
       case 'OFF': return 'この機能は無効化されています';
+      /* ★S-4b */
+      case 'SCENARIO_SYNC_CONFLICT_START': return 'このシナリオは別の端末での変更と食い違っています。どちらを使うか選んでから始めてください（この端末の内容は消えていません）';
+      case 'SCENARIO_REMOTE_DELETED': return 'このシナリオは別の端末で削除されました（このシナリオから始めた物語は残っています）';
+      case 'SCENARIO_SYNC_CONFLICT': return '同期の食い違いを解決できませんでした。この端末のシナリオはそのままです' + f867c(detail);
       default:
         if (/_WRITE_FAILED$/.test(str(code)) || /_SERIALIZE_FAILED$/.test(str(code))) return '保存できませんでした（保存容量が不足している可能性があります）';
         return '失敗しました' + f867c(code);
@@ -323,19 +327,25 @@
     var html = '<div class="sc-head"><div class="sc-h1">シナリオ</div>' +
       '<button class="sc-btn" data-sc-act="toStories">← 物語一覧へ</button>' +
       '<button class="sc-btn sc-primary" data-sc-act="new">＋ シナリオを作る</button>' +
-      (sync966Available() ? '<button class="sc-btn" data-sc-act="cloudSync" title="同じ Google アカウントの他の端末とシナリオを共有します"' + (S966.running ? ' disabled' : '') + '>☁ 端末間で同期</button>' : '') +
+      (sync966Available() ? '<button class="sc-btn" data-sc-act="cloudSync" title="同じ Google アカウントの他の端末とシナリオを共有します"' + (S966.running ? ' disabled' : '') + '>' + (f872Auto() ? '☁ いま同期・古いシナリオを共有' : '☁ 端末間で同期') + '</button>' : '') +
       '</div>';
     if (S966.note) html += '<div class="sc-msg ' + (S966.err ? 'sc-err' : 'sc-note') + '">' + esc(S966.note) + '</div>';   /* ★fix966 */
+    html += autoStatusHtml();   /* ★S-4b */
     if (!st){ html += '<div class="sc-msg sc-err">' + esc(msg('FIX820_UNAVAILABLE')) + '</div>'; root.innerHTML = html; return; }
     var r = st.list();
     if (!r.ok){ html += '<div class="sc-msg sc-err">' + esc(msg(r.code, r.detail)) + '</div>'; root.innerHTML = html; return; }
     var rows = r.scenarios.slice().sort(function(a, b){ return String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')); });
+    var LG = legacyInfo966(r.scenarios);   /* ★#127-FV */
+    if (LG.n) html += '<div class="sc-msg sc-note" data-sc-legacy-note>この端末だけに保存されているシナリオがあります。別の端末でも使うには、☁から一度同期してください。以後は自動的に同期されます。</div>';
     if (!rows.length){
       html += '<div class="sc-empty">シナリオがありません。「＋ シナリオを作る」から作成してください。<br>' +
               '<span style="font-size:12px">少しだけ書いて 🌱 AI に広げてもらう、🎲 全部おまかせ、どちらでも。気に入ったシナリオから何度でも物語を始められます。</span></div>';
     } else {
       html += '<div class="sc-rows">' + rows.map(function(m){
-        return '<div class="sc-row" data-sc-open="' + esc(m.scenarioId) + '"><div class="sc-t">' + esc(m.title || '(無題)') + '</div>' +
+        return '<div class="sc-row" data-sc-open="' + esc(m.scenarioId) + '"><div class="sc-t">' + esc(m.title || '(無題)') +
+               (conflictOf966(m.scenarioId) ? ' <span class="sc-badge sc-dirty" data-sc-conflict="' + esc(m.scenarioId) + '">要確認（別の端末と食い違い）</span>' : '') +
+               (LG.pending[m.scenarioId] ? ' <span class="sc-badge" data-sc-legacy="' + esc(m.scenarioId) + '">この端末だけ</span>'
+                 : (LG.copied[m.scenarioId] ? ' <span class="sc-badge" data-sc-legacy-copied="' + esc(m.scenarioId) + '">この端末だけ（同期されるのは共有したコピー）</span>' : '')) + '</div>' +
                '<div class="sc-m">作成 ' + esc(fmt(m.createdAt)) + (m.updatedAt ? ' ／ 更新 ' + esc(fmt(m.updatedAt)) : '') + '</div></div>';
       }).join('') + '</div>';
     }
@@ -540,6 +550,12 @@
           var sync = window.__v292Dfix872;
           if (!sync || typeof sync.resolveConflict !== 'function'){ setError('SCENARIO_SYNC_CONFLICT', 'SYNC_MODULE_MISSING'); return; }
           sync.resolveConflict(id, choice, function(r){
+            /* ★S-4b: 編集画面でこのシナリオを開いていたら、解決後の中身で開き直す（古い draft のまま保存させない） */
+            if (r && r.ok && S.view === 'SC_EDIT' && S.scenarioId === id && !S.dirty){
+              var st2 = ST(), rr = st2 ? st2.read(id) : null;
+              if (rr && rr.ok) openExisting(id); else { S.scenarioId = null; S.draft = null; S.savedSnapshot = null; openList(); }
+            }
+            if (S.view === 'SC_LIST') renderList();
             if (r && r.ok) setNote(choice === 'cloud'
               ? (remoteDeleted ? 'クラウドの削除を受け入れました' : 'クラウド版を取り込みました')
               : ('新しいIDとして保存しました（' + (r.forkedTo || '') + '）'));
@@ -610,6 +626,8 @@
     S.draft = toDraft(r.scenario); S.scenarioId = r.scenario.scenarioId; S.savedSnapshot = JSON.stringify(S.draft); S.dirty = false; S.draftRevision++;
     S.candidate = null; S.candidateReport = null; S.lastError = null; S.lastNote = null;
     S.view = 'SC_EDIT'; showView('SC_EDIT'); renderEdit();
+    /* ★S-4b: 自動同期で記録された衝突があれば、開いた時に 2 択を出す（自動で上書きしない） */
+    try { var cf0 = conflictOf966(S.scenarioId); if (cf0) f872ConflictDialog(cf0); } catch(e){}
     return { ok: true, scenarioId: S.scenarioId };
   }
   function edit(path, value){ if (!S.draft) return; setPath(path, value); bump(); refreshEdit(); }
@@ -635,6 +653,7 @@
     S.savedSnapshot = JSON.stringify(S.draft); S.dirty = false;
     if (S.view === 'SC_EDIT') renderEdit();
     setNote('保存しました。「▶ このシナリオで始める」で、このシナリオから新しい物語を始められます。');
+    afterWriteSync('save', S.scenarioId);   /* ★S-4b: local の保存が確定した後に 1 回だけ */
     return { ok: true, saved: true, scenarioId: S.scenarioId };
   }
 
@@ -833,6 +852,7 @@
     S.busy = null;
     if (!r.ok){ if (r.hard) S.hardStop = true; setError(r.code, r.detail); return r; }
     S.scenarioId = null; S.draft = null; S.dirty = false; S.savedSnapshot = null;
+    afterWriteSync('delete', null);         /* ★S-4b: local の削除（墓標）が確定した後に 1 回だけ */
     openList();
     return { ok: true };
   }
@@ -872,6 +892,28 @@
         emptyStartConfirm(function(){ start({ force: _f3, emptyOk: true }); });
         return { ok: false, code: 'SCENARIO_LOOKS_EMPTY_CONFIRM', pending: true };
       }
+    }
+    /* ★★S-4b（GPT #127-FT）: 始める直前に、このシナリオ 1 本だけクラウドと照合する。
+         ・未解決の衝突 / 別の端末で削除 → 始めない（2 択・一覧へ）
+         ・別の端末の新しい版を取り込んだ → 始めない（開き直して確かめてもらう）
+         ・通信できない → この端末の版で始める（未同期をはっきり表示する）
+       自動同期が OFF（kill / 未ログイン）で既知の衝突も無い時は、従来どおりその場で始める。 */
+    var F0 = f872();
+    if (!opts.syncChecked && F0 && typeof F0.preStart === 'function' && (f872Auto() || conflictOf966(S.scenarioId))){
+      var sid0 = S.scenarioId, rev0 = S.draftRevision, force0 = opts.force;
+      S.busy = 'startSync'; S.lastError = null; S.lastNote = 'クラウドの版と照合しています…'; refreshEdit();
+      F0.preStart(sid0, function(pr){
+        S.busy = null;
+        if (S.scenarioId !== sid0 || S.draftRevision !== rev0 || S.view !== 'SC_EDIT'){ S.lastNote = null; refreshEdit(); return; }
+        if (pr && pr.block === 'CONFLICT'){ setError('SCENARIO_SYNC_CONFLICT_START'); try { f872ConflictDialog(pr.conflict || { id: sid0 }); } catch(e){} return; }
+        if (pr && pr.block === 'DELETED'){ S.scenarioId = null; S.draft = null; S.dirty = false; S.savedSnapshot = null; openList(); note966(msg('SCENARIO_REMOTE_DELETED'), true); return; }
+        if (pr && pr.block === 'UPDATED'){ openExisting(sid0); setNote('別の端末で更新された新しい版を取り込みました。内容を確かめてから、もう一度「▶ このシナリオで始める」を押してください。'); return; }
+        S.lastNote = null; refreshEdit();
+        var go = function(){ start({ force: force0, emptyOk: true, syncChecked: true }); };
+        if (pr && pr.unsynced){ unsyncedStartNotice(sid0, pr.code, go); return; }
+        go();
+      });
+      return { ok: true, pending: true, code: 'SYNC_CHECK' };
     }
     var home = HOME();
     S.busy = 'start'; refreshEdit();
@@ -949,6 +991,81 @@
     return true;
   }
   function on966(){ try { return localStorage.getItem('v292Dfix872On') === '1'; } catch(e){ return false; } }
+  /* ★★S-4b: ログイン中（owner / beta）の自動同期が有効か（fix872 が判断する。kill・AutoOff・未ログインなら false） */
+  function f872Auto(){ var F = f872(); try { return !!(F && typeof F.autoActive === 'function' && F.autoActive()); } catch(e){ return false; } }
+  /* ★★#127-FV: 持ち主の記録が無い「この端末だけ」の古いシナリオ。☁ で一度共有すると、作成時に今のアカウントが持ち主として
+       記録された写しができ、以後はその写しが新しいシナリオと同じく自動で同期される（fix966r3b の写し方式のまま）。
+       pending = まだ共有していない古い物 / copied = 共有用の写しがもうある古い物（元はそのまま・同期されるのは写し） */
+  function acctNow966(){ try { var F = window.__v292Dfix893; var m = F && F.serverMe && F.serverMe(); return (m && m.accountId) ? String(m.accountId) : ''; } catch(e){ return ''; } }
+  function legacyInfo966(rows){
+    var out = { pending: {}, copied: {}, n: 0 };
+    try {
+      if (!f872Auto() || !sync966Available()) return out;
+      var G = window.__v292Diso2, F = f872(); if (!G || typeof G.stampOf !== 'function') return out;
+      var acct = acctNow966(), cm = copyMap966(), mine = (acct && cm[acct] && typeof cm[acct] === 'object') ? cm[acct] : {};
+      var live = {}; (rows || []).forEach(function(m){ live[m.scenarioId] = 1; });
+      (rows || []).forEach(function(m){
+        var id = m.scenarioId, s = null; try { s = G.stampOf(id, 'c'); } catch(e){ s = null; }
+        if (s) return;                                          /* 持ち主の記録あり（このアカウント＝自動／別のアカウント＝出さない） */
+        if (F && F.canAutoSend && F.canAutoSend(id)) return;
+        if (mine[id] && live[mine[id]]){ out.copied[id] = mine[id]; return; }
+        out.pending[id] = 1; out.n++;
+      });
+    } catch(e){}
+    return out;
+  }
+  function conflictOf966(id){ var F = f872(); try { return (id && F && typeof F.conflictOf === 'function') ? F.conflictOf(id) : null; } catch(e){ return null; } }
+  /* 保存・削除の直後（local は確定済み）に 1 回だけ同期する。衝突はその場で 2 択（この ID を今さわっているため） */
+  function afterWriteSync(reason, id){
+    if (!f872Auto()) return;
+    var F = f872();
+    try {
+      F.requestSync(reason, id ? { interactiveId: id } : {}, function(rep){
+        if (!rep || rep.skipped) return;
+        var failed = !!((rep.ok === false && rep.code) || (rep.errors && rep.errors.length));
+        if (S.view === 'SC_EDIT' && id && S.scenarioId === id && !S.dirty && !S.lastError){
+          var mine = (rep.pushedIds || []).indexOf(id) >= 0;
+          if (mine) S.lastNote = (S.lastNote ? S.lastNote + ' ' : '') + 'クラウドにも保存しました（同じアカウントの他の端末でも使えます）。';
+          else if (failed) S.lastNote = (S.lastNote ? S.lastNote + ' ' : '') + 'クラウドへの同期はまだです（この端末には保存済みです。次にホームを開いた時にもう一度送ります）。';
+          refreshEdit();
+        }
+        if (S.view === 'SC_LIST') renderList();
+      });
+    } catch(e){}
+  }
+  function autoStatusHtml(){
+    if (!f872Auto()) return '';
+    var F = f872(), a = null; try { a = F.autoState(); } catch(e){ a = null; }
+    if (!a) return '';
+    var t = '', bad = false, nc = 0;
+    if (a.running || a.queued) t = 'クラウドと同期しています…';
+    else if (a.lastDoneAt && a.lastOk === false){ t = 'クラウドと同期できませんでした。この端末のシナリオはそのままです（次にホームを開いた時・保存した時にもう一度行います）。'; bad = true; }
+    else if (a.lastDoneAt) t = 'このアカウントで作ったシナリオは、同じアカウントの端末どうしで自動で同期されます。';
+    try { nc = F.conflicts().length; } catch(e){ nc = 0; }
+    if (nc){ t += (t ? ' ' : '') + nc + ' 件は別の端末の変更と食い違っているため、確認が必要です（開くと選べます）。'; bad = true; }
+    return t ? '<div class="sc-msg ' + (bad ? 'sc-err' : 'sc-note') + '" data-sc-autosync>' + esc(t) + '</div>' : '';
+  }
+  function onAutoSync(){
+    try { if (S.view === 'SC_LIST') renderList(); } catch(e){}
+    try { if (window.__v292Dfix870 && typeof window.__v292Dfix870.apply === 'function') window.__v292Dfix870.apply(); } catch(e){}
+  }
+  /* 通信できずに照合できなかった時: この端末の版で始めることをはっきり出してから始める（4 秒後に自動で続行・押せばすぐ） */
+  function unsyncedStartNotice(id, code, go){
+    var done = false, t = null;
+    try { sessionStorage.setItem('v292DfixS4bUnsyncedStart', JSON.stringify({ id: String(id || ''), code: String(code || ''), at: Date.now() })); } catch(e){}
+    var run = function(){ if (done) return; done = true; if (t) clearTimeout(t); closeOverlay(); go(); };
+    overlay('<h3>クラウドと照合できませんでした</h3>' +
+      '<div>通信できなかったため、<b>この端末に保存されているシナリオの版</b>で物語を始めます。' +
+      'このシナリオのクラウドへの同期はまだ終わっていません（次にホームを開いた時にもう一度行います）。</div>' +
+      '<div class="sc-acts"><button class="sc-btn sc-primary" data-sc-u="go">この端末の版で始める</button></div>',
+      function(p){ p.setAttribute('data-sc-unsynced', '1'); p.querySelector('[data-sc-u="go"]').addEventListener('click', run, false); });
+    t = setTimeout(run, 4000);
+  }
+  function sync966(cb, o){
+    var F = f872();
+    if (f872Auto() && typeof F.requestSync === 'function'){ F.requestSync('manual', { extraAllow: o && o.pushAllow }, cb); return; }
+    F.syncOnce(cb, o);
+  }
   function consent966(){ try { var c = JSON.parse(localStorage.getItem(CONSENT966) || 'null'); return (c && typeof c.acct === 'string' && c.acct && Array.isArray(c.ids)) ? c : null; } catch(e){ return null; } }
   function saveConsent966(c){ try { localStorage.setItem(CONSENT966, JSON.stringify(c)); return true; } catch(e){ return false; } }
   function me966(cb){
@@ -967,7 +1084,7 @@
     if (!c || c.acct !== acct){ if (!quiet) note966('このアカウントではまだ同期の対象を選んでいません。「☁ 端末間で同期」から選んでください。', true); return; }
     var allowed = {}; c.ids.forEach(function(id){ allowed[String(id)] = 1; });
     S966.running = true; if (!quiet) note966('同期しています…');
-    F.syncOnce(function(rep){
+    sync966(function(rep){
       S966.running = false;
       if (!rep || (rep.ok === false && rep.code)){
         var code = rep && rep.code;
@@ -1000,14 +1117,19 @@
       if (!acct){ note966('ログインしているアカウントを確認できませんでした。ホームで Google ログインしてから、もう一度押してください。', true); return; }
       var st = ST(); var r = st ? st.list() : null;
       var rows = (r && r.ok) ? r.scenarios : [];
+      var auto = f872Auto(), F2 = f872();
+      /* ★S-4b: 自動で同期されるシナリオ（このアカウントが作った物）は選ばせない。持ち主の記録が無い古い物だけを出す */
+      if (auto){ var LG2 = legacyInfo966(rows); rows = rows.filter(function(m){ return !!LG2.pending[m.scenarioId]; }); }   /* ★#127-FV */
       var c = consent966(); var prev = {};
       if (c && c.acct === acct) c.ids.forEach(function(id){ prev[String(id)] = 1; });
       var list = rows.length ? rows.map(function(m){
         return '<label class="sc-g" style="display:block;margin:6px 0"><input type="checkbox" data-sc966="' + esc(m.scenarioId) + '"' + (prev[m.scenarioId] ? ' checked' : '') + '> ' + esc(m.title || '(無題)') + '</label>';
-      }).join('') : '<div>この端末にシナリオはありません（他の端末のシナリオの取り込みだけ行います）。</div>';
+      }).join('') : (auto ? '<div>選んで共有する必要がある古いシナリオはありません。「選んだシナリオで同期する」を押すと、いますぐ同期します。</div>'
+                          : '<div>この端末にシナリオはありません（他の端末のシナリオの取り込みだけ行います）。</div>');
       overlay('<h3>シナリオを端末間で同期</h3>' +
         '<div>保存先：いまログインしているアカウント（' + esc(acctLabel966(acct)) + '）</div>' +
-        '<div style="margin-top:8px">クラウドに保存して他の端末でも使うシナリオを選んでください（選んだものだけ送ります）。持ち主の記録が無い古いシナリオは、元を移動・変更せず、選択したシナリオのコピーを現在のアカウントへ保存して共有します。この端末のシナリオは消えません。他の端末から届くシナリオはこの一覧に追加されます。同じシナリオを両方で別々に変更していた場合は、自動で上書きせず、どちらを使うか確認します。</div>' +
+        (auto ? '<div style="margin-top:8px">このアカウントで作ったシナリオは、選ばなくても自動で同期されます。ここに出ているのは、持ち主の記録が無い古いシナリオです。選んだものだけ、元を移動・変更せずにコピーを現在のアカウントへ保存して共有します。この端末のシナリオは消えません。</div>' : '') +
+        '<div style="margin-top:8px"' + (auto ? ' hidden' : '') + '>クラウドに保存して他の端末でも使うシナリオを選んでください（選んだものだけ送ります）。持ち主の記録が無い古いシナリオは、元を移動・変更せず、選択したシナリオのコピーを現在のアカウントへ保存して共有します。この端末のシナリオは消えません。他の端末から届くシナリオはこの一覧に追加されます。同じシナリオを両方で別々に変更していた場合は、自動で上書きせず、どちらを使うか確認します。</div>' +
         '<div style="margin-top:8px" data-sc966-list>' + list + '</div>' +
         '<div class="sc-acts"><button class="sc-btn" data-sc-c="no">やめる</button><button class="sc-btn sc-primary" data-sc-c="yes">選んだシナリオで同期する</button></div>',
         function(p){
@@ -1017,7 +1139,9 @@
             var cbs = p.querySelectorAll('[data-sc966]');
             for (var i = 0; i < cbs.length; i++){ if (cbs[i].checked) ids.push(cbs[i].getAttribute('data-sc966')); }
             closeOverlay();
-            try { localStorage.setItem('v292Dfix872On', '1'); } catch(e){ note966('この端末の設定を保存できませんでした。', true); return; }
+            if (!auto){ try { localStorage.setItem('v292Dfix872On', '1'); } catch(e){ note966('この端末の設定を保存できませんでした。', true); return; } }   /* ★S-4b: 自動同期中は手動の旗を立てない */
+            /* ★#127-FV: 登録の時に今のアカウントをもう一度確かめる（/auth/me の答え・この画面の server の答え・端末の印・iso2 が同じ）。違えば写しも送信も 0 */
+            if (auto){ var F3 = f872(); if (!F3 || typeof F3.accountOk !== 'function' || !F3.accountOk(acct)){ note966('ログインしているアカウントを確かめられなかったため、共有しませんでした（シナリオはそのままです）。ページを読み込み直してから、もう一度押してください。', true); return; } }
             /* ★fix966r3（GPT #127-E）: 送信前の関所（iso2）で帰属を確かめる。持ち主の記録が無い古いシナリオは、
                元を変えずに「このアカウント用の写し」を作って共有する（作成時に iso2 がこのアカウントを作成者として記録する）。
                別アカウントの記録があるものは共有しない。元のシナリオ・既存の記録は 1 バイトも変えない。 */
@@ -1068,7 +1192,7 @@
       refused.push(titleOf[id] || id);
     });
     var note = '';
-    if (copied.length) note += '持ち主の記録が無い古いシナリオ（' + copied.join('・') + '）は、元をそのまま残し、選択したシナリオのコピーを現在のアカウントへ保存して共有しました。';
+    if (copied.length) note += '持ち主の記録が無い古いシナリオ（' + copied.join('・') + '）は、元をそのまま残し、選択したシナリオのコピーを現在のアカウントへ保存して共有しました。' + (f872Auto() ? '以後はこのコピーが自動で同期されます（編集はコピーの方で）。' : '');
     if (reused.length) note += (note ? ' ' : '') + '前に作ったコピー（' + reused.join('・') + '）を使いました（新しいコピーは作っていません）。';
     if (refused.length) note += (note ? ' ' : '') + '共有できなかったシナリオ: ' + refused.join('・') + '（別のアカウントの記録があるか、確認できませんでした）。';
     return { ids: out, note: note };
@@ -1076,6 +1200,8 @@
   /* シナリオ一覧を開いた時、同じアカウントで同意済みなら 1 ページ 1 回だけ同期（選んだシナリオだけ送る） */
   function auto966(){
     try {
+      /* ★S-4b: 自動同期中は一覧を開いた時も 1 回（直近に成功していれば省く）。同意の有無は問わない（送るのは持ち主＝いまのアカウントの物だけ） */
+      if (f872Auto()){ if (sync966Available()) f872().requestSync('list', { minGapMs: 20000 }, function(){ if (S.view === 'SC_LIST') renderList(); }); return; }
       if (S966.auto || !sync966Available() || !on966()) return;
       var c = consent966(); if (!c) return;
       S966.auto = true;
@@ -1110,6 +1236,7 @@
     root.addEventListener('input', onRootInput, false);
     root.addEventListener('change', onRootGender, false);
     btn.addEventListener('click', function(){ if (S.view === 'LIST') openList(); else toStories(); }, false);
+    try { window.addEventListener('chr:scenario-sync', onAutoSync, false); } catch(e){}   /* ★S-4b: 取り込み後に一覧と HOME の入口を描き直す */
     S.wired = true;
     try { console.log(TAG, 'loaded (wired to #scBtn/#scView; entry ' + (btn.hidden ? 'hidden=dormant' : 'visible') + ')'); } catch(e){}
   }
