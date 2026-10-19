@@ -20,11 +20,11 @@
   var st = { mode: null, flagSet: 0, flagCleared: 0, sidecar: null, held: 0 };
   function mode() {   /* true / false / null(unknown) — server answer only */
     try { var F = window.__v292Dfix893; if (!F || typeof F.serverMe !== 'function' || typeof F.features !== 'function') return null;
-      var me = F.serverMe(), f = F.features(); if (!me || !f) return null; return f.assetV2Beta === true; } catch (e) { return null; }
+      var me = F.serverMe(), f = F.features(); if (!me || !f) return null; return f.assetV2Beta === true || f.assetV2New === true; } catch (e) { return null; }   /* ★FG-1c (GPT #127-FJ): Owner の新しい物語も S2 で始める（server の features.assetV2New）。旧画像の経路を閉じるのは server 側で beta だけ */
   }
   function applyFlag() {
     var m = mode(); st.mode = m; if (m === null) return m;
-    if (m) { if (g('v292Dav2On') !== '1') { s('v292Dav2On', '1'); st.flagSet++; } if (g('v292DbAv2') !== '1') s('v292DbAv2', '1'); }
+    if (m) { if (g('v292Dav2On') !== '1') { s('v292Dav2On', '1'); s('v292DbAv2', '1'); st.flagSet++; } }   /* ★FG-1c: 自分が ON にしたときだけ印を付ける（Owner が前から ON にしていた flag を、後で false になったときに消さない） */
     else if (g('v292DbAv2') === '1') { r('v292DbAv2'); r('v292Dav2On'); st.flagCleared++; }
     return m;
   }
