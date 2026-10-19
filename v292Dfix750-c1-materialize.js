@@ -331,6 +331,164 @@
     });
   }
 
+  /* =====================================================================
+     ★★M3 NEW_S2_SERVER_ID_ADOPTION（GPT #127-FN: M3 implement GO / production HOLD）
+     症状: 名前つき cast（シナリオから開始・hero + NPC）の新しい S2 物語は、初回 shadow 書込（putstory）で
+       server が cast.hero / cast.npcs[i].character_id と body.bindings を付ける（SERVER_DERIVED_ONLY）。
+       local は id なしのままなので、fix702 promote の precheck が HASH_MISMATCH → request 0 →
+       PROMOTION_DID_NOT_TAKE_EFFECT → 物語は shadow rev 1 のまま（bav2 の overlay で止まる）。
+       空の cast（npcs:[]）の物語では id が付かないので起きない。
+     対処: SHADOW_S1 の昇格の **直前に 1 回だけ**、server が付けた id を既存の hydrate と同じ規則
+       （__v292Dav2Map.pullCast(serverBody, storyId) = fix743 buildWritePlan と同じ）で local の slot に取り込む。
+       条件（全部）: kill v292DfixM3Off !== '1' / fix756 の自動新規 permit 中（autoPermitValid）/ この document で
+         この story に未実施 / document story の slot / server record body.assetSchema === 2 / local slot が S2 の
+         新しい印（cast.av2: assetSchema 2・sid 一致・bindings/known/retired が空）で id が 1 つも無い /
+         server cast から character_id を除いたもの == local cast（av2 を除く。名前・desc・gender など全部）/
+         server の id が全 entry に付き形式が正しく重複なし / server bindings == {各 entry の名前: その id} だけ /
+         画面の状態（S.cast）も slot と同じ / 取り込んだ後の local projection の hash == server hash を
+         **書く前に**計算して一致。
+       1 つでも外れたら local へ 1 バイトも書かず、そのまま従来の昇格（＝従来の HASH_MISMATCH HOLD）へ進む。
+       書いた後にもう一度 fix697.contentHashOf で照合し、違えば元の bytes に戻して従来経路へ進む。
+       retry 0 / 1 document 1 story 1 回 / server write 0 / Worker・canonical 契約・他の HASH_MISMATCH 処理は不変。
+     ===================================================================== */
+  var M3 = { attempts: 0, adopted: 0, refused: 0, notNeeded: 0, wrote: 0, rolledBack: 0, done: {}, last: null };
+  function m3Off(){ return lsg('v292DfixM3Off') === '1'; }
+  function m3IsObj(o){ return !!o && typeof o === 'object' && Object.prototype.toString.call(o) !== '[object Array]'; }
+  function m3IsArr(a){ return Object.prototype.toString.call(a) === '[object Array]'; }
+  function m3Clone(o){ return JSON.parse(JSON.stringify(o)); }
+  function m3Res(code, extra){
+    var r = { code: code, at: Date.now() };
+    if (extra) for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) r[k] = extra[k];
+    if (code === 'ADOPTED') M3.adopted++; else if (code === 'NOT_NEEDED') M3.notNeeded++; else M3.refused++;
+    M3.last = r; note({ m3: r });
+    try { console.log(TAG, 'M3_' + (code === 'ADOPTED' ? 'ADOPT' : 'SKIP'), code, r.storyId || ''); } catch(e){}
+    return r;
+  }
+  function m3Entries(cast){
+    var out = [];
+    if (m3IsObj(cast.hero)) out.push({ path: 'hero', e: cast.hero });
+    if (m3IsArr(cast.npcs)) for (var i = 0; i < cast.npcs.length; i++) out.push({ path: 'npcs[' + i + ']', e: cast.npcs[i] });
+    return out;
+  }
+  function m3NameKey(e){ var n = (e && e.name !== undefined) ? e.name : (e && e.display_name); return (typeof n === 'string') ? n.normalize('NFC').trim() : ''; }
+  function m3Hash(content){
+    var s = stableStringOf(content);
+    if (s == null) return Promise.resolve(null);
+    return sha256hex(s);
+  }
+  function m3LocalHash(storyId){
+    return new Promise(function(resolve){
+      try { var F = f697(); if (!F || typeof F.contentHashOf !== 'function') return resolve(null);
+            F.contentHashOf(storyId, function(h){ resolve(h || null); }); } catch(e){ resolve(null); }
+    });
+  }
+  function m3Adopt(storyId, g){
+    var key = 'chr6_slot_' + storyId;
+    var base = { storyId: storyId, wrote: 0 };
+    try {
+      if (m3Off()) return Promise.resolve(m3Res('OFF', base));
+      if (!autoPermitValid(storyId)) return Promise.resolve(m3Res('NOT_AUTO_NEW_STORY', base));
+      if (M3.done[storyId]) return Promise.resolve(m3Res('ALREADY_ATTEMPTED_THIS_DOCUMENT', base));
+      if (docStoryKey() !== key) return Promise.resolve(m3Res('SCOPE_MISMATCH', base));
+      var M = null; try { M = window.__v292Dav2Map || null; } catch(e){ M = null; }
+      var F = f697();
+      if (!M || typeof M.pullCast !== 'function' || typeof M.push !== 'function' ||
+          !F || typeof F.projectionOf !== 'function' || typeof F.contentHashOf !== 'function')
+        return Promise.resolve(m3Res('NO_DEPS', base));
+      var rec = g && g.record, sb = rec && rec.body;
+      if (!m3IsObj(sb) || sb.assetSchema !== 2 || !m3IsObj(sb.cast) || !m3IsObj(sb.bindings))
+        return Promise.resolve(m3Res('SERVER_NOT_S2', base));
+      if (typeof g.serverHash !== 'string' || !/^[0-9a-f]{64}$/.test(g.serverHash))
+        return Promise.resolve(m3Res('NO_SERVER_HASH', base));
+      var raw = lsg(key); var slot = null;
+      try { slot = JSON.parse(raw); } catch(e){ slot = null; }
+      if (!m3IsObj(slot) || !m3IsObj(slot.cast)) return Promise.resolve(m3Res('NO_LOCAL_SLOT', base));
+      var la = slot.cast.av2;
+      if (!m3IsObj(la) || la.assetSchema !== 2 || la.sid !== String(storyId) || la.assetIdPrep !== undefined)
+        return Promise.resolve(m3Res('LOCAL_NOT_S2_NEW', base));
+      if ((la.bindings !== undefined && !(m3IsObj(la.bindings) && Object.keys(la.bindings).length === 0)) ||
+          (la.known !== undefined && !(m3IsObj(la.known) && Object.keys(la.known).length === 0)) ||
+          (la.retired !== undefined && !(m3IsArr(la.retired) && la.retired.length === 0)))
+        return Promise.resolve(m3Res('LOCAL_SIDECAR_NOT_FRESH', base));
+      var le = m3Entries(slot.cast);
+      for (var a = 0; a < le.length; a++){ if (!m3IsObj(le[a].e) || le[a].e.character_id !== undefined) return Promise.resolve(m3Res('LOCAL_HAS_IDS', base)); }
+      /* pullCast は av2 の conflict / preflight-block 印を消す副作用を持つ。新しい物語には無いはずなので、在れば取り込まない（照合前の書込 0 を保つ） */
+      if (lsg('v292Dav2_cfl_' + storyId) != null || lsg('v292Dav2_blk_' + storyId) != null || lsg('v292Dav2_reg_' + storyId) != null)
+        return Promise.resolve(m3Res('AV2_MARKERS_PRESENT', base));
+    } catch(e0){ return Promise.resolve(m3Res('THREW', { storyId: storyId, wrote: 0, detail: String(e0 && e0.message || e0).slice(0, 120) })); }
+
+    return m3LocalHash(storyId).then(function(h0){
+      if (!h0) return m3Res('NO_LOCAL_HASH', base);
+      if (h0 === g.serverHash) return m3Res('NOT_NEEDED', base);           /* 既に一致: 何もしない（従来経路） */
+      M3.done[storyId] = true; M3.attempts++;                              /* ★ここから先は 1 document 1 回 */
+      var sb = g.record.body;
+      /* (1) server cast − character_id == local cast − av2（全 field・全 key） */
+      var lc = m3Clone(slot.cast); delete lc.av2;
+      var sc = m3Clone(sb.cast);
+      var se = m3Entries(sb.cast), sce = m3Entries(sc);
+      if (se.length !== le.length) return m3Res('CAST_DIFFERS', { storyId: storyId, wrote: 0, reason: 'ENTRY_COUNT' });
+      var ids = {}, expectBind = {};
+      for (var i = 0; i < se.length; i++){
+        var e = se[i].e;
+        if (!m3IsObj(e) || typeof e.character_id !== 'string' || !/^ch_[A-Za-z0-9_-]{8,64}$/.test(e.character_id))
+          return m3Res('SERVER_IDS_INVALID', { storyId: storyId, wrote: 0, path: se[i].path });
+        if (ids[e.character_id]) return m3Res('SERVER_IDS_INVALID', { storyId: storyId, wrote: 0, reason: 'DUPLICATE' });
+        if (e.status !== undefined || e.av2_aliases !== undefined) return m3Res('CAST_DIFFERS', { storyId: storyId, wrote: 0, reason: 'SERVER_ENTRY_EXTRA', path: se[i].path });
+        ids[e.character_id] = 1;
+        /* Worker C7 と同じ規則: 名前（name、無ければ display_name）のある entry だけが初期 binding を持つ。名前の無い entry（例: 空の hero {}）は id だけ。 */
+        var nk = m3NameKey(e);
+        if (nk){ if (expectBind[nk]) return m3Res('BINDINGS_UNEXPECTED', { storyId: storyId, wrote: 0, reason: 'DUPLICATE_NAME' }); expectBind[nk] = e.character_id; }
+        delete sce[i].e.character_id;
+      }
+      if (stableStringOf(lc) !== stableStringOf(sc)) return m3Res('CAST_DIFFERS', { storyId: storyId, wrote: 0, reason: 'FIELDS' });
+      /* (2) server bindings はちょうど {名前: その entry の id}（それ以外が 1 つでもあれば取り込まない） */
+      if (stableStringOf(sb.bindings) !== stableStringOf(expectBind)) return m3Res('BINDINGS_UNEXPECTED', { storyId: storyId, wrote: 0, reason: 'SET' });
+      /* (3) 画面の状態も slot と同じ cast であること（違えば後の保存で id が消えるので取り込まない） */
+      var S = null; try { S = (typeof window.__chronicleGetState === 'function') ? window.__chronicleGetState('fix750-m3') : null; } catch(e){ S = null; }
+      if (!S || !m3IsObj(S.cast)) return m3Res('NO_STATE', { storyId: storyId, wrote: 0 });
+      var mc = m3Clone(S.cast); delete mc.av2;
+      if (stableStringOf(mc) !== stableStringOf(lc)) return m3Res('MEMORY_DIFFERS', { storyId: storyId, wrote: 0 });
+      /* (4) 取り込み後の projection を **書く前に**作り、hash を server hash と照合する。
+             取り込みの規則は hydrate（fix743 buildWritePlan）と同じ pullCast、projection は fix697 projectFrom と同じ push。 */
+      var newCast = M.pullCast(m3Clone(sb), storyId);
+      if (!m3IsObj(newCast) || !m3IsObj(newCast.av2) || newCast.av2.assetSchema !== 2) return m3Res('PULL_FAILED', { storyId: storyId, wrote: 0 });
+      var p0 = F.projectionOf(storyId);
+      if (!p0 || p0.schema !== 1 || String(p0.id) !== String(storyId) || !m3IsObj(p0.body)) return m3Res('NO_LOCAL_PROJECTION', { storyId: storyId, wrote: 0 });
+      var pre = {}; for (var k in p0.body){ if (Object.prototype.hasOwnProperty.call(p0.body, k) && k !== 'assetSchema' && k !== 'bindings' && k !== 'assetIdPrep') pre[k] = p0.body[k]; }
+      pre.cast = newCast;
+      var cb = M.push(pre, storyId);
+      if (!m3IsObj(cb) || cb.assetSchema !== 2) return m3Res('PUSH_FAILED', { storyId: storyId, wrote: 0 });
+      var cand = {}; for (var k2 in p0){ if (Object.prototype.hasOwnProperty.call(p0, k2)) cand[k2] = p0[k2]; }
+      cand.body = cb;
+      return m3Hash(cand).then(function(h1){
+        if (!h1 || h1 !== g.serverHash) return m3Res('HASH_AFTER_ADOPTION_MISMATCH', { storyId: storyId, wrote: 0, h1: h1 ? h1.slice(0, 16) : null, server: g.serverHash.slice(0, 16) });
+        if (lsg(key) !== raw) return m3Res('LOCAL_CHANGED', { storyId: storyId, wrote: 0 });
+        /* (5) 書く: slot の cast だけを置き換える（他の bytes は parse→stringify の同値）。画面の状態にも同じ id を付ける。 */
+        var nb = null; try { nb = JSON.parse(raw); } catch(e){ nb = null; }
+        if (!m3IsObj(nb)) return m3Res('NO_LOCAL_SLOT', { storyId: storyId, wrote: 0 });
+        nb.cast = newCast;
+        var memBefore = m3Clone(S.cast);
+        if (!lss(key, JSON.stringify(nb))) return m3Res('LOCAL_WRITE_FAILED', { storyId: storyId, wrote: 0 });
+        M3.wrote++;
+        var me = m3Entries(S.cast), ne = m3Entries(newCast);
+        try {
+          for (var q = 0; q < me.length; q++) me[q].e.character_id = ne[q].e.character_id;
+          S.cast.av2 = m3Clone(newCast.av2);
+        } catch(eM){}
+        /* (6) 書いた後の照合（fix697 の正規 projection で）。違えば元の bytes と画面の状態へ戻す。 */
+        return m3LocalHash(storyId).then(function(h2){
+          if (h2 === g.serverHash) return m3Res('ADOPTED', { storyId: storyId, wrote: 1, ids: ne.length, serverRev: g.rev });
+          var rb = lss(key, raw);
+          try { var mb = m3Entries(memBefore), m2 = m3Entries(S.cast);
+                for (var r = 0; r < m2.length; r++){ if (!mb[r] || mb[r].e.character_id === undefined) delete m2[r].e.character_id; }
+                S.cast.av2 = memBefore.av2; } catch(eR){}
+          M3.rolledBack++;
+          return m3Res('POSTCHECK_MISMATCH_ROLLED_BACK', { storyId: storyId, wrote: 1, restored: rb, h2: h2 ? h2.slice(0, 16) : null });
+        });
+      });
+    }).then(null, function(e1){ return m3Res('THREW', { storyId: storyId, wrote: 0, detail: String(e1 && e1.message || e1).slice(0, 120) }); });
+  }
+
   /* ---------------- STATE C: canonical schema1 → canonical schema2 ----------------
      ★ここだけが不可逆。commitSchema2() からしか呼ばれない。 */
   /* ★★裁定43: putcanonical の payload は **journal binding からのみ**組み立てる。
@@ -505,7 +663,11 @@
 
     if (state === STATE.SHADOW_S1){
       j.phase = PHASE.SHADOW_VERIFIED; journalSet(j);
-      return stepPromotion(storyId).then(function(p){
+      /* ★M3: 昇格の直前に server が付けた id を 1 回だけ取り込む（条件外・不一致は書込 0 で従来どおり）。 */
+      return m3Adopt(storyId, g).then(function(m3r){
+        ctx.m3 = m3r || null;
+        return stepPromotion(storyId);
+      }).then(function(p){
         if (p.err) return holdWith(j, 'PROMOTION_REFUSED', p, steps, ctx);
         return freshGetStory(storyId).then(function(g2){
           if (g2.error) return holdWith(j, 'READ_FAILED_AFTER_PROMOTION', g2, steps, ctx);
@@ -1355,6 +1517,9 @@
        autoPermitArmed() は fix745 materializationActive() が読む（read-only boolean）。 */
     autoNewStoryPermit: autoNewStoryPermit,
     autoPermitArmed: autoPermitArmed,
+    /* ★M3: 観測口（read-only）。kill: v292DfixM3Off='1' */
+    m3: function(){ return { off: m3Off(), attempts: M3.attempts, adopted: M3.adopted, refused: M3.refused, notNeeded: M3.notNeeded,
+                             wrote: M3.wrote, rolledBack: M3.rolledBack, last: M3.last ? m3Clone(M3.last) : null }; },
     journal: journal,
     journalClear: journalClear,
     status: function(){

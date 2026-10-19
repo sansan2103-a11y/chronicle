@@ -276,8 +276,19 @@
       tools.appendChild(gsel);
       var ta = document.createElement('textarea'); ta.setAttribute('data-av2-prof', 'appearance'); ta.rows = 3; ta.maxLength = 400; ta.placeholder = '例: 黒髪の短髪、細身、灰色の着物、左頬に古い傷';
       ta.style.cssText = 'display:block;width:96%;margin-top:4px;background:#1a1a22;border:1px solid #555;color:#eee;padding:4px;border-radius:4px;font-size:11px;';
-      ta.value = (sug.current && sug.current.appearance) || '';                                 // ONLY a previously confirmed appearance is prefilled
+      ta.value = (sug.current && sug.current.appearance) || '';                                 // a previously confirmed appearance is prefilled
+      /* ★FG-1c (GPT #127-FJ「シナリオの外見を初期値に・保存前に本人が編集できる」): 確定済みの外見が無いときだけ、設定の説明文（desc）を
+         編集欄の下書きに入れる。profile.appearance へは書かない（#31-b：書くのは本人の「確定」= setProfile だけ）。生成もしない。
+         kill: localStorage v292DfixFG1cOff='1'（従来どおり空欄）。 */
+      var fg1cOff = false; try { fg1cOff = localStorage.getItem('v292DfixFG1cOff') === '1'; } catch(eF){}
+      var draftNote = null;
+      if (!fg1cOff && !ta.value && typeof sug.desc === 'string' && sug.desc.trim()){
+        ta.value = sug.desc.replace(/\s+/g, ' ').trim().slice(0, 400);
+        draftNote = document.createElement('div'); draftNote.setAttribute('data-av2-prof', 'draft-note'); draftNote.style.cssText = 'margin-top:2px;color:#e0c080;font-size:11px;';
+        draftNote.textContent = '設定の説明文を下書きとして入れました。確認・編集してから確定してください（見た目に関係ない語は絵に使われません）。';
+      }
       tools.appendChild(ta);
+      if (draftNote) tools.appendChild(draftNote);
       var refs = [];
       if (sug.desc) refs.push(['設定の説明文（参考）', sug.desc]);
       if (sug.legacy) refs.push(['以前のAIアイコン用の外見文（参考・自動推定なので要確認）', sug.legacy]);
