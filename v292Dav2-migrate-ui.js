@@ -171,11 +171,6 @@
       var foot = document.createElement('div'); foot.style.cssText = 'border-top:1px solid #555;margin-top:8px;padding-top:8px;';
       var rd = document.createElement('div'); rd.setAttribute('data-av2-mig', 'ready'); rd.setAttribute('data-all', res.allReady ? '1' : '0');
       rd.textContent = '準備できた ' + n + ' / ' + res.rows.length + '（確保 / 古い絵なし / 移さない）' + (res.allReady ? '（切り替えられます）' : '（全員の準備ができると切り替えられます）'); foot.appendChild(rd);
-      /* ★N2 (GPT #127-FJ): 作った絵は「切り替え」まで画面のアイコンに出ない（仮表示のまま）ことを、次に押すものと一緒に示す。自動の切替・自動 adopt はしない。 */
-      var nPic = res.rows.filter(function(r){ return !!r.pointer; }).length;
-      if (nPic > 0){ var hint = document.createElement('div'); hint.setAttribute('data-av2-mig', 'switch-wait'); hint.style.cssText = 'margin:4px 0;color:#e0c080;font-size:12px;';
-        hint.textContent = '画像準備済み ' + nPic + ' 人・Asset v2 への切替待ち：画面のアイコンは、下の「Asset v2へ切り替える」を押すまで仮の表示のままです。' + (res.allReady ? '' : '（先に残りの人の準備が要ります）');
-        foot.appendChild(hint); }
       var sw = btn('Asset v2へ切り替える', res.allReady ? '#6a4a2a' : '#333'); sw.setAttribute('data-av2-mig', 'switch');
       if (!res.allReady){ sw.disabled = true; sw.style.opacity = '.5'; }
       var fm = document.createElement('span'); fm.style.cssText = 'margin-left:6px;color:#e0c080;';
@@ -194,7 +189,7 @@
     var want = shown() && (stage() === 'LEG' || stage() === 'PREP');
     if (!want){ if (entry && entry.parentNode) entry.parentNode.removeChild(entry); entry = null; return; }
     if (entry && entry.parentNode) return;
-    entry = btn(stage() === 'PREP' ? 'Asset v2 移行（切替待ち）' : 'Asset v2 移行', '#4a3a5a'); entry.id = 'v292Dav2-migrate-entry';   /* ★N2: 準備済み（PREP）なら切替待ちと分かる名前 */ entry.setAttribute('data-av2-ui', 'migrate-entry');
+    entry = btn('Asset v2 移行', '#4a3a5a'); entry.id = 'v292Dav2-migrate-entry'; entry.setAttribute('data-av2-ui', 'migrate-entry');
     entry.style.cssText += 'position:fixed;left:10px;bottom:56px;z-index:2147483000;opacity:.85;';
     entry.onclick = function(){ open(); };
     (document.body || document.documentElement).appendChild(entry);
