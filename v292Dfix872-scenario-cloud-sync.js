@@ -459,7 +459,7 @@
       if (localMoved(a) || (opts && opts.ownerGuard && a.hasLocal && localForeign(a.id))){ rep.deferred++; next(); return; }
       if (res.j.deleted === true){ applyRemoteDelete(a, rep, cloudRevOfRow(res.j), next); return; }
       var st = ST();
-      var r = st.f872ApplyRemote(a.id, inputFromRecord(res.j.record), cloudRevOfRow(res.j), +res.j.scenarioRev || 0);
+      var r = st.f872ApplyRemote(a.id, inputFromRecord(res.j.record), cloudRevOfRow(res.j), +res.j.scenarioRev || 0, +res.j.updatedAt || 0);   /* ★SC-DATE */
       if (!r.ok){ rep.ok = false; rep.errors.push({ id: a.id, code: r.code || 'APPLY_FAILED' }); }
       else { rep.pulled++; rep.pulledIds.push(a.id); }
       next();
@@ -496,7 +496,7 @@
       var lcs = (body && body.ok && meta) ? canonicalOf(a.id, inputFromBody(meta.title, body.body)) : null;
       var rcs = canonicalOf(a.id, inputFromRecord(res.j.record));
       if (lcs == null || rcs == null || lcs !== rcs) return cf('この端末だけのシナリオと同じ ID の別の中身がクラウドにある');
-      var r = st.f872ApplyRemote(a.id, inputFromRecord(res.j.record), cloudRevOfRow(res.j), +res.j.scenarioRev || 0);
+      var r = st.f872ApplyRemote(a.id, inputFromRecord(res.j.record), cloudRevOfRow(res.j), +res.j.scenarioRev || 0, +res.j.updatedAt || 0);   /* ★SC-DATE */
       if (!r.ok){ rep.ok = false; rep.errors.push({ id: a.id, code: r.code || 'APPLY_FAILED' }); }
       else rep.adopted++;
       next();
@@ -522,7 +522,7 @@
         /* ★S-4b: 送っている間に同じシナリオがもう一度保存されていたら、cloudRev だけ進めて dirty は残す（次の同期で送る） */
         var now = metaOf(a.id);
         var moved = !!(now && ((+now.rev || 0) !== sentRev || now.updatedAt !== sentAt));
-        var m = st.f872MarkPushed(a.id, cloudRevOfRow(res.j), moved ? { keepDirty: true } : undefined);
+        var m = st.f872MarkPushed(a.id, cloudRevOfRow(res.j), (moved || res.j.created === true) ? { keepDirty: moved, registeredAt: (res.j.created === true) ? (+res.j.updatedAt || 0) : 0 } : undefined);   /* ★SC-DATE: クラウドに初めて作られた時刻（server の updatedAt） */
         if (!m.ok){ rep.ok = false; rep.errors.push({ id: a.id, code: m.code || 'MARK_FAILED' }); }
         else { rep.pushed++; rep.pushedIds.push(a.id); if (a.replay) rep.replayed++; }
         next(); return;
@@ -620,7 +620,7 @@
       }
       var applied;
       if (res.j.deleted === true) applied = st.f872ApplyRemoteDelete(id, cloudRevOfRow(res.j));
-      else applied = st.f872ApplyRemote(id, inputFromRecord(res.j.record), cloudRevOfRow(res.j), +res.j.scenarioRev || 0);
+      else applied = st.f872ApplyRemote(id, inputFromRecord(res.j.record), cloudRevOfRow(res.j), +res.j.scenarioRev || 0, +res.j.updatedAt || 0);   /* ★SC-DATE */
       if (!applied.ok) return done({ ok: false, code: applied.code || 'APPLY_FAILED', forkedTo: forked });
       delete S.conflicts[id];
       /* ★S-4b: 解決した結果（新しい ID の写し）を 1 回だけ送る（自動同期が有効な時だけ） */

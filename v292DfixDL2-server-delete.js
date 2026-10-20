@@ -185,7 +185,23 @@
     /* ★サーバの一覧に無い物語は削除しない。Vault v2 で隠した物語は施錠中の一覧に出ず、getstory も「無い」と同じ形で答えるので、
        「この端末だけの物語」と区別できない（D5）。端末の推測では消さない（D3）。 */
     else if (!srv) r.reason = 'クラウドでこの物語を確認できないため、ここでは削除できません（隠している物語の可能性もあります）。';
-    else if (srv.deleted) r.reason = 'サーバーではすでに削除されています。';
+    else if (srv.deleted) {
+      /* ★★DP3（BUNDLE35b・GPT #127-GS・既定 OFF / 有効化 v292DfixDP3On='1'）: サーバーではもう削除済みなのに、この端末の一覧にだけ残っている物語
+         （受け取り側で「未保存の変更がある」として残したもの）を、Owner がこの端末で選んだときだけ、この端末の一覧からも外せるようにする。
+         ・サーバーへ削除の要求は送らない（fix587.acceptServerTombstone が getstory を 1 回読み、削除済みを確かめてから meta に墓標を立てる）。
+         ・本文・サイドストアはこの端末に残す（従来の「この端末で削除」と同じ allowDirty の扱い）。
+         ・以前は「サーバーではすでに削除されています。」と出るだけで選べず、一覧から外す方法が無かった。
+         ・#127-GS: 未保存の変更を戻す道（復旧の経路）が確かめられていないので、既定では OFF（従来どおり選べない）。 */
+      var dp3on = false; try { dp3on = localStorage.getItem('v292DfixDP3On') === '1'; } catch (e3) { dp3on = false; }
+      if (dp3on && m && !tomb && !srv.locked) {
+        r.ready = true; r.kind = 'localOnly';
+        r.basis = Object.freeze({ rev: srv.rev, serverHash: srv.serverHash, authority: srv.authority });
+        r.warn.push('この物語は、ほかの端末ですでに削除されています。この端末の一覧からも外します（サーバーへは何も送りません）。');
+        var s3 = svc(), u3 = null;
+        try { u3 = (s3 && typeof s3.dl2LocalUnsynced === 'function') ? s3.dl2LocalUnsynced(r.id) : null; } catch (e4) { u3 = 'MARKER_UNREADABLE'; }
+        if (u3) r.warn.push('この端末に、まだクラウドへ保存されていない変更があります。一覧から外すとその変更も見えなくなります（この端末の控えには残ります）。');
+      } else r.reason = 'サーバーではすでに削除されています。';
+    }
     else if (srv.locked) r.reason = 'パスコード付きの物語は削除できません。先にパスコードを外してください。';
     else if ((srv.authority !== 'shadow' && srv.authority !== 'canonical') || !srv.serverHash) r.reason = 'この物語はいまは削除できない状態です。';
     else {
@@ -300,7 +316,7 @@
       if (!allowed()) { M.phase = 'done'; M.msg = 'いまは物語の削除を使えません（何も送っていません）。'; renderSheet(); return; }
       M.msg = '送信しています…'; renderSheet();
       var chain = Promise.resolve();
-      sel.forEach(function (r) { chain = chain.then(function () { return sendOne(r); }).then(function () { renderSheet(); }); });
+      sel.forEach(function (r) { chain = chain.then(function () { return r.kind === 'localOnly' ? accept(r, 'already') : sendOne(r); }).then(function () { renderSheet(); }); });   /* ★DP3: localOnly は送らない（既定 OFF なので通常は現れない） */
       return chain.then(function () {
         var ok = sel.filter(function (r) { return r.result && r.result.ok; }).length;
         M.phase = 'done'; M.msg = (ok === sel.length) ? (ok + ' 件を一覧から削除しました。') : (sel.length + ' 件のうち ' + ok + ' 件を削除しました。残りは下の理由をご確認ください。');
@@ -357,7 +373,7 @@
       cand.forEach(function (id) {
         if (iso2Foreign(id)) { st.receive.skipped++; return; }
         chain = chain.then(function () {
-          return Promise.resolve(s.acceptServerTombstone(id, { source: 'dl2-receive' })).then(function (a) {
+          return Promise.resolve(s.acceptServerTombstone(id, { source: 'dl2-receive', dp1Principal: x[0] })).then(function (a) {   /* ★DP1: 受け取りの前後で確かめた accountId */
             if (a && a.code === 'tombstoned') applied++;
             else if (a && a.code === 'local-unsynced-conflict') conflicts++;
             else if (a && a.ok && a.resolvedPlans) resolved++;
@@ -408,6 +424,36 @@
     } else if (!on && b && b.parentNode) b.parentNode.removeChild(b);
     if (on && b && b.parentNode) { var L = bulkLabel(); if (b.textContent !== L) b.textContent = L; }
     renderBar();
+    markConflicts();
+  }
+  /* ★★DP4（BUNDLE35b・GPT #127-GS「本当の未保存は残して競合として見せる」・kill v292DfixDP4Off='1'）: サーバーでは削除済みなのに、この端末に未保存の変更があるため一覧に残した物語
+     （fix587 の競合の記録 v292Dfix587_dl2conflict があり、この端末の meta はまだ生きている物語）を、カードの上ではっきり示す。
+     ・それまでは帯の件数だけで、カードには「この端末のみ」（fix889: lastConfirmed が無い）と出ていた = 実際の状態（サーバーで削除済み・端末に未保存の変更）と違う。
+     ・表示だけ。読むのは競合の記録と meta だけ。書込 0・通信 0。カードは home の render のたびに作り直されるので、render の最後（decorate）で毎回付け直す。 */
+  function markConflicts() {
+    if (MODE !== 'home') return;
+    var off4 = false; try { off4 = localStorage.getItem('v292DfixDP4Off') === '1'; } catch (e0) { off4 = true; }
+    var s = svc(), conf = {};
+    try { conf = (!off4 && s && typeof s.dl2Conflicts === 'function') ? (s.dl2Conflicts() || {}) : {}; } catch (e1) { conf = {}; }
+    var cards = document.querySelectorAll('.card[data-id]');
+    for (var i = 0; i < cards.length; i++) {
+      var c = cards[i], id = c.getAttribute('data-id'), rec = conf[id], m = rec ? metaRow(id) : null;
+      var want = !!(rec && rec.serverDeleted === true && m && m.deleted !== true);
+      var cur = c.querySelector('[data-dl2conf]'), cov = c.querySelector('.cover') || c;
+      if (want && !cur) {
+        var bs = cov.querySelectorAll('.badge');
+        for (var j = 0; j < bs.length; j++) if (/この端末のみ/.test(bs[j].textContent || '')) { bs[j].setAttribute('data-dl2hid', '1'); bs[j].style.display = 'none'; }
+        var d = document.createElement('div'); d.className = 'badge'; d.setAttribute('data-dl2conf', '1');
+        d.setAttribute('title', 'この物語はほかの端末で削除されています。この端末には、まだクラウドへ保存されていない変更が残っています（この端末の控えは消していません）。');
+        d.style.cssText = 'z-index:2;top:auto;bottom:8px;background:#6a3a10;color:#ffe2b0;border:1px solid #c07a2a';
+        d.textContent = 'サーバーで削除済み・この端末に未保存の変更';
+        cov.appendChild(d);
+      } else if (!want && cur) {
+        if (cur.parentNode) cur.parentNode.removeChild(cur);
+        var hs = c.querySelectorAll('[data-dl2hid]');
+        for (var k = 0; k < hs.length; k++) { hs[k].style.display = ''; hs[k].removeAttribute('data-dl2hid'); }
+      }
+    }
   }
   function openDelete(ids, opts) { return openFlow('single', Array.isArray(ids) ? ids : [ids], true); }
   function openBulk() {

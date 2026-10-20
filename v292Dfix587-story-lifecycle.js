@@ -1455,6 +1455,101 @@
       return null;
     } catch(e){ return 'MARKER_UNREADABLE'; }
   }
+  /* ★★DP1（BUNDLE35b・GPT #127-GS・kill v292DfixDP1Off='1'）: 「印は DIRTY なのに中身はサーバーと同じ」を見分ける。
+     実測（BUNDLE34 本番 QA-B・2026-10-20 / harness delprop）: シナリオから始めた物語は、作った端末で
+       ① fix750 M3（cast の id 取り込み）の書込が昇格の前に印を DIRTY_LOCAL にし、
+       ② fix810 の confirm は inFlightSave が無いので CLEAN にできず、
+       ③ 昇格の途中（putcanonical の返事の前）でページを離れると lastConfirmed も null のまま残る。
+     中身はサーバーの rev と同じなのに、別の端末で削除されると D3（未保存の変更は捨てない）が働き、一覧に残り続けていた。
+     判定（新しい serializer は作らない）: fix697.projectionV2(id)（Worker chrCanonicalStoryContentV2 と同一形）に deleted:true を入れ、
+       fix697.canonicalString → SHA-256。これは Worker deletestory2 が墓標の hash を作る導出と同じ。getstory が返した墓標の
+       serverHash と一致したときだけ「この端末に、サーバーに無い変更は無い」と判断する。
+     ・対象は印が DIRTY_INTENT / DIRTY_LOCAL のときだけ。DIVERGED / BOOTSTRAP_HOLD / 送信中 / 印が読めない は従来どおり残す。
+     ・hash を作れない・一致しない・lock の中で読み直した印か projection が 1 バイトでも違う → 従来どおり残す（fail-closed）。
+     ・サーバーへは何も送らない。本文・サイドストアは残す（墓標は meta だけ・従来と同じ）。 */
+  function dp1Off(){ return lsg('v292DfixDP1Off') === '1'; }
+  function dp1Str(slotId){
+    var W = null; try { W = window.__v292Dfix697 || null; } catch(e){ W = null; }
+    if (!W || typeof W.projectionV2 !== 'function' || typeof W.canonicalString !== 'function') return null;
+    var c = null; try { c = W.projectionV2(slotId); } catch(e){ c = null; }
+    if (!c || c.schema !== 2 || String(c.id) !== String(slotId)) return null;
+    var t = {}; for (var k in c) if (Object.prototype.hasOwnProperty.call(c, k)) t[k] = c[k];
+    t.deleted = true;
+    try { return String(W.canonicalString(t)); } catch(e){ return null; }
+  }
+  /* home は fix743（CC2）を常には読み込まない。home の N2（g2LoadCC2）と同じ作法・同じ URL で、必要なときだけ読み込む
+     （fix743 は副作用の無い純関数モジュール）。読めなければ判定しない（fail-closed）。 */
+  function dp1LoadCC2(cb){
+    try {
+      if (window.__v292DfixCC2 && typeof window.__v292DfixCC2.buildSchema2Record === 'function') return cb(true);
+      var done = false, fin = function(v){ if (!done){ done = true; cb(v); } };
+      var sc = document.createElement('script'); sc.src = 'v292Dfix743-cc2-client.js?cb=20261006-n2';
+      sc.onload = function(){ fin(!!(window.__v292DfixCC2 && typeof window.__v292DfixCC2.buildSchema2Record === 'function')); };
+      sc.onerror = function(){ fin(false); };
+      setTimeout(function(){ fin(false); }, 8000);
+      (document.head || document.documentElement).appendChild(sc);
+    } catch(e){ cb(false); }
+  }
+  /* #127-GS の条件: 受け取り（dl2-receive）だけ・同じアカウント（DL2 が受け取りの前後で確かめた accountId を、hash を作った後に
+     /api/auth/me でもう一度確かめる）・同じ物語 ID・印が読める・送信中（inFlightSave）でない。どれか欠ければ判定しない＝従来どおり残す。 */
+  function dp1Who(cb){
+    try {
+      fetch('/api/auth/me', { method: 'GET', credentials: 'same-origin', cache: 'no-store', headers: { 'x-chronicle-csrf': '1' } })
+        .then(function(r){ return r.ok ? r.json() : null; }, function(){ return null; })
+        .then(function(j){ cb((j && j.ok === true && j.accountId) ? String(j.accountId) : null); }, function(){ cb(null); });
+    } catch(e){ cb(null); }
+  }
+  function dp1Prepare(slotId, srv, opts, cb){
+    try {
+      if (dp1Off()) return cb(null);
+      var u = dl2LocalUnsynced(slotId);
+      if (u !== 'DIRTY_INTENT' && u !== 'DIRTY_LOCAL') return cb(null);
+      if (String(opts.source || '') !== 'dl2-receive') return cb({ equal: false, why: 'NOT_RECEIVE' });
+      var who0 = (typeof opts.dp1Principal === 'string' && opts.dp1Principal) ? opts.dp1Principal : '';
+      if (!who0) return cb({ equal: false, why: 'NO_PRINCIPAL' });
+      var mraw = lsg('v292Dfix402_f781g_' + String(slotId)), mo = null;
+      try { mo = (mraw == null) ? null : JSON.parse(mraw); } catch(eM){ mo = null; }
+      if (!mo || typeof mo !== 'object') return cb({ equal: false, why: 'MARKER_UNREADABLE' });
+      if (mo.inFlightSave) return cb({ equal: false, why: 'IN_FLIGHT' });
+      if (mo.storyId != null && String(mo.storyId) !== String(slotId)) return cb({ equal: false, why: 'MARKER_ID_MISMATCH' });
+      var sh = (srv && srv.serverHash) ? String(srv.serverHash) : '';
+      if (!/^[0-9a-f]{64}$/.test(sh)) return cb({ equal: false, why: 'NO_SERVER_HASH' });
+      dp1LoadCC2(function(ok){
+        if (!ok) return cb({ equal: false, why: 'NO_CC2' });
+        dp1Hash(slotId, sh, u, function(r){
+          if (!r || r.equal !== true) return cb(r);
+          dp1Who(function(w){
+            if (!w || w !== who0) return cb({ equal: false, why: 'PRINCIPAL_CHANGED' });
+            r.gen = +mo.localGeneration || 0; cb(r);
+          });
+        });
+      });
+    } catch(e){ cb({ equal: false, why: 'THREW' }); }
+  }
+  function dp1Hash(slotId, sh, u, cb){
+    try {
+      var mk = lsg('v292Dfix402_f781g_' + String(slotId));
+      var str = dp1Str(slotId);
+      if (str == null) return cb({ equal: false, why: 'NO_PROJECTION' });
+      if (typeof crypto === 'undefined' || !crypto.subtle || typeof TextEncoder === 'undefined') return cb({ equal: false, why: 'NO_DIGEST' });
+      crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)).then(function(buf){
+        var a = new Uint8Array(buf), h = '';
+        for (var i = 0; i < a.length; i++){ var x = a[i].toString(16); h += (x.length < 2 ? '0' : '') + x; }
+        cb({ equal: h === sh, why: h === sh ? 'CONTENT_EQUAL' : 'CONTENT_DIFFERS', str: str, mk: mk, state: u });
+      }, function(){ cb({ equal: false, why: 'DIGEST_FAILED' }); });
+    } catch(e){ cb({ equal: false, why: 'THREW' }); }
+  }
+  /* lock の中で読み直す: 印（生の文字列）と projection が hash を作った時点と完全に同じであること */
+  function dp1Holds(slotId, dp){
+    try {
+      if (!dp || dp.equal !== true || dp1Off()) return false;
+      var raw = lsg('v292Dfix402_f781g_' + String(slotId));
+      if (raw !== dp.mk) return false;                                   /* 世代・状態・送信中が 1 文字でも変わった */
+      var mo = null; try { mo = JSON.parse(raw); } catch(eM){ return false; }
+      if (!mo || mo.inFlightSave) return false;
+      return dp1Str(slotId) === dp.str;
+    } catch(e){ return false; }
+  }
   function dl2ReadConflicts(){ try { var o = JSON.parse(lsg(DL2_CONFLICT_KEY) || '{}'); return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {}; } catch(e){ return {}; } }
   function dl2WriteConflicts(o){ return lss(DL2_CONFLICT_KEY, JSON.stringify(o)); }
   function dl2MarkPlansResolved(slotId, srv, now, src){
@@ -1495,7 +1590,10 @@
       return { ok:true, code: n1 ? 'resolved-plan' : 'already-tombstoned', resolvedPlans:n1 };
     }
     var unsynced = dl2LocalUnsynced(slotId);
-    if (unsynced && opts.allowDirty !== true){
+    var dp1ok = !!(unsynced && opts.allowDirty !== true && dp1Holds(slotId, opts.dp1));   /* ★DP1 */
+    if (dp1ok){ stats.dp1ContentEqual = (stats.dp1ContentEqual || 0) + 1; note({ act:'dp1-content-equal', slotId:slotId, source:src, localState:unsynced, gen: opts.dp1.gen }); }
+    else if (unsynced && opts.dp1 && opts.allowDirty !== true){ note({ act:'dp1-kept', slotId:slotId, source:src, why: String(opts.dp1.equal === true ? 'RECHECK_CHANGED' : (opts.dp1.why || '?')) }); }
+    if (unsynced && opts.allowDirty !== true && !dp1ok){
       /* ★D3: この端末の未保存の変更は捨てない。墓標を立てず、競合として記録して一覧に残す。 */
       conf[slotId] = { serverDeleted:true, serverRev: srv.rev, authority: srv.authority, localState: unsynced, at: now, source: src };
       dl2WriteConflicts(conf);
@@ -1510,6 +1608,7 @@
     if (!tomb || !d.tomb.validate(tomb).ok) return { ok:false, code:'tombstone-invalid' };
     tomb.serverTombstone = { rev: srv.rev, authority: srv.authority, at: now, source: src,
                              bodyPreserved: bodyPresent, localState: unsynced || null };
+    if (dp1ok) tomb.serverTombstone.dp1 = 'CONTENT_EQUAL';   /* ★DP1: 印は DIRTY だったが中身はサーバーの削除内容と同じ */
     var next = meta.filter(function(e){ return !e || String(e.id) !== String(slotId); });
     next.push(tomb);
     if (!writeMeta(next)) return { ok:false, code:'tombstone-write-failed' };
@@ -1539,10 +1638,18 @@
           resolve({ ok:false, code:'server-not-tombstoned', status: r.status, errorCode: j.errorCode || null }); return;
         }
         var srv = { rev: +j.rev || 0, authority: String(j.authority), serverHash: j.serverHash || null };
-        dl2RunAdmission(function(){ return dl2ApplyLocked(id, srv, opts, d); }).then(function(x){
-          if (!x || x.ran !== true){ resolve({ ok:false, code:'admission-busy', reason: (x && x.reason) || 'BUSY' }); return; }
-          var out = x.result || { ok:false, code:'threw' }; out.serverRev = srv.rev; resolve(out);
-        }, function(e){ resolve({ ok:false, code:'threw', why: String(e) }); });
+        var run = function(o2){
+          dl2RunAdmission(function(){ return dl2ApplyLocked(id, srv, o2, d); }).then(function(x){
+            if (!x || x.ran !== true){ resolve({ ok:false, code:'admission-busy', reason: (x && x.reason) || 'BUSY' }); return; }
+            var out = x.result || { ok:false, code:'threw' }; out.serverRev = srv.rev; if (o2.dp1) out.dp1 = o2.dp1.why || null; resolve(out);
+          }, function(e){ resolve({ ok:false, code:'threw', why: String(e) }); });
+        };
+        if (opts.allowDirty === true){ run(opts); return; }
+        dp1Prepare(id, srv, opts, function(dp){                                   /* ★DP1: hash は lock の外で作り、lock の中で読み直す */
+          if (!dp){ run(opts); return; }
+          var o2 = {}; for (var k in opts) if (Object.prototype.hasOwnProperty.call(opts, k)) o2[k] = opts[k];
+          o2.dp1 = dp; run(o2);
+        });
       });
     });
   }

@@ -345,8 +345,11 @@
         return '<div class="sc-row" data-sc-open="' + esc(m.scenarioId) + '"><div class="sc-t">' + esc(m.title || '(無題)') +
                (conflictOf966(m.scenarioId) ? ' <span class="sc-badge sc-dirty" data-sc-conflict="' + esc(m.scenarioId) + '">要確認（別の端末と食い違い）</span>' : '') +
                (LG.pending[m.scenarioId] ? ' <span class="sc-badge" data-sc-legacy="' + esc(m.scenarioId) + '">この端末だけ</span>'
-                 : (LG.copied[m.scenarioId] ? ' <span class="sc-badge" data-sc-legacy-copied="' + esc(m.scenarioId) + '">この端末だけ（同期されるのは共有したコピー）</span>' : '')) + '</div>' +
-               '<div class="sc-m">作成 ' + esc(fmt(m.createdAt)) + (m.updatedAt ? ' ／ 更新 ' + esc(fmt(m.updatedAt)) : '') + '</div></div>';
+                 : (LG.copied[m.scenarioId] ? (verifiedCopy966(m.scenarioId)
+                      ? ' <span class="sc-badge" data-sc-legacy-copied="' + esc(m.scenarioId) + '" data-sc-legacy-verified="1">この端末のみ・自動同期なし</span>'   /* ★S4B-UI */
+                      : ' <span class="sc-badge" data-sc-legacy-copied="' + esc(m.scenarioId) + '">この端末だけ（同期されるのは共有したコピー）</span>')
+                 : (verifiedOrigOf966(m.scenarioId) ? ' <span class="sc-badge sc-saved" data-sc-legacy-copy="' + esc(m.scenarioId) + '">☁ 自動同期中</span>' : ''))) + '</div>' +   /* ★S4B-UI */
+               '<div class="sc-m">' + dateLine966(m) + '</div></div>';   /* ★SC-DATE */
       }).join('') + '</div>';
     }
     html += '<div class="sc-msg sc-note" style="margin-top:16px">シナリオは遊んでも変わりません。「▶ このシナリオで始める」を押すたびに、シナリオから新しい独立した物語が 1 本できます。</div>';
@@ -393,6 +396,9 @@
     var html = '<div class="sc-head"><div class="sc-h1">' + (S.scenarioId ? 'シナリオを編集' : 'シナリオを作る') + '</div>' +
       '<span class="sc-badge" data-sc-badge></span>' +
       '<button class="sc-btn" data-sc-act="back">← シナリオ一覧へ</button></div>';
+    var lk966 = S.scenarioId ? legacyKind966(S.scenarioId) : null, cp966 = (lk966 === 'copied') ? verifiedCopy966(S.scenarioId) : null;   /* ★S4B-UI */
+    if (lk966 === 'copied') html += '<div class="sc-msg sc-err" data-sc-legacy-edit>このシナリオは<b>この端末のみ・自動同期なし</b>です。ここで変えた内容は、クラウドの共有したコピーには届きません。' +
+      (cp966 ? '他の端末でも使う変更は、共有したコピーの方で行ってください。 <button class="sc-btn" data-sc-act="openCopy">共有したコピーを開く</button>' : '') + '</div>';
     html += '<div class="sc-form">' +
       field('title', LABEL.title, true, false) +
       field('scene.lore', LABEL.lore, true, true) +
@@ -652,7 +658,10 @@
     if (!S.scenarioId) S.scenarioId = r.scenarioId;
     S.savedSnapshot = JSON.stringify(S.draft); S.dirty = false;
     if (S.view === 'SC_EDIT') renderEdit();
-    setNote('保存しました。「▶ このシナリオで始める」で、このシナリオから新しい物語を始められます。');
+    var lk966s = legacyKind966(S.scenarioId);   /* ★S4B-UI */
+    setNote(lk966s === 'copied' ? 'この端末にだけ保存しました（自動同期なし）。この変更は、クラウドの共有したコピーには届きません。'
+          : lk966s === 'pending' ? 'この端末にだけ保存しました（自動同期なし）。他の端末へは届きません。'
+          : '保存しました。「▶ このシナリオで始める」で、このシナリオから新しい物語を始められます。');
     afterWriteSync('save', S.scenarioId);   /* ★S-4b: local の保存が確定した後に 1 回だけ */
     return { ok: true, saved: true, scenarioId: S.scenarioId };
   }
@@ -965,6 +974,8 @@
       case 'start': start(); return;
       case 'delete': askRemove(); return;
       case 'cloudSync': ask966(); return;   /* ★fix966 */
+      case 'openCopy': { var cpx = S.scenarioId ? verifiedCopy966(S.scenarioId) : null; if (!cpx) { refreshEdit(); return; }   /* ★S4B-UI: 照合がそろわなければ何もしない */
+                         if (S.dirty){ confirmBox('未保存の変更があります。破棄して共有したコピーを開きますか？', function(){ S.dirty = false; openExisting(cpx); }); } else openExisting(cpx); return; }
     }
   }
 
@@ -1013,6 +1024,59 @@
       });
     } catch(e){}
     return out;
+  }
+  /* ★S4B-UI（GPT #127-GH 2・kill v292DfixS4bUiOff='1' → BUNDLE33 の表示）: 表示と案内だけ。データ（元・写し・対応表・クラウド・持ち主の記録）は書かない。
+       verifiedCopy966(元の ID) は、次が全部そろった時だけ写しの ID を返す（どれか 1 つでも欠ければ null＝案内もボタンも出さない）:
+         ① ログイン中の自動同期が有効 ② いまのアカウントが server の答え・端末の印・iso2 でそろっている（fix872 accountOk）
+         ③ fix966r3b の対応表 v292Dfix966CopyOf[いまのアカウント][元の ID] に写しの ID がある（★ID だけで引く。題名では探さない）
+         ④ 元と写しがどちらもこの端末に live である ⑤ 元に持ち主の記録が無い ⑥ 写しはいまのアカウントが作成者・最後に書いた人として記録されている（fix872 stampOk） */
+  function lcOff966(){ try { return localStorage.getItem('v292DfixS4bUiOff') === '1'; } catch(e){ return true; } }
+  function verifiedCopy966(orig){
+    try {
+      if (lcOff966() || !orig || !f872Auto() || !sync966Available()) return null;
+      var F = f872(), G = window.__v292Diso2, st = ST();
+      if (!F || typeof F.accountOk !== 'function' || typeof F.canAutoSend !== 'function' || !G || typeof G.stampOf !== 'function' || !st) return null;
+      var acct = acctNow966(); if (!acct || !F.accountOk(acct)) return null;
+      var cm = copyMap966(), mine = (cm[acct] && typeof cm[acct] === 'object') ? cm[acct] : null;
+      var cid = mine ? mine[String(orig)] : null;
+      if (typeof cid !== 'string' || !cid || cid === String(orig)) return null;
+      var r = st.list(); if (!r || !r.ok) return null;
+      var hasO = false, hasC = false;
+      r.scenarios.forEach(function(m){ if (m.scenarioId === String(orig)) hasO = true; if (m.scenarioId === cid) hasC = true; });
+      if (!hasO || !hasC) return null;
+      if (G.stampOf(String(orig), 'c')) return null;
+      if (!F.canAutoSend(cid)) return null;
+      return cid;
+    } catch(e){ return null; }
+  }
+  function verifiedOrigOf966(cid){
+    try {
+      if (lcOff966() || !cid) return null;
+      var acct = acctNow966(); var cm = copyMap966(), mine = (acct && cm[acct] && typeof cm[acct] === 'object') ? cm[acct] : null;
+      if (!mine) return null;
+      for (var o in mine){ if (Object.prototype.hasOwnProperty.call(mine, o) && mine[o] === String(cid) && verifiedCopy966(o) === String(cid)) return o; }
+      return null;
+    } catch(e){ return null; }
+  }
+  /* 元を保存した時の文言用: 持ち主の記録が無い旧シナリオ（自動同期の対象外）か・この端末の対応表に写しがあるか（ボタンは出さないので照合は ID の有無だけ） */
+  function legacyKind966(id){
+    try {
+      if (lcOff966() || !id || !f872Auto()) return null;
+      var G = window.__v292Diso2, F = f872(); if (!G || typeof G.stampOf !== 'function') return null;
+      if (G.stampOf(String(id), 'c')) return null;
+      if (F && typeof F.canAutoSend === 'function' && F.canAutoSend(id)) return null;
+      var acct = acctNow966(), cm = copyMap966(); var mine = (acct && cm[acct] && typeof cm[acct] === 'object') ? cm[acct] : {};
+      return (typeof mine[String(id)] === 'string' && mine[String(id)]) ? 'copied' : 'pending';
+    } catch(e){ return null; }
+  }
+  /* ★SC-DATE（GPT #127-GH 4・kill v292DfixScDateOff='1' → BUNDLE33 の表示）: 作成（作った端末の記録だけ・不明は —）／クラウド登録日（別記録）／更新 */
+  function dateLine966(m){
+    var off = false; try { off = localStorage.getItem('v292DfixScDateOff') === '1'; } catch(e){}
+    if (off) return '作成 ' + esc(fmt(m.createdAt)) + (m.updatedAt ? ' ／ 更新 ' + esc(fmt(m.updatedAt)) : '');
+    var reg = null; try { var st = ST(); reg = (st && typeof st.cloudRegisteredAt === 'function') ? st.cloudRegisteredAt(m.scenarioId) : null; } catch(e){ reg = null; }
+    return '<span data-sc-created>作成 ' + esc(m.createdAt ? fmt(m.createdAt) : '—') + '</span>' +
+           (reg ? ' ／ <span data-sc-cloudreg>クラウド登録日 ' + esc(fmt(reg)) + '</span>' : '') +
+           (m.updatedAt ? ' ／ <span data-sc-updated>更新 ' + esc(fmt(m.updatedAt)) + '</span>' : '');
   }
   function conflictOf966(id){ var F = f872(); try { return (id && F && typeof F.conflictOf === 'function') ? F.conflictOf(id) : null; } catch(e){ return null; } }
   /* 保存・削除の直後（local は確定済み）に 1 回だけ同期する。衝突はその場で 2 択（この ID を今さわっているため） */

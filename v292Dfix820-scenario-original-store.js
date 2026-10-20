@@ -822,13 +822,33 @@
    *   ・cloudRev / dirty / deleted 以外の意味論（rev = scenarioRev / body の whitelist）は触らない。
    *   ・body は必ず validate() を通して bodyOf() で組む（cloud から来た record も素通ししない）。
    * ===================================================================== */
+  /* ★SC-DATE（GPT #127-GB item6 / #127-GH 4・kill v292DfixScDateOff='1' → 従来どおり）:
+       ・作成日時（META createdAt）は「作った端末で記録した値」だけを信じる。クラウドの行は作成日時を持たない（D1 に列が無く record にも無い）ので、
+         別の端末で初めて受け取った時は不明＝ null（表示は「作成 —」）。受け取った時刻を作成日時として記録しない。
+       ・クラウド登録日（その ID の行がクラウドに初めて作られた時刻）は META とは別の key に記録する（META の形・既存の読み手は変えない）:
+           この端末が最初に送った（server が created:true）→ その応答の updatedAt
+           受け取った行が cloudRev 1（最初の登録から変わっていない）→ その updatedAt
+           それ以外（すでに更新済みの行を初めて受け取った）→ 分からないので記録しない
+         いったん記録したら上書きしない（最初の 1 回だけ）。
+       ・既存の META は 1 件も書き換えない（一括修正なし）。 */
+  var CLOUDREG_KEY = 'v292DscCloudReg';
+  function scDateOff(){ return lsg('v292DfixScDateOff') === '1'; }
+  function cloudRegRead(){ try { var o = JSON.parse(lsg(CLOUDREG_KEY) || 'null'); return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {}; } catch(e){ return {}; } }
+  function cloudRegSet(id, ms){
+    if (scDateOff()) return false;
+    var t = Math.floor(+ms || 0); if (!(t > 0) || !id) return false;
+    var o = cloudRegRead(); if (typeof o[id] === 'string') return false;
+    o[id] = new Date(t).toISOString();
+    try { return lss(CLOUDREG_KEY, JSON.stringify(o)); } catch(e){ return false; }
+  }
+  function cloudRegisteredAt(id0){ if (scDateOff()) return null; var v = cloudRegRead()[trim(id0)]; return (typeof v === 'string' && v) ? v : null; }
   function f872Meta(){ return readMetaRaw(); }
   function f872WriteMeta(listArr){
     var s; try { s = JSON.stringify(listArr); } catch(e){ return false; }
     return lss(META_KEY, s);
   }
   /* pull: cloud の record を local へ適用する（新規 or 上書き）。 */
-  function f872ApplyRemote(id0, input, cloudRev, scenarioRev){
+  function f872ApplyRemote(id0, input, cloudRev, scenarioRev, remoteUpdatedAt){
     if (off()) return err('OFF');
     if (!f872On()) return err('F872_OFF');
     var id = trim(id0); if (!id) return err('NO_ID');
@@ -841,9 +861,11 @@
     if (!lss(bodyKey, bodyStr)) return err('BODY_WRITE_FAILED');
     var listArr = m.list.slice(), idx = metaIndexOf(listArr, id);
     var src = (idx >= 0) ? listArr[idx] : null;
+    var scd = scDateOff();                                                  /* ★SC-DATE */
+    var rUp = (Math.floor(+remoteUpdatedAt || 0) > 0) ? new Date(Math.floor(+remoteUpdatedAt)).toISOString() : null;
     var entry = { scenarioId: id, title: v.value.title, schemaVersion: SCHEMA_VERSION,
-                  createdAt: (src && src.createdAt !== undefined) ? src.createdAt : new Date().toISOString(),
-                  updatedAt: new Date().toISOString(),
+                  createdAt: (src && src.createdAt !== undefined) ? src.createdAt : (scd ? new Date().toISOString() : null),   /* ★SC-DATE: 受け取った端末では作成日時は不明 */
+                  updatedAt: (!scd && rUp) ? rUp : new Date().toISOString(),       /* ★SC-DATE: 更新 = クラウドの updated_at */
                   rev: (typeof scenarioRev === 'number' && scenarioRev >= 0) ? Math.floor(scenarioRev) : revOf(src),
                   cloudRev: Math.max(0, Math.floor(+cloudRev || 0)),
                   dirty: false, deleted: false };
@@ -853,6 +875,7 @@
       if (snapMeta == null) lsr(META_KEY); else lss(META_KEY, snapMeta);
       return { ok: false, code: 'META_WRITE_FAILED', rolledBack: true };
     }
+    if (!scd && entry.cloudRev === 1 && rUp) cloudRegSet(id, Math.floor(+remoteUpdatedAt));   /* ★SC-DATE: 最初の登録から変わっていない行だけ */
     return { ok: true, scenarioId: id, cloudRev: entry.cloudRev, rev: entry.rev };
   }
   /* pull(remote deleted): local body を消して META を墓標にする。 */
@@ -890,6 +913,7 @@
     out.dirty = !!(opt && opt.keepDirty === true);
     listArr[idx] = out;
     if (!f872WriteMeta(listArr)) return err('META_WRITE_FAILED');
+    if (opt && +opt.registeredAt > 0 && cloudRevOf(e) === 0) cloudRegSet(id, +opt.registeredAt);   /* ★SC-DATE: この端末が最初に送った時 */
     return { ok: true, scenarioId: id, cloudRev: out.cloudRev, deleted: !!out.deleted };
   }
   /* body の生文字列（canonical 計算用の read 口・書込 0） */
@@ -1045,6 +1069,7 @@
     f872ApplyRemote: f872ApplyRemote,
     f872ApplyRemoteDelete: f872ApplyRemoteDelete,
     f872MarkPushed: f872MarkPushed,
+    cloudRegisteredAt: cloudRegisteredAt,   /* ★SC-DATE: 読むだけ（null = 分からない） */
     f872RawBody: f872RawBody,
     /* 診断 */
     selfCheck: selfCheck,

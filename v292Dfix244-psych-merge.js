@@ -118,7 +118,12 @@
     else card.appendChild(wrap);
 
     // 初期同期(既存値の整形済み再書き込み=無害)
-    parseAndSync(card, ta.value);
+    /* ★F3(GPT #127-GB item4・#127-GH・kill v292Dfix244F3Off='1'): 開いただけで隠し欄へ書き戻して input を発火すると、fix351 の
+       下書き保存（入力から 800ms 後の commitDraft）が走り、無かった key（personality / coreDesire / coreFear / wound = ''、
+       主人公の desc = ''）を物語に足して保存する → 別の端末で設定を開いただけで rev が 1 つ進む（実測）。
+       隠し欄はすでに S の値そのものなので、初期表示では書き戻さず署名だけ取る。利用者が統合欄を編集したときは従来どおり。 */
+    var f3off = false; try { f3off = localStorage.getItem('v292Dfix244F3Off') === '1'; } catch(eF3){}
+    if (f3off) parseAndSync(card, ta.value); else card.__f244sig = fieldsSig(card);
   }
 
   function scan(){
