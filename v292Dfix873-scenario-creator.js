@@ -37,7 +37,7 @@
   'use strict';
   if (window.__v292Dfix873) return;
   var TAG = '[v292Dfix873:scenario-creator]';
-  var VERSION = 'v292Dfix873-20260919-creator-v1.0';
+  var VERSION = 'v292Dfix873-20261020-creator-v1.0a';   /* v1.0a: uifix-a #sc873View のスクロール箱化（フッター重なり・スクロール不可の修正） */
 
   var DEFAULT_TITLE = '新しい物語';
 
@@ -105,6 +105,16 @@
     var s = document.createElement('style'); s.id = 'sc873Style';
     s.textContent =
       '#sc873View{flex:1;min-width:0}' +
+      /* ★uifix-a(2026-10-20・iPhone 実機で発覚): #sc873View は class 'mid' を付けない約束なので、
+         section.mid の overflow:auto を**受け継いでいなかった**。HOME は body{height:100%;overflow:hidden} の
+         画面固定レイアウトで、スクロールできるのは section.mid / aside だけ。そのため長い「できました」が
+         main の外へはみ出して下のフッター（#v888footer）の上に重なって描かれ、ページもスクロールできなかった。
+         → section.mid と同じく「自分の中でスクロールする箱」にする（min-height:0 は縦並びの flex で縮めるため）。
+         中身が箱に収まる時は見た目 1px も変わらない。 */
+      '#sc873View{min-height:0;overflow:auto}' +
+      /* ★uifix-a: 携帯幅では section.mid と同じ 14px の余白（無いとカードの右端が画面の縁に貼りつき、切れて見える）。
+         PC / iPad 幅（641px 以上）は 1px も変えない。 */
+      '@media(max-width:640px){#sc873View{padding:14px}}' +
       '.sc873-cards{display:flex;flex-direction:column;gap:8px;margin:4px 0 12px}' +
       '.sc873-card{display:block;width:100%;text-align:left;padding:14px;border:1px solid var(--line);' +
         'border-radius:10px;background:var(--panel);color:var(--tx);cursor:pointer;font:inherit}' +
