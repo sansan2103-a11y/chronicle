@@ -3320,7 +3320,8 @@
                lazy rev refresh で無理に復活させない（reload で fix705 に再分類させる） */
   var F733_SIDEPORT_TYPE_R = { setstorytitle: 1, scrubstorycfg: 1, putstory: 1 };
   var F733_SIDEPORT_TYPE_A = { putcanonical: 1, promotestory: 1, promotedelete: 1,
-                               deleteshadow: 1, deletecanonical: 1 };
+                               deleteshadow: 1, deletecanonical: 1,
+                               deletestory2: 1 };   /* ★DL2 (S-2): lifecycle-changing like the other delete ops */
   /* ★fix733 */
   function f733SidePortAttempt(body){
     if (!body) return;
@@ -3565,6 +3566,53 @@
         }
         cb(rows, null);
       });
+    },
+    /* ★★DL2 (S-2 / GPT #127-FJ): HOME の削除モジュール（v292DfixDL2）専用の **狭い** 2 口。
+       新 fetch 0 / 新 endpoint 0 / 新 auth 0（postSaveOnce を共有）。自動 retry しない。localStorage を書かない。
+       ・listShadowBasisOnce(cb): op は 'listshadow' 固定。削除の表示基準に要る列だけを返す
+         （id / rev / serverHash / authority / deleted / locked / title / turnCount / updatedAt）。本文は返らない（listshadow の仕様）。
+       ・deleteStory2Once(storyId, basis, deleteOpId, cb): op は 'deletestory2' 固定。
+         caller から渡せるのは exact storyId・サーバの表示基準 {rev, serverHash, authority}・deleteOpId だけ。
+         record / body / tombstone / hash の再計算値は送らない（Worker も 400 で拒否する）。
+         clientCanonicalSchemaMax は内部で 2 固定、mid は内部で 'dl2:<id>:<deleteOpId>' に組む
+         （同じ deleteOpId の再送 = 同じ mid = Worker の冪等 replay）。
+       ・汎用 shadowRequest は byte 不変（op を足さない）。 */
+    listShadowBasisOnce: function(cb){
+      cb = (typeof cb === 'function') ? cb : function(){};
+      postSaveOnce({ op: 'listshadow' }, function(r, err){
+        if (err || !r){ cb(null, err || 'LIST_FAIL', r ? r.status : 0); return; }
+        if (r.status !== 200 || !r.j || r.j.ok !== true || Object.prototype.toString.call(r.j.stories) !== '[object Array]'){
+          cb(null, (r.j && r.j.errorCode) || 'LIST_FAIL', r.status); return;
+        }
+        var rows = [], i, x;
+        for (i = 0; i < r.j.stories.length; i++){
+          x = r.j.stories[i] || {};
+          if (x.id == null || String(x.id) === '') continue;
+          rows.push({ id: String(x.id), rev: (typeof x.rev === 'number') ? x.rev : (+x.rev || 0),
+                      serverHash: (typeof x.serverHash === 'string' && x.serverHash) ? x.serverHash : null,
+                      authority: String(x.authority || 'shadow'), deleted: x.deleted === true, locked: !!x.locked,
+                      title: String(x.title == null ? '' : x.title), turnCount: Math.max(0, +x.turnCount || 0),
+                      updatedAt: Math.max(0, +x.updatedAt || 0) });
+        }
+        cb(rows, null, 200);
+      });
+    },
+    deleteStory2Once: function(storyId, basis, deleteOpId, cb){
+      cb = (typeof cb === 'function') ? cb : function(){};
+      if (typeof storyId !== 'string' || !storyId){ cb(null, 'BAD_STORY_ID'); return; }
+      var b = (basis && typeof basis === 'object') ? basis : null;
+      if (!b){ cb(null, 'BAD_BASIS'); return; }
+      var xr = b.rev;
+      if (typeof xr !== 'number' || !isFinite(xr) || xr < 0 || Math.floor(xr) !== xr){ cb(null, 'BAD_EXPECTED_REV'); return; }
+      var xh = (typeof b.serverHash === 'string') ? b.serverHash : '';
+      if (!xh){ cb(null, 'BAD_EXPECTED_HASH'); return; }
+      var xa = b.authority;
+      if (xa !== 'shadow' && xa !== 'canonical'){ cb(null, 'BAD_EXPECTED_AUTHORITY'); return; }
+      if (typeof deleteOpId !== 'string' || !/^dl2_[A-Za-z0-9_]{1,110}$/.test(deleteOpId)){ cb(null, 'BAD_DELETE_OP_ID'); return; }
+      /* ★whitelist から組み直す（caller の任意 field は 1 つも通さない） */
+      var body = { op: 'deletestory2', id: storyId, expectedRev: xr, expectedHash: xh, expectedAuthority: xa,
+                   deleteOpId: deleteOpId, clientCanonicalSchemaMax: 2, mid: 'dl2:' + storyId + ':' + deleteOpId };
+      postSaveOnce(body, cb);
     },
     storyPassRequest: function(payload, cb){
       var op = payload && payload.op;

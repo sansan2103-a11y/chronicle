@@ -255,7 +255,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261020-uifix-a';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261020-bundle34-a';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -325,12 +325,12 @@
 <script src="v292Dav2-data.js?cb=20261019-bundle31-a"></script>
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
 <script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20261019-bundle33-b"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20261020-bundle34-a"></script>
 <!-- ★fix860 STORY_PASSCODE: unlock dialog / passcode 管理 UI（supplier と fix697 の狭い口に依存） -->
 <script src="v292Dfix860-story-unlock-ui.js?cb=20260916-sp2"></script>
 <script src="v292Dfix729-title-sync.js?cb=20260909-fix842"></script>
 <script src="v292Dfix843-capability-notice.js?cb=20260909-fix843"></script>
-<script src="v292Dfix587-story-lifecycle.js?cb=v292Dfix736"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=20261020-bundle34-a"></script>
 <script src="v292Dfix933-beta-delete-off.js?cb=20261019-bundle31-a"></script>
 <!-- ★fix602: 墓標が立ったスロットへの書き込みを影で止める（別途配信） -->
 <script src="v292Dfix602-tombstone-write-shadow.js?cb=v292Dfix680"></script>
@@ -351,7 +351,10 @@
      interval/polling なし・新規 localStorage 書込なし・OFF=v292Dfix710Off
      観測 = window.__v292Dfix710.status() / .decide()
      ★fix587 より後に置く（__chronicleStoryLifecycle が生えている必要がある）。 -->
-<script src="v292Dfix710-home-delete-autoresume.js?cb=v292Dfix712"></script>
+<script src="v292Dfix710-home-delete-autoresume.js?cb=20261020-bundle34-a"></script>
+<!-- ★★DL2 (S-2 / GPT #127-FJ): 物語を一覧から削除する（サーバの版を基準にした削除・確認は画面内のシート・受け取り側の片づけ・止まっている削除の一覧）。
+     fix587 / fix697 / fix933 / fix710 より後。下の inline script が window.__v292DhomeDL2（render / all）を出す。kill = localStorage v292DfixDL2Off=1 -->
+<script src="v292DfixDL2-server-delete.js?cb=20261020-bundle34-a2" data-dl2="home"></script>
 <!-- ★★v292Dfix826 P0B_REVISION_COHERENCE_BUNDLE_V1（GPT 裁定 52）
      read-only の判定 module（localStorage を 1 バイトも書かない）。
        F1 trustedRev() = max(valid v292Dfix580_rev, valid v292Dfix402_baseRev)
@@ -537,9 +540,10 @@
        arrives. A failed principal check on this lane (no answer / not ok at start or at apply) = rows stay absent
        (never a fallback to the unguarded path). Hosts without fix893 (the old passcode / token lanes) are unchanged. */
     if (typeof verify !== 'function' && window.__v292Dfix893 && window.__v292Dfix893.active){
-      var who0 = f757Who();
+      var who0 = f757Who();   /* (DL2 は F757.who0p として読む) */
       verify = function(){ return who0.then(function(a0){ if (!a0) return false; return f757Who().then(function(a1){ return !!a1 && a1 === a0; }); }); };
     }
+    F757.who0p = (typeof who0 !== 'undefined' && who0) ? who0 : null;   /* ★DL2: 受け取り側の照合に使う（読む前の accountId） */
     var p = null, gen757 = (F757.gen = (F757.gen || 0) + 1);
     try { p = call({ op: 'listshadow' }, 20000); } catch(e){ F757.code = 'CALL_THREW'; return; }
     /* ★UI1 (GPT #125-DP): a refresh started by the Vault UI passes verify(); its answer is applied only if no newer
@@ -565,6 +569,8 @@
                     updatedAt: Math.max(0, +r.updatedAt || 0) });
       }
       F757.stories = rows; F757.ok = true; F757.code = 'OK'; F757.fetchedAt = Date.now();
+      /* ★DL2 (D3): サーバで削除が確定した物語を、この端末の写しから一覧に出さない（受け取り側）。判定と書込は DL2 → fix587。 */
+      try { var D2 = window.__v292DfixDL2; if (D2 && typeof D2.onListshadow === 'function') D2.onListshadow(j.stories, F757.who0p || null); } catch(eD2){}
       try { console.log('[home][v292Dfix757] クラウドの物語 ' + rows.length + ' 件を一覧へ反映します'); } catch(e){}
       render();
     })['catch'](function(e){ F757.code = 'NETWORK'; });
@@ -808,6 +814,7 @@
     f889RenderCanon();                 /* ★★sp18 D-C2: クラウド側の状態を 1 行で述べる */
     f889RenderVault();                 /* ★★sp18: 解錠しているあいだだけの別面 */
     mountCovers(document);
+    try { var D2r = window.__v292DfixDL2; if (D2r && typeof D2r.decorate === 'function') D2r.decorate(); } catch(eD2){}   /* ★DL2: 「まとめて削除」と下の帯 */
   }
 
   /* ============================================================
@@ -862,10 +869,14 @@
          short-circuits on <a data-p3> so a click never falls through to the card's 2nd-click open. No write, no engine. */
       (/^[A-Za-z0-9]{6,32}$/.test(String(x.id||'')) ? '<a class="mini" data-p3="1" href="portraits.html?story='+encodeURIComponent(String(x.id))+'" style="display:inline-block;margin-top:8px;color:#b39ddb;text-decoration:none;font-size:13px">🖼 絵を見る（読み取り専用）</a>' : '')+
       (f759Cloud(x)
-        ? '<div class="mini" style="color:var(--dim);font-size:12px;line-height:1.6">☁ クラウドの物語です。開いてこの端末へ取り込むと、名前の変更や削除ができます。</div>'
+        ? (dl2On()
+            /* ★DL2: クラウド行も「一覧から削除」できる（名前の変更・お気に入りは従来どおり取り込み後） */
+            ? '<div class="mini" style="color:var(--dim);font-size:12px;line-height:1.6">☁ クラウドの物語です。開いてこの端末へ取り込むと、名前の変更ができます。</div>'+
+              '<div class="mini"><button class="danger" id="delBtn">一覧から削除</button></div>'
+            : '<div class="mini" style="color:var(--dim);font-size:12px;line-height:1.6">☁ クラウドの物語です。開いてこの端末へ取り込むと、名前の変更や削除ができます。</div>')
         : '<div class="mini"><button id="favBtn">'+(x.favorite?'★ お気に入り解除':'☆ お気に入り')+'</button>'+
           '<button id="renBtn">名前を変更</button>'+
-          '<button class="danger" id="delBtn">削除</button>'+f889HideBtn(x)+'</div>')+
+          '<button class="danger" id="delBtn">'+(dl2On()?'一覧から削除':'削除')+'</button>'+f889HideBtn(x)+'</div>')+
       '<div class="dsec">この物語のキャラクター</div>'+
       (chars.length ? chars.map(function(o){
         return '<div class="ch">'+avatar(o.c.name)+'<div><div class="nm">'+esc(o.c.name||'')+
@@ -953,7 +964,11 @@
     var u = 'index.html' + (BUILD ? ('?v='+encodeURIComponent(BUILD)+'&story=') : '?story=') + encodeURIComponent(id) + '&new=1';
     location.href = u;
   }
+  /* ★DL2 (S-2 / GPT #127-FJ D8): DL2 が有効な画面では、削除は DL2 の確認シートだけで行う（window.confirm は使わない）。
+     クラウド行（この端末に写しが無い物語）も同じ入口。DL2 が無効（kill / 依存不足 / アカウント方式でない画面）なら従来どおり。 */
+  function dl2On(){ try { var D = window.__v292DfixDL2; return !!(D && typeof D.active === 'function' && D.active()); } catch(e){ return false; } }
   function delStory(id){
+    if (dl2On()){ try { window.__v292DfixDL2.openDelete([String(id)], { source:'home' }); } catch(e){} return; }
     var m = readMeta().filter(function(x){ return x && String(x.id)===id; })[0];
     if(!m) return;
     var d = slotData(id); var t = (d&&d.turns&&d.turns.length)||0;
@@ -3162,11 +3177,16 @@
      ③**表示できない理由も黙らせない**（削除機能がまだ読めていない、等）。
      ④生の hash や技術用語（tombstone / deleteOpId / rev）は出さない。 */
   function pendingDeleteText(){
+    /* ★DL2: DL2 が有効な画面では、止まっている削除は DL2 の帯（「削除が止まっている物語が N 件あります［確認する］」）が出す。
+       旧文言「ゲーム画面を一度開くと同期されます」は schema2 の物語では事実と違うので出さない。 */
+    if (dl2On()) return '';
     var svc = lifecycleSvc();
     var n = null, st = null, svcMissing = false;
     try {
       if (svc && typeof svc.pendingDeletes === 'function'){
         var list = svc.pendingDeletes();
+        /* ★DL2: DL2 で片づいた計画は「反映待ち」に数えない */
+        if (Array.isArray(list) && typeof svc.dl2IsResolved === 'function') list = list.filter(function(p){ return !svc.dl2IsResolved(p); });
         n = Array.isArray(list) ? list.length : null;
       } else { svcMissing = true; }
     } catch(e){ n = null; }
@@ -3255,6 +3275,8 @@
     } catch(e){ return false; }
   }
 
+  /* ★DL2: 削除モジュールが使う読み口（描き直しと一覧の行）。書込の口は出さない。 */
+  try { window.__v292DhomeDL2 = { render: function(){ try { render(); pendingDeleteNotice(); } catch(e){} }, all: function(){ return all(); } }; } catch(e){}
   // ---------- 起動 ----------
   fetch('version.txt?_='+Date.now(), {cache:'no-store'})
     .then(function(r){ return r.text(); })

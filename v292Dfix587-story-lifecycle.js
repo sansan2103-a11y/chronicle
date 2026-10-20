@@ -220,9 +220,25 @@
       bumpCode(stats.blockedByReason, reason);
     } catch(e){}
   }
+  /* ★★DL2 (S-2 / GPT #127-FJ D4): 古い削除の計画（v1）のうち、サーバが schema2 で 409 CLIENT_SCHEMA_TOO_OLD を返して
+     止まったものは **自動では二度と送らない**（隔離。消さない）。Owner が HOME の新しい画面で、そのときのサーバの状態を見て
+     選び直したものだけが、新しい要求（deletestory2）として送られる。
+     ・隔離の印 = dl2Quarantine:true、または保留理由（sdHold）に CLIENT_SCHEMA_TOO_OLD を含む。
+     ・DL2 で片づいた計画 = sdResolution === 'SERVER_TOMBSTONED_BY_DL2'（sdTerminal も立つ）。
+     ・判定は DL2 の kill（v292DfixDL2Off）とは無関係に常に効く（kill しても古い計画は自動送信へ戻らない）。 */
+  var DL2_RESOLUTION = 'SERVER_TOMBSTONED_BY_DL2';
+  function dl2HoldSaysTooOld(p){
+    try {
+      var h = p && p.sdHold;
+      if (!h) return false;
+      return /CLIENT_SCHEMA_TOO_OLD/.test(String(h.why || '') + ' ' + String(h.code || '') + ' ' + String(h.verdict || ''));
+    } catch(e){ return false; }
+  }
+  function dl2Resolved(p){ return !!(p && p.sdResolution === DL2_RESOLUTION); }
+  function dl2Quarantined(p){ return !!(p && !dl2Resolved(p) && (p.dl2Quarantine === true || dl2HoldSaysTooOld(p))); }
   /* autoResume / resumePending が拾ってよい計画だけを返す。 */
   function resumablePending(){
-    return readPending().filter(function(p){ return !(p && p.sdTerminal === true); });
+    return readPending().filter(function(p){ return !(p && p.sdTerminal === true) && !dl2Quarantined(p) && !dl2Resolved(p); });
   }
   /* ★★fix712(GPT裁定 DEFAULT ON CUT): 既定を反転する。
      旧: DEFAULT OFF ＋ v292Dfix708On='1' で ON
@@ -590,7 +606,14 @@
     return o;
   }
   function writePending(a){
-    var safe = a.slice(-20), out = [], i;
+    /* ★DL2 (D4「消さない」): 上限 20 件の切り詰めで、隔離中の古い計画を押し出さない。
+       隔離中はすべて残し、それ以外だけを新しい方から 20 件に絞る（並び順は保つ）。隔離が無いときは従来と同じ。 */
+    var keepIdx = {}, j, others = [];
+    for (j = 0; j < a.length; j++){ if (dl2Quarantined(a[j])) keepIdx[j] = 1; else others.push(j); }
+    others = others.slice(-20); for (j = 0; j < others.length; j++) keepIdx[others[j]] = 1;
+    var safe = [];
+    for (j = 0; j < a.length; j++) if (keepIdx[j] === 1) safe.push(a[j]);
+    var out = [], i;
     for (i = 0; i < safe.length; i++) out.push(stripExecProof(safe[i]));
     return lss(PENDING_KEY, JSON.stringify(out));
   }
@@ -839,6 +862,14 @@
   function finishShadowDelete(plan, d, snapshotId, mode){
     var slotId = plan.slotId, deleteOpId = plan.deleteOpId;
     var sid = (plan.storyId != null && plan.storyId !== '') ? String(plan.storyId) : String(slotId);
+    /* ★DL2 (D4): 隔離中 / DL2 で片づいた計画は、どの経路から来ても通信しない（getstory も送らない）。 */
+    if (dl2Quarantined(plan) || dl2Resolved(plan)){
+      stats.dl2QuarantineBlocked = (stats.dl2QuarantineBlocked || 0) + 1;
+      note({ act:'dl2-quarantine-blocked', slotId:slotId, deleteOpId:deleteOpId,
+             detail:'古い削除の計画は自動では送らない。HOME の「止まっている削除」から選び直す' });
+      return Promise.resolve({ ok:false, code: dl2Resolved(plan) ? 'DL2_RESOLVED' : 'DL2_QUARANTINED',
+                               hidden:true, shadowDelete:true, deleteOpId:deleteOpId });
+    }
     stats.sdAttempts++;
 
     /* 保留＝データを1バイトも消さずに止まる。理由は **計画そのもの**へ持たせる
@@ -846,6 +877,8 @@
     function hold(code, verdict, why, extra){
       var terminal = (SD_TERMINAL_VERDICTS[verdict] === 1);
       try {
+        /* ★DL2: 一度 CLIENT_SCHEMA_TOO_OLD で止まった計画は、後の保留理由で上書きされても隔離のまま（印を固定する） */
+        if (dl2Quarantined(plan) || /CLIENT_SCHEMA_TOO_OLD/.test(String(why || ''))) plan.dl2Quarantine = true;
         plan.sdHold = { code: code, verdict: verdict, why: String(why || ''), at: Date.now(), terminal: terminal };
         if (terminal) plan.sdTerminal = true;      /* ★autoResume / resumePending はこれを skip する */
       } catch(e){}
@@ -1156,6 +1189,11 @@
 
     /* 保留中の計画があれば、それをそのまま使う（keysもhashも当時のまま＝計画の同一性を保つ） */
     var plan = readPending().filter(function(p){ return p && String(p.slotId) === slotId; })[0] || null;
+    if (plan && (dl2Quarantined(plan) || dl2Resolved(plan))){
+      stats.dl2QuarantineBlocked = (stats.dl2QuarantineBlocked || 0) + 1;
+      note({ act:'dl2-quarantine-blocked', slotId:slotId, source:src, deleteOpId:deleteOpId });
+      return Promise.resolve({ ok:false, code: dl2Resolved(plan) ? 'DL2_RESOLVED' : 'DL2_QUARANTINED', slotId:slotId });
+    }
     if (plan){
       note({ act:'continue', slotId:slotId, source:src, deleteOpId:deleteOpId, keys:plan.keys.length });
       /* ★fix746: 既に durable 化された pending をそのまま使う継続なので RECOVERY_RESUME。 */
@@ -1387,6 +1425,136 @@
         }
         resolve(f734Continue(h));
       });
+    });
+  }
+
+  /* =====================================================================
+   * ★★DL2 (S-2 / GPT #127-FJ D2/D3): acceptServerTombstone(slotId, opts)
+   *   サーバで削除が確定した物語を、この端末の一覧から外すための入口。
+   *   ・サーバへは **何も送らない**（読むのは getstory 1 回だけ。削除 op は送らない）。
+   *   ・caller から deleted / rev / hash を受け取らない。入口が自分で getStoryV2Once を 1 回読み、
+   *     ok && deleted===true && authority∈{shadow,canonical} を確かめる（サーバが確定したものだけ）。
+   *   ・物理削除はしない。本体・サイドストア・復元セットはそのまま残す（墓標は meta だけ）。
+   *     本体が残るので、ここでは新しい復元セットも作らない（容量を増やさない）。
+   *   ・この端末に未保存の変更がある物語（fix781 の印が DIRTY_* / DIVERGED / BOOTSTRAP_HOLD / 送信中 / 読めない）は、
+   *     opts.allowDirty===true（Owner がこの端末の確認シートで明示的に削除したとき）以外は **墓標を立てない**。
+   *     一覧に残し、競合の記録（v292Dfix587_dl2conflict）だけを付ける。変更は捨てない。
+   *   ・古い計画（v1）が残っていれば「DL2 で片づいた」印を付ける（sdTerminal / sdResolution）。計画そのものは消さない。
+   *   ・lock: forward admission と同じ GWS の口（無いページでは従来どおり同期実行）。
+   * ===================================================================== */
+  var DL2_CONFLICT_KEY = 'v292Dfix587_dl2conflict';
+  function dl2LocalUnsynced(slotId){
+    try {
+      var raw = localStorage.getItem('v292Dfix402_f781g_' + String(slotId));
+      if (raw == null) return null;
+      var m = null; try { m = JSON.parse(raw); } catch(eP){ return 'MARKER_UNREADABLE'; }
+      if (!m || typeof m !== 'object') return 'MARKER_UNREADABLE';
+      var st = String(m.state || '');
+      if (st === 'DIRTY_INTENT' || st === 'DIRTY_LOCAL' || st === 'DIVERGED' || st === 'BOOTSTRAP_HOLD') return st;
+      if (m.inFlightSave) return 'IN_FLIGHT';
+      return null;
+    } catch(e){ return 'MARKER_UNREADABLE'; }
+  }
+  function dl2ReadConflicts(){ try { var o = JSON.parse(lsg(DL2_CONFLICT_KEY) || '{}'); return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {}; } catch(e){ return {}; } }
+  function dl2WriteConflicts(o){ return lss(DL2_CONFLICT_KEY, JSON.stringify(o)); }
+  function dl2MarkPlansResolved(slotId, srv, now, src){
+    var a = readPending(), n = 0;
+    for (var i = 0; i < a.length; i++){
+      var p = a[i];
+      if (!p || dl2Resolved(p)) continue;
+      if (String(p.slotId) !== String(slotId) && String(p.storyId || '') !== String(slotId)) continue;
+      p.sdTerminal = true; p.sdResolution = DL2_RESOLUTION;
+      p.resolvedServerRev = srv.rev; p.resolvedAuthority = srv.authority;
+      p.resolvedAt = now; p.resolvedSource = String(src || '');
+      n++;
+    }
+    if (n) writePending(a);
+    return n;
+  }
+  function dl2RunAdmission(fn){
+    var G = null;
+    try { G = window.__v292DfixGWS || null; } catch(e){ G = null; }
+    if (!G || typeof G.runTurnMutation !== 'function'
+        || typeof G.serializationRequired !== 'function' || !G.serializationRequired())
+      return Promise.resolve({ ran:true, result: fn(), serialized:false });
+    return G.runTurnMutation(function(){ return fn(); });
+  }
+  function dl2ApplyLocked(slotId, srv, opts, d){
+    var src = String(opts.source || 'unknown'), now = Date.now();
+    var meta = readMeta(), idx = -1, i;
+    for (i = 0; i < meta.length; i++) if (meta[i] && String(meta[i].id) === String(slotId)){ idx = i; break; }
+    var conf = dl2ReadConflicts();
+    if (idx < 0){
+      var n0 = dl2MarkPlansResolved(slotId, srv, now, src);
+      return { ok:true, code:'no-local-row', resolvedPlans:n0, wrote: n0 ? 1 : 0 };
+    }
+    var cur = meta[idx];
+    if (cur && cur.deleted === true){
+      var n1 = dl2MarkPlansResolved(slotId, srv, now, src);
+      if (conf[slotId]){ delete conf[slotId]; dl2WriteConflicts(conf); }
+      return { ok:true, code: n1 ? 'resolved-plan' : 'already-tombstoned', resolvedPlans:n1 };
+    }
+    var unsynced = dl2LocalUnsynced(slotId);
+    if (unsynced && opts.allowDirty !== true){
+      /* ★D3: この端末の未保存の変更は捨てない。墓標を立てず、競合として記録して一覧に残す。 */
+      conf[slotId] = { serverDeleted:true, serverRev: srv.rev, authority: srv.authority, localState: unsynced, at: now, source: src };
+      dl2WriteConflicts(conf);
+      stats.dl2Conflicts = (stats.dl2Conflicts || 0) + 1;
+      note({ act:'dl2-conflict-kept', slotId:slotId, source:src, localState:unsynced });
+      return { ok:false, code:'local-unsynced-conflict', localState: unsynced };
+    }
+    var deleteOpId = (src === 'dl2-delete' ? 'dl2_' : 'dl2r_') + slotId + '_' + now;
+    var bodyPresent = lsg('chr6_slot_' + slotId) != null;
+    var tomb = d.tomb.make({ slotId: slotId, title: (cur && (cur.name || cur.title)) || '',
+                             deletedAt: now, deleteOpId: deleteOpId, recoverySnapshotId: null });
+    if (!tomb || !d.tomb.validate(tomb).ok) return { ok:false, code:'tombstone-invalid' };
+    tomb.serverTombstone = { rev: srv.rev, authority: srv.authority, at: now, source: src,
+                             bodyPreserved: bodyPresent, localState: unsynced || null };
+    var next = meta.filter(function(e){ return !e || String(e.id) !== String(slotId); });
+    next.push(tomb);
+    if (!writeMeta(next)) return { ok:false, code:'tombstone-write-failed' };
+    var n2 = dl2MarkPlansResolved(slotId, srv, now, src);
+    if (conf[slotId]){ delete conf[slotId]; dl2WriteConflicts(conf); }
+    stats.dl2Tombstoned = (stats.dl2Tombstoned || 0) + 1;
+    note({ act:'dl2-tombstone', slotId:slotId, source:src, serverRev: srv.rev, bodyPreserved: bodyPresent });
+    return { ok:true, code:'tombstoned', deleteOpId: deleteOpId, bodyPreserved: bodyPresent, resolvedPlans:n2 };
+  }
+  function acceptServerTombstone(slotId, opts){
+    opts = opts || {};
+    var id = (slotId == null) ? '' : String(slotId);
+    stats.dl2AcceptCalls = (stats.dl2AcceptCalls || 0) + 1;
+    if (!id || id === 'default' || id === 'chr6') return Promise.resolve({ ok:false, code:'not-deletable' });
+    if (restoreHold()) return Promise.resolve({ ok:false, code:'restore-hold' });
+    if (off()) return Promise.resolve({ ok:false, code:'service-off' });
+    var d = dep();
+    if (!d.tomb || typeof d.tomb.make !== 'function' || typeof d.tomb.validate !== 'function')
+      return Promise.resolve({ ok:false, code:'missing-deps', missing:['fix579(墓標)'] });
+    var W = null; try { W = window.__v292Dfix697; } catch(e){ W = null; }
+    if (!W || typeof W.getStoryV2Once !== 'function') return Promise.resolve({ ok:false, code:'contract-unavailable' });
+    return new Promise(function(resolve){
+      W.getStoryV2Once(id, function(r, err){
+        if (err || !r){ resolve({ ok:false, code:'server-unreachable', why: String(err || '?') }); return; }
+        var j = r.j || {};
+        if (r.status !== 200 || j.ok !== true || j.deleted !== true || (j.authority !== 'shadow' && j.authority !== 'canonical')){
+          resolve({ ok:false, code:'server-not-tombstoned', status: r.status, errorCode: j.errorCode || null }); return;
+        }
+        var srv = { rev: +j.rev || 0, authority: String(j.authority), serverHash: j.serverHash || null };
+        dl2RunAdmission(function(){ return dl2ApplyLocked(id, srv, opts, d); }).then(function(x){
+          if (!x || x.ran !== true){ resolve({ ok:false, code:'admission-busy', reason: (x && x.reason) || 'BUSY' }); return; }
+          var out = x.result || { ok:false, code:'threw' }; out.serverRev = srv.rev; resolve(out);
+        }, function(e){ resolve({ ok:false, code:'threw', why: String(e) }); });
+      });
+    });
+  }
+  /* HOME の「止まっている削除」一覧用。読むだけ。 */
+  function dl2QuarantinedPlans(){
+    var meta = readMeta(), byId = {}, i;
+    for (i = 0; i < meta.length; i++) if (meta[i] && meta[i].id != null) byId[String(meta[i].id)] = meta[i];
+    return readPending().filter(dl2Quarantined).map(function(p){
+      var sid = String(p.storyId || p.slotId), m = byId[sid] || null;
+      return { planId: String(p.planId), slotId: String(p.slotId), storyId: sid,
+               title: m ? String(m.title || m.name || '') : '', createdAt: p.createdAt || null,
+               localTombstone: !!(m && m.deleted === true), why: (p.sdHold && p.sdHold.why) || null };
     });
   }
 
@@ -1749,6 +1917,13 @@
     requestDelete: requestDelete,
     resumePending: resumePending,
     pendingDeletes: readPending,
+    /* ★★DL2 (S-2): サーバ確定の墓標を受け入れる入口・隔離の読み口・未保存の判定（読むだけ）・競合の記録（読むだけ） */
+    acceptServerTombstone: acceptServerTombstone,
+    dl2QuarantinedPlans: dl2QuarantinedPlans,
+    dl2IsQuarantined: dl2Quarantined,
+    dl2IsResolved: dl2Resolved,
+    dl2LocalUnsynced: dl2LocalUnsynced,
+    dl2Conflicts: function(){ return JSON.parse(JSON.stringify(dl2ReadConflicts())); },
     /* ★★fix602: 「なぜ片づいていないのか」を読める口。どれも読むだけで何も書かない。 */
     blockedDeletes: readBlocked,
     refusals: readRefusals,

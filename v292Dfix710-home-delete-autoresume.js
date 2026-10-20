@@ -75,6 +75,16 @@
     if (typeof p.localDeleteBaseHash !== 'string' || p.localDeleteBaseHash === '') return false; /* baseHash ゲート */
     if (!p.planId || !p.slotId || !p.deleteOpId) return false;
     if (!(p.recoverySnapshotId || p.snapshotId)) return false;                 /* 復元セットが無ければ触らない */
+    /* ★★DL2 (S-2 / GPT #127-FJ D4): サーバが schema2 で CLIENT_SCHEMA_TOO_OLD を返して止まった古い計画（隔離）と、
+       DL2 で片づいた計画は、自動再開の候補にしない（getstory も送らない）。判定の正本は fix587。fix587 が古い版でも
+       保留理由の文字列だけで同じく除外する（fail-closed）。計画そのものは消さない。 */
+    try {
+      var s = svc();
+      if (s && typeof s.dl2IsQuarantined === 'function' && s.dl2IsQuarantined(p)) return false;
+      if (s && typeof s.dl2IsResolved === 'function' && s.dl2IsResolved(p)) return false;
+    } catch(e){ return false; }
+    if (p.dl2Quarantine === true || p.sdResolution) return false;
+    try { if (p.sdHold && /CLIENT_SCHEMA_TOO_OLD/.test(String(p.sdHold.why || '') + ' ' + String(p.sdHold.code || '') + ' ' + String(p.sdHold.verdict || ''))) return false; } catch(e){ return false; }
     return true;
   }
   function allPending(){
