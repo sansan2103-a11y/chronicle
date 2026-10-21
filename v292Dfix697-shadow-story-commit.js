@@ -374,6 +374,16 @@
           var j = g.j; var srvRev = (typeof j.rev === 'number') ? j.rev : 0; var srvHash = String(j.serverHash || '');
           if (String(j.authority || 'shadow') !== 'canonical' || j.deleted) return cb({ error: 'NOT_CANONICAL' });
           if (srvRev === lc.serverRev) return cb({ remoteAhead: false });
+          /* ■fixHK1（GPT #127-HW・BUNDLE39・kill v292DfixHK1Off='1'）: 自分の保存（fix697 commit / title CAS）が送信中、または
+             この getstory の往復中に自分の保存の ACK で lastConfirmed が進んだときは「別端末が進めた」と判定しない。
+             ・送信中 → 判定できないので error（呼び手 fix912 は既存の「取得失敗 → 通常送信」へ。保存時の f910Check / CAS が守る）
+             ・lastConfirmed を読み直して server と同じ rev / hash → remoteAhead:false */
+          if (lsg('v292DfixHK1Off') !== '1'){
+            if (inFlight) return cb({ error: 'OWN_COMMIT_IN_FLIGHT' });
+            var lcNow = null; try { var mNow = G.marker(id); lcNow = mNow && mNow.lastConfirmed; } catch(eN){ lcNow = null; }
+            if (lcNow && typeof lcNow.serverRev === 'number' && lcNow.serverRev === srvRev &&
+                lcNow.fingerprint != null && String(lcNow.fingerprint) === srvHash) return cb({ remoteAhead: false });
+          }
           var m2 = G.marker(id);
           s2Proof911(id, j.record, m2, function(r){
             cb({ remoteAhead: true, safe: !!(r && r.ok), why: r && r.why, srvRev: srvRev, srvHash: srvHash, j: j, lcRev: lc.serverRev });

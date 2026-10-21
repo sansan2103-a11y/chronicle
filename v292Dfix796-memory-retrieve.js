@@ -702,6 +702,17 @@
           admitted3.push(admitted2[cx]);
         }
       }
+      /* ★F1（GPT #127-IA・既定 OFF・v292Dfix796F1On='1'。v292Dfix796RerOff='1' でも止まる）: 3 枠を決める前に、表示段（render）で
+         捨てられる record（world_event・命題が空）を外す。render の判定と同じ条件。重み・MIN_SCORE・MAX_ITEMS・入場条件は変えない。 */
+      if (rerOn() && lsg('v292Dfix796F1On') === '1') {
+        var disp = [], nd = 0;
+        for (var dx = 0; dx < admitted3.length; dx++) {
+          var rr = admitted3[dx];
+          if (str(rr.lineageClass) === CLASS_WORLD_EVENT || !truncate(rr.normalizedProposition, LIMITS.PROP_MAX)) { nd++; continue; }
+          disp.push(rr);
+        }
+        admitted3 = disp; log.f1NotDisplayable = nd;
+      }
       var remaining = admitted3.slice(0);       /* memoryId 昇順で安定済み */
       var chosenRecords = [];
       while (out.length < LIMITS.MAX_ITEMS && remaining.length) {
@@ -886,7 +897,58 @@
        ・ambiguous:true は **0**
        ・部分一致・表層類似は **0**（literal 出現のみ）
      戻り値 { ids:[], names:[], dropped:[{name,reason}] }。落とした理由を必ず残す。 */
-  function explicitMentionIdsFromText(playerText, kNow) {
+  /* ★HON1（GPT #127-IA・既定 OFF・v292Dfix796HonOn='1'。v292Dfix796RerOff='1' でも止まる）:
+     完全一致（従来）の後段で、「姓／名＋敬称」を、主人公と cast 全員を数えてちょうど 1 人に決まり、その人に記憶の名前がある時だけ tier1 にする。
+     規則 R1〜R7（下の honorificMentions）。推測しない。cast 名は「1 人に決まるか」の確認だけに使い、鍵（entityId）は記憶由来のものだけ。 */
+  function honOn() { return rerOn() && lsg('v292Dfix796HonOn') === '1'; }
+  var HON_LIST = ['さん', 'さま', '様', 'くん', '君', 'ちゃん', '先生', '先輩', '氏', '殿'];
+  var MIN_LEN = 2, MAX_LEN = 8;
+  function isKanjiOrKatakana(ch) { return /[㐀-鿿豈-﫿゠-ヿㇰ-ㇿｦ-ﾟ々〆ヶ]/.test(ch || ''); }
+  function nameParts(name) { return String(name || '').split(/[\s　]+/).filter(Boolean); }
+  /* X が name の真の一部か（R2） */
+  function isProperPart(x, name) {
+    var n = String(name || ''); if (!x || !n || x === n) return false;
+    var toks = nameParts(n);
+    if (toks.length >= 2) { for (var i = 0; i < toks.length; i++) if (toks[i] === x) return true; return false; }
+    return n.indexOf(x) === 0 || (n.length > x.length && n.slice(n.length - x.length) === x);
+  }
+  /* people: [{ entityId, name, hero?:bool, candidate?:bool, ambiguous?:bool, guardOnly?:bool（数えるだけ・鍵にしない） }]
+     戻り値 { ids:[], hits:[{ alias, honorific, entityId, name }], dropped:[{ alias, reason }] } */
+  function honorificMentions(text, people) {
+    var out = { ids: [], hits: [], dropped: [] };
+    var t = String(text || ''); if (!t || !Array.isArray(people) || !people.length) return out;
+    var seenAlias = {};
+    for (var h = 0; h < HON_LIST.length; h++) {
+      var hon = HON_LIST[h], from = 0, p;
+      while ((p = t.indexOf(hon, from)) >= 0) {
+        from = p + hon.length;
+        var chosen = null, matched = null;
+        for (var k = Math.min(MAX_LEN, p); k >= MIN_LEN; k--) {            /* R1 最長一致・R3 */
+          var x = t.slice(p - k, p);
+          if (/[\s　、。，．,.!?！？「」『』（）()]/.test(x)) continue;
+          var m = people.filter(function (q) { return q && q.name && isProperPart(x, q.name); });
+          if (m.length) { chosen = x; matched = m; break; }
+        }
+        if (!chosen) continue;
+        var key = chosen + '|' + hon; if (seenAlias[key]) continue; seenAlias[key] = 1;
+        var before = t.charAt(p - chosen.length - 1);
+        if (p - chosen.length > 0 && isKanjiOrKatakana(before)) { out.dropped.push({ alias: chosen + hon, reason: 'boundary' }); continue; }   /* R4 */
+        /* 同じ人物が複数の entry（memory 由来名＋cast 名）で出るのは 1 人として数える */
+        var ents = {}; matched.forEach(function (q) { ents[q.hero ? '#hero' : String(q.entityId)] = q; });
+        var keys = Object.keys(ents);
+        if (keys.length !== 1) { out.dropped.push({ alias: chosen + hon, reason: 'ambiguous' }); continue; }          /* R5 */
+        var one = ents[keys[0]];
+        if (one.hero) { out.dropped.push({ alias: chosen + hon, reason: 'hero' }); continue; }                       /* R6 */
+        if (one.candidate || one.ambiguous || /^char_candidate:/.test(String(one.entityId))) { out.dropped.push({ alias: chosen + hon, reason: 'candidate_or_ambiguous' }); continue; }  /* R7 */
+        if (out.ids.indexOf(one.entityId) < 0) out.ids.push(one.entityId);
+        out.hits.push({ alias: chosen, honorific: hon, entityId: one.entityId, name: one.name, guardOnly: !!one.guardOnly });
+      }
+    }
+    out.ids.sort();
+    return out;
+  }
+
+  function explicitMentionIdsFromText(playerText, kNow, aliasGuard) {
     var out = { ids: [], names: [], dropped: [] };
     var text = str(playerText); if (!text || !kNow) return out;
     var names = arr(kNow.names), hit = [], i, j;
@@ -913,6 +975,21 @@
       if (meta && str(meta.status) === 'candidate') { out.dropped.push({ name: nm, reason: 'candidate' }); continue; }
       if (id.indexOf(CANDIDATE_PREFIX) === 0) { out.dropped.push({ name: nm, reason: 'candidate' }); continue; }
       ids.push(id); out.names.push(nm);
+    }
+    if (honOn()) {   /* ★HON1: 完全一致で取れた人には触らない */
+      try {
+        var people = [], have = {}, k2, nm2, mt2, g2 = (aliasGuard && typeof aliasGuard === 'object') ? aliasGuard : {};
+        for (k2 = 0; k2 < names.length; k2++) { nm2 = names[k2]; if (!nm2) continue; mt2 = (kNow.metaByName && kNow.metaByName[nm2]) || {};
+          people.push({ entityId: str(kNow.byName[nm2]), name: nm2, candidate: str(mt2.status) === 'candidate', ambiguous: mt2.ambiguous === true }); have[nm2] = 1; }
+        var gn = arr(g2.names);
+        for (k2 = 0; k2 < gn.length; k2++) { nm2 = str(gn[k2]); if (nm2 && !have[nm2]) { people.push({ entityId: 'guard:' + nm2, name: nm2, guardOnly: true }); have[nm2] = 1; } }
+        if (str(g2.hero)) people.push({ entityId: '', name: str(g2.hero), hero: true });
+        var hm = honorificMentions(text, people);
+        for (k2 = 0; k2 < hm.hits.length; k2++) {
+          if (hm.hits[k2].guardOnly) { out.dropped.push({ name: hm.hits[k2].alias + hm.hits[k2].honorific, reason: 'honorific_no_memory_entity' }); continue; }
+          if (ids.indexOf(hm.hits[k2].entityId) < 0) { ids.push(hm.hits[k2].entityId); out.names.push(hm.hits[k2].alias + hm.hits[k2].honorific + '→' + hm.hits[k2].name); } }
+        for (k2 = 0; k2 < hm.dropped.length; k2++) out.dropped.push({ name: hm.dropped[k2].alias, reason: 'honorific_' + hm.dropped[k2].reason });
+      } catch (eH) {}
     }
     out.ids = uniqSorted(ids);
     return out;
@@ -1276,7 +1353,7 @@
   /* 呼び出し側が turnCtx を持たない live 経路用。entity 解決は **ここ**でやる。 */
   function ctxFromCaller(o, kNow) {
     var who = interlocutorFromTurn(o.prevTurn, kNow.byName, kNow.metaByName);
-    var ex  = explicitMentionIdsFromText(o.text, kNow);
+    var ex  = explicitMentionIdsFromText(o.text, kNow, o.aliasGuard);
     return {
       interlocutorId: who,
       explicitInputMentionIds: ex.ids,

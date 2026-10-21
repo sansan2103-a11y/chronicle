@@ -687,6 +687,58 @@
     return EXAMPLES[toneKey()] || EXAMPLES['shizuka'];
   }
 
+  /* ★B38（GPT #127-HQ ①②③ / #127-HU ④ / #127-IA）: どれも flag 既定 OFF（'1' のときだけ）。OFF のときモデルへ送る中身は従来と 1 バイトも変わらない。
+     追加した storage アクセスは getItem だけ（書込 0）。全部止める: v292DfixB38Off='1'。
+       a = v292DfixB38aOn: 主人公の主体性の 1 文（SAY/DO/STORY の入力説明の行の末尾／「続きを書く」・オート⏩では入力説明の位置）
+                          ＋ 実際に使われている見本（静・標準/短の B、静・長文＝fix440 側）の主人公の入力外の行動・台詞を差し替え
+       b = v292DfixB38bOn: 【守ること】に過去の引用の 1 文      c = v292DfixB38cOn: fix440 ②連続性（fix440 側）
+       d = v292DfixB38dOn: 「拒まない」の直後に 1 文（元の文は消さない）
+       e = v292DfixB38eOn: user 側 scene.location のキーを「物語開始時の場所・時刻（現在地・現在時刻を保証しない）」へ（S.turns が 1 件以上のとき。
+                          S.scene.loc は書き換えない。送る直前の文字列で、該当がちょうど 1 か所のときだけ置き換える） */
+  var B38_A = '主人公の知覚・身体反応は描写してよい。ただし、プレイヤーが指定していない新たな発話、重要な判断、推理の結論、主体的な目的変更は追加しない。発見は主人公の断定ではなく、観察できる事実として示す。';
+  var B38_B = '過去の会話や記録を事実として引用するときは、与えられた文脈で確認できる内容に基づく。確認できない過去の発言やメモの具体的文言を、実在したものとして創作しない。';
+  var B38_D = 'プレイヤーの行動は受け付け、結果は状況に従って描く。ただし、既に示された確定情報や否定と食い違う入力の前提を、根拠なく世界の事実へ上書きしない。人物の嘘・誤認・訂正や、新たな発見による事実の更新は許す。';
+  var B38_E_KEY = '物語開始時の場所・時刻（現在地・現在時刻を保証しない）';
+  var B38_E_MIN_TURNS = 1;   /* 最初の 1 ターン（S.turns が空）は開始地点＝現在地なので変えない */
+  function b38On(k){ try { if (localStorage.getItem('v292DfixB38Off') === '1') return false; return localStorage.getItem('v292DfixB38' + k + 'On') === '1'; } catch(e){ return false; } }
+  /* B38-a: 見本（静）B。元は「主人公は紙束を床に戻し、奥の廊下へ一歩踏み出した」＝入力に無い主人公の行動。
+     NPC（相手）が動き、主人公は知覚と体の反応だけ、発見は観察できる事実（扉の開き）として示す版。行数・タグの種類は元と同じ。 */
+  var B38_EXB_OLD = [
+      '─見本B（静かな場面から一歩踏み込む）─',
+      '主人公は紙束を床に戻し、奥の廊下へ一歩踏み出した。相手の手が、とっさに袖を掴む。指先が、かすかに震えていた。',
+      '<say who="相手">……一人で行かないで</say>',
+      '天井の隅で、何かが乾いた音を立てて動いた。',
+      '<react who="主人公" 反応="足を止め、音のした方へ視線を上げる" 声=""/>',
+      '<react who="相手" 反応="袖を掴む手に力がこもる" 声="<say who=\'相手\'>今の、聞こえた?</say>"/>',
+      '<state who="主人公" からだ="足を止める・緊張" こころ="警戒と気遣い" 本能="相手を背に庇う"/>',
+      '<state who="相手" からだ="主人公の袖を掴む" こころ="不安" 本能="離れたくない"/>'
+    ].join('\n');
+  var B38_EXB_NEW = [
+      '─見本B（静かな場面から一歩踏み込む）─',
+      '相手が紙束を床に戻し、奥の廊下へ一歩踏み出した。懐中電灯の輪の先で、閉まっていたはずの扉が指一本ぶん開いている。',
+      '<say who="相手">……さっきまで、閉まってたよね</say>',
+      '天井の隅で、何かが乾いた音を立てて動いた。主人公の首筋が、ひやりと粟立つ。',
+      '<react who="主人公" 反応="首筋が粟立ち、息が浅くなる" 声=""/>',
+      '<react who="相手" 反応="懐中電灯を握る手に力がこもる" 声="<say who=\'相手\'>今の、聞こえた?</say>"/>',
+      '<state who="主人公" からだ="首筋が粟立つ・息が浅い" こころ="警戒" 本能="身を固くする"/>',
+      '<state who="相手" からだ="懐中電灯を奥へ向けたまま" こころ="不安" 本能="引き返したい"/>'
+    ].join('\n');
+  function b38Ex(s){ try { if (!b38On('a') || typeof s !== 'string') return s; return s.split(B38_EXB_OLD).join(B38_EXB_NEW); } catch(e){ return s; } }
+  /* B38-e: 送る直前の user 文字列だけを変える（S.scene.loc・保存・同一性の目印には触らない）。該当がちょうど 1 か所でなければ何もしない。 */
+  var _b38e = { applied: 0, skipped: '' };
+  function b38eUser(user){
+    try {
+      if (!b38On('e') || typeof user !== 'string') return user;
+      var S = getS(); if (!S || !Array.isArray(S.turns) || S.turns.length < B38_E_MIN_TURNS){ _b38e.skipped = 'first-turn'; return user; }
+      var loc = S.scene && S.scene.loc; if (typeof loc !== 'string' || !loc){ _b38e.skipped = 'no-loc'; return user; }
+      var v = JSON.stringify(loc), forms = ['"location": ' + v, '"location":' + v], i;
+      for (i = 0; i < forms.length; i++){
+        if (user.split(forms[i]).length === 2){ _b38e.applied++; _b38e.skipped = ''; return user.split(forms[i]).join(JSON.stringify(B38_E_KEY) + (i === 0 ? ': ' : ':') + v); }
+      }
+      _b38e.skipped = 'not-exactly-once'; return user;
+    } catch(e){ return user; }
+  }
+
   function buildSys(mode, text){
     var d = lvl('dramaLevel', 2);
     var dlg = lvl('dialogueLevel', 1);
@@ -714,6 +766,7 @@
     } else if (m==='STORY' && inText && !isCont){
       inputLine = '【プレイヤー入力＝場面の方向づけ】プレイヤーが「'+inText+'」と場面を方向づけた。その方向で場面を進める。';
     }
+    if (inputLine && b38On('a')) inputLine += B38_A;   /* ★B38-a（既定 OFF） */
 
     var dramaLine = pick(d,
       '今回の進行＝弱め：新しい要素は1つだけ、控えめに小さく。一気に飛ばさず半歩〜一歩進める。',
@@ -755,7 +808,9 @@
       'あなたは一人称視点の物語TRPGの語り手です。ジャンルは固定されていない。シーン設定の雰囲気と、プレイヤーの入力が向かう方向(ホラー・日常・冒険・恋愛・コメディ、その混在)に寄り添って描く。プレイヤーの行動や入力を「物語の種」として受け取り、それを膨らませて場面を一つ前へ進めます。プレイヤーは善にも悪にもなれます。物語を裁かず、世界を生きたものとして描いてください。',
       'プレイヤーの種が今の場面の現実と食い違っても拒まない。世界の方が動いた・変わったものとして受け入れ、これまでの物語と矛盾なく繋がる理屈を見つけて描く。自由は受け入れる、整合はあなたが守る。'
     ];
+    if (b38On('d')) blocks.push(B38_D);   /* ★B38-d（既定 OFF）: 上の文の補足。上の文は消さない */
     if (inputLine){ blocks.push(''); blocks.push(inputLine); }
+    else if (isCont && b38On('a')){ blocks.push(''); blocks.push(B38_A); }   /* ★B38-a（既定 OFF）: 「続きを書く」とオート⏩（入力説明の行が無い経路） */
     blocks = blocks.concat([
       '',
       '【良い1ターンの形】',
@@ -806,6 +861,11 @@
         var _b3c2 = (window.__v292Dfix796 && typeof window.__v292Dfix796.canaryBlocks === 'function')
           ? window.__v292Dfix796.canaryBlocks({
               sid: _sid3c2, mode: m, text: t, currentTurn: _ct3c2,
+              /* ★HON1（既定 OFF・v292Dfix796HonOn='1' のときだけ足す）: 敬称つき呼び名の「1 人に決まるか」の確認用。鍵には使わない。 */
+              aliasGuard: (function(){ try { if (localStorage.getItem('v292Dfix796HonOn') !== '1') return undefined;
+                  var c = _S3c2 && _S3c2.cast, o = { hero: (c && c.hero && c.hero.name) ? String(c.hero.name) : '', names: [] }, a = (c && c.npcs) || [], i;
+                  for (i = 0; i < a.length; i++) if (a[i] && a[i].name) o.names.push(String(a[i].name));
+                  return o; } catch(_hg){ return undefined; } })(),
               prevTurn: (_ct3c2 && _ct3c2 > 0) ? _S3c2.turns[_ct3c2 - 1] : null,
               /* ★rer1 (RETRIEVE_ENTITY_RESOLUTION_V1 / H1): story cast の **純射影**だけを渡す。
                  判断ロジック・Memory ロジックはここに置かない（identity map の供給のみ）。
@@ -889,10 +949,11 @@
       (gq2 ? '・主人公の名前は未設定。本文（地の文）に「主人公」という管理ラベルを主語として書かない。主人公の行動は主語を省いた三人称の文で描く（例: 「主人公は扉を開けた」ではなく「扉を開けると、廊下の奥から物音が響いた」）。他のキャラが呼びかけるときは関係に合う呼び方（「あんた」「お前」「旦那」など）にする。タグの who="主人公" はそのまま。' : null),
       '・直前のターンの文章やセリフをそのまま引用・再掲して書き始めない。前ターンの続きの瞬間から書く。',
       '・物理的に矛盾させない（位置・負傷・人物・所持が前の場面と食い違わない）。',
+      (b38On('b') ? '・' + B38_B : null),   /* ★B38-b（既定 OFF） */
       '・このメッセージのルールや、説明・要約・メモ・チェックリスト・【】ラベルを本文に書かない。「未解決事項:」のようなGM的な運営コメント・判断の独り言も本文ではない。本文はあくまで物語の地の文とセリフだけ。',
       '・日本語として自然な文章で書く。句読点を適切に打ち、一文を長くしすぎない。キャラの状態・数値・時間・確率・スペックを機械的に実況・列挙せず、観測ログやシステムメッセージのような無機質な文体にしない（あくまで物語の地の文として描く）。同じ語・同じ言い回しを連続で繰り返さない。', /* v292Dfix289: Pro長文脈での機械文体・句読点省略・反復崩壊の暴走対策 */
       '',
-      miniEx() + '\n\n' + pickExamples()   // v292Dfix208: 🎭トーンで見本切替 / fix223d改: ミニ見本先・トーン見本後 / fix224: 強制リマインドは実測無効 / fix249: 長文時はフル尺見本(長さは見本で引っ張る)
+      miniEx() + '\n\n' + b38Ex(pickExamples())   /* ★B38-a: flag OFF なら素通し */ // v292Dfix208: 🎭トーンで見本切替 / fix223d改: ミニ見本先・トーン見本後 / fix224: 強制リマインドは実測無効 / fix249: 長文時はフル尺見本(長さは見本で引っ張る)
     ]);
     return blocks.filter(function(b){ return b !== null; }).join('\n');   /* ★GQ2: 条件付きの行（null）は落とす。従来は null が無いので同一 */
   }
@@ -930,6 +991,7 @@
           var mode = (arguments.length>0 && arguments[0]!=null) ? String(arguments[0]) : '';
           var text = (arguments.length>1 && arguments[1]!=null) ? String(arguments[1]) : '';
           r.sys = buildSys(mode, text);
+          if (typeof r.user === 'string') r.user = b38eUser(r.user);   /* ★B38-e（既定 OFF） */
         }
       }catch(e){ try{ console.warn(TAG,'build err:', e&&e.message); }catch(_){} }
       return r;
@@ -986,6 +1048,6 @@
   }
   injectToggle();
 
-  window.__v292NewEngine = { buildSys: buildSys, engineOn: engineOn, setEngine: setEngine, stateBlock: stateBlock, toneKey: toneKey, setTone: setTone, lenKey: lenKey, setLen: setLen, agendaBlock: agendaBlock, agendaPressures: agendaPressures /* v292Dfix254 */ };
+  window.__v292NewEngine = { b38eStatus: function(){ return { applied: _b38e.applied, skipped: _b38e.skipped }; }, b38eUser: b38eUser, buildSys: buildSys, engineOn: engineOn, setEngine: setEngine, stateBlock: stateBlock, toneKey: toneKey, setTone: setTone, lenKey: lenKey, setLen: setLen, agendaBlock: agendaBlock, agendaPressures: agendaPressures /* v292Dfix254 */ };
   try{ console.log(TAG, 'loaded'); }catch(_){}
 })();
