@@ -80,6 +80,22 @@
     note({ kind: 'CHANGE', v: v });
     flash('次に作る絵から「' + LABEL[v] + '」になります（今の絵はそのまま）');
   }
+  /* ★B37-F (GPT #127-HF F・kill: localStorage v292DfixB37fOff='1' → 従来どおり ⚙ 設定 > 詳細設定 の旧 8 択の隣)
+     S2 の物語だけ、3 択（デフォルト／クール／ダーク）を物語画面の「🎛 調整」（topbar の折りたたみ・fix243）の中に置く。
+     保存は従来どおり onChange → S.cfg.artPreset → 通常の保存（S.saveD → fix697 → putcanonical）。PC / iPhone は通常の保存で揃う。
+     採用済みの絵は作り直さない・自動で採用しない（この module は生成を呼ばない）。旧形式の物語では何もしない（applyUI の早期 return）。 */
+  function b37fOn() { return g('v292DfixB37fOff') !== '1'; }
+  function b37place(mine) {
+    var bar = document.getElementById('topbar'); if (!bar) return false;
+    if (mine.parentNode !== bar) {
+      var tg = document.getElementById('v243-toggle');
+      /* 「🎛 調整」の直後（fix243 の折りたたみの対象になる位置）に置く */
+      if (tg && tg.parentNode === bar) bar.insertBefore(mine, tg.nextSibling); else bar.appendChild(mine);
+      mine.classList.remove('v880-knob'); mine.style.marginLeft = '6px'; mine.setAttribute('data-b37f', 'topbar'); st.b37moved = (st.b37moved || 0) + 1;
+    }
+    if (!mine.classList.contains('v243-foldable')) mine.classList.add('v243-foldable');   /* 「🎛 調整」を閉じると隠れる（fix243 の CSS） */
+    return true;
+  }
   function applyUI() {
     var d = doc(), sup = supported(); st.mode = { doc: d, sup: sup };
     if (d !== true || sup !== true) { removeMine(); unhideLegacy(); return; }   /* 旧形式・判定前・未対応 = BUNDLE31c と同じ */
@@ -87,8 +103,11 @@
     if (!lw) { if (!mine) return; }   /* 旧 8 択がまだ作られていない（features.js が後から注入）→ 次の tick */
     if (lw && lw.getAttribute('data-fg3-hidden') !== '1') { lw.setAttribute('data-fg3-prev-display', lw.style.display || ''); lw.style.display = 'none'; lw.setAttribute('data-fg3-hidden', '1'); st.legacyHidden++; }
     if (!mine) { mine = build(lw); st.ui++; }
+    if (b37fOn()) { b37place(mine); }   /* ★B37-F: 物語の「🎛 調整」（topbar）に置く */
+    else {
     if (lw && lw.nextSibling !== mine) { lw.parentNode.insertBefore(mine, lw.nextSibling); }   /* fix880 が旧 8 択を動かしても隣に付いていく */
     if (lw && lw.classList.contains('v880-knob') && !mine.classList.contains('v880-knob')) { mine.classList.add('v880-knob'); mine.style.marginLeft = ''; }
+    }
     var sel = document.getElementById(SEL_ID); if (sel) syncValue(sel);
   }
 

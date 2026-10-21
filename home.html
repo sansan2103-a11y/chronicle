@@ -255,7 +255,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261021-bundle36-a';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261021-bundle37-a';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -322,7 +322,7 @@
      ・home.html には S / __chronicleGetState が無いので S.save wrap も成立しない（wrapSave は空振りして諦める）。
      ・fix587 より前に置く（fix587 は呼び出し時に参照するので順序依存は無いが、owner を先に載せる）。 -->
 <!-- ★av2 (GPT 904 C1): Asset v2 client data plane. save core (fix697/fix705/fix743) が呼ぶ純関数 + registrar。kill = localStorage v292Dav2Off=1 -->
-<script src="v292Dav2-data.js?cb=20261019-bundle31-a"></script>
+<script src="v292Dav2-data.js?cb=20261021-bundle37-a"></script>
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
 <script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
 <script src="v292Dfix697-shadow-story-commit.js?cb=20261020-bundle34-a"></script>
@@ -355,6 +355,8 @@
 <!-- ★★DL2 (S-2 / GPT #127-FJ): 物語を一覧から削除する（サーバの版を基準にした削除・確認は画面内のシート・受け取り側の片づけ・止まっている削除の一覧）。
      fix587 / fix697 / fix933 / fix710 より後。下の inline script が window.__v292DhomeDL2（render / all）を出す。kill = localStorage v292DfixDL2Off=1 -->
 <script src="v292DfixDL2-server-delete.js?cb=20261020-bundle35-b" data-dl2="home"></script>
+<!-- ★B37-D (GPT #127-HF D): 物語カードの「…」→「この物語を削除」= DL2 の確認シート（openDelete）をそのまま開くだけ。OFF=localStorage v292DfixB37dOff=1 -->
+<script src="v292DfixB37-home-menu.js?cb=20261021-bundle37-a"></script>
 <!-- ★JR1 (GPT #127-HC): サーバーで削除済み（墓標）と確かめた物語を指す fix750 journal だけを退避する（写して読み戻し一致 → 元キーを消す）。サーバー書込 0・UI 変更 0。OFF=localStorage v292DfixJR1Off=1 -->
 <script src="v292DfixJR1-journal-retire.js?cb=20261021-bundle36-a" data-jr1="home"></script>
 <!-- ★★v292Dfix826 P0B_REVISION_COHERENCE_BUNDLE_V1（GPT 裁定 52）
@@ -370,7 +372,7 @@
      fix436 = 「種を広げる」engine の公開 pure 関数（buildFillPrompt / parseFillJson / normVal / applyFill / request）を fix823 が再利用する。
      home には UI.randomFill が無いので fix436 は arm されず 30 秒 keeper が空回りして止まる（model call 0 / LS write 0 / DOM 0 = stage 実測）。
      fix335 は既定 OFF・呼び手 0（pure API __v292Dfix335api.draw を fix823 の RANDOM_FALLBACK が使う）。fix247 は home に **載せない**（裁定 27）。 -->
-<script src="v292Dfix436-seed-expand.js?cb=20260906-fix823"></script>
+<script src="v292Dfix436-seed-expand.js?cb=20261021-bundle37-a"></script>
 <script src="v292Dfix335-omakase.js?cb=20260906-fix823"></script>
 <!-- v292Dfix819: STORY_INSTANTIATION_PRIMITIVE（原本 → 独立 Story を 1 本作る primitive）。
      GPT 裁定 2026-09-06 `FIX819_DEPLOY_DORMANT_LIBRARY = GO`: **載せるだけ。UI caller 0・Owner 操作から到達不能。**
@@ -3332,6 +3334,6 @@
   <div>本文と画像は AI が生成しています。内容は架空のものです。</div>
   <div>AI: OpenRouter / DeepSeek ・ 画像: Pollinations</div>
 </footer>
-<script src="v292Dvault2-ui.js?cb=20261019-bundle31-a"></script>
+<script src="v292Dvault2-ui.js?cb=20261021-bundle37-a"></script>
 </body>
 </html>

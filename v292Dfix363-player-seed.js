@@ -49,7 +49,7 @@
     return false;
   }
   function clickAiGen(){
-    var ai = Array.from(document.querySelectorAll('#settingsOv button')).find(function(x){ return /AIでランダム生成/.test(x.textContent); });
+    var ai = Array.from(document.querySelectorAll('#settingsOv button')).find(function(x){ return /AIでランダム生成|設定の空欄をAIで埋める/.test(x.textContent) || (x.hasAttribute && x.hasAttribute('data-b37-dice')); });   /* ★B37-C: 新しい表示名 */
     if (ai) { ai.click(); return true; }
     return false;
   }

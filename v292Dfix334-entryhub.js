@@ -20,6 +20,17 @@
      既存の kill / opt-out は独立して維持する = localStorage['v292Dfix334']='0' で従来の空状態へ戻る。
      '1' は従来どおり ON（明示 opt-in の互換）。未設定 = ON（ここだけが sp9 との差）。 */
   function on(){ try{ return localStorage.getItem('v292Dfix334')!=='0'; }catch(e){ return true; } }
+  /* ★B37-E (GPT #127-HF E・開始画面の整理・kill: localStorage v292DfixB37eOff='1' → 従来どおり 3 ボタン)
+     行き先の棚卸し（実コード）:
+       「▶ 物語を始める」（index の固定ボタン）… G.startScene()
+       「▶ この世界で始める」（ここ・world ready のとき）… G.startScene() ＝ 上と同じ → 出さない（固定ボタンが常に同じ場所にある）
+       「DO / STORY の例」（_showIntro の chip）… 入力欄に例文を入れるだけ → そのまま
+       「✏️ 世界とキャラを作る」（ここ）… UI.openSettings() → そのまま
+       「🎲 AI に考えてもらう 近日」（ここ）… 未実装（fix335 は v292Dfix335='1' のときだけ動くプレビュー）→ プレビューが ON のときだけ出す
+     続きから遊ぶ道（ターンがある物語）は、この画面を出さない（下の reskin の早期 return）ので変わらない。 */
+  function b37e(){ try{ return localStorage.getItem('v292DfixB37eOff')!=='1'; }catch(e){ return true; } }
+  function b37staticStart(){ try{ var b=document.querySelector('#welcomeActions > button[onclick*="startScene"]'); return !!b; }catch(e){ return false; } }
+  function b37omakaseOn(){ try{ return localStorage.getItem('v292Dfix335')==='1'; }catch(e){ return false; } }
 
   // inject style once
   try{
@@ -69,7 +80,7 @@
         var hub=document.createElement('div'); hub.id='v334-hub'; hub.className='v334-hub';
         var row=document.createElement('div'); row.className='v334-row';
         // ▶ この世界で始める (world readyのみ・既存G.startSceneを呼ぶだけ=ゲート不触)
-        if(ready){
+        if(ready && !(b37e() && b37staticStart())){
           var bStart=document.createElement('button'); bStart.className='v334-btn primary';
           bStart.textContent='▶ この世界で始める';
           bStart.onclick=function(){ try{ (window.G||G).startScene(); }catch(e){} };
@@ -85,6 +96,7 @@
         /* ★sp16(C-13): fix873 の「おまかせで作る」は実装済み、こちらは未実装。同じ語が 2 か所で
            違う意味になっていたので、ここでは名乗らない（ラベル 1 つ・挙動は 1 バイトも変えない）。 */
         bOma.innerHTML='🎲 AI に考えてもらう<span class="v334-soon">近日</span>';
+        if(b37e()){ if(b37omakaseOn()) bOma.innerHTML='🎲 AI に考えてもらう<span class="v334-soon">プレビュー</span>'; else bOma.style.display='none'; bOma.setAttribute('data-b37e', b37omakaseOn()?'preview':'hidden'); }
         bOma.onclick=function(){
           // Phase Bで window.__v334Omakase() が定義されたらそれを呼ぶ。未定義なら案内。
           try{ if(typeof window.__v334Omakase==='function'){ window.__v334Omakase(); return; } }catch(e){}

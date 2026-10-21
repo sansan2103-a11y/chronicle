@@ -1219,6 +1219,9 @@
   window.__chronicleAssetV2 = {
     migrate: migrate, prepare: migrate, switchToSchema2: switchToSchema2, ensureFirst: ensureFirst,
     suggestAppearance: suggestAppearance, setProfile: setProfile, newDraw: newDraw,
+    /* ★B37 (GPT #127-HF A): read-only — the EXACT profile setProfile() would store for this input (same cleaning, same gender rule).
+       The portrait UI shows this text to the Owner before confirming. Never writes, never sends. */
+    previewProfile: function(input){ input = isObj(input) ? input : {}; return { appearance: cleanAppearance(input.appearance), gender: genderOf(input.gender) }; },
     migrationStatus: migrationStatus, secureCharacter: secureCharacter, adoptCandidate: adoptCandidate, waiveCharacter: waiveCharacter, listCandidates: listCandidates, reportSecured: reportSecured, addBinding: addBinding, deleteCharacter: deleteCharacter,
     /* readback / reconcile only (never a second write): C2 offers it as 「再照合」 */
     reconcile: function(){ var id = curStoryId(); var F = F697(); var pd = id ? loadPending(id) : null;

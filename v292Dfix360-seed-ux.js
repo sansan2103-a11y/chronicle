@@ -104,7 +104,7 @@
             try { lore.dispatchEvent(new Event('input', {bubbles:true})); } catch(_){}
           }
           // 残りをAIに膨らませてもらう(既存の「AIでランダム生成」を起動)
-          var ai = Array.from(document.querySelectorAll('#settingsOv button')).find(function(x){ return /AIでランダム生成/.test(x.textContent); });
+          var ai = Array.from(document.querySelectorAll('#settingsOv button')).find(function(x){ return /AIでランダム生成|設定の空欄をAIで埋める/.test(x.textContent) || (x.hasAttribute && x.hasAttribute('data-b37-dice')); });   /* ★B37-C: 新しい表示名 */
           if (ai) ai.click();
           try { UI.setStatus('🌱 あなたの種を軸に、残りをAIが育てています…（数秒）'); } catch(_){}
         } catch(e){}

@@ -10695,7 +10695,8 @@
     if (!btn) return false;
     var tx = (btn.textContent || '');
     return tx.indexOf('未入力をランダム') > -1 ||
-           (tx.indexOf('ランダム生成') > -1 && tx.indexOf('🎲') > -1);
+           (tx.indexOf('ランダム生成') > -1 && tx.indexOf('🎲') > -1) ||
+           (btn.hasAttribute && btn.hasAttribute('data-b37-dice'));   /* ★B37-C: 「🎲 設定の空欄をAIで埋める」 */
   }
 
   document.addEventListener('click', function(e){

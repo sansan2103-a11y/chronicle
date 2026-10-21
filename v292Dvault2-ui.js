@@ -251,6 +251,7 @@
       if (a.act === 'hide') h += '<button type="button" class="v2uiItem v2uiAct" data-v2="hide" data-id="' + esc(sheetId) + '"' + (S.busy ? ' disabled' : '') + '>この物語を非表示にする</button>';
       else if (a.act === 'unhide') h += '<button type="button" class="v2uiItem v2uiAct" data-v2="unhide" data-id="' + esc(sheetId) + '"' + (S.busy ? ' disabled' : '') + '>非表示を解除する</button>';
       else if (S.st && S.st.hasVault) h += '<div class="v2uiWhy">' + esc(a.why) + '</div>';
+      if (b37DelOn()) h += '<button type="button" class="v2uiItem v2uiDel" data-v2="b37del" data-id="' + esc(sheetId) + '">この物語を削除</button>';   /* ★B37-D (GPT #127-HS) */
       h += '<button type="button" class="v2uiGhost" data-v2="close">閉じる</button>';
     } else if (sheetMode === 'bulk') {
       var P = MS.pending || { kind: '', ids: [] }, n = P.ids.length, hide = P.kind === 'hide';
@@ -340,6 +341,14 @@
     if (k === 'close') return closeSheet();
     if (k === 'bulkgo') { var P = MS.pending; MS.swallowUntil = Date.now() + 700; closeSheet(); if (P) msRun(P.kind, P.ids); return; }   /* a double tap must not fall through to the card under the closed sheet */
     if (k === 'hide' || k === 'unhide') { var id = t.getAttribute('data-id'); doAction(k, id); }
+    if (k === 'b37del') { var did = String(t.getAttribute('data-id') || ''); MS.swallowUntil = Date.now() + 700; closeSheet(); if (did && b37DelOn()) { try { window.__v292DfixDL2.openDelete([did], { source: 'home-vault-menu' }); } catch (eD) {} } return; }
+  }
+  /* ★B37-D (GPT #127-HS 案 1): 狭い画面（カードの「…」はこの Vault の「…」だけ）のメニューに「この物語を削除」を 1 行足す。
+     押すとメニューを閉じて、既存の DL2 の確認シート（__v292DfixDL2.openDelete([このカードの id])）を開くだけ。新しい削除の口・Vault の権限の判定は変えない。
+     出すのは DL2 が有効（active）かつ Owner（allowed）のときだけ。kill: localStorage v292DfixB37dOff='1'（PC の B37「…」と一緒に止まる） */
+  function b37DelOn() {
+    try { if (LS && LS.getItem('v292DfixB37dOff') === '1') return false; } catch (e) { return false; }
+    try { var D2 = window.__v292DfixDL2; return !!(D2 && typeof D2.openDelete === 'function' && D2.active() && D2.allowed()); } catch (e) { return false; }
   }
 
   /* ---- ms1: multi-select (N stories) ---- */
@@ -508,6 +517,7 @@
       '@media ' + NARROW + '{.v2uiMore{display:block}}' +
       '#v2uiDetail{margin-top:10px}#v2uiDetail .v2uiAct{width:100%;padding:10px;border-radius:8px;border:1px solid #8f7bd6;background:#221d36;color:#cbbcff;font-size:13px;font-weight:700;cursor:pointer}' +
       '#v2uiDetail .v2uiAct[disabled]{opacity:.5;cursor:default}.v2uiWhy{font-size:12px;line-height:1.6;color:var(--dim,#8f93bb);margin:6px 0}' +
+      '#v2uiSheet .v2uiDel{color:#ffb0b0}' +   /* ★B37-D */
       '#v2uiSheet{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px}' +
       '#v2uiSheet .v2uiBox{background:#15172a;color:var(--tx,#e9e6dc);border:1px solid #2c2e48;border-radius:16px;width:100%;max-width:440px;padding:22px;box-sizing:border-box;max-height:100%;overflow:auto}' +
       '@media ' + NARROW + '{#v2uiSheet{align-items:flex-end;padding:0}#v2uiSheet .v2uiBox{max-width:none;border-radius:22px 22px 0 0;padding:24px 20px 30px}}' +

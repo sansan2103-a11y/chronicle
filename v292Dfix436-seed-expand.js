@@ -93,6 +93,22 @@
   function getUI(){ try { if (typeof UI !== 'undefined' && UI) return UI; } catch(e){} return window.UI || null; }
   function getS(){ try { if (typeof S !== 'undefined' && S) return S; } catch(e){} return window.S || null; }
   function setStatus(m, err){ try { var U = getUI(); if (U && U.setStatus) U.setStatus(m, err); } catch(e){} }
+  /* ★B37-C (GPT #127-HF C): 結果を設定画面の中（🎲 ボタンのすぐ下 #b37-dice-result）にも出す。上部の帯（#topStatus）は設定画面の
+     黒い幕の裏に隠れて見えないため。kind: ok（N 項目を補完）/ none（空欄なし・変更 0 件）/ error / busy。表示だけ（書込 0・通信 0）。
+     kill: localStorage v292DfixB37cOff='1'（従来どおり #topStatus だけ） */
+  function b37Off(){ try { return localStorage.getItem('v292DfixB37cOff') === '1'; } catch(e){ return false; } }
+  var B37_LAST = null;
+  function b37res(kind, text){
+    B37_LAST = { kind: kind, text: text, t: Date.now() };
+    if (b37Off()) return;
+    try {
+      var el = document.getElementById('b37-dice-result'); if (!el) return;
+      var col = { ok: ['rgba(96,192,128,.12)', '#9fd49f'], none: ['rgba(200,200,220,.08)', 'var(--tx,#ddd)'], error: ['rgba(224,96,96,.12)', 'var(--err,#f0a0a0)'], busy: ['rgba(139,118,240,.12)', 'var(--tx,#ddd)'] }[kind] || ['transparent', 'inherit'];
+      el.style.display = 'block'; el.style.background = col[0]; el.style.color = col[1]; el.setAttribute('data-kind', kind); el.textContent = text;
+    } catch(e){}
+  }
+  function b37snap(){ try { return collectFields(document).map(function(f){ return f.key + '\u0000' + f.value; }); } catch(e){ return null; } }
+  function b37diff(a, b){ if (!a || !b) return null; var n = 0, m = {}; for (var i = 0; i < a.length; i++) m[a[i]] = 1; for (var j = 0; j < b.length; j++) if (!m[b[j]]) n++; return n; }
   function trim(v){ return String(v == null ? '' : v).replace(/^\s+|\s+$/g, ''); }
   function fire(el){ try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch(e){} }
 
@@ -374,18 +390,23 @@
     return 'AI生成に失敗しました。';
   }
   var F855_TAIL = 'ローカルの雛形を入力しました。';
+  /* ★B37-C: ローカルの雛形で埋めたときは、変わった欄の数を数えて設定画面の中に出す */
+  function b37legacy(s0, head){ var n = b37diff(s0, b37snap()); b37res(n ? 'error' : 'none', head.replace(/。?$/, '。') + (n == null ? 'ローカルの雛形を入力しました。' : (n ? 'ローカルの雛形で ' + n + ' 項目を埋めました（AIは使っていません）。' : '変更 0 件です。'))); }
 
   function onFail(fields, why){
     try { console.warn(TAG, 'fail:', why); } catch(e){}
     if (!hasSeed(fields)){
       // 種が皆無 → 空フォームで詰まないよう従来の固定ランダムへ退避
-      if (f855Off()){ setStatus('AI生成に失敗しました。固定パターンで埋めます。', true); legacy(); return; }
+      var s0 = b37snap();
+      if (f855Off()){ setStatus('AI生成に失敗しました。固定パターンで埋めます。', true); legacy(); b37legacy(s0, 'AIで埋められませんでした。'); return; }
       legacy();                                                   /* ★fix855: 先に退避を実行し… */
       setStatus(f855Reason(why) + F855_TAIL, true);               /* ★…その後に状況を出す(旧経路の成功文言に上書きされない) */
+      b37legacy(s0, f855Reason(why));
       return;
     }
     // 種がある → 何も書かない(定型文で種を汚さない)。入力はそのまま。
     setStatus('AI生成に失敗しました。入力内容はそのままです。もう一度🎲を押してください。', true);
+    b37res('error', 'AIで埋められませんでした（' + f855Reason(why).replace(/。$/, '') + '）。入力内容はそのままです（変更 0 件）。もう一度🎲を押してください。');
   }
 
   function run(){
@@ -396,18 +417,22 @@
     var p = buildFillPrompt(fields);
     if (!p){
       setStatus('空欄はありません。🎲は「空いている欄」だけを埋めます。');
+      b37res('none', '空欄はありません（変更 0 件）。🎲は設定の空いている欄だけを埋めます。');
       return;
     }
     var st = getS(), cfg = (st && st.cfg) || {};
     if (cfg.provider !== 'openrouter' || !cfg.orKey){
-      if (f855Off()){ legacy(); return; }
+      var s0 = b37snap();
+      if (f855Off()){ legacy(); b37legacy(s0, 'AI生成は使えません。'); return; }
       legacy();                                                   /* ★fix855: 雛形挿入は従来どおり */
       setStatus((!cfg.orKey ? 'AI生成は使えません(OpenRouter APIキーが未設定)。'
                             : 'AI生成は OpenRouter 選択時のみ利用できます。') + F855_TAIL, true);
+      b37legacy(s0, (!cfg.orKey ? 'AI生成は使えません（APIキーが未設定）。' : 'AI生成は OpenRouter 選択時のみ利用できます。'));
       return;
     }
 
     setStatus('🎲 書いた内容から、空いている欄をAIが埋めています…（数秒）');
+    b37res('busy', '空いている欄をAIが埋めています…（数秒）');
     request(p, function(err, txt){
       if (err) return onFail(fields, err && err.message);
       var json = parseFillJson(txt);
@@ -418,6 +443,7 @@
       if (!rep.applied.length) return onFail(fields, 'nothing-applied');
       try { console.log(TAG, 'applied', rep.applied.length, rep.applied.join(','), '| protected', rep.protected_.length); } catch(e){}
       setStatus('🎲 空いていた' + rep.applied.length + '件を、書いた内容に合わせて埋めました。内容を確認して「保存してゲーム開始」を押してください。');
+      b37res('ok', rep.applied.length + ' 項目を補完しました。内容を確認して「保存してゲーム開始」を押してください。');
     });
   }
 
@@ -479,6 +505,6 @@
     off: off,
     SCALAR_DEFS: SCALAR_DEFS,
     NPC_DEFS: NPC_DEFS,
-    _state: function(){ return { armed: !!WRAPPER, busy: BUSY, hasOrig: typeof ORIG === 'function' }; }
+    _state: function(){ return { armed: !!WRAPPER, busy: BUSY, hasOrig: typeof ORIG === 'function', b37: B37_LAST }; }
   };
 })();

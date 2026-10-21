@@ -256,6 +256,8 @@
           schedule(); });
       };
       efB.onclick = function(ev){ ev.stopPropagation(); if (efB.disabled) return;
+        /* ★B37-A: 「外見を設定」を開いていて、入力欄が確定済みの外見と違うなら、その内容を確かめて確定してから作る（黙って古い外見・空の外見で作らない） */
+        try { if (tools && tools.style.display !== 'none' && typeof tools.__b37needs === 'function' && tools.__b37needs()){ tools.__b37guard('ef'); return; } } catch(eG){}
         var okc = false; try { okc = window.confirm('「' + name + '」の最初の絵を作ります。\n外見の情報がある場合だけ画像生成を1回使います。よろしいですか？'); } catch(e1){}
         if (!okc) return; runEF(); };
       box.appendChild(efB);
@@ -264,7 +266,7 @@
        「新しいデザインを生成（候補のみ）」 (newDraw: explicit_new_draw, candidate only, never adopted). Shown for every registered entry. */
     var tools = null;
     function showProfileTools(open){
-      if (tools){ tools.style.display = open ? '' : 'none'; return; }
+      if (tools){ tools.style.display = open ? '' : 'none'; if (open && typeof tools.__b37refresh === 'function') { try { tools.__b37refresh(); } catch(eR){} } return; }
       if (!open) return;
       tools = document.createElement('div'); tools.setAttribute('data-av2-ui', 'profile'); tools.style.cssText = 'margin-top:6px;padding:6px;border:1px solid #444;border-radius:6px;background:#15151c;';
       tools.onclick = function(ev){ ev.stopPropagation(); };
@@ -357,6 +359,128 @@
         });
       };
       tools.appendChild(ndB); tools.appendChild(pmsg);
+      /* ★★B37-A (GPT #127-HF A「未確定の外見で黙って描かない」・kill: localStorage v292DfixB37aOff='1' → 上の従来の 3 ボタンのまま)
+         ・「確定して新しい候補を作る」（全キャラ・絵があるキャラにも出す）/「確定してアイコンを作る」（絵が無いキャラ）/ カードの「最初の絵を作る」:
+           入力欄（外見の文・性別）がサーバーで確定済みの外見と違う（＝未確定の下書き・未確定の性別・確定済みと別の内容）ときは、すぐには描かない。
+           使う外見の文を（setProfile が保存するのと同じ整形で）そのまま見せて確かめ、setProfile が成功してから、物語・キャラ・アカウントが
+           変わっていないことを確かめ直して、newDraw / ensureFirst を 1 回だけ呼ぶ。setProfile が失敗したら画像の呼び出しは 0。
+         ・外見なしで描く（従来の explicit_new_draw だけの候補）は「外見・性別を指定せずAIにまかせる」を明示して選んだときだけ。確定済みの
+           外見があるキャラには出さない（Worker は profile があれば必ずそれで描くので、「外見なし」にはならない）。
+         ・Worker の意味は変えない: 絵の材料はサーバーの profile だけ。cast.gender / 下書きは、本人がここで確定したときだけ profile に入る。
+         ・既にある絵: 新しい候補は候補のまま（自動で採用しない）。採用中の絵（pointer）は変えない。 */
+      var b37a = (function(){ try { return localStorage.getItem('v292DfixB37aOff') !== '1'; } catch(eB){ return true; } })();
+      if (b37a){
+        var B37_COST = 0.0154;
+        var acct37 = function(){ try { var Fm = window.__v292Dfix893; var me = (Fm && typeof Fm.me === 'function') ? Fm.me() : null; return (me && me.accountId) ? String(me.accountId) : null; } catch(eA){ return null; } };
+        var draftNow = function(){ var A0 = A(); var inp0 = { gender: gsel.value, appearance: ta.value };
+          if (A0 && typeof A0.previewProfile === 'function'){ try { var pv = A0.previewProfile(inp0); if (pv) return { appearance: String(pv.appearance || ''), gender: String(pv.gender || '') }; } catch(eP){} }
+          return { appearance: String(ta.value || '').replace(/\s+/g, ' ').trim(), gender: (gsel.value === '女性' || gsel.value === '男性') ? gsel.value : '' }; };
+        var confirmedNow = function(){ var nw = A().suggestAppearance(e.id) || {}; var cc = nw.current || {}; return { appearance: String(cc.appearance || ''), gender: String(cc.gender || '') }; };
+        var sameP = function(a, b){ return a.appearance === b.appearance && a.gender === b.gender; };
+        var GL = function(g){ return g || '未設定（性別は絵に指定しない）'; };
+        var lockB = [];
+        var lockAll = function(on){ for (var i = 0; i < lockB.length; i++) if (lockB[i]) lockB[i].disabled = !!on; };
+        var askEl = null;
+        var closeAsk = function(){ if (askEl && askEl.parentNode) askEl.parentNode.removeChild(askEl); askEl = null; lockAll(false); };
+        /* 画面内の確認（window.confirm は使わない: 使う文をそのまま見せる） */
+        var ask = function(o, cb){
+          closeAsk(); lockAll(true);
+          askEl = document.createElement('div'); askEl.setAttribute('data-av2-prof', 'ask'); askEl.setAttribute('role', 'dialog');
+          askEl.style.cssText = 'margin-top:8px;padding:8px;border:1px solid #806040;border-radius:6px;background:#1d1a14;color:#eee;font-size:12px;line-height:1.6;';
+          askEl.onclick = function(ev){ ev.stopPropagation(); };
+          var hd = document.createElement('div'); hd.style.cssText = 'font-weight:bold;margin-bottom:4px;'; hd.textContent = o.title; askEl.appendChild(hd);
+          (o.rows || []).forEach(function(r){ var rw = document.createElement('div'); rw.setAttribute('data-av2-ask-row', r[0]); rw.style.cssText = 'margin:2px 0;';
+            var lb = document.createElement('span'); lb.style.cssText = 'color:#aaa;margin-right:6px;'; lb.textContent = r[0] + ':'; rw.appendChild(lb);
+            var vv = document.createElement('span'); vv.setAttribute('data-av2-ask-val', r[0]); vv.style.cssText = 'white-space:pre-wrap;color:#fff;'; vv.textContent = r[1]; rw.appendChild(vv); askEl.appendChild(rw); });
+          if (o.note){ var nt = document.createElement('div'); nt.setAttribute('data-av2-ask-note', '1'); nt.style.cssText = 'margin-top:4px;color:#e0c080;'; nt.textContent = o.note; askEl.appendChild(nt); }
+          var okA = mkBtn(o.ok, '#3a6a5a'); okA.setAttribute('data-av2-ask', 'ok');
+          var noA = mkBtn('やめる', '#444'); noA.setAttribute('data-av2-ask', 'cancel');
+          try { if (window.matchMedia && window.matchMedia('(max-width: 980px)').matches){ [okA, noA].forEach(function(bb){ bb.style.minHeight = '44px'; bb.style.padding = '8px 14px'; bb.style.fontSize = '13px'; }); } } catch(eM){}   /* ★GPT #127-HS: 狭い画面では押しやすく */
+          okA.onclick = function(ev){ ev.stopPropagation(); closeAsk(); cb(true); };
+          noA.onclick = function(ev){ ev.stopPropagation(); closeAsk(); cb(false); };
+          askEl.appendChild(okA); askEl.appendChild(noA);
+          tools.appendChild(askEl); try { askEl.scrollIntoView({ block: 'nearest' }); } catch(eS){}
+        };
+        var frB = null;
+        var refreshFree = function(){ if (!frB) return; var cc = confirmedNow(); frB.style.display = cc.appearance ? 'none' : ''; };
+        /* kind: 'nd' = 新しい候補（newDraw）/ 'ef' = 最初の絵（ensureFirst） */
+        var guarded = function(kind){
+          var d = draftNow(), c = confirmedNow();
+          if (!d.appearance){
+            pmsg.textContent = c.appearance
+              ? '外見の欄が空です。絵に使う外見の文を入力して確定してください（絵は作っていません）'
+              : (d.gender ? '性別だけでは確定できません。外見の文も入力してください（絵は作っていません）'
+                          : '外見の文を入力して確定してください。外見なしで作るときは「外見・性別を指定せずAIにまかせる」を選んでください（絵は作っていません）');
+            note({ kind: 'B37_GUARD_EMPTY', what: kind, gender: !!d.gender, confirmed: !!c.appearance }); return;
+          }
+          var needSet = !sameP(d, c);
+          var what = kind === 'nd' ? '新しい候補を1枚作ります（候補を作るだけで、採用はしません。今の絵はそのままです）' : '最初の絵を1枚作ります';
+          note({ kind: 'B37_ASK', what: kind, needSet: needSet });
+          ask({ title: '「' + name + '」の絵に使う外見', rows: [['性別', GL(d.gender)], ['外見', d.appearance]],
+                note: (needSet ? 'この外見はまだ確定していません。この内容で確定（保存）してから、' : '確定済みのこの外見で、') + what + '。画像生成を1回使います（目安 $' + B37_COST + '）。',
+                ok: needSet ? (kind === 'nd' ? '確定して候補を作る' : '確定して絵を作る') : (kind === 'nd' ? 'この外見で候補を作る' : 'この外見で絵を作る') }, function(yes){
+            if (!yes){ note({ kind: 'B37_ASK_CANCEL', what: kind }); return; }
+            var sid0 = m.story_id, cid0 = e.id, acc0 = acct37();
+            var go = function(res){
+              /* 物語・キャラ・アカウントを確かめ直す（setProfile の後・画像の呼び出しの前） */
+              var m2 = model(); var e2 = m2 ? entById(m2, cid0) : null; var acc1 = acct37();
+              if (!m2 || m2.story_id !== sid0 || !e2 || e2.status === 'DELETED' || !acc0 || acc1 !== acc0){ pmsg.textContent = '物語・キャラクター・アカウントを確かめられなかったので、絵は作っていません'; note({ kind: 'B37_RECHECK_FAIL', what: kind }); afterSidePort(res, pmsg); return; }
+              if (!sameP(confirmedNow(), d)){ pmsg.textContent = '確定した外見をこの端末で確かめられなかったので、絵は作っていません。ページを再読み込みしてください'; note({ kind: 'B37_RECHECK_PROFILE', what: kind }); afterSidePort(res, pmsg); return; }
+              lockAll(true); pmsg.textContent = kind === 'nd' ? '候補を作っています…' : '絵を作っています…';
+              if (kind === 'nd'){
+                A().newDraw(cid0, { ownerExplicit: true }, function(r2){
+                  note({ kind: 'UI_NEW_DRAW', b37: 1, ok: !!(r2 && r2.ok), code: r2 && r2.code, calls: r2 && r2.calls, grounded: r2 && r2.grounded });
+                  lockAll(false); pmsg.textContent = (r2 && r2.ok) ? MSG.CANDIDATE_CREATED : msgFor(r2); pmsg.title = (r2 && r2.code) || '';
+                  if (r2 && r2.ok) msg.textContent = MSG.CANDIDATE_CREATED;                       // 採用しない・pointer はそのまま
+                  refreshFree(); afterSidePort(res, pmsg);
+                });
+              } else {
+                A().ensureFirst(cid0, {}, function(r2){
+                  note({ kind: 'UI_ENSURE_FIRST', b37: 1, ok: !!(r2 && r2.ok), code: r2 && r2.code, calls: r2 && r2.calls });
+                  lockAll(false); pmsg.textContent = (r2 && r2.ok) ? (MSG[r2.code] || MSG.ok_first) : msgFor(r2); pmsg.title = (r2 && r2.code) || ''; msg.textContent = pmsg.textContent;
+                  if (r2 && r2.ok){ listed = null; card.__av2Key = null; if (oneB) oneB.style.display = 'none'; var efB4 = card.querySelector('[data-av2-ef]'); if (efB4) efB4.style.display = 'none'; }
+                  refreshFree(); schedule(); afterSidePort(res, pmsg);
+                });
+              }
+            };
+            if (!needSet) return go(null);
+            lockAll(true); pmsg.textContent = '外見を保存しています…';
+            A().setProfile(cid0, { gender: d.gender, appearance: d.appearance, ownerConfirmed: true }, function(res){
+              note({ kind: 'UI_SET_PROFILE', b37: 1, what: kind, ok: !!(res && res.ok), code: res && res.code });
+              lockAll(false);
+              if (!(res && res.ok)){ pmsg.textContent = msgFor(res) + '（絵は作っていません）'; pmsg.title = (res && res.code) || ''; afterSidePort(res, pmsg); return; }   // 保存できない → 画像の呼び出し 0
+              msg.textContent = MSG.ok_profile; go(res);
+            });
+          });
+        };
+        tools.__b37needs = function(){ var d = draftNow(); return !!d.appearance && !sameP(d, confirmedNow()); };
+        tools.__b37guard = guarded;
+        tools.__b37refresh = refreshFree;
+        ndB.textContent = '確定して新しい候補を作る';
+        ndB.onclick = function(ev){ ev.stopPropagation(); if (ndB.disabled) return; guarded('nd'); };
+        if (oneB) oneB.onclick = function(ev){ ev.stopPropagation(); if (oneB.disabled) return; guarded('ef'); };
+        frB = mkBtn('外見・性別を指定せずAIにまかせる', '#4a3a3a'); frB.setAttribute('data-av2-free', '1');
+        frB.onclick = function(ev){ ev.stopPropagation(); if (frB.disabled) return;
+          if (confirmedNow().appearance){ pmsg.textContent = 'このキャラクターには確定済みの外見があります。その外見で作るときは「確定して新しい候補を作る」を使ってください（絵は作っていません）'; refreshFree(); return; }
+          ask({ title: '「' + name + '」を外見・性別を指定せずに作る', rows: [],
+                note: '外見と性別の情報を使わずに、AIが考えたデザインの候補を1枚作ります。性別・年齢・髪型などが設定と違う絵になることがあります。候補を作るだけで、採用はしません。画像生成を1回使います（目安 $' + B37_COST + '）。',
+                ok: 'AIにまかせて候補を作る' }, function(yes){
+            if (!yes) return;
+            if (confirmedNow().appearance){ pmsg.textContent = 'このキャラクターには確定済みの外見があります（絵は作っていません）'; refreshFree(); return; }
+            lockAll(true); pmsg.textContent = '候補を作っています…';
+            A().newDraw(e.id, { ownerExplicit: true }, function(r3){
+              note({ kind: 'UI_NEW_DRAW', b37: 1, free: 1, ok: !!(r3 && r3.ok), code: r3 && r3.code, calls: r3 && r3.calls, grounded: r3 && r3.grounded });
+              lockAll(false); pmsg.textContent = (r3 && r3.ok) ? MSG.CANDIDATE_CREATED : msgFor(r3); pmsg.title = (r3 && r3.code) || '';
+              if (r3 && r3.ok) msg.textContent = MSG.CANDIDATE_CREATED;
+            });
+          });
+        };
+        tools.insertBefore(frB, pmsg);
+        lockB = [okB, oneB || null, ndB, frB];
+        var okOrig = okB.onclick;
+        okB.onclick = function(ev){ var r0 = okOrig ? okOrig.call(this, ev) : undefined; setTimeout(refreshFree, 4000); return r0; };
+        refreshFree();
+      }
       box.appendChild(tools);
     }
     var tgB = mkBtn('外見を設定', '#3a4a5a'); tgB.setAttribute('data-av2-prof', 'toggle');
