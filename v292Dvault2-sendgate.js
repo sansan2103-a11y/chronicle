@@ -178,8 +178,9 @@
   /* send decision. HOME / unresolved story id: only "no vault"; a story id: visible now */
   function decide(ident, a) {
     var ok = !!(a && a.answered) && ((ident === '__none__' || ident == null) ? a.hasVault === false : a.visible === true);
-    if (ok) st.allowed++; else {
+    if (ok) { st.allowed++; st.expiredHint = false; } else {
       st.denied++;
+      if (a && a.answered && a.hasVault === true && a.visible === false && ident != null && ident !== '__none__') st.expiredHint = true;   /* ★LaneE VAULT-UX-1 */
       if (a && a.answered && a.hasVault === true) kill(ident === '__none__' ? 'home-vault-account' : ident == null ? 'unresolved-story-vault-account' : 'probe-negative', ident);
     }
     return ok;
@@ -192,6 +193,7 @@
     return r.clone().json().then(function (j) {
       if (j && j.vault2Send === true) {
         if (j.errorCode === 'STORY_UNAVAILABLE') kill('proxy-STORY_UNAVAILABLE', sid);
+        st.expiredHint = true;   /* ★LaneE VAULT-UX-1: Worker が vault2Send の 409/503 で断った */
         return refusal('proxy-' + j.errorCode);          // 503 (state unknown) is also answered as a definitive 409
       }
       return r;
@@ -243,7 +245,7 @@
     if (pp !== null && SEND_PATHS[pp] && typeof body === 'string') {
       if (shut()) return xhrFail(xhr, 'shut-xhr-proxy');
       var ident = sendIdentity();
-      try { xhr.addEventListener('load', function () { try { if ((xhr.status === 409 || xhr.status === 503) && /"vault2Send":true/.test(xhr.responseText || '')) { if (/STORY_UNAVAILABLE/.test(xhr.responseText)) kill('xhr-proxy-409', ident); markBlocked('xhr-proxy-' + xhr.status); } } catch (e) {} }); } catch (e) {}
+      try { xhr.addEventListener('load', function () { try { if ((xhr.status === 409 || xhr.status === 503) && /"vault2Send":true/.test(xhr.responseText || '')) { if (/STORY_UNAVAILABLE/.test(xhr.responseText)) kill('xhr-proxy-409', ident); st.expiredHint = true; markBlocked('xhr-proxy-' + xhr.status); } } catch (e) {} }); } catch (e) {}
       if (ident === null) {
         probe(null).then(function (a) { if (decide(null, a)) XSend.call(xhr, withStoryId(body, undefined)); else xhrFail(xhr, 'xhr-unresolved-story-id'); });
         return;
@@ -367,12 +369,18 @@
   /* ---- K6 input retention (story documents): wrap G.submit / G.cont / G.retry like fix892 ---- */
   var NOTICE_ID = 'v292Dvault2-notice';
   var COPY = 'いまは送信できませんでした。入力した文はそのまま残しています。';
+  /* ★LaneE VAULT-UX-1: 「金庫の解錠が切れた」と分かるときだけ案内を変える（文言だけ・送信の許可/拒否の判定は 1 byte も変えない）。
+     分かる = probe が答えていて 金庫あり・この物語は見せてはいけない（a.answered && a.hasVault && !a.visible）／ Worker が vault2Send の 409/503 で断った。
+     答えが無い・通信不可は従来の文言のまま。 */
+  var COPY_EXPIRED = '金庫の解錠が切れました。ホームで解錠し直すと続けられます。入力した文は残しています。';
+  function curCopy() { return st.expiredHint ? COPY_EXPIRED : COPY; }
   function notice() {
+    var COPYNOW = curCopy();
     try {
       var n = document.getElementById(NOTICE_ID); if (n) n.parentNode.removeChild(n);
       var d = document.createElement('div'); d.id = NOTICE_ID; setAttr.call(d, 'role', 'status');
       setAttr.call(d, 'style', 'position:fixed;left:0;right:0;bottom:0;z-index:99997;background:#2b3a4a;color:#e3efff;font-size:13px;line-height:1.6;padding:10px 12px;text-align:center;font-family:system-ui,sans-serif;');
-      d.appendChild(document.createTextNode(COPY));
+      d.appendChild(document.createTextNode(COPYNOW));
       (document.body || document.documentElement).appendChild(d);
       var rm = function () { try { if (d.parentNode) d.parentNode.removeChild(d); } catch (e) {} };
       setTimeout(rm, 20000);
@@ -404,7 +412,7 @@
           st.inSubmit--; note('submit-exit', name + ':' + (st.blockSeq - seq0) + ':' + (inp ? JSON.stringify(String(inp.value).slice(0, 20)) : 'noinp'));
           if (st.blockSeq !== seq0) {
             try { if (inp && snap != null && String(inp.value).trim() === '') { inp.value = snap; st.restored++; } } catch (e) {}
-            try { var ui = getUI(); if (ui && typeof ui.setLoading === 'function') ui.setLoading(false); if (ui && typeof ui.setStatus === 'function') ui.setStatus(COPY, true); } catch (e) {}
+            try { var ui = getUI(); if (ui && typeof ui.setLoading === 'function') ui.setLoading(false); if (ui && typeof ui.setStatus === 'function') ui.setStatus(curCopy(), true); } catch (e) {}
             notice();
           }
           if (!st.inSubmit) st.latched = false;
@@ -425,5 +433,5 @@
     var nb = 0; (function boot() { nb++; try { if (wrapG()) return; } catch (e) {} if (nb < 400) setTimeout(boot, nb < 120 ? 100 : 1000); })();
   }
 
-  window.__v292Dvault2Gate = { status: function () { return { mode: V2_CLIENT_MODE, killed: st.killed, latched: st.latched, probes: st.probes, allowed: st.allowed, denied: st.denied, heldImgs: st.heldImgs, heldCss: st.heldCss, cssReapplied: st.cssReapplied, blockSeq: st.blockSeq, restored: st.restored, wrapped: wrapped, gen: gen, acctKnown: acct.doc !== null, acctAnon: acct.anon, acctMismatch: acct.mismatch, build: 'SG-H2b', doc: docKind(), storyId: storyId(), log: st.log.slice(-40) }; }, kill: kill };
+  window.__v292Dvault2Gate = { status: function () { return { mode: V2_CLIENT_MODE, expiredHint: !!st.expiredHint, killed: st.killed, latched: st.latched, probes: st.probes, allowed: st.allowed, denied: st.denied, heldImgs: st.heldImgs, heldCss: st.heldCss, cssReapplied: st.cssReapplied, blockSeq: st.blockSeq, restored: st.restored, wrapped: wrapped, gen: gen, acctKnown: acct.doc !== null, acctAnon: acct.anon, acctMismatch: acct.mismatch, build: 'SG-H2b', doc: docKind(), storyId: storyId(), log: st.log.slice(-40) }; }, kill: kill };
 })();

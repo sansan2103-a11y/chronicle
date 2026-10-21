@@ -565,7 +565,29 @@
   // 発話の実体は地の文に書かれるが、<say>/「」は独立行になりがちで、動作プロセは
   // 隣の行にある。よって「引用の直後(次行)のプロセを次の引用/タグまで跨いで拾い、
   // 無ければ直前のプロセ」を beat とし、最初の1文に整える。
-  function findBeat(narr, speaker, text){
+  /* ★SP1-A（kill: localStorage v292DfixSP1Off='1'）: 補足描写(beat)の行動者が話者と別人なら付けない。
+     同文引用は「n 番目の出現」で引く（enhanceBeats が同文カードの序数を渡す）。 */
+  function sp1Off(){ try { return localStorage.getItem('v292DfixSP1Off') === '1'; } catch(e){ return false; } }
+  function sp1Toks(n, all){
+    var f = String(n||'').replace(/[\s\u3000]/g,''), o = [f];
+    String(n||'').split(/[\s\u3000・]+/).forEach(function(p){ if (p.length >= 2) o.push(p); });
+    if (/^[一-鿿]{3,4}$/.test(f)){ o.push(f.slice(-2)); o.push(f.slice(0,2)); }
+    return o.filter(function(t){ return t.length >= 2 && !all.some(function(m){ var g = String(m).replace(/[\s\u3000]/g,''); return g !== f && g.indexOf(t) >= 0; }); });
+  }
+  function sp1Actor(beat, speaker){     // beat の主語(Xが/Xは)が話者以外の登録人物なら その名前
+    var all = castNameList(), sp = String(speaker||'').replace(/[\s\u3000]/g,'');
+    var spT = sp ? sp1Toks(speaker, all).concat([sp]) : [];
+    for (var i = 0; i < all.length; i++){
+      var ts = sp1Toks(all[i], all);
+      for (var j = 0; j < ts.length; j++){
+        if (spT.indexOf(ts[j]) >= 0) continue;
+        var p = beat.indexOf(ts[j]);
+        if (p >= 0 && /^[がはも]/.test(beat.slice(p + ts[j].length))) return all[i];
+      }
+    }
+    return '';
+  }
+  function findBeat(narr, speaker, text, nth){
     if (!narr || !text) return '';
     var QO = '「『〝', QC = '」』〟';
     var idx = -1, needleLen = 0;
@@ -577,6 +599,7 @@
       }
     }
     if (idx === -1) return '';
+    if (nth > 0 && !sp1Off()){ var _nd = narr.substr(idx, needleLen); for (var _k = 0; _k < nth; _k++){ idx = narr.indexOf(_nd, idx + 1); if (idx < 0) return ''; } }   // SP1-A: n番目の出現
     // 残存タグ・引用スパン・話者名を除去し、前後の余分な記号を整える
     function clean(str){
       if (!str) return '';
@@ -598,19 +621,24 @@
     }
     // 直前のプロセ(前の引用/タグ以降)を拾う
     function bwd(from){
-      var s = narr.slice(Math.max(0, from - 140), from);
+      var st = Math.max(0, from - 140), s = narr.slice(st, from);
       var last = -1, mm, re = /[」』〟]|<\/say>|<\s*\/\s*>/g;
       while ((mm = re.exec(s))) last = mm.index + mm[0].length;
-      return last !== -1 ? s.slice(last) : s;
+      s = last !== -1 ? s.slice(last) : s;
+      if (last === -1 && st > 0 && !sp1Off() && !/[。！？\n」』〟]/.test(narr.charAt(st - 1))){ var pe = s.search(/[。！？\n]/); s = pe >= 0 ? s.slice(pe + 1) : ''; }   // SP1-A2: 窓の頭が文の途中なら その断片は捨てる
+      return s;
     }
-    var beat = clean(fwd(idx + needleLen));        // 発話の「後」の反応プロセを優先
-    if (beat.length < 2) beat = clean(bwd(idx));   // 無ければ「前」のプロセ
+    var beat = clean(fwd(idx + needleLen)), _back = false;        // 発話の「後」の反応プロセを優先
+    if (beat.length < 2){ beat = clean(bwd(idx)); _back = true; }   // 無ければ「前」のプロセ
     if (beat.length < 2) return '';
+    var _ctx2 = beat;   // SP1-A2: 直前プロセは「引用に最も近い文」を採る（窓の先頭＝最も遠い文ではない）。行為者判定は直近2文で見る
+    if (_back && !sp1Off()){ var _ss = beat.match(/[^。！？]+[。！？]?/g) || [beat]; _ss = _ss.filter(function(x){ return x.length; }); _ctx2 = _ss.slice(-2).join(''); var _nr = _ss[_ss.length - 1]; if (_nr.length < 6 && _ss.length > 1) _nr = _ss[_ss.length - 2] + _nr; beat = _nr; }
     // 最初の文(。！？)で切って1文の beat にする
     var re2 = /[。！？]/g, m2, cut = -1;
     while ((m2 = re2.exec(beat))){ if (m2.index + 1 >= 10){ cut = m2.index + 1; break; } cut = m2.index + 1; }
     if (cut !== -1 && cut >= 6) beat = beat.slice(0, cut);
     if (beat.length > 42) beat = beat.slice(0, 42) + '…';
+    if (!sp1Off() && (sp1Actor(beat, speaker) || sp1Actor((_back ? _ctx2 : beat).replace(/の(手|腕|指|肩|声|背|瞳|目|唇|髪)(?=が|は)/g, ''), speaker))) return '';   // SP1-A: 別人の行動はカードに付けない（本文には残る）
     return beat;
   }
 
@@ -642,7 +670,8 @@
         var tx = (textEl.textContent || '').trim();
         c.setAttribute('data-beat-checked', '1');
         if (!tx) continue;
-        var beat = findBeat(allNarr, nm, tx);
+        var _nth = 0; if (!sp1Off()){ for (var _p = 0; _p < i; _p++){ var _t = cards[_p].querySelector('.dlg-text'); if (_t && (_t.textContent || '').trim() === tx) _nth++; } }   // SP1-A: 同文カードの序数
+        var beat = findBeat(allNarr, nm, tx, _nth);
         if (beat){
           var bd = document.createElement('div');
           bd.className = 'dlg-beat';
@@ -1315,7 +1344,7 @@
         //   一切使わない。これで状態描写・メタが構造的に会話ログに入らない。
         var ds;
         if (t && Array.isArray(t._convSays)){
-          ds = t._convSays.map(function(c){ return { speaker: String(c.who||'').trim(), text: String(c.say||'').trim(), isHero: false }; })
+          ds = t._convSays.map(function(c, _ix){ return { speaker: String(c.who||'').trim(), text: String(c.say||'').trim(), isHero: false, _ci: _ix }; })   /* EDIT-01: data-ci 用に _convSays の添字を運ぶ */
                           .filter(function(d){ return d.text; });
         } else {
           ds = extractFromTurn(t);
@@ -1344,6 +1373,7 @@
           if (existing[k]) continue;
           var isHeroFlag = !!d.isHero || (sp && sp === hero);
           var card = buildCard(sp, d.text, isHeroFlag);
+          if (typeof d._ci === 'number' && window.__v292DfixEDIT01 && typeof window.__v292DfixEDIT01.enabled === 'function' && window.__v292DfixEDIT01.enabled()){ try { card.setAttribute('data-ti', String(i)); card.setAttribute('data-ci', String(d._ci)); if (window.__v292DfixEDIT01 && typeof window.__v292DfixEDIT01.decorate === 'function') window.__v292DfixEDIT01.decorate(card); } catch(_e01){} }   /* EDIT-01: ✕ 手動削除の宛先(ターン番号/_convSays 添字)。kill: v292DfixEdit01Off */
           stream.appendChild(card);
           existing[k] = true;
           added++;

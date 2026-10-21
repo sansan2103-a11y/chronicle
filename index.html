@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<script src="v292Dvault2-sendgate.js?cb=sgh2b"></script>
+<script src="v292Dvault2-sendgate.js?cb=20261021-laneE-a"></script>
 <script src="v292Dvault2-copygate.js?cb=20261011-ab8"></script>
 <script src="v292Dfix950-card-delivery-probe.js?cb=20261014-f950r2"></script><!-- v292Dfix950: card/memory delivery probe (record-only; request body unchanged). OFF=localStorage v292Dfix950Off=1 -->
 <script src="v292Dfix953-card-canary-gate.js?cb=20261015-bundle1-cardA-f957on"></script><!-- v292Dfix953: card canary gate (fix952/fix951/fix444g run ONLY when localStorage v292Dfix953On=1 AND this document story id is in the baked allowlist; otherwise byte-identical to production) -->
@@ -41,7 +41,7 @@
        applyRequestPolicy() を 1 回呼ぶだけ（各所に merge ロジックを複製しない）。
      ★この block は定義と option 同値再設定 1 回だけ。localStorage 書込 0 / 新永続 key 0 /
        fetch・XHR・parsePlan の wrapper 追加 0（Q119 topology 不触）。sampling(fix84) 不触。 -->
-<script src="v292Dsmrc1-model-registry.js?cb=20260926-sp20m"></script>
+<script src="v292Dsmrc1-model-registry.js?cb=20261022-bundle40-b"></script>
 <script>
 /* ★dsmon-1 / MODEL_UPDATE_MONITOR v1（②C1 lane 裁定・最新 action semantics 反映）
    ・OpenRouter の **公開・無認証** catalog を読むだけの read-only モニタ
@@ -282,7 +282,7 @@
      ★kill = localStorage['v292Dfix889Off']='1' は **UI だけ**を消す。絞り込みと扉は止まらない。 -->
 <script src="v292Dfix889-secret-vault.js?cb=20260928-ac9"></script>
 <!-- ★av2 (GPT 904 C1): Asset v2 client data plane. save core (fix697/fix705/fix743) が呼ぶ純関数 + registrar。kill = localStorage v292Dav2Off=1 -->
-<script src="v292Dav2-data.js?cb=20261021-bundle37-a"></script>
+<script src="v292Dav2-data.js?cb=20261021-laneE-a"></script>
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
 <script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
 <script src="v292Dfix705-canonical-read-gate.js?cb=20261019-bundle33-b"></script>
@@ -335,7 +335,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261021-bundle38-b';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261022-bundle40-b';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4270,7 +4270,9 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix135-longmem.js?cb=20260927-ac3"></script>
 <script src="v292Dfix138-continue.js?cb=20260929-ac18"></script>
 <script src="v292Dfix145-charlist.js?cb=20261019-bundle31-a"></script>
-<script src="v292Dfix777-icon-lightbox.js?cb=v292Dfix777"></script>
+<script src="v292Dfix777-icon-lightbox.js?cb=20261021-laneE-a"></script>
+<script src="v292DfixLE3-iphone-nav.js?cb=20261021-laneE-a"></script>
+<script src="v292DfixLE4-relock-follow.js?cb=20261022-bundle40-b"></script>
 <!-- v292Dfix226(P1): fix52(可読性v1)はfix53(包括v2)に内包されるため退役。問題があれば下行のコメントを外す
 <script src="v292Dfix52-readability.js?cb=v292Dfix52"></script> -->
 <script src="v292Dfix53-readability-v2.js?cb=v292Dfix53"></script>
@@ -4290,7 +4292,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=20260912-q119s4"></script>
-  <script src="v292Dfix66-renderhook-repair.js?cb=20261009-bh1"></script>
+  <script src="v292Dfix66-renderhook-repair.js?cb=20261022-bundle40-b"></script>
+  <script src="v292DfixEDIT01-edit-reconcile.js?cb=20261022-bundle40-b"></script><!-- v292DfixEDIT01: 本文を編集したら会話ログを本文に合わせる(フェーズ1) + カード✕。OFF=localStorage v292DfixEdit01Off=1 -->
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
     <!-- v292Dfix189c: fix70(dialogue-order, 本文ベースの並べ替え)を無効化。fix70bが
@@ -4306,6 +4309,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix76-human-foundation.js?cb=v292Dfix76b"></script>  <script src="v292Dfix77-state-memory.js?cb=20261019-bundle31-a"></script>
   <script src="v292Dfix78-tag-case-normalize.js?cb=20260912-q119s4"></script>
   <script src="v292Dfix79-momentum-anchor.js?cb=v292Dfix79"></script>
+  <script src="v292DfixBF1-reasoning-fallback.js?cb=20261022-bundle40-b"></script>
   <script src="v292Dfix80-gen-gate-retry.js?cb=20260929-ac23"></script>
   <script src="v292Dfix82-injury-reaction-root.js?cb=v292Dfix82"></script>
   <script src="v292Dfix83-name-truncation-repair.js?cb=v292Dfix83"></script>
@@ -4343,7 +4347,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <!-- v292Dfix244: 心理プロファイル入力欄を1つの自由記述に統合(裏の4軸は保持)。OFF=v292PsychMergeOff -->
   <script src="v292Dfix244-psych-merge.js?cb=20261020-bundle35-b"></script>
   <!-- v292Dfix256: 🧠モデル切替セレクタ(cfg.orModel・スロット毎保存)。A/B実測でDS V4 Flash推奨。OFF=v292ModelSelOff -->
-  <script src="v292Dfix256-model-select.js?cb=20260913-dsadm1"></script>
+  <script src="v292Dfix256-model-select.js?cb=20261021-laneE-a"></script>
 <script src="v292Dfix270-topbar-ui.js?cb=20260916-sp3"></script>
 <script src="v292Dfix274-build-flag-guard.js?cb=v292Dfix274"></script>
 <script src="v292Dfix275-settings-tabs.js?cb=v292Dfix275"></script>
@@ -4459,7 +4463,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix388-first-person-speaker.js?cb=20260829-fix748"></script>
 <script src="v292Dfix389-npc-relations.js?cb=v292Dfix389"></script>
 <script src="v292Dfix390-speaker-fullname.js?cb=20260829-fix748"></script>
-<script src="v292Dfix393-restyle-unify.js?cb=20261002-ac36"></script>
+<script src="v292Dfix393-restyle-unify.js?cb=20261021-laneE-a"></script>
 <script src="v292Dfix395-default-darkanime.js?cb=20260901-fix783"></script>
 <script src="v292Dfix398-scream-attribution.js?cb=v292Dfix496"></script>
 <script src="v292Dfix399-cloudsync.js?cb=20261014-iso2b"></script>
@@ -4676,9 +4680,12 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- ★av2 C2 (GPT 911): Asset v2 presentation plane (portrait.list / asset.get / IDB / placeholder / reason display / addBinding / explicit delete UI).
      Acts ONLY on assetSchema-2 documents (canonical-derived; never the local flag). Legacy stories: no DOM work at all.
      kill: localStorage[v292Dav2pOff]=1 (legacy generation guards stay) -->
-<script src="v292Dav2-portrait.js?cb=20261021-bundle37-a"></script>
+<script src="v292Dav2-portrait.js?cb=20261021-laneE-a-lc1-ld1"></script>
+<script src="v292DfixLD1-preset-portrait.js?cb=20261021-laneD-a"></script>
 <!-- ★B37-B (GPT #127-HF B): 新しい S2 物語の「登場人物の最初の絵」案内（任意・止めない・自動は 1 回だけ）。OFF=localStorage v292DfixB37bOff=1 -->
-<script src="v292DfixB37-onboard.js?cb=20261021-bundle37-a"></script>
+<script src="v292DfixB37-onboard.js?cb=20261021-laneE-a-lc1"></script>
+<script src="v292DfixLC1-appearance-proposal.js?cb=20261021-lc1-a"></script>
+<script src="v292DfixLC1-workbench.js?cb=20261021-lc1-a"></script>
 <script src="v292Dav2-migrate-ui.js?cb=20261019-bundle31-a"></script>
 <!-- ★FG-3 (GPT #127-FR): S2 の物語の画風を 3 択（デフォルト／クール／ダーク）に。正本は server の story cfg.artPreset。
      S2 では旧来の「アイコン再生成」「⟳」を隠し、押されても旧経路へ渡さない。旧形式の物語では何もしない。kill: localStorage[v292Dfg3Off]=1 -->

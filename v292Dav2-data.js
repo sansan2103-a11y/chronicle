@@ -597,7 +597,7 @@
       attempt++;
       F.getStoryV2Once(id, function(g, gerr){
         var j = g && g.j;
-        if (gerr || !g || g.status !== 200 || !j || !j.ok || !j.record) return done({ ok: false, code: 'READ_FAIL' });
+        if (gerr || !g || g.status !== 200 || !j || !j.ok || !j.record) return done({ ok: false, code: 'READ_FAIL', http: (g && g.status) || null });
         if (String(j.authority || '') !== 'canonical' || j.deleted) return done({ ok: false, code: 'NOT_CANONICAL_ROW' });   /* ★audit B1: shadow / deleted row → request 0 (same gate as the registrar) */
         var b0 = j.record.body || {};
         /* ★r5 (GPT #31-d): per-op phase. setProfile = PREP + schema2 (the Owner must be able to confirm an appearance before S9b);
@@ -758,11 +758,12 @@
     if (efBusy[characterId] || ndBusy[characterId]) return cb({ ok: false, code: 'IN_PROGRESS' });   /* ★audit P2C I2: not while an explicit new draw runs */
     efBusy[characterId] = true;
     var done = function(o){ delete efBusy[characterId]; note({ kind: 'AV2_ENSURE_FIRST_' + (o.ok ? 'OK' : o.code), id: id, cid: characterId }); cb(o); };
+    var rfHttp = null;   /* ★LaneE: READ_FAIL の原因（HTTP status）を UI の文言用に残すだけ */
     var hasPointer = function(cb2){ F.assetV2Read('portrait.list', { story_id: id }, function(r, err){
-      var j = r && r.j; if (err || !r || r.status !== 200 || !j || !isArr(j.portraits)) return cb2(null);
+      var j = r && r.j; if (err || !r || r.status !== 200 || !j || !isArr(j.portraits)){ rfHttp = (r && r.status) || null; return cb2(null); }
       cb2(j.portraits.some(function(p){ return p && p.character_id === characterId; })); }); };
     hasPointer(function(h0){
-      if (h0 === null) return done({ ok: false, code: 'READ_FAIL' });
+      if (h0 === null) return done({ ok: false, code: 'READ_FAIL', http: rfHttp });
       if (h0 === true) return done({ ok: true, code: 'EXISTS', calls: 0 });
       /* ★av2f client (GPT #31 / #31-b): owner_confirmed_empty_profile is NEVER sent. 「外見情報が無いことの確認」≠「AI に人物を発明させてよい承認」.
          An empty profile answers UNGROUNDED_REQUIRES_EXPLICIT_NEW_DRAW (av2f) — or, against the older Worker, PROFILE_EMPTY_CONFIRM_REQUIRED —
@@ -934,7 +935,7 @@
     var chars = migChars(S, id), rec = loadMig(id);
     F.assetV2Read('portrait.list', { story_id: id }, function(r, err){
       var j = r && r.j;
-      if (err || !r || r.status !== 200 || !j || !isArr(j.portraits)) return cb({ ok: false, code: 'READ_FAIL' });
+      if (err || !r || r.status !== 200 || !j || !isArr(j.portraits)) return cb({ ok: false, code: 'READ_FAIL', http: (r && r.status) || null });
       var ptr = {}; j.portraits.forEach(function(p){ if (p && typeof p.character_id === 'string') ptr[p.character_id] = { asset_id: p.asset_id, rev: p.rev }; });
       var rows = [], i = 0;
       var next = function(){
@@ -1007,7 +1008,7 @@
     efBusy[characterId] = true;
     var done = function(o){ delete efBusy[characterId]; note({ kind: 'AV2_ADOPT_' + (o.ok ? 'OK' : o.code), id: id, cid: characterId }); cb(o); };
     F.assetV2Read('portrait.list', { story_id: id }, function(r, err){                            // expected_rev from a fresh list
-      var j = r && r.j; if (err || !r || r.status !== 200 || !j || !isArr(j.portraits)) return done({ ok: false, code: 'READ_FAIL' });
+      var j = r && r.j; if (err || !r || r.status !== 200 || !j || !isArr(j.portraits)) return done({ ok: false, code: 'READ_FAIL', http: (r && r.status) || null });
       var p = j.portraits.filter(function(x){ return x && x.character_id === characterId; })[0];
       if (p && p.asset_id === assetId) return done({ ok: true, code: 'ALREADY' });
       F.assetV2Write('portrait.adopt', { story_id: id, character_id: characterId, asset_id: assetId, expected_rev: p ? (+p.rev || 0) : 0 }, function(r2, err2){
@@ -1048,10 +1049,10 @@
     var id = g.id, F = g.F;
     if (!migChars(g.S, id).some(function(x){ return x.id === characterId; })) return cb({ ok: false, code: 'UNKNOWN_CHARACTER_ID' });
     F.assetV2Read('portrait.list', { story_id: id }, function(r, err){
-      var j = r && r.j; if (err || !r || r.status !== 200 || !j || !isArr(j.portraits)) return cb({ ok: false, code: 'READ_FAIL' });
+      var j = r && r.j; if (err || !r || r.status !== 200 || !j || !isArr(j.portraits)) return cb({ ok: false, code: 'READ_FAIL', http: (r && r.status) || null });
       var cur = j.portraits.filter(function(x){ return x && x.character_id === characterId; })[0] || null;
       F.assetV2Read('portrait.candidates', { story_id: id, character_id: characterId }, function(r2, e2){
-        var j2 = r2 && r2.j; if (e2 || !r2 || r2.status !== 200 || !j2 || !isArr(j2.items)) return cb({ ok: false, code: 'READ_FAIL' });
+        var j2 = r2 && r2.j; if (e2 || !r2 || r2.status !== 200 || !j2 || !isArr(j2.items)) return cb({ ok: false, code: 'READ_FAIL', http: (r2 && r2.status) || null });
         cb({ ok: true, current: cur ? { asset_id: cur.asset_id, rev: cur.rev } : null,
              items: j2.items.filter(function(it){ return it && typeof it.asset_id === 'string' && (!cur || it.asset_id !== cur.asset_id); }).map(function(it){ return { asset_id: it.asset_id, provenance: it.provenance, derived: it.derived }; }) });
       });
@@ -1135,7 +1136,7 @@
     var done = function(o){ reg.busy = false; note({ kind: 'AV2_SWITCH_' + (o.ok ? 'OK' : o.code), id: id }); cb(o); };
     F.getStoryV2Once(id, function(g, gerr){
       var j = g && g.j;
-      if (gerr || !g || g.status !== 200 || !j || !j.ok || !j.record || String(j.authority || '') !== 'canonical' || j.deleted) return done({ ok: false, code: 'READ_FAIL' });
+      if (gerr || !g || g.status !== 200 || !j || !j.ok || !j.record || String(j.authority || '') !== 'canonical' || j.deleted) return done({ ok: false, code: 'READ_FAIL', http: (g && g.status) || null });
       var b0 = j.record.body || {};
       var m0 = modeOf(b0);
       if (m0 === 'S2') return done({ ok: false, code: 'SERVER_ALREADY_SCHEMA2' });   // another device switched: re-hydrate, never write

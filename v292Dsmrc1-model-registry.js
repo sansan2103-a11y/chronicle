@@ -83,8 +83,15 @@
   function requestPolicy(model){
     if (typeof model !== 'string' || !model) return {};
     if (!Object.prototype.hasOwnProperty.call(REQUEST_POLICY_BY_ID, model)) return {};
-    return _policyCopy(REQUEST_POLICY_BY_ID[model]);
+    var __p = _policyCopy(REQUEST_POLICY_BY_ID[model]);
+    /* ★BF1 (GPT #127-IZ / #127-JF 'first release OFF'): provider Novita は reasoning:{effort:'none'} を（require_parameters でも）無視し、推論で max_tokens を使い切って
+       content 空・finish_reason=length を返す（実 API 実測 2026-10-21: 0/3）。ignore:['novita'] は【opt-in】: localStorage v292DfixBF1On==='1' のときだけ、
+       かつ kill v292DfixBF1Off==='1' が無いときだけ、requestPolicy() の呼び出し時に読んで足す（毎回 fresh array）。storage が無い/読めない = OFF = 表の値そのまま（b38 とバイト同一）。
+       Worker 匿名経路の CHR_BF1_ON='1' と対（client の provider は Worker が破棄する）。 */
+    if (model === PRIMARY_ID && __p && __p.provider && typeof __p.provider === 'object' && __bf1On()) __p.provider.ignore = ['novita'];
+    return __p;
   }
+  function __bf1On(){ try { return typeof localStorage !== 'undefined' && localStorage.getItem('v292DfixBF1On') === '1' && localStorage.getItem('v292DfixBF1Off') !== '1'; } catch (e) { return false; } }
 
   /* ★純粋関数 #2（deep-merge の実装は**この 1 本だけ**。5 経路が同じものを使う）。
      ・policy が {} なら body は 1 byte も変わらない（対象外 model = 完全に無干渉）

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<script src="v292Dvault2-sendgate.js?cb=sgh2b"></script>
+<script src="v292Dvault2-sendgate.js?cb=20261021-laneE-a"></script>
 <script src="v292Dvault2-copygate.js?cb=20261011-ab8"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
@@ -255,7 +255,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261021-bundle38-b';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261022-bundle40-b';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -295,7 +295,7 @@
      ★kill switch は持たない（index の対局 model routing を殺さないため。v292Dfix887Off は sp20m で無効）。
      読み込み位置 = fix654 の直後（素の同期 script）。index.html でも同じ tag が同じ slot に在る。
      匿名経路の実行 model は worker が CHR_PUBLIC_MODEL へ強制する（client の model は捨てられる）。 -->
-<script src="v292Dsmrc1-model-registry.js?cb=20260926-sp20m"></script>
+<script src="v292Dsmrc1-model-registry.js?cb=20261022-bundle40-b"></script>
 <script src="v292Dfix698-mutation-bus.js?cb=20260908-fix837"></script>
 <script src="v292Dfix569-gc-shadow.js?cb=v292Dfix680"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者（fix569 が捕捉済みの native を借りる） -->
@@ -322,7 +322,7 @@
      ・home.html には S / __chronicleGetState が無いので S.save wrap も成立しない（wrapSave は空振りして諦める）。
      ・fix587 より前に置く（fix587 は呼び出し時に参照するので順序依存は無いが、owner を先に載せる）。 -->
 <!-- ★av2 (GPT 904 C1): Asset v2 client data plane. save core (fix697/fix705/fix743) が呼ぶ純関数 + registrar。kill = localStorage v292Dav2Off=1 -->
-<script src="v292Dav2-data.js?cb=20261021-bundle37-a"></script>
+<script src="v292Dav2-data.js?cb=20261021-laneE-a"></script>
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
 <script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
 <script src="v292Dfix697-shadow-story-commit.js?cb=20261021-bundle39-a"></script>
@@ -3335,5 +3335,6 @@
   <div>AI: OpenRouter / DeepSeek ・ 画像: Pollinations</div>
 </footer>
 <script src="v292Dvault2-ui.js?cb=20261021-bundle37-a"></script>
+<script src="v292DfixLE4-relock-follow.js?cb=20261022-bundle40-b"></script>
 </body>
 </html>

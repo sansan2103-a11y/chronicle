@@ -128,7 +128,7 @@
     if (!cast.length){ alert('キャラが見つかりません'); return; }
     if (!opts.skipConfirm){
       var est=(cast.length*0.15).toFixed(1);
-      if (!confirm('登場キャラ '+cast.length+'人 の絵柄を同じ形にそろえて描き直します。\n1人あたり約0.1〜0.2円・合計 約'+est+'円ぶんの生成が発生します。\n\nよろしいですか？')) return;
+      if (!confirm('登場キャラ '+cast.length+'人 の絵柄を同じ形にそろえて描き直します。\n1人ずつ画像を作り直します。\n\nよろしいですか？')) return;
     }
     var btn=document.querySelector('.v292Dfix393-btn');
     var i=0, okN=0, ngN=0;

@@ -69,10 +69,19 @@
             if (_Rd && _Rd.isLegacyPrimary && _Rd.effective && _Rd.isLegacyPrimary(cur)) curDisp = _Rd.effective(cur); } catch(e){}
       sel.value = curDisp || (opts[0] && opts[0].id) || '';   /* v292Dsmrc1 + v292Dsadm1 */
       sel.addEventListener('change', function(){ setModel(sel.value); });
-      tb.appendChild(span);
+      span.id = 'v292-model-wrap'; span.className = 'le1-hide'; span.setAttribute('data-lane-e1', '1');   /* ★LaneE E-1: 既定は全員に非表示（select 自体は DOM に残す＝fix317/fix288/fix370 は従来どおり動く） */
+      tb.appendChild(span); applyVis();
       try{ console.log(TAG, 'injected (current:', cur || '(未設定)', ')'); }catch(_){}
     }catch(e){ setTimeout(inject, 600); }
   }
+  /* ★LaneE E-1（Owner #128）: ゲーム画面のモデル切替は一般プレイヤーに見せない。cfg.orModel・保存値・管理画面（モデル管理/fallback）は 1 byte も変えない。
+     見せるのは「server 由来 entitlement === 'owner'」かつ localStorage v292DfixLE1ShowModel==='1' のときだけ（既定は非表示）。 */
+  (function(){ try { var st = document.createElement('style'); st.id = 'v292DfixLE1-style'; st.textContent = '#v292-model-wrap.le1-hide{display:none !important}'; (document.head || document.documentElement).appendChild(st); } catch(e){} })();
+  function ownerShow(){
+    try { if (localStorage.getItem('v292DfixLE1ShowModel') !== '1') return false; var A = window.__v292Dfix893; var me = (A && typeof A.serverMe === 'function') ? A.serverMe() : null; return !!(me && me.entitlement === 'owner'); } catch(e){ return false; }
+  }
+  function applyVis(){ try { var w = document.getElementById('v292-model-wrap'); if (w) w.classList.toggle('le1-hide', !ownerShow()); } catch(e){} }
+  try { setInterval(applyVis, 3000); window.addEventListener('chr:account-me', applyVis); } catch(e){}
   inject();
 
   window.__v292ModelSel = { setModel: setModel, currentModel: currentModel, MODELS: MODELS, models: MODELS_ };

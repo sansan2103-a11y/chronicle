@@ -117,7 +117,7 @@
     P = null;
   }
   function selected() { return P ? P.rows.filter(function (r) { return !r.has && r.chk; }) : []; }
-  function costText(n) { return '選んだ ' + n + ' 人 × 画像生成 1 回（目安 $' + COST + ' × ' + n + ' = $' + (Math.round(COST * n * 10000) / 10000) + '）'; }
+  function costText(n) { return '選んだ ' + n + ' 人ぶん、1 人 1 枚ずつ作ります（画像生成 ' + n + ' 回）'; }   /* ★LaneE E-3: 金額は出さない（内部の計測・上限は従来どおり） */
   function syncInputs() {
     if (!P) return; var box = document.getElementById(BOX); if (!box) return;
     P.rows.forEach(function (r) { if (r.has) return;
@@ -184,6 +184,8 @@
   }
   function open(source) {
     if (killed()) return { ok: false, code: 'OFF' };
+    /* ★LC1 (GPT #127-IJ 4) open: LC1 が ON のときは、B37 の案内パネルを出さず、👥 の作業欄に任せる（自動の 1 回の印はここで付ける） */
+    try { var lc1o = window.__v292DfixLC1; if (lc1o && typeof lc1o.on === 'function' && lc1o.on()) { var r1o = lc1o.openFromB37(source); if (r1o && r1o.ok && source === 'auto') setFlag(sid(), 'shown'); return r1o; } } catch (eLC1) {}
     var id = sid(); if (!id || doc() !== true) return { ok: false, code: 'NOT_S2' };
     if (P && P.phase === 'run') return { ok: false, code: 'RUNNING' };
     var cs = chars(); if (!cs.length) return { ok: false, code: 'NO_CHARACTERS' };
@@ -215,8 +217,10 @@
   var SET_MSG = { LOCAL_NOT_SYNCED: 'この端末の保存がまだサーバーと揃っていません', REBASE_REQUIRED: 'サーバー側の物語が更新されています', READ_FAIL: 'サーバーに接続できませんでした',
                   NOT_CANONICAL_ROW: 'この物語はサーバー側で編集できない状態です', CONFLICT: 'サーバー側が更新されていました', NOT_APPLIED: '反映を確認できませんでした',
                   EMPTY_APPEARANCE: '外見の文が空です', REGISTRATION_IN_PROGRESS: '保存の確認中でした', UNKNOWN_CHARACTER_ID: 'このキャラクターは登録されていません', CHARACTER_DELETED: '削除済みのキャラクターです' };
+  /* ★LaneE: 読み込み失敗の文言を原因（HTTP status）で分ける（文言だけ） */
+  function RFMSG(res) { var h = res && res.http; if (h === 404) return 'この物語は非表示中か、見つかりません'; if (h === 401) return 'ログインが切れました。もう一度ログインしてください'; if (h === 429 || h === 503) return '混み合っています。少し待ってからお試しください'; return 'サーバーに接続できませんでした'; }
   var EF_MSG = { CREATED: '絵を作りました', CREATED_CONFIRMED: '絵を作りました', EXISTS: 'もう絵がありました（作っていません）',
-                 BUDGET: '今月の画像生成の上限に達しています', RATE_LIMITED: '画像生成が混み合っています', LEDGER_UNHEALTHY: '利用記録の確認中のため、画像の作成を止めています',
+                 BUDGET: '今月の画像の上限に達しました', RATE_LIMITED: '混み合っています。少し待ってからもう一度お試しください', LEDGER_UNHEALTHY: '利用記録の確認中のため、画像の作成を止めています',
                  PROFILE_NOT_ENGLISH: '外見の文の中に、絵の指示に直せない言葉がありました（費用はかかっていません）。髪・目・服・体格などの見た目だけを短く書き直してください',
                  GENERATION_FAILED: '絵を作れませんでした', OUTCOME_UNKNOWN: '結果を確認できませんでした（あとで 👥 キャラ で確かめてください）',
                  UNGROUNDED_REQUIRES_EXPLICIT_NEW_DRAW: '外見の情報が届いていなかったので作っていません', PROFILE_REVIEW_REQUIRED: '外見の確認が必要です', CANDIDATES_PENDING: '候補の絵があります。👥 キャラ の「候補から選ぶ」で選んでください',
@@ -229,7 +233,7 @@
     var end = now + waitMs;
     (function tick() { if (!P) return; var left = Math.ceil((end - Date.now()) / 1000);
       if (left <= 0) { P.msg = ''; render(); return paced(cb); }
-      P.msg = '1 分あたりの上限（' + RATE_N + ' 枚）を超えないように待っています…（あと ' + left + ' 秒）'; render(); setTimeout(tick, 1000); })();
+      P.msg = '混み合わないよう、少し間をあけて作っています…（あと ' + left + ' 秒）'; render(); setTimeout(tick, 1000); })();
   }
   function same(id, a0) { return sid() === id && acct() === a0 && doc() === true; }
   function run() {
@@ -284,10 +288,10 @@
             note({ kind: 'EF', cid: r.id, ok: !!(x && x.ok), code: x && x.code, calls: x && x.calls });
             var code = (x && x.code) || 'UNKNOWN';
             if (x && x.ok) { st.efOk++; r.ok = (code !== 'EXISTS'); r.res = EF_MSG[code] || '絵を作りました'; if (code === 'EXISTS') r.ok = true; render(); return next(); }
-            st.efFail++; r.res = (EF_MSG[code] || 'できませんでした') + (x && x.calls === 0 ? '' : ''); render();
+            st.efFail++; r.res = (code === 'READ_FAIL' ? RFMSG(x) : (EF_MSG[code] || 'できませんでした')) + (x && x.calls === 0 ? '' : ''); render();
             if (code === 'BUDGET' || code === 'RATE_LIMITED' || code === 'LEDGER_UNHEALTHY') {
               sel.slice(i).forEach(function (q) { q.res = '止めたので作っていません'; });
-              return finish(code === 'BUDGET' ? '画像の上限に達したので止めました。残りは作っていません。' : code === 'RATE_LIMITED' ? '混み合っていたので止めました。残りは少し時間をおいて 👥 キャラ から作ってください。' : '画像の作成を一時的に止めています。');
+              return finish(code === 'BUDGET' ? '今月の画像の上限に達したので止めました。残りは作っていません。' : code === 'RATE_LIMITED' ? '混み合っています。少し待ってからもう一度お試しください（残りは作っていません。👥 キャラ からも作れます）。' : '画像の作成を一時的に止めています。');
             }
             next();
           });
@@ -300,7 +304,7 @@
           note({ kind: 'SET', cid: r.id, ok: !!(res && res.ok), code: res && res.code, mirror: res && res.mirror });
           if (!(res && res.ok)) {
             st.setFail++; var code = (res && res.code) || 'UNKNOWN';
-            r.res = '外見を保存できませんでした（' + (SET_MSG[code] || code) + '）。絵は作っていません'; render();
+            r.res = '外見を保存できませんでした（' + (code === 'READ_FAIL' ? RFMSG(res) : (SET_MSG[code] || code)) + '）。絵は作っていません'; render();
             if (code === 'APPLIED_SERVER_MOVED') P.reloadNeeded = true;
             if (STOP_SET[code]) { sel.slice(i).forEach(function (q) { q.res = '止めたので作っていません'; }); return finish('外見を保存できない状態だったので止めました。ページを再読み込みしてから、もう一度お試しください。'); }
             return next();
@@ -330,6 +334,8 @@
   /* ---------- キャラ一覧（fix145）に開き直すボタン ---------- */
   function decorateCharlist() {
     if (killed()) return;
+    /* ★LC1 (GPT #127-IJ 4) decorate: LC1 が ON のときは「🎨 登場人物の絵をまとめて作る」ボタンを出さない（作業欄に統合） */
+    try { var lc1d = window.__v292DfixLC1; if (lc1d && typeof lc1d.on === 'function' && lc1d.on()) { var obd = document.querySelector('[data-b37-onb-open]'); if (obd && obd.parentNode) obd.parentNode.removeChild(obd); return; } } catch (eLC1) {}
     var mo = document.querySelector('.v292Dfix145-modal'); if (!mo) return;
     var on = doc() === true && chars().length > 0;
     var b = mo.querySelector('[data-b37-onb-open]');

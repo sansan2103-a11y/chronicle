@@ -86,7 +86,7 @@
 
   /* ---------- server reads (fix697 read port: portrait.list / asset.get only) ---------- */
   var listed = null, listInFlight = false, lastRegOk = -1;
-  var LIST_MAX_AGE = 180000, LIST_RETRY_MS = 15000;
+  var LIST_MAX_AGE = 30000, LIST_RETRY_MS = 15000;   /* ★LaneE: 180000 → 30000（非表示→再ロックした物語の絵が 3 分近く残らないように） */
   function wantList(m){
     if (!listed || listed.story_id !== m.story_id) return true;
     var age = Date.now() - listed.at;
@@ -141,7 +141,7 @@
     var e = entById(m, ident.id) || { name: '?' };
     if (!listed || listed.story_id !== m.story_id) return { state: 'loading', src: placeholderImage(e.name), title: '' };
     if (listed.error) return { state: 'unavail', src: placeholderImage(e.name), title: '画像を読み込めません' };
-    var p = listed.by[ident.id];
+    var p = listed.by[ident.id]; try { var ld1 = window.__v292DfixLD1; if (ld1 && typeof ld1.pick === 'function') p = ld1.pick(m.story_id, ident.id, p) || p; } catch(eLD1){}   /* Lane D (UX-05): adopted image of the CURRENT art preset (read-only; flag v292DfixLD1On) */
     if (!p) return { state: 'none', src: placeholderImage(e.name), title: 'まだ絵がありません' };
     if (mem[p.asset_id]){ stats.memHit++; return { state: 'ok', src: mem[p.asset_id], title: '' }; }
     if (getFailed[p.asset_id]){
@@ -194,15 +194,19 @@
               REGISTRATION_PENDING: '登録の確認が終わってからお試しください', CHARACTER_DELETED: '削除済みのキャラクターです', UNKNOWN_CHARACTER_ID: 'このキャラクターは登録されていません', ok_profile: '外見を保存しました。「最初の絵を作る」で絵を作れます',
               /* ★cand_sideport_authority R3-1 */ APPLIED_SERVER_MOVED: '保存されましたが、別の端末も更新しています。ページを再読み込みしてください', NOT_CANONICAL_ROW: 'この物語はサーバー側で編集できない状態です（非表示または削除済み）', READBACK_FAIL: '保存結果を確認できませんでした。ページを再読み込みしてください', 'canonical-deleted': 'この物語は削除されています', 'not-canonical': 'この物語はまだサーバーの正本になっていません',
               IN_FLIGHT: '作成中です。少し待ってから確認してください', IN_PROGRESS: '作成中です', LOST_RACE: '別の操作で絵が決まりました',
-              BUDGET: '今月の画像生成の上限に達しています', RATE_LIMITED: '少し時間をおいてからお試しください', GENERATION_FAILED: '絵を作れませんでした',
+              BUDGET: '今月の画像の上限に達しました', RATE_LIMITED: '混み合っています。少し待ってからもう一度お試しください', GENERATION_FAILED: '絵を作れませんでした',
               PROFILE_NOT_ENGLISH: '外見の文の中に、絵の指示に直せない言葉がありました（絵は作っていません・費用はかかっていません）。「外見を設定」で、髪・目・服・体格などの見た目だけを短く書き直してください（例：黒髪の長髪の少女、細身、白いドレス）', LEDGER_UNHEALTHY: '利用記録の確認中のため、画像の作成を一時的に止めています。しばらくしてからお試しください', OUTCOME_UNKNOWN: '結果を確認できませんでした。しばらくしてから表示を確認してください', READ_FAIL: 'サーバーに接続できませんでした',
               ASSET_V2_UNAVAILABLE: 'この物語では使えません', NOT_FOUND: 'この物語では使えません' };
-  function msgFor(res, okKey){ if (res && res.ok) return MSG[okKey]; return (res && MSG[res.code]) || 'できませんでした'; }
+  /* ★LaneE: 読み込み失敗の文言を原因（HTTP status）で分ける。文言だけ・流れは変えない */
+  function readFailMsg(res){ var h = res && res.http; if (h === 404) return 'この物語は非表示中か、見つかりません'; if (h === 401) return 'ログインが切れました。もう一度ログインしてください'; if (h === 429 || h === 503) return '混み合っています。少し待ってからお試しください'; return 'サーバーに接続できませんでした'; }
+  function msgFor(res, okKey){ if (res && res.ok) return MSG[okKey]; if (res && res.code === 'READ_FAIL') return readFailMsg(res); return (res && MSG[res.code]) || 'できませんでした'; }
   /* ★cand_sideport_authority (audit D7 / D3-a): after a side-port write the document must be re-read (fix733 TYPE A: ordinary pushes are held
      until reload). On PERSISTED_EQUALS_READBACK reload once; on any other mirror outcome tell the Owner to reload (the server has the change). */
   function afterSidePort(res, msgEl){
     if (!res || res.noop) return;
     if (!res.ok){ if (res.code === 'APPLIED_SERVER_MOVED' && msgEl) msgEl.textContent = MSG.APPLIED_SERVER_MOVED; return; }
+    /* ★LC1 (GPT #127-IJ 5): 作業欄（👥）が開いている間は再読み込みを保留し、閉じたあとに 1 回だけ行う。flag OFF のときは false を返すだけ */
+    try { var lc1h = window.__v292DfixLC1; if (lc1h && typeof lc1h.holdReload === 'function' && lc1h.holdReload(res, msgEl)) return; } catch(eLC1){}
     /* ★R3-3: never reload while a generation is in flight or the composer holds an unsent draft — tell the Owner instead */
     var busy = false; try { var S0 = window.__chronicleGetState ? window.__chronicleGetState('av2ui') : null; busy = !!(S0 && S0.inFlight); var inp = document.getElementById('inp'); if (inp && String(inp.value || '').trim()) busy = true; } catch(e){}
     if (res.mirror === 'PERSISTED_EQUALS_READBACK' && !busy){ if (msgEl) msgEl.textContent = (msgEl.textContent || '') + '（反映のため再読み込みします）'; setTimeout(function(){ try { location.reload(); } catch(e){} }, 1200); return; }
@@ -220,6 +224,7 @@
     var ck = name + '|' + m.story_id + '|' + (e ? e.id : '') + '|' + (noPtr ? 1 : 0) + '|' + (regBusy ? 1 : 0);
     if (card.__av2Key === ck) return;
     card.__av2Key = ck; card.__av2Name = name; card.__av2Story = m.story_id;
+    try { var colE5 = card.children[1]; var slE5 = colE5 && colE5.children && colE5.children[1]; if (slE5 && colE5.children[0] && /最終/.test(colE5.children[0].textContent || '')) clampLong(slE5, 2, 50); } catch(eE5){}   /* ★LaneE E-5: 長い状態文は 2 行に畳む（全文は「全文を見る」） */
     var img = card.querySelector('img[alt]');
     if (e){ card.setAttribute('data-av2-cid', e.id); if (img) img.setAttribute('data-av2-cid', e.id); }
     else { card.removeAttribute('data-av2-cid'); if (img) img.removeAttribute('data-av2-cid'); }
@@ -297,7 +302,7 @@
       refs.forEach(function(r){
         var rb = document.createElement('div'); rb.setAttribute('data-av2-prof', 'suggestion'); rb.style.cssText = 'margin-top:4px;color:#aaa;font-size:11px;';
         var lab = document.createElement('div'); lab.textContent = r[0]; rb.appendChild(lab);
-        var tx = document.createElement('div'); tx.style.cssText = 'white-space:pre-wrap;color:#999;border-left:2px solid #555;padding-left:6px;'; tx.textContent = r[1]; rb.appendChild(tx);
+        var tx = document.createElement('div'); tx.style.cssText = 'white-space:pre-wrap;color:#999;border-left:2px solid #555;padding-left:6px;'; tx.textContent = r[1]; rb.appendChild(tx); clampLong(tx, 2, 50);   /* ★LaneE E-5 */
         var cp = mkBtn('この文を編集欄へ入れる', '#3a3a4a'); cp.setAttribute('data-av2-prof', 'copy');
         cp.onclick = function(ev){ ev.stopPropagation(); ta.value = r[1].slice(0, 400); ta.focus(); };   // Owner action: goes into the EDIT box, never straight to the profile
         rb.appendChild(cp); tools.appendChild(rb);
@@ -417,7 +422,7 @@
           var what = kind === 'nd' ? '新しい候補を1枚作ります（候補を作るだけで、採用はしません。今の絵はそのままです）' : '最初の絵を1枚作ります';
           note({ kind: 'B37_ASK', what: kind, needSet: needSet });
           ask({ title: '「' + name + '」の絵に使う外見', rows: [['性別', GL(d.gender)], ['外見', d.appearance]],
-                note: (needSet ? 'この外見はまだ確定していません。この内容で確定（保存）してから、' : '確定済みのこの外見で、') + what + '。画像生成を1回使います（目安 $' + B37_COST + '）。',
+                note: (needSet ? 'この外見はまだ確定していません。この内容で確定（保存）してから、' : '確定済みのこの外見で、') + what + '。画像生成を1回使います。',
                 ok: needSet ? (kind === 'nd' ? '確定して候補を作る' : '確定して絵を作る') : (kind === 'nd' ? 'この外見で候補を作る' : 'この外見で絵を作る') }, function(yes){
             if (!yes){ note({ kind: 'B37_ASK_CANCEL', what: kind }); return; }
             var sid0 = m.story_id, cid0 = e.id, acc0 = acct37();
@@ -463,7 +468,7 @@
         frB.onclick = function(ev){ ev.stopPropagation(); if (frB.disabled) return;
           if (confirmedNow().appearance){ pmsg.textContent = 'このキャラクターには確定済みの外見があります。その外見で作るときは「確定して新しい候補を作る」を使ってください（絵は作っていません）'; refreshFree(); return; }
           ask({ title: '「' + name + '」を外見・性別を指定せずに作る', rows: [],
-                note: '外見と性別の情報を使わずに、AIが考えたデザインの候補を1枚作ります。性別・年齢・髪型などが設定と違う絵になることがあります。候補を作るだけで、採用はしません。画像生成を1回使います（目安 $' + B37_COST + '）。',
+                note: '外見と性別の情報を使わずに、AIが考えたデザインの候補を1枚作ります。性別・年齢・髪型などが設定と違う絵になることがあります。候補を作るだけで、採用はしません。画像生成を1回使います。',
                 ok: 'AIにまかせて候補を作る' }, function(yes){
             if (!yes) return;
             if (confirmedNow().appearance){ pmsg.textContent = 'このキャラクターには確定済みの外見があります（絵は作っていません）'; refreshFree(); return; }
@@ -503,7 +508,7 @@
 
   /* ---------- GPT 917 Q3: candidate picker (explicit adopt → readback → pointer confirmed → display refresh; never re-sent) ---------- */
   var picker = null;
-  function closePicker(){ if (picker && picker.parentNode) picker.parentNode.removeChild(picker); picker = null; }
+  function closePicker(){ try { closePreview(); } catch(e){} if (picker && picker.parentNode) picker.parentNode.removeChild(picker); picker = null; }
   function thumbInto(assetId, img){
     if (mem[assetId]){ img.src = mem[assetId]; return; }
     var f = F(); if (!f || typeof f.assetV2Read !== 'function') return;
@@ -520,39 +525,211 @@
   function openPicker(e, name, cardMsg){
     closePicker();
     picker = document.createElement('div'); picker.setAttribute('data-av2-ui', 'picker'); picker.id = 'v292Dav2-picker';
-    picker.style.cssText = 'position:fixed;left:50%;top:12%;transform:translateX(-50%);z-index:2147483002;width:min(92vw,460px);max-height:76vh;overflow:auto;background:#16161e;color:#eee;border:1px solid #806040;border-radius:10px;padding:12px;font-size:13px;box-shadow:0 4px 24px rgba(0,0,0,.6);';
+    picker.style.cssText = 'position:fixed;left:50%;top:12%;transform:translateX(-50%);z-index:2147483647;width:min(92vw,460px);max-height:76vh;overflow:auto;background:#16161e;color:#eee;border:1px solid #806040;border-radius:10px;padding:12px;font-size:13px;box-shadow:0 4px 24px rgba(0,0,0,.6);';
     picker.onclick = function(ev){ ev.stopPropagation(); };
     var x = mkBtn('閉じる', '#444'); x.style.float = 'right'; x.onclick = closePicker; picker.appendChild(x);
     var h = document.createElement('div'); h.style.cssText = 'font-weight:bold;margin-bottom:6px;'; h.textContent = '「' + name + '」の候補'; picker.appendChild(h);
+    var hintP = document.createElement('div'); hintP.setAttribute('data-av2-pick', 'hint'); hintP.style.cssText = 'color:#9a9aae;font-size:11px;margin:2px 0 4px;line-height:1.5;'; hintP.textContent = '絵をタップすると大きく見られます（見るだけでは絵は変わりません）'; picker.appendChild(hintP);
     var st = document.createElement('div'); st.setAttribute('data-av2-pick', 'msg'); st.style.cssText = 'color:#e0c080;margin:4px 0;'; st.textContent = '読み込み中…'; picker.appendChild(st);
     var list = document.createElement('div'); picker.appendChild(list);
     (document.body || document.documentElement).appendChild(picker);
     A().listCandidates(e.id, function(res){
       if (!picker) return;
-      if (!res || !res.ok){ st.textContent = (res && PMSG[res.code]) || 'できませんでした'; return; }
+      if (!res || !res.ok){ st.textContent = (res && res.code === 'READ_FAIL' ? readFailMsg(res) : (res && PMSG[res.code])) || 'できませんでした'; return; }
       st.textContent = res.items.length ? '' : '候補はありません';
+      var items = [];   /* ★LaneE E-1: 採用中 + 候補 の並び（プレビューの左右切替用）。画像は一覧のサムネイルが既に持っている src を使うだけ（新しい通信 0） */
       var mk = function(assetId, current){
         var cell = document.createElement('span'); cell.setAttribute('data-av2-pick-item', assetId); cell.setAttribute('data-current', current ? '1' : '0');
         cell.style.cssText = 'display:inline-block;margin:6px 10px 0 0;text-align:center;vertical-align:top;';
-        var im = document.createElement('img'); im.alt = ''; im.setAttribute('data-av2-ui', 'thumb'); im.style.cssText = 'width:72px;height:72px;border-radius:8px;background:#333;display:block;' + (current ? 'outline:2px solid #e0c080;' : '');
+        var im = document.createElement('img'); im.alt = ''; im.setAttribute('data-av2-ui', 'thumb'); im.style.cssText = 'width:72px;height:72px;border-radius:8px;background:#333;display:block;cursor:zoom-in;' + (current ? 'outline:2px solid #e0c080;' : '');
+        im.setAttribute('role', 'button'); im.setAttribute('tabindex', '0'); im.setAttribute('aria-label', current ? '採用中の絵を大きく見る' : '候補を大きく見る'); im.setAttribute('data-av2-pick-thumb', assetId);
         thumbInto(assetId, im); cell.appendChild(im);
+        var rec = { id: assetId, current: !!current, im: im, adopt: null };
+        items.push(rec);
+        var viewIt = function(ev){ try { ev.stopPropagation(); } catch(e0){} openPreview(items, items.indexOf(rec), st); };   /* 見るだけ。採用はしない */
+        im.addEventListener('click', viewIt);
+        im.addEventListener('keydown', function(ev){ if (ev && (ev.key === 'Enter' || ev.key === ' ')){ try { ev.preventDefault(); } catch(e0){} viewIt(ev); } });
         if (current){ var lb = document.createElement('div'); lb.textContent = '採用中'; lb.style.cssText = 'font-size:11px;color:#e0c080;'; cell.appendChild(lb); }
         else {
+          var lc = document.createElement('div'); lc.textContent = '候補'; lc.style.cssText = 'font-size:11px;color:#9ab4d8;'; cell.appendChild(lc);
           var b = mkBtn('この絵にする', '#5a4a2a'); b.setAttribute('data-av2-pick', 'adopt');
           b.onclick = function(){ Array.prototype.forEach.call(list.querySelectorAll('button'), function(z){ z.disabled = true; }); st.textContent = '…';
             A().adoptCandidate(e.id, assetId, function(r){
               note({ kind: 'UI_PICK_ADOPT', ok: !!(r && r.ok), code: r && r.code });
-              st.textContent = (r && PMSG[r.code]) || (r && r.ok ? 'この絵にしました' : 'できませんでした');
+              st.textContent = (r && r.code === 'READ_FAIL' ? readFailMsg(r) : (r && PMSG[r.code])) || (r && r.ok ? 'この絵にしました' : 'できませんでした');
               if (r && r.ok){ listed = null; Array.prototype.forEach.call(document.querySelectorAll('.v292Dfix145-card'), function(c){ c.__av2Key = null; }); schedule(); if (cardMsg) cardMsg.textContent = st.textContent; setTimeout(closePicker, 600); }
               /* not ok: no automatic re-send (a stale rev stays stale until the Owner opens the picker again) */
             }); };
-          cell.appendChild(b);
+          cell.appendChild(b); rec.adopt = b;
         }
         list.appendChild(cell);
       };
       if (res.current) mk(res.current.asset_id, true);
       res.items.forEach(function(it){ mk(it.asset_id, false); });
     });
+  }
+
+  /* ---------- ★LaneE E-1: 候補プレビュー（見るだけ・採用しない・新しい通信 0） ----------
+     一覧のサムネイル（既に読み込み済みの src）をそのまま大きく出す。生成・採用・pointer 変更・fetch は一切しない。
+     採用は従来どおり「この絵にする」ボタンだけ（プレビュー内のボタンは、一覧にある同じボタンの click() を呼ぶだけ）。
+     操作: 左右ボタン / 左右スワイプ / ← → キー（採用中の絵も並びに含む）・ピンチ / ダブルタップ / ホイールで拡大・拡大中はドラッグで移動・× / 一覧へ戻る / Esc で閉じる。
+     kill: localStorage v292DfixLE1pvOff='1'（従来どおり、タップしても何も起きない）。 */
+  var preview = null;
+  function pvOff(){ try { return localStorage.getItem('v292DfixLE1pvOff') === '1'; } catch(e){ return false; } }
+  function closePreview(){
+    if (!preview) return false;
+    var pv = preview; preview = null;
+    try { clearInterval(pv.timer); } catch(e){}
+    try { document.removeEventListener('keydown', pv.onKey, true); } catch(e){}
+    try { if (pv.el.parentNode) pv.el.parentNode.removeChild(pv.el); } catch(e){}
+    try { if (document.body && document.body.style) document.body.style.overflow = pv.prevOv; } catch(e){}
+    try { (pv.muted || []).forEach(function(m){ try { m[0].textContent = m[1]; } catch(e1){} }); } catch(e){}
+    return true;
+  }
+  function openPreview(items, start, st){
+    if (pvOff() || !items || !items.length) return false;
+    closePreview();
+    var n = items.length, idx = Math.max(0, Math.min(n - 1, start || 0));
+    var sc = 1, tx = 0, ty = 0;
+    var mkEl = function(tag, css, attrs){ var x = document.createElement(tag); if (css) x.style.cssText = css; if (attrs) for (var k in attrs) x.setAttribute(k, attrs[k]); return x; };
+    var ov = mkEl('div', 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:2147483647;background:#06060a;color:#eee;display:flex;flex-direction:column;font-size:13px;box-sizing:border-box;-webkit-tap-highlight-color:transparent;'
+      + 'padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);', { id: 'v292Dav2-preview', 'data-av2-ui': 'preview', role: 'dialog', 'aria-modal': 'true', 'aria-label': '絵の拡大表示' });
+    ov.addEventListener('click', function(ev){ try { ev.stopPropagation(); } catch(e){} });
+    var head = mkEl('div', 'display:flex;align-items:center;gap:8px;padding:8px 10px;flex:0 0 auto;');
+    var chip = mkEl('span', 'padding:4px 10px;border-radius:12px;font-weight:bold;font-size:13px;', { 'data-av2-pv': 'label' });
+    var count = mkEl('span', 'color:#aab;font-size:12px;', { 'data-av2-pv': 'count' });
+    var spacer = mkEl('span', 'flex:1;');
+    var closeB = mkEl('button', 'min-height:44px;min-width:44px;padding:0 14px;border-radius:22px;border:1px solid #666;background:#2a2a38;color:#fff;font-size:14px;cursor:pointer;', { type: 'button', 'data-av2-pv': 'close', 'aria-label': '閉じる' });
+    closeB.textContent = '✕ 閉じる';
+    head.appendChild(chip); head.appendChild(count); head.appendChild(spacer); head.appendChild(closeB);
+    var wrap = mkEl('div', 'position:relative;flex:1 1 auto;min-height:0;');
+    var stage = mkEl('div', 'position:absolute;left:0;top:0;right:0;bottom:0;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;cursor:grab;', { 'data-av2-pv': 'stage' });
+    var img = mkEl('img', 'position:absolute;left:0;top:0;width:100%;height:100%;object-fit:contain;transform-origin:50% 50%;-webkit-user-drag:none;pointer-events:none;visibility:hidden;', { 'data-av2-pv': 'img', alt: '', draggable: 'false' });
+    var ph = mkEl('div', 'position:absolute;left:0;top:45%;right:0;text-align:center;color:#aaa;pointer-events:none;'); ph.textContent = '読み込み中…';
+    stage.appendChild(ph); stage.appendChild(img); wrap.appendChild(stage);
+    var mkArrow = function(side, label){ var a = mkEl('button', 'position:absolute;top:50%;' + side + ':6px;width:44px;height:56px;margin-top:-28px;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:rgba(20,20,30,.6);color:#fff;font-size:26px;line-height:1;cursor:pointer;z-index:2;padding:0;', { type: 'button', 'data-av2-pv': side === 'left' ? 'prev' : 'next', 'aria-label': label });
+      a.textContent = side === 'left' ? '‹' : '›'; if (n < 2) a.style.display = 'none'; wrap.appendChild(a); return a; };
+    var prevB = mkArrow('left', '前の絵'), nextB = mkArrow('right', '次の絵');
+    var foot = mkEl('div', 'flex:0 0 auto;padding:8px 10px 12px;display:flex;flex-direction:column;gap:6px;');
+    var strip = mkEl('div', 'display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 0;');
+    var thumbs = items.map(function(it, i){ var t = mkEl('img', 'width:44px;height:44px;flex:0 0 44px;border-radius:6px;object-fit:cover;background:#333;cursor:pointer;border:2px solid transparent;', { alt: '', 'data-av2-pv': 'thumb', 'aria-label': (it.current ? '採用中' : '候補') + 'を見る' });
+      t.addEventListener('click', function(ev){ try { ev.stopPropagation(); } catch(e){} show(i); }); strip.appendChild(t); return t; });
+    if (n < 2) strip.style.display = 'none';
+    var msg = mkEl('div', 'color:#e0c080;min-height:16px;font-size:12px;', { 'data-av2-pv': 'msg' });
+    var row = mkEl('div', 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;');
+    var adoptB = mkEl('button', 'min-height:44px;padding:0 18px;border-radius:8px;border:1px solid #a08040;background:#5a4a2a;color:#fff;font-size:14px;font-weight:bold;cursor:pointer;', { type: 'button', 'data-av2-pv': 'adopt' });
+    adoptB.textContent = 'この絵にする';
+    var curNote = mkEl('span', 'color:#e0c080;font-size:13px;', { 'data-av2-pv': 'cur-note' }); curNote.textContent = 'いま使っている絵です';
+    var backB = mkEl('button', 'min-height:44px;padding:0 16px;border-radius:8px;border:1px solid #666;background:#2a2a38;color:#fff;font-size:14px;cursor:pointer;', { type: 'button', 'data-av2-pv': 'back' });
+    backB.textContent = '一覧へ戻る';
+    row.appendChild(adoptB); row.appendChild(curNote); row.appendChild(backB);
+    var hint = mkEl('div', 'color:#8e8ea0;font-size:11px;line-height:1.5;'); hint.textContent = '見るだけでは絵は変わりません。「この絵にする」を押したときだけ採用されます。ダブルタップ／ピンチで拡大、左右にスワイプで切り替え。';
+    foot.appendChild(strip); foot.appendChild(msg); foot.appendChild(row); foot.appendChild(hint);
+    ov.appendChild(head); ov.appendChild(wrap); ov.appendChild(foot);
+
+    function applyT(extraX){ img.style.transform = 'translate(' + ((tx + (extraX || 0)).toFixed(1)) + 'px,' + ty.toFixed(1) + 'px) scale(' + sc.toFixed(3) + ')'; }
+    function clampT(){ var w = stage.clientWidth, h = stage.clientHeight, mx = (sc - 1) * w / 2, my = (sc - 1) * h / 2; tx = Math.max(-mx, Math.min(mx, tx)); ty = Math.max(-my, Math.min(my, ty)); }
+    function setScale(ns, dx, dy){ /* 指の下の点を動かさずに拡大率を変える（dx,dy = stage 中心からの指の位置） */
+      ns = Math.max(1, Math.min(6, ns)); if (ns === sc) return;
+      tx = dx - ns * (dx - tx) / sc; ty = dy - ns * (dy - ty) / sc; sc = ns; if (sc <= 1.001){ sc = 1; tx = 0; ty = 0; } clampT(); applyT(); }
+    function resetZoom(){ sc = 1; tx = 0; ty = 0; applyT(); }
+    function refresh(){
+      var it = items[idx]; var src = ''; try { src = it.im.getAttribute('src') || ''; } catch(e){}
+      if (src){ if (img.getAttribute('src') !== src) img.setAttribute('src', src); img.style.visibility = 'visible'; ph.style.display = 'none'; }
+      else { img.removeAttribute('src'); img.style.visibility = 'hidden'; ph.style.display = ''; }
+      var k = 0; for (var i = 0; i < idx; i++) if (!items[i].current) k++;
+      if (it.current){ chip.textContent = '採用中'; chip.style.cssText = 'padding:4px 10px;border-radius:12px;font-weight:bold;font-size:13px;background:#e0c080;color:#2a2000;'; }
+      else { chip.textContent = '候補 ' + (k + 1); chip.style.cssText = 'padding:4px 10px;border-radius:12px;font-weight:bold;font-size:13px;background:#27415f;color:#d6e6ff;border:1px solid #4a77b0;'; }
+      count.textContent = (idx + 1) + ' / ' + n;
+      adoptB.style.display = it.current ? 'none' : ''; curNote.style.display = it.current ? '' : 'none';
+      adoptB.disabled = !(it.adopt && !it.adopt.disabled); adoptB.style.opacity = adoptB.disabled ? '.5' : '1';
+      thumbs.forEach(function(t, i){ var s = items[i].im.getAttribute('src') || ''; if (s && t.getAttribute('src') !== s) t.setAttribute('src', s); t.style.borderColor = i === idx ? (items[i].current ? '#e0c080' : '#6aa0e0') : 'transparent'; t.style.opacity = i === idx ? '1' : '.7'; });
+      try { msg.textContent = st ? (st.textContent || '') : ''; } catch(e){}
+    }
+    function show(i){ idx = ((i % n) + n) % n; resetZoom(); refresh(); }
+    function go(d){ if (n < 2) return; show(idx + d); }
+    prevB.addEventListener('click', function(ev){ try { ev.stopPropagation(); } catch(e){} go(-1); });
+    nextB.addEventListener('click', function(ev){ try { ev.stopPropagation(); } catch(e){} go(1); });
+    closeB.addEventListener('click', function(ev){ try { ev.stopPropagation(); } catch(e){} closePreview(); });
+    backB.addEventListener('click', function(ev){ try { ev.stopPropagation(); } catch(e){} closePreview(); });
+    adoptB.addEventListener('click', function(ev){ try { ev.stopPropagation(); } catch(e){} var it = items[idx]; if (it && it.adopt && !it.adopt.disabled) it.adopt.click(); });   /* 一覧の既存ボタンと同じ処理（新しい採用経路は作らない） */
+
+    /* ---- ジェスチャ（pointer events: iOS Safari / PC どちらでも） ---- */
+    var ptrs = {}, np = 0, g = null, lastTap = { t: 0, x: 0, y: 0 };
+    var rel = function(e){ var r = stage.getBoundingClientRect(); return { x: e.clientX - r.left - r.width / 2, y: e.clientY - r.top - r.height / 2 }; };
+    stage.addEventListener('pointerdown', function(e){
+      try { stage.setPointerCapture(e.pointerId); } catch(x){}
+      ptrs[e.pointerId] = { x: e.clientX, y: e.clientY }; np++;
+      if (np === 2){ var ids = Object.keys(ptrs), a = ptrs[ids[0]], b = ptrs[ids[1]]; var r = stage.getBoundingClientRect();
+        g = { type: 'pinch', d0: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), s0: sc, tx0: tx, ty0: ty, mx0: (a.x + b.x) / 2 - r.left - r.width / 2, my0: (a.y + b.y) / 2 - r.top - r.height / 2 }; }
+      else if (np === 1){ g = { type: 'drag', x0: e.clientX, y0: e.clientY, tx0: tx, ty0: ty, moved: false, t0: Date.now() }; }
+    });
+    stage.addEventListener('pointermove', function(e){
+      if (!ptrs[e.pointerId]) return; ptrs[e.pointerId].x = e.clientX; ptrs[e.pointerId].y = e.clientY;
+      if (!g) return;
+      if (g.type === 'pinch' && np >= 2){ var ids = Object.keys(ptrs), a = ptrs[ids[0]], b = ptrs[ids[1]], r = stage.getBoundingClientRect();
+        var d = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), mx = (a.x + b.x) / 2 - r.left - r.width / 2, my = (a.y + b.y) / 2 - r.top - r.height / 2;
+        var ns = Math.max(1, Math.min(6, g.s0 * d / g.d0));
+        tx = mx - ns * (g.mx0 - g.tx0) / g.s0; ty = my - ns * (g.my0 - g.ty0) / g.s0; sc = ns; if (sc <= 1.001){ sc = 1; tx = 0; ty = 0; } clampT(); applyT(); return; }
+      if (g.type === 'drag' && np === 1){ var dx = e.clientX - g.x0, dy = e.clientY - g.y0;
+        if (Math.abs(dx) > 6 || Math.abs(dy) > 6) g.moved = true;
+        if (sc > 1){ tx = g.tx0 + dx; ty = g.ty0 + dy; clampT(); applyT(); }
+        else { applyT(Math.max(-stage.clientWidth * .6, Math.min(stage.clientWidth * .6, dx))); } }
+    });
+    var endPtr = function(e){
+      if (!ptrs[e.pointerId]) return; var p0 = ptrs[e.pointerId]; delete ptrs[e.pointerId]; np = Math.max(0, np - 1);
+      try { stage.releasePointerCapture(e.pointerId); } catch(x){}
+      if (!g) return;
+      if (g.type === 'pinch'){ if (np === 1){ var id = Object.keys(ptrs)[0]; g = { type: 'drag', x0: ptrs[id].x, y0: ptrs[id].y, tx0: tx, ty0: ty, moved: true, t0: Date.now() }; } else if (np === 0) g = null; if (sc < 1.02) resetZoom(); return; }
+      if (g.type === 'drag' && np === 0){
+        var dx = e.clientX - g.x0, dy = e.clientY - g.y0, gg = g; g = null;
+        if (e.type === 'pointercancel'){ applyT(); return; }
+        if (!gg.moved){   /* タップ。2 回続けたらダブルタップで拡大 / 戻す */
+          var now = Date.now(), c = rel(e);
+          if (now - lastTap.t < 320 && Math.hypot(c.x - lastTap.x, c.y - lastTap.y) < 40){ lastTap.t = 0; if (sc > 1.05) resetZoom(); else setScale(2.5, c.x, c.y); }
+          else lastTap = { t: now, x: c.x, y: c.y };
+          applyT(); return; }
+        if (sc === 1 && Math.abs(dx) > 50 && Math.abs(dx) > 1.3 * Math.abs(dy) && n > 1){ go(dx < 0 ? 1 : -1); return; }
+        applyT(); }
+    };
+    stage.addEventListener('pointerup', endPtr); stage.addEventListener('pointercancel', endPtr);
+    stage.addEventListener('wheel', function(e){ try { e.preventDefault(); } catch(x){} var c = rel(e); setScale(sc * Math.exp(-e.deltaY * 0.0015), c.x, c.y); }, { passive: false });
+    stage.addEventListener('dblclick', function(e){ try { e.preventDefault(); } catch(x){} });
+
+    var onKey = function(e){
+      var k = e && e.key; if (!k) return;
+      if (k === 'Escape' || k === 'Esc'){ try { e.stopPropagation(); e.preventDefault(); } catch(x){} closePreview(); }
+      else if (k === 'ArrowLeft'){ try { e.stopPropagation(); } catch(x){} go(-1); }
+      else if (k === 'ArrowRight'){ try { e.stopPropagation(); } catch(x){} go(1); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    /* features.js の Esc（window capture）は「表示中の 閉じる ボタン」を最初の 1 つ押してしまい、プレビューと一緒に下の候補一覧まで閉じる。
+       プレビューが開いている間だけ、一覧側の「閉じる」の文字の末尾に目に見えない文字を足して一致させない（閉じたら必ず元に戻す）。 */
+    var muted = [];
+    try { var bsAll = document.querySelectorAll('button'); for (var bi = 0; bi < bsAll.length; bi++){ var bb = bsAll[bi]; if ((bb.textContent || '').trim() === '閉じる'){ muted.push([bb, bb.textContent]); bb.textContent = bb.textContent + '\u200B'; } } } catch(e){}
+    var prevOv = ''; try { prevOv = (document.body && document.body.style.overflow) || ''; if (document.body) document.body.style.overflow = 'hidden'; } catch(e){}
+    (document.body || document.documentElement).appendChild(ov);
+    /* サムネイルがまだ読み込み中でも、届いた時点で出る／一覧のメッセージ（「…」「この絵にしました」）を写す */
+    var timer = setInterval(function(){ if (!preview || preview.el !== ov){ clearInterval(timer); return; } refresh(); }, 300);
+    preview = { el: ov, timer: timer, onKey: onKey, prevOv: prevOv, muted: muted };
+    refresh(); applyT();
+    return true;
+  }
+
+  /* ---------- ★LaneE E-5: 長い文は 2 行に畳み、「全文を見る」で開く（textContent は変えない・iPhone の縦の長さ対策） ---------- */
+  function clampLong(txEl, lines, minLen){
+    try {
+      if (!txEl || txEl.getAttribute('data-av2-clamped')) return;
+      var full = String(txEl.textContent || ''); if (full.length < (minLen || 50)) return;
+      txEl.setAttribute('data-av2-clamped', '1');
+      var base = txEl.style.cssText;
+      var shut = function(){ txEl.style.cssText = base + ';display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:' + lines + ';overflow:hidden;'; };
+      shut();
+      var tg = mkBtn('▾ 全文を見る', '#33334a'); tg.setAttribute('data-av2-clamp', 'toggle'); var open = false;
+      tg.onclick = function(ev){ ev.stopPropagation(); open = !open; if (open){ txEl.style.cssText = base; tg.textContent = '▴ たたむ'; } else { shut(); tg.textContent = '▾ 全文を見る'; } };
+      if (txEl.parentNode) txEl.parentNode.insertBefore(tg, txEl.nextSibling);
+      setTimeout(function(){ try { if (!open && txEl.clientHeight > 0 && txEl.scrollHeight <= txEl.clientHeight + 1){ txEl.style.cssText = base; if (tg.parentNode) tg.parentNode.removeChild(tg); txEl.removeAttribute('data-av2-clamped'); } } catch(e){} }, 80);
+    } catch(e){}
   }
 
   /* pending / blocked / conflict — three states never mixed; internal codes are not shown */
@@ -628,6 +805,8 @@
     setInterval(sweep, 1200);
     sweep();
   }
+  /* ★LaneE: 画面に戻ったとき・金庫の表示/非表示が変わったときは、絵の一覧を取り直す（読み取りだけ） */
+  try { document.addEventListener('visibilitychange', function(){ if (!document.hidden){ try { window.__chronicleAv2Portrait.refresh(); } catch(e){} } }); window.addEventListener('chr:vault2-ui-changed', function(){ try { window.__chronicleAv2Portrait.refresh(); } catch(e){} }); } catch(e){}
   window.__chronicleAv2Portrait = {
     status: function(){ return { doc: doc(), killed: killed(), storyId: sid(), listed: listed ? { story_id: listed.story_id, at: listed.at, error: listed.error, n: Object.keys(listed.by || {}).length } : null,
                                  mem: Object.keys(mem).length, stats: JSON.parse(JSON.stringify(stats)), wrapped118: wrapped118, log: LOG.slice(-20) }; },

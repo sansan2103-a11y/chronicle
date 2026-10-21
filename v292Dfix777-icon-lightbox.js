@@ -6,7 +6,7 @@
 //   会話ログ・キャラ一覧に出ている **キャラアイコンの img をタップ/クリックすると、
 //   その img の「現在の src」をそのまま大きく表示する** だけ。それ以外は何もしない。
 //   ・画像を作らない・取りに行かない・作り直さない（fix197 / fix766 / fix767 と非結合）。
-//   ・localStorage へ 1バイトも書かない（読むのは kill フラグだけ）。
+//   ・lightbox 自体は localStorage へ 1バイトも書かない（読むのは kill フラグだけ）。※LaneE E-2 で、アイコンの大きさ／顔ズームの「表示設定」だけを別キー（v292DfixLE2Size / v292DfixLE2Zoom）に保存する。
 //   ・Canonical Appearance（fix766 の record）も S.cast も roster も触らない。
 //   ・fetch もしない。src は「いま画面に出ている値」をそのまま使う（data: でもURLでも同じ）。
 //
@@ -222,6 +222,63 @@
       openFor(t);
     } catch(err){}
   }
+
+  // =====================================================================
+  // ★LaneE E-2: 会話ログのアイコン表示（この端末だけ・画像は一切いじらない）
+  //   ・大きさ: 小 / 標準（いまの大きさ）/ 大（PC は約 2 倍・iPhone 幅は 96px で上限）
+  //   ・顔ズーム: 等倍 / 1.3 倍 / 1.6 倍（円の中で顔の方へ寄せる。実画像の「人の顔の絵」だけ＝fix979 の目印 data-f979 付き）
+  //   ・保存先は localStorage（この端末だけ）: v292DfixLE2Size = small|large（無い＝標準）/ v292DfixLE2Zoom = 1.3|1.6（無い＝等倍）
+  //   ・実体は <html> の属性 data-chr-avsize / data-chr-avzoom と下の CSS だけ。タップで拡大（上の lightbox）は従来どおり。
+  //   ・kill: v292DfixLE2Off='1'（属性を付けず、操作欄も出さない＝従来どおり）
+  // =====================================================================
+  var LE2_SIZE = 'v292DfixLE2Size', LE2_ZOOM = 'v292DfixLE2Zoom';
+  function le2Off(){ try { return localStorage.getItem('v292DfixLE2Off') === '1'; } catch(e){ return false; } }
+  function le2Get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function le2Set(k, v){ try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch(e){} }
+  function le2Apply(){
+    try {
+      var r = document.documentElement; if (!r) return;
+      var s = le2Off() ? null : le2Get(LE2_SIZE), z = le2Off() ? null : le2Get(LE2_ZOOM);
+      if (s === 'small' || s === 'large') r.setAttribute('data-chr-avsize', s); else r.removeAttribute('data-chr-avsize');
+      if (z === '1.3' || z === '1.6') r.setAttribute('data-chr-avzoom', z); else r.removeAttribute('data-chr-avzoom');
+    } catch(e){}
+  }
+  function le2Css(){
+    if (document.getElementById('v292DfixLE2-style')) return;
+    var AV = 'html[data-chr-avsize="%s"] .dlg-av';
+    var box = function(sel, px){ return sel + '{width:' + px + 'px !important;height:' + px + 'px !important;flex:0 0 ' + px + 'px !important;min-width:' + px + 'px !important;min-height:' + px + 'px !important}'; };
+    var css = [
+      '.v292-dlg-card .dlg-av img{cursor:zoom-in}',
+      box(AV.replace('%s', 'small'), 40), box(AV.replace('%s', 'large'), 96),
+      '@media (min-width:768px){' + box(AV.replace('%s', 'small'), 48) + box(AV.replace('%s', 'large'), 144) + '}',
+      'html[data-chr-avsize] .dlg-av img{width:100% !important;height:100% !important}',
+      'html[data-chr-avzoom="1.3"] .v292-dlg-card .dlg-av img[data-f979="1"]{transform:scale(1.3) !important;transform-origin:50% 30% !important}',
+      'html[data-chr-avzoom="1.6"] .v292-dlg-card .dlg-av img[data-f979="1"]{transform:scale(1.6) !important;transform-origin:50% 30% !important}',
+      '#v292DfixLE2-ctl select{font-size:12px;max-width:96px}'
+    ].join('\n');
+    var st = document.createElement('style'); st.id = 'v292DfixLE2-style'; st.textContent = css; (document.head || document.documentElement).appendChild(st);
+  }
+  function le2Control(){
+    try {
+      if (le2Off()) return;
+      var tb = document.getElementById('topbar');
+      if (!tb){ setTimeout(le2Control, 700); return; }
+      if (document.getElementById('v292DfixLE2-ctl')) return;
+      var span = document.createElement('span'); span.id = 'v292DfixLE2-ctl';
+      span.style.cssText = 'margin-left:8px;font-size:12px;display:inline-flex;align-items:center;gap:4px;';
+      span.title = '会話ログのアイコンの見え方（この端末だけ。絵は変わりません）';
+      span.innerHTML = '🖼アイコン<select data-le2="size" aria-label="アイコンの大きさ"><option value="">標準</option><option value="small">小</option><option value="large">大</option></select>'
+        + '<select data-le2="zoom" aria-label="顔の寄せ"><option value="">顔 等倍</option><option value="1.3">顔 1.3倍</option><option value="1.6">顔 1.6倍</option></select>';
+      var a = span.querySelector('[data-le2="size"]'), b = span.querySelector('[data-le2="zoom"]');
+      a.value = (le2Get(LE2_SIZE) === 'small' || le2Get(LE2_SIZE) === 'large') ? le2Get(LE2_SIZE) : '';
+      b.value = (le2Get(LE2_ZOOM) === '1.3' || le2Get(LE2_ZOOM) === '1.6') ? le2Get(LE2_ZOOM) : '';
+      a.addEventListener('change', function(){ le2Set(LE2_SIZE, a.value || null); le2Apply(); });
+      b.addEventListener('change', function(){ le2Set(LE2_ZOOM, b.value || null); le2Apply(); });
+      tb.appendChild(span);
+    } catch(e){ setTimeout(le2Control, 1000); }
+  }
+  try { le2Css(); le2Apply(); } catch(e){}
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', le2Control); else le2Control();
 
   var armed = false;
   if (!isOff()){
