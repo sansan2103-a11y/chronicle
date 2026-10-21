@@ -89,7 +89,7 @@
   'use strict';
   if (window.__v292Dfix756) return;                 /* 二重install防止（自 namespace のみ） */
   var TAG = '[v292Dfix756:new-story-schema2]';
-  var BUILD = 'fix756+757prov+810confirm-on';
+  var BUILD = 'fix756+757prov+810confirm-on+jr1epoch';
   var ATT_PREFIX  = 'v292Dfix756_att:';
   var DONE_PREFIX = 'v292Dfix756_done:';
   /* ★裁定44: putcanonical を 1 バイトも送っていないことが phase から確定できる集合。
@@ -189,6 +189,11 @@
     if (a5.present !== false) return { ok: false, code: 'SERVER_ROW_PRESENT',
                                        authority: a5.authority || null, schema: a5.schema || null };
 
+    /* ★JR1(#127-HC): この document の recovery release epoch が古い（別の処理が journal を片づけた直後）なら
+       始めない。GWS が MATERIALIZATION_RELOAD_REQUIRED で必ず断るので、ここで始めると session の 1 回性ガード
+       （v292Dfix756_att）だけを消費して、読み込み直した後も新しい物語が昇格しなくなる。read-only。 */
+    try { if (typeof G.releaseEpochStale === 'function' && G.releaseEpochStale()) return { ok: false, code: 'RELOAD_REQUIRED' }; }
+    catch(eJR1){ return { ok: false, code: 'EPOCH_UNKNOWN' }; }
     /* ★D: 進行中/残留 transaction があれば触らない（recovery は fix750 の明示 API の仕事）。 */
     var j = null;
     try { j = F750.journal(); } catch(e){ return { ok: false, code: 'JOURNAL_READ_THREW' }; }
@@ -468,6 +473,7 @@
     }
     /* どちらの場合も prepare() が開始時に fresh getstory で SHADOW_S1 を再確認し、promote() が送信直前に
        fresh getstory と local hash を再照合する（不一致・shadow 以外なら request 0）。 */
+    try { if (typeof G.releaseEpochStale === 'function' && G.releaseEpochStale()) return rSkip('RELOAD_REQUIRED'); } catch(eJR1){ return rSkip('EPOCH_UNKNOWN'); }   /* ★JR1 */
     var oAt = fix750Origin(id);
     if (oAt == null) return rSkip('NOT_FIX750_ORIGIN');
     if (!(oAt >= R_EPOCH) && !rAllowed(id)) return rSkip('PRE_EPOCH_SHADOW_NOT_ALLOWED');
@@ -554,7 +560,7 @@
       if (g.code === 'OFF' || g.code === 'NO_DOCUMENT_STORY' || g.code === 'DEFAULT_STORY_UNSUPPORTED' ||
           g.code === 'PROVISIONAL_AUTHORITY' ||                       /* ★fix757: document 不変の条件 */
           g.code === 'ATTEMPTED_THIS_SESSION' || g.code === 'SERVER_ROW_PRESENT' ||
-          g.code === 'FIX705_UNSAFE' || g.code === 'PREEXISTING_JOURNAL' ||
+          g.code === 'FIX705_UNSAFE' || g.code === 'PREEXISTING_JOURNAL' || g.code === 'RELOAD_REQUIRED' ||
           g.code === 'FIX705_ID_MISMATCH'){
         state.phase = 'skipped'; note({ kind: 'SKIP', code: g.code }); return;
       }
