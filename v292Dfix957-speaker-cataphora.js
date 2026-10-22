@@ -29,7 +29,7 @@
   'use strict';
   var G = (typeof window !== 'undefined') ? window : globalThis;
   if (G.__v292Dfix957 && G.__v292Dfix957.__installed) return;
-  var VERSION = 'fix957-r5-fix974-20261015';
+  var VERSION = 'fix957-r6-sp1b-20261022';
   var st = { calls: 0, strong: 0, abstain: 0, none: 0, errors: 0, fallback: 0, resolved: 0 }, lastRec = null;
   var pend = {};   // 保留にした引用 → 元の窓推測（第 2 層で決まらなかった時に戻す＝引用数を減らさない）
   // r4（GPT 裁定変更・FIX957_DEFAULT_ON）: 全ユーザー既定 ON。
@@ -142,7 +142,8 @@
       list.forEach(function(c){
         if (!c || !c.say || !Object.prototype.hasOwnProperty.call(pend, c.say)) return;
         if (c.who){ st.resolved++; return; }
-        if (pend[c.say]){ c.who = pend[c.say]; c._f957fb = 1; st.fallback++; n++; }
+        if (pend[c.say]){ var _sp1b = false; try { var _l = G.localStorage; _sp1b = !!_l && _l.getItem('v292DfixSP1Off') !== '1' && _l.getItem('v292DfixSP1BOff') !== '1' && _l.getItem('v292DfixSP1BOn') === '1'; } catch(e){ _sp1b = false; }
+        c.who = _sp1b ? '???' : pend[c.say]; c._f957fb = 1; st.fallback++; n++; }   // ★SP1-B（GPT #127-JM・既定OFF・opt-in v292DfixSP1BOn / kill v292DfixSP1BOff / 全体 v292DfixSP1Off）: ON の時だけ、第2層でも決まらなかった保留を窓推測へ戻さず '???' のまま（引用数・順序は不変）
       });
       pend = {}; return n;
     } catch(e){ st.errors++; pend = {}; return 0; }

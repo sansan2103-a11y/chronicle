@@ -255,7 +255,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261022-bundle40-b';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261022-bundle41-a';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -295,7 +295,7 @@
      ★kill switch は持たない（index の対局 model routing を殺さないため。v292Dfix887Off は sp20m で無効）。
      読み込み位置 = fix654 の直後（素の同期 script）。index.html でも同じ tag が同じ slot に在る。
      匿名経路の実行 model は worker が CHR_PUBLIC_MODEL へ強制する（client の model は捨てられる）。 -->
-<script src="v292Dsmrc1-model-registry.js?cb=20261022-bundle40-b"></script>
+<script src="v292Dsmrc1-model-registry.js?cb=20261022-bf1owner"></script>
 <script src="v292Dfix698-mutation-bus.js?cb=20260908-fix837"></script>
 <script src="v292Dfix569-gc-shadow.js?cb=v292Dfix680"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者（fix569 が捕捉済みの native を借りる） -->

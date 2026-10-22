@@ -13,7 +13,7 @@
  *        ・_convSays と _convSayMeta は同じ添字の並行配列（fix922 / fix670）。必ず同時に切り詰める（長さが揃わなければ meta は捨てる）
  *        ・SAY モードの主人公の入力の写しは例外で残す（CL1-c と同じ）
  *        ・カードは新しい本文での出現位置の順に並べる
- *        ・plan.narrative には触らない（<say who> の証拠源）
+ *        ・plan.narrative はフェーズ1では触らなかった → フェーズ1b で <say> 区間だけ直す（下記）
  *        ・新しく書き足した「」にはカードを付けない（話者の自動推定は SPEAKER-01 の領分）。件数だけ 1 行表示する。
  *   2. UI.saveEdit をこの module から包み替える（index.html は編集しない）。
  *        narrative + _convSays + _convSayMeta を 1 回の S.saveD で一緒に保存。保存が通らなければ 3 つとも戻し、DOM には触らない。
@@ -21,9 +21,20 @@
  *   4. 会話ログのカードの ✕（手動削除）。確認（スマホ）→ 削除 → 「元に戻す」トースト。
  *        fix66 が各カードに data-ti / data-ci を付ける（applier が入れる）。
  *
+ * ■フェーズ1b（EDIT-01b・2026-10-22）: 消した／言い直した台詞が「展開の描写」に戻ってくる件
+ *   実例（PC・QA 物語・EDIT-01 ON）: ターン1の本文から 司書「閉館は九時…」 を消し、「…珍しいお客さんね」→「…だこと」に直して保存・リロード
+ *   → .narr-block に古い行が .v292Dfix438-say として再挿入され、新旧が両方並んだ。
+ *   原因: fix438 buildItems() は turn.plan.narrative（生成時の行配列・<say who> 付き）を読み、本文に無い <say> を挿入する（alreadyShown）。
+ *         フェーズ1は plan.narrative / plan._structuredNarrative に触らなかったので、消した行が毎描画で戻る。
+ *   対処: 編集保存（と ✕）の同じ S.saveD で、reconcile() の対応表（dropped / reworded）を使って plan.narrative と
+ *         plan._structuredNarrative の <say> 区間だけを直す（reconcilePlan）。地の文・<state>/<react>/<scene_move> 等の他のタグは触らない。
+ *         本文に元から無い <say>（fix213 で本文から落ち、fix438 が復元している行）は残す。型は維持（narrative=文字列配列 / _structuredNarrative={type,text,speaker} 配列）。
+ *   次ターンの文脈（recentScenes=turn.narrative / recentDialogues=_convSays / recentHistory=narrative）は plan を読まないので影響なし。
+ *   plan.narrative を後から読むもの（fix438 表示 / fix606・640・383 の話者証拠 / fix796 記憶照合 / fix292・293 文体）は、消した台詞が無くなる＝本文どおりになる。
+ *
  * ■★r40 既定 OFF（opt-in）: localStorage v292DfixEdit01On='1' のときだけ有効。OFF = UI.saveEdit は元のまま・✕ も data-ti/data-ci も付かない（旧挙動）。
  * ■kill: localStorage v292DfixEdit01Off='1'（On より常に優先）→ 同じく旧挙動。
- * ■診断: window.__v292DfixEDIT01.status() / .reconcile(turn, narr, opts)
+ * ■診断: window.__v292DfixEDIT01.status() / .reconcile(turn, narr, opts) / .reconcilePlan(plan, opts)
  * ===================================================================== */
 (function (root) {
   'use strict';
@@ -184,8 +195,140 @@
     return res;
   }
 
+  /* ---------- フェーズ1b: plan.narrative / plan._structuredNarrative の <say> 区間を本文に合わせる ---------- */
+  /* <say who="X">…</say> と、fix61 が parsePlan 中だけ使う保護形 \uE000X\uE001…\uE002（_structuredNarrative には保護形のまま保存されている・実測）の両方を区間として扱う */
+  var SAY_RE = /<say\b([^>]*)>([\s\S]*?)<\/say>|\uE000([^\uE001\uE002]*)\uE001([\s\S]*?)\uE002/gi;
+  var SAY_FIX214 = /<say(\s+who="[^"]*"\s*)>([^<\n]*)[」』](?=\s*$)/g;   /* index.html fix214 / fix438 parseLine と同じ「」閉じの壊れタグ修復 */
+  function hasSay(s) { return typeof s === 'string' && (s.indexOf('<say') >= 0 || s.indexOf('\uE000') >= 0); }
+  function stripAllTags(s) { return String(s == null ? '' : s).replace(/<[^>]*>/g, ''); }
+  function sayKey(text) { return norm(stripAllTags(text)); }
+  function segsOf(line) {           /* 1 行（修復後）の say 区間 [{text,key,kind,to}] */
+    var out = [], m; SAY_RE.lastIndex = 0;
+    while ((m = SAY_RE.exec(line))) { var tx = m[2] != null ? m[2] : m[4]; out.push({ text: tx, key: sayKey(tx), kind: 'keep', to: null }); if (m[0].length === 0) SAY_RE.lastIndex++; }
+    return out;
+  }
+  function wrapLike(orig, to) {     /* 元のタグ中身が「…」/『…』で包まれていたら同じ形で */
+    var t = String(orig == null ? '' : orig).trim();
+    if (/^「/.test(t)) return '「' + to + '」';                     /* fix214 修復で 」 だけ落ちた形（「…）も同じ扱い */
+    if (/^『[\s\S]*』$/.test(t)) return '『' + to + '』';
+    return to;
+  }
+  /* 区間列（出現順）に規則 1〜3 を当てる。counters は呼び出しごとに新しく作る（narrative と structured で独立） */
+  function decide(items, ctx) {
+    var rw = {}, dp = {}, i, k, it;
+    for (i = 0; i < ctx.reworded.length; i++) { k = norm(ctx.reworded[i] && ctx.reworded[i].from); if (k) (rw[k] = rw[k] || []).push(String(ctx.reworded[i].to == null ? '' : ctx.reworded[i].to)); }
+    for (i = 0; i < ctx.dropped.length; i++) { k = norm(ctx.dropped[i] && ctx.dropped[i].say); if (k) dp[k] = (dp[k] || 0) + 1; }
+    for (i = 0; i < items.length; i++) { it = items[i]; if (it.key && rw[it.key] && rw[it.key].length) { it.kind = 'reword'; it.to = rw[it.key].shift(); } }                       /* 1. 言い直し（前から） */
+    for (i = items.length - 1; i >= 0; i--) { it = items[i]; if (it.kind === 'keep' && it.key && dp[it.key] > 0) { it.kind = 'drop'; dp[it.key]--; } }                           /* 2. 消したカードの台詞（後ろから＝reconcile が後ろのカードを捨てるのと同じ） */
+    if (ctx.oldBody != null && ctx.newBody != null) {
+      for (i = 0; i < items.length; i++) { it = items[i]; if (it.kind === 'keep' && it.key && ctx.oldBody.indexOf(it.key) >= 0 && ctx.newBody.indexOf(it.key) < 0) it.kind = 'drop'; }   /* 3. 編集前の本文にあって、いまは無い（カードの無かった行も本文が正） */
+    }
+  }
+  function rebuildLine(repaired, segs, cur) {   /* cur = {n} 区間の消費位置 */
+    var changed = false;
+    var out = repaired.replace(SAY_RE, function (m, attrs, text, pWho, pText) {
+      var sg = segs[cur.n++]; if (!sg) return m;
+      if (sg.kind === 'drop') { changed = true; return ''; }
+      if (sg.kind === 'reword') { changed = true; return (text != null) ? ('<say' + attrs + '>' + wrapLike(text, sg.to) + '</say>') : ('\uE000' + pWho + '\uE001' + wrapLike(pText, sg.to) + '\uE002'); }
+      return m;
+    });
+    if (!changed) return null;
+    out = out.replace(/[ \t]{2,}/g, ' ').trim();
+    return out;
+  }
+  /*
+   * reconcilePlan(plan, opts) — 純関数。入力を一切変更しない。
+   *   opts: { dropped: [{say}], reworded: [{from,to}], oldNarr, newNarr }（oldNarr/newNarr が無ければ規則 3 は働かない＝✕ の経路）
+   *   規則（<say>…</say> 区間ごと。地の文・他のタグはそのまま）:
+   *     1. reworded.from と同じ台詞 → 中身を to に（who 属性・「」の形は維持）
+   *     2. dropped.say と同じ台詞 → 区間を外す（後ろから 1 件ずつ）
+   *     3. 編集前の本文にあって編集後の本文に無い台詞 → 区間を外す
+   *     4. それ以外 → そのまま（本文に元から無い <say> = fix438 が復元している行は残す）
+   *   区間が無くなって空になった行／要素は取り除く。型は維持。
+   *   戻り値: { applicable, changed, narrative, structured, structuredAction:'none'|'replace', dropped, reworded }
+   */
+  function reconcilePlan(plan, opts) {
+    opts = opts || {};
+    var res = { applicable: false, changed: false, narrative: plan && plan.narrative, structured: plan && plan._structuredNarrative, structuredAction: 'none', dropped: 0, reworded: 0 };
+    if (!plan || typeof plan !== 'object' || !Array.isArray(plan.narrative)) return res;
+    res.applicable = true;
+    var ctx = { reworded: Array.isArray(opts.reworded) ? opts.reworded : [], dropped: Array.isArray(opts.dropped) ? opts.dropped : [],
+      oldBody: opts.oldNarr != null ? analyse(opts.oldNarr).body : null, newBody: opts.newNarr != null ? analyse(opts.newNarr).body : null };
+    if (!ctx.reworded.length && !ctx.dropped.length && (ctx.oldBody == null || ctx.newBody == null)) return res;
+    var i, j;
+    /* --- plan.narrative（文字列配列） --- */
+    var lines = plan.narrative, rep = [], segs = [], all = [];
+    for (i = 0; i < lines.length; i++) {
+      var raw = typeof lines[i] === 'string' ? lines[i] : null;
+      if (raw === null || !hasSay(raw)) { rep.push(null); segs.push([]); continue; }
+      var r = raw.replace(SAY_FIX214, '<say$1>$2</say>'), sg = segsOf(r);
+      rep.push(r); segs.push(sg); for (j = 0; j < sg.length; j++) all.push(sg[j]);
+    }
+    var nChanged = false, outN = [];
+    if (all.length) {
+      decide(all, ctx);
+      for (i = 0; i < lines.length; i++) {
+        if (rep[i] === null || !segs[i].length) { outN.push(lines[i]); continue; }
+        var nl = rebuildLine(rep[i], segs[i], { n: 0 });
+        if (nl === null) { outN.push(lines[i]); continue; }
+        nChanged = true; if (nl) outN.push(nl);
+      }
+      for (i = 0; i < all.length; i++) { if (all[i].kind === 'drop') res.dropped++; else if (all[i].kind === 'reword') res.reworded++; }
+    }
+    if (nChanged) { res.narrative = outN; res.changed = true; }
+    /* --- plan._structuredNarrative（{type,text,speaker} 配列。fix26/27/28 の型をそのまま） --- */
+    var st = plan._structuredNarrative;
+    if (Array.isArray(st)) {
+      var sItems = [], sMap = [], el;
+      for (i = 0; i < st.length; i++) {
+        el = st[i]; sMap.push(null);
+        if (typeof el === 'string') { if (hasSay(el)) { var r1 = el.replace(SAY_FIX214, '<say$1>$2</say>'), g1 = segsOf(r1); sMap[i] = { rep: r1, segs: g1 }; for (j = 0; j < g1.length; j++) sItems.push(g1[j]); } }
+        else if (el && typeof el === 'object') {
+          if (el.type === 'dialogue' && typeof el.text === 'string') { var d = { key: norm(el.text), kind: 'keep', to: null, dlg: true }; sMap[i] = { dlg: d }; sItems.push(d); }
+          else if (hasSay(el.text)) { var r2 = el.text.replace(SAY_FIX214, '<say$1>$2</say>'), g2 = segsOf(r2); sMap[i] = { rep: r2, segs: g2 }; for (j = 0; j < g2.length; j++) sItems.push(g2[j]); }
+        }
+      }
+      if (sItems.length) {
+        decide(sItems, ctx);
+        var sChanged = false, outS = [];
+        for (i = 0; i < st.length; i++) {
+          el = st[i]; var mp = sMap[i];
+          if (!mp) { outS.push(el); continue; }
+          if (mp.dlg) {
+            if (mp.dlg.kind === 'drop') { sChanged = true; continue; }
+            if (mp.dlg.kind === 'reword') { var ne = {}, kk; for (kk in el) if (has(el, kk)) ne[kk] = el[kk]; ne.text = mp.dlg.to; outS.push(ne); sChanged = true; continue; }
+            outS.push(el); continue;
+          }
+          var nt = rebuildLine(mp.rep, mp.segs, { n: 0 });
+          if (nt === null) { outS.push(el); continue; }
+          sChanged = true;
+          if (!nt) continue;                                        /* 空になった要素は取り除く */
+          if (typeof el === 'string') outS.push(nt);
+          else { var ne2 = {}, k2; for (k2 in el) if (has(el, k2)) ne2[k2] = el[k2]; ne2.text = nt; outS.push(ne2); }
+        }
+        if (sChanged) { res.structured = outS; res.structuredAction = 'replace'; res.changed = true; }
+      }
+    }
+    return res;
+  }
+  function planSnap(turn) {
+    var p = turn && turn.plan;
+    if (!p || typeof p !== 'object') return null;
+    return { plan: p, nar: p.narrative, hasSt: has(p, '_structuredNarrative'), st: p._structuredNarrative };
+  }
+  function planApply(turn, pres) {   /* 戻り値: 書き換えたか */
+    if (!pres || !pres.applicable || !pres.changed || !turn || !turn.plan) return false;
+    if (pres.narrative !== turn.plan.narrative) turn.plan.narrative = pres.narrative;
+    if (pres.structuredAction === 'replace') turn.plan._structuredNarrative = pres.structured;
+    return true;
+  }
+  function planRevert(ps) {
+    if (!ps) return;
+    try { ps.plan.narrative = ps.nar; if (ps.hasSt) ps.plan._structuredNarrative = ps.st; else delete ps.plan._structuredNarrative; } catch (e) {}
+  }
+
   /* ---------- 実行環境（ブラウザ） ---------- */
-  var ST = { installed: false, reason: 'init', saves: 0, reverted: 0, lastResult: null, cardDeletes: 0, undos: 0 };
+  var ST = { installed: false, reason: 'init', saves: 0, reverted: 0, lastResult: null, cardDeletes: 0, undos: 0, planEdits: 0 };
 
   function getS() {
     try { if (typeof root.__chronicleGetState === 'function') { var s = root.__chronicleGetState('edit01'); if (s) return s; } } catch (e) {}
@@ -218,22 +361,28 @@
         narr: turn.narrative, hasCs: has(turn, '_convSays'), cs: turn._convSays, hasMeta: has(turn, '_convSayMeta'), meta: turn._convSayMeta };
       var res;
       try { res = reconcile(turn, newNarr, { oldNarr: snap.narr, hero: heroName(S) }); } catch (e) { res = { applicable: false, changed: false, newQuotes: 0 }; try { console.warn(TAG, 'reconcile err', e && e.message); } catch (_) {} }
+      /* フェーズ1b: plan.narrative / _structuredNarrative の <say> も同じ対応表で直す（失敗したら plan は触らない） */
+      var ps = planSnap(turn), pres = null;
+      try { pres = reconcilePlan(turn.plan, { dropped: (res && res.dropped) || [], reworded: (res && res.reworded) || [], oldNarr: snap.narr, newNarr: newNarr }); } catch (e) { pres = null; try { console.warn(TAG, 'reconcilePlan err', e && e.message); } catch (_) {} }
       var revert = function () {
         try {
           turn.narrative = snap.narr;
           if (snap.hasCs) turn._convSays = snap.cs; else delete turn._convSays;
           if (snap.hasMeta) turn._convSayMeta = snap.meta; else delete turn._convSayMeta;
+          planRevert(ps);
         } catch (e) {}
         ST.reverted++;
       };
-      /* 3 つを同じ保存に載せる（fix670 が二重に再計算しない） */
+      /* 3 つ（＋plan）を同じ保存に載せる（fix670 が二重に再計算しない） */
       turn.narrative = newNarr;
       if (res.applicable && res.changed) {
         turn._convSays = res.says;
         if (res.metaAction === 'splice') turn._convSayMeta = res.meta;
         else if (res.metaAction === 'drop') delete turn._convSayMeta;
       }
-      ST.lastResult = { idx: idx, changed: !!res.changed, kept: res.kept, dropped: res.dropped, reworded: res.reworded, newQuotes: res.newQuotes, metaAction: res.metaAction, lenOk: res.lenOk };
+      var planChanged = planApply(turn, pres);
+      ST.lastResult = { idx: idx, changed: !!res.changed, kept: res.kept, dropped: res.dropped, reworded: res.reworded, newQuotes: res.newQuotes, metaAction: res.metaAction, lenOk: res.lenOk,
+        plan: pres ? { applicable: pres.applicable, changed: planChanged, dropped: pres.dropped, reworded: pres.reworded, structured: pres.structuredAction } : null };
       var p;
       try { p = (typeof S.saveD === 'function') ? S.saveD('UI.saveEdit') : Promise.resolve({ ran: true, result: S.save() }); }
       catch (e) { p = Promise.reject(e); }
@@ -243,7 +392,7 @@
           try { UI.setStatus('編集を保存できませんでした。もう一度お試しください', true); } catch (e) {}
           return;
         }
-        ST.saves++;
+        ST.saves++; if (planChanged) ST.planEdits++;
         UI.closeEdit();
         clearStream();      /* fix317:100 と同じ。renderAll の hook → fix66 repair() が turns から作り直す（_convSays 無しの古いターンも本文どおりになる） */
         UI.renderAll(); UI.renderBranches(S.scene && S.scene.branches);
@@ -317,23 +466,29 @@
     var metaAligned = Array.isArray(snap.meta) && snap.meta.length === snap.cs.length, metaEntry = metaAligned ? snap.meta[ci] : undefined;
     var ncs = snap.cs.slice(); ncs.splice(ci, 1); turn._convSays = ncs;
     if (metaAligned) { var nm = snap.meta.slice(); nm.splice(ci, 1); turn._convSayMeta = nm; }
-    var revert = function () { turn._convSays = snap.cs; if (snap.hasMeta) turn._convSayMeta = snap.meta; else delete turn._convSayMeta; };
+    /* フェーズ1b: plan の同じ台詞の <say> 区間も外す（本文は触らない。規則 3 は働かない）。undo で元の配列へ戻す */
+    var ps = planSnap(turn), pres = null;
+    try { pres = reconcilePlan(turn.plan, { dropped: [{ say: entry.say }], reworded: [] }); } catch (e) { pres = null; }
+    var planChanged = planApply(turn, pres);
+    var revert = function () { turn._convSays = snap.cs; if (snap.hasMeta) turn._convSayMeta = snap.meta; else delete turn._convSayMeta; planRevert(ps); };
     var p; try { p = (typeof S.saveD === 'function') ? S.saveD('EDIT01.deleteCard') : Promise.resolve({ ran: true, result: S.save() }); } catch (e) { p = Promise.reject(e); }
     return Promise.resolve(p).then(function (x) {
       if (!x || x.ran !== true) { revert(); toast('保存できなかったので、消していません'); return { ok: false, why: 'save-refused' }; }
-      ST.cardDeletes++;
+      ST.cardDeletes++; if (planChanged) ST.planEdits++;
       try { if (cardEl && cardEl.parentNode) cardEl.parentNode.removeChild(cardEl); } catch (e) {}
-      if (!opts.silent) toast('会話ログから1件消しました（本文はそのままです）', function () { undoDelete(turn, ci, entry, metaAligned, metaEntry); });
-      return { ok: true, turn: turn, entry: entry };
+      if (!opts.silent) toast('会話ログから1件消しました（本文はそのままです）', function () { undoDelete(turn, ci, entry, metaAligned, metaEntry, planChanged ? ps : null); });
+      return { ok: true, turn: turn, entry: entry, planChanged: planChanged };
     }, function () { revert(); toast('保存できなかったので、消していません'); return { ok: false, why: 'save-rejected' }; });
   }
-  function undoDelete(turn, ci, entry, metaAligned, metaEntry) {
+  function undoDelete(turn, ci, entry, metaAligned, metaEntry, planPrev) {
     var S = getS();
     if (!S || !turn || !Array.isArray(turn._convSays)) return Promise.resolve({ ok: false });
     var snap = { cs: turn._convSays, hasMeta: has(turn, '_convSayMeta'), meta: turn._convSayMeta };
     var at = Math.min(ci, snap.cs.length), ncs = snap.cs.slice(); ncs.splice(at, 0, entry); turn._convSays = ncs;
     if (metaAligned && Array.isArray(snap.meta) && snap.meta.length === snap.cs.length) { var nm = snap.meta.slice(); nm.splice(at, 0, metaEntry); turn._convSayMeta = nm; }
-    var revert = function () { turn._convSays = snap.cs; if (snap.hasMeta) turn._convSayMeta = snap.meta; else delete turn._convSayMeta; };
+    var ps = planSnap(turn);
+    if (planPrev && ps && planPrev.plan === ps.plan) planRevert(planPrev);          /* フェーズ1b: ✕ で外した <say> 区間を元の配列に戻す（同じ plan オブジェクトのときだけ） */
+    var revert = function () { turn._convSays = snap.cs; if (snap.hasMeta) turn._convSayMeta = snap.meta; else delete turn._convSayMeta; planRevert(ps); };
     var p; try { p = (typeof S.saveD === 'function') ? S.saveD('EDIT01.undoDelete') : Promise.resolve({ ran: true, result: S.save() }); } catch (e) { p = Promise.reject(e); }
     return Promise.resolve(p).then(function (x) {
       if (!x || x.ran !== true) { revert(); toast('保存できなかったので、戻していません'); return { ok: false }; }
@@ -355,9 +510,9 @@
   }
 
   var api = {
-    reconcile: reconcile, norm: norm, similarity: similarity, analyse: analyse,
+    reconcile: reconcile, reconcilePlan: reconcilePlan, norm: norm, similarity: similarity, analyse: analyse,
     decorate: decorate, deleteCard: deleteCard, undoDelete: undoDelete, install: install, sweepDecorate: sweepDecorate, enabled: enabled,
-    status: function () { return { installed: ST.installed, reason: ST.reason, off: off(), saves: ST.saves, reverted: ST.reverted, cardDeletes: ST.cardDeletes, undos: ST.undos, last: ST.lastResult }; }
+    status: function () { return { installed: ST.installed, reason: ST.reason, off: off(), saves: ST.saves, reverted: ST.reverted, cardDeletes: ST.cardDeletes, undos: ST.undos, planEdits: ST.planEdits, last: ST.lastResult }; }
   };
   root.__v292DfixEDIT01 = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

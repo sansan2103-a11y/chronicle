@@ -91,7 +91,31 @@
     if (model === PRIMARY_ID && __p && __p.provider && typeof __p.provider === 'object' && __bf1On()) __p.provider.ignore = ['novita'];
     return __p;
   }
-  function __bf1On(){ try { return typeof localStorage !== 'undefined' && localStorage.getItem('v292DfixBF1On') === '1' && localStorage.getItem('v292DfixBF1Off') !== '1'; } catch (e) { return false; } }
+  /* ★BF1-OWNER (GPT #127-JO BF1_CLIENT_OWNER_DEFAULT_ON = CONDITIONAL_GO_NEXT_BUNDLE): Owner だけ既定 ON。
+     enabled = !kill && ( optIn==='1' || ( !匿名経路 && ownerGate() ) )。**requestPolicy() の呼び出しごと**に評価（load 時に固定しない）。
+     ownerGate = 既存の信頼済み Owner 判定（fix905 と同じ読み口）: window.__v292Dfix893.serverMe()（server 由来 /auth/me の in-memory cache。mark は読まない）が
+     entitlement==='owner' かつ status==='active' のときだけ true。/auth/me 未応答（null）・失敗・401・非 owner・API 不在・例外 → false（fail-closed = 表の値そのまま）。
+     匿名経路（fix886 active = x-chronicle-anon を付ける Customer 経路。Worker が権威）では Owner 判定を使わない（opt-in は従来どおり）。
+     kill は Owner でも常に勝つ。storage が読めない = kill 不明 = OFF。書くもの: なし。/auth/me を増やさない。 */
+  function __bf1Owner(){
+    try {
+      var A = (typeof window !== 'undefined') ? window.__v292Dfix893 : null;
+      if (!A || typeof A.serverMe !== 'function') return false;
+      var me = A.serverMe();
+      return !!(me && me.entitlement === 'owner' && me.status === 'active');
+    } catch (e) { return false; }
+  }
+  function __bf1Anon(){
+    try { var P = (typeof window !== 'undefined') ? window.__v292Dfix886 : null; return !!(P && P.api && typeof P.api.active === 'function' && P.api.active()); } catch (e) { return false; }
+  }
+  function __bf1On(){
+    var kill, on;
+    try { kill = localStorage.getItem('v292DfixBF1Off'); on = localStorage.getItem('v292DfixBF1On'); } catch (e) { return false; }
+    if (kill === '1') return false;
+    if (on === '1') return true;
+    if (__bf1Anon()) return false;
+    return __bf1Owner();
+  }
 
   /* ★純粋関数 #2（deep-merge の実装は**この 1 本だけ**。5 経路が同じものを使う）。
      ・policy が {} なら body は 1 byte も変わらない（対象外 model = 完全に無干渉）
