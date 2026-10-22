@@ -32,8 +32,13 @@
  *   次ターンの文脈（recentScenes=turn.narrative / recentDialogues=_convSays / recentHistory=narrative）は plan を読まないので影響なし。
  *   plan.narrative を後から読むもの（fix438 表示 / fix606・640・383 の話者証拠 / fix796 記憶照合 / fix292・293 文体）は、消した台詞が無くなる＝本文どおりになる。
  *
- * ■★r40 既定 OFF（opt-in）: localStorage v292DfixEdit01On='1' のときだけ有効。OFF = UI.saveEdit は元のまま・✕ も data-ti/data-ci も付かない（旧挙動）。
- * ■kill: localStorage v292DfixEdit01Off='1'（On より常に優先）→ 同じく旧挙動。
+ * ■★r42 既定 ON（GPT #127-KA）: localStorage v292DfixEdit01Off='1' でなければ有効。v292DfixEdit01On は読まない（残っていても無害）。
+ *   （r40/r41 は opt-in: v292DfixEdit01On='1' のときだけ有効だった。）
+ * ■kill: localStorage v292DfixEdit01Off='1'（常に勝つ）→ 旧挙動（UI.saveEdit は元のまま・✕ も data-ti/data-ci も付かない）。storage 不可 = OFF（旧挙動）。
+ * ■既存データ: 読み込み時には何もしない（再処理・移行なし）。動くのは「✎ 編集 → 保存」と「✕」の 2 操作だけ。
+ * ■★r42 (GPT #127-KE/#127-KO) 入れ子の「」: 引用の区間は括弧の深さで切る（外側の対だけを 1 区間）。編集後の本文で括弧の対応が取れない
+ *   （閉じ忘れ・余分な閉じ・「…』）ときは引用の区間を使わず、行が変わっていないカードだけ残し、消えた行・変わった行のカードと plan の同じ <say> を外す
+ *   （本文は打ったとおり保存・言い直しは入れない・案内 1 行）。編集前だけ不整合なら編集後の区間で通常どおり合わせる。
  * ■診断: window.__v292DfixEDIT01.status() / .reconcile(turn, narr, opts) / .reconcilePlan(plan, opts)
  * ===================================================================== */
 (function (root) {
@@ -41,8 +46,8 @@
   var TAG = '[v292DfixEDIT01]';
   var THRESH = 0.6;
 
-  /* ★r40 (GPT #127-JF 'Owner QA first'): opt-in。localStorage v292DfixEdit01On==='1' のときだけ有効。v292DfixEdit01Off==='1' は強制停止で常に勝つ。storage 不可 = OFF（旧挙動）。 */
-  function enabled() { try { var ls = root.localStorage; return !!ls && ls.getItem('v292DfixEdit01On') === '1' && ls.getItem('v292DfixEdit01Off') !== '1'; } catch (e) { return false; } }
+  /* ★r42 (GPT #127-KA): 既定 ON。v292DfixEdit01Off==='1' は強制停止で常に勝つ。storage 不可 = OFF（旧挙動）。v292DfixEdit01On は見ない（r40/r41 の opt-in 値が残っていても同じ ON）。 */
+  function enabled() { try { var ls = root.localStorage; return !!ls && ls.getItem('v292DfixEdit01Off') !== '1'; } catch (e) { return false; } }
   function off() { return !enabled(); }
 
   /* ---------- 純関数 ---------- */
@@ -60,14 +65,22 @@
       if (!DROP_CH.test(ch)) body += ch;
     }
     map[raw.length] = body.length;
-    var spans = [], re = /「([^」]*)」|『([^』]*)』/g, m;
-    while ((m = re.exec(raw))) {
-      var inner = m[1] !== undefined ? m[1] : m[2];
-      var ns = map[m.index], ne = map[m.index + m[0].length];
-      spans.push({ ns: ns, ne: ne, key: body.slice(ns, ne), inner: String(inner).trim(), used: false });
-      if (m[0].length === 0) re.lastIndex++;
+    /* ★r42 (GPT #127-KE): 引用は括弧の深さで切る。旧版の正規表現 /「([^」]*)」/ は入れ子の内側の最初の 」 で切れ、
+       言い直した台詞が短く保存されていた（「…「続きは」って」→ say「…「続きは」）。外側の対になった 「…」/『…』 だけを 1 区間にする。
+       対応が取れない（閉じ忘れ・余分な閉じ・「…』の食い違い）ときは quotesOk=false → reconcile は何もしない（旧挙動で保存）。 */
+    var spans = [], stack = [], quotesOk = true, CLOSE = { '「': '」', '『': '』' };
+    for (i = 0; i < raw.length; i++) {
+      ch = raw.charAt(i);
+      if (ch === '「' || ch === '『') { stack.push({ c: ch, i: i }); continue; }
+      if (ch !== '」' && ch !== '』') continue;
+      if (!stack.length || CLOSE[stack[stack.length - 1].c] !== ch) { quotesOk = false; continue; }
+      var op = stack.pop();
+      if (stack.length) continue;                                                     /* 内側の引用は外側の区間の一部 */
+      var ns = map[op.i], ne = map[i + 1];
+      spans.push({ ns: ns, ne: ne, key: body.slice(ns, ne), inner: raw.slice(op.i + 1, i).trim(), used: false });
     }
-    return { raw: raw, body: body, spans: spans };
+    if (stack.length) quotesOk = false;
+    return { raw: raw, body: body, spans: spans, quotesOk: quotesOk };
   }
 
   function occurrences(body, k) {
@@ -105,9 +118,14 @@
     if (!cs) return res;
     var rawMeta = turn._convSayMeta, hasMeta = Array.isArray(rawMeta), metaAligned = hasMeta && rawMeta.length === cs.length;
     var A = analyse(newNarr), body = A.body;
-    var oldBody = (opts.oldNarr != null) ? analyse(opts.oldNarr).body : null;
+    var OA = (opts.oldNarr != null) ? analyse(opts.oldNarr) : null, oldBody = OA ? OA.body : null;
     var heroKey = (turn.inputType === 'SAY' && turn.playerText) ? norm(turn.playerText) : null;
     var hero = opts.hero || '';
+    /* ★r42 (GPT #127-KE/#127-KO): 編集後の本文で括弧の対応が取れないときは、引用の区間を一切使わない（言い直しの対応づけ・短い行・連結行を作らない）。
+       その代わり「行が変わっていないカード」だけを残し、消えた行・変わった行のカードは外す（古い文言を会話ログ/plan/次ターンへ持ち越さない）。
+       編集前だけ不整合（編集後は整っている）なら、編集後の区間で通常どおり合わせる（編集前の区間を使う「足して書き直した」判定だけ使わない）。 */
+    if (!A.quotesOk) return lineFallback(turn, cs, rawMeta, metaAligned, newNarr, opts.oldNarr, heroKey, hero, res);
+    var oldSpansOk = !OA || OA.quotesOk;
     var n = cs.length, st = new Array(n), used = {}, i, c, k;
 
     /* 1 回目: 本文にまだある台詞（n 番目のカードは n 番目の出現に当てる） */
@@ -127,8 +145,8 @@
       for (j = 0; j < A.spans.length; j++) if (A.spans[j].ns < e0 && A.spans[j].ne > s0) A.spans[j].used = true;
     }
     /* 「足して書き直した」行: 古い台詞が、編集前は 1 つの引用そのものだったのに、いまは新しい（より長い）引用の一部になっている → その引用の文に更新する */
-    if (oldBody != null) {
-      var oldWhole = {}, oa = analyse(opts.oldNarr), oi;
+    if (oldBody != null && oldSpansOk) {
+      var oldWhole = {}, oa = OA, oi;
       for (oi = 0; oi < oa.spans.length; oi++) oldWhole[oa.spans[oi].key] = true;
       var spanTaken = {};
       for (i = 0; i < n; i++) {
@@ -195,6 +213,26 @@
     return res;
   }
 
+  /* ★r42 (GPT #127-KO) 括弧の対応が取れない編集の安全側: 行単位（正規化して比較）で、変わっていない行にある台詞のカードだけ残す */
+  function lineFallback(turn, cs, rawMeta, metaAligned, newNarr, oldNarr, heroKey, hero, res) {
+    res.skipped = 'unbalanced-quotes'; res.fallback = 'unchanged-lines';
+    var nl = String(stripTags(newNarr)).split('\n').map(norm), cnt = {}, i, c, k, j;
+    String(stripTags(oldNarr == null ? '' : oldNarr)).split('\n').map(norm).forEach(function (x) { if (x) cnt[x] = (cnt[x] || 0) + 1; });
+    var outS = [], outM = [];
+    for (i = 0; i < cs.length; i++) {
+      c = cs[i]; k = norm(c && c.say); var keep = false;
+      if (!c || typeof c !== 'object' || !k) keep = true;                                   /* 想定外の形・空は触らない（通常経路と同じ） */
+      else if (heroKey && k === heroKey && (!hero || c.who === hero)) keep = true;           /* SAY の主人公の写し */
+      else for (j = 0; j < nl.length; j++) if (nl[j] && cnt[nl[j]] > 0 && nl[j].indexOf(k) >= 0) { keep = true; break; }
+      if (keep) { outS.push(c); if (metaAligned) outM.push(rawMeta[i]); }
+      else res.dropped.push({ i: i, who: String(c.who || ''), say: String(c.say || '') });
+    }
+    res.kept = outS.length; res.changed = outS.length !== cs.length; res.newQuotes = 0;
+    if (res.changed) { res.says = outS; if (metaAligned) { res.meta = outM; res.metaAction = 'splice'; } else if (Array.isArray(rawMeta)) { res.meta = undefined; res.metaAction = 'drop'; } }
+    res.lenOk = true;
+    return res;
+  }
+
   /* ---------- フェーズ1b: plan.narrative / plan._structuredNarrative の <say> 区間を本文に合わせる ---------- */
   /* <say who="X">…</say> と、fix61 が parsePlan 中だけ使う保護形 \uE000X\uE001…\uE002（_structuredNarrative には保護形のまま保存されている・実測）の両方を区間として扱う */
   var SAY_RE = /<say\b([^>]*)>([\s\S]*?)<\/say>|\uE000([^\uE001\uE002]*)\uE001([\s\S]*?)\uE002/gi;
@@ -207,10 +245,18 @@
     while ((m = SAY_RE.exec(line))) { var tx = m[2] != null ? m[2] : m[4]; out.push({ text: tx, key: sayKey(tx), kind: 'keep', to: null }); if (m[0].length === 0) SAY_RE.lastIndex++; }
     return out;
   }
+  /* ★r42: 先頭の 「/『 が「全体を包む括弧」か（対の閉じが末尾にある／閉じが無い＝fix214 で 」 だけ落ちた形）。
+     「「いいえ」でもいいよ」の中身「いいえ」でもいいよ のように、先頭が入れ子の内側の引用で始まるだけなら包みではない */
+  function wrapsWhole(t, o, c) {
+    if (t.charAt(0) !== o) return false;
+    var d = 0, i, ch;
+    for (i = 0; i < t.length; i++) { ch = t.charAt(i); if (ch === o) d++; else if (ch === c) { d--; if (d === 0) return i === t.length - 1; } }
+    return o === '「';                                               /* 閉じが無い: 「 は fix214 の形として包む（旧挙動と同じ）、『 は包まない（旧挙動と同じ） */
+  }
   function wrapLike(orig, to) {     /* 元のタグ中身が「…」/『…』で包まれていたら同じ形で */
     var t = String(orig == null ? '' : orig).trim();
-    if (/^「/.test(t)) return '「' + to + '」';                     /* fix214 修復で 」 だけ落ちた形（「…）も同じ扱い */
-    if (/^『[\s\S]*』$/.test(t)) return '『' + to + '』';
+    if (wrapsWhole(t, '「', '」')) return '「' + to + '」';           /* fix214 修復で 」 だけ落ちた形（「…）も同じ扱い */
+    if (wrapsWhole(t, '『', '』')) return '『' + to + '』';
     return to;
   }
   /* 区間列（出現順）に規則 1〜3 を当てる。counters は呼び出しごとに新しく作る（narrative と structured で独立） */
@@ -350,6 +396,7 @@
     } catch (e) {}
   }
 
+  var SKIP_MSG = '本文を保存しました。かぎかっこ「」の対応が取れないため、直した台詞は会話ログに入れていません（消した・直した行のカードは外しました）。「」を閉じると次の編集から合わせます';
   function makeSaveEdit(orig) {
     return function saveEdit() {
       if (off()) return orig.apply(this, arguments);
@@ -363,7 +410,8 @@
       try { res = reconcile(turn, newNarr, { oldNarr: snap.narr, hero: heroName(S) }); } catch (e) { res = { applicable: false, changed: false, newQuotes: 0 }; try { console.warn(TAG, 'reconcile err', e && e.message); } catch (_) {} }
       /* フェーズ1b: plan.narrative / _structuredNarrative の <say> も同じ対応表で直す（失敗したら plan は触らない） */
       var ps = planSnap(turn), pres = null;
-      try { pres = reconcilePlan(turn.plan, { dropped: (res && res.dropped) || [], reworded: (res && res.reworded) || [], oldNarr: snap.narr, newNarr: newNarr }); } catch (e) { pres = null; try { console.warn(TAG, 'reconcilePlan err', e && e.message); } catch (_) {} }
+      /* ★r42 (#127-KO): 安全側（括弧不整合）でも、外したカードと消えた行の <say> は plan からも外す（言い直しは渡さない＝引用の区間は使わない） */
+      try { pres = reconcilePlan(turn.plan, { dropped: (res && res.dropped) || [], reworded: (res && res.skipped) ? [] : ((res && res.reworded) || []), oldNarr: snap.narr, newNarr: newNarr }); } catch (e) { pres = null; try { console.warn(TAG, 'reconcilePlan err', e && e.message); } catch (_) {} }
       var revert = function () {
         try {
           turn.narrative = snap.narr;
@@ -381,7 +429,8 @@
         else if (res.metaAction === 'drop') delete turn._convSayMeta;
       }
       var planChanged = planApply(turn, pres);
-      ST.lastResult = { idx: idx, changed: !!res.changed, kept: res.kept, dropped: res.dropped, reworded: res.reworded, newQuotes: res.newQuotes, metaAction: res.metaAction, lenOk: res.lenOk,
+      if (res && res.skipped) { ST.skipped = (ST.skipped || 0) + 1; try { console.warn(TAG, 'skip reconcile:', res.skipped, 'turn', idx); } catch (_) {} }
+      ST.lastResult = { idx: idx, skipped: (res && res.skipped) || null, changed: !!res.changed, kept: res.kept, dropped: res.dropped, reworded: res.reworded, newQuotes: res.newQuotes, metaAction: res.metaAction, lenOk: res.lenOk,
         plan: pres ? { applicable: pres.applicable, changed: planChanged, dropped: pres.dropped, reworded: pres.reworded, structured: pres.structuredAction } : null };
       var p;
       try { p = (typeof S.saveD === 'function') ? S.saveD('UI.saveEdit') : Promise.resolve({ ran: true, result: S.save() }); }
@@ -396,7 +445,12 @@
         UI.closeEdit();
         clearStream();      /* fix317:100 と同じ。renderAll の hook → fix66 repair() が turns から作り直す（_convSays 無しの古いターンも本文どおりになる） */
         UI.renderAll(); UI.renderBranches(S.scene && S.scene.branches);
-        if (res.applicable && res.newQuotes > 0) {
+        if (res.skipped) {
+          try { UI.setStatus(SKIP_MSG); } catch (e) {}
+        } else {
+          try { var tsEl = root.document.getElementById('topStatus'); if (tsEl && tsEl.textContent === SKIP_MSG) UI.setStatus(''); } catch (e) {}   /* 前回の安全停止の案内を残さない */
+        }
+        if (!res.skipped && res.applicable && res.newQuotes > 0) {
           try { UI.setStatus('本文にあるが会話ログにないセリフ: ' + res.newQuotes + ' 件'); } catch (e) {}
         }
       }, function (err) {
@@ -512,7 +566,7 @@
   var api = {
     reconcile: reconcile, reconcilePlan: reconcilePlan, norm: norm, similarity: similarity, analyse: analyse,
     decorate: decorate, deleteCard: deleteCard, undoDelete: undoDelete, install: install, sweepDecorate: sweepDecorate, enabled: enabled,
-    status: function () { return { installed: ST.installed, reason: ST.reason, off: off(), saves: ST.saves, reverted: ST.reverted, cardDeletes: ST.cardDeletes, undos: ST.undos, planEdits: ST.planEdits, last: ST.lastResult }; }
+    status: function () { return { installed: ST.installed, reason: ST.reason, off: off(), skipped: ST.skipped || 0, saves: ST.saves, reverted: ST.reverted, cardDeletes: ST.cardDeletes, undos: ST.undos, planEdits: ST.planEdits, last: ST.lastResult }; }
   };
   root.__v292DfixEDIT01 = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

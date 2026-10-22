@@ -335,7 +335,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261022-bundle41-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261022-bundle42-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4349,7 +4349,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=20260912-q119s4"></script>
   <script src="v292Dfix66-renderhook-repair.js?cb=20261022-bundle40-b"></script>
-  <script src="v292DfixEDIT01-edit-reconcile.js?cb=20261022-bundle41-a"></script><!-- v292DfixEDIT01: 本文を編集したら会話ログを本文に合わせる(フェーズ1) + カード✕。OFF=localStorage v292DfixEdit01Off=1 -->
+  <script src="v292DfixEDIT01-edit-reconcile.js?cb=20261022-bundle42-a"></script><!-- v292DfixEDIT01: 本文を編集したら会話ログを本文に合わせる(フェーズ1) + カード✕。OFF=localStorage v292DfixEdit01Off=1 -->
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
     <!-- v292Dfix189c: fix70(dialogue-order, 本文ベースの並べ替え)を無効化。fix70bが
@@ -4436,6 +4436,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixSC1-sidecar-eligibility.js?cb=20261009-bh1"></script>
 <script src="v292DfixGQ4-summary-request.js?cb=20261010-gq1"></script>
 <script src="v292DfixCTX-context-restore.js?cb=20261010-gq1"></script>
+<!-- v292DfixRC1 r2 (QUOTE-01 / GPT #127-JS・#127-KA): 想起を求める入力のときだけ、この物語の実入力・話者の確かな台詞を user JSON の playerInputs（storySoFar の直後）に足す。既定 OFF・Owner だけの opt-in（localStorage v292DfixRC1On=1 かつ /auth/me で owner・active）/ kill v292DfixRC1Off=1 -->
+<script src="v292DfixRC1-recall-inputs.js?cb=20261022-bundle42-a"></script>
 <script src="v292Dfix308-creepy-toggle.js?cb=v292Dfix308"></script>
 <script src="v292Dfix309-progression.js?cb=v292Dfix419c"></script>
 <!-- fix577: 物語削除の入口を1つに寄せる。B(gallery)/C(features clearSlot)の独自削除を停止し、
