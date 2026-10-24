@@ -330,6 +330,8 @@ v292Dfix945-xtab-stale-guard.js
 v292DfixBF1-reasoning-fallback.js
 v292DfixCTX-context-restore.js
 v292DfixRC1-recall-inputs.js
+v292DfixCP1-scene-presence.js
+v292DfixCP1-final-tap.js
 v292DfixGQ4-summary-request.js
 v292DfixP0-scenario-blocker.js
 v292DfixSC1-sidecar-eligibility.js

@@ -4,6 +4,7 @@
 <script src="v292Dvault2-sendgate.js?cb=20261021-laneE-a"></script>
 <script src="v292Dvault2-copygate.js?cb=20261011-ab8"></script>
 <script src="v292Dfix950-card-delivery-probe.js?cb=20261014-f950r2"></script><!-- v292Dfix950: card/memory delivery probe (record-only; request body unchanged). OFF=localStorage v292Dfix950Off=1 -->
+<script src="v292DfixCP1-final-tap.js?cb=20261023-bundle43a-r5"></script><!-- CP1 tap r43e (GPT #127-JY/#127-KA/#127-KK/#127-LA/#127-LC): 送信直前の body を CP1 に見せる観測口（送る中身は不変）。読み込み時に v292DfixCP1On='1'（かつ v292DfixCP1Off≠'1'）のときだけ fetch を包む。OFF/kill は何もしない。CP1 を使ったターンの途中でアカウント・物語・Owner 権限が変わった・kill されたときは、その送信を出さない／送信後に変わったら応答を捨てる。止めたターンは自動で送り直さない -->
 <script src="v292Dfix953-card-canary-gate.js?cb=20261015-bundle1-cardA-f957on"></script><!-- v292Dfix953: card canary gate (fix952/fix951/fix444g run ONLY when localStorage v292Dfix953On=1 AND this document story id is in the baked allowlist; otherwise byte-identical to production) -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -335,7 +336,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261022-bundle42-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261023-bundle43a-r5';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -2659,7 +2660,7 @@ const G = {
      ・失敗したら **元の err** を throw（既存の fix263a トースト経路を変えない）。
      ・診断は volatile（registry の FB_DIAG）。localStorage / save schema へは 1 byte も書かない（CF-5）。
      ・新 wrapper 0（fetch/XHR/parsePlan/submit を包まない・参照へ代入しない）。 */
-  async _cmfTry(sys, user, err, primaryAttempts) {
+  async _cmfTry(sys, user, err, primaryAttempts, cp1Att) {
     var R = null; try { R = window.__CHR_MODEL_REGISTRY; } catch(_e0){ R = null; }
     if (!R || typeof R.fallbackGate !== 'function' || typeof R.classifyFailure !== 'function' ||
         typeof R.fallbackPolicy !== 'function') throw err;
@@ -2682,7 +2683,7 @@ const G = {
 
     var r = null, fbErr = null;
     this.__cmfBusy = true;
-    try { r = await Api.call(sys, user, undefined, { __fbModel: m }); }
+    try { r = await Api.call(sys, user, undefined, cp1Att ? { __fbModel: m, __cp1Att: cp1Att } : { __fbModel: m }); }   /* ★r5: 別モデルへの切替も同じ試行（取消済みなら送らない） */
     catch (_efb) { fbErr = _efb; }
     finally { this.__cmfBusy = false; }
 
@@ -2702,6 +2703,7 @@ const G = {
   },
 
   async submit() {
+    var _cp1A = null, _cp1Att = null;   /* ★bundle43-a r5（GPT #127-LI G5）: CP1 を使う試行のときだけ値が入る。OFF・kill・非 Owner では null のまま＝以下はすべて従来の経路 */
     if (S.inFlight) return;
     /* ★fix546(2026-07-25・おしん裁定「直るまで遊べなくてもいい」): 直前のターンが保存できていない間は
        新しいターンを作らせない。ここは G.submit の入口で、ボタン・Enterキー・他fix(fix138/v274/v261)からの
@@ -2748,16 +2750,19 @@ const G = {
       const _b748 = await this._dadmRun('TURN_BUILD', () => Planner.build(S.mode, text));
       if (!_b748.ran) { this._dadmHold(_b748, inputEl, text); return; }
       const { sys, user } = _b748.result;
+      try { _cp1A = window.__v292DfixCP1Att || null; _cp1Att = (_cp1A && typeof _cp1A.of === 'function') ? _cp1A.of(_b748.result) : null; } catch(_cp1e){ _cp1A = null; _cp1Att = null; }   /* ★r5: この build の試行（in-memory の印）を受け取る */
+      const _cp1Call = (s, u) => (_cp1Att ? Api.call(s, u, undefined, { __cp1Att: _cp1Att }) : Api.call(s, u));   /* ★r5: 送信・fix265 の再送・書き直しは同じ試行を引き継ぐ（CP1 の包みが内側へ渡す前に取り除く） */
+      const _cp1Wrap = (fn) => (_cp1Att ? () => _cp1A.within(_cp1Att, fn) : fn);   /* ★r5: parse と確定の同期区間をこの試行に結び付ける */
       try { window.__v292Dfix797 && __v292Dfix797.beginTurnContext(S); } catch(_e797b){} /* ★v292Dfix797 Rev4: 今回の生成が始まる前の fix77 状態を 1 回だけ写す（ephemeral／書込 0）。未 load / flag OFF で no-op */
-      let result; try { result = await Api.call(sys, user); } catch (_e265) { var _m269 = String((_e265 && _e265.message) || _e265); var _is429 = /HTTP 429/.test(_m269); if (_is429 || /HTTP 5\d\d|Failed to fetch|NetworkError|load failed/i.test(_m269)) { UI.setStatus(_is429 ? '混み合っています。少し待って自動でもう一度試します…' : 'うまくつながりませんでした。自動でもう一度試します…'); await new Promise(function(_r){ setTimeout(_r, _is429 ? 8000 : 2000); }); try { result = await Api.call(sys, user); } catch (_e2cmf) { result = await this._cmfTry(sys, user, _e2cmf, 2); } } else { result = await this._cmfTry(sys, user, _e265, 1); } } /* v292Dfix269: 429(レート制限)はレート明けを8秒待って再試行 */ /* v292Dfix265: 5xx/ネットワーク一過性エラーは1回だけ透過リトライ。2回目失敗はfix263aトーストへ */ /* ★dscmf-1: 同一モデル retry を **使い切った最終段だけ** に cross-model fallback を足す（CF-1）。_cmfTry は gate OFF / 非対象なら受け取った err をそのまま throw するので、既定では throw _e265 と完全同値。commit 済み response には到達しない（この行は result 取得前）。 */
-      if (!result) { try { if (text && !inputEl.value.trim()) inputEl.value = text; UI.setStatus('応答が得られませんでした。もう一度お試しください', true); } catch(_){} return; } /* v292Dfix263a2 */
+      let result; try { result = await _cp1Call(sys, user); } catch (_e265) { var _m269 = String((_e265 && _e265.message) || _e265); var _is429 = /HTTP 429/.test(_m269); if (_is429 || /HTTP 5\d\d|Failed to fetch|NetworkError|load failed/i.test(_m269)) { UI.setStatus(_is429 ? '混み合っています。少し待って自動でもう一度試します…' : 'うまくつながりませんでした。自動でもう一度試します…'); await new Promise(function(_r){ setTimeout(_r, _is429 ? 8000 : 2000); }); try { result = await _cp1Call(sys, user); } catch (_e2cmf) { result = await this._cmfTry(sys, user, _e2cmf, 2, _cp1Att); } } else { result = await this._cmfTry(sys, user, _e265, 1, _cp1Att); } } /* v292Dfix269: 429(レート制限)はレート明けを8秒待って再試行 */ /* v292Dfix265: 5xx/ネットワーク一過性エラーは1回だけ透過リトライ。2回目失敗はfix263aトーストへ */ /* ★dscmf-1: 同一モデル retry を **使い切った最終段だけ** に cross-model fallback を足す（CF-1）。_cmfTry は gate OFF / 非対象なら受け取った err をそのまま throw するので、既定では throw _e265 と完全同値。commit 済み response には到達しない（この行は result 取得前）。 */
+      if (!result) { if (_cp1Att && _cp1A.superseded(_cp1Att)) return; try { if (text && !inputEl.value.trim()) inputEl.value = text; UI.setStatus('応答が得られませんでした。もう一度お試しください', true); } catch(_){} return; } /* v292Dfix263a2 */
 
       /* ★fix748 D1(C7a): parsePlan の _parseExtensions から
          fix77 captureState → persist（v292Dfix77States_slot_）が同期で走る。
          raw を保持していないので失っても再構成できない = Class D。
          ★_parseExtensions は sync 契約（呼び出し側が typeof r === 'object' で plan を差し替える）なので
            hook 自体は Promise 化しない。admission はこの呼び出し**側**で取る。 */
-      const _p748 = await this._dadmRun('TURN_PARSE', () => Planner.parsePlan(result.text, S.mode));
+      const _p748 = await this._dadmRun('TURN_PARSE', _cp1Wrap(() => Planner.parsePlan(result.text, S.mode)));
       if (!_p748.ran) { this._dadmHold(_p748, inputEl, text); return; }
       let plan = _p748.result;
       if (!plan) throw new Error('うまく物語を組み立てられませんでした。もう一度お試しください');
@@ -2779,17 +2784,17 @@ const G = {
         const _short235 = (function(){ try { if (localStorage.getItem('v292ShortGateOff') === '1') return false; const lk = localStorage.getItem('v100_outputLen') || 'standard'; return lk !== 'short' && _sents216.length > 0 && _sents216.length < 4; } catch(e){ return false; } })();
         if (_recap235 || _short235){
           UI.setStatus((_recap235 ? '前ターンの再掲' : '短すぎる応答') + 'を検知 → 書き直し中…');
-          const result2 = await Api.call(sys, user + '\n\n【重要・書き直し】直前のあなたの出力は' + (_recap235 ? '前ターンの内容のほぼ再掲だった。' : '') + (_short235 ? '短すぎた(数文で切り上げていた)。最低でも8文以上で場面を最後まで描き切ること。' : '') + '同じ場面・同じ文を繰り返さず、時間と状況を必ず前へ進めて、新しい出来事・発見・反応を描くこと。');
+          const result2 = await _cp1Call(sys, user + '\n\n【重要・書き直し】直前のあなたの出力は' + (_recap235 ? '前ターンの内容のほぼ再掲だった。' : '') + (_short235 ? '短すぎた(数文で切り上げていた)。最低でも8文以上で場面を最後まで描き切ること。' : '') + '同じ場面・同じ文を繰り返さず、時間と状況を必ず前へ進めて、新しい出来事・発見・反応を描くこと。');
           if (result2 && result2.text){
             /* ★fix748 D1(C7a): 書き直し経路も同じ Class D admission を通す */
-            const _p2748 = await this._dadmRun('TURN_PARSE_REWRITE', () => Planner.parsePlan(result2.text, S.mode));
+            const _p2748 = await this._dadmRun('TURN_PARSE_REWRITE', _cp1Wrap(() => Planner.parsePlan(result2.text, S.mode)));
             if (!_p2748.ran) { this._dadmHold(_p2748, inputEl, text); return; }
             const plan2 = _p2748.result;
             if (plan2 && Array.isArray(plan2.narrative) && plan2.narrative.join('').length > 40){ plan = plan2; result = result2; }
           }
         }
       } catch(_e216){}
-      try { if (window.__v292Dfix797) { const _r797 = await window.__v292Dfix797.turnHook({ text: result.text, plan: plan, sys: sys, user: user, api: Api, state: S, parse: (t) => this._dadmRun('TURN_PARSE_REWRITE', () => Planner.parsePlan(t, S.mode)) }); if (_r797 && _r797.adopted) { plan = _r797.plan; result = _r797.result; } } } catch(_e797){} /* ★v292Dfix797: 4A Layer2 v1. 既存 rewrite 入口の直後だけ。本 file 未 load / flag OFF で no-op（出力 byte 同一）*/
+      try { if (window.__v292Dfix797) { const _r797 = await window.__v292Dfix797.turnHook({ text: result.text, plan: plan, sys: sys, user: user, api: (_cp1Att ? _cp1A.api(_cp1Att) : Api), state: S, parse: (t) => this._dadmRun('TURN_PARSE_REWRITE', _cp1Wrap(() => Planner.parsePlan(t, S.mode))) }); if (_r797 && _r797.adopted) { plan = _r797.plan; result = _r797.result; } } } catch(_e797){} /* ★v292Dfix797: 4A Layer2 v1. 既存 rewrite 入口の直後だけ。本 file 未 load / flag OFF で no-op（出力 byte 同一）*/
 
       // 心理エンジンで NPC 状態を更新
       PsychEngine.process(plan);
@@ -2986,7 +2991,7 @@ const G = {
       /* ★fix748 D4(C9): turn commit。S.turns.push + branches + S.save() が 1 つの logical transaction。
          S.save は fix30 wrapper 経由で chr6_slot_<id>（本体）を書く Class D writer。
          ★BUSY / isolation HOLD なら **push もしない**（turn を成立させない = silent success 禁止）。 */
-      const _c748 = await this._dadmRun('TURN_COMMIT', () => {
+      const _c748 = await this._dadmRun('TURN_COMMIT', _cp1Wrap(() => {
         S.turns.push(turn);
         /* ★CL1-b: 保留していた fix240 の引っ越し（前ターンの _rv カードを外す）を、このターンの確定と同じ transaction で行う。
            _convSayMeta は _convSays と同じ添字の並行配列（fix616）なので、長さが揃っている時は同じ位置を外す。 */
@@ -3005,12 +3010,13 @@ const G = {
         try { _sv240 = S.save(); } catch(_es240){ _rb240(); throw _es240; }
         try { var _f543 = window.__v292Dfix543; if ((_sv240 && _sv240.hold) || (_f543 && typeof _f543.unsaved === 'function' && _f543.unsaved() && _f543.unsaved().active)) _rb240(); } catch(_ec240){}
         return true;
-      });
+      }));
       if (!_c748.ran) { this._dadmHold(_c748, inputEl, text); return; }
       UI.appendTurn(turn, S.turns.length - 1);
       UI.renderBranches(plan.branchCandidates);
       UI.setStatus('');
     } catch(e) {
+      if (_cp1Att && _cp1A && _cp1A.superseded(_cp1Att)) { try { console.warn('[v292DfixCP1] an older attempt ended after a newer one started; the newer one owns the screen', e && e.code); } catch(_cp1w){} return; }   /* ★r5: 古い試行の catch は新しい試行の表示・入力欄・busy を触らない */
       /* ★★sp16(C-4 / 裁定 #LANE19): 匿名の 1 日上限（errorCode = anon-daily / budget）は
          「失敗した」ではなく「今日は終わった」である。赤トースト（再試行ボタン付き）・黒通知・
          status bar の三重表示をやめ、**案内 1 面**へ収束させる。errorCode は分岐にだけ使い、
@@ -3045,7 +3051,7 @@ const G = {
         document.body.appendChild(_t263);
         setTimeout(function(){ try { _t263.remove(); } catch(_){} }, 60000);
       } catch(_e263) {}
-    } finally { try { if (this.__p888) { clearTimeout(this.__p888); this.__p888 = null; } } catch(_p888d){} UI.setLoading(false); }
+    } finally { if (!(_cp1Att && _cp1A && _cp1A.superseded(_cp1Att))) { try { if (this.__p888) { clearTimeout(this.__p888); this.__p888 = null; } } catch(_p888d){} UI.setLoading(false); } try { if (_cp1Att && _cp1A) _cp1A.end(_cp1Att); } catch(_cp1f){} }   /* ★r5: busy は持ち主の試行だけが戻す。採用されずに終わった試行は取消（NOT_COMMITTED） */
   },
 
   async cont() {
@@ -4438,6 +4444,9 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixCTX-context-restore.js?cb=20261010-gq1"></script>
 <!-- v292DfixRC1 r2 (QUOTE-01 / GPT #127-JS・#127-KA): 想起を求める入力のときだけ、この物語の実入力・話者の確かな台詞を user JSON の playerInputs（storySoFar の直後）に足す。既定 OFF・Owner だけの opt-in（localStorage v292DfixRC1On=1 かつ /auth/me で owner・active）/ kill v292DfixRC1Off=1 -->
 <script src="v292DfixRC1-recall-inputs.js?cb=20261022-bundle42-a"></script>
+<!-- CP1-R6b + Owner ゲート r5 (CONT-02 / GPT #127-KK→#127-KQ→#127-KW→#127-LA→#127-LC→#127-LG→#127-LI): 今の場面に誰がいるかの最小正本。既定 OFF・Owner だけの opt-in（localStorage v292DfixCP1On='1' かつ /auth/me で owner・active・匿名でない）/ kill v292DfixCP1Off='1'。読み込み時に opt-in なし・kill なら何も装着しない（ON への切り替えは reload 後に有効）。生成の開始ごとに適用可否とアカウント・物語を確定し、同じターンはそれに揃える。途中で側が変わった・kill されたら送らない・保存しない（止めたターンは自動で送り直さない）。中断した回の結果は正式なターンとして採用しない（その回が足したものだけを撤回）。試行は build ごとの in-memory の印で見分け、G.submit が送信・再送・parse・確定へ引き継ぐ。採用前の仮の state は保存先へ書かず、安全に戻せないときはこの物語の生成と保存を止める（fail-closed）。fix333 の受け口・tap のガードが揃わない（混在キャッシュ）なら CP1 全体 OFF。ON: fix192/fix277 の装着後に最後にラップ・30 秒で揃わなければ無効化・送信直前の観測（記録のみ）・fix333 の前面化から ABSENT を外す -->
+<script>window.__v292DfixCP1IdxAtt = 'att-r5';</script><!-- bundle43-a r5: この index の G.submit は CP1 の試行を引き継ぐ（CP1 r5 はこの印が無い index では全体 OFF） -->
+<script src="v292DfixCP1-scene-presence.js?cb=20261023-bundle43a-r5"></script>
 <script src="v292Dfix308-creepy-toggle.js?cb=v292Dfix308"></script>
 <script src="v292Dfix309-progression.js?cb=v292Dfix419c"></script>
 <!-- fix577: 物語削除の入口を1つに寄せる。B(gallery)/C(features clearSlot)の独自削除を停止し、
@@ -4477,7 +4486,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix298-roster.js?cb=20261001-ac34"></script>
 <script src="v292Dfix330-somatic-guard.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix332-uifold.js?cb=v292Dfix332"></script>
-<script src="v292Dfix333-actor-reality.js?cb=20261001-ac33"></script>
+<script src="v292Dfix333-actor-reality.js?cb=20261023-bundle43a-r2"></script>
 <script src="v292Dfix334-entryhub.js?cb=20261021-bundle37-a"></script>
 <!-- ★lane 15 / sp10A(GPT 裁定 #L15entry): 設定の 3 段畳み + 公開文面。どちらも DOM 移動と文字列だけ。
      kill: localStorage['v292Dfix880Off']='1' / localStorage['v292Dfix881Off']='1' -->

@@ -155,6 +155,12 @@
     logRotation(chosen, names, turnNum);
     return {fg:chosen, bg:bg, budget:budget, lull:lull};
   }
+  /* ★CP1-R6 (CONT-02 / GPT #127-KK ①): 前面化の候補を CP1 の「今の場面にいない」で絞る受け口。
+     window.__v292DfixCP1Fg333 は CP1 を ON で読み込んだページだけが定義し、CP1 が実効 ON のときだけ ABSENT の NPC を落とした states の写しを返す。
+     未定義・null・例外のときは states をそのまま使う＝CP1 OFF/kill（と CP1 の無いページ）では従来と 1 バイトも変わらない。
+     前面・背景・強制ローテ・その回の選択と公平カウンタ（lastBeatTurn・__pool・__prevKarada・v292Dfix333Rot）はすべてこの states から作られるので、
+     ABSENT の NPC はどれにも入らない。0 人なら selectForeground は null を返し、前面化の行は出ない。 */
+  function fgStates333(states, text){ try{ var h=window.__v292DfixCP1Fg333; if(typeof h!=='function') return states; var r=h(states, text); return (r && typeof r==='object') ? r : states; }catch(e){ return states; } }
   function foregroundBlock(sel){
     if(!sel||!sel.fg.length) return '';
     var lines=['【この一手で前面に出す人物】'+sel.fg.join('・')+' ＝ それぞれに、人物像と今の身体状態に合った具体的な局所反応か小さな動きを一つだけ(声・行動・視線・沈黙のどれか)。主人公や状況に絡ませ、NPC同士の雑談に逃さない。'];
@@ -217,7 +223,7 @@
           var authority=_ab927(p.states);
           if(authority && sys.indexOf('【身体状態・正史')<0) sys=sys+'\n\n'+authority;
           if(npcAutonomyOn()){
-            var sel=selectForeground(p.states, p.text, p.turnNum);
+            var sel=selectForeground(fgStates333(p.states, p.text), p.text, p.turnNum);   /* ★CP1-R6 */
             try{ p.__sel=sel; }catch(_ps){}   /* ★fix333n(RC-2): 品質分析で再計算せず再利用する */
             var fb=foregroundBlock(sel);
             if(fb && sys.indexOf('【この一手で前面に出す')<0) sys=sys+'\n\n'+fb;
@@ -250,7 +256,7 @@
           var _sel2=null;
           try{ var _once=(localStorage.getItem('v292Dfix333SelOnceOff')!=='1');
                _sel2=(_once && p.__sel!==undefined && p.__sel!==null) ? p.__sel
-                     : selectForeground(p.states, p.text, p.turnNum); }catch(_s){}
+                     : selectForeground(fgStates333(p.states, p.text), p.text, p.turnNum); }catch(_s){}   /* ★CP1-R6 */
           var _budget=_sel2?_sel2.budget:2;
           var _hero=heroName();
           var _npcs=presentNames().filter(function(n){ return n && n!==_hero; });
@@ -349,6 +355,6 @@
       return {total:arr.length, byScene:by};
     }catch(e){ return {err:e.message}; }
   }
-  window.__v292Dfix333api={ compileActorStates:compileActorStates, validateAll:validateAll, authorityBlock:authorityBlock, foregroundBlock:foregroundBlock, selectForeground:selectForeground, analyzeEnsemble:analyzeEnsemble, classifyScene:classifyScene, qualStats:qualStats, mode:mode, _pending:function(){return pending;} };
+  window.__v292Dfix333api={ compileActorStates:compileActorStates, validateAll:validateAll, authorityBlock:authorityBlock, foregroundBlock:foregroundBlock, selectForeground:selectForeground, analyzeEnsemble:analyzeEnsemble, classifyScene:classifyScene, qualStats:qualStats, mode:mode, _pending:function(){return pending;}, cp1Hook:'fg333-r6' };   /* ★bundle43-a r2 (GPT #127-LA §3): 受け口 fgStates333 を持つ版の印（CP1 はこれが無い fix333 と組み合わさると CP1 全体を OFF） */
   try{ console.log(TAG,'loaded (v2/fix333h); mode=',mode()); }catch(e){}
 })();
