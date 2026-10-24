@@ -179,6 +179,18 @@
  *     作れたときだけ、安全に戻せなかった人物を試行の前の値へ戻して再読込（既存の起動時の解決へ）。Draft が作れなければ止めたまま。
  *     採用前の仮の state が保存先に書かれてしまった試行がある間は、Worker への物語の state の書込を止める（決着まで）。
  *   compat: r5 の index（window.__v292DfixCP1IdxAtt = 'att-r5'）と guard 3 の tap が揃わなければ CP1 全体 OFF（混在キャッシュ）。
+ *
+ * ■ bundle43-a r6（2026-10-24・本番 r5 の Owner 先行試用で見つかった 2 点。PRES_VER = pres-r6-20261024。G5/G6・HOLD・kill・Owner ゲート・互換・注入の文面は r5 のまま）
+ *   #1 戻りの言い方が狭すぎた（「真田はもういない」の後の「真田刑事が事務所にやって来た」「真田は今この事務所にいる」で ABSENT のまま、
+ *      以後のターンも「真田は現在の場面にいない…」と送り続けた）→ プレイヤー入力の PRESENT の判定（presentIn）を広げ、否定・仮定・伝聞・電話・問いを除く。
+ *      名前の照合（一意な形だけ）・本文からは決めない・ABSENT の語は r5 のまま。
+ *   #2 そのターンの入力がそのターンの指示に入らなかった（presence は採用済みのターンからだけ導いていた）→ build の開始で、その試行だけの
+ *      仮の判定（確定済み＋今回の入力）を作って注入に使う（T.prov・メモリだけ）。保存する presence は r5 と同じく採用済みのターンからの再導出で、
+ *      採用の瞬間（push の後の保存）に確定する。取消・中断・採用後は仮の判定を捨てる。
+ *   OFF・kill・非 Owner・未装着・旧エンジンでは何も変わらない（仮の判定は CP1 を使う試行のときだけ作る）。
+ *   過去分（GPT #127-LW Q3）: r6 を入れる前に確定済みのターン（r5 が保存した field の turnsLen まで）は r5 の読み方のまま。新しい規則はそれ以降のターンだけ（field.r6from）。
+ *   表示（統括・UI45）: HOLD 通知を #composer の上 8px（BASE の A2 通知が見えていればその上 8px）へ。幅 720px 以下は左右 12px。
+ *      #composer の大きさの変化・window の resize・1 秒ごとに置き直す。文面・ボタン・復旧の動き・最前面は r5 のまま（holdPlace）。
  */
 (function(){
   'use strict';
@@ -193,6 +205,7 @@
   function on(){ return lsg('v292DfixCP1Off') !== '1' && lsg('v292DfixCP1On') === '1'; }
   /* ★bundle43-a Owner ゲート（RC1 r2 の ownerGate()/anonActive()/gate() と同じ読み口・同じ fail-closed）。BF1 の gateOf()（手動 opt-in で非 Owner も有効）は使わない */
   var GATE_VER = 'owner-r43e-20261024';
+  var PRES_VER = 'pres-r6-20261024';   /* bundle43-a r6: 戻りの言い方の拡張＋そのターンの入力の仮の判定（VER・GATE_VER・cb は r5 のまま＝index・tap・fix333 との互換は変わらない） */
   function ownerGate(){
     try {
       var A = window.__v292Dfix893;
@@ -240,7 +253,8 @@
   var turn = null, turnSeq = 0, pageAcct = null, recent = [], apiCur = null, scopeT = null, inflight = [], holds = {}, _holdIv = null,
    guardStats = { turns: 0, turnsOn: 0, offCompat: 0, offIdent: 0, offPageAcct: 0, sendBlocked: 0, abortedResend: 0, respDiscarded: 0, resultDiscarded: 0, parseBlocked: 0, commitReverted: 0,
                   stateRevert: { fix302: 0, own: 0, unsafe: 0, none: 0, deferred: 0 }, saveBlocked: 0, fgSkipped: 0, entryRefused: 0, unbound: 0, ambiguous: 0, ambiguousBlocked: 0, adopted: 0, cancelled: 0,
-                  endCancelled: 0, provisional: 0, lsRestored: 0, provisionalPersisted: 0, workerWriteBlocked: 0, holds: 0, holdBuildRefused: 0, holdSaveRefused: 0, holdReleased: 0, nested: 0, lastBlock: null, reasons: {} };
+                  endCancelled: 0, provisional: 0, lsRestored: 0, provisionalPersisted: 0, workerWriteBlocked: 0, holds: 0, holdBuildRefused: 0, holdSaveRefused: 0, holdReleased: 0, nested: 0, lastBlock: null, reasons: {},
+                  prov: { built: 0, changed: 0, discarded: 0, adopted: 0, fallback: 0 } };   /* r6: 仮の presence の件数だけ */
   /* 理由コード（通常のネットワーク失敗と区別できる）。エラーは e.code = 'CP1_INTERRUPTED'・e.reason = コード・e.terminal = true */
   var REASON = { 'account-changed': 'ACCOUNT_CHANGED', 'account-changed-page': 'ACCOUNT_CHANGED', 'logged-out': 'LOGOUT', 'story-changed': 'STORY_CHANGED', 'state-changed': 'STORY_RELOADED',
                  'not-owner-now': 'CP1_PERMISSION_LOST', 'killed': 'KILL_BEFORE_SEND', 'not-committed': 'NOT_COMMITTED', 'ambiguous': 'AMBIGUOUS_REQUEST', 'hold': 'STATE_UNSAFE_HOLD', 'duplicate': 'DUPLICATE_ADOPTION', 'superseded': 'SUPERSEDED' };
@@ -252,7 +266,7 @@
     if (g === 'owner'){ why = compatWhy(); if (!why && (!acct || !story)) why = 'identity-unknown'; if (!why && pageAcct && acct !== pageAcct) why = 'account-changed-page'; }
     var S = getS();
     turn = { id: ++turnSeq, eff: g === 'owner' && !why, gate: g, why: why, acct: acct, story: story, sRef: S, len0: (S && Array.isArray(S.turns)) ? S.turns.length : -1, closed: false, blocked: null,
-             state: 'open', reason: null, aborted: false, texts: [], plans: [], branches0: undefined, hasBranches0: false, provisional: false, store0: null, storePost: null, ls0: undefined, revertPending: false };
+             state: 'open', reason: null, aborted: false, texts: [], plans: [], branches0: undefined, hasBranches0: false, provisional: false, store0: null, storePost: null, ls0: undefined, revertPending: false, inText: null, prov: null };
     if (turn.eff) guardPush(S);   /* r4 ③ */
     guardStats.turns++; if (turn.eff) guardStats.turnsOn++; else if (why === 'identity-unknown') guardStats.offIdent++; else if (why === 'account-changed-page') guardStats.offPageAcct++; else if (why) guardStats.offCompat++;
     recent.push(turn); if (recent.length > 8) recent.shift();
@@ -269,6 +283,7 @@
   function cancel(T, where, why){
     if (!T || T.state !== 'open') return !!(T && T.state === 'cancelled');
     T.state = 'cancelled'; T.aborted = true; T.reason = codeOf(why); T.blocked = T.blocked || (where + ':' + why);
+    if (T.prov){ T.prov = null; guardStats.prov.discarded++; }   /* r6: 取消・中断の試行の仮の presence は捨てる（保存先には最初から書いていない） */
     guardStats.cancelled++; guardStats.reasons[T.reason] = (guardStats.reasons[T.reason] || 0) + 1;
     guardStats.lastBlock = { turn: T.id, why: where + ':' + why, code: T.reason, at: now() };
     try { console.warn(TAG, 'attempt cancelled (terminal)', T.id, where, T.reason); } catch(_w){}
@@ -475,6 +490,39 @@
       });
     } catch(e){ cb(false, 'DRAFT_THREW'); }
   }
+  /* ★bundle43-a r6（統括・UI45 の試験）: HOLD 通知の置き場所（表示だけ。文面・ボタン・復旧の動きは r5 のまま）。
+     r5 は「画面の下から 16px・最前面」固定で、入力欄（#composer）に重なり、UI1 の「⋯ その他」の枠が通知の下に入った。
+     r6: BASE の A2 通知（fix758）と同じく #composer の上端から 8px 上に置く（#composer が無い・測れないときは r5 と同じ下から 16px）。
+     A2 通知（#v292Dfix758Banner）が見えているときは、その上端から 8px 上（HOLD が上・A2 が下の縦並び。fix758 には触れない）。
+     幅 720px 以下は左右 12px の余白。置き直すのは作ったとき・#composer の大きさが変わったとき（ResizeObserver）・window の resize・
+     1 秒ごと（A2 の出入りと #composer の作り直しを拾う。通知が消えたら止める）。最前面（z-index 100001）は r5 のまま。 */
+  var HOLD_ID = 'v292DfixCP1-hold', HOLD_NARROW = 720, HOLD_SIDE = 12, A2_ID = 'v292Dfix758Banner';
+  var _hpIv = null, _hpRO = null, _hpROel = null, _hpRz = false, holdPos = { places: 0, composer: 0, a2: 0, fallback: 0 };
+  function holdPlace(d){
+    try {
+      d = d || document.getElementById(HOLD_ID); if (!d) return;
+      var w = window.innerWidth || 0, h = window.innerHeight || 0;
+      if (w > 0 && w <= HOLD_NARROW){ d.style.boxSizing = 'border-box'; d.style.maxWidth = 'none'; d.style.width = (w - HOLD_SIDE * 2) + 'px'; }
+      else { d.style.boxSizing = ''; d.style.width = ''; d.style.maxWidth = '92vw'; }
+      holdPos.places++;
+      var cp = document.getElementById('composer'), r = (cp && cp.getBoundingClientRect) ? cp.getBoundingClientRect() : null;
+      if (cp && _hpROel !== cp && typeof window.ResizeObserver === 'function'){ try { if (_hpRO) _hpRO.disconnect(); _hpRO = new window.ResizeObserver(function(){ holdPlace(); }); _hpRO.observe(cp); _hpROel = cp; } catch(_ro){} }
+      if (!(r && r.height > 0 && r.top > 0 && h > 0)){ d.style.bottom = '16px'; d.style.maxHeight = ''; holdPos.fallback++; return; }
+      var b = h - r.top + 8, via = 'composer';
+      var a2 = document.getElementById(A2_ID);
+      if (a2 && a2 !== d){
+        var cs = (typeof window.getComputedStyle === 'function') ? window.getComputedStyle(a2) : a2.style;
+        if (cs && cs.display !== 'none' && cs.visibility !== 'hidden'){ var ra = a2.getBoundingClientRect(); if (ra && ra.height > 0 && (h - ra.top + 8) > b){ b = h - ra.top + 8; via = 'a2'; } }
+      }
+      b = Math.max(8, Math.round(b)); d.style.bottom = b + 'px';
+      d.style.maxHeight = Math.max(96, h - b - 8) + 'px'; d.style.overflowY = 'auto';   /* 上へ押し上げられても画面の外へ出さない（確認の文を開いたとき） */
+      holdPos[via]++;
+    } catch(e){}
+  }
+  function holdPlaceArm(){
+    try { if (!_hpRz){ _hpRz = true; window.addEventListener('resize', function(){ holdPlace(); }); } } catch(e){}
+    try { if (_hpIv === null) _hpIv = setInterval(function(){ try { if (!document.getElementById(HOLD_ID)){ clearInterval(_hpIv); _hpIv = null; if (_hpRO){ _hpRO.disconnect(); _hpRO = null; _hpROel = null; } return; } holdPlace(); } catch(_i){} }, 1000); } catch(e2){}
+  }
   function holdNotice(){
     try {
       if (!document || !document.body || typeof document.createElement !== 'function') return;
@@ -500,11 +548,12 @@
           var no = document.createElement('button'); no.textContent = 'やめる'; no.style.cssText = 'background:transparent;color:#efe6ff;border:1px solid #7a5ea0;border-radius:8px;padding:4px 10px;cursor:pointer;flex:none';
           no.onclick = function(){ try { if (c.parentNode) c.parentNode.removeChild(c); } catch(_n){} };
           yes.onclick = function(){ yes.disabled = true; no.disabled = true; m.textContent = '退避しています…'; holdResolve(function(ok, err){ if (!ok){ m.textContent = '退避できなかったため、止めたままにしています。'; try { if (c.parentNode) c.parentNode.removeChild(c); } catch(_r){} } }); };
-          row.appendChild(no); row.appendChild(yes); c.appendChild(row); d.appendChild(c);
+          row.appendChild(no); row.appendChild(yes); c.appendChild(row); d.appendChild(c); holdPlace(d);
         } catch(e){}
       };
       d.appendChild(b);
       document.body.appendChild(d);
+      holdPlace(d); holdPlaceArm();   /* r6: #composer の上（A2 があればその上）へ */
     } catch(e){}
   }
   /* 読み込み時: hold のまま再読込・開き直された物語なら、hold を続ける（解除は上の 2 つだけ）。r5 final: 物語ごとの記録（v2）。旧形（1 件）も読む */
@@ -558,7 +607,7 @@
           if (why === 'duplicate'){ guardStats.duplicateRefused = (guardStats.duplicateRefused || 0) + 1; throw cp1Err(T, 'commit', 'duplicate'); }
           if (why){ cancel(T, 'commit', why); if (T.provisional) revertState(T); guardStats.commitReverted++; throw cp1Err(T, 'commit', why); }
           var res = nativePush.apply(this, arguments);
-          if (T.state === 'open'){ T.state = 'adopted'; guardStats.adopted++;
+          if (T.state === 'open'){ T.state = 'adopted'; guardStats.adopted++; if (T.prov){ T.prov = null; guardStats.prov.adopted++; }   /* r6: 採用後は仮の判定を使わない（次の ensure が採用したターンから確定） */
             if (T.provisional){ if (commit77()) guardStats.provisionalPersisted++; else { try { var st = store77(); if (st && setLs77(JSON.stringify(st))) guardStats.provisionalPersisted++; } catch(e3){} } T.provisional = false; } }
           return res;
         }
@@ -629,13 +678,62 @@
   var GAP = '(?:どこにも|どこへも|もう|既に|すでに|まだ|また|やはり|やっぱり)*[^、。！？!?\\nはがもてで]{0,10}?';
   var ABSENT_V = '(?:は|が|も|の姿(?:は|が|も)?|とは)?' + GAP + '(?:いない|居ない|いなかった|居なかった|いなくなった|居なくなった|いなくなって|消えた|消えていた|姿がない|姿が見えない|姿はない|姿は無い|見当たらない|見あたらない|はぐれた|はぐれて|置いていかれた|取り残された|連れ去られた|さらわれた|攫われた|離れ離れ|別行動|置いてき|置いて行|立ち去った|出て行った|出ていった|去った|去っていった|帰った|帰っていった|帰ってしまった|姿を消した)';
   var ABSENT_T = '(?:と|とは|とも)(?:はぐれ|別れ|離れ|分かれ)';
+  /* r5 の PRESENT の正規表現（r6 では presentIn の PRES_OLD_VERB / oldT に移した。記録として残す・使わない） */
   var PRESENT_V = '(?:は|が|も)?' + GAP + '(?:戻ってき|戻って来|帰ってき|帰って来|現れた|現われた|姿を見せた|合流し|合流する|追いついた|追い付いた|駆けつけ|駆け込んで|駆け寄って|やってきた|やって来た|来てくれた|入ってきた|入って来た|到着し|再会し)';
   var PRESENT_T = '(?:と|とも)(?:合流|再会)';
   var COMOVE = '(?:と|は|が|も)(?:一緒に|共に|ともに)|を連れて|の手を(?:引|取|握)';
   var UNREAL = /かもしれ|だろう|だろうか|ような気|気がした|思い出|回想|夢|幻|電話|通話|受話器|画面|スマホ|端末|メッセージ|噂|らしい|はず|だったら|つもり|かのよう|もし|想像|錯覚|声だけ|声しか/;
   function clauses(text){ return String(text || '').split(/[。！？!?\n]/); }
-  /* 1 本のテキストから NPC ごとの証拠を集める。strict=true は節に推量・遠隔語があれば無視（② により v0 では proseHints の診断にだけ使う） */
-  function scan(text, forms, strict){
+  /* ★bundle43-a r6（Owner 先行試用 #1・戻りの言い方が狭すぎた）: プレイヤー入力の「戻った・いる」の判定（PRESENT の側だけ。ABSENT の語は r5 のまま）。
+     ・肩書き（刑事・警部・課長・先生など）を名前と助詞の間に許す（r5 は「真田刑事がやって来た」を取れなかった）。
+     ・新しい言い方は名前の直後に は/が/も（「一緒に」は と も）が要る: 来た／来ている／やって来る／入ってくる／戻ってくる／帰ってくる／加わった／姿を現し／顔を出し、
+       「（場所）にいる」（場所の語に ここ・この・目の前・隣・そば・同じ… か今の場面名があるときだけ。離れた場所にいるは戻りにしない）、「一緒にいる」、「〜がいる」。
+     ・戻さないもの（r5 の語にも同じ除外をかける）: 否定（来なかった・来ていない・合流しなかった・わけではない）、仮定（来たら・来れば・来るかも・来るなら・来るはず・来てほしい）、
+       伝聞（来たらしい・来たそうだ・来たって・来たと聞いた・噂）、電話・画面越し（電話で・電話が・画面に・メールで・写真に…）、問い（？で終わる節）、
+       夢・回想・想像、「出来た／以来／将来」などの「来」を含む別の語。
+     ・名前の照合（formTable・一意な形だけ）と「同じテキスト内は後に書かれた方が勝つ」は r5 のまま。本文（AI の地の文）からは決めない（derive は playerText だけ） */
+  var RET_HON = '(?:巡査部長|警部補|警部|警視|刑事|巡査|署長|課長|係長|部長|社長|店長|主任|隊長|団長|班長|室長|局長|会長|教授|博士|先生|先輩|せんぱい|さん|くん|君|ちゃん|様|さま|氏|殿)?';
+  var GAP2 = '(?:どこにも|どこへも|もう|既に|すでに|まだ|また|やはり|やっぱり)*[^。！？!?\\nはがもてで]{0,14}?';   /* 「（場所）にいる」だけ: 読点を 1 つ越えてよい（「真田は今、この事務所にいる」） */
+  var PRES_OLD_VERB = '戻ってき|戻って来|帰ってき|帰って来|現れた|現われた|姿を見せた|合流し|合流する|追いついた|追い付いた|駆けつけ|駆け込んで|駆け寄って|やってきた|やって来た|来てくれた|入ってきた|入って来た|到着し|再会し';
+  var PRES_NEW_VERB = 'やってくる|やって来る|入ってくる|入って来る|戻ってくる|戻って来る|帰ってくる|帰って来る|来ていた|来ている|来ています|来てる|来ました|来た|加わった|加わって|加わり|加わる|姿を現し|顔を出し|顔を見せ';
+  var PRES_PAT = [
+    { k: 'old',  re: '(?:は|が|も)?' + GAP + '(' + PRES_OLD_VERB + ')' },            /* r5 の語（助詞は任意のまま） */
+    { k: 'oldT', re: '(?:と|とも)((?:合流|再会)(?:する|し)?)' },   /* 「し・する」まで含めて、続く否定・仮定（合流しなかった・合流したら）を見る */
+    { k: 'new',  re: '(?:は|が|も)' + GAP + '(' + PRES_NEW_VERB + ')' },
+    { k: 'with', re: '(?:と|は|が|も)' + GAP + '((?:一緒に|共に|ともに)(?:いる|居る|います|おります))' },
+    { k: 'here', re: '(?:は|が|も)' + GAP2 + '(に(?:いる|居る|います|おります))', place: true },
+    { k: 'bare', re: '(?:は|が|も)(?:今|いま|ちゃんと|まだ|ずっと|確かに)?((?:いる|居る|います))' }
+  ];
+  var RET_COMPOUND = '出以将未本従元家由到往再伝外舶古爾襲去近';
+  var RET_MODAL = /かもしれ|だろう|でしょう|らしい|はず|もし|だったら|つもり|噂|夢|幻|想像|錯覚|思い出|回想|ような気|気がした|かのよう|声だけ|声しか|って聞|と聞|予定|明日|あした|明後日|来週|そのうち|いずれ/;
+  var RET_MEDIA = /(?:電話|通話|受話器|画面|スマホ|端末|メッセージ|メール|LINE|ライン|ビデオ|オンライン|モニター|無線|手紙|連絡|映像|動画|テレビ|中継|写真)(?:で|が|に|から|越し|ごし|の向こう|の中|口|を通|経由)/;
+  var RET_NEG = /^(?:た|ました)?(?:わけ|の|ん)(?:では|じゃ)(?:な|あり)|^(?:て|で)?(?:い|お|は|も)?(?:ない|なかっ|なく|ません|らず|ず)|^ませ/;
+  var RET_HYPO = /^(?:た|ました)?(?:ら|り|ば(?!かり)|れば|なら|としたら|とすれば|場合|限り|かも|か(?:$|、|ね|な|い|の|も|しら|どうか)|のか|はず|べき|よう|みたい|そう(?:だ|です|な|に|で)|らしい|って|とか|と(?:の|は)?(?:聞|言|い[うっ]|思|話|噂|知ら|電話|連絡|メール|知らせ|報告|伝え)|ことに|つもり|予定|ため|まで|前に|のでは|んじゃ|たい|たかっ|てほし|て欲し|てくれ(?:たら|れば|な|ませ)|のを待|でしょう|だろう|道|方向|方角)/;
+  var RET_HERE = /ここ|こちら|この|目の前|眼前|隣|となり|そば|傍|横|後ろ|背後|同じ|その場|一緒/;
+  var retStats = { tried: 0, hit: 0, neg: 0, hypo: 0, media: 0, modal: 0, ask: 0, compound: 0, place: 0 };   /* 件数だけ（名前・本文は持たない） */
+  /* 1 つの節の中で、その名前の「今いる・戻った」の最後の有効な証拠（無ければ null）。c は伏せ字済みの節、term は節の区切りの文字 */
+  function presentIn(c, nm, sceneId, term){
+    if (term === '？' || term === '?'){ retStats.ask++; return null; }
+    var best = null, modal = RET_MODAL.test(c);
+    for (var q = 0; q < PRES_PAT.length; q++){
+      var P = PRES_PAT[q], re = new RegExp(nm + RET_HON + P.re, 'g'), m;
+      while ((m = re.exec(c))){
+        retStats.tried++;
+        var end = m.index + m[0].length, vb = m[1] || '', vs = end - vb.length, tail = c.slice(end), ok = true;
+        if (modal){ ok = false; retStats.modal++; }
+        else if (vb.charAt(0) === '来' && RET_COMPOUND.indexOf(c.charAt(vs - 1)) >= 0){ ok = false; retStats.compound++; }
+        else if (RET_NEG.test(tail)){ ok = false; retStats.neg++; }
+        else if (RET_HYPO.test(tail)){ ok = false; retStats.hypo++; }
+        else if (RET_MEDIA.test(c.slice(0, end))){ ok = false; retStats.media++; }
+        else if (P.place && !(RET_HERE.test(m[0]) || (sceneId && sceneId !== 'start' && String(sceneId).length >= 2 && m[0].indexOf(String(sceneId)) >= 0))){ ok = false; retStats.place++; }
+        if (ok){ retStats.hit++; if (!best || m.index >= best.at) best = { ev: snip(m[0]), at: m.index }; }
+        re.lastIndex = m.index + 1;
+      }
+    }
+    return best;
+  }
+  /* ★r6 final（GPT #127-LW Q3）: r5 の読み方（r5 の scan と 1 文字も同じ）。r6 を入れる前に確定済みのターンはこちらで読み直す（黙って読み替えない） */
+  function scanR5(text, forms, strict){
     var res = {}, src = String(text || ''), cls = clauses(src), off = 0;
     var sorted = forms.slice().sort(function(a, b){ return b.length - a.length; });
     for (var i = 0; i < cls.length; i++){
@@ -647,6 +745,27 @@
         var nm = esc(x), m;
         if ((m = new RegExp(nm + HON + '(?:' + ABSENT_V + '|' + ABSENT_T + ')').exec(c))) res.absent = { ev: snip(m[0]), at: base + m.index };
         if ((m = new RegExp(nm + HON + '(?:' + PRESENT_V + '|' + PRESENT_T + ')').exec(c))) res.present = { ev: snip(m[0]), at: base + m.index };
+        if ((m = new RegExp(nm + HON + '(?:' + COMOVE + ')').exec(c))) res.comove = { ev: snip(m[0]), at: base + m.index };
+        c = c.split(x).join(new Array(x.length + 1).join('〓'));   /* 〓 で伏せ字（長さ不変＝位置不変）。「柊千景」の中の「千景」を二重に拾わない */
+      }
+    }
+    return res;
+  }
+
+  /* 1 本のテキストから NPC ごとの証拠を集める。strict=true は節に推量・遠隔語があれば無視（② により v0 では proseHints の診断にだけ使う）。
+     r6: sceneId（任意）は「（場所）にいる」の場所が今の場面かの確認にだけ使う */
+  function scan(text, forms, strict, sceneId){
+    var res = {}, src = String(text || ''), cls = clauses(src), off = 0;
+    var sorted = forms.slice().sort(function(a, b){ return b.length - a.length; });
+    for (var i = 0; i < cls.length; i++){
+      var c = cls[i], base = off, term = src.charAt(off + c.length); off += c.length + 1;
+      if (!c) continue;
+      if (strict && UNREAL.test(c)) continue;
+      for (var f = 0; f < sorted.length; f++){
+        var x = sorted[f]; if (c.indexOf(x) < 0) continue;
+        var nm = esc(x), m, pr;
+        if ((m = new RegExp(nm + HON + '(?:' + ABSENT_V + '|' + ABSENT_T + ')').exec(c))) res.absent = { ev: snip(m[0]), at: base + m.index };
+        if ((pr = presentIn(c, nm, sceneId, term))) res.present = { ev: pr.ev, at: base + pr.at };   /* r6: r5 の 1 本の正規表現 → presentIn（語を足し、否定・仮定・伝聞・電話を除く） */
         if ((m = new RegExp(nm + HON + '(?:' + COMOVE + ')').exec(c))) res.comove = { ev: snip(m[0]), at: base + m.index };
         c = c.split(x).join(new Array(x.length + 1).join('〓'));   /* 〓 で伏せ字（長さ不変＝位置不変）。「柊千景」の中の「千景」を二重に拾わない */
       }
@@ -689,6 +808,18 @@
   function pickEv(r){ var a = r.absent, p = r.present; if (a && p) return a.at > p.at ? { st: 'ABSENT', ev: a.ev } : { st: 'PRESENT', ev: p.ev }; if (a) return { st: 'ABSENT', ev: a.ev }; if (p) return { st: 'PRESENT', ev: p.ev }; return null; }
 
   /* ---- 決定的な再導出（S.turns 全走査・書込 0） ---- */
+  /* ★r6 final（GPT #127-LW Q3）: 規則の切り替え点 r6from。これより前のターンは r5 の読み方、以降は r6 の読み方。
+     ・保存済みの field に r6from があればそれ（r6 が書いた field）。
+     ・r6from の無い field（r5 が書いた）なら、その turnsLen まで＝r5 で確定済み → そこから先だけ r6。
+     ・field が無い物語（CP1 で一度も確定していない）は 0（全部 r6）。
+     ・取消などでターンが減っていれば今のターン数で頭打ち（以後に足されるターンは r6）。
+     derive は全ターンを走査し直すが、確定済みのターンは確定したときの規則で読むので、既存の物語の過去分の判定は変わらない。 */
+  function epochOf(S, len){
+    var f = null; try { f = S && S.scene ? S.scene[FIELD] : null; } catch(e){ f = null; }
+    var from = 0;
+    if (f && f.v === 1 && f.npcs){ from = (typeof f.r6from === 'number' && f.r6from >= 0) ? f.r6from : ((typeof f.turnsLen === 'number' && f.turnsLen >= 0) ? f.turnsLen : 0); }
+    return Math.min(from, len);
+  }
   function derive(S){
     var out = { v: 1, sceneId: 'start', sceneTurn: 0, turnsLen: 0, npcs: {} };
     if (!S || !S.cast) return out;
@@ -696,6 +827,7 @@
     var tbl = formTable(S), turns = Array.isArray(S.turns) ? S.turns : [];
     var heroName = (S.cast.hero && S.cast.hero.name) ? String(S.cast.hero.name) : '';
     npcs.forEach(function(n){ out.npcs[npcId(S, n)] = { name: String(n.name), state: 'UNKNOWN', turn: -1, src: 'init', ev: '', scene: out.sceneId }; });
+    var from = epochOf(S, turns.length);   /* r6 final: これより前は r5 の読み方 */
     for (var i = 0; i < turns.length; i++){
       var t = turns[i] || {};
       var mv = sceneMoveOf(t, heroName), to = mv && mv.to;
@@ -704,17 +836,56 @@
         out.sceneId = to; out.sceneTurn = i;
         npcs.forEach(function(n){ var e = out.npcs[npcId(S, n)]; e.state = 'UNKNOWN'; e.turn = i; e.src = 'scene_move'; e.ev = snip('<scene_move to="' + to + '">'); e.scene = to; });
       }
-      npcs.forEach(function(n){
-        var e = out.npcs[npcId(S, n)], forms = tbl[String(n.name)] || [];
-        if (!forms.length) return;
-        var pv = scan(t.playerText, forms, false);   /* ② 本文（AI 生成）は読まない。入力だけ */
-        var set = function(state, src, ev){ e.state = state; e.turn = i; e.src = src; e.ev = ev; e.scene = out.sceneId; };
-        if (to && pv.comove) set('PRESENT', 'player_comove', pv.comove.ev);
-        var p1 = pickEv(pv); if (p1) set(p1.st, 'player', p1.ev);
-      });
+      applyPlayer(out, S, npcs, tbl, t.playerText, i, !!to, i < from);
     }
     out.turnsLen = turns.length;
+    out.r6from = from;   /* r6 final: 切り替え点を field に残す（r5 は読まない key。r5 が導き直すと消え、次に r6 が読むと「その turnsLen まで r5」になる） */
     return out;
+  }
+  /* 1 ターン分のプレイヤー入力を当てる（derive と r6 の仮の判定で共通。r5 の derive の内側と同じ規則） */
+  function applyPlayer(out, S, npcs, tbl, text, i, moved, r5rules){
+    npcs.forEach(function(n){
+      var id = npcId(S, n), e = out.npcs[id], forms = tbl[String(n.name)] || [];
+      if (!e) e = out.npcs[id] = { name: String(n.name), state: 'UNKNOWN', turn: -1, src: 'init', ev: '', scene: out.sceneId };   /* 仮の判定の土台に無い NPC（derive では常にある） */
+      if (!forms.length) return;
+      var pv = r5rules ? scanR5(text, forms, false) : scan(text, forms, false, out.sceneId);   /* ② 本文（AI 生成）は読まない。入力だけ。r6 final: 確定済みのターンは r5 の読み方 */
+      var set = function(state, src, ev){ e.state = state; e.turn = i; e.src = src; e.ev = ev; e.scene = out.sceneId; };
+      if (moved && pv.comove) set('PRESENT', 'player_comove', pv.comove.ev);
+      var p1 = pickEv(pv); if (p1) set(p1.st, 'player', p1.ev);
+    });
+  }
+  /* ★bundle43-a r6（Owner 先行試用 #2・そのターンの入力がそのターンの指示に入らない）:
+     r5 は presence を S.turns（採用済みのターン）からだけ導くので、今回の入力（Planner.build の第 2 引数＝採用後の turn.playerText）は
+     次のターンからしか効かなかった（「美咲と再会し」のターンでまだ「美咲は現在の場面にいない」と送っていた。「篠原はもういない」も同じく次のターンから）。
+     r6: build の開始で、その試行（T）だけの仮の判定 = 確定済みの presence（ensure＝r5 と同じ）＋今回の入力を 1 ターン分当てたもの、を作り、
+     そのターンの注入（sys の印・注記、user の presence、fix333 の除外、送信直前の観測の期待値）に使う。
+     ・仮の判定はメモリの T.prov だけ。S.scene.presenceCP1 には書かない（保存するのはこれまでどおり ensure＝採用済みのターンからの再導出）。
+       採用（S.turns.push が通る）でターンが増えれば、次の ensure がそのターンの playerText から同じ規則で確定する（G6 の「採用まで保存しない」とは別の仕組み）。
+     ・取消・中断（cancel）・採用後・別の S・ターン数が変わった後は使わない（捨てる）。fix265 の再送・書き直しは同じ試行なので同じ仮の判定を使う。
+     ・場面の移動（scene_move）はまだ起きていないので当てない（同じターンの移動は採用後の再導出で r5 と同じ「移動 → 入力」の順に当たる）。 */
+  function provisionalOf(S, text){
+    var base = ensure(S); if (!base) return null;
+    var p = cloneJ(base); if (!p || !p.npcs) return null;
+    var npcs = (S.cast && Array.isArray(S.cast.npcs) ? S.cast.npcs : []).filter(function(n){ return n && n.name; });
+    applyPlayer(p, S, npcs, formTable(S), text, Array.isArray(S.turns) ? S.turns.length : 0, false);
+    var d = 0; Object.keys(p.npcs).forEach(function(k){ var b = base.npcs[k]; if (!b || b.state !== p.npcs[k].state) d++; });
+    p.__delta = d;   /* 件数だけ（保存されない: この object は S に入れない） */
+    return p;
+  }
+  function provOf(T, S){ return (T && T.eff && T.state === 'open' && T.prov && S && T.sRef === S && Array.isArray(S.turns) && S.turns.length === T.len0) ? T.prov : null; }
+  /* この build の presence: 開いている CP1 の試行に今回の入力があれば仮の判定、それ以外は r5 と同じ ensure */
+  function presFor(S){
+    var T = turn;
+    if (T && T.eff && T.state === 'open' && typeof T.inText === 'string' && S && T.sRef === S && Array.isArray(S.turns) && S.turns.length === T.len0){
+      if (!T.prov){
+        var pv = null; try { pv = provisionalOf(S, T.inText); } catch(e){ pv = null; }
+        if (!pv){ guardStats.prov.fallback++; return ensure(S); }
+        T.prov = pv; guardStats.prov.built++; if (pv.__delta) guardStats.prov.changed++;
+      }
+      ensure(S);   /* r5 と同じ: 確定済みの field を最新に（カーソル一致なら書かない） */
+      return T.prov;
+    }
+    return ensure(S);
   }
   /* ② の保留分の診断: 本文が何を言っていたか（保存も注入もしない・読み取り専用。矛盾チェック設計の材料） */
   function proseHints(S){
@@ -730,7 +901,7 @@
     var d = derive(S); S.scene[FIELD] = d; return d;
   }
   function absentList(S){
-    var p = ensure(S), out = []; if (!p) return out;
+    var p = presFor(S), out = []; if (!p) return out;   /* r6: 開いている試行は今回の入力を当てた仮の判定（保存はしない） */
     Object.keys(p.npcs).forEach(function(k){ var e = p.npcs[k]; if (e.state === 'ABSENT') out.push(e); });
     return out;
   }
@@ -744,7 +915,7 @@
   function bulletEnd(lines, head){ var k = head + 1; while (k < lines.length && lines[k].indexOf('・') === 0) k++; return k; }
   function patchSys(sys, S){
     var abs = absentList(S);
-    last = { ver: VER, turns: S.turns ? S.turns.length : 0, nAbsent: abs.length, sysChanged: false, userChanged: userHit, ops: [], skipped: [], selfcheck: 'n/a' }; userHit = false;
+    last = { ver: VER, turns: S.turns ? S.turns.length : 0, nAbsent: abs.length, sysChanged: false, userChanged: userHit, ops: [], skipped: [], selfcheck: 'n/a', prov: (function(){ var pp = provOf(turn, S); return pp ? { delta: pp.__delta || 0 } : null; })() }; userHit = false;
     if (!abs.length) return sys;
     var src = String(sys);
     if (src.indexOf(MARK) >= 0 || src.indexOf(NOTE_HEAD) >= 0){ last.selfcheck = 'already-marked'; return sys; }   /* 二重適用の防止 */
@@ -856,7 +1027,7 @@
       if (!states || typeof states !== 'object') return null;
       var S = S0 || getS(); if (!S || !S.cast) return null;
       var cur = S.scene && S.scene[FIELD], len = Array.isArray(S.turns) ? S.turns.length : 0;
-      var p = (cur && cur.v === 1 && cur.turnsLen === len && cur.npcs) ? cur : derive(S);   /* 読み取りだけ（ensure は呼ばない） */
+      var p = (!S0 && provOf(TT, S)) || ((cur && cur.v === 1 && cur.turnsLen === len && cur.npcs) ? cur : derive(S));   /* 読み取りだけ（ensure は呼ばない）。r6: この送信の試行の仮の判定があればそれ */
       var absIds = {}, nAbs = 0; Object.keys(p.npcs).forEach(function(id){ if (p.npcs[id].state === 'ABSENT'){ absIds[id] = 1; nAbs++; } });
       if (!nAbs){ fgStats.noAbsent++; return null; }
       var out = {}, ex = 0, keys = Object.keys(states);
@@ -1043,6 +1214,7 @@
       try { recent.forEach(function(X){ if (X && X.state === 'cancelled' && X.provisional) revertState(X); }); } catch(_rv){}
       if (heldHere()){ guardStats.holdBuildRefused++; var eh = new Error('[v292DfixCP1] generation held [CP1_INTERRUPTED:STATE_UNSAFE_HOLD]'); try { eh.code = 'CP1_INTERRUPTED'; eh.reason = 'STATE_UNSAFE_HOLD'; eh.terminal = true; } catch(_e){} holdNotice(); throw eh; }
       var T = null; try { T = beginTurn(); } catch(_t){ turn = null; }   /* r2 §2: 生成の開始でこの試行を確定 */
+      try { if (T && T.eff) T.inText = (typeof arguments[1] === 'string') ? arguments[1] : ''; } catch(_i){}   /* r6: 今回の入力（G.submit の Planner.build(S.mode, text)・採用後の playerText と同じ）。CP1 を使う試行だけ・メモリだけ */
       var r = inner.apply(this, arguments);
       try { if (T && T.eff && r && typeof r === 'object') Object.defineProperty(r, '__cp1Attempt', { value: T, enumerable: false, configurable: true, writable: false }); } catch(_rc){}   /* r5: G.submit へ試行を渡す（列挙されない・本文には入らない） */
       try {
@@ -1108,16 +1280,17 @@
     var T = window.__v292DfixCP1Tap, o = {};
     for (var k in fbStats) o[k] = fbStats[k];
     return { ver: VER, on: on(), state: inst.state, reason: inst.reason, waitMs: WAIT_MS, tLoad: inst.tLoad, tDone: inst.tDone, waitedMs: inst.waitedMs, tries: inst.tries,
-             flags: inst.flags, flagsNow: flagsOf(window.Planner), engineNew: engineNew(), tap: !!(T && T.installed), tapVer: T ? T.ver || null : null, fb: o, loadOn: LOAD_ON, gate: gate(), gateVer: GATE_VER, compat: compatWhy() || 'ok', guard: (function(){ var g = {}; for (var k4 in guardStats) g[k4] = guardStats[k4]; g.reasons = {}; for (var k5 in guardStats.reasons) g.reasons[k5] = guardStats.reasons[k5]; g.turn = turn ? { id: turn.id, eff: turn.eff, gate: turn.gate, why: turn.why, closed: turn.closed, blocked: turn.blocked, aborted: !!turn.aborted, state: turn.state, reason: turn.reason, stateRevert: turn.stateRevert || null } : null; g.attempts = recent.map(function(X){ return { id: X.id, eff: X.eff, state: X.state, reason: X.reason, stateRevert: X.stateRevert || null, provisional: !!X.provisional }; }); g.hold = (function(h){ return h ? { kind: h.kind, attempt: h.attempt, nAmb: (h.amb || []).length, fromReload: !!h.fromReload, others: nHolds() - 1 } : null; })(curHold()); g.holdOnly = !!inst.holdOnly; g.holdOnlyAt = inst.holdOnlyAt || null; g.__x = null; g.inflight = inflight.length; return g; })(), fg333: (function(){ var g = {}; for (var k2 in fgStats) g[k2] = fgStats[k2]; g.reasons = {}; for (var k3 in fgStats.reasons) g.reasons[k3] = fgStats.reasons[k3]; return g; })() };
+             flags: inst.flags, flagsNow: flagsOf(window.Planner), engineNew: engineNew(), tap: !!(T && T.installed), tapVer: T ? T.ver || null : null, fb: o, loadOn: LOAD_ON, gate: gate(), gateVer: GATE_VER, presVer: PRES_VER, ret: (function(){ var r = {}; for (var k6 in retStats) r[k6] = retStats[k6]; return r; })(), compat: compatWhy() || 'ok', guard: (function(){ var g = {}; for (var k4 in guardStats) g[k4] = guardStats[k4]; g.reasons = {}; for (var k5 in guardStats.reasons) g.reasons[k5] = guardStats.reasons[k5]; g.turn = turn ? { id: turn.id, eff: turn.eff, gate: turn.gate, why: turn.why, closed: turn.closed, blocked: turn.blocked, aborted: !!turn.aborted, state: turn.state, reason: turn.reason, stateRevert: turn.stateRevert || null, prov: turn.prov ? { delta: turn.prov.__delta || 0 } : null } : null; g.attempts = recent.map(function(X){ return { id: X.id, eff: X.eff, state: X.state, reason: X.reason, stateRevert: X.stateRevert || null, provisional: !!X.provisional }; }); g.hold = (function(h){ return h ? { kind: h.kind, attempt: h.attempt, nAmb: (h.amb || []).length, fromReload: !!h.fromReload, others: nHolds() - 1 } : null; })(curHold()); g.holdOnly = !!inst.holdOnly; g.holdOnlyAt = inst.holdOnlyAt || null; g.__x = null; g.inflight = inflight.length; return g; })(), fg333: (function(){ var g = {}; for (var k2 in fgStats) g[k2] = fgStats[k2]; g.reasons = {}; for (var k3 in fgStats.reasons) g.reasons[k3] = fgStats.reasons[k3]; return g; })() };
   }
   /* r4 H4: 口座の変化は /auth/me の再取得（fix893 が 'chr:account-me' を出す）で観測できる。開いている CP1 の回の途中で側が変わったら、
      その時点で中断として記録する（後で元に戻っても、その回の結果は採用しない） */
   if (LOAD_ON){ try { window.addEventListener('chr:account-me', function(){ try { var L = recent.slice(); L.forEach(function(T){ try { if (T && T.eff && T.state === 'open'){ var w = sideWhy(T); if (w) cancel(T, 'event', w); } } catch(_e){} }); } catch(e){} });   /* r4: 開いている試行すべて（r5: 採用済みは対象外） */ } catch(e){} }
   if (LOAD_ON){ try { window.__v292DfixCP1FinalHook = onFinal; window.__v292DfixCP1AfterHook = onAfter; window.__v292DfixCP1SaveHook = onSave; window.__v292DfixCP1Att = { of: attOf, within: within, api: attApi, superseded: superseded, end: endAttempt }; } catch(e){} try { window.__v292DfixCP1Fg333 = function(states, text){ return fgFilter(states, text); }; } catch(e2){} }
-  window.__v292DfixCP1 = { VER: VER, GATE_VER: GATE_VER, FIELD: FIELD, on: on, gate: gate, effective: eff, derive: derive, ensure: ensure, scan: scan, formTable: formTable, rawForms: rawForms, patchSys: patchSys, sceneMoveOf: sceneMoveOf, proseHints: proseHints,
+  window.__v292DfixCP1 = { VER: VER, GATE_VER: GATE_VER, PRES_VER: PRES_VER, FIELD: FIELD, on: on, gate: gate, effective: eff, derive: derive, ensure: ensure, scan: scan, scanR5: scanR5, epochOf: function(S){ return epochOf(S, (S && Array.isArray(S.turns)) ? S.turns.length : 0); }, formTable: formTable, rawForms: rawForms, patchSys: patchSys, sceneMoveOf: sceneMoveOf, proseHints: proseHints,
     state: function(){ var S = getS(); return S && S.scene ? S.scene[FIELD] || null : null; }, last: function(){ return last; }, status: status,
     finalBody: function(){ return fbLog.length ? fbLog[fbLog.length - 1] : null; }, finalBodyLog: function(){ return fbLog.slice(); }, __userExt: userExt, __analyzeFinal: analyzeFinal, __fnv: fnv, __fgFilter: fgFilter,
-    hold: function(){ var h = curHold(); return h ? { kind: h.kind, attempt: h.attempt, nAmb: (h.amb || []).length, fromReload: !!h.fromReload, others: nHolds() - 1 } : null; }, __holdResolve: holdResolve };
+    hold: function(){ var h = curHold(); return h ? { kind: h.kind, attempt: h.attempt, nAmb: (h.amb || []).length, fromReload: !!h.fromReload, others: nHolds() - 1 } : null; }, __holdResolve: holdResolve,
+    holdPos: function(){ var o = {}; for (var k7 in holdPos) o[k7] = holdPos[k7]; return o; }, __holdPlace: function(){ holdPlace(); } };   /* r6: 通知の置き場所の件数だけ */
   if (LOAD_ON) install();
   else { try { inst.holdOnlyAt = { sk: storyKey(), keys: Object.keys(holds), held: heldHere() }; } catch(_d){} if (heldHere()) installHoldOnly(); }   /* r5 final: OFF / kill で読み込んだが、この物語は HOLD のまま */
 })();
