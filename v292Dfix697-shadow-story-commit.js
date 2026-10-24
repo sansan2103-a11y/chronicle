@@ -1633,15 +1633,83 @@
       if (typeof r.intendedCanonicalHash !== 'string' || !r.intendedCanonicalHash) return null;
       if (typeof r.lastConfirmedRev !== 'number') return null;
       if (typeof r.lastConfirmedHash !== 'string' || !r.lastConfirmedHash) return null;
+      /* ■BCJ①（BASE-COMMIT-JOURNAL・GPT #127-KY）: 読んだ時点の生バイトを **列挙されない** property で持たせる。
+         JSON.stringify には載らない（journal の形は 1 byte も変わらない）。古い record を書き戻す前の照合にだけ使う。 */
+      try { Object.defineProperty(r, '__f697pRaw', { value: raw, enumerable: false, writable: true, configurable: true }); } catch(eD){}
       return r;
     } catch(e){ return null; }
   }
 
+  /* ■BCJ②: この document の commit 経路（prepare / arm / conflict / parity）が最後に書いた journal の生バイト。
+     in-memory のみ（永続化しない・document が変われば空）。boot reconcile が「同じ document で作った journal」を
+     横取りしないための作成 provenance（時刻比較は使わない）。 */
+  var f697pDocRaw = {};
   function f697pSave(id, rec){
-    try { rec.updatedAt = Date.now(); return f697pSet(f697pKey(id), JSON.stringify(rec)); }
+    try { rec.updatedAt = Date.now(); var s0 = JSON.stringify(rec); var ok0 = f697pSet(f697pKey(id), s0);
+          if (ok0) f697pDocRaw[String(id)] = s0;
+          return ok0; }
     catch(e){ return false; }
   }
 
+  /* ■■BCJ①（BASE-COMMIT-JOURNAL・GPT #127-KY 修正①・kill: v292DfixBCJ1Off='1'）STALE JOURNAL RECORD GUARD
+     起きていたこと（J1・ledger 実測）: boot reconcile が読んだ record（rec）を、GET や 2 s 待ちの後に
+     そのまま f697pSave していた。その間に同じ document の commit が journal を書き換え・着地・消去していると、
+     消えた journal が古い内容（CASE_B_RESUME・resumeCount 1）で復活し、続く commit は no-op なので誰も消さない。
+     ここでは「古い record を書く直前に、いまの journal を読み直す」だけを足す。
+       ・読んだ時点の生バイト（f697pRead が付ける __f697pRaw）と、いまの生バイトが **完全一致** のときだけ書く。
+       ・一致しないときは理由を分類して書かない: JOURNAL_GONE（消去済み）/ REPLACED（作成時刻・保存対象 hash・
+         lastConfirmed のどれかが違う＝別 commit）/ STATE_CHANGED（状態・送信 hash・resumeCount が違う）/
+         REWRITTEN（同じ intent を別の書き手が書き直した）/ STORY_MISMATCH（record・document の story が違う）。
+       ・作成時刻だけで同一性を決めない（storyId・lastConfirmed・intended/outgoing hash・state・resumeCount・生バイト）。
+       ・判定は同期・storage read 1 回。server への通信 0・新しい待ち 0・新しい retry 0。
+     kill 時は従来どおり（照合なしで書く）。 */
+  function bcj1Off(){ return lsg('v292DfixBCJ1Off') === '1'; }
+  function f697pStaleWhy(id, rec){
+    if (bcj1Off()) return null;
+    try {
+      if (!rec || typeof rec !== 'object') return 'NO_RECORD';
+      if (String(rec.storyId || '') !== String(id)) return 'STORY_MISMATCH';
+      if (String(storyId() || '') !== String(id)) return 'STORY_MISMATCH';
+      var raw = f697pGet(f697pKey(id));
+      if (raw == null) return 'JOURNAL_GONE';
+      var cur = null; try { cur = JSON.parse(raw); } catch(eP){ return 'JOURNAL_UNREADABLE'; }
+      if (!cur || typeof cur !== 'object' || cur.cleared === true) return 'JOURNAL_GONE';
+      if (String(cur.storyId || '') !== String(id)) return 'STORY_MISMATCH';
+      var snap = rec.__f697pRaw, base = null;
+      if (typeof snap === 'string'){
+        if (raw === snap) return null;                                     /* 誰も書いていない = この record がいまの journal */
+        try { base = JSON.parse(snap); } catch(eS){ base = null; }
+      }
+      if (!base) base = rec;                                               /* 生バイトが無い record（想定外）は field で照合 */
+      if (cur.createdAt !== base.createdAt ||
+          String(cur.intendedCanonicalHash || '') !== String(base.intendedCanonicalHash || '') ||
+          cur.lastConfirmedRev !== base.lastConfirmedRev ||
+          String(cur.lastConfirmedHash || '') !== String(base.lastConfirmedHash || '')) return 'REPLACED';
+      if (cur.state !== base.state ||
+          String(cur.outgoingV2Hash || '') !== String(base.outgoingV2Hash || '') ||
+          ((+cur.resumeCount) || 0) !== ((+base.resumeCount) || 0)) return 'STATE_CHANGED';
+      if (typeof snap === 'string') return 'REWRITTEN';
+      return null;
+    } catch(e){ return 'CHECK_FAILED'; }
+  }
+  /* 照合を通った record を書く（f697pSave と同じ bytes・書いた生バイトを record に持たせ直す）。 */
+  function f697pSaveSnap(id, rec){
+    try {
+      rec.updatedAt = Date.now();
+      var s = JSON.stringify(rec);
+      var ok = f697pSet(f697pKey(id), s);
+      if (ok){ try { Object.defineProperty(rec, '__f697pRaw', { value: s, enumerable: false, writable: true, configurable: true }); } catch(eD){} }
+      return ok;
+    } catch(e){ return false; }
+  }
+  function f697pStaleDrop(id, where, why, verdict, extra){
+    f697pStats.staleDropped = (f697pStats.staleDropped || 0) + 1;
+    try { note({ kind: 'F697P_STALE_WRITE_SKIPPED', id: String(id), where: String(where), reason: String(why),
+                 wanted: String(verdict || '') }); } catch(e){}
+    var o = { reason: String(why), where: String(where), wanted: String(verdict || '') };
+    if (extra){ for (var k in extra){ if (Object.prototype.hasOwnProperty.call(extra, k)) o[k] = extra[k]; } }
+    f697pFinish(id, 'STALE_RECORD_DROPPED', o);
+  }
   /* ★★Rev2: PREPARED_LOCAL を canonicalCommit2 の入口で書く。
      4 field（storyId / lastConfirmedRev / lastConfirmedHash / intendedCanonicalHash）が
      揃わなければ **書かない**。next() は必ず 1 回だけ呼ぶ（save 経路を止めない）。 */
@@ -2207,11 +2275,11 @@
     try { g781Confirm(id, j.rev, String(rec.outgoingV2Hash)); } catch(e){}
     /* landed が証明できたので journal の役目（未着地 PUT の復旧）は終了 → clear。
        ★canonCtx は **設定しない**（local は server より先行しており write authority を与えない）。 */
-    f697pClear(id, 'LANDED_BASE_CONFIRMED');
+    var crLB = f697pClearIfCurrent(id, rec, 'LANDED_BASE_CONFIRMED', j.rev);   /* ■BCJ① / r2: 結果名 */
     f697pNotifyLanded(id, j.rev, String(rec.outgoingV2Hash), (rec.outgoingFingerprint && typeof rec.outgoingFingerprint.turnCount === 'number') ? rec.outgoingFingerprint.turnCount : null);   /* ★fix802 */
-    f697pFinish(id, 'LANDED_BASE_CONFIRMED', { serverRev: j.rev, preServerRev: rec.preServerRev,
+    f697pFinish(id, f697pClearVerdict('LANDED_BASE_CONFIRMED', crLB), { serverRev: j.rev, preServerRev: rec.preServerRev,
                                                fingerprint: String(rec.outgoingV2Hash).slice(0, 16),
-                                               excluded: (norm.excluded || []).slice(0) });
+                                               excluded: (norm.excluded || []).slice(0), journalClear: crLB });
     return true;
   }
 
@@ -2238,13 +2306,13 @@
     /* ★Rev3b(Q3): boot 救済でも confirm 成立時にだけ CANONICAL_COMMIT_OK{via:'boot-cleared-stale'}。 */
     f697pNoteCommitOk(id, rev, localHash, 'boot-cleared-stale');
     canonCtx = { id: id, rev: (typeof rev === 'number' ? rev : null), hash: String(localHash) };
-    f697pClear(id, 'CLEARED_STALE_LANDED');
-    f697pFinish(id, 'CLEARED_STALE_LANDED', { serverRev: rev, serverHashSeen: String(serverHash).slice(0, 16),
+    var crSL = f697pClearIfCurrent(id, rec, 'CLEARED_STALE_LANDED', (typeof rev === 'number' ? rev : null));   /* ■BCJ① / r2: 結果名 */
+    f697pFinish(id, f697pClearVerdict('CLEARED_STALE_LANDED', crSL), { serverRev: rev, serverHashSeen: String(serverHash).slice(0, 16),
                                               fingerprint: String(localHash).slice(0, 16),
-                                              excluded: (excluded || []).slice(0), capped: !!capped });
+                                              excluded: (excluded || []).slice(0), capped: !!capped, journalClear: crSL });
   }
 
-  function f697pClear(id, reason){
+  function f697pClear(id, reason, freshRev){
     if (!f697pEnabled() || !id) return false;
     try {
       var k = f697pKey(id);
@@ -2256,10 +2324,30 @@
                                            reason: String(reason || ''), updatedAt: Date.now() }));
       }
       if (okd) f697pStats.clears++; else f697pStats.clearFails++;
-      try { note({ kind: 'F697P_JOURNAL_CLEAR', id: String(id), reason: String(reason || ''), ok: !!okd }); } catch(e){}
+      /* ■BCJ r2（GPT #127-LE・レビュー指摘 3）: 消した / 消せなかった を別の記録名にする（挙動は不変）。
+         消した時の kind は従来の F697P_JOURNAL_CLEAR のまま（outcome=JOURNAL_CLEARED）、消せなかった時は F697P_JOURNAL_CLEAR_FAILED。 */
+      try { note(okd ? { kind: 'F697P_JOURNAL_CLEAR', outcome: 'JOURNAL_CLEARED', id: String(id), reason: String(reason || ''), ok: true }
+                     : { kind: 'F697P_JOURNAL_CLEAR_FAILED', outcome: 'JOURNAL_CLEAR_FAILED', id: String(id), reason: String(reason || ''), ok: false }); } catch(e){}
+      if (okd){ try { f895OnJournalClear(id, reason, freshRev); } catch(eJ){} }   /* ■BCJ③: 既存の journal-clear に相乗り（新 poller なし） */
       return okd;
     } catch(e){ f697pStats.clearFails++; return false; }
   }
+  /* ■BCJ①: reconcile が読んだ record を根拠に journal を消すときも、いまの journal がその record のままかを確かめる
+     （着地前に読んだ判断で、その後に別 commit が書いた新しい journal を消さない）。照合を通らなければ消さない。 */
+  /* ■BCJ r2: 戻り値を結果名にする（'JOURNAL_CLEARED' / 'JOURNAL_CLEAR_SKIPPED_STALE' / 'JOURNAL_CLEAR_FAILED'）。消す・消さないの判断は r1 と同じ。 */
+  function f697pClearIfCurrent(id, rec, reason, freshRev){
+    var stale4 = f697pStaleWhy(id, rec);
+    if (stale4){
+      f697pStats.staleDropped = (f697pStats.staleDropped || 0) + 1;
+      f697pStats.clearSkippedStale = (f697pStats.clearSkippedStale || 0) + 1;
+      try { note({ kind: 'F697P_JOURNAL_CLEAR_SKIPPED_STALE', outcome: 'JOURNAL_CLEAR_SKIPPED_STALE', id: String(id), where: 'clear',
+                   reason: String(stale4), wanted: String(reason || '') }); } catch(e){}
+      return 'JOURNAL_CLEAR_SKIPPED_STALE';
+    }
+    return f697pClear(id, reason, freshRev) ? 'JOURNAL_CLEARED' : 'JOURNAL_CLEAR_FAILED';
+  }
+  /* 消去を見送った時だけ verdict に印を付ける（消した時・消せなかった時の verdict 名は従来どおり）。 */
+  function f697pClearVerdict(v, cr){ return (cr === 'JOURNAL_CLEAR_SKIPPED_STALE') ? (String(v) + '_CLEAR_SKIPPED_STALE') : String(v); }
   /* ★fixKNW: a pc2 landing (ACK hash == sent / readback == sent / converged no-write) confirms canonicalSend.body → av2 known refresh (memory only) */
   function f697kLanded(id, cs, src){ try { var Mk = window.__v292Dav2Map; if (Mk && typeof Mk.confirmedCanonical === 'function' && cs && cs.body) Mk.confirmedCanonical(id, cs.body, src); } catch(_){} }
   function f697pNotifyLanded(id, rev, hash, turnCount){ try{ var o=window.__v292Dfix802; o && o.onLanded && o.onLanded(id, rev, hash, turnCount); }catch(_){} }   /* ★fix802: REFRESH_SETTLED one-line notify（Orchestrator 不在なら no-op・判断ロジック 0） */
@@ -2301,11 +2389,13 @@
   }
   /* HOLD: holdCount を進める（Case C の cap 用） */
   function f697pHold(id, rec, verdict, extra){
+    var stale1 = f697pStaleWhy(id, rec);                         /* ■BCJ①: 古い record で journal を書き戻さない */
+    if (stale1) return f697pStaleDrop(id, 'hold', stale1, verdict, extra);
     f697pStats.holdC++;
     try {
       rec.holdCount = ((+rec.holdCount) || 0) + 1;
       rec.lastVerdict = String(verdict);
-      f697pSave(id, rec);
+      f697pSaveSnap(id, rec);
     } catch(e){}
     var o = { reason: String(verdict), holdCount: ((+rec.holdCount) || 0) };
     if (extra){ for (var k in extra){ if (Object.prototype.hasOwnProperty.call(extra, k)) o[k] = extra[k]; } }
@@ -2313,7 +2403,9 @@
   }
   /* 判定不能で終わったときの記録（holdCount は進めない = 次 load で再挑戦できる） */
   function f697pNoteVerdict(id, rec, verdict, extra){
-    try { if (rec){ rec.lastVerdict = String(verdict); f697pSave(id, rec); } } catch(e){}
+    var stale2 = rec ? f697pStaleWhy(id, rec) : null;          /* ■BCJ①: 古い record で journal を書き戻さない */
+    if (stale2) return f697pStaleDrop(id, 'verdict', stale2, verdict, extra);
+    try { if (rec){ rec.lastVerdict = String(verdict); f697pSaveSnap(id, rec); } } catch(e){}
     f697pFinish(id, verdict, extra);
   }
 
@@ -2330,6 +2422,14 @@
     tries = tries || 0;
     if (f697pResumeFired){ return f697pFinish(id, 'RESUME_ALREADY_FIRED'); }
     if (!f697pEnabled()){ f697pStats.skipped++; return f697pFinish(id, 'RESUME_SKIPPED_OFF'); }
+    /* ■BCJ①: 待機（2 s / fix914 / 非同期 hash）から戻るたびに、いまの journal が reconcile で読んだ record のままかを確かめる。
+       この関数は ここから commit() まで同期なので、この照合が「budget を書く直前」の照合になる。
+       消去済み・別 commit による置換・状態不一致・story 不一致なら何も書かず・送らずに終える。 */
+    var stale3 = f697pStaleWhy(id, rec);
+    if (stale3){
+      f697pStats.resumeAbortedStale = (f697pStats.resumeAbortedStale || 0) + 1;
+      return f697pStaleDrop(id, 'resume', stale3, 'CASE_B_RESUME', { serverRev: serverRev, tries: tries });
+    }
     if (rec.state === F697P_CONFLICT){                          /* ★HOLD_CONFLICT は永久に resume 禁止 */
       return f697pHold(id, rec, 'HOLD_CONFLICT_NO_RESUME');
     }
@@ -2396,7 +2496,7 @@
     rec.resumeCount = ((+rec.resumeCount) || 0) + 1;
     rec.lastVerdict = 'CASE_B_RESUME';
     rec.resumedAt = Date.now();
-    f697pSave(id, rec);
+    f697pSaveSnap(id, rec);
     f697pResumeFired = true;
     f697pStats.resumedB++;
     f697pFinish(id, 'CASE_B_RESUME', { serverRev: serverRev, barrier: bs,
@@ -2541,8 +2641,8 @@
       if (sh === String(rec.intendedCanonicalHash) ||
           (rec.outgoingV2Hash && sh === String(rec.outgoingV2Hash))){
         f697pStats.convergedA++;
-        f697pClear(id, 'CASE_A_CONVERGED');
-        return f697pFinish(id, 'CASE_A_CONVERGED', { serverRev: j.rev, from: String(rec.state) });
+        var crA = f697pClearIfCurrent(id, rec, 'CASE_A_CONVERGED', j.rev);   /* ■BCJ① / r2: 結果名 */
+        return f697pFinish(id, f697pClearVerdict('CASE_A_CONVERGED', crA), { serverRev: j.rev, from: String(rec.state), journalClear: crA });
       }
       /* ---- HOLD_CONFLICT / HOLD_PARITY: 収束していない限り保持して HOLD（自動 resume 禁止） ---- */
       if (rec.state === F697P_CONFLICT){
@@ -2596,6 +2696,15 @@
     if (!id) return again();                        /* document bind 前 */
     var rec = f697pRead(id);
     if (!rec) return;                               /* journal 無し = 従来挙動（read 1 回・write 0・GET 0） */
+    /* ■■BCJ②（BASE-COMMIT-JOURNAL・GPT #127-KY 修正②・kill: v292DfixBCJ2Off='1'）
+       いま読めた journal が **この document の commit 経路が書いたもの（生バイト一致）** なら、boot reconcile はそれを扱わない。
+       その journal はこの document の通常 commit（ACK / readback / HOLD）が片づける。前の document から残った journal は
+       この document が 1 度も書いていないので一致せず、従来どおり reconcile する（別タブが書いた journal も同じ）。 */
+    if (lsg('v292DfixBCJ2Off') !== '1' && typeof rec.__f697pRaw === 'string' && f697pDocRaw[String(id)] === rec.__f697pRaw){
+      f697pStats.bootSameDocSkipped = (f697pStats.bootSameDocSkipped || 0) + 1;
+      try { note({ kind: 'F697P_BOOT_SAME_DOCUMENT_SKIP', id: String(id), state: String(rec.state), inFlight: !!inFlight, tries: tries }); } catch(e){}
+      return;
+    }
     if (!isLoggedIn()) return again();               /* 未 login では authoritative GET を撃たない */
     /* ★★Rev3c(GPT 裁定 §4): holdCount cap に達していても **safe content-equivalence reconcile**
        だけは cap 判定より前に実施する（holdCount reset 禁止・cap 除外禁止のまま）。
@@ -3194,7 +3303,16 @@
           else if (!s.localHash || String(s.localHash) === String(lc.fingerprint)) why = 'LOCAL_NOT_AHEAD';
           else if (inFlight) why = 'IN_FLIGHT';
           else if (pushTimer) why = 'ALREADY_SCHEDULED';
-          else if (f697pRead(id)) why = 'JOURNAL_PRESENT';
+          else if (f697pRead(id)){
+            why = 'JOURNAL_PRESENT';
+            /* ■BCJ③: journal が残っているだけでは「この document では二度と評価しない」と確定させない。
+               この時点の根拠（lastConfirmed・fix705 の rev/hash）を覚え、journal が **実際に消えたら** 1 回だけ評価し直す。 */
+            if (!bcj3Off() && !f895Wait){
+              f895Wait = { id: String(id), lcRev: lc.serverRev, lcFp: String(lc.fingerprint), srvRev: srev,
+                           srvHash: String(s.serverHash), gen: (+m.localGeneration) || 0, src: src, armedAt: Date.now(), used: false };
+              try { note({ kind: 'F895_WAIT_JOURNAL_CLEAR', id: id, src: src, serverRev: srev }); } catch(eW){}
+            }
+          }
           else {
             note({ kind: 'F895_RESUME_RESERVED', id: id, src: src, serverRev: srev,
                    base: String(lc.fingerprint).slice(0, 16), local: String(s.localHash).slice(0, 16) });
@@ -3214,6 +3332,88 @@
     } catch(e){ why = 'ERROR'; f895Done = true; }
     f895Last = { reserved: false, why: why, src: src, t: Date.now() };
     if (f895Done) note({ kind: 'F895_SKIP', why: why, src: src });
+  }
+  /* ■■BCJ③（BASE-COMMIT-JOURNAL・GPT #127-KY 修正③・kill: v292DfixBCJ3Off='1'）fix895 の 1 回だけの再評価。
+     起きていたこと（Gate A・J1-2）: 取り残しの journal がある状態で reload すると fix895 が JOURNAL_PRESENT で終わり、
+     reconcile の Case A は journal を消すだけでターンを送らない → 未送信のターンが端末にだけ残り、通知も出ない。
+     ここで足すのは:
+       ・きっかけ = 既存の journal-clear（f697pClear が実際に消したとき）だけ。新しい poller / timer ループ / retry は作らない。
+       ・この document で **最大 1 回**（f895Wait.used）。
+       ・評価し直すのは fix895 と同じ条件の全部（fix705 released・CANONICAL_LOCAL_AHEAD・同じ story・route canonical・
+         canonHold なし・marker DIRTY_LOCAL・KEEP_LOCAL でない・marker の inFlightSave なし・lastConfirmed が待機開始時のまま・
+         lastConfirmed.serverRev == fix705 の Cloud rev（Case A なら fresh GET の rev とも一致）・Cloud hash == lastConfirmed・
+         いまの local hash != lastConfirmed・inFlight なし・予約なし・journal なし）。journal が消えたことだけでは送らない。
+       ・送るのは既存の commit 経路（fix895 と同じ commit / SN1b の分岐）を 1 回だけ。CAS・fresh GET・HOLD はその中で従来どおり。
+       ・HOLD_CONFLICT / HOLD_PARITY / Case C の journal は消えないので、ここは発火しない（自動書込 0 のまま）。 */
+  var f895Wait = null, f895Re = { fired: 0, skipped: {}, last: null };
+  function bcj3Off(){ try { return lsg('v292DfixBCJ3Off') === '1'; } catch(e){ return false; } }
+  function f895OnJournalClear(id, reason, freshRev){
+    var w = f895Wait;
+    if (!w || w.used || bcj3Off()) return;
+    if (String(w.id) !== String(id)) return;
+    w.used = true; w.clearReason = String(reason || ''); w.freshRev = (typeof freshRev === 'number') ? freshRev : null;
+    try { setTimeout(function(){ try { f895Reeval('journal-clear'); } catch(e){} }, 0); } catch(e2){}   /* 消した呼び出しが終わってから 1 回 */
+  }
+  function f895ReSkip(why, src){
+    f895Re.skipped[why] = (f895Re.skipped[why] || 0) + 1; f895Re.last = { reserved: false, why: why, src: src, t: Date.now() };
+    try { note({ kind: 'F895_REEVAL_SKIP', why: why, src: src }); } catch(e){}
+  }
+  function f895ReMarker(id){ try { var m = JSON.parse(lsg('v292Dfix402_f781g_' + id) || 'null'); return (m && typeof m === 'object') ? m : null; } catch(e){ return null; } }
+  function f895ReSync(id, w, s, st){
+    if (!id || String(id) !== String(w.id)) return 'STORY_CHANGED';
+    if (!s || String(st.storyId) !== String(id)) return 'F705_OTHER_STORY';
+    if (s.phase !== 'released' || s.error) return 'F705_NOT_RELEASED';
+    if (s.verdict !== 'CANONICAL_LOCAL_AHEAD') return 'VERDICT_' + String(s.verdict);
+    var rt = docAuthorityRoute(id); if (rt !== 'canonical') return 'ROUTE_' + String(rt).toUpperCase();
+    if (canonHold[id]) return 'CANON_HOLD';
+    var m = f895ReMarker(id), lc = m && m.lastConfirmed;
+    if (!m) return 'NO_MARKER';
+    if (m.storyId != null && String(m.storyId) !== String(id)) return 'MARKER_STORY_MISMATCH';
+    if (m.state !== 'DIRTY_LOCAL') return 'MARKER_' + String(m.state);
+    if (m.userChoice && m.userChoice.kind === 'KEEP_LOCAL') return 'KEEP_LOCAL';
+    if (m.inFlightSave) return 'MARKER_IN_FLIGHT';
+    if (!lc || lc.serverRev !== w.lcRev || String(lc.fingerprint) !== String(w.lcFp)) return 'LAST_CONFIRMED_CHANGED';
+    var srev = (typeof s.serverRev === 'number') ? s.serverRev : null;
+    if (srev == null || lc.serverRev !== srev) return 'REV_NE_LAST_CONFIRMED';
+    if (w.freshRev != null && w.freshRev !== lc.serverRev) return 'FRESH_REV_NE_LAST_CONFIRMED';
+    if (!s.serverHash || String(s.serverHash) !== String(lc.fingerprint)) return 'CLOUD_HASH_NE_LAST_CONFIRMED';
+    if (inFlight) return 'IN_FLIGHT';
+    if (pushTimer) return 'ALREADY_SCHEDULED';
+    if (f697pRead(id)) return 'JOURNAL_PRESENT';
+    return null;
+  }
+  function f895Reeval(src){
+    var w = f895Wait; if (!w) return;
+    try {
+      if (bcj3Off()) return f895ReSkip('KILL', src);
+      if (f895Off()) return f895ReSkip('F895_KILL', src);
+      if (!on()) return f895ReSkip('F697_OFF', src);
+      if (!isLoggedIn()) return f895ReSkip('NOT_LOGGED_IN', src);
+      var id = storyId();
+      var f7 = window.__v292Dfix705; var st = (f7 && typeof f7.status === 'function') ? f7.status() : null; var s = st && st.state;
+      var why = f895ReSync(id, w, s, st);
+      if (why) return f895ReSkip(why, src);
+      var m0 = f895ReMarker(id), gen0 = (+m0.localGeneration) || 0;
+      /* いまの local hash を fix705 / fix781 と同じ領域で取り直す（schema 1 は V1・それ以外は V2。fix898 と同じ選び方） */
+      var hf = (s.schema === 1) ? function(_id, cb){ var c = projection(); if (!c) return cb(null); sha256hex(canonicalString(c), cb); } : contentHashV2;
+      hf(id, function(h){
+        try {
+          if (!h) return f895ReSkip('LOCAL_HASH_FAILED', src);
+          var st2 = (f7 && typeof f7.status === 'function') ? f7.status() : null; var s2 = st2 && st2.state;
+          var why2 = f895ReSync(storyId(), w, s2, st2);
+          if (why2) return f895ReSkip(why2 + '_AFTER_HASH', src);
+          var m2 = f895ReMarker(id);
+          if (!m2 || ((+m2.localGeneration) || 0) !== gen0) return f895ReSkip('MARKER_CHANGED_DURING_HASH', src);
+          if (String(h) === String(w.lcFp)) return f895ReSkip('LOCAL_NOT_AHEAD', src);
+          f895Re.fired++; f895Re.last = { reserved: true, src: src, t: Date.now() };
+          note({ kind: 'F895_RESUME_RESERVED', id: id, src: src, reeval: true, clearReason: w.clearReason, serverRev: s2.serverRev,
+                 base: String(w.lcFp).slice(0, 16), local: String(h).slice(0, 16) });
+          try { console.log(TAG, 'fix895(BCJ③): journal 消去後の再評価で DIRTY_LOCAL を再予約（既存 commit 経路・1 回）', src); } catch(eL){}
+          if (lsg('v292DfixSN1bOff') === '1') { markDirty(); }
+          else { try { if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; } firstDirtyTs = 0; } catch(e3){} commit('f895-reeval'); }
+        } catch(e4){ f895ReSkip('ERROR', src); }
+      });
+    } catch(e){ f895ReSkip('ERROR', src); }
   }
   try {
     window.addEventListener('chr:f705-released', function(){ f895Eval('f705-released'); }, false);
@@ -3511,7 +3711,8 @@
     f924: function(){ return { off: f924Off(), stats: JSON.parse(JSON.stringify(f924)) }; },   /* ■fix924 */
     f928: function(){ return { off: f928Off(), netFail: f928.netFail, busy: Date.now() < f928.busyUntil, tries: f928.tries, pending: !!f928.timer, scheduled: f928.scheduled, fired: JSON.parse(JSON.stringify(f928.fired)), skipped: JSON.parse(JSON.stringify(f928.skipped)), stops: f928.stops, resets: f928.resets, last: f928.last }; },   /* ■fix928 */
     flushForNav: function(maxMs){ return flushForNav(maxMs); },   /* ■SN1(a) */
-    f895: function(){ return { off: f895Off(), done: f895Done, last: f895Last ? JSON.parse(JSON.stringify(f895Last)) : null }; },
+    f895: function(){ return { off: f895Off(), done: f895Done, last: f895Last ? JSON.parse(JSON.stringify(f895Last)) : null,
+                               bcj3: { off: bcj3Off(), wait: f895Wait ? JSON.parse(JSON.stringify(f895Wait)) : null, re: JSON.parse(JSON.stringify(f895Re)) } }; },   /* ■BCJ③ read-only */
     /* ★fix718: read-only 可視化（書込 0） */
     canonState: function(){ return { ctx: canonCtx ? JSON.parse(JSON.stringify(canonCtx)) : null,
       holds: JSON.parse(JSON.stringify(canonHold)), cstats: JSON.parse(JSON.stringify(cstats)) }; },

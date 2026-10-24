@@ -80,6 +80,120 @@
       } catch (e) { return false; }
     }
 
+    /* ★fix758c（BASEFIX r2・GPT #127-LE A2「安全に送れない HOLD を見えるようにする」）kill: v292Dfix758cOff='1'
+     *   既存の待機バナー（この要素）を再利用して、保存状態を 3 つに分けて見せる。表示だけ:
+     *   通信 0・localStorage 書込 0・journal / marker に触らない・保存済み扱いにしない・自動送信を足さない。
+     *   CONFIRMED_SAVED  … 端末の正本（V2 hash）＝ 最後に server で確認した正本。警告なし。
+     *   UNCONFIRMED      … 送った書込みの着地を証明できないまま止まっている（HOLD_PARITY、ARMED_CAS で着地しなかったと証明されていない HOLD）。
+     *   LOCAL_AHEAD_HELD … 端末が先に進んでいるが、安全条件で自動送信していない（PREPARED_LOCAL / HOLD_CONFLICT の HOLD、未着地と証明済みの ARMED_CAS）。
+     *   優先順位: 差分バナー（DIVERGED / BOOTSTRAP_HOLD）・「このままローカル」通知（v927keep）・既存の待機 / 認証失敗の表示 が先。ここでは上書きしない。
+     *   出すのは「journal が残ったまま、送信中でも予約中でも再開待ちでもない状態が 10 s 続いた」時だけ（照合・再開の途中の一瞬は出さない）。
+     *   読むのは今の document の物語の journal / marker だけ（他の物語・口座の情報は出さない）。 */
+    var C_OFF = false;
+    try { C_OFF = (localStorage.getItem('v292Dfix758cOff') === '1'); } catch (e) { C_OFF = false; }
+    var MSG_UNCONF = '⚠ クラウドに保存できたか確認できていません（確認が必要です）。この端末の内容は残っています。';
+    var MSG_AHEAD = '⚠ この端末に、クラウドへまだ同期していない変更があります（安全のため自動では送っていません）。';
+    var HELD_MS = 10000;
+    var saveState = 'NONE', saveWhy = null, heldKey = null, heldSince = null, hashBusy = false, heldShown = false, heldStory = null;
+    var NOT_LANDED_RE = /^(LOCAL_MOVED_SINCE_PREPARE|RESUME_NOT_READY_HOLD|BARRIER_TIMEOUT_HOLD|RESUME_HELD_AUTHORITY|RESUME_HELD_ROUTE|RESUME_BUDGET_EXHAUSTED|RESUME_ABORTED_STORY_CHANGED)$/;
+    function keepLocalShown() {
+      try { var b = document.getElementById('v927keep'); return !!(b && b.isConnected && b.style.display !== 'none' && b.getBoundingClientRect().height > 0); } catch (e) { return false; }
+    }
+    function setState(s, why) { saveState = s; saveWhy = why || null; }
+    /* 既存の read-only 照会だけで「送れずに止まっている journal」を探す。 */
+    function heldCandidate(api) {
+      var j = null; try { j = (typeof api.journal === 'function') ? api.journal() : null; } catch (e) { return null; }
+      if (!j) return null;
+      var st = null; try { st = api.status(); } catch (e) { return null; }
+      if (!st || st.inFlight) return null;
+      var f9 = null; try { f9 = (typeof api.f909 === 'function') ? api.f909() : null; } catch (e) { f9 = null; }
+      if (f9 && (f9.pushTimer || f9.inFlight)) return null;
+      var js = null; try { js = (typeof api.journalStats === 'function') ? api.journalStats() : null; } catch (e) { js = null; }
+      if (!js || js.waiting) return null;
+      var f14 = null; try { f14 = (typeof api.f914 === 'function') ? api.f914() : null; } catch (e) { f14 = null; }
+      if (f14 && f14.armed) return null;
+      var age = 0; try { age = performance.now(); } catch (e) { age = 99999; }
+      if (js.reconciled !== true && age < 35000) return null;           /* boot の再試行（最大 30 s）の間は待つ */
+      var G = window.__v292Dfix781; var m = null; try { m = (G && typeof G.marker === 'function') ? G.marker() : null; } catch (e) { m = null; }
+      if (!m) return null;
+      if (m.state === 'DIVERGED' || m.state === 'BOOTSTRAP_HOLD' || m.inFlightSave) return null;
+      var last = js.last || null;
+      var why = (last && (last.reason || last.verdict)) || j.lastVerdict || null;
+      return { j: j, m: m, why: why ? String(why) : null };
+    }
+    function classifyHeld(c, localHash) {
+      var lc = c.m.lastConfirmed;
+      if (c.m.state === 'CLEAN') return { s: 'CONFIRMED_SAVED', why: 'MARKER_CLEAN' };
+      if (lc && lc.fingerprint != null && localHash && String(localHash) === String(lc.fingerprint)) return { s: 'CONFIRMED_SAVED', why: 'LOCAL_EQUALS_LAST_CONFIRMED' };
+      var js = String(c.j.state || ''), w = String(c.why || '');
+      var unproven = js === 'HOLD_PARITY' || (js === 'ARMED_CAS' && !NOT_LANDED_RE.test(w));
+      return { s: unproven ? 'UNCONFIRMED' : 'LOCAL_AHEAD_HELD', why: js + ':' + w };
+    }
+    /* r2b（GPT #127-LK 見やすさ）: A2 の表示だけ、入力欄（#composer）の上に置き、少し濃い地・14px にする（コントラスト約 6:1）。
+       既存の待機・認証失敗の表示に戻る時は元の見た目（CSS）に戻す。 */
+    var HELD_BG = 'rgba(120,72,0,.96)';
+    /* r2c（統括 #127-LK 判断 1）: 狭い画面（幅 720px 以下）でだけ、A2 の表示を左右 12px の余白まで広げる（390px で 2〜3 行）。
+       PC（721px 以上）は r2b と同じ（幅は元の CSS のまま）。既存の待機・認証失敗の表示は restoreBaseStyle で元の CSS に戻る。 */
+    var NARROW_MAX = 720, SIDE_GAP = 12;
+    function fitNarrow(el) {
+      try { var w = window.innerWidth || 0;
+            if (w > 0 && w <= NARROW_MAX) { el.style.boxSizing = 'border-box'; el.style.maxWidth = 'none'; el.style.width = (w - SIDE_GAP * 2) + 'px'; }
+            else { el.style.boxSizing = ''; el.style.width = ''; el.style.maxWidth = '90vw'; } } catch (e) {}
+    }
+    function placeAboveComposer(el) {
+      fitNarrow(el);
+      try { var cp = document.getElementById('composer'); var r = cp ? cp.getBoundingClientRect() : null;
+            if (r && r.height > 0 && r.top > 0) { el.style.bottom = Math.max(8, Math.round(window.innerHeight - r.top + 8)) + 'px'; return; } } catch (e) {}
+      el.style.bottom = '64px';
+    }
+    function restoreBaseStyle() { try { var el = findBanner(); if (el && el.getAttribute('data-v758c') === '1') { var d = el.style.display; el.style.cssText = CSS; el.style.display = d; el.removeAttribute('data-v758c'); } } catch (e) {} }
+    /* r2d（統括・UI45 の指摘）: 入力の部分（#composer）の大きさが変わったら、A2 の表示をすぐ置き直す（5 s ごとの置き直しは残す）。
+       window と visualViewport の resize でも置き直す。ResizeObserver が無い環境では何も足さない（r2c と同じ動き）。
+       置き直すのは A2 の表示（data-v758c）が出ている間だけ。位置・幅・色の決まりは placeAboveComposer のまま。保存の判断には触らない。 */
+    var roObs = null, roEl = null, roWin = false;
+    function replaceHeldNow() { try { var el = findBanner(); if (el && el.getAttribute('data-v758c') === '1' && el.style.display !== 'none') placeAboveComposer(el); } catch (e) {} }
+    function armReplace() {
+      try {
+        if (typeof window.ResizeObserver !== 'function') return;
+        var cp = document.getElementById('composer');
+        if (cp && cp !== roEl) { if (!roObs) roObs = new window.ResizeObserver(function () { replaceHeldNow(); }); if (roEl) { try { roObs.unobserve(roEl); } catch (e1) {} } roObs.observe(cp); roEl = cp; }
+        if (!roWin) { roWin = true; window.addEventListener('resize', replaceHeldNow); try { if (window.visualViewport && typeof window.visualViewport.addEventListener === 'function') window.visualViewport.addEventListener('resize', replaceHeldNow); } catch (e2) {} }
+      } catch (e) {}
+    }
+    function showText(msg) {
+      var el = ensureBanner();
+      if (!el) return;
+      if (el.textContent !== msg) el.textContent = msg;
+      el.setAttribute('data-v758c', '1'); el.style.background = HELD_BG; el.style.fontSize = '14px'; placeAboveComposer(el); armReplace();
+      el.style.display = 'block';
+      visible = true;
+    }
+    /* true = この tick の表示はここで決めた（呼び元は隠さない） */
+    function heldTick(api) {
+      var c = heldCandidate(api);
+      if (!c) { heldKey = null; heldSince = null; return false; }
+      if (hashBusy) return true;
+      if (typeof api.contentHashV2 !== 'function') return false;
+      hashBusy = true;
+      var gen0 = c.m.localGeneration;
+      try {
+        api.contentHashV2(String(c.j.storyId), function (h) {
+          hashBusy = false;
+          try {
+            var r = classifyHeld(c, h || null);
+            if (r.s === 'CONFIRMED_SAVED') { heldKey = null; heldSince = null; setState('CONFIRMED_SAVED', r.why); if (heldShown) { heldShown = false; hide(); } return; }
+            var key = r.s + '|' + r.why + '|' + gen0;
+            if (heldKey !== key) { heldKey = key; heldSince = Date.now(); }
+            if (Date.now() - heldSince < HELD_MS) return;
+            if (divergedBannerShown() || keepLocalShown()) { if (heldShown) { heldShown = false; hide(); } return; }
+            setState(r.s, r.why); heldShown = true; heldStory = String(c.j.storyId);
+            showText(r.s === 'UNCONFIRMED' ? MSG_UNCONF : MSG_AHEAD);
+          } catch (e2) {}
+        });
+      } catch (e) { hashBusy = false; return false; }
+      return true;
+    }
+
     function findBanner() {
       try { return document.getElementById(BANNER_ID) || null; } catch (e) { return null; }
     }
@@ -152,8 +266,29 @@
         var pendingByFail = (lastFailT != null)
           && (lastOkT == null || lastOkT < lastFailT);
 
-        if (divergedBannerShown()) { hide(); return; }   /* ★fix758b */
-        if (pendingByMark || pendingByFail) show(pendingByFail && isAuthKind(lastFailKind)); else hide();
+        if (divergedBannerShown()) { if (!C_OFF) setState('DIVERGED_NOTICE'); heldShown = false; hide(); return; }   /* ★fix758b */
+        if (pendingByMark || pendingByFail) { if (!C_OFF) { setState('UNCONFIRMED', pendingByFail ? ('FAIL:' + lastFailKind) : 'ACK_PENDING'); restoreBaseStyle(); } heldShown = false; show(pendingByFail && isAuthKind(lastFailKind)); return; }
+        /* ★fix758c: 既存の表示が何も無い時だけ、送れずに止まっている journal を見る */
+        if (!C_OFF) {
+          if (keepLocalShown()) { setState('KEEP_LOCAL_NOTICE'); heldShown = false; hide(); return; }
+          if (heldTick(api)) return;
+          /* ★fix758c（r2b・GPT #127-LK）: 一度出した表示は「保存の確認（marker CLEAN）」か「権威ある一致（端末の正本の V2 hash ＝ この物語で
+             最後に server が確認した正本）」でだけ消す。次の保存が予約された・送信中になった・journal が書き換わっただけでは消さない。 */
+          if (heldShown) {
+            var G8 = window.__v292Dfix781; var m8 = null; try { m8 = (G8 && typeof G8.marker === 'function') ? G8.marker() : null; } catch (e8) { m8 = null; }
+            if (m8 && m8.state === 'CLEAN') { setState('CONFIRMED_SAVED', 'MARKER_CLEAN'); heldShown = false; hide(); return; }
+            if (!hashBusy && m8 && m8.lastConfirmed && m8.lastConfirmed.fingerprint != null && heldStory && typeof api.contentHashV2 === 'function') {
+              hashBusy = true; var fp8 = String(m8.lastConfirmed.fingerprint);
+              try { api.contentHashV2(heldStory, function (h8) { hashBusy = false; try { if (h8 && String(h8) === fp8 && heldShown) { setState('CONFIRMED_SAVED', 'LOCAL_EQUALS_LAST_CONFIRMED'); heldShown = false; hide(); } } catch (e9) {} }); } catch (e10) { hashBusy = false; }
+            }
+            try { var el8 = findBanner(); if (el8 && el8.style.display !== 'none') placeAboveComposer(el8); } catch (e11) {}
+            return;   /* 表示と saveState はそのまま */
+          }
+          try { var G7 = window.__v292Dfix781; var m7 = (G7 && typeof G7.marker === 'function') ? G7.marker() : null;
+                setState(m7 && m7.state === 'CLEAN' ? 'CONFIRMED_SAVED' : 'NONE', m7 ? String(m7.state) : null); } catch (e7) { setState('NONE'); }
+          heldShown = false;
+        }
+        hide();
       } catch (e) {
         try { hide(); } catch (e2) {}
       }
@@ -169,7 +304,11 @@
           lastOkT: lastOkT,
           lastFailT: lastFailT,
           lastFailKind: lastFailKind,
-          polls: polls
+          polls: polls,
+          saveState: C_OFF ? 'OFF' : saveState,   /* ★fix758c read-only: CONFIRMED_SAVED / UNCONFIRMED / LOCAL_AHEAD_HELD / NONE / DIVERGED_NOTICE / KEEP_LOCAL_NOTICE */
+          saveWhy: saveWhy,
+          heldShown: heldShown,
+          text: (function () { try { var el = findBanner(); return el && el.style.display !== 'none' ? String(el.textContent || '') : null; } catch (e) { return null; } })()
         };
       },
       _tick: function (nowMs) { tick(nowMs); }
