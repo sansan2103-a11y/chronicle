@@ -5,6 +5,7 @@
 <script src="v292Dvault2-copygate.js?cb=20261011-ab8"></script>
 <script src="v292Dfix950-card-delivery-probe.js?cb=20261014-f950r2"></script><!-- v292Dfix950: card/memory delivery probe (record-only; request body unchanged). OFF=localStorage v292Dfix950Off=1 -->
 <script src="v292DfixCP1-final-tap.js?cb=20261023-bundle43a-r5"></script><!-- CP1 tap r43e (GPT #127-JY/#127-KA/#127-KK/#127-LA/#127-LC): 送信直前の body を CP1 に見せる観測口（送る中身は不変）。読み込み時に v292DfixCP1On='1'（かつ v292DfixCP1Off≠'1'）のときだけ fetch を包む。OFF/kill は何もしない。CP1 を使ったターンの途中でアカウント・物語・Owner 権限が変わった・kill されたときは、その送信を出さない／送信後に変わったら応答を捨てる。止めたターンは自動で送り直さない -->
+<script src="v292DfixE64-save-tap.js?cb=20261024-bundle45-e64-d"></script><!-- E6-4 r4 (GPT #127-MG): E64Stop がある物語の state を /save へ送らない保存の出口。印なしかつ OFF/kill なら何もしない -->
 <script src="v292Dfix953-card-canary-gate.js?cb=20261015-bundle1-cardA-f957on"></script><!-- v292Dfix953: card canary gate (fix952/fix951/fix444g run ONLY when localStorage v292Dfix953On=1 AND this document story id is in the baked allowlist; otherwise byte-identical to production) -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -336,7 +337,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261024-bundle44-b';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261024-bundle45-e64-d';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -2704,6 +2705,7 @@ const G = {
 
   async submit() {
     var _cp1A = null, _cp1Att = null;   /* ★bundle43-a r5（GPT #127-LI G5）: CP1 を使う試行のときだけ値が入る。OFF・kill・非 Owner では null のまま＝以下はすべて従来の経路 */
+    var _e64 = null;   /* ★E6-4 r2: finally からも見えるようにここで宣言（OFF では null のまま） */
     if (S.inFlight) return;
     /* ★fix546(2026-07-25・おしん裁定「直るまで遊べなくてもいい」): 直前のターンが保存できていない間は
        新しいターンを作らせない。ここは G.submit の入口で、ボタン・Enterキー・他fix(fix138/v274/v261)からの
@@ -2720,6 +2722,7 @@ const G = {
         }
       }
     } catch (e) {}
+    try { const _s64 = window.__v292DfixE64; if (_s64 && typeof _s64.stopped === 'function' && _s64.stopped()) { _s64.notifyStop(); return; } } catch(_e64g){}   /* ★E6-4 r3: 記録を安全に戻せなかった物語は続けない（kill でも解除しない） */
     const inputEl = document.getElementById('inp');
     const text = inputEl.value.trim();
     if (!text) {
@@ -2762,7 +2765,8 @@ const G = {
          raw を保持していないので失っても再構成できない = Class D。
          ★_parseExtensions は sync 契約（呼び出し側が typeof r === 'object' で plan を差し替える）なので
            hook 自体は Promise 化しない。admission はこの呼び出し**側**で取る。 */
-      const _p748 = await this._dadmRun('TURN_PARSE', _cp1Wrap(() => Planner.parsePlan(result.text, S.mode)));
+      _e64 = (function(){ try { return (window.__v292DfixE64 && typeof window.__v292DfixE64.begin === 'function') ? window.__v292DfixE64.begin() : null; } catch(_e64a){ return null; } })();   /* ★E6-4（laneE64-a・既定 OFF）: 捨てた応答の parse の取り込みを残さない。OFF・kill・非 Owner では null＝以下は従来の関数そのもの */
+      const _p748 = await this._dadmRun('TURN_PARSE', _cp1Wrap(_e64 ? () => _e64.first(() => Planner.parsePlan(result.text, S.mode)) : () => Planner.parsePlan(result.text, S.mode)));
       if (!_p748.ran) { this._dadmHold(_p748, inputEl, text); return; }
       let plan = _p748.result;
       if (!plan) throw new Error('うまく物語を組み立てられませんでした。もう一度お試しください');
@@ -2784,18 +2788,20 @@ const G = {
         const _short235 = (function(){ try { if (localStorage.getItem('v292ShortGateOff') === '1') return false; const lk = localStorage.getItem('v100_outputLen') || 'standard'; return lk !== 'short' && _sents216.length > 0 && _sents216.length < 4; } catch(e){ return false; } })();
         if (_recap235 || _short235){
           UI.setStatus((_recap235 ? '前ターンの再掲' : '短すぎる応答') + 'を検知 → 書き直し中…');
+          try { if (_e64) _e64.hold(); } catch(_e64h){}   /* ★E6-4 r2: 書き直しを待つ間、採用前の 1 回目の state を端末キーに置かない（OFF では _e64=null） */
           const result2 = await _cp1Call(sys, user + '\n\n【重要・書き直し】直前のあなたの出力は' + (_recap235 ? '前ターンの内容のほぼ再掲だった。' : '') + (_short235 ? '短すぎた(数文で切り上げていた)。最低でも8文以上で場面を最後まで描き切ること。' : '') + '同じ場面・同じ文を繰り返さず、時間と状況を必ず前へ進めて、新しい出来事・発見・反応を描くこと。');
           if (result2 && result2.text){
             /* ★fix748 D1(C7a): 書き直し経路も同じ Class D admission を通す */
-            const _p2748 = await this._dadmRun('TURN_PARSE_REWRITE', _cp1Wrap(() => Planner.parsePlan(result2.text, S.mode)));
+            const _p2748 = await this._dadmRun('TURN_PARSE_REWRITE', _cp1Wrap(_e64 ? () => _e64.alt('rw216', () => Planner.parsePlan(result2.text, S.mode), (_q) => !!(_q && Array.isArray(_q.narrative) && _q.narrative.join('').length > 40)) : () => Planner.parsePlan(result2.text, S.mode)));   /* ★E6-4: 採る条件は直後の if と同じ式 */
             if (!_p2748.ran) { this._dadmHold(_p2748, inputEl, text); return; }
             const plan2 = _p2748.result;
             if (plan2 && Array.isArray(plan2.narrative) && plan2.narrative.join('').length > 40){ plan = plan2; result = result2; }
           }
         }
       } catch(_e216){}
-      try { if (window.__v292Dfix797) { const _r797 = await window.__v292Dfix797.turnHook({ text: result.text, plan: plan, sys: sys, user: user, api: (_cp1Att ? _cp1A.api(_cp1Att) : Api), state: S, parse: (t) => this._dadmRun('TURN_PARSE_REWRITE', _cp1Wrap(() => Planner.parsePlan(t, S.mode))) }); if (_r797 && _r797.adopted) { plan = _r797.plan; result = _r797.result; } } } catch(_e797){} /* ★v292Dfix797: 4A Layer2 v1. 既存 rewrite 入口の直後だけ。本 file 未 load / flag OFF で no-op（出力 byte 同一）*/
+      try { if (window.__v292Dfix797) { const _r797 = await window.__v292Dfix797.turnHook({ text: result.text, plan: plan, sys: sys, user: user, api: (_e64 ? _e64.api(_cp1Att ? _cp1A.api(_cp1Att) : Api) : (_cp1Att ? _cp1A.api(_cp1Att) : Api)), state: S, parse: (t) => this._dadmRun('TURN_PARSE_REWRITE', _cp1Wrap(_e64 ? () => _e64.alt('fix797', () => Planner.parsePlan(t, S.mode), (_q) => !!_q) : () => Planner.parsePlan(t, S.mode))) }); if (_r797 && _r797.adopted) { plan = _r797.plan; result = _r797.result; } } } catch(_e797){} /* ★v292Dfix797: 4A Layer2 v1. 既存 rewrite 入口の直後だけ。本 file 未 load / flag OFF で no-op（出力 byte 同一）*/
 
+      try { if (_e64) _e64.settle(); } catch(_e64s){} if (_e64 && _e64.aborted()) throw _e64.abortError();   /* ★E6-4 r2: 書き直しを parse しなかったときだけ端末キーを 1 回目の値へ戻す */
       // 心理エンジンで NPC 状態を更新
       PsychEngine.process(plan);
 
@@ -3051,7 +3057,7 @@ const G = {
         document.body.appendChild(_t263);
         setTimeout(function(){ try { _t263.remove(); } catch(_){} }, 60000);
       } catch(_e263) {}
-    } finally { if (!(_cp1Att && _cp1A && _cp1A.superseded(_cp1Att))) { try { if (this.__p888) { clearTimeout(this.__p888); this.__p888 = null; } } catch(_p888d){} UI.setLoading(false); } try { if (_cp1Att && _cp1A) _cp1A.end(_cp1Att); } catch(_cp1f){} }   /* ★r5: busy は持ち主の試行だけが戻す。採用されずに終わった試行は取消（NOT_COMMITTED） */
+    } finally { if (!(_cp1Att && _cp1A && _cp1A.superseded(_cp1Att))) { try { if (this.__p888) { clearTimeout(this.__p888); this.__p888 = null; } } catch(_p888d){} UI.setLoading(false); } try { if (_cp1Att && _cp1A) _cp1A.end(_cp1Att); } catch(_cp1f){} try { if (_e64) _e64.end(); } catch(_e64e){} }   /* ★r5: busy は持ち主の試行だけが戻す。採用されずに終わった試行は取消（NOT_COMMITTED） */
   },
 
   async cont() {
@@ -4727,6 +4733,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix742-physical-bridge.js?cb=v292Dfix742"></script>
 <!-- v292Dfix797: 4A Layer2 v1 hard capability contradiction (N1P: persistent 3 属性 = 傷/関係/未解決 を parse 前に original 継承). 既定 OFF=v292Dfix797On / kill=v292Dfix797Off -->
 <script src="v292Dfix797-layer2-contradiction.js?cb=20261010-gq1"></script>
+<script src="v292DfixE64-discard-guard.js?cb=20261024-bundle45-e64-d"></script>
 <!-- CLOUD_CANONICAL C1 client (C1-a builder + C1-b hydrator)。DEPLOY != ENABLE：呼び出し側0本・load時storage読取0。OFF=v292Dfix743Off / feature=v292DfixCC2On (default OFF) -->
 <script src="v292Dfix743-cc2-client.js?cb=20261019-bundle33-b"></script>
 <!-- CLOUD_CANONICAL C1 write path wiring（裁定30/31/32）。DEPLOY != ENABLE：caller 0本・自動実行0・load時storage読取0。prepare()/commitSchema2() は明示呼出のみ。ON=v292Dfix750On / KILL=v292Dfix750Off (default OFF) -->
