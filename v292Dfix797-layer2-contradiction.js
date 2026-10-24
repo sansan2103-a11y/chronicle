@@ -77,6 +77,8 @@
  *   turnHook: tier==='PREMISE' かつ v292Dfix797DescRewrite!=='1' なら rewrite せず ring 'premise-hold'（api 0）。
  *   HARD_DENIAL / VIOL / outcome / helper 語彙 / fix741 経路は 1 バイトも変えない。
  */
+/* ★N1P2（2026-10-24・lane797・候補 20261024-lane797-c）: N1P の守る基準を「捨てる original の <state>」から「このターンの前の確定値」へ。
+   FN1（捨てる側だけの値を写す）・FN2（rewrite の新しい値を消す）だけを直す。違わない項目は N1P と同じバイト。kill v292Dfix797N1P2Off='1'。詳細は n1p2Sanitize。 */
 /* ★A-0 stage（4A-2 v1）2026-09-05: N1P bb2ecfffe29d に対し beginTurnContext(desc snapshot)・prevFor(desc)・detect(source A-0) の 3 箇所だけ追加。
    他は 1 バイトも変えない。stage only・deploy HOLD・既定 OFF 維持。 */
 (function () {
@@ -385,6 +387,7 @@
                   canonical の読取のみ（AUTHORITY_CONSUMPTION_EXPANSION = YES / NEW_AUTHORITY = NO）。書込 0。 */
                desc: desc };
     } catch (e) { PREV = null; }
+    n1p2Begin(st);   /* ★N1P2（lane797）: 同じ時点の確定済み 傷/関係/未解決 を写す（読むだけ・書込 0・never throw） */
   }
 
   /* Layer2 判定時に PREV を source A として使ってよいか。
@@ -773,6 +776,140 @@
     } catch (e) { return String(rewriteText == null ? '' : rewriteText); }   /* fail-open */
   }
 
+  /* ======================================================================
+   * ★N1P2（2026-10-24・lane797・候補 20261024-lane797-c（r2: GPT #127-MI・r3: #127-MK）・GPT #127-ME §4 P1）
+   *   N1P の「守る基準」を **同 turn の original 応答（捨てる側）** から
+   *   **このターンの前に確定していた値**（beginTurnContext 時点の fix77/fix190 store の 傷/関係/未解決）へ移す。
+   *   N1P の意図「書き直しは、ターンの前から確定していた傷を消さない・変えない」はそのまま。
+   *   直すのは 2 点だけ:
+   *     FN1  捨てる original にしか無い値を rewrite のタグへ写さない（n1pPut しない）
+   *     FN2  採る rewrite が新しく書いた値（確定値が無い項目）を消さない（n1pDel しない）
+   *   項目ごと（who × 傷/関係/未解決）の「capture 後に残る値」で決める（下の n1p2Want）:
+   *     ・rewrite と original が同じ値 → その値（従来どおり）
+   *     ・確定値あり → 確定値。ただし rewrite の値が確定値をそのまま含み、書き足し部分に否定・仮定・伝聞など（fix670 の門）や
+   *       回復・消失の言い方が無いときだけ rewrite の値（r2・n1p2AppendOk。判定できなければ確定値）
+   *     ・確定値なし → rewrite の値（無ければ何も書かない）
+   *   「capture 後に残る値」が従来の sanitize と同じになる項目は、従来の sanitize と**同じバイト**を返す。
+   *   全項目が同じなら戻り値は sanitizePersistentForParse(t2, t1) そのもの（N1P と 1 バイトも違わない）。
+   *   使わない（＝従来の N1P と同じ）とき: kill v292Dfix797N1P2Off='1'・N1P2_DEFAULT_ON=false（かつ On 無し）・
+   *     写しが無い／story・turn が一致しない・例外。
+   *   読むのは beginTurnContext の写しだけ（store を後から読まない）。書込 0・localStorage 書込 0・DOM 0・network 0。
+   *   限界（fix797 の外の問題）: original の parse は fix797 より前に store へ書いている。rewrite がその人物の
+   *     タグを持たない、または確定値が無い項目では、ここでは消せない（capture は空を書かない）。それは E6-4／E64 の範囲。
+   * ====================================================================*/
+  var N1P2_VER = 'n1p2-20261024-lane797-c';
+  var N1P2_DEFAULT_ON = true;      /* ← 既定。Owner opt-in にするなら false（On キー v292Dfix797N1P2On='1'） */
+  var N1P2_KEY = { '傷': 'kizu', '関係': 'kankei', '未解決': 'mikaiketsu' };   /* fix190 FIELDS と同じ対応 */
+  var PRE2 = null;                  /* { story, turn, map: who -> { 傷, 関係, 未解決 } } | null（ephemeral） */
+  var n1p2Stat = { begin: 0, used: 0, same: 0, changed: 0, fallback: 0, last: null };
+  function n1p2On() { return lsGet('v292Dfix797N1P2Off') !== '1' && (N1P2_DEFAULT_ON || lsGet('v292Dfix797N1P2On') === '1'); }
+  function n1p2Begin(st) {
+    try {
+      if (!n1p2On()) { PRE2 = null; return; }
+      var store = window.__v292Dfix77Store || {}, map = Object.create(null);
+      Object.keys(store).forEach(function (who) {
+        var e = store[who]; if (!e || typeof e !== 'object') return;
+        var w = String(who).trim(); if (!w) return;
+        var o = Object.create(null);
+        for (var i = 0; i < N1P_FIELDS.length; i++) {
+          var f = N1P_FIELDS[i], v = e[N1P2_KEY[f]] || e[f] || '';
+          o[f] = String(v == null ? '' : v).trim();
+        }
+        map[w] = o;
+      });
+      PRE2 = { story: storyKeyOf(), turn: turnOf(st), map: map };
+      n1p2Stat.begin++;
+    } catch (e) { PRE2 = null; }
+  }
+  function n1p2Pre(st) {
+    var p = PRE2; if (!p) return null;
+    var story = storyKeyOf();
+    if (story && p.story && story !== p.story) return null;
+    var t = turnOf(st);
+    if (t < 0 || p.turn < 0 || t !== p.turn) return null;
+    return p.map;
+  }
+  /* capture（fix190: trim して非空だけ後勝ち）の後に残る値。無ければ base（＝その前の値）。 */
+  function n1p2Eff(P, who, f) {
+    var e = (P && Object.prototype.hasOwnProperty.call(P, who)) ? P[who] : null;
+    var ent = (e && Object.prototype.hasOwnProperty.call(e, f)) ? e[f] : null;
+    return (ent && ent.eff !== null) ? String(ent.eff).trim() : '';
+  }
+  function n1p2Want(c, o, r) {      /* c = 確定値・o = original・r = rewrite（どれも trim 済み・'' = 無し） */
+    if (r && r === o) return r;
+    if (c) return (r && r !== c && n1p2AppendOk(c, r)) ? r : c;
+    return r;
+  }
+  /* ★N1P2 r2（GPT #127-MI L1〜L3）: 「確定値を含む書き足し」を部分文字列だけで認めない。
+   *   認めるのは次を全部満たすときだけ（どれか 1 つでも満たさない・判定できない → 確定値を保つ）:
+   *     ① rewrite の値の中に確定値がそのまま 1 回以上ある
+   *     ② 確定値を 1 回取り除いた残り（＝書き足し部分）が空でない
+   *     ③ 残りに fix670 の既存の門（否定・仮定・疑問・比喩・錯覚・未来・認識・伝聞・推量・受益）が 1 つも当たらない
+   *        （window.__v292Dfix670.__test.gateBlocked を参照で使う。regex のコピー 0。fix670 が無ければ認めない＝fail-safe）
+   *     ④ 残りに回復・消失の言い方（N1P2_RECOVERY）が無い
+   *   N1P2_RECOVERY は fix797 にも他 fix にも「治癒判定」の辞書が無い（fix797 A-0 は治癒 regex を足さない方針・
+   *   fix77X は既定 OFF の 傷解消 属性方式）ため置く小さな閉じた一覧。**認める側を狭めるためだけ**に使い、
+   *   当たれば確定値を保つ。辞書の漏れ・誤りが確定済みの傷を消す方向に働くことは無い（誤爆しても確定値が残るだけ）。
+   *   「治療中」「包帯で固定」「悪化」などの経過・処置は ③④ に当たらないので書き足しとして残る。 */
+  var N1P2_RECOVERY = /(治っ|治り|治る|治癒|完治|全快|快癒|回復|癒え|消え|消失|なくな|無くな|なし|無し|跡形|元通り|元に戻|勘違い|誤診|気のせい|解決|解消|和解|判明)/;   /* ★r3（lane797-c 案）: 関係・未解決 の「解けた」系 4 語（解決・解消・和解・判明）だけを足す。範囲はここで固定 */
+  function n1p2AppendOk(c, r) {
+    try {
+      var i = r.indexOf(c); if (i < 0) return false;                          /* ① */
+      var rest = r.slice(0, i) + r.slice(i + c.length);
+      if (!rest.replace(/[\s　、，,。．・／\/（）()「」\[\]【】:：;；-]/g, '')) return false;   /* ② 区切り記号だけの残りは書き足しではない */
+      var g = dep670(); if (!g) return false;                                   /* ③ fix670 が無い → 判定できない */
+      if (g.gateBlocked(rest)) return false;
+      if (N1P2_RECOVERY.test(rest)) return false;                               /* ④ */
+      return true;
+    } catch (e) { return false; }
+  }
+  function n1p2Sanitize(rewriteText, originalText, st) {
+    var old = sanitizePersistentForParse(rewriteText, originalText);   /* 従来（N1P）の結果。違わない項目はこのバイトを使う */
+    try {
+      if (!n1p2On()) return old;
+      var t2 = String(rewriteText == null ? '' : rewriteText);
+      var t1 = String(originalText == null ? '' : originalText);
+      if (!t1 || t2.indexOf('<state') < 0) return old;          /* 従来も no-op の場合 */
+      var C = n1p2Pre(st);
+      if (!C) { n1p2Stat.fallback++; n1p2Stat.last = { why: 'no-pre' }; return old; }
+      var P1 = n1pPersistentOf(t1), P2 = n1pPersistentOf(t2), PO = n1pPersistentOf(old);
+      var plan = Object.create(null), diff = [];
+      Object.keys(P2).concat(Object.keys(PO)).forEach(function (who) {
+        if (plan[who]) return; plan[who] = Object.create(null);
+        for (var i = 0; i < N1P_FIELDS.length; i++) {
+          var f = N1P_FIELDS[i];
+          var c = (C[who] && C[who][f]) || '';
+          var want = n1p2Want(c, n1p2Eff(P1, who, f), n1p2Eff(P2, who, f));
+          var oldEnd = n1p2Eff(PO, who, f) || c;                /* 従来の text を capture した後に残る値 */
+          var newEnd = want || c;
+          if (oldEnd === newEnd) continue;
+          plan[who][f] = (want && want === n1p2Eff(P2, who, f)) ? { keep: true } : (want ? { put: want } : { del: true });
+          diff.push({ who: who, f: f, act: plan[who][f].keep ? 'keep-rewrite' : (want ? 'put-committed' : 'drop-original') });
+        }
+      });
+      n1p2Stat.used++;
+      if (!diff.length) { n1p2Stat.same++; n1p2Stat.last = { why: 'same', n: 0 }; return old; }
+      var out = t2.replace(/<state\b[^>]*?\/?>/g, function (tag) {
+        var who = n1pAttr(tag, 'who'); if (who === null) return tag;
+        who = who.trim(); if (!who) return tag;
+        var e = Object.prototype.hasOwnProperty.call(P1, who) ? P1[who] : null;
+        var pw = plan[who] || null, o2 = tag;
+        for (var i = 0; i < N1P_FIELDS.length; i++) {
+          var f = N1P_FIELDS[i], a = pw ? pw[f] : null;
+          if (a && a.keep) continue;                                 /* rewrite の生バイトのまま */
+          if (a && a.put !== undefined) { o2 = n1pPut(o2, f, a.put); continue; }
+          if (a && a.del) { o2 = n1pDel(o2, f); continue; }
+          var ent = (e && Object.prototype.hasOwnProperty.call(e, f)) ? e[f] : null;   /* 違わない項目 = 従来と同じ操作 */
+          o2 = (ent && ent.present) ? n1pPut(o2, f, ent.eff === null ? '' : ent.eff) : n1pDel(o2, f);
+        }
+        return o2;
+      });
+      n1p2Stat.changed++;
+      n1p2Stat.last = { why: 'changed', n: diff.length, acts: diff.map(function (d) { return d.f + ':' + d.act; }) };   /* 名前・本文は残さない */
+      return out;
+    } catch (e) { n1p2Stat.fallback++; n1p2Stat.last = { why: 'error' }; return old; }
+  }
+
   /* ---- rewrite 指示文（設計 §3 verbatim・医学語 0・severity 0） -------- */
   function instructionFor(d) {
     return '\n\n【重要・書き直し】直前の本文で「'
@@ -859,7 +996,7 @@
         if (d2.hit)                           { rec(Object.assign({}, base, { adopted: false, why: 'still-violating' })); return null; }
         /* ★N1P: parse へ渡す text の 傷 / 関係 / 未解決 attr だけを original の値／有無へ
            restore する。採用 gate（上の 4 条件）は t2 の生バイトで判定済み。表示・保存は r2 のまま。 */
-        var t2p = sanitizePersistentForParse(t2, io.text);
+        var t2p = n1p2Sanitize(t2, io.text, io.state);   /* ★N1P2（lane797）: 基準 = このターンの前の確定値。使えないとき・kill では従来の sanitizePersistentForParse と同じバイト */
         return Promise.resolve(io.parse(t2p)).then(function (p2) {
           if (!p2 || p2.ran === false || !p2.result)
                                               { rec(Object.assign({}, base, { adopted: false, why: 'parse-denied' })); return null; }
@@ -894,7 +1031,16 @@
                sessionRewrites: sessionRewrites, cap: SESSION_CAP, last: last };
     },
     log: function () { return ring.slice(); },
+    /* ★N1P2（lane797）: 診断のみ（件数と理由だけ・名前／本文は返さない） */
+    n1p2: function () {
+      return { ver: N1P2_VER, on: n1p2On(), defaultOn: N1P2_DEFAULT_ON, off: lsGet('v292Dfix797N1P2Off') === '1',
+               preReady: !!PRE2, preTurn: PRE2 ? PRE2.turn : -1,
+               begin: n1p2Stat.begin, used: n1p2Stat.used, same: n1p2Stat.same, changed: n1p2Stat.changed,
+               fallback: n1p2Stat.fallback, last: n1p2Stat.last ? JSON.parse(JSON.stringify(n1p2Stat.last)) : null };
+    },
     __test: {
+      n1p2Sanitize: n1p2Sanitize, n1p2Want: n1p2Want, n1p2On: n1p2On, n1p2AppendOk: n1p2AppendOk, N1P2_RECOVERY: N1P2_RECOVERY,
+      n1p2SetPre: function (story, turn, map) { PRE2 = { story: story, turn: turn, map: map }; },   /* fixture 用 */
       HARD_DENIAL: HARD_DENIAL, VIOL: VIOL, splitClauses: splitClauses,
       /* ★N1P: persistent 3 属性 sanitiser（fixture 用・純関数・読み取りのみ） */
       sanitizePersistentForParse: sanitizePersistentForParse, n1pPersistentOf: n1pPersistentOf,
