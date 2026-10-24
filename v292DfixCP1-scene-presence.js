@@ -191,6 +191,19 @@
  *   過去分（GPT #127-LW Q3）: r6 を入れる前に確定済みのターン（r5 が保存した field の turnsLen まで）は r5 の読み方のまま。新しい規則はそれ以降のターンだけ（field.r6from）。
  *   表示（統括・UI45）: HOLD 通知を #composer の上 8px（BASE の A2 通知が見えていればその上 8px）へ。幅 720px 以下は左右 12px。
  *      #composer の大きさの変化・window の resize・1 秒ごとに置き直す。文面・ボタン・復旧の動き・最前面は r5 のまま（holdPlace）。
+ *
+ * ■ cp1r-c（2026-10-25）: HOLD 専用の包みの付け直しは、包みが鎖から消えたときだけ（このページの印 HO_TOK で判定）。fix697 との 2 秒ごとの
+ *   取り合いで S.save の層が増え続けた cp1r-b（r5 以来の HOLD 中の OFF / kill ページも同じ）を止める。止める判定・対象・HOLD の扱いは cp1r-b のまま。
+ * ■ cp1r-b（2026-10-25・GPT #127-MW）: OFF / kill で読み込んだページも、HOLD 専用の包み（installHoldOnly＝生成・S.save・state 書込の関門）を必ず置き、
+ *   C の読み直しで後から別タブでできた同じ物語の HOLD を実行の時点で止める。HOLD が無ければ素通し（CP1 の働きは何も装着しない）。
+ * ■ cp1r-a（2026-10-25・GPT #127-MQ・P1。VER・GATE_VER・PRES_VER・注入／保存／観測のロジックは r6 のまま。HOLD の守りと装着の判定だけ）
+ *   A  互換の不一致（fix333 / tap / index）は、文書の同期 script がすべて実行された後（readyState が 'loading' でなくなった後）に確定する。
+ *      fix333 はこのファイルより後の同期 script なので、上流フラグが先に揃っても fix333 の実行前に 'fix333-incompatible' と決めない。WAIT_MS は 30 秒のまま。
+ *   B  opt-in で読み込んで無効化したページ（互換・install-timeout）にも、OFF / kill と同じ HOLD 専用の包み（installHoldOnly）を必ず置く。
+ *   B2 opt-in で読み込んだページで、読み込み時にこの物語の HOLD の記録があれば、装着を待つ間も HOLD 専用の包みを先に置く。
+ *   C  HOLD の記録は、生成・保存・state 書込を実行するその時点で端末の印（v292DfixCP1Hold）を読み直し、増えた記録（別タブで作られた HOLD）を取り込む。
+ *      取り込むのは追加だけ（このページで持っている記録を別タブの変化で消さない＝止める側）。opt-in で読み込んだページだけ（OFF / kill の読み込みは r6 のまま）。
+ *   tap（guard 3）が居るページでは、HOLD 専用の包みは fetch を包まない（tap が同じ onSave で state 書込を止めるので二重にしない）。
  */
 (function(){
   'use strict';
@@ -253,7 +266,7 @@
   var turn = null, turnSeq = 0, pageAcct = null, recent = [], apiCur = null, scopeT = null, inflight = [], holds = {}, _holdIv = null,
    guardStats = { turns: 0, turnsOn: 0, offCompat: 0, offIdent: 0, offPageAcct: 0, sendBlocked: 0, abortedResend: 0, respDiscarded: 0, resultDiscarded: 0, parseBlocked: 0, commitReverted: 0,
                   stateRevert: { fix302: 0, own: 0, unsafe: 0, none: 0, deferred: 0 }, saveBlocked: 0, fgSkipped: 0, entryRefused: 0, unbound: 0, ambiguous: 0, ambiguousBlocked: 0, adopted: 0, cancelled: 0,
-                  endCancelled: 0, provisional: 0, lsRestored: 0, provisionalPersisted: 0, workerWriteBlocked: 0, holds: 0, holdBuildRefused: 0, holdSaveRefused: 0, holdReleased: 0, nested: 0, lastBlock: null, reasons: {},
+                  endCancelled: 0, provisional: 0, lsRestored: 0, provisionalPersisted: 0, workerWriteBlocked: 0, holds: 0, holdsXtab: 0, holdBuildRefused: 0, holdSaveRefused: 0, holdReleased: 0, nested: 0, lastBlock: null, reasons: {},
                   prov: { built: 0, changed: 0, discarded: 0, adopted: 0, fallback: 0 } };   /* r6: 仮の presence の件数だけ */
   /* 理由コード（通常のネットワーク失敗と区別できる）。エラーは e.code = 'CP1_INTERRUPTED'・e.reason = コード・e.terminal = true */
   var REASON = { 'account-changed': 'ACCOUNT_CHANGED', 'account-changed-page': 'ACCOUNT_CHANGED', 'logged-out': 'LOGOUT', 'story-changed': 'STORY_CHANGED', 'state-changed': 'STORY_RELOADED',
@@ -465,7 +478,20 @@
     if (kind === 'REVERT_ADMISSION_HOLD' && !_holdIv){ try { _holdIv = setInterval(function(){ try { var L = Object.keys(holds).map(function(x){ return holds[x]; }).filter(function(x){ return x && x.kind === 'REVERT_ADMISSION_HOLD' && x.T; }); if (!L.length){ clearInterval(_holdIv); _holdIv = null; return; } var G0 = (0, eval)('typeof G !== "undefined" ? G : null'); if (!G0 || typeof G0._dadmRun !== 'function') return; L.forEach(function(x){ G0._dadmRun('CP1_REVERT', function(){ return revertState(x.T); }).then(function(r){ if (r && r.ran === true && r.result !== 'unsafe' && holds[x.sid] === x) releaseHold('verified-revert', x); }, function(){}); }); } catch(e){} }, 3000); } catch(e){} }
   }
   function releaseHold(why, h){ h = h || curHold(); if (!h || holds[h.sid] !== h) return; delete holds[h.sid]; saveHolds(); guardStats.holdReleased++; try { if (!curHold()){ var n = document.getElementById('v292DfixCP1-hold'); if (n && n.parentNode) n.parentNode.removeChild(n); } } catch(e){} try { console.warn(TAG, 'hold released', why); } catch(_w){} }
-  function heldHere(){ return !!curHold(); }
+  /* ★cp1r-a C: 実行の時点で端末の印を読み直し、別タブで増えた記録を取り込む（追加だけ・opt-in で読み込んだページだけ） */
+  var _hlsRaw = null;
+  function holdRecsOf(raw){ var ho = JSON.parse(raw); return (ho && ho.v === 2 && ho.holds && typeof ho.holds === 'object') ? Object.keys(ho.holds).map(function(k){ return ho.holds[k]; }) : (ho && ho.story ? [ho] : []); }
+  function holdObjOf(x, sx){ return { sid: sx, story: x.story || null, acct: x.acct || null, kind: x.kind || 'STATE_UNSAFE', attempt: x.attempt || null, at: x.at || now(), T: null, amb: x.amb || [], pre: x.pre || null, fromReload: true }; }
+  function refreshHolds(){
+    if (LOAD_ON !== true && LOAD_ON !== false) return;   /* ★cp1r-b: 読み込み時の判定（LOAD_ON）が決まった後なら ON / OFF / kill のどれでも読み直す（決まる前＝読み込みの記録の取り込みの途中は何もしない） */
+    try {
+      var raw = ssg(HOLD_SS); if (raw === _hlsRaw) return; _hlsRaw = raw; if (!raw) return;
+      var L1 = null; try { L1 = holdRecsOf(raw); } catch(_p){ L1 = null; }
+      if (!L1) return;   /* 読めない印は読み込み時と同じく取り込まない（r5 final と同じ扱い） */
+      L1.forEach(function(x){ var sx = x && sidOf(x.sid || x.story); if (sx && !Object.prototype.hasOwnProperty.call(holds, sx)){ var h = holdObjOf(x, sx); h.fromXtab = true; holds[sx] = h; guardStats.holdsXtab++; } });
+    } catch(e){}
+  }
+  function heldHere(){ refreshHolds(); return !!curHold(); }
   /* hold の解除（再読込）: 先に Recovery Draft を作り、読み戻し検証が通ったときだけ、安全に戻せなかった人物を試行の前の値へ戻して再読込する。
      Draft が作れないときは何もしない（止めたまま）。 */
   function holdResolve(cb){
@@ -558,7 +584,7 @@
   }
   /* 読み込み時: hold のまま再読込・開き直された物語なら、hold を続ける（解除は上の 2 つだけ）。r5 final: 物語ごとの記録（v2）。旧形（1 件）も読む */
   try { var hs0 = ssg(HOLD_SS); if (hs0){ var ho = JSON.parse(hs0), L0 = (ho && ho.v === 2 && ho.holds && typeof ho.holds === 'object') ? Object.keys(ho.holds).map(function(k){ return ho.holds[k]; }) : (ho && ho.story ? [ho] : []);
-    L0.forEach(function(x){ var sx = x && sidOf(x.sid || x.story); if (sx) holds[sx] = { sid: sx, story: x.story || null, acct: x.acct || null, kind: x.kind || 'STATE_UNSAFE', attempt: x.attempt || null, at: x.at || now(), T: null, amb: x.amb || [], pre: x.pre || null, fromReload: true }; });
+    L0.forEach(function(x){ var sx = x && sidOf(x.sid || x.story); if (sx) holds[sx] = { sid: sx, story: x.story || null, acct: x.acct || null, kind: x.kind || 'STATE_UNSAFE', attempt: x.attempt || null, at: x.at || now(), T: null, amb: x.amb || [], pre: x.pre || null, fromReload: true }; }); _hlsRaw = hs0;
     if (on() && heldHere()) { try { setTimeout(function(){ if (heldHere()) holdNotice(); }, 1500); } catch(_t){} } } } catch(e){}
   /* Worker への書込のうち、物語の state を運ぶもの（tap から呼ばれる）。hold 中は止める。採用前の仮の state が保存先へ書かれてしまった
      （＝parse の後に他の誰かが store 全体を書いた）試行があれば、その試行が決着するまで止める */
@@ -581,16 +607,30 @@
      CP1 の働き（印・注記・presence・除外）は何も装着しない。止めるのは HOLD の 3 点（S.save・state 書込・生成）だけで、出口は通知のボタン
      （Recovery Draft → 未復旧の人物を試行前の値へ → 印を消して再読込）だけ。HOLD の記録が無い物語では何もしない（kill = CP1 を外す、のまま） */
   function holdOnlyErr(){ var e = new Error('[v292DfixCP1] held [CP1_INTERRUPTED:STATE_UNSAFE_HOLD]'); try { e.code = 'CP1_INTERRUPTED'; e.reason = 'STATE_UNSAFE_HOLD'; e.terminal = true; } catch(_e){} return e; }
-  var _hoSave = null, _hoBuild = null;   /* 自分の包みが一番外にあるか（fix274 が __v292* の印を後の包みへ写すので、印ではなく参照で見る） */
+  var _hoSave = null, _hoBuild = null, holdWraps = { save: 0, build: 0, fetch: 0 };   /* cp1r-c: 包みを作った回数（診断・件数だけ） */   /* 自分の包みが一番外にあるか（fix274 が __v292* の印を後の包みへ写すので、印ではなく参照で見る） */
+  /* ★cp1r-c（GPT #127-MX の後・統括）: 包み直しは「包みが鎖から消えたとき」だけ。r5〜cp1r-b は参照（S.save !== _hoSave）で判定していたため、
+     同じく参照で一番外を取りに来る fix697（S.save を 2 秒ごとに identity で再装着）と交互に上書きし合い、S.save の層が 2 秒ごとに 1 枚ずつ増えた（実測）。
+     このページで作った包みに固有の印（HO_TOK・__cp1HoTok）を付け、今の関数（と、外側の包みが写した印）にそれが見えれば鎖の中にあるとみなして包み直さない。
+     S（物語の state）や Planner の object そのものが替わったときは、印に関係なく新しい側へ付ける。
+     HOLD が付いている間も同じ（一番外でなくても、鎖の中で呼ばれたその場で heldHere() を確かめる）。自分の包みどうしは __cp1HoIn で内側をたどれる（上限 HO_WALK 回）。 */
+  var HO_TOK = { cp1HoldOnly: 'cp1r-c' }, HO_WALK = 16, hoSObj = null, hoPObj = null;
+  /* 印の名前は __v292 で始めない（fix274 は Planner.build への代入のたびに旧関数の __v292* を新関数へ写すため、鎖を捨てた差し替えにも印が写ってしまう）。
+     鎖の上の包み（fix697・fix277 など）は内側の own props を写すので、印が見えれば鎖の中に関門がある。 */
+  function hoInChain(f){
+    try { for (var n = 0; f && typeof f === 'function' && n < HO_WALK; n++){ if (f.__cp1HoTok === HO_TOK) return true; f = f.__cp1HoIn; } } catch(e){}
+    return false;
+  }
   function holdOnlyWrap(){
-    try { var S = getS(); if (S && typeof S.save === 'function' && S.save !== _hoSave){ var os = S.save; var w = function(){ if (heldHere()){ guardStats.holdSaveRefused++; guardStats.saveBlocked++; try { console.warn(TAG, 'save skipped: hold (CP1 off at load)'); } catch(_w){} return undefined; } return os.apply(this, arguments); }; try { Object.keys(os).forEach(function(k){ w[k] = os[k]; }); } catch(_k){} w.__v292DfixCP1Hold = true; S.save = w; _hoSave = S.save; } } catch(e){}
-    try { var P = window.Planner; if (P && typeof P.build === 'function' && P.build !== _hoBuild){ var ob = P.build; var wb = function(){ if (heldHere()){ guardStats.holdBuildRefused++; holdNotice(); throw holdOnlyErr(); } return ob.apply(this, arguments); }; try { Object.keys(ob).forEach(function(k){ wb[k] = ob[k]; }); } catch(_k2){} wb.__v292DfixCP1Hold = true; P.build = wb; _hoBuild = P.build; } } catch(e2){}
+    try { var S = getS(); if (S && typeof S.save === 'function' && (S !== hoSObj || !hoInChain(S.save))){ var os = S.save; var w = function(){ if (heldHere()){ guardStats.holdSaveRefused++; guardStats.saveBlocked++; try { console.warn(TAG, 'save skipped: hold (CP1 off at load)'); } catch(_w){} return undefined; } return os.apply(this, arguments); }; try { Object.keys(os).forEach(function(k){ w[k] = os[k]; }); } catch(_k){} w.__v292DfixCP1Hold = true; w.__cp1HoTok = HO_TOK; w.__cp1HoIn = os; S.save = w; _hoSave = S.save; hoSObj = S; holdWraps.save++; } } catch(e){}
+    try { var P = window.Planner; if (P && typeof P.build === 'function' && (P !== hoPObj || !hoInChain(P.build))){ var ob = P.build; var wb = function(){ if (heldHere()){ guardStats.holdBuildRefused++; holdNotice(); throw holdOnlyErr(); } return ob.apply(this, arguments); }; try { Object.keys(ob).forEach(function(k){ wb[k] = ob[k]; }); } catch(_k2){} wb.__v292DfixCP1Hold = true; wb.__cp1HoTok = HO_TOK; wb.__cp1HoIn = ob; P.build = wb; _hoBuild = P.build; hoPObj = P; holdWraps.build++; } } catch(e2){}
   }
   function installHoldOnly(){
     inst.holdOnly = true;
-    try { var f0 = window.fetch; if (typeof f0 === 'function' && !f0.__v292DfixCP1Hold){ var gf = function(u, o){ try { if (o && typeof o.body === 'string' && String(o.method || '').toUpperCase() === 'POST'){ var v = onSave(u, o.body); if (v && v.block === true) return Promise.reject(holdOnlyErr()); } } catch(_e){} return f0.apply(this, arguments); }; try { Object.keys(f0).forEach(function(k){ gf[k] = f0[k]; }); } catch(_k){} gf.__v292DfixCP1Hold = true; window.fetch = gf; } } catch(e){}
+    var tapRoutes = false; try { tapRoutes = (LOAD_ON === true && tapOk()); } catch(_tr){ tapRoutes = false; }   /* ★cp1r-a: tap（guard 3）が同じ onSave で止めるので fetch は包まない（二重にしない） */
+    inst.holdOnlyFetch = !tapRoutes;
+    try { var f0 = window.fetch; if (!tapRoutes && typeof f0 === 'function' && !f0.__v292DfixCP1Hold){ var gf = function(u, o){ try { if (o && typeof o.body === 'string' && String(o.method || '').toUpperCase() === 'POST'){ var v = onSave(u, o.body); if (v && v.block === true) return Promise.reject(holdOnlyErr()); } } catch(_e){} return f0.apply(this, arguments); }; try { Object.keys(f0).forEach(function(k){ gf[k] = f0[k]; }); } catch(_k){} gf.__v292DfixCP1Hold = true; window.fetch = gf; holdWraps.fetch++; } } catch(e){}
     holdOnlyWrap();
-    try { var iv = setInterval(function(){ if (!heldHere()){ try { clearInterval(iv); } catch(_c){} return; } holdOnlyWrap(); }, 2000); } catch(e3){}
+    try { setInterval(function(){ holdOnlyWrap(); }, 2000); } catch(e3){}   /* ★cp1r-b: ON / OFF / kill のどのページでも、後から増えた HOLD（別タブ）に備えて包みを保つ（中身は heldHere() の素通し） */
     try { setTimeout(function(){ if (heldHere()) holdNotice(); }, 1500); } catch(e4){}
   }
   /* ③ 採用（S.turns.push）の関門。試行の同期区間（within）の中の push だけを見る（列挙されないプロパティ・JSON には出ない）。
@@ -1070,6 +1110,10 @@
                turns: 0, nAbsent: 0, sysChanged: false, userChanged: false, ops: [], skipped: ['disabled:' + reason], selfcheck: 'n/a' };
       try { console.warn(TAG, 'disabled for this page (no wrap / no injection / no presence write):', reason, JSON.stringify({ waitedMs: inst.waitedMs, flags: inst.flags })); } catch(_e){}
     }
+    /* ★20261024-laneCP1race-a (B): opt-in で読み込んだが無効化したページでも、この物語に HOLD の記録があれば OFF / kill で読み込んだときと同じく
+       HOLD の 3 点（生成・S.save・state 書込）だけを止める（r5 final の installHoldOnly をそのまま使う）。r6 は無効化で build / save の包みを
+       置かないため、HOLD の記録があっても生成と端末への保存が通っていた（Worker への書込は tap が止めていた） */
+    try { if (!inst.holdOnly){ inst.holdOnlyAt = { sk: storyKey(), keys: Object.keys(holds), held: heldHere(), from: 'disabled:' + reason }; installHoldOnly(); } } catch(_h){}   /* ★cp1r-a B: HOLD の記録が無くても置く（後から別タブで HOLD ができたとき、実行の時点で止めるため） */
   }
 
   /* ---- 送信直前の観測（r4: GPT #127-JY ②）。純粋な観測器: tap から body 文字列を受け取り、送信の後（setTimeout 0）で読むだけ ---- */
@@ -1207,7 +1251,14 @@
       if (inst.state === 'waiting' && now() - inst.waitStart > WAIT_MS){ disable('install-timeout'); return true; }
       return false;   /* 装着済みのあと誰かが差し替えた場合も、上流フラグが揃うまで待つだけ（強制装着しない） */
     }
-    var cw = compatWhy(); if (cw && inst.state === 'waiting'){ disable(cw); return true; }   /* r2 §3: 混在キャッシュ → CP1 全体 OFF（何も包まない） */
+    var cw = compatWhy(); if (cw && inst.state === 'waiting'){
+      /* ★20261024-laneCP1race-a (A): fix333 は index.html でこのファイルより後に読まれる同期 script。上流フラグ（fix192/fix277）が先に揃うと
+         （このファイルの到着が約 2 秒以上遅れた読み込み）、fix333 がまだ実行されていないだけで 'fix333-incompatible' と決めていた（tries 1・waitedMs 0）。
+         互換の不一致は、文書の同期 script がすべて実行された後（readyState が 'loading' でなくなった後）に初めて確定とする。それまでは待つだけ（素通し＝OFF と同じ）。
+         互換の判定そのもの・確定後の disable・WAIT_MS の打ち切りは r6 のまま */
+      var parsing = false; try { parsing = (typeof document !== 'undefined' && document.readyState === 'loading'); } catch(_rs){ parsing = false; }
+      if (parsing && now() - inst.waitStart <= WAIT_MS){ inst.compatWait = (inst.compatWait || 0) + 1; inst.compatWaitWhy = cw; return false; }
+      disable(cw); return true; }   /* r2 §3: 混在キャッシュ → CP1 全体 OFF（何も包まない） */
     var inner = P.build;
     var wrapped = function(){
       /* r5 G6: 取り消した試行の仮の state がまだ残っていれば、新しい生成の前に（TURN_BUILD の admission の中で）撤回する。戻せない・hold 中なら生成しない */
@@ -1279,7 +1330,7 @@
   function status(){
     var T = window.__v292DfixCP1Tap, o = {};
     for (var k in fbStats) o[k] = fbStats[k];
-    return { ver: VER, on: on(), state: inst.state, reason: inst.reason, waitMs: WAIT_MS, tLoad: inst.tLoad, tDone: inst.tDone, waitedMs: inst.waitedMs, tries: inst.tries,
+    return { ver: VER, on: on(), state: inst.state, reason: inst.reason, waitMs: WAIT_MS, tLoad: inst.tLoad, tDone: inst.tDone, waitedMs: inst.waitedMs, tries: inst.tries, raceFix: '20261024-laneCP1race-a', holdFix: 'cp1r-c-20261025', holdWraps: { save: holdWraps.save, build: holdWraps.build, fetch: holdWraps.fetch }, compatWait: inst.compatWait || 0, holdOnlyFetch: (inst.holdOnlyFetch === undefined ? null : inst.holdOnlyFetch),
              flags: inst.flags, flagsNow: flagsOf(window.Planner), engineNew: engineNew(), tap: !!(T && T.installed), tapVer: T ? T.ver || null : null, fb: o, loadOn: LOAD_ON, gate: gate(), gateVer: GATE_VER, presVer: PRES_VER, ret: (function(){ var r = {}; for (var k6 in retStats) r[k6] = retStats[k6]; return r; })(), compat: compatWhy() || 'ok', guard: (function(){ var g = {}; for (var k4 in guardStats) g[k4] = guardStats[k4]; g.reasons = {}; for (var k5 in guardStats.reasons) g.reasons[k5] = guardStats.reasons[k5]; g.turn = turn ? { id: turn.id, eff: turn.eff, gate: turn.gate, why: turn.why, closed: turn.closed, blocked: turn.blocked, aborted: !!turn.aborted, state: turn.state, reason: turn.reason, stateRevert: turn.stateRevert || null, prov: turn.prov ? { delta: turn.prov.__delta || 0 } : null } : null; g.attempts = recent.map(function(X){ return { id: X.id, eff: X.eff, state: X.state, reason: X.reason, stateRevert: X.stateRevert || null, provisional: !!X.provisional }; }); g.hold = (function(h){ return h ? { kind: h.kind, attempt: h.attempt, nAmb: (h.amb || []).length, fromReload: !!h.fromReload, others: nHolds() - 1 } : null; })(curHold()); g.holdOnly = !!inst.holdOnly; g.holdOnlyAt = inst.holdOnlyAt || null; g.__x = null; g.inflight = inflight.length; return g; })(), fg333: (function(){ var g = {}; for (var k2 in fgStats) g[k2] = fgStats[k2]; g.reasons = {}; for (var k3 in fgStats.reasons) g.reasons[k3] = fgStats.reasons[k3]; return g; })() };
   }
   /* r4 H4: 口座の変化は /auth/me の再取得（fix893 が 'chr:account-me' を出す）で観測できる。開いている CP1 の回の途中で側が変わったら、
@@ -1291,6 +1342,10 @@
     finalBody: function(){ return fbLog.length ? fbLog[fbLog.length - 1] : null; }, finalBodyLog: function(){ return fbLog.slice(); }, __userExt: userExt, __analyzeFinal: analyzeFinal, __fnv: fnv, __fgFilter: fgFilter,
     hold: function(){ var h = curHold(); return h ? { kind: h.kind, attempt: h.attempt, nAmb: (h.amb || []).length, fromReload: !!h.fromReload, others: nHolds() - 1 } : null; }, __holdResolve: holdResolve,
     holdPos: function(){ var o = {}; for (var k7 in holdPos) o[k7] = holdPos[k7]; return o; }, __holdPlace: function(){ holdPlace(); } };   /* r6: 通知の置き場所の件数だけ */
+  /* ★20261024-laneCP1race-a (B2): opt-in で読み込んだページでも、装着が決まるまで（waiting・約 2 秒）は build / save を包んでいない。
+     この物語に HOLD の記録があれば、読み込みの時点で HOLD の 3 点だけを止める包み（OFF / kill と同じ installHoldOnly）を先に置く。
+     記録が無い物語では何もしない（r6 と同じ）。CP1 本体の包みは後から内側／外側に重なっても、どちらも heldHere() で止めるだけ */
+  if (LOAD_ON){ try { if (heldHere() && !inst.holdOnly){ inst.holdOnlyAt = { sk: storyKey(), keys: Object.keys(holds), held: true, from: 'load-on' }; installHoldOnly(); } } catch(_h0){} }
   if (LOAD_ON) install();
-  else { try { inst.holdOnlyAt = { sk: storyKey(), keys: Object.keys(holds), held: heldHere() }; } catch(_d){} if (heldHere()) installHoldOnly(); }   /* r5 final: OFF / kill で読み込んだが、この物語は HOLD のまま */
+  else { try { inst.holdOnlyAt = { sk: storyKey(), keys: Object.keys(holds), held: heldHere(), from: LOAD_ON === false ? (lsg('v292DfixCP1Off') === '1' ? 'kill-at-load' : 'off-at-load') : 'n/a' }; } catch(_d){} installHoldOnly(); }   /* ★cp1r-b（GPT #127-MW）: OFF / kill で読み込んだページにも HOLD 専用の包み（生成・S.save・state 書込の関門）を必ず置く。HOLD が無ければ素通し（送信・保存は r6 と byte 同一）。後から別タブで HOLD ができても、実行の時点（C）で止める。CP1 の働き（印・注記・presence・除外）は何も装着しない */   /* r5 final: OFF / kill で読み込んだが、この物語は HOLD のまま */
 })();

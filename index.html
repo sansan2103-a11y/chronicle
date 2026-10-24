@@ -337,7 +337,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261024-bundle46-797c-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261025-bundle47-cp1r-c';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4452,7 +4452,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixRC1-recall-inputs.js?cb=20261022-bundle42-a"></script>
 <!-- CP1-R6b + Owner ゲート r5 (CONT-02 / GPT #127-KK→#127-KQ→#127-KW→#127-LA→#127-LC→#127-LG→#127-LI): 今の場面に誰がいるかの最小正本。既定 OFF・Owner だけの opt-in（localStorage v292DfixCP1On='1' かつ /auth/me で owner・active・匿名でない）/ kill v292DfixCP1Off='1'。読み込み時に opt-in なし・kill なら何も装着しない（ON への切り替えは reload 後に有効）。生成の開始ごとに適用可否とアカウント・物語を確定し、同じターンはそれに揃える。途中で側が変わった・kill されたら送らない・保存しない（止めたターンは自動で送り直さない）。中断した回の結果は正式なターンとして採用しない（その回が足したものだけを撤回）。試行は build ごとの in-memory の印で見分け、G.submit が送信・再送・parse・確定へ引き継ぐ。採用前の仮の state は保存先へ書かず、安全に戻せないときはこの物語の生成と保存を止める（fail-closed）。fix333 の受け口・tap のガードが揃わない（混在キャッシュ）なら CP1 全体 OFF。ON: fix192/fix277 の装着後に最後にラップ・30 秒で揃わなければ無効化・送信直前の観測（記録のみ）・fix333 の前面化から ABSENT を外す -->
 <script>window.__v292DfixCP1IdxAtt = 'att-r5';</script><!-- bundle43-a r5: この index の G.submit は CP1 の試行を引き継ぐ（CP1 r5 はこの印が無い index では全体 OFF） -->
-<script src="v292DfixCP1-scene-presence.js?cb=20261024-bundle43a-r6"></script>
+<script src="v292DfixCP1-scene-presence.js?cb=20261025-bundle47-cp1r-c"></script>
 <script src="v292Dfix308-creepy-toggle.js?cb=v292Dfix308"></script>
 <script src="v292Dfix309-progression.js?cb=v292Dfix419c"></script>
 <!-- fix577: 物語削除の入口を1つに寄せる。B(gallery)/C(features clearSlot)の独自削除を停止し、
