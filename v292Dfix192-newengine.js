@@ -106,6 +106,36 @@
      項目順を 傷 → からだ → こころ → 本能 → 目的 → 関係 → 未解決 にし、fix277 の 124 字圧縮で傷が落ちないようにする。
      身体の検出器（【身体状態・正史】【制約】）は従来どおり shadow を読む。OFF: localStorage v292Dfix930Off='1'。 */
   function off930(){ try { return localStorage.getItem('v292Dfix930Off') === '1'; } catch(e){ return false; } }
+  /* ★v292DfixA1 r2（GPT #127-NN §7 A1・Local 候補 A1-b・kill: localStorage v292DfixA1Off='1'）: 読む側だけの防止策。
+     モデルが <state> に書いた主人公の こころ・本能・目的・未解決・関係 を、次のターンの sys へ戻さない
+     （関係はモデルが作った主観の感情と区別できないので v0 では戻さない）。主人公の行は 傷・からだ だけ。
+     【この場面の種】も主人公の 未解決・関係 を使わない（傷は従来どおり候補）。
+     主人公 = S.cast.hero.name と一意に同じ人物に当たる名前だけ：完全一致／空白違い（「朝霧蓮」）／アプリのラベル「主人公」。
+       登録 NPC にも同じ名前（空白を除いて）があるときは一意でないので主人公扱いしない（従来どおり）。短い別名（「蓮」）は対象外。
+     A1 が有効なときだけ、状態ブロック末尾の「各キャラは自分の目的に向かって…」を NPC に限った文に替える。
+     保存値（fix77 store・端末・サーバ）は 1 バイトも変えない。NPC の行・プレイヤーが決めた設定（cast.hero・scene・カード・記憶メモ）は触らない。
+     kill／localStorage 例外のときは従来どおり（送信バイト同一）。 */
+  function offA1(){ try { return localStorage.getItem('v292DfixA1Off') === '1'; } catch(e){ return true; } }
+  function nsA1(x){ return String(x == null ? '' : x).replace(/[\s\u3000]+/g, ''); }
+  function heroKeyA1(){
+    if (offA1()) return null;
+    try {
+      var S = getS(); var c = S && S.cast; var h = c && c.hero; if (!h) return null;
+      var hn = h.name ? String(h.name) : '';
+      var ex = {}, ns = {};
+      (Array.isArray(c.npcs) ? c.npcs : []).forEach(function(p){ if (p && p.name){ ex[String(p.name)] = 1; var k = nsA1(p.name); if (k) ns[k] = 1; } });
+      return { name: hn, k: nsA1(hn), ex: ex, ns: ns };
+    } catch(e){ return null; }
+  }
+  function isHeroA1(hk, n){
+    if (!hk) return false;
+    var raw = String(n == null ? '' : n), x = nsA1(raw);
+    if (!x) return false;
+    if (hk.name && raw === hk.name) return !hk.ex[raw];      /* 完全一致：同じ名前の登録 NPC がいなければ主人公 */
+    if (hk.ns[x]) return false;                               /* 空白違い・ラベルが登録 NPC にも当たる＝一意でない */
+    if (x === '主人公') return true;                          /* アプリ自身のラベル */
+    return !!hk.k && x === hk.k;                              /* 空白違い */
+  }
   function stateBlock(legacyStore){
     try{
       var c930 = !off930() && !legacyStore; /* ★fix932: legacyStore=true は ac27 と同じ（shadow を読む・旧項目順）判定専用 */
@@ -113,12 +143,15 @@
       if (c930){ try { var X = window.__v292Dfix850x; if (X && typeof X.realStore === 'function'){ var rs = X.realStore(); if (rs) store = rs; } } catch(_x930){} }
       if(!store) return '';
       var lines=[];
+      var onA1 = !legacyStore && !offA1();               /* ★v292DfixA1 r2 */
+      var hkA1 = onA1 ? heroKeyA1() : null;
       Object.keys(store).forEach(function(n){
         var s=store[n]||{}; if(!s || typeof s!=='object') return;
         var parts=[];
         var ka=clean223(s.karada||s['からだ']), ko=clean223(s.kokoro||s['こころ']), ho=clean223(s.honno||s['本能']);
         var ki=clean223(s.kizu||s['傷']), kn=clean223(s.kankei||s['関係']), mi=clean223(s.mikaiketsu||s['未解決']);
         var mo=clean223(s.mokuteki||s['目的']); /* v292Dfix223b */
+        if(isHeroA1(hkA1, n)){ ko=''; ho=''; mo=''; kn=''; mi=''; }   /* ★v292DfixA1 r2: 主人公は 傷・からだ だけ */
         if(c930 && ki) parts.push('傷:'+ki);
         if(ka) parts.push('からだ:'+ka);
         if(ko) parts.push('こころ:'+ko);
@@ -132,7 +165,8 @@
       if(!lines.length) return '';
       return '【各キャラの現在の状態（引き継ぐ。傷/関係/未解決は治療・和解まで保持し勝手に消さない）】\n'+lines.join('\n')
         +'\n・関係・未解決は各キャラが自分から動き、主人公や他キャラに話しかける動機になる。傷・恐怖・対立・依頼の場面では、入力を待たずNPCの側から言葉を発してよい。'
-        +'\n・各キャラは自分の「目的」に向かって、入力を待たず自分から動いてよい（目的が衝突するキャラ同士は自然に対立する）。'; /* v292Dfix223b */
+        +(onA1 ? '\n・主人公以外のNPCは、各自の目的・関係・状況に応じて、入力を待たず自律的に行動してよい。目的が衝突しても、対立・協力・妥協などの選択は人物ごとに異なる。' /* ★v292DfixA1 r2: NPC に限る */
+               : '\n・各キャラは自分の「目的」に向かって、入力を待たず自分から動いてよい（目的が衝突するキャラ同士は自然に対立する）。'); /* v292Dfix223b */
     }catch(e){ return ''; }
   }
 
@@ -146,10 +180,12 @@
       var store = window.__v292Dfix77Store; if(!store) return '';
       var S=getS(); var cur=(S&&S.turns)?S.turns.length:0;
       var cands=[];
+      var hkA1 = heroKeyA1();   /* ★v292DfixA1 r2 */
       Object.keys(store).forEach(function(n){
         var s=store[n]||{};
         if (cur && s.turn!=null && (cur - s.turn) > 3) return; /* 在場=直近に状態が動いたキャラ */
         var mi=clean223(s.mikaiketsu||s['未解決']), ki=clean223(s.kizu||s['傷']), kn=clean223(s.kankei||s['関係']);
+        if (isHeroA1(hkA1, n)){ mi=''; kn=''; }   /* ★v292DfixA1 r2: 主人公の 未解決・関係 は種にしない（傷は従来どおり） */
         if (mi) cands.push({n:n, w:3, t:n+'の未解決「'+mi.slice(0,40)+'」が、今ターンの言動の下に流れている'});
         if (ki && /未治療|重|中/.test(ki)) cands.push({n:n, w:2, t:n+'の傷('+ki.slice(0,30)+')が行動を縛り、周囲の目と空気を変える'});
         if (kn) cands.push({n:n, w:1, t:n+'の関係('+kn.slice(0,40)+')が距離感・口調に出る'});
