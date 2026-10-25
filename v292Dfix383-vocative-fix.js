@@ -103,6 +103,7 @@
   }
   function f972Protected(t, s, j){
     if (f972Off()) return false;
+    try { var _sfl1 = window.__v292DfixSFL1; if (_sfl1 && typeof _sfl1.protects === 'function' && _sfl1.protects(t, j, 'fix383')) return true; } catch(_sfl1e){}   /* ★SFL-01: 人手で直した話者は呼びかけ振替の対象外。保存済みの有効な訂正が無いカードでは従来どおり（flag の ON/OFF/kill と無関係・止めるキーは無い・r4） */
     try {
       var who = String((s && s.who) || '').trim(), say = s && s.say;
       if (!who) return false;

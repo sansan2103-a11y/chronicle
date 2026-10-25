@@ -337,7 +337,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261025-bundle54-ui1-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261025-bundle55-sfl-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4147,7 +4147,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
        fix659 は別 id + __f527 マーカーを立てるので干渉しない、という関係をこの並びで示す。
      読出=window.__v292Dfix659.status()/.selfTest() / OFF=v292Dfix659Off -->
 <script src="v292Dfix659-fork-choice.js?cb=v292Dfix680"></script>
-<script src="features.js?cb=20261025-bundle48-qa-a"></script>
+<script src="features.js?cb=20261025-bundle55-sfl-a"></script>
 <script>
 /* ============================================================================
  * v292DfixP0-inline : シナリオテンプレ適用の緊急封鎖（L2 + L2b）
@@ -4409,7 +4409,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=20260912-q119s4"></script>
-  <script src="v292Dfix66-renderhook-repair.js?cb=20261022-bundle40-b"></script>
+  <script src="v292DfixSFL1-speaker-correct.js?cb=20261025-bundle55-sfl-a"></script><!-- v292DfixSFL1(SFL-01): ✎ 編集パネル内の話者 <select>＋訂正台帳(turn._sflCorrections)。既定OFF・opt-in v292DfixSFL1On=1 / kill v292DfixSFL1Off=1（OFF/kill は新しい訂正だけを止め、保存済みの訂正の保護は常に効く・r3）。fix66 より前に置く(起動時 migrate の保護判定が参照する) -->
+  <script src="v292Dfix66-renderhook-repair.js?cb=20261025-bundle55-sfl-a"></script>
   <script src="v292DfixEDIT01-edit-reconcile.js?cb=20261022-bundle42-a"></script><!-- v292DfixEDIT01: 本文を編集したら会話ログを本文に合わせる(フェーズ1) + カード✕。OFF=localStorage v292DfixEdit01Off=1 -->
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
@@ -4577,7 +4578,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix822-start-rules-block.js?cb=20260906-fix822"></script>
 <script src="v292Dfix381-reaction.js?cb=v292Dfix381"></script>
 <script src="v292Dfix382-auto-dial.js?cb=20260901-fix783"></script>
-<script src="v292Dfix383-vocative-fix.js?cb=20261019-bundle31-a"></script>
+<script src="v292Dfix383-vocative-fix.js?cb=20261025-bundle55-sfl-a"></script>
 <script src="v292Dfix384-auto-restore.js?cb=20260901-fix783"></script>
 <script src="v292Dfix385-voice-correction.js?cb=v292Dfix385"></script>
 <script src="v292Dfix386-relation-gauge.js?cb=v292Dfix386b"></script>
@@ -4649,7 +4650,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix466-dup-say.js?cb=v292Dfix466"></script>
 <script src="v292Dfix467-readability-rules.js?cb=v292Dfix468"></script>
 <script src="v292Dfix468-gen-timing.js?cb=v292Dfix468"></script>
-<script src="v292Dfix469-speaker-score.js?cb=20260905-fix469tg"></script>
+<script src="v292Dfix469-speaker-score.js?cb=20261025-bundle55-sfl-a"></script>
   <script src="v292Dfix680-bare-speaker-provenance.js?cb=20260829-fix748"></script>
   <script src="v292Dfix681-player-say-claim.js?cb=20260829-fix748"></script>
 <!-- fix606: 話者帰属の来歴アナライザ。**読み取り専用**（whoもDOMもlocalStorageも触らない）。
@@ -4665,7 +4666,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      復元=__v292Dfix620.undoPast() / OFF=v292Dfix620ApplyOff（fix619側のOFFでも止まる）
      ★fix611 の後に置くこと -->
 <script src="v292Dfix957-speaker-cataphora.js?cb=20261022-bundle41-a"></script><!-- v292Dfix957: 独立行の裸「」の後方照応（既定OFF・ON: localStorage v292Dfix957On=1） -->
-<script src="v292Dfix620-speaker-apply.js?cb=20260901-fix783"></script>
+<script src="v292Dfix620-speaker-apply.js?cb=20261025-bundle55-sfl-a"></script>
 <!-- fix616: 話者の由来をターンへ記録（GPT実装順②）。並行配列 turn._convSayMeta に書き、
      _convSays / who / say / DOM は触らない。**新ターンだけ**・自分から保存しない。
      読出=window.__v292Dfix616.stats()/.coverage()/.purge() / OFF=v292Dfix616Off

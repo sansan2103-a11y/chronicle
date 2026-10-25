@@ -96,6 +96,7 @@
     for (var i = 0; i < r.proposals.length; i++) {
       var p = r.proposals[i], c = cards[p.cardIndex];
       if (!c) continue;
+      try { var _sfl1 = window.__v292DfixSFL1; if (_sfl1 && typeof _sfl1.protects === 'function' && _sfl1.protects(turn, p.cardIndex, 'fix620')) continue; } catch (_sfl1e) {}   /* ★SFL-01: 人手で直した話者には提案を適用しない（新ターン確定時 UI.appendTurn 経路）。保存済みの有効な訂正が無いカードでは従来どおり（flag の ON/OFF/kill と無関係・止めるキーは無い・r4） */
       if (String(c.who) !== String(p.from)) continue;     // 途中で変わっていたら触らない
       c.who = p.to;                                       // ★who だけ。say は触らない
       n++;
@@ -154,6 +155,7 @@
       if (!r || !r.proposals) continue;
       for (var j = 0; j < r.proposals.length; j++) {
         var p = r.proposals[j];
+        try { var _sfl1r = window.__v292DfixSFL1; if (_sfl1r && typeof _sfl1r.protects === 'function' && _sfl1r.protects(t, p.cardIndex, 'fix620past')) { out.skippedManual = (out.skippedManual || 0) + 1; continue; } } catch (_sfl1e) {}   /* ★SFL-01 r2: repairPast（dryRun と {apply:true}）は人手で直したカードを提案から外す＝書き換えない（r1 では applyTurn だけを守っていて、この経路は素通しだった＝実測）。保存済みの有効な訂正が無いカードでは従来どおり（flag の ON/OFF/kill と無関係・止めるキーは無い・r4） */
         out.proposals.push({ turn: i, card: p.cardIndex, from: p.from, to: p.to, say: p.say });
       }
     }

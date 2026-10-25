@@ -1415,6 +1415,7 @@
   function sayNorm922(x){ return String(x || '').replace(/[\s\u3000。、！？!?…・「」『』]/g, ''); }
   function strongTag922(t, j){
     if (f922Off()) return false;
+    try { var _sfl1 = window.__v292DfixSFL1; if (_sfl1 && typeof _sfl1.protects === 'function' && _sfl1.protects(t, j, 'fix66')) return true; } catch(_sfl1e){}   /* ★SFL-01: 人手で直した話者（turn._sflCorrections の印）は後置 heuristic で書き換えない。保存済みの有効な訂正が無いカードでは従来どおり（flag の ON/OFF/kill と無関係・止めるキーは無い・r4） */
     try {
       var metaA = Array.isArray(t && t._convSayMeta) ? t._convSayMeta : null;
       var saysA = Array.isArray(t && t._convSays) ? t._convSays : null;

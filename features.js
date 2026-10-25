@@ -5855,6 +5855,7 @@
       var currentSpeaker = (nameEl.textContent || '').trim();
       var correctSpeaker = globalMap[text];
       if (!correctSpeaker || currentSpeaker === correctSpeaker) continue;
+      try { var _sfl1 = window.__v292DfixSFL1; if (_sfl1 && typeof _sfl1.protectsCard === 'function' && _sfl1.protectsCard(card, currentSpeaker, text)) continue; } catch(_sfl1e){}   /* ★SFL-01: 人手で直した話者のカードは表示層でも書き換えない（保存済みの有効な訂正が無いカードでは従来どおり（flag の ON/OFF/kill と無関係・止めるキーは無い・r4）） */
 
       // 訂正: name 表示
       nameEl.textContent = correctSpeaker;

@@ -656,6 +656,7 @@
   var TG_PROTECT = { 'say-tag': 1, 'hero-utterance': 1, 'react-voice': 1 };
   function _tagGuardOn(){ try { return localStorage.getItem('v292Dfix469TagGuardOff') !== '1'; } catch(e){ return true; } }
   function _highProvenance(t, c, i, heroName){
+    try { var _sfl1 = window.__v292DfixSFL1; if (_sfl1 && typeof _sfl1.protects === 'function' && _sfl1.protects(t, i, 'fix469')) return true; } catch(_sfl1e){}   /* ★SFL-01: 人手で直した話者は高 provenance 扱い（flip / drop / toneFix の対象外）。保存済みの有効な訂正が無いカードでは従来どおり（flag の ON/OFF/kill と無関係・止めるキーは無い・r4） */
     try {
       var mm = t && t._convSayMeta;
       if (Array.isArray(mm) && mm.length === ((t._convSays || []).length)){
