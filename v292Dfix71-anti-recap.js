@@ -20,6 +20,12 @@
   antiRecapExt.__v292Dfix71 = true;
   function norm(t){ return String(t==null?'':t).replace(/[「」『』（）()\s　…⋯。、！？!?.,<>\/="]/g,''); }
   function splitSentences(text){ var out=[],buf=''; for(var i=0;i<text.length;i++){ var c=text.charAt(i); buf+=c; if(c==='。'||c==='！'||c==='？'||c==='\n'){ if(buf.trim())out.push(buf); buf=''; } } if(buf.trim())out.push(buf); return out; }
+  /* ★E6-1: 台詞の内側の文の扱い。DLG_DEFAULT_ON=false にすると v292Dfix71DlgOn='1' の端末だけ。Off が常に勝つ。
+     診断 window.__v292Dfix71Dlg（件数だけ。本文・名前は持たない）。 */
+  var DLG_DEFAULT_ON = true;
+  var F71DLG = { VER: '20261024-laneE61-b', s: { calls: 0, kept: 0 } };
+  function f71DlgOn(){ try { if (localStorage.getItem('v292Dfix71DlgOff') === '1') return false; if (DLG_DEFAULT_ON) return true; return localStorage.getItem('v292Dfix71DlgOn') === '1'; } catch(e){ return false; } }
+  try { window.__v292Dfix71Dlg = { VER: F71DLG.VER, defaultOn: DLG_DEFAULT_ON, on: f71DlgOn, stats: function(){ return { calls: F71DLG.s.calls, kept: F71DLG.s.kept }; } }; } catch(_d){}
   function crossTurnDedup(plan, ctx){
     try {
       if (!plan || !Array.isArray(plan.narrative)) return plan;
@@ -30,10 +36,27 @@
       /* ★CL1-g（GPT #125-BG 残件・fix71）: 台詞（「」や say を含む文）は、直前 1 ターンの同文（再掲癖）だけを落とす。
          何ターンも前と同じ台詞（問い直し・口癖・呼びかけ）は残す。地の文は従来どおり全ターンと照合。OFF: v292DfixCL1gOff='1'。 */
       var off1g = false; try { off1g = localStorage.getItem('v292DfixCL1gOff') === '1'; } catch(_e1g){}
+      /* ★E6-1（GPT #127-MA §D・P1）: CL1-g の判定は「切った後の 1 文」に括弧があるかだけを見ていたので、
+         「…。申し訳ありませんでした！」の 2 文目以降（括弧を含まない文）が地の文として全ターンと照合され、消えていた。
+         同じ行の中で「」『』や <say> の内側にある文（台詞の中で始まる／終わる文＝開き・途中・閉じの断片）は照合しない＝消さない
+         （GPT #127-MO B・案 B）。括弧だけの 1 文の台詞（「…」）も同じ。台詞と地の文が混ざった文（「行くぞ」と篠原は言った。）と地の文の判定は 44-b のまま。
+         消す文は 44-b の部分集合なので、44-b が台詞の内側の文を消さない本文は 1 バイトも変わらない。
+         OFF: v292Dfix71DlgOff='1'（v292DfixCL1gOff='1' のときも 44-b と同じ）。 */
+      var dlgFix = !off1g && f71DlgOn(); var ds = F71DLG.s; ds.calls++;
       var dropped = 0;
       plan.narrative = plan.narrative.map(function(line){
         if (typeof line!=='string') return line;
-        var kept = splitSentences(line).filter(function(s){ var k=norm(s); var dlg = !off1g && /[「」『』]|<\/?say\b/.test(s); if(k.length>=8 && (dlg ? prevLast[k] : prev[k])){ dropped++; return false; } return true; });
+        var depth = 0, sayOpen = 0;
+        var kept = splitSentences(line).filter(function(s){ var k=norm(s); var dlg = !off1g && /[「」『』]|<\/?say\b/.test(s);
+          var inner = false;
+          if (dlgFix){ inner = depth>0 || sayOpen>0; var m;
+            m = s.match(/[「『]/g); depth += m ? m.length : 0; m = s.match(/[」』]/g); depth -= m ? m.length : 0; if (depth<0) depth=0;
+            m = s.match(/<say\b/g); sayOpen += m ? m.length : 0; m = s.match(/<\/say\s*>/g); sayOpen -= m ? m.length : 0; if (sayOpen<0) sayOpen=0;
+            inner = inner || depth>0 || sayOpen>0 || /^\s*[「『][^「『」』]*[」』]\s*$/.test(s); }   /* 台詞の中で始まる文・台詞の中で終わる文（開き・途中・閉じの断片）・括弧だけの 1 文の台詞 */
+          var hit = k.length>=8 && (dlg ? prevLast[k] : prev[k]);
+          if (inner){ if (hit) ds.kept++; return true; }
+          if (hit){ dropped++; return false; }
+          return true; });
         return kept.join('').trim();
       }).filter(function(l){ return l && String(l).trim().length>1; });
       if (dropped>0){ try{ console.log(TAG,'cross-turn dedup removed',dropped,'recap sentence(s)'); }catch(_){} }

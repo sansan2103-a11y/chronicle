@@ -337,7 +337,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261025-bundle47-cp1r-c';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261025-bundle48-qa-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -1380,7 +1380,7 @@ const Api = {
     }
     const prov = S.cfg.provider || 'anthropic';
     if (prov === 'novelai')     return this._callNovelAI(_system, _userContent, _maxTok, opts);
-    if (prov === 'openrouter')  return this._callOpenRouter(_system, _userContent, _maxTok, opts);
+    if (prov === 'openrouter')  return this._callOpenRouter(_system, _userContent, _maxTok, opts, (arguments.length <= 2 || arguments[2] === undefined));   /* ★E65-A（GPT #127-MR Q5）: 本編の生成＝maxTok を渡さない呼び出し（fix643 と同じ見分け。明示 maxTok の呼び出しは会話ログ 500・話者 400・校正 1200・状態推定 1000・種の生成 2400・画風 200 だけで、本編ではない）だけ 1 ターンの上限の対象 */
     return this._callAnthropic(_system, _userContent, _maxTok, opts);
   },
 
@@ -1455,7 +1455,7 @@ const Api = {
     return outChars >= 3 || enMatches >= 3 || zhMatches >= 2; /* v292Dfix250: outChars=許可セット外(越語等)。enMatchesは既存正規表現が空クラスで常に0=実質死文だが互換のため残置 */
   },
 
-  async _callOpenRouter(system, userContent, maxTok, opts = {}) {
+  async _callOpenRouter(system, userContent, maxTok, opts = {}, __e65aMain) {
     const key = this.normalize(S.cfg.orKey);
     if (!key) throw new Error('OpenRouter APIキーが設定されていません（sk-or-... 形式）');
     const model = ((opts && typeof opts.__fbModel === 'string' && opts.__fbModel) ? opts.__fbModel : (window.__CHR_MODEL_REGISTRY ? window.__CHR_MODEL_REGISTRY.resolve(S.cfg.orModel) : S.cfg.orModel)); /* v292Dsmrc1: 旧 literal fallback を集中定義の resolve() へ（同値）。 v292Dfix272: 空時フォールバックをEuryale遺物→DS Flash(orModel消失時の意図外モデル課金防止) */ /* ★dscmf-1: opts.__fbModel（**非空文字列のときだけ**）= cross-model fallback の予備 model。これは opts の top-level prop なので JSON body へは混入しない（body は model/max_tokens/sampling/messages と opts.extraBody だけを積む）。以降の applyRequestPolicy(body, model) が **予備 model の** request policy を引く（CF-7）。__fbModel が無い通常経路は従来式と逐語同値。 */
@@ -1465,8 +1465,35 @@ const Api = {
        追加パラメータと"再試行なし"を許す。既定は従来どおり(maxRetries=2・追加なし)。 */
     const maxRetries = (opts && opts.noRetry) ? 0 : 2;
     let lastResult = null;
+    /* ★★E65-A（GPT #127-MR Q5・laneE65AD）: 物理送信の上限。(i) この呼び出し（最大 3 試行）全体で 3 送信、(ii) 1 ターンの本編の呼び出し全体で 9 送信。
+       既存の fix494 の共通予算（fetch init の非送信プロパティ __chronicleAttemptBudget）を、ここで試行ごとに「残り」の値で先に作って渡す。
+       fix80 / BF1 / fix482 は無変更でその予算を消費する。sent は accessor ＝ fix80 が送信の直前に数えた瞬間に、呼び出しとターンの数も進む（失敗しても戻さない）。
+       使い切ったら: 応答があれば「試行を使い切った」と同じ扱いで返す（fix818 / fix250 の救済も同じ）。無ければ送らずに E65A_TURN_CAP を投げる
+       （fix265 の正規表現にも fallback の分類にも当たらない＝既存の失敗トースト・入力の復元）。本文（body）・保存・通信の先は変えない。
+       kill: localStorage v292DfixE65AOff='1'（従来の経路そのもの）。 */
+    let __pc = null, __tc = null;
+    try { if (localStorage.getItem('v292DfixE65AOff') !== '1') { __pc = { sent: 0 }; __tc = (__e65aMain && Api.__e65aTurn && Api.__e65aTurn.live) ? Api.__e65aTurn : null; } } catch(_e65a0){ __pc = null; __tc = null; }
+    const __left = () => (__tc ? (__tc.cap - __tc.sent) : 3);   /* E65A_MODE=turn: 1 回の呼び出しの上限は置かない（各 init は fix494 の 3 のまま）。ターンの 9 だけ */
+    /* remaining も accessor: 送る直前に fix80 / BF1 が読むたびに「この呼び出しの残り」と「ターンの残り」の小さい方を返す（同時に飛ぶ呼び出しがあっても 9 を超えない）。
+       0 以下を書かれたら（BF1 の打ち切り等）この init はそれ以上送らない。 */
+    const __bud = (l0) => { let s = 0, stop = false; const b = { limit: l0, e65a: 1 };
+      Object.defineProperty(b, 'remaining', { enumerable: true, configurable: true, get: function(){ return stop ? 0 : Math.max(0, Math.min(3 - s, __left())); }, set: function(v){ if ((+v || 0) <= 0) stop = true; } });
+      Object.defineProperty(b, 'sent', { enumerable: true, configurable: true, get: function(){ return s; }, set: function(v){ const n = +v || 0, d = n - s; s = n; if (d > 0) { __pc.sent += d; if (__tc) __tc.sent += d; } } });
+      return b; };
+    const __st = () => { try { return (window.__v292DfixE65A = window.__v292DfixE65A || { VER: '20261025-laneE65AD-c', capHits: 0, returnedLast: 0, threw: 0, lastTurn: null }); } catch(_e65a1){ return {}; } };
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      let __b65 = null;
+      if (__pc) {
+        const l0 = Math.min(3, __left());
+        if (l0 <= 0) {
+          const W = __st(); W.capHits = (W.capHits || 0) + 1;
+          if (lastResult) { W.returnedLast = (W.returnedLast || 0) + 1; return lastResult; }
+          W.threw = (W.threw || 0) + 1;
+          const _ce = new Error('このターンの送信回数の上限に達しました。もう一度お試しください'); _ce.code = 'E65A_TURN_CAP'; throw _ce;
+        }
+        __b65 = __bud(l0);
+      }
       const id = ++S.reqId;
       S.inFlight = true;
       const ctrl = new AbortController();
@@ -1510,9 +1537,11 @@ const Api = {
             'X-Title': 'Chronicle TRPG'
           },
           body: JSON.stringify(body),
-          signal: ctrl.signal
+          signal: ctrl.signal,
+          ...(__b65 ? { __chronicleAttemptBudget: __b65 } : {})
         });
-      } finally { clearTimeout(tid); S.inFlight = false; }
+      } finally { clearTimeout(tid); S.inFlight = false; if (__b65 && (__b65.sent | 0) === 0) __b65.sent = 1; }   /* ★E65-A: 予算の持ち主（fix80）が数えなかった fetch も 1 送信として数える（数える場所を迂回させない・多めに数える側） */
+      const __noMore = !!__pc && !!__tc && __left() <= 0;   /* ★E65-A: もう 1 回も送れない＝この試行を最後の試行として扱う（下の 2 か所） */
 
       if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(`OpenRouter HTTP ${res.status}: ${t.slice(0,200)}`); }
       const json = await res.json();
@@ -1546,7 +1575,7 @@ const Api = {
         }
       } catch (_e) {}
       const isIncomplete = (!opts.allowShort && _proseLen < 40) || /以下省略|（省略|省略\)/.test(text) || _isCopy;
-      if (attempt < maxRetries && (this._hasForeignGarbage(text) || isIncomplete)) {
+      if (attempt < maxRetries && !__noMore && (this._hasForeignGarbage(text) || isIncomplete)) {
         const reason = _isCopy ? '前ターンのコピー' : (isIncomplete ? '不完全な出力' : '外国語混入');
         console.warn(`[Retry ${attempt+1}/${maxRetries}] ${reason}を検出、再生成します`);
         await new Promise(function(_r269){ setTimeout(_r269, 1500 + attempt * 1500); }); /* v292Dfix269b: 内部リトライ連打の429誘発を抑止 */ continue;
@@ -1554,7 +1583,7 @@ const Api = {
       // v292Dfix250: リトライを使い切ってもなお外国語が混入している場合の救済——
       //   許可セット外の文字だけを除去して採用(再生成より文意の保全を優先。簡体字は
       //   CJK共有ブロックのため削らない=破損リスク回避)。
-      if (lastResult && lastResult.text && attempt >= maxRetries && this._hasForeignGarbage(lastResult.text)) {
+      if (lastResult && lastResult.text && (attempt >= maxRetries || __noMore) && this._hasForeignGarbage(lastResult.text)) {
         /* ★v292Dfix818（GPT 裁定 2026-09-06 `FIX250_DESTRUCTIVE_SALVAGE_GUARD = GO_STAGE_WITH_CALIBRATION`）:
            fix250 の救済は「軽微なノイズ除去」に限る。元出力の大半を削らないと成立しない応答は
            **salvage ではなく別物の採用**なので、採らずに既存の失敗経路（throw → G.submit の catch →
@@ -2706,6 +2735,7 @@ const G = {
   async submit() {
     var _cp1A = null, _cp1Att = null;   /* ★bundle43-a r5（GPT #127-LI G5）: CP1 を使う試行のときだけ値が入る。OFF・kill・非 Owner では null のまま＝以下はすべて従来の経路 */
     var _e64 = null;   /* ★E6-4 r2: finally からも見えるようにここで宣言（OFF では null のまま） */
+    var _e65aId = 0;   /* ★E65-A: このターンの送信の予算の印（finally で閉じる） */
     if (S.inFlight) return;
     /* ★fix546(2026-07-25・おしん裁定「直るまで遊べなくてもいい」): 直前のターンが保存できていない間は
        新しいターンを作らせない。ここは G.submit の入口で、ボタン・Enterキー・他fix(fix138/v274/v261)からの
@@ -2747,6 +2777,10 @@ const G = {
     try { var _self888 = this; this.__p888 = setTimeout(function(){ try { _self888.__p888 = null; var _b888 = document.getElementById('sendBtn'); if (_b888 && _b888.disabled) UI.setStatus('まだ考えています。もう少しお待ちください。'); } catch(_p888c){} }, 30000); } catch(_p888b){}
 
     try {
+      try { if (localStorage.getItem('v292DfixE65AOff') !== '1') { var _cap65 = 9; try { var _q65 = +localStorage.getItem('v292DfixE65ACapQA'); if (_q65 >= 1 && _q65 <= 9) _cap65 = _q65; } catch(_e65q){} var _sk65 = null; try { _sk65 = (typeof window.__chronicleDocumentStoryKey === 'string') ? window.__chronicleDocumentStoryKey : null; } catch(_e65k){ _sk65 = null; }
+        var _cur65 = Api.__e65aTurn;
+        if (_cur65 && _cur65.live && (_cur65.story === _sk65 || _cur65.story == null || _sk65 == null)) { _cur65.holders = (_cur65.holders || 1) + 1; _e65aId = _cur65.id; try { (window.__v292DfixE65A = window.__v292DfixE65A || { capHits: 0, returnedLast: 0, threw: 0, lastTurn: null }).joined = ((window.__v292DfixE65A.joined || 0) + 1); } catch(_e65j){} }   /* ★E65-A c（GPT #127-MX）: 同じページ・同じ物語でまだ動いている G.submit があれば、その予算を共有する（後から来た送信が新しい 9 を持たない） */
+        else { Api.__e65aSeq = (Api.__e65aSeq || 0) + 1; _e65aId = Api.__e65aSeq; Api.__e65aTurn = { live: true, cap: _cap65, sent: 0, id: _e65aId, story: _sk65, holders: 1 }; } } } catch(_e65a3){ _e65aId = 0; }   /* ★E65-A: このターンの本編の送信の予算（9。QA だけ 1〜9 に下げられる） */
       /* ★fix748 D2(C10): Planner.build の _userExtensions から
          features.js userExt → clearPending（chr6_pending_dice_）が同期で走る。
          ダイス1回の消費は再構成できない = Class D。network より前・lock の外に network なし。 */
@@ -2792,7 +2826,7 @@ const G = {
           const result2 = await _cp1Call(sys, user + '\n\n【重要・書き直し】直前のあなたの出力は' + (_recap235 ? '前ターンの内容のほぼ再掲だった。' : '') + (_short235 ? '短すぎた(数文で切り上げていた)。最低でも8文以上で場面を最後まで描き切ること。' : '') + '同じ場面・同じ文を繰り返さず、時間と状況を必ず前へ進めて、新しい出来事・発見・反応を描くこと。');
           if (result2 && result2.text){
             /* ★fix748 D1(C7a): 書き直し経路も同じ Class D admission を通す */
-            const _p2748 = await this._dadmRun('TURN_PARSE_REWRITE', _cp1Wrap(_e64 ? () => _e64.alt('rw216', () => Planner.parsePlan(result2.text, S.mode), (_q) => !!(_q && Array.isArray(_q.narrative) && _q.narrative.join('').length > 40)) : () => Planner.parsePlan(result2.text, S.mode)));   /* ★E6-4: 採る条件は直後の if と同じ式 */
+            const _p2748 = await this._dadmRun('TURN_PARSE_REWRITE', _cp1Wrap(_e64 ? () => _e64.alt('rw216', () => (window.__v292DfixE65 ? window.__v292DfixE65.guard(() => Planner.parsePlan(result2.text, S.mode)) : Planner.parsePlan(result2.text, S.mode)), (_q) => !!(_q && Array.isArray(_q.narrative) && _q.narrative.join('').length > 40)) : () => (window.__v292DfixE65 ? window.__v292DfixE65.guard(() => Planner.parsePlan(result2.text, S.mode)) : Planner.parsePlan(result2.text, S.mode))));   /* ★E6-4: 採る条件は直後の if と同じ式 */
             if (!_p2748.ran) { this._dadmHold(_p2748, inputEl, text); return; }
             const plan2 = _p2748.result;
             if (plan2 && Array.isArray(plan2.narrative) && plan2.narrative.join('').length > 40){ plan = plan2; result = result2; }
@@ -3057,7 +3091,7 @@ const G = {
         document.body.appendChild(_t263);
         setTimeout(function(){ try { _t263.remove(); } catch(_){} }, 60000);
       } catch(_e263) {}
-    } finally { if (!(_cp1Att && _cp1A && _cp1A.superseded(_cp1Att))) { try { if (this.__p888) { clearTimeout(this.__p888); this.__p888 = null; } } catch(_p888d){} UI.setLoading(false); } try { if (_cp1Att && _cp1A) _cp1A.end(_cp1Att); } catch(_cp1f){} try { if (_e64) _e64.end(); } catch(_e64e){} }   /* ★r5: busy は持ち主の試行だけが戻す。採用されずに終わった試行は取消（NOT_COMMITTED） */
+    } finally { if (!(_cp1Att && _cp1A && _cp1A.superseded(_cp1Att))) { try { if (this.__p888) { clearTimeout(this.__p888); this.__p888 = null; } } catch(_p888d){} UI.setLoading(false); } try { if (_cp1Att && _cp1A) _cp1A.end(_cp1Att); } catch(_cp1f){} try { if (_e64) _e64.end(); } catch(_e64e){} try { if (_e65aId && Api.__e65aTurn && Api.__e65aTurn.id === _e65aId) { try { window.__v292DfixE65A = window.__v292DfixE65A || { VER: '20261025-laneE65AD-c', capHits: 0, returnedLast: 0, threw: 0, lastTurn: null }; window.__v292DfixE65A.lastTurn = { sent: Api.__e65aTurn.sent, cap: Api.__e65aTurn.cap }; } catch(_e65a5){} Api.__e65aTurn.holders = (Api.__e65aTurn.holders || 1) - 1; if (Api.__e65aTurn.holders <= 0) { Api.__e65aTurn.live = false; Api.__e65aTurn = null; } } } catch(_e65a4){} }   /* ★E65-A c: 共有している G.submit が全部終わったときだけ閉じる */   /* ★r5: busy は持ち主の試行だけが戻す。採用されずに終わった試行は取消（NOT_COMMITTED） */
   },
 
   async cont() {
@@ -4098,7 +4132,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
        fix659 は別 id + __f527 マーカーを立てるので干渉しない、という関係をこの並びで示す。
      読出=window.__v292Dfix659.status()/.selfTest() / OFF=v292Dfix659Off -->
 <script src="v292Dfix659-fork-choice.js?cb=v292Dfix680"></script>
-<script src="features.js?cb=20261021-bundle37-a"></script>
+<script src="features.js?cb=20261025-bundle48-qa-a"></script>
 <script>
 /* ============================================================================
  * v292DfixP0-inline : シナリオテンプレ適用の緊急封鎖（L2 + L2b）
@@ -4368,7 +4402,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
          _convSays由来の正しい時系列で並べ替えを一本化しており、fix70(本文ベース=誤順)の
          2秒tickがfix70bと互いのMutationObserverで反応し合い会話ログが点滅していた。
          並べ替えはfix70bに集約。 (旧: v292Dfix70-dialogue-order.js?cb=v292Dfix70) -->
-    <script src="v292Dfix71-anti-recap.js?cb=20261009-bh1"></script>
+    <script src="v292Dfix71-anti-recap.js?cb=20261025-bundle48-qa-a"></script>
     <script src="v292Dfix72-within-turn-dedup.js?cb=20261009-bh1"></script>
     <!-- v292Dfix229(P3): solo時no-opのためfix73/70b退役。復活=コメント解除
     <script src="v292Dfix73-card-dedup.js?cb=v292Dfix200"></script>

@@ -3655,6 +3655,7 @@
   window.__v292Dfix14Active = true;
 
   var TAG = '[v292Dfix14]';
+  var __e65rec = { n: 0, cur: null };   /* ★E6-5（laneE65-b）: stage3 で代替文を作った回数と、いま進行中の 1 回の parse 試行（guard の中）で作った代替文の行（cur）。メモリだけ・保存も送信もしない */
 
   // ----- Detection -----
   function isNarrativeEmpty(narr){
@@ -3850,6 +3851,7 @@
         var synth = synthFallback(plan, ctx);
         if (synth && synth.length > 0){
           plan.narrative = synth;
+          try { __e65rec.n++; if (__e65rec.cur) Array.prototype.push.apply(__e65rec.cur, synth); } catch(_e65r){}   /* ★E6-5: 代替文を作った印（origin）。guard の試行の中でだけ行を控える。本文・plan には何も足さない */
           console.log(TAG, 'V4 stage3: synthesized fallback, lines=' + synth.length);
         }
       } catch(e){ console.warn(TAG, 'V4 stage3 err', e); }
@@ -3955,6 +3957,42 @@
     recoveryExtV4: recoveryExtV4,
     ensureInstalled: ensureInstalled,
     pickPlayerText: pickPlayerText
+  };
+
+  /* ★E6-5（laneE65-b・GPT #127-MC M6・P1／#127-MO C）: fix235/fix216 の書き直しの parse で stage3 の代替文しか出なかったら、その書き直しを「採らない」。
+     実測: 書き直しの応答が「<say who=…>「……」</say>」や英語の断り文だけだと、parse で本文が空→上の stage3 が代替文（40 字超）を入れ→
+     G.submit の採る条件（narrative.join('').length > 40）を通り、まともな 1 回目を定型文で置き換えていた。
+     guard(fn) = 書き直しの parse をそのまま呼び、その parse の間に stage3 が走ったときだけ、代替文の行を除いた長さで同じ 40 字の条件を見る。
+     足りなければ null を返す（G.submit は null を「採らない」と扱う＝1 回目を採る。E64 の alt も accept(null)=false で「採らない」側の戻しをする）。
+     stage3 が走らなかった parse・OFF・kill では fn() の戻り値をそのまま返す＝44-b と同一。代替文を入れる側（stage3）の動きは不変。
+     既定 E65_DEFAULT_ON（下の定数）／kill: localStorage v292DfixE65Off='1'（常に優先）／定数 false のときの opt-in: v292DfixE65On='1'。 */
+  var E65_DEFAULT_ON = true;
+  var __e65st = { calls: 0, synth: 0, dropped: 0, keptOwn: 0, errors: 0 }, __e65last = null;
+  function __e65on(){ try { if (localStorage.getItem('v292DfixE65Off') === '1') return false; return E65_DEFAULT_ON || localStorage.getItem('v292DfixE65On') === '1'; } catch(e){ return false; } }
+  window.__v292DfixE65 = {
+    VER: '20261024-laneE65-b',
+    on: __e65on,
+    guard: function(fn){
+      if (!__e65on()) return fn();
+      /* 印の有効範囲 = この 1 回の parse 試行だけ（GPT #127-MO C）。試行ごとに新しい控え（mine）を作り、終わったら（例外でも）前の値へ戻す。
+         前の試行・1 回目の parse・別の書き直しで作った代替文はここに入らない。 */
+      var prev = __e65rec.cur, mine = [], p;
+      __e65rec.cur = mine;
+      try { p = fn(); } finally { __e65rec.cur = prev; }
+      __e65st.calls++;
+      if (!mine.length) return p;               /* この試行では代替文を作っていない＝そのまま */
+      try {
+        __e65st.synth++;
+        if (!p || !Array.isArray(p.narrative)) return p;
+        var sy = {}; mine.forEach(function(l){ sy[String(l == null ? '' : l).trim()] = 1; });
+        var own = p.narrative.filter(function(l){ return !sy[String(l == null ? '' : l).trim()]; }).join('').length;
+        __e65last = { lines: p.narrative.length, synthLines: mine.length, own: own };
+        if (own > 40){ __e65st.keptOwn++; __e65last.ok = 'kept-own'; return p; }
+        __e65st.dropped++; __e65last.ok = 'dropped'; return null;
+      } catch(e){ __e65st.errors++; return p; }
+    },
+    last: function(){ return __e65last ? JSON.parse(JSON.stringify(__e65last)) : null; },
+    stats: function(){ return JSON.parse(JSON.stringify(__e65st)); }
   };
 
   console.log(TAG, 'IIFE loaded — narrative recovery V4 active');
