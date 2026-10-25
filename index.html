@@ -337,7 +337,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261025-bundle48-qa-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261025-bundle50-e65d-d';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -2736,6 +2736,7 @@ const G = {
     var _cp1A = null, _cp1Att = null;   /* ★bundle43-a r5（GPT #127-LI G5）: CP1 を使う試行のときだけ値が入る。OFF・kill・非 Owner では null のまま＝以下はすべて従来の経路 */
     var _e64 = null;   /* ★E6-4 r2: finally からも見えるようにここで宣言（OFF では null のまま） */
     var _e65aId = 0;   /* ★E65-A: このターンの送信の予算の印（finally で閉じる） */
+    var _pp797 = null, _done797 = false, _a797 = null;   /* ★E65-D r3（laneE65AD・Local）: fix797 が parse の前に棄却を決めたターンの採った書き直しの plan／fix797 を呼んだ印／中断の印 */
     if (S.inFlight) return;
     /* ★fix546(2026-07-25・おしん裁定「直るまで遊べなくてもいい」): 直前のターンが保存できていない間は
        新しいターンを作らせない。ここは G.submit の入口で、ボタン・Enterキー・他fix(fix138/v274/v261)からの
@@ -2800,7 +2801,18 @@ const G = {
          ★_parseExtensions は sync 契約（呼び出し側が typeof r === 'object' で plan を差し替える）なので
            hook 自体は Promise 化しない。admission はこの呼び出し**側**で取る。 */
       _e64 = (function(){ try { return (window.__v292DfixE64 && typeof window.__v292DfixE64.begin === 'function') ? window.__v292DfixE64.begin() : null; } catch(_e64a){ return null; } })();   /* ★E6-4（laneE64-a・既定 OFF）: 捨てた応答の parse の取り込みを残さない。OFF・kill・非 Owner では null＝以下は従来の関数そのもの */
-      const _p748 = await this._dadmRun('TURN_PARSE', _cp1Wrap(_e64 ? () => _e64.first(() => Planner.parsePlan(result.text, S.mode)) : () => Planner.parsePlan(result.text, S.mode)));
+      /* ★E65-D r3（GPT #127-MT 第一候補）: fix797 の棄却の判定（detect）は parse の取り込みを読まない（本文・cast の名前・生成前の写し PREV だけ）。
+         E64 OFF で「この 1 回目は棄却して書き直しを頼む」と parse の前に分かったら、1 回目は副作用のある parse に渡さない。先に fix797 の書き直しを頼み、
+         採れたらその plan だけを使う。採れない（空・短い・合成の代替文だけ・まだ矛盾・通信失敗）ならターンを確定せず中断する。
+         fix797 が書き直しを頼まずに null を返したとき（parse の前の判定の後に上限や PREMISE の保留に当たったときなど＝従来も 1 回目を採る場合）だけ、従来どおり 1 回目を parse して採る。
+         r5（GPT #127-MY Q3）: <state> の無い書き直しは中断せずに採る（このターンは状態が動かない応答）。それ以外のターンは従来の経路そのもの。 */
+      try { if (window.__v292Dfix797 && typeof window.__v292Dfix797.willRewrite === 'function' && window.__v292DfixE64 && typeof window.__v292DfixE64.restoreIfRejected === 'function' && window.__v292Dfix797.willRewrite(result.text, S)) {   /* ★E65-D r4（GPT #127-MX）: E64 ON・OFF とも。E64 ON では 1 回目を parse しないので E64 の first/hold/alt は動かない（保存の保留だけが end() まで続く） */
+        _done797 = true; let _r797p = null;
+        try { _r797p = await window.__v292Dfix797.turnHook({ text: result.text, plan: null, sys: sys, user: user, api: (_cp1Att ? _cp1A.api(_cp1Att) : Api), state: S, abortable: true, parse: (t) => this._dadmRun('TURN_PARSE_REWRITE', _cp1Wrap(() => window.__v292DfixE64.restoreIfRejected(() => (window.__v292DfixE65 ? window.__v292DfixE65.guard(() => Planner.parsePlan(t, S.mode)) : Planner.parsePlan(t, S.mode))))) }); } catch(_e797p){ _r797p = null; }
+        if (_r797p && _r797p.adopted) { _pp797 = _r797p.plan; result = _r797p.result; } else if (_r797p && _r797p.abort) { _a797 = _r797p; }
+      } } catch(_e797q){}
+      if (_a797) { const _x797 = new Error('書き直した文章を確かめられなかったため、このターンは取りやめました。もう一度送ってください。'); _x797.code = 'FIX797_ABORT'; throw _x797; }   /* ★E65-D r3: 棄却した 1 回目へ戻さない＝既存の失敗の経路。1 回目は parse していないので戻すものは無い */
+      const _p748 = _pp797 ? { ran: true, result: _pp797 } : await this._dadmRun('TURN_PARSE', _cp1Wrap(_e64 ? () => _e64.first(() => Planner.parsePlan(result.text, S.mode)) : () => Planner.parsePlan(result.text, S.mode)));
       if (!_p748.ran) { this._dadmHold(_p748, inputEl, text); return; }
       let plan = _p748.result;
       if (!plan) throw new Error('うまく物語を組み立てられませんでした。もう一度お試しください');
@@ -2809,7 +2821,7 @@ const G = {
          再描写することがあり、fix71のdedupで全文消える→fix155のraw救済が丸ごと復元＝重複が蘇る
          (slot b 16ターン自動デバッグで3ターン連続の再掲ループを確認・合成rawで復元経路も実証)。
          検知したら1回だけ「時間を前へ進めろ」のフィードバック付きで書き直させる(根治=出力品質側)。 */
-      try {
+      if (!_pp797) try {   /* ★E65-D r3: fix797 の書き直しを採ったターンでは従来どおり fix216/235 は走らせない（従来も fix797 の後には走らない） */
         const _rNorm216 = (s) => String(s||'').replace(/[「」『』（）()\s　…⋯。、！？!?.,<>\/="]/g,'');
         const _prev216 = {};
         S.turns.slice(-3).forEach(pt => { String((pt&&pt.narrative)||'').split(/(?<=[。！？\n])/).forEach(x => { const k = _rNorm216(x); if (k.length >= 8) _prev216[k] = 1; }); });
@@ -2824,7 +2836,10 @@ const G = {
           UI.setStatus((_recap235 ? '前ターンの再掲' : '短すぎる応答') + 'を検知 → 書き直し中…');
           try { if (_e64) _e64.hold(); } catch(_e64h){}   /* ★E6-4 r2: 書き直しを待つ間、採用前の 1 回目の state を端末キーに置かない（OFF では _e64=null） */
           const result2 = await _cp1Call(sys, user + '\n\n【重要・書き直し】直前のあなたの出力は' + (_recap235 ? '前ターンの内容のほぼ再掲だった。' : '') + (_short235 ? '短すぎた(数文で切り上げていた)。最低でも8文以上で場面を最後まで描き切ること。' : '') + '同じ場面・同じ文を繰り返さず、時間と状況を必ず前へ進めて、新しい出来事・発見・反応を描くこと。');
-          if (result2 && result2.text){
+          let _rj797 = false; try { _rj797 = !!(result2 && result2.text && window.__v292Dfix797 && typeof window.__v292Dfix797.willRewrite === 'function' && window.__v292Dfix797.willRewrite(result2.text, S)); } catch(_rj797e){ _rj797 = false; }   /* ★E65-D r4: fix216/235 の書き直しが同じターンの矛盾を持つなら、parse に渡さずに採らない（1 回目は fix797 の detect に当たっていない＝棄却されていない応答なのでそのまま採る） */
+          try { if (result2 && result2.text && !_rj797 && window.__v292Dfix797 && typeof window.__v292Dfix797.noStateInjury === 'function' && window.__v292Dfix797.noStateInjury(result2.text, 'rw235')) _rj797 = true; } catch(_ni797e){}   /* ★E65-D r6（GPT #127-NB Q4）: fix216/235 の書き直しが <state> を持たず、本文に新しい傷の信号（既存の fix670／N1P2 の判定）があれば採らない。1 回目は棄却されていない有効な応答なので、1 回目をそのまま採る（D235C と同じ流れ）。kill・fix797 OFF では noStateInjury が null＝従来どおり */
+          try { if (!_e64 && result2 && result2.text && !_rj797 && window.__v292Dfix797 && typeof window.__v292Dfix797.noStateKeepFirst === 'function' && window.__v292Dfix797.noStateKeepFirst(result2.text, 'rw235')) _rj797 = true; } catch(_nk797e){}   /* ★E65-D r7（GPT #127-ND Q4）: E64 OFF では 1 回目はもう parse 済みで、その取り込み（fix77/fix190 の state・要約・fix27 の行・準登録台帳）が残っている（実測 D235F）。<state> の無い書き直しを採ると「書き直しの本文＋1 回目の状態」になるので採らず、1 回目をそのまま採る（本文と状態が同じ応答に由来・D235C／D235NI と同じ流れ）。E64 ON は E64 の alt が戻すので従来どおり。kill・fix797 OFF では noStateKeepFirst が null＝従来どおり */
+          if (result2 && result2.text && !_rj797){
             /* ★fix748 D1(C7a): 書き直し経路も同じ Class D admission を通す */
             const _p2748 = await this._dadmRun('TURN_PARSE_REWRITE', _cp1Wrap(_e64 ? () => _e64.alt('rw216', () => (window.__v292DfixE65 ? window.__v292DfixE65.guard(() => Planner.parsePlan(result2.text, S.mode)) : Planner.parsePlan(result2.text, S.mode)), (_q) => !!(_q && Array.isArray(_q.narrative) && _q.narrative.join('').length > 40)) : () => (window.__v292DfixE65 ? window.__v292DfixE65.guard(() => Planner.parsePlan(result2.text, S.mode)) : Planner.parsePlan(result2.text, S.mode))));   /* ★E6-4: 採る条件は直後の if と同じ式 */
             if (!_p2748.ran) { this._dadmHold(_p2748, inputEl, text); return; }
@@ -2833,7 +2848,7 @@ const G = {
           }
         }
       } catch(_e216){}
-      try { if (window.__v292Dfix797) { const _r797 = await window.__v292Dfix797.turnHook({ text: result.text, plan: plan, sys: sys, user: user, api: (_e64 ? _e64.api(_cp1Att ? _cp1A.api(_cp1Att) : Api) : (_cp1Att ? _cp1A.api(_cp1Att) : Api)), state: S, parse: (t) => this._dadmRun('TURN_PARSE_REWRITE', _cp1Wrap(_e64 ? () => _e64.alt('fix797', () => Planner.parsePlan(t, S.mode), (_q) => !!_q) : () => Planner.parsePlan(t, S.mode))) }); if (_r797 && _r797.adopted) { plan = _r797.plan; result = _r797.result; } } } catch(_e797){} /* ★v292Dfix797: 4A Layer2 v1. 既存 rewrite 入口の直後だけ。本 file 未 load / flag OFF で no-op（出力 byte 同一）*/
+      try { if (window.__v292Dfix797 && !_done797) { const _r797 = await window.__v292Dfix797.turnHook({ text: result.text, plan: plan, sys: sys, user: user, api: (_e64 ? _e64.api(_cp1Att ? _cp1A.api(_cp1Att) : Api) : (_cp1Att ? _cp1A.api(_cp1Att) : Api)), state: S, parse: (t) => this._dadmRun('TURN_PARSE_REWRITE', _cp1Wrap(_e64 ? () => _e64.alt('fix797', () => Planner.parsePlan(t, S.mode), (_q) => !!_q) : () => Planner.parsePlan(t, S.mode))) }); if (_r797 && _r797.adopted) { plan = _r797.plan; result = _r797.result; } } } catch(_e797){} /* ★v292Dfix797: 4A Layer2 v1. 既存 rewrite 入口の直後だけ。本 file 未 load / flag OFF で no-op（出力 byte 同一）*/
 
       try { if (_e64) _e64.settle(); } catch(_e64s){} if (_e64 && _e64.aborted()) throw _e64.abortError();   /* ★E6-4 r2: 書き直しを parse しなかったときだけ端末キーを 1 回目の値へ戻す */
       // 心理エンジンで NPC 状態を更新
@@ -4766,8 +4781,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- R118 Phase3-A: existing physical signal bridge. fix414 hook 経由。OFF=v292Dfix742Off / feature=v292Dfix414PhysP (default OFF) -->
 <script src="v292Dfix742-physical-bridge.js?cb=v292Dfix742"></script>
 <!-- v292Dfix797: 4A Layer2 v1 hard capability contradiction (N1P: persistent 3 属性 = 傷/関係/未解決 を parse 前に original 継承). 既定 OFF=v292Dfix797On / kill=v292Dfix797Off -->
-<script src="v292Dfix797-layer2-contradiction.js?cb=20261024-bundle46-797c-a"></script>
-<script src="v292DfixE64-discard-guard.js?cb=20261024-bundle45-e64-d"></script>
+<script src="v292Dfix797-layer2-contradiction.js?cb=20261025-bundle50-e65d-d"></script>
+<script src="v292DfixE64-discard-guard.js?cb=20261025-bundle50-e65d-d"></script>
 <!-- CLOUD_CANONICAL C1 client (C1-a builder + C1-b hydrator)。DEPLOY != ENABLE：呼び出し側0本・load時storage読取0。OFF=v292Dfix743Off / feature=v292DfixCC2On (default OFF) -->
 <script src="v292Dfix743-cc2-client.js?cb=20261019-bundle33-b"></script>
 <!-- CLOUD_CANONICAL C1 write path wiring（裁定30/31/32）。DEPLOY != ENABLE：caller 0本・自動実行0・load時storage読取0。prepare()/commitSchema2() は明示呼出のみ。ON=v292Dfix750On / KILL=v292Dfix750Off (default OFF) -->

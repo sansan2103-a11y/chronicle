@@ -104,6 +104,73 @@
   /* ★A-1 PREMISE-TIER（4A-2 v1・GPT 裁定 2026-09-05 G4/G5）: desc-only evidence による rewrite は既定 OFF。
    *  QA のみ v292Dfix797DescRewrite='1' で解禁。detection / log は flag に依らず常に行う。 */
   function descRewriteOn() { return lsGet('v292Dfix797DescRewrite') === '1'; }
+  /* ★E65-D r2（laneE65AD・GPT #127-MR Q7/Q8・Local・出荷しない）: 棄却した 1 回目へ戻さない。
+     abortOn(): 中断を使ってよいか（kill: v292DfixE65DOff='1'）。
+     willRewrite(text, st): turnHook と同じ前提（ON・detect が当たる・PREMISE の保留でない・セッション上限内）で「この応答は棄却して書き直しを頼む」と
+       parse の前に分かるか。G.submit はこれが true のターンだけ区間の写し（E64 section）を作る。純関数（書込 0・通信 0・sessionRewrites も動かさない）。 */
+  function abortOn() { return on() && lsGet('v292DfixE65DOff') !== '1'; }
+  function willRewrite(text, st) {
+    try {
+      if (!abortOn() || sessionRewrites >= SESSION_CAP) return false;
+      var d = detect(text, ctxOf({ state: st }));
+      if (!d || !d.hit) return false;
+      if (d.tier === 'PREMISE' && !descRewriteOn()) return false;
+      return true;
+    } catch (e) { return false; }
+  }
+  /* ★E65-D r6（GPT #127-NB Q4 ADOPT_B_WITH_SAFETY_CONDITION・laneE65AD・Local）: <state> の無い書き直しの本文に「新しい傷」の信号があるか。
+     判定は既存の部品を参照で使うだけ（regex のコピー 0・新しい辞書 0・新しい状態抽出器 0）:
+       ・fix670 の splitSpans（文の区切り）・maskQuotes（台詞と <say> は世界の事実として読まない）・gateBlocked（否定・仮定・疑問・比喩・錯覚・未来・認識・伝聞・推量・受益の門）
+       ・fix670 TYPES の wound_persistent.re（持続する傷）と harm_context_recorded.cond（fix670 の「その span に実際の損傷語があること」）
+       ・N1P2 の N1P2_RECOVERY（回復・消失の言い方。当たる文は新しい傷として数えない）
+     1 文でも「門に当たらない・回復の言い方でない・傷の語がある」なら信号あり。fix670 の部品が無い・読めない・例外のときは判定できない＝信号あり（fail-closed＝r4 と同じく採らない側）。
+     限界: 見るのは傷だけ。回復・関係・未解決・持ち物などの変化の整合は保証しない。前から確定している傷への言及も信号として数える（新旧は区別しない）。
+     injurySignal は純関数（書込 0・通信 0）。noStateInjury は kill（v292DfixE65DOff='1'）・fix797 OFF・<state> がある本文では null。where を渡すと件数と ring に種類だけ残す（本文は残さない・memory only）。 */
+  var nsiStat = { checked: 0, hit: 0, last: null };
+  function injurySignal(text) {
+    try {
+      var g = dep670(), T = window.__v292Dfix670 && window.__v292Dfix670.__test && window.__v292Dfix670.__test.TYPES;
+      if (!g || !Array.isArray(T)) return { k: 'no-detector' };
+      var wre = null, hre = null;
+      for (var i = 0; i < T.length; i++) { if (T[i] && T[i].type === 'wound_persistent') wre = T[i].re; if (T[i] && T[i].type === 'harm_context_recorded') hre = T[i].cond; }
+      if (!(wre instanceof RegExp) || !(hre instanceof RegExp)) return { k: 'no-detector' };
+      var sp = g.splitSpans(String(g.maskQuotes(String(text == null ? '' : text))).replace(/<[^>]*>/g, ''));
+      for (var j = 0; j < sp.length; j++) {
+        var s = sp[j].s;
+        if (g.gateBlocked(s)) continue;
+        if (N1P2_RECOVERY.test(s)) continue;
+        if (wre.test(s)) return { k: 'wound', i: sp[j].i };
+        if (hre.test(s)) return { k: 'harm', i: sp[j].i };
+      }
+      return null;
+    } catch (e) { return { k: 'error' }; }
+  }
+  function noStateInjury(text, where) {
+    try {
+      if (!abortOn()) return null;
+      var t = String(text == null ? '' : text);
+      if (t.indexOf('<state') >= 0) return null;
+      var w = injurySignal(t);
+      nsiStat.checked++;
+      if (w) { nsiStat.hit++; nsiStat.last = { where: String(where || ''), k: w.k }; if (where) rec({ k: 'no-state-injury', where: String(where), sig: w.k, adopted: false }); }
+      return w;
+    } catch (e) { return { k: 'error' }; }
+  }
+  /* ★E65-D r7（GPT #127-ND Q4・laneE65AD・Local）: fix216/235 の書き直しに <state> が無いとき「1 回目を採る」か。G.submit は E64 OFF のターンだけ呼ぶ
+     （1 回目はもう parse 済みで、その取り込みが store・要約・fix27・準登録台帳に残っている＝書き直しを採ると本文と状態の出所が分かれる。実測 D235F）。
+     kill（v292DfixE65DOff='1'）・fix797 OFF・<state> がある本文では null（従来どおり）。書込 0・通信 0（件数と ring に種類だけ・本文は残さない）。
+     例外は {k:'error'}＝1 回目を採る側（fail-closed）。 */
+  var nskStat = { checked: 0, kept: 0, last: null };
+  function noStateKeepFirst(text, where) {
+    try {
+      if (!abortOn()) return null;
+      var t = String(text == null ? '' : text);
+      if (t.indexOf('<state') >= 0) return null;
+      nskStat.checked++; nskStat.kept++; nskStat.last = { where: String(where || '') };
+      if (where) rec({ k: 'no-state-keep-first', where: String(where), adopted: false });
+      return { k: 'no-state-keep-first' };
+    } catch (e) { return { k: 'error' }; }
+  }
 
   /* ---- 外部依存（すべて参照。コピー 0・改変 0） ---------------------- */
   function dep741() {
@@ -988,23 +1055,31 @@
       .then(function () { return io.api.call(io.sys, String(io.user || '') + instructionFor(d)); })
       .then(function (r2) {
         var t2 = r2 && r2.text ? String(r2.text) : '';
-        if (!t2.trim())                       { rec(Object.assign({}, base, { adopted: false, why: 'empty' })); return null; }
+        var AB = function (why) { if (io.abortable && abortOn()) { rec(Object.assign({}, base, { adopted: false, why: why, abort: true })); return { abort: true, why: why }; } rec(Object.assign({}, base, { adopted: false, why: why })); return null; };   /* ★E65-D r2 */
+        if (!t2.trim())                       { return AB('empty'); }
         if (t2.replace(/<[^>]*>/g, '').trim().length < 40)
-                                              { rec(Object.assign({}, base, { adopted: false, why: 'short' })); return null; }
-        if (t2.indexOf('<state') < 0)         { rec(Object.assign({}, base, { adopted: false, why: 'no-state' })); return null; }
+                                              { return AB('short'); }
+        var ns2 = t2.indexOf('<state') < 0;
+        if (ns2 && !(io.abortable && abortOn())) { rec(Object.assign({}, base, { adopted: false, why: 'no-state' })); return null; }   /* ★E65-D r5（GPT #127-MY Q3）: 従来の経路（1 回目を parse 済み）では従来どおり採らない。 */
+        /* ★E65-D r5: parse の前の経路（abortable）では 1 回目を parse していないので、store はこのターンの前の確定値のまま。<state> の無い書き直しは
+           「このターンは状態が動かない」応答として採る（fix77 の出力規則は変化の無いキャラの省略を許す・parsePlan も fix77/fix190 の capture も <state> を要さない）。
+           ここで中断するのは、下の still-violating・r6 の新しい傷の信号・parse の保留／合成の代替文だけ・通信失敗だけ。 */
         var d2 = detect(t2, ctxOf(io));
-        if (d2.hit)                           { rec(Object.assign({}, base, { adopted: false, why: 'still-violating' })); return null; }
+        if (d2.hit)                           { return AB('still-violating'); }
+        if (ns2) { var w6 = noStateInjury(t2); if (w6) { base.nsi = w6.k; return AB('no-state-injury'); } }   /* ★E65-D r6（GPT #127-NB Q4）: <state> の無い書き直しの本文に新しい傷の信号（既存の fix670／N1P2 の判定）があれば採らない。ここは parse の前の経路＝1 回目は棄却済みなので、1 回目を復活させずにターンを中断する */
         /* ★N1P: parse へ渡す text の 傷 / 関係 / 未解決 attr だけを original の値／有無へ
            restore する。採用 gate（上の 4 条件）は t2 の生バイトで判定済み。表示・保存は r2 のまま。 */
         var t2p = n1p2Sanitize(t2, io.text, io.state);   /* ★N1P2（lane797）: 基準 = このターンの前の確定値。使えないとき・kill では従来の sanitizePersistentForParse と同じバイト */
         return Promise.resolve(io.parse(t2p)).then(function (p2) {
           if (!p2 || p2.ran === false || !p2.result)
-                                              { rec(Object.assign({}, base, { adopted: false, why: 'parse-denied' })); return null; }
-          rec(Object.assign({}, base, { adopted: true, why: 'ok' }));
+                                              { return AB((p2 && p2.ran === false) ? 'parse-held' : 'parse-denied');   /* ★E65-D r4: 合成の代替文だけ（E65 guard が null）・admission の保留も、有効な書き直しが得られなかった＝中断（abortable のとき） */
+                                                rec(Object.assign({}, base, { adopted: false, why: 'parse-denied' })); return null; }
+          rec(Object.assign({}, base, { adopted: true, why: ns2 ? 'ok-no-state' : 'ok' }));
           return { adopted: true, plan: p2.result, result: r2 };
         });
       })
       .catch(function (e) {                    /* fail-open: 例外は必ず元採用 */
+        if (io.abortable && abortOn()) { rec(Object.assign({}, base, { adopted: false, why: 'error:' + (e && e.message), abort: true })); return { abort: true, why: 'error' }; }   /* ★E65-D r2: 通信失敗 */
         rec(Object.assign({}, base, { adopted: false, why: 'error:' + (e && e.message) }));
         return null;
       });
@@ -1022,6 +1097,10 @@
     explicitHardConstraint: explicitHardConstraint,   /* ★Rev3: source A / B 共用 pure helper */
     beginTurnContext: beginTurnContext,               /* ★Rev4: PREV snapshot の唯一の入口 */
     turnHook: turnHook,
+    abortOn: abortOn, willRewrite: willRewrite,
+    noStateInjury: noStateInjury, injurySignal: injurySignal,   /* ★E65-D r6 */
+    noStateKeepFirst: noStateKeepFirst, nskStats: function () { return { checked: nskStat.checked, kept: nskStat.kept, last: nskStat.last ? { where: nskStat.last.where } : null }; },   /* ★E65-D r7 */
+    nsiStats: function () { return { checked: nsiStat.checked, hit: nsiStat.hit, last: nsiStat.last ? { where: nsiStat.last.where, k: nsiStat.last.k } : null }; },
     status: function () {
       return { build: BUILD, stage: 'a1-premise', on: on(), off: lsGet('v292Dfix797Off') === '1',
                descRewrite: descRewriteOn(),

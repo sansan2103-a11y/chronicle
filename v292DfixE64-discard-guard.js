@@ -319,7 +319,24 @@
     return ctx;
   }
 
+  /* ★E65-D r3（laneE65AD・GPT #127-MT・Local・出荷しない）: fix797 の書き直しの parse を「採らない」と決まったら、その parse の取り込みを同期のうちに外す。
+     使うのは G.submit の「fix797 が parse の前に棄却を決めた」経路の書き直しの parse だけ（E64 OFF）。1 回目の応答はこの経路では parse されない。
+     fn が null（E65 guard: 合成の代替文だけ）を返したら、直前の写し（fix77 store とその端末キー・rollingSummary・fix27 の行・fix277 台帳）へ戻す。
+     parse は同期なので、直前→直後の差はその parse の取り込みだけ（他の書込が間に入らない）。例外でも戻して投げ直す。kill: v292DfixE65DOff='1'。 */
+  var rirStats = { calls: 0, restored: 0, errors: 0 };
+  function restoreIfRejected(fn){
+    var off = false; try { off = localStorage.getItem('v292DfixE65DOff') === '1'; } catch(e){ off = true; }
+    if (off) return fn();
+    rirStats.calls++;
+    var pre = snapAll(), p;
+    var back = function(){ ALL.forEach(function(n){ var x = pre[n]; if (!x) return; if (n === 'f27') T.f27.putArr(x, x.a); else if (n === 'sum') T.sum.putVal(x); else { T[n].putMem(x, x.j); lsPutSafe(x.k, x.ls); } }); rirStats.restored++; };
+    try { p = fn(); } catch(e){ try { back(); } catch(e2){ rirStats.errors++; } throw e; }
+    if (p == null) { try { back(); } catch(e3){ rirStats.errors++; } }
+    return p;
+  }
+
   window.__v292DfixE64 = {
+    restoreIfRejected: restoreIfRejected, rirStats: function(){ return JSON.parse(JSON.stringify(rirStats)); },
     VER: VER, GATE_VER: GATE_VER, begin: begin, gate: gate, on: function(){ return gate() === 'owner'; },
     last: function(){ try { return JSON.parse(JSON.stringify(last)); } catch(e){ return null; } },
     stats: function(){ try { return JSON.parse(JSON.stringify(stats)); } catch(e){ return null; } },
