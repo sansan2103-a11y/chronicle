@@ -337,7 +337,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261025-bundle50-e65d-d';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261025-bundle54-ui1-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4827,6 +4827,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      kill: localStorage[v292Dfix890]=0 → 何もしない（fix328 は sp14 と同じ挙動に戻る） -->
 <script src="v292Dfix890-anon-gate-yield.js?cb=20260920-sp14j"></script>
 <script src="v292Dfix970-state-intake-shadow.js?cb=20261019-bundle31-a"></script>
+<!-- ★UI44 v292DfixUI1（Astra UI レビュー / GPT 裁定 UI_SUBTRACT・独立レーン C）: 表示だけの引き算。空の会話ログを自動で畳む・Asset v2 移行の入口をプレイ画面から外し設定内に置く・怪異/アイコンを設定へ・オート/展開を提案を「⋯ その他」へ・ボタン名（生成し直す/取り消す/取消を戻す/場面を絵に）。r2=GPT #127-LQ（移行の入口は owner/beta の設定内）。textContent・保存・生成・送信は不変。kill: localStorage v292DfixUI1Off='1' -->
+<script src="v292DfixUI1-subtract.js?cb=20261025-bundle54-ui1-a"></script>
 </body>
 </html>
 
