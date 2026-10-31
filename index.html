@@ -337,7 +337,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261031-bundle65-sfltap-b';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261031-bundle71-ednedg-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -550,6 +550,19 @@ body {
   .narr-block { font-size: 14px; padding: 12px 34px 12px 14px; }
 }
 </style>
+<script id="v292DfixEDN-btn">/* ★EDN-BTN（bundle66-ednbtn-a・laneEDN・2026-10-31・Owner 要望「展開の描写の ✎ を本文の終わりへ」）
+   62-b: .edit-btn は .narr-block の右上（position:absolute・ホバーまで透明）。ここでは CSS だけで、本文の最後の段落の下・右寄せへ置く。
+   ボタン要素・onclick（UI.openEdit(idx)）・編集画面・保存（UI.saveEdit → EDIT-01 → S.saveD）は 62-b のまま（DOM も JS も触らない）。
+   kill: localStorage v292DfixEDNBtnOff='1' → この style を足さない（= 62-b と同じ DOM・同じ配置）。storage が読めないときは新しい配置。 */
+(function(){ try {
+  var off = false; try { off = window.localStorage.getItem('v292DfixEDNBtnOff') === '1'; } catch (e) {}
+  if (off) return;
+  var st = document.createElement('style'); st.id = 'v292DfixEDN-btn-css';
+  st.textContent = '.narr-block > .edit-btn{position:static;display:block;margin:4px 0 0 auto;opacity:.6}'
+    + '.narr-block > .edit-btn:hover,.narr-block > .edit-btn:focus-visible{opacity:1}';
+  (document.head || document.documentElement).appendChild(st);
+} catch (e) {} })();
+</script>
 <script id="v292Dfix890-early">/* ★sp14i part A — hunk A1h（UI PRE-HIDE ONLY）
    incident: candidate/sp14h_g8post_v1.md §3（live cold で visible frames 14-61 / 初可視 5304-5658 ms）。
    機序: v292Dfix890-anon-gate-yield.js は index.html の 308 本中 308 本目の script なので
@@ -4411,7 +4424,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=20260912-q119s4"></script>
   <script src="v292DfixSFL1-speaker-correct.js?cb=20261025-bundle55-sfl-a"></script><!-- v292DfixSFL1(SFL-01): ✎ 編集パネル内の話者 <select>＋訂正台帳(turn._sflCorrections)。既定OFF・opt-in v292DfixSFL1On=1 / kill v292DfixSFL1Off=1（OFF/kill は新しい訂正だけを止め、保存済みの訂正の保護は常に効く・r3）。fix66 より前に置く(起動時 migrate の保護判定が参照する) -->
   <script src="v292Dfix66-renderhook-repair.js?cb=20261025-bundle55-sfl-a"></script>
-  <script src="v292DfixEDIT01-edit-reconcile.js?cb=20261022-bundle42-a"></script><!-- v292DfixEDIT01: 本文を編集したら会話ログを本文に合わせる(フェーズ1) + カード✕。OFF=localStorage v292DfixEdit01Off=1 -->
+  <script src="v292DfixEDIT01-edit-reconcile.js?cb=20261031-bundle71-ednedg-a"></script><!-- v292DfixEDIT01: 本文を編集したら会話ログを本文に合わせる(フェーズ1) + カード✕。OFF=localStorage v292DfixEdit01Off=1 -->
   <script src="v292DfixSFLTap-card-correct.js?cb=20261031-bundle65-sfltap-b"></script><!-- v292DfixSFLTap(bundle65): 会話ログのカードをタップして、その場で話者を直す（SFL の ✎ と同じ保存経路・同じ守り・同じ記録）。SFL が使えるとき（uiEnabled）だけ。停止 = localStorage v292DfixSFLTapOff=1（常に勝つ）・SFL の kill v292DfixSFL1Off=1 でも止まる -->
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>

@@ -49,6 +49,9 @@
   /* ★r42 (GPT #127-KA): 既定 ON。v292DfixEdit01Off==='1' は強制停止で常に勝つ。storage 不可 = OFF（旧挙動）。v292DfixEdit01On は見ない（r40/r41 の opt-in 値が残っていても同じ ON）。 */
   function enabled() { try { var ls = root.localStorage; return !!ls && ls.getItem('v292DfixEdit01Off') !== '1'; } catch (e) { return false; } }
   function off() { return !enabled(); }
+  /* ★EDG（bundle69-edg-a・案A）: ✎ の保存で本文が編集前と同じ（\r\n→\n だけ揃える）なら、会話カード・meta・plan の整理をしない。kill: localStorage v292DfixEDGOff='1'（62-b と同じ） */
+  function edgOn() { try { var ls = root.localStorage; return !ls || ls.getItem('v292DfixEDGOff') !== '1'; } catch (e) { return true; } }
+  function edgSame(a, b) { if (b == null) b = ''; return typeof a === 'string' && typeof b === 'string' && a.replace(/\r\n/g, '\n') === b.replace(/\r\n/g, '\n') && edgOn(); }
 
   /* ---------- 純関数 ---------- */
   /* CL1-c の _n1c と同じ文字集合（index.html:2954） */
@@ -406,12 +409,13 @@
       if (!ta) return orig.apply(this, arguments);
       var newNarr = ta.value, snap = {
         narr: turn.narrative, hasCs: has(turn, '_convSays'), cs: turn._convSays, hasMeta: has(turn, '_convSayMeta'), meta: turn._convSayMeta };
-      var res;
-      try { res = reconcile(turn, newNarr, { oldNarr: snap.narr, hero: heroName(S) }); } catch (e) { res = { applicable: false, changed: false, newQuotes: 0 }; try { console.warn(TAG, 'reconcile err', e && e.message); } catch (_) {} }
+      var res, edg = edgSame(newNarr, snap.narr);
+      if (edg) res = { applicable: false, changed: false, newQuotes: 0, dropped: [], reworded: [], edg: true };   /* ★EDG: 本文そのまま = 整理しない */
+      if (!edg) try { res = reconcile(turn, newNarr, { oldNarr: snap.narr, hero: heroName(S) }); } catch (e) { res = { applicable: false, changed: false, newQuotes: 0 }; try { console.warn(TAG, 'reconcile err', e && e.message); } catch (_) {} }
       /* フェーズ1b: plan.narrative / _structuredNarrative の <say> も同じ対応表で直す（失敗したら plan は触らない） */
       var ps = planSnap(turn), pres = null;
       /* ★r42 (#127-KO): 安全側（括弧不整合）でも、外したカードと消えた行の <say> は plan からも外す（言い直しは渡さない＝引用の区間は使わない） */
-      try { pres = reconcilePlan(turn.plan, { dropped: (res && res.dropped) || [], reworded: (res && res.skipped) ? [] : ((res && res.reworded) || []), oldNarr: snap.narr, newNarr: newNarr }); } catch (e) { pres = null; try { console.warn(TAG, 'reconcilePlan err', e && e.message); } catch (_) {} }
+      if (!edg) try { pres = reconcilePlan(turn.plan, { dropped: (res && res.dropped) || [], reworded: (res && res.skipped) ? [] : ((res && res.reworded) || []), oldNarr: snap.narr, newNarr: newNarr }); } catch (e) { pres = null; try { console.warn(TAG, 'reconcilePlan err', e && e.message); } catch (_) {} }
       var revert = function () {
         try {
           turn.narrative = snap.narr;
@@ -432,6 +436,7 @@
       if (res && res.skipped) { ST.skipped = (ST.skipped || 0) + 1; try { console.warn(TAG, 'skip reconcile:', res.skipped, 'turn', idx); } catch (_) {} }
       ST.lastResult = { idx: idx, skipped: (res && res.skipped) || null, changed: !!res.changed, kept: res.kept, dropped: res.dropped, reworded: res.reworded, newQuotes: res.newQuotes, metaAction: res.metaAction, lenOk: res.lenOk,
         plan: pres ? { applicable: pres.applicable, changed: planChanged, dropped: pres.dropped, reworded: pres.reworded, structured: pres.structuredAction } : null };
+      if (edg) ST.lastResult.edg = true;
       var p;
       try { p = (typeof S.saveD === 'function') ? S.saveD('UI.saveEdit') : Promise.resolve({ ran: true, result: S.save() }); }
       catch (e) { p = Promise.reject(e); }
