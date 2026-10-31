@@ -183,6 +183,7 @@
       var store = window.__v292Dfix77Store;
       if (!store || !name || !store[name]) return '';
       var s = store[name];
+      try { var N = window.__v292DfixNPRES; if (N && typeof N.orphan === 'function' && N.orphan(name, s)) return ''; } catch(_n){}   /* ★NPRES r-c333（既定 OFF）: この値を書いた描写が ✎ で消えたときは表示しない */
       var bits = [];
       if (s.karada) bits.push('からだ: ' + String(s.karada).slice(0, 48));
       if (s.kokoro) bits.push('こころ: ' + String(s.kokoro).slice(0, 40));

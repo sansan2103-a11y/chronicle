@@ -136,6 +136,12 @@
     if (x === '主人公') return true;                          /* アプリ自身のラベル */
     return !!hk.k && x === hk.k;                              /* 空白違い */
   }
+  /* ★NPRES r-c333（laneNPRES・2026-10-31・GPT #127-OE/#127-OG・既定 OFF。opt-in v292DfixNPRESOn='1'／kill v292DfixNPRESOff='1'）:
+     v292DfixNPRES-presence-gate.js（読むだけ）が NPC を (a) 場面にいる (b) 未確認 (c) 別の場所 に分ける。
+     (b)(c) と「✎ で描写が消えた値」は からだ・こころ・本能・目的 を載せない。(c) だけ「別の場所にいる」と書く（傷・関係・未解決は残す）。
+     (b)(c) は【この場面の種】【自発】の候補から外す。OFF なら _npg=null で従来と 1 バイトも同じ。 */
+  var _npg = null;
+  function npres192(){ try { var N = window.__v292DfixNPRES; return (N && typeof N.gate === 'function') ? N.gate() : null; } catch(_n){ return null; } }
   function stateBlock(legacyStore){
     try{
       var c930 = !off930() && !legacyStore; /* ★fix932: legacyStore=true は ac27 と同じ（shadow を読む・旧項目順）判定専用 */
@@ -152,6 +158,8 @@
         var ki=clean223(s.kizu||s['傷']), kn=clean223(s.kankei||s['関係']), mi=clean223(s.mikaiketsu||s['未解決']);
         var mo=clean223(s.mokuteki||s['目的']); /* v292Dfix223b */
         if(isHeroA1(hkA1, n)){ ko=''; ho=''; mo=''; kn=''; mi=''; }   /* ★v292DfixA1 r2: 主人公は 傷・からだ だけ */
+        var gp = (!legacyStore && _npg) ? _npg.group(n, s) : '';   /* ★NPRES r-c333: (a)/(b)/(c) */
+        if(gp === 'b' || gp === 'c' || (!legacyStore && _npg && _npg.orphan(n, s))){ ka=''; ko=''; ho=''; mo=''; if(gp === 'c') parts.push('別の場所にいる'); else if(gp === 'b' && typeof _npg.note === 'function'){ var nt3 = _npg.note(n, s); if(nt3) parts.push(nt3); } }   /* ★NPRES d3: 通話中の人は「声だけで加われる」の一行（d3Off なら ''） */
         if(c930 && ki) parts.push('傷:'+ki);
         if(ka) parts.push('からだ:'+ka);
         if(ko) parts.push('こころ:'+ko);
@@ -184,6 +192,7 @@
       Object.keys(store).forEach(function(n){
         var s=store[n]||{};
         if (cur && s.turn!=null && (cur - s.turn) > 3) return; /* 在場=直近に状態が動いたキャラ */
+        if (_npg && _npg.out(n, s)) return;   /* ★NPRES */
         var mi=clean223(s.mikaiketsu||s['未解決']), ki=clean223(s.kizu||s['傷']), kn=clean223(s.kankei||s['関係']);
         if (isHeroA1(hkA1, n)){ mi=''; kn=''; }   /* ★v292DfixA1 r2: 主人公の 未解決・関係 は種にしない（傷は従来どおり） */
         if (mi) cands.push({n:n, w:3, t:n+'の未解決「'+mi.slice(0,40)+'」が、今ターンの言動の下に流れている'});
@@ -474,6 +483,7 @@
       var cands=[];
       npcs.forEach(function(n,i){
         var info=pr[n.name]; if(!info||!info.present||info.pressure<2) return;
+        if(_npg && _npg.out(String(n.name), st77[n.name])) return;   /* ★NPRES: 候補から外すだけ */
         if(!off956()){ var sp956=scenePresent956(S.turns||[], String(n.name)); if(!sp956.ok){ (last956=last956||{ at:Date.now(), dropped:[] }).dropped.push({ name:String(n.name), why:sp956.why }); return; } }   /* ★fix956: 候補から外すだけ */
         var s=st77[n.name]||{};
         var desire=clean223(n.coreDesire||'')||clean223(s.mokuteki||s['目的']||'')||clean223(s.mikaiketsu||s['未解決']||'');
@@ -815,10 +825,12 @@
     var contLine = isCont
       ? '（プレイヤーは「続きを書く」を押した。あなたが物語を一歩進める番。受け身で待たず、上の進行レベルに従って能動的に動かす。グロや痛みの強度を上げるだけ＝"縦"は前進ではない。新しい要素＝"横"で世界を広げる。）'
       : '';
+    _npg = npres192();               /* ★NPRES: OFF なら null */
     var st = stateBlock();
     var seed = seedBlock();          /* v292Dfix223a */
     var spice = spiceLine(isCont);   /* v292Dfix223c */
     var agenda = agendaBlock();      /* v292Dfix254 */
+    _npg = null;                     /* ★NPRES */
     var suspense = '';               /* v292Dfix287 */
     try { if (toneKey() === 'suspense' && localStorage.getItem('v292SuspenseOff') !== '1') suspense = SUSPENSE_BLOCK; } catch(e){}
     var reform293 = '';              /* v292Dfix293: 自己模倣カット(劣化スパイラル予防) */

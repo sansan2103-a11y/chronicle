@@ -17,7 +17,8 @@
      OFF=v292Dfix654Off -->
 <script src="v292Dfix654-storage-trap.js?cb=v292Dfix731"></script>
 <!-- v292Dfix893: Pages origin（*.pages.dev）でだけ動く cookie session shim。github.io では何もしない。 -->
-<script src="v292Dfix893-account-cookie-shim.js?cb=20261019-bundle33-b"></script>
+<script src="v292Dfix893-account-cookie-shim.js?cb=20261031-bundle78-admf-c"></script>
+<script src="v292DfixADMF1-account-flags.js?cb=20261101-bundle80-int-a"></script><!-- ★admf2: 話者の訂正（sfl1）と NPC 場面整合（npres1・行なし=OFF）。★ADMF-1 r3: 管理者画面のアカウント機能スイッチ（/auth/me accountFlags）で SFL を使うかを決める（読むだけ・書き込み 0）。OFF=localStorage v292DfixADMF1Off=1（= SFL OFF） -->
 <!-- ★BAV2 (GPT #127-DV/#127-EE): beta を最初から Asset v2 で始める（client 側は使い勝手だけ。安全は Worker。Worker が features.assetV2Beta を返さない間は何もしない） -->
 <script src="v292Dbav2-beta.js?cb=20261019-bundle33-b"></script>
 <!-- ★fix990 (GPT #127-EN D): 旧画像 op が ASSET_V2_REQUIRED で断られたら、このタブではその op を 10 分送らない（fix523/633/634 より前に置く）。kill: localStorage v292Dfix990Off=1 -->
@@ -337,7 +338,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261031-bundle71-ednedg-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261101-bundle80-int-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4398,11 +4399,12 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixP0-scenario-blocker.js?cb=v292Dfix680"></script>
 <script src="v292Dfix135-longmem.js?cb=20260927-ac3"></script>
 <script src="v292Dfix138-continue.js?cb=20260929-ac18"></script>
-<script src="v292Dfix145-charlist.js?cb=20261019-bundle31-a"></script>
+<script src="v292Dfix145-charlist.js?cb=20261101-bundle79-npres73d4b-on78c"></script>
 <script src="v292Dfix777-icon-lightbox.js?cb=20261021-laneE-a"></script>
 <script src="v292DfixLE3-iphone-nav.js?cb=20261021-laneE-a"></script>
 <script src="v292DfixLE4-relock-follow.js?cb=20261022-bundle40-b"></script>
 <script src="v292DfixIS1-icon-size.js?cb=20261022-bundle41-a"></script>
+<script src="v292DfixUX72-adjust-icon.js?cb=20261031-bundle72-ux-a"></script><!-- v292DfixUX72(bundle72): アイコンの大きさ・顔の寄せを「🎛 調整」からも選べる（設定の中の本物の欄の写し・保存キーは IS1 / LE2 のまま）。停止 = localStorage v292DfixUX72Off=1 -->
 <!-- v292Dfix226(P1): fix52(可読性v1)はfix53(包括v2)に内包されるため退役。問題があれば下行のコメントを外す
 <script src="v292Dfix52-readability.js?cb=v292Dfix52"></script> -->
 <script src="v292Dfix53-readability-v2.js?cb=v292Dfix53"></script>
@@ -4422,7 +4424,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=20260912-q119s4"></script>
-  <script src="v292DfixSFL1-speaker-correct.js?cb=20261025-bundle55-sfl-a"></script><!-- v292DfixSFL1(SFL-01): ✎ 編集パネル内の話者 <select>＋訂正台帳(turn._sflCorrections)。既定OFF・opt-in v292DfixSFL1On=1 / kill v292DfixSFL1Off=1（OFF/kill は新しい訂正だけを止め、保存済みの訂正の保護は常に効く・r3）。fix66 より前に置く(起動時 migrate の保護判定が参照する) -->
+  <script src="v292DfixSFL1-speaker-correct.js?cb=20261031-bundle78-admf-c"></script><!-- v292DfixSFL1(SFL-01): ✎ 編集パネル内の話者 <select>＋訂正台帳(turn._sflCorrections)。既定OFF・opt-in v292DfixSFL1On=1 / kill v292DfixSFL1Off=1（OFF/kill は新しい訂正だけを止め、保存済みの訂正の保護は常に効く・r3）。fix66 より前に置く(起動時 migrate の保護判定が参照する) -->
   <script src="v292Dfix66-renderhook-repair.js?cb=20261025-bundle55-sfl-a"></script>
   <script src="v292DfixEDIT01-edit-reconcile.js?cb=20261031-bundle71-ednedg-a"></script><!-- v292DfixEDIT01: 本文を編集したら会話ログを本文に合わせる(フェーズ1) + カード✕。OFF=localStorage v292DfixEdit01Off=1 -->
   <script src="v292DfixSFLTap-card-correct.js?cb=20261031-bundle65-sfltap-b"></script><!-- v292DfixSFLTap(bundle65): 会話ログのカードをタップして、その場で話者を直す（SFL の ✎ と同じ保存経路・同じ守り・同じ記録）。SFL が使えるとき（uiEnabled）だけ。停止 = localStorage v292DfixSFLTapOff=1（常に勝つ）・SFL の kill v292DfixSFL1Off=1 でも止まる -->
@@ -4456,7 +4458,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
   <script src="v292Dfix796-memory-retrieve.js?cb=20261021-bundle38-b"></script>
-  <script src="v292Dfix192-newengine.js?cb=20261025-bundle57-a1-b"></script>
+  <script src="v292Dfix192-newengine.js?cb=20261101-bundle79-npres73d4b-on78c"></script>
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
   <script src="v292Dfix197-avatar-key.js?cb=20261019-bundle31-a"></script>
@@ -4551,12 +4553,13 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix324-show-dont-tell.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix325-state-rederive.js?cb=20261019-bundle31-a"></script>
 <script src="v292Dfix326-story-scroll.js?cb=v292Dfix326"></script>
+<script src="v292DfixJMP-jump-latest.js?cb=20261031-bundle76-jmp-a"></script><!-- v292DfixJMP(bundle76): 展開の描写・会話ログをさかのぼっているときだけ、パネルの下に丸い「↓ 最新へ」ボタン（押すと一番下までスクロール。読むだけ・保存/通信なし）。停止 = localStorage v292DfixJMPOff=1 -->
 <script src="v292Dfix327-turn-counter.js?cb=v292Dfix327"></script>
 <script src="v292Dfix328-google-login.js?cb=20260908-fix837"></script>
 <script src="v292Dfix298-roster.js?cb=20261001-ac34"></script>
 <script src="v292Dfix330-somatic-guard.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix332-uifold.js?cb=v292Dfix332"></script>
-<script src="v292Dfix333-actor-reality.js?cb=20261023-bundle43a-r2"></script>
+<script src="v292Dfix333-actor-reality.js?cb=20261101-bundle79-npres73d4b-on78c"></script>
 <script src="v292Dfix334-entryhub.js?cb=20261021-bundle37-a"></script>
 <!-- ★lane 15 / sp10A(GPT 裁定 #L15entry): 設定の 3 段畳み + 公開文面。どちらも DOM 移動と文字列だけ。
      kill: localStorage['v292Dfix880Off']='1' / localStorage['v292Dfix881Off']='1' -->
@@ -4815,6 +4818,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix851-posture-directive.js?cb=20261001-ac33"></script>
 <script src="v292Dfix852-mental-capability.js?cb=20261001-ac33"></script>
 <script src="v292Dfix853-truncated-name-guard.js?cb=20261025-bundle58-npcp1-b"></script>
+<script src="v292DfixNPRES-presence-gate.js?cb=20261101-bundle80-int-a"></script><!-- v292DfixNPRES(73-d4b): NPC を 場面にいる／未確認／別の場所 に分け、未確認・別の場所の人の古い「その瞬間の様子」を次ターンの指示に載せない（読むだけ・保存しない）。既定 OFF・管理者画面で ON にしたアカウントだけ ON（admf2: ADMF1.gate('npres1')。端末の v292DfixNPRESOn は使わない） / kill v292DfixNPRESOff=1（部分 kill d1Off〜d4Off） -->
 <!-- ★av2 C2 (GPT 911): Asset v2 presentation plane (portrait.list / asset.get / IDB / placeholder / reason display / addBinding / explicit delete UI).
      Acts ONLY on assetSchema-2 documents (canonical-derived; never the local flag). Legacy stories: no DOM work at all.
      kill: localStorage[v292Dav2pOff]=1 (legacy generation guards stay) -->

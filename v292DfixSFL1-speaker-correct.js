@@ -91,7 +91,8 @@
 
   /* ---------- flag ---------- */
   function lsGet(k) { try { var ls = root.localStorage; return ls ? ls.getItem(k) : null; } catch (e) { return null; } }
-  function enabled() { return lsGet('v292DfixSFL1On') === '1' && lsGet('v292DfixSFL1Off') !== '1'; }
+  function enabled() { if (lsGet('v292DfixSFL1Off') === '1') return false; return admfGate(lsGet('v292DfixSFL1On') === '1'); }
+  function admfGate(dev) { try { var A = root.__v292DfixADMF1; return !!(A && typeof A.gate === 'function' && A.gate('sfl1', dev) === true); } catch (e) { return false; } }   /* ★ADMF-1 r3 (GPT #127-OM): kill が常に勝つ。管理者画面の値（A）／未設定（B）／不明・待ち（C = OFF）を ADMF1 が答える。ADMF1 が無い・読めない・ADMF1Off のときは OFF */
   function edit01On() { try { var E = root.__v292DfixEDIT01; return !!(E && typeof E.enabled === 'function' && E.enabled()); } catch (e) { return false; } }
   function uiEnabled() { return enabled() && edit01On(); }
   /* r5: CP1 の HOLD（読むだけ）。true = この物語は止められている。分からないときは false（r4 と同じ動き）。 */

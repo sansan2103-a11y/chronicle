@@ -160,7 +160,9 @@
      未定義・null・例外のときは states をそのまま使う＝CP1 OFF/kill（と CP1 の無いページ）では従来と 1 バイトも変わらない。
      前面・背景・強制ローテ・その回の選択と公平カウンタ（lastBeatTurn・__pool・__prevKarada・v292Dfix333Rot）はすべてこの states から作られるので、
      ABSENT の NPC はどれにも入らない。0 人なら selectForeground は null を返し、前面化の行は出ない。 */
-  function fgStates333(states, text){ try{ var h=window.__v292DfixCP1Fg333; if(typeof h!=='function') return states; var r=h(states, text); return (r && typeof r==='object') ? r : states; }catch(e){ return states; } }
+  function fgStates333(states, text){ var b=states; try{ var h=window.__v292DfixCP1Fg333; if(typeof h==='function'){ var r=h(states, text); if(r && typeof r==='object') b=r; } }catch(e){ b=states; }
+    try{ var N=window.__v292DfixNPRES, r2=(N && typeof N.fgRestrict==='function') ? N.fgRestrict(b, text) : null; if(r2 && typeof r2==='object'){ var o={}; Object.keys(r2).forEach(function(k){ if(Object.prototype.hasOwnProperty.call(b,k)) o[k]=b[k]; }); b=o; } }catch(e2){}   /* ★NPRES-c333（GPT #127-OG 条件付き許可・既定 OFF）: CP1 の結果を先に取り、その中から NPRES の (b)(c) を外す。名前を足さない・CP1 が外した名前を戻さない */
+    return b; }
   function foregroundBlock(sel){
     if(!sel||!sel.fg.length) return '';
     var lines=['【この一手で前面に出す人物】'+sel.fg.join('・')+' ＝ それぞれに、人物像と今の身体状態に合った具体的な局所反応か小さな動きを一つだけ(声・行動・視線・沈黙のどれか)。主人公や状況に絡ませ、NPC同士の雑談に逃さない。'];

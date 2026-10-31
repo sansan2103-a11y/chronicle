@@ -30,11 +30,18 @@
   var CRED_KEYS = ['v292ProxyPass', 'v292GoogleToken'];
   var CRED_HEADERS = { 'x-chronicle-pass': 1, 'x-google-id': 1, 'x-chronicle-session': 1 };
   var PLAY = { beta: 1, paid: 1, owner: 1 };
-  var state = { me: null, checked: false, lastError: null, features: null };   /* ★fix905: features は in-memory のみ（mark / localStorage へ書かない） */
+  var state = { me: null, checked: false, lastError: null, features: null, flags: null, flagsWhy: 'boot' };   /* ★ADMF-1 r2: flags = 最後の /auth/me の答えの機能スイッチ（in-memory のみ・その答えの accountId に紐づく） */   /* ★fix905: features は in-memory のみ（mark / localStorage へ書かない） */
 
   function readMark() { try { var o = JSON.parse(lsGet(MARK_KEY) || 'null'); return (o && o.sid === 'cookie' && o.acct) ? o : null; } catch (e) { return null; } }
   function writeMark(me) { lsSet(MARK_KEY, JSON.stringify({ sid: 'cookie', acct: me.accountId, ent: me.entitlement, ts: Date.now() })); }
   function clearMark() { lsDel(MARK_KEY); }
+  /* ★ADMF-1 r2: 機能スイッチの写し。答え 1 つ分を丸ごと持ち、どの失敗・切り替えでも捨てる。meSeq = 最後に出した /auth/me、flEpoch = 捨てた回数。
+     古い要求の遅い答え（my !== meSeq）・捨てる前に出した要求の答え（ep !== flEpoch）は写しに使わない。別タブで印が消える／別のアカウントになったら即捨てる。 */
+  var meSeq = 0, flEpoch = 0;
+  function flagsOf(x) { if (!x || typeof x !== 'object' || Array.isArray(x)) return null; var o = {}, n = 0; for (var k in x) { if (n >= 16) break; if (Object.prototype.hasOwnProperty.call(x, k) && /^[a-z][a-z0-9]{0,23}$/.test(k) && (x[k] === 0 || x[k] === 1)) { o[k] = x[k]; n++; } } return o; }
+  function flagsSnapOf(j, my) { return { acct: String(j.accountId || ''), st: (typeof j.accountFlagsState === 'string') ? j.accountFlagsState.slice(0, 16) : 'absent', flags: flagsOf(j.accountFlags), phase: (j.accountFlagsPhase === 1 || j.accountFlagsPhase === 2) ? j.accountFlagsPhase : null, seq: my }; }
+  function dropFlags(why) { flEpoch++; state.flags = null; state.flagsWhy = why; try { window.dispatchEvent(new Event('chr:account-flags')); } catch (e) {} }
+  try { window.addEventListener('storage', function (e) { try { if (e.key !== MARK_KEY && e.key !== null) return; if (!state.flags) return; var m = readMark(); if (!m || m.acct !== state.flags.acct) dropFlags(m ? 'other-tab-account' : 'other-tab-logout'); } catch (x) {} }); } catch (e) {}
 
   /* ---- 1. 起動時の掃除: credential を持たない ---- */
   CRED_KEYS.forEach(lsDel);
@@ -75,7 +82,7 @@
     if (rest.indexOf('/img') === 0 && (rest.length === 4 || rest.charAt(4) === '?')) return null;   /* 画像 URL は認証不要のまま */
     return '/api' + rest;
   }
-  function onAuthFailure() { state.me = null; state.features = null; clearMark(); unrenderLogout897(); showGate('expired'); try { if (window.__chrMeGate && window.__chrMeGate.invalidate) window.__chrMeGate.invalidate('401'); } catch (e905) {} }
+  function onAuthFailure() { state.me = null; state.features = null; dropFlags('401'); clearMark(); unrenderLogout897(); showGate('expired'); try { if (window.__chrMeGate && window.__chrMeGate.invalidate) window.__chrMeGate.invalidate('401'); } catch (e905) {} }
   function watch(resp) {
     try {
       if (resp && resp.status === 401) {
@@ -83,7 +90,7 @@
       }
       /* ★fix905c: 403（利用権なし・停止・利用記録なし）を受けたら ME gate を即失効させ、/auth/me を取り直す（表示は refreshMe の既存処理） */
       else if (resp && resp.status === 403) {
-        resp.clone().json().then(function (j) { if (j && (j.errorCode === 'ENTITLEMENT_REQUIRED' || j.errorCode === 'ACCOUNT_SUSPENDED' || j.errorCode === 'ACCOUNT_LEDGER_MISSING')) { state.features = null; try { if (window.__chrMeGate && window.__chrMeGate.invalidate) window.__chrMeGate.invalidate(j.errorCode); } catch (e1) {} try { refreshMe(); } catch (e2) {} } }).catch(function () {});
+        resp.clone().json().then(function (j) { if (j && (j.errorCode === 'ENTITLEMENT_REQUIRED' || j.errorCode === 'ACCOUNT_SUSPENDED' || j.errorCode === 'ACCOUNT_LEDGER_MISSING')) { state.features = null; dropFlags('403'); try { if (window.__chrMeGate && window.__chrMeGate.invalidate) window.__chrMeGate.invalidate(j.errorCode); } catch (e1) {} try { refreshMe(); } catch (e2) {} } }).catch(function () {});
       }
     } catch (e) {}
     return resp;
@@ -137,24 +144,25 @@
     return nativeFetch('/api' + path, o).then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { j.__status = r.status; return j; }); });
   }
   function refreshMe() {
+    var my = ++meSeq, ep = flEpoch;
     return api('/auth/me', 'GET').then(function (j) {
       state.checked = true;
-      if (j && j.ok) { state.me = { accountId: j.accountId, entitlement: j.entitlement, status: j.status }; state.features = (j.features && typeof j.features === 'object') ? { memoryEngine: j.features.memoryEngine === true, assetV2Beta: j.features.assetV2Beta === true, assetV2New: j.features.assetV2New === true, artPresetV1: j.features.artPresetV1 === true } : null;   /* ★BAV2: carry the server's beta Asset v2 answer (v292Dbav2-beta.js) ★FG-1c: + assetV2New ★FG-3: + artPresetV1（Worker が story cfg.artPreset を扱えるか） */ writeMark(state.me); if (!PLAY[j.entitlement]) showGate('entitlement'); else { hideGate(); renderLogout897(); } }
-      else if (j && j.__status === 401) { state.me = null; state.features = null; clearMark(); unrenderLogout897(); showGate('login'); }
-      else { state.lastError = j && (j.errorCode || j.__status); state.features = null; }
+      if (j && j.ok) { state.me = { accountId: j.accountId, entitlement: j.entitlement, status: j.status }; state.features = (j.features && typeof j.features === 'object') ? { memoryEngine: j.features.memoryEngine === true, assetV2Beta: j.features.assetV2Beta === true, assetV2New: j.features.assetV2New === true, artPresetV1: j.features.artPresetV1 === true } : null;   /* ★BAV2: carry the server's beta Asset v2 answer (v292Dbav2-beta.js) ★FG-1c: + assetV2New ★FG-3: + artPresetV1（Worker が story cfg.artPreset を扱えるか） */ if (my === meSeq && ep === flEpoch) { state.flags = flagsSnapOf(j, my); state.flagsWhy = 'me-ok'; } else state.flagsWhy = 'late-answer-ignored'; writeMark(state.me); if (!PLAY[j.entitlement]) showGate('entitlement'); else { hideGate(); renderLogout897(); } }
+      else if (j && j.__status === 401) { state.me = null; state.features = null; dropFlags('me-401'); clearMark(); unrenderLogout897(); showGate('login'); }
+      else { state.lastError = j && (j.errorCode || j.__status); state.features = null; dropFlags('me-' + ((j && j.__status) || 'err')); }
       try { window.dispatchEvent(new Event('chr:account-me')); } catch (e905) {}
       return state.me;
-    }).catch(function (e) { state.checked = true; state.lastError = String(e && e.message || e); state.features = null; try { window.dispatchEvent(new Event('chr:account-me')); } catch (e905) {} return state.me; });
+    }).catch(function (e) { state.checked = true; state.lastError = String(e && e.message || e); state.features = null; dropFlags('me-network'); try { window.dispatchEvent(new Event('chr:account-me')); } catch (e905) {} return state.me; });
   }
   function loginWithCredential(cred) {
     return api('/auth/google', 'POST', { credential: cred }).then(function (j) {
-      if (j && j.ok) { state.me = { accountId: j.accountId, entitlement: j.entitlement, status: j.status }; writeMark(state.me); location.reload(); return true; }
+      if (j && j.ok) { dropFlags('login'); state.me = { accountId: j.accountId, entitlement: j.entitlement, status: j.status }; writeMark(state.me); location.reload(); return true; }
       setGateMsg('ログインできませんでした（' + ((j && j.errorCode) || 'error') + '）。もう一度お試しください。');
       return false;
     });
   }
   function logout() {
-    return api('/auth/logout', 'POST', {}).catch(function () {}).then(function () { state.me = null; clearMark(); });
+    dropFlags('logout'); return api('/auth/logout', 'POST', {}).catch(function () {}).then(function () { state.me = null; dropFlags('logout'); clearMark(); });
   }
 
   /* ---- 6. ログイン画面（この origin だけ） ---- */
@@ -256,6 +264,6 @@
     } catch (e) {}
   }
 
-  window.__v292Dfix893 = { active: true, loggedIn: loggedIn, me: function () { return state.me || readMark(); }, serverMe: function () { return state.me; }, features: function () { return state.features; }, refreshMe: refreshMe, logout: logout, loginWithCredential: loginWithCredential, status: function () { return { active: true, checked: state.checked, me: state.me, features: state.features, mark: readMark(), lastError: state.lastError }; } };
+  window.__v292Dfix893 = { active: true, loggedIn: loggedIn, me: function () { return state.me || readMark(); }, serverMe: function () { return state.me; }, features: function () { return state.features; }, flagsSnap: function () { return state.flags ? JSON.parse(JSON.stringify(state.flags)) : null; }, flagsWhy: function () { return state.flagsWhy; }, refreshMe: refreshMe, logout: logout, loginWithCredential: loginWithCredential, status: function () { return { active: true, checked: state.checked, me: state.me, features: state.features, mark: readMark(), lastError: state.lastError }; } };
   refreshMe();
 })();
