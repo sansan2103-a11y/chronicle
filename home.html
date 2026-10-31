@@ -256,7 +256,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261025-bundle58-npcp1-b';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261031-bundle62-sflt-b';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -271,6 +271,22 @@
         location.replace(location.pathname + location.search + sep + 'vr=1&v=' + encodeURIComponent(v));
       })
       .catch(function(){});
+  } catch(e){}
+})();
+</script>
+<script>
+/* ★SFLT1（2026-10-31・GPT #127-NT §0 SFL_OWNER_ENABLE／#127-NX で bundle58-npcp1-b の上へ）: 話者の訂正（v292DfixSFL1）を Owner が URL だけで入れ切りする。
+   home.html?sfl=1 → localStorage v292DfixSFL1On='1'（既に '1' なら書かない）
+   home.html?sfl=0 → v292DfixSFL1On を消す（無ければ何もしない）
+   それ以外（パラメータ無し・他の値）は localStorage に触れない。kill（v292DfixSFL1Off）は読まない・書かない＝kill が常に勝つまま。
+   読み込みのたびに 1 回だけ。URL は書き換えない。通信・タイマー・DOM・他のキーなし。rollback = bundle58-npcp1-b の home.html。 */
+(function(){
+  try {
+    var m = /[?&]sfl=([01])(?:&|$)/.exec(String(location.search || ''));
+    if (!m) return;
+    var ls = window.localStorage, K = 'v292DfixSFL1On';
+    if (m[1] === '1') { if (ls.getItem(K) !== '1') ls.setItem(K, '1'); }
+    else if (ls.getItem(K) !== null) ls.removeItem(K);
   } catch(e){}
 })();
 </script>
