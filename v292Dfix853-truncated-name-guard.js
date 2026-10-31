@@ -135,6 +135,74 @@
   }
   W.__v292Dfix853filter=filterRaw;
 
+  /* ★v292DfixA4 r（GPT #127-NN §6 A4_RESCOPING・Local 試作・kill: localStorage v292DfixA4Off='1'）:
+     まだ行が無い <state who="X"> の X が「既にいる主人公」へ一意に当たるときだけ、X の新しい人物行を作らない。
+       一意に当たる = (a) fix853 自身の decide() が block を返し、衝突相手（collides）が全部、主人公の名前（空白を除いて同じ）
+                     (b) 主人公の名前の空白違い（「朝霧蓮」）／アプリのラベル「主人公」で、登録 NPC に同じもの（空白を除いて）がいない
+     そのときは tag を主人公の名前の tag に書き換え、からだ・傷 だけを渡す（こころ・本能・目的・関係・未解決は渡さない）。
+     からだ・傷 が無ければ tag を外す。書き換えは fix77 captureState と fix190 captureExt の呼び出しの間だけ（ctx.raw の shadow swap）。
+     登録 NPC へ当たる切れた名前（「早瀬」→「早瀬 透」など）・衝突相手が 2 人以上・既にある行（既存セーブ）・主人公が無い／名前が無い・
+     fix853 OFF・kill・例外 → 従来どおり（1 バイトも変えない）。新しい判定器は足さない（decide をそのまま使う）。既存の行は消さない・まとめない。 */
+  function offA4r(){ try{ return W.localStorage.getItem('v292DfixA4Off')==='1'; }catch(e){ return true; } }
+  function nsA4r(x){ return String(x==null?'':x).replace(/[\s\u3000]+/g,''); }
+  function heroOfA4r(who){
+    try{
+      var S=getS(); if(!S||!S.cast||!S.cast.hero) return null;
+      var hn=S.cast.hero.name?String(S.cast.hero.name):''; if(!hn||/["<>]/.test(hn)) return null;
+      var w=String(who==null?'':who).replace(/^[\s\u3000]+|[\s\u3000]+$/g,''); if(!w||w===hn) return null;
+      var keys=[]; try{ keys=Object.keys(store()); }catch(e){}
+      if(keys.indexOf(w)>=0) return null;                                   /* 既にある行は従来どおり */
+      var npcs=[]; try{ if(Object.prototype.toString.call(S.cast.npcs)==='[object Array]') S.cast.npcs.forEach(function(n){ if(n&&n.name) npcs.push(String(n.name)); }); }catch(e){}
+      if(npcs.indexOf(w)>=0) return null;                                    /* 登録 NPC そのもの */
+      var hk=nsA4r(hn), x=nsA4r(w);
+      if(x===hk||x==='主人公'){
+        for(var i=0;i<npcs.length;i++){ if(nsA4r(npcs[i])===x) return null; }   /* 一意でない */
+        return hn;
+      }
+      var d=decide(w); if(!d||d.block!==true||!d.collides||!d.collides.length) return null;
+      for(var j=0;j<d.collides.length;j++){ if(nsA4r(d.collides[j])!==hk) return null; }   /* 主人公以外にも当たる＝従来どおり */
+      return hn;
+    }catch(e){ return null; }
+  }
+  function attrA4r(tag,k){ try{ var m=String(tag).match(new RegExp(k+'\\s*=\\s*"([^"]*)"')); return m?m[1].trim():''; }catch(e){ return ''; } }
+  function routeA4r(raw){
+    var routed=[];
+    STATE_RE.lastIndex=0;
+    var out=String(raw).replace(STATE_RE, function(tag0){
+      var who=whoOf(tag0), hn=heroOfA4r(who); if(!hn) return tag0;
+      var tag=tag0; try{ var X=W.__v292Dfix938x; if(X&&typeof X.norm==='function'&&!X.off()) tag=X.norm(tag0); }catch(_n){}
+      var ka=attrA4r(tag,'からだ'), ki=attrA4r(tag,'傷');
+      routed.push({who:who, to:hn, karada:!!ka, kizu:!!ki});
+      if(!ka&&!ki) return '';
+      return '<state who="'+hn+'"'+(ka?' からだ="'+ka+'"':'')+(ki?' 傷="'+ki+'"':'')+'/>';
+    });
+    return {text:out, routed:routed};
+  }
+  var auditA4r=W.__v292DfixA4r={ routed:0, calls:[], last:null };
+  function noteA4r(where, r){ try{ auditA4r.routed+=r.routed.length; auditA4r.last={ where:where, routed:r.routed }; if(auditA4r.calls.length<40) auditA4r.calls.push({ t:Date.now(), where:where, routed:r.routed }); }catch(_a){} }
+  W.__v292DfixA4rRoute=routeA4r;
+
+  /* ★v292Dfix853p（GPT #127-NT §1・NPC_STATE_CORRUPTION P1 の分割案・kill: localStorage v292Dfix853pOff='1'）:
+     853 が止める <state who=X> のうち、既存の fix830 resolver が「登録 NPC 1 人の、区切りで分かれた丸ごと 1 パート（PART_EXACT）
+     ／作者が書いた別名（ALIAS_EXACT）／異体字（FOLDED_EXACT）」と答えるものだけは止めない（PC の並びで通るのと同じ）。
+     統合はしない（fix830 裁定 74 のまま）。「壁」⊂「真壁 誠」・「瀬」・「真壁 誠の声」など、それ以外の衝突は全ての並びで従来どおり止める。
+     並び替えはしない。新しい判定器・保存キー・sys の文面・通信は無い。fix830 が無い／OFF／例外 → 従来どおり止める。 */
+  function off853p(){ try{ return W.localStorage.getItem('v292Dfix853pOff')==='1'; }catch(e){ return true; } }
+  var diag853p=W.__v292Dfix853p={ passed:0, kept:0, last:[] };
+  function partNpc853p(who){
+    try{
+      if(off853p()) return '';
+      var R=W.__v292Dfix830; if(!R||typeof R.resolve!=='function') return '';
+      var S=getS(); var hn=(S&&S.cast&&S.cast.hero&&S.cast.hero.name)?String(S.cast.hero.name):'';
+      var npcs=[]; try{ if(Object.prototype.toString.call(S.cast.npcs)==='[object Array]') S.cast.npcs.forEach(function(n){ if(n&&n.name) npcs.push(String(n.name)); }); }catch(e){}
+      var r=R.resolve(who, (hn?[hn]:[]).concat(npcs));
+      if(!r||!r.matched||r.ambiguous) return '';
+      if(r.kind!=='PART_EXACT' && r.kind!=='ALIAS_EXACT' && r.kind!=='FOLDED_EXACT') return '';
+      if(r.matched===hn || npcs.indexOf(r.matched)<0) return '';
+      return r.matched;
+    }catch(e){ return ''; }
+  }
+
   function wrap(){
     try{
       var P=W.Planner; if(!P||!P._parseExtensions||!P._parseExtensions.length) return false;
@@ -147,12 +215,29 @@
           if(off()) return orig(plan, ctx);
           var raw=(ctx && typeof ctx.raw==='string') ? ctx.raw : null;
           if(raw===null) return orig(plan, ctx);         /* raw が無い経路は一切触らない */
+          var a4r=null;                                   /* ★v292DfixA4 r: 主人公へ一意に当たる tag の書き換え（先に行う） */
+          try{ if(!offA4r()){ a4r=routeA4r(raw); if(a4r.routed.length) noteA4r('fix77', a4r); else a4r=null; } }catch(_e4){ a4r=null; }
           var r;
-          try{ r=filterRaw(raw); }catch(e){ return orig(plan, ctx); }   /* fail-open */
-          if(!r.blocked.length) return orig(plan, ctx);
+          try{ r=filterRaw(a4r ? a4r.text : raw); }catch(e){ return orig(plan, ctx); }   /* fail-open */
+          if(r.blocked.length && !off853p()){                  /* ★v292Dfix853p: 登録 NPC の丸ごと 1 パートだけ通す */
+            try{
+              var pass853p={}, nb=[];
+              r.blocked.forEach(function(b){ var m=partNpc853p(b.who); if(m) pass853p[b.who]=m; else nb.push(b); });
+              if(nb.length!==r.blocked.length){
+                STATE_RE.lastIndex=0;
+                var src853p=(a4r ? a4r.text : raw);
+                var txt853p=String(src853p).replace(STATE_RE, function(tag){ var w=whoOf(tag); if(pass853p[w]) return tag; var d=decide(w); return d.block ? '' : tag; });
+                diag853p.passed+=(r.blocked.length-nb.length); diag853p.kept+=nb.length;
+                if(diag853p.last.length<20) diag853p.last.push(Object.keys(pass853p).map(function(k){ return k+'→'+pass853p[k]; }).join(','));
+                r={text:txt853p, blocked:nb};
+              }
+            }catch(_p){}
+          }
+          if(!r.blocked.length && !a4r) return orig(plan, ctx);
           var prev=ctx.raw;
           try{
             ctx.raw=r.text;
+            if(!r.blocked.length) return orig(plan, ctx);
             audit.push({t:Date.now(), turn:(function(){ try{ var S=getS(); return (S&&S.turns)?S.turns.length:-1; }catch(e){ return -1; } })(),
                         blocked:r.blocked});
             try{ console.warn(TAG,'blocked ghost state key(s):', r.blocked.map(function(b){return b.who+'⊂'+(b.collides||[]).join(',');}).join(' / ')); }catch(_){}
@@ -174,12 +259,43 @@
     return false;
   }
   W.__v292Dfix853wrap=wrap;
+  /* ★v292DfixA4 r: fix190 captureExt も同じ書き換えの間だけ呼ぶ（主人公の別名の空の行を先に作らせない）。書き換えが無い回は素通し。 */
+  function wrap190A4r(){
+    try{
+      var P=W.Planner; if(!P||!P._parseExtensions||!P._parseExtensions.length) return false;
+      for(var i=0;i<P._parseExtensions.length;i++){
+        var f=P._parseExtensions[i];
+        if(!f||!f.__v292Dfix190) continue;
+        if(f.__a4r) return true;
+        var orig=f;
+        var wrapped=function(plan, ctx){
+          if(off()||offA4r()) return orig(plan, ctx);
+          var raw=(ctx && typeof ctx.raw==='string') ? ctx.raw : null;
+          if(raw===null) return orig(plan, ctx);
+          var a; try{ a=routeA4r(raw); }catch(e){ return orig(plan, ctx); }
+          if(!a.routed.length) return orig(plan, ctx);
+          noteA4r('fix190', a);
+          var prev=ctx.raw;
+          try{ ctx.raw=a.text; return orig(plan, ctx); } finally { try{ ctx.raw=prev; }catch(_){} }
+        };
+        try{ Object.getOwnPropertyNames(orig).forEach(function(k){
+          if(k==='length'||k==='name'||k==='prototype') return;
+          try{ wrapped[k]=orig[k]; }catch(_e){}
+        }); }catch(_e2){}
+        wrapped.__v292Dfix190=true; wrapped.__a4r=true;
+        P._parseExtensions[i]=wrapped;
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
 
   if(!wrap()){
     var tries=0;
     var iv=setInterval(function(){ tries++; if(wrap()||tries>60) clearInterval(iv); }, 300);
   }
   /* fix77 の selfHeal が 2 秒ごとに走るため、取りこぼしても次の tick で包み直す */
-  setInterval(function(){ try{ wrap(); }catch(e){} }, 2000);
+  setInterval(function(){ try{ wrap(); }catch(e){} try{ wrap190A4r(); }catch(e2){} }, 2000);
+  if(!wrap190A4r()){ var t4=0; var iv4=setInterval(function(){ t4++; if(wrap190A4r()||t4>60) clearInterval(iv4); }, 300); }
   try{ console.log(TAG,'loaded'); }catch(_){}
 })();

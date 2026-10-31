@@ -370,10 +370,19 @@
   window.__v292AliasFix = aliasFix; // index.html(会話ログ収穫)から呼ばれる
 
   // ---- fix277b: fix77状態ストアの別名エントリを正名へマージ ----
+  function off277r(){ try { return localStorage.getItem('v292Dfix277rOff') === '1'; } catch(e){ return true; } }
   function mergeAliasStates(){
     if (offA()) return;
     try {
-      var st = window.__v292Dfix77Store; if (!st) return;
+      var st = window.__v292Dfix77Store;
+      /* ★v292Dfix277r（GPT #127-NR §3 NPC_STATE_CORRUPTION P1・kill: localStorage v292Dfix277rOff='1'）:
+         この統合は Planner.build の中で走る。そのとき fix850 は __v292Dfix77Store を「からだ に今ターンの地の文を足した
+         読み取り専用の写し」へ一時的に差し替えている。写しを統合して保存すると、地の文の切れ端
+         （「。早瀬は青ざめた顔で…」）が からだ として端末とサーバーに残り、メモリ側は統合されないまま食い違う。
+         fix192 stateBlock（fix930 c1）と同じく、fix850 が公開する本物の store を統合・保存する。
+         fix850 が無い・build の外 → realStore() は __v292Dfix77Store そのもの＝従来どおり。kill / 例外 → 従来どおり。 */
+      if (!off277r()){ try { var X277r = window.__v292Dfix850x; if (X277r && typeof X277r.realStore === 'function'){ var rs277r = X277r.realStore(); if (rs277r && typeof rs277r === 'object') st = rs277r; } } catch(_r277){} }
+      if (!st) return;
       var map = aliasMap(); var moved = 0;
       Object.keys(map).forEach(function(a){
         if (!st[a]) return;
