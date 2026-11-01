@@ -14,7 +14,7 @@
   'use strict';
   if (window.__v292Dfix335) return; window.__v292Dfix335 = true;
   var TAG='[v292Dfix335:omakase]';
-  function on(){ try{ return localStorage.getItem('v292Dfix335')==='1'; }catch(e){ return false; } }
+  function on(){ try{ var A=window.__v292DfixADMF1; return !!(A && typeof A.gate==='function' && A.gate('oma1', localStorage.getItem('v292Dfix335')==='1')===true); }catch(e){ return false; } }   /* ★admg1: 管理者画面（ADMF1.gate('oma1', 端末の opt-in v292Dfix335)） */
 
   var BANK=null, ANTI=null, loading=false;
   function loadBank(cb){
@@ -201,7 +201,7 @@
       try{ console.log(TAG,'omakase drawn:',JSON.stringify(Object.keys(pick).reduce(function(o,k){o[k]=pick[k]&&pick[k].id;return o;},{}))); }catch(_){}
     });
   }
-  window.__v334Omakase=function(){ if(!on()){ try{ UI.setStatus('おまかせ生成はプレビュー中です（有効化: v292Dfix335=1）'); }catch(_){}; return; } omakase(); };
+  window.__v334Omakase=function(){ if(!on()){ try{ UI.setStatus('おまかせ生成は今は使えません（管理者画面の「おまかせで埋める」が OFF です）'); }catch(_){}; return; } omakase(); };
 
   // test/preview api
   window.__v292Dfix335api={ on:on, loadBank:loadBank,

@@ -28,12 +28,15 @@
  *   Worker kill: env CHR_AV2_PRESET_VIEW_OFF='1' (no extra fields => this module sees nothing => pointer image as before).
  * Observation: window.__v292DfixLD1.status()
  */
-(function(){
+(function ld1Main(){
   'use strict';
   if (typeof window === 'undefined' || window.__v292DfixLD1) return;
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   var KILLED = lsg('v292DfixD1Off') === '1';
-  var ON = !KILLED && lsg('v292DfixLD1On') === '1';
+  /* ★admg1（laneADMG）: ON = kill でない && ADMF1.gate('ld1', 端末の opt-in)。OFF で kill でなければ、答えが届いて ON になったら 1 回だけ起こす（ON→OFF は次に開いた時から） */
+  var ADM = window.__v292DfixADMF1, devLD1 = function(){ return lsg('v292DfixLD1On') === '1'; };
+  var ON = !KILLED && (function(){ try { return !!(ADM && typeof ADM.gate === 'function' && ADM.gate('ld1', devLD1()) === true); } catch(e){ return false; } })();
+  if (!ON && !KILLED){ try { if (ADM && typeof ADM.whenOn === 'function') ADM.whenOn('ld1', devLD1, function(){ if (lsg('v292DfixD1Off') === '1') return; var cur = window.__v292DfixLD1; if (cur && cur.on === true) return; window.__v292DfixLD1 = undefined; ld1Main(); }); } catch(e){} }
   if (!ON){ window.__v292DfixLD1 = { version: 'ld1-r2', on: false, killed: KILLED, status: function(){ return { on: false, killed: KILLED }; } }; return; }
 
   var NOTE = 'この画風の絵はまだありません（別の画風の絵を表示中）';                       // unified fallback label (GPT D2-7)

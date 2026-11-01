@@ -27,12 +27,20 @@
  * ■admf2（laneINT・2026-11-01・GPT #127-OQ 3）: 2 つ目の鍵 'npres1'（NPC 場面整合 NPRES）。A（行あり）は sfl1 と同じ（1=ON / 0=OFF）。
  *   ★npres1 の B（行なし）は段階に関係なく常に OFF（端末の設定 v292DfixNPRESOn には戻さない）。C・待ち・ADMF1Off も OFF（sfl1 と同じ）。
  *   NPRES 本体が gate('npres1', false) を呼ぶ（端末の値は渡さない）。sfl1 の動き（段階 1 = 端末の設定）は変えない。見た目の印の合わせ直しは sfl1 だけ。
+ * ■admg1（laneADMG・2026-11-01・Local 候補）: 鍵を 4 つ足す。lc1（キャラの絵の作業欄 LC1）・ld1（画風ごとの採用画像 LD1）・rc1（想起の補助 RC1）・oma1（おまかせ fix335）。
+ *   4 つとも行なし（B）の扱いは sfl1 と同じ 'phase'（段階 1 = 端末の opt-in のまま＝80 と同じ / 2 = OFF）。A（行あり）・C・待ち・ADMF1Off は sfl1 と同じ。
+ *   Worker（v46.13-admg）が公開許可の範囲（READY / CANARY / HOLD）を当てて accountFlags を作る＝ここでは A として読む:
+ *     範囲の外の鍵（HOLD の鍵・CANARY でそのアカウントが許可外）は、行が無くても明示の 0（＝端末の opt-in でも ON にならない）。
+ *     READY の鍵で行が無いものは、全体の値（既存の KV の 'featcfg:<鍵>'・読めなければ 0）で埋める。それ以外で行が無い鍵は来ない＝B（段階）。
+ *   判定の順: 部品の kill（各部品が先に見る）＞ ADMF1Off ＞ 範囲（Worker）＞ アカウントの行 ＞ 全体の値 ＞ 行なしの扱い（段階）。答えが無い・読めない・別アカウント → OFF。
+ *   whenOn(key, devFn, cb): 読み込み時にしか判定しない部品（LC1・LD1）用。今 OFF でも、答えが届いて gate が true になったら cb を 1 回だけ呼ぶ（OFF→ON の 1 回だけ。ON→OFF は次に開いた時から）。
+ *   書き込みは今までどおり 0（localStorage / cookie / 通信）。
  * ===================================================================== */
 (function (root) {
   'use strict';
-  var VER = 'admf2-20261101-int-a';
+  var VER = 'admg1-20261101-bundle81';
   var KILL = 'v292DfixADMF1Off';
-  var KEYS = { sfl1: 'phase', npres1: 'off' };   /* 未設定（行なし）の扱い: 'phase' = Worker の段階（1 = 端末の設定 / 2 = OFF）、'off' = 常に OFF（admf2） */
+  var KEYS = { sfl1: 'phase', npres1: 'off', lc1: 'phase', ld1: 'phase', rc1: 'phase', oma1: 'phase' };   /* ★admg1: +lc1 / ld1 / rc1 / oma1（行なし = 段階） */ var LATE = [];   /* 未設定（行なし）の扱い: 'phase' = Worker の段階（1 = 端末の設定 / 2 = OFF）、'off' = 常に OFF（admf2） */
   var HOLD_MS = 10000;
   var ACCT_RE = /^[0-9a-f]{32}$/;
   var T0 = Date.now();
@@ -71,6 +79,18 @@
     return false;
   }
 
+  /* ★admg1: whenOn — 今 gate が false の部品を、答えが届いたあとに 1 回だけ起こす。devFn は呼ぶたびに端末の opt-in を読み直す関数 */
+  function devOf(f) { try { return typeof f === 'function' ? f() === true : f === true; } catch (e) { return false; } }
+  function whenOn(key, devFn, cb) {
+    if (!KEYS[key] || typeof cb !== 'function') return false;
+    if (gate(key, devOf(devFn))) { setTimeout(function () { try { cb(); } catch (e) {} }, 0); return true; }
+    if (LATE.length < 32) LATE.push({ key: key, dev: devFn, cb: cb });
+    return false;
+  }
+  function runLate() {
+    for (var i = LATE.length - 1; i >= 0; i--) { var L = LATE[i]; var on = false; try { on = gate(L.key, devOf(L.dev)); } catch (e) { on = false; }
+      if (on) { LATE.splice(i, 1); (function (cb) { setTimeout(function () { try { cb(); } catch (e) {} }, 0); })(L.cb); } }
+  }
   function sflOn() { try { var S = root.__v292DfixSFL1; return !!(S && typeof S.enabled === 'function' && S.enabled()); } catch (e) { return false; } }
   function tapSync(on) {   /* SFLTap は読み込み時に 1 回だけ見た目の印を判定する → 判定が変わった時だけ同じ判定をもう一度呼ぶ（無ければ何もしない） */
     try {
@@ -91,10 +111,11 @@
       if (!on) tapSync(false); else if (ST.lastOn !== true) tapSync(true);
       ST.lastOn = on;
     } catch (e) {}
+    try { runLate(); } catch (e) {}   /* ★admg1 */
   }
 
-  root.__v292DfixADMF1 = { ver: VER, gate: gate, decide: decide,
-    status: function () { return { ver: VER, killed: lsGet(KILL) === '1', sinceLoadMs: Date.now() - T0, holdMs: HOLD_MS, sfl1: decide('sfl1'), npres1: decide('npres1'), rechecks: ST.rechecks, changes: ST.changes, lastOn: ST.lastOn, last: ST.last ? JSON.parse(JSON.stringify(ST.last)) : null, hist: JSON.parse(JSON.stringify(ST.hist)) }; } };
+  root.__v292DfixADMF1 = { ver: VER, gate: gate, decide: decide, whenOn: whenOn, keys: function () { return Object.keys(KEYS); },
+    status: function () { return { ver: VER, killed: lsGet(KILL) === '1', sinceLoadMs: Date.now() - T0, holdMs: HOLD_MS, sfl1: decide('sfl1'), npres1: decide('npres1'), lc1: decide('lc1'), ld1: decide('ld1'), rc1: decide('rc1'), oma1: decide('oma1'), late: LATE.map(function (L) { return L.key; }), rechecks: ST.rechecks, changes: ST.changes, lastOn: ST.lastOn, last: ST.last ? JSON.parse(JSON.stringify(ST.last)) : null, hist: JSON.parse(JSON.stringify(ST.hist)) }; } };
   try {
     root.addEventListener('chr:account-me', function () { recheck('me'); });
     root.addEventListener('chr:account-flags', function () { recheck('flags'); });

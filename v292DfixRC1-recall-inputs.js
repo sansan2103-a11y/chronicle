@@ -89,7 +89,7 @@
     var kill, opt;
     try { kill = localStorage.getItem('v292DfixRC1Off'); opt = localStorage.getItem('v292DfixRC1On'); } catch(e){ return 'killed'; }   /* storage 不可 = OFF */
     if (kill === '1') return 'killed';
-    if (opt !== '1') return 'unset';
+    try { var ADM = window.__v292DfixADMF1; if (!(ADM && typeof ADM.gate === 'function' && ADM.gate('rc1', opt === '1') === true)) return 'unset'; } catch(e){ return 'unset'; }   /* ★admg1: 端末の opt-in の代わりに管理者画面（ADMF1.gate('rc1', 端末の opt-in)）。Owner だけ・匿名は OFF は下でそのまま */
     if (anonActive()) return 'anon';
     return ownerGate() ? 'owner' : 'not-owner';
   }

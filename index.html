@@ -18,7 +18,7 @@
 <script src="v292Dfix654-storage-trap.js?cb=v292Dfix731"></script>
 <!-- v292Dfix893: Pages origin（*.pages.dev）でだけ動く cookie session shim。github.io では何もしない。 -->
 <script src="v292Dfix893-account-cookie-shim.js?cb=20261031-bundle78-admf-c"></script>
-<script src="v292DfixADMF1-account-flags.js?cb=20261101-bundle80-int-a"></script><!-- ★admf2: 話者の訂正（sfl1）と NPC 場面整合（npres1・行なし=OFF）。★ADMF-1 r3: 管理者画面のアカウント機能スイッチ（/auth/me accountFlags）で SFL を使うかを決める（読むだけ・書き込み 0）。OFF=localStorage v292DfixADMF1Off=1（= SFL OFF） -->
+<script src="v292DfixADMF1-account-flags.js?cb=20261101-bundle81-admg-a"></script><!-- ★admg1: +lc1 / ld1 / rc1 / oma1（管理者画面の機能スイッチ・全体の値）。★admf2: 話者の訂正（sfl1）と NPC 場面整合（npres1・行なし=OFF）。★ADMF-1 r3: 管理者画面のアカウント機能スイッチ（/auth/me accountFlags）で SFL を使うかを決める（読むだけ・書き込み 0）。OFF=localStorage v292DfixADMF1Off=1（= SFL OFF） -->
 <!-- ★BAV2 (GPT #127-DV/#127-EE): beta を最初から Asset v2 で始める（client 側は使い勝手だけ。安全は Worker。Worker が features.assetV2Beta を返さない間は何もしない） -->
 <script src="v292Dbav2-beta.js?cb=20261019-bundle33-b"></script>
 <!-- ★fix990 (GPT #127-EN D): 旧画像 op が ASSET_V2_REQUIRED で断られたら、このタブではその op を 10 分送らない（fix523/633/634 より前に置く）。kill: localStorage v292Dfix990Off=1 -->
@@ -338,7 +338,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261101-bundle80-int-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261101-bundle81-admg-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -1007,7 +1007,7 @@ body {
         <div id="b37-dice-result" role="status" aria-live="polite" style="display:none;margin-top:6px;font-size:12.5px;line-height:1.6;padding:6px 8px;border-radius:6px"></div>
         <div id="b37-dice-note" style="margin-top:4px;font-size:11.5px;color:var(--dim);line-height:1.5">埋めるのは設定の空いている文字欄だけです（外見の確定や絵の作成はしません）。キャラのアイコン（絵）の外見は、👥 キャラ の「外見を設定」から決めます。</div>
       </div>
-      <script>try{if(localStorage.getItem('v292Dfix335')==='1'){var _ob=document.getElementById('v292-omakase-settings-btn');if(_ob)_ob.style.display='';}}catch(e){}</script>
+      <script>try{(function(){var _sh=function(){var _ob=document.getElementById('v292-omakase-settings-btn');if(_ob)_ob.style.display='';};var _dv=function(){return localStorage.getItem('v292Dfix335')==='1';};var _A=window.__v292DfixADMF1;if(_A&&typeof _A.whenOn==='function')_A.whenOn('oma1',_dv,_sh);})();}catch(e){}</script><!-- ★admg1: おまかせのボタンは管理者画面（ADMF1 'oma1'）が ON のとき出す（答えが後から届いても出す） -->
       <div class="mpanel-footer-danger">
         <button class="btn-d" onclick="G.resetStory()">物語リセット（設定は保持）</button>
         <button class="btn-d" onclick="G.resetAll()">完全リセット</button>
@@ -4515,7 +4515,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixGQ4-summary-request.js?cb=20261010-gq1"></script>
 <script src="v292DfixCTX-context-restore.js?cb=20261010-gq1"></script>
 <!-- v292DfixRC1 r2 (QUOTE-01 / GPT #127-JS・#127-KA): 想起を求める入力のときだけ、この物語の実入力・話者の確かな台詞を user JSON の playerInputs（storySoFar の直後）に足す。既定 OFF・Owner だけの opt-in（localStorage v292DfixRC1On=1 かつ /auth/me で owner・active）/ kill v292DfixRC1Off=1 -->
-<script src="v292DfixRC1-recall-inputs.js?cb=20261022-bundle42-a"></script>
+<script src="v292DfixRC1-recall-inputs.js?cb=20261101-bundle81-admg-a"></script>
 <!-- CP1-R6b + Owner ゲート r5 (CONT-02 / GPT #127-KK→#127-KQ→#127-KW→#127-LA→#127-LC→#127-LG→#127-LI): 今の場面に誰がいるかの最小正本。既定 OFF・Owner だけの opt-in（localStorage v292DfixCP1On='1' かつ /auth/me で owner・active・匿名でない）/ kill v292DfixCP1Off='1'。読み込み時に opt-in なし・kill なら何も装着しない（ON への切り替えは reload 後に有効）。生成の開始ごとに適用可否とアカウント・物語を確定し、同じターンはそれに揃える。途中で側が変わった・kill されたら送らない・保存しない（止めたターンは自動で送り直さない）。中断した回の結果は正式なターンとして採用しない（その回が足したものだけを撤回）。試行は build ごとの in-memory の印で見分け、G.submit が送信・再送・parse・確定へ引き継ぐ。採用前の仮の state は保存先へ書かず、安全に戻せないときはこの物語の生成と保存を止める（fail-closed）。fix333 の受け口・tap のガードが揃わない（混在キャッシュ）なら CP1 全体 OFF。ON: fix192/fix277 の装着後に最後にラップ・30 秒で揃わなければ無効化・送信直前の観測（記録のみ）・fix333 の前面化から ABSENT を外す -->
 <script>window.__v292DfixCP1IdxAtt = 'att-r5';</script><!-- bundle43-a r5: この index の G.submit は CP1 の試行を引き継ぐ（CP1 r5 はこの印が無い index では全体 OFF） -->
 <script src="v292DfixCP1-scene-presence.js?cb=20261025-bundle47-cp1r-c"></script>
@@ -4560,7 +4560,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix330-somatic-guard.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix332-uifold.js?cb=v292Dfix332"></script>
 <script src="v292Dfix333-actor-reality.js?cb=20261101-bundle79-npres73d4b-on78c"></script>
-<script src="v292Dfix334-entryhub.js?cb=20261021-bundle37-a"></script>
+<script src="v292Dfix334-entryhub.js?cb=20261101-bundle81-admg-a"></script>
 <!-- ★lane 15 / sp10A(GPT 裁定 #L15entry): 設定の 3 段畳み + 公開文面。どちらも DOM 移動と文字列だけ。
      kill: localStorage['v292Dfix880Off']='1' / localStorage['v292Dfix881Off']='1' -->
 <script src="v292Dfix880-settings-fold.js?cb=20260919-sp10a"></script>
@@ -4569,7 +4569,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      【開発者向け】へ寄せる。**ACTIVATION_BLOCKED_PUBLIC_AI_ACCESS** — API キー不要の経路が実際に使えるように
      なるまで production では有効化しない。kill: localStorage['v292Dfix884Off']='1' → sp10A と同じ配置へ戻る。 -->
 <script src="v292Dfix884-byok-dev-only.js?cb=20260919-sp14"></script>
-<script src="v292Dfix335-omakase.js?cb=v292Dfix335k"></script>
+<script src="v292Dfix335-omakase.js?cb=20261101-bundle81-admg-a"></script>
 <script src="v292Dfix351-settings-draft.js?cb=20261008-int1"></script>
 <script src="v292Dfix352-hero-placeholder.js?cb=v292Dfix352"></script>
 <script src="v292Dfix353-omakase-fill-rest.js?cb=v292Dfix353"></script>
@@ -4823,11 +4823,11 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      Acts ONLY on assetSchema-2 documents (canonical-derived; never the local flag). Legacy stories: no DOM work at all.
      kill: localStorage[v292Dav2pOff]=1 (legacy generation guards stay) -->
 <script src="v292Dav2-portrait.js?cb=20261021-laneE-a-lc1-ld1"></script>
-<script src="v292DfixLD1-preset-portrait.js?cb=20261021-laneD-a"></script>
+<script src="v292DfixLD1-preset-portrait.js?cb=20261101-bundle81-admg-a"></script>
 <!-- ★B37-B (GPT #127-HF B): 新しい S2 物語の「登場人物の最初の絵」案内（任意・止めない・自動は 1 回だけ）。OFF=localStorage v292DfixB37bOff=1 -->
 <script src="v292DfixB37-onboard.js?cb=20261021-laneE-a-lc1"></script>
 <script src="v292DfixLC1-appearance-proposal.js?cb=20261021-lc1-a"></script>
-<script src="v292DfixLC1-workbench.js?cb=20261021-lc1-a"></script>
+<script src="v292DfixLC1-workbench.js?cb=20261101-bundle81-admg-a"></script>
 <script src="v292Dav2-migrate-ui.js?cb=20261019-bundle31-a"></script>
 <!-- ★FG-3 (GPT #127-FR): S2 の物語の画風を 3 択（デフォルト／クール／ダーク）に。正本は server の story cfg.artPreset。
      S2 では旧来の「アイコン再生成」「⟳」を隠し、押されても旧経路へ渡さない。旧形式の物語では何もしない。kill: localStorage[v292Dfg3Off]=1 -->

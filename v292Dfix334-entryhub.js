@@ -30,7 +30,7 @@
      続きから遊ぶ道（ターンがある物語）は、この画面を出さない（下の reskin の早期 return）ので変わらない。 */
   function b37e(){ try{ return localStorage.getItem('v292DfixB37eOff')!=='1'; }catch(e){ return true; } }
   function b37staticStart(){ try{ var b=document.querySelector('#welcomeActions > button[onclick*="startScene"]'); return !!b; }catch(e){ return false; } }
-  function b37omakaseOn(){ try{ return localStorage.getItem('v292Dfix335')==='1'; }catch(e){ return false; } }
+  function b37omakaseOn(){ try{ var A=window.__v292DfixADMF1; return !!(A && typeof A.gate==='function' && A.gate('oma1', localStorage.getItem('v292Dfix335')==='1')===true); }catch(e){ return false; } }   /* ★admg1: 管理者画面の「おまかせで埋める」（ADMF1 'oma1'）に合わせる */
 
   // inject style once
   try{
@@ -97,6 +97,8 @@
            違う意味になっていたので、ここでは名乗らない（ラベル 1 つ・挙動は 1 バイトも変えない）。 */
         bOma.innerHTML='🎲 AI に考えてもらう<span class="v334-soon">近日</span>';
         if(b37e()){ if(b37omakaseOn()) bOma.innerHTML='🎲 AI に考えてもらう<span class="v334-soon">プレビュー</span>'; else bOma.style.display='none'; bOma.setAttribute('data-b37e', b37omakaseOn()?'preview':'hidden'); }
+        /* ★admg1: 答えが後から届いて 'oma1' が ON になったら、そのとき 1 回だけプレビューのボタンを出す */
+        try{ var A334=window.__v292DfixADMF1; if(b37e() && !b37omakaseOn() && A334 && typeof A334.whenOn==='function') A334.whenOn('oma1', function(){ try{ return localStorage.getItem('v292Dfix335')==='1'; }catch(e){ return false; } }, function(){ try{ bOma.innerHTML='🎲 AI に考えてもらう<span class="v334-soon">プレビュー</span>'; bOma.style.display=''; bOma.setAttribute('data-b37e','preview'); }catch(e){} }); }catch(e){}
         bOma.onclick=function(){
           // Phase Bで window.__v334Omakase() が定義されたらそれを呼ぶ。未定義なら案内。
           try{ if(typeof window.__v334Omakase==='function'){ window.__v334Omakase(); return; } }catch(e){}

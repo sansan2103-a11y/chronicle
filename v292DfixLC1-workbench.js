@@ -23,13 +23,18 @@
  * 通常画面に金額（$）は出さない。上限は平易な日本語で出す。
  * 観測口: window.__v292DfixLC1.status()
  * ===================================================================== */
-(function () {
+(function lc1Main() {
   'use strict';
   if (typeof window === 'undefined' || window.__v292DfixLC1) return;
   var TAG = '[LC1]';
   function lsg(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
-  var ON = lsg('v292DfixLC1On') === '1' && lsg('v292DfixLC1Off') !== '1';
+  /* ★admg1（laneADMG）: ON にするかは管理者画面（ADMF1.gate('lc1', 端末の opt-in)）。kill v292DfixLC1Off は常に先。ADMF1 が無い・例外 = OFF。
+     OFF のとき、kill でなければ ADMF1.whenOn で「答えが届いて ON になったら 1 回だけこの部品を起こす」を予約する（ON→OFF は次に開いた時から）。 */
+  var KILL = lsg('v292DfixLC1Off') === '1';
+  var ADM = window.__v292DfixADMF1, devLC1 = function () { return lsg('v292DfixLC1On') === '1'; };
+  var ON = !KILL && (function () { try { return !!(ADM && typeof ADM.gate === 'function' && ADM.gate('lc1', devLC1()) === true); } catch (e) { return false; } })();
   if (!ON) {   /* OFF: 画面も通信もタイマーも無い。フックの口だけ */
+    if (!KILL) { try { if (ADM && typeof ADM.whenOn === 'function') ADM.whenOn('lc1', devLC1, function () { if (lsg('v292DfixLC1Off') === '1') return; var cur = window.__v292DfixLC1; if (cur && cur.on && cur.on()) return; window.__v292DfixLC1 = undefined; lc1Main(); }); } catch (e) {} }
     window.__v292DfixLC1 = { version: 'LC1-r1', on: function () { return false; }, holdReload: function () { return false; }, openFromB37: function () { return { ok: false, code: 'OFF' }; },
       status: function () { return { on: false }; } };
     return;
