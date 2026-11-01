@@ -1,7 +1,7 @@
 # FIX_INDEX — Chronicle fix 辞典（開発担当向け）
 
-> 下書き（laneDOCS・2026-10-31・第 1 段。2026-11-01 に 80-int-a、続けて 81-admg-a の出荷を反映）。
-> **基準の本番**：`20261101-bundle81-admg-a`（version `ed3b4a64`・index `140afddc`・home `b9b033e8`。2026-11-01 13 時台に出荷。sha は出荷パッケージの値で、本番の読み直しで配信・Worker・管理者画面の sha 一致を確認、Owner の PC と iPhone で確認済み）。Worker `v46.13-admg-fc`（`95b4f70a`・ルートの `acctFlags`=`admg1`・`admView`=`admpriv1`。ICONFIX 1b の上に ADMG）、管理者画面 `e19b2569`。1 つ前は `20261101-bundle80-int-a`（version `fad4757c`）。
+> 下書き（laneDOCS・2026-10-31・第 1 段。2026-11-01 に 80-int-a、続けて 81-admg-a、82b-iconux-b、83-flow-c、MSW1-c の出荷を反映）。
+> **基準の本番**：Pages `20261101-bundle83-flow-c`（version `3f90783e`・index `a2fdc990`・home `f26d8391`）＋ Worker `v46.17-msw1c-fc`（ソース `033fa29c`・Cloudflare の版 `4e443c60`・ルートの `acctFlags`=`admg1`・`admView`=`admpriv1`・`modelSw`=`msw3`。81 の `v46.13-admg-fc` の上に MSW1）＋ 管理者画面 `b4c007d6`。2026-11-01 に出荷（台帳 2181〜2183）。sha は出荷パッケージの値で、本番の読み直しで一致を確認済み。それまでの流れ：81-admg-a（version `ed3b4a64`・Worker `v46.13-admg-fc` `95b4f70a`・管理者画面 `e19b2569`）→ 82b（Pages だけ・version `0eb99cb4`）→ 83（Pages ＋ 管理者画面 `0b825943`）→ MSW1-c（Worker ＋ 管理者画面）。戻し先は Worker `95b4f70a`・管理者画面 `0b825943`・Pages 82b。
 > **「本番稼働」の判定は、上の本番の `index.html` / `home.html` が実際に読み込むかどうかだけで行っています。** ファイルが配信物にあるだけのもの・コメントアウトされたものは「読み込まれていない」と書きます。
 > 確かめていないことは「未確認」と書きます。過去の資料（記憶メモ・2026-07 の knowledge/）にあった説明は、コードと照らして合っている部分だけ使いました。
 
@@ -13,7 +13,7 @@
 - **スイッチ（localStorage キー）で探す**：付録 C（全 706 キー → それを読む部品）。
 - 項目の書き方：
   - **状態**：本番稼働（読込位置 `i93` = index.html の 93 番目、`h5` = home.html の 5 番目）／Local 候補／読み込まれていない。
-  - **i 番号は 71-a の読込順で数えた値**です。80-int-a で 4 本（ADMF1・UX72・JMP・NPRES）が途中に入ったため、今の本番では `i9`〜`i70` が +1、`i71`〜`i165` が +2、`i166`〜`i339` が +3、`i340`〜`i350` が +4 ずれます（全行の振り直しを避けた。新しい 4 本だけは 80-int-a の番号で書き、そう明記）。81-admg-a はファイルの増減が無いので、番号は 80-int-a と同じ。
+  - **i 番号は 71-a の読込順で数えた値**です。80-int-a で 4 本（ADMF1・UX72・JMP・NPRES）が途中に入ったため、今の本番では `i9`〜`i70` が +1、`i71`〜`i165` が +2、`i166`〜`i339` が +3、`i340`〜`i350` が +4 ずれます（全行の振り直しを避けた。新しい 4 本だけは 80-int-a の番号で書き、そう明記）。81-admg-a はファイルの増減が無いので、番号は 80-int-a と同じ。82b で 3 本（ICONUX2・SETAV1 は LC1 の作業欄の直後、FLW3 は最後）、83 で 4 本（ICF・FLW2・FLW4・FLW5。UI1 の後ろ）が入ったため、今の本番（83）では `i340`〜`i344` が +4、`i345`〜`i350` が +6 ずれます（`i9`〜`i339` のずれは上と同じ。新しい 7 本は 83 の番号で書き、そう明記）。
   - **sha**：本番ファイルの sha256 先頭 8 桁。**?cb=**：index.html に書かれたキャッシュ破棄の値（最後に入れ替わった出荷の目安）。
   - **スイッチ**：`キー='1'` の形。kill が常に優先するのが原則（例外は項目に記載）。端末ごと（localStorage）の設定です。
 - 数字（件数・sha）は記録時点の値です。出荷のたびに、変わった項目だけを直してください。
@@ -31,16 +31,16 @@
 
 | 分野 | 主な部品（§2 に項目あり） |
 |---|---|
-| 生成の中心・プロンプト | features.js、fix192、fix226、fix379、fix459、smrc1、BF1、fix80、fix247 |
+| 生成の中心・プロンプト | features.js、fix192、fix226、fix379、FLW4、fix459、smrc1、MSW1（Worker）、BF1、fix80、fix247 |
 | NPC・キャラ状態 | fix77、fix305、fix333、fix414、fix145、fix298、fix277、fix307、fix641、fix853、CP1、NPRES、E64、fix797 |
 | 話者・会話ログ・編集 | fix66、fix469、fix606、fix611、fix620、fix957、SFL1、SFLTap、EDIT01、EDN（inline）、fix295 |
 | 記憶 | fix135、fix313、fix314、fix670、fix796、fix793、fix905、fix950/953、RC1 |
-| 保存・同期 | fix246、fix228、fix525、fix527、fix543、fix654、fix399、fix402、fix590、fix826、fix697、fix702、fix705、fix743/750/756、fix781、fix758、fix912、fix945、fix859、fix564/721/726/291 |
+| 保存・同期 | fix246、fix228、fix525、fix527（FLW5）、fix543、fix654、fix399、fix402、fix590、fix826、fix697、fix702、fix705、fix743/750/756、fix781、fix758、fix912、fix945、fix859、fix564/721/726/291 |
 | 削除・墓標 | DL2、fix933、fix587、fix579、fix602、fix660、fix577、fix710、fix642、JR1 |
 | Vault・ユーザー分離 | vault2-sendgate、vault2-copygate、vault2-ui、LE4、fix889、iso2、fix946 |
 | 認証・アカウント | fix893、ADMF1、fix328、fix886/890、bav2-beta |
-| アイコン・画像 | av2-data、av2-portrait、av2-migrate-ui、LD1、LC1、fg3、fix197、fix523、fix990、p8d、ICONFIX1（Worker） |
-| UI・画面 | UI1、IS1、UX72、JMP、LE3、fix777、fix243/270、fix880 |
+| アイコン・画像 | av2-data、av2-portrait（FLW1）、av2-migrate-ui、LD1、LC1、ICONUX2、SETAV1、FLW2、ICF、fg3、fix63（fix979b）、fix197、fix523、fix990、p8d、ICONFIX1（Worker） |
+| UI・画面 | UI1、IS1、UX72、JMP、FLW3、LE3、fix777、fix243/270、fix880 |
 | シナリオ・ホーム | fix819、fix825、fix873、fix335 |
 
 ---
@@ -65,9 +65,10 @@
 - 状態：本番稼働 `i108`。役割：engineMode=1 で無駄に計算されていた旧注入（fix74/71/76/77/69/79/82 の sys 側）を、印を保ったまま無害な関数に置き換える。parse 側は残す。戻し：`v292EngineUnifyOff='1'`。
 
 #### fix379 — wrap-keeper（sys 注入の登録簿と予算）
-- 状態：本番稼働 `i195`・sha `36077976`。
+- 状態：本番稼働 `i195`・sha `6f406375`・?cb=`20261101-bundle83-flow-c`（83 で更新：【キャラ属性】の「名前=性別」の後ろに FLW4 の `suffix()` を足す。fix366 の予備経路も同じ）。
 - 役割：sys 注入ブロックを `window.__f379reg` に `{off, marker, text}` で登録すると、毎ターン確実に、優先度つきの文字数予算の中で注入する（build の包みが外れる競合の根治）。
 - 注意：予算からあふれた低優先のブロックは黙って落ちる前歴あり（記憶メモ「keeper 予算飽和」）。新しいブロックを足すときは実際の sys を傍受して確かめる。スイッチ：`v292Dfix379Off`・`v292Dfix379V4Off` ほか。
+- FLW4（`v292DfixFLW4-cast-age.js`・83 の番号で `i360`・sha `e2b2877a`・?cb=`20261101-bundle83-flow-c`）：NPC の説明文（または構造化された `n.age`）に本人の年齢がはっきりあるときだけ、【キャラ属性】の「名前=性別」の後ろに「・17歳」を足す（FLW4-r2）。他人・過去・幅の書き方、2 つ以上の違う年齢、台詞の中、推測（「少女」「十代」など）からは足さない。主人公には足さない。保存・通信 0。kill `v292DfixFLW4Off='1'`（送信ごとに評価）。ほかの sys ブロック・予算・マーカーは変えない。
 
 #### fix459 — sys の重複クラスタの統合
 - 状態：本番稼働 `i260`・sha `8243a236`。役割：話者の同一性・出力形式・展開の進め方などで重複していたブロックを 1 つにまとめる。スイッチ：`v292Dfix459Off`、クラスタ別 `v292Dfix459AOff`〜`DOff`。
@@ -76,6 +77,14 @@
 - 状態：本番稼働 `i16`・`h9`・sha `52ca67f1`。
 - 役割：文章の主モデルを 1 行で決める（`deepseek/deepseek-v4.1-flash`、表示名「DS V4.1 Flash」）。モデル切替の UI は fix256・fix354・fix370。
 - 注意：Worker 側にも使ってよいモデルの許可リストがある。
+
+#### MSW1 — 文章のモデルの切り替え（Worker・管理者画面だけ。MSW1-c）
+- 状態：本番稼働（Worker `v46.17-msw1c-fc`・ソース `033fa29c`・ルートの `modelSw`=`msw3`。管理者画面 `b4c007d6`。画面（Pages）の部品は無い）。台帳 2183・GPT #127-PI。
+- 役割：管理者画面で、本文のモデルを `deepseek/deepseek-v4.1-flash`（既定・「DS V4.1 Flash」）と `deepseek/deepseek-v4.1-flash-1017`（「DS V4.1 Flash 1017」）から選ぶ。Worker は OpenRouter へ送る直前にモデル名だけを差し替える。差し替えるのは Owner（entitlement owner かつ active＝CANARY）の要求だけで、ほかのアカウント・旧経路はいつも V4.1 Flash（切り替えの KV も読まない）。
+- 設定：KV `modelcfg:storyFlash`（＋ 目安の数 `:stat`・短い遮断 `:trip`）。1017 は許可モデルの一覧に入っていることが前提。1017 にする前に OpenRouter の endpoints API（鍵を送らない GET）で実在を確かめ、確かめられなければ 422 で断る。
+- 安全網：「モデル・提供元が使えない」とはっきり分かる失敗のときだけ V4.1 Flash で 1 回だけ送り直し、その後 120 秒は 1017 を使わない（端末の再送と掛け算にしない）。時間切れ・通信の失敗・ほかの失敗では送り直さない。予算と記帳は今までどおりで、記帳するのは成功した 1 回だけ。
+- 止める：env `CHR_MODELSW_OFF=1`（v46.13 と同じ動き）。戻し：Worker `95b4f70a`（`v46.13-admg-fc`）・管理者画面 `0b825943`。
+- 端末の設定画面の「モデル管理」の表示は V4.1 Flash のまま（画面の変更なし）。1017 の料金・品質の比べ方は未確認。
 
 #### BF1 — 推論で使い切った空応答の再送を「条件を変えた 1 回」にする
 - 状態：本番稼働 `i96`。既定：**Owner だけ既定 ON**（`/auth/me` の entitlement owner・active）。ほかは `v292DfixBF1On='1'` で opt-in。kill：`v292DfixBF1Off='1'`。
@@ -234,7 +243,7 @@
 | fix246 | `i35` | per-story の付随データ（fix77 状態・longmem・会話ログ抽出など）を `localStorage` の読み書きの段階で物語ごとのキーへ振り分ける | `v292Dfix783Off` |
 | fix228 | `i109` | スロットの自動世代バックアップ（直近 3 世代 `__gen_<slotKey>`）と巻き戻り検知。`window.__v292Restore()` | `v292SlotGenOff` |
 | fix525 | `i298` | タブの所有権ピン（他タブの切替で自分の物語を他スロットへ書かない） | `v292Dfix525Off` |
-| fix527 | `i60` | 開いている物語の真実を URL の `?story=` にする（`chr6_active_slot` は互換用ミラー） | `v292Dfix527Off` |
+| fix527 | `i60` | 開いている物語の真実を URL の `?story=` にする（`chr6_active_slot` は互換用ミラー）。83 で sha `2ee15cb3`・?cb=`20261101-bundle83-flow-c`：「🏠 ホーム」の押下を先に FLW5 へ渡す。FLW5（83 の番号で `i361`・sha `c3679050`）＝保存が書く形（保存先の妥当な origin を含む）で比べ、意味の無い差（origin・`cast.av2.known.*.appeared`）だけを外して同じなら書かない。DIRTY の印には触れない（② は GPT #127-PG で外した）。kill `v292DfixFLW5Off` | `v292Dfix527Off`・`v292DfixFLW5Off` |
 | fix543 | `i36` | 保存（setItem）の失敗を無言にしない。物語の保存失敗はトースト | `v292Dfix543Off` |
 | fix654 | `i7` `h4` | iOS Safari で localStorage のラッパが素通りする問題（第 18 型）を `Storage.prototype` のアクセサで根治。localStorage を包む部品より前に読まれることが前提（index では 7 番目。前にある部品との関係は未整理） | `v292Dfix654Off` |
 | fix399 | `i210` | 旧方式の端末間同期（アカウント単位のパッケージ）。起動時 pull・保存時 push・楽観ロック | `v292Dfix399Off`・`v292Dfix399AutoOff` |
@@ -312,7 +321,7 @@
 - 判定の順：部品の kill ＞ `v292DfixADMF1Off` ＞ 範囲（Worker）＞ アカウントの行 ＞ 全体の値（READY だけ）＞ 行なしの扱い。答えが無い・読めない・別アカウントの答え・fix893 が無い配信先は OFF。
 - 行なしのとき（範囲の中に限る）：`npres1` は常に OFF。それ以外の 5 つは段階 1＝従来どおり端末の opt-in（`?sfl=1`・`v292DfixLC1On`・`v292DfixLD1On`・`v292DfixRC1On`・`v292Dfix335`）、段階 2＝OFF（本番の段階の設定値は未確認。未設定なら段階 1）。
 - `whenOn(key, devFn, cb)`（81-admg-a）：読み込み時にしか判定しない部品（LC1・LD1・おまかせのボタン）用。答えが後から届いて ON になったら cb を 1 回だけ呼ぶ（OFF→ON の 1 回だけ。ON→OFF は次に開いたときから）。
-- 管理者画面：「機能スイッチ」の表（1 行 1 機能・6 行）に、範囲・全体の値・アカウントごとの値と「このアカウントの機能をまとめて ON」。81-admg-a から既定は閲覧制限モード（下の「管理者画面の伏字」）。
+- 管理者画面：「機能スイッチ」の表（1 行 1 機能・6 行）に、範囲・全体の値・アカウントごとの値と「このアカウントの機能をまとめて ON」。81-admg-a から既定は閲覧制限モード（下の「管理者画面の伏字」）。83（管理者画面 `0b825943`・表示だけ）から、範囲が許す機能がすべて ON なら状態の 1 行「利用可能な機能はすべて ON（n）」、そうでなければボタン「利用可能な機能をまとめて ON（n）」（HOLD・範囲の外は数えない）。押したときの確認はブラウザの confirm ではなく画面の中に出す。送る内容・順番は変えていない。MSW1-c の管理者画面 `b4c007d6` はこの上に「文章のモデルの切り替え」を足したもの。
 - 80 からの動きの違い（81-admg-a）：Owner 以外のアカウントでは 6 つとも OFF（行・端末キー・`?sfl=1` に関係なく）／Owner でも `lc1` は OFF（HOLD）／取得失敗・未ログイン・fix893 の無い配信先・`v292DfixADMF1Off` では、端末キーがあっても LC1・LD1・RC1・おまかせは OFF／範囲の外の古い ON の行は 0 として扱う。
 
 #### 管理者画面の伏字（ADMG-PRIV・Worker `admView`=`admpriv1`・81-admg-a）
@@ -334,13 +343,17 @@
 
 #### av2-data / av2-portrait / av2-migrate-ui / LD1 / fg3 — Asset v2（新しいアイコンの仕組み）
 - av2-data（`i23` `h20`）：データ層。キャラごとの ID と絵の結び付け（bindings）をサーバーが正として持つ。保存の 4 か所の境界（fix697・fix743・fix705）で押し引きする。
-- av2-portrait（`i340`）：表示層。`portrait.list` / `asset.get`、asset_id ごとの IndexedDB キャッシュ、保留・拒否・競合の理由表示、明示の削除 UI。
+- av2-portrait（`i340`）：表示層。`portrait.list` / `asset.get`、asset_id ごとの IndexedDB キャッシュ、保留・拒否・競合の理由表示、明示の削除 UI。sha `fdd77f2a`・?cb=`20261101-bundle83-flow-c`。82b で FLW1（キャラ一覧の「最初の絵を作る」「この外見で確定」「削除」の確認をカードの中に出す。文面と OK のあとの処理は同じ。DOM が使えないときだけ従来の confirm。kill `v292DfixFLW1Off`）、83 で FLW2 の呼び出し口（外見の確定のあとの読み直しの前に FLW2 を呼ぶ）。
 - av2-migrate-ui（`i345`）：Owner 向けの移行 UI（準備 → 今の絵を候補として確保 → 採用 → …）。入口は UI1 で「⚙ 設定 → ⚙ システム → 詳細設定」へ。サーバー側の許可リストが最終の権限。
 - LD1（`i341`）：今の画風（preset）で採用された絵を出す（表示だけ）。sha `a7a98a65`・?cb=`20261101-bundle81-admg-a`（81-admg-a で更新）。kill `v292DfixD1Off`（常に先）。81-admg-a から ON は ADMF1 の `gate('ld1', 端末の opt-in v292DfixLD1On)`（公開範囲 CANARY＝Owner のアカウントだけ。Owner で行が無いときは端末の opt-in）。答えが後から届いて ON になったら `whenOn` で 1 回だけ起動。記録時点で Owner のアカウントが ON かは未確認。
-- LC1（`i343` 外見の案・`i344` 作業欄）：「👥 キャラ」の最上段の作業欄（1 人ずつ「絵を作る／絵を変える」・「まとめて絵を作る」）。作業欄 `v292DfixLC1-workbench.js` の sha `7114c9b4`・?cb=`20261101-bundle81-admg-a`（81-admg-a で更新。`i343` は不変）。kill `v292DfixLC1Off`（常に先）。81-admg-a から ON は ADMF1 の `gate('lc1', 端末の opt-in v292DfixLC1On)`。**公開範囲は HOLD＝Owner を含めてだれも ON にならない**（端末の opt-in でも OFF）。CANARY 化は次の出荷候補として GPT #127-PC で GO（81 には入っていない）。
+- LC1（`i343` 外見の案・`i344` 作業欄）：「👥 キャラ」の最上段の作業欄（1 人ずつ「絵を作る／絵を変える」・「まとめて絵を作る」）。作業欄 `v292DfixLC1-workbench.js` の sha `7114c9b4`・?cb=`20261101-bundle81-admg-a`（81-admg-a で更新。`i343` は不変）。kill `v292DfixLC1Off`（常に先）。81-admg-a から ON は ADMF1 の `gate('lc1', 端末の opt-in v292DfixLC1On)`。**公開範囲は HOLD＝Owner を含めてだれも ON にならない**（端末の opt-in でも OFF）。CANARY 化は次の出荷候補として GPT #127-PC で GO（81 には入っていない。82b の Worker `v46.14-iconux-fc` で CANARY にする予定だったが、その Worker は出していない。今の `v46.17-msw1c-fc` でも `lc1`＝HOLD）。
 - fg3（`i346`）：Asset v2 の物語の画風を 3 択（デフォルト／クール／ダーク）にする。正本は canonical の `body.cfg.artPreset`。
+- ICONUX2（`v292DfixICONUX2-twotap.js`・83 の番号で `i349`・sha `984a534d`・?cb=`20261101-bundle82-iconux-b`）：キャラ一覧のカードで、絵を 2 タップで作る（「🎨 絵を作る」→ 下書き →「この外見で作る」／「🎨 絵を変える」→ 候補を選ぶ。confirm なし）。働くのは LC1 が ON のときだけ（毎回 `__v292DfixLC1.on()` を読む）。**LC1 が HOLD なので、今はだれにも動かない**。外見の案の近道は年代の語だけを足し、LC1 と同じ語の表の検査に当たれば近道を使わず LC1 の案に任せる。結果が分からない失敗の間は主ボタンを止める。kill `v292DfixICONUXOff`。
+- SETAV1（`v292DfixSETAV1-settings-avatar.js`・83 の番号で `i350`・sha `d2146d0e`・?cb=`20261101-bundle82-iconux-b`）：⚙ 設定の「キャラ」で、Asset v2（schema2）の物語の主人公・NPC の欄に `<img>` が無いときだけ `<img alt="名前">` を 1 つ入れる。絵を入れるのは従来どおり av2-portrait の applyImg と LD1。表示だけ（通信・保存・localStorage への書き込み 0）。schema2 でない物語では何もしない。kill `v292DfixSETAV1Off`。
+- FLW2（`v292DfixFLW2-reload-notice.js`・83 の番号で `i359`・sha `0bb9f347`・?cb=`20261101-bundle83-flow-c`）：外見の欄から確定して読み直す直前に、画面全体へ「外見を保存しました。表示をそろえるため読み直しています」を出す。結果は sessionStorage の 1 key（`v292DfixFLW2`）に状態のコードだけを持ち越し（物語 ID・キャラ ID・結果の種類・理由コード・時刻。本文・外見の文・名前は入れない）、同じ物語・120 秒以内・読み直しのときだけ 1 回読んで消し、カードに結果を出す。読み直しそのものは残す。kill `v292DfixFLW2Off`。
+- ICF（`v292DfixICF-icon-fail-log.js`・83 の番号で `i357`・sha `c393f1a8`・?cb=`20261101-bundle83-flow-c`）：アイコンの失敗の入口・段階・理由コード・HTTP status などを、この端末の localStorage `v292DfixICF_log` にだけ記録する（失敗は最大 100 件・全体 20,000 文字。成功は回数と時間だけ）。文章・名前・物語 ID・画像・URL・鍵は入れない・どこへも送らない。要求・応答・画像・保存は変えない（見るだけ）。読む口 `window.__chrIconFail`。kill `v292DfixICFOff`。
 - 冒頭コメントはどれも「offline candidate, NOT DEPLOYED」のままだが、本番で読み込まれている。
-- Worker：画像生成の失敗は理由を問わず 502 GENERATION_FAILED になり、画面には「絵を作れませんでした」。Worker の失敗分類（R74-FC：失敗の段階を Workers Logs に 1 行出すだけ・応答の中身は変えない）は `v46.10-admf2-fc` から入っている（差分で確認）。端末側の記録 75-icf-a は 80 から除外（§3）。
+- Worker：画像生成の失敗は理由を問わず 502 GENERATION_FAILED になり、画面には「絵を作れませんでした」。Worker の失敗分類（R74-FC：失敗の段階を Workers Logs に 1 行出すだけ・応答の中身は変えない）は `v46.10-admf2-fc` から入っている（差分で確認）。端末側の記録は 75-icf-a が 80 から除外されたあと、83 で ICF として本番に入った（上の ICF）。
 - **ICONFIX1（Worker だけ・2026-11-01・`v46.11-iconfix1` → `v46.12-iconfix1b`、今の `v46.13-admg-fc` にもそのまま入っている）**：2026-10-22 ごろから Together（FLUX.2-dev）が要求を 400 で断っていた件の修正（GPT #127-OY／#127-PA。#127-PC で CLOSED）。
   - 要求の形：`response_format` を `'b64_json'` → `'base64'`、`prompt_upsampling` は送らない（r1 で false を残したら 400・param `prompt_upsampling` が返ったため 1b で削除）。model・prompt・width/height 512・steps・n 1・seed は不変。
   - 4xx の診断：4xx のときだけ応答の error の `code`・`type`・`param` を、許可した語の一覧（それ以外は `OTHER`。読めなければ null）でだけ Workers Logs の失敗行に足す（`upstream_error`）。message・未加工の本文・prompt・キャラの情報・キーは記録しない。本文が長すぎるときは解析しない。502 の応答と保存の挙動は変えない。GPT #127-PA で常設 GO。
@@ -353,6 +366,7 @@
 - fix523（`i297`）：アイコンの端末間伝播（Worker の imgmanifest の rev で新しいときだけ上書き）。
 - fix990（`i10`）：Asset v2 必須のアカウントで旧画像の op が 409 を返し続ける空回りを、10 分止める。
 - p8d（`i14`）：画像生成の送信直前に、人物名や日本語の文がそのまま provider へ出るのを止める（fail-closed）。
+- fix63（`i80`）の fix979b（82b・sha `77b3d9b2`・?cb=`20261101-bundle82-iconux-b`）：会話ログの丸いアイコンの明るさ・コントラストの補正（`brightness(1.12) contrast(1.06)`）を既定で外す（明るい背景の新しい絵の白飛び）。拡大 1.0・目印 `data-f979`・kill `v292Dfix979Off` はそのまま。補正の強さは端末の `v292Dfix979Filter`（`none` 既定／`soft`／`old`＝従来の補正に戻す）。
 
 ### 2.10 UI・画面
 
@@ -361,6 +375,7 @@
 | UI1 | `i350`（最後） | プレイ画面の引き算：Asset v2 移行の固定ボタンを外し（Owner だけ詳細設定に置く）、空の会話ログを畳み、補助操作を設定へ移す | `v292DfixUI1Off` ほか |
 | IS1 | `i70` | アイコンの大きさ（小・中・大）。表示だけ。「🎛 調整」からも選べるのは UX72（下） | `v292DfixIS1Off` |
 | UX72 | `i72`（80-int-a の番号） | 「🎛 調整」の中に 🖼 アイコン欄（大きさ・顔の寄せ）。設定の中の本物の欄の写しで、新しい保存キーは無い。端末だけの見え方。全員 ON。sha `c4dcaa07`・?cb=`20261031-bundle72-ux-a` | `v292DfixUX72Off` |
+| FLW3 | `i358`（83 の番号） | 「▶ 物語を始める」の幕開けを STORY で送ったあと、ターンが増えて最後のターンが幕開けのときだけ、入力の種類を押す前の種類（ふつうは DO）へ戻す。失敗のときは STORY のまま。開き直したとき、ターンが幕開け 1 つだけで STORY なら表示を DO に（保存はしない）。sha `f2e896a4`・?cb=`20261101-bundle82-iconux-b`（82b） | `v292DfixFLW3Off` |
 | JMP | `i168`（80-int-a の番号） | 展開の描写・会話ログをさかのぼっているときだけ、パネルの下に「↓ 最新へ」。読むだけ（押したときだけスクロール）。全員 ON。sha `b726e645`・?cb=`20261031-bundle76-jmp-a` | `v292DfixJMPOff` |
 | LE3 | `i68` | iPhone 幅（520px 以下）だけ上のバーを 1 行にして ☰ にまとめ、展開の描写を広げる | `v292DfixLE3Off` |
 | fix777 | `i67` | アイコンをタップで拡大表示 | — |
@@ -377,7 +392,7 @@
 
 ## 3. Local 候補（まだ本番ではない）
 
-記録時点（2026-11-01）。「80-int-a で本番」「81-admg-a で本番」「本番」と書いた行を除き、**Owner の承認前で、本番には入っていません**。土台・sha は各パッケージの MANIFEST が正。
+記録時点（2026-11-01）。「80-int-a で本番」「81-admg-a で本番」「82b で本番」「83 で本番」「MSW1-c で本番」「本番」と書いた行を除き、**Owner の承認前で、本番には入っていません**。土台・sha は各パッケージの MANIFEST が正。
 
 | 候補 | 中身 | 土台 | 状態（GPT 裁定） | 置き場所 |
 |---|---|---|---|---|
@@ -386,7 +401,10 @@
 | 73-npres-d3 | NPC の前面化・状態注入から、場面にいない人物を外す（電話の相手は「声だけ」で残す） | （c333 系） | **80-int-a で本番**（73-d4b＋admf2。管理者画面の npres1 で Owner のアカウントだけ ON＝限定カナリア。一般の既定 ON は HOLD。本番の長ターン確認は未確認） | 本番 |
 | ICONFIX1 / 1b | Worker だけ：Together FLUX.2-dev への要求の形（`response_format`=`base64`・`prompt_upsampling` を送らない）＋ 4xx の code・type・param だけの診断ログ。停止 env `CHR_ICONFIX1_OFF='1'` | `v46.10-admf2-fc` | **本番**（`v46.12-iconfix1b` で限定 PRODUCTION_PASS・#127-PA。#127-PC で CLOSED。`v46.13-admg-fc` にも含む） | 本番 |
 | 81-admg-a（ADMG） | 管理者画面の機能スイッチを 6 鍵に（`lc1`・`ld1`・`rc1`・`oma1` を追加）・公開範囲 READY／CANARY／HOLD を Worker が強制・全体の値（KV `featcfg:<鍵>`）・管理者画面の伏字。Worker・Pages 9 本・管理者画面 | 80-int-a ＋ ICONFIX 1b | **81-admg-a で本番**（#127-PC：条件付き出荷 GO。初期 CANARY＝sfl1・npres1・ld1・rc1・oma1、HOLD＝lc1。NPRES の一般 ON は HOLD 継続。伏字は誤表示防止として限定 GO） | 本番 |
-| 75-icf-a | アイコン生成の失敗を端末に記録（最大 100 件・名前や文章は持たない）。kill `v292DfixICFOff` | 71-a | **80 から除外**（M1e の flake・比較試験の作り直しが先） | 作業環境 |
+| 75-icf-a | アイコン生成の失敗を端末に記録（最大 100 件・名前や文章は持たない）。kill `v292DfixICFOff` | 71-a | 80 では除外（M1e の flake・比較試験の作り直しが先）。**ICF として 83 で本番**（83-flow-c に合流） | 本番 |
+| 82b-iconux-b | ICONUX2（2 タップの絵・LC1 が ON のときだけ）・fix979b（会話ログのアイコンの白飛び）・FLW1（確認をカードの中へ）・FLW3（幕開けのあと入力の種類を戻す）・SETAV1（設定の「キャラ」の絵）。Pages 8 本。パッケージの Worker `v46.14-iconux-fc`（`lc1` を CANARY に）は出していない | 81-admg-a | **82b で本番**（Pages だけ。台帳 2181。LC1 は HOLD のままなので ICONUX2 は動かない） | 本番 |
+| 83-flow-c | FLW2（読み直しの前の案内）・FLW4-r2（本人の年齢を【キャラ属性】へ）・FLW5 ①（🏠 で同じなら書かない。② は GPT #127-PG で外した）・ICF・管理者画面の「まとめて ON」の表示。Pages 11 本＋管理者画面 `0b825943`。Worker は 81 のまま | 82b | **83 で本番**（台帳 2182） | 本番 |
+| MSW1-c | 文章のモデルの切り替え（V4.1 Flash ⇔ V4.1 Flash 1017・Owner だけ＝CANARY・実在の事前確認・1 回だけの安全網と 120 秒の遮断）。Worker `v46.17-msw1c-fc`（`033fa29c`・Cloudflare の版 `4e443c60`）＋管理者画面 `b4c007d6`。Pages なし。停止 env `CHR_MODELSW_OFF=1` | `v46.13-admg-fc` ＋ 83 の管理者画面 | **MSW1-c で本番**（台帳 2183・GPT #127-PI。戻し Worker `95b4f70a`・管理者画面 `0b825943`） | 本番 |
 | EDLOG | 本文の手動編集の記録（`_narrEdits`） | — | Owner の QA 物語に限った GO | （場所未確認） |
 | DP3 | 削除済み・未保存の物語を端末の一覧から外す | — | HOLD | — |
 | UX72 単体 / 76-jmp 単体 / 74 単体 | 77-ui-a に合流 | — | — | — |
@@ -400,7 +418,7 @@
 - engineMode の既定値の決まり方（未確認）。
 ## 付録A　本番で読み込まれる部品の全一覧（機械抽出）
 
-- 抽出元：本番 `20261031-bundle71-ednedg-a` の `pages_full.zip`（index `9a205026`・home `795af03c`・version `f45d7f71` を照合済み）から機械抽出。**今の本番 `20261101-bundle80-int-a`**（index `0ad99051`・home `7c581720`・version `fad4757c`。読み込まれる 373 本を 2026-11-01 に本番でバイト照合）に合わせ、変わった 5 本（fix893・fix145・SFL1・fix192・fix333）の sha と ?cb= だけを実物で直した。**81-admg-a**（index `140afddc`・home `b9b033e8`・version `ed3b4a64`）で変わった 6 本（RC1・fix334・fix335・LD1・LC1-workbench・ADMF1）の sha と ?cb= も、出荷パッケージの実物で直した（ファイルの増減なし）。
+- 抽出元：本番 `20261031-bundle71-ednedg-a` の `pages_full.zip`（index `9a205026`・home `795af03c`・version `f45d7f71` を照合済み）から機械抽出。**今の本番 `20261101-bundle80-int-a`**（index `0ad99051`・home `7c581720`・version `fad4757c`。読み込まれる 373 本を 2026-11-01 に本番でバイト照合）に合わせ、変わった 5 本（fix893・fix145・SFL1・fix192・fix333）の sha と ?cb= だけを実物で直した。**81-admg-a**（index `140afddc`・home `b9b033e8`・version `ed3b4a64`）で変わった 6 本（RC1・fix334・fix335・LD1・LC1-workbench・ADMF1）の sha と ?cb= も、出荷パッケージの実物で直した（ファイルの増減なし）。**82b-iconux-b**（index `0d974f9c`・home `8dbade5a`・version `0eb99cb4`）で変わった 2 本（av2-portrait・fix63）と、**83-flow-c**（index `a2fdc990`・home `f26d8391`・version `3f90783e`）で変わった 4 本（av2-portrait・fix366・fix379・fix527）の sha と ?cb= も、出荷パッケージの実物で直した。82b で足した 3 本・83 で足した 4 本は末尾の別表（下の「82b・83 で足した部品」）。
 - **新しい 4 本は末尾の別表**（下の「80-int-a で足した部品」）。途中に入ったため振り直すとほぼ全行の番号が動くので、上の表の `i` 番号は 71-a の読込順のまま（ずれ方は §0）。
 - 判定：`index.html` / `home.html` / `backup.html` の `<script src>` を、HTML コメント `<!-- -->` を除いて読んだ順。ほかに動的読込 1 件（`v292Dfix743-cc2-client.js` を home.html の inline と fix587 が必要時に読む）。
 - 「分野」はファイル名からの**自動推定**です。正確な役割は本文の手書き項目か、ファイル冒頭のコメントを見てください（冒頭コメントは古いことがあります）。
@@ -468,7 +486,7 @@
 | 57 | fix247 | `v292Dfix247-proxy.js` | i57 h43 | `06dd6d0f` | 20260909-fix841 | 認証・アカウント | `v292Dfix837Off` `v292Dfix841Off` |
 | 58 | fix247b | `v292Dfix247b-proxy-admin.js` | i58 | `3bdbfbac` | v292Dfix247b | 認証・アカウント | `v292Dfix247bOff` |
 | 59 | fix600 | `v292Dfix600-new-story-guard.js` | i59 | `d874abc9` | v292Dfix601 | 保存・同期 | `v292Dfix600Off` |
-| 60 | fix527 | `v292Dfix527-story-url.js` | i60 | `59d65c75` | 20261011-sn1 | 保存・同期 | `v292Dfix527NoopHomeSaveOff` `v292Dfix527Off` `v292Dfix588Off` `v292DfixSN1aOff` |
+| 60 | fix527 | `v292Dfix527-story-url.js` | i60 | `2ee15cb3` | 20261101-bundle83-flow-c | 保存・同期 | `v292Dfix527NoopHomeSaveOff` `v292Dfix527Off` `v292Dfix588Off` `v292DfixSN1aOff` |
 | 61 | fix659 | `v292Dfix659-fork-choice.js` | i61 | `d6e39622` | v292Dfix680 | 保存・同期 | `v292Dfix659Off` |
 | 62 | features | `features.js` | i62 | `143763f8` | 20261025-bundle55-sfl-a | 本体（ゲーム中核） | `v292Dfix190Off` `v292Dfix205gOff` `v292Dfix748SaveRefuseOff` `v292Dfix834Off` |
 | 63 | fixP0 | `v292DfixP0-scenario-blocker.js` | i63 | `7c6d79f0` | v292Dfix680 | シナリオ・ホーム |  |
@@ -488,7 +506,7 @@
 | 77 | fix60 | `v292Dfix60-display-pipeline.js` | i77 | `fc5144f4` | v292Dfix60 | アイコン・画像 |  |
 | 78 | fix59 | `v292Dfix59-hybrid-extractor.js` | i78 | `12c56db5` | v292Dfix59 | NPC・キャラ状態 |  |
 | 79 | fix61 | `v292Dfix61-alpha-strip-protect.js` | i79 | `7cbb4781` | 20260829-fix748 | 文章品質・プロンプト |  |
-| 80 | fix63 | `v292Dfix63-avatar-style.js` | i80 | `3c12b0a9` | 20261019-bundle31-a | アイコン・画像 | `v292Dfix979Off` |
+| 80 | fix63 | `v292Dfix63-avatar-style.js` | i80 | `77b3d9b2` | 20261101-bundle82-iconux-b | アイコン・画像 | `v292Dfix979Off` |
 | 81 | fix65 | `v292Dfix65-dialogue-rescue.js` | i81 | `a616558a` | v292Dfix65b | 話者・会話ログ |  |
 | 82 | fix74 | `v292Dfix74-ext-dedup-and-say.js` | i82 | `a7131790` | 20260912-q119s4 | 話者・会話ログ | `v292DQ119PageCanaryOff` `v292DQ119PageCanaryOn` |
 | 83 | fixSFL1 | `v292DfixSFL1-speaker-correct.js` | i83 | `92fa4e4f` | 20261031-bundle78-admf-c | 話者・会話ログ | `v292Dfix781Off` `v292DfixCP1Off` `v292DfixSFL1Off` `v292DfixSFL1On` |
@@ -595,7 +613,7 @@
 | 184 | fix361 | `v292Dfix361-phaseb-preview.js` | i184 | `0ad7e105` | v292Dfix361 | シナリオ・ホーム |  |
 | 185 | fix363 | `v292Dfix363-player-seed.js` | i185 | `648c3a3e` | 20261021-bundle37-a | シナリオ・ホーム | `v292Dfix363Off` |
 | 186 | fix364 | `v292Dfix364-reset-help.js` | i186 | `593e0057` | v292Dfix365 | UI・画面 | `v292Dfix364Off` |
-| 187 | fix366 | `v292Dfix366-cast-gender.js` | i187 | `dbaadf16` | v292Dfix369 | NPC・キャラ状態 | `v292Dfix366Off` |
+| 187 | fix366 | `v292Dfix366-cast-gender.js` | i187 | `438e5a4d` | 20261101-bundle83-flow-c | NPC・キャラ状態 | `v292Dfix366Off` |
 | 188 | fix370 | `v292Dfix370-model-guard.js` | i188 | `210a5e98` | 20260913-dsmrc1 | UI・画面 | `v292Dfix370Off` |
 | 189 | fix371 | `v292Dfix371-reset-dialog-text.js` | i189 | `5720d35d` | v292Dfix371 | 文章品質・プロンプト | `v292Dfix371Off` |
 | 190 | fix372 | `v292Dfix372-gender-radio-guard.js` | i190 | `867ce977` | v292Dfix372 | NPC・キャラ状態 | `v292Dfix372Off` |
@@ -603,7 +621,7 @@
 | 192 | fix376 | `v292Dfix376-speaker-guard.js` | i192 | `c282fa65` | 20260902-fix800 | 話者・会話ログ | `v292Dfix376Off` `v292Dfix469Off` |
 | 193 | fix377 | `v292Dfix377-voice-anchor.js` | i193 | `442efa8b` | 20261010-gq1 | 話者・会話ログ | `v292Dfix377COff` `v292Dfix377Off` `v292DfixGQ1aOff` `v292DfixGQ1bOff` |
 | 194 | fix378 | `v292Dfix378-species-judge.js` | i194 | `c0e2fa1f` | v292Dfix378 | NPC・キャラ状態 | `v292Dfix378Off` |
-| 195 | fix379 | `v292Dfix379-wrap-keeper.js` | i195 | `36077976` | v292Dfix646 | 文章品質・プロンプト | `v292Dfix363Off` `v292Dfix366Off` `v292Dfix376Off` `v292Dfix377Off` |
+| 195 | fix379 | `v292Dfix379-wrap-keeper.js` | i195 | `6f406375` | 20261101-bundle83-flow-c | 文章品質・プロンプト | `v292Dfix363Off` `v292Dfix366Off` `v292Dfix376Off` `v292Dfix377Off` |
 | 196 | fix822 | `v292Dfix822-start-rules-block.js` | i196 | `45f8e559` | 20260906-fix822 | 文章品質・プロンプト | `v292Dfix822Off` |
 | 197 | fix381 | `v292Dfix381-reaction.js` | i197 | `eeaf39ce` | v292Dfix381 | NPC・キャラ状態 | `v292Dfix381Off` |
 | 198 | fix382 | `v292Dfix382-auto-dial.js` | i198 | `329ba7a6` | 20260901-fix783 | 文章品質・プロンプト | `v292Dfix382Off` `v292Dfix783Off` |
@@ -748,7 +766,7 @@
 | 337 | fix851 | `v292Dfix851-posture-directive.js` | i337 | `22543ee2` | 20261001-ac33 | NPC・キャラ状態 | `v292Dfix851Off` `v292Dfix851On` `v292Dfix936Off` `v292DrrOff` |
 | 338 | fix852 | `v292Dfix852-mental-capability.js` | i338 | `dbd6fffe` | 20261001-ac33 | NPC・キャラ状態 | `v292Dfix852Off` `v292Dfix852On` `v292Dfix936Off` `v292DrrOff` |
 | 339 | fix853 | `v292Dfix853-truncated-name-guard.js` | i339 | `14e1e6de` | 20261025-bundle58-npcp1-b | NPC・キャラ状態 | `v292Dfix853Off` `v292Dfix853pOff` `v292DfixA4Off` |
-| 340 | av2-portrait | `v292Dav2-portrait.js` | i340 | `c3a24336` | 20261021-laneE-a-lc1-ld1 | アイコン・画像 | `v292Dav2pOff` `v292Dfix993Off` `v292DfixB37aOff` `v292DfixFG1cOff` |
+| 340 | av2-portrait | `v292Dav2-portrait.js` | i340 | `fdd77f2a` | 20261101-bundle83-flow-c | アイコン・画像 | `v292Dav2pOff` `v292Dfix993Off` `v292DfixB37aOff` `v292DfixFG1cOff` |
 | 341 | fixLD1 | `v292DfixLD1-preset-portrait.js` | i341 | `a7a98a65` | 20261101-bundle81-admg-a | アイコン・画像 | `v292DfixD1Off` `v292DfixLD1On` |
 | 342 | fixB37 | `v292DfixB37-onboard.js` | i342 | `1c20fead` | 20261021-laneE-a-lc1 | シナリオ・ホーム | `v292DfixB37bOff` |
 | 343 | fixLC1 | `v292DfixLC1-appearance-proposal.js` | i343 | `a012e615` | 20261021-lc1-a | アイコン・画像 | `v292DfixLC1Off` |
@@ -773,7 +791,7 @@
 | 362 | fix885 | `v292Dfix885-home-data-fold.js` | h48 | `f1447152` | 20260919-sp14 | シナリオ・ホーム | `v292Dfix885Off` |
 | 363 | vault2-ui | `v292Dvault2-ui.js` | h49 | `1a3eba03` | 20261021-bundle37-a | Vault・非表示 | `v292Dfix964Off` `v292DfixB37dOff` `v292Dvault2MsOff` `v292Dvault2UiOff` |
 
-**80-int-a で足した部品**（読込は **80-int-a の index 順**。どれも index.html だけで、home.html では読まない。81-admg-a でも位置は同じ）
+**80-int-a で足した部品**（読込は **80-int-a の index 順**。どれも index.html だけで、home.html では読まない。81-admg-a・82b・83 でも位置は同じ）
 
 | # | 番号 | ファイル | 読込（80-int-a の index順） | sha256先頭 | ?cb= | 分野 | スイッチ（例） |
 |---|---|---|---|---|---|---|---|
@@ -781,6 +799,18 @@
 | 365 | fixUX72 | `v292DfixUX72-adjust-icon.js` | i72（IS1 の直後） | `c4dcaa07` | 20261031-bundle72-ux-a | UI・画面 | `v292DfixUX72Off` |
 | 366 | fixJMP | `v292DfixJMP-jump-latest.js` | i168（fix326 の直後） | `b726e645` | 20261031-bundle76-jmp-a | UI・画面 | `v292DfixJMPOff` |
 | 367 | fixNPRES | `v292DfixNPRES-presence-gate.js` | i343（fix853 の直後） | `99b249a8` | 20261101-bundle80-int-a | NPC・キャラ状態 | `v292DfixNPRESOff` `v292DfixNPRESOn` `v292DfixNPRESd1Off` `v292DfixNPRESd2Off` |
+
+**82b・83 で足した部品**（読込は **83-flow-c の index 順**。どれも index.html だけで、home.html では読まない）
+
+| # | 番号 | ファイル | 読込（83 の index順） | sha256先頭 | ?cb= | 分野 | スイッチ（例） |
+|---|---|---|---|---|---|---|---|
+| 368 | fixICONUX2 | `v292DfixICONUX2-twotap.js` | i349（LC1-workbench の直後） | `984a534d` | 20261101-bundle82-iconux-b | アイコン・画像 | `v292DfixICONUXOff` `v292DfixLC1On` |
+| 369 | fixSETAV1 | `v292DfixSETAV1-settings-avatar.js` | i350（ICONUX2 の直後） | `d2146d0e` | 20261101-bundle82-iconux-b | アイコン・画像 | `v292DfixSETAV1Off` |
+| 370 | fixICF | `v292DfixICF-icon-fail-log.js` | i357（UI1 の直後・83） | `c393f1a8` | 20261101-bundle83-flow-c | アイコン・画像 | `v292DfixICFOff` `v292DfixB37aOff` |
+| 371 | fixFLW3 | `v292DfixFLW3-opening-mode.js` | i358（82b では i357＝最後） | `f2e896a4` | 20261101-bundle82-iconux-b | UI・画面 | `v292DfixFLW3Off` |
+| 372 | fixFLW2 | `v292DfixFLW2-reload-notice.js` | i359 | `0bb9f347` | 20261101-bundle83-flow-c | アイコン・画像 | `v292DfixFLW2Off` |
+| 373 | fixFLW4 | `v292DfixFLW4-cast-age.js` | i360 | `e2b2877a` | 20261101-bundle83-flow-c | 文章品質・プロンプト | `v292DfixFLW4Off` |
+| 374 | fixFLW5 | `v292DfixFLW5-home-noop-save.js` | i361（最後） | `c3679050` | 20261101-bundle83-flow-c | 保存・同期 | `v292DfixFLW5Off` `v292Dfix527NoopHomeSaveOff` `v292DfixOrgOff` |
 
 ## 付録B　ファイルはあるが読み込まれていないもの（＝本番で動いていない）
 
@@ -800,7 +830,7 @@
 
 ### inline script（ファイルではなく HTML の中に直接書かれた部品）
 
-- index.html：10 個（81-admg-a の行番号。80-int-a と同じ行。字数は 332 行目と 1010 行目が変わった）。[48行目・11748字] [332行目・1233字] [554行目・id=v292DfixEDN-btn・881字] [567行目・id=v292Dfix890-early・3002字] [754行目・13800字] [1010行目・305字（おまかせのボタンを ADMF1 の `oma1` で出す）] [1034行目・153999字] [3414行目・id=v100-patch・35064字] [4165行目・9509字] [4520行目・38字]
+- index.html：10 個（81-admg-a の行番号。80-int-a と同じ行。字数は 332 行目と 1010 行目が変わった。83-flow-c でも行・字数は同じ）。[48行目・11748字] [332行目・1233字] [554行目・id=v292DfixEDN-btn・881字] [567行目・id=v292Dfix890-early・3002字] [754行目・13800字] [1010行目・305字（おまかせのボタンを ADMF1 の `oma1` で出す）] [1034行目・153999字] [3414行目・id=v100-patch・35064字] [4165行目・9509字] [4520行目・38字]
 - home.html：3 個。[251行目・1196字] [277行目・749字] [420行目・162047字]
   - index.html の主なもの：1034 行目（約 15 万字）＝ゲーム本体の中核（S・UI・G・保存）、3414 行目 `v100-patch`、554 行目 `v292DfixEDN-btn`（✎ の位置）、567 行目 `v292Dfix890-early`。
 ## 付録C　スイッチ（localStorage キー）→ それを読む部品（機械抽出）
