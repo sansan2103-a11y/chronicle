@@ -6,6 +6,7 @@
  *   ① 読み直す直前に、画面全体へ「外見を保存しました。表示をそろえるため読み直しています」を出す。
  *   ② 結果を「状態コード」だけで 1 回だけ持ち越す（sessionStorage・このタブだけ）:
  *        { v:1, s:物語ID, c:キャラID, k:結果の種類, r:理由コード(英大文字・数字・_ のみ・48 字まで), t:時刻 }
+ *      ★IMGSAFE3: 理由が APPEARANCE_UNSAFE_MINOR のときだけ、分類の 2 語 y:(age|school|child)・x:(body|underwear|framing) も（決まった語だけ）。
  *      本文・外見の文・名前・メッセージの文は入れない。
  *   ③ 読み直したあと、同じ物語・120 秒以内・読み直し（navigation type = reload）のときだけ、1 回読んで消し、
  *      キャラ一覧を開いて同じキャラのカードに結果を出す（失敗の理由もここで出す。文はコードから作り直す）。
@@ -20,7 +21,7 @@
 (function(){
   'use strict';
   if (typeof window === 'undefined' || window.__v292DfixFLW2) return;
-  var VERSION = 'FLW2-r2', KEY = 'v292DfixFLW2', TTL = 120000, TAG = '[FLW2]';
+  var VERSION = 'FLW2-r2-is3', KEY = 'v292DfixFLW2', TTL = 120000, TAG = '[FLW2]';
   function log(){ try { console.log.apply(console, [TAG].concat([].slice.call(arguments))); } catch(e){} }
   var stats = { stashed: 0, shown: 0, discarded: 0, why: null, cardShown: 0, bannerShown: 0, toolsOpened: 0, opened: 0, steps: 0, last: null, err: null };
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
@@ -31,6 +32,8 @@
     return null;
   }
   function code(x){ x = String(x == null ? '' : x); return /^[A-Za-z0-9_]{1,48}$/.test(x) ? x : (x ? 'OTHER' : ''); }
+  var IS_Y = { age: 1, school: 1, child: 1 }, IS_X = { body: 1, underwear: 1, framing: 1 };   /* ★IMGSAFE3: 持ち越す分類の語（これ以外は捨てる） */
+  function isCodes(){ try { var G = window.__chrImgSafe, l = G && typeof G.last === 'function' ? G.last() : null; return (l && IS_Y.hasOwnProperty(l.y) && IS_X.hasOwnProperty(l.s)) ? { y: l.y, x: l.s } : null; } catch(e){ return null; } }   /* ★IMGSAFE3 */
   function cidOk(x){ x = String(x == null ? '' : x); return /^[A-Za-z0-9_-]{1,64}$/.test(x) ? x : ''; }
   /* 最後に外見の欄（[data-av2-ui="profile"]）の中を押したカード（読み直しの直前にカードが作り直されて msgEl が外れても分かるように） */
   var lastCard = null;
@@ -87,6 +90,7 @@
       if (!cid && lastCard && Date.now() - lastCard.t < 600000) cid = lastCard.cid;
       var oc = outcome(ring);
       var rec = { v: 1, s: String(sid).slice(0, 64), c: cid, k: oc.k, r: oc.r, t: Date.now() };
+      if (oc.r === 'APPEARANCE_UNSAFE_MINOR'){ var ic = isCodes(); if (ic){ rec.y = ic.y; rec.x = ic.x; } }   /* ★IMGSAFE3 */
       try { sessionStorage.setItem(KEY, JSON.stringify(rec)); stats.stashed++; log('stash', rec.k, rec.r, !!rec.c); } catch(eS){}
       overlay(oc.k);
       return true;
@@ -95,13 +99,14 @@
   /* ---------- 読み直したあと ---------- */
   function navType(){ try { var n = performance.getEntriesByType('navigation'); if (n && n[0] && n[0].type) return n[0].type; } catch(e){} try { if (performance.navigation) return performance.navigation.type === 1 ? 'reload' : 'other'; } catch(e){} return null; }
   function msgOf(c){ try { var f = window.__v292DfixFLW2msg; return (typeof f === 'function') ? f(c) : null; } catch(e){ return null; } }
+  function hintOf(rec){ try { var G = window.__chrImgSafe; return (rec.r === 'APPEARANCE_UNSAFE_MINOR' && rec.y && rec.x && G && typeof G.hint === 'function') ? G.hint(rec.y, rec.x) : ''; } catch(e){ return ''; } }   /* ★IMGSAFE3 */
   function textFor(rec){
     var why = rec.r ? (msgOf(rec.r) || ('理由コード: ' + rec.r)) : '';
     switch (rec.k){
       case 'EF': return '外見を保存しました。' + (msgOf(rec.r) || '絵を作りました') + '。';
-      case 'EFX': return '外見は保存しました。' + (msgOf(rec.r) || '絵は作れませんでした') + (rec.r ? '（' + rec.r + '）' : '') + '。作り直すときは、下の絵を作るボタンをもう一度押してください。';
+      case 'EFX': return '外見は保存しました。' + (msgOf(rec.r) || '絵は作れませんでした') + hintOf(rec) + (rec.r ? '（' + rec.r + '）' : '') + '。作り直すときは、下の絵を作るボタンをもう一度押してください。';
       case 'ND': return '外見を保存しました。' + (msgOf('CANDIDATE_CREATED') || '候補を1枚作りました');
-      case 'NDX': return '外見は保存しました。候補の絵は作れませんでした' + (why ? '（' + why + (msgOf(rec.r) ? '・' + rec.r : '') + '）' : '') + '。';
+      case 'NDX': return '外見は保存しました。候補の絵は作れませんでした' + (why ? '（' + why + (msgOf(rec.r) ? '・' + rec.r : '') + '）' : '') + hintOf(rec) + '。';
       case 'RC': return '外見は保存しました。' + (rec.r === 'RECHECK_PROFILE' ? '確定した外見をこの端末で確かめられなかったので' : '物語・キャラクター・アカウントを確かめられなかったので') + '、絵は作っていません。もう一度お試しください。';
       default: return (msgOf('ok_profile') || '外見を保存しました') + '。';
     }
@@ -168,7 +173,9 @@
     var bad = !rec || rec.v !== 1 ? 'BAD' : (typeof rec.t !== 'number' || Date.now() - rec.t > TTL || rec.t > Date.now() + 5000) ? 'STALE'
             : (nt && nt !== 'reload') ? 'NOT_RELOAD:' + nt : ((+rec.n || 0) >= 3) ? 'TOO_MANY_LOADS' : null;
     if (bad){ drop(); stats.discarded++; stats.why = bad; log('discard', bad); return; }
+    var isY = IS_Y.hasOwnProperty(rec.y) ? rec.y : '', isX = IS_X.hasOwnProperty(rec.x) ? rec.x : '';   /* ★IMGSAFE3 */
     rec = { v: 1, s: String(rec.s || ''), c: cidOk(rec.c), k: LINE2.hasOwnProperty(rec.k) ? rec.k : 'P', r: code(rec.r), t: rec.t, n: (+rec.n || 0) + 1 };
+    if (isY && isX && rec.r === 'APPEARANCE_UNSAFE_MINOR'){ rec.y = isY; rec.x = isX; }
     try { sessionStorage.setItem(KEY, JSON.stringify(rec)); } catch(e){}
     var tries = 0;
     (function waitSid(){                                        /* 物語 ID が分かるまで待つ（最大 20 秒） */

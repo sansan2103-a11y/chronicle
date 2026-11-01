@@ -130,6 +130,13 @@
     } catch(e){ try { console.warn(TAG, 'notifyFail error', e); } catch(_){} }
   }
 
+  /* ★IMGSAFE2 (GPT #127-PE / 独立レビュー MID-5): 旧 /image が 422 APPEARANCE_UNSAFE_MINOR を返したときだけ、短い理由を出す（複製を読むだけ。元の Response は触らない） */
+  var MSG_UNSAFE = '未成年に見える人物の性的な描写があるため、アイコンを作りませんでした（費用はかかっていません）。キャラの外見から、性的な体の描写や見せ方を外してください';
+  function notifyUnsafe(resp){
+    try { resp.clone().json().then(function(j){ try { if (!j || j.errorCode !== 'APPEARANCE_UNSAFE_MINOR') return; stats.unsafe = (stats.unsafe || 0) + 1; if (isHidden()){ stats.hiddenSkipped++; return; }
+      var G = window.__chrImgSafe; showToast(MSG_UNSAFE + ((G && G.hint) ? G.hint(j.imgsafeY, j.imgsafeS) : '')); lastShown = Date.now(); stats.toasts++; } catch(e){} }, function(){}); } catch(e){}
+  }
+
   // ---------- fetch ラッパ(結果を観測するだけ) ----------
   var _origFetch = window.fetch;
   var wrapped = function(url, init){
@@ -145,6 +152,7 @@
           if (resp && resp.ok === false){
             var s = resp.status;
             if (s === 402 || s === 429 || (s >= 500 && s <= 599)) notifyFail(s);
+            else if (s === 422) notifyUnsafe(resp);   /* ★IMGSAFE2 */
           }
         } catch(e){}
         return resp;                       // 同一参照のまま返す

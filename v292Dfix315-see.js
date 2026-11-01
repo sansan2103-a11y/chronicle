@@ -25,6 +25,11 @@
   function getS(){ try{ return window.S||(typeof S!=='undefined'?S:null); }catch(e){ return null; } }
   function hashN(s){ var h=0,i; s=String(s||''); for(i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; } return Math.abs(h); }
   function lsg(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  /* ★IMGSAFE2 / GPT #127-PG: SEE は既定 OFF。端末で明示的に許可したとき（localStorage v292Dfix315On='1'）だけボタンを出し、絵を作る。
+     OFF のとき: ボタンは出さない（出ていれば外す）。window.__v292Dfix315api.open() は短い案内だけ出し、画像サービスへは何も送らない。部品は消さない。
+     ON のときも、下の画面側の判定は早めの警告のための補助。最終の安全は Worker 側で行う設計にする（報告書の「SEE を再び既定 ON にするなら」）。 */
+  function seeOn(){ return lsg('v292Dfix315On')==='1'; }
+  var SEE_OFF_NOTE='「👁 見る」（場面を絵にする）は、安全確認のため今は止めています。画像サービスへは何も送っていません。';
 
   // ---- [1] 人物中心の素材集め ----
   // cast = { hero:{name,desc}, npcs:[{name,desc}...] }（features.jsの定義）
@@ -163,9 +168,17 @@
   function generate(modal){
     var prompt=buildPrompt();
     var stage=modal.querySelector('#v315-stage'); if(!stage) return;
+    if(!seeOn()){ stage.innerHTML='<div class="v315-empty" data-see-off="1">'+esc(SEE_OFF_NOTE)+'</div>'; var cap0=modal.querySelector('#v315-cap'); if(cap0) cap0.textContent=''; return; }   /* ★GPT #127-PG: 既定 OFF */
     if(!prompt || !latestScene()){
       stage.innerHTML='<div class="v315-empty">まだ描写がありません。物語を一度進めてから「見る」を押してください。</div>';
       return;
+    }
+    /* ★IMGSAFE2 (GPT #127-PE / 独立レビュー HIGH-3): 送る文そのもの（この prompt が URL に入る）を Worker と同じ判定で確かめる。未成年らしさ × 性的な描写なら送らない（再試行も含めて 0 件）。
+       判定の部品（v292DfixIMGSAFE-core.js）が無いときも送らない（安全側）。端末の kill: v292DfixIMGSAFEOff='1' */
+    var G315=window.__chrImgSafe, gv315=null;
+    if(!(G315 && G315.off && G315.off())){
+      try{ gv315 = (G315 && G315.verdict) ? G315.verdict([prompt]) : { y:'', s:'' }; }catch(eG315){ gv315 = { y:'', s:'' }; }
+      if(gv315){ stage.innerHTML='<div class="v315-empty" data-imgsafe="1">'+esc((G315 && G315.seeMsg) ? G315.seeMsg(gv315) : '安全確認の部品を読み込めなかったため、絵を作りませんでした（何も送っていません）。ページを再読み込みしてください')+'</div>'; var cap315=modal.querySelector('#v315-cap'); if(cap315) cap315.textContent=''; return; }
     }
     var s=getS(); var turnN=(s&&s.turns)?s.turns.length:0;
     var seed=(hashN(prompt)%100000)+turnN*7+_seedBump;
@@ -225,6 +238,7 @@
     return null;
   }
   function ensureBtn(){
+    if(!seeOn()){ var b0=document.getElementById('v315-btn'); if(b0&&b0.parentNode){ try{ b0.parentNode.removeChild(b0); }catch(e){} } return; }   /* ★GPT #127-PG: 既定 OFF＝ボタンを出さない */
     ensureStyles();
     var anchor=topbarAnchor(); if(!anchor||!anchor.parentNode) return;
     var b=document.getElementById('v315-btn');

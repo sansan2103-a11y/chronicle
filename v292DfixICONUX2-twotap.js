@@ -7,6 +7,8 @@
  *     LOW-a  結果が分からない失敗（「結果を確かめる」）の間は、主ボタンを押せなくする（確かめたら戻す）。費用の一行は主ボタンの下に常に出す。
  *     LOW-c  「AIに足りない所を足してもらう」（案を作り直す）からの呼び出しでは近道を使わない（空の欄でも AI を呼ぶ）。
  *     LOW-d  LC1 の行が無いキャラ（退場など）では「最初の絵を作る」を隠さない。
+ *   r3（bundle82-imgsafe-a・GPT #127-PE）: 年代の語は「10〜90代」だけ（「第12代」「十二代目」は年代にしない）。若く見える人物の判定に「16才」「十七の娘」「JK」などを足した
+ *     （YOUTH_X と minorAge。LC1 から写した 4 つの表はそのまま＝LC1 自身の表にはこの語は無い）。
  *   働くのは LC1 が ON のときだけ（LC1 は Worker の公開許可の範囲 CANARY＝owner かつ active のアカウントだけ ON になれる）。
  * ---------------------------------------------------------------------
  * 目的: キャラのアイコン（絵）を「2 回のタップ」で作れるようにする。
@@ -40,7 +42,7 @@
   if (typeof window === 'undefined' || window.__v292DfixICONUX2) return;
   function lsg(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   if (lsg('v292DfixICONUXOff') === '1') { window.__v292DfixICONUX2 = { on: false, status: function () { return { on: false }; } }; return; }
-  var VERSION = 'ICONUX2-r2-bundle82b';
+  var VERSION = 'ICONUX2-r3d-lc1ox';
   var st = { passes: 0, taps: {}, direct: 0, aiPass: 0, wrapped: false, log: [] };
   function tap(k) { st.taps[k] = (st.taps[k] || 0) + 1; }
   function note(o) { try { o.t = Date.now(); st.log.push(o); if (st.log.length > 80) st.log.shift(); } catch (e) {} }
@@ -53,17 +55,36 @@
   /* ---------- (A) 説明文の見た目をそのまま下書きにする判定（AI を呼ばない）---------- */
   var VIS_KINDS = ['hair', 'eyes', 'clothes', 'feature'];
   var AGE_RE = /[0-9０-９]+\s*(?:代|歳)|[十二三四五六七八九]{1,3}(?:代|歳)|中年|初老|老人|老婆|老爺|青年|少女|少年|若い(?:男|女)/;
+  /* r3: 「代」は 10〜90 代だけ。直前が「第」・数字、直後が「目」なら年代ではない（例「第12代当主」「十二代目」）。歳・才はそのまま */
+  function ageWord(c) {
+    c = String(c || ''); var re = new RegExp(AGE_RE.source, 'g'), m;
+    while ((m = re.exec(c))) {
+      var w = m[0];
+      if (/代$/.test(w)) {
+        var pre = c.charAt(m.index - 1), post = c.charAt(m.index + w.length);
+        if (pre === '第' || /[0-9０-９一二三四五六七八九十百]/.test(pre) || post === '目') continue;
+        if (!/^(?:[1-9１-９][0０]\s*代|[二三四五六七八九]?十代)$/.test(w)) continue;
+      }
+      return w;
+    }
+    return null;
+  }
+  /* r3: LC1 の YOUTH に無い若年の言い方（ICONUX2 だけの表。近道を使わない側へ倒すだけ） */
+  var YOUTH_X = /(?:^|[^A-Za-zＡ-Ｚａ-ｚ])(?:JK|JC|JS|ＪＫ|ＪＣ|ＪＳ|jk|ｊｋ)(?![A-Za-zＡ-Ｚａ-ｚ])|女児|男児|未成年|ロリ|ショタ|ティーン|あどけな|女の子|男の子|セーラー服|ランドセル|生徒|児童/;
   /* LC1（v292DfixLC1-appearance-proposal.js）の検査と同じ語の表（あちらは公開していないので写し。変えるときは両方そろえる） */
-  var BAD_SEX = /裸|露出|下着|水着|ランジェリー|セクシー|エロ|胸の大|巨乳|爆乳|谷間|太もも|太腿|スタイル抜群|グラマー|ナイスバディ|扇情|煽情|官能|透け/;
+  var BAD_SEX = /裸|露出|下着|ランジェリー|セクシー|エロ|胸の大|巨乳|爆乳|谷間|スタイル抜群|グラマー|ナイスバディ|扇情|煽情|官能|透け|(?:胸|尻|お尻|太もも|太腿|脚|腰|くびれ|ボディライン|体の線)を?強調/;   /* ★LC1OX: 水着・太ももは普通の服・体の語（未成年×性的は Worker の imgsafe が判定） */
   var YOUTH = /女子高生|高校生|中学生|小学生|女子学生|男子学生|少女|少年|幼|子供|こども|十代|10代|１０代/;
-  var BAD_BODY_YOUTH = /胸|腰|脚|体型|スタイル|ボディ|細身|華奢|豊満/;
+  var BAD_BODY_YOUTH = /胸(?!元[のに](?:大きな|赤い|白い|青い|黒い|小さな)?(?:リボン|ブローチ|ネクタイ|ボタン|バッジ|ポケット))|腰つき|くびれ|脚線|美脚|スタイル|ボディ|豊満/;   /* ★LC1OX: 細身・華奢・体型・腰・脚（腰の剣など）・胸元のリボンは普通の外見 */
   var PERS_RE = /性格|明るく|明るい|おとなし|優しい|優しく|穏やか|勇敢|臆病|無口|冷静|活発|元気|頑固|真面目|不器用|社交的|内気|短気|好奇心|思い|過去|両親|幼い頃|生まれ|育ち|得意|苦手|好き|嫌い|夢|目標|秘密|嘘|事件|出身|恐れ|願い|傷つ|裏切|復讐|守る|助け/;
   var KD = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9 };
-  function minorAge(t) {                                       /* 20 歳未満の明示の年齢（数字・漢数字）があるか（LC1 の YOUTH に無い分を足す・近道を使わない側へ倒すだけ） */
-    t = String(t || ''); var m, re = /([0-9０-９]+)\s*歳/g;
+  function minorAge(t) {                                       /* 20 歳未満の明示の年齢（数字・漢数字）があるか（LC1 の YOUTH に無い分を足す・近道を使わない側へ倒すだけ）。r3: 才・さい・「十七の娘」も */
+    t = String(t || ''); var m, re = /([0-9０-９]+)\s*(?:歳|才|さい)/g;
     while ((m = re.exec(t))) { var v = parseInt(m[1].replace(/[０-９]/g, function (d) { return String.fromCharCode(d.charCodeAt(0) - 0xFEE0); }), 10); if (v < 20) return true; }
-    var re2 = /(十)?([一二三四五六七八九])?歳/g;
+    var re2 = /(十)?([一二三四五六七八九])?(?:歳|才|さい)/g;
     while ((m = re2.exec(t))) { if (!m[1] && !m[2]) continue; var v2 = (m[1] ? 10 : 0) + (m[2] ? KD[m[2]] : 0); var pre = t.charAt(m.index - 1); if (/[十二三四五六七八九百]/.test(pre)) continue; if (v2 < 20) return true; }
+    var re3 = /(?:([0-9０-９]+)|(十)?([一二三四五六七八九])?)\s*の\s*(?:娘|少女|子|女の子|男の子|少年|小娘)/g;   /* r3: 「十七の娘」「16の娘」 */
+    while ((m = re3.exec(t))) { var v3 = m[1] ? parseInt(m[1].replace(/[０-９]/g, function (d) { return String.fromCharCode(d.charCodeAt(0) - 0xFEE0); }), 10) : ((m[2] || m[3]) ? (m[2] ? 10 : 0) + (m[3] ? KD[m[3]] : 0) : NaN);
+      if (m[1] && /[0-9０-９]/.test(t.charAt(m.index - 1))) continue; if (!m[1] && /[十二三四五六七八九百]/.test(t.charAt(m.index - 1))) continue; if (v3 < 20) return true; }
     return false;
   }
   function normT(s) { return String(s == null ? '' : s).normalize('NFC').replace(/\s+/g, ' ').trim(); }
@@ -71,7 +92,7 @@
     var P = PR(); if (!P || typeof P.visualPart !== 'function' || typeof P.slotsOf !== 'function') return { ok: false, why: 'NO_LC1PROP' };
     var d = normT(desc);
     if (BAD_SEX.test(d)) return { ok: false, why: 'SENSITIVE_DESC' };                  /* 説明文に性的な語 → 近道を使わない（LC1 の案に任せる） */
-    var youth = YOUTH.test(d) || minorAge(d);
+    var youth = YOUTH.test(d) || YOUTH_X.test(d) || minorAge(d);   /* r3: + YOUTH_X */
     if (youth && BAD_BODY_YOUTH.test(d)) return { ok: false, why: 'YOUTH_BODY_DESC' };   /* 若く見える人物の体の語 → 近道を使わない */
     var vp = P.visualPart(d); var text = String(vp.text || '');
     if (!text) return { ok: false, why: 'NO_VISUAL' };
@@ -79,7 +100,7 @@
     for (var i = 0; i < VIS_KINDS.length; i++) if (sl[VIS_KINDS[i]]) n++;
     if (n < 2) return { ok: false, why: 'FEW_KINDS' };            /* 見た目の種類が 2 つ未満 → LC1 のとおり AI の案（ER1x の「2 種類以上」に合わせる） */
     var age = null, ageFrom = null;
-    (vp.dropped || []).some(function (c) { var m = AGE_RE.exec(String(c)); if (m) { age = m[0]; ageFrom = c; return true; } return false; });
+    (vp.dropped || []).some(function (c) { var w = ageWord(c); if (w) { age = w; ageFrom = c; return true; } return false; });   /* r3: 10〜90 代だけ（第12代は年代にしない） */
     if (age && !sl.age) text = age + '、' + text;                /* 年代の語だけ（例「30代」）。その句の残り（経歴・体の語など）は入れない */
     if (text.length > 400) return { ok: false, why: 'TOO_LONG' };
     if (PERS_RE.test(text)) return { ok: false, why: 'PERSONALITY_OR_BIO' };
