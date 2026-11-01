@@ -20,7 +20,7 @@
   'use strict';
   var W = root;
   if (!W || W.__v292DfixLC1prop) return;
-  var VERSION = 'LC1prop-r2d-lc1ox';
+  var VERSION = 'LC1prop-r3-lc1ox2';
   var MAX_APPEARANCE = 400, MAX_ADD_TOTAL = 80, MAX_CLAUSE = 24, MAX_RAW_ADD = 240;
 
   /* ---------- 枠（ER1 と同じ軸: 年代・髪・瞳・服・特徴）---------- */
@@ -84,7 +84,7 @@
   var BAD_NEG = /(?:では|じゃ)ない|ではなく|ていない|ない|無い|なし|ません|不明|不詳|不要|ず(?![っ])/;
   var BAD_SEX = /裸|露出|下着|ランジェリー|セクシー|エロ|胸の大|巨乳|爆乳|谷間|スタイル抜群|グラマー|ナイスバディ|扇情|煽情|官能|透け|(?:胸|尻|お尻|太もも|太腿|脚|腰|くびれ|ボディライン|体の線)を?強調/;   /* ★LC1OX: 水着・太ももは普通の服・体の語（未成年×性的は Worker の imgsafe が判定） */
   var YOUTH = /女子高生|高校生|中学生|小学生|女子学生|男子学生|少女|少年|幼|子供|こども|十代|10代|１０代/;
-  var BAD_BODY_YOUTH = /胸|腰|脚|体型|スタイル|ボディ|細身|華奢|豊満|ライン|くびれ/;   /* ★LC1OX-c (rv 86 MID-1): AI が足す句だけに使う＝84 の表＋ライン・くびれ（本人の文は ICONUX2 の狭い表と visualPart で残す） */
+  var BAD_BODY_YOUTH = /胸(?!元[のに](?:大きな|赤い|白い|青い|黒い|小さな)?(?:リボン|ブローチ|ネクタイ|ボタン|バッジ|ポケット))|腰(?!に|まで|の(?:剣|刀|鞘|ベルト|ポーチ))|脚(?!の長|が長)|スタイル|ボディ|豊満|ライン|くびれ/;   /* ★LC1OX-2 (#127-PS): 体の強調だけ（腰に剣・腰までの髪・脚の長い・細身・華奢・体型は普通の外見） */   /* ★LC1OX-c (rv 86 MID-1): AI が足す句だけに使う＝84 の表＋ライン・くびれ（本人の文は ICONUX2 の狭い表と visualPart で残す） */
   function badAdd(raw) {
     if (typeof raw !== 'string') return 'NOT_STRING';
     if (raw.length > MAX_RAW_ADD) return 'TOO_LONG';
@@ -100,7 +100,7 @@
     var baseText = norm(base);
     var present = slotsOf(baseText), missing = missingOf(baseText);
     var res = { base: baseText, appearance: baseText, added: [], rejected: [], missing: missing, gender: '', whole: null };
-    var youth = YOUTH.test(baseText + ' ' + (ctx.context || ''));
+    var youth = YOUTH.test(baseText + ' ' + (ctx.desc || ''));   /* ★LC1OX-2: 描かれる本人の文（外見・設定）だけで決める。世界観（context）は見ない＝学園ものの成人キャラを年少者扱いしない */
     var raw = ai && typeof ai.add === 'string' ? norm(ai.add) : '';
     var why = raw ? badAdd(raw) : null;
     if (why) { res.rejected.push({ clause: raw.slice(0, 40), why: why }); res.whole = why; raw = ''; }
