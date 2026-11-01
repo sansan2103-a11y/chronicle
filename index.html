@@ -338,7 +338,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261101-bundle82-iconux-b';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261101-bundle83-flow-c';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4153,7 +4153,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
 <!-- v292Dfix600: 新しい物語(?new=1)に別の物語の中身が混入したら保存を止める。 2026-07-27の実機事故（タブ2枚で新物語に他物語のキャラが丸ごと入った）の再発防止。 features.js より前に置き、S.save を待ち受けて包む。OFF=v292Dfix600Off -->
 <script src="v292Dfix600-new-story-guard.js?cb=v292Dfix601"></script>
-<script src="v292Dfix527-story-url.js?cb=20261011-sn1"></script>
+<script src="v292Dfix527-story-url.js?cb=20261101-bundle83-flow-c"></script>
 <!-- ★fix659: 分岐(fork)バナーの作り直し。平易な文言＋「☁ クラウド側を取り込む」が
      home.html?autopull=1 へ渡って**取り込みまで完走**する。物語画面で pull しないのは
      fix527 [3] の設計どおり（ここは変えない）。
@@ -4580,7 +4580,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix361-phaseb-preview.js?cb=v292Dfix361"></script>
 <script src="v292Dfix363-player-seed.js?cb=20261021-bundle37-a"></script>
 <script src="v292Dfix364-reset-help.js?cb=v292Dfix365"></script>
-<script src="v292Dfix366-cast-gender.js?cb=v292Dfix369"></script>
+<script src="v292Dfix366-cast-gender.js?cb=20261101-bundle83-flow-c"></script>
 <script src="v292Dfix370-model-guard.js?cb=20260913-dsmrc1"></script>
 <script src="v292Dfix371-reset-dialog-text.js?cb=v292Dfix371"></script>
 <script src="v292Dfix372-gender-radio-guard.js?cb=v292Dfix372"></script>
@@ -4588,7 +4588,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix376-speaker-guard.js?cb=20260902-fix800"></script>
 <script src="v292Dfix377-voice-anchor.js?cb=20261010-gq1"></script>
 <script src="v292Dfix378-species-judge.js?cb=v292Dfix378"></script>
-<script src="v292Dfix379-wrap-keeper.js?cb=v292Dfix646"></script>
+<script src="v292Dfix379-wrap-keeper.js?cb=20261101-bundle83-flow-c"></script>
 <!-- v292Dfix822: START_RULES_V1（GPT 裁定 2026-09-06(20)(21)）。keeper prio1 で【開始ルール】(毎turn)・【開始時の状況】(T0のみ) を
      S.scene.startRules / S.scene.startCondition から注入。両 field を持つ Story が無ければ sys は 1 バイトも変わらない（dormant）。
      MARKER_SAFE render / fix444 の law 意味論は不使用 / S.scene への書込 0。kill = v292Dfix822Off='1'。 -->
@@ -4822,7 +4822,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- ★av2 C2 (GPT 911): Asset v2 presentation plane (portrait.list / asset.get / IDB / placeholder / reason display / addBinding / explicit delete UI).
      Acts ONLY on assetSchema-2 documents (canonical-derived; never the local flag). Legacy stories: no DOM work at all.
      kill: localStorage[v292Dav2pOff]=1 (legacy generation guards stay) -->
-<script src="v292Dav2-portrait.js?cb=20261101-bundle82-iconux-b"></script>
+<script src="v292Dav2-portrait.js?cb=20261101-bundle83-flow-c"></script>
 <script src="v292DfixLD1-preset-portrait.js?cb=20261101-bundle81-admg-a"></script>
 <!-- ★B37-B (GPT #127-HF B): 新しい S2 物語の「登場人物の最初の絵」案内（任意・止めない・自動は 1 回だけ）。OFF=localStorage v292DfixB37bOff=1 -->
 <script src="v292DfixB37-onboard.js?cb=20261021-laneE-a-lc1"></script>
@@ -4852,8 +4852,14 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix970-state-intake-shadow.js?cb=20261019-bundle31-a"></script>
 <!-- ★UI44 v292DfixUI1（Astra UI レビュー / GPT 裁定 UI_SUBTRACT・独立レーン C）: 表示だけの引き算。空の会話ログを自動で畳む・Asset v2 移行の入口をプレイ画面から外し設定内に置く・怪異/アイコンを設定へ・オート/展開を提案を「⋯ その他」へ・ボタン名（生成し直す/取り消す/取消を戻す/場面を絵に）。r2=GPT #127-LQ（移行の入口は owner/beta の設定内）。textContent・保存・生成・送信は不変。kill: localStorage v292DfixUI1Off='1' -->
 <script src="v292DfixUI1-subtract.js?cb=20261025-bundle54-ui1-a"></script>
+<!-- ★ICF (lane ICF / Tier 1): アイコンの失敗理由をこの端末にだけ記録する（記録のみ・要求/応答/画像/保存は変えない・どこへも送らない）。読む口 window.__chrIconFail.status()/.summary()。停止 = localStorage v292DfixICFOff=1 -->
+<script src="v292DfixICF-icon-fail-log.js?cb=20261101-bundle83-flow-c"></script>
 <!-- ★FLW3 (laneFLOWFIX・GPT #127-OW FLOW): 最初の場面のあと入力の種類を元へ戻す（G.startScene を包むだけ・保存/通信 0）。kill: localStorage v292DfixFLW3Off=1 -->
 <script src="v292DfixFLW3-opening-mode.js?cb=20261101-bundle82-iconux-b"></script>
+<!-- ★FLW2/FLW4/FLW5 (laneFLOWFIX2・GPT #127-PC FLOWFIX 2-A / 4 / 5-C・Local): 外見の確定の読み直しの表示と結果の持ち越し（表示だけ）／【キャラ属性】へはっきりした年齢だけ／🏠 の何も変えない保存で未保存の印を立てない。kill: v292DfixFLW2Off / v292DfixFLW4Off / v292DfixFLW5Off -->
+<script src="v292DfixFLW2-reload-notice.js?cb=20261101-bundle83-flow-c"></script>
+<script src="v292DfixFLW4-cast-age.js?cb=20261101-bundle83-flow-c"></script>
+<script src="v292DfixFLW5-home-noop-save.js?cb=20261101-bundle83-flow-c"></script>
 </body>
 </html>
 

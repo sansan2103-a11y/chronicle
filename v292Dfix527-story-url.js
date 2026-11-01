@@ -192,6 +192,7 @@
       try { b.className = anchor.className || ''; } catch(e){}
       b.style.cssText = (anchor.getAttribute('style') || '') + ';cursor:pointer';
       b.addEventListener('click', function(){
+        try { var f5 = window.__v292DfixFLW5; if (f5 && typeof f5.homeClick === 'function' && f5.homeClick(b, function(){ sn1GoHome(b); })) return; } catch(eF5){}   /* ★FLW5 (5-C): 保存と同じ形で比べる＋何も変えない保存で立った印だけ戻す。kill v292DfixFLW5Off → 下の従来の道 */
         try { var S = window.S || (0,eval)('typeof S!=="undefined"?S:null');
           if (S && typeof S.save === 'function'){
             /* ★2026-10-06 H (LPS_PER_OPEN_PACKAGE_PUT): 物語を開いて何もせず「ホーム」を押しただけでも、ここの保存が

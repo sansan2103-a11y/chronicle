@@ -45,7 +45,7 @@
       var parts = [];
       var h = S.cast.hero;
       if (h && h.gender && (h.name || '').length) parts.push(h.name + '(主人公)=' + h.gender);
-      (S.cast.npcs || []).forEach(function(n){ if (n && n.name && n.gender) parts.push(n.name + '=' + n.gender); });
+      (S.cast.npcs || []).forEach(function(n){ if (n && n.name && n.gender) parts.push(n.name + '=' + n.gender + (window.__v292DfixFLW4 && typeof window.__v292DfixFLW4.suffix === 'function' ? window.__v292DfixFLW4.suffix(n) : '')); });   /* ★FLW4: はっきりした年齢だけ「・17歳」（kill v292DfixFLW4Off） */
       if (!parts.length) return '';
       return '\n【キャラ属性】' + parts.join('、') + '。各キャラの一人称・言葉遣い・地の文の代名詞(彼/彼女)は、この性別と人物像に必ず一致させる。';
     } catch(e){ return ''; }

@@ -200,6 +200,7 @@
   /* ★LaneE: 読み込み失敗の文言を原因（HTTP status）で分ける。文言だけ・流れは変えない */
   function readFailMsg(res){ var h = res && res.http; if (h === 404) return 'この物語は非表示中か、見つかりません'; if (h === 401) return 'ログインが切れました。もう一度ログインしてください'; if (h === 429 || h === 503) return '混み合っています。少し待ってからお試しください'; return 'サーバーに接続できませんでした'; }
   function msgFor(res, okKey){ if (res && res.ok) return MSG[okKey]; if (res && res.code === 'READ_FAIL') return readFailMsg(res); return (res && MSG[res.code]) || 'できませんでした'; }
+  try { window.__v292DfixFLW2msg = function(c){ return (typeof c === 'string' && own(MSG, c)) ? MSG[c] : null; }; } catch(eF2m){}   /* ★FLW2: 読み直しのあと理由コードから文を作り直すための読み口（読むだけ） */
   /* ★cand_sideport_authority (audit D7 / D3-a): after a side-port write the document must be re-read (fix733 TYPE A: ordinary pushes are held
      until reload). On PERSISTED_EQUALS_READBACK reload once; on any other mirror outcome tell the Owner to reload (the server has the change). */
   function afterSidePort(res, msgEl){
@@ -209,7 +210,7 @@
     try { var lc1h = window.__v292DfixLC1; if (lc1h && typeof lc1h.holdReload === 'function' && lc1h.holdReload(res, msgEl)) return; } catch(eLC1){}
     /* ★R3-3: never reload while a generation is in flight or the composer holds an unsent draft — tell the Owner instead */
     var busy = false; try { var S0 = window.__chronicleGetState ? window.__chronicleGetState('av2ui') : null; busy = !!(S0 && S0.inFlight); var inp = document.getElementById('inp'); if (inp && String(inp.value || '').trim()) busy = true; } catch(e){}
-    if (res.mirror === 'PERSISTED_EQUALS_READBACK' && !busy){ if (msgEl) msgEl.textContent = (msgEl.textContent || '') + '（反映のため再読み込みします）'; setTimeout(function(){ try { location.reload(); } catch(e){} }, 1200); return; }
+    if (res.mirror === 'PERSISTED_EQUALS_READBACK' && !busy){ if (msgEl) msgEl.textContent = (msgEl.textContent || '') + '（反映のため再読み込みします）'; try { var f2w = window.__v292DfixFLW2; if (f2w && typeof f2w.beforeReload === 'function') f2w.beforeReload(msgEl, LOG.slice(-30)); } catch(eF2){} /* ★FLW2: 読み直しの前の全画面表示＋状態コードの持ち越し（表示だけ・読み直しはそのまま） */ setTimeout(function(){ try { location.reload(); } catch(e){} }, 1200); return; }
     if (msgEl){ msgEl.textContent = busy ? 'サーバーには保存されました。生成や入力が終わったら、ページを再読み込みしてください' : 'サーバーには保存されました。この端末の表示を揃えるため、ページを再読み込みしてください'; msgEl.title = String(res.mirror || ''); }
   }
   function mkBtn(label, bg){ var b = document.createElement('button'); b.type = 'button'; b.textContent = label;

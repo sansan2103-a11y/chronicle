@@ -22,7 +22,7 @@
           var h = S && S.cast && S.cast.hero;
           if (h && h.gender && (h.name || '').length) parts.push(h.name + '(主人公)=' + h.gender);
           ((S && S.cast && S.cast.npcs) || []).forEach(function(n){
-            if (n && n.name && n.gender) parts.push(n.name + '=' + n.gender);
+            if (n && n.name && n.gender) parts.push(n.name + '=' + n.gender + (window.__v292DfixFLW4 && typeof window.__v292DfixFLW4.suffix === 'function' ? window.__v292DfixFLW4.suffix(n) : ''));   /* ★FLW4 */
           });
           if (!parts.length) return r;
           r.sys += '\n【キャラ属性】' + parts.join('、') +
