@@ -25,8 +25,8 @@
 
 ## 3. 今の本番を確かめる（毎回）
 
-- **記録時点（2026-11-01 に出荷）の本番**：Pages `20261101-bundle83-flow-c` ＋ Worker `v46.17-msw1c-fc` ＋ 管理者画面 `b4c007d6`（下の sha は出荷パッケージの値。本番の読み直しで一致を確認済み。台帳 2181〜2183）
-  - Pages：`version.txt` sha256 先頭 `3f90783e`、`index.html` `a2fdc990`、`home.html` `f26d8391`（81 から、82b で 8 本・83 で 11 本を入れ替え・追加。読み込む部品は 82b で 3 本、83 で 4 本増えた）
+- **記録時点（2026-11-02）の本番**：Pages `20261102-bundle84-b37g-a`（83-flow-c に B37g の 4 本だけ。version `8071113f`・index `fda89e45`・home `3ce5c243`。戻しは 83 の 4 本）＋ Worker `v46.17-msw1c-fc` ＋ 管理者画面 `b4c007d6`（下の sha は出荷パッケージの値。本番の読み直しで一致を確認済み。台帳 2181〜2183）
+  - Pages：`version.txt` sha256 先頭 `8071113f`、`index.html` `fda89e45`、`home.html` `3ce5c243`（84-b37g-a。83-flow-c は `3f90783e`・`a2fdc990`・`f26d8391`。81 から、82b で 8 本・83 で 11 本を入れ替え・追加。読み込む部品は 82b で 3 本、83 で 4 本増えた）
   - Worker：`workerBuild = v46.17-msw1c-fc`（ソース `w_msw1_fc.js` sha `033fa29c`・Cloudflare の版 `4e443c60`。81 の `v46.13-admg-fc` の上に MSW1（文章のモデルの切り替え）を足したもの）。ルートの `acctFlags` = `admg1`、`admView` = `admpriv1`、`modelSw` = `msw3`
   - 管理者画面：`b4c007d6`（83 の `0b825943` の上に MSW1）
   - それまでの流れ（同じ日）：`20261101-bundle81-admg-a`（version `ed3b4a64`・Worker `v46.13-admg-fc`・管理者画面 `e19b2569`）→ `20261101-bundle82-iconux-b`（Pages だけ。version `0eb99cb4`。Worker は変えていない）→ `20261101-bundle83-flow-c`（Pages ＋ 管理者画面 `0b825943`。Worker は 81 のまま）→ MSW1-c（Worker ＋ 管理者画面だけ。Pages は 83 のまま）
