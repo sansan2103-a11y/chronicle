@@ -90,7 +90,7 @@ setTimeout(inject, 2000);
  *   ・対象は「人の顔の絵」だけ: 実画像（data:png/jpeg/webp・blob:・サーバ画像）で、fix487 の汎用ラベル（???／人影 等）でなく、
  *     外見記録（fix766・読み取りだけ）が HUMAN か、記録が無く登録キャストの名前のもの。人外・仮アイコン（SVG）・シルエットは対象外。
  *   ・目印は img の data-f979="1"（この属性が無ければ従来と同じ表示）。
- *   kill: localStorage v292Dfix979Off='1'（目印を外し、従来の表示に戻る）。調整: v292Dfix979Scale（1.0〜1.8、既定 1.15 ＝ fix982）。 */
+ *   kill: localStorage v292Dfix979Off='1'（目印を外し、従来の表示に戻る）。調整: v292Dfix979Scale（1.0〜1.8、既定 1.0）・v292Dfix979Filter（none 既定／soft／old）。 */
 (function v292Dfix979(){
   if (window.__v292Dfix979) return;
   var ST_ID = 'v292Dfix979-face-zoom';
@@ -103,8 +103,16 @@ setTimeout(inject, 2000);
   function scaleSp(){ var o = override(); return o != null ? o : 1.0; }   // ★fix984（Owner 実機 10/17 11:08「まだ近すぎ」）：iPhone 幅は拡大なし＝キャラ一覧と同じ写り。明るさ・縁取りは残す
   function scalePc(){ var o = override(); return o != null ? o : 1.0; }   // ★fix992（Owner 10/19 09:42「PC の会話ログのアイコンの引き具合を iPhone と同じに」）：PC 幅も拡大なし
   function scale(){ return scaleSp(); }
-  function rule(sc, org){ return '.v292-dlg-card .dlg-av img[data-f979="1"] { transform: scale(' + sc + ') !important; transform-origin: ' + org + ' !important;'
-         + ' filter: brightness(1.12) contrast(1.06) !important; }'; }
+  /* ★fix979b（Owner 2026-11-01 案A「会話ログのアイコンが白飛び」）: 明るさ・コントラストの補正を既定で外す。
+   *   原因: 10 月に暗い画風 6 の絵向けに入れた brightness(1.12) contrast(1.06) が、背景の明るい新しい絵（FLUX.2・淡いクリーム色）を白飛びさせる。
+   *   既定 = 'none'（filter を書かない＝拡大表示・キャラ一覧と同じ写り）。拡大 1.0・目印 data-f979・kill v292Dfix979Off はそのまま。
+   *   強さは filterLevel() の 1 か所で決める（今は端末の localStorage v292Dfix979Filter だけ。'old' = 従来の補正に戻す／'soft' = 弱い補正）。
+   *   将来、管理者画面から決めるときは filterLevel() の読み先だけを差し替える（今は管理者画面・Worker の配線なし）。 */
+  var FILTERS = { none: '', soft: 'brightness(1.05) contrast(1.03)', old: 'brightness(1.12) contrast(1.06)' };
+  function filterLevel(){ var v = lsg('v292Dfix979Filter'); return (v && Object.prototype.hasOwnProperty.call(FILTERS, v)) ? v : 'none'; }
+  function rule(sc, org){ var f = FILTERS[filterLevel()];
+    return '.v292-dlg-card .dlg-av img[data-f979="1"] { transform: scale(' + sc + ') !important; transform-origin: ' + org + ' !important;'
+         + (f ? ' filter: ' + f + ' !important;' : '') + ' }'; }
   function css(){
     return rule(scaleSp(), '50% 30%') + '\n'   // ★fix985（Owner 実機 10/17 13:05「縁なぞってるのいらない」）：会話ログの円の縁取り（box-shadow の輪）をやめた。拡大と明るさの補正はそのまま
          + '@media (min-width: 768px) { ' + rule(scalePc(), '50% 28%') + ' }';
@@ -153,7 +161,7 @@ setTimeout(inject, 2000);
   }
   setInterval(sweep, 1500);
   setTimeout(sweep, 300);
-  window.__v292Dfix979 = { sweep: sweep, stats: function(){ return { on: !off(), scale: scale(), scaleSp: scaleSp(), scalePc: scalePc(), marked: stats.marked, skippedNonHuman: stats.skippedNonHuman, skippedPlaceholder: stats.skippedPlaceholder }; } };
+  window.__v292Dfix979 = { sweep: sweep, stats: function(){ return { on: !off(), filter: filterLevel(), scale: scale(), scaleSp: scaleSp(), scalePc: scalePc(), marked: stats.marked, skippedNonHuman: stats.skippedNonHuman, skippedPlaceholder: stats.skippedPlaceholder }; } };
 })();
 })();
 

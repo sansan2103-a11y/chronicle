@@ -338,7 +338,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261101-bundle81-admg-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261101-bundle82-iconux-b';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4419,7 +4419,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <!-- v292Dfix230(判定テスト): fix62はfix66(fix102修復)+fix197スイープと役割重複の疑い。退役試験中。
        アバターに「?」が出る場合はコメント解除で復活
   <script src="v292Dfix62-avatar-fix.js?cb=v292Dfix62"></script> -->
-  <script src="v292Dfix63-avatar-style.js?cb=20261019-bundle31-a"></script>
+  <script src="v292Dfix63-avatar-style.js?cb=20261101-bundle82-iconux-b"></script>
   <!-- v292Dfix229(P3): solo執行をfix66に内蔵したためfix64(抑制器)退役。復活=コメント解除
   <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
@@ -4822,12 +4822,16 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- ★av2 C2 (GPT 911): Asset v2 presentation plane (portrait.list / asset.get / IDB / placeholder / reason display / addBinding / explicit delete UI).
      Acts ONLY on assetSchema-2 documents (canonical-derived; never the local flag). Legacy stories: no DOM work at all.
      kill: localStorage[v292Dav2pOff]=1 (legacy generation guards stay) -->
-<script src="v292Dav2-portrait.js?cb=20261021-laneE-a-lc1-ld1"></script>
+<script src="v292Dav2-portrait.js?cb=20261101-bundle82-iconux-b"></script>
 <script src="v292DfixLD1-preset-portrait.js?cb=20261101-bundle81-admg-a"></script>
 <!-- ★B37-B (GPT #127-HF B): 新しい S2 物語の「登場人物の最初の絵」案内（任意・止めない・自動は 1 回だけ）。OFF=localStorage v292DfixB37bOff=1 -->
 <script src="v292DfixB37-onboard.js?cb=20261021-laneE-a-lc1"></script>
 <script src="v292DfixLC1-appearance-proposal.js?cb=20261021-lc1-a"></script>
 <script src="v292DfixLC1-workbench.js?cb=20261101-bundle81-admg-a"></script>
+<!-- ★ICONUX2 (GPT #127-PC ICONUX): キャラの絵を 2 タップで（カードの「🎨 絵を作る」→「この外見で作る」）。LC1 が ON のときだけ働く（LC1 の判定には触らない）。kill: localStorage v292DfixICONUXOff=1 -->
+<script src="v292DfixICONUX2-twotap.js?cb=20261101-bundle82-iconux-b"></script>
+<!-- ★SETAV1 (Owner 2026-11-01): 設定の「キャラ」の主人公・NPC の絵が Asset v2 の物語で「?」になる件。schema2 で <img> が無い欄にだけ <img alt="名前"> を置き、絵は av2 applyImg が入れる（表示だけ・通信/保存 0）。kill: localStorage v292DfixSETAV1Off=1 -->
+<script src="v292DfixSETAV1-settings-avatar.js?cb=20261101-bundle82-iconux-b"></script>
 <script src="v292Dav2-migrate-ui.js?cb=20261019-bundle31-a"></script>
 <!-- ★FG-3 (GPT #127-FR): S2 の物語の画風を 3 択（デフォルト／クール／ダーク）に。正本は server の story cfg.artPreset。
      S2 では旧来の「アイコン再生成」「⟳」を隠し、押されても旧経路へ渡さない。旧形式の物語では何もしない。kill: localStorage[v292Dfg3Off]=1 -->
@@ -4848,6 +4852,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix970-state-intake-shadow.js?cb=20261019-bundle31-a"></script>
 <!-- ★UI44 v292DfixUI1（Astra UI レビュー / GPT 裁定 UI_SUBTRACT・独立レーン C）: 表示だけの引き算。空の会話ログを自動で畳む・Asset v2 移行の入口をプレイ画面から外し設定内に置く・怪異/アイコンを設定へ・オート/展開を提案を「⋯ その他」へ・ボタン名（生成し直す/取り消す/取消を戻す/場面を絵に）。r2=GPT #127-LQ（移行の入口は owner/beta の設定内）。textContent・保存・生成・送信は不変。kill: localStorage v292DfixUI1Off='1' -->
 <script src="v292DfixUI1-subtract.js?cb=20261025-bundle54-ui1-a"></script>
+<!-- ★FLW3 (laneFLOWFIX・GPT #127-OW FLOW): 最初の場面のあと入力の種類を元へ戻す（G.startScene を包むだけ・保存/通信 0）。kill: localStorage v292DfixFLW3Off=1 -->
+<script src="v292DfixFLW3-opening-mode.js?cb=20261101-bundle82-iconux-b"></script>
 </body>
 </html>
 

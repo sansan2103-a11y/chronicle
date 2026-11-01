@@ -214,6 +214,30 @@
   }
   function mkBtn(label, bg){ var b = document.createElement('button'); b.type = 'button'; b.textContent = label;
     b.style.cssText = 'background:' + bg + ';border:1px solid #666;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;margin:4px 6px 0 0;'; return b; }
+  /* ★FLW1 (GPT #127-OW FLOW「confirm による停止 → 画面内の確認へ」・kill: localStorage v292DfixFLW1Off='1' → 従来の window.confirm):
+     キャラ一覧の「最初の絵を作る」「この外見で確定」「削除」の確認を、ブラウザのダイアログ（タブごと止まる）ではなく、そのカードの中の確認欄で行う。
+     文面と、OK のあとに呼ぶ処理は従来と同じ（OK のときだけ同じ処理）。確認欄を作れない（DOM 例外）ときだけ従来の window.confirm。 */
+  function flw1Off(){ return lsg('v292DfixFLW1Off') === '1'; }
+  var flw1 = { asked: 0, ok: 0, cancel: 0, fallback: 0, native: 0 };
+  function askInline(host, o, cb){
+    var settled = false; var fin = function(yes){ if (settled) return; settled = true; flw1[yes ? 'ok' : 'cancel']++; note({ kind: 'FLW1_ASK_' + (yes ? 'OK' : 'CANCEL'), what: o.kind || '' }); cb(!!yes); };
+    if (flw1Off() || !host || !host.appendChild){ flw1.native++; var ok0 = false; try { ok0 = window.confirm(o.msg); } catch(e0){} fin(ok0); return; }
+    try {
+      Array.prototype.forEach.call(host.querySelectorAll('[data-av2-inask]'), function(x){ if (x.parentNode === host && x.parentNode) x.parentNode.removeChild(x); });
+      var el = document.createElement('div'); el.setAttribute('data-av2-inask', o.kind || '1'); el.setAttribute('role', 'dialog');
+      el.style.cssText = 'margin-top:8px;padding:8px;border:1px solid #806040;border-radius:6px;background:#1d1a14;color:#eee;font-size:12px;line-height:1.6;';
+      el.onclick = function(ev){ ev.stopPropagation(); };
+      var tx = document.createElement('div'); tx.setAttribute('data-av2-inask-msg', '1'); tx.style.cssText = 'white-space:pre-wrap;margin-bottom:4px;'; tx.textContent = o.msg; el.appendChild(tx);
+      var okA = mkBtn(o.ok || 'OK', o.okBg || '#3a6a5a'); okA.setAttribute('data-av2-inask-btn', 'ok');
+      var noA = mkBtn('やめる', '#444'); noA.setAttribute('data-av2-inask-btn', 'cancel');
+      try { if (window.matchMedia && window.matchMedia('(max-width: 980px)').matches){ [okA, noA].forEach(function(bb){ bb.style.minHeight = '44px'; bb.style.padding = '8px 14px'; bb.style.fontSize = '13px'; }); } } catch(eM){}
+      var close = function(){ if (el.parentNode) el.parentNode.removeChild(el); };
+      okA.onclick = function(ev){ ev.stopPropagation(); close(); fin(true); };
+      noA.onclick = function(ev){ ev.stopPropagation(); close(); fin(false); };
+      el.appendChild(okA); el.appendChild(noA); host.appendChild(el); flw1.asked++; note({ kind: 'FLW1_ASK', what: o.kind || '' });
+      try { el.scrollIntoView({ block: 'nearest' }); } catch(eS){}
+    } catch(e){ flw1.fallback++; var ok1 = false; try { ok1 = window.confirm(o.msg); } catch(e1){} fin(ok1); }
+  }
   function augmentCard(m, card){
     var name = card.getAttribute('data-name') || '';
     var e = cardEntry(m, name);
@@ -263,8 +287,12 @@
       efB.onclick = function(ev){ ev.stopPropagation(); if (efB.disabled) return;
         /* ★B37-A: 「外見を設定」を開いていて、入力欄が確定済みの外見と違うなら、その内容を確かめて確定してから作る（黙って古い外見・空の外見で作らない） */
         try { if (tools && tools.style.display !== 'none' && typeof tools.__b37needs === 'function' && tools.__b37needs()){ tools.__b37guard('ef'); return; } } catch(eG){}
-        var okc = false; try { okc = window.confirm('「' + name + '」の最初の絵を作ります。\n外見の情報がある場合だけ画像生成を1回使います。よろしいですか？'); } catch(e1){}
-        if (!okc) return; runEF(); };
+        efB.disabled = true;   /* ★FLW1: 確認中は二重に押せない（やめたら戻す） */
+        askInline(box, { kind: 'ef', msg: '「' + name + '」の最初の絵を作ります。\n外見の情報がある場合だけ画像生成を1回使います。よろしいですか？', ok: '絵を作る' }, function(okc){
+          if (!okc){ efB.disabled = false; return; }
+          /* ★82b LOW-b: 確認欄を見ている間に「外見を設定」の欄が書き換わったら、OK の時点でもう一度 B37-A を通す（黙って古い外見で作らない） */
+          try { if (!flw1Off() && tools && tools.style.display !== 'none' && typeof tools.__b37needs === 'function' && tools.__b37needs()){ efB.disabled = false; flw1.recheck = (flw1.recheck || 0) + 1; tools.__b37guard('ef'); return; } } catch(eG2){}
+          runEF(); }); };
       box.appendChild(efB);
     }
     /* ★av2f client (GPT #31-b): 「外見を設定」 (review suggestion → Owner edits → explicit confirm → setProfile) and
@@ -310,13 +338,13 @@
       var pmsg = document.createElement('span'); pmsg.style.cssText = 'margin-left:4px;color:#e0c080;';
       var okB = mkBtn('この外見で確定', '#3a5a4a'); okB.setAttribute('data-av2-prof', 'confirm');
       okB.onclick = function(ev){ ev.stopPropagation(); if (okB.disabled) return;
-        var okc = false; try { okc = window.confirm('「' + name + '」の外見をこの内容で確定します。\n（絵の生成はまだ行いません）'); } catch(e1){}
+        askInline(tools, { kind: 'profile', msg: '「' + name + '」の外見をこの内容で確定します。\n（絵の生成はまだ行いません）', ok: '確定する' }, function(okc){   /* ★FLW1 */
         if (!okc) return;
         okB.disabled = true; pmsg.textContent = '…';
         A().setProfile(e.id, { gender: gsel.value, appearance: ta.value, ownerConfirmed: true }, function(res){
           note({ kind: 'UI_SET_PROFILE', ok: !!(res && res.ok), code: res && res.code });
           okB.disabled = false; pmsg.textContent = (res && res.ok) ? MSG.ok_profile : msgFor(res); pmsg.title = (res && res.code) || '';
-          if (res && res.ok){ msg.textContent = MSG.ok_profile; var efB2 = card.querySelector('[data-av2-ef]'); if (efB2) efB2.disabled = false; afterSidePort(res, pmsg); } });
+          if (res && res.ok){ msg.textContent = MSG.ok_profile; var efB2 = card.querySelector('[data-av2-ef]'); if (efB2) efB2.disabled = false; afterSidePort(res, pmsg); } }); });
       };
       tools.appendChild(okB);
       /* ★fix993 (GPT #127-EP C): 「確定してアイコンを作る」= この外見で確定 → サーバーで保存を確認 → ensureFirst を 1 回。
@@ -494,12 +522,13 @@
     if (!e.hero){
       var delB = mkBtn('削除', '#6a3a3a');
       delB.onclick = function(ev){ ev.stopPropagation();
-        var okc = false; try { okc = window.confirm('「' + name + '」を削除します。\n削除すると元に戻せません。過去の会話の表示には残ります。'); } catch(e1){}
-        if (!okc) return;
-        delB.disabled = true; msg.textContent = '…';
+        if (delB.disabled) return; delB.disabled = true;   /* ★FLW1 */
+        askInline(box, { kind: 'del', msg: '「' + name + '」を削除します。\n削除すると元に戻せません。過去の会話の表示には残ります。', ok: '削除する', okBg: '#6a3a3a' }, function(okc){
+        if (!okc){ delB.disabled = false; return; }
+        msg.textContent = '…';
         A().deleteCharacter(e.id, function(res){ delB.disabled = false; msg.textContent = msgFor(res, 'ok_del'); msg.title = (res && res.code) || ''; note({ kind: 'UI_DELETE', ok: !!(res && res.ok), code: res && res.code });
           afterSidePort(res, msg);
-          if (res && res.ok && res.mirror !== 'PERSISTED_EQUALS_READBACK'){ try { if (window.__charlist && typeof window.__charlist.open === 'function') setTimeout(function(){ window.__charlist.open(); }, 300); } catch(e2){} } }); };
+          if (res && res.ok && res.mirror !== 'PERSISTED_EQUALS_READBACK'){ try { if (window.__charlist && typeof window.__charlist.open === 'function') setTimeout(function(){ window.__charlist.open(); }, 300); } catch(e2){} } }); }); };
       box.appendChild(delB);
     }
     box.appendChild(msg);
@@ -809,7 +838,7 @@
   try { document.addEventListener('visibilitychange', function(){ if (!document.hidden){ try { window.__chronicleAv2Portrait.refresh(); } catch(e){} } }); window.addEventListener('chr:vault2-ui-changed', function(){ try { window.__chronicleAv2Portrait.refresh(); } catch(e){} }); } catch(e){}
   window.__chronicleAv2Portrait = {
     status: function(){ return { doc: doc(), killed: killed(), storyId: sid(), listed: listed ? { story_id: listed.story_id, at: listed.at, error: listed.error, n: Object.keys(listed.by || {}).length } : null,
-                                 mem: Object.keys(mem).length, stats: JSON.parse(JSON.stringify(stats)), wrapped118: wrapped118, log: LOG.slice(-20) }; },
+                                 mem: Object.keys(mem).length, stats: JSON.parse(JSON.stringify(stats)), wrapped118: wrapped118, log: LOG.slice(-20), flw1: { off: flw1Off(), c: JSON.parse(JSON.stringify(flw1)) } }; },
     refresh: function(){ listed = null; getFailed = {}; schedule(); return true; },
     resolve: function(label){ var m = model(); return m ? resolveLabel(m, label) : null; },
     placeholderImage: placeholderImage
