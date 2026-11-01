@@ -27,6 +27,24 @@
   function lsg(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lss(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
   function killed() { return lsg('v292DfixB37bOff') === '1'; }
+  /* ★B37g (2026-11-02): 自動表示は「何も開いていない・操作の途中でない」ときだけ。以前は 👥 キャラ の一覧が開いている最中でも自動で開き、
+   * open() が一覧を閉じてしまって、「この外見で確定」などの押下が失われた（laneFLOWFIX2 既知の点 6 / lane82 / lane83）。
+   * kill: localStorage v292DfixB37gOff = '1'（この見張りだけ止める。以前の動きに戻る）。手動（👥 のボタン）の開き方は変えない。 */
+  function gKilled() { return lsg('v292DfixB37gOff') === '1'; }
+  var lastAct = 0;
+  try { ['pointerdown', 'touchstart', 'mousedown', 'keydown', 'input', 'wheel'].forEach(function (ev) { document.addEventListener(ev, function () { lastAct = Date.now(); }, true); }); } catch (eG) {}
+  var BUSY_SEL = '.v292Dfix145-modal, [role="dialog"], [aria-modal="true"], dialog[open], [data-av2-inask], #v292DfixFLW2-overlay';
+  function autoBlocked() {   /* 理由の文字を返す（無ければ null） */
+    if (gKilled()) return null;
+    try {
+      var q = document.querySelectorAll(BUSY_SEL);
+      for (var i = 0; i < q.length; i++) { var el = q[i]; if (el.id === 'v292DfixB37-onb') continue; if (el.getClientRects && el.getClientRects().length) return 'MODAL'; }
+      var ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable) && String(ae.value || ae.textContent || '').length > 0) return 'EDITING';
+      if (Date.now() - lastAct < 4000) return 'RECENT_ACTION';
+    } catch (e) {}
+    return null;
+  }
   function A() { return window.__chronicleAssetV2 || null; }
   function F697() { return window.__v292Dfix697 || null; }
   function state() { try { return (typeof window.__chronicleGetState === 'function') ? window.__chronicleGetState('b37onb') : null; } catch (e) { return null; } }
@@ -184,13 +202,14 @@
   }
   function open(source) {
     if (killed()) return { ok: false, code: 'OFF' };
+    if (source === 'auto') { var bl = autoBlocked(); if (bl) { st.last = 'AUTO_BLOCKED_' + bl; return { ok: false, code: 'BLOCKED', why: bl }; } }   /* ★B37g */
     /* ★LC1 (GPT #127-IJ 4) open: LC1 が ON のときは、B37 の案内パネルを出さず、👥 の作業欄に任せる（自動の 1 回の印はここで付ける） */
     try { var lc1o = window.__v292DfixLC1; if (lc1o && typeof lc1o.on === 'function' && lc1o.on()) { var r1o = lc1o.openFromB37(source); if (r1o && r1o.ok && source === 'auto') setFlag(sid(), 'shown'); return r1o; } } catch (eLC1) {}
     var id = sid(); if (!id || doc() !== true) return { ok: false, code: 'NOT_S2' };
     if (P && P.phase === 'run') return { ok: false, code: 'RUNNING' };
     var cs = chars(); if (!cs.length) return { ok: false, code: 'NO_CHARACTERS' };
     var a0 = acct(); if (!a0) return { ok: false, code: 'NO_ACCOUNT' };
-    try { var m = document.querySelector('.v292Dfix145-modal'); if (m && window.__charlist && typeof window.__charlist.close === 'function') window.__charlist.close(); } catch (e) {}
+    try { var m = (source === 'auto' && !gKilled()) ? null : document.querySelector('.v292Dfix145-modal'); if (m && window.__charlist && typeof window.__charlist.close === 'function') window.__charlist.close(); } catch (e) {}
     P = { id: id, acct: a0, rows: [], phase: 'loading', stop: false, msg: '', source: source };
     var mine = P;
     pointers(id, function (by) {
@@ -359,6 +378,7 @@
     if (!ok) { okSince = 0; return; }
     if (!okSince) { okSince = Date.now(); return; }
     if (Date.now() - okSince < STABLE_MS) return;
+    var blk = autoBlocked(); if (blk) { okSince = 0; st.last = 'AUTO_WAIT_' + blk; return; }   /* ★B37g: 何かが開いている／操作の途中 → 自動では開かず、静かになるまで待つ（1 回だけの権利は使わない）*/
     autoDone = true; st.last = 'AUTO_OPEN'; open('auto');
   }
   function start() {
