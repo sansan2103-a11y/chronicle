@@ -43,12 +43,14 @@
 
 ## 3. 今の本番を確かめる（毎回）
 
-- **記録時点（2026-11-02）の本番**：Pages `20261102-bundle84-b37g-a`（83-flow-c に B37g の 4 本だけ。version `8071113f`・index `fda89e45`・home `3ce5c243`。戻しは 83 の 4 本）＋ Worker `v46.17-msw1c-fc` ＋ 管理者画面 `b4c007d6`（下の sha は出荷パッケージの値。本番の読み直しで一致を確認済み。台帳 2181〜2183）
-  - Pages：`version.txt` sha256 先頭 `8071113f`、`index.html` `fda89e45`、`home.html` `3ce5c243`（84-b37g-a。83-flow-c は `3f90783e`・`a2fdc990`・`f26d8391`。81 から、82b で 8 本・83 で 11 本を入れ替え・追加。読み込む部品は 82b で 3 本、83 で 4 本増えた）
-  - Worker：`workerBuild = v46.17-msw1c-fc`（ソース `w_msw1_fc.js` sha `033fa29c`・Cloudflare の版 `4e443c60`。81 の `v46.13-admg-fc` の上に MSW1（文章のモデルの切り替え）を足したもの）。ルートの `acctFlags` = `admg1`、`admView` = `admpriv1`、`modelSw` = `msw3`
-  - 管理者画面：`b4c007d6`（83 の `0b825943` の上に MSW1）
-  - それまでの流れ（同じ日）：`20261101-bundle81-admg-a`（version `ed3b4a64`・Worker `v46.13-admg-fc`・管理者画面 `e19b2569`）→ `20261101-bundle82-iconux-b`（Pages だけ。version `0eb99cb4`。Worker は変えていない）→ `20261101-bundle83-flow-c`（Pages ＋ 管理者画面 `0b825943`。Worker は 81 のまま）→ MSW1-c（Worker ＋ 管理者画面だけ。Pages は 83 のまま）
-  - 戻し先：Worker は `95b4f70a`（`v46.13-admg-fc`）、管理者画面は `0b825943`（83）。Pages は 82b（version `0eb99cb4`・index `0d974f9c`・home `8dbade5a`）、その前は 81（version `ed3b4a64`・index `140afddc`・home `b9b033e8`）
+- **記録時点（2026-11-02）の本番**：Pages `20261102-bundle86-lc1ox-d`（84-b37g-a の上にコミット `91854ab`。12 本を入れ替え・追加。version `ccb576f6`・index `16a28966`・home `da8ae5fe`）＋ Worker `v46.27-thin1lc1c-fc` ＋ 管理者画面 `b4c007d6`（変更なし）（下の sha は出荷パッケージの値。本番の読み直しで一致を確認済み。台帳 2190〜2200・GPT #127-PK〜#127-PQ）
+  - Pages：`version.txt` sha256 先頭 `ccb576f6`、`index.html` `16a28966`、`home.html` `da8ae5fe`。84-b37g-a（version `8071113f`・index `fda89e45`・home `3ce5c243`）から入れ替えた 11 本（home・index・version・`v292Dav2-data.js` `c1931013`・`v292Dav2-portrait.js` `15a51215`・`v292Dfix315-see.js` `67589324`・`v292Dfix492-genfail-toast.js` `7e3e1b73`・`v292DfixFLW2-reload-notice.js` `82323dfa`・`v292DfixICONUX2-twotap.js` `58254d0c`・`v292DfixLC1-appearance-proposal.js` `48be7f2a`・`v292DfixLC1-workbench.js` `db457b4c`）＋新しい 1 本（`v292DfixIMGSAFE-core.js` `e0df08e6`。画像の安全確認の画面側の部品）。B37 の部品（`0e2c5681`）は変えていない。読み込む部品は 1 本増えた（`v292DfixIMGSAFE-core.js` が index.html の 16 番目に入り、それ以降の読込番号が 1 つずれる）
+  - Worker：`workerBuild = v46.27-thin1lc1c-fc`（ソース sha `033c4e7b`・Cloudflare の版 `d8ca42f5`。MSW1 の `v46.17-msw1c-fc` の上に、画像の安全確認・短い外見の緩和（THIN1）・LC1 の公開範囲 CANARY を足したもの）。ルートの JSON：`imgSafe` = `imgsafex:owner`、`modelSw` = `msw3`、`acctFlags` = `admg1`、`admView` = `admpriv1`
+  - 環境変数：`CHR_IMGSAFE_ENFORCE=owner`（未設定＝画像の経路は msw1c と同じで、Owner 専用の dry run だけ使える／`owner` ＝ Owner のアカウントだけに画像の安全確認を効かせる／`all` ＝全員に効かせる。**`all` は HOLD**）。`CHR_IMGSAFE_OFF=1` で画像の安全確認を全部止める（dry run も 403）
+  - 管理者画面：`b4c007d6`（この出荷では変えていない。本番での読み直しは未確認）
+  - それまでの流れ：同日の `20261102-bundle84-b37g-a`（Pages だけ。version `8071113f`）＋ Worker `v46.17-msw1c-fc`（ソース `033fa29c`・Cloudflare の版 `4e443c60`）→ Worker だけ `v46.22-imgsafexd`（Cloudflare の版 `6ffb014f`）→ `v46.23-imgsafexe`（`e492fc7d`）→ `v46.24-imgsafexf`（`87ebec4d`。env を足して `b5a2d45f`）→ `v46.27-thin1lc1c-fc`（`d8ca42f5`）＋ Pages 86-lc1ox-d
+  - 戻し先：Pages は 84 の同名ファイル 11 本（追加の core ファイルは置いたままでよい）。Worker は `v46.24-imgsafexf`（ソース `42ebab48`）か `v46.23-imgsafexe`（ソース `085742bf`）、さらに前は msw1c（`033fa29c`。画像の安全確認なし・LC1 は HOLD）。Worker を戻さずに止めるなら env `CHR_IMGSAFE_ENFORCE` を外す（msw1c と同じ画像の経路になる）、すべて止めるなら `CHR_IMGSAFE_OFF=1`
+  - 残っていること：①画像の安全確認を全員に効かせる（`all`）のは HOLD。②年少者らしい設定のとき、AI が足した「細身・華奢・胸元のリボン」などは今も下書きから落ちる（ユーザーが自分で書いたものは残る）。③LC1 は Owner の CANARY（Owner が管理者画面で `lc1` を ON にして使う）。④Owner の実機 QA の結果と、Owner が `lc1` を ON にしたかは、この文書の時点では未確認
 - 確かめ方：本番の `version.txt` を `?_=<時刻>` 付きで読み、上の値や最新の出荷記録と一致するかを見る。Worker はルート（`GET /`）の JSON の `workerBuild`。
 - **「ファイルがある」＝「本番で動いている」ではありません**。本番で動いているかは、`index.html` / `home.html` の `<script src>`（HTML コメントの中は除く）で決まります。全一覧は `docs/FIX_INDEX.md` 付録 A。
 - **現在地と判断の正本は 2 つ**（GPT #127-OO）。どちらも **Owner PC にあり、このリポジトリには入っていません**。
