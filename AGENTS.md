@@ -25,10 +25,11 @@
 
 ## 3. 今の本番を確かめる（毎回）
 
-- **記録時点（2026-11-01 に照合）の本番**：`20261101-bundle80-int-a`（Owner の PC・iPhone 実機確認も合格＝`PRODUCTION_PASS`）
-  - Pages：`version.txt` sha256 先頭 `fad4757c`、`index.html` `0ad99051`、`home.html` `7c581720`（読み込まれる 373 本を本番でバイト照合）
-  - Worker：`workerBuild = v46.10-admf2-fc`（本番相当のソース `w_admf2_fc.js` sha `167e6ac8`）。ルートの `acctFlags` = `admf2`
-  - 管理者画面：`a635c04b`
+- **記録時点（2026-11-01 13 時台に出荷）の本番**：`20261101-bundle81-admg-a`（下の sha は出荷パッケージの値。本番の読み直しで 9 本の配信・Worker・管理者画面の sha 一致を確認、Owner の PC と iPhone で遊べることを確認済み）
+  - Pages：`version.txt` sha256 先頭 `ed3b4a64`、`index.html` `140afddc`、`home.html` `b9b033e8`（80-int-a から 9 本だけ入れ替え。増減なし）
+  - Worker：`workerBuild = v46.13-admg-fc`（本番相当のソース `w_admg_fc.js` sha `95b4f70a`。ICONFIX 1b `v46.12-iconfix1b` の上に ADMG を足したもの）。ルートの `acctFlags` = `admg1`、`admView` = `admpriv1`
+  - 管理者画面：`e19b2569`
+  - 1 つ前の本番：`20261101-bundle80-int-a`（version `fad4757c`・Worker `v46.10-admf2-fc` → 同日に ICONFIX の `v46.11-iconfix1` → `v46.12-iconfix1b`）
 - 確かめ方：本番の `version.txt` を `?_=<時刻>` 付きで読み、上の値や最新の出荷記録と一致するかを見る。Worker はルート（`GET /`）の JSON の `workerBuild`。
 - **「ファイルがある」＝「本番で動いている」ではありません**。本番で動いているかは、`index.html` / `home.html` の `<script src>`（HTML コメントの中は除く）で決まります。全一覧は `docs/FIX_INDEX.md` 付録 A。
 - **現在地と判断の正本は 2 つ**（GPT #127-OO）。どちらも **Owner PC にあり、このリポジトリには入っていません**。
