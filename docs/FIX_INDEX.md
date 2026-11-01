@@ -1,7 +1,7 @@
 # FIX_INDEX — Chronicle fix 辞典（開発担当向け）
 
 > 下書き（laneDOCS・2026-10-31・第 1 段。2026-11-01 に 80-int-a、続けて 81-admg-a、82b-iconux-b、83-flow-c、MSW1-c の出荷を反映）。
-> **基準の本番**：Pages `20261101-bundle83-flow-c`（version `3f90783e`・index `a2fdc990`・home `f26d8391`）＋ Worker `v46.17-msw1c-fc`（ソース `033fa29c`・Cloudflare の版 `4e443c60`・ルートの `acctFlags`=`admg1`・`admView`=`admpriv1`・`modelSw`=`msw3`。81 の `v46.13-admg-fc` の上に MSW1）＋ 管理者画面 `b4c007d6`。2026-11-01 に出荷（台帳 2181〜2183）。sha は出荷パッケージの値で、本番の読み直しで一致を確認済み。それまでの流れ：81-admg-a（version `ed3b4a64`・Worker `v46.13-admg-fc` `95b4f70a`・管理者画面 `e19b2569`）→ 82b（Pages だけ・version `0eb99cb4`）→ 83（Pages ＋ 管理者画面 `0b825943`）→ MSW1-c（Worker ＋ 管理者画面）。戻し先は Worker `95b4f70a`・管理者画面 `0b825943`・Pages 82b。
+> **基準の本番**：Pages `20261102-bundle84-b37g-a`（version `8071113f`・index `fda89e45`・home `3ce5c243`。83-flow-c に B37g の 4 本だけ）＋ Worker `v46.17-msw1c-fc`（ソース `033fa29c`・Cloudflare の版 `4e443c60`・ルートの `acctFlags`=`admg1`・`admView`=`admpriv1`・`modelSw`=`msw3`。81 の `v46.13-admg-fc` の上に MSW1）＋ 管理者画面 `b4c007d6`。2026-11-01 に出荷（台帳 2181〜2183）。sha は出荷パッケージの値で、本番の読み直しで一致を確認済み。それまでの流れ：81-admg-a（version `ed3b4a64`・Worker `v46.13-admg-fc` `95b4f70a`・管理者画面 `e19b2569`）→ 82b（Pages だけ・version `0eb99cb4`）→ 83（Pages ＋ 管理者画面 `0b825943`）→ MSW1-c（Worker ＋ 管理者画面）。戻し先は Worker `95b4f70a`・管理者画面 `0b825943`・Pages 82b。
 > **「本番稼働」の判定は、上の本番の `index.html` / `home.html` が実際に読み込むかどうかだけで行っています。** ファイルが配信物にあるだけのもの・コメントアウトされたものは「読み込まれていない」と書きます。
 > 確かめていないことは「未確認」と書きます。過去の資料（記憶メモ・2026-07 の knowledge/）にあった説明は、コードと照らして合っている部分だけ使いました。
 
@@ -405,6 +405,7 @@
 | 82b-iconux-b | ICONUX2（2 タップの絵・LC1 が ON のときだけ）・fix979b（会話ログのアイコンの白飛び）・FLW1（確認をカードの中へ）・FLW3（幕開けのあと入力の種類を戻す）・SETAV1（設定の「キャラ」の絵）。Pages 8 本。パッケージの Worker `v46.14-iconux-fc`（`lc1` を CANARY に）は出していない | 81-admg-a | **82b で本番**（Pages だけ。台帳 2181。LC1 は HOLD のままなので ICONUX2 は動かない） | 本番 |
 | 83-flow-c | FLW2（読み直しの前の案内）・FLW4-r2（本人の年齢を【キャラ属性】へ）・FLW5 ①（🏠 で同じなら書かない。② は GPT #127-PG で外した）・ICF・管理者画面の「まとめて ON」の表示。Pages 11 本＋管理者画面 `0b825943`。Worker は 81 のまま | 82b | **83 で本番**（台帳 2182） | 本番 |
 | MSW1-c | 文章のモデルの切り替え（V4.1 Flash ⇔ V4.1 Flash 1017・Owner だけ＝CANARY・実在の事前確認・1 回だけの安全網と 120 秒の遮断）。Worker `v46.17-msw1c-fc`（`033fa29c`・Cloudflare の版 `4e443c60`）＋管理者画面 `b4c007d6`。Pages なし。停止 env `CHR_MODELSW_OFF=1` | `v46.13-admg-fc` ＋ 83 の管理者画面 | **MSW1-c で本番**（台帳 2183・GPT #127-PI。戻し Worker `95b4f70a`・管理者画面 `0b825943`） | 本番 |
+| 84-b37g-a | 初心者向けの案内（B37）が、👥 一覧・確認が開いているとき・入力中・直近 4 秒の操作中は自動で開かない（以前は自動で開いて一覧を閉じ、「この外見で確定」の押下が失われた）。手動の開き方は不変。Pages 4 本（B37-onboard `0e2c5681`・index `fda89e45`・home `3ce5c243`・version `8071113f`）。kill `v292DfixB37gOff` | 83-flow-c | **84-b37g-a で本番**（台帳 2189・GPT #127-PK。戻し 83 の 4 本） | 本番 |
 | EDLOG | 本文の手動編集の記録（`_narrEdits`） | — | Owner の QA 物語に限った GO | （場所未確認） |
 | DP3 | 削除済み・未保存の物語を端末の一覧から外す | — | HOLD | — |
 | UX72 単体 / 76-jmp 単体 / 74 単体 | 77-ui-a に合流 | — | — | — |
@@ -768,7 +769,7 @@
 | 339 | fix853 | `v292Dfix853-truncated-name-guard.js` | i339 | `14e1e6de` | 20261025-bundle58-npcp1-b | NPC・キャラ状態 | `v292Dfix853Off` `v292Dfix853pOff` `v292DfixA4Off` |
 | 340 | av2-portrait | `v292Dav2-portrait.js` | i340 | `fdd77f2a` | 20261101-bundle83-flow-c | アイコン・画像 | `v292Dav2pOff` `v292Dfix993Off` `v292DfixB37aOff` `v292DfixFG1cOff` |
 | 341 | fixLD1 | `v292DfixLD1-preset-portrait.js` | i341 | `a7a98a65` | 20261101-bundle81-admg-a | アイコン・画像 | `v292DfixD1Off` `v292DfixLD1On` |
-| 342 | fixB37 | `v292DfixB37-onboard.js` | i342 | `1c20fead` | 20261021-laneE-a-lc1 | シナリオ・ホーム | `v292DfixB37bOff` |
+| 342 | fixB37 | `v292DfixB37-onboard.js` | i342 | `0e2c5681` | 20261102-bundle84-b37g-a | シナリオ・ホーム | `v292DfixB37bOff` `v292DfixB37gOff` |
 | 343 | fixLC1 | `v292DfixLC1-appearance-proposal.js` | i343 | `a012e615` | 20261021-lc1-a | アイコン・画像 | `v292DfixLC1Off` |
 | 344 | fixLC1 | `v292DfixLC1-workbench.js` | i344 | `7114c9b4` | 20261101-bundle81-admg-a | アイコン・画像 | `v292DfixLC1Off` `v292DfixLC1On` |
 | 345 | av2-migrate-ui | `v292Dav2-migrate-ui.js` | i345 | `488999e4` | 20261019-bundle31-a | アイコン・画像 | `v292Dav2Off` `v292Dav2On` `v292Dav2mOff` |
@@ -1388,6 +1389,7 @@
 - `v292DfixB0On` — fix192
 - `v292DfixB37aOff` — av2
 - `v292DfixB37bOff` — fixB37
+- `v292DfixB37gOff` — fixB37（84-b37g の「一覧・確認が開いている／操作中は自動で開かない」見張りだけを止める）
 - `v292DfixB37cOff` — fix436
 - `v292DfixB37dOff` — fixB37, vault2
 - `v292DfixB37eOff` — fix334
