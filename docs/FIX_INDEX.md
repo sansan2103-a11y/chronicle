@@ -1,7 +1,7 @@
 # FIX_INDEX — Chronicle fix 辞典（開発担当向け）
 
-> 下書き（laneDOCS・2026-10-31・第 1 段。2026-11-01 に 80-int-a、続けて 81-admg-a、82b-iconux-b、83-flow-c、MSW1-c、2026-11-02 に 84-b37g-a、85-imgsafe（Worker だけ）、86-lc1ox-d の出荷を反映）。
-> **基準の本番**：Pages `20261102-bundle86-lc1ox-d`（version `ccb576f6`・index `16a28966`・home `da8ae5fe`。84-b37g-a の上にコミット `91854ab`。11 本を入れ替え・1 本追加。B37 の部品は不変）＋ Worker `v46.27-thin1lc1c-fc`（ソース `033c4e7b`・Cloudflare の版 `d8ca42f5`・ルートの `imgSafe`=`imgsafex:owner`・`acctFlags`=`admg1`・`admView`=`admpriv1`・`modelSw`=`msw3`）＋ 管理者画面 `b4c007d6`（変更なし）。env `CHR_IMGSAFE_ENFORCE=owner`（未設定＝従来の画像の経路＋ dry run だけ／`owner`＝Owner だけ／`all`＝全員・HOLD）、`CHR_IMGSAFE_OFF=1` で全部止める。2026-11-02 に出荷（台帳 2190〜2200・GPT #127-PK〜#127-PQ）。sha は出荷パッケージの値で、本番の読み直しで一致を確認済み。それまでの流れ：84-b37g-a（Pages だけ・version `8071113f`）、Worker だけ `v46.22-imgsafexd`（`6ffb014f`）→ `v46.23-imgsafexe`（`e492fc7d`）→ `v46.24-imgsafexf`（`87ebec4d`、env を足して `b5a2d45f`）→ `v46.27-thin1lc1c-fc`（`d8ca42f5`）＋ Pages 86。1 つ前までは MSW1-c の Worker `v46.17-msw1c-fc`（ソース `033fa29c`・Cloudflare の版 `4e443c60`）。戻し先は Pages 84 の同名 11 本（core の 1 本は残してよい）、Worker `42ebab48`（`v46.24`）か `085742bf`（`v46.23`）か msw1c の `033fa29c`、env は `CHR_IMGSAFE_ENFORCE` を外す。
+> 下書き（laneDOCS・2026-10-31・第 1 段。2026-11-01 に 80-int-a、続けて 81-admg-a、82b-iconux-b、83-flow-c、MSW1-c、2026-11-02 に 84-b37g-a、85-imgsafe（Worker だけ）、86-lc1ox-d、87-lc1ox2-a、Worker v46.28-r1920b-fc、89-r1920-b の出荷を反映）。
+> **基準の本番**：Pages `20261102-bundle89-r1920-b`（version `e49339f7`・index `4578a867`・home `58af17d4`。87-lc1ox2-a の上にコミット `b395bd2`。9 本を入れ替え。B37 の部品と ICONUX2 は不変）＋ Worker `v46.28-r1920b-fc`（ソース `d7b768bd`・Cloudflare の版 `7e759b58`・ルートの `imgSafe`=`imgsafex:owner`・`acctFlags`=`admg1`・`admView`=`admpriv1`・`modelSw`=`msw3`）＋ 管理者画面 `b4c007d6`（変更なし）。env `CHR_IMGSAFE_ENFORCE=owner`（未設定＝従来の画像の経路＋ dry run だけ／`owner`＝Owner だけ／`all`＝全員・HOLD）、`CHR_IMGSAFE_OFF=1` で全部止める。2026-11-02 に出荷（GPT #127-PS〜#127-PW。台帳の番号は統括の記録を正とする）。sha は出荷パッケージの値で、本番の読み直しで 9 本とも一致を確認済み。それまでの流れ：86-lc1ox-d（version `ccb576f6`）＋ Worker `v46.27-thin1lc1c-fc`（ソース `033c4e7b`・Cloudflare の版 `d8ca42f5`）→ Pages だけ 87-lc1ox2-a（コミット `9237e13`・version `aac19175`）→ Worker `v46.28-r1920b-fc` → Pages 89-r1920-b。戻し先は Pages 87 の同名 9 本（core も 87 の版 `e0df08e6`）、Worker `033c4e7b`（`v46.27`）、env は `CHR_IMGSAFE_ENFORCE` を外す。
 > **「本番稼働」の判定は、上の本番の `index.html` / `home.html` が実際に読み込むかどうかだけで行っています。** ファイルが配信物にあるだけのもの・コメントアウトされたものは「読み込まれていない」と書きます。
 > 確かめていないことは「未確認」と書きます。過去の資料（記憶メモ・2026-07 の knowledge/）にあった説明は、コードと照らして合っている部分だけ使いました。
 
@@ -342,11 +342,11 @@
 ### 2.9 アイコン・画像
 
 #### av2-data / av2-portrait / av2-migrate-ui / LD1 / fg3 — Asset v2（新しいアイコンの仕組み）
-- av2-data（`i23` `h20`。86 では `i25` `h20`・sha `c1931013`・?cb=`20261102-bundle86-lc1ox-d`）：データ層。キャラごとの ID と絵の結び付け（bindings）をサーバーが正として持つ。保存の 4 か所の境界（fix697・fix743・fix705）で押し引きする。
-- av2-portrait（`i340`。86 では `i345`）：表示層。`portrait.list` / `asset.get`、asset_id ごとの IndexedDB キャッシュ、保留・拒否・競合の理由表示、明示の削除 UI。sha `15a51215`・?cb=`20261102-bundle86-lc1ox-d`（86 で更新：Worker が 422 `APPEARANCE_UNSAFE_MINOR` を返したときの理由の文と、分類の 2 語（種類だけ）の添え方。外見の欄の道具は開いたままにする）。前は sha `fdd77f2a`・?cb=`20261101-bundle83-flow-c`。82b で FLW1（キャラ一覧の「最初の絵を作る」「この外見で確定」「削除」の確認をカードの中に出す。文面と OK のあとの処理は同じ。DOM が使えないときだけ従来の confirm。kill `v292DfixFLW1Off`）、83 で FLW2 の呼び出し口（外見の確定のあとの読み直しの前に FLW2 を呼ぶ）。
+- av2-data（`i23` `h20`。89-b では `i25` `h20`・sha `d208ae87`・?cb=`20261102-bundle89-r1920-b`。86〜87 は `c1931013`。89-b で 422 `APPEARANCE_UNSAFE_POLICY` も「絵を作っていない（呼び出し 0）」として返す）：データ層。キャラごとの ID と絵の結び付け（bindings）をサーバーが正として持つ。保存の 4 か所の境界（fix697・fix743・fix705）で押し引きする。
+- av2-portrait（`i340`。86 では `i345`）：表示層。`portrait.list` / `asset.get`、asset_id ごとの IndexedDB キャッシュ、保留・拒否・競合の理由表示、明示の削除 UI。sha `00a31caf`・?cb=`20261102-bundle89-r1920-b`（89-b で更新：`APPEARANCE_UNSAFE_POLICY` の理由の文と外見の欄の道具。86〜87 は `15a51215`。86 で更新：Worker が 422 `APPEARANCE_UNSAFE_MINOR` を返したときの理由の文と、分類の 2 語（種類だけ）の添え方。外見の欄の道具は開いたままにする）。前は sha `fdd77f2a`・?cb=`20261101-bundle83-flow-c`。82b で FLW1（キャラ一覧の「最初の絵を作る」「この外見で確定」「削除」の確認をカードの中に出す。文面と OK のあとの処理は同じ。DOM が使えないときだけ従来の confirm。kill `v292DfixFLW1Off`）、83 で FLW2 の呼び出し口（外見の確定のあとの読み直しの前に FLW2 を呼ぶ）。
 - av2-migrate-ui（`i345`）：Owner 向けの移行 UI（準備 → 今の絵を候補として確保 → 採用 → …）。入口は UI1 で「⚙ 設定 → ⚙ システム → 詳細設定」へ。サーバー側の許可リストが最終の権限。
 - LD1（`i341`）：今の画風（preset）で採用された絵を出す（表示だけ）。sha `a7a98a65`・?cb=`20261101-bundle81-admg-a`（81-admg-a で更新）。kill `v292DfixD1Off`（常に先）。81-admg-a から ON は ADMF1 の `gate('ld1', 端末の opt-in v292DfixLD1On)`（公開範囲 CANARY＝Owner のアカウントだけ。Owner で行が無いときは端末の opt-in）。答えが後から届いて ON になったら `whenOn` で 1 回だけ起動。記録時点で Owner のアカウントが ON かは未確認。
-- LC1（`i343` 外見の案・`i344` 作業欄）：「👥 キャラ」の最上段の作業欄（1 人ずつ「絵を作る／絵を変える」・「まとめて絵を作る」）。作業欄 `v292DfixLC1-workbench.js` の sha `db457b4c`・外見の案 `v292DfixLC1-appearance-proposal.js` の sha `48be7f2a`・どちらも ?cb=`20261102-bundle86-lc1ox-d`（86 の番号で外見の案 `i348`・作業欄 `i349`。前は 作業欄 `7114c9b4`・外見の案 `a012e615`）。kill `v292DfixLC1Off`（常に先）。81-admg-a から ON は ADMF1 の `gate('lc1', 端末の opt-in v292DfixLC1On)`。**公開範囲は 86 から CANARY＝Owner のアカウントだけ ON にできる**（Worker `v46.27-thin1lc1c-fc` で HOLD から変更・GPT #127-PQ。81〜85 は HOLD）。Owner が管理者画面で `lc1` を ON にして使う。Owner が ON にしたか・実機の結果は未確認。86 の LC1OX：外見の案から落とす語を絞った。水着・細身・華奢・太もも・胸元のリボン・普段着や衣装などの普通の言葉は下書きに残し、AI が足した性的な体の言葉・体の線を強調する言葉は今まで通り落とす（外見の案は版 `LC1prop-r2d-lc1ox`）。残課題：年少者らしい設定のとき、AI が足した「細身・華奢・胸元のリボン」などはまだ落ちる（ユーザーが書いたものは残る）。
+- LC1（`i343` 外見の案・`i344` 作業欄）：「👥 キャラ」の最上段の作業欄（1 人ずつ「絵を作る／絵を変える」・「まとめて絵を作る」）。作業欄 `v292DfixLC1-workbench.js` の sha `8def3834`・?cb=`20261102-bundle89-r1920-b`（89-b で `APPEARANCE_UNSAFE_POLICY` の理由の文・やり直しなし・「外見を直す」。86〜87 は `db457b4c`）・外見の案 `v292DfixLC1-appearance-proposal.js` の sha `fb4e689f`・?cb=`20261102-bundle88-lc1ox3-e`（版 `LC1prop-r4e-lc1ox3`。87 は `4dbacfc2`、86 は `48be7f2a`、84 以前は `a012e615`）（86 の番号で外見の案 `i348`・作業欄 `i349`）。kill `v292DfixLC1Off`（常に先）。81-admg-a から ON は ADMF1 の `gate('lc1', 端末の opt-in v292DfixLC1On)`。**公開範囲は 86 から CANARY＝Owner のアカウントだけ ON にできる**（Worker `v46.27` で HOLD から変更・GPT #127-PQ）。Owner の実機 QA（5 人）は PASS（GPT #127-PU）。一般公開は HOLD。外見の案の作り方：①86 の LC1OX：水着・細身・華奢・太もも・胸元のリボン・普段着や衣装などの普通の言葉を下書きに残す。②87 の LC1OX-2：年少者かどうかは描かれる本人の文（外見・設定）だけで決め、世界観の文は見ない。AI が足す句の年少者向けの検査は体の強調だけ（腰までの髪・腰の剣・脚の長い などは通す）。③89-b の LC1OX-3（88-e）：種族・役割の語は「顔の特徴」の枠を埋めない／体格の枠（任意。AI を呼ぶ理由にはしない）／服は重ね着・小物なら 2 句・特徴も 2 句まで／種族・役割らしい見た目の案（説明と食い違う印は足さない。「人間と見分けがつかない」などと書かれた人物には、AI が足す牙・赤い瞳・尖った耳・角・尻尾・獣の耳・翼を落とす）／表に無い種族の見た目を 1 句まで／1 文だけの短い設定（末尾の「。」を除く）は名詞句と同じに残す（性的な語を含むときを除く）／算用数字の「30代」も年代／「大人の女性・大人の男性」を年代の語に／性別と食い違う AI の年代の語は落とす（男装・女装・中性的・ボーイッシュなどの人物は除く）／色の例を指示文から外した（赤い瞳の偏り）。AI が足す誘う響きの語（むっちり・艶めかし・色っぽ・妖艶 など）は年少者のときだけ落とし、成人の普通の色気は残す。ユーザーが自分で書いた言葉と確定した外見は変えない。
 - fg3（`i346`）：Asset v2 の物語の画風を 3 択（デフォルト／クール／ダーク）にする。正本は canonical の `body.cfg.artPreset`。
 - ICONUX2（`v292DfixICONUX2-twotap.js`・86 の番号で `i350`・sha `58254d0c`・?cb=`20261102-bundle86-lc1ox-d`。前は 83 の番号で `i349`・sha `984a534d`・?cb=`20261101-bundle82-iconux-b`。版 `ICONUX2-r3d-lc1ox`）：キャラ一覧のカードで、絵を 2 タップで作る（「🎨 絵を作る」→ 下書き →「この外見で作る」／「🎨 絵を変える」→ 候補を選ぶ。confirm なし）。働くのは LC1 が ON のときだけ（毎回 `__v292DfixLC1.on()` を読む）。**LC1 が CANARY（86 から）なので、動くのは Owner のアカウントで `lc1` が ON のときだけ**。外見の案の近道は年代の語だけを足し、LC1 と同じ語の表の検査に当たれば近道を使わず LC1 の案に任せる。結果が分からない失敗の間は主ボタンを止める。kill `v292DfixICONUXOff`。
 - SETAV1（`v292DfixSETAV1-settings-avatar.js`・83 の番号で `i350`・sha `d2146d0e`・?cb=`20261101-bundle82-iconux-b`）：⚙ 設定の「キャラ」で、Asset v2（schema2）の物語の主人公・NPC の欄に `<img>` が無いときだけ `<img alt="名前">` を 1 つ入れる。絵を入れるのは従来どおり av2-portrait の applyImg と LD1。表示だけ（通信・保存・localStorage への書き込み 0）。schema2 でない物語では何もしない。kill `v292DfixSETAV1Off`。
@@ -361,15 +361,16 @@
   - 本番：ICONFIX1b で候補 1 枚の成功を受理（限定 `PRODUCTION_PASS`・#127-PA）。画風の品質・薄い外見の 422・タップ数などは別課題。
   - 共通ルール（#127-PA）：モデル固有の公式仕様と実測のエラーを、推測上の既定値より優先する。受け付けない引数は値に関係なく送らない。
 
-#### IMGSAFE — 画像の安全確認（Worker ＋ 画面側の部品。85-imgsafe・86-lc1ox-d）
-- 状態：本番稼働（Worker `v46.27-thin1lc1c-fc`・ルートの `imgSafe`=`imgsafex:owner`。Pages 86-lc1ox-d の `v292DfixIMGSAFE-core.js` は 86 の番号で `i16`・sha `e0df08e6`・?cb=`20261102-bundle86-lc1ox-d`。`home.html` は読まない）。台帳 2190〜2200・GPT #127-PK〜#127-PQ。**効くのは Owner のアカウントだけ**（env `CHR_IMGSAFE_ENFORCE=owner`）。全員に効かせる（`all`）のは HOLD。
-- 役割：描かれる人物が未成年で、かつ性的な描写があるときだけ、絵を作らない（422 `APPEARANCE_UNSAFE_MINOR`・画像の provider は呼ばない・費用なし）。判定は 2 段：①ER1x の JSON に「描く姿の年齢」と「性的か」の分類を足し、未成年かつ性的が none 以外なら止める（案X。語の表を足し続ける案Yは採らない）。②AI が none と答えても止める小さな床だけ持つ（描かれる未成年 × 裸・性行為・下着を着ている姿。成人・過去の経歴・持ち物・背景の言及は数えない。広い禁止語は足さない）。分類が欠けた・不正なときは provider を呼ばず止める（再試行なし・10 分だけ覚える）。旧い絵の作り方（`/image`）も同じ分類を 1 回通す。キャッシュ鍵 `xf1`（規則を変えたら古い結果を使わない・アカウントと物語ごとに分ける）。
+#### IMGSAFE — 画像の安全確認（Worker ＋ 画面側の部品。85-imgsafe・86-lc1ox-d・v46.28 ＋ 89-r1920-b）
+- 状態：本番稼働（Worker `v46.28-r1920b-fc`・ソース `d7b768bd`・ルートの `imgSafe`=`imgsafex:owner`。Pages 89-r1920-b の `v292DfixIMGSAFE-core.js` は 86 の番号で `i16`・sha `fb23cf9e`・?cb=`20261102-bundle89-r1920-b`（86〜87 は `e0df08e6`）。`home.html` は読まない）。台帳 2190〜2200・GPT #127-PK〜#127-PW。**効くのは Owner のアカウントだけ**（env `CHR_IMGSAFE_ENFORCE=owner`）。全員に効かせる（`all`）のは HOLD。
+- 役割：描かれる人物が未成年で、かつ性的な描写があるときだけ、絵を作らない（422 `APPEARANCE_UNSAFE_MINOR`・画像の provider は呼ばない・費用なし）。判定は 2 段：①ER1x の JSON に「描く姿の年齢」と「性的か」の分類を足し、未成年かつ性的が none 以外なら止める（案X。語の表を足し続ける案Yは採らない）。②AI が none と答えても止める小さな床だけ持つ（描かれる未成年 × 裸・性行為・下着を着ている姿。成人・過去の経歴・持ち物・背景の言及は数えない。広い禁止語は足さない）。分類が欠けた・不正なときは provider を呼ばず止める（再試行なし・10 分だけ覚える）。旧い絵の作り方（`/image`）も同じ分類を 1 回通す。キャッシュ鍵 `xh4`（規則を変えたら古い結果を使わない・アカウントと物語ごとに分ける。85〜86 は `xf1`）。床の版 `xg2`：v46.28 で、床の「性行為」の語に「性的な場面・ポーズ・行為・描写・姿・奉仕」「性的に描く・強調・見せる」を足した（40 件の dry run の見逃し R02「小学生の女の子、性的な場面」で AI が child/none と答えた件。性的少数者・性的指向などは数えない。描かれる未成年が要る）。
+- R19/R20（v46.28 ＋ 89-b の画面）：①分類 `sexual=explicit`（裸・性行為。性的暴力・同意のない性的な行為も explicit）は年齢を問わず止める。②ER1x の JSON に `real_person`（yes/no）を足し、`yes` かつ性的な描写が none 以外なら止める。yes は、よく知られた実在の公人か、入力が実在の人物だと明言したときだけ（氏名だけでは yes にしない・実在か分からないときは no）。③性的な描写があるのに `real_person` が無いときだけ判定できないとして止める（sexual=none の普通の肖像は影響なし）。どれも 422 `APPEARANCE_UNSAFE_POLICY`（画像の provider は呼ばない・費用なし）。画面は 89-b から理由の文と「外見を設定」「外見を直す」の入口を出す（av2-data・av2-portrait・LC1 作業欄・fix492）。止めないもの：成人の露骨でない色気・普通の水着や衣装・氏名だけの架空の人物・実在の人物の普通の肖像・性的でない流血やホラー。追加の入力は約 +146 トークン（呼び出しは増えない）。
 - Owner 専用の dry run：`POST /imgsafe-dryrun`（Owner かつ active・1 日 30 回・provider 0・保存 0・ログにはラベルと件数だけ）。
 - THIN1（86 の Worker）：画像の安全確認が効いている経路では、見た目の種類が 1 つ、または描く対象がはっきりしていれば足りる（従来は 2 種類必要）。既定の外見を作って保存することはしない。2 種類の語の表そのものは変えていない。
 - 画面側（`v292DfixIMGSAFE-core.js`）：Worker と同じバイトの判定部分を持ち、「👁 見る」（fix315）が送る文の確認と、理由に添える分類の文言だけに使う。通信・保存はしない。観測口 `window.__chrImgSafe`。端末の kill：`v292DfixIMGSAFEOff='1'`（画面側の確認だけ止める。Worker 側は env）。
 - 同時に変わった部品（86）：fix315（SEE）は既定 OFF（`v292Dfix315On='1'` で許可したときだけボタンが出る。許可しても送る前に core で確かめる）、fix492（旧い絵の作り方が 422 `APPEARANCE_UNSAFE_MINOR` を返したときの理由のトースト）、av2-data（同じ理由を、結果不明ではなく「絵を作っていない（呼び出し 0）」として返す）、av2-portrait、FLW2（上の各項）。
-- 止める・戻す：env `CHR_IMGSAFE_OFF=1`（全部止める。dry run も 403）。`CHR_IMGSAFE_ENFORCE` を外すと画像の経路は msw1c と同じ（dry run だけ）。Worker の戻し：`42ebab48`（`v46.24`）／`085742bf`（`v46.23`）／`033fa29c`（msw1c）。Pages の戻し：84 の同名 11 本（core は残してよい）。
-- 未確認：本物の ER1x での分類の正しさ・誤拒否の割合・待ち時間と費用・iPhone Safari。全員に効かせる条件は GPT #127-PQ（Owner の実機 QA → 未知の正常例・禁止例を各約 20 件 dry run → 非 Owner の経路の限定確認 → 別の GPT 裁定）。
+- 止める・戻す：env `CHR_IMGSAFE_OFF=1`（全部止める。dry run も 403）。`CHR_IMGSAFE_ENFORCE` を外すと画像の経路は msw1c と同じ（dry run だけ）。Worker の戻し：`033c4e7b`（`v46.27`。R19/R20 と床 xg2 なし）、さらに前は `42ebab48`（`v46.24`）／`033fa29c`（msw1c）。Pages の戻し：87 の同名 9 本（core も 87 の版 `e0df08e6`）。
+- 未確認：R19/R20 の本物の ER1x での正確さ（実在の人物の見分け・成人の色気を止めないか・`real_person` の欠けの割合）・iPhone Safari。画像の provider の規約で、実在の人物の普通の肖像をどう扱うかは確認中（GPT #127-PW）。全員に効かせる条件は GPT #127-PQ（Owner の実機 QA → 未知の正常例・禁止例を各約 20 件 dry run → 非 Owner の経路の限定確認 → 別の GPT 裁定）。
 
 #### fix197 / fix523 / fix990 / p8d — 旧アイコンの仕組みと安全装置
 - fix197（`i106`）：AI アイコン（seed 固定・キャラ単位）。再生成（fix403）・サーバー URL 優先（fix400）・正名寄せ（fix424）など多数の追加を内蔵。
@@ -418,6 +419,8 @@
 | 84-b37g-a | 初心者向けの案内（B37）が、👥 一覧・確認が開いているとき・入力中・直近 4 秒の操作中は自動で開かない（以前は自動で開いて一覧を閉じ、「この外見で確定」の押下が失われた）。手動の開き方は不変。Pages 4 本（B37-onboard `0e2c5681`・index `fda89e45`・home `3ce5c243`・version `8071113f`）。kill `v292DfixB37gOff` | 83-flow-c | **84-b37g-a で本番**（台帳 2189・GPT #127-PK。戻し 83 の 4 本） | 本番 |
 | 85-imgsafe（X-d〜X-f） | Worker だけ：画像の安全確認（案X）。ER1x の分類＋小さな床・旧い絵の作り方も同じ分類・Owner 専用の dry run・env `CHR_IMGSAFE_ENFORCE`（未設定／`owner`／`all`）と `CHR_IMGSAFE_OFF=1`。`v46.22-imgsafexd`（ソース `9d879f49`）→ `v46.23-imgsafexe`（`085742bf`。性的の定義を絞る）→ `v46.24-imgsafexf`（`42ebab48`。普通の体型・普段着を none にする文言）。env `CHR_IMGSAFE_ENFORCE=owner` を設定。Pages は 84 のまま | msw1c ＋ 84 | **85 で本番**（台帳 2190〜2200 の範囲・GPT #127-PK〜#127-PO。戻し Worker は 1 つ前の版か msw1c `033fa29c`。Owner の実機 QA の結果は未確認） | 本番 |
 | 86-lc1ox-d | Pages 12 本（core 追加）＋ Worker `v46.27-thin1lc1c-fc`（`033c4e7b`・Cloudflare の版 `d8ca42f5`）：THIN1（短い外見でも絵を作る）・LC1 の公開範囲 HOLD→CANARY（Owner だけ）・LC1OX（普通の語を下書きに残す）・SEE 既定 OFF・画面側の core・理由の文言。Pages は version `ccb576f6`・index `16a28966`・home `da8ae5fe` | 84-b37g-a ＋ Worker `v46.24` | **86 で本番**（台帳 2190〜2200・GPT #127-PQ。全員への強制は HOLD。戻し：Pages 84 の 11 本・Worker `42ebab48` か `085742bf` か `033fa29c`・env を外す） | 本番 |
+| 87-lc1ox2-a | Pages 4 本（外見の案 `4dbacfc2`・index `0ad8f67b`・home `32ba38bc`・version `aac19175`。コミット `9237e13`）：LC1OX-2（年少者の判定を本人の文だけで・AI が足す普通の見た目を残す） | 86-lc1ox-d | **87 で本番**（GPT #127-PS。戻し 86 の 4 本） | 本番 |
+| v46.28-r1920b-fc ＋ 89-r1920-b | Worker（ソース `d7b768bd`・Cloudflare の版 `7e759b58`）：R19/R20（explicit は年齢を問わず・実在の人物 × 性的）・床 xg2（R02）・鍵 `xh4`。Pages 9 本（コミット `b395bd2`・version `e49339f7`・index `4578a867`・home `58af17d4`）：LC1OX-3（88-e の外見の案 `fb4e689f`）・`APPEARANCE_UNSAFE_POLICY` の理由の文（av2-data `d208ae87`・av2-portrait `00a31caf`・LC1 作業欄 `8def3834`・fix492 `98e37759`）・core `fb23cf9e` | 87 ＋ Worker `v46.27` | **89-b で本番**（Worker → Pages の順・Owner だけ・GPT #127-PW。戻し：Pages 87 の 9 本・Worker `033c4e7b`） | 本番 |
 | EDLOG | 本文の手動編集の記録（`_narrEdits`） | — | Owner の QA 物語に限った GO | （場所未確認） |
 | DP3 | 削除済み・未保存の物語を端末の一覧から外す | — | HOLD | — |
 | UX72 単体 / 76-jmp 単体 / 74 単体 | 77-ui-a に合流 | — | — | — |
@@ -462,7 +465,7 @@
 | 20 | fix748 | `v292Dfix748-class-d-admission.js` | i20 | `c9ba87aa` | 20260829-fix748 | 保存・同期 |  |
 | 21 | fix698 | `v292Dfix698-mutation-bus.js` | i21 h10 | `406075da` | 20260908-fix837 | 保存・同期 | `v292Dfix698Off` `v292Dfix698On` `v292Dfix837Off` |
 | 22 | fix889 | `v292Dfix889-secret-vault.js` | i22 h42 | `82edc1ad` | 20260928-ac9 | Vault・非表示 | `v292Dfix889Off` `v292Dfix902Off` |
-| 23 | av2-data | `v292Dav2-data.js` | i23 h20（86 では i25 h20） | `c1931013` | 20261102-bundle86-lc1ox-d | アイコン・画像 | `v292Dav2Off` `v292Dav2On` `v292DbndOff` `v292DknwOff` |
+| 23 | av2-data | `v292Dav2-data.js` | i23 h20（86 では i25 h20） | `d208ae87` | 20261102-bundle89-r1920-b | アイコン・画像 | `v292Dav2Off` `v292Dav2On` `v292DbndOff` `v292DknwOff` |
 | 24 | fix859 | `v292Dfix859-story-session.js` | i24 h21 | `5bb41ddd` | 20260916-sp2 | Vault・非表示 | `v292Dfix859Off` |
 | 25 | fix705 | `v292Dfix705-canonical-read-gate.js` | i25 | `337ec0b1` | 20261019-bundle33-b | 認証・アカウント | `v292Dfix705Off` `v292Dfix705bdOff` `v292Dfix781Off` `v292Dfix837Off` |
 | 26 | fix900 | `v292Dfix900-hydrate-ui-gate.js` | i26 | `48c9765f` | 20260928-ac8 | 保存・同期 | `v292Dfix900Off` |
@@ -730,7 +733,7 @@
 | 288 | fix482 | `v292Dfix482-output-quality.js` | i288 | `895da7e1` | 20261019-bundle31-a | 文章品質・プロンプト | `v292Dfix482Off` `v292Dfix482RetryOff` `v292Dfix482RetryOn` `v292Dfix482mOff` |
 | 289 | fix489 | `v292Dfix489-convlog-gate.js` | i289 | `2263d032` | 20260901-fix784 | 話者・会話ログ | `v292Dfix489DropOn` `v292Dfix489Off` `v292Dfix783Off` |
 | 290 | fix490 | `v292Dfix490-slot-write-guard.js` | i290 | `874dce71` | v292Dfix565 | 保存・同期 | `v292Dfix490Off` `v292Dfix576Off` |
-| 291 | fix492 | `v292Dfix492-genfail-toast.js` | i291（86 では i295） | `7e3e1b73` | 20261102-bundle86-lc1ox-d | UI・画面 | `v292Dfix492Off` |
+| 291 | fix492 | `v292Dfix492-genfail-toast.js` | i291（86 では i295） | `98e37759` | 20261102-bundle89-r1920-b | UI・画面 | `v292Dfix492Off` |
 | 292 | fix501 | `v292Dfix501-legacy-appearance-probe.js` | i292 | `bd3bb1ca` | v292Dfix501 | アイコン・画像 | `v292Dfix501Off` |
 | 293 | fix515 | `v292Dfix515-icon-persist-probe.js` | i293 | `dd96cd56` | v292Dfix515 | アイコン・画像 | `v292Dfix515Off` `v292Dfix515On` |
 | 294 | fix516 | `v292Dfix516-regen-local-display.js` | i294 | `115a78e1` | 20261002-ac36 | アイコン・画像 | `v292Dfix516Off` |
@@ -779,11 +782,11 @@
 | 337 | fix851 | `v292Dfix851-posture-directive.js` | i337 | `22543ee2` | 20261001-ac33 | NPC・キャラ状態 | `v292Dfix851Off` `v292Dfix851On` `v292Dfix936Off` `v292DrrOff` |
 | 338 | fix852 | `v292Dfix852-mental-capability.js` | i338 | `dbd6fffe` | 20261001-ac33 | NPC・キャラ状態 | `v292Dfix852Off` `v292Dfix852On` `v292Dfix936Off` `v292DrrOff` |
 | 339 | fix853 | `v292Dfix853-truncated-name-guard.js` | i339 | `14e1e6de` | 20261025-bundle58-npcp1-b | NPC・キャラ状態 | `v292Dfix853Off` `v292Dfix853pOff` `v292DfixA4Off` |
-| 340 | av2-portrait | `v292Dav2-portrait.js` | i340（86 では i345） | `15a51215` | 20261102-bundle86-lc1ox-d | アイコン・画像 | `v292Dav2pOff` `v292Dfix993Off` `v292DfixB37aOff` `v292DfixFG1cOff` |
+| 340 | av2-portrait | `v292Dav2-portrait.js` | i340（86 では i345） | `00a31caf` | 20261102-bundle89-r1920-b | アイコン・画像 | `v292Dav2pOff` `v292Dfix993Off` `v292DfixB37aOff` `v292DfixFG1cOff` |
 | 341 | fixLD1 | `v292DfixLD1-preset-portrait.js` | i341 | `a7a98a65` | 20261101-bundle81-admg-a | アイコン・画像 | `v292DfixD1Off` `v292DfixLD1On` |
 | 342 | fixB37 | `v292DfixB37-onboard.js` | i342 | `0e2c5681` | 20261102-bundle84-b37g-a | シナリオ・ホーム | `v292DfixB37bOff` `v292DfixB37gOff` |
-| 343 | fixLC1 | `v292DfixLC1-appearance-proposal.js` | i343（86 では i348） | `48be7f2a` | 20261102-bundle86-lc1ox-d | アイコン・画像 | `v292DfixLC1Off` |
-| 344 | fixLC1 | `v292DfixLC1-workbench.js` | i344（86 では i349） | `db457b4c` | 20261102-bundle86-lc1ox-d | アイコン・画像 | `v292DfixLC1Off` `v292DfixLC1On` |
+| 343 | fixLC1 | `v292DfixLC1-appearance-proposal.js` | i343（86 では i348） | `fb4e689f` | 20261102-bundle88-lc1ox3-e | アイコン・画像 | `v292DfixLC1Off` |
+| 344 | fixLC1 | `v292DfixLC1-workbench.js` | i344（86 では i349） | `8def3834` | 20261102-bundle89-r1920-b | アイコン・画像 | `v292DfixLC1Off` `v292DfixLC1On` |
 | 345 | av2-migrate-ui | `v292Dav2-migrate-ui.js` | i345 | `488999e4` | 20261019-bundle31-a | アイコン・画像 | `v292Dav2Off` `v292Dav2On` `v292Dav2mOff` |
 | 346 | fg3-artpreset | `v292Dfg3-artpreset.js` | i346 | `5c575d27` | 20261021-bundle37-a | アイコン・画像 | `v292Dfg3Off` `v292DfixB37fOff` |
 | 347 | fix886 | `v292Dfix886-public-anon-client.js` | i347 | `0d4b103e` | 20260921-sp16r | 認証・アカウント | `v292Dfix837Off` `v292Dfix841Off` `v292Dfix886Off` `v292Dfix886TurnOff` |
@@ -824,7 +827,7 @@
 | 372 | fixFLW2 | `v292DfixFLW2-reload-notice.js` | i360（86 の番号。83 では i359） | `82323dfa` | 20261102-bundle86-lc1ox-d | アイコン・画像 | `v292DfixFLW2Off` |
 | 373 | fixFLW4 | `v292DfixFLW4-cast-age.js` | i360 | `e2b2877a` | 20261101-bundle83-flow-c | 文章品質・プロンプト | `v292DfixFLW4Off` |
 | 374 | fixFLW5 | `v292DfixFLW5-home-noop-save.js` | i361（最後） | `c3679050` | 20261101-bundle83-flow-c | 保存・同期 | `v292DfixFLW5Off` `v292Dfix527NoopHomeSaveOff` `v292DfixOrgOff` |
-| 375 | fixIMGSAFE | `v292DfixIMGSAFE-core.js` | i16（86 の番号。home では読まない） | `e0df08e6` | 20261102-bundle86-lc1ox-d | アイコン・画像 | `v292DfixIMGSAFEOff` |
+| 375 | fixIMGSAFE | `v292DfixIMGSAFE-core.js` | i16（86 の番号。home では読まない） | `fb23cf9e` | 20261102-bundle89-r1920-b | アイコン・画像 | `v292DfixIMGSAFEOff` |
 
 ## 付録B　ファイルはあるが読み込まれていないもの（＝本番で動いていない）
 
