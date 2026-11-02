@@ -108,7 +108,7 @@
     if (!text.split('、').every(function (x) { return !x || d.indexOf(x) >= 0; })) return { ok: false, why: 'NOT_VERBATIM' };   /* 下書きの句はすべて説明文にそのままある語 */
     var g = genderOf(gender) || (typeof P.genderGuess === 'function' ? P.genderGuess(d) : '');
     var dropped = (vp.dropped || []).slice();
-    return { ok: true, draft: { text: text, gender: g, dropped: dropped, kinds: n, age: age } };
+    return { ok: true, draft: { text: text, gender: g, dropped: dropped, droppedVisual: (vp.droppedVisual || []).slice(), kinds: n, age: age } };
   }
   function directDraft(desc, gender) { var r = directCheck(desc, gender); return r.ok ? r.draft : null; }
   /* LOW-c: 「案を作り直す／AIに足りない所を足してもらう」の押下中は近道を使わない（LC1 は同じ関数を同期で呼ぶので、capture で印を付けて同じ押下の間だけ有効） */
@@ -126,7 +126,7 @@
           if (dd) {
             st.direct++; note({ kind: 'DIRECT', name: input.name, kinds: dd.kinds });
             setTimeout(function () { cb({ ok: true, code: null, appearance: dd.text, base: dd.text, gender: dd.gender, genderFixed: !!genderOf(input.gender),
-              added: [], rejected: [], dropped: dd.dropped, missing: [], aiCalled: false, direct: true, version: VERSION }); }, 0);
+              added: [], rejected: [], dropped: dd.dropped, droppedVisual: dd.droppedVisual || [], missing: [], aiCalled: false, direct: true, version: VERSION }); }, 0);
             return;
           }
         }

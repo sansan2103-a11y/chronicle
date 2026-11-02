@@ -20,7 +20,7 @@
   'use strict';
   var W = root;
   if (!W || W.__v292DfixLC1prop) return;
-  var VERSION = 'LC1prop-r4e-lc1ox3';
+  var VERSION = 'LC1prop-r4f-90a';
   var MAX_APPEARANCE = 400, MAX_ADD_TOTAL = 80, MAX_CLAUSE = 24, MAX_RAW_ADD = 240;
 
   /* ---------- 枠（ER1 と同じ軸: 年代・髪・瞳・服・特徴）---------- */
@@ -53,8 +53,10 @@
   var PERS_RE = /性格|明るく|明るい|おとなし|優しい|優しく|穏やか|勇敢|臆病|無口|冷静|活発|元気|頑固|真面目|不器用|社交的|内気|短気|好奇心|思い|過去|両親|幼い頃|生まれ|育ち|得意|苦手|好き|嫌い|夢|目標|秘密|嘘|事件|出身|恐れ|願い|傷つ|裏切|復讐|守る|助け/;
   var ASCII_ONLY = /^[\x00-\x7f]+$/;
   function visualPart(desc) {
-    var s = norm(desc), dropped = [];
-    if (!s) return { text: '', dropped: [] };
+    var s = norm(desc), dropped = [], droppedVisual = [];
+    if (!s) return { text: '', dropped: [], droppedVisual: [] };
+    var visLike = function (c) { return BAD_SEX.test(c) || VISUAL_RE.test(c) || VIS_ADD_RE.test(c) || VIS_WEAR_RE.test(c) || RE.clothes.test(c) || RE.hair.test(c) || RE.eyes.test(c) || RE.feature.test(c); };   /* ★90-a: 見た目らしいのに案に入れなかった句（性的な語で外した句を含む）。表示だけに使う */
+    var drop = function (c) { dropped.push(c); if (visLike(c)) droppedVisual.push(c); };
     var sents = s.split(/(?<=[。！？!?])/).map(function (x) { return x.trim(); }).filter(Boolean);
     var keep = [];
     sents.forEach(function (st) {
@@ -63,17 +65,17 @@
       if (ASCII_ONLY.test(core)) { keep.push(core); return; }                    /* 英語の外見文は本人の語としてそのまま */
       core.split('、').forEach(function (c) {
         c = c.trim(); if (!c) return;
-        if (!isVis(c)) { dropped.push(c); return; }
+        if (!isVis(c)) { drop(c); return; }
         if (!PERS_RE.test(c)) { keep.push(c); return; }
         /* 見た目の語と性格の語が同じ句にあるとき: 助詞で区切って、見た目の断片だけ残す */
         var frags = c.split(/(?<=[のでがをに])/).map(function (f) { return f.replace(/[のでがをに]$/, '').trim(); }).filter(Boolean);
         var ok = frags.filter(function (f) { return isVis(f) && !PERS_RE.test(f); });
-        if (ok.length) keep.push(ok.join('、')); else dropped.push(c);
+        if (ok.length) { keep.push(ok.join('、')); frags.forEach(function (f) { if (ok.indexOf(f) < 0) drop(f); }); } else drop(c);   /* ★90-a: 同じ句から外した性格の断片も dropped に数える（表示だけ） */
       });
     });
     var s1 = s.replace(/[。！？!?]+$/, '');   /* ★88-c: 1 文だけの短い設定（末尾の「。」を除く）も名詞句と同じ */
-    if (!keep.length && s1.length <= 30 && !/[。！？!?]/.test(s1) && !PERS_RE.test(s1) && !BAD_SEX.test(s1)) { return { text: s1, dropped: [] }; }   /* 性的な語を含む短文は今までどおり案に入れない */   /* 短い名詞句（例: 謎の少女）はそのまま本人の語 */
-    return { text: keep.join('、'), dropped: dropped };
+    if (!keep.length && s1.length <= 30 && !/[。！？!?]/.test(s1) && !PERS_RE.test(s1) && !BAD_SEX.test(s1)) { return { text: s1, dropped: [], droppedVisual: [] }; }   /* 性的な語を含む短文は今までどおり案に入れない */   /* 短い名詞句（例: 謎の少女）はそのまま本人の語 */
+    return { text: keep.join('、'), dropped: dropped, droppedVisual: droppedVisual };
   }
 
   /* ---------- 性別（決定的）---------- */
@@ -188,11 +190,11 @@
   function propose(input, cb) {
     cb = typeof cb === 'function' ? cb : function () {};
     input = input || {};
-    var vp = input.confirmed ? { text: norm(input.confirmed), dropped: [] } : visualPart(input.desc);
+    var vp = input.confirmed ? { text: norm(input.confirmed), dropped: [], droppedVisual: [] } : visualPart(input.desc);
     var base = vp.text;
     var ctx = { gender: input.gender, desc: input.desc, context: input.context };
     var missing = missingOf(base);
-    var out = function (o) { o.base = base; o.dropped = vp.dropped; o.missing = missing; o.version = VERSION; if (o.gender === undefined) o.gender = ''; cb(o); };
+    var out = function (o) { o.base = base; o.dropped = vp.dropped; o.droppedVisual = vp.droppedVisual || []; o.missing = missing; o.version = VERSION; if (o.gender === undefined) o.gender = ''; cb(o); };
     if (killed()) return out({ ok: false, code: 'OFF', appearance: base, aiCalled: false, gender: (ctx.gender === '女性' || ctx.gender === '男性') ? ctx.gender : genderGuess(base + ' ' + (input.desc || '')) });
     if (!missing.length || (base && !/[\u3040-\u30ff\u4e00-\u9fff]/.test(base))) {          /* 足りない枠が無い／日本語でない外見文（枠を判定できない）→ AI は呼ばない */
       var c0 = compose(base, null, ctx); return out({ ok: true, appearance: c0.appearance, gender: c0.gender, genderFixed: c0.genderFixed, added: [], rejected: [], aiCalled: false });

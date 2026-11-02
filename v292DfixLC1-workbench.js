@@ -263,7 +263,7 @@
       if (!W.rows[cid] || r.phase !== 'proposing') return;
       res = res || {};
       var g = d.castG || genderOf(prevPg) || genderOf(res.gender);
-      r.prop = { ok: !!res.ok, code: res.code || null, appearance: res.appearance || '', original: res.base || '', last: res.appearance || '', gender: g, genderFixed: !!d.castG, added: res.added || [], dropped: res.dropped || [], aiCalled: !!res.aiCalled };
+      r.prop = { ok: !!res.ok, code: res.code || null, appearance: res.appearance || '', original: res.base || '', last: res.appearance || '', gender: g, genderFixed: !!d.castG, added: res.added || [], dropped: res.dropped || [], droppedVisual: res.droppedVisual || [], aiCalled: !!res.aiCalled };
       r.pg = g; r.pa = r.prop.appearance;
       setRow(r, { phase: 'proposed', msg: '', tone: '' });
     };
@@ -390,7 +390,7 @@
       var input = { name: r.name, gender: d.castG, desc: d.desc, confirmed: '', context: lore().slice(0, 120), hero: r.hero };
       var fin = function (res) {
         res = res || {}; var g = genderOf(res.gender) || d.castG;
-        r.prop = { ok: !!res.ok, code: res.code || null, appearance: res.appearance || '', original: res.base || '', last: res.appearance || '', gender: g, genderFixed: !!d.castG, added: res.added || [], dropped: res.dropped || [], aiCalled: !!res.aiCalled };
+        r.prop = { ok: !!res.ok, code: res.code || null, appearance: res.appearance || '', original: res.base || '', last: res.appearance || '', gender: g, genderFixed: !!d.castG, added: res.added || [], dropped: res.dropped || [], droppedVisual: res.droppedVisual || [], aiCalled: !!res.aiCalled };
         r.pg = g; r.pa = r.prop.appearance; setRow(r, { phase: 'proposed', msg: '', tone: '' }); next();
       };
       if (P && typeof P.propose === 'function') { stats.ai++; P.propose(input, fin); } else fin({ ok: false, code: 'NO_MODULE', appearance: '', base: '', gender: d.castG });
@@ -490,7 +490,9 @@
     if (!p.ok) sub.push('AIの案は作れませんでした。' + (p.original ? 'あなたの設定にある見た目の語だけを入れてあります。' : '') + '外見を直接入力してもかまいません。');
     else if (p.aiCalled) sub.push('あなたが書いた語はそのままで、足りない所だけをAIが足しました。');
     else if (!p.editing) sub.push('設定の説明にある見た目の語をそのまま入れました。');
-    if (p.dropped && p.dropped.length) sub.push('性格・経歴などの説明は含めていません。');
+    var dv = (p.droppedVisual || []).length;   /* ★90-a: 見た目らしい句を案に入れなかったときは、そのことを知らせる（語は出さない） */
+    if (dv) sub.push('元の設定の一部を画像用の外見に反映していません。内容を確認してください。');
+    if (p.dropped && p.dropped.length > dv) sub.push('性格・経歴などの説明は含めていません。');
     if (sub.length) h += '<div class="lc1-sub" data-lc1-sub="' + esc(r.cid) + '">' + esc(sub.join(' ')) + '</div>';
     if (!bulk) h += '<button class="lc1-go" data-lc1="go" data-cid="' + esc(r.cid) + '">この外見で作る</button><button data-lc1="regen" data-cid="' + esc(r.cid) + '">案を作り直す</button><button data-lc1="cancel" data-cid="' + esc(r.cid) + '">やめる</button>';
     return h + '</div>';
