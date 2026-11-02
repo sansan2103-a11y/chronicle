@@ -19,7 +19,7 @@
    mode 'rules'（AI の分類がある経路）= A だけ。'strict'（既定・AI の分類が無い経路）= A と B、未成年らしさに girl / boy も足す。
    文を整える順は r3 と同じ（見えない書式の文字 → NFKC → 合成記号 → 小文字 → 似た形の文字（キリル・ギリシャ・small capital）→ 工口/口リ/一 → かな → 空白）。 */
 var CHR_IMGSAFE_V = 'imgsafex';
-var CHR_IMGSAFE_RULES_V = 'xg1';   /* ★X-c: 判定の版（キャッシュの鍵に入れる＝規則を変えたら古い分類は使わない） */
+var CHR_IMGSAFE_RULES_V = 'xg2';   /* ★40 件 run 1 R02: 性的な場面・ポーズ…を act に（床にも効く） */   /* ★X-c: 判定の版（キャッシュの鍵に入れる＝規則を変えたら古い分類は使わない） */
 var CHR_IMGSAFE_MAXLEN = 20000;
 var CHR_IMGSAFE_BOILER = ['girl next door', 'girl-next-door'];
 var CHR_IMGSAFE_INVIS = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0\uFFF0-\uFFFB]|\uDB40[\uDC00-\uDDEF]|\uD834[\uDD73-\uDD7A]/g;
@@ -71,7 +71,7 @@ var CHR_IMGSAFE_YOUTH_STRICT = /\b(?:girls?|boys?|girlish|boyish|child-?like|chi
 var CHR_IMGSAFE_SEX_A = [
   ['underwear', /全裸|半裸|裸|はだか|ぬーど|すっぽんぽん|一糸(?:まとわ|纏わ)ぬ|生まれたままの姿|下着|らんじぇりー|ぶらじゃー|のーぶら|のーぱん|ぶら|ぱんてぃ|ぱんちら|ぱんつ(?:が|の)?(?:丸見え|まるみえ)|てぃーばっく|tばっく|ねぐりじぇ|まいくろびきに|紐水着|ひも水着|極小水着/g],
   ['underwear', /\b(?:nude|nudes|naked|nudity|topless|bottomless|unclothed|undressed|undressing|half-?naked|semi-?nude|(?:no|without)\s(?:clothes|clothing)|not\swearing\s(?:any(?:thing)?|clothes|clothing)|wearing\snothing|nothing\son(?!\s[a-z])|(?:wearing\s)?(?:only|just)\s(?:a\s)?(?:bath\s)?towel|(?:bath\s)?towel\sonly|nothing\sbut|lingerie|underwear|undergarments?|panties|panty|pantsu|bras?|brassiere|bra-?less|thong|g-?string|negligee|micro[- ]?bikinis?|string bikinis?|upskirt)\b/g],
-  ['act', /せっくす|性行為|性交|自慰|おなにー|絶頂|強姦|れいぷ|犯され|淫行|援交|援助交際|売春|射精|精液|愛撫|ぽるの|成人向け|18禁|r-?18|えっち(?:する|して|した|な行為|しよ)/g],
+  ['act', /性的な?(?:場面|ぽーず|行為|描写|姿|奉仕)|性的に(?:描|強調|見せ)|せっくす|性行為|性交|自慰|おなにー|絶頂|強姦|れいぷ|犯され|淫行|援交|援助交際|売春|射精|精液|愛撫|ぽるの|成人向け|18禁|r-?18|えっち(?:する|して|した|な行為|しよ)/g],
   ['act', /\b(?:sex|having\ssex|intercourse|sex\sact|sexual\sact|masturbat[a-z]*|orgasm[a-z]*|porn[a-z]*|explicit|r-?18|18\+|xxx|nsfw|hentai|rape[ds]?|raping|molest[a-z]*|fellatio|blowjob|semen|cum)\b/g]
 ];
 var CHR_IMGSAFE_SEX_B = [

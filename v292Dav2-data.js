@@ -780,6 +780,7 @@
         if (!err && st === 402) return done({ ok: false, code: 'BUDGET', calls: 1 });
         if (!err && st === 429) return done({ ok: false, code: 'RATE_LIMITED', calls: 1 });
         if (!err && st === 422 && code === 'PROFILE_NOT_ENGLISH') return done({ ok: false, code: 'PROFILE_NOT_ENGLISH', calls: 0 });   /* ★fix991 (GPT #127-EN B): the Worker stopped before the provider (P8E) — not an unknown outcome */
+        if (!err && st === 422 && code === 'APPEARANCE_UNSAFE_POLICY') return done({ ok: false, code: 'APPEARANCE_UNSAFE_POLICY', calls: 0 });   /* ★R1920 (rv 88 MID-2): known refusal before the provider */
         if (!err && st === 422 && code === 'APPEARANCE_UNSAFE_MINOR') return done({ ok: false, code: 'APPEARANCE_UNSAFE_MINOR', calls: 0, imgsafe: { y: String(j.imgsafeY || ''), s: String(j.imgsafeS || '') } });   /* ★IMGSAFE2 (GPT #127-PE): the Worker refused before the provider (minor-looking + sexual) — not an unknown outcome; category codes only */
         if (!err && st === 503 && code === 'LEDGER_UNHEALTHY') return done({ ok: false, code: 'LEDGER_UNHEALTHY', calls: 0 });
         if (!err && st === 502) return done({ ok: false, code: 'GENERATION_FAILED', calls: 1 });
@@ -893,6 +894,7 @@
       if (!err && st === 402) return done({ ok: false, code: 'BUDGET', calls: 1 });
       if (!err && st === 429) return done({ ok: false, code: 'RATE_LIMITED', calls: 1 });
       if (!err && st === 422 && code === 'PROFILE_NOT_ENGLISH') return done({ ok: false, code: 'PROFILE_NOT_ENGLISH', calls: 0 });   /* ★fix991 (GPT #127-EN B): the Worker stopped before the provider (P8E) — not an unknown outcome */
+      if (!err && st === 422 && code === 'APPEARANCE_UNSAFE_POLICY') return done({ ok: false, code: 'APPEARANCE_UNSAFE_POLICY', calls: 0 });   /* ★R1920 */
       if (!err && st === 422 && code === 'APPEARANCE_UNSAFE_MINOR') return done({ ok: false, code: 'APPEARANCE_UNSAFE_MINOR', calls: 0, imgsafe: { y: String(j.imgsafeY || ''), s: String(j.imgsafeS || '') } });   /* ★IMGSAFE2 (GPT #127-PE): the Worker refused before the provider (minor-looking + sexual) — not an unknown outcome; category codes only */
       if (!err && st === 503 && code === 'LEDGER_UNHEALTHY') return done({ ok: false, code: 'LEDGER_UNHEALTHY', calls: 0 });
       if (!err && st === 502) return done({ ok: false, code: 'GENERATION_FAILED', calls: 1 });
