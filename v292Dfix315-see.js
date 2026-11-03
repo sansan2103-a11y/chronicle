@@ -28,7 +28,7 @@
   /* ★IMGSAFE2 / GPT #127-PG: SEE は既定 OFF。端末で明示的に許可したとき（localStorage v292Dfix315On='1'）だけボタンを出し、絵を作る。
      OFF のとき: ボタンは出さない（出ていれば外す）。window.__v292Dfix315api.open() は短い案内だけ出し、画像サービスへは何も送らない。部品は消さない。
      ON のときも、下の画面側の判定は早めの警告のための補助。最終の安全は Worker 側で行う設計にする（報告書の「SEE を再び既定 ON にするなら」）。 */
-  function seeOn(){ return lsg('v292Dfix315On')==='1'; }
+  function seeOn(){ return false; }   /* ★NDI1 (GPT #127-QK): 場面の絵は Pollinations へ直接つなぐ経路しか無いので、端末の許可（v292Dfix315On）があっても作らない。Worker 経由の場面画像ができるまで止める */
   var SEE_OFF_NOTE='「👁 見る」（場面を絵にする）は、安全確認のため今は止めています。画像サービスへは何も送っていません。';
 
   // ---- [1] 人物中心の素材集め ----
