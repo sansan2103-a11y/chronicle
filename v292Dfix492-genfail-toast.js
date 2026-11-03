@@ -132,10 +132,10 @@
 
   /* ★IMGSAFE2 (GPT #127-PE / 独立レビュー MID-5): 旧 /image が 422 APPEARANCE_UNSAFE_MINOR を返したときだけ、短い理由を出す（複製を読むだけ。元の Response は触らない） */
   var MSG_UNSAFE = '未成年に見える人物の性的な描写があるため、アイコンを作りませんでした（費用はかかっていません）。キャラの外見から、性的な体の描写や見せ方を外してください';
-  var MSG_POLICY = '露骨な性的描写、または実在の人物の性的な描写があるため、アイコンを作りませんでした（費用はかかっていません）。キャラの外見を直してください';   /* ★R1920 */
+  var MSG_POLICY = 'この外見ではアイコンを作りませんでした（費用はかかっていません）。キャラの外見を直してください', MSG_POLICY_WHY = { real_person: '実在の人物に該当する可能性があるため、画像生成を保留しました（費用はかかっていません）。オリジナルの架空キャラクターに変更する場合は、キャラの外見を編集してください。前の画像はそのまま残ります。', explicit: '露骨な性的描写があるため、アイコンを作りませんでした（費用はかかっていません）。キャラの外見を直してください' };   /* ★R1920 ★90-b */
   function notifyUnsafe(resp){
     try { resp.clone().json().then(function(j){ try { if (!j || (j.errorCode !== 'APPEARANCE_UNSAFE_MINOR' && j.errorCode !== 'APPEARANCE_UNSAFE_POLICY')) return; stats.unsafe = (stats.unsafe || 0) + 1; if (isHidden()){ stats.hiddenSkipped++; return; }
-      if (j.errorCode === 'APPEARANCE_UNSAFE_POLICY') { showToast(MSG_POLICY); lastShown = Date.now(); stats.toasts++; return; }
+      if (j.errorCode === 'APPEARANCE_UNSAFE_POLICY') { showToast(Object.prototype.hasOwnProperty.call(MSG_POLICY_WHY, String(j.imgsafeWhy || '')) ? MSG_POLICY_WHY[j.imgsafeWhy] : MSG_POLICY); lastShown = Date.now(); stats.toasts++; return; }
       var G = window.__chrImgSafe; showToast(MSG_UNSAFE + ((G && G.hint) ? G.hint(j.imgsafeY, j.imgsafeS) : '')); lastShown = Date.now(); stats.toasts++; } catch(e){} }, function(){}); } catch(e){}
   }
 

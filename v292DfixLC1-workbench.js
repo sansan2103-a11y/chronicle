@@ -146,7 +146,7 @@
     NOT_FOUND: 'この物語では使えません', ASSET_V2_UNAVAILABLE: 'この物語では使えません', NOT_SCHEMA2_DOCUMENT: 'この物語では使えません',
     RECHECK_FAIL: '物語・キャラクター・アカウントを確かめられなかったので、絵は作っていません', PROFILE_MISMATCH: '確定した外見をこの端末で確かめられなかったので、絵は作っていません。ページを再読み込みしてください',
     NO_PROFILE: '確定した外見が無いので、絵は作っていません',
-    APPEARANCE_UNSAFE_POLICY: '露骨な性的描写、または実在の人物の性的な描写があるため、この外見では絵を作れません（絵は作っていません）。「外見を直す」で外見を直してください',   /* ★R1920 */
+    APPEARANCE_UNSAFE_POLICY: 'この外見では絵を作れません（絵は作っていません）。「外見を直す」で外見を直してください',   /* ★R1920 ★90-b: 理由が届かないときの中立の文 */
     APPEARANCE_UNSAFE_MINOR: '未成年に見える人物の性的な描写があるため、この外見では絵を作れません（絵は作っていません）。「外見を直す」で、性的な体の描写や見せ方を外してください' };   /* ★IMGSAFE1 (GPT #127-PE) */
   var SET_MSG = { LOCAL_NOT_SYNCED: 'この端末の保存がまだサーバーと揃っていません', REBASE_REQUIRED: 'サーバー側の物語が更新されています', READ_FAIL: 'サーバーに接続できませんでした',
     NOT_CANONICAL_ROW: 'この物語はサーバー側で編集できない状態です', CONFLICT: 'サーバー側が更新されていました', NOT_APPLIED: '反映を確認できませんでした', EMPTY_APPEARANCE: '外見の文が空です',
@@ -155,7 +155,8 @@
   var STOP_SET = { LOCAL_NOT_SYNCED: 1, REBASE_REQUIRED: 1, READ_FAIL: 1, NOT_CANONICAL_ROW: 1, CONFLICT: 1, NOT_APPLIED: 1, READBACK_FAIL: 1, APPLIED_SERVER_MOVED: 1,
     SERVER_NOT_SCHEMA2: 1, AV2_OFF: 1, AV2_FLAG_OFF: 1, NOT_SCHEMA2_DOCUMENT: 1, 'canonical-deleted': 1, 'not-canonical': 1 };
   var NO_RETRY = { APPEARANCE_UNSAFE_POLICY: 1, APPEARANCE_UNSAFE_MINOR: 1, BUDGET: 1, OUTCOME_UNKNOWN: 1, PROFILE_NOT_ENGLISH: 1, REBASE_REQUIRED: 1, REGISTRATION_BLOCKED: 1, NOT_FOUND: 1, ASSET_V2_UNAVAILABLE: 1, NOT_SCHEMA2_DOCUMENT: 1 };
-  function efText(code) { return EF_MSG[code] || 'できませんでした'; }
+  var POLICY_WHY = { real_person: '実在の人物に該当する可能性があるため、画像生成を保留しました。オリジナルの架空キャラクターに変更する場合は、『外見を直す』から編集できます。前の画像はそのまま残ります。', explicit: '露骨な性的描写があるため、この外見では絵を作れません（絵は作っていません）。「外見を直す」で外見を直してください' };   /* ★90-b */
+  function efText(code, x) { if (code === 'APPEARANCE_UNSAFE_POLICY' && x && Object.prototype.hasOwnProperty.call(POLICY_WHY, String(x.imgsafeWhy || ''))) return POLICY_WHY[x.imgsafeWhy]; return EF_MSG[code] || 'できませんでした'; }
   function imgsafeHint(code, x) { try { var G = window.__chrImgSafe; return (code === 'APPEARANCE_UNSAFE_MINOR' && x && x.imgsafe && G && G.hint) ? G.hint(x.imgsafe.y, x.imgsafe.s) : ''; } catch (e) { return ''; } }   /* ★IMGSAFE2 */
 
   /* ---------- 1 分 4 枚の待ち（B37 の run() と同じ）---------- */
@@ -228,7 +229,7 @@
     }
     if (code === 'CANDIDATES_PENDING') { setRow(r, { phase: 'idle', ok: null, cand: true, fail: null, msg: EF_MSG[code], tone: 'info', prop: null }); return 'cand'; }
     if (code === 'EXISTS') { if (W.ptr) W.ptr[r.cid] = 1; setRow(r, { phase: 'done', ok: true, fail: null, msg: EF_MSG.EXISTS, tone: 'ok' }); return 'ok'; }
-    setRow(r, { phase: 'failed', ok: false, msg: efText(code) + imgsafeHint(code, x), tone: 'ng', fail: { code: code, kind: kind, stage: 'gen', retry: !NO_RETRY[code], unknown: code === 'OUTCOME_UNKNOWN', fix: code === 'PROFILE_NOT_ENGLISH' || code === 'APPEARANCE_UNSAFE_MINOR' || code === 'APPEARANCE_UNSAFE_POLICY' } });   /* ★IMGSAFE1: 外見を直す */
+    setRow(r, { phase: 'failed', ok: false, msg: efText(code, x) + imgsafeHint(code, x), tone: 'ng', fail: { code: code, kind: kind, stage: 'gen', retry: !NO_RETRY[code], unknown: code === 'OUTCOME_UNKNOWN', fix: code === 'PROFILE_NOT_ENGLISH' || code === 'APPEARANCE_UNSAFE_MINOR' || code === 'APPEARANCE_UNSAFE_POLICY' } });   /* ★IMGSAFE1: 外見を直す */
     return 'fail';
   }
 
