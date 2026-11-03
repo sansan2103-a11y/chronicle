@@ -340,7 +340,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261103-bundle91-b';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261103-bundle92-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4430,6 +4430,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <script src="v292Dfix66-renderhook-repair.js?cb=20261025-bundle55-sfl-a"></script>
   <script src="v292DfixEDIT01-edit-reconcile.js?cb=20261031-bundle71-ednedg-a"></script><!-- v292DfixEDIT01: 本文を編集したら会話ログを本文に合わせる(フェーズ1) + カード✕。OFF=localStorage v292DfixEdit01Off=1 -->
   <script src="v292DfixSFLTap-card-correct.js?cb=20261031-bundle65-sfltap-b"></script><!-- v292DfixSFLTap(bundle65): 会話ログのカードをタップして、その場で話者を直す（SFL の ✎ と同じ保存経路・同じ守り・同じ記録）。SFL が使えるとき（uiEnabled）だけ。停止 = localStorage v292DfixSFLTapOff=1（常に勝つ）・SFL の kill v292DfixSFL1Off=1 でも止まる -->
+  <script src="v292DfixEDLOG-narr-edit-log.js?cb=20261103-bundle92-a"></script><!-- ★EDLOG (laneEDICF): ✎ の本文編集を差分の記録 turn._narrEdits として同じ S.saveD に残す（本文の全文は持たない）。既定OFF・物語 smvhfq1rulp だけ・opt-in localStorage v292DfixEDLogOn=1 / kill v292DfixEDLogOff=1。SFL1/EDIT-01 の包みの外側を 1 回だけ包む -->
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
     <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
     <!-- v292Dfix189c: fix70(dialogue-order, 本文ベースの並べ替え)を無効化。fix70bが
@@ -4856,6 +4857,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixUI1-subtract.js?cb=20261025-bundle54-ui1-a"></script>
 <!-- ★ICF (lane ICF / Tier 1): アイコンの失敗理由をこの端末にだけ記録する（記録のみ・要求/応答/画像/保存は変えない・どこへも送らない）。読む口 window.__chrIconFail.status()/.summary()。停止 = localStorage v292DfixICFOff=1 -->
 <script src="v292DfixICF-icon-fail-log.js?cb=20261101-bundle83-flow-c"></script>
+<script src="v292DfixICF80-record.js?cb=20261103-bundle92-a"></script><!-- ★ICF80 (laneEDICF): window.__icfRecord(category, meta) = 自動アイコンなどの「作らなかった理由」を ICF の記録（v292DfixICF_log）へ 1 行足す口＋5 分類の読み口。通信 0・包み 0。既定OFF・opt-in localStorage v292DfixICF80On=1 / kill v292DfixICF80Off=1（v292DfixICFOff=1 にも従う） -->
 <!-- ★FLW3 (laneFLOWFIX・GPT #127-OW FLOW): 最初の場面のあと入力の種類を元へ戻す（G.startScene を包むだけ・保存/通信 0）。kill: localStorage v292DfixFLW3Off=1 -->
 <script src="v292DfixFLW3-opening-mode.js?cb=20261101-bundle82-iconux-b"></script>
 <!-- ★FLW2/FLW4/FLW5 (laneFLOWFIX2・GPT #127-PC FLOWFIX 2-A / 4 / 5-C・Local): 外見の確定の読み直しの表示と結果の持ち越し（表示だけ）／【キャラ属性】へはっきりした年齢だけ／🏠 の何も変えない保存で未保存の印を立てない。kill: v292DfixFLW2Off / v292DfixFLW4Off / v292DfixFLW5Off -->
