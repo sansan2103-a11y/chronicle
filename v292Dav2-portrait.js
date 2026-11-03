@@ -20,6 +20,17 @@
   function M(){ return window.__v292Dav2Map || null; }
   function A(){ return window.__chronicleAssetV2 || null; }
   function F(){ return window.__v292Dfix697 || null; }
+  /* ★MIDICON3 (GPT #127-PC「portrait.js の EXTRA 表示 Local GO・独立レビュー必須」): 途中から登場したキャラの画像専用の控え（ch_mx）。
+     データ（呼び名・言い換え・asset_id・引き継ぎ先）は v292DfixMIDICON がくれるだけ。img の src を書くのはこのファイルの applyImg（sweep）だけ。
+     ・未登録の話者で、呼び名か言い換えが控えと同じ（そろえた形）→ 控えの絵＋小さな「自動」。
+     ・控えが登録キャラに引き継がれていて、そのキャラに絵がある → そのキャラの絵を優先。
+     ・登録キャラ（その呼び名の binding がそのキャラ）にまだ絵が無い間は、控えの絵を出したまま（文字の丸に戻して点滅させない）。
+     ・読み込み中・失敗は今の文字の丸のまま（src を変えない）。kill: v292Dav2pOff（この部品全体）/ v292DfixMIDICONOff（控えのデータが来ない）。 */
+  function MXD(){ return window.__v292DfixMIDICON || null; }
+  function mxFor(m, label){ try { var x = MXD(); return (x && typeof x.extraFor === 'function') ? x.extraFor(m.story_id, label) : null; } catch(e){ return null; } }
+  var mxStats = { shown: 0, preferNpc: 0, keepWhileNpcEmpty: 0, badgeAdd: 0, badgeDel: 0 };
+  function mxNpcConfirmed(cid){ try { var S0 = state(); var c0 = S0 && S0.cast; if (!c0) return false; var all = [].concat(c0.hero ? [c0.hero] : [], Array.isArray(c0.npcs) ? c0.npcs : []);   /* ★mx3-b: the NPC has an Owner-confirmed appearance (profile) */
+      for (var i = 0; i < all.length; i++){ var e = all[i]; if (e && e.character_id === cid){ var p = e.profile; return !!(p && typeof p === 'object' && ((typeof p.appearance === 'string' && p.appearance.trim()) || p.gender === '女性' || p.gender === '男性')); } } } catch(e){} return false; }
   function doc(){ try { var m = M(); return (m && typeof m.docSchema2 === 'function') ? m.docSchema2() : false; } catch(e){ return false; } }
   function sid(){ try { var f = F(); var s = f && f.status ? f.status().storyId : null; return s || window.__chronicleDocumentStoryKey || null; } catch(e){ return null; } }
   function state(){ try { return (typeof window.__chronicleGetState === 'function') ? window.__chronicleGetState('av2p') : null; } catch(e){ return null; } }
@@ -136,7 +147,15 @@
     });
   }
   /* desired picture for an identity — never generates */
+  function pictureExtra(ident){   /* ★MIDICON3 */
+    var aid = ident.asset_id;
+    if (mem[aid]){ stats.memHit++; return { state: 'extra', src: mem[aid], title: '自動で作った絵（途中から登場した人物）' }; }
+    if (getFailed[aid]){ if (Date.now() - getFailed[aid] > 60000) delete getFailed[aid]; return ident.fallback || { state: 'unreg', src: placeholderImage(ident.label), title: '未登録の話者' }; }
+    loadAsset(aid, ident.story_id);
+    return ident.fallback || { state: 'unreg', src: placeholderImage(ident.label), title: '未登録の話者' };
+  }
   function pictureFor(m, ident){
+    if (ident.kind === 'EXTRA') return pictureExtra(ident);   /* ★MIDICON3 */
     if (ident.kind !== 'REGISTERED') return { state: 'unreg', src: placeholderImage(ident.label), title: '未登録の話者' };
     var e = entById(m, ident.id) || { name: '?' };
     if (!listed || listed.story_id !== m.story_id) return { state: 'loading', src: placeholderImage(e.name), title: '' };
@@ -168,13 +187,38 @@
     var ident = null;
     if (cid){ var e = entById(m, cid); ident = e ? { kind: 'REGISTERED', id: e.id, historical: e.status === 'DELETED' } : null; }
     if (!ident) ident = resolveLabel(m, img.getAttribute('alt'));
+    var mxl = img.getAttribute('alt'), mxx = null;   /* ★MIDICON3 */
+    if (ident.kind === 'UNREGISTERED' && (mxx = mxFor(m, mxl))){
+      var mxc = mxx.claimed_by ? entById(m, mxx.claimed_by) : null;
+      if (mxc && mxc.status !== 'DELETED' && ((listed && listed.story_id === m.story_id && !listed.error && own(listed.by, mxc.id)) || mxx.claim_state === 'CANDIDATE' || mxNpcConfirmed(mxc.id))){ ident = { kind: 'REGISTERED', id: mxc.id, historical: false }; mxStats.preferNpc++; }   /* ★mx3-b (中-3): a CANDIDATE claim / an NPC with a confirmed appearance shows the NPC side, never the extra */
+      else ident = { kind: 'EXTRA', id: mxx.extra_id, asset_id: mxx.asset_id, label: key(mxl), story_id: m.story_id };
+    }
     var pic = pictureFor(m, ident);
+    if (ident.kind === 'REGISTERED' && pic.state === 'none' && (mxx = mxFor(m, mxl)) && (!mxx.claimed_by || mxx.claimed_by === ident.id) && mxx.claim_state !== 'CANDIDATE' && !mxNpcConfirmed(ident.id)){   /* ★MIDICON3: promoted, no picture of its own yet (★mx3-b 中-3: not when the claim is only a CANDIDATE or the NPC has a confirmed appearance — the Owner decides) */
+      var mxr = resolveLabel(m, mxl);
+      if (mxr.kind === 'REGISTERED' && mxr.id === ident.id){ pic = pictureExtra({ asset_id: mxx.asset_id, label: key(mxl), story_id: m.story_id, fallback: pic }); if (pic.state === 'extra') mxStats.keepWhileNpcEmpty++; }
+    }
+    if (pic.state === 'extra') mxStats.shown++;
     if (img.getAttribute('src') !== pic.src){ try { img.onerror = null; img.src = pic.src; stats.set++; } catch(e){} }
     if (img.getAttribute('data-av2') !== pic.state) img.setAttribute('data-av2', pic.state);
     if (ident.kind === 'REGISTERED'){ if (img.getAttribute('data-av2-id') !== ident.id) img.setAttribute('data-av2-id', ident.id); }
     else if (img.hasAttribute('data-av2-id')) img.removeAttribute('data-av2-id');
     if (img.hasAttribute('data-avpk')) img.removeAttribute('data-avpk');
     if (pic.title && img.title !== pic.title) img.title = pic.title;
+    mxMark(img, pic.state === 'extra');   /* ★MIDICON3 */
+  }
+  /* ★MIDICON3: the small 「自動」 mark — one span inside the img's own box (styled by one <style>; nothing else in the card is changed) */
+  var MX_STY = 'v292Dav2-mx-sty';
+  function mxStyle(){ if (document.getElementById(MX_STY)) return; var st = document.createElement('style'); st.id = MX_STY;
+    st.textContent = '[data-av2-mxhost]{position:relative}[data-av2-mxbadge]{position:absolute;left:0;right:0;bottom:0;font:bold 8px/11px sans-serif;text-align:center;color:#fff;background:rgba(40,60,96,.82);pointer-events:none;letter-spacing:1px;z-index:1}';
+    (document.head || document.documentElement).appendChild(st); }
+  function mxMark(img, on){
+    var host = img.parentNode; if (!host || host.nodeType !== 1) return;
+    var b = null; for (var c = host.firstChild; c; c = c.nextSibling) if (c.nodeType === 1 && c.hasAttribute && c.hasAttribute('data-av2-mxbadge')){ b = c; break; }
+    if (on){ if (img.getAttribute('data-av2-auto') !== '1') img.setAttribute('data-av2-auto', '1');
+      if (!b){ mxStyle(); b = document.createElement('span'); b.setAttribute('data-av2-mxbadge', '1'); b.setAttribute('data-av2-ui', 'mx'); b.setAttribute('aria-label', '自動で作った絵'); b.textContent = '自動';
+        if (!host.hasAttribute('data-av2-mxhost')) host.setAttribute('data-av2-mxhost', '1'); host.appendChild(b); mxStats.badgeAdd++; } }
+    else { if (img.hasAttribute('data-av2-auto')) img.removeAttribute('data-av2-auto'); if (b){ host.removeChild(b); mxStats.badgeDel++; } if (host.hasAttribute('data-av2-mxhost')) host.removeAttribute('data-av2-mxhost'); }
   }
 
   /* charlist (fix145) cards: own identity + v2 actions; legacy regeneration buttons hidden */
@@ -845,6 +889,8 @@
     status: function(){ return { doc: doc(), killed: killed(), storyId: sid(), listed: listed ? { story_id: listed.story_id, at: listed.at, error: listed.error, n: Object.keys(listed.by || {}).length } : null,
                                  mem: Object.keys(mem).length, stats: JSON.parse(JSON.stringify(stats)), wrapped118: wrapped118, log: LOG.slice(-20), flw1: { off: flw1Off(), c: JSON.parse(JSON.stringify(flw1)) } }; },
     refresh: function(){ listed = null; getFailed = {}; schedule(); return true; },
+    extrasChanged: function(){ schedule(); return true; },   /* ★MIDICON3: new extras data → one more sweep (no list refetch) */
+    mxStats: function(){ return JSON.parse(JSON.stringify(mxStats)); },
     resolve: function(label){ var m = model(); return m ? resolveLabel(m, label) : null; },
     placeholderImage: placeholderImage
   };

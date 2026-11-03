@@ -3652,12 +3652,60 @@
     }).then(function(r){ if (timer) clearTimeout(timer); cb(r, null); })['catch'](function(){ if (timer) clearTimeout(timer); cb(null, 'NETWORK_FAILED'); });
   }
   function assetV2EnsureFirstImpl(args, cb){ assetV2WriteImpl('portrait.ensure_first', args, cb); }
+  /* ★MIDICON3 (laneMIDICON3 2026-11-01・GPT #127-PC「fix697 の専用書き込み口 Local GO（正本・競合保護を維持）」):
+     途中から登場したキャラの「画像専用の控え」(ch_mx) だけの専用の口。assetV2WriteImpl は広げない（character_id 必須・既存 op のまま）。
+     ・op は 3 つだけ（portrait.mx_list 読む / portrait.mx_ensure 作る / portrait.mx_claim 昇格したキャラへ写す）。送る項目は op ごとに固定し、それ以外は捨てる。
+     ・mx_ensure は character_id を送らない（番号は Worker が決める）。postSaveOnce を通らない＝fix733 TYPE A・canonical の CAS・afterSidePort・再読み込みに触れない。
+     ・ここでは再送しない。待ち時間は mx_ensure 150 秒（Worker の札 300 秒より短い）、ほかは TIMEOUT_MS。時間切れは 'TIMEOUT'（呼び手は送り直さず mx_list を 1 回読むだけ）。
+     ・何も保存しない（ch_mx の番号を S・長期記憶・名簿・sidecar に書かない）。 */
+  var AV2_MX_TIMEOUT_MS = 150000, AV2_MX_ID_RE = /^ch_mx[A-Za-z0-9_-]{22}$/;
+  var AV2_MX_KINDS = { human: 1, spirit: 1, yokai: 1, creature: 1, shadow: 1 };
+  var AV2_MX_TRAITS = { pale: 1, hollow_eyes: 1, translucent: 1, wet_hair: 1, hair_over_face: 1, lifeless: 1, eye_glow: 1, dark_haze: 1 };
+  function av2MxStr(s, max){ return (typeof s === 'string' && s.length >= 1 && s.length <= max) ? s : null; }
+  function assetV2MxImpl(op, args, cb){
+    cb = (typeof cb === 'function') ? cb : function(){};
+    if (!isLoggedIn()){ cb(null, 'NOT_LOGGED_IN'); return; }
+    var a = (args && typeof args === 'object') ? args : {};
+    if (typeof a.story_id !== 'string' || !a.story_id){ cb(null, 'BAD_STORY_ID'); return; }
+    var body = { op: op, story_id: a.story_id };
+    if (op === 'portrait.mx_list'){ /* story_id only */ }
+    else if (op === 'portrait.mx_ensure'){
+      var h = av2MxStr(a.handle, 40); if (!h){ cb(null, 'BAD_HANDLE'); return; }
+      var tc = a.expected_turn_count; if (typeof tc !== 'number' || !(tc >= 0) || Math.floor(tc) !== tc){ cb(null, 'BAD_TURN_COUNT'); return; }
+      var ap = av2MxStr(a.appearance, 400); if (!ap){ cb(null, 'BAD_APPEARANCE'); return; }
+      if (!AV2_MX_KINDS[a.kind]){ cb(null, 'BAD_KIND'); return; }
+      var vs = [];
+      if (a.variants != null){ if (!Array.isArray(a.variants) || a.variants.length > 3){ cb(null, 'BAD_VARIANTS'); return; }
+        for (var i = 0; i < a.variants.length; i++){ var v = av2MxStr(a.variants[i], 40); if (!v){ cb(null, 'BAD_VARIANTS'); return; } vs.push(v); } }
+      var tr = [];
+      if (a.traits != null){ if (!Array.isArray(a.traits) || a.traits.length > 4){ cb(null, 'BAD_TRAITS'); return; }
+        for (var j = 0; j < a.traits.length; j++){ if (!AV2_MX_TRAITS[a.traits[j]]){ cb(null, 'BAD_TRAITS'); return; } tr.push(a.traits[j]); } }
+      body.handle = h; body.expected_turn_count = tc; body.appearance = ap; body.kind = a.kind;
+      if (vs.length) body.variants = vs;
+      if (tr.length) body.traits = tr;
+      if (a.gender === '女性' || a.gender === '男性') body.gender = a.gender;
+    }
+    else if (op === 'portrait.mx_claim'){
+      if (typeof a.extra_id !== 'string' || !AV2_MX_ID_RE.test(a.extra_id)){ cb(null, 'BAD_EXTRA_ID'); return; }
+      if (typeof a.character_id !== 'string' || !AV2_CID_RE.test(a.character_id) || AV2_MX_ID_RE.test(a.character_id)){ cb(null, 'BAD_CHARACTER_ID'); return; }
+      body.extra_id = a.extra_id; body.character_id = a.character_id;
+    }
+    else { cb(null, 'OP_NOT_ALLOWED'); return; }
+    var ac = null, timer = null, timedOut = false;
+    try { ac = new AbortController(); timer = setTimeout(function(){ timedOut = true; try { ac.abort(); } catch(e){} }, op === 'portrait.mx_ensure' ? AV2_MX_TIMEOUT_MS : TIMEOUT_MS); } catch(e){}
+    var opts = { method: 'POST', headers: authHeaders(body), body: JSON.stringify(body) };
+    if (ac) opts.signal = ac.signal;
+    fetch(proxyUrl() + '/save', opts).then(function(res){
+      return res.json().then(function(j){ return { status: res.status, j: j }; }, function(){ return { status: res.status, j: null }; });
+    }).then(function(r){ if (timer) clearTimeout(timer); cb(r, null); })['catch'](function(){ if (timer) clearTimeout(timer); cb(null, timedOut ? 'TIMEOUT' : 'NETWORK_FAILED'); });
+  }
 
   window.__v292Dfix697 = {
     __armed: true,
     assetV2Read: assetV2ReadImpl,
     assetV2EnsureFirst: assetV2EnsureFirstImpl,
     assetV2Write: assetV2WriteImpl,
+    assetV2Mx: assetV2MxImpl,   /* ★MIDICON3: ch_mx only (mx_list / mx_ensure / mx_claim) */
     /* ★★fix733: side-port 側から current document の rev authority を無効化するための口。
        **進めることは決してしない**（UNKNOWN へ落とすだけ）。fix702 / fix729 からも呼べる。 */
     invalidateDocRevAuthority: invalidateDocRevAuthority,

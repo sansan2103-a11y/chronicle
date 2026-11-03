@@ -40,7 +40,7 @@
   'use strict';
   var VER = 'admg1-20261101-bundle81';
   var KILL = 'v292DfixADMF1Off';
-  var KEYS = { sfl1: 'phase', npres1: 'off', lc1: 'phase', ld1: 'phase', rc1: 'phase', oma1: 'phase' };   /* ★admg1: +lc1 / ld1 / rc1 / oma1（行なし = 段階） */ var LATE = [];   /* 未設定（行なし）の扱い: 'phase' = Worker の段階（1 = 端末の設定 / 2 = OFF）、'off' = 常に OFF（admf2） */
+  var KEYS = { sfl1: 'phase', npres1: 'off', lc1: 'phase', ld1: 'phase', rc1: 'phase', oma1: 'phase', midicon1: 'off' };   /* ★MIDICON3: midicon1（途中から登場したキャラの自動アイコン）。行なし = 常に OFF。範囲は Worker（mx3-c = Owner だけの CANARY） */   /* ★admg1: +lc1 / ld1 / rc1 / oma1（行なし = 段階） */ var LATE = [];   /* 未設定（行なし）の扱い: 'phase' = Worker の段階（1 = 端末の設定 / 2 = OFF）、'off' = 常に OFF（admf2） */
   var HOLD_MS = 10000;
   var ACCT_RE = /^[0-9a-f]{32}$/;
   var T0 = Date.now();
@@ -115,7 +115,7 @@
   }
 
   root.__v292DfixADMF1 = { ver: VER, gate: gate, decide: decide, whenOn: whenOn, keys: function () { return Object.keys(KEYS); },
-    status: function () { return { ver: VER, killed: lsGet(KILL) === '1', sinceLoadMs: Date.now() - T0, holdMs: HOLD_MS, sfl1: decide('sfl1'), npres1: decide('npres1'), lc1: decide('lc1'), ld1: decide('ld1'), rc1: decide('rc1'), oma1: decide('oma1'), late: LATE.map(function (L) { return L.key; }), rechecks: ST.rechecks, changes: ST.changes, lastOn: ST.lastOn, last: ST.last ? JSON.parse(JSON.stringify(ST.last)) : null, hist: JSON.parse(JSON.stringify(ST.hist)) }; } };
+    status: function () { return { ver: VER, killed: lsGet(KILL) === '1', sinceLoadMs: Date.now() - T0, holdMs: HOLD_MS, sfl1: decide('sfl1'), npres1: decide('npres1'), lc1: decide('lc1'), ld1: decide('ld1'), rc1: decide('rc1'), oma1: decide('oma1'), midicon1: decide('midicon1'), late: LATE.map(function (L) { return L.key; }), rechecks: ST.rechecks, changes: ST.changes, lastOn: ST.lastOn, last: ST.last ? JSON.parse(JSON.stringify(ST.last)) : null, hist: JSON.parse(JSON.stringify(ST.hist)) }; } };
   try {
     root.addEventListener('chr:account-me', function () { recheck('me'); });
     root.addEventListener('chr:account-flags', function () { recheck('flags'); });

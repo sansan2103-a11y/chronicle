@@ -27,7 +27,7 @@
   'use strict';
   var W = (typeof window !== 'undefined') ? window : null;
   if (!W || W.__chrIconFail) return;
-  var VER = 'ICF-a1', LSK = 'v292DfixICF_log', KILL = 'v292DfixICFOff';
+  var VER = 'ICF-a1-mx3c', LSK = 'v292DfixICF_log', KILL = 'v292DfixICFOff';
   var MAX_N = 100, MAX_CHARS = 20000, MAX_OKMS = 30, COALESCE_MS = 600000, RR_MS = 900000, EF_TIMEOUT_MS = 90000;
   function now() { return Date.now(); }
   function lsg(k) { try { return W.localStorage.getItem(k); } catch (e) { return null; } }
@@ -210,6 +210,28 @@
       };
       own(gR, wR); gR.__icf = true; try { F.assetV2Read = gR; } catch (e) {} fDone.r = F.assetV2Read === gR;
     }
+    /* ★MIDICON3-c (GPT #127-QM): the dedicated ch_mx port (fix697 assetV2Mx). Only portrait.mx_ensure is recorded: failure = code / HTTP / Worker errorCode / reason class / ms
+       (never the handle, the appearance or any id); success = a count only. mx_list / mx_claim pass through untouched. */
+    var wM = F.assetV2Mx;
+    if (typeof wM === 'function' && !wM.__icf && !fDone.m) {
+      var gM = function (op, args, cb) {
+        var a = Array.prototype.slice.call(arguments);
+        if (!killed() && op === 'portrait.mx_ensure') {
+          var t0 = now(), v0 = visSeq;
+          a[2] = wrapCb(cb, function (r, err) {
+            var j = r && r.j, s = r && typeof r.status === 'number' ? r.status : null;
+            var w = j && (j.errorCode || (typeof j.error === 'string' && /^[A-Z_0-9]+$/.test(j.error) ? j.error : null)) || null;
+            var ws = j && typeof j.status === 'string' && /^[A-Z_]+$/.test(j.status) ? j.status : null;
+            if (!err && s === 200 && (ws === 'CREATED' || ws === 'EXISTS' || ws === 'IN_FLIGHT')) { later(function () { okRec({ p: 'mx', o: 'mx_ensure', r: ws, gen: false }); }); return; }
+            var k = j && typeof j.mxk === 'string' && /^[a-z_]{2,12}$/.test(j.mxk) ? j.mxk : (err ? 'net' : /^(APPEARANCE_UNSAFE_MINOR|APPEARANCE_UNSAFE_POLICY|PROFILE_NOT_ENGLISH)$/.test(String(w)) ? 'imgsafe' : (s === 402 || s === 429 || w === 'MX_CAP') ? 'cap' : (s === 403 || s === 404 || s === 501 || s === 503) ? 'gate' : s === 502 ? 'provider' : 'other');
+            var hid = visSeq !== v0 || hiddenNow();
+            later(function () { fail({ p: 'mx', u: null, o: 'mx_ensure', s: 'gen', r: err ? (err === 'TIMEOUT' ? 'TIMEOUT' : 'NETWORK') : (w || ws || ('HTTP_' + s)), h: s, w: w, x: 'mxk_' + k + (j && typeof j.cap === 'string' && /^[A-Za-z]{1,16}$/.test(j.cap) ? ':' + j.cap : ''), ms: now() - t0, hid: hid, q: j && j.requestId, coalesce: true }); });
+          });
+        }
+        return wM.apply(this, a);
+      };
+      own(gM, wM); gM.__icf = true; try { F.assetV2Mx = gM; } catch (e) {} fDone.m = F.assetV2Mx === gM;
+    }
     okAny = !!(fDone.ef && fDone.w);
     st.hooks.f = okAny; return okAny;
   }
@@ -342,6 +364,9 @@
                failMs: { p50: pct(fms, 0.5), p90: pct(fms, 0.9), max: fms.length ? Math.max.apply(null, fms) : null }, okMs: { n: oms.length, p50: pct(oms, 0.5), p90: pct(oms, 0.9), max: oms.length ? Math.max.apply(null, oms) : null },
                sameCharRepeat: Object.keys(perCh).filter(function (k) { return perCh[k] > 1; }).length, chars: Object.keys(perCh).length,
                last: d.slice(-5) }; },
+    mxNote: function (k, why) {   /* ★MIDICON3-c: a count of a device-side MIDICON outcome (no request was sent). Codes only. */
+      if (killed()) return false; var kk = /^[a-z_]{2,12}$/.test(String(k)) ? String(k) : 'other', ww = /^[A-Z_]{2,24}$/.test(String(why)) ? String(why) : 'OTHER';
+      okRec({ p: 'mx', o: 'mx_skip', r: kk + '.' + ww, gen: false }); return true; },
     entries: function (n) { var d = data().d; return JSON.parse(JSON.stringify(d.slice(-Math.max(1, Math.min(MAX_N, +n || 20))))); },
     clear: function () { try { W.localStorage.removeItem(LSK); } catch (e) {} mem = null; return true; },
     __t: { h8: h8, legacyInfo: legacyInfo, cap: cap, PF: PF, BR: BR }

@@ -19,7 +19,7 @@
 <script src="v292Dfix654-storage-trap.js?cb=v292Dfix731"></script>
 <!-- v292Dfix893: Pages origin（*.pages.dev）でだけ動く cookie session shim。github.io では何もしない。 -->
 <script src="v292Dfix893-account-cookie-shim.js?cb=20261031-bundle78-admf-c"></script>
-<script src="v292DfixADMF1-account-flags.js?cb=20261101-bundle81-admg-a"></script><!-- ★admg1: +lc1 / ld1 / rc1 / oma1（管理者画面の機能スイッチ・全体の値）。★admf2: 話者の訂正（sfl1）と NPC 場面整合（npres1・行なし=OFF）。★ADMF-1 r3: 管理者画面のアカウント機能スイッチ（/auth/me accountFlags）で SFL を使うかを決める（読むだけ・書き込み 0）。OFF=localStorage v292DfixADMF1Off=1（= SFL OFF） -->
+<script src="v292DfixADMF1-account-flags.js?cb=20261103-bundle93-a"></script><!-- ★admg1: +lc1 / ld1 / rc1 / oma1（管理者画面の機能スイッチ・全体の値）。★admf2: 話者の訂正（sfl1）と NPC 場面整合（npres1・行なし=OFF）。★ADMF-1 r3: 管理者画面のアカウント機能スイッチ（/auth/me accountFlags）で SFL を使うかを決める（読むだけ・書き込み 0）。OFF=localStorage v292DfixADMF1Off=1（= SFL OFF） -->
 <!-- ★BAV2 (GPT #127-DV/#127-EE): beta を最初から Asset v2 で始める（client 側は使い勝手だけ。安全は Worker。Worker が features.assetV2Beta を返さない間は何もしない） -->
 <script src="v292Dbav2-beta.js?cb=20261019-bundle33-b"></script>
 <!-- ★fix990 (GPT #127-EN D): 旧画像 op が ASSET_V2_REQUIRED で断られたら、このタブではその op を 10 分送らない（fix523/633/634 より前に置く）。kill: localStorage v292Dfix990Off=1 -->
@@ -340,7 +340,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261103-bundle92-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261103-bundle93-a';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4107,7 +4107,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      default OFF (opt-in=v292Dfix803On / kill=v292Dfix803Off / story=v292Dfix803Story)。fix802 の fire 末尾から onFire で呼ばれる。
      timer 0 / retry 0 / 新 write path 0 / localStorage 書込は fix793.materialize() 経由の v292Dmem1_slot_<sid> のみ -->
 <script src="v292Dfix803-auto-materialize.js?cb=20260930-ac25"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20261024-bundle44-b"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20261103-bundle93-a"></script>
 <!-- ★fix912 SA-3 S2 in-session reconcile（fix697 の後・kill v292Dfix912Off / v292Dfix911Off） -->
 <script src="v292Dfix912-s2-insession.js?cb=20261022-bundle41-a"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
@@ -4825,7 +4825,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- ★av2 C2 (GPT 911): Asset v2 presentation plane (portrait.list / asset.get / IDB / placeholder / reason display / addBinding / explicit delete UI).
      Acts ONLY on assetSchema-2 documents (canonical-derived; never the local flag). Legacy stories: no DOM work at all.
      kill: localStorage[v292Dav2pOff]=1 (legacy generation guards stay) -->
-<script src="v292Dav2-portrait.js?cb=20261103-bundle90-b"></script>
+<script src="v292Dav2-portrait.js?cb=20261103-bundle93-a"></script>
 <script src="v292DfixLD1-preset-portrait.js?cb=20261101-bundle81-admg-a"></script>
 <!-- ★B37-B (GPT #127-HF B): 新しい S2 物語の「登場人物の最初の絵」案内（任意・止めない・自動は 1 回だけ）。OFF=localStorage v292DfixB37bOff=1 -->
 <script src="v292DfixB37-onboard.js?cb=20261102-bundle84-b37g-a"></script>
@@ -4835,6 +4835,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixICONUX2-twotap.js?cb=20261102-bundle90-a"></script>
 <!-- ★SETAV1 (Owner 2026-11-01): 設定の「キャラ」の主人公・NPC の絵が Asset v2 の物語で「?」になる件。schema2 で <img> が無い欄にだけ <img alt="名前"> を置き、絵は av2 applyImg が入れる（表示だけ・通信/保存 0）。kill: localStorage v292DfixSETAV1Off=1 -->
 <script src="v292DfixSETAV1-settings-avatar.js?cb=20261101-bundle82-iconux-b"></script>
+<!-- ★MIDICON3-c (GPT #127-QM: Owner だけの CANARY): 途中から登場したキャラの自動アイコン（画像専用の控え）。鍵 midicon1（Worker が範囲を決める）。新しく遊んだターンだけ。S・長期記憶・名簿には何も書かない。kill = localStorage v292DfixMIDICONOff=1 -->
+<script src="v292DfixMIDICON-auto-icon.js?cb=20261103-bundle93-a"></script>
 <script src="v292Dav2-migrate-ui.js?cb=20261019-bundle31-a"></script>
 <!-- ★FG-3 (GPT #127-FR): S2 の物語の画風を 3 択（デフォルト／クール／ダーク）に。正本は server の story cfg.artPreset。
      S2 では旧来の「アイコン再生成」「⟳」を隠し、押されても旧経路へ渡さない。旧形式の物語では何もしない。kill: localStorage[v292Dfg3Off]=1 -->
@@ -4856,7 +4858,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- ★UI44 v292DfixUI1（Astra UI レビュー / GPT 裁定 UI_SUBTRACT・独立レーン C）: 表示だけの引き算。空の会話ログを自動で畳む・Asset v2 移行の入口をプレイ画面から外し設定内に置く・怪異/アイコンを設定へ・オート/展開を提案を「⋯ その他」へ・ボタン名（生成し直す/取り消す/取消を戻す/場面を絵に）。r2=GPT #127-LQ（移行の入口は owner/beta の設定内）。textContent・保存・生成・送信は不変。kill: localStorage v292DfixUI1Off='1' -->
 <script src="v292DfixUI1-subtract.js?cb=20261025-bundle54-ui1-a"></script>
 <!-- ★ICF (lane ICF / Tier 1): アイコンの失敗理由をこの端末にだけ記録する（記録のみ・要求/応答/画像/保存は変えない・どこへも送らない）。読む口 window.__chrIconFail.status()/.summary()。停止 = localStorage v292DfixICFOff=1 -->
-<script src="v292DfixICF-icon-fail-log.js?cb=20261101-bundle83-flow-c"></script>
+<script src="v292DfixICF-icon-fail-log.js?cb=20261103-bundle93-a"></script>
 <script src="v292DfixICF80-record.js?cb=20261103-bundle92-a"></script><!-- ★ICF80 (laneEDICF): window.__icfRecord(category, meta) = 自動アイコンなどの「作らなかった理由」を ICF の記録（v292DfixICF_log）へ 1 行足す口＋5 分類の読み口。通信 0・包み 0。既定OFF・opt-in localStorage v292DfixICF80On=1 / kill v292DfixICF80Off=1（v292DfixICFOff=1 にも従う） -->
 <!-- ★FLW3 (laneFLOWFIX・GPT #127-OW FLOW): 最初の場面のあと入力の種類を元へ戻す（G.startScene を包むだけ・保存/通信 0）。kill: localStorage v292DfixFLW3Off=1 -->
 <script src="v292DfixFLW3-opening-mode.js?cb=20261101-bundle82-iconux-b"></script>
