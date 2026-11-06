@@ -32,12 +32,15 @@
  *   ・失敗の種類を分ける（imgsafe の拒否 / 上限 / provider の失敗 / まだ対象でない / 同一性 / 停止中）。画面には何も出さない（イニシャルの丸のまま）。
  *     記録 = この部品の 'v292DfixMIDICON_v1' の数（種類ごとの回数だけ）＋ ICF（v292DfixICF の mx の行）。名前・本文・番号は残さない。自動の再試行はしない。
  *   ・上限は Worker の設定値（mx_list の caps）に合わせる。数えて予約するのは Worker（1 ターン 1・1 物語・1 日）。
+ * ■mx3-e（本番 QA 2026-11-03 の指摘）: ① 別名の行き先が登録キャラのときだけ A_ALIAS。登録されていない話者名（fix277 の準登録の別名: 郵便屋のトマス → トマス）なら
+ *   その名前を Worker へ送る呼び名にし（本文の「郵便屋のトマス」と <say who="トマス"> の両方が数えられる）、名簿の呼び名は表示の別名として覚える。
+ *   ② ターン数が Worker と合わない（Worker が遅れている）ときは、同じターンを 1 回だけ間を置いて見直す（1 ターン 1 枚は変わらない）。
  * ■診断: window.__v292DfixMIDICON.status()
  * ===================================================================== */
 (function (root) {
   'use strict';
   if (typeof window === 'undefined' || root.__v292DfixMIDICON) return;
-  var VER = 'mx3c-20261103';
+  var VER = 'mx3e-20261103';
   var KILL = 'v292DfixMIDICONOff', LSK = 'v292DfixMIDICON_v1';
   var CAP = { turn: 1, storyDay: 2, storyTotal: 6, storyDesc: 2, acctDay: 5 };
   var SETTLE_MS = 3000, POLL_MS = 1500;
@@ -45,7 +48,7 @@
   function lsGet(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { root.localStorage.setItem(k, v); return true; } catch (e) { return false; } }
   var LOG = []; function note(o) { try { o.t = Date.now(); LOG.push(o); if (LOG.length > 120) LOG.shift(); } catch (e) {} }
-  var stats = { list: 0, listFail: 0, ensure: 0, claim: 0, created: 0, exists: 0, inflight: 0, skipped: 0, mismatch: 0, timeouts: 0, settles: 0, notPlayed: 0, notYet: 0, alias: 0, refused: 0, provider: 0 };   /* ★mx3-c: + notPlayed / notYet / alias / refused / provider */
+  var stats = { aliasSpeaker: 0, aliasRegistered: 0, mmRetry: 0, list: 0, listFail: 0, ensure: 0, claim: 0, created: 0, exists: 0, inflight: 0, skipped: 0, mismatch: 0, timeouts: 0, settles: 0, notPlayed: 0, notYet: 0, alias: 0, refused: 0, provider: 0 };   /* ★mx3-c: + notPlayed / notYet / alias / refused / provider */
 
   /* ---------- environment ---------- */
   function state() { try { return (typeof root.__chronicleGetState === 'function') ? root.__chronicleGetState('midicon') : null; } catch (e) { return null; } }
@@ -283,7 +286,7 @@
 
   /* ---------- extras (memory only) ---------- */
   var X = { story: null, extras: [], turnCount: null, at: 0, listed: false, stopped: null, claimTried: {}, lastTurnSeen: -1, lastChange: 0, doneTurn: -1, busy: false, started: false, lastRegOk: null, pageStop: null, last: null, initListAsked: false,
-    played: {}, seen: {}, seenN: 0, alias: {}, caps: null };   /* ★mx3-c: played[n] = turn n was played on this page (+1 turn with content never seen on this page); seen = content hashes; alias = hash(handle) → extra_id; caps = the Worker's settings */
+    played: {}, seen: {}, seenN: 0, alias: {}, caps: null, mmRetry: {}, mmWait: 0 };   /* ★mx3-e: mmRetry[n] = the one re-run of turn n was used; mmWait = not before */   /* ★mx3-c: played[n] = turn n was played on this page (+1 turn with content never seen on this page); seen = content hashes; alias = hash(handle) → extra_id; caps = the Worker's settings */
   function setExtras(id, j) {
     if (!j || !Array.isArray(j.extras)) return;
     X.story = id; X.at = Date.now(); X.listed = true; X.turnCount = (typeof j.turn_count === 'number') ? j.turn_count : null;
@@ -300,6 +303,8 @@
     if (killed() || !X.listed || X.story !== String(storyId || '')) return null;
     var n = norm(String(label == null ? '' : label)); if (!n) return null;
     for (var i = 0; i < X.extras.length; i++) if (X.extras[i].forms.indexOf(n) >= 0) { var e = X.extras[i]; return { extra_id: e.extra_id, asset_id: e.asset_id, handle: e.handle, claimed_by: e.claimed_by, claim_state: e.claim_state, cls: e.cls }; }
+    try { var at = (typeof root.__v292AliasFix === 'function') ? root.__v292AliasFix(String(label)) : null; if (typeof at === 'string' && at && at !== label) { var an = norm(at);   /* ★mx3-e: the label is an alias of a speaker name that has an extra (any device) */
+        if (an && an.length >= 2 && endsWith(n, an)) for (var k2 = 0; k2 < X.extras.length; k2++) if (X.extras[k2].forms.indexOf(an) >= 0) { var e3 = X.extras[k2]; return { extra_id: e3.extra_id, asset_id: e3.asset_id, handle: e3.handle, claimed_by: e3.claimed_by, claim_state: e3.claim_state, cls: e3.cls, alias: true }; } } } catch (e) {}
     var al = X.alias[hk(n)];   /* ★mx3-c: a renamed figure the Worker mapped to an existing extra (409 EXTRA_*) shows that extra's picture */
     if (al) for (var j = 0; j < X.extras.length; j++) if (X.extras[j].extra_id === al) { var e2 = X.extras[j]; return { extra_id: e2.extra_id, asset_id: e2.asset_id, handle: e2.handle, claimed_by: e2.claimed_by, claim_state: e2.claim_state, cls: e2.cls, alias: true }; }
     return null;
@@ -326,6 +331,13 @@
   function promotedSoon() { var o = {}; if (!f641Live()) return o; try { var P = root.__v292Dfix641; if (P && typeof P.dryRun === 'function') { var r = P.dryRun(); (r && Array.isArray(r.promoted) ? r.promoted : []).forEach(function (x) { var nm = (typeof x === 'string') ? x : (x && (x.name || x.n)); if (nm) o[norm(nm)] = 1; }); } } catch (e) {} return o; }
   /* ★mx3-b: fix640 resolved this role word to a registered name → A (read only) */
   function roleResolvedTo(handle) { try { var L = root.__v292Dfix640; var w = L && typeof L.why === 'function' ? L.why(handle) : null; return (w && typeof w.resolvedTo === 'string' && w.resolvedTo) ? w.resolvedTo : null; } catch (e) { return null; } }
+  /* ★mx3-e: where does __v292AliasFix send this handle? registered = the target is a registered character (name / binding / contains) → A.
+     usable = an unregistered name that is the TAIL of the handle (郵便屋のトマス → トマス), ≥2 letters, not generic / role / descriptor → send it as the handle. */
+  function aliasInfo(key, nk, cast, bindings) { var t = null; try { t = (typeof root.__v292AliasFix === 'function') ? root.__v292AliasFix(key) : null; } catch (e) { t = null; }
+    if (typeof t !== 'string' || !t || t === key) return null; var tnk = norm(t); if (!tnk || tnk === nk) return null;
+    var reg = !!identityA(cast, bindings, [tnk]) || Object.prototype.hasOwnProperty.call(bindings, t);
+    var usable = !reg && tnk.length >= 2 && endsWith(nk, tnk) && !generic(tnk) && !isDesc(tnk) && !isRoleish(tnk);
+    return { target: dispKey(t) || t, tnk: tnk, registered: reg, usable: usable }; }
   function aliasOfRegistered(h) { try { return typeof root.__v292AliasFix === 'function' && root.__v292AliasFix(h) !== h; } catch (e) { return false; } }
   function fold(s) { try { var R = root.__v292Dfix307api; if (R && typeof R.fkey764 === 'function') return String(R.fkey764(s)); } catch (e) {} return norm(s); }
   var PERSONISH = /人物|怪異|霊|幽霊|亡霊|妖怪|人|女|男|少女|少年|化け物|怪物|影/, NOT_PERSON = /現象|物体|場所|風景|景色|液体|物音|背景|動物|^物$|^物品/;
@@ -345,6 +357,8 @@
     });
     var C = [];
     cands.forEach(function (c) {
+      var al = aliasInfo(c.key, c.nk, cast, bindings), disp = null;   /* ★mx3-e */
+      if (al && al.usable && !isDesc(c.nk)) { disp = c.key; c = { e: c.e, key: al.target, nk: al.tnk, vars: [] }; stats.aliasSpeaker++; }
       var why = null, desc = isDesc(c.nk), f = [c.nk].concat(c.vars), ev = null;
       if (generic(c.nk)) why = 'GENERIC';
       else if (so.h[hk(c.nk)]) why = 'NO_RETRY:' + so.h[hk(c.nk)];
@@ -353,7 +367,7 @@
       else if (identityA(cast, bindings, f)) why = 'A_REGISTERED';
       else if (apposition(cast, bindings, T, f)) why = 'A_APPOSITION';
       else if (roleResolvedTo(c.key) && identityA(cast, bindings, [norm(roleResolvedTo(c.key))])) why = 'A_ROLE_RESOLVED';
-      else if (aliasOfRegistered(c.key)) why = 'A_ALIAS';
+      else if (al && al.registered) { why = 'A_ALIAS'; stats.aliasRegistered++; }   /* ★mx3-e: only a REGISTERED target is the same person (was: any alias) */
       else if (castFold[fold(c.key)]) why = 'A_FOLD';
       else if (soon[c.nk]) why = 'FIX641_SOON';
       else if (X.extras.some(function (x) { return x.forms.some(function (a) { return f.some(function (b) { return a.length >= 2 && (a.indexOf(b) >= 0 || b.indexOf(a) >= 0); }); }); })) why = 'EXTRA_EXISTS_OR_OVERLAP';
@@ -363,7 +377,7 @@
       else { ev = evidence(T, f, desc); if (!ev.ok) why = 'EVIDENCE:' + ev.t + '/' + ev.need + (ev.recent ? '' : ':old');
         else if (lastHitOf(T, f, desc) !== T.length - 1) why = 'NOT_IN_LATEST';   /* ★mx3-c (GPT #127-QM): only a figure of the turn just played */
         else if (so.ny && typeof so.ny[hk(c.nk)] === 'number' && ev.t <= so.ny[hk(c.nk)]) why = 'NOT_YET_WAIT';   /* ★mx3-c: the Worker said not yet; ask again only when it appeared in more turns */ }
-      var row = { nk: c.nk, desc: desc, why: why, t: ev ? ev.t : null };
+      var row = { nk: c.nk, desc: desc, why: why, t: ev ? ev.t : null }; if (disp) row.alias = 1;
       if (!why) {
         var cue = [c.nk].concat(c.vars, ev.near).join('。');
         var app = appearanceFrom(ev.hitS.concat([String(c.e.appr || '')]));   /* only the sentences that name the figure (not the next sentence) + the roster's appearance */
@@ -381,7 +395,7 @@
           }
           if (!row.why) {
             var traits = []; if (kind !== 'human') Object.keys(TRAIT_CUE).forEach(function (k) { if (traits.length < 4 && TRAIT_CUE[k].test(cue)) traits.push(k); });
-            C.push({ key: c.key, nk: c.nk, vars: c.vars, desc: desc, last: ev ? T.length : 0, t: ev.t, lastHit: lastHitOf(T, f, desc), appearance: app, gender: gender, kind: kind, traits: traits });
+            C.push({ disp: disp, key: c.key, nk: c.nk, vars: c.vars, desc: desc, last: ev ? T.length : 0, t: ev.t, lastHit: lastHitOf(T, f, desc), appearance: app, gender: gender, kind: kind, traits: traits });
           }
         }
       }
@@ -404,12 +418,12 @@
     if (code === 'MX_CAP' || st === 402 || st === 429) return 'cap'; if (st === 502 || code === 'GENERATION_FAILED') return 'provider';
     if (st === 403 || st === 404 || st === 501 || st === 503) return 'gate'; return 'other';
   }
-  var RUN_KIND = { CREATED: 'ok', EXISTS: 'ok', IN_FLIGHT: 'race', OUTCOME_UNKNOWN: 'race', TURN_MISMATCH: 'race', TURN_MISMATCH_W: 'race', NOT_PLAYED: 'not_played', NO_CANDIDATE: 'not_yet', NOT_YET: 'not_yet',
+  var RUN_KIND = { TURN_MISMATCH_RETRY: 'race', CREATED: 'ok', EXISTS: 'ok', IN_FLIGHT: 'race', OUTCOME_UNKNOWN: 'race', TURN_MISMATCH: 'race', TURN_MISMATCH_W: 'race', NOT_PLAYED: 'not_played', NO_CANDIDATE: 'not_yet', NOT_YET: 'not_yet',
     CAP_STORY_TOTAL: 'cap', CAP_STORY_DAY: 'cap', CAP_ACCT_DAY: 'cap', CAP_TURN: 'cap', CAP_STORY_DESC: 'cap', CAP_ATTEMPTS_THIS_FIGURE: 'cap', IMGSAFE: 'imgsafe', PROVIDER: 'provider', IDENTITY: 'identity', LIST_FAIL: 'gate', GATE: 'gate' };
-  var LOCAL_ONLY = { NOT_PLAYED: 1, NO_CANDIDATE: 1, CAP_STORY_TOTAL: 1, CAP_STORY_DAY: 1, CAP_ACCT_DAY: 1, TURN_MISMATCH: 1 };   /* outcomes decided without an mx_ensure (ICF sees mx_ensure answers itself) */
+  var LOCAL_ONLY = { TURN_MISMATCH_RETRY: 1, NOT_PLAYED: 1, NO_CANDIDATE: 1, CAP_STORY_TOTAL: 1, CAP_STORY_DAY: 1, CAP_ACCT_DAY: 1, TURN_MISMATCH: 1 };   /* outcomes decided without an mx_ensure (ICF sees mx_ensure answers itself) */
   /* ★mx3-c + ICF80 (laneEDICF __icfRecord, if loaded): device-side outcomes only (ICF records the Worker-answered mx_ensure itself) → one category + a code; never a name / text / id.
      Without ICF80 (or when it is OFF / refuses), the counts-only ICF mxNote. Never both. */
-  var LOCAL_CAT = { NOT_PLAYED: 'NOT_YET_ELIGIBLE', NO_CANDIDATE: 'NOT_YET_ELIGIBLE', TURN_MISMATCH: 'NOT_YET_ELIGIBLE', CAP_STORY_TOTAL: 'CAP_REACHED', CAP_STORY_DAY: 'CAP_REACHED', CAP_ACCT_DAY: 'CAP_REACHED' };
+  var LOCAL_CAT = { TURN_MISMATCH_RETRY: 'NOT_YET_ELIGIBLE', NOT_PLAYED: 'NOT_YET_ELIGIBLE', NO_CANDIDATE: 'NOT_YET_ELIGIBLE', TURN_MISMATCH: 'NOT_YET_ELIGIBLE', CAP_STORY_TOTAL: 'CAP_REACHED', CAP_STORY_DAY: 'CAP_REACHED', CAP_ACCT_DAY: 'CAP_REACHED' };
   var LOCAL_CAP = { CAP_STORY_TOTAL: 'storyTotal', CAP_STORY_DAY: 'storyDay', CAP_ACCT_DAY: 'acctDay' };
   function icfLocal(k, why) { try { var F80 = root.__icfRecord; if (typeof F80 === 'function') { var m = { code: why, src: 'mx' }; if (LOCAL_CAP[why]) m.cap = LOCAL_CAP[why]; var r80 = F80(LOCAL_CAT[why] || 'OTHER', m); if (r80 && r80.ok === true) return 'icf80'; }   /* ICF80 OFF / refused → the mxNote count instead (never both) */
       var I = root.__chrIconFail; if (I && typeof I.mxNote === 'function') { I.mxNote(k, why); return 'mxnote'; } } catch (e) {} return null; }
@@ -422,10 +436,13 @@
 
   function quiet() {
     var S = state(); if (!S || S.inFlight) return 'inflight';
+    try { var g945 = root.__v292Dfix945; if (g945 && typeof g945.isStale === 'function' && g945.isStale()) return 'xtab-stale'; } catch (e) { return 'xtab?'; }   /* ★mx3-e2 (GPT #127-QS): a save conflict (fix945 STALE) means this tab's turns may not be saved; never create */
     try { var a = A(); if (a && ((a.pending && a.pending()) || (a.blocked && a.blocked()) || (a.conflict && a.conflict()) || (a.status && a.status().reg && a.status().reg.busy))) return 'registrar'; } catch (e) { return 'registrar?'; }
     try { var f = F697(); var p = f && f.f909 ? f.f909() : null; if (p && (p.pushTimer || p.inFlight)) return 'push-pending'; } catch (e) { return 'f697?'; }
     return '';   /* note (measured 2026-11-01): fix697 authorityReloadRequired is TRUE in every schema-2 page after its first putcanonical (fix733 TYPE A at attempt time), so it is not a usable "busy" signal; the turn-count equality with the Worker is the guard */
   }
+  var MM_WAIT_MS = 15000;   /* ★mx3-e: > fix697's push debounce (12 s) */
+  function mmRetry(n) { if (X.mmRetry[n]) return false; X.mmRetry[n] = Date.now(); X.doneTurn = n - 1; X.mmWait = Date.now() + MM_WAIT_MS; stats.mmRetry++; return true; }   /* once per turn */
   function finish(why, extra) { X.busy = false; var k = traceRun(why, typeof extra === 'string' ? extra : null); X.last = { why: why, k: k, at: Date.now(), extra: extra || null }; note({ kind: 'RUN_' + why, k: k, extra: extra || null }); }   /* ★mx3-c: + reason class */
   function runTurn(force) {
     if (X.busy) return 'busy';
@@ -442,7 +459,9 @@
     listOnce(id, function (j, err) {                                    /* request 1 of 2 (read) */
       if (err) return finish('LIST_FAIL', err);
       if (gateWhy() || X.stopped) return finish('GATE', gateWhy() || X.stopped);
-      var S2 = state(); if (!S2 || S2.turns.length !== n || j.turn_count !== n) { stats.mismatch++; return finish('TURN_MISMATCH', { local: S2 && S2.turns.length, server: j.turn_count }); }
+      var S2 = state(); if (!S2 || S2.turns.length !== n || j.turn_count !== n) { stats.mismatch++;
+        if (S2 && S2.turns.length === n && typeof j.turn_count === 'number' && j.turn_count < n && mmRetry(n)) return finish('TURN_MISMATCH_RETRY', { local: n, server: j.turn_count });   /* ★mx3-e */
+        return finish('TURN_MISMATCH', { local: S2 && S2.turns.length, server: j.turn_count }); }
       var mine = X.extras.length, sd = so.d || 0;
       if (mine >= capOf('storyTotal')) return finish('CAP_STORY_TOTAL');
       if (sd >= capOf('storyDay')) return finish('CAP_STORY_DAY');
@@ -462,6 +481,7 @@
         }
         if (st === 200 && rj && (rj.status === 'CREATED' || rj.status === 'EXISTS')) {
           if (rj.status === 'CREATED') { stats.created++; so2.d = (so2.d || 0) + 1; r2.acct = (r2.acct || 0) + 1; recSave(r2); } else stats.exists++;
+          if (p.disp && typeof rj.extra_id === 'string' && MX_ID_RE.test(rj.extra_id)) { so2.ak = so2.ak || {}; so2.ak[hk(norm(p.disp))] = rj.extra_id; recSave(r2); X.alias = JSON.parse(JSON.stringify(so2.ak)); }   /* ★mx3-e: the roster handle shows the same picture */
           var pa = rj.pointer && rj.pointer.asset_id;
           if (typeof rj.extra_id === 'string' && MX_ID_RE.test(rj.extra_id) && typeof pa === 'string' && !X.extras.some(function (e) { return e.extra_id === rj.extra_id; })) {
             X.extras.push({ extra_id: rj.extra_id, handle: p.key, vars: p.vars.slice(), cls: p.desc ? 'desc' : 'named', kind: p.kind, asset_id: pa, claimed_by: null, claim_state: null, forms: [p.nk].concat(p.vars) });
@@ -471,7 +491,7 @@
         }
         if (st === 200 && rj && rj.status === 'IN_FLIGHT') { stats.inflight++; return finish('IN_FLIGHT'); }
         if (st === 200 && rj) return finish('OTHER_' + String(rj.status || '').slice(0, 20));
-        if (st === 409 && code === 'MX_TURN_MISMATCH') { stats.mismatch++; return finish('TURN_MISMATCH_W'); }
+        if (st === 409 && code === 'MX_TURN_MISMATCH') { stats.mismatch++; var S3 = state(); if (S3 && S3.turns.length === n && rj && typeof rj.turn_count === 'number' && rj.turn_count < n && mmRetry(n)) return finish('TURN_MISMATCH_RETRY', { local: n, server: rj.turn_count, w: 1 }); return finish('TURN_MISMATCH_W'); }
         var rk = reasonKind(st, code, rj);   /* ★mx3-c: never shown on the screen (the initial stays); never retried automatically */
         if (rk === 'not_yet' && NOT_YET[code]) { so2.ny = so2.ny || {}; so2.ny[hk(p.nk)] = p.t || 0; var nyk = Object.keys(so2.ny); if (nyk.length > 30) delete so2.ny[nyk[0]]; recSave(r2); stats.notYet++; return finish('NOT_YET', code); }
         if (rk === 'identity') { so2.h[hk(p.nk)] = String(code || st).slice(0, 32);
@@ -524,7 +544,7 @@
       var g = gateWhy(); if (g) return;
       var id = sid();
       if (X.story !== id) { X.story = id; X.extras = []; X.listed = false; X.claimTried = {}; X.doneTurn = -1; X.lastTurnSeen = -1; X.stopped = null; X.pageStop = null; X.initListAsked = false;
-        X.played = {}; X.seen = {}; X.seenN = 0; X.caps = null; try { var sa = stOf(rec(), id); X.alias = sa.ak ? JSON.parse(JSON.stringify(sa.ak)) : {}; } catch (e) { X.alias = {}; } }   /* ★mx3-c */
+        X.played = {}; X.seen = {}; X.seenN = 0; X.caps = null; X.mmRetry = {}; X.mmWait = 0; try { var sa = stOf(rec(), id); X.alias = sa.ak ? JSON.parse(JSON.stringify(sa.ak)) : {}; } catch (e) { X.alias = {}; } }   /* ★mx3-c */
       if (!X.listed && !X.busy && !X.stopped && !X.initListAsked) { X.initListAsked = true; X.busy = true; var S0 = state(); X.doneTurn = (S0 && Array.isArray(S0.turns)) ? S0.turns.length : -1; seeAll(S0); X.lastTurnSeen = X.doneTurn; X.lastChange = Date.now();   /* ★mx3-c: every turn present at open = seen (baseline) */   /* opening / reloading a story never creates by itself: only a NEW turn that settles */
         listOnce(id, function () { X.busy = false; claimPass(); }); return; }
       var S = state(); if (!S || !Array.isArray(S.turns)) return;
@@ -535,7 +555,7 @@
         if (X.lastTurnSeen >= 0 && n < X.lastTurnSeen) { X.doneTurn = Math.min(X.doneTurn, n); for (var pk in X.played) if (+pk > n) delete X.played[pk]; }   /* undo: a NEW turn after it may be considered again */
         seeAll(S); X.lastTurnSeen = n; X.lastChange = Date.now(); return; }
       try { var a = A(); var ro = a && a.status ? a.status().reg.ok : null; if (ro !== X.lastRegOk) { X.lastRegOk = ro; if (X.listed) setTimeout(claimPass, 1500); } } catch (e) {}
-      if (n > X.doneTurn && Date.now() - X.lastChange >= SETTLE_MS) { var why = runTurn(false); if (why !== X.lastTry) { X.lastTry = why; note({ kind: 'TRY', why: String(why).slice(0, 40) }); } }
+      if (n > X.doneTurn && Date.now() - X.lastChange >= SETTLE_MS && Date.now() >= (X.mmWait || 0)) { var why = runTurn(false); if (why !== X.lastTry) { X.lastTry = why; note({ kind: 'TRY', why: String(why).slice(0, 40) }); } }
     } catch (e) { note({ kind: 'TICK_THREW', e: String(e).slice(0, 80) }); }
   }
   function turnKey(t) { try { return hk(String((t && t.narrative) || '') + '|' + String((t && t.playerText) || '') + '|' + String((t && t.inputType) || '')); } catch (e) { return 'x'; } }   /* ★mx3-c: content of one turn (hash only, memory only) */
@@ -555,7 +575,7 @@
     /* test / diagnosis: evaluate the candidates now (reads only, no request) */
     dryRun: function (o) { var S = state(), id = sid(); if (!S || !id) return null; return select(S, rec(), id, o && Array.isArray(o.roster) ? o.roster : null); },   /* o.roster: diagnosis only (evaluate a given roster instead of fix307's) */
     kick: function () { return runTurn(true); },   /* diagnosis / test only (an explicit action): skips the played-turn check; the Worker still requires the figure in its newest turn */
-    __t: { lastHitOf: lastHitOf, traceRun: traceRun, icfLocal: icfLocal, isRoleish: isRoleish, apposition: apposition, f641Live: f641Live, promotedSoon: promotedSoon, norm: norm, dispKey: dispKey, generic: generic, isDesc: isDesc, vis: vis, axes: axes, evidence: evidence, turnsOf: turnsOf, identityA: identityA, descIdentity: descIdentity, appearanceFrom: appearanceFrom, kindOf: kindOf, hitsIn: hitsIn, tailGender: tailGender }
+    __t: { aliasInfo: aliasInfo, lastHitOf: lastHitOf, traceRun: traceRun, icfLocal: icfLocal, isRoleish: isRoleish, apposition: apposition, f641Live: f641Live, promotedSoon: promotedSoon, norm: norm, dispKey: dispKey, generic: generic, isDesc: isDesc, vis: vis, axes: axes, evidence: evidence, turnsOf: turnsOf, identityA: identityA, descIdentity: descIdentity, appearanceFrom: appearanceFrom, kindOf: kindOf, hitsIn: hitsIn, tailGender: tailGender }
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })(typeof window !== 'undefined' ? window : this);
