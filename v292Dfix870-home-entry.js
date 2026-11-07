@@ -73,31 +73,43 @@
       return r.scenarios.length;
     } catch(e){ return 0; }
   }
-  function latestStory(){
-    /* chr6_slots_meta を読むだけ。lastOpenedAt（無ければ updatedAt → createdAt）が最新の 1 件。 */
+  /* ★OPEN1 (GPT #127-RA ④): 「続きから遊ぶ」は、HOME の一覧(home.html all())が描く物語だけを指す。
+     可視判定は一覧と同じ authority: fix889 mayShowRow(行)＝Vault で隠した物語・別アカウントのクラウド物語・ISO1 が隠す物語・server 未確認のクラウド物語は false。
+     墓標(削除済み)も一覧に出ないので除く。読むのは meta の id と可視フラグだけ(本文・題名は読まない・出さない)。
+     fix889 が無い配布事故のときは home.html と同じく chr6_vault_hidden の cache で落とす。 */
+  function visibleStory(m){
     try {
-      var raw = lsg('chr6_slots_meta'); if (raw == null) return null;
+      if (!m || typeof m !== 'object' || !m.id) return false;
+      try { var T = window.__v292Dfix579; if (T && typeof T.isTombstone === 'function' ? T.isTombstone(m) : m.deleted === true) return false; } catch(_){ if (m.deleted === true) return false; }
+      var F = window.__v292Dfix889;
+      if (F && typeof F.mayShowRow === 'function') return F.mayShowRow(m) === true;
+      var o = JSON.parse(lsg('chr6_vault_hidden') || 'null'), a = (o && Object.prototype.toString.call(o.hidden) === '[object Array]') ? o.hidden : [];
+      for (var i = 0; i < a.length; i++) if (String(a[i]) === String(m.id)) return false;
+      return true;
+    } catch(e){ return false; }
+  }
+  function metaList(){
+    try {
+      var raw = lsg('chr6_slots_meta'); if (raw == null) return [];
       var a = JSON.parse(raw);
-      if (Object.prototype.toString.call(a) !== '[object Array]') return null;
-      var best = null, bestKey = '';
-      for (var i = 0; i < a.length; i++){
-        var m = a[i];
-        if (!m || typeof m !== 'object' || !m.id) continue;
-        var k = String(m.lastOpenedAt || m.updatedAt || m.createdAt || '');
-        if (best === null || k.localeCompare(bestKey) > 0){ best = m; bestKey = k; }
-      }
-      return best;
-    } catch(e){ return null; }
+      return (Object.prototype.toString.call(a) === '[object Array]') ? a : [];
+    } catch(e){ return []; }
+  }
+  function latestStory(){
+    /* chr6_slots_meta を読むだけ。一覧に出る物語のうち lastOpenedAt（無ければ updatedAt → createdAt）が最新の 1 件。 */
+    var a = metaList(), best = null, bestKey = '';
+    for (var i = 0; i < a.length; i++){
+      var m = a[i];
+      if (!visibleStory(m)) continue;
+      var k = String(m.lastOpenedAt || m.updatedAt || m.createdAt || '');
+      if (best === null || k.localeCompare(bestKey) > 0){ best = m; bestKey = k; }
+    }
+    return best;
   }
   function storyCount(){
-    try {
-      var raw = lsg('chr6_slots_meta'); if (raw == null) return 0;
-      var a = JSON.parse(raw);
-      if (Object.prototype.toString.call(a) !== '[object Array]') return 0;
-      var n = 0;
-      for (var i = 0; i < a.length; i++) if (a[i] && typeof a[i] === 'object' && a[i].id) n++;
-      return n;
-    } catch(e){ return 0; }
+    var a = metaList(), n = 0;
+    for (var i = 0; i < a.length; i++) if (visibleStory(a[i])) n++;
+    return n;
   }
 
   /* ---------- 新 CTA（1 度だけ作る。以後は使い回す） ---------- */
@@ -247,6 +259,9 @@
   function wire(){
     apply();
     observe();
+    /* ★OPEN1: fix889 の可視判定が変わったら(server の返事・隠す/隠すのをやめる・再ロック)入口も取り直す */
+    try { var F = window.__v292Dfix889; if (F && typeof F.onChange === 'function' && !S.f889wired){ S.f889wired = true; F.onChange(function(){ try { apply(); } catch(_){} }); } } catch(_){}
+    try { window.addEventListener('chr:account-me', function(){ setTimeout(function(){ try { apply(); } catch(_){} }, 0); }, false); } catch(_){}
     try { console.log(TAG, 'loaded (' + (off() ? 'OFF: restored to original entry' : 'three-CTA entry applied') + ')'); } catch(e){}
   }
 

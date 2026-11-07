@@ -78,7 +78,7 @@
       var A = window.__v292Dfix893;
       if (!A || typeof A.serverMe !== 'function') return false;              /* account API 不在 = fail-closed */
       var me = A.serverMe();                                                  /* server 由来の cache（未応答 = null） */
-      return !!(me && me.entitlement === 'owner' && me.status === 'active');
+      return !!(me && (me.entitlement === 'owner' || me.entitlement === 'beta') && me.status === 'active');   /* ★READY1 (GPT #127-QY ⑤): 招待した知人（beta・active）も Owner と同じに使える。none・suspended・未応答・不達は今までどおり OFF。ON にするのは ADMF1.gate('rc1')（管理者画面の行／全体）が先 */
     } catch(e){ return false; }
   }
   function anonActive(){

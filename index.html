@@ -341,7 +341,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261107-bundle93-d';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261107-bundle93-e';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4156,7 +4156,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- ==== v292 features (Phase 4-A: cast_lock, verbatim, input_priority, mind_repair, onomatopoeia) ==== -->
 <!-- v292Dfix600: 新しい物語(?new=1)に別の物語の中身が混入したら保存を止める。 2026-07-27の実機事故（タブ2枚で新物語に他物語のキャラが丸ごと入った）の再発防止。 features.js より前に置き、S.save を待ち受けて包む。OFF=v292Dfix600Off -->
 <script src="v292Dfix600-new-story-guard.js?cb=v292Dfix601"></script>
-<script src="v292Dfix527-story-url.js?cb=20261101-bundle83-flow-c"></script>
+<script src="v292Dfix527-story-url.js?cb=20261107-open1"></script>
 <!-- ★fix659: 分岐(fork)バナーの作り直し。平易な文言＋「☁ クラウド側を取り込む」が
      home.html?autopull=1 へ渡って**取り込みまで完走**する。物語画面で pull しないのは
      fix527 [3] の設計どおり（ここは変えない）。
@@ -4519,7 +4519,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixGQ4-summary-request.js?cb=20261010-gq1"></script>
 <script src="v292DfixCTX-context-restore.js?cb=20261010-gq1"></script>
 <!-- v292DfixRC1 r2 (QUOTE-01 / GPT #127-JS・#127-KA): 想起を求める入力のときだけ、この物語の実入力・話者の確かな台詞を user JSON の playerInputs（storySoFar の直後）に足す。既定 OFF・Owner だけの opt-in（localStorage v292DfixRC1On=1 かつ /auth/me で owner・active）/ kill v292DfixRC1Off=1 -->
-<script src="v292DfixRC1-recall-inputs.js?cb=20261101-bundle81-admg-a"></script>
+<script src="v292DfixRC1-recall-inputs.js?cb=20261107-ready1"></script>
 <!-- CP1-R6b + Owner ゲート r5 (CONT-02 / GPT #127-KK→#127-KQ→#127-KW→#127-LA→#127-LC→#127-LG→#127-LI): 今の場面に誰がいるかの最小正本。既定 OFF・Owner だけの opt-in（localStorage v292DfixCP1On='1' かつ /auth/me で owner・active・匿名でない）/ kill v292DfixCP1Off='1'。読み込み時に opt-in なし・kill なら何も装着しない（ON への切り替えは reload 後に有効）。生成の開始ごとに適用可否とアカウント・物語を確定し、同じターンはそれに揃える。途中で側が変わった・kill されたら送らない・保存しない（止めたターンは自動で送り直さない）。中断した回の結果は正式なターンとして採用しない（その回が足したものだけを撤回）。試行は build ごとの in-memory の印で見分け、G.submit が送信・再送・parse・確定へ引き継ぐ。採用前の仮の state は保存先へ書かず、安全に戻せないときはこの物語の生成と保存を止める（fail-closed）。fix333 の受け口・tap のガードが揃わない（混在キャッシュ）なら CP1 全体 OFF。ON: fix192/fix277 の装着後に最後にラップ・30 秒で揃わなければ無効化・送信直前の観測（記録のみ）・fix333 の前面化から ABSENT を外す -->
 <script>window.__v292DfixCP1IdxAtt = 'att-r5';</script><!-- bundle43-a r5: この index の G.submit は CP1 の試行を引き継ぐ（CP1 r5 はこの印が無い index では全体 OFF） -->
 <script src="v292DfixCP1-scene-presence.js?cb=20261025-bundle47-cp1r-c"></script>

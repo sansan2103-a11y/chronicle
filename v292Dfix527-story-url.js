@@ -297,23 +297,45 @@
                                  残るだけで、物語データにも同一性にも影響しない **表示用フィールド**
          RECOMPUTATION_TRIGGER = 次にこの story を開いたとき（毎 boot 必ず実行される）
        ★「開けなかった」ことにはしない（story を開く操作そのものは成功してよい）ので Class D ではない。 */
-    try {
-      var meta = JSON.parse(lsg('chr6_slots_meta') || '[]') || [];
-      var hit = false;
-      for (var i = 0; i < meta.length; i++){ if (meta[i] && String(meta[i].id) === storyId){ meta[i].lastOpenedAt = new Date().toISOString(); hit = true; break; } }
-      if (hit){
-        var A748 = null;
-        try { A748 = window.__v292DfixDAdm; } catch(_){}
-        if (A748 && typeof A748.registerC === 'function')
-          A748.registerC('fix527.lastOpenedAt',
-            'chr6_slots_meta 自身（失っても直前の lastOpenedAt が残るだけ。表示用で同一性には影響しない）',
-            '次にこの story を開いたとき（毎 boot）',
-            'C17 story-url lastOpenedAt / companion of chr6_slot_');
-        if (A748 && typeof A748.persistC === 'function')
-          A748.persistC('fix527.lastOpenedAt', function(){ localStorage.setItem('chr6_slots_meta', JSON.stringify(meta)); });
-        else localStorage.setItem('chr6_slots_meta', JSON.stringify(meta));
-      }
-    } catch(e){}
+    /* ★OPEN1 (GPT #127-RA ③): この書込みは「この物語を開いてよい」と確定してからだけ行う。
+       拒否される物語(fix889 の扉が武装中=server の可視判定待ち/隠し・ISO1 の扉が武装)では、chr6_slots_meta の
+       lastOpenedAt を含め 1 byte も書かない。持ち主の通常の再開は、扉が解けた(fix889 gate.released)ときに同じ書込みを行う(結果は従来と同じ)。 */
+    function touchOpened(){
+      try {
+        var meta = JSON.parse(lsg('chr6_slots_meta') || '[]') || [];
+        var hit = false;
+        for (var i = 0; i < meta.length; i++){ if (meta[i] && String(meta[i].id) === storyId){ meta[i].lastOpenedAt = new Date().toISOString(); hit = true; break; } }
+        if (hit){
+          var A748 = null;
+          try { A748 = window.__v292DfixDAdm; } catch(_){}
+          if (A748 && typeof A748.registerC === 'function')
+            A748.registerC('fix527.lastOpenedAt',
+              'chr6_slots_meta 自身（失っても直前の lastOpenedAt が残るだけ。表示用で同一性には影響しない）',
+              '次にこの story を開いたとき（毎 boot）',
+              'C17 story-url lastOpenedAt / companion of chr6_slot_');
+          if (A748 && typeof A748.persistC === 'function')
+            A748.persistC('fix527.lastOpenedAt', function(){ localStorage.setItem('chr6_slots_meta', JSON.stringify(meta)); });
+          else localStorage.setItem('chr6_slots_meta', JSON.stringify(meta));
+        }
+      } catch(e){}
+    }
+    function doorState(){
+      /* 'closed'=書いてはならない(ISO1 拒否) / 'wait'=fix889 の扉が武装中で未解錠 / 'open'=従来どおり書く */
+      try { var I = window.__v292DfixISO1; if (I && typeof I.status === 'function'){ var ig = I.status().gate; if (ig && ig.armed) return 'closed'; } } catch(_){}
+      try { var F = window.__v292Dfix889; if (F && typeof F.gate === 'function'){ var g = F.gate(); if (g && g.armed && g.released !== true) return 'wait'; } } catch(_){}
+      return 'open';
+    }
+    (function guardedTouch(){
+      var st = doorState();
+      if (st === 'open'){ touchOpened(); return; }
+      if (st === 'closed') return;
+      var n = 0, h = setInterval(function(){
+        n++;
+        var s2 = doorState();
+        if (s2 === 'open'){ clearInterval(h); touchOpened(); }
+        else if (s2 === 'closed' || n > 240){ clearInterval(h); }     /* 解けなければ(拒否・未確認)書かない。最長 約 60 秒 */
+      }, 250);
+    })();
 
     // fix525 の own を URL 由来へ
     (function poll(){
