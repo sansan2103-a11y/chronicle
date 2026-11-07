@@ -179,10 +179,11 @@
   function flat(s) { return nfkc(String(s)).replace(/\r?\n+/g, '。').replace(/[\s・·\u0000-\u001F\u007F-\u009F\u00AD\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF]+/g, ''); }
   function turnsOf(S) {
     return (Array.isArray(S.turns) ? S.turns : []).map(function (t) {
-      if (!t || typeof t !== 'object') return { text: '', says: [] };
+      if (!t || typeof t !== 'object') return { text: '', says: [], conv: [] };
       var pn = (t.plan && Array.isArray(t.plan.narrative)) ? t.plan.narrative.filter(function (x) { return typeof x === 'string'; }).join('\n') : '';
       var says = [], re = /<say\s+who="([^"]{1,80})"/g, m; while ((m = re.exec(pn))) { var w = flat(m[1]); if (w && says.indexOf(w) < 0) says.push(w); }
-      return { text: flat([typeof t.narrative === 'string' ? t.narrative : '', pn.replace(/<[^>]{0,200}>/g, '')].join('\n')), says: says };
+      var conv = []; if (Array.isArray(t._convSays)) t._convSays.forEach(function (c) { var w = c && typeof c.who === 'string' ? flat(c.who) : ''; if (w && conv.indexOf(w) < 0) conv.push(w); });   /* ★mx3-g: conversation-log speakers (importance 中 only) */
+      return { text: flat([typeof t.narrative === 'string' ? t.narrative : '', pn.replace(/<[^>]{0,200}>/g, '')].join('\n')), says: says, conv: conv };
     });
   }
   function evidence(T, forms, desc) {
@@ -346,7 +347,7 @@
     var ros = Array.isArray(rosterOverride) ? rosterOverride : rosterOf(), soon = promotedSoon(), so = stOf(r, id), out = { picked: null, considered: [] };
     var descN = X.extras.filter(function (e) { return e.cls === 'desc'; }).length;
     var castFold = {}; cast.forEach(function (c) { if (c.name) castFold[fold(c.name)] = 1; }); Object.keys(bindings).forEach(function (b) { castFold[fold(b)] = 1; });
-    var hs = ros.filter(function (e) { return e && typeof e.handle === 'string' && String(e.importance || '') === '高' && !NOT_PERSON.test(String(e.kind || '人物')) && PERSONISH.test(String(e.kind || '人物')); });
+    var hs = ros.filter(function (e) { return e && typeof e.handle === 'string' && (String(e.importance || '') === '高' || String(e.importance || '') === '中') && !NOT_PERSON.test(String(e.kind || '人物')) && PERSONISH.test(String(e.kind || '人物')); });
     var forms = hs.map(function (e) { return { e: e, key: dispKey(e.handle), nk: norm(e.handle) }; }).filter(function (x) { return x.key && x.nk.length >= 2; });
     /* longest roster form: a form that is a suffix of a longer one becomes its variant (≤3, must carry a look word, not generic) */
     var cands = [];
@@ -359,7 +360,8 @@
     cands.forEach(function (c) {
       var al = aliasInfo(c.key, c.nk, cast, bindings), disp = null;   /* ★mx3-e */
       if (al && al.usable && !isDesc(c.nk)) { disp = c.key; c = { e: c.e, key: al.target, nk: al.tnk, vars: [] }; stats.aliasSpeaker++; }
-      var why = null, desc = isDesc(c.nk), f = [c.nk].concat(c.vars), ev = null;
+      var why = null, desc = isDesc(c.nk), f = [c.nk].concat(c.vars), ev = null, mid = String(c.e.importance || '') === '中';   /* ★mx3-g (GPT #127-QW): 中 needs speaks-in-latest-turn + look word + ≥2 turns */
+      var TT = mid ? T.map(function (t) { return { text: t.text, says: t.says.concat(t.conv || []), conv: t.conv }; }) : T;
       if (generic(c.nk)) why = 'GENERIC';
       else if (so.h[hk(c.nk)]) why = 'NO_RETRY:' + so.h[hk(c.nk)];
       else if (so.ak && so.ak[hk(c.nk)]) why = 'ALIAS_OF_EXTRA';   /* ★mx3-c: the Worker said this handle is an existing extra (renamed / revealed) */
@@ -374,8 +376,9 @@
       else if (apposition(cast, bindings, T, f, [].concat.apply([], X.extras.map(function (x) { return x.forms.map(function (n) { return [n, x.extra_id]; }); })))) why = 'EXTRA_APPOSITION';
       else if (desc && apposition(cast, bindings, T, f, cands.filter(function (o) { return o !== c && !isDesc(o.nk); }).map(function (o) { return [o.nk, o.nk]; }))) why = 'APPOSED_TO_NAMED';   /* the proper-named form wins; the role form is the same person */
       else if (desc && (descN >= capOf('storyDesc') || so.descStop)) why = 'CAP_DESC';
-      else { ev = evidence(T, f, desc); if (!ev.ok) why = 'EVIDENCE:' + ev.t + '/' + ev.need + (ev.recent ? '' : ':old');
-        else if (lastHitOf(T, f, desc) !== T.length - 1) why = 'NOT_IN_LATEST';   /* ★mx3-c (GPT #127-QM): only a figure of the turn just played */
+      else { ev = evidence(TT, f, desc); if (!ev.ok) why = 'EVIDENCE:' + ev.t + '/' + ev.need + (ev.recent ? '' : ':old');
+        else if (lastHitOf(TT, f, desc) !== T.length - 1) why = 'NOT_IN_LATEST';
+        else if (mid && !speaksLatest(T, f, c.key, disp)) why = 'MID_NOT_SPEAKING';   /* ★mx3-g */   /* ★mx3-c (GPT #127-QM): only a figure of the turn just played */
         else if (so.ny && typeof so.ny[hk(c.nk)] === 'number' && ev.t <= so.ny[hk(c.nk)]) why = 'NOT_YET_WAIT';   /* ★mx3-c: the Worker said not yet; ask again only when it appeared in more turns */ }
       var row = { nk: c.nk, desc: desc, why: why, t: ev ? ev.t : null }; if (disp) row.alias = 1;
       if (!why) {
@@ -404,6 +407,14 @@
     C.sort(function (a, b) { return (b.lastHit - a.lastHit) || (b.t - a.t) || (a.nk < b.nk ? -1 : 1); });
     out.picked = C[0] || null;
     return out;
+  }
+  /* ★mx3-g: does a form speak in the latest turn? speaker = plan <say who> or conversation-log who, matched by the form, or through __v292AliasFix (either direction) */
+  function speaksLatest(T, f, key, disp) {
+    var t = T[T.length - 1]; if (!t) return false; var sp = (t.says || []).concat(t.conv || []); if (!sp.length) return false;
+    var tg = []; [key, disp].forEach(function (h) { if (!h) return; try { var a = (typeof root.__v292AliasFix === 'function') ? root.__v292AliasFix(h) : null; if (typeof a === 'string' && a) tg.push(norm(a)); } catch (e) {} });
+    return sp.some(function (w) { var n = norm(w); if (f.indexOf(n) >= 0 || tg.indexOf(n) >= 0) return true;
+      var a2 = null; try { a2 = (typeof root.__v292AliasFix === 'function') ? root.__v292AliasFix(w) : null; } catch (e) {}
+      var an = (typeof a2 === 'string' && a2) ? norm(a2) : ''; return !!an && f.indexOf(an) >= 0; });
   }
   function lastHitOf(T, f, desc) { for (var i = T.length - 1; i >= 0; i--) { var says = T[i].says.map(norm); if (f.some(function (x) { return says.indexOf(x) >= 0; })) return i; var ss = sents(T[i].text); for (var s = 0; s < ss.length; s++) { if (desc && RECALL.test(ss[s])) continue; if (f.some(function (x) { return hitsIn(ss[s], x, desc).length; })) return i; } } return -1; }
 

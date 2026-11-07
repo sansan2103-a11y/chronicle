@@ -174,7 +174,7 @@
     var key=getKey(); if(!key){ cb(null); return; }
     var user=buildUserPrompt(transcript);   // ★fix408強化: 総文字数上限+改行1行化(buildExistingLines)
     var _m=MODEL(); if(!_m){ cb(null); return; }   /* v292Dsmrc1: fail-closed */
-    var _b={ model:_m, temperature:0.2, max_tokens:600, messages:[{role:'system',content:SYS},{role:'user',content:user}] };
+    var _b={ model:_m, temperature:0.2, max_tokens:1200, messages:[{role:'system',content:SYS},{role:'user',content:user}] };
     /* ★v292Dsmrc2b: MODEL-SPECIFIC REQUEST POLICY（effective model = _m = registry.primary()）。
        registry の applyRequestPolicy() を 1 回呼ぶだけ。registry 不在なら従来 body（fail-open）。 */
     try { var _R=window.__CHR_MODEL_REGISTRY; if(_R&&_R.applyRequestPolicy) _R.applyRequestPolicy(_b,_m); }catch(e){}
@@ -292,8 +292,11 @@
     return existing;
   }
 
+  var _inflight=false, _failAt=0;   /* ★mx3-g: 失敗したら cursor を戻し 60 秒後に再試行／同時実行は 1 本 */
   function run(){
     if(off()) return;
+    if(_inflight) return;
+    if(_failAt && Date.now()-_failAt<60000) return;
     var s=getS(); if(!s||!Array.isArray(s.turns)||s.turns.length<2) return;
     if(!canSave()) return;                  // 単一writerだけがLLMを叩く
     // ★fix307e: 保存先スロットと、いまSが保持する物語の一致をここで固定/検証する。
@@ -322,17 +325,19 @@
         try{ console.log(TAG,'fix748: カーソルを書けなかったので今回は抽出しない（次の run で再試行）'); }catch(e){}
         return;
       }
-      runLLM();
+      _inflight=true; runLLM();
     });
     function runLLM(){
+    var prevLast=last;
+    function giveUp(){ _inflight=false; _failAt=Date.now(); try{ saveLastK(lastK, prevLast); }catch(e){} }   /* 失敗: cursor を予約前へ戻す(同じ saveLastK) */
     callLLM(tr, function(out){
       // ★再確認: LLM(最大90s)中にスロット切替/物語差替が起きていたら、このスロットには書かない。
       var s2=getS();
-      if(!s2 || !s2.scene || (s2.scene.loc||null)!==curLoc) return; // 物語が差し替わった
-      if(slotSfx()!==sfx) return;                                   // アクティブスロットが変わった
+      if(!s2 || !s2.scene || (s2.scene.loc||null)!==curLoc){ _inflight=false; return; } // 物語が差し替わった（何も書かない・cursor も触らない）
+      if(slotSfx()!==sfx){ _inflight=false; return; }                  // アクティブスロットが変わった（何も書かない）
       var arr=parseArr(out);
-      if(!arr) return;                       // 失敗時は次INTERVALで再試行
-      if(staleSc1()){ try{ console.log(TAG,'SC1: 抽出中に本文の履歴が変わったので、この結果は書かない'); }catch(e){} return; }
+      if(!arr){ giveUp(); return; }          // 失敗: cursor を戻して 60 秒後に再試行
+      if(staleSc1()){ try{ console.log(TAG,'SC1: 抽出中に本文の履歴が変わったので、この結果は書かない'); }catch(e){} giveUp(); return; }
       /* ★fix748(C5): roster 書込は Class C transaction。network(callLLM) は **この外**で終わっている。 */
       f748RunC('FIX307_ROSTER', function(){
         if(staleSc1()) return { merged: [], w: { skip:true, sc1:'STALE_ASYNC' } };   /* ★v292DfixSC1: lock 待ちの間の取消も見る */
@@ -342,11 +347,13 @@
         var w = saveRosterK(storeK, merged);
         return { merged: merged, w: w };
       }).then(function(x){
+        _inflight=false;
         var r = x && x.result;
         if (!(x && x.ran) || (r && r.w && (r.w.skip || r.w.hold))){
           try{ console.log(TAG,'fix748: roster 保存を飛ばした（次の INTERVAL で同じ窓から再抽出）'); }catch(e){}
           return;
         }
+        _failAt=0;
         try{ console.log(TAG,'roster updated, count=', r.merged.length, 'slot=', sfx||'(default)'); }catch(e){}
       });
     });
