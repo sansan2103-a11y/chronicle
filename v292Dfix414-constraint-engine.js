@@ -40,6 +40,10 @@
   //   ※旧キー v292Dfix414On が localStorage に残っていても無害(冗長なだけ)。
   function on(){ return !off(); }   // 既定ON・Off優先・毎回評価
   function off(){ try { return localStorage.getItem('v292Dfix414Off') === '1'; } catch(e){ return false; } }
+  // ★NPCQ1-C2 OWNER CANARY: 拡張は「この画面のアカウントが owner かつ active」の時だけ。/auth/me の答え(fix893 serverMe)だけを信じ、毎回評価。
+  //   未応答・ログアウト・匿名・beta・none・suspended・API不在・例外 = false(= 従来の挙動と完全に同じ)。v292DfixISO1 ownerNow / v292DfixRC1 ownerGate と同じ読み口。
+  function npcqOwner(){ try { var A = window.__v292Dfix893; if(!A || typeof A.serverMe !== 'function') return false; var m = A.serverMe(); if(!(m && m.entitlement === 'owner' && m.status === 'active')) return false; var P = window.__v292Dfix886; if(P && P.api && typeof P.api.active === 'function' && P.api.active()) return false; return true; } catch(e){ return false; } }
+  function widenOff(){ try { if(!npcqOwner()) return true; return localStorage.getItem('v292Dfix414WidenOff') === '1'; } catch(e){ return true; } }
   function store(){ try { return window.__v292Dfix77Store || {}; } catch(e){ return {}; } }
   function getS(){ try { return window.S || (0,eval)('typeof S!=="undefined" ? S : null'); } catch(e){ return null; } }
 
@@ -165,6 +169,24 @@
     if (/(解離|現実感が(薄|な)|頭が真っ白|凍りつ|固ま|震えが止ま|身がすく)/.test(mindText)){
       add(6, '即応・機転は出ない(型B/C)');
     }
+    // ---- NPCQ1(fix414 widen・既定ON・v292Dfix414WidenOff='1'で従来): 部位不明の重傷/強い恐怖 ----
+    //   重傷(重傷・深手・深い傷・骨折・出血・意識朦朧 等)→ 動作1行+発話1行まで(短い発話のみ・鋭い戦術判断なし)。
+    //   強い恐怖(恐怖・怯え・パニック 等)→ 1行。既存の3件/人・ブロック上限は不変。
+    if (!widenOff()){
+      var serious = bodyClauses.some(function(cl){
+        return /(重傷|重体|致命|瀕死|深手|深い傷|深く(刺|切|斬|えぐ|抉|裂)|骨折|出血|意識[がは]?(朦朧|もうろう|遠の|混濁|薄)|朦朧|もうろう)/.test(cl) &&
+               !LIGHT.test(cl) && !/(少量|わずか|微量|滲|にじ)/.test(cl) &&
+               !/(治|癒|完治|回復|止ま|塞が|(て|で)(い)?ない|なかった|無い)/.test(cl.replace(/止まらな(い|く)/g, ''));
+      });
+      if (serious){
+        add(3.5, '動きは小さく遅い(激しい連続行動は不可)');
+        add(5, '長い台詞不可(短い発話のみ)');
+      }
+      var fearTxt = mindText.replace(/(恐怖|怯え|おびえ|パニック|恐慌)(は|が|も|を|て(い)?|で(は)?)?(ない|なく|消え|薄れ|和らい|収ま|克服)/g, '');
+      if (/(恐怖|怯え|おびえ|パニック|恐慌|竦ん|すくん|泣きじゃく)/.test(fearTxt)){
+        add(6, '即応・機転は出ない(型B/C)');
+      }
+    }
     // ★R118 Phase2-S: severity consequence lane hook（外部 fix741。未load時 no-op / flag 既定OFF）
     try{ if(window.__v292Dfix414S) window.__v292Dfix414S(bodyClauses, add); }catch(e){}
     // ★R118 Phase3-A: existing physical signal bridge hook（外部 fix742。未load時 no-op / flag 既定OFF）
@@ -284,6 +306,7 @@
 
   // ---- F-4: 検証口 ----------------------------------------------------
   window.__v292Dfix414x = {
+    deriveFor: function(name, entry){ try { return deriveConstraints(name, entry); } catch(e){ return []; } },   // NPCQ1: fix192 が表示エントリで判定する口
     derive: function(name){ try { return deriveConstraints(name, store()[name]); } catch(e){ return []; } },
     preview: function(){ return buildBlock(); },
     status: function(){ return { on: on(), off: off(), names: Object.keys(store()) }; },

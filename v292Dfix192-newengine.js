@@ -148,7 +148,9 @@
       var store = window.__v292Dfix77Store;
       if (c930){ try { var X = window.__v292Dfix850x; if (X && typeof X.realStore === 'function'){ var rs = X.realStore(); if (rs) store = rs; } } catch(_x930){} }
       if(!store) return '';
-      var lines=[];
+      var lines=[]; var licN=[];
+      /* ★NPCQ1-C2 OWNER CANARY: 免除文は owner かつ active の画面だけ(/auth/me=fix893 serverMe。毎回評価・未応答/匿名/beta/none/例外=従来どおり) */
+      function npcqOwner192(){ try{ var A=window.__v292Dfix893; if(!A||typeof A.serverMe!=='function') return false; var m=A.serverMe(); if(!(m&&m.entitlement==='owner'&&m.status==='active')) return false; var P=window.__v292Dfix886; if(P&&P.api&&typeof P.api.active==='function'&&P.api.active()) return false; return true; }catch(e){ return false; } }
       var onA1 = !legacyStore && !offA1();               /* ★v292DfixA1 r2 */
       var hkA1 = onA1 ? heroKeyA1() : null;
       Object.keys(store).forEach(function(n){
@@ -169,10 +171,13 @@
         if(kn) parts.push('関係:'+kn);
         if(mi) parts.push('未解決:'+mi);
         if(parts.length) lines.push('・'+n+'｜'+parts.join(' ／ '));
+        try{ if(npcqOwner192() && !legacyStore && !isHeroA1(hkA1, n) && localStorage.getItem('v292Dfix192LicOff')!=='1' && localStorage.getItem('v292Dfix414Off')!=='1'){ var X414=window.__v292Dfix414x; if(X414 && X414.deriveFor && X414.deriveFor(n,{karada:ka,kokoro:ko,kizu:ki}).length && licN.length<3) licN.push(n); } }catch(_l){}   /* ★NPCQ1 */
       });
       if(!lines.length) return '';
+      var licExc=''; /* ★NPCQ1: 制約のある人物には「入力を待たず発言してよい」を適用しない（1条件・新ブロックなし。v292Dfix192LicOff='1'で従来） */
+      if(licN.length){ licExc='（ただし'+licN.join('・')+'は重傷・強い恐怖で動きが縛られているため除く）'; }
       return '【各キャラの現在の状態（引き継ぐ。傷/関係/未解決は治療・和解まで保持し勝手に消さない）】\n'+lines.join('\n')
-        +'\n・関係・未解決は各キャラが自分から動き、主人公や他キャラに話しかける動機になる。傷・恐怖・対立・依頼の場面では、入力を待たずNPCの側から言葉を発してよい。'
+        +'\n・関係・未解決は各キャラが自分から動き、主人公や他キャラに話しかける動機になる。傷・恐怖・対立・依頼の場面では、入力を待たずNPCの側から言葉を発してよい'+licExc+'。'
         +(onA1 ? '\n・主人公以外のNPCは、各自の目的・関係・状況に応じて、入力を待たず自律的に行動してよい。目的が衝突しても、対立・協力・妥協などの選択は人物ごとに異なる。' /* ★v292DfixA1 r2: NPC に限る */
                : '\n・各キャラは自分の「目的」に向かって、入力を待たず自分から動いてよい（目的が衝突するキャラ同士は自然に対立する）。'); /* v292Dfix223b */
     }catch(e){ return ''; }
