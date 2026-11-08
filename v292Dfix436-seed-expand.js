@@ -82,7 +82,7 @@
   ];
   // モデルがネスト/別名で返したときの吸収表
   var ALIASES = {
-    'hero_name': 'heroName', 'hero_desc': 'heroDesc',
+    'hero_name': 'heroName', 'hero_desc': 'heroDesc', 'hero_gender': 'heroGender',   /* ★GENDER1 */
     'scene_lore': 'lore', 'scene_loc': 'loc', 'scene_obj': 'obj', 'scene_tone': 'tone',
     'world': 'lore', 'world_lore': 'lore', 'setting': 'lore',
     'scene': 'loc', 'opening': 'loc', 'objective': 'obj'
@@ -90,6 +90,9 @@
   var NAME_RE = /(^heroName$|_name$)/;
 
   function off(){ try { return localStorage.getItem('v292Dfix436Off') === '1'; } catch(e){ return false; } }
+  /* ★GENDER1: 性別も「空欄」として AI に聞く（共通部品 v292DfixGENDER1・kill v292DfixGENDER1Off）。部品が無い / OFF なら null = 従来どおり。 */
+  function G1(){ try { var g = window.__v292DfixGENDER1; return (g && g.on()) ? g : null; } catch(e){ return null; } }
+  var GENDER_KEY_RE = /(^heroGender$|_gender$)/;
   function getUI(){ try { if (typeof UI !== 'undefined' && UI) return UI; } catch(e){} return window.UI || null; }
   function getS(){ try { if (typeof S !== 'undefined' && S) return S; } catch(e){} return window.S || null; }
   function setStatus(m, err){ try { var U = getUI(); if (U && U.setStatus) U.setStatus(m, err); } catch(e){} }
@@ -130,7 +133,9 @@
     // 主人公の性別(ラジオ) = 読み取り専用の確定情報
     var hg = doc.querySelector('input[name="v108g_hero"]:checked');
     var hgv = hg ? trim(hg.value) : '';
-    out.push({ key: 'heroGender', label: '主人公の性別', value: hgv, filled: hgv.length > 0, writable: false, el: null });
+    /* ★GENDER1: 未選択（=「未設定」ラジオ or ラジオ未注入）の時だけ AI に聞く空欄にする。選択済みは従来どおり不可侵の確定情報。 */
+    var g1 = G1(), hgBlankAsk = !!(g1 && !(hgv === '女性' || hgv === '男性'));
+    out.push({ key: 'heroGender', label: hgBlankAsk ? g1.LABEL_HERO : '主人公の性別', value: hgv, filled: hgv.length > 0, writable: hgBlankAsk, el: null, g1blank: hgBlankAsk });
 
     var cards = doc.querySelectorAll('#npcList .npc-card');
     for (i = 0; i < cards.length; i++){
@@ -149,9 +154,10 @@
       // 性別ラジオの name は 0始まり(features.js genderRadio: v108g_npc<idx>)
       var ng = doc.querySelector('input[name="v108g_npc' + i + '"]:checked');
       var ngv = ng ? trim(ng.value) : '';
+      var ngBlankAsk = !!(g1 && !(ngv === '女性' || ngv === '男性'));   /* ★GENDER1 */
       out.push({
-        key: 'npc' + n + '_gender', label: 'NPC' + n + 'の性別',
-        value: ngv, filled: ngv.length > 0, writable: false, el: null
+        key: 'npc' + n + '_gender', label: ngBlankAsk ? 'NPC' + n + 'の' + g1.LABEL_NPC : 'NPC' + n + 'の性別',
+        value: ngv, filled: ngv.length > 0, writable: ngBlankAsk, el: null, g1blank: ngBlankAsk
       });
     }
     return out;
@@ -169,6 +175,9 @@
       else if (f.writable) blanks.push(f);
     }
     if (blanks.length === 0) return null;   // 全欄埋まっている → 生成しない
+    /* ★GENDER1: 性別だけが空欄の時は AI を呼ばない（呼び出し 1 回ぶんの費用・待ち時間を増やさない。本文からの保険だけ別途走る） */
+    var gBlanks = 0; for (i = 0; i < blanks.length; i++){ if (GENDER_KEY_RE.test(blanks[i].key)) gBlanks++; }
+    if (gBlanks === blanks.length) return null;
 
     var hasSeed = known.length > 0;
     var sys =
@@ -211,6 +220,9 @@
     u.push('- *_desc は外見・立場を1〜2文で簡潔に。*_personality / *_coreDesire / *_coreFear は短い1文。*_wound は1〜2文。');
     u.push('- 性別が確定情報にある人物は、その性別と矛盾しない名前・外見にする。');
     u.push('- 既に名前が確定している人物と同じ名前を新しく作らない。');
+    if (gBlanks > 0){   /* ★GENDER1 */
+      u.push('- *_gender（heroGender を含む）は「女性」か「男性」のどちらか1語だけ。外見・名前・一人称・代名詞と必ず矛盾させない。人間でない等で本当に決められない時だけ「不明」。');
+    }
 
     return { sys: sys, user: u.join('\n'), blankKeys: keys, knownKeys: (function(){ var a = []; for (i = 0; i < known.length; i++) a.push(known[i].key); return a; })() };
   }
@@ -283,6 +295,12 @@
       f = byKey[k];
       if (!f){ rep.unknown.push(k); continue; }                       // 未知キー → 無視
       if (!f.writable || f.filled){ rep.protected_.push(k); continue; } // ★ユーザー入力は絶対不可侵
+      if (GENDER_KEY_RE.test(k)){          /* ★GENDER1: 女性/男性 以外（不明・自由文）は採用しない = 未設定のまま */
+        var gg = (window.__v292DfixGENDER1 && window.__v292DfixGENDER1.norm) ? window.__v292DfixGENDER1.norm(json[k]) : '';
+        if (!gg){ rep.rejected.push(k); continue; }
+        f.value = gg; f.filled = true; rep.applied.push(k);
+        continue;                           // ラジオへの書き込みは run() の finalizeGender（本文優先・未選択のみ）
+      }
       var v = normVal(json[k]);
       if (!v){ rep.rejected.push(k); continue; }
       if (NAME_RE.test(k)){
@@ -393,13 +411,39 @@
   /* ★B37-C: ローカルの雛形で埋めたときは、変わった欄の数を数えて設定画面の中に出す */
   function b37legacy(s0, head){ var n = b37diff(s0, b37snap()); b37res(n ? 'error' : 'none', head.replace(/。?$/, '。') + (n == null ? 'ローカルの雛形を入力しました。' : (n ? 'ローカルの雛形で ' + n + ' 項目を埋めました（AIは使っていません）。' : '変更 0 件です。'))); }
 
+  /* ★GENDER1: AI が返した性別 + 本文から、**未選択のラジオにだけ**書く（本文に明確な語があれば本文優先・選択済みは不可侵）。
+     ラジオが未注入のカード（今 ensureNpcCards で作った）にも、現れるまで待って書く。 */
+  function finalizeGender(fields){
+    var g1 = G1(); if (!g1) return;
+    try {
+      var ai = { hero: '', npcs: [] }, ask = { hero: false, npcs: [] }, i, f, m;
+      for (i = 0; i < fields.length; i++){
+        f = fields[i]; if (!f || !f.g1blank) continue;
+        if (f.key === 'heroGender'){ ask.hero = true; ai.hero = f.filled ? f.value : ''; continue; }
+        m = /^npc(\d+)_gender$/.exec(f.key);
+        if (m){ ask.npcs[+m[1] - 1] = true; ai.npcs[+m[1] - 1] = f.filled ? f.value : ''; }
+      }
+      var hd = document.getElementById('cfgHDesc');
+      if (ask.hero){ var hg = g1.resolve(ai.hero, hd ? hd.value : ''); if (hg && !g1.readHero()) g1.applyHero(hg); }
+      var cards = document.querySelectorAll('#npcList .npc-card');
+      for (i = 0; i < cards.length; i++){
+        if (!ask.npcs[i]) continue;
+        var dd = cards[i].querySelector('[data-f="desc"]');
+        var ng = g1.resolve(ai.npcs[i], dd ? dd.value : '');
+        if (ng && !g1.readCard(cards[i])) g1.applyCard(cards[i], ng);
+      }
+    } catch(e){ try { console.warn(TAG, 'gender1', e && e.message); } catch(_){} }
+  }
+  function g1sweep(){ var g1 = G1(); if (g1) { try { g1.sweepSoon(); } catch(e){} } }   /* ★GENDER1: 旧雛形に落ちた時の本文保険 */
+
   function onFail(fields, why){
     try { console.warn(TAG, 'fail:', why); } catch(e){}
     if (!hasSeed(fields)){
       // 種が皆無 → 空フォームで詰まないよう従来の固定ランダムへ退避
       var s0 = b37snap();
-      if (f855Off()){ setStatus('AI生成に失敗しました。固定パターンで埋めます。', true); legacy(); b37legacy(s0, 'AIで埋められませんでした。'); return; }
+      if (f855Off()){ setStatus('AI生成に失敗しました。固定パターンで埋めます。', true); legacy(); g1sweep(); b37legacy(s0, 'AIで埋められませんでした。'); return; }
       legacy();                                                   /* ★fix855: 先に退避を実行し… */
+      g1sweep();                                                  /* ★GENDER1 */
       setStatus(f855Reason(why) + F855_TAIL, true);               /* ★…その後に状況を出す(旧経路の成功文言に上書きされない) */
       b37legacy(s0, f855Reason(why));
       return;
@@ -416,6 +460,7 @@
     var fields = collectFields(document);
     var p = buildFillPrompt(fields);
     if (!p){
+      g1sweep();   /* ★GENDER1: 他の欄が全部埋まっていて性別だけ未設定 → AI は呼ばず、本文に明確な語がある時だけ自動で設定 */
       setStatus('空欄はありません。🎲は「空いている欄」だけを埋めます。');
       b37res('none', '空欄はありません（変更 0 件）。🎲は設定の空いている欄だけを埋めます。');
       return;
@@ -423,8 +468,9 @@
     var st = getS(), cfg = (st && st.cfg) || {};
     if (cfg.provider !== 'openrouter' || !cfg.orKey){
       var s0 = b37snap();
-      if (f855Off()){ legacy(); b37legacy(s0, 'AI生成は使えません。'); return; }
+      if (f855Off()){ legacy(); g1sweep(); b37legacy(s0, 'AI生成は使えません。'); return; }
       legacy();                                                   /* ★fix855: 雛形挿入は従来どおり */
+      g1sweep();                                                  /* ★GENDER1 */
       setStatus((!cfg.orKey ? 'AI生成は使えません(OpenRouter APIキーが未設定)。'
                             : 'AI生成は OpenRouter 選択時のみ利用できます。') + F855_TAIL, true);
       b37legacy(s0, (!cfg.orKey ? 'AI生成は使えません（APIキーが未設定）。' : 'AI生成は OpenRouter 選択時のみ利用できます。'));
@@ -440,10 +486,13 @@
       var rep;
       try { rep = applyFill(fields, json); }
       catch(e){ return onFail(fields, 'apply'); }
-      if (!rep.applied.length) return onFail(fields, 'nothing-applied');
+      /* ★GENDER1: 性別だけ返ってきても「補完できた」とは数えない（従来の判定を保つ） */
+      var nonGender = 0; for (var q = 0; q < rep.applied.length; q++){ if (!GENDER_KEY_RE.test(rep.applied[q])) nonGender++; }
+      if (!nonGender) return onFail(fields, 'nothing-applied');
+      finalizeGender(fields);
       try { console.log(TAG, 'applied', rep.applied.length, rep.applied.join(','), '| protected', rep.protected_.length); } catch(e){}
-      setStatus('🎲 空いていた' + rep.applied.length + '件を、書いた内容に合わせて埋めました。内容を確認して「保存してゲーム開始」を押してください。');
-      b37res('ok', rep.applied.length + ' 項目を補完しました。内容を確認して「保存してゲーム開始」を押してください。');
+      setStatus('🎲 空いていた' + nonGender + '件を、書いた内容に合わせて埋めました。内容を確認して「保存してゲーム開始」を押してください。');
+      b37res('ok', nonGender + ' 項目を補完しました。内容を確認して「保存してゲーム開始」を押してください。');
     });
   }
 

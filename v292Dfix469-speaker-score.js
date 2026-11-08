@@ -147,13 +147,22 @@
   }
   var GENERIC_LABELS = ['若い男','若い女','若者','青年','老人','老婆','老爺','少年','少女','子供','男性','女性','人影','黒衣の男','黒衣の女'];
   var ATTR_CONSTRUCT = '(の(?:声|口調|言葉|囁き|呟き|悲鳴|叫び)|[はが](?:[^。、\\n]{0,6})?(?:言|口を開|続け|答え|尋ね|叫|呟|囁|告げ|問い|返し|吐き捨て))';
+  /* ★IDSPLIT2-B(2026-11-08・Owner だけのカナリア): 名乗りで登録NPCの別名と確定した記述的な呼び名（IDSPLIT2 が別名台帳に足したもの）は、
+     別人の候補にせず「その登録NPCのトークン」として扱う。これが無いと、確定後も GENERIC_LABELS の「少女」が別人として +140 を取り、
+     正名へ寄せた会話カードをまた「少女」へ flip する（往復）。判定は IDSPLIT2.aliasFor（Owner かつ active・匿名でない・毎回評価・
+     台帳の別名で正名が今回の候補 names の登録NPCのものだけ）。それ以外・file 不在・例外 = '' = 従来どおり。
+     OFF: localStorage v292DfixIDSPLIT2Off='1' */
+  function _idsplitAliasTo(w, names){
+    try { var X = window.__v292DfixIDSPLIT2; if (!X || typeof X.aliasFor !== 'function') return ''; return String(X.aliasFor(w, names) || ''); } catch(e){ return ''; }
+  }
   function extraTokens(t, names, narr){
-    var known = {}, out = [], cand = {};
+    var known = {}, out = [], cand = {}, aliasOut = [];   // ★IDSPLIT2-B: aliasOut
     names.forEach(function(n){ known[nospace(n)] = 1; });
     try {
       ((t && t._convSays) || []).forEach(function(c){
         var w = c && c.who ? String(c.who).trim() : '';
         if (!w || w === '???' || known[nospace(w)]) return;
+        if (w.length >= 2 && PRONOUN_WHO.indexOf(w) < 0){ var _ia = _idsplitAliasTo(w, names); if (_ia){ aliasOut.push({ canon: _ia, tok: w }); return; } }   // ★IDSPLIT2-B
         // fix495(B1): 1文字ラベル・代名詞whoを候補トークンにしない(「女」が「彼女の声…」に
         // 部分一致してvoiceAfter+115を取り、正しいwho(+60)を55差でflipする実測事故の遮断)
         if (w.length < 2 || PRONOUN_WHO.indexOf(w) >= 0) return;
@@ -161,7 +170,8 @@
       });
       GENERIC_LABELS.forEach(function(g){
         if (known[g] || cand[g]) return;
-        try { if (new RegExp(g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ATTR_CONSTRUCT).test(String(narr || ''))) cand[g] = 1; } catch(e){}
+        var _ia = _idsplitAliasTo(g, names);   // ★IDSPLIT2-B: 別名確定済みの呼び名は正名のトークン
+        try { if (new RegExp(g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ATTR_CONSTRUCT).test(String(narr || ''))){ if (_ia) aliasOut.push({ canon: _ia, tok: g }); else cand[g] = 1; } } catch(e){}
       });
       var ks = Object.keys(cand);
       ks.forEach(function(k){
@@ -172,7 +182,7 @@
         out.push({ canon: k, tok: k });
       });
     } catch(e){}
-    return out;
+    return aliasOut.length ? out.concat(aliasOut) : out;   // ★IDSPLIT2-B: 別名が無いときは従来と同じ配列
   }
 
   // ---------- 証拠検出 ----------

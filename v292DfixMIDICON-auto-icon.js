@@ -35,20 +35,26 @@
  * ■mx3-e（本番 QA 2026-11-03 の指摘）: ① 別名の行き先が登録キャラのときだけ A_ALIAS。登録されていない話者名（fix277 の準登録の別名: 郵便屋のトマス → トマス）なら
  *   その名前を Worker へ送る呼び名にし（本文の「郵便屋のトマス」と <say who="トマス"> の両方が数えられる）、名簿の呼び名は表示の別名として覚える。
  *   ② ターン数が Worker と合わない（Worker が遅れている）ときは、同じターンを 1 回だけ間を置いて見直す（1 ターン 1 枚は変わらない）。
+ * ■OLDMX1（2026-11-08・Owner「古い物語でも、続きを遊んでいるときは NPC のアイコン自動生成が正常に働くようにして」・Local 候補）:
+ *   候補は fix307 の名簿（登場人物台帳）からしか出ない。名簿の抽出（文章 AI・3 ターンごと・数秒〜十数秒）は、ターンが落ち着いて 3 秒後のこの判定より遅れて届くことが多い。
+ *   古い物語を続きから遊ぶと、名簿に居なかった（または名簿がこの端末で作り直された）人が再登場したターンで、名簿が届く前に「候補なし」と決まり、
+ *   その人が次に名簿の更新と同じターンに出るまで絵が付かなかった。→ 遊んだターンの判定が「候補なし」だった後、同じターンのうちに名簿が変わったら、
+ *   そのターンをもう 1 回だけ判定し直す（1 ターン 1 回・ターンが落ち着いてから 90 秒以内・規則・上限・Worker の確認は同じ。開いただけでは作らないのも同じ）。
+ *   kill: localStorage v292DfixMIDICONrosOff='1'（この見直しだけ止める）
  * ■診断: window.__v292DfixMIDICON.status()
  * ===================================================================== */
 (function (root) {
   'use strict';
   if (typeof window === 'undefined' || root.__v292DfixMIDICON) return;
-  var VER = 'mx3e-20261103';
+  var VER = 'mx3e-20261103+oldmx1';
   var KILL = 'v292DfixMIDICONOff', LSK = 'v292DfixMIDICON_v1';
   var CAP = { turn: 1, storyDay: 2, storyTotal: 6, storyDesc: 2, acctDay: 5 };
-  var SETTLE_MS = 3000, POLL_MS = 1500;
+  var SETTLE_MS = 3000, POLL_MS = 1500, ROS_LATE_MS = 90000;   /* ★OLDMX1 */
   var MX_ID_RE = /^ch_mx[A-Za-z0-9_-]{22}$/;
   function lsGet(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { root.localStorage.setItem(k, v); return true; } catch (e) { return false; } }
   var LOG = []; function note(o) { try { o.t = Date.now(); LOG.push(o); if (LOG.length > 120) LOG.shift(); } catch (e) {} }
-  var stats = { aliasSpeaker: 0, aliasRegistered: 0, mmRetry: 0, list: 0, listFail: 0, ensure: 0, claim: 0, created: 0, exists: 0, inflight: 0, skipped: 0, mismatch: 0, timeouts: 0, settles: 0, notPlayed: 0, notYet: 0, alias: 0, refused: 0, provider: 0 };   /* ★mx3-c: + notPlayed / notYet / alias / refused / provider */
+  var stats = { rosRetry: 0, aliasSpeaker: 0, aliasRegistered: 0, mmRetry: 0, list: 0, listFail: 0, ensure: 0, claim: 0, created: 0, exists: 0, inflight: 0, skipped: 0, mismatch: 0, timeouts: 0, settles: 0, notPlayed: 0, notYet: 0, alias: 0, refused: 0, provider: 0 };   /* ★mx3-c: + notPlayed / notYet / alias / refused / provider */
 
   /* ---------- environment ---------- */
   function state() { try { return (typeof root.__chronicleGetState === 'function') ? root.__chronicleGetState('midicon') : null; } catch (e) { return null; } }
@@ -287,7 +293,7 @@
 
   /* ---------- extras (memory only) ---------- */
   var X = { story: null, extras: [], turnCount: null, at: 0, listed: false, stopped: null, claimTried: {}, lastTurnSeen: -1, lastChange: 0, doneTurn: -1, busy: false, started: false, lastRegOk: null, pageStop: null, last: null, initListAsked: false,
-    played: {}, seen: {}, seenN: 0, alias: {}, caps: null, mmRetry: {}, mmWait: 0 };   /* ★mx3-e: mmRetry[n] = the one re-run of turn n was used; mmWait = not before */   /* ★mx3-c: played[n] = turn n was played on this page (+1 turn with content never seen on this page); seen = content hashes; alias = hash(handle) → extra_id; caps = the Worker's settings */
+    played: {}, seen: {}, seenN: 0, alias: {}, caps: null, mmRetry: {}, mmWait: 0, noCand: null, rosRetry: {} };   /* ★mx3-e: mmRetry[n] = the one re-run of turn n was used; mmWait = not before */   /* ★mx3-c: played[n] = turn n was played on this page (+1 turn with content never seen on this page); seen = content hashes; alias = hash(handle) → extra_id; caps = the Worker's settings */
   function setExtras(id, j) {
     if (!j || !Array.isArray(j.extras)) return;
     X.story = id; X.at = Date.now(); X.listed = true; X.turnCount = (typeof j.turn_count === 'number') ? j.turn_count : null;
@@ -325,6 +331,7 @@
   }
 
   /* ---------- candidate selection (the r2 Worker rules, checked first on the device) ---------- */
+  function rosterSig() { try { return hk(rosterOf().map(function (e) { return e ? String(e.handle) + ':' + String(e.importance || '') + ':' + String(e.lastTurn) : ''; }).join('|')); } catch (e) { return 'x'; } }   /* ★OLDMX1: hash only, memory only */
   function rosterOf() { try { var R = root.__v292Dfix307api; var a = (R && typeof R.loadRoster === 'function') ? R.loadRoster() : []; return Array.isArray(a) ? a : []; } catch (e) { return []; } }
   /* ★mx3-b (review 中-1): fix641 dryRun().promoted is an array of NAME STRINGS. Exclude those names ONLY when fix641 really registers (live mode:
      not killed, v292Dfix641Live='1' — its own live() rule, read only). In the default dryRun mode nobody will register them, so they stay candidates. */
@@ -478,7 +485,7 @@
       if (sd >= capOf('storyDay')) return finish('CAP_STORY_DAY');
       if ((r.acct || 0) >= capOf('acctDay')) return finish('CAP_ACCT_DAY');
       var sel = select(S2, r, id); X.lastSel = sel;
-      if (!sel.picked) { stats.skipped++; return finish('NO_CANDIDATE', sel.considered.slice(0, 8)); }
+      if (!sel.picked) { stats.skipped++; X.noCand = { n: n, sig: rosterSig() }; return finish('NO_CANDIDATE', sel.considered.slice(0, 8)); }   /* ★OLDMX1: remember the roster this decision saw */
       var p = sel.picked, args = { story_id: id, handle: p.key, expected_turn_count: n, appearance: p.appearance, kind: p.kind };
       if (p.vars.length) args.variants = p.vars; if (p.traits.length) args.traits = p.traits; if (p.gender) args.gender = p.gender;
       stats.ensure++; note({ kind: 'ENSURE', desc: p.desc, kind2: p.kind, nv: p.vars.length, nt: p.traits.length });
@@ -555,7 +562,7 @@
       var g = gateWhy(); if (g) return;
       var id = sid();
       if (X.story !== id) { X.story = id; X.extras = []; X.listed = false; X.claimTried = {}; X.doneTurn = -1; X.lastTurnSeen = -1; X.stopped = null; X.pageStop = null; X.initListAsked = false;
-        X.played = {}; X.seen = {}; X.seenN = 0; X.caps = null; X.mmRetry = {}; X.mmWait = 0; try { var sa = stOf(rec(), id); X.alias = sa.ak ? JSON.parse(JSON.stringify(sa.ak)) : {}; } catch (e) { X.alias = {}; } }   /* ★mx3-c */
+        X.played = {}; X.seen = {}; X.seenN = 0; X.caps = null; X.mmRetry = {}; X.mmWait = 0; X.noCand = null; X.rosRetry = {}; try { var sa = stOf(rec(), id); X.alias = sa.ak ? JSON.parse(JSON.stringify(sa.ak)) : {}; } catch (e) { X.alias = {}; } }   /* ★mx3-c */
       if (!X.listed && !X.busy && !X.stopped && !X.initListAsked) { X.initListAsked = true; X.busy = true; var S0 = state(); X.doneTurn = (S0 && Array.isArray(S0.turns)) ? S0.turns.length : -1; seeAll(S0); X.lastTurnSeen = X.doneTurn; X.lastChange = Date.now();   /* ★mx3-c: every turn present at open = seen (baseline) */   /* opening / reloading a story never creates by itself: only a NEW turn that settles */
         listOnce(id, function () { X.busy = false; claimPass(); }); return; }
       var S = state(); if (!S || !Array.isArray(S.turns)) return;
@@ -566,6 +573,9 @@
         if (X.lastTurnSeen >= 0 && n < X.lastTurnSeen) { X.doneTurn = Math.min(X.doneTurn, n); for (var pk in X.played) if (+pk > n) delete X.played[pk]; }   /* undo: a NEW turn after it may be considered again */
         seeAll(S); X.lastTurnSeen = n; X.lastChange = Date.now(); return; }
       try { var a = A(); var ro = a && a.status ? a.status().reg.ok : null; if (ro !== X.lastRegOk) { X.lastRegOk = ro; if (X.listed) setTimeout(claimPass, 1500); } } catch (e) {}
+      /* ★OLDMX1: the roster arrived after the decision of this played turn ("no candidate") → decide this same turn once more */
+      if (X.noCand && X.noCand.n === n && X.doneTurn === n && !X.busy && X.played[n] && !X.rosRetry[n] && lsGet('v292DfixMIDICONrosOff') !== '1' && Date.now() - X.lastChange < ROS_LATE_MS && rosterSig() !== X.noCand.sig) {
+        X.rosRetry[n] = 1; X.doneTurn = n - 1; stats.rosRetry++; note({ kind: 'ROSTER_LATE', n: n }); }
       if (n > X.doneTurn && Date.now() - X.lastChange >= SETTLE_MS && Date.now() >= (X.mmWait || 0)) { var why = runTurn(false); if (why !== X.lastTry) { X.lastTry = why; note({ kind: 'TRY', why: String(why).slice(0, 40) }); } }
     } catch (e) { note({ kind: 'TICK_THREW', e: String(e).slice(0, 80) }); }
   }

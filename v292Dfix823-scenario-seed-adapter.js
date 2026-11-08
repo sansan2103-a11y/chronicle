@@ -82,6 +82,12 @@
   function f436(){ return window.__v292Dfix436 || null; }
   function f335(){ return window.__v292Dfix335api || null; }
   function f820(){ return window.__v292Dfix820 || null; }
+  /* ★GENDER1（おしん 2026-11-07・GPT 裁定 56 の「AI に gender を自由文字列で書かせない」は維持）:
+     空の gender は「女性/男性 の 2 択だけを答える空欄」として同じ 1 回の呼び出しに載せる（追加通信 0）。
+     返事は norm() で女性/男性 以外を捨て（= INVALID_ENUM を作らない）、本文に明確な語があれば本文を優先する。
+     入力に既にある gender は従来どおり LOCKED（writable:false・上書き 0）。kill: v292DfixGENDER1Off='1'。 */
+  function G1(){ try { var g = window.__v292DfixGENDER1; return (g && g.on()) ? g : null; } catch(e){ return null; } }
+  var GENDER_KEY_RE = /(^heroGender$|_gender$)/;
   function fail(code, detail){ var r = { ok: false, code: code }; if (detail !== undefined) r.detail = detail; return r; }
 
   /* ---- 入力の正規化（読むだけ・新オブジェクト） ---- */
@@ -116,7 +122,8 @@
     }
     /* ★主人公の性別 = 読み取り専用の確定情報（writable:false・fix436 と同じ扱い） */
     var hg = trim(s.cast.hero[GENDER_FIELD]);
-    fields.push({ key: HERO_GENDER_KEY, label: HERO_GENDER_LABEL, value: hg, filled: hg.length > 0, writable: false, el: null });
+    var g1 = G1(), hgAsk = !!(g1 && !hg);   /* ★GENDER1 */
+    fields.push({ key: HERO_GENDER_KEY, label: hgAsk ? g1.LABEL_HERO : HERO_GENDER_LABEL, value: hg, filled: hg.length > 0, writable: hgAsk, el: null, g1blank: hgAsk });
     var npcCount = s.cast.npcs.length;
     if (mode === MODES.OMAKASE_CREATE && npcCount === 0) npcCount = OMAKASE_DEFAULT_NPC;   /* ★ OMAKASE_CREATE だけ */
     for (i = 0; i < npcCount; i++){
@@ -127,8 +134,9 @@
       }
       /* ★NPC の性別も読み取り専用の確定情報（writable:false） */
       var ngv = trim(src[GENDER_FIELD]);
-      fields.push({ key: 'npc' + (i + 1) + '_' + GENDER_FIELD, label: 'NPC' + (i + 1) + 'の性別',
-                    value: ngv, filled: ngv.length > 0, writable: false, el: null });
+      var ngAsk = !!(g1 && !ngv);   /* ★GENDER1 */
+      fields.push({ key: 'npc' + (i + 1) + '_' + GENDER_FIELD, label: 'NPC' + (i + 1) + 'の' + (ngAsk ? g1.LABEL_NPC : '性別'),
+                    value: ngv, filled: ngv.length > 0, writable: ngAsk, el: null, g1blank: ngAsk });
     }
     /* startCondition: 空欄なら AI fill 可 */
     fields.push({ key: 'startCondition', label: '開始時の状況（物語の最初の場面・配置・直前の出来事。1〜3文）', value: s.startCondition, filled: s.startCondition.length > 0, writable: true, el: null });
@@ -249,7 +257,7 @@
       (function more(){
         if (npcs.length >= OMAKASE_DEFAULT_NPC){
           var out = { title: s.title, scene: { lore: f1.lore, loc: f1.loc, obj: f1.obj, tone: f1.tone },
-                      cast: { hero: { name: f1.hero.name, desc: f1.hero.desc }, npcs: npcs },
+                      cast: { hero: (function(){ var h = { name: f1.hero.name, desc: f1.hero.desc }; var hg = G1() && f1.hero.gender; if (hg === '女性' || hg === '男性') h.gender = hg; return h; })() /* ★GENDER1 */, npcs: npcs },
                       startCondition: '', startRules: s.startRules };
           return cb({ ok: true, input: out, generationMode: 'RANDOM_FALLBACK' });
         }
@@ -260,6 +268,20 @@
         });
       })();
     });
+  }
+
+  /* ★GENDER1: 空だった gender 欄を「本文の明確な語 > AI の答え」で決める（決められなければ空のまま = 未設定）。
+     LOCKED（入力にあった gender）は g1blank が false なので触らない。 */
+  function finalizeGenders(fields){
+    var g1 = G1(); if (!g1) return;
+    var byKey = {}, i, f;
+    for (i = 0; i < fields.length; i++){ if (fields[i] && fields[i].key) byKey[fields[i].key] = fields[i]; }
+    for (i = 0; i < fields.length; i++){
+      f = fields[i]; if (!f || !f.g1blank) continue;
+      var dk = (f.key === HERO_GENDER_KEY) ? 'heroDesc' : f.key.replace(/_gender$/, '_desc');
+      var d = byKey[dk], g = g1.resolve(f.filled ? f.value : '', d ? d.value : '');
+      f.value = g; f.filled = !!g;
+    }
   }
 
   /* ---- ⑤ expand（保存しない。candidate を返す） ---- */
@@ -301,7 +323,9 @@
         if (!json) return cb(fail('BAD_JSON'));
         var rep; try { rep = F.applyFill(fields, json); } catch(e){ return cb(fail('APPLY_ERROR')); }
         report.applied = rep.applied; report.protected_ = rep.protected_; report.unknown = rep.unknown; report.rejected = rep.rejected;
-        if (!rep.applied.length) return cb(fail('NOTHING_APPLIED', report));
+        var nonGender = 0; for (var q = 0; q < rep.applied.length; q++){ if (!GENDER_KEY_RE.test(rep.applied[q])) nonGender++; }   /* ★GENDER1: 性別だけでは「補完できた」と数えない */
+        if (!nonGender) return cb(fail('NOTHING_APPLIED', report));
+        finalizeGenders(fields);
         var t = toScenarioInput(fields, base);
         report.namelessSlots = t.namelessSlots; report.generationMode = 'AI_INFERRED';
         if (JSON.stringify(input) !== baseStr) return cb(fail('BASE_MUTATED'));   /* 入力を汚していないことの自己検査 */

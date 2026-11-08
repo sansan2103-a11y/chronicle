@@ -257,7 +257,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261108-bundle93-g';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261108-bundle93-h';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -391,8 +391,10 @@
      fix436 = 「種を広げる」engine の公開 pure 関数（buildFillPrompt / parseFillJson / normVal / applyFill / request）を fix823 が再利用する。
      home には UI.randomFill が無いので fix436 は arm されず 30 秒 keeper が空回りして止まる（model call 0 / LS write 0 / DOM 0 = stage 実測）。
      fix335 は既定 OFF・呼び手 0（pure API __v292Dfix335api.draw を fix823 の RANDOM_FALLBACK が使う）。fix247 は home に **載せない**（裁定 27）。 -->
-<script src="v292Dfix436-seed-expand.js?cb=20261021-bundle37-a"></script>
-<script src="v292Dfix335-omakase.js?cb=20260906-fix823"></script>
+<!-- ★GENDER1 (おしん 2026-11-07・bundle93-h): シナリオの自動作成で性別を自動で決める（利用者が選んだ性別は触らない）。kill: localStorage v292DfixGENDER1Off=1 -->
+<script src="v292DfixGENDER1-autogender.js?cb=20261108-bundle93-h"></script>
+<script src="v292Dfix436-seed-expand.js?cb=20261108-bundle93-h"></script>
+<script src="v292Dfix335-omakase.js?cb=20261108-bundle93-h"></script>
 <!-- v292Dfix819: STORY_INSTANTIATION_PRIMITIVE（原本 → 独立 Story を 1 本作る primitive）。
      GPT 裁定 2026-09-06 `FIX819_DEPLOY_DORMANT_LIBRARY = GO`: **載せるだけ。UI caller 0・Owner 操作から到達不能。**
      配置 = home の既存 story lifecycle / protection 群（fix654/fix697/fix587/fix710 …）の**後**、
@@ -415,7 +417,7 @@
 <script src="v292Dfix872-scenario-cloud-sync.js?cb=20261020-bundle35-b"></script>
 <!-- v292Dfix823: SEED_EXPANSION_V1 Scenario Seed Adapter（dormant・UI caller 0・kill v292Dfix823Off）。fix436+fix335 の再利用で
      Scenario Original の空欄だけを埋める。transport は実 fix247 runtime authority のみ（home には fix247 が無いので現状は常に AI_UNAVAILABLE = fail-closed）。 -->
-<script src="v292Dfix823-scenario-seed-adapter.js?cb=20260907-schema3"></script>
+<script src="v292Dfix823-scenario-seed-adapter.js?cb=20261108-bundle93-h"></script>
 <!-- ★★sp18 v292Dfix889 SECRET_STORY_VAULT（v7.2）: HOME の可視性 authority。
      ★下の inline script より **前**（あちらは parse 時に render() を呼ぶ）。 -->
 <script src="v292Dfix889-secret-vault.js?cb=20261108-bundle93-g"></script>
@@ -579,7 +581,9 @@
     }).then(function(j){
       if (j === null) return;
       if (!j || j.ok !== true || Object.prototype.toString.call(j.stories) !== '[object Array]'){
-        F757.code = (j && j.errorCode) || 'BAD_RESPONSE'; return;
+        F757.code = (j && j.errorCode) || 'BAD_RESPONSE';
+        try { if (j && hr1Retryable(j.__status, j.errorCode, j.retryable === true, false)) hr1Schedule757(); } catch(e2){}   /* ★HOMERETRY1 */
+        return;
       }
       var rows = [];
       for (var i = 0; i < j.stories.length; i++){
@@ -596,7 +600,7 @@
       try { var D2 = window.__v292DfixDL2; if (D2 && typeof D2.onListshadow === 'function') D2.onListshadow(j.stories, F757.who0p || null); } catch(eD2){}
       try { console.log('[home][v292Dfix757] クラウドの物語 ' + rows.length + ' 件を一覧へ反映します'); } catch(e){}
       render();
-    })['catch'](function(e){ F757.code = 'NETWORK'; });
+    })['catch'](function(e){ F757.code = 'NETWORK'; try { if (e && e.__hr1net) hr1Schedule757(); } catch(e2){} });   /* ★HOMERETRY1: 通信そのものの失敗だけ */
   }
   /* ★UI1 (2026-10-11, GPT #125-DS HOME_INITIAL_CARD_DELAY の原因): fix893 の /auth/me がまだ返っていない間に f757Fetch が
      走ると loggedIn() が false で NOT_LOGGED_IN のまま二度と取りに行かず、fix889 も noauth のままになり、クラウドの物語が
@@ -1174,6 +1178,68 @@
     return 'ログイン情報が読めないため同期できません。';
   }
   var NEWACCT1 = { stale: null };   /* ★NEWACCT1: 「ログイン不可」を出した pull の引数。/auth/me が返って loggedIn() になったら 1 回だけやり直す */
+  /* ★HOMERETRY1（2026-11-08 本番 93-g: Worker の冷えた起動で /api/save が 8 s 後に 503 D1_INIT_TIMEOUT を 7 回返し、約 16 s 後から 200。
+     fix889 は BOOTOFF1 の聞き直しで戻ったが、HOME の pull() は「☁ 同期できませんでした」のまま二度と聞き直さなかった）
+     ・聞き直すのは「一時的」と分かる失敗だけ: HTTP 503 で body.retryable===true、または errorCode が D1_INIT_TIMEOUT / ACCOUNT_STORE_TIMEOUT。
+       もう 1 つは通信そのものの失敗（fetch が投げた＝call() の中で印を付けたものだけ。応答の処理中の例外は対象外）。
+       500 / 403 / 401 / 409 / ok:false の 200 / 応答の形の誤りは従来どおり（聞き直さない）。
+     ・回数は 1 ページで最大 3 回（2 s・6 s・15 s 後。BOOTOFF1 と同じ刻み・待ちの合計 23 s）。online になったら待たずに聞き直す（回数に数える）。
+     ・聞き直しは pull() / f757Fetch() をそのまま呼ぶだけ（判定・墓標・826 などの関門はすべて通常どおり。成功は Worker が 200 を返したときだけ）。
+     ・表示: 聞き直す予定がある間だけ「☁ 同期できませんでした（少し待って自動でもう一度試します）」。最後は従来の「☁ 同期できませんでした」。
+       聞き直す直前に、表示がまだ自分の書いた文のままかを確かめる。別の処理が書き換えていたら（手動の取り込み・NEWACCT1 など）何もしない。
+     ・f757（クラウドの物語の行）も同じ規則で最大 3 回。別の取り直し（Vault の refresh など）が始まっていたら何もしない。
+     kill: localStorage v292DfixHOMERETRY1Off='1' → 93-g と同じ（聞き直さない・文も従来どおり）。 */
+  var HR1 = { pull: { n: 0, timer: null, args: null, text: null }, f757: { n: 0, timer: null, code: null, gen: null }, wired: false };
+  var HR1_MAX = 3, HR1_DELAYS = [2000, 6000, 15000];
+  var HR1_CODES = { D1_INIT_TIMEOUT: 1, ACCOUNT_STORE_TIMEOUT: 1 };
+  var HR1_WAIT_TEXT = '☁ 同期できませんでした（少し待って自動でもう一度試します）';
+  function hr1Off(){ return g('v292DfixHOMERETRY1Off') === '1'; }
+  function hr1Retryable(status, code, retryable, net){
+    if (net === true) return true;
+    if (+status !== 503) return false;
+    return retryable === true || HR1_CODES[String(code || '')] === 1;
+  }
+  function hr1Wire(){
+    if (HR1.wired) return; HR1.wired = true;
+    try { window.addEventListener('online', function(){ hr1FirePull('online'); hr1Fire757('online'); }, false); } catch(e){}
+  }
+  function hr1SchedulePull(args){
+    if (hr1Off()) return false;
+    var S = HR1.pull; if (S.n >= HR1_MAX) return false;
+    if (S.timer){ try { clearTimeout(S.timer); } catch(e){} S.timer = null; }
+    S.args = args || []; S.text = HR1_WAIT_TEXT;
+    S.timer = setTimeout(function(){ S.timer = null; hr1FirePull('timer'); }, HR1_DELAYS[Math.min(S.n, HR1_DELAYS.length - 1)]);
+    hr1Wire(); return true;
+  }
+  function hr1FirePull(why){
+    var S = HR1.pull; if (!S.args) return;
+    if (S.timer){ try { clearTimeout(S.timer); } catch(e){} S.timer = null; }
+    var args = S.args, text = S.text; S.args = null; S.text = null;
+    if (hr1Off() || S.n >= HR1_MAX) return;
+    try { if (!el('sync') || el('sync').textContent !== text) return; } catch(e){ return; }   /* 表示が他の処理のものになっていたら触らない */
+    S.n++;
+    try { console.log('[home][HOMERETRY1] 同期をもう一度試します', JSON.stringify({ n: S.n, why: why })); } catch(e){}
+    pull(args[0], args[1]);
+  }
+  function hr1Schedule757(){
+    if (hr1Off()) return;
+    var S = HR1.f757; if (S.n >= HR1_MAX || S.timer) return;
+    S.code = F757.code; S.gen = F757.gen;
+    S.timer = setTimeout(function(){ S.timer = null; hr1Fire757('timer'); }, HR1_DELAYS[Math.min(S.n, HR1_DELAYS.length - 1)]);
+    hr1Wire();
+  }
+  function hr1Fire757(why){
+    var S = HR1.f757; if (S.code == null) return;
+    if (S.timer){ try { clearTimeout(S.timer); } catch(e){} S.timer = null; }
+    var code = S.code, gen = S.gen; S.code = null; S.gen = null;
+    if (hr1Off() || S.n >= HR1_MAX || f757off()) return;
+    if (F757.ok || F757.code !== code || F757.gen !== gen) return;   /* 別の取り直しが始まった／もう取れている */
+    S.n++;
+    try { console.log('[home][HOMERETRY1] クラウドの物語一覧をもう一度取ります', JSON.stringify({ n: S.n, why: why })); } catch(e){}
+    F757.tried = false; f757Fetch();
+  }
+  function hr1MarkNet(err){ try { if (err && typeof err === 'object' && !hr1Off()) err.__hr1net = true; } catch(e){} return err; }
+  function hr1Info(r){ return { status: r && r.__status, code: (r && r.errorCode) || null, retryable: !!(r && r.retryable === true) }; }
   function noteNotLoggedIn(pullArgs){
     var n1 = newacct1Why();
     if (n1){
@@ -1289,7 +1355,7 @@
         try { if (j && typeof j === 'object' && j.__status === undefined) j.__status = r.status; } catch(e){}
         return j;
       });
-    });
+    }, function(err){ throw hr1MarkNet(err); });   /* ★HOMERETRY1: fetch 自体が失敗した（通信断・時間切れ）印だけを付けて、同じ例外を投げ直す */
   }
   function turnsOf(raw){ var d=J(raw,null); return (d && Array.isArray(d.turns)) ? d.turns.length : -1; }
 
@@ -2004,7 +2070,7 @@
     el('sync').className='sync';
     el('sync').textContent = '☁ 確認中…';
     call({op:'meta'}, 15000).then(function(m){
-      if(!m || !m.ok){ var em = new Error('meta'); try { em.status = m && m.__status; em.serverError = String((m && m.error) || ''); em.errorCode = (m && m.errorCode) || null; } catch(e){} throw em; }
+      if(!m || !m.ok){ var em = new Error('meta'); try { em.status = m && m.__status; em.serverError = String((m && m.error) || ''); em.errorCode = (m && m.errorCode) || null; em.hr1 = hr1Info(m); } catch(e){} throw em; }
       var serverRev = +m.rev||0, base = +(g('v292Dfix402_baseRev')||0)||0;
       /* ★fix866 終端①: #note を書き換えずに終わるので、予告だけを外す */
       if(!force && serverRev <= base){ el('sync').textContent='☁ 最新です'; f866ClearTransientNote(); return; }
@@ -2034,7 +2100,7 @@
           f866ClearTransientNote();
           return;
         }
-        if(!r || !r.ok || !r.data || !r.data.ls) throw new Error('get');
+        if(!r || !r.ok || !r.data || !r.data.ls){ var eg = new Error('get'); try { eg.hr1 = hr1Info(r); } catch(e){} throw eg; }   /* ★HOMERETRY1: 失敗の中身を別の印で持つ（status 等は付けない＝下の未招待判定は従来どおり） */
         /* ★★v292Dfix826 F3（GPT裁定52）: 応答が届くまでの間に、この端末の別経路が
            より新しい版を確定させていることがある（実観測: rev69 の pull 応答が
            rev70 の push 後に適用され、古い状態が local へ戻った）。
@@ -2417,6 +2483,14 @@
       }
       el('sync').className='sync err';
       el('sync').textContent = '☁ 同期できませんでした';
+      /* ★HOMERETRY1: 一時的な失敗なら、有限回だけ聞き直す（表示は聞き直す予定がある間だけ補足付き）。 */
+      try {
+        var h1 = (e && e.hr1) || {};
+        if (!hr1Off() && hr1Retryable(h1.status, h1.code, h1.retryable, !!(e && e.__hr1net)) && hr1SchedulePull([force, adoptSlotId])){
+          el('sync').textContent = HR1_WAIT_TEXT;
+          try { console.warn('[home][HOMERETRY1] 一時的な失敗。少し待って聞き直します', JSON.stringify({ status: h1.status || null, code: h1.code || null, net: !!(e && e.__hr1net), n: HR1.pull.n })); } catch(e3){}
+        }
+      } catch(e2){}
       f866ClearTransientNote();   /* ★fix866 終端③: meta/get の throw もここへ来る */
     });
   }

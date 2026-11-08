@@ -121,6 +121,8 @@
     var tone=GLABEL[g]+'。'+pick.mood_tone.text+'。心理描写重視・会話多め。';
     var hero={ name:drawName(),
       desc:pick.stance.text+'。'+lackShort(pick.lack_desire)+'。' };
+    var G1=window.__v292DfixGENDER1, g1=(G1&&G1.on&&G1.on())?G1:null;   /* ★GENDER1: 自分で選んだ名前の性別を一緒に決める（種バンクは性別を持たない・名前プールは固定） */
+    if(g1) hero.gender=g1.resolve(g1.genderForName(hero.name),hero.desc);
     // NPC: 関係とNPC用stanceから
     var ns=pick.npcStance, d=ns.depth||{};
     var npc={ name:drawName(),
@@ -129,6 +131,7 @@
       coreDesire:d.want||'自分の居場所を守ること',
       coreFear:(d.need? 'ふたたび'+d.wound.replace(/。$/,'').replace(/^.*?、/,'')+'こと':'すべてを失うこと'),
       wound:d.wound||'語られない過去の傷を抱えている。' };
+    if(g1) npc.gender=g1.resolve(g1.genderForName(npc.name),npc.desc);   /* ★GENDER1 */
     return { genre:g, lore:lore, loc:loc, obj:obj, tone:tone, hero:hero, npc:npc };
   }
   function heroStanceShort(a){ return a.text.split('。')[0]; }
@@ -141,7 +144,10 @@
   // 既に入力がある欄は上書きしない(種を尊重・空欄だけ埋める)
   function setVal(id,v){ var el=document.getElementById(id); if(el && !(el.value&&el.value.trim())){ el.value=v; try{ el.dispatchEvent(new Event('input',{bubbles:true})); }catch(_){} } }
   function fillFields(f){
+    /* ★GENDER1: こちらが名前を書いた時だけ、その名前の性別を未選択のラジオへ（利用者の名前・選択済みの性別には触らない） */
+    var _g1=window.__v292DfixGENDER1, _hn=document.getElementById('cfgHName'), _hNameMine=!!(_hn && !(_hn.value&&_hn.value.trim()));
     setVal('cfgHName',f.hero.name); setVal('cfgHDesc',f.hero.desc);
+    if(_g1&&_g1.on&&_g1.on()&&_hNameMine&&f.hero.gender) _g1.applyHero(f.hero.gender);
     setVal('cfgLore',f.lore); setVal('cfgLoc',f.loc); setVal('cfgObj',f.obj); setVal('cfgTone',f.tone);
     // v292Dfix342: 「名前が空のカード」でなく「未完成カード(6欄のどれかが空)」を対象に、その空欄だけ埋める。
     //   おしん報告: 名前だけ先に入れたNPC(例ジーン)がスキップされ残り欄が埋まらなかった
@@ -165,8 +171,9 @@
   }
   function fillNpcCard(npc, card){
     card=card||document.querySelector('#npcList .npc-card'); if(!card) return;
-    var set=function(fld,v){ var el=card.querySelector('[data-f="'+fld+'"]'); if(el && !(el.value&&el.value.trim())){ el.value=v; try{el.dispatchEvent(new Event('input',{bubbles:true}));}catch(_){}} };
-    set('name',npc.name); set('desc',npc.desc); set('personality',npc.personality);
+    var set=function(fld,v){ var el=card.querySelector('[data-f="'+fld+'"]'); if(el && !(el.value&&el.value.trim())){ el.value=v; try{el.dispatchEvent(new Event('input',{bubbles:true}));}catch(_){} return true;} return false; };
+    var _nameMine=set('name',npc.name);
+    var _g1=window.__v292DfixGENDER1; if(_g1&&_g1.on&&_g1.on()&&_nameMine&&npc.gender) _g1.applyCard(card,npc.gender);   /* ★GENDER1 */ set('desc',npc.desc); set('personality',npc.personality);
     set('coreDesire',npc.coreDesire); set('coreFear',npc.coreFear); set('wound',npc.wound);
   }
 
