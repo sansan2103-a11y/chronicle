@@ -1522,9 +1522,56 @@
       }
       /* ★server の返事が無い ＝ 開けない（D-C2 / D-C3 の fail-closed）。
          ここで cache や「認証が無いこと」を理由に開けてはならない。 */
-      if (VIS.state === 'noauth') { GATE.reason = 'NO_AUTH'; gateUnconfirmed('noauth'); return; }
-      GATE.reason = 'UNCONFIRMED'; gateUnconfirmed('offline');
+      if (VIS.state === 'noauth') { bo1Note(tokenProbe); GATE.reason = 'NO_AUTH'; gateUnconfirmed('noauth'); bo1Arm(); return; }
+      bo1Note(tokenProbe);
+      GATE.reason = 'UNCONFIRMED'; gateUnconfirmed('offline'); bo1Arm();
     });
+  }
+
+  /* ■★BOOTOFF1（kill: localStorage v292DfixBOOTOFF1Off='1' → 93-f と同一挙動）
+     実測（本番 20261107-bundle93-f）: 起動直後の listshadow が 1 回だけ失敗（token 期限切れ/未更新など）すると、
+     扉は「オフラインのため…」で止まり、**自動で聞き直す道が無かった**（ボタン「もう一度確認する」だけ）。
+     直し: 扉が **失敗の dialog で止まっている間だけ**、聞き直しを有限回（BO_MAX）行う。
+       契機 = ①backoff タイマー（2s/6s/15s）②認証 header の変化（fix893 の cookie session 供給が ''→'cookie:…' になる等）と /auth/me 応答（chr:account-me）③online ④タブが見える/focus。
+     ★fail-open しない: 聞き直しは既存の「もう一度確認する」と**同じ経路**（gateWaiting(); probeGate()）。
+        server が ready と答えない限り released にならない（Vault 隠し判定・HIDDEN・reload 上限 REL_MAX は不変）。
+     ★write 0 / reload は既存 gateReload（REL_MAX 内）のみ。上限到達後は何もしない（静かに止まる）。 */
+  var BO_MAX = 4, BO_DELAYS = [2000, 6000, 15000];
+  var BO = { n: 0, pending: false, timer: null, wired: false, tokenProbe: false, sig: '', poll: null, pollN: 0 };
+  function bo1Off() { return lsg('v292DfixBOOTOFF1Off') === '1'; }
+  function bo1Sig() { try { var h = authHeaders(); return (h['x-google-id'] || '') + '|' + (h['x-chronicle-pass'] || ''); } catch (e) { return ''; } }
+  function bo1Note(tp) { if (!BO.n) BO.tokenProbe = !!tp; }     /* 最初の probe が doc2(TOKEN_PROBE) だったか */
+  function bo1Now(why) {
+    if (bo1Off() || !GATE.armed || GATE.released || GATE.probing || !BO.pending) return;
+    if (GATE.reason !== 'UNCONFIRMED' && GATE.reason !== 'NO_AUTH') return;   /* RELOAD_CAPPED / HIDDEN / BARRIER_MISSING は対象外 */
+    if (BO.n >= BO_MAX) { BO.pending = false; return; }
+    BO.n++; BO.pending = false; BO.sig = bo1Sig();
+    if (BO.timer) { try { clearTimeout(BO.timer); } catch (e) {} BO.timer = null; }
+    stats.bo1Retry = (stats.bo1Retry || 0) + 1;
+    /* 最初が TOKEN_PROBE だった document は、その意味のまま聞き直す（同じ document で開ける・reload 不要）。 */
+    if (BO.tokenProbe) GATE.reason = 'TOKEN_PROBE';
+    VIS.at = 0;
+    gateWaiting(); probeGate();
+  }
+  function bo1Arm() {
+    if (bo1Off() || !GATE.armed || GATE.released) return;
+    BO.pending = true;
+    if (BO.n >= BO_MAX) { BO.pending = false; return; }
+    if (BO.timer) { try { clearTimeout(BO.timer); } catch (e) {} }
+    BO.timer = setTimeout(function () { BO.timer = null; bo1Now('timer'); }, BO_DELAYS[Math.min(BO.n, BO_DELAYS.length - 1)]);
+    BO.sig = bo1Sig();
+    if (BO.wired) return;
+    BO.wired = true;
+    try { window.addEventListener('online', function () { bo1Now('online'); }, false); } catch (e) {}
+    try { window.addEventListener('focus', function () { bo1Now('focus'); }, false); } catch (e) {}
+    try { window.addEventListener('chr:account-me', function () { bo1Now('account-me'); }, false); } catch (e) {}   /* fix893 が /auth/me を答えた（cookie session が確定した） */
+    try { document.addEventListener('visibilitychange', function () { if (!document.hidden) bo1Now('visible'); }, false); } catch (e) {}
+    /* token 更新（fix328 の GIS 更新は localStorage v292GoogleToken を書き換える／workerReady が立つ）を 1 秒周期で検知。2 分で打ち切り。 */
+    BO.poll = setInterval(function () {
+      BO.pollN++;
+      if (BO.pollN > 120 || GATE.released || BO.n >= BO_MAX) { clearInterval(BO.poll); BO.poll = null; return; }
+      if (BO.pending && bo1Sig() !== BO.sig) bo1Now('token');
+    }, 1000);
   }
 
   function armGate() {
@@ -2111,6 +2158,7 @@
                ns: { active: NS.active, epoch: NS.epoch, confirmed: (NS.at > 0), probed: NS.probed,
                      seenManifest: NS.seenManifest, need: NS.need, stale: NS.stale, lazyArmed: NS.lazyArmed },
                confirm: { stopped: confirmStop, stories: Object.keys(confirmDone).length },
+               bo1: { off: bo1Off(), n: BO.n, pending: BO.pending },   /* ★BOOTOFF1 観測（読み取りのみ） */
                stats: stats };
     }
   };

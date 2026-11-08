@@ -257,7 +257,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261107-bundle93-f';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261108-bundle93-g';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -418,7 +418,7 @@
 <script src="v292Dfix823-scenario-seed-adapter.js?cb=20260907-schema3"></script>
 <!-- ★★sp18 v292Dfix889 SECRET_STORY_VAULT（v7.2）: HOME の可視性 authority。
      ★下の inline script より **前**（あちらは parse 時に render() を呼ぶ）。 -->
-<script src="v292Dfix889-secret-vault.js?cb=20260928-ac9"></script>
+<script src="v292Dfix889-secret-vault.js?cb=20261108-bundle93-g"></script>
 <script>
 (function(){
   'use strict';
@@ -608,6 +608,21 @@
       var F9 = f889(); if (F9 && typeof F9.status === 'function' && typeof F9.refresh === 'function'){ var s9 = F9.status(); if (s9 && s9.state === 'noauth') F9.refresh(); }
     } catch(e){}
   }); } catch(e){}
+  /* ★NEWACCT1(1): 起動直後の pull() が /auth/me より先に走って「同期待ち」の表示を出した場合、/auth/me の答えで loggedIn() になったら
+     その pull を 1 回だけやり直し、古い表示を残さない（表示がまだ私たちの文のままのときだけ。他の表示は上書きしない）。 */
+  try { window.addEventListener('chr:account-me', function(){
+    try {
+      if (g('v292DfixNEWACCT1Off') !== '1' && loggedIn()){   /* fix889 が 'cache'/'blind'（オフライン扱い）のまま /auth/me が答えたら、listshadow を聞き直す */
+        var F9n = f889(), s9n = (F9n && typeof F9n.status === 'function') ? F9n.status() : null;
+        if (s9n && (s9n.state === 'cache' || s9n.state === 'blind') && typeof F9n.refresh === 'function') F9n.refresh();
+      }
+      var st = NEWACCT1.stale; if (!st) return;
+      if (g('v292DfixNEWACCT1Off') === '1'){ NEWACCT1.stale = null; return; }
+      if (!loggedIn()) return;
+      NEWACCT1.stale = null;
+      if (el('sync') && el('sync').textContent === st.text){ pull(st.args[0], st.args[1]); }
+    } catch(e){}
+  }); } catch(e){}
   try { window.__v292Dfix757 = { status: function(){
     return { off: f757off(), tried: F757.tried, ok: F757.ok, code: F757.code,
              fetched: F757.stories.length, hiddenBecauseLocal: F757.hidden,
@@ -666,7 +681,17 @@
   }
   function f889EmptyText(){
     var n = f889CanonNotice();
-    return n ? n : '物語がありません。「＋ 新しい物語を始める」から作成してください。';
+    if (n) return n;
+    /* ★NEWACCT1(3): 空リストの案内は、実際に見えているボタンの名前に合わせる。
+       fix870 が #newBtn を「空の物語から始める」へ降格し、主導線は #scBtn「✎ シナリオを作る」になっている。
+       #scBtn が見えていて fix870 が生きているときだけ #scBtn の表示名を使う（hidden / fix870 kill / NEWACCT1 kill は従来文のまま）。 */
+    try {
+      if (g('v292DfixNEWACCT1Off') !== '1' && g('v292Dfix870Off') !== '1'){
+        var sb1 = el('scBtn'), lb1 = sb1 ? String(sb1.textContent || '').replace(/\s+/g, ' ').trim() : '';
+        if (sb1 && !sb1.hidden && lb1) return '物語がありません。「' + lb1 + '」から作成してください。';
+      }
+    } catch(e){}
+    return '物語がありません。「＋ 新しい物語を始める」から作成してください。';
   }
   /* D-C8 の 2 つめの分類を **目に見える形**で出す */
   function f889OnlyBadge(x){
@@ -721,6 +746,17 @@
     var F = f889(); if (!F) return;
     try { F.onChange(function(){ try { render(); } catch(e){} }); } catch(e){}
     try { F.refresh(); } catch(e){}
+    /* ★NEWACCT1(2b): 起動直後の listshadow が 1 回だけ届かなかった（通信の一瞬の失敗）と、fix889 は 'cache'/'blind'（=オフライン）のまま
+       二度と聞き直さない。物語が 1 件も無い新規アカウントでは一覧が「オフラインのため…」だけになり、リロードまで直らない。
+       ログイン中でまだオフライン扱いなら、読み取り専用の listshadow を 5 秒後と 15 秒後に最大 2 回だけ聞き直す（本当に届かないなら表示は従来どおり）。
+       kill: v292DfixNEWACCT1Off='1'。 */
+    [5000, 15000].forEach(function(ms){ setTimeout(function(){
+      try {
+        if (g('v292DfixNEWACCT1Off') === '1' || !loggedIn()) return;
+        var st = F.status && F.status();
+        if (st && (st.state === 'cache' || st.state === 'blind')) F.refresh();
+      } catch(e){}
+    }, ms); });
   }
 
   // 互換用の内部スロット 'default'(chr6) は、中身が無い限り一覧に出さない
@@ -1113,7 +1149,23 @@
     var h=authHeaders(); return !!(h['x-google-id']||h['x-chronicle-pass']); }
   /* ★★fix601: 「なぜ同期できないのか」を必ず画面に出す。
      黙って return するのが一番たちが悪い（無反応にしか見えず、原因を追えない）。 */
+  /* ★NEWACCT1(1): Pages origin（fix893 = cookie session）では localStorage に credential が無いのが正常なので、
+     下の「ログインしていないため…」は**常に嘘**になる（実機: 「Google アカウントでログイン中」と同時に表示された）。
+     loggedIn() が false になるのは次の 2 つだけ: ①/auth/me がまだ返っていない ②entitlement が beta/paid/owner ではない（招待前）。
+     どちらも「未ログイン」ではないので、それぞれ中立の文にする。/auth/me が 401 / 通信失敗のときは従来文のまま。
+     kill: localStorage v292DfixNEWACCT1Off='1' → 従来どおり。 */
+  function newacct1Why(){
+    try {
+      if (g('v292DfixNEWACCT1Off') === '1') return null;
+      var A = window.__v292Dfix893; if (!(A && A.active)) return null;
+      var st = A.status ? A.status() : null, me = A.serverMe ? A.serverMe() : null;
+      if (me){ return { kind:'noinvite', text:'このアカウントはまだ招待されていません。招待をお待ちください。' }; }   /* /auth/me が答えたのに loggedIn() false = 利用権なし */
+      if (st && !st.checked){ return { kind:'pending', text:'ログイン状態を確認しています…' }; }   /* /auth/me 待ち（印だけでは判断しない） */
+    } catch(e){}
+    return null;
+  }
   function whyNotLoggedIn(){
+    var n1 = newacct1Why(); if (n1) return n1.text;
     var p=(g('v292ProxyPass')||'').trim();
     var t=J(g('v292GoogleToken'),null);
     /* ★fix667(M2): iPhone では旧prompt経路のボタンを隠すので、案内は公式ボタンを指す。 */
@@ -1121,7 +1173,15 @@
     if(!p && t && t.token) return 'Googleログインの有効期限が切れています。ホームのGoogle公式ログインボタンからログインし直してください。';
     return 'ログイン情報が読めないため同期できません。';
   }
-  function noteNotLoggedIn(){
+  var NEWACCT1 = { stale: null };   /* ★NEWACCT1: 「ログイン不可」を出した pull の引数。/auth/me が返って loggedIn() になったら 1 回だけやり直す */
+  function noteNotLoggedIn(pullArgs){
+    var n1 = newacct1Why();
+    if (n1){
+      try { el('sync').className = 'sync'; el('sync').textContent = '☁ ' + n1.text; } catch(e){}
+      try { NEWACCT1.stale = { args: pullArgs || [], text: el('sync').textContent }; } catch(e){}
+      try { console.warn('[home][NEWACCT1] 同期待ち:', n1.kind); } catch(e){}
+      return;
+    }
     try { el('sync').className='sync err'; el('sync').textContent='⚠ '+whyNotLoggedIn(); } catch(e){}
     try { console.warn('[home] 同期不可:', whyNotLoggedIn()); } catch(e){}
   }
@@ -1939,7 +1999,7 @@
     } catch(e){ return false; }
   }
   function pull(force, adoptSlotId){
-    if(!loggedIn()){ noteNotLoggedIn(); return; }
+    if(!loggedIn()){ noteNotLoggedIn([force, adoptSlotId]); return; }
     var f659adoptKeyOnly = f659adoptKey(adoptSlotId);   /* ★fix659: 保護を外してよい唯一のキー(無ければ null) */
     el('sync').className='sync';
     el('sync').textContent = '☁ 確認中…';
@@ -1960,6 +2020,18 @@
           el('sync').textContent='☁ 物語別の同期を利用中';
           try { console.log('[home][HL409] legacy get は使えない口座（物語別の同期）。取り込みは行わず終了', JSON.stringify({ status: r.__status, errorCode: r.errorCode, force: !!force })); } catch(e){}
           f866ClearTransientNote();   /* ★fix866 終端: 予告を残さない */
+          return;
+        }
+        /* ★NEWACCT1(2): クラウドに保存が 1 件も無い新規アカウントは、Worker が op:'get' に 200 {ok:true, data:null, rev:0} を返す
+           （w_v4634b.js「op:get(main) のKVフォールバック」）。これは失敗ではなく「空」なので、☁ 最新です で終える。
+           条件は厳密: HTTP 200 ∧ ok:true ∧ data が**明示の null** ∧ rev が 0 ∧ meta の rev も 0。
+           5xx / 通信断 / 時間切れ / ok:false / data が object で ls 無し は従来どおり下の throw → 「同期できませんでした」。
+           1 バイトも書かない・baseRev は触らない。kill: v292DfixNEWACCT1Off='1'。 */
+        if (g('v292DfixNEWACCT1Off') !== '1' && r && r.ok === true && r.__status === 200 && r.data === null && (+r.rev || 0) === 0 && serverRev === 0){
+          el('sync').className='sync';
+          el('sync').textContent='☁ 最新です';
+          try { console.log('[home][NEWACCT1] クラウドは空（新規アカウント）。取り込みなし', JSON.stringify({ force: !!force })); } catch(e){}
+          f866ClearTransientNote();
           return;
         }
         if(!r || !r.ok || !r.data || !r.data.ls) throw new Error('get');
