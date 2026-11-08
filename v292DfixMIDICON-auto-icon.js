@@ -46,7 +46,7 @@
 (function (root) {
   'use strict';
   if (typeof window === 'undefined' || root.__v292DfixMIDICON) return;
-  var VER = 'mx3e-20261103+oldmx1';
+  var VER = 'mx3e-20261103+oldmx1+wmxreg1';
   var KILL = 'v292DfixMIDICONOff', LSK = 'v292DfixMIDICON_v1';
   var CAP = { turn: 1, storyDay: 2, storyTotal: 6, storyDesc: 2, acctDay: 5 };
   var SETTLE_MS = 3000, POLL_MS = 1500, ROS_LATE_MS = 90000;   /* ★OLDMX1 */
@@ -54,7 +54,7 @@
   function lsGet(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { root.localStorage.setItem(k, v); return true; } catch (e) { return false; } }
   var LOG = []; function note(o) { try { o.t = Date.now(); LOG.push(o); if (LOG.length > 120) LOG.shift(); } catch (e) {} }
-  var stats = { rosRetry: 0, aliasSpeaker: 0, aliasRegistered: 0, mmRetry: 0, list: 0, listFail: 0, ensure: 0, claim: 0, created: 0, exists: 0, inflight: 0, skipped: 0, mismatch: 0, timeouts: 0, settles: 0, notPlayed: 0, notYet: 0, alias: 0, refused: 0, provider: 0 };   /* ★mx3-c: + notPlayed / notYet / alias / refused / provider */
+  var stats = { regList: 0, regEnsure: 0, regDone: 0, /* ★W-MXREG */ rosRetry: 0, aliasSpeaker: 0, aliasRegistered: 0, mmRetry: 0, list: 0, listFail: 0, ensure: 0, claim: 0, created: 0, exists: 0, inflight: 0, skipped: 0, mismatch: 0, timeouts: 0, settles: 0, notPlayed: 0, notYet: 0, alias: 0, refused: 0, provider: 0 };   /* ★mx3-c: + notPlayed / notYet / alias / refused / provider */
 
   /* ---------- environment ---------- */
   function state() { try { return (typeof root.__chronicleGetState === 'function') ? root.__chronicleGetState('midicon') : null; } catch (e) { return null; } }
@@ -65,13 +65,15 @@
   function doc2() { try { var m = M(); return !!(m && typeof m.docSchema2 === 'function' && m.docSchema2() === true); } catch (e) { return false; } }
   function loggedIn() { try { var f = F697(); return !!(f && f.status && f.status().loggedIn); } catch (e) { return false; } }
   function admfOn() { try { var X = root.__v292DfixADMF1; return !!(X && typeof X.gate === 'function' && X.gate('midicon1', false) === true); } catch (e) { return false; } }
+  /* ★W-MXREG: the account key mxreg1 (any account; the admin page decides) + this device's kill v292DfixMIDICONregOff='1' */
+  function regOn() { if (lsGet('v292DfixMIDICONregOff') === '1') return false; try { var X = root.__v292DfixADMF1; return !!(X && typeof X.gate === 'function' && X.gate('mxreg1', false) === true); } catch (e) { return false; } }
   function vaultHidden(id) {   /* fail-closed: no fix889 → treat as hidden (do nothing). Worker is strict as well. */
     try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; }
   }
   function killed() { return lsGet(KILL) === '1' || lsGet('v292Dav2Off') === '1'; }
   function gateWhy() {
     if (killed()) return 'kill';
-    if (!admfOn()) return 'flag-off';
+    if (!admfOn() && !regOn()) return 'flag-off';   /* ★W-MXREG: either key runs the loop; unregistered figures still need midicon1 (select below) */
     if (!loggedIn()) return 'not-logged-in';
     if (!doc2()) return 'not-schema2';
     var id = sid(); if (!id) return 'no-story';
@@ -210,7 +212,7 @@
   function castOf(S) {
     var c = S.cast || {}, out = [];
     var take = function (e, hero) { if (!e || typeof e !== 'object' || typeof e.character_id !== 'string') return; var p = (e.profile && typeof e.profile === 'object') ? e.profile : {};
-      out.push({ character_id: e.character_id, status: e.status === 'DELETED' ? 'DELETED' : 'ACTIVE', name: typeof e.name === 'string' ? e.name : '', hero: !!hero, profile: p }); };
+      out.push({ character_id: e.character_id, status: e.status === 'DELETED' ? 'DELETED' : 'ACTIVE', name: typeof e.name === 'string' ? e.name : '', hero: !!hero, profile: p, sap: e.source_appearance_present === true }); };   /* ★W-MXREG: + sap */
     take(c.hero, true); (Array.isArray(c.npcs) ? c.npcs : []).forEach(function (n) { take(n, false); });
     return out;
   }
@@ -425,6 +427,73 @@
   }
   function lastHitOf(T, f, desc) { for (var i = T.length - 1; i >= 0; i--) { var says = T[i].says.map(norm); if (f.some(function (x) { return says.indexOf(x) >= 0; })) return i; var ss = sents(T[i].text); for (var s = 0; s < ss.length; s++) { if (desc && RECALL.test(ss[s])) continue; if (f.some(function (x) { return hitsIn(ss[s], x, desc).length; })) return i; } } return -1; }
 
+  /* ---------- ★W-MXREG (laneWMXREG 2026-11-08 · GPT #127-RI ② · Owner: every account, switched by the admin key mxreg1) ----------
+     A REGISTERED NPC (opening speaker / 「NPCに昇格」/ fix641) that has no picture and no confirmed profile, seen in the turn just played under the MIDICON rules
+     (2 turns, 3 for a descriptor name; the newest turn; a look word in the text AND in the image-only appearance) → portrait.mx_ensure WITH its character_id.
+     The Worker re-checks everything (the id belongs to this account + story, no pointer / candidate / confirmed profile, evidence, caps, imgsafe, extras)
+     and writes only the picture + that character's pointer (never the profile). Only when there is no unregistered candidate this turn (1 picture per turn).
+     The device keeps per-story hashes of 'r:' + character_id → reason (no names, no ids in clear). kill: localStorage v292DfixMIDICONregOff='1'. */
+  function explicitN(p) {   /* = the Worker's explicitCount: a confirmed profile goes to ensure_first (explicit), never here */
+    p = (p && typeof p === 'object') ? p : {}; var n = 0, t = function (v) { return typeof v === 'string' && v.replace(/\s+/g, '') !== ''; };
+    if (p.gender === '女性' || p.gender === '男性') n++; if (t(p.ageBand)) n++; if (t(p.species) && String(p.species).trim() !== 'HUMAN') n++;
+    if (p.traits && typeof p.traits === 'object' && !Array.isArray(p.traits)) { for (var k in p.traits) if (Object.prototype.hasOwnProperty.call(p.traits, k) && t(k) && t(p.traits[k])) { n++; break; } }
+    if (t(p.appearance)) n++; return n;
+  }
+  var REG_F = /女性|少女|女の子|彼女|の女|老婆|娘/, REG_M = /男性|少年|男の子|の男|老人|彼は|彼が/;
+  function regSelect(S, r, id, by) {
+    var T = turnsOf(S), cast = castOf(S), bindings = bindingsOf(S), so = stOf(r, id), out = { picked: null, considered: [] }, C = [];
+    var namesOf = function (cid) { var o = []; cast.forEach(function (c) { if (c.character_id === cid && c.name) o.push(norm(c.name)); }); Object.keys(bindings).forEach(function (b) { if (bindings[b] === cid) o.push(norm(b)); });
+      return o.filter(function (x, i, a) { return x && x.length >= 2 && !generic(x) && a.indexOf(x) === i; }); };
+    cast.forEach(function (c) {
+      if (c.hero || c.status === 'DELETED' || MX_ID_RE.test(c.character_id)) return;
+      var own = namesOf(c.character_id), named = own.filter(function (x) { return !isDesc(x); }), desc = !named.length, f = desc ? own : named, hid = hk('r:' + c.character_id), ev = null, why = null;
+      if (!own.length) why = 'REG_NO_NAME';
+      else if (by[c.character_id]) why = 'REG_HAS_PICTURE';
+      else if (explicitN(c.profile) > 0) why = 'REG_CONFIRMED';
+      else if (c.sap) why = 'REG_REVIEW';
+      else if (so.h[hid]) why = 'NO_RETRY:' + so.h[hid];
+      else if (X.extras.some(function (x) { return x.forms.some(function (a) { return own.some(function (b) { return a.length >= 2 && (a.indexOf(b) >= 0 || b.indexOf(a) >= 0); }); }); })) why = 'REG_EXTRA_OVERLAP';   /* mx_claim is the way (claimPass) */
+      else if (cast.some(function (o) { return o.character_id !== c.character_id && o.status !== 'DELETED' && namesOf(o.character_id).some(function (x) { return own.indexOf(x) >= 0; }); })) why = 'REG_SAME_NAME';
+      else { ev = evidence(T, f, desc); if (!ev.ok) why = 'EVIDENCE:' + ev.t + '/' + ev.need + (ev.recent ? '' : ':old');
+        else if (lastHitOf(T, f, desc) !== T.length - 1) why = 'NOT_IN_LATEST';
+        else if (so.ny && typeof so.ny[hid] === 'number' && ev.t <= so.ny[hid]) why = 'NOT_YET_WAIT'; }
+      var row = { reg: 1, why: why, t: ev ? ev.t : null };
+      if (!why) {
+        var cue = f.concat(ev.near).join('。'), app = appearanceFrom(ev.hitS);
+        var ts = vis(cue).slots, as = vis(app).slots, both = Object.keys(as).filter(function (s) { return ts[s]; });
+        if (!app) row.why = 'NO_LOOK';
+        else if (!desc && !both.length) row.why = 'FEW_FEATURES_NAMED';
+        else if (desc && (both.length < 2 || !both.some(function (s) { return s !== 'hair'; }))) row.why = 'FEW_FEATURES:' + both.sort().join('+');
+        else {
+          var kind = kindOf(cue), hs = ev.hitS.join('。'), fem = REG_F.test(hs), mal = REG_M.test(hs);
+          var gender = (desc && tailGender(f[0])) || (fem && !mal ? '女性' : mal && !fem ? '男性' : '');
+          var traits = []; if (kind !== 'human') Object.keys(TRAIT_CUE).forEach(function (k) { if (traits.length < 4 && TRAIT_CUE[k].test(cue)) traits.push(k); });
+          var key = (c.name && own.indexOf(norm(c.name)) >= 0) ? (dispKey(c.name) || c.name) : (Object.keys(bindings).filter(function (b) { return bindings[b] === c.character_id && own.indexOf(norm(b)) >= 0; }).map(dispKey).filter(Boolean)[0] || '');
+          if (!key) row.why = 'REG_NO_HANDLE';
+          else C.push({ reg: 1, character_id: c.character_id, key: key, nk: 'r:' + c.character_id, vars: [], desc: desc, t: ev.t, lastHit: lastHitOf(T, f, desc), appearance: app, gender: gender, kind: kind, traits: traits });
+        }
+      }
+      out.considered.push(row);
+    });
+    C.sort(function (a, b) { return (b.lastHit - a.lastHit) || (b.t - a.t) || (a.character_id < b.character_id ? -1 : 1); });
+    out.picked = C[0] || null;
+    return out;
+  }
+  function regTurn(S2, r, id, n, sel0) {
+    var f = F697(); if (!f || typeof f.assetV2Read !== 'function') { stats.skipped++; return finish('NO_CANDIDATE', 'no-read-port'); }
+    stats.regList++;
+    f.assetV2Read('portrait.list', { story_id: id }, function (res, err) {   /* read only: which registered characters already have a picture */
+      var j = res && res.j;
+      if (err || !res || res.status !== 200 || !j || !Array.isArray(j.portraits)) return finish('LIST_FAIL', err || ('HTTP_' + (res && res.status)));
+      if (gateWhy() || X.stopped) return finish('GATE', gateWhy() || X.stopped);
+      var S3 = state(); if (!S3 || S3.turns.length !== n) return finish('TURN_MISMATCH', { local: S3 && S3.turns.length, server: n });
+      var by = {}; j.portraits.forEach(function (p) { if (p && typeof p.character_id === 'string') by[p.character_id] = 1; });
+      var rs = regSelect(S3, rec(), id, by); X.lastSel = { picked: sel0.picked, considered: sel0.considered.concat(rs.considered).slice(0, 16), reg: rs.picked ? 1 : 0 };
+      if (!rs.picked) { stats.skipped++; X.noCand = { n: n, sig: rosterSig() }; return finish('NO_CANDIDATE', X.lastSel.considered.slice(0, 8)); }
+      stats.regEnsure++; ensureSend(id, n, rs.picked);
+    });
+    return 'started';
+  }
   /* ---------- the per-turn run ---------- */
   var STOP_PAGE = { BUDGET: 1, LEDGER_UNHEALTHY: 1, MX_CAP: 1, RATE_LIMITED: 1, IMG_RATE: 1, IMG_MONTHLY_CAP: 1, IMG_ACCT_MONTHLY_CAP: 1, MX_OFF: 1, MX_NOT_ENABLED: 1, APPEARANCE_UNSAFE_MINOR: 1, NOT_FOUND: 1,
     APPEARANCE_UNSAFE_POLICY: 1, PUBLIC_MODE_OFF: 1, TRIAL_MODEL_UNCONFIGURED: 1, GENERATION_FAILED: 1 };   /* ★mx3-c: + POLICY (real_person / explicit), public mode OFF, provider failure */
@@ -484,9 +553,17 @@
       if (mine >= capOf('storyTotal')) return finish('CAP_STORY_TOTAL');
       if (sd >= capOf('storyDay')) return finish('CAP_STORY_DAY');
       if ((r.acct || 0) >= capOf('acctDay')) return finish('CAP_ACCT_DAY');
-      var sel = select(S2, r, id); X.lastSel = sel;
-      if (!sel.picked) { stats.skipped++; X.noCand = { n: n, sig: rosterSig() }; return finish('NO_CANDIDATE', sel.considered.slice(0, 8)); }   /* ★OLDMX1: remember the roster this decision saw */
-      var p = sel.picked, args = { story_id: id, handle: p.key, expected_turn_count: n, appearance: p.appearance, kind: p.kind };
+      var sel = admfOn() ? select(S2, r, id) : { picked: null, considered: [] }; X.lastSel = sel;   /* ★W-MXREG: unregistered figures only with midicon1 (unchanged when it is on) */
+      if (!sel.picked) {
+        if (regOn()) return regTurn(S2, r, id, n, sel);   /* ★W-MXREG: nobody unregistered → a registered NPC without a picture (one more read: portrait.list) */
+        stats.skipped++; X.noCand = { n: n, sig: rosterSig() }; return finish('NO_CANDIDATE', sel.considered.slice(0, 8)); }   /* ★OLDMX1: remember the roster this decision saw */
+      ensureSend(id, n, sel.picked);
+    });
+    return 'started';
+  }
+  function ensureSend(id, n, p) {   /* ★W-MXREG: the request 2 of the turn, split out so the registered path uses the same answer handling */
+      var args = { story_id: id, handle: p.key, expected_turn_count: n, appearance: p.appearance, kind: p.kind };
+      if (p.reg) args.character_id = p.character_id;
       if (p.vars.length) args.variants = p.vars; if (p.traits.length) args.traits = p.traits; if (p.gender) args.gender = p.gender;
       stats.ensure++; note({ kind: 'ENSURE', desc: p.desc, kind2: p.kind, nv: p.vars.length, nt: p.traits.length });
       call('portrait.mx_ensure', args, function (res, err2) {                  /* request 2 of 2 (write) — never resent */
@@ -500,6 +577,7 @@
         if (st === 200 && rj && (rj.status === 'CREATED' || rj.status === 'EXISTS')) {
           if (rj.status === 'CREATED') { stats.created++; so2.d = (so2.d || 0) + 1; r2.acct = (r2.acct || 0) + 1; recSave(r2); } else stats.exists++;
           if (p.disp && typeof rj.extra_id === 'string' && MX_ID_RE.test(rj.extra_id)) { so2.ak = so2.ak || {}; so2.ak[hk(norm(p.disp))] = rj.extra_id; recSave(r2); X.alias = JSON.parse(JSON.stringify(so2.ak)); }   /* ★mx3-e: the roster handle shows the same picture */
+          if (p.reg) { stats.regDone++; try { var P0 = root.__chronicleAv2Portrait; if (P0 && typeof P0.refresh === 'function') P0.refresh(); } catch (e) {} }   /* ★W-MXREG: the pointer is on the registered id → re-read portrait.list */
           var pa = rj.pointer && rj.pointer.asset_id;
           if (typeof rj.extra_id === 'string' && MX_ID_RE.test(rj.extra_id) && typeof pa === 'string' && !X.extras.some(function (e) { return e.extra_id === rj.extra_id; })) {
             X.extras.push({ extra_id: rj.extra_id, handle: p.key, vars: p.vars.slice(), cls: p.desc ? 'desc' : 'named', kind: p.kind, asset_id: pa, claimed_by: null, claim_state: null, forms: [p.nk].concat(p.vars) });
@@ -528,8 +606,6 @@
         }
         return finish('HTTP_' + st, code);
       });
-    });
-    return 'started';
   }
   /* ---------- claim after a normal registration (「NPCに昇格」/ fix641) ---------- */
   function claimPass() {
@@ -595,7 +671,8 @@
       played: Object.keys(X.played).map(Number), caps: X.caps, alias: Object.keys(X.alias).length, trace: { day: r.tr || {}, story: id && r.st[id] && r.st[id].tr ? JSON.parse(JSON.stringify(r.st[id].tr)) : {} } }; },   /* ★mx3-c */
     /* test / diagnosis: evaluate the candidates now (reads only, no request) */
     dryRun: function (o) { var S = state(), id = sid(); if (!S || !id) return null; return select(S, rec(), id, o && Array.isArray(o.roster) ? o.roster : null); },   /* o.roster: diagnosis only (evaluate a given roster instead of fix307's) */
-    kick: function () { return runTurn(true); },   /* diagnosis / test only (an explicit action): skips the played-turn check; the Worker still requires the figure in its newest turn */
+    kick: function () { return runTurn(true); },
+    regDryRun: function (by) { var S = state(), id = sid(); if (!S || !id) return null; return regSelect(S, rec(), id, (by && typeof by === 'object') ? by : {}); },   /* ★W-MXREG diagnosis: by = { character_id: 1 } of characters that have a picture */   /* diagnosis / test only (an explicit action): skips the played-turn check; the Worker still requires the figure in its newest turn */
     __t: { aliasInfo: aliasInfo, lastHitOf: lastHitOf, traceRun: traceRun, icfLocal: icfLocal, isRoleish: isRoleish, apposition: apposition, f641Live: f641Live, promotedSoon: promotedSoon, norm: norm, dispKey: dispKey, generic: generic, isDesc: isDesc, vis: vis, axes: axes, evidence: evidence, turnsOf: turnsOf, identityA: identityA, descIdentity: descIdentity, appearanceFrom: appearanceFrom, kindOf: kindOf, hitsIn: hitsIn, tailGender: tailGender }
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

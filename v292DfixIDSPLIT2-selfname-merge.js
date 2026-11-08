@@ -1,13 +1,16 @@
 // =====================================================================
 // Chronicle TRPG - v292DfixIDSPLIT2: 名前の無い呼び名（少女／裸足の少女 など）の人が「登録キャラの名前」を名乗ったとき、
-//                  はっきりした証拠がそろう場合だけ同じ人として扱う（★Owner だけのカナリア・LOCAL ONLY）
+//                  はっきりした証拠がそろう場合だけ同じ人として扱う（★93-i: 管理者画面の機能スイッチ idsplit2 で入れ切り）
 // ---------------------------------------------------------------------
 // 由来: IDSPLIT1（知人試験アカウントの物語で捕獲。登録NPCがずっと「少女」「裸足の少女」と書かれ、
 //   fix307 の自動抽出で別人として一覧に出た。のちの裸の台詞「わたし、＜登録名＞……！」は fix469 が「少女」へ flip し、
 //   会話ログに 2 人として並んだ）。IDSPLIT2 は GPT 裁定 #127-RE ③（Owner CANARY・条件付き GO）に合わせて条件を締めた版。
 //
-// ■ 誰に効くか（npcq1 C2 / fix414 npcqOwner と同じ読み口・同じ fail-closed・毎回評価）
-//   有効 = 画面のアカウントが owner かつ active（window.__v292Dfix893.serverMe()）で、匿名経路（__v292Dfix886.api.active()）ではない時だけ。
+// ■ 誰に効くか（★IDSPLIT2ADM 93-i・Owner 2026-11-08「新機能は全アカウントへ・管理者画面の ON/OFF で入れ切り」。同じ fail-closed・毎回評価）
+//   有効 = 管理者画面の機能スイッチ idsplit2 がそのアカウントで ON（window.__v292DfixADMF1.gate('idsplit2') === true：アカウントの行 → 全体の値 → 無ければ OFF。
+//          範囲は Worker v46.37 の READY）、かつ画面のアカウントが active（__v292Dfix893.serverMe()）で、匿名経路（__v292Dfix886.api.active()）ではない時だけ。
+//   93-h までの「owner かつ active」の固定はやめた（Owner も行 idsplit2=1 が無ければ OFF）。証拠の規則・kill は 93-h と同じ。
+//   （旧）有効 = 画面のアカウントが owner かつ active（window.__v292Dfix893.serverMe()）で、匿名経路（__v292Dfix886.api.active()）ではない時だけ。
 //   それ以外（beta・none・suspended・ログアウト・/auth/me 未応答・API 不在・例外・storage 不可）は**何もしない**（観測もしない）。
 //   kill: localStorage v292DfixIDSPLIT2Off='1'（この file と fix469 の ★IDSPLIT2 分岐の両方が止まる）
 //
@@ -42,19 +45,23 @@
 
   /* ---------- gate（npcq1 C2 と同じ） ---------- */
   function anonActive(){ try { var P = window.__v292Dfix886; return !!(P && P.api && typeof P.api.active === 'function' && P.api.active()); } catch(e){ return true; } }
-  /* 戻り: 'killed' | 'anon' | 'no-api' | 'unknown' | 'not-owner' | 'owner' */
+  /* 戻り: 'killed' | 'anon' | 'no-api' | 'unknown' | 'off' | 'on'
+     ★IDSPLIT2ADM (93-i): 'owner' / 'not-owner' → 'on' / 'off'。鍵 idsplit2 は ADMF1（/auth/me の accountFlags）だけで決める。
+       ADMF1 が無い・古い（鍵を知らない）・答え待ち・別アカウント・停止中・ログアウト・例外 = ON にしない。 */
   function gate(){
     try { if (localStorage.getItem('v292DfixIDSPLIT2Off') === '1') return 'killed'; } catch(e){ return 'killed'; }
     if (anonActive()) return 'anon';
     try {
-      var A = window.__v292Dfix893;
-      if (!A || typeof A.serverMe !== 'function') return 'no-api';
+      var X = window.__v292DfixADMF1, A = window.__v292Dfix893;
+      if (!X || typeof X.gate !== 'function' || typeof X.decide !== 'function' || !A || typeof A.serverMe !== 'function') return 'no-api';
+      var d = X.decide('idsplit2');
+      if (d && d.s === 'wait') return 'unknown';
+      if (X.gate('idsplit2', false) !== true) return 'off';
       var m = A.serverMe();
-      if (!m) return 'unknown';
-      return (m.entitlement === 'owner' && m.status === 'active') ? 'owner' : 'not-owner';
+      return (m && m.status === 'active') ? 'on' : 'off';
     } catch(e){ return 'unknown'; }
   }
-  function on(){ return gate() === 'owner'; }
+  function on(){ return gate() === 'on'; }
 
   function getS(){
     try { var a = window.__chronicleGetState ? window.__chronicleGetState('IDSPLIT2') : null; if (a) return a; } catch(e){}
@@ -365,7 +372,7 @@
     try {
       st.ticks++;
       var g = gate(); st.gate = g;
-      if (g !== 'owner'){ st.lastReason = 'gate:' + g; return; }
+      if (g !== 'on'){ st.lastReason = 'gate:' + g; return; }
       var S = getS(); if (!S || !Array.isArray(S.turns)) { st.lastReason = 'no-state'; return; }
       if (S.inFlight){ st.lastReason = 'in-flight'; return; }
       var k = docKey();
@@ -384,10 +391,10 @@
     } catch(e){ st.lastReason = 'error:' + s(e && e.message).slice(0, 60); }
   }
 
-  /* 過去ターン（いま開いている物語の保存済み分）の明示修復。既定は提案だけ（書かない）。Owner だけ */
+  /* 過去ターン（いま開いている物語の保存済み分）の明示修復。既定は提案だけ（書かない）。鍵 idsplit2 が ON のアカウントだけ */
   function repairPast(opts){
     opts = opts || {};
-    var g = gate(); if (g !== 'owner') return { ok: false, why: 'gate:' + g };
+    var g = gate(); if (g !== 'on') return { ok: false, why: 'gate:' + g };
     var S = getS(); if (!S || !Array.isArray(S.turns)) return { ok: false, why: 'no-state' };
     if (S.inFlight) return { ok: false, why: 'in-flight' };
     var all = [], obs = [];

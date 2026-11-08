@@ -3684,6 +3684,13 @@
       if (vs.length) body.variants = vs;
       if (tr.length) body.traits = tr;
       if (a.gender === '女性' || a.gender === '男性') body.gender = a.gender;
+      if (a.character_id != null){   /* ★W-MXREG: a registered NPC's id (Worker checks it belongs to this account + story). Never a ch_mx id. kill: localStorage v292DfixMIDICONregOff='1' */
+        var regOff = false; try { regOff = window.localStorage.getItem('v292DfixMIDICONregOff') === '1'; } catch(e){}
+        if (regOff){ cb(null, 'REG_OFF'); return; }
+        if (typeof a.character_id !== 'string' || !AV2_CID_RE.test(a.character_id) || AV2_MX_ID_RE.test(a.character_id)){ cb(null, 'BAD_CHARACTER_ID'); return; }
+        if (a.variants != null){ cb(null, 'BAD_VARIANTS'); return; }
+        body.character_id = a.character_id;
+      }
     }
     else if (op === 'portrait.mx_claim'){
       if (typeof a.extra_id !== 'string' || !AV2_MX_ID_RE.test(a.extra_id)){ cb(null, 'BAD_EXTRA_ID'); return; }

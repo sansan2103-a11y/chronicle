@@ -806,6 +806,11 @@
     if (s.length > PROFILE_APPEARANCE_MAX) s = s.slice(0, PROFILE_APPEARANCE_MAX); if (/[\ud800-\udbff]$/.test(s)) s = s.slice(0, -1);
     return s.trim();
   }
+  /* ★STARTICON2 (GPT #127-RI ①): the only automatic writer of profile.appearance is STARTICON (start of a NEW story). Its profile carries
+     origin = AUTO_ORIGIN and basis = 'desc' (the description's own visual phrases, no AI) | 'ai' (LC1's text-AI draft: may contain traits that
+     are NOT in the description). A profile without origin = written by an explicit Owner action (as before). Readers: originOf(). */
+  var AUTO_ORIGIN = 'starticon_auto', AUTO_BASIS = { desc: 1, ai: 1 };
+  function originOf(p){ return (isObj(p) && p.origin === AUTO_ORIGIN) ? { origin: AUTO_ORIGIN, basis: AUTO_BASIS[p.basis] ? p.basis : 'unknown' } : null; }
   /* read-only: what this device can show the Owner as reference text (never sent anywhere by this function) */
   function suggestAppearance(characterId){
     var id = curStoryId(); var S = state();
@@ -817,7 +822,7 @@
     try { var pre = 'chrAiAv4:' + name + '::'; for (var i = 0; i < localStorage.length; i++){ var k = localStorage.key(i); if (k && k.indexOf(pre) === 0){ var v = localStorage.getItem(k); if (typeof v === 'string' && v.trim()){ legacy = v.trim().slice(0, 1200); break; } } } } catch(e1){}
     var p = isObj(e.profile) ? e.profile : {};
     return { ok: true, name: name, gender: genderOf(e.gender), desc: (typeof e.desc === 'string') ? e.desc.trim().slice(0, 1200) : '', legacy: legacy,
-             current: { gender: genderOf(p.gender), appearance: (typeof p.appearance === 'string') ? p.appearance : '' }, reviewed: e.source_appearance_present === true };
+             current: { gender: genderOf(p.gender), appearance: (typeof p.appearance === 'string') ? p.appearance : '', origin: originOf(p) }, reviewed: e.source_appearance_present === true };
   }
   /* explicit Owner action: fresh read → local == server → one CAS putcanonical carrying ONLY this entry's profile → readback is the authority */
   function setProfile(characterId, input, cb){
@@ -832,10 +837,17 @@
     var gender = genderOf(input.gender);
     if (!appearance) return cb({ ok: false, code: 'EMPTY_APPEARANCE' });
     if (input.ownerConfirmed !== true) return cb({ ok: false, code: 'OWNER_CONFIRM_REQUIRED' });   // the UI passes this only from the explicit 「この外見で確定」 button
+    /* ★STARTICON2 (GPT #127-RI ①): provenance. origin is accepted ONLY as AUTO_ORIGIN (the start-of-story automation). Any other call —
+       every Owner button — writes a profile WITHOUT origin, so a later explicit 「この外見で作る」 / 「この外見で確定」 replaces (= upgrades)
+       an automatic appearance like any other. The automatic path never overwrites an appearance that is already on the server (below). */
+    var auto = input.origin === AUTO_ORIGIN;
+    if (input.origin !== undefined && !auto) return cb({ ok: false, code: 'BAD_ORIGIN' });
+    var basis = auto ? (AUTO_BASIS[input.basis] ? input.basis : 'unknown') : null;
     if (reg.busy || loadPending(id)) return cb({ ok: false, code: 'REGISTRATION_IN_PROGRESS' });
     if (loadConflict(id)) return cb({ ok: false, code: 'REBASE_REQUIRED' });
     reg.busy = true;
     var prof = { v: 1, appearance: appearance }; if (gender) prof.gender = gender;
+    if (auto){ prof.origin = AUTO_ORIGIN; prof.basis = basis; }   /* inside profile: it travels (and is replaced) together with the appearance it describes */
     var done = function(o){ reg.busy = false; note({ kind: 'AV2_SET_PROFILE_' + (o.ok ? 'OK' : o.code), id: id, cid: characterId }); cb(o); };
     /* ★cand_sideport_authority: no S.save() / F.flush() before the write (GPT #31-c contract 3). The persisted slot is compared with the
        fresh server inside sidePortCommit; runtime drift stays in memory and is never canonicalised by this operation. */
@@ -844,8 +856,11 @@
         var tgt = entriesOf(b0.cast || {}).filter(function(x){ return x.e.character_id === characterId; })[0];
         if (!tgt) return { ok: false, code: 'UNKNOWN_CHARACTER_ID' };
         if (tgt.e.status === 'DELETED') return { ok: false, code: 'CHARACTER_DELETED' };
+        /* ★STARTICON2: the automatic path checks the FRESH server body (b0, CAS on its rev): any appearance already there — confirmed by the
+           Owner on any device, or an earlier automatic one — is never replaced. Request 0 (no putcanonical). */
+        if (auto && isObj(tgt.e.profile) && typeof tgt.e.profile.appearance === 'string' && tgt.e.profile.appearance.trim()) return { ok: false, code: 'APPEARANCE_EXISTS' };
         var te = entriesOf(sent.cast).filter(function(x){ return x.e.character_id === characterId; })[0];
-        te.e.profile = clone(prof); te.e.source_appearance_present = true;              // = a REVIEWED appearance exists (GPT #31)
+        te.e.profile = clone(prof); te.e.source_appearance_present = true;              // = a REVIEWED appearance exists (GPT #31); ★STARTICON2: for an automatic one, profile.origin says it was not reviewed
         return true;
       },
       mid: function(rev){ return 'av2prof:' + id + ':' + rev + ':' + digest(characterId + '|' + stable(prof)); },
