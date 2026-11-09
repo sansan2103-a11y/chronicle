@@ -16,6 +16,11 @@
  *      入力中・生成中・画面が開いている・操作の直後でないときに 1 回だけ再読み込みする（LC1 / B37 と同じ。短い表示つき）。
  *   C) 最初の絵: A.ensureFirst を 1 人 1 回ずつ（順番に・生成中のターンがあれば終わるまで待つ）。結果が分からない（5xx・時間切れ）・上限・混雑・
  *      利用記録の不調・使えない（403 / 501 = 公開許可の外 / HOLD）→ そこで止める。自動の再試行はしない。422（imgsafe 等）はそのキャラだけ失敗にして次へ。
+ *      ★93-j（GPT #127-RO ①・Worker v46.38 の口座の札）: 200 IN_FLIGHT（同じアカウントの別の絵＝MIDICON の mx_ensure・別端末・手動が札を持っている）を受けたら、
+ *      そのキャラだけ 1 回だけ再試行する。すぐには送らない: 札が空く頃（20〜40 秒後・Worker の札は最長 300 秒）まで待ち、その間はほかのキャラにも送らない
+ *      （同じ口座の札なので送っても IN_FLIGHT になるだけ）。待った後に portrait.list でそのキャラに絵が付いたかを確かめ、付いていれば送らない（FILLED）。
+ *      まだなら ensureFirst をもう 1 回（送る前に「再試行した」と書く＝閉じても 3 回目は無い）。2 回目も IN_FLIGHT なら、そのキャラはそこで見送る（IN_FLIGHT2・手動は残る）。
+ *      5xx・通信断・時間切れ（OUTCOME_UNKNOWN / GENERATION_FAILED）・402 / 403 / 429 は今までどおり止まる（再試行しない）。kill: v292DfixSTARTICONRetryOff='1' = 93-i と同じ（再試行しない）。
  * ■重複を作らない
  *   ・物語ごとに 1 回: 作った端末（URL new=1）以外の端末・タブでは、どのキャラにもまだ絵が無いときだけ始める（ほかの端末が始めていれば何もしない）。
  *   ・この端末: localStorage 'v292DfixSTARTICON_v1' に物語ごとの段階（plan / img / done / stop）とキャラごとの結果（character_id のハッシュ → 理由コード）。
@@ -39,8 +44,9 @@
 (function (root) {
   'use strict';
   if (typeof window === 'undefined' || root.__v292DfixSTARTICON) return;
-  var VER = 'starticon-b-20261108';
-  var KILL = 'v292DfixSTARTICONOff', NOAI = 'v292DfixSTARTICONNoAI', LSK = 'v292DfixSTARTICON_v1', HOLDK = 'v292DfixSTARTICON_hold';
+  var VER = 'starticon-c-20261109-ifretry';
+  var KILL = 'v292DfixSTARTICONOff', NOAI = 'v292DfixSTARTICONNoAI', LSK = 'v292DfixSTARTICON_v1', HOLDK = 'v292DfixSTARTICON_hold', RETRY_OFF = 'v292DfixSTARTICONRetryOff';   /* ★93-j */
+  var IF_WAIT_MS = 20000, IF_SPAN_MS = 20000;   /* ★93-j: IN_FLIGHT の後に待つ時間 = 20 秒 + 0〜20 秒（Worker の口座の札 MX_LEASE_MS = 300 秒より十分短い・生成 1 枚より長い） */
   var CAP = { npcs: 3, maxTurns: 2, dayStarts: 5, bTries: 2, newMs: 6 * 3600 * 1000 };
   var POLL_MS = 1500, STABLE_MS = 3000, AUTO_MAX_MS = 240000, WAIT_MS = 20000, CLEAN_MS = 45000;
   function lsGet(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
@@ -48,7 +54,7 @@
   function ssGet(k) { try { return root.sessionStorage.getItem(k); } catch (e) { return null; } }
   function ssSet(k, v) { try { root.sessionStorage.setItem(k, v); } catch (e) {} }
   var LOG = []; function note(o) { try { o.t = Date.now(); o.inFlight = inFlight(); LOG.push(o); if (LOG.length > 120) LOG.shift(); } catch (e) {} }
-  var stats = { plans: 0, proposals: 0, direct: 0, sets: 0, setFail: 0, ef: 0, created: 0, exists: 0, efFail: 0, reloads: 0, skipped: 0, sentWhileInFlight: 0 };
+  var stats = { plans: 0, proposals: 0, direct: 0, sets: 0, setFail: 0, ef: 0, created: 0, exists: 0, efFail: 0, reloads: 0, skipped: 0, sentWhileInFlight: 0, inflight: 0, ifRetry: 0, ifFilled: 0, ifGiveUp: 0 };   /* ★93-j: +inflight / ifRetry / ifFilled / ifGiveUp */
 
   /* ---------- environment (same readers as B37 / LC1 / MIDICON) ---------- */
   function state() { try { return (typeof root.__chronicleGetState === 'function') ? root.__chronicleGetState('starticon') : null; } catch (e) { return null; } }
@@ -145,7 +151,7 @@
   function holdOf(code, x) { if (EF_HOLD[code]) return code; var e = String((x && x.err) || ''); return (code === 'OUTCOME_UNKNOWN' && HOLD_ERR.test(e)) ? e.slice(0, 40) : null; }
 
   /* ---------- page state ---------- */
-  var X = { story: null, t0: Date.now(), firstTurns: null, okSince: 0, busy: false, pageStop: null, needReload: false, reloaded: false, bDone: false, last: null, why: null };
+  var X = { story: null, t0: Date.now(), firstTurns: null, okSince: 0, busy: false, pageStop: null, needReload: false, reloaded: false, bDone: false, last: null, why: null, leaseUntil: 0 };   /* ★93-j: leaseUntil */
   var lastAct = 0;
   try { ['pointerdown', 'touchstart', 'mousedown', 'keydown', 'input', 'wheel'].forEach(function (ev) { document.addEventListener(ev, function () { lastAct = Date.now(); }, true); }); } catch (eA) {}
   var BUSY_SEL = '.v292Dfix145-modal, [role="dialog"], [aria-modal="true"], dialog[open], [data-av2-inask], #v292DfixFLW2-overlay, #v292Dav2-picker';
@@ -235,19 +241,42 @@
     });
   }
 
-  /* ---------- C: ensureFirst (one per character, sequential, never resent) ---------- */
+  /* ---------- C: ensureFirst (one per character, sequential, never resent — except ONE retry after 200 IN_FLIGHT, ★93-j) ---------- */
+  function retryOn() { return lsGet(RETRY_OFF) !== '1'; }
   function phaseB(id) {
     if (X.busy || X.bDone) return;
     var so0 = soOf(id); if (!so0 || so0.p !== 'img') return;
     X.busy = true; X.bDone = true; var a0 = acct();
     var so = X.bCounted ? soOf(id) : soSet(id, function (s) { s.bt = (s.bt || 0) + 1; }); X.bCounted = true;   /* tries are counted per page load */
     if (so.bt > CAP.bTries) { soSet(id, function (s) { s.p = 'stop'; s.why = 'B_TRIES'; }); return finish('B_TRIES'); }
-    var todo = chars().filter(function (c) { var h = hk(c.id); return so.t.indexOf(h) >= 0 && (so.a[h] === 'set' || so.a[h] === 'conf') && !so.b[h]; });
+    /* ★93-j: a character whose first send got IN_FLIGHT and was not retried yet (the page closed while waiting) is still to do — its one retry */
+    var todo = chars().filter(function (c) { var h = hk(c.id); var b = so.b[h], r = so.r || {}; return so.t.indexOf(h) >= 0 && (so.a[h] === 'set' || so.a[h] === 'conf') && (!b || (b === 'IN_FLIGHT' && !r[h] && retryOn())); });
     var i = 0, transient = 0;
+    todo.forEach(function (c) { var t = so.ra && so.ra[hk(c.id)]; if (typeof t === 'number' && t > (X.leaseUntil || 0)) X.leaseUntil = Math.min(t, Date.now() + IF_WAIT_MS + IF_SPAN_MS); });   /* ★93-j: a reload in the middle of the wait keeps waiting */
     var endB = function (why, hold) {
       soSet(id, function (s) { if (why) { s.p = 'stop'; s.why = why; } else s.p = 'done'; });
       if (hold) ssSet(HOLDK, hold);
       refreshPortraits(); finish(why ? 'B_STOP_' + why : 'B_DONE');
+    };
+    var send = function (c, h, again) {   /* the one billable request for this character (again = the ONE retry after IN_FLIGHT) */
+      soSet(id, function (s) { if (again) { s.r = s.r || {}; s.r[h] = 1; } s.b[h] = 'SENT'; });   /* written BEFORE the call: a page closed mid-call never resends (and never retries twice) */
+      stats.ef++; if (again) stats.ifRetry++; if (inFlight()) stats.sentWhileInFlight++; note({ kind: again ? 'EF_RETRY' : 'EF', hero: c.hero });
+      A().ensureFirst(c.id, {}, function (x) {
+        var code = (x && x.code) || 'UNKNOWN';
+        if ((code === 'REGISTRATION_IN_PROGRESS') && x && !x.calls && transient < 5) { transient++; soSet(id, function (s) { if (again) { s.b[h] = 'IN_FLIGHT'; if (s.r) delete s.r[h]; } else delete s.b[h]; }); if (again) stats.ifRetry--; return setTimeout(next, 2000); }   /* refused on the device before any request (★93-j: a retry stays a retry) */
+        note({ kind: 'EF_RES', code: code, calls: x && x.calls, retry: again ? 1 : 0 });
+        if (code === 'IN_FLIGHT' && x && x.calls && retryOn()) {   /* ★93-j: the Worker answered 200 IN_FLIGHT (the account's lease is held by another picture) — nothing was made, nothing billed */
+          stats.inflight++; stats.efFail++;
+          X.leaseUntil = Date.now() + IF_WAIT_MS + Math.floor(Math.random() * IF_SPAN_MS);   /* no request to ANY character until then (the same account lease would answer IN_FLIGHT again) */
+          if (!again) { soSet(id, function (s) { s.b[h] = 'IN_FLIGHT'; s.ra = s.ra || {}; s.ra[h] = X.leaseUntil; }); return next(); }   /* i is not advanced: the same character comes again after the wait (its one retry). ra = not before (kept across a reload) */
+          stats.ifGiveUp++; i++; soSet(id, function (s) { s.b[h] = 'IN_FLIGHT2'; }); return next();   /* the second IN_FLIGHT: this character is left (manual stays) */
+        }
+        i++; soSet(id, function (s) { s.b[h] = String(code).slice(0, 32); });
+        if (x && x.ok && EF_OK[code]) { if (code === 'EXISTS') stats.exists++; else stats.created++; refreshPortraits(); return next(); }
+        stats.efFail++;
+        if (EF_STOP[code]) return endB(code, holdOf(code, x));
+        next();   /* 422 imgsafe / PROFILE_NOT_ENGLISH / CANDIDATES_PENDING / IN_FLIGHT (retry off) / IN_PROGRESS / LOST_RACE / UNGROUNDED …: this character only */
+      });
     };
     var next = function () {
       if (i >= todo.length) return endB(null);
@@ -255,22 +284,24 @@
       var c = todo[i], h = hk(c.id);
       var cur = (suggest(c.id) || {}).current || {};
       if (!cur.appearance) { i++; soSet(id, function (s) { s.b[h] = 'NO_PROFILE'; }); return next(); }   /* the Worker would refuse (UNGROUNDED) — never send */
-      waitFor(quiet, WAIT_MS * 6, function (q) {
-        if (!q) { X.bDone = false; return finish('B_NOT_QUIET'); }   /* nothing sent; the loop tries again later on this page */
+      var wait = Math.max(0, (X.leaseUntil || 0) - Date.now());   /* ★93-j: after an IN_FLIGHT, wait until the lease is likely free (0 otherwise = as before) */
+      if (wait) note({ kind: 'IF_WAIT', ms: wait });
+      setTimeout(function () {
         if (!same(id, a0)) return endB('RECHECK');
-        soSet(id, function (s) { s.b[h] = 'SENT'; });   /* written BEFORE the call: a page closed mid-call never resends */
-        stats.ef++; if (inFlight()) stats.sentWhileInFlight++; note({ kind: 'EF', hero: c.hero });
-        A().ensureFirst(c.id, {}, function (x) {
-          var code = (x && x.code) || 'UNKNOWN';
-          if ((code === 'REGISTRATION_IN_PROGRESS') && x && !x.calls && transient < 5) { transient++; soSet(id, function (s) { delete s.b[h]; }); return setTimeout(next, 2000); }   /* refused on the device before any request */
-          i++; soSet(id, function (s) { s.b[h] = String(code).slice(0, 32); });
-          note({ kind: 'EF_RES', code: code, calls: x && x.calls });
-          if (x && x.ok && EF_OK[code]) { if (code === 'EXISTS') stats.exists++; else stats.created++; refreshPortraits(); return next(); }
-          stats.efFail++;
-          if (EF_STOP[code]) return endB(code, holdOf(code, x));
-          next();   /* 422 imgsafe / PROFILE_NOT_ENGLISH / CANDIDATES_PENDING / IN_FLIGHT / IN_PROGRESS / LOST_RACE / UNGROUNDED …: this character only */
+        waitFor(quiet, WAIT_MS * 6, function (q) {
+          if (!q) { X.bDone = false; return finish('B_NOT_QUIET'); }   /* nothing sent; the loop tries again later on this page */
+          if (!same(id, a0)) return endB('RECHECK');
+          var b0 = (soOf(id) || { b: {} }).b[h];
+          if (b0 !== 'IN_FLIGHT') return send(c, h, false);
+          /* ★93-j: the retry — first look whether the character got a picture meanwhile (the other request may have been for this same character) */
+          pointers(id, function (by) {
+            if (!same(id, a0)) return endB('RECHECK');
+            if (by === null) { i++; soSet(id, function (s) { s.b[h] = 'IF_READ_FAIL'; }); stats.efFail++; return endB('READ_FAIL'); }   /* = READ_FAIL of ensureFirst: stop, nothing sent */
+            if (by[c.id]) { i++; stats.ifFilled++; soSet(id, function (s) { s.b[h] = 'FILLED'; }); note({ kind: 'IF_FILLED' }); refreshPortraits(); return next(); }   /* nothing sent */
+            send(c, h, true);
+          });
         });
-      });
+      }, wait);
     };
     note({ kind: 'B_START', n: todo.length, try: so.bt });
     next();
@@ -325,7 +356,8 @@
     ver: VER,
     status: function () { var id = sid(); var so = id ? soOf(id) : null; var r = rec();
       return { ver: VER, killed: killed(), gate: gateWhy() || 'on', story: id, firstTurns: X.firstTurns, busy: X.busy, pageStop: X.pageStop, needReload: X.needReload, reloaded: X.reloaded,
-        rec: so ? JSON.parse(JSON.stringify(so)) : null, day: { day: r.day, starts: r.starts }, last: X.last, stats: JSON.parse(JSON.stringify(stats)), hold: ssGet(HOLDK), log: LOG.slice(-40) }; },
+        rec: so ? JSON.parse(JSON.stringify(so)) : null, day: { day: r.day, starts: r.starts }, last: X.last, stats: JSON.parse(JSON.stringify(stats)), hold: ssGet(HOLDK), log: LOG.slice(-40),
+        retry: { on: retryOn(), leaseWaitMs: Math.max(0, (X.leaseUntil || 0) - Date.now()) } }; },   /* ★93-j */
     __t: { hk: hk, bornMs: bornMs, isNewStory: isNewStory }
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

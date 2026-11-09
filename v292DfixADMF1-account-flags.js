@@ -38,9 +38,9 @@
  * ===================================================================== */
 (function (root) {
   'use strict';
-  var VER = 'admg1-20261101-bundle81+starticon2+idsplit2';
+  var VER = 'admg1-20261101-bundle81+starticon2+idsplit2+kn1';
   var KILL = 'v292DfixADMF1Off';
-  var KEYS = { sfl1: 'phase', npres1: 'off', lc1: 'phase', ld1: 'phase', rc1: 'phase', oma1: 'phase', midicon1: 'off', mxreg1: 'off', starticon1: 'off', idsplit2: 'off' };   /* ★IDSPLIT2ADM (93-i・Owner 2026-11-08「新機能は全アカウントへ・管理者画面で入れ切り」): idsplit2 = 名乗りで記述的な呼び名を登録 NPC へ結び付ける（IDSPLIT2-B）。行なし・全体の値なし = OFF。範囲は Worker（v46.37 で READY）。旧 Worker はこの鍵を返さない = OFF */   /* ★STARTICON2 (Owner 2026-11-08: 新機能は全員へ・管理者画面で切り替え): starticon1 = 物語の始めのキャラの絵の自動作成。行なし・全体の値なし = OFF。範囲は Worker（READY を提案）。旧 Worker はこの鍵を返さない = OFF */   /* ★W-MXREG: mxreg1（絵の無い登録 NPC の最初の絵）。行なし = 全体の値（Worker が返す）・それも無ければ OFF。範囲は Worker（READY） */   /* ★MIDICON3: midicon1（途中から登場したキャラの自動アイコン）。行なし = 常に OFF。範囲は Worker（mx3-c = Owner だけの CANARY） */   /* ★admg1: +lc1 / ld1 / rc1 / oma1（行なし = 段階） */ var LATE = [];   /* 未設定（行なし）の扱い: 'phase' = Worker の段階（1 = 端末の設定 / 2 = OFF）、'off' = 常に OFF（admf2） */
+  var KEYS = { sfl1: 'phase', npres1: 'off', lc1: 'phase', ld1: 'phase', rc1: 'phase', oma1: 'phase', midicon1: 'off', mxreg1: 'off', starticon1: 'off', idsplit2: 'off', kn1: 'off' };   /* ★93-j KN1 (GPT #127-RO ②): kn1 = Knowledge の Owner 限定 CANARY（参考知識カードを user 側へ）。行なし = OFF。範囲は Worker（v46.39 で CANARY = owner かつ active だけ）。旧 Worker はこの鍵を返さない = OFF */   /* ★IDSPLIT2ADM (93-i・Owner 2026-11-08「新機能は全アカウントへ・管理者画面で入れ切り」): idsplit2 = 名乗りで記述的な呼び名を登録 NPC へ結び付ける（IDSPLIT2-B）。行なし・全体の値なし = OFF。範囲は Worker（v46.37 で READY）。旧 Worker はこの鍵を返さない = OFF */   /* ★STARTICON2 (Owner 2026-11-08: 新機能は全員へ・管理者画面で切り替え): starticon1 = 物語の始めのキャラの絵の自動作成。行なし・全体の値なし = OFF。範囲は Worker（READY を提案）。旧 Worker はこの鍵を返さない = OFF */   /* ★W-MXREG: mxreg1（絵の無い登録 NPC の最初の絵）。行なし = 全体の値（Worker が返す）・それも無ければ OFF。範囲は Worker（READY） */   /* ★MIDICON3: midicon1（途中から登場したキャラの自動アイコン）。行なし = 常に OFF。範囲は Worker（mx3-c = Owner だけの CANARY） */   /* ★admg1: +lc1 / ld1 / rc1 / oma1（行なし = 段階） */ var LATE = [];   /* 未設定（行なし）の扱い: 'phase' = Worker の段階（1 = 端末の設定 / 2 = OFF）、'off' = 常に OFF（admf2） */
   var HOLD_MS = 10000;
   var ACCT_RE = /^[0-9a-f]{32}$/;
   var T0 = Date.now();
@@ -115,7 +115,7 @@
   }
 
   root.__v292DfixADMF1 = { ver: VER, gate: gate, decide: decide, whenOn: whenOn, keys: function () { return Object.keys(KEYS); },
-    status: function () { return { ver: VER, killed: lsGet(KILL) === '1', sinceLoadMs: Date.now() - T0, holdMs: HOLD_MS, sfl1: decide('sfl1'), npres1: decide('npres1'), lc1: decide('lc1'), ld1: decide('ld1'), rc1: decide('rc1'), oma1: decide('oma1'), midicon1: decide('midicon1'), mxreg1: decide('mxreg1'), starticon1: decide('starticon1'), idsplit2: decide('idsplit2'), late: LATE.map(function (L) { return L.key; }), rechecks: ST.rechecks, changes: ST.changes, lastOn: ST.lastOn, last: ST.last ? JSON.parse(JSON.stringify(ST.last)) : null, hist: JSON.parse(JSON.stringify(ST.hist)) }; } };
+    status: function () { return { ver: VER, killed: lsGet(KILL) === '1', sinceLoadMs: Date.now() - T0, holdMs: HOLD_MS, sfl1: decide('sfl1'), npres1: decide('npres1'), lc1: decide('lc1'), ld1: decide('ld1'), rc1: decide('rc1'), oma1: decide('oma1'), midicon1: decide('midicon1'), mxreg1: decide('mxreg1'), starticon1: decide('starticon1'), idsplit2: decide('idsplit2'), kn1: decide('kn1'), late: LATE.map(function (L) { return L.key; }), rechecks: ST.rechecks, changes: ST.changes, lastOn: ST.lastOn, last: ST.last ? JSON.parse(JSON.stringify(ST.last)) : null, hist: JSON.parse(JSON.stringify(ST.hist)) }; } };
   try {
     root.addEventListener('chr:account-me', function () { recheck('me'); });
     root.addEventListener('chr:account-flags', function () { recheck('flags'); });

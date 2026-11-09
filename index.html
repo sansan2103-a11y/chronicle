@@ -20,7 +20,7 @@
 <!-- v292Dfix893: Pages origin（*.pages.dev）でだけ動く cookie session shim。github.io では何もしない。 -->
 <script src="v292Dfix893-account-cookie-shim.js?cb=20261031-bundle78-admf-c"></script>
 <script src="v292DfixISO1-local-only-foreign-hide.js?cb=20261107-iso1e"></script><!-- v292DfixISO1: 別アカウントのlocal-only物語を隠す・開かせない。OFF=localStorage v292DfixISO1Off=1 -->
-<script src="v292DfixADMF1-account-flags.js?cb=20261108-bundle93-i"></script><!-- ★admg1: +lc1 / ld1 / rc1 / oma1（管理者画面の機能スイッチ・全体の値）。★admf2: 話者の訂正（sfl1）と NPC 場面整合（npres1・行なし=OFF）。★ADMF-1 r3: 管理者画面のアカウント機能スイッチ（/auth/me accountFlags）で SFL を使うかを決める（読むだけ・書き込み 0）。OFF=localStorage v292DfixADMF1Off=1（= SFL OFF） -->
+<script src="v292DfixADMF1-account-flags.js?cb=20261109-bundle93-j"></script><!-- ★admg1: +lc1 / ld1 / rc1 / oma1（管理者画面の機能スイッチ・全体の値）。★admf2: 話者の訂正（sfl1）と NPC 場面整合（npres1・行なし=OFF）。★ADMF-1 r3: 管理者画面のアカウント機能スイッチ（/auth/me accountFlags）で SFL を使うかを決める（読むだけ・書き込み 0）。OFF=localStorage v292DfixADMF1Off=1（= SFL OFF） -->
 <!-- ★BAV2 (GPT #127-DV/#127-EE): beta を最初から Asset v2 で始める（client 側は使い勝手だけ。安全は Worker。Worker が features.assetV2Beta を返さない間は何もしない） -->
 <script src="v292Dbav2-beta.js?cb=20261019-bundle33-b"></script>
 <!-- ★fix990 (GPT #127-EN D): 旧画像 op が ASSET_V2_REQUIRED で断られたら、このタブではその op を 10 分送らない（fix523/633/634 より前に置く）。kill: localStorage v292Dfix990Off=1 -->
@@ -341,7 +341,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261108-bundle93-i';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261109-bundle93-j';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4718,7 +4718,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix482-output-quality.js?cb=20261019-bundle31-a"></script>
 <script src="v292Dfix489-convlog-gate.js?cb=20260901-fix784"></script>
 <script src="v292Dfix490-slot-write-guard.js?cb=v292Dfix565"></script>
-<script src="v292Dfix492-genfail-toast.js?cb=20261103-bundle90-b"></script>
+<script src="v292Dfix492-genfail-toast.js?cb=20261109-bundle93-j"></script>
 <script src="v292Dfix501-legacy-appearance-probe.js?cb=v292Dfix501"></script>
 <script src="v292Dfix515-icon-persist-probe.js?cb=v292Dfix515"></script>
 <script src="v292Dfix516-regen-local-display.js?cb=20261002-ac36"></script>
@@ -4829,10 +4829,10 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- ★av2 C2 (GPT 911): Asset v2 presentation plane (portrait.list / asset.get / IDB / placeholder / reason display / addBinding / explicit delete UI).
      Acts ONLY on assetSchema-2 documents (canonical-derived; never the local flag). Legacy stories: no DOM work at all.
      kill: localStorage[v292Dav2pOff]=1 (legacy generation guards stay) -->
-<script src="v292Dav2-portrait.js?cb=20261103-bundle93-a"></script>
+<script src="v292Dav2-portrait.js?cb=20261109-bundle93-j"></script>
 <script src="v292DfixLD1-preset-portrait.js?cb=20261101-bundle81-admg-a"></script>
 <!-- ★B37-B (GPT #127-HF B): 新しい S2 物語の「登場人物の最初の絵」案内（任意・止めない・自動は 1 回だけ）。OFF=localStorage v292DfixB37bOff=1 -->
-<script src="v292DfixB37-onboard.js?cb=20261102-bundle84-b37g-a"></script>
+<script src="v292DfixB37-onboard.js?cb=20261109-bundle93-j"></script>
 <script src="v292DfixLC1-appearance-proposal.js?cb=20261102-bundle90-a"></script>
 <script src="v292DfixLC1-workbench.js?cb=20261103-bundle90-b"></script>
 <!-- ★ICONUX2 (GPT #127-PC ICONUX): キャラの絵を 2 タップで（カードの「🎨 絵を作る」→「この外見で作る」）。LC1 が ON のときだけ働く（LC1 の判定には触らない）。kill: localStorage v292DfixICONUXOff=1 -->
@@ -4843,8 +4843,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- ★OLDMX1 (Owner 2026-11-08・bundle93-h): 古い物語の続きで、名簿が判定より遅れて届いたターンを 1 回だけ判定し直す（MIDICON の中・規則と Worker の確認は同じ）。kill: localStorage v292DfixMIDICONrosOff=1 -->
 <script src="v292DfixMIDICON-auto-icon.js?cb=20261108-bundle93-i"></script>
 <!-- ★STARTICON (Owner 2026-11-07・Local 候補): 物語を始めたとき、絵の無い主人公＋登録 NPC（最大 3 人）の最初の絵を自動で 1 回だけ作る（手動の 2 タップと同じ部品・同じ順）。鍵 starticon1（★STARTICON2: 管理者画面の切り替え・全アカウント共通。鍵 0 = 通信 0。外見には由来 origin=starticon_auto。新しい物語だけ）。kill = localStorage v292DfixSTARTICONOff=1 -->
-<script src="v292DfixSTARTICON-start-icons.js?cb=20261108-bundle93-i"></script>
-<script src="v292Dav2-migrate-ui.js?cb=20261019-bundle31-a"></script>
+<script src="v292DfixSTARTICON-start-icons.js?cb=20261109-bundle93-j"></script>
+<script src="v292Dav2-migrate-ui.js?cb=20261109-bundle93-j"></script>
 <!-- ★FG-3 (GPT #127-FR): S2 の物語の画風を 3 択（デフォルト／クール／ダーク）に。正本は server の story cfg.artPreset。
      S2 では旧来の「アイコン再生成」「⟳」を隠し、押されても旧経路へ渡さない。旧形式の物語では何もしない。kill: localStorage[v292Dfg3Off]=1 -->
 <script src="v292Dfg3-artpreset.js?cb=20261021-bundle37-a"></script>
@@ -4875,6 +4875,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixFLW5-home-noop-save.js?cb=20261101-bundle83-flow-c"></script>
 <!-- ★SETUI1 (laneSETUI1・Owner 2026-11-07 iPhone 実機): 設定画面の下の固定フッターを「保存／閉じる」の 1 行だけにし、🎲 の塊は🌍世界タブの先頭へ、リセットと利用規約の行は⚙システムタブへ移す（要素の移動だけ・通信 0・保存 0・id/onclick/確認画面は不変）。電話幅は画面いっぱい（100dvh）。kill: localStorage v292DfixSETUI1Off=1 -->
 <script src="v292DfixSETUI1-settings-layout.js?cb=20261108-bundle93-g"></script>
+<script src="v292DfixKN1-knowledge-canary.js?cb=20261109-bundle93-j"></script><!-- ★93-j KN1 (GPT #127-RO ②): Knowledge の Owner 限定 CANARY。管理者画面の鍵 kn1（Worker v46.39・CANARY）が ON のときだけ、入力文に当たった参考知識カード（最大 2 枚）を Planner.build の user 側の末尾へ（sys には足さない）。いちばん外側に包むため最後に読む。kill: localStorage v292DfixKN1Off=1 -->
 </body>
 </html>
 

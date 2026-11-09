@@ -240,7 +240,7 @@
   function RFMSG(res) { var h = res && res.http; if (h === 404) return 'この物語は非表示中か、見つかりません'; if (h === 401) return 'ログインが切れました。もう一度ログインしてください'; if (h === 429 || h === 503) return '混み合っています。少し待ってからお試しください'; return 'サーバーに接続できませんでした'; }
   var EF_MSG = { CREATED: '絵を作りました', CREATED_CONFIRMED: '絵を作りました', EXISTS: 'もう絵がありました（作っていません）',
                  BUDGET: '今月の画像の上限に達しました', RATE_LIMITED: '混み合っています。少し待ってからもう一度お試しください', LEDGER_UNHEALTHY: '利用記録の確認中のため、画像の作成を止めています',
-                 PROFILE_NOT_ENGLISH: '外見の文の中に、絵の指示に直せない言葉がありました（費用はかかっていません）。髪・目・服・体格などの見た目だけを短く書き直してください',
+                 PROFILE_NOT_ENGLISH: '外見の文の中に、絵の指示に直せない言葉がありました（絵は作っていないため、画像の費用はかかっていません）。髪・目・服・体格などの見た目だけを短く書き直してください',
                  GENERATION_FAILED: '絵を作れませんでした', OUTCOME_UNKNOWN: '結果を確認できませんでした（あとで 👥 キャラ で確かめてください）',
                  UNGROUNDED_REQUIRES_EXPLICIT_NEW_DRAW: '外見の情報が届いていなかったので作っていません', PROFILE_REVIEW_REQUIRED: '外見の確認が必要です', CANDIDATES_PENDING: '候補の絵があります。👥 キャラ の「候補から選ぶ」で選んでください',
                  IN_FLIGHT: '作成中です。少し待ってから確かめてください', IN_PROGRESS: '作成中です', LOST_RACE: '別の操作で絵が決まりました', READ_FAIL: 'サーバーに接続できませんでした' };

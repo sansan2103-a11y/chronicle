@@ -239,13 +239,13 @@
               /* ★cand_sideport_authority R3-1 */ APPLIED_SERVER_MOVED: '保存されましたが、別の端末も更新しています。ページを再読み込みしてください', NOT_CANONICAL_ROW: 'この物語はサーバー側で編集できない状態です（非表示または削除済み）', READBACK_FAIL: '保存結果を確認できませんでした。ページを再読み込みしてください', 'canonical-deleted': 'この物語は削除されています', 'not-canonical': 'この物語はまだサーバーの正本になっていません',
               IN_FLIGHT: '作成中です。少し待ってから確認してください', IN_PROGRESS: '作成中です', LOST_RACE: '別の操作で絵が決まりました',
               BUDGET: '今月の画像の上限に達しました', RATE_LIMITED: '混み合っています。少し待ってからもう一度お試しください', GENERATION_FAILED: '絵を作れませんでした',
-              PROFILE_NOT_ENGLISH: '外見の文の中に、絵の指示に直せない言葉がありました（絵は作っていません・費用はかかっていません）。「外見を設定」で、髪・目・服・体格などの見た目だけを短く書き直してください（例：黒髪の長髪の少女、細身、白いドレス）', LEDGER_UNHEALTHY: '利用記録の確認中のため、画像の作成を一時的に止めています。しばらくしてからお試しください', OUTCOME_UNKNOWN: '結果を確認できませんでした。しばらくしてから表示を確認してください', READ_FAIL: 'サーバーに接続できませんでした',
+              PROFILE_NOT_ENGLISH: '外見の文の中に、絵の指示に直せない言葉がありました（絵は作っていないため、画像の費用はかかっていません）。「外見を設定」で、髪・目・服・体格などの見た目だけを短く書き直してください（例：黒髪の長髪の少女、細身、白いドレス）', LEDGER_UNHEALTHY: '利用記録の確認中のため、画像の作成を一時的に止めています。しばらくしてからお試しください', OUTCOME_UNKNOWN: '結果を確認できませんでした。しばらくしてから表示を確認してください', READ_FAIL: 'サーバーに接続できませんでした',
               ASSET_V2_UNAVAILABLE: 'この物語では使えません', NOT_FOUND: 'この物語では使えません',
-              /* ★R1920 */ APPEARANCE_UNSAFE_POLICY: 'この外見では絵を作れません（絵は作っていません・費用はかかっていません）。「外見を設定」で外見を直してください',   /* ★90-b: 理由が届かないときの中立の文 */
-              /* ★IMGSAFE1 (GPT #127-PE) */ APPEARANCE_UNSAFE_MINOR: '未成年に見える人物の性的な描写があるため、この外見では絵を作れません（絵は作っていません・費用はかかっていません）。「外見を設定」で、性的な体の描写や見せ方を外してください' };
+              /* ★R1920 */ APPEARANCE_UNSAFE_POLICY: 'この外見では絵を作れません（絵は作っていないため、画像の費用はかかっていません）。「外見を設定」で外見を直してください',   /* ★90-b: 理由が届かないときの中立の文 */
+              /* ★IMGSAFE1 (GPT #127-PE) */ APPEARANCE_UNSAFE_MINOR: '未成年に見える人物の性的な描写があるため、この外見では絵を作れません（絵は作っていないため、画像の費用はかかっていません）。「外見を設定」で、性的な体の描写や見せ方を外してください' };
   /* ★LaneE: 読み込み失敗の文言を原因（HTTP status）で分ける。文言だけ・流れは変えない */
   function readFailMsg(res){ var h = res && res.http; if (h === 404) return 'この物語は非表示中か、見つかりません'; if (h === 401) return 'ログインが切れました。もう一度ログインしてください'; if (h === 429 || h === 503) return '混み合っています。少し待ってからお試しください'; return 'サーバーに接続できませんでした'; }
-  var POLICY_WHY = { real_person: '実在の人物に該当する可能性があるため、画像生成を保留しました。オリジナルの架空キャラクターに変更する場合は、『外見を設定』から編集できます。前の画像はそのまま残ります。', explicit: '露骨な性的描写があるため、この外見では絵を作れません（絵は作っていません・費用はかかっていません）。「外見を設定」で外見を直してください' };   /* ★90-b: imgsafeWhy ごとの理由（入れなかった語は出さない） */
+  var POLICY_WHY = { real_person: '実在の人物に該当する可能性があるため、画像生成を保留しました。オリジナルの架空キャラクターに変更する場合は、『外見を設定』から編集できます。前の画像はそのまま残ります。', explicit: '露骨な性的描写があるため、この外見では絵を作れません（絵は作っていないため、画像の費用はかかっていません）。「外見を設定」で外見を直してください' };   /* ★90-b: imgsafeWhy ごとの理由（入れなかった語は出さない） */
   function msgFor(res, okKey){ if (res && res.ok) return MSG[okKey]; if (res && res.code === 'READ_FAIL') return readFailMsg(res); if (res && res.code === 'APPEARANCE_UNSAFE_POLICY' && own(POLICY_WHY, String(res.imgsafeWhy || ''))) return POLICY_WHY[res.imgsafeWhy]; return ((res && MSG[res.code]) || 'できませんでした') + imgsafeHint(res); }
   function imgsafeHint(res){ try { var G = window.__chrImgSafe; if (!(res && res.code === 'APPEARANCE_UNSAFE_MINOR' && res.imgsafe && G && G.hint)) return ''; if (G.remember) G.remember(res.imgsafe.y, res.imgsafe.s); return G.hint(res.imgsafe.y, res.imgsafe.s); } catch(e){ return ''; } }   /* ★IMGSAFE2: 分類の文言だけ ★IMGSAFE3: FLW2 が読み直しの後にも分類を出せるよう、分類の 2 語だけを覚える（画面の中だけ・保存しない） */
   try { window.__v292DfixFLW2msg = function(c){ return (typeof c === 'string' && own(MSG, c)) ? MSG[c] : null; }; } catch(eF2m){}   /* ★FLW2: 読み直しのあと理由コードから文を作り直すための読み口（読むだけ） */
