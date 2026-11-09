@@ -276,6 +276,96 @@
     return DEFAULT_TITLE;
   }
 
+  /* ---------- ★SEEDNPC1（2026-11-09・Local 候補）: 「いっしょに出る人」の 1 行を人ごとに分ける ----------
+     不具合（本番 93-i で実測）: 「パン屋の娘 汐里（しおり）：18歳、…／老灯台守 源三：70歳、…」が
+       **名前 61 文字の NPC 1 人**になった。真因 = 下の seededDraft が欄の全文をそのまま npcs[0].name に入れていた。
+       fix823 の EXPAND_EXISTING は「埋まっている欄 = 確定（LOCKED）」「NPC の人数は増やさない」契約なので、
+       AI は名前を直せず人数も増やせない → 合体した 1 人のまま保存・物語の登録 NPC になる。
+     直し方（ここだけ・fix823 / fix436 / fix820 / 保存の形は 1 バイトも変えない）:
+       ① 強い区切り（改行 ／ / ； ; ｜ |）で切り、「名前：説明」で始まるかたまりが **2 つ以上**（最大 6）
+          あり、しかも先頭のかたまりも「名前：説明」のときだけ、人ごとに分ける。
+          「名前：説明」で始まらないかたまり（説明の中の ／・「性格：明るい」のような項目名）は直前の人の説明へ戻す。
+       ② 分けないとき（1 人）: 「名前：説明」なら名前と説明に分ける。名前の後ろのかな読み「（しおり）」は
+          説明の先頭へ「（読み：しおり）」として移す。
+       ③ それでも名前が 20 文字を超えるなら、名前は空にして全文を説明に入れる（名前は AI が説明から決める。
+          AI が使えないときは「自分で書きつづける」で名前の欄が空のまま見える）。
+       ・「、」「・」「。」「空白」では切らない（説明の中・「ユア・ミスト」型の名前・「パン屋の娘 汐里」型の肩書きを守る）。
+       ・項目名（性格・年齢・口癖 など）は名前として扱わない。「18:00」のような時刻の : も区切りにしない。
+       ・20 文字以下で「：」も読みも無い入力は従来と 1 バイトも同じ（名前 = 入力全文）。
+     kill: localStorage v292DfixSEEDNPC1Off='1' → 従来どおり（全文を 1 人の名前に）。
+     診断: window.__v292DfixSEEDNPC1 = { version, on(), parse(text), status() }（localStorage へ書かない・名前は残さない） */
+  var SN1 = { version: 'seednpc1-a-20261109', last: null };
+  var SN1_NAME_MAX = 20;                 /* code point */
+  var SN1_MAX_PEOPLE = 6;
+  var SN1_SEP_RE = /([\n／\/；;｜|])/;
+  var SN1_HEAD_BAD = /[、。，,．.!?！？「」『』（）()\[\]【】<>＜＞\n／\/；;｜|：:]/;
+  var SN1_LABELS = (function(){
+    var a = ['名前','氏名','名','よみ','読み','ふりがな','フリガナ','年齢','歳','年','性別','性格','外見','容姿','見た目','顔',
+             '髪','髪型','髪色','目','瞳','服','服装','身長','体型','体格','職業','仕事','立場','役割','役職','身分','所属',
+             '出身','種族','関係','関係性','間柄','口調','口癖','一人称','二人称','呼び方','好き','嫌い','好物','苦手',
+             '得意','趣味','特技','能力','武器','特徴','過去','経歴','背景','秘密','目的','目標','願い','欲求','動機',
+             '恐怖','傷','弱点','癖','信条','夢','悩み','家族','声','備考','補足','説明','設定','メモ','注意','例','NG'];
+    var o = {}; for (var i = 0; i < a.length; i++) o[a[i]] = 1; return o;
+  })();
+  function sn1Off(){ return lsg('v292DfixSEEDNPC1Off') === '1'; }
+  function sn1Len(s){ return str(s).replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '_').length; }
+  /* 名前の後ろのかな読み「（しおり）」「(シオリ)」だけを外す（漢字・英字の括弧は外さない） */
+  function sn1Reading(head){
+    var m = /^([\s\S]*?)[ 　]*[（(][ 　]*([ぁ-ゖァ-ヺー・ 　]+?)[ 　]*[）)]$/.exec(trim(head));
+    if (m && trim(m[1])) return { name: trim(m[1]), reading: trim(m[2]) };
+    return { name: trim(head), reading: '' };
+  }
+  /* かたまりが「名前：説明」で始まるか。始まるなら { name, reading, body } */
+  function sn1Head(seg){
+    var s = trim(seg), i = s.search(/[：:]/);
+    if (i <= 0) return null;
+    var head = trim(s.slice(0, i)), body = trim(s.slice(i + 1));
+    if (!head || !body) return null;
+    if (s.charAt(i) === ':' && /\d$/.test(head) && /^\d/.test(body)) return null;   /* 18:00 */
+    var rd = sn1Reading(head);
+    if (!rd.name || sn1Len(rd.name) > SN1_NAME_MAX || SN1_HEAD_BAD.test(rd.name)) return null;
+    if (/^[0-9０-９]/.test(rd.name)) return null;                                     /* 「20年前：…」は名前ではない */
+    if (SN1_LABELS[rd.name.replace(/[ 　]+/g, '')]) return null;
+    return { name: rd.name, reading: rd.reading, body: body };
+  }
+  function sn1Desc(reading, body){
+    var b = trim(body);
+    return reading ? ('（読み：' + reading + '）' + b) : b;
+  }
+  function sn1Parse(raw){
+    var text = trim(str(raw).replace(/\r\n?/g, '\n'));
+    if (!text) return { mode: 'EMPTY', people: [] };
+    var parts = text.split(SN1_SEP_RE);   /* 偶数 = かたまり / 奇数 = 区切り文字 */
+    if (parts.length >= 3){
+      var people = [], cur = null, okFirst = true;
+      for (var i = 0; i < parts.length; i += 2){
+        var h = sn1Head(parts[i]);
+        if (h){ cur = { name: h.name, reading: h.reading, body: h.body }; people.push(cur); continue; }
+        if (!cur){ okFirst = false; break; }
+        cur.body = cur.body + parts[i - 1] + parts[i];      /* 説明の中の ／ 等は区切り文字ごと元へ戻す */
+      }
+      if (okFirst && people.length >= 2 && people.length <= SN1_MAX_PEOPLE){
+        var out = [];
+        for (var j = 0; j < people.length; j++) out.push({ name: people[j].name, desc: sn1Desc(people[j].reading, people[j].body) });
+        return { mode: 'SPLIT', people: out };
+      }
+    }
+    var one = sn1Head(text);
+    if (one) return { mode: 'NAME_DESC', people: [{ name: one.name, desc: sn1Desc(one.reading, one.body) }] };
+    var rd = sn1Reading(text);
+    if (sn1Len(rd.name) <= SN1_NAME_MAX){
+      if (rd.reading) return { mode: 'READING', people: [{ name: rd.name, desc: sn1Desc(rd.reading, '') }] };
+      return { mode: 'AS_IS', people: [{ name: text, desc: '' }] };
+    }
+    return { mode: 'TOO_LONG', people: [{ name: '', desc: text }] };
+  }
+  window.__v292DfixSEEDNPC1 = {
+    version: SN1.version,
+    on: function(){ return !sn1Off(); },
+    parse: function(t){ return sn1Parse(t); },
+    status: function(){ return { on: !sn1Off(), version: SN1.version, last: SN1.last ? { mode: SN1.last.mode, count: SN1.last.count } : null }; }
+  };
+
   /* ---------- 生成 ---------- */
   function seededDraft(){
     var a = A(); if (!a) return null;
@@ -286,7 +376,16 @@
        名前の無い slot は fix820.validate が NPC_WITHOUT_NAME で落とすし、
        EXPAND_EXISTING は slot を消せない（裁定 26）ので、作らないのが唯一安全な選択。 */
     d.cast.npcs = [];
-    if (trim(S.seed.npc)) d.cast.npcs.push({ name: trim(S.seed.npc), desc: '', personality: '', coreDesire: '', coreFear: '', wound: '', gender: '' });
+    if (sn1Off()){
+      if (trim(S.seed.npc)) d.cast.npcs.push({ name: trim(S.seed.npc), desc: '', personality: '', coreDesire: '', coreFear: '', wound: '', gender: '' });
+    } else {
+      /* ★SEEDNPC1: 「いっしょに出る人」の 1 行を人ごとに分ける（名前と説明も分ける）。入力の文字は 1 文字も捨てない */
+      var pr = sn1Parse(S.seed.npc);
+      SN1.last = { mode: pr.mode, count: pr.people.length };
+      for (var pi = 0; pi < pr.people.length; pi++){
+        d.cast.npcs.push({ name: pr.people[pi].name, desc: pr.people[pi].desc, personality: '', coreDesire: '', coreFear: '', wound: '', gender: '' });
+      }
+    }
     if (trim(S.seed.title)) d.title = trim(S.seed.title);
     return d;
   }
