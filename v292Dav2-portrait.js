@@ -29,6 +29,7 @@
   function MXD(){ return window.__v292DfixMIDICON || null; }
   function mxFor(m, label){ try { var x = MXD(); return (x && typeof x.extraFor === 'function') ? x.extraFor(m.story_id, label) : null; } catch(e){ return null; } }
   var mxStats = { shown: 0, preferNpc: 0, keepWhileNpcEmpty: 0, badgeAdd: 0, badgeDel: 0 };
+  var renameStats = { byName: 0 };   /* ★93-k RENAME1 */
   function mxNpcConfirmed(cid){ try { var S0 = state(); var c0 = S0 && S0.cast; if (!c0) return false; var all = [].concat(c0.hero ? [c0.hero] : [], Array.isArray(c0.npcs) ? c0.npcs : []);   /* ★mx3-b: the NPC has an Owner-confirmed appearance (profile) */
       for (var i = 0; i < all.length; i++){ var e = all[i]; if (e && e.character_id === cid){ var p = e.profile; return !!(p && typeof p === 'object' && ((typeof p.appearance === 'string' && p.appearance.trim()) || p.gender === '女性' || p.gender === '男性')); } } } catch(e){} return false; }
   function doc(){ try { var m = M(); return (m && typeof m.docSchema2 === 'function') ? m.docSchema2() : false; } catch(e){ return false; } }
@@ -192,6 +193,15 @@
       var mxc = mxx.claimed_by ? entById(m, mxx.claimed_by) : null;
       if (mxc && mxc.status !== 'DELETED' && ((listed && listed.story_id === m.story_id && !listed.error && own(listed.by, mxc.id)) || mxx.claim_state === 'CANDIDATE' || mxNpcConfirmed(mxc.id))){ ident = { kind: 'REGISTERED', id: mxc.id, historical: false }; mxStats.preferNpc++; }   /* ★mx3-b (中-3): a CANDIDATE claim / an NPC with a confirmed appearance shows the NPC side, never the extra */
       else ident = { kind: 'EXTRA', id: mxx.extra_id, asset_id: mxx.asset_id, label: key(mxl), story_id: m.story_id };
+    }
+    /* ★93-k RENAME1（Owner 実測 2026-11-09）: ⚙ 設定で NPC の名前を変えると、会話ログのカード・設定の頭の丸（<img alt="新しい名前">）が
+       文字の丸のままになっていた。名前→キャラの対応（cast.av2.bindings）は登録したときの名前だけで、名前を変えても新しい名前は足されない
+       （呼び名の追加 = addBinding は利用者の明示の操作だけ）ため。保存された対応表の問題なので再読み込みでは直らない。
+       ここ（表示だけ）: 新しい名前が **どの対応にも無い** ときだけ、👥 キャラ一覧のカードと同じ決まり（cardEntry = 今の名前と完全に同じ・削除でない・1 人だけ）で
+       そのキャラの絵を出す。対応表・保存・通信は何も変えない（書かない）。kill: localStorage v292Dav2pRenameOff='1' */
+    if (ident.kind === 'UNREGISTERED' && lsg('v292Dav2pRenameOff') !== '1'){
+      var rk = key(mxl);
+      if (rk && !own(m.bindings, rk)){ var rce = cardEntry(m, rk); if (rce){ ident = { kind: 'REGISTERED', id: rce.id, historical: false }; renameStats.byName++; } }
     }
     var pic = pictureFor(m, ident);
     if (ident.kind === 'REGISTERED' && pic.state === 'none' && (mxx = mxFor(m, mxl)) && (!mxx.claimed_by || mxx.claimed_by === ident.id) && mxx.claim_state !== 'CANDIDATE' && !mxNpcConfirmed(ident.id)){   /* ★MIDICON3: promoted, no picture of its own yet (★mx3-b 中-3: not when the claim is only a CANDIDATE or the NPC has a confirmed appearance — the Owner decides) */
@@ -891,6 +901,7 @@
     refresh: function(){ listed = null; getFailed = {}; schedule(); return true; },
     extrasChanged: function(){ schedule(); return true; },   /* ★MIDICON3: new extras data → one more sweep (no list refetch) */
     mxStats: function(){ return JSON.parse(JSON.stringify(mxStats)); },
+    renameStats: function(){ return { on: lsg('v292Dav2pRenameOff') !== '1', byName: renameStats.byName }; },   /* ★93-k RENAME1 */
     resolve: function(label){ var m = model(); return m ? resolveLabel(m, label) : null; },
     placeholderImage: placeholderImage
   };

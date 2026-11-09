@@ -691,8 +691,23 @@
   var sumDone = false, n = 0;
   (function loop() { n++; if (!sumDone && n < 60) { try { sumDone = showSummary(); } catch (e) { sumDone = true; } } tick(); setTimeout(loop, 400); })();
 
+  /* ★93-k（STARTICON の段 B・Owner 実測 2026-11-09）: 一覧を開いたまま別の部品（STARTICON）が絵を付けたとき、この欄の「絵あり」の控え（W.ptr・45 秒）が
+     古いままで、絵が見えているのに「絵を作る」のままになっていた。絵を付けた側が呼ぶ読み直し（読むだけ・portrait.list 1 回）。
+     控えには足すだけ（サーバーの一覧に今ある絵を「絵あり」にする。消えた扱いにはしない＝消すのは今までどおりの読み直しだけ）。kill: v292DfixLC1PtrRefreshOff='1' */
+  function refreshPtr(why) {
+    if (lsg('v292DfixLC1PtrRefreshOff') === '1') return { ok: false, code: 'OFF' };
+    var id = sid(); if (!id || W.id !== id) return { ok: false, code: 'NOT_THIS_STORY' };
+    stats.ptrRefresh = (stats.ptrRefresh || 0) + 1; note({ kind: 'PTR_REFRESH', why: String(why || '').slice(0, 24) });
+    pointers(id, function (by) {
+      if (!by || sid() !== id || W.id !== id) return;
+      var m = {}; Object.keys(W.ptr || {}).forEach(function (k) { m[k] = W.ptr[k]; }); Object.keys(by).forEach(function (k) { m[k] = by[k]; });
+      W.ptr = m; W.ptrAt = Date.now();
+      renderSoon();   /* = loadPtr と同じ再描画（入力中の欄はそのまま） */
+    });
+    return { ok: true };
+  }
   window.__v292DfixLC1 = {
-    version: 'LC1-r1', on: function () { return true; }, holdReload: holdReload, openFromB37: openFromB37,
+    version: 'LC1-r1', on: function () { return true; }, holdReload: holdReload, openFromB37: openFromB37, refreshPtr: refreshPtr,
     genState: genState, useGenState: function (fn) { gsProvider = (typeof fn === 'function') ? fn : null; },
     openBulk: openBulk, openCandidates: openCandidates,
     status: function () {

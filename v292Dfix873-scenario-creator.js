@@ -326,7 +326,113 @@
     if (!rd.name || sn1Len(rd.name) > SN1_NAME_MAX || SN1_HEAD_BAD.test(rd.name)) return null;
     if (/^[0-9０-９]/.test(rd.name)) return null;                                     /* 「20年前：…」は名前ではない */
     if (SN1_LABELS[rd.name.replace(/[ 　]+/g, '')]) return null;
-    return { name: rd.name, reading: rd.reading, body: body };
+    return { name: rd.name, reading: rd.reading, body: body, head: head, colon: s.charAt(i) };
+  }
+
+  /* ---------- ★SEEDNPC1b（2026-11-09・Local 候補）: 名前の無い「説明だけの人」 ----------
+     不具合（本番 93-j・Owner 実プレイ）: 「生徒会委員長のまじめな女子高生」と説明だけ書くと、その文がそのまま
+       NPC の **名前** になった（20 文字以下なので SEEDNPC1a の「長すぎる名前は空に」に当たらない）。
+     直し方（ここだけ）: 「人を表す語で終わり、その前に修飾（の・な・い・を・が など）がある」ものだけを
+       **説明** と判定し、name を空・desc に全文を入れる（SEEDNPC1a の TOO_LONG と同じ形 → fix823 が AI で名前を埋める）。
+       迷うものは今までどおり名前のまま（本物の名前を説明へ回す方が害が大きい）。
+       ・ひらがなの「の」で終わる名前（ひなの・あやの）や「姓＋ひらがなの名」（日向のぞみ・田中なな）を
+         説明と見ないため、「の」「な」は **漢字・カタカナの直後** のときだけ修飾として数え、
+         その後ろに続くひらがなが決まった語尾（まじめな・優しい 等）でなければ数えない。
+       ・先輩・先生・姫・隊長などの **敬称になる語** は、さらに厳しく（「剣道部の先輩」「優しい先生」だけ）。
+         「あやの先輩」「ひなの先生」「春な先輩」は名前のまま。
+       ・複数人: 区切り（改行 ／ / ； ; ｜ |、または 、 ，）で 2〜6 個に分かれ、**全部が** 説明のときだけ人ごとに分ける。
+         「名前：説明」の並び（SEEDNPC1a）では、名前の側が説明なら（「港町の老漁師：70歳」）その人の name を空にする。
+         名前だけの項目が混ざる列（「汐里／港町の老漁師」）は今までどおり（分けない）。
+     kill: localStorage v292DfixSEEDNPC1bOff='1' → SEEDNPC1a と同じ（説明だけの人も名前になる）。
+           v292DfixSEEDNPC1Off='1' は今までどおり全部止める（93-i と同じ）。 */
+  var SN1B = { version: 'seednpc1-b-20261109' };
+  function sn1bOff(){ return lsg('v292DfixSEEDNPC1bOff') === '1'; }
+  var SN1B_ROLE = ('女子高生 男子高生 女子高校生 男子高校生 高校生 中学生 小学生 大学生 女子大生 学生 生徒 転校生 新入生 同級生 上級生 下級生 '+
+    '少年 少女 青年 若者 老人 老婆 老女 老爺 老紳士 紳士 淑女 男 女 男性 女性 男の子 女の子 子ども 子供 赤ん坊 幼女 幼児 娘 息子 '+
+    '漁師 猟師 農夫 農家 商人 店主 店員 職人 鍛冶屋 鍛冶師 医者 医師 看護師 薬師 教師 騎士 兵士 剣士 戦士 魔法使い 魔女 魔術師 魔導士 錬金術師 '+
+    '僧侶 神父 牧師 巫女 神官 修道女 シスター 執事 メイド 侍女 召使い 使用人 盗賊 海賊 山賊 傭兵 冒険者 旅人 吟遊詩人 詩人 探偵 警官 警察官 '+
+    '記者 作家 画家 歌手 歌姫 踊り子 アイドル 女王 王女 令嬢 お嬢様 貴族 村人 町人 住人 隣人 友人 友達 親友 幼なじみ 幼馴染 同僚 上司 部下 '+
+    '相棒 仲間 恋人 婚約者 夫 妻 兄 姉 弟 妹 母 父 祖母 祖父 叔父 叔母 伯父 伯母 母親 父親 兄貴 姉貴 おばあさん おじいさん おばあちゃん '+
+    'おじいちゃん おばさん おじさん お姉さん お兄さん 研究者 科学者 学者 技術者 技師 案内人 管理人 番人 守り人 灯台守 墓守 門番 船乗り 水夫 '+
+    '運転手 料理人 料理長 板前 パン屋 花屋 看板娘 女将 主人 女主人 大家 少年兵 勇者 魔王 人物 キャラ キャラクター 人 者 '+
+    '猫 黒猫 犬 狐 狼 幽霊 亡霊 妖精 精霊 竜 ドラゴン ロボット アンドロイド 人形').split(' ');
+  /* 敬称・肩書きになる語（「あやの先輩」のように名前の直後に付く）= 厳しい判定 */
+  var SN1B_TITLE = ('先輩 後輩 先生 師匠 姫 姫様 王子 王 王様 殿下 陛下 委員長 会長 副会長 部長 隊長 団長 社長 船長 艦長 署長 院長 '+
+    '校長 教頭 店長 局長 博士 教授 刑事 警部 少尉 中尉 大尉 少佐 中佐 大佐 将軍 司令 兄さん 姉さん 兄ちゃん 姉ちゃん 兄様 姉様 お姉様 お兄様').split(' ');
+  var SN1B_NOUNS = (function(){
+    var a = [], i, t = {};
+    for (i = 0; i < SN1B_ROLE.length; i++) a.push({ w: SN1B_ROLE[i], title: false });
+    for (i = 0; i < SN1B_TITLE.length; i++){ a.push({ w: SN1B_TITLE[i], title: true }); t[SN1B_TITLE[i]] = 1; }
+    a.sort(function(x, y){ return y.w.length - x.w.length; });   /* 長い語を先に（「老漁師」より「漁師」… 「お姉さん」より「姉さん」は後） */
+    return a;
+  })();
+  /* 漢字の直後に続くひらがなが、これと **ちょうど同じ** ときだけ修飾（「田中なな」「鈴木いずみ」は当たらない） */
+  var SN1B_ADJ = (function(){
+    var a = ('な い しい た だ る う く す つ む ぬ ぐ ぶ ない らない わない かない さない たない まない がない した った いた んだ れた けた えた '+
+      'きた ちた めた せた てた ねた える ける げる せる てる ねる める れる いる きる そうな げな しげな っぽい らしい がちな がる っている ている '+
+      'ていた ってる かな やかな らかな ような みたいな').split(' ');
+    var o = {}; for (var i = 0; i < a.length; i++) o[a[i]] = 1; return o;
+  })();
+  var SN1B_KAN = '一-龯々〆ヵヶ';
+  var SN1B_BAD = /[：:「」『』（）()\[\]【】<>＜＞"“”'‘’\n／\/；;｜|，,。．.!?！？…]/;
+  /* 修飾の手がかり。strict = 敬称の語の前（「剣道部の先輩」「優しい先生」だけ） */
+  function sn1bEvid(P, strict){
+    var re, m;
+    /* ① 漢字・カタカナ・数字の直後の の/を/が */
+    re = new RegExp('[' + SN1B_KAN + 'ァ-ヺー0-9０-９]([のをが])([ぁ-ゖ]*)', 'g');
+    while ((m = re.exec(P))){
+      var run = m[2];
+      if (strict){ if (run === '') return true; continue; }               /* 敬称の前: 助詞の直後が漢字・カタカナ・語の終わり */
+      if (m[1] !== 'の') return true;                                     /* を・が: 名前には入らない */
+      /* の: 直後が漢字・カタカナ・語の終わり、または「まじめな」「やさしい」のような 3〜6 字の語尾つきひらがな（「日向のぞみ」は当たらない） */
+      if (run === '' || SN1B_ADJ[run] || (run.length >= 3 && run.length <= 6 && /(な|い|た)$/.test(run))) return true;
+    }
+    /* ② 漢字の直後の決まった語尾（無口な・優しい・喋る・眼鏡をかけた の「た」は ① で済む） */
+    re = new RegExp('([' + SN1B_KAN + ']+)([ぁ-ゖ]+)', 'g');
+    while ((m = re.exec(P))){
+      var r2 = m[2];
+      if (strict){ if (r2 === 'しい' || r2 === 'い' || (r2 === 'な' && m[1].length >= 2)) return true; continue; }   /* 敬称の前: 優しい・元気な（漢字 2 字以上 + な）。「春な先輩」は数えない */
+      if (SN1B_ADJ[r2] || (r2.length >= 2 && r2.length <= 5 && /[いな]$/.test(r2))) return true;   /* 人懐っこい・賑やかな */
+    }
+    /* ③ カタカナの直後の「な」（ドジな・クールな） */
+    if (new RegExp('[ァ-ヺー]な(?![ぁ-ゖ])').test(P)) return true;
+    /* ④ ひらがなだけの修飾（まじめな・かわいい）。敬称の前では数えない（「あやな先輩」を守る） */
+    if (!strict && /^[ぁ-ゖー]{3,}(な|い)$/.test(P) && sn1Len(P) >= 4) return true;
+    return false;
+  }
+  /* 説明だけの人か。true のときだけ name を空にする（迷えば false = 今までどおり名前） */
+  function sn1bIsDesc(raw){
+    if (sn1bOff()) return false;
+    var t = trim(str(raw)).replace(/[。．.！!]+$/, '');
+    var n = sn1Len(t);
+    if (n < 2 || n > 60) return false;
+    if (SN1B_BAD.test(t)) return false;
+    /* 「、」の前のかたまりが言いさし（無口で、・18歳、）でなければ説明と見ない（「汐里、港町の老漁師」は名前の並びかもしれない＝今までどおり） */
+    var segs = t.split('、');
+    for (var si = 0; si < segs.length - 1; si++){ var sg = trim(segs[si]); if (!sg || !(/[でてくしりいなたがもやら歳代]$/.test(sg))) return false; }
+    var tc = t.replace(/[ 　]+$/, '');
+    for (var i = 0; i < SN1B_NOUNS.length; i++){
+      var w = SN1B_NOUNS[i].w;
+      if (tc.length < w.length || tc.slice(tc.length - w.length) !== w) continue;
+      var P = trim(tc.slice(0, tc.length - w.length).replace(/[、 　]+$/, ''));
+      if (!P){
+        /* 語だけ（「女子高生」「幼なじみ」）: 2 文字以上・敬称でない語だけ説明とみなす */
+        return !SN1B_NOUNS[i].title && sn1Len(w) >= 2;
+      }
+      return sn1bEvid(P, SN1B_NOUNS[i].title);
+    }
+    return false;
+  }
+  /* 区切られた項目が全部「説明だけの人」なら、その項目の列（2〜6）。それ以外は null */
+  function sn1bList(text, sepRe){
+    var items = text.split(sepRe), out = [];
+    for (var i = 0; i < items.length; i++){
+      var it = trim(items[i]);
+      if (!it) continue;
+      if (!sn1bIsDesc(it)) return null;
+      out.push(it);
+    }
+    return (out.length >= 2 && out.length <= SN1_MAX_PEOPLE) ? out : null;
   }
   function sn1Desc(reading, body){
     var b = trim(body);
@@ -340,20 +446,35 @@
       var people = [], cur = null, okFirst = true;
       for (var i = 0; i < parts.length; i += 2){
         var h = sn1Head(parts[i]);
-        if (h){ cur = { name: h.name, reading: h.reading, body: h.body }; people.push(cur); continue; }
+        if (h){ cur = { name: h.name, reading: h.reading, body: h.body, head: h.head, colon: h.colon }; people.push(cur); continue; }
         if (!cur){ okFirst = false; break; }
         cur.body = cur.body + parts[i - 1] + parts[i];      /* 説明の中の ／ 等は区切り文字ごと元へ戻す */
       }
       if (okFirst && people.length >= 2 && people.length <= SN1_MAX_PEOPLE){
         var out = [];
-        for (var j = 0; j < people.length; j++) out.push({ name: people[j].name, desc: sn1Desc(people[j].reading, people[j].body) });
+        for (var j = 0; j < people.length; j++){
+          /* ★SEEDNPC1b: 名前の側が説明（「港町の老漁師：70歳」）なら name を空・そのかたまりを丸ごと説明へ */
+          if (sn1bIsDesc(people[j].head)) out.push({ name: '', desc: people[j].head + people[j].colon + people[j].body });
+          else out.push({ name: people[j].name, desc: sn1Desc(people[j].reading, people[j].body) });
+        }
         return { mode: 'SPLIT', people: out };
       }
+      /* ★SEEDNPC1b: 区切られた項目が全部「説明だけの人」→ 人ごとに name 空 */
+      var dl = sn1bList(text, /[\n／\/；;｜|]/);
+      if (dl) return { mode: 'DESC_LIST', people: dl.map(function(x){ return { name: '', desc: x }; }) };
+    }
+    if (!/[\n／\/；;｜|]/.test(text) && /[、，,]/.test(text)){
+      var dl2 = sn1bList(text, /[、，,]/);
+      if (dl2) return { mode: 'DESC_LIST', people: dl2.map(function(x){ return { name: '', desc: x }; }) };
     }
     var one = sn1Head(text);
-    if (one) return { mode: 'NAME_DESC', people: [{ name: one.name, desc: sn1Desc(one.reading, one.body) }] };
+    if (one){
+      if (sn1bIsDesc(one.head)) return { mode: 'DESC_HEAD', people: [{ name: '', desc: text }] };
+      return { mode: 'NAME_DESC', people: [{ name: one.name, desc: sn1Desc(one.reading, one.body) }] };
+    }
     var rd = sn1Reading(text);
     if (sn1Len(rd.name) <= SN1_NAME_MAX){
+      if (sn1bIsDesc(text)) return { mode: 'DESC_ONLY', people: [{ name: '', desc: text }] };
       if (rd.reading) return { mode: 'READING', people: [{ name: rd.name, desc: sn1Desc(rd.reading, '') }] };
       return { mode: 'AS_IS', people: [{ name: text, desc: '' }] };
     }
@@ -363,7 +484,9 @@
     version: SN1.version,
     on: function(){ return !sn1Off(); },
     parse: function(t){ return sn1Parse(t); },
-    status: function(){ return { on: !sn1Off(), version: SN1.version, last: SN1.last ? { mode: SN1.last.mode, count: SN1.last.count } : null }; }
+    status: function(){ return { on: !sn1Off(), version: SN1.version, last: SN1.last ? { mode: SN1.last.mode, count: SN1.last.count } : null,
+                                 b: { on: !sn1Off() && !sn1bOff(), version: SN1B.version } }; },
+    isDesc: function(t){ return sn1bIsDesc(t); }
   };
 
   /* ---------- 生成 ---------- */
@@ -372,9 +495,10 @@
     var d = a.draft(); if (!d) return null;
     d.scene.lore = S.seed.lore;
     d.cast.hero.desc = S.seed.hero;
-    /* ★NPC slot は「名前が入っているときだけ」作る。
+    /* ★NPC slot は「名前か説明が入っているときだけ」作る（空の slot は作らない）。
        名前の無い slot は fix820.validate が NPC_WITHOUT_NAME で落とすし、
-       EXPAND_EXISTING は slot を消せない（裁定 26）ので、作らないのが唯一安全な選択。 */
+       EXPAND_EXISTING は slot を消せない（裁定 26）。SEEDNPC1a/1b の「name 空・desc あり」は
+       fix823 が AI で名前を埋める（AI が使えないときは編集画面で名前の欄が空のまま見える）。 */
     d.cast.npcs = [];
     if (sn1Off()){
       if (trim(S.seed.npc)) d.cast.npcs.push({ name: trim(S.seed.npc), desc: '', personality: '', coreDesire: '', coreFear: '', wound: '', gender: '' });

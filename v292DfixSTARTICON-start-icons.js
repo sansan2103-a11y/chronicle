@@ -21,6 +21,9 @@
  *      （同じ口座の札なので送っても IN_FLIGHT になるだけ）。待った後に portrait.list でそのキャラに絵が付いたかを確かめ、付いていれば送らない（FILLED）。
  *      まだなら ensureFirst をもう 1 回（送る前に「再試行した」と書く＝閉じても 3 回目は無い）。2 回目も IN_FLIGHT なら、そのキャラはそこで見送る（IN_FLIGHT2・手動は残る）。
  *      5xx・通信断・時間切れ（OUTCOME_UNKNOWN / GENERATION_FAILED）・402 / 403 / 429 は今までどおり止まる（再試行しない）。kill: v292DfixSTARTICONRetryOff='1' = 93-i と同じ（再試行しない）。
+ *      ★93-k（Owner 実測）: B の再読み込みは、👥 キャラ一覧を「見ているだけ」（文字の入った欄・確認欄・ピッカー・ほかのダイアログが無い）なら一覧が開いていても進め、
+ *      読み直した後に一覧を 1 回だけ開き直す。一覧の中で編集中などで待つ間は「キャラ一覧を閉じると絵の準備を続けます」を 1 回出す。
+ *      C で絵が付いたら、一覧の「絵を作る／絵を変える」の元（LC1 の「絵あり」の控え）も読み直してもらう（LC1.refreshPtr・読むだけ）。kill: v292DfixSTARTICONListOff='1' = 93-j と同じ。
  * ■重複を作らない
  *   ・物語ごとに 1 回: 作った端末（URL new=1）以外の端末・タブでは、どのキャラにもまだ絵が無いときだけ始める（ほかの端末が始めていれば何もしない）。
  *   ・この端末: localStorage 'v292DfixSTARTICON_v1' に物語ごとの段階（plan / img / done / stop）とキャラごとの結果（character_id のハッシュ → 理由コード）。
@@ -44,8 +47,9 @@
 (function (root) {
   'use strict';
   if (typeof window === 'undefined' || root.__v292DfixSTARTICON) return;
-  var VER = 'starticon-c-20261109-ifretry';
+  var VER = 'starticon-d-20261109-ifretry-listopen';   /* ★93-k: キャラ一覧を開いたままでも 1 回の再読み込みへ進む・一覧の行の読み直し */
   var KILL = 'v292DfixSTARTICONOff', NOAI = 'v292DfixSTARTICONNoAI', LSK = 'v292DfixSTARTICON_v1', HOLDK = 'v292DfixSTARTICON_hold', RETRY_OFF = 'v292DfixSTARTICONRetryOff';   /* ★93-j */
+  var LIST_OFF = 'v292DfixSTARTICONListOff', REOPENK = 'v292DfixSTARTICON_reopen';   /* ★93-k: kill（= 93-j と同じ再読み込みの待ち方）・再読み込みの後に一覧を開き直す印（sessionStorage・このタブだけ） */
   var IF_WAIT_MS = 20000, IF_SPAN_MS = 20000;   /* ★93-j: IN_FLIGHT の後に待つ時間 = 20 秒 + 0〜20 秒（Worker の口座の札 MX_LEASE_MS = 300 秒より十分短い・生成 1 枚より長い） */
   var CAP = { npcs: 3, maxTurns: 2, dayStarts: 5, bTries: 2, newMs: 6 * 3600 * 1000 };
   var POLL_MS = 1500, STABLE_MS = 3000, AUTO_MAX_MS = 240000, WAIT_MS = 20000, CLEAN_MS = 45000;
@@ -54,7 +58,7 @@
   function ssGet(k) { try { return root.sessionStorage.getItem(k); } catch (e) { return null; } }
   function ssSet(k, v) { try { root.sessionStorage.setItem(k, v); } catch (e) {} }
   var LOG = []; function note(o) { try { o.t = Date.now(); o.inFlight = inFlight(); LOG.push(o); if (LOG.length > 120) LOG.shift(); } catch (e) {} }
-  var stats = { plans: 0, proposals: 0, direct: 0, sets: 0, setFail: 0, ef: 0, created: 0, exists: 0, efFail: 0, reloads: 0, skipped: 0, sentWhileInFlight: 0, inflight: 0, ifRetry: 0, ifFilled: 0, ifGiveUp: 0 };   /* ★93-j: +inflight / ifRetry / ifFilled / ifGiveUp */
+  var stats = { plans: 0, proposals: 0, direct: 0, sets: 0, setFail: 0, ef: 0, created: 0, exists: 0, efFail: 0, reloads: 0, skipped: 0, sentWhileInFlight: 0, inflight: 0, ifRetry: 0, ifFilled: 0, ifGiveUp: 0, listReload: 0, listWaitToast: 0, listReopen: 0, listRefresh: 0 };   /* ★93-j: +inflight / ifRetry / ifFilled / ifGiveUp ★93-k: +list* */
 
   /* ---------- environment (same readers as B37 / LC1 / MIDICON) ---------- */
   function state() { try { return (typeof root.__chronicleGetState === 'function') ? root.__chronicleGetState('starticon') : null; } catch (e) { return null; } }
@@ -126,7 +130,12 @@
       var by = {}; j.portraits.forEach(function (p) { if (p && typeof p.character_id === 'string') by[p.character_id] = 1; }); cb(by);
     });
   }
-  function refreshPortraits() { try { var P = root.__chronicleAv2Portrait; if (P && typeof P.refresh === 'function') P.refresh(); } catch (e) {} }
+  function listOn() { return lsGet(LIST_OFF) !== '1'; }   /* ★93-k */
+  function refreshPortraits() { try { var P = root.__chronicleAv2Portrait; if (P && typeof P.refresh === 'function') P.refresh(); } catch (e) {}
+    /* ★93-k（Owner 実測 2026-11-09）: キャラ一覧を開いたまま段 B が絵を付けると、一覧の「🎨 絵を作る／絵を変える」の元になる LC1 の
+       「絵あり」の控え（45 秒）が古いままで、絵が見えているのに「絵を作る」のままだった（押しても ensureFirst が EXISTS で止まる＝費用 0）。
+       絵の表示の読み直しと一緒に、LC1 の控えも読み直してもらう（読むだけ・旧い LC1 には口が無いので何もしない） */
+    if (listOn()) { try { var L = root.__v292DfixLC1; if (L && typeof L.refreshPtr === 'function') { stats.listRefresh++; L.refreshPtr('starticon'); } } catch (e2) {} } }
 
   /* ---------- small device record (no names / ids: a character is kept only as a hash) ---------- */
   function today() { return new Date().toISOString().slice(0, 10); }
@@ -155,8 +164,24 @@
   var lastAct = 0;
   try { ['pointerdown', 'touchstart', 'mousedown', 'keydown', 'input', 'wheel'].forEach(function (ev) { document.addEventListener(ev, function () { lastAct = Date.now(); }, true); }); } catch (eA) {}
   var BUSY_SEL = '.v292Dfix145-modal, [role="dialog"], [aria-modal="true"], dialog[open], [data-av2-inask], #v292DfixFLW2-overlay, #v292Dav2-picker';
-  function screenBusy() {
-    try { var q = document.querySelectorAll(BUSY_SEL); for (var i = 0; i < q.length; i++) if (q[i].getClientRects && q[i].getClientRects().length) return 'MODAL';
+  /* ★93-k: キャラ一覧（.v292Dfix145-modal）を「見ているだけ」か。一覧の中に、文字の入った入力欄・選択欄・チェックされた欄・
+     確認欄（[data-av2-inask]）・ピッカー・ほかのダイアログが見えていれば「見ているだけ」ではない（入力中の文字・選んだものを失わない） */
+  function vis(e) { try { return !!(e && e.getClientRects && e.getClientRects().length); } catch (e2) { return false; } }
+  function listOnlyIdle(q) {
+    var mo = document.querySelector('.v292Dfix145-modal'); if (!mo || !vis(mo)) return false;
+    for (var i = 0; i < q.length; i++) { var e = q[i]; if (!vis(e)) continue; if (e === mo) continue; if (!mo.contains(e)) return false; if (e.matches && e.matches('[data-av2-inask], dialog[open], [role="dialog"], [aria-modal="true"]')) return false; }
+    var f = mo.querySelectorAll('input, textarea, select, [contenteditable="true"], [contenteditable=""]');
+    for (var j = 0; j < f.length; j++) { var x = f[j]; if (!vis(x)) continue; var tp = String(x.type || '').toLowerCase();
+      if (tp === 'button' || tp === 'submit' || tp === 'reset' || tp === 'hidden' || tp === 'image') continue;
+      if (tp === 'checkbox' || tp === 'radio') { if (x.checked) return false; continue; }
+      if (x.tagName === 'SELECT') return false;   /* 選択欄は外見を編集しているときだけ出る（その場合は待つ） */
+      if (String(x.isContentEditable ? x.textContent : x.value || '').trim()) return false; }
+    return true;
+  }
+  function screenBusy(allowList) {
+    try { var q = document.querySelectorAll(BUSY_SEL), modal = false; for (var i = 0; i < q.length; i++) if (q[i].getClientRects && q[i].getClientRects().length) { modal = true; break; }
+      if (modal && !(allowList && listOnlyIdle(q))) return 'MODAL';
+      /* 一覧を開くと検索欄に印が来るが、空なら下の EDITING には当たらない（文字が入っていれば待つ） */
       var ae = document.activeElement; if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable) && String(ae.value || ae.textContent || '').length > 0) return 'EDITING';
       var inp = document.getElementById('inp'); if (inp && String(inp.value || '').trim()) return 'DRAFT';
       if (Date.now() - lastAct < 4000) return 'RECENT_ACTION'; } catch (e) { return 'ERR'; }
@@ -313,12 +338,48 @@
       d.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483647;max-width:92vw;background:#222;color:#eee;border:1px solid #806040;border-radius:8px;padding:8px 12px;font-size:12px;line-height:1.6';
       d.textContent = t; (document.body || document.documentElement).appendChild(d); } catch (e) {}
   }
+  /* ★93-k（Owner 実測 2026-11-09）: 段 A のあと「1 回だけの再読み込み」を待つ間に Owner が 👥 キャラ一覧を開いていたため、MODAL で止まり絵が付かなかった。
+     キャラ一覧を「見ているだけ」（文字の入った欄・確認欄・ピッカー・ほかのダイアログが無い）なら、再読み込みへ進む
+     （再読み込みは fix733 TYPE A のため省けない＝外見を書いたこのページでは物語の保存が止まっている。手動の「この外見で作る」も一覧を開いたまま読み直す＝portrait.js afterSidePort）。
+     読み直した後は同じ一覧を 1 回だけ開き直す（同じ物語・2 分以内）。入力中の文字・下書き・生成中・操作の直後（4 秒）は今までどおり待つ。
+     待っている間（一覧の中で編集中・ほかの画面）は「キャラ一覧を閉じると絵の準備を続けます」を 1 回出す。kill: v292DfixSTARTICONListOff='1'（= 93-j の待ち方） */
+  var waitToast = null, blockedSince = 0;
+  function toastWait(t) {
+    if (waitToast) return; stats.listWaitToast++; note({ kind: 'LIST_WAIT_TOAST' });
+    try { var d = document.createElement('div'); d.setAttribute('data-av2-ui', 'starticon-wait');
+      d.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483647;max-width:92vw;background:#222;color:#eee;border:1px solid #806040;border-radius:8px;padding:8px 12px;font-size:12px;line-height:1.6;pointer-events:none';
+      d.textContent = t; (document.body || document.documentElement).appendChild(d); waitToast = d;
+      setTimeout(function () { try { if (d.parentNode) d.parentNode.removeChild(d); } catch (e) {} }, 9000); } catch (e) {}
+  }
   function watchReload() {
     if (!X.needReload || X.reloaded || X.busy) return;
-    if (inFlight() || screenBusy() || lc1Busy()) return;
-    X.reloaded = true; stats.reloads++; note({ kind: 'RELOAD' });
+    var lo = listOn(), why = inFlight() ? 'INFLIGHT' : (screenBusy(lo) || (lc1Busy() ? 'LC1' : null));
+    if (why) {
+      if (lo && why === 'MODAL') { if (!blockedSince) blockedSince = Date.now(); if (Date.now() - blockedSince > 3000) toastWait(document.querySelector('.v292Dfix145-modal') ? 'キャラ一覧を閉じると絵の準備を続けます' : '開いている画面を閉じると絵の準備を続けます'); }
+      else if (why !== 'RECENT_ACTION') blockedSince = 0;
+      return;
+    }
+    var listOpen = lo && !!document.querySelector('.v292Dfix145-modal');
+    X.reloaded = true; stats.reloads++; if (listOpen) stats.listReload++; note({ kind: 'RELOAD', list: listOpen });
+    if (listOpen) { try { root.sessionStorage.setItem(REOPENK, JSON.stringify({ v: 1, s: sid(), t: Date.now() })); } catch (e) {} }
+    try { if (waitToast && waitToast.parentNode) waitToast.parentNode.removeChild(waitToast); } catch (e) {}
     toast('キャラの絵を用意するため、1 回だけ再読み込みします');
     setTimeout(function () { try { location.reload(); } catch (e) {} }, 1200);
+  }
+  /* ★93-k: 再読み込みの前にキャラ一覧が開いていたら、読み直した後に同じ物語なら 1 回だけ開き直す（2 分以内・印は読んだら消す・通信 0） */
+  /* 印は開き直したときに消す（読み込み直後に消すと、続けて起きる既存の読み直し＝canonical の再読込で失われる。実測 2026-11-09） */
+  function dropReopen() { reopen = null; try { root.sessionStorage.removeItem(REOPENK); } catch (e) {} }
+  var reopen = (function () { try { var v = root.sessionStorage.getItem(REOPENK); if (!v) return null; var o = JSON.parse(v);
+    if (o && o.v === 1 && o.s && Date.now() - (+o.t || 0) < 120000) return o; root.sessionStorage.removeItem(REOPENK); return null; } catch (e) { return null; } })();
+  function watchReopen() {
+    if (!reopen) return;
+    if (!listOn() || Date.now() - reopen.t > 120000) return dropReopen();
+    var id = sid(); if (!id) return; if (id !== reopen.s) return dropReopen();
+    if (document.querySelector('.v292Dfix145-modal')) return dropReopen();   /* もう開いている（ほかの部品・本人） */
+    if (chars().length === 0 || !doc2() || !ready(id)) return;   /* 段 B と同じ「落ち着いた」ページになってから */
+    var cl = root.__charlist; if (!cl || typeof cl.open !== 'function') return;
+    dropReopen(); stats.listReopen++; note({ kind: 'LIST_REOPEN' });
+    try { cl.open(); } catch (e) {}
   }
 
   /* ---------- loop ---------- */
@@ -326,6 +387,7 @@
     try {
       if (killed()) return;
       watchReload();
+      try { watchReopen(); } catch (eR) {}
       var g = gateWhy(); X.why = g || 'on'; if (g) return;
       var id = sid();
       if (X.story !== id) { X.story = id; X.firstTurns = null; X.okSince = 0; X.pageStop = null; X.bDone = false; X.bCounted = false; }
@@ -357,7 +419,8 @@
     status: function () { var id = sid(); var so = id ? soOf(id) : null; var r = rec();
       return { ver: VER, killed: killed(), gate: gateWhy() || 'on', story: id, firstTurns: X.firstTurns, busy: X.busy, pageStop: X.pageStop, needReload: X.needReload, reloaded: X.reloaded,
         rec: so ? JSON.parse(JSON.stringify(so)) : null, day: { day: r.day, starts: r.starts }, last: X.last, stats: JSON.parse(JSON.stringify(stats)), hold: ssGet(HOLDK), log: LOG.slice(-40),
-        retry: { on: retryOn(), leaseWaitMs: Math.max(0, (X.leaseUntil || 0) - Date.now()) } }; },   /* ★93-j */
+        retry: { on: retryOn(), leaseWaitMs: Math.max(0, (X.leaseUntil || 0) - Date.now()) },   /* ★93-j */
+        list: { on: listOn(), reopenPending: !!reopen, screen: screenBusy(listOn()) } }; },   /* ★93-k */
     __t: { hk: hk, bornMs: bornMs, isNewStory: isNewStory }
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
