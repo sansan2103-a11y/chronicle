@@ -818,6 +818,7 @@
       inputLine = '【プレイヤー入力＝場面の方向づけ】プレイヤーが「'+inText+'」と場面を方向づけた。その方向で場面を進める。';
     }
     if (inputLine && b38On('a')) inputLine += B38_A;   /* ★B38-a（既定 OFF） */
+    try { var _ag1 = window.__v292DfixAGENCY1; if (inputLine && (m==='SAY' || m==='DO') && _ag1 && typeof _ag1.suffix === 'function'){ var _ag1s = _ag1.suffix(m, inputLine); if (typeof _ag1s === 'string' && _ag1s && inputLine.indexOf(_ag1s) < 0) inputLine += _ag1s; } } catch(_ag1e){}   /* ★AGENCY1（GPT #127-RS ②・既定は影＝足さない）: SAY/DO の入力説明の行の末尾に「入力されていない主人公の意図・発話内容を確定しない」1 文。STORY・続き・オートは対象外。判断は v292DfixAGENCY1-player-intent.js（無ければ何もしない） */
 
     var dramaLine = pick(d,
       '今回の進行＝弱め：新しい要素は1つだけ、控えめに小さく。一気に飛ばさず半歩〜一歩進める。',
