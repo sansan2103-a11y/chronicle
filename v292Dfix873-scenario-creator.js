@@ -400,8 +400,15 @@
     if (!strict && /^[ぁ-ゖー]{3,}(な|い)$/.test(P) && sn1Len(P) >= 4) return true;
     return false;
   }
-  /* 説明だけの人か。true のときだけ name を空にする（迷えば false = 今までどおり名前） */
+  /* 説明だけの人か。true のときだけ name を空にする（迷えば false = 今までどおり名前）。
+     ★SEEDNPC1c: 93-k（1b）の判定が false のときだけ、下の sn1cIsDesc（複合語）を足す＝1c は「名前→説明」へしか変えない。 */
   function sn1bIsDesc(raw){
+    if (sn1bOff()) return false;
+    if (sn1bIsDescK(raw)) return true;
+    return sn1cIsDesc(raw);
+  }
+  /* 93-k の sn1bIsDesc そのもの（1 バイトも変えずに名前だけ K を付けた） */
+  function sn1bIsDescK(raw){
     if (sn1bOff()) return false;
     var t = trim(str(raw)).replace(/[。．.！!]+$/, '');
     var n = sn1Len(t);
@@ -420,6 +427,86 @@
         return !SN1B_NOUNS[i].title && sn1Len(w) >= 2;
       }
       return sn1bEvid(P, SN1B_NOUNS[i].title);
+    }
+    return false;
+  }
+  /* ---------- ★SEEDNPC1c（2026-11-10・Local 候補）: 「の・な」なしで直接つながる複合語 ----------
+     不具合（本番 93-k・Owner の iPhone）: 「ヤンキー女子高生」が名前のまま登録された。真因 = 1b は「人を表す語の前に
+       修飾（の・を・が・な・い…）がある」ことを求めるので、修飾語が直接つながる複合語（ヤンキー＋女子高生・不良＋少年・
+       老＋漁師）は手がかりが無く「名前」側に落ちていた。「男子」「女子」も人を表す語の表に無かった（オタク男子）。
+     直し方（ここだけ・1b が false のときだけ足す＝名前→説明の向きにしか変えない）:
+       ① 人を表す語の前が **全部** 下の修飾語の表（SN1C_MOD）の語の並び、または「〜系」（クール系・癒し系）のときだけ説明。
+          長さ・形（カタカナなら何でも）では判断しない（「ミナ少女」「アリス先輩」のような名前＋語を守るため）。
+       ② 1 文字の語（男・女・人・娘・猫・犬 …）の前は 2 文字以上（「元男」「美女」「老猫」は名前のまま。「ヤンキー娘」「野良猫」は説明）。
+       ③ 敬称（先輩・後輩・先生・師匠）の前は、2 文字以上の修飾語だけ（「ヤンキー先輩」は説明、「元先輩」「美先生」は名前のまま。
+          元＝はじめ・げん、美＝み のように 1 文字の修飾語は名前にもなるため）。
+          姫・姫様・王・王子・王様・殿下・陛下・兄さん・姉さん などは複合語では **説明にしない**（「白雪姫」「ヤンキー姫」は名前のまま）。
+          刑事・部長・社長・船長・博士などの肩書きの前は表のどの語でもよい（新人刑事・元刑事・老船長）。
+       ④ 表に足した人を表す語（男子 女子 ヤンキー ギャル オタク 不良 吸血鬼）は、1b と同じく前に修飾があるか、語だけのとき説明（転校生の男子・金髪のヤンキー）。
+          どれも 93-k の語の後ろ側（語尾）と重ならないので、93-k で説明だった入力の判定は変わらない。
+     kill: localStorage v292DfixSEEDNPC1cOff='1' → 93-k と同じ。v292DfixSEEDNPC1bOff・v292DfixSEEDNPC1Off は今までどおり（1c も止まる）。 */
+  var SN1C = { version: 'seednpc1-c-20261110' };
+  function sn1cOff(){ return lsg('v292DfixSEEDNPC1cOff') === '1'; }
+  var SN1C_MOD = (function(){
+    var a = ('ヤンキー ギャル オタク 不良 金髪 銀髪 黒髪 茶髪 白髪 赤髪 青髪 眼鏡 メガネ 天才 秀才 熱血 ツンデレ ヤンデレ クーデレ ダウナー '+
+      '地味 病弱 不思議 小悪魔 文学 ゴスロリ 美人 メイド 魔法 新人 新米 見習い 若手 ベテラン 転校生 野良 迷子 男装 女装 '+
+      '元 老 美 女 男').split(' ');
+    var o = {}; for (var i = 0; i < a.length; i++) o[a[i]] = 1; return o;
+  })();
+  var SN1C_MODMAX = 4;
+  var SN1C_ROLE_ADD = 'ヤンキー ギャル オタク 不良 男子 女子 吸血鬼'.split(' ');
+  var SN1C_NEVER = ('姫 姫様 王 王子 王様 殿下 陛下 兄さん 姉さん 兄ちゃん 姉ちゃん 兄様 姉様 お姉様 お兄様').split(' ');
+  var SN1C_HON = ('先輩 後輩 先生 師匠').split(' ');
+  var SN1C_NOUNS = (function(){
+    var a = [], i, nv = {}, hn = {};
+    for (i = 0; i < SN1C_NEVER.length; i++) nv[SN1C_NEVER[i]] = 1;
+    for (i = 0; i < SN1C_HON.length; i++) hn[SN1C_HON[i]] = 1;
+    for (i = 0; i < SN1B_NOUNS.length; i++){
+      var w = SN1B_NOUNS[i].w;
+      a.push({ w: w, title: SN1B_NOUNS[i].title, add: false, cls: nv[w] ? 'never' : (hn[w] ? 'hon' : (SN1B_NOUNS[i].title ? 'occ' : 'role')) });
+    }
+    for (i = 0; i < SN1C_ROLE_ADD.length; i++) a.push({ w: SN1C_ROLE_ADD[i], title: false, add: true, cls: 'role' });
+    a.sort(function(x, y){ return y.w.length - x.w.length; });
+    return a;
+  })();
+  /* P が修飾語の表の語（と「〜系」）だけの並びか。minTok = 1 語の最小の長さ（敬称の前は 2） */
+  function sn1cChain(P, minTok){
+    var s = P.replace(/[ 　]+/g, ''), n = s.length, ok = [true], i, j;
+    if (!n) return false;
+    for (i = 1; i <= n; i++) ok[i] = false;
+    for (i = 0; i < n; i++){
+      if (!ok[i]) continue;
+      for (j = i + 1; j <= n && j - i <= SN1C_MODMAX; j++){
+        var w = s.slice(i, j);
+        if (SN1C_MOD[w] && sn1Len(w) >= minTok) ok[j] = true;
+      }
+      /* 「〜系」: 系の前が 2〜6 文字（かな・カタカナ・漢字）で、系をふくまない */
+      for (j = i + 3; j <= n && j - i <= 7; j++){
+        if (s.charAt(j - 1) !== '系') continue;
+        var x = s.slice(i, j - 1);
+        if (x.indexOf('系') < 0 && new RegExp('^[ぁ-ゖァ-ヺー' + SN1B_KAN + ']+$').test(x)) ok[j] = true;
+      }
+    }
+    return ok[n] === true;
+  }
+  function sn1cIsDesc(raw){
+    if (sn1bOff() || sn1cOff()) return false;
+    var t = trim(str(raw)).replace(/[。．.！!]+$/, '');
+    var n = sn1Len(t);
+    if (n < 2 || n > 60) return false;
+    if (SN1B_BAD.test(t)) return false;
+    var segs = t.split('、');
+    for (var si = 0; si < segs.length - 1; si++){ var sg = trim(segs[si]); if (!sg || !(/[でてくしりいなたがもやら歳代]$/.test(sg))) return false; }
+    var tc = t.replace(/[ 　]+$/, '');
+    for (var i = 0; i < SN1C_NOUNS.length; i++){
+      var N = SN1C_NOUNS[i], w = N.w;
+      if (tc.length < w.length || tc.slice(tc.length - w.length) !== w) continue;
+      var P = trim(tc.slice(0, tc.length - w.length).replace(/[、 　]+$/, ''));
+      if (!P) return N.add && sn1Len(w) >= 2;                  /* 足した語だけ（「男子」「ヤンキー」）。93-k の語だけは 1b が判定済み */
+      if (N.add && sn1bEvid(P, false)) return true;             /* 足した語の前の修飾（転校生の男子・金髪のヤンキー） */
+      if (N.cls === 'never') return false;
+      if (sn1Len(w) === 1 && sn1Len(P.replace(/[ 　]+/g, '')) < 2) return false;
+      return sn1cChain(P, N.cls === 'hon' ? 2 : 1);
     }
     return false;
   }
@@ -485,7 +572,8 @@
     on: function(){ return !sn1Off(); },
     parse: function(t){ return sn1Parse(t); },
     status: function(){ return { on: !sn1Off(), version: SN1.version, last: SN1.last ? { mode: SN1.last.mode, count: SN1.last.count } : null,
-                                 b: { on: !sn1Off() && !sn1bOff(), version: SN1B.version } }; },
+                                 b: { on: !sn1Off() && !sn1bOff(), version: SN1B.version },
+                                 c: { on: !sn1Off() && !sn1bOff() && !sn1cOff(), version: SN1C.version } }; },
     isDesc: function(t){ return sn1bIsDesc(t); }
   };
 
