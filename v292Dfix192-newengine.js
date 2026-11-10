@@ -818,7 +818,7 @@
       inputLine = '【プレイヤー入力＝場面の方向づけ】プレイヤーが「'+inText+'」と場面を方向づけた。その方向で場面を進める。';
     }
     if (inputLine && b38On('a')) inputLine += B38_A;   /* ★B38-a（既定 OFF） */
-    try { var _ag1 = window.__v292DfixAGENCY1; if (inputLine && (m==='SAY' || m==='DO') && _ag1 && typeof _ag1.suffix === 'function'){ var _ag1s = _ag1.suffix(m, inputLine); if (typeof _ag1s === 'string' && _ag1s && inputLine.indexOf(_ag1s) < 0) inputLine += _ag1s; } } catch(_ag1e){}   /* ★AGENCY1（GPT #127-RS ②・既定は影＝足さない）: SAY/DO の入力説明の行の末尾に「入力されていない主人公の意図・発話内容を確定しない」1 文。STORY・続き・オートは対象外。判断は v292DfixAGENCY1-player-intent.js（無ければ何もしない） */
+    try { var _ag1 = window.__v292DfixAGENCY1; if (inputLine && (m==='SAY' || m==='DO' || m==='STORY') && _ag1 && typeof _ag1.suffix === 'function'){ var _ag1s = _ag1.suffix(m, inputLine); if (typeof _ag1s === 'string' && _ag1s && inputLine.indexOf(_ag1s) < 0) inputLine += _ag1s; } } catch(_ag1e){}   /* ★AGENCY1（GPT #127-RS ②・既定は影＝足さない）: SAY/DO の入力説明の行の末尾に「入力されていない主人公の意図・発話内容を確定しない」1 文。STORY の方向づけの行には AGENCY1b の別の 1 文（続き・オートは下の blocks 側）。判断は v292DfixAGENCY1-player-intent.js（無ければ何もしない） */
 
     var dramaLine = pick(d,
       '今回の進行＝弱め：新しい要素は1つだけ、控えめに小さく。一気に飛ばさず半歩〜一歩進める。',
@@ -865,6 +865,7 @@
     if (b38On('d')) blocks.push(B38_D);   /* ★B38-d（既定 OFF）: 上の文の補足。上の文は消さない */
     if (inputLine){ blocks.push(''); blocks.push(inputLine); }
     else if (isCont && b38On('a')){ blocks.push(''); blocks.push(B38_A); }   /* ★B38-a（既定 OFF）: 「続きを書く」とオート⏩（入力説明の行が無い経路） */
+    try { var _ag1c = window.__v292DfixAGENCY1; if (isCont && !inputLine && _ag1c && typeof _ag1c.contSentence === 'function'){ var _ag1cs = _ag1c.contSentence(m); if (typeof _ag1cs === 'string' && _ag1cs){ blocks.push(''); blocks.push(_ag1cs); } } } catch(_ag1ce){}   /* ★AGENCY1b（Owner 案 A）: 「続きを書く」・オート⏩は入力説明の行が無いので 1 ブロックとして置く（見出しなし＝fix459 では head に残る）。既定は影＝足さない */
     blocks = blocks.concat([
       '',
       '【良い1ターンの形】',
