@@ -97,7 +97,7 @@
   /* ---- (7) 退避（S.save を止めたとき・メモリにしかないターン + 入力欄） ---- */
   /* ★既定 OFF（統括裁定）: 退避キーが Vault 非表示・削除・アカウント切替の掃除の一覧に入るまでは書かない。
      ON は端末キー v292Dfix945RescueOn='1' のときだけ。v292Dfix945RescueOff='1' は常に優先して OFF。 */
-  var RESCUE_DEFAULT_ON = false;   /* ★v2.5: 既定を ON にするかは GPT 裁定待ち。ON にしても RESCUE1（掃除と画面）が無ければ書かない */
+  var RESCUE_DEFAULT_ON = true;   /* ★v2.6 (GPT #127-SA ①・Owner PC 実機 PASS 台帳 2319/2323): 既定 ON。RESCUE1（掃除と画面）が無ければ書かない。止める: v292Dfix945RescueOff=1 / v292DfixRESCUE1Off=1 */
   function rescueStore(){ try { var R = window.__v292DfixRESCUE1; return (R && R.armed === true && typeof R.store === 'function') ? R : null; } catch(e){ return null; } }
   function rescueOff(){ return lsg('v292Dfix945RescueOff') === '1' || !(RESCUE_DEFAULT_ON || lsg('v292Dfix945RescueOn') === '1') || !rescueStore(); }
   function tfp(t){ var n = (t && t.narrative != null) ? t.narrative : ''; if (Array.isArray(n)) n = n.join('\n'); return fnv(String((t && t.inputType) || '') + '\u0001' + String((t && t.playerText) == null ? '' : t.playerText) + '\u0001' + String(n)); }
