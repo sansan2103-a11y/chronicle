@@ -3555,6 +3555,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
       return false;
     } catch(e){ return false; }
   }
+  /* ■STALE1: 検証口（読取専用）。skipped = 既定 model の消去だけのための本文書込を見送った回数 */
+  try { if (!window.__v292DfixSTALE1) window.__v292DfixSTALE1 = { v: 1, skipped: 0, last: null, off: function(){ try { return localStorage.getItem('v292DfixSTALE1Off') === '1'; } catch(e){ return false; } }, state: function(){ return { v: 1, skipped: this.skipped, last: this.last, off: this.off() }; } }; } catch(eS1i){}
   function fixProviderCfg(){
     try {
       /* ★fix694: fix692 の個別 resolver を共有 authority へ統合 */
@@ -3584,8 +3586,19 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
         var m = String(cfg.model).toLowerCase();
         if (m.indexOf('claude') !== -1 || m.indexOf('haiku') !== -1 ||
             m.indexOf('sonnet') !== -1 || m.indexOf('opus') !== -1){
-          delete cfg.model;
-          changed = true;
+          /* ■STALE1（GPT #127-RY・kill: v292DfixSTALE1Off='1' で従来どおり本文から消して書き戻す）
+             openrouter の送信は cfg.orModel だけを使い（Api の openrouter 経路）、cfg.model は使わない。
+             設定の保存（UI.saveSettings）は毎回 Anthropic 用の欄の既定 model を本文へ入れるので、
+             ここで消して書き戻すと、物語を開くたびに（別のタブでも）本文が書き換わり、
+             共有の marker の世代が進んで、先に開いていたタブが「古い」（fix945 STALE）になっていた（Local 実測）。
+             この項目だけのためには本文を書かない（メモリ上の正規化は下の fix899 がそのまま行う）。
+             他の項目（key / provider の取り違え）の修正は従来どおり書く。 */
+          if (localStorage.getItem('v292DfixSTALE1Off') === '1'){
+            delete cfg.model;
+            changed = true;
+          } else {
+            try { var __s1 = window.__v292DfixSTALE1; __s1.skipped++; __s1.last = { t: Date.now(), key: __k, model: String(cfg.model) }; } catch(eS1){}
+          }
         }
       }
       /* provider=openrouter but cfg.key has sk-or- (wrong field) */
