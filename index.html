@@ -2946,6 +2946,23 @@ const G = {
           var _ns276 = /(出かかっ|言いかけ|飲み込ん|呑み込ん|喉に詰ま|言葉を失|声を失|声にならな|思っ|考え|心の中|脳裏|書かれ|刻まれ|記され|彫られ|描かれ|呼ばれ|称され)/;
           var _np276 = /^[\s　]*(を|に|へ|の|まで|から|より|とい|と呼|と名|と書|と刻|と記|と思|と考)/;
           var _bad276 = /^(それ|これ|あれ|どれ|誰か|何か|彼|彼女|自分|皆|みんな|全員|二人|三人|私|俺|僕|お前|あなた|主人公)$/;
+          /* ★NS1/NS2（NONSPEECH1・張り紙の「入るな」が話者「めくれた縁」のカードになる件）。kill: localStorage v292DfixNS1Off='1' / v292DfixNS2Off='1'（どちらも旧挙動に完全に戻る）。fix276 の kill は v292NoTagJudgeOff のまま
+             NS1=引用の直後が「と〜書かれ／殴り書きされ／刻まれ／貼られ／記され」など書かれた文字の形で、同じ節に発話動詞が無いときだけ台詞にしない（引用符だけでは外さない）
+             NS2=話者推測: ①引用の直後の節に発話動詞があれば前の文の主語で推測しない ②「X の Y」が 1 字になるときは全体を見る ③手がかりは直前の 1 文だけ・1 字の手がかりは発話の形に限る ④人の呼び名でなければ話者にせず保留（=既存の保留: 候補なし→attribQuotes218→無ければカードを作らない） */
+          var _nsOff276 = function(k){ try { return localStorage.getItem(k) === '1'; } catch(_e){ return false; } };
+          var _NSP_SPSRC = '言っ|言う|言い|言わ|言え|叫|囁|呟|怒鳴|喚|答え|尋ね|訊|問いかけ|問う|問い返|問い質|聞き返|告げ|笑っ|笑い|嗤|呻|唸|吠え|読み上げ|声に出|声を(?:上げ|かけ|掛け|漏ら|張|潜め|落と|絞|荒げ|出し|発し|詰ま|震わせ|殺し|低め|強め)|口にし|口走|口を開|口を挟|口ごも|言葉を(?:押し出|絞り出|継|続け|返|紡)|返事|応じ|応え|漏らし|呼びかけ|呼び止め|歌っ|歌い|喉を鳴ら'; var _NSP_SPEECH = new RegExp('(' + _NSP_SPSRC + ')');
+          var _NSP_WRIT = /(殴り書|走り書|なぐり書|落書|書き殴|書きなぐ|書きつけ|書き付け|書かれ|書き込ま|書いてあ|刻ま|刻み込ま|記さ|貼ら|貼ってあ|貼り出さ|張ら|張り出さ|彫ら|彫り込ま|印字さ|綴ら|描か)/;
+          var _NSP_PERSON = /^(?:少女|少年|女|男|老人|老婆|老爺|子供|子ども|女の子|男の子|女性|男性|青年|婦人|紳士|誰か|何者か|声の主|影|人影|白い影|黒い影|気配|化け物|怪物|妖怪|怪異|幽霊|亡霊|悪霊|人形|店主|店員|駅員|警官|医者|先生|教師|用務員|管理人|住職|宮司|村長|老女|母|父|姉|兄|妹|弟|母親|父親)$/;
+          var _NSP_PSUF = /(?:人|者|男|女|子|客|師|員|官|主|兵|長|生|士|さん|くん|ちゃん|君|様|氏|先輩|先生|少女|少年|老人|老婆)$/;
+          var _NSP_OBJ = /(?:縁|角|端|紙|板|扉|壁|床|窓|跡|音|風|光|闇|空気|部屋|廊下|教室|階段|校舎|天井|机|椅子|画面|文字|看板|口|所|場|中|前|奥|側|面|下|上|先|影響|時|間|夜|朝|雨|霧|空|景色|地面|道|庭|店|家|館|室|門|柱|棚|箱|鏡|灯|電話|機|声|息|手|目|顔|足|腕|胸|喉|頭|髪|肩|背|もの|物|こと|事)$/;
+          var _ns2off276 = function(){ return _nsOff276('v292DfixNS2Off') || (function(){ try { return localStorage.getItem('v292DfixNS2On') !== '1'; } catch(_e){ return true; } })(); }; /* ★NS2 は既定 OFF: 端末キー v292DfixNS2On='1' のときだけ動く。v292DfixNS2Off='1' が常に優先 */
+          var _nsClause276 = function(t){ var c = String(t || '').replace(/^[\s　」』]+/, ''); var k = c.search(/[「。\n]/); if (k >= 0) c = c.slice(0, k); return c.slice(0, 48); };
+          var _ns2ok276 = function(nm, post){ try { if (_ns2off276()) return true; nm = String(nm || ''); if (!nm) return false;
+            if (_cands218.indexOf(nm) >= 0) return true;
+            var tl = nm.replace(/^.*の/, ''); if (_NSP_PERSON.test(nm) || _NSP_PERSON.test(tl) || _NSP_PSUF.test(nm)) return true;
+            if (_NSP_OBJ.test(nm)) return false;
+            if (post) return true;   /* 引用の直後の「と、Xは/が」は文法上の主語: 物・場所の名詞（上の一覧）でなければ従来どおり採用 */
+            return /^[ァ-ヺー・]{2,12}$/.test(nm) || /^[一-鿿々]{2,6}$/.test(nm); } catch(_e){ return true; } };
           while ((_m276 = _re276.exec(_body))) {
             var _q276 = String(_m276[1] || '').trim().slice(0, 80);
             var _qn276 = _q276.replace(/[\s　。、！？!?…・ッぁぃぅぇぉ「」『』]/g, '');
@@ -2955,13 +2972,15 @@ const G = {
             if (_L217.namingPre.test(_pr276)) continue;
             if (_np276.test(_po276)) continue;
             if (_ns276.test(_po276.slice(0, 20)) || _ns276.test(_pr276.slice(-20))) continue;
+            if (!_nsOff276('v292DfixNS1Off')) { var _c1_276 = _nsClause276(_body.slice(_m276.index + _m276[0].length, _m276.index + _m276[0].length + 70)); if (/^[\s　]*と/.test(_c1_276) && _NSP_WRIT.test(_c1_276) && !_NSP_SPEECH.test(_c1_276)) continue; } /* ★NS1: 「…」と〜殴り書きされた／貼られた＝書かれた文字（発話動詞なし）は台詞にしない */
             var _sw276 = null;
             var _pm276 = _po276.match(/^[\s　]*と[、，\s　]*([^\s　。、！？!?…・「」『』]{1,10})[はがも]/);
-            if (_pm276) { var _pn276 = _pm276[1]; var _pd276 = _pn276.lastIndexOf('の'); if (_pd276 >= 0) _pn276 = _pn276.slice(_pd276 + 1); if (_pn276 && _pn276.length >= 2 && !_bad276.test(_pn276)) _sw276 = _pn276; }
+            if (_pm276) { var _pn276 = _pm276[1], _pmX276 = _pn276; if (!_ns2off276() && _pn276.length >= 3 && /[はがも]$/.test(_pn276) && _cands218.indexOf(_pn276) < 0) _pn276 = _pn276.slice(0, -1), _pmX276 = _pn276; /* ★NS2: 「紙の端がは…」の正規表現が助詞を 1 字巻き込む（「端が」）を外す */ var _pd276 = _pn276.lastIndexOf('の'); if (_pd276 >= 0) _pn276 = _pn276.slice(_pd276 + 1); if (_pn276.length < 2 && _pmX276.length >= 2 && !_ns2off276() && _ns2ok276(_pmX276, true) && _ns2ok276(_pmX276, false)) _pn276 = _pmX276; /* ★NS2②: 「用務員の男」が「男」1字で捨てられていた→人を表す語のときだけ全体 */ if (_pn276 && _pn276.length >= 2 && !_bad276.test(_pn276) && _ns2ok276(_pn276, true)) _sw276 = _pn276; }
+            var _postSp276 = !_ns2off276() && !!_pm276 && /^[\s　]*と/.test(_nsClause276(_po276)) && _NSP_SPEECH.test(_nsClause276(_po276)); /* ★NS2①: 引用の直後の節に「と、Xが…叫んだ」の形で主語と発話動詞がある＝話者はその節の中。前の文の主語で推測しない（主語が書かれていない「と叫んだ」は従来どおり前の文の主語） */
             var _ct276 = Math.max(_pr276.lastIndexOf('。'), _pr276.lastIndexOf('\n'));
             var _sg276 = (_ct276 >= 0 ? _pr276.slice(_ct276 + 1) : _pr276).slice(-60);
             if (!_sw276) { var _bi276 = -1; _cands218.forEach(function(n){ var p = _sg276.lastIndexOf(n); if (p >= 0 && /^[\s　]*[はがも]/.test(_sg276.slice(p + n.length)) && p > _bi276) { _bi276 = p; _sw276 = n; } }); }
-            if (!_sw276) { var _gl276 = null, _gw276 = _pr276.slice(-120), _gre276 = /([^\s　。、！？!?…・「」『』のでにをへとはが]{1,10})[はが](?!ら)(?=[^。「]{0,25}(言|呟|囁|叫|笑|嗤|呻|唸|答|問|尋|返|告|漏|歌|続|口|声|喉))/g, _g276; while ((_g276 = _gre276.exec(_gw276))) _gl276 = _g276[1]; if (_gl276) { var _gd276 = _gl276.lastIndexOf('の'); if (_gd276 >= 0) _gl276 = _gl276.slice(_gd276 + 1); if (_gl276 && _gl276.length >= 2 && !_bad276.test(_gl276)) _sw276 = _gl276; } }
+            if (!_sw276 && !_postSp276) { var _gl276 = null, _gw276 = _pr276.slice(-120), _gre276 = /([^\s　。、！？!?…・「」『』のでにをへとはが]{1,10})[はが](?!ら)(?=[^。「]{0,25}(言|呟|囁|叫|笑|嗤|呻|唸|答|問|尋|返|告|漏|歌|続|口|声|喉))/g, _g276; if (!_ns2off276()) { var _b2 = _gw276.replace(/[\s　]+$/, ''); var _l1 = Math.max(_b2.lastIndexOf('。', _b2.length - 2), _b2.lastIndexOf('\n', _b2.length - 2)); _gw276 = _b2.slice(_l1 + 1); /* ★NS2③: 直前の 1 文だけ */ _gre276 = new RegExp('([^\\s　。、！？!?…・「」『』のでにをへとはが]{1,10})[はが](?!ら)(?=[^。「]{0,25}(' + _NSP_SPSRC + '))', 'g'); /* ★NS2③: 手がかりは発話の形に限る（揺れ続け・入口・静まり返った を拾わない） */ } while ((_g276 = _gre276.exec(_gw276))) _gl276 = _g276[1]; if (_gl276) { var _gd276 = _gl276.lastIndexOf('の'); if (_gd276 >= 0) _gl276 = _gl276.slice(_gd276 + 1); if (_gl276 && _gl276.length >= 2 && !_bad276.test(_gl276) && _ns2ok276(_gl276, false)) _sw276 = _gl276; /* ★NS2④: 人の呼び名でなければ話者にしない（保留） */ } }
             if (!_sw276) { var _w2276 = _pr276.slice(-200), _ls276 = []; _cands218.forEach(function(n){ if (_w2276.indexOf(n) >= 0 && _ls276.indexOf(n) < 0) _ls276.push(n); }); if (_ls276.length === 1) _sw276 = _ls276[0]; }
             var _k276 = (_sw276 || '?') + '' + _q276; if (_seenSay[_k276]) continue; _seenSay[_k276] = 1;
             if (_sw276) { _cards276.push({ who: _sw276, say: _q276, _b: 1 }); _conf276++; }
@@ -4429,7 +4448,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=20260912-q119s4"></script>
   <script src="v292DfixSFL1-speaker-correct.js?cb=20261031-bundle78-admf-c"></script><!-- v292DfixSFL1(SFL-01): ✎ 編集パネル内の話者 <select>＋訂正台帳(turn._sflCorrections)。既定OFF・opt-in v292DfixSFL1On=1 / kill v292DfixSFL1Off=1（OFF/kill は新しい訂正だけを止め、保存済みの訂正の保護は常に効く・r3）。fix66 より前に置く(起動時 migrate の保護判定が参照する) -->
   <script src="v292Dfix66-renderhook-repair.js?cb=20261110-beat1"></script>
-  <script src="v292DfixEDIT01-edit-reconcile.js?cb=20261031-bundle71-ednedg-a"></script><!-- v292DfixEDIT01: 本文を編集したら会話ログを本文に合わせる(フェーズ1) + カード✕。OFF=localStorage v292DfixEdit01Off=1 -->
+  <script src="v292DfixEDIT01-edit-reconcile.js?cb=20261110-edit01carry"></script><!-- v292DfixEDIT01: 本文を編集したら会話ログを本文に合わせる(フェーズ1) + カード✕。OFF=localStorage v292DfixEdit01Off=1 -->
   <script src="v292DfixSFLTap-card-correct.js?cb=20261031-bundle65-sfltap-b"></script><!-- v292DfixSFLTap(bundle65): 会話ログのカードをタップして、その場で話者を直す（SFL の ✎ と同じ保存経路・同じ守り・同じ記録）。SFL が使えるとき（uiEnabled）だけ。停止 = localStorage v292DfixSFLTapOff=1（常に勝つ）・SFL の kill v292DfixSFL1Off=1 でも止まる -->
   <script src="v292DfixEDLOG-narr-edit-log.js?cb=20261103-bundle92-a"></script><!-- ★EDLOG (laneEDICF): ✎ の本文編集を差分の記録 turn._narrEdits として同じ S.saveD に残す（本文の全文は持たない）。既定OFF・物語 smvhfq1rulp だけ・opt-in localStorage v292DfixEDLogOn=1 / kill v292DfixEDLogOff=1。SFL1/EDIT-01 の包みの外側を 1 回だけ包む -->
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>

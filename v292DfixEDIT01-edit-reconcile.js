@@ -39,6 +39,13 @@
  * ■★r42 (GPT #127-KE/#127-KO) 入れ子の「」: 引用の区間は括弧の深さで切る（外側の対だけを 1 区間）。編集後の本文で括弧の対応が取れない
  *   （閉じ忘れ・余分な閉じ・「…』）ときは引用の区間を使わず、行が変わっていないカードだけ残し、消えた行・変わった行のカードと plan の同じ <say> を外す
  *   （本文は打ったとおり保存・言い直しは入れない・案内 1 行）。編集前だけ不整合なら編集後の区間で通常どおり合わせる。
+ * ■★E1（EDIT01-carry・2026-11-10）: 台詞を「同じ場所で別の文に書き換えた」ときも、元のカードの話者・meta・_sid を引き継いで台詞だけ差し替える。
+ *   従来は似かた 0.6 未満（例「鏡……鏡の中に、誰かいる」→「鏡……鏡の中の、ひなの」=0.4）だとカードが消え、新しい「」は「会話ログにないセリフ: N 件」になるだけだった。
+ *   やること: 編集前後を行ごと（正規化）に LCS で比べ、変わった塊（hunk）のうち「編集前の行に消えたカードの台詞があり、編集後の行に新しい引用がある」ものについて、
+ *   消えたカードの数と新しい引用の数が同じ（1 対 1）なら順番どおりに reword として当てる（plan.narrative / _structuredNarrative の <say who> も既存の reword 経路で同じく引き継がれる）。
+ *   数が合わない・行が増減しただけの塊・括弧が不整合のときは何もしない（今まで通り）。
+ *   既知のリスク: 同じ場所で別人の台詞に書き換えた場合は、元の話者のまま残る（カードの ✕ で消せる）。
+ *   kill: localStorage v292DfixEDIT01CarryOff='1'（これだけ旧挙動に戻る。v292DfixEdit01Off は従来どおり全体停止）。
  * ■診断: window.__v292DfixEDIT01.status() / .reconcile(turn, narr, opts) / .reconcilePlan(plan, opts)
  * ===================================================================== */
 (function (root) {
@@ -49,6 +56,8 @@
   /* ★r42 (GPT #127-KA): 既定 ON。v292DfixEdit01Off==='1' は強制停止で常に勝つ。storage 不可 = OFF（旧挙動）。v292DfixEdit01On は見ない（r40/r41 の opt-in 値が残っていても同じ ON）。 */
   function enabled() { try { var ls = root.localStorage; return !!ls && ls.getItem('v292DfixEdit01Off') !== '1'; } catch (e) { return false; } }
   function off() { return !enabled(); }
+  /* ★E1: 同じ場所の書き換えを元のカードの話者で受け継ぐ。kill: localStorage v292DfixEDIT01CarryOff='1'（storage が無い環境=テスト等は ON） */
+  function carryOn() { try { var ls = root.localStorage; return !ls || ls.getItem('v292DfixEDIT01CarryOff') !== '1'; } catch (e) { return true; } }
   /* ★EDG（bundle69-edg-a・案A）: ✎ の保存で本文が編集前と同じ（\r\n→\n だけ揃える）なら、会話カード・meta・plan の整理をしない。kill: localStorage v292DfixEDGOff='1'（62-b と同じ） */
   function edgOn() { try { var ls = root.localStorage; return !ls || ls.getItem('v292DfixEDGOff') !== '1'; } catch (e) { return true; } }
   function edgSame(a, b) { if (b == null) b = ''; return typeof a === 'string' && typeof b === 'string' && a.replace(/\r\n/g, '\n') === b.replace(/\r\n/g, '\n') && edgOn(); }
@@ -105,6 +114,43 @@
       if (d <= 1) dice = Math.max(dice, THRESH);
     }
     return dice;
+  }
+
+  /* ★E1: 行ごと（正規化後）の LCS で変わった塊を出す。{o:[旧の行], n:[新の行]}（o/n は {k,ns,ne}）。大きすぎるときは null */
+  function lineHunks(oldRaw, newRaw) {
+    function lines(raw) { var out = [], off = 0; String(raw).split('\n').forEach(function (l) { var k = norm(l); out.push({ k: k, ns: off, ne: off + k.length }); off += k.length; }); return out; }
+    var OL = lines(oldRaw), NL = lines(newRaw), m = OL.length, n = NL.length, i, j;
+    if (m * n > 60000) return null;
+    var T = []; for (i = 0; i <= m; i++) { T.push(new Array(n + 1)); for (j = 0; j <= n; j++) T[i][j] = 0; }
+    for (i = m - 1; i >= 0; i--) for (j = n - 1; j >= 0; j--) T[i][j] = OL[i].k === NL[j].k ? T[i + 1][j + 1] + 1 : Math.max(T[i + 1][j], T[i][j + 1]);
+    var hunks = [], cur = null; i = 0; j = 0;
+    while (i < m || j < n) {
+      if (i < m && j < n && OL[i].k === NL[j].k) { if (cur) { hunks.push(cur); cur = null; } i++; j++; continue; }
+      cur = cur || { o: [], n: [] };
+      if (j < n && (i >= m || T[i][j + 1] >= T[i + 1][j])) cur.n.push(NL[j++]); else cur.o.push(OL[i++]);
+    }
+    if (cur) hunks.push(cur);
+    return hunks;
+  }
+  function inLines(sp, L) { for (var x = 0; x < L.length; x++) if (sp.ns < Math.max(L[x].ne, L[x].ns + 1) && sp.ne > L[x].ns) return true; return false; }
+  /* ★E1: 消えたカード（st の kind='drop'）と、新しい引用（cand・未使用）を、同じ変更塊の中で 1 対 1・順番どおりに対応づける。戻り値: [{i, to, ns}] */
+  function carryPairs(st, A, OA, cand) {
+    var hunks = lineHunks(OA.raw, A.raw), out = [];
+    if (!hunks) return out;
+    var claimed = {};
+    hunks.forEach(function (h) {
+      if (!h.o.length || !h.n.length) return;                                     /* 行が増えただけ／減っただけの塊は対象外 */
+      var drops = [], cs = [], i, q, sp, oi;
+      for (i = 0; i < st.length; i++) {
+        if (st[i].kind !== 'drop' || !st[i].k) continue;
+        for (oi = 0; oi < OA.spans.length; oi++) { sp = OA.spans[oi]; if (!claimed[oi] && sp.key === st[i].k && inLines(sp, h.o)) { claimed[oi] = true; drops.push({ i: i, ns: sp.ns }); break; } }
+      }
+      for (q = 0; q < cand.length; q++) if (!cand[q].used && inLines(cand[q], h.n)) cs.push(cand[q]);
+      if (!drops.length || drops.length !== cs.length) return;                    /* 1 対 1 のときだけ */
+      drops.sort(function (a, b) { return a.ns - b.ns; }); cs.sort(function (a, b) { return a.ns - b.ns; });
+      for (i = 0; i < drops.length; i++) out.push({ i: drops[i].i, sp: cs[i] });
+    });
+    return out;
   }
 
   /*
@@ -181,6 +227,17 @@
         if (sc > bestSim) { bestSim = sc; best = cand[q]; }
       }
       if (best) { best.used = true; lastStart = best.ns; st[i].kind = 'reword'; st[i].pos = best.ns; st[i].say = best.inner; }
+    }
+    /* ★E1: 3 回目: 同じ場所の入れ替え（1 対 1・順番どおり）は、元のカードの話者・meta を引き継いで台詞だけ差し替える */
+    res.carried = [];
+    if (OA && oldSpansOk && carryOn()) {
+      try {
+        carryPairs(st, A, OA, cand).forEach(function (pr) {
+          if (st[pr.i].kind !== 'drop' || pr.sp.used) return;
+          pr.sp.used = true; st[pr.i].kind = 'reword'; st[pr.i].pos = pr.sp.ns; st[pr.i].say = pr.sp.inner;
+          res.carried.push({ i: pr.i, who: String(cs[pr.i] && cs[pr.i].who || ''), from: String(cs[pr.i] && cs[pr.i].say || ''), to: pr.sp.inner });
+        });
+      } catch (eCarry) { res.carried = []; try { console.warn(TAG, 'carry err', eCarry && eCarry.message); } catch (_) {} }
     }
     for (j2 = 0; j2 < cand.length; j2++) if (!cand[j2].used) res.newQuotes++;
 
@@ -434,7 +491,7 @@
       }
       var planChanged = planApply(turn, pres);
       if (res && res.skipped) { ST.skipped = (ST.skipped || 0) + 1; try { console.warn(TAG, 'skip reconcile:', res.skipped, 'turn', idx); } catch (_) {} }
-      ST.lastResult = { idx: idx, skipped: (res && res.skipped) || null, changed: !!res.changed, kept: res.kept, dropped: res.dropped, reworded: res.reworded, newQuotes: res.newQuotes, metaAction: res.metaAction, lenOk: res.lenOk,
+      ST.lastResult = { idx: idx, skipped: (res && res.skipped) || null, changed: !!res.changed, kept: res.kept, dropped: res.dropped, reworded: res.reworded, carried: (res && res.carried) || [], newQuotes: res.newQuotes, metaAction: res.metaAction, lenOk: res.lenOk,
         plan: pres ? { applicable: pres.applicable, changed: planChanged, dropped: pres.dropped, reworded: pres.reworded, structured: pres.structuredAction } : null };
       if (edg) ST.lastResult.edg = true;
       var p;
@@ -569,7 +626,7 @@
   }
 
   var api = {
-    reconcile: reconcile, reconcilePlan: reconcilePlan, norm: norm, similarity: similarity, analyse: analyse,
+    reconcile: reconcile, reconcilePlan: reconcilePlan, carryOn: carryOn, norm: norm, similarity: similarity, analyse: analyse,
     decorate: decorate, deleteCard: deleteCard, undoDelete: undoDelete, install: install, sweepDecorate: sweepDecorate, enabled: enabled,
     status: function () { return { installed: ST.installed, reason: ST.reason, off: off(), skipped: ST.skipped || 0, saves: ST.saves, reverted: ST.reverted, cardDeletes: ST.cardDeletes, undos: ST.undos, planEdits: ST.planEdits, last: ST.lastResult }; }
   };
