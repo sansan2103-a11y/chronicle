@@ -39,6 +39,12 @@
 //                      field-by-field write 0。失敗時 meta/body byte 不変
 //   Story / active slot / cloud / canonical への書込 0。DOM 0。
 //
+// ★SEEDWORLD2（物語の種 段 2・GPT #127-RQ ③）: 呼ぶ側が明示したときだけ（opts.loreAppend===true、または armLoreAppend() の 1 回限りの合図）、
+//   世界観メモ（scene.lore）の **後ろに** AI の「つづき」を足す。ユーザーの文は先頭に 1 文字も変えずに残し（indexOf===0 を自己検査）、
+//   区切りは「\n（AI が補った設定）\n」。つづきは仮の欄 loreAdd（採用されなければ lore は元のまま）。AI 呼び出しは増えない（同じ 1 回）。
+//   長すぎる（切らない）・同じ文/先頭一致/包含（fix829 dupReject）・空 は、**つづきだけ**不採用（他の欄は生かす・report.loreAppend.reason）。
+//   禁止の文（〜てはいけない 型）は検出して report に残す（startRules には絶対に入らない: startRules は従来どおり原文のまま）。
+//   kill: localStorage v292DfixSEEDWORLD2Off='1' → 合図も opts も無視（従来とバイト一致）。
 // 検証口: window.__v292Dfix823 = { MODES, toFields, explicitSeedCount, buildPrompt, preflightRaw,
 //                                   toScenarioInput, randomCandidate, transportAvailable, expand, expandAndSave, state }
 // 既定: 誰も呼ばない（UI caller 0）。kill: localStorage v292Dfix823Off='1' → expand/expandAndSave が即 {ok:false, code:'OFF'}。
@@ -47,7 +53,7 @@
   'use strict';
   if (window.__v292Dfix823) return;
   var TAG = '[v292Dfix823:scenario-seed-adapter]';
-  var VERSION = 'v292Dfix823-20260907-adapter-v1.3';   /* v1.1: 裁定 26 slot 維持 / v1.2: 裁定 27 FIX823_TRANSPORT_AVAILABILITY = ACTUAL_PROXY_RUNTIME_ONLY */
+  var VERSION = 'v292Dfix823-20261110-adapter-v1.4-sw2';   /* v1.1: 裁定 26 slot 維持 / v1.2: 裁定 27 FIX823_TRANSPORT_AVAILABILITY = ACTUAL_PROXY_RUNTIME_ONLY */
   var MODES = { EXPAND_EXISTING: 'EXPAND_EXISTING', OMAKASE_CREATE: 'OMAKASE_CREATE' };
   var OMAKASE_DEFAULT_NPC = 2;          /* fix436 NEW_NPC_COUNT と同じ既定（OMAKASE_CREATE 専用） */
   var SCENE_FIELDS = ['lore', 'loc', 'obj', 'tone'];
@@ -68,6 +74,19 @@
      他の欄の補完が性別と矛盾しないようにする。fix436 の DOM 版 collectFields と key / label / writable を揃える
      （heroGender / npcN_gender・writable:false → applyFill は構造的に書かない）。
      ★これが無いと 🌱「全採用」で Owner の選んだ性別が消える（fix825 の adopt は draft を候補で置き換えるため）。 */
+  /* ★SEEDWORLD2 */
+  var LORE_ADD_KEY = 'loreAdd';
+  var LORE_ADD_MARK = '（AI が補った設定）';
+  var LORE_ADD_SEP = '\n' + LORE_ADD_MARK + '\n';   /* 原文 + SEP + つづき */
+  var LORE_DELIVER_CAP = 400;     /* LORE1 が毎ターン届ける上限（code point）。これを超えるつづきは作らせない */
+  var LORE_ADD_MAX = 300;         /* つづきの上限（目安は 150〜250 字。超えたら切らずにつづきだけ不採用） */
+  var LORE_ADD_MIN = 20;          /* これより短いつづきは意味が無いので不採用 */
+  var LORE_ADD_ROOM_MIN = 80;     /* 上限 400 の残りがこれ未満なら、つづきを頼まない（原文が長い） */
+  /* 出力の長さの見積もり（fix436.request の max_tokens 1800 に収める。★本物のトークナイザでの実測ではない・目安）。
+     つづきを足したせいで JSON が途中で切れる（BAD_JSON で全体が失敗）／後ろの人物の欄が欠けるのを避けるため、
+     「いま空欄の欄」の典型の長さから出力量を見積もり、余裕が足りないときはつづきの長さを縮め、縮めても足りないなら頼まない（reason BUDGET）。 */
+  var MAX_TOKENS = 1800, TOK_PER_CHAR = 1.3, TOK_RESERVE = 0.85;
+  var TYP_LEN = { heroName: 6, heroDesc: 45, loc: 25, obj: 50, tone: 25, startCondition: 70, name: 6, desc: 45, personality: 25, coreDesire: 25, coreFear: 25, wound: 45, gender: 2 };
   var GENDER_FIELD = 'gender';
   var HERO_GENDER_KEY = 'heroGender';
   var HERO_GENDER_LABEL = '主人公の性別';
@@ -79,6 +98,55 @@
   function isObj(o){ return !!o && typeof o === 'object' && Object.prototype.toString.call(o) !== '[object Array]'; }
   function isArr(o){ return Object.prototype.toString.call(o) === '[object Array]'; }
   function clone(o){ return JSON.parse(JSON.stringify(o)); }
+  /* ---- ★SEEDWORLD2: つづき ---- */
+  function skw2Off(){ return lsg('v292DfixSEEDWORLD2Off') === '1'; }
+  function cpLen(t){ t = str(t); var n = 0, i = 0, c; while (i < t.length){ c = t.charCodeAt(i); i += (c >= 0xD800 && c <= 0xDBFF && i + 1 < t.length) ? 2 : 1; n++; } return n; }
+  var ARMED = false;   /* fix825 の expand は opts を渡す口が無い（NO_FIX825_REWRITE）ので、呼ぶ側が直前に 1 回だけ合図する。expand が入口で必ず消費する */
+  function armLoreAppend(){ if (skw2Off()) return false; ARMED = true; return true; }
+  function disarmLoreAppend(){ ARMED = false; }
+  function loreRoom(userLore){ return LORE_DELIVER_CAP - cpLen(userLore) - cpLen(LORE_ADD_SEP); }
+  /* 禁止・決まりの文（〜てはいけない 型）。文ごとに見る。fix444 が掟として拾う型と同じ見方（fix444 があればその抽出も併用） */
+  var PROHIB_RE = /(てはいけ|てはなりま|てはなら|べからず|べからざ|禁止|禁じ|禁忌|タブー|厳禁|禁足|してはならぬ|許されな|許されぬ|破って(は|も)|破ると|破れば|破った(者|もの|場合|とき|時)|(決して|絶対に|けっして|ぜったいに)[^。！？\n]{0,24}(ない|ぬ|ず|ません|な[。！？\n]|$))/;
+  function splitSentences(t){ var m = str(t).match(/[^。！？!?\n]+[。！？!?」』）)]*\n*|\n+/g); return m || []; }
+  function loreProhibitions(text){
+    var out = [], ss = splitSentences(text);
+    for (var i = 0; i < ss.length; i++){ var x = trim(ss[i]); if (x && PROHIB_RE.test(x)) out.push(x); }
+    return out;
+  }
+  function laws444(text){ try { var L = window.__v292Dfix444; if (L && typeof L.extractLaws === 'function'){ var r = L.extractLaws(str(text), []); return (r && r.length) || 0; } } catch(e){} return 0; }
+  function stripProhibitions(text){
+    var ss = splitSentences(text), keep = [], removed = [];
+    for (var i = 0; i < ss.length; i++){ if (PROHIB_RE.test(trim(ss[i]))) removed.push(trim(ss[i])); else keep.push(ss[i]); }
+    return { text: trim(keep.join('')), removed: removed };
+  }
+  function f829(){ return window.__v292Dfix829 || null; }
+  function dupLocal(seed, add){
+    var s = trim(str(seed).replace(/\s+/g, ' ')), a = trim(str(add).replace(/\s+/g, ' '));
+    if (!s || !a) return null;
+    if (a === s) return 'DUP_EQUAL';
+    if (a.indexOf(s) === 0) return 'DUP_PREFIX';
+    if (cpLen(s) >= 12 && a.indexOf(s) >= 0) return 'DUP_CONTAINED';
+    return null;
+  }
+  /* AI の loreAdd を検査して { ok, text } または { ok:false, reason }。切らない */
+  function checkLoreAdd(raw, userLore, addMax){
+    var v = raw;
+    if (typeof v === 'number') v = String(v);
+    if (typeof v !== 'string') return { ok: false, reason: 'MISSING' };
+    var t = v.replace(/\r\n?/g, '\n').replace(/```[a-zA-Z]*/g, ' ').replace(/```/g, ' ');
+    t = trim(t);
+    if (t.length > 2 && ((t.charAt(0) === '"' && t.charAt(t.length - 1) === '"' && t.indexOf('"', 1) === t.length - 1) ||
+                         (t.charAt(0) === '「' && t.charAt(t.length - 1) === '」' && t.indexOf('」') === t.length - 1))) t = trim(t.slice(1, -1));   /* 全体を 1 組の引用符が括るときだけ外す（途中の台詞は触らない） */
+    if (t.indexOf(LORE_ADD_MARK) === 0) t = trim(t.slice(LORE_ADD_MARK.length));
+    t = t.replace(/\n{3,}/g, '\n\n');
+    if (!t || /^(なし|未定|不明|空|null|undefined|n\/a|-{1,3})$/i.test(t)) return { ok: false, reason: 'EMPTY' };
+    var n = cpLen(t);
+    if (n > addMax) return { ok: false, reason: 'TOO_LONG', n: n };
+    if (n < LORE_ADD_MIN) return { ok: false, reason: 'TOO_SHORT', n: n };
+    var d = null; try { var D = f829(); d = (D && typeof D.dupReject === 'function') ? D.dupReject(userLore, t) : dupLocal(userLore, t); } catch(e){ d = dupLocal(userLore, t); }
+    if (d) return { ok: false, reason: 'DUP', detail: d };
+    return { ok: true, text: t, n: n };
+  }
   function f436(){ return window.__v292Dfix436 || null; }
   function f335(){ return window.__v292Dfix335api || null; }
   function f820(){ return window.__v292Dfix820 || null; }
@@ -113,13 +181,27 @@
   }
 
   /* ---- ① toFields: Scenario → fix436 の fields[]（el:null・pure） ---- */
-  function toFields(input, mode){
+  function estOutTokens(fields){
+    var tok = 12, i, f, k, m;
+    for (i = 0; i < fields.length; i++){
+      f = fields[i]; if (!f || f.filled || !f.writable || f.loreAdd) continue;
+      k = f.key; m = /^npc\d+_(\w+)$/.exec(k); if (m) k = m[1]; else if (k === 'heroGender') k = 'gender';
+      tok += Math.round((TYP_LEN[k] || 30) * TOK_PER_CHAR + f.key.length * 0.45 + 6);
+    }
+    return tok;
+  }
+  function loreAddLabel(room){
+    var hi = Math.min(250, room), lo = hi >= 250 ? 150 : Math.max(40, hi - 100);
+    return '世界観のつづき（上の世界観メモの続きに書き足す文章。' + lo + '〜' + hi + '字・2〜4文。世界観メモの言い換えや繰り返しはしない。場所の様子・歴史・住人・空気感を具体的に書く。「〜してはいけない」などの禁止や決まりの文は書かない）';
+  }
+  function toFields(input, mode, o){
     var s = normalizeInput(input);
     var fields = [], i, j;
     for (i = 0; i < SCALAR_MAP.length; i++){
       var d = SCALAR_MAP[i], v = d.get(s);
       fields.push({ key: d.key, label: d.label, value: v, filled: v.length > 0, writable: true, el: null });
     }
+    var loreIdx = 3;   /* SCALAR_MAP の 'lore' の次（= 4 番目）に差し込む位置 */
     /* ★主人公の性別 = 読み取り専用の確定情報（writable:false・fix436 と同じ扱い） */
     var hg = trim(s.cast.hero[GENDER_FIELD]);
     var g1 = G1(), hgAsk = !!(g1 && !hg);   /* ★GENDER1 */
@@ -142,6 +224,19 @@
     fields.push({ key: 'startCondition', label: '開始時の状況（物語の最初の場面・配置・直前の出来事。1〜3文）', value: s.startCondition, filled: s.startCondition.length > 0, writable: true, el: null });
     /* startRules: 確定 context のみ（writable:false = fix436 applyFill が構造的に書かない） */
     fields.push({ key: 'startRules', label: '開始ルール（作者が定めた約束。矛盾しない補完をする。書き換え・転記はしない）', value: s.startRules, filled: s.startRules.length > 0, writable: false, el: null });
+    /* ★SEEDWORLD2: 呼ぶ側が明示したときだけ。ユーザーの世界観が非空で、400 の残りと出力の余裕が足りるときだけ「つづき」の仮の欄を足す。
+       足せなかった理由は o.skip.reason に返す（報告用）。足さないときは fields は従来とまったく同じ */
+    if (o && o.loreAppend === true && !skw2Off() && mode === MODES.EXPAND_EXISTING && s.scene.lore.length > 0){
+      var room = loreRoom(s.scene.lore);
+      if (room < LORE_ADD_ROOM_MIN){ if (o.info) o.info.reason = 'LORE_FULL'; }
+      else {
+        var allow = Math.floor((MAX_TOKENS * TOK_RESERVE - estOutTokens(fields)) / TOK_PER_CHAR);   /* 余裕の文字数 */
+        var cap = Math.min(250, room, allow);
+        if (o.info){ o.info.estTok = estOutTokens(fields); o.info.allow = allow; }
+        if (cap < LORE_ADD_ROOM_MIN){ if (o.info) o.info.reason = 'BUDGET'; }
+        else { fields.splice(loreIdx, 0, { key: LORE_ADD_KEY, label: loreAddLabel(cap), value: '', filled: false, writable: true, el: null, loreAdd: true, cap: cap }); }
+      }
+    }
     return fields;
   }
   function explicitSeedCount(fields){
@@ -183,13 +278,14 @@
     /* fix436.normVal と同じ前処理（trim → 端の引用符除去 → trim）の後の JS .length */
     var s = trim(str(v)).replace(/^["'「『]+|["'」』]+$/g, ''); s = trim(s); return s.length;
   }
-  function preflightRaw(text){
+  function preflightRaw(text, skipKeys){
     var F = f436(); if (!F || typeof F.normVal !== 'function') return fail('FIX436_UNAVAILABLE');
     var o = extractRawObject(text);
     if (!o) return fail('BAD_JSON');
     var oversized = [], walk = function(obj, prefix){
       for (var k in obj){
         if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+        if (skipKeys && prefix === '' && skipKeys.indexOf(k) >= 0) continue;   /* ★SEEDWORLD2: loreAdd の長さは expand が自分で見る（つづきだけ不採用にするため） */
         var v = obj[k];
         if (isObj(v)){ walk(v, prefix + k + '_'); continue; }
         if (typeof v !== 'string' && typeof v !== 'number') continue;
@@ -210,6 +306,8 @@
     var val = function(k){ var f = byKey[k]; return f ? trim(f.value) : ''; };
     var out = { title: s.title, scene: {}, cast: { hero: {}, npcs: [] }, startCondition: '', startRules: s.startRules /* 原文そのまま */ };
     var sc = { lore: val('lore'), loc: val('loc'), obj: val('obj'), tone: val('tone') };
+    /* ★SEEDWORLD2: 採用されたつづきがあるときだけ「原文 + 区切り + つづき」。原文は val('lore')（= 入力の trim）をそのまま先頭に */
+    var la = byKey[LORE_ADD_KEY]; if (la && sc.lore && trim(la.value)) sc.lore = sc.lore + LORE_ADD_SEP + trim(la.value);
     for (var k in sc){ if (sc[k]) out.scene[k] = sc[k]; }
     var hn = val('heroName'), hd = val('heroDesc');
     if (hn) out.cast.hero.name = hn; if (hd) out.cast.hero.desc = hd;
@@ -294,10 +392,16 @@
     var F = f436(); if (!F || typeof F.request !== 'function') return cb(fail('FIX436_UNAVAILABLE'));
     var base = clone(isObj(input) ? input : {});
     var baseStr = JSON.stringify(input);
-    var fields = toFields(base, mode);
+    /* ★SEEDWORLD2: 合図は入口で必ず消費する（次の呼び出しへ持ち越さない）。kill 中は無視 */
+    var laReq = (opts.loreAppend === true || ARMED) && !skw2Off(); ARMED = false;
+    var laInfo = {};
+    var fields = toFields(base, mode, laReq ? { loreAppend: true, info: laInfo } : undefined);
+    var laField = null; for (var li = 0; li < fields.length; li++){ if (fields[li].loreAdd) laField = fields[li]; }
     var seeds = explicitSeedCount(fields);
     var baseNpcCount = normalizeInput(base).cast.npcs.length;
     var report = { mode: mode, explicitSeeds: seeds, calls: 0, generationMode: null, hinted: false, applied: [], protected_: [], unknown: [], rejected: [], namelessSlots: [] };
+    if (laReq) report.loreAppend = { requested: true, asked: !!laField, applied: false, reason: laField ? null : (normalizeInput(base).scene.lore ? (mode === MODES.EXPAND_EXISTING ? (laInfo.reason || 'LORE_FULL') : 'MODE') : 'NO_LORE'), addLen: 0, addMax: 0, prohibitions: [], laws444: 0 };
+    if (laReq && laInfo.estTok) { report.loreAppend.estTok = laInfo.estTok; report.loreAppend.allow = laInfo.allow; }
     var omakaseZero = (mode === MODES.OMAKASE_CREATE && seeds === 0);
 
     function finishRandom(code){
@@ -317,17 +421,39 @@
       report.calls = 1;
       F.request(bp.prompt, function(err, txt){
         if (err) return finishRandom('AI_FAILED');
-        var pf = preflightRaw(txt);
+        var pf = preflightRaw(txt, laField ? [LORE_ADD_KEY, 'lore_add'] : undefined);
         if (!pf.ok) return cb(fail(pf.code, pf.detail));          /* oversized / bad json → write 0（random にも落とさない） */
         var json = F.parseFillJson(txt);
         if (!json) return cb(fail('BAD_JSON'));
+        /* ★SEEDWORLD2: loreAdd は applyFill（normVal が 400 で黙って切る）に通さず、ここで検査して自分で入れる */
+        var laRaw, laHas = false;
+        if (laField){
+          var userLore = normalizeInput(base).scene.lore, addMax = Math.min(LORE_ADD_MAX, loreRoom(userLore));   /* 検査の上限は 300（目安は label の 150〜250。16%の余裕は切らずに受ける） */
+          report.loreAppend.addMax = addMax;
+          if (Object.prototype.hasOwnProperty.call(json, LORE_ADD_KEY)){ laRaw = json[LORE_ADD_KEY]; laHas = true; }
+          else if (Object.prototype.hasOwnProperty.call(json, 'lore_add')){ laRaw = json.lore_add; laHas = true; }
+          delete json[LORE_ADD_KEY]; delete json.lore_add;
+        }
         var rep; try { rep = F.applyFill(fields, json); } catch(e){ return cb(fail('APPLY_ERROR')); }
         report.applied = rep.applied; report.protected_ = rep.protected_; report.unknown = rep.unknown; report.rejected = rep.rejected;
+        if (laField){
+          var chk = laHas ? checkLoreAdd(laRaw, userLore, report.loreAppend.addMax) : { ok: false, reason: 'MISSING' };
+          if (chk.ok){
+            laField.value = chk.text; laField.filled = true; rep.applied.push(LORE_ADD_KEY);
+            report.loreAppend.applied = true; report.loreAppend.addLen = chk.n;
+            report.loreAppend.prohibitions = loreProhibitions(chk.text); report.loreAppend.laws444 = laws444(chk.text);
+          } else { report.loreAppend.reason = chk.reason; if (chk.n) report.loreAppend.addLen = chk.n; if (chk.detail) report.loreAppend.detail = chk.detail; }
+          report.applied = rep.applied;
+        }
         var nonGender = 0; for (var q = 0; q < rep.applied.length; q++){ if (!GENDER_KEY_RE.test(rep.applied[q])) nonGender++; }   /* ★GENDER1: 性別だけでは「補完できた」と数えない */
         if (!nonGender) return cb(fail('NOTHING_APPLIED', report));
         finalizeGenders(fields);
         var t = toScenarioInput(fields, base);
         report.namelessSlots = t.namelessSlots; report.generationMode = 'AI_INFERRED';
+        if (laField && report.loreAppend.applied){   /* ★SEEDWORLD2: 原文が先頭にそのまま残っていることの自己検査（崩れたらつづきだけ落とす） */
+          var ul = normalizeInput(base).scene.lore, nl = t.input.scene && t.input.scene.lore;
+          if (typeof nl !== 'string' || nl.indexOf(ul) !== 0 || nl.length <= ul.length){ laField.value = ''; laField.filled = false; t = toScenarioInput(fields, base); report.loreAppend.applied = false; report.loreAppend.reason = 'PREFIX_BROKEN'; report.loreAppend.addLen = 0; report.loreAppend.prohibitions = []; report.loreAppend.laws444 = 0; }
+        }
         if (JSON.stringify(input) !== baseStr) return cb(fail('BASE_MUTATED'));   /* 入力を汚していないことの自己検査 */
         /* 裁定 26: EXPAND_EXISTING は base の NPC 数を厳密に維持（hard invariant・崩れたら fail-closed） */
         if (mode === MODES.EXPAND_EXISTING && t.input.cast.npcs.length !== baseNpcCount) return cb(fail('NPC_COUNT_INVARIANT_VIOLATED', { base: baseNpcCount, got: t.input.cast.npcs.length }));
@@ -367,6 +493,9 @@
     toFields: toFields, explicitSeedCount: explicitSeedCount, buildPrompt: buildPrompt, seedHintText: seedHintText,
     preflightRaw: preflightRaw, toScenarioInput: toScenarioInput, randomCandidate: randomCandidate,
     transportAvailable: transportAvailable, expand: expand, expandAndSave: expandAndSave,
+    /* ★SEEDWORLD2 */
+    armLoreAppend: armLoreAppend, disarmLoreAppend: disarmLoreAppend, loreProhibitions: loreProhibitions, stripProhibitions: stripProhibitions,
+    LORE_ADD_SEP: LORE_ADD_SEP, LORE_ADD_MARK: LORE_ADD_MARK, LORE_ADD_MAX: LORE_ADD_MAX, LORE_DELIVER_CAP: LORE_DELIVER_CAP,
     state: function(){ return { off: off(), fix436: !!f436(), fix436Request: !!(f436() && f436().request), fix335: !!f335(), fix820: !!f820(), transport: transportAvailable(), uiWired: false }; }
   };
   try { console.log(TAG, 'loaded (adapter only; not wired to any UI)'); } catch(e){}
