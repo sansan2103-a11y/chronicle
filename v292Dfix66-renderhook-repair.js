@@ -587,8 +587,35 @@
     }
     return '';
   }
+  /* ★BEAT1（kill: localStorage v292DfixBEAT1Off='1' → 従来どおり）: 添え書きは「人物の気配がある文」だけにする。
+     後ろ：同じターンの「引用の行の続き」はそのまま。行が変わったら「直後の1段落」（文の途中の改行は続ける）だけを見て、
+           人物の気配（話者の名前・主人公なら「あなた」・彼/彼女・声や手などの身体の語・話者と同じ呼び名「男は」など）が
+           ある文だけ採る。2段落先・次のターンへは行かない。次の台詞の話者名だけの行（X「…」の X）は採らない。
+     前：後ろで採れなかったときの従来の「前の文」も、同じ気配の検査を通ったときだけ（前のターンへは戻らない）。
+     SP1-A/A2（別人の動作は付けない）はそのまま上に掛かる。表示（.dlg-beat）だけで、保存・次ターンには流れない。 */
+  function beat1Off(){ try { return localStorage.getItem('v292DfixBEAT1Off') === '1'; } catch(e){ return false; } }
+  function beat1Mine(line, speaker){   // その行に人物の気配があるか（無ければ情景の文とみなす）
+    var ln = String(line||'').replace(/<\/?[^>]*>/g,'').replace(/[「『〝][^「」『』〝〟]*[」』〟]/g,'').replace(/[\s\u3000]/g,'');
+    if (!ln) return false;
+    var sp = String(speaker||'').replace(/[\s\u3000]/g,'');
+    if (sp){
+      var ts = sp1Toks(speaker, castNameList()).concat([sp]);
+      for (var i = 0; i < ts.length; i++){ if (ts[i] && ln.indexOf(ts[i]) >= 0) return true; }
+      try { var st = getState(); if (st && sp === String(getHero(st)).replace(/[\s\u3000]/g,'') && /あなた/.test(ln)) return true; } catch(e){}
+    }
+    var gm = sp ? ln.match(/(男|女|娘|老人|老婆|少年|少女|青年)(?=[はがの])/g) : null;   // 呼び名は話者の呼び名と同じ語のときだけ（「若い男」の話者に「男は」）
+    if (gm){ for (var g = 0; g < gm.length; g++){ if (sp.slice(-gm[g].length) === gm[g]) return true; } }
+    return /(彼女|彼[はがもの]|声|喉|息|唇|口元|口調|指|手[がはをもでの]|腕|肩|背中|目[がはをもでの]|瞳|視線|眉|顔|頬|髪|膝|足(?!音)|爪先|まぶた|睫|表情|笑|涙|首|胸|額|拳)/.test(ln);
+  }
+  function beat1NameOnly(str, speaker){   // 台詞の前に付く話者名（<say who="X"> → X「…」の X）だけの断片か
+    var t = String(str||'').replace(/[\s\u3000]/g,'');
+    if (!t) return false;
+    if (t === String(speaker||'').replace(/[\s\u3000]/g,'') || castNameList().some(function(n){ return String(n).replace(/[\s\u3000]/g,'') === t; })) return true;
+    return t.length <= 20 && !/[。！？!?、，,はがをもにへでと]/.test(t);
+  }
   function findBeat(narr, speaker, text, nth){
     if (!narr || !text) return '';
+    var _b1 = !beat1Off();
     var QO = '「『〝', QC = '」』〟';
     var idx = -1, needleLen = 0;
     for (var o = 0; o < QO.length && idx === -1; o++){
@@ -603,7 +630,7 @@
     // 残存タグ・引用スパン・話者名を除去し、前後の余分な記号を整える
     function clean(str){
       if (!str) return '';
-      var b = str.replace(/<\/?[^>]*>/g, '').replace(/[「『〝][^「」『』〝〟]*[」』〟]/g, '');
+      var b = str.split('\u0001').join('').replace(/<\/?[^>]*>/g, '').replace(/[「『〝][^「」『』〝〟]*[」』〟]/g, '');
       if (speaker){
         var sp = String(speaker).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         b = b.replace(new RegExp(sp + '(?:は|が|の|も|に|へ|と|を|、)?', 'g'), '');
@@ -617,7 +644,15 @@
     function fwd(from){
       var s = narr.slice(from, from + 140);
       var m = s.search(/[「『〝]|<say|<\s*="/);
-      return m !== -1 ? s.slice(0, m) : s;
+      s = m !== -1 ? s.slice(0, m) : s;
+      if (!_b1) return s;
+      var tb = s.indexOf('\u0001'); if (tb >= 0) s = s.slice(0, tb);         // BEAT1: ターンの境目で止める
+      var nl = s.indexOf('\n'); if (nl < 0) return s;                        // 引用の行の残り（同じ段落）
+      if (clean(s.slice(0, nl)).length >= 2) return s.slice(0, nl);
+      var rs = s.slice(nl + 1).split('\n'), nx = rs[0], k = 1;                // 直後の1行（段落）だけ。その先の段落へは行かない
+      while (k < rs.length && k < 4 && !/[。！？!?」』〟）)…―—]\s*$/.test(nx) && rs[k].replace(/[\s\u3000]/g,'')){ nx += rs[k]; k++; }   // 文の途中の改行は同じ段落として続ける
+      if (rs.length === 1 && m !== -1 && beat1NameOnly(nx, speaker)) return '';   // 次の台詞の話者名（X「…」の X）だけ → 採らない
+      return beat1Mine(nx, speaker) ? nx : '';                                // 人物のいない情景の文は採らない
     }
     // 直前のプロセ(前の引用/タグ以降)を拾う
     function bwd(from){
@@ -625,12 +660,21 @@
       var last = -1, mm, re = /[」』〟]|<\/say>|<\s*\/\s*>/g;
       while ((mm = re.exec(s))) last = mm.index + mm[0].length;
       s = last !== -1 ? s.slice(last) : s;
-      if (last === -1 && st > 0 && !sp1Off() && !/[。！？\n」』〟]/.test(narr.charAt(st - 1))){ var pe = s.search(/[。！？\n]/); s = pe >= 0 ? s.slice(pe + 1) : ''; }   // SP1-A2: 窓の頭が文の途中なら その断片は捨てる
+      if (_b1){ var _tb = s.lastIndexOf('\u0001'); if (_tb >= 0) return s.slice(_tb + 1); }   // BEAT1: 前のターンへは戻らない
+      if (last === -1 && st > 0 && !sp1Off() && !/[。！？\n」』〟\u0001]/.test(narr.charAt(st - 1))){ var pe = s.search(/[。！？\n]/); s = pe >= 0 ? s.slice(pe + 1) : ''; }   // SP1-A2: 窓の頭が文の途中なら その断片は捨てる
       return s;
     }
     var beat = clean(fwd(idx + needleLen)), _back = false;        // 発話の「後」の反応プロセを優先
     if (beat.length < 2){ beat = clean(bwd(idx)); _back = true; }   // 無ければ「前」のプロセ
     if (beat.length < 2) return '';
+    if (_b1 && _back){   // BEAT1: 前の文も、人物の気配がある文のときだけ採る（情景の文は付けない）
+      var _rr = String(bwd(idx)).replace(/[「『〝][^「」『』〝〟]*[」』〟]/g,'');
+      var _rt = _rr.match(/(^|[\n。！？])([^\n。！？]*)$/); if (_rt && beat1NameOnly(_rt[2], speaker)) _rr = _rr.slice(0, _rr.length - _rt[2].length);   // 引用の直前の話者名（X「…」の X）は外して見る
+      var _rb = _rr.split(/[。！？\n]/).filter(function(x){ return x.replace(/[\s\u3000]/g,'').length; });
+      var _rl = _rb.length ? _rb[_rb.length - 1] : '';
+      if (_rl.replace(/[\s\u3000]/g,'').length < 6 && _rb.length > 1) _rl = _rb[_rb.length - 2] + _rl;
+      if (!beat1Mine(_rl, speaker)) return '';
+    }
     var _ctx2 = beat;   // SP1-A2: 直前プロセは「引用に最も近い文」を採る（窓の先頭＝最も遠い文ではない）。行為者判定は直近2文で見る
     if (_back && !sp1Off()){ var _ss = beat.match(/[^。！？]+[。！？]?/g) || [beat]; _ss = _ss.filter(function(x){ return x.length; }); _ctx2 = _ss.slice(-2).join(''); var _nr = _ss[_ss.length - 1]; if (_nr.length < 6 && _ss.length > 1) _nr = _ss[_ss.length - 2] + _nr; beat = _nr; }
     // 最初の文(。！？)で切って1文の beat にする
@@ -1272,9 +1316,9 @@
       // render hooks may have injected (additive repair never removed them).
       // Citations like 「X」という事実 are not dialogue and must not stay in the log.
       try {
-        var __allNarr = '';
+        var __allNarr = '', __beatNarr = '';
         for (var __ti = 0; __ti < turns.length; __ti++){
-          if (turns[__ti]) __allNarr += '\n' + preprocessNarrative(turns[__ti].narrative);
+          if (turns[__ti]){ var __pn = preprocessNarrative(turns[__ti].narrative); __allNarr += '\n' + __pn; __beatNarr += '\n' + '\u0001' + __pn; }   // BEAT1: 添え書き用はターン境目に印
         }
         var __innerSet = innerMonologueTexts(rawNarrConcat(turns));   // v292Dfix158
         var __cards = stream.querySelectorAll('.v292-dlg-card');
@@ -1381,7 +1425,7 @@
       }
       // v292Dfix91: 全カードに地の文 beat を後付け（__allNarr は上で構築済みを再利用）。
       try {
-        if (typeof __allNarr === 'string' && __allNarr) enhanceBeats(stream, __allNarr);
+        if (typeof __allNarr === 'string' && __allNarr) enhanceBeats(stream, (beat1Off() || typeof __beatNarr !== 'string') ? __allNarr : __beatNarr);   // BEAT1 (kill: v292DfixBEAT1Off)
       } catch(__be){}
       // v292Dfix102: upgrade any stale / cold-start "?" avatars on every repair.
       try { upgradeMissingAvatars(stream); } catch(__ua){}
