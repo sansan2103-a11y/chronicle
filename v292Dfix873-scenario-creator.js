@@ -56,6 +56,17 @@
     seedHero: 'どんな主人公ですか？',
     seedNpc: 'いっしょに出る人（任意）',
     seedGo: 'つづける',
+    /* ★SEEDWORLD1（物語の種 段 1） */
+    swLoreHint: '場所も書けます。例：高校の旧校舎で、昔から怪談が残っている／廃墟になった遊園地で、夜だけ観覧車が回る',
+    swMore: 'もっと細かく決める（任意）',
+    swLoc: '舞台（どこから始まる？）',        swLocEx: '例：高校の旧校舎の三階／廃墟になった遊園地の観覧車の下',
+    swTone: '雰囲気',                           swToneEx: '例：じわじわ怖い学園ホラー／明るい日常に少しの不思議',
+    swStart: '始まりの場面',                    swStartEx: '例：放課後、忘れ物を取りに旧校舎へ戻ると、三階の廊下だけ明かりがついていた',
+    swRules: '世界のきまり（物語の間ずっと守る約束）', swRulesEx: '例：幽霊は鏡越しにしか見えない',
+    swNote: '空いている欄は Chronicle が世界に合わせて考えます。書いた欄はそのまま使います。',
+    swOver: '世界のきまりが長すぎます。300文字までにしてください。',
+    swMine: 'あなたが書いた',
+    swRulesRow: '世界のきまり',
     genOmakase: 'シナリオを組み立てています…',
     genSeed: '物語を広げています…',
     revHead: 'できました',
@@ -87,13 +98,45 @@
   function esc(t){ return str(t).replace(/[&<>"]/g, function(c){ return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function el(id){ try { return document.getElementById(id); } catch(e){ return null; } }
 
+  /* ---------- ★SEEDWORLD1（2026-11-10・Local 候補・物語の種 段 1・GPT #127-RQ ③ GO） ----------
+     要望（Owner 実例）: 種から作った物語の世界観メモが「辺鄙な島にある高校の怪異」の 1 行だけになり、詳しい世界観を入れる場所が無かった。
+     直し方（ここだけ・fix823 / fix436 / fix820 / fix825 / 保存の形は 1 バイトも変えない・AI 呼び出しは増やさない）:
+       ① 「どんな世界ですか？」を複数行（textarea）にして、場所も書けると分かる見本を出す。
+       ② 「もっと細かく決める（任意）」（<details>・最初は閉じている）に 4 欄:
+            舞台 → scene.loc ／ 雰囲気 → scene.tone ／ 始まりの場面 → startCondition ／ 世界のきまり → startRules（300 code point）
+          書いた欄は fix823 の filled／fix436 の protected_ に乗る＝AI は上書きしない。空の欄は今までどおり AI が埋める。
+          世界のきまりは 300 を超えたら「つづける」の前に止める（超えたまま進むと保存で START_RULES_TOO_LONG になり、AI の 1 回が無駄になるため）。
+       ③ 確認カードに「世界のきまり」の行と、ユーザーが書いた行への小さな印「あなたが書いた」（表示だけ・保存 0）。
+     kill: localStorage v292DfixSEEDWORLD1Off='1' → 種の画面（HTML）も seededDraft も 93-m とバイト単位で同じ。
+     診断: window.__v292DfixSEEDWORLD1 = { version, on(), rulesCount(text), status() }（localStorage へ書かない・入力の文字は残さない） */
+  var SW = { version: 'seedworld1-a-20261110' };
+  var SW_RULES_MAX = 300;
+  function skwOff(){ return lsg('v292DfixSEEDWORLD1Off') === '1'; }
+  /* fix820 の normRules / codePoints と同じ数え方（SC_EDIT の「n / 300」と一致）。fix820 があればそれを使う */
+  function normRulesLocal(v){
+    try { var m = window.__v292Dfix820; if (m && typeof m.normRules === 'function') return m.normRules(v); } catch(e){}
+    return (v == null) ? '' : String(v).replace(/\r\n?/g, '\n').replace(/^\s+|\s+$/g, '');
+  }
+  function cpCount(v){
+    try { var m = window.__v292Dfix820; if (m && typeof m.codePoints === 'function') return m.codePoints(v); } catch(e){}
+    var n = 0, t = String(v == null ? '' : v);
+    for (var i = 0; i < t.length; i++){
+      var c = t.charCodeAt(i);
+      if (c >= 0xD800 && c <= 0xDBFF && i + 1 < t.length){ var d = t.charCodeAt(i + 1); if (d >= 0xDC00 && d <= 0xDFFF) i++; }
+      n++;
+    }
+    return n;
+  }
+  function nl(v){ return str(v).replace(/\r\n?/g, '\n'); }
+
   /* ---------- state（memory only。LS / sessionStorage / 新 key 0） ---------- */
   var S = {
     installed: false, view: null,           /* null | 'PICK' | 'SEED' | 'GEN' | 'REVIEW' | 'FAIL' | 'SEEDKEPT' */
     mode: null,                             /* 'OMAKASE' | 'SEED' */
     busy: false, gens: 0, picks: 0,
     candidate: null, report: null, title: '',
-    seed: { lore: '', hero: '', npc: '', title: '' },
+    seed: { lore: '', hero: '', npc: '', title: '', loc: '', tone: '', start: '', rules: '' },   /* ★SEEDWORLD1: loc/tone/start/rules を足した */
+    worldOpen: false,                       /* ★SEEDWORLD1: 「もっと細かく決める」の開閉（メモリだけ・保存しない） */
     lastFail: null                          /* code は **画面に出さない**。console / state 用 */
   };
 
@@ -130,7 +173,17 @@
       '.sc873-k{color:var(--dim);font-size:11.5px;white-space:nowrap}' +
       '.sc873-v{overflow-wrap:anywhere;word-break:break-word}' +
       '.sc873-cta{padding:11px 16px;font-size:14px}' +
-      '.sc873-note{font-size:12px;color:var(--dim);line-height:1.6;margin-top:8px}';
+      '.sc873-note{font-size:12px;color:var(--dim);line-height:1.6;margin-top:8px}' +
+      /* ★SEEDWORLD1: 折りたたみ・数え・「あなたが書いた」の印（新しい class だけ。既存の規則は 1 バイトも変えない） */
+      '.sc873-det{margin:12px 0 4px;border:1px solid var(--line);border-radius:10px;background:var(--panel);min-width:0}' +
+      '.sc873-det>summary{cursor:pointer;padding:12px 14px;font-size:13.5px;font-weight:700;list-style-position:inside}' +
+      '.sc873-det .sc-form{padding:0 14px 6px}' +
+      '.sc873-det .sc873-note{padding:0 14px 12px;margin-top:4px}' +
+      '.sc873-det textarea,.sc873-det input{min-width:0;max-width:100%;box-sizing:border-box}' +
+      '#sc873View textarea{min-width:0;max-width:100%;box-sizing:border-box}' +
+      '.sc873-cnt{font-size:11.5px;color:var(--dim);text-align:right}' +
+      '.sc873-cnt.over{color:#e5484d;font-weight:700}' +
+      '.sc873-mine{display:inline-block;margin-left:8px;padding:0 6px;border:1px solid var(--line);border-radius:8px;font-size:10.5px;color:var(--dim);white-space:nowrap}';
     (document.head || document.documentElement).appendChild(s);
   }
 
@@ -186,15 +239,41 @@
     return '<div class="sc-f sc-wide"><label for="sc873_' + esc(k) + '">' + esc(label) + '</label>' +
            '<input id="sc873_' + esc(k) + '" type="text" data-c873-f="' + esc(k) + '" value="' + esc(v) + '"></div>';
   }
+  /* ★SEEDWORLD1: 複数行の欄（textarea）。先頭の改行は HTML の textarea が 1 つ落とすので 1 つ足して守る */
+  function areaHtml(k, label, v, ph, rows, extra){
+    return '<div class="sc-f sc-wide"><label for="sc873_' + esc(k) + '">' + esc(label) + '</label>' +
+           '<textarea id="sc873_' + esc(k) + '" rows="' + rows + '" data-c873-f="' + esc(k) + '" placeholder="' + esc(ph).replace(/\n/g, '&#10;') + '">\n' + esc(v) + '</textarea>' +
+           (extra || '') + '</div>';
+  }
+  function inputHtml(k, label, v, ph){
+    return '<div class="sc-f sc-wide"><label for="sc873_' + esc(k) + '">' + esc(label) + '</label>' +
+           '<input id="sc873_' + esc(k) + '" type="text" data-c873-f="' + esc(k) + '" value="' + esc(v) + '" placeholder="' + esc(ph) + '"></div>';
+  }
+  function rulesCount(v){ return cpCount(normRulesLocal(v)); }
+  function cntHtml(){
+    var n = rulesCount(S.seed.rules), over = n > SW_RULES_MAX;
+    return '<div class="sc873-cnt' + (over ? ' over' : '') + '" data-c873-cnt>' + n + ' / ' + SW_RULES_MAX + ' 文字</div>';
+  }
+  function worldBlockHtml(){
+    return '<details class="sc873-det" data-c873-det' + (S.worldOpen ? ' open' : '') + '>' +
+      '<summary>' + esc(COPY.swMore) + '</summary><div class="sc-form">' +
+      inputHtml('loc', COPY.swLoc, S.seed.loc, COPY.swLocEx) +
+      inputHtml('tone', COPY.swTone, S.seed.tone, COPY.swToneEx) +
+      areaHtml('start', COPY.swStart, S.seed.start, COPY.swStartEx, 2) +
+      areaHtml('rules', COPY.swRules, S.seed.rules, COPY.swRulesEx, 2, cntHtml()) +
+      '</div><div class="sc873-note">' + esc(COPY.swNote) + '</div></details>';
+  }
   function renderSeed(){
     if (!showSelf()) return;
     S.view = 'SEED';
     var h = headHtml(COPY.seedHead);
+    var on = !skwOff();
     h += '<div class="sc-form">' +
-      fieldHtml('lore', COPY.seedLore, S.seed.lore) +
+      (on ? areaHtml('lore', COPY.seedLore, S.seed.lore, COPY.swLoreHint, 3) : fieldHtml('lore', COPY.seedLore, S.seed.lore)) +
       fieldHtml('hero', COPY.seedHero, S.seed.hero) +
       fieldHtml('npc', COPY.seedNpc, S.seed.npc) +
       '</div>' +
+      (on ? worldBlockHtml() + '<div class="sc873-note" data-c873-seedmsg></div>' : '') +
       '<div class="sc-acts"><button class="sc-btn sc-primary sc873-cta" data-c873="seedGo">' + esc(COPY.seedGo) + '</button></div>';
     host.innerHTML = h;
   }
@@ -204,9 +283,15 @@
     host.innerHTML = headHtml('シナリオを作る') +
       '<div class="sc873-gen">' + esc(S.mode === 'SEED' ? COPY.genSeed : COPY.genOmakase) + '</div>';
   }
-  function row(label, v){
+  function row(label, v, mine){
     if (!trim(v)) return '';
-    return '<div class="sc873-k">' + esc(label) + '</div><div class="sc873-v">' + esc(v) + '</div>';
+    return '<div class="sc873-k">' + esc(label) + '</div><div class="sc873-v">' + esc(v) +
+           (mine ? '<span class="sc873-mine">' + esc(COPY.swMine) + '</span>' : '') + '</div>';
+  }
+  /* ★SEEDWORLD1: ユーザーが書いた欄か（表示だけ。候補の値が入力と同じ＝ユーザーの文のまま） */
+  function isMine(userVal, candVal){
+    if (skwOff()) return false;
+    var u = trim(nl(userVal)); return !!u && u === trim(nl(candVal));
   }
   function renderReview(){
     if (!showSelf()) return;
@@ -215,16 +300,17 @@
     var cast = isObj(c.cast) ? c.cast : {}, hero = isObj(cast.hero) ? cast.hero : {};
     var npcs = isArr(cast.npcs) ? cast.npcs : [];
     var g = '';
-    g += row('世界', sc.lore);
-    g += row('舞台', sc.loc);
-    g += row('雰囲気', sc.tone);
+    g += row('世界', sc.lore, isMine(S.seed.lore, sc.lore));
+    g += row('舞台', sc.loc, isMine(S.seed.loc, sc.loc));
+    g += row('雰囲気', sc.tone, isMine(S.seed.tone, sc.tone));
     g += row('目的', sc.obj);
     g += row('主人公', trim(hero.name) + (trim(hero.desc) ? '／' + hero.desc : ''));
     for (var i = 0; i < npcs.length; i++){
       var n = isObj(npcs[i]) ? npcs[i] : {};
       g += row('登場人物 ' + (i + 1), trim(n.name) + (trim(n.desc) ? '／' + n.desc : ''));
     }
-    g += row('はじまり', c.startCondition);
+    g += row('はじまり', c.startCondition, isMine(S.seed.start, c.startCondition));
+    if (!skwOff()) g += row(COPY.swRulesRow, c.startRules, isMine(S.seed.rules, c.startRules));
     var isRandom = !!(S.report && S.report.generationMode === 'RANDOM_FALLBACK');
     var h = headHtml(COPY.revHead);
     h += '<div class="sc873-rev">' +
@@ -599,6 +685,13 @@
       }
     }
     if (trim(S.seed.title)) d.title = trim(S.seed.title);
+    if (!skwOff()){
+      /* ★SEEDWORLD1: 書いた欄だけ入れる（空は触らない＝AI が今までどおり埋める）。前後の空白だけ落とし、中身は 1 文字も変えない */
+      if (trim(S.seed.loc))   d.scene.loc = trim(nl(S.seed.loc));
+      if (trim(S.seed.tone))  d.scene.tone = trim(nl(S.seed.tone));
+      if (trim(S.seed.start)) d.startCondition = trim(nl(S.seed.start));
+      if (trim(S.seed.rules)) d.startRules = normRulesLocal(S.seed.rules);
+    }
     return d;
   }
   function generate(){
@@ -686,7 +779,8 @@
     if (r && r.ok === false) return r;
     S.picks++; S.mode = null; S.busy = false;
     S.candidate = null; S.report = null; S.title = '';
-    S.seed = { lore: '', hero: '', npc: '', title: '' };
+    S.seed = { lore: '', hero: '', npc: '', title: '', loc: '', tone: '', start: '', rules: '' };
+    S.worldOpen = false;
     renderPick();
     return { ok: true };
   }
@@ -699,6 +793,14 @@
   function seedGo(){
     if (S.busy) return;
     var a = A(); if (!a) return;
+    /* ★SEEDWORLD1: 世界のきまりが 300 を超えるなら AI を呼ぶ前に止める（入力は 1 文字も捨てない） */
+    if (!skwOff() && rulesCount(S.seed.rules) > SW_RULES_MAX){
+      S.lastFail = 'START_RULES_TOO_LONG_PRE';
+      var box = host && host.querySelector('[data-c873-seedmsg]');
+      if (box) box.innerHTML = '<div class="sc-msg sc-err">' + esc(COPY.swOver) + '</div>';
+      var det = host && host.querySelector('[data-c873-det]'); if (det) { det.open = true; S.worldOpen = true; }
+      return;
+    }
     var d = seededDraft(); if (!d) return;
     a.setDraft(d);                        /* 種を draft へ（store write 0） */
     generate();
@@ -733,6 +835,17 @@
     if (!k) return;
     if (k === 'title') S.title = t.value;
     else if (S.seed.hasOwnProperty(k)) S.seed[k] = t.value;
+    if (k === 'rules' && !skwOff()){
+      /* ★SEEDWORLD1: 数えだけ更新（再描画しない＝入力中のフォーカスと変換を壊さない） */
+      var c = host && host.querySelector('[data-c873-cnt]');
+      if (c){ var n = rulesCount(S.seed.rules), over = n > SW_RULES_MAX; c.textContent = n + ' / ' + SW_RULES_MAX + ' 文字'; c.className = 'sc873-cnt' + (over ? ' over' : ''); }
+      if (rulesCount(S.seed.rules) <= SW_RULES_MAX){ var m = host && host.querySelector('[data-c873-seedmsg]'); if (m) m.innerHTML = ''; }
+    }
+  }
+  /* ★SEEDWORLD1: <details> の開閉をメモリに持つ（toggle は bubble しないので capture で拾う） */
+  function onHostToggle(e){
+    var t = e.target;
+    if (t && t.getAttribute && t.getAttribute('data-c873-det') !== null) S.worldOpen = !!t.open;
   }
   function backToList(){
     var a = A();
@@ -760,17 +873,27 @@
       h.hidden = true;
       h.addEventListener('click', onHostClick, false);
       h.addEventListener('input', onHostInput, false);
+      h.addEventListener('toggle', onHostToggle, true);
     }
     S.installed = true;
     try { console.log(TAG, 'loaded (' + (off() ? 'OFF: depth chooser hidden' : 'depth chooser active') + ')'); } catch(e){}
   }
+
+  window.__v292DfixSEEDWORLD1 = {
+    version: SW.version,
+    on: function(){ return !skwOff(); },
+    rulesCount: function(t){ return rulesCount(t); },
+    status: function(){ return { on: !skwOff(), version: SW.version, worldOpen: S.worldOpen, rulesMax: SW_RULES_MAX,
+                                 filled: { loc: !!trim(S.seed.loc), tone: !!trim(S.seed.tone), start: !!trim(S.seed.start), rules: !!trim(S.seed.rules) } }; }
+  };
 
   window.__v292Dfix873 = {
     version: VERSION,
     state: function(){
       return { off: off(), installed: S.installed, view: S.view, mode: S.mode, busy: S.busy,
                gens: S.gens, picks: S.picks, hasCandidate: !!S.candidate, title: S.title,
-               seed: { lore: S.seed.lore, hero: S.seed.hero, npc: S.seed.npc },
+               seed: (skwOff() ? { lore: S.seed.lore, hero: S.seed.hero, npc: S.seed.npc }
+                                : { lore: S.seed.lore, hero: S.seed.hero, npc: S.seed.npc, loc: S.seed.loc, tone: S.seed.tone, start: S.seed.start, rules: S.seed.rules }),
                lastFail: S.lastFail,
                deps: { fix825: !!A(), hostEl: !!el('sc873View') } };
     },
