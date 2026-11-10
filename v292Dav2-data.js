@@ -1205,8 +1205,34 @@
             S.cast.av2 = c2.av2;                                              // sidecar mode S2 (same ids / bindings / known / retired)
             S.save();
           } catch(e){ return done({ ok: false, code: 'LOCAL_SWITCH_FAILED' }); }
+          /* ★SPBASE2 (GPT #127-SA・kill v292DfixSPBASE2Off='1'): the same F-FZ1(2) rule as SPBASE1 (sidePortCommit) for the S9b switch write.
+             The switch moved the server by one rev; until now only this F.flush() could catch up (CONVERGED_NO_WRITE confirms when the local
+             projection hash == server hash). When the local document changed before that commit ran (an edit / a turn right after the switch,
+             or the flush deferred by an in-flight save), the next push saw "server ahead" for this tab's own write (fix910 → DIVERGED, the
+             turns stopped reaching the cloud). The device's save base advances to the landed rev ONLY when ALL hold (else unchanged):
+               (1) the write was accepted (200 ok) and the accepted rev/hash IS the readback (rev and hash identical); readback body == sent (checked above)
+               (2) the local switch took (S.save above did not throw) and the persisted record == readback (not PERSISTED_DIVERGED)
+               (3) the device's last confirmed rev AND hash == the fresh server state we composed on (j)
+               (4) nobody else wrote in between: landed rev == composed rev + 1 (exactly our one write)
+               (5) the marker is not DIVERGED / BOOTSTRAP_HOLD and no ordinary save is in flight */
+          var spb2 = null;
+          try { if (lsg('v292DfixSPBASE2Off') !== '1'){
+                  var G2 = window.__v292Dfix781; var mk2 = (G2 && typeof G2.marker === 'function') ? G2.marker(id) : null; var lc2 = mk2 && mk2.lastConfirmed;
+                  var wj2 = w && w.j; var pre2 = +j.rev || 0, preH2 = String(j.serverHash || ''), landed2 = +j2.rev || 0, fp2 = String(j2.serverHash || '');
+                  var rec2 = buildRecord(F, id, schema); var post2 = !!(rec2 && isObj(rec2.body) && same(rec2.body, b2));
+                  var why2 = !G2 || typeof G2.confirm !== 'function' ? 'NO_781'
+                    : !(wst === 200 && !werr && wj2 && wj2.ok === true) ? 'NOT_ACCEPTED'
+                    : !(+wj2.rev === landed2 && String(wj2.serverHash || '') === fp2 && fp2) ? 'ACCEPTED_NE_READBACK'
+                    : !post2 ? 'PERSISTED_DIVERGED'
+                    : !(lc2 && typeof lc2.serverRev === 'number' && lc2.serverRev === pre2 && lc2.fingerprint != null && String(lc2.fingerprint) === preH2) ? 'LC_NE_BASE'
+                    : landed2 !== pre2 + 1 ? 'OTHER_WRITER'
+                    : (mk2.state === 'DIVERGED' || mk2.state === 'BOOTSTRAP_HOLD') ? 'HELD_' + mk2.state
+                    : mk2.inFlightSave ? 'IN_FLIGHT' : null;
+                  if (!why2){ G2.confirm(id, landed2, fp2); spb2 = { from: pre2, to: landed2 }; }
+                  else spb2 = { kept: why2, lc: lc2 ? lc2.serverRev : null, preRev: pre2, landed: landed2 }; } } catch(eB2){ spb2 = { kept: 'THREW', err: String(eB2).slice(0, 60) }; }
+          note({ kind: 'AV2_SWITCH_SAVE_BASE', id: id, base: spb2 });
           try { F.flush(); } catch(e){}
-          done({ ok: true, serverRev: j2.rev });
+          done({ ok: true, serverRev: j2.rev, base: spb2 });
         });
       });
     });
