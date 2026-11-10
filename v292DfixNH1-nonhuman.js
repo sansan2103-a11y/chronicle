@@ -8,6 +8,8 @@
  *   ・Worker（v46.41-iconx1 以降）は、鍵 nh1 が ON のときだけ、このラベル付きの外見から人外用の注文文を作る。
  *   ・辞書と判定は Worker と同じ文（src/nh1_core.js をそのまま埋め込み）。
  * 鍵：管理者画面 nh1（READY・行なし = OFF）。kill：localStorage v292DfixNH1Off='1'（この部品は何も返さない＝今までの下書き）
+ * ★NH1b（丸アイコン向けの構図）：Worker が人外の注文文の構図を変える。端末 kill v292DfixNH1bOff='1' のあいだに作る下書きの末尾に「／構図：従来」を付け、
+ *   その 1 人だけ Worker は NH1（iconx1）の構図で作る（保存形式は外見の文 1 本のまま。Owner は 2 タップの欄で消せる）。
  * 観測口：window.__v292DfixNH1.status()
  * ===================================================================== */
 (function (root) {
@@ -19,6 +21,7 @@
      The Worker turns a labeled draft into the image prompt (nh1Prompt) only when the account key nh1 is ON. A human text never gets a header,
      so a human profile never takes this path (the human prompt stays byte-identical). ---- */
   var NH1_VER = 'nh1';
+  var NH1_COMP_OLD_JA = '従来';   /* ★NH1b: 「構図：従来」を下書きの末尾に付けると、Worker はこの 1 人だけ NH1（iconx1）の構図で作る（端末の kill v292DfixNH1bOff='1' の運び方） */
   /* species words: [regex, English subject, form, kind (MIDICON kind: creature | spirit | yokai)] — first match wins.
      form 'soft' = a species that is usually drawn as a human-looking character (vampire, beastman, fairy): it never switches the prompt by itself;
      it only names the subject when strong non-human parts already made the figure mixed (狼の頭 + 獣人 → wolf beastman). */
@@ -109,7 +112,7 @@
     return { v: NH1_VER, form: form, base: base, baseJa: baseJa, kind: kind, parts: parts, restJa: rest };
   }
   /* draft → labeled Japanese (≤ 400 chars, the profile.appearance limit). null for a human */
-  function nh1Labeled(d, kindJa) {
+  function nh1Labeled(d, kindJa, compOld) {
     if (!d || d.form === 'human') return null;
     var by = {}; d.parts.forEach(function (p) { (by[p.slot] = by[p.slot] || []).push(p.ja); });
     var seg = [];
@@ -118,16 +121,19 @@
     if (d.restJa.length) seg.push('ほか：' + d.restJa.join('・'));
     var k = String(kindJa || '').replace(/[（）【】／：・|]/g, '').slice(0, 12);
     var s = '【' + (d.form === 'nonhuman' ? '人外' : '混合') + (k ? '（' + k + '）' : '') + '】' + seg.join('／');
-    return s.length > 400 ? s.slice(0, 400).replace(/[／・][^／・]*$/, '') : s;
+    if (s.length > 400) s = s.slice(0, 400).replace(/[／・][^／・]*$/, '');
+    if (compOld && s.length + 6 <= 400) s += '／構図：' + NH1_COMP_OLD_JA;   /* ★NH1b: kill の印（6 字）。400 字を超えるときは付けない（その 1 人は新しい構図のまま）。表示・編集は他の句と同じ */
+    return s;
   }
   function nh1IsLabeled(text) { return NH1_HEAD.test(String(text == null ? '' : text).normalize('NFC').trim()); }
   /* labeled Japanese → { form, kindJa, base, baseJa, kind, parts: [{ slot, ja, en | null }] }. Values without a dictionary match keep en = null (the Worker translates them). */
   function nh1Parse(text) {
     var t = String(text == null ? '' : text).normalize('NFC').trim(), h = NH1_HEAD.exec(t);
     if (!h) return null;
-    var out = { v: NH1_VER, form: h[1] === '人外' ? 'nonhuman' : 'mixed', kindJa: h[2] || '', base: null, baseJa: '', kind: null, parts: [] };
+    var out = { v: NH1_VER, form: h[1] === '人外' ? 'nonhuman' : 'mixed', kindJa: h[2] || '', base: null, baseJa: '', kind: null, parts: [], comp: '' };
     t.slice(h[0].length).split('／').forEach(function (seg) {
       var m = /^([^：]{1,4})：(.*)$/.exec(seg.trim()); if (!m) { if (seg.trim()) out.parts.push({ slot: 'rest', ja: seg.trim(), en: null }); return; }
+      if (m[1] === '構図') { if (m[2].trim() === NH1_COMP_OLD_JA) out.comp = 'old'; return; }   /* ★NH1b: 構図の印は部位ではない（訳さない・注文文に入れない） */
       var slot = NH1_JA_SLOT[m[1]] || 'rest';
       m[2].split('・').map(function (x) { return x.trim(); }).filter(Boolean).forEach(function (v) {
         var i, mm;
@@ -169,28 +175,56 @@
   };
   var NH1_ORDER = ['lower', 'arms', 'body', 'motion', 'head', 'face', 'mouth', 'eyes', 'skin', 'pose', 'hair', 'clothes', 'build', 'base', 'rest'];
   var NH1_PLAN = { lower: 1, arms: 1, body: 1, motion: 1 };
-  function nh1Framing(o) {
+  /* ---- NH1 (iconx1) composition — kept byte-for-byte as the kill path (comp 'old') ---- */
+  function nh1FramingOld(o) {
     var s = {}; (o.parts || []).forEach(function (p) { s[p.slot] = 1; });
     if (s.lower || s.motion || s.pose || /zombie|skeleton|slime|doll|mummy/.test(String(o.base || ''))) return 'full-body figure, the whole body visible from head to toe';
     if (s.arms || s.body || s.clothes) return 'upper-body figure from head to waist, arms and torso visible';
     return 'upper-body portrait, head and torso visible';
   }
+  /* ---- NH1b composition for the round icon (GPT #127-SA ②). The icon is a 56–72 px circle: a full-body figure leaves the face about 7% of the frame.
+     Rule: the figure is never reduced to a bare face, but the parts that identify it are brought near the centre and large, and a part that would need the whole body
+     (serpent lower body, floating, a shambling gait) is made to fit by coiling / looking up / cutting at the knees. A circle clips the four corners, so nothing identifying sits there.
+     Tier priority: lower > motion > whole-body species or pose > arms / body > face-only (face / mouth / eyes / skin / clothes only). Extras are added for arms and tentacles. No negation words, no silhouette / shadow. */
+  var NH1B_EN = {   /* part wording that assumed the whole body in the frame (ground, feet) → wording that works in the tight frame. Only used by comp 'b'. */
+    'floating in the air above the ground': 'hovering weightlessly, hair and sleeves drifting upward',
+    'a long scaly serpent body in place of legs, coiled on the ground': 'a long scaly serpent body in place of legs, coiled into a tight spiral below the waist',
+    'a stiff lurching posture, dragging one foot': 'a stiff lurching posture, shoulders slumped and head hanging forward'
+  };
+  var NH1B_TIER = {
+    lower: 'centered compact composition, the upper body rising from a tight coil of the lower body that fills the bottom third of the frame, head and face large near the middle',
+    motion: 'low-angle view looking up at the figure from slightly below, knees and above, hair and clothing drifting upward, soft mist at the bottom edge, head and face large near the middle',
+    whole: 'three-quarter view from the knees up, leaning toward the viewer, head and face large near the middle, the body filling the frame',
+    waist: 'waist-up figure centered and filling the frame, head and face large near the middle',
+    face: 'tight bust portrait, head and shoulders filling the frame, face large and centered'
+  };
+  function nh1Framing(o) {
+    var s = {}; (o.parts || []).forEach(function (p) { s[p.slot] = 1; });
+    var whole = /zombie|skeleton|slime|doll|mummy/.test(String(o.base || ''));
+    var tier = s.lower ? 'lower' : s.motion ? 'motion' : (whole || s.pose) ? 'whole' : (s.arms || s.body) ? 'waist' : 'face';
+    var t = NH1B_TIER[tier];
+    if (/slime/.test(String(o.base || ''))) t = 'centered close view, the rounded body mass filling the frame, the visible inner details near the middle';
+    if (s.arms && tier !== 'face') t += ', the arms raised and spread outward at both sides so they stay inside the frame';
+    if ((o.parts || []).some(function (p) { return /tentacle/.test(p.en); }) && !s.lower && tier !== 'face') t += ', the tentacles curling around the figure inside the frame';
+    return t + ', simple uncluttered background';
+  }
   function nh1Prompt(o) {
     var st = NH1_STYLE[o.presetId] || NH1_STYLE['chronicle_dark_vn_v1@1'], tone = o.tone === 'horror' ? 'horror' : 'normal';
     var g = o.gender === 'woman' || o.gender === 'man' ? o.gender : '';
     var b = String(o.base || '');
+    var old = o.comp === 'old';
     var subj = o.form === 'nonhuman' ? (b || 'supernatural being') + (g && /ghost|apparition/.test(b) ? ' of a ' + g : '')
       : (b ? b : 'uncanny hybrid being, ' + (g ? 'a ' + g : 'a person') + ' with non-human body parts');
-    var ps = (o.parts || []).filter(function (p) { return p && p.en; }).slice().sort(function (x, y) { return NH1_ORDER.indexOf(x.slot) - NH1_ORDER.indexOf(y.slot); });
+    var ps = (o.parts || []).filter(function (p) { return p && p.en; }).map(function (p) { return { slot: p.slot, en: (!old && NH1B_EN[p.en]) || p.en }; }).sort(function (x, y) { return NH1_ORDER.indexOf(x.slot) - NH1_ORDER.indexOf(y.slot); });
     var plan = ps.filter(function (p) { return NH1_PLAN[p.slot]; }).map(function (p) { return p.en; });
     var feat = ps.filter(function (p) { return !NH1_PLAN[p.slot]; }).map(function (p) { return p.en; });
     var hasFace = ps.some(function (p) { return p.slot === 'face'; });
     var mood = tone === 'horror' ? 'unsettling, uncanny stillness' + (hasFace || /slime/.test(b) ? '' : ', unsmiling expression') : 'otherworldly';
     var details = (o.details || []).filter(Boolean).join(', ');
-    var out = st[tone] + '. ' + nh1Framing({ parts: ps, base: b }) + '. portrait of one ' + subj +
+    var out = st[tone] + '. ' + (old ? nh1FramingOld({ parts: ps, base: b }) : nh1Framing({ parts: ps, base: b })) + '. portrait of one ' + subj +
       (plan.length ? '. body plan: ' + plan.join(', ') : '') + (feat.length ? '. distinctive features: ' + feat.join(', ') : '') +
       (details ? '. details: ' + details : '') + (o.traits ? '. traits: ' + o.traits : '') + '. mood: ' + mood +
-      (plan.length ? '. every listed body part clearly visible in the frame' : '');
+      (plan.length ? (old ? '. every listed body part clearly visible in the frame' : '. the listed body parts large and clear near the middle of the frame') : '');
     return out.slice(0, 1800);
   }
   /* ---- NH1 core end ---- */
@@ -202,10 +236,10 @@
   }
   var calls = { draft: 0, labeled: 0 };
   root.__v292DfixNH1 = {
-    ver: NH1_VER + '-iconx1-20261110', on: on,
+    ver: NH1_VER + '-iconx1nh1b-20261111', on: on,
     draft: function (t, o) { calls.draft++; return nh1Draft(t, o); },
-    labeled: function (d, k) { calls.labeled++; return nh1Labeled(d, k); },
+    labeled: function (d, k) { calls.labeled++; return nh1Labeled(d, k, lsGet('v292DfixNH1bOff') === '1'); },   /* ★NH1b */
     isLabeled: nh1IsLabeled, parse: nh1Parse, slotsJa: nh1SlotsJa, anchors: nh1Anchors, anchorsS: nh1AnchorsS,
-    status: function () { return { ver: NH1_VER, on: on(), killed: lsGet('v292DfixNH1Off') === '1', calls: JSON.parse(JSON.stringify(calls)) }; }
+    status: function () { return { ver: NH1_VER, on: on(), killed: lsGet('v292DfixNH1Off') === '1', nh1bKilled: lsGet('v292DfixNH1bOff') === '1', calls: JSON.parse(JSON.stringify(calls)) }; }
   };
 })(typeof window !== 'undefined' ? window : this);
