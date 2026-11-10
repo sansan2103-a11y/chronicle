@@ -20,7 +20,7 @@
 <!-- v292Dfix893: Pages origin（*.pages.dev）でだけ動く cookie session shim。github.io では何もしない。 -->
 <script src="v292Dfix893-account-cookie-shim.js?cb=20261031-bundle78-admf-c"></script>
 <script src="v292DfixISO1-local-only-foreign-hide.js?cb=20261107-iso1e"></script><!-- v292DfixISO1: 別アカウントのlocal-only物語を隠す・開かせない。OFF=localStorage v292DfixISO1Off=1 -->
-<script src="v292DfixADMF1-account-flags.js?cb=20261110-read1a"></script><!-- ★admg1: +lc1 / ld1 / rc1 / oma1（管理者画面の機能スイッチ・全体の値）。★admf2: 話者の訂正（sfl1）と NPC 場面整合（npres1・行なし=OFF）。★ADMF-1 r3: 管理者画面のアカウント機能スイッチ（/auth/me accountFlags）で SFL を使うかを決める（読むだけ・書き込み 0）。OFF=localStorage v292DfixADMF1Off=1（= SFL OFF） -->
+<script src="v292DfixADMF1-account-flags.js?cb=20261110-iconx1-a"></script><!-- ★admg1: +lc1 / ld1 / rc1 / oma1（管理者画面の機能スイッチ・全体の値）。★admf2: 話者の訂正（sfl1）と NPC 場面整合（npres1・行なし=OFF）。★ADMF-1 r3: 管理者画面のアカウント機能スイッチ（/auth/me accountFlags）で SFL を使うかを決める（読むだけ・書き込み 0）。OFF=localStorage v292DfixADMF1Off=1（= SFL OFF） -->
 <!-- ★BAV2 (GPT #127-DV/#127-EE): beta を最初から Asset v2 で始める（client 側は使い勝手だけ。安全は Worker。Worker が features.assetV2Beta を返さない間は何もしない） -->
 <script src="v292Dbav2-beta.js?cb=20261019-bundle33-b"></script>
 <!-- ★fix990 (GPT #127-EN D): 旧画像 op が ASSET_V2_REQUIRED で断られたら、このタブではその op を 10 分送らない（fix523/633/634 より前に置く）。kill: localStorage v292Dfix990Off=1 -->
@@ -4866,15 +4866,15 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixLD1-preset-portrait.js?cb=20261101-bundle81-admg-a"></script>
 <!-- ★B37-B (GPT #127-HF B): 新しい S2 物語の「登場人物の最初の絵」案内（任意・止めない・自動は 1 回だけ）。OFF=localStorage v292DfixB37bOff=1 -->
 <script src="v292DfixB37-onboard.js?cb=20261109-bundle93-j"></script>
-<script src="v292DfixLC1-appearance-proposal.js?cb=20261102-bundle90-a"></script>
+<!-- ★NH1 (laneICONX1・GPT #127-RY B): 人外モードの下書き（辞書だけ・AI なし）。鍵 nh1（READY・行なし = OFF）。kill = localStorage v292DfixNH1Off=1 --><script src="v292DfixNH1-nonhuman.js?cb=20261110-iconx1-a"></script><script src="v292DfixLC1-appearance-proposal.js?cb=20261110-iconx1-a"></script>
 <script src="v292DfixLC1-workbench.js?cb=20261110-bundle93-k"></script>
 <!-- ★ICONUX2 (GPT #127-PC ICONUX): キャラの絵を 2 タップで（カードの「🎨 絵を作る」→「この外見で作る」）。LC1 が ON のときだけ働く（LC1 の判定には触らない）。kill: localStorage v292DfixICONUXOff=1 -->
-<script src="v292DfixICONUX2-twotap.js?cb=20261102-bundle90-a"></script>
+<script src="v292DfixICONUX2-twotap.js?cb=20261110-iconx1-a"></script>
 <!-- ★SETAV1 (Owner 2026-11-01): 設定の「キャラ」の主人公・NPC の絵が Asset v2 の物語で「?」になる件。schema2 で <img> が無い欄にだけ <img alt="名前"> を置き、絵は av2 applyImg が入れる（表示だけ・通信/保存 0）。kill: localStorage v292DfixSETAV1Off=1 -->
 <script src="v292DfixSETAV1-settings-avatar.js?cb=20261101-bundle82-iconux-b"></script>
 <!-- ★MIDICON3-c (GPT #127-QM: Owner だけの CANARY): 途中から登場したキャラの自動アイコン（画像専用の控え）。鍵 midicon1（Worker が範囲を決める）。新しく遊んだターンだけ。S・長期記憶・名簿には何も書かない。kill = localStorage v292DfixMIDICONOff=1 -->
 <!-- ★OLDMX1 (Owner 2026-11-08・bundle93-h): 古い物語の続きで、名簿が判定より遅れて届いたターンを 1 回だけ判定し直す（MIDICON の中・規則と Worker の確認は同じ）。kill: localStorage v292DfixMIDICONrosOff=1 -->
-<script src="v292DfixMIDICON-auto-icon.js?cb=20261108-bundle93-i"></script>
+<script src="v292DfixMIDICON-auto-icon.js?cb=20261110-iconx1-a"></script>
 <!-- ★STARTICON (Owner 2026-11-07・Local 候補): 物語を始めたとき、絵の無い主人公＋登録 NPC（最大 3 人）の最初の絵を自動で 1 回だけ作る（手動の 2 タップと同じ部品・同じ順）。鍵 starticon1（★STARTICON2: 管理者画面の切り替え・全アカウント共通。鍵 0 = 通信 0。外見には由来 origin=starticon_auto。新しい物語だけ）。kill = localStorage v292DfixSTARTICONOff=1 -->
 <script src="v292DfixSTARTICON-start-icons.js?cb=20261110-bundle93-k"></script>
 <script src="v292Dav2-migrate-ui.js?cb=20261109-bundle93-j"></script>

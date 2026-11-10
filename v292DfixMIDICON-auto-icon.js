@@ -46,7 +46,7 @@
 (function (root) {
   'use strict';
   if (typeof window === 'undefined' || root.__v292DfixMIDICON) return;
-  var VER = 'mx3e-20261103+oldmx1+wmxreg1';
+  var VER = 'mx3e-20261103+oldmx1+wmxreg1+iconx1';
   var KILL = 'v292DfixMIDICONOff', LSK = 'v292DfixMIDICON_v1';
   var CAP = { turn: 1, storyDay: 2, storyTotal: 6, storyDesc: 2, acctDay: 5 };
   var SETTLE_MS = 3000, POLL_MS = 1500, ROS_LATE_MS = 90000;   /* ★OLDMX1 */
@@ -67,6 +67,10 @@
   function admfOn() { try { var X = root.__v292DfixADMF1; return !!(X && typeof X.gate === 'function' && X.gate('midicon1', false) === true); } catch (e) { return false; } }
   /* ★W-MXREG: the account key mxreg1 (any account; the admin page decides) + this device's kill v292DfixMIDICONregOff='1' */
   function regOn() { if (lsGet('v292DfixMIDICONregOff') === '1') return false; try { var X = root.__v292DfixADMF1; return !!(X && typeof X.gate === 'function' && X.gate('mxreg1', false) === true); } catch (e) { return false; } }
+  /* ★iconx1 A (GPT #127-RY): the account key mxgen1 (READY・行なし = OFF) + this device's kill v292DfixMIDICONgenOff='1'. Used only with midicon1 (select). */
+  function genOn() { if (lsGet('v292DfixMIDICONgenOff') === '1') return false; try { var X = root.__v292DfixADMF1; return !!(X && typeof X.gate === 'function' && X.gate('mxgen1', false) === true); } catch (e) { return false; } }
+  /* ★iconx1 B: the nh1 module (its own key nh1 + kill v292DfixNH1Off) */
+  function NH() { try { var N = root.__v292DfixNH1; return (N && typeof N.on === 'function' && N.on()) ? N : null; } catch (e) { return null; } }
   function vaultHidden(id) {   /* fail-closed: no fix889 → treat as hidden (do nothing). Worker is strict as well. */
     try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; }
   }
@@ -101,6 +105,55 @@
   var RE_GEN1 = /^(?:謎の|不明の|ある|その|例の|一人の|知らない|見知らぬ|別の|他の)|(?:たち|達|一同|衆|ども|共|の声|の影)$|[?？]/;
   var RE_GEN_RA = new RegExp('[' + HAN + KATA + ']ら$');   /* = the Worker's rule 'ら after a Han / Katakana letter', written without a lookbehind */
   function generic(nk) { return !!GENERIC[nk] || RE_GEN1.test(nk) || RE_GEN_RA.test(nk); }
+  /* ★iconx1 A: a generic handle (「女」「影」…) may be drawn only when ONE figure is proven (the Worker checks the same text again; GPT #127-RY 条件付き GO):
+     roster: exactly one entry of this word · importance 高 (or 中 with a supernatural 種別) · ≥2 look anchors in its roster appearance, one of them not hair.
+     text: ≥3 turns where a sentence names the word WITH an anchor (or it speaks), a hit in the newest turn, never with a count / "another" word or a different hair. */
+  var GA_OK = {}; ['女', '男', '少女', '少年', '老婆', '老人', '子供', '子ども', 'こども', '女の子', '男の子', '影', '人影', '幽霊', '亡霊', '怨霊', '霊', '化け物', '化物', '怪物', '妖怪', '鬼', '怪異', '影法師'].forEach(function (w) { GA_OK[w] = 1; });
+  var GA_MULTI = /(?:二人|ふたり|2人|２人|三人|3人|数人|何人|もう一人|もうひとり|別の|他の|ほかの|それぞれの|一人目|二人目|もう片方)[^。、]{0,4}$/;
+  var GA_NH_KIND = /怪異|妖怪|幽霊|亡霊|化け物|怪物|魔物|霊/;
+  var gaWhyLast = null;
+  function gaKey1(h) { var k = nfkc(String(h || '')).replace(RE_STRIP, ''); return (k.length === 1 && GA_OK[k] && genOn()) ? k : ''; }
+  function rosterCount(nk) { var fk = fold(nk), n = 0; rosterOf().forEach(function (e) { if (e && typeof e.handle === 'string' && fold(e.handle) === fk) n++; }); return n; }
+  function gaAnchors(app) {
+    var all = [], hair = [];
+    vis(app, true).list.forEach(function (x) { if (all.indexOf(x.w) < 0) { all.push(x.w); if (x.s === 'hair') hair.push(x.w); } });
+    var N = root.__v292DfixNH1; if (N && typeof N.anchorsS === 'function') N.anchorsS(app).forEach(function (x) { if (all.indexOf(x.w) < 0) { all.push(x.w); if (x.s === 'hair') hair.push(x.w); } });
+    return { all: all, nonHair: all.some(function (w) { return hair.indexOf(w) < 0; }) };
+  }
+  function gaOk(c) {
+    gaWhyLast = 'GENERIC';
+    if (!genOn() || !GA_OK[c.nk]) return false;
+    if (rosterCount(c.nk) !== 1) { gaWhyLast = 'GA_ROSTER_N'; return false; }
+    var imp = String(c.e.importance || ''), rk = String(c.e.kind || '');
+    if (!(imp === '高' || (imp === '中' && GA_NH_KIND.test(rk)))) { gaWhyLast = 'GA_IMPORTANCE'; return false; }
+    var an = gaAnchors(String(c.e.appr || '')); if (an.all.length < 2 || !an.nonHair) { gaWhyLast = 'GA_ANCHORS'; return false; }
+    c.gaA = an; return true;
+  }
+  function gaEvidence(T, nk, anchors, app) {   /* = the Worker's mxGaEvidence (plan <say who> only, no conversation-log who) */
+    var n = T.length, turns = 0, last = -1, multi = false, conflict = false, win = [], near = [], hitS = [], ax = axes(app);
+    T.forEach(function (t, i) {
+      var say = t.says.map(norm).indexOf(nk) >= 0, hit = say, ss = sents(t.text);
+      ss.forEach(function (s, si) {
+        if (RECALL.test(s)) return;
+        var ps = hitsIn(s, nk, false); if (!ps.length) return;   /* boundary only, not the descriptor rule */
+        ps.forEach(function (p) { if (GA_MULTI.test(s.slice(Math.max(0, p - 10), p))) multi = true; });
+        var sx = axes(s); if ((ax.hc && sx.hc && ax.hc !== sx.hc) || (ax.hl && sx.hl && ax.hl !== sx.hl)) conflict = true;
+        if (!anchors.some(function (a) { return s.indexOf(a) >= 0; })) return;
+        hit = true; ps.forEach(function (p) { win.push(s.slice(Math.max(0, p - 30), p + nk.length + 30)); }); near.push(s.slice(0, 80)); near.push((ss[si + 1] || '').slice(0, 40)); hitS.push(s.slice(0, 120));
+      });
+      if (hit) { turns++; last = i; }
+    });
+    var recent = last >= 0 && last >= n - 3;
+    return { ok: recent && turns >= 3, t: turns, recent: recent, need: 3, win: win, near: near, hitS: hitS, latest: n > 0 && last === n - 1, multi: multi, conflict: conflict };
+  }
+  /* ★iconx1 B: look slots + the nh1 dictionary's part slots (only while nh1 is ON); the labeled non-human appearance */
+  function slotsU(text) { var s = vis(text).slots, o = {}; for (var k in s) o[k] = 1; var N = NH(); if (N) { var x = N.slotsJa(text); for (var k2 in x) o[k2] = 1; } return o; }
+  function nhApp(texts, rosterKind) {
+    var N = NH(); if (!N) return null;
+    var d = N.draft(texts.join('。'), { rosterKind: rosterKind, isVisual: function (x) { return vis(x, true).nTokens > 0; } });
+    if (!d || d.form === 'human') return null;
+    var lab = N.labeled(d, GA_NH_KIND.test(String(rosterKind || '')) ? '怪異' : ''); return lab ? { app: lab, kind: d.kind || 'spirit' } : null;
+  }
   var COLORS = ['灰色', '灰', '鼠色', 'グレー', '琥珀色', '琥珀', '金色', '黄金', '金', '銀色', '銀', '濃紺', '紺色', '紺', '漆黒', '黒色', '黒', '純白', '白色', '白', '真紅', '赤色', '赤', '紅', '朱',
     '青色', '青', '蒼', '碧', '緑色', '緑', '焦茶', '茶色', '鳶色', '茶', '紫色', '紫', '桃色', 'ピンク', '黄色', '黄'];
   var COLOR_EN = { '灰色': 'grey', '灰': 'grey', '鼠色': 'grey', 'グレー': 'grey', '琥珀色': 'amber', '琥珀': 'amber', '金色': 'golden', '黄金': 'golden', '金': 'golden', '銀色': 'silver', '銀': 'silver',
@@ -302,7 +355,7 @@
     if (j.caps && typeof j.caps === 'object') { var cp = {}; Object.keys(CAP).forEach(function (k) { var v = j.caps[k]; if (typeof v === 'number' && v >= 0 && v === Math.floor(v)) cp[k] = v; }); X.caps = cp; }   /* ★mx3-c: follow the Worker's cap settings */
     X.extras = j.extras.filter(function (e) { return e && typeof e.extra_id === 'string' && MX_ID_RE.test(e.extra_id) && typeof e.asset_id === 'string' && typeof e.handle === 'string'; })
       .map(function (e) { return { extra_id: e.extra_id, handle: e.handle, vars: Array.isArray(e.vars) ? e.vars.filter(function (v) { return typeof v === 'string'; }).slice(0, 3) : [], cls: e.cls === 'desc' ? 'desc' : 'named',
-        kind: e.kind || null, asset_id: e.asset_id, claimed_by: (typeof e.claimed_by === 'string' && !MX_ID_RE.test(e.claimed_by)) ? e.claimed_by : null, claim_state: e.claim_state || null,
+        kind: e.kind || null, ga: e.ga === 1, asset_id: e.asset_id, claimed_by: (typeof e.claimed_by === 'string' && !MX_ID_RE.test(e.claimed_by)) ? e.claimed_by : null, claim_state: e.claim_state || null,
         forms: [norm(e.handle)].concat((Array.isArray(e.vars) ? e.vars : []).map(norm)).filter(Boolean) }; });
     notifyPortrait();
   }
@@ -311,7 +364,7 @@
   function extraFor(storyId, label) {   /* read only — portrait.js asks; the src is set there */
     if (killed() || !X.listed || X.story !== String(storyId || '')) return null;
     var n = norm(String(label == null ? '' : label)); if (!n) return null;
-    for (var i = 0; i < X.extras.length; i++) if (X.extras[i].forms.indexOf(n) >= 0) { var e = X.extras[i]; return { extra_id: e.extra_id, asset_id: e.asset_id, handle: e.handle, claimed_by: e.claimed_by, claim_state: e.claim_state, cls: e.cls }; }
+    for (var i = 0; i < X.extras.length; i++) if (X.extras[i].forms.indexOf(n) >= 0) { var e = X.extras[i]; if (e.ga && rosterCount(e.handle) > 1) return null; /* ★iconx1 A: a generic-word picture is shown only while the roster has one figure of that word */ return { extra_id: e.extra_id, asset_id: e.asset_id, handle: e.handle, claimed_by: e.claimed_by, claim_state: e.claim_state, cls: e.cls }; }
     try { var at = (typeof root.__v292AliasFix === 'function') ? root.__v292AliasFix(String(label)) : null; if (typeof at === 'string' && at && at !== label) { var an = norm(at);   /* ★mx3-e: the label is an alias of a speaker name that has an extra (any device) */
         if (an && an.length >= 2 && endsWith(n, an)) for (var k2 = 0; k2 < X.extras.length; k2++) if (X.extras[k2].forms.indexOf(an) >= 0) { var e3 = X.extras[k2]; return { extra_id: e3.extra_id, asset_id: e3.asset_id, handle: e3.handle, claimed_by: e3.claimed_by, claim_state: e3.claim_state, cls: e3.cls, alias: true }; } } } catch (e) {}
     var al = X.alias[hk(n)];   /* ★mx3-c: a renamed figure the Worker mapped to an existing extra (409 EXTRA_*) shows that extra's picture */
@@ -357,7 +410,7 @@
     var descN = X.extras.filter(function (e) { return e.cls === 'desc'; }).length;
     var castFold = {}; cast.forEach(function (c) { if (c.name) castFold[fold(c.name)] = 1; }); Object.keys(bindings).forEach(function (b) { castFold[fold(b)] = 1; });
     var hs = ros.filter(function (e) { return e && typeof e.handle === 'string' && (String(e.importance || '') === '高' || String(e.importance || '') === '中') && !NOT_PERSON.test(String(e.kind || '人物')) && PERSONISH.test(String(e.kind || '人物')); });
-    var forms = hs.map(function (e) { return { e: e, key: dispKey(e.handle), nk: norm(e.handle) }; }).filter(function (x) { return x.key && x.nk.length >= 2; });
+    var forms = hs.map(function (e) { return { e: e, key: dispKey(e.handle) || gaKey1(e.handle), nk: norm(e.handle) }; }).filter(function (x) { return x.key && (x.nk.length >= 2 || GA_OK[x.nk] === 1); });   /* ★iconx1 A: a 1-letter figure word (女・男・影・鬼・霊) only with mxgen1 */
     /* longest roster form: a form that is a suffix of a longer one becomes its variant (≤3, must carry a look word, not generic) */
     var cands = [];
     forms.forEach(function (x) {
@@ -371,7 +424,8 @@
       if (al && al.usable && !isDesc(c.nk)) { disp = c.key; c = { e: c.e, key: al.target, nk: al.tnk, vars: [] }; stats.aliasSpeaker++; }
       var why = null, desc = isDesc(c.nk), f = [c.nk].concat(c.vars), ev = null, mid = String(c.e.importance || '') === '中';   /* ★mx3-g (GPT #127-QW): 中 needs speaks-in-latest-turn + look word + ≥2 turns */
       var TT = mid ? T.map(function (t) { return { text: t.text, says: t.says.concat(t.conv || []), conv: t.conv }; }) : T;
-      if (generic(c.nk)) why = 'GENERIC';
+      var ga = generic(c.nk) ? gaOk(c) : false; if (ga) desc = true;   /* ★iconx1 A */
+      if (generic(c.nk) && !ga) why = gaWhyLast || 'GENERIC';
       else if (so.h[hk(c.nk)]) why = 'NO_RETRY:' + so.h[hk(c.nk)];
       else if (so.ak && so.ak[hk(c.nk)]) why = 'ALIAS_OF_EXTRA';   /* ★mx3-c: the Worker said this handle is an existing extra (renamed / revealed) */
       else if (hero && norm(hero.name) === c.nk) why = 'HERO';
@@ -385,20 +439,23 @@
       else if (apposition(cast, bindings, T, f, [].concat.apply([], X.extras.map(function (x) { return x.forms.map(function (n) { return [n, x.extra_id]; }); })))) why = 'EXTRA_APPOSITION';
       else if (desc && apposition(cast, bindings, T, f, cands.filter(function (o) { return o !== c && !isDesc(o.nk); }).map(function (o) { return [o.nk, o.nk]; }))) why = 'APPOSED_TO_NAMED';   /* the proper-named form wins; the role form is the same person */
       else if (desc && (descN >= capOf('storyDesc') || so.descStop)) why = 'CAP_DESC';
-      else { ev = evidence(TT, f, desc); if (!ev.ok) why = 'EVIDENCE:' + ev.t + '/' + ev.need + (ev.recent ? '' : ':old');
-        else if (lastHitOf(TT, f, desc) !== T.length - 1) why = 'NOT_IN_LATEST';
-        else if (mid && !speaksLatest(T, f, c.key, disp)) why = 'MID_NOT_SPEAKING';   /* ★mx3-g */   /* ★mx3-c (GPT #127-QM): only a figure of the turn just played */
+      else { ev = ga ? gaEvidence(T, c.nk, c.gaA.all, String(c.e.appr || '')) : evidence(TT, f, desc); if (!ev.ok) why = 'EVIDENCE:' + ev.t + '/' + ev.need + (ev.recent ? '' : ':old');
+        else if (ga ? !ev.latest : lastHitOf(TT, f, desc) !== T.length - 1) why = 'NOT_IN_LATEST';
+        else if (ga && ev.multi) why = 'GA_MULTI';   /* ★iconx1 A: maybe two people under one word */
+        else if (ga && ev.conflict) why = 'GA_CONFLICT';
+        else if (mid && !ga && !speaksLatest(T, f, c.key, disp)) why = 'MID_NOT_SPEAKING';   /* ★mx3-g */   /* ★mx3-c (GPT #127-QM): only a figure of the turn just played */
         else if (so.ny && typeof so.ny[hk(c.nk)] === 'number' && ev.t <= so.ny[hk(c.nk)]) why = 'NOT_YET_WAIT';   /* ★mx3-c: the Worker said not yet; ask again only when it appeared in more turns */ }
       var row = { nk: c.nk, desc: desc, why: why, t: ev ? ev.t : null }; if (disp) row.alias = 1;
       if (!why) {
         var cue = [c.nk].concat(c.vars, ev.near).join('。');
         var app = appearanceFrom(ev.hitS.concat([String(c.e.appr || '')]));   /* only the sentences that name the figure (not the next sentence) + the roster's appearance */
-        var ts = vis(cue).slots, as = vis(app).slots, both = Object.keys(as).filter(function (s) { return ts[s]; });
+        var nha = nhApp([String(c.e.appr || '')].concat(ev.hitS), c.e.kind); if (nha) app = nha.app;   /* ★iconx1 B: non-human / mixed → the labeled appearance */
+        var ts = slotsU(cue), as = slotsU(app), both = Object.keys(as).filter(function (s) { return ts[s]; });
         if (!app) row.why = 'NO_LOOK';
         else if (!desc && !both.length) row.why = 'FEW_FEATURES_NAMED';   /* ★mx3-c: = the Worker (a look clue in the text AND in the image-only appearance) */
         else if (desc && (both.length < 2 || !both.some(function (s) { return s !== 'hair'; }))) row.why = 'FEW_FEATURES:' + both.sort().join('+');
         else {
-          var kind = kindOf(cue), gender = tailGender(c.nk) || (/女性|少女|女の子|彼女|の女|老婆|娘/.test(String(c.e.appr || '')) ? '女性' : /男性|少年|男の子|の男|老人/.test(String(c.e.appr || '')) ? '男性' : '');
+          var kind = nha ? nha.kind : kindOf(cue), gender = tailGender(c.nk) || (/女性|少女|女の子|彼女|の女|老婆|娘/.test(String(c.e.appr || '')) ? '女性' : /男性|少年|男の子|の男|老人/.test(String(c.e.appr || '')) ? '男性' : '');
           if (desc) {
             var hx = axes(f.join('。')), wx = axes(ev.win.join('。')), da = { g: tailGender(c.nk) || hx.g, hc: hx.hc || wx.hc, hl: hx.hl || wx.hl };
             var ax = axes(app), ag = gender || ax.g;
@@ -407,7 +464,7 @@
           }
           if (!row.why) {
             var traits = []; if (kind !== 'human') Object.keys(TRAIT_CUE).forEach(function (k) { if (traits.length < 4 && TRAIT_CUE[k].test(cue)) traits.push(k); });
-            C.push({ disp: disp, key: c.key, nk: c.nk, vars: c.vars, desc: desc, last: ev ? T.length : 0, t: ev.t, lastHit: lastHitOf(T, f, desc), appearance: app, gender: gender, kind: kind, traits: traits });
+            C.push({ disp: disp, key: c.key, nk: c.nk, vars: ga ? [] : c.vars, desc: desc, last: ev ? T.length : 0, t: ev.t, lastHit: ga ? T.length - 1 : lastHitOf(T, f, desc), appearance: app, gender: gender, kind: kind, traits: traits }); if (ga) C[C.length - 1].ga = 1;
           }
         }
       }
@@ -460,12 +517,13 @@
       var row = { reg: 1, why: why, t: ev ? ev.t : null };
       if (!why) {
         var cue = f.concat(ev.near).join('。'), app = appearanceFrom(ev.hitS);
-        var ts = vis(cue).slots, as = vis(app).slots, both = Object.keys(as).filter(function (s) { return ts[s]; });
+        var nhr = nhApp(ev.hitS, ''); if (nhr) app = nhr.app;   /* ★iconx1 B */
+        var ts = slotsU(cue), as = slotsU(app), both = Object.keys(as).filter(function (s) { return ts[s]; });
         if (!app) row.why = 'NO_LOOK';
         else if (!desc && !both.length) row.why = 'FEW_FEATURES_NAMED';
         else if (desc && (both.length < 2 || !both.some(function (s) { return s !== 'hair'; }))) row.why = 'FEW_FEATURES:' + both.sort().join('+');
         else {
-          var kind = kindOf(cue), hs = ev.hitS.join('。'), fem = REG_F.test(hs), mal = REG_M.test(hs);
+          var kind = nhr ? nhr.kind : kindOf(cue), hs = ev.hitS.join('。'), fem = REG_F.test(hs), mal = REG_M.test(hs);
           var gender = (desc && tailGender(f[0])) || (fem && !mal ? '女性' : mal && !fem ? '男性' : '');
           var traits = []; if (kind !== 'human') Object.keys(TRAIT_CUE).forEach(function (k) { if (traits.length < 4 && TRAIT_CUE[k].test(cue)) traits.push(k); });
           var key = (c.name && own.indexOf(norm(c.name)) >= 0) ? (dispKey(c.name) || c.name) : (Object.keys(bindings).filter(function (b) { return bindings[b] === c.character_id && own.indexOf(norm(b)) >= 0; }).map(dispKey).filter(Boolean)[0] || '');
@@ -665,7 +723,7 @@
 
   root.__v292DfixMIDICON = {
     ver: VER, extraFor: extraFor,
-    status: function () { var r = rec(), id = sid(); return { ver: VER, killed: killed(), gate: gateWhy() || 'on', started: X.started, story: X.story, listed: X.listed, turnCount: X.turnCount, doneTurn: X.doneTurn, busy: X.busy,
+    status: function () { var r = rec(), id = sid(); return { ver: VER, killed: killed(), gate: gateWhy() || 'on', gen: genOn(), nh: !!NH(), started: X.started, story: X.story, listed: X.listed, turnCount: X.turnCount, doneTurn: X.doneTurn, busy: X.busy,
       stopped: X.stopped, pageStop: X.pageStop, lastTry: X.lastTry || null, quiet: quiet() || 'quiet', extras: X.extras.map(function (e) { return { extra_id: e.extra_id, handle: e.handle, vars: e.vars, cls: e.cls, kind: e.kind, asset_id: e.asset_id, claimed_by: e.claimed_by, claim_state: e.claim_state }; }),
       last: X.last, lastSel: X.lastSel || null, stats: JSON.parse(JSON.stringify(stats)), rec: { day: r.day, acct: r.acct, story: id && r.st[id] ? JSON.parse(JSON.stringify(r.st[id])) : null }, log: LOG.slice(-30),
       played: Object.keys(X.played).map(Number), caps: X.caps, alias: Object.keys(X.alias).length, trace: { day: r.tr || {}, story: id && r.st[id] && r.st[id].tr ? JSON.parse(JSON.stringify(r.st[id].tr)) : {} } }; },   /* ★mx3-c */
@@ -673,7 +731,7 @@
     dryRun: function (o) { var S = state(), id = sid(); if (!S || !id) return null; return select(S, rec(), id, o && Array.isArray(o.roster) ? o.roster : null); },   /* o.roster: diagnosis only (evaluate a given roster instead of fix307's) */
     kick: function () { return runTurn(true); },
     regDryRun: function (by) { var S = state(), id = sid(); if (!S || !id) return null; return regSelect(S, rec(), id, (by && typeof by === 'object') ? by : {}); },   /* ★W-MXREG diagnosis: by = { character_id: 1 } of characters that have a picture */   /* diagnosis / test only (an explicit action): skips the played-turn check; the Worker still requires the figure in its newest turn */
-    __t: { aliasInfo: aliasInfo, lastHitOf: lastHitOf, traceRun: traceRun, icfLocal: icfLocal, isRoleish: isRoleish, apposition: apposition, f641Live: f641Live, promotedSoon: promotedSoon, norm: norm, dispKey: dispKey, generic: generic, isDesc: isDesc, vis: vis, axes: axes, evidence: evidence, turnsOf: turnsOf, identityA: identityA, descIdentity: descIdentity, appearanceFrom: appearanceFrom, kindOf: kindOf, hitsIn: hitsIn, tailGender: tailGender }
+    __t: { gaOk: gaOk, gaEvidence: gaEvidence, gaAnchors: gaAnchors, rosterCount: rosterCount, slotsU: slotsU, nhApp: nhApp, select: select, aliasInfo: aliasInfo, lastHitOf: lastHitOf, traceRun: traceRun, icfLocal: icfLocal, isRoleish: isRoleish, apposition: apposition, f641Live: f641Live, promotedSoon: promotedSoon, norm: norm, dispKey: dispKey, generic: generic, isDesc: isDesc, vis: vis, axes: axes, evidence: evidence, turnsOf: turnsOf, identityA: identityA, descIdentity: descIdentity, appearanceFrom: appearanceFrom, kindOf: kindOf, hitsIn: hitsIn, tailGender: tailGender }
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })(typeof window !== 'undefined' ? window : this);

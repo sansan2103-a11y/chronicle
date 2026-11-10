@@ -121,6 +121,8 @@
       try {
         if (lsg('v292DfixICONUXOff') !== '1' && input && !input.confirmed && typeof cb === 'function') {
           if (regenTap) { st.regenAi = (st.regenAi || 0) + 1; note({ kind: 'REGEN_NO_SHORTCUT', name: input.name }); throw 'regen'; }
+          { var nh0 = null; try { nh0 = (typeof P.nhPropose === 'function') ? P.nhPropose(input) : null; } catch (e1) { nh0 = null; }   /* ★NH1 (GPT #127-RY B): 人外・混合は部位ラベル付きの下書き（AI なし）。人間は今までどおり */
+            if (nh0) { st.nh = (st.nh || 0) + 1; note({ kind: 'NH1', name: input.name }); setTimeout(function () { cb(nh0); }, 0); return; } }
           var dc = directCheck(input.desc, input.gender), dd = dc.ok ? dc.draft : null;
           if (!dd) { st.refused = st.refused || {}; st.refused[dc.why] = (st.refused[dc.why] || 0) + 1; note({ kind: 'NO_SHORTCUT', name: input.name, why: dc.why }); }
           if (dd) {

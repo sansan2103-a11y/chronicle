@@ -175,6 +175,24 @@
     return { sys: sys, user: user };
   }
 
+  /* ★NH1 (laneICONX1・GPT #127-RY B): 人外・混合の人物は、部位ラベル付きの下書き（辞書だけ・AI なし）。人間の人物は今までどおり（この関数は null）。
+     鍵 nh1 が OFF・kill v292DfixNH1Off='1'・部品が無い → null。性的な語を含む下書きは作らない（今までの案と同じ保護）。 */
+  function nhPropose(input) {
+    var N = W.__v292DfixNH1; if (!N || typeof N.on !== 'function' || !N.on()) return null;
+    input = input || {};
+    var src = norm(input.confirmed ? input.confirmed : (input.desc || '')); if (!src || BAD_SEX.test(src)) return null;   /* a text with a sexual word keeps the previous draft (its notice and protections) */
+    var g0 = (input.gender === '女性' || input.gender === '男性') ? input.gender : '';
+    var lab = null;
+    if (N.isLabeled(src)) lab = src.slice(0, MAX_APPEARANCE);
+    else {
+      var d = N.draft(src, { isVisual: function (c) { return isVis(c) && !PERS_RE.test(c) && !BAD_SEX.test(c); } });
+      if (!d || d.form === 'human') return null;
+      lab = N.labeled(d, '');
+    }
+    if (!lab || BAD_SEX.test(lab)) return null;
+    var g = g0 || genderGuess(src);
+    return { ok: true, code: null, appearance: lab, base: lab, gender: g, genderFixed: !!g0, added: [], rejected: [], dropped: [], droppedVisual: [], missing: [], aiCalled: false, nh: 'nh1', version: VERSION + '+nh1' };
+  }
   function F436() { return W.__v292Dfix436 || null; }
   function killed() { try { return W.localStorage && W.localStorage.getItem('v292DfixLC1Off') === '1'; } catch (e) { return false; } }
   function parseJson(F, txt) {
@@ -196,6 +214,7 @@
     var missing = missingOf(base);
     var out = function (o) { o.base = base; o.dropped = vp.dropped; o.droppedVisual = vp.droppedVisual || []; o.missing = missing; o.version = VERSION; if (o.gender === undefined) o.gender = ''; cb(o); };
     if (killed()) return out({ ok: false, code: 'OFF', appearance: base, aiCalled: false, gender: (ctx.gender === '女性' || ctx.gender === '男性') ? ctx.gender : genderGuess(base + ' ' + (input.desc || '')) });
+    { var nhr = null; try { nhr = nhPropose(input); } catch (e) { nhr = null; } if (nhr) return cb(nhr); }   /* ★NH1 */
     if (!missing.length || (base && !/[\u3040-\u30ff\u4e00-\u9fff]/.test(base))) {          /* 足りない枠が無い／日本語でない外見文（枠を判定できない）→ AI は呼ばない */
       var c0 = compose(base, null, ctx); return out({ ok: true, appearance: c0.appearance, gender: c0.gender, genderFixed: c0.genderFixed, added: [], rejected: [], aiCalled: false });
     }
@@ -220,7 +239,7 @@
     } catch (e) { if (!done) { done = true; fallback('AI_THREW', { detail: String(e && e.message || e).slice(0, 80) }); } }
   }
 
-  var api = { propose: propose, compose: compose, slotsOf: slotsOf, missingOf: missingOf, visualPart: visualPart, genderGuess: genderGuess, buildPrompt: buildPrompt,
+  var api = { propose: propose, nhPropose: nhPropose, compose: compose, slotsOf: slotsOf, missingOf: missingOf, visualPart: visualPart, genderGuess: genderGuess, buildPrompt: buildPrompt,
               version: VERSION, stats: function () { return { calls: calls }; }, SLOT_LABEL: SLOT_LABEL };
   W.__v292DfixLC1prop = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
