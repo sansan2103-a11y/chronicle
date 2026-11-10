@@ -31,15 +31,17 @@
 (function () {
   'use strict';
   if (window.__v292DfixAGENCY1) return;
-  var VER = 'agency1-20261110-b';
+  var VER = 'agency1-20261110-c';
   var TAG = '[v292DfixAGENCY1:player-intent]';
   var KILL = 'v292DfixAGENCY1Off', ON = 'v292DfixAGENCY1On', KEY = 'agency1', STORY_OFF = 'v292DfixAGENCY1StoryOff';
-  var TEXT = '入力されていない主人公の意図・発話内容を勝手に確定しない。NPCは自分の知識や関心から質問・推測・提案してよいが、それを主人公が元から考えていた内容として扱わず、主人公の次の選択を残す。';
+  /* ★AGENCY1c（GPT #127-RU ②）: 3 つの文（TEXT／TEXT_STORY／TEXT_STORY_B）すべての直後に続けて足す 1 文（文面は裁定のまま・1 回だけ）。 */
+  var SENT_FACT = 'NPCが主人公の過去の発言・決定を事実として述べる場合は、既存の記録に基づく。根拠のない推測や嘘はNPC自身の認識として扱い、確定した事実にしない。';
+  var TEXT = '入力されていない主人公の意図・発話内容を勝手に確定しない。NPCは自分の知識や関心から質問・推測・提案してよいが、それを主人公が元から考えていた内容として扱わず、主人公の次の選択を残す。' + SENT_FACT;
   /* ★AGENCY1b（Owner 決定 2026-11-10 17:12 案 A）: STORY（場面の方向づけ）と「続きを書く」・オート⏩の回にも、主人公の台詞を AI に書かせない 1 文。
      文面は Owner 案のまま。SAY/DO の文（TEXT）とは別の文で、同じ回に両方が付くことはない（SAY/DO の回は STORY の文を付けない）。 */
-  var TEXT_STORY = 'プレイヤーが台詞を入力していないターンでは、主人公の台詞（「」）を書かない。主人公は表情・視線・小さな動作などの描写にとどめ、言葉はプレイヤーに残す。';
+  var TEXT_STORY = 'プレイヤーが台詞を入力していないターンでは、主人公の台詞（「」）を書かない。主人公は表情・視線・小さな動作などの描写にとどめ、言葉はプレイヤーに残す。' + SENT_FACT;
   /* 版 B（統括追加・Owner「ゲームとしての質が最優先で、A は必須ではない」）: A/B 比較用。端末キー v292DfixAGENCY1StoryMode='B' で切り替え（既定は A）。 */
-  var TEXT_STORY_B = 'プレイヤーが台詞を入力していないターンでは、主人公の台詞は短いひと言の反応（10字程度まで）にとどめ、新しい提案・決定・情報を主人公に言わせない。';
+  var TEXT_STORY_B = 'プレイヤーが台詞を入力していないターンでは、主人公の台詞は短いひと言の反応（10字程度まで）にとどめ、新しい提案・決定・情報を主人公に言わせない。' + SENT_FACT;
   var STORY_MODE = 'v292DfixAGENCY1StoryMode';
   function storyMode() { return lsGet(STORY_MODE) === 'B' ? 'B' : 'A'; }
   function storyText() { return storyMode() === 'B' ? TEXT_STORY_B : TEXT_STORY; }
