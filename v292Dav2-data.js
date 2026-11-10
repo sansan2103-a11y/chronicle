@@ -643,8 +643,31 @@
             if (mr !== true) return done({ ok: true, serverRev: j2.rev, mirror: 'MIRROR_FAILED:' + (isObj(mr) && mr.code || '?') });
             if (!lss(slotKey, JSON.stringify(slot))) return done({ ok: true, serverRev: j2.rev, mirror: 'SLOT_WRITE_FAILED' });
             var rec2 = buildRecord(F, id, schema); var post = !!(rec2 && isObj(rec2.body) && same(rec2.body, b2));   // contract 6 post-check
+            /* ★SPBASE1 (GPT #127-RW ① 条件付き GO・kill v292DfixSPBASE1Off='1'): the registrar's F-FZ1(2) rule for this side-port.
+               This tab's own side-port moved the server; without this the next ordinary push saw "server ahead" (fix910 SAVE_TIME_SERVER_REV_ADVANCED →
+               DIVERGED) for its own write. The device's save base advances to the landed rev ONLY when ALL hold (else unchanged = the old behaviour):
+                 (1) the write was accepted (200 ok) and the accepted rev/hash IS the readback (rev and hash identical), and the readback body == what we sent
+                 (2) the persisted slot and memory took the delta (we are past mirror / slot write) and the persisted record == readback (not PERSISTED_DIVERGED)
+                 (3) the device's last confirmed rev AND hash == the fresh server state we composed on (j)
+                 (4) nobody else wrote in between: landed rev == composed rev + 1 (exactly our one write)
+                 (5) the marker is not DIVERGED / BOOTSTRAP_HOLD and no ordinary save is in flight */
+            var spb = null;
+            try { if (lsg('v292DfixSPBASE1Off') !== '1'){
+                    var G1 = window.__v292Dfix781; var mk1 = (G1 && typeof G1.marker === 'function') ? G1.marker(id) : null; var lc1 = mk1 && mk1.lastConfirmed;
+                    var wj1 = w && w.j; var pre1 = +j.rev || 0, preH1 = String(j.serverHash || ''), landed1 = +j2.rev || 0, fp1 = String(j2.serverHash || '');
+                    var why1 = !G1 || typeof G1.confirm !== 'function' ? 'NO_781'
+                      : !(wst === 200 && !werr && wj1 && wj1.ok === true) ? 'NOT_ACCEPTED'
+                      : !(+wj1.rev === landed1 && String(wj1.serverHash || '') === fp1 && fp1) ? 'ACCEPTED_NE_READBACK'
+                      : !post ? 'PERSISTED_DIVERGED'
+                      : !(lc1 && typeof lc1.serverRev === 'number' && lc1.serverRev === pre1 && lc1.fingerprint != null && String(lc1.fingerprint) === preH1) ? 'LC_NE_BASE'
+                      : landed1 !== pre1 + 1 ? 'OTHER_WRITER'
+                      : (mk1.state === 'DIVERGED' || mk1.state === 'BOOTSTRAP_HOLD') ? 'HELD_' + mk1.state
+                      : mk1.inFlightSave ? 'IN_FLIGHT' : null;
+                    if (!why1){ G1.confirm(id, landed1, fp1); spb = { from: pre1, to: landed1 }; }
+                    else spb = { kept: why1, lc: lc1 ? lc1.serverRev : null, preRev: pre1, landed: landed1 }; } } catch(eB){ spb = { kept: 'THREW', err: String(eB).slice(0, 60) }; }
+            note({ kind: 'AV2_SIDEPORT_SAVE_BASE', id: id, op: op.kind, base: spb });
             try { if (typeof op.after === 'function') op.after(b2); } catch(e){}
-            done({ ok: true, serverRev: j2.rev, mirror: post ? 'PERSISTED_EQUALS_READBACK' : 'PERSISTED_DIVERGED', reloadRequired: true });   /* ★R3-4: fix733 TYPE A → the document must be re-read before the next push */
+            done({ ok: true, serverRev: j2.rev, mirror: post ? 'PERSISTED_EQUALS_READBACK' : 'PERSISTED_DIVERGED', reloadRequired: true, base: spb });   /* ★R3-4: fix733 TYPE A → the document must be re-read before the next push */
           });
         });
         }
