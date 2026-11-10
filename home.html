@@ -1983,7 +1983,7 @@
       for (var id in rIds) ids[id] = 1;
       for (var i = 0; i < LS.length; i++){
         var kk = LS.key(i); if (!kk || Object.prototype.hasOwnProperty.call(ls, kk)) continue;
-        if (/^(__gen_|chr6_bk_|v292Dfix399_|v292Dfix402_)/.test(kk)) continue;
+        if (/^(__gen_|chr6_bk_|v292Dfix399_|v292Dfix402_|v292Dfix945_rescue_)/.test(kk)) continue;   /* ★RESCUE1: 控えは package 対象外 */
         if (pafOn() && F_PAF_DENY.test(kk)) continue;                           /* ★PAF: 運ばない family は local residue ＝ 関門の対象外（collector と同じ policy） */
         var owner = null; for (var sid in ids){ if (g2Belongs(kk, sid)){ owner = sid; break; } }
         if (owner == null){
@@ -2692,6 +2692,7 @@
     for(var i=0;i<LS.length;i++){
       var k = LS.key(i); if(!k) continue;
       if(/^__gen_|^chr6_bk_|^v292Dfix399_|^v292Dfix402_/.test(k)) continue;
+      if(/^v292Dfix945_rescue_/.test(k)) continue;           /* ★RESCUE1: 保存されなかったターンの控えは端末だけ（クラウドへ運ばない） */
       if(use821 && F821_DENY.test(k)) continue;              /* ★fix821③ credential は package 対象外 */
       if(pafOn() && F_PAF_DENY.test(k)) continue;            /* ★PAF: local-derived family は運ばない */
       /* ★fix602: 列挙側の除外だけに頼らない。組み立ての最後の関門でも墓標スロットを落とす
@@ -3520,5 +3521,7 @@
 </footer>
 <script src="v292Dvault2-ui.js?cb=20261021-bundle37-a"></script>
 <script src="v292DfixLE4-relock-follow.js?cb=20261022-bundle40-b"></script>
+<!-- RESCUE1: 控え（v292Dfix945_rescue_）の掃除だけ（Vault 非表示・削除・別アカウント・ログアウト）。画面は出さない。kill v292DfixRESCUE1Off='1' -->
+<script src="v292DfixRESCUE1-rescue-view.js?cb=20261110-rescue1"></script>
 </body>
 </html>

@@ -330,6 +330,7 @@
       if (/^__gen_/.test(k)) continue;
       if (/^chr6_bk_/.test(k)) continue;
       if (/^v292Dfix399_/.test(k)) continue;     // 同期状態は運ばない
+      if (/^v292Dfix945_rescue_/.test(k)) continue;           /* ★RESCUE1: 保存されなかったターンの控えは端末だけ（クラウドへ運ばない） */
       if (use821 && F821_DENY.test(k)) continue;              /* ★fix821③ */
       if (pafOn() && F_PAF_DENY.test(k)) continue;            /* ★PAF: local-derived family は運ばない */
       if (pafOn() && /^v292Dfix402_/.test(k)) continue;      /* ★PAF(2): 同期 marker（v292Dfix402_f781g_ 等）は fix402 / home と同じく運ばない（従来は fix399 だけが運んでいた） */

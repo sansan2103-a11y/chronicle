@@ -29,6 +29,13 @@
  *       v292Dfix945_rescue_<id> へ 1 本だけ退避（物語本体・marker・クラウドには触らない。上書き 1 本・約 400KB まで）。
  *       戻す操作は作らない（案のみ）。★既定 OFF。ON = v292Dfix945RescueOn='1'（RescueOff='1' が優先）
  *   (6) の呼出しは index.html を変えず、この file が G.submit を包む（SC1 と同じ型・外側/内側どちらでも鎖の中に入る）。
+ *
+ * ■v2.5（RESCUE1 / GPT #127-RY ④-2・LOCAL）: 退避の「掃除・確認・入力欄へ戻す」を v292DfixRESCUE1-rescue-view.js に分け、(7) を直した
+ *   ・書くのは RESCUE1 の store() だけ（アカウントの印・Vault・件数/容量の上限・掃除はそちら）。RESCUE1 が無い／止まっている＝書かない。
+ *   ・退避するターンの始まりを「ディスクのターン数」から「メモリとディスクで最初に食い違うターン」に変えた。
+ *     旧版は本物の競合（別タブが同じ番号のターンを先に保存）で disk = mem になり、このタブで作ったターンを 1 つも退避していなかった。
+ *   ・中身は入力の種類・入力文・本文だけ（plan / 会話カード / 診断は持たない）。
+ *   ・ON の条件: RescueOff='1' でない かつ（RESCUE_DEFAULT_ON または RescueOn='1'）かつ RESCUE1 が armed。RESCUE_DEFAULT_ON は false のまま（既定 OFF）。
  */
 (function v292Dfix945(){
   if (window.__v292Dfix945) return;
@@ -90,29 +97,32 @@
   /* ---- (7) 退避（S.save を止めたとき・メモリにしかないターン + 入力欄） ---- */
   /* ★既定 OFF（統括裁定）: 退避キーが Vault 非表示・削除・アカウント切替の掃除の一覧に入るまでは書かない。
      ON は端末キー v292Dfix945RescueOn='1' のときだけ。v292Dfix945RescueOff='1' は常に優先して OFF。 */
-  function rescueOff(){ return lsg('v292Dfix945RescueOff') === '1' || lsg('v292Dfix945RescueOn') !== '1'; }
+  var RESCUE_DEFAULT_ON = false;   /* ★v2.5: 既定を ON にするかは GPT 裁定待ち。ON にしても RESCUE1（掃除と画面）が無ければ書かない */
+  function rescueStore(){ try { var R = window.__v292DfixRESCUE1; return (R && R.armed === true && typeof R.store === 'function') ? R : null; } catch(e){ return null; } }
+  function rescueOff(){ return lsg('v292Dfix945RescueOff') === '1' || !(RESCUE_DEFAULT_ON || lsg('v292Dfix945RescueOn') === '1') || !rescueStore(); }
+  function tfp(t){ var n = (t && t.narrative != null) ? t.narrative : ''; if (Array.isArray(n)) n = n.join('\n'); return fnv(String((t && t.inputType) || '') + '\u0001' + String((t && t.playerText) == null ? '' : t.playerText) + '\u0001' + String(n)); }
   function rescue(id, S){
     if (rescueOff() || !S || !id) return null;
     try {
       var turns = (S.turns && S.turns.length) ? S.turns : [];
-      var raw = lsg('chr6_slot_' + id), disk = 0;
-      try { var o = raw ? JSON.parse(raw) : null; disk = (o && o.turns && o.turns.length) || 0; } catch(e){ disk = 0; }
+      var raw = lsg('chr6_slot_' + id), dt = [];
+      try { var o = raw ? JSON.parse(raw) : null; dt = (o && Array.isArray(o.turns)) ? o.turns : []; } catch(e){ dt = []; }
+      /* ★v2.5: 最初に食い違うターンから後ろ（別タブが同じ番号のターンを保存していても、このタブのターンを取りこぼさない） */
+      var base = 0; while (base < turns.length && base < dt.length && tfp(turns[base]) === tfp(dt[base])) base++;
       var inp = null; try { var el = document.getElementById('inp'); inp = (el && el.value) ? String(el.value) : null; } catch(e){}
-      var extra = turns.length > disk ? turns.slice(disk) : [];
+      var extra = turns.slice(base);
       if (!extra.length && !inp) return null;
-      var rec = { v: 1, storyId: id, at: Date.now(), why: stale[id] ? stale[id].why : null, fromTurn: disk, memTurns: turns.length, turns: extra, pendingInput: inp, build: 'fix945.4' };
-      var js = JSON.stringify(rec);
-      if (js.length > 400000){ rec.turns = extra.map(function(t){ return { inputType: t && t.inputType, playerText: t && t.playerText, narrative: t && t.narrative }; }); rec.trimmed = true; js = JSON.stringify(rec); }
-      if (js.length > 400000) return null;
-      localStorage.setItem('v292Dfix945_rescue_' + id, js);   /* isSelf → guardWrite を通らない・story-owned ではない（fix781 keySet 外） */
-      stats.rescued = (stats.rescued || 0) + 1; stats.rescuedTurns = extra.length;
-      try { console.warn(TAG, 'rescued ' + extra.length + ' unsaved turn(s) (from #' + disk + ') to v292Dfix945_rescue_' + id); } catch(e){}
+      var rec = rescueStore().store(id, { storyId: id, why: stale[id] ? stale[id].why : null, fromTurn: base, memTurns: turns.length, diskTurns: dt.length, turns: extra, pendingInput: inp, build: 'fix945.5' });
+      if (!rec){ stats.rescueRefused = (stats.rescueRefused || 0) + 1; return null; }
+      stats.rescued = (stats.rescued || 0) + 1; stats.rescuedTurns = rec.turns.length; stats.rescuedInput = rec.pendingInput ? 1 : 0;
+      try { console.warn(TAG, 'rescued ' + rec.turns.length + ' unsaved turn(s) (from #' + rec.fromTurn + ', disk ' + dt.length + ') to v292Dfix945_rescue_' + id); } catch(e){}
       return rec;
     } catch(e){ try { console.warn(TAG, 'rescue failed', e && e.message); } catch(_){} return null; }
   }
   function bannerNote(){
     try { var d = document.getElementById('v292Dfix945-banner'); if (!d) return; var n = d.querySelector('[data-f945n]'); if (!n){ n = document.createElement('div'); n.setAttribute('data-f945n', '1'); n.style.cssText = 'font-size:12px;opacity:.9;margin-top:4px'; d.appendChild(n); }
-      var t = []; if (stats.rescuedTurns) t.push('このタブで進めた ' + stats.rescuedTurns + ' ターンは、この端末に控えとして残しました（物語には入っていません）。');
+      var t = []; if (stats.rescuedTurns) t.push('このタブで進めた ' + stats.rescuedTurns + ' ターンは、この端末に控えとして残しました（物語には入っていません。再読み込みすると入力欄の上から見られます）。');
+      if (stats.rescuedInput && !stats.rescuedTurns) t.push('入力した文は、この端末に控えとして残しました（再読み込みすると入力欄の上から戻せます）。');
       if (stats.genStop) t.push('このタブでは新しいターンを作りません（入力した文は消していません）。'); n.textContent = t.join(' '); } catch(e){}
   }
   /* ---- (6) 生成の前の関門（index.html の G.submit 入口から呼ぶ） ---- */
@@ -123,7 +133,9 @@
       if (!checkNow(id, who || 'gate')) return false;
       stats.genStop = (stats.genStop || 0) + 1;
       try { console.warn(TAG, 'turn not started (stale): story ' + id + ' ' + JSON.stringify(stale[id])); } catch(e){}
-      banner(id); bannerNote();
+      banner(id);
+      try { if (!rescueOff()) rescue(id, getS()); } catch(e){}   /* ★v2.5: 止めた入力（と、もしあればメモリだけのターン）を控えへ。再読み込みで消えないように */
+      bannerNote();
       try { if (typeof showToast === 'function') showToast('別のタブで更新されたため、このタブでは続けられません。再読み込みしてください（入力した文は残っています）。', true); } catch(e){}
       return true;
     } catch(e){ return false; }
@@ -137,7 +149,7 @@
       d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:2147483000;background:#7a1f1f;color:#fff;font:14px/1.5 system-ui,sans-serif;padding:10px 14px;text-align:center;box-shadow:0 -2px 8px rgba(0,0,0,.4)';
       d.textContent = 'この物語は別のタブ（または画面）で更新されました。このタブの変更は保存されません。ページを再読み込みして最新の内容を開き直してください。';
       var b = document.createElement('button'); b.textContent = '再読み込み'; b.style.cssText = 'margin-left:12px;padding:4px 12px;font:inherit;cursor:pointer';
-      b.onclick = function(){ try { location.reload(); } catch(e){} }; d.appendChild(b);
+      b.onclick = function(){ try { if (!rescueOff()) rescue(id, getS()); } catch(e){} try { location.reload(); } catch(e){} }; d.appendChild(b);   /* ★v2.5: 再読み込みの前に、入力欄とメモリだけのターンを控えへ */
       (document.body || document.documentElement).appendChild(d);
     } catch(e){}
     try { if (typeof showToast === 'function') showToast('別のタブで更新されたため、このタブでは保存できません。再読み込みしてください。', true); } catch(e){}
@@ -259,9 +271,10 @@
         return r; }; G.__f945t = true; return; } if (G && typeof G.confirm === 'function' && typeof G.titleAdvance !== 'function') return; if (++n < 240) setTimeout(tryWrap, 250); })();
   })();
   window.__v292Dfix945 = {
-    BUILD: 'fix945.4+729t',
+    BUILD: 'fix945.5+729t',
     gate: gate,
-    rescued: function(id){ try { return JSON.parse(lsg('v292Dfix945_rescue_' + (id || current())) || 'null'); } catch(e){ return null; } },
+    rescued: function(id){ try { var o = JSON.parse(lsg('v292Dfix945_rescue_' + (id || current())) || 'null'); return o ? { v: o.v, turns: (o.turns || []).length, fromTurn: o.fromTurn, at: o.at } : null; } catch(e){ return null; } },   /* ★v2.5: 本文は返さない */
+    rescueOn: function(){ return !rescueOff(); },
     state: function(){ return { on: !off(), evtOn: !evtOff(), wrapped: wrapped, current: current(), stale: JSON.parse(JSON.stringify(stale)), seen: JSON.parse(JSON.stringify(seen)), stats: JSON.parse(JSON.stringify(stats)) }; },
     isStale: function(id){ return !!stale[id || current()]; },
     check: function(id){ return checkNow(id || current(), 'manual'); },

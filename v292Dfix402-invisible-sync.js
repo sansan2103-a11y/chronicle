@@ -588,6 +588,7 @@
       if (/^chr6_bk_/.test(k)) continue;
       if (/^v292Dfix399_/.test(k)) continue;
       if (/^v292Dfix402_/.test(k)) continue;
+      if (/^v292Dfix945_rescue_/.test(k)) continue;           /* ★RESCUE1: 保存されなかったターンの控えは端末だけ（クラウドへ運ばない） */
       if (use821 && F821_DENY.test(k)) continue;              /* ★fix821③ */
       if (pafOn() && F_PAF_DENY.test(k)) continue;            /* ★PAF: local-derived family は運ばない */
       /* ★fix588: package を組み立てる最後の関門でも、墓標スロットの実体を落とす
