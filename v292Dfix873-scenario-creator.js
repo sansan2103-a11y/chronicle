@@ -491,7 +491,8 @@
   function sn1bIsDesc(raw){
     if (sn1bOff()) return false;
     if (sn1bIsDescK(raw)) return true;
-    return sn1cIsDesc(raw);
+    if (sn1cIsDesc(raw)) return true;
+    return sn1dIsDesc(raw);
   }
   /* 93-k の sn1bIsDesc そのもの（1 バイトも変えずに名前だけ K を付けた） */
   function sn1bIsDescK(raw){
@@ -596,6 +597,59 @@
     }
     return false;
   }
+  /* ---------- ★SEEDNPC1d（2026-11-10・Local 候補）: 動詞の連体形で終わる関係節 ----------
+     不具合（本番 fix873 SEEDNPC1b/1c 入り）: 「昔からこの港町に住んでいる女子高生」（17 字）が名前のまま登録された（AI が名前を付けなかった）。
+     真因 = 1b/1c は「の・を・が」「〜な／〜い」の形容詞、修飾語の表しか見ない。「住んでいる」のような動詞の連体形（関係節）には手がかりが無かった。
+     直し方（1b/1c が false のときだけ足す＝名前→説明の向きにしか変えない）:
+       人を表す語（SN1C_NOUNS の role 類。敬称・肩書き・姫王類は対象外＝今までどおり厳しい規則）の直前（P）が、次のどれかで終わるとき説明:
+         ① 「て／で＋いる・いた・きた・くる・る」（住んでいる・知っている・笑っている・転校してきた・営んでいた）。直前は漢字・かな・カタカナ。
+         ② 漢字・カタカナ＋活用語尾の決まった形：1 字 る た だ す く ぐ む ぶ つ う（住む・営む・見守る・生きた）、2 字 ろす らす かす った んだ いだ いた
+            した きた ちた めた れた けた えた せた てた べた じた ぎた りた みた える ける げる せる てる ねる める れる べる じる ぎる きる いる
+            （見下ろす・笑った・飛んだ・デートした）。ひらがなだけの名前（ひなた・はると）は漢字・カタカナが前に無いので当たらない。
+         ③ 「（た|だ）ばかりの」（転校してきたばかりの）。
+       1 文字の語（男・女・娘・猫…）の前は P が 2 文字以上。P は空でないこと。
+     kill: localStorage v292DfixSEEDNPC1dOff='1' → 1c と同じ。v292DfixSEEDNPC1cOff・1bOff・SEEDNPC1Off も 1d を止める（b→c→d の重ね）。 */
+  var SN1D = { version: 'seednpc1-d-20261110' };
+  function sn1dOff(){ return lsg('v292DfixSEEDNPC1dOff') === '1'; }
+  var SN1D_TAIL1 = 'るただすくぐむぶつう';
+  var SN1D_TAIL2 = ('ろす らす かす った んだ いだ いた した きた ちた めた れた けた えた せた てた べた じた ぎた りた みた '+
+    'える ける げる せる てる ねる める れる べる じる ぎる きる いる').split(' ');
+  var SN1D_TAIL2_SET = (function(){ var o = {}; for (var i = 0; i < SN1D_TAIL2.length; i++) o[SN1D_TAIL2[i]] = 1; return o; })();
+  var SN1D_KATA = 'ァ-ヺー';
+  function sn1dVerbEnd(P){
+    var s = P.replace(/[ 　]+/g, ''), m;
+    if (s.length < 2) return false;
+    /* ③ 来たばかりの */
+    if (/[ぁ-ゖ一-龯々ァ-ヺー](?:た|だ)ばかりの$/.test(s)) return true;
+    /* ① て／で＋いる… */
+    if (/[ぁ-ゖ一-龯々ァ-ヺー](?:て|で)(?:いる|いた|きた|くる|る)$/.test(s)) return true;
+    /* ② 漢字・カタカナ＋活用語尾（2 字は決まった形だけ） */
+    m = new RegExp('[' + SN1B_KAN + SN1D_KATA + ']([ぁ-ゖ]{2})$').exec(s);
+    if (m && SN1D_TAIL2_SET[m[1]]) return true;
+    m = new RegExp('[' + SN1B_KAN + ']([ぁ-ゖ])$').exec(s);
+    if (m && SN1D_TAIL1.indexOf(m[1]) >= 0) return true;
+    return false;
+  }
+  function sn1dIsDesc(raw){
+    if (sn1bOff() || sn1cOff() || sn1dOff()) return false;
+    var t = trim(str(raw)).replace(/[。．.！!]+$/, '');
+    var n = sn1Len(t);
+    if (n < 2 || n > 60) return false;
+    if (SN1B_BAD.test(t)) return false;
+    var segs = t.split('、');
+    for (var si = 0; si < segs.length - 1; si++){ var sg = trim(segs[si]); if (!sg || !(/[でてくしりいなたがもやら歳代]$/.test(sg))) return false; }
+    var tc = t.replace(/[ 　]+$/, '');
+    for (var i = 0; i < SN1C_NOUNS.length; i++){
+      var N = SN1C_NOUNS[i], w = N.w;
+      if (tc.length < w.length || tc.slice(tc.length - w.length) !== w) continue;
+      var P = trim(tc.slice(0, tc.length - w.length).replace(/[、 　]+$/, ''));
+      if (!P) return false;
+      if (N.cls !== 'role') return false;                       /* 敬称・肩書き・姫王類は今までどおり（1b/1c の厳しい規則） */
+      if (sn1Len(w) === 1 && sn1Len(P.replace(/[ 　]+/g, '')) < 2) return false;
+      return sn1dVerbEnd(P);
+    }
+    return false;
+  }
   /* 区切られた項目が全部「説明だけの人」なら、その項目の列（2〜6）。それ以外は null */
   function sn1bList(text, sepRe){
     var items = text.split(sepRe), out = [];
@@ -659,7 +713,8 @@
     parse: function(t){ return sn1Parse(t); },
     status: function(){ return { on: !sn1Off(), version: SN1.version, last: SN1.last ? { mode: SN1.last.mode, count: SN1.last.count } : null,
                                  b: { on: !sn1Off() && !sn1bOff(), version: SN1B.version },
-                                 c: { on: !sn1Off() && !sn1bOff() && !sn1cOff(), version: SN1C.version } }; },
+                                 c: { on: !sn1Off() && !sn1bOff() && !sn1cOff(), version: SN1C.version },
+                                 d: { on: !sn1Off() && !sn1bOff() && !sn1cOff() && !sn1dOff(), version: SN1D.version } }; },
     isDesc: function(t){ return sn1bIsDesc(t); }
   };
 
