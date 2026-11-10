@@ -18,6 +18,17 @@
  *   (4) 通知は画面下に 1 回だけ（再読み込みボタン付き）。自動 reload / merge / retry はしない。
  * 残り: 自分の write と別 document の write が同一 ms に重なる窓（after.gen で検出する分を除く）。
  * kill switch: localStorage['v292Dfix945Off']='1'   検証口: window.__v292Dfix945
+ *
+ * ■v2.4（SAVEGUARD1 / GPT #127-RW ②・LOCAL）: 「保存できない状態なら次のターン生成を始めさせない」
+ *   実測（laneSAVEGUARD1 sg_fx tab2）: 別タブが同じ物語を開いただけで（その起動時の書込で）このタブが STALE になる。
+ *   旧版は STALE を記録するだけで知らせず、G.submit はそのまま生成 → 生成後の S.save で初めて止まり・バナーが出る。
+ *   以後のターンも生成は続き、メモリにしか無いまま再読み込みで全部消えた（端末の控え 0・クラウド 0）。
+ *   (5) STALE を記録した時点で（この document の物語なら）すぐバナーを出す。                     kill: v292Dfix945EarlyOff='1'
+ *   (6) gate(): G.submit を包んで入口で呼ぶ。STALE なら生成を始めず・入力欄を消さず・バナー。 kill: v292Dfix945GateOff='1'
+ *   (7) S.save を止めたとき、メモリにしかないターン（ディスクのターン数より後ろ）と入力欄を
+ *       v292Dfix945_rescue_<id> へ 1 本だけ退避（物語本体・marker・クラウドには触らない。上書き 1 本・約 400KB まで）。
+ *       戻す操作は作らない（案のみ）。★既定 OFF。ON = v292Dfix945RescueOn='1'（RescueOff='1' が優先）
+ *   (6) の呼出しは index.html を変えず、この file が G.submit を包む（SC1 と同じ型・外側/内側どちらでも鎖の中に入る）。
  */
 (function v292Dfix945(){
   if (window.__v292Dfix945) return;
@@ -46,7 +57,9 @@
      別 document の CAS は rev/fp を進める。本文だけの差（gen/rev/fp 不変）は同一 document の native 正規化（boot 時に実測）でも
      起きるので STALE にしない（home pull / 他タブ hydrate の native 書込は storage event 側で拾う。残差として報告）。 */
   function diff(a, b){ var d = []; if (!a || !b) return ['no-seen']; if (a.gen !== b.gen) d.push('gen:' + a.gen + '>' + b.gen); if (a.rev !== b.rev) d.push('rev:' + a.rev + '>' + b.rev); if (a.fp !== b.fp) d.push('fp'); if (!d.length && a.body !== b.body) stats.bodyOnly = (stats.bodyOnly || 0) + 1; return d; }
-  function markStale(id, why, detail){ if (!stale[id]) stale[id] = { t: Date.now(), why: why, detail: detail || null }; try { console.warn(TAG, 'story ' + id + ' STALE (' + why + ' ' + JSON.stringify(detail || null) + ') — this tab must reload before it may save'); } catch(_){} }
+  function markStale(id, why, detail){ if (!stale[id]) stale[id] = { t: Date.now(), why: why, detail: detail || null }; try { console.warn(TAG, 'story ' + id + ' STALE (' + why + ' ' + JSON.stringify(detail || null) + ') — this tab must reload before it may save'); } catch(_){}
+    /* ★v2.4 (5): 記録した時点で知らせる（次の生成の前に見えるように）。DOM が無ければ後の gate()/S.save で出る */
+    try { if (lsg('v292Dfix945EarlyOff') !== '1' && !off() && id === current()){ if (document.body) banner(id); else document.addEventListener('DOMContentLoaded', function(){ try { banner(id); } catch(e){} }); } } catch(_){} }
   /* ---- (1) save-time check ---- */
   function checkNow(id, who){
     stats.checks++;
@@ -74,6 +87,47 @@
     } catch(_){}
   }
   try { window.addEventListener('storage', onStorage); } catch(e){}
+  /* ---- (7) 退避（S.save を止めたとき・メモリにしかないターン + 入力欄） ---- */
+  /* ★既定 OFF（統括裁定）: 退避キーが Vault 非表示・削除・アカウント切替の掃除の一覧に入るまでは書かない。
+     ON は端末キー v292Dfix945RescueOn='1' のときだけ。v292Dfix945RescueOff='1' は常に優先して OFF。 */
+  function rescueOff(){ return lsg('v292Dfix945RescueOff') === '1' || lsg('v292Dfix945RescueOn') !== '1'; }
+  function rescue(id, S){
+    if (rescueOff() || !S || !id) return null;
+    try {
+      var turns = (S.turns && S.turns.length) ? S.turns : [];
+      var raw = lsg('chr6_slot_' + id), disk = 0;
+      try { var o = raw ? JSON.parse(raw) : null; disk = (o && o.turns && o.turns.length) || 0; } catch(e){ disk = 0; }
+      var inp = null; try { var el = document.getElementById('inp'); inp = (el && el.value) ? String(el.value) : null; } catch(e){}
+      var extra = turns.length > disk ? turns.slice(disk) : [];
+      if (!extra.length && !inp) return null;
+      var rec = { v: 1, storyId: id, at: Date.now(), why: stale[id] ? stale[id].why : null, fromTurn: disk, memTurns: turns.length, turns: extra, pendingInput: inp, build: 'fix945.4' };
+      var js = JSON.stringify(rec);
+      if (js.length > 400000){ rec.turns = extra.map(function(t){ return { inputType: t && t.inputType, playerText: t && t.playerText, narrative: t && t.narrative }; }); rec.trimmed = true; js = JSON.stringify(rec); }
+      if (js.length > 400000) return null;
+      localStorage.setItem('v292Dfix945_rescue_' + id, js);   /* isSelf → guardWrite を通らない・story-owned ではない（fix781 keySet 外） */
+      stats.rescued = (stats.rescued || 0) + 1; stats.rescuedTurns = extra.length;
+      try { console.warn(TAG, 'rescued ' + extra.length + ' unsaved turn(s) (from #' + disk + ') to v292Dfix945_rescue_' + id); } catch(e){}
+      return rec;
+    } catch(e){ try { console.warn(TAG, 'rescue failed', e && e.message); } catch(_){} return null; }
+  }
+  function bannerNote(){
+    try { var d = document.getElementById('v292Dfix945-banner'); if (!d) return; var n = d.querySelector('[data-f945n]'); if (!n){ n = document.createElement('div'); n.setAttribute('data-f945n', '1'); n.style.cssText = 'font-size:12px;opacity:.9;margin-top:4px'; d.appendChild(n); }
+      var t = []; if (stats.rescuedTurns) t.push('このタブで進めた ' + stats.rescuedTurns + ' ターンは、この端末に控えとして残しました（物語には入っていません）。');
+      if (stats.genStop) t.push('このタブでは新しいターンを作りません（入力した文は消していません）。'); n.textContent = t.join(' '); } catch(e){}
+  }
+  /* ---- (6) 生成の前の関門（index.html の G.submit 入口から呼ぶ） ---- */
+  function gate(who){
+    try {
+      if (off() || lsg('v292Dfix945GateOff') === '1') return false;
+      var id = current(); if (!id || id === 'default') return false;
+      if (!checkNow(id, who || 'gate')) return false;
+      stats.genStop = (stats.genStop || 0) + 1;
+      try { console.warn(TAG, 'turn not started (stale): story ' + id + ' ' + JSON.stringify(stale[id])); } catch(e){}
+      banner(id); bannerNote();
+      try { if (typeof showToast === 'function') showToast('別のタブで更新されたため、このタブでは続けられません。再読み込みしてください（入力した文は残っています）。', true); } catch(e){}
+      return true;
+    } catch(e){ return false; }
+  }
   /* ---- (4) 通知 ---- */
   function banner(id){
     if (bannerFor === id) return; bannerFor = id;
@@ -102,6 +156,7 @@
         stats.blockedSave++;
         try { console.warn(TAG, 'S.save blocked: story ' + id + ' ' + JSON.stringify(stale[id])); } catch(e){}
         banner(id);
+        try { if (!rescueOff()) { rescue(id, S); bannerNote(); } } catch(e){}
         return { hold: true, code: 'XTAB_STALE', wrote: 0, storyId: id };   /* ★書かない・reload しない・merge しない。★v2.3: caller が成功扱いしないよう hold を返す（fix748 refuse と同じ形） */
       }
       var r = inner.apply(this, arguments);
@@ -115,6 +170,19 @@
     return true;
   }
   (function poll(){ if (wrapSave()) return; poll._n = (poll._n || 0) + 1; if (poll._n > 240) { try { console.warn(TAG, 'S.save not found; idle'); } catch(e){} return; } setTimeout(poll, 250); })();
+  /* ---- (6) G.submit を包む（index.html は変えない）。入力欄を消す前に止めるので入力は残る ---- */
+  function getG(){ try { return window.G || (0,eval)('typeof G!=="undefined"?G:null'); } catch(e){ return null; } }
+  function wrapSubmit(){
+    var g = getG(); if (!g || typeof g.submit !== 'function') return false;
+    if (g.submit.__f945g) return true;
+    var os = g.submit;
+    var w = function(){ try { if (gate('G.submit')) return Promise.resolve(); } catch(e){} return os.apply(this, arguments); };
+    try { for (var p in os){ if (!(p in w)){ try { w[p] = os[p]; } catch(e){} } } } catch(e){}
+    w.__f945g = true; g.submit = w; stats.submitWrapped = (stats.submitWrapped || 0) + 1;
+    return true;
+  }
+  (function pollG(){ if (wrapSubmit()) return; pollG._n = (pollG._n || 0) + 1; if (pollG._n > 240) return; setTimeout(pollG, 250); })();
+  /* 後から包む層（SC1 等）は前の関数を呼ぶので、この層は鎖の中に残る。付け直しはしない。 */
   /* ---- (1)(3) story-owned write の chain 観測（fix781 layer1 と同じ chain・外側） ---- */
   function owned(k, id){ try { var G = window.__v292Dfix781; if (G && typeof G.isStoryOwned === 'function') return !!G.isStoryOwned(String(k), id); } catch(e){} return String(k) === 'chr6_slot_' + id; }
   function isSelf(k){ k = String(k); return k.indexOf('v292Dfix402_f781g_') === 0 || k.indexOf('v292Dfix945') === 0 || k.indexOf('v292Dfix781') === 0; }
@@ -191,7 +259,9 @@
         return r; }; G.__f945t = true; return; } if (G && typeof G.confirm === 'function' && typeof G.titleAdvance !== 'function') return; if (++n < 240) setTimeout(tryWrap, 250); })();
   })();
   window.__v292Dfix945 = {
-    BUILD: 'fix945.3+729t',
+    BUILD: 'fix945.4+729t',
+    gate: gate,
+    rescued: function(id){ try { return JSON.parse(lsg('v292Dfix945_rescue_' + (id || current())) || 'null'); } catch(e){ return null; } },
     state: function(){ return { on: !off(), evtOn: !evtOff(), wrapped: wrapped, current: current(), stale: JSON.parse(JSON.stringify(stale)), seen: JSON.parse(JSON.stringify(seen)), stats: JSON.parse(JSON.stringify(stats)) }; },
     isStale: function(id){ return !!stale[id || current()]; },
     check: function(id){ return checkNow(id || current(), 'manual'); },

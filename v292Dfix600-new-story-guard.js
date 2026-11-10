@@ -135,7 +135,15 @@
     (function poll(){
       poll._n = (poll._n || 0) + 1;
       if (wrapSave()) return;
-      if (poll._n > 120) { try { console.warn(TAG, 'S.save を包めませんでした'); } catch(e){} return; }
+      if (poll._n > 120) {
+        /* ★SAVEGUARD1（GPT #127-RW ②）: このページの S は index.html の const で window.S は無い＝ここは包めない（既知・2026-07-29 監査）。
+           同じ条件の保存止めは fix635 が正式API（__chronicleGetState）で包んでいる。fix635 が包めていれば警告を出さない
+           （本番の知人役アカウントで毎回出ていた「包めませんでした」は、守りが無いという意味ではなかった）。
+           fix635 も包めていない・OFF のときだけ従来どおり警告する。 */
+        var w635 = false; try { var f635 = window.__v292Dfix635; w635 = !!(f635 && f635.state && f635.state().wrapped && !f635.isOff()); } catch(e){}
+        try { if (w635) console.log(TAG, 'window.S が無いので包まない（fix635 が同じ条件で保存を止める: wrapped）'); else console.warn(TAG, 'S.save を包めませんでした（fix635 も未装着）'); } catch(e){}
+        state.deferredTo635 = w635;
+        return; }
       setTimeout(poll, 250);
     })();
   }
