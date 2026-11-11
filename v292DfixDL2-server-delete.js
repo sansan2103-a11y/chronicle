@@ -37,7 +37,7 @@
   var MODE = (cs && cs.getAttribute && cs.getAttribute('data-dl2') === 'index') ? 'index' : 'home';
   function lsg(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function off() { return lsg('v292DfixDL2Off') === '1'; }
-  var PROTECT = { smv82tjjai8: 1, smv92e8vv1f: 1, smv6r10s7u9: 1 };   /* 表示用。最終の関所は Worker（env で外せない） */
+  var PROTECT = { smv6r10s7u9: 1 };   /* Owner 2026-11-11: smv82tjjai8・smv92e8vv1f の保護を外した（Worker v46.44b） */ //   /* 表示用。最終の関所は Worker（env で外せない） */
   var st = { version: VERSION, mode: MODE, opened: 0, sends: 0, accepted: 0, reconciles: 0, results: [],
              receive: { runs: 0, applied: 0, resolved: 0, conflicts: 0, skipped: 0, last: null },
              guardRefused: 0, guardClicks: 0, wrapped: false, lastWhy: null };
