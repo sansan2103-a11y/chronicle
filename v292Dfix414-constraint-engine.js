@@ -51,6 +51,34 @@
   var DISABLE = /(動かな|使えな|ほぼ動か|上がらな|力が入らな|折れ|骨折|潰れ|貫通|骨.{0,3}露出|切断|失(く|っ|わ))/;
   var WOUND   = /(裂傷|深い傷|刺さ|刺され|えぐ|抉|裂け|えぐれ|大きな傷)/;
   var LIGHT   = /(浅|掠り|かすり|小さな|軽い擦|擦り傷|軽い傷|軽傷|かすり傷)/;
+  /* ★FRZ1（laneFLOW2・2026-11-11・kill: localStorage v292DfixFRZ1Off='1' で従来と同じ。v292Dfix414Off='1' は fix414 全体を止める）:
+     恐怖で「足が床に縫い付いたように動かない」等を DISABLE(/動かな/)＋足 で脚の負傷と読み、
+     「走行不可・移動は支え必要」を出していた（laneFLOW1 実測 A T3・B2 T5。主人公の救出行動まで縛った）。
+       ・脚の「走行不可」は、脚の近くにけがの語（骨折・捻挫・ひねった・腫れ・撃たれ 等）があるか、傷の欄に脚の傷があるときだけ。
+         捻挫・ひねった・腫れ・脱臼・撃たれ は「動かない」が無くても走行不可（軽く・少し等なら「移動が鈍い」）。
+       ・けがの無い「動かない」は、すくみ・硬直・縫い付く等の恐怖の語があれば「即応・機転は出ない」（既存 rank6）へ。無ければ何も付けない。
+       ・「立てない・歩けない」も同じ扱い（腰が抜けて立てない＝恐怖）。
+       ・人違い: 「ユイはサキの足首を…」のように、部位の直前が別の人物の「Xの」なら、その部位はこの人のものではない → 数えない。 */
+  function offFRZ1(){ try { return localStorage.getItem('v292DfixFRZ1Off') === '1'; } catch(e){ return false; } }
+  var INJ_FRZ1    = /(骨折|折れ|潰れ|切断|貫通|捻挫|捻っ|捻り|ひねっ|ひねり|挫い|くじい|くじけ|腫れ|腫ら|脱臼|撃たれ|撃ち抜|刺さ|刺され|裂傷|裂け|えぐ|抉|噛ま|咬ま|噛みつかれ|噛み付かれ|食いちぎ|火傷|打撲|出血|流血|血を流|血が(滲|にじ|流|溢|噴|垂)|負傷|怪我|けが|傷)/;
+  var SPRAIN_FRZ1 = /(捻挫|捻っ|捻り|ひねっ|ひねり|挫い|挫き|くじい|くじき|腫れ|腫ら|脱臼|撃たれ|撃ち抜)/;
+  var PHYS_FRZ1   = /(朦朧|もうろう|意識が|失血|衰弱|麻痺|痺れ|しびれ|毒)/;
+  var MILD_FRZ1   = /(軽く|少し|わずか|ちょっと|かるく)/;
+  var FREEZE_FRZ1 = /(縫い付|縫いつ|硬直|こわば|強張|すく|竦|固ま|凍りつ|凍り付|張り付|貼り付|根が生え|震え|がくがく|ガクガク|笑って|力が抜け|腰が抜け|へたり|恐怖|怯え|おびえ)/;
+  function otherOwnerFRZ1(clause, idx, self){   /* 部位の直前（10 字以内・助詞を挟まない）が「別の人物の名＋の」か */
+    try {
+      var head = String(clause).slice(Math.max(0, idx - 12), idx);
+      var names = castNames().concat(Object.keys(store())), best = -1, who = null;
+      for (var i = 0; i < names.length; i++){
+        var x = String(names[i] || ''); if (!x) continue;
+        var p = head.lastIndexOf(x + 'の'); if (p < 0 || head.length - (p + x.length + 1) > 10) continue;
+        if (/[でにをへ]/.test(head.slice(p + x.length + 1))) continue;   /* 「ユイの隣で右足首を…」の「ユイの」は持ち主ではない */
+        if (p > best || (p === best && x === self)){ best = p; who = x; }   /* いちばん近い「Xの」の X */
+      }
+      return !!who && who !== self;
+    } catch(e){}
+    return false;
+  }
 
   // ---- G-3: 節分割器(逆接の接続詞で分割・主語のがは割らない) ------------
   //   「だが/が、」等の逆接のみ分割。連体/主語の「が」(左腕が骨折)は割らない。
@@ -116,7 +144,7 @@
     while ((m = re.exec(clause))){
       var side = m[1] || '', word = m[2], part = side + word;
       var ctx = localCtxComma(clause, m.index, m[0].length);
-      cb(part, ctx);
+      cb(part, ctx, m.index);   /* ★FRZ1: 3 番目に位置（従来の cb は無視＝挙動同じ） */
       if (re.lastIndex === m.index) re.lastIndex++;   // ゼロ幅ループ回避
     }
   }
@@ -136,18 +164,31 @@
     var mindText    = keepClauses(kokoro + '。' + karada).join('。'); // こころ系
     var cons = [], seen = {};
     function add(rank, text){ if (seen[text]) return; seen[text] = 1; cons.push({ rank: rank, text: text }); }
+    var frz = !offFRZ1();   /* ★FRZ1 */
+    var kizuLeg = frz && keepClauses(kizu).some(function(c){ return new RegExp(LEG_RE).test(c) && !LIGHT.test(c); });
+    function physFRZ1(t){ return INJ_FRZ1.test(t) || PHYS_FRZ1.test(t); }
 
     bodyClauses.forEach(function(cl){
       // ---- A: 腕/手 → 不能=使用不可 / 裂傷=細かい作業が乱れる(G-1/G-2 部位ローカル) ----
-      scanPart(cl, ARM_RE, function(part, ctx){
+      scanPart(cl, ARM_RE, function(part, ctx, at){
+        if (frz && otherOwnerFRZ1(cl, at, name)) return;   /* ★FRZ1: 「Xの腕」は X のもの */
         if (DISABLE.test(ctx)) add(1, part + '使用不可');
         else if (WOUND.test(ctx) && !LIGHT.test(ctx)) add(1.5, part + 'の細かい作業が乱れる');
       });
       // ---- B: 脚/足/膝 → 明示不能=走行不可 / 裂傷=移動が鈍い ----
       if (/(立てな|歩けな|荷重(が|に|)(かけ|できな|耐え))/.test(cl)){
-        add(2, '走行不可・移動は支え必要');
+        if (!frz || physFRZ1(cl) || kizuLeg || /荷重/.test(cl)) add(2, '走行不可・移動は支え必要');
+        else if (FREEZE_FRZ1.test(cl)) add(6, '即応・機転は出ない(型B/C)');   /* ★FRZ1: 腰が抜けて立てない＝恐怖 */
       }
-      scanPart(cl, LEG_RE, function(part, ctx){
+      scanPart(cl, LEG_RE, function(part, ctx, at){
+        if (frz){   /* ★FRZ1: 走行不可はけががあるときだけ */
+          if (otherOwnerFRZ1(cl, at, name)) return;
+          var hard = /(折れ|骨折|潰れ|切断|貫通)/.test(ctx), spr = SPRAIN_FRZ1.test(ctx);
+          if (hard || (spr && !MILD_FRZ1.test(ctx)) || (DISABLE.test(ctx) && (physFRZ1(ctx) || kizuLeg))) add(2, '走行不可・移動は支え必要');
+          else if ((WOUND.test(ctx) && !LIGHT.test(ctx)) || spr) add(2.5, '移動が鈍い');
+          else if (DISABLE.test(ctx) && FREEZE_FRZ1.test(cl)) add(6, '即応・機転は出ない(型B/C)');
+          return;
+        }
         if (DISABLE.test(ctx) || /(折れ|骨折|潰れ|切断|貫通)/.test(ctx)) add(2, '走行不可・移動は支え必要');
         else if (WOUND.test(ctx) && !LIGHT.test(ctx)) add(2.5, '移動が鈍い');
       });

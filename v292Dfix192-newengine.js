@@ -142,6 +142,37 @@
      (b)(c) は【この場面の種】【自発】の候補から外す。OFF なら _npg=null で従来と 1 バイトも同じ。 */
   var _npg = null;
   function npres192(){ try { var N = window.__v292DfixNPRES; return (N && typeof N.gate === 'function') ? N.gate() : null; } catch(_n){ return null; } }
+  /* ★STATEAGE1（laneFLOW2・2026-11-11・kill: localStorage v292DfixSTATEAGE1Off='1' で従来と送信バイト同一）:
+     fix77 の値は <state> が出た回しか更新されない。出なかった回は古い値が「現在の状態」として届き、
+     モデルが宙吊りの人物を「腕の中で咳き込み」と書く等の食い違いが起きていた（laneFLOW1 実測 B T10・B2 T8）。
+     組み立てだけを変える（保存値・store・サーバーは 1 バイトも触らない）:
+       ・その瞬間の値（からだ・こころ・本能・目的）と、持ち物・姿勢・接触を表す 関係 は、直前のターンで更新されていなければ
+         行の末尾へ移し「（N ターン前の様子・今も同じとは限らない）」を付ける。傷・それ以外の関係・未解決は従来どおり。
+       ・付いた行があるときだけ、その扱いを 1 行添える（古い行についてだけ「前提」を弱める）。
+     ターン番号: fix77 captureState は parse 時（S.turns.push の前）に entry.turn = S.turns.length を書く＝そのターンの index。
+       次の組み立て時は S.turns.length = entry.turn + 1 なので、経過 = S.turns.length - turn。1 = 直前のターン。
+     項目ごとの経過: entry.turn は「その人の <state> が出たターン」だけなので、この画面のメモリに「値と最初に見たターン」を持つ
+       （保存しない・物語が変われば捨てる）。読込直後に初めて見る値は entry.turn とみなす（＝従来寄り）。 */
+  function offAGE1(){ try { return localStorage.getItem('v292DfixSTATEAGE1Off') === '1'; } catch(e){ return true; } }
+  var AGE1_POSE = /(保持|抱え|抱き|持っ|持ち|握|掴|つか[まみん]|しがみ|支え|背負|おぶ|担い|担が|手を引|肩を貸|腕の中|胸の中|膝の上|手を取|押さえ|引っ張|吊|ぶら下|寄りかか|もたれ)/;
+  var _age1 = { sk: undefined, m: {} };
+  function age1Ctx(){
+    if (offAGE1()) return null;
+    try {
+      var S = getS(); if (!S || !Array.isArray(S.turns)) return null;
+      var sk = null; try { sk = window.__chronicleDocumentStoryKey || null; } catch(_k){}
+      if (sk !== _age1.sk){ _age1.sk = sk; _age1.m = {}; }
+      return { cur: S.turns.length };
+    } catch(e){ return null; }
+  }
+  function age1Of(ac, n, f, v, et){   /* 戻り値: 経過ターン数（1 = 直前のターンで更新）。不明は 0 */
+    if (!ac || !v || typeof et !== 'number') return 0;
+    var mn = _age1.m[n] || (_age1.m[n] = {}), r = mn[f];
+    if (!r || r.v !== v){ r = mn[f] = { v: v, t: et }; }
+    var t = Math.min(r.t, et);
+    return ac.cur - t;
+  }
+  try { window.__v292DfixSTATEAGE1 = { v: 1, off: offAGE1, status: function(){ return { off: offAGE1(), names: Object.keys(_age1.m).length }; } }; } catch(_a1){}
   function stateBlock(legacyStore){
     try{
       var c930 = !off930() && !legacyStore; /* ★fix932: legacyStore=true は ac27 と同じ（shadow を読む・旧項目順）判定専用 */
@@ -153,6 +184,7 @@
       function npcqOwner192(){ try{ var A=window.__v292Dfix893; if(!A||typeof A.serverMe!=='function') return false; var m=A.serverMe(); if(!(m&&m.entitlement==='owner'&&m.status==='active')) return false; var P=window.__v292Dfix886; if(P&&P.api&&typeof P.api.active==='function'&&P.api.active()) return false; return true; }catch(e){ return false; } }
       var onA1 = !legacyStore && !offA1();               /* ★v292DfixA1 r2 */
       var hkA1 = onA1 ? heroKeyA1() : null;
+      var ac1 = legacyStore ? null : age1Ctx(), stale1 = false;   /* ★STATEAGE1 */
       Object.keys(store).forEach(function(n){
         var s=store[n]||{}; if(!s || typeof s!=='object') return;
         var parts=[];
@@ -162,14 +194,17 @@
         if(isHeroA1(hkA1, n)){ ko=''; ho=''; mo=''; kn=''; mi=''; }   /* ★v292DfixA1 r2: 主人公は 傷・からだ だけ */
         var gp = (!legacyStore && _npg) ? _npg.group(n, s) : '';   /* ★NPRES r-c333: (a)/(b)/(c) */
         if(gp === 'b' || gp === 'c' || (!legacyStore && _npg && _npg.orphan(n, s))){ ka=''; ko=''; ho=''; mo=''; if(gp === 'c') parts.push('別の場所にいる'); else if(gp === 'b' && typeof _npg.note === 'function'){ var nt3 = _npg.note(n, s); if(nt3) parts.push(nt3); } }   /* ★NPRES d3: 通話中の人は「声だけで加われる」の一行（d3Off なら ''） */
+        var old1 = {};   /* ★STATEAGE1: 経過ターン数 → 古い項目（ac1=null なら常に従来の位置へ push） */
+        function p1(f, lb, v, pose){ var a = (ac1 && (!pose || AGE1_POSE.test(v))) ? age1Of(ac1, n, f, v, s.turn) : 0; if(a >= 2) (old1[a] = old1[a] || []).push(lb+v); else parts.push(lb+v); }
         if(c930 && ki) parts.push('傷:'+ki);
-        if(ka) parts.push('からだ:'+ka);
-        if(ko) parts.push('こころ:'+ko);
-        if(ho) parts.push('本能:'+ho);
-        if(mo) parts.push('目的:'+mo);
+        if(ka) p1('ka', 'からだ:', ka);
+        if(ko) p1('ko', 'こころ:', ko);
+        if(ho) p1('ho', '本能:', ho);
+        if(mo) p1('mo', '目的:', mo);
         if(!c930 && ki) parts.push('傷:'+ki);
-        if(kn) parts.push('関係:'+kn);
+        if(kn) p1('kn', '関係:', kn, true);
         if(mi) parts.push('未解決:'+mi);
+        Object.keys(old1).map(Number).sort(function(a, b){ return a - b; }).forEach(function(a){ parts.push('（'+a+' ターン前の様子・今も同じとは限らない）'+old1[a].join(' ／ ')); stale1 = true; });
         if(parts.length) lines.push('・'+n+'｜'+parts.join(' ／ '));
         try{ if(npcqOwner192() && !legacyStore && !isHeroA1(hkA1, n) && localStorage.getItem('v292Dfix192LicOff')!=='1' && localStorage.getItem('v292Dfix414Off')!=='1'){ var X414=window.__v292Dfix414x; if(X414 && X414.deriveFor && X414.deriveFor(n,{karada:ka,kokoro:ko,kizu:ki}).length && licN.length<3) licN.push(n); } }catch(_l){}   /* ★NPCQ1 */
       });
@@ -177,6 +212,7 @@
       var licExc=''; /* ★NPCQ1: 制約のある人物には「入力を待たず発言してよい」を適用しない（1条件・新ブロックなし。v292Dfix192LicOff='1'で従来） */
       if(licN.length){ licExc='（ただし'+licN.join('・')+'は重傷・強い恐怖で動きが縛られているため除く）'; }
       return '【各キャラの現在の状態（引き継ぐ。傷/関係/未解決は治療・和解まで保持し勝手に消さない）】\n'+lines.join('\n')
+        +(stale1 ? '\n・「ターン前の様子」と付いた項目は、最後に状態が書かれた時点のもの。直近の本文と食い違うときは本文を正とし、反応の前提にしない（傷はそのまま引き継ぐ）。' : '')   /* ★STATEAGE1 */
         +'\n・関係・未解決は各キャラが自分から動き、主人公や他キャラに話しかける動機になる。傷・恐怖・対立・依頼の場面では、入力を待たずNPCの側から言葉を発してよい'+licExc+'。'
         +(onA1 ? '\n・主人公以外のNPCは、各自の目的・関係・状況に応じて、入力を待たず自律的に行動してよい。目的が衝突しても、対立・協力・妥協などの選択は人物ごとに異なる。' /* ★v292DfixA1 r2: NPC に限る */
                : '\n・各キャラは自分の「目的」に向かって、入力を待たず自分から動いてよい（目的が衝突するキャラ同士は自然に対立する）。'); /* v292Dfix223b */
