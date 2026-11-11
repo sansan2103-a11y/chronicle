@@ -69,6 +69,74 @@
     return lines;
   }
 
+  /* ★FACTS1（laneFLOW3・2026-11-11・kill: localStorage v292DfixFACTS1Off='1' で従来と送信バイト同一・毎回評価）:
+     モデルに渡る本文は直近 2 ターン（recentScenes）だけで、storySoFar は fix75 の重複除去の後「これまで N ターン経過。」の 1 文になる。
+     3 ターン以上前の事実がずれていた（laneFLOW1 実測: 鍵束「十本ほど」→「三本」、通っていない非常口を「さっき通った」）。
+     追加の AI 呼び出しはしない。保存も store も変えない。その回の S.turns から毎回作る（取消・やり直しで消えたターンは入らない）。
+       ・recentScenes より前のターン（turns[0 .. -3]）について、プレイヤーの入力（本人が書いた言葉・40 字まで。「続きを書く」は入れない）と、
+         本文のうち「数＋助数詞」を含む地の文を前から 2 文まで（台詞＝「」『』の中は使わない・1 文 70 字まで・「一番」は数えない）だけを 1 行にする。
+       ・新しいターンを優先して合計 600 字まで（古い方から落とす）。並びは古い順。何も無ければキーを足さない。
+       ・置き場所は user JSON の storySoFar の直後（earlierFacts）。sys は 0 字。
+     過去の不具合（fix35/fix71）: sys 末尾に「各ターン本文の 1 文目を番号付きで並べ『上記の経緯を踏まえ続きを書く』」と渡したら、
+       モデルがそれを本文で語り直し、保存→次のターンで増幅して反復崩壊した。ここではその条件を避ける:
+       本文の書き出しを並べない（入力と数の事実だけ）・user 側の背景データとして置く・「語り直し・引用の禁止」と「ここに無いことを過去の事実にしない」を同じ場所に書く。
+       本文の文と同じ文が出たときは従来どおり fix71 の全ターン照合が落とす。 */
+  var FACTS1_MAX = 600, FACTS1_IN = 40, FACTS1_SENT = 70, FACTS1_PER = 2;
+  var FACTS1_NUM = /[0-9０-９一二三四五六七八九十百千]+\s*(?:本|個|枚|人|つ|階|号|番|台|匹|頭|冊|発|錠|か所|箇所|ヶ所|歩|メートル|ｍ|キロ|束|部屋|段)/;
+  var FACTS1_RULE = 'earlierFacts は recentScenes より前に実際にあったことの控え（プレイヤーの入力と、数・持ち物の事実）。食い違わせないためだけに使う。本文で振り返り・言い換え・引用をしない。ここにも recentScenes にも無いことを、前にあった事実（通った道・持ち物・約束など）として作らない。';
+  function facts1On(){ try { return localStorage.getItem('v292DfixFACTS1Off') !== '1'; } catch(e){ return false; } }
+  function facts1Plain(narr){
+    var t = Array.isArray(narr) ? narr.join('\n') : String(narr || '');
+    t = t.replace(/<say\b[^>]*>[\s\S]*?<\/say>/g, '\n').replace(/<[^>]*>/g, ' ');
+    return t;
+  }
+  function facts1Sentence(narr){
+    var t = facts1Plain(narr), buf = '', depth = 0, out = [];
+    for (var i = 0; i < t.length; i++){
+      var c = t.charAt(i);
+      if (c === '「' || c === '『'){ depth++; buf = ''; continue; }
+      if (c === '」' || c === '』'){ if (depth > 0) depth--; buf = ''; continue; }
+      if (depth > 0) continue;
+      if (c === '。' || c === '！' || c === '？' || c === '\n'){ if (c !== '\n') buf += c; var s = buf.replace(/\s+/g, ' ').trim(); if (s) out.push(s); buf = ''; continue; }
+      buf += c;
+    }
+    var got = [];
+    for (var k = 0; k < out.length && got.length < FACTS1_PER; k++){
+      var hit = out[k].replace(/一番/g, '');   /* 「一番上」等の「一番」は数の事実ではない */
+      if (FACTS1_NUM.test(hit) && /[ぁ-ん]/.test(out[k]) && out[k].length >= 6) got.push(out[k].length > FACTS1_SENT ? (out[k].slice(0, FACTS1_SENT - 1) + '…') : out[k]);
+    }
+    return got.join('');
+  }
+  function facts1Build(state){
+    var turns = (state && Array.isArray(state.turns)) ? state.turns : [];
+    if (turns.length <= 2) return null;
+    var TYPE = { SAY: '発言', DO: '行動', STORY: '展開' }, items = [], used = 0;
+    for (var i = turns.length - 3; i >= 0; i--){
+      var t = turns[i]; if (!t) continue;
+      var pt = String(t.playerText || '').replace(/\s+/g, ' ').trim();
+      if (/続きを(?:自然に)?進めて|^続きを書/.test(pt)) pt = '';
+      if (pt.length > FACTS1_IN) pt = pt.slice(0, FACTS1_IN - 1) + '…';
+      var fact = facts1Sentence(t.narrative);
+      if (!pt && !fact) continue;
+      var line = (i + 1) + 'ターン目' + (pt ? ('・' + (TYPE[t.inputType] || '入力') + '「' + pt + '」') : '') + (fact ? ('・' + fact) : '');
+      if (used + line.length > FACTS1_MAX) break;
+      used += line.length; items.unshift(line);
+    }
+    return items.length ? items : null;
+  }
+  var _facts1Last = null;
+  function facts1Apply(parsed, state){
+    if (!facts1On()) return parsed;
+    var items = facts1Build(state);
+    _facts1Last = { turns: (state && state.turns) ? state.turns.length : 0, items: items ? items.length : 0, chars: items ? items.join('').length : 0 };
+    if (!items) return parsed;
+    var o = {}, k, placed = false;
+    for (k in parsed){ if (!Object.prototype.hasOwnProperty.call(parsed, k) || k === 'earlierFacts') continue; o[k] = parsed[k]; if (k === 'storySoFar'){ o.earlierFacts = { rule: FACTS1_RULE, items: items }; placed = true; } }
+    if (!placed) o.earlierFacts = { rule: FACTS1_RULE, items: items };
+    return o;
+  }
+  window.__v292DfixFACTS1 = { VER: 'facts1-20261111', on: facts1On, build: facts1Build, sentence: facts1Sentence, last: function(){ return _facts1Last; } };
+
   // ---------------------------------------------------------------
   // 1. sys プロンプト書き換え（末尾に出力形式仕様を追加）
   // ---------------------------------------------------------------
@@ -149,6 +217,8 @@
         'recentScenes / recentDialogues の内容は「これまでの文脈」であり、再演・言い換え・引用は禁止。';
 
       delete parsed.recentHistory;
+
+      parsed = facts1Apply(parsed, state);   /* ★FACTS1（kill v292DfixFACTS1Off='1'）: storySoFar の直後に earlierFacts（無ければ何もしない） */
 
       return JSON.stringify(parsed, null, 2);
     } catch(e){

@@ -27,6 +27,9 @@
          （呼びかけ・念押し）は残す。地の文は従来どおり。OFF: v292DfixCL1hOff='1'。 */
       var off1h = false; try { off1h = localStorage.getItem('v292DfixCL1hOff') === '1'; } catch(_e1h){}
       var lastK = null;
+      /* ★DEDUPQ1（laneFLOW3・本体は v292Dfix68-cliche-sentence-aware.js・kill: v292DfixDEDUPQ1Off='1' で従来どおり）: この段階の <say> 行は「X…」の形で
+         括弧もタグも無く、CL1-h の「台詞か」の判定をすり抜けていた。生の応答の台詞に含まれる文も台詞として扱う（続けて同じときだけ落とす＝CL1-h のまま）。 */
+      var _q1 = window.__v292DfixDEDUPQ1, q1on = !off1h && !!(_q1 && _q1.on()), raw72 = (ctx && ctx.raw) || '';
       plan.narrative = plan.narrative.map(function(line){
         if (typeof line !== 'string') return line;
         var parts = splitSentences(line);
@@ -35,6 +38,7 @@
           var s = parts[i];
           var k = norm(s);
           var dlg = !off1h && /[「」『』]|<\/?say\b/.test(s);
+          if (!dlg && q1on && k.length >= 8 && seen[k] && lastK !== k && _q1.isDlg(s, raw72)){ try { _q1.noteKept(); } catch(_q){} dlg = true; }   /* ★DEDUPQ1 */
           if (k.length >= 8 && seen[k] && (!dlg || lastK === k)){ dropped++; continue; }
           if (k.length >= 8) seen[k] = 1;
           if (k) lastK = k;

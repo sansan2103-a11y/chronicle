@@ -108,12 +108,60 @@
     catch(e){ return null; }
   }
 
+  /* ★CLICHE2（laneFLOW3・2026-11-11・kill: localStorage v292DfixCLICHE2Off='1' で従来どおり＝本文バイト同一・毎回評価）:
+     13 種の言い回し（息を呑・目を見開いた・背筋が凍 等）を含む文を「文ごと」消していた（ここ fix68 と features.js fix27）。
+     消えた文が筋の事実を運んでいた（laneFLOW1 実測 A T11「腫れた足首が宙に浮き、彼女は小さく息を呑んだ。」・Local 再現
+     「時が止まったような静けさの中、湊は赤い札の鍵を差し込んだ。」）うえ、次のターンの文脈からも消えていた。
+     言い回しだけを抜くと日本語が壊れる（「彼女は小さく。」）ので、消すのをやめる（文は 1 字も変えない）。言い回しの癖は
+     sys の既存の指示（【描写の芯】の「型に嵌めない・固有の反応を毎回新鮮に」等）に任せる。fix27 の文ごとの削除も同じ鍵で止める。
+     ★DEDUPQ1（同日・kill: localStorage v292DfixDEDUPQ1Off='1' で従来どおり）: 重複の削除（fix27 の全ターン照合・ターン内照合、
+     fix71 の全ターン照合、fix72 のターン内照合）で、台詞の中の文を消さない。この段階の本文では <say who="X">…</say> の行が
+     「X…」の形（括弧もタグも無い）になっていて、各 fix の「台詞か」の判定（「」や <say> の有無）をすり抜け、地の文として消えていた
+     （laneFLOW1 A T12「私、ここで待ってる。」が台詞の途中から消えた型・Local で再現）。ここでは生の応答（raw）の <say> と「」『』の中身から
+     台詞の集合を作り、文（先頭の話者名は除く）がその中に含まれれば台詞として扱う。同じターンで同じ台詞が続けて 2 回（壊れた連続）だけは従来どおり 1 つにする。 */
+  function cliche2On(){ try { return localStorage.getItem('v292DfixCLICHE2Off') !== '1'; } catch(e){ return false; } }
+  function dedupq1On(){ try { return localStorage.getItem('v292DfixDEDUPQ1Off') !== '1'; } catch(e){ return false; } }
+  function q1norm(t){ return String(t == null ? '' : t).replace(/[「」『』（）()\s　…⋯。、！？!?.,<>\/="\uE000-\uE002]/g, ''); }
+  var _q1cache = { raw: null, v: null };
+  function q1set(raw){
+    raw = String(raw || '');
+    if (_q1cache.raw === raw) return _q1cache.v;
+    var dl = [], who = {}, m, re = /<say\b([^>]*)>([\s\S]*?)<\/say>/g;
+    while ((m = re.exec(raw))){ var w = (m[1].match(/who\s*=\s*["']([^"']{1,24})["']/) || [])[1]; if (w) who[w.trim()] = 1; var n = q1norm(m[2]); if (n) dl.push(n); }
+    /* fix61 は parsePlan の前に <say who="X">…</say> を U+E000 X U+E001 … U+E002 に置き換える（拡張が見る raw と本文はこの形） */
+    var re1 = /\uE000([^\uE001\uE002]{0,40})\uE001([\s\S]*?)\uE002/g;
+    while ((m = re1.exec(raw))){ if (m[1] && m[1].trim()) who[m[1].trim()] = 1; var n1 = q1norm(m[2]); if (n1) dl.push(n1); }
+    var re2 = /[「『]([^「『」』]{1,400})[」』]/g;
+    while ((m = re2.exec(raw.replace(/<say\b[^>]*>[\s\S]*?<\/say>/g, ' ').replace(/\uE000[^\uE001\uE002]{0,40}\uE001[\s\S]*?\uE002/g, ' ')))){ var n2 = q1norm(m[1]); if (n2) dl.push(n2); }
+    try { var S = (0, eval)('typeof S !== "undefined" ? S : null'); var c = S && S.cast; if (c && c.hero && c.hero.name) who[String(c.hero.name)] = 1; ((c && c.npcs) || []).forEach(function(x){ if (x && x.name) who[String(x.name)] = 1; }); } catch(e){}
+    var names = Object.keys(who).map(q1norm).filter(Boolean).sort(function(a, b){ return b.length - a.length; });
+    _q1cache = { raw: raw, v: { dl: dl, names: names } };
+    return _q1cache.v;
+  }
+  function q1isDlg(text, raw){
+    try {
+      if (!dedupq1On()) return false;
+      var st = q1set(raw); if (!st.dl.length) return false;
+      var k = q1norm(text); if (!k) return false;
+      for (var i = 0; i < st.names.length; i++){ if (k.indexOf(st.names[i]) === 0 && k.length > st.names[i].length){ k = k.slice(st.names[i].length); break; } }
+      if (k.length < 2) return false;
+      for (var j = 0; j < st.dl.length; j++){ if (st.dl[j].indexOf(k) >= 0) return true; }
+      return false;
+    } catch(e){ return false; }
+  }
+  var q1stats = { cliche2Kept: 0, dlgKept: 0 };
+  window.__v292DfixCLICHE2 = { VER: 'cliche2-20261111', on: cliche2On, stats: function(){ return { kept: q1stats.cliche2Kept }; },
+    noteKept: function(){ q1stats.cliche2Kept++; }, hasCliche: function(t){ return hasCliche(String(t || '')); } };
+  window.__v292DfixDEDUPQ1 = { VER: 'dedupq1-20261111', on: dedupq1On, isDlg: q1isDlg, norm: q1norm, stats: function(){ return { kept: q1stats.dlgKept }; }, noteKept: function(){ q1stats.dlgKept++; } };
+
   function clicheProtect(plan, meta){
     try {
       if (!plan || !Array.isArray(plan.narrative)) return plan;
       var changed = 0;
+      var keep2 = cliche2On();   /* ★CLICHE2: 文を消さない（下の 1 字以下の行を落とす filter は従来どおり） */
       plan.narrative = plan.narrative.map(function(line){
         if (typeof line !== 'string') return line;
+        if (keep2){ if (hasCliche(line)) q1stats.cliche2Kept++; return line; }
         var r = stripClicheSentences(line);
         if (r.dropped > 0){
           changed++;

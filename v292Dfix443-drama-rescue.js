@@ -67,6 +67,37 @@
     contHint: '【続きの転換点】前ターン末の発言/動作/各キャラの状態（負傷・拘束等）を今ターン冒頭で引き継いでから、状況を次へ動かす。動かし方の例：場所/移動・新人物や物の登場・時間経過・状況急変（逃走/拘束変化/治療/別の脅威の出現）・重要事実判明・関係性の変化。直近数ターンと同じ種類の転換は避ける。起きる出来事を主人公の五感で具体的に描き、「〜寸前まで追い込まれる」のような要約で済ませない。'
   };
 
+  /* ★CONT1（laneFLOW3・2026-11-11・kill: localStorage v292DfixCONT1Off='1' で従来と送信バイト同一・毎回評価）:
+     「続きを書く」の回だけ、上の 2 ブロックのうち次の 2 か所を差し替える（ほかの文字は 1 字も変えない）。
+       ① 横原則の「主人公は受け身の観察に留めず、状況に応じて自分から動く（抵抗・逃走・対峙・利用・取引・救出・探索・呼びかけ等…）」
+          → 世界と NPC を動かし、主人公の決定的な行動（救出・脱出・攻撃・重大な決断）は書かない。
+          主人公の台詞を書かない指示（AGENCY1b の文）が sys に無いときだけ「重要な台詞も言わせない」を添える（同じ規則を二重にしない）。
+       ② 転換点の例「状況急変（逃走/拘束変化/治療/別の脅威の出現）」→「状況急変（危険の悪化/別の脅威の出現/新しい糸口）」と、
+          進行中の危機をこの回で解決させない 1 文。
+     実測（laneFLOW1 B T7）: 宙吊りの NPC をモデルが自分で救出し、主人公の行動も決めた → 次のプレイヤー入力と食い違った。
+     停滞させない: 前進（新しい要素・局面の変化）の指示はそのまま。前進は世界と NPC の側で起こす。 */
+  var CONT1 = {
+    yokoOld: '主人公は受け身の観察に留めず、状況に応じて自分から動く（抵抗・逃走・対峙・利用・取引・救出・探索・呼びかけ等。冷静なキャラなら計算ずくの選択として）。',
+    yokoNew: '前進は世界とNPCの側で起こす（NPCの試み・新たな脅威・発見・環境の変化）。主人公はプレイヤーの分身なので、決定的な行動（救出・脱出・攻撃・重大な決断）は書かず、知覚と身体の反射までにとどめて次の一手をプレイヤーに残す。',
+    yokoLine: '主人公に重要な台詞も言わせない。',
+    hintOld: '状況急変（逃走/拘束変化/治療/別の脅威の出現）',
+    hintNew: '状況急変（危険の悪化/別の脅威の出現/新しい糸口）',
+    hintAdd: '進行中の危機（宙吊り・拘束・追跡・負傷の悪化など）は、この回で解決させない。NPCの試みや状況の変化で局面を動かし、決着はプレイヤーの次の入力に残す。',
+    agencyMark: '主人公の台詞（「」）を書かない'
+  };
+  function cont1On(){ try { return localStorage.getItem('v292DfixCONT1Off') !== '1'; } catch(e){ return false; } }
+  var cont1Stats = { applied: 0, line: 0 };
+  function cont1Yoko(sys){
+    if (!cont1On()) return T.yoko;
+    var add = (String(sys || '').indexOf(CONT1.agencyMark) >= 0) ? '' : CONT1.yokoLine;
+    if (add) cont1Stats.line++;
+    return T.yoko.split(CONT1.yokoOld).join(CONT1.yokoNew + add);
+  }
+  function cont1Hint(){
+    if (!cont1On()) return T.contHint;
+    return T.contHint.split(CONT1.hintOld).join(CONT1.hintNew) + CONT1.hintAdd;
+  }
+
   // fix108b: サンプル名スクラブ（fix58 の <say> 見本に焼き込まれた固有名）
   var SCRUB = [
     ['<say who="ミリア">走れ！振り向くな！</say> ミリアはナイフを構えた。', '<say who="相手">走れ！振り向くな！</say> 相手はナイフを構えた。'],
@@ -106,13 +137,13 @@
   }
 
   // fix105 と同じ構成: 「続きを書く」検知時は 推進ブロックを 続きを書くブロックで“置き換える”
-  function buildDramaBlock(lvl, cont){
+  function buildDramaBlock(lvl, cont, sys){
     if (cont){
       var w;
       if (lvl <= 1)      w = T.widthWeak;     // ① 小さく一歩（弱め・OFFも含む＝fix105 の挙動）
       else if (lvl >= 3) w = T.widthStrong;   // ② 大胆に転がす（強め）
       else               w = T.widthStd;      // 標準
-      return T.contHead + w + ' ' + T.yoko;
+      return T.contHead + w + ' ' + cont1Yoko(sys);   /* ★CONT1（kill で T.yoko そのもの） */
     }
     if (lvl === 1)  return T.dramaWeakHdr + '\n' + T.dramaWeakLine;
     if (lvl >= 3)   return T.dramaStrong;
@@ -172,7 +203,7 @@
 
     /* 2)/3) 【物語の推進】 or 【続きを書く＝…】（どちらか一方・マーカー冪等） */
     if (out.indexOf(M_DRAMA) < 0 && out.indexOf(M_CONT) < 0){
-      var blk = buildDramaBlock(lvl, cont);
+      var blk = buildDramaBlock(lvl, cont, out);
       if (blk){
         out = out + '\n\n' + blk;
         applied.drama = true;
@@ -181,7 +212,8 @@
 
     /* 3b) 【続きの転換点】（「続きを書く」のときだけ・マーカー冪等） */
     if (cont && out.indexOf(M_HINT) < 0){
-      out = out + '\n\n' + T.contHint;
+      out = out + '\n\n' + cont1Hint();   /* ★CONT1（kill で T.contHint そのもの） */
+      if (cont1On()) cont1Stats.applied++;
       applied['continue'] = true;
     }
 
@@ -288,6 +320,7 @@
     buildDramaBlock: buildDramaBlock,
     extractPlayerText: extractPlayerText,
     texts: function(){ return T; },
+    cont1: { on: cont1On, texts: function(){ return CONT1; }, yoko: cont1Yoko, hint: cont1Hint, stats: function(){ return JSON.parse(JSON.stringify(cont1Stats)); } },
     scrubs: function(){ return SCRUB; },
     isOff: off,
     status: function(){

@@ -5371,6 +5371,12 @@
       var prevProse = '';
       var fixed = [];
       var counts = { vocFix:0, dedup:0, cliche:0, verbatim:0, pronounFix:0, storyDrop:0 };
+      /* ★CLICHE2 / DEDUPQ1（laneFLOW3・v292Dfix68-cliche-sentence-aware.js に本体）: 言い回しで要素を消さない／台詞を重複で消さない
+         （同じ台詞が直前の要素と続けて同じときだけ従来どおり）。kill: v292DfixCLICHE2Off / v292DfixDEDUPQ1Off（どちらも '1' で従来どおり） */
+      var _c2 = window.__v292DfixCLICHE2, _q1 = window.__v292DfixDEDUPQ1, _raw27 = (meta && meta.raw) || '';
+      var keepCliche = !!(_c2 && _c2.on());
+      var isDlgQ1 = function(t){ return !!(_q1 && _q1.on() && _q1.isDlg(t, _raw27)); };
+      var lastNorm27 = null;
 
       structured.forEach(function(el){
         if (!el || typeof el !== 'object') return;
@@ -5414,10 +5420,17 @@
           }
 
           if (type === 'dialogue'){
-            if (isCliche(text)){ counts.cliche++; return; }
+            if (isCliche(text) && !keepCliche){ counts.cliche++; return; }
             var nk = normText(text);
             var k1 = (speaker||'')+'|'+nk;
             var k2 = 'd|'+nk;
+            if (_q1 && _q1.on()){   /* ★DEDUPQ1: 台詞は「直前の要素と同じ」ときだけ落とす。全ターン照合（history）では落とさない */
+              if (lastNorm27 === nk){ counts.dedup++; return; }
+              if (seenNorm[k1] || seenNorm[k2] || history.indexOf(nk) >= 0) { try { _q1.noteKept(); } catch(_q){} }
+              seenNorm[k1] = 1; seenNorm[k2] = 1; lastNorm27 = nk;
+              fixed.push({ type:'dialogue', speaker: speaker, text: text });
+              return;
+            }
             if (seenNorm[k1] || seenNorm[k2]){ counts.dedup++; return; }
             seenNorm[k1] = 1; seenNorm[k2] = 1;
             if (history.indexOf(nk) >= 0){ counts.verbatim++; return; }
@@ -5428,13 +5441,21 @@
 
         // prose (元 prose または C-3 格下げ)
         if (!text) return;
-        if (isCliche(text)){ counts.cliche++; return; }
+        if (isCliche(text) && !keepCliche){ counts.cliche++; return; }
         var pk = normText(text);
+        if (isDlgQ1(text)){   /* ★DEDUPQ1: この段階で「X…」の形になった <say> の行（台詞）。直前の要素と同じときだけ落とす */
+          if (lastNorm27 === pk){ counts.dedup++; return; }
+          if (seenNorm['p|'+pk] || history.indexOf(pk) >= 0) { try { _q1.noteKept(); } catch(_q){} }
+          seenNorm['p|'+pk] = 1; lastNorm27 = pk;
+          fixed.push({ type:'prose', text: text });
+          prevProse = text;
+          return;
+        }
         if (seenNorm['p|'+pk]){ counts.dedup++; return; }
         seenNorm['p|'+pk] = 1;
         if (history.indexOf(pk) >= 0){ counts.verbatim++; return; }
         fixed.push({ type:'prose', text: text });
-        prevProse = text;
+        prevProse = text; lastNorm27 = pk;
       });
 
       plan.narrative = fixed.map(function(el){

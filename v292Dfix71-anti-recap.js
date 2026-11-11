@@ -43,6 +43,9 @@
          消す文は 44-b の部分集合なので、44-b が台詞の内側の文を消さない本文は 1 バイトも変わらない。
          OFF: v292Dfix71DlgOff='1'（v292DfixCL1gOff='1' のときも 44-b と同じ）。 */
       var dlgFix = !off1g && f71DlgOn(); var ds = F71DLG.s; ds.calls++;
+      /* ★DEDUPQ1（laneFLOW3・本体は v292Dfix68-cliche-sentence-aware.js・kill: v292DfixDEDUPQ1Off='1' で従来どおり）: 台詞の中の文は全ターン照合で消さない。
+         この段階の <say> 行は「X…」の形で括弧もタグも無く、上の判定をすり抜けて地の文として全ターンと照合されていた。生の応答の台詞に含まれる文は消さない。 */
+      var _q1 = window.__v292DfixDEDUPQ1, q1on = !!(_q1 && _q1.on()), raw71 = (ctx && ctx.raw) || '';
       var dropped = 0;
       plan.narrative = plan.narrative.map(function(line){
         if (typeof line!=='string') return line;
@@ -55,6 +58,7 @@
             inner = inner || depth>0 || sayOpen>0 || /^\s*[「『][^「『」』]*[」』]\s*$/.test(s); }   /* 台詞の中で始まる文・台詞の中で終わる文（開き・途中・閉じの断片）・括弧だけの 1 文の台詞 */
           var hit = k.length>=8 && (dlg ? prevLast[k] : prev[k]);
           if (inner){ if (hit) ds.kept++; return true; }
+          if (q1on && hit && (dlg || _q1.isDlg(s, raw71))){ try { _q1.noteKept(); } catch(_q){} return true; }   /* ★DEDUPQ1 */
           if (hit){ dropped++; return false; }
           return true; });
         return kept.join('').trim();
