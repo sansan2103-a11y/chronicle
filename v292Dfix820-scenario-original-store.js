@@ -499,15 +499,34 @@
     return metaIndexOf(m.list, scenarioId) >= 0;
   }
 
+  /* ★SCID1（2026-11-11）: 時刻ベースの id が 5 回とも当たったとき（例: 旧形式の Story ID「b」が残る端末で、
+     Date.now().toString(36) に「b」が含まれる約 17 時間のあいだ毎回 ID_ALLOCATION_EXHAUSTED）だけ、
+     乱数だけの id（'sc-' + 英数字 8 + '-' + 英数字 2 ＝ run<=8・[a-z0-9-]）で最大 40 回ためす。
+     関門（isTaken・keyInvariant・storyIdSubstringHits）は 1 つも緩めない。kill: v292DfixSCID1Off='1'。 */
+  function scid1Off(){ return lsg('v292DfixSCID1Off') === '1'; }
+  var SCID1_TRIES = 40;
+  var scid1Stat = { fallbackUsed: 0, fallbackTries: 0, fallbackFail: 0 };
+  function rand36(n){ var s = ''; for (var i = 0; i < n; i++) s += Math.floor(Math.random() * 36).toString(36); return s; }
+  function randomScenarioId(){ return 'sc-' + rand36(8) + '-' + rand36(2); }
+  function idUsable(id){
+    if (isTaken(id)) return false;
+    var inv = keyInvariant(keyFor(id));
+    if (!inv.ok) return false;
+    if (storyIdSubstringHits(keyFor(id)).length) return false;
+    return true;
+  }
   function allocateId(){
     for (var t = 0; t < MAX_ID_TRIES; t++){
       var id = newScenarioId();
-      if (isTaken(id)) continue;
-      var inv = keyInvariant(keyFor(id));
-      if (!inv.ok) continue;
-      if (storyIdSubstringHits(keyFor(id)).length) continue;
-      return id;
+      if (idUsable(id)) return id;
     }
+    if (scid1Off()) return null;
+    for (var u = 0; u < SCID1_TRIES; u++){
+      scid1Stat.fallbackTries++;
+      var rid = randomScenarioId();
+      if (idUsable(rid)){ scid1Stat.fallbackUsed++; return rid; }
+    }
+    scid1Stat.fallbackFail++;
     return null;
   }
 
@@ -1040,6 +1059,7 @@
     return out;
   }
 
+  try { window.__v292DfixSCID1 = { version: 'scid1-a-20261111', on: function(){ return !scid1Off(); }, status: function(){ return clone(scid1Stat); } }; } catch(e){}
   window.__v292Dfix820 = {
     version: VERSION,
     schemaVersion: SCHEMA_VERSION,
