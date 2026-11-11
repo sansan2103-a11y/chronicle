@@ -15,6 +15,10 @@
  *      （home は「削除できませんでした。データはそのまま残っています」を出す）。
  * やらないこと: サーバー側の禁止（API での削除禁止は別問題・一般公開の完成条件とは区別）、owner の動作の変更、
  *   ストレージの書込、ネットワーク（/auth/me は fix893 が既に取っている値を読むだけ）。
+ * ★DELALL（2026-11-11・Owner「知人にも物語の削除を開く」）: owner に加えて、Worker の /auth/me が features.storyDelete2 === true と
+ *   答えたアカウント（v46.43 で beta / paid。Worker の env CHR_DELETE2_ALL_OFF='1' で false に戻る）にも削除を許す。
+ *   判定に使うのはこの画面の最新の /auth/me の答え（fix893.serverMe と features。保存済みの印は使わない）。答えが無い・古い Worker = 許さない（fail-closed）。
+ *   端末の kill: localStorage v292DfixDELALLOff = '1' → owner だけ（今までと同じ）。
  * OFF（QA 用）: localStorage v292Dfix933Off = '1'
  * 観測口: window.__v292Dfix933.status()
  * ===================================================================== */
@@ -39,7 +43,16 @@
       return st.ent;
     } catch (x) { st.ent = null; return null; }
   }
-  function allowed() { return ent() === 'owner'; }
+  /* ★DELALL: the Worker's per-account answer, read from fix893's in-memory /auth/me result only */
+  function srvAllowed() {
+    if (lsGet('v292DfixDELALLOff') === '1') return false;
+    try {
+      var A = window.__v292Dfix893; if (!A || typeof A.serverMe !== 'function' || typeof A.features !== 'function') return false;
+      var m = A.serverMe(), f = A.features();
+      return !!(m && m.accountId && m.status === 'active' && f && f.storyDelete2 === true);
+    } catch (x) { return false; }
+  }
+  function allowed() { return ent() === 'owner' || srvAllowed(); }
 
   /* 2. 表示（owner 以外は隠す。判定が owner に変われば外す） */
   var STYLE_ID = 'v292Dfix933-style';
@@ -92,6 +105,7 @@
     if (n < 600) setTimeout(tick, n < 100 ? 100 : 1000);   /* 最初の 10 秒は 0.1 秒ごと、その後 1 秒ごと（約 8 分）。判定の変化と home の再描画に追従 */
   })();
   try { document.addEventListener('DOMContentLoaded', function () { try { wrap(); applyCss(); } catch (e) {} }); } catch (e) {}
+  try { window.addEventListener('chr:account-me', function () { try { applyCss(); } catch (e) {} }); } catch (e) {}   /* ★DELALL: follow a late /auth/me answer */
 
-  window.__v292Dfix933 = { status: function () { ent(); return { ent: st.ent, allowed: st.ent === 'owner', wrapped: st.wrapped, cssOn: st.cssOn, refused: st.refused, noteShown: st.noteShown }; } };
+  window.__v292Dfix933 = { status: function () { ent(); var sa = srvAllowed(); return { ent: st.ent, allowed: st.ent === 'owner' || sa, byServer: sa, wrapped: st.wrapped, cssOn: st.cssOn, refused: st.refused, noteShown: st.noteShown }; } };
 })();

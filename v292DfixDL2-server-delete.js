@@ -31,7 +31,7 @@
 (function () {
   'use strict';
   if (window.__v292DfixDL2) return;
-  var VERSION = 'DL2-r1nw';   /* r1n (BUNDLE34): narrow-screen entry label + 44px target (T1) */
+  var VERSION = 'DL2-r1nw-da2';   /* ★DELALL: stuck list scoped to the current account's server list */   /* r1n (BUNDLE34): narrow-screen entry label + 44px target (T1) */
   var TAG = '[v292DfixDL2]';
   var cs = null; try { cs = document.currentScript; } catch (e) { cs = null; }
   var MODE = (cs && cs.getAttribute && cs.getAttribute('data-dl2') === 'index') ? 'index' : 'home';
@@ -147,6 +147,12 @@
       h += '</div></div>';
     }
     var n = checkedRows().length;
+    if (M.phase === 'ready' && n) {   /* ★DELALL r2 (GPT #127-SC): 送る直前に、消す物語の名前と「元に戻せない」をはっきり出す（owner も知人も同じ表示） */
+      var cr = checkedRows(), nm = [];
+      for (var q = 0; q < cr.length && q < 5; q++) nm.push('「' + esc(cr[q].title) + '」');
+      h += '<div class="dl2soft" id="dl2undo" role="note"><b>削除する物語：</b>' + nm.join('') + (cr.length > 5 ? ' ほか ' + (cr.length - 5) + ' 件' : '') +
+           '<br>削除した物語は、ご自身では元に戻せません。名前を確かめてから削除してください。</div>';
+    }
     h += '<div class="dl2btns">';
     if (M.phase === 'ready') h += '<button class="dl2go" data-dl2="go"' + (n ? '' : ' disabled') + '>選んだ ' + n + ' 件を一覧から削除する</button><button data-dl2="close">やめる</button>';
     else if (M.phase === 'sending' || M.phase === 'loading') h += '<button disabled>' + (M.phase === 'sending' ? '送信中…' : '確認中…') + '</button>';
@@ -231,6 +237,7 @@
       if (!L.ok) { blocked('サーバーの状態を確認できないため、削除できません（何も送っていません）。'); return false; }
       M.a0 = a0;
       var byId = {}; for (var j = 0; j < L.rows.length; j++) byId[L.rows[j].id] = L.rows[j];
+      if (kind === 'stuck') uniq = uniq.filter(function (id) { return !!byId[id]; });   /* ★DELALL: a stuck plan whose story is not on this account's server list is not shown */
       M.rows = uniq.map(function (id) { return buildRow(id, byId[id] || null, preCheck); });
       M.phase = 'ready';
       M.msg = M.rows.some(function (r) { return r.ready; }) ? '' : '削除できる物語がありません。';
@@ -352,7 +359,22 @@
       return !!((sp.c && sp.c !== me) || (sp.w && sp.w !== me));
     } catch (e) { return true; }                                                /* 判定できない = 触らない */
   }
+  /* ★DELALL: the last listshadow this HOME read, with the account it was read for (memory only). Used to scope the stuck list. */
+  var SEEN = { who: null, ids: null, gen: 0 };
+  function curAcct() { try { var A = A893(); var m = A && typeof A.serverMe === 'function' ? A.serverMe() : null; return (m && m.accountId) ? String(m.accountId) : null; } catch (e) { return null; } }
+  function stuckPlans() {
+    var s = svc(), plans = [];
+    try { plans = (s && typeof s.dl2QuarantinedPlans === 'function') ? s.dl2QuarantinedPlans() : []; } catch (e) { plans = []; }
+    var me = curAcct();
+    if (!plans.length || !SEEN.ids || !SEEN.who || !me || SEEN.who !== me) return [];   /* not known for this account yet = show none */
+    return plans.filter(function (p) { var id = String(p.storyId); return SEEN.ids[id] === 1 && !iso2Foreign(id); });
+  }
   function onListshadow(stories, who0p) {
+    if (who0p && Object.prototype.toString.call(stories) === '[object Array]') {
+      var g = ++SEEN.gen, ids0 = {};
+      for (var q = 0; q < stories.length; q++) if (stories[q] && stories[q].id != null) ids0[String(stories[q].id)] = 1;
+      Promise.resolve(who0p).then(function (a) { if (g !== SEEN.gen) return; SEEN.who = a ? String(a) : null; SEEN.ids = a ? ids0 : null; try { renderBar(); } catch (e) {} }, function () {});
+    }
     if (!active()) return;
     if (!who0p || Object.prototype.toString.call(stories) !== '[object Array]') { st.receive.skipped++; return; }
     var s = svc(), meta = readMeta(), live = {}, i;
@@ -390,7 +412,7 @@
   }
 
   /* ================================================================ bar + bulk button */
-  function stuckCount() { try { var s = svc(); return (s && typeof s.dl2QuarantinedPlans === 'function') ? s.dl2QuarantinedPlans().length : 0; } catch (e) { return 0; } }
+  function stuckCount() { try { return stuckPlans().length; } catch (e) { return 0; } }   /* ★DELALL: this account's plans only */
   function renderBar() {
     if (MODE !== 'home' || !active()) { var o = document.getElementById('dl2-bar'); if (o && o.parentNode) o.parentNode.removeChild(o); return; }
     ensureStyle();
@@ -462,8 +484,7 @@
     return openFlow('bulk', rows.map(function (x) { return x.id; }), false);
   }
   function openStuck() {
-    var s = svc(), plans = [];
-    try { plans = s.dl2QuarantinedPlans(); } catch (e) { plans = []; }
+    var plans = stuckPlans();   /* ★DELALL: this account's plans only */
     return openFlow('stuck', plans.map(function (p) { return p.storyId; }), false);
   }
 
