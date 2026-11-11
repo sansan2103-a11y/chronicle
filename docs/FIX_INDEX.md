@@ -1,7 +1,7 @@
 # FIX_INDEX — Chronicle fix 辞典（開発担当向け）
 
 > 下書き（laneDOCS・2026-10-31・第 1 段。2026-11-01 に 80-int-a、続けて 81-admg-a、82b-iconux-b、83-flow-c、MSW1-c、2026-11-02 に 84-b37g-a、85-imgsafe（Worker だけ）、86-lc1ox-d、87-lc1ox2-a、Worker v46.28-r1920b-fc、89-r1920-b、90-a、2026-11-03 に 90-b、Worker v46.29-rphold-fc、Worker v46.30-public-fc と管理者画面 `53e2d067`、91-b、92-a、2026-11-03 に 93-a（MIDICON3 mx3-d・Worker `v46.30-public-mx3c-fc`・管理者画面 `abd3084d`）、2026-11-07 に 93-b、Worker `v46.31-diag1b-fc`、管理者画面 `5c9c9f28`、Worker `v46.33b-limit1-fc`、管理者画面 `18594749`（admhub1）、93-c 、2026-11-07 夜に Worker `v46.34b-ready1-proarg-fc`・管理者画面 `e5198d0a`・93-d（ISO1e）・93-e（OPEN1・READY1 の端末側）、2026-11-08 に 93-f（npcq1 C2）、Worker `v46.35b-custimg1-fc`・管理者画面 `a2ea35ca`（ADMBULK1）、Worker `v46.35c-hang1-fc`、93-g（SETUI1・BOOTOFF1・NEWACCT1）、Worker `v46.35d-initslow1-fc`（INITSLOW1）、Worker `v46.36-wmxreg-fc`（W-MXREG・`midicon1` を READY に）・管理者画面 `f2258e33`、93-h（HOMERETRY1・OLDMX1・IDSPLIT2・GENDER1）、2026-11-09 に Worker `v46.37-keys-fc`（鍵 `starticon1`・`idsplit2`）・管理者画面 `752c623a`・93-i（STARTICON・W-MXREG の端末側・IDSPLIT2 の鍵）の出荷を反映）。
-> **基準の本番（2026-11-11）**：11-10 夜の基準の上に 11-11 の出荷（読み戻しの結果は出荷の記録を正とする）。RESCUEON（GitHub `72df0ea`・fix945 v2.6・退避が既定 ON）→ READYALL（Worker `v46.42-readyall-fc`・ソース `28a36bf0`・鍵 `npres1`・`lc1`・`kn1` を READY に）＋ ADMALL2（管理者画面 `8101b836`・戻し先 `b6e6d211`。一番上に「すべての機能を全員に ON」の箱）→ DELALL（GitHub `8b688f2`・Worker `v46.43-delall-fc`・ソース `15d46408`。知人も自分の物語を削除できる）→ SEEDHERO1＋SEEDNPC1e（`0475772`）→ SAVEUI（`0756755`）→ SCID1（`5c0ba2c`・fix820）。Worker の現行は `v46.43-delall-fc`。戻し先は各コミット・各ファイルの 1 つ前。Owner の台帳 2323〜2330。この資料の sha は GitHub `5c0ba2c` の実物から取った。本番の読み戻し・実機は、この資料では未確認。
+> **基準の本番（2026-11-11）**：11-10 夜の基準の上に 11-11 の出荷（読み戻しの結果は出荷の記録を正とする）。RESCUEON（GitHub `72df0ea`・fix945 v2.6・退避が既定 ON）→ READYALL（Worker `v46.42-readyall-fc`・ソース `28a36bf0`・鍵 `npres1`・`lc1`・`kn1` を READY に）＋ ADMALL2（管理者画面 `8101b836`・戻し先 `b6e6d211`。一番上に「すべての機能を全員に ON」の箱）→ DELALL（GitHub `8b688f2`・Worker `v46.43-delall-fc`・ソース `15d46408`。知人も自分の物語を削除できる）→ SEEDHERO1＋SEEDNPC1e（`0475772`）→ SAVEUI（`0756755`）→ SCID1（`5c0ba2c`・fix820）→ FLOW2（GitHub `daeb3a9`・STATEAGE1・FRZ1・出荷済み・本番の読み戻し一致）→ FLOW3（GitHub `e484735`・?cb=`20261111-flow3`・FACTS1・CONT1・CLICHE2・DEDUPQ1・出荷済み・本番の読み戻し一致。index `93b91210`）。Worker の現行は `v46.43-delall-fc`。戻し先は各コミット・各ファイルの 1 つ前。Owner の台帳 2323〜2330。この資料の sha は GitHub `5c0ba2c` の実物から取った。本番の読み戻し・実機は、この資料では未確認。
 > **基準の本番（2026-11-10 夜）**：Pages は 93-m の上に 11-10 午後〜夜の追加出荷 5 件（読み戻しはすべて一致）。AGENCY1b（GitHub `062773c`：fix192 `43364471`・AGENCY1 `b9b0b406`）→ SEEDWORLD1（`05e5c04`：fix873 `f372bda5`・home `74b9efb3`）→ AGENCY1c（`75116dd`：AGENCY1 `0079579c`）→ SEEDNPC1d（`3b4a6fe`：fix873 `90e4744b`・home 最終 `246d1945`）→ SPBASE1（`e71fde6`：av2-data `68243311`・index 最終 `59767f39`・?cb=`20261110-spbase1`。GPT #127-RW の条件付き GO）。最終の sha：index `59767f39`・home `246d1945`・fix192 `43364471`・AGENCY1 `0079579c`・fix873 `90e4744b`・av2-data `68243311`。Worker `v46.40-lore1agency1-fc`・管理者画面 `8f5e0704` は不変。Owner の運用（管理者画面）：`lore1` は全体 ON（11-10 18:18）、`agency1` は Owner だけ ON（11-10 18:15）。戻し先は各コミットの 1 つ前（SPBASE1 → `3b4a6fe` の av2-data `bc08ce7b`・index・home）。version.txt は未確認。
 > **93-m 時点の本番（1 つ前の基準。以降に変わったものは上に書いた）**：Pages `20261110-bundle93-m`（GitHub コミット `73c6ed1`・version `4aacfaee`・index `9765ea16`・home `6cb38f59`。93-l〔GitHub `76b20d2`〕の上に 5 本：fix192 `f229dbc2`（SAY/DO の入力説明の行から AGENCY1 を呼ぶ 1 行）・新ファイル AGENCY1 `v292DfixAGENCY1-player-intent.js` `83d4b781`（`index.html` の fix192 の直後。`home.html` は読まない）・index `9765ea16`（土台 `149dbdac` に BUILT・fix192 の ?cb=`20261110-bundle93-m`・AGENCY1 の読み込み 1 行）・home `6cb38f59`（土台 `488093e4` に HOME_BUILT だけ）・version `4aacfaee`。本番の読み戻しで 5 本とも一致（2026-11-10 午後））。Worker `v46.40-lore1agency1-fc`・管理者画面 `8f5e0704` は 93-l のまま（鍵 `agency1` は 93-l で配線済み）。AGENCY1 は既定は影（送信は 93-l とバイト一致）。本物の AI の A/B は未実行。戻し先：Pages は 76b20d2 の同名 4 本（index `149dbdac`・home `488093e4`・version `d9a3bbe8`・fix192 `6fbdcca4`）を戻し、AGENCY1 のファイルを消す（残しても 93-l の index は読まない）。
 > **93-l 時点の本番（1 つ前の基準。以降に変わったものは上に書いた）**：Pages `20261110-bundle93-l`（GitHub コミット `76b20d2`・version `d9a3bbe8`・index `149dbdac`・home `488093e4`。93-k〔＋SEEDNPC1c・BEAT1＝GitHub `e9606a8`〕の上に 6 本：fix459 `5175518c`（MARKERS に 2 つ）・ADMF1 `8e51e63e`（鍵 `lore1`・`agency1` を知る）・新ファイル LORE1 `v292DfixLORE1-world-lore.js` `34c9217d`（`index.html` の最後・KN1 の後。`home.html` は読まない）・index `149dbdac`（土台 `a51256f5` に BUILT・LORE1 の読み込み 1 行・fix459 と ADMF1 の ?cb=`20261110-bundle93-l`）・home `488093e4`（土台 `8a0da98a` に HOME_BUILT だけ）・version `d9a3bbe8`。本番の読み戻しで 6 本とも一致（2026-11-10 昼））＋ Worker `v46.40-lore1agency1-fc`（ソース `09b9103d`。ルート JSON の `workerBuild` で確認。v46.39 からの変更は 4 か所：`CHR_ACCT_FLAG_KEYS` に `lore1`・`agency1`〔11 → 13 個〕・`CHR_ACCT_FLAG_UNSET` で両方 `'off'`・`CHR_FEAT_SCOPE` で両方 READY・`workerBuild`）＋ 管理者画面 `8f5e0704`（`lore1`・`agency1` の行・READY・一括の対象外。読み戻し一致）。`agency1` は鍵の配線だけ（端末側の本体は別レーン・GPT #127-RS）。戻し先：Pages は e9606a8 の同名 5 本（index `a51256f5`・home `8a0da98a`・version `af33aa91`・fix459 `8243a236`・ADMF1 `697272e3`）を戻し、LORE1 のファイルを消す（残しても 93-k の index は読まない）。Worker は `v46.39-kn1-fc`（`06776d69`）。管理者画面は `d2e83021`。
@@ -72,6 +72,16 @@
 - 状態：本番稼働 `i62`・sha `143763f8`・?cb=`20261025-bundle55-sfl-a`。
 - 役割：入力モード（DO/SAY/STORY）、`PromptRegistry` / `UserMessageRegistry` / `Planner._extensions` / `UI._renderHooks` などの登録口、会話ログ抽出、状態推論、表示の仕組み。index.html の中核 inline script（S・Api・Planner・UI・G.submit・保存）と組で動く。
 - 注意：`Planner._extensions` は fix192（engineMode=1）では sys に乗らない「死に経路」（`.claude/rules/sys-injection.md`、fix226、fix313 の冒頭に記録）。新しい sys 注入は `Planner.build` を包むか、fix379 の keeper に登録する。
+
+#### FLOW3 — 流れを見失う原因の残り 3 つ（2026-11-11・出荷済み〔GitHub `e484735`・本番の読み戻し一致〕・?cb=`20261111-flow3`）
+- FACTS1（fix58 `4e5f780e`・既定 ON・kill `v292DfixFACTS1Off='1'`＝送信バイト同一）：AI に渡る本文は直近 2 ターンだけで、storySoFar は fix75 の重複除去の後「これまで N ターン経過。」になる。user JSON の storySoFar の直後に `earlierFacts`（rule＋items）を足す。items は recentScenes より前の各ターンの「プレイヤーの入力（40 字まで・続きを書くは入れない）」と「本文の数＋助数詞を含む地の文を前から 2 文まで（台詞の中は使わない・1 文 70 字・「一番」は数えない）」で、新しい方を優先して合計 600 字まで。追加の AI 呼び出し 0・保存 0・sys 0 字。rule に「本文で振り返り・言い換え・引用をしない／ここにも recentScenes にも無いことを前にあった事実として作らない」。過去の fix35（sys 末尾に本文の 1 文目を番号付きで並べ「上記の経緯を踏まえ続きを書く」）が語り直し→保存→増幅の反復崩壊を起こした条件（本文の書き出しの列挙・sys 末尾・続きを促す文）を避けた。本文と同じ文が出たら従来どおり fix71 が落とす。
+- CONT1（fix443 `710f47dd`・既定 ON・kill `v292DfixCONT1Off='1'`＝送信バイト同一）：「続きを書く」の回だけ、【続きを書く＝物語を"横"に広げる】の「主人公は受け身の観察に留めず…自分から動く（…救出…）」を「前進は世界と NPC の側で起こす。主人公の決定的な行動（救出・脱出・攻撃・重大な決断）は書かず、知覚と身体の反射まで」に、【続きの転換点】の例「状況急変（逃走/拘束変化/治療/別の脅威の出現）」を「（危険の悪化/別の脅威の出現/新しい糸口）」にし、「進行中の危機（宙吊り・拘束・追跡・負傷の悪化など）は、この回で解決させない。…決着はプレイヤーの次の入力に残す」を足す。AGENCY1b の「主人公の台詞（「」）を書かない」が sys に無いときだけ「主人公に重要な台詞も言わせない。」を添える（二重にしない）。前進の指示（新しい要素を 1 つ・一段階進める）はそのまま。sys は CONT の回だけ +112 字（AGENCY1b あり）／+128 字。
+- CLICHE2（fix68 `1ed2f6d0`・features.js fix27・既定 ON・kill `v292DfixCLICHE2Off='1'`＝従来どおり）：13 種の言い回し（息を呑・目を見開いた・背筋が凍 等）を含む文・要素を消さない（文は 1 字も変えない。言い回しだけを抜くと文が壊れるため）。fix68 の「1 字以下の行を落とす」filter は従来どおり。
+- DEDUPQ1（fix68 に本体・fix27・fix71・fix72・既定 ON・kill `v292DfixDEDUPQ1Off='1'`＝従来どおり）：重複の削除で台詞の中の文を消さない。parse の段階では fix61 が `<say who="X">…</say>` を U+E000 X U+E001 … U+E002 に置き換えていて、各 fix の「台詞か」の判定（「」や <say>）をすり抜け、地の文として全ターン照合・ターン内照合で消えていた（laneFLOW1 A T12「私、ここで待ってる。」の型。Local で再現）。生の応答（raw）の <say>・U+E000 の形・「」『』の中身を台詞の集合にし、文（先頭の話者名を除く）がその中に含まれれば台詞として扱う。同じ台詞が直前の要素と続けて同じ（壊れた連続）ときだけ従来どおり 1 つにする。地の文の重複削除（fix71 の語り直し対策）は変えない。
+- 試験（出荷前）：ユニット（node vm）63 件・kill で HEAD とバイト同一。偽 AI の Local ブラウザ（Chromium・WebKit）でページエラー 0・kill で HEAD と全送信と本文がバイト一致。本番の本物の AI で A/B（端末だけの上書き・旧 3 本／新 3 本・56 ターン・$0.61）。
+- 既知：SAY の回の主人公ロック（index.html parsePlan の `湊[はがを].{0,20}(殴|刺|掴|捕まえ|蹴|握|縛|押|叫び)`）が行ごと消し、同じ行の NPC の動作も巻き添えになる（本番 A/B で 3 回・9 文）。今回は変えていない。STORY 入力の inputSeed「直後のミクロな展開(0.5〜3秒)」と全体の「状況を一段階進める」の食い違いも未修正（毎ターンの user に入るため A/B が要る）。
+- 本物の AI での A/B の事実（出荷版・2 回・標本が小さいので傾向の目安）：5 ターン以上あとに「鍵の本数」を覚えているか＝旧 3 本は 3/3 が誤り、新は 1 本が正解・1 本がほぼ正解。「続きを書く」で危機が自動で解決した割合＝旧 1/7、新 0/7。
+- index.html は `93b91210`（上の 6 本の ?cb を 20261111-flow3 にしただけ）。
 
 #### fix192 — 新プロンプトエンジン（生成の sys を丸ごと差し替える）
 - 状態：本番稼働 `i105`・sha `58b7acbd`・?cb=`20261111-flow2`（**FLOW2 で STATEAGE1 を入れた版**。GitHub `daeb3a9`・本番の読み戻し一致〔出荷済み〕。前は `43364471`・?cb=`20261110-agency1b`〔AGENCY1b で STORY の方向づけの行からも AGENCY1 を呼ぶようにした版〕。その前は `f229dbc2`・?cb=`20261110-bundle93-m`〔93-m で AGENCY1 を呼ぶ 1 行を足した版〕。その前は `6fbdcca4`・?cb=`20261107-bundle93-f`〔93-f の npcq1 C2〕。さらにその前は `931d1310`・?cb=`20261101-bundle79-npres73d4b-on78c`＝80-int-a で NPRES の gate を呼ぶようにした版）。
@@ -778,7 +788,7 @@
 | 59 | fix600 | `v292Dfix600-new-story-guard.js` | i59 | `cfdc3593` | 20261110-sg1 | 保存・同期 | `v292Dfix600Off` |
 | 60 | fix527 | `v292Dfix527-story-url.js` | i60 | `8c62d316` | 20261107-open1 | 保存・同期 | `v292Dfix527NoopHomeSaveOff` `v292Dfix527Off` `v292Dfix588Off` `v292DfixSN1aOff` |
 | 61 | fix659 | `v292Dfix659-fork-choice.js` | i61 | `d6e39622` | v292Dfix680 | 保存・同期 | `v292Dfix659Off` |
-| 62 | features | `features.js` | i62 | `6dab3c24` | 20261111-saveui | 本体（ゲーム中核） | `v292Dfix190Off` `v292Dfix205gOff` `v292Dfix748SaveRefuseOff` `v292Dfix834Off` `v292DfixSAVEUIOff` |
+| 62 | features | `features.js` | i62 | `e446efe5` | 20261111-flow3 | 本体（ゲーム中核） | `v292Dfix190Off` `v292Dfix205gOff` `v292Dfix748SaveRefuseOff` `v292Dfix834Off` `v292DfixSAVEUIOff` `v292DfixCLICHE2Off` `v292DfixDEDUPQ1Off` |
 | 63 | fixP0 | `v292DfixP0-scenario-blocker.js` | i63 | `7c6d79f0` | v292Dfix680 | シナリオ・ホーム |  |
 | 64 | fix135 | `v292Dfix135-longmem.js` | i64 | `1eb21253` | 20260927-ac3 | 記憶 | `v292Dfix894Off` |
 | 65 | fix138 | `v292Dfix138-continue.js` | i65 | `db8f5e85` | 20260929-ac18 | 記憶 | `v292Drp1Off` |
@@ -792,7 +802,7 @@
 | 73 | fix55 | `v292Dfix55-gm-mode.js` | i73 | `f465582c` | v292Dfix55c | 文章品質・プロンプト |  |
 | 74 | fix56 | `v292Dfix56-conversation-log-fix.js` | i74 | `551d0c71` | v292Dfix200 | 話者・会話ログ |  |
 | 75 | fix57 | `v292Dfix57-script-style-dialogue.js` | i75 | `bfea0dfd` | v292Dfix57 | 話者・会話ログ |  |
-| 76 | fix58 | `v292Dfix58-prompt-rebuild.js` | i76 | `dbe6a382` | 20260829-fix748 | 文章品質・プロンプト |  |
+| 76 | fix58 | `v292Dfix58-prompt-rebuild.js` | i76 | `4e5f780e` | 20261111-flow3 | 文章品質・プロンプト | `v292DfixFACTS1Off` |
 | 77 | fix60 | `v292Dfix60-display-pipeline.js` | i77 | `fc5144f4` | v292Dfix60 | アイコン・画像 |  |
 | 78 | fix59 | `v292Dfix59-hybrid-extractor.js` | i78 | `12c56db5` | v292Dfix59 | NPC・キャラ状態 |  |
 | 79 | fix61 | `v292Dfix61-alpha-strip-protect.js` | i79 | `7cbb4781` | 20260829-fix748 | 文章品質・プロンプト |  |
@@ -803,10 +813,10 @@
 | 84 | fix66 | `v292Dfix66-renderhook-repair.js` | i84 | `48d98f7f` | 20261110-beat1 | 話者・会話ログ | `v292Dfix455Off` `v292Dfix457Off` `v292Dfix783Off` `v292Dfix808Off` `v292DfixBEAT1Off` |
 | 85 | fixEDIT01 | `v292DfixEDIT01-edit-reconcile.js` | i85 | `d3b19793` | 20261111-saveui | 話者・会話ログ | `v292DfixEDGOff` `v292DfixEdit01Off` `v292DfixEDIT01CarryOff` `v292DfixSAVEUIOff` |
 | 86 | fixSFLTap | `v292DfixSFLTap-card-correct.js` | i86 | `197a15c6` | 20261031-bundle65-sfltap-b | 話者・会話ログ | `v292Dfix457Off` `v292DfixSFLTapOff` |
-| 87 | fix68 | `v292Dfix68-cliche-sentence-aware.js` | i87 | `0b3e2a28` | v292Dfix68 | 文章品質・プロンプト |  |
+| 87 | fix68 | `v292Dfix68-cliche-sentence-aware.js` | i87 | `1ed2f6d0` | 20261111-flow3 | 文章品質・プロンプト | `v292DfixCLICHE2Off` `v292DfixDEDUPQ1Off` |
 | 88 | fix69 | `v292Dfix69-literary-prose.js` | i88 | `35c17050` | v292Dfix69 | 文章品質・プロンプト |  |
-| 89 | fix71 | `v292Dfix71-anti-recap.js` | i89 | `f44a7f21` | 20261025-bundle48-qa-a | 文章品質・プロンプト | `v292Dfix71DlgOff` `v292Dfix71DlgOn` `v292DfixCL1gOff` |
-| 90 | fix72 | `v292Dfix72-within-turn-dedup.js` | i90 | `a47966c7` | 20261009-bh1 | 文章品質・プロンプト | `v292DfixCL1hOff` |
+| 89 | fix71 | `v292Dfix71-anti-recap.js` | i89 | `556ca607` | 20261111-flow3 | 文章品質・プロンプト | `v292Dfix71DlgOff` `v292Dfix71DlgOn` `v292DfixCL1gOff` `v292DfixDEDUPQ1Off` |
+| 90 | fix72 | `v292Dfix72-within-turn-dedup.js` | i90 | `c322d729` | 20261111-flow3 | 文章品質・プロンプト | `v292DfixCL1hOff` `v292DfixDEDUPQ1Off` |
 | 91 | fix75 | `v292Dfix75-history-dedup.js` | i91 | `4ae2143f` | v292Dfix75 | 文章品質・プロンプト |  |
 | 92 | fix76 | `v292Dfix76-human-foundation.js` | i92 | `e60a34f5` | v292Dfix76b | NPC・キャラ状態 |  |
 | 93 | fix77 | `v292Dfix77-state-memory.js` | i93 | `d53f65aa` | 20261019-bundle31-a | NPC・キャラ状態 | `v292Dfix532Off` `v292Dfix901Off` `v292Dfix938Off` `v292Dfix961Off` |
@@ -966,7 +976,7 @@
 | 247 | fix514 | `v292Dfix514-say-fullname.js` | i247 | `8f0cf53d` | v292Dfix514 | 話者・会話ログ | `v292Dfix514Off` |
 | 248 | fix441 | `v292Dfix441-sys-at-send.js` | i248 | `868917f9` | v292Dfix514 | 文章品質・プロンプト | `v292Dfix441Off` |
 | 249 | fix442 | `v292Dfix442-folklore.js` | i249 | `d7940bcd` | v292Dfix442 | 文章品質・プロンプト | `v292Dfix442Off` |
-| 250 | fix443 | `v292Dfix443-drama-rescue.js` | i250 | `16a897f5` | v292Dfix443 | 文章品質・プロンプト | `v292Dfix443Off` |
+| 250 | fix443 | `v292Dfix443-drama-rescue.js` | i250 | `710f47dd` | 20261111-flow3 | 文章品質・プロンプト | `v292Dfix443Off` `v292DfixCONT1Off` |
 | 251 | fix483 | `v292Dfix483-beat-director.js` | i251 | `2be886d6` | v292Dfix483 | 文章品質・プロンプト | `v292Dfix483Off` |
 | 252 | fix444 | `v292Dfix444-world-law.js` | i252 | `39d1eeb9` | 20261014-iso2b-c953r3 | NPC・キャラ状態 | `v292Dfix444Off` `v292Dfix444gOff` `v292Dfix451Off` |
 | 253 | fix445 | `v292Dfix445-handle-lock.js` | i253 | `a3e972f8` | 20260901-fix784 | 保存・同期 | `v292Dfix445LabelOff` `v292Dfix445Off` `v292Dfix445SpkOff` `v292Dfix445WiOff` |
@@ -1142,7 +1152,7 @@
   - index.html の主なもの：1034 行目（約 15 万字）＝ゲーム本体の中核（S・UI・G・保存）、3414 行目 `v100-patch`、554 行目 `v292DfixEDN-btn`（✎ の位置）、567 行目 `v292Dfix890-early`。
 ## 付録C　スイッチ（localStorage キー）→ それを読む部品（機械抽出）
 
-- 本番で読み込まれる部品と index.html の中に現れる `v292…Off` / `v292…On` の文字列を全部拾ったもの（725 件：Off 653・On 72。93-a で `v292DfixMIDICONOff`、93-d で `v292DfixISO1Off`、93-f で `v292Dfix414WidenOff`・`v292Dfix192LicOff`、93-g で `v292DfixBOOTOFF1Off`・`v292DfixSETUI1Off`・`v292DfixNEWACCT1Off`、93-h で `v292DfixHOMERETRY1Off`・`v292DfixMIDICONrosOff`・`v292DfixIDSPLIT2Off`・`v292DfixGENDER1Off`、93-i で `v292DfixMIDICONregOff`・`v292DfixSTARTICONOff`、11-10 夜に `v292DfixAGENCY1StoryOff`・`v292DfixAGENCY1StoryMode`・`v292DfixSEEDWORLD1Off`・`v292DfixSEEDNPC1dOff`・`v292DfixSPBASE1Off` を手で足した（11-11 に `v292DfixSTATEAGE1Off`・`v292DfixFRZ1Off`（FLOW2）・`v292DfixRESCUE1Off`・`v292DfixNH1bOff`・`v292DfixSPBASE2Off`、続けて `v292DfixDELALLOff`・`v292DfixSAVEUIOff`・`v292DfixSAVEUIGateOff`・`v292DfixSAVEUIAdoptOff`・`v292DfixSEEDHERO1Off`・`v292DfixSEEDNPC1eOff`・`v292DfixSCID1Off` を足した）。86 で `v292DfixIMGSAFEOff`・`v292Dfix315On` の 2 件を手で足した。71-a で拾った 697 件に、80-int-a の新しい 9 件を手で足した）。
+- 本番で読み込まれる部品と index.html の中に現れる `v292…Off` / `v292…On` の文字列を全部拾ったもの（729 件：Off 657・On 72。93-a で `v292DfixMIDICONOff`、93-d で `v292DfixISO1Off`、93-f で `v292Dfix414WidenOff`・`v292Dfix192LicOff`、93-g で `v292DfixBOOTOFF1Off`・`v292DfixSETUI1Off`・`v292DfixNEWACCT1Off`、93-h で `v292DfixHOMERETRY1Off`・`v292DfixMIDICONrosOff`・`v292DfixIDSPLIT2Off`・`v292DfixGENDER1Off`、93-i で `v292DfixMIDICONregOff`・`v292DfixSTARTICONOff`、11-10 夜に `v292DfixAGENCY1StoryOff`・`v292DfixAGENCY1StoryMode`・`v292DfixSEEDWORLD1Off`・`v292DfixSEEDNPC1dOff`・`v292DfixSPBASE1Off` を手で足した（11-11 に（FLOW3 で `v292DfixFACTS1Off`・`v292DfixCONT1Off`・`v292DfixCLICHE2Off`・`v292DfixDEDUPQ1Off` の 4 件も足した）`v292DfixSTATEAGE1Off`・`v292DfixFRZ1Off`（FLOW2）・`v292DfixRESCUE1Off`・`v292DfixNH1bOff`・`v292DfixSPBASE2Off`、続けて `v292DfixDELALLOff`・`v292DfixSAVEUIOff`・`v292DfixSAVEUIGateOff`・`v292DfixSAVEUIAdoptOff`・`v292DfixSEEDHERO1Off`・`v292DfixSEEDNPC1eOff`・`v292DfixSCID1Off` を足した）。86 で `v292DfixIMGSAFEOff`・`v292Dfix315On` の 2 件を手で足した。71-a で拾った 697 件に、80-int-a の新しい 9 件を手で足した）。
 - 拾っただけなので、**そのキーが実際にどう効くか（全体停止か一部か、既定 ON/OFF のどちらを切り替えるか）は部品のコードで確かめてください**。名前が `Off` で終わらない停止キー（例 `v292SlotGenOff`・`v292EngineUnifyOff`・`v292GoogleLoginOff`）や値で切り替えるキー（例 `v292Dfix333`=`observe`）は一部しか拾えていません。
 - 「読む部品」は id（`fix77` など。fix 以外はファイル名）。index.html は inline の中を含む。
 
@@ -1734,12 +1744,15 @@
 - `v292DfixCL1fOff` — index.html
 - `v292DfixCL1gOff` — fix71
 - `v292DfixCL1hOff` — fix72
+- `v292DfixCLICHE2Off` — fix68, features（CLICHE2・FLOW3 から。13 種の言い回しを含む文を消す従来の処理に戻す）
+- `v292DfixCONT1Off` — fix443（CONT1・FLOW3 から。「続きを書く」の 2 つの文を従来の文に戻す。送信バイト同一）
 - `v292DfixCmfOff` — smrc1
 - `v292DfixCP1Off` — fixCP1, fixSFL1
 - `v292DfixCP1On` — fixCP1
 - `v292DfixCTXOff` — fixCTX
 - `v292DfixCTXOn` — fixCTX
 - `v292DfixD1Off` — fixLD1
+- `v292DfixDEDUPQ1Off` — fix68, features, fix71, fix72（DEDUPQ1・FLOW3 から。重複削除で台詞の中の文も消す従来の判定に戻す）
 - `v292DfixDL2Off` — fixDL2
 - `v292DfixDP1Off` — fix587
 - `v292DfixDP3On` — fixDL2
@@ -1756,6 +1769,7 @@
 - `v292DfixEDLogOff` — fixEDLOG（92-a から。止める）
 - `v292DfixEDLogOn` — fixEDLOG（92-a から。既定 OFF。`1` で ON）
 - `v292DfixEDNBtnOff` — index.html
+- `v292DfixFACTS1Off` — fix58（FACTS1・FLOW3 から。earlierFacts を足さない。送信バイト同一）
 - `v292DfixFG1cOff` — av2
 - `v292DfixGC1Off` — fix912
 - `v292DfixGENDER1Off` — fixGENDER1, fix436, fix823（93-h から。性別の自動決定を止め、従来どおりにする。fix335 は GENDER1 の `on()` を通して同じく止まる）
