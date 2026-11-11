@@ -6,6 +6,7 @@
 <script src="v292Dvault2-copygate.js?cb=20261011-ab8"></script>
 <script src="v292Dfix950-card-delivery-probe.js?cb=20261014-f950r2"></script><!-- v292Dfix950: card/memory delivery probe (record-only; request body unchanged). OFF=localStorage v292Dfix950Off=1 -->
 <script src="v292DfixCP1-final-tap.js?cb=20261023-bundle43a-r5"></script><!-- CP1 tap r43e (GPT #127-JY/#127-KA/#127-KK/#127-LA/#127-LC): 送信直前の body を CP1 に見せる観測口（送る中身は不変）。読み込み時に v292DfixCP1On='1'（かつ v292DfixCP1Off≠'1'）のときだけ fetch を包む。OFF/kill は何もしない。CP1 を使ったターンの途中でアカウント・物語・Owner 権限が変わった・kill されたときは、その送信を出さない／送信後に変わったら応答を捨てる。止めたターンは自動で送り直さない -->
+<script src="v292DfixPRUNE1-sys-prune.js?cb=20261111-prune1"></script><!-- ★PRUNE1（lanePRUNE1・2026-11-11）: 最終 sys の当て布の整理。fix459 ほか sys を書き換える部品がすべて済んだ後（fetch を包む部品の内側）で、決まった文だけを外す／差し替える（重複 6 文を外す・食い違いと受け身の強制 7 文を言い換える・進行エンジンを 1 つの規則に・【自発】の定型を 1 行に・【危機のとき】を新設・user 側の「0.5〜3 秒」「直後だけ」を言い換える）。安全・出力形式・<say>/<state> の契約・話者・見本・状態の文は触らない。見つからない文はその 1 手だけ何もしない。kill = localStorage v292DfixPRUNE1Off='1'（毎回評価・送信バイト同一）。CP1-final-tap の直後に置く（tap が整理後の body を見る） -->
 <script src="v292DfixE64-save-tap.js?cb=20261024-bundle45-e64-d"></script><!-- E6-4 r4 (GPT #127-MG): E64Stop がある物語の state を /save へ送らない保存の出口。印なしかつ OFF/kill なら何もしない -->
 <script src="v292Dfix953-card-canary-gate.js?cb=20261015-bundle1-cardA-f957on"></script><!-- v292Dfix953: card canary gate (fix952/fix951/fix444g run ONLY when localStorage v292Dfix953On=1 AND this document story id is in the baked allowlist; otherwise byte-identical to production) -->
 <meta charset="UTF-8">
