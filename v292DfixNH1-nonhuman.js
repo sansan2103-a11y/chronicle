@@ -10,6 +10,9 @@
  * 鍵：管理者画面 nh1（READY・行なし = OFF）。kill：localStorage v292DfixNH1Off='1'（この部品は何も返さない＝今までの下書き）
  * ★NH1b（丸アイコン向けの構図）：Worker が人外の注文文の構図を変える。端末 kill v292DfixNH1bOff='1' のあいだに作る下書きの末尾に「／構図：従来」を付け、
  *   その 1 人だけ Worker は NH1（iconx1）の構図で作る（保存形式は外見の文 1 本のまま。Owner は 2 タップの欄で消せる）。
+ * ★ICONFIX1 b（laneICONFIX1・2026-11-11）：下書きの部位の取り方を直した（色を部位から切り離さない・「くちばし」の「し」を落とさない・「虎の毛皮」は服・
+ *   蛇以外の尻尾は体の部位・種類に 鬼／狐（獣人ではない狐の妖怪）／烏天狗、部位に くちばし・甲羅・頭の皿・水かき・一本角・金棒）。
+ *   kill：localStorage v292DfixICONFIX1bOff='1' → 下書きは今までとバイト一致（nh1Draft）。構図（ICONFIX1 c）は Worker だけ（端末は何もしない）。
  * 観測口：window.__v292DfixNH1.status()
  * ===================================================================== */
 (function (root) {
@@ -221,13 +224,180 @@
     var hasFace = ps.some(function (p) { return p.slot === 'face'; });
     var mood = tone === 'horror' ? 'unsettling, uncanny stillness' + (hasFace || /slime/.test(b) ? '' : ', unsmiling expression') : 'otherworldly';
     var details = (o.details || []).filter(Boolean).join(', ');
-    var out = st[tone] + '. ' + (old ? nh1FramingOld({ parts: ps, base: b }) : nh1Framing({ parts: ps, base: b })) + '. portrait of one ' + subj +
+    var out = st[tone] + '. ' + (old ? nh1FramingOld({ parts: ps, base: b }) : (o.fx && (o.fx.b || o.fx.c)) ? nh1FramingX({ parts: ps, base: b, fx: o.fx }) : nh1Framing({ parts: ps, base: b })) + '. portrait of one ' + subj +
       (plan.length ? '. body plan: ' + plan.join(', ') : '') + (feat.length ? '. distinctive features: ' + feat.join(', ') : '') +
       (details ? '. details: ' + details : '') + (o.traits ? '. traits: ' + o.traits : '') + '. mood: ' + mood +
       (plan.length ? (old ? '. every listed body part clearly visible in the frame' : '. the listed body parts large and clear near the middle of the frame') : '');
     return out.slice(0, 1800);
   }
   /* ---- NH1 core end ---- */
+  /* ---- ICONFIX1 b/c core (laneICONFIX1・2026-11-11・LOCAL) — the same text is inlined into the Pages module v292DfixNH1-nonhuman.js and the Worker.
+     Pure functions only, ES5. Used ONLY when the fix is on (device: localStorage v292DfixICONFIX1bOff !== '1'; Worker: env CHR_ICONFIX1B_OFF / CHR_ICONFIX1C_OFF).
+     The NH1 core above is not changed (its tables are read, never modified): with the fix off every function above gives the same result as before.
+     b (parser): ① a part keeps its colour (「黒い翼」 → black wings, 「緑色の鱗の肌」 → green scales) ② a left-over clause no longer loses a final 「し」 (くちばし)
+                 ③ 「虎の毛皮」 is clothing (a tiger-skin loincloth), not body fur ④ a tail that is not a serpent's is a body part, never the coiled lower body
+                 ⑤ new species 鬼 (oni) and 狐 (kitsune, the fox spirit — not the beastman) and parts くちばし・甲羅・頭の皿・水かき・一本角・金棒
+     c (composition): 骸骨 and 人形 take the close tier (waist-up, face large) instead of the knees-up tier. ---- */
+  var FX1_VER = 'fx1';
+  var FX1_COLORS = [   /* [Japanese stem, English] longer stems first */
+    ['灰緑', 'grey-green'], ['赤黒', 'dark red'], ['青黒', 'blue-black'], ['青白', 'pale bluish-white'], ['赤銅', 'coppery red'], ['真紅', 'crimson'],
+    ['漆黒', 'jet-black'], ['純白', 'pure white'], ['ピンク', 'pink'], ['オレンジ', 'orange'],
+    ['黒', 'black'], ['白', 'white'], ['赤', 'red'], ['紅', 'crimson'], ['青', 'blue'], ['蒼', 'blue'], ['緑', 'green'], ['黄', 'yellow'], ['茶', 'brown'],
+    ['灰', 'grey'], ['金', 'golden'], ['銀', 'silver'], ['紫', 'purple'], ['桃', 'pink'], ['橙', 'orange'], ['紺', 'navy']
+  ];
+  var FX1_COLOR_SRC = '(?:真っ|深|濃い|薄い)?(' + FX1_COLORS.map(function (c) { return c[0]; }).join('|') + ')(?:色(?:の|い)?|い|の|な|く)';
+  var FX1_COLOR_TAIL = new RegExp(FX1_COLOR_SRC + '$');      /* a colour phrase that ends right before a part */
+  var FX1_COLOR_HEAD = new RegExp('^' + FX1_COLOR_SRC);      /* a colour phrase at the start of a labeled value */
+  var FX1_SKIN_SUFFIX = /^(?:の肌|の皮膚|に覆われた肌|に覆われた皮膚|に覆われた体|の体)/;
+  /** @param {*} x @returns {RegExp} */ function fx1Re(x) { return x; }
+  /** @param {*} x @returns {string} */ function fx1Src(x) { return x && typeof x.source === 'string' ? x.source : ''; }
+  function fx1ColorEn(stem) { for (var i = 0; i < FX1_COLORS.length; i++) if (FX1_COLORS[i][0] === stem) return FX1_COLORS[i][1]; return ''; }
+  function fx1Colorize(en, c) {
+    if (!c) return en;
+    var m = /^(a|an) (.*)$/.exec(en);
+    if (m) return (/^[aeiou]/.test(c) ? 'an ' : 'a ') + c + ' ' + m[2];
+    return c + ' ' + en;
+  }
+  /* a colour phrase must be its own word: 「針金の」「黄金の」 are not colours of the next part */
+  function fx1ColorOk(before, cm) { var p = before.charAt(before.length - cm[0].length - 1); return !(p && /[一-鿿]/.test(p) && !/^(?:真っ|深|濃い|薄い)/.test(cm[0])); }
+  var FX1_BASE_ADD_AFTER_VAMPIRE = [   /* inserted right after 吸血鬼 (so 吸血鬼 stays a vampire) */
+    [/赤鬼|青鬼|黒鬼|鬼女|鬼神|大鬼|小鬼|鬼(?=$|[、。・／\s]|で(?!も)|だ|と(?!呼|恐|称|言|い)|の(?!よう|ような|みたい|形相|首))/, 'oni, a Japanese ogre demon with horns', 'mixed', 'yokai', 'oni']
+  ];
+  var FX1_BASE_ADD_AFTER_BEASTMAN = [   /* after the beastman entries (狐の獣人 stays a beastman) */
+    [/九尾の狐|九尾|妖狐|化け狐|白狐|天狐|狐の(?:妖怪|あやかし|化身|精|霊|神)|狐憑き|狐(?=$|[、。・／\s]|で(?!も)|だ|と(?!呼|恐|称|言|い))/, 'kitsune, a Japanese fox spirit with fox ears and fluffy fox tails', 'mixed', 'yokai', 'fox']
+  ];
+  var FX1_BASE_BEFORE_TENGU = [[/烏天狗|鴉天狗|カラス天狗/, 'karasu-tengu, a crow-headed Japanese mountain yokai', 'mixed', 'yokai']];
+  var FX1_BASE = (function () {
+    var o = [];
+    for (var i = 0; i < NH1_BASE.length; i++) {
+      var b = NH1_BASE[i];
+      if (/天狗/.test(fx1Src(b[0]))) o = o.concat(FX1_BASE_BEFORE_TENGU);
+      o.push(b);
+      if (/吸血鬼/.test(fx1Src(b[0]))) o = o.concat(FX1_BASE_ADD_AFTER_VAMPIRE);
+      if (fx1Src(b[0]) === '獣人') o = o.concat(FX1_BASE_ADD_AFTER_BEASTMAN);
+    }
+    return o;
+  })();
+  /* the 鬼 word must not be part of a word like 仕事の鬼 / 鬼教官 (lookahead handles the right side; the left side is checked here) */
+  function fx1BaseOk(entry, r, m) {
+    if (entry[4] !== 'oni' && entry[4] !== 'fox') return true;
+    if (m[0].length > 1) return true;                               /* 赤鬼・九尾の狐 … are always species words */
+    var p = r.charAt(m.index - 1);
+    return !(p === 'の' || /[一-鿿]/.test(p));               /* 仕事の鬼・餓鬼・天邪鬼・雌狐 … are not the species */
+  }
+  var FX1_PART_ADD = [   /* checked before the NH1 parts */
+    [/くちばし|嘴|クチバシ/, 'mouth', 'a hard bird-like beak', 1],
+    [/背中に甲羅|亀の甲羅|甲羅/, 'body', 'a turtle shell on the back', 1],
+    [/頭頂の皿|頭の皿|頭に皿/, 'head', 'a round dish-shaped plate on top of the head', 1],
+    [/水かき|水掻き/, 'arms', 'webbed hands', 1],
+    [/一本角|一本の角|額の角|額に角/, 'head', 'a single horn on the forehead', 0],
+    [/頭に二本の角|角が二本|鋭い角|大きな角|曲がった角/, 'head', 'horns', 0],
+    [/金棒/, 'clothes', 'a spiked iron club in hand', 0],
+    [/虎の毛皮の腰巻き?|虎の毛皮|虎皮の腰巻き?|虎柄の(?:腰巻き?|褌|ふんどし|布)/, 'clothes', 'a tiger-skin loincloth', 0],
+    [/毛皮の(?:腰巻き?|マント|コート|外套|服)|毛皮をまと(?:い|う|った)|毛皮を纏(?:い|う|った)/, 'clothes', 'an animal-fur garment', 0],
+    [/九本の(?:尻尾|尾)|九つの(?:尻尾|尾)|九尾の尻尾/, 'body', 'nine fluffy fox tails fanning out behind', 0],
+    [/(?:二|三|四|五|六|七|八|複数の|何本もの)(?:本の)?(?:尻尾|尾)/, 'body', 'several fluffy tails fanning out behind', 0],
+    [/狐の(?:尻尾|尾)/, 'body', 'a fluffy fox tail', 0],
+    [/蛇の尾/, 'lower', 'a long scaly serpent tail', 1]
+  ];
+  var FX1_PART = (function () {
+    var o = FX1_PART_ADD.slice();
+    for (var i = 0; i < NH1_PART.length; i++) {
+      var p = NH1_PART[i];
+      if (fx1Src(p[0]) === '蛇の尾|尻尾|長い尾') { o.push([/尻尾|長い尾/, 'body', 'a long tail', 0]); continue; }   /* a tail that is not a serpent's is not a lower body */
+      if (fx1Src(p[0]) === '灰色の毛皮|毛皮|毛むくじゃら') { o.push([/灰色の毛皮/, 'skin', 'grey fur covering the body', 1], [/毛皮|毛むくじゃら/, 'skin', 'fur covering the body', 1]); continue; }   /* ★b①: the colour stays with the part */
+      if (fx1Src(p[0]) === '赤く光る目|光る目') { o.push([/赤く光る目/, 'eyes', 'glowing red eyes', 0], [/光る目/, 'eyes', 'glowing eyes', 0]); continue; }
+      if (fx1Src(p[0]) === '眼窩に青い光|眼窩に光|空洞の眼窩|眼窩') { o.push([/眼窩に青い光/, 'eyes', 'empty eye sockets glowing with faint blue light', 1], [/眼窩に光|空洞の眼窩|眼窩/, 'eyes', 'empty eye sockets glowing with faint light', 1]); continue; }
+      o.push(p);
+    }
+    return o;
+  })();
+  var FX1_COLOR_SKIN = new RegExp(FX1_COLOR_SRC.replace(/\(\?:色\(\?:の\|い\)\?\|い\|の\|な\|く\)$/, '') + '(?:色)?(?:い|の)?肌');   /* 赤い肌・緑色の肌 */
+  /* free Japanese text → draft (= nh1Draft with the fixes). Same return shape. */
+  function nh1DraftX(desc, opt) {
+    opt = opt || {};
+    var text = String(desc == null ? '' : desc).normalize('NFC');
+    var clauses = text.split(/[、。・\n／]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+    var base = null, baseForm = null, baseJa = '', kind = null, parts = [], rest = [];
+    clauses.forEach(function (cl) {
+      var r = cl, i, m;
+      for (i = 0; i < FX1_PART.length; i++) {
+        m = fx1Re(FX1_PART[i][0]).exec(r); if (!m) continue;
+        var st = m.index, en0 = m.index + m[0].length, en = FX1_PART[i][2];
+        var cm = FX1_COLOR_TAIL.exec(r.slice(0, st));
+        if (cm && cm[0].length && fx1ColorOk(r.slice(0, st), cm) && r.slice(0, st).indexOf('\u0000', st - cm[0].length) < 0) { st -= cm[0].length; en = fx1Colorize(en, fx1ColorEn(cm[1])); }
+        if (FX1_PART[i][1] === 'skin') { var sm = FX1_SKIN_SUFFIX.exec(r.slice(en0)); if (sm) en0 += sm[0].length; }
+        var ja = r.slice(st, en0);
+        if (!parts.some(function (p) { return p.en === en; })) parts.push({ slot: FX1_PART[i][1], ja: ja, en: en, strong: FX1_PART[i][3] });
+        r = r.slice(0, st) + '\u0000' + r.slice(en0);
+      }
+      m = FX1_COLOR_SKIN.exec(r);
+      if (m && fx1ColorOk(r.slice(0, m.index + m[0].length), [m[0]])) { var ce = fx1ColorEn(m[1]) + ' skin'; if (!parts.some(function (p) { return p.en === ce; })) parts.push({ slot: 'skin', ja: m[0], en: ce, strong: 0 }); r = r.replace(m[0], '\u0000'); }
+      if (!base) for (i = 0; i < FX1_BASE.length; i++) { m = fx1Re(FX1_BASE[i][0]).exec(r); if (m && fx1BaseOk(FX1_BASE[i], r, m)) { base = FX1_BASE[i][1]; baseForm = FX1_BASE[i][2]; kind = FX1_BASE[i][3]; baseJa = m[0]; r = r.replace(m[0], '\u0000'); break; } }
+      r.split('\u0000').forEach(function (x) { x = x.replace(/^[のでとがはをにも、]+|(?:をし|[のでとがはをにも、])+$/g, '').trim(); if (x && (typeof opt.isVisual !== 'function' || opt.isVisual(x))) rest.push(x); });   /* ★b②: a final 「し」 is only dropped after を (肌をし), never from a word (くちばし) */
+    });
+    var strong = parts.filter(nh1Strong), form = 'human';
+    if (base && baseForm !== 'soft') form = baseForm; else if (strong.length) form = 'mixed';
+    var rk = String(opt.rosterKind || '');
+    if (form === 'human' && NH1_ROSTER_NH.test(rk) && parts.length) form = 'mixed';
+    if (!base && NH1_ROSTER_NH.test(rk) && parts.some(function (p) { return p.slot === 'motion'; })) { base = 'ghostly apparition'; baseJa = '霊のような存在'; baseForm = 'nonhuman'; form = 'nonhuman'; kind = 'spirit'; }
+    if (!kind && form !== 'human') kind = NH1_ROSTER_NH.test(rk) ? 'spirit' : 'creature';
+    return { v: NH1_VER, form: form, base: base, baseJa: baseJa, kind: kind, parts: parts, restJa: rest, fx: FX1_VER };
+  }
+  /* one labeled value → { slot, en } with the fixes (exact part, colour + part, part + skin suffix, colour + 肌). null = no dictionary match */
+  function fx1PartOf(v, slot) {
+    var i, mm, w = v;
+    var exact = function (s) { for (var k = 0; k < FX1_PART.length; k++) { var q = fx1Re(FX1_PART[k][0]).exec(s); if (q && q[0] === s) return FX1_PART[k]; } return null; };
+    var p = exact(w); if (p) return { slot: slot === 'rest' ? p[1] : slot, en: p[2], pslot: p[1] };
+    var c = '', cm = FX1_COLOR_HEAD.exec(w);
+    if (cm && cm[0].length < w.length) { c = fx1ColorEn(cm[1]); w = w.slice(cm[0].length); }
+    var w2 = w.replace(/(?:の|に覆われた)(?:肌|皮膚|体)$/, '');
+    p = exact(w) || (w2 !== w ? exact(w2) : null);
+    if (p && (c || w2 !== w)) { if (w2 !== w && p[1] !== 'skin' && !exact(w)) return null; return { slot: slot === 'rest' ? p[1] : slot, en: fx1Colorize(p[2], c), pslot: p[1] }; }
+    mm = FX1_COLOR_SKIN.exec(v); if (mm && mm[0] === v) return { slot: slot === 'rest' ? 'skin' : slot, en: fx1ColorEn(mm[1]) + ' skin', pslot: 'skin' };
+    return null;
+  }
+  /* labeled Japanese → same shape as nh1Parse, with the fixed dictionary */
+  function nh1ParseX(text) {
+    var t = String(text == null ? '' : text).normalize('NFC').trim(), h = NH1_HEAD.exec(t);
+    if (!h) return null;
+    var out = { v: NH1_VER, form: h[1] === '人外' ? 'nonhuman' : 'mixed', kindJa: h[2] || '', base: null, baseJa: '', kind: null, parts: [], comp: '', fx: FX1_VER };
+    t.slice(h[0].length).split('／').forEach(function (seg) {
+      var m = /^([^：]{1,4})：(.*)$/.exec(seg.trim()); if (!m) { if (seg.trim()) out.parts.push({ slot: 'rest', ja: seg.trim(), en: null }); return; }
+      if (m[1] === '構図') { if (m[2].trim() === NH1_COMP_OLD_JA) out.comp = 'old'; return; }
+      var slot = NH1_JA_SLOT[m[1]] || 'rest';
+      m[2].split('・').map(function (x) { return x.trim(); }).filter(Boolean).forEach(function (v) {
+        var i, mm;
+        if (slot === 'base') { for (i = 0; i < FX1_BASE.length; i++) { mm = fx1Re(FX1_BASE[i][0]).exec(v); if (mm && mm[0] === v) { out.base = FX1_BASE[i][1]; out.baseJa = v; out.kind = FX1_BASE[i][3]; return; } } out.parts.push({ slot: 'base', ja: v, en: null }); return; }
+        var q = fx1PartOf(v, slot);
+        if (q) {
+          var sl = q.slot;
+          if (sl === 'lower' && q.pslot !== 'lower') sl = q.pslot;          /* ★b④: 「下半身：九本の尻尾」（古い下書き）も体の部位 */
+          if (sl === 'skin' && q.pslot === 'clothes') sl = 'clothes';       /* ★b③: 「肌：虎の毛皮」（古い下書き）は服 */
+          out.parts.push({ slot: sl, ja: v, en: q.en }); return;
+        }
+        out.parts.push({ slot: slot, ja: v, en: null });
+      });
+    });
+    if (!out.kind) out.kind = NH1_ROSTER_NH.test(out.kindJa) ? 'spirit' : 'creature';
+    return out;
+  }
+  /* composition with the fixes. fx = { b: 1|0, c: 1|0 }. comp 'old' never reaches here. */
+  var FX1C_TIER = 'three-quarter view from the waist up, leaning toward the viewer, head and face large near the middle, the body filling the frame';
+  function nh1FramingX(o) {
+    var fx = o.fx || {}, s = {}, ps = o.parts || [], b = String(o.base || '');
+    ps.forEach(function (p) { s[p.slot] = 1; });
+    if (fx.b && s.lower && !ps.some(function (p) { return p.slot === 'lower' && /serpent|snake|coil/.test(p.en); })) { delete s.lower; s.body = 1; }   /* ★b④: a tail is not a coiled lower body */
+    var whole = /zombie|skeleton|slime|doll|mummy/.test(b);
+    var tier = s.lower ? 'lower' : s.motion ? 'motion' : (whole || s.pose) ? 'whole' : (s.arms || s.body) ? 'waist' : 'face';
+    var t = NH1B_TIER[tier];
+    if (fx.c && tier === 'whole' && /skeleton|doll/.test(b)) t = FX1C_TIER;   /* ★c: 骸骨・人形は腰から上（顔を丸の中で大きく） */
+    if (/slime/.test(b)) t = 'centered close view, the rounded body mass filling the frame, the visible inner details near the middle';
+    if (s.arms && tier !== 'face') t += ', the arms raised and spread outward at both sides so they stay inside the frame';
+    if (ps.some(function (p) { return /tentacle/.test(p.en); }) && !s.lower && tier !== 'face') t += ', the tentacles curling around the figure inside the frame';
+    return t + ', simple uncluttered background';
+  }
+  /* ---- ICONFIX1 b/c core end ---- */
 
   function lsGet(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function on() {
@@ -236,10 +406,10 @@
   }
   var calls = { draft: 0, labeled: 0 };
   root.__v292DfixNH1 = {
-    ver: NH1_VER + '-iconx1nh1b-20261111', on: on,
-    draft: function (t, o) { calls.draft++; return nh1Draft(t, o); },
+    ver: NH1_VER + '-iconx1nh1b-fx1-20261111', on: on,
+    draft: function (t, o) { calls.draft++; if (lsGet('v292DfixICONFIX1bOff') === '1') return nh1Draft(t, o); calls.fx1 = (calls.fx1 || 0) + 1; return nh1DraftX(t, o); },   /* ★ICONFIX1 b */
     labeled: function (d, k) { calls.labeled++; return nh1Labeled(d, k, lsGet('v292DfixNH1bOff') === '1'); },   /* ★NH1b */
-    isLabeled: nh1IsLabeled, parse: nh1Parse, slotsJa: nh1SlotsJa, anchors: nh1Anchors, anchorsS: nh1AnchorsS,
-    status: function () { return { ver: NH1_VER, on: on(), killed: lsGet('v292DfixNH1Off') === '1', nh1bKilled: lsGet('v292DfixNH1bOff') === '1', calls: JSON.parse(JSON.stringify(calls)) }; }
+    isLabeled: nh1IsLabeled, parse: nh1Parse, parseX: nh1ParseX, draftX: nh1DraftX, draftOld: nh1Draft, slotsJa: nh1SlotsJa, anchors: nh1Anchors, anchorsS: nh1AnchorsS,
+    status: function () { return { ver: NH1_VER, on: on(), killed: lsGet('v292DfixNH1Off') === '1', nh1bKilled: lsGet('v292DfixNH1bOff') === '1', fx1b: lsGet('v292DfixICONFIX1bOff') === '1' ? 0 : FX1_VER, fx1c: lsGet('v292DfixICONFIX1cOff') === '1' ? 0 : 'worker-only', calls: JSON.parse(JSON.stringify(calls)) }; }
   };
 })(typeof window !== 'undefined' ? window : this);
