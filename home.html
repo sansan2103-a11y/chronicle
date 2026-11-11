@@ -417,7 +417,7 @@
 <script src="v292Dfix872-scenario-cloud-sync.js?cb=20261020-bundle35-b"></script>
 <!-- v292Dfix823: SEED_EXPANSION_V1 Scenario Seed Adapter（dormant・UI caller 0・kill v292Dfix823Off）。fix436+fix335 の再利用で
      Scenario Original の空欄だけを埋める。transport は実 fix247 runtime authority のみ（home には fix247 が無いので現状は常に AI_UNAVAILABLE = fail-closed）。 -->
-<script src="v292Dfix823-scenario-seed-adapter.js?cb=20261110-seedworld2"></script>
+<script src="v292Dfix823-scenario-seed-adapter.js?cb=20261111-seedhero1"></script>
 <!-- ★★sp18 v292Dfix889 SECRET_STORY_VAULT（v7.2）: HOME の可視性 authority。
      ★下の inline script より **前**（あちらは parse 時に render() を呼ぶ）。 -->
 <script src="v292Dfix889-secret-vault.js?cb=20261108-bundle93-g"></script>
@@ -3502,7 +3502,7 @@
      描画は自前の #sc873View のみ。localStorage 書込 0・auth key 読み 0・画面に内部 code 0。
      ★WAIT_SP8_LIVE_GREEN: sp8（fix872 同期）が live green になるまで本番投入しない。
      kill = localStorage['v292Dfix873Off']='1' → 深さ選択を出さず従来どおり SC_EDIT へ直行。 -->
-<script src="v292Dfix873-scenario-creator.js?cb=20261110-seedworld2"></script>
+<script src="v292Dfix873-scenario-creator.js?cb=20261111-seedhero1"></script>
 <!-- v292Dfix885(HOME_DATA_MANAGEMENT_FOLD_V1・GPT 裁定 #L16entry): ホーム左袖の「データ」欄を
      player 向けに減らす（DOM の移動だけ・id ・ handler ・ 保存経路は不変）。
      ★手動同期の 2 ボタン（#upBtn / #downBtn）は **常に見える位置のまま**（降格は sp11b）。

@@ -79,6 +79,21 @@
     s2Why: { TOO_LONG: 'つづきが長すぎたため', DUP: '内容があなたの文とほぼ同じだったため', EMPTY: 'つづきが空だったため', MISSING: 'AI からつづきが返らなかったため', TOO_SHORT: 'つづきが短すぎたため', LORE_FULL: 'あなたの世界観がすでに長いため', PREFIX_BROKEN: '安全のため', BUDGET: 'ほかの欄（登場人物など）を優先したため', NO_LORE: '世界観が空だったため', MODE: '' },
     s2NotAdded: '世界観のつづきは今回は足されませんでした（%s）。他の欄は広がっています。「🎲 別の案を作る」でもう一度ためせます。',
     s2Long: '合計が400文字を超えています。超えた分は、物語の途中の指示には入りません（保存はされます）。',
+    /* ★SEEDHERO1（種の主人公）／★SEEDNPC1e（呼び名だけの人に名前を付ける） */
+    h1Head: 'Chronicle が足した主人公の説明',
+    h1Tag: 'AI が補った設定',
+    h1Keep: 'あなたの書いた説明はそのまま先頭に残ります。性格・外見・立場と口調の行は、「▶」を押す前にここで直せます。',
+    h1Del: 'この補足を使わない',
+    h1Gone: '補足は使いません。あなたの書いた説明だけで始まります。「🎲 別の案を作る」でもう一度足せます。',
+    h1Why: { TOO_LONG: '補足が長すぎたため', DUP: '内容があなたの説明とほぼ同じだったため', EMPTY: '補足が空だったため', MISSING: 'AI から補足が返らなかったため', TOO_SHORT: '補足が短すぎたため',
+             AGENCY: '主人公の決意や行動予定の文だけだったため（主人公の意思はあなたのものなので足しません）', HERO_FULL: 'あなたの説明が十分長いため', BUDGET: '出力の余裕が足りなかったため', PREFIX_BROKEN: '安全のため' },
+    h1NotAdded: '主人公の説明の補足は今回は足されませんでした（%s）。他の欄は広がっています。',
+    h1Cnt: '全体 %n 文字（目安 120 字まで）',
+    n1Head: '名前を付けた人',
+    n1Tag: 'AI が付けた名前',
+    n1Label: '登場人物 %n の名前',
+    n1Note: '「%s」は呼び名として説明に残しています。名前はここで直せます。',
+    n1Keep: '「%s」のままにする',
     swRulesRow: '世界のきまり',
     genOmakase: 'シナリオを組み立てています…',
     genSeed: '物語を広げています…',
@@ -173,6 +188,7 @@
     candidate: null, report: null, title: '',
     seed: { lore: '', hero: '', npc: '', title: '', loc: '', tone: '', start: '', rules: '', expandLore: false },   /* ★SEEDWORLD1: loc/tone/start/rules を足した ／ ★SEEDWORLD2: expandLore（チェック・メモリだけ） */
     loreSplit: null, addOff: false,          /* ★SEEDWORLD2: 確認カードの「原文 / つづき」。メモリだけ */
+    heroSplit: null, heroOff: false, nicks: [], aliasRes: [],   /* ★SEEDHERO1 / SEEDNPC1e: メモリだけ */
     worldOpen: false,                       /* ★SEEDWORLD1: 「もっと細かく決める」の開閉（メモリだけ・保存しない） */
     lastFail: null                          /* code は **画面に出さない**。console / state 用 */
   };
@@ -358,7 +374,9 @@
     g += row('舞台', sc.loc, isMine(S.seed.loc, sc.loc));
     g += row('雰囲気', sc.tone, isMine(S.seed.tone, sc.tone));
     g += row('目的', sc.obj);
-    g += row('主人公', trim(hero.name) + (trim(hero.desc) ? '／' + hero.desc : ''));
+    var hsp = sh1On() ? (S.heroSplit || { user: str(hero.desc), add: null }) : null;   /* ★SEEDHERO1: 主人公の行は利用者の文だけ（足した分は下の枠）。足しが無ければ従来と同じ */
+    var hdesc = hsp ? hsp.user : hero.desc;
+    g += row('主人公', trim(hero.name) + (trim(hdesc) ? '／' + hdesc : ''));
     for (var i = 0; i < npcs.length; i++){
       var n = isObj(npcs[i]) ? npcs[i] : {};
       g += row('登場人物 ' + (i + 1), trim(n.name) + (trim(n.desc) ? '／' + n.desc : ''));
@@ -372,7 +390,7 @@
       '<input id="sc873_title" type="text" data-c873-f="title" value="' + esc(S.title) + '"></div>' +
       '<div class="sc873-grid">' + g + '</div>' +
       (isRandom ? '<div class="sc873-note">' + esc(COPY.randomNote) + '</div>' : '') +
-      aiBlockHtml() +
+      heroBoxHtml() + nickBoxHtml() + aiBlockHtml() +
       '</div>';
     h += '<div class="sc-acts">' +
       '<button class="sc-btn sc-start sc873-cta" data-c873="start">' + esc(COPY.start) + '</button>' +
@@ -383,6 +401,7 @@
     h += '<div data-c873-msg></div>';
     host.innerHTML = h;
     if (sw2On() && S.loreSplit && S.loreSplit.add != null) refreshAiMeta(trim(nl(S.loreSplit.add)));   /* ★SEEDWORLD2: 数えと警告の初期表示 */
+    if (sh1On() && S.heroSplit && S.heroSplit.add != null) refreshHeroMeta();   /* ★SEEDHERO1 */
   }
   /* ★SEEDWORLD2: 確認カードの「Chronicle が足した世界観」枠（つづきがあるときだけ）／足されなかった理由（頼んだのに無かったとき） */
   function aiBlockHtml(){
@@ -744,6 +763,91 @@
     }
     return false;
   }
+  /* ---------- ★SEEDNPC1e（2026-11-11・Local 候補）: 「性格・様子の語＋役割の名詞」の呼び名に名前を付ける ----------
+     不具合（Owner の実例）: 「おてんば女子高生」と書くと NPC の名前が「おてんば女子高生」のまま登録された（1b/1c/1d の手がかり＝の・な・表の語・関係節が無い）。
+     直し方（単語表は足さない。「役割の名詞で終わる ＋ 前が名前らしくない」の形だけで判断・名前→説明の向きにしか変えない・迷えば変えない）:
+       呼び名と見なす = ① 1b/1c/1d がまだ「説明」と見ていない ② 全体 4〜14 字・空白と記号なし ③ 末尾が人を表す語（1b/1c の「role」類。敬称・肩書き・姫王類は対象外）
+                         ④ その前（P）が **ひらがなだけ 3〜8 字**（おてんば・いたずら・わんぱく・ひょうきん）で、末尾が の・な・こ・み・か・え でない
+                            （あやの・ひなこ・あやか・まりえ のような名前らしい終わりは名前のまま）。漢字・カタカナの P（田中少年・ミナ少女・アリス…）は名前かもしれないので **変えない**。
+       呼び名と見なしたら: 同じ 1 回の AI 呼び出しで「日本人らしい姓＋名」を付けさせ、元の呼び名は説明に「（呼び名：…）」で残す（利用者が説明を書いていたら末尾に足すだけ）。
+       AI の名前が 空・呼び名と同じ/含む・役割の名詞で終わる・記号や数字・説明の再掲・2〜12 字の外 なら **元の名前（呼び名）のまま**。
+       確認カードに「名前を付けた人」の枠が出て、その場で直せる／「呼び名のままにする」で戻せる。
+     kill: localStorage v292DfixSEEDNPC1eOff='1' → 1d と同じ（呼び名のまま）。SEEDNPC1Off・1bOff・1cOff・1dOff も 1e を止める（重ね）。
+     診断: window.__v292DfixSEEDNPC1e = { version, on(), isNick(text), status() }（名前は残さない） */
+  var SN1E = { version: 'seednpc1-e-20261111', last: null };
+  function sn1eOff(){ return lsg('v292DfixSEEDNPC1eOff') === '1' || sn1Off() || sn1bOff() || sn1cOff() || sn1dOff(); }
+  /* 末尾の人を表す語（role 類のみ）で切って { P, noun } を返す。当たらなければ null */
+  function sn1eSplit(t){
+    for (var i = 0; i < SN1C_NOUNS.length; i++){
+      var N = SN1C_NOUNS[i], w = N.w;
+      if (t.length <= w.length || t.slice(t.length - w.length) !== w) continue;
+      if (N.cls !== 'role') return null;
+      return { P: t.slice(0, t.length - w.length), noun: w };
+    }
+    return null;
+  }
+  function sn1eNick(raw){
+    if (sn1eOff()) return false;
+    var t = trim(str(raw));
+    var n = sn1Len(t);
+    if (n < 4 || n > 14) return false;
+    if (SN1B_BAD.test(t) || /[ 　]/.test(t)) return false;
+    if (sn1bIsDesc(t)) return false;                       /* 1b/1c/1d が説明と見るものは従来の経路（ここでは扱わない） */
+    var sp = sn1eSplit(t); if (!sp) return false;
+    if (!/^[ぁ-ゖー]{3,8}$/.test(sp.P)) return false;      /* ひらがなだけ 3〜8 字（漢字・カタカナは名前かもしれない） */
+    if (/[のなこみかえた]$/.test(sp.P)) return false;        /* あやの・ひなこ・あやか・まりえ 等の名前らしい終わり */
+    return true;
+  }
+  /* AI が付けた名前として使えるか（使えなければ呼び名のまま） */
+  function sn1eNameOk(name, alias){
+    var t = trim(str(name)), n = sn1Len(t);
+    if (n < 2 || n > 12) return false;
+    if (!/^[ぁ-ゖァ-ヺー一-龯々・ 　]+$/.test(t)) return false;      /* 記号・数字・英字・括弧は不可 */
+    if (t === alias || t.indexOf(alias) >= 0 || alias.indexOf(t) >= 0) return false;
+    var sp = sn1eSplit(alias); if (sp && sn1Len(sp.P) >= 3 && t.indexOf(sp.P) >= 0) return false;   /* 呼び名の修飾語の再掲（おてんば ひな） */
+    var tc = t.replace(/[ 　]+/g, '');
+    if (sn1bIsDesc(tc) || sn1eNick(tc)) return false;
+    for (var i = 0; i < SN1C_NOUNS.length; i++){ var w = SN1C_NOUNS[i].w; if (tc.length >= w.length && tc.slice(tc.length - w.length) === w) return false; }   /* 役割の名詞で終わる＝説明の再掲 */
+    return true;
+  }
+  function nickTag(alias){ return '（呼び名：' + alias + '）'; }
+  /* 候補の NPC を後処理: 名前が付いたら「（呼び名：…）」を説明へ。使えない名前は呼び名のまま。結果を返す（表示用） */
+  function sn1ePost(cand){
+    var out = []; if (!S.nicks.length || !cand || !isObj(cand.cast) || !isArr(cand.cast.npcs)) return out;
+    for (var i = 0; i < S.nicks.length; i++){
+      var nk = S.nicks[i], npc = cand.cast.npcs[nk.n - 1]; if (!isObj(npc)) continue;
+      var cur = trim(npc.name);
+      if (!cur || cur === nk.alias){ npc.name = nk.alias; out.push({ n: nk.n, alias: nk.alias, applied: false, reason: cur ? 'SAME' : 'NONAME' }); continue; }
+      if (!sn1eNameOk(cur, nk.alias)){ npc.name = nk.alias; out.push({ n: nk.n, alias: nk.alias, applied: false, reason: 'BAD_NAME' }); continue; }
+      var tag = nickTag(nk.alias), d = trim(npc.desc);
+      npc.desc = nk.userDesc ? (d + '\n' + tag) : (tag + d);
+      out.push({ n: nk.n, alias: nk.alias, applied: true, tag: tag, userDesc: !!nk.userDesc });
+    }
+    return out;
+  }
+  function sn1eKeep(n){
+    var c = S.candidate, r = null; if (!c || !isObj(c.cast) || !isArr(c.cast.npcs)) return;
+    for (var i = 0; i < S.aliasRes.length; i++){ if (S.aliasRes[i].n === n) r = S.aliasRes[i]; }
+    var npc = c.cast.npcs[n - 1]; if (!r || !r.applied || !isObj(npc)) return;
+    var d = str(npc.desc);
+    if (d.indexOf(r.tag) === 0) d = d.slice(r.tag.length); else if (d.length >= r.tag.length + 1 && d.slice(d.length - r.tag.length - 1) === '\n' + r.tag) d = d.slice(0, d.length - r.tag.length - 1);
+    npc.desc = trim(d); npc.name = r.alias; r.applied = false; r.reason = 'KEPT';
+    renderReview();
+  }
+  function sn1eEdit(n, val){
+    var c = S.candidate; if (!c || !isObj(c.cast) || !isArr(c.cast.npcs)) return;
+    var npc = c.cast.npcs[n - 1]; if (!isObj(npc)) return;
+    var r = null; for (var i = 0; i < S.aliasRes.length; i++){ if (S.aliasRes[i].n === n) r = S.aliasRes[i]; }
+    var v = trim(nl(val)).replace(/\n/g, ''); npc.name = v || (r ? r.alias : npc.name);
+  }
+  window.__v292DfixSEEDNPC1e = {
+    version: SN1E.version,
+    on: function(){ return !sn1eOff(); },
+    isNick: function(t){ return sn1eNick(t); },
+    nameOk: function(n, a){ return sn1eNameOk(n, a); },
+    status: function(){ var ap = 0; for (var i = 0; i < S.aliasRes.length; i++){ if (S.aliasRes[i].applied) ap++; }
+      return { on: !sn1eOff(), version: SN1E.version, nicks: S.nicks.length, applied: ap, kept: S.aliasRes.length - ap }; }
+  };
   /* 区切られた項目が全部「説明だけの人」なら、その項目の列（2〜6）。それ以外は null */
   function sn1bList(text, sepRe){
     var items = text.split(sepRe), out = [];
@@ -812,6 +916,83 @@
     isDesc: function(t){ return sn1bIsDesc(t); }
   };
 
+  /* ---------- ★SEEDHERO1（2026-11-11・Local 候補）: 種の主人公を AI が埋める ----------
+     要望（Owner）: 「シナリオを種から作ったけど主人公のところ埋めて欲しかった」。実例: 主人公の説明が「色白ギャル女子高生」だけ・口調が空。
+     直し方（SEEDWORLD2 と同じ考え方・AI 呼び出し増 0）: 利用者が主人公の説明を書いたとき、既存の 1 回の呼び出しの JSON に heroAdd（性格・外見・立場）と
+       heroVoice（口調 1 行・説明に口調の手がかりが無いときだけ）を足す。cast.hero.desc ＝ 利用者の文 + 改行 + 足した分（+ 改行 + 「口調：…」）。全体で 120 字ほどまで。
+       名前・性別は触らない（空なら今までの自動）。決意・目的・行動予定の文は fix823 が文ごとに外す（AGENCY）。出力予算が足りなければ短く／足さない。
+       確認カードに別枠「Chronicle が足した主人公の説明」（編集・「この補足を使わない」）。
+       ★口調は専用の欄ではなく説明の中の 1 行（シナリオの保存の形に voice 欄が無いため。保存の形は変えない）。
+     kill: localStorage v292DfixSEEDHERO1Off='1' → 合図なし・枠なし（出荷前とバイト一致）。診断: window.__v292DfixSEEDHERO1 = { version, on(), status() } */
+  var SH1 = { version: 'seedhero1-a-20261111' };
+  function sh1On(){ return lsg('v292DfixSEEDHERO1Off') !== '1'; }
+  /* 候補の主人公の説明を「利用者の文 / 足した分」に分ける（足しが採用されたときだけ。分けられなければ add は null） */
+  function sh1Split(cand){
+    var c = isObj(cand) ? cand : {}, cast = isObj(c.cast) ? c.cast : {}, hero = isObj(cast.hero) ? cast.hero : {};
+    var d = str(hero.desc), ha = S.report && S.report.heroAppend;
+    if (!sh1On() || !ha || !(ha.appliedAdd || ha.appliedVoice)) return { user: d, add: null };
+    var user = trim(nl(S.seed.hero)), sep = '\n';
+    if (user && d.indexOf(user + sep) === 0) return { user: user, add: d.slice(user.length + sep.length) };
+    return { user: d, add: null };
+  }
+  function heroBoxHtml(){
+    if (!sh1On()) return '';
+    var hs = S.heroSplit, ha = S.report && S.report.heroAppend; if (!hs || !ha) return '';
+    if (hs.add == null){
+      if (S.heroOff) return '<div class="sc873-note" data-c873-herogone>' + esc(COPY.h1Gone) + '</div>';
+      if (!ha.appliedAdd && !ha.appliedVoice){
+        var rs = ha.reason || ha.addReason; if (!rs) return '';
+        return '<div class="sc873-note" data-c873-heronot>' + esc(COPY.h1NotAdded.replace('%s', COPY.h1Why[rs] || '理由は表示できません')) + '</div>';
+      }
+      return '';
+    }
+    return '<div class="sc873-ai" data-c873-heroai>' +
+      '<div class="sc873-ai-h">' + esc(COPY.h1Head) + '<span class="sc873-ai-tag">' + esc(COPY.h1Tag) + '</span></div>' +
+      '<div class="sc-f sc-wide"><textarea id="sc873_heroAdd" rows="5" data-c873-f="heroAdd">\n' + esc(hs.add) + '</textarea></div>' +
+      '<div class="sc873-cnt" data-c873-herocnt></div>' +
+      '<div class="sc873-ai-acts"><button class="sc-btn" data-c873="delHero">' + esc(COPY.h1Del) + '</button></div>' +
+      '<div class="sc873-note">' + esc(COPY.h1Keep) + '</div></div>';
+  }
+  function refreshHeroMeta(){
+    if (!host) return; var hs = S.heroSplit; if (!hs) return;
+    var c = host.querySelector('[data-c873-herocnt]'); if (!c) return;
+    var cur = S.candidate && S.candidate.cast && S.candidate.cast.hero ? str(S.candidate.cast.hero.desc) : '';
+    var n = cpCount(cur), over = n > 150;
+    c.textContent = COPY.h1Cnt.replace('%n', String(n)); c.className = 'sc873-cnt' + (over ? ' over' : '');
+  }
+  function applyHeroEdit(val){
+    var c = S.candidate, hs = S.heroSplit; if (!c || !isObj(c.cast) || !isObj(c.cast.hero) || !hs) return;
+    var add = trim(nl(val));
+    c.cast.hero.desc = add ? hs.user + '\n' + add : hs.user;
+    refreshHeroMeta();
+  }
+  function delHero(){
+    var c = S.candidate, hs = S.heroSplit; if (!c || !isObj(c.cast) || !isObj(c.cast.hero) || !hs || S.busy) return;
+    c.cast.hero.desc = hs.user; S.heroSplit = { user: hs.user, add: null }; S.heroOff = true;
+    renderReview();
+  }
+  function nickBoxHtml(){
+    if (sn1eOff()) return '';
+    var h = '', c = S.candidate, npcs = (c && isObj(c.cast) && isArr(c.cast.npcs)) ? c.cast.npcs : [];
+    for (var i = 0; i < S.aliasRes.length; i++){
+      var r = S.aliasRes[i]; if (!r.applied) continue;
+      var npc = isObj(npcs[r.n - 1]) ? npcs[r.n - 1] : {};
+      h += '<div class="sc873-ai" data-c873-nick="' + r.n + '">' +
+        '<div class="sc873-ai-h">' + esc(COPY.n1Head) + '<span class="sc873-ai-tag">' + esc(COPY.n1Tag) + '</span></div>' +
+        '<div class="sc-f sc-wide"><label for="sc873_nick' + r.n + '">' + esc(COPY.n1Label.replace('%n', String(r.n))) + '</label>' +
+        '<input id="sc873_nick' + r.n + '" type="text" data-c873-f="nick" data-c873-n="' + r.n + '" value="' + esc(trim(npc.name)) + '"></div>' +
+        '<div class="sc873-note">' + esc(COPY.n1Note.replace('%s', r.alias)) + '</div>' +
+        '<div class="sc873-ai-acts"><button class="sc-btn" data-c873="nickKeep" data-c873-n="' + r.n + '">' + esc(COPY.n1Keep.replace('%s', r.alias)) + '</button></div></div>';
+    }
+    return h;
+  }
+  window.__v292DfixSEEDHERO1 = {
+    version: SH1.version,
+    on: function(){ return sh1On(); },
+    status: function(){ var ha = S.report && S.report.heroAppend;
+      return { on: sh1On(), version: SH1.version, last: ha ? { requested: !!ha.requested, askedAdd: !!ha.askedAdd, askedVoice: !!ha.askedVoice, appliedAdd: !!ha.appliedAdd, appliedVoice: !!ha.appliedVoice, reason: ha.reason || null, addReason: ha.addReason || null, voiceReason: ha.voiceReason || null, addLen: ha.addLen || 0, droppedAgency: ha.droppedAgency || 0 } : null }; }
+  };
+
   /* ---------- 生成 ---------- */
   function seededDraft(){
     var a = A(); if (!a) return null;
@@ -823,6 +1004,7 @@
        EXPAND_EXISTING は slot を消せない（裁定 26）。SEEDNPC1a/1b の「name 空・desc あり」は
        fix823 が AI で名前を埋める（AI が使えないときは編集画面で名前の欄が空のまま見える）。 */
     d.cast.npcs = [];
+    S.nicks = [];
     if (sn1Off()){
       if (trim(S.seed.npc)) d.cast.npcs.push({ name: trim(S.seed.npc), desc: '', personality: '', coreDesire: '', coreFear: '', wound: '', gender: '' });
     } else {
@@ -832,6 +1014,9 @@
       for (var pi = 0; pi < pr.people.length; pi++){
         d.cast.npcs.push({ name: pr.people[pi].name, desc: pr.people[pi].desc, personality: '', coreDesire: '', coreFear: '', wound: '', gender: '' });
       }
+    }
+    if (!sn1eOff()){   /* ★SEEDNPC1e: 呼び名だけの名前（おてんば女子高生）を控える。draft は従来どおり名前＝呼び名のまま（AI が使えなければそのまま残る） */
+      for (var ni = 0; ni < d.cast.npcs.length; ni++){ var nm = trim(d.cast.npcs[ni].name); if (nm && sn1eNick(nm)) S.nicks.push({ n: ni + 1, alias: nm, userDesc: trim(d.cast.npcs[ni].desc) }); }
     }
     if (trim(S.seed.title)) d.title = trim(S.seed.title);
     if (!skwOff()){
@@ -855,7 +1040,14 @@
     var f823 = F823(), armed = false;
     if (S.mode === 'SEED' && sw2On() && S.seed.expandLore === true && trim(S.seed.lore) && f823 && typeof f823.armLoreAppend === 'function') armed = !!f823.armLoreAppend();
     if (armed) SW2.armed++;
-    try { a.expand(mode, genCb); } finally { if (armed && f823.disarmLoreAppend) f823.disarmLoreAppend(); }
+    /* ★SEEDHERO1 / SEEDNPC1e: 種のときだけ、主人公の説明があれば hero、呼び名だけの NPC があれば npcAlias を 1 回限りで合図（同期呼び出し・直後に必ず消す） */
+    var xArmed = false; S.heroSplit = null; S.heroOff = false; S.aliasRes = [];
+    if (S.mode === 'SEED' && f823 && typeof f823.armSeedExtras === 'function'){
+      var heroOn = sh1On() && !!trim(S.seed.hero), amap = null;
+      if (!sn1eOff() && S.nicks.length){ amap = {}; for (var ai = 0; ai < S.nicks.length; ai++) amap[S.nicks[ai].n] = S.nicks[ai].alias; }
+      if (heroOn || amap) xArmed = !!f823.armSeedExtras({ hero: heroOn, npcAlias: amap });
+    }
+    try { a.expand(mode, genCb); } finally { if (armed && f823.disarmLoreAppend) f823.disarmLoreAppend(); if (xArmed && f823.disarmSeedExtras) f823.disarmSeedExtras(); }
     function genCb(res){
       if (done) return; done = true;
       S.busy = false; S.gens++;
@@ -875,6 +1067,8 @@
         return renderFail();
       }
       S.candidate = res.candidate; S.report = res.report || {};
+      S.aliasRes = sn1ePost(res.candidate);   /* ★SEEDNPC1e */
+      S.heroSplit = sh1Split(res.candidate);  /* ★SEEDHERO1 */
       S.title = deriveTitle(res.candidate);
       renderReview();
     }
@@ -950,6 +1144,7 @@
     S.candidate = null; S.report = null; S.title = '';
     S.seed = { lore: '', hero: '', npc: '', title: '', loc: '', tone: '', start: '', rules: '', expandLore: false };
     S.worldOpen = false; S.loreSplit = null; S.addOff = false;
+    S.heroSplit = null; S.heroOff = false; S.nicks = []; S.aliasRes = [];
     renderPick();
     return { ok: true };
   }
@@ -999,6 +1194,8 @@
       case 'toEdit': return toEdit();
       case 'delAdd': return delAdd();
       case 'stripAdd': return stripAdd();
+      case 'delHero': return delHero();                                     /* ★SEEDHERO1 */
+      case 'nickKeep': return sn1eKeep(+b.getAttribute('data-c873-n'));     /* ★SEEDNPC1e */
     }
   }
   function onHostInput(e){
@@ -1007,6 +1204,8 @@
     if (k === 'title') S.title = t.value;
     else if (k === 'expandLore') { S.seed.expandLore = !!t.checked; return; }   /* ★SEEDWORLD2 */
     else if (k === 'loreAdd') { applyAddEdit(t.value); return; }                /* ★SEEDWORLD2 */
+    else if (k === 'heroAdd') { applyHeroEdit(t.value); return; }               /* ★SEEDHERO1 */
+    else if (k === 'nick') { sn1eEdit(+t.getAttribute('data-c873-n'), t.value); return; }   /* ★SEEDNPC1e */
     else if (S.seed.hasOwnProperty(k)) S.seed[k] = t.value;
     if (k === 'rules' && !skwOff()){
       /* ★SEEDWORLD1: 数えだけ更新（再描画しない＝入力中のフォーカスと変換を壊さない） */
@@ -1085,6 +1284,7 @@
            setTitle: function(t){ S.title = str(t); return { ok: true }; },
            setSeed: function(o){ if (isObj(o)) { for (var k in o){ if (k === 'expandLore') { S.seed.expandLore = (o[k] === true || o[k] === '1' || o[k] === 'true'); continue; } if (S.seed.hasOwnProperty(k)) S.seed[k] = str(o[k]); } } return { ok: true }; },
            editAdd: function(v){ applyAddEdit(v); return { ok: true }; }, delAdd: delAdd, stripAdd: stripAdd,
+           editHero: function(v){ applyHeroEdit(v); return { ok: true }; }, delHero: delHero, editNick: function(n, v){ sn1eEdit(n, v); return { ok: true }; }, keepNick: sn1eKeep,
            candidate: function(){ return S.candidate ? JSON.parse(JSON.stringify(S.candidate)) : null; },
            deriveTitle: deriveTitle, forbiddenWords: function(){ return FORBIDDEN.slice(); },
            install: install }
