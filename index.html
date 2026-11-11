@@ -5,6 +5,7 @@
 <script src="v292Dvault2-sendgate.js?cb=20261021-laneE-a"></script>
 <script src="v292Dvault2-copygate.js?cb=20261011-ab8"></script>
 <script src="v292DfixCP1-final-tap.js?cb=20261023-bundle43a-r5"></script><!-- CP1 tap r43e (GPT #127-JY/#127-KA/#127-KK/#127-LA/#127-LC): 送信直前の body を CP1 に見せる観測口（送る中身は不変）。読み込み時に v292DfixCP1On='1'（かつ v292DfixCP1Off≠'1'）のときだけ fetch を包む。OFF/kill は何もしない。CP1 を使ったターンの途中でアカウント・物語・Owner 権限が変わった・kill されたときは、その送信を出さない／送信後に変わったら応答を捨てる。止めたターンは自動で送り直さない -->
+<script src="v292DfixPRUNE2-sys-prune2.js?cb=20261111-prune2"></script><!-- ★PRUNE2（lanePRUNE2・2026-11-11）: 最終 sys／user の整理・第 2 弾。送信直前（fetch 境界）で決まった文だけを差し替える。P2a＝<say> の決まりを末尾の【話者タグの徹底】1 か所に（【出力の形式】2 項・【出力の掟】1 項・【話者】2 項の重複を外す。見出しと解析が依存する形式は変えない）／P2b＝見本 A を外す・【プレイヤーの種】【NPCの登場】を短く・「先輩」の例文を呼称に依らない文へ／P2c＝user 末尾の逐語反映を短く・psychAnchors の注記から決まり文句の列挙を外す。既定は P2c だけ ON（P2a・P2b は v292DfixPRUNE2aOn / bOn="1" の端末だけ）。kill = localStorage v292DfixPRUNE2aOff / v292DfixPRUNE2bOff / v292DfixPRUNE2cOff（個別）・v292DfixPRUNE2Off（全部）＝"1"（毎回評価・送信バイト同一）。PRUNE1 の直前に置く（PRUNE1 の後・CP1 tap の前に当たる。順が逆でも結果は同じ） -->
 <script src="v292DfixPRUNE1-sys-prune.js?cb=20261111-prune1"></script><!-- ★PRUNE1（lanePRUNE1・2026-11-11）: 最終 sys の当て布の整理。fix459 ほか sys を書き換える部品がすべて済んだ後（fetch を包む部品の内側）で、決まった文だけを外す／差し替える（重複 6 文を外す・食い違いと受け身の強制 7 文を言い換える・進行エンジンを 1 つの規則に・【自発】の定型を 1 行に・【危機のとき】を新設・user 側の「0.5〜3 秒」「直後だけ」を言い換える）。安全・出力形式・<say>/<state> の契約・話者・見本・状態の文は触らない。見つからない文はその 1 手だけ何もしない。kill = localStorage v292DfixPRUNE1Off='1'（毎回評価・送信バイト同一）。CP1-final-tap の直後に置く（tap が整理後の body を見る） -->
 <script src="v292DfixE64-save-tap.js?cb=20261024-bundle45-e64-d"></script><!-- E6-4 r4 (GPT #127-MG): E64Stop がある物語の state を /save へ送らない保存の出口。印なしかつ OFF/kill なら何もしない -->
 <script src="v292Dfix953-card-canary-gate.js?cb=20261015-bundle1-cardA-f957on"></script><!-- v292Dfix953: card canary gate (fix952/fix951/fix444g run ONLY when localStorage v292Dfix953On=1 AND this document story id is in the baked allowlist; otherwise byte-identical to production) -->
@@ -2113,7 +2114,7 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
 // UI
 // ─────────────────────────────────────────────────────────────
 const UI = {
-  esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); },
+  esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); },
 
   setStatus(msg, err = false) {
     const el = document.getElementById('topStatus');
@@ -2148,7 +2149,7 @@ const UI = {
 
     // プレイヤー行動
     const pline = document.createElement('div'); pline.className = 'player-line';
-    pline.innerHTML = `<span class="mbadge ${turn.inputType}">${turn.inputType}</span> <span class="ptext">${this.esc(turn.playerText)}</span>`;
+    pline.innerHTML = `<span class="mbadge ${this.esc(String(turn.inputType))}">${this.esc(String(turn.inputType))}</span> <span class="ptext">${this.esc(turn.playerText)}</span>`;
     div.appendChild(pline);
 
     if (turn.narrative) {
@@ -3857,6 +3858,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   }
 
   /* ─── 8. HERO AVATAR WIDGET (v75 essence) ──────────────────────── */
+  function _xss1e(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); } /* xss1: X2/X3 */
   function buildHeroWidget(){
     var heroSec = null;
     document.querySelectorAll('.sec').forEach(function(el){
@@ -3877,10 +3879,10 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
       heroSec.parentNode.insertBefore(hav, heroSec.nextSibling);
     }
     hav.classList.add('v100-clean'); /* fix329: className丸ごと上書きをやめ、fix275のv275-hideガードを温存（システムタブへの漏れ根治） */
-    var imgInner = url ? '<img src="' + url.replace(/"/g,'&quot;') + '" alt="' + name + '">' : '?';
+    var imgInner = url ? '<img src="' + _xss1e(url) + '" alt="' + _xss1e(name) + '">' : '?';
     hav.innerHTML =
       '<div class="v100-img" data-v100-act="hero-regen">' + imgInner + '</div>' +
-      '<div class="v100-info"><div class="v100-name">' + name.replace(/</g,'&lt;') + '</div>' +
+      '<div class="v100-info"><div class="v100-name">' + _xss1e(name) + '</div>' +
       '<div>' + (url ? '⟳ で再生成' : '⟳ で生成') + '</div></div>' +
       '<button class="v100-btn" type="button" data-v100-act="hero-regen">⟳</button>';
     /* ★av2 C2 (GPT 913): on an Asset-v2 document the legacy ⟳ is not offered (hidden, click inert) */
@@ -3906,11 +3908,11 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
       var w = document.createElement('div');
       w.className = 'v100-npc-av';
       var imgInner = npc.avatar
-        ? '<img src="' + npc.avatar.replace(/"/g,'&quot;') + '" alt="' + npc.name + '">'
+        ? '<img src="' + _xss1e(npc.avatar) + '" alt="' + _xss1e(npc.name) + '">'
         : '?';
       w.innerHTML =
         '<div class="v100-npc-img" data-v100-npc="'+idx+'">' + imgInner + '</div>' +
-        '<div style="flex:1;font-size:12px;color:var(--dim,#888)">' + npc.name + '</div>' +
+        '<div style="flex:1;font-size:12px;color:var(--dim,#888)">' + _xss1e(npc.name) + '</div>' +
         '<button class="v100-npc-btn" type="button" data-v100-npc="'+idx+'">⟳</button>';
       /* Insert at top of NPC card body */
       var firstChild = card.firstChild;
@@ -4151,7 +4153,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
        fix659 は別 id + __f527 マーカーを立てるので干渉しない、という関係をこの並びで示す。
      読出=window.__v292Dfix659.status()/.selfTest() / OFF=v292Dfix659Off -->
 <script src="v292Dfix659-fork-choice.js?cb=v292Dfix680"></script>
-<script src="features.js?cb=20261111-scene1"></script>
+<script src="features.js?cb=20261111-xss1"></script>
 <script>
 /* ============================================================================
  * v292DfixP0-inline : シナリオテンプレ適用の緊急封鎖（L2 + L2b）

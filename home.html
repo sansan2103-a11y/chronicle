@@ -871,7 +871,7 @@
           '<div class="csum">'+esc(x.summary||'')+'</div>'+
           '<div class="cchars">'+chars.map(function(c,i){ return avatar(c.name,i); }).join('')+
             '<span>'+(chars.length?chars.length+'人のキャラクター':'キャラクター未設定')+'</span></div>'+
-          '<div class="cfoot"><span>更新：'+ago(x.updated)+'</span><span>ターン '+x.turns+'</span></div></div></div>';
+          '<div class="cfoot"><span>更新：'+ago(x.updated)+'</span><span>ターン '+esc(String(x.turns))+'</span></div></div></div>';
       }).join('') + '<div class="newcard" id="newCard"><div class="plus">＋</div>新しい物語を始める<div style="font-size:11px;margin-top:4px;opacity:.7">空の世界から始める</div></div>';
     }
     renderDetail(full);
@@ -925,7 +925,7 @@
       '<div class="dtitle">'+esc(x.name)+'</div>'+
       '<div class="drow"><span>作成日</span><b>'+dt(x.created)+'</b></div>'+
       '<div class="drow"><span>最終更新</span><b>'+dt(x.updated)+'</b></div>'+
-      '<div class="drow"><span>総ターン数</span><b>'+x.turns+'</b></div>'+
+      '<div class="drow"><span>総ターン数</span><b>'+esc(String(x.turns))+'</b></div>'+
       '<div class="drow"><span>場所</span><b>'+esc(x.loc||'—')+'</b></div>'+
       '<button class="play" id="playBtn">'+(f759Cloud(x)?'開いてこの端末へ取り込む':(x.turns>0?'続きから始める':'この物語を始める'))+'</button>'+
       /* ★P3 (ASSET_PORTRAIT_OFFICIAL_INSPECTION = READ_ONLY_SURFACE): plain navigation to the read-only portrait page.

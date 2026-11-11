@@ -5895,7 +5895,7 @@
         img.src = newAvatarUrl;
         img.alt = correctSpeaker;
       } else if (avatarDiv && newAvatarUrl){
-        avatarDiv.innerHTML = '<img src="' + newAvatarUrl + '" alt="' + correctSpeaker +
+        avatarDiv.innerHTML = '<img src="' + String(newAvatarUrl).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '" alt="' + String(correctSpeaker).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;') +
           '" loading="lazy" onerror="this.parentNode.textContent=String.fromCharCode(63)">';
       } else if (img){
         img.alt = correctSpeaker;
@@ -11279,11 +11279,11 @@
   // icon, removing the "一瞬以前のアイコンが出る" flash when settings opens).
   var GEN_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='15' fill='none' stroke='%23b39ddb' stroke-width='4' stroke-linecap='round' stroke-dasharray='71' stroke-dashoffset='30'%3E%3CanimateTransform attributeName='transform' type='rotate' from='0 24 24' to='360 24 24' dur='0.9s' repeatCount='indefinite'/%3E%3C/circle%3E%3C/svg%3E";
   function showGen(img){ if (!img) return; if (img.getAttribute('data-gen') === '1') return; try { img.onerror = null; } catch(e){} img.removeAttribute('data-r'); img.setAttribute('data-gen', '1'); img.title = '生成中…'; img.src = GEN_SVG; }
-  function showGenAv(av, name){ var img = av.querySelector('img'); if (!img){ av.innerHTML = '<img alt="' + name + '" loading="lazy">'; img = av.querySelector('img'); } showGen(img); }
+  function showGenAv(av, name){ var img = av.querySelector('img'); if (!img){ av.textContent = ''; img = document.createElement('img'); img.alt = name; img.setAttribute('loading', 'lazy'); av.appendChild(img); } showGen(img); }
   function applyAvatar(av, name, url, aiPath){
     var img = av.querySelector('img');
     if (img && img.getAttribute('data-gen') !== '1' && (aiPathOf(img.getAttribute('src') || '') === aiPath || /api\.dicebear\.com|^data:|^blob:/.test(img.getAttribute('src') || ''))) return; // already our AI image, OR fix197/199が貼ったDiceBear/生成画像(data:|blob:)(402嵐防止: 再適用しない) — leave it
-    if (!img){ av.innerHTML = '<img alt="' + name + '" loading="lazy">'; img = av.querySelector('img'); }
+    if (!img){ av.textContent = ''; img = document.createElement('img'); img.alt = name; img.setAttribute('loading', 'lazy'); av.appendChild(img); }
     if (!img) return;
     img.removeAttribute('data-r');
     img.removeAttribute('data-gen');
