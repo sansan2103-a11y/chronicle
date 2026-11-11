@@ -74,13 +74,14 @@
 - 注意：`Planner._extensions` は fix192（engineMode=1）では sys に乗らない「死に経路」（`.claude/rules/sys-injection.md`、fix226、fix313 の冒頭に記録）。新しい sys 注入は `Planner.build` を包むか、fix379 の keeper に登録する。
 
 #### fix192 — 新プロンプトエンジン（生成の sys を丸ごと差し替える）
-- 状態：本番稼働 `i105`・sha `43364471`・?cb=`20261110-agency1b`（**AGENCY1b で STORY の方向づけの行からも AGENCY1 を呼ぶようにした**。前は `f229dbc2`・?cb=`20261110-bundle93-m`〔93-m で AGENCY1 を呼ぶ 1 行を足した版〕。その前は `6fbdcca4`・?cb=`20261107-bundle93-f`〔93-f の npcq1 C2〕。さらにその前は `931d1310`・?cb=`20261101-bundle79-npres73d4b-on78c`＝80-int-a で NPRES の gate を呼ぶようにした版）。
+- 状態：本番稼働 `i105`・sha `58b7acbd`・?cb=`20261111-flow2`（**FLOW2 で STATEAGE1 を入れた版**。GitHub `daeb3a9`・本番の読み戻し一致〔出荷済み〕。前は `43364471`・?cb=`20261110-agency1b`〔AGENCY1b で STORY の方向づけの行からも AGENCY1 を呼ぶようにした版〕。その前は `f229dbc2`・?cb=`20261110-bundle93-m`〔93-m で AGENCY1 を呼ぶ 1 行を足した版〕。その前は `6fbdcca4`・?cb=`20261107-bundle93-f`〔93-f の npcq1 C2〕。さらにその前は `931d1310`・?cb=`20261101-bundle79-npres73d4b-on78c`＝80-int-a で NPRES の gate を呼ぶようにした版）。
 - 93-m：buildSys の SAY/DO の入力説明の行（`inputLine`。B38-a の後）で `window.__v292DfixAGENCY1.suffix(m, inputLine)` を呼び、文字列が返ったら行の末尾に足す（try/catch。新ファイルが無い・例外・文字列以外 → 何も足さない）。STORY・続き・オートでは呼ばない（93-m の時点）。
 - AGENCY1b（`20261110-agency1b`）：STORY の方向づけの行にも suffix を呼ぶ。続き・オート（入力説明の行なし）は blocks に 1 ブロック足す。
 - npcq1 C2（93-f・Owner だけの CANARY）：「入力を待たず NPC から言葉を発してよい」の文に「（ただし A は重傷・強い恐怖で動きが縛られているため除く）」を 1 つ付ける。有効なのは画面のアカウントが owner かつ active（fix893 の `/auth/me` の答え。ISO1・RC1 と同じ読み口）で匿名の経路でないときだけ。毎回評価する。招待した知人（beta）・none・suspended・ログアウト・匿名・`/auth/me` の未応答・例外では 93-e と同じ出力（Local の試験で sys の SHA が一致）。kill `v292Dfix192LicOff='1'`。H2（【制約】を最優先にする変更）は入っていない。
 - 役割：`Planner.build` を最も外側で包み、`engineMode=1` のとき sys を「良い 1 ターンの形＋見本」の短い指示へ差し替える。進行度・台詞量・続きの検知・キャラ状態（fix77 の store を直接読む `stateBlock`）・記憶の文字列（fix796 から）を自分で注入する。出力形式（`<say>` / `<react>` / `<state>` タグ）は旧エンジンと同じ。
 - engineMode の決まり方：`S.cfg.engineMode` が主、無ければ localStorage `v292EngineMode`。**新しい物語での既定値は 1 になる見込み（コードを読んだだけ・未実測）**：fix317（`v292Dfix317-slot-leak.js`）の `syncSelectors` が、物語の切り替えのときセーブの cfg に engineMode が無ければ既定値 1（`def:1`）を `S.cfg` に入れる（台帳 2230）。fix192 自身の既定は 0＝従来。実機での確認は未。
 - 依存：fix77（store）、fix796（記憶）、fix226（旧エンジン用注入の退役）、fix379（keeper）。中に後から足された分岐が多い（fix812/813/832/903/930/932/956、A1、B0、B38、GQ2 など。スイッチは付録 C）。
+- STATEAGE1（laneFLOW2・2026-11-11・出荷済み〔GitHub `daeb3a9`・本番の読み戻し一致〕・既定 ON・kill `v292DfixSTATEAGE1Off='1'`＝送信バイト同一。`v292DfixSTALE1Off` とは別物）：【各キャラの現在の状態】の組み立てだけを変える。直前のターンで更新されなかった その瞬間の値（からだ・こころ・本能・目的）と、持ち物・姿勢・接触を表す 関係 は、行の末尾へ移して「（N ターン前の様子・今も同じとは限らない）」を付け、付いたときだけ「直近の本文と食い違うときは本文を正とし、反応の前提にしない（傷はそのまま引き継ぐ）」の 1 行を添える。傷・ほかの関係・未解決は従来どおり。経過は fix77 の entry.turn（parse 時＝push 前の S.turns.length）から、項目ごとの経過は画面のメモリ（保存しない・物語が変われば捨てる・読込直後は entry.turn とみなす）。保存値・store・Worker は不変。試験：ユニット（node vm）・偽 AI の Local ブラウザ 6 ターン（最終送信で確認・kill で HEAD と全送信バイト一致）・本番の本物の AI で A/B（端末だけの上書き・各 2 本 × 8 ターン）。A/B の結果：古い状態が本文に漏れたターンは、旧版 2 ターン → 新版 0 ターン（2 本 × 8 ターン。標本は小さい）。
 - 既知の問題（laneNPRES 2026-10-31・合成物語で実測）：`stateBlock` は store の**全員**の状態を、何ターン前のものでも載せる。退場した NPC の様子が sys に残る。→ **NPRES が ON のアカウントでは抑制**（場面にいない／未確認の人物の からだ・こころ・本能・目的を載せず、【この場面の種】【自発】の候補からも外す。80-int-a）。**OFF のアカウントでは従来どおり**。NPRES の効果の本番での長ターン確認は未確認。
 
 #### fix226 — 旧エンジン用 sys 注入の退役
@@ -175,8 +176,9 @@
 - 既知の問題：前面化の候補を store の全員から選ぶため、退場した人物が強制的に戻ることがある。弱い離れの語（「画面」「電話」「待って」）で同席者まで外す害も記録あり（laneNPRES・台帳 2156）。→ **NPRES が ON のアカウントでは抑制**（CP1 の結果から、場面にいない／未確認の人物を外す。名前は足さない）。**OFF のアカウントでは従来どおり**。本番での長ターン確認は未確認。
 
 #### fix414 — 身体・心理の制約エンジン（重傷・解離・凍結のコスト）
-- 状態：本番稼働 `i221`・sha `371f8ce8`・?cb=`20261107-bundle93-f`（**93-f の npcq1 C2 で更新**。前は `fdad99f5`）。既定 ON（fix428 で ON 化）。止める：`v292Dfix414Off='1'`。
+- 状態：本番稼働 `i221`・sha `a91c216b`・?cb=`20261111-flow2`（**FLOW2 で FRZ1 を入れた版**。GitHub `daeb3a9`・本番の読み戻し一致〔出荷済み〕。前は `371f8ce8`・?cb=`20261107-bundle93-f`〔93-f の npcq1 C2〕。その前は `fdad99f5`）。既定 ON（fix428 で ON 化）。止める：`v292Dfix414Off='1'`。
 - npcq1 C2（93-f・Owner だけの CANARY。有効の条件は §2.1 fix192 の C2 と同じ）：重傷・強い恐怖のときも「動きは小さく遅い」「短い発話のみ」などの【制約】を作る（従来は傷の部位が分からないと何も出なかった）。Owner 以外は 93-e と同じ出力。kill `v292Dfix414WidenOff='1'`（拡張だけを止める）。試験（Local・偽の AI）：ユニット 35/0、10 ターン × 6 通りで owner は【制約】10/10・ほかの 5 通りは 0/10、MIDICON 87/0（Chromium・WebKit）、2 タップ 30/0。**本物のモデルが行動を変えるかは未測定**。語彙で判定するため、過去の傷や比喩の「出血」で反応し得る（owner だけ）。【制約】は予算が厳しいと落ち得る（H2 は未対応）。
+- FRZ1（laneFLOW2・2026-11-11・出荷済み〔GitHub `daeb3a9`・本番の読み戻し一致〕・既定 ON・kill `v292DfixFRZ1Off='1'`＝従来と同じ。`v292Dfix414Off='1'` は従来どおり fix414 全体を止める）：脚の「走行不可・移動は支え必要」は、脚の近くにけがの語（骨折・捻挫・ひねった・腫れ・脱臼・撃たれ 等）があるか、傷の欄に脚の傷があるときだけ（捻挫・ひねった・腫れは「動かない」が無くても走行不可、「軽く・少し」なら「移動が鈍い」）。けがの無い「動かない／立てない」は、すくみ・硬直・縫い付く・腰が抜け 等があれば「即応・機転は出ない」（既存 rank6）、無ければ何も付けない。部位の直前が別の人物の「Xの」（例「サキの足首」）ならその部位は数えない（腕・脚。laneFLOW1 A T6 の人違いの型を Local で再現して直した。本番の A T6 の本文は残っておらず、どちらの経路〔ユイ自身の <state> か fix850 の本文の切り出し〕だったかは未確認）。腕の「使用不可」の判定（恐怖で手が動かない）は変えていない。
 - 役割：store から毎ターン導出したキャラ別の【制約】行を keeper（fix379・prio2）で注入する。関連：fix416（痛覚・既定 ON）、fix417（反応系の統合ブロック）、fix850〜852（同じターンの身体・姿勢・精神の能力制約。RR-1〜3）。
 
 #### fix145 — キャラ一覧（モーダル）
@@ -819,7 +821,7 @@
 | 102 | fix81 | `v292Dfix81-strip-incomplete-tags.js` | i102 | `f58f2480` | v292Dfix81 | 文章品質・プロンプト |  |
 | 103 | fix90 | `v292Dfix90-extension-dedup.js` | i103 | `4434f189` | v292Dfix90 | 文章品質・プロンプト |  |
 | 104 | fix796 | `v292Dfix796-memory-retrieve.js` | i104 | `c7b43471` | 20261021-bundle38-b | 記憶 | `v292Dfix796BackfillOff` `v292Dfix796DedupeOff` `v292Dfix796F1On` `v292Dfix796HonOn` |
-| 105 | fix192 | `v292Dfix192-newengine.js` | i105 | `43364471` | 20261110-agency1b | 文章品質・プロンプト（生成の中心） | `v292Dfix425Off` `v292Dfix796HonOn` `v292Dfix812Off` `v292Dfix813Off` `v292DfixAGENCY1Off` `v292DfixAGENCY1StoryOff` |
+| 105 | fix192 | `v292Dfix192-newengine.js` | i105 | `58b7acbd` | 20261111-flow2 | 文章品質・プロンプト（生成の中心） | `v292Dfix425Off` `v292Dfix796HonOn` `v292Dfix812Off` `v292Dfix813Off` `v292DfixAGENCY1Off` `v292DfixAGENCY1StoryOff` `v292DfixSTATEAGE1Off` |
 | 106 | fix197 | `v292Dfix197-avatar-key.js` | i106 | `ef0ec3e6` | 20261019-bundle31-a | アイコン・画像 | `v292DavProvOff` `v292Dfix403Off` `v292Dfix403cOff` `v292Dfix411Off` |
 | 107 | fix221 | `v292Dfix221-recent-dialogues-authoritative.js` | i107 | `9def1578` | v292Dfix221 | 話者・会話ログ |  |
 | 108 | fix226 | `v292Dfix226-engine-unify.js` | i108 | `d966519b` | v292Dfix226 | 文章品質・プロンプト |  |
@@ -935,7 +937,7 @@
 | 218 | fix406 | `v292Dfix406-automode.js` | i218 | `4a563296` | v292Dfix417d | UI・画面 | `v292Dfix406Off` |
 | 219 | fix407 | `v292Dfix407-load-noconfirm.js` | i219 | `9287401c` | v292Dfix407 | UI・画面 | `v292Dfix407Off` |
 | 220 | fix409 | `v292Dfix409-handle-merge.js` | i220 | `297d7f30` | 20260901-fix784 | 保存・同期 | `v292Dfix409Off` `v292Dfix409bOff` `v292Dfix409cOff` `v292Dfix783Off` |
-| 221 | fix414 | `v292Dfix414-constraint-engine.js` | i221 | `371f8ce8` | 20261107-bundle93-f | NPC・キャラ状態 | `v292Dfix414Off` `v292Dfix414WidenOff` |
+| 221 | fix414 | `v292Dfix414-constraint-engine.js` | i221 | `a91c216b` | 20261111-flow2 | NPC・キャラ状態 | `v292Dfix414Off` `v292Dfix414WidenOff` `v292DfixFRZ1Off` |
 | 222 | fix77X | `v292Dfix77X-clear.js` | i222 | `71551453` | 20261019-bundle31-a | NPC・キャラ状態 |  |
 | 223 | fix415 | `v292Dfix415-opening-mask.js` | i223 | `93e0d740` | v292Dfix415b | 文章品質・プロンプト | `v292Dfix415Off` |
 | 224 | fix416 | `v292Dfix416-pain-style.js` | i224 | `7e4a98de` | v292Dfix428 | NPC・キャラ状態 | `v292Dfix416Off` `v292Dfix425Off` |
@@ -1140,7 +1142,7 @@
   - index.html の主なもの：1034 行目（約 15 万字）＝ゲーム本体の中核（S・UI・G・保存）、3414 行目 `v100-patch`、554 行目 `v292DfixEDN-btn`（✎ の位置）、567 行目 `v292Dfix890-early`。
 ## 付録C　スイッチ（localStorage キー）→ それを読む部品（機械抽出）
 
-- 本番で読み込まれる部品と index.html の中に現れる `v292…Off` / `v292…On` の文字列を全部拾ったもの（723 件：Off 651・On 72。93-a で `v292DfixMIDICONOff`、93-d で `v292DfixISO1Off`、93-f で `v292Dfix414WidenOff`・`v292Dfix192LicOff`、93-g で `v292DfixBOOTOFF1Off`・`v292DfixSETUI1Off`・`v292DfixNEWACCT1Off`、93-h で `v292DfixHOMERETRY1Off`・`v292DfixMIDICONrosOff`・`v292DfixIDSPLIT2Off`・`v292DfixGENDER1Off`、93-i で `v292DfixMIDICONregOff`・`v292DfixSTARTICONOff`、11-10 夜に `v292DfixAGENCY1StoryOff`・`v292DfixAGENCY1StoryMode`・`v292DfixSEEDWORLD1Off`・`v292DfixSEEDNPC1dOff`・`v292DfixSPBASE1Off` を手で足した（11-11 に `v292DfixRESCUE1Off`・`v292DfixNH1bOff`・`v292DfixSPBASE2Off`、続けて `v292DfixDELALLOff`・`v292DfixSAVEUIOff`・`v292DfixSAVEUIGateOff`・`v292DfixSAVEUIAdoptOff`・`v292DfixSEEDHERO1Off`・`v292DfixSEEDNPC1eOff`・`v292DfixSCID1Off` を足した）。86 で `v292DfixIMGSAFEOff`・`v292Dfix315On` の 2 件を手で足した。71-a で拾った 697 件に、80-int-a の新しい 9 件を手で足した）。
+- 本番で読み込まれる部品と index.html の中に現れる `v292…Off` / `v292…On` の文字列を全部拾ったもの（725 件：Off 653・On 72。93-a で `v292DfixMIDICONOff`、93-d で `v292DfixISO1Off`、93-f で `v292Dfix414WidenOff`・`v292Dfix192LicOff`、93-g で `v292DfixBOOTOFF1Off`・`v292DfixSETUI1Off`・`v292DfixNEWACCT1Off`、93-h で `v292DfixHOMERETRY1Off`・`v292DfixMIDICONrosOff`・`v292DfixIDSPLIT2Off`・`v292DfixGENDER1Off`、93-i で `v292DfixMIDICONregOff`・`v292DfixSTARTICONOff`、11-10 夜に `v292DfixAGENCY1StoryOff`・`v292DfixAGENCY1StoryMode`・`v292DfixSEEDWORLD1Off`・`v292DfixSEEDNPC1dOff`・`v292DfixSPBASE1Off` を手で足した（11-11 に `v292DfixSTATEAGE1Off`・`v292DfixFRZ1Off`（FLOW2）・`v292DfixRESCUE1Off`・`v292DfixNH1bOff`・`v292DfixSPBASE2Off`、続けて `v292DfixDELALLOff`・`v292DfixSAVEUIOff`・`v292DfixSAVEUIGateOff`・`v292DfixSAVEUIAdoptOff`・`v292DfixSEEDHERO1Off`・`v292DfixSEEDNPC1eOff`・`v292DfixSCID1Off` を足した）。86 で `v292DfixIMGSAFEOff`・`v292Dfix315On` の 2 件を手で足した。71-a で拾った 697 件に、80-int-a の新しい 9 件を手で足した）。
 - 拾っただけなので、**そのキーが実際にどう効くか（全体停止か一部か、既定 ON/OFF のどちらを切り替えるか）は部品のコードで確かめてください**。名前が `Off` で終わらない停止キー（例 `v292SlotGenOff`・`v292EngineUnifyOff`・`v292GoogleLoginOff`）や値で切り替えるキー（例 `v292Dfix333`=`observe`）は一部しか拾えていません。
 - 「読む部品」は id（`fix77` など。fix 以外はファイル名）。index.html は inline の中を含む。
 
@@ -1595,6 +1597,7 @@
 - `v292DfixAGENCY1On` — fixAGENCY1（93-m から。端末だけ足す・試験用。管理者画面の `agency1` が ON なら不要）
 - `v292DfixAGENCY1StoryMode` — fixAGENCY1（AGENCY1b から。'B' のとき STORY の文が版 B〔短いひと言〕。既定 A）
 - `v292DfixAGENCY1StoryOff` — fixAGENCY1, fix192（AGENCY1b から。STORY・続き・オートの腕だけ止める）
+- `v292DfixFRZ1Off` — fix414（FRZ1・FLOW2 から。けが無しの「動かない」も脚の走行不可にする従来の判定に戻す。人違いの防止も止まる）
 - `v292DfixSEEDNPC1Off` — fix873（SEEDNPC1。手で追記：「いっしょに出る人」の 1 行を人ごとに分ける処理だけ止め、93-i と同じ動きに戻す）
 - `v292Dfix880Off` — fix880, index.html
 - `v292Dfix881Off` — fix881, index.html
@@ -1814,6 +1817,7 @@
 - `v292DfixS4bUiOff` — fix825
 - `v292DfixSC1Off` — fixSC1
 - `v292DfixSC1On` — fixSC1
+- `v292DfixSTATEAGE1Off` — fix192（STATEAGE1・FLOW2 から。【各キャラの現在の状態】の古い項目に「N ターン前の様子」を付けない＝従来どおりの組み立て。送信バイト同一）
 - `v292DfixScDateOff` — fix820, fix825
 - `v292DfixSETUI1Off` — fixSETUI1（93-g から。⚙ 設定の配置を従来のフッターのままにする）
 - `v292DfixSFL1Off` — fixADMF1, fixSFL1
