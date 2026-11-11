@@ -87,7 +87,7 @@
   'use strict';
   if (window.__v292Dfix820) return;
   var TAG = '[v292Dfix820:scenario-original-store]';
-  var VERSION = 'v292Dfix820-20261019-store-v1.4-s4b';   /* v1.4: S-4b（f872On の自動判定・f872MarkPushed keepDirty） */
+  var VERSION = 'v292Dfix820-20261019-store-v1.4-s4b';   /* ★VERSION 文字列は変えない（他所の照合を壊さない）。SCID2 の版は window.__v292DfixSCID2.version */   /* v1.4: S-4b（f872On の自動判定・f872MarkPushed keepDirty） */
 
   var META_KEY    = 'chr6_scenario_meta';
   var KEY_PREFIX  = 'chr6_scenario_';
@@ -332,7 +332,7 @@
       else if (!/^[A-Za-z0-9]+$/.test(id)) bad = 'NOT_ALPHANUMERIC';
       else if (id.length < MIN_STORY_ID_LEN) bad = 'TOO_SHORT';
       if (!bad) continue;
-      var row = { id: id, why: bad, inKey: (!!id && out.key.indexOf(id) >= 0) };
+      var row = { id: id, why: bad, inKey: (!!id && scid2JudgedPart(out.key).indexOf(id) >= 0) };   /* ★SCID2: 定数部だけの当たりは既存 key と同じ＝blocker にしない（kill で key 全体） */
       out.offenders.push(row);
       if (row.inKey) out.hazardous.push(row);       /* ★この key に実際に当たる違反だけが blocker */
     }
@@ -366,12 +366,35 @@
         JSON.stringify({ hazardous: haz, probeKey: probe.key }));
     } catch(e){}
   }
+  /* ★★SCID2（2026-11-11）: 部分一致を判定する範囲を「key の可変部」だけにする。
+     ・Scenario key は必ず `chr6_scenario_sc-` で始まる（newScenarioId / randomScenarioId の両方。KEY_PREFIX ＋ 'sc-'）。
+       この定数部は端末に既にある全 Scenario key（と chr6_scenario_meta）が持っているので、
+       定数部の中だけで当たる Story ID（例: 旧形式の固定枠 `c` `a`・`sc`・`scenario`）は
+       **既存の全 Scenario key に既に当たっている**＝新しい key を 1 本足しても危険は 1 つも増えない。
+     ・Story ID は英数字だけ（bodyBackedStoryIds の正規表現）で、定数部の末尾は '-'。
+       よって「定数部と可変部にまたがる当たり」は起こらない＝全体の当たり ⇔ 定数部の当たり ∨ 可変部の当たり。
+       SCID2 は前者だけを免除し、後者（可変部に Story ID が現れる）は従来どおり拒否する。
+     ・定数部で始まらない key は従来どおり key 全体で判定する（fail-closed 側）。
+     ・列挙不能時の扱い・isTaken・keyInvariant・fix868 の hazardous 判定の意味は変えない（判定する文字列だけが変わる）。
+     kill: localStorage['v292DfixSCID2Off']='1' … 今日と同じ（key 全体で判定・乱数の文字種も従来）。 */
+  function scid2Off(){ return lsg('v292DfixSCID2Off') === '1'; }
+  var SCID2_CONST = KEY_PREFIX + 'sc-';
+  var scid2Stat = { judgedSuffix: 0, judgedWhole: 0, exemptConstHits: 0, avoidChars: '' };
+  function scid2JudgedPart(key){
+    var k = String(key == null ? '' : key);
+    if (scid2Off()) return k;
+    if (k.indexOf(SCID2_CONST) === 0 && k.length > SCID2_CONST.length){ scid2Stat.judgedSuffix++; return k.slice(SCID2_CONST.length); }
+    scid2Stat.judgedWhole++;
+    return k;
+  }
   /* 提案キーに **body-backed** Story ID が裸の部分文字列として現れないこと（hard condition） */
   function storyIdSubstringHits(key){
     var hits = [], ids = bodyBackedStoryIds() || [];
+    var part = scid2JudgedPart(key);
     for (var i = 0; i < ids.length; i++){
       var id = ids[i];
-      if (id && String(key).indexOf(id) >= 0) hits.push(id);
+      if (id && part.indexOf(id) >= 0) hits.push(id);
+      else if (id && part !== String(key) && String(key).indexOf(id) >= 0) scid2Stat.exemptConstHits++;
     }
     return hits;
   }
@@ -508,6 +531,24 @@
   var scid1Stat = { fallbackUsed: 0, fallbackTries: 0, fallbackFail: 0 };
   function rand36(n){ var s = ''; for (var i = 0; i < n; i++) s += Math.floor(Math.random() * 36).toString(36); return s; }
   function randomScenarioId(){ return 'sc-' + rand36(8) + '-' + rand36(2); }
+  /* ★SCID2: 乱数 id の文字種から「1 文字の body-backed Story ID」の文字を外す（例: 旧形式の a / b / c）。
+     2 文字以上の規格外 ID は文字種では避けず、従来どおり per-key の部分一致検査で弾く。
+     外した結果の文字種が 10 文字未満になるなら外さない（従来の文字種）。kill で従来の rand36。 */
+  function scid2Alphabet(){
+    var all = '0123456789abcdefghijklmnopqrstuvwxyz', ids = bodyBackedStoryIds() || [], drop = {};
+    for (var i = 0; i < ids.length; i++){ if (ids[i] && ids[i].length === 1) drop[ids[i].toLowerCase()] = 1; }
+    var out = '';
+    for (var j = 0; j < all.length; j++){ if (!drop[all.charAt(j)]) out += all.charAt(j); }
+    if (out.length < 10) out = all;
+    scid2Stat.avoidChars = Object.keys(drop).sort().join('');
+    return out;
+  }
+  function randFrom(abc, n){ var s = ''; for (var i = 0; i < n; i++) s += abc.charAt(Math.floor(Math.random() * abc.length)); return s; }
+  function randomScenarioId2(){
+    if (scid2Off()) return randomScenarioId();
+    var abc = scid2Alphabet();
+    return 'sc-' + randFrom(abc, 8) + '-' + randFrom(abc, 2);
+  }
   function idUsable(id){
     if (isTaken(id)) return false;
     var inv = keyInvariant(keyFor(id));
@@ -523,7 +564,7 @@
     if (scid1Off()) return null;
     for (var u = 0; u < SCID1_TRIES; u++){
       scid1Stat.fallbackTries++;
-      var rid = randomScenarioId();
+      var rid = randomScenarioId2();
       if (idUsable(rid)){ scid1Stat.fallbackUsed++; return rid; }
     }
     scid1Stat.fallbackFail++;
@@ -1059,6 +1100,7 @@
     return out;
   }
 
+  try { window.__v292DfixSCID2 = { version: 'scid2-a-20261111', on: function(){ return !scid2Off(); }, constPart: SCID2_CONST, status: function(){ return clone(scid2Stat); } }; } catch(e){}
   try { window.__v292DfixSCID1 = { version: 'scid1-a-20261111', on: function(){ return !scid1Off(); }, status: function(){ return clone(scid1Stat); } }; } catch(e){}
   window.__v292Dfix820 = {
     version: VERSION,

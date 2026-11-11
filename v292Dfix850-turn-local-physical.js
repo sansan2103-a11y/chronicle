@@ -216,10 +216,46 @@
       /* else: 対象不明 = safe miss（観察者 X には渡さない） */
     }
   }
+  /* ★★F333b（laneFIX3・2026-11-11・LOCAL 候補・kill: localStorage v292DfixF333bOff='1'）---------------------------
+     実測（本物の AI の A/B・美羽が T6〜T9 に宙吊り）: 【身体状態・正史】が ①吊られている美羽の行を T7〜T8 で落とす
+       ②解放の回 T9 に助ける側の剛へ「拘束されている／宙に吊られ不安定」を出す ③美羽の手首のけがを蓮・剛へ付ける。
+     原因（fixture で再現。qa/fixtures_f333b.cjs）:
+       ①F333a の「近くの他人 Yの」判定が、本人の動作の目的語（剛の手を掴もうと／蓮の名を呼びながら）まで「他人の状態」とみなして外す。
+         解放の判定が「美羽は思わず手を離した」（本人が手を離す）・「放しかけた」（未遂）を解放とみなし、保存の宙吊りを外す。
+       ②能動の語が体の語を修飾する形（吊り上げる腕に／締め上げる腕を）を「本人の体」とみなして残す。
+         主語が本人の能動（剛が…押さえつけた）を、目的語が無い・目的語が体の語だというだけで残す。
+       ③主語の無い文の引き継ぎ（fix929 H）が、救助者が 1 人だけ出た文（蓮が駆け寄る。）の次の「右手首が折れていた」を救助者へ渡す。
+     対処（どれも「持ち主が言えないなら行を出さない」側。語・検出器・fix333 の文面は変えない）:
+       a) 『Yの N を …ながら／うと／まま』の Y は、その後ろの語の持ち主の印にしない（受け身・状態の語だけ）。
+       b) 解放の「離し／放し」は、主語が本人（名前・自分・彼女 等）なら解放にしない。「放しかけ／離しかけ」は未遂。
+       c) 能動の語＋体の語（吊り上げる腕）は、その腕の持ち主＝加える側 → 本人には付けない。
+          主語が本人の能動は、目的語が本人（名前・自分）でない限り加える側 → 付けない。
+       d) 拘束・けがの語を含む主語の無い文は、同じ段落にそれまで出た人物が 1 人だけのときだけ引き継ぐ（2 人以上なら誰にも付けない）。
+       e) 『Yの（右|左|両|片）部位 は／が／から／に／の …けがの語』（間に 、 を・別の人物なし）は Y のけが。その部分を Y へ渡す。
+     kill: v292DfixF333bOff='1' → F333a のまま（バイト同一）。F333a・fix850 を止める鍵でも止まる。診断: window.__v292DfixF333b.stat()。 */
+  function f333bOn(){ return ls('v292DfixF333aOff') !== '1' && ls('v292DfixF333bOff') !== '1'; }
+  var _f333bStat = { carryAbstain: 0, possessorPush: 0, agentCut: 0, relRejected: 0, nearKept: 0 };
+  var B_TOK1 = /宙に吊|宙づり|宙吊り|締め上げ|吊り上げ|吊ら|縛ら|絡め取ら|押さえ込ま|押さえつけ|羽交い締め|組み伏せ|引き倒|身動きが取れ|拘束|出血|骨折|刺さ|裂け|抉|損傷|負傷|折れ|潰れ|火傷/;
+  function bPossessorInjury(sent, names, push){
+    /* e) Yの部位 … けがの語（同じ節・別の人物なし） */
+    var BW = '体|身体|からだ|腕|手|足|脚|首|頭|胴|腰|肩|指|背|胸|腹|膝|顔|肌|皮膚|骨|肋骨|肋|歯|爪|耳|目|鼻|口|唇|額|頬|喉|腿|太腿|脛|踵|拳|掌|肘|脇|内臓|関節|鎖骨|爪先|足先|指先|手首|足首|首筋|手足|背中|脇腹|全身|半身|上半身|下半身';
+    var INJ = '出血|骨折|刺さ|裂け|抉|損傷|負傷|折れ|潰れ|火傷';
+    for (var i = 0; i < names.length; i++){
+      var y = names[i]; if (!y) continue;
+      var re = new RegExp(y.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + 'の((?:右|左|両|片)?(?:' + BW + '))(?:には|にも|から|は|が|に|も|の)([^、。を]{0,12}?)(' + INJ + ')([ぁ-ん]{0,8})', 'g'), m;
+      while ((m = re.exec(sent))){
+        var mid = m[2], bad = false;
+        for (var j = 0; j < names.length; j++){ if (names[j] && mid.indexOf(names[j]) >= 0){ bad = true; break; } }
+        if (bad) continue;
+        push(y, m[0]); _f333bStat.possessorPush++;
+      }
+    }
+  }
   function attributeH(text, hero, others, push, src){
     var names = [hero].concat(others);
+    var useB = f333bOn();
     str(text).split(/\n+/).forEach(function(para){
-      var actor = null;
+      var actor = null, seenB = {};
       para.split('。').map(function(x){ return x.trim(); }).filter(function(x){ return !!x; }).forEach(function(sent){
         var hits = [], i, n, at;
         for (i = 0; i < names.length; i++){
@@ -229,10 +265,15 @@
         }
         if (!hits.length){
           var mark = (src === 'player') ? HERO_MARK_P929 : HERO_MARK_N929;
-          if (mark.test(sent)){ push(hero, sent); actor = hero; return; }
-          if (src === 'narr' && actor){ push(actor, sent); }
+          if (mark.test(sent)){ push(hero, sent); actor = hero; if (useB) seenB[hero] = 1; return; }
+          if (src === 'narr' && actor){
+            /* ★F333b d): 拘束・けがの語を含む文は、段落にそれまで出た人物が 1 人だけのときだけ引き継ぐ */
+            if (useB && B_TOK1.test(sent) && Object.keys(seenB).length > 1){ _f333bStat.carryAbstain++; return; }
+            push(actor, sent);
+          }
           return;                                   /* actor 不明 = safe miss */
         }
+        if (useB){ hits.forEach(function(h){ seenB[h.n] = 1; }); bPossessorInjury(sent, names, push); }
         hits.sort(function(x, y){ return x.at - y.at; });
         if (!off934()){
           attrFrag934(sent, hits, push);
@@ -390,14 +431,18 @@
     return out;
   }
   /* pre の終わり 10 字以内に、別の人物の「Yの／Yが／Yは／Yも」があるか（Yの隣・Yの前 などの場所は除く） */
-  function aOtherNear(pre, owner, names, withWo){
+  function aOtherNear(pre, owner, names, withWo, bPred){
     var best = null;
     for (var i = 0; i < names.length; i++){ var n = names[i]; if (!n) continue; var k = pre.lastIndexOf(n); if (k >= 0 && (!best || k > best.at)) best = { n: n, at: k }; }
     if (!best || best.n === owner) return false;
     var after = pre.slice(best.at + best.n.length);
     if (after.length > 11) return false;
     var c = after.charAt(0);
-    if (c === 'の'){ return !A_PLACE.test(after.slice(1)); }
+    if (c === 'の'){
+      /* ★F333b a): 『Yの N を …ながら／うと／まま』= 本人の動作の目的語。後ろの受け身・状態の語の持ち主の印にしない */
+      if (!withWo && bPred && f333bOn() && /^の[^をがは、。]{1,6}を[^、。]{1,8}?(?:ながら|うと|まま|ままで)$/.test(after)){ _f333bStat.nearKept++; return false; }
+      return !A_PLACE.test(after.slice(1));
+    }
     if (c === 'が' || c === 'は' || c === 'も') return true;
     if (withWo && c === 'を') return true;
     return false;
@@ -433,7 +478,9 @@
     else if (A_NOUNV.test(tok)){ nounTok = true; voice = /^(?:に)?され/.test(tail) ? 'passive' : (/^(?:に)?(?:し|する|した)/.test(tail) ? 'active' : 'state'); }
     else if (/^(宙吊り|宙づり|出血|骨折|損傷|負傷|火傷)$/.test(tok)){ nounTok = true; if (/^させ/.test(tail)) voice = 'active'; }
     else if (injury && /^させ/.test(tail)) voice = 'active';
-    if (aOtherNear(pre, owner, names, voice === 'active')) return 'other';
+    /* ★F333b a) は語が述語の位置（後ろの名詞を修飾しない）のときだけ */
+    var bPred = !/^([ぁ-ん]{0,6}?)(た|る|の|いる|いた|ある|あった|たままの|ているままの)(?=[一-龥々ァ-ヶーA-Za-z])/.test(tail);
+    if (aOtherNear(pre, owner, names, voice === 'active', bPred)) return 'other';
     /* 動詞を重ねて他人を修飾する形（負傷して倒れている剛／縛られて震える美羽） */
     if (voice !== 'active'){
       for (var ni = 0; ni < names.length; ni++){ var nm = names[ni]; if (!nm || nm === owner) continue;
@@ -446,6 +493,8 @@
     if (am){
       var noun = (tail.slice(am[0].length).match(/^[一-龥々ァ-ヶーA-Za-z]{1,8}/) || [''])[0];
       var viaNo = (am[1] === '' && am[2] === 'の');
+      /* ★F333b c): 能動の語が体の語を修飾（吊り上げる腕・締め上げる手）= その腕は加える側のもの */
+      if (voice === 'active' && !viaNo && A_BODY.test(noun) && f333bOn() && !(owner && (pre.indexOf(owner + 'の') >= 0 || pre.indexOf(owner + 'を') >= 0)) && !/自分(?:の|を)|己(?:の|を)/.test(pre)){ _f333bStat.agentCut++; return 'agent'; }
       if (aIsSelfNoun(noun, owner) || A_STATE_NOUN.test(noun)) return null;
       if (aOtherName(noun, owner, names)) return 'other';
       if (viaNo && nounTok){ return A_PERSON.test(noun) ? 'other' : null; }   /* 拘束の痛み・出血の量 = 本人のこと */
@@ -457,6 +506,12 @@
     }
     if (voice === 'active'){
       var obj = aObject(pre);
+      if (f333bOn()){
+        /* ★F333b c): 主語が本人の能動 = 本人は加える側（目的語が本人＝名前・自分 のときだけ残す） */
+        var bsj = aSubject(pre);
+        if (bsj && (bsj === owner || (owner && bsj.indexOf(owner) === 0) || A_SELF.test(bsj))
+            && !(obj && ((owner && obj.indexOf(owner) === 0) || /^(自分|己)/.test(obj)))){ _f333bStat.agentCut++; return 'agent'; }
+      }
       if (!obj) return null;                       /* 相手が書かれていない能動 = 判断しない（残す） */
       if (aIsSelfNoun(obj, owner)) return null;    /* 蓮を／首を 締め上げる */
       return 'agent';                              /* 扉を押さえつけた = 本人は加える側 */
@@ -475,6 +530,12 @@
     if (/^(?:ようと|ようとし|こうと|そうと)/.test(tail)) return false;
     if (aOtherNear(pre, owner, names, true)) return false;
     if (A_REL_ACT.test(tok)){
+      if (f333bOn()){
+        /* ★F333b b): 未遂（放しかけ）と、本人が主語の「手を離した／目を離した」は解放ではない */
+        if (/^(?:かけ|かか)/.test(tail)){ _f333bStat.relRejected++; return false; }
+        var bs = (tok === 'ほどい') ? null : aSubject(pre);    /* 本人が縄をほどいた は解放のまま */
+        if (bs && (bs === owner || (owner && bs.indexOf(owner) === 0) || A_SELF.test(bs))){ _f333bStat.relRejected++; return false; }
+      }
       var obj = aObject(pre);
       if (tok === 'ほどい') return !obj || aIsSelfNoun(obj, owner) || A_BOND.test(obj);
       return !!obj && aIsSelfNoun(obj, owner);   /* 腕が美羽を放した（本人が目的語）だけ。鍵を放した は違う */
@@ -672,6 +733,7 @@
     _heroName: heroName,
     _otherNames: otherNames
   };
+  G.__v292DfixF333b = { v: 'f333b-20261111', on: f333bOn, stat: function(){ return JSON.parse(JSON.stringify(_f333bStat)); } };
   G.__v292DfixF333a = { v: 'f333a-20261111', on: f333aOn, last: function(){ return _f333aLast.slice(); },
     _clean: function(text, owner, names){ var r = aClean(text, owner, names || [owner]); return aApply(r, -1, owner, null).text; },
     _generic: aGenericKizu };
