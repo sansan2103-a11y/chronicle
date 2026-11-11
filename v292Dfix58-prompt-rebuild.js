@@ -100,16 +100,46 @@
       if (c === '。' || c === '！' || c === '？' || c === '\n'){ if (c !== '\n') buf += c; var s = buf.replace(/\s+/g, ' ').trim(); if (s) out.push(s); buf = ''; continue; }
       buf += c;
     }
-    var got = [];
+    var got = [], f2 = facts2On();
     for (var k = 0; k < out.length && got.length < FACTS1_PER; k++){
       var hit = out[k].replace(/一番/g, '');   /* 「一番上」等の「一番」は数の事実ではない */
+      if (f2 && facts2MeasureOnly(hit)) continue;   /* ★FACTS2: 長さ・体の部位の数だけの文は拾わない（迷えば拾う） */
       if (FACTS1_NUM.test(hit) && /[ぁ-ん]/.test(out[k]) && out[k].length >= 6) got.push(out[k].length > FACTS1_SENT ? (out[k].slice(0, FACTS1_SENT - 1) + '…') : out[k]);
     }
     return got.join('');
   }
+  /* ★FACTS2（laneSCENE1・2026-11-11・kill: localStorage v292DfixFACTS2Off='1' で FACTS1 のまま＝送信バイト同一・毎回評価）:
+     FACTS1 は新しい 7 行前後（600 字）しか残さず、12 ターン目に「鍵十二本・一本は左ポケット」の行が窓から押し出された（laneFABLE1 #12）。
+     また「指先が三本ぶん届かない」のような長さ・体の部位の数の文を拾って、鍵の本数を汚す恐れがあった（#13）。
+       ・数（物の個数）・持ち物の受け渡し・けが・約束や期限 を含む行は、新しい方から 5 行まで「固定」して窓から落とさない。残りの字数を従来どおり新しい行で埋める。
+         固定行のプレイヤー入力だけは 80 字まで残す（「…11 本を美羽へ」の後半が切れないように）。合計 600 字・並びは古い順は従来どおり。
+       ・本文から拾う数の文のうち、数の出どころが全部「〜ぶん」「〜メートル・歩・段」や「指・腕・足」の数だけのものは拾わない。
+       固定の順番: プレイヤーの入力にその手の語・数があるターン（新しい順）→ 本文の数の文だけのターン（新しい順）。
+     書き方（rule の文）・置き場所・保存は FACTS1 のまま。AI の呼び出しは増えない。 */
+  var FACTS2_PIN = 5, FACTS2_IN = 80;
+  var FACTS2_NUMG = /[0-9０-９一二三四五六七八九十百千]+\s*(本|個|枚|人|つ|階|号|番|台|匹|頭|冊|発|錠|か所|箇所|ヶ所|歩|メートル|ｍ|キロ|束|部屋|段)/g;
+  var FACTS2_BODY = /(指|爪|歯)/;   /* 指・爪・歯の数だけ（腕・足は怪異の数のことがあるので残す） */
+  var FACTS2_KEY = /(渡し|渡す|渡さ|渡せ|預け|預か|受け取|ポケット|持っ|持た|持つ|持ち帰|握らせ|しまっ|仕舞|鞄|カバン|リュック|傷|怪我|けが|出血|血が|骨折|折れ|捻挫|ひね|捻っ|切り傷|噛ま|刺さ|火傷|腫れ|止血|手当|約束|までに|迎えに|戻る|戻れ|戻って|戻ります|戻す|戻し|[0-9０-９一二三四五六七八九十]+\s*(?:分|秒|時間)(?:で|後|以内|まで))/;
+  function facts2On(){ try { return localStorage.getItem('v292DfixFACTS2Off') !== '1'; } catch(e){ return false; } }
+  function facts2MeasureOnly(t){
+    FACTS2_NUMG.lastIndex = 0; var m, n = 0, meas = 0;
+    while ((m = FACTS2_NUMG.exec(t)) !== null){
+      n++;
+      var after = t.slice(m.index + m[0].length, m.index + m[0].length + 3), before = t.slice(Math.max(0, m.index - 3), m.index);
+      if (/^(ぶん|分(?![か-ん])|ほど先|ほど後|先|後ろ)/.test(after) || /(歩|メートル|ｍ|キロ|段)/.test(m[1])) { meas++; continue; }
+      if (FACTS2_BODY.test(after.charAt(0) === 'の' ? after.slice(1, 2) : '') || FACTS2_BODY.test(before.replace(/[がはも]$/, '').slice(-1))) { meas++; continue; }
+    }
+    return n > 0 && meas === n;
+  }
+  function facts2Key(pt, fact){   /* 2 = プレイヤーの入力に 数・持ち物・けが・約束 / 1 = 本文の文にだけある / 0 = なし */
+    var p = String(pt || '').replace(/一番/g, ''); FACTS2_NUMG.lastIndex = 0;
+    if (FACTS2_KEY.test(p) || (FACTS2_NUMG.test(p) && !facts2MeasureOnly(p))) return 2;
+    return fact ? 1 : 0;
+  }
   function facts1Build(state){
     var turns = (state && Array.isArray(state.turns)) ? state.turns : [];
     if (turns.length <= 2) return null;
+    if (facts2On()) return facts2Build(turns);   /* ★FACTS2（kill v292DfixFACTS2Off='1'）: 下の FACTS1 のまま */
     var TYPE = { SAY: '発言', DO: '行動', STORY: '展開' }, items = [], used = 0;
     for (var i = turns.length - 3; i >= 0; i--){
       var t = turns[i]; if (!t) continue;
@@ -124,6 +154,88 @@
     }
     return items.length ? items : null;
   }
+  function facts2Build(turns){
+    var TYPE = { SAY: '発言', DO: '行動', STORY: '展開' }, rows = [], i;
+    for (i = turns.length - 3; i >= 0; i--){
+      var t = turns[i]; if (!t) continue;
+      var pt = String(t.playerText || '').replace(/\s+/g, ' ').trim();
+      if (/続きを(?:自然に)?進めて|^続きを書/.test(pt)) pt = '';
+      var fact = facts1Sentence(t.narrative);
+      if (!pt && !fact) continue;
+      var key = facts2Key(pt, fact), cap = (key === 2) ? FACTS2_IN : FACTS1_IN;
+      if (pt.length > cap) pt = pt.slice(0, cap - 1) + '…';
+      rows.push({ i: i, key: key, line: (i + 1) + 'ターン目' + (pt ? ('・' + (TYPE[t.inputType] || '入力') + '「' + pt + '」') : '') + (fact ? ('・' + fact) : '') });
+    }
+    /* rows は新しい順。固定（key）を新しい方から 5 行まで先に取り、残りの字数を新しい行で埋める */
+    var pick = {}, used = 0, pins = 0, r;
+    for (var tier = 2; tier >= 1; tier--){
+      for (r = 0; r < rows.length && pins < FACTS2_PIN; r++){ if (rows[r].key !== tier || pick[r]) continue; if (used + rows[r].line.length > FACTS1_MAX) continue; pick[r] = 1; used += rows[r].line.length; pins++; }
+    }
+    for (r = 0; r < rows.length; r++){ if (pick[r]) continue; if (used + rows[r].line.length > FACTS1_MAX) break; pick[r] = 1; used += rows[r].line.length; }
+    var items = [];
+    for (r = rows.length - 1; r >= 0; r--) if (pick[r]) items.push(rows[r].line);
+    _facts2Pins = pins;
+    return items.length ? items : null;
+  }
+  /* ★NOW1（laneSCENE1・2026-11-11・kill: localStorage v292DfixNOW1Off='1' で従来と送信バイト同一・毎回評価）:
+     モデルに「いま誰がどこでどうなっているか」を言う欄が無かった。状態ブロックは <state> が出た回しか動かず（宙吊りの前後 4 ターン 0 件）、
+     現在地は開始地点のまま（laneFABLE1 #2 #4 #11 #15）。追加の AI 呼び出しはしない。保存・store も変えない。
+       ・直前のターン（S.turns の最後）の本文から、地の文（「」『』（）と <say> の中は使わない）の最後の 2〜3 文（合計 150 字まで）を取り、
+         この回の入力（「続きを書く」は入れない・40 字まで）と合わせて 1〜2 行にする。user JSON の recentScenes の直後に nowScene として置く。
+       ・現在地のキーは fix192 の B38-e と同じ置き換え（「物語開始時の場所…」）を NOW1 でも行う（fix192 側。B38-e の鍵が無くても）。
+     過去の不具合（fix35/fix71/fix75）: sys 末尾に過去の文を並べ「上記を踏まえ続きを」と渡すと語り直しの反復崩壊が起きた。ここでは
+       sys に置かない・並べるのは直前ターンの末尾 3 文まで（recentScenes にも同じ文がある＝新しい手本にならない）・「続けて」とは書かず
+       「繰り返さない・言い換えない」を同じ場所に書く。本文が同じ文を出したときは従来どおり fix71 が落とす。 */
+  var NOW1_MAX = 150, NOW1_SENT = 3, NOW1_IN = 40;
+  var NOW1_RULE = 'nowScene は、いまこの瞬間の場面（直前の本文の終わり）と、この回の入力。誰がどこで何をしているか・位置・姿勢を食い違わせないためだけに使う。本文で繰り返さない・言い換えない。';
+  function now1On(){ try { return localStorage.getItem('v292DfixNOW1Off') !== '1'; } catch(e){ return false; } }
+  function now1Tail(narr){
+    var ls = Array.isArray(narr) ? narr : String(narr || '').split('\n'), t = '';
+    for (var a = 0; a < ls.length; a++){
+      var l = String(ls[a] == null ? '' : ls[a]);
+      if (/^\s*<(react|state|summary|scene_move)\b/.test(l)) continue;
+      t += l.replace(/<say\b[^>]*>[\s\S]*?<\/say>/g, '\n').replace(/<[^>]*>/g, ' ') + '\n';
+    }
+    var buf = '', depth = 0, out = [];
+    for (var i = 0; i < t.length; i++){
+      var c = t.charAt(i);
+      if (c === '「' || c === '『' || c === '（' || c === '('){ depth++; buf = ''; continue; }
+      if (c === '」' || c === '』' || c === '）' || c === ')'){ if (depth > 0) depth--; buf = ''; continue; }
+      if (depth > 0) continue;
+      if (c === '。' || c === '！' || c === '？' || c === '\n'){ if (c !== '\n') buf += c; var x = buf.replace(/\s+/g, ' ').trim(); if (x && /[ぁ-んァ-ヶ一-龠]/.test(x) && x.length >= 4) out.push(x); buf = ''; continue; }
+      buf += c;
+    }
+    var x2 = buf.replace(/\s+/g, ' ').trim(); if (x2 && x2.length >= 4 && /[ぁ-ん]/.test(x2)) out.push(x2);
+    var got = [], used = 0;
+    for (var k = out.length - 1; k >= 0 && got.length < NOW1_SENT; k--){
+      var sx = out[k].length > 70 ? (out[k].slice(0, 69) + '…') : out[k];
+      if (got.length && used + sx.length > NOW1_MAX) break;
+      got.unshift(sx); used += sx.length;
+    }
+    return got.join('');
+  }
+  var _now1Last = null;
+  function now1Apply(parsed, state){
+    if (!now1On()) return parsed;
+    var turns = (state && Array.isArray(state.turns)) ? state.turns : [];
+    _now1Last = { turns: turns.length, text: '' };
+    if (!turns.length) return parsed;
+    var last = turns[turns.length - 1] || {};
+    var tail = now1Tail(last.narrative);
+    if (!tail) return parsed;
+    var ci = parsed.currentInput || {}, it = String(ci.text || '').replace(/\s+/g, ' ').trim();
+    if (/続きを(?:自然に)?進めて|^続きを書/.test(it)) it = '';
+    if (it.length > NOW1_IN) it = it.slice(0, NOW1_IN - 1) + '…';
+    var TYPE = { SAY: '発言', DO: '行動', STORY: '展開' };
+    var text = 'いまの場面：' + tail + (it ? ('\nこの回の入力：' + (TYPE[String(ci.type || '').toUpperCase()] || '入力') + '「' + it + '」') : '');
+    _now1Last.text = text;
+    var o = {}, k, placed = false;
+    for (k in parsed){ if (!Object.prototype.hasOwnProperty.call(parsed, k) || k === 'nowScene') continue; o[k] = parsed[k]; if (k === 'recentScenes'){ o.nowScene = { rule: NOW1_RULE, text: text }; placed = true; } }
+    if (!placed) o.nowScene = { rule: NOW1_RULE, text: text };
+    return o;
+  }
+  window.__v292DfixNOW1 = { VER: 'now1-20261111', on: now1On, tail: now1Tail, last: function(){ return _now1Last; } };
+  var _facts2Pins = 0;
   var _facts1Last = null;
   function facts1Apply(parsed, state){
     if (!facts1On()) return parsed;
@@ -136,6 +248,7 @@
     return o;
   }
   window.__v292DfixFACTS1 = { VER: 'facts1-20261111', on: facts1On, build: facts1Build, sentence: facts1Sentence, last: function(){ return _facts1Last; } };
+  window.__v292DfixFACTS2 = { VER: 'facts2-20261111', on: facts2On, measureOnly: facts2MeasureOnly, pins: function(){ return _facts2Pins; } };
 
   // ---------------------------------------------------------------
   // 1. sys プロンプト書き換え（末尾に出力形式仕様を追加）
@@ -218,6 +331,7 @@
 
       delete parsed.recentHistory;
 
+      parsed = now1Apply(parsed, state);     /* ★NOW1（kill v292DfixNOW1Off='1'）: recentScenes の直後に nowScene（直前ターンが無ければ何もしない） */
       parsed = facts1Apply(parsed, state);   /* ★FACTS1（kill v292DfixFACTS1Off='1'）: storySoFar の直後に earlierFacts（無ければ何もしない） */
 
       return JSON.stringify(parsed, null, 2);

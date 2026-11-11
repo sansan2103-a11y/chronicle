@@ -3193,7 +3193,7 @@
           var tag = norm938_190(m[0]), who = attrOf(tag, 'who'); if (!who) continue;
           try { if (window.__v292Dfix961 && window.__v292Dfix961.hold(who, st, 'fix190')) continue; } catch(_961){}   /* ★fix961 */
           var cur = st[who] || {};
-          FIELDS.forEach(function(f){ var v = attrOf(tag, f[0]); if (v) cur[f[1]] = v; });  // 該当があった時だけ更新=永続
+          FIELDS.forEach(function(f){ var v = attrOf(tag, f[0]); if (v && f[1] === 'kizu'){ try { var S2 = window.__v292DfixSTATE2; if (S2 && S2.on() && S2.generic(v)) v = ''; } catch(_s2){} } if (v) cur[f[1]] = v; });  // 該当があった時だけ更新=永続 / ★STATE2（v292DfixSTATE2Off='1' で従来）: 部位も原因も無い 傷="負傷している" 等は取り込まない（判定は fix192）
           st[who] = cur; found++;
         }
         if (found) persist();

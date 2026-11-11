@@ -345,6 +345,226 @@
     return out;
   }
 
+  /* ---- ★F333a（laneF333・2026-11-11・LOCAL 候補・kill: localStorage v292DfixF333aOff='1'）---------
+     実測: fix333 の【身体状態・正史(絶対に覆らない)】に、吊られていない人物の「拘束されている／宙に吊られ不安定」が出た。
+       原因 = fix333 は karada（＝ここで作る shadow：保存の からだ ＋ 直前の地の文の断片）に語（吊ら・拘束・折れ …）が
+       **どこかに有るか**だけを見る。主語を見ない。断片は「蓮は…」の文ごと蓮へ渡るので、
+       「フックに吊られた鍵」（物）・「吊られた美羽を見上げた」（他人）・「吊られてはいない」（否定）でも蓮が拘束になる。
+       保存の 傷="負傷している"（部位も原因も無い）も毎ターン「負傷している」を出し、AI が書き戻す輪になる。
+     対処（fix333 は保護ファイルなので触らない。fix333 が読む shadow の写しの側だけで直す。保存・実 store は変えない）:
+       ① 語の主語がその人（か、その人の体の部位）でないとき、その語（と活用の尾）を shadow から外す:
+          物・他人を修飾する形（吊られた鍵／宙吊りの美羽）、物・他人が主語（鍵が吊られている／美羽が吊られ）、
+          他人の所有・目的（美羽の手首を縛った／美羽を押さえつけた）、能動で相手が物（扉を押さえつけた）、
+          否定（吊られてはいない）、仮定・比喩・過去（もし／ように／かつて）、解放の形（拘束から解放され）。
+       ② その人の解放（床に落ちた／解放された／縄がほどけた …）があれば、それより前の拘束・宙吊りの語を外す。けがは消さない。
+       ③ 傷 が部位も原因も無い一般語（「負傷している」等。STATE2 と同じ判定）なら shadow の 傷 を空にする。
+     語・検出器・fix333 の文面は 1 文字も変えない。何も外さない回は従来と同じ（overlay が無ければ swap もしない）。
+     kill: v292DfixF333aOff='1' → 従来の shadowOf / swap 条件そのもの（バイト同一）。fix850 を止める鍵（v292Dfix850Off / v292DrrOff）でも止まる。
+     診断: window.__v292DfixF333a.last() = [{n, tok, why}]（本文は残さない）。 */
+  function f333aOn(){ return ls('v292DfixF333aOff') !== '1'; }
+  var A_TOK = /宙に吊|宙づり|宙吊り|締め上げ|吊り上げ|吊ら|縛ら|絡め取ら|押さえ込ま|押さえつけ|羽交い締め|組み伏せ|引き倒|身動きが取れ|拘束|出血|骨折|刺さ|裂け|抉|損傷|負傷|折れ|潰れ|火傷/g;
+  var A_INJ = /^(出血|骨折|刺さ|裂け|抉|損傷|負傷|折れ|潰れ|火傷)$/;
+  var A_PASSIVE_STEM = /^(吊ら|縛ら|絡め取ら|押さえ込ま)$/;
+  var A_ACTIVE = /^(締め上げ|吊り上げ|押さえつけ|引き倒|組み伏せ)$/;
+  var A_NOUNV = /^(拘束|羽交い締め)$/;
+  var A_BODYW = '体|身体|からだ|身|腕|手|足|脚|首|頭|胴|腰|肩|指|背|胸|腹|膝|顔|肌|皮膚|骨|肋骨|肋|歯|爪|耳|目|鼻|口|唇|額|頬|喉|腿|太腿|脛|踵|拳|掌|肘|脇|内臓|関節|鎖骨|髪|爪先|足先|指先|手首|足首|首筋|手足|背中|脇腹|全身|半身|上半身|下半身';
+  var A_BODY = new RegExp('^(?:右|左|両|片)?(?:' + A_BODYW + ')$');
+  var A_SELF = /^(自分|己|私|俺|僕|あなた|主人公|彼|彼女)$/;
+  var A_STATE_NOUN = /^(状態|姿|格好|体勢|姿勢|身|まま)/;
+  var A_PERSON = /^(少女|少年|男|女|子|人|者|生徒|学生|子供|男性|女性|彼|彼女|先輩|後輩)/;
+  var A_PLACE = /^(隣|横|前|後ろ|後|上|下|そば|傍|近く|方|側|脇|奥|足元|背後|目の前)/;
+  var A_ADV_SUBJ = /^(今|今度|今日|今夜|昨日|明日|時|一瞬|最初|最後|次|前|後|上|下|中|外|内|足元|頭上|背後|途中|半分|全部|少し|何度|一度|二度|再度)$/;
+  var A_BOND = /(縄|ロープ|紐|鎖|手錠|拘束|戒め|触手|腕|手|指|網|糸|髪|蔓|ツタ|ベルト|テープ|枷)$/;
+  var A_REL = /解放さ|解き放た|振りほど|ほどけ|ほどか|ほどい|解かれ|抜け出|降ろさ|下ろさ|床に(?:落ち|降り|着地|転がり落ち|崩れ落ち)|地面に(?:落ち|降り|着地)|落下し|自由にな|逃れ(?:た|て)|離され|放され|離し|放し/g;
+  var A_REL_MOTION = /^(床に|地面に|落下)/;
+  var A_REL_ACT = /^(離し|放し|ほどい)$/;
+  var A_NEG_TAIL = /^(?:は|も)?(?:られ|され|れ|さ|り|し|せ)?(?:て|で)?(?:は|も|など|すら)?(?:い|お)?(?:ない|なかっ|ず|ません|ませ|ぬ)/;
+  var A_HYPO_TAIL = /^[ぁ-ん]{0,6}?(?:よう|みたい|かのよう|かと思|そう(?:な|に|だ|で))|^[ぁ-ん]{0,4}?(?:たら|れば|なら)/;
+  var A_HYPO_PRE = /もし|仮に|以前|かつて|昔|あの(?:時|日|夜)|幼い頃|子供の頃|夢の中|夢で/;
+  var A_RELTAIL = /^(?:の)?(?:状態)?から(?:解放|抜け出|逃れ|外|降ろ|下ろ|脱)|^を(?:解かれ|解いた|解き放|ほどかれ|ほどいた|外され|外した|脱し|抜け出|振りほど)/;
+  var A_INJ_LOCUS = new RegExp('(?:' + A_BODYW + ')(?:に|から|が|を)[^、。]{0,6}$');
+  var _f333aLast = [];
+  function aClauses(text){
+    var out = [], re = /[^、。，！？!?\n]+[、。，！？!?\n]?|[、。，！？!?\n]/g, m;
+    while ((m = re.exec(text))){ out.push({ s: m[0], at: m.index }); }
+    return out;
+  }
+  /* pre の終わり 10 字以内に、別の人物の「Yの／Yが／Yは／Yも」があるか（Yの隣・Yの前 などの場所は除く） */
+  function aOtherNear(pre, owner, names, withWo){
+    var best = null;
+    for (var i = 0; i < names.length; i++){ var n = names[i]; if (!n) continue; var k = pre.lastIndexOf(n); if (k >= 0 && (!best || k > best.at)) best = { n: n, at: k }; }
+    if (!best || best.n === owner) return false;
+    var after = pre.slice(best.at + best.n.length);
+    if (after.length > 11) return false;
+    var c = after.charAt(0);
+    if (c === 'の'){ return !A_PLACE.test(after.slice(1)); }
+    if (c === 'が' || c === 'は' || c === 'も') return true;
+    if (withWo && c === 'を') return true;
+    return false;
+  }
+  function aIsSelfNoun(noun, owner){
+    if (!noun) return false;
+    if (owner && noun.indexOf(owner) === 0) return true;
+    return A_SELF.test(noun) || A_BODY.test(noun);
+  }
+  function aOtherName(noun, owner, names){
+    for (var i = 0; i < names.length; i++){ var n = names[i]; if (n && n !== owner && noun.indexOf(n) === 0) return n; }
+    return null;
+  }
+  function aSubject(pre){
+    var re = /([一-龥々ァ-ヶーA-Za-z]{1,8})(?:が|は)/g, m, last = null;
+    while ((m = re.exec(pre))){ if (!A_ADV_SUBJ.test(m[1])) last = m[1]; }
+    return last;
+  }
+  function aObject(pre){
+    var re = /([一-龥々ァ-ヶーA-Za-z]{1,8})を/g, m, last = null;
+    while ((m = re.exec(pre))){ last = m[1]; }
+    return last;
+  }
+  /* 1 つの語が「その人の身体状態でない」なら理由を返す（外す）。その人のものなら null（残す）。迷うときは残す。 */
+  function aWhy(tok, pre, tail, owner, names){
+    if (tok !== '身動きが取れ' && A_NEG_TAIL.test(tail)) return 'neg';
+    if (A_HYPO_TAIL.test(tail) || A_HYPO_PRE.test(pre)) return 'hypo';
+    var injury = A_INJ.test(tok);
+    if (!injury && A_RELTAIL.test(tail)) return 'released';
+    var voice = 'state', nounTok = false;
+    if (A_PASSIVE_STEM.test(tok)) voice = 'passive';
+    else if (A_ACTIVE.test(tok)) voice = /^(?:られ|され|ら)/.test(tail) ? 'passive' : 'active';
+    else if (A_NOUNV.test(tok)){ nounTok = true; voice = /^(?:に)?され/.test(tail) ? 'passive' : (/^(?:に)?(?:し|する|した)/.test(tail) ? 'active' : 'state'); }
+    else if (/^(宙吊り|宙づり|出血|骨折|損傷|負傷|火傷)$/.test(tok)){ nounTok = true; if (/^させ/.test(tail)) voice = 'active'; }
+    else if (injury && /^させ/.test(tail)) voice = 'active';
+    if (aOtherNear(pre, owner, names, voice === 'active')) return 'other';
+    /* 動詞を重ねて他人を修飾する形（負傷して倒れている剛／縛られて震える美羽） */
+    if (voice !== 'active'){
+      for (var ni = 0; ni < names.length; ni++){ var nm = names[ni]; if (!nm || nm === owner) continue;
+        var k2 = tail.indexOf(nm); if (k2 < 1 || k2 > 13) continue;
+        var mid = tail.slice(0, k2); if (/[、。がはをに]/.test(mid)) continue;
+        if (/[たる]$/.test(mid)) return 'other'; }
+    }
+    /* 修飾の形（吊られた鍵／宙吊りの美羽／折れた枝） */
+    var am = tail.match(/^([ぁ-ん]{0,6}?)(た|る|の|いる|いた|ある|あった|たままの|ているままの)(?=[一-龥々ァ-ヶーA-Za-z])/);
+    if (am){
+      var noun = (tail.slice(am[0].length).match(/^[一-龥々ァ-ヶーA-Za-z]{1,8}/) || [''])[0];
+      var viaNo = (am[1] === '' && am[2] === 'の');
+      if (aIsSelfNoun(noun, owner) || A_STATE_NOUN.test(noun)) return null;
+      if (aOtherName(noun, owner, names)) return 'other';
+      if (viaNo && nounTok){ return A_PERSON.test(noun) ? 'other' : null; }   /* 拘束の痛み・出血の量 = 本人のこと */
+      if (voice !== 'active'){
+        if (A_PERSON.test(noun)) return 'other';
+        if (injury && A_INJ_LOCUS.test(pre)) return null;                        /* 腕に刺さったナイフ */
+        return 'object';
+      }
+    }
+    if (voice === 'active'){
+      var obj = aObject(pre);
+      if (!obj) return null;                       /* 相手が書かれていない能動 = 判断しない（残す） */
+      if (aIsSelfNoun(obj, owner)) return null;    /* 蓮を／首を 締め上げる */
+      return 'agent';                              /* 扉を押さえつけた = 本人は加える側 */
+    }
+    var subj = aSubject(pre);
+    if (subj){
+      if (aIsSelfNoun(subj, owner)) return null;
+      if (aOtherName(subj, owner, names) || A_PERSON.test(subj)) return 'other';
+      if (!injury && A_BOND.test(subj)) return null; /* 縄が／触手が = 本人のこと */
+      return 'object';                             /* 鍵が吊られている・鉛筆が折れた */
+    }
+    return null;
+  }
+  function aRelValid(tok, pre, tail, owner, names){
+    if (A_NEG_TAIL.test(tail) || A_HYPO_TAIL.test(tail) || A_HYPO_PRE.test(pre)) return false;
+    if (/^(?:ようと|ようとし|こうと|そうと)/.test(tail)) return false;
+    if (aOtherNear(pre, owner, names, true)) return false;
+    if (A_REL_ACT.test(tok)){
+      var obj = aObject(pre);
+      if (tok === 'ほどい') return !obj || aIsSelfNoun(obj, owner) || A_BOND.test(obj);
+      return !!obj && aIsSelfNoun(obj, owner);   /* 腕が美羽を放した（本人が目的語）だけ。鍵を放した は違う */
+    }
+    var subj = aSubject(pre);
+    if (subj && !aIsSelfNoun(subj, owner)){
+      if (aOtherName(subj, owner, names) || A_PERSON.test(subj)) return false;
+      if (A_REL_MOTION.test(tok)) return false;  /* 鍵が床に落ちた */
+      if (!A_BOND.test(subj) && !/拘束|戒め/.test(subj)) return false;
+    }
+    return true;
+  }
+  function aClean(text, owner, names, relCut, log){
+    /* relCut: この位置より前の拘束・宙吊りの語を外す（-1 = 外さない／Infinity = 全部） */
+    var t = str(text); if (!t) return { t: t, cut: [], lastRel: -1 };
+    var cut = [], lastRel = -1;
+    aClauses(t).forEach(function(c){
+      var s = c.s, m;
+      A_REL.lastIndex = 0;
+      while ((m = A_REL.exec(s))){
+        if (aRelValid(m[0], s.slice(0, m.index), s.slice(m.index + m[0].length), owner, names)) lastRel = Math.max(lastRel, c.at + m.index);
+      }
+      A_TOK.lastIndex = 0;
+      while ((m = A_TOK.exec(s))){
+        var tok = m[0], pre = s.slice(0, m.index), tail = s.slice(m.index + tok.length);
+        var why = aWhy(tok, pre, tail, owner, names);
+        var tl = (tail.match(/^[ぁ-ん]{0,8}/) || [''])[0];
+        if (why && (why === 'neg' || why === 'released') && !A_INJ.test(tok)) lastRel = Math.max(lastRel, c.at + m.index);   /* 「もう拘束されていない」= 今は解かれている */
+        if (why) cut.push({ a: c.at + m.index, b: c.at + m.index + tok.length + tl.length, tok: tok, why: why });
+        else if (!A_INJ.test(tok)) cut.push({ a: c.at + m.index, b: c.at + m.index + tok.length + tl.length, tok: tok, why: null, r: true });
+      }
+    });
+    return { t: t, cut: cut, lastRel: lastRel };
+  }
+  function aApply(res, relCut, owner, log){
+    var t = res.t; if (!res.cut) return { text: t, changed: false };
+    var keep = [];
+    res.cut.forEach(function(x){
+      if (x.why) keep.push(x);
+      else if (x.r && relCut >= 0 && x.a < relCut) keep.push({ a: x.a, b: x.b, tok: x.tok, why: 'after-release' });
+    });
+    if (!keep.length) return { text: t, changed: false };
+    keep.sort(function(x, y){ return y.a - x.a; });
+    var out = t, lastA = Infinity;
+    keep.forEach(function(x){ if (x.b > lastA) return; out = out.slice(0, x.a) + out.slice(x.b); lastA = x.a; if (log) log.push({ n: owner, tok: x.tok, why: x.why }); });
+    return { text: out, changed: out !== t };
+  }
+  function aGenericKizu(v){   /* STATE2（laneSCENE1）の st2Generic と同じ判定 */
+    var x = str(v).replace(/[\s　・、。,，．.（）()「」\-ー―:：\/／]/g, '');
+    if (!x) return false;
+    x = x.replace(/(負傷|怪我|けが|ケガ|傷|手傷)/g, '').replace(/(している|してる|した|を負った|を負う|負った|あり|有り|がある|あるが|状態|中|多数|複数|軽度|軽傷|軽い|軽|重度|重傷|重い|重|浅い|浅|深い|深|小さな|小さい|小|大|未治療|治療済み|治療中|不明|ている|いる|ある|を|が|の|も|は)/g, '');
+    return x === '';
+  }
+  function shadowOfA(store, overlay){
+    var out = {}, changed = false, log = [];
+    var src = store || {};
+    var names = [heroName()].concat(otherNames());
+    Object.keys(overlay || {}).forEach(function(n){ if (names.indexOf(n) < 0) names.push(n); });
+    function clean(n, sTxt, oTxt){
+      var rs = aClean(sTxt, n, names), ro = (oTxt != null) ? aClean(oTxt, n, names) : null;
+      var sCut = -1, oCut = -1;
+      if (ro && ro.lastRel >= 0){ sCut = Infinity; oCut = ro.lastRel; }
+      else if (rs.lastRel >= 0){ sCut = rs.lastRel; }
+      var a = aApply(rs, sCut === Infinity ? 1e15 : sCut, n, log), b = ro ? aApply(ro, oCut, n, log) : null;
+      return { s: a.text, o: b ? b.text : null, ch: a.changed || (b ? b.changed : false) };
+    }
+    Object.keys(src).forEach(function(n){
+      var e = src[n];
+      if (!e || typeof e !== 'object'){ out[n] = e; return; }
+      var copy = {};
+      Object.keys(e).forEach(function(k){ copy[k] = e[k]; });
+      var add = overlay && overlay[n];
+      var c = clean(n, str(copy.karada), add ? add : null);
+      if (c.ch){ changed = true; copy.karada = add ? (c.s + '。' + c.o) : c.s; }
+      else if (add){ copy.karada = str(copy.karada) + '。' + add; }
+      if (copy.kizu != null && aGenericKizu(copy.kizu)){ copy.kizu = ''; changed = true; log.push({ n: n, tok: 'kizu', why: 'generic' }); }
+      out[n] = copy;
+    });
+    if (overlay){
+      Object.keys(overlay).forEach(function(n){
+        if (out[n]) return;
+        var c = clean(n, '', overlay[n]);
+        if (c.ch) changed = true;
+        out[n] = { karada: c.ch ? c.o : str(overlay[n]), turn: -1 };
+      });
+    }
+    _f333aLast = log;
+    return { out: out, changed: changed };
+  }
+
   /* ---- ラップ順の保証 ------------------------------------------------
      本 fix は **最外** でなければ意味が無い:
        ・fix379 keeper が外側にいると、fix414 の textFn が shadow の外で走る
@@ -383,7 +603,13 @@
       _real930 = prev; /* ★fix930 c1: build 中の実 store（shadow ではない）を公開 */
       try {
         var ov = buildOverlay(arguments[1], arguments[0]);
-        if (ov){
+        if (f333aOn()){
+          /* ★F333a: overlay が無くても、実 store の語を外す必要があるときだけ swap する（何も外さなければ従来どおり） */
+          var sa = null;
+          try { sa = shadowOfA(prev, ov); } catch(eA){ sa = null; _f333aLast = [{ n: '', tok: '', why: 'err:' + (eA && eA.message) }]; }
+          if (sa && (ov || sa.changed)){ G.__v292Dfix77Store = sa.out; swapped = true; }
+          else if (!sa && ov){ G.__v292Dfix77Store = shadowOf(prev, ov); swapped = true; }
+        } else if (ov){
           G.__v292Dfix77Store = shadowOf(prev, ov);
           swapped = true;
         }
@@ -442,8 +668,12 @@
     shadowOf: shadowOf,
     realStore: function(){ return _real930 || G.__v292Dfix77Store; },
     b1HOn: b1HOn,
+    shadowOfA: shadowOfA,
     _heroName: heroName,
     _otherNames: otherNames
   };
+  G.__v292DfixF333a = { v: 'f333a-20261111', on: f333aOn, last: function(){ return _f333aLast.slice(); },
+    _clean: function(text, owner, names){ var r = aClean(text, owner, names || [owner]); return aApply(r, -1, owner, null).text; },
+    _generic: aGenericKizu };
   try { console.log(TAG, 'loaded (on=' + (on() ? '1' : '0') + ')'); } catch(e){}
 })();

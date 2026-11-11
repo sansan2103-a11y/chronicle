@@ -173,6 +173,21 @@
     return ac.cur - t;
   }
   try { window.__v292DfixSTATEAGE1 = { v: 1, off: offAGE1, status: function(){ return { off: offAGE1(), names: Object.keys(_age1.m).length }; } }; } catch(_a1){}
+  /* ★STATE2（laneSCENE1・2026-11-11・kill: localStorage v292DfixSTATE2Off='1' で従来と送信バイト同一・毎回評価）:
+     laneFABLE1 #9: T8 の <state> で AI が無傷の主人公に 傷="負傷している" を付け、以後「傷はそのまま引き継ぐ」で毎回送られ、AI も毎回書き戻した。
+       ・傷の値が「負傷している／怪我をしている／傷あり」のように部位も原因も無い一般語だけなら、状態ブロックに載せない（保存値・store は触らない）。
+         取り込み側（features.js fix190 captureExt）も、同じ判定の値で既存の傷を上書きしない・新しく作らない。
+     laneFABLE1 #10: 解決済みの 未解決（名簿を拾えないこと）が残り続けた。
+       ・未解決は STATEAGE1 と同じ数え方で 3 ターン以上同じ値のままなら、STATEAGE1 の「（N ターン前の様子・今も同じとは限らない）」の側へ移す。
+         STATEAGE1 の鍵 v292DfixSTATEAGE1Off='1' のときは数えない（従来どおり）。 */
+  function st2On(){ try { return localStorage.getItem('v292DfixSTATE2Off') !== '1'; } catch(e){ return false; } }
+  function st2Generic(v){
+    var x = String(v || '').replace(/[\s　・、。,，．.（）()「」\-ー―:：\/／]/g, '');
+    if (!x) return false;
+    x = x.replace(/(負傷|怪我|けが|ケガ|傷|手傷)/g, '').replace(/(している|してる|した|を負った|を負う|負った|あり|有り|がある|あるが|状態|中|多数|複数|軽度|軽傷|軽い|軽|重度|重傷|重い|重|浅い|浅|深い|深|小さな|小さい|小|大|未治療|治療済み|治療中|不明|ている|いる|ある|を|が|の|も|は)/g, '');
+    return x === '';
+  }
+  try { window.__v292DfixSTATE2 = { v: 1, on: st2On, generic: st2Generic }; } catch(_s2){}
   function stateBlock(legacyStore){
     try{
       var c930 = !off930() && !legacyStore; /* ★fix932: legacyStore=true は ac27 と同じ（shadow を読む・旧項目順）判定専用 */
@@ -196,6 +211,7 @@
         if(gp === 'b' || gp === 'c' || (!legacyStore && _npg && _npg.orphan(n, s))){ ka=''; ko=''; ho=''; mo=''; if(gp === 'c') parts.push('別の場所にいる'); else if(gp === 'b' && typeof _npg.note === 'function'){ var nt3 = _npg.note(n, s); if(nt3) parts.push(nt3); } }   /* ★NPRES d3: 通話中の人は「声だけで加われる」の一行（d3Off なら ''） */
         var old1 = {};   /* ★STATEAGE1: 経過ターン数 → 古い項目（ac1=null なら常に従来の位置へ push） */
         function p1(f, lb, v, pose){ var a = (ac1 && (!pose || AGE1_POSE.test(v))) ? age1Of(ac1, n, f, v, s.turn) : 0; if(a >= 2) (old1[a] = old1[a] || []).push(lb+v); else parts.push(lb+v); }
+        if(ki && st2On() && st2Generic(ki)) ki='';   /* ★STATE2: 部位も原因も無い「負傷している」等は載せない（保存値はそのまま） */
         if(c930 && ki) parts.push('傷:'+ki);
         if(ka) p1('ka', 'からだ:', ka);
         if(ko) p1('ko', 'こころ:', ko);
@@ -203,7 +219,7 @@
         if(mo) p1('mo', '目的:', mo);
         if(!c930 && ki) parts.push('傷:'+ki);
         if(kn) p1('kn', '関係:', kn, true);
-        if(mi) parts.push('未解決:'+mi);
+        if(mi){ if(ac1 && st2On()){ var am = age1Of(ac1, n, 'mi', mi, s.turn); if(am >= 3) (old1[am] = old1[am] || []).push('未解決:'+mi); else parts.push('未解決:'+mi); } else parts.push('未解決:'+mi); }   /* ★STATE2: 3 ターン以上書き直されていない未解決に古さの印 */
         Object.keys(old1).map(Number).sort(function(a, b){ return a - b; }).forEach(function(a){ parts.push('（'+a+' ターン前の様子・今も同じとは限らない）'+old1[a].join(' ／ ')); stale1 = true; });
         if(parts.length) lines.push('・'+n+'｜'+parts.join(' ／ '));
         try{ if(npcqOwner192() && !legacyStore && !isHeroA1(hkA1, n) && localStorage.getItem('v292Dfix192LicOff')!=='1' && localStorage.getItem('v292Dfix414Off')!=='1'){ var X414=window.__v292Dfix414x; if(X414 && X414.deriveFor && X414.deriveFor(n,{karada:ka,kokoro:ko,kizu:ki}).length && licN.length<3) licN.push(n); } }catch(_l){}   /* ★NPCQ1 */
@@ -813,9 +829,13 @@
   function b38Ex(s){ try { if (!b38On('a') || typeof s !== 'string') return s; return s.split(B38_EXB_OLD).join(B38_EXB_NEW); } catch(e){ return s; } }
   /* B38-e: 送る直前の user 文字列だけを変える（S.scene.loc・保存・同一性の目印には触らない）。該当がちょうど 1 か所でなければ何もしない。 */
   var _b38e = { applied: 0, skipped: '' };
+  /* ★NOW1（laneSCENE1・2026-11-11）: 現在地の欄（scene.location）は物語の最後まで開始地点のまま送られていた（laneFABLE1 #15）。
+     場所の更新に使える確かなデータ（検証済み scene_move）は出力率が低く当てにできないので、B38-e と同じく「開始時の場所」と名札を付け替えるだけ。
+     いまの場所は fix58 の nowScene（直前の本文の終わり）が持つ。B38 全体の停止鍵 v292DfixB38Off='1' もこれを止める。 */
+  function now1Loc(){ try { if (localStorage.getItem('v292DfixB38Off') === '1') return false; return localStorage.getItem('v292DfixNOW1Off') !== '1'; } catch(e){ return false; } }
   function b38eUser(user){
     try {
-      if (!b38On('e') || typeof user !== 'string') return user;
+      if (!(b38On('e') || now1Loc()) || typeof user !== 'string') return user;   /* ★NOW1: B38-e の置き換えを NOW1 でも行う（v292DfixNOW1Off='1' で従来＝B38-e の鍵のときだけ） */
       var S = getS(); if (!S || !Array.isArray(S.turns) || S.turns.length < B38_E_MIN_TURNS){ _b38e.skipped = 'first-turn'; return user; }
       var loc = S.scene && S.scene.loc; if (typeof loc !== 'string' || !loc){ _b38e.skipped = 'no-loc'; return user; }
       var v = JSON.stringify(loc), forms = ['"location": ' + v, '"location":' + v], i;
