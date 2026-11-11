@@ -7076,8 +7076,24 @@
   function actSave(){
     try {
       if (typeof S !== 'undefined' && typeof S.save === 'function'){
-        (typeof S.saveD==='function'?S.saveD('features.actSave'):S.save());
-        showToast('💾 保存しました');
+        /* ★SAVEUI（GPT #127-SC (B)）: 書けたときだけ「保存しました」。断られた（理由は saveD が出す）・書かずに hold（fix635 の混入止め・fix945 の古いタブ）
+           のときは成功と言わない。差分の帯が未選択の間は「この端末にだけ」と言う。kill v292DfixSAVEUIOff → 前と同じ（いつも「保存しました」） */
+        var _su = window.__v292DfixSAVEUI;
+        if (!_su || typeof _su.on !== 'function' || !_su.on()){
+          (typeof S.saveD==='function'?S.saveD('features.actSave'):S.save());
+          showToast('💾 保存しました');
+          return;
+        }
+        var _p = (typeof S.saveD==='function') ? S.saveD('features.actSave') : { ran:true, result: S.save() };
+        Promise.resolve(_p).then(function(x){
+          try {
+            if (!x || x.ran !== true) return;
+            var w = _su.reasonText(x.result);
+            if (w){ showToast('保存できませんでした（' + w + '）', true); return; }
+            var lo = _su.localOnlyText('物語');
+            showToast(lo || '💾 保存しました', false);
+          } catch(e2){}
+        }, function(e3){ showToast('save 失敗: ' + ((e3 && e3.message) || e3), true); });
       } else {
         showToast('S.save 未定義 (state 未初期化?)', true);
       }

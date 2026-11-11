@@ -498,9 +498,11 @@
       try { p = (typeof S.saveD === 'function') ? S.saveD('UI.saveEdit') : Promise.resolve({ ran: true, result: S.save() }); }
       catch (e) { p = Promise.reject(e); }
       Promise.resolve(p).then(function (x) {
-        if (!x || x.ran !== true) {
+        /* ★SAVEUI（GPT #127-SC (B)）: S.save が書かずに hold を返した（fix635 の混入止め・fix945 の古いタブ）ときも成功扱いにしない＝戻して、編集画面を閉じない。kill v292DfixSAVEUIOff */
+        var su = root.__v292DfixSAVEUI, sw = (x && x.ran === true && su && su.reasonText) ? su.reasonText(x.result) : null;
+        if (!x || x.ran !== true || sw) {
           revert();
-          try { UI.setStatus('編集を保存できませんでした。もう一度お試しください', true); } catch (e) {}
+          try { UI.setStatus(sw ? ('編集を保存できませんでした（' + sw + '）') : '編集を保存できませんでした。もう一度お試しください', true); } catch (e) {}
           return;
         }
         ST.saves++; if (planChanged) ST.planEdits++;
@@ -515,6 +517,7 @@
         if (!res.skipped && res.applicable && res.newQuotes > 0) {
           try { UI.setStatus('本文にあるが会話ログにないセリフ: ' + res.newQuotes + ' 件'); } catch (e) {}
         }
+        try { var lo = su && su.localOnlyText ? su.localOnlyText('本文の編集') : null; if (lo) UI.setStatus(lo); } catch (e) {}   /* ★SAVEUI: 差分の帯が未選択の間は「この端末にだけ」と言う */
       }, function (err) {
         revert();
         try { UI.setStatus('編集を保存できませんでした。もう一度お試しください', true); } catch (e) {}

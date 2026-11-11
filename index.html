@@ -2483,8 +2483,10 @@ const UI = {
       .then(function(x){
         if (!x || x.ran !== true){ _s748.setStatus('設定を保存できませんでした。もう一度お試しください', true); return; }
         /* ★SAVE P1（GPT #125）: S.save 自体が書かずに hold を返した（fix945 XTAB_STALE / fix748 refuse）なら成功表示しない・閉じない */
-        if (x.result && typeof x.result === 'object' && x.result.hold === true){ _s748.setStatus('設定を保存できませんでした（この画面は最新ではありません。再読み込みしてください）', true); return; }
-        _s748.closeSettings(); _s748.setStatus('設定を保存しました');
+        /* ★SAVEUI（GPT #127-SC）: 止めた理由ごとの短い文（fix635 = 別の物語の混入）。差分の帯が未選択の間は「この端末にだけ」と言う。kill v292DfixSAVEUIOff → 前の文 */
+        var _su = window.__v292DfixSAVEUI;
+        if (x.result && typeof x.result === 'object' && x.result.hold === true){ _s748.setStatus('設定を保存できませんでした（' + ((_su && _su.reasonText && _su.reasonText(x.result)) || 'この画面は最新ではありません。再読み込みしてください') + '）', true); return; }
+        _s748.closeSettings(); _s748.setStatus((_su && _su.localOnlyText && _su.localOnlyText('設定')) || '設定を保存しました');
         if (S.turns.length === 0) _s748._showIntro();
       });
   },
@@ -2528,9 +2530,10 @@ const UI = {
     const _e748 = this;
     (typeof S.saveD === 'function' ? S.saveD('UI.saveEdit') : Promise.resolve({ ran:true, result: S.save() }))
       .then(function(x){
-        if (!x || x.ran !== true){
+        var _su = window.__v292DfixSAVEUI, _sw = (x && x.ran === true && _su && _su.reasonText) ? _su.reasonText(x.result) : null;   /* ★SAVEUI: 書かずに hold が返ったら閉じない */
+        if (!x || x.ran !== true || _sw){
           try { if (S.editIdx >= 0) S.turns[S.editIdx].narrative = _prev748; } catch(e){}   /* ★メモリも戻す */
-          _e748.setStatus('編集を保存できませんでした。もう一度お試しください', true);
+          _e748.setStatus(_sw ? ('編集を保存できませんでした（' + _sw + '）') : '編集を保存できませんでした。もう一度お試しください', true);
           return;
         }
         _e748.closeEdit(); _e748.renderAll(); _e748.renderBranches(S.scene.branches);
@@ -4196,7 +4199,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
        fix659 は別 id + __f527 マーカーを立てるので干渉しない、という関係をこの並びで示す。
      読出=window.__v292Dfix659.status()/.selfTest() / OFF=v292Dfix659Off -->
 <script src="v292Dfix659-fork-choice.js?cb=v292Dfix680"></script>
-<script src="features.js?cb=20261025-bundle55-sfl-a"></script>
+<script src="features.js?cb=20261111-saveui"></script>
 <script>
 /* ============================================================================
  * v292DfixP0-inline : シナリオテンプレ適用の緊急封鎖（L2 + L2b）
@@ -4459,9 +4462,9 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script> -->
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=20260912-q119s4"></script>
-  <script src="v292DfixSFL1-speaker-correct.js?cb=20261031-bundle78-admf-c"></script><!-- v292DfixSFL1(SFL-01): ✎ 編集パネル内の話者 <select>＋訂正台帳(turn._sflCorrections)。既定OFF・opt-in v292DfixSFL1On=1 / kill v292DfixSFL1Off=1（OFF/kill は新しい訂正だけを止め、保存済みの訂正の保護は常に効く・r3）。fix66 より前に置く(起動時 migrate の保護判定が参照する) -->
+  <script src="v292DfixSFL1-speaker-correct.js?cb=20261111-saveui"></script><!-- v292DfixSFL1(SFL-01): ✎ 編集パネル内の話者 <select>＋訂正台帳(turn._sflCorrections)。既定OFF・opt-in v292DfixSFL1On=1 / kill v292DfixSFL1Off=1（OFF/kill は新しい訂正だけを止め、保存済みの訂正の保護は常に効く・r3）。fix66 より前に置く(起動時 migrate の保護判定が参照する) -->
   <script src="v292Dfix66-renderhook-repair.js?cb=20261110-beat1"></script>
-  <script src="v292DfixEDIT01-edit-reconcile.js?cb=20261110-edit01carry"></script><!-- v292DfixEDIT01: 本文を編集したら会話ログを本文に合わせる(フェーズ1) + カード✕。OFF=localStorage v292DfixEdit01Off=1 -->
+  <script src="v292DfixEDIT01-edit-reconcile.js?cb=20261111-saveui"></script><!-- v292DfixEDIT01: 本文を編集したら会話ログを本文に合わせる(フェーズ1) + カード✕。OFF=localStorage v292DfixEdit01Off=1 -->
   <script src="v292DfixSFLTap-card-correct.js?cb=20261031-bundle65-sfltap-b"></script><!-- v292DfixSFLTap(bundle65): 会話ログのカードをタップして、その場で話者を直す（SFL の ✎ と同じ保存経路・同じ守り・同じ記録）。SFL が使えるとき（uiEnabled）だけ。停止 = localStorage v292DfixSFLTapOff=1（常に勝つ）・SFL の kill v292DfixSFL1Off=1 でも止まる -->
   <script src="v292DfixEDLOG-narr-edit-log.js?cb=20261103-bundle92-a"></script><!-- ★EDLOG (laneEDICF): ✎ の本文編集を差分の記録 turn._narrEdits として同じ S.saveD に残す（本文の全文は持たない）。既定OFF・物語 smvhfq1rulp だけ・opt-in localStorage v292DfixEDLogOn=1 / kill v292DfixEDLogOff=1。SFL1/EDIT-01 の包みの外側を 1 回だけ包む -->
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=v292Dfix68"></script>
@@ -4767,7 +4770,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix632-img-content-dirty.js?cb=fix638"></script>
 <script src="v292Dfix633-icon-sweep-full.js?cb=20260908-fix837"></script>
 <script src="v292Dfix634-aiappearance-sync.js?cb=20261005-c1"></script>
-<script src="v292Dfix635-new-story-guard-rearm.js?cb=v292Dfix637"></script>
+<script src="v292Dfix635-new-story-guard-rearm.js?cb=20261111-saveui"></script>
+<script src="v292DfixSAVEUI-save-truth.js?cb=20261111-saveui"></script><!-- ★SAVEUI (GPT #127-SC): 保存されていないのに「保存しました」と見せない／差分の帯が未選択の間と fix635 が止めている間は生成を始めない／「退避してクラウド版を開く」の前に控えと退避を作り直す。kill v292DfixSAVEUIOff=1（Gate/Adopt は v292DfixSAVEUIGateOff・v292DfixSAVEUIAdoptOff） -->
 <script src="v292Dfix636-npc-presence-evidence.js?cb=20260829-fix748"></script>
 <script src="v292Dfix637-cast-bootstrap-probe.js?cb=20260829-fix748"></script>
 <!-- fix638: pull側の画像ガード。クラウドの save blob(pkg.idb) で**既存のローカルアイコンを上書きしない**。

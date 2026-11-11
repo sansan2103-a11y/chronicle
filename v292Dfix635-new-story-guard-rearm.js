@@ -128,6 +128,9 @@
             console.error(TAG, '物語画面のタブを1つだけにして、ホームからやり直してください。');
           } catch(e){}
           notice();
+          /* ★SAVEUI（GPT #127-SC (B)）: 呼び手が「保存しました」と出さないよう、fix945 / fix748 と同じ形の hold を返す（書かないのは前と同じ）。
+             kill v292DfixSAVEUIOff='1' → 前と同じ undefined。 */
+          if (lsg('v292DfixSAVEUIOff') !== '1') return { hold: true, code: 'NEW_STORY_GUARD', wrote: 0, storyId: state.storyId };
           return;                            /* ★書かない。消しも上書きもしない */
         }
         return inner.apply(this, arguments);

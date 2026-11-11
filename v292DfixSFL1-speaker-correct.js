@@ -522,7 +522,7 @@
       var oneShot = function () {
         called = true; restore();
         var p; try { p = orig.apply(this === undefined ? S : this, arguments); } catch (e) { fail('saveD-throw'); throw e; }
-        Promise.resolve(p).then(function (x) { if (!x || x.ran !== true) fail('ran-false'); else ok(); }, function () { fail('rejected'); });
+        Promise.resolve(p).then(function (x) { if (!x || x.ran !== true) fail('ran-false'); else if (x.result && typeof x.result === 'object' && x.result.hold === true && root.__v292DfixSAVEUI && root.__v292DfixSAVEUI.on()) fail('hold'); else ok(); }, function () { fail('rejected'); });   /* ★SAVEUI（GPT #127-SC (B)）: 書かずに hold が返ったら成功扱いにしない。kill v292DfixSAVEUIOff */
         return p;
       };
       if (typeof orig !== 'function') { fail('no-saveD'); removeList(); return inner.apply(self, args); }
