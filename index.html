@@ -7,7 +7,7 @@
 <script src="v292DfixCP1-final-tap.js?cb=20261023-bundle43a-r5"></script><!-- CP1 tap r43e (GPT #127-JY/#127-KA/#127-KK/#127-LA/#127-LC): 送信直前の body を CP1 に見せる観測口（送る中身は不変）。読み込み時に v292DfixCP1On='1'（かつ v292DfixCP1Off≠'1'）のときだけ fetch を包む。OFF/kill は何もしない。CP1 を使ったターンの途中でアカウント・物語・Owner 権限が変わった・kill されたときは、その送信を出さない／送信後に変わったら応答を捨てる。止めたターンは自動で送り直さない -->
 <script src="v292DfixPRUNE2-sys-prune2.js?cb=20261111-prune2"></script><!-- ★PRUNE2（lanePRUNE2・2026-11-11）: 最終 sys／user の整理・第 2 弾。送信直前（fetch 境界）で決まった文だけを差し替える。P2a＝<say> の決まりを末尾の【話者タグの徹底】1 か所に（【出力の形式】2 項・【出力の掟】1 項・【話者】2 項の重複を外す。見出しと解析が依存する形式は変えない）／P2b＝見本 A を外す・【プレイヤーの種】【NPCの登場】を短く・「先輩」の例文を呼称に依らない文へ／P2c＝user 末尾の逐語反映を短く・psychAnchors の注記から決まり文句の列挙を外す。既定は P2c だけ ON（P2a・P2b は v292DfixPRUNE2aOn / bOn="1" の端末だけ）。kill = localStorage v292DfixPRUNE2aOff / v292DfixPRUNE2bOff / v292DfixPRUNE2cOff（個別）・v292DfixPRUNE2Off（全部）＝"1"（毎回評価・送信バイト同一）。PRUNE1 の直前に置く（PRUNE1 の後・CP1 tap の前に当たる。順が逆でも結果は同じ） -->
 <script src="v292DfixPRUNE1-sys-prune.js?cb=20261111-prune1"></script><!-- ★PRUNE1（lanePRUNE1・2026-11-11）: 最終 sys の当て布の整理。fix459 ほか sys を書き換える部品がすべて済んだ後（fetch を包む部品の内側）で、決まった文だけを外す／差し替える（重複 6 文を外す・食い違いと受け身の強制 7 文を言い換える・進行エンジンを 1 つの規則に・【自発】の定型を 1 行に・【危機のとき】を新設・user 側の「0.5〜3 秒」「直後だけ」を言い換える）。安全・出力形式・<say>/<state> の契約・話者・見本・状態の文は触らない。見つからない文はその 1 手だけ何もしない。kill = localStorage v292DfixPRUNE1Off='1'（毎回評価・送信バイト同一）。CP1-final-tap の直後に置く（tap が整理後の body を見る） -->
-<script src="v292DfixE64-save-tap.js?cb=20261024-bundle45-e64-d"></script><!-- E6-4 r4 (GPT #127-MG): E64Stop がある物語の state を /save へ送らない保存の出口。印なしかつ OFF/kill なら何もしない -->
+<script src="v292DfixSOL1-story-open-lock.js?cb=20261112-store1b"></script><!-- ★SOL1 (GPT #127-SG Q9): 物語を開いている間 Web Lock chronicle:story-open:&lt;id&gt; を持つ（書込 0・通信 0）。OFF=localStorage v292DfixSOL1Off=1 --><script src="v292DfixKEY1-story-key.js?cb=20261112-key1"></script><!-- ★KEY1 (GPT #127-SG Q10): キーの持ち主を完全一致で決める共通判定（書込 0・通信 0）。OFF=localStorage v292DfixKEY1Off=1 --><script src="v292DfixE64-save-tap.js?cb=20261112-key1"></script><!-- E6-4 r4 (GPT #127-MG): E64Stop がある物語の state を /save へ送らない保存の出口。印なしかつ OFF/kill なら何もしない -->
 <script src="v292Dfix953-card-canary-gate.js?cb=20261015-bundle1-cardA-f957on"></script><!-- v292Dfix953: card canary gate (fix952/fix951/fix444g run ONLY when localStorage v292Dfix953On=1 AND this document story id is in the baked allowlist; otherwise byte-identical to production) -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -4121,8 +4121,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      それらは new Response で応答を作り直すので、後から読み込むと「出口ガード後の本文」しか見えず
      モデルの生出力が取れない。本文は1文字も書き換えない。OFF=v292Dfix553Off -->
 <script src="v292Dfix553-punct-probe.js?cb=20260913-q119b5"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=v292Dfix735"></script>
-<script src="v292Dfix564-snapshot.js?cb=v292Dfix567"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=20261112-key1"></script>
+<script src="v292Dfix564-snapshot.js?cb=20261112-key1"></script>
 <!-- v292Dfix721(STEP4F): SAFE RESTORE ENGINE。fix291のimportAllを委譲で受け、
      NON-DESTRUCTIVE MERGE + default-deny + durable journal + boot rollbackで復元する。
      配置契約(RULING31/32): fix564直後・全writer(291/587/399/402)より前 = RECOVERY EARLY。
@@ -4516,11 +4516,11 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      正規サービスへ委譲する。未搭載なら削除せず fail-closed（旧経路へは戻さない）。OFF=v292Dfix577Off -->
 <!-- fix579: tombstone(墓標)のスキーマとマージ規則。純粋関数のみで、**まだ同期へ配線していない**。
      pull barrier と push競合規則は一組で入れる必要があるため、先に形だけ固める。OFF=v292Dfix579Off -->
-<script src="v292Dfix579-tombstone-schema.js?cb=v292Dfix588"></script>
+<script src="v292Dfix579-tombstone-schema.js?cb=20261112-key1"></script>
 <!-- fix587: 物語削除の正規サービス。UIは意思表示を受け取るだけで、認可と手順はここが持つ。
      削除の順序: 再読込→exact key確定→復元セット作成→検証→墓標→クラウドへ反映確認→ゲート経由でexact削除。
      ★物理削除より先に墓標をクラウドへ確定させる。OFF=v292Dfix587Off -->
-<script src="v292Dfix587-story-lifecycle.js?cb=20261020-bundle35-b"></script>
+<script src="v292Dfix587-story-lifecycle.js?cb=20261112-key1"></script>
 <!-- fix602: 墓標(tombstone)が立ったスロットのキーへの setItem を影監視する。
      拒否しない・挙動を1ミリも変えない・LSへは1バイトも書かない。
      経路・key・slotId を記録するだけ。読出: __v292Dfix602.stats()/.recent()/.selfTest()

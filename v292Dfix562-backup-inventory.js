@@ -34,6 +34,10 @@
   function off(){ return lsg('v292Dfix562Off') === '1'; }
   function keys(){ try { return Object.keys(localStorage); } catch(e){ return []; } }
   function bytes(k){ var v = lsg(k); return v == null ? 0 : v.length; }
+  /* ★KEY1 (GPT #127-SG Q10): キーの持ち主を完全一致で決める共通判定（v292DfixKEY1-story-key.js）。
+     居ない・kill（v292DfixKEY1Off='1'）なら null ＝ 下の各所は今日の部分一致の式をそのまま使う。 */
+  function key1(){ try { var K = window.__v292DfixKEY1; return (K && typeof K.enabled === 'function' && K.enabled()) ? K : null; } catch(e){ return null; } }
+  var KEY1_LEGACY = { 'a':1, 'b':1, 'c':1, 'default':1, 'chr6':1 };
 
   /* ---- 指紋 ----------------------------------------------------------- */
   /* 内容が同一の控えを見つけるためだけに使う。暗号用途ではない(FNV-1a 32bit)。
@@ -65,6 +69,9 @@
      genderMap のようにキー内でスロットIDが引用符で囲まれる例があるので、部分一致で拾う。 */
   function sideStoreKeys(slot){
     if (!slot) return [];
+    var K1 = key1();
+    /* ★KEY1: 既知 family で id が丸ごと一致するキーだけ（本体・控え・snapshot は含めない）。形の分からないキーは誰のものでもない。 */
+    if (K1) return K1.keysOf(String(slot), keys()).sort();
     var out = [];
     keys().forEach(function(k){
       if (k === 'chr6_slot_' + slot) return;      /* 本体 */
@@ -128,6 +135,18 @@
        ③`_sm…` の形(孤児=もう存在しないスロットの控えは②で当たらないため、形で拾う)
      ③のパターンだけに頼ると、命名規則が変わった控えを取りこぼす。 */
   function slotFromKey(k, live){
+    var K1 = key1();
+    if (K1){
+      /* ★KEY1: ①既知 family（snapshot・サイドストア）なら丸ごとの id ②控えは chr6_slot_<id> か、生きている id が
+         「丸ごと 1 語」で 1 つだけ現れるとき ③孤児の _sm… の形（従来どおり・もともと区切りで囲まれている） */
+      var s1 = K1.storyOf(k); if (s1) return s1.id;
+      var b1 = K1.backupSlotOf(k, live || liveSlots()); if (b1) return b1;
+      var m1 = k.match(/_(sm[A-Za-z0-9]{3,})(?:_\d{13})?$/); if (m1) return m1[1];
+      m1 = k.match(/_(sm[A-Za-z0-9]{3,})_/); return m1 ? m1[1] : null;
+    }
+    return slotFromKeyOld(k, live);
+  }
+  function slotFromKeyOld(k, live){
     var m = k.match(/chr6_slot_([A-Za-z0-9]+)/);
     if (m) return m[1];
     var ls = live || liveSlots();
@@ -570,9 +589,15 @@
     /* ★「生きているスロットのサイドストア」は hard。スロットが既に無いなら孤児で releasable。
        ここで live を先に見るのが要。生セーブと同じ強さで守らないと、
        物語は残っているのに登場人物や記憶だけが消える事故になる。 */
-    var sid = null;
-    for (var i = 0; i < live.length; i++){
-      if (k.indexOf(live[i]) >= 0){ sid = live[i]; break; }
+    var sid = null, K1c = key1(), oldO0 = null;
+    if (K1c){
+      /* ★KEY1: 生きている物語のサイドストア = 既知 family で id が丸ごと一致し、その id が生きている */
+      var s8 = K1c.storyOf(k);
+      if (s8 && live.indexOf(s8.id) >= 0) sid = s8.id;
+    } else {
+      for (var i = 0; i < live.length; i++){
+        if (k.indexOf(live[i]) >= 0){ sid = live[i]; break; }
+      }
     }
     if (sid){
       r.family = 'live-side-store'; r.slotId = sid; r.protection = 'hard'; r.owner = 'story-lifecycle';
@@ -580,6 +605,12 @@
       return r;
     }
     var orphan = slotFromKey(k, live);
+    if (K1c){
+      /* ★KEY1: 孤児（releasable）は「新しい判定と今日の判定が同じ id を指し、その id が生きておらず、旧 id でない」ときだけ。
+         どちらかが違えば review（消さない）。＝ 新しい判定で消せる範囲が今日より広がることはない。 */
+      var s8b = K1c.storyOf(k), oldO = slotFromKeyOld(k, live); oldO0 = oldO;
+      orphan = (s8b && oldO === s8b.id && !KEY1_LEGACY[s8b.id]) ? s8b.id : null;
+    }
     if (orphan && live.indexOf(orphan) < 0){
       r.family = 'orphan-side-store'; r.slotId = orphan; r.protection = 'releasable';
       r.owner = 'story-lifecycle';
@@ -587,6 +618,17 @@
       return r;
     }
     /* ⑨それ以外は判断しない（消さない） ----------------------------------- */
+    if (K1c){
+      /* ★KEY1: 形の分からないキーは誰のものでもない（消してよい根拠にならない＝review のまま）。
+         ただし送信・取り込みの遮断（fix399/fix402/home の墓標フィルタ・fix602）は slotId を見て「送らない」を決めるので、
+         id が「丸ごと 1 語」で現れる場合に限り、遮断用の目印として slotId を残す（protection は review＝削除には使えない）。
+         接頭辞の衝突（sabcdefgh と sabcdefgh1）はここで落ちる。 */
+      var s9 = K1c.storyOf(k);
+      if (s9){ r.family = 'side-store-not-live'; r.slotId = s9.id; r.why = '既知の形だが、持ち主の物語の本体がこの端末に無い（孤児と確定できないので消さない）'; return r; }
+      var bs = K1c.backupSlotOf(k, live);
+      if (!bs && oldO0 && K1c.mentions(k, oldO0)) bs = oldO0;
+      if (bs){ r.family = 'unknown-shape-mentions-story'; r.slotId = bs; }
+    }
     r.why = '形式不明。判断できないものは削除対象にしない';
     return r;
   }
@@ -796,7 +838,7 @@
     /* fix578(A3.1): 読取専用の汎用分類器。protectedSet() の意味は据え置き。 */
     classifyKey: classifyKey,
     deletePolicy: deletePolicy,
-    _hash: hash, _tsFromKey: tsFromKey, _slotFromKey: slotFromKey, _familyOf: familyOf, _score: score
+    _hash: hash, _tsFromKey: tsFromKey, _slotFromKey: slotFromKey, _slotFromKeyOld: slotFromKeyOld, _familyOf: familyOf, _score: score
   };
   try { if (!off()) console.log(TAG, 'ready (read-only)'); } catch(e){}
 })();

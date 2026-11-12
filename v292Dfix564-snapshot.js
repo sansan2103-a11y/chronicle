@@ -53,10 +53,18 @@
      スナップショット自身を除外しないと、2回目の作成で**前回のスナップショットを取り込んで**
      容量が雪だるま式に増える(設計時に気づいた。fix562側も同じ除外が要る)。 */
   function isOurs(k){ return k.indexOf(MPRE) === 0 || k.indexOf(DPRE) === 0; }
+  /* ★KEY1 (GPT #127-SG Q10): 持ち主の判定を完全一致へ。居ない・kill（v292DfixKEY1Off='1'）なら今日の部分一致のまま。 */
+  function key1(){ try { var K = window.__v292DfixKEY1; return (K && typeof K.enabled === 'function' && K.enabled()) ? K : null; } catch(e){ return null; } }
   function partKeys(slot){
     var storyKey = 'chr6_slot_' + slot;
     var out = [];
     if (lsg(storyKey) != null) out.push(storyKey);
+    var K1 = key1();
+    if (K1){
+      /* ★KEY1: 既知 family で id が丸ごと一致するキーだけ（本体は上で入れた・控えと snapshot は入れない） */
+      K1.keysOf(String(slot), keys()).forEach(function(k){ if (k !== storyKey) out.push(k); });
+      return out;
+    }
     keys().forEach(function(k){
       if (k === storyKey) return;
       if (k.indexOf('chr6_bk_') === 0) return;
@@ -182,19 +190,25 @@
     if (!v.ok) return { ok: false, error: '検証を通らないスナップショットは復元しません', detail: v };
     var m = JSON.parse(lsg(id));
     var toSlot = opts.toSlot || m.slotId;
-    var plan = [];
+    var plan = [], K1 = key1(), dropped = [];
     Object.keys(m.parts).forEach(function(lk){
       var p = m.parts[lk];
-      var target = toSlot === m.slotId ? lk : lk.split(m.slotId).join(toSlot);
+      /* ★KEY1: 古い（部分一致の）規則で作られた manifest には、他の物語のキーが混ざっていることがある。
+         復元の時点で取り直し、この snapshot の物語のキーでないものは書かない（数えるだけ）。 */
+      if (K1 && !K1.belongs(lk, m.slotId)){ dropped.push(lk); return; }
+      var target = toSlot === m.slotId ? lk : (K1 ? K1.rekey(lk, m.slotId, toSlot) : lk.split(m.slotId).join(toSlot));
+      if (target == null){ dropped.push(lk); return; }
       var cur = lsg(target);
       plan.push({ from: p.snapKey, to: target, bytes: p.bytes, role: p.role,
                   overwrites: cur != null, sameAsCurrent: cur != null && hash(cur) === p.hash });
     });
     if (!opts.confirm){
-      return { ok: true, dryRun: true, id: id, toSlot: toSlot, willWrite: plan.length,
+      var dr = { ok: true, dryRun: true, id: id, toSlot: toSlot, willWrite: plan.length,
                willOverwrite: plan.filter(function(x){ return x.overwrites; }).length,
                bytes: plan.reduce(function(a, b){ return a + b.bytes; }, 0), plan: plan,
                note: '★dryRunです。1バイトも書いていません。実行するには {confirm:true} を渡してください。' };
+      if (K1) dr.key1Dropped = dropped.length;
+      return dr;
     }
     /* 実行。書けなかった時点で中止する(部分復元のまま進めない)。
        すでに書いた分は戻さない = 元の値を控えていないため。
@@ -208,8 +222,10 @@
       if (back == null || hash(back) !== hash(val)){ failedAt = { to: plan[i].to, error: '読み戻しが一致しません' }; break; }
       done.push(plan[i].to);
     }
-    return { ok: !failedAt, id: id, toSlot: toSlot, written: done.length,
+    var rr = { ok: !failedAt, id: id, toSlot: toSlot, written: done.length,
              total: plan.length, failedAt: failedAt, writtenKeys: done };
+    if (K1) rr.key1Dropped = dropped.length;
+    return rr;
   }
 
   /* ---- 一覧・削除 ------------------------------------------------------ */

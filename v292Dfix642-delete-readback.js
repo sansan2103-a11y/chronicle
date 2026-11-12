@@ -365,10 +365,17 @@
   /* =====================================================================
    * ④ 物理削除（必ず DeleteGateway 経由。自前 removeItem を呼ばない）
    * ===================================================================== */
+  /* ★KEY1 (GPT #127-SG Q10): 持ち主の判定を完全一致へ。居ない・kill（v292DfixKEY1Off='1'）なら今日のまま。 */
+  function key1(){ try { var K = window.__v292DfixKEY1; return (K && typeof K.enabled === 'function' && K.enabled()) ? K : null; } catch(e){ return null; } }
+  var key1Dropped = 0;
   function executePlan(plan, d){
     var deleted = [], refused = [], alreadyMissing = [];
+    var K1x = key1(), sidx = String(plan && plan.slotId);
     for (var i = 0; i < plan.keys.length; i++){
       var it = plan.keys[i];
+      /* ★KEY1: 保存済みの計画は実行の時点で取り直す。この物語のキーでないもの（旧規則で載った他の物語・形の分からないキー）は
+         消さずに外して数える（deleted にも refused にも入れない）。 */
+      if (K1x && it && String(it.key) !== 'chr6_slot_' + sidx && !K1x.belongs(String(it.key), sidx)){ key1Dropped++; continue; }
       /* fix594 と同じ: もう無いキーは成功扱い。ただし「物理削除した」とは別に数える(fix595)。 */
       if (lsg(it.key) == null){ deleted.push(it.key); alreadyMissing.push(it.key); continue; }
       var r = null;
@@ -604,6 +611,7 @@
     /* 実機で理由を読むための口（どれも読むだけ） */
     log: function(){ return LOG.slice(); },
     runs: readRuns,
+    key1Dropped: function(){ return key1Dropped; },   /* ★KEY1: 実行時に計画から外したキーの数 */
     /* テスト専用の内部露出（本番コードからは使わない） */
     _planKeys: function(slotId){ return planKeys(String(slotId), dep()); },
     _precheck: function(slotId, opts){ return precheck(slotId, opts, dep()); },

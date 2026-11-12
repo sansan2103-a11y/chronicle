@@ -416,10 +416,20 @@
     try { return executePlanInner(plan, d); }
     finally { clearLdrExecProof(); }
   }
+  /* ★KEY1 (GPT #127-SG Q10): 持ち主の判定を完全一致へ。居ない・kill（v292DfixKEY1Off='1'）なら今日のまま。 */
+  function key1(){ try { var K = window.__v292DfixKEY1; return (K && typeof K.enabled === 'function' && K.enabled()) ? K : null; } catch(e){ return null; } }
   function executePlanInner(plan, d){
     var deleted = [], refused = [];
+    var K1x = key1(), sidx = String(plan && plan.slotId);
     for (var i = 0; i < plan.keys.length; i++){
       var it = plan.keys[i];
+      /* ★KEY1: 保存済みの計画（旧規則で作られたもの）は実行の時点で取り直す。この物語のキー
+         （chr6_slot_<id> か既知 family で id が丸ごと一致）でないものは消さない。計画からは外れたものとして
+         数えるだけ（deleted にも refused にも入れない＝この計画は残りのキーだけで完了できる）。 */
+      if (K1x && it && String(it.key) !== 'chr6_slot_' + sidx && !K1x.belongs(String(it.key), sidx)){
+        stats.key1DroppedPlanned = (stats.key1DroppedPlanned || 0) + 1;
+        continue;
+      }
       /* ★fix594: **もう存在しないキーは成功扱い**にする。
          2026-07-27 の実機で踏んだ: 物理削除が済んだ後も保留(pending)が残っていると、
          次の resumePending が「存在しないキー」をゲートへ渡し、ゲートが拒否 →
@@ -764,6 +774,12 @@
       if (!it || !it.key) return { ok:false, why:'plan-key-shape' };
       if (!durKeys[String(it.key)]) return { ok:false, why:'plan-key-not-in-durable-pending:' + it.key };
       /* exact key は必ず自 slot に属していること（他 slot へ展開しない） */
+      /* ★KEY1: 「含む」ではなく完全一致（chr6_slot_<id> か既知 family で id が丸ごと一致）。
+         含むだけの key（旧規則で載った他の物語・形の分からない key）では計画全体を止めず、数えて先へ進む（実行側が消さずに外す）。 */
+      var K1v = key1();
+      if (K1v){
+        if (String(it.key) !== 'chr6_slot_' + sid && !K1v.belongs(String(it.key), sid)){ stats.key1DroppedRecovery = (stats.key1DroppedRecovery || 0) + 1; continue; }   /* 実行側（executePlanInner）が消さずに外す */
+      } else
       if (String(it.key).indexOf(sid) < 0) return { ok:false, why:'plan-key-foreign-slot:' + it.key };
     }
     return { ok:true, durable: dur };

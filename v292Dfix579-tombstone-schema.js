@@ -153,15 +153,20 @@
   /* 「このキーは、墓標が立っているスロットのものか？」を返す。
      取り込み側がこれを見て**書き戻さない**ようにするのが次段。
      ★引用符付きキー chr6_v292Dfix54_genderMap_"<id>" も弾けるよう、部分一致で判定する。 */
+  /* ★KEY1 (GPT #127-SG Q10): 居ない・kill（v292DfixKEY1Off='1'）なら今日の部分一致のまま。 */
+  function key1(){ try { var K = window.__v292DfixKEY1; return (K && typeof K.enabled === 'function' && K.enabled()) ? K : null; } catch(e){ return null; } }
   function isBlockedByTombstone(key, meta){
     var k = String(key == null ? '' : key);
     if (!k) return null;
     var tombs = tombstonesOf(meta);
     var ids = Object.keys(tombs);
+    var K1 = key1();
     for (var i = 0; i < ids.length; i++){
       var id = ids[i];
       if (k === 'chr6_slot_' + id) return { blocked: true, slotId: id, kind: 'story', tombstone: tombs[id] };
-      if (k.indexOf(id) >= 0)      return { blocked: true, slotId: id, kind: 'side-store', tombstone: tombs[id] };
+      /* ★KEY1: 遮断は id が「丸ごと 1 語」で現れるキーだけ（接頭辞が同じ別の物語・シナリオを巻き込まない）。
+         形の分からないキーも 1 語で現れれば遮断する＝遮断の範囲は接頭辞の衝突分だけ狭まる。 */
+      if (K1 ? K1.mentions(k, id) : k.indexOf(id) >= 0) return { blocked: true, slotId: id, kind: 'side-store', tombstone: tombs[id] };
     }
     return { blocked: false, slotId: null, kind: null, tombstone: null };
   }

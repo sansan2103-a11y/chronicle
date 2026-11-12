@@ -74,7 +74,9 @@
     for (var i = 0; i < ts.length; i++) if (ts[i].id === '*' || id === '*' || ts[i].id === id) return true;
     return false;
   }
-  function keyOf(k, id){ k = String(k); if (id === 'chr6') return k === 'chr6' || /_slot_chr6$|genderMap_"?chr6"?$/.test(k); return k.indexOf(id) >= 0; }
+  /* ★KEY1 (GPT #127-SG Q10): 停止した物語のキーは id が「丸ごと 1 語」で現れるものだけ（接頭辞が同じ別の物語を止めない）。kill v292DfixKEY1Off='1' / 未読込 = 今日の部分一致 */
+  function key1(){ try { var K = window.__v292DfixKEY1; return (K && typeof K.enabled === 'function' && K.enabled()) ? K : null; } catch(e){ return null; } }
+  function keyOf(k, id){ k = String(k); if (id === 'chr6') return k === 'chr6' || /_slot_chr6$|genderMap_"?chr6"?$/.test(k); var K1 = key1(); return K1 ? K1.mentions(k, id) : k.indexOf(id) >= 0; }
   function isSave(u){
     try { var s = (typeof u === 'string') ? u : (u && typeof u.url === 'string') ? u.url : String(u); s = s.split('#')[0].split('?')[0]; return /\/save$/.test(s); } catch(e){ return true; }
   }
@@ -170,7 +172,8 @@
   function fp(v){ if (v === null || v === undefined) return 'null'; v = String(v); return v.length + ':' + h32(v, 2166136261) + h32(v, 0x9747b28c); }
   function isStateKey(k, id){
     if (id === 'chr6') return k === 'chr6' || k === 'v292Dfix77States' || k === 'v292Dfix277Quasi' || /^(v292Dfix77States|v292Dfix277Quasi).*_slot_chr6$/.test(k);
-    return k === 'chr6_slot_' + id || (/^(v292Dfix77States|v292Dfix277Quasi)/.test(k) && k.indexOf(id) >= 0);
+    var K1 = key1();
+    return k === 'chr6_slot_' + id || (/^(v292Dfix77States|v292Dfix277Quasi)/.test(k) && (K1 ? K1.mentions(k, id) : k.indexOf(id) >= 0));
   }
   /* その物語の本文・state・準登録台帳のキーの指紋（中身は持たない） */
   function stateFp(id){ var o = {}; try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && isStateKey(k, id)) o[k] = fp(localStorage.getItem(k)); } } catch(e){ return null; } return o; }
