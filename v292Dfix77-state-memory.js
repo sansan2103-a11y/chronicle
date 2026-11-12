@@ -316,6 +316,167 @@
     return m ? m[1].trim() : '';
   }
 
+  /* ★STATEQ1（laneQUALB・2026-11-12・GPT #127-SG §D の D2・D3・Local 候補・未出荷）
+     <state> の取り込みの入口を 2 つの鍵で直す。保存の形（fix77 / fix190 の store の項目・キー）は 1 つも変えない。
+     ■PH1（D2・kill: localStorage v292DfixPH1Off='1' で従来どおり）
+       値が「埋まっていない型の文字」そのもの、または含むときは、その項目を保存しない（前の値を残す）:
+         #NAME# 型（#英字#）・{主人公} 型（{ } で囲んだ短い語）・記号だけ（# … ・ - 等）・
+         sys の書式の説明文をそのまま写した値（「今この瞬間の身体」「今の感情」…）・who="名前" 等。
+       状態ブロック（fix192 stateBlock・fix190 buildBlock）も同じ判定の値を載せない（過去に保存された値を含む・保存値は触らない）。
+     ■SREP1（D3・kill: localStorage v292DfixSREP1Off='1' で従来どおり＝fix938＋attr）
+       <state> の中を左から読み、意味を推測せずに戻せる書式の崩れだけを戻す（項目ごと）:
+         R1 全角引用符で囲んだ値  key=“値” / key=”値” / key=“値"   （中にもう 1 つ全角引用符があれば戻さない）
+         R2 コロンの区切り        key:"値" / key："値"
+         R3 引用符つきのキー      "key"="値"
+         R4 開きの引用符の抜け    key=値"  （閉じの " の直後が空白・/・> で、値に = と " が無いときだけ）
+         R5 = の前後の空白        key= "値"（従来も通っていた）
+       戻さず「この回は更新しない」にするもの（その項目だけ）:
+         None / null / undefined / N/A（引用の有無を問わず）・空の値・キーの崩れ（fromだ= 等の未知のキー）・
+         同じキーが 2 回・閉じの無い値・引用符の無い値・中に全角引用符が残る値。
+       who は戻さない（fix938 と同じ。who が正規の who="…" で読めない tag は丸ごと取り込まない）。
+       足りない項目は作らない（からだ が無ければ からだ は前の値のまま）。
+       ターンごとの記録（画面のメモリだけ・保存しない・プレイヤーには見せない）:
+         window.__v292DfixSTATEQ1.last() … { turn, tags, chars: { 名前: { upd:[項目], rej:[{k,why}], rep:[{k,kind}] } }, tagRej:[…] }
+         fieldTurn(名前, 項目) … その項目を最後に受け取ったターン（同じ値の書き直しも「受け取った」に数える）。
+       fix192 STATEAGE1 と fix851 POSE1 がこの記録で「この回に書き直されたか」を見る。 */
+  var SQ1_KEYS = ['からだ','こころ','本能','目的','傷','関係','未解決'];
+  function offPH1(){ try { return localStorage.getItem('v292DfixPH1Off') === '1'; } catch(e){ return true; } }
+  function offSREP1(){ try { return localStorage.getItem('v292DfixSREP1Off') === '1'; } catch(e){ return true; } }
+  var PH1_TPL = ['名前','登録名','キャラ名','キャラクター名','今この瞬間の身体','今の感情','体が今したいこと','今この場面で本人が望む小さなこと',
+                 '負傷した瞬間だけ記入・治るまで保持','主人公や他者への今の関係','抱えた感情の負債'];
+  var PH1_TOKEN = /#[A-Za-z_][A-Za-z0-9_]{1,24}#|[{｛][^{}｛｝\s]{1,16}[}｝]|\$\{[^}]{0,24}\}|__[A-Z][A-Z0-9_]{1,20}__|\[(?:名前|キャラ名|登録名|NAME|name|PLACEHOLDER)\]/;
+  var PH1_SYMBOLS = /^[#＃\s　…‥.．。、,，・\-－—―~〜*＊?？!！_]+$/;
+  function isPlaceholder(v){
+    var x = String(v == null ? '' : v).trim();
+    if (!x) return false;
+    if (PH1_SYMBOLS.test(x)) return true;
+    if (PH1_TOKEN.test(x)) return true;
+    return PH1_TPL.indexOf(x) >= 0;
+  }
+  function phWho(w){ var x = String(w == null ? '' : w).trim(); return !!x && (isPlaceholder(x) || /^(NAME|name|who|WHO)$/.test(x)); }
+  var SQ1_NULL = /^(none|null|undefined|nil|n\/a|nan)$/i;
+  /* 1 つの tag を読む。戻り値の fields は「この回に受け取る値」だけ（空・null・崩れは入らない）。 */
+  function sq1Parse(tag){
+    var t = String(tag == null ? '' : tag);
+    var out = { who: '', fields: {}, rej: [], rep: [], tagRej: '' };
+    var mw = t.match(/who\s*=\s*"([^"]*)"/);
+    var who = mw ? mw[1].trim() : '';
+    if (!who){ out.tagRej = /who/.test(t) ? 'who-broken' : 'no-who'; return out; }
+    out.who = who;
+    var body = t.replace(/^<state\b/, '').replace(/\/?>\s*$/, '');
+    var n = body.length, i = 0, seen = {};
+    function isSp(c){ return c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '　' || c === ',' || c === '、' || c === '，'; }
+    function bnd(j){ if (j >= n) return true; var c = body.charAt(j); return isSp(c) || c === '/' || c === '>'; }
+    /* 次の「キー＋区切り」の位置（値の終わりの手がかり）。なければ n */
+    function nextKeyAt(j){
+      var re = /[\s　,、，"“”]["“”]?(?:からだ|こころ|本能|目的|傷|関係|未解決|who)["“”]?\s*[=:：]/g; re.lastIndex = Math.max(0, j - 1);
+      var m = re.exec(body); return m ? m.index + 1 : n;
+    }
+    while (i < n){
+      while (i < n && isSp(body.charAt(i))) i++;
+      if (i >= n) break;
+      /* key */
+      var qk = false, k0 = i;
+      if ('"“”'.indexOf(body.charAt(i)) >= 0){ qk = true; i++; }
+      var ks = i;
+      while (i < n && !/[\s　"“”=:：<>\/]/.test(body.charAt(i))) i++;
+      var key = body.slice(ks, i);
+      if (qk && '"“”'.indexOf(body.charAt(i)) >= 0) i++;
+      var j = i; while (j < n && (body.charAt(j) === ' ' || body.charAt(j) === '　')) j++;
+      var sep = body.charAt(j);
+      if (!key || '=:：'.indexOf(sep) < 0){ i = Math.max(i, j) + 1; continue; }   /* キーでない断片は読み飛ばす */
+      i = j + 1;
+      while (i < n && (body.charAt(i) === ' ' || body.charAt(i) === '　')) i++;
+      /* value */
+      var c = body.charAt(i), val = null, kind = '', why = '';
+      if (c === '"'){
+        var e = body.indexOf('"', i + 1);
+        if (e < 0){ why = 'unterminated'; i = n; }
+        else { val = body.slice(i + 1, e); i = e + 1; if (sep !== '=') kind = 'colon-sep'; }
+      } else if (c === '“' || c === '”'){
+        var stop = nextKeyAt(i + 1), seg = body.slice(i + 1, stop).replace(/[\s　]+$/, '');
+        var last = seg.charAt(seg.length - 1);
+        if (seg.length && '“”"'.indexOf(last) >= 0){
+          var inner = seg.slice(0, -1);
+          if (/[“”"]/.test(inner)){ why = 'ambiguous-quotes'; }
+          else { val = inner; kind = 'fullwidth-quote'; }
+        } else why = 'unterminated';
+        i = stop;
+      } else {
+        var e2 = body.indexOf('"', i), ws = i; while (ws < n && !isSp(body.charAt(ws)) && body.charAt(ws) !== '/' && body.charAt(ws) !== '>') ws++;
+        var raw0;
+        if (e2 >= 0 && e2 <= nextKeyAt(i) && bnd(e2 + 1) && !/[=“”]/.test(body.slice(i, e2))){ raw0 = body.slice(i, e2); i = e2 + 1; kind = 'missing-open-quote'; }
+        else { raw0 = body.slice(i, ws); i = ws; why = 'unquoted'; }
+        if (SQ1_NULL.test(raw0.trim())){ why = 'null-literal'; kind = ''; }
+        else if (!why) val = raw0;
+      }
+      if (qk && !kind && !why) kind = 'quoted-key';
+      else if (qk && kind) kind = 'quoted-key+' + kind;
+      if (key === 'who') continue;
+      if (SQ1_KEYS.indexOf(key) < 0){ out.rej.push({ k: key.slice(0, 12), why: 'unknown-key' }); continue; }
+      if (seen[key]){ out.rej.push({ k: key, why: 'dup-key' }); delete out.fields[key]; seen[key]++; continue; }
+      seen[key] = 1;
+      if (why){ out.rej.push({ k: key, why: why }); continue; }
+      val = String(val).trim();
+      if (!val){ out.rej.push({ k: key, why: 'empty' }); continue; }
+      if (SQ1_NULL.test(val)){ out.rej.push({ k: key, why: 'null-literal' }); continue; }
+      out.fields[key] = val;
+      if (kind) out.rep.push({ k: key, kind: kind });
+    }
+    return out;
+  }
+  /* PH1: 受け取る値から型の文字を外す（SREP1 の有無と独立） */
+  function ph1Filter(who, fields, rej){
+    if (offPH1()) return fields;
+    Object.keys(fields).forEach(function(k){ if (isPlaceholder(fields[k])){ rej.push({ k: k, why: 'placeholder' }); delete fields[k]; } });
+    return fields;
+  }
+  var _sq1 = { cache: { raw: null, res: null }, ring: [], ft: {}, sk: undefined, stats: { tags: 0, repaired: 0, fieldRej: 0, tagRej: 0, ph: 0 } };
+  function sq1Sk(){ var sk = null; try { sk = window.__chronicleDocumentStoryKey || null; } catch(e){} if (sk !== _sq1.sk){ _sq1.sk = sk; _sq1.ft = {}; _sq1.ring = []; } }
+  /* 応答 1 つ分を読む（fix77 と fix190 が同じ結果を使う・同じ raw は 1 回だけ数える） */
+  function sq1ParseRaw(raw){
+    var src = String(raw == null ? '' : raw), ck = (offPH1() ? '0' : '1') + src;
+    if (_sq1.cache.raw === ck && _sq1.cache.res) return _sq1.cache.res;
+    var re = /<state\b[^>]*?\/?>/g, m, list = [];
+    while ((m = re.exec(src)) !== null){
+      var p = sq1Parse(m[0]);
+      if (p.who && phWho(p.who) && !offPH1()){ p.tagRej = 'who-placeholder'; p.who = ''; }
+      if (p.who) ph1Filter(p.who, p.fields, p.rej);
+      list.push(p);
+    }
+    _sq1.cache = { raw: ck, res: list };
+    return list;
+  }
+  function sq1Record(list, turn, st){
+    try {
+      sq1Sk();
+      var rec = { turn: turn, tags: list.length, chars: {}, tagRej: [] };
+      list.forEach(function(p){
+        _sq1.stats.tags++;
+        if (!p.who){ rec.tagRej.push(p.tagRej || 'no-who'); _sq1.stats.tagRej++; return; }
+        var c = rec.chars[p.who] || (rec.chars[p.who] = { upd: [], rej: [], rep: [] });
+        Object.keys(p.fields).forEach(function(k){ if (c.upd.indexOf(k) < 0) c.upd.push(k); var ft = _sq1.ft[p.who] || (_sq1.ft[p.who] = {}); ft[k] = turn; });
+        p.rej.forEach(function(r){ c.rej.push(r); _sq1.stats.fieldRej++; if (r.why === 'placeholder') _sq1.stats.ph++; });
+        p.rep.forEach(function(r){ c.rep.push(r); _sq1.stats.repaired++; });
+      });
+      /* 書かれなかった人（store にいる人）: 理由だけ残す */
+      rec.notUpdated = {};
+      try { Object.keys(st || {}).forEach(function(nm){ if (!rec.chars[nm]) rec.notUpdated[nm] = list.length ? 'no-tag' : 'no-state-output'; }); } catch(_n){}
+      _sq1.ring.push(rec); if (_sq1.ring.length > 12) _sq1.ring.shift();
+      return rec;
+    } catch(e){ return null; }
+  }
+  try {
+    window.__v292DfixSTATEQ1 = {
+      v: 1, offPH1: offPH1, offSREP1: offSREP1, isPlaceholder: isPlaceholder, phWho: phWho, parseTag: sq1Parse, parseRaw: sq1ParseRaw,
+      last: function(){ return _sq1.ring.length ? JSON.parse(JSON.stringify(_sq1.ring[_sq1.ring.length - 1])) : null; },
+      ring: function(){ return JSON.parse(JSON.stringify(_sq1.ring)); },
+      fieldTurn: function(who, k){ if (offSREP1()) return null; sq1Sk(); var f = _sq1.ft[who]; return (f && typeof f[k] === 'number') ? f[k] : null; },
+      stats: function(){ return JSON.parse(JSON.stringify(_sq1.stats)); },
+      _reset: function(){ _sq1.cache = { raw: null, res: null }; _sq1.ring = []; _sq1.ft = {}; }
+    };
+  } catch(_sq){}
+
   // ---- (capture+strip) parseExtension: narrative 中の <state> を拾って保存、本文から除去 ----
   /* ★★fix748(Phase C / C7a = Class D): captureState は LLM 応答から <state> を回収して
      v292Dfix77States_slot_ へ persist する。raw を保存していないので、この write を失うと
@@ -348,17 +509,23 @@
       //   fix190(傷/関係/未解決)と同方式のraw読みなら上流の除去に影響されない。
       var src = (ctx && typeof ctx.raw === 'string' && ctx.raw) ? ctx.raw : plan.narrative.join('\n');
       re.lastIndex = 0;
+      var _sqOn = !offSREP1(), _sqList = _sqOn ? sq1ParseRaw(src) : null, _sqI = 0;   /* ★STATEQ1 SREP1 */
+      if (_sqOn) sq1Record(_sqList, (function(){ var st=getS77(); return (st&&st.turns)?st.turns.length:0; })(), store);
       while ((m = re.exec(src)) !== null){
-        var tag = norm938(m[0]);
-        var who = attr(tag,'who');
+        var _sqP = _sqOn ? _sqList[_sqI++] : null;
+        var tag = _sqOn ? '' : norm938(m[0]);
+        var who = _sqOn ? (_sqP ? _sqP.who : '') : attr(tag,'who');
+        if (!_sqOn && who && !offPH1() && phWho(who)) who = '';   /* ★STATEQ1 PH1: who="名前" 等は人物として保存しない */
         if (who && window.__v292Dfix961 && window.__v292Dfix961.hold(who, store, 'fix77')) who = '';   /* ★fix961 */
         if (who){
           var cur = store[who] || {};
-          var ka = attr(tag,'からだ'), ko = attr(tag,'こころ'), ho = attr(tag,'本能');
+          var _f = _sqOn ? _sqP.fields : null;
+          var ka = _sqOn ? (_f['からだ'] || '') : attr(tag,'からだ'), ko = _sqOn ? (_f['こころ'] || '') : attr(tag,'こころ'), ho = _sqOn ? (_f['本能'] || '') : attr(tag,'本能');
+          if (!_sqOn && !offPH1()){ if (isPlaceholder(ka)) ka = ''; if (isPlaceholder(ko)) ko = ''; if (isPlaceholder(ho)) ho = ''; }   /* ★STATEQ1 PH1 */
           if (ka) cur.karada = ka;
           if (ko) cur.kokoro = ko;
           if (ho) cur.honno = ho;
-          var mo = attr(tag,'目的'); if (mo) cur.mokuteki = mo; /* v292Dfix223b: いまの目的(瞬間・毎ターン更新可) */
+          var mo = _sqOn ? (_f['目的'] || '') : attr(tag,'目的'); if (!_sqOn && !offPH1() && isPlaceholder(mo)) mo = ''; if (mo) cur.mokuteki = mo; /* v292Dfix223b: いまの目的(瞬間・毎ターン更新可) */
           cur.turn = (function(){ var st=getS77(); return (st&&st.turns)?st.turns.length:0; })();   /* ★fix539 */
           store[who] = cur;
           found++;

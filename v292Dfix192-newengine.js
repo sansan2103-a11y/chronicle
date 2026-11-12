@@ -165,14 +165,31 @@
       return { cur: S.turns.length };
     } catch(e){ return null; }
   }
+  /* ★STATEQ1 SREP1（laneQUALB・kill v292DfixSREP1Off='1' で従来）: fix77 のターンごとの記録で、その項目が
+     「同じ値のまま書き直された」と分かるときは、そのターンを最新の更新として数える（記録が無い＝読込直後は従来どおり）。 */
+  var AGE1_FK = { ka: 'からだ', ko: 'こころ', ho: '本能', mo: '目的', kn: '関係', mi: '未解決' };
+  function age1Ft(n, f){ try { var Q = window.__v292DfixSTATEQ1; if (!Q || typeof Q.fieldTurn !== 'function' || !AGE1_FK[f]) return null; return Q.fieldTurn(n, AGE1_FK[f]); } catch(e){ return null; } }
   function age1Of(ac, n, f, v, et){   /* 戻り値: 経過ターン数（1 = 直前のターンで更新）。不明は 0 */
     if (!ac || !v || typeof et !== 'number') return 0;
     var mn = _age1.m[n] || (_age1.m[n] = {}), r = mn[f];
     if (!r || r.v !== v){ r = mn[f] = { v: v, t: et }; }
+    var ft = age1Ft(n, f); if (typeof ft === 'number' && ft > r.t && ft <= et) r.t = ft;   /* ★STATEQ1 SREP1 */
     var t = Math.min(r.t, et);
     return ac.cur - t;
   }
-  try { window.__v292DfixSTATEAGE1 = { v: 1, off: offAGE1, status: function(){ return { off: offAGE1(), names: Object.keys(_age1.m).length }; } }; } catch(_a1){}
+  /* 読むだけ（記録を変えない）: fix851 POSE1 が状態ブロックと同じ数え方で からだ の経過を知るため */
+  function age1Peek(n, f, v, et){
+    try {
+      if (offAGE1() || !v || typeof et !== 'number') return null;
+      var S = getS(); if (!S || !Array.isArray(S.turns)) return null;
+      var sk = null; try { sk = window.__chronicleDocumentStoryKey || null; } catch(_k){}
+      var r = (sk === _age1.sk && _age1.m[n]) ? _age1.m[n][f] : null;
+      var t0 = (r && r.v === v) ? r.t : et;
+      var ft = age1Ft(n, f); if (typeof ft === 'number' && ft > t0 && ft <= et) t0 = ft;
+      return S.turns.length - Math.min(t0, et);
+    } catch(e){ return null; }
+  }
+  try { window.__v292DfixSTATEAGE1 = { v: 1, off: offAGE1, peek: age1Peek, status: function(){ return { off: offAGE1(), names: Object.keys(_age1.m).length }; } }; } catch(_a1){}
   /* ★STATE2（laneSCENE1・2026-11-11・kill: localStorage v292DfixSTATE2Off='1' で従来と送信バイト同一・毎回評価）:
      laneFABLE1 #9: T8 の <state> で AI が無傷の主人公に 傷="負傷している" を付け、以後「傷はそのまま引き継ぐ」で毎回送られ、AI も毎回書き戻した。
        ・傷の値が「負傷している／怪我をしている／傷あり」のように部位も原因も無い一般語だけなら、状態ブロックに載せない（保存値・store は触らない）。
@@ -206,6 +223,8 @@
         var ka=clean223(s.karada||s['からだ']), ko=clean223(s.kokoro||s['こころ']), ho=clean223(s.honno||s['本能']);
         var ki=clean223(s.kizu||s['傷']), kn=clean223(s.kankei||s['関係']), mi=clean223(s.mikaiketsu||s['未解決']);
         var mo=clean223(s.mokuteki||s['目的']); /* v292Dfix223b */
+        try { var Q1 = window.__v292DfixSTATEQ1; if (!legacyStore && Q1 && !Q1.offPH1()){ var P1 = Q1.isPlaceholder;   /* ★STATEQ1 PH1: 型の文字の値は載せない（保存値はそのまま） */
+          if(P1(ka)) ka=''; if(P1(ko)) ko=''; if(P1(ho)) ho=''; if(P1(ki)) ki=''; if(P1(kn)) kn=''; if(P1(mi)) mi=''; if(P1(mo)) mo=''; } } catch(_q1){}
         if(isHeroA1(hkA1, n)){ ko=''; ho=''; mo=''; kn=''; mi=''; }   /* ★v292DfixA1 r2: 主人公は 傷・からだ だけ */
         var gp = (!legacyStore && _npg) ? _npg.group(n, s) : '';   /* ★NPRES r-c333: (a)/(b)/(c) */
         if(gp === 'b' || gp === 'c' || (!legacyStore && _npg && _npg.orphan(n, s))){ ka=''; ko=''; ho=''; mo=''; if(gp === 'c') parts.push('別の場所にいる'); else if(gp === 'b' && typeof _npg.note === 'function'){ var nt3 = _npg.note(n, s); if(nt3) parts.push(nt3); } }   /* ★NPRES d3: 通話中の人は「声だけで加われる」の一行（d3Off なら ''） */
@@ -252,6 +271,7 @@
         if (_npg && _npg.out(n, s)) return;   /* ★NPRES */
         var mi=clean223(s.mikaiketsu||s['未解決']), ki=clean223(s.kizu||s['傷']), kn=clean223(s.kankei||s['関係']);
         if (isHeroA1(hkA1, n)){ mi=''; kn=''; }   /* ★v292DfixA1 r2: 主人公の 未解決・関係 は種にしない（傷は従来どおり） */
+        try { var Q1s = window.__v292DfixSTATEQ1; if (Q1s && !Q1s.offPH1()){ if (Q1s.isPlaceholder(mi)) mi=''; if (Q1s.isPlaceholder(ki)) ki=''; if (Q1s.isPlaceholder(kn)) kn=''; } } catch(_q1s){}   /* ★STATEQ1 PH1 */
         if (mi) cands.push({n:n, w:3, t:n+'の未解決「'+mi.slice(0,40)+'」が、今ターンの言動の下に流れている'});
         if (ki && /未治療|重|中/.test(ki)) cands.push({n:n, w:2, t:n+'の傷('+ki.slice(0,30)+')が行動を縛り、周囲の目と空気を変える'});
         if (kn) cands.push({n:n, w:1, t:n+'の関係('+kn.slice(0,40)+')が距離感・口調に出る'});
@@ -543,8 +563,9 @@
         if(_npg && _npg.out(String(n.name), st77[n.name])) return;   /* ★NPRES: 候補から外すだけ */
         if(!off956()){ var sp956=scenePresent956(S.turns||[], String(n.name)); if(!sp956.ok){ (last956=last956||{ at:Date.now(), dropped:[] }).dropped.push({ name:String(n.name), why:sp956.why }); return; } }   /* ★fix956: 候補から外すだけ */
         var s=st77[n.name]||{};
-        var desire=clean223(n.coreDesire||'')||clean223(s.mokuteki||s['目的']||'')||clean223(s.mikaiketsu||s['未解決']||'');
-        var wound=clean223(n.wound||'')||clean223(s.kizu||s['傷']||'');
+        var ph1a=function(v){ try{ var Q=window.__v292DfixSTATEQ1; return (Q && !Q.offPH1() && Q.isPlaceholder(v)) ? '' : v; }catch(_p){ return v; } };   /* ★STATEQ1 PH1 */
+        var desire=clean223(n.coreDesire||'')||ph1a(clean223(s.mokuteki||s['目的']||''))||ph1a(clean223(s.mikaiketsu||s['未解決']||''));
+        var wound=clean223(n.wound||'')||ph1a(clean223(s.kizu||s['傷']||''));
         if(!desire&&!wound) return; /* 原料なし=注入しない */
         cands.push({ name:n.name, p:info.pressure, d:desire, w:wound, r:(i+cur)%(npcs.length||1) });
       });

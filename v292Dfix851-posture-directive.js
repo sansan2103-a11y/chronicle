@@ -123,15 +123,74 @@
     '座り込み':   /座り込|しゃがみ込|膝をつ|膝から崩|へたり込|崩れ落ち/
   };
 
+  /* ★POSE1（laneQUALB・2026-11-12・GPT #127-SG §D D1・Local 候補・未出荷。kill: localStorage v292DfixPOSE1Off='1' で従来とバイト一致）
+     姿勢の正本（何を「いまの姿勢」として【身体状態・正史】に書いてよいか）を決める:
+       ① AI の <state> の からだ（fix77 の実 store）は、【各キャラの現在の状態】で古さの印が付かない間（直前のターンで書かれた）だけ根拠にする。
+          経過の数え方は fix192 STATEAGE1 と同じ（同じ値の書き直しは STATEQ1 の記録で「書かれた」に数える）。
+          印が付く（2 ターン以上前）の からだ は、正史の姿勢の根拠にしない（状態ブロックには従来どおり「N ターン前の様子」の印つきで残る）。
+       ② 直前の本文で本人が主語の文（fix936 が残す部分）は、従来どおり根拠にする。
+       ③ どちらにも無ければ姿勢の行を出さない（新しい中身は作らない）。
+     POSE1b（kill: v292DfixPOSE1bOff='1'）分類の 2 点だけ:
+       ・「倒れた椅子」「倒れる音」のように 倒れ が後ろの名詞を修飾している形は、その人の姿勢にしない。
+       ・膝をつく・膝立ち・片膝 は「座り込み」ではなく「膝をついている」と書く（崩れ落ち・へたり込み・座り込みは従来どおり）。 */
+  function offPOSE1(){ try { return localStorage.getItem('v292DfixPOSE1Off') === '1'; } catch(e){ return true; } }
+  function offPOSE1b(){ try { return offPOSE1() || localStorage.getItem('v292DfixPOSE1bOff') === '1'; } catch(e){ return true; } }
+  var ORDER_B = ['仰向け', 'うつ伏せ', '倒れている', '座り込み', '膝をついている'];
+  var PAT_B = {
+    '仰向け':     PAT['仰向け'],
+    'うつ伏せ':   PAT['うつ伏せ'],
+    '倒れている': /倒れ(て|込|た|る)|這いつくば|床に伏|地面に伏/,
+    '座り込み':   /座り込|しゃがみ込|膝から崩|へたり込|崩れ落ち/,
+    '膝をついている': /膝をつ|膝立ち|片膝を?つ/
+  };
+  var ATTR_FALL = /倒れ(た|る|ている|かけた|かけの)(?=[一-龥々〆ヵヶァ-ヴー])/g;
+  var _p1 = { stale: 0, kept: 0, attr: 0, kneel: 0, shape: 0 };
+
   function classify(karada){
     var t = evidenceOnly(str(karada));
     if (!t) return null;
     /* 体勢移行が同じテキスト内にあるなら、もう不利姿勢ではない */
     if (RECOVERED.test(t) && !RECOVER_NEG.test(t)) return null;
+    if (!offPOSE1b()){
+      var t2 = t.replace(ATTR_FALL, function(){ _p1.attr++; return '〇'; });
+      for (var j = 0; j < ORDER_B.length; j++){
+        if (PAT_B[ORDER_B[j]].test(t2)){ if (ORDER_B[j] === '膝をついている') _p1.kneel++; return ORDER_B[j]; }
+      }
+      return null;
+    }
     for (var i = 0; i < ORDER.length; i++){
       if (PAT[ORDER[i]].test(t)) return ORDER[i];
     }
     return null;   /* fail-closed: 曖昧な姿勢は通常扱い */
+  }
+
+  /* 実 store の からだ の経過ターン（1 = 直前のターンで書かれた）。分からなければ null（＝従来どおり使う） */
+  function karadaAge(n, rk){
+    try {
+      var real = (G.__v292Dfix77Store || {})[n]; if (!real || !rk) return null;
+      var et = (typeof real.turn === 'number') ? real.turn : null;
+      var A = G.__v292DfixSTATEAGE1;
+      if (A && typeof A.peek === 'function' && et !== null){ var a = A.peek(n, 'ka', rk, et); if (typeof a === 'number') return a; }
+      var S = G.__chronicleGetState && G.__chronicleGetState(); if (!S || !Array.isArray(S.turns)) return null;
+      var Q = G.__v292DfixSTATEQ1, ft = (Q && typeof Q.fieldTurn === 'function') ? Q.fieldTurn(n, 'からだ') : null;
+      var t0 = (typeof ft === 'number') ? ft : et; if (t0 === null) return null;
+      return S.turns.length - t0;
+    } catch(e){ return null; }
+  }
+  /* POSE1: 古い からだ を外した根拠の文字列（形が想定外なら従来どおり） */
+  function poseText(n, merged){
+    var full = rrKarada936(n, merged);
+    if (offPOSE1()) return full;
+    try {
+      var real = (G.__v292Dfix77Store || {})[n]; var rk = real ? str(real.karada).trim() : '';
+      if (!rk) return full;
+      var a = karadaAge(n, str(real.karada));
+      if (typeof a !== 'number' || a < 2){ _p1.kept++; return full; }
+      var rk0 = str(real.karada);
+      if (full.indexOf(rk0) !== 0){ _p1.shape++; return full; }   /* 写しが想定外の形（F333a が語を外した等）→ 従来どおり */
+      _p1.stale++;
+      return full.slice(rk0.length).replace(/^。+/, '');
+    } catch(e){ return full; }
   }
 
   function postureMap(states){
@@ -141,7 +200,7 @@
         var st = states[n]; if (!st) return;
         /* 吊られている／拘束は既存の拘束制約の担当。二重化しない。 */
         if (st.suspended || st.restrained) return;
-        var p = classify(rrKarada936(n, st.karada));
+        var p = classify(poseText(n, st.karada));
         if (p){ out[n] = p; any = true; }
       });
     } catch(e){}
@@ -204,6 +263,8 @@
     directive: directive,
     lastText: function(){ return _last; },
     _classify: classify,
+    _poseText: poseText,
+    pose1: function(){ return { off: offPOSE1(), offB: offPOSE1b(), stats: JSON.parse(JSON.stringify(_p1)) }; },
     _evidenceOnly: evidenceOnly
   };
   try { console.log(TAG, 'loaded (on=' + (on() ? '1' : '0') + ')'); } catch(e){}

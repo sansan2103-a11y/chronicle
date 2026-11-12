@@ -3189,11 +3189,18 @@
         if (!raw && plan && Array.isArray(plan.narrative)) raw = plan.narrative.join('\n');
         if (!raw || raw.indexOf('<state') < 0) return plan;
         var st = store(), found = 0, re = /<state\b[^>]*?\/?>/g, m;
+        /* ★STATEQ1（laneQUALB）: SREP1 は fix77 と同じ読み方（v292DfixSREP1Off='1' で従来）。PH1 は型の文字の値を取り込まない（v292DfixPH1Off='1' で従来）。 */
+        var Q1 = null; try { Q1 = window.__v292DfixSTATEQ1 || null; } catch(_q1){}
+        var q1On = !!(Q1 && typeof Q1.parseRaw === 'function' && !Q1.offSREP1()), q1L = q1On ? Q1.parseRaw(raw) : null, q1I = 0;
+        var ph1On = !!(Q1 && typeof Q1.isPlaceholder === 'function' && !Q1.offPH1());
         while ((m = re.exec(raw)) !== null){
-          var tag = norm938_190(m[0]), who = attrOf(tag, 'who'); if (!who) continue;
+          var q1P = q1On ? q1L[q1I++] : null;
+          var tag = q1On ? '' : norm938_190(m[0]), who = q1On ? (q1P ? q1P.who : '') : attrOf(tag, 'who');
+          if (!q1On && who && ph1On && Q1.phWho(who)) who = '';
+          if (!who) continue;
           try { if (window.__v292Dfix961 && window.__v292Dfix961.hold(who, st, 'fix190')) continue; } catch(_961){}   /* ★fix961 */
           var cur = st[who] || {};
-          FIELDS.forEach(function(f){ var v = attrOf(tag, f[0]); if (v && f[1] === 'kizu'){ try { var S2 = window.__v292DfixSTATE2; if (S2 && S2.on() && S2.generic(v)) v = ''; } catch(_s2){} } if (v) cur[f[1]] = v; });  // 該当があった時だけ更新=永続 / ★STATE2（v292DfixSTATE2Off='1' で従来）: 部位も原因も無い 傷="負傷している" 等は取り込まない（判定は fix192）
+          FIELDS.forEach(function(f){ var v = q1On ? (q1P.fields[f[0]] || '') : attrOf(tag, f[0]); if (v && !q1On && ph1On && Q1.isPlaceholder(v)) v = ''; if (v && f[1] === 'kizu'){ try { var S2 = window.__v292DfixSTATE2; if (S2 && S2.on() && S2.generic(v)) v = ''; } catch(_s2){} } if (v) cur[f[1]] = v; });  // 該当があった時だけ更新=永続 / ★STATE2（v292DfixSTATE2Off='1' で従来）: 部位も原因も無い 傷="負傷している" 等は取り込まない（判定は fix192）
           st[who] = cur; found++;
         }
         if (found) persist();
@@ -3222,9 +3229,10 @@
         names.forEach(function(n){
           var s = st[n]; if (!s) return;
           var parts = [];
-          if (s.kizu) parts.push('傷:' + s.kizu);
-          if (s.kankei) parts.push('関係:' + s.kankei);
-          if (s.mikaiketsu) parts.push('未解決:' + s.mikaiketsu);
+          var ph = function(v){ try { var Q = window.__v292DfixSTATEQ1; return !!(Q && !Q.offPH1() && Q.isPlaceholder(v)); } catch(_p){ return false; } };   /* ★STATEQ1 PH1: 型の文字の値は載せない（保存値はそのまま） */
+          if (s.kizu && !ph(s.kizu)) parts.push('傷:' + s.kizu);
+          if (s.kankei && !ph(s.kankei)) parts.push('関係:' + s.kankei);
+          if (s.mikaiketsu && !ph(s.mikaiketsu)) parts.push('未解決:' + s.mikaiketsu);
           if (parts.length) lines.push(n + '｜' + parts.join(' ／ '));
         });
         var cur = lines.length ? (

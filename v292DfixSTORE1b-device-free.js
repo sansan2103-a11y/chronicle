@@ -58,6 +58,23 @@
  *
  * kill: localStorage v292DfixSTORE1Off='1' → 入口を出さない・何もしない（読むのはこのキー 1 本だけ）。
  * 観測: window.__v292DfixSTORE1b.status() / .dryRun()（消さない）
+ *
+ * ■★PURGE1 段階 1（Local prototype・既定 OFF・localStorage v292DfixPURGE1On='1' のときだけ。kill v292DfixPURGE1Off='1'）
+ *   Owner 裁定 2026-11-12「明示的に削除した物語は、復旧できない完全削除を基本仕様にしていい」。STORE1b の関門のうち
+ *   「端末の控えを残す」ためだけにあったもの（S3 本文保持・S4 内容一致・未送信の印・snapshot・その物語だけの控え）を外し、
+ *   この端末に残ったその物語のキーを snapshot と控えまで含めて消す。残すのは meta の墓標だけ（復活を止める根拠）。
+ *   変えないもの: KEY1 の完全一致・同じ実行の /api/auth/me 前後・サーバーの deleted===true（404 は証拠にしない）・
+ *   排他 Lock・開いている/最近開いた・別アカウント・旧 id・HOME を開くだけでは消さない・1 件ずつ・最初の失敗で止める。
+ *   Vault で隠した物語の墓標は、さらに v292DfixPURGE1VaultOn='1' のときだけ「名前だけで消す」（値を 1 回も getItem しない）。
+ *   そのときサーバーの確認は本文を含まない一覧の行（listshadow）だけで行う。
+ *   OFF のときは r2 と 1 バイトも同じ動き（PURGE1 の関数は呼ばれない）。
+ * ■★PURGE1c（GPT #127-SK・段階 1 の QA 条件。既定 OFF のまま）
+ *   ・「未送信なし」: f781g が DIRTY_INTENT / DIRTY_LOCAL / DIVERGED / BOOTSTRAP_HOLD（unsynced）、f911 / f697p / 945_rescue がある
+ *     （stash / journal / rescue。名前の列挙だけで見る）物語は消さない。
+ *   ・題名（Q12）: 本文などを全部消したら、最後の同期の印を消す前に meta の墓標の title / name を '' にし purgedAt を足す（同じ 2 つの Lock の中）。
+ *     墓標の id・deleteOpId・recoverySnapshotId・lifecycleVersion・serverTombstone は変えない。途中で止まれば次の実行が続きを片づける。
+ *   ・保護判定（P0-B）: fix569 → fix562.scopedProtection（名前と凍結した proof だけ）。ほかの物語のキーの値は読まない。
+ *   ・Vault で隠した物語（v292DfixPURGE1VaultOn）はこのレーンでは使わない（OFF のまま。シート・記録に題名を出さない）。
  * ===================================================================== */
 (function (root) {
   'use strict';
@@ -70,6 +87,9 @@
   var OPEN_LOCK = 'chronicle:story-open:', MAT_LOCK = 'chronicle:cc2:materialization:v1';
   var UNSYNCED_STATES = { DIRTY_INTENT: 1, DIRTY_LOCAL: 1, DIVERGED: 1, BOOTSTRAP_HOLD: 1 };
   var NOTICE = 'この端末に保存された控えが消えます。現時点では削除済み物語を一覧へ戻す機能はありません';
+  /* ★PURGE1 */
+  var PURGE_ON = 'v292DfixPURGE1On', PURGE_OFF = 'v292DfixPURGE1Off', PURGE_VAULT = 'v292DfixPURGE1VaultOn', PVERSION = 'PURGE1-s1c';
+  var NOTICE_P = '削除した物語の残りを、この端末から完全に消します。スナップショットと控えも消えます。元に戻せません';
 
   function J(s, d) { try { var v = JSON.parse(s); return v === undefined ? d : v; } catch (e) { return d; } }
   function isArr(a) { return Object.prototype.toString.call(a) === '[object Array]'; }
@@ -378,7 +398,7 @@
       if (idx >= ids.length) { res.ok = true; res.code = 'all-freed'; return res; }
       var id = String(ids[idx++]);
       try { if (onStep) onStep(idx, ids.length); } catch (e) {}
-      return freeOne(id, env, ctx).then(function (x) {
+      return (env.purge === true ? freeOneP : freeOne)(id, env, ctx).then(function (x) {
         if (x && x.ok) { res.done++; res.removed += x.removed; res.chars += x.chars; res.doneIds.push(id); return next(); }
         res.failed = 1; res.failedCode = (x && x.code) || 'threw'; res.partial = (x && x.removed) || 0; res.removed += res.partial; res.chars += (x && x.chars) || 0;
         res.notProcessed = ids.length - idx; res.code = 'stopped';
@@ -386,6 +406,284 @@
       });
     }
     return Promise.resolve().then(next);
+  }
+
+
+  /* ======================================================================
+   * ★PURGE1 段階 1: 削除済み物語の端末の写しを「全部」消す（env.purge === true のときだけ呼ばれる）
+   * ====================================================================== */
+  var BK_PRE = 'chr6_bk_';
+  function bkOwnedBy(k, id) {      /* 控えのキー名に chr6_slot_<id> が丸ごと 1 語で入っている（名前だけで判定・値は読まない） */
+    var i = k.indexOf('chr6_slot_' + id); if (i < 0) return false;
+    var nx = k.charAt(i + 10 + id.length); return !nx || !/[A-Za-z0-9]/.test(nx);
+  }
+  function keysForP(id, env) {
+    var r = { side: [], snapMan: [], snapPart: [], backup: [], body: [], unsent: [], marker: [], refused: 0, backupKept: 0, unknownKept: 0 };
+    var K = env.key1; if (!K || !ID_RE.test(String(id))) return r;
+    var ks = allKeys(env);
+    for (var i = 0; i < ks.length; i++) {
+      var k = ks[i], s = K.storyOf(k);
+      if (s && s.id === id) {
+        if (s.kind === 'vault') { r.refused++; continue; }                     /* chr6_storysess_<id>: 関門（passcode）で止まる。ここに来ても消さない */
+        if (s.kind === 'snapshot') { (k.indexOf('chr6_snap_') === 0 ? r.snapMan : r.snapPart).push(k); continue; }
+        if (s.kind === 'body') r.body.push(k);
+        else if (k === 'v292Dfix402_f781g_' + id) r.marker.push(k);
+        else if (s.kind === 'sync' || s.kind === 'rescue') r.unsent.push(k);   /* f911 / f697p / 945_rescue: 削除した物語の未送信の写し（完全削除では消す） */
+        else r.side.push(k);
+        continue;
+      }
+      if (!K.mentions(k, id)) continue;
+      if (k.indexOf(BK_PRE) === 0 && bkOwnedBy(k, id)) { r.backup.push(k); continue; }
+      if (k.indexOf(BK_PRE) === 0) r.backupKept++; else r.unknownKept++;      /* 形の分からないキーは消さない（KEY1 の規則のまま） */
+    }
+    r.side.sort(); r.snapMan.sort(); r.snapPart.sort(); r.backup.sort(); r.unsent.sort();
+    return r;
+  }
+  /* 消す順: サイド → 本体 → snapshot の目録 → snapshot の部品 → その物語だけの控え → 未送信の写し → 同期の印（最後）。
+     ★本体が先: fix562.liveSlots は「本体がある物語」を生きていると数え、その物語の最良の snapshot / 控えを protectedSet で守る
+       （fix569 tryDeleteExact が 'protected' で断る）。本体を消した後なら、墓標の物語の snapshot / 控えは守られない。
+       途中で止まっても墓標は残り、次の実行は本体なしで残りを続ける（planP は本体の有無を問わない）。 */
+  function purgeListP(kf) { return kf.side.concat(kf.body, kf.snapMan, kf.snapPart, kf.backup, kf.unsent, kf.marker); }
+  function tombRow(id, env) { var m = metaRows(env) || []; for (var i = 0; i < m.length; i++) if (m[i] && String(m[i].id) === id && m[i].deleted === true) return m[i]; return null; }
+  /* ローカルの関門（PURGE1）。{ why, blind }。why = null で通過 */
+  function localBlockP(id, env) {
+    id = String(id);
+    if (!ID_RE.test(id)) return { why: 'id-shape' };                     /* a/b/c/default/chr6（値を読まない） */
+    if (PROTECT[id] === 1) return { why: 'protected' };
+    var vb = vaultBlock(id, env), blind = false;
+    if (vb === 'vault' && env.purgeVault === true) blind = true;            /* 裁定 2: 隠した物語の墓標は名前だけで消す（passcode・判定不能は止めたまま） */
+    else if (vb) return { why: vb };
+    var meta = metaRows(env); if (!meta) return { why: 'meta-unreadable' };
+    var tomb = 0, live = 0, row = null;
+    for (var i = 0; i < meta.length; i++) { var e = meta[i]; if (!e || String(e.id) !== id) continue; if (e.deleted === true) { tomb++; row = e; } else live++; }
+    if (live) return { why: 'live-row' };
+    if (tomb !== 1) return { why: tomb ? 'dup-tombstone' : 'no-tombstone' };
+    try { if (env.iso2Foreign && env.iso2Foreign(id)) return { why: 'foreign' }; } catch (e3) { return { why: 'foreign-check-threw' }; }
+    var act = g(env, 'chr6_active_slot');
+    if (act != null && (act === id || J(act, null) === id)) return { why: 'active-slot' };
+    var lo = row && row.lastOpenedAt ? Date.parse(row.lastOpenedAt) : 0;
+    if (lo && env.now() - lo < RECENT_OPEN_MS) return { why: 'recently-opened' };
+    var tombAt = (row && typeof row.deletedAt === 'number') ? row.deletedAt : ((row && row.serverTombstone && typeof row.serverTombstone.at === 'number') ? row.serverTombstone.at : 0);
+    if (!blind) {
+      /* ★PURGE1c（GPT #127-SK の QA 条件「未送信なし」）: 未送信の変更が残っている物語は消さない（r2 と同じ状態の一覧）。
+         墓標より後に書かれた印・送信中も止める */
+      var mk = g(env, 'v292Dfix402_f781g_' + id);
+      if (mk != null) {
+        var mo = J(mk, null); if (!mo || typeof mo !== 'object') return { why: 'marker-unreadable' };
+        if (mo.storyId != null && String(mo.storyId) !== id) return { why: 'marker-id-mismatch' };
+        if (UNSYNCED_STATES[String(mo.state || '')] === 1) return { why: 'unsynced' };
+        if (mo.inFlightSave) return { why: 'in-flight' };                     /* いま送っている最中（一時的）。終わってから */
+        if (typeof mo.updatedAt === 'number' && mo.updatedAt > 0 && tombAt > 0 && mo.updatedAt > tombAt) return { why: 'changed-after-delete' };
+      }
+    }
+    /* 未送信の写し（f911 / f697p / 945_rescue）があれば止める。名前の列挙だけで見る（値は読まない） */
+    if (hasKey(env, 'v292Dfix402_f911_' + id)) return { why: 'stash' };
+    if (hasKey(env, 'v292Dfix402_f697p_' + id)) return { why: 'journal' };
+    if (hasKey(env, 'v292Dfix945_rescue_' + id)) return { why: 'rescue' };
+    var cf = g(env, 'v292Dfix587_dl2conflict');
+    if (cf != null) { var co = J(cf, null); if (!co || typeof co !== 'object') return { why: 'conflict-unreadable' }; if (Object.prototype.hasOwnProperty.call(co, id)) return { why: 'conflict' }; }
+    var mt = g(env, 'v292Dfix750_matTxn');
+    if (mt != null) { var to = J(mt, null); if (!to || typeof to !== 'object') return { why: 'mat-journal-unreadable' }; if (String(to.storyId) === id || String(to.slotId) === id) return { why: 'mat-journal' }; }
+    var planOpen = 0, pd = g(env, 'v292Dfix587_pending');
+    if (pd != null) {
+      var pa = J(pd, null); if (!isArr(pa)) return { why: 'pending-unreadable' };
+      for (var p = 0; p < pa.length; p++) { var pl = pa[p]; if (pl && (String(pl.slotId) === id || String(pl.storyId || '') === id) && !(pl.sdTerminal === true)) planOpen++; }
+    }
+    return { why: null, blind: blind, tombAt: tombAt, planOpen: planOpen };   /* 開いた計画は「サーバーで削除済み」と確かめた後なら意味を持たない（数えるだけ） */
+  }
+  function planP(id, env, blind) {
+    var kf = keysForP(id, env), list = purgeListP(kf), vals = null, chars = 0, fullDumpKept = 0;
+    if (blind) {                                                            /* 名前だけ。getItem しない（文字数はキー名の分しか数えない） */
+      kf.backupKept += kf.backup.length; kf.backup = []; list = purgeListP(kf);   /* 控えは中身を見ないと丸ごと控えか分からない → 残す */
+      for (var b = 0; b < list.length; b++) chars += list[b].length;
+    } else {
+      var keep = [];
+      for (var q = 0; q < kf.backup.length; q++) { var bv = J(g(env, kf.backup[q]) || 'null', null); if (bv && typeof bv === 'object' && bv.ls && typeof bv.ls === 'object') { keep.push(kf.backup[q]); fullDumpKept++; } }
+      if (keep.length) { kf.backup = kf.backup.filter(function (x) { return keep.indexOf(x) < 0; }); list = purgeListP(kf); }   /* localStorage 丸ごとの控え（ほかの物語も入っている）は消さない */
+      vals = [];
+      for (var i = 0; i < list.length; i++) { var v = g(env, list[i]); vals.push(v); chars += list[i].length + (v == null ? 0 : v.length); }
+    }
+    return { id: id, keys: list, vals: vals, chars: chars, blind: !!blind, snapshots: kf.snapMan.length, snapParts: kf.snapPart.length, backups: kf.backup.length,
+             unsent: kf.unsent.length, backupKept: kf.backupKept + fullDumpKept, fullDumpKept: fullDumpKept, unknownKept: kf.unknownKept, refused: kf.refused };
+  }
+  function samePlanP(a, b) {
+    if (a.keys.join('\n') !== b.keys.join('\n')) return 'keys-changed';
+    if (a.blind) return null;                                              /* 名前だけ: キーの集合が同じこと */
+    for (var i = 0; i < a.keys.length; i++) if (a.vals[i] !== b.vals[i]) return 'value-changed';
+    return null;
+  }
+  /* サーバー（PURGE1）: 削除済みであることだけ。本文の保持・内容の一致は見ない（完全削除では意味を持たない） */
+  function serverEvalP(id, r) {
+    if (!r || typeof r !== 'object') return { why: 'server-unreachable' };
+    if (r.status === 404) return { why: 'server-404' };
+    if (r.status !== 200) return { why: 'server-unreachable' };
+    var j = r.j || {};
+    if (j.ok !== true) return { why: 'server-not-ok' };
+    if (j.id == null || String(j.id) !== String(id)) return { why: 'server-id-mismatch' };
+    if (j.authority !== 'shadow' && j.authority !== 'canonical') return { why: 'server-authority' };
+    if (j.locked) return { why: 'server-locked' };
+    if (j.deleted !== true) return { why: 'server-live' };
+    if (typeof j.rev !== 'number' || !(j.rev >= 1)) return { why: 'server-rev' };
+    var rec = j.record, b = rec && rec.body;
+    return { why: null, rev: j.rev, authority: j.authority, serverBodyHeld: !!(b && isArr(b.turns) && b.turns.length) };
+  }
+  /* 隠した物語: 本文を含まない一覧の行で確かめる（ctx.serverMeta → { status, row }。row = listshadow の 1 行） */
+  function serverEvalMeta(id, r) {
+    if (!r || typeof r !== 'object' || r.status !== 200) return { why: 'server-unreachable' };
+    var x = r.row;
+    if (!x) return { why: 'vault-server-unconfirmed' };                   /* 施錠中は隠した行が一覧に出ない＝確かめられない */
+    if (String(x.id) !== String(id)) return { why: 'server-id-mismatch' };
+    if (x.authority !== 'shadow' && x.authority !== 'canonical') return { why: 'server-authority' };
+    if (x.locked) return { why: 'server-locked' };
+    if (x.deleted !== true) return { why: 'server-live' };
+    if (typeof x.rev !== 'number' || !(x.rev >= 1)) return { why: 'server-rev' };
+    return { why: null, rev: x.rev, authority: x.authority, serverBodyHeld: null };
+  }
+  function askServer(id, ctx, blind) {
+    if (blind) { if (typeof ctx.serverMeta !== 'function') return Promise.resolve({ why: 'vault-server-unconfirmed' }); return Promise.resolve(ctx.serverMeta(id)).then(function (r) { return serverEvalMeta(id, r); }, function () { return { why: 'server-unreachable' }; }); }
+    return Promise.resolve(ctx.getStory(id)).then(function (r) { return serverEvalP(id, r); }, function () { return { why: 'server-unreachable' }; });
+  }
+  function surveyP(env, ctx) {
+    var rep = { at: env.now(), v: PVERSION, kind: 'survey', purge: true, candidates: 0, eligible: [], skipped: {},
+                totals: { stories: 0, blind: 0, keys: 0, chars: 0, snapshots: 0, backups: 0, unsent: 0, planOpen: 0, noServerBody: 0, backupKept: 0, unknownKept: 0 } };
+    var gb = globalBlock(env);
+    if (gb) { bump(rep.skipped, gb); return Promise.resolve(rep); }
+    var ids = candidates(env), pass = [];
+    rep.candidates = ids.length;
+    for (var i = 0; i < ids.length; i++) { var w = localBlockP(ids[i], env); if (w.why) { bump(rep.skipped, w.why); continue; } pass.push({ id: ids[i], lb: w }); }
+    if (!pass.length) return Promise.resolve(rep);
+    return Promise.resolve(ctx.who()).then(function (a0) {
+      if (!a0) { bump(rep.skipped, 'no-account'); return rep; }
+      var rows = [], chain = Promise.resolve();
+      pass.forEach(function (c) {
+        chain = chain.then(function () {
+          var pl = planP(c.id, env, c.lb.blind);
+          if (!pl.keys.length) { bump(rep.skipped, 'nothing-left'); return; }
+          return askServer(c.id, ctx, c.lb.blind).then(function (se) {
+            if (se.why) { bump(rep.skipped, se.why); return; }
+            return Promise.resolve(ctx.lockHeld(c.id)).then(function (h) {
+              if (h !== false) { bump(rep.skipped, h === true ? 'open-in-tab' : 'locks-unavailable'); return; }
+              rows.push({ id: c.id, title: c.lb.blind ? null : titleOf(c.id, env), blind: pl.blind, keys: pl.keys.length, chars: pl.chars, snapshots: pl.snapshots, backups: pl.backups, unsent: pl.unsent,
+                          planOpen: c.lb.planOpen, serverBodyHeld: se.serverBodyHeld, backupKept: pl.backupKept, unknownKept: pl.unknownKept, serverRev: se.rev, authority: se.authority });
+            });
+          });
+        });
+      });
+      return chain.then(function () { return ctx.who(); }).then(function (a1) {
+        if (!a1 || a1 !== a0) { rep.eligible = []; bump(rep.skipped, 'principal-changed'); return rep; }
+        rep.eligible = rows;
+        rows.forEach(function (x) { var t = rep.totals; t.stories++; if (x.blind) t.blind++; t.keys += x.keys; t.chars += x.chars; t.snapshots += x.snapshots; t.backups += x.backups; t.unsent += x.unsent;
+          if (x.planOpen) t.planOpen++; if (x.serverBodyHeld === false) t.noServerBody++; t.backupKept += x.backupKept; t.unknownKept += x.unknownKept; });
+        return rep;
+      });
+    });
+  }
+  function freeOneP(id, env, ctx) {
+    id = String(id);
+    var out = { ok: false, code: null, id: id, removed: 0, chars: 0, purge: true, blind: false };
+    function fin(code) { out.code = code; return out; }
+    var gb = globalBlock(env); if (gb) return Promise.resolve(fin(gb));
+    var lb = localBlockP(id, env); if (lb.why) return Promise.resolve(fin(lb.why));
+    var blind = out.blind = !!lb.blind;
+    var pl = planP(id, env, blind);
+    if (!pl.keys.length && !tombTitled(id, env)) return Promise.resolve(fin('nothing-left'));   /* 題名だけ残っている（前回が題名を消す直前で止まった）なら、同じ関門で題名だけ消す */
+    function syncDelete(a0, a2, se, issuedAt) {
+      var gb3 = globalBlock(env); if (gb3) return fin(gb3);
+      var lb3 = localBlockP(id, env); if (lb3.why) return fin(lb3.why); if (!!lb3.blind !== blind) return fin('vault-state-changed');
+      var now3 = planP(id, env, blind), sp3 = samePlanP(pl, now3); if (sp3) return fin(sp3);
+      var I = env.inv, G = env.gate;
+      if (!I || typeof I.deletePolicy !== 'function' || typeof I.purge1Arm !== 'function' || typeof I.purge1Disarm !== 'function' || typeof I._hash !== 'function') return fin('policy-unavailable');
+      if (!G || typeof G.tryDeleteExact !== 'function') return fin('gate-unavailable');
+      var proof = { v: 1, kind: 'PURGE1', mode: blind ? 'blind' : 'full', runId: 'p1-' + issuedAt + '-' + (++runSeq), storyId: id, accountId: a0, accountIdAfter: a2,
+                    serverRev: se.rev, serverDeleted: true, authority: se.authority, issuedAt: issuedAt,
+                    keys: pl.keys.map(function (k, j) { return blind ? { key: k } : { key: k, bytes: pl.vals[j].length, hash: I._hash(pl.vals[j]), value: pl.vals[j] }; }) };
+      var armed = I.purge1Arm(proof);
+      if (!armed) return fin('arm-refused');
+      var intent = blind ? 'purge-blind' : 'purge-full';
+      /* ★PURGE1c（#127-SK Q12）: 本文などが全部消えたら、最後の同期の印を消す前に meta の墓標の題名を '' にする（同じ 2 つの Lock の中）。
+         途中で止まっても、印が残る＝次の実行が続きと題名を片づける。印が無い物語はループの最後に消す */
+      var markerK = 'v292Dfix402_f781g_' + id, lastQ = pl.keys.length - 1, tb = null;
+      function titleStep() { if (tb == null) { tb = blankTomb(id, env); out.title = tb; } return tb === 'blanked' || tb === 'already'; }
+      try {
+        for (var q = 0; q < pl.keys.length; q++) {
+          var k = pl.keys[q], cur;
+          if (q === lastQ && k === markerK && !titleStep()) return fin('title-write-failed');
+          if (blind) {
+            if (!hasKey(env, k)) continue;                                  /* 名前の列挙だけで在るかを見る（getItem しない） */
+            var polB = I.deletePolicy({ key: k, intent: intent, purge1Proof: armed });
+            if (!polB || polB.allow !== true || polB.code !== 'purge-verified-blind') { out.policyWhy = polB && (polB.purgeWhy || polB.code); return fin('policy-refused'); }
+            var bb = polB.binding || {};
+            if (bb.key !== k || bb.storyId !== id || bb.runId !== armed.runId) return fin('binding-mismatch');
+            var rb = null; try { rb = G.tryDeleteExact({ key: k, expectedBytes: null, expectedHash: null, intent: intent, path: 'PURGE1', reason: 'purge-blind story=' + id }); } catch (eB) { rb = null; }
+            if (!rb || rb.ok !== true || rb.deleted !== true || hasKey(env, k)) { out.gateCode = rb && rb.code; return fin('gate-refused'); }
+            out.removed++; out.chars += k.length;
+            continue;
+          }
+          cur = g(env, k);
+          if (cur == null) continue;
+          if (cur !== pl.vals[q]) return fin('value-changed-mid');
+          var pol = I.deletePolicy({ key: k, value: cur, intent: intent, purge1Proof: armed });
+          if (!pol || pol.allow !== true || pol.code !== 'purge-verified-full') { out.policyWhy = pol && (pol.purgeWhy || pol.code); return fin('policy-refused'); }
+          var b = pol.binding || {};
+          if (b.key !== k || b.bytes !== cur.length || b.hash !== I._hash(cur) || b.storyId !== id || b.runId !== armed.runId) return fin('binding-mismatch');
+          var rr = null; try { rr = G.tryDeleteExact({ key: k, expectedBytes: cur.length, expectedHash: b.hash, intent: intent, path: 'PURGE1', reason: 'purge-full story=' + id }); } catch (eG) { rr = null; }
+          if (!rr || rr.ok !== true || rr.deleted !== true || g(env, k) != null) { out.gateCode = rr && rr.code; return fin('gate-refused'); }
+          out.removed++; out.chars += k.length + cur.length;
+        }
+        if (!titleStep()) return fin('title-write-failed');
+      } finally { try { I.purge1Disarm(); } catch (eD) {} }
+      out.ok = true; out.snapshots = pl.snapshots; out.backups = pl.backups; out.unsent = pl.unsent; out.backupKept = pl.backupKept; out.unknownKept = pl.unknownKept; out.planOpen = lb.planOpen;
+      return fin('purged');
+    }
+    function underOpenLock(a0) {
+      return Promise.resolve(ctx.who()).then(function (a1) {
+        if (!a1 || a1 !== a0) return fin('principal-changed');
+        var gb2 = globalBlock(env); if (gb2) return fin(gb2);
+        var lb2 = localBlockP(id, env); if (lb2.why) return fin(lb2.why); if (!!lb2.blind !== blind) return fin('vault-state-changed');
+        var now2 = planP(id, env, blind), sp2 = samePlanP(pl, now2); if (sp2) return fin(sp2);
+        return askServer(id, ctx, blind).then(function (se) {
+          if (se.why) return fin(se.why);
+          var issuedAt = env.now();
+          return Promise.resolve(ctx.who()).then(function (a2) {
+            if (!a2 || a2 !== a0) return fin('principal-changed');
+            return Promise.resolve(ctx.withMatLock(function () { return syncDelete(a0, a2, se, issuedAt); })).then(function (m) {
+              if (!m || m.granted !== true) return fin(m && m.api === false ? 'locks-unavailable' : 'lock-busy');
+              if (m.threw) return fin('threw');
+              return m.value;
+            });
+          });
+        });
+      });
+    }
+    return Promise.resolve(ctx.who()).then(function (a0) {
+      if (!a0) return fin('no-account');
+      return Promise.resolve(ctx.lockHeld(id)).then(function (h) {
+        if (h !== false) return fin(h === true ? 'open-in-tab' : 'locks-unavailable');
+        return Promise.resolve(ctx.withOpenLock(id, function () { return underOpenLock(a0); })).then(function (x) {
+          if (!x || x.granted !== true) return fin(x && x.api === false ? 'locks-unavailable' : 'open-in-tab');
+          if (x.threw) return fin(out.code && out.code !== 'purged' ? out.code : 'threw');
+          return x.value;
+        });
+      });
+    }).then(null, function () { return fin('threw'); });
+  }
+  function hasKey(env, k) { var n = env.ls.length; for (var i = 0; i < n; i++) if (env.ls.key(i) === k) return true; return false; }
+  /* ★PURGE1c: meta の墓標（ちょうど 1 行）の題名を '' にし、片づけた時刻 purgedAt を足す。id・deleted・deletedAt・deleteOpId・
+     recoverySnapshotId・lifecycleVersion・serverTombstone は変えない（Worker の forceput 墓標保護が完全一致を見る 3 項目を含む）。
+     返り値: 'blanked' | 'already'（もう題名が無い）| 'meta-unreadable' | 'tomb-not-unique' | 'write-failed' */
+  function tombTitled(id, env) { var r = tombRow(id, env); return !!(r && ((r.title != null && r.title !== '') || (r.name != null && r.name !== ''))); }
+  function blankTomb(id, env) {
+    var a = metaRows(env); if (!a) return 'meta-unreadable';
+    var n = 0, ix = -1;
+    for (var i = 0; i < a.length; i++) if (a[i] && String(a[i].id) === id) { n++; if (a[i].deleted === true) ix = i; }
+    if (n !== 1 || ix < 0) return 'tomb-not-unique';
+    var e = a[ix], ch = false;
+    if (e.title != null && e.title !== '') { e.title = ''; ch = true; }
+    if (e.name != null && e.name !== '') { e.name = ''; ch = true; }
+    if (!ch) return 'already';
+    if (typeof e.purgedAt !== 'number') e.purgedAt = env.now();
+    try { env.ls.setItem('chr6_slots_meta', JSON.stringify(a)); } catch (eW) { return 'write-failed'; }
+    return 'blanked';
   }
 
   /* ---- Web Locks（ブラウザでは navigator.locks。試験では同じ意味の偽物を渡す） ----
@@ -429,6 +727,8 @@
     } catch (e) { return false; }                                          /* 容量不足など: メモリだけに残す */
   }
   function logOfSurvey(rep, mode) {
+    if (rep.purge) return { at: rep.at, v: PVERSION, kind: mode, purge: true, candidates: rep.candidates, eligible: rep.eligible.length, skipped: rep.skipped,
+             totals: rep.totals, perStoryChars: rep.eligible.map(function (x) { return x.chars; }).sort(function (a, b) { return b - a; }) };   /* 件数・文字数・理由だけ（id・題名は書かない） */
     return { at: rep.at, v: VERSION, kind: mode, candidates: rep.candidates, eligible: rep.eligible.length, skipped: rep.skipped,
              keys: rep.totals.keys, chars: rep.totals.chars, snapshotsKept: rep.totals.snapshotsKept, backupKept: rep.totals.backupKept, unknownKept: rep.totals.unknownKept,
              perStoryChars: rep.eligible.map(function (x) { return x.chars; }).sort(function (a, b) { return b - a; }) };
@@ -436,7 +736,9 @@
 
   var api = { version: VERSION, NOTICE: NOTICE, ID_RE: ID_RE, MAX_MULTI: MAX_MULTI, OPEN_LOCK: OPEN_LOCK, MAT_LOCK: MAT_LOCK, keysFor: keysFor, purgeList: purgeList, localBlock: localBlock, candidates: candidates,
               serverEval: serverEval, survey: survey, freeOne: freeOne, freeMany: freeMany, lockCtx: lockCtx, stable: stable,
-              writeLog: writeLog, logOfSurvey: logOfSurvey, _memLog: function () { return memLog.slice(); } };
+              writeLog: writeLog, logOfSurvey: logOfSurvey, _memLog: function () { return memLog.slice(); },
+              /* ★PURGE1 */ PURGE_ON: PURGE_ON, PURGE_OFF: PURGE_OFF, PURGE_VAULT: PURGE_VAULT, NOTICE_P: NOTICE_P, keysForP: keysForP, purgeListP: purgeListP, localBlockP: localBlockP, planP: planP,
+              serverEvalP: serverEvalP, serverEvalMeta: serverEvalMeta, surveyP: surveyP, freeOneP: freeOneP };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 
   /* ================================================================ browser wiring (HOME only) */
@@ -448,7 +750,9 @@
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function benv() {
     var K = null; try { K = root.__v292DfixKEY1; K = (K && typeof K.enabled === 'function' && K.enabled()) ? K : null; } catch (e) { K = null; }
+    var pOn = lsg(PURGE_ON) === '1' && lsg(PURGE_OFF) !== '1';
     return { ls: root.localStorage, ss: root.sessionStorage, now: function () { return Date.now(); }, key1: K, multi: lsg(MULTI) === '1',
+             purge: pOn, purgeVault: pOn && lsg(PURGE_VAULT) === '1',
              vault: root.__v292Dfix889 || null, inv: root.__v292Dfix562 || null, gate: root.__v292Dfix569 || null,
              iso2Foreign: function (id) { try { var I = root.__v292Diso2; if (!I || typeof I.stampOf !== 'function' || typeof I.owner !== 'function') return false;
                var me = I.owner().now, sp = I.stampOf(id, 's'); if (!sp) return false; return !!((sp.c && sp.c !== me) || (sp.w && sp.w !== me)); } catch (e) { return true; } } };
@@ -464,12 +768,16 @@
       },
       getStory: function (id) { return new Promise(function (res) { var W = root.__v292Dfix697; if (!W || typeof W.getStoryV2Once !== 'function') return res(null);
         try { W.getStoryV2Once(id, function (x, err) { res(err ? null : x); }); } catch (e) { res(null); } }); },
+      /* ★PURGE1: 隠した物語の削除済みの確認は、本文を含まない一覧の行（listshadow）だけで行う */
+      serverMeta: function (id) { return new Promise(function (res) { var W = root.__v292Dfix697; if (!W || typeof W.listShadowBasisOnce !== 'function') return res(null);
+        try { W.listShadowBasisOnce(function (rows, err, status) { if (!rows) return res({ status: status || 0 }); var hit = null; for (var i = 0; i < rows.length; i++) if (rows[i] && String(rows[i].id) === String(id)) { hit = rows[i]; break; } res({ status: 200, row: hit }); }); } catch (e) { res(null); } }); },
       lockHeld: lc.lockHeld, withOpenLock: lc.withOpenLock, withMatLock: lc.withMatLock
     };
   }
   function ready() {
     if (lsg(KILL) === '1') return false;
     var e = benv(); if (!e.key1 || !e.inv || typeof e.inv.store1Arm !== 'function' || !e.gate || typeof e.gate.tryDeleteExact !== 'function') return false;
+    if (e.purge && typeof e.inv.purge1Arm !== 'function') return false;     /* ★PURGE1: fix562 が対応していなければ使わない */
     var W = root.__v292Dfix697; if (!W || typeof W.getStoryV2Once !== 'function') return false;
     var A = root.__v292Dfix893; if (!(A && A.active)) return false;          /* アカウント方式（cookie session）の画面だけ */
     try { if (!(root.navigator && root.navigator.locks && typeof root.navigator.locks.query === 'function')) return false; } catch (e2) { return false; }
@@ -505,19 +813,22 @@
     var box = root.document.getElementById(SHEET);
     if (!box) { box = root.document.createElement('div'); box.id = SHEET; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); root.document.body.appendChild(box); box.addEventListener('click', onClick); box.addEventListener('change', onChange); }
     var h = '<div class="c"><h2>この端末の空き容量を増やす</h2>' +
-            '<div class="soft" id="s1bnotice" role="note">' + esc(NOTICE) + '</div>' +
-            '<p>一覧から削除した物語のうち、クラウドに同じ本文が残っていると確かめられたものだけを表示します。消すのはこの端末の写しだけで、クラウドのデータは変わりません。' +
+            '<div class="soft" id="s1bnotice" role="note">' + esc(M.purge ? NOTICE_P : NOTICE) + '</div>' +
+            (M.purge ? '<p>一覧から削除した物語のうち、サーバーで削除が確定したものだけを表示します。この端末に残ったその物語のデータ（本文・スナップショット・控え）を消します。' :
+            '<p>一覧から削除した物語のうち、クラウドに同じ本文が残っていると確かめられたものだけを表示します。消すのはこの端末の写しだけで、クラウドのデータは変わりません。') +
             (M.multi ? '一度に ' + MAX_MULTI + ' 件まで選べます。1 件ずつ確かめながら消し、うまくいかない物語があればそこで止めます。' : '1 件ずつ選んで消します。') + '</p>';
     h += '<div class="msg" id="s1bmsg">' + esc(M.msg || '') + '</div>';
     if (M.rep && M.phase !== 'loading') {
       var t = M.rep.totals;
-      h += '<p id="s1btotal">消せる物語 ' + t.stories + ' 件・合計 ' + esc(kchars(t.chars)) + '（スナップショット ' + t.snapshotsKept + ' 件は残します）</p>';
+      h += M.purge ? ('<p id="s1btotal">消せる物語 ' + t.stories + ' 件・合計 約 ' + esc(kchars(t.chars)) + (t.blind ? '（隠した物語 ' + t.blind + ' 件は中身を見ずに消すため、文字数に入っていません）' : '') + '</p>')
+                   : ('<p id="s1btotal">消せる物語 ' + t.stories + ' 件・合計 ' + esc(kchars(t.chars)) + '（スナップショット ' + t.snapshotsKept + ' 件は残します）</p>');
       var full = M.picks.length >= (M.multi ? MAX_MULTI : 1);
       for (var i = 0; i < M.rep.eligible.length; i++) {
         var r = M.rep.eligible[i], on = M.picks.indexOf(r.id) >= 0;
         var dis = M.phase !== 'ready' || (M.multi && full && !on);
-        h += '<div class="row" data-row="' + esc(r.id) + '"><input type="checkbox" data-s1bchk="' + esc(r.id) + '"' + (on ? ' checked' : '') + (dis ? ' disabled' : '') + ' aria-label="選ぶ">' +
-             '<div style="flex:1;min-width:0"><div class="t">' + esc(r.title || '（題名なし）') + '</div><div class="s">ターン ' + esc(r.turns == null ? '—' : r.turns) + '・この端末で空く量 ' + esc(kchars(r.chars)) + '</div></div></div>';
+        var tok = r.blind ? ('h' + i) : r.id;                                    /* ★PURGE1c: 隠した物語の id は画面（DOM）にも出さない */
+        h += '<div class="row" data-row="' + esc(tok) + '"><input type="checkbox" data-s1bchk="' + esc(tok) + '"' + (on ? ' checked' : '') + (dis ? ' disabled' : '') + ' aria-label="選ぶ">' +
+             '<div style="flex:1;min-width:0"><div class="t">' + esc(r.blind ? '（隠した物語・題名は表示しません）' : (r.title || '（題名なし）')) + '</div><div class="s">' + (M.purge ? '' : 'ターン ' + esc(r.turns == null ? '—' : r.turns) + '・') + 'この端末で空く量 ' + esc(r.blind ? '（数えません）' : kchars(r.chars)) + '</div></div></div>';
       }
       var sk = 0; for (var c in M.rep.skipped) sk += M.rep.skipped[c];
       if (sk) h += '<p>確かめられなかったため、今回は対象にしていない物語が ' + sk + ' 件あります（そのまま残します）。</p>';
@@ -525,9 +836,10 @@
     }
     if (M.phase === 'confirm' && M.picks.length) {
       var prs = pickedRows();
-      if (prs.length === 1) h += '<div class="soft" id="s1bconfirm" role="note"><b>この端末から消す物語：</b>「' + esc(prs[0].title || '（題名なし）') + '」（' + esc(kchars(prs[0].chars)) + '）<br>' + esc(NOTICE) + '。</div>';
+      var NT = M.purge ? NOTICE_P : NOTICE, tl = function (x) { return x.blind ? '（隠した物語）' : (x.title || '（題名なし）'); };
+      if (prs.length === 1) h += '<div class="soft" id="s1bconfirm" role="note"><b>この端末から消す物語：</b>「' + esc(tl(prs[0])) + '」（' + esc(prs[0].blind ? '—' : kchars(prs[0].chars)) + '）<br>' + esc(NT) + '。</div>';
       else h += '<div class="soft" id="s1bconfirm" role="note"><b>この端末から消す物語：</b>' + prs.length + ' 件（合計 約 ' + esc(kchars(pickedChars())) + '）<br>' +
-                prs.map(function (x) { return '「' + esc(x.title || '（題名なし）') + '」'; }).join('、') + '<br>' + esc(NOTICE) + '。<br>1 件ずつ確かめながら消します。うまくいかない物語があれば、そこで止めます（残りには手を付けません）。</div>';
+                prs.map(function (x) { return '「' + esc(tl(x)) + '」'; }).join('、') + '<br>' + esc(NT) + '。<br>1 件ずつ確かめながら消します。うまくいかない物語があれば、そこで止めます（残りには手を付けません）。</div>';
     }
     if (M.result) h += '<p id="s1bresult">消した物語 ' + M.result.done + ' 件・止まった物語 ' + M.result.failed + ' 件' + (M.result.failedCode ? '（理由: ' + esc(M.result.failedCode) + '）' : '') + '・手を付けていない物語 ' + M.result.notProcessed + ' 件</p>';
     h += '<div class="btns">';
@@ -543,6 +855,7 @@
   function onChange(e) {
     var t = e.target; if (!M || !t || !t.getAttribute || M.phase !== 'ready') return;
     var id = t.getAttribute('data-s1bchk'); if (id == null) return;
+    var hm = /^h(\d+)$/.exec(id); if (hm) { var hr = M.rep && M.rep.eligible[+hm[1]]; if (!hr || !hr.blind) return; id = hr.id; }
     if (!M.multi) M.picks = t.checked ? [id] : M.picks.filter(function (x) { return x !== id; });   /* 1 件だけ（別のを選ぶと前の選択は外れる） */
     else if (t.checked) { if (M.picks.indexOf(id) < 0 && M.picks.length < MAX_MULTI) M.picks.push(id); }
     else M.picks = M.picks.filter(function (x) { return x !== id; });
@@ -560,14 +873,22 @@
               'keys-changed': 'この物語のデータが確認のあとで変わったため、何も消していません。', 'open-in-tab': 'この物語が別の画面で開かれているため、何も消していません。',
               'locks-unavailable': 'このブラウザでは安全に確かめられないため、何も消していません。', 'lock-busy': 'ほかの処理が動いているため、何も消していません。少し待ってからもう一度試してください。',
               'server-body-not-held': 'クラウドに本文が残っていると確かめられないため、何も消していません。', 'server-body-behind': 'この端末の方が新しい内容を持っているため、何も消していません。',
-              'content-mismatch': 'この端末とクラウドで本文の内容が違うため、何も消していません。' };
+              'content-mismatch': 'この端末とクラウドで本文の内容が違うため、何も消していません。',
+              purged: 'この端末から完全に消しました。', 'changed-after-delete': '削除のあとでこの物語に書き込みがあったため、何も消していません。',
+              'vault-server-unconfirmed': '隠した物語の削除をサーバーで確かめられないため、何も消していません（Vault を開いてからもう一度試せます）。',
+              'vault-state-changed': '隠す設定が途中で変わったため、何も消していません。', 'in-flight': 'この物語の保存がまだ送信中のため、何も消していません。',
+              unsynced: 'この物語に、まだクラウドへ送っていない変更が残っているため、何も消していません。', stash: 'この物語に、まだクラウドへ送っていない変更が残っているため、何も消していません。',
+              journal: 'この物語に、まだクラウドへ送っていない変更が残っているため、何も消していません。', rescue: 'この物語に、まだクラウドへ送っていない変更が残っているため、何も消していません。',
+              'title-write-failed': '物語のデータは消しましたが、一覧の記録の書き換えができませんでした。もう一度開くと続きを片づけます。' };
   function doFree(id) {
     var mine = M; M.phase = 'running'; M.msg = ''; render();
     var e = benv();
-    return freeOne(id, e, bctx()).then(function (x) {
+    return (e.purge ? freeOneP : freeOne)(id, e, bctx()).then(function (x) {
       st.last = { code: x.code, removed: x.removed, chars: x.chars };
-      var logRun = { at: Date.now(), v: VERSION, kind: 'free', code: x.code, removed: x.removed, chars: x.chars, turnsMatched: x.ok ? x.turnsMatched : undefined };
-      if (x.ok) { st.freed++; logRun.id = id; logRun.snapshotsKept = x.snapshotsKept; logRun.backupKept = x.backupKept; logRun.unknownKept = x.unknownKept; }
+      var logRun = e.purge ? { at: Date.now(), v: PVERSION, kind: 'purge', code: x.code, removed: x.removed, chars: x.chars, blind: x.blind }
+                           : { at: Date.now(), v: VERSION, kind: 'free', code: x.code, removed: x.removed, chars: x.chars, turnsMatched: x.ok ? x.turnsMatched : undefined };
+      if (x.ok && e.purge) { st.freed++; logRun.snapshots = x.snapshots; logRun.backups = x.backups; logRun.unsent = x.unsent; }   /* ★PURGE1: 完全削除した物語の id はログにも残さない（件数だけ） */
+      else if (x.ok) { st.freed++; logRun.id = id; logRun.snapshotsKept = x.snapshotsKept; logRun.backupKept = x.backupKept; logRun.unknownKept = x.unknownKept; }
       if (x.policyWhy) logRun.policyWhy = String(x.policyWhy); if (x.gateCode) logRun.gateCode = String(x.gateCode);
       writeLog(e, logRun);
       if (M !== mine) return x;
@@ -581,8 +902,8 @@
     return freeMany(ids, e, bctx(), function (i, n) { if (M === mine) { M.step = [i, n]; render(); } }).then(function (x) {
       st.last = { code: x.code, done: x.done, failed: x.failed, notProcessed: x.notProcessed, failedCode: x.failedCode, removed: x.removed, chars: x.chars };
       st.freed += x.done;
-      var logRun = { at: Date.now(), v: VERSION, kind: 'free-multi', code: x.code, total: x.total, done: x.done, failed: x.failed, notProcessed: x.notProcessed,
-                     failedCode: x.failedCode, removed: x.removed, chars: x.chars, ids: x.doneIds.slice() };   /* 消した物語の id だけ（Vault は関門で対象外） */
+      var logRun = { at: Date.now(), v: e.purge ? PVERSION : VERSION, kind: e.purge ? 'purge-multi' : 'free-multi', code: x.code, total: x.total, done: x.done, failed: x.failed, notProcessed: x.notProcessed,
+                     failedCode: x.failedCode, removed: x.removed, chars: x.chars, ids: e.purge ? undefined : x.doneIds.slice() };   /* ★PURGE1: id は書かない（件数だけ） */   /* 消した物語の id だけ（Vault は関門で対象外） */
       writeLog(e, logRun);
       if (M !== mine) return x;
       var text = x.code === 'all-freed' ? ('選んだ ' + x.done + ' 件をこの端末から消しました。（' + kchars(x.chars) + '）')
@@ -593,11 +914,13 @@
   }
   function openFlow(msg, result) {
     st.opened++;
-    M = { phase: 'loading', msg: msg || '確認しています…', rep: null, picks: [], multi: lsg(MULTI) === '1', result: result || null, step: null };
+    var be0 = benv();
+    M = { phase: 'loading', msg: msg || '確認しています…', rep: null, picks: [], multi: lsg(MULTI) === '1', result: result || null, step: null, purge: be0.purge === true };
     render();
     if (!ready()) { M.phase = 'done'; M.msg = 'いまはこの操作を使えません。物語はそのまま残っています。'; render(); return Promise.resolve(false); }
     var mine = M;
-    return survey(benv(), bctx()).then(function (rep) {
+    var be1 = benv();
+    return (be1.purge ? surveyP : survey)(be1, bctx()).then(function (rep) {
       st.surveys++; st.lastSurvey = logOfSurvey(rep, 'survey');
       if (M !== mine) return false;
       M.rep = rep; M.phase = rep.eligible.length ? 'ready' : 'done';
@@ -620,7 +943,7 @@
   function dryRun() {
     var e = benv();
     if (!ready()) { var r0 = { at: Date.now(), v: VERSION, kind: 'dry', notReady: true }; writeLog(e, r0); st.dry = r0; return Promise.resolve(r0); }
-    return survey(e, bctx()).then(function (rep) { var L = logOfSurvey(rep, 'dry'); L.logWritten = writeLog(e, L); st.dry = L; return L; });
+    return (e.purge ? surveyP : survey)(e, bctx()).then(function (rep) { var L = logOfSurvey(rep, 'dry'); L.logWritten = writeLog(e, L); st.dry = L; return L; });
   }
   root.__v292DfixSTORE1b = {
     version: VERSION,

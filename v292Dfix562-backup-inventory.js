@@ -679,6 +679,13 @@
   }
   function deletePolicy(req){
     req = req || {};
+    /* ★★PURGE1 段階 1（Local prototype・既定 OFF）: 完全削除の verified 許可。intent が purge-full / purge-blind のときだけ見る。
+       purge-blind（隠した物語）は classifyKey を呼ばない（classifyKey は本体の値を読むため）。ほかの intent の判断は 1 行も変わらない。 */
+    if (req.intent === P1_FULL || req.intent === P1_BLIND){
+      var pa = purge1Authorization(req);
+      if (pa.ok) return { allow: true, code: req.intent === P1_BLIND ? 'purge-verified-blind' : 'purge-verified-full', binding: pa.binding, policyVersion: 1 };
+      return { allow: false, code: 'purge-requires-proof', purgeWhy: pa.why, policyVersion: 1 };
+    }
     var c = classifyKey(req.key, req.value);
     var intent = String(req.intent || 'reclaim');
     var out = { allow: false, code: 'denied', classification: c, policyVersion: 1 };
@@ -896,6 +903,125 @@
     return { ok:true, binding: { key: k, bytes: raw.length, hash: hv, storyId: sid, runId: p.runId, serverRev: p.serverRev } };
   }
 
+  /* ================= ★★PURGE1 段階 1: 完全削除の verified 許可（メモリだけ・同時に 1 件・TTL 120 秒） ======================
+   * 許すのは: proof の keys に載った exact key ∧ KEY1 の完全一致でその物語のもの（snapshot・未送信の写し・世代を含む。chr6_storysess_ は不可）
+   *   か、キー名に chr6_slot_<id> が丸ごと入った控え（chr6_bk_）∧ meta にその物語の墓標がある ∧ 墓標の関所が準備できている ∧
+   *   full: 今の値が計画時の値と同じ（bytes・hash も）／blind: 値を受け取らない（req.value があれば断る）・proof.mode === 'blind'。
+   * ・PURGE1 が OFF（v292DfixPURGE1On≠'1'・v292DfixPURGE1Off='1'・STORE1 の kill）のときは常に拒否。 */
+  var P1_FULL = 'purge-full', P1_BLIND = 'purge-blind', p1Armed = null;
+  function purge1On(){ return lsg('v292DfixPURGE1On') === '1' && lsg('v292DfixPURGE1Off') !== '1' && lsg('v292DfixSTORE1Off') !== '1'; }
+  function purge1Arm(proof){
+    if (!purge1On()) return null;
+    if (!proof || typeof proof !== 'object' || proof.kind !== 'PURGE1') return null;
+    var c = null; try { c = JSON.parse(JSON.stringify(proof)); } catch(e){ return null; }
+    p1Armed = s1Freeze(c);
+    return p1Armed;
+  }
+  function purge1Disarm(){ p1Armed = null; }
+  function p1BkOwned(k, sid){ if (k.indexOf('chr6_bk_') !== 0) return false; var i = k.indexOf('chr6_slot_' + sid); if (i < 0) return false; var nx = k.charAt(i + 10 + sid.length); return !nx || !/[A-Za-z0-9]/.test(nx); }
+  function purge1Authorization(req){
+    function no(why){ return { ok:false, why:why }; }
+    if (!purge1On()) return no('purge-off');
+    var K1 = key1(); if (!K1) return no('key1-unavailable');
+    var p = req.purge1Proof;
+    if (!p || !p1Armed || p !== p1Armed) return no('proof-not-armed');
+    if (p.v !== 1 || p.kind !== 'PURGE1' || typeof p.runId !== 'string' || !p.runId) return no('proof-shape');
+    var blind = req.intent === P1_BLIND;
+    if (p.mode !== (blind ? 'blind' : 'full')) return no('proof-mode');
+    var sid = String(p.storyId == null ? '' : p.storyId);
+    if (!S1_ID_RE.test(sid) || KEY1_LEGACY[sid]) return no('proof-story-shape');
+    if (typeof p.accountId !== 'string' || !p.accountId || p.accountIdAfter !== p.accountId) return no('proof-account');
+    if (p.serverDeleted !== true) return no('proof-not-deleted');
+    if (p.authority !== 'shadow' && p.authority !== 'canonical') return no('proof-authority');
+    if (typeof p.serverRev !== 'number' || !isFinite(p.serverRev) || p.serverRev < 1) return no('proof-rev');
+    var at = p.issuedAt, now = Date.now();
+    if (typeof at !== 'number' || !isFinite(at) || at <= 0) return no('proof-timestamp-invalid');
+    if (now - at < 0) return no('proof-timestamp-future');
+    if (now - at > S1_TTL_MS) return no('proof-stale');
+    var k = String(req.key == null ? '' : req.key);
+    var so = K1.storyOf(k), mine = (so && so.id === sid) || k === 'chr6_slot_' + sid;
+    if (mine && so && so.kind === 'vault') return no('key-kind-not-allowed');
+    if (!mine && !p1BkOwned(k, sid)) return no('key-not-story');
+    var it = null, ks = p.keys;
+    if (Object.prototype.toString.call(ks) !== '[object Array]') return no('proof-keys-missing');
+    for (var i = 0; i < ks.length; i++){ if (ks[i] && ks[i].key === k){ it = ks[i]; break; } }
+    if (!it) return no('key-not-in-proof');
+    if (!metaTombstoneExists(sid)) return no('no-meta-tombstone');
+    if (!tombstoneReady()) return no('tombstone-barrier-not-ready');
+    if (blind){
+      if (req.value !== undefined || it.value !== undefined) return no('blind-value-present');   /* 値を持ち込まない */
+      return { ok:true, binding: { key: k, storyId: sid, runId: p.runId, serverRev: p.serverRev, blind: true } };
+    }
+    var raw = (req.value !== undefined) ? req.value : lsg(k);
+    if (raw == null) return no('value-missing');
+    if (typeof it.value !== 'string' || raw !== it.value) return no('value-changed');
+    var hv = hash(raw);
+    if (raw.length !== it.bytes || hv !== it.hash) return no('value-changed');
+    return { ok:true, binding: { key: k, bytes: raw.length, hash: hv, storyId: sid, runId: p.runId, serverRev: p.serverRev } };
+  }
+
+  /* ================= ★★P0-B（GPT #127-SK）: 「この端末から消す」系の削除の保護判定を、名前と凍結した proof だけで決める ===========
+   * 問題: fix569 tryDeleteExact は消すたびに protectedSet() を取り直し、その中で端末の**すべての** snapshot の目録・部品と控え（chr6_bk_）の
+   *   値を読む（Vault で隠した物語のものも）。device-free（STORE1b r2）・purge-full / purge-blind（PURGE1）の 1 キーごとに起きていた。
+   * ここでは、その 3 つの intent に限って、保護の判断を
+   *   ①キー名（localStorage の列挙だけ。値は読まない）と ②fix562 に登録済みの凍結した proof（store1Arm / purge1Arm が返したもの）
+   *   だけで決める。消す物語以外のキーの値は 1 本も読まない。
+   * 同じ答えになる理由: protectedSet() が返す key は、inventory() の行（名前が chr6_bk_ で始まる）か snapshotsBySlot() の目録の id
+   *   （名前が chr6_snap_ で始まる）だけ。だから、それ以外の名前のキーは protectedSet() に絶対に入らない ＝ 名前だけで「保護されない」と決まる
+   *   （device-free が消す本体・サイドストア・同期の印は全部これ。r2 の答えと 1 件も変わらない）。
+   *   chr6_bk_ / chr6_snap_ の名前は:
+   *     device-free … store1Authorization がもともと断る形（snapshot・控え）。ここでも「保護」と答える（fail-closed）。
+   *     purge-* …… その物語の本体 chr6_slot_<id> がまだある（名前で見る）なら「保護」（protectedSet より広く守る側）。
+   *                本体が無ければ protectedSet はその物語の snapshot / 控えを守らない（liveSlots に入らない）。ただし
+   *                full: 凍結した proof の値（＝今の値。fix569 が hash で照合する）から、目録の slotId・控えの包んだキー・丸ごと控え（ls）を見て、
+   *                      ほかの生きている物語のものなら「保護」。丸ごと控えは常に「保護」（ほかの物語も入っている）。
+   *                blind: 控えは常に「保護」（中身を見ないと丸ごと控えか分からない）。目録は名前の持ち主だけで決める。
+   * ほかの intent（reclaim / retention / lifecycle-delete ほか）はこの関数を使わない（fix569 は今までどおり protectedSet() を取り直す）。
+   * 返り値: { ok:true, protected:bool, why } ／ { ok:false, why }（判断できない＝fix569 は消さない）。何も書かない・何も消さない。
+   * kill: fix569 側の localStorage v292DfixP0BOff='1'（今までの protectedSet() の読み方に戻る）。 */
+  var P0B_INTENTS = { 'device-free':1, 'purge-full':1, 'purge-blind':1 };
+  function p0bKeyNamed(k){ var ks = keys(); for (var i = 0; i < ks.length; i++) if (ks[i] === k) return true; return false; }
+  function scopedProtection(req){
+    function no(why){ return { ok:false, why:why }; }
+    function yes(p, why){ return { ok:true, protected: !!p, why: why }; }
+    req = req || {};
+    var intent = String(req.intent || '');
+    if (P0B_INTENTS[intent] !== 1) return no('intent-not-scoped');
+    var K1 = key1(); if (!K1) return no('key1-unavailable');
+    var p = intent === S1_INTENT ? s1Armed : p1Armed;
+    if (!p || typeof p !== 'object') return no('proof-not-armed');
+    if (intent !== S1_INTENT && p.mode !== (intent === P1_BLIND ? 'blind' : 'full')) return no('proof-mode');
+    var sid = String(p.storyId == null ? '' : p.storyId);
+    if (!S1_ID_RE.test(sid) || KEY1_LEGACY[sid]) return no('proof-story-shape');
+    var k = String(req.key == null ? '' : req.key);
+    var it = null, ks = p.keys;
+    if (Object.prototype.toString.call(ks) !== '[object Array]') return no('proof-keys-missing');
+    for (var i = 0; i < ks.length; i++){ if (ks[i] && ks[i].key === k){ it = ks[i]; break; } }
+    if (!it) return no('key-not-in-proof');
+    var isBk = k.indexOf('chr6_bk_') === 0, isMan = k.indexOf('chr6_snap_') === 0;
+    if (!isBk && !isMan) return yes(false, 'name-never-in-protected-set');
+    if (intent === S1_INTENT) return yes(true, 'device-free-backup-or-snapshot');
+    if (p0bKeyNamed('chr6_slot_' + sid)) return yes(true, 'story-body-present');
+    var live = liveSlots();
+    function liveOther(s){ return s != null && String(s) !== sid && live.indexOf(String(s)) >= 0; }
+    if (isMan){
+      var so = K1.storyOf(k);
+      if (!so || so.id !== sid || so.kind !== 'snapshot') return yes(true, 'snapshot-not-this-story');
+      if (intent === P1_BLIND) return yes(false, 'snapshot-of-tombstoned-story');
+      var m = null; try { m = JSON.parse(typeof it.value === 'string' ? it.value : 'null'); } catch(e){ m = null; }
+      if (m && typeof m === 'object' && m.slotId != null && String(m.slotId) !== sid && liveOther(m.slotId)) return yes(true, 'snapshot-of-live-story');
+      return yes(false, 'snapshot-of-tombstoned-story');
+    }
+    /* chr6_bk_ */
+    if (intent === P1_BLIND) return yes(true, 'blind-backup-kept');
+    if (typeof it.value !== 'string') return yes(true, 'backup-value-unknown');
+    var c = classify(it.value);
+    if (c.kind === 'fullDump') return yes(true, 'full-dump');
+    if (liveOther(slotFromKey(k, live))) return yes(true, 'backup-of-live-story');
+    if (c.wrappedKey && liveOther(slotFromKey(c.wrappedKey, live))) return yes(true, 'backup-of-live-story');
+    return yes(false, 'backup-of-tombstoned-story');
+  }
+
   window.__v292Dfix562 = {
     off: off,
     report: report,
@@ -911,6 +1037,10 @@
     deletePolicy: deletePolicy,
     /* ★STORE1b: device-free の証拠の登録・破棄（メモリだけ） */
     store1Arm: store1Arm, store1Disarm: store1Disarm,
+    /* ★PURGE1 段階 1（既定 OFF） */
+    purge1Arm: purge1Arm, purge1Disarm: purge1Disarm,
+    /* ★P0-B: device-free / purge-* の保護判定（名前と凍結した proof だけ・値は読まない）。fix569 tryDeleteExact が使う */
+    scopedProtection: scopedProtection,
     _hash: hash, _tsFromKey: tsFromKey, _slotFromKey: slotFromKey, _slotFromKeyOld: slotFromKeyOld, _familyOf: familyOf, _score: score
   };
   try { if (!off()) console.log(TAG, 'ready (read-only)'); } catch(e){}

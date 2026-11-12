@@ -355,9 +355,22 @@
     return h.toString(16) + '-' + str.length;
   }
   function gateNote(rec){ try { gateLog.push(rec); if (gateLog.length > GATE_LOG_MAX) gateLog.shift(); } catch(e){} }
+  /* ★★P0-B（GPT #127-SK・既定 ON・kill localStorage v292DfixP0BOff='1'）:
+     intent が device-free（STORE1b）・purge-full / purge-blind（PURGE1）のときだけ、③④の保護判定を protectedSet() の取り直し
+     （端末のすべての snapshot・控えの値を読む）ではなく、fix562.scopedProtection()（キー名と、fix562 に登録済みの凍結した proof だけ）で決める。
+     purge-blind（隠した物語）は①⑥の「在るか」も値を読まずにキーの列挙で見る（②の照合は値が無いので行わない＝ PURGE1 は bytes/hash を渡さない）。
+     fix562 が scopedProtection を持たない（古い版）・kill のときは、今までの読み方のまま（fail-safe: 今の本番と同じ）。
+     ほかの intent は 1 行も変わらない。 */
+  var P0B_SCOPED = { 'device-free':1, 'purge-full':1, 'purge-blind':1 };
+  function p0bOn(){ return rawGet('v292DfixP0BOff') !== '1'; }
+  function keyListed(k){ var ks = rawKeys(); for (var i = 0; i < ks.length; i++) if (ks[i] === k) return true; return false; }
   function tryDeleteExact(req){
     req = req || {};
     var key = String(req.key == null ? '' : req.key);
+    var f562 = null; try { f562 = window.__v292Dfix562; } catch(eF){ f562 = null; }
+    var scoped = false;
+    try { scoped = !!(key && P0B_SCOPED[String(req.intent || '')] === 1 && f562 && typeof f562.scopedProtection === 'function' && p0bOn()); } catch(eS){ scoped = false; }
+    if (scoped) return tryDeleteScoped(req, key, f562);
     var out = function(code, deleted){
       var r = { ok: code === 'deleted', deleted: !!deleted, code: code, key: key };
       gateNote({ at: now(), key: key, code: code, intent: req.intent || null,
@@ -382,6 +395,41 @@
       try { nativeRemove.call(localStorage, key); } catch(e){ return out('delete-failed', false); }
       /* ⑥ read-back */
       if (rawGet(key) != null) return out('delete-failed', false);
+      return out('deleted', true);
+    } catch(e){ S.wrapperErrors++; return out('delete-failed', false); }
+  }
+  /* ★P0-B: 上の 7 段と同じ順番・同じ返り値。違うのは③④（名前と凍結した proof だけ）と、blind の①⑥（列挙だけ） */
+  function tryDeleteScoped(req, key, f562){
+    var out = function(code, deleted){
+      var r = { ok: code === 'deleted', deleted: !!deleted, code: code, key: key };
+      gateNote({ at: now(), key: key, code: code, intent: req.intent || null,
+                 path: req.path || null, reason: req.reason || null, scoped: true });
+      S.gate[code] = (S.gate[code] || 0) + 1;
+      S.gateScoped = (S.gateScoped || 0) + 1;
+      return r;
+    };
+    try {
+      var blind = String(req.intent) === 'purge-blind';
+      /* ① exact key が存在する */
+      if (blind){
+        if (req.expectedBytes != null || req.expectedHash != null) return out('stale', false);   /* 値を見ない削除に値の照合は付けられない */
+        if (!keyListed(key)) return out('missing', false);
+      } else {
+        var raw = rawGet(key);                                    /* 消す物語自身のキー（proof に載っているもの）だけ */
+        if (raw == null) return out('missing', false);
+        /* ② hash・bytes が候補作成時と一致 */
+        if (req.expectedBytes != null && raw.length !== req.expectedBytes) return out('stale', false);
+        if (req.expectedHash != null && fnv(raw) !== req.expectedHash) return out('stale', false);
+      }
+      /* ③④ 名前と凍結した proof だけの保護判定。判断できなければ消さない */
+      var sp = null; try { sp = f562.scopedProtection({ key: key, intent: req.intent }); } catch(eP){ S.classifierErrors++; sp = null; }
+      if (!sp || sp.ok !== true) return out('policy-unavailable', false);
+      if (sp.protected) return out('protected', false);
+      /* ⑤ fix246 を迂回した exact-delete */
+      if (!nativeRemove) return out('policy-unavailable', false);
+      try { nativeRemove.call(localStorage, key); } catch(e){ return out('delete-failed', false); }
+      /* ⑥ read-back */
+      if (blind ? keyListed(key) : (rawGet(key) != null)) return out('delete-failed', false);
       return out('deleted', true);
     } catch(e){ S.wrapperErrors++; return out('delete-failed', false); }
   }

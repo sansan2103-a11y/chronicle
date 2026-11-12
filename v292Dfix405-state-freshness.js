@@ -74,7 +74,23 @@
     '<state who="名前" からだ="…" こころ="…" 本能="…"/>\n' +
     '・who は cast の名前。既に使った名前があればそれを使う。名前の無い人物は呼び名を1つに決め、同じ場面では変えない（「女」「娘」「若い女」を別人として出さない）。3軸は今この瞬間の状態を簡潔な自由記述で。\n' +
     '・このタグは本文（地の文・セリフ）には絶対に含めない。必ず本文の後に独立して置く。';
-  function emit405(){ return on962() ? EMIT405_Q1 : EMIT405; }
+  /* ★STATEQ1 PH1（laneQUALB・2026-11-12・kill v292DfixPH1Off='1' で従来とバイト一致）:
+     この節の書式の見本 からだ="…" こころ="…" 本能="…" の「…」が、そのまま値として写された（実測: こころ= "…"）。
+     書式は fix192 の【出力の形式】と同じなので、engineMode1 では見本の行を「書式は【出力の形式】と同じ」に替え、
+     engineMode0 では「…」を fix192 と同じ説明語に替える（説明語をそのまま写した値は fix77 の PH1 が取り込まない）。
+     どちらも「書くことが無い項目は属性ごと省く・空や記号だけや仮の文字を値にしない」を 1 行添える。 */
+  var PH1_TPL_LINE = '<state who="名前" からだ="…" こころ="…" 本能="…"/>\n';
+  var PH1_E1_LINE = '（書式は【出力の形式】の <state> の行と同じ）\n';
+  var PH1_E0_LINE = '<state who="名前" からだ="今この瞬間の身体" こころ="今の感情" 本能="体が今したいこと"/>\n';
+  var PH1_NOTE = '\n・値には実際の様子だけを短く書く。書くことが無い項目は属性ごと省き、空の値・記号だけの値・仮の文字を書かない。';
+  function offPH1_405(){ try { return localStorage.getItem('v292DfixPH1Off') === '1'; } catch(e){ return true; } }
+  function ph1Text(t){
+    if (offPH1_405() || t.indexOf(PH1_TPL_LINE) < 0) return t;
+    var x = t.replace(PH1_TPL_LINE, engineOn405() ? PH1_E1_LINE : PH1_E0_LINE);
+    var k = x.indexOf('\n・このタグは本文');
+    return k >= 0 ? x.slice(0, k) + PH1_NOTE + x.slice(k) : x + PH1_NOTE;
+  }
+  function emit405(){ return ph1Text(on962() ? EMIT405_Q1 : EMIT405); }
 
   // ---- statesBlock405: fix77 の buildStatesBlock と同一ロジック(store=window.__v292Dfix77Store) ----
   function statesBlock405(){
