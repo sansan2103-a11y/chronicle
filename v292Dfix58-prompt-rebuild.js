@@ -222,18 +222,35 @@
     if (!turns.length) return parsed;
     var last = turns[turns.length - 1] || {};
     var tail = now1Tail(last.narrative);
-    if (!tail) return parsed;
+    var amb = scene2Line(parsed, state);   /* ★SCENE2 r2（既定 OFF・On v292DfixSCENE2On='1'・kill v292DfixSCENE2Off='1'）: OFF なら '' ＝従来と送信バイト同一 */
+    if (!tail && !amb) return parsed;
     var ci = parsed.currentInput || {}, it = String(ci.text || '').replace(/\s+/g, ' ').trim();
     if (/続きを(?:自然に)?進めて|^続きを書/.test(it)) it = '';
     if (it.length > NOW1_IN) it = it.slice(0, NOW1_IN - 1) + '…';
     var TYPE = { SAY: '発言', DO: '行動', STORY: '展開' };
-    var text = 'いまの場面：' + tail + (it ? ('\nこの回の入力：' + (TYPE[String(ci.type || '').toUpperCase()] || '入力') + '「' + it + '」') : '');
+    var text = tail ? ('いまの場面：' + tail + (it ? ('\nこの回の入力：' + (TYPE[String(ci.type || '').toUpperCase()] || '入力') + '「' + it + '」') : '')) : '';
+    var rule = NOW1_RULE;
+    if (amb){ text = (text ? text + '\n' : '') + amb; rule = NOW1_RULE + window.__v292DfixSCENE2Core.GUARD; }   /* ★SCENE2 r2: 背景の控え 1〜2 行と、古い時刻・一時的な出来事を現在の確定事実にしない 1 文 */
     _now1Last.text = text;
     var o = {}, k, placed = false;
-    for (k in parsed){ if (!Object.prototype.hasOwnProperty.call(parsed, k) || k === 'nowScene') continue; o[k] = parsed[k]; if (k === 'recentScenes'){ o.nowScene = { rule: NOW1_RULE, text: text }; placed = true; } }
-    if (!placed) o.nowScene = { rule: NOW1_RULE, text: text };
+    for (k in parsed){ if (!Object.prototype.hasOwnProperty.call(parsed, k) || k === 'nowScene') continue; o[k] = parsed[k]; if (k === 'recentScenes'){ o.nowScene = { rule: rule, text: text }; placed = true; } }
+    if (!placed) o.nowScene = { rule: rule, text: text };
     return o;
   }
+  /* ★SCENE2 r2（laneSCENE2R・2026-11-12・試作・既定 OFF・GPT #127-SQ）: 天候は「継続候補」、時刻は「最後に確認された時刻／現在は未確定」、
+       一度起きた出来事は過去の事実、続く出来事は終了を判定——を nowScene に 1〜2 行で添える。
+       判定は v292DfixSCENE2-ambient.js（純関数・保存しない・AI 呼び出しなし）。ON でも値が 1 つも無ければ何も足さない。 */
+  var _scene2Last = null;
+  function scene2Line(parsed, state){
+    try {
+      var C = window.__v292DfixSCENE2Core; if (!C || !C.on()) return '';
+      var r = C.build(state, { currentInput: parsed && parsed.currentInput });
+      var l = C.line(r.norm);
+      _scene2Last = { turn: r.cur, norm: r.norm, line: l, trace: r.trace };
+      return l;
+    } catch(e){ return ''; }
+  }
+  window.__v292DfixSCENE2 = { VER: 'scene2-20261112-r2c', last: function(){ return _scene2Last; } };
   window.__v292DfixNOW1 = { VER: 'now1-20261111', on: now1On, tail: now1Tail, last: function(){ return _now1Last; } };
   var _facts2Pins = 0;
   var _facts1Last = null;

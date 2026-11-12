@@ -217,6 +217,8 @@
       var onA1 = !legacyStore && !offA1();               /* ★v292DfixA1 r2 */
       var hkA1 = onA1 ? heroKeyA1() : null;
       var ac1 = legacyStore ? null : age1Ctx(), stale1 = false;   /* ★STATEAGE1 */
+      var C2 = legacyStore ? null : window.__v292DfixSCENE2Core, sv1 = !!(C2 && C2.severeOn()), dr1 = !!(C2 && C2.driveOn()), sevU = [], sevS = [], S2x = null, hero2 = '';   /* ★SEVERE1 r2 / DRIVE1 r2（既定 OFF） */
+      if (sv1 || dr1){ try { S2x = getS(); hero2 = (S2x && S2x.cast && S2x.cast.hero && S2x.cast.hero.name) || ''; } catch(_s2x){} }
       Object.keys(store).forEach(function(n){
         var s=store[n]||{}; if(!s || typeof s!=='object') return;
         var parts=[];
@@ -229,7 +231,15 @@
         var gp = (!legacyStore && _npg) ? _npg.group(n, s) : '';   /* ★NPRES r-c333: (a)/(b)/(c) */
         if(gp === 'b' || gp === 'c' || (!legacyStore && _npg && _npg.orphan(n, s))){ ka=''; ko=''; ho=''; mo=''; if(gp === 'c') parts.push('別の場所にいる'); else if(gp === 'b' && typeof _npg.note === 'function'){ var nt3 = _npg.note(n, s); if(nt3) parts.push(nt3); } }   /* ★NPRES d3: 通話中の人は「声だけで加われる」の一行（d3Off なら ''） */
         var old1 = {};   /* ★STATEAGE1: 経過ターン数 → 古い項目（ac1=null なら常に従来の位置へ push） */
-        function p1(f, lb, v, pose){ var a = (ac1 && (!pose || AGE1_POSE.test(v))) ? age1Of(ac1, n, f, v, s.turn) : 0; if(a >= 2) (old1[a] = old1[a] || []).push(lb+v); else parts.push(lb+v); }
+        /* ★SEVERE1 r2（GPT #127-SQ）: 根拠は 傷（fix190 の永続の記録・治療状況を含む）と からだ（fix77 の瞬間値）と、その後の本文の覚醒・治療の描写。
+             語が無ければ認定しない。意識不明（U）／重い出血・衰弱（S）を別々に数え、状態ブロックに能力の制約を 1 行だけ添える（感情は指定しない）。
+             重い からだ は古さで「N ターン前の様子」へ回さない。正史 fix333 は読まない・触らない。その場にいない人物（NPRES の b／c／名簿外）は数えない。 */
+        var sev1 = '';
+        if(sv1 && !(gp === 'b' || gp === 'c' || (_npg && _npg.orphan(n, s)))){ try { sev1 = C2.sevNow(S2x, n, s.turn, ka, ki); } catch(_sv){ sev1 = ''; } if(sev1 === 'U') sevU.push(n); else if(sev1 === 'S') sevS.push(n); }
+        /* ★DRIVE1 r2: モデルが書いた 本能／目的 が「指示を求める」「主人公の言葉を待つ」だけの定型のときは、次回の状態ブロックに載せない（保存値はそのまま。
+             待つ以外の中身がある値・関係・未解決・【この場面の種】・利用者が設定した人物像は対象外）。 */
+        if(dr1 && !isHeroA1(hkA1, n)){ try { if(ho && C2.drive(ho, hero2)) ho=''; if(mo && C2.drive(mo, hero2)) mo=''; } catch(_dr){} }
+        function p1(f, lb, v, pose){ var a = (ac1 && (!pose || AGE1_POSE.test(v))) ? age1Of(ac1, n, f, v, s.turn) : 0; if(sev1 && f === 'ka' && C2.sevClass(v, '')) a = 0; if(a >= 2) (old1[a] = old1[a] || []).push(lb+v); else parts.push(lb+v); }
         if(ki && st2On() && st2Generic(ki)) ki='';   /* ★STATE2: 部位も原因も無い「負傷している」等は載せない（保存値はそのまま） */
         if(c930 && ki) parts.push('傷:'+ki);
         if(ka) p1('ka', 'からだ:', ka);
@@ -248,6 +258,7 @@
       if(licN.length){ licExc='（ただし'+licN.join('・')+'は重傷・強い恐怖で動きが縛られているため除く）'; }
       return '【各キャラの現在の状態（引き継ぐ。傷/関係/未解決は治療・和解まで保持し勝手に消さない）】\n'+lines.join('\n')
         +(stale1 ? '\n・「ターン前の様子」と付いた項目は、最後に状態が書かれた時点のもの。直近の本文と食い違うときは本文を正とし、反応の前提にしない（傷はそのまま引き継ぐ）。' : '')   /* ★STATEAGE1 */
+        +((sevU.length || sevS.length) ? '\n' + C2.severeLine(sevU, sevS) : '')   /* ★SEVERE1 r2 */
         +'\n・関係・未解決は各キャラが自分から動き、主人公や他キャラに話しかける動機になる。傷・恐怖・対立・依頼の場面では、入力を待たずNPCの側から言葉を発してよい'+licExc+'。'
         +(onA1 ? '\n・主人公以外のNPCは、各自の目的・関係・状況に応じて、入力を待たず自律的に行動してよい。目的が衝突しても、対立・協力・妥協などの選択は人物ごとに異なる。' /* ★v292DfixA1 r2: NPC に限る */
                : '\n・各キャラは自分の「目的」に向かって、入力を待たず自分から動いてよい（目的が衝突するキャラ同士は自然に対立する）。'); /* v292Dfix223b */
@@ -325,7 +336,12 @@
     '二人の視線が主人公を挟む。相手Aは布を裂く手を止めない。',
     '<react who="相手A" 反応="返事を待たず止血を続ける" 声="<say who=\'相手A\'>決まるまで、手は止めない</say>"/>'
   ].join('\n');
-  function miniEx(){ try{ if(localStorage.getItem('v292MiniExOff')==='1') return ''; }catch(e){} return '\n'+MINI223; }
+  /* ★EX192（laneSCENE2R・既定 OFF・On v292DfixEX192On='1'＝案 A／'2'＝案 B・kill v292DfixEX192Off='1'・GPT #127-SQ Local GO）:
+       見本の「……ねえ、あんたが決めて」（決定を主人公へ渡す）を、「自分の目的・恐怖・立場に応じて判断し、実行できる範囲で動く」姿に置き換える。
+       置き換えだけ（見本は増やさない・行数も同じ）。文面は v292DfixSCENE2-ambient.js の EX192。 */
+  function miniEx(){ try{ if(localStorage.getItem('v292MiniExOff')==='1') return ''; }catch(e){}
+    try { var C2 = window.__v292DfixSCENE2Core, v = C2 ? C2.ex192() : ''; if (v && C2.EX192[v]) return '\n'+C2.EX192[v]; } catch(_ex){}
+    return '\n'+MINI223; }
 
   // v292Dfix254: NPCアジェンダ(自発性)。状況トリガー+内圧蓄積(おしん設計合意 2026-06-10)。
   //   反応(fix77/react)は受け身の人間味——これは「こちらが何もしなくても自分の目的で動く」深い人間味。
