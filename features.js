@@ -10222,8 +10222,9 @@
       if (changed){ try { if (typeof st.save === 'function') (typeof st.saveC==='function'?st.saveC('features.npcAppearedMark'):st.save()); } catch(e){} }
       if (active.length === npcs.length){ return orig(inputType, inputText); } // all appeared — no swap needed
       st.cast.npcs = active;
+      try { window.__v292Dfix95Roster = npcs; } catch(_r95){}   /* ★CAST1/CALL1（laneCAST1）: build の間だけ全 NPC の名簿を見せる（読むだけ・保存しない・appeared 印は従来どおり）。鍵が無ければ誰も読まない */
       try { return orig(inputType, inputText); }
-      finally { st.cast.npcs = npcs; }
+      finally { st.cast.npcs = npcs; try { window.__v292Dfix95Roster = null; } catch(_r95b){} }
     };
     P.__v292Dfix95Build = true;
     try { console.log('[v292Dfix95] name-triggered NPC appearance guard armed'); } catch(e){}

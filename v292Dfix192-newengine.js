@@ -217,7 +217,7 @@
       var onA1 = !legacyStore && !offA1();               /* ★v292DfixA1 r2 */
       var hkA1 = onA1 ? heroKeyA1() : null;
       var ac1 = legacyStore ? null : age1Ctx(), stale1 = false;   /* ★STATEAGE1 */
-      var C2 = legacyStore ? null : window.__v292DfixSCENE2Core, sv1 = !!(C2 && C2.severeOn()), dr1 = !!(C2 && C2.driveOn()), sevU = [], sevS = [], S2x = null, hero2 = '';   /* ★SEVERE1 r2 / DRIVE1 r2（既定 OFF） */
+      var C2 = legacyStore ? null : window.__v292DfixSevDrvCore, sv1 = !!(C2 && C2.severeOn()), dr1 = !!(C2 && C2.driveOn()), sevU = [], sevS = [], S2x = null, hero2 = '';   /* ★SEVERE1 r2 / DRIVE1 r2（既定 OFF） */
       if (sv1 || dr1){ try { S2x = getS(); hero2 = (S2x && S2x.cast && S2x.cast.hero && S2x.cast.hero.name) || ''; } catch(_s2x){} }
       Object.keys(store).forEach(function(n){
         var s=store[n]||{}; if(!s || typeof s!=='object') return;
@@ -338,9 +338,9 @@
   ].join('\n');
   /* ★EX192（laneSCENE2R・既定 OFF・On v292DfixEX192On='1'＝案 A／'2'＝案 B・kill v292DfixEX192Off='1'・GPT #127-SQ Local GO）:
        見本の「……ねえ、あんたが決めて」（決定を主人公へ渡す）を、「自分の目的・恐怖・立場に応じて判断し、実行できる範囲で動く」姿に置き換える。
-       置き換えだけ（見本は増やさない・行数も同じ）。文面は v292DfixSCENE2-ambient.js の EX192。 */
+       置き換えだけ（見本は増やさない・行数も同じ）。文面は v292DfixSEVDRV-state-judge.js の EX192。 */
   function miniEx(){ try{ if(localStorage.getItem('v292MiniExOff')==='1') return ''; }catch(e){}
-    try { var C2 = window.__v292DfixSCENE2Core, v = C2 ? C2.ex192() : ''; if (v && C2.EX192[v]) return '\n'+C2.EX192[v]; } catch(_ex){}
+    try { var C2 = window.__v292DfixSevDrvCore, v = C2 ? C2.ex192() : ''; if (v && C2.EX192[v]) return '\n'+C2.EX192[v]; } catch(_ex){}
     return '\n'+MINI223; }
 
   // v292Dfix254: NPCアジェンダ(自発性)。状況トリガー+内圧蓄積(おしん設計合意 2026-06-10)。

@@ -222,35 +222,19 @@
     if (!turns.length) return parsed;
     var last = turns[turns.length - 1] || {};
     var tail = now1Tail(last.narrative);
-    var amb = scene2Line(parsed, state);   /* ★SCENE2 r2（既定 OFF・On v292DfixSCENE2On='1'・kill v292DfixSCENE2Off='1'）: OFF なら '' ＝従来と送信バイト同一 */
-    if (!tail && !amb) return parsed;
+    if (!tail) return parsed;
     var ci = parsed.currentInput || {}, it = String(ci.text || '').replace(/\s+/g, ' ').trim();
     if (/続きを(?:自然に)?進めて|^続きを書/.test(it)) it = '';
     if (it.length > NOW1_IN) it = it.slice(0, NOW1_IN - 1) + '…';
     var TYPE = { SAY: '発言', DO: '行動', STORY: '展開' };
-    var text = tail ? ('いまの場面：' + tail + (it ? ('\nこの回の入力：' + (TYPE[String(ci.type || '').toUpperCase()] || '入力') + '「' + it + '」') : '')) : '';
+    var text = 'いまの場面：' + tail + (it ? ('\nこの回の入力：' + (TYPE[String(ci.type || '').toUpperCase()] || '入力') + '「' + it + '」') : '');
     var rule = NOW1_RULE;
-    if (amb){ text = (text ? text + '\n' : '') + amb; rule = NOW1_RULE + window.__v292DfixSCENE2Core.GUARD; }   /* ★SCENE2 r2: 背景の控え 1〜2 行と、古い時刻・一時的な出来事を現在の確定事実にしない 1 文 */
     _now1Last.text = text;
     var o = {}, k, placed = false;
     for (k in parsed){ if (!Object.prototype.hasOwnProperty.call(parsed, k) || k === 'nowScene') continue; o[k] = parsed[k]; if (k === 'recentScenes'){ o.nowScene = { rule: rule, text: text }; placed = true; } }
     if (!placed) o.nowScene = { rule: rule, text: text };
     return o;
   }
-  /* ★SCENE2 r2（laneSCENE2R・2026-11-12・試作・既定 OFF・GPT #127-SQ）: 天候は「継続候補」、時刻は「最後に確認された時刻／現在は未確定」、
-       一度起きた出来事は過去の事実、続く出来事は終了を判定——を nowScene に 1〜2 行で添える。
-       判定は v292DfixSCENE2-ambient.js（純関数・保存しない・AI 呼び出しなし）。ON でも値が 1 つも無ければ何も足さない。 */
-  var _scene2Last = null;
-  function scene2Line(parsed, state){
-    try {
-      var C = window.__v292DfixSCENE2Core; if (!C || !C.on()) return '';
-      var r = C.build(state, { currentInput: parsed && parsed.currentInput });
-      var l = C.line(r.norm);
-      _scene2Last = { turn: r.cur, norm: r.norm, line: l, trace: r.trace };
-      return l;
-    } catch(e){ return ''; }
-  }
-  window.__v292DfixSCENE2 = { VER: 'scene2-20261112-r2c', last: function(){ return _scene2Last; } };
   window.__v292DfixNOW1 = { VER: 'now1-20261111', on: now1On, tail: now1Tail, last: function(){ return _now1Last; } };
   var _facts2Pins = 0;
   var _facts1Last = null;
@@ -263,6 +247,19 @@
     for (k in parsed){ if (!Object.prototype.hasOwnProperty.call(parsed, k) || k === 'earlierFacts') continue; o[k] = parsed[k]; if (k === 'storySoFar'){ o.earlierFacts = { rule: FACTS1_RULE, items: items }; placed = true; } }
     if (!placed) o.earlierFacts = { rule: FACTS1_RULE, items: items };
     return o;
+  }
+  /* ★CAST1 / CALL1 / SPK3（laneCAST1・2026-11-13・試作・既定 OFF・GPT #127-SU ①②③）: 判定は別ファイルの純関数（保存しない・AI 呼び出しなし・sys 0 字）。
+       CAST1（v292DfixCAST1On='1'／比較腕 '2'・kill v292DfixCAST1Off='1'）: 物語の最初の回だけ、開始場面にいると確定している NPC の説明を cast.npcs に補う（v292DfixCAST1-opening-cast.js）。
+       CALL1（v292DfixCALL1On='1'・kill v292DfixCALL1Off='1'）: earlierFacts.items の最後に「呼称の先例」1 行・最大 120 字（v292DfixCALL1-confirmed-speech.js）。
+       SPK3 （v292DfixSPK3On='1'・kill v292DfixSPK3Off='1'）: recentScenes の直後に recentSpeakers（直近 2 ターンの確定した話者の参照。本文は書き換えない）（同上）。
+       部品が読み込まれていない・鍵が無い・例外 のときは parsed をそのまま返す。全 NPC の名簿は fix95 が build の間だけ window.__v292Dfix95Roster に置く（無ければ state.cast.npcs）。 */
+  function castCallSpkApply(parsed, state){
+    var roster = null;
+    try { roster = Array.isArray(window.__v292Dfix95Roster) ? window.__v292Dfix95Roster : null; } catch(e){}
+    try { var C1 = window.__v292DfixCAST1Core; if (C1 && C1.mode()) parsed = C1.apply(parsed, state, roster) || parsed; } catch(e1){}
+    try { var C2 = window.__v292DfixCALL1Core; if (C2 && C2.on()) parsed = C2.apply(parsed, state, roster, FACTS1_RULE) || parsed; } catch(e2){}
+    try { var C3 = window.__v292DfixSPK3Core; if (C3 && C3.on()) parsed = C3.apply(parsed, state) || parsed; } catch(e3){}
+    return parsed;
   }
   window.__v292DfixFACTS1 = { VER: 'facts1-20261111', on: facts1On, build: facts1Build, sentence: facts1Sentence, last: function(){ return _facts1Last; } };
   window.__v292DfixFACTS2 = { VER: 'facts2-20261111', on: facts2On, measureOnly: facts2MeasureOnly, pins: function(){ return _facts2Pins; } };
@@ -350,6 +347,7 @@
 
       parsed = now1Apply(parsed, state);     /* ★NOW1（kill v292DfixNOW1Off='1'）: recentScenes の直後に nowScene（直前ターンが無ければ何もしない） */
       parsed = facts1Apply(parsed, state);   /* ★FACTS1（kill v292DfixFACTS1Off='1'）: storySoFar の直後に earlierFacts（無ければ何もしない） */
+      parsed = castCallSpkApply(parsed, state);   /* ★CAST1 / CALL1 / SPK3（laneCAST1・GPT #127-SU・すべて既定 OFF・鍵は別々）: 鍵が無ければ parsed をそのまま返す＝送信バイト同一 */
 
       return JSON.stringify(parsed, null, 2);
     } catch(e){
