@@ -637,6 +637,24 @@
      外側を奪われることはない。 */
   var _lateWrap = false;
   var _real930 = null;
+  /* ★F850ORD（laneF850・GPT #127-SS・候補）: 初期化順の確定。
+     実測: fix192（新エンジン）は内側が作った sys を捨てて作り直し、その外側の keeper が【制約】を足し直す。
+     本 fix が fix192 の「内側」に入ると、外側の keeper は shadow の外で fix414 を呼ぶ＝その回の描写を見ない【制約】になる。
+     fix192 の最初の装着は読み込みの途中で外れ、2 秒ごとの見直しで付け直される。fix74／fix75 も後から包む。
+     どれも自分の印（__v292…）が最上位に見えないあいだは「これから外側を包む」部品なので、
+     読み込まれているのに印が見えないあいだは待つ（＝fix333・keeper と同じ待ち方を、fix192・fix74・fix75 にも広げるだけ）。
+     待ちの上限は ORD_MAX_TRIES 回（250ms × 32 ＝ 約 8 秒）。超えたらこの待ちだけをやめ、従来の条件（fix333 と keeper）で包む。
+     kill: localStorage v292DfixF850OrdOff='1' → この待ちをしない（従来と同じ）。新しい見張り・包み直し・保存・SYS の文面は足していない。 */
+  var ORD_MAX_TRIES = 32;
+  var _ordGaveUp = false, _ordWaited = 0;
+  function ordOn(){ return ls('v292DfixF850OrdOff') !== '1'; }
+  function ordWait(P){
+    var w = [];
+    try { if (G.__v292NewEngine && !P.build.__v292NewEngine) w.push('fix192'); } catch(e){}
+    try { if (G.__v292Dfix74Active && !P.build.__v292Dfix74w) w.push('fix74'); } catch(e){}
+    try { if (G.__v292Dfix75Active && !P.build.__v292Dfix75w) w.push('fix75'); } catch(e){}
+    return w;
+  }
   function depsReady(){
     try {
       var P = G.Planner;
@@ -645,6 +663,7 @@
          未ロードの環境（harness 等）では待たない。 */
       if (G.__v292Dfix333 && !P.__fix333build) return false;
       if (G.__f379done && !P.build.__f379) return false;
+      if (ordOn() && !_ordGaveUp && ordWait(P).length) return false;   /* ★F850ORD */
       return true;
     } catch(e){ return false; }
   }
@@ -697,6 +716,8 @@
     var tries = 0;
     var iv = setInterval(function(){
       tries++;
+      /* ★F850ORD: 上限。超えたら fix192／fix74／fix75 の待ちだけをやめる（従来の条件で包む） */
+      try { if (!_ordGaveUp && ordOn()){ var Pq = G.Planner; if (Pq && typeof Pq.build === 'function' && !Pq.build.__f850 && ordWait(Pq).length){ _ordWaited = tries; if (tries > ORD_MAX_TRIES){ _ordGaveUp = true; try { console.warn(TAG, 'F850ORD: gave up waiting for', ordWait(Pq).join(',')); } catch(_o){} } } } } catch(_q){}
       if (wrap()){ clearInterval(iv); return; }
       if (tries > 60){
         /* 15 秒待っても上流が揃わない異常系。ラップはするが **必ず記録を残す**
@@ -719,7 +740,9 @@
         lateWrap: _lateWrap,
         /* outermost: 自分のラッパが現在の Planner.build 本体であること */
         outermost: !!(P && P.build && P.build.__f850),
-        upstream: { fix333Wrapped: !!(P && P.__fix333build), fix379Wrapped: !!(P && P.build && P.build.__f379) }
+        upstream: { fix333Wrapped: !!(P && P.__fix333build), fix379Wrapped: !!(P && P.build && P.build.__f379) },
+        /* ★F850ORD: on＝待ちが有効／waiting＝いま待っている相手／waited＝待った回数（250ms 単位）／gaveUp＝上限で待ちをやめた */
+        ord: { v: 'f850ord-1', on: ordOn(), waiting: (function(){ try { return (P && typeof P.build === 'function') ? ordWait(P) : []; } catch(e){ return []; } })(), waited: _ordWaited, gaveUp: _ordGaveUp }
       };
     },
     overlayFor: function(playerText, mode){ return buildOverlay(playerText, mode); },
