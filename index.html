@@ -297,6 +297,7 @@
 <script src="v292Dfix900-hydrate-ui-gate.js?cb=20260928-ac8"></script>
 <!-- ★si1 v292Dfix892 SAVE_INTEGRITY_HELD_INPUT_GUARD（packet SAVE_INTEGRITY_P1_20260927_01 / GPT GO_WITH_FIXES B'）: fix705 HOLD 中は送信を生成前に止める。read-only。★head・fix705 の直後＝送信 UI（#sendBtn 等）より先に同期ロードし、document capture で入口を押さえる（GPT SAVE_INTEGRITY_P1_20260927_02 条件 1 = load-order）。kill=v292Dfix892Off=1 -->
 <script src="v292Dfix892-held-input-guard.js?cb=20261011-s1b"></script>
+<script src="v292DfixLAT1-press-feedback.js?cb=20261112-lat1"></script>
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
@@ -4843,6 +4844,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixLORE1-world-lore.js?cb=20261110-bundle93-l"></script><!-- ★LORE1 (GPT #127-RQ ② 案 A): 世界観メモ（scene.lore）を keeper prio1 の【世界設定・参照データ】として毎ターン sys へ（上限 400 コードポイント・文の終わりで切る・GM 専用部分を外す・保存原文は変えない）。既定は影モード（組み立てて診断だけ・送信は 93-k と同じ）。ON は管理者画面の鍵 lore1（Worker v46.40・READY・行なし=OFF）または端末の v292DfixLORE1On='1'。kill: v292DfixLORE1Off='1'。fix459 の MARKERS に見出しを登録（?cb 更新）。Planner.build は包まない -->
 <script src="v292DfixREAD1-scene-consistency.js?cb=20261110-read1a"></script><!-- ★READ1 (GPT #127-RY ①): keeper prio1 の【場面の一貫性】＋【話者】末尾の 1 文。既定は影。ON=端末 v292DfixREAD1On=1 / 管理者画面の鍵 read1。kill v292DfixREAD1Off=1 -->
 <script src="v292DfixUI2-readability.js?cb=20261111-ui2b"></script>
+<script src="v292DfixUI3-polish.js?cb=20261112-ui3a"></script>
 </body>
 </html>
 
