@@ -344,7 +344,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261112-ui4ff1gc1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261113-gc1bspk2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4155,7 +4155,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix803-auto-materialize.js?cb=20260930-ac25"></script>
 <script src="v292Dfix697-shadow-story-commit.js?cb=20261108-bundle93-i"></script>
 <!-- ★fix912 SA-3 S2 in-session reconcile（fix697 の後・kill v292Dfix912Off / v292Dfix911Off） -->
-<script src="v292Dfix912-s2-insession.js?cb=20261112-gc1"></script>
+<script src="v292Dfix912-s2-insession.js?cb=20261112-gc1b"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
      OFF=v292Dfix729Off / 検証口=window.__v292Dfix729 -->
 <script src="v292Dfix729-title-sync.js?cb=20261010-rs1"></script>
@@ -4898,6 +4898,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixREAD1-scene-consistency.js?cb=20261110-read1a"></script><!-- ★READ1 (GPT #127-RY ①): keeper prio1 の【場面の一貫性】＋【話者】末尾の 1 文。既定は影。ON=端末 v292DfixREAD1On=1 / 管理者画面の鍵 read1。kill v292DfixREAD1Off=1 -->
 <script src="v292DfixUI2-readability.js?cb=20261111-ui2b"></script>
 <script src="v292DfixUI3-polish.js?cb=20261112-ui3a"></script>
+<script src="v292DfixSPK2-speaker-shadow.js?cb=20261112-spk2hb1"></script><!-- ★SPK2+HB1 (laneSCENE2 / laneP0C・GPT #127-SQ): 会話ログ話者の影（記録だけ）。HB1＝裸の「」が根拠なく主人公のカードになるとき ??? を提案。kill v292DfixSPK2Off / 適用 v292DfixSPK2Apply=1（既定 OFF） -->
 </body>
 </html>
 
