@@ -319,7 +319,7 @@
 <script src="v292Dfix569-gc-shadow.js?cb=v292Dfix680"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者（fix569 が捕捉済みの native を借りる） -->
 <script src="v292Dfix660-delete-gateway.js?cb=v292Dfix680"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=20261112-key1"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=20261112-store1c"></script>
 <script src="v292Dfix564-snapshot.js?cb=20261112-key1"></script>
 <!-- v292Dfix721(STEP4F): SAFE RESTORE ENGINE。fix291のimportAllを委譲で受け、
      NON-DESTRUCTIVE MERGE + default-deny + durable journal + boot rollbackで復元する。
@@ -373,7 +373,7 @@
 <script src="v292Dfix710-home-delete-autoresume.js?cb=20261020-bundle34-a"></script>
 <!-- ★★DL2 (S-2 / GPT #127-FJ): 物語を一覧から削除する（サーバの版を基準にした削除・確認は画面内のシート・受け取り側の片づけ・止まっている削除の一覧）。
      fix587 / fix697 / fix933 / fix710 より後。下の inline script が window.__v292DhomeDL2（render / all）を出す。kill = localStorage v292DfixDL2Off=1 -->
-<script src="v292DfixDL2-server-delete.js?cb=20261111-unprot" data-dl2="home"></script>
+<script src="v292DfixDL2-server-delete.js?cb=20261111-unprot" data-dl2="home"></script><script src="v292DfixSTORE1b-device-free.js?cb=20261112-store1c"></script><!-- ★STORE1b r2 (GPT #127-SG B / #127-SI): 「この端末の空き容量を増やす」＝サーバーで削除済み・クラウドに同じ本文ありと確かめた物語の端末の写しを、選んだものだけ消す（消す間は Web Lock story-open を排他で持つ）。HOME を開くだけでは何も消さない。dry-run=localStorage v292DfixSTORE1Dry=1 / まとめて=v292DfixSTORE1Multi=1（既定 OFF）/ OFF=v292DfixSTORE1Off=1 -->
 <!-- ★B37-D (GPT #127-HF D): 物語カードの「…」→「この物語を削除」= DL2 の確認シート（openDelete）をそのまま開くだけ。OFF=localStorage v292DfixB37dOff=1 -->
 <script src="v292DfixB37-home-menu.js?cb=20261021-bundle37-a"></script>
 <!-- ★JR1 (GPT #127-HC): サーバーで削除済み（墓標）と確かめた物語を指す fix750 journal だけを退避する（写して読み戻し一致 → 元キーを消す）。サーバー書込 0・UI 変更 0。OFF=localStorage v292DfixJR1Off=1 -->

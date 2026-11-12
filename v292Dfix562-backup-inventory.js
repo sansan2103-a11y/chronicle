@@ -691,6 +691,14 @@
       return out;
     }
 
+    /* ★★STORE1b (GPT #127-SG Q4): 「この端末の空き容量を増やす」専用の verified 許可。intent 'device-free' のときだけ見る
+       （ほかの intent の判断は 1 行も変わらない。LDR の許可も広げない）。STORE1b が同じ実行の中で作り、ここへ登録（store1Arm）した
+       揮発の証拠（アカウント・物語・サーバーの削除済み証明・キーと値の一覧）に載っている exact key と、その計画時の値そのものだけを許す。 */
+    if (intent === S1_INTENT){
+      var s1 = store1Authorization(req, c);
+      if (s1.ok){ out.allow = true; out.code = 'device-free-verified-store1'; out.binding = s1.binding; return out; }
+      out.code = 'device-free-requires-store1-proof'; out.store1Why = s1.why; return out;
+    }
     if (c.protection === 'review'){ out.code = 'unknown-format-review-only'; return out; }
     if (c.protection === 'releasable'){
       if (intent === 'reclaim' || intent === 'retention' || intent === 'lifecycle-delete'){
@@ -825,6 +833,69 @@
                         resolvedServerRev: vp.resolvedServerRev } };
   }
 
+  /* ================= ★★STORE1b (GPT #127-SG Q2/Q4): device-free の verified 許可 ======================
+   * ・証拠（proof）は STORE1b が 1 回の「この端末から消す」の中で作り、store1Arm で登録する。登録はメモリだけ・同時に 1 件だけ。
+   *   登録時に凍結した写しを返し、deletePolicy はその写しと同一（===）の proof だけを受け付ける（他のコードが作った proof は通らない）。
+   * ・store1Disarm で必ず捨てる（STORE1b は finally で呼ぶ）。TTL 120 秒を過ぎた proof も通らない。
+   * ・許すのは: proof の keys に載っている exact key ∧ 今の値が計画時の値と 1 文字も違わない ∧ そのキーが KEY1 の完全一致で
+   *   proof の物語のもの ∧ 分類が生セーブ本体・サイドストア（snapshot・控え・共有画像は不可）∧ この端末の meta に墓標がある。
+   * ・何も消さない・何も書かない（判断だけ）。kill v292DfixSTORE1Off='1' のときは常に拒否。 */
+  var S1_INTENT = 'device-free', S1_TTL_MS = 120000, S1_ID_RE = /^s[0-9a-z]{8,10}$/, s1Armed = null;
+  function s1Freeze(o){ if (o && typeof o === 'object'){ Object.keys(o).forEach(function(k){ s1Freeze(o[k]); }); Object.freeze(o); } return o; }
+  function store1Arm(proof){
+    if (lsg('v292DfixSTORE1Off') === '1') return null;
+    if (!proof || typeof proof !== 'object' || proof.kind !== 'STORE1') return null;
+    var c = null; try { c = JSON.parse(JSON.stringify(proof)); } catch(e){ return null; }
+    s1Armed = s1Freeze(c);
+    return s1Armed;
+  }
+  function store1Disarm(){ s1Armed = null; }
+  function store1Authorization(req, c){
+    function no(why){ return { ok:false, why:why }; }
+    if (lsg('v292DfixSTORE1Off') === '1') return no('store1-off');
+    var K1 = key1(); if (!K1) return no('key1-unavailable');
+    var p = req.store1Proof;
+    if (!p || !s1Armed || p !== s1Armed) return no('proof-not-armed');
+    if (p.v !== 2 || p.kind !== 'STORE1' || typeof p.runId !== 'string' || !p.runId) return no('proof-shape');
+    var sid = String(p.storyId == null ? '' : p.storyId);
+    if (!S1_ID_RE.test(sid) || KEY1_LEGACY[sid]) return no('proof-story-shape');
+    if (typeof p.accountId !== 'string' || !p.accountId || p.accountIdAfter !== p.accountId) return no('proof-account');
+    if (p.serverDeleted !== true) return no('proof-not-deleted');
+    if (p.authority !== 'shadow' && p.authority !== 'canonical') return no('proof-authority');
+    if (typeof p.serverRev !== 'number' || !isFinite(p.serverRev) || p.serverRev < 1) return no('proof-rev');
+    if (p.serverBodyHeld !== true) return no('proof-server-body-not-held');
+    /* ★STORE1c (GPT #127-SI R1②): 端末のターンが全部、同じ内容でサーバーの行にあると STORE1b が同じ実行の中で確かめたこと */
+    if (p.contentMatched !== true) return no('proof-content-not-matched');
+    if (typeof p.localTurns !== 'number' || !(p.localTurns >= 0) || Math.floor(p.localTurns) !== p.localTurns ||
+        typeof p.serverTurns !== 'number' || !(p.serverTurns >= 1) || p.serverTurns < p.localTurns) return no('proof-content-not-matched');
+    var at = p.issuedAt, now = Date.now();
+    if (typeof at !== 'number' || !isFinite(at) || at <= 0) return no('proof-timestamp-invalid');
+    if (now - at < 0) return no('proof-timestamp-future');
+    if (now - at > S1_TTL_MS) return no('proof-stale');
+    var k = String(req.key == null ? '' : req.key);
+    if (k !== 'chr6_slot_' + sid && !K1.belongs(k, sid)) return no('key-not-story');
+    var so = K1.storyOf(k);
+    if (!so || so.kind === 'snapshot' || so.kind === 'vault' || so.kind === 'rescue') return no('key-kind-not-allowed');
+    if (!c || String(c.slotId) !== sid) return no('class-slot-mismatch');
+    /* 本体を消した後のサイドキー・同期の印は「生きていない物語」のキーとして review（side-store-not-live）か、
+       旧 id 形（_sm…）なら orphan-side-store（releasable）に分類される。どちらも proof の exact key のときだけ。 */
+    if (!((c.protection === 'hard' && (c.family === 'live-story' || c.family === 'live-side-store')) ||
+          (c.protection === 'review' && c.family === 'side-store-not-live') ||
+          (c.protection === 'releasable' && c.family === 'orphan-side-store'))) return no('class-not-allowed');
+    var it = null, ks = p.keys;
+    if (Object.prototype.toString.call(ks) !== '[object Array]') return no('proof-keys-missing');
+    for (var i = 0; i < ks.length; i++){ if (ks[i] && ks[i].key === k){ it = ks[i]; break; } }
+    if (!it) return no('key-not-in-proof');
+    var raw = (req.value !== undefined) ? req.value : lsg(k);
+    if (raw == null) return no('value-missing');
+    if (typeof it.value !== 'string' || raw !== it.value) return no('value-changed');
+    var hv = hash(raw);
+    if (raw.length !== it.bytes || hv !== it.hash) return no('value-changed');
+    if (!metaTombstoneExists(sid)) return no('no-meta-tombstone');
+    if (!tombstoneReady()) return no('tombstone-barrier-not-ready');
+    return { ok:true, binding: { key: k, bytes: raw.length, hash: hv, storyId: sid, runId: p.runId, serverRev: p.serverRev } };
+  }
+
   window.__v292Dfix562 = {
     off: off,
     report: report,
@@ -838,6 +909,8 @@
     /* fix578(A3.1): 読取専用の汎用分類器。protectedSet() の意味は据え置き。 */
     classifyKey: classifyKey,
     deletePolicy: deletePolicy,
+    /* ★STORE1b: device-free の証拠の登録・破棄（メモリだけ） */
+    store1Arm: store1Arm, store1Disarm: store1Disarm,
     _hash: hash, _tsFromKey: tsFromKey, _slotFromKey: slotFromKey, _slotFromKeyOld: slotFromKeyOld, _familyOf: familyOf, _score: score
   };
   try { if (!off()) console.log(TAG, 'ready (read-only)'); } catch(e){}
