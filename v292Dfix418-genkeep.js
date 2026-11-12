@@ -26,6 +26,7 @@
 // =====================================================================
 (function(){
   'use strict';
+  /* ★UI4a: 設定の決定ボタンの名前（1 ターン以上=「保存して物語に戻る」/ 0 ターン=従来）を案内文でもそろえる。kill v292DfixUI4aOff='1' */ function ui4aL(){ try { return (window.__chrSaveLabel && window.__chrSaveLabel()) || '保存してゲーム開始'; } catch(e){ return '保存してゲーム開始'; } }
   if (window.__v292Dfix418) return;
   window.__v292Dfix418 = true;
   var TAG = '[v292Dfix418:genkeep]';
@@ -119,7 +120,7 @@
         try {
           var n = restore(ps, pn);
           if (n > 0){
-            try { U.setStatus('🎲 未保存の生成内容を復元しました。「✔ 保存してゲーム開始」で確定します。'); } catch(e){}
+            try { U.setStatus('🎲 未保存の生成内容を復元しました。「✔ ' + ui4aL() + '」で確定します。'); } catch(e){}
             try { console.log(TAG, 'restored', n, 'field(s)'); } catch(e){}
           }
         } catch(e){ try { console.warn(TAG, 'restore failed:', e && e.message); } catch(_){} }

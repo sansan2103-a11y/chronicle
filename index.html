@@ -344,7 +344,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261112-purge1c';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261112-ui4ff1gc1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -956,7 +956,7 @@ body {
     </div>
     <div class="mpanel-footer">
       <div class="mpanel-footer-main">
-        <button class="btn-p" onclick="UI.saveSettings()">✔ 保存してゲーム開始</button>
+        <button class="btn-p" id="cfgSaveBtn" onclick="UI.saveSettings()">✔ 保存してゲーム開始</button>
         <button class="btn-s" onclick="UI.closeSettings()">閉じる</button>
       </div>
       <div style="margin-top:8px">
@@ -2050,6 +2050,37 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
          （例: 涼太が振り返ると、澪が「行こう」と囁いた → 澪の台詞なので残す）。OFF: v292DfixCL1eOff='1'。 */
       const _off1e = (function(){ try { return localStorage.getItem('v292DfixCL1eOff') === '1'; } catch(_x){ return false; } })();
       const _oth1e = ((S.cast && S.cast.npcs) || []).map(n => n && n.name).filter(n => n && n !== heroName);
+      /* ★FF1a（GPT #127-SM B1 条件付き出荷 GO）: 主人公ロックが「入力の実現」ごと行（段落）を消さないようにする。kill: v292DfixFF1aOff='1'（＝下の CL1-e のまま）。
+         (1) 主人公の主語のあとの「」が台詞でないときは消さない＝書かれた文字・名前・語の引用:
+             「」のすぐ後が と書かれ/と記され/と刻まれ/と彫られ/と印字・印刷/と表示/と貼られ/と掲げ/と描かれ/と綴られ/と浮かび/と読める/とある・とあった（間に 言・叫・呟・囁・答・告・問・頷 などの話す語が無いとき）、
+             または という/といった/との/を/の/が/は/も/に/へ/で/や（その後 5 字以内に 声・言・叫・呟・囁・繰り返・口に・告げ・答え・読み上げ・合図 などが無いとき）。
+             「」の直前が 看板・張り紙・貼り紙・表札・名札・札・メモ・画面・表示・ラベル・掲示・標識・プレート・案内板・文字 ＋（の/に/には/にも/で/では/、/：）のときも引用。
+         (2) 台詞のときも、消すのはその「」を含む 1 文だけ（段落ごとは消さない。同じ段落の行動・発見の文・別の人物の台詞の文は残る）。CL1-eOff のときは従来どおり行ごと。 */
+      const _ff1a = (function(){ try { return localStorage.getItem('v292DfixFF1aOff') !== '1'; } catch(_x){ return false; } })();
+      if (_ff1a && !_off1e) {
+        const _rxH1a = new RegExp(`${heroName}[はが]([^「]*)「`, 'g');
+        const _sp1a = '言|叫|呟|囁|答|告|問|尋|怒鳴|返|続け|頷|笑|声';
+        const _nonSp1a = new RegExp('^(?:と|って)?(?:だけ|のみ)?(?:(?!' + _sp1a + ')[^。「」\\n]){0,6}?(?:書か|書い|書き|記さ|記し|刻ま|刻ん|彫ら|彫っ|印字|印刷|表示|貼ら|掲げ|描か|綴ら|浮か|読め|読みと|読み取)'
+          + '|^(?:と|って)(?:だけ|のみ)?あ(?:る|った|り[、，。])'
+          + '|^(?:という|といった|との|を|の|が|は|も|に|へ|で|や|と[、，]?[^。「」\\n]{0,3}?(?:並|同|一緒))(?![^。「」\\n]{0,5}?(?:' + _sp1a + '|繰り返|口に|口走|告げ|読み上げ|合図))');
+        const _sign1a = /(?:看板|張り紙|貼り紙|貼紙|表札|名札|札|メモ|画面|表示|ラベル|掲示|標識|プレート|案内板|文字)(?:の|に|には|にも|で|では|、|，|：|:)?$/;
+        const _sents1a = function(line){ const out = []; let d = 0, b = 0; for (let i = 0; i < line.length; i++){ const ch = line[i]; if (ch === '「' || ch === '『') d++; else if ((ch === '」' || ch === '』') && d > 0) d--; else if (d === 0 && /[。！？!?]/.test(ch)){ let e = i + 1; while (e < line.length && /[。！？!?」』）)]/.test(line[e])) e++; out.push([b, e]); b = e; i = e - 1; } } if (b < line.length) out.push([b, line.length]); return out; };
+        plan.narrative = plan.narrative.map(s => {
+          if (typeof s !== 'string') return s;
+          const drop = []; let m; _rxH1a.lastIndex = 0;
+          while ((m = _rxH1a.exec(s))) {
+            const q = m.index + m[0].length - 1; _rxH1a.lastIndex = q + 1;
+            if (_oth1e.some(n => new RegExp(n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[はがも]').test(m[1]))) continue;   /* CL1-e と同じ：別の人物が主語＝その人の台詞 */
+            const qe = s.indexOf('」', q); const post = qe >= 0 ? s.slice(qe + 1, qe + 20) : '';
+            if (qe >= 0 && _nonSp1a.test(post)) continue;   /* 書かれた文字・名前・語の引用＝台詞ではない */
+            if (_sign1a.test(m[1])) continue;   /* 看板・張り紙・表札・メモ・画面・ラベル などの文字の引用 */
+            drop.push(q);
+          }
+          if (!drop.length) return s;
+          const keep = _sents1a(s).filter(r => !drop.some(q => q >= r[0] && q < r[1])).map(r => s.slice(r[0], r[1]));
+          return keep.join('').trim();
+        }).filter(s => typeof s !== 'string' || s.length > 0);
+      } else
       plan.narrative = plan.narrative.filter(s => {
         if (_off1e) return !new RegExp(`${heroName}[はが].*「`).test(s);
         if (typeof s !== 'string') return true;
@@ -2085,6 +2116,22 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
       if (!line || line.length < 2) return false;
       // ひらがなまたはカタカナを最低1つ含む行だけ残す
       if (/[぀-ゟ゠-ヿ]/.test(line)) return true;
+      /* ★FF1b（GPT #127-SM B1 条件付き出荷 GO）: 登録キャラ（主人公・登録 NPC の名前と完全一致）の <say> 1 行だけの台詞は、中身が漢字・数字だけ（句読点・三点リーダー・長音などを除き 1〜12 字）でも残す（「……五時、五十八分」「……煙」）。
+         CL1-f の <say> の枝は、外側の fix61 が <say> を U+E000 who U+E001 本文 U+E002 に包んでから呼ぶため一度も当たっていなかった（実測 66 ターン）。その形も見る。
+         中国語専用の字（CL1-f と同じ表）を含む行・中国語の機能語（我你他她的了是不在…）を 2 字以上含む行・登録名でない who・13 字以上・地の文は従来どおり捨てる。kill: v292DfixFF1bOff='1'。 */
+      try {
+        if (localStorage.getItem('v292DfixFF1bOff') !== '1') {
+          const q1b = line.match(/^\s*(?:\uE000([^\uE001\uE002]*)\uE001([^\uE002]*)\uE002|<say\s+who="([^"]*)"\s*>([^<]*)<\/say>)\s*$/);
+          if (q1b) {
+            const w1b = String(q1b[1] != null ? q1b[1] : q1b[3] || '').trim();
+            const in1b = String(q1b[1] != null ? q1b[2] : q1b[4] || '').replace(/[\s　。、．，！？!?…‥・ー〜—―「」『』]/g, '');
+            const cast1b = [heroName].concat(((S.cast && S.cast.npcs) || []).map(n => n && n.name)).filter(Boolean);
+            if (w1b && cast1b.indexOf(w1b) >= 0 && in1b && in1b.length <= 12 && /^[一-鿿々〇0-9０-９]+$/.test(in1b)
+                && !/[你您们这那么吗呢吧没说话还让给对从东几亲爱觉哪谁怎样围过现谢请问听见时间什]/.test(in1b)
+                && (in1b.match(/[我你他她它的了是不在有个和吗呢吧么]/g) || []).length < 2) return true;
+          }
+        }
+      } catch(_e1b){}
       /* ★CL1-f（GPT #125-BG 残件・かな無し台詞行）: 日本語の短い台詞「何？」「嘘……」<say>本当！</say> を守る。
          対象は台詞行だけ・中身が漢字 1〜4 字（記号を除く）・中国語専用の字を含まない時だけ。地の文の言語フィルタは不変。OFF: v292DfixCL1fOff='1'。 */
       try {
@@ -2115,6 +2162,11 @@ narrativeの注意: 各要素は「〜した」「〜と言った」形式の完
 // ─────────────────────────────────────────────────────────────
 // UI
 // ─────────────────────────────────────────────────────────────
+/* ★UI4a (2026-11-12 Owner): 設定の決定ボタン。1 ターン以上進んだ物語では「✔ 保存して物語に戻る」、0 ターンでは従来の「✔ 保存してゲーム開始」。
+   表示だけ（saveSettings の動きは同じ）。案内文（fix335/418/436/573）も同じ名前を引用する。kill: localStorage v292DfixUI4aOff='1' → ボタンに触らず従来の名前を返す。 */
+window.__chrSaveLabel = function(){ var OLD = '保存してゲーム開始'; try { if (localStorage.getItem('v292DfixUI4aOff') === '1') return OLD; } catch(e){ return OLD; }
+  var n = 0; try { n = (S && S.turns && S.turns.length) || 0; } catch(e){ n = 0; } var L = n >= 1 ? '保存して物語に戻る' : OLD;
+  try { var b = document.getElementById('cfgSaveBtn'); if (b && b.textContent !== '✔ ' + L) b.textContent = '✔ ' + L; } catch(e){} return L; };
 const UI = {
   esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); },
 
@@ -2251,6 +2303,7 @@ const UI = {
     document.getElementById('cfgObj').value   = S.scene.obj  || '';
     document.getElementById('cfgTone').value  = S.scene.tone || '';
     this._renderNpcList();
+    try { window.__chrSaveLabel(); } catch(e){}   /* ★UI4a: 決定ボタンの名前をターン数に合わせる */
     document.getElementById('settingsOv').classList.add('open');
     /* ★v292Dfix854: APIキー未設定が理由で開いた時だけ ⚙システム タブを初期選択にする
        (通常の手動 open は reason 無し = 従来どおり)。詳細は v292Dfix854-firstrun-key-tab.js */
@@ -4102,7 +4155,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix803-auto-materialize.js?cb=20260930-ac25"></script>
 <script src="v292Dfix697-shadow-story-commit.js?cb=20261108-bundle93-i"></script>
 <!-- ★fix912 SA-3 S2 in-session reconcile（fix697 の後・kill v292Dfix912Off / v292Dfix911Off） -->
-<script src="v292Dfix912-s2-insession.js?cb=20261022-bundle41-a"></script>
+<script src="v292Dfix912-s2-insession.js?cb=20261112-gc1"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
      OFF=v292Dfix729Off / 検証口=window.__v292Dfix729 -->
 <script src="v292Dfix729-title-sync.js?cb=20261010-rs1"></script>
@@ -4117,7 +4170,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- v292Dfix573: 主人公が「無言で消える」のを見張る。
      名前が「あった→無くなった」書込を捉え、旧値の控えを取り、その場で知らせる。
      書込は止めない・自動復元もしない。OFF=v292Dfix573Off -->
-<script src="v292Dfix573-hero-guard.js?cb=20261009-f573b"></script>
+<script src="v292Dfix573-hero-guard.js?cb=20261112-ui4"></script>
 <!-- v292Dfix553: 句読点崩れの発生段階を突き止める読み取り専用の検出器。
      ★fetchラッパを持つ他のfix(80/464/476/482)より【前】に置くこと。
      それらは new Response で応答を作り直すので、後から読み込むと「出口ガード後の本文」しか見えず
@@ -4533,7 +4586,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix577-delete-entry-guard.js?cb=v292Dfix577"></script>
 <script src="v292Dfix933-beta-delete-off.js?cb=20261111-delall"></script>
 <!-- ★★DL2 (S-2 / GPT #127-FJ D8): ゲーム画面の「削除」とギャラリーの「セーブを削除」は「削除はホームから」の案内だけ（旧経路の送信を止める）。kill = v292DfixDL2Off=1 -->
-<script src="v292DfixDL2-server-delete.js?cb=20261111-unprot" data-dl2="index"></script>
+<script src="v292DfixDL2-server-delete.js?cb=20261112-ui4" data-dl2="index"></script>
 <script src="v292Dfix313-story-cards.js?cb=20261019-bundle31-a"></script>
 <script src="v292Dfix314-memory.js?cb=20260829-fix748"></script>
 <script src="v292Dfix317-slot-leak.js?cb=20260901-fix783"></script>
@@ -4561,7 +4614,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix884-byok-dev-only.js?cb=20260919-sp14"></script>
 <!-- ★GENDER1 (おしん 2026-11-07・bundle93-h): 自動で作ったキャラの性別を自動で決める（AI 埋め・おまかせ。利用者が選んだ性別は触らない）。kill: localStorage v292DfixGENDER1Off=1 -->
 <script src="v292DfixGENDER1-autogender.js?cb=20261108-bundle93-h"></script>
-<script src="v292Dfix335-omakase.js?cb=20261108-bundle93-h"></script>
+<script src="v292Dfix335-omakase.js?cb=20261112-ui4"></script>
 <script src="v292Dfix351-settings-draft.js?cb=20261008-int1"></script>
 <script src="v292Dfix352-hero-placeholder.js?cb=v292Dfix352"></script>
 <script src="v292Dfix353-omakase-fill-rest.js?cb=v292Dfix353"></script>
@@ -4613,13 +4666,13 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix415-opening-mask.js?cb=v292Dfix415b"></script>
 <script src="v292Dfix416-pain-style.js?cb=v292Dfix428"></script>
 <script src="v292Dfix417-reaction-unified.js?cb=v292Dfix426"></script>
-<script src="v292Dfix418-genkeep.js?cb=v292Dfix418"></script>
+<script src="v292Dfix418-genkeep.js?cb=20261112-ui4"></script>
 <script src="v292Dfix475-recipe-v3.js?cb=v292Dfix486"></script>
 <script src="v292Dfix477-autocomplete-off.js?cb=v292Dfix477"></script>
 <script src="v292Dfix483-genbudget-sync.js?cb=v292Dfix495"></script>
 <script src="v292Dfix427-output-sanitize.js?cb=20261019-bundle31-a"></script>
 <script src="v292Dfix430-carrier-block.js?cb=v292Dfix430"></script>
-<script src="v292Dfix436-seed-expand.js?cb=20261108-bundle93-h"></script>
+<script src="v292Dfix436-seed-expand.js?cb=20261112-ui4"></script>
 <script src="v292Dfix438-inline-dialogue.js?cb=20261019-bundle31-a"></script>
 <script src="v292Dfix439-readability.js?cb=v292Dfix457"></script>
 <script src="v292Dfix440-block-rescue.js?cb=20261021-bundle38-b"></script>

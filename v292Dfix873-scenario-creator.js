@@ -109,7 +109,18 @@
     failHead: 'うまく作れませんでした',
     failBody: 'もう一度ためすか、自分で作ることもできます。',
     retry: 'もう一度ためす',
-    manual: '✎ 自分で作る'
+    manual: '✎ 自分で作る',
+    /* ★UI4c: 保存に失敗したときの画面（見出し・理由・書いた内容は残っていること） */
+    sfHead: '保存できませんでした',
+    sfKeep: '書いた内容と作った案は消えていません。',
+    sfRetry: 'もう一度保存する',
+    sfFix: '✎ 内容を見直す',
+    sfWhy: { NO_TITLE: 'タイトルが空です。', NPC_WITHOUT_NAME: '名前の無い登場人物がいます。', START_RULES_TOO_LONG: '世界のきまりが長すぎます。',
+             ID_ALLOCATION_EXHAUSTED: 'シナリオの番号をうまく決められませんでした。', ID_COLLISION_EXHAUSTED: 'シナリオの番号をうまく決められませんでした。',
+             META_WRITE_FAILED: 'この端末に書き込めませんでした（空き容量が足りないのかもしれません）。', BODY_WRITE_FAILED: 'この端末に書き込めませんでした（空き容量が足りないのかもしれません）。',
+             ROLLBACK_FAILED: 'ページを読み込み直してから、もう一度お試しください。', HARD_STOP: 'ページを読み込み直してから、もう一度お試しください。' },
+    sfWhyDefault: 'この端末にシナリオを保存できませんでした。',
+    sfFixOnly: { NO_TITLE: 1, NPC_WITHOUT_NAME: 1, START_RULES_TOO_LONG: 1, ROLLBACK_FAILED: 1, HARD_STOP: 1 }
   };
   /* 画面に出してはいけない語（自己検査。harness も同じ表を使う） */
   var FORBIDDEN = ['Google', 'ログインし', 'アクセスコード', '合言葉', 'プロキシ', 'proxy', 'token', 'API'];
@@ -117,6 +128,10 @@
   /* ---------- deps（呼ぶだけ・無ければ黙って従来動作） ---------- */
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix873Off') === '1'; }
+  /* ★UI4c (2026-11-12 Owner): 「▶ このシナリオで始める」の保存に失敗したとき、見出しを「保存できませんでした」にして ▶ を出さない。
+     理由はやさしい日本語だけ（code は console だけ）。書いた内容（fix825 の下書き）はそのまま。やり直しは既存の save() をもう一度呼ぶか、既存の編集画面へ。
+     kill: localStorage v292DfixUI4cOff='1' → 従来どおり（確認カードを描き直して下に 1 行）。 */
+  function ui4cOff(){ return lsg('v292DfixUI4cOff') === '1'; }
   function M825(){ var m = window.__v292Dfix873TestHook825 || window.__v292Dfix825; return (m && m.api) ? m : null; }
   function A(){ var m = M825(); return m ? m.api : null; }
   function str(v){ return (v == null) ? '' : String(v); }
@@ -1094,10 +1109,15 @@
       S.lastFail = (sv && sv.code) || 'SAVE_FAILED';
       try { console.warn(TAG, 'SAVE_FAILED', S.lastFail); } catch(e){}
       S.candidate = null;
+      if (!ui4cOff()) return renderSaveFail();   /* ★UI4c */
       renderReview();
       setCardMsg(saveFailText());
       return;
     }
+    startAfterSave(a);
+  }
+  /* ★UI4c: 保存のあとに始める（doStart の後半と同じ。分けただけ） */
+  function startAfterSave(a){
     var st = a.start();
     if (!st || !st.ok){
       S.lastFail = (st && st.code) || 'START_FAILED';
@@ -1110,6 +1130,29 @@
   /* fix825 の state().lastErrorCode ではなく、利用者向けの短い一文だけを出す（code 0） */
   function saveFailText(){
     return 'このままでは保存できませんでした。「' + COPY.tweak + '」で直してください。';
+  }
+  /* ★UI4c: 保存に失敗した画面。▶ は出さない。「もう一度保存する」= 既存の a.save() をもう一度（下書きは fix825 にある）。「✎ 内容を見直す」= 既存の編集画面（toEdit） */
+  function renderSaveFail(){
+    if (!showSelf()) return;
+    S.view = 'SAVEFAIL';
+    var code = String(S.lastFail || ''), why = COPY.sfWhy[code] || COPY.sfWhyDefault, fixOnly = !!COPY.sfFixOnly[code];
+    host.innerHTML = headHtml(COPY.sfHead) +
+      '<div class="sc873-rev"><div class="sc-msg sc-err" data-c873-sfwhy>' + esc(why) + '</div>' +
+      '<div class="sc873-v">' + esc(COPY.sfKeep) + '</div></div>' +
+      '<div class="sc-acts">' +
+      (fixOnly ? '' : '<button class="sc-btn sc-primary sc873-cta" data-c873="saveRetry"' + (S.busy ? ' disabled' : '') + '>' + esc(COPY.sfRetry) + '</button>') +
+      '<button class="sc-btn' + (fixOnly ? ' sc-primary' : '') + ' sc873-cta" data-c873="toEdit">' + esc(COPY.sfFix) + '</button>' +
+      '</div>';
+  }
+  function doSaveRetry(){
+    var a = A(); if (!a || S.busy) return;
+    var sv = a.save();
+    if (!sv || !sv.ok){
+      S.lastFail = (sv && sv.code) || 'SAVE_FAILED';
+      try { console.warn(TAG, 'SAVE_FAILED', S.lastFail, 'retry'); } catch(e){}
+      return renderSaveFail();
+    }
+    startAfterSave(a);
   }
   function doTweak(){
     var a = A(); if (!a || S.busy) return;
@@ -1179,7 +1222,7 @@
     var act = b.getAttribute('data-c873');
     switch (act){
       case 'back':
-        if (S.view === 'SEED' || S.view === 'REVIEW' || S.view === 'FAIL' || S.view === 'SEEDKEPT'){
+        if (S.view === 'SEED' || S.view === 'REVIEW' || S.view === 'FAIL' || S.view === 'SEEDKEPT' || S.view === 'SAVEFAIL'){
           if (S.busy) return;
           S.candidate = null; S.report = null;
           return renderPick();
@@ -1192,6 +1235,7 @@
       case 'again':  if (!S.busy) generate(); return;
       case 'retry':  if (!S.busy) generate(); return;
       case 'toEdit': return toEdit();
+      case 'saveRetry': return doSaveRetry();                               /* ★UI4c */
       case 'delAdd': return delAdd();
       case 'stripAdd': return stripAdd();
       case 'delHero': return delHero();                                     /* ★SEEDHERO1 */

@@ -56,6 +56,7 @@
 // =====================================================================
 (function(){
   'use strict';
+  /* ★UI4a: 設定の決定ボタンの名前（1 ターン以上=「保存して物語に戻る」/ 0 ターン=従来）を案内文でもそろえる。kill v292DfixUI4aOff='1' */ function ui4aL(){ try { return (window.__chrSaveLabel && window.__chrSaveLabel()) || '保存してゲーム開始'; } catch(e){ return '保存してゲーム開始'; } }
   if (window.__v292Dfix436) return;
 
   var TAG = '[v292Dfix436:seedExpand]';
@@ -491,8 +492,8 @@
       if (!nonGender) return onFail(fields, 'nothing-applied');
       finalizeGender(fields);
       try { console.log(TAG, 'applied', rep.applied.length, rep.applied.join(','), '| protected', rep.protected_.length); } catch(e){}
-      setStatus('🎲 空いていた' + nonGender + '件を、書いた内容に合わせて埋めました。内容を確認して「保存してゲーム開始」を押してください。');
-      b37res('ok', nonGender + ' 項目を補完しました。内容を確認して「保存してゲーム開始」を押してください。');
+      setStatus('🎲 空いていた' + nonGender + '件を、書いた内容に合わせて埋めました。内容を確認して「' + ui4aL() + '」を押してください。');
+      b37res('ok', nonGender + ' 項目を補完しました。内容を確認して「' + ui4aL() + '」を押してください。');
     });
   }
 

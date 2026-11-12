@@ -76,6 +76,13 @@
         transition:transform .12s,border-color .12s;position:relative}
   .card:hover{transform:translateY(-2px);border-color:rgba(139,118,240,.5)}
   .card.sel{border-color:var(--acc)}
+  /* ★UI4d: カードの「詳細」（PC だけ。押すと選ぶだけで開かない）とキーボードの枠。kill v292DfixUI4dOff='1' のときはボタンも tabindex も描かない */
+  .card .cover .ui4det{position:absolute;right:6px;bottom:6px;z-index:3;min-height:32px;padding:0 10px;border-radius:8px;border:1px solid rgba(255,255,255,.25);
+        background:rgba(20,20,28,.72);color:#fff;font-size:12px;line-height:1;cursor:pointer;font-family:inherit}
+  .card .cover .ui4det:hover{border-color:var(--acc)}
+  .card:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+  @media(max-width:980px){ .card .cover .ui4det{display:none} }
+  body.v2uiMsMode .card .cover .ui4det{display:none}
   .cover{height:132px;background:#161628;background-size:cover;background-position:center;position:relative;overflow:hidden}
   .cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .45s}
   .cover img.on{opacity:1}
@@ -373,7 +380,7 @@
 <script src="v292Dfix710-home-delete-autoresume.js?cb=20261020-bundle34-a"></script>
 <!-- ★★DL2 (S-2 / GPT #127-FJ): 物語を一覧から削除する（サーバの版を基準にした削除・確認は画面内のシート・受け取り側の片づけ・止まっている削除の一覧）。
      fix587 / fix697 / fix933 / fix710 より後。下の inline script が window.__v292DhomeDL2（render / all）を出す。kill = localStorage v292DfixDL2Off=1 -->
-<script src="v292DfixDL2-server-delete.js?cb=20261111-unprot" data-dl2="home"></script><script src="v292DfixSTORE1b-device-free.js?cb=20261112-purge1c"></script><!-- ★STORE1b r2 (GPT #127-SG B / #127-SI): 「この端末の空き容量を増やす」＝サーバーで削除済み・クラウドに同じ本文ありと確かめた物語の端末の写しを、選んだものだけ消す（消す間は Web Lock story-open を排他で持つ）。HOME を開くだけでは何も消さない。dry-run=localStorage v292DfixSTORE1Dry=1 / まとめて=v292DfixSTORE1Multi=1（既定 OFF）/ OFF=v292DfixSTORE1Off=1 -->
+<script src="v292DfixDL2-server-delete.js?cb=20261112-ui4" data-dl2="home"></script><script src="v292DfixSTORE1b-device-free.js?cb=20261112-purge1c"></script><!-- ★STORE1b r2 (GPT #127-SG B / #127-SI): 「この端末の空き容量を増やす」＝サーバーで削除済み・クラウドに同じ本文ありと確かめた物語の端末の写しを、選んだものだけ消す（消す間は Web Lock story-open を排他で持つ）。HOME を開くだけでは何も消さない。dry-run=localStorage v292DfixSTORE1Dry=1 / まとめて=v292DfixSTORE1Multi=1（既定 OFF）/ OFF=v292DfixSTORE1Off=1 -->
 <!-- ★B37-D (GPT #127-HF D): 物語カードの「…」→「この物語を削除」= DL2 の確認シート（openDelete）をそのまま開くだけ。OFF=localStorage v292DfixB37dOff=1 -->
 <script src="v292DfixB37-home-menu.js?cb=20261021-bundle37-a"></script>
 <!-- ★JR1 (GPT #127-HC): サーバーで削除済み（墓標）と確かめた物語を指す fix750 journal だけを退避する（写して読み戻し一致 → 元キーを消す）。サーバー書込 0・UI 変更 0。OFF=localStorage v292DfixJR1Off=1 -->
@@ -393,8 +400,8 @@
      fix335 は既定 OFF・呼び手 0（pure API __v292Dfix335api.draw を fix823 の RANDOM_FALLBACK が使う）。fix247 は home に **載せない**（裁定 27）。 -->
 <!-- ★GENDER1 (おしん 2026-11-07・bundle93-h): シナリオの自動作成で性別を自動で決める（利用者が選んだ性別は触らない）。kill: localStorage v292DfixGENDER1Off=1 -->
 <script src="v292DfixGENDER1-autogender.js?cb=20261108-bundle93-h"></script>
-<script src="v292Dfix436-seed-expand.js?cb=20261108-bundle93-h"></script>
-<script src="v292Dfix335-omakase.js?cb=20261108-bundle93-h"></script>
+<script src="v292Dfix436-seed-expand.js?cb=20261112-ui4"></script>
+<script src="v292Dfix335-omakase.js?cb=20261112-ui4"></script>
 <!-- v292Dfix819: STORY_INSTANTIATION_PRIMITIVE（原本 → 独立 Story を 1 本作る primitive）。
      GPT 裁定 2026-09-06 `FIX819_DEPLOY_DORMANT_LIBRARY = GO`: **載せるだけ。UI caller 0・Owner 操作から到達不能。**
      配置 = home の既存 story lifecycle / protection 群（fix654/fix697/fix587/fix710 …）の**後**、
@@ -861,12 +868,14 @@
          0 件なのではなく「まだ確認できていない」ので、そう書く。題名も件数も出さない。 */
       el('grid').innerHTML = '<div class="empty">'+(q?'見つかりませんでした':f889EmptyText())+'</div>';
     } else {
+      var u4 = ui4dOn();                 /* ★UI4d */
       el('grid').innerHTML = list.map(function(x){
         var u = coverUrl(x.id, x.scene);
         var chars = [].concat(x.hero?[x.hero]:[], x.npcs).filter(Boolean).slice(0,4);
-        return '<div class="card'+(SEL===x.id?' sel':'')+'" data-id="'+esc(x.id)+'">'+
+        return '<div class="card'+(SEL===x.id?' sel':'')+'" data-id="'+esc(x.id)+'"'+(u4?' tabindex="0"':'')+'>'+
           '<div class="cover" style="background:'+gradient(x.name)+'"'+(u?' data-cover="'+esc(u)+'"':'')+'>'+
-            '<div class="badge" style="z-index:2">'+(x.cloud?'☁ クラウド':(x.turns>0?'進行中':'未開始'))+'</div>'+f889OnlyBadge(x)+'</div>'+
+            '<div class="badge" style="z-index:2">'+(x.cloud?'☁ クラウド':(x.turns>0?'進行中':'未開始'))+'</div>'+f889OnlyBadge(x)+
+            (u4?'<button type="button" class="ui4det" data-ui4-det="'+esc(x.id)+'" aria-label="詳細を見る（開かない）" title="詳細を見る（物語は開きません）">ⓘ 詳細</button>':'')+'</div>'+
           '<div class="cbody"><div class="ctitle">'+esc(x.name)+'</div>'+
           '<div class="csum">'+esc(x.summary||'')+'</div>'+
           '<div class="cchars">'+chars.map(function(c,i){ return avatar(c.name,i); }).join('')+
@@ -1129,10 +1138,39 @@
     var card = t.closest && t.closest('.card');
     if(card){
       var id = card.getAttribute('data-id');
+      /* ★UI4d (2026-11-12 Owner): 一覧(#grid)のカードは 1 回目のクリックで開く。「ⓘ 詳細」は選ぶだけ（PC の詳細欄に出す・開かない）。
+         カードの中のボタン・リンク・入力にあたったクリックでは開かない。続けて押しても 1 回しか開かない。
+         秘密の物語の面(#v889sec)のカードは従来どおり。kill: localStorage v292DfixUI4dOff='1' → 従来（1 回目で選ぶ・2 回目で開く）。 */
+      if(ui4dOn() && card.closest('#grid')){
+        if(t.closest('[data-ui4-det]')){ SEL = id; render(); return; }
+        var ic = t.closest('button,a,input,select,textarea,label,summary,[role=button],[contenteditable]');
+        if(ic && ic !== card && card.contains(ic)) return;
+        ui4Open(id, card); return;
+      }
       if(SEL===id){ openStory(id); return; }             // 2回目のクリックで開く
       SEL = id; render(); return;
     }
   });
+  /* ★UI4d: helpers（kill を毎回読む） */
+  function ui4dOn(){ try { return localStorage.getItem('v292DfixUI4dOff') !== '1'; } catch(e){ return false; } }
+  var UI4D = { at: 0, opens: 0, blocked: 0 };
+  function ui4Open(id, card){
+    var now = Date.now();
+    if (UI4D.at && now - UI4D.at < 3000){ UI4D.blocked++; return; }   /* 二度押し・ダブルクリックで 2 回開かない */
+    UI4D.at = now; UI4D.opens++;
+    SEL = id;
+    try { var cs = document.querySelectorAll('#grid .card.sel'); for (var i = 0; i < cs.length; i++) cs[i].classList.remove('sel'); if (card) card.classList.add('sel'); } catch(e){}
+    openStory(id);
+  }
+  window.addEventListener('pageshow', function(){ UI4D.at = 0; });   /* 戻る(bfcache)で戻ったら、また開ける */
+  document.addEventListener('keydown', function(e){
+    if (!ui4dOn() || e.key !== 'Enter' || e.isComposing) return;
+    if (document.body && document.body.classList.contains('v2uiMsMode')) return;   /* Vault の複数選択中は従来どおり（開かない） */
+    var c = e.target; if (!c || !c.classList || !c.classList.contains('card') || !c.closest || !c.closest('#grid')) return;
+    var id = c.getAttribute('data-id'); if (!id) return;
+    e.preventDefault(); ui4Open(id, c);
+  });
+  window.__v292DfixUI4d = { on: ui4dOn, status: function(){ return { on: ui4dOn(), at: UI4D.at, opens: UI4D.opens, blocked: UI4D.blocked, sel: SEL }; } };
   el('q').addEventListener('input', render);
   el('sort').addEventListener('change', render);
 
@@ -3503,7 +3541,7 @@
      描画は自前の #sc873View のみ。localStorage 書込 0・auth key 読み 0・画面に内部 code 0。
      ★WAIT_SP8_LIVE_GREEN: sp8（fix872 同期）が live green になるまで本番投入しない。
      kill = localStorage['v292Dfix873Off']='1' → 深さ選択を出さず従来どおり SC_EDIT へ直行。 -->
-<script src="v292Dfix873-scenario-creator.js?cb=20261111-seedhero1"></script>
+<script src="v292Dfix873-scenario-creator.js?cb=20261112-ui4"></script>
 <!-- v292Dfix885(HOME_DATA_MANAGEMENT_FOLD_V1・GPT 裁定 #L16entry): ホーム左袖の「データ」欄を
      player 向けに減らす（DOM の移動だけ・id ・ handler ・ 保存経路は不変）。
      ★手動同期の 2 ボタン（#upBtn / #downBtn）は **常に見える位置のまま**（降格は sp11b）。

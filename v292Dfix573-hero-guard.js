@@ -27,6 +27,7 @@
 (function v292Dfix573(){
   if (window.__v292Dfix573 && window.__v292Dfix573.__armed) return;
   var TAG = '[v292Dfix573:hero-guard]';
+  /* ★UI4a: 設定の決定ボタンの名前（1 ターン以上=「保存して物語に戻る」/ 0 ターン=従来）を案内文でもそろえる。kill v292DfixUI4aOff='1' */ function ui4aL(){ try { return (window.__chrSaveLabel && window.__chrSaveLabel()) || '保存してゲーム開始'; } catch(e){ return '保存してゲーム開始'; } }
   var LOGK = 'v292Dfix573_log', BKPRE = 'chr6_bk_fix573_hero_';
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
@@ -117,7 +118,7 @@
                 try { console.warn(TAG, '★主人公の名前が消える書込を検知:', oldName,
                       '控え=' + (bk || '取れず'), rec.stack); } catch(e){}
                 toast('主人公「' + oldName + '」の名前が消えました。書込前の控えを取りました。'
-                      + '設定画面で「保存してゲーム開始」を押す前に確認してください。');
+                      + '設定画面で「' + ui4aL() + '」を押す前に確認してください。');
               }
             }
           }
@@ -194,7 +195,7 @@
       try { console.warn(TAG, '★いま主人公の名前が空です。復元候補=' + c.length + '件', c.slice(0,3)); } catch(e){}
       if (c.length){
         toast('主人公の名前が空になっています。控えに「' + c[0].name + '」が残っています。'
-              + '設定画面で「保存してゲーム開始」を押すと空のまま確定するので注意してください。');
+              + '設定画面で「' + ui4aL() + '」を押すと空のまま確定するので注意してください。');
       }
     }
     return { key: key, heroName: name, empty: (name === ''), candidates: (name === '') ? candidates(key) : [] };

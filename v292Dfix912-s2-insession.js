@@ -27,8 +27,8 @@
   var COPY = '別の端末の続きを取り込んでいます…';
   var SS_R = 'v292Dfix912_reload_', SS_D = 'v292Dfix912_draft_';
   function off(){ try { return localStorage.getItem('v292Dfix912Off') === '1' || localStorage.getItem('v292Dfix911Off') === '1'; } catch(e){ return false; } }
-  /* ■GC1（GCONT-01・GPT #127-JH §4 CONDITIONAL_GO_DEFAULT_OFF）: 既定 OFF。localStorage v292DfixGC1On='1' で opt-in、v292DfixGC1Off='1'（kill）が常に勝つ */
-  function gc1On(){ try { return localStorage.getItem('v292DfixGC1On') === '1' && localStorage.getItem('v292DfixGC1Off') !== '1'; } catch(e){ return false; } }
+  /* ■GC1（GCONT-01・GPT #127-SM B4 条件付き既定 ON）: 既定 ON。kill: localStorage v292DfixGC1Off='1' → 従来どおり（v292DfixGC1On は使わない）。 */
+  function gc1On(){ try { return localStorage.getItem('v292DfixGC1Off') !== '1'; } catch(e){ return false; } }
   function sid(){ try { var k = window.__chronicleDocumentStoryKey;
                         return (typeof k === 'string' && k.indexOf('chr6_slot_') === 0) ? k.slice(10) : null; } catch(e){ return null; } }
   function ssg(k){ try { return sessionStorage.getItem(k); } catch(e){ return null; } }
@@ -104,6 +104,98 @@
     } catch(e){ return false; }
   }
 
+  /* ---- ■GC1: 保存中の「続きを書く」を 1 件だけ預かる（GPT #127-SM B4） ---- */
+  var GC1_WAIT = '前のターンを保存しています。保存が終わったら「続きを書く」を始めます…';
+  var GC1_FAIL = '保存を確かめられなかったため、「続きを書く」は取りやめました。少し待ってから、もう一度押してください。';
+  var GC1_EDIT = '入力が変わったため、「続きを書く」は取りやめました。';
+  var GC1_OTHER = '別の操作をしたため、「続きを書く」は取りやめました。';
+  var GC1_AWAY = '画面を離れたため、「続きを書く」は取りやめました。もう一度押してください。';
+  var GC1_MAX_MS = 60000, GC1_NOTE = 'v292DfixGC1-note';
+  var gc1P = null, gc1Bypass = false;
+  function gc1Top(t, err){ try { var el = document.getElementById('topStatus'); if (!el) return; el.textContent = t; el.style.color = err ? 'var(--err)' : 'var(--dim)'; } catch(e){} }
+  function gc1Note(msg){
+    try { var o = document.getElementById(GC1_NOTE); if (o && o.parentNode) o.parentNode.removeChild(o);
+      var d = document.createElement('div'); d.id = GC1_NOTE; d.setAttribute('role', 'status'); d.setAttribute('aria-live', 'polite');
+      d.setAttribute('style', 'position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%);max-width:88vw;z-index:99996;background:#2b3240;color:#e8eef8;border:1px solid #4a5568;border-radius:10px;padding:8px 14px;font-size:13px;line-height:1.5;font-family:system-ui,sans-serif;pointer-events:none');
+      d.textContent = msg; (document.body || document.documentElement).appendChild(d);
+      setTimeout(function(){ try { if (d.parentNode) d.parentNode.removeChild(d); } catch(e){} }, 6000); } catch(e){}
+  }
+  function gc1Show(){ gc1Top(GC1_WAIT, false); }
+  function gc1Inp(){ try { var i = document.getElementById('inp'); return i ? String(i.value) : null; } catch(e){ return null; } }
+  function gc1Mode(){ try { var S = getS(); return S ? S.mode : null; } catch(e){ return null; } }
+  function gc1Turns(){ try { var S = getS(); return (S && Array.isArray(S.turns)) ? S.turns.length : -1; } catch(e){ return -1; } }
+  function gc1Save(id){   /* 読むだけ: marker（fix781）と fix697 の送信状態 */
+    var o = { mk: null, inFlight: false, timer: false, routed: 0, hold: false };
+    try { var M = window.__v292Dfix781; var m = (M && typeof M.marker === 'function') ? M.marker(id) : null; o.mk = m ? m.state : null; } catch(e){}
+    try { var F = F697(); if (F && typeof F.f909 === 'function'){ var x = F.f909(); o.inFlight = !!(x && x.inFlight); o.timer = !!(x && x.pushTimer); }
+          if (F && typeof F.status === 'function'){ var st = F.status(); if (st && st.inFlight) o.inFlight = true; }
+          if (F && typeof F.canonState === 'function'){ var c = F.canonState(); o.routed = (c && c.cstats && +c.cstats.routedCanonical) || 0; o.hold = !!(c && c.holds && c.holds[id]); } } catch(e){}
+    return o;
+  }
+  function gc1Cancel(why, msg, err){
+    var p = gc1P; if (!p) return; gc1P = null;
+    try { clearInterval(p.iv); } catch(e){}
+    stats.gc1Cancel = stats.gc1Cancel || {}; stats.gc1Cancel[why] = (stats.gc1Cancel[why] || 0) + 1;
+    stats.gc1Last = { act: 'cancel', why: why, ms: Date.now() - p.t0 };
+    try { var el = document.getElementById('topStatus'); if (el && el.textContent === GC1_WAIT) gc1Top(msg || '', !!err); } catch(e){}
+    if (msg) gc1Note(msg);
+    try { console.log(TAG, 'GC1 cancel', why); } catch(e){}
+  }
+  function gc1Fire(){
+    var p = gc1P; if (!p) return; gc1P = null;
+    try { clearInterval(p.iv); } catch(e){}
+    stats.gc1Fired = (stats.gc1Fired || 0) + 1; stats.gc1Last = { act: 'fire', ms: Date.now() - p.t0 };
+    try { var el = document.getElementById('topStatus'); if (el && el.textContent === GC1_WAIT) gc1Top('', false); } catch(e){}
+    gc1Bypass = true;
+    try { var g = getG(); if (g && typeof g.cont === 'function') g.cont.apply(p.self, p.args); }   /* 1 回だけ。外側から入り直す＝fix912 自身と内側の関門（fix917/fix892/Vault）を今の状態で通す */
+    catch(e){} finally { gc1Bypass = false; }
+  }
+  function gc1Tick(){
+    var p = gc1P; if (!p) return;
+    try {
+      var id = sid();
+      if (off() || !gc1On()) return gc1Cancel('killed', null);
+      if (!id || String(id) !== p.id) return gc1Cancel('story-changed', null);
+      if (document.visibilityState === 'hidden'){ p.away = true; return; }
+      if (p.away) return gc1Cancel('hidden', GC1_AWAY);
+      if (gc1Inp() !== p.inp || gc1Mode() !== p.mode) return gc1Cancel('input-changed', GC1_EDIT);
+      if (gc1Turns() !== p.turns) return gc1Cancel('turns-changed', GC1_EDIT);
+      if (Date.now() - p.t0 > GC1_MAX_MS) return gc1Cancel('timeout', GC1_FAIL, true);
+      var s = gc1Save(id);
+      if (s.mk === 'DIVERGED' || s.mk === 'BOOTSTRAP_HOLD' || s.hold || pending(id)) return gc1Cancel('hold-or-conflict', GC1_FAIL, true);
+      if (s.inFlight || s.timer) return;                                  /* 保存の予約・送信中 → 待つ */
+      if (s.mk === 'CLEAN'){
+        var S = getS(); if (S && S.inFlight) return;
+        if (preflightBusy || inProgress913(id) || !f705Released()) return;
+        try { var g5 = window.__v292Dfix543; if (g5 && typeof g5.unsaved === 'function' && !g5.off()){ var u = g5.unsaved(); if (u && u.active) return gc1Cancel('unsaved', GC1_FAIL, true); } } catch(e5){}
+        return gc1Fire();
+      }
+      if (s.routed > p.routed0) return gc1Cancel('save-failed', GC1_FAIL, true);   /* 保存は終わったが CLEAN にならず、次の予約も無い＝失敗 */
+    } catch(e){ gc1Cancel('threw', GC1_FAIL, true); }
+  }
+  function gc1Hold(self, args){
+    var id = sid(); if (!id) return;
+    var s = gc1Save(id);
+    gc1P = { id: String(id), self: self, args: args, t0: Date.now(), inp: gc1Inp(), mode: gc1Mode(), turns: gc1Turns(), routed0: s.routed, away: false, iv: null };
+    stats.gc1Held = (stats.gc1Held || 0) + 1; stats.gc1Last = { act: 'hold', mk: s.mk, inFlight: s.inFlight, timer: s.timer, t: Date.now() };
+    gc1Show();
+    gc1P.iv = setInterval(gc1Tick, 250);
+    try { console.log(TAG, 'GC1 hold (wait for the pending save)', s.mk); } catch(e){}
+  }
+  try { window.addEventListener('pagehide', function(){ if (gc1P) gc1Cancel('pagehide', null); });
+        window.addEventListener('beforeunload', function(){ if (gc1P) gc1Cancel('beforeunload', null); }); } catch(e){}
+  /* 預かり中に「続きを書く」以外のボタン・リンク等（🏠 ホーム・設定・モード・送信など）を押した → その場で取りやめる。
+     🏠 は遷移の前に保存の完了を最大 3 秒待つ（fix697 flushForNav）ので、ここで止めないと離れる直前に生成してしまう（実測）。
+     入力欄そのものを触っただけでは取りやめない（文字が変わったら gc1Tick が取りやめる）。 */
+  function gc1OnPress(ev){
+    if (!gc1P) return;
+    try { var t = ev.target, el = (t && t.closest) ? t.closest('button,a,[onclick],input,select,textarea,label,[role="button"]') : null;
+          if (!el || el.id === 'inp') return;
+          if (/\bG\.cont\(/.test(el.getAttribute('onclick') || '')) return;
+          gc1Cancel('other-press', GC1_OTHER); } catch(e){}
+  }
+  try { document.addEventListener('pointerdown', gc1OnPress, true); document.addEventListener('click', gc1OnPress, true); } catch(e){}
+
   /* ---- 送信の入口（G.submit / G.cont / G.retry）---- */
   var wrapped = false;
   function wrapG(){
@@ -116,6 +208,8 @@
         var self = this, args = arguments;
         if (off()) return orig.apply(self, args);
         var id = sid();
+        if (gc1P){ if (name === 'cont' && !gc1Bypass){ stats.gc1Absorbed = (stats.gc1Absorbed || 0) + 1; gc1Show(); return; }   /* ■GC1: 預かりは 1 件だけ（二度押しは吸収） */
+                   if (name !== 'cont') gc1Cancel('other-send', GC1_EDIT); }                                                   /* ■GC1: 送信・やり直しを押した → 預かりをやめる（その押下は従来どおり） */
         if (pending(id) || preflightBusy){ stats.blocked++; notice(true); return; }
         var F = F697();
         /* ■fix913（SA-4a）: boot S2 の途中は preflight / hold を始めない（WAIT）。
@@ -130,52 +224,27 @@
           }
         }
         if (!id || !F || typeof F.s2PreflightNeeded !== 'function' || !F.s2PreflightNeeded(id)){ stats.preflightSkip++; return orig.apply(self, args); }
+        /* ■GC1（GCONT-01・GPT #127-SM B4）: 「続きを書く」だけ。従来はここで preflight を始めて即 return したため、G.cont が
+           先に終わって入力欄を空にし、preflight 後の本物の submit が空の入力で何もしなかった（1 回目が黙って消える）。
+           GC1 はこの押下を 1 件だけ預かり、すでに予約されている保存（fix697 の debounce → putcanonical）が終わるのを待つ
+           （保存を始めない・変えない・急がせない。読むのは marker / fix697 の状態だけ）。終わったら
+           同じ物語・同じ入力欄の文字・同じモード・marker CLEAN・hold/conflict なし・生成中でない を確かめて 1 回だけ G.cont を呼ぶ。
+           保存の失敗・時間切れ・入力の変更・他の送信・タブを離れた → 預かりを取りやめて表示する（生成しない）。 */
+        if (name === 'cont' && gc1On() && !gc1Bypass){ gc1Hold(self, args); return; }
         preflightBusy = true; stats.preflights++;
-        if (!gc1On()){
-          /* ── 既定（GC1 OFF）: 従来どおり。preflight を始めて即 undefined を返す（下の GC1 と 1 byte も違わない挙動） ── */
-          F.s2Preflight(id, function(r){
-            preflightBusy = false;
-            try {
-              if (!r || r.skip){ stats.preflightSkip++; return orig.apply(self, args); }
-              if (r.error){ stats.preflightError++; return orig.apply(self, args); }
-              if (!r.remoteAhead){ stats.preflightNoAhead++; return orig.apply(self, args); }
-              if (r.safe){
-                stats.preflightSafe++;
-                if (request(id, r.srvRev, 'preflight')) return;          /* 送信しない（入力は退避して reload 後に戻す） */
-              } else stats.preflightUnsafe++;
-              stats.holds++;                                             /* unsafe / loop guard: 自動 merge しない */
-              try { F.s2HoldNow(id, r, 'preflight'); } catch(eH){}
-            } catch(e){}
-          });
-          return;
-        }
-        /* ■GC1（GCONT-01・opt-in v292DfixGC1On='1'・kill v292DfixGC1Off='1'）: 従来は preflight を始めて **すぐ undefined を返した**ため、
-           G.cont の `await this.submit()` が本物の submit より先に解決し、cont 末尾の「入力欄を空にする・mode を戻す」が先に走って、
-           preflight 後に呼ばれる本物の submit が **空の入力で何も起こさず戻る**（トーストなし）= 「続きを書く」が無反応になった。
-           （fix917 が fix905c で直したのと同じ型。retry / startScene / automode(G.cont) も同じ経路。）
-           ON のときだけ: preflight が終わって本物の submit/cont/retry を呼び、その完了まで待つ Promise を返す（待ち行列は preflight そのもの）。
-           deny/hold/pending の枝は従来どおり送信しない（resolve(undefined)）。通信・保存・marker は 1 byte も増やさない。 */
-        stats.gc1Awaited = (stats.gc1Awaited || 0) + 1;
-        return new Promise(function(resolve, reject){
-          F.s2Preflight(id, function(r){
-            preflightBusy = false;
-            var go = function(){
-              try { var v = orig.apply(self, args); Promise.resolve(v).then(function(x){ resolve(x); }, function(e){ reject(e); }); }
-              catch(eT){ reject(eT); }
-            };
-            try {
-              if (!r || r.skip){ stats.preflightSkip++; return go(); }
-              if (r.error){ stats.preflightError++; return go(); }
-              if (!r.remoteAhead){ stats.preflightNoAhead++; return go(); }
-              if (r.safe){
-                stats.preflightSafe++;
-                if (request(id, r.srvRev, 'preflight')){ resolve(); return; }   /* 送信しない（入力は退避して reload 後に戻す） */
-              } else stats.preflightUnsafe++;
-              stats.holds++;                                           /* unsafe / loop guard: 自動 merge しない */
-              try { F.s2HoldNow(id, r, 'preflight'); } catch(eH){}
-              resolve();
-            } catch(e){ try { resolve(); } catch(e2){} }
-          });
+        F.s2Preflight(id, function(r){
+          preflightBusy = false;
+          try {
+            if (!r || r.skip){ stats.preflightSkip++; return orig.apply(self, args); }
+            if (r.error){ stats.preflightError++; return orig.apply(self, args); }
+            if (!r.remoteAhead){ stats.preflightNoAhead++; return orig.apply(self, args); }
+            if (r.safe){
+              stats.preflightSafe++;
+              if (request(id, r.srvRev, 'preflight')) return;          /* 送信しない（入力は退避して reload 後に戻す） */
+            } else stats.preflightUnsafe++;
+            stats.holds++;                                             /* unsafe / loop guard: 自動 merge しない */
+            try { F.s2HoldNow(id, r, 'preflight'); } catch(eH){}
+          } catch(e){}
         });
       };
       w.__f912 = true; w.__orig = orig;
@@ -187,6 +256,7 @@
       if (typeof orig2 !== 'function' || orig2.__f912) return;
       var w2 = function(){
         if (!off() && pending(sid())){ stats.blocked++; notice(true); return; }
+        if (gc1P) gc1Cancel('other-entry', GC1_EDIT);   /* ■GC1: 取り消し・場面開始・リセットを押した → 預かりをやめる */
         return orig2.apply(this, arguments);
       };
       w2.__f912 = true; w2.__orig = orig2;
@@ -259,7 +329,8 @@
   window.__v292Dfix912 = {
     off: off, pending: pending, request: request,
     status: function(){ return { off: off(), wrapped: wrapped, pending: pend ? JSON.parse(JSON.stringify(pend)) : null,
-                                 preflightBusy: preflightBusy, stats: JSON.parse(JSON.stringify(stats)) }; }
+                                 preflightBusy: preflightBusy, gc1: { on: gc1On(), pending: gc1P ? { id: gc1P.id, ms: Date.now() - gc1P.t0 } : null },
+                                 stats: JSON.parse(JSON.stringify(stats)) }; }
   };
   try { console.log(TAG, 'loaded (kill=v292Dfix912Off=1 / v292Dfix911Off=1)'); } catch(e){}
 })();

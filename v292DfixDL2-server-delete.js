@@ -30,6 +30,7 @@
  * ===================================================================== */
 (function () {
   'use strict';
+  function ui4bOff(){ try { return localStorage.getItem('v292DfixUI4bOff') === '1'; } catch(e){ return true; } }   /* ★UI4b */
   if (window.__v292DfixDL2) return;
   var VERSION = 'DL2-r1nw-da2';   /* ★DELALL: stuck list scoped to the current account's server list */   /* r1n (BUNDLE34): narrow-screen entry label + 44px target (T1) */
   var TAG = '[v292DfixDL2]';
@@ -130,7 +131,9 @@
     h += '<h2>物語を一覧から削除する</h2>' +
          '<div class="dl2soft" id="dl2warn" role="note">この操作で物語は一覧から削除されます。現在、一覧へ戻す機能はありません。サーバー上のデータを直ちに完全消去する操作ではありません。</div>' +   /* ★T2 (GPT #127-GL): required warning, exact text */
          '<p>選んだ物語を、この端末・ほかの端末・クラウドの物語の一覧から外します。</p>' +
-         '<div class="dl2soft">これは一覧から外す操作です。データを完全に消すものではありません（本文の控えはクラウドとこの端末に残ります）。一覧へ戻す画面はまだありません。</div>';
+         /* ★UI4b (2026-11-12 Owner): 2 枚目の注意（裁定なし）は #dl2warn と同じ内容で、「控えはこの端末に残ります」は STORE1b 以後いつも正しいとは限らないため外す。
+            #dl2warn（#127-GL）と #dl2undo（#127-SC）は変えない。kill: localStorage v292DfixUI4bOff='1' → 従来どおり出す。 */
+         (ui4bOff() ? '<div class="dl2soft">これは一覧から外す操作です。データを完全に消すものではありません（本文の控えはクラウドとこの端末に残ります）。一覧へ戻す画面はまだありません。</div>' : '');
     if (M.kind === 'stuck') h += '<p>以前に削除しようとして止まっている物語です。いまのサーバーの状態を表示しています。削除するものだけを選んでください。</p>';
     if (M.kind === 'bulk') h += '<p>削除する物語だけを選んでください。1件だけ選んで削除することもできます。</p>';
     h += '<div class="dl2msg" id="dl2msg">' + esc(M.msg || '') + '</div>';
