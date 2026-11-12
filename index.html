@@ -344,7 +344,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261113-cast1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261113-leak1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -1522,7 +1522,7 @@ const Api = {
       const text = (json.choices?.[0]?.message?.content || '').trim();
       if (!text) throw new Error('OpenRouterから出力がありませんでした');
 
-      lastResult = { text, body: null };
+      lastResult = { text, body: null, fin: (json.choices && json.choices[0] && typeof json.choices[0].finish_reason === 'string') ? json.choices[0].finish_reason : null };   /* ★LEAK1: finish_reason をメモリ内の result に持たせるだけ（保存・送信には出ない。読むのは v292DfixLEAK1 だけ） */
 
       // v292 Tier 1.5 Fix G: also retry on incomplete Hermes responses
       // (response missing narrative key, or contains "省略" laziness marker)
@@ -2823,6 +2823,9 @@ const G = {
       try { window.__v292Dfix797 && __v292Dfix797.beginTurnContext(S); } catch(_e797b){} /* ★v292Dfix797 Rev4: 今回の生成が始まる前の fix77 状態を 1 回だけ写す（ephemeral／書込 0）。未 load / flag OFF で no-op */
       let result; try { result = await _cp1Call(sys, user); } catch (_e265) { var _m269 = String((_e265 && _e265.message) || _e265); var _is429 = /HTTP 429/.test(_m269); if (_is429 || /HTTP 5\d\d|Failed to fetch|NetworkError|load failed/i.test(_m269)) { UI.setStatus(_is429 ? '混み合っています。少し待って自動でもう一度試します…' : 'うまくつながりませんでした。自動でもう一度試します…'); await new Promise(function(_r){ setTimeout(_r, _is429 ? 8000 : 2000); }); try { result = await _cp1Call(sys, user); } catch (_e2cmf) { result = await this._cmfTry(sys, user, _e2cmf, 2, _cp1Att); } } else { result = await this._cmfTry(sys, user, _e265, 1, _cp1Att); } } /* v292Dfix269: 429(レート制限)はレート明けを8秒待って再試行 */ /* v292Dfix265: 5xx/ネットワーク一過性エラーは1回だけ透過リトライ。2回目失敗はfix263aトーストへ */ /* ★dscmf-1: 同一モデル retry を **使い切った最終段だけ** に cross-model fallback を足す（CF-1）。_cmfTry は gate OFF / 非対象なら受け取った err をそのまま throw するので、既定では throw _e265 と完全同値。commit 済み response には到達しない（この行は result 取得前）。 */
       if (!result) { if (_cp1Att && _cp1A.superseded(_cp1Att)) return; try { if (text && !inputEl.value.trim()) inputEl.value = text; UI.setStatus('応答が得られませんでした。もう一度お試しください', true); } catch(_){} return; } /* v292Dfix263a2 */
+      /* ★LEAK1（laneLEAK1・GPT #127-SW 2）: 生の応答の検査。影（鍵なし）= 数えるだけで result.text は変えない。適用（v292DfixLEAK1Apply='1'・既定 OFF）= 内部ラベルだけの行・タグ領域の後ろの作業メモを parse の前に除く。
+         finish=length で作業メモと本文の境界を決められない回は throw → 下の既存の catch（入力を戻す・「再試行」ボタン）。parse 0・保存 0・自動の再送 0。kill: v292DfixLEAK1Off='1'（部品が無い・例外でも従来どおり）。 */
+      { let _lk1 = null; try { const _L1 = window.__v292DfixLEAK1; if (_L1 && typeof _L1.pre === 'function') _lk1 = _L1.pre(result, 'main'); } catch(_eL1){ _lk1 = null; } if (_lk1 && _lk1.hold === true) throw new Error('LEAK1_HOLD: 応答が途中で切れ、本文の終わりを決められませんでした。もう一度お試しください'); }
 
       /* ★fix748 D1(C7a): parsePlan の _parseExtensions から
          fix77 captureState → persist（v292Dfix77States_slot_）が同期で走る。
@@ -2865,6 +2868,7 @@ const G = {
           UI.setStatus((_recap235 ? '前ターンの再掲' : '短すぎる応答') + 'を検知 → 書き直し中…');
           try { if (_e64) _e64.hold(); } catch(_e64h){}   /* ★E6-4 r2: 書き直しを待つ間、採用前の 1 回目の state を端末キーに置かない（OFF では _e64=null） */
           const result2 = await _cp1Call(sys, user + '\n\n【重要・書き直し】直前のあなたの出力は' + (_recap235 ? '前ターンの内容のほぼ再掲だった。' : '') + (_short235 ? '短すぎた(数文で切り上げていた)。最低でも8文以上で場面を最後まで描き切ること。' : '') + '同じ場面・同じ文を繰り返さず、時間と状況を必ず前へ進めて、新しい出来事・発見・反応を描くこと。');
+          try { const _L1b = window.__v292DfixLEAK1; if (_L1b && typeof _L1b.pre === 'function' && result2) _L1b.pre(result2, 'rw'); } catch(_eL1b){}   /* ★LEAK1: 書き直しの応答にも同じ検査（影=数えるだけ／適用=明らかな行を除く。ここでは hold しない＝採否は従来の条件のまま） */
           let _rj797 = false; try { _rj797 = !!(result2 && result2.text && window.__v292Dfix797 && typeof window.__v292Dfix797.willRewrite === 'function' && window.__v292Dfix797.willRewrite(result2.text, S)); } catch(_rj797e){ _rj797 = false; }   /* ★E65-D r4: fix216/235 の書き直しが同じターンの矛盾を持つなら、parse に渡さずに採らない（1 回目は fix797 の detect に当たっていない＝棄却されていない応答なのでそのまま採る） */
           try { if (result2 && result2.text && !_rj797 && window.__v292Dfix797 && typeof window.__v292Dfix797.noStateInjury === 'function' && window.__v292Dfix797.noStateInjury(result2.text, 'rw235')) _rj797 = true; } catch(_ni797e){}   /* ★E65-D r6（GPT #127-NB Q4）: fix216/235 の書き直しが <state> を持たず、本文に新しい傷の信号（既存の fix670／N1P2 の判定）があれば採らない。1 回目は棄却されていない有効な応答なので、1 回目をそのまま採る（D235C と同じ流れ）。kill・fix797 OFF では noStateInjury が null＝従来どおり */
           try { if (!_e64 && result2 && result2.text && !_rj797 && window.__v292Dfix797 && typeof window.__v292Dfix797.noStateKeepFirst === 'function' && window.__v292Dfix797.noStateKeepFirst(result2.text, 'rw235')) _rj797 = true; } catch(_nk797e){}   /* ★E65-D r7（GPT #127-ND Q4）: E64 OFF では 1 回目はもう parse 済みで、その取り込み（fix77/fix190 の state・要約・fix27 の行・準登録台帳）が残っている（実測 D235F）。<state> の無い書き直しを採ると「書き直しの本文＋1 回目の状態」になるので採らず、1 回目をそのまま採る（本文と状態が同じ応答に由来・D235C／D235NI と同じ流れ）。E64 ON は E64 の alt が戻すので従来どおり。kill・fix797 OFF では noStateKeepFirst が null＝従来どおり */
@@ -3082,6 +3086,9 @@ const G = {
         }
       } catch(_e1c){}
 
+      /* ★LEAK1: 保存・表示の直前の最終境界。影（鍵なし）= 物語でない行（内部ラベルだけの行／タグの断片だけの行／作業メモの残り）の件数だけを記録して narr はそのまま。
+         適用（v292DfixLEAK1Apply='1'）= その行だけを除く（plan.narrative も同じ行を除く）。kill: v292DfixLEAK1Off='1'。 */
+      try { const _L1g = window.__v292DfixLEAK1; if (_L1g && typeof _L1g.gate === 'function') { const _n1g = _L1g.gate(narr, result, plan); if (typeof _n1g === 'string') narr = _n1g; } } catch(_eL1g){}
       const turn = {
         inputType:       S.mode,
         playerText:      text,
@@ -4459,7 +4466,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix55-gm-mode.js?cb=v292Dfix55c"></script>
   <script src="v292Dfix56-conversation-log-fix.js?cb=v292Dfix200"></script>
   <script src="v292Dfix57-script-style-dialogue.js?cb=v292Dfix57"></script>
-  <script src="v292Dfix58-prompt-rebuild.js?cb=20261113-cast1"></script>
+  <script src="v292Dfix58-prompt-rebuild.js?cb=20261113-leak1"></script>
   <script src="v292Dfix60-display-pipeline.js?cb=v292Dfix60"></script>
   <script src="v292Dfix59-hybrid-extractor.js?cb=v292Dfix59"></script>
   <script src="v292Dfix61-alpha-strip-protect.js?cb=20260829-fix748"></script>
@@ -4902,6 +4909,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixSEVDRV-state-judge.js?cb=20261113-cast1"></script><!-- ★SEVERE1 r2 / DRIVE1 r2 / EX192 (GPT #127-SQ・#127-SU ⑤): 判定の純関数だけ（fix192 が呼ぶたびに探す）。すべて既定 OFF。同じファイルにあった天候・時刻の控えは撤去（laneCAST1）。最後に置く＝ほかの部品の読み込みの順番を動かさない -->
 <script src="v292DfixCAST1-opening-cast.js?cb=20261113-cast1"></script><!-- ★CAST1 (laneCAST1・GPT #127-SU ①): 開始場面にいると確定している NPC の説明を最初の回だけ user の cast.npcs に補う。判定の純関数だけ（fix58 が呼ぶたびに探す）。既定 OFF。ON v292DfixCAST1On=1（比較腕 2）/ kill v292DfixCAST1Off=1 -->
 <script src="v292DfixCALL1-confirmed-speech.js?cb=20261113-cast1"></script><!-- ★CALL1 / SPK3 (laneCAST1・GPT #127-SU ②③): 話者が確定した発話だけから「呼称の先例」1 行（earlierFacts）と recentSpeakers（直近 2 ターンの話者の参照）を作る純関数（fix58 が呼ぶたびに探す）。どちらも既定 OFF・鍵は別々。ON v292DfixCALL1On=1 / v292DfixSPK3On=1・kill v292DfixCALL1Off=1 / v292DfixSPK3Off=1 -->
+<script src="v292DfixLEAK1-nonstory-lines.js?cb=20261113-leak1"></script><!-- ★LEAK1 (laneLEAK1・GPT #127-SW 2): 本文に混ざる物語でない行の検査。影は常時（件数だけ・本文は記録しない）。適用 v292DfixLEAK1Apply='1'（既定 OFF）／kill v292DfixLEAK1Off='1'。保存・sys・送信は変えない。 -->
+<script src="v292DfixNUM1-input-ledger.js?cb=20261113-leak1"></script><!-- ★NUM1 (laneLEAK1・GPT #127-SW 3): 序盤のプレイヤー入力の数・約束を earlierFacts の先頭に最大 5 行・200 字で残す純関数（fix58 が呼ぶ）。鍵 v292DfixNUM1On='1'（既定 OFF）／kill v292DfixNUM1Off='1'。保存なし・sys 0 字。 -->
 </body>
 </html>
 
