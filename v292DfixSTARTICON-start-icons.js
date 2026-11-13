@@ -45,23 +45,39 @@
  *   ・v292Dav2Off='1'・Vault の物語（fix889 で非表示）・ログインしていない・schema 2 でない → 何もしない。
  * ■書かないもの: S・長期記憶・名簿・sys には何も書かない（書くのは setProfile が書く外見だけ＝手動と同じ）。B37 の自動案内の印
  *   'v292DfixB37onb_<id>' だけは「STARTICON が引き受けた」として付ける（👥 が勝手に開かないように。手動の入口はそのまま）。
+ * ■★ICONFIX2（laneICONFIX2・2026-11-14・GPT #127-TN icons (2)(3)・LOCAL）
+ *   b) 外見の案を「変えてはいけない事実」（性別・種類・体の作り・材質・持ち物/補助具・役割・体格）と照らす（LC1prop.enforceFacts）。落ちた事実は説明文の句を戻し、
+ *      性別の無い人物の性別の案は外す。戻せない（400 字を超える）ときはそのキャラだけ作らない（PROPOSE_FACTS_*・手動は残る）。kill: v292DfixICONFIX2bOff='1'。
+ *   c) 段 B の結果をキャラごとに独立させる: 結果不明（OUTCOME_UNKNOWN・アカウント単位の断り CUSTOMER_IMG_* などは除く）と GENERATION_FAILED は
+ *      そのキャラだけ保留して次のキャラへ進む（同じアカウントの札が空く頃まで待ってから＝IN_FLIGHT と同じ待ち）。送り直しはしない（費用の二重なし）。
+ *      まず札が空く頃（20〜40 秒後）に同じキャラの結果を portrait.list で読み（読むだけ）、絵が付いていれば採用（ADOPTED）。無ければ保留のまま次のキャラへ。
+ *      最後にもう 1 回（結果から 120 秒後）だけ読み直し、まだ無ければ UNKNOWN_HELD（手動の「結果を確かめる」は残る）。
+ *      2 人続けて結果不明／生成失敗なら、そこで止める（障害のときに送り続けない）。上限・混雑・利用記録・403/501・READ_FAIL などは今までどおり全体を止める。
+ *      kill: v292DfixICONFIX2cOff='1' → 今までどおり（最初の結果不明で止まる）。
+ *   t) 段ごとの時間（下書き・案・外見の登録・絵・表示）を status().timing に出す（数字だけ・この端末の記録に最新 5 物語分）。kill: v292DfixICONFIX2tOff='1'。
  * ■診断: window.__v292DfixSTARTICON.status()
  * ===================================================================== */
 (function (root) {
   'use strict';
   if (typeof window === 'undefined' || root.__v292DfixSTARTICON) return;
-  var VER = 'starticon-d-20261109-ifretry-listopen+lim1';   /* ★93-k: キャラ一覧を開いたままでも 1 回の再読み込みへ進む・一覧の行の読み直し */
+  var VER = 'starticon-d-20261109-ifretry-listopen+lim1+fx2';   /* ★93-k: キャラ一覧を開いたままでも 1 回の再読み込みへ進む・一覧の行の読み直し */
   var KILL = 'v292DfixSTARTICONOff', NOAI = 'v292DfixSTARTICONNoAI', LSK = 'v292DfixSTARTICON_v1', HOLDK = 'v292DfixSTARTICON_hold', RETRY_OFF = 'v292DfixSTARTICONRetryOff';   /* ★93-j */
   var LIST_OFF = 'v292DfixSTARTICONListOff', REOPENK = 'v292DfixSTARTICON_reopen';   /* ★93-k: kill（= 93-j と同じ再読み込みの待ち方）・再読み込みの後に一覧を開き直す印（sessionStorage・このタブだけ） */
   var IF_WAIT_MS = 20000, IF_SPAN_MS = 20000;   /* ★93-j: IN_FLIGHT の後に待つ時間 = 20 秒 + 0〜20 秒（Worker の口座の札 MX_LEASE_MS = 300 秒より十分短い・生成 1 枚より長い） */
   var CAP = { npcs: 3, maxTurns: 2, dayStarts: 5, bTries: 2, newMs: 6 * 3600 * 1000 };
+  var FX2B_OFF = 'v292DfixICONFIX2bOff', FX2C_OFF = 'v292DfixICONFIX2cOff', FX2T_OFF = 'v292DfixICONFIX2tOff';   /* ★ICONFIX2 */
+  var UNK_CHECK_MS = [120000], UNK_SERIAL_MAX = 2, TM_KEEP = 5;   /* ★ICONFIX2 c: 保留キャラの最後の読み直し（結果から 120 秒）／続けて 2 回で止める ★t: 時間の記録は最新 5 物語 */
   var POLL_MS = 1500, STABLE_MS = 3000, AUTO_MAX_MS = 240000, WAIT_MS = 20000, CLEAN_MS = 45000;
   function lsGet(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { root.localStorage.setItem(k, v); return true; } catch (e) { return false; } }
   function ssGet(k) { try { return root.sessionStorage.getItem(k); } catch (e) { return null; } }
   function ssSet(k, v) { try { root.sessionStorage.setItem(k, v); } catch (e) {} }
   var LOG = []; function note(o) { try { o.t = Date.now(); o.inFlight = inFlight(); LOG.push(o); if (LOG.length > 120) LOG.shift(); } catch (e) {} }
-  var stats = { plans: 0, proposals: 0, direct: 0, sets: 0, setFail: 0, ef: 0, created: 0, exists: 0, efFail: 0, reloads: 0, skipped: 0, sentWhileInFlight: 0, inflight: 0, ifRetry: 0, ifFilled: 0, ifGiveUp: 0, listReload: 0, listWaitToast: 0, listReopen: 0, listRefresh: 0 };   /* ★93-j: +inflight / ifRetry / ifFilled / ifGiveUp ★93-k: +list* */
+  var stats = { plans: 0, proposals: 0, direct: 0, sets: 0, setFail: 0, ef: 0, created: 0, exists: 0, efFail: 0, reloads: 0, skipped: 0, sentWhileInFlight: 0, inflight: 0, ifRetry: 0, ifFilled: 0, ifGiveUp: 0, listReload: 0, listWaitToast: 0, listReopen: 0, listRefresh: 0,
+    factsOk: 0, factsRepaired: 0, factsSex: 0, factsFatal: 0, unkHeld: 0, unkAdopted: 0, unkContinue: 0, unkSerialStop: 0 };   /* ★93-j: +inflight / ifRetry / ifFilled / ifGiveUp ★93-k: +list* ★ICONFIX2: +facts* / unk* */
+  function fx2bOn() { var P = root.__v292DfixLC1prop; return lsGet(FX2B_OFF) !== '1' && !!(P && typeof P.enforceFacts === 'function'); }
+  function fx2cOn() { return lsGet(FX2C_OFF) !== '1'; }
+  function tmOn() { return lsGet(FX2T_OFF) !== '1'; }
 
   /* ---------- environment (same readers as B37 / LC1 / MIDICON) ---------- */
   function state() { try { return (typeof root.__chronicleGetState === 'function') ? root.__chronicleGetState('starticon') : null; } catch (e) { return null; } }
@@ -149,7 +165,13 @@
   function today() { return new Date().toISOString().slice(0, 10); }
   function hk(s) { var h = 2166136261; s = String(s); for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; } return 'h' + h.toString(36); }
   function rec() { var r = null; try { r = JSON.parse(lsGet(LSK) || 'null'); } catch (e) { r = null; } if (!r || r.v !== 1 || typeof r.st !== 'object' || !r.st) r = { v: 1, day: today(), starts: 0, st: {} }; if (r.day !== today()) { r.day = today(); r.starts = 0; } return r; }
-  function recSave(r) { var ks = Object.keys(r.st); if (ks.length > 40) ks.sort(function (a, b) { return (r.st[a].at || 0) - (r.st[b].at || 0); }).slice(0, ks.length - 40).forEach(function (k) { delete r.st[k]; }); lsSet(LSK, JSON.stringify(r)); }
+  function recSave(r) { var ks = Object.keys(r.st); if (ks.length > 40) ks.sort(function (a, b) { return (r.st[a].at || 0) - (r.st[b].at || 0); }).slice(0, ks.length - 40).forEach(function (k) { delete r.st[k]; });
+    var tk = Object.keys(r.st).filter(function (k) { return r.st[k] && r.st[k].tm; }); if (tk.length > TM_KEEP) tk.sort(function (a, b) { return (r.st[a].at || 0) - (r.st[b].at || 0); }).slice(0, tk.length - TM_KEEP).forEach(function (k) { delete r.st[k].tm; });   /* ★ICONFIX2 t */
+    lsSet(LSK, JSON.stringify(r)); }
+  /* ★ICONFIX2 t: stage timing (numbers only; absolute times in 0.1 s units, durations in ms). so.tm = { a0, a1, rl, b0, b1, c: { <hash>: { x, w, p, ai, cw, s, i, code, cr, d } } } */
+  function tmSet(id, fn) { if (!tmOn()) return; try { soSet(id, function (so) { so.tm = so.tm || { c: {} }; so.tm.c = so.tm.c || {}; fn(so.tm); }); } catch (e) {} }
+  function tmC(id, h, fn) { tmSet(id, function (tm) { tm.c[h] = tm.c[h] || {}; fn(tm.c[h]); }); }
+  function ds(t) { return Math.round(t / 100); }
   function soOf(id) { var r = rec(); return r.st[hk(id)] || null; }
   function soSet(id, fn) { var r = rec(), k = hk(id); var so = r.st[k] || { p: null, at: Date.now(), t: [], a: {}, b: {} }; fn(so, r); so.at = Date.now(); r.st[k] = so; recSave(r); return so; }
   function claimB37(id) {   /* B37 の自動案内（LC1 では 👥 が勝手に開く）を「STARTICON が引き受けた」にする。B37 自身の 1 回の印と同じ形 */
@@ -164,6 +186,7 @@
   var EF_STOP = { BUDGET: 1, RATE_LIMITED: 1, LEDGER_UNHEALTHY: 1, ASSET_V2_UNAVAILABLE: 1, NOT_FOUND: 1, GENERATION_FAILED: 1, OUTCOME_UNKNOWN: 1, READ_FAIL: 1,
     AV2_OFF: 1, AV2_FLAG_OFF: 1, NOT_SCHEMA2_DOCUMENT: 1, REBASE_REQUIRED: 1, REGISTRATION_BLOCKED: 1 };
   var EF_HOLD = { ASSET_V2_UNAVAILABLE: 1, BUDGET: 1, RATE_LIMITED: 1 };   /* 403 / 501（公開許可の外・HOLD・停止中）・402（上限）・429（毎分 / お客さまの 1 日の枚数）→ このタブではもう試さない */
+  var EF_ONE = { OUTCOME_UNKNOWN: 1, GENERATION_FAILED: 1 };   /* ★ICONFIX2 c: failures of ONE picture (not of the account / device / story) — held for that character only */
   var HOLD_ERR = /^(CUSTOMER_IMG_|ACCOUNT_|ENTITLEMENT_)/;   /* ★STARTICON2: the Worker's customer refusals that arrive as 503 (OUTCOME_UNKNOWN on the device) — also held for the tab */
   function holdOf(code, x) { if (EF_HOLD[code]) return code; var e = String((x && x.err) || ''); return (code === 'OUTCOME_UNKNOWN' && HOLD_ERR.test(e)) ? e.slice(0, 40) : null; }
 
@@ -199,19 +222,19 @@
 
   /* ---------- A: draft → setProfile (sequential) ---------- */
   function phaseA(id) {
-    X.busy = true; var a0 = acct();
+    X.busy = true; var a0 = acct(); X.aT0 = Date.now();   /* ★ICONFIX2 t */
     pointers(id, function (by) {
       if (!by) { X.pageStop = 'READ_FAIL'; return finish('A_READ_FAIL'); }   /* nothing sent; the next page load may try again */
       if (!same(id, a0)) return finish('A_RECHECK');
       /* targets: no picture on the server yet AND a draft is possible (confirmed appearance, or a description that is not sensitive) — then the cap (hero 1 + NPCs 3) */
-      var cs = chars(), tg = [], npc = 0, skip = {}, sc = storyCap();   /* ★LIM1 */
+      var cs = chars(), tg = [], npc = 0, skip = {}, sc = storyCap(), xt = {};   /* ★LIM1 ★ICONFIX2 t: xt = extract ms per character */
       /* once per story across devices: only the device that created the story (URL new=1) starts with pictures already present; any other device /
          tab starts only when NO character of the story has a picture yet (otherwise another device — or the Owner — already did the start) */
       if (!isNew && cs.some(function (c) { return by[c.id]; })) { soSet(id, function (so) { so.p = 'done'; so.why = 'OTHER_DEVICE'; }); return finish('A_OTHER_DEVICE'); }
       cs.forEach(function (c) {
         if (by[c.id]) return;
         if (c.hero ? (!sc.hero || tg.some(function (t) { return t.hero; })) : npc >= sc.npcs) return;   /* ★LIM1: sc = { hero: true, npcs: 3 } without a row (as before) */
-        var s = suggest(c.id), why = null, dc = null;
+        var x0 = Date.now(), s = suggest(c.id), why = null, dc = null;
         if (!s) why = 'NO_ENTRY';
         else if (!(s.current && s.current.appearance)) {
           var desc = String(s.desc || '').trim();
@@ -221,15 +244,17 @@
             else if (!dc.ok && lsGet(NOAI) === '1') why = 'SKIP_NOAI'; }
         }
         if (why) { skip[hk(c.id)] = why; stats.skipped++; return; }
-        if (!c.hero) npc++; c.dc = dc; tg.push(c);
+        if (!c.hero) npc++; c.dc = dc; tg.push(c); xt[hk(c.id)] = Date.now() - x0;
       });
       if (!tg.length) { soSet(id, function (so) { so.p = 'done'; so.why = 'NOTHING'; so.a = skip; }); return finish('A_NOTHING'); }
       tg.sort(function (a, b) { return (b.hero ? 1 : 0) - (a.hero ? 1 : 0); });
       soSet(id, function (so, r) { so.p = 'plan'; so.t = tg.map(function (c) { return hk(c.id); }); so.a = skip; r.starts = (r.starts || 0) + 1; });
       stats.plans++; note({ kind: 'PLAN', n: tg.length, hero: tg.some(function (c) { return c.hero; }), skipped: Object.keys(skip).length, cap: sc.src });
+      tmSet(id, function (tm) { tm.a0 = ds(X.aT0 || Date.now()); tm.o = ds(X.t0); Object.keys(xt).forEach(function (h) { tm.c[h] = tm.c[h] || {}; tm.c[h].x = xt[h]; }); });   /* ★ICONFIX2 t */
       var i = 0, setAny = false, wrote = false;
       var endA = function (why) {
         soSet(id, function (so) { if (setAny) so.p = 'img'; else { so.p = 'done'; so.why = why || 'NO_PROFILE'; } });
+        tmSet(id, function (tm) { tm.a1 = ds(Date.now()); });   /* ★ICONFIX2 t */
         if (setAny && wrote) { X.needReload = true; return finish('A_DONE_RELOAD'); }
         if (setAny) { X.busy = false; return phaseB(id); }   /* every target already had a confirmed appearance → no write, no reload */
         finish('A_DONE_NONE');
@@ -241,23 +266,40 @@
         var mark = function (code) { soSet(id, function (so) { so.a[h] = code; }); };
         if (!s) { mark('NO_ENTRY'); return next(); }
         if (s.current && s.current.appearance) { setAny = true; mark('conf'); return next(); }   /* confirmed appearance: never changed silently */
-        var desc = String(s.desc || '').trim(), dc = c.dc || { ok: false, why: '?' };
+        var desc = String(s.desc || '').trim(), dc = c.dc || { ok: false, why: '?' }, tw = Date.now();
         waitFor(quiet, WAIT_MS * 6, function (q) {
           if (!q) { mark('NOT_QUIET'); return endA('NOT_QUIET'); }   /* nothing sent for this character */
           var input = { name: c.name, gender: genderOf(s.gender), desc: desc, confirmed: '', context: lore().slice(0, 120), hero: c.hero };
           stats.proposals++; if (dc.ok) stats.direct++;
           note({ kind: 'PROPOSE', direct: !!dc.ok });
+          var tp = Date.now();
           PR().propose(input, function (res) {
             res = res || {};
+            var tpe = Date.now();
+            tmC(id, h, function (t) { t.w = tp - tw; t.p = tpe - tp; t.ai = (res.aiCalled === true) ? 1 : 0; t.nh = res.nh ? 1 : 0; });   /* ★ICONFIX2 t: w = waiting for a quiet page, p = the proposal (AI or not) */
+            if (fx2bOn()) {   /* ★ICONFIX2 b: the proposal is checked against the description's fixed facts (whatever path made it) */
+              try { res = root.__v292DfixLC1prop.enforceFacts(res, input) || res; } catch (eF) { note({ kind: 'FACTS_THREW', e: String(eF).slice(0, 60) }); }
+              var fc = res.facts;
+              if (fc && !fc.skipped) {
+                if (fc.fatal) stats.factsFatal++; else if (fc.ok) stats.factsOk++; else stats.factsRepaired++;
+                if (fc.sexFixed) stats.factsSex++;
+                note({ kind: 'FACTS', ok: !!fc.ok, miss: fc.missing.length, rep: fc.repaired.length, sex: fc.sexFixed || '', form: fc.form, fatal: fc.fatal || null });
+                soSet(id, function (so) { so.f = so.f || {}; so.f[h] = fc.fatal ? 'fatal' : fc.ok ? 'ok' : ('rep' + fc.repaired.length + (fc.sexFixed ? 's' : '')); });
+                if (fc.fatal) { mark('PROPOSE_FACTS_' + String(fc.fatal).slice(0, 16)); return next(); }   /* never an image with a fact missing; the manual 2-tap stays */
+              }
+            }
             var g = genderOf(s.gender) || genderOf(res.gender);
             var pv = A().previewProfile ? A().previewProfile({ gender: g, appearance: res.appearance || '' }) : { gender: g, appearance: String(res.appearance || '').trim() };
             if (!res.ok || !pv.appearance) { mark('PROPOSE_' + String(res.code || 'EMPTY').slice(0, 24)); return next(); }
+            var tcw = Date.now();
             waitFor(function () { return saveClean(id) && quiet(); }, CLEAN_MS, function (ok) {
               if (!ok) { mark('NOT_CLEAN'); return endA('NOT_CLEAN'); }
               if (!same(id, a0)) return endA('RECHECK');
               var basis = (res.direct === true || res.aiCalled === false) ? 'desc' : 'ai';   /* ★STARTICON2: unknown → 'ai' (the less trusted label) */
               stats.sets++; if (inFlight()) stats.sentWhileInFlight++; note({ kind: 'SET', ai: basis === 'ai' });
+              var ts0 = Date.now();
               A().setProfile(c.id, { gender: pv.gender, appearance: pv.appearance, ownerConfirmed: true, origin: 'starticon_auto', basis: basis }, function (r2) {
+                tmC(id, h, function (t) { t.cw = ts0 - tcw; t.s = Date.now() - ts0; });   /* ★ICONFIX2 t: cw = waiting for a clean save, s = the profile registration */
                 if (r2 && r2.ok) { setAny = true; if (!r2.noop) wrote = true; mark('set'); note({ kind: 'SET_OK', noop: !!r2.noop, mirror: r2.mirror, basis: basis }); return setTimeout(next, 200); }
                 var code = (r2 && r2.code) || 'UNKNOWN';
                 if (code === 'APPEARANCE_EXISTS') { setAny = true; mark('conf'); stats.exists++; note({ kind: 'SET_EXISTS' }); return setTimeout(next, 200); }   /* ★STARTICON2: an appearance appeared on the server (another device / the Owner) — never replaced */
@@ -284,18 +326,23 @@
     if (so.bt > CAP.bTries) { soSet(id, function (s) { s.p = 'stop'; s.why = 'B_TRIES'; }); return finish('B_TRIES'); }
     /* ★93-j: a character whose first send got IN_FLIGHT and was not retried yet (the page closed while waiting) is still to do — its one retry */
     var todo = chars().filter(function (c) { var h = hk(c.id); var b = so.b[h], r = so.r || {}; return so.t.indexOf(h) >= 0 && (so.a[h] === 'set' || so.a[h] === 'conf') && (!b || (b === 'IN_FLIGHT' && !r[h] && retryOn())); });
-    var i = 0, transient = 0;
+    var i = 0, transient = 0, serial = 0;   /* ★ICONFIX2 c: serial = per-character failures in a row */
     todo.forEach(function (c) { var t = so.ra && so.ra[hk(c.id)]; if (typeof t === 'number' && t > (X.leaseUntil || 0)) X.leaseUntil = Math.min(t, Date.now() + IF_WAIT_MS + IF_SPAN_MS); });   /* ★93-j: a reload in the middle of the wait keeps waiting */
     var endB = function (why, hold) {
       soSet(id, function (s) { if (why) { s.p = 'stop'; s.why = why; } else s.p = 'done'; });
+      tmSet(id, function (tm) { tm.b1 = ds(Date.now()); });   /* ★ICONFIX2 t */
       if (hold) ssSet(HOLDK, hold);
       refreshPortraits(); finish(why ? 'B_STOP_' + why : 'B_DONE');
     };
+    /* ★ICONFIX2 c: before the chain ends, the characters held after an unknown outcome are looked up again (read only, never re-sent) */
+    var endB2 = function (why, hold) { if (!fx2cOn() || why === 'RECHECK') return endB(why, hold); reconcileUnknown(id, a0, function () { endB(why, hold); }); };
     var send = function (c, h, again) {   /* the one billable request for this character (again = the ONE retry after IN_FLIGHT) */
       soSet(id, function (s) { if (again) { s.r = s.r || {}; s.r[h] = 1; } s.b[h] = 'SENT'; });   /* written BEFORE the call: a page closed mid-call never resends (and never retries twice) */
       stats.ef++; if (again) stats.ifRetry++; if (inFlight()) stats.sentWhileInFlight++; note({ kind: again ? 'EF_RETRY' : 'EF', hero: c.hero });
+      var ti0 = Date.now();
       A().ensureFirst(c.id, {}, function (x) {
         var code = (x && x.code) || 'UNKNOWN';
+        tmC(id, h, function (t) { t.i = Date.now() - ti0; t.code = String(code).slice(0, 24); if (again) t.rt = 1; });   /* ★ICONFIX2 t: the image request (one billable call) */
         if ((code === 'REGISTRATION_IN_PROGRESS') && x && !x.calls && transient < 5) { transient++; soSet(id, function (s) { if (again) { s.b[h] = 'IN_FLIGHT'; if (s.r) delete s.r[h]; } else delete s.b[h]; }); if (again) stats.ifRetry--; return setTimeout(next, 2000); }   /* refused on the device before any request (★93-j: a retry stays a retry) */
         note({ kind: 'EF_RES', code: code, calls: x && x.calls, retry: again ? 1 : 0 });
         if (code === 'IN_FLIGHT' && x && x.calls && retryOn()) {   /* ★93-j: the Worker answered 200 IN_FLIGHT (the account's lease is held by another picture) — nothing was made, nothing billed */
@@ -305,14 +352,35 @@
           stats.ifGiveUp++; i++; soSet(id, function (s) { s.b[h] = 'IN_FLIGHT2'; }); return next();   /* the second IN_FLIGHT: this character is left (manual stays) */
         }
         i++; soSet(id, function (s) { s.b[h] = String(code).slice(0, 32); });
-        if (x && x.ok && EF_OK[code]) { if (code === 'EXISTS') stats.exists++; else stats.created++; refreshPortraits(); return next(); }
+        if (x && x.ok && EF_OK[code]) { if (code === 'EXISTS') stats.exists++; else stats.created++; serial = 0; var m0 = memNow(); tmC(id, h, function (t) { t.cr = ds(Date.now()); }); refreshPortraits(); watchDisplay(id, h, Date.now(), m0); return next(); }
         stats.efFail++;
-        if (EF_STOP[code]) return endB(code, holdOf(code, x));
+        if (EF_STOP[code]) {
+          var hd = holdOf(code, x);
+          if (fx2cOn() && !hd && EF_ONE[code]) {   /* ★ICONFIX2 c: this character only — held, never re-sent; the others go on */
+            serial++; if (code === 'OUTCOME_UNKNOWN') stats.unkContinue++;
+            soSet(id, function (s) { s.u = s.u || {}; s.u[h] = Date.now(); if (code === 'OUTCOME_UNKNOWN') s.b[h] = 'UNKNOWN'; });
+            X.leaseUntil = Math.max(X.leaseUntil || 0, Date.now() + IF_WAIT_MS + Math.floor(Math.random() * IF_SPAN_MS));   /* the Worker may still hold the account's lease for this picture: the next one waits like after IN_FLIGHT */
+            note({ kind: 'EF_HOLD_ONE', code: code, serial: serial });
+            if (serial >= UNK_SERIAL_MAX) { stats.unkSerialStop++; return endB2(code + '_X' + serial, null); }   /* two in a row = an outage, not this character: stop sending */
+            if (code !== 'OUTCOME_UNKNOWN') return next();
+            /* first look at the SAME character's result (after the lease wait, read only): made meanwhile → adopted; otherwise it stays held and the others go on */
+            var wl = Math.max(0, (X.leaseUntil || 0) - Date.now()); note({ kind: 'UNK_LOOK_WAIT', ms: wl });
+            return setTimeout(function () {
+              if (!same(id, a0)) return endB('RECHECK');
+              pointers(id, function (by) {
+                if (by && by[c.id]) { serial = 0; stats.unkAdopted++; soSet(id, function (s) { s.b[h] = 'ADOPTED'; }); tmC(id, h, function (t) { t.cr = ds(Date.now()); t.code = 'ADOPTED'; }); note({ kind: 'UNK_ADOPTED', n: 1, at: 'look' }); refreshPortraits(); }
+                next();
+              });
+            }, wl);
+          }
+          return endB2(code, hd);
+        }
+        serial = 0;   /* ★ICONFIX2 c: a definite answer (422 …) — the service is up */
         next();   /* 422 imgsafe / PROFILE_NOT_ENGLISH / CANDIDATES_PENDING / IN_FLIGHT (retry off) / IN_PROGRESS / LOST_RACE / UNGROUNDED …: this character only */
       });
     };
     var next = function () {
-      if (i >= todo.length) return endB(null);
+      if (i >= todo.length) return endB2(null);
       if (!same(id, a0)) return endB('RECHECK');
       var c = todo[i], h = hk(c.id);
       var cur = (suggest(c.id) || {}).current || {};
@@ -329,7 +397,7 @@
           /* ★93-j: the retry — first look whether the character got a picture meanwhile (the other request may have been for this same character) */
           pointers(id, function (by) {
             if (!same(id, a0)) return endB('RECHECK');
-            if (by === null) { i++; soSet(id, function (s) { s.b[h] = 'IF_READ_FAIL'; }); stats.efFail++; return endB('READ_FAIL'); }   /* = READ_FAIL of ensureFirst: stop, nothing sent */
+            if (by === null) { i++; soSet(id, function (s) { s.b[h] = 'IF_READ_FAIL'; }); stats.efFail++; return endB2('READ_FAIL'); }   /* = READ_FAIL of ensureFirst: stop, nothing sent */
             if (by[c.id]) { i++; stats.ifFilled++; soSet(id, function (s) { s.b[h] = 'FILLED'; }); note({ kind: 'IF_FILLED' }); refreshPortraits(); return next(); }   /* nothing sent */
             send(c, h, true);
           });
@@ -337,7 +405,56 @@
       }, wait);
     };
     note({ kind: 'B_START', n: todo.length, try: so.bt });
+    tmSet(id, function (tm) { if (!tm.b0) { tm.b0 = ds(Date.now()); tm.o2 = ds(X.t0); } });   /* ★ICONFIX2 t: the first B start (o2 = this page's open) */
     next();
+  }
+  /* ★ICONFIX2 c: read-only follow-up of the characters whose request had an unknown outcome. Never re-sends. A page closed while waiting leaves them 'UNKNOWN'
+     (the next open of the story — while its tries last — looks again); after the last look they are 'UNKNOWN_HELD' (the manual 「結果を確かめる」 stays). */
+  function reconcileUnknown(id, a0, cb) {
+    var so = soOf(id) || { b: {} };
+    var hs = Object.keys(so.b || {}).filter(function (h) { return so.b[h] === 'UNKNOWN'; });
+    if (!hs.length) return cb();
+    var k = 0;
+    (function round() {
+      var s1 = soOf(id) || { b: {} }, left = hs.filter(function (h) { return s1.b[h] === 'UNKNOWN'; });
+      if (!left.length) return cb();
+      if (k >= UNK_CHECK_MS.length) { soSet(id, function (s) { left.forEach(function (h) { s.b[h] = 'UNKNOWN_HELD'; }); }); stats.unkHeld += left.length; note({ kind: 'UNK_HELD', n: left.length }); return cb(); }
+      var due = 0; left.forEach(function (h) { var t = ((s1.u || {})[h] || 0) + UNK_CHECK_MS[k]; if (t > due) due = t; });
+      var wait = Math.max(0, due - Date.now()); k++;
+      note({ kind: 'UNK_WAIT', ms: wait, n: left.length, round: k });
+      setTimeout(function () {
+        if (!same(id, a0)) return cb();
+        pointers(id, function (by) {
+          if (by) {
+            var cm = {}; chars().forEach(function (c) { cm[hk(c.id)] = c.id; });
+            var got = left.filter(function (h) { return cm[h] && by[cm[h]]; });
+            if (got.length) { soSet(id, function (s) { got.forEach(function (h) { s.b[h] = 'ADOPTED'; }); }); stats.unkAdopted += got.length; note({ kind: 'UNK_ADOPTED', n: got.length }); got.forEach(function (h) { tmC(id, h, function (t) { t.cr = ds(Date.now()); t.code = 'ADOPTED'; }); }); refreshPortraits(); }
+          }
+          round();
+        });
+      }, wait);
+    })();
+  }
+  /* ★ICONFIX2 t: display = the portrait list read again after the picture was made AND a picture body loaded (approximate; read only) */
+  function memNow() { try { var P = root.__chronicleAv2Portrait; var st = P && typeof P.status === 'function' ? P.status() : null; return st && typeof st.mem === 'number' ? st.mem : -1; } catch (e) { return -1; } }
+  function watchDisplay(id, h, t0, mem0) {
+    if (!tmOn()) return; var P = root.__chronicleAv2Portrait; if (!P || typeof P.status !== 'function') return;
+    var n = 0;
+    (function poll() {
+      var st = null; try { st = P.status(); } catch (e) { st = null; }
+      if (st && st.listed && st.listed.at >= t0 && !st.listed.error && typeof st.mem === 'number' && st.mem > mem0) { var d = Date.now() - t0; tmC(id, h, function (t) { t.d = d; }); return; }
+      if (++n > 120) { tmC(id, h, function (t) { t.d = -1; }); return; }
+      setTimeout(poll, 250);
+    })();
+  }
+  function timingOf(id, so) {
+    if (!so || !so.tm) return null;
+    var tm = so.tm, born = bornMs(id), T = function (v) { return typeof v === 'number' ? v * 100 : null; }, df = function (a, b) { return (typeof a === 'number' && typeof b === 'number') ? (a - b) * 100 : null; };
+    var rows = Object.keys(tm.c || {}).map(function (h) { var t = tm.c[h] || {};
+      return { h: h, extract: t.x, waitQuiet: t.w, propose: t.p, ai: t.ai, nh: t.nh, waitClean: t.cw, register: t.s, image: t.i, retry: t.rt || 0, code: t.code || null, display: t.d, createdFromBorn: (t.cr && born) ? T(t.cr) - born : null, createdFromBStart: df(t.cr, tm.b0) }; });
+    var med = function (k) { var v = rows.map(function (r) { return r[k]; }).filter(function (x) { return typeof x === 'number' && x >= 0; }).sort(function (a, b) { return a - b; }); if (!v.length) return null; var m = v.length >> 1; return v.length % 2 ? v[m] : Math.round((v[m - 1] + v[m]) / 2); };
+    return { unit: 'ms', born: born, openFromBorn: (tm.o && born) ? T(tm.o) - born : null, aStartFromBorn: (tm.a0 && born) ? T(tm.a0) - born : null, aDur: df(tm.a1, tm.a0), reloadAfterA: df(tm.rl, tm.a1), bStartAfterA: df(tm.b0, tm.a1), bPageOpenToStart: df(tm.b0, tm.o2), bDur: df(tm.b1, tm.b0),
+      median: { extract: med('extract'), propose: med('propose'), register: med('register'), image: med('image'), display: med('display'), createdFromBorn: med('createdFromBorn') }, rows: rows };
   }
 
   /* ---------- B: the one reload after a profile write (fix733 TYPE A) ---------- */
@@ -369,6 +486,7 @@
     }
     var listOpen = lo && !!document.querySelector('.v292Dfix145-modal');
     X.reloaded = true; stats.reloads++; if (listOpen) stats.listReload++; note({ kind: 'RELOAD', list: listOpen });
+    try { var rid = sid(); if (rid) tmSet(rid, function (tm) { tm.rl = ds(Date.now()); }); } catch (eT) {}   /* ★ICONFIX2 t */
     if (listOpen) { try { root.sessionStorage.setItem(REOPENK, JSON.stringify({ v: 1, s: sid(), t: Date.now() })); } catch (e) {} }
     try { if (waitToast && waitToast.parentNode) waitToast.parentNode.removeChild(waitToast); } catch (e) {}
     toast('キャラの絵を用意するため、1 回だけ再読み込みします');
@@ -428,9 +546,10 @@
       return { ver: VER, killed: killed(), gate: gateWhy() || 'on', story: id, firstTurns: X.firstTurns, busy: X.busy, pageStop: X.pageStop, needReload: X.needReload, reloaded: X.reloaded,
         rec: so ? JSON.parse(JSON.stringify(so)) : null, day: { day: r.day, starts: r.starts }, last: X.last, stats: JSON.parse(JSON.stringify(stats)), hold: ssGet(HOLDK), log: LOG.slice(-40),
         retry: { on: retryOn(), leaseWaitMs: Math.max(0, (X.leaseUntil || 0) - Date.now()) },   /* ★93-j */
+        fx2: { facts: fx2bOn(), perChar: fx2cOn(), timing: tmOn() }, timing: (function () { try { return timingOf(id, so); } catch (eT) { return null; } })(),   /* ★ICONFIX2 */
         list: { on: listOn(), reopenPending: !!reopen, screen: screenBusy(listOn()) },   /* ★93-k */
         caps: (function () { var sc = storyCap(), d = capDayStarts(); return { dayStarts: d === Infinity ? -1 : d, hero: sc.hero, npcs: sc.npcs === Infinity ? -1 : sc.npcs, src: sc.src, lim: (root.__v292DfixADMF1 && typeof root.__v292DfixADMF1.limDecide === 'function') ? root.__v292DfixADMF1.limDecide('starticon_day_stories').why : 'no-admf1' }; })() }; },   /* ★LIM1 */
-    __t: { hk: hk, bornMs: bornMs, isNewStory: isNewStory, storyCap: storyCap, capDayStarts: capDayStarts }
+    __t: { hk: hk, bornMs: bornMs, isNewStory: isNewStory, storyCap: storyCap, capDayStarts: capDayStarts, timingOf: timingOf }
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })(typeof window !== 'undefined' ? window : this);

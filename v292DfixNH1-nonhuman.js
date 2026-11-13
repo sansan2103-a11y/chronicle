@@ -13,6 +13,11 @@
  * ★ICONFIX1 b（laneICONFIX1・2026-11-11）：下書きの部位の取り方を直した（色を部位から切り離さない・「くちばし」の「し」を落とさない・「虎の毛皮」は服・
  *   蛇以外の尻尾は体の部位・種類に 鬼／狐（獣人ではない狐の妖怪）／烏天狗、部位に くちばし・甲羅・頭の皿・水かき・一本角・金棒）。
  *   kill：localStorage v292DfixICONFIX1bOff='1' → 下書きは今までとバイト一致（nh1Draft）。構図（ICONFIX1 c）は Worker だけ（端末は何もしない）。
+ * ★ICONFIX2 a（laneICONFIX2・2026-11-14・GPT #127-TN icons (1)）：辞書の外の種族の語（黒猫・ロボット・からくり・黒い霧・ラミア・人魚）を、句の主語（「大きな黒猫」）の
+ *   ときだけ種類として残す（「猫を抱いた少女」「猫背」「霧の中の女」は今までどおり）。種族と人間の両方が主語なら混合（黙って人間にしない）。
+ *   「下半身が緑色の大蛇の女」は下半身が蛇＋色の語。歯車・金属の体・レンズの目・無数の目・二股の尻尾・刀・羽団扇・大男も部位として残す。
+ *   使うのは設定の説明文からの下書き（LC1prop＝STARTICON・2 タップ）だけ。MIDICON（物語の本文から）は今までどおり ICONFIX1 b（影・闇は扱わない＝'shadow' の黒い人影を避ける）。
+ *   kill：localStorage v292DfixICONFIX2aOff='1' → 下書きは ICONFIX1 b とバイト一致（v292DfixICONFIX1bOff='1' でも止まる）。Worker は変えない（知らない語は ER1x が訳す）。
  * 観測口：window.__v292DfixNH1.status()
  * ===================================================================== */
 (function (root) {
@@ -398,6 +403,119 @@
     return t + ', simple uncluttered background';
   }
   /* ---- ICONFIX1 b/c core end ---- */
+  /* ---- ICONFIX2 a core (laneICONFIX2・2026-11-14・LOCAL・GPT #127-TN icons (1)) — device only for now (the Worker keeps its own NH1/FX1 tables:
+     a value this table knows but the Worker does not is translated there by ER1x, as before for any unknown part).
+     Pure functions only, ES5. Used ONLY when the fix is on (device: localStorage v292DfixICONFIX2aOff !== '1' and v292DfixICONFIX1bOff !== '1').
+     The NH1 / FX1 tables above are read, never modified: with the fix off every function above gives the same result as before.
+     ① species words that the dictionary did not know (animal 黒猫, machine ロボット / からくり, amorphous 黒い霧, hybrids ラミア / 人魚) are kept as the species —
+        but only when the word is the HEAD of its clause (「大きな黒猫」「黒い霧のかたまり」), never as an object or a modifier (「猫を抱いた少女」「猫背」「霧の中に立つ女」)
+     ② ambiguous (a species head AND a human head in the same description: 「昼は少女、夜は黒猫」) → mixed, never silently human
+     ③ body-structure / material / key-prop phrases are kept: 「下半身が緑色の大蛇の女」 → the serpent lower body (+ the colour words kept as a second value),
+        歯車・金属の体・レンズの目・無数の目・二股の尻尾・刀・羽団扇・大男
+     ④ the left-over clauses of a non-human figure are kept when they describe its body / material / props (keepRest), not only the human look words ---- */
+  var FX2_VER = 'fx2a';
+  var FX2_HUMAN_HEAD = /(?:少女|少年|女性|男性|女の子|男の子|青年|老人|老婆|老爺|紳士|婦人|淑女|娘|人間|女|男)$/;
+  var FX2_COPULA = /^(?:で(?:ある|す|した)?|だ(?:った)?|です|でした|である)?$/;
+  var FX2_BASE_ADD = [   /* [regex, English, form, kind, tag, kindJa, implied lower part ja] — checked AFTER the NH1/FX1 species (they keep priority) */
+    [/ラミア|半人半蛇|蛇女/, 'lamia, a woman whose lower body is a long serpent tail', 'mixed', 'yokai', 'hybrid', '', '下半身が蛇'],
+    [/人魚|マーメイド/, 'mermaid, a woman with a long fish tail in place of legs', 'mixed', 'yokai', 'hybrid', '', '下半身が魚の尾'],
+    [/ケンタウロス|半人半馬/, 'centaur, a human upper body on a horse body', 'mixed', 'creature', 'hybrid', '', ''],
+    [/アラクネ|女郎蜘蛛|半人半蜘蛛/, 'arachne, a woman whose lower body is a giant spider', 'mixed', 'yokai', 'hybrid', '', ''],
+    [/アンドロイド|ガイノイド/, 'android, a humanoid machine with visible mechanical seams', 'mixed', 'creature', 'machine', '機械', ''],
+    [/ロボット|機械人形|自動人形|オートマタ|オートマトン|ゴーレム|人型の機械|人型機械|機械兵|からくり(?!人形|仕掛け)/, 'mechanical automaton', 'nonhuman', 'creature', 'machine', '機械', ''],
+    [/猫又|ねこまた|化け猫|(?:大きな|巨大な|小さな|黒い|白い)?(?:黒猫|白猫|三毛猫|野良猫|猫|ねこ|ネコ)/, 'cat, a four-legged animal', 'nonhuman', 'yokai', 'animal', '動物', ''],
+    [/(?:大きな|巨大な|黒い|白い)?(?:黒犬|白犬|野良犬|山犬|狼|オオカミ|犬|いぬ|イヌ)/, 'dog-like four-legged animal', 'nonhuman', 'creature', 'animal', '動物', ''],
+    [/(?:大きな|巨大な|白い|黒い)?(?:大蛇|白蛇|蛇)/, 'giant serpent', 'nonhuman', 'creature', 'animal', '動物', ''],
+    [/(?:大きな|巨大な)?(?:大蜘蛛|蜘蛛)/, 'giant spider', 'nonhuman', 'creature', 'animal', '動物', ''],
+    [/(?:大きな|巨大な|黒い)?(?:大烏|大鴉|烏|鴉|カラス|梟|フクロウ|鷹|鷲)/, 'large bird', 'nonhuman', 'creature', 'animal', '動物', ''],
+    [/(?:大きな|巨大な)?(?:狸|たぬき|タヌキ|兎|うさぎ|ウサギ|熊|鼠|ネズミ|鹿|猿|虎|獅子|ライオン)/, 'animal', 'nonhuman', 'creature', 'animal', '動物', ''],
+    [/竜|龍|ドラゴン/, 'dragon', 'nonhuman', 'creature', 'animal', '動物', ''],
+    [/(?:黒い|白い|灰色の|赤い)?(?:霧|靄|煙)(?:の(?:かたまり|塊|渦|柱))?|(?:黒い|白い)?(?:霧|煙)の(?:ような|ような姿の)?(?:もの|存在)/, 'a shapeless mass of dark mist', 'nonhuman', 'spirit', 'amorphous', '不定形', '']
+  ];
+  var FX2_BASE = FX1_BASE.concat(FX2_BASE_ADD);
+  var FX2_IDIOM = /負け犬|狂犬|番犬|忠犬|飼い犬|泥棒猫|猫かぶり|猫を被|猫背|猫舌|猫なで|猫撫で|猫目|猫耳|猫っ毛|猫可愛がり|猫の額|猫の手|一匹狼|送り狼|虎の子|虎の威|熊手|鷹揚|招き猫|竜胆|登竜門|煙たい|煙草|煙管|闇市|闇金|闇夜|影武者|影絵|影響|面影|人影|月影|鼠色|ねずみ色|狸寝入り|狐につま|蛇足|蛇口|鹿威し|猿芝居|鷲鼻|鷹の目|兎に角|うさぎ跳び/g;
+  var FX2_SERPENT_LOWER = /下半身が([^、。・／\u0000]{0,10}?)(大蛇|蛇)(?:の(?:胴体|体|尾|姿))?/;   /* 「下半身が緑色の大蛇」→ 下半身が蛇（Worker が知っている形）＋ 緑色の大蛇（色の語は残す・Worker の ER1x が訳す） */
+  var FX2_PART_ADD = [   /* checked before the FX1 parts */
+    [/胸の窓から歯車が見える|胸の窓に歯車|胸の歯車|体の歯車|歯車の(?:体|胸|心臓)|(?:胸|体|腹)から歯車が(?:見える|のぞく)/, 'body', 'brass gears visible through a small window in the chest', 1],
+    [/錆の浮いた金属の体|錆びた金属の体|錆だらけの(?:金属の)?体/, 'body', 'a rust-spotted metal body', 1],
+    [/金属の体|鋼鉄の体|鉄の体|機械の体|金属製の体|機械仕掛けの体|ブリキの体/, 'body', 'a mechanical metal body', 1],
+    [/(?:右|左|片)?(?:目|眼)(?:だけ)?が(?:ガラスの)?レンズ|レンズの(?:目|眼|瞳)/, 'eyes', 'one eye replaced by a round glass lens', 1],
+    [/(?:(?:白い|赤い|青い|金色の|黄色い)?目がいくつも|無数の目|いくつもの目|たくさんの目|多数の目|複数の目)(?![にでをか])/, 'eyes', 'many eyes', 1],
+    [/二股に分かれた(?:尻尾|尾)|二股の(?:尻尾|尾)|二又の(?:尻尾|尾)|(?:尻尾|尾)が二股|二本の(?:尻尾|尾)/, 'body', 'two tails (a tail forked in two)', 0],
+    [/刀を握っている|刀を握り|刀を握った|刀を持っている|刀を持った|刀を持つ|日本刀|刀(?!傷|痕)/, 'clothes', 'a katana held in one hand', 0],
+    [/羽団扇/, 'clothes', 'a feathered fan in hand', 0],
+    [/大男|巨漢|巨体|大柄/, 'build', 'a huge towering build', 0]
+  ];
+  var FX2_PART = FX2_PART_ADD.concat(FX1_PART);
+  /* the text after a species word inside its clause: the word is the head when nothing (or only a copula) follows, or は / が / も with no human noun after it */
+  function fx2Head(r, m, tag) {
+    var after = r.slice(m.index + m[0].length).split('\u0000')[0].trim();
+    if (FX2_COPULA.test(after)) return true;
+    /* 「黒猫は人の言葉を話す」: the topic at the start of the clause (animal / machine only; 「霧が晴れる」 is weather, not a figure) */
+    if (tag !== 'amorphous' && /^[\u0001\s]*$/.test(r.slice(0, m.index)) && /^(?:は|も)/.test(after) && !/少女|少年|女性|男性|女の子|男の子|青年|老人|紳士|婦人|娘|人間|女|男/.test(after)) return true;
+    return false;
+  }
+  function fx2BaseOk(entry, r, m) {
+    if (!entry[4]) return fx1BaseOk(entry, r, m);
+    var p = r.charAt(m.index - 1);
+    if (entry[4] === 'animal' && p && /[一-鿿ァ-ヿ]/.test(p) && !/^(?:大|白|黒|三毛|野良|山)/.test(m[0])) return false;   /* 子猫 is fine (head), 招き猫 / 竜人 / 化け猫(handled) … a compound noun is not the animal */
+    return fx2Head(r, m, entry[4]);
+  }
+  /* 「ロボットの少女」「黒猫の娘」「人形の姿をした女」: the species word directly names what a human noun is → ambiguous (mixed), never silently human */
+  var FX2_AMB_AFTER = /^の(?:姿をした|姿の|体の)?(?:少女|少年|女性|男性|女の子|男の子|青年|娘|女|男)(?:$|で|だ|です|である|は|が)/;
+  function fx2Amb(entry, r, m) {
+    if (!entry[4] || entry[4] === 'hybrid') return false;
+    var p = r.charAt(m.index - 1);
+    if (entry[4] === 'animal' && p && /[一-鿿ァ-ヿ]/.test(p) && !/^(?:大|白|黒|三毛|野良|山)/.test(m[0])) return false;
+    return FX2_AMB_AFTER.test(r.slice(m.index + m[0].length).split('\u0000')[0].trim());
+  }
+  function nh1DraftX2(desc, opt) {
+    opt = opt || {};
+    var text = String(desc == null ? '' : desc).normalize('NFC');
+    var clauses = text.split(/[、。・\n／]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+    var base = null, baseForm = null, baseJa = '', kind = null, kindJa = '', parts = [], rest = [], implied = '', tag = '', amb = 0;
+    var humanHead = clauses.some(function (cl) { return FX2_HUMAN_HEAD.test(cl.replace(/(?:で(?:ある|す)?|だ|です)$/, '')); });
+    var push = function (slot, ja, en, strong) { if (!parts.some(function (p) { return p.en === en && p.ja === ja; })) parts.push({ slot: slot, ja: ja, en: en, strong: strong }); };
+    clauses.forEach(function (cl) {
+      var r = cl, i, m;
+      m = FX2_SERPENT_LOWER.exec(r);
+      if (m) {   /* ★③ 下半身が…蛇: the Worker-known form + the user's own modifier words */
+        push('lower', '下半身が蛇', 'a long scaly serpent body in place of legs, coiled on the ground', 1);
+        var mod = (m[1] || m[2] === '大蛇') ? String(m[1] || '').replace(/^の/, '') + m[2] : '';
+        if (mod) push('lower', mod, '', 1);
+        r = r.slice(0, m.index) + '\u0000' + r.slice(m.index + m[0].length);
+      }
+      for (i = 0; i < FX2_PART.length; i++) {
+        m = fx1Re(FX2_PART[i][0]).exec(r); if (!m) continue;
+        var st = m.index, en0 = m.index + m[0].length, en = FX2_PART[i][2];
+        var cm = FX1_COLOR_TAIL.exec(r.slice(0, st));
+        if (cm && cm[0].length && fx1ColorOk(r.slice(0, st), cm) && r.slice(0, st).indexOf('\u0000', st - cm[0].length) < 0) { st -= cm[0].length; en = fx1Colorize(en, fx1ColorEn(cm[1])); }
+        if (FX2_PART[i][1] === 'skin') { var sm = FX1_SKIN_SUFFIX.exec(r.slice(en0)); if (sm) en0 += sm[0].length; }
+        var ja = r.slice(st, en0);
+        if (!parts.some(function (p) { return p.en === en; })) parts.push({ slot: FX2_PART[i][1], ja: ja, en: en, strong: FX2_PART[i][3] });
+        r = r.slice(0, st) + '\u0000' + r.slice(en0);
+      }
+      m = FX1_COLOR_SKIN.exec(r);
+      if (m && fx1ColorOk(r.slice(0, m.index + m[0].length), [m[0]])) { var ce = fx1ColorEn(m[1]) + ' skin'; if (!parts.some(function (p) { return p.en === ce; })) parts.push({ slot: 'skin', ja: m[0], en: ce, strong: 0 }); r = r.replace(m[0], '\u0000'); }
+      var rI = r.replace(FX2_IDIOM, function (w) { return new Array(w.length + 1).join('\u0001'); });   /* idioms (負け犬・猫背・煙草…) are never the species — same length, so indexes stay */
+      if (!base) for (i = 0; i < FX2_BASE.length; i++) { var rr = FX2_BASE[i][4] ? rI : r; m = fx1Re(FX2_BASE[i][0]).exec(rr); if (m && !fx2BaseOk(FX2_BASE[i], rr, m) && fx2Amb(FX2_BASE[i], rr, m)) amb = 2; if (m && (amb === 2 || fx2BaseOk(FX2_BASE[i], rr, m))) { base = FX2_BASE[i][1]; baseForm = FX2_BASE[i][2]; kind = FX2_BASE[i][3]; tag = FX2_BASE[i][4] || ''; kindJa = FX2_BASE[i][5] || ''; implied = FX2_BASE[i][6] || ''; baseJa = m[0]; r = r.slice(0, m.index) + '\u0000' + r.slice(m.index + m[0].length); break; } }
+      r.split('\u0000').forEach(function (x) { x = x.replace(/^[のでとがはをにも、]+|(?:をし|[のでとがはをにも、])+$/g, '').trim(); if (x && (typeof opt.isVisual !== 'function' || opt.isVisual(x))) rest.push(x); });
+    });
+    if (implied && !parts.some(function (p) { return p.slot === 'lower'; })) parts.push({ slot: 'lower', ja: implied, en: implied === '下半身が蛇' ? 'a long scaly serpent body in place of legs, coiled on the ground' : 'a long fish tail in place of legs', strong: 1 });   /* ラミア / 人魚 define their lower body */
+    var strong = parts.filter(nh1Strong), form = 'human';
+    if (base && baseForm !== 'soft') form = baseForm; else if (strong.length) form = 'mixed';
+    if (tag && tag !== 'hybrid' && form === 'nonhuman' && (humanHead || amb === 2)) { form = 'mixed'; amb = amb || 1; }   /* ★② a species head and a human head: never silently human, never silently animal */
+    var rk = String(opt.rosterKind || '');
+    if (form === 'human' && NH1_ROSTER_NH.test(rk) && parts.length) form = 'mixed';
+    if (!base && NH1_ROSTER_NH.test(rk) && parts.some(function (p) { return p.slot === 'motion'; })) { base = 'ghostly apparition'; baseJa = '霊のような存在'; baseForm = 'nonhuman'; form = 'nonhuman'; kind = 'spirit'; }
+    if (!kind && form !== 'human') kind = NH1_ROSTER_NH.test(rk) ? 'spirit' : 'creature';
+    return { v: NH1_VER, form: form, base: base, baseJa: baseJa, kind: kind, kindJa: form === 'human' ? '' : kindJa, parts: parts, restJa: rest, fx: FX1_VER, fx2: FX2_VER, amb: amb, tag: tag };
+  }
+  /* ★④ a left-over clause of a non-human figure: kept when it describes the body, a material or a prop (not a habit / story / speech) */
+  var FX2_KEEP = /体|胴|胸|腹|背|腰|首|頭|手|腕|足|脚|尾|翼|羽|鱗|毛|皮|殻|骨|角|牙|爪|金属|真鍮|鉄|鋼|銅|錆|陶器|磁器|木製|石の|ガラス|レンズ|歯車|ゼンマイ|機械|継ぎ目|関節|霧|煙|靄|炎|光|目|眼|口|刀|剣|槍|弓|杖|斧|銃|盾|鎌|形|姿|大男|巨体|巨漢|大柄|小柄|古い|古びた/;
+  var FX2_NONVIS = /話す|喋る|しゃべ|言葉|になると|ときどき|時々|たまに|ことがある|住む|住んで|暮らす|呼ばれ|言われ|噂|伝説|かつて|好む|嫌う|知って|覚えて|名乗/;
+  function fx2KeepRest(c) { c = String(c || ''); return FX2_KEEP.test(c) && !FX2_NONVIS.test(c); }
+  /* ---- ICONFIX2 a core end ---- */
 
   function lsGet(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function on() {
@@ -405,11 +523,13 @@
     try { var X = root.__v292DfixADMF1; return !!(X && typeof X.gate === 'function' && X.gate('nh1', false) === true); } catch (e) { return false; }
   }
   var calls = { draft: 0, labeled: 0 };
+  function fx2On() { return lsGet('v292DfixICONFIX2aOff') !== '1' && lsGet('v292DfixICONFIX1bOff') !== '1'; }   /* ★ICONFIX2 a (builds on ICONFIX1 b: its kill also turns this off) */
   root.__v292DfixNH1 = {
-    ver: NH1_VER + '-iconx1nh1b-fx1-20261111', on: on,
-    draft: function (t, o) { calls.draft++; if (lsGet('v292DfixICONFIX1bOff') === '1') return nh1Draft(t, o); calls.fx1 = (calls.fx1 || 0) + 1; return nh1DraftX(t, o); },   /* ★ICONFIX1 b */
+    ver: NH1_VER + '-iconx1nh1b-fx1-fx2a-20261114', on: on,
+    draft: function (t, o) { calls.draft++; if (lsGet('v292DfixICONFIX1bOff') === '1') return nh1Draft(t, o); calls.fx1 = (calls.fx1 || 0) + 1; if (!fx2On() || !(o && o.fx2 === true)) return nh1DraftX(t, o); calls.fx2 = (calls.fx2 || 0) + 1; return nh1DraftX2(t, o); },   /* ★ICONFIX1 b ★ICONFIX2 a: only the caller that asks (LC1prop = STARTICON / 2-tap, a written description). MIDICON (story narrative) keeps fx1 */
     labeled: function (d, k) { calls.labeled++; return nh1Labeled(d, k, lsGet('v292DfixNH1bOff') === '1'); },   /* ★NH1b */
-    isLabeled: nh1IsLabeled, parse: nh1Parse, parseX: nh1ParseX, draftX: nh1DraftX, draftOld: nh1Draft, slotsJa: nh1SlotsJa, anchors: nh1Anchors, anchorsS: nh1AnchorsS,
-    status: function () { return { ver: NH1_VER, on: on(), killed: lsGet('v292DfixNH1Off') === '1', nh1bKilled: lsGet('v292DfixNH1bOff') === '1', fx1b: lsGet('v292DfixICONFIX1bOff') === '1' ? 0 : FX1_VER, fx1c: lsGet('v292DfixICONFIX1cOff') === '1' ? 0 : 'worker-only', calls: JSON.parse(JSON.stringify(calls)) }; }
+    isLabeled: nh1IsLabeled, parse: nh1Parse, parseX: nh1ParseX, draftX: nh1DraftX, draftX2: nh1DraftX2, draftOld: nh1Draft, slotsJa: nh1SlotsJa, anchors: nh1Anchors, anchorsS: nh1AnchorsS,
+    fx2On: fx2On, keepRest: fx2KeepRest,   /* ★ICONFIX2 a: draftX2 / keepRest are pure (LC1prop's fact check reads draftX2 even when this key is off) */
+    status: function () { return { ver: NH1_VER, on: on(), killed: lsGet('v292DfixNH1Off') === '1', nh1bKilled: lsGet('v292DfixNH1bOff') === '1', fx1b: lsGet('v292DfixICONFIX1bOff') === '1' ? 0 : FX1_VER, fx1c: lsGet('v292DfixICONFIX1cOff') === '1' ? 0 : 'worker-only', fx2a: fx2On() ? FX2_VER : 0, calls: JSON.parse(JSON.stringify(calls)) }; }
   };
 })(typeof window !== 'undefined' ? window : this);
