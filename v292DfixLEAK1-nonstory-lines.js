@@ -15,12 +15,18 @@
 //       ・finish=length で、作業メモがあるのに本文との境界を決められない回は hold（index.html が throw → 既存の失敗の経路＝入力を戻す・再試行ボタン。
 //         parse 0・保存 0・自動の再送 0。再試行の回数・費用の制御は変えない）。
 //   kill（v292DfixLEAK1Off='1'）: 影も止める（何も記録しない・何も変えない）。
+// ★laneNUM2（2026-11-13・GPT #127-SY 5・6）
+//   ・限定 Apply: 適用で取り除くのは 2 種だけにした。①単独行の既知の内部専用ラベル（LABELS とタグ名の行。属性の並び「からだ=… / こころ=…」の行は含めない）
+//     ②タグ領域（最初のタグ行より後ろ）にある、内部語を含むまとまりの中の英語が主の行（とその残り）。
+//     タグの断片・属性の並び・日本語が主のメモ行・タグの無い応答の末尾のメモは、数えるだけで取り除かない。finish=length で境界を決められない回の hold は従来どおり。
+//   ・jp_meta（案 A・影だけ・取り除かない）: 本文の最後の行（独立した段落）が、台詞・括弧の外で、読み手への依頼（〜てください 等）と、
+//     書き手視点の語（直前ターン・この返答・本文・描写・読者 等）または受け取り方の語（理解して・違和感 等）を両方含むとき、件数・字数だけを数える。
 // 保存・localStorage への書き込み 0。AI の呼び出し 0。sys 0 字。fetch / parsePlan / submit を包まない。
 // =====================================================================
 (function(){
   'use strict';
   if (typeof window !== 'undefined' && window.__v292DfixLEAK1) return;
-  var VER = 'leak1-20261113';
+  var VER = 'leak1-20261113-num2';
   var STRUCT = 'react|state|scene_move|summary';
   // 内部専用ラベル（sys・クライアントに実在する固定の語だけ）
   var LABELS = ['状態ラベル', '移動タグ', '話者タグ', '状態タグ', '反応タグ', 'sayタグ', 'stateタグ', '状態の出力', '出力の形式'];
@@ -45,6 +51,23 @@
   function applyOn(){ return on() && ls('v292DfixLEAK1Apply') === '1'; }
 
   function isLabel(line){ var t = String(line || '').trim(); if (!t || t.length > 40) return false; return RX_LABEL.test(t) || RX_ATTRLINE.test(t); }
+  function isKnownLabel(line){ var t = String(line || '').trim(); if (!t || t.length > 40) return false; return RX_LABEL.test(t); }   // 限定 Apply ①（属性の並びの行は含めない）
+  // jp_meta（影だけ）: 本文の最後の行が読み手への説明・依頼かどうか（台詞・括弧の外だけを見る）
+  var RX_JP_REQ = /(?:て|で)(?:ください|下さい|ほしい|欲しい)|お願いします|ご了承|ご理解|お含みおき/;
+  var RX_JP_WRITER = /プレイヤー|読者|読み手|本文|描写|場面設定|地の文|ナレーション|このターン|前のターン|直前(?:の)?ターン|次のターン|返答|この応答|出力|文章|メタ/;
+  var RX_JP_TAKE = /受け取って|受け止めて|解釈して|理解して|理解しておいて|捉えて|違和感|想定して|扱って|読み替えて/;
+  var RX_JP_INDIRECT = /(?:て|で)(?:ください|下さい|ほしい|欲しい)[^。]{0,3}(?:と|って)(?:言|頼|告げ|書|叫|囁|呟|答え|笑|伝え|願|祈|念|声)/;
+  function jpMeta(narr){
+    var ls = String(narr || '').split('\n'), i = ls.length - 1;
+    while (i >= 0 && !ls[i].trim()) i--;
+    if (i < 0) return null;
+    var line = ls[i].trim();
+    if (/^[「『（(〔<＜]/.test(line)) return null;                                     // 台詞・括弧・話者の印で始まる行は見ない
+    var t = line.replace(/「[^」]*」|『[^』]*』|（[^）]*）|\([^)]*\)/g, '');
+    if (!RX_JP_REQ.test(t) || RX_JP_INDIRECT.test(t)) return null;
+    if (!RX_JP_WRITER.test(t) && !RX_JP_TAKE.test(t)) return null;
+    return { line: i, chars: line.length };
+  }
   function isFrag(line){ var t = String(line || '').trim(); if (!t) return false; for (var i = 0; i < RX_FRAG.length; i++) if (RX_FRAG[i].test(t)) return true; return false; }
   function counts(t){ var s = String(t || ''); return { L: (s.match(/[A-Za-z]/g) || []).length, J: (s.match(/[ぁ-ゖァ-ヺ一-鿿々〆]/g) || []).length }; }
   function bare(line){ return String(line || '').replace(RX_INLINE, ' '); }
@@ -71,7 +94,7 @@
       else kind.push('other');
     }
     var s = kind.indexOf('tag'), endA = s >= 0 ? s : n, run = [], chars = 0, tokA = false, k;
-    out.hasTag = s >= 0;
+    out.hasTag = s >= 0; out.kind = kind; out.endA = endA;
     for (i = endA - 1; i >= 0; i--){ k = kind[i]; if (k === 'blank' || k === 'label') continue; if (k === 'tok' || k === 'eng'){ run.unshift(i); chars += lines[i].length; if (k === 'tok') tokA = true; } else break; }
     var memoA = !!(run.length && tokA && engDominant(lines[run[0]]) && (run.length >= 2 || chars >= 80));
     var cand = [], tokB = false, m = -1, others = 0;
@@ -87,7 +110,7 @@
     return out;
   }
 
-  var _log = [], _last = null, _stat = { VER: VER, turns: 0, hit: 0, label: 0, frag: 0, meta: 0, amb: 0, hold: 0, removedLines: 0, removedChars: 0, err: 0 };
+  var _log = [], _last = null, _stat = { VER: VER, turns: 0, hit: 0, label: 0, frag: 0, meta: 0, amb: 0, hold: 0, removedLines: 0, removedChars: 0, err: 0, jpmeta: 0, jpChars: 0 };
   function turnNo(){ try { var S = (0, eval)('typeof S !== "undefined" ? S : null'); return S && S.turns ? S.turns.length + 1 : null; } catch(e){ return null; } }
   function norm(s){ return String(s || '').replace(/<[a-z_\/][^<>]*>/gi, '').replace(/[\s　「」『』-]/g, ''); }
 
@@ -98,12 +121,17 @@
       var raw = result.text, fin = (typeof result.fin === 'string') ? result.fin : null, sc = scanRaw(raw), ap = applyOn();
       var info = { which: which || 'main', fin: fin, label: sc.labels.length, meta: sc.meta.length, unsure: sc.unsure, amb: sc.amb, hold: false, cut: 0, cutChars: 0, _memo: '' };
       var memo = sc.meta.map(function(i){ return sc.lines[i]; });
-      info._memo = norm(memo.join('\n'));   // 最終境界で「作業メモの残り」を数えるための照合用（メモリ内だけ。記録には出さない）
+      // 限定 Apply の対象: ①既知の内部専用ラベルだけの行 ②タグ領域（最初のタグ行より後ろ）の作業メモのうち英語が主の行
+      var apLab = sc.labels.filter(function(i){ return isKnownLabel(sc.lines[i]); });
+      var apEng = sc.hasTag ? sc.meta.filter(function(i){ return i >= sc.endA && (sc.kind[i] === 'eng' || sc.kind[i] === 'tok') && engDominant(sc.lines[i]); }) : [];
+      info.apLabel = apLab.length; info.apEng = apEng.length;
+      info._memo = norm(apEng.map(function(i){ return sc.lines[i]; }).join('\n'));   // 最終境界で「英語の作業メモの残り」を数えるための照合用（メモリ内だけ。記録には出さない）
+      info._memoAll = norm(memo.join('\n'));                                            // 影の数え用（従来の作業メモ全体）
       info._body = norm(sc.lines.filter(function(l, i){ return sc.meta.indexOf(i) < 0 && sc.labels.indexOf(i) < 0; }).join('\n'));
       if (ap){
         if (fin === 'length' && sc.amb){ info.hold = true; }
         else {
-          var drop = {}; sc.labels.concat(sc.meta).forEach(function(i){ drop[i] = 1; });
+          var drop = {}; apLab.concat(apEng).forEach(function(i){ drop[i] = 1; });
           var keep = [], cutN = 0, cutC = 0;
           for (var i = 0; i < sc.lines.length; i++){ if (drop[i]){ cutN++; cutC += sc.lines[i].length; } else keep.push(sc.lines[i]); }
           if (cutN){ result.text = keep.join('\n').replace(/\s+$/, ''); info.cut = cutN; info.cutChars = cutC; }
@@ -120,28 +148,37 @@
     if (!on() || typeof narr !== 'string') return narr;
     try {
       var info = (result && result.__leak1) || null, ap = applyOn();
-      var lines = narr.split('\n'), kinds = { label: 0, frag: 0, meta: 0 }, drop = {}, nL = 0, nC = 0, i;
-      var memo = info ? info._memo : '', body = info ? info._body : '';
+      var lines = narr.split('\n'), kinds = { label: 0, attr: 0, frag: 0, meta: 0, jpmeta: 0 }, drop = {}, nL = 0, nC = 0, dL = 0, dC = 0, i;
+      var memo = info ? info._memo : '', memoAll = info ? (info._memoAll || info._memo) : '', body = info ? info._body : '';
+      function rem(x){ return x.length >= 6 && memo && memo.indexOf(x) >= 0 && body.indexOf(x) < 0; }
       for (i = 0; i < lines.length; i++){
-        var l = lines[i], k = null; if (!l.trim()) continue;
-        if (isLabel(l)) k = 'label'; else if (isFrag(l)) k = 'frag';
-        else if (memo){ var x = norm(l); if (x.length >= 6 && memo.indexOf(x) >= 0 && body.indexOf(x) < 0) k = 'meta'; }
-        if (k){ kinds[k]++; drop[i] = 1; nL++; nC += l.length; }
+        var l = lines[i], k = null, ok = false; if (!l.trim()) continue;
+        if (isKnownLabel(l)){ k = 'label'; ok = true; }                                   // 限定 Apply ①
+        else if (isLabel(l)) k = 'attr';                                                   // 属性の並びの行（数えるだけ）
+        else if (isFrag(l)) k = 'frag';                                                    // タグの断片（数えるだけ）
+        else if (memoAll){ var x = norm(l); if (x.length >= 6 && memoAll.indexOf(x) >= 0 && body.indexOf(x) < 0){ k = 'meta'; ok = rem(x); } }   // 作業メモの残り（英語のメモだけ限定 Apply ②）
+        if (k){ kinds[k]++; nL++; nC += l.length; if (ok){ drop[i] = 1; dL++; dC += l.length; } }
       }
+      var jm = jpMeta(narr), jpC = 0;
+      if (jm && !drop[jm.line] && !(lines[jm.line] && (isLabel(lines[jm.line]) || isFrag(lines[jm.line])))){ kinds.jpmeta = 1; jpC = jm.chars; }
       _stat.turns++;
       var preCut = info ? info.cut : 0;
       if (nL || preCut || (info && (info.label || info.meta || info.amb))){
-        _stat.hit++; _stat.label += kinds.label; _stat.frag += kinds.frag; _stat.meta += kinds.meta; if (info && info.amb) _stat.amb++;
-        record({ t: turnNo(), at: 'gate', fin: info ? info.fin : null,
-          kinds: kinds, lines: nL, chars: nC,                                     // 最終境界（保存される本文）に残っていた数
-          raw: info ? { label: info.label, meta: info.meta, unsure: info.unsure, amb: info.amb ? 1 : 0, cut: info.cut, cutChars: info.cutChars } : null,   // 生の応答での数
-          applied: ap, hold: false });
+        _stat.hit++; _stat.label += kinds.label + kinds.attr; _stat.frag += kinds.frag; _stat.meta += kinds.meta; if (info && info.amb) _stat.amb++;
       }
-      _last = { t: turnNo(), lines: nL, chars: nC, kinds: kinds, applied: ap, preCut: preCut };
-      if (!ap || !nL) return narr;
+      if (kinds.jpmeta){ _stat.jpmeta++; _stat.jpChars += jpC; }
+      if (nL || preCut || kinds.jpmeta || (info && (info.label || info.meta || info.amb))){
+        record({ t: turnNo(), at: 'gate', fin: info ? info.fin : null,
+          kinds: kinds, lines: nL, chars: nC,                                     // 最終境界（保存される本文）に残っていた数（jp_meta は別の欄）
+          jp: kinds.jpmeta ? { lines: 1, chars: jpC } : null,                     // jp_meta 候補（影だけ・取り除かない・本文は残さない）
+          raw: info ? { label: info.label, meta: info.meta, unsure: info.unsure, amb: info.amb ? 1 : 0, cut: info.cut, cutChars: info.cutChars, apLabel: info.apLabel || 0, apEng: info.apEng || 0 } : null,   // 生の応答での数
+          applied: ap, removed: ap ? dL : 0, hold: false });
+      }
+      _last = { t: turnNo(), lines: nL, chars: nC, kinds: kinds, applied: ap, preCut: preCut, removed: ap ? dL : 0, jpChars: jpC };
+      if (!ap || !dL) return narr;
       var out = []; for (i = 0; i < lines.length; i++) if (!drop[i]) out.push(lines[i]);
-      _stat.removedLines += nL; _stat.removedChars += nC;
-      try { if (plan && Array.isArray(plan.narrative)) plan.narrative = plan.narrative.filter(function(pl){ if (typeof pl !== 'string') return true; if (isLabel(pl) || isFrag(pl)) return false; if (memo){ var y = norm(pl); if (y.length >= 6 && memo.indexOf(y) >= 0 && body.indexOf(y) < 0) return false; } return true; }); } catch(e2){}
+      _stat.removedLines += dL; _stat.removedChars += dC;
+      try { if (plan && Array.isArray(plan.narrative)) plan.narrative = plan.narrative.filter(function(pl){ if (typeof pl !== 'string') return true; if (isKnownLabel(pl)) return false; var y = norm(pl); if (rem(y)) return false; return true; }); } catch(e2){}
       return out.join('\n').replace(/[ \t]*\n{3,}/g, '\n\n').trim();
     } catch(e){ _stat.err++; return narr; }
   }
@@ -149,7 +186,7 @@
 
   var api = { VER: VER, on: on, applyOn: applyOn, pre: pre, gate: gate,
     log: function(){ return _log.slice(); }, last: function(){ return _last; }, status: function(){ var o = {}; for (var k in _stat) o[k] = _stat[k]; o.on = on(); o.apply = applyOn(); return o; },
-    core: { scanRaw: scanRaw, isLabel: isLabel, isFrag: isFrag, engDominant: engDominant, tokenLine: tokenLine, norm: norm, LABELS: LABELS.slice() } };
+    core: { scanRaw: scanRaw, isLabel: isLabel, isKnownLabel: isKnownLabel, isFrag: isFrag, engDominant: engDominant, tokenLine: tokenLine, norm: norm, jpMeta: jpMeta, LABELS: LABELS.slice() } };
   if (typeof window !== 'undefined') window.__v292DfixLEAK1 = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
