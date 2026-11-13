@@ -8,7 +8,7 @@
 //       かなを 1 字でも含む行（日本語を引用した行）は既存の言語フィルタを通るので保存される。
 // 動き
 //   影（鍵なし・常時）: 件数だけを記録する（ターン番号・種別・行数・文字数・finish）。本文は 1 字も記録しない。本文・保存・送信は変えない。
-//   適用（localStorage v292DfixLEAK1Apply='1'・既定 OFF）: 「明らかな」行だけを取り除く。
+//   適用（2026-11-14 から既定 ON・止めるのは v292DfixLEAK1ApplyOff='1'。旧 v292DfixLEAK1Apply は使わない）: 「明らかな」行だけを取り除く。
 //       ・生の応答（parse の前）: 内部ラベルだけの行／タグ領域の後ろ（またはタグの無い応答の末尾）にまとまった作業メモ。
 //       ・保存・表示の直前（最終境界）: 内部ラベルだけの行／タグの断片だけの行／作業メモの残り。
 //       ・物語の文と区別できない行は取り除かない。英文を含む行・括弧つきの行を一律には扱わない。
@@ -26,7 +26,7 @@
 (function(){
   'use strict';
   if (typeof window !== 'undefined' && window.__v292DfixLEAK1) return;
-  var VER = 'leak1-20261113-r3';
+  var VER = 'leak1-20261114-r3on';
   var STRUCT = 'react|state|scene_move|summary';
   // 内部専用ラベル（sys・クライアントに実在する固定の語だけ）
   var LABELS = ['状態ラベル', '移動タグ', '話者タグ', '状態タグ', '反応タグ', 'sayタグ', 'stateタグ', '状態の出力', '出力の形式'];
@@ -48,7 +48,8 @@
 
   function ls(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function on(){ return ls('v292DfixLEAK1Off') !== '1'; }
-  function applyOn(){ return on() && ls('v292DfixLEAK1Apply') === '1'; }
+  // ★2026-11-14 既定 ON（GPT #127-TL Q3b）：適用は既定で有効。適用だけ止める kill＝v292DfixLEAK1ApplyOff='1'、影も含め全部止める kill＝v292DfixLEAK1Off='1'。
+  function applyOn(){ return on() && ls('v292DfixLEAK1ApplyOff') !== '1'; }
 
   function isLabel(line){ var t = String(line || '').trim(); if (!t || t.length > 40) return false; return RX_LABEL.test(t) || RX_ATTRLINE.test(t); }
   function isKnownLabel(line){ var t = String(line || '').trim(); if (!t || t.length > 40) return false; return RX_LABEL.test(t); }   // 限定 Apply ①（属性の並びの行は含めない）
