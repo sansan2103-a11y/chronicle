@@ -13,7 +13,7 @@
 // =====================================================================
 (function(root){
   'use strict';
-  var VER = 'sevdrv-20261113-r1';
+  var VER = 'sevdrv-20261113-r3';
   function lsGet(k){ try { return root.localStorage ? root.localStorage.getItem(k) : null; } catch(e){ return null; } }
   function severeOn(){ return lsGet('v292DfixSEVERE1Off') !== '1' && lsGet('v292DfixSEVERE1On') === '1'; }
   function driveOn(){ return lsGet('v292DfixDRIVE1Off') !== '1' && lsGet('v292DfixDRIVE1On') === '1'; }
@@ -65,6 +65,14 @@
     return '';
   }
   function severe(v){ return sevClass(v, '') !== ''; }
+  // ★SEVERE1 r3（PROD9 の実測：モデルは意識不明を こころ に書いた〔こころ=意識なし〕。からだ・傷 には無く、判定に当たらなかった）
+  //   こころ に意識不明の語があり、からだ が起きて動いている語でも覚醒の語でもないときだけ U。出血・衰弱（S）は こころ からは判定しない。
+  function sevKo(ka, ko){
+    ka = String(ka || ''); ko = String(ko || '');
+    if (!ko || !UNCON_RE.test(ko) || UNCON_NOT.test(ko)) return '';
+    if (ka && (AWAKE_KA.test(ka) || UNCON_NOT.test(ka))) return '';
+    return 'U';
+  }
   // その後の本文（値が書かれたターンより後の地の文で、その人の名と同じ文）に、覚醒／治療が描かれたか
   var AWAKE_RE = /目を開け|目を覚ま|意識が戻|意識を取り戻|気がつい|気が付い|息を吹き返|起き上が|身を起こ|薄く目を|瞼(?:が|を)(?:開|持ち上)/;
   var TREAT_RE = /血が止ま|出血が(?:止|収|おさ)ま|止血(?:が|を)?(?:終え|済|でき|した)|包帯を巻き終え|手当て(?:が|を)?(?:終え|済)|縫合(?:が|を)?(?:終え|済)|傷口を(?:縫い終え|塞)/;
@@ -80,8 +88,8 @@
   }
   function recovered(state, name, sinceTurnIdx){ return seenAfter(state, name, sinceTurnIdx, AWAKE_RE) || seenAfter(state, name, sinceTurnIdx, TREAT_RE); }
   // sevNow(state, name, entryTurn, ka, ki) → 'U' | 'S' | ''（その後の本文の覚醒・治療を反映）
-  function sevNow(state, name, entryTurn, ka, ki){
-    var c = sevClass(ka, ki); if (!c) return '';
+  function sevNow(state, name, entryTurn, ka, ki, ko){
+    var c = sevClass(ka, ki); if (!c && ko != null) c = sevKo(ka, ko); if (!c) return '';
     if (c === 'U'){ if (seenAfter(state, name, entryTurn, AWAKE_RE)) { c = sevClass(String(ka || '').replace(UNCON_RE, '／'), String(ki || '').replace(UNCON_RE, '／')); } }
     if (c === 'S' && seenAfter(state, name, entryTurn, TREAT_RE)) c = '';   // 治療が描かれた → 制約の行からは外す（傷の記録はそのまま残る）
     return c;
@@ -135,6 +143,6 @@
   };
 
   root.__v292DfixSevDrvCore = { VER: VER, severeOn: severeOn, driveOn: driveOn, ex192: ex192, EX192: EX192,
-    severe: severe, sevClass: sevClass, sevNow: sevNow, recovered: recovered, severeLine: severeLine,
+    severe: severe, sevClass: sevClass, sevKo: sevKo, sevNow: sevNow, recovered: recovered, severeLine: severeLine,
     drive: drive, splitNarr: splitNarr };
 })(typeof window !== 'undefined' ? window : globalThis);

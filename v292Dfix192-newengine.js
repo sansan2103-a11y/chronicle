@@ -235,7 +235,7 @@
              語が無ければ認定しない。意識不明（U）／重い出血・衰弱（S）を別々に数え、状態ブロックに能力の制約を 1 行だけ添える（感情は指定しない）。
              重い からだ は古さで「N ターン前の様子」へ回さない。正史 fix333 は読まない・触らない。その場にいない人物（NPRES の b／c／名簿外）は数えない。 */
         var sev1 = '';
-        if(sv1 && !(gp === 'b' || gp === 'c' || (_npg && _npg.orphan(n, s)))){ try { sev1 = C2.sevNow(S2x, n, s.turn, ka, ki); } catch(_sv){ sev1 = ''; } if(sev1 === 'U') sevU.push(n); else if(sev1 === 'S') sevS.push(n); }
+        if(sv1 && !(gp === 'b' || gp === 'c' || (_npg && _npg.orphan(n, s)))){ try { sev1 = C2.sevNow(S2x, n, s.turn, ka, ki, ko);   /* ★SEVERE1 r3: こころ の意識不明も見る */ } catch(_sv){ sev1 = ''; } if(sev1 === 'U') sevU.push(n); else if(sev1 === 'S') sevS.push(n); }
         /* ★DRIVE1 r2: モデルが書いた 本能／目的 が「指示を求める」「主人公の言葉を待つ」だけの定型のときは、次回の状態ブロックに載せない（保存値はそのまま。
              待つ以外の中身がある値・関係・未解決・【この場面の種】・利用者が設定した人物像は対象外）。 */
         if(dr1 && !isHeroA1(hkA1, n)){ try { if(ho && C2.drive(ho, hero2)) ho=''; if(mo && C2.drive(mo, hero2)) mo=''; } catch(_dr){} }
