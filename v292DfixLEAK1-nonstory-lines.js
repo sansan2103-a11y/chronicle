@@ -26,7 +26,7 @@
 (function(){
   'use strict';
   if (typeof window !== 'undefined' && window.__v292DfixLEAK1) return;
-  var VER = 'leak1-20261113-num2';
+  var VER = 'leak1-20261113-r3';
   var STRUCT = 'react|state|scene_move|summary';
   // 内部専用ラベル（sys・クライアントに実在する固定の語だけ）
   var LABELS = ['状態ラベル', '移動タグ', '話者タグ', '状態タグ', '反応タグ', 'sayタグ', 'stateタグ', '状態の出力', '出力の形式'];
@@ -68,6 +68,14 @@
     if (!RX_JP_WRITER.test(t) && !RX_JP_TAKE.test(t)) return null;
     return { line: i, chars: line.length };
   }
+  // ★LEAK1 r3（QAB run1 の実測：適用 ON でも画面に残った 2 型）
+  //   stf = 状態の欄の書き出し（「→こころ:…」のように、行頭が矢印＋状態の欄名＋コロン）。物語の文がこの形で始まることはない。
+  //   chk = 自己点検の塊（「本文終わり」「【逐語反映チェック】」「- 入力DO: …」「（注記：…本文/タグ…）」）。強い印（本文終わり・逐語反映チェック・入力〇〇: の箇条）が 1 つでもある返答だけで落とす。
+  var RX_STF = /^\s*[→⇒]\s*(?:こころ|からだ|本能|目的|関係|傷|未解決|所在|場所|服装|持ち物)\s*[:：]/;
+  var RX_CHK_STRONG = /^\s*\**\s*(?:本文(?:終わり|ここまで|終了)|【?\s*逐語反映チェック\s*】?)\s*\**\s*$|^\s*[-・*]\s*入力\s*(?:DO|SAY|STORY|行動|台詞|出来事)\s*[:：]/;
+  var RX_CHK_WEAK = /^\s*[-・*]\s*「[^」]{1,20}」\s*[→⇒]\s*(?:実際に|本文|使用)|^\s*[（(]\s*注記\s*[:：].*(?:本文|タグ)/;
+  function isStf(line){ return RX_STF.test(String(line || '')); }
+  function chkLines(lines){ var strong = false, out = {}; for (var i = 0; i < lines.length; i++){ var t = lines[i]; if (RX_CHK_STRONG.test(t)){ strong = true; out[i] = 1; } else if (RX_CHK_WEAK.test(t)) out[i] = 1; } return strong ? out : {}; }
   function isFrag(line){ var t = String(line || '').trim(); if (!t) return false; for (var i = 0; i < RX_FRAG.length; i++) if (RX_FRAG[i].test(t)) return true; return false; }
   function counts(t){ var s = String(t || ''); return { L: (s.match(/[A-Za-z]/g) || []).length, J: (s.match(/[ぁ-ゖァ-ヺ一-鿿々〆]/g) || []).length }; }
   function bare(line){ return String(line || '').replace(RX_INLINE, ' '); }
@@ -148,12 +156,14 @@
     if (!on() || typeof narr !== 'string') return narr;
     try {
       var info = (result && result.__leak1) || null, ap = applyOn();
-      var lines = narr.split('\n'), kinds = { label: 0, attr: 0, frag: 0, meta: 0, jpmeta: 0 }, drop = {}, nL = 0, nC = 0, dL = 0, dC = 0, i;
+      var lines = narr.split('\n'), kinds = { label: 0, attr: 0, frag: 0, meta: 0, jpmeta: 0, stf: 0, chk: 0 }, drop = {}, nL = 0, nC = 0, dL = 0, dC = 0, i, chk = chkLines(lines);
       var memo = info ? info._memo : '', memoAll = info ? (info._memoAll || info._memo) : '', body = info ? info._body : '';
       function rem(x){ return x.length >= 6 && memo && memo.indexOf(x) >= 0 && body.indexOf(x) < 0; }
       for (i = 0; i < lines.length; i++){
         var l = lines[i], k = null, ok = false; if (!l.trim()) continue;
-        if (isKnownLabel(l)){ k = 'label'; ok = true; }                                   // 限定 Apply ①
+        if (isStf(l)){ k = 'stf'; ok = true; }                                             // ★r3 状態の欄の書き出し
+        else if (chk[i]){ k = 'chk'; ok = true; }                                          // ★r3 自己点検の塊
+        else if (isKnownLabel(l)){ k = 'label'; ok = true; }                              // 限定 Apply ①
         else if (isLabel(l)) k = 'attr';                                                   // 属性の並びの行（数えるだけ）
         else if (isFrag(l)) k = 'frag';                                                    // タグの断片（数えるだけ）
         else if (memoAll){ var x = norm(l); if (x.length >= 6 && memoAll.indexOf(x) >= 0 && body.indexOf(x) < 0){ k = 'meta'; ok = rem(x); } }   // 作業メモの残り（英語のメモだけ限定 Apply ②）
@@ -164,7 +174,7 @@
       _stat.turns++;
       var preCut = info ? info.cut : 0;
       if (nL || preCut || (info && (info.label || info.meta || info.amb))){
-        _stat.hit++; _stat.label += kinds.label + kinds.attr; _stat.frag += kinds.frag; _stat.meta += kinds.meta; if (info && info.amb) _stat.amb++;
+        _stat.hit++; _stat.label += kinds.label + kinds.attr; _stat.frag += kinds.frag; _stat.meta += kinds.meta; _stat.stf = (_stat.stf || 0) + kinds.stf; _stat.chk = (_stat.chk || 0) + kinds.chk; if (info && info.amb) _stat.amb++;
       }
       if (kinds.jpmeta){ _stat.jpmeta++; _stat.jpChars += jpC; }
       if (nL || preCut || kinds.jpmeta || (info && (info.label || info.meta || info.amb))){
