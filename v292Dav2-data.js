@@ -140,6 +140,25 @@
   var reg = { busy: false, held: {}, runs: 0, ok: 0, fail: 0, writes: 0, polls: 0, last: null, next: {} };
   var POLL_MAX = 5, POLL_BACKOFF_MS = 3000;
   var PEND = 'v292Dav2_reg_';
+  /* ================= ★REG1（laneSAVE1・GPT #127-TN P0 B2）登録の書き込みが 1 回失敗しただけで、その物語のクラウド保存が止まり続ける件 =================
+     従来: 登録（putcanonical）は 1 回だけ。503・応答喪失のあとは読み直し（最大 5 回）だけで、使い切ると pending が残ったまま
+           run() が何もしなくなり、通常の保存も AV2_CANONICAL_HELD のまま止まり続けた（再読込しても同じ）。
+     REG1:
+       ① 読み直しで「サーバーが書く前の rev・hash のまま」（＝その書き込みは着地していない）と分かったら、同じ登録 ID（mid）・同じ CAS 前提で
+          もう一度だけ書く（1 回の区切りで書き込みは最大 REG1_WRITE_MAX 回）。Worker は mid の冪等記録と rev+hash の CAS で、2 回目が
+          着地済みの 1 回目と重なっても 2 回は適用しない。
+       ② 読み直しで「サーバーが進んだが自分の書き込みとは証明できない」ときは、最新のサーバー本文の上で登録を作り直す（compose は
+          サーバーに同名の結び付けがあればその ID を採る＝書かない。だから 1 回目が着地していても人物は二重にならない）。
+       ③ 読み直しは時間を空けて自分で続ける（上限つき）。区切りを使い切ったら「この端末には保存済み・クラウドは未保存」と
+          「もう一度試す」を出す。次の区切りは 物語を開き直す／オンラインに戻る／画面に戻る／「もう一度試す」 のときだけ始める。
+       ・端末の本文は消さない・書き換えない。クラウド保存済みとは表示しない。確定した拒否（blocked）・CAS 競合（conflict）は従来どおり。
+     kill: localStorage v292DfixREG1Off='1' → 従来どおり（書き込み 1 回・読み直し 5 回・表示なし）。 */
+  var REG1_WRITE_MAX = 3, REG1_EP_GAP_MS = 20000, REG1_SCHED_MAX = 6, REG1_PRE_MAX = 4;
+  /* 止まった後、利用者が何もしなくても試し直す区切り（サーバー側の障害で 'online' が来ない場合）。2 回だけ（2 分後・10 分後）。その後は開き直し・画面に戻る・「もう一度試す」だけ */
+  var REG1_AUTO_EP_MS = [120000, 600000];
+  function reg1On(){ return lsg('v292DfixREG1Off') !== '1'; }
+  reg.stall = {}; reg.epAt = {}; reg.sched = {}; reg.preFail = {}; reg.autoEp = {}; reg.retries = 0; reg.rebuilds = 0; reg.episodes = 0;
+  var schedT = {}, autoT = {};
   function lss(k, v){ try { localStorage.setItem(k, v); return true; } catch(e){ return false; } }
   function lsr(k){ try { localStorage.removeItem(k); } catch(e){} }
   function loadPending(id){ try { var o = JSON.parse(lsg(PEND + id) || 'null'); return (o && o.v === 1) ? o : null; } catch(e){ return null; } }
@@ -220,6 +239,7 @@
   }
   function finish(id, kind, extra){
     reg.busy = false; reg.last = { kind: kind, id: id, extra: extra || null, t: Date.now() };
+    try { if (reg1On()) reg1After(id, kind); } catch(eR){}
     if (kind === 'AV2_REGISTERED') reg.ok++; else if (kind !== 'AV2_NOTHING_TO_REGISTER' && kind !== 'AV2_POLL_PENDING') reg.fail++;
     note({ kind: kind + (extra && extra.reason ? ':' + extra.reason : ''), id: id, extra: extra || null });
     if (kind === 'AV2_REGISTERED' || kind === 'AV2_MIGRATION_REFUSED' || kind === 'AV2_NOTHING_TO_REGISTER'){
@@ -363,15 +383,95 @@
     }
     return null;
   }
+  /* ---- ★REG1 helpers ---- */
+  function reg1Schedule(id, ms, why){
+    if (schedT[id]) return;
+    reg.sched[id] = (reg.sched[id] || 0) + 1;
+    if (reg.sched[id] > REG1_SCHED_MAX) return reg1MarkStall(id, 'RETRY_BUDGET:' + why);
+    schedT[id] = setTimeout(function(){ delete schedT[id]; try { if (curStoryId() === id && !off() && reg1On()) run(id, 'reg1-' + why); } catch(e){} }, Math.max(500, ms));
+  }
+  function reg1After(id, kind){
+    if (kind === 'AV2_REGISTERED' || kind === 'AV2_NOTHING_TO_REGISTER' || kind === 'AV2_MIGRATION_REFUSED'){
+      delete reg.stall[id]; reg.sched[id] = 0; reg.preFail[id] = 0; reg.autoEp[id] = 0; if (schedT[id]){ clearTimeout(schedT[id]); delete schedT[id]; } if (autoT[id]){ clearTimeout(autoT[id]); delete autoT[id]; } reg1Render(); return; }
+    if (kind === 'AV2_POLL_PENDING'){ var nx = (reg.next[id] || Date.now()) - Date.now(); return reg1Schedule(id, nx + 50, 'poll'); }
+    if (kind === 'AV2_PRE_READ_FAIL'){ reg.preFail[id] = (reg.preFail[id] || 0) + 1;
+      if (reg.preFail[id] >= REG1_PRE_MAX) return reg1MarkStall(id, 'PRE_READ_FAIL');
+      return reg1Schedule(id, POLL_BACKOFF_MS * Math.pow(2, reg.preFail[id] - 1), 'pre'); }
+    if (kind === 'AV2_REGISTRAR_GAVE_UP') return reg1MarkStall(id, 'GAVE_UP');
+  }
+  function reg1MarkStall(id, why){
+    reg.stall[id] = { why: String(why || ''), t: Date.now() }; note({ kind: 'AV2_REG1_STALL', id: id, why: why }); reg1Render();
+    var n = reg.autoEp[id] || 0;
+    if (!autoT[id] && n < REG1_AUTO_EP_MS.length){
+      reg.autoEp[id] = n + 1;
+      autoT[id] = setTimeout(function(){ delete autoT[id]; try { if (curStoryId() === id && reg.stall[id]) reg1Kick('auto'); } catch(e){} }, REG1_AUTO_EP_MS[n]);
+    }
+  }
+  /* 新しい区切り（読み直し・書き込みの回数を戻す）。open / online / visible は前の区切りから REG1_EP_GAP_MS 以上あいた時だけ。manual はいつでも。 */
+  function reg1Episode(id, src){
+    var now = Date.now();
+    if (src !== 'manual' && reg.epAt[id] != null && now - reg.epAt[id] < REG1_EP_GAP_MS) return false;
+    reg.epAt[id] = now; reg.episodes++;
+    var pend = loadPending(id);
+    if (pend){ pend.polls = 0; pend.writes = 0; pend.ep = (+pend.ep || 0) + 1; if (!savePending(id, pend)) return false; }
+    delete reg.next[id]; reg.sched[id] = 0; reg.preFail[id] = 0; delete reg.stall[id];
+    if (schedT[id]){ clearTimeout(schedT[id]); delete schedT[id]; }
+    note({ kind: 'AV2_REG1_EPISODE', id: id, src: src, pending: !!pend });
+    reg1Render();
+    return true;
+  }
+  /* 登録待ち（pending）・保存の保留（held）・止まった表示（stall）のどれかがある時だけ、新しい区切りを始めて 1 回走らせる */
+  function reg1Kick(src){
+    try {
+      if (off() || !reg1On()) return false;
+      var id = curStoryId(); if (!id) return false;
+      if (!loadPending(id) && !reg.held[id] && !reg.stall[id]) return false;
+      if (reg.busy && src !== 'manual'){ note({ kind: 'AV2_REG1_KICK_SKIP', id: id, src: src, why: 'BUSY' }); return false; }
+      if (!reg1Episode(id, src)){ note({ kind: 'AV2_REG1_KICK_SKIP', id: id, src: src, why: 'EPISODE_GAP' }); return false; }
+      setTimeout(function(){ try { if (curStoryId() === id) run(id, 'reg1-' + src); } catch(e){} }, src === 'manual' ? 0 : 400);
+      return true;
+    } catch(e){ return false; }
+  }
+  var STALL_ID = 'v292Dav2RegStall';
+  var STALL_HEAD = 'この端末には保存済み・クラウドは未保存';
+  var STALL_SUB = 'クラウドへの保存が止まっています。この端末の内容は消えません。通信が戻ると自動で保存し直します。';
+  function reg1Render(){
+    try {
+      if (typeof document === 'undefined' || !document.body) return;
+      var id = curStoryId(); var st = (reg1On() && id) ? reg.stall[id] : null;
+      var el = document.getElementById(STALL_ID);
+      if (!st){ if (el && el.parentNode) el.parentNode.removeChild(el); return; }
+      if (el) return;
+      el = document.createElement('div'); el.id = STALL_ID; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite');
+      el.setAttribute('style', 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(64px + env(safe-area-inset-bottom));z-index:99999;max-width:92vw;box-sizing:border-box;'
+        + 'background:rgba(120,72,0,.97);color:#fff;border-radius:10px;padding:10px 14px;font-size:14px;line-height:1.5;font-family:system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.35);');
+      var h = document.createElement('div'); h.setAttribute('data-reg1', 'head'); h.style.fontWeight = '600'; h.textContent = '⚠ ' + STALL_HEAD;
+      var t = document.createElement('div'); t.setAttribute('data-reg1', 'sub'); t.style.fontSize = '12px'; t.style.opacity = '.92'; t.textContent = STALL_SUB;
+      var b = document.createElement('button'); b.type = 'button'; b.setAttribute('data-reg1', 'retry'); b.textContent = 'もう一度試す';
+      b.setAttribute('style', 'margin-top:6px;background:#fff;color:#5a3a00;border:0;border-radius:6px;padding:4px 12px;font-size:13px;cursor:pointer;');
+      b.addEventListener('click', function(ev){ try { ev.preventDefault(); ev.stopPropagation(); } catch(e){} reg.manualRetries = (reg.manualRetries || 0) + 1; reg1Kick('manual'); });
+      el.appendChild(h); el.appendChild(t); el.appendChild(b);
+      document.body.appendChild(el);
+    } catch(e){}
+  }
+  try {
+    window.addEventListener('online', function(){ reg1Kick('online'); }, false);
+    document.addEventListener('visibilitychange', function(){ try { if (document.visibilityState === 'visible') reg1Kick('visible'); } catch(e){} }, false);
+    window.addEventListener('pageshow', function(ev){ if (ev && ev.persisted) reg1Kick('pageshow'); }, false);
+  } catch(e){}
   function run(id, why){
     if (reg.busy || off()) return;
     var F = F697(); if (!F || !F.getStoryV2Once || !F.putCanonicalOnce) return note({ kind: 'AV2_NO_PORT' });
     if (curStoryId() !== id) return note({ kind: 'AV2_NOT_DOCUMENT_STORY', id: id });
     reg.busy = true; reg.runs++;
     var pend = loadPending(id);
+    if (reg1On() && reg.epAt[id] == null){   /* ★REG1: このページで最初の実行＝区切りの始まり（pending が残っていれば開き直し＝新しい区切り） */
+      if (pend){ reg.busy = false; if (!reg1Episode(id, 'open')) return null; reg.busy = true; pend = loadPending(id); }
+      else reg.epAt[id] = Date.now();
+    }
     if (pend){
       /* readback-only; automatic readbacks stop at POLL_MAX (HOLD + pending stay; C2 shows it; no auto retry) */
-      if ((pend.polls || 0) >= POLL_MAX){ reg.busy = false; return null; }
+      if ((pend.polls || 0) >= POLL_MAX){ reg.busy = false; if (reg1On()) reg1MarkStall(id, 'PENDING_GAVE_UP'); return null; }
       return readback(F, id, pend);
     }
     F.getStoryV2Once(id, function(g, gerr){
@@ -383,40 +483,45 @@
   }
   /* one registration attempt on the fresh read j: compose the delta on the server body → preflight → ONE CAS write → readback.
      rebased = true marks the single rebase write allowed after a strict CAS 409 (GPT: STRICT_409_REBASE = ALLOWED_MAX_1). */
-  function attempt(F, id, j, rebased){
+  function attempt(F, id, j, rebased, prev){
+    /* ★REG1: prev = 着地していない（または自分のものと証明できない）前の登録の pending。ここで書かずに終わるなら、その pending を外す
+       （prev が来るのは、読み直しで「前の書き込みはサーバーに無い」か「最新のサーバー本文の上で作り直す」と決めた後だけ）。 */
+    var fin = function(k, x){ if (prev){ try { var cp = loadPending(id); if (cp && cp.mid === prev.mid && cp.t === prev.t) lsr(PEND + id); } catch(e){} delete refsMem[id]; } return finish(id, k, x); };
     var schema = (j.recordSchema === 2) ? 2 : 1;
     var rec = buildRecord(F, id, schema);
-    if (!rec) return finish(id, 'AV2_NO_LOCAL_RECORD', { schema: schema });
-    if (!idlessPaths(rec.body).length) return finish(id, 'AV2_NOTHING_TO_REGISTER');
-    var S = state(); if (!S || !isObj(S.cast)) return finish(id, 'AV2_NO_STATE');
+    if (!rec) return fin('AV2_NO_LOCAL_RECORD', { schema: schema });
+    if (!idlessPaths(rec.body).length) return fin('AV2_NOTHING_TO_REGISTER');
+    var S = state(); if (!S || !isObj(S.cast)) return fin('AV2_NO_STATE');
     var b0 = (j.record && isObj(j.record.body)) ? j.record.body : {};
-    if (loadConflict(id)) return finish(id, 'AV2_REGISTRATION_CONFLICT', { reason: 'REBASE_REQUIRED', same: true });   // held after the second 409 until the document is re-hydrated
+    if (loadConflict(id)) return fin('AV2_REGISTRATION_CONFLICT', { reason: 'REBASE_REQUIRED', same: true });   // held after the second 409 until the document is re-hydrated
     var cmp = compose(j, b0, rec, S);
     if (cmp.stop){
       if (cmp.stop === 'AV2_REGISTRATION_BLOCKED'){ saveBlocked(id, { reason: cmp.extra.reason, by: 'preflight', fp: regFingerprint(rec.body) }); }
       if (cmp.stop === 'AV2_REGISTRATION_CONFLICT' && cmp.conflict){ saveConflict(id, { preRev: +j.rev || 0, seenRev: +j.rev || 0, reason: cmp.conflict.reason, detail: cmp.conflict.detail, rebased: !!rebased }); }   // HOLD, write 0 (cleared by an explicit re-hydration)
-      return finish(id, cmp.stop, cmp.extra || null);
+      return fin(cmp.stop, cmp.extra || null);
     }
     var adopted = applyAdopt(S, id, cmp.adopt);
     if (!cmp.paths.length){
       /* everything id-less here was already registered elsewhere: no write; the sidecar follows the server */
       applySidecar(S, id, b0); try { S.save(); } catch(e){}
-      return finish(id, 'AV2_REGISTERED', { ids: 0, adopted: adopted, serverRev: j.rev, write: 0 });
+      return fin('AV2_REGISTERED', { ids: 0, adopted: adopted, serverRev: j.rev, write: 0 });
     }
     var pf = cmp.s9a ? null : preflight(cmp.sent, cmp.paths);
     if (pf){
       /* the Worker would refuse the WHOLE save with BINDING_CONFLICT: not sent; the push stays HELD and C2 shows the reason */
       saveBlocked(id, { reason: 'BINDING_CONFLICT', by: 'preflight', key: pf.key, path: pf.path, fp: regFingerprint(rec.body) });
-      return finish(id, 'AV2_REGISTRATION_BLOCKED', { reason: 'BINDING_CONFLICT', key: pf.key, path: pf.path });
+      return fin('AV2_REGISTRATION_BLOCKED', { reason: 'BINDING_CONFLICT', key: pf.key, path: pf.path });
     }
     var blk0 = loadBlocked(id);
-    if (blk0 && blk0.fp === regFingerprint(rec.body)) return finish(id, 'AV2_REGISTRATION_BLOCKED', { reason: blk0.reason, same: true });   // never write the same refused input
+    if (blk0 && blk0.fp === regFingerprint(rec.body)) return fin('AV2_REGISTRATION_BLOCKED', { reason: blk0.reason, same: true });   // never write the same refused input
     if (blk0) lsr(BLK + id);
     var mid = 'av2reg:' + id + ':' + (+j.rev || 0) + ':' + String(j.serverHash || '').slice(0, 16);
     var p0 = { v: 1, mid: mid, preRev: +j.rev || 0, preHash: String(j.serverHash || ''), schema: schema, paths: cmp.paths, s9a: cmp.s9a, rebased: !!rebased,
                sent: { cast: clone(cmp.sent.cast), bindings: clone(cmp.sent.bindings || {}), rest: digest(stable(restOf(cmp.sent))) },
                polls: 0, t: Date.now() };
-    if (!savePending(id, p0)) return finish(id, 'AV2_PENDING_NOT_DURABLE');     // intent must be durable before the one write
+    if (prev){ p0.writes = (+prev.writes || 1) + 1; p0.ep = +prev.ep || 0; p0.wTotal = (+prev.wTotal || 1) + 1; p0.retryOf = String(prev.mid || '').slice(0, 80); p0.sameMid = (prev.mid === mid); }   /* ★REG1: 同じ区切りの書き込み回数を引き継ぐ */
+    else if (reg1On()){ p0.writes = 1; p0.ep = 0; p0.wTotal = 1; }
+    if (!savePending(id, p0)) return fin('AV2_PENDING_NOT_DURABLE');     // intent must be durable before the one write
     refsMem[id] = cmp.refs;
     reg.writes++;
     /* F-FZ2 (lane D on candidate 3): the record ENVELOPE (title / deleted / sidecar / …) is the fresh server record's too — the local
@@ -476,11 +581,24 @@
         /* server unchanged since the CAS precondition: the single write has not (yet) landed. GPT 905: the registrar
            writes AT MOST ONCE → no re-send here; the pending intent stays, later polls are readback-only. */
         pend.notLanded = true; savePending(id, pend);
+        /* ★REG1: サーバーは書く前のまま＝その書き込みは着地していない。同じ登録 ID（同じ mid・同じ CAS 前提）でもう一度だけ書く（区切りごとに上限）。 */
+        if (reg1On() && (+pend.writes || 1) < REG1_WRITE_MAX && String(j2.authority || '') === 'canonical' && !j2.deleted){
+          reg.retries++; note({ kind: 'AV2_REG1_RETRY_SAME_ID', id: id, mid: String(pend.mid || '').slice(0, 60), writes: +pend.writes || 1 });
+          return attempt(F, id, j2, !!pend.rebased, pend);
+        }
         return again('AV2_POLL_PENDING', 'NOT_LANDED');
       }
       if (!isIdentityBody(b1)){ lsr(PEND + id); return migrationRefused(id, S, 'SERVER_NOT_IDENTITY'); }   // server kept it legacy (prepare not enabled)
       var v = verifyOurs(pend.sent, b1, pend.paths);
-      if (!v.ok) return again('AV2_RECONCILE_DIVERGED', v.reason);   // never guessed
+      if (!v.ok){
+        /* ★REG1: サーバーは進んだが自分の書き込みとは証明できない → 推測しない。最新のサーバー本文の上で登録を作り直す
+           （compose は同名の結び付けがサーバーにあればその ID を採り書かない＝前の書き込みが着地していても人物は増えない。新しい人物だけ CAS で 1 回書く）。 */
+        if (reg1On() && (+pend.writes || 1) < REG1_WRITE_MAX && String(j2.authority || '') === 'canonical' && !j2.deleted){
+          reg.rebuilds++; note({ kind: 'AV2_REG1_REBUILD', id: id, reason: v.reason, fromRev: pend.preRev, toRev: +j2.rev || 0 });
+          return attempt(F, id, j2, !!pend.rebased, pend);
+        }
+        return again('AV2_RECONCILE_DIVERGED', v.reason);   // never guessed
+      }
       if (!S || !isObj(S.cast)) return again('AV2_NO_STATE', 'NO_STATE');
       /* apply the server-minted ids to the local entries: same-session object refs, else a local id-less entry equal to what was sent,
          else (S9a) the local id-less entry with the same exact name. Local turns / other fields are never touched (F-FZ1). */
@@ -508,7 +626,13 @@
         m2.character_id = sid2; delete m2.av2_aliases; applied++;
         local.forEach(function(x){ if (x.e === m2) used[x.path] = 1; });
       }
-      if (!pend.s9a && missing) return again('AV2_RECONCILE_DIVERGED', 'LOCAL_MOVED');
+      if (!pend.s9a && missing){
+        if (reg1On() && (+pend.writes || 1) < REG1_WRITE_MAX && String(j2.authority || '') === 'canonical' && !j2.deleted){   /* ★REG1: 上と同じ（作り直し） */
+          reg.rebuilds++; note({ kind: 'AV2_REG1_REBUILD', id: id, reason: 'LOCAL_MOVED', fromRev: pend.preRev, toRev: +j2.rev || 0 });
+          return attempt(F, id, j2, !!pend.rebased, pend);
+        }
+        return again('AV2_RECONCILE_DIVERGED', 'LOCAL_MOVED');
+      }
       applySidecar(S, id, b1);
       try { S.save(); } catch(e){}
       lsr(PEND + id); delete refsMem[id];
@@ -1284,7 +1408,10 @@
     } catch(e){ return false; }
   }
   window.__v292Dav2Map = { push: push, pullCast: pullCast, isSchema2Local: isSchema2Local, isIdentityLocal: isIdentityLocal, modeOf: modeOf, idlessPaths: idlessPaths,
-                           holdCanonical: holdCanonical, off: off, docSchema2: docSchema2, confirmedCanonical: confirmedCanonical };
+                           holdCanonical: holdCanonical, off: off, docSchema2: docSchema2, confirmedCanonical: confirmedCanonical,
+                           /* ★REG1 read-only: クラウド保存が登録待ちで止まっている（区切りを使い切った）か／登録待ち・保留中か */
+                           regStalled: function(id){ try { return reg1On() && !off() && !!(id && reg.stall[String(id)]); } catch(e){ return false; } },
+                           regWaiting: function(id){ try { return !!(id && (reg.held[String(id)] || loadPending(String(id)))); } catch(e){ return false; } } };
   window.__chronicleAssetV2 = {
     migrate: migrate, prepare: migrate, switchToSchema2: switchToSchema2, ensureFirst: ensureFirst,
     suggestAppearance: suggestAppearance, setProfile: setProfile, newDraw: newDraw,
@@ -1296,6 +1423,9 @@
     reconcile: function(){ var id = curStoryId(); var F = F697(); var pd = id ? loadPending(id) : null;
       if (!pd || !F || reg.busy || off()) return false; reg.busy = true; reg.manual = (reg.manual || 0) + 1; readback(F, id, pd); return true; },
     pending: function(){ var id = curStoryId(); return id ? loadPending(id) : null; },
+    /* ★REG1: 「もう一度試す」と同じ（新しい区切りで読み直し → 必要なら同じ登録 ID で書き直し）。kill 中は false。 */
+    retry: function(){ return reg1Kick('manual'); },
+    reg1: function(){ var id = curStoryId(); return { on: reg1On(), stall: id ? (reg.stall[id] || null) : null, episodes: reg.episodes, retries: reg.retries, rebuilds: reg.rebuilds, sched: id ? (reg.sched[id] || 0) : 0, preFail: id ? (reg.preFail[id] || 0) : 0, banner: !!document.getElementById(STALL_ID) }; },
     blocked: function(){ var id = curStoryId(); return id ? loadBlocked(id) : null; },
     /* ★fixBND read-only diagnostic: registered (cid-bearing) non-DELETED entries of the local cast whose id has NO binding key at all
        (what the registrar would have created had the name been present). Never writes; the repair stays the explicit addBinding. */

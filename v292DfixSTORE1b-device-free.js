@@ -101,6 +101,16 @@
  *     書いた（storage イベント）→ 'other-tab-write'。meta の墓標の行が 1 文字でも変わった → 'meta-changed'。キーと値（同期の印を含む）は従来どおり samePlan。
  *   ・__v292DfixSTORE1b.planByReason() …… 読み取りだけ（消さない・書かない・ログも書かない）。理由ごとの物語の数と、キーの family ごとの
  *     キー数・文字数（id・題名・値は返さない）。Vault に関わる物語（vault / passcode / vault-*）と id の形・保護は数だけ（キーを 1 本も見ない）。
+ * ■★ZT1（laneSAVE1・GPT #127-TN「0 ターンの削除済み物語」。既定 OFF: localStorage v292DfixZT1On='1' のときだけ。kill v292DfixZT1Off='1' が勝つ）
+ *   0 ターンのまま削除した物語は、サーバーの墓標の本文も 0 ターン（record.body.turns = []）なので S3 の 'server-body-not-held' で永久に残った。
+ *   ZT1 は「サーバーの空の状態とこの端末が一致し、未送信が無い」と証明できたときだけ、S3 の代わりに通す:
+ *     ・サーバー: deleted===true・record.body.turns が配列で 0 件。この端末: 本体が読めて turns が配列で 0 件。
+ *     ・証明（必須・印が CLEAN でも行う）: fix697.projectionV2(id) に deleted:true と墓標の title（meta の墓標の行）を入れた canonicalString の SHA-256 が、
+ *       getstory の serverHash（Worker が作った墓標の hash）と 1 文字も違わない（＝cast・設定・場面など本文以外もサーバーと同じ）。STUCK1 と同じ導出。
+ *     ・印が DIRTY_INTENT / DIRTY_LOCAL でも、本体が 0 ターン・送信中でない・印の storyId が一致・削除の後に印が書かれていない・墓標がサーバー確認済み
+ *       なら、上の証明へ回す（DIVERGED / BOOTSTRAP_HOLD / 送信中 / f911・f697p・rescue・Vault・パスコード・開いている は今までどおり止める）。
+ *       このとき消すキーは STUCK1 r2 と同じ a / b だけ（c＝この端末にしか無いかもしれないものと同期の印は残す）。
+ *   題名で決めない（題名は hash の入力の一部として一致を求めるだけ）。Vault を迂回しない。OFF のときは 1 バイトも同じ判断（ZT1 の関数は何も読まない）。
  * ===================================================================== */
 (function (root) {
   'use strict';
@@ -124,6 +134,7 @@
      c = この端末にしか無いかもしれない（AI が作った長期記憶・手で選んだ退場・固定した外見・登録待ち など）。証明が無いので消さない
      この表に無い family・形の分からないキーは c と同じ扱い（消さない） */
   var STUCK_ON = 'v292DfixSTUCK1On', SVERSION = 'STUCK1-r2';
+  var ZT_ON = 'v292DfixZT1On', ZT_OFF = 'v292DfixZT1Off';   /* ★ZT1 */
   var FAMILY_CLASS = {
     'chr6_slot_': 'a', 'chr6_relations_': 'a', 'chr6_char_states_': 'a', 'chr6_char_flags_': 'a', 'chr6_pending_dice_': 'a',
     'chr6_turn_summaries_': 'a', 'chr6_chapter_titles_': 'a', 'chr6_scene_breaks_': 'a', 'chr6_scene_summaries_': 'a',
@@ -234,21 +245,41 @@
     if (typeof row.title !== 'string') return false;                                                 /* サーバーの title と突き合わせる値（fix579 make） */
     return true;
   }
+  /* ★ZT1: 0 ターンの本体で、印が DIRTY_INTENT / DIRTY_LOCAL のまま削除された物語を、墓標の hash の確認へ回してよいか（ローカルの条件だけ） */
+  function zt1DirtyLocal(id, env, row, mo) {
+    if (env.zt1 !== true || typeof env.dirtyProof !== 'function') return false;
+    if (!mo || typeof mo !== 'object' || STALE_DIRTY[String(mo.state || '')] !== 1) return false;
+    if (mo.inFlightSave) return false;
+    if (mo.storyId != null && String(mo.storyId) !== id) return false;
+    var st = row && row.serverTombstone;
+    if (!st || typeof st !== 'object' || typeof st.at !== 'number' || !(st.at > 0)) return false;
+    if (typeof mo.updatedAt === 'number' && mo.updatedAt > st.at) return false;
+    if (typeof row.title !== 'string') return false;
+    var b = J(g(env, 'chr6_slot_' + id), null);
+    return !!(b && typeof b === 'object' && !isArr(b) && isArr(b.turns) && b.turns.length === 0);
+  }
+  function zt1Row(id, env) { var m = metaRows(env) || []; for (var i = 0; i < m.length; i++) if (m[i] && String(m[i].id) === id && m[i].deleted === true) return m[i]; return null; }
   /* いま、その物語がサーバーの内容の確認を要るか。要る → 墓標の title / 要らない → null。値を読むのは印と meta だけ */
   function stuckNeeds(id, env) {
-    if (env.stuck1 !== true || typeof env.dirtyProof !== 'function') return null;   /* OFF: 1 キーも余計に読まない */
+    if ((env.stuck1 !== true && env.zt1 !== true) || typeof env.dirtyProof !== 'function') return null;   /* OFF: 1 キーも余計に読まない */
     var mk = g(env, 'v292Dfix402_f781g_' + id); if (mk == null) return null;
     var mo = J(mk, null), row = null, m = metaRows(env) || [];
     for (var i = 0; i < m.length; i++) if (m[i] && String(m[i].id) === id && m[i].deleted === true) { row = m[i]; break; }
-    return staleDirtyLocal(id, env, row, mo) ? { title: row.title } : null;
+    return (staleDirtyLocal(id, env, row, mo) || zt1DirtyLocal(id, env, row, mo)) ? { title: row.title } : null;
   }
   /* サーバーの墓標の hash とこの端末の内容が同じか。null = 確認不要か一致 / 理由コード = 一致を確かめられない */
   function stuckProof(id, env, se) {
     var need = stuckNeeds(id, env);
+    if (!need && se && se.zeroTurn === true) {   /* ★ZT1: 印が CLEAN でも 0 ターンの墓標は hash の一致を必ず確かめる（dirtyProven にはしない） */
+      var zr = zt1Row(id, env);
+      if (!zr || typeof zr.title !== 'string' || !HEX64.test(String(se.serverHash || ''))) return Promise.resolve('zero-turn-unproven');
+      return Promise.resolve().then(function () { return env.dirtyProof(id, zr.title, String(se.serverHash)); })
+        .then(function (why) { if (why == null) { se.zeroTurnProven = true; return null; } return 'zero-turn-unproven'; }, function () { return 'zero-turn-unproven'; });
+    }
     if (!need) return Promise.resolve(null);
     if (!HEX64.test(String(se && se.serverHash || ''))) return Promise.resolve('unsynced-unproven');
     return Promise.resolve().then(function () { return env.dirtyProof(id, need.title, String(se.serverHash)); })
-      .then(function (why) { if (why == null) { se.dirtyProven = true; return null; } return 'unsynced-unproven'; }, function () { return 'unsynced-unproven'; });
+      .then(function (why) { if (why == null) { se.dirtyProven = true; if (se.zeroTurn === true) se.zeroTurnProven = true; return null; } return se.zeroTurn === true ? 'zero-turn-unproven' : 'unsynced-unproven'; }, function () { return se.zeroTurn === true ? 'zero-turn-unproven' : 'unsynced-unproven'; });
   }
   function vaultBlock(id, env) {
     var vh = g(env, 'chr6_vault_hidden');
@@ -288,7 +319,7 @@
     var mk = g(env, 'v292Dfix402_f781g_' + id);                            /* L6 */
     if (mk != null) {
       var mo = J(mk, null); if (!mo || typeof mo !== 'object') return 'marker-unreadable';
-      if (UNSYNCED_STATES[String(mo.state || '')] === 1 && !staleDirtyLocal(id, env, row, mo)) return 'unsynced';   /* ★STUCK1: 回したものは stuckProof で確かめる */
+      if (UNSYNCED_STATES[String(mo.state || '')] === 1 && !staleDirtyLocal(id, env, row, mo) && !zt1DirtyLocal(id, env, row, mo)) return 'unsynced';   /* ★STUCK1: 回したものは stuckProof で確かめる */
       if (mo.inFlightSave) return 'in-flight';
       if (mo.storyId != null && String(mo.storyId) !== id) return 'marker-id-mismatch';
     }
@@ -351,7 +382,7 @@
     return null;
   }
   /* ---- サーバー（S2/S3） ---- */
-  function serverEval(id, r, pl) {
+  function serverEval(id, r, pl, env) {
     if (!r || typeof r !== 'object') return { why: 'server-unreachable' };
     if (r.status === 404) return { why: 'server-404' };
     if (r.status !== 200) return { why: 'server-unreachable' };
@@ -363,6 +394,9 @@
     if (j.deleted !== true) return { why: 'server-live' };
     if (typeof j.rev !== 'number' || !(j.rev >= 1)) return { why: 'server-rev' };
     var rec = j.record, b = rec && rec.body;
+    /* ★ZT1: サーバーの墓標も端末の本体も 0 ターン → 本文の一致は自明。全体の一致（hash）は stuckProof が必ず確かめる */
+    if (env && env.zt1 === true && rec && rec.deleted === true && b && isArr(b.turns) && b.turns.length === 0 && pl && pl.body === 'present' && isArr(pl.tstr) && pl.tstr.length === 0)
+      return { why: null, rev: j.rev, authority: j.authority, serverTurns: 0, localTurns: 0, digest: h53(''), serverHash: j.serverHash, zeroTurn: true };
     if (!rec || rec.deleted !== true || !b || !isArr(b.turns) || b.turns.length < 1) return { why: 'server-body-not-held' };
     /* R1②: 端末のターンが全部、同じ位置に同じ内容で（canonical 文字列が 1 文字も違わずに）サーバーにある */
     var loc = (pl && pl.body === 'present' && isArr(pl.tstr)) ? pl.tstr : [];
@@ -393,7 +427,7 @@
           if (!pl.keys.length) { skp(id, 'nothing-left'); return; }
           var bb = bodyBlock(pl); if (bb) { skp(id, bb); return; }
           return Promise.resolve(ctx.getStory(id)).then(function (r) {
-            var se = serverEval(id, r, pl);
+            var se = serverEval(id, r, pl, env);
             if (se.why) { skp(id, se.why); return; }
             return stuckProof(id, env, se).then(function (pw) {
               if (pw) { skp(id, pw); return; }
@@ -453,6 +487,7 @@
       var proof = { v: 2, kind: 'STORE1', runId: 's1b-' + issuedAt + '-' + (++runSeq), storyId: id, accountId: a0, accountIdAfter: a2,
                     serverRev: se.rev, serverDeleted: true, authority: se.authority, serverBodyHeld: true, issuedAt: issuedAt,
                     contentMatched: true, localTurns: se.localTurns, serverTurns: se.serverTurns, contentDigest: se.digest, dirtyProven: se.dirtyProven === true,
+                    zeroTurnProven: (se.zeroTurn === true && se.zeroTurnProven === true) ? true : undefined,
                     keys: pl.keys.map(function (k, j) { return { key: k, bytes: pl.vals[j].length, hash: I._hash(pl.vals[j]), value: pl.vals[j] }; }) };
       var armed = I.store1Arm(proof);
       if (!armed) return fin('arm-refused');
@@ -480,7 +515,7 @@
         var gb2 = globalBlock(env) || localBlock(id, env); if (gb2) return fin(gb2);       /* 墓標・Vault・未送信・開いている印 */
         var now2 = planOne(id, env), sp2 = samePlan(pl, now2); if (sp2) return fin(sp2);
         return Promise.resolve(ctx.getStory(id)).then(function (r) {
-          var se = serverEval(id, r, now2);                                                 /* サーバーの状態と内容の一致（Lock の中で） */
+          var se = serverEval(id, r, now2, env);                                                 /* サーバーの状態と内容の一致（Lock の中で） */
           if (se.why) return fin(se.why);
           return stuckProof(id, env, se).then(function (pw) {                               /* ★STUCK1: 印が DIRTY のときだけ墓標の hash と突き合わせる（Lock の中で） */
             if (pw) return fin(pw);
@@ -956,6 +991,7 @@
     return { ls: root.localStorage, ss: root.sessionStorage, now: function () { return Date.now(); }, key1: K, multi: lsg(MULTI) === '1',
              purge: pOn, purgeVault: pOn && lsg(PURGE_VAULT) === '1',
              stuck1: lsg(STUCK_ON) === '1' && lsg(STUCK_OFF) !== '1', dirtyProof: dirtyProofB, otherTab: otherTabSeq,   /* ★STUCK1 r2: 既定 OFF */
+             zt1: lsg(ZT_ON) === '1' && lsg(ZT_OFF) !== '1',   /* ★ZT1: 既定 OFF */
              vault: root.__v292Dfix889 || null, inv: root.__v292Dfix562 || null, gate: root.__v292Dfix569 || null,
              iso2Foreign: function (id) { try { var I = root.__v292Diso2; if (!I || typeof I.stampOf !== 'function' || typeof I.owner !== 'function') return false;
                var me = I.owner().now, sp = I.stampOf(id, 's'); if (!sp) return false; return !!((sp.c && sp.c !== me) || (sp.w && sp.w !== me)); } catch (e) { return true; } } };

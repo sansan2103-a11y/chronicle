@@ -3055,6 +3055,31 @@
     }, false);
   } catch(e){}
 
+  /* ■LSF1（laneSAVE1・GPT #127-TN P1 B1、kill: v292DfixLSF1Off='1'）画面を離れる時の保存の前倒し。
+     いままで: 🏠 以外（URL・タブの切り替え・アプリの切り替え・タブを閉じる）で離れると、fix697 の 12 秒の保存予約（pushTimer）が
+       送られないまま残った（laneSAVEDEL の実測: 4 ターン遊んで URL でホーム → クラウド 0 ターン）。
+     ここでは visibilitychange（hidden）と pagehide を「補助の契機」としてだけ使う: 保存の予約があれば、その予約を今すぐ既存の
+       commit 経路で始める（flushForNav と同じ。新しいタイマー・新しい送信経路・sendBeacon・keepalive は使わない）。
+       予約が無い（送信中・送るものが無い）なら何もしない。送れたかどうかは既存の marker が持つ（届かなければ DIRTY のまま。
+       次に開いた時に fix895 が送る）。端末の本文には触らない。 */
+  function lsf1Off(){ return lsg('v292DfixLSF1Off') === '1'; }
+  var lsf1 = { fired: 0, skipped: 0, last: null };
+  function lsf1Flush(src){
+    try {
+      if (lsf1Off() || !on()) return false;
+      if (!pushTimer){ lsf1.skipped++; return false; }
+      try { clearTimeout(pushTimer); } catch(e0){} pushTimer = null; firstDirtyTs = 0;
+      lsf1.fired++; lsf1.last = { src: src, t: Date.now() };
+      try { LEDGER.push({ kind: 'LSF1_FLUSH', id: storyId(), src: src, t: Date.now() }); while (LEDGER.length > LEDGER_CAP) LEDGER.shift(); } catch(e1){}
+      commit('lifecycle-' + src);
+      return true;
+    } catch(e){ return false; }
+  }
+  try {
+    document.addEventListener('visibilitychange', function(){ try { if (document.visibilityState === 'hidden') lsf1Flush('hidden'); } catch(e){} }, false);
+    window.addEventListener('pagehide', function(){ lsf1Flush('pagehide'); }, false);
+  } catch(e){}
+
   /* ■SN1(a)（2026-10-11, GPT #125-CY, kill: v292DfixSN1aOff='1'）flushForNav(maxMs) → Promise<{ok, why, ms}>
      アプリ内の物語切替・HOME 遷移の直前に呼ぶ。予約中（pushTimer）の commit を既存の commit 経路ですぐ始め、
      server の ACK（fix781 marker が CLEAN になる = g781Confirm）を最大 maxMs 待つ。
@@ -3766,6 +3791,7 @@
     f924: function(){ return { off: f924Off(), stats: JSON.parse(JSON.stringify(f924)) }; },   /* ■fix924 */
     f928: function(){ return { off: f928Off(), netFail: f928.netFail, busy: Date.now() < f928.busyUntil, tries: f928.tries, pending: !!f928.timer, scheduled: f928.scheduled, fired: JSON.parse(JSON.stringify(f928.fired)), skipped: JSON.parse(JSON.stringify(f928.skipped)), stops: f928.stops, resets: f928.resets, last: f928.last }; },   /* ■fix928 */
     flushForNav: function(maxMs){ return flushForNav(maxMs); },   /* ■SN1(a) */
+    lsf1: function(){ return { off: lsf1Off(), fired: lsf1.fired, skipped: lsf1.skipped, last: lsf1.last }; },   /* ■LSF1 read-only */
     f895: function(){ return { off: f895Off(), done: f895Done, last: f895Last ? JSON.parse(JSON.stringify(f895Last)) : null,
                                bcj3: { off: bcj3Off(), wait: f895Wait ? JSON.parse(JSON.stringify(f895Wait)) : null, re: JSON.parse(JSON.stringify(f895Re)) } }; },   /* ■BCJ③ read-only */
     /* ★fix718: read-only 可視化（書込 0） */

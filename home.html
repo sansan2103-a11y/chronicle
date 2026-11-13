@@ -264,7 +264,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261114-iconfix2';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261114-save1';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -326,7 +326,7 @@
 <script src="v292Dfix569-gc-shadow.js?cb=20261112-purge1c"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者（fix569 が捕捉済みの native を借りる） -->
 <script src="v292Dfix660-delete-gateway.js?cb=v292Dfix680"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=20261112-purge1c"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=20261114-save1"></script>
 <script src="v292Dfix564-snapshot.js?cb=20261112-key1"></script>
 <!-- v292Dfix721(STEP4F): SAFE RESTORE ENGINE。fix291のimportAllを委譲で受け、
      NON-DESTRUCTIVE MERGE + default-deny + durable journal + boot rollbackで復元する。
@@ -348,10 +348,10 @@
      ・home.html には S / __chronicleGetState が無いので S.save wrap も成立しない（wrapSave は空振りして諦める）。
      ・fix587 より前に置く（fix587 は呼び出し時に参照するので順序依存は無いが、owner を先に載せる）。 -->
 <!-- ★av2 (GPT 904 C1): Asset v2 client data plane. save core (fix697/fix705/fix743) が呼ぶ純関数 + registrar。kill = localStorage v292Dav2Off=1 -->
-<script src="v292Dav2-data.js?cb=20261111-spbase2"></script>
+<script src="v292Dav2-data.js?cb=20261114-save1"></script>
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
 <script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20261108-bundle93-i"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20261114-save1"></script>
 <!-- ★fix860 STORY_PASSCODE: unlock dialog / passcode 管理 UI（supplier と fix697 の狭い口に依存） -->
 <script src="v292Dfix860-story-unlock-ui.js?cb=20260916-sp2"></script>
 <script src="v292Dfix729-title-sync.js?cb=20260909-fix842"></script>
@@ -380,7 +380,7 @@
 <script src="v292Dfix710-home-delete-autoresume.js?cb=20261020-bundle34-a"></script>
 <!-- ★★DL2 (S-2 / GPT #127-FJ): 物語を一覧から削除する（サーバの版を基準にした削除・確認は画面内のシート・受け取り側の片づけ・止まっている削除の一覧）。
      fix587 / fix697 / fix933 / fix710 より後。下の inline script が window.__v292DhomeDL2（render / all）を出す。kill = localStorage v292DfixDL2Off=1 -->
-<script src="v292DfixDL2-server-delete.js?cb=20261112-ui4" data-dl2="home"></script><script src="v292DfixSTORE1b-device-free.js?cb=20261113-stuck1"></script><!-- ★STORE1b r2 (GPT #127-SG B / #127-SI): 「この端末の空き容量を増やす」＝サーバーで削除済み・クラウドに同じ本文ありと確かめた物語の端末の写しを、選んだものだけ消す（消す間は Web Lock story-open を排他で持つ）。HOME を開くだけでは何も消さない。dry-run=localStorage v292DfixSTORE1Dry=1 / まとめて=v292DfixSTORE1Multi=1（既定 OFF）/ OFF=v292DfixSTORE1Off=1 -->
+<script src="v292DfixDL2-server-delete.js?cb=20261114-save1" data-dl2="home"></script><script src="v292DfixSTORE1b-device-free.js?cb=20261114-save1"></script><!-- ★STORE1b r2 (GPT #127-SG B / #127-SI): 「この端末の空き容量を増やす」＝サーバーで削除済み・クラウドに同じ本文ありと確かめた物語の端末の写しを、選んだものだけ消す（消す間は Web Lock story-open を排他で持つ）。HOME を開くだけでは何も消さない。dry-run=localStorage v292DfixSTORE1Dry=1 / まとめて=v292DfixSTORE1Multi=1（既定 OFF）/ OFF=v292DfixSTORE1Off=1 -->
 <!-- ★B37-D (GPT #127-HF D): 物語カードの「…」→「この物語を削除」= DL2 の確認シート（openDelete）をそのまま開くだけ。OFF=localStorage v292DfixB37dOff=1 -->
 <script src="v292DfixB37-home-menu.js?cb=20261021-bundle37-a"></script>
 <!-- ★JR1 (GPT #127-HC): サーバーで削除済み（墓標）と確かめた物語を指す fix750 journal だけを退避する（写して読み戻し一致 → 元キーを消す）。サーバー書込 0・UI 変更 0。OFF=localStorage v292DfixJR1Off=1 -->

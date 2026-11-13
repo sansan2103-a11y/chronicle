@@ -873,8 +873,10 @@
     if (p.serverBodyHeld !== true) return no('proof-server-body-not-held');
     /* ★STORE1c (GPT #127-SI R1②): 端末のターンが全部、同じ内容でサーバーの行にあると STORE1b が同じ実行の中で確かめたこと */
     if (p.contentMatched !== true) return no('proof-content-not-matched');
+    /* ★ZT1（laneSAVE1・既定 OFF）: 0 ターンの墓標は、STORE1b がサーバーの墓標 hash と端末の全体（projectionV2）の一致を確かめたときだけ */
+    var zt1 = (p.zeroTurnProven === true && lsg('v292DfixZT1On') === '1' && lsg('v292DfixZT1Off') !== '1' && p.serverTurns === 0 && p.localTurns === 0);
     if (typeof p.localTurns !== 'number' || !(p.localTurns >= 0) || Math.floor(p.localTurns) !== p.localTurns ||
-        typeof p.serverTurns !== 'number' || !(p.serverTurns >= 1) || p.serverTurns < p.localTurns) return no('proof-content-not-matched');
+        typeof p.serverTurns !== 'number' || !(p.serverTurns >= 1 || zt1) || p.serverTurns < p.localTurns) return no('proof-content-not-matched');
     var at = p.issuedAt, now = Date.now();
     if (typeof at !== 'number' || !isFinite(at) || at <= 0) return no('proof-timestamp-invalid');
     if (now - at < 0) return no('proof-timestamp-future');

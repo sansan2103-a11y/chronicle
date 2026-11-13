@@ -25,6 +25,21 @@
  * ■断るもの: 保護 3 件（Worker が最終の関所。ここは表示だけ）、Vault で隠した物語（D5・解錠中も）、パスコード付き、
  *   サーバの一覧に無い物語（隠した物語と区別できないため。旧 v1 経路へも渡さない）、fix933 が owner と判定しない利用者（D7）。
  * ■百鬼夜行の 2 件に専用の扱いは無い（Owner が選んだときだけ、ほかと同じ経路で消える）。
+ * ■★SD1（laneSAVEDEL・GPT #127-TL Q4 → laneSAVE1・GPT #127-TN で既定 ON。kill v292DfixSD1Off='1'）
+ *   「遊んだ直後に削除すると、クラウドの墓標が端末より少ないターンしか持たない」を止める。
+ *   実測（Local Chromium・本物のモジュール＋LIM1 Worker）: 物語画面を 🏠 以外（URL・タブを閉じる・ブックマーク）で離れると、
+ *   fix697 の 12 秒の保存予約が送られないまま HOME へ来る。DL2 はサーバーの rev / hash（＝古い本文）を基準に deletestory2 を送り、
+ *   Worker はその古い本文をそのまま墓標にする（端末 4 ターン・クラウド墓標 0 ターン → STORE1b server-body-not-held）。
+ *   シートは「ターン 0」と注意を出すだけで、削除はそのまま通っていた（DL2 buildRow・fix587 dl2ApplyLocked allowDirty）。
+ *   SD1 が足すこと（読むだけ・新しい書き込み 0・自動の保存 0・自動の再送 0）:
+ *     ① シートを開いたとき: この端末の本文のターン数 ＞ サーバーの一覧の turnCount → その行を選べなくし、理由を出す（通信なし）。
+ *     ② 送る直前（1 件ずつ）: getstory を 1 回読み、rev・serverHash が表示基準と同じ（違えば「別の端末で更新」＝従来の 409 と同じ扱い）、
+ *        かつ この端末の本文の各ターンがサーバーの同じ位置のターンと canonical 文字列（キー順・undefined 落とし＝STORE1b R1② と同じ）で
+ *        1 文字も違わないことを確かめる。端末の方が多い → 'device-ahead'、違う → 'device-differs' で送らない（何も変わらない）。
+ *        本体が無い（この端末に写しが無い）・読めない は従来どおり送る（端末に失うものが無い／判定できないのは従来と同じ扱い）。
+ *     ③ 送らなかった行は「物語を開いて保存が終わってから、もう一度削除してください」と出す（開くと既存の起動時の照合・保存が送る）。
+ *   変えないもの: Worker・fix587・fix697・墓標の形・削除の契約（deletestory2 の CAS はそのまま最終の関所）・ほかの行の判断・文言。
+ *   OFF のときは 1 バイトも同じ判断（SD1 の関数は呼ばれない・getstory も増えない）。
  * kill: localStorage v292DfixDL2Off='1' → HOME は従来の削除に戻る（古い計画の隔離は fix587 側で常に効く）。
  * 観測: window.__v292DfixDL2.status()
  * ===================================================================== */
@@ -32,12 +47,60 @@
   'use strict';
   function ui4bOff(){ try { return localStorage.getItem('v292DfixUI4bOff') === '1'; } catch(e){ return true; } }   /* ★UI4b */
   if (window.__v292DfixDL2) return;
-  var VERSION = 'DL2-r1nw-da2';   /* ★DELALL: stuck list scoped to the current account's server list */   /* r1n (BUNDLE34): narrow-screen entry label + 44px target (T1) */
+  var VERSION = 'DL2-r1nw-da2-sd1on';   /* ★DELALL: stuck list scoped to the current account's server list */   /* r1n (BUNDLE34): narrow-screen entry label + 44px target (T1) */
   var TAG = '[v292DfixDL2]';
   var cs = null; try { cs = document.currentScript; } catch (e) { cs = null; }
   var MODE = (cs && cs.getAttribute && cs.getAttribute('data-dl2') === 'index') ? 'index' : 'home';
   function lsg(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function off() { return lsg('v292DfixDL2Off') === '1'; }
+  /* ★SD1: 既定 ON（laneSAVE1・GPT #127-TN「SD1 条件付き GO・既定 ON」。Worker deletestory2 は rev+hash+authority+deleted=0 を
+     1 本の UPDATE の WHERE で照合する＝確認と書き込みの間に保存が着地しても墓標は書かれない。v46.45-lim1 で確認済み）。
+     kill: localStorage v292DfixSD1Off='1' → HEAD と同じ判断（v292DfixSD1On はもう使わない）。 */
+  function sd1On() { return lsg('v292DfixSD1Off') !== '1'; }
+  var SD1_AHEAD = 'この端末に、まだクラウドへ保存されていないターンがあります（この端末 {L} ターン・クラウド {S} ターン）。物語を開いて保存が終わってから、もう一度削除してください。何も変わっていません。';
+  var SD1_DIFF = 'この端末の物語の内容が、クラウドの内容と違います（保存がまだ終わっていない可能性があります）。物語を開いて保存が終わってから、もう一度削除してください。何も変わっていません。';
+  var sd1 = { rowsBlocked: 0, checks: 0, ahead: 0, differs: 0, changed: 0, readFail: 0, passed: 0, noLocal: 0, unreadable: 0, last: null };
+  function sd1Stable(v) {   /* STORE1b stable() と同じ規約（キー順・undefined のキーは落とす・配列の undefined は null） */
+    if (v === undefined) return 'null';
+    if (v === null || typeof v !== 'object') return JSON.stringify(v);
+    if (Object.prototype.toString.call(v) === '[object Array]') { var a = '['; for (var i = 0; i < v.length; i++) a += (i ? ',' : '') + sd1Stable(v[i]); return a + ']'; }
+    var ks = []; for (var k in v) if (Object.prototype.hasOwnProperty.call(v, k)) ks.push(k); ks.sort();
+    var o = ''; for (var j = 0; j < ks.length; j++) { if (v[ks[j]] === undefined) continue; o += (o ? ',' : '') + JSON.stringify(ks[j]) + ':' + sd1Stable(v[ks[j]]); }
+    return '{' + o + '}';
+  }
+  /* この端末の本文: { body:'absent' } / { body:'unreadable' } / { body:'present', turns:[...] }（値はメモリだけ・ログに出さない） */
+  function sd1Local(id) {
+    var raw = lsg('chr6_slot_' + id);
+    if (raw == null) return { body: 'absent' };
+    var d = null; try { d = JSON.parse(raw); } catch (e) { d = null; }
+    if (!d || typeof d !== 'object' || Object.prototype.toString.call(d.turns) !== '[object Array]') return { body: 'unreadable' };
+    return { body: 'present', turns: d.turns };
+  }
+  /* 送る直前の確認。cb(null) = 送ってよい / cb({ code, text, recheck }) = 送らない */
+  function sd1Verify(r, cb) {
+    sd1.checks++;
+    var loc = sd1Local(r.id);
+    if (loc.body === 'absent') { sd1.noLocal++; sd1.last = { code: 'no-local', t: Date.now() }; cb(null); return; }
+    if (loc.body === 'unreadable') { sd1.unreadable++; sd1.last = { code: 'local-unreadable', t: Date.now() }; cb(null); return; }
+    var W0 = W697(); if (!W0 || typeof W0.getStoryV2Once !== 'function') { sd1.readFail++; cb({ code: 'sd1-no-port', text: '削除の前の確認ができませんでした。何も変わっていません。少し待ってから「確認し直す」を押してください。', recheck: true }); return; }
+    try {
+      W0.getStoryV2Once(r.id, function (x, err) {
+        try {
+          var j = (x && x.j) || {};
+          if (err || !x || x.status !== 200 || j.ok !== true) { sd1.readFail++; sd1.last = { code: 'read-fail', status: x && x.status, t: Date.now() }; cb({ code: 'sd1-read-fail', text: '削除の前にクラウドの内容を確認できませんでした。何も変わっていません。少し待ってから「確認し直す」を押してください。', recheck: true }); return; }
+          if (j.deleted === true || +j.rev !== r.basis.rev || String(j.serverHash || '') !== String(r.basis.serverHash || '')) {
+            sd1.changed++; sd1.last = { code: 'changed', t: Date.now() }; cb({ code: 'sd1-changed', text: '別の端末で更新されています。何も変わっていません。「確認し直す」でもう一度確認してください。', recheck: true }); return; }
+          var rec = j.record, b = rec && rec.body, st = (b && Object.prototype.toString.call(b.turns) === '[object Array]') ? b.turns : [];
+          var lt = loc.turns;
+          if (lt.length > st.length) { sd1.ahead++; sd1.last = { code: 'device-ahead', local: lt.length, server: st.length, t: Date.now() }; cb({ code: 'sd1-device-ahead', text: SD1_AHEAD.replace('{L}', lt.length).replace('{S}', st.length), recheck: true }); return; }
+          for (var i = 0; i < lt.length; i++) {
+            if (sd1Stable(lt[i]) !== sd1Stable(st[i])) { sd1.differs++; sd1.last = { code: 'device-differs', at: i, t: Date.now() }; cb({ code: 'sd1-device-differs', text: SD1_DIFF, recheck: true }); return; }
+          }
+          sd1.passed++; sd1.last = { code: 'pass', local: lt.length, server: st.length, t: Date.now() }; cb(null);
+        } catch (e2) { sd1.readFail++; cb({ code: 'sd1-threw', text: '削除の前の確認ができませんでした。何も変わっていません。', recheck: true }); }
+      });
+    } catch (e) { sd1.readFail++; cb({ code: 'sd1-threw', text: '削除の前の確認ができませんでした。何も変わっていません。', recheck: true }); }
+  }
   var PROTECT = { smv6r10s7u9: 1 };   /* Owner 2026-11-11: smv82tjjai8・smv92e8vv1f の保護を外した（Worker v46.44b） */ //   /* 表示用。最終の関所は Worker（env で外せない） */
   var st = { version: VERSION, mode: MODE, opened: 0, sends: 0, accepted: 0, reconciles: 0, results: [],
              receive: { runs: 0, applied: 0, resolved: 0, conflicts: 0, skipped: 0, last: null },
@@ -213,6 +276,11 @@
     }
     else if (srv.locked) r.reason = 'パスコード付きの物語は削除できません。先にパスコードを外してください。';
     else if ((srv.authority !== 'shadow' && srv.authority !== 'canonical') || !srv.serverHash) r.reason = 'この物語はいまは削除できない状態です。';
+    else if (sd1On() && (function () { var l0 = sd1Local(r.id); return l0.body === 'present' && l0.turns.length > (+srv.turnCount || 0); })()) {
+      /* ★SD1 ①: この端末の方がターンが多い → 選べない（通信なし・何も書かない） */
+      var l1 = sd1Local(r.id); sd1.rowsBlocked++;
+      r.reason = SD1_AHEAD.replace('{L}', l1.turns.length).replace('{S}', (+srv.turnCount || 0)); r.sd1 = 'device-ahead';
+    }
     else {
       r.ready = true;
       r.basis = Object.freeze({ rev: srv.rev, serverHash: srv.serverHash, authority: srv.authority });
@@ -308,6 +376,17 @@
     return Promise.resolve();
   }
   function sendOne(r) {
+    if (sd1On() && r.kind === 'server' && r.basis) {   /* ★SD1 ②: 送る直前に、端末のターンが全部クラウドにあることを確かめる */
+      return new Promise(function (res0) {
+        sd1Verify(r, function (no) {
+          if (no) { setRes(r, false, no.text, { code: no.code, recheck: !!no.recheck }); res0(); return; }
+          sendOneRaw(r).then(res0, res0);
+        });
+      });
+    }
+    return sendOneRaw(r);
+  }
+  function sendOneRaw(r) {
     if (!r.deleteOpId) r.deleteOpId = 'dl2_' + r.id + '_' + Date.now();
     st.sends++;
     return new Promise(function (res) {
@@ -557,7 +636,8 @@
     status: function () { return { version: VERSION, mode: MODE, off: off(), active: active(), allowed: allowed(), sheetOpen: !!M, sheetKind: M ? M.kind : null, phase: M ? M.phase : null,
       rows: M ? M.rows.map(function (r) { return { id: r.id, ready: r.ready, checked: r.checked, kind: r.kind, reason: r.reason, warn: r.warn.slice(), result: r.result, retryable: r.retryable, done: r.done }; }) : null,
       msg: M ? M.msg : null, stuck: stuckCount(), opened: st.opened, sends: st.sends, accepted: st.accepted, reconciles: st.reconciles, receive: JSON.parse(JSON.stringify(st.receive)),
-      guardRefused: st.guardRefused, guardClicks: st.guardClicks, wrapped: st.wrapped, log: st.results.slice() }; }
+      guardRefused: st.guardRefused, guardClicks: st.guardClicks, wrapped: st.wrapped, log: st.results.slice(),
+      sd1: { on: sd1On(), stats: JSON.parse(JSON.stringify(sd1)) } }; }
   };
   try { console.log(TAG, 'loaded', MODE, off() ? '(off)' : ''); } catch (e) {}
 })();

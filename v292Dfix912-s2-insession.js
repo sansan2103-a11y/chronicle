@@ -130,6 +130,7 @@
       setTimeout(function(){ try { if (d.parentNode) d.parentNode.removeChild(d); } catch(e){} }, 6000); } catch(e){}
   }
   function gc1Show(){ gc1Top(GC1_WAIT, false); }
+  function gc1RegStalled(id){ try { var M = window.__v292Dav2Map; return !!(M && typeof M.regStalled === 'function' && M.regStalled(id)); } catch(e){ return false; } }   /* ★REG1 */
   function gc1Inp(){ try { var i = document.getElementById('inp'); return i ? String(i.value) : null; } catch(e){ return null; } }
   function gc1Mode(){ try { var S = getS(); return S ? S.mode : null; } catch(e){ return null; } }
   function gc1Turns(){ try { var S = getS(); return (S && Array.isArray(S.turns)) ? S.turns.length : -1; } catch(e){ return -1; } }
@@ -182,7 +183,8 @@
       if (!f705Released() || inProgress913(id)) return 'not-released';
       var s = gc1Save(id);
       if (s.mk === 'DIVERGED' || s.mk === 'BOOTSTRAP_HOLD' || s.hold) return 'hold-or-conflict';
-      if (s.mk !== 'CLEAN' || s.inFlight) return 'dirty';   /* 保存前に生成しない */
+      if (s.inFlight) return 'dirty';
+      if (s.mk !== 'CLEAN' && !(r.p.allowDirty && gc1RegStalled(id))) return 'dirty';   /* 保存前に生成しない（★REG1: 登録待ちで止まった物語は、事前確認を通った時だけ通す） */
       return null;
     } catch(e){ return 'threw'; }
   }
@@ -238,6 +240,22 @@
       var s = gc1Save(id);
       if (s.mk === 'DIVERGED' || s.mk === 'BOOTSTRAP_HOLD' || s.hold || pending(id)) return gc1Cancel('hold-or-conflict', GC1_FAIL, true);
       if (s.inFlight || s.timer){ p.clean = 0; return; }                  /* 保存の予約・送信中 → 待つ */
+      /* ★REG1（laneSAVE1・GPT #127-TN）: クラウド保存が人物の登録待ちで止まっている（av2 の再試行の区切りを使い切った）物語では、
+         CLEAN を待っても来ない（従来は 60 秒待って取りやめ）。「行動する」と同じ事前確認（fresh getstory 1 回）を 1 度だけ行い、
+         ほかの端末が進めていなければ、その場で 1 回だけ始める（端末の正本に続きを書く。クラウドは止まった表示のまま）。進んでいれば取りやめる。
+         kill: v292DfixREG1Off='1'（av2 側が止まった判定を返さない）／v292DfixGC1Off='1'。 */
+      if (s.mk !== 'CLEAN' && gc1RegStalled(id)){
+        if (p.pf === 'busy') return;
+        if (p.pf == null){
+          var F2 = F697(); if (!F2 || typeof F2.s2Preflight !== 'function'){ p.pf = 'ok'; return; }
+          p.pf = 'busy'; stats.gc1RegPreflight = (stats.gc1RegPreflight || 0) + 1;
+          try { F2.s2Preflight(id, function(r){ p.pf = (r && !r.skip && !r.error && r.remoteAhead) ? 'ahead' : 'ok'; }); } catch(eP){ p.pf = 'ok'; }
+          return;
+        }
+        if (p.pf === 'ahead') return gc1Cancel('hold-or-conflict', GC1_FAIL, true);
+        p.allowDirty = true; stats.gc1RegFire = (stats.gc1RegFire || 0) + 1;
+        return gc1Fire();
+      }
       if (s.mk === 'CLEAN'){
         var S = getS(); if (S && S.inFlight) return;
         if (preflightBusy || inProgress913(id) || !f705Released()) return;

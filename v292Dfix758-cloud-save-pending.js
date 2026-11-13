@@ -239,6 +239,8 @@
         var st = null;
         try { st = api.status(); } catch (e) { st = null; }
         if (!st || !st.on || !st.loggedIn) { hide(); return; }
+        /* ★REG1（laneSAVE1）: 登録待ちで止まった時の表示（「この端末には保存済み・クラウドは未保存」＋「もう一度試す」）が出ている間は、待機の表示を重ねない */
+        try { if (document.getElementById('v292Dav2RegStall')) { hide(); return; } } catch (eR) {}
 
         var marks = (st.saveWrap && typeof st.saveWrap.marks === 'number') ? st.saveWrap.marks : null;
         if (marks != null) {

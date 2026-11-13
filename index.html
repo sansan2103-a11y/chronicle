@@ -290,7 +290,7 @@
      ★kill = localStorage['v292Dfix889Off']='1' は **UI だけ**を消す。絞り込みと扉は止まらない。 -->
 <script src="v292Dfix889-secret-vault.js?cb=20261108-bundle93-g"></script>
 <!-- ★av2 (GPT 904 C1): Asset v2 client data plane. save core (fix697/fix705/fix743) が呼ぶ純関数 + registrar。kill = localStorage v292Dav2Off=1 -->
-<script src="v292Dav2-data.js?cb=20261111-spbase2"></script>
+<script src="v292Dav2-data.js?cb=20261114-save1"></script>
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
 <script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
 <script src="v292Dfix705-canonical-read-gate.js?cb=20261019-bundle33-b"></script>
@@ -344,7 +344,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261114-iconfix2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261114-save1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4160,9 +4160,9 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      default OFF (opt-in=v292Dfix803On / kill=v292Dfix803Off / story=v292Dfix803Story)。fix802 の fire 末尾から onFire で呼ばれる。
      timer 0 / retry 0 / 新 write path 0 / localStorage 書込は fix793.materialize() 経由の v292Dmem1_slot_<sid> のみ -->
 <script src="v292Dfix803-auto-materialize.js?cb=20260930-ac25"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20261108-bundle93-i"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20261114-save1"></script>
 <!-- ★fix912 SA-3 S2 in-session reconcile（fix697 の後・kill v292Dfix912Off / v292Dfix911Off） -->
-<script src="v292Dfix912-s2-insession.js?cb=20261112-gc1b"></script>
+<script src="v292Dfix912-s2-insession.js?cb=20261114-save1"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
      OFF=v292Dfix729Off / 検証口=window.__v292Dfix729 -->
 <script src="v292Dfix729-title-sync.js?cb=20261010-rs1"></script>
@@ -4183,7 +4183,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      それらは new Response で応答を作り直すので、後から読み込むと「出口ガード後の本文」しか見えず
      モデルの生出力が取れない。本文は1文字も書き換えない。OFF=v292Dfix553Off -->
 <script src="v292Dfix553-punct-probe.js?cb=20260913-q119b5"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=20261112-purge1c"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=20261114-save1"></script>
 <script src="v292Dfix564-snapshot.js?cb=20261112-key1"></script>
 <!-- v292Dfix721(STEP4F): SAFE RESTORE ENGINE。fix291のimportAllを委譲で受け、
      NON-DESTRUCTIVE MERGE + default-deny + durable journal + boot rollbackで復元する。
@@ -4593,7 +4593,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix577-delete-entry-guard.js?cb=v292Dfix577"></script>
 <script src="v292Dfix933-beta-delete-off.js?cb=20261111-delall"></script>
 <!-- ★★DL2 (S-2 / GPT #127-FJ D8): ゲーム画面の「削除」とギャラリーの「セーブを削除」は「削除はホームから」の案内だけ（旧経路の送信を止める）。kill = v292DfixDL2Off=1 -->
-<script src="v292DfixDL2-server-delete.js?cb=20261112-ui4" data-dl2="index"></script>
+<script src="v292DfixDL2-server-delete.js?cb=20261114-save1" data-dl2="index"></script>
 <script src="v292Dfix313-story-cards.js?cb=20261019-bundle31-a"></script>
 <script src="v292Dfix314-memory.js?cb=20260829-fix748"></script>
 <script src="v292Dfix317-slot-leak.js?cb=20260901-fix783"></script>
@@ -4846,7 +4846,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix756-new-story-schema2.js?cb=20261021-bundle36-a"></script>
 <!-- ★JR1 (GPT #127-HC): サーバーで削除済み（墓標）と確かめた物語を指す fix750 journal だけを退避する（写して読み戻し一致 → 元キーを消す）。サーバー書込 0・UI 変更 0。OFF=localStorage v292DfixJR1Off=1 -->
 <script src="v292DfixJR1-journal-retire.js?cb=20261021-bundle36-a" data-jr1="index"></script>
-<script src="v292Dfix758-cloud-save-pending.js?cb=20261024-bundle44-b"></script>
+<script src="v292Dfix758-cloud-save-pending.js?cb=20261114-save1"></script>
 <script src="v292Dfix844-provisional-handle-prompt-semantics.js?cb=20260912-fix844v22"></script>
 <script src="v292Dfix850-turn-local-physical.js?cb=20261113-f850ord"></script>
 <script src="v292Dfix851-posture-directive.js?cb=20261112-stateq1"></script>
