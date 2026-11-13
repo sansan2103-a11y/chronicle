@@ -39,6 +39,9 @@
  *   ・サーバーが断ったとき（403 / 501 / 402 / 429・お客さまの 503 CUSTOMER_IMG_*）はこのタブではもう試さない（sessionStorage 'v292DfixSTARTICON_hold'）。
  *   ・新しい物語だけ（★STARTICON2）: 物語の ID に入っている作成時刻から 6 時間以内、かつ開いたときのターン数 2 以下。ID が読めない・古い物語 → 何もしない（NOT_NEW）。
  *   ・端末の上限: 1 日（UTC）に自動で始める物語 5 つまで。1 物語 4 枚まで。
+ *     ★LIM1（laneLIM1 2026-11-13・Owner「1 端末 1 日 5 物語はおしんはいらない・管理者画面でアカウントごとに」）: この 2 つは管理者画面の「上限の設定」
+ *     （starticon_day_stories / starticon_story_imgs。アカウントの行 → 種類の既定 → 行なし）で変えられる。読むのは ADMF1.limit（/auth/me の accountLimits）。
+ *     行なし・旧 Worker・答えが別アカウント・kill v292DfixLIM1Off='1' → 今の定数（5 つ・4 枚）。-1 = 無制限。1 物語 N 枚 = 主人公 1 ＋ 登録キャラ N−1（0 = 作らない）。
  *   ・v292Dav2Off='1'・Vault の物語（fix889 で非表示）・ログインしていない・schema 2 でない → 何もしない。
  * ■書かないもの: S・長期記憶・名簿・sys には何も書かない（書くのは setProfile が書く外見だけ＝手動と同じ）。B37 の自動案内の印
  *   'v292DfixB37onb_<id>' だけは「STARTICON が引き受けた」として付ける（👥 が勝手に開かないように。手動の入口はそのまま）。
@@ -47,7 +50,7 @@
 (function (root) {
   'use strict';
   if (typeof window === 'undefined' || root.__v292DfixSTARTICON) return;
-  var VER = 'starticon-d-20261109-ifretry-listopen';   /* ★93-k: キャラ一覧を開いたままでも 1 回の再読み込みへ進む・一覧の行の読み直し */
+  var VER = 'starticon-d-20261109-ifretry-listopen+lim1';   /* ★93-k: キャラ一覧を開いたままでも 1 回の再読み込みへ進む・一覧の行の読み直し */
   var KILL = 'v292DfixSTARTICONOff', NOAI = 'v292DfixSTARTICONNoAI', LSK = 'v292DfixSTARTICON_v1', HOLDK = 'v292DfixSTARTICON_hold', RETRY_OFF = 'v292DfixSTARTICONRetryOff';   /* ★93-j */
   var LIST_OFF = 'v292DfixSTARTICONListOff', REOPENK = 'v292DfixSTARTICON_reopen';   /* ★93-k: kill（= 93-j と同じ再読み込みの待ち方）・再読み込みの後に一覧を開き直す印（sessionStorage・このタブだけ） */
   var IF_WAIT_MS = 20000, IF_SPAN_MS = 20000;   /* ★93-j: IN_FLIGHT の後に待つ時間 = 20 秒 + 0〜20 秒（Worker の口座の札 MX_LEASE_MS = 300 秒より十分短い・生成 1 枚より長い） */
@@ -72,6 +75,11 @@
   function doc2() { try { var m = root.__v292Dav2Map; return !!(m && typeof m.docSchema2 === 'function' && m.docSchema2() === true); } catch (e) { return false; } }
   function loggedIn() { try { var f = F697(); return !!(f && f.status && f.status().loggedIn); } catch (e) { return false; } }
   function acct() { try { var F = root.__v292Dfix893; var me = (F && typeof F.me === 'function') ? F.me() : null; return (me && me.accountId) ? String(me.accountId) : null; } catch (e) { return null; } }
+  /* ★LIM1: the account's own caps (admin page 上限の設定). No row / old Worker / other account / kill → the constants above (= as before) */
+  function limOf(k, dflt) { try { var X = root.__v292DfixADMF1; if (!X || typeof X.limit !== 'function') return dflt; var v = X.limit(k, dflt); return (v === Infinity || (typeof v === 'number' && v >= 0 && v === Math.floor(v))) ? v : dflt; } catch (e) { return dflt; } }
+  function capDayStarts() { return limOf('starticon_day_stories', CAP.dayStarts); }
+  function storyCap() { var n = limOf('starticon_story_imgs', null); if (n === null) return { hero: true, npcs: CAP.npcs, src: 'const' };   /* = before: hero 1 + NPCs 3 */
+    if (n === Infinity) return { hero: true, npcs: Infinity, src: 'row' }; return { hero: n >= 1, npcs: Math.max(0, n - 1), src: 'row' }; }
   function admfOn() { try { var X = root.__v292DfixADMF1; return !!(X && typeof X.gate === 'function' && X.gate('starticon1', false) === true); } catch (e) { return false; } }   /* ★STARTICON2: 自分の鍵 starticon1（管理者画面）。行なし = OFF */
   function vaultHidden(id) { try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* fail-closed */
   function killed() { return lsGet(KILL) === '1' || lsGet('v292Dav2Off') === '1'; }
@@ -196,13 +204,13 @@
       if (!by) { X.pageStop = 'READ_FAIL'; return finish('A_READ_FAIL'); }   /* nothing sent; the next page load may try again */
       if (!same(id, a0)) return finish('A_RECHECK');
       /* targets: no picture on the server yet AND a draft is possible (confirmed appearance, or a description that is not sensitive) — then the cap (hero 1 + NPCs 3) */
-      var cs = chars(), tg = [], npc = 0, skip = {};
+      var cs = chars(), tg = [], npc = 0, skip = {}, sc = storyCap();   /* ★LIM1 */
       /* once per story across devices: only the device that created the story (URL new=1) starts with pictures already present; any other device /
          tab starts only when NO character of the story has a picture yet (otherwise another device — or the Owner — already did the start) */
       if (!isNew && cs.some(function (c) { return by[c.id]; })) { soSet(id, function (so) { so.p = 'done'; so.why = 'OTHER_DEVICE'; }); return finish('A_OTHER_DEVICE'); }
       cs.forEach(function (c) {
         if (by[c.id]) return;
-        if (c.hero ? tg.some(function (t) { return t.hero; }) : npc >= CAP.npcs) return;
+        if (c.hero ? (!sc.hero || tg.some(function (t) { return t.hero; })) : npc >= sc.npcs) return;   /* ★LIM1: sc = { hero: true, npcs: 3 } without a row (as before) */
         var s = suggest(c.id), why = null, dc = null;
         if (!s) why = 'NO_ENTRY';
         else if (!(s.current && s.current.appearance)) {
@@ -218,7 +226,7 @@
       if (!tg.length) { soSet(id, function (so) { so.p = 'done'; so.why = 'NOTHING'; so.a = skip; }); return finish('A_NOTHING'); }
       tg.sort(function (a, b) { return (b.hero ? 1 : 0) - (a.hero ? 1 : 0); });
       soSet(id, function (so, r) { so.p = 'plan'; so.t = tg.map(function (c) { return hk(c.id); }); so.a = skip; r.starts = (r.starts || 0) + 1; });
-      stats.plans++; note({ kind: 'PLAN', n: tg.length, hero: tg.some(function (c) { return c.hero; }), skipped: Object.keys(skip).length });
+      stats.plans++; note({ kind: 'PLAN', n: tg.length, hero: tg.some(function (c) { return c.hero; }), skipped: Object.keys(skip).length, cap: sc.src });
       var i = 0, setAny = false, wrote = false;
       var endA = function (why) {
         soSet(id, function (so) { if (setAny) so.p = 'img'; else { so.p = 'done'; so.why = why || 'NO_PROFILE'; } });
@@ -398,7 +406,7 @@
       if (!so) {
         if (X.firstTurns > CAP.maxTurns) { X.pageStop = 'NOT_START'; return; }   /* an older story (opened with more turns): never automatic */
         if (!isNewStory(id)) { X.pageStop = 'NOT_NEW'; return; }   /* ★STARTICON2 (GPT #127-RI ①): created more than 6 h ago / id without a time → opening it never starts anything */
-        if (rec().starts >= CAP.dayStarts) { X.pageStop = 'DAY_CAP'; return; }
+        if (rec().starts >= capDayStarts()) { X.pageStop = 'DAY_CAP'; return; }   /* ★LIM1: the account's own value (Infinity = no cap); no row = 5 */
         claimB37(id);
       } else if (so.p === 'plan' && Date.now() - (so.at || 0) > 60000) {   /* a page closed in the middle of A: continue with the profiles that were written (never re-draft) */
         soSet(id, function (s) { s.p = 'img'; s.why = 'PLAN_RESUMED'; }); return;
@@ -420,8 +428,9 @@
       return { ver: VER, killed: killed(), gate: gateWhy() || 'on', story: id, firstTurns: X.firstTurns, busy: X.busy, pageStop: X.pageStop, needReload: X.needReload, reloaded: X.reloaded,
         rec: so ? JSON.parse(JSON.stringify(so)) : null, day: { day: r.day, starts: r.starts }, last: X.last, stats: JSON.parse(JSON.stringify(stats)), hold: ssGet(HOLDK), log: LOG.slice(-40),
         retry: { on: retryOn(), leaseWaitMs: Math.max(0, (X.leaseUntil || 0) - Date.now()) },   /* ★93-j */
-        list: { on: listOn(), reopenPending: !!reopen, screen: screenBusy(listOn()) } }; },   /* ★93-k */
-    __t: { hk: hk, bornMs: bornMs, isNewStory: isNewStory }
+        list: { on: listOn(), reopenPending: !!reopen, screen: screenBusy(listOn()) },   /* ★93-k */
+        caps: (function () { var sc = storyCap(), d = capDayStarts(); return { dayStarts: d === Infinity ? -1 : d, hero: sc.hero, npcs: sc.npcs === Infinity ? -1 : sc.npcs, src: sc.src, lim: (root.__v292DfixADMF1 && typeof root.__v292DfixADMF1.limDecide === 'function') ? root.__v292DfixADMF1.limDecide('starticon_day_stories').why : 'no-admf1' }; })() }; },   /* ★LIM1 */
+    __t: { hk: hk, bornMs: bornMs, isNewStory: isNewStory, storyCap: storyCap, capDayStarts: capDayStarts }
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })(typeof window !== 'undefined' ? window : this);

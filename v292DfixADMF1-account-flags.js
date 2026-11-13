@@ -38,7 +38,7 @@
  * ===================================================================== */
 (function (root) {
   'use strict';
-  var VER = 'admg1-20261101-bundle81+starticon2+idsplit2+kn1+lore1+agency1+read1+iconx1';
+  var VER = 'admg1-20261101-bundle81+starticon2+idsplit2+kn1+lore1+agency1+read1+iconx1+lim1';
   var KILL = 'v292DfixADMF1Off';
   var KEYS = { sfl1: 'phase', npres1: 'off', lc1: 'phase', ld1: 'phase', rc1: 'phase', oma1: 'phase', midicon1: 'off', mxreg1: 'off', starticon1: 'off', idsplit2: 'off', kn1: 'off', lore1: 'off', agency1: 'off', read1: 'off', mxgen1: 'off', nh1: 'off' };   /* ★iconx1 (GPT #127-RY): mxgen1 = 汎用の呼び名の自動アイコン・nh1 = 人外モード。行なし = OFF */   /* ★READ1 (GPT #127-RY ①): read1 = 場面の一貫性ブロック＋【話者】末尾の 1 文（READ1 本体は keys() に read1 があるときだけ gate('read1', false) を読む）。行なし = OFF。範囲は Worker（READY を提案）。旧 Worker はこの鍵を返さない = OFF */   /* ★93-l (GPT #127-RQ ② / #127-RS・Owner「新機能は全アカウントへ READY・既定 OFF・管理者画面で入れ切り」): lore1 = 設定の世界観メモ（scene.lore）を毎ターン AI へ参照データとして渡す（LORE1 本体は keys() に lore1 があるときだけ gate('lore1', false) を読む）／agency1 = 入力していない主人公の意図を AI が勝手に決めない（試験中・端末側の本体は別レーン。93-l は鍵だけ）。どちらも行なし = OFF（全体の値があればそれを Worker が返す）。範囲は Worker（v46.40 で READY）。旧 Worker はこの鍵を返さない = OFF */   /* ★93-j KN1 (GPT #127-RO ②): kn1 = Knowledge の Owner 限定 CANARY（参考知識カードを user 側へ）。行なし = OFF。範囲は Worker（v46.39 で CANARY = owner かつ active だけ）。旧 Worker はこの鍵を返さない = OFF */   /* ★IDSPLIT2ADM (93-i・Owner 2026-11-08「新機能は全アカウントへ・管理者画面で入れ切り」): idsplit2 = 名乗りで記述的な呼び名を登録 NPC へ結び付ける（IDSPLIT2-B）。行なし・全体の値なし = OFF。範囲は Worker（v46.37 で READY）。旧 Worker はこの鍵を返さない = OFF */   /* ★STARTICON2 (Owner 2026-11-08: 新機能は全員へ・管理者画面で切り替え): starticon1 = 物語の始めのキャラの絵の自動作成。行なし・全体の値なし = OFF。範囲は Worker（READY を提案）。旧 Worker はこの鍵を返さない = OFF */   /* ★W-MXREG: mxreg1（絵の無い登録 NPC の最初の絵）。行なし = 全体の値（Worker が返す）・それも無ければ OFF。範囲は Worker（READY） */   /* ★MIDICON3: midicon1（途中から登場したキャラの自動アイコン）。行なし = 常に OFF。範囲は Worker（mx3-c = Owner だけの CANARY） */   /* ★admg1: +lc1 / ld1 / rc1 / oma1（行なし = 段階） */ var LATE = [];   /* 未設定（行なし）の扱い: 'phase' = Worker の段階（1 = 端末の設定 / 2 = OFF）、'off' = 常に OFF（admf2） */
   var HOLD_MS = 10000;
@@ -79,6 +79,26 @@
     return false;
   }
 
+  /* ★LIM1（laneLIM1 2026-11-13）: 上限の設定（管理者画面の「上限の設定」・Worker v46.45 の /auth/me accountLimits）を読む。読むだけ（書き込み 0）。
+     limit(key, dflt) → 数（-1 = 無制限は Infinity）。次のときは dflt（＝部品の今の定数）: kill v292DfixLIM1Off='1'・ADMF1Off・答えがまだ／無い・
+     答えのアカウントが今のアカウントと違う・accountLimitsState が 'ok' でない（旧 Worker・off・error）・その鍵の行が無い。
+     判定の順は Worker（アカウントの行 → 種類の既定 → 行なし）。端末はその答えを使うか、使わずに今の定数か、の 2 つだけ。 */
+  var LIM_KILL = 'v292DfixLIM1Off';
+  function limDecide(key) {
+    if (lsGet(LIM_KILL) === '1') return { s: 'kill', why: 'LIM1Off' };
+    if (lsGet(KILL) === '1') return { s: 'kill', why: 'ADMF1Off' };
+    var F = f893(); if (!F || typeof F.flagsSnap !== 'function' || typeof F.serverMe !== 'function') return { s: 'C', why: 'no-fix893' };
+    var snap = null, me = null; try { snap = F.flagsSnap(); me = F.serverMe(); } catch (e) { return { s: 'C', why: 'read-error' }; }
+    if (!snap) return { s: 'C', why: 'no-answer' };
+    var acct = (me && ACCT_RE.test(String(me.accountId || ''))) ? String(me.accountId) : null;
+    if (!acct || snap.acct !== acct) return { s: 'C', why: 'acct-mismatch' };
+    if (snap.limSt !== 'ok' || !snap.lim || typeof snap.lim !== 'object') return { s: 'C', why: 'server:' + String(snap.limSt || 'absent').slice(0, 16) };
+    var v = snap.lim[key];
+    if (typeof v === 'number' && v === Math.floor(v) && v >= -1) return { s: 'A', v: v, why: 'row' };
+    return { s: 'B', why: 'unset' };
+  }
+  function limit(key, dflt) { var d = limDecide(key); if (d.s !== 'A') return dflt; return d.v === -1 ? Infinity : d.v; }
+
   /* ★admg1: whenOn — 今 gate が false の部品を、答えが届いたあとに 1 回だけ起こす。devFn は呼ぶたびに端末の opt-in を読み直す関数 */
   function devOf(f) { try { return typeof f === 'function' ? f() === true : f === true; } catch (e) { return false; } }
   function whenOn(key, devFn, cb) {
@@ -114,7 +134,7 @@
     try { runLate(); } catch (e) {}   /* ★admg1 */
   }
 
-  root.__v292DfixADMF1 = { ver: VER, gate: gate, decide: decide, whenOn: whenOn, keys: function () { return Object.keys(KEYS); },
+  root.__v292DfixADMF1 = { ver: VER, gate: gate, decide: decide, whenOn: whenOn, keys: function () { return Object.keys(KEYS); }, limit: limit, limDecide: limDecide,   /* ★LIM1 */
     status: function () { return { ver: VER, killed: lsGet(KILL) === '1', sinceLoadMs: Date.now() - T0, holdMs: HOLD_MS, sfl1: decide('sfl1'), npres1: decide('npres1'), lc1: decide('lc1'), ld1: decide('ld1'), rc1: decide('rc1'), oma1: decide('oma1'), midicon1: decide('midicon1'), mxreg1: decide('mxreg1'), starticon1: decide('starticon1'), idsplit2: decide('idsplit2'), kn1: decide('kn1'), lore1: decide('lore1'), agency1: decide('agency1'), read1: decide('read1'), late: LATE.map(function (L) { return L.key; }), rechecks: ST.rechecks, changes: ST.changes, lastOn: ST.lastOn, last: ST.last ? JSON.parse(JSON.stringify(ST.last)) : null, hist: JSON.parse(JSON.stringify(ST.hist)) }; } };
   try {
     root.addEventListener('chr:account-me', function () { recheck('me'); });

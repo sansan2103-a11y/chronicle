@@ -39,7 +39,11 @@
      古い要求の遅い答え（my !== meSeq）・捨てる前に出した要求の答え（ep !== flEpoch）は写しに使わない。別タブで印が消える／別のアカウントになったら即捨てる。 */
   var meSeq = 0, flEpoch = 0;
   function flagsOf(x) { if (!x || typeof x !== 'object' || Array.isArray(x)) return null; var o = {}, n = 0; for (var k in x) { if (n >= 16) break; if (Object.prototype.hasOwnProperty.call(x, k) && /^[a-z][a-z0-9]{0,23}$/.test(k) && (x[k] === 0 || x[k] === 1)) { o[k] = x[k]; n++; } } return o; }
-  function flagsSnapOf(j, my) { return { acct: String(j.accountId || ''), st: (typeof j.accountFlagsState === 'string') ? j.accountFlagsState.slice(0, 16) : 'absent', flags: flagsOf(j.accountFlags), phase: (j.accountFlagsPhase === 1 || j.accountFlagsPhase === 2) ? j.accountFlagsPhase : null, seq: my }; }
+  /* ★LIM1（laneLIM1 2026-11-13）: 上限の設定（Worker v46.45 の accountLimits）も同じ答えの写しに持つ（in-memory のみ・書き込み 0）。鍵は英小文字＋数字＋_、値は -1（無制限）〜 100000 の整数だけ・16 個まで。
+     旧 Worker（accountLimitsState が無い）= 'absent'・lim は空 = 端末の定数のまま */
+  function limsOf(x) { if (!x || typeof x !== 'object' || Array.isArray(x)) return {}; var o = {}, n = 0; for (var k in x) { if (n >= 16) break; var v = x[k]; if (Object.prototype.hasOwnProperty.call(x, k) && /^[a-z][a-z0-9_]{0,39}$/.test(k) && typeof v === 'number' && v === Math.floor(v) && v >= -1 && v <= 100000) { o[k] = v; n++; } } return o; }
+  function flagsSnapOf(j, my) { return { acct: String(j.accountId || ''), st: (typeof j.accountFlagsState === 'string') ? j.accountFlagsState.slice(0, 16) : 'absent', flags: flagsOf(j.accountFlags), phase: (j.accountFlagsPhase === 1 || j.accountFlagsPhase === 2) ? j.accountFlagsPhase : null, seq: my,
+    limSt: (typeof j.accountLimitsState === 'string') ? j.accountLimitsState.slice(0, 16) : 'absent', lim: limsOf(j.accountLimits) }; }
   function dropFlags(why) { flEpoch++; state.flags = null; state.flagsWhy = why; try { window.dispatchEvent(new Event('chr:account-flags')); } catch (e) {} }
   try { window.addEventListener('storage', function (e) { try { if (e.key !== MARK_KEY && e.key !== null) return; if (!state.flags) return; var m = readMark(); if (!m || m.acct !== state.flags.acct) dropFlags(m ? 'other-tab-account' : 'other-tab-logout'); } catch (x) {} }); } catch (e) {}
 
