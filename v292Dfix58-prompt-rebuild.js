@@ -349,6 +349,7 @@
       parsed = facts1Apply(parsed, state);   /* ★FACTS1（kill v292DfixFACTS1Off='1'）: storySoFar の直後に earlierFacts（無ければ何もしない） */
       try { var N1 = window.__v292DfixNUM1Core; if (N1 && N1.on()) parsed = N1.apply(parsed, state, FACTS1_RULE) || parsed; } catch(eN1){}   /* ★NUM1（laneLEAK1・GPT #127-SW 3・鍵 v292DfixNUM1On='1'・kill v292DfixNUM1Off='1'・既定 OFF）: 窓から落ちた序盤のプレイヤー入力の数・約束を earlierFacts.items の先頭に最大 5 行・200 字（v292DfixNUM1-input-ledger.js）。鍵が無ければ何もしない＝送信バイト同一 */
       try { var E1 = window.__v292DfixECHO1; if (E1 && typeof E1.mode === 'function' && E1.mode()) parsed = E1.userApply(parsed, state, Array.isArray(window.__v292Dfix95Roster) ? window.__v292Dfix95Roster : null) || parsed; } catch(eE1){}   /* ★ECHO1（laneECHO1・GPT #127-TP・鍵 v292DfixECHO1On='1'・kill v292DfixECHO1Off='1'・既定 OFF）: nowScene の直後に alreadyDone（直前ターンの最後の台詞 1 行＋出来事 1 文＝済んだこと。問い・頼み・途中の動きは stillOpen＝今回その返事・続きを書く）／未登場の登録 NPC の人物像を cast.offstage に（v292DfixECHO1-no-restate.js）。鍵が無ければ何もしない＝送信バイト同一 */
+      try { var PL1 = window.__v292DfixPLACE1; if (PL1 && typeof PL1.on === 'function' && PL1.on()) parsed = PL1.apply(parsed, state) || parsed; } catch(ePL1){}   /* ★PLACE1（lanePLACE1・鍵 v292DfixPLACE1On='1'・kill v292DfixPLACE1Off='1'・既定 OFF）: nowScene の直後に whereNow（物のいまの持ち主・置き場所と、その場にいない人の控え。プレイヤーの入力と本文のはっきりした受け渡しから毎回作る・最大 6 行 360 字）（v292DfixPLACE1-where-now.js）。鍵が無ければ何もしない＝送信バイト同一 */
       parsed = castCallSpkApply(parsed, state);   /* ★CAST1 / CALL1 / SPK3（laneCAST1・GPT #127-SU・すべて既定 OFF・鍵は別々）: 鍵が無ければ parsed をそのまま返す＝送信バイト同一 */
 
       return JSON.stringify(parsed, null, 2);
