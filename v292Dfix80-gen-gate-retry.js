@@ -138,6 +138,12 @@ function makeWrapper(orig){
            429 / 5xx / 例外の既存 retry は不変。kill: localStorage v292Dfix923Off='1' → 従来（402 も再送）。 */
         if(resp && resp.status === 402){ var off923 = false; try{ off923 = (localStorage.getItem('v292Dfix923Off') === '1'); }catch(e){}
           if(!off923){ try{ window.__v292Dfix923 = window.__v292Dfix923 || { failFast: 0 }; window.__v292Dfix923.failFast++; }catch(e){} return resp; } }
+        /* ★RETRY1（GPT #127-TR 4・P0）: 503 で errorCode が LEDGER_UNHEALTHY（サーバーが利用記録を書けず一時停止している）は、待って送り直しても通らない。
+           自動の送り直し 0・1 回目で呼び出し元へ返す（fix923 の 402 と同じ形）。ほかの 503・5xx・429・例外の送り直しは変えない。応答は clone して読むだけ（元の応答はそのまま返す）。
+           kill: localStorage v292DfixRETRY1Off='1' → 従来（LEDGER_UNHEALTHY も送り直す）。 */
+        if(resp && resp.status === 503){ var offR1 = false; try{ offR1 = (localStorage.getItem('v292DfixRETRY1Off') === '1'); }catch(e){}
+          if(!offR1){ var tR1 = ''; try{ tR1 = await resp.clone().text(); }catch(e){ tR1 = ''; }
+            if(/"errorCode"\s*:\s*"LEDGER_UNHEALTHY"/.test(tR1)){ try{ window.__v292DfixRETRY1 = window.__v292DfixRETRY1 || { VER: 'retry1-20261114-a', failFast: 0, submitFast: 0 }; window.__v292DfixRETRY1.failFast++; }catch(e){} return resp; } } }
         last = resp || last;
         if(attempt < MAX - 1){ await sleep((resp && resp.status === 429) ? 2500 * (attempt + 1) : 1200); continue; }
         return resp || failResp();
