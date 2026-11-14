@@ -92,6 +92,21 @@
   function isJkv(line){ var t = String(line || ''); return t.length <= 200 && (RX_JKV.test(t) || RX_RNOTE.test(t)); }
   function jkvOn(){ return ls('v292DfixLEAK1JkvOff') !== '1'; }
   function chkLines(lines){ var strong = false, out = {}; for (var i = 0; i < lines.length; i++){ var t = lines[i]; if (RX_CHK_STRONG.test(t)){ strong = true; out[i] = 1; } else if (RX_CHK_WEAK.test(t)) out[i] = 1; } return strong ? out : {}; }
+  /* ★OPT1（SMOKE6 K6-A T1 の実測・kill v292DfixLEAK1OptOff='1'・適用の鍵 ApplyOff／Off にも従う）: 本文の末尾にある、プレイヤーへ選択を促すまとまりを取り除く。
+     形は 2 つだけ: ①括弧の見出し行（問いかけ・行動選択・選択肢・次の行動・主人公への …）＋その後ろが箇条書き 2 行以上（と最後の問いかけ 1 行）だけで本文が終わる
+     ②箇条書き 2 行以上＋最後の行が「あなた／プレイヤー …どうする？」の問いかけで本文が終わる。途中にあるもの・台詞（「」）の中・物語の行が混ざるものは取り除かない。 */
+  function optOn(){ return ls('v292DfixLEAK1OptOff') !== '1'; }
+  var RX_OPT_HEAD = /^\s*[（(【〔]\s*[^（）()【】〔〕「」]{0,20}(?:問いかけ|行動選択|選択肢|次の行動|主人公への|プレイヤーへの)[^（）()【】〔〕「」]{0,20}[）)】〕]\s*$/;
+  var RX_OPT_BUL = /^\s*(?:[-・*＊●○◆]|[0-9０-９]{1,2}[.．)）]|[①-⑩]|[A-CＡ-Ｃa-c][.．)）])\s*[^「」\s]/;
+  var RX_OPT_Q = /^\s*(?:あなた|プレイヤー|君|キミ)[^「」]{0,20}(?:どうする|どうします|どれを選|選んで|どちらを)[^「」]{0,6}[？?]\s*$/;
+  function optBlock(lines){   /* 取り除く行の番号（無ければ []） */
+    var i = lines.length - 1; while (i >= 0 && !String(lines[i]).trim()) i--; if (i < 0) return [];
+    var end = i, hasQ = RX_OPT_Q.test(lines[i]), j = hasQ ? i - 1 : i, nb = 0;
+    while (j >= 0 && (!String(lines[j]).trim() || RX_OPT_BUL.test(lines[j]))){ if (String(lines[j]).trim()) nb++; j--; }
+    if (nb < 2) return [];
+    var start; if (j >= 0 && RX_OPT_HEAD.test(lines[j])) start = j; else if (hasQ) start = j + 1; else return [];
+    var out = []; for (var k = start; k <= end; k++) out.push(k); return out;
+  }
   function isFrag(line){ var t = String(line || '').trim(); if (!t) return false; for (var i = 0; i < RX_FRAG.length; i++) if (RX_FRAG[i].test(t)) return true; return false; }
   function counts(t){ var s = String(t || ''); return { L: (s.match(/[A-Za-z]/g) || []).length, J: (s.match(/[ぁ-ゖァ-ヺ一-鿿々〆]/g) || []).length }; }
   function bare(line){ return String(line || '').replace(RX_INLINE, ' '); }
@@ -186,6 +201,7 @@
         else if (memoAll){ var x = norm(l); if (x.length >= 6 && memoAll.indexOf(x) >= 0 && body.indexOf(x) < 0){ k = 'meta'; ok = rem(x); } }   // 作業メモの残り（英語のメモだけ限定 Apply ②）
         if (k){ kinds[k]++; nL++; nC += l.length; if (ok){ drop[i] = 1; dL++; dC += l.length; } }
       }
+      if (optOn()){ var ob = optBlock(lines); if (ob.length){ kinds.opt = 1; ob.forEach(function(ix){ if (!drop[ix] && String(lines[ix]).trim()){ nL++; nC += lines[ix].length; drop[ix] = 1; dL++; dC += lines[ix].length; } }); } }   /* ★OPT1 */
       var jm = jpMeta(narr), jpC = 0;
       if (jm && !drop[jm.line] && !(lines[jm.line] && (isLabel(lines[jm.line]) || isFrag(lines[jm.line])))){ kinds.jpmeta = 1; jpC = jm.chars; }
       _stat.turns++;
@@ -211,7 +227,7 @@
   }
   function record(r){ _log.push(r); if (_log.length > 60) _log.shift(); try { console.log('[v292DfixLEAK1]', JSON.stringify(r)); } catch(e){} }
 
-  var api = { VER: VER, on: on, applyOn: applyOn, pre: pre, gate: gate,
+  var api = { VER: VER, on: on, applyOn: applyOn, pre: pre, gate: gate, optBlock: optBlock,
     log: function(){ return _log.slice(); }, last: function(){ return _last; }, status: function(){ var o = {}; for (var k in _stat) o[k] = _stat[k]; o.on = on(); o.apply = applyOn(); return o; },
     core: { scanRaw: scanRaw, isJkv: isJkv, isLabel: isLabel, isKnownLabel: isKnownLabel, isFrag: isFrag, engDominant: engDominant, tokenLine: tokenLine, norm: norm, jpMeta: jpMeta, LABELS: LABELS.slice() } };
   if (typeof window !== 'undefined') window.__v292DfixLEAK1 = api;

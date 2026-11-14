@@ -80,6 +80,20 @@
   var FUNC_NEG_F1 = /[^。、]{0,12}(わけではな|ことはな|くはな|ずに済|ほどではな)[^。、]*/g;
   var PSY_F1 = /(頭が真っ白|何も考えられな|考えがまとまらな|思考が止ま|判断(が|も)?(でき|つか)な|腰が抜け|足が(すく|竦)|身がすく|すくんで|竦んで|過呼吸|泣きじゃく)/;   /* それ自体が心理による機能の喪失 */
   var CTX_F1 = /(恐怖|怯え|おびえ|怖|パニック|恐慌|竦|すく|震え|戦慄|動揺|混乱|硬直|凍りつ)/;   /* 「動けない・声が出ない」等は、恐怖・動揺の文脈があるときだけ（縛られて動けない・喉のけが等は心理の制約にしない） */
+  /* ★FEAR2 束（2026-11-16・SMOKE6 の実測）:
+     ARM2: K6-D T11 の圭介に「拳使用不可」。fix850 が本文「拳を胸元まで上げたまま動かなくなった」を圭介の断片として渡し、規則 A が「拳＋動かな」を負傷と読んだ
+       （FIX850A の動作の語は「を」の直後だけを見ていて「拳を胸元まで上げ」を外せなかった）。規則 A で、使用不可の根拠が「動かない」だけで、
+       その人の からだ（fix850 の断片を含む）に負傷の語が無く、傷の欄も空のときは部位の使用不可を作らない。kill v292DfixARM2Off='1'。
+     FEAR2: 「硬直」「固まる」「〜まま動けない」だけでは恐怖による制約を作らない（widen・規則 F の からだ）。「足がすくむ」「声が出ない」「頭が真っ白」等は残す。
+       既定は FEAR2_ON の 1 行で切り替える（true＝既定 ON・kill v292DfixFEAR2Off='1'／false＝既定 OFF・v292DfixFEAR2On='1' で有効）。
+     CHEAD1: 【制約】の人物の制約がすべて怖さ由来（rank 6）のときは、見出しを「負傷者の行動には…」ではなく怖さ用の文にする。kill v292DfixCHEAD1Off='1'。 */
+  var FEAR2_ON = false;   /* ★FEAR2: 既定の切り替え（この 1 行） */
+  function fear2On(){ try { if (localStorage.getItem('v292DfixFEAR2Off') === '1') return false; return FEAR2_ON || localStorage.getItem('v292DfixFEAR2On') === '1'; } catch(e){ return false; } }
+  function arm2On(){ try { return localStorage.getItem('v292DfixARM2Off') !== '1'; } catch(e){ return false; } }
+  function chead1On(){ try { return localStorage.getItem('v292DfixCHEAD1Off') !== '1'; } catch(e){ return false; } }
+  var FRZ_F2 = /[^。、]{0,14}(?:硬直|固ま(?:っ|り|る|れ|ろ|った)?)[^。、]*|[^。、]{0,14}まま[^。、]{0,6}(?:動けず|動けな[いく]?|動かな[いく]?)[^。、]*/g;
+  function fearFunc2(t){ t = String(t || '').replace(FUNC_NEG_F1, ''); if (PSY_F1.test(t)) return true; var f = t.replace(FRZ_F2, ''); return FUNC_F1.test(f) && CTX_F1.test(f); }   /* ★FEAR2 */
+  var DIS_NOFREEZE_A2 = /(使えな|上がらな|力が入らな|折れ|骨折|潰れ|貫通|骨.{0,3}露出|切断|失(く|っ|わ))/;
   function fearFunc(t){ t = String(t || '').replace(FUNC_NEG_F1, ''); return PSY_F1.test(t) || (FUNC_F1.test(t) && CTX_F1.test(t)); }
   var MINDW_ST3 = /(解離|現実感が(薄|な)|頭が真っ白|震えが止ま|身がすく)/;
   var POSE_ST3  = /(固ま|凍りつ|凍り付)/;
@@ -92,6 +106,7 @@
     return keepClauses(karada).some(function(cl){ return String(cl).split(/[、，]/).some(function(c){
       if (MINDW_ST3.test(c)) return true;
       if (!POSE_ST3.test(c)) return false;
+      if (fear2On()) return false;   /* ★FEAR2: からだ の「固まる・凍りつく」は数えない */
       return koFear || FEARW_ST3.test(c) || BODYF_ST3.test(c); }); });
   }
   function fearText_ST3(t){   /* 抑えた恐怖・程度の軽い恐怖の言い方を外す */
@@ -218,7 +233,7 @@
       // ---- A: 腕/手 → 不能=使用不可 / 裂傷=細かい作業が乱れる(G-1/G-2 部位ローカル) ----
       scanPart(cl, ARM_RE, function(part, ctx, at){
         if (frz && otherOwnerFRZ1(cl, at, name)) return;   /* ★FRZ1: 「Xの腕」は X のもの */
-        if (DISABLE.test(ctx)) add(1, part + '使用不可');
+        if (DISABLE.test(ctx)){ if (!(arm2On() && !DIS_NOFREEZE_A2.test(ctx) && !INJ_FRZ1.test(bodyClauses.join('。')) && !keepClauses(kizu).join('').trim())) add(1, part + '使用不可'); }   /* ★ARM2: 「動かない」だけ・負傷の語なし・傷の欄も空 → 作らない */
         else if (WOUND.test(ctx) && !LIGHT.test(ctx)) add(1.5, part + 'の細かい作業が乱れる');
       });
       // ---- B: 脚/足/膝 → 明示不能=走行不可 / 裂傷=移動が鈍い ----
@@ -273,7 +288,7 @@
       var fearSrc = mindText;   /* ★STATE3 1c: 古い こころ・からだ は使わない／抑えた・軽い恐怖の言い方は外す */
       if (st3){ var koS = staleF_ST3(name, entry, 'ko') ? '' : kokoro, kaS = staleF_ST3(name, entry, 'ka') ? '' : karada; fearSrc = fearText_ST3(keepClauses(koS + '。' + kaS).join('。')); }
       var fearTxt = fearSrc.replace(/(恐怖|怯え|おびえ|パニック|恐慌)(は|が|も|を|て(い)?|で(は)?)?(ない|なく|消え|薄れ|和らい|収ま|克服)/g, '');
-      if (offFEAR1() ? /(恐怖|怯え|おびえ|パニック|恐慌|竦ん|すくん|泣きじゃく)/.test(fearTxt) : fearFunc(fearTxt)){   /* ★FEAR1 A: 機能の喪失が明示されたときだけ */
+      if (offFEAR1() ? /(恐怖|怯え|おびえ|パニック|恐慌|竦ん|すくん|泣きじゃく)/.test(fearTxt) : (fear2On() ? fearFunc2(fearTxt) : fearFunc(fearTxt))){   /* ★FEAR2 */   /* ★FEAR1 A: 機能の喪失が明示されたときだけ */
         add(6, t6F1());
       }
     }
@@ -328,6 +343,8 @@
   // ---- F-2: 注入文の合成(E-5 圧縮ヘッダ) -----------------------------
   var HEADER =
     '\n【制約】負傷者の行動には必ずコストを描く(無償の冷静さ・全能力維持は禁止)。現在: ';
+  var HEADER_F = '\n【制約】恐怖・動揺による能力の低下を行動に反映して描く(平然と全能力を保たない)。現在: ';   /* ★CHEAD1 */
+  function hdrFor(list){ try { if (chead1On() && list.length && list.every(function(a){ return a.cons.every(function(c){ return c.rank >= 6; }); })) return HEADER_F; } catch(e){} return HEADER; }
   var _lastText = '';
 
   function collectAll(){
@@ -362,10 +379,10 @@
     try {
       var all = collectAll();
       if (!all.length){ _lastText = ''; return ''; }
-      var block = HEADER + fmt(all);
+      var block = hdrFor(all) + fmt(all);   /* ★CHEAD1 */
       // E-3 ハードキャップ: 300字超→2名→1名→248字切詰め。
-      if (block.length > 300) block = HEADER + fmt(all.slice(0, 2));
-      if (block.length > 300) block = HEADER + fmt(all.slice(0, 1));
+      if (block.length > 300) block = hdrFor(all.slice(0, 2)) + fmt(all.slice(0, 2));
+      if (block.length > 300) block = hdrFor(all.slice(0, 1)) + fmt(all.slice(0, 1));
       if (block.length > 248) block = capAt248(block);
       _lastText = block;
       return block;
@@ -397,6 +414,7 @@
   // ---- F-4: 検証口 ----------------------------------------------------
   try { window.__v292DfixSTATE3 = { v: 1, on: function(){ return !offST3(); }, ruleF: ruleF_ST3, fearText: fearText_ST3 }; } catch(_st3){}   /* ★STATE3 検証口 */
   try { window.__v292DfixFEAR1 = { v: 1, on: function(){ return !offFEAR1(); }, func: fearFunc }; } catch(_f1){}   /* ★FEAR1 検証口 */
+  try { window.__v292DfixFEAR2 = { v: 1, fear2On: fear2On, arm2On: arm2On, chead1On: chead1On, defaultOn: FEAR2_ON }; } catch(_f2){}
   window.__v292Dfix414x = {
     deriveFor: function(name, entry){ try { return deriveConstraints(name, entry); } catch(e){ return []; } },   // NPCQ1: fix192 が表示エントリで判定する口
     derive: function(name){ try { return deriveConstraints(name, store()[name]); } catch(e){ return []; } },

@@ -238,7 +238,8 @@
         try { var Q1 = window.__v292DfixSTATEQ1; if (!legacyStore && Q1 && !Q1.offPH1()){ var P1 = Q1.isPlaceholder;   /* ★STATEQ1 PH1: 型の文字の値は載せない（保存値はそのまま） */
           if(P1(ka)) ka=''; if(P1(ko)) ko=''; if(P1(ho)) ho=''; if(P1(ki)) ki=''; if(P1(kn)) kn=''; if(P1(mi)) mi=''; if(P1(mo)) mo=''; } } catch(_q1){}
         try { var Q4 = window.__v292DfixSTATEQ1; if (!legacyStore && Q4 && typeof Q4.st4Why === 'function' && !Q4.offST4()){ var B4 = function(v){ return !!Q4.st4Why(v); };   /* ★STATE4: 長すぎる・コード片・タグの記号の値は載せない（保存値はそのまま） */
-          if(B4(ka)) ka=''; if(B4(ko)) ko=''; if(B4(ho)) ho=''; if(B4(ki)) ki=''; if(B4(kn)) kn=''; if(B4(mi)) mi=''; if(B4(mo)) mo=''; } } catch(_q4){}
+          if(B4(ka)) ka=''; if(B4(ko)) ko=''; if(B4(ho)) ho=''; if(B4(ki)) ki=''; if(B4(kn)) kn=''; if(B4(mi)) mi=''; if(B4(mo)) mo='';
+          if (typeof Q4.st4Fix === 'function'){ var F4 = Q4.st4Fix; ka=F4(ka); ko=F4(ko); ho=F4(ho); ki=F4(ki); kn=F4(kn); mi=F4(mi); mo=F4(mo); } } } catch(_q4){}   /* ★ST4B: 既に保存された値も前後の記号・末尾の「（この場にいない）」を外して載せる */
         if(isHeroA1(hkA1, n)){ ko=''; ho=''; mo=''; kn=''; mi=''; }
         if(ab7 && ab7.indexOf(n) >= 0){ ho=''; mo=''; }   /* ★PLACE1 r7: この場にいない人の行動の目的は載せない */   /* ★v292DfixA1 r2: 主人公は 傷・からだ だけ */
         var gp = (!legacyStore && _npg) ? _npg.group(n, s) : '';   /* ★NPRES r-c333: (a)/(b)/(c) */

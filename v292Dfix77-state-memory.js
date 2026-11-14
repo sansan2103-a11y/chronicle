@@ -439,8 +439,13 @@
   var ST4_CODE = /\.(?:trim|slice|replace|join|split|map|filter|toString)\s*\(|=>|function\s*\(|\bundefined\b|\bnull\b|\$\{|;\s*$/;
   var ST4_TAG = /[<>]|=\s*["“”]|(?:who|からだ|こころ|本能|目的|傷|関係|未解決)\s*[=:：]/;
   function st4Why(v){ var x = String(v == null ? '' : v).trim(); if (!x) return ''; if (x.length > ST4_MAX) return 'long'; if (ST4_CODE.test(x)) return 'code'; if (ST4_TAG.test(x)) return 'tag'; return ''; }
-  function st4Filter(who, fields, rej){
+  /* ★ST4B（SMOKE6 の実測・kill v292DfixSTATE4BOff='1'）: 値の前後のスラッシュ（「/録音機材を持ち直している/」）と、末尾の whereNow 由来の括弧書き
+     （「…（この場にいない）」「…（朝陽と一緒にいない）」「…（別の場所にいる）」）を外して受け入れる（捨てない・中身は残す）。 */
+  function offST4B(){ try { return localStorage.getItem('v292DfixSTATE4BOff') === '1'; } catch(e){ return false; } }
+  function st4Fix(v){ if (offST4B() || offST4()) return v; var x = String(v == null ? '' : v); var y = x.replace(/^[\s　\/／]+|[\s　\/／]+$/g, '').replace(/[（(](?:この場(?:に|には|には今)?いない|[^（）()]{0,12}と一緒にいない|別の場所にいる)[)）][\s　]*$/, '').replace(/[\s　\/／]+$/g, ''); return y; }
+  function st4Filter(who, fields, rej, rep){
     if (offST4()) return fields;
+    if (!offST4B()) Object.keys(fields).forEach(function(k){ var y = st4Fix(fields[k]); if (y !== fields[k]){ if (rep) rep.push({ k: k, why: 'st4-trim' }); if (y) fields[k] = y; else { rej.push({ k: k, why: 'st4-empty' }); delete fields[k]; } } });   /* ★ST4B */
     Object.keys(fields).forEach(function(k){ var w = st4Why(fields[k]); if (w){ rej.push({ k: k, why: 'st4-' + w }); delete fields[k]; } });
     return fields;
   }
@@ -460,7 +465,7 @@
       var p = sq1Parse(m[0]);
       if (p.who && phWho(p.who) && !offPH1()){ p.tagRej = 'who-placeholder'; p.who = ''; }
       if (p.who) ph1Filter(p.who, p.fields, p.rej);
-      if (p.who) st4Filter(p.who, p.fields, p.rej);   /* ★STATE4 */
+      if (p.who) st4Filter(p.who, p.fields, p.rej, p.rep);   /* ★STATE4 ／ ★ST4B */
       list.push(p);
     }
     _sq1.cache = { raw: ck, res: list };
@@ -487,7 +492,7 @@
   }
   try {
     window.__v292DfixSTATEQ1 = {
-      v: 1, offPH1: offPH1, offSREP1: offSREP1, isPlaceholder: isPlaceholder, offST4: offST4, st4Why: st4Why,   /* ★STATE4 */ phWho: phWho, parseTag: sq1Parse, parseRaw: sq1ParseRaw,
+      v: 1, offPH1: offPH1, offSREP1: offSREP1, isPlaceholder: isPlaceholder, offST4: offST4, st4Why: st4Why, st4Fix: st4Fix,   /* ★STATE4 */ phWho: phWho, parseTag: sq1Parse, parseRaw: sq1ParseRaw,
       last: function(){ return _sq1.ring.length ? JSON.parse(JSON.stringify(_sq1.ring[_sq1.ring.length - 1])) : null; },
       ring: function(){ return JSON.parse(JSON.stringify(_sq1.ring)); },
       fieldTurn: function(who, k){ if (offSREP1()) return null; sq1Sk(); var f = _sq1.ft[who]; return (f && typeof f[k] === 'number') ? f[k] : null; },
