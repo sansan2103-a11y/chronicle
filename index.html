@@ -346,7 +346,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261115-leak2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261115-free2c';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -1515,7 +1515,8 @@ const Api = {
           },
           body: JSON.stringify(body),
           signal: ctrl.signal,
-          ...(__b65 ? { __chronicleAttemptBudget: __b65 } : {})
+          ...(__b65 ? { __chronicleAttemptBudget: __b65 } : {}),
+          ...((opts && opts.allowShort && !__e65aMain) ? { __chronicleShortOk: true } : {})   /* ★FANOUT1 (b): 補助の呼び出しの印（送らない init の項目。本文・宛先は変えない）。fix80 が短い正しい答え（「[]」など）を送り直さない */
         });
       } finally { clearTimeout(tid); S.inFlight = false; if (__b65 && (__b65.sent | 0) === 0) __b65.sent = 1; }   /* ★E65-A: 予算の持ち主（fix80）が数えなかった fetch も 1 送信として数える（数える場所を迂回させない・多めに数える側） */
       const __noMore = !!__pc && !!__tc && __left() <= 0;   /* ★E65-A: もう 1 回も送れない＝この試行を最後の試行として扱う（下の 2 か所） */
@@ -4307,7 +4308,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
        fix659 は別 id + __f527 マーカーを立てるので干渉しない、という関係をこの並びで示す。
      読出=window.__v292Dfix659.status()/.selfTest() / OFF=v292Dfix659Off -->
 <script src="v292Dfix659-fork-choice.js?cb=v292Dfix680"></script>
-<script src="features.js?cb=20261113-cast1"></script>
+<script src="features.js?cb=20261116-fanout1"></script>
 <script>
 /* ============================================================================
  * v292DfixP0-inline : シナリオテンプレ適用の緊急封鎖（L2 + L2b）
@@ -4592,7 +4593,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <script src="v292Dfix79-momentum-anchor.js?cb=v292Dfix79"></script>
   <script src="v292DfixBF1-reasoning-fallback.js?cb=20261022-bf1owner"></script>
   <script src="v292DfixRETRY2-send-policy.js?cb=retry2-a"></script><!-- ★RETRY2（GPT #127-TT）: 送信が失敗したときに自動で送り直すか・別モデルへ切り替えるかを決める唯一の判定（fix80 と G.submit が聞く）。既定 ON・kill: v292DfixRETRY2Off='1' → 土台の動き。別モデルへの切替を戻す: v292DfixRETRY2CmfOn='1'。要求 ID: v292DfixRETRY2IdOn='1'（既定 OFF） -->
-  <script src="v292Dfix80-gen-gate-retry.js?cb=retry2-a"></script>
+  <script src="v292Dfix80-gen-gate-retry.js?cb=20261116-fanout1"></script>
   <script src="v292Dfix82-injury-reaction-root.js?cb=v292Dfix82"></script>
   <script src="v292Dfix83-name-truncation-repair.js?cb=v292Dfix83"></script>
   <script src="v292Dfix84-sampling.js?cb=v292Dfix482"></script>
@@ -4686,7 +4687,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix577-delete-entry-guard.js?cb=v292Dfix577"></script>
 <script src="v292Dfix933-beta-delete-off.js?cb=20261111-delall"></script>
 <!-- ★★DL2 (S-2 / GPT #127-FJ D8): ゲーム画面の「削除」とギャラリーの「セーブを削除」は「削除はホームから」の案内だけ（旧経路の送信を止める）。kill = v292DfixDL2Off=1 -->
-<script src="v292DfixDL2-server-delete.js?cb=20261115-free2" data-dl2="index"></script>
+<script src="v292DfixDL2-server-delete.js?cb=20261116-free2c" data-dl2="index"></script>
 <script src="v292Dfix313-story-cards.js?cb=20261019-bundle31-a"></script>
 <script src="v292Dfix314-memory.js?cb=20260829-fix748"></script>
 <script src="v292Dfix317-slot-leak.js?cb=20260901-fix783"></script>

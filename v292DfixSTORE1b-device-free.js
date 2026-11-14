@@ -126,6 +126,15 @@
  *   サーバーで確かめて立てた墓標のある物語については理由にしない（開いているかは Web Lock と lastOpenedAt 10 分で見る＝従来どおり）。
  *   証明が無い物語（FREE2 より前に消した写し・削除の時点で端末がサーバーと違った写し）は今までどおり。DIVERGED / BOOTSTRAP_HOLD / f911 / f697p /
  *   rescue / 削除の計画が開いている / Vault・パスコード / 開いている は今までどおり止める。全キー名の一覧は作らない。自動では消さない（シートで選ぶ）。
+ * ■★FREE2c（GPT #127-TV 2: 全員既定 ON の前提条件。kill v292DfixFREE2Off='1' は維持。v292DfixFREE2On は読まない）
+ *   既定 ON: localStorage v292DfixFREE2Off='1' でなければ FREE2 が効く（kill のときは STORE1b r2 / FREE2 前と同じ判断・同じ読み取り）。
+ *   ・判定を 1 つにまとめた: judgeOne(id) が「計画 → 本文 → 保存の送信中 → getstory → 内容の一致 → 証明 → 墓標の hash → 消すキー → タブで開いているか」を決める。
+ *     シート（survey）・dry-run（free2DryRun）・explain・実行（freeOne の Lock の中）が同じ judgeOne を通る。実行だけは
+ *     Web Lock の query の代わりに exclusive・ifAvailable で取った Lock の中で judgeOne を呼ぶ（もっと強い確かめ方）。
+ *   ・公式の削除シートで立てた墓標（serverTombstone.source='dl2-delete'）の物語は、印が CLEAN でも、この端末の全体（projectionV2＋deleted＋サーバーの title）
+ *     の SHA-256 がサーバーの墓標の hash と同じときだけ通す（違う → 'tomb-hash-mismatch'・確かめられない → 'tomb-hash-unproven'）。実行のときも Lock の中でもう一度。
+ *   ・この画面（HOME）の fix697 がその物語の保存を送っている最中 → 'in-flight'。
+ *   ・explain(id) に openLock（その物語の Web Lock を持っている数・待っている数・mode ごとの数。だれのものかは返さない）を足した（原因の切り分け用・読むだけ）。
  * ===================================================================== */
 (function (root) {
   'use strict';
@@ -150,7 +159,7 @@
      この表に無い family・形の分からないキーは c と同じ扱い（消さない） */
   var STUCK_ON = 'v292DfixSTUCK1On', SVERSION = 'STUCK1-r2';
   var ZT_ON = 'v292DfixZT1On', ZT_OFF = 'v292DfixZT1Off';   /* ★ZT1 */
-  var F2_ON = 'v292DfixFREE2On', F2_OFF = 'v292DfixFREE2Off', F2_KEY = 'v292DfixFREE2_proofs', F2_VERSION = 'FREE2-r1';   /* ★FREE2 */
+  var F2_ON = 'v292DfixFREE2On', F2_OFF = 'v292DfixFREE2Off', F2_KEY = 'v292DfixFREE2_proofs', F2_VERSION = 'FREE2-r2';   /* ★FREE2 */
   var FAMILY_CLASS = {
     'chr6_slot_': 'a', 'chr6_relations_': 'a', 'chr6_char_states_': 'a', 'chr6_char_flags_': 'a', 'chr6_pending_dice_': 'a',
     'chr6_turn_summaries_': 'a', 'chr6_chapter_titles_': 'a', 'chr6_scene_breaks_': 'a', 'chr6_scene_summaries_': 'a',
@@ -460,6 +469,46 @@
     return seOut;
   }
 
+  /* ★FREE2c: 公式の削除シートで立てた墓標の物語は、印が CLEAN でも「この端末の全体＝サーバーの墓標の hash」を確かめる（FREE2 のときだけ）。
+     null = 通過（確認が要らない古い墓標・証明つきで確認済み・一致）／理由コード */
+  function tombHashCheck(id, env, se) {
+    if (env.free2 !== true) return Promise.resolve(null);                         /* kill: 何も読まない */
+    if (se.dirtyProven === true || se.zeroTurnProven === true) return Promise.resolve(null);   /* もう同じ hash で確かめた */
+    var row = zt1Row(id, env), st = row && row.serverTombstone;
+    if (!st || typeof st !== 'object' || st.source !== 'dl2-delete') return Promise.resolve(null);   /* FREE2 より前の形の墓標: r2 の規則（ターンの一致）のまま */
+    if (typeof env.dirtyProof !== 'function' || !HEX64.test(String(se.serverHash || '')) || typeof se.title !== 'string') return Promise.resolve('tomb-hash-unproven');
+    return Promise.resolve().then(function () { return env.dirtyProof(id, se.title, String(se.serverHash)); })
+      .then(function (why) { if (why == null) { se.tombHashMatched = true; return null; } return why === 'content-differs' ? 'tomb-hash-mismatch' : 'tomb-hash-unproven'; }, function () { return 'tomb-hash-unproven'; });
+  }
+  /* ★FREE2c: 1 物語の判定（シート・dry-run・explain・実行が同じ関数を通る）。ローカルの関門（localBlock）を通った物語だけで呼ぶ。
+     opt.inLock = 実行（その物語の Lock を exclusive で持っている）: Lock の query は飛ばす。opt.pl0 = 計画と同じか（実行のとき）。
+     返り値 { why } か { why:null, pl, pq, se }（pq = 実際に消すキー）。何も消さない・書かない */
+  function judgeOne(id, env, ctx, opt) {
+    opt = opt || {};
+    var pl = planOne(id, env);
+    if (opt.pl0) { var sp = samePlan(opt.pl0, pl); if (sp) return Promise.resolve({ why: sp }); }
+    if (!pl.keys.length) return Promise.resolve({ why: 'nothing-left' });
+    var bb = bodyBlock(pl); if (bb) return Promise.resolve({ why: bb });
+    if (env.free2 === true && typeof env.saveBusy === 'function') { var sb = true; try { sb = !!env.saveBusy(id); } catch (eB) { sb = true; } if (sb) return Promise.resolve({ why: 'in-flight' }); }
+    return Promise.resolve(ctx.getStory(id)).then(function (r) {
+      var se = serverEval(id, r, pl, env);
+      if (se.why) return { why: se.why };
+      return stuckProof(id, env, se).then(function (pw) {
+        if (pw) return { why: pw };
+        return tombHashCheck(id, env, se).then(function (tw) {
+          if (tw) return { why: tw };
+          var pq = se.dirtyProven === true ? applySubset(pl, provenSubset(id, env, pl)) : pl;   /* ★STUCK1 r2: c は残す */
+          if (!pq.keys.length) return { why: 'nothing-left' };
+          if (opt.inLock) return { why: null, pl: pl, pq: pq, se: se };
+          return Promise.resolve(ctx.lockHeld(id)).then(function (h) {
+            if (h !== false) return { why: h === true ? 'open-in-tab' : 'locks-unavailable' };
+            return { why: null, pl: pl, pq: pq, se: se };
+          });
+        });
+      });
+    }, function () { return { why: 'server-unreachable' }; });
+  }
+
   /* ---- 一覧（何も消さない）: 候補ごとに L1〜L6 → 計画 → getstory → Lock の確認、前後の accountId ---- */
   function survey(env, ctx) {
     var rep = { at: env.now(), v: VERSION, kind: 'survey', candidates: 0, eligible: [], skipped: {}, totals: { stories: 0, keys: 0, chars: 0, snapshotsKept: 0, backupKept: 0, unknownKept: 0 } };
@@ -475,23 +524,12 @@
       var rows = [], chain = Promise.resolve();
       pass.forEach(function (id) {
         chain = chain.then(function () {
-          var pl = planOne(id, env);
-          if (!pl.keys.length) { skp(id, 'nothing-left'); return; }
-          var bb = bodyBlock(pl); if (bb) { skp(id, bb); return; }
-          return Promise.resolve(ctx.getStory(id)).then(function (r) {
-            var se = serverEval(id, r, pl, env);
-            if (se.why) { skp(id, se.why); return; }
-            return stuckProof(id, env, se).then(function (pw) {
-              if (pw) { skp(id, pw); return; }
-              var pq = se.dirtyProven === true ? applySubset(pl, provenSubset(id, env, pl)) : pl;   /* ★STUCK1 r2: c は残す */
-              if (!pq.keys.length) { skp(id, 'nothing-left'); return; }
-              return Promise.resolve(ctx.lockHeld(id)).then(function (h) {
-                if (h !== false) { skp(id, h === true ? 'open-in-tab' : 'locks-unavailable'); return; }
-                rows.push({ id: id, title: titleOf(id, env), turns: pl.turns, keys: pq.keys.length, chars: pq.chars, snapshots: pl.snapshots, backupKept: pl.backupKept, unknownKept: pl.unknownKept, serverRev: se.rev, authority: se.authority, dirtyProven: se.dirtyProven === true });
-                if (se.dirtyProven === true) rows[rows.length - 1].keptC = pq.keptC;
-              });
-            });
-          }, function () { skp(id, 'server-unreachable'); });
+          return judgeOne(id, env, ctx).then(function (x) {   /* ★FREE2c: 判定は judgeOne（実行と同じ）。kill のときも同じ順の確かめ（FREE2 の項目は飛ばす） */
+            if (x.why) { skp(id, x.why); return; }
+            var pl = x.pl, pq = x.pq, se = x.se;
+            rows.push({ id: id, title: titleOf(id, env), turns: pl.turns, keys: pq.keys.length, chars: pq.chars, snapshots: pl.snapshots, backupKept: pl.backupKept, unknownKept: pl.unknownKept, serverRev: se.rev, authority: se.authority, dirtyProven: se.dirtyProven === true });
+            if (se.dirtyProven === true) rows[rows.length - 1].keptC = pq.keptC;
+          });
         });
       });
       return chain.then(function () { return ctx.who(); }).then(function (a1) {
@@ -561,7 +599,28 @@
       out.turnsMatched = se.localTurns; out.dirtyProven = se.dirtyProven === true;
       return fin('freed');
     }
+    function underOpenLockJ(a0) {   /* ★FREE2c: Lock の中の判定はシート・dry-run と同じ judgeOne（Lock の query の代わりに、いま持っている exclusive Lock） */
+      return Promise.resolve(ctx.who()).then(function (a1) {
+        if (!a1 || a1 !== a0) return fin('principal-changed');
+        var gb2 = globalBlock(env) || localBlock(id, env); if (gb2) return fin(gb2);
+        return judgeOne(id, env, ctx, { inLock: true, pl0: pl }).then(function (x) {
+          if (x.why) return fin(x.why);
+          var se = x.se;
+          var rb2 = raceBlock(id, env, rp); if (rb2) return fin(rb2);
+          var issuedAt = env.now();
+          return Promise.resolve(ctx.who()).then(function (a2) {
+            if (!a2 || a2 !== a0) return fin('principal-changed');
+            return Promise.resolve(ctx.withMatLock(function () { return syncDelete(a0, a2, se, issuedAt); })).then(function (m) {
+              if (!m || m.granted !== true) return fin(m && m.api === false ? 'locks-unavailable' : 'lock-busy');
+              if (m.threw) return fin('threw');
+              return m.value;
+            });
+          });
+        });
+      });
+    }
     function underOpenLock(a0) {
+      if (env.free2 === true) return underOpenLockJ(a0);
       return Promise.resolve(ctx.who()).then(function (a1) {
         if (!a1 || a1 !== a0) return fin('principal-changed');
         var gb2 = globalBlock(env) || localBlock(id, env); if (gb2) return fin(gb2);       /* 墓標・Vault・未送信・開いている印 */
@@ -935,6 +994,15 @@
           return false;
         }, function () { return null; });
       },
+      /* ★FREE2c: 切り分け用（数だけ）。その物語の Lock を持っている数・待っている数・mode ごとの数 */
+      lockInfo: function (id) {
+        if (!L || typeof L.query !== 'function') return Promise.resolve(null);
+        return Promise.resolve().then(function () { return L.query(); }).then(function (q) {
+          var nm = OPEN_LOCK + id, o = { held: 0, pending: 0, shared: 0, exclusive: 0 };
+          [['held', (q && q.held) || []], ['pending', (q && q.pending) || []]].forEach(function (pr) { for (var i = 0; i < pr[1].length; i++) { var a = pr[1][i]; if (a && a.name === nm) { o[pr[0]]++; if (a.mode === 'shared') o.shared++; else o.exclusive++; } } });
+          return o;
+        }, function () { return null; });
+      },
       withOpenLock: function (id, fn) { return withLock(OPEN_LOCK + id, fn); },
       withMatLock: function (fn) { return withLock(MAT_LOCK, fn); }
     };
@@ -1017,7 +1085,8 @@
               /* ★PURGE1 */ PURGE_ON: PURGE_ON, PURGE_OFF: PURGE_OFF, PURGE_VAULT: PURGE_VAULT, NOTICE_P: NOTICE_P, keysForP: keysForP, purgeListP: purgeListP, localBlockP: localBlockP, planP: planP,
               serverEvalP: serverEvalP, serverEvalMeta: serverEvalMeta, surveyP: surveyP, freeOneP: freeOneP,
               /* ★STUCK1 */ STUCK_OFF: STUCK_OFF, staleDirtyLocal: staleDirtyLocal, stuckNeeds: stuckNeeds, stuckProof: stuckProof,
-              /* ★STUCK1 r2 */ STUCK_ON: STUCK_ON, SVERSION: SVERSION, FAMILY_CLASS: FAMILY_CLASS, familyClass: familyClass, provenSubset: provenSubset, raceProbe: raceProbe, raceBlock: raceBlock, planByReason: planByReason, COUNT_ONLY: COUNT_ONLY };
+              /* ★STUCK1 r2 */ STUCK_ON: STUCK_ON, SVERSION: SVERSION, FAMILY_CLASS: FAMILY_CLASS, familyClass: familyClass, provenSubset: provenSubset, raceProbe: raceProbe, raceBlock: raceBlock, planByReason: planByReason, COUNT_ONLY: COUNT_ONLY,
+              /* ★FREE2c */ judgeOne: judgeOne, tombHashCheck: tombHashCheck, F2_VERSION: F2_VERSION };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 
   /* ================================================================ browser wiring (HOME only) */
@@ -1044,11 +1113,13 @@
              purge: pOn, purgeVault: pOn && lsg(PURGE_VAULT) === '1',
              stuck1: lsg(STUCK_ON) === '1' && lsg(STUCK_OFF) !== '1', dirtyProof: dirtyProofB, otherTab: otherTabSeq,   /* ★STUCK1 r2: 既定 OFF */
              zt1: lsg(ZT_ON) === '1' && lsg(ZT_OFF) !== '1',   /* ★ZT1: 既定 OFF */
-             free2: lsg(F2_ON) === '1' && lsg(F2_OFF) !== '1',   /* ★FREE2: 既定 OFF */
+             free2: lsg(F2_OFF) !== '1',   /* ★FREE2c: 既定 ON（kill v292DfixFREE2Off='1'）。v292DfixFREE2On は読まない */
+             saveBusy: saveBusyB,   /* ★FREE2c: この画面の fix697 がその物語の保存を送っている最中か（FREE2 のときだけ呼ぶ） */
              vault: root.__v292Dfix889 || null, inv: root.__v292Dfix562 || null, gate: root.__v292Dfix569 || null,
              iso2Foreign: function (id) { try { var I = root.__v292Diso2; if (!I || typeof I.stampOf !== 'function' || typeof I.owner !== 'function') return false;
                var me = I.owner().now, sp = I.stampOf(id, 's'); if (!sp) return false; return !!((sp.c && sp.c !== me) || (sp.w && sp.w !== me)); } catch (e) { return true; } } };
   }
+  function saveBusyB(id) { var W = root.__v292Dfix697; if (!W || typeof W.status !== 'function') return false; var s = W.status(); return !!(s && s.storyId != null && String(s.storyId) === String(id) && s.inFlight); }
   /* ★STUCK1: fix587 DP1 と同じ導出（fix697.projectionV2 → deleted:true → canonicalString → SHA-256）。title は墓標の title。
      home は fix743（CC2）を常には読まないので、fix587 dp1LoadCC2 と同じ URL で要るときだけ読む（純関数モジュール）。null = 一致 */
   function loadCC2(cb) {
@@ -1098,7 +1169,7 @@
       /* ★PURGE1: 隠した物語の削除済みの確認は、本文を含まない一覧の行（listshadow）だけで行う */
       serverMeta: function (id) { return new Promise(function (res) { var W = root.__v292Dfix697; if (!W || typeof W.listShadowBasisOnce !== 'function') return res(null);
         try { W.listShadowBasisOnce(function (rows, err, status) { if (!rows) return res({ status: status || 0 }); var hit = null; for (var i = 0; i < rows.length; i++) if (rows[i] && String(rows[i].id) === String(id)) { hit = rows[i]; break; } res({ status: 200, row: hit }); }); } catch (e) { res(null); } }); },
-      lockHeld: lc.lockHeld, withOpenLock: lc.withOpenLock, withMatLock: lc.withMatLock
+      lockHeld: lc.lockHeld, lockInfo: lc.lockInfo, withOpenLock: lc.withOpenLock, withMatLock: lc.withMatLock
     };
   }
   function ready() {
@@ -1283,7 +1354,10 @@
     dryRun: dryRun,
     /* ★STUCK1: その 1 件だけ、シートと同じ確認をして理由コードを返す（何も消さない・書かない。getstory と /api/auth/me を読むだけ） */
     explain: function (id) { if (!ready()) return Promise.resolve({ notReady: true }); var e = benv(); e.only = [String(id)];
-      return (e.purge ? surveyP : survey)(e, bctx()).then(function (rep) { return { purge: !!e.purge, candidate: rep.candidates === 1, eligible: rep.eligible.length === 1, skipped: rep.skipped, dirtyProven: !!(rep.eligible[0] && rep.eligible[0].dirtyProven) }; }); },
+      var cx = bctx();
+      return (e.purge ? surveyP : survey)(e, cx).then(function (rep) { var out = { purge: !!e.purge, candidate: rep.candidates === 1, eligible: rep.eligible.length === 1, skipped: rep.skipped, dirtyProven: !!(rep.eligible[0] && rep.eligible[0].dirtyProven) };
+        if (e.free2 !== true) return out;
+        return Promise.resolve(cx.lockInfo(String(id))).then(function (li) { out.openLock = li; return out; }, function () { return out; }); }); },   /* ★FREE2c: Lock の数（切り分け用） */
     /* ★STUCK1 r2: 理由ごとの数と family ごとの文字数だけ（読むだけ。消さない・書かない） */
     planByReason: function () { if (!ready()) return Promise.resolve({ notReady: true, v: SVERSION }); return planByReason(benv(), bctx()); },
     /* ★FREE2: DL2 が削除の成立の直後に使う。この端末の全体の hash と印の指紋（読むだけ・通信なし。OFF のときは null） */

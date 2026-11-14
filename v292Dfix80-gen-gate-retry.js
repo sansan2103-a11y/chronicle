@@ -67,6 +67,22 @@ function gatePass(content){
   return true;
 }
 
+/* ★FANOUT1 (b): 補助の呼び出し（Api.call に allowShort を渡した会話ログの作り直し・話者の照会など。本編の生成ではない）は、
+ *   設計上短い答え（「[]」＝誰も話していない など）が正しい答え。20 字未満でも、空でなく退行的反復でもなければ門を通す。
+ *   見分けは fetch の init の送らない印 __chronicleShortOk（index.html の _callOpenRouter が allowShort かつ本編でないときだけ付ける。本文には入らない）。
+ *   本編の生成の判定（20 字未満は失敗）は変えない。kill: localStorage v292DfixFANOUT1Off='1' → 土台の門（20 字未満は送り直し）。 */
+function shortOkOf(init){
+  try{ if(!init || typeof init !== 'object' || init.__chronicleShortOk !== true) return false; return localStorage.getItem('v292DfixFANOUT1Off') !== '1'; }catch(e){ return false; }
+}
+function shortPass(content){
+  if(content == null) return false;
+  if(content.trim().length < 1) return false;
+  if(isDegenerate(content)) return false;
+  return true;
+}
+var FO1B = { shortPass: 0 };
+try{ window.__v292DfixFANOUT1b = { status: function(){ return { shortPass: FO1B.shortPass }; } }; }catch(e){}
+
 function makeWrapper(orig){
   // ★fix494(GPT再監査): 自分の inner が native(=最内層)の時だけ予算を減算する。
   // ★fix504(2026-07-20 GPT条件付きGO): 最内判定をマーカー依存(orig.__fix80/_f482)から
@@ -157,6 +173,7 @@ function makeWrapper(orig){
       var text = "";
       try{ text = await resp.clone().text(); }catch(e){ return resp; }
       var content = extractContent(text);
+      if(!gatePass(content) && shortOkOf(init) && shortPass(content)){ FO1B.shortPass++; return resp; }   /* ★FANOUT1 (b) */
       if(gatePass(content)){
         if(attempt > 0){ try{ console.log("[v292Dfix80] passed after retry #" + attempt); }catch(e){} }
         return resp;

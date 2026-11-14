@@ -11217,6 +11217,14 @@
   }
   var cache = Object.create(null);
   var pending = Object.create(null);
+  /* ★FANOUT1（同じアカウントから同時に何本も文章の要求を出さない）: 旧 AI アイコンの外見文（genAsync）を 1 本ずつ送る。
+     前の応答（失敗・時間切れを含む）が返ってから FO_GAP ミリ秒あけて次。失敗した名前の送り直しは 1 名につき FO_RETRY 回まで
+     （それを超えたら、その名前は ↻ で作り直すまで送らない）。本文の送信（Api）が送信中（S.inFlight）の間は待つ。
+     既定 ON・kill: localStorage v292DfixFANOUT1Off='1' → 土台の動き（名前ごとに同時・失敗は 1.2 秒の見回りで上限なく出し直す）。
+     送る中身（prompt・model・max_tokens）は変えない。観測: window.__v292DfixFANOUT1.status()（数だけ・名前は返さない） */
+  var FO = { q: [], busy: false, lastEnd: 0, fails: Object.create(null), gaveUp: Object.create(null), timer: null, sent: 0, failed: 0, gaveUpN: 0, waitedInFlight: 0 };
+  var FO_GAP = 1100, FO_RETRY = 2, FO_WATCHDOG = 75000;
+  function foOn(){ try { return localStorage.getItem('v292DfixFANOUT1Off') !== '1'; } catch(e){ return true; } }
   var cacheHash = Object.create(null);   // name -> description-hash that cache[name] was built from
   // v292Dfix121: persist the (style-NEUTRAL) character description prompt so the avatar
   // is STABLE across reloads (おしん: 毎回変わる"迷走"). Art style is applied separately at
@@ -11242,7 +11250,7 @@
   // v292Dfix121e: force a regenerate for a character (used by the ↻ button / desc edit).
   // v292Dfix121g: ALSO remove the persisted entry — otherwise have() just reloads it from
   // localStorage and nothing regenerates (↻ appeared to do nothing for the AI icon).
-  function invalidate(name){ try { localStorage.removeItem(LSP + name + '::' + hashDesc(name)); } catch(e){} try { delete cache[name]; delete cacheHash[name]; delete pending[name]; } catch(e){} }
+  function invalidate(name){ try { localStorage.removeItem(LSP + name + '::' + hashDesc(name)); } catch(e){} try { delete cache[name]; delete cacheHash[name]; delete pending[name]; } catch(e){} try { delete FO.fails[name]; delete FO.gaveUp[name]; } catch(e){} }   /* ★FANOUT1: ↻ で作り直すときは送り直しの回数も戻す */
   // art-style selector (S.cfg.artStyle index → fixed style suffix appended to every prompt)
   // v292Dfix121c: おしんが「以前の絵柄(標準テンプレのダークファンタジー調)が好み」→
   // 'darkfantasy' を選択肢に追加し既定にする。元テンプレの style tail を再現。
@@ -11325,17 +11333,46 @@
     try { var f = window.__v292Dfix66; if (f && typeof f.ncAppearanceFor === 'function') return f.ncAppearanceFor(name) || ''; } catch(e){}
     return '';
   }
+  /* ★FANOUT1: 列（1 本ずつ）。genNow の終わり（成功・失敗・送らなかった）で fin が 1 回だけ呼ばれる */
+  function foPump(){
+    if (FO.busy || !FO.q.length) return;
+    if (FO.timer) return;
+    var st0 = null; try { st0 = getS(); } catch(e){}
+    if (st0 && st0.inFlight){ FO.waitedInFlight++; FO.timer = setTimeout(function(){ FO.timer = null; foPump(); }, 500); return; }   /* 本文の送信中は待つ */
+    var wait = FO.lastEnd + FO_GAP - Date.now();
+    if (wait > 0){ FO.timer = setTimeout(function(){ FO.timer = null; foPump(); }, wait); return; }
+    var it = FO.q.shift(); FO.busy = true;
+    var done = false, sentAny = false, wd = null;
+    function fin(kind){
+      if (done) return; done = true; if (wd) { try { clearTimeout(wd); } catch(e){} }
+      if (kind === 'ok'){ delete FO.fails[it.name]; }
+      else if (kind === 'fail'){ FO.failed++; FO.fails[it.name] = (FO.fails[it.name] || 0) + 1;
+        if (FO.fails[it.name] > FO_RETRY){ FO.gaveUp[it.name] = true; FO.gaveUpN++; pending[it.name] = true; } }   /* 上限を超えた名前は pending のまま（見回りが出し直さない） */
+      if (sentAny) FO.lastEnd = Date.now();
+      FO.busy = false; foPump();
+    }
+    wd = setTimeout(function(){ fin('fail'); }, FO_WATCHDOG);
+    try { genNow(it.name, it.desc, function(kind){ if (kind === 'sent'){ sentAny = true; FO.sent++; return; } fin(kind); }); } catch(e){ fin('fail'); }
+  }
   function genAsync(name, desc){
+    if (!foOn()) return genNow(name, desc, null);
+    if (FO.gaveUp[name]){ pending[name] = true; return; }
+    for (var i = 0; i < FO.q.length; i++){ if (FO.q[i].name === name) return; }
+    FO.q.push({ name: name, desc: desc }); foPump();
+  }
+  try { window.__v292DfixFANOUT1 = { VER: 'fanout1-20261116-a', on: foOn, status: function(){ var g = 0; for (var k in FO.gaveUp) g++; return { on: foOn(), queued: FO.q.length, busy: FO.busy, sent: FO.sent, failed: FO.failed, gaveUp: g, waitedInFlight: FO.waitedInFlight, gapMs: FO_GAP, retryMax: FO_RETRY }; } }; } catch(e){}
+  function genNow(name, desc, cb){
+    var fin0 = function(k){ if (cb) { try { cb(k); } catch(e){} } };   /* ★FANOUT1（cb が無い＝kill: 土台と同じ） */
     /* ★fix634r1 (FIX634_AIAV_CROSS_DEVICE_OVERWRITE_RACE / AV2_WRAP118_BOOT_ORDER_GAP):
        (1) Asset v2 document（docSchema2() === true）では legacy AI avatar を生成しない。av2-portrait の wrap118 と同じ規約
            （undecidable = null も fail-closed）。wrap118 は最初の sweep（MutationObserver +40ms）で入るため、boot 直後の
            fix66 lookupAvatar → urlFor → genAsync が wrap より先に走って schema2 文書でも LLM 生成していた（本番 2 call の正体）。
        (2) schema1 文書では fix634 の authority gate（server 束の pull 完了前）を待つ。どちらも pending を解いて return
            するので、gate 解除後の 1.2s sweep が拾い直す（従来の生成は遅延するだけで失われない）。 */
-    try { var M634 = window.__v292Dav2Map; if (M634 && typeof M634.docSchema2 === 'function'){ var d634 = M634.docSchema2(); if (d634 === true){ delete pending[name]; return; } if (d634 === null){ var li634 = false; try { li634 = !!((typeof window.__chronicleSessionId === 'function' && window.__chronicleSessionId()) || (typeof window.__chronicleGoogleId === 'function' && window.__chronicleGoogleId()) || (window.__v292Dfix634 && typeof window.__v292Dfix634.loggedIn === 'function' && window.__v292Dfix634.loggedIn())); } catch(e634){}   /* ★r4 (audit R3-1 / B-5): same logged-in predicate as fix634 (session | google token | pass), evaluated only while undecidable */ if (li634){ delete pending[name]; return; } } } } catch(e){}   /* ★r3 (audit D-3): schema2 = never; undecidable = hold only for logged-in users (anonymous keeps production timing) */
-    try { var F634 = window.__v292Dfix634; if (F634 && typeof F634.holdGen === 'function' && F634.holdGen()){ delete pending[name]; return; } } catch(e){}
+    try { var M634 = window.__v292Dav2Map; if (M634 && typeof M634.docSchema2 === 'function'){ var d634 = M634.docSchema2(); if (d634 === true){ delete pending[name]; fin0('skip'); return; } if (d634 === null){ var li634 = false; try { li634 = !!((typeof window.__chronicleSessionId === 'function' && window.__chronicleSessionId()) || (typeof window.__chronicleGoogleId === 'function' && window.__chronicleGoogleId()) || (window.__v292Dfix634 && typeof window.__v292Dfix634.loggedIn === 'function' && window.__v292Dfix634.loggedIn())); } catch(e634){}   /* ★r4 (audit R3-1 / B-5): same logged-in predicate as fix634 (session | google token | pass), evaluated only while undecidable */ if (li634){ delete pending[name]; fin0('skip'); return; } } } } catch(e){}   /* ★r3 (audit D-3): schema2 = never; undecidable = hold only for logged-in users (anonymous keeps production timing) */
+    try { var F634 = window.__v292Dfix634; if (F634 && typeof F634.holdGen === 'function' && F634.holdGen()){ delete pending[name]; fin0('skip'); return; } } catch(e){}
     var st = getS(); var cfg = (st && st.cfg) || {};
-    if (cfg.provider !== 'openrouter' || !cfg.orKey){ delete pending[name]; return; }
+    if (cfg.provider !== 'openrouter' || !cfg.orKey){ delete pending[name]; fin0('skip'); return; }
     var tone = ''; try { if (st && st.scene && st.scene.tone) tone = String(st.scene.tone).trim(); } catch(e){}
     var cast = isCast(name);
     var sys, user;
@@ -11355,19 +11392,22 @@
       xhr.setRequestHeader('Authorization', 'Bearer ' + cfg.orKey);
       xhr.timeout = 60000;
       xhr.onload = function(){
+        var okF = false;   /* ★FANOUT1 */
         try {
           if (xhr.status !== 200) throw new Error('http ' + xhr.status);
           var j = JSON.parse(xhr.responseText);
           var t = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
           t = String(t).replace(/^[\s"'`]+|[\s"'`]+$/g, '').replace(/\s+/g, ' ').slice(0, 400);
-          if (t){ cache[name] = t; saveCache(name, t); swapAvatar(name); }
+          if (t){ cache[name] = t; saveCache(name, t); swapAvatar(name); okF = true; }
         } catch(e){}
         delete pending[name];
+        fin0(okF ? 'ok' : 'fail');
       };
-      xhr.onerror = function(){ delete pending[name]; };
-      xhr.ontimeout = function(){ delete pending[name]; };
+      xhr.onerror = function(){ delete pending[name]; fin0('fail'); };
+      xhr.ontimeout = function(){ delete pending[name]; fin0('fail'); };
       xhr.send(JSON.stringify({ model: /* v292Dm3: 同上（__aiAvatar 経路）。 */ (window.__CHR_MODEL_REGISTRY ? window.__CHR_MODEL_REGISTRY.resolve(cfg.orModel) : (cfg.orModel || '')), temperature: 0.5, max_tokens: 160, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] }));
-    } catch(e){ delete pending[name]; }
+      fin0('sent');
+    } catch(e){ delete pending[name]; fin0('fail'); }
   }
   window.__aiAvatar = {
     enabled: function(){ var st = getS(); return !!(st && st.cfg && (+st.cfg.aiAvatar) === 1); },

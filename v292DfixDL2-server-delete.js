@@ -110,7 +110,7 @@
      STORE1b（空き容量のシート）がこの証明と、消す時点のサーバーの墓標・端末の全体をもう一度突き合わせる。ここでは何も消さない。
      印が CLEAN の物語は証明が要らない（従来どおりシートに出る）。違った・作れなかった物語は証明なし＝従来どおり対象外。通信は増えない。 */
   var F2_KEY = 'v292DfixFREE2_proofs', F2_MAX = 100;
-  function free2On() { return lsg('v292DfixFREE2On') === '1' && lsg('v292DfixFREE2Off') !== '1'; }
+  function free2On() { return lsg('v292DfixFREE2Off') !== '1'; }   /* ★FREE2c (GPT #127-TV 2): 既定 ON。kill v292DfixFREE2Off='1'。v292DfixFREE2On は読まない */
   var free2 = { tried: 0, recorded: 0, clean: 0, differs: 0, skipped: 0, last: null };
   function free2Note(id, code) { free2.last = { code: code, t: Date.now() }; if (code === 'recorded') free2.recorded++; else if (code === 'clean-no-proof-needed') free2.clean++; else if (code === 'content-differs') free2.differs++; else free2.skipped++; }
   function free2Record(r, j, a) {
