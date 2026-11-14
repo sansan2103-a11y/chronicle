@@ -235,6 +235,9 @@
      第 1 層の CL1-d・fix957 には同じ除外が既にある。鍵なし＝従来と同じ。 */
   var NEG_SPEECH_W1 = /^[はが][^。「」\n]{0,10}?(?:答え|応え|言わ|話さ|喋ら|しゃべら|返さ|呟か|囁か|叫ば|告げ|口を開か|返事をし|返事もし|声を出さ|何も言わ)(?:ない|なかった|ず(?!には)|ぬ|ません)/;   /* 「言わずにはいられ」＝実際に言っている、は除く */
   function _spkw1On(){ try { return localStorage.getItem('v292DfixSPKW1Off') !== '1' && localStorage.getItem('v292DfixSPKW1On') === '1'; } catch(e){ return false; } }
+  /* ★SPKW2-S2（GPT #127-TT 2・SPKW1 と同じ鍵）: 実測（試験物語 K1-ON T6）: 直前の行「彼女は前を向いたまま言った。…航が右ポケットから鍵を出すと、…」で、
+     行全体から探した「言った」が「航が」に結び付き speechBefore=115 → 夏希のカードを 航 へ振り替えた。後ろ方向は fix535 が名前の直後だけを見る。前方向も同じ考えで、名前の直後の節だけを見る。 */
+  function clauseAfter(s, i){ var t = String(s || '').slice(i); var k = t.search(/[。！？!?「」\n]/); return k >= 0 ? t.slice(0, k) : t; }
   function evidenceIn(line, tok, isNext, sandwiched){
     var s = String(line || '');
     if (isNext && REACT_LEAD.test(s)) return null;
@@ -252,7 +255,7 @@
       if (_w1 && NEG_SPEECH_W1.test(s.slice(p + tok.length, p + tok.length + 24))){ p = s.indexOf(tok, p + 1); continue; }   /* ★SPKW1: 否定された発話は証拠にしない */
       var reacting = strict && isNext && (REACT_FRAME.test(head) || REACT_PRED.test(tail));
       if (SUBJ.test(tail) && !reacting){
-        var speechNear = isNext ? speechTest(strict ? tail : s) : speechTest(s);
+        var speechNear = isNext ? speechTest(strict ? tail : s) : (_w1 ? speechTest(clauseAfter(s, p + tok.length)) : speechTest(s));   /* ★SPKW2-S2: 鍵 ON のとき、前の行の speechBefore(115) は名前の直後の節（次の 。！？「」改行 まで）に発話動詞がある時だけ。別の文の「言った」を結び付けない */
         if (speechNear) offer(isNext ? 'speechAfter' : 'speechBefore', isNext ? 140 : 115);
         else offer('subj', isNext ? 40 : 20);
       }
