@@ -265,7 +265,7 @@
   function castOf(S) {
     var c = S.cast || {}, out = [];
     var take = function (e, hero) { if (!e || typeof e !== 'object' || typeof e.character_id !== 'string') return; var p = (e.profile && typeof e.profile === 'object') ? e.profile : {};
-      out.push({ character_id: e.character_id, status: e.status === 'DELETED' ? 'DELETED' : 'ACTIVE', name: typeof e.name === 'string' ? e.name : '', hero: !!hero, profile: p, sap: e.source_appearance_present === true }); };   /* ★W-MXREG: + sap */
+      out.push({ character_id: e.character_id, status: e.status === 'DELETED' ? 'DELETED' : 'ACTIVE', name: typeof e.name === 'string' ? e.name : '', hero: !!hero, profile: p, sap: e.source_appearance_present === true, rg: (e.gender === '女性' || e.gender === '男性') ? e.gender : ((p.gender === '女性' || p.gender === '男性') ? p.gender : '') }); };   /* ★W-MXREG: + sap ★MXREGFIX1: + rg = 登録の性別 */
     take(c.hero, true); (Array.isArray(c.npcs) ? c.npcs : []).forEach(function (n) { take(n, false); });
     return out;
   }
@@ -497,6 +497,42 @@
     if (t(p.appearance)) n++; return n;
   }
   var REG_F = /女性|少女|女の子|彼女|の女|老婆|娘/, REG_M = /男性|少年|男の子|の男|老人|彼は|彼が/;
+  /* ★MXREGFIX1（laneICONFIX2・2026-11-14・本番 I6: 登録の性別が男性の「源蔵」に若い女性の絵）:
+     原因 ① 登録の性別を読まず、名前の出た文の語（の女・彼女…）だけで性別を決めていた ② 名前の出た文にある見た目の語を、だれの物かを見ずに全部その人物の外見にしていた。
+     直し ① 登録の性別があればそれを使う（本文の語で変えない） ② 見た目の語は、その文の中で「その人物の名前」に掛かるものだけ拾う（直後の別の人物・反対の性別の語に掛かる句は拾わない）
+          ③ 名前に掛かる年配の語（老人・老漁師・年老いた）があれば「老人」を外見に足す。kill: localStorage v292DfixMXREGFIX1Off='1' → 今までとバイト一致。 */
+  function mxrOn() { return lsGet('v292DfixMXREGFIX1Off') !== '1'; }
+  var MXR_PF = /少女|女性|女の子|老婆|彼女|娘|女/g, MXR_PM = /少年|男性|男の子|老人|老爺|青年|彼(?!女)|男/g, MXR_OLD = /老人|老漁師|老爺|老婆|老いた|年老い|老齢|ご老体/g;
+  /* refs of one sentence: own name forms (own: 1), other characters' names and — when the registered gender is known — person words of the opposite gender (own: 0) */
+  function mxrRefs(s, forms, desc, others, rg) {
+    var out = [], add = function (at, len, own) { if (!out.some(function (r) { return at < r.end && at + len > r.at; })) out.push({ at: at, end: at + len, own: own }); };
+    forms.forEach(function (f) { hitsIn(s, f, desc).forEach(function (p) { add(p, f.length, 1); }); });
+    others.forEach(function (o) { if (!o || o.length < 2) return; var i = s.indexOf(o); while (i >= 0) { add(i, o.length, 0); i = s.indexOf(o, i + 1); } });
+    if (rg) { var re = rg === '男性' ? MXR_PF : MXR_PM, m; re.lastIndex = 0; while ((m = re.exec(s))) add(m.index, m[0].length, 0); }
+    return out.sort(function (a, b) { return a.at - b.at; });
+  }
+  /* the owner of a phrase at [at, end): a ref that follows it in the same clause within 8 chars (長い黒髪の女 / 白い上着を着た女) — otherwise the last ref before it — otherwise the hit name itself */
+  function mxrOwn(s, refs, at, end) {
+    for (var i = 0; i < refs.length; i++) { var r = refs[i]; if (r.at >= end) { var gap = s.slice(end, r.at); if (gap.length <= 8 && !/[、，,]/.test(gap)) return r.own === 1; break; } }
+    var prev = null; refs.forEach(function (r) { if (r.at < at) prev = r; });
+    return prev ? prev.own === 1 : true;
+  }
+  function appearanceFromOwn(texts, forms, desc, others, rg) {
+    var seen = {}, out = [], old = false;
+    texts.forEach(function (tx) {
+      var refs = mxrRefs(tx, forms, desc, others, rg), m; MXR_OLD.lastIndex = 0;
+      while ((m = MXR_OLD.exec(tx))) if (mxrOwn(tx, refs.filter(function (r) { return !(r.at < m.index + m[0].length && r.end > m.index); }), m.index, m.index + m[0].length)) old = true;
+      vis(tx, true).list.sort(function (a, b) { return a.at - b.at; }).forEach(function (x) {
+        var w = x.w; if (BELOW.test(w)) return;
+        if (!mxrOwn(tx, refs, x.at, x.at + x.w.length)) return;
+        for (var i = 0; i < CHEST.length; i++) w = w.replace(CHEST[i][0], CHEST[i][1]);
+        if (seen[w]) return; seen[w] = 1; out.push(w);
+      });
+    });
+    out = out.filter(function (w) { return !out.some(function (o) { return o !== w && o.indexOf(w) >= 0; }); });
+    if (old && out.length && !out.some(function (w) { return /老/.test(w); })) out.unshift('老人');
+    return out.join('、').slice(0, 400);
+  }
   function regSelect(S, r, id, by) {
     var T = turnsOf(S), cast = castOf(S), bindings = bindingsOf(S), so = stOf(r, id), out = { picked: null, considered: [] }, C = [];
     var namesOf = function (cid) { var o = []; cast.forEach(function (c) { if (c.character_id === cid && c.name) o.push(norm(c.name)); }); Object.keys(bindings).forEach(function (b) { if (bindings[b] === cid) o.push(norm(b)); });
@@ -516,8 +552,9 @@
         else if (so.ny && typeof so.ny[hid] === 'number' && ev.t <= so.ny[hid]) why = 'NOT_YET_WAIT'; }
       var row = { reg: 1, why: why, t: ev ? ev.t : null };
       if (!why) {
-        var cue = f.concat(ev.near).join('。'), app = appearanceFrom(ev.hitS);
-        var nhr = nhApp(ev.hitS, ''); if (nhr) app = nhr.app;   /* ★iconx1 B */
+        var mxr = mxrOn(), oth = []; if (mxr) cast.forEach(function (o) { if (o.character_id !== c.character_id && o.status !== 'DELETED' && o.name) oth.push(flat(o.name)); });
+        var cue = f.concat(ev.near).join('。'), app = mxr ? appearanceFromOwn(ev.hitS, f, desc, oth, c.rg) : appearanceFrom(ev.hitS);   /* ★MXREGFIX1 ② */
+        var nhr = nhApp(ev.hitS, ''); if (nhr && !(mxr && c.rg && !app)) app = nhr.app;   /* ★iconx1 B */
         var ts = slotsU(cue), as = slotsU(app), both = Object.keys(as).filter(function (s) { return ts[s]; });
         if (!app) row.why = 'NO_LOOK';
         else if (!desc && !both.length) row.why = 'FEW_FEATURES_NAMED';
@@ -525,6 +562,7 @@
         else {
           var kind = nhr ? nhr.kind : kindOf(cue), hs = ev.hitS.join('。'), fem = REG_F.test(hs), mal = REG_M.test(hs);
           var gender = (desc && tailGender(f[0])) || (fem && !mal ? '女性' : mal && !fem ? '男性' : '');
+          if (mxr && c.rg) gender = c.rg;   /* ★MXREGFIX1 ①: 登録の性別は本文の語で変えない */
           var traits = []; if (kind !== 'human') Object.keys(TRAIT_CUE).forEach(function (k) { if (traits.length < 4 && TRAIT_CUE[k].test(cue)) traits.push(k); });
           var key = (c.name && own.indexOf(norm(c.name)) >= 0) ? (dispKey(c.name) || c.name) : (Object.keys(bindings).filter(function (b) { return bindings[b] === c.character_id && own.indexOf(norm(b)) >= 0; }).map(dispKey).filter(Boolean)[0] || '');
           if (!key) row.why = 'REG_NO_HANDLE';
@@ -730,6 +768,7 @@
     /* test / diagnosis: evaluate the candidates now (reads only, no request) */
     dryRun: function (o) { var S = state(), id = sid(); if (!S || !id) return null; return select(S, rec(), id, o && Array.isArray(o.roster) ? o.roster : null); },   /* o.roster: diagnosis only (evaluate a given roster instead of fix307's) */
     kick: function () { return runTurn(true); },
+    dryRunReg: function (by) { var S = state(), id = sid(); if (!S || !id) return null; return regSelect(S, rec(), id, by || {}); },   /* ★MXREGFIX1: test / diagnosis (reads only, no request) */
     regDryRun: function (by) { var S = state(), id = sid(); if (!S || !id) return null; return regSelect(S, rec(), id, (by && typeof by === 'object') ? by : {}); },   /* ★W-MXREG diagnosis: by = { character_id: 1 } of characters that have a picture */   /* diagnosis / test only (an explicit action): skips the played-turn check; the Worker still requires the figure in its newest turn */
     __t: { gaOk: gaOk, gaEvidence: gaEvidence, gaAnchors: gaAnchors, rosterCount: rosterCount, slotsU: slotsU, nhApp: nhApp, select: select, aliasInfo: aliasInfo, lastHitOf: lastHitOf, traceRun: traceRun, icfLocal: icfLocal, isRoleish: isRoleish, apposition: apposition, f641Live: f641Live, promotedSoon: promotedSoon, norm: norm, dispKey: dispKey, generic: generic, isDesc: isDesc, vis: vis, axes: axes, evidence: evidence, turnsOf: turnsOf, identityA: identityA, descIdentity: descIdentity, appearanceFrom: appearanceFrom, kindOf: kindOf, hitsIn: hitsIn, tailGender: tailGender }
   };
