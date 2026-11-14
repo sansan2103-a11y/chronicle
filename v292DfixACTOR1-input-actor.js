@@ -38,7 +38,8 @@
     var all = ls('v292DfixACTOR1Off');
     if (all === '__ERR__' || all === '1') return { a: false, b: false };
     var a = ls('v292DfixACTOR1aOff') !== '1';
-    return { a: a, as: a && ls('v292DfixACTOR1aStoryOn') === '1', b: ls('v292DfixACTOR1bOff') !== '1' && ls('v292DfixACTOR1bOn') === '1' };
+    var hvC = true; try { var H = G.__v292DfixHEROVOICE1; hvC = !(H && typeof H.mode === 'function') || H.mode() === 'C'; } catch (e) { hvC = true; }   /* ★HEROVOICE1: (b) は「おまかせ」（C）の物語だけ */
+    return { a: a, as: a && ls('v292DfixACTOR1aStoryOn') === '1', b: hvC && ls('v292DfixACTOR1bOff') !== '1' && ls('v292DfixACTOR1bOn') === '1' };
   }
 
   var MK_SAY = '【プレイヤー入力＝主人公の発話】', MK_DO = '【プレイヤー入力＝主人公の行動】', MK_DIR = '【プレイヤー入力＝場面の方向づけ】';
