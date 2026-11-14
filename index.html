@@ -299,6 +299,7 @@
 <!-- ★si1 v292Dfix892 SAVE_INTEGRITY_HELD_INPUT_GUARD（packet SAVE_INTEGRITY_P1_20260927_01 / GPT GO_WITH_FIXES B'）: fix705 HOLD 中は送信を生成前に止める。read-only。★head・fix705 の直後＝送信 UI（#sendBtn 等）より先に同期ロードし、document capture で入口を押さえる（GPT SAVE_INTEGRITY_P1_20260927_02 条件 1 = load-order）。kill=v292Dfix892Off=1 -->
 <script src="v292Dfix892-held-input-guard.js?cb=20261011-s1b"></script>
 <script src="v292DfixLAT1-press-feedback.js?cb=20261112-lat1"></script>
+<script src="v292DfixERRNOTE1-send-error-note.js?cb=errnote1-a"></script><!-- ★ERRNOTE1: 物語の送信がサーバーに断られたとき（HTTP 4xx/5xx）、理由を入力欄の上に出したままにする（既存の知らせは 60 秒で消えていた）。表示だけ（送り直さない・入力・本文・保存・sys・送信の中身に触らない・fetch を包まない）。kill: v292DfixERRNOTE1Off='1'。 -->
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
@@ -345,7 +346,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261114-place1r2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261114-errnote1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -3172,6 +3173,7 @@ const G = {
         document.body.appendChild(_t263);
         setTimeout(function(){ try { _t263.remove(); } catch(_){} }, 60000);
       } catch(_e263) {}
+      try { var _en1 = window.__v292DfixERRNOTE1; if (_en1 && typeof _en1.fail === 'function') _en1.fail(_m888); } catch(_en1e){}   /* ★ERRNOTE1: HTTP 4xx/5xx で断られたときは、理由を入力欄の上に出したままにする（表示だけ・送り直さない。部品なし・kill・HTTP の番号なし → 上の知らせのまま）。kill: v292DfixERRNOTE1Off='1' */
     } finally { if (!(_cp1Att && _cp1A && _cp1A.superseded(_cp1Att))) { try { if (this.__p888) { clearTimeout(this.__p888); this.__p888 = null; } } catch(_p888d){} UI.setLoading(false); } try { if (_cp1Att && _cp1A) _cp1A.end(_cp1Att); } catch(_cp1f){} try { if (_e64) _e64.end(); } catch(_e64e){} try { if (_e65aId && Api.__e65aTurn && Api.__e65aTurn.id === _e65aId) { try { window.__v292DfixE65A = window.__v292DfixE65A || { VER: '20261025-laneE65AD-c', capHits: 0, returnedLast: 0, threw: 0, lastTurn: null }; window.__v292DfixE65A.lastTurn = { sent: Api.__e65aTurn.sent, cap: Api.__e65aTurn.cap }; } catch(_e65a5){} Api.__e65aTurn.holders = (Api.__e65aTurn.holders || 1) - 1; if (Api.__e65aTurn.holders <= 0) { Api.__e65aTurn.live = false; Api.__e65aTurn = null; } } } catch(_e65a4){} }   /* ★E65-A c: 共有している G.submit が全部終わったときだけ閉じる */   /* ★r5: busy は持ち主の試行だけが戻す。採用されずに終わった試行は取消（NOT_COMMITTED） */
   },
 
