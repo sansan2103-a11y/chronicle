@@ -5,7 +5,7 @@
 <script src="v292Dvault2-sendgate.js?cb=20261021-laneE-a"></script>
 <script src="v292Dvault2-copygate.js?cb=20261011-ab8"></script>
 <script src="v292DfixCP1-final-tap.js?cb=20261023-bundle43a-r5"></script><!-- CP1 tap r43e (GPT #127-JY/#127-KA/#127-KK/#127-LA/#127-LC): 送信直前の body を CP1 に見せる観測口（送る中身は不変）。読み込み時に v292DfixCP1On='1'（かつ v292DfixCP1Off≠'1'）のときだけ fetch を包む。OFF/kill は何もしない。CP1 を使ったターンの途中でアカウント・物語・Owner 権限が変わった・kill されたときは、その送信を出さない／送信後に変わったら応答を捨てる。止めたターンは自動で送り直さない -->
-<script src="v292DfixHEROVOICE1-hero-voice.js?cb=20261114-hv1"></script><!-- ★HEROVOICE1（laneHV2・2026-11-14）: 物語ごとの「主人公はどれくらい喋る？」（おまかせ＝既定・今までの動き／よく喋る・反応する／自分からは喋らない）。送信直前に sys の決まった文だけ置き換える（おまかせは触らない＝送信バイト同一）。出口は parsePlan の主人公ロックが lockMode() を聞く。保存は この端末の localStorage v292DfixHEROVOICE1:<物語キー>（物語本体・クラウドには書かない）。kill: v292DfixHEROVOICE1Off='1'。ACTOR1 の内側・CP1-final-tap の外側に置く（CP1 tap は置き換え後を見る）。 -->
+<script src="v292DfixHEROVOICE1-hero-voice.js?cb=20261114-hv1b"></script><!-- ★HEROVOICE1（laneHV2・2026-11-14）: 物語ごとの「主人公はどれくらい喋る？」（おまかせ＝既定・今までの動き／よく喋る・反応する／自分からは喋らない）。送信直前に sys の決まった文だけ置き換える（おまかせは触らない＝送信バイト同一）。出口は parsePlan の主人公ロックが lockMode() を聞く。保存は この端末の localStorage v292DfixHEROVOICE1:<物語キー>（物語本体・クラウドには書かない）。kill: v292DfixHEROVOICE1Off='1'。ACTOR1 の内側・CP1-final-tap の外側に置く（CP1 tap は置き換え後を見る）。 -->
 <script src="v292DfixACTOR1-input-actor.js?cb=20261114-hv1"></script><!-- ★ACTOR1（laneQUALA・2026-11-12・GPT #127-SG §D の D5/D4）: 送信直前（fetch 境界）に入力の説明行だけを直す。(a) DO の入力で「登録キャラ名＋が」が主語の部分を「…の主語は美羽（主人公ではない）」と明示し、「他キャラの行動にしない」を外す（証明できないときは何もしない）。STORY の腕は v292DfixACTOR1aStoryOn="1" の端末だけ。(b) 既定 OFF（v292DfixACTOR1bOn="1"）: 台詞の入力が無い回に「主人公の台詞を書かない」1 行を user 末尾の SAY の行の位置へ・食い違う 2 文を sys から外す。kill = localStorage v292DfixACTOR1Off / aOff / bOff ="1"（毎回評価・送信バイト同一）。CP1 tap の直後・PRUNE2 の前（＝PRUNE1/PRUNE2 の後に当たる） -->
 <script src="v292DfixPRUNE2-sys-prune2.js?cb=20261111-prune2"></script><!-- ★PRUNE2（lanePRUNE2・2026-11-11）: 最終 sys／user の整理・第 2 弾。送信直前（fetch 境界）で決まった文だけを差し替える。P2a＝<say> の決まりを末尾の【話者タグの徹底】1 か所に（【出力の形式】2 項・【出力の掟】1 項・【話者】2 項の重複を外す。見出しと解析が依存する形式は変えない）／P2b＝見本 A を外す・【プレイヤーの種】【NPCの登場】を短く・「先輩」の例文を呼称に依らない文へ／P2c＝user 末尾の逐語反映を短く・psychAnchors の注記から決まり文句の列挙を外す。既定は P2c だけ ON（P2a・P2b は v292DfixPRUNE2aOn / bOn="1" の端末だけ）。kill = localStorage v292DfixPRUNE2aOff / v292DfixPRUNE2bOff / v292DfixPRUNE2cOff（個別）・v292DfixPRUNE2Off（全部）＝"1"（毎回評価・送信バイト同一）。PRUNE1 の直前に置く（PRUNE1 の後・CP1 tap の前に当たる。順が逆でも結果は同じ） -->
 <script src="v292DfixPRUNE1-sys-prune.js?cb=20261111-prune1"></script><!-- ★PRUNE1（lanePRUNE1・2026-11-11）: 最終 sys の当て布の整理。fix459 ほか sys を書き換える部品がすべて済んだ後（fetch を包む部品の内側）で、決まった文だけを外す／差し替える（重複 6 文を外す・食い違いと受け身の強制 7 文を言い換える・進行エンジンを 1 つの規則に・【自発】の定型を 1 行に・【危機のとき】を新設・user 側の「0.5〜3 秒」「直後だけ」を言い換える）。安全・出力形式・<say>/<state> の契約・話者・見本・状態の文は触らない。見つからない文はその 1 手だけ何もしない。kill = localStorage v292DfixPRUNE1Off='1'（毎回評価・送信バイト同一）。CP1-final-tap の直後に置く（tap が整理後の body を見る） -->
@@ -345,7 +345,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261114-mxregfix1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261114-hv1b';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4477,7 +4477,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix55-gm-mode.js?cb=v292Dfix55c"></script>
   <script src="v292Dfix56-conversation-log-fix.js?cb=v292Dfix200"></script>
   <script src="v292Dfix57-script-style-dialogue.js?cb=v292Dfix57"></script>
-  <script src="v292Dfix58-prompt-rebuild.js?cb=20261114-mxregfix1"></script>
+  <script src="v292Dfix58-prompt-rebuild.js?cb=20261114-hv1b"></script>
   <script src="v292Dfix60-display-pipeline.js?cb=v292Dfix60"></script>
   <script src="v292Dfix59-hybrid-extractor.js?cb=v292Dfix59"></script>
   <script src="v292Dfix61-alpha-strip-protect.js?cb=20260829-fix748"></script>
@@ -4524,7 +4524,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
   <script src="v292Dfix796-memory-retrieve.js?cb=20261021-bundle38-b"></script>
-  <script src="v292Dfix192-newengine.js?cb=20261114-mxregfix1"></script>
+  <script src="v292Dfix192-newengine.js?cb=20261114-hv1b"></script>
   <script src="v292DfixAGENCY1-player-intent.js?cb=20261110-agency1c"></script><!-- ★AGENCY1 (GPT #127-RS ②): SAY/DO の入力説明の行に「入力されていない主人公の意図・発話内容を確定しない」1 文（fix192 が呼ぶ）。既定は影（足さない）。ON = 管理者画面の鍵 agency1 または localStorage v292DfixAGENCY1On=1。Vault は足さない。kill: localStorage v292DfixAGENCY1Off=1 -->
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
@@ -4700,7 +4700,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix514-say-fullname.js?cb=v292Dfix514"></script>
   <script src="v292Dfix441-sys-at-send.js?cb=v292Dfix514"></script>
 <script src="v292Dfix442-folklore.js?cb=v292Dfix442"></script>
-<script src="v292Dfix443-drama-rescue.js?cb=20261114-mxregfix1"></script>
+<script src="v292Dfix443-drama-rescue.js?cb=20261114-hv1b"></script>
 <script src="v292Dfix444-world-law.js?cb=20261014-iso2b-c953r3"></script>
 <script src="v292Dfix445-handle-lock.js?cb=20260901-fix784"></script>
 <script src="v292Dfix446-fill-robust.js?cb=v292Dfix446"></script>
@@ -4879,7 +4879,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixSETAV1-settings-avatar.js?cb=20261101-bundle82-iconux-b"></script>
 <!-- ★MIDICON3-c (GPT #127-QM: Owner だけの CANARY): 途中から登場したキャラの自動アイコン（画像専用の控え）。鍵 midicon1（Worker が範囲を決める）。新しく遊んだターンだけ。S・長期記憶・名簿には何も書かない。kill = localStorage v292DfixMIDICONOff=1 -->
 <!-- ★OLDMX1 (Owner 2026-11-08・bundle93-h): 古い物語の続きで、名簿が判定より遅れて届いたターンを 1 回だけ判定し直す（MIDICON の中・規則と Worker の確認は同じ）。kill: localStorage v292DfixMIDICONrosOff=1 -->
-<script src="v292DfixMIDICON-auto-icon.js?cb=20261114-mxregfix1"></script>
+<script src="v292DfixMIDICON-auto-icon.js?cb=20261114-hv1b"></script>
 <!-- ★STARTICON (Owner 2026-11-07・Local 候補): 物語を始めたとき、絵の無い主人公＋登録 NPC（最大 3 人）の最初の絵を自動で 1 回だけ作る（手動の 2 タップと同じ部品・同じ順）。鍵 starticon1（★STARTICON2: 管理者画面の切り替え・全アカウント共通。鍵 0 = 通信 0。外見には由来 origin=starticon_auto。新しい物語だけ）。kill = localStorage v292DfixSTARTICONOff=1 -->
 <script src="v292DfixSTARTICON-start-icons.js?cb=20261114-iconfix3"></script>
 <script src="v292Dav2-migrate-ui.js?cb=20261109-bundle93-j"></script>
@@ -4921,7 +4921,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixCAST1-opening-cast.js?cb=20261113-cast1"></script><!-- ★CAST1 (laneCAST1・GPT #127-SU ①): 開始場面にいると確定している NPC の説明を最初の回だけ user の cast.npcs に補う。判定の純関数だけ（fix58 が呼ぶたびに探す）。既定 OFF。ON v292DfixCAST1On=1（比較腕 2）/ kill v292DfixCAST1Off=1 -->
 <script src="v292DfixCALL1-confirmed-speech.js?cb=20261113-cast1"></script><!-- ★CALL1 / SPK3 (laneCAST1・GPT #127-SU ②③): 話者が確定した発話だけから「呼称の先例」1 行（earlierFacts）と recentSpeakers（直近 2 ターンの話者の参照）を作る純関数（fix58 が呼ぶたびに探す）。どちらも既定 OFF・鍵は別々。ON v292DfixCALL1On=1 / v292DfixSPK3On=1・kill v292DfixCALL1Off=1 / v292DfixSPK3Off=1 -->
 <script src="v292DfixLEAK1-nonstory-lines.js?cb=20261114-leak1on"></script><!-- ★LEAK1 (laneLEAK1・GPT #127-SW 2): 本文に混ざる物語でない行の検査。影は常時（件数だけ・本文は記録しない）。適用 v292DfixLEAK1Apply='1'（既定 OFF）／kill v292DfixLEAK1Off='1'。保存・sys・送信は変えない。 -->
-<script src="v292DfixECHO1-no-restate.js?cb=20261114-mxregfix1"></script><!-- ★ECHO1 (laneECHO1・GPT #127-TP): 前のターンの最後の一拍を次のターンの書き出しで言い直させない（済んだ反応だけ。答えの出ていない問い・途中の動きは引き継ぐ）。純関数だけ（fix58・fix192・fix443・保存直前の境界が呼ぶたびに探す）。鍵 v292DfixECHO1On=1（既定 OFF＝送信バイト同一・影の検出も動かない）・kill v292DfixECHO1Off=1 -->
+<script src="v292DfixECHO1-no-restate.js?cb=20261114-hv1b"></script><!-- ★ECHO1 (laneECHO1・GPT #127-TP): 前のターンの最後の一拍を次のターンの書き出しで言い直させない（済んだ反応だけ。答えの出ていない問い・途中の動きは引き継ぐ）。純関数だけ（fix58・fix192・fix443・保存直前の境界が呼ぶたびに探す）。鍵 v292DfixECHO1On=1（既定 OFF＝送信バイト同一・影の検出も動かない）・kill v292DfixECHO1Off=1 -->
 <script src="v292DfixNUM1-input-ledger.js?cb=20261113-num2"></script><!-- ★NUM1 (laneLEAK1・GPT #127-SW 3): 序盤のプレイヤー入力の数・約束を earlierFacts の先頭に最大 5 行・200 字で残す純関数（fix58 が呼ぶ）。鍵 v292DfixNUM1On='1'（既定 OFF）／kill v292DfixNUM1Off='1'。保存なし・sys 0 字。 -->
 </body>
 </html>
