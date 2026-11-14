@@ -60,7 +60,7 @@
 (function (root) {
   'use strict';
   if (typeof window === 'undefined' || root.__v292DfixSTARTICON) return;
-  var VER = 'starticon-d-20261109-ifretry-listopen+lim1+fx2';   /* ★93-k: キャラ一覧を開いたままでも 1 回の再読み込みへ進む・一覧の行の読み直し */
+  var VER = 'starticon-d-20261109-ifretry-listopen+lim1+fx2+fx3';   /* ★93-k: キャラ一覧を開いたままでも 1 回の再読み込みへ進む・一覧の行の読み直し */
   var KILL = 'v292DfixSTARTICONOff', NOAI = 'v292DfixSTARTICONNoAI', LSK = 'v292DfixSTARTICON_v1', HOLDK = 'v292DfixSTARTICON_hold', RETRY_OFF = 'v292DfixSTARTICONRetryOff';   /* ★93-j */
   var LIST_OFF = 'v292DfixSTARTICONListOff', REOPENK = 'v292DfixSTARTICON_reopen';   /* ★93-k: kill（= 93-j と同じ再読み込みの待ち方）・再読み込みの後に一覧を開き直す印（sessionStorage・このタブだけ） */
   var IF_WAIT_MS = 20000, IF_SPAN_MS = 20000;   /* ★93-j: IN_FLIGHT の後に待つ時間 = 20 秒 + 0〜20 秒（Worker の口座の札 MX_LEASE_MS = 300 秒より十分短い・生成 1 枚より長い） */
@@ -76,6 +76,7 @@
   var stats = { plans: 0, proposals: 0, direct: 0, sets: 0, setFail: 0, ef: 0, created: 0, exists: 0, efFail: 0, reloads: 0, skipped: 0, sentWhileInFlight: 0, inflight: 0, ifRetry: 0, ifFilled: 0, ifGiveUp: 0, listReload: 0, listWaitToast: 0, listReopen: 0, listRefresh: 0,
     factsOk: 0, factsRepaired: 0, factsSex: 0, factsFatal: 0, unkHeld: 0, unkAdopted: 0, unkContinue: 0, unkSerialStop: 0 };   /* ★93-j: +inflight / ifRetry / ifFilled / ifGiveUp ★93-k: +list* ★ICONFIX2: +facts* / unk* */
   function fx2bOn() { var P = root.__v292DfixLC1prop; return lsGet(FX2B_OFF) !== '1' && !!(P && typeof P.enforceFacts === 'function'); }
+  function fx3On() { var P = root.__v292DfixLC1prop; return lsGet('v292DfixICONFIX3Off') !== '1' && lsGet('v292DfixICONFIX3NoDescOff') !== '1' && !!(P && typeof P.fx3Fill === 'function'); }   /* ★ICONFIX3: 説明文なしの自動（個別の kill = v292DfixICONFIX3NoDescOff） */
   function fx2cOn() { return lsGet(FX2C_OFF) !== '1'; }
   function tmOn() { return lsGet(FX2T_OFF) !== '1'; }
 
@@ -238,7 +239,8 @@
         if (!s) why = 'NO_ENTRY';
         else if (!(s.current && s.current.appearance)) {
           var desc = String(s.desc || '').trim();
-          if (!desc) why = 'SKIP_NO_DESC';   /* only from the description the story already has */
+          if (!desc && !fx3On()) why = 'SKIP_NO_DESC';   /* only from the description the story already has */
+          else if (!desc) dc = { ok: false, why: 'NO_DESC' };   /* ★ICONFIX3: 説明文の無い登録キャラも見送らない（性別・役割・世界観から無難な外見を埋める） */
           else { try { dc = UX().directCheck(desc, s.gender); } catch (e) { dc = { ok: false, why: 'THREW' }; }
             if (!dc.ok && SENSITIVE[dc.why]) why = 'SKIP_' + dc.why;   /* left to the manual 2-tap (the Owner reads the draft) */
             else if (!dc.ok && lsGet(NOAI) === '1') why = 'SKIP_NOAI'; }
@@ -269,7 +271,7 @@
         var desc = String(s.desc || '').trim(), dc = c.dc || { ok: false, why: '?' }, tw = Date.now();
         waitFor(quiet, WAIT_MS * 6, function (q) {
           if (!q) { mark('NOT_QUIET'); return endA('NOT_QUIET'); }   /* nothing sent for this character */
-          var input = { name: c.name, gender: genderOf(s.gender), desc: desc, confirmed: '', context: lore().slice(0, 120), hero: c.hero };
+          var input = { name: c.name, gender: genderOf(s.gender), desc: desc, confirmed: '', context: lore().slice(0, 120), hero: c.hero, auto: true };   /* ★ICONFIX3: auto = 案の失敗で見送らない（LC1prop が決まった語で埋める。旧い LC1prop は読まない） */
           stats.proposals++; if (dc.ok) stats.direct++;
           note({ kind: 'PROPOSE', direct: !!dc.ok });
           var tp = Date.now();
@@ -277,6 +279,7 @@
             res = res || {};
             var tpe = Date.now();
             tmC(id, h, function (t) { t.w = tp - tw; t.p = tpe - tp; t.ai = (res.aiCalled === true) ? 1 : 0; t.nh = res.nh ? 1 : 0; });   /* ★ICONFIX2 t: w = waiting for a quiet page, p = the proposal (AI or not) */
+            if (res.fx3) { note({ kind: 'FX3', why: res.fx3.why, ai: res.fx3.ai || 0, det: res.fx3.det || 0, code: res.fx3.code || null }); soSet(id, function (so) { so.x = so.x || {}; so.x[h] = String(res.fx3.why) + ':' + (res.fx3.ai || 0) + '+' + (res.fx3.det || 0); }); }   /* ★ICONFIX3: 足した語の数だけ（語そのものは残さない） */
             if (fx2bOn()) {   /* ★ICONFIX2 b: the proposal is checked against the description's fixed facts (whatever path made it) */
               try { res = root.__v292DfixLC1prop.enforceFacts(res, input) || res; } catch (eF) { note({ kind: 'FACTS_THREW', e: String(eF).slice(0, 60) }); }
               var fc = res.facts;
