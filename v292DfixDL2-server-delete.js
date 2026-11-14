@@ -97,7 +97,7 @@
             if (sd1Stable(lt[i]) !== sd1Stable(st[i])) { sd1.differs++; sd1.last = { code: 'device-differs', at: i, t: Date.now() }; cb({ code: 'sd1-device-differs', text: SD1_DIFF, recheck: true }); return; }
           }
           sd1.passed++; sd1.last = { code: 'pass', local: lt.length, server: st.length, t: Date.now() };
-          if (free2On()) r.sd1Pass = { title: (rec && typeof rec.title === 'string') ? rec.title : null };   /* ★FREE2: 確認が通った行の印（メモリだけ） */
+          if (free2On()) r.sd1Pass = { title: (rec && typeof rec.title === 'string') ? rec.title : null, mem: !!(rec && rec.sidecar && typeof rec.sidecar === 'object' && Object.prototype.hasOwnProperty.call(rec.sidecar, 'memoryV1')) };   /* ★FREE2d: サーバーの行が memoryV1 を持つか */   /* ★FREE2: 確認が通った行の印（メモリだけ） */
           cb(null);
         } catch (e2) { sd1.readFail++; cb({ code: 'sd1-threw', text: '削除の前の確認ができませんでした。何も変わっていません。', recheck: true }); }
       });
@@ -126,7 +126,7 @@
       if (!mo || (mo.state !== 'DIRTY_INTENT' && mo.state !== 'DIRTY_LOCAL')) { free2Note(r.id, 'marker-state'); return Promise.resolve(); }
       var S = null; try { S = window.__v292DfixSTORE1b; } catch (e1) { S = null; }
       if (!S || typeof S.free2Hash !== 'function') { free2Note(r.id, 'no-store1b'); return Promise.resolve(); }
-      return Promise.resolve(S.free2Hash(r.id, r.sd1Pass.title)).then(function (x) {
+      return Promise.resolve(S.free2Hash(r.id, r.sd1Pass.title, r.sd1Pass.mem ? { mem: true } : undefined)).then(function (x) {   /* ★FREE2d */
         if (!x || !x.h) { free2Note(r.id, 'no-hash'); return; }
         if (x.h !== h) { free2Note(r.id, 'content-differs'); return; }
         if (x.same !== true || typeof x.mk !== 'string' || lsg('v292Dfix402_f781g_' + r.id) !== raw) { free2Note(r.id, 'marker-moved'); return; }
