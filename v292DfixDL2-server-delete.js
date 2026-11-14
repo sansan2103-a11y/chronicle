@@ -96,10 +96,48 @@
           for (var i = 0; i < lt.length; i++) {
             if (sd1Stable(lt[i]) !== sd1Stable(st[i])) { sd1.differs++; sd1.last = { code: 'device-differs', at: i, t: Date.now() }; cb({ code: 'sd1-device-differs', text: SD1_DIFF, recheck: true }); return; }
           }
-          sd1.passed++; sd1.last = { code: 'pass', local: lt.length, server: st.length, t: Date.now() }; cb(null);
+          sd1.passed++; sd1.last = { code: 'pass', local: lt.length, server: st.length, t: Date.now() };
+          if (free2On()) r.sd1Pass = { title: (rec && typeof rec.title === 'string') ? rec.title : null };   /* ★FREE2: 確認が通った行の印（メモリだけ） */
+          cb(null);
         } catch (e2) { sd1.readFail++; cb({ code: 'sd1-threw', text: '削除の前の確認ができませんでした。何も変わっていません。', recheck: true }); }
       });
     } catch (e) { sd1.readFail++; cb({ code: 'sd1-threw', text: '削除の前の確認ができませんでした。何も変わっていません。', recheck: true }); }
+  }
+  /* ★FREE2（laneFREE2・既定 OFF: localStorage v292DfixFREE2On='1' のときだけ。kill v292DfixFREE2Off='1' が勝つ。OFF は何も読まない・書かない）
+     公式の削除（SD1 の確認が通り、deletestory2 が 200 で成立し、この端末の墓標も立った）の直後に、同期の印が DIRTY_INTENT / DIRTY_LOCAL の物語だけ:
+     この端末の全体（fix697.projectionV2＋deleted＋サーバーの title）の SHA-256 が、Worker が返した墓標の hash と 1 文字も違わないとき、
+     証明 v292DfixFREE2_proofs[id] = { v:1, h, rev, at, mk, jr } を残す（h = 墓標の hash、mk = その時の印の指紋、jr = 送信の記録 f697p の指紋か null。題名・本文は入れない）。
+     STORE1b（空き容量のシート）がこの証明と、消す時点のサーバーの墓標・端末の全体をもう一度突き合わせる。ここでは何も消さない。
+     印が CLEAN の物語は証明が要らない（従来どおりシートに出る）。違った・作れなかった物語は証明なし＝従来どおり対象外。通信は増えない。 */
+  var F2_KEY = 'v292DfixFREE2_proofs', F2_MAX = 100;
+  function free2On() { return lsg('v292DfixFREE2On') === '1' && lsg('v292DfixFREE2Off') !== '1'; }
+  var free2 = { tried: 0, recorded: 0, clean: 0, differs: 0, skipped: 0, last: null };
+  function free2Note(id, code) { free2.last = { code: code, t: Date.now() }; if (code === 'recorded') free2.recorded++; else if (code === 'clean-no-proof-needed') free2.clean++; else if (code === 'content-differs') free2.differs++; else free2.skipped++; }
+  function free2Record(r, j, a) {
+    try {
+      if (!free2On()) return Promise.resolve();
+      free2.tried++;
+      if (!r || !r.sd1Pass || typeof r.sd1Pass.title !== 'string') { free2Note(r && r.id, 'no-sd1-pass'); return Promise.resolve(); }
+      if (!a || a.ok !== true || a.code !== 'tombstoned') { free2Note(r.id, 'no-local-tombstone'); return Promise.resolve(); }
+      var h = String((j && j.serverHash) || ''), rev = j && +j.rev;
+      if (!/^[0-9a-f]{64}$/.test(h) || !(rev >= 1) || j.recordSchema !== 2) { free2Note(r.id, 'no-server-hash'); return Promise.resolve(); }
+      var raw = lsg('v292Dfix402_f781g_' + r.id), mo = null; try { mo = raw == null ? null : JSON.parse(raw); } catch (e0) { mo = null; }
+      if (raw == null || (mo && mo.state === 'CLEAN' && !mo.inFlightSave)) { free2Note(r.id, 'clean-no-proof-needed'); return Promise.resolve(); }
+      if (!mo || (mo.state !== 'DIRTY_INTENT' && mo.state !== 'DIRTY_LOCAL')) { free2Note(r.id, 'marker-state'); return Promise.resolve(); }
+      var S = null; try { S = window.__v292DfixSTORE1b; } catch (e1) { S = null; }
+      if (!S || typeof S.free2Hash !== 'function') { free2Note(r.id, 'no-store1b'); return Promise.resolve(); }
+      return Promise.resolve(S.free2Hash(r.id, r.sd1Pass.title)).then(function (x) {
+        if (!x || !x.h) { free2Note(r.id, 'no-hash'); return; }
+        if (x.h !== h) { free2Note(r.id, 'content-differs'); return; }
+        if (x.same !== true || typeof x.mk !== 'string' || lsg('v292Dfix402_f781g_' + r.id) !== raw) { free2Note(r.id, 'marker-moved'); return; }
+        var all = null; try { all = JSON.parse(lsg(F2_KEY) || '{}'); } catch (e2) { all = null; }
+        if (!all || typeof all !== 'object' || Object.prototype.toString.call(all) === '[object Array]') all = {};
+        all[r.id] = { v: 1, h: h, rev: rev, at: Date.now(), mk: x.mk, jr: (typeof x.jr === 'string') ? x.jr : null };   /* jr = その時に残っていた送信の記録（f697p）の指紋 */
+        var ks = Object.keys(all);
+        if (ks.length > F2_MAX) { ks.sort(function (p, q) { return (+(all[p] && all[p].at) || 0) - (+(all[q] && all[q].at) || 0); }); for (var i = 0; i < ks.length - F2_MAX; i++) delete all[ks[i]]; }
+        try { localStorage.setItem(F2_KEY, JSON.stringify(all)); free2Note(r.id, 'recorded'); } catch (e3) { free2Note(r.id, 'write-failed'); }
+      }, function () { free2Note(r.id, 'threw'); });
+    } catch (e) { return Promise.resolve(); }
   }
   var PROTECT = { smv6r10s7u9: 1 };   /* Owner 2026-11-11: smv82tjjai8・smv92e8vv1f の保護を外した（Worker v46.44b） */ //   /* 表示用。最終の関所は Worker（env で外せない） */
   var st = { version: VERSION, mode: MODE, opened: 0, sends: 0, accepted: 0, reconciles: 0, results: [],
@@ -320,9 +358,12 @@
   /* ================================================================ send */
   function W() { return W697(); }
   function setRes(r, ok, text, extra) { r.result = { ok: !!ok, text: text }; if (extra) for (var k in extra) r[k] = extra[k]; note({ id: r.id, ok: !!ok, text: text, code: (extra && extra.code) || null }); }
-  function accept(r, how) {
+  function accept(r, how, j) {
     var s = svc();
     return Promise.resolve(s.acceptServerTombstone(r.id, { source: 'dl2-delete', allowDirty: true })).then(function (a) {
+      if (j && free2On()) { var a0 = a; return free2Record(r, j, a0).then(function () { return a0; }, function () { return a0; }); }   /* ★FREE2 */
+      return a;
+    }).then(function (a) {
       st.accepted++; r.done = true; r.retryable = false; M && (M.changed = true);
       var t = (how === 'already') ? '別の端末ですでに削除されていました。この端末の一覧からも外しました。' : '一覧から削除しました。';
       if (!a || !a.ok) t += '（この端末の一覧はまだ更新できていません。次にホームを開いたときにもう一度確かめます）';
@@ -352,7 +393,7 @@
     if (err === 'NOT_LOGGED_IN') { setRes(r, false, 'ログインが切れています。何も送っていません。', { code: err }); return Promise.resolve(); }
     if (err || !x) { r.last5xx = null; return reconcile(r); }                     /* 応答を取り逃した → 読むだけで判定 */
     var j = x.j || {}, s = x.status, c = j.errorCode || null;
-    if (s === 200 && j.ok === true && j.deleted === true) return accept(r, 'deleted');
+    if (s === 200 && j.ok === true && j.deleted === true) return accept(r, 'deleted', j);   /* ★FREE2: j = 成立した削除の応答（墓標の hash・rev） */
     if (s === 409 && c === 'already-deleted') return accept(r, (j.serverRev === r.basis.rev + 1) ? 'deleted' : 'already');
     if (s === 409 && /^(rev-mismatch|hash-mismatch|authority-mismatch|cas-lost|authority-unsupported)$/.test(String(c))) {
       setRes(r, false, '別の端末で更新されています。何も変わっていません。「確認し直す」でもう一度確認してください。', { code: c, recheck: true }); return Promise.resolve();
@@ -637,7 +678,7 @@
       rows: M ? M.rows.map(function (r) { return { id: r.id, ready: r.ready, checked: r.checked, kind: r.kind, reason: r.reason, warn: r.warn.slice(), result: r.result, retryable: r.retryable, done: r.done }; }) : null,
       msg: M ? M.msg : null, stuck: stuckCount(), opened: st.opened, sends: st.sends, accepted: st.accepted, reconciles: st.reconciles, receive: JSON.parse(JSON.stringify(st.receive)),
       guardRefused: st.guardRefused, guardClicks: st.guardClicks, wrapped: st.wrapped, log: st.results.slice(),
-      sd1: { on: sd1On(), stats: JSON.parse(JSON.stringify(sd1)) } }; }
+      sd1: { on: sd1On(), stats: JSON.parse(JSON.stringify(sd1)) }, free2: { on: free2On(), stats: JSON.parse(JSON.stringify(free2)) } }; }
   };
   try { console.log(TAG, 'loaded', MODE, off() ? '(off)' : ''); } catch (e) {}
 })();

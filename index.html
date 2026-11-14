@@ -346,7 +346,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261114-place1r4';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261115-free2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -2930,7 +2930,7 @@ const G = {
             for (var j = 0; j < fulls.length; j++){ if (fulls[j] === f[0]) continue; if (nsp[j].indexOf(a) >= 0 || a.indexOf(nsp[j]) >= 0) return; }
             al[a] = f[0];
           });
-          var aliases = Object.keys(al); if (!aliases.length) return;
+          var aliases = Object.keys(al); try { window.__v292DfixSPKW1 = { on: true, aliases: al, expand: _spkw1Exp, ver: 'spkw1b-20261114' }; } catch(_e0){} /* ★SPKW1b: 呼び名の表が空でも、鍵が入っていれば確認の口を置く（読み替えは何もしない関数） */ if (!aliases.length) return;
           var esc = function(x){ return x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
           var re = new RegExp(fulls.concat(aliases).sort(function(a, b){ return b.length - a.length; }).map(esc).join('|'), 'g');
           var PRE_BAD = /[一-鿿゠-ヿｦ-ﾝーA-Za-z0-9０-９ａ-ｚＡ-Ｚ々]/;
@@ -2947,7 +2947,7 @@ const G = {
               return al[m];
             });
           };
-          try { window.__v292DfixSPKW1 = { on: true, aliases: al, expand: _spkw1Exp, ver: 'spkw1-20261114' }; } catch(_e){}
+          try { window.__v292DfixSPKW1 = { on: true, aliases: al, expand: _spkw1Exp, ver: 'spkw1b-20261114' }; } catch(_e){}
         })(); } catch(_eSpkw1){ _spkw1Exp = function(s){ return s; }; } }
         var _LANGS217 = { ja: { bareSrc: '「([^」]*)」', speechVerb: /(言|呟|囁|尋|問|答|叫|返|応|漏|告|呼|続|笑|声|呻|唸)/, nonSpeech: /(呼ば|称さ)れ|出かかっ|言いかけ|飲み込ん|呑み込ん|喉に詰ま/, /* v292Dfix276: 非発話3型追加(実測T36「檻」=言葉が出かかって型) */ negSpeech: /^[\s　]*と(も|は)[\s　]*言わ(ない|なかった)|^[\s　]*と[\s　]*言った(わけ|訳)(では|じゃ)ない/, /* v292Dfix811(4B1B R3 NEGATED_QUOTATION・GPT GO_NARROW 2026-09-05): 引用直後の発話動詞「言」が否定されている 3 系統だけ＝「Q」とも言わない(かった)／「Q」とは言わない(かった)／「Q」と言ったわけでは(じゃ)ない → 非発話（実測 smtodgp8rb3 T8「選べ」とも「答えろ」とも言わない が男の speech card 化）。_post 先頭アンカー＝引用直後の動詞だけを見るので「Xとは言わなかったが、Yとは言った」は X のみ抑制。「言わずにはいられなかった」(ず)・「言っていない」・他動詞の否定は対象外(v1 narrow・speechVerb 全体へ一般化しない)。既定 ON（GPT 深夜220）／kill v292Dfix811Off='1'／v292Dfix811On は互換受理 */ negSpeech2: /^[\s\u3000]*と[もは]?[\s\u3000]*(?:(?:言わ|呟か|囁か|尋ね|問わ|答え|叫ば|返さ|応え|漏らさ|告げ|呼ば)(?:ない|なかった|ぬ|ず(?!には))|(?:言っ|呟い|囁い|尋ね|問い|答え|叫ん|返し|応え|漏らし|告げ|呼ん)て(?:い|は)?(?:ない|なかった|ません)|(?:言う|呟く|囁く|尋ねる|問う|答える|叫ぶ|返す|応える|漏らす|告げる|呼ぶ)こと(?:は|も)?(?:な|無)かった|(?:言お|呟こ|囁こ|尋ねよ|問お|答えよ|叫ぼ|返そ|応えよ|漏らそ|告げよ|呼ぼ)うとし(?:ない|なかった))/, /* v292Dfix833 NEGATED_QUOTE_FAMILY_REMAINDER（GPT 裁定 79）: fix811 が閉じた 3 型の残り。(1) 言/呟/囁/尋/問/答/叫/返/応/漏/告/呼 の否定（ない・なかった・ぬ・ず ※『ずにはいられ』は除外＝二重否定は実際に言っている）(2) 〜ていない／〜ていなかった／〜ていません（言っていない型） (3) 〜ことはなかった（言うことはなかった型）(4) 〜おうとしない／しなかった（言おうとしない型）。すべて **引用直後（_post 先頭）にアンカー**し、**発話動詞そのものが否定されている**場合だけ。一般的な否定語の抑制ではない（global negation suppression は禁止）。LLM 判定も新 schema も追加しない。say-tag / react-voice の高信頼経路は通らない（_mk218 = 地の文の裸引用のみ・裁定 79 の provenance 優先）。既定 ON ／ kill: v292Dfix833Off='1' */ quoteLead: /^\s*[とっ、]*と/, voiceNoun: /^の[^。「」]{0,6}(声|言葉|悲鳴|金切|叫|呟|囁|うめ|絶叫|嗚咽)/, entityNouns: '(妖怪|怪異|化け物|怪物|魔物|悪霊|亡霊|幽霊|人形)', subjAfter: /^[\s　]*[がは]/, voiceAfter: /^の[^。、\n]{0,2}(声|言葉|喉|口|唇|悲鳴|叫)/, voicePost: /^[がはの][^。\n]{0,8}(声|悲鳴|絶叫|金切|嗚咽|叫び)(を上げ|を漏ら|を絞|が漏れ|が上が|が響|が迸|を発)/, namingPre: /を[\s　]*$/ } }; /* v292Dfix217: 言語プロファイル(多言語展開用)。bareSrc=裸引用の正規表現ソース(キャプチャ群ちょうど1個の契約)。言語追加=ここに1エントリ+S.cfg.langで選択。例 en: bareSrc:'“([^”]+)”'(ASCIIの"はsayタグ属性と衝突するためスマートクォート推奨), speechVerb=(said|whisper|shout|murmur|replied|asked|cried)/i, quoteLead=^[\s,]+ 等。露語は«»+ダッシュ式の別bareSrcが要る。 */ var _L217 = _LANGS217[(S.cfg && S.cfg.lang) || 'ja'] || _LANGS217.ja; var _va217 = (_spkw1 && _L217 === _LANGS217.ja) ? /^の[^。、\n]{0,2}(声|言葉|喉|口|唇|悲鳴|叫)(?![びき]?声?(?:(?:に|へ)(?:対して)?(?:[、,「『]|$)|を(?:聞|背|遮|さえぎ|思)))/ : _L217.voiceAfter; var _sv217 = (_spkw1 && _L217 === _LANGS217.ja) ? /(言っ|言う|言い|呟|囁|尋ね|訊|問いかけ|問う|答え|叫|返し|返す|応じ|応え|漏らし|告げ|呼ん|呼び|続け|笑っ|声を)/ : _L217.speechVerb; /* ★SPKW1 V-i・P: 鍵なしは従来の正規表現そのもの */ var _sayRe = new RegExp('<say\\s+who="([^"]*)"\\s*>([^<]*)<\\/say>|' + _L217.bareSrc, 'g'), _sm, _seenSay = {}; /* v292Dfix218: 話者候補=キャスト+本文中の人外実体(fix207語彙)。確信のみ採用・不確信は保留して第2層(モデル帰属照会)へ */ var _cands218 = _names.slice(); try { var _em218, _entRe218 = new RegExp(_L217.entityNouns, 'g'); while ((_em218 = _entRe218.exec(_body))) { if (_cands218.indexOf(_em218[0]) < 0) _cands218.push(_em218[0]); } } catch(e){} var _pend218 = []; /* v292Dfix213: タグ付きセリフの正規化テキスト集合を先に作る(モデルが同じセリフを裸「」とタグで二重に書く対策) */ var _tagNorm = {}; try { var _tm, _tRe = /<say\s+who="([^"]*)"\s*>([^<]*)<\/say>/g; while ((_tm = _tRe.exec(_body))) { _tagNorm[String(_tm[2]||'').trim().slice(0,80).replace(/([？！。…」])と(聞い|言っ|尋ね|呟い|囁い|叫ん|答え|返し|告げ)(た|だ)$/, '$1').replace(/[\s　。、！？!?…・「」『』]/g,'')] = 1; /* v292Dfix255c: ト書き尻尾切除を辞書側にも適用(裸「」との重複判定の整合) */ var _tw238 = String(_tm[1]||'').trim().slice(0,24); if (_tw238 && _cands218.indexOf(_tw238) < 0) _cands218.push(_tw238); } } catch(e){} /* v292Dfix238: タグ付きで登場した話者(店主・通行人等の未登録キャラ)を同ターンの裸引用の話者候補へ動的追加。実測: ジャンルフリー化後、人外固定語彙に無い「店主」の裸セリフ「無料だよ！」がカエデに誤帰属した対策 */
         var _F833_DEFAULT_ON = true;  var _neg833 = function(p, q){ try { if (localStorage.getItem('v292Dfix833Off') === '1') return false; if (!_F833_DEFAULT_ON) return false; if (!(_L217.negSpeech2 && _L217.negSpeech2.test(p))) return false; try { var _o833 = (window.__v292Dfix833 = window.__v292Dfix833 || { suppressed: 0, last: null }); _o833.suppressed++; _o833.last = { q: String(q || '').slice(0, 24), post: String(p || '').slice(0, 32) }; } catch(e2){} return true; } catch(e){ return false; } };  var _F811_DEFAULT_ON = true;  var _neg811 = function(p, q){ try { if (localStorage.getItem('v292Dfix811Off') === '1') return false; if (!_F811_DEFAULT_ON && localStorage.getItem('v292Dfix811On') !== '1') return false; if (!(_L217.negSpeech && _L217.negSpeech.test(p))) return false; try { var _o811 = (window.__v292Dfix811 = window.__v292Dfix811 || { suppressed: 0, last: null }); _o811.suppressed++; _o811.last = { q: String(q || '').slice(0, 24), post: String(p || '').slice(0, 24) }; } catch(_e){} return true; } catch(e){ return false; } }; /* v292Dfix811: 否定された発話動詞の引用は _mk218（後置話者型）にしない。独立行 _lh217・say タグ・react 声は不変。in-memory counter のみ（永続 0） */
@@ -4646,7 +4646,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix577-delete-entry-guard.js?cb=v292Dfix577"></script>
 <script src="v292Dfix933-beta-delete-off.js?cb=20261111-delall"></script>
 <!-- ★★DL2 (S-2 / GPT #127-FJ D8): ゲーム画面の「削除」とギャラリーの「セーブを削除」は「削除はホームから」の案内だけ（旧経路の送信を止める）。kill = v292DfixDL2Off=1 -->
-<script src="v292DfixDL2-server-delete.js?cb=20261114-save1" data-dl2="index"></script>
+<script src="v292DfixDL2-server-delete.js?cb=20261115-free2" data-dl2="index"></script>
 <script src="v292Dfix313-story-cards.js?cb=20261019-bundle31-a"></script>
 <script src="v292Dfix314-memory.js?cb=20260829-fix748"></script>
 <script src="v292Dfix317-slot-leak.js?cb=20260901-fix783"></script>

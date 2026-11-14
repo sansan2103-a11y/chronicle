@@ -111,6 +111,21 @@
  *       なら、上の証明へ回す（DIVERGED / BOOTSTRAP_HOLD / 送信中 / f911・f697p・rescue・Vault・パスコード・開いている は今までどおり止める）。
  *       このとき消すキーは STUCK1 r2 と同じ a / b だけ（c＝この端末にしか無いかもしれないものと同期の印は残す）。
  *   題名で決めない（題名は hash の入力の一部として一致を求めるだけ）。Vault を迂回しない。OFF のときは 1 バイトも同じ判断（ZT1 の関数は何も読まない）。
+ * ■★FREE2（laneFREE2・Owner 承認の範囲「サーバー側の削除状態と一致し、未同期の変更がないと確認できたものに限り、端末内の写しを整理」。
+ *   既定 OFF: localStorage v292DfixFREE2On='1' のときだけ。kill v292DfixFREE2Off='1' が勝つ。OFF のときは 1 キーも余計に読まず同じ判断）
+ *   実測（Owner PC 2026-11-14）: 公式の削除シート（SD1 が通った削除）で消した試験物語の写しが、同期の印 f781g が DIRTY_INTENT / DIRTY_LOCAL
+ *   （または送信中の印が残ったまま）だったために L6 の 'unsynced' / 'in-flight' で止まり、空き容量のシートに出なかった。
+ *   DL2（v292DfixDL2-server-delete.js）が削除の成立の直後に「削除の時点で、この端末の全体（fix697.projectionV2）＝サーバーの墓標」を
+ *   SHA-256 で確かめられたときだけ、証明 v292DfixFREE2_proofs[id] = { v, h: 墓標の hash, rev, at, mk: その時の印の指紋 } を残す。
+ *   （jr = その時に送信の記録 f697p が残っていればその指紋。無ければ null）
+ *   STORE1b は、その証明があり・印と送信の記録が証明の時から 1 文字も変わっておらず・墓標の rev が同じ物語だけ、L6 をその場で決めずにサーバーの確認へ回す:
+ *     getstory の serverHash・rev が証明と同じ、かつ いまの端末の全体（projectionV2＋deleted＋サーバーの墓標の title）の SHA-256 がその hash と
+ *     1 文字も違わない → 通す（dirtyProven。消すのは STUCK1 r2 と同じ a / b だけ。c と同期の印は残す）。1 つでも違う → 'unsynced-unproven'。
+ *     送信の記録 f697p は消さない（残るときは同期の印も残す）。
+ *   もう 1 つ（同じ鍵）: L5 の 'active-slot'。chr6_active_slot は最後に開いた物語の写しで、削除しても次に別の物語を開くまで残る。
+ *   サーバーで確かめて立てた墓標のある物語については理由にしない（開いているかは Web Lock と lastOpenedAt 10 分で見る＝従来どおり）。
+ *   証明が無い物語（FREE2 より前に消した写し・削除の時点で端末がサーバーと違った写し）は今までどおり。DIVERGED / BOOTSTRAP_HOLD / f911 / f697p /
+ *   rescue / 削除の計画が開いている / Vault・パスコード / 開いている は今までどおり止める。全キー名の一覧は作らない。自動では消さない（シートで選ぶ）。
  * ===================================================================== */
 (function (root) {
   'use strict';
@@ -135,6 +150,7 @@
      この表に無い family・形の分からないキーは c と同じ扱い（消さない） */
   var STUCK_ON = 'v292DfixSTUCK1On', SVERSION = 'STUCK1-r2';
   var ZT_ON = 'v292DfixZT1On', ZT_OFF = 'v292DfixZT1Off';   /* ★ZT1 */
+  var F2_ON = 'v292DfixFREE2On', F2_OFF = 'v292DfixFREE2Off', F2_KEY = 'v292DfixFREE2_proofs', F2_VERSION = 'FREE2-r1';   /* ★FREE2 */
   var FAMILY_CLASS = {
     'chr6_slot_': 'a', 'chr6_relations_': 'a', 'chr6_char_states_': 'a', 'chr6_char_flags_': 'a', 'chr6_pending_dice_': 'a',
     'chr6_turn_summaries_': 'a', 'chr6_chapter_titles_': 'a', 'chr6_scene_breaks_': 'a', 'chr6_scene_summaries_': 'a',
@@ -212,6 +228,7 @@
       if (cls === 'a' || cls === 'b') { out.keys.push(k); out.vals.push(v); out.chars += k.length + (v == null ? 0 : v.length); }
       else { out.keptC++; out.keptCChars += k.length + (v == null ? 0 : v.length); }
     }
+    if (env.free2 === true && g(env, 'v292Dfix402_f697p_' + id) != null) { out.keptC++; out.keptCChars += ('v292Dfix402_f697p_' + id).length + g(env, 'v292Dfix402_f697p_' + id).length; }   /* ★FREE2: 送信の記録が残る → 同期の印も残す */
     if (mi >= 0) {
       if (out.keptC) out.markerKept = true;
       else { var mv = pl.vals ? pl.vals[mi] : null; out.keys.push(mkK); out.vals.push(mv); out.chars += mkK.length + (mv == null ? 0 : mv.length); }
@@ -259,12 +276,32 @@
     return !!(b && typeof b === 'object' && !isArr(b) && isArr(b.turns) && b.turns.length === 0);
   }
   function zt1Row(id, env) { var m = metaRows(env) || []; for (var i = 0; i < m.length; i++) if (m[i] && String(m[i].id) === id && m[i].deleted === true) return m[i]; return null; }
+  /* ★FREE2: 削除の時点の証明（DL2 が残す）があり、印がその時から変わっていない物語か。返すのは証明（{h,rev,...}）か null。
+     読むのは証明の表・印・meta の墓標の行だけ（本文は読まない）。 */
+  function free2Proof(id, env, row, mkRaw, mo) {
+    if (env.free2 !== true || typeof env.dirtyProof !== 'function') return null;
+    if (mkRaw == null || !mo || typeof mo !== 'object' || STALE_DIRTY[String(mo.state || '')] !== 1) return null;   /* DIVERGED / BOOTSTRAP_HOLD は対象外 */
+    if (mo.storyId != null && String(mo.storyId) !== id) return null;
+    var st = row && row.serverTombstone;
+    if (!st || typeof st !== 'object' || typeof st.at !== 'number' || !(st.at > 0) || st.source !== 'dl2-delete') return null;   /* 公式の削除シートで、サーバーを確かめて立てた墓標だけ */
+    var all = J(g(env, F2_KEY), null); if (!all || typeof all !== 'object' || isArr(all)) return null;
+    var p = Object.prototype.hasOwnProperty.call(all, id) ? all[id] : null;
+    if (!p || typeof p !== 'object' || p.v !== 1 || !HEX64.test(String(p.h || '')) || typeof p.rev !== 'number' || typeof p.mk !== 'string') return null;
+    if (p.rev !== st.rev) return null;                    /* 証明は、この墓標を立てた削除のもの */
+    if (p.mk !== h53(mkRaw)) return null;                 /* 印が証明の時から 1 文字でも変わった */
+    /* 送信の記録 f697p（その時の送信の控え）: 証明の時にあったものが 1 文字も変わらず残っている／その時に無く今も無い のどちらかだけ */
+    var jr = g(env, 'v292Dfix402_f697p_' + id);
+    if (jr == null ? (p.jr != null) : (typeof p.jr !== 'string' || p.jr !== h53(jr))) return null;
+    return p;
+  }
   /* いま、その物語がサーバーの内容の確認を要るか。要る → 墓標の title / 要らない → null。値を読むのは印と meta だけ */
   function stuckNeeds(id, env) {
-    if ((env.stuck1 !== true && env.zt1 !== true) || typeof env.dirtyProof !== 'function') return null;   /* OFF: 1 キーも余計に読まない */
+    if ((env.stuck1 !== true && env.zt1 !== true && env.free2 !== true) || typeof env.dirtyProof !== 'function') return null;   /* OFF: 1 キーも余計に読まない */
     var mk = g(env, 'v292Dfix402_f781g_' + id); if (mk == null) return null;
     var mo = J(mk, null), row = null, m = metaRows(env) || [];
     for (var i = 0; i < m.length; i++) if (m[i] && String(m[i].id) === id && m[i].deleted === true) { row = m[i]; break; }
+    var fp = free2Proof(id, env, row, mk, mo);
+    if (fp) return { title: row.title, free2: fp };       /* ★FREE2: 証明つき（STUCK1 / ZT1 の条件より先。証明の hash・rev とも突き合わせる） */
     return (staleDirtyLocal(id, env, row, mo) || zt1DirtyLocal(id, env, row, mo)) ? { title: row.title } : null;
   }
   /* サーバーの墓標の hash とこの端末の内容が同じか。null = 確認不要か一致 / 理由コード = 一致を確かめられない */
@@ -278,6 +315,11 @@
     }
     if (!need) return Promise.resolve(null);
     if (!HEX64.test(String(se && se.serverHash || ''))) return Promise.resolve('unsynced-unproven');
+    if (need.free2) {   /* ★FREE2: サーバーの墓標が証明の時のまま（hash・rev）で、いまの端末の全体がその hash と同じ。title はサーバーの墓標のもの */
+      if (String(se.serverHash) !== need.free2.h || se.rev !== need.free2.rev || typeof se.title !== 'string') return Promise.resolve('unsynced-unproven');
+      return Promise.resolve().then(function () { return env.dirtyProof(id, se.title, String(se.serverHash)); })
+        .then(function (why) { if (why == null) { se.dirtyProven = true; se.free2 = true; return null; } return 'unsynced-unproven'; }, function () { return 'unsynced-unproven'; });
+    }
     return Promise.resolve().then(function () { return env.dirtyProof(id, need.title, String(se.serverHash)); })
       .then(function (why) { if (why == null) { se.dirtyProven = true; if (se.zeroTurn === true) se.zeroTurnProven = true; return null; } return se.zeroTurn === true ? 'zero-turn-unproven' : 'unsynced-unproven'; }, function () { return se.zeroTurn === true ? 'zero-turn-unproven' : 'unsynced-unproven'; });
   }
@@ -313,18 +355,26 @@
     if (tomb !== 1) return tomb ? 'dup-tombstone' : 'no-tombstone';
     try { if (env.iso2Foreign && env.iso2Foreign(id)) return 'foreign'; } catch (e3) { return 'foreign-check-threw'; }   /* L4 */
     var act = g(env, 'chr6_active_slot');                                  /* L5 */
-    if (act != null && (act === id || J(act, null) === id)) return 'active-slot';
+    /* ★FREE2: chr6_active_slot は「最後に開いた物語」の写し（fix527 の互換ミラー）で、物語を削除しても次に別の物語を開くまで残る
+       （実測: 削除した直後の試験物語が、この理由でシートに出なかった）。サーバーで確かめて立てた墓標（serverTombstone）のある物語は
+       もう開けない（fix527 は墓標の id をミラーへ書かない・fix588）ので、FREE2 が ON のときは理由にしない。
+       「いま開いているか」は今までどおり Web Lock chronicle:story-open:<id>（一覧では query、消す時は exclusive で取る）と lastOpenedAt 10 分で見る。 */
+    var f2stale = env.free2 === true && !!(row && row.serverTombstone && typeof row.serverTombstone === 'object' && typeof row.serverTombstone.at === 'number' && row.serverTombstone.at > 0);
+    if (act != null && (act === id || J(act, null) === id) && !f2stale) return 'active-slot';
     var lo = row && row.lastOpenedAt ? Date.parse(row.lastOpenedAt) : 0;
     if (lo && env.now() - lo < RECENT_OPEN_MS) return 'recently-opened';
     var mk = g(env, 'v292Dfix402_f781g_' + id);                            /* L6 */
     if (mk != null) {
       var mo = J(mk, null); if (!mo || typeof mo !== 'object') return 'marker-unreadable';
-      if (UNSYNCED_STATES[String(mo.state || '')] === 1 && !staleDirtyLocal(id, env, row, mo) && !zt1DirtyLocal(id, env, row, mo)) return 'unsynced';   /* ★STUCK1: 回したものは stuckProof で確かめる */
-      if (mo.inFlightSave) return 'in-flight';
+      var f2p = free2Proof(id, env, row, mk, mo);   /* ★FREE2（OFF: 何も読まず null） */
+      if (UNSYNCED_STATES[String(mo.state || '')] === 1 && !f2p && !staleDirtyLocal(id, env, row, mo) && !zt1DirtyLocal(id, env, row, mo)) return 'unsynced';   /* ★STUCK1: 回したものは stuckProof で確かめる */
+      if (mo.inFlightSave && !f2p) return 'in-flight';   /* ★FREE2: 削除の時から変わっていない送信中の印は、墓標の hash との一致で確かめる（サーバーの行は墓標＝その送信はもう着地しない） */
       if (mo.storyId != null && String(mo.storyId) !== id) return 'marker-id-mismatch';
     }
     if (g(env, 'v292Dfix402_f911_' + id) != null) return 'stash';
-    if (g(env, 'v292Dfix402_f697p_' + id) != null) return 'journal';
+    /* ★FREE2: 削除の時から変わっていない送信の記録は、その時の端末の全体＝サーバーの墓標 と証明済み（送ろうとした内容はもうサーバーにある）。
+       消す時点でもう一度 hash を突き合わせる。記録そのものは消さない（同期の印と一緒に残す）。f911・rescue は今までどおり止める。 */
+    if (g(env, 'v292Dfix402_f697p_' + id) != null && !(env.free2 === true && mk != null && free2Proof(id, env, row, mk, J(mk, null)))) return 'journal';
     if (g(env, 'v292Dfix945_rescue_' + id) != null) return 'rescue';
     var cf = g(env, 'v292Dfix587_dl2conflict');
     if (cf != null) { var co = J(cf, null); if (!co || typeof co !== 'object') return 'conflict-unreadable'; if (Object.prototype.hasOwnProperty.call(co, id)) return 'conflict'; }
@@ -405,7 +455,9 @@
     var dig = [];
     try { for (var i = 0; i < loc.length; i++) { var sv = stable(b.turns[i]); if (sv !== loc[i]) return { why: 'content-mismatch' }; dig.push(h53(sv)); } }
     catch (eC) { return { why: 'content-mismatch' }; }
-    return { why: null, rev: j.rev, authority: j.authority, serverTurns: b.turns.length, localTurns: loc.length, digest: h53(dig.join(',')), serverHash: j.serverHash };
+    var seOut = { why: null, rev: j.rev, authority: j.authority, serverTurns: b.turns.length, localTurns: loc.length, digest: h53(dig.join(',')), serverHash: j.serverHash };
+    if (env && env.free2 === true && typeof rec.title === 'string') seOut.title = rec.title;   /* ★FREE2: 墓標の title（hash の入力。ログ・proof には入れない） */
+    return seOut;
   }
 
   /* ---- 一覧（何も消さない）: 候補ごとに L1〜L6 → 計画 → getstory → Lock の確認、前後の accountId ---- */
@@ -992,6 +1044,7 @@
              purge: pOn, purgeVault: pOn && lsg(PURGE_VAULT) === '1',
              stuck1: lsg(STUCK_ON) === '1' && lsg(STUCK_OFF) !== '1', dirtyProof: dirtyProofB, otherTab: otherTabSeq,   /* ★STUCK1 r2: 既定 OFF */
              zt1: lsg(ZT_ON) === '1' && lsg(ZT_OFF) !== '1',   /* ★ZT1: 既定 OFF */
+             free2: lsg(F2_ON) === '1' && lsg(F2_OFF) !== '1',   /* ★FREE2: 既定 OFF */
              vault: root.__v292Dfix889 || null, inv: root.__v292Dfix562 || null, gate: root.__v292Dfix569 || null,
              iso2Foreign: function (id) { try { var I = root.__v292Diso2; if (!I || typeof I.stampOf !== 'function' || typeof I.owner !== 'function') return false;
                var me = I.owner().now, sp = I.stampOf(id, 's'); if (!sp) return false; return !!((sp.c && sp.c !== me) || (sp.w && sp.w !== me)); } catch (e) { return true; } } };
@@ -1008,8 +1061,11 @@
       (root.document.head || root.document.documentElement).appendChild(sc);
     } catch (e) { cb(false); }
   }
-  function dirtyProofB(id, title, serverHash) {
-    return new Promise(function (res) {
+  function dirtyProofB(id, title, serverHash) { return free2HashB(id, title).then(function (r) { return r.why ? r.why : (r.h === serverHash ? null : 'content-differs'); }); }
+  /* この端末の全体（projectionV2＋deleted＋title）の canonicalString の SHA-256。{ h } か { why }。読むだけ */
+  function free2HashB(id, title) {
+    return new Promise(function (res0) {
+      var res = function (w) { res0({ why: w }); };
       loadCC2(function (ok) {
         if (!ok) return res('no-cc2');
         var W = root.__v292Dfix697; if (!W || typeof W.projectionV2 !== 'function' || typeof W.canonicalString !== 'function') return res('no-projection');
@@ -1022,7 +1078,7 @@
           if (!root.crypto || !root.crypto.subtle || typeof root.TextEncoder === 'undefined') return res('no-digest');
           root.crypto.subtle.digest('SHA-256', new root.TextEncoder().encode(str)).then(function (buf) {
             var a = new Uint8Array(buf), h = ''; for (var i = 0; i < a.length; i++) { var x = a[i].toString(16); h += (x.length < 2 ? '0' : '') + x; }
-            res(h === serverHash ? null : 'content-differs');
+            res0({ h: h });
           }, function () { res('digest-failed'); });
         } catch (e3) { res('digest-failed'); }
       });
@@ -1230,6 +1286,26 @@
       return (e.purge ? surveyP : survey)(e, bctx()).then(function (rep) { return { purge: !!e.purge, candidate: rep.candidates === 1, eligible: rep.eligible.length === 1, skipped: rep.skipped, dirtyProven: !!(rep.eligible[0] && rep.eligible[0].dirtyProven) }; }); },
     /* ★STUCK1 r2: 理由ごとの数と family ごとの文字数だけ（読むだけ。消さない・書かない） */
     planByReason: function () { if (!ready()) return Promise.resolve({ notReady: true, v: SVERSION }); return planByReason(benv(), bctx()); },
+    /* ★FREE2: DL2 が削除の成立の直後に使う。この端末の全体の hash と印の指紋（読むだけ・通信なし。OFF のときは null） */
+    free2Hash: function (id, title) { if (benv().free2 !== true) return Promise.resolve(null);
+      var raw = lsg('v292Dfix402_f781g_' + String(id)), jr0 = lsg('v292Dfix402_f697p_' + String(id));
+      return free2HashB(String(id), String(title)).then(function (r) { return { h: r.h || null, why: r.why || null, mk: raw == null ? null : h53(raw), jr: jr0 == null ? null : h53(jr0),
+        same: lsg('v292Dfix402_f781g_' + String(id)) === raw && lsg('v292Dfix402_f697p_' + String(id)) === jr0 }; }, function () { return null; }); },
+    free2: function () { return { v: F2_VERSION, on: benv().free2 === true }; },
+    /* ★FREE2 dry-run（読むだけ: 消さない・書かない・記録も書かない。通信は /api/auth/me と候補ごとの getstory＝シートを開くのと同じ）。
+       返すのは数だけ: 解放できる物語の数・その鍵の数と字数の合計・対象外の数と理由コード別の内訳。id・題名・本文・鍵名は返さない。
+       鍵の有無に関係なく「いまの設定でシートがどう判定するか」を返す（on = FREE2 が効いているか）。 */
+    free2DryRun: function () {
+      var e = benv(), o = { v: F2_VERSION, on: e.free2 === true, mode: e.purge ? 'purge' : 'r2', at: Date.now(), candidates: 0, freeable: { stories: 0, keys: 0, chars: 0, viaProof: 0 }, excluded: { stories: 0, byReason: {} }, global: null };
+      if (!ready()) { o.notReady = true; return Promise.resolve(o); }
+      var glob = null; e.onReason = function (sid, w) { if (sid === '*') glob = String(w); };
+      return (e.purge ? surveyP : survey)(e, bctx()).then(function (rep) {
+        o.candidates = rep.candidates || 0; o.global = glob;
+        for (var i = 0; i < rep.eligible.length; i++) { var x = rep.eligible[i]; o.freeable.stories++; o.freeable.keys += +x.keys || 0; o.freeable.chars += +x.chars || 0; if (x.dirtyProven === true) o.freeable.viaProof++; }
+        for (var k in rep.skipped) if (Object.prototype.hasOwnProperty.call(rep.skipped, k) && k !== glob) { o.excluded.byReason[k] = rep.skipped[k]; o.excluded.stories += rep.skipped[k]; }
+        return o;
+      }, function () { o.failed = true; return o; });
+    },
     status: function () { return JSON.parse(JSON.stringify({ version: VERSION, stuck1: { v: SVERSION, on: benv().stuck1 === true }, ready: ready(), opened: st.opened, surveys: st.surveys, freed: st.freed, last: st.last, lastSurvey: st.lastSurvey, dry: st.dry, memLog: memLog })); }
   };
   function boot() {
