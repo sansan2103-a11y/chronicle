@@ -426,6 +426,24 @@
     return out;
   }
   /* PH1: 受け取る値から型の文字を外す（SREP1 の有無と独立） */
+  /* ★STATE4（laneSTATE4・2026-11-16・kill: localStorage v292DfixSTATE4Off='1' で従来と同じ・毎回評価）:
+     実走 SMOKE5（K6 r6）T1: 和代の からだ= に「（無傷）／誰かを探す目つきではない／…呼び名『千尋ちゃん』…を使う距離感／…」の約 200 字の指示文のような値が入り、
+     そのまま store に保存され、T2〜T3 の【各キャラの現在の状態】に載った。SREP1 の読み取り（fix77 と fix190 が同じ結果を使う）で、値を受け入れる前に捨てる:
+       ・長すぎる値（80 字を超える。試験物語の <state> の値 1,037 種の最長は 53 字）
+       ・コード片（.trim( 等のメソッド呼び出し・=>・function(・undefined・null・${・; で終わる）
+       ・タグの記号（< >・="・値の中の「からだ=」「未解決:」のような属性の書き方）
+     捨てた項目は保存も更新もしない＝前の値が残る（ほかの項目・who・ターンの記録は従来どおり）。who が空の <state> は従来から捨てている（tagRej）。
+     SREP1 を止めた旧経路（v292DfixSREP1Off='1'）には掛からない。fix192 の状態ブロックでも同じ判定で、既に保存された値を載せない（保存値はそのまま）。 */
+  function offST4(){ try { return localStorage.getItem('v292DfixSTATE4Off') === '1'; } catch(e){ return false; } }
+  var ST4_MAX = 80;
+  var ST4_CODE = /\.(?:trim|slice|replace|join|split|map|filter|toString)\s*\(|=>|function\s*\(|\bundefined\b|\bnull\b|\$\{|;\s*$/;
+  var ST4_TAG = /[<>]|=\s*["“”]|(?:who|からだ|こころ|本能|目的|傷|関係|未解決)\s*[=:：]/;
+  function st4Why(v){ var x = String(v == null ? '' : v).trim(); if (!x) return ''; if (x.length > ST4_MAX) return 'long'; if (ST4_CODE.test(x)) return 'code'; if (ST4_TAG.test(x)) return 'tag'; return ''; }
+  function st4Filter(who, fields, rej){
+    if (offST4()) return fields;
+    Object.keys(fields).forEach(function(k){ var w = st4Why(fields[k]); if (w){ rej.push({ k: k, why: 'st4-' + w }); delete fields[k]; } });
+    return fields;
+  }
   function ph1Filter(who, fields, rej){
     if (offPH1()) return fields;
     Object.keys(fields).forEach(function(k){ if (isPlaceholder(fields[k])){ rej.push({ k: k, why: 'placeholder' }); delete fields[k]; } });
@@ -442,6 +460,7 @@
       var p = sq1Parse(m[0]);
       if (p.who && phWho(p.who) && !offPH1()){ p.tagRej = 'who-placeholder'; p.who = ''; }
       if (p.who) ph1Filter(p.who, p.fields, p.rej);
+      if (p.who) st4Filter(p.who, p.fields, p.rej);   /* ★STATE4 */
       list.push(p);
     }
     _sq1.cache = { raw: ck, res: list };
@@ -468,7 +487,7 @@
   }
   try {
     window.__v292DfixSTATEQ1 = {
-      v: 1, offPH1: offPH1, offSREP1: offSREP1, isPlaceholder: isPlaceholder, phWho: phWho, parseTag: sq1Parse, parseRaw: sq1ParseRaw,
+      v: 1, offPH1: offPH1, offSREP1: offSREP1, isPlaceholder: isPlaceholder, offST4: offST4, st4Why: st4Why,   /* ★STATE4 */ phWho: phWho, parseTag: sq1Parse, parseRaw: sq1ParseRaw,
       last: function(){ return _sq1.ring.length ? JSON.parse(JSON.stringify(_sq1.ring[_sq1.ring.length - 1])) : null; },
       ring: function(){ return JSON.parse(JSON.stringify(_sq1.ring)); },
       fieldTurn: function(who, k){ if (offSREP1()) return null; sq1Sk(); var f = _sq1.ft[who]; return (f && typeof f[k] === 'number') ? f[k] : null; },

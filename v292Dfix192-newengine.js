@@ -233,6 +233,8 @@
         var mo=clean223(s.mokuteki||s['目的']); /* v292Dfix223b */
         try { var Q1 = window.__v292DfixSTATEQ1; if (!legacyStore && Q1 && !Q1.offPH1()){ var P1 = Q1.isPlaceholder;   /* ★STATEQ1 PH1: 型の文字の値は載せない（保存値はそのまま） */
           if(P1(ka)) ka=''; if(P1(ko)) ko=''; if(P1(ho)) ho=''; if(P1(ki)) ki=''; if(P1(kn)) kn=''; if(P1(mi)) mi=''; if(P1(mo)) mo=''; } } catch(_q1){}
+        try { var Q4 = window.__v292DfixSTATEQ1; if (!legacyStore && Q4 && typeof Q4.st4Why === 'function' && !Q4.offST4()){ var B4 = function(v){ return !!Q4.st4Why(v); };   /* ★STATE4: 長すぎる・コード片・タグの記号の値は載せない（保存値はそのまま） */
+          if(B4(ka)) ka=''; if(B4(ko)) ko=''; if(B4(ho)) ho=''; if(B4(ki)) ki=''; if(B4(kn)) kn=''; if(B4(mi)) mi=''; if(B4(mo)) mo=''; } } catch(_q4){}
         if(isHeroA1(hkA1, n)){ ko=''; ho=''; mo=''; kn=''; mi=''; }   /* ★v292DfixA1 r2: 主人公は 傷・からだ だけ */
         var gp = (!legacyStore && _npg) ? _npg.group(n, s) : '';   /* ★NPRES r-c333: (a)/(b)/(c) */
         if(gp === 'b' || gp === 'c' || (!legacyStore && _npg && _npg.orphan(n, s))){ ka=''; ko=''; ho=''; mo=''; if(gp === 'c') parts.push('別の場所にいる'); else if(gp === 'b' && typeof _npg.note === 'function'){ var nt3 = _npg.note(n, s); if(nt3) parts.push(nt3); } }   /* ★NPRES d3: 通話中の人は「声だけで加われる」の一行（d3Off なら ''） */
