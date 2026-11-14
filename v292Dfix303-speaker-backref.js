@@ -47,12 +47,38 @@
     catch(e){ return false; }
   }
 
-  function correctConvSays(convSays, narrative, cast){
+  /* ★SPKW1（既定 OFF・鍵 v292DfixSPKW1On='1'／kill v292DfixSPKW1Off='1'）: モデルが <say who> を明示したカードは書き換えない。
+     実測（試験物語 P1-ON T6）: <say who="節子">…</say> の直後の地の文「蒼の声を背に、二人は上った。」で R1 が 蒼 へ書き換えた。
+     タグ由来の判定: (1) _convSayMeta が _convSays と揃っていれば sourceKind==='say-tag' (2) fix606.classifyCard が say-tag かつ対応が確か
+     (3) どちらも無ければ plan.narrative / narrative に <say who="今の who">同じ台詞</say> がそのままあること。判定できなければ従来どおり。
+     鍵なし＝この関数は呼ばれない（従来と同じ）。 */
+  function _spkw1On(){ try { return localStorage.getItem('v292DfixSPKW1Off')!=='1' && localStorage.getItem('v292DfixSPKW1On')==='1'; }catch(e){ return false; } }
+  function _spkw1TagCard(t, c, i){
+    try{
+      if(!t||!c) return false;
+      var mm=t._convSayMeta;
+      if(Array.isArray(mm) && Array.isArray(t._convSays) && mm.length===t._convSays.length && mm[i]) return mm[i].sourceKind==='say-tag';
+      var p6=window.__v292Dfix606;
+      if(p6 && typeof p6.classifyCard==='function'){
+        var hero=''; try{ var s=getS(); hero=(s&&s.cast&&s.cast.hero&&s.cast.hero.name)||''; }catch(e){}
+        var r=p6.classifyCard(t, c, i, { hero: hero });
+        if(r) return r.source==='say-tag' && r.tagMappingHighConfidence!==false;
+      }
+      var who=String(c.who||''), say=String(c.say||''); if(!who||!say) return false;
+      var srcs=[t.plan&&t.plan.narrative, t.narrative], hit=false;
+      srcs.forEach(function(x){ if(hit) return; var txt=Array.isArray(x)?x.join('\n'):String(x||''); if(txt.indexOf('<say')<0) return;
+        var re=/<say\s+who="([^"]*)"\s*>([^<]*)<\/say>/g, m; while((m=re.exec(txt))){ if(String(m[1]).trim()===who && String(m[2]).trim().slice(0,80)===say){ hit=true; break; } } });
+      return hit;
+    }catch(e){ return false; }
+  }
+  function correctConvSays(convSays, narrative, cast, turn){
     var changed=0;
     var n=String(narrative||''); if(!n||!Array.isArray(convSays)) return 0;
     function castHas(nm){ return cast.indexOf(nm)>=0; }
-    convSays.forEach(function(c){
+    var _sw1=!!turn && _spkw1On();
+    convSays.forEach(function(c, ci){
       if(!c||!c.say) return;
+      if(_sw1 && _spkw1TagCard(turn, c, ci)) return;   /* ★SPKW1: タグ由来は不触 */
       var say=String(c.say), idx=n.indexOf(say);
       if(idx<0){ var bare=say.replace(/^[「『]+|[」』]+$/g,''); idx=n.indexOf(bare); if(idx<0) return; say=bare; }
       var after=n.slice(idx+say.length, idx+say.length+60);
@@ -67,7 +93,7 @@
     });
     return changed;
   }
-  function processTurn(t){ try{ if(!t||!Array.isArray(t._convSays)||off()) return 0; return correctConvSays(t._convSays, t.narrative, castNames()); }catch(e){ return 0; } }
+  function processTurn(t){ try{ if(!t||!Array.isArray(t._convSays)||off()) return 0; return correctConvSays(t._convSays, t.narrative, castNames(), t); }catch(e){ return 0; } }
 
   function install(){
     var UI=getUI();

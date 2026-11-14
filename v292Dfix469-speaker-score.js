@@ -229,11 +229,17 @@
   var REACT_FRAME = /(?:言葉|台詞|セリフ|科白|声|問い|問いかけ|質問|返事|返答|発言|一言|話|指摘)に(?:対して)?[、,]?[\s　]*$/;
   var REACT_PRED  = /(思|感じ|気づ|気付|覚え|引っかか|引っ掛か|驚|見つめ|見返|振り返|振り向|考え|迷|眉|息を呑|息をの|戸惑|首をかし|首を傾|目を見開|見開|眉根|訝|怪訝|唖然|絶句|理解|悟|察|納得|違和感)/;
   function off535(){ try { return localStorage.getItem('v292Dfix535Off') === '1'; } catch(e){ return false; } }
+  /* ★SPKW1（既定 OFF・鍵 v292DfixSPKW1On='1'／kill v292DfixSPKW1Off='1'）: 「X は答えなかった／言わなかった／返事をしない」＝話していない人。
+     名前の直後の発話動詞が否定されている時は、発話の証拠（speechAfter 140 / speechBefore 115）にも主語の証拠（subj）にもしない。
+     実測（試験物語 E1-OFF T11）: 「……あんた、それを知ってるのか。」の直後「老人は答えなかった。」で 老人 へ 140 点。
+     第 1 層の CL1-d・fix957 には同じ除外が既にある。鍵なし＝従来と同じ。 */
+  var NEG_SPEECH_W1 = /^[はが][^。「」\n]{0,10}?(?:答え|応え|言わ|話さ|喋ら|しゃべら|返さ|呟か|囁か|叫ば|告げ|口を開か|返事をし|返事もし|声を出さ|何も言わ)(?:ない|なかった|ず(?!には)|ぬ|ません)/;   /* 「言わずにはいられ」＝実際に言っている、は除く */
+  function _spkw1On(){ try { return localStorage.getItem('v292DfixSPKW1Off') !== '1' && localStorage.getItem('v292DfixSPKW1On') === '1'; } catch(e){ return false; } }
   function evidenceIn(line, tok, isNext, sandwiched){
     var s = String(line || '');
     if (isNext && REACT_LEAD.test(s)) return null;
     var best = null, bestPt = -1, p = s.indexOf(tok);
-    var strict = !off535();
+    var strict = !off535(), _w1 = _spkw1On();
     function offer(kind, pt){ if (pt > bestPt){ best = kind; bestPt = pt; } }
     while (p >= 0){
       var tail = s.slice(p + tok.length, p + tok.length + 14);
@@ -243,6 +249,7 @@
         else if (VOICE_INTRO.test(tail)) offer('voiceIntro', 90);
         else if (!sandwiched) offer('voiceDesc', 25);
       }
+      if (_w1 && NEG_SPEECH_W1.test(s.slice(p + tok.length, p + tok.length + 24))){ p = s.indexOf(tok, p + 1); continue; }   /* ★SPKW1: 否定された発話は証拠にしない */
       var reacting = strict && isNext && (REACT_FRAME.test(head) || REACT_PRED.test(tail));
       if (SUBJ.test(tail) && !reacting){
         var speechNear = isNext ? speechTest(strict ? tail : s) : speechTest(s);
