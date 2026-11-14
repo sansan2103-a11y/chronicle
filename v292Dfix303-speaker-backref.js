@@ -52,7 +52,7 @@
      タグ由来の判定: (1) _convSayMeta が _convSays と揃っていれば sourceKind==='say-tag' (2) fix606.classifyCard が say-tag かつ対応が確か
      (3) どちらも無ければ plan.narrative / narrative に <say who="今の who">同じ台詞</say> がそのままあること。判定できなければ従来どおり。
      鍵なし＝この関数は呼ばれない（従来と同じ）。 */
-  function _spkw1On(){ try { return localStorage.getItem('v292DfixSPKW1Off')!=='1' && localStorage.getItem('v292DfixSPKW1On')==='1'; }catch(e){ return false; } }
+  function _spkw1On(){ try { return localStorage.getItem('v292DfixSPKW1Off')!=='1' && (localStorage.getItem('v292DfixSPKW1On')==='1' || (function(){ try { var O = window.__v292DfixOWNERON1; return !!(O && typeof O.want === 'function' && O.want('spkw1') === true); } catch(_o1){ return false; } })()); }catch(e){ return false; } }   /* ★OWNERON1 */
   function _spkw1TagCard(t, c, i){
     try{
       if(!t||!c) return false;

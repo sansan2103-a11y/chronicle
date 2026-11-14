@@ -64,7 +64,8 @@
   /* r4: いない人の行の言い方（既定は従来どおり。統括が選ぶための切り替え。v292DfixPLACE1Absent = 'A' | 'B'） */
   function absentStyle(){ var v = ls('v292DfixPLACE1Absent'); return (v === 'A' || v === 'B') ? v : ''; }
   function ls(k){ try { return root.localStorage ? root.localStorage.getItem(k) : null; } catch(e){ return null; } }
-  function on(){ return ls('v292DfixPLACE1Off') !== '1' && ls('v292DfixPLACE1On') === '1'; }
+  function on(){ return ls('v292DfixPLACE1Off') !== '1' && (ls('v292DfixPLACE1On') === '1' || ownerOn()); }
+  function ownerOn(){ try { var O = root.__v292DfixOWNERON1; return !!(O && typeof O.want === 'function' && O.want('place1') === true); } catch(e){ return false; } }   /* ★OWNERON1: Owner の端末は鍵なしでも ON（Off 鍵が先に勝つ・部品が無い／不明 = 従来どおり） */
   function narrOn(){ return ls('v292DfixPLACE1NarrOff') !== '1'; }
   function str(v){ return v == null ? '' : String(v); }
   function isCont(t){ t = str(t); return /続きを(?:自然に)?進めて/.test(t) || /^続きを書/.test(t); }

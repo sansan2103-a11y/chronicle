@@ -346,7 +346,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261115-spkw2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261115-owneron1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -2912,7 +2912,7 @@ const G = {
               呼び名は 1 人だけに対応し、ほかの登録名と含む・含まれるの関係に無いものだけ。人名として使われた所だけ（fix533b と同じ前後の条件：直前が漢字・カタカナ・英数でない／直後が句読点・括弧・空白・助詞・敬称。1 字の呼び名は助詞を は が を に へ と も の と敬称だけに絞る）。
            V: 「X の声／言葉」のうち、聞かれた側の形（〜に、／〜に「／〜を聞・を背・を遮・を思）と、閉じ括弧の直後（前の台詞の説明）のものを、後ろの台詞の話者の証拠にしない。
            P: 独立行の台詞の次の文「X は…」の発話動詞を語の形で見る（「振り返らず」の返・「X の問い」の問 に当てない）。 */
-        var _spkw1 = (function(){ try { return localStorage.getItem('v292DfixSPKW1Off') !== '1' && localStorage.getItem('v292DfixSPKW1On') === '1'; } catch(e){ return false; } })();
+        var _spkw1 = (function(){ try { return localStorage.getItem('v292DfixSPKW1Off') !== '1' && (localStorage.getItem('v292DfixSPKW1On') === '1' || (function(){ try { var O = window.__v292DfixOWNERON1; return !!(O && typeof O.want === 'function' && O.want('spkw1') === true); } catch(_o1){ return false; } })()); } catch(e){ return false; } })();   /* ★OWNERON1: Owner の端末は鍵なしでも ON（Off 鍵が先に勝つ・部品が無い／不明 = 従来どおり） */
         var _spkw1Exp = function(s){ return s; };
         if (_spkw1) { try { (function(){
           var fulls = _names.map(function(n){ return String(n || '').trim(); }).filter(Boolean);
@@ -4642,7 +4642,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix301-longmem-stale-guard.js?cb=v292Dfix301"></script>
 <script src="v292Dfix302-undo-state-rollback.js?cb=20261009-bh1"></script>
 <script src="v292Dfix732-session-turn-scope.js?cb=v292Dfix732"></script>
-<script src="v292Dfix303-speaker-backref.js?cb=20261114-spkw1"></script>
+<script src="v292Dfix303-speaker-backref.js?cb=20261115-owneron1"></script>
 <script src="v292Dfix304-emotion.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix305-trigger-states.js?cb=v292Dfix305"></script>
 <script src="v292Dfix306-npc-liveliness.js?cb=v292Dfix738"></script>
@@ -4795,7 +4795,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix465-role-who.js?cb=20260829-fix748"></script>
 <script src="v292Dfix466-dup-say.js?cb=v292Dfix466"></script>
 <script src="v292Dfix467-readability-rules.js?cb=v292Dfix468"></script>
-<script src="v292Dfix469-speaker-score.js?cb=20261115-spkw2"></script>
+<script src="v292Dfix469-speaker-score.js?cb=20261115-owneron1"></script>
   <script src="v292Dfix680-bare-speaker-provenance.js?cb=20260829-fix748"></script>
   <script src="v292Dfix681-player-say-claim.js?cb=20260829-fix748"></script>
 <!-- fix606: 話者帰属の来歴アナライザ。**読み取り専用**（whoもDOMもlocalStorageも触らない）。
@@ -5000,7 +5000,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixCAST1-opening-cast.js?cb=20261113-cast1"></script><!-- ★CAST1 (laneCAST1・GPT #127-SU ①): 開始場面にいると確定している NPC の説明を最初の回だけ user の cast.npcs に補う。判定の純関数だけ（fix58 が呼ぶたびに探す）。既定 OFF。ON v292DfixCAST1On=1（比較腕 2）/ kill v292DfixCAST1Off=1 -->
 <script src="v292DfixCALL1-confirmed-speech.js?cb=20261113-cast1"></script><!-- ★CALL1 / SPK3 (laneCAST1・GPT #127-SU ②③): 話者が確定した発話だけから「呼称の先例」1 行（earlierFacts）と recentSpeakers（直近 2 ターンの話者の参照）を作る純関数（fix58 が呼ぶたびに探す）。どちらも既定 OFF・鍵は別々。ON v292DfixCALL1On=1 / v292DfixSPK3On=1・kill v292DfixCALL1Off=1 / v292DfixSPK3Off=1 -->
 <script src="v292DfixLEAK1-nonstory-lines.js?cb=20261114-leak1on"></script><!-- ★LEAK1 (laneLEAK1・GPT #127-SW 2): 本文に混ざる物語でない行の検査。影は常時（件数だけ・本文は記録しない）。適用 v292DfixLEAK1Apply='1'（既定 OFF）／kill v292DfixLEAK1Off='1'。保存・sys・送信は変えない。 -->
-<script src="v292DfixPLACE1-where-now.js?cb=20261114-place1r4"></script><!-- ★PLACE1 (lanePLACE1): 物のいまの持ち主・置き場所と、その場にいない人の控えを user の whereNow に渡す。純関数だけ（fix58 が呼ぶたびに探す）。鍵 v292DfixPLACE1On=1（既定 OFF＝送信バイト同一）・kill v292DfixPLACE1Off=1 -->
+<script src="v292DfixOWNERON1-owner-defaults.js?cb=20261115-owneron1"></script><!-- ★OWNERON1 (laneOWNERON1): Owner（/auth/me の entitlement owner かつ active）でログイン中の端末だけ、PLACE1・SPKW1 を既定 ON。各機能の on() が呼ぶたびに聞く（読むだけ・書き込み 0）。各機能の Off 鍵が常に優先・全体 kill v292DfixOWNERON1Off=1。Owner 以外・未ログイン・不明 = 従来と同じ -->
+<script src="v292DfixPLACE1-where-now.js?cb=20261115-owneron1"></script><!-- ★PLACE1 (lanePLACE1): 物のいまの持ち主・置き場所と、その場にいない人の控えを user の whereNow に渡す。純関数だけ（fix58 が呼ぶたびに探す）。鍵 v292DfixPLACE1On=1（既定 OFF＝送信バイト同一）・kill v292DfixPLACE1Off=1 -->
 <script src="v292DfixNUM1-input-ledger.js?cb=20261113-num2"></script><!-- ★NUM1 (laneLEAK1・GPT #127-SW 3): 序盤のプレイヤー入力の数・約束を earlierFacts の先頭に最大 5 行・200 字で残す純関数（fix58 が呼ぶ）。鍵 v292DfixNUM1On='1'（既定 OFF）／kill v292DfixNUM1Off='1'。保存なし・sys 0 字。 -->
 </body>
 </html>

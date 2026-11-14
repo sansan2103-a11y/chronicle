@@ -234,7 +234,7 @@
      実測（試験物語 E1-OFF T11）: 「……あんた、それを知ってるのか。」の直後「老人は答えなかった。」で 老人 へ 140 点。
      第 1 層の CL1-d・fix957 には同じ除外が既にある。鍵なし＝従来と同じ。 */
   var NEG_SPEECH_W1 = /^[はが][^。「」\n]{0,10}?(?:答え|応え|言わ|話さ|喋ら|しゃべら|返さ|呟か|囁か|叫ば|告げ|口を開か|返事をし|返事もし|声を出さ|何も言わ)(?:ない|なかった|ず(?!には)|ぬ|ません)/;   /* 「言わずにはいられ」＝実際に言っている、は除く */
-  function _spkw1On(){ try { return localStorage.getItem('v292DfixSPKW1Off') !== '1' && localStorage.getItem('v292DfixSPKW1On') === '1'; } catch(e){ return false; } }
+  function _spkw1On(){ try { return localStorage.getItem('v292DfixSPKW1Off') !== '1' && (localStorage.getItem('v292DfixSPKW1On') === '1' || (function(){ try { var O = window.__v292DfixOWNERON1; return !!(O && typeof O.want === 'function' && O.want('spkw1') === true); } catch(_o1){ return false; } })()); } catch(e){ return false; } }   /* ★OWNERON1 */
   /* ★SPKW2-S2（GPT #127-TT 2・SPKW1 と同じ鍵）: 実測（試験物語 K1-ON T6）: 直前の行「彼女は前を向いたまま言った。…航が右ポケットから鍵を出すと、…」で、
      行全体から探した「言った」が「航が」に結び付き speechBefore=115 → 夏希のカードを 航 へ振り替えた。後ろ方向は fix535 が名前の直後だけを見る。前方向も同じ考えで、名前の直後の節だけを見る。 */
   function clauseAfter(s, i){ var t = String(s || '').slice(i); var k = t.search(/[。！？!?「」\n]/); return k >= 0 ? t.slice(0, k) : t; }
