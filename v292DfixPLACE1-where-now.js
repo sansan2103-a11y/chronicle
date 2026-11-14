@@ -41,14 +41,28 @@
 //   ・拾える言い方を足した（託す・押しつける・持ってもらう・ひったくる・返してもらう・A には X を・腰に差す・ねじ込む・立てかける・
 //     下ろす・放り出す／〜へ走る・〜に駆け込む・〜をよじ登って〜へ出る）。行き先として弱い語（先・奥・向こう・人のところ）は場所にしない。
 //   ・観測の口 obs()（読み取り専用・件数だけ・本文や入力の文は入れない）: 行数、落とした行数と理由、動きの語があるのに行にならなかった入力の数。
+// ★r4（2026-11-14・r3 の実走 6 本の盲検で出た ON 固有の害への手当て。鍵・置き場所・保存しないことは同じ）:
+//   ・行に出どころを付けない（r3 までの〔N ターン目の入力「…」〕をやめた）。本文に「七つ目の段で」「三枚目で渡した」と数字が漏れたため。
+//     行は「X は A が持っている」「X は P にある」「A は P に残った（…）」「主人公はいま P にいる」の短い言い切り。最大 8 行・320 字。
+//     出どころ（何ターン目の入力／本文か）は obs().last.sources に番号だけ残す（送信に入らない）。
+//     rule に「この控えの文面をそのまま本文や台詞に写さない。聞かれていないのに並べ立てない」を足した（user 側。sys は 0 字のまま）。
+//   ・（STORY）「A は先に階段を下りていく・上がっていく」（行き先なし・文の最後の節）＝「A は先に階段を下りた（主人公と一緒にいない）」。
+//     その後の入力で主人公が同じ向きに P へ動いたら「A は先に下りて、P にいる」（そのターンと次の 2 ターン）。別の向き・読めない移動なら行を消す。
+//   ・入力に「全員・みんな・N 人とも … 集まる・揃う・合流」があれば、いない人の行を全部落とす（N は「いない人＋主人公」以上のときだけ）。
+//   ・いない人の行の言い方を切り替えられる（v292DfixPLACE1Absent='A'｜'B'。無ければ従来どおり）。
+//   ・前のターンまでの入力に名前の出ている物を、入力で手に取った（ひっつかんで・拾い・持ったまま）なら新しい行にする（体の部位・扉などは除く。複数ある物は r3 の決まりのまま）。
+//   ・「出てきた・入ってきた・戻ってきた」を主人公の移動と読まない。名前で分けた同種の物（寝室の鍵・物置の鍵）は、ただの「鍵」の文では落とさない。
 // 正当な描写は削らない（本文・会話ログ・状態には触らない。足すのは user の 1 欄だけ）。
 // 呼び出し元: v292Dfix58 userExt。検証口: window.__v292DfixPLACE1
 // =====================================================================
 (function(root){
   'use strict';
-  var VER = 'place1-20261114-r3';
-  var MAX_ITEMS = 8, MAX_CHARS = 480, EVID = 18;   /* r3: 8 行・480 字まで（根拠の引用は 18 字に短く）。古い順に落とすので、長く有効な入力の行が押し出されないように */
-  var RULE = 'whereNow は、プレイヤーの入力と本文で決まった、物の「いまの持ち主・置き場所」と「いまこの場にいない人」の控え（〔 〕は決まったターン）。それより後に、渡す・拾う・置く・戻ってくる様子が本文ではっきり描かれていれば、そちらが新しい。そうでなければ、状態の欄や前の本文に別の持ち主・別の場所が書かれていても、この控えのほうが正しい。その場にいない人を、戻る様子を書かずに同じ場所に居させない。持ち物や居場所を聞かれた人物には、この控えのとおりに答えさせる。本文でこの控えを説明・列挙しない。';
+  var VER = 'place1-20261114-r4';
+  var MAX_ITEMS = 8, MAX_CHARS = 320;   /* r3: 8 行・480 字まで（根拠の引用は 18 字に短く）。古い順に落とすので、長く有効な入力の行が押し出されないように */
+  /* r4: 行に出どころ（〔N ターン目の入力「…」〕）を付けない。数字や引用が本文に漏れた（「七つ目の段で」「三枚目で渡した」）。出どころは obs() にだけ残す（送信に入らない） */
+  var RULE = 'whereNow は、プレイヤーの入力と本文で決まった、物の「いまの持ち主・置き場所」と「いまこの場にいない人」の控え。これより後に、渡す・拾う・置く・戻ってくる様子が本文ではっきり描かれていれば、そちらが新しい。そうでなければ、状態の欄や前の本文に別の持ち主・別の場所が書かれていても、この控えのほうが正しい。その場にいない人を、戻る様子を書かずに同じ場所に居させない。持ち物や居場所を聞かれた人物には、この控えのとおりに、その人物の言葉で答えさせる。この控えの文面をそのまま本文や台詞に写さない。聞かれていないのに持ち物や居場所を並べ立てない。';
+  /* r4: いない人の行の言い方（既定は従来どおり。統括が選ぶための切り替え。v292DfixPLACE1Absent = 'A' | 'B'） */
+  function absentStyle(){ var v = ls('v292DfixPLACE1Absent'); return (v === 'A' || v === 'B') ? v : ''; }
   function ls(k){ try { return root.localStorage ? root.localStorage.getItem(k) : null; } catch(e){ return null; } }
   function on(){ return ls('v292DfixPLACE1Off') !== '1' && ls('v292DfixPLACE1On') === '1'; }
   function narrOn(){ return ls('v292DfixPLACE1NarrOff') !== '1'; }
@@ -61,7 +75,8 @@
   var RECV = '(?:受け取|預か|もら|借り|奪|取り上げ|ひったく|もぎ取|引き取)';   /* r3 */
   var STOW = '(?:入れ|しま|仕舞|置|挿|差し|差す|残し|掛け|隠し|戻し|戻す|突っ込|ねじ込|押し込|放り込|滑り込ませ|収め|納め|忍ばせ|詰め|立てかけ|引っかけ|ぶら下げ|下げ|載せ|乗せ|のせ|下ろ|降ろ|おろし|結|括り|巻|ほっぽ|放って|放置|立て)';   /* r2: 「机の上に戻す」（「広間に戻る」は入れない） */
   var SELF_OF = /(?:自分|私|わたし|あたし|俺|僕|おれ|ぼく)の/g;   /* r2: 「自分の／私の X」は主語の名前に直して同じ物として扱う */
-  var HOLD = '(?:持って|持ち、|持ち$|拾い|拾って|拾う|手に取|抱え|握りしめ|掴ん|掴み|つかん|つかみ|背負|担い|担ぎ|取り上げ|持ち上げ|引っつか|ひっつか|取り出し|取り出して|抜き取)';
+  var HOLD = '(?:持って|持ったまま|持ち、|持ち$|拾い|拾って|拾う|手に取|抱え|握りしめ|掴ん|掴み|つかん|つかみ|背負|担い|担ぎ|取り上げ|持ち上げ|引っつか|ひっつか|取り出し|取り出して|抜き取)';
+  var STAIRS = /(階段|梯子|はしご|石段|坂道|坂|タラップ)を(?:[^、。をへ]{0,6}?)(下り|降り|駆け下り|駆け降り|上が|上って|上り|登|駆け上が)/;   /* r4: 「A は先に階段を下りていく」 */
   var DROP = '(?:落と|捨て|手放|放り出|投げ捨|置き去り|放り投げ)';
   var HONOR = /(?:さん|先輩|くん|君|ちゃん|様|さま|氏|殿)$/;
   var PERSON_WORD = /^(?:自分|私|わたし|俺|僕|あたし|お兄ちゃん|お姉ちゃん|兄さん|姉さん|兄|姉|お父さん|お母さん|父さん|母さん|父|母|頭|店長|先生|先輩|女将|隊長|みんな|全員|相手)$/;
@@ -166,10 +181,10 @@
         if (m && subj && !/に|で|へ|から/.test(m[1])){ var osn = stripLead(selfName(m[1])); if (osn && !ctx.isPerson(osn.replace(/^.*の/, ''))) out.push({ kind: 'item', key: osn, where: '人', who: subj, actor: subj, ev: cl }); continue; }
         // 持つ・拾う: 「X を（N 本）持って／拾い」
         m = cl.match(new RegExp('^(.{1,20}?)を(?:' + NUMW + ')?(?:だけ)?' + HOLD));
-        if (m && subj && !/に|で|へ/.test(m[1])){ var oh = stripLead(selfName(m[1])); if (oh && oh.length <= 14 && !ctx.isPerson(oh.replace(/^.*の/, ''))){
+        if (m && subj && !/に|で|へ/.test(m[1])){ var oh = stripLead(selfName(m[1])).replace(/^(?:とりあえず|ひとまず|まずは?|急いで|慌てて|あわてて|そっと|さっと|すばやく|素早く|黙って|すぐに?)/, ''); if (oh && oh.length <= 14 && !ctx.isPerson(oh.replace(/^.*の/, ''))){
             var ownQ = oh.match(/^(.+?)の[^の]+$/), owned = !!(ownQ && ctx.isPerson(ownQ[1]) && SELF_OF.test(m[1])); SELF_OF.lastIndex = 0;
             /* r2: 「自分の X を持って」は持ち主つきなので新しい行にしてよい。それ以外の「持って・拾い」は既にある行を動かすだけ */
-            out.push({ kind: 'item', key: oh, where: '人', who: subj, actor: subj, ev: cl, weak: !owned }); prevObj = oh; lastNoun = oh; } if (!(isStory && /へ/.test(cl))) continue; }   /* r3: STORY「A が X を持って P へ行く」は、行き先も読む */
+            out.push({ kind: 'item', key: oh, where: '人', who: subj, actor: subj, ev: cl, weak: !owned }); prevObj = oh; lastNoun = oh; } if (!(isStory && (/へ/.test(cl) || STAIRS.test(cl) || /に残(?:って|る|った)/.test(cl)))) continue; }   /* r3: STORY「A が X を持って P へ行く」は、行き先も読む */
         // 落とす
         m = cl.match(new RegExp('^(.{1,20}?)を' + DROP));
         if (m && !/に|で|へ/.test(m[1])){ var od = stripLead(m[1]); if (od && od.length <= 14) out.push({ kind: 'item', key: od, where: '落', who: subj, ev: cl }); continue; }
@@ -194,6 +209,8 @@
         }
         // STORY: 「A が…去っていく／帰っていく／P へ戻る・行く」（文の最後の節だけ）
         if (isStory && c === cls.length - 1 && subj && !ctx.isSelf(subj)){
+          var ma = !/へ/.test(cl) && cl.match(STAIRS);   /* r4: 行き先の無い「（先に）階段を下りていく・上がっていく」＝主人公のそばを離れた（主人公が後から同じ向きに動いたら、その先にいる） */
+          if (ma && /(?:いく|いった|行く|行った|る|た|いき|き)$/.test(cl)){ out.push({ kind: 'person', who: [subj], place: '', mode: 'ahead', via: ma[1], dir: /下|降/.test(ma[2]) ? 'down' : 'up', ev: short(s, 40) }); continue; }
           m = cl.match(/(?:^|[^ぁ-ん])(.{1,12}?)へ(?:[^、。へ]{0,10}?に)?(?:戻|行|向か|出て|帰)/) || cl.match(/(?:持って|抱えて|連れて)(.{1,12}?)へ(?:[^、。へ]{0,10}?に)?(?:戻|行|向か|出て|帰)/);
           if (m && !ctx.isPerson(m[1])) { var pl = clean(m[1].replace(/^.*(?:て|り|し)/, '')); out.push({ kind: 'person', who: [subj], place: pl, mode: /(?:窓辺|窓際|壁際|隅|戸口|入口|入り口|の前|そば|脇|奥|端)$/.test(pl) ? 'spot' : 'gone', ev: short(s, 40) }); continue; }
           if (/(?:去ってい|帰ってい|出てい|出て行|立ち去)/.test(cl)){ out.push({ kind: 'person', who: [subj], place: '', mode: 'gone', ev: short(s, 40) }); continue; }
@@ -289,6 +306,8 @@
     var inTxtA = null;   /* 書き方ちがいをそろえた入力の文（最初に使うときに作る） */
     var NUM2 = '((?:[二三四五六七八九十百]|[2-9２-９]|[0-9０-９]{2,})[0-9０-９一二三四五六七八九十百]*\\s*(?:本|個|枚|つ|巻|切れ|斤|冊|通|脚|束|瓶|袋|丁|匹))';
     function totalOf(h){ if (!h) return ''; if (inTxtA === null) inTxtA = alias(inTxt); var e = h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); var m = inTxtA.match(new RegExp(e + '(?:が|を|は|も|の)?\\s*' + NUM2)) || inTxtA.match(new RegExp(NUM2 + 'の' + e)); return m ? m[1].replace(/\s/g, '') : ''; }
+    var inBy = turns.map(function(t){ var ty = str(t && t.inputType).toUpperCase(); return (ty === 'DO' || ty === 'STORY') ? splitQuotesOut(str(t.playerText)) : ''; });
+    function knownBefore(h, turn){ if (!h || h.length < 2 || /^(?:手|腕|肩|袖|裾|襟|髪|足|指|顔|頭|背中|腰|胸|首|手首|取っ手|把手|手すり|扉|戸|ドア|襖|窓)$/.test(h)) return false; var ha = alias(h); for (var i = 0; i < turn - 1 && i < inBy.length; i++) if (alias(inBy[i]).indexOf(ha) >= 0) return true; return false; }
     function pluralPass(){
     for (var z = items.length - 1; z >= 0; z--){ var it = items[z], hk = alias(head(it.key)), base = partitive(it.key) ? alias(str(it.key).replace(/の(?:もう|残りの)?一[本個つ枚巻]$|の残り$|のもう一方$/, '')) : hk, tot = totalOf(base); if (!tot) continue;
       if (ownerOfKey(it.key) && !partitive(it.key)) continue;
@@ -310,7 +329,9 @@
             var inOwn = x0.e.where === '場所' && e.where === '人' && holderOf(x0) && holderOf(x0) === bare(e.who);   /* 「遥の内ポケットにある」と本文の「遥が受け取った」は同じこと */
             if (inOwn || (x0.e.where === e.where && (e.where !== '場所' || x0.e.place === e.place) && (e.where !== '人' || holderOf(x0) === bare(e.who)))){ x0.seen = turn; if (x0.e.narr && !inOwn){ x0.turn = turn; x0.e.ev = e.ev; } return; } }
           if (e.weak || e.onlyKnown){   /* 既にある行を動かすだけ（新しい物は載せない） */
-            if (!hit.length) return;
+            if (!hit.length){   /* r4: 前のターンまでの入力に名前の出ている物を、入力で手に取った（「懐中電灯をひっつかんで」）なら新しい行にする */
+              if (!(e.weak && src === '入力' && e.where === '人' && e.who && knownBefore(head(e.key), turn))) return;
+              items.push({ key: e.key, e: { kind: 'item', key: e.key, n: '', owner: '', where: '人', who: e.who, ev: e.ev }, turn: turn, src: src }); return; }
             if (hit.length > 1){ hit.forEach(removeItem); drops.ambiguous = (drops.ambiguous || 0) + hit.length; return; }   /* どの行のことか決められない → 古い行を残さず、言わない */
             var x = hit[0]; if (e.weak && x.e.where === '人' && holderOf(x) === bare(e.who)) return;
             removeItem(x);
@@ -321,10 +342,13 @@
           hit.forEach(function(x){ if ((ownerOfKey(x.key) && !ownerOfKey(e.key)) || (pq && ((x.e.place && x.e.place.indexOf(pq) >= 0) || (hit.length === 1 && BODY_PLACE.test(pq))))) keepKey = x.key;   /* 「机の鍵」の「机の」は置き場所の説明。名前は元の行のまま */ if (!keepOwner && !ownerOfKey(keepKey)) keepOwner = x.e.owner || (x.e.n && x.e.where === '人' ? x.e.who : ''); removeItem(x); });
           var ne = {}; for (var kk in e) ne[kk] = e[kk]; ne.key = keepKey; if (!ne.owner && e.where === '場所' && e.actor && !ownerOfKey(keepKey)) ne.owner = keepOwner || e.actor; else if (!ne.owner && keepOwner) ne.owner = keepOwner;
           items.push({ key: keepKey, e: ne, turn: turn, src: src }); }
-        else if (e.kind === 'person'){ e.who.forEach(function(w){ for (var i = people.length - 1; i >= 0; i--) if (people[i].who === w) people.splice(i, 1); people.push({ who: w, place: e.place, mode: e.mode, ev: e.ev, turn: turn, src: src }); }); }
+        else if (e.kind === 'person'){ e.who.forEach(function(w){ for (var i = people.length - 1; i >= 0; i--) if (people[i].who === w) people.splice(i, 1); people.push({ who: w, place: e.place, mode: e.mode, via: e.via, dir: e.dir, ev: e.ev, turn: turn, src: src }); }); }
         else if (e.kind === 'back'){ e.who.forEach(function(w){ for (var i = people.length - 1; i >= 0; i--) if (bare(people[i].who) === bare(w)) people.splice(i, 1); }); }
         else if (e.kind === 'hero'){ heroAt = { place: e.place, turn: turn, ev: e.ev };
-          for (var k = people.length - 1; k >= 0; k--){ if (samePlace(people[k].place, e.place) || e.with.indexOf(people[k].who) >= 0) people.splice(k, 1); } }
+          for (var k = people.length - 1; k >= 0; k--){ var pk = people[k];
+            if (pk.mode === 'ahead' && pk.turn < turn){ var hd = /(?:下り|降り)/.test(e.ev) ? 'down' : /(?:上が|上っ|上り|登)/.test(e.ev) ? 'up' : ''; if (hd && hd === pk.dir && e.with.indexOf(pk.who) < 0){ pk.mode = 'here'; pk.place = e.place; pk.turn = turn; pk.src = '入力'; } else people.splice(k, 1); continue; }   /* r4 */
+            if (pk.mode === 'here' && pk.turn < turn){ people.splice(k, 1); continue; }
+            if (samePlace(pk.place, e.place) || e.with.indexOf(pk.who) >= 0) people.splice(k, 1); } }
       });
       pluralPass();   /* r3: 複数ある物の行は、作った時点で「A の X」に直すか外す（後の出来事が同じ行に当たるように） */
       noteMulti();
@@ -356,6 +380,7 @@
         for (var b = 0; b < ss.length; b++){ var sn = ss[b]; if (!mentions(sn, h)) continue;
           if (/(?:ようとし|かけた|ふり|つもり|ない|なかった|たら|れば|なら)/.test(sn)) continue;
           var sj = bare(sjs[b]), ox = ownerOf(x), why = '';
+          var gx = gqOf(x.key); if (gx && sn.indexOf(gx + 'の' + h) < 0 && items.some(function(y){ return y !== x && alias(head(y.key)) === h; })) continue;   /* r4: 「寝室の鍵」「物置の鍵」があるとき、ただの「鍵」の文ではどちらの行も落とさない */
           if (multi[h] && sj && ox && sj !== ox && holderOf(x) !== sj) continue;   /* 同じ名前の物が 2 つあって、別の人の分の話 */
           /* r3: 誰かが持っている行なのに、本文では「傍らの X」「足元の X」「机の上の X」＝手を離れて置いてある */
           if (x.e.where === '人' && (new RegExp('(?:傍ら|かたわら|脇|そば|足元|足もと|床|机|卓|棚|地面|隅|椅子|台|膝の上)(?:の上)?の[^、。をはがにの]{0,6}' + h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))).test(sn)) why = 'setAside';
@@ -386,51 +411,68 @@
     var moveIn = 0, moveNoLine = 0, MOVE_IN = new RegExp('(?:' + GIVE + '|' + RECV + '|' + STOW + '|' + DROP + '|持って|持たせ|拾|走|駆け|逃げ|向か|戻る|戻って|入る|入って|上が|下り|降り|出る|出て|移動)');
     function noteInput(text, evs){ if (!MOVE_IN.test(splitQuotesOut(text))) return; moveIn++; if (!evs.some(function(e){ return !(e.kind === 'item' && e.weak); })) moveNoLine++; }
     /* 主人公が動く入力なのに行き先が読めなかったら、前の現在地の行は消す（不明なら言わない） */
-    function heroMoved(typ, text, evs){ if (typ !== 'DO' || !heroAt) return; if (evs.some(function(e){ return e.kind === 'hero'; })) return;
-      if (/(?:走|駆け|逃げ|進む|進ん|歩い|歩く|上が|上る|上って|下り|降り|出る|出て|入る|入って|戻る|戻って|向か|移動|離れ|渡る|渡って|追い)/.test(splitQuotesOut(text))) { heroAt = null; drops.heroUnreadable = (drops.heroUnreadable || 0) + 1; } }
+    function heroMoved(typ, text, evs){ if (typ !== 'DO') return; if (evs.some(function(e){ return e.kind === 'hero'; })) return;
+      if (/(?:走|駆け|逃げ|進む|進ん|歩い|歩く|上が|上る|上って|下り|降り|出る|出て(?!き|来)|入る|入って(?!き|来)|戻る|戻って(?!き|来)|向か|移動|離れ|渡る|渡って|追い)/.test(splitQuotesOut(text))) { if (heroAt){ heroAt = null; drops.heroUnreadable = (drops.heroUnreadable || 0) + 1; }
+        for (var k = people.length - 1; k >= 0; k--) if (people[k].mode === 'ahead' || people[k].mode === 'here') people.splice(k, 1); } }
+    /* r4: 入力で全員が同じ場所に集まったら、いない人の行を全部落とす */
+    function allTogether(text){ if (!people.length) return; var tx = splitQuotesOut(text), KJ = '二三四五六七八九十', hit = /(?:全員|みんな|皆|一同)(?:が|は|で|も|、)?[^。]{0,24}(?:集ま|揃|そろ|合流|顔を合わせ|落ち合)/.test(tx);
+      if (!hit){ var mg = tx.match(/([二三四五六七八九十])人(?:とも|が|は|で|全員)[^。]{0,24}(?:集ま|揃|そろ|合流|顔を合わせ|落ち合)/); hit = !!(mg && KJ.indexOf(mg[1]) + 2 >= people.length + 1); }   /* 人数は「いない人＋主人公」以上のときだけ */
+      if (hit){ drops.allTogether = (drops.allTogether || 0) + people.length; people.length = 0; } }
     for (var i = 0; i < turns.length; i++){
       var t = turns[i] || {}, typ = str(t.inputType).toUpperCase(), pt = str(t.playerText);
-      if ((typ === 'DO' || typ === 'STORY') && pt && !isCont(pt)){ var ev1 = parseInput(pt, hero, ctx, typ === 'STORY'); noteInput(pt, ev1); heroMoved(typ, pt, ev1); feed(ev1, i + 1, '入力'); }
+      if ((typ === 'DO' || typ === 'STORY') && pt && !isCont(pt)){ var ev1 = parseInput(pt, hero, ctx, typ === 'STORY'); noteInput(pt, ev1); heroMoved(typ, pt, ev1); feed(ev1, i + 1, '入力'); allTogether(pt); }
       if (nOn){ feed(parseNarr(t.narrative, ctx), i + 1, '本文'); staleDrop(t.narrative, i + 1); }   /* 先に読める文で行を作り直し、残った古い行だけを「動きの語」で落とす */
       for (var p = people.length - 1; p >= 0; p--){ var pe = people[p]; if (i + 1 <= pe.turn) continue;
         if ((typ === 'SAY' && vocative(pt, pe.who)) || (nOn && cameBack(t.narrative, pe.who))) people.splice(p, 1); }
     }
-    if (curInput && curInput.text && !isCont(curInput.text)){ var ct = str(curInput.type).toUpperCase(); if (ct === 'DO' || ct === 'STORY'){ var ev2 = parseInput(curInput.text, hero, ctx, ct === 'STORY'); noteInput(curInput.text, ev2); heroMoved(ct, curInput.text, ev2); feed(ev2, turns.length + 1, '入力'); }
+    if (curInput && curInput.text && !isCont(curInput.text)){ var ct = str(curInput.type).toUpperCase(); if (ct === 'DO' || ct === 'STORY'){ var ev2 = parseInput(curInput.text, hero, ctx, ct === 'STORY'); noteInput(curInput.text, ev2); heroMoved(ct, curInput.text, ev2); feed(ev2, turns.length + 1, '入力'); allTogether(curInput.text); }
       else if (ct === 'SAY'){ for (var q = people.length - 1; q >= 0; q--) if (vocative(curInput.text, people[q].who)) people.splice(q, 1); } }
-    return { items: items, people: people, heroAt: heroAt, hero: hero, now: turns.length + 1, drops: drops, moveIn: moveIn, moveNoLine: moveNoLine };
+    return { items: items, people: people, heroAt: heroAt, hero: hero, names: ctx.names, now: turns.length + 1, drops: drops, moveIn: moveIn, moveNoLine: moveNoLine };
   }
-  function lines(L){
-    var out = [];
+  function lines2(L){
+    var out = [], H = L.hero || '主人公', AS = absentStyle();
+    var NM = (L.names || []).concat(L.hero ? [L.hero] : []);
+    function nm(w){ w = str(w); if (NM.indexOf(w) >= 0) return w; var b = w.replace(HONOR, ''); return (b && NM.indexOf(b) >= 0) ? b : w; }   /* r4: 行の中の人の名前は、登録名に敬称が付いただけなら登録名で書く（入力の「権蔵さん」をそのまま写さない。地の文に出ても不自然でない形） */
     L.items.forEach(function(it){ var e = it.e, body;
       if (e.ttl && L.now - it.turn > e.ttl){ L.expired = (L.expired || 0) + 1; return; }   /* 本文から読んだ行は 3 ターン（「落とした」は 2 ターン）だけ出す。その後どうなったかは分からないので、行そのものを出さない */
-      if (e.where === '人') body = e.who + 'が持っている' + (e.from ? '（' + e.from + 'から）' : '');
-      else if (e.where === '場所') body = (e.who ? e.who + 'の' : '') + e.place + 'にある';
-      else body = '落とした（誰も持っていない）';
-      out.push({ turn: it.turn, s: it.key + (e.n ? '（' + e.n + '）' : '') + '：' + body + '〔' + it.turn + 'ターン目の' + it.src + '「' + short(e.ev, EVID) + '」〕' }); });
+      if (e.where === '人') body = nm(e.who) + 'が持っている' + (e.from ? '（' + nm(e.from) + 'から受け取った）' : '');
+      else if (e.where === '場所') body = (e.who ? nm(e.who) + 'の' : '') + e.place + 'にある';
+      else body = '落ちたまま（誰も持っていない）';
+      var kq = str(it.key).match(/^(.+?)の(.+)$/), kd = (kq && nm(kq[1]) !== kq[1]) ? nm(kq[1]) + 'の' + kq[2] : it.key;
+      out.push({ turn: it.turn, src: it.src, s: kd + (e.n ? '（' + e.n + '）' : '') + 'は' + body }); });   /* r4: 短い言い切り。出どころは付けない */
     var grp = {}, order = [];   /* 同じターン・同じ行き先の人は 1 行にまとめる */
-    L.people.forEach(function(pe){ var k = pe.turn + '|' + pe.mode + '|' + pe.place; if (!grp[k]){ grp[k] = { pe: pe, who: [] }; order.push(k); } grp[k].who.push(pe.who); });
-    order.forEach(function(k){ var pe = grp[k].pe, body; if (pe.mode === 'spot' && L.now - pe.turn > 1) return;   /* 同じ部屋の中の立ち位置（窓辺へ行く）は次のターンまで */
-      body = pe.mode === 'spot' ? (pe.place + 'にいる') : pe.mode === 'left' ? (pe.place + 'に残った（' + (L.hero || '主人公') + 'と一緒にいない）') : pe.mode === 'sent' ? (pe.place + 'へ向かった（この場にいない）') : ((pe.place ? pe.place + 'へ行った' : '去った') + '（この場にいない）');
-      out.push({ turn: pe.turn, s: grp[k].who.join('・') + '：' + body + '〔' + pe.turn + 'ターン目の' + pe.src + '〕' }); });
+    L.people.forEach(function(pe){ var k = pe.turn + '|' + pe.mode + '|' + pe.place + '|' + (pe.dir || ''); if (!grp[k]){ grp[k] = { pe: pe, who: [] }; order.push(k); } grp[k].who.push(nm(pe.who)); });
+    order.forEach(function(k){ var pe = grp[k].pe, body, w = grp[k].who.join('・'); if (pe.mode === 'spot' && L.now - pe.turn > 1) return;   /* 同じ部屋の中の立ち位置（窓辺へ行く）は次のターンまで */
+      if (pe.mode === 'here' && L.now - pe.turn > HERO_TTL) return;
+      var mv = (pe.via || '階段') + 'を' + (pe.dir === 'up' ? '上がった' : '下りた');
+      if (pe.mode === 'spot') body = pe.place + 'にいる';
+      else if (pe.mode === 'here') body = '先に' + (pe.dir === 'up' ? '上がって' : '下りて') + '、' + pe.place + 'にいる';   /* r4: 先に下りた人は、主人公が後から下りた先にいる */
+      else { var where = pe.mode === 'left' ? (pe.place + 'に残った') : pe.mode === 'sent' ? (pe.place + 'へ向かった') : pe.mode === 'ahead' ? ('先に' + mv) : (pe.place ? pe.place + 'へ行った' : '去った');
+        if (AS === 'A') body = where + '。戻る様子を書くまで、この場での台詞や動きを書かない';
+        else if (AS === 'B') body = 'この場にいない（' + where + '）。台詞を書かない';
+        else body = where + ((pe.mode === 'left' || pe.mode === 'ahead') ? ('（' + H + 'と一緒にいない）') : '（この場にいない）'); }
+      out.push({ turn: pe.turn, src: pe.src, s: w + 'は' + body }); });
     /* ★r2: 主人公の現在地の行。入力で主人公が動いたターンと次の 2 ターンだけ出す（後の移動を拾い損ねても、古い場所を「いま」と言い続けない） */
-    if (L.heroAt && L.now - L.heroAt.turn <= HERO_TTL) out.push({ turn: L.heroAt.turn, s: (L.hero || '主人公') + 'のいまの場所：' + L.heroAt.place + '〔' + L.heroAt.turn + 'ターン目の入力「' + short(L.heroAt.ev, EVID) + '」〕' });
+    if (L.heroAt && L.now - L.heroAt.turn <= HERO_TTL) out.push({ turn: L.heroAt.turn, src: '入力', s: H + 'はいま' + L.heroAt.place + 'にいる' });
     out.sort(function(a, b){ return a.turn - b.turn; });
-    /* 新しい方を優先して 6 行・360 字まで（古い方から落とす）。並びは古い順 */
+    /* 新しい方を優先して 8 行・480 字まで（古い方から落とす）。並びは古い順 */
     var keep = [], used = 0;
-    for (var i = out.length - 1; i >= 0 && keep.length < MAX_ITEMS; i--){ if (used + out[i].s.length > MAX_CHARS) break; used += out[i].s.length; keep.unshift(out[i].s); }
+    for (var i = out.length - 1; i >= 0 && keep.length < MAX_ITEMS; i--){ if (used + out[i].s.length > MAX_CHARS) break; used += out[i].s.length; keep.unshift(out[i]); }
     return keep;
   }
+  function lines(L){ return lines2(L).map(function(x){ return x.s; }); }
 
   var _last = null, _obs = { ver: VER, applies: 0, withLines: 0, last: null };   /* r3 観測（件数だけ。本文・入力の文は入れない） */
   function apply(parsed, state){
     _last = { on: on(), items: 0, chars: 0 };
     if (!_last.on || !parsed) return parsed;
     try {
-      var L = build(state, parsed.currentInput), ls1 = lines(L);
+      var L = build(state, parsed.currentInput), l2 = lines2(L), ls1 = l2.map(function(x){ return x.s; });
       _last.raw = { items: L.items.length, people: L.people.length, hero: L.heroAt ? L.heroAt.place : '' };
       var dr = {}, dk; for (dk in L.drops) dr[dk] = L.drops[dk]; if (L.expired) dr.expired = L.expired;
       _obs.applies++; if (ls1.length) _obs.withLines++;
-      _obs.last = { turn: L.now, lines: ls1.length, chars: ls1.join('').length, dropped: dr, inputsWithMoveWords: L.moveIn, inputsWithMoveWordsNoLine: L.moveNoLine };
+      _obs.last = { turn: L.now, lines: ls1.length, chars: ls1.join('').length, dropped: dr, inputsWithMoveWords: L.moveIn, inputsWithMoveWordsNoLine: L.moveNoLine,
+        sources: l2.map(function(x){ return { turn: x.turn, from: x.src === '本文' ? 'narration' : 'input' }; }) };   /* r4: 各行の出どころ（何ターン目の入力／本文か）。番号だけ・文は入れない・送信には入らない */
       if (!ls1.length) return parsed;
       var blk = { rule: RULE, items: ls1 }, o = {}, k, placed = false, anchor = Object.prototype.hasOwnProperty.call(parsed, 'nowScene') ? 'nowScene' : 'recentScenes';
       for (k in parsed){ if (!Object.prototype.hasOwnProperty.call(parsed, k) || k === 'whereNow') continue; o[k] = parsed[k]; if (k === anchor){ o.whereNow = blk; placed = true; } }
@@ -439,7 +481,7 @@
       return o;
     } catch(e){ _last.err = str(e && e.message || e); return parsed; }
   }
-  root.__v292DfixPLACE1 = { VER: VER, on: on, narrOn: narrOn, apply: apply, build: build, lines: lines, parseInput: parseInput, parseNarr: parseNarr, makeCtx: makeCtx, RULE: RULE,
+  root.__v292DfixPLACE1 = { VER: VER, on: on, narrOn: narrOn, apply: apply, build: build, lines: lines, parseInput: parseInput, parseNarr: parseNarr, makeCtx: makeCtx, RULE: RULE, lines2: lines2, absentStyle: absentStyle,
     obs: function(){ return JSON.parse(JSON.stringify(_obs)); },   /* r3: 読み取り専用。{ ver, applies, withLines, last:{ turn, lines, chars, dropped:{理由:件数}, inputsWithMoveWords, inputsWithMoveWordsNoLine } }。dropped は物語の最初からの通算（毎回作り直すので）。 */
     last: function(){ return _last; }, status: function(){ return { ver: VER, on: on(), narr: narrOn(), last: _last }; } };
 })(typeof window !== 'undefined' ? window : globalThis);
