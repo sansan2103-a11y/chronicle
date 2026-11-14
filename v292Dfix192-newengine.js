@@ -211,6 +211,9 @@
        1a: 除くのは体の制約（rank<6：部位の使用不可・移動・出血・視覚・発話・重傷）がある人だけ。文言は原因を断定しない「身体に制約があり、可能な動作に制限がある。具体的な制約は現在の状態に従う」（GPT #127-TZ）。
        1b・1c は v292Dfix414-constraint-engine.js（同じ鍵）。 */
   function st3On192(){ try { return localStorage.getItem('v292DfixSTATE3Off') !== '1'; } catch(e){ return false; } }
+  /* ★PLACE1 r7（GPT #127-UB・kill: v292DfixPLACE1R7Off='1' か PLACE1 が OFF で従来と送信バイト同一）: PLACE1 が「この場にいない」とした人の
+     本能・目的（いまの行動の目的）を状態ブロックに載せない（からだ・こころ・傷・関係・未解決・保存値・人物設定はそのまま）。今回の入力も含めて PLACE1 が決める。 */
+  var _p7cur = null;
   function stateBlock(legacyStore){
     try{
       var c930 = !off930() && !legacyStore; /* ★fix932: legacyStore=true は ac27 と同じ（shadow を読む・旧項目順）判定専用 */
@@ -218,6 +221,7 @@
       if (c930){ try { var X = window.__v292Dfix850x; if (X && typeof X.realStore === 'function'){ var rs = X.realStore(); if (rs) store = rs; } } catch(_x930){} }
       if(!store) return '';
       var lines=[]; var licN=[];
+      var ab7 = null; try { var P7 = window.__v292DfixPLACE1; if (!legacyStore && P7 && typeof P7.absentNames === 'function' && P7.on()){ var a7 = P7.absentNames(getS(), _p7cur); if (a7 && a7.length) ab7 = a7; } } catch(_p7){ ab7 = null; }   /* ★PLACE1 r7 */
       /* ★NPCQ1-C2 OWNER CANARY: 免除文は owner かつ active の画面だけ(/auth/me=fix893 serverMe。毎回評価・未応答/匿名/beta/none/例外=従来どおり) */
       function npcqOwner192(){ try{ var A=window.__v292Dfix893; if(!A||typeof A.serverMe!=='function') return false; var m=A.serverMe(); if(!(m&&m.entitlement==='owner'&&m.status==='active')) return false; var P=window.__v292Dfix886; if(P&&P.api&&typeof P.api.active==='function'&&P.api.active()) return false; return true; }catch(e){ return false; } }
       var onA1 = !legacyStore && !offA1();               /* ★v292DfixA1 r2 */
@@ -235,7 +239,8 @@
           if(P1(ka)) ka=''; if(P1(ko)) ko=''; if(P1(ho)) ho=''; if(P1(ki)) ki=''; if(P1(kn)) kn=''; if(P1(mi)) mi=''; if(P1(mo)) mo=''; } } catch(_q1){}
         try { var Q4 = window.__v292DfixSTATEQ1; if (!legacyStore && Q4 && typeof Q4.st4Why === 'function' && !Q4.offST4()){ var B4 = function(v){ return !!Q4.st4Why(v); };   /* ★STATE4: 長すぎる・コード片・タグの記号の値は載せない（保存値はそのまま） */
           if(B4(ka)) ka=''; if(B4(ko)) ko=''; if(B4(ho)) ho=''; if(B4(ki)) ki=''; if(B4(kn)) kn=''; if(B4(mi)) mi=''; if(B4(mo)) mo=''; } } catch(_q4){}
-        if(isHeroA1(hkA1, n)){ ko=''; ho=''; mo=''; kn=''; mi=''; }   /* ★v292DfixA1 r2: 主人公は 傷・からだ だけ */
+        if(isHeroA1(hkA1, n)){ ko=''; ho=''; mo=''; kn=''; mi=''; }
+        if(ab7 && ab7.indexOf(n) >= 0){ ho=''; mo=''; }   /* ★PLACE1 r7: この場にいない人の行動の目的は載せない */   /* ★v292DfixA1 r2: 主人公は 傷・からだ だけ */
         var gp = (!legacyStore && _npg) ? _npg.group(n, s) : '';   /* ★NPRES r-c333: (a)/(b)/(c) */
         if(gp === 'b' || gp === 'c' || (!legacyStore && _npg && _npg.orphan(n, s))){ ka=''; ko=''; ho=''; mo=''; if(gp === 'c') parts.push('別の場所にいる'); else if(gp === 'b' && typeof _npg.note === 'function'){ var nt3 = _npg.note(n, s); if(nt3) parts.push(nt3); } }   /* ★NPRES d3: 通話中の人は「声だけで加われる」の一行（d3Off なら ''） */
         var old1 = {};   /* ★STATEAGE1: 経過ターン数 → 古い項目（ac1=null なら常に従来の位置へ push） */
@@ -932,6 +937,7 @@
     var contLine = isCont
       ? '（プレイヤーは「続きを書く」を押した。あなたが物語を一歩進める番。受け身で待たず、上の進行レベルに従って能動的に動かす。グロや痛みの強度を上げるだけ＝"縦"は前進ではない。新しい要素＝"横"で世界を広げる。）'
       : '';
+    _p7cur = { type: m, text: t };   /* ★PLACE1 r7 */
     _npg = npres192();               /* ★NPRES: OFF なら null */
     var st = stateBlock();
     var seed = seedBlock();          /* v292Dfix223a */

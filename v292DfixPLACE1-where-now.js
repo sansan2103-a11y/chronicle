@@ -65,7 +65,18 @@
 // =====================================================================
 (function(root){
   'use strict';
-  var VER = 'place1-20261115-r6';
+  var VER = 'place1-20261115-r7';
+  /* ★r7（2026-11-16・GPT #127-UB。r7 の分だけ止める鍵 v292DfixPLACE1R7Off='1'＝r6 と同じ行・同じ状態欄・同じ言い方 A）:
+     ・複数人の帰還: 入力で決まった「いない」の人について、「二人／三人／みんな／全員／彼ら が戻ってきた」の文も戻りとして読む。
+       ただし誰のことかが一意なときだけ（「N人」は、いない人のうち同じ回に同じ所へ去った組で人数が N のものがちょうど 1 組。「みんな・全員・彼ら」は、いない組がちょうど 1 組）。
+       候補が複数なら断定しない（行はそのまま）。
+     ・「はず」: 戻る語のある文の「〜たはずの」（連体）は仮定に数えない（「向かったはずの二人が、戻ってきている」＝戻り）。「戻ってきているはずだ」は従来どおり戻りではない。
+     ・状態欄: absentNames() で「いない」の人の名前を返す。fix192 の【各キャラの現在の状態】は、その人の 本能・目的（いまの行動の目的）の項目だけを載せない
+       （からだ・こころ・傷・関係・未解決と、fix77・fix190 の保存値・人物設定は変えない）。戻ったら（行が消えたら）従来どおり載る。PLACE1 が ON のときだけ。
+     ・言い方 A（v292DfixPLACE1Absent='A'）: 「X はこの場にいない（…）。この場にいる人物として直接話させたり動かしたりしない（離れた場所からの声・電話・回想は書いてよい）」。既定（鍵なし）は変えない。 */
+  function r7On(){ return ls('v292DfixPLACE1R7Off') !== '1'; }
+  var NOT_BACK_R7 = /(?:声|聞こえ|電話|のを待|まで待|はず(?!の)|だろう|かもしれ|ように|たら|なら|れば|写真|窓の外|向こうに|遠く|映って|映る)/;
+  var GROUP_R7 = /(二人|三人|四人|五人|ふたり|みんな|皆|全員|彼ら|彼女ら|一同)/;
   /* ★r6（2026-11-16・SMOKE4 K6 の診断 STATE2 §3。鍵・置き場所・保存しないこと・出どころを送らないこと・8 行 320 字は同じ。r6 の分だけ止める鍵 v292DfixPLACE1R6Off='1'＝r5 と同じ行）:
      ・橋渡し（r5 案 2）の対象に「〜に〜を〜まで送ってもらう」（mode sent）を足す。K6 T7: 直前の本文で和代・篠田がこの場で動いていたのに一言が付かなかった。
      ・退場の意思・途中だけの入力（〜しようとする・〜たい・〜かけて・〜よう頼む 等）では「いない」の行を作らない（GPT #127-TZ。退場が入力で確定したときだけ）。
@@ -432,8 +443,19 @@
     var NOT_BACK_R5 = /(?:声|聞こえ|電話|のを待|まで待|はず|だろう|かもしれ|ように|たら|なら|れば|写真|窓の外|向こうに|遠く|映って|映る)/;   /* 声だけ・期待・仮定・遠くに見えるだけ・写真の中の文は戻りに数えない */
     function pin6(evs){ if (!r6On()) return evs; return evs.filter(function(e){ return !(e && e.kind === 'person' && /^(?:sent|gone|left|ahead)$/.test(str(e.mode)) && INTENT_R6.test(str(e.ev))); }); }   /* ★r6: 意思・途中の入力では「いない」の行を作らない */
     function departed(narr, w, pl){ var b = bare(w); if (!b) return false; var ph = str(pl).replace(/^.*の/, ''); return narrSents(narr).some(function(x){ return x.indexOf(b) >= 0 && !NOT_DEP_R6.test(x) && (DEP_R6.test(x) || (ph.length >= 2 && x.indexOf(ph) >= 0)); }); }   /* ★r6: 出発の語か、行き先にいる文 */
+    var g7snap = null;
+    function groupBack7(x, pe){   /* ★r7: 「二人／みんな が戻ってきた」の「二人」が、いない組から一意に決まるか */
+      var g = x.match(GROUP_R7); if (!g) return false;
+      var key = function(q){ return q.turn + '|' + q.mode + '|' + q.place; }, groups = {};
+      (g7snap || people).forEach(function(q){ if (absentMode(q)) groups[key(q)] = (groups[key(q)] || 0) + 1; });   /* その回の本文を読む前の人の並び（1 人ずつ消しても組の人数が変わらないように） */
+      var ks = Object.keys(groups), mine = key(pe); if (!groups[mine]) return false;
+      var N = { '二人': 2, 'ふたり': 2, '三人': 3, '四人': 4, '五人': 5 }[g[1]];
+      if (N){ var hit = ks.filter(function(k){ return groups[k] === N; }); return hit.length === 1 && hit[0] === mine; }
+      return ks.length === 1;
+    }
     function absentMode(pe){ return !!pe && /^(?:left|sent|gone|ahead)$/.test(str(pe.mode)); }
     function cameBack(narr, w, pe){ var b = bare(w); if (!b) return false;
+      if (r5On() && absentMode(pe) && r7On()) return narrSents(narr).some(function(x){ if (/(?:ない|なかった)/.test(x) || !BACK_R5.test(x) || NOT_BACK_R7.test(x)) return false; if (x.indexOf(b) >= 0) return true; return groupBack7(x, pe); });   /* ★r7 */
       if (r5On() && absentMode(pe)) return narrSents(narr).some(function(x){ return x.indexOf(b) >= 0 && !/(?:ない|なかった)/.test(x) && BACK_R5.test(x) && !NOT_BACK_R5.test(x); });
       return narrSents(narr).some(function(x){ if (x.indexOf(b) < 0 || /(?:ない|なかった)/.test(x)) return false;
         if (/(?:戻ってき|戻って来|引き返してき|追いつい|合流し|入ってき|入って来|駆け込んでき|姿を見せ|現れた)/.test(x)) return true;
@@ -454,6 +476,7 @@
       var t = turns[i] || {}, typ = str(t.inputType).toUpperCase(), pt = str(t.playerText);
       if ((typ === 'DO' || typ === 'STORY') && pt && !isCont(pt)){ var ev1 = pin6(parseInput(pt, hero, ctx, typ === 'STORY')); noteInput(pt, ev1); heroMoved(typ, pt, ev1); feed(ev1, i + 1, '入力'); allTogether(pt); }
       if (nOn){ feed(parseNarr(t.narrative, ctx), i + 1, '本文'); staleDrop(t.narrative, i + 1); }   /* 先に読める文で行を作り直し、残った古い行だけを「動きの語」で落とす */
+      g7snap = people.slice();   /* ★r7 */
       for (var p = people.length - 1; p >= 0; p--){ var pe = people[p];
         if (nOn && (pe.mode === 'sent' || pe.mode === 'gone') && !pe.dep && i + 1 >= pe.turn && departed(t.narrative, pe.who, pe.place)) pe.dep = true;   /* ★r6: 決まった回とその後の本文で出発が書かれたか */
         if (i + 1 <= pe.turn) continue;
@@ -485,7 +508,7 @@
       else if (pe.mode === 'here') body = '先に' + (pe.dir === 'up' ? '上がって' : '下りて') + '、' + pe.place + 'にいる';   /* r4: 先に下りた人は、主人公が後から下りた先にいる */
       else { var where = pe.mode === 'left' ? (pe.place + 'に残った') : pe.mode === 'sent' ? (pe.place + 'へ向かった') : pe.mode === 'ahead' ? ('先に' + mv) : (pe.place ? pe.place + 'へ行った' : '去った');
         var BR = grp[k].bridge ? '。この場を離れたことを一言書く' : '';   /* ★r5 案 2（橋渡し）。言い方 A・B のときも同じ一言を足す */
-        if (AS === 'A') body = where + BR + '。戻る様子を書くまで、この場での台詞や動きを書かない';
+        if (AS === 'A') body = r7On() ? ('この場にいない（' + where + '）' + BR + '。この場にいる人物として直接話させたり動かしたりしない（離れた場所からの声・電話・回想は書いてよい）') : (where + BR + '。戻る様子を書くまで、この場での台詞や動きを書かない');   /* ★r7: GPT #127-UB の文言 */
         else if (AS === 'B') body = 'この場にいない（' + where + '）。台詞を書かない' + BR;
         else body = where + ((pe.mode === 'left' || pe.mode === 'ahead') ? ('（' + H + 'と一緒にいない）') : grp[k].pend ? '（まだこの場にいるなら、出ていく所を書く）' : '（この場にいない）') + BR; }   /* ★r6: 出発の途中で本文が終わった人 */
       out.push({ turn: pe.turn, src: pe.src, s: w + 'は' + body }); });
@@ -518,7 +541,12 @@
       return o;
     } catch(e){ _last.err = str(e && e.message || e); return parsed; }
   }
-  root.__v292DfixPLACE1 = { VER: VER, on: on, narrOn: narrOn, apply: apply, build: build, lines: lines, parseInput: parseInput, parseNarr: parseNarr, makeCtx: makeCtx, RULE: RULE, lines2: lines2, absentStyle: absentStyle,
+  function absentNames(state, cur){   /* ★r7: いま「いない」の人の登録名（PLACE1 が OFF・r7 を止めた・読めないときは []） */
+    try { if (!on() || !r7On()) return []; var L = build(state, cur || null); var NM = (L.names || []).concat(L.hero ? [L.hero] : []), out = [];
+      L.people.forEach(function(pe){ if (!/^(?:left|sent|gone|ahead)$/.test(str(pe.mode))) return; var w = str(pe.who); if (NM.indexOf(w) < 0){ var b0 = w.replace(HONOR, ''); if (b0 && NM.indexOf(b0) >= 0) w = b0; } if (w && out.indexOf(w) < 0) out.push(w); });
+      return out; } catch(e){ return []; }
+  }
+  root.__v292DfixPLACE1 = { VER: VER, absentNames: absentNames, on: on, narrOn: narrOn, apply: apply, build: build, lines: lines, parseInput: parseInput, parseNarr: parseNarr, makeCtx: makeCtx, RULE: RULE, lines2: lines2, absentStyle: absentStyle,
     obs: function(){ return JSON.parse(JSON.stringify(_obs)); },   /* r3: 読み取り専用。{ ver, applies, withLines, last:{ turn, lines, chars, dropped:{理由:件数}, inputsWithMoveWords, inputsWithMoveWordsNoLine } }。dropped は物語の最初からの通算（毎回作り直すので）。 */
     last: function(){ return _last; }, status: function(){ return { ver: VER, on: on(), narr: narrOn(), last: _last }; } };
 })(typeof window !== 'undefined' ? window : globalThis);

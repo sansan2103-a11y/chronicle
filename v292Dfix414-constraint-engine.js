@@ -68,6 +68,19 @@
        1c（widen・Owner だけ）: 恐怖を「押し殺す・こらえる・抑える・振り払う」、程度の軽い言い方（少し・かすか・わずか・平静を装いきれない・にじむ 等）は数えない。
            こころ・からだ が古い（fix192 STATEAGE1 の数え方で 2 ターン以上前＝「N ターン前の様子」）ときは、その値から恐怖の制約を新しく作らない。 */
   function offST3(){ try { return localStorage.getItem('v292DfixSTATE3Off') === '1'; } catch(e){ return false; } }
+  /* ★FEAR1（laneFEAR1・2026-11-16・GPT #127-UB の A＋C・kill: localStorage v292DfixFEAR1Off='1' で従来と同じ・毎回評価）:
+     A: Owner だけの widen の恐怖の判定は、恐怖の語（恐怖・怯え・パニック 等）があるだけでは「即応・機転」の制約を作らない。
+        実際の機能の喪失が明示されたとき（動けない・立てない・声が出ない・頭が真っ白で何も考えられない・足がすくむ・腰が抜ける・
+        判断できない・何もできない・体が言うことをきかない・過呼吸 等）だけ作る。表現が違っても機能の喪失なら候補にする（パニックの語の有無では決めない）。
+        恐怖感そのものは fix77 の こころ（状態欄）に残る（ここでは触らない）。全員に効く規則（F・FRZ1・立てない）は前から機能の語で判定しているので変えない。
+     C: 制約の文言の内部の言い方「即応・機転は出ない(型B/C)」を sys に出さず、平易な「とっさの判断や機転が利きにくい」にする（4 か所とも）。 */
+  function offFEAR1(){ try { return localStorage.getItem('v292DfixFEAR1Off') === '1'; } catch(e){ return false; } }
+  function t6F1(){ return offFEAR1() ? '即応・機転は出ない(型B/C)' : 'とっさの判断や機転が利きにくい'; }
+  var FUNC_F1 = /(動けな|動けず|身動きが?(取れな|できな)|立てな|立ち上がれな|歩けな|足が(すく|竦)|足がもつれ|膝が(笑|崩れ|折れ)|腰が抜け|声が出な|声も出な|声にならな|言葉が出な|口がきけな|息ができな|息が吸えな|過呼吸|頭が真っ白|何も考えられな|考えがまとまらな|思考が止ま|判断(が|も)?(でき|つか)な|何もできな|体が言うことを(きか|聞か)な|手が震えて[^。、]{0,8}(でき|持て|つかめ|掴め|握れ)な|硬直|凍りついて|身がすく|すくんで動|竦んで動|泣きじゃく)/;
+  var FUNC_NEG_F1 = /[^。、]{0,12}(わけではな|ことはな|くはな|ずに済|ほどではな)[^。、]*/g;
+  var PSY_F1 = /(頭が真っ白|何も考えられな|考えがまとまらな|思考が止ま|判断(が|も)?(でき|つか)な|腰が抜け|足が(すく|竦)|身がすく|すくんで|竦んで|過呼吸|泣きじゃく)/;   /* それ自体が心理による機能の喪失 */
+  var CTX_F1 = /(恐怖|怯え|おびえ|怖|パニック|恐慌|竦|すく|震え|戦慄|動揺|混乱|硬直|凍りつ)/;   /* 「動けない・声が出ない」等は、恐怖・動揺の文脈があるときだけ（縛られて動けない・喉のけが等は心理の制約にしない） */
+  function fearFunc(t){ t = String(t || '').replace(FUNC_NEG_F1, ''); return PSY_F1.test(t) || (FUNC_F1.test(t) && CTX_F1.test(t)); }
   var MINDW_ST3 = /(解離|現実感が(薄|な)|頭が真っ白|震えが止ま|身がすく)/;
   var POSE_ST3  = /(固ま|凍りつ|凍り付)/;
   var FEARW_ST3 = /(恐怖|怖|怯え|おびえ|竦|すく|パニック|恐慌|戦慄|震え|ぞっと)/;
@@ -211,7 +224,7 @@
       // ---- B: 脚/足/膝 → 明示不能=走行不可 / 裂傷=移動が鈍い ----
       if (/(立てな|歩けな|荷重(が|に|)(かけ|できな|耐え))/.test(cl)){
         if (!frz || physFRZ1(cl) || kizuLeg || /荷重/.test(cl)) add(2, '走行不可・移動は支え必要');
-        else if (FREEZE_FRZ1.test(cl)) add(6, '即応・機転は出ない(型B/C)');   /* ★FRZ1: 腰が抜けて立てない＝恐怖 */
+        else if (FREEZE_FRZ1.test(cl)) add(6, t6F1());   /* ★FRZ1: 腰が抜けて立てない＝恐怖 ／ ★FEAR1 C: 平易な文言 */
       }
       scanPart(cl, LEG_RE, function(part, ctx, at){
         if (frz){   /* ★FRZ1: 走行不可はけががあるときだけ */
@@ -219,7 +232,7 @@
           var hard = /(折れ|骨折|潰れ|切断|貫通)/.test(ctx), spr = SPRAIN_FRZ1.test(ctx);
           if (hard || (spr && !MILD_FRZ1.test(ctx)) || (DISABLE.test(ctx) && (physFRZ1(ctx) || kizuLeg))) add(2, '走行不可・移動は支え必要');
           else if ((WOUND.test(ctx) && !LIGHT.test(ctx)) || spr) add(2.5, '移動が鈍い');
-          else if (DISABLE.test(ctx) && FREEZE_FRZ1.test(cl)) add(6, '即応・機転は出ない(型B/C)');
+          else if (DISABLE.test(ctx) && FREEZE_FRZ1.test(cl)) add(6, t6F1());   /* ★FEAR1 C */
           return;
         }
         if (DISABLE.test(ctx) || /(折れ|骨折|潰れ|切断|貫通)/.test(ctx)) add(2, '走行不可・移動は支え必要');
@@ -242,7 +255,7 @@
     // ---- F: こころ由来 → 即応・機転は出ない(型B/C) ----
     var st3 = !offST3();   /* ★STATE3 */
     if (st3 ? ruleF_ST3(kokoro, karada) : /(解離|現実感が(薄|な)|頭が真っ白|凍りつ|固ま|震えが止ま|身がすく)/.test(mindText)){
-      add(6, '即応・機転は出ない(型B/C)');
+      add(6, t6F1());   /* ★FEAR1 C */
     }
     // ---- NPCQ1(fix414 widen・既定ON・v292Dfix414WidenOff='1'で従来): 部位不明の重傷/強い恐怖 ----
     //   重傷(重傷・深手・深い傷・骨折・出血・意識朦朧 等)→ 動作1行+発話1行まで(短い発話のみ・鋭い戦術判断なし)。
@@ -260,8 +273,8 @@
       var fearSrc = mindText;   /* ★STATE3 1c: 古い こころ・からだ は使わない／抑えた・軽い恐怖の言い方は外す */
       if (st3){ var koS = staleF_ST3(name, entry, 'ko') ? '' : kokoro, kaS = staleF_ST3(name, entry, 'ka') ? '' : karada; fearSrc = fearText_ST3(keepClauses(koS + '。' + kaS).join('。')); }
       var fearTxt = fearSrc.replace(/(恐怖|怯え|おびえ|パニック|恐慌)(は|が|も|を|て(い)?|で(は)?)?(ない|なく|消え|薄れ|和らい|収ま|克服)/g, '');
-      if (/(恐怖|怯え|おびえ|パニック|恐慌|竦ん|すくん|泣きじゃく)/.test(fearTxt)){
-        add(6, '即応・機転は出ない(型B/C)');
+      if (offFEAR1() ? /(恐怖|怯え|おびえ|パニック|恐慌|竦ん|すくん|泣きじゃく)/.test(fearTxt) : fearFunc(fearTxt)){   /* ★FEAR1 A: 機能の喪失が明示されたときだけ */
+        add(6, t6F1());
       }
     }
     // ★R118 Phase2-S: severity consequence lane hook（外部 fix741。未load時 no-op / flag 既定OFF）
@@ -383,6 +396,7 @@
 
   // ---- F-4: 検証口 ----------------------------------------------------
   try { window.__v292DfixSTATE3 = { v: 1, on: function(){ return !offST3(); }, ruleF: ruleF_ST3, fearText: fearText_ST3 }; } catch(_st3){}   /* ★STATE3 検証口 */
+  try { window.__v292DfixFEAR1 = { v: 1, on: function(){ return !offFEAR1(); }, func: fearFunc }; } catch(_f1){}   /* ★FEAR1 検証口 */
   window.__v292Dfix414x = {
     deriveFor: function(name, entry){ try { return deriveConstraints(name, entry); } catch(e){ return []; } },   // NPCQ1: fix192 が表示エントリで判定する口
     derive: function(name){ try { return deriveConstraints(name, store()[name]); } catch(e){ return []; } },
