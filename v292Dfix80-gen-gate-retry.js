@@ -123,6 +123,8 @@ function makeWrapper(orig){
           try{ budget.ownerMissing = true; console.error("[v292Dfix504] budget owner missing (throw)"); }catch(_e){}
           return failResp();
         }
+        /* ★RETRY2: 通信断・時間切れ＝上流へ届いたか分からない。送り直さずにそのまま投げる（部品なし・kill → 下の土台の動き） */
+        { var R2t = window.__v292DfixRETRY2, stopT = false; try{ stopT = !!(R2t && typeof R2t.stopOnThrow === 'function' && R2t.stopOnThrow(e)); }catch(_e2){ stopT = false; } if(stopT) throw e; }
         if(attempt < MAX - 1){ await sleep(1500 * (attempt + 1)); continue; }
         throw e;
       }
@@ -133,6 +135,10 @@ function makeWrapper(orig){
         return resp || failResp();
       }
       if(!resp || !resp.ok){                          /* ★fix502: null(予算切れ等)でも落ちない */
+        /* ★RETRY2（GPT #127-TT）: 送り直すかは RETRY2 の判定（v292DfixRETRY2-send-policy.js）だけが決める。429 だけ 1 回・同じ中身で（Retry-After と予算を守る）。
+           それ以外（Worker が送る前に断った errorCode・402・上流の 4xx・上流へ送った後の 5xx）は 1 回目の応答をそのまま返す。部品なし・kill v292DfixRETRY2Off='1' → 下の土台の動き */
+        if(resp){ var R2 = window.__v292DfixRETRY2; if(R2 && typeof R2.fetchPlan === 'function'){ var p2 = null; try{ p2 = await R2.fetchPlan(resp, budget, attempt); }catch(e){ p2 = null; }
+          if(p2){ last = resp; if(!p2.resend || attempt >= MAX - 1) return resp; await sleep(p2.waitMs); continue; } } }
         /* ★fix923 BUDGET_ERROR_UX / FAIL_FAST（GPT 裁定）: 402（account の月上限 errorCode BUDGET など）は
            数秒待って再送しても通らない。自動再送 0・1 回目で即終了して呼び出し元へ返す。
            429 / 5xx / 例外の既存 retry は不変。kill: localStorage v292Dfix923Off='1' → 従来（402 も再送）。 */

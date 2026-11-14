@@ -46,9 +46,14 @@
   }
   /* サーバーの error の文を画面に出してよいか: 文字列・短い・英字や記号（JSON・URL・内部の語）を含まない */
   function plainJa(s) { return typeof s === 'string' && s.length >= 4 && s.length <= 80 && !/[A-Za-z{}\[\]<>\\\/:="']/.test(s); }
+  /* ★RETRY2: HTTP の番号が無い失敗のうち、通信断・時間切れ（RETRY2 が送り直さないもの）にも同じ消えない知らせを出す。RETRY2 の部品なし・kill → null（従来の 60 秒の知らせのまま） */
+  var T_NET = '通信が途切れて、返事を受け取れませんでした。電波の届く場所で、もう一度送ってください。';
+  var T_TIMEOUT = '時間内に返事が来なかったため、待つのをやめました。少し時間をおいて、もう一度送ってください。';
+  function netNote(raw) { var k = null; try { var R2 = G.__v292DfixRETRY2; k = (R2 && typeof R2.netKind === 'function') ? R2.netKind(String(raw == null ? '' : raw)) : null; } catch (e) { k = null; }
+    return k === 'net' ? { kind: 'net', status: 0, text: T_NET } : (k === 'timeout' ? { kind: 'timeout', status: 0, text: T_TIMEOUT } : null); }
   /* 出す文を決める。toastText = 既存の知らせの文（対応表で決まった公開用の文）。null を返したら何も出さない（従来のまま）。純関数 */
   function decide(raw, toastText) {
-    var p = parse(raw); if (!(p.status >= 400 && p.status <= 599)) return null;
+    var p = parse(raw); if (!(p.status >= 400 && p.status <= 599)) return netNote(raw);
     var kept = String(toastText || '').replace(/^⚠\s*/, ''); if (kept.slice(-TOAST_TAIL.length) === TOAST_TAIL) kept = kept.slice(0, -TOAST_TAIL.length);
     var specific = !!kept && kept !== TOAST_DEFAULT;
     if (p.status === 402 && !p.code && !(p.parsed && typeof p.error === 'string')) return { kind: '402', status: 402, text: T_402 };   /* サーバー自身の 402（月の上限）は error が日本語の文字列 → 下の「既存の文のまま」へ */

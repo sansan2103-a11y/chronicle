@@ -299,7 +299,7 @@
 <!-- ★si1 v292Dfix892 SAVE_INTEGRITY_HELD_INPUT_GUARD（packet SAVE_INTEGRITY_P1_20260927_01 / GPT GO_WITH_FIXES B'）: fix705 HOLD 中は送信を生成前に止める。read-only。★head・fix705 の直後＝送信 UI（#sendBtn 等）より先に同期ロードし、document capture で入口を押さえる（GPT SAVE_INTEGRITY_P1_20260927_02 条件 1 = load-order）。kill=v292Dfix892Off=1 -->
 <script src="v292Dfix892-held-input-guard.js?cb=20261011-s1b"></script>
 <script src="v292DfixLAT1-press-feedback.js?cb=20261112-lat1"></script>
-<script src="v292DfixERRNOTE1-send-error-note.js?cb=errnote1-a"></script><!-- ★ERRNOTE1: 物語の送信がサーバーに断られたとき（HTTP 4xx/5xx）、理由を入力欄の上に出したままにする（既存の知らせは 60 秒で消えていた）。表示だけ（送り直さない・入力・本文・保存・sys・送信の中身に触らない・fetch を包まない）。kill: v292DfixERRNOTE1Off='1'。 -->
+<script src="v292DfixERRNOTE1-send-error-note.js?cb=retry2-a"></script><!-- ★ERRNOTE1: 物語の送信がサーバーに断られたとき（HTTP 4xx/5xx）、理由を入力欄の上に出したままにする（既存の知らせは 60 秒で消えていた）。表示だけ（送り直さない・入力・本文・保存・sys・送信の中身に触らない・fetch を包まない）。kill: v292DfixERRNOTE1Off='1'。 -->
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
      捕捉するので、後から置くとそれらの削除が監視を迂回する。OFF=v292Dfix569Off -->
@@ -346,7 +346,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261115-owneron1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261115-retry2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -1499,6 +1499,8 @@ const Api = {
            （= extraBody をそのまま尊重）。registry 不在なら何もしない（従来どおり = fail-open）。
            deep-merge なので provider.order 等の既存 field は消えない。 */
         try { var _R = window.__CHR_MODEL_REGISTRY; if (_R && _R.applyRequestPolicy) _R.applyRequestPolicy(body, model); } catch(e){}
+        /* ★RETRY2: 1 回の操作に 1 つの要求 ID（本編の送信だけ・送り直しは同じ init＝同じ ID）。既定 OFF（v292DfixRETRY2IdOn='1' のときだけ本文に chrReqId）。DESIGN.md §4 */
+        try { var _r2i = window.__v292DfixRETRY2; if (__e65aMain && _r2i && typeof _r2i.reqIdFor === 'function') { var _r2id = _r2i.reqIdFor(Api.__e65aTurn, !!(opts && opts.__fbModel)); if (_r2id) body.chrReqId = _r2id; } } catch(_r2e){}
         // Tier 1: OpenRouter の JSON モード（Hermes 系のみ。Llama 微調整系は対象外）
         if (/hermes/i.test(model)) {
           /* v292Dfix87: disabled json_object - fix58 outputs prose, not JSON */ void 0;
@@ -2831,7 +2833,7 @@ const G = {
       const _cp1Call = (s, u) => (_cp1Att ? Api.call(s, u, undefined, { __cp1Att: _cp1Att }) : Api.call(s, u));   /* ★r5: 送信・fix265 の再送・書き直しは同じ試行を引き継ぐ（CP1 の包みが内側へ渡す前に取り除く） */
       const _cp1Wrap = (fn) => (_cp1Att ? () => _cp1A.within(_cp1Att, fn) : fn);   /* ★r5: parse と確定の同期区間をこの試行に結び付ける */
       try { window.__v292Dfix797 && __v292Dfix797.beginTurnContext(S); } catch(_e797b){} /* ★v292Dfix797 Rev4: 今回の生成が始まる前の fix77 状態を 1 回だけ写す（ephemeral／書込 0）。未 load / flag OFF で no-op */
-      let result; try { result = await _cp1Call(sys, user); } catch (_e265) { var _m269 = String((_e265 && _e265.message) || _e265); var _is429 = /HTTP 429/.test(_m269); /* ★RETRY1（GPT #127-TR 4・P0）: 503 LEDGER_UNHEALTHY は送り直さない・別モデルへも切り替えない（そのまま下の失敗の枝＝入力を戻す・ERRNOTE1 の知らせ）。kill: v292DfixRETRY1Off='1' */ if (/HTTP 503\b/.test(_m269) && /"errorCode"\s*:\s*"LEDGER_UNHEALTHY"/.test(_m269) && (function(){ try { return localStorage.getItem('v292DfixRETRY1Off') !== '1'; } catch(_r1k){ return true; } })()) { try { window.__v292DfixRETRY1 = window.__v292DfixRETRY1 || { VER: 'retry1-20261114-a', failFast: 0, submitFast: 0 }; window.__v292DfixRETRY1.submitFast++; } catch(_r1c){} throw _e265; } if (_is429 || /HTTP 5\d\d|Failed to fetch|NetworkError|load failed/i.test(_m269)) { UI.setStatus(_is429 ? '混み合っています。少し待って自動でもう一度試します…' : 'うまくつながりませんでした。自動でもう一度試します…'); await new Promise(function(_r){ setTimeout(_r, _is429 ? 8000 : 2000); }); try { result = await _cp1Call(sys, user); } catch (_e2cmf) { result = await this._cmfTry(sys, user, _e2cmf, 2, _cp1Att); } } else { result = await this._cmfTry(sys, user, _e265, 1, _cp1Att); } } /* v292Dfix269: 429(レート制限)はレート明けを8秒待って再試行 */ /* v292Dfix265: 5xx/ネットワーク一過性エラーは1回だけ透過リトライ。2回目失敗はfix263aトーストへ */ /* ★dscmf-1: 同一モデル retry を **使い切った最終段だけ** に cross-model fallback を足す（CF-1）。_cmfTry は gate OFF / 非対象なら受け取った err をそのまま throw するので、既定では throw _e265 と完全同値。commit 済み response には到達しない（この行は result 取得前）。 */
+      let result; try { result = await _cp1Call(sys, user); } catch (_e265) { var _m269 = String((_e265 && _e265.message) || _e265); var _is429 = /HTTP 429/.test(_m269); /* ★RETRY1（GPT #127-TR 4・P0）: 503 LEDGER_UNHEALTHY は送り直さない・別モデルへも切り替えない（そのまま下の失敗の枝＝入力を戻す・ERRNOTE1 の知らせ）。kill: v292DfixRETRY1Off='1' */ if (/HTTP 503\b/.test(_m269) && /"errorCode"\s*:\s*"LEDGER_UNHEALTHY"/.test(_m269) && (function(){ try { return localStorage.getItem('v292DfixRETRY1Off') !== '1'; } catch(_r1k){ return true; } })()) { try { window.__v292DfixRETRY1 = window.__v292DfixRETRY1 || { VER: 'retry1-20261114-a', failFast: 0, submitFast: 0 }; window.__v292DfixRETRY1.submitFast++; } catch(_r1c){} throw _e265; } /* ★RETRY2（GPT #127-TT）: 呼び直し（fix265）も別モデルへの切替（dscmf-1）も RETRY2 の判定に聞く。判定が返れば呼び直さない（429 の限られた送り直しは fix80 が同じ中身で済ませている）。切替は鍵 v292DfixRETRY2CmfOn='1' のときに 429・使える本文なし だけ。部品なし・kill v292DfixRETRY2Off='1' → 下の土台の動き */ var _r2p = null; try { var _r2m = window.__v292DfixRETRY2; if (_r2m && typeof _r2m.submitPlan === 'function') _r2p = _r2m.submitPlan(_e265); } catch(_r2x){ _r2p = null; } if (_r2p) { if (_r2p.cmf) { result = await this._cmfTry(sys, user, _e265, 1, _cp1Att); } else { throw _e265; } } else if (_is429 || /HTTP 5\d\d|Failed to fetch|NetworkError|load failed/i.test(_m269)) { UI.setStatus(_is429 ? '混み合っています。少し待って自動でもう一度試します…' : 'うまくつながりませんでした。自動でもう一度試します…'); await new Promise(function(_r){ setTimeout(_r, _is429 ? 8000 : 2000); }); try { result = await _cp1Call(sys, user); } catch (_e2cmf) { result = await this._cmfTry(sys, user, _e2cmf, 2, _cp1Att); } } else { result = await this._cmfTry(sys, user, _e265, 1, _cp1Att); } } /* v292Dfix269: 429(レート制限)はレート明けを8秒待って再試行 */ /* v292Dfix265: 5xx/ネットワーク一過性エラーは1回だけ透過リトライ。2回目失敗はfix263aトーストへ */ /* ★dscmf-1: 同一モデル retry を **使い切った最終段だけ** に cross-model fallback を足す（CF-1）。_cmfTry は gate OFF / 非対象なら受け取った err をそのまま throw するので、既定では throw _e265 と完全同値。commit 済み response には到達しない（この行は result 取得前）。 */
       if (!result) { if (_cp1Att && _cp1A.superseded(_cp1Att)) return; try { if (text && !inputEl.value.trim()) inputEl.value = text; UI.setStatus('応答が得られませんでした。もう一度お試しください', true); } catch(_){} return; } /* v292Dfix263a2 */
       /* ★LEAK1（laneLEAK1・GPT #127-SW 2）: 生の応答の検査。影（鍵なし）= 数えるだけで result.text は変えない。適用（v292DfixLEAK1Apply='1'・既定 OFF）= 内部ラベルだけの行・タグ領域の後ろの作業メモを parse の前に除く。
          finish=length で作業メモと本文の境界を決められない回は throw → 下の既存の catch（入力を戻す・「再試行」ボタン）。parse 0・保存 0・自動の再送 0。kill: v292DfixLEAK1Off='1'（部品が無い・例外でも従来どおり）。 */
@@ -4589,7 +4591,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <script src="v292Dfix78-tag-case-normalize.js?cb=20260912-q119s4"></script>
   <script src="v292Dfix79-momentum-anchor.js?cb=v292Dfix79"></script>
   <script src="v292DfixBF1-reasoning-fallback.js?cb=20261022-bf1owner"></script>
-  <script src="v292Dfix80-gen-gate-retry.js?cb=20261114-retry1"></script>
+  <script src="v292DfixRETRY2-send-policy.js?cb=retry2-a"></script><!-- ★RETRY2（GPT #127-TT）: 送信が失敗したときに自動で送り直すか・別モデルへ切り替えるかを決める唯一の判定（fix80 と G.submit が聞く）。既定 ON・kill: v292DfixRETRY2Off='1' → 土台の動き。別モデルへの切替を戻す: v292DfixRETRY2CmfOn='1'。要求 ID: v292DfixRETRY2IdOn='1'（既定 OFF） -->
+  <script src="v292Dfix80-gen-gate-retry.js?cb=retry2-a"></script>
   <script src="v292Dfix82-injury-reaction-root.js?cb=v292Dfix82"></script>
   <script src="v292Dfix83-name-truncation-repair.js?cb=v292Dfix83"></script>
   <script src="v292Dfix84-sampling.js?cb=v292Dfix482"></script>
