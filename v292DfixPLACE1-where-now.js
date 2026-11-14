@@ -65,7 +65,20 @@
 // =====================================================================
 (function(root){
   'use strict';
-  var VER = 'place1-20261115-r5';
+  var VER = 'place1-20261115-r6';
+  /* ★r6（2026-11-16・SMOKE4 K6 の診断 STATE2 §3。鍵・置き場所・保存しないこと・出どころを送らないこと・8 行 320 字は同じ。r6 の分だけ止める鍵 v292DfixPLACE1R6Off='1'＝r5 と同じ行）:
+     ・橋渡し（r5 案 2）の対象に「〜に〜を〜まで送ってもらう」（mode sent）を足す。K6 T7: 直前の本文で和代・篠田がこの場で動いていたのに一言が付かなかった。
+     ・退場の意思・途中だけの入力（〜しようとする・〜たい・〜かけて・〜よう頼む 等）では「いない」の行を作らない（GPT #127-TZ。退場が入力で確定したときだけ）。
+     ・出発の途中で本文が終わった人（入力で退場が確定している人だけ）: 入力で「向かった／行った」（sent・gone）と決まった人について、決まった回とその後の本文に、その人の名前と
+       出発の語（歩き出す・出ていく・去る・離れる・向かった・見送る・遠ざかる・姿が消える・部屋を出る 等）のある文が無く、主人公もその後動いていなければ、
+       次の回（決まった回の次の 1 回だけ）の行を「（この場にいない）」と言い切らず「（まだこの場にいるなら、出ていく所を書く）」にする。行き先にいる文（「篠田は昇降口で…」）も出発が済んだと数える。一緒に決まった人（「和代・篠田」の 1 行）は、だれか 1 人でも出発が書かれていれば r5 の言い方。K6 T8: T7 の本文が和代の出発の途中で終わり、
+       行が「この場にいない」と言う一方で直前の本文では和代がこの場にいた。言い方 A・B（v292DfixPLACE1Absent）のときと、本文の読み取りを止めたとき（NarrOff）は r5 のまま。 */
+  function r6On(){ return ls('v292DfixPLACE1R6Off') !== '1'; }
+  var DEP_R6 = /(?:歩き出|歩いて行|歩いていっ|出て行|出ていっ|出ていく|出ていき|出て行っ|去って|去っ|去る|立ち去|離れて|離れた|離れる|離れてい|向かっ|向かう|向かい|見送|遠ざか|姿が消え|消えていっ|消えて行|後にし|連れて行|連れていっ|送って行|送っていっ|付き添って|部屋を出|外へ出|外に出|廊下へ出|廊下に出|降りて行|降りていっ|下りて行|下りていっ|上がって行|上がっていっ|行ってしま|出かけ|引き上げ)/;
+  var NOT_DEP_R6 = /(?:ない|なかった|たら|なら|れば|うと(?:する|し)|かけた|かけて|つもり|はず|だろう|かもしれ|振り返)/;
+  /* ★r6（GPT #127-TZ）: 退場が確定した入力と、退場しようとした意思・途中の入力を分ける。入力の節が「〜しようとする・〜たい・〜かけて・〜よう頼む・つもり」等なら、
+     その人の「いない」の行（残った・向かった・行った・先に下りた）を作らない（r5 までは作っていた）。行は入力で確定したときだけ出す。 */
+  var INTENT_R6 = /(?:うと(?:する|し|思)|よう(?:に)?(?:頼|言|お願い|促)|たい|たがっ|かけ[てたる]|つもり|予定|ないか|てほしい|て欲しい|だろう|かもしれ|はず|ふり)/;
   var MAX_ITEMS = 8, MAX_CHARS = 320;   /* r3: 8 行・480 字まで（根拠の引用は 18 字に短く）。古い順に落とすので、長く有効な入力の行が押し出されないように */
   /* r4: 行に出どころ（〔N ターン目の入力「…」〕）を付けない。数字や引用が本文に漏れた（「七つ目の段で」「三枚目で渡した」）。出どころは obs() にだけ残す（送信に入らない） */
   var RULE = 'whereNow は、プレイヤーの入力と本文で決まった、物の「いまの持ち主・置き場所」と「いまこの場にいない人」の控え。これより後に、渡す・拾う・置く・戻ってくる様子が本文ではっきり描かれていれば、そちらが新しい。そうでなければ、状態の欄や前の本文に別の持ち主・別の場所が書かれていても、この控えのほうが正しい。その場にいない人を、戻る様子を書かずに同じ場所に居させない。持ち物や居場所を聞かれた人物には、この控えのとおりに、その人物の言葉で答えさせる。この控えの文面をそのまま本文や台詞に写さない。聞かれていないのに持ち物や居場所を並べ立てない。';
@@ -357,7 +370,8 @@
           for (var k = people.length - 1; k >= 0; k--){ var pk = people[k];
             if (pk.mode === 'ahead' && pk.turn < turn){ var hd = /(?:下り|降り)/.test(e.ev) ? 'down' : /(?:上が|上っ|上り|登)/.test(e.ev) ? 'up' : ''; if (hd && hd === pk.dir && e.with.indexOf(pk.who) < 0){ pk.mode = 'here'; pk.place = e.place; pk.turn = turn; pk.src = '入力'; } else people.splice(k, 1); continue; }   /* r4 */
             if (pk.mode === 'here' && pk.turn < turn){ people.splice(k, 1); continue; }
-            if (samePlace(pk.place, e.place) || e.with.indexOf(pk.who) >= 0) people.splice(k, 1); } }
+            if (samePlace(pk.place, e.place) || e.with.indexOf(pk.who) >= 0) people.splice(k, 1); }
+          for (var k6 = 0; k6 < people.length; k6++) if (people[k6].turn < turn) people[k6].hm = turn; }   /* ★r6: その後に主人公が動いた（出発の途中の言い方はやめる） */
       });
       pluralPass();   /* r3: 複数ある物の行は、作った時点で「A の X」に直すか外す（後の出来事が同じ行に当たるように） */
       noteMulti();
@@ -416,6 +430,8 @@
     function r5On(){ return ls('v292DfixPLACE1R5Off') !== '1'; }
     var BACK_R5 = /(?:戻ってく|戻ってき|戻って来|引き返してき|引き返して来|追いつい|追い付い|合流し|合流す|入ってき|入って来|駆け込んでき|駆けつけ|駆け付け|姿を見せ|姿を現|の姿があ|現れた|下りてき|降りてき|下りて来|降りて来|上がってき|上がって来|やってき|やって来)/;
     var NOT_BACK_R5 = /(?:声|聞こえ|電話|のを待|まで待|はず|だろう|かもしれ|ように|たら|なら|れば|写真|窓の外|向こうに|遠く|映って|映る)/;   /* 声だけ・期待・仮定・遠くに見えるだけ・写真の中の文は戻りに数えない */
+    function pin6(evs){ if (!r6On()) return evs; return evs.filter(function(e){ return !(e && e.kind === 'person' && /^(?:sent|gone|left|ahead)$/.test(str(e.mode)) && INTENT_R6.test(str(e.ev))); }); }   /* ★r6: 意思・途中の入力では「いない」の行を作らない */
+    function departed(narr, w, pl){ var b = bare(w); if (!b) return false; var ph = str(pl).replace(/^.*の/, ''); return narrSents(narr).some(function(x){ return x.indexOf(b) >= 0 && !NOT_DEP_R6.test(x) && (DEP_R6.test(x) || (ph.length >= 2 && x.indexOf(ph) >= 0)); }); }   /* ★r6: 出発の語か、行き先にいる文 */
     function absentMode(pe){ return !!pe && /^(?:left|sent|gone|ahead)$/.test(str(pe.mode)); }
     function cameBack(narr, w, pe){ var b = bare(w); if (!b) return false;
       if (r5On() && absentMode(pe)) return narrSents(narr).some(function(x){ return x.indexOf(b) >= 0 && !/(?:ない|なかった)/.test(x) && BACK_R5.test(x) && !NOT_BACK_R5.test(x); });
@@ -428,6 +444,7 @@
     /* 主人公が動く入力なのに行き先が読めなかったら、前の現在地の行は消す（不明なら言わない） */
     function heroMoved(typ, text, evs){ if (typ !== 'DO') return; if (evs.some(function(e){ return e.kind === 'hero'; })) return;
       if (/(?:走|駆け|逃げ|進む|進ん|歩い|歩く|上が|上る|上って|下り|降り|出る|出て(?!き|来)|入る|入って(?!き|来)|戻る|戻って(?!き|来)|向か|移動|離れ|渡る|渡って|追い)/.test(splitQuotesOut(text))) { if (heroAt){ heroAt = null; drops.heroUnreadable = (drops.heroUnreadable || 0) + 1; }
+        for (var k6 = 0; k6 < people.length; k6++) people[k6].hm = -1;   /* ★r6: 行き先の読めない移動でも、主人公が動いたことは同じ */
         for (var k = people.length - 1; k >= 0; k--) if (people[k].mode === 'ahead' || people[k].mode === 'here') people.splice(k, 1); } }
     /* r4: 入力で全員が同じ場所に集まったら、いない人の行を全部落とす */
     function allTogether(text){ if (!people.length) return; var tx = splitQuotesOut(text), KJ = '二三四五六七八九十', hit = /(?:全員|みんな|皆|一同)(?:が|は|で|も|、)?[^。]{0,24}(?:集ま|揃|そろ|合流|顔を合わせ|落ち合)/.test(tx);
@@ -435,14 +452,16 @@
       if (hit){ drops.allTogether = (drops.allTogether || 0) + people.length; people.length = 0; } }
     for (var i = 0; i < turns.length; i++){
       var t = turns[i] || {}, typ = str(t.inputType).toUpperCase(), pt = str(t.playerText);
-      if ((typ === 'DO' || typ === 'STORY') && pt && !isCont(pt)){ var ev1 = parseInput(pt, hero, ctx, typ === 'STORY'); noteInput(pt, ev1); heroMoved(typ, pt, ev1); feed(ev1, i + 1, '入力'); allTogether(pt); }
+      if ((typ === 'DO' || typ === 'STORY') && pt && !isCont(pt)){ var ev1 = pin6(parseInput(pt, hero, ctx, typ === 'STORY')); noteInput(pt, ev1); heroMoved(typ, pt, ev1); feed(ev1, i + 1, '入力'); allTogether(pt); }
       if (nOn){ feed(parseNarr(t.narrative, ctx), i + 1, '本文'); staleDrop(t.narrative, i + 1); }   /* 先に読める文で行を作り直し、残った古い行だけを「動きの語」で落とす */
-      for (var p = people.length - 1; p >= 0; p--){ var pe = people[p]; if (i + 1 <= pe.turn) continue;
+      for (var p = people.length - 1; p >= 0; p--){ var pe = people[p];
+        if (nOn && (pe.mode === 'sent' || pe.mode === 'gone') && !pe.dep && i + 1 >= pe.turn && departed(t.narrative, pe.who, pe.place)) pe.dep = true;   /* ★r6: 決まった回とその後の本文で出発が書かれたか */
+        if (i + 1 <= pe.turn) continue;
         if ((typ === 'SAY' && vocative(pt, pe.who)) || (nOn && cameBack(t.narrative, pe.who, pe))) people.splice(p, 1); }
     }
-    if (curInput && curInput.text && !isCont(curInput.text)){ var ct = str(curInput.type).toUpperCase(); if (ct === 'DO' || ct === 'STORY'){ var ev2 = parseInput(curInput.text, hero, ctx, ct === 'STORY'); noteInput(curInput.text, ev2); heroMoved(ct, curInput.text, ev2); feed(ev2, turns.length + 1, '入力'); allTogether(curInput.text);
+    if (curInput && curInput.text && !isCont(curInput.text)){ var ct = str(curInput.type).toUpperCase(); if (ct === 'DO' || ct === 'STORY'){ var ev2 = pin6(parseInput(curInput.text, hero, ctx, ct === 'STORY')); noteInput(curInput.text, ev2); heroMoved(ct, curInput.text, ev2); feed(ev2, turns.length + 1, '入力'); allTogether(curInput.text);
         /* ★r5 案 2: この回の入力で「残った／別の場所へ行った」と決まった人が、直前の本文ではこの場で主語として動いていた（主人公はこの回に動いていない）→ 行に橋渡しの一言を頼む */
-        if (r5On() && nOn && turns.length && !ev2.some(function(e){ return e.kind === 'hero'; })){ var pn = turns[turns.length - 1].narrative; people.forEach(function(pe){ if (pe.turn === turns.length + 1 && (pe.mode === 'left' || pe.mode === 'gone') && cameBack(pn, pe.who, null)) pe.bridge = true; }); } }
+        if (r5On() && nOn && turns.length && !ev2.some(function(e){ return e.kind === 'hero'; })){ var pn = turns[turns.length - 1].narrative; people.forEach(function(pe){ if (pe.turn === turns.length + 1 && (pe.mode === 'left' || pe.mode === 'gone' || (r6On() && pe.mode === 'sent')) && cameBack(pn, pe.who, null)) pe.bridge = true; }); } }
       else if (ct === 'SAY'){ for (var q = people.length - 1; q >= 0; q--) if (vocative(curInput.text, people[q].who)) people.splice(q, 1); } }
     return { items: items, people: people, heroAt: heroAt, hero: hero, names: ctx.names, now: turns.length + 1, drops: drops, moveIn: moveIn, moveNoLine: moveNoLine };
   }
@@ -458,7 +477,7 @@
       var kq = str(it.key).match(/^(.+?)の(.+)$/), kd = (kq && nm(kq[1]) !== kq[1]) ? nm(kq[1]) + 'の' + kq[2] : it.key;
       out.push({ turn: it.turn, src: it.src, s: kd + (e.n ? '（' + e.n + '）' : '') + 'は' + body }); });   /* r4: 短い言い切り。出どころは付けない */
     var grp = {}, order = [];   /* 同じターン・同じ行き先の人は 1 行にまとめる */
-    L.people.forEach(function(pe){ var k = pe.turn + '|' + pe.mode + '|' + pe.place + '|' + (pe.dir || ''); if (!grp[k]){ grp[k] = { pe: pe, who: [] }; order.push(k); } grp[k].who.push(nm(pe.who)); if (pe.bridge) grp[k].bridge = true; });
+    L.people.forEach(function(pe){ var k = pe.turn + '|' + pe.mode + '|' + pe.place + '|' + (pe.dir || ''); if (!grp[k]){ grp[k] = { pe: pe, who: [] }; order.push(k); } grp[k].who.push(nm(pe.who)); if (pe.bridge) grp[k].bridge = true; if (r6On() && narrOn() && !AS && (pe.mode === 'sent' || pe.mode === 'gone')){ var ip6 = L.now === pe.turn + 1 && !pe.dep && !pe.hm; grp[k].pend = (grp[k].pend === undefined) ? ip6 : (grp[k].pend && ip6); } });   /* ★r6: 決まった回の次の回だけ・一緒に決まった人のだれも出発が書かれていないときだけ */
     order.forEach(function(k){ var pe = grp[k].pe, body, w = grp[k].who.join('・'); if (pe.mode === 'spot' && L.now - pe.turn > 1) return;   /* 同じ部屋の中の立ち位置（窓辺へ行く）は次のターンまで */
       if (pe.mode === 'here' && L.now - pe.turn > HERO_TTL) return;
       var mv = (pe.via || '階段') + 'を' + (pe.dir === 'up' ? '上がった' : '下りた');
@@ -468,7 +487,7 @@
         var BR = grp[k].bridge ? '。この場を離れたことを一言書く' : '';   /* ★r5 案 2（橋渡し）。言い方 A・B のときも同じ一言を足す */
         if (AS === 'A') body = where + BR + '。戻る様子を書くまで、この場での台詞や動きを書かない';
         else if (AS === 'B') body = 'この場にいない（' + where + '）。台詞を書かない' + BR;
-        else body = where + ((pe.mode === 'left' || pe.mode === 'ahead') ? ('（' + H + 'と一緒にいない）') : '（この場にいない）') + BR; }
+        else body = where + ((pe.mode === 'left' || pe.mode === 'ahead') ? ('（' + H + 'と一緒にいない）') : grp[k].pend ? '（まだこの場にいるなら、出ていく所を書く）' : '（この場にいない）') + BR; }   /* ★r6: 出発の途中で本文が終わった人 */
       out.push({ turn: pe.turn, src: pe.src, s: w + 'は' + body }); });
     /* ★r2: 主人公の現在地の行。入力で主人公が動いたターンと次の 2 ターンだけ出す（後の移動を拾い損ねても、古い場所を「いま」と言い続けない） */
     if (L.heroAt && L.now - L.heroAt.turn <= HERO_TTL) out.push({ turn: L.heroAt.turn, src: '入力', s: H + 'はいま' + L.heroAt.place + 'にいる' });

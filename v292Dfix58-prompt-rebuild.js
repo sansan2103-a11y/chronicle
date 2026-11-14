@@ -47,6 +47,9 @@
     return 'これまで ' + turns.length + ' ターン経過。直近の状況: ' + n + (n.length >= 200 ? '…' : '');
   }
 
+  /* ★CARD80（2026-11-16・kill: localStorage v292DfixCARD80Off='1' で従来と送信バイト同一）: 会話カードは最大 1000 字になったので、
+     AI へ渡す recentDialogues は 1 発言 300 字で丸める（末尾「…」）。カード・保存・今回の入力は変えない。 */
+  function card80Cap(t){ t = String(t == null ? '' : t); try { if (localStorage.getItem('v292DfixCARD80Off') === '1') return t; } catch(e){ return t; } return t.length > 300 ? t.slice(0, 300) + '…' : t; }
   function buildRecentDialoguesList(state, maxN){
     var lines = [];
     var turns = state.turns || [];
@@ -62,7 +65,7 @@
       for (var j = ds.length - 1; j >= 0 && lines.length < maxN; j--){
         var d = ds[j];
         if (d && d.speaker && d.text){
-          lines.unshift({ speaker: d.speaker, text: d.text });
+          lines.unshift({ speaker: d.speaker, text: card80Cap(d.text) });   /* ★CARD80（GPT #127-TZ）: 1 発言 300 字まで */
         }
       }
     }

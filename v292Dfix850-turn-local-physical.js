@@ -128,12 +128,26 @@
   /* 仮定・想像・伝聞の節 */
   var HYPO = /もし|仮に|たとえ|想像|夢の中|かもしれな|だろうか|と(考え|思っ|想像し)|ような気が/;
 
+  /* ★FIX850A（2026-11-16・GPT #127-TZ・kill: localStorage v292Dfix850AOff='1' で従来と同じ・毎回評価）:
+     実測（SMOKE4 K6 の偽 AI 再生）: 地の文「圭介は扉の陰で腕を組んだまま動かない」→ fix414 の規則 A（腕＋「動かな」）で、無傷の圭介に
+     全員の【制約】「腕使用不可」。腕・手の負傷でない動作（組む・伸ばす・まくる・広げる・回す・振る・上げる・下ろす・ほどく・差し出す・添える・
+     置く・握る 等）の節では、その部位の語だけを overlay から外す（「を組んだまま動かない」になる＝部位の制約は作らない）。
+     同じ節にけがの語（折れ・骨折・斬・切・刺・血・傷・痛・腫・撃・噛・潰・火傷・捻・挫・裂・抉・貫・痺れ・麻痺・感覚が・力が入らない・上がらない・
+     動かせない・使えない・脱臼 等）があれば何も外さない（本物の負傷は従来どおり）。保存・store・本文は変えない（overlay の写しだけ）。 */
+  function offA850(){ return ls('v292Dfix850AOff') === '1'; }
+  var ARMPOSE_A = /(左|右|両)?(腕|手首|手|拳|肘)(?=(?:を|は|も)?(?:[^、。を]{1,6}(?:に|へ)(?=置|載せ|乗せ|当て|添え|突い|つい|回))?(?:組|く[みん]|伸ば|伸び|まく|捲|広げ|回|振|上げ|下ろ|おろ|解|ほど|絡め|差し出|突っ込|添え|置|載せ|乗せ|貸|背に|後ろ|胸の前|握|かざ|当て|掲げ|伸べ|引っ込))/g;
+  var INJ_A850 = /(打|ぶつけ|挟|折|骨折|斬|切ら|切れ|切り|切っ|刺|血|傷|痛|腫|撃|噛|咬|潰|焼|火傷|捻|挫|裂|抉|えぐ|貫|千切|ちぎ|もげ|失|痺|しび|麻痺|感覚が|力が入らな|上がらな|動かせな|使えな|脱臼|ひね|くじ|砕|ひび|食い|もが)/;
+  var _a850 = { n: 0 };
+  function armPoseA(sent){
+    if (offA850()) return sent;
+    return String(sent).split(/([、，])/).map(function(cl){ if (/^[、，]$/.test(cl) || INJ_A850.test(cl)) return cl; var o = cl.replace(ARMPOSE_A, ''); if (o !== cl) _a850.n++; return o; }).join('');
+  }
   function evidenceOnly(text){
     var kept = [];
     sentences(text).forEach(function(sent){
       if (HYPO.test(sent)) return;        /* 仮定・想像は身体的事実ではない */
       if (NEG_DAMAGE.test(sent)) return;  /* 損傷そのものの否定 */
-      kept.push(sent);
+      kept.push(armPoseA(sent));   /* ★FIX850A */
     });
     return kept.join('。');
   }
@@ -730,6 +744,7 @@
     }, 250);
   }
 
+  G.__v292Dfix850A = { v: 1, on: function(){ return !offA850(); }, armPose: function(s){ return armPoseA(s); }, count: function(){ return _a850.n; } };   /* ★FIX850A 検証口 */
   G.__v292Dfix850x = {
     status: function(){
       var P = null; try { P = G.Planner; } catch(e){}

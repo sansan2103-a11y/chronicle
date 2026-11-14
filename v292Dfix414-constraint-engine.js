@@ -60,6 +60,39 @@
        ・「立てない・歩けない」も同じ扱い（腰が抜けて立てない＝恐怖）。
        ・人違い: 「ユイはサキの足首を…」のように、部位の直前が別の人物の「Xの」なら、その部位はこの人のものではない → 数えない。 */
   function offFRZ1(){ try { return localStorage.getItem('v292DfixFRZ1Off') === '1'; } catch(e){ return false; } }
+  /* ★STATE3（laneSTATE3・2026-11-16・kill: localStorage v292DfixSTATE3Off='1' で従来と同じ。v292Dfix414Off='1' は fix414 全体を止める）:
+     実走 SMOKE4 F1 T6: からだ「天井を見上げた姿勢で固まる」→ 規則 F が こころ＋からだ の「固ま」を恐怖の硬直と読み、無傷の権蔵に
+     「即応・機転は出ない」（【制約】の見出しは「負傷者の行動には…」）。K6 T7〜T8: こころ「平静を装いきれない恐怖」→ widen の恐怖 1 語で同じ制約。
+       1b（規則 F・全員）: 「固ま」「凍りつ」は こころ の値か、からだ の同じ節か こころ に恐怖の語（恐怖・怖・怯え・竦・すく・パニック・震え 等）があるとき、
+           または「体が・全身が固ま」のときだけ数える（姿勢・表情の「固まる」は数えない）。ほかの語（解離・頭が真っ白・身がすく 等）は従来どおり。
+       1c（widen・Owner だけ）: 恐怖を「押し殺す・こらえる・抑える・振り払う」、程度の軽い言い方（少し・かすか・わずか・平静を装いきれない・にじむ 等）は数えない。
+           こころ・からだ が古い（fix192 STATEAGE1 の数え方で 2 ターン以上前＝「N ターン前の様子」）ときは、その値から恐怖の制約を新しく作らない。 */
+  function offST3(){ try { return localStorage.getItem('v292DfixSTATE3Off') === '1'; } catch(e){ return false; } }
+  var MINDW_ST3 = /(解離|現実感が(薄|な)|頭が真っ白|震えが止ま|身がすく)/;
+  var POSE_ST3  = /(固ま|凍りつ|凍り付)/;
+  var FEARW_ST3 = /(恐怖|怖|怯え|おびえ|竦|すく|パニック|恐慌|戦慄|震え|ぞっと)/;
+  var BODYF_ST3 = /(体|身体|からだ|全身|身)(が|は|も|ごと)?[^、。]{0,4}(固ま|凍りつ|凍り付|硬直)/;
+  function ruleF_ST3(kokoro, karada){   /* 規則 F の判定（STATE3 のとき）。戻り値: 数えるなら true */
+    var ko = keepClauses(kokoro).join('。');
+    if (/(解離|現実感が(薄|な)|頭が真っ白|凍りつ|固ま|震えが止ま|身がすく)/.test(ko)) return true;   /* こころ は従来どおり */
+    var koFear = FEARW_ST3.test(ko.replace(/(恐怖|怯え|おびえ|パニック|恐慌)(は|が|も|を|て(い)?|で(は)?)?(ない|なく|消え|薄れ|和らい|収ま|克服)/g, ''));   /* こころ に恐怖があれば、からだ の「固まる」も恐怖の硬直と読む */
+    return keepClauses(karada).some(function(cl){ return String(cl).split(/[、，]/).some(function(c){
+      if (MINDW_ST3.test(c)) return true;
+      if (!POSE_ST3.test(c)) return false;
+      return koFear || FEARW_ST3.test(c) || BODYF_ST3.test(c); }); });
+  }
+  function fearText_ST3(t){   /* 抑えた恐怖・程度の軽い恐怖の言い方を外す */
+    return String(t || '')
+      .replace(/(恐怖|怯え|おびえ|怖さ|恐れ)[^。、]{0,3}(押し殺|噛み殺|抑え|こらえ|堪え|振り払|隠し|隠す|飲み込|呑み込)/g, '')
+      .replace(/(押し殺|噛み殺|抑え込|こらえ|堪え|隠し)[^。、]{0,4}(恐怖|怯え|おびえ)/g, '')
+      .replace(/(平静|冷静|平気|強がり)[^。、]{0,3}装[^。、]{0,8}(恐怖|怯え|おびえ)/g, '')
+      .replace(/(少し|少しの|わずか|わずかな|かすか|かすかな|微か|微かな|ほのか|ほのかな|小さな|軽い|薄い|うっすら|ちょっと|やや|淡い)[^。、]{0,3}(恐怖|怯え|おびえ)/g, '')
+      .replace(/(恐怖|怯え|おびえ)[^。、]{0,2}(が|を)?(にじむ|滲む|にじん|滲ん|混じ|まじ|よぎ|過ぎ)/g, '');
+  }
+  function staleF_ST3(name, entry, f){   /* fix192 STATEAGE1 と同じ数え方で 2 ターン以上前の値か（分からなければ false＝従来どおり） */
+    try { if (!entry || typeof entry.turn !== 'number') return false; var A = window.__v292DfixSTATEAGE1; if (!A || typeof A.peek !== 'function') return false;
+      var v = f === 'ko' ? entry.kokoro : entry.karada; if (!v) return false; var a = A.peek(name, f, String(v), entry.turn); return typeof a === 'number' && a >= 2; } catch(e){ return false; }
+  }
   var INJ_FRZ1    = /(骨折|折れ|潰れ|切断|貫通|捻挫|捻っ|捻り|ひねっ|ひねり|挫い|くじい|くじけ|腫れ|腫ら|脱臼|撃たれ|撃ち抜|刺さ|刺され|裂傷|裂け|えぐ|抉|噛ま|咬ま|噛みつかれ|噛み付かれ|食いちぎ|火傷|打撲|出血|流血|血を流|血が(滲|にじ|流|溢|噴|垂)|負傷|怪我|けが|傷)/;
   var SPRAIN_FRZ1 = /(捻挫|捻っ|捻り|ひねっ|ひねり|挫い|挫き|くじい|くじき|腫れ|腫ら|脱臼|撃たれ|撃ち抜)/;
   var PHYS_FRZ1   = /(朦朧|もうろう|意識が|失血|衰弱|麻痺|痺れ|しびれ|毒)/;
@@ -207,7 +240,8 @@
       }
     });
     // ---- F: こころ由来 → 即応・機転は出ない(型B/C) ----
-    if (/(解離|現実感が(薄|な)|頭が真っ白|凍りつ|固ま|震えが止ま|身がすく)/.test(mindText)){
+    var st3 = !offST3();   /* ★STATE3 */
+    if (st3 ? ruleF_ST3(kokoro, karada) : /(解離|現実感が(薄|な)|頭が真っ白|凍りつ|固ま|震えが止ま|身がすく)/.test(mindText)){
       add(6, '即応・機転は出ない(型B/C)');
     }
     // ---- NPCQ1(fix414 widen・既定ON・v292Dfix414WidenOff='1'で従来): 部位不明の重傷/強い恐怖 ----
@@ -223,7 +257,9 @@
         add(3.5, '動きは小さく遅い(激しい連続行動は不可)');
         add(5, '長い台詞不可(短い発話のみ)');
       }
-      var fearTxt = mindText.replace(/(恐怖|怯え|おびえ|パニック|恐慌)(は|が|も|を|て(い)?|で(は)?)?(ない|なく|消え|薄れ|和らい|収ま|克服)/g, '');
+      var fearSrc = mindText;   /* ★STATE3 1c: 古い こころ・からだ は使わない／抑えた・軽い恐怖の言い方は外す */
+      if (st3){ var koS = staleF_ST3(name, entry, 'ko') ? '' : kokoro, kaS = staleF_ST3(name, entry, 'ka') ? '' : karada; fearSrc = fearText_ST3(keepClauses(koS + '。' + kaS).join('。')); }
+      var fearTxt = fearSrc.replace(/(恐怖|怯え|おびえ|パニック|恐慌)(は|が|も|を|て(い)?|で(は)?)?(ない|なく|消え|薄れ|和らい|収ま|克服)/g, '');
       if (/(恐怖|怯え|おびえ|パニック|恐慌|竦ん|すくん|泣きじゃく)/.test(fearTxt)){
         add(6, '即応・機転は出ない(型B/C)');
       }
@@ -346,6 +382,7 @@
   })();
 
   // ---- F-4: 検証口 ----------------------------------------------------
+  try { window.__v292DfixSTATE3 = { v: 1, on: function(){ return !offST3(); }, ruleF: ruleF_ST3, fearText: fearText_ST3 }; } catch(_st3){}   /* ★STATE3 検証口 */
   window.__v292Dfix414x = {
     deriveFor: function(name, entry){ try { return deriveConstraints(name, entry); } catch(e){ return []; } },   // NPCQ1: fix192 が表示エントリで判定する口
     derive: function(name){ try { return deriveConstraints(name, store()[name]); } catch(e){ return []; } },

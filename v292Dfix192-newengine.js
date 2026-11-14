@@ -205,6 +205,12 @@
     return x === '';
   }
   try { window.__v292DfixSTATE2 = { v: 1, on: st2On, generic: st2Generic }; } catch(_s2){}
+  /* ★STATE3（laneSTATE3・2026-11-16・kill: localStorage v292DfixSTATE3Off='1' で従来と送信バイト同一・毎回評価）:
+     実走 SMOKE4（F1 T6 権蔵・K6 T7〜T8 圭介）で、けがの無い人物に「（ただし○○は重傷・強い恐怖で動きが縛られているため除く）」が付いた。
+     原因は fix414 の制約が 1 つでもあれば除いていたこと（姿勢の「固まる」や こころ の「恐怖」1 語から出る心理の制約 rank 6 だけでも）。
+       1a: 除くのは体の制約（rank<6：部位の使用不可・移動・出血・視覚・発話・重傷）がある人だけ。文言は原因を断定しない「身体に制約があり、可能な動作に制限がある。具体的な制約は現在の状態に従う」（GPT #127-TZ）。
+       1b・1c は v292Dfix414-constraint-engine.js（同じ鍵）。 */
+  function st3On192(){ try { return localStorage.getItem('v292DfixSTATE3Off') !== '1'; } catch(e){ return false; } }
   function stateBlock(legacyStore){
     try{
       var c930 = !off930() && !legacyStore; /* ★fix932: legacyStore=true は ac27 と同じ（shadow を読む・旧項目順）判定専用 */
@@ -251,11 +257,11 @@
         if(mi){ if(ac1 && st2On()){ var am = age1Of(ac1, n, 'mi', mi, s.turn); if(am >= 3) (old1[am] = old1[am] || []).push('未解決:'+mi); else parts.push('未解決:'+mi); } else parts.push('未解決:'+mi); }   /* ★STATE2: 3 ターン以上書き直されていない未解決に古さの印 */
         Object.keys(old1).map(Number).sort(function(a, b){ return a - b; }).forEach(function(a){ parts.push('（'+a+' ターン前の様子・今も同じとは限らない）'+old1[a].join(' ／ ')); stale1 = true; });
         if(parts.length) lines.push('・'+n+'｜'+parts.join(' ／ '));
-        try{ if(npcqOwner192() && !legacyStore && !isHeroA1(hkA1, n) && localStorage.getItem('v292Dfix192LicOff')!=='1' && localStorage.getItem('v292Dfix414Off')!=='1'){ var X414=window.__v292Dfix414x; if(X414 && X414.deriveFor && X414.deriveFor(n,{karada:ka,kokoro:ko,kizu:ki}).length && licN.length<3) licN.push(n); } }catch(_l){}   /* ★NPCQ1 */
+        try{ if(npcqOwner192() && !legacyStore && !isHeroA1(hkA1, n) && localStorage.getItem('v292Dfix192LicOff')!=='1' && localStorage.getItem('v292Dfix414Off')!=='1'){ var X414=window.__v292Dfix414x; if(X414 && X414.deriveFor && X414.deriveFor(n,{karada:ka,kokoro:ko,kizu:ki}).length && licN.length<3){ if(!st3On192()) licN.push(n); else if(X414.deriveFor(n,{karada:ka,kokoro:ko,kizu:ki,turn:s.turn}).some(function(c){ return c && c.rank < 6; })) licN.push(n); } } }catch(_l){}   /* ★NPCQ1 ／ ★STATE3 1a: 体の制約（rank<6）がある人だけ除く（心理の制約 rank 6 だけの人は除かない） */
       });
       if(!lines.length) return '';
       var licExc=''; /* ★NPCQ1: 制約のある人物には「入力を待たず発言してよい」を適用しない（1条件・新ブロックなし。v292Dfix192LicOff='1'で従来） */
-      if(licN.length){ licExc='（ただし'+licN.join('・')+'は重傷・強い恐怖で動きが縛られているため除く）'; }
+      if(licN.length){ licExc= st3On192() ? '（ただし'+licN.join('・')+'は除く：身体に制約があり、可能な動作に制限がある。具体的な制約は現在の状態に従う）' : '（ただし'+licN.join('・')+'は重傷・強い恐怖で動きが縛られているため除く）'; }   /* ★STATE3 1a（GPT #127-TZ）: 原因を断定しない文言（負傷とは限らない） */
       return '【各キャラの現在の状態（引き継ぐ。傷/関係/未解決は治療・和解まで保持し勝手に消さない）】\n'+lines.join('\n')
         +(stale1 ? '\n・「ターン前の様子」と付いた項目は、最後に状態が書かれた時点のもの。直近の本文と食い違うときは本文を正とし、反応の前提にしない（傷はそのまま引き継ぐ）。' : '')   /* ★STATEAGE1 */
         +((sevU.length || sevS.length) ? '\n' + C2.severeLine(sevU, sevS) : '')   /* ★SEVERE1 r2 */
