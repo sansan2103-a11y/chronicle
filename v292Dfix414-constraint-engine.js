@@ -87,12 +87,26 @@
      FEAR2: 「硬直」「固まる」「〜まま動けない」だけでは恐怖による制約を作らない（widen・規則 F の からだ）。「足がすくむ」「声が出ない」「頭が真っ白」等は残す。
        既定は FEAR2_ON の 1 行で切り替える（true＝既定 ON・kill v292DfixFEAR2Off='1'／false＝既定 OFF・v292DfixFEAR2On='1' で有効）。
      CHEAD1: 【制約】の人物の制約がすべて怖さ由来（rank 6）のときは、見出しを「負傷者の行動には…」ではなく怖さ用の文にする。kill v292DfixCHEAD1Off='1'。 */
-  var FEAR2_ON = false;   /* ★FEAR2: 既定の切り替え（この 1 行） */
+  var FEAR2_ON = true;   /* ★FEAR2: 既定の切り替え（この 1 行）。r2（GPT #127-UD）で全員既定 ON */
   function fear2On(){ try { if (localStorage.getItem('v292DfixFEAR2Off') === '1') return false; return FEAR2_ON || localStorage.getItem('v292DfixFEAR2On') === '1'; } catch(e){ return false; } }
   function arm2On(){ try { return localStorage.getItem('v292DfixARM2Off') !== '1'; } catch(e){ return false; } }
   function chead1On(){ try { return localStorage.getItem('v292DfixCHEAD1Off') !== '1'; } catch(e){ return false; } }
   var FRZ_F2 = /[^。、]{0,14}(?:硬直|固ま(?:っ|り|る|れ|ろ|った)?)[^。、]*|[^。、]{0,14}まま[^。、]{0,6}(?:動けず|動けな[いく]?|動かな[いく]?)[^。、]*/g;
-  function fearFunc2(t){ t = String(t || '').replace(FUNC_NEG_F1, ''); if (PSY_F1.test(t)) return true; var f = t.replace(FRZ_F2, ''); return FUNC_F1.test(f) && CTX_F1.test(f); }   /* ★FEAR2 */
+  /* ★FEAR2 r2（2026-11-16・GPT #127-UD 1・kill v292DfixFEAR2R2Off='1'＝r1 と同じ）: 「硬直」「固まる」「〜まま動けない」だけ（姿勢・一瞬の反応）は作らない、は維持。
+     ただし 1 つの文に（固まる・硬直・凍りつく・すくむ・こわばる・縫い付く 等）＋（動けない／動こうとしても…／体が言うことをきかない）がそろい、
+     恐怖・動揺の文脈（同じ文か、同じ人物の こころ）があれば、明確な行動不能として残す（FEAR1 と同じ制約）。
+     その文に「〜たまま」の姿勢の句（固まったまま 等の固まり自体は除く）や「一瞬・一拍・束の間」があり、「動こうとしても」「言うことをきかない」が無ければ残さない。 */
+  function f2r2On(){ try { return localStorage.getItem('v292DfixFEAR2R2Off') !== '1'; } catch(e){ return true; } }
+  var FEARW_F2R = /(恐怖|怯え|おびえ|怖|パニック|恐慌|戦慄|動揺)/;
+  var FRZW_F2R = /(固ま|硬直|凍りつ|凍り付|すく|竦|こわば|強張|縫い付|縫いつ|根が生え)/;
+  var TRY_F2R = /((動こう|動かそう|立とう|逃げよう|走ろう|踏み出そう)と?(しても|するが|したが|にも)[^。]{0,14}(動けな|動けず|動かな|動かせな|言うことを|立てな|逃げられな|走れな|出な)|(体|身体|からだ|全身|手足|足|脚)が[^。]{0,4}言うことを(きか|聞か)な)/;
+  var INAB_F2R = /((固ま|硬直|凍りつ|凍り付|すく|竦|こわば|強張)[^。]{0,10}(動けな|動けず|身動きが?(取れな|できな)|一歩も動|微動だにでき)|(縫い付|縫いつ|根が生え)[^。]{0,8}(動かな|動けな|動けず))/;
+  var POSE_F2R = /(?<!(固まっ|硬直し|凍りつい|凍り付い|すくん|竦ん|こわばっ|強張っ))(た|だ)まま|姿勢/;
+  var MOM_F2R = /(一瞬|一拍|束の間|つかの間|一時的)/;
+  function strongF2(t, ctx){ return String(t || '').replace(FUNC_NEG_F1, '').split(/[。\n]/).some(function(s){
+    if (!FRZW_F2R.test(s)) return false; var tr = TRY_F2R.test(s); if (!tr && !INAB_F2R.test(s)) return false;
+    if (!ctx && !FEARW_F2R.test(s)) return false; if (!tr && (POSE_F2R.test(s) || MOM_F2R.test(s))) return false; return true; }); }
+  function fearFunc2(t){ t = String(t || '').replace(FUNC_NEG_F1, ''); if (PSY_F1.test(t)) return true; if (f2r2On() && strongF2(t, FEARW_F2R.test(t))) return true; var f = t.replace(FRZ_F2, ''); return FUNC_F1.test(f) && CTX_F1.test(f); }   /* ★FEAR2（r2: 明確な行動不能は残す） */
   var DIS_NOFREEZE_A2 = /(使えな|上がらな|力が入らな|折れ|骨折|潰れ|貫通|骨.{0,3}露出|切断|失(く|っ|わ))/;
   function fearFunc(t){ t = String(t || '').replace(FUNC_NEG_F1, ''); return PSY_F1.test(t) || (FUNC_F1.test(t) && CTX_F1.test(t)); }
   var MINDW_ST3 = /(解離|現実感が(薄|な)|頭が真っ白|震えが止ま|身がすく)/;
@@ -106,7 +120,7 @@
     return keepClauses(karada).some(function(cl){ return String(cl).split(/[、，]/).some(function(c){
       if (MINDW_ST3.test(c)) return true;
       if (!POSE_ST3.test(c)) return false;
-      if (fear2On()) return false;   /* ★FEAR2: からだ の「固まる・凍りつく」は数えない */
+      if (fear2On()) return f2r2On() ? strongF2(String(cl), koFear) : false;   /* ★FEAR2: からだ の「固まる・凍りつく」は数えない（r2: 明確な行動不能の文だけ数える） */
       return koFear || FEARW_ST3.test(c) || BODYF_ST3.test(c); }); });
   }
   function fearText_ST3(t){   /* 抑えた恐怖・程度の軽い恐怖の言い方を外す */
@@ -414,7 +428,7 @@
   // ---- F-4: 検証口 ----------------------------------------------------
   try { window.__v292DfixSTATE3 = { v: 1, on: function(){ return !offST3(); }, ruleF: ruleF_ST3, fearText: fearText_ST3 }; } catch(_st3){}   /* ★STATE3 検証口 */
   try { window.__v292DfixFEAR1 = { v: 1, on: function(){ return !offFEAR1(); }, func: fearFunc }; } catch(_f1){}   /* ★FEAR1 検証口 */
-  try { window.__v292DfixFEAR2 = { v: 1, fear2On: fear2On, arm2On: arm2On, chead1On: chead1On, defaultOn: FEAR2_ON }; } catch(_f2){}
+  try { window.__v292DfixFEAR2 = { v: 2, fear2On: fear2On, arm2On: arm2On, chead1On: chead1On, defaultOn: FEAR2_ON, r2On: f2r2On, strongF2: strongF2 }; } catch(_f2){}
   window.__v292Dfix414x = {
     deriveFor: function(name, entry){ try { return deriveConstraints(name, entry); } catch(e){ return []; } },   // NPCQ1: fix192 が表示エントリで判定する口
     derive: function(name){ try { return deriveConstraints(name, store()[name]); } catch(e){ return []; } },

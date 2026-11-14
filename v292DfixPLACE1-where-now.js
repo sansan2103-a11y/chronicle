@@ -65,7 +65,7 @@
 // =====================================================================
 (function(root){
   'use strict';
-  var VER = 'place1-20261115-r7';
+  var VER = 'place1-20261115-r8';
   /* ★r7（2026-11-16・GPT #127-UB。r7 の分だけ止める鍵 v292DfixPLACE1R7Off='1'＝r6 と同じ行・同じ状態欄・同じ言い方 A）:
      ・複数人の帰還: 入力で決まった「いない」の人について、「二人／三人／みんな／全員／彼ら が戻ってきた」の文も戻りとして読む。
        ただし誰のことかが一意なときだけ（「N人」は、いない人のうち同じ回に同じ所へ去った組で人数が N のものがちょうど 1 組。「みんな・全員・彼ら」は、いない組がちょうど 1 組）。
@@ -77,6 +77,20 @@
   function r7On(){ return ls('v292DfixPLACE1R7Off') !== '1'; }
   var NOT_BACK_R7 = /(?:声|聞こえ|電話|のを待|まで待|はず(?!の)|だろう|かもしれ|ように|たら|なら|れば|写真|窓の外|向こうに|遠く|映って|映る)/;
   var GROUP_R7 = /(二人|三人|四人|五人|ふたり|みんな|皆|全員|彼ら|彼女ら|一同)/;
+  /* ★r8（2026-11-16・GPT #127-UD 2。r8 の分だけ止める鍵 v292DfixPLACE1R8Off='1'＝r7 と同じ行）:
+     ・明確な帰還の言い方を足す: 「扉口に和代の小柄な影が現れる」（K6-D T11→T12 で行が残った）、「X が部屋に入ってくる」「X が顔を出す」「X が姿を見せる」「X が戻った」等。
+       その人の名前が主語（X は／が／も、X の…影・姿・顔が）で、動きの語がその後 30 字以内にあるときだけ。行を消すのはその人だけ（一緒に去った人もまとめて消さない）。
+     ・帰還にしない: 声・足音・物音・気配・電話だけ、遠く・窓の外・写真・鏡・回想・記憶・夢、「はず」「だろう」「戻ろうとした」「〜かけた」「つもり」「予定」、
+       主語の無い文・「誰か／何者か」、否定（ない・なかった）。
+     ・r7 の言い方（戻ってきた 等）でも、回想・夢・記憶・鏡・「戻ろうとした」・「誰か」の文は帰還にしない。r7 の組の帰還（「二人が戻ってきた」）も、「うち一人」「片方」「どちらか」「〜だけ」等で一部だけのときは断定しない。 */
+  function r8On(){ return ls('v292DfixPLACE1R8Off') !== '1'; }
+  var BACK_R8 = /(?:現れ(?:る|た|て)|姿を(?:現|見せ)|顔を(?:出|見せ|のぞかせ|覗かせ)|入ってく|入ってき|入って来|帰ってき|帰って来|戻ってく|戻ってき|戻って来|引き返してき|引き返して来|駆け込んでく|駆け込んでき|上がってく|上がってき|下りてく|下りてき|降りてく|降りてき|戻った|戻り着|追いつい|追い付い|合流し)/;
+  var NOT_BACK_R8 = /(?:声|聞こえ|電話|足音|物音|気配|のを待|まで待|はず|だろう|かもしれ|ように|たら|なら|れば|写真|窓の外|向こうに|遠く|映って|映る|鏡|記憶|思い出|回想|かつて|昔|夢|幻|戻ろう|行こう|来よう|うとし|うとす|かけ[てたる]|つもり|予定|誰か|何者か|気がし|のか|かどうか)/;
+  var SUBJ_R8 = /^(?:さん|先輩|くん|君|ちゃん|様|さま)?(?:は|が|も|の[^。、]{0,8}(?:影|姿|顔)(?:が|は|も))/;
+  var NOTX_R8 = /(?:鏡|記憶|思い出|回想|かつて|昔|夢|幻|戻ろう|行こう|来よう|うとし|うとす|かけ[てたる]|つもり|予定|誰か|何者か)/;   /* r7 の言い方（戻ってきた 等）にも効かせる */
+  var PART_R8 = /(?:うち(?:の)?(?:一人|ひとり|二人|ふたり)|片方|一方だけ|どちらか|だけが|だけ戻|ひとりだけ|一人だけ)/;
+  function back8(x, b){ if (/(?:ない|なかった)/.test(x) || NOT_BACK_R8.test(x)) return false; var k = x.indexOf(b); if (k < 0) return false;
+    var af = x.slice(k + b.length), m = af.match(SUBJ_R8); if (!m) return false; return BACK_R8.test(af.slice(m[0].length, m[0].length + 30)); }
   /* ★r6（2026-11-16・SMOKE4 K6 の診断 STATE2 §3。鍵・置き場所・保存しないこと・出どころを送らないこと・8 行 320 字は同じ。r6 の分だけ止める鍵 v292DfixPLACE1R6Off='1'＝r5 と同じ行）:
      ・橋渡し（r5 案 2）の対象に「〜に〜を〜まで送ってもらう」（mode sent）を足す。K6 T7: 直前の本文で和代・篠田がこの場で動いていたのに一言が付かなかった。
      ・退場の意思・途中だけの入力（〜しようとする・〜たい・〜かけて・〜よう頼む 等）では「いない」の行を作らない（GPT #127-TZ。退場が入力で確定したときだけ）。
@@ -455,7 +469,8 @@
     }
     function absentMode(pe){ return !!pe && /^(?:left|sent|gone|ahead)$/.test(str(pe.mode)); }
     function cameBack(narr, w, pe){ var b = bare(w); if (!b) return false;
-      if (r5On() && absentMode(pe) && r7On()) return narrSents(narr).some(function(x){ if (/(?:ない|なかった)/.test(x) || !BACK_R5.test(x) || NOT_BACK_R7.test(x)) return false; if (x.indexOf(b) >= 0) return true; return groupBack7(x, pe); });   /* ★r7 */
+      if (r5On() && absentMode(pe) && r7On()) return narrSents(narr).some(function(x){ if (r8On() && back8(x, b)) return true;   /* ★r8 */
+        if (/(?:ない|なかった)/.test(x) || !BACK_R5.test(x) || NOT_BACK_R7.test(x)) return false; if (r8On() && NOTX_R8.test(x)) return false; if (x.indexOf(b) >= 0) return true; if (r8On() && PART_R8.test(x)) return false; return groupBack7(x, pe); });   /* ★r7 */
       if (r5On() && absentMode(pe)) return narrSents(narr).some(function(x){ return x.indexOf(b) >= 0 && !/(?:ない|なかった)/.test(x) && BACK_R5.test(x) && !NOT_BACK_R5.test(x); });
       return narrSents(narr).some(function(x){ if (x.indexOf(b) < 0 || /(?:ない|なかった)/.test(x)) return false;
         if (/(?:戻ってき|戻って来|引き返してき|追いつい|合流し|入ってき|入って来|駆け込んでき|姿を見せ|現れた)/.test(x)) return true;
