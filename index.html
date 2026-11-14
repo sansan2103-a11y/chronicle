@@ -345,7 +345,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261114-hv1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261114-echo1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -3098,6 +3098,8 @@ const G = {
       /* ★LEAK1: 保存・表示の直前の最終境界。影（鍵なし）= 物語でない行（内部ラベルだけの行／タグの断片だけの行／作業メモの残り）の件数だけを記録して narr はそのまま。
          適用（v292DfixLEAK1Apply='1'）= その行だけを除く（plan.narrative も同じ行を除く）。kill: v292DfixLEAK1Off='1'。 */
       try { const _L1g = window.__v292DfixLEAK1; if (_L1g && typeof _L1g.gate === 'function') { const _n1g = _L1g.gate(narr, result, plan); if (typeof _n1g === 'string') narr = _n1g; } } catch(_eL1g){}
+      /* ★ECHO1（laneECHO1・既定 OFF・鍵 v292DfixECHO1On='1'・kill v292DfixECHO1Off='1'）: 影の検出。書き出しが直前ターンの最後の一拍の言い直しかを数えるだけ（narr・_convSays は変えない。鍵が無ければ何もしない）。 */
+      try { const _E1x = window.__v292DfixECHO1; if (_E1x && typeof _E1x.exit === 'function') _E1x.exit(narr, _convSays, S, plan, text, S.mode); } catch(_eE1x){}
       const turn = {
         inputType:       S.mode,
         playerText:      text,
@@ -4475,7 +4477,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix55-gm-mode.js?cb=v292Dfix55c"></script>
   <script src="v292Dfix56-conversation-log-fix.js?cb=v292Dfix200"></script>
   <script src="v292Dfix57-script-style-dialogue.js?cb=v292Dfix57"></script>
-  <script src="v292Dfix58-prompt-rebuild.js?cb=20261113-leak1"></script>
+  <script src="v292Dfix58-prompt-rebuild.js?cb=20261114-echo1"></script>
   <script src="v292Dfix60-display-pipeline.js?cb=v292Dfix60"></script>
   <script src="v292Dfix59-hybrid-extractor.js?cb=v292Dfix59"></script>
   <script src="v292Dfix61-alpha-strip-protect.js?cb=20260829-fix748"></script>
@@ -4522,7 +4524,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
   <script src="v292Dfix796-memory-retrieve.js?cb=20261021-bundle38-b"></script>
-  <script src="v292Dfix192-newengine.js?cb=20261113-sev3"></script>
+  <script src="v292Dfix192-newengine.js?cb=20261114-echo1"></script>
   <script src="v292DfixAGENCY1-player-intent.js?cb=20261110-agency1c"></script><!-- ★AGENCY1 (GPT #127-RS ②): SAY/DO の入力説明の行に「入力されていない主人公の意図・発話内容を確定しない」1 文（fix192 が呼ぶ）。既定は影（足さない）。ON = 管理者画面の鍵 agency1 または localStorage v292DfixAGENCY1On=1。Vault は足さない。kill: localStorage v292DfixAGENCY1Off=1 -->
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
@@ -4698,7 +4700,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix514-say-fullname.js?cb=v292Dfix514"></script>
   <script src="v292Dfix441-sys-at-send.js?cb=v292Dfix514"></script>
 <script src="v292Dfix442-folklore.js?cb=v292Dfix442"></script>
-<script src="v292Dfix443-drama-rescue.js?cb=20261111-flow3"></script>
+<script src="v292Dfix443-drama-rescue.js?cb=20261114-echo1"></script>
 <script src="v292Dfix444-world-law.js?cb=20261014-iso2b-c953r3"></script>
 <script src="v292Dfix445-handle-lock.js?cb=20260901-fix784"></script>
 <script src="v292Dfix446-fill-robust.js?cb=v292Dfix446"></script>
@@ -4919,6 +4921,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixCAST1-opening-cast.js?cb=20261113-cast1"></script><!-- ★CAST1 (laneCAST1・GPT #127-SU ①): 開始場面にいると確定している NPC の説明を最初の回だけ user の cast.npcs に補う。判定の純関数だけ（fix58 が呼ぶたびに探す）。既定 OFF。ON v292DfixCAST1On=1（比較腕 2）/ kill v292DfixCAST1Off=1 -->
 <script src="v292DfixCALL1-confirmed-speech.js?cb=20261113-cast1"></script><!-- ★CALL1 / SPK3 (laneCAST1・GPT #127-SU ②③): 話者が確定した発話だけから「呼称の先例」1 行（earlierFacts）と recentSpeakers（直近 2 ターンの話者の参照）を作る純関数（fix58 が呼ぶたびに探す）。どちらも既定 OFF・鍵は別々。ON v292DfixCALL1On=1 / v292DfixSPK3On=1・kill v292DfixCALL1Off=1 / v292DfixSPK3Off=1 -->
 <script src="v292DfixLEAK1-nonstory-lines.js?cb=20261114-leak1on"></script><!-- ★LEAK1 (laneLEAK1・GPT #127-SW 2): 本文に混ざる物語でない行の検査。影は常時（件数だけ・本文は記録しない）。適用 v292DfixLEAK1Apply='1'（既定 OFF）／kill v292DfixLEAK1Off='1'。保存・sys・送信は変えない。 -->
+<script src="v292DfixECHO1-no-restate.js?cb=20261114-echo1"></script><!-- ★ECHO1 (laneECHO1・GPT #127-TP): 前のターンの最後の一拍を次のターンの書き出しで言い直させない（済んだ反応だけ。答えの出ていない問い・途中の動きは引き継ぐ）。純関数だけ（fix58・fix192・fix443・保存直前の境界が呼ぶたびに探す）。鍵 v292DfixECHO1On=1（既定 OFF＝送信バイト同一・影の検出も動かない）・kill v292DfixECHO1Off=1 -->
 <script src="v292DfixNUM1-input-ledger.js?cb=20261113-num2"></script><!-- ★NUM1 (laneLEAK1・GPT #127-SW 3): 序盤のプレイヤー入力の数・約束を earlierFacts の先頭に最大 5 行・200 字で残す純関数（fix58 が呼ぶ）。鍵 v292DfixNUM1On='1'（既定 OFF）／kill v292DfixNUM1Off='1'。保存なし・sys 0 字。 -->
 </body>
 </html>

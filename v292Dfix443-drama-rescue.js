@@ -94,8 +94,12 @@
     return T.yoko.split(CONT1.yokoOld).join(CONT1.yokoNew + add);
   }
   function cont1Hint(){
-    if (!cont1On()) return T.contHint;
-    return T.contHint.split(CONT1.hintOld).join(CONT1.hintNew) + CONT1.hintAdd;
+    var h = cont1On() ? (T.contHint.split(CONT1.hintOld).join(CONT1.hintNew) + CONT1.hintAdd) : T.contHint;
+    /* ★ECHO1（laneECHO1・GPT #127-TP・既定 OFF・鍵 v292DfixECHO1On='1'・kill v292DfixECHO1Off='1'）: 鍵があるときだけ先頭の 1 文
+       「前ターン末の発言/動作/各キャラの状態…を今ターン冒頭で引き継いでから、状況を次へ動かす。」を
+       「…は前提として引き継ぐ。済んだ反応や描写は冒頭で書き直さず、答えの出ていない問い・途中の動きがあればその返事・続きから、状況を次へ動かす。」に替える。鍵が無ければ同じ文字列 */
+    try { var E = window.__v292DfixECHO1; if (E && typeof E.contHint === 'function') h = E.contHint(h); } catch(eE1){}
+    return h;
   }
 
   // fix108b: サンプル名スクラブ（fix58 の <say> 見本に焼き込まれた固有名）
