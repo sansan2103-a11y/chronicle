@@ -1,6 +1,7 @@
 # FIX_INDEX — Chronicle fix 辞典（開発担当向け）
 
 > 下書き（laneDOCS・2026-10-31・第 1 段。2026-11-01 に 80-int-a、続けて 81-admg-a、82b-iconux-b、83-flow-c、MSW1-c、2026-11-02 に 84-b37g-a、85-imgsafe（Worker だけ）、86-lc1ox-d、87-lc1ox2-a、Worker v46.28-r1920b-fc、89-r1920-b、90-a、2026-11-03 に 90-b、Worker v46.29-rphold-fc、Worker v46.30-public-fc と管理者画面 `53e2d067`、91-b、92-a、2026-11-03 に 93-a（MIDICON3 mx3-d・Worker `v46.30-public-mx3c-fc`・管理者画面 `abd3084d`）、2026-11-07 に 93-b、Worker `v46.31-diag1b-fc`、管理者画面 `5c9c9f28`、Worker `v46.33b-limit1-fc`、管理者画面 `18594749`（admhub1）、93-c 、2026-11-07 夜に Worker `v46.34b-ready1-proarg-fc`・管理者画面 `e5198d0a`・93-d（ISO1e）・93-e（OPEN1・READY1 の端末側）、2026-11-08 に 93-f（npcq1 C2）、Worker `v46.35b-custimg1-fc`・管理者画面 `a2ea35ca`（ADMBULK1）、Worker `v46.35c-hang1-fc`、93-g（SETUI1・BOOTOFF1・NEWACCT1）、Worker `v46.35d-initslow1-fc`（INITSLOW1）、Worker `v46.36-wmxreg-fc`（W-MXREG・`midicon1` を READY に）・管理者画面 `f2258e33`、93-h（HOMERETRY1・OLDMX1・IDSPLIT2・GENDER1）、2026-11-09 に Worker `v46.37-keys-fc`（鍵 `starticon1`・`idsplit2`）・管理者画面 `752c623a`・93-i（STARTICON・W-MXREG の端末側・IDSPLIT2 の鍵）の出荷を反映）。
+> **基準の本番（2026-11-15・GitHub HEAD `9a74d7d`・版 `20261115-state3`）**：11-12 の基準（`8311948`）の上に、11-12〜11-15 の出荷 41 コミット（GitHub `e4d982e`〜`9a74d7d`）。index `a19bd431`・home `c0094670`・version `23938ae5`・features.js `3f128dee`（いずれも GitHub HEAD の実物から取った。**本番の読み戻しは、この資料では未確認**）。新しいファイル 17 本（付録 A の #394〜#410）。GitHub の順（要約）：KEY1・SOL1（`e4d982e`）→ STORE1b r2（`a46c2f1`）→ ACTOR1・STATEQ1・PURGE1c（`5b8a837`）→ UI3・LAT1（`f2b6d56`）→ UI4・FF1・GC1（`63bfe48`・`9dab027`）→ GC1b・SPK2/HB1（`b385f25`）→ SCENE2 r2c・SEVERE1・DRIVE1・EX192（`c228821`）→ F850Ord（`8f80b0a`）→ CAST1・CALL1・SPK3、SCENE2 の天候の控えを撤去（`ea768d0`・`0c70ca2`）→ LEAK1・NUM1（`d24bbd5`・`7338a53`・`0a44c44`）→ SEVERE1 r3（`494b09c`）→ LIM1（`2361a19`・Worker `v46.45-lim1-fc`）→ STUCK1（`e37f802`）→ LEAK1 の適用を既定 ON（`452285c`）→ ICONFIX2（`2317dbe`）→ SAVE1＝REG1・SD1・LSF1・ZT1（`972330d`）→ GUIDE1（`6b22963`）→ ICONFIX3（`19fe4f4`）→ HEROVOICE1（`747a505`・`85b3be2`）→ ECHO1（`5a13762`・`72a7237` で撤去）→ MXREGFIX1（`2e37066`）→ PLACE1 r1〜r6（`f35a302`・`340c495`・`8ff0354`・`53fbdfd`・`72ab286`・`9a74d7d`）→ ERRNOTE1（`4f0f2b1`）→ RETRY1（`72a7237`）→ SPKW1・SPKW1b・SPKW2・KANA1（`802ef66`・`650cff9`・`11493dc`）→ FREE2・FREE2c・FREE2d（`650cff9`・`2e6e2c9`・`72ab286`）→ OWNERON1（`2b3271e`）→ RETRY2（`248cc36`）→ LEAK2（`9cf5e24`）→ FANOUT1（`2e6e2c9`）→ STATE3・FIX850A・CARD80（`9a74d7d`）。Worker は LIM1 の `v46.45-lim1-fc` までをコミットの文と端末のコードで確認（それより後の Worker の版は、この資料では未確認）。戻し先は各コミットの 1 つ前。
 > **基準の本番（2026-11-12）**：11-11 の FLOW3（GitHub `e484735`）の上に、11-11 夜〜11-12 朝の出荷（読み戻しの結果は出荷の記録を正とする。GitHub の版はブランチ `v292-rebuild` の履歴から取った）。現在の本番 HEAD は GitHub `8311948`。GitHub の順：UI2（`2f04062`・?cb=`20261111-ui2b`。CSS だけの小修正。ホームの主ボタンを 1 つにする規則は Owner 判断で外した）→ PRUNE1（`a085c42`・新しい `v292DfixPRUNE1-sys-prune.js` `f2f590d3`・?cb=`20261111-prune1`）→ CLEANUP1（`4dcd38c`・9 本の読み込みを停止）→ SCENE1＋F333a（`125c261`・fix58 `1603d3c1`・fix192 `0530bb9b`・fix850 `44794344`・features.js `cca12be1`）→ UNPROT（`83a8859`・DL2 `22e0432c`）→ CLEANUP2（`05da4aa`・23 本の読み込みを停止）→ GHOST1（`98cf4bc`・home.html だけ・新しい `v292DfixGHOST1-legacy-slot-ghost.js` `cf49f461`）→ XSS1＋PRUNE2（`b1e2a5d`・features.js `6d812ce8`・新しい `v292DfixPRUNE2-sys-prune2.js` `254f46dd`・?cb=`20261111-prune2`。PRUNE2 は P2c だけ既定 ON）→ SCID2＋F333b（`e70f7d2`・fix820 `edc59752`・fix850 `91e0af75`）→ ICONQ1（`8311948`・NH1 `96ac383f`・LC1 の外見の案 `05b810a0`・?cb=`20261111-iconfix1`。部品名と kill のキーは ICONFIX1 で始まるが、11-01 の Worker の ICONFIX1 とは別件）。Worker：`v46.43-delall-fc` → `v46.43b-sec0-fc`（ソース `457468ed`）→ `v46.44-sec1-fc`（`f345181e`。合言葉・旧ヘッダの認証を退役・画像の配信を厳しく・管理 API は伏字のみ）→ `v46.44b-unprot-fc`（`1c585c24`）→ `v46.44b-unprot-ifx11-fc`（`9878917f`・現行）。管理者画面は ADM3b（手元の `admin/index.html` `7fa89716`・戻し先 `8101b836`）。最終の sha：index `b937cb3e`・home `df9ed280`。Worker と管理者画面の出荷の前後・時刻は出荷の記録を正とする。戻し先は各コミット・各ファイルの 1 つ前。この資料の sha は GitHub `8311948` の実物から取った（Worker と管理者画面は手元のファイルから）。本番の読み戻し・実機は、この資料では未確認（ICONQ1 の実画像の確認だけ §2.9 を参照）。
 > **基準の本番（2026-11-11）**：11-10 夜の基準の上に 11-11 の出荷（読み戻しの結果は出荷の記録を正とする）。RESCUEON（GitHub `72df0ea`・fix945 v2.6・退避が既定 ON）→ READYALL（Worker `v46.42-readyall-fc`・ソース `28a36bf0`・鍵 `npres1`・`lc1`・`kn1` を READY に）＋ ADMALL2（管理者画面 `8101b836`・戻し先 `b6e6d211`。一番上に「すべての機能を全員に ON」の箱）→ DELALL（GitHub `8b688f2`・Worker `v46.43-delall-fc`・ソース `15d46408`。知人も自分の物語を削除できる）→ SEEDHERO1＋SEEDNPC1e（`0475772`）→ SAVEUI（`0756755`）→ SCID1（`5c0ba2c`・fix820）→ FLOW2（GitHub `daeb3a9`・STATEAGE1・FRZ1・出荷済み・本番の読み戻し一致）→ FLOW3（GitHub `e484735`・?cb=`20261111-flow3`・FACTS1・CONT1・CLICHE2・DEDUPQ1・出荷済み・本番の読み戻し一致。index `93b91210`）。Worker は `v46.43-delall-fc`（11-11 のこの段の時点。その後は上の 11-12 の段）。戻し先は各コミット・各ファイルの 1 つ前。Owner の台帳 2323〜2330。この資料の sha は GitHub `5c0ba2c` の実物から取った。本番の読み戻し・実機は、この資料では未確認。
 > **基準の本番（2026-11-10 夜）**：Pages は 93-m の上に 11-10 午後〜夜の追加出荷 5 件（読み戻しはすべて一致）。AGENCY1b（GitHub `062773c`：fix192 `43364471`・AGENCY1 `b9b0b406`）→ SEEDWORLD1（`05e5c04`：fix873 `f372bda5`・home `74b9efb3`）→ AGENCY1c（`75116dd`：AGENCY1 `0079579c`）→ SEEDNPC1d（`3b4a6fe`：fix873 `90e4744b`・home 最終 `246d1945`）→ SPBASE1（`e71fde6`：av2-data `68243311`・index 最終 `59767f39`・?cb=`20261110-spbase1`。GPT #127-RW の条件付き GO）。最終の sha：index `59767f39`・home `246d1945`・fix192 `43364471`・AGENCY1 `0079579c`・fix873 `90e4744b`・av2-data `68243311`。Worker `v46.40-lore1agency1-fc`・管理者画面 `8f5e0704` は不変。Owner の運用（管理者画面）：`lore1` は全体 ON（11-10 18:18）、`agency1` は Owner だけ ON（11-10 18:15）。戻し先は各コミットの 1 つ前（SPBASE1 → `3b4a6fe` の av2-data `bc08ce7b`・index・home）。version.txt は未確認。
@@ -52,17 +53,17 @@
 
 | 分野 | 主な部品（§2 に項目あり） |
 |---|---|
-| 生成の中心・プロンプト | features.js、fix192、fix226、fix379、FLW4、fix459、smrc1、MSW1（Worker）、BF1、fix80、fix247、PRUNE1、PRUNE2、SCENE1（NOW1・FACTS2・STATE2） |
-| NPC・キャラ状態 | fix77、fix305、fix333、fix414、fix145、fix298、fix277、fix307、fix641、fix853、CP1、NPRES、E64、fix797、F333a・F333b（fix850） |
-| 話者・会話ログ・編集 | fix66、fix469、IDSPLIT2、fix606、fix611、fix620、fix957、SFL1、SFLTap、EDIT01、EDLOG、EDN（inline）、fix295 |
+| 生成の中心・プロンプト | features.js、fix192、fix226、fix379、FLW4、fix459、smrc1、MSW1（Worker）、BF1、fix80、fix247、PRUNE1、PRUNE2、SCENE1（NOW1・FACTS2・STATE2）、ACTOR1、HEROVOICE1、LEAK1・LEAK2、NUM1、PLACE1、CAST1・CALL1・SPK3、SEVERE1・DRIVE1・EX192（SEVDRV）、ECHO1（撤去）、CARD80、RETRY1・RETRY2、FANOUT1 |
+| NPC・キャラ状態 | fix77、fix305、fix333、fix414、fix145、fix298、fix277、fix307、fix641、fix853、CP1、NPRES、E64、fix797、F333a・F333b（fix850）、STATEQ1（PH1・SREP1・POSE1）、STATE3、FIX850A・F850Ord（fix850） |
+| 話者・会話ログ・編集 | fix66、fix469、IDSPLIT2、fix606、fix611、fix620、fix957、SFL1、SFLTap、EDIT01、EDLOG、EDN（inline）、fix295、SPKW1・SPKW2、KANA1・FF1（index.html）、SPK2・HB1 |
 | 記憶 | fix135、fix313、fix314、fix670、fix796、fix793、fix905、fix950/953、RC1 |
-| 保存・同期 | fix246、fix228、fix525、fix527（FLW5）、fix543、fix654、fix399、fix402、fix590、fix826、fix697、fix702、fix705、fix743/750/756、fix781、fix758、fix912、fix945、fix859、fix564/721/726/291、WKRHANG1・INITSLOW1（Worker） |
-| 削除・墓標 | DL2、fix933、fix587、fix579、fix602、fix660、fix577、fix710、fix642、JR1、UNPROT（DL2） |
+| 保存・同期 | fix246、fix228、fix525、fix527（FLW5）、fix543、fix654、fix399、fix402、fix590、fix826、fix697、fix702、fix705、fix743/750/756、fix781、fix758、fix912、fix945、fix859、fix564/721/726/291、WKRHANG1・INITSLOW1（Worker）、REG1・LSF1（SAVE1）、GC1・GC1b（fix912）、KEY1、SOL1 |
+| 削除・墓標 | DL2、fix933、fix587、fix579、fix602、fix660、fix577、fix710、fix642、JR1、UNPROT（DL2）、SD1・FREE2（DL2）、STORE1b（PURGE1c・P0-B・STUCK1・ZT1・FREE2c/d） |
 | Vault・ユーザー分離 | vault2-sendgate、vault2-copygate、vault2-ui、LE4、fix889（BOOTOFF1）、iso2、ISO1、fix946 |
-| 認証・アカウント | fix893、ADMF1、fix328、fix886/890、bav2-beta、FRIEND1・LIMIT1（Worker・管理者画面）、ADMHUB1・ADMBULK1（管理者画面）、MXALL（Worker・管理者画面 `f2258e33`）、鍵 `starticon1`・`idsplit2`（Worker `v46.37`・管理者画面 `752c623a`）、SEC0・SEC1・UNPROT（Worker）、ADM3b（管理者画面） |
-| アイコン・画像 | av2-data、av2-portrait（FLW1）、av2-migrate-ui、LD1、LC1、ICONUX2、SETAV1、FLW2、ICF、fg3、fix63（fix979b）、fix197、fix523、fix990、p8d、ICONFIX1（Worker）、PUBMODE（Worker・管理者画面）、NDI1、ICF80、MIDICON（OLDMX1）、W-MXREG（Worker・93-i から端末側も）、STARTICON、IMGMODEL1（Worker・管理者画面）、CUSTIMG1（Worker・管理者画面）、DIAG1b（Worker）、ICONQ1（LC1 の外見の案・NH1・Worker。名前は ICONFIX1 で始まる） |
-| UI・画面 | UI1、IS1、UX72、JMP、FLW3、LE3、fix777、fix243/270、fix880、SETUI1、UI2、XSS1 |
-| シナリオ・ホーム | fix819、fix825、fix873、fix335、GENDER1、NEWACCT1・HOMERETRY1（home.html の inline）、SCID2（fix820）、GHOST1 |
+| 認証・アカウント | fix893、ADMF1、fix328、fix886/890、bav2-beta、FRIEND1・LIMIT1（Worker・管理者画面）、ADMHUB1・ADMBULK1（管理者画面）、MXALL（Worker・管理者画面 `f2258e33`）、鍵 `starticon1`・`idsplit2`（Worker `v46.37`・管理者画面 `752c623a`）、SEC0・SEC1・UNPROT（Worker）、ADM3b（管理者画面）、LIM1（Worker `v46.45-lim1-fc`・ADMF1）、OWNERON1 |
+| アイコン・画像 | av2-data、av2-portrait（FLW1）、av2-migrate-ui、LD1、LC1、ICONUX2、SETAV1、FLW2、ICF、fg3、fix63（fix979b）、fix197、fix523、fix990、p8d、ICONFIX1（Worker）、PUBMODE（Worker・管理者画面）、NDI1、ICF80、MIDICON（OLDMX1）、W-MXREG（Worker・93-i から端末側も）、STARTICON、IMGMODEL1（Worker・管理者画面）、CUSTIMG1（Worker・管理者画面）、DIAG1b（Worker）、ICONQ1（LC1 の外見の案・NH1・Worker。名前は ICONFIX1 で始まる）、ICONFIX2、ICONFIX3、MXREGFIX1（MIDICON） |
+| UI・画面 | UI1、IS1、UX72、JMP、FLW3、LE3、fix777、fix243/270、fix880、SETUI1、UI2、XSS1、UI3、LAT1、UI4、ERRNOTE1 |
+| シナリオ・ホーム | fix819、fix825、fix873、fix335、GENDER1、NEWACCT1・HOMERETRY1（home.html の inline）、SCID2（fix820）、GHOST1、GUIDE1（fix873） |
 | 読み込みを止めた部品 | CLEANUP1・CLEANUP2（§2.12。32 本。ファイルは残る） |
 
 ---
@@ -198,6 +199,60 @@
 - 本物の AI の A/B（各腕 3 本×8T）：効果は見えず、副作用もなかった → 影のままにする。また本番の送信 sys では【話者】末尾の 1 文が載らず、【話者厳守】が残っていた（**原因は未調査**）。
 - 戻し方：端末は `v292DfixREAD1Off='1'`。管理者画面は read1 を OFF。Pages は rollback/pages の 5 本を戻し v292DfixREAD1-scene-consistency.js を消す。Worker は戻さなくてよい（read1 の行は v46.40 が読まない・無害）。
 
+#### ACTOR1 — 入力の主体を正しく伝える（a）／台詞の無い回に主人公を喋らせない（b）（11-12・GitHub `5b8a837`・`v292DfixACTOR1-input-actor.js`）
+- 状態：本番の index.html が読む（CP1-final-tap の直後・PRUNE2 の前＝fetch の境界。home は読まない）。(a) DO の腕は既定 ON、STORY の腕は既定 OFF（`v292DfixACTOR1aStoryOn='1'` の端末だけ）。(b) は既定 OFF（`v292DfixACTOR1bOn='1'` の端末だけ・HEROVOICE1 が C〔おまかせ〕のときだけ）。
+- 中身：(a) DO の入力に「登録キャラ名＋が」が主語の部分があり証明できるときだけ、入力説明の行の「他キャラの行動にしない」を「…の主語は〇〇（主人公ではない）。主人公に移さない」に置き換える。証明できないときは何もしない。(b) SAY でない回に「主人公の台詞を「」でも <say> でも書かない」を user 末尾へ、sys の食い違う 2 文を直す。
+- 止める：`v292DfixACTOR1Off='1'`（全部・送信バイト同一）／`v292DfixACTOR1aOff='1'`／`v292DfixACTOR1bOff='1'`。診断 `window.__v292DfixACTOR1.status()`。
+- 注意：ファイル冒頭のコメントは「Local 候補」のまま（HEAD では index.html が読み込んでいる）。
+
+#### HEROVOICE1 — 物語ごとの「主人公はどれくらい喋る？」（11-14・GitHub `747a505`・B の名前は `85b3be2`・`v292DfixHEROVOICE1-hero-voice.js`）
+- 状態：本番の index.html が読む（ACTOR1 の直前の行）。全員に設定の欄が出る。既定は C「おまかせ」（今までと送信も保存も同じ）。
+- モード：A「よく喋る・反応する」／B「控えめに喋る」（旧名「自分からは喋らない」。11-14 に表示名だけ変更。痛み・驚きの反応と 10 字程度の短い声まで）／C「おまかせ」。A・B のとき送信直前に sys の決まった文を置き換え、parsePlan の主人公ロックも A・B 用の判定に任せる。ACTOR1(b) は C のときだけ動く。
+- 保存：この端末の localStorage に物語ごと 1 キー `v292DfixHEROVOICE1:<物語キー>`（'A'／'B'。C はキーなし）。物語の本体・クラウドには書かない＝別の端末には伝わらない（既知の制限）。
+- 止める：`v292DfixHEROVOICE1Off='1'`（常に C・欄も出さない）。試験用の上書き `v292DfixHEROVOICE1Force='A'|'B'|'C'`。診断 `window.__v292DfixHEROVOICE1.status()`。
+
+#### LEAK1 / LEAK2 — 本文に混ざる「物語でない行」を取り除く（11-13 追加・11-14 に適用を既定 ON・11-15 に LEAK2。`v292DfixLEAK1-nonstory-lines.js`）
+- 状態：本番の index.html が読む。影（件数だけの記録・本文は記録しない）は常時。**適用は 11-14（GitHub `452285c`）から既定 ON**。
+- 適用で取り除くもの（r2 で 2 種に絞り、r3 で追加）：単独行の既知の内部ラベル（（状態ラベル）など）・タグ領域の後ろの英語が主の作業メモ・状態の欄の写し（state-field echo）と自己点検のブロック。finish=length で本文との境界を決められない回は hold（既存の失敗の経路＝入力を戻す・自動の再送なし）。
+- LEAK2（GitHub `9cf5e24`）：最終境界で、JSON の切れ端だけの行（`key": value` の形）と「→修正します。」だけの行も落とす。止める `v292DfixLEAK1JkvOff='1'`（この 2 種は数えるだけに戻す）。
+- jp_meta（影だけ）：本文の最後の段落が読み手への依頼と書き手視点の語を両方含むときに数えるだけ。取り除かない。
+- 止める：`v292DfixLEAK1ApplyOff='1'`（適用だけ）／`v292DfixLEAK1Off='1'`（影も含め全部）。旧 `v292DfixLEAK1Apply` は読まない。
+- 注意：index.html の script タグのコメントは「適用 既定 OFF」のまま（コードの既定は ON）。保存・sys・送信は変えない。
+
+#### NUM1 — 序盤のプレイヤー入力の数・約束を earlierFacts に残す（11-13・GitHub `d24bbd5`・r2 `7338a53`・`v292DfixNUM1-input-ledger.js`）
+- 状態：本番の index.html が読む。**既定 OFF**（`v292DfixNUM1On='1'` の端末だけ）。kill `v292DfixNUM1Off='1'`（On より優先）。FACTS1 の kill 中も出さない。
+- 中身：earlierFacts の窓から落ちたターンの「プレイヤーの入力にある数量・約束」を、earlierFacts.items の先頭に最大 5 行・200 字（入力の語のまま・「N ターン目の入力の時点」と書く）。r2（NUM2）で、本文に決定的に読める消費・受け渡しがあれば「今の数は不明」と添える（引き算はしない）。保存なし・sys 0 字・AI の呼び出し 0。
+
+#### PLACE1 — 物の持ち主・置き場所と、その場にいない人の控えを user の whereNow に渡す（11-14〜11-15・r1〜r6・`v292DfixPLACE1-where-now.js`・版 `place1-20261115-r6`）
+- 状態：本番の index.html が読む（fix58 の userExt が呼ぶ純関数）。**既定 OFF**（`v292DfixPLACE1On='1'` の端末だけ）。**Owner のアカウント（OWNERON1）では鍵なしで ON**。kill `v292DfixPLACE1Off='1'` が常に優先。保存しない・AI を呼ばない・sys 0 字・本文とカードは変えない。
+- 中身：その回の S.turns から毎回作る。プレイヤーの入力（DO・STORY）の決まった言い方（渡す・預ける・置く・〜へ行く 等）と、本文の登録名どうしの受け渡しを拾い、nowScene の直後（無ければ recentScenes の直後）に `whereNow { rule, items }`（r4 から最大 8 行・320 字）。優先順は 最新の入力 ＞ 後の本文 ＞ 古い行（r3）。r4 で行に出どころ（ターン番号・引用）を付けないようにした。
+- 版ごとの鍵：`v292DfixPLACE1NarrOff='1'`（本文からの読み取りだけ止める）・`v292DfixPLACE1Absent='A'|'B'`（いない人の行の言い方。無ければ従来）・`v292DfixPLACE1R5Off='1'`（r5〔入力で決まった「いない」は明示の戻りか後の入力でだけ消す・離れる一言の橋渡し〕を止め r4 と同じ行）・`v292DfixPLACE1R6Off='1'`（r6〔「〜まで送ってもらう」の橋渡し・退場が入力で確定したときだけ〕を止め r5 と同じ行）。
+- 診断：`window.__v292DfixPLACE1`（obs()：行数・落とした理由の件数。本文・入力の文は入れない）。
+
+#### CAST1 / CALL1 / SPK3 — 開始場面の NPC の説明・呼称の先例・直近の台詞の話者（11-13・GitHub `ea768d0`・`v292DfixCAST1-opening-cast.js`・`v292DfixCALL1-confirmed-speech.js`）
+- 状態：本番の index.html が読む（fix58 の userExt が呼ぶ純関数）。**3 つとも既定 OFF のまま**（送信バイト同一）。鍵は別々。
+- CAST1（`v292DfixCAST1On='1'`／比較腕 `'2'`・kill `v292DfixCAST1Off='1'`・人数の根拠だけ止める `v292DfixCAST1CountOff='1'`）：最初の回だけ、開始条件や入力から「開始場面にいると確定している NPC」の説明を user の cast.npcs に補う（600 字まで）。
+- CALL1（`v292DfixCALL1On='1'`・kill `v292DfixCALL1Off='1'`）：話者が確定した発話だけから「呼称の先例」1 行（120 字まで）を earlierFacts の最後に足す。
+- SPK3（`v292DfixSPK3On='1'`・kill `v292DfixSPK3Off='1'`）：recentScenes の直後に recentSpeakers（直近 2 ターンの話者が確定した台詞・最大 10 件）。
+
+#### SEVERE1 / DRIVE1 / EX192 — 状態の判定の短期比較（11-13・`v292DfixSEVDRV-state-judge.js`）
+- 状態：本番の index.html が読む（判定の純関数だけ。fix192 が呼ぶ）。**すべて既定 OFF**。鍵：`v292DfixSEVERE1On='1'`（kill `v292DfixSEVERE1Off`）・`v292DfixDRIVE1On='1'`（kill `v292DfixDRIVE1Off`）・`v292DfixEX192On='1'`（案 A）／`'2'`（案 B）（kill `v292DfixEX192Off`）。SEVERE1 r3（`494b09c`）は こころ の「意識がない」も読む。
+- 撤去：同じ束で入れた SCENE2（天候・時刻・出来事の控え）は GPT #127-SU ⑤ で撤去した（`ea768d0`・ファイル `v292DfixSCENE2-ambient.js` は `0c70ca2` で削除）。
+
+#### ECHO1 — 追加して撤去（11-14）
+- `5a13762` で既定 OFF（鍵 `v292DfixECHO1On`）として追加し、盲検 A/B で効果が無かったため `72a7237`（GPT #127-TR）で撤去した。HEAD のコードに ECHO1 は残っていない。
+
+#### CARD80 — 会話カードの文字数（11-15・GitHub `9a74d7d`・index.html と fix58）
+- 既定 ON・kill `v292DfixCARD80Off='1'`（従来の 80 字・送信バイト同一）。会話カードの台詞は最大 1000 字、主人公の SAY のカードは入力の全文。AI へ渡す recentDialogues は 1 発言 300 字で丸める（fix58 の card80Cap）。
+
+#### RETRY1 / RETRY2 — 失敗した送信を自動で送り直すかの判定（11-14〜11-15・fix80 と G.submit・`v292DfixRETRY2-send-policy.js`）
+- RETRY1（GitHub `72a7237`・fix80）：503 で errorCode が LEDGER_UNHEALTHY のときは自動で送り直さない。既定 ON・kill `v292DfixRETRY1Off='1'`。
+- RETRY2（GitHub `248cc36`・fix80 の直前に読む）：送り直し・別モデルへの切替を 1 か所で決める。既定 ON。上流へ届いたか分からない要求（上流へ送った後の 5xx・通信断・時間切れ）・Worker が断った応答・402・429 以外の上流の 4xx は送り直さない。429 は Retry-After（無ければ 8 秒・30 秒超は送らない）で 1 回だけ。別モデルへの自動の切替は既定で止める（`v292DfixRETRY2CmfOn='1'` で 429 と空の本文に限り従来の切替を許す）。要求 ID `chrReqId` は既定 OFF（`v292DfixRETRY2IdOn='1'`。Worker が受け取って消すようになってから ON にする前提）。通信断・時間切れでも ERRNOTE1 の知らせを出す。
+- 止める：`v292DfixRETRY2Off='1'`（fix80 と G.submit が土台の動き＝最大 9 回・別モデルへの切替あり）。診断 `window.__v292DfixRETRY2.status()`。
+
+#### FANOUT1 — 同じアカウントから文章の要求を同時に何本も出さない（11-15・GitHub `2e6e2c9`・features.js と fix80）
+- 既定 ON・kill `v292DfixFANOUT1Off='1'`。(a) 旧 AI アイコンの外見文（features.js の genAsync）を 1 本ずつ送り、送り直しに上限を付ける。(b) 補助の呼び出し（Api.call に allowShort を渡したもの）は短くても正しい答えなら再送しない。本編の生成の判定（20 字未満は失敗）は変えない。
+
 ### 2.2 NPC・キャラ状態
 
 #### fix77 — 状態の記憶（state memory）
@@ -276,6 +331,20 @@
 - 状態：本番稼働 `i327`・sha `346c7119`。**保護ファイル**。既定 ON（fix817）。kill `v292Dfix797Off`。
 - 役割：明示された能力の境界（例：両手を縛られている）を、同じターンの生成が無視して完遂したときに検出し、書き直しを頼む。E65-D（中断の扱い）の対象。
 
+#### STATEQ1 — <state> の取り込みの入口の直し（PH1・SREP1・POSE1。11-12・GitHub `5b8a837`・fix77・fix405・fix192・features.js・fix851）
+- 状態：本番で読む部品の中（新しいファイルなし）。どれも既定 ON（Off の鍵だけ）。保存の形（fix77／fix190 の store）は変えない。
+- PH1（kill `v292DfixPH1Off='1'`）：値が型の文字（#NAME#・{主人公}・書式の説明文の写し・who="名前" 等）なら保存しない・状態ブロックに載せない。
+- SREP1（kill `v292DfixSREP1Off='1'`）：<state> の書式の崩れのうち意味を推測せずに戻せるもの（全角引用符・コロン区切り・引用符つきのキー 等）だけ戻す。戻せない項目はその回は更新しない。
+- POSE1（kill `v292DfixPOSE1Off='1'`・fix851）：【身体状態・正史】の姿勢の根拠を、直前のターンに書かれた からだ と直前の本文の本人が主語の文だけにする。POSE1b（kill `v292DfixPOSE1bOff='1'`）：「倒れた椅子」の形を姿勢にしない・膝をつくを「膝をついている」と書く。
+- 注意：fix77・fix851 の冒頭コメントは「Local 候補・未出荷」のまま（HEAD では読み込まれている）。
+
+#### STATE3 — 体の制約の除外は体に制約があるときだけ（11-15・GitHub `9a74d7d`・fix192・fix414）
+- 既定 ON・kill `v292DfixSTATE3Off='1'`（送信バイト同一）。1a（fix192）：「（ただし〇〇は除く）」は体の制約（rank<6）がある人だけ、文言は原因を断定しない「身体に制約があり、可能な動作に制限がある」。1b（fix414）：姿勢・表情の「固まる」だけでは恐怖の硬直にしない。1c（fix414 の widen・Owner だけ）：抑えた・軽い恐怖の言い方と、2 ターン以上前の こころ・からだ からは恐怖の制約を作らない。
+
+#### FIX850A / F850Ord — fix850 の 2 つの直し（11-13・11-15）
+- FIX850A（GitHub `9a74d7d`・kill `v292Dfix850AOff='1'`・既定 ON）：腕・手の負傷でない動作（組む・伸ばす・握る 等）の節では、その部位を【制約】の材料にしない。同じ節にけがの語があれば従来どおり。
+- F850Ord（GitHub `8f80b0a`・kill `v292DfixF850OrdOff='1'`・既定 ON）：読み込みの順の競合を直す。fix192・fix74・fix75 の印が最上位に見えるまで包むのを待つ（最大 約 8 秒。超えたら従来の条件で包む）。
+
 ### 2.3 話者・会話ログ・編集
 
 #### fix66 — 会話ログの描画フック修復（＋未登録キャラのアバター文体）
@@ -338,6 +407,19 @@
 - 役割：会話ログが再描画されても、読んでいた位置（最下部なら最下部）へ戻す。再描画直後 350ms のスクロールは記録しない。fix197.sweep() でアイコンのずれを即同期。
 - fix295e（91-b・GPT #127-QO）：新しいターンのあと会話ログが上端（0）に戻る件の直し。実測の型は 2 つ：①ログを空にして組み直す経路（例 EDIT01 の clearStream → UI.renderAll）でブラウザが scrollTop を 0 に丸め、最下部へ戻す書き込みが fix222 の門（`__convPinned=false`）で断られる。②物語を開き直したとき、UI1 の自動たたみの中でカードが入り、未スクロールの 0 を利用者の位置として記録する（台帳 2232）。直し：(a) 再描画後の復元が済むまで（pending）のスクロールは記録しない (b) 利用者のスクロールで最下部と記録したら `window.__convPinned=true` にそろえる (c) 最下部への書き込みが通らなければ記録した lastTop へ戻す (d) 装着のときは最新へ追従で始め、1 回だけ戻す。新しい timer・observer は無い。本番の QA 物語（Owner の PC）では、開き直したときと本文を変えずに保存したあとも一番下（台帳 2234）。iPhone の実機は未確認。
 - 止める：`v292Dfix295eOff='1'`（295d と同じ動き）。部品全体は `v292ConvStabilityOff='1'`。
+
+#### SPKW1 / SPKW1b / SPKW2 — 裸の「」の話者の窓推測の直し（11-14〜11-15・index.html の genConvLog 付近・fix303・fix469）
+- 状態：**既定 OFF**（`v292DfixSPKW1On='1'` の端末だけ）。**Owner のアカウント（OWNERON1）では鍵なしで ON**。kill `v292DfixSPKW1Off='1'` が常に優先。SPKW2 も同じ鍵。
+- SPKW1（GitHub `802ef66`）：W＝推測に使う写しの中だけで登録名の呼び名（短い名）を登録名に読み替える／V＝聞かれた側の「X の声・言葉」を話者の証拠にしない／P＝発話動詞を語の形で見る。fix303 はモデルが <say who> を明示したカードを書き換えない。fix469 は「X は答えなかった」のような否定された発話を証拠にしない。SPKW1b（`650cff9`）：呼び名の表が空でも確認の口 `window.__v292DfixSPKW1` を置く。
+- SPKW2（GitHub `11493dc`）：未登録の人物の裸の台詞を近くの登録名や主人公に倒さない（SPKW2-U・index.html）。fix469 は名前の直後の節に発話動詞があるときだけ前の行の「言った」を結び付ける（SPKW2-S2）。
+
+#### KANA1 / FF1 — 出口のロックが台詞・行を消しすぎない（index.html の parsePlan）
+- FF1（11-12・GitHub `63bfe48`）：FF1a（kill `v292DfixFF1aOff='1'`）主人公ロックが入力の実現ごと段落を消さない／FF1b（kill `v292DfixFF1bOff='1'`）登録キャラの <say> 1 行だけの短い漢字・数字の台詞（「……煙」）を言語フィルタで捨てない。どちらも既定 ON。
+- KANA1（11-15・GitHub `11493dc`・既定 ON・kill `v292DfixKANA1Off='1'`）：ダッシュ（——）で終わる短いかなの無い台詞（「朔、足——」）も FF1b の保護に当てる。
+
+#### SPK2 / HB1 — 会話ログの話者の影（記録だけ）（11-13・GitHub `b385f25`・`v292DfixSPK2-speaker-shadow.js`）
+- 状態：本番の index.html が読む。影は既定で動く（kill `v292DfixSPK2Off='1'`）。適用は `v292DfixSPK2Apply='1'` のときだけ（**既定 OFF**）。影のときは S・ターン・カード・保存に触らない。記録はメモリ（200 件）と localStorage `v292DfixSPK2Ring`（最新 30 件）。
+- 規則は引用の直後の 1 文だけを見る（P-Q1・P-Q2・FF2c R1/R1b/R2・HV-C1）。HB1：裸の「」が確かな根拠なく主人公のカードになっているとき '???' を提案（別の NPC へは付け替えない）。モデルが who を書いたカードは「食い違い」として記録だけ。検証口 `window.__v292DfixSPK2`。
 
 ### 2.4 記憶
 
@@ -411,6 +493,18 @@
 - 引き換え：本当に止まった準備からの立ち直りが約 8 秒から最大約 16 秒に延びる。
 - 戻す：Worker `7ffa92b1`（v46.35c-hang1-fc）を貼り直す。D1・KV に何も残らない。
 
+#### SAVE1 — REG1・LSF1（クラウド保存が止まらない・画面を離れるときの保存。11-14・GitHub `972330d`）
+- REG1（av2-data・fix912・fix758・既定 ON・kill `v292DfixREG1Off='1'`＝従来の 1 回だけの書き込み）：Asset v2 の登録（putcanonical）が 1 回失敗しただけで、その物語のクラウド保存が止まり続ける件。着地していないと分かれば同じ登録 ID でもう一度だけ書く／証明できなければ最新のサーバー本文の上で作り直す。区切りを使い切ったら「この端末には保存済み・クラウドは未保存」と「もう一度試す」を出す。
+- LSF1（fix697・既定 ON・kill `v292DfixLSF1Off='1'`）：visibilitychange（hidden）と pagehide で、12 秒の保存予約があれば既存の commit の経路で今すぐ始める（新しい送信経路・sendBeacon は使わない）。
+- 同じ束の SD1・ZT1 は §2.6。
+
+#### GC1 / GC1b — 保存中に押した「続きを書く」を 1 件だけ預かる（fix912。GC1 は 11-12 `63bfe48`・GC1b は 11-13 `b385f25`）
+- 既定 ON・kill `v292DfixGC1Off='1'`（従来どおり。`v292DfixGC1On` は読まない）。保存中の「続きを書く」を 1 件だけ預かり、保存が CLEAN になってから送る（二度押しは吸収・別の操作で取り消し）。GC1b：CLEAN を 2 回続けて確かめてから始め、始められなかったときは「続けられませんでした。もう一度お試しください。」を出す（無言にしない）。REG1 で止まった物語は預からない。
+
+#### KEY1 / SOL1 — キーの持ち主を完全一致で決める・物語を開いている印（11-12・GitHub `e4d982e`・`v292DfixKEY1-story-key.js`・`v292DfixSOL1-story-open-lock.js`）
+- KEY1（index と home が読む・既定 ON・kill `v292DfixKEY1Off='1'`＝各呼び出し側が従来の部分一致の式）：localStorage のキーがどの物語のものかを、既知の family の区切りで囲まれた id の完全一致で決める（fix562・fix564・fix579・fix587・fix642・E64 が使う）。書き込み 0・通信 0。
+- SOL1（index が読む・既定 ON・kill `v292DfixSOL1Off='1'`）：物語画面を開いている間、Web Lock `chronicle:story-open:<id>`（shared）を持つ。STORE1b はこれを見て開いている物語に触らない。書き込み 0・通信 0。
+
 ### 2.6 削除・墓標（危険領域）
 
 #### DL2 — サーバーの版を基準にした物語の削除（S-2）
@@ -431,6 +525,18 @@
 - fix660（`v292Dfix660-delete-gateway.js` `i34` `h12`、`v292Dfix660-backup-gc.js` `i53` `h17`）：物理削除の唯一の実行者と、何を消すかを決める BackupGC。
 - fix577（`i151`）：削除の入口を 1 つに寄せる。fix710（`h31`）：ホームで保留中の削除を起動時に 1 回再開。fix642（`h29`）：削除の read-back（操作専用）。
 - JR1（`i332` `h34`）：サーバーで削除済みの物語を指したまま残った fix750 の journal を退避し、新しい物語が作れない・全物語が止まる状態を解く。
+
+#### SD1 / FREE2（DL2）— 端末のターンが全部クラウドにあるときだけ削除・削除の時点の証明（11-14〜11-15・`v292DfixDL2-server-delete.js`）
+- SD1（GitHub `972330d`・既定 ON・kill `v292DfixSD1Off='1'`。`v292DfixSD1On` は読まない）：削除のシートで、端末の本文のターン数がサーバーの一覧より多い行は選べなくする。送る直前に getstory で rev・serverHash と端末のターンを確かめる。読むだけ（新しい書き込み・自動の保存・自動の再送なし）。
+- FREE2（`650cff9`）：公式の削除が成立した直後、この端末の全体（fix697.projectionV2）の SHA-256 がサーバーの墓標の hash と一致したときだけ、証明 `v292DfixFREE2_proofs[id]` を残す（題名・本文は入れない）。FREE2c（`2e6e2c9`）で**既定 ON**（kill `v292DfixFREE2Off='1'`。`v292DfixFREE2On` は読まない）。
+
+#### STORE1b — HOME「この端末の空き容量を増やす」（11-12 r2・GitHub `a46c2f1`、以後 PURGE1c・STUCK1・ZT1・FREE2c・FREE2d。`v292DfixSTORE1b-device-free.js`）
+- 状態：本番の home.html が読む（DL2 の直後）。入口は既定で出る（kill `v292DfixSTORE1Off='1'`＝入口を出さない）。HOME を開いただけでは消さない。Owner が選んだ物語だけ 1 件ずつ消す。まとめての実行は既定 OFF（`v292DfixSTORE1Multi='1'`・最大 10 件）。数えるだけの dry-run は `v292DfixSTORE1Dry='1'`。
+- 消してよい条件（全部）：サーバーで削除が確定（deleted===true）・同じ実行の /api/auth/me 前後で同じアカウント・Vault に関わらない・開いていない（SOL1 の Web Lock・lastOpenedAt 10 分）・未送信なし・本文の内容がサーバーと 1 文字ずつ一致。消すキーは KEY1 の完全一致だけ。排他 Web Lock の中で確かめ直してから消す。記録 `v292DfixSTORE1Log` は件数と理由コードだけ。
+- PURGE1c（`5b8a837`）：PURGE1（控えまで含めた完全削除）は**既定 OFF のまま**（`v292DfixPURGE1On='1'`・kill `v292DfixPURGE1Off`・Vault の名前だけの削除 `v292DfixPURGE1VaultOn` はこのレーンでは使わない）。段階 1 の QA 条件（未送信の物語は消さない・最後に墓標の題名を '' にする）を足した。P0-B（fix562・fix569・**既定 ON**・kill `v292DfixP0BOff='1'`）：保護判定を名前と凍結した proof だけで決める（ほかの物語の値を読まない）。
+- STUCK1（`e37f802`・**既定 OFF**・`v292DfixSTUCK1On='1'`・kill `v292DfixSTUCK1Off='1'`）：削除の時点で印が DIRTY だった写しを、墓標の hash の一致で証明できたときだけ通す。ZT1（`972330d`・**既定 OFF**・`v292DfixZT1On='1'`・kill `v292DfixZT1Off='1'`）：0 ターンのまま削除した物語を、hash の一致を確かめて通す。
+- FREE2c（`2e6e2c9`・既定 ON・kill `v292DfixFREE2Off='1'`）：シート・dry-run（`free2DryRun`）・explain・実行が同じ判定 judgeOne を通る。公式の削除で立てた墓標は印が CLEAN でも hash の一致を求める。FREE2d（`72ab286`・kill `v292DfixFREE2dOff='1'`）：サーバーの行が memoryV1 を持つときは端末の値も hash に入れる・本文を持たない墓標を覚えて getstory を繰り返さない・getstory は最大 4 本まで同時。
+- 診断：`window.__v292DfixSTORE1b.status()`／`.dryRun()`（消さない）。
 
 ### 2.7 Vault（物語を隠す）・ユーザー分離（危険領域）
 
@@ -522,6 +628,13 @@
   - ルート JSON：workerBuild `v46.44-sec1-fc`。`imgStrict`・`passAuth`・`legacyAuth`・`spendAcctOnly`・`admMaskedOnly`・`tokClampMissing`・`genBodyCap` を追加（`passReserved` は SEC0 のまま 1 つ）。
 - `v46.44b-unprot-fc`（ソース `1c585c24`）：UNPROT（削除の保護は 1 件だけ。§2.6 の DL2）。`v46.44b-unprot-ifx11-fc`（ソース `9878917f`）：ICONQ1 の Worker 側（§2.9）。
 - ADM3b（管理者画面。もとは `8101b836`。Owner の承認 3 点：①6 区画の並び ②「全部 ON」系は上の箱「すべての機能を全員に ON」と各行のボタンだけ ③合言葉の画面を全部撤去）：合言葉の行の表・発行フォーム・名前の絞り込み欄・関連コードと、一括 ON のボタン（「全機能を一括 ON（全体）」「試験中の機能も含めて全部 ON（全体）」・機能ごとの「まとめて ON／OFF」・アカウントごとの「利用可能な機能をまとめて ON」。合計 32 ボタンと表示モード 2 種）を撤去した。上の箱（bulkAllAsk／bulkAllRun）は変えていない。list は従来どおり呼ぶ（設定と許可メールのため）。Worker は変更なし。戻し先：`8101b836`。手元の `admin/index.html` は `7fa89716`。本番に置かれた版の読み戻しは、この資料では未確認。
+
+#### LIM1 — アカウントごとの上限の設定（11-13・GitHub `2361a19`・Worker `v46.45-lim1-fc`・fix893・ADMF1・STARTICON）
+- 管理者画面の「上限の設定」の値（Worker `/auth/me` の accountLimits）を端末が読む（fix893 の写し・in-memory・書き込み 0）。ADMF1 の `limit(key, dflt)`。STARTICON の 1 日の物語数（`starticon_day_stories`）と 1 物語の枚数がアカウントの値になる（-1＝無制限）。行なし・旧 Worker・別アカウント・kill `v292DfixLIM1Off='1'` のときは今までの定数（5 物語・4 枚）。
+
+#### OWNERON1 — Owner の端末だけ指定の機能を既定 ON（11-15・GitHub `2b3271e`・`v292DfixOWNERON1-owner-defaults.js`）
+- 対象：PLACE1・SPKW1。各機能の on() が呼ぶたびに聞く（覚えない・読むだけ・書き込み 0）。Owner の判定は fix893 の serverMe() が entitlement 'owner' かつ active・accountId が 32 桁・flagsSnap と同じアカウント・ログインの印と同じ・匿名経路でない、が全部そろうときだけ（欠けたら OFF）。
+- 優先順：各機能の Off 鍵 ＞ 全体 kill `v292DfixOWNERON1Off='1'` ＞ 各機能の On 鍵 ＞ Owner 判定。Owner 以外・未ログインは部品が無いのと同じ。診断 `window.__v292DfixOWNERON1.status()`。
 
 #### fix328 — Google ログイン（GIS）
 - 状態：本番稼働 `i167`。Google Identity Services を読み込んで ID トークンを得る（pages.dev では、その後の認証は fix893 の cookie 方式）。
@@ -633,6 +746,13 @@
 - 実画像（本番・2026-11-12）：画像 10 枚を作り、断られた画像は 0 枚。確認時の本番のルート JSON は workerBuild `v46.44b-unprot-ifx11-fc`・iconfix11 `bc`。AI が足した句を捨てる部分（a の①）は、この確認では試していない（下書きは端末の自動の下書きをそのまま使った）。
 - 残り：Worker の ER1x の指示文は職業を捨てるので、下書きに残した役割の語は今の絵の注文には出ない見込み（コードの文面どおり。変更案は承認待ち）。
 
+#### ICONFIX2 / ICONFIX3 — 外見の下書き・案の直し（11-14・GitHub `2317dbe`・`19fe4f4`・LC1 の外見の案・NH1・STARTICON・LC1 作業欄）
+- ICONFIX2 a（kill `v292DfixICONFIX2aOff='1'`・NH1 と同じ鍵）：人外・混合の下書きで体の作り・材質・持ち物の句を捨てない・種類の札を付ける。b（kill `v292DfixICONFIX2bOff='1'`）：説明文から変えてはいけない事実（性別・種類・材質・持ち物・役割・体格）を取り出し、AI の案に渡して検査する（性別の無い人物に性別を足さない・落ちた事実を戻す）。c（STARTICON・kill `v292DfixICONFIX2cOff='1'`）：結果不明のときもキャラごとに結果を確かめる（120 秒後に 1 回）。t（kill `v292DfixICONFIX2tOff='1'`）：段ごとの時間を status().timing に出す（数字だけ）。
+- ICONFIX3（kill `v292DfixICONFIX3Off='1'`＝今までとバイト一致）：括弧の中の注記を外見に使わない・見た目は人間のアンドロイド等と隠している正体は描かない・材料の足りない人物は髪・服・瞳を足す（足せなければ決まった語）・物や正体の曖昧な存在は人外の札・安全の理由以外で自動の見送りにしない・AI が足したことを正直に知らせる。安全検査（imgsafe 等）は変えない。
+
+#### MXREGFIX1 — 途中の自動アイコンが登録の性別と本人の外見の語だけを使う（11-14・GitHub `2e37066`・MIDICON）
+- 既定 ON・kill `v292DfixMXREGFIX1Off='1'`（今までとバイト一致）。登録の性別があれば本文の語で変えない／見た目の語はその人物の名前に掛かるものだけ拾う／名前に掛かる年配の語があれば「老人」を足す。診断 `dryRunReg`（読むだけ）。
+
 #### ADMALL2・READYALL — 管理者画面の「すべての機能を全員に ON」と、試験中の 3 機能の READY 化（2026-11-11。Worker `v46.42-readyall-fc`・ソース `28a36bf0`・管理者画面 `8101b836`・戻し先 `b6e6d211`）
 - ADMALL（管理者画面）：機能スイッチ欄に、範囲が READY で全体が ON でない行（noBulk の試験中の行も含む）を 1 行ずつ全体 ON にする入口を足した（行ごとの全体 ON と同じ `feat-global-set`・今の全体の値を expect に付ける）。範囲が READY でない行は対象外（理由を出す）。確認はページ内（confirm 不使用）。結果は行ごとに 成功／変化なし／失敗で、1 行が失敗しても続ける。
 - ADMALL2（管理者画面 `8101b836`）：ページの一番上に「すべての機能を全員に ON」の箱（既存の bulkAllAsk／bulkAllRun を呼ぶ。結果も箱の中）。既存の「試験中の機能も含めて全部 ON（全体）」は残す。READY 以外は対象外。
@@ -719,6 +839,10 @@
 | SETUI1 | `index.html` の最後（FLW5 の後・93-g。home では読まない）・sha `3892c38f`・?cb=`20261108-bundle93-g` | ⚙ 設定の画面の配置（93-g）。スマホで下の固定部分が画面の大半を占めていたのを「✔ 保存してゲーム開始」「閉じる」の 1 行だけにする。🎲 おまかせで埋める／🎲 設定の空欄を AI で埋める／その結果 → 🌍 世界タブの先頭（長い説明は畳んだ「ⓘ 説明」）。物語リセット・完全リセットの説明 → ⚙ システムタブのボタンの隣（確認画面は従来どおり）。🛠 AI への追加指示 → ⚙ システムタブ。利用規約・プライバシーの行 → ⚙ システムタブの一番下。600px 以下では設定の画面を画面いっぱい（100dvh・ノッチ対応・横スクロールなし）。要素を動かすだけで、id・ボタンの動作・確認は変えない。実測（390×844）：入力欄の高さ 32% → 68%、下の固定部分 349px → 58px。試験（Local）：before 11/11×2、after 29/29（スマホ）・27/27（PC）、kill 12/12×2、MIDICON 87/0。「画像: Pollinations」の表記は変えていない（運営の判断待ち）。状態の確認 `window.__v292DfixSETUI1.status()` | `v292DfixSETUI1Off` |
 | UI2 | `index.html` と `home.html` の最後（`</body>` の直前）・sha `b6c0953c`・?cb=`20261111-ui2b`・GitHub `2f04062` | 読みやすさの小修正（CSS を 1 枚入れるだけ・ロジックなし・保存／同期／生成には触れない）：入力欄の例文を小さく・2 行を許す（入力文字は 16px のまま）／背の低い画面で「その他」を開いたとき説明文を畳む／✎ 編集ほか小さい文字を少し大きく／削除シートの実行・やめるを下に固定／PC の詳細ボタンの折り返し・シナリオ行のはみ出し。**ホームの主ボタンを 1 つにする規則は Owner 判断で外した**（入っていない） | `v292DfixUI2Off` |
 | XSS1 | `index.html`（`UI.esc` ほか）・`features.js`・`home.html` の中。新しいファイルは無い・GitHub `b1e2a5d` | 名前・性格などを画面の HTML に入れる箇所で、" ' < > & を文字のまま表示するよう変換を足した：`UI.esc` が " と ' も変換／主人公・NPC のアイコン欄／入力種別の札／features.js の話者訂正（fix29）とアイコン生成中の表示（fix121f）／home.html のターン数 2 か所。普通の名前の見た目・AI への送信・保存は変わらない。fix310（ギャラリー）のターン数の分は、fix310 の読み込みを止めたので入っていない（§2.12） | なし（表示の変換だけ） |
+| UI3 | `v292DfixUI3-polish.js`（index・GitHub `f2b6d56`・?cb=`20261112-ui3a`） | 見た目の小さな手直し：iPhone 幅の小さなボタン・チェック欄を大きく・「物語を紡いでいます…」の重なり・削除の帯の余白。表示だけの言い換え（「続きを自然に進めてください。」→「◈ 続きを書く」・「最終: T6」→「最終: 6ターン目」・「続きから始める」→「続きから遊ぶ」 等。保存・送る文は変えない） | `v292DfixUI3Off` |
+| LAT1 | `v292DfixLAT1-press-feedback.js`（index・`f2b6d56`） | 送信・続きを書く・やり直すを押した瞬間に上の一行へ「送信の準備をしています…」。表示中の二度押しは止める。入力なしの案内が出たら「送信できませんでした。もう一度押してください。」。送信・保存・通信は 0 | `v292DfixLAT1Off` |
+| UI4 | index.html・home.html・DL2・fix873 ほか（`63bfe48`） | a 設定の決定ボタンを 1 ターン以上では「✔ 保存して物語に戻る」／b 削除のシートの重複した 2 枚目の注意を外す／c シナリオの保存に失敗したとき見出しを「保存できませんでした」にし ▶ を出さない／d HOME のカードは 1 回目のクリックで開く（「ⓘ 詳細」は選ぶだけ） | `v292DfixUI4aOff`・`UI4bOff`・`UI4cOff`・`UI4dOff` |
+| ERRNOTE1 | `v292DfixERRNOTE1-send-error-note.js`（index・`4f0f2b1`。RETRY2 で ?cb=`retry2-a`） | 送信がサーバーに断られたとき（HTTP 4xx/5xx）、理由を入力欄のすぐ上に出したままにする（✕ か次の送信まで）。402 は「AI の利用残高が足りない」、503 LEDGER_UNHEALTHY はサーバーの短い日本語の文。60 秒で消える赤い知らせの二重表示は外す。送り直さない・送信の中身に触らない | `v292DfixERRNOTE1Off` |
 
 ### 2.11 シナリオ・ホーム
 
@@ -728,6 +852,7 @@
 - GENDER1（93-h・新ファイル `v292DfixGENDER1-autogender.js`・sha `3291ae11`・?cb=`20261108-bundle93-h`。`index.html` は fix335 の直前、`home.html` は fix436 の直前に読む）：おまかせ・AI でキャラを作るとき、性別を自動で決める（Owner「性別が未設定になるのは良くない」）。全員に効く。利用者に操作は増えない（ダイアログ・ボタン 0）。決め方の順：①利用者が選んだ性別（ラジオ・シナリオの gender）は触らない ②説明の文にはっきりした語（少女・女性・少年・男性・「性別: 女」など。「母」「娘」など他人の性別を指しうる語は使わない。男女の語が混ざれば決めない）③AI が返した性別の欄（fix436・fix823 のプロンプトに 1 項目足しただけ・追加の通信 0。性別だけが空欄のときは AI を呼ばない）④種バンクのおまかせ（AI なし）では fix335 が自分で選んだ名前の性別 ⑤どれでも決められない（人外・曖昧）→ 未設定のまま。変えたファイル：fix335 `fc96f630`・fix436 `3a5d6160`・fix823 `d1837ab4`（どれも ?cb=`20261108-bundle93-h`。前は `d70eb54d`・`ff50b6f7`・`e86d3a62`）。kill `v292DfixGENDER1Off='1'`（呼び出し側は従来どおり）。観測口 `window.__v292DfixGENDER1`。試験（Local・nonet2・偽 AI）：node 単体 66/0、ブラウザ home・modal・kill × 2 ブラウザ＝82/0。GENDER1 で性別が入ったキャラに対する IDSPLIT2 の動きは専用には試していない（未確認）。本物の AI での確認は未実施。
 - HOMERETRY1（93-h・`home.html` の inline の中。ファイルは無い）：93-g の出荷直後、Worker の冷えた起動で `/save` が 503 `D1_INIT_TIMEOUT` を返したあと、ホームの「☁ 同期できませんでした」が Worker が直っても戻らなかった件の対策。一時的と分かる失敗（HTTP 503 で `retryable:true`、または `D1_INIT_TIMEOUT`／`ACCOUNT_STORE_TIMEOUT`、または通信そのものの失敗）のときだけ、`pull()` とクラウドの物語の行（f757）を、1 ページで最大 3 回（2・6・15 秒後）聞き直す。online になったら待たずに聞き直す（回数に数える）。500・403・401・409・`ok:false` の 200 は従来どおり聞き直さない。関門（判定・墓標・fix826 など）は通常どおり通す。聞き直す予定がある間だけ「☁ 同期できませんでした（少し待って自動でもう一度試します）」と出し、表示をほかの処理が書き換えていたら何もしない。kill `v292DfixHOMERETRY1Off='1'`（93-g と同じ）。試験（Local・nonet2）：7 場面 ×（after・kill）× Chromium・WebKit＝28 回で 152/0。online のときの即時の聞き直しは未確認。全部失敗すると最大約 1 分「…自動でもう一度試します」が出る。本番の確認：出荷後の Owner のホームの読み直しで Worker への要求 13 本がすべて 200・「同期できませんでした」なし（聞き直しが実際に走った場面は未観測）。
 - GHOST1（`v292DfixGHOST1-legacy-slot-ghost.js`・sha `cf49f461`・?cb=`20261111-ghost1`・GitHub `98cf4bc`・`home.html` だけ〔fix889 の直後〕・既定 ON・kill `v292DfixGHOST1Off='1'`）：ホームに残っていた「スロット A／B／C」（features.js の旧 fix30 が `chr6_slots_meta` が空のときに自動で作った行）の空の行が、削除シートで「クラウドでこの物語を確認できないため、ここでは削除できません」と断られていた件。次の条件を**すべて**満たす行だけを `chr6_slots_meta` から外す（読み込み時 1 回・冪等）：id が `a`／`b`／`c`・行の形が自動作成のまま・墓標でない・この端末に本文が無い・クラウドの痕跡が無い・Vault に関わらない・スナップショットや控えや削除の計画が無い・どのタブでも開かれていない・サーバーの一覧（読むだけ）を 1 回読めてその id が無い。`default` と新しい形式の id には触れない。外したら `v292DfixGHOST1Log` に id だけを残し、一覧を描き直す。DL2 の「サーバーの一覧に無い物語は削除できない」断りは変えていない。診断 `window.__v292DfixGHOST1.status()`。
+- GUIDE1（11-14・GitHub `6b22963`・fix873 の中。新しいファイルなし・既定 ON・kill `v292DfixGUIDE1Off='1'`）：物語の種の世界観の欄の下に、常に見える書き方の案内（「思いついたことを自由に書いて大丈夫です。…」）を出す。表示だけ。
 
 ### 2.12 読み込みを止めた部品（CLEANUP1・CLEANUP2）
 
@@ -1242,6 +1367,23 @@
 | 391 | fixPRUNE1 | `v292DfixPRUNE1-sys-prune.js` | index：CP1-final-tap の次（PRUNE2 の直後。home では読まない。PRUNE1・GitHub `a085c42`） | `f2f590d3` | 20261111-prune1 | 文章品質・プロンプト | `v292DfixPRUNE1Off`（kill。既定 ON） |
 | 392 | fixPRUNE2 | `v292DfixPRUNE2-sys-prune2.js` | index：CP1-final-tap の直後・PRUNE1 の直前（home では読まない。PRUNE2・GitHub `b1e2a5d`） | `254f46dd` | 20261111-prune2 | 文章品質・プロンプト | `v292DfixPRUNE2Off` `v292DfixPRUNE2aOff` `v292DfixPRUNE2bOff` `v292DfixPRUNE2cOff`（kill。既定 ON は P2c だけ）`v292DfixPRUNE2aOn` `v292DfixPRUNE2bOn`（P2a・P2b を端末で ON） |
 | 393 | fixGHOST1 | `v292DfixGHOST1-legacy-slot-ghost.js` | home：fix889 の直後（index では読まない。GHOST1・GitHub `98cf4bc`） | `cf49f461` | 20261111-ghost1 | シナリオ・ホーム | `v292DfixGHOST1Off`（kill。既定 ON） |
+| 394 | fixKEY1 | `v292DfixKEY1-story-key.js` | index・home（KEY1・GitHub `e4d982e`） | `499b6c97` | 20261112-key1 | 保存・同期 | `v292DfixKEY1Off`（kill。既定 ON） |
+| 395 | fixSOL1 | `v292DfixSOL1-story-open-lock.js` | index（KEY1 の直前。SOL1・`e4d982e`） | `4617f25e` | 20261112-store1b | 保存・同期 | `v292DfixSOL1Off`（kill。既定 ON） |
+| 396 | fixSTORE1b | `v292DfixSTORE1b-device-free.js` | home：DL2 の直後（index では読まない。STORE1b・`a46c2f1`〜`72ab286`） | `5ead3be0` | 20261116-free2d | 削除・墓標 | `v292DfixSTORE1Off` `v292DfixFREE2Off` `v292DfixSTUCK1On` `v292DfixZT1On` |
+| 397 | fixACTOR1 | `v292DfixACTOR1-input-actor.js` | index：HEROVOICE1 の直後（ACTOR1・`5b8a837`） | `1bb474f0` | 20261114-hv1 | 文章品質・プロンプト | `v292DfixACTOR1Off` `v292DfixACTOR1aOff` `v292DfixACTOR1bOn`（既定 OFF） |
+| 398 | fixLAT1 | `v292DfixLAT1-press-feedback.js` | index（LAT1・`f2b6d56`） | `43ec809d` | 20261112-lat1 | UI・画面 | `v292DfixLAT1Off` |
+| 399 | fixUI3 | `v292DfixUI3-polish.js` | index（UI3・`f2b6d56`） | `17bf53cc` | 20261112-ui3a | UI・画面 | `v292DfixUI3Off` |
+| 400 | fixSPK2 | `v292DfixSPK2-speaker-shadow.js` | index（SPK2・HB1・`b385f25`） | `228004e0` | 20261112-spk2hb1 | 話者・会話ログ | `v292DfixSPK2Off` `v292DfixSPK2Apply`（既定 OFF） |
+| 401 | fixSEVDRV | `v292DfixSEVDRV-state-judge.js` | index（SEVERE1・DRIVE1・EX192・`ea768d0`） | `a51b8231` | 20261113-sev3 | NPC・キャラ状態 | `v292DfixSEVERE1On` `v292DfixDRIVE1On` `v292DfixEX192On`（どれも既定 OFF） |
+| 402 | fixCAST1 | `v292DfixCAST1-opening-cast.js` | index（CAST1・`ea768d0`） | `e66d817b` | 20261113-cast1 | 文章品質・プロンプト | `v292DfixCAST1On`（既定 OFF） `v292DfixCAST1Off` |
+| 403 | fixCALL1 | `v292DfixCALL1-confirmed-speech.js` | index（CALL1・SPK3・`ea768d0`） | `2afcbfc1` | 20261113-cast1 | 文章品質・プロンプト | `v292DfixCALL1On` `v292DfixSPK3On`（既定 OFF） |
+| 404 | fixLEAK1 | `v292DfixLEAK1-nonstory-lines.js` | index（LEAK1・`d24bbd5`〜`9cf5e24`） | `c45f267e` | 20261115-leak2 | 文章品質・プロンプト | `v292DfixLEAK1Off` `v292DfixLEAK1ApplyOff` `v292DfixLEAK1JkvOff`（適用は既定 ON） |
+| 405 | fixNUM1 | `v292DfixNUM1-input-ledger.js` | index（NUM1・`d24bbd5`・`7338a53`） | `62478e1a` | 20261113-num2 | 文章品質・プロンプト | `v292DfixNUM1On`（既定 OFF） `v292DfixNUM1Off` |
+| 406 | fixERRNOTE1 | `v292DfixERRNOTE1-send-error-note.js` | index（ERRNOTE1・`4f0f2b1`・`248cc36`） | `bc96a1c8` | retry2-a | UI・画面 | `v292DfixERRNOTE1Off` |
+| 407 | fixHEROVOICE1 | `v292DfixHEROVOICE1-hero-voice.js` | index：ACTOR1 の直前（HEROVOICE1・`747a505`・`85b3be2`） | `e6a8736f` | 20261114-hv1b | 文章品質・プロンプト | `v292DfixHEROVOICE1Off` `v292DfixHEROVOICE1Force` |
+| 408 | fixOWNERON1 | `v292DfixOWNERON1-owner-defaults.js` | index（OWNERON1・`2b3271e`） | `6643467e` | 20261115-owneron1 | 認証・アカウント | `v292DfixOWNERON1Off` |
+| 409 | fixPLACE1 | `v292DfixPLACE1-where-now.js` | index（PLACE1・`f35a302`〜`9a74d7d`） | `c7805786` | 20261116-place1r6 | 文章品質・プロンプト | `v292DfixPLACE1On`（既定 OFF・Owner は OWNERON1 で ON） `v292DfixPLACE1Off` `v292DfixPLACE1R5Off` `v292DfixPLACE1R6Off` |
+| 410 | fixRETRY2 | `v292DfixRETRY2-send-policy.js` | index：fix80 の直前（RETRY2・`248cc36`） | `5343838b` | retry2-a | 生成の中心 | `v292DfixRETRY2Off` `v292DfixRETRY2CmfOn` `v292DfixRETRY2IdOn` |
 
 ## 付録B　ファイルはあるが読み込まれていないもの（＝本番で動いていない）
 
@@ -1712,6 +1854,52 @@
 - `v292DfixPRUNE2Off` — fixPRUNE2（PRUNE2。P2a・P2b・P2c の全部を当てない＝送信バイト同一）
 - `v292DfixSCID2Off` — fix820（SCID2。部分一致を見る範囲を従来どおりキー全体にし、乱数 id の文字も除かない）
 - `v292DfixSEEDNPC1Off` — fix873（SEEDNPC1。手で追記：「いっしょに出る人」の 1 行を人ごとに分ける処理だけ止め、93-i と同じ動きに戻す）
+- `v292DfixACTOR1Off` — fixACTOR1（11-12。ACTOR1 を全部止める＝送信バイト同一）
+- `v292DfixACTOR1aOff` — fixACTOR1（(a) 入力の主体の行だけ止める）
+- `v292DfixACTOR1aStoryOn` — fixACTOR1（(a) の STORY の腕を端末で ON。既定 OFF）
+- `v292DfixACTOR1bOn` / `v292DfixACTOR1bOff` — fixACTOR1（(b) 台詞の無い回の 1 行。既定 OFF）
+- `v292DfixCARD80Off` — index.html, fix58（CARD80。会話カードを従来の 80 字に）
+- `v292DfixCAST1On` / `v292DfixCAST1Off` / `v292DfixCAST1CountOff` — fixCAST1（既定 OFF）
+- `v292DfixCALL1On` / `v292DfixCALL1Off` / `v292DfixSPK3On` / `v292DfixSPK3Off` — fixCALL1（既定 OFF）
+- `v292DfixDRIVE1On` / `v292DfixDRIVE1Off` / `v292DfixEX192On` / `v292DfixEX192Off` / `v292DfixSEVERE1On` / `v292DfixSEVERE1Off` — fixSEVDRV（既定 OFF）
+- `v292DfixERRNOTE1Off` — fixERRNOTE1（送信失敗の知らせを従来の 60 秒で消える方だけに）
+- `v292DfixF850OrdOff` — fix850（F850Ord。読み込みの順の待ちをしない）
+- `v292Dfix850AOff` — fix850（FIX850A。腕・手の負傷でない動作も従来どおり制約の材料にする）
+- `v292DfixFANOUT1Off` — features, fix80（FANOUT1。土台の同時送信・上限なしの出し直し）
+- `v292DfixFF1aOff` / `v292DfixFF1bOff` — index.html（FF1。parsePlan の保護を外す）
+- `v292DfixFREE2Off` / `v292DfixFREE2dOff` — fixDL2, fixSTORE1b（FREE2c から既定 ON。`v292DfixFREE2On` は読まない）
+- `v292DfixGC1Off` — fix912（GC1・GC1b。保存中の「続きを書く」を預からない）
+- `v292DfixGUIDE1Off` — fix873（GUIDE1。世界観の欄の案内を出さない）
+- `v292DfixHEROVOICE1Off` / `v292DfixHEROVOICE1Force` — fixHEROVOICE1（Off は常に C・欄も出さない。Force は試験用の上書き）
+- `v292DfixICONFIX2aOff` / `v292DfixICONFIX2bOff` — fixLC1, fixNH1, fixSTARTICON（ICONFIX2 a・b）
+- `v292DfixICONFIX2cOff` / `v292DfixICONFIX2tOff` — fixSTARTICON（ICONFIX2 c・t）
+- `v292DfixICONFIX3Off` — fixLC1, fixSTARTICON（ICONFIX3。今までとバイト一致）
+- `v292DfixKANA1Off` — index.html（KANA1）
+- `v292DfixKEY1Off` — fixKEY1（各呼び出し側が従来の部分一致）
+- `v292DfixLAT1Off` — fixLAT1
+- `v292DfixLEAK1Off` / `v292DfixLEAK1ApplyOff` / `v292DfixLEAK1JkvOff` — fixLEAK1（適用は 11-14 から既定 ON）
+- `v292DfixLIM1Off` — fixADMF1, fixSTARTICON（LIM1。上限を部品の定数に戻す）
+- `v292DfixLSF1Off` — fix697（LSF1）
+- `v292DfixMXREGFIX1Off` — fixMIDICON（MXREGFIX1）
+- `v292DfixNUM1On` / `v292DfixNUM1Off` — fixNUM1（既定 OFF）
+- `v292DfixOWNERON1Off` — fixOWNERON1（Owner の既定 ON を全部やめる）
+- `v292DfixP0BOff` — fix569, fix562（P0-B。既定 ON）
+- `v292DfixPH1Off` / `v292DfixSREP1Off` — fix77, fix192, fix405, features（STATEQ1）
+- `v292DfixPLACE1On` / `v292DfixPLACE1Off` / `v292DfixPLACE1NarrOff` / `v292DfixPLACE1Absent` / `v292DfixPLACE1R5Off` / `v292DfixPLACE1R6Off` — fixPLACE1（既定 OFF・Owner は OWNERON1 で ON）
+- `v292DfixPOSE1Off` / `v292DfixPOSE1bOff` — fix851（STATEQ1 の POSE1）
+- `v292DfixPURGE1On` / `v292DfixPURGE1Off` / `v292DfixPURGE1VaultOn` — fixSTORE1b, fix562（PURGE1。既定 OFF）
+- `v292DfixREG1Off` — av2, fix912（REG1）
+- `v292DfixRETRY1Off` — fix80（RETRY1）
+- `v292DfixRETRY2Off` / `v292DfixRETRY2CmfOn` / `v292DfixRETRY2IdOn` — fixRETRY2（RETRY2 は既定 ON。Cmf・Id は既定 OFF）
+- `v292DfixSD1Off` — fixDL2（SD1。`v292DfixSD1On` は読まない）
+- `v292DfixSOL1Off` — fixSOL1
+- `v292DfixSPK2Off` / `v292DfixSPK2Apply` — fixSPK2（適用は既定 OFF）
+- `v292DfixSPKW1On` / `v292DfixSPKW1Off` — index.html, fix303, fix469, fixOWNERON1（SPKW1・SPKW2。既定 OFF・Owner は ON）
+- `v292DfixSTATE3Off` — fix192, fix414（STATE3）
+- `v292DfixSTORE1Off` / `v292DfixSTORE1Multi` / `v292DfixSTORE1Dry` — fixSTORE1b
+- `v292DfixSTUCK1On` / `v292DfixSTUCK1Off` / `v292DfixZT1On` / `v292DfixZT1Off` — fixSTORE1b（STUCK1・ZT1。既定 OFF）
+- `v292DfixUI3Off` — fixUI3
+- `v292DfixUI4aOff` / `v292DfixUI4bOff` / `v292DfixUI4cOff` / `v292DfixUI4dOff` — index.html, home.html, fixDL2, fix873 ほか（UI4）
 - `v292Dfix880Off` — fix880, index.html
 - `v292Dfix881Off` — fix881, index.html
 - `v292Dfix884Off` — fix884, index.html
