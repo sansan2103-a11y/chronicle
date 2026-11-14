@@ -58,6 +58,8 @@
     seedGo: 'つづける',
     /* ★SEEDWORLD1（物語の種 段 1） */
     swLoreHint: '場所も書けます。例：高校の旧校舎で、昔から怪談が残っている／廃墟になった遊園地で、夜だけ観覧車が回る',
+    // ★GUIDE1（Owner 2026-11-14 iPhone 実機「何を入れたらいいか迷う」）: 欄の下に常に見える書き方の案内（kill v292DfixGUIDE1Off='1'）
+    swLoreGuide: '思いついたことを自由に書いて大丈夫です。一言だけでも、長くても構いません。場所・時代・雰囲気（ホラー、恋愛、冒険など）・いま起きていること・その世界の決まりごと、書けるものだけで OK です。足りないところは Chronicle が補い、次の画面で確かめて直せます。',
     swMore: 'もっと細かく決める（任意）',
     swLoc: '舞台（どこから始まる？）',        swLocEx: '例：高校の旧校舎の三階／廃墟になった遊園地の観覧車の下',
     swTone: '雰囲気',                           swToneEx: '例：じわじわ怖い学園ホラー／明るい日常に少しの不思議',
@@ -318,6 +320,7 @@
            '<input id="sc873_' + esc(k) + '" type="text" data-c873-f="' + esc(k) + '" value="' + esc(v) + '"></div>';
   }
   /* ★SEEDWORLD1: 複数行の欄（textarea）。先頭の改行は HTML の textarea が 1 つ落とすので 1 つ足して守る */
+  function guide1Off(){ try { return localStorage.getItem('v292DfixGUIDE1Off') === '1'; } catch(e){ return false; } }
   function areaHtml(k, label, v, ph, rows, extra){
     return '<div class="sc-f sc-wide"><label for="sc873_' + esc(k) + '">' + esc(label) + '</label>' +
            '<textarea id="sc873_' + esc(k) + '" rows="' + rows + '" data-c873-f="' + esc(k) + '" placeholder="' + esc(ph).replace(/\n/g, '&#10;') + '">\n' + esc(v) + '</textarea>' +
@@ -351,7 +354,7 @@
     var h = headHtml(COPY.seedHead);
     var on = !skwOff();
     h += '<div class="sc-form">' +
-      (on ? areaHtml('lore', COPY.seedLore, S.seed.lore, COPY.swLoreHint, 3) : fieldHtml('lore', COPY.seedLore, S.seed.lore)) +
+      (on ? areaHtml('lore', COPY.seedLore, S.seed.lore, COPY.swLoreHint, 3, guide1Off() ? '' : '<div class="sc873-note" data-c873-guide1 style="margin-top:6px">' + esc(COPY.swLoreGuide) + '</div>') : fieldHtml('lore', COPY.seedLore, S.seed.lore)) +
       (sw2On() ? expandHtml() : '') +
       fieldHtml('hero', COPY.seedHero, S.seed.hero) +
       fieldHtml('npc', COPY.seedNpc, S.seed.npc) +
