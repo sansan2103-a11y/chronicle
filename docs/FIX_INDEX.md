@@ -1,6 +1,7 @@
 # FIX_INDEX — Chronicle fix 辞典（開発担当向け）
 
 > 下書き（laneDOCS・2026-10-31・第 1 段。2026-11-01 に 80-int-a、続けて 81-admg-a、82b-iconux-b、83-flow-c、MSW1-c、2026-11-02 に 84-b37g-a、85-imgsafe（Worker だけ）、86-lc1ox-d、87-lc1ox2-a、Worker v46.28-r1920b-fc、89-r1920-b、90-a、2026-11-03 に 90-b、Worker v46.29-rphold-fc、Worker v46.30-public-fc と管理者画面 `53e2d067`、91-b、92-a、2026-11-03 に 93-a（MIDICON3 mx3-d・Worker `v46.30-public-mx3c-fc`・管理者画面 `abd3084d`）、2026-11-07 に 93-b、Worker `v46.31-diag1b-fc`、管理者画面 `5c9c9f28`、Worker `v46.33b-limit1-fc`、管理者画面 `18594749`（admhub1）、93-c 、2026-11-07 夜に Worker `v46.34b-ready1-proarg-fc`・管理者画面 `e5198d0a`・93-d（ISO1e）・93-e（OPEN1・READY1 の端末側）、2026-11-08 に 93-f（npcq1 C2）、Worker `v46.35b-custimg1-fc`・管理者画面 `a2ea35ca`（ADMBULK1）、Worker `v46.35c-hang1-fc`、93-g（SETUI1・BOOTOFF1・NEWACCT1）、Worker `v46.35d-initslow1-fc`（INITSLOW1）、Worker `v46.36-wmxreg-fc`（W-MXREG・`midicon1` を READY に）・管理者画面 `f2258e33`、93-h（HOMERETRY1・OLDMX1・IDSPLIT2・GENDER1）、2026-11-09 に Worker `v46.37-keys-fc`（鍵 `starticon1`・`idsplit2`）・管理者画面 `752c623a`・93-i（STARTICON・W-MXREG の端末側・IDSPLIT2 の鍵）の出荷を反映）。
+> **基準の本番（2026-11-16・GitHub HEAD `3c57fc3`・版 `20261115-fear2r2`）**：11-15 の基準（`9a74d7d`）の上に 4 コミット。STATE4（`019686c`）→ FEAR1・QUOTE1・PLACE1 r7（`fbbff01`）→ ARM2・CHEAD1・ST4B・OPT1・FEAR2 r1（`3ec9d68`・FEAR2 は既定 OFF で出荷）→ FEAR2 r2 を全員既定 ON・PLACE1 r8（`3c57fc3`）。index `f94b27a1`・home `169a1dc1`（BUILT／HOME_BUILT だけ）・version `bd6f148d`（GitHub HEAD の実物。本番の読み戻しは、この資料では未確認）。新しいファイルは無い。戻し先は各コミットの 1 つ前。
 > **基準の本番（2026-11-15・GitHub HEAD `9a74d7d`・版 `20261115-state3`）**：11-12 の基準（`8311948`）の上に、11-12〜11-15 の出荷 41 コミット（GitHub `e4d982e`〜`9a74d7d`）。index `a19bd431`・home `c0094670`・version `23938ae5`・features.js `3f128dee`（いずれも GitHub HEAD の実物から取った。**本番の読み戻しは、この資料では未確認**）。新しいファイル 17 本（付録 A の #394〜#410）。GitHub の順（要約）：KEY1・SOL1（`e4d982e`）→ STORE1b r2（`a46c2f1`）→ ACTOR1・STATEQ1・PURGE1c（`5b8a837`）→ UI3・LAT1（`f2b6d56`）→ UI4・FF1・GC1（`63bfe48`・`9dab027`）→ GC1b・SPK2/HB1（`b385f25`）→ SCENE2 r2c・SEVERE1・DRIVE1・EX192（`c228821`）→ F850Ord（`8f80b0a`）→ CAST1・CALL1・SPK3、SCENE2 の天候の控えを撤去（`ea768d0`・`0c70ca2`）→ LEAK1・NUM1（`d24bbd5`・`7338a53`・`0a44c44`）→ SEVERE1 r3（`494b09c`）→ LIM1（`2361a19`・Worker `v46.45-lim1-fc`）→ STUCK1（`e37f802`）→ LEAK1 の適用を既定 ON（`452285c`）→ ICONFIX2（`2317dbe`）→ SAVE1＝REG1・SD1・LSF1・ZT1（`972330d`）→ GUIDE1（`6b22963`）→ ICONFIX3（`19fe4f4`）→ HEROVOICE1（`747a505`・`85b3be2`）→ ECHO1（`5a13762`・`72a7237` で撤去）→ MXREGFIX1（`2e37066`）→ PLACE1 r1〜r6（`f35a302`・`340c495`・`8ff0354`・`53fbdfd`・`72ab286`・`9a74d7d`）→ ERRNOTE1（`4f0f2b1`）→ RETRY1（`72a7237`）→ SPKW1・SPKW1b・SPKW2・KANA1（`802ef66`・`650cff9`・`11493dc`）→ FREE2・FREE2c・FREE2d（`650cff9`・`2e6e2c9`・`72ab286`）→ OWNERON1（`2b3271e`）→ RETRY2（`248cc36`）→ LEAK2（`9cf5e24`）→ FANOUT1（`2e6e2c9`）→ STATE3・FIX850A・CARD80（`9a74d7d`）。Worker は LIM1 の `v46.45-lim1-fc` までをコミットの文と端末のコードで確認（それより後の Worker の版は、この資料では未確認）。戻し先は各コミットの 1 つ前。
 > **基準の本番（2026-11-12）**：11-11 の FLOW3（GitHub `e484735`）の上に、11-11 夜〜11-12 朝の出荷（読み戻しの結果は出荷の記録を正とする。GitHub の版はブランチ `v292-rebuild` の履歴から取った）。現在の本番 HEAD は GitHub `8311948`。GitHub の順：UI2（`2f04062`・?cb=`20261111-ui2b`。CSS だけの小修正。ホームの主ボタンを 1 つにする規則は Owner 判断で外した）→ PRUNE1（`a085c42`・新しい `v292DfixPRUNE1-sys-prune.js` `f2f590d3`・?cb=`20261111-prune1`）→ CLEANUP1（`4dcd38c`・9 本の読み込みを停止）→ SCENE1＋F333a（`125c261`・fix58 `1603d3c1`・fix192 `0530bb9b`・fix850 `44794344`・features.js `cca12be1`）→ UNPROT（`83a8859`・DL2 `22e0432c`）→ CLEANUP2（`05da4aa`・23 本の読み込みを停止）→ GHOST1（`98cf4bc`・home.html だけ・新しい `v292DfixGHOST1-legacy-slot-ghost.js` `cf49f461`）→ XSS1＋PRUNE2（`b1e2a5d`・features.js `6d812ce8`・新しい `v292DfixPRUNE2-sys-prune2.js` `254f46dd`・?cb=`20261111-prune2`。PRUNE2 は P2c だけ既定 ON）→ SCID2＋F333b（`e70f7d2`・fix820 `edc59752`・fix850 `91e0af75`）→ ICONQ1（`8311948`・NH1 `96ac383f`・LC1 の外見の案 `05b810a0`・?cb=`20261111-iconfix1`。部品名と kill のキーは ICONFIX1 で始まるが、11-01 の Worker の ICONFIX1 とは別件）。Worker：`v46.43-delall-fc` → `v46.43b-sec0-fc`（ソース `457468ed`）→ `v46.44-sec1-fc`（`f345181e`。合言葉・旧ヘッダの認証を退役・画像の配信を厳しく・管理 API は伏字のみ）→ `v46.44b-unprot-fc`（`1c585c24`）→ `v46.44b-unprot-ifx11-fc`（`9878917f`・現行）。管理者画面は ADM3b（手元の `admin/index.html` `7fa89716`・戻し先 `8101b836`）。最終の sha：index `b937cb3e`・home `df9ed280`。Worker と管理者画面の出荷の前後・時刻は出荷の記録を正とする。戻し先は各コミット・各ファイルの 1 つ前。この資料の sha は GitHub `8311948` の実物から取った（Worker と管理者画面は手元のファイルから）。本番の読み戻し・実機は、この資料では未確認（ICONQ1 の実画像の確認だけ §2.9 を参照）。
 > **基準の本番（2026-11-11）**：11-10 夜の基準の上に 11-11 の出荷（読み戻しの結果は出荷の記録を正とする）。RESCUEON（GitHub `72df0ea`・fix945 v2.6・退避が既定 ON）→ READYALL（Worker `v46.42-readyall-fc`・ソース `28a36bf0`・鍵 `npres1`・`lc1`・`kn1` を READY に）＋ ADMALL2（管理者画面 `8101b836`・戻し先 `b6e6d211`。一番上に「すべての機能を全員に ON」の箱）→ DELALL（GitHub `8b688f2`・Worker `v46.43-delall-fc`・ソース `15d46408`。知人も自分の物語を削除できる）→ SEEDHERO1＋SEEDNPC1e（`0475772`）→ SAVEUI（`0756755`）→ SCID1（`5c0ba2c`・fix820）→ FLOW2（GitHub `daeb3a9`・STATEAGE1・FRZ1・出荷済み・本番の読み戻し一致）→ FLOW3（GitHub `e484735`・?cb=`20261111-flow3`・FACTS1・CONT1・CLICHE2・DEDUPQ1・出荷済み・本番の読み戻し一致。index `93b91210`）。Worker は `v46.43-delall-fc`（11-11 のこの段の時点。その後は上の 11-12 の段）。戻し先は各コミット・各ファイルの 1 つ前。Owner の台帳 2323〜2330。この資料の sha は GitHub `5c0ba2c` の実物から取った。本番の読み戻し・実機は、この資料では未確認。
@@ -53,9 +54,9 @@
 
 | 分野 | 主な部品（§2 に項目あり） |
 |---|---|
-| 生成の中心・プロンプト | features.js、fix192、fix226、fix379、FLW4、fix459、smrc1、MSW1（Worker）、BF1、fix80、fix247、PRUNE1、PRUNE2、SCENE1（NOW1・FACTS2・STATE2）、ACTOR1、HEROVOICE1、LEAK1・LEAK2、NUM1、PLACE1、CAST1・CALL1・SPK3、SEVERE1・DRIVE1・EX192（SEVDRV）、ECHO1（撤去）、CARD80、RETRY1・RETRY2、FANOUT1 |
-| NPC・キャラ状態 | fix77、fix305、fix333、fix414、fix145、fix298、fix277、fix307、fix641、fix853、CP1、NPRES、E64、fix797、F333a・F333b（fix850）、STATEQ1（PH1・SREP1・POSE1）、STATE3、FIX850A・F850Ord（fix850） |
-| 話者・会話ログ・編集 | fix66、fix469、IDSPLIT2、fix606、fix611、fix620、fix957、SFL1、SFLTap、EDIT01、EDLOG、EDN（inline）、fix295、SPKW1・SPKW2、KANA1・FF1（index.html）、SPK2・HB1 |
+| 生成の中心・プロンプト | features.js、fix192、fix226、fix379、FLW4、fix459、smrc1、MSW1（Worker）、BF1、fix80、fix247、PRUNE1、PRUNE2、SCENE1（NOW1・FACTS2・STATE2）、ACTOR1、HEROVOICE1、LEAK1・LEAK2・OPT1、NUM1、PLACE1、CAST1・CALL1・SPK3、SEVERE1・DRIVE1・EX192（SEVDRV）、ECHO1（撤去）、CARD80、RETRY1・RETRY2、FANOUT1 |
+| NPC・キャラ状態 | fix77、fix305、fix333、fix414、fix145、fix298、fix277、fix307、fix641、fix853、CP1、NPRES、E64、fix797、F333a・F333b（fix850）、STATEQ1（PH1・SREP1・POSE1）、STATE3、STATE4・ST4B（fix77）、FEAR1・FEAR2・ARM2・CHEAD1（fix414）、FIX850A・F850Ord（fix850） |
+| 話者・会話ログ・編集 | fix66、fix469、IDSPLIT2、fix606、fix611、fix620、fix957、SFL1、SFLTap、EDIT01、EDLOG、EDN（inline）、fix295、SPKW1・SPKW2・QUOTE1、KANA1・FF1（index.html）、SPK2・HB1 |
 | 記憶 | fix135、fix313、fix314、fix670、fix796、fix793、fix905、fix950/953、RC1 |
 | 保存・同期 | fix246、fix228、fix525、fix527（FLW5）、fix543、fix654、fix399、fix402、fix590、fix826、fix697、fix702、fix705、fix743/750/756、fix781、fix758、fix912、fix945、fix859、fix564/721/726/291、WKRHANG1・INITSLOW1（Worker）、REG1・LSF1（SAVE1）、GC1・GC1b（fix912）、KEY1、SOL1 |
 | 削除・墓標 | DL2、fix933、fix587、fix579、fix602、fix660、fix577、fix710、fix642、JR1、UNPROT（DL2）、SD1・FREE2（DL2）、STORE1b（PURGE1c・P0-B・STUCK1・ZT1・FREE2c/d） |
@@ -215,6 +216,7 @@
 - 状態：本番の index.html が読む。影（件数だけの記録・本文は記録しない）は常時。**適用は 11-14（GitHub `452285c`）から既定 ON**。
 - 適用で取り除くもの（r2 で 2 種に絞り、r3 で追加）：単独行の既知の内部ラベル（（状態ラベル）など）・タグ領域の後ろの英語が主の作業メモ・状態の欄の写し（state-field echo）と自己点検のブロック。finish=length で本文との境界を決められない回は hold（既存の失敗の経路＝入力を戻す・自動の再送なし）。
 - LEAK2（GitHub `9cf5e24`）：最終境界で、JSON の切れ端だけの行（`key": value` の形）と「→修正します。」だけの行も落とす。止める `v292DfixLEAK1JkvOff='1'`（この 2 種は数えるだけに戻す）。
+- OPT1（GitHub `3ec9d68`・既定 ON・kill `v292DfixLEAK1OptOff='1'`・適用の鍵 ApplyOff／Off にも従う）：本文の末尾にある、プレイヤーへ選択を促すまとまりを取り除く。形は 2 つだけ（括弧の見出し行＋箇条書き 2 行以上で本文が終わる／箇条書き 2 行以上＋最後の行が「あなた・プレイヤー …どうする？」で終わる）。途中にあるもの・台詞の中・物語の行が混ざるものは取り除かない。
 - jp_meta（影だけ）：本文の最後の段落が読み手への依頼と書き手視点の語を両方含むときに数えるだけ。取り除かない。
 - 止める：`v292DfixLEAK1ApplyOff='1'`（適用だけ）／`v292DfixLEAK1Off='1'`（影も含め全部）。旧 `v292DfixLEAK1Apply` は読まない。
 - 注意：index.html の script タグのコメントは「適用 既定 OFF」のまま（コードの既定は ON）。保存・sys・送信は変えない。
@@ -223,10 +225,12 @@
 - 状態：本番の index.html が読む。**既定 OFF**（`v292DfixNUM1On='1'` の端末だけ）。kill `v292DfixNUM1Off='1'`（On より優先）。FACTS1 の kill 中も出さない。
 - 中身：earlierFacts の窓から落ちたターンの「プレイヤーの入力にある数量・約束」を、earlierFacts.items の先頭に最大 5 行・200 字（入力の語のまま・「N ターン目の入力の時点」と書く）。r2（NUM2）で、本文に決定的に読める消費・受け渡しがあれば「今の数は不明」と添える（引き算はしない）。保存なし・sys 0 字・AI の呼び出し 0。
 
-#### PLACE1 — 物の持ち主・置き場所と、その場にいない人の控えを user の whereNow に渡す（11-14〜11-15・r1〜r6・`v292DfixPLACE1-where-now.js`・版 `place1-20261115-r6`）
+#### PLACE1 — 物の持ち主・置き場所と、その場にいない人の控えを user の whereNow に渡す（11-14〜11-16・r1〜r8・`v292DfixPLACE1-where-now.js`・版 `place1-20261115-r8`）
 - 状態：本番の index.html が読む（fix58 の userExt が呼ぶ純関数）。**既定 OFF**（`v292DfixPLACE1On='1'` の端末だけ）。**Owner のアカウント（OWNERON1）では鍵なしで ON**。kill `v292DfixPLACE1Off='1'` が常に優先。保存しない・AI を呼ばない・sys 0 字・本文とカードは変えない。
 - 中身：その回の S.turns から毎回作る。プレイヤーの入力（DO・STORY）の決まった言い方（渡す・預ける・置く・〜へ行く 等）と、本文の登録名どうしの受け渡しを拾い、nowScene の直後（無ければ recentScenes の直後）に `whereNow { rule, items }`（r4 から最大 8 行・320 字）。優先順は 最新の入力 ＞ 後の本文 ＞ 古い行（r3）。r4 で行に出どころ（ターン番号・引用）を付けないようにした。
-- 版ごとの鍵：`v292DfixPLACE1NarrOff='1'`（本文からの読み取りだけ止める）・`v292DfixPLACE1Absent='A'|'B'`（いない人の行の言い方。無ければ従来）・`v292DfixPLACE1R5Off='1'`（r5〔入力で決まった「いない」は明示の戻りか後の入力でだけ消す・離れる一言の橋渡し〕を止め r4 と同じ行）・`v292DfixPLACE1R6Off='1'`（r6〔「〜まで送ってもらう」の橋渡し・退場が入力で確定したときだけ〕を止め r5 と同じ行）。
+- 版ごとの鍵：`v292DfixPLACE1NarrOff='1'`（本文からの読み取りだけ止める）・`v292DfixPLACE1Absent='A'|'B'`（いない人の行の言い方の試験用の鍵。無ければ従来。'A'＝強い言い方〔「この場にいる人物として直接話させたり動かしたりしない」〕は GPT #127-UD で不採用・次の整理で撤去候補）・`v292DfixPLACE1R5Off='1'`（r5〔入力で決まった「いない」は明示の戻りか後の入力でだけ消す・離れる一言の橋渡し〕を止め r4 と同じ行）・`v292DfixPLACE1R6Off='1'`（r6〔「〜まで送ってもらう」の橋渡し・退場が入力で確定したときだけ〕を止め r5 と同じ行）。
+- r7（GitHub `fbbff01`・kill `v292DfixPLACE1R7Off='1'`＝r6 と同じ行・同じ状態欄）：「二人／みんな／全員 が戻ってきた」も、誰のことかが一意なときだけ戻りとして読む。「向かったはずの二人が、戻ってきている」の連体の「はず」は仮定にしない。PLACE1 が「この場にいない」とした人は、fix192 の【各キャラの現在の状態】で 本能・目的 の項目だけを載せない（`absentNames()`。保存値は変えない）。
+- r8（GitHub `3c57fc3`・kill `v292DfixPLACE1R8Off='1'`＝r7 と同じ行）：「X の影が現れる」「X が部屋に入ってくる／顔を出す／姿を見せる」などの明確な帰還を足す（その人の名前が主語・動きの語が 30 字以内のときだけ・消すのはその人の行だけ）。声・足音・電話・回想・夢・鏡・「はず」・「戻ろうとした」・「誰か」・否定・組の一部だけ、は帰還にしない。PLACE1 と同じく Owner のアカウント（OWNERON1）だけ既定で効く。
 - 診断：`window.__v292DfixPLACE1`（obs()：行数・落とした理由の件数。本文・入力の文は入れない）。
 
 #### CAST1 / CALL1 / SPK3 — 開始場面の NPC の説明・呼称の先例・直近の台詞の話者（11-13・GitHub `ea768d0`・`v292DfixCAST1-opening-cast.js`・`v292DfixCALL1-confirmed-speech.js`）
@@ -345,6 +349,16 @@
 - FIX850A（GitHub `9a74d7d`・kill `v292Dfix850AOff='1'`・既定 ON）：腕・手の負傷でない動作（組む・伸ばす・握る 等）の節では、その部位を【制約】の材料にしない。同じ節にけがの語があれば従来どおり。
 - F850Ord（GitHub `8f80b0a`・kill `v292DfixF850OrdOff='1'`・既定 ON）：読み込みの順の競合を直す。fix192・fix74・fix75 の印が最上位に見えるまで包むのを待つ（最大 約 8 秒。超えたら従来の条件で包む）。
 
+#### STATE4 / ST4B — 状態の値の受け入れの検査（11-16・GitHub `019686c`・`3ec9d68`・fix77・fix192）
+- STATE4（既定 ON・kill `v292DfixSTATE4Off='1'`）：<state> の値が 80 字を超える・コード片（`.trim(`・`=>`・`undefined` 等）・タグの記号や属性の書き方（`<` `>`・`からだ=` 等）を含むときは、その項目を保存も更新もしない（前の値が残る）。fix192 の状態ブロックも同じ判定で、既に保存された値を載せない（保存値はそのまま）。SREP1 を止めた旧経路（`v292DfixSREP1Off='1'`）には掛からない。
+- ST4B（既定 ON・kill `v292DfixSTATE4BOff='1'`）：値の前後のスラッシュと、末尾の「（この場にいない）」「（〜と一緒にいない）」「（別の場所にいる）」の括弧書きを外して受け入れる（捨てない）。
+
+#### FEAR1 / FEAR2 / ARM2 / CHEAD1 — 怖さ・姿勢から作る【制約】の直し（11-16・GitHub `fbbff01`・`3ec9d68`・`3c57fc3`・fix414）
+- FEAR1（既定 ON・kill `v292DfixFEAR1Off='1'`）：A＝Owner だけの widen の恐怖の判定は、恐怖の語だけでは「とっさの判断」の制約を作らず、機能の喪失（動けない・立てない・声が出ない・頭が真っ白・足がすくむ・腰が抜ける 等）が恐怖・動揺の文脈で書かれたときだけ作る。C＝制約の文言の内部の言い方「即応・機転は出ない(型B/C)」を「とっさの判断や機転が利きにくい」にする（全員）。
+- FEAR2（r1 `3ec9d68` は既定 OFF で出荷 → r2 `3c57fc3` で**全員既定 ON**・kill `v292DfixFEAR2Off='1'`。既定はコードの `FEAR2_ON` の 1 行）：「硬直」「固まる」「〜まま動けない」だけ（姿勢・一瞬の反応）では恐怖の制約を作らない（widen・規則 F の からだ）。r2（kill `v292DfixFEAR2R2Off='1'`＝r1 と同じ）：1 つの文に 固まる・すくむ 等＋動けない・体が言うことをきかない がそろい、恐怖・動揺の文脈があるときは明確な行動不能として残す（「〜たまま」の姿勢の句や「一瞬・一拍」だけなら残さない）。
+- ARM2（既定 ON・kill `v292DfixARM2Off='1'`）：規則 A で、部位の使用不可の根拠が「動かない」だけで、その人の からだ に負傷の語が無く傷の欄も空のときは、部位の使用不可を作らない（FIX850A が外せなかった「拳を胸元まで上げたまま動かなくなった」の型）。
+- CHEAD1（既定 ON・kill `v292DfixCHEAD1Off='1'`）：【制約】の人物の制約がすべて怖さ由来（rank 6）のときは、見出しを「負傷者の行動には…」ではなく怖さ用の文（「恐怖・動揺による能力の低下を行動に反映して描く…」）にする。
+
 ### 2.3 話者・会話ログ・編集
 
 #### fix66 — 会話ログの描画フック修復（＋未登録キャラのアバター文体）
@@ -412,6 +426,10 @@
 - 状態：**既定 OFF**（`v292DfixSPKW1On='1'` の端末だけ）。**Owner のアカウント（OWNERON1）では鍵なしで ON**。kill `v292DfixSPKW1Off='1'` が常に優先。SPKW2 も同じ鍵。
 - SPKW1（GitHub `802ef66`）：W＝推測に使う写しの中だけで登録名の呼び名（短い名）を登録名に読み替える／V＝聞かれた側の「X の声・言葉」を話者の証拠にしない／P＝発話動詞を語の形で見る。fix303 はモデルが <say who> を明示したカードを書き換えない。fix469 は「X は答えなかった」のような否定された発話を証拠にしない。SPKW1b（`650cff9`）：呼び名の表が空でも確認の口 `window.__v292DfixSPKW1` を置く。
 - SPKW2（GitHub `11493dc`）：未登録の人物の裸の台詞を近くの登録名や主人公に倒さない（SPKW2-U・index.html）。fix469 は名前の直後の節に発話動詞があるときだけ前の行の「言った」を結び付ける（SPKW2-S2）。
+
+#### QUOTE1 — 発声の行為の無い引用をカードにしない（11-16・GitHub `fbbff01`・index.html の genConvLog）
+- 状態：SPKW1 と同じ範囲で効く（`v292DfixSPKW1On='1'` の端末か、OWNERON1 で Owner のアカウント＝**Owner 限定**）。kill `v292DfixQUOTE1Off='1'`（従来）。
+- 中身：行の途中の裸の「」の後ろが「という一言／言葉」「という文字／貼り紙」「と書かれ／記され」のとき、同じ文に発声の行為（口にする・言う・叫ぶ・呟く・告げる・読み上げる・声 等）が無ければ台詞にしない（カードを作らない）。発声の行為があれば台詞として残し、話者はその文で名前が主語のときだけ確定し、無ければ「???」（窓の推測で決めない）。
 
 #### KANA1 / FF1 — 出口のロックが台詞・行を消しすぎない（index.html の parsePlan）
 - FF1（11-12・GitHub `63bfe48`）：FF1a（kill `v292DfixFF1aOff='1'`）主人公ロックが入力の実現ごと段落を消さない／FF1b（kill `v292DfixFF1bOff='1'`）登録キャラの <say> 1 行だけの短い漢字・数字の台詞（「……煙」）を言語フィルタで捨てない。どちらも既定 ON。
@@ -1377,12 +1395,12 @@
 | 401 | fixSEVDRV | `v292DfixSEVDRV-state-judge.js` | index（SEVERE1・DRIVE1・EX192・`ea768d0`） | `a51b8231` | 20261113-sev3 | NPC・キャラ状態 | `v292DfixSEVERE1On` `v292DfixDRIVE1On` `v292DfixEX192On`（どれも既定 OFF） |
 | 402 | fixCAST1 | `v292DfixCAST1-opening-cast.js` | index（CAST1・`ea768d0`） | `e66d817b` | 20261113-cast1 | 文章品質・プロンプト | `v292DfixCAST1On`（既定 OFF） `v292DfixCAST1Off` |
 | 403 | fixCALL1 | `v292DfixCALL1-confirmed-speech.js` | index（CALL1・SPK3・`ea768d0`） | `2afcbfc1` | 20261113-cast1 | 文章品質・プロンプト | `v292DfixCALL1On` `v292DfixSPK3On`（既定 OFF） |
-| 404 | fixLEAK1 | `v292DfixLEAK1-nonstory-lines.js` | index（LEAK1・`d24bbd5`〜`9cf5e24`） | `c45f267e` | 20261115-leak2 | 文章品質・プロンプト | `v292DfixLEAK1Off` `v292DfixLEAK1ApplyOff` `v292DfixLEAK1JkvOff`（適用は既定 ON） |
+| 404 | fixLEAK1 | `v292DfixLEAK1-nonstory-lines.js` | index（LEAK1・`d24bbd5`〜`3ec9d68`） | `e6ece310` | 20261116-fear2 | 文章品質・プロンプト | `v292DfixLEAK1Off` `v292DfixLEAK1ApplyOff` `v292DfixLEAK1JkvOff` `v292DfixLEAK1OptOff`（適用は既定 ON） |
 | 405 | fixNUM1 | `v292DfixNUM1-input-ledger.js` | index（NUM1・`d24bbd5`・`7338a53`） | `62478e1a` | 20261113-num2 | 文章品質・プロンプト | `v292DfixNUM1On`（既定 OFF） `v292DfixNUM1Off` |
 | 406 | fixERRNOTE1 | `v292DfixERRNOTE1-send-error-note.js` | index（ERRNOTE1・`4f0f2b1`・`248cc36`） | `bc96a1c8` | retry2-a | UI・画面 | `v292DfixERRNOTE1Off` |
 | 407 | fixHEROVOICE1 | `v292DfixHEROVOICE1-hero-voice.js` | index：ACTOR1 の直前（HEROVOICE1・`747a505`・`85b3be2`） | `e6a8736f` | 20261114-hv1b | 文章品質・プロンプト | `v292DfixHEROVOICE1Off` `v292DfixHEROVOICE1Force` |
 | 408 | fixOWNERON1 | `v292DfixOWNERON1-owner-defaults.js` | index（OWNERON1・`2b3271e`） | `6643467e` | 20261115-owneron1 | 認証・アカウント | `v292DfixOWNERON1Off` |
-| 409 | fixPLACE1 | `v292DfixPLACE1-where-now.js` | index（PLACE1・`f35a302`〜`9a74d7d`） | `c7805786` | 20261116-place1r6 | 文章品質・プロンプト | `v292DfixPLACE1On`（既定 OFF・Owner は OWNERON1 で ON） `v292DfixPLACE1Off` `v292DfixPLACE1R5Off` `v292DfixPLACE1R6Off` |
+| 409 | fixPLACE1 | `v292DfixPLACE1-where-now.js` | index（PLACE1・`f35a302`〜`3c57fc3`） | `caf33d69` | 20261116-place1r8 | 文章品質・プロンプト | `v292DfixPLACE1On`（既定 OFF・Owner は OWNERON1 で ON） `v292DfixPLACE1Off` `v292DfixPLACE1R5Off` `v292DfixPLACE1R6Off` `v292DfixPLACE1R7Off` `v292DfixPLACE1R8Off` |
 | 410 | fixRETRY2 | `v292DfixRETRY2-send-policy.js` | index：fix80 の直前（RETRY2・`248cc36`） | `5343838b` | retry2-a | 生成の中心 | `v292DfixRETRY2Off` `v292DfixRETRY2CmfOn` `v292DfixRETRY2IdOn` |
 
 ## 付録B　ファイルはあるが読み込まれていないもの（＝本番で動いていない）
@@ -1877,7 +1895,7 @@
 - `v292DfixKANA1Off` — index.html（KANA1）
 - `v292DfixKEY1Off` — fixKEY1（各呼び出し側が従来の部分一致）
 - `v292DfixLAT1Off` — fixLAT1
-- `v292DfixLEAK1Off` / `v292DfixLEAK1ApplyOff` / `v292DfixLEAK1JkvOff` — fixLEAK1（適用は 11-14 から既定 ON）
+- `v292DfixLEAK1Off` / `v292DfixLEAK1ApplyOff` / `v292DfixLEAK1JkvOff` / `v292DfixLEAK1OptOff` — fixLEAK1（適用は 11-14 から既定 ON）
 - `v292DfixLIM1Off` — fixADMF1, fixSTARTICON（LIM1。上限を部品の定数に戻す）
 - `v292DfixLSF1Off` — fix697（LSF1）
 - `v292DfixMXREGFIX1Off` — fixMIDICON（MXREGFIX1）
@@ -1885,7 +1903,7 @@
 - `v292DfixOWNERON1Off` — fixOWNERON1（Owner の既定 ON を全部やめる）
 - `v292DfixP0BOff` — fix569, fix562（P0-B。既定 ON）
 - `v292DfixPH1Off` / `v292DfixSREP1Off` — fix77, fix192, fix405, features（STATEQ1）
-- `v292DfixPLACE1On` / `v292DfixPLACE1Off` / `v292DfixPLACE1NarrOff` / `v292DfixPLACE1Absent` / `v292DfixPLACE1R5Off` / `v292DfixPLACE1R6Off` — fixPLACE1（既定 OFF・Owner は OWNERON1 で ON）
+- `v292DfixPLACE1On` / `v292DfixPLACE1Off` / `v292DfixPLACE1NarrOff` / `v292DfixPLACE1Absent` / `v292DfixPLACE1R5Off` / `v292DfixPLACE1R6Off` / `v292DfixPLACE1R7Off` / `v292DfixPLACE1R8Off` — fixPLACE1, fix192（R7Off は fix192 の状態欄も。既定 OFF・Owner は OWNERON1 で ON。`v292DfixPLACE1Absent` は試験用・'A' は不採用で撤去候補）
 - `v292DfixPOSE1Off` / `v292DfixPOSE1bOff` — fix851（STATEQ1 の POSE1）
 - `v292DfixPURGE1On` / `v292DfixPURGE1Off` / `v292DfixPURGE1VaultOn` — fixSTORE1b, fix562（PURGE1。既定 OFF）
 - `v292DfixREG1Off` — av2, fix912（REG1）
@@ -1896,6 +1914,9 @@
 - `v292DfixSPK2Off` / `v292DfixSPK2Apply` — fixSPK2（適用は既定 OFF）
 - `v292DfixSPKW1On` / `v292DfixSPKW1Off` — index.html, fix303, fix469, fixOWNERON1（SPKW1・SPKW2。既定 OFF・Owner は ON）
 - `v292DfixSTATE3Off` — fix192, fix414（STATE3）
+- `v292DfixSTATE4Off` / `v292DfixSTATE4BOff` — fix77, fix192（STATE4・ST4B）
+- `v292DfixFEAR1Off` / `v292DfixFEAR2Off` / `v292DfixFEAR2On` / `v292DfixFEAR2R2Off` / `v292DfixARM2Off` / `v292DfixCHEAD1Off` — fix414（FEAR2 は r2 から既定 ON。FEAR2On は既定を OFF に戻したときだけ意味がある）
+- `v292DfixQUOTE1Off` — index.html（QUOTE1。SPKW1 と同じ範囲で効く）
 - `v292DfixSTORE1Off` / `v292DfixSTORE1Multi` / `v292DfixSTORE1Dry` — fixSTORE1b
 - `v292DfixSTUCK1On` / `v292DfixSTUCK1Off` / `v292DfixZT1On` / `v292DfixZT1Off` — fixSTORE1b（STUCK1・ZT1。既定 OFF）
 - `v292DfixUI3Off` — fixUI3
