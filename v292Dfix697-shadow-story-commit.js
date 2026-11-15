@@ -457,6 +457,8 @@
   }
   /* ★HOLDNOTE1: canonHold に入ったが fix924 が守らなかった（CAS 以外の 409 = F924_SKIP 等）ときだけ、画面に知らせを 1 回。表示だけ・送信 0。kill: v292DfixHOLDNOTE1Off='1' */
   function holdNote1(id, code){ try { var H = (typeof window !== 'undefined') ? window.__v292DfixHOLDNOTE1 : null; if (H && typeof H.hold === 'function') H.hold('canon', id, code); } catch(eH){} }
+  /* ★HOLDNOTE2: 状態のために canonHold に入ったとき（404・authority の食い違い・削除済み）、状態ごとの知らせを 1 回。表示だけ・送信 0。kill: v292DfixHOLDNOTE2Off='1' */
+  function holdNote2(kind, id, code){ try { var H = (typeof window !== 'undefined') ? window.__v292DfixHOLDNOTE2 : null; if (H && typeof H.hold === 'function') H.hold(kind, id, code); } catch(eH){} }
   function f909bOff(){ return lsg('v292Dfix909bOff') === '1'; }
   var f909 = { probes: 0, v2Same: 0, notCanonical2: 0, notDirty: 0, noLc: 0, journal: 0, busy: 0, fires: 0,
                remoteAhead: 0, bridgeCalls: 0, bridgeScheduled: 0, bridgeDup: 0, bridgeInFlight: 0,
@@ -1167,13 +1169,13 @@
       if (gerr || !g){ cstats.netFail++; note({ kind: 'C_GETSTORY_FAIL', id: id, why: why }); return fin(); }
       var j = g.j || {};
       if (g.status === 404){ cstats.rowMissing++; canonHold[id] = true;
-        note({ kind: 'CANONICAL_ROW_MISSING', id: id }); return fin(); }
+        note({ kind: 'CANONICAL_ROW_MISSING', id: id }); holdNote2('missing', id, (j && j.errorCode) || null); return fin(); }   /* ★HOLDNOTE2 */
       if (g.status !== 200 || !j.ok){ cstats.netFail++; note({ kind: 'C_GETSTORY_HTTP_' + g.status, id: id }); return fin(); }
       if (String(j.authority || 'shadow') !== 'canonical'){
         cstats.drift++; canonHold[id] = true;
-        note({ kind: 'CANONICAL_AUTHORITY_DRIFT', id: id, serverAuthority: j.authority || 'shadow' }); return fin(); }
+        note({ kind: 'CANONICAL_AUTHORITY_DRIFT', id: id, serverAuthority: j.authority || 'shadow' }); holdNote2('drift', id, String(j.authority || 'shadow')); return fin(); }   /* ★HOLDNOTE2 */
       if (j.deleted){ cstats.deletedStop++; canonHold[id] = true;
-        note({ kind: 'CANONICAL_ALREADY_DELETED', id: id }); return fin(); }
+        note({ kind: 'CANONICAL_ALREADY_DELETED', id: id }); holdNote2('deleted', id, null); return fin(); }   /* ★HOLDNOTE2 */
       var srvRev = (typeof j.rev === 'number') ? j.rev : 0;
       var srvHash = String(j.serverHash || '');
       /* ---- POST 前の local 再確認（連続入力競合対策） ---- */
@@ -1286,13 +1288,13 @@
       if (gerr || !g){ cstats.netFail++; note({ kind: 'C2_GETSTORY_FAIL', id: id, why: why }); return fin(); }
       var j = g.j || {};
       if (g.status === 404){ cstats.rowMissing++; canonHold[id] = true;
-        note({ kind: 'CANONICAL_ROW_MISSING', id: id }); return fin(); }
+        note({ kind: 'CANONICAL_ROW_MISSING', id: id }); holdNote2('missing', id, (j && j.errorCode) || null); return fin(); }   /* ★HOLDNOTE2 */
       if (g.status !== 200 || !j.ok){ cstats.netFail++; note({ kind: 'C2_GETSTORY_HTTP_' + g.status, id: id }); return fin(); }
       if (String(j.authority || 'shadow') !== 'canonical'){
         cstats.drift++; canonHold[id] = true;
-        note({ kind: 'CANONICAL_AUTHORITY_DRIFT', id: id, serverAuthority: j.authority || 'shadow' }); return fin(); }
+        note({ kind: 'CANONICAL_AUTHORITY_DRIFT', id: id, serverAuthority: j.authority || 'shadow' }); holdNote2('drift', id, String(j.authority || 'shadow')); return fin(); }   /* ★HOLDNOTE2 */
       if (j.deleted){ cstats.deletedStop++; canonHold[id] = true;
-        note({ kind: 'CANONICAL_ALREADY_DELETED', id: id }); return fin(); }
+        note({ kind: 'CANONICAL_ALREADY_DELETED', id: id }); holdNote2('deleted', id, null); return fin(); }   /* ★HOLDNOTE2 */
       var srvSchema = (typeof j.recordSchema === 'number') ? j.recordSchema
                     : ((j.record && j.record.schema === 2) ? 2 : 1);
       if (srvSchema !== 2){

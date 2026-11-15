@@ -228,7 +228,7 @@
       if (loadConflict(id) && !loadPending(id)){ holdNote1(id, 'AV2_REGISTRATION_CONFLICT'); return true; }                                       // conflict: held, write 0, no polling until rebased
       var bl = loadBlocked(id);
       if (bl && !loadPending(id)){
-        if (bl.fp === regFingerprint(content.body)) return true;                                   // same input: held, write 0, no re-check
+        if (bl.fp === regFingerprint(content.body)){ holdNote2('av2blocked', id, String(bl.reason || '').slice(0, 48) || null); return true; }   // same input: held, write 0, no re-check  ★HOLDNOTE2
         lsr(BLK + id); note({ kind: 'AV2_BLOCK_CLEARED_INPUT_CHANGED', id: id });                    // input changed → new registration
         setTimeout(function(){ run(id, 'input-changed'); }, 0); return true;
       }
@@ -239,6 +239,8 @@
   }
   /* ★HOLDNOTE1: 登録の衝突 HOLD（通常の保存も止まる）を画面に 1 回知らせる。表示だけ・送信 0。kill: v292DfixHOLDNOTE1Off='1' */
   function holdNote1(id, code){ try { var H = (typeof window !== 'undefined') ? window.__v292DfixHOLDNOTE1 : null; if (H && typeof H.hold === 'function') H.hold('av2', id, code); } catch(eH){} }
+  /* ★HOLDNOTE2: 断られた入力（BLOCKED）と同じ入力のあいだ通常の保存が止まることを 1 回知らせる。表示だけ。kill: v292DfixHOLDNOTE2Off='1' */
+  function holdNote2(kind, id, code){ try { var H = (typeof window !== 'undefined') ? window.__v292DfixHOLDNOTE2 : null; if (H && typeof H.hold === 'function') H.hold(kind, id, code); } catch(eH){} }
   function finish(id, kind, extra){
     reg.busy = false; reg.last = { kind: kind, id: id, extra: extra || null, t: Date.now() };
     if (kind === 'AV2_REGISTRATION_CONFLICT') holdNote1(id, (extra && extra.reason) || null);
