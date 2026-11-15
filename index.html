@@ -348,7 +348,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261115-beat2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261115-cleanup4';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4555,7 +4555,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixIS1-icon-size.js?cb=20261022-bundle41-a"></script>
 <script src="v292DfixUX72-adjust-icon.js?cb=20261031-bundle72-ux-a"></script><!-- v292DfixUX72(bundle72): アイコンの大きさ・顔の寄せを「🎛 調整」からも選べる（設定の中の本物の欄の写し・保存キーは IS1 / LE2 のまま）。停止 = localStorage v292DfixUX72Off=1 -->
 <!-- v292Dfix226(P1): fix52(可読性v1)はfix53(包括v2)に内包されるため退役。問題があれば下行のコメントを外す
-<script src="v292Dfix52-readability.js?cb=v292Dfix52"></script> -->
+-->
 <script src="v292Dfix53-readability-v2.js?cb=v292Dfix53"></script>
 <script src="v292Dfix54-gender-pronoun.js?cb=20260901-fix783"></script>
 <script src="v292Dfix55-gm-mode.js?cb=v292Dfix55c"></script>
@@ -4570,16 +4570,15 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <script src="v292Dfix62-avatar-fix.js?cb=v292Dfix62"></script> -->
   <script src="v292Dfix63-avatar-style.js?cb=20261101-bundle82-iconux-b"></script>
   <!-- v292Dfix229(P3): solo執行をfix66に内蔵したためfix64(抑制器)退役。復活=コメント解除
-  <script src="v292Dfix64-conversation-log-restore.js?cb=v292Dfix200"></script> -->
+  -->
   <script src="v292Dfix65-dialogue-rescue.js?cb=v292Dfix65b"></script>
   <script src="v292Dfix74-ext-dedup-and-say.js?cb=20260912-q119s4"></script>
   <script src="v292DfixSFL1-speaker-correct.js?cb=20261111-saveui"></script><!-- v292DfixSFL1(SFL-01): ✎ 編集パネル内の話者 <select>＋訂正台帳(turn._sflCorrections)。既定OFF・opt-in v292DfixSFL1On=1 / kill v292DfixSFL1Off=1（OFF/kill は新しい訂正だけを止め、保存済みの訂正の保護は常に効く・r3）。fix66 より前に置く(起動時 migrate の保護判定が参照する) -->
   <script src="v292Dfix66-renderhook-repair.js?cb=20261110-beat1"></script>
   <script src="v292DfixEDIT01-edit-reconcile.js?cb=20261111-saveui"></script><!-- v292DfixEDIT01: 本文を編集したら会話ログを本文に合わせる(フェーズ1) + カード✕。OFF=localStorage v292DfixEdit01Off=1 -->
   <script src="v292DfixSFLTap-card-correct.js?cb=20261031-bundle65-sfltap-b"></script><!-- v292DfixSFLTap(bundle65): 会話ログのカードをタップして、その場で話者を直す（SFL の ✎ と同じ保存経路・同じ守り・同じ記録）。SFL が使えるとき（uiEnabled）だけ。停止 = localStorage v292DfixSFLTapOff=1（常に勝つ）・SFL の kill v292DfixSFL1Off=1 でも止まる -->
-  <script src="v292DfixEDLOG-narr-edit-log.js?cb=20261103-bundle92-a"></script><!-- ★EDLOG (laneEDICF): ✎ の本文編集を差分の記録 turn._narrEdits として同じ S.saveD に残す（本文の全文は持たない）。既定OFF・物語 smvhfq1rulp だけ・opt-in localStorage v292DfixEDLogOn=1 / kill v292DfixEDLogOff=1。SFL1/EDIT-01 の包みの外側を 1 回だけ包む -->
+  <!-- ★EDLOG (laneEDICF): ✎ の本文編集を差分の記録 turn._narrEdits として同じ S.saveD に残す（本文の全文は持たない）。既定OFF・物語 smvhfq1rulp だけ・opt-in localStorage v292DfixEDLogOn=1 / kill v292DfixEDLogOff=1。SFL1/EDIT-01 の包みの外側を 1 回だけ包む -->
     <script src="v292Dfix68-cliche-sentence-aware.js?cb=20261111-flow3"></script>
-    <script src="v292Dfix69-literary-prose.js?cb=v292Dfix69"></script>
     <!-- v292Dfix189c: fix70(dialogue-order, 本文ベースの並べ替え)を無効化。fix70bが
          _convSays由来の正しい時系列で並べ替えを一本化しており、fix70(本文ベース=誤順)の
          2秒tickがfix70bと互いのMutationObserverで反応し合い会話ログが点滅していた。
@@ -4587,24 +4586,20 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
     <script src="v292Dfix71-anti-recap.js?cb=20261111-flow3"></script>
     <script src="v292Dfix72-within-turn-dedup.js?cb=20261111-flow3"></script>
     <!-- v292Dfix229(P3): solo時no-opのためfix73/70b退役。復活=コメント解除
-    <script src="v292Dfix73-card-dedup.js?cb=v292Dfix200"></script>
-    <script src="v292Dfix70b-order-convsays.js?cb=v292Dfix200"></script> -->
+    -->
   <script src="v292Dfix75-history-dedup.js?cb=v292Dfix75"></script>
-<script src="v292Dfix76-human-foundation.js?cb=v292Dfix76b"></script>  <script src="v292Dfix77-state-memory.js?cb=20261116-fear2"></script>
+  <script src="v292Dfix77-state-memory.js?cb=20261116-fear2"></script>
   <script src="v292Dfix78-tag-case-normalize.js?cb=20260912-q119s4"></script>
-  <script src="v292Dfix79-momentum-anchor.js?cb=v292Dfix79"></script>
   <script src="v292DfixBF1-reasoning-fallback.js?cb=20261022-bf1owner"></script>
   <script src="v292DfixRETRY2-send-policy.js?cb=retry2-a"></script><!-- ★RETRY2（GPT #127-TT）: 送信が失敗したときに自動で送り直すか・別モデルへ切り替えるかを決める唯一の判定（fix80 と G.submit が聞く）。既定 ON・kill: v292DfixRETRY2Off='1' → 土台の動き。別モデルへの切替を戻す: v292DfixRETRY2CmfOn='1'。要求 ID: v292DfixRETRY2IdOn='1'（既定 OFF） -->
   <script src="v292Dfix80-gen-gate-retry.js?cb=20261116-fanout1"></script>
-  <script src="v292Dfix82-injury-reaction-root.js?cb=v292Dfix82"></script>
   <script src="v292Dfix83-name-truncation-repair.js?cb=v292Dfix83"></script>
   <script src="v292Dfix84-sampling.js?cb=v292Dfix482"></script>
-  <script src="v292Dfix85-reaction-spectrum.js?cb=v292Dfix85"></script>
   <script src="v292Dfix81-strip-incomplete-tags.js?cb=v292Dfix81"></script>
   <!-- v292Dfix229(P4): アバターは全てfix199系のdata:URL化済みでblob変換の出番が消滅(実測: 全カードdata:)。fix86退役。復活=コメント解除
-  <script src="v292Dfix86-avatar-eager-blob.js?cb=v292Dfix86"></script> -->
+  -->
   <!-- v292Dfix226(P1): fix89はヘッダー自称NO-OP STUB=純粋死コードのため退役
-  <script src="v292Dfix89-convlog-cleanup.js?cb=v292Dfix89"></script> -->
+  -->
   <script src="v292Dfix90-extension-dedup.js?cb=v292Dfix90"></script>
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
@@ -4650,7 +4645,6 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix732-session-turn-scope.js?cb=v292Dfix732"></script>
 <script src="v292Dfix303-speaker-backref.js?cb=20261115-owneron1"></script>
 <script src="v292Dfix304-emotion.js?cb=v292Dfix419c"></script>
-<script src="v292Dfix305-trigger-states.js?cb=v292Dfix305"></script>
 <script src="v292Dfix306-npc-liveliness.js?cb=v292Dfix738"></script>
 <script src="v292Dfix764-name-variant-fold.js?cb=v292Dfix764"></script>
 <!-- v292Dfix830(ENTITY_MATCH_RESOLVER_V1 / GPT ruling 73+74): one shared read-time predicate for "is this name an entity we already know". Auto-merge only on EXACT / ALIAS_EXACT / FOLDED_EXACT; fix445 castMatch (prefix/suffix) is classified as LEGACY_PARTIAL and never auto-merges. No new persistent state, no Story schema change. kill: localStorage v292Dfix830Off=1. -->
@@ -4826,10 +4820,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix616-say-provenance-persist.js?cb=20260829-fix748"></script>
 <!-- fix805(4B-1): speaker abstention layer。新ターン確定時(UI.appendTurn・描画前)に bare-inferred/harvest かつ fix469 正証拠 0 の who だけを '???' へ倒す。既定 OFF(opt-in v292Dfix805On='1' / kill v292Dfix805Off='1')。
      say/枚数/順序/meta/過去ターン不触・逆方向なし。★fix616/620 より後ろに置く(外側 wrapper = fix616 の save に相乗り・自前 save 0)。GPT RULING 4B-1 deploy gate 2026-09-05 -->
-<script src="v292Dfix805-speaker-abstain.js?cb=20260905-fix805v2"></script>
 <!-- fix806(4B-2): NPC consistency observer（観測のみ・in-memory・write 0・既定 OFF opt-in v292Dfix806On='1' / kill v292Dfix806Off='1'）。GPT RULING 4A-2+4B-2 2026-09-05: fix805 と同 release・805 bytes 不変 -->
-<script src="v292Dfix806-npc-consistency-observer.js?cb=20260928-ac13"></script>
-<script src="v292Dfix816-posture-transition-observer.js?cb=20260906-fix816b"></script>
 <!-- fix624: 生成の**崩壊**を測る（★読み取り専用・影モード）。
      実データ168ターンで崩壊3件(1.8%)を検出。崩壊は少なくとも3型あり、
      「反復＋ルビ」だけの検出器では**語調崩壊型を取り逃がす**（実測で確認済み）。
@@ -4982,12 +4973,11 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
        （立てると設定パネル内の Google カード #g250-settings まで死ぬ）。
      ★fix886 の 1 つ後ろに置く。fix886 の probe 結果（publicAnon）を読むため。
      kill: localStorage[v292Dfix890]=0 → 何もしない（fix328 は sp14 と同じ挙動に戻る） -->
-<script src="v292Dfix970-state-intake-shadow.js?cb=20261019-bundle31-a"></script>
 <!-- ★UI44 v292DfixUI1（Astra UI レビュー / GPT 裁定 UI_SUBTRACT・独立レーン C）: 表示だけの引き算。空の会話ログを自動で畳む・Asset v2 移行の入口をプレイ画面から外し設定内に置く・怪異/アイコンを設定へ・オート/展開を提案を「⋯ その他」へ・ボタン名（生成し直す/取り消す/取消を戻す/場面を絵に）。r2=GPT #127-LQ（移行の入口は owner/beta の設定内）。textContent・保存・生成・送信は不変。kill: localStorage v292DfixUI1Off='1' -->
 <script src="v292DfixUI1-subtract.js?cb=20261025-bundle54-ui1-a"></script>
 <!-- ★ICF (lane ICF / Tier 1): アイコンの失敗理由をこの端末にだけ記録する（記録のみ・要求/応答/画像/保存は変えない・どこへも送らない）。読む口 window.__chrIconFail.status()/.summary()。停止 = localStorage v292DfixICFOff=1 -->
 <script src="v292DfixICF-icon-fail-log.js?cb=20261103-bundle93-a"></script>
-<script src="v292DfixICF80-record.js?cb=20261103-bundle92-a"></script><!-- ★ICF80 (laneEDICF): window.__icfRecord(category, meta) = 自動アイコンなどの「作らなかった理由」を ICF の記録（v292DfixICF_log）へ 1 行足す口＋5 分類の読み口。通信 0・包み 0。既定OFF・opt-in localStorage v292DfixICF80On=1 / kill v292DfixICF80Off=1（v292DfixICFOff=1 にも従う） -->
+<!-- ★ICF80 (laneEDICF): window.__icfRecord(category, meta) = 自動アイコンなどの「作らなかった理由」を ICF の記録（v292DfixICF_log）へ 1 行足す口＋5 分類の読み口。通信 0・包み 0。既定OFF・opt-in localStorage v292DfixICF80On=1 / kill v292DfixICF80Off=1（v292DfixICFOff=1 にも従う） -->
 <!-- ★FLW3 (laneFLOWFIX・GPT #127-OW FLOW): 最初の場面のあと入力の種類を元へ戻す（G.startScene を包むだけ・保存/通信 0）。kill: localStorage v292DfixFLW3Off=1 -->
 <script src="v292DfixFLW3-opening-mode.js?cb=20261101-bundle82-iconux-b"></script>
 <!-- ★FLW2/FLW4/FLW5 (laneFLOWFIX2・GPT #127-PC FLOWFIX 2-A / 4 / 5-C・Local): 外見の確定の読み直しの表示と結果の持ち越し（表示だけ）／【キャラ属性】へはっきりした年齢だけ／🏠 の何も変えない保存で未保存の印を立てない。kill: v292DfixFLW2Off / v292DfixFLW4Off / v292DfixFLW5Off -->
