@@ -54,7 +54,7 @@
 
 | 分野 | 主な部品（§2 に項目あり） |
 |---|---|
-| 生成の中心・プロンプト | features.js、fix192、fix226、fix379、FLW4、fix459（RW1・HIDE2）、smrc1、MSW1（Worker）、BF1、fix80、fix247、PRUNE1、PRUNE2、SCENE1（NOW1・FACTS2・STATE2）、ACTOR1、HEROVOICE1、LEAK1・LEAK2・OPT1、NUM1、PLACE1、CAST1・CALL1・SPK3、SEVERE1・DRIVE1・EX192（SEVDRV）、ECHO1（撤去）、CARD80、RETRY1・RETRY2、FANOUT1 |
+| 生成の中心・プロンプト | features.js、fix192、fix226、fix379、FLW4、fix459（RW1）、smrc1、MSW1（Worker）、BF1、fix80、fix247、PRUNE1、PRUNE2、SCENE1（NOW1・FACTS2・STATE2）、ACTOR1、HEROVOICE1、LEAK1・LEAK2・OPT1、NUM1、PLACE1、CAST1・CALL1・SPK3、SEVERE1・DRIVE1・EX192（SEVDRV）、ECHO1（撤去）、CARD80、RETRY1・RETRY2、FANOUT1 |
 | NPC・キャラ状態 | fix77、fix305、fix333、fix414、fix145、fix298、fix277、fix307、fix641、fix853、CP1、NPRES、E64、fix797、F333a・F333b（fix850）、STATEQ1（PH1・SREP1・POSE1）、STATE3、STATE4・ST4B（fix77）、FEAR1・FEAR2・ARM2・CHEAD1・EYE1・LEG1（fix414）、FIX850A・F850Ord（fix850） |
 | 話者・会話ログ・編集 | fix66、fix469、fix465（RW1）、IDSPLIT2、fix606、fix611、fix620、fix957、SFL1、SFLTap、EDIT01、EDLOG、EDN（inline）、fix295、SPKW1・SPKW2・QUOTE1、KANA1・FF1（index.html）、SPK2・HB1 |
 | 記憶 | fix135、fix313、fix314、fix670、fix796、fix793、fix905、fix950/953、RC1 |
@@ -118,8 +118,8 @@
 - 状態：本番稼働 `i260`・sha `5175518c`・?cb=`20261110-bundle93-l`（93-l で MARKERS に 2 つ足した。前は `8243a236`・?cb=`20261019-bundle31-a`）。役割：話者の同一性・出力形式・展開の進め方などで重複していたブロックを 1 つにまとめる。スイッチ：`v292Dfix459Off`、クラスタ別 `v292Dfix459AOff`〜`DOff`。
 - 93-l：MARKERS に `【世界設定・参照データ】`・`【世界設定ここまで】` を登録（LORE1 のブロックが直前のブロックへ吸収・道連れ削除されないように）。sha `8243a236` → `5175518c`・?cb=`20261110-bundle93-l`。LORE1 が足さないときは組み替えの結果が従来とバイト一致（Local）。
 - RW1（11-15・GitHub `fac7b6e`・既定 ON・kill `v292DfixRW1Off='1'`）：役割名→登録名の対応表（roleMap）で、説明文の「主人公」を役割語「主人」に数えない（店の主人・宿の主人・ご主人は従来どおり）。fix465 も同じ鍵。
-- HIDE1 r1（11-15・GitHub `fac7b6e`・既定 OFF・鍵 `v292DfixHIDE1On`）：隠し事のある物語だけ【展開】に 1 文（+204 字）を足す試験。実 AI の A/B で不採用（ON で切っ掛けの前に告白が早まった）。**HIDE2 で撤去**（HIDE2 を当てた木には HIDE1 のコード・鍵は無い）。
-- HIDE2（laneHIDE2・**候補・既定 OFF**・ON `v292DfixHIDE2On='1'`・kill `v292DfixHIDE2Off='1'` が優先。既定 ON はコードの `hide2On()` の 1 行）：NPC の説明文に「胸にしまっている事実」（隠している・まだ話していない・正体は〜・実は〜の娘 等の決まった書き方）がある物語だけ、fix192 の【良い1ターンの形】4 の「本音・打ち明け・…情報の開示はセリフで」の文を、問われる・証拠を突きつけられる・状況が要する、のどれかが起きてから本人の言動で明かし、それより前に台詞・独白・地の文で先に明かさない、という文に**置き換える**（足さない。+78 字。「秘密」「隠し事」の語は増やさない）。当たらない物語・OFF では sys は従来とバイト一致。検証口 `__v292Dfix459.hide2`。
+- HIDE1 r1（11-15・GitHub `fac7b6e`・既定 OFF・鍵 `v292DfixHIDE1On`）：隠し事のある物語だけ【展開】に 1 文を足す試験。実 AI の A/B で不採用、HIDE2 で撤去済み。
+- HIDE2（GitHub `bea6bae`・既定 OFF・鍵 `v292DfixHIDE2On`／`v292DfixHIDE2Off`）：隠している事実のある物語だけ fix192 の開示を促す文を置き換える試験。**不採用・撤去（2026-11-15・GPT #127-UL）。対策案としての HIDE1/HIDE2 を閉じただけで、秘密の先漏れの問題自体は未解決（実プレイで再現したら原因側から）**。撤去後の fix459 は RW1 だけの fix459 とバイト一致。
 
 #### PRUNE1 — 最終 sys の当て布の整理（重複を外す・食い違いをなくす・危機を優先。`v292DfixPRUNE1-sys-prune.js`）
 - 状態：本番稼働（2026-11-11・GitHub `a085c42`）・sha `f2f590d3`・?cb=`20261111-prune1`・版 `prune1-20261111-c`。既定 ON。`index.html` の先頭近く、CP1-final-tap の直後（PRUNE2 の次。fetch を包む部品の内側＝fix459・fix441・fix443・fix514 など sys を書き換える部品がすべて済んだ後に当たる）。`home.html` は読まない。
@@ -1247,7 +1247,7 @@
 | 257 | fix453 | `v292Dfix453-src-coalesce.js` | i257 | `b82f3cb8` | v292Dfix453 | 文章品質・プロンプト | `v292Dfix453Off` |
 | 258 | fix454 | `v292Dfix454-dash.js` | i258 | `868cca04` | v292Dfix457 | 文章品質・プロンプト | `v292Dfix454Off` |
 | 259 | fix458 | `v292Dfix458-dash-post.js` | i259 | `5f9a8424` | 20260901-fix784 | 文章品質・プロンプト | `v292Dfix458Off` `v292Dfix625Off` `v292Dfix760Off` `v292Dfix762Off` |
-| 260 | fix459 | `v292Dfix459-sys-v2.js` | i260 | `b80c365f` | 20261115-rw1（HIDE2 の出荷で更新） | 文章品質・プロンプト | `v292Dfix459AOff` `v292Dfix459BOff` `v292Dfix459COff` `v292Dfix459DOff` `v292DfixRW1Off` `v292DfixHIDE2On` `v292DfixHIDE2Off` |
+| 260 | fix459 | `v292Dfix459-sys-v2.js` | i260 | `7c3787ed` | 20261115-hide2rm | 文章品質・プロンプト | `v292Dfix459AOff` `v292Dfix459BOff` `v292Dfix459COff` `v292Dfix459DOff` `v292DfixRW1Off` |
 | 261 | fix460 | `v292Dfix460-slotgrid.js` | 読み込み停止（CLEANUP2 C2a・GitHub `05da4aa`。元の読込 i261。ファイルは残る） | `7b19dfd7` | v292Dfix460 | 保存・同期 | `v292Dfix460Off` |
 | 262 | fix461 | `v292Dfix461-appearance-en.js` | 読み込み停止（CLEANUP2 C2c・GitHub `05da4aa`。元の読込 i262。ファイルは残る） | `775fcc85` | 20261002-ac36 | アイコン・画像 | `v292Dfix461Off` `v292Dfix461V21Off` `v292Dfix461V21On` |
 | 263 | fix462 | `v292Dfix462-bare-speaker.js` | i263 | `e2c7f062` | 20260829-fix748 | 話者・会話ログ | `v292Dfix462Off` `v292Dfix469Off` |
@@ -1930,7 +1930,7 @@
 - `v292DfixEYE1Off` / `v292DfixLEG1Off` — fix414（EYE1・LEG1 r2。既定 ON）
 - `v292DfixRW1Off` — fix459, fix465（RW1。既定 ON）
 - `v292DfixAPPX1Off` — fixLC1, fixICONUX2（APPX1。既定 ON）
-- `v292DfixHIDE2On` / `v292DfixHIDE2Off` — fix459（HIDE2。候補・既定 OFF。HIDE1 r1 の `v292DfixHIDE1On` / `v292DfixHIDE1Off` は HIDE2 で撤去）
+- `v292DfixHIDE2On` / `v292DfixHIDE2Off` — （撤去・コードは読まない。HIDE1・HIDE2 は不採用・撤去（2026-11-15・GPT #127-UL）。対策案としての HIDE1/HIDE2 を閉じただけで、秘密の先漏れの問題自体は未解決（実プレイで再現したら原因側から））
 - `v292DfixDISCARD1Off` — fixSTORE1b, fix562（DISCARD1。手動専用）
 - `v292DfixSTORE1Off` / `v292DfixSTORE1Multi` / `v292DfixSTORE1Dry` — fixSTORE1b
 - `v292DfixSTUCK1On` / `v292DfixSTUCK1Off` / `v292DfixZT1On` / `v292DfixZT1Off` — fixSTORE1b（STUCK1・ZT1。既定 OFF）
