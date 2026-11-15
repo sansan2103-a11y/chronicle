@@ -1102,6 +1102,188 @@
       return out;
     });
   }
+  /* ======================================================================
+   * ★DISCARD1（Owner 承認 2026-11-15 12:29「二度と元に戻せなくなってもよいので消してよい」・GPT #127-UB / #127-UD）
+   *   手動専用。自動では動かない（呼ばれたときだけ）。UI なし。FREE2 の通常の判定（judgeOne）は 1 文字も緩めない。
+   *   対象: 通常の確認（survey）で「サーバーの内容と同じと確かめられなかった」理由（D1_OVERRIDE）で残った写しだけ。そのうえで
+   *     ・その場で getstory（公式の読み取り）がサーバーの墓標（deleted===true・id 一致・locked でない）を返した
+   *     ・Vault / パスコードに関わらない（vaultBlock）・別アカウントの印なし
+   *     ・活動中でない: chr6_active_slot がその id でない・lastOpenedAt 10 分以内でない・story-open の Lock を誰も持っていない
+   *     ・未同期でない: 同期の印が無いか CLEAN（送信中でない）・f911 / f697p / 945_rescue なし・dl2conflict・fix750・削除の計画が開いていない・この画面の保存が送信中でない
+   *     ・旧 id でない・保護 id でない
+   *   消すキー: FREE2 の解放と同じ planOne（purgeList＝サイド・本体・同期の印。snapshot・控え・未送信の写しは残す）。meta の墓標は残す（復活を止める根拠）。
+   *   返すのは件数・字数・理由ごとの件数・id の短い指紋（h53 の先頭 8 字）だけ。題名・本文・鍵名は返さない。
+   *   kill: v292DfixDISCARD1Off='1'（fix562 も断る）・v292DfixSTORE1Off='1'。
+   * ====================================================================== */
+  var D1_ACK = 'OWNER-ACK-20261115', D1_KILL = 'v292DfixDISCARD1Off', D1_LOGK = 'v292DfixDISCARD1Log', D1_MAX_DEFAULT = 5, D1_MAX_CAP = 50;
+  var D1_OVERRIDE = { 'server-body-not-held': 1, 'tomb-hash-mismatch': 1, 'tomb-hash-unproven': 1, 'content-mismatch': 1, 'server-body-behind': 1,
+                      'local-body-unreadable': 1, 'local-body-missing': 1, 'zero-turn-unproven': 1 };
+  function d1Cat(why) {
+    var w = String(why || '');
+    if (/^vault|^passcode$|^server-locked$/.test(w)) return 'vault';
+    if (/^(active-slot|recently-opened|open-in-tab|locks-unavailable|open-lock-off)$/.test(w)) return 'active';
+    if (/^(unsynced|unsynced-unproven|in-flight|stash|journal|rescue|marker-unreadable|marker-id-mismatch|conflict|conflict-unreadable|mat-journal|mat-journal-unreadable|restore-hold)$/.test(w)) return 'unsynced';
+    if (/^(delete-plan-open|pending-unreadable)$/.test(w)) return 'pending-delete';
+    if (/^(no-tombstone|live-row|dup-tombstone|server-404|server-live|server-id-mismatch|foreign|foreign-check-threw|meta-unreadable)$/.test(w)) return 'no-tombstone';
+    if (/^(id-shape|protected)$/.test(w)) return 'legacy';
+    if (w === 'nothing-left') return 'nothing-left';
+    return 'network';   /* server-unreachable / server-not-ok / server-authority / server-rev / no-account / principal-changed / 判断できないもの */
+  }
+  /* DISCARD1 だけの厳しいローカルの条件（値を読むのは印・meta・関門の鍵だけ）。null = 通過 */
+  function d1Local(id, env) {
+    id = String(id);
+    if (!ID_RE.test(id)) return 'id-shape';
+    if (PROTECT[id] === 1) return 'protected';
+    var vb = vaultBlock(id, env); if (vb) return vb;
+    var meta = metaRows(env); if (!meta) return 'meta-unreadable';
+    var tomb = 0, live = 0, row = null;
+    for (var i = 0; i < meta.length; i++) { var e = meta[i]; if (!e || String(e.id) !== id) continue; if (e.deleted === true) { tomb++; row = e; } else live++; }
+    if (live) return 'live-row';
+    if (tomb !== 1) return tomb ? 'dup-tombstone' : 'no-tombstone';
+    try { if (env.iso2Foreign && env.iso2Foreign(id)) return 'foreign'; } catch (e3) { return 'foreign-check-threw'; }
+    var act = g(env, 'chr6_active_slot');
+    if (act != null && (act === id || J(act, null) === id)) return 'active-slot';   /* FREE2 の緩め（墓標の物語は理由にしない）は使わない */
+    var lo = row && row.lastOpenedAt ? Date.parse(row.lastOpenedAt) : 0;
+    if (lo && env.now() - lo < RECENT_OPEN_MS) return 'recently-opened';
+    var mk = g(env, 'v292Dfix402_f781g_' + id);
+    if (mk != null) { var mo = J(mk, null); if (!mo || typeof mo !== 'object') return 'marker-unreadable';
+      if (String(mo.state || '') !== 'CLEAN') return 'unsynced';
+      if (mo.inFlightSave) return 'in-flight';
+      if (mo.storyId != null && String(mo.storyId) !== id) return 'marker-id-mismatch'; }
+    if (g(env, 'v292Dfix402_f911_' + id) != null) return 'stash';
+    if (g(env, 'v292Dfix402_f697p_' + id) != null) return 'journal';
+    if (g(env, 'v292Dfix945_rescue_' + id) != null) return 'rescue';
+    var cf = g(env, 'v292Dfix587_dl2conflict');
+    if (cf != null) { var co = J(cf, null); if (!co || typeof co !== 'object') return 'conflict-unreadable'; if (Object.prototype.hasOwnProperty.call(co, id)) return 'conflict'; }
+    var mt = g(env, 'v292Dfix750_matTxn');
+    if (mt != null) { var to = J(mt, null); if (!to || typeof to !== 'object') return 'mat-journal-unreadable'; if (String(to.storyId) === id || String(to.slotId) === id) return 'mat-journal'; }
+    var pd = g(env, 'v292Dfix587_pending');
+    if (pd != null) { var pa = J(pd, null); if (!isArr(pa)) return 'pending-unreadable';
+      for (var p = 0; p < pa.length; p++) { var pl = pa[p]; if (!pl) continue; if (String(pl.slotId) !== id && String(pl.storyId || '') !== id) continue;
+        if (!(pl.sdTerminal === true && (pl.sdResolution === 'SERVER_TOMBSTONED_BY_DL2' || pl.sdResolution === 'SERVER_TOMBSTONED_BY_LDR'))) return 'delete-plan-open'; } }
+    if (typeof env.saveBusy === 'function') { var sb = true; try { sb = !!env.saveBusy(id); } catch (eB) { sb = true; } if (sb) return 'in-flight'; }
+    return null;
+  }
+  /* サーバーの墓標の確認（その場の getstory）。本文の有無・内容は見ない */
+  function d1Server(id, r) {
+    if (!r || typeof r !== 'object') return { why: 'server-unreachable' };
+    if (r.status === 404) return { why: 'server-404' };
+    if (r.status !== 200) return { why: 'server-unreachable' };
+    var j = r.j || {};
+    if (j.ok !== true) return { why: 'server-not-ok' };
+    if (j.id == null || String(j.id) !== String(id)) return { why: 'server-id-mismatch' };
+    if (j.authority !== 'shadow' && j.authority !== 'canonical') return { why: 'server-authority' };
+    if (j.locked) return { why: 'server-locked' };
+    if (j.deleted !== true) return { why: 'server-live' };
+    if (typeof j.rev !== 'number' || !(j.rev >= 1)) return { why: 'server-rev' };
+    return { why: null, rev: j.rev, authority: j.authority };
+  }
+  /* 一覧（何も消さない・書かない）: 通常の survey（FREE2 の判定・同じ通信）→ 確かめられなかった理由の物語だけ DISCARD1 の条件を見る */
+  function d1Survey(env, ctx) {
+    var why = {}, glob = null, e2 = {};
+    for (var k0 in env) if (Object.prototype.hasOwnProperty.call(env, k0)) e2[k0] = env[k0];
+    e2.onReason = function (sid, w) { if (sid === '*') glob = String(w); else if (why[String(sid)] == null) why[String(sid)] = String(w); };
+    e2.only = null; e2.purge = false;
+    var out = { v: 'DISCARD1-r1', at: env.now(), candidates: 0, targets: [], chars: 0, excluded: { vault: 0, active: 0, unsynced: 0, 'pending-delete': 0, 'no-tombstone': 0, network: 0, legacy: 0, 'free2-eligible': 0, 'nothing-left': 0 }, global: null };
+    function ex(c) { out.excluded[c] = (out.excluded[c] || 0) + 1; }
+    return survey(e2, ctx).then(function (rep) {
+      var ids = candidates(e2), el = {}; out.candidates = ids.length; out.global = glob;
+      for (var i = 0; i < rep.eligible.length; i++) el[String(rep.eligible[i].id)] = 1;
+      var pend = [];
+      for (var j = 0; j < ids.length; j++) { var id = ids[j];
+        if (el[id]) { ex('free2-eligible'); continue; }
+        var w = why[id] || glob || 'not-reached';
+        if (D1_OVERRIDE[w] !== 1) { ex(d1Cat(w)); continue; }
+        var lw = d1Local(id, env); if (lw) { ex(d1Cat(lw)); continue; }
+        pend.push({ id: id, ask: (w === 'local-body-unreadable' || w === 'local-body-missing') }); }   /* 本文の関門で止まった物語は survey が getstory していない → ここで聞く */
+      if (glob) { for (var q = 0; q < pend.length; q++) ex('network'); return out; }
+      var chain = Promise.resolve();
+      pend.forEach(function (pq) { var id = pq.id; chain = chain.then(function () {
+        var pl = planOne(id, env); if (!pl.keys.length) { ex('nothing-left'); return; }
+        return (pq.ask ? Promise.resolve(ctx.getStory(id)).then(function (r) { return d1Server(id, r).why; }, function () { return 'server-unreachable'; }) : Promise.resolve(null)).then(function (sw) {
+          if (sw) { ex(d1Cat(sw)); return; }
+          return Promise.resolve(ctx.lockHeld(id)).then(function (h) { if (h !== false) { ex('active'); return; }
+            out.targets.push({ id: id, keys: pl.keys.length, chars: pl.chars }); out.chars += pl.chars; }); }); }); });
+      return chain.then(function () { return out; });
+    });
+  }
+  function d1Short(id) { return h53(String(id)).replace(':', '').slice(0, 8); }
+  /* 1 物語を捨てる（Lock の中で、関門・計画・getstory・アカウントを取り直す） */
+  function d1One(id, env, ctx) {
+    id = String(id);
+    var out = { ok: false, code: null, removed: 0, chars: 0 };
+    function fin(c) { out.code = c; return out; }
+    var gb = globalBlock(env); if (gb) return Promise.resolve(fin(gb));
+    var lb = d1Local(id, env); if (lb) return Promise.resolve(fin(lb));
+    var pl = planOne(id, env); if (!pl.keys.length) return Promise.resolve(fin('nothing-left'));
+    return Promise.resolve(ctx.who()).then(function (a0) {
+      if (!a0) return fin('no-account');
+      return Promise.resolve(ctx.lockHeld(id)).then(function (h) {
+        if (h !== false) return fin(h === true ? 'open-in-tab' : 'locks-unavailable');
+        return Promise.resolve(ctx.withOpenLock(id, function () {
+          return Promise.resolve(ctx.who()).then(function (a1) {
+            if (!a1 || a1 !== a0) return fin('principal-changed');
+            var gb2 = globalBlock(env) || d1Local(id, env); if (gb2) return fin(gb2);
+            var sp2 = samePlan(pl, planOne(id, env)); if (sp2) return fin(sp2);
+            return Promise.resolve(ctx.getStory(id)).then(function (r) {
+              var se = d1Server(id, r); if (se.why) return fin(se.why);
+              var issuedAt = env.now();
+              return Promise.resolve(ctx.who()).then(function (a2) {
+                if (!a2 || a2 !== a0) return fin('principal-changed');
+                return Promise.resolve(ctx.withMatLock(function () {
+                  var gb3 = globalBlock(env) || d1Local(id, env); if (gb3) return fin(gb3);
+                  var sp3 = samePlan(pl, planOne(id, env)); if (sp3) return fin(sp3);
+                  var I = env.inv, G = env.gate;
+                  if (!I || typeof I.deletePolicy !== 'function' || typeof I.discard1Arm !== 'function' || typeof I.discard1Disarm !== 'function' || typeof I._hash !== 'function') return fin('policy-unavailable');
+                  if (!G || typeof G.tryDeleteExact !== 'function') return fin('gate-unavailable');
+                  var proof = { v: 1, kind: 'DISCARD1', ack: D1_ACK, runId: 'd1-' + issuedAt + '-' + (++runSeq), storyId: id, accountId: a0, accountIdAfter: a2,
+                                serverRev: se.rev, serverDeleted: true, authority: se.authority, issuedAt: issuedAt,
+                                keys: pl.keys.map(function (k, j) { return { key: k, bytes: pl.vals[j].length, hash: I._hash(pl.vals[j]), value: pl.vals[j] }; }) };
+                  var armed = I.discard1Arm(proof); if (!armed) return fin('arm-refused');
+                  try {
+                    for (var q = 0; q < pl.keys.length; q++) {
+                      var k = pl.keys[q], cur = g(env, k);
+                      if (cur == null) continue;
+                      if (cur !== pl.vals[q]) return fin('value-changed-mid');
+                      var pol = I.deletePolicy({ key: k, value: cur, intent: 'device-discard', discard1Proof: armed });
+                      if (!pol || pol.allow !== true || pol.code !== 'device-discard-verified') { out.policyWhy = pol && (pol.discardWhy || pol.code); return fin('policy-refused'); }
+                      var b = pol.binding || {};
+                      if (b.key !== k || b.bytes !== cur.length || b.hash !== I._hash(cur) || b.storyId !== id || b.runId !== armed.runId) return fin('binding-mismatch');
+                      var rr = null; try { rr = G.tryDeleteExact({ key: k, expectedBytes: cur.length, expectedHash: b.hash, intent: 'device-discard', path: 'DISCARD1', reason: 'device-discard' }); } catch (eG) { rr = null; }
+                      if (!rr || rr.ok !== true || rr.deleted !== true || g(env, k) != null) { out.gateCode = rr && rr.code; return fin('gate-refused'); }
+                      out.removed++; out.chars += k.length + cur.length;
+                    }
+                  } finally { try { I.discard1Disarm(); } catch (eD) {} }
+                  out.ok = true; return fin('discarded');
+                })).then(function (m) { if (!m || m.granted !== true) return fin(m && m.api === false ? 'locks-unavailable' : 'lock-busy'); if (m.threw) return fin('threw'); return m.value; });
+              });
+            }, function () { return fin('server-unreachable'); });
+          });
+        })).then(function (x) { if (!x || x.granted !== true) return fin(x && x.api === false ? 'locks-unavailable' : 'open-in-tab'); if (x.threw) return fin(out.code || 'threw'); return x.value; });
+      });
+    }).then(null, function () { return fin('threw'); });
+  }
+  /* 実行: ack が違えば何もしない。dryRun と同じ確認で対象を選び、先頭から max 件まで 1 件ずつ。最初の失敗で止める */
+  function d1Run(opts, env, ctx) {
+    var res = { v: 'DISCARD1-r1', ok: false, code: null, freed: 0, chars: 0, failed: 0, notProcessed: 0, failedCode: null, freedIds: [] };
+    if (!opts || opts.ack !== D1_ACK) { res.code = 'ack-mismatch'; return Promise.resolve(res); }
+    if (g(env, D1_KILL) === '1') { res.code = 'killed'; return Promise.resolve(res); }
+    var max = (opts.max == null) ? D1_MAX_DEFAULT : Math.floor(+opts.max);
+    if (!(max >= 1)) { res.code = 'bad-max'; return Promise.resolve(res); }
+    if (max > D1_MAX_CAP) max = D1_MAX_CAP;
+    return d1Survey(env, ctx).then(function (s) {
+      var list = s.targets.slice(0, max); res.notProcessed = s.targets.length - list.length; var i = 0;
+      function next() {
+        if (i >= list.length) { res.ok = true; res.code = list.length ? 'done' : 'nothing-to-do'; return res; }
+        var id = list[i++];
+        return d1One(id.id, env, ctx).then(function (x) {
+          if (x.ok) { res.freed++; res.chars += x.chars; res.freedIds.push(d1Short(id.id)); return next(); }
+          res.failed = 1; res.failedCode = x.code; res.chars += x.chars || 0; res.notProcessed += list.length - i; res.code = 'stopped'; if (x.policyWhy) res.policyWhy = String(x.policyWhy); return res;
+        });
+      }
+      return next();
+    });
+  }
   var api = { version: VERSION, NOTICE: NOTICE, ID_RE: ID_RE, MAX_MULTI: MAX_MULTI, OPEN_LOCK: OPEN_LOCK, MAT_LOCK: MAT_LOCK, keysFor: keysFor, purgeList: purgeList, localBlock: localBlock, candidates: candidates,
               serverEval: serverEval, survey: survey, freeOne: freeOne, freeMany: freeMany, lockCtx: lockCtx, stable: stable,
               writeLog: writeLog, logOfSurvey: logOfSurvey, _memLog: function () { return memLog.slice(); },
@@ -1109,6 +1291,7 @@
               serverEvalP: serverEvalP, serverEvalMeta: serverEvalMeta, surveyP: surveyP, freeOneP: freeOneP,
               /* ★STUCK1 */ STUCK_OFF: STUCK_OFF, staleDirtyLocal: staleDirtyLocal, stuckNeeds: stuckNeeds, stuckProof: stuckProof,
               /* ★STUCK1 r2 */ STUCK_ON: STUCK_ON, SVERSION: SVERSION, FAMILY_CLASS: FAMILY_CLASS, familyClass: familyClass, provenSubset: provenSubset, raceProbe: raceProbe, raceBlock: raceBlock, planByReason: planByReason, COUNT_ONLY: COUNT_ONLY,
+              /* ★DISCARD1 */ d1Local: d1Local, d1Server: d1Server, d1Survey: d1Survey, d1One: d1One, d1Run: d1Run, d1Cat: d1Cat, D1_ACK: D1_ACK, D1_OVERRIDE: D1_OVERRIDE,
               /* ★FREE2c */ judgeOne: judgeOne, /* ★FREE2d */ _memoClear: function () { MEMO = {}; }, tombHashCheck: tombHashCheck, F2_VERSION: F2_VERSION };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 
@@ -1396,6 +1579,13 @@
     /* ★FREE2 dry-run（読むだけ: 消さない・書かない・記録も書かない。通信は /api/auth/me と候補ごとの getstory＝シートを開くのと同じ）。
        返すのは数だけ: 解放できる物語の数・その鍵の数と字数の合計・対象外の数と理由コード別の内訳。id・題名・本文・鍵名は返さない。
        鍵の有無に関係なく「いまの設定でシートがどう判定するか」を返す（on = FREE2 が効いているか）。 */
+    /* ★DISCARD1（手動専用・UI なし・自動では呼ばれない）。dryRun は読むだけ（消さない・書かない・記録も書かない）。 */
+    discard1DryRun: function () { if (lsg(D1_KILL) === '1') return Promise.resolve({ killed: true }); if (!ready()) return Promise.resolve({ notReady: true });
+      return d1Survey(benv(), bctx()).then(function (o) { return { v: o.v, candidates: o.candidates, targets: o.targets.length, chars: o.chars, excluded: o.excluded, global: o.global, ids: o.targets.map(function (t) { return d1Short(t.id); }) }; }); },
+    discard1Run: function (opts) { if (!opts || opts.ack !== D1_ACK) return Promise.resolve({ code: 'ack-mismatch', freed: 0 }); if (!ready()) return Promise.resolve({ notReady: true, freed: 0 });
+      var e = benv(); return d1Run(opts, e, bctx()).then(function (r) {
+        try { var o = J(lsg(D1_LOGK) || 'null', null); if (!o || !isArr(o.runs)) o = { v: 1, runs: [] }; o.runs.push({ at: Date.now(), freed: r.freed, chars: r.chars, failed: r.failed, code: r.code }); while (o.runs.length > 20) o.runs.shift(); root.localStorage.setItem(D1_LOGK, JSON.stringify(o)); r.logWritten = true; } catch (eL) { r.logWritten = false; }
+        return r; }); },
     free2DryRun: function () {
       var e = benv(), o = { v: F2_VERSION, on: e.free2 === true, mode: e.purge ? 'purge' : 'r2', at: Date.now(), candidates: 0, freeable: { stories: 0, keys: 0, chars: 0, viaProof: 0 }, excluded: { stories: 0, byReason: {} }, global: null };
       if (!ready()) { o.notReady = true; return Promise.resolve(o); }

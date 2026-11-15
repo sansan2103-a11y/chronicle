@@ -706,6 +706,13 @@
       if (s1.ok){ out.allow = true; out.code = 'device-free-verified-store1'; out.binding = s1.binding; return out; }
       out.code = 'device-free-requires-store1-proof'; out.store1Why = s1.why; return out;
     }
+    /* ★DISCARD1（Owner 承認 2026-11-15 12:29・GPT #127-UB/UD）: 手動専用の「確かめられなかった削除済みの写しを捨てる」。intent 'device-discard' のときだけ見る。
+       STORE1b の discard1Run が同じ実行の中で作り discard1Arm で登録した proof（サーバーの削除済み・アカウント・ack・キーと値）の exact key だけ。 */
+    if (intent === D1_INTENT){
+      var d1 = discard1Authorization(req, c);
+      if (d1.ok){ out.allow = true; out.code = 'device-discard-verified'; out.binding = d1.binding; return out; }
+      out.code = 'device-discard-requires-proof'; out.discardWhy = d1.why; return out;
+    }
     if (c.protection === 'review'){ out.code = 'unknown-format-review-only'; return out; }
     if (c.protection === 'releasable'){
       if (intent === 'reclaim' || intent === 'retention' || intent === 'lifecycle-delete'){
@@ -905,6 +912,58 @@
     return { ok:true, binding: { key: k, bytes: raw.length, hash: hv, storyId: sid, runId: p.runId, serverRev: p.serverRev } };
   }
 
+  /* ================= ★DISCARD1: device-discard の verified 許可（メモリだけ・同時に 1 件・TTL 120 秒） ======================
+   * store1Authorization と同じ形の確かめ（exact key・計画時の値・KEY1 でその物語のもの・snapshot / Vault / rescue は不可・分類・meta の墓標・墓標の関所）。
+   * 違いは「サーバーが本文を持つ／内容が一致する」を求めないこと（Owner が元に戻せなくてよいと承認した写しだけ）。代わりに ack の文字列が要る。
+   * kill: v292DfixDISCARD1Off='1' / v292DfixSTORE1Off='1' → 常に拒否。 */
+  var D1_INTENT = 'device-discard', D1_ACK = 'OWNER-ACK-20261115', d1Armed = null;
+  function discard1Off(){ return lsg('v292DfixDISCARD1Off') === '1' || lsg('v292DfixSTORE1Off') === '1'; }
+  function discard1Arm(proof){
+    if (discard1Off()) return null;
+    if (!proof || typeof proof !== 'object' || proof.kind !== 'DISCARD1' || proof.ack !== D1_ACK) return null;
+    var c = null; try { c = JSON.parse(JSON.stringify(proof)); } catch(e){ return null; }
+    d1Armed = s1Freeze(c);
+    return d1Armed;
+  }
+  function discard1Disarm(){ d1Armed = null; }
+  function discard1Authorization(req, c){
+    function no(why){ return { ok:false, why:why }; }
+    if (discard1Off()) return no('discard-off');
+    var K1 = key1(); if (!K1) return no('key1-unavailable');
+    var p = req.discard1Proof;
+    if (!p || !d1Armed || p !== d1Armed) return no('proof-not-armed');
+    if (p.v !== 1 || p.kind !== 'DISCARD1' || p.ack !== D1_ACK || typeof p.runId !== 'string' || !p.runId) return no('proof-shape');
+    var sid = String(p.storyId == null ? '' : p.storyId);
+    if (!S1_ID_RE.test(sid) || KEY1_LEGACY[sid]) return no('proof-story-shape');
+    if (typeof p.accountId !== 'string' || !p.accountId || p.accountIdAfter !== p.accountId) return no('proof-account');
+    if (p.serverDeleted !== true) return no('proof-not-deleted');
+    if (p.authority !== 'shadow' && p.authority !== 'canonical') return no('proof-authority');
+    if (typeof p.serverRev !== 'number' || !isFinite(p.serverRev) || p.serverRev < 1) return no('proof-rev');
+    var at = p.issuedAt, now = Date.now();
+    if (typeof at !== 'number' || !isFinite(at) || at <= 0) return no('proof-timestamp-invalid');
+    if (now - at < 0) return no('proof-timestamp-future');
+    if (now - at > S1_TTL_MS) return no('proof-stale');
+    var k = String(req.key == null ? '' : req.key);
+    if (k !== 'chr6_slot_' + sid && !K1.belongs(k, sid)) return no('key-not-story');
+    var so = K1.storyOf(k);
+    if (!so || so.kind === 'snapshot' || so.kind === 'vault' || so.kind === 'rescue') return no('key-kind-not-allowed');   /* 同期の印 f781g は消す（STORE1b と同じ）。f911 / f697p は計画に入らず、d1Local が先に止める */
+    if (!c || String(c.slotId) !== sid) return no('class-slot-mismatch');
+    if (!((c.protection === 'hard' && (c.family === 'live-story' || c.family === 'live-side-store')) ||
+          (c.protection === 'review' && c.family === 'side-store-not-live') ||
+          (c.protection === 'releasable' && c.family === 'orphan-side-store'))) return no('class-not-allowed');
+    var it = null, ks = p.keys;
+    if (Object.prototype.toString.call(ks) !== '[object Array]') return no('proof-keys-missing');
+    for (var i = 0; i < ks.length; i++){ if (ks[i] && ks[i].key === k){ it = ks[i]; break; } }
+    if (!it) return no('key-not-in-proof');
+    var raw = (req.value !== undefined) ? req.value : lsg(k);
+    if (raw == null) return no('value-missing');
+    if (typeof it.value !== 'string' || raw !== it.value) return no('value-changed');
+    var hv = hash(raw);
+    if (raw.length !== it.bytes || hv !== it.hash) return no('value-changed');
+    if (!metaTombstoneExists(sid)) return no('no-meta-tombstone');
+    if (!tombstoneReady()) return no('tombstone-barrier-not-ready');
+    return { ok:true, binding: { key: k, bytes: raw.length, hash: hv, storyId: sid, runId: p.runId, serverRev: p.serverRev } };
+  }
   /* ================= ★★PURGE1 段階 1: 完全削除の verified 許可（メモリだけ・同時に 1 件・TTL 120 秒） ======================
    * 許すのは: proof の keys に載った exact key ∧ KEY1 の完全一致でその物語のもの（snapshot・未送信の写し・世代を含む。chr6_storysess_ は不可）
    *   か、キー名に chr6_slot_<id> が丸ごと入った控え（chr6_bk_）∧ meta にその物語の墓標がある ∧ 墓標の関所が準備できている ∧
@@ -981,7 +1040,7 @@
    * ほかの intent（reclaim / retention / lifecycle-delete ほか）はこの関数を使わない（fix569 は今までどおり protectedSet() を取り直す）。
    * 返り値: { ok:true, protected:bool, why } ／ { ok:false, why }（判断できない＝fix569 は消さない）。何も書かない・何も消さない。
    * kill: fix569 側の localStorage v292DfixP0BOff='1'（今までの protectedSet() の読み方に戻る）。 */
-  var P0B_INTENTS = { 'device-free':1, 'purge-full':1, 'purge-blind':1 };
+  var P0B_INTENTS = { 'device-free':1, 'purge-full':1, 'purge-blind':1, 'device-discard':1 };   /* ★DISCARD1: device-free と同じ名前だけの判断 */
   function p0bKeyNamed(k){ var ks = keys(); for (var i = 0; i < ks.length; i++) if (ks[i] === k) return true; return false; }
   function scopedProtection(req){
     function no(why){ return { ok:false, why:why }; }
@@ -990,9 +1049,9 @@
     var intent = String(req.intent || '');
     if (P0B_INTENTS[intent] !== 1) return no('intent-not-scoped');
     var K1 = key1(); if (!K1) return no('key1-unavailable');
-    var p = intent === S1_INTENT ? s1Armed : p1Armed;
+    var p = intent === S1_INTENT ? s1Armed : (intent === D1_INTENT ? d1Armed : p1Armed);
     if (!p || typeof p !== 'object') return no('proof-not-armed');
-    if (intent !== S1_INTENT && p.mode !== (intent === P1_BLIND ? 'blind' : 'full')) return no('proof-mode');
+    if (intent !== S1_INTENT && intent !== D1_INTENT && p.mode !== (intent === P1_BLIND ? 'blind' : 'full')) return no('proof-mode');
     var sid = String(p.storyId == null ? '' : p.storyId);
     if (!S1_ID_RE.test(sid) || KEY1_LEGACY[sid]) return no('proof-story-shape');
     var k = String(req.key == null ? '' : req.key);
@@ -1002,7 +1061,7 @@
     if (!it) return no('key-not-in-proof');
     var isBk = k.indexOf('chr6_bk_') === 0, isMan = k.indexOf('chr6_snap_') === 0;
     if (!isBk && !isMan) return yes(false, 'name-never-in-protected-set');
-    if (intent === S1_INTENT) return yes(true, 'device-free-backup-or-snapshot');
+    if (intent === S1_INTENT || intent === D1_INTENT) return yes(true, 'device-free-backup-or-snapshot');
     if (p0bKeyNamed('chr6_slot_' + sid)) return yes(true, 'story-body-present');
     var live = liveSlots();
     function liveOther(s){ return s != null && String(s) !== sid && live.indexOf(String(s)) >= 0; }
@@ -1039,6 +1098,7 @@
     deletePolicy: deletePolicy,
     /* ★STORE1b: device-free の証拠の登録・破棄（メモリだけ） */
     store1Arm: store1Arm, store1Disarm: store1Disarm,
+    /* ★DISCARD1 */ discard1Arm: discard1Arm, discard1Disarm: discard1Disarm,
     /* ★PURGE1 段階 1（既定 OFF） */
     purge1Arm: purge1Arm, purge1Disarm: purge1Disarm,
     /* ★P0-B: device-free / purge-* の保護判定（名前と凍結した proof だけ・値は読まない）。fix569 tryDeleteExact が使う */
