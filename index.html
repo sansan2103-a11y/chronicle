@@ -27,7 +27,7 @@
 <!-- ★BAV2 (GPT #127-DV/#127-EE): beta を最初から Asset v2 で始める（client 側は使い勝手だけ。安全は Worker。Worker が features.assetV2Beta を返さない間は何もしない） -->
 <script src="v292Dbav2-beta.js?cb=20261019-bundle33-b"></script>
 <!-- ★fix990 (GPT #127-EN D): 旧画像 op が ASSET_V2_REQUIRED で断られたら、このタブではその op を 10 分送らない（fix523/633/634 より前に置く）。kill: localStorage v292Dfix990Off=1 -->
-<script src="v292Dfix990-legacy-img-breaker.js?cb=20261019-bundle31-a"></script>
+<script src="v292Dfix990-legacy-img-breaker.js?cb=20261115-holdnote1"></script>
 <script src="v292DfixS1-entry-notice.js?cb=20261019-bundle31-a"></script><!-- v292DfixS1: github.io でだけ正式な入口の案内（自動転送なし）。OFF=localStorage v292DfixS1Off=1 -->
 <!-- ★fix946 第1段(2026-10-14 / GPT #125-GR): アイコン画像のアカウント境界だけ（M3）。キーは不変。fix889 より前（fetch の関所）・fix197/346 より前（退避が mem 読込より先）。kill: localStorage v292Dfix946Off=1 -->
 <script src="v292Dfix946-img-isolation.js?cb=20261014-iso1c"></script>
@@ -291,7 +291,7 @@
      ★kill = localStorage['v292Dfix889Off']='1' は **UI だけ**を消す。絞り込みと扉は止まらない。 -->
 <script src="v292Dfix889-secret-vault.js?cb=20261108-bundle93-g"></script>
 <!-- ★av2 (GPT 904 C1): Asset v2 client data plane. save core (fix697/fix705/fix743) が呼ぶ純関数 + registrar。kill = localStorage v292Dav2Off=1 -->
-<script src="v292Dav2-data.js?cb=20261114-save1"></script>
+<script src="v292Dav2-data.js?cb=20261115-holdnote1"></script>
 <!-- ★fix859 STORY_PASSCODE: story 単位の unlock token supplier。★fix705 より前に読む -->
 <script src="v292Dfix859-story-session.js?cb=20260916-sp2"></script>
 <script src="v292Dfix705-canonical-read-gate.js?cb=20261019-bundle33-b"></script>
@@ -299,6 +299,7 @@
 <!-- ★si1 v292Dfix892 SAVE_INTEGRITY_HELD_INPUT_GUARD（packet SAVE_INTEGRITY_P1_20260927_01 / GPT GO_WITH_FIXES B'）: fix705 HOLD 中は送信を生成前に止める。read-only。★head・fix705 の直後＝送信 UI（#sendBtn 等）より先に同期ロードし、document capture で入口を押さえる（GPT SAVE_INTEGRITY_P1_20260927_02 条件 1 = load-order）。kill=v292Dfix892Off=1 -->
 <script src="v292Dfix892-held-input-guard.js?cb=20261011-s1b"></script>
 <script src="v292DfixLAT1-press-feedback.js?cb=20261112-lat1"></script>
+<script src="v292DfixHOLDNOTE1-hold-note.js?cb=20261115-holdnote1"></script><!-- ★HOLDNOTE1: クラウドへの保存が黙って止まったとき（fix697 canonHold の F924_SKIP・av2 登録の衝突 HOLD）に、入力欄の上に消えない知らせを 1 回。表示だけ。kill: v292DfixHOLDNOTE1Off='1' -->
 <script src="v292DfixERRNOTE1-send-error-note.js?cb=retry2-a"></script><!-- ★ERRNOTE1: 物語の送信がサーバーに断られたとき（HTTP 4xx/5xx）、理由を入力欄の上に出したままにする（既存の知らせは 60 秒で消えていた）。表示だけ（送り直さない・入力・本文・保存・sys・送信の中身に触らない・fetch を包まない）。kill: v292DfixERRNOTE1Off='1'。 -->
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
      ★必ず fix246 より【前】に置くこと。fix246 / fix346 / fix472 は読込時に removeItem 参照を
@@ -346,7 +347,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261115-fear2r2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261115-holdnote1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4253,7 +4254,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      default OFF (opt-in=v292Dfix803On / kill=v292Dfix803Off / story=v292Dfix803Story)。fix802 の fire 末尾から onFire で呼ばれる。
      timer 0 / retry 0 / 新 write path 0 / localStorage 書込は fix793.materialize() 経由の v292Dmem1_slot_<sid> のみ -->
 <script src="v292Dfix803-auto-materialize.js?cb=20260930-ac25"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20261114-save1"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20261115-holdnote1"></script>
 <!-- ★fix912 SA-3 S2 in-session reconcile（fix697 の後・kill v292Dfix912Off / v292Dfix911Off） -->
 <script src="v292Dfix912-s2-insession.js?cb=20261114-save1"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。

@@ -26,8 +26,15 @@
   function trip(op){ var o = load(); o[k(op)] = Date.now(); save(o); stats.tripped[op] = (stats.tripped[op] || 0) + 1; }
   function urlOf(input){ try { return (typeof input === 'string') ? input : (input && input.url) || ''; } catch(e){ return ''; } }
   function isSave(u){ return /\/save(?:\?|$)/.test(String(u || '').split('#')[0]); }
+  /* ★IMGSTOP1 (2026-11-15・GPT #127-UF ③): putimg は絵の data を積むため本文が 4096 字を超え、上の字数の制限で op を読めず素通しになっていた（SMOKE7: Worker の 409 ASSET_V2_REQUIRED が続いた）。
+     長い本文は「先頭の JSON の op フィールドの値」が下の旧画像 op のどれかと完全に一致するときだけ対象（{ "op" : "putimg" などの空白の差は許す）。
+     判定できない本文（先頭が { でない・最初の鍵が op でない・値に \ などの記号がある・先頭 256 字に収まらない）は従来どおり送る。本文の途中の "putimg" の文字には当たらない。
+     kill: localStorage v292DfixIMGSTOP1Off='1'（長い本文は従来どおり素通し＝土台と同じ） */
+  var IMGSTOP1_HEAD = /^\s*\{\s*"op"\s*:\s*"([A-Za-z0-9_.]+)"\s*[,}]/;
+  function imgstopOff(){ try { return localStorage.getItem('v292DfixIMGSTOP1Off') === '1'; } catch(e){ return false; } }
   function opOf(init){
-    try { var b = init && init.body; if (typeof b !== 'string' || b.length > 4096) return null;
+    try { var b = init && init.body; if (typeof b !== 'string') return null;
+      if (b.length > 4096){ if (imgstopOff()) return null; var mb = IMGSTOP1_HEAD.exec(b.slice(0, 256)); return (mb && OPS.hasOwnProperty(mb[1]) && OPS[mb[1]] === 1) ? mb[1] : null; }
       var m = /"op"\s*:\s*"([A-Za-z0-9_.]+)"/.exec(b); return m && OPS[m[1]] === 1 ? m[1] : null; } catch(e){ return null; }
   }
   function synth(){

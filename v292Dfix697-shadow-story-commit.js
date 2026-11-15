@@ -455,6 +455,8 @@
       return true;
     } catch(e){ return false; }
   }
+  /* ★HOLDNOTE1: canonHold に入ったが fix924 が守らなかった（CAS 以外の 409 = F924_SKIP 等）ときだけ、画面に知らせを 1 回。表示だけ・送信 0。kill: v292DfixHOLDNOTE1Off='1' */
+  function holdNote1(id, code){ try { var H = (typeof window !== 'undefined') ? window.__v292DfixHOLDNOTE1 : null; if (H && typeof H.hold === 'function') H.hold('canon', id, code); } catch(eH){} }
   function f909bOff(){ return lsg('v292Dfix909bOff') === '1'; }
   var f909 = { probes: 0, v2Same: 0, notCanonical2: 0, notDirty: 0, noLc: 0, journal: 0, busy: 0, fires: 0,
                remoteAhead: 0, bridgeCalls: 0, bridgeScheduled: 0, bridgeDup: 0, bridgeInFlight: 0,
@@ -1209,7 +1211,7 @@
                 cstats.conflicts++; canonHold[id] = true;
                 note({ kind: 'CANONICAL_WRITE_CONFLICT', id: id, serverRev: j2.rev,
                        serverHash: String(j2.serverHash || '').slice(0, 16) });
-                { var c924 = f924LastCode; f924LastCode = null; f924Protect(id, 1, j2, c924); }   /* ■fix924 */
+                { var c924 = f924LastCode; f924LastCode = null; if (!f924Protect(id, 1, j2, c924)) holdNote1(id, c924); }   /* ■fix924 / ★HOLDNOTE1 */
               } else {
                 cstats.ambiguous++; note({ kind: kindKeep, id: id, serverRev: j2.rev });
               }
@@ -1400,7 +1402,7 @@
                   /* ★fix697p Rev2(GPT REVISE 3-(2)): journal を消さず HOLD_CONFLICT にする。
                      自動 resume は永久に禁止。fresh GET で CONVERGED になったときだけ clear。 */
                   f697pMarkConflict(id, j2.rev, String(j2.serverHash || ''));
-                  { var c924b = f924LastCode; f924LastCode = null; f924Protect(id, 2, j2, c924b); }   /* ■fix924 */
+                  { var c924b = f924LastCode; f924LastCode = null; if (!f924Protect(id, 2, j2, c924b)) holdNote1(id, c924b); }   /* ■fix924 / ★HOLDNOTE1 */
                 } else {
                   cstats.ambiguous++; note({ kind: kindKeep, id: id, serverRev: j2.rev });
                 }

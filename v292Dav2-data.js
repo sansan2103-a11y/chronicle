@@ -225,7 +225,7 @@
       if (!idlessPaths(content.body).length && !loadPending(id)){ if (loadBlocked(id)) lsr(BLK + id); if (loadConflict(id)) lsr(CFL + id); return false; }   // nothing to register: stale block / conflict dropped
       reg.held[id] = (reg.held[id] || 0) + 1;
       note({ kind: 'AV2_CANONICAL_PUSH_HELD', id: id });
-      if (loadConflict(id) && !loadPending(id)) return true;                                       // conflict: held, write 0, no polling until rebased
+      if (loadConflict(id) && !loadPending(id)){ holdNote1(id, 'AV2_REGISTRATION_CONFLICT'); return true; }                                       // conflict: held, write 0, no polling until rebased
       var bl = loadBlocked(id);
       if (bl && !loadPending(id)){
         if (bl.fp === regFingerprint(content.body)) return true;                                   // same input: held, write 0, no re-check
@@ -237,8 +237,11 @@
       return true;                                              // ordinary push held, dirty kept
     } catch(e){ return false; }
   }
+  /* ★HOLDNOTE1: 登録の衝突 HOLD（通常の保存も止まる）を画面に 1 回知らせる。表示だけ・送信 0。kill: v292DfixHOLDNOTE1Off='1' */
+  function holdNote1(id, code){ try { var H = (typeof window !== 'undefined') ? window.__v292DfixHOLDNOTE1 : null; if (H && typeof H.hold === 'function') H.hold('av2', id, code); } catch(eH){} }
   function finish(id, kind, extra){
     reg.busy = false; reg.last = { kind: kind, id: id, extra: extra || null, t: Date.now() };
+    if (kind === 'AV2_REGISTRATION_CONFLICT') holdNote1(id, (extra && extra.reason) || null);
     try { if (reg1On()) reg1After(id, kind); } catch(eR){}
     if (kind === 'AV2_REGISTERED') reg.ok++; else if (kind !== 'AV2_NOTHING_TO_REGISTER' && kind !== 'AV2_POLL_PENDING') reg.fail++;
     note({ kind: kind + (extra && extra.reason ? ':' + extra.reason : ''), id: id, extra: extra || null });
