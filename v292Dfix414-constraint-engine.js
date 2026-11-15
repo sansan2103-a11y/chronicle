@@ -225,6 +225,17 @@
   }
   var ARM_RE = '(左|右|両)?(腕|手首|手|拳|肘)';
   var LEG_RE = '(左|右|両)?(太もも|ふくらはぎ|足首|脚|足|膝)';
+  /* ★CONS2（2026-11-16・SMOKE9 E1・kill: localStorage v292DfixEYE1Off='1'／v292DfixLEG1Off='1' で従来と同じ・毎回評価）:
+     EYE1: 規則 D（視覚）の「目」は、語の頭か「の・が・は・も・で・、・両・片・右・左・涙」の後のときだけ数える。E1-OFF T2: fix850 が T1 本文「天井の木目がぼやけて映る」を
+       透子の断片として渡し、「木目」の「目」＋「ぼやけ」で無傷の透子に「距離感・精密動作の低下」が付いた。
+     LEG1: 脚の部位に「脛・腿」を足す（従来は無く、「右脛の裂傷」でも脚の制約にならなかった）。脚の傷の語に「切り傷・切創・切った・切れた・切り裂・切られ」を足す（部位の語より後ろにあるときだけ・腕は変えない）。
+       E1-OFF T8〜T12: 傷「右の脛を切った。血がにじんでいる」で【制約】が付かなかった。浅い・小さな・かすり 等（LIGHT）は従来どおり付けない。 */
+  function eye1On(){ try { return localStorage.getItem('v292DfixEYE1Off') !== '1'; } catch(e){ return true; } }
+  function leg1On(){ try { return localStorage.getItem('v292DfixLEG1Off') !== '1'; } catch(e){ return true; } }
+  var LEG_RE1 = '(左|右|両)?(太もも|ふくらはぎ|足首|脚|足|膝|脛|腿)';
+  var CUT_L1 = /(切り傷|切創|切っ(た|て)|切れ(た|て)|切り裂|切られ)/;
+  var EYE_D1 = /(?:^|[のがはもで、・\s　両片右左涙])(目|眼)[^。]{0,8}(失|見えな|潰|塞が|血で|かすん|ぼやけ|霞ん)|視界[^。]{0,8}(失|見えな|潰|塞が|血で|かすん|ぼやけ|霞ん)/;
+  function legRE(){ return leg1On() ? LEG_RE1 : LEG_RE; }
 
   // ---- F-1: 導出器 deriveConstraints(name, stateEntry) ----------------
   //   入力: fix77 store の {karada, kokoro, kizu}。回復節を除いた各節を、部位ローカルで判定。
@@ -240,7 +251,7 @@
     var cons = [], seen = {};
     function add(rank, text){ if (seen[text]) return; seen[text] = 1; cons.push({ rank: rank, text: text }); }
     var frz = !offFRZ1();   /* ★FRZ1 */
-    var kizuLeg = frz && keepClauses(kizu).some(function(c){ return new RegExp(LEG_RE).test(c) && !LIGHT.test(c); });
+    var kizuLeg = frz && keepClauses(kizu).some(function(c){ return new RegExp(legRE()).test(c) && !LIGHT.test(c); });   /* ★LEG1 */
     function physFRZ1(t){ return INJ_FRZ1.test(t) || PHYS_FRZ1.test(t); }
 
     bodyClauses.forEach(function(cl){
@@ -255,12 +266,12 @@
         if (!frz || physFRZ1(cl) || kizuLeg || /荷重/.test(cl)) add(2, '走行不可・移動は支え必要');
         else if (FREEZE_FRZ1.test(cl)) add(6, t6F1());   /* ★FRZ1: 腰が抜けて立てない＝恐怖 ／ ★FEAR1 C: 平易な文言 */
       }
-      scanPart(cl, LEG_RE, function(part, ctx, at){
+      scanPart(cl, legRE(), function(part, ctx, at){   /* ★LEG1 */
         if (frz){   /* ★FRZ1: 走行不可はけががあるときだけ */
           if (otherOwnerFRZ1(cl, at, name)) return;
           var hard = /(折れ|骨折|潰れ|切断|貫通)/.test(ctx), spr = SPRAIN_FRZ1.test(ctx);
           if (hard || (spr && !MILD_FRZ1.test(ctx)) || (DISABLE.test(ctx) && (physFRZ1(ctx) || kizuLeg))) add(2, '走行不可・移動は支え必要');
-          else if ((WOUND.test(ctx) && !LIGHT.test(ctx)) || spr) add(2.5, '移動が鈍い');
+          else if (((WOUND.test(ctx) || (leg1On() && CUT_L1.test(ctx.slice(Math.max(0, ctx.indexOf(part)))))) && !LIGHT.test(ctx)) || spr) add(2.5, '移動が鈍い');   /* ★LEG1 */
           else if (DISABLE.test(ctx) && FREEZE_FRZ1.test(cl)) add(6, t6F1());   /* ★FEAR1 C */
           return;
         }
@@ -272,7 +283,7 @@
         add(3, '長い行動で意識が揺らぐ');
       }
       // ---- D: 視覚 → 距離感・精密動作の低下 ----
-      if (/(目|眼|視界)[^。]{0,8}(失|見えな|潰|塞が|血で|かすん|ぼやけ|霞ん)/.test(cl)){
+      if (eye1On() ? EYE_D1.test(cl) : /(目|眼|視界)[^。]{0,8}(失|見えな|潰|塞が|血で|かすん|ぼやけ|霞ん)/.test(cl)){   /* ★EYE1 */
         add(4, '距離感・精密動作の低下');
       }
       // ---- E: 発話(喉/首/肺/胸の重損) → 長い台詞不可。手首/足首の「首」は除外 ----
