@@ -1,0 +1,219 @@
+// =====================================================================
+// Chronicle TRPG - v292DfixCONTRACT1: 今回の場面の契約（会話の順番と確定事実の小さな控え）を user に渡す（実験・既定 OFF）
+// ---------------------------------------------------------------------
+// 背景（laneCONTRACT1・2026-11-15・GPT #127-UP 最優先）: 「NPC が主人公の代わりに答える」「断られていないのに断られた前提で答える」は、
+//   指示（〜せよ）を足しても PRUNE3／BEAT2 のどの腕でも減らなかった。GPT の提案は「誰の返事を待っているか・何が確定しているか」を
+//   状況の事実として数行で渡すこと。PLACE1 の whereNow と同じく、毎回コードが作り直す短い欄（保存しない・sys は増やさない）。
+// 中身（どれも「確実に言える時だけ」。疑わしければ出さない。何も言えない回は欄ごと出さない）:
+//   1 直前のやり取り: 直前の回の会話カード（_convSays）のうち、由来が <say> タグか主人公の入力のもの（_convSayMeta の sourceKind が say-tag／hero-utterance。
+//     裸の「」から推した話者・昇格・由来の記録が無いもの・_b/_bw は使わない）の最後の 1〜2 台詞（各 30 字まで）。
+//   2 まだ返事が出ていない相手: 直前の回の最後の問い・頼み（「？」・〜ですか／〜ませんか／〜のか／〜てくれ／〜てください 等の確実な形）の相手が
+//     呼びかけ（登録名＋さん／ちゃん・あんたら 等）で決まり（呼びかけが無ければ出さない）、その後に相手の台詞が無いとき。相手が主人公（を含む複数人）なら
+//     「主人公の返事はプレイヤーが決める」、今回の入力が台詞なら「今回の入力が主人公の返事」。
+//   3 断った・引き受けた: 頼み → その相手の明示の拒否／承諾（決まった言い方だけ）があったときだけ、いちばん新しいもの 1 行。無いときは書かない。
+//   4 設定で確定した関係・出自: 主人公と登録 NPC の desc から、関係・出自の語（孫・娘・幼なじみ・初対面・転校・生まれ 等）を含む文だけ、2 行まで。
+//     「実は・隠し・秘密・正体・知らない」等の印がある文は使わない。人物が何を知り得るかの推測はしない。
+// 置き場所: user の JSON に "sceneContract": { rule, items } を whereNow（無ければ nowScene）の直後に足す（fetch 境界・HEROVOICE1 の直後に読む）。
+//   直前の回は user の recentScenes の最後の本文と S.turns の本文が一致したときだけ使う（再生成などで食い違えば出さない）。
+// 鍵: localStorage v292DfixCONTRACT1On='1' で ON（既定 OFF）。v292DfixCONTRACT1Off='1' は On より強い。読めない → 何もしない。毎回評価。
+// 検証口: window.__v292DfixCONTRACT1 = { VER, build, contractFromBody, last, stats }。last() は各行の根拠（どの台詞・desc の文か・30 字まで）。
+// =====================================================================
+(function(){
+  'use strict';
+  var G = (typeof window !== 'undefined') ? window : globalThis;
+  if (G.__v292DfixCONTRACT1) return;
+  var TAG = '[v292DfixCONTRACT1]', VER = 'contract1-20261115-a';
+  function ls(k){ try { return G.localStorage.getItem(k); } catch(e){ return '__ERR__'; } }
+  function on(){ var o = ls('v292DfixCONTRACT1Off'); if (o === '__ERR__' || o === '1') return false; return ls('v292DfixCONTRACT1On') === '1'; }
+
+  var RULE = 'sceneContract は、直前の会話の順番と、設定で確定した事実の控え。食い違わせないためだけに使い、本文や台詞に写さない。';
+  var MAXQ = 30, MAXLINE = 90, MAXITEMS = 6, MAXCHARS = 320;
+  function q(s){ s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > MAXQ ? s.slice(0, MAXQ) + '…' : s; }
+  function lastSentence(s){
+    var t = String(s || '').replace(/[」』\s]+$/, '').replace(/[…‥・]+$/, '');
+    var parts = t.split(/(?<=[。！？!?])/).map(function(x){ return x.trim(); }).filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : t;
+  }
+  function sentences(s){ return String(s || '').split(/(?<=[。！？!?])/).map(function(x){ return x.replace(/[」』\s]+$/, '').trim(); }).filter(Boolean); }
+  var RE_Q = /(?:[？?]|(?:ですか|ますか|ませんか|でしょうか|のか|んか|かね|かい|だろうか)[。…]*|^(?!(?:そう|そっ|ほう|なるほど|まあ|そりゃ|あ|え|ふん)か)[^。]{3,}[^そっ]か[。…]*)$/;
+  var RE_REQ = /(?:てくれ|てくれよ|てくれないか|てくれませんか|てください|て下さい|てほしい|て欲しい|ていただけませんか|てもらえませんか|てもらえないか|お願いします|お願いです|お願い)[。！!…]*$/;
+  var GROUP = /(あんたら|あんたたち|あんた方|お前さんたち|お前さんら|お前ら|おまえら|お二人|おふたり|二人とも|ふたりとも|三人とも|皆さん|みなさん|みんな|あなたたち|あなた方|君たち|きみたち|お前たち|おまえたち)/;
+  var RE_REFUSE = /(?:断る|お断りだ|お断りします|お断りや|(?:出さ|出せ|貸さ|貸せ|通さ|通せ|入れ|乗せ|乗せられ|教えられ|教え|でき)(?:ん|ない|ません|ねぇ|ねえ)|無理だ|無理です|だめだ|駄目だ|ダメだ)(?:よ|ぞ|な|ね|わ|って)*[。！!…]*$/;
+  var RE_ACCEPT = /(?:^(?:いいだろう|よかろう|いいですよ|構わん|かまわん|引き受け)|(?:出し|乗せ|連れて行っ|連れてっ|案内し|貸し)てやる(?:よ|ぞ|わ)?[。！!]*$|引き受けます|引き受けた|任せろ|任せとけ)/;
+  var COND = /(ただし|なら|けど|けれど|だが|でも|条件|それより|考えて|かもしれ)/;
+  var REL = /(孫|娘|息子|祖母|祖父|父親|母親|兄|姉|弟|妹|幼なじみ|幼馴染|同級生|同僚|初対面|初めて|転校|生まれ|出身|育ち|よそ者|知り合い|元用務員|卒業生|親戚|夫|妻|恋人|上司|部下|教え子|恩師|島の外|都会)/;
+  var HIDDEN = /(実は|隠し|隠す|秘密|内緒|明かさ|明かして|知らない|知られ|正体|本当は|ふりを|偽)/;
+  var STYLE = /(一人称|口調|丁寧語|ため口|方言|呼ぶ|呼び捨て|と呼|話し方)/;
+
+  // ---- 純粋関数: ctx = { hero:{name,desc}, npcs:[{name,desc}], turns:[{type,text,says:[{who,say,bare}]}] (直前の回まで), cur:{type,text} }
+  function build(ctx){
+    var items = [], ev = [];
+    if (!ctx || !ctx.hero || !ctx.hero.name || !Array.isArray(ctx.turns) || !ctx.turns.length) return { items: items, ev: ev };
+    var hero = ctx.hero.name, npcs = (ctx.npcs || []).filter(function(n){ return n && n.name; }), names = [hero].concat(npcs.map(function(n){ return n.name; }));
+    function reg(w){ return names.indexOf(w) >= 0; }
+    function heroLbl(){ return '主人公（' + hero + '）'; }
+    function lbl(w){ return w === hero ? heroLbl() : w; }
+    var T = ctx.turns, ti = T.length - 1, prev = T[ti];
+    var says = (prev.says || []).filter(function(c){ return c && c.say && String(c.say).trim(); });
+    var sure = says.filter(function(c){ return !c.bare && reg(c.who); });
+
+    // ---- 2: まだ返事が出ていない相手 ----
+    // 呼びかけ: 台詞の頭か、問い・頼みの文の頭に「名前（＋さん等）、」「あんたら、」等があるときだけ。文の途中の名前（「澄ちゃんの二人です」）は呼びかけにしない。
+    var NICK = {};   // desc の「X を「Y」と呼ぶ」から、話し手ごとの呼び名 → 登録名（設定で確定した呼び方だけ）
+    npcs.concat([ctx.hero]).forEach(function(p){ var re = /([^、。「」\s]{1,12})を「([^」]{1,10})」[^。]{0,8}と呼/g, m; while ((m = re.exec(String(p.desc || '')))){ if (reg(m[1])) (NICK[p.name] = NICK[p.name] || {})[m[2]] = m[1]; } });
+    var SUF = '(?:さん|ちゃん|くん|君|先輩|ねえ|姉ちゃん|兄ちゃん)?';
+    function headOf(x){ return String(x || '').replace(/^[「『…‥・\s]+/, ''); }
+    function vocAt(x, speaker){
+      var h = headOf(x), gm = h.match(new RegExp('^' + GROUP.source + '[、。！!…？?\\s]'));
+      if (gm) return { group: true, word: gm[1] };
+      for (var i = 0; i < names.length; i++){ var n = names[i]; if (n === speaker) continue;
+        var mm = h.match(new RegExp('^' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + SUF + '[、。！!…？?\\s]+'));
+        if (mm && !/^(?:という|って|とは|は|も|の)/.test(h.slice(mm[0].length))) return { name: n, word: n }; }   // 「結衣、というのは」は名前の話（呼びかけでない）
+      var nk = NICK[speaker] || {}; for (var y in nk){ if (h.indexOf(y) === 0 && /^[、。！!…？?\s]/.test(h.slice(y.length))) return { name: nk[y], word: y }; }
+      return null;
+    }
+    function addressees(c, idx, list){
+      var ss = sentences(c.say), lastS = ss[ss.length - 1] || '', v = vocAt(lastS, c.who) || vocAt(c.say, c.who);
+      if (!v) return null;   // 呼びかけが無い問いは相手を決めない（直前の話し手を相手と見なすと誤る実例があった）
+      if (v.group) return { to: names.filter(function(n){ return n !== c.who; }), how: '呼びかけ「' + v.word + '」', group: true };
+      return { to: [v.name], how: '呼びかけ「' + v.word + '」' };
+    }
+    var pending = null;
+    if (sure.length && says[says.length - 1] === sure[sure.length - 1]){
+      // 最後の確定台詞から後ろ向きに、最後の問い・頼みを探す（その後ろに台詞が 1 つまで）
+      for (var k = says.length - 1; k >= Math.max(0, says.length - 2); k--){
+        var c = says[k]; if (c.bare || !reg(c.who)) break;
+        var ls1 = lastSentence(c.say), kind = RE_Q.test(ls1) ? '問い' : (RE_REQ.test(ls1) ? '頼み' : null);
+        if (!kind) continue;
+        var a = addressees(c, k, says); if (!a) break;
+        var later = says.slice(k + 1);
+        if (later.some(function(x){ return a.to.indexOf(x.who) >= 0; })) break;          // 相手がもう答えた
+        if (later.length > 1) break;
+        pending = { by: c.who, to: a.to, kind: kind, say: c.say, how: a.how, group: !!a.group, idx: k };
+        break;
+      }
+    }
+    if (pending){
+      var toHero = pending.to.indexOf(hero) >= 0, others = pending.to.filter(function(n){ return n !== hero; });
+      var head = pending.by + 'の' + pending.kind + '「' + q(lastSentence(pending.say)) + '」';
+      var line;
+      if (toHero){
+        if (ctx.cur && ctx.cur.type === 'SAY' && ctx.cur.text) line = head + 'のあと、' + heroLbl() + 'の最初の台詞は今回の入力。';
+        else line = head + 'への' + heroLbl() + 'の返事はまだ入力されていない（返事はプレイヤーが決める）。';
+      } else line = head + 'への' + others.join('・') + 'の返事は、まだ出ていない。';
+      items.push(line); ev.push({ item: 'pending', turn: ti + 1, by: pending.by, to: pending.to, how: pending.how, quote: q(pending.say) });
+    }
+
+    // ---- 1: 直前のやり取り（最後の 1〜2 台詞・話者が確定したものだけ） ----
+    if (sure.length && says[says.length - 1] === sure[sure.length - 1]){
+      var tail = sure.slice(-2), last2 = says.slice(-2);
+      if (tail.length === 2 && (last2[0] !== tail[0])) tail = tail.slice(-1);
+      var seg = tail.map(function(c){ return lbl(c.who) + '「' + q(c.say) + '」'; }).join(' → ');
+      if (!pending || tail.length === 2 || tail[0].say !== pending.say){
+        items.unshift('直前の回の終わりの台詞：' + seg);
+        ev.push({ item: 'last', turn: ti + 1, quotes: tail.map(function(c){ return c.who + ':' + q(c.say); }) });
+      }
+    }
+
+    // ---- 3: 断った・引き受けた（いちばん新しいもの 1 つ） ----
+    var ask = null, fact = null;
+    T.forEach(function(t, i){
+      (t.says || []).forEach(function(c, j, list){
+        if (!c || c.bare || !reg(c.who) || !c.say) return;
+        var ss = sentences(c.say), last = ss[ss.length - 1] || '';
+        if (ask && c.who !== ask.by && (ask.to ? ask.to.indexOf(c.who) >= 0 : ask.next === c)){
+          var amb = COND.test(c.say), ref = !amb && ss.some(function(x){ return RE_REFUSE.test(x); }), acc = !amb && !ref && ss.some(function(x){ return RE_ACCEPT.test(x); });
+          if (ref || acc){ var hitS = ss.filter(function(x){ return ref ? RE_REFUSE.test(x) : RE_ACCEPT.test(x); }).pop(); fact = { who: c.who, kind: ref ? '断った' : '引き受けた', ask: ask, turn: i + 1, quote: q(hitS || c.say), ti: i, sj: j }; return; }   // 頼みは生かしたまま（同じ頼みへの後の返事で上書きする）
+          if (amb) { fact = null; ask = null; return; }   // 条件つき・あいまいな返事 → それまでの事実も使わない
+        }
+        if (RE_REQ.test(last)){
+          var a = addressees(c, j, list);
+          ask = { by: c.who, to: a ? a.to : null, text: last, turn: i + 1, next: list[j + 1] || null };
+        }
+      });
+    });
+    // 直前の回の、その人の最後の台詞が拒否／承諾のときだけ出す（その後に話が動いていれば古い事実になり得るので出さない）
+    if (fact && fact.ti === ti && !(T[ti].says || []).slice(fact.sj + 1).some(function(x){ return x && x.who === fact.who; }) && fact.ask){
+      items.push(lbl(fact.who) + 'は、' + lbl(fact.ask.by) + 'の頼み「' + q(fact.ask.text) + '」を' + fact.kind + '（' + fact.turn + 'ターン目「' + q(fact.quote) + '」）。');
+      ev.push({ item: 'decision', who: fact.who, kind: fact.kind, askBy: fact.ask.by, askTurn: fact.ask.turn, turn: fact.turn, quote: fact.quote });
+    }
+
+    // ---- 4: 設定で確定した関係・出自（2 行まで） ----
+    var rel = [];
+    var near = []; ev.forEach(function(e){ [e.by].concat(e.to || [], (e.quotes || []).map(function(x){ return x.split(':')[0]; })).forEach(function(n){ if (n && near.indexOf(n) < 0) near.push(n); }); });
+    var order = [ctx.hero].concat(npcs.filter(function(n){ return near.indexOf(n.name) >= 0; }), npcs.filter(function(n){ return near.indexOf(n.name) < 0; }));
+    order.forEach(function(p){
+      if (rel.length >= 2 || !p || !p.desc) return;
+      var ss = String(p.desc).split(/(?<=[。])/).map(function(x){ return x.trim(); }).filter(Boolean);
+      var hit = ss.filter(function(x){ return REL.test(x) && !HIDDEN.test(x) && !STYLE.test(x) && x.length <= 60; });
+      if (!hit.length) return;
+      var txt = hit.join('').replace(/。$/, '');
+      if (txt.length > 60) txt = hit[0].replace(/。$/, '');
+      rel.push((p.name === hero ? heroLbl() : p.name) + '：' + txt); ev.push({ item: 'relation', who: p.name, from: 'desc', quote: q(txt) });
+    });
+    rel.forEach(function(x){ items.push(x); });
+
+    // ---- 上限 ----
+    var out = [], n = 0;
+    items.forEach(function(x){ x = x.length > MAXLINE + 40 ? x.slice(0, MAXLINE + 39) + '…' : x; if (out.length < MAXITEMS && n + x.length <= MAXCHARS){ out.push(x); n += x.length; } });
+    return { items: out, ev: ev };
+  }
+
+  // ---- 実行時: body から ctx を作る ----
+  function stateOf(){ try { return typeof G.__chronicleGetState === 'function' ? G.__chronicleGetState('contract1') : null; } catch(e){ return null; } }
+  function narrOf(t){ var n = t && t.narrative; return Array.isArray(n) ? n.join('\n') : String(n || ''); }
+  function ctxFrom(userObj, S){
+    if (!S || !S.cast || !S.cast.hero || !Array.isArray(S.turns) || !S.turns.length) return null;
+    var rs = userObj.recentScenes; if (!Array.isArray(rs) || !rs.length) return null;
+    var lastN = rs[rs.length - 1] && rs[rs.length - 1].narrative; if (typeof lastN !== 'string' || !lastN) return null;
+    var k = -1; for (var i = S.turns.length - 1; i >= 0; i--){ if (narrOf(S.turns[i]) === lastN){ k = i; break; } }
+    if (k < 0) return null;                                                     // 直前の回が特定できない → 出さない
+    var turns = S.turns.slice(0, k + 1).map(function(t){ return { type: t.inputType || null, text: t.playerText || '',
+      says: (Array.isArray(t._convSays) ? t._convSays : []).map(function(c, j){
+        // 話者が確定した台詞だけ使う: 由来（fix616 の _convSayMeta）が <say> タグそのもの（say-tag）か主人公の入力（hero-utterance）。
+        // 裸の「」から推した話者（bare-inferred）・昇格（say-tag-promoted）・由来の記録が無いもの・_b/_bw は「確定でない」扱い。
+        var mt = Array.isArray(t._convSayMeta) ? t._convSayMeta[j] : null, kind = mt && mt.sourceKind;
+        var sure = !!(c && !c._b && !c._bw && mt && (kind === 'say-tag' || kind === 'hero-utterance'));
+        return { who: c && c.who, say: c && c.say, bare: !sure }; }) }; });
+    var ci = userObj.currentInput || {};
+    return { hero: { name: S.cast.hero.name, desc: S.cast.hero.desc || '' }, npcs: (S.cast.npcs || []).map(function(n){ return { name: n && n.name, desc: n && n.desc || '' }; }),
+      turns: turns, cur: { type: ci.type || null, text: ci.text || '' } };
+  }
+  var last = null, stats = { seen: 0, added: 0, empty: 0, skip: 0, err: 0 };
+  function contractFromBody(body){
+    if (!on() || typeof body !== 'string' || body.indexOf('protagonist') < 0) return body;
+    var b = JSON.parse(body); if (!b || !Array.isArray(b.messages)) return body;
+    var ui = -1; for (var i = b.messages.length - 1; i >= 0; i--){ var m = b.messages[i]; if (m && m.role === 'user' && typeof m.content === 'string' && m.content.indexOf('"protagonist"') >= 0){ ui = i; break; } }
+    if (ui < 0) return body;
+    var u = b.messages[ui].content, cut = u.indexOf('\n\n━'), head = cut < 0 ? u : u.slice(0, cut), tail = cut < 0 ? '' : u.slice(cut);
+    var o; try { o = JSON.parse(head); } catch(e){ stats.skip++; return body; }
+    if (!o || o.sceneContract || JSON.stringify(o, null, 2) !== head){ stats.skip++; return body; }   // 形が想定と違う → 触らない
+    stats.seen++;
+    var ctx = ctxFrom(o, stateOf()); if (!ctx){ stats.skip++; last = { t: Date.now(), items: [], why: 'no-prev-turn' }; return body; }
+    var r = build(ctx);
+    last = { t: Date.now(), items: r.items, ev: r.ev };
+    if (!r.items.length){ stats.empty++; return body; }
+    var n = {}, put = false, anchor = o.whereNow ? 'whereNow' : (o.nowScene ? 'nowScene' : null);
+    Object.keys(o).forEach(function(key){
+      if (!put && !anchor && key === 'deltaInstruction'){ n.sceneContract = { rule: RULE, items: r.items }; put = true; }
+      n[key] = o[key];
+      if (key === anchor){ n.sceneContract = { rule: RULE, items: r.items }; put = true; }
+    });
+    if (!put) n.sceneContract = { rule: RULE, items: r.items };
+    b.messages[ui].content = JSON.stringify(n, null, 2) + tail;
+    stats.added++;
+    return JSON.stringify(b);
+  }
+  var of = G.fetch;
+  if (typeof of === 'function'){
+    var wrapped = function(u, o){
+      try { if (on() && o && o.method === 'POST' && typeof o.body === 'string' && /workers\.dev|openrouter/.test(String(u))){ var nb = contractFromBody(o.body); if (nb !== o.body) o = Object.assign({}, o, { body: nb }); } }
+      catch(e){ stats.err++; try { console.warn(TAG, 'skipped:', e && e.message); } catch(_){} }
+      return of.apply(this, [u, o]);
+    };
+    try { Object.keys(of).forEach(function(k){ wrapped[k] = of[k]; }); } catch(e){}
+    wrapped.__fCONTRACT1 = true; G.fetch = wrapped;
+  }
+  G.__v292DfixCONTRACT1 = { VER: VER, build: build, contractFromBody: contractFromBody, last: function(){ return last; }, stats: function(){ return stats; } };
+  try { console.log(TAG, 'armed', VER); } catch(e){}
+})();
