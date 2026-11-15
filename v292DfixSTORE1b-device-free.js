@@ -1284,6 +1284,163 @@
       return next();
     });
   }
+  /* ======================================================================
+   * ★DISCARD2（GPT #127-UL・Owner 承認 2026-11-15 12:29 の範囲）: 削除済みの物語のスナップショット（chr6_snap_ / chr6_snapd_）を捨てる。手動専用・UI なし・自動経路なし。
+   *   所属 id は KEY1（^chr6_snap_<id>_<時刻>$ / ^chr6_snapd_<id>_<時刻>_<n>$。id に _ は無い）で完全一致に決める。時刻ごとの組（manifest＋実体）に分け、
+   *   manifest が読めない・id / slotId が鍵と合わない・実体の鍵が同じ組でない・ほかの物語の manifest がその鍵を指している → その組は unknown-owner（消さない）。
+   *   KEY1 で持ち主が決まらないスナップショット系の鍵も unknown-owner として数えるだけ。
+   *   物語の条件: 本体 chr6_slot_<id> が無い（あれば live）＋ DISCARD1 の d1Local（Vault・墓標の行がちょうど 1・別アカウント・最後に開いた・10 分以内・
+   *   印が CLEAN でない・送信中・f911 / f697p / rescue・conflict・fix750・削除の計画・この画面の送信中・旧 id）＋ story-open の Lock。
+   *   Run だけが物語ごとに Lock の中で getstory（deleted===true）を取り直し、計画（鍵と値）とほかのタブの書き込みを確かめてから、実体 → manifest の順に
+   *   fix562（intent 'snapshot-discard'）→ fix569 tryDeleteExact で 1 本ずつ消す。meta の墓標・chr6_bk_・__gen_・本体・サイドストアには触らない（fix562 も断る）。
+   *   スナップショットの一覧は manifest の列挙そのもの（fix564.list）なので、組ごと消せば一覧と実体は合ったまま。生きている物語の組には触らない。
+   *   kill: v292DfixDISCARD2Off='1'（fix562 も断る）・v292DfixSTORE1Off='1'。
+   * ====================================================================== */
+  var D2_KILL = 'v292DfixDISCARD2Off', D2_LOGK = 'v292DfixDISCARD2Log';
+  function d2Re(id) { var e = String(id).replace(/[^A-Za-z0-9]/g, ''); return { man: new RegExp('^chr6_snap_' + e + '_(\\d+)$'), part: new RegExp('^chr6_snapd_' + e + '_(\\d+)_(\\d+)$') }; }
+  /* 端末のスナップショット系の鍵を持ち主ごとに（名前だけ・値は読まない） */
+  function d2Owners(env) {
+    var K = env.key1, ks = allKeys(env), by = {}, unknownKeys = 0;
+    for (var i = 0; i < ks.length; i++) { var k = ks[i]; if (k.indexOf('chr6_snap_') !== 0 && k.indexOf('chr6_snapd_') !== 0) continue;
+      var s = K && K.storyOf(k); if (!s || s.kind !== 'snapshot' || !s.id) { unknownKeys++; continue; } (by[s.id] = by[s.id] || []).push(k); }
+    return { by: by, unknownKeys: unknownKeys };
+  }
+  /* ほかの物語の manifest が指している実体の鍵（Vault に関わる物語の manifest は読まない） */
+  function d2Refs(env, owners, exceptId) {
+    var ref = {};
+    for (var id in owners.by) { if (id === exceptId) continue; var vb = null; try { vb = vaultBlock(id, env); } catch (e) { vb = 'x'; } if (vb) continue;
+      var arr = owners.by[id]; for (var i = 0; i < arr.length; i++) { if (arr[i].indexOf('chr6_snap_') !== 0) continue; var m = J(g(env, arr[i]), null);
+        if (m && m.parts && typeof m.parts === 'object') for (var lk in m.parts) { var sk = m.parts[lk] && m.parts[lk].snapKey; if (typeof sk === 'string') ref[sk] = 1; } } }
+    return ref;
+  }
+  /* その物語の組（消せる組の鍵と、unknown-owner の組の数） */
+  function d2Plan(id, env, owners, refs) {
+    var R = d2Re(id), arr = (owners.by[id] || []).slice().sort(), grp = {}, out = { keys: [], vals: [], chars: 0, groups: 0, unknownGroups: 0, unknownKeys: 0 };
+    for (var i = 0; i < arr.length; i++) { var k = arr[i], m1 = R.man.exec(k), m2 = R.part.exec(k), ts = m1 ? m1[1] : (m2 ? m2[1] : null);
+      if (ts == null) { out.unknownKeys++; continue; } var gp = grp[ts] || (grp[ts] = { man: null, parts: [] }); if (m1) gp.man = k; else gp.parts.push(k); }
+    var tss = Object.keys(grp).sort();
+    for (var t = 0; t < tss.length; t++) { var gp2 = grp[tss[t]], bad = false, vals = {};
+      if (gp2.man) { var raw = g(env, gp2.man), m = J(raw, null);
+        if (!m || typeof m !== 'object' || String(m.id) !== gp2.man || String(m.slotId) !== String(id) || !m.parts || typeof m.parts !== 'object') bad = true;
+        else for (var lk in m.parts) { var sk = m.parts[lk] && m.parts[lk].snapKey; var mm = typeof sk === 'string' ? R.part.exec(sk) : null; if (!mm || mm[1] !== tss[t]) { bad = true; break; } }
+        vals[gp2.man] = raw; }
+      for (var p = 0; p < gp2.parts.length && !bad; p++) { if (refs[gp2.parts[p]]) bad = true; }
+      if (bad) { out.unknownGroups++; out.unknownKeys += gp2.parts.length + (gp2.man ? 1 : 0); continue; }
+      gp2.parts.sort(); var order = gp2.parts.concat(gp2.man ? [gp2.man] : []);   /* 実体 → manifest（途中で止まっても manifest が残り、次の実行で続きを片づける） */
+      for (var q = 0; q < order.length; q++) { var v = vals[order[q]] !== undefined ? vals[order[q]] : g(env, order[q]); out.keys.push(order[q]); out.vals.push(v); out.chars += order[q].length + (v == null ? 0 : v.length); }
+      out.groups++; }
+    return out;
+  }
+  function d2Local(id, env) {
+    if (!ID_RE.test(String(id))) return 'id-shape';
+    if (PROTECT[String(id)] === 1) return 'protected';
+    if (g(env, 'chr6_slot_' + id) != null) { var mr = metaRows(env) || [], dl = false; for (var i = 0; i < mr.length; i++) if (mr[i] && String(mr[i].id) === String(id) && mr[i].deleted === true) dl = true; return dl ? 'body-present' : 'live'; }   /* r2: 削除済みだが本体の写しがまだある（FREE2 / DISCARD1 が先） */
+    return d1Local(id, env);
+  }
+  function d2Cat(w) { return (w === 'live' || w === 'body-present') ? w : d1Cat(w); }
+  /* r2: サーバーの答え。墓標でないと分かった（404・deleted===false・locked）＝その物語は除外して次へ。分からない（401・通信断・欄の欠け）＝全体を止める */
+  var D2_SKIP = { 'server-404': 'no-tombstone', 'server-live': 'no-tombstone', 'server-locked': 'vault' };
+  function d2Server(id, r) {
+    if (r && r.status === 200 && r.j && r.j.ok === true && String(r.j.id) === String(id) && typeof r.j.deleted !== 'boolean') return { why: 'server-partial' };
+    return d1Server(id, r);
+  }
+  function d2Survey(env, ctx) {
+    var out = { v: 'DISCARD2-r2', at: env.now(), stories: 0, targets: [], snapshots: 0, chars: 0, bodyPresent: { stories: 0, snapshots: 0, chars: 0 },
+                excluded: { live: 0, 'body-present': 0, vault: 0, active: 0, unsynced: 0, 'pending-delete': 0, 'no-tombstone': 0, network: 0, legacy: 0, 'unknown-owner': 0 }, unknownOwnerKeys: 0, global: null };
+    var gb = globalBlock(env); if (gb) { out.global = gb; return Promise.resolve(out); }
+    var ow = d2Owners(env); out.unknownOwnerKeys = ow.unknownKeys; if (ow.unknownKeys) out.excluded['unknown-owner'] += ow.unknownKeys;
+    var ids = Object.keys(ow.by).sort(), pend = []; out.stories = ids.length;
+    for (var i = 0; i < ids.length; i++) { var w = d2Local(ids[i], env); if (w) { out.excluded[d2Cat(w)] = (out.excluded[d2Cat(w)] || 0) + 1;
+        if (w === 'body-present') { var bp = d2Plan(ids[i], env, ow, {}); out.bodyPresent.stories++; out.bodyPresent.snapshots += bp.groups; out.bodyPresent.chars += bp.chars; }   /* 内訳だけ（消さない）。manifest と名前だけを読む */
+        continue; } pend.push(ids[i]); }
+    var chain = Promise.resolve();
+    pend.forEach(function (id) { chain = chain.then(function () {
+      var pl = d2Plan(id, env, ow, d2Refs(env, ow, id)); if (pl.unknownGroups) out.excluded['unknown-owner'] += pl.unknownKeys;
+      if (!pl.keys.length) return;
+      return Promise.resolve(ctx.lockHeld(id)).then(function (h) { if (h !== false) { out.excluded.active++; return; }
+        out.targets.push({ id: id, groups: pl.groups, keys: pl.keys.length, chars: pl.chars }); out.snapshots += pl.groups; out.chars += pl.chars; }); }); });
+    return chain.then(function () { return out; });
+  }
+  function d2One(id, env, ctx) {
+    id = String(id);
+    var out = { ok: false, code: null, removed: 0, chars: 0, groups: 0 };
+    function fin(c) { out.code = c; return out; }
+    var gb = globalBlock(env); if (gb) return Promise.resolve(fin(gb));
+    var lb = d2Local(id, env); if (lb) return Promise.resolve(fin(lb));
+    var ow = d2Owners(env), pl = d2Plan(id, env, ow, d2Refs(env, ow, id)); if (!pl.keys.length) return Promise.resolve(fin('nothing-left'));
+    var seq0 = typeof env.otherTab === 'function' ? env.otherTab(id) : null, tomb0 = tombStr(id, env);
+    function race() { if (typeof env.otherTab === 'function' && env.otherTab(id) !== seq0) return 'other-tab-write'; if (tombStr(id, env) !== tomb0) return 'meta-changed'; return null; }
+    function replan() { var o2 = d2Owners(env); return d2Plan(id, env, o2, d2Refs(env, o2, id)); }
+    return Promise.resolve(ctx.who()).then(function (a0) {
+      if (!a0) return fin('no-account');
+      return Promise.resolve(ctx.lockHeld(id)).then(function (h) {
+        if (h !== false) return fin(h === true ? 'open-in-tab' : 'locks-unavailable');
+        return Promise.resolve(ctx.withOpenLock(id, function () {
+          return Promise.resolve(ctx.who()).then(function (a1) {
+            if (!a1 || a1 !== a0) return fin('principal-changed');
+            var gb2 = globalBlock(env) || d2Local(id, env); if (gb2) return fin(gb2);
+            var sp2 = samePlan(pl, replan()); if (sp2) return fin(sp2);
+            return Promise.resolve(ctx.getStory(id)).then(function (r) {
+              var se = d2Server(id, r); if (se.why) return fin(se.why);
+              var issuedAt = env.now();
+              return Promise.resolve(ctx.who()).then(function (a2) {
+                if (!a2 || a2 !== a0) return fin('principal-changed');
+                return Promise.resolve(ctx.withMatLock(function () {
+                  var gb3 = globalBlock(env) || d2Local(id, env); if (gb3) return fin(gb3);
+                  var sp3 = samePlan(pl, replan()); if (sp3) return fin(sp3);
+                  var rc = race(); if (rc) return fin(rc);
+                  var I = env.inv, G = env.gate;
+                  if (!I || typeof I.deletePolicy !== 'function' || typeof I.discard2Arm !== 'function' || typeof I.discard2Disarm !== 'function' || typeof I._hash !== 'function') return fin('policy-unavailable');
+                  if (!G || typeof G.tryDeleteExact !== 'function') return fin('gate-unavailable');
+                  var proof = { v: 1, kind: 'DISCARD2', ack: D1_ACK, runId: 'd2-' + issuedAt + '-' + (++runSeq), storyId: id, accountId: a0, accountIdAfter: a2,
+                                serverRev: se.rev, serverDeleted: true, authority: se.authority, issuedAt: issuedAt,
+                                keys: pl.keys.map(function (k, j) { return { key: k, bytes: pl.vals[j].length, hash: I._hash(pl.vals[j]), value: pl.vals[j] }; }) };
+                  var armed = I.discard2Arm(proof); if (!armed) return fin('arm-refused');
+                  try {
+                    for (var q = 0; q < pl.keys.length; q++) {
+                      var k = pl.keys[q], cur = g(env, k);
+                      if (cur == null) continue;
+                      if (cur !== pl.vals[q]) return fin('value-changed-mid');
+                      var pol = I.deletePolicy({ key: k, value: cur, intent: 'snapshot-discard', discard2Proof: armed });
+                      if (!pol || pol.allow !== true || pol.code !== 'snapshot-discard-verified') { out.policyWhy = pol && (pol.discardWhy || pol.code); return fin('policy-refused'); }
+                      var b = pol.binding || {};
+                      if (b.key !== k || b.bytes !== cur.length || b.hash !== I._hash(cur) || b.storyId !== id || b.runId !== armed.runId) return fin('binding-mismatch');
+                      var rr = null; try { rr = G.tryDeleteExact({ key: k, expectedBytes: cur.length, expectedHash: b.hash, intent: 'snapshot-discard', path: 'DISCARD2', reason: 'snapshot-discard' }); } catch (eG) { rr = null; }
+                      if (!rr || rr.ok !== true || rr.deleted !== true || g(env, k) != null) { out.gateCode = rr && rr.code; return fin('gate-refused'); }
+                      out.removed++; out.chars += k.length + cur.length;
+                    }
+                  } finally { try { I.discard2Disarm(); } catch (eD) {} }
+                  out.ok = true; out.groups = pl.groups; return fin('discarded');
+                })).then(function (m) { if (!m || m.granted !== true) return fin(m && m.api === false ? 'locks-unavailable' : 'lock-busy'); if (m.threw) return fin('threw'); return m.value; });
+              });
+            }, function () { return fin('server-unreachable'); });
+          });
+        })).then(function (x) { if (!x || x.granted !== true) return fin(x && x.api === false ? 'locks-unavailable' : 'open-in-tab'); if (x.threw) return fin(out.code || 'threw'); return x.value; });
+      });
+    }).then(null, function () { return fin('threw'); });
+  }
+  function d2Run(opts, env, ctx) {
+    var res = { v: 'DISCARD2-r2', ok: false, code: null, stories: 0, snapshots: 0, chars: 0, failed: 0, notProcessed: 0, failedCode: null, ids: [], skipped: {} };
+    if (!opts || opts.ack !== D1_ACK) { res.code = 'ack-mismatch'; return Promise.resolve(res); }
+    if (g(env, D2_KILL) === '1') { res.code = 'killed'; return Promise.resolve(res); }
+    var max = (opts.max == null) ? D1_MAX_DEFAULT : Math.floor(+opts.max);
+    if (!(max >= 1)) { res.code = 'bad-max'; return Promise.resolve(res); }
+    if (max > D1_MAX_CAP) max = D1_MAX_CAP;
+    return d2Survey(env, ctx).then(function (s) {
+      if (s.global) { res.code = 'global:' + s.global; return res; }
+      var list = s.targets.slice(0, max); res.notProcessed = s.targets.length - list.length; var i = 0;
+      function next() {
+        if (i >= list.length) { res.ok = true; res.code = list.length ? 'done' : 'nothing-to-do'; return res; }
+        var t = list[i++];
+        return d2One(t.id, env, ctx).then(function (x) {
+          if (x.ok) { res.stories++; res.snapshots += x.groups; res.chars += x.chars; res.ids.push(d1Short(t.id)); return next(); }
+          if (D2_SKIP[x.code] && !x.removed) { var sk = D2_SKIP[x.code]; res.skipped[sk] = (res.skipped[sk] || 0) + 1; return next(); }   /* r2: 墓標でないと分かった物語は消さずに数えて次へ */
+          res.failed = 1; res.failedCode = x.code; res.chars += x.chars || 0; res.notProcessed += list.length - i; res.code = 'stopped'; if (x.policyWhy) res.policyWhy = String(x.policyWhy); return res;
+        });
+      }
+      return next();
+    });
+  }
   var api = { version: VERSION, NOTICE: NOTICE, ID_RE: ID_RE, MAX_MULTI: MAX_MULTI, OPEN_LOCK: OPEN_LOCK, MAT_LOCK: MAT_LOCK, keysFor: keysFor, purgeList: purgeList, localBlock: localBlock, candidates: candidates,
               serverEval: serverEval, survey: survey, freeOne: freeOne, freeMany: freeMany, lockCtx: lockCtx, stable: stable,
               writeLog: writeLog, logOfSurvey: logOfSurvey, _memLog: function () { return memLog.slice(); },
@@ -1291,6 +1448,7 @@
               serverEvalP: serverEvalP, serverEvalMeta: serverEvalMeta, surveyP: surveyP, freeOneP: freeOneP,
               /* ★STUCK1 */ STUCK_OFF: STUCK_OFF, staleDirtyLocal: staleDirtyLocal, stuckNeeds: stuckNeeds, stuckProof: stuckProof,
               /* ★STUCK1 r2 */ STUCK_ON: STUCK_ON, SVERSION: SVERSION, FAMILY_CLASS: FAMILY_CLASS, familyClass: familyClass, provenSubset: provenSubset, raceProbe: raceProbe, raceBlock: raceBlock, planByReason: planByReason, COUNT_ONLY: COUNT_ONLY,
+              /* ★DISCARD2 */ d2Owners: d2Owners, d2Plan: d2Plan, d2Local: d2Local, d2Survey: d2Survey, d2One: d2One, d2Run: d2Run, d2Server: d2Server, D2_SKIP: D2_SKIP,
               /* ★DISCARD1 */ d1Local: d1Local, d1Server: d1Server, d1Survey: d1Survey, d1One: d1One, d1Run: d1Run, d1Cat: d1Cat, D1_ACK: D1_ACK, D1_OVERRIDE: D1_OVERRIDE,
               /* ★FREE2c */ judgeOne: judgeOne, /* ★FREE2d */ _memoClear: function () { MEMO = {}; }, tombHashCheck: tombHashCheck, F2_VERSION: F2_VERSION };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -1580,6 +1738,13 @@
        返すのは数だけ: 解放できる物語の数・その鍵の数と字数の合計・対象外の数と理由コード別の内訳。id・題名・本文・鍵名は返さない。
        鍵の有無に関係なく「いまの設定でシートがどう判定するか」を返す（on = FREE2 が効いているか）。 */
     /* ★DISCARD1（手動専用・UI なし・自動では呼ばれない）。dryRun は読むだけ（消さない・書かない・記録も書かない）。 */
+    /* ★DISCARD2（手動専用・UI なし・自動では呼ばれない）。dryRun は名前と manifest だけ（通信なし・何も書かない）。 */
+    discard2DryRun: function () { if (lsg(D2_KILL) === '1') return Promise.resolve({ killed: true }); if (!ready()) return Promise.resolve({ notReady: true });
+      return d2Survey(benv(), bctx()).then(function (o) { return { v: o.v, stories: o.stories, targets: o.targets.length, snapshots: o.snapshots, chars: o.chars, bodyPresent: o.bodyPresent, excluded: o.excluded, unknownOwnerKeys: o.unknownOwnerKeys, global: o.global, ids: o.targets.map(function (t) { return d1Short(t.id); }) }; }); },
+    discard2Run: function (opts) { if (!opts || opts.ack !== D1_ACK) return Promise.resolve({ code: 'ack-mismatch', stories: 0 }); if (!ready()) return Promise.resolve({ notReady: true, stories: 0 });
+      var e = benv(); return d2Run(opts, e, bctx()).then(function (r) {
+        try { var o = J(lsg(D2_LOGK) || 'null', null); if (!o || !isArr(o.runs)) o = { v: 1, runs: [] }; o.runs.push({ at: Date.now(), stories: r.stories, snapshots: r.snapshots, chars: r.chars, failed: r.failed, code: r.code }); while (o.runs.length > 20) o.runs.shift(); root.localStorage.setItem(D2_LOGK, JSON.stringify(o)); r.logWritten = true; } catch (eL) { r.logWritten = false; }
+        return r; }); },
     discard1DryRun: function () { if (lsg(D1_KILL) === '1') return Promise.resolve({ killed: true }); if (!ready()) return Promise.resolve({ notReady: true });
       return d1Survey(benv(), bctx()).then(function (o) { return { v: o.v, candidates: o.candidates, targets: o.targets.length, chars: o.chars, excluded: o.excluded, global: o.global, ids: o.targets.map(function (t) { return d1Short(t.id); }) }; }); },
     discard1Run: function (opts) { if (!opts || opts.ack !== D1_ACK) return Promise.resolve({ code: 'ack-mismatch', freed: 0 }); if (!ready()) return Promise.resolve({ notReady: true, freed: 0 });

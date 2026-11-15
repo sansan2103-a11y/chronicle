@@ -708,6 +708,12 @@
     }
     /* ★DISCARD1（Owner 承認 2026-11-15 12:29・GPT #127-UB/UD）: 手動専用の「確かめられなかった削除済みの写しを捨てる」。intent 'device-discard' のときだけ見る。
        STORE1b の discard1Run が同じ実行の中で作り discard1Arm で登録した proof（サーバーの削除済み・アカウント・ack・キーと値）の exact key だけ。 */
+    /* ★DISCARD2（GPT #127-UL）: 削除済みの物語のスナップショット（chr6_snap_ / chr6_snapd_）だけ。discard2Arm で登録した proof の exact key・計画時の値。 */
+    if (intent === D2_INTENT){
+      var d2 = discard2Authorization(req);
+      if (d2.ok){ out.allow = true; out.code = 'snapshot-discard-verified'; out.binding = d2.binding; return out; }
+      out.code = 'snapshot-discard-requires-proof'; out.discardWhy = d2.why; return out;
+    }
     if (intent === D1_INTENT){
       var d1 = discard1Authorization(req, c);
       if (d1.ok){ out.allow = true; out.code = 'device-discard-verified'; out.binding = d1.binding; return out; }
@@ -964,6 +970,57 @@
     if (!tombstoneReady()) return no('tombstone-barrier-not-ready');
     return { ok:true, binding: { key: k, bytes: raw.length, hash: hv, storyId: sid, runId: p.runId, serverRev: p.serverRev } };
   }
+  /* ================= ★DISCARD2: snapshot-discard の verified 許可（メモリだけ・同時に 1 件・TTL 120 秒） ======================
+   * 許すのは: proof の keys に載った exact key ∧ KEY1 で kind 'snapshot' かつ id がその物語に完全一致 ∧ その物語の本体 chr6_slot_<id> が無い
+   *   ∧ manifest（chr6_snap_）なら値の slotId と id がその物語・その鍵 ∧ 今の値が計画時の値と同じ ∧ meta の墓標 ∧ 墓標の関所。
+   * __gen_・chr6_bk_・本体・サイドストアはどれも kind が snapshot でないので通らない。kill: v292DfixDISCARD2Off='1' / v292DfixSTORE1Off='1'。 */
+  var D2_INTENT = 'snapshot-discard', d2Armed = null;
+  function discard2Off(){ return lsg('v292DfixDISCARD2Off') === '1' || lsg('v292DfixSTORE1Off') === '1'; }
+  function discard2Arm(proof){
+    if (discard2Off()) return null;
+    if (!proof || typeof proof !== 'object' || proof.kind !== 'DISCARD2' || proof.ack !== D1_ACK) return null;
+    var c = null; try { c = JSON.parse(JSON.stringify(proof)); } catch(e){ return null; }
+    d2Armed = s1Freeze(c);
+    return d2Armed;
+  }
+  function discard2Disarm(){ d2Armed = null; }
+  function d2BodyPresent(sid){ var ks = keys(); for (var i = 0; i < ks.length; i++) if (ks[i] === 'chr6_slot_' + sid) return true; return false; }
+  function discard2Authorization(req){
+    function no(why){ return { ok:false, why:why }; }
+    if (discard2Off()) return no('discard-off');
+    var K1 = key1(); if (!K1) return no('key1-unavailable');
+    var p = req.discard2Proof;
+    if (!p || !d2Armed || p !== d2Armed) return no('proof-not-armed');
+    if (p.v !== 1 || p.kind !== 'DISCARD2' || p.ack !== D1_ACK || typeof p.runId !== 'string' || !p.runId) return no('proof-shape');
+    var sid = String(p.storyId == null ? '' : p.storyId);
+    if (!S1_ID_RE.test(sid) || KEY1_LEGACY[sid]) return no('proof-story-shape');
+    if (typeof p.accountId !== 'string' || !p.accountId || p.accountIdAfter !== p.accountId) return no('proof-account');
+    if (p.serverDeleted !== true) return no('proof-not-deleted');
+    if (p.authority !== 'shadow' && p.authority !== 'canonical') return no('proof-authority');
+    if (typeof p.serverRev !== 'number' || !isFinite(p.serverRev) || p.serverRev < 1) return no('proof-rev');
+    var at = p.issuedAt, now = Date.now();
+    if (typeof at !== 'number' || !isFinite(at) || at <= 0) return no('proof-timestamp-invalid');
+    if (now - at < 0) return no('proof-timestamp-future');
+    if (now - at > S1_TTL_MS) return no('proof-stale');
+    var k = String(req.key == null ? '' : req.key);
+    var so = K1.storyOf(k);
+    if (!so || so.kind !== 'snapshot' || so.id !== sid) return no('key-not-story-snapshot');
+    if (d2BodyPresent(sid)) return no('story-body-present');
+    var it = null, ks = p.keys;
+    if (Object.prototype.toString.call(ks) !== '[object Array]') return no('proof-keys-missing');
+    for (var i = 0; i < ks.length; i++){ if (ks[i] && ks[i].key === k){ it = ks[i]; break; } }
+    if (!it) return no('key-not-in-proof');
+    var raw = (req.value !== undefined) ? req.value : lsg(k);
+    if (raw == null) return no('value-missing');
+    if (typeof it.value !== 'string' || raw !== it.value) return no('value-changed');
+    var hv = hash(raw);
+    if (raw.length !== it.bytes || hv !== it.hash) return no('value-changed');
+    if (k.indexOf('chr6_snap_') === 0){ var m = null; try { m = JSON.parse(raw); } catch(e){ m = null; }
+      if (!m || typeof m !== 'object' || String(m.slotId) !== sid || String(m.id) !== k) return no('manifest-owner-mismatch'); }
+    if (!metaTombstoneExists(sid)) return no('no-meta-tombstone');
+    if (!tombstoneReady()) return no('tombstone-barrier-not-ready');
+    return { ok:true, binding: { key: k, bytes: raw.length, hash: hv, storyId: sid, runId: p.runId, serverRev: p.serverRev } };
+  }
   /* ================= ★★PURGE1 段階 1: 完全削除の verified 許可（メモリだけ・同時に 1 件・TTL 120 秒） ======================
    * 許すのは: proof の keys に載った exact key ∧ KEY1 の完全一致でその物語のもの（snapshot・未送信の写し・世代を含む。chr6_storysess_ は不可）
    *   か、キー名に chr6_slot_<id> が丸ごと入った控え（chr6_bk_）∧ meta にその物語の墓標がある ∧ 墓標の関所が準備できている ∧
@@ -1040,7 +1097,7 @@
    * ほかの intent（reclaim / retention / lifecycle-delete ほか）はこの関数を使わない（fix569 は今までどおり protectedSet() を取り直す）。
    * 返り値: { ok:true, protected:bool, why } ／ { ok:false, why }（判断できない＝fix569 は消さない）。何も書かない・何も消さない。
    * kill: fix569 側の localStorage v292DfixP0BOff='1'（今までの protectedSet() の読み方に戻る）。 */
-  var P0B_INTENTS = { 'device-free':1, 'purge-full':1, 'purge-blind':1, 'device-discard':1 };   /* ★DISCARD1: device-free と同じ名前だけの判断 */
+  var P0B_INTENTS = { 'device-free':1, 'purge-full':1, 'purge-blind':1, 'device-discard':1, 'snapshot-discard':1 };   /* ★DISCARD2 */   /* ★DISCARD1: device-free と同じ名前だけの判断 */
   function p0bKeyNamed(k){ var ks = keys(); for (var i = 0; i < ks.length; i++) if (ks[i] === k) return true; return false; }
   function scopedProtection(req){
     function no(why){ return { ok:false, why:why }; }
@@ -1049,9 +1106,9 @@
     var intent = String(req.intent || '');
     if (P0B_INTENTS[intent] !== 1) return no('intent-not-scoped');
     var K1 = key1(); if (!K1) return no('key1-unavailable');
-    var p = intent === S1_INTENT ? s1Armed : (intent === D1_INTENT ? d1Armed : p1Armed);
+    var p = intent === S1_INTENT ? s1Armed : (intent === D1_INTENT ? d1Armed : (intent === D2_INTENT ? d2Armed : p1Armed));
     if (!p || typeof p !== 'object') return no('proof-not-armed');
-    if (intent !== S1_INTENT && intent !== D1_INTENT && p.mode !== (intent === P1_BLIND ? 'blind' : 'full')) return no('proof-mode');
+    if (intent !== S1_INTENT && intent !== D1_INTENT && intent !== D2_INTENT && p.mode !== (intent === P1_BLIND ? 'blind' : 'full')) return no('proof-mode');
     var sid = String(p.storyId == null ? '' : p.storyId);
     if (!S1_ID_RE.test(sid) || KEY1_LEGACY[sid]) return no('proof-story-shape');
     var k = String(req.key == null ? '' : req.key);
@@ -1060,6 +1117,12 @@
     for (var i = 0; i < ks.length; i++){ if (ks[i] && ks[i].key === k){ it = ks[i]; break; } }
     if (!it) return no('key-not-in-proof');
     var isBk = k.indexOf('chr6_bk_') === 0, isMan = k.indexOf('chr6_snap_') === 0;
+    if (intent === D2_INTENT){   /* ★DISCARD2: その物語のスナップショットだけ・本体が無いときだけ「保護しない」。ほかは全部「保護」 */
+      var so2 = K1.storyOf(k);
+      if (!so2 || so2.kind !== 'snapshot' || so2.id !== sid) return yes(true, 'not-this-story-snapshot');
+      if (p0bKeyNamed('chr6_slot_' + sid)) return yes(true, 'story-body-present');
+      if (isMan){ var m2 = null; try { m2 = JSON.parse(typeof it.value === 'string' ? it.value : 'null'); } catch(e){ m2 = null; } if (!m2 || String(m2.slotId) !== sid) return yes(true, 'manifest-owner-mismatch'); }
+      return yes(false, 'snapshot-of-tombstoned-story'); }
     if (!isBk && !isMan) return yes(false, 'name-never-in-protected-set');
     if (intent === S1_INTENT || intent === D1_INTENT) return yes(true, 'device-free-backup-or-snapshot');
     if (p0bKeyNamed('chr6_slot_' + sid)) return yes(true, 'story-body-present');
@@ -1099,6 +1162,7 @@
     /* ★STORE1b: device-free の証拠の登録・破棄（メモリだけ） */
     store1Arm: store1Arm, store1Disarm: store1Disarm,
     /* ★DISCARD1 */ discard1Arm: discard1Arm, discard1Disarm: discard1Disarm,
+    /* ★DISCARD2 */ discard2Arm: discard2Arm, discard2Disarm: discard2Disarm,
     /* ★PURGE1 段階 1（既定 OFF） */
     purge1Arm: purge1Arm, purge1Disarm: purge1Disarm,
     /* ★P0-B: device-free / purge-* の保護判定（名前と凍結した proof だけ・値は読まない）。fix569 tryDeleteExact が使う */

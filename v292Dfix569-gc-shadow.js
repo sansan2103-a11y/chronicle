@@ -361,7 +361,7 @@
      purge-blind（隠した物語）は①⑥の「在るか」も値を読まずにキーの列挙で見る（②の照合は値が無いので行わない＝ PURGE1 は bytes/hash を渡さない）。
      fix562 が scopedProtection を持たない（古い版）・kill のときは、今までの読み方のまま（fail-safe: 今の本番と同じ）。
      ほかの intent は 1 行も変わらない。 */
-  var P0B_SCOPED = { 'device-free':1, 'purge-full':1, 'purge-blind':1, 'device-discard':1 };   /* ★DISCARD1: device-free と同じ（名前と凍結した proof だけ） */
+  var P0B_SCOPED = { 'device-free':1, 'purge-full':1, 'purge-blind':1, 'device-discard':1, 'snapshot-discard':1 };   /* ★DISCARD2 */   /* ★DISCARD1: device-free と同じ（名前と凍結した proof だけ） */
   function p0bOn(){ return rawGet('v292DfixP0BOff') !== '1'; }
   function keyListed(k){ var ks = rawKeys(); for (var i = 0; i < ks.length; i++) if (ks[i] === k) return true; return false; }
   function tryDeleteExact(req){
