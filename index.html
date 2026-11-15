@@ -299,6 +299,7 @@
 <!-- ★si1 v292Dfix892 SAVE_INTEGRITY_HELD_INPUT_GUARD（packet SAVE_INTEGRITY_P1_20260927_01 / GPT GO_WITH_FIXES B'）: fix705 HOLD 中は送信を生成前に止める。read-only。★head・fix705 の直後＝送信 UI（#sendBtn 等）より先に同期ロードし、document capture で入口を押さえる（GPT SAVE_INTEGRITY_P1_20260927_02 条件 1 = load-order）。kill=v292Dfix892Off=1 -->
 <script src="v292Dfix892-held-input-guard.js?cb=20261011-s1b"></script>
 <script src="v292DfixLAT1-press-feedback.js?cb=20261112-lat1"></script>
+<script src="v292DfixSTORYSIZE1-story-size.js?cb=20261115-storysize1"></script><!-- ★STORYSIZE1 (GPT #127-UN): 1 物語の大きさの上限（Worker 100 万字・D1 200 万バイト）を保存の直前に測り、注意域は知らせ・危険域は送信と続きを書くを止める・上限を確実に超える本文は送らない（Worker の 413 と同じ形）。kill: v292DfixSTORYSIZE1Off='1' -->
 <script src="v292DfixHOLDNOTE1-hold-note.js?cb=20261115-holdnote1"></script><!-- ★HOLDNOTE1: クラウドへの保存が黙って止まったとき（fix697 canonHold の F924_SKIP・av2 登録の衝突 HOLD）に、入力欄の上に消えない知らせを 1 回。表示だけ。kill: v292DfixHOLDNOTE1Off='1' -->
 <script src="v292DfixERRNOTE1-send-error-note.js?cb=retry2-a"></script><!-- ★ERRNOTE1: 物語の送信がサーバーに断られたとき（HTTP 4xx/5xx）、理由を入力欄の上に出したままにする（既存の知らせは 60 秒で消えていた）。表示だけ（送り直さない・入力・本文・保存・sys・送信の中身に触らない・fetch を包まない）。kill: v292DfixERRNOTE1Off='1'。 -->
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
@@ -347,7 +348,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261115-discard2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261115-autoclean1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4254,7 +4255,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      default OFF (opt-in=v292Dfix803On / kill=v292Dfix803Off / story=v292Dfix803Story)。fix802 の fire 末尾から onFire で呼ばれる。
      timer 0 / retry 0 / 新 write path 0 / localStorage 書込は fix793.materialize() 経由の v292Dmem1_slot_<sid> のみ -->
 <script src="v292Dfix803-auto-materialize.js?cb=20260930-ac25"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20261115-holdnote1"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20261115-storysize1"></script>
 <!-- ★fix912 SA-3 S2 in-session reconcile（fix697 の後・kill v292Dfix912Off / v292Dfix911Off） -->
 <script src="v292Dfix912-s2-insession.js?cb=20261114-save1"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
@@ -4688,7 +4689,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix577-delete-entry-guard.js?cb=v292Dfix577"></script>
 <script src="v292Dfix933-beta-delete-off.js?cb=20261111-delall"></script>
 <!-- ★★DL2 (S-2 / GPT #127-FJ D8): ゲーム画面の「削除」とギャラリーの「セーブを削除」は「削除はホームから」の案内だけ（旧経路の送信を止める）。kill = v292DfixDL2Off=1 -->
-<script src="v292DfixDL2-server-delete.js?cb=20261116-free2d" data-dl2="index"></script>
+<script src="v292DfixDL2-server-delete.js?cb=20261116-autoclean1" data-dl2="index"></script>
 <script src="v292Dfix313-story-cards.js?cb=20261019-bundle31-a"></script>
 <script src="v292Dfix314-memory.js?cb=20260829-fix748"></script>
 <script src="v292Dfix317-slot-leak.js?cb=20260901-fix783"></script>

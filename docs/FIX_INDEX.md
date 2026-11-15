@@ -63,7 +63,7 @@
 | Vault・ユーザー分離 | vault2-sendgate、vault2-copygate、vault2-ui、LE4、fix889（BOOTOFF1）、iso2、ISO1、fix946 |
 | 認証・アカウント | fix893、ADMF1、fix328、fix886/890、bav2-beta、FRIEND1・LIMIT1（Worker・管理者画面）、ADMHUB1・ADMBULK1（管理者画面）、MXALL（Worker・管理者画面 `f2258e33`）、鍵 `starticon1`・`idsplit2`（Worker `v46.37`・管理者画面 `752c623a`）、SEC0・SEC1・UNPROT（Worker）、ADM3b（管理者画面）、LIM1（Worker `v46.45-lim1-fc`・ADMF1）、OWNERON1 |
 | アイコン・画像 | av2-data、av2-portrait（FLW1）、av2-migrate-ui、LD1、LC1（APPX1）、ICONUX2、SETAV1、FLW2、ICF、fg3、fix63（fix979b）、fix197、fix523、fix990、p8d、ICONFIX1（Worker）、PUBMODE（Worker・管理者画面）、NDI1、ICF80、MIDICON（OLDMX1）、W-MXREG（Worker・93-i から端末側も）、STARTICON、IMGMODEL1（Worker・管理者画面）、CUSTIMG1（Worker・管理者画面）、DIAG1b（Worker）、ICONQ1（LC1 の外見の案・NH1・Worker。名前は ICONFIX1 で始まる）、ICONFIX2、ICONFIX3、MXREGFIX1（MIDICON） |
-| UI・画面 | UI1、IS1、UX72、JMP、FLW3、LE3、fix777、fix243/270、fix880、SETUI1、UI2、XSS1、UI3、LAT1、UI4、ERRNOTE1、HOLDNOTE1 |
+| UI・画面 | UI1、IS1、UX72、JMP、FLW3、LE3、fix777、fix243/270、fix880、SETUI1、UI2、XSS1、UI3、LAT1、UI4、ERRNOTE1、HOLDNOTE1、STORYSIZE1 |
 | シナリオ・ホーム | fix819、fix825、fix873、fix335、GENDER1、NEWACCT1・HOMERETRY1（home.html の inline）、SCID2（fix820）、GHOST1、GUIDE1（fix873） |
 | 読み込みを止めた部品 | CLEANUP1・CLEANUP2（§2.12。32 本。ファイルは残る） |
 
@@ -869,6 +869,7 @@
 | UI4 | index.html・home.html・DL2・fix873 ほか（`63bfe48`） | a 設定の決定ボタンを 1 ターン以上では「✔ 保存して物語に戻る」／b 削除のシートの重複した 2 枚目の注意を外す／c シナリオの保存に失敗したとき見出しを「保存できませんでした」にし ▶ を出さない／d HOME のカードは 1 回目のクリックで開く（「ⓘ 詳細」は選ぶだけ） | `v292DfixUI4aOff`・`UI4bOff`・`UI4cOff`・`UI4dOff` |
 | ERRNOTE1 | `v292DfixERRNOTE1-send-error-note.js`（index・`4f0f2b1`。RETRY2 で ?cb=`retry2-a`） | 送信がサーバーに断られたとき（HTTP 4xx/5xx）、理由を入力欄のすぐ上に出したままにする（✕ か次の送信まで）。402 は「AI の利用残高が足りない」、503 LEDGER_UNHEALTHY はサーバーの短い日本語の文。60 秒で消える赤い知らせの二重表示は外す。送り直さない・送信の中身に触らない | `v292DfixERRNOTE1Off` |
 | HOLDNOTE1 | `v292DfixHOLDNOTE1-hold-note.js`（index・ERRNOTE1 の直前。fix697・av2-data から呼ぶ） | クラウドへの保存が画面に何も出ないまま止まったとき（fix697 の canonHold のうち fix924 の差分バナーが出ないもの＝CAS 以外の 409 など／av2 の登録の衝突 HOLD）、入力欄の上に「クラウドへの保存が停止しています。現在の画面では自動で再開できません。端末への保存を確認したうえで、ページを開き直してください。」を 1 ページ 1 回（✕ まで）。表示だけ（送り直し・再読込・保存・通信なし）。GPT #127-UF ②。av2 BLOCKED・404・drift・deleted は対象外 | `v292DfixHOLDNOTE1Off` |
+| STORYSIZE1 | `v292DfixSTORYSIZE1-story-size.js`（index・HOLDNOTE1 の直前。fix697 の putstory／putcanonical の送信の口から呼ぶ） | 1 物語の保存の大きさを送信の直前に測る（文字数と UTF-8 バイト数。小さい物語はバイト数を数えない）。割合＝max(バイト/1,990,000, 文字/1,000,000)（Worker の 100 万字の上限と D1 の 200 万バイトの上限）。70% で入力欄の上に知らせ 1 回、90% で「送信」「続きを書く」を生成の前に止めて知らせる（入力欄の文は消さない・「やり直す」は止めない）。上限を確実に超える本文と、Worker が大きさで断った（413 STORY_TOO_LARGE／500 SQLITE_TOOBIG）物語は送らず、Worker の 413 と同じ形の応答をその場で返す（再送しない）。本文を削らない・何も消さない。GPT #127-UN | `v292DfixSTORYSIZE1Off` |
 
 ### 2.11 シナリオ・ホーム
 
@@ -1026,7 +1027,7 @@
 | 36 | fix543 | `v292Dfix543-save-guard.js` | i36 | `28bf9923` | 20260829-fix748 | 保存・同期 | `v292Dfix543Off` |
 | 37 | fix802 | `v292Dfix802-refresh-orchestrator.js` | i37 | `092278a1` | 20260930-ac24 | 保存・同期 | `v292Dfix802Off` `v292Dfix802On` `v292Dfix924Off` `v292DmeOff` |
 | 38 | fix803 | `v292Dfix803-auto-materialize.js` | i38 | `4b113de5` | 20260930-ac25 | 保存・同期 | `v292Dfix803Off` `v292Dfix803On` `v292Dfix904Off` `v292Dfix924Off` |
-| 39 | fix697 | `v292Dfix697-shadow-story-commit.js` | i39 h22 | `3253b7d0` | 20261115-holdnote1 | 保存・同期 | `v292Dfix697Off` `v292Dfix697pOff` `v292Dfix697q2Off` `v292Dfix697qOff` |
+| 39 | fix697 | `v292Dfix697-shadow-story-commit.js` | i39 h22 | `0779d8c2` | 20261115-storysize1（home は 20261115-holdnote1 のまま） | 保存・同期 | `v292Dfix697Off` `v292Dfix697pOff` `v292Dfix697q2Off` `v292Dfix697qOff` |
 | 40 | fix912 | `v292Dfix912-s2-insession.js` | i40 | `fa9862e1` | 20261022-bundle41-a | 保存・同期 | `v292Dfix911Off` `v292Dfix912Off` `v292Dfix913Off` `v292DfixGC1Off` |
 | 41 | fix729 | `v292Dfix729-title-sync.js` | i41 h24 | `95ce2b1d` | 20261010-rs1 | 保存・同期 | `v292Dfix729Off` `v292Dfix729tOff` `v292Dfix842Off` |
 | 42 | fix843 | `v292Dfix843-capability-notice.js` | i42 h25 | `d9c8ef62` | 20260909-fix843 | 認証・アカウント | `v292Dfix843Off` |
@@ -1411,6 +1412,7 @@
 | 409 | fixPLACE1 | `v292DfixPLACE1-where-now.js` | index（PLACE1・`f35a302`〜`3c57fc3`） | `caf33d69` | 20261116-place1r8 | 文章品質・プロンプト | `v292DfixPLACE1On`（既定 OFF・Owner は OWNERON1 で ON） `v292DfixPLACE1Off` `v292DfixPLACE1R5Off` `v292DfixPLACE1R6Off` `v292DfixPLACE1R7Off` `v292DfixPLACE1R8Off` |
 | 410 | fixRETRY2 | `v292DfixRETRY2-send-policy.js` | index：fix80 の直前（RETRY2・`248cc36`） | `5343838b` | retry2-a | 生成の中心 | `v292DfixRETRY2Off` `v292DfixRETRY2CmfOn` `v292DfixRETRY2IdOn` |
 | 411 | fixHOLDNOTE1 | `v292DfixHOLDNOTE1-hold-note.js` | index：ERRNOTE1 の直前（HOLDNOTE1） | `095d6225` | 20261115-holdnote1 | UI・画面 | `v292DfixHOLDNOTE1Off` |
+| 412 | fixSTORYSIZE1 | `v292DfixSTORYSIZE1-story-size.js` | index：HOLDNOTE1 の直前（STORYSIZE1） | `73784d56` | 20261115-storysize1 | 保存・同期 | `v292DfixSTORYSIZE1Off` |
 
 ## 付録B　ファイルはあるが読み込まれていないもの（＝本番で動いていない）
 
@@ -1891,6 +1893,7 @@
 - `v292DfixDRIVE1On` / `v292DfixDRIVE1Off` / `v292DfixEX192On` / `v292DfixEX192Off` / `v292DfixSEVERE1On` / `v292DfixSEVERE1Off` — fixSEVDRV（既定 OFF）
 - `v292DfixERRNOTE1Off` — fixERRNOTE1（送信失敗の知らせを従来の 60 秒で消える方だけに）
 - `v292DfixHOLDNOTE1Off` — fixHOLDNOTE1（保存停止の知らせを出さない＝従来どおり画面に何も出ない）
+- `v292DfixSTORYSIZE1Off` — fixSTORYSIZE1（物語の大きさを測らない・止めない・知らせない＝従来どおり）
 - `v292DfixF850OrdOff` — fix850（F850Ord。読み込みの順の待ちをしない）
 - `v292Dfix850AOff` — fix850（FIX850A。腕・手の負傷でない動作も従来どおり制約の材料にする）
 - `v292DfixFANOUT1Off` — features, fix80（FANOUT1。土台の同時送信・上限なしの出し直し）

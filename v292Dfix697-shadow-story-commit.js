@@ -2904,7 +2904,7 @@
       try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, TIMEOUT_MS); } catch(e){}
       var opts = { method: 'POST', headers: authHeaders(payload), body: JSON.stringify(payload) };
       if (ac) opts.signal = ac.signal;
-      fetch(proxyUrl() + '/save', opts).then(function(res){
+      sz1Send(payload, opts, function(){ return fetch(proxyUrl() + '/save', opts); }).then(function(res){   /* ★STORYSIZE1 */
         return res.json().then(function(j){ return { status: res.status, j: j }; });
       }).then(function(r){
         inFlight = false; if (timer) clearTimeout(timer);
@@ -3566,6 +3566,11 @@
     if (F733_SIDEPORT_TYPE_A[op]){ invalidateDocRevAuthority('sideportA:' + op, body.id, true); return; }
     if (F733_SIDEPORT_TYPE_R[op]){ invalidateDocRevAuthority('sideportR:' + op, body.id, false); return; }
   }
+  /* ★STORYSIZE1 (GPT #127-UN): 物語の保存（putstory / putcanonical）の送信の口。測るだけ・大きさの上限を確実に超える本文と
+     Worker が大きさで断った物語だけ、Worker の 413 STORY_TOO_LARGE と同じ形の応答をその場で返す。部品が無い／kill → go() そのまま。 */
+  function sz1Send(body, opts, go){ var p0 = null, called = false; var g = function(){ called = true; p0 = go(); return p0; };
+    try { var Z = window.__v292DfixSTORYSIZE1; if (Z && typeof Z.send === 'function'){ var p = Z.send(body, opts, g); if (p && typeof p.then === 'function') return p; } } catch(eZ){}
+    return called ? p0 : go(); }
   function postSaveOnce(body, cb){
     if (!isLoggedIn()){ cb(null, 'NOT_LOGGED_IN'); return; }
     try { f733SidePortAttempt(body); } catch(e){}          /* ★fix733: 送信を試みた時点で invalidate */
@@ -3573,7 +3578,7 @@
     try { ac = new AbortController(); timer = setTimeout(function(){ try { ac.abort(); } catch(e){} }, TIMEOUT_MS); } catch(e){}
     var opts = { method: 'POST', headers: authHeaders(body), body: JSON.stringify(body) };
     if (ac) opts.signal = ac.signal;
-    fetch(proxyUrl() + '/save', opts).then(function(res){
+    sz1Send(body, opts, function(){ return fetch(proxyUrl() + '/save', opts); }).then(function(res){   /* ★STORYSIZE1 */
       return res.json().then(function(j){ return { status: res.status, j: j }; },
                              function(){ return { status: res.status, j: null }; });
     }).then(function(r){

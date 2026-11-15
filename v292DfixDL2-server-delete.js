@@ -110,6 +110,9 @@
      STORE1b（空き容量のシート）がこの証明と、消す時点のサーバーの墓標・端末の全体をもう一度突き合わせる。ここでは何も消さない。
      印が CLEAN の物語は証明が要らない（従来どおりシートに出る）。違った・作れなかった物語は証明なし＝従来どおり対象外。通信は増えない。 */
   var F2_KEY = 'v292DfixFREE2_proofs', F2_MAX = 100;
+  function acNote() { try { var A = window.__v292DfixSTORE1b, ac = (A && typeof A.autoclean === 'function') ? A.autoclean() : null;
+    if (!ac || ac.on !== true || !(+ac.days > 0)) return '';
+    return '<p id="dl2auto">削除から ' + (+ac.days) + ' 日たった後、この端末でホームを開いたときに、この端末に残る写しと巻き戻し用の控えを順に自動で消します（サーバーで削除済みと確認できた物語だけ。確認できないときは消しません）。</p>'; } catch (e) { return ''; } }
   function free2On() { return lsg('v292DfixFREE2Off') !== '1'; }   /* ★FREE2c (GPT #127-TV 2): 既定 ON。kill v292DfixFREE2Off='1'。v292DfixFREE2On は読まない */
   var free2 = { tried: 0, recorded: 0, clean: 0, differs: 0, skipped: 0, last: null };
   function free2Note(id, code) { free2.last = { code: code, t: Date.now() }; if (code === 'recorded') free2.recorded++; else if (code === 'clean-no-proof-needed') free2.clean++; else if (code === 'content-differs') free2.differs++; else free2.skipped++; }
@@ -232,6 +235,7 @@
     h += '<h2>物語を一覧から削除する</h2>' +
          '<div class="dl2soft" id="dl2warn" role="note">この操作で物語は一覧から削除されます。現在、一覧へ戻す機能はありません。サーバー上のデータを直ちに完全消去する操作ではありません。</div>' +   /* ★T2 (GPT #127-GL): required warning, exact text */
          '<p>選んだ物語を、この端末・ほかの端末・クラウドの物語の一覧から外します。</p>' +
+         acNote() +   /* ★AUTOCLEAN1: この端末に残る写しと控えの自動の片づけ（STORE1b の AUTOCLEAN1 が有効なときだけ・kill → 何も足さない＝土台の文面） */
          /* ★UI4b (2026-11-12 Owner): 2 枚目の注意（裁定なし）は #dl2warn と同じ内容で、「控えはこの端末に残ります」は STORE1b 以後いつも正しいとは限らないため外す。
             #dl2warn（#127-GL）と #dl2undo（#127-SC）は変えない。kill: localStorage v292DfixUI4bOff='1' → 従来どおり出す。 */
          (ui4bOff() ? '<div class="dl2soft">これは一覧から外す操作です。データを完全に消すものではありません（本文の控えはクラウドとこの端末に残ります）。一覧へ戻す画面はまだありません。</div>' : '');

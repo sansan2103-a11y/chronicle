@@ -1339,20 +1339,30 @@
   }
   function d2Cat(w) { return (w === 'live' || w === 'body-present') ? w : d1Cat(w); }
   /* r2: サーバーの答え。墓標でないと分かった（404・deleted===false・locked）＝その物語は除外して次へ。分からない（401・通信断・欄の欠け）＝全体を止める */
-  var D2_SKIP = { 'server-404': 'no-tombstone', 'server-live': 'no-tombstone', 'server-locked': 'vault' };
+  var D2_SKIP = { 'server-404': 'no-tombstone', 'server-live': 'no-tombstone', 'server-locked': 'vault', 'too-young': 'too-young', 'no-time': 'no-time', 'bad-time': 'no-time' };   /* ★AUTOCLEAN1: 年齢は手動の DISCARD2 では出ない。no-server-time は全体停止 */   /* ★AUTOCLEAN1: 年齢は手動の DISCARD2 では出ない */
   function d2Server(id, r) {
     if (r && r.status === 200 && r.j && r.j.ok === true && String(r.j.id) === String(id) && typeof r.j.deleted !== 'boolean') return { why: 'server-partial' };
     return d1Server(id, r);
   }
+  /* ★AUTOCLEAN1（Owner 裁定 2026-11-15 14:40「A」）: 削除から AC_DAYS 日たった物語のスナップショットだけを自動で消す。日数はここ 1 か所 */
+  var AC_DAYS = 7, AC_MIN_AGE_MS = AC_DAYS * 24 * 3600 * 1000;
+  /* 端末の墓標の行の削除時刻（serverTombstone.at と deletedAt の新しい方）。無い・読めない → 0 */
+  function d2LocalAt(id, env) { var row = zt1Row(String(id), env); if (!row) return 0; var a = 0;
+    var st = row.serverTombstone; if (st && typeof st === 'object' && typeof st.at === 'number' && isFinite(st.at) && st.at > 0) a = st.at;
+    if (typeof row.deletedAt === 'number' && isFinite(row.deletedAt) && row.deletedAt > a) a = row.deletedAt; return a; }
+  /* 年齢の判定（env.d2MinAgeMs があるときだけ）。null = 通過 / 'no-time' / 'too-young' */
+  function d2AgeBlock(at, env) { if (!(typeof env.d2MinAgeMs === 'number' && env.d2MinAgeMs > 0)) return null; if (!(typeof at === 'number' && isFinite(at) && at > 0)) return 'no-time'; return (env.now() - at >= env.d2MinAgeMs) ? null : 'too-young'; }
   function d2Survey(env, ctx) {
     var out = { v: 'DISCARD2-r2', at: env.now(), stories: 0, targets: [], snapshots: 0, chars: 0, bodyPresent: { stories: 0, snapshots: 0, chars: 0 },
-                excluded: { live: 0, 'body-present': 0, vault: 0, active: 0, unsynced: 0, 'pending-delete': 0, 'no-tombstone': 0, network: 0, legacy: 0, 'unknown-owner': 0 }, unknownOwnerKeys: 0, global: null };
+                excluded: { live: 0, 'body-present': 0, 'too-young': 0, 'no-time': 0, vault: 0, active: 0, unsynced: 0, 'pending-delete': 0, 'no-tombstone': 0, network: 0, legacy: 0, 'unknown-owner': 0 }, unknownOwnerKeys: 0, global: null };
     var gb = globalBlock(env); if (gb) { out.global = gb; return Promise.resolve(out); }
     var ow = d2Owners(env); out.unknownOwnerKeys = ow.unknownKeys; if (ow.unknownKeys) out.excluded['unknown-owner'] += ow.unknownKeys;
     var ids = Object.keys(ow.by).sort(), pend = []; out.stories = ids.length;
     for (var i = 0; i < ids.length; i++) { var w = d2Local(ids[i], env); if (w) { out.excluded[d2Cat(w)] = (out.excluded[d2Cat(w)] || 0) + 1;
         if (w === 'body-present') { var bp = d2Plan(ids[i], env, ow, {}); out.bodyPresent.stories++; out.bodyPresent.snapshots += bp.groups; out.bodyPresent.chars += bp.chars; }   /* 内訳だけ（消さない）。manifest と名前だけを読む */
-        continue; } pend.push(ids[i]); }
+        continue; }
+      var ab = d2AgeBlock(d2LocalAt(ids[i], env), env); if (ab) { out.excluded[ab]++; continue; }   /* ★AUTOCLEAN1（手動の DISCARD2 では d2MinAgeMs が無く、何もしない） */
+      pend.push(ids[i]); }
     var chain = Promise.resolve();
     pend.forEach(function (id) { chain = chain.then(function () {
       var pl = d2Plan(id, env, ow, d2Refs(env, ow, id)); if (pl.unknownGroups) out.excluded['unknown-owner'] += pl.unknownKeys;
@@ -1385,6 +1395,7 @@
               var issuedAt = env.now();
               return Promise.resolve(ctx.who()).then(function (a2) {
                 if (!a2 || a2 !== a0) return fin('principal-changed');
+                if (typeof env.d2MinAgeMs === 'number' && env.d2MinAgeMs > 0) { var ag = acServerAge(r, ctx, env); if (ag) return fin(ag); }   /* ★AUTOCLEAN1 r2: サーバーの時計だけで年齢を決める */
                 return Promise.resolve(ctx.withMatLock(function () {
                   var gb3 = globalBlock(env) || d2Local(id, env); if (gb3) return fin(gb3);
                   var sp3 = samePlan(pl, replan()); if (sp3) return fin(sp3);
@@ -1441,6 +1452,102 @@
       return next();
     });
   }
+  /* ★AUTOCLEAN1 の 1 回分（自動の入口から呼ぶ。ここだけでは時機を決めない）。記録の鍵に件数と時刻だけ（20 回分）。
+     1 日 1 回: 前回の試み（成功・失敗とも）から AC_GAP_MS たっていなければ何もしない。試みる前に記録する（途中で閉じても同じ日にもう一度は動かない）。 */
+  var AC_KILL = 'v292DfixAUTOCLEAN1Off', AC_LOGK = 'v292DfixAUTOCLEAN1Log', AC_GAP_MS = 24 * 3600 * 1000, AC_MAX = 3;
+  /* ★AUTOCLEAN1 r3（GPT #127-UN）: 既定 OFF。端末の鍵 v292DfixAUTOCLEAN1On='1' の端末だけで動く（アカウント単位ではない）。kill v292DfixAUTOCLEAN1Off='1'（と DISCARD2 の kill）が優先。
+     全員 ON に切り替えるときは、この 1 行の AC_DEFAULT_ON を true にする（ほかは変えない）。 */
+  var AC_DEFAULT_ON = false, AC_ON = 'v292DfixAUTOCLEAN1On';
+  function acOnGet(get) { if (get(AC_KILL) === '1' || get(D2_KILL) === '1') return false; return AC_DEFAULT_ON === true || get(AC_ON) === '1'; }
+  function acOn(env) { return acOnGet(function (k) { return g(env, k); }); }
+  function acLog(env) { var o = J(g(env, AC_LOGK) || 'null', null); return (o && typeof o === 'object' && isArr(o.runs)) ? o : { v: 1, lastTry: 0, runs: [] }; }
+  /* r2: 年齢はサーバーの時計だけで決める（getstory の updatedAt＝墓標の時刻 と、直前の /api/auth/me の Date ヘッダ＝サーバーの今）。端末の時計は候補の下見だけ。
+     null = 通過 / 'no-server-time'（サーバーの今が分からない＝全体停止）/ 'no-time'（墓標の時刻が無い）/ 'bad-time'（差が負）/ 'too-young' */
+  function acServerAge(r, ctx, env) {
+    var now = (ctx && typeof ctx.serverNow === 'function') ? ctx.serverNow() : null;
+    if (!(typeof now === 'number' && isFinite(now) && now > 0)) return 'no-server-time';
+    var at = (r && r.j && typeof r.j.updatedAt === 'number' && isFinite(r.j.updatedAt) && r.j.updatedAt > 0) ? r.j.updatedAt : 0;
+    if (!at) return 'no-time';
+    var d = now - at; if (d < 0) return 'bad-time';
+    return d >= (env.d2MinAgeMs || AC_MIN_AGE_MS) ? null : 'too-young';
+  }
+  var AC_QMAX = 6, AC_CURK = 'v292DfixAUTOCLEAN1Cur';   /* 1 回の実行で getstory は 6 本まで。候補の回し位置（指紋 8 字だけ） */
+  function acRunOnce(env, ctx) {
+    if (!acOn(env)) return Promise.resolve({ code: 'off' });
+    var o = acLog(env), now = env.now();
+    if (typeof o.lastTry === 'number' && o.lastTry > 0 && now - o.lastTry < AC_GAP_MS && now >= o.lastTry) return Promise.resolve({ code: 'not-due' });
+    o.lastTry = now; try { env.ls.setItem(AC_LOGK, JSON.stringify(o)); } catch (eW) { return Promise.resolve({ code: 'log-unwritable' }); }   /* 記録できなければ動かない（毎回動くのを防ぐ） */
+    var e2 = {}; for (var k in env) if (Object.prototype.hasOwnProperty.call(env, k)) e2[k] = env[k]; e2.d2MinAgeMs = AC_MIN_AGE_MS; e2.only = null; e2.purge = false;
+    var res = { code: null, freed: 0, freedChars: 0, stories: 0, snapshots: 0, chars: 0, failed: 0, failedCode: null, skipped: {}, queries: 0 };
+    var c2 = {}; for (var k2 in ctx) if (Object.prototype.hasOwnProperty.call(ctx, k2)) c2[k2] = ctx[k2];
+    c2.getStory = function (id) { res.queries++; return ctx.getStory(id); };
+    return acWalk(e2, c2, res).then(function () {
+      if (!res.code) res.code = res.failed ? 'stopped' : 'done';
+      var o2 = acLog(env); o2.runs.push({ at: now, freed: res.freed, freedChars: res.freedChars, stories: res.stories, snapshots: res.snapshots, chars: res.chars, failed: res.failed, code: String(res.code) }); while (o2.runs.length > 20) o2.runs.shift();
+      try { env.ls.setItem(AC_LOGK, JSON.stringify(o2)); } catch (eW2) {} return res; }, function () { return { code: 'threw' }; });
+  }
+  var AC_UNKNOWN = { 'server-unreachable': 1, 'server-not-ok': 1, 'server-authority': 1, 'server-rev': 1, 'server-id-mismatch': 1, 'server-partial': 1, 'no-account': 1, 'principal-changed': 1, 'no-server-time': 1 };
+  function acSkip(res, code) { var c = D2_SKIP[code] || code; res.skipped[c] = (res.skipped[c] || 0) + 1; }
+  /* 候補（端末の墓標の行で 7 日以上＝下見）を指紋の順に並べ、前回の続きから 1 件ずつ:
+       段 1（本体の写しがある）: 通常の FREE2 の判定（survey・その物語だけ）→ 解放できるなら getstory＋/api/auth/me でサーバーの年齢 → freeOne（FREE2 そのもの）
+       段 2（本体の写しが無い・スナップショットがある）: d2One（墓標の確認・年齢はサーバーの時計・DISCARD2 の判定と消し方）
+     触る物語は 3 まで・getstory は 6 本まで。サーバーの状態が分からない・門の拒否 → 全体停止。墓標でない・年齢が足りない → 数えて次へ。 */
+  function acWalk(e2, ctx, res) {
+    var K = e2.key1, ow = d2Owners(e2), aged = candidates(e2).filter(function (id) { return d2AgeBlock(d2LocalAt(id, e2), e2) == null; });
+    var snapIds = {}; for (var sid in ow.by) snapIds[sid] = 1;
+    var fp = function (id) { return d1Short(id); };
+    aged.sort(function (a, b) { var x = fp(a), y = fp(b); return x < y ? -1 : (x > y ? 1 : 0); });
+    var cur = g(e2, AC_CURK), start = 0;
+    if (typeof cur === 'string' && /^[0-9a-f]{8}$/.test(cur)) { for (var i = 0; i < aged.length; i++) if (fp(aged[i]) > cur) { start = i; break; } }   /* 前回の続きから（無ければ先頭から） */
+    var order = aged.slice(start).concat(aged.slice(0, start)), touched = 0, idx = 0;
+    function mark(id) { try { e2.ls.setItem(AC_CURK, fp(id)); } catch (eC) {} }
+    function stop(code) { res.failed = 1; res.failedCode = code; res.code = 'stopped'; }
+    function next() {
+      if (res.failed || idx >= order.length || touched >= AC_MAX) return Promise.resolve();
+      var id = String(order[idx]);
+      var hasBody = g(e2, 'chr6_slot_' + id) != null;
+      if (res.queries + (hasBody ? 3 : 1) > AC_QMAX) { res.budgetLeft = true; return Promise.resolve(); }   /* 問い合わせの上限: この物語は次の実行で */
+      idx++; mark(id);
+      var step = hasBody ? acStage1One(id, e2, ctx, res) : Promise.resolve({ go2: true });
+      return step.then(function (x) {
+        if (res.failed) return;
+        if (x && x.freedNow) touched++;
+        if (!(x && x.go2) || g(e2, 'chr6_slot_' + id) != null || !snapIds[id]) return next();
+        if (res.queries + 1 > AC_QMAX) { res.budgetLeft = true; return; }
+        var lb = d2Local(id, e2); if (lb) { acSkip(res, d2Cat(lb)); return next(); }
+        var o2 = d2Owners(e2), pl = d2Plan(id, e2, o2, d2Refs(e2, o2, id)); if (!pl.keys.length) return next();
+        return Promise.resolve(ctx.lockHeld(id)).then(function (h) { if (h !== false) { acSkip(res, 'active'); return next(); }   /* 別のタブで開いている（DISCARD2 の一覧と同じ除外） */
+        return d2One(id, e2, ctx).then(function (y) {
+          if (y && y.ok) { res.stories++; res.snapshots += y.groups; res.chars += y.chars; if (!(x && x.freedNow)) touched++; return next(); }
+          if (y && D2_SKIP[y.code] && !y.removed) { acSkip(res, y.code); return next(); }
+          if (y && y.code === 'nothing-left') return next();
+          stop((y && y.code) || 'threw'); if (y && y.policyWhy) res.policyWhy = String(y.policyWhy);
+        }); });
+      });
+    }
+    return next();
+  }
+  function acStage1One(id, e2, ctx, res) {
+    var e3 = {}; for (var k in e2) if (Object.prototype.hasOwnProperty.call(e2, k)) e3[k] = e2[k]; e3.only = [id];
+    var unknown = null; e3.onReason = function (sid, w) { if (AC_UNKNOWN[String(w)] === 1 && !unknown) unknown = String(w); };
+    return survey(e3, ctx).then(function (rep) {
+      if (unknown) { res.failed = 1; res.failedCode = unknown; res.code = 'stopped'; return null; }
+      if (!rep.eligible.length) return { go2: false };   /* FREE2 で解放できない（証明できない・開いている・未同期…）→ 段 1 も段 2 もしない */
+      return Promise.resolve(ctx.getStory(id)).then(function (r) {
+        var se = d2Server(id, r);
+        if (se.why) { if (D2_SKIP[se.why]) { acSkip(res, se.why); return { go2: false }; } res.failed = 1; res.failedCode = se.why; res.code = 'stopped'; return null; }
+        return Promise.resolve(ctx.who()).then(function (a) {
+          if (!a) { res.failed = 1; res.failedCode = 'no-account'; res.code = 'stopped'; return null; }
+          var ag = acServerAge(r, ctx, e2);
+          if (ag === 'no-server-time') { res.failed = 1; res.failedCode = ag; res.code = 'stopped'; return null; }
+          if (ag) { acSkip(res, ag); return { go2: false }; }
+          return freeOne(id, e2, ctx).then(function (x) {
+            if (x && x.ok) { res.freed++; res.freedChars += x.chars || 0; return { go2: true, freedNow: true }; }
+            res.failed = 1; res.failedCode = (x && x.code) || 'threw'; res.code = 'stopped'; return null; });
+        });
+      }, function () { res.failed = 1; res.failedCode = 'server-unreachable'; res.code = 'stopped'; return null; });
+    });
+  }
   var api = { version: VERSION, NOTICE: NOTICE, ID_RE: ID_RE, MAX_MULTI: MAX_MULTI, OPEN_LOCK: OPEN_LOCK, MAT_LOCK: MAT_LOCK, keysFor: keysFor, purgeList: purgeList, localBlock: localBlock, candidates: candidates,
               serverEval: serverEval, survey: survey, freeOne: freeOne, freeMany: freeMany, lockCtx: lockCtx, stable: stable,
               writeLog: writeLog, logOfSurvey: logOfSurvey, _memLog: function () { return memLog.slice(); },
@@ -1448,6 +1555,7 @@
               serverEvalP: serverEvalP, serverEvalMeta: serverEvalMeta, surveyP: surveyP, freeOneP: freeOneP,
               /* ★STUCK1 */ STUCK_OFF: STUCK_OFF, staleDirtyLocal: staleDirtyLocal, stuckNeeds: stuckNeeds, stuckProof: stuckProof,
               /* ★STUCK1 r2 */ STUCK_ON: STUCK_ON, SVERSION: SVERSION, FAMILY_CLASS: FAMILY_CLASS, familyClass: familyClass, provenSubset: provenSubset, raceProbe: raceProbe, raceBlock: raceBlock, planByReason: planByReason, COUNT_ONLY: COUNT_ONLY,
+              /* ★AUTOCLEAN1 */ acRunOnce: acRunOnce, AC_DEFAULT_ON: AC_DEFAULT_ON, acOnGet: acOnGet, acServerAge: acServerAge, AC_QMAX: AC_QMAX, AC_DAYS: AC_DAYS, AC_MIN_AGE_MS: AC_MIN_AGE_MS, AC_GAP_MS: AC_GAP_MS, AC_MAX: AC_MAX, d2LocalAt: d2LocalAt,
               /* ★DISCARD2 */ d2Owners: d2Owners, d2Plan: d2Plan, d2Local: d2Local, d2Survey: d2Survey, d2One: d2One, d2Run: d2Run, d2Server: d2Server, D2_SKIP: D2_SKIP,
               /* ★DISCARD1 */ d1Local: d1Local, d1Server: d1Server, d1Survey: d1Survey, d1One: d1One, d1Run: d1Run, d1Cat: d1Cat, D1_ACK: D1_ACK, D1_OVERRIDE: D1_OVERRIDE,
               /* ★FREE2c */ judgeOne: judgeOne, /* ★FREE2d */ _memoClear: function () { MEMO = {}; }, tombHashCheck: tombHashCheck, F2_VERSION: F2_VERSION };
@@ -1523,13 +1631,15 @@
       });
     });
   }
+  var srvClock = null; function perfNow() { try { return root.performance.now(); } catch (e) { return 0; } }
   function bctx() {
     var L = null; try { L = root.navigator && root.navigator.locks; } catch (e) { L = null; }
     var lc = lockCtx(L);
     return {
       who: function () {
         return root.fetch('/api/auth/me', { method: 'GET', credentials: 'same-origin', cache: 'no-store', headers: { 'x-chronicle-csrf': '1' } })
-          .then(function (r) { return r.ok ? r.json() : null; }, function () { return null; })
+          .then(function (r) { try { var dh = r.headers && r.headers.get('Date'), dm = dh ? Date.parse(dh) : NaN; srvClock = (isFinite(dm) && dm > 0) ? { t: dm, p: perfNow() } : null; } catch (eD) { srvClock = null; }   /* ★AUTOCLEAN1 r2: サーバーの今 */
+            return r.ok ? r.json() : null; }, function () { srvClock = null; return null; })
           .then(function (j) { return (j && j.ok === true && j.accountId) ? String(j.accountId) : null; }, function () { return null; });
       },
       getStory: function (id) { return new Promise(function (res) { var W = root.__v292Dfix697; if (!W || typeof W.getStoryV2Once !== 'function') return res(null);
@@ -1537,6 +1647,7 @@
       /* ★PURGE1: 隠した物語の削除済みの確認は、本文を含まない一覧の行（listshadow）だけで行う */
       serverMeta: function (id) { return new Promise(function (res) { var W = root.__v292Dfix697; if (!W || typeof W.listShadowBasisOnce !== 'function') return res(null);
         try { W.listShadowBasisOnce(function (rows, err, status) { if (!rows) return res({ status: status || 0 }); var hit = null; for (var i = 0; i < rows.length; i++) if (rows[i] && String(rows[i].id) === String(id)) { hit = rows[i]; break; } res({ status: 200, row: hit }); }); } catch (e) { res(null); } }); },
+      serverNow: function () { return srvClock ? srvClock.t + Math.max(0, perfNow() - srvClock.p) : null; },   /* ★AUTOCLEAN1 r2: 直前の /api/auth/me の Date ＋ そこからの経過（単調な時計） */
       lockHeld: lc.lockHeld, lockInfo: lc.lockInfo, withOpenLock: lc.withOpenLock, withMatLock: lc.withMatLock
     };
   }
@@ -1587,7 +1698,7 @@
     if (M.rep && M.phase !== 'loading') {
       var t = M.rep.totals;
       h += M.purge ? ('<p id="s1btotal">消せる物語 ' + t.stories + ' 件・合計 約 ' + esc(kchars(t.chars)) + (t.blind ? '（隠した物語 ' + t.blind + ' 件は中身を見ずに消すため、文字数に入っていません）' : '') + '</p>')
-                   : ('<p id="s1btotal">消せる物語 ' + t.stories + ' 件・合計 ' + esc(kchars(t.chars)) + '（スナップショット ' + t.snapshotsKept + ' 件は残します）</p>');
+                   : ('<p id="s1btotal">消せる物語 ' + t.stories + ' 件・合計 ' + esc(kchars(t.chars)) + '（スナップショット ' + t.snapshotsKept + ' 件は' + (!acOnGet(lsg) ? '残します' : '、削除から ' + AC_DAYS + ' 日たつと自動で消えます') + '）</p>');   /* ★AUTOCLEAN1 */
       var full = M.picks.length >= (M.multi ? MAX_MULTI : 1);
       for (var i = 0; i < M.rep.eligible.length; i++) {
         var r = M.rep.eligible[i], on = M.picks.indexOf(r.id) >= 0;
@@ -1762,12 +1873,45 @@
         return o;
       }, function () { o.failed = true; return o; });
     },
+    /* ★AUTOCLEAN1: autoclean() = 状態（読むだけ）／autoclean({ dryRun:true }) = 何も消さず・記録も書かず（1 日 1 回に数えない）候補の数・7 日以上の数（端末の下見）・サーバーの今が読めたか／
+       autoclean({ run:true }) = 自動と同じ 1 回の実行（On の端末だけ・1 日 1 回の制限も同じ） */
+    autoclean: function (opt) {
+      if (opt && opt.dryRun === true) { if (!ready()) return Promise.resolve({ notReady: true }); var e = benv(), cx = bctx();
+        var c = candidates(e), aged = c.filter(function (id) { return d2AgeBlock(d2LocalAt(id, e), { d2MinAgeMs: AC_MIN_AGE_MS, now: e.now }) == null; });
+        var lg = acLog(e), due = !(typeof lg.lastTry === 'number' && lg.lastTry > 0 && e.now() - lg.lastTry < AC_GAP_MS && e.now() >= lg.lastTry);
+        return Promise.resolve(cx.who()).then(function (a) { var n = cx.serverNow(); return { code: 'dry', on: acOnGet(lsg), account: !!a, serverTime: typeof n === 'number' && n > 0, candidates: c.length, aged: aged.length, due: due, days: AC_DAYS }; }); }
+      if (opt && opt.run === true) { if (!acOnGet(lsg)) return Promise.resolve({ code: 'off' }); if (!ready()) return Promise.resolve({ notReady: true });
+        return acRunOnce(benv(), bctx()).then(function (r) { st.autoclean = { code: r.code, freed: r.freed || 0, stories: r.stories || 0, snapshots: r.snapshots || 0, failed: r.failed || 0, manual: true }; return r; }); }
+      return { days: AC_DAYS, on: acOnGet(lsg), defaultOn: AC_DEFAULT_ON, last: st.autoclean, log: J(lsg(AC_LOGK) || 'null', null) }; },
     status: function () { return JSON.parse(JSON.stringify({ version: VERSION, stuck1: { v: SVERSION, on: benv().stuck1 === true }, ready: ready(), opened: st.opened, surveys: st.surveys, freed: st.freed, last: st.last, lastSurvey: st.lastSurvey, dry: st.dry, memLog: memLog })); }
   };
   function boot() {
     decorate();
     try { var mo = new root.MutationObserver(function () { if (!root.document.getElementById('s1bBtn')) decorate(); }); mo.observe(root.document.body, { childList: true, subtree: true }); } catch (e) {}
     if (lsg(DRY) === '1') root.setTimeout(function () { dryRun(); }, 6000);
+    acSchedule();
   }
+  /* ★AUTOCLEAN1 の自動の入口（HOME だけ: この部品は home.html だけが読む。念のため ?story= の画面でも動かない）。
+     読み込みから AC_DELAY_MS 後、アイドルのときに 1 回だけ試す。条件が合わなければ少し待って最大 AC_TRIES 回まで見直す。画面には何も出さない。 */
+  var AC_DELAY_MS = 30000, AC_TRIES = 6, AC_RETRY_MS = 20000, acTries = 0, acDone = false;
+  st.autoclean = null;
+  function acIdle() {
+    try { if (root.document.hidden) return false; } catch (e) {}
+    try { if (root.navigator && root.navigator.onLine === false) return false; } catch (e) {}
+    if (M) return false;                                                                         /* 空き容量のシートを開いている */
+    try { if (root.document.getElementById('dl2sheet')) return false; } catch (e) {}              /* 削除のシートを開いている */
+    try { var W = root.__v292Dfix697; if (W && typeof W.status === 'function') { var s2 = W.status(); if (s2 && s2.inFlight) return false; } } catch (e) { return false; }   /* 保存を送っている */
+    return true;
+  }
+  function acTick() {
+    if (acDone) return;
+    if (!acOnGet(lsg)) { acDone = true; st.autoclean = { code: 'off' }; return; }
+    try { if (/[?&]story=/.test(String(root.location.search || ''))) { acDone = true; return; } } catch (e) {}
+    if (!ready() || !acIdle()) { if (++acTries < AC_TRIES) root.setTimeout(acTick, AC_RETRY_MS); else st.autoclean = { code: 'not-idle' }; return; }
+    acDone = true;
+    var go = function () { acRunOnce(benv(), bctx()).then(function (r) { st.autoclean = { code: r.code, freed: r.freed || 0, stories: r.stories || 0, snapshots: r.snapshots || 0, failed: r.failed || 0 }; }, function () { st.autoclean = { code: 'threw' }; }); };
+    try { if (typeof root.requestIdleCallback === 'function') root.requestIdleCallback(go, { timeout: 10000 }); else go(); } catch (e) { go(); }
+  }
+  function acSchedule() { if (!acOnGet(lsg)) return;   /* r3: OFF の端末では timer も置かない（土台と同じ） */ root.setTimeout(acTick, (+lsg('v292DfixAUTOCLEAN1DelayMs') > 0 ? +lsg('v292DfixAUTOCLEAN1DelayMs') : AC_DELAY_MS)); }
   if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', function () { root.setTimeout(boot, 1500); }); else root.setTimeout(boot, 1500);
 })(typeof window !== 'undefined' ? window : null);
