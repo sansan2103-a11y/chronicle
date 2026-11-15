@@ -275,6 +275,7 @@
 
 #### CONTRACT1 — 今回の場面の契約（会話の順番と確定事実の小さな控え）を user に渡す（11-15・GitHub `9e585fb`・`v292DfixCONTRACT1-scene-contract.js`・版 `contract1-20261115-a`）
 - 状態：**実験・既定 OFF**（`v292DfixCONTRACT1On='1'` の端末だけ）。kill `v292DfixCONTRACT1Off='1'` が On より強い。保存しない・sys は増やさない。index.html の先頭近く。
+- r2（11-16・版 `20261116-contract1r2`・kill `v292DfixCONTRACT1R2Off='1'` で r1 に戻る）：同じ人が続けて話す間の頭の呼びかけを相手が 1 人のときだけ引き継ぐ／疑問詞で終わる問いを問いとして数える／最後の 1 枚だけ話者が未確定ならその前の確定した台詞を出す。SMOKE13 の再生で増えた行の誤り 0（本物の AI では未確認）。Owner の PC だけ On（GPT #127-UR）。
 - 中身（確実に言えるときだけ。何も言えない回は欄ごと出さない）：user の JSON の whereNow（無ければ nowScene）の直後に `sceneContract { rule, items }`（最大 6 行・320 字）。①直前のやり取り（<say> タグか主人公の入力が由来の最後の 1〜2 台詞・各 30 字まで）②まだ返事が出ていない相手（呼びかけで相手が決まる問い・頼みだけ）③明示の拒否／承諾（決まった言い方だけ・最新 1 行）④設定で確定した関係・出自（desc の関係・出自の語を含む文・2 行まで。「実は・隠し・秘密・正体」等の印がある文は使わない）。直前の回は recentScenes の最後の本文と S.turns の本文が一致したときだけ使う。
 - 検証口：`window.__v292DfixCONTRACT1`（last() は各行の根拠を 30 字まで）。判断待ち（GPT #127-UP・QUALITY_LEDGER 2454・2455）。
 
@@ -493,6 +494,7 @@
 |---|---|---|---|
 | fix246 | `i35` | per-story の付随データ（fix77 状態・longmem・会話ログ抽出など）を `localStorage` の読み書きの段階で物語ごとのキーへ振り分ける | `v292Dfix783Off` |
 | fix228 | `i109` | スロットの自動世代バックアップ（直近 3 世代 `__gen_<slotKey>`）と巻き戻り検知。`window.__v292Restore()` | `v292SlotGenOff` |
+| GEN1 | index（fix228 の直後） | 既定 OFF。__gen_ の合計（キー名＋値の字数）が 400,000（ソフト上限）を超え、かつ保護される分だけでは超えないときだけ、生きた行・開いていない（この画面・active_slot・10 分以内・Web Lock）・同期の印 CLEAN・f911／f697p／rescue／dl2conflict／fix750／fix587 の印なし・Vault／パスコードでない物語の __gen_ を、最後に開いたのが古い順に、1 回の実行で 1 本だけ最新 1 世代へ減らす（キーは消さない）。世代の指紋が別の物語・読めない（所属不明）、削除済みの物語、既定の chr6 は対象外。GPT #127-UR の条件。`dryRun()` は読むだけ（本数と字数だけ）。GPT #127-UN | `v292DfixGEN1On` `v292DfixGEN1Off` |
 | fix525 | `i298` | タブの所有権ピン（他タブの切替で自分の物語を他スロットへ書かない） | `v292Dfix525Off` |
 | fix527 | `i60` | 開いている物語の真実を URL の `?story=` にする（`chr6_active_slot` は互換用ミラー）。83 で sha `2ee15cb3`・?cb=`20261101-bundle83-flow-c`：「🏠 ホーム」の押下を先に FLW5 へ渡す。FLW5（83 の番号で `i361`・sha `c3679050`）＝保存が書く形（保存先の妥当な origin を含む）で比べ、意味の無い差（origin・`cast.av2.known.*.appeared`）だけを外して同じなら書かない。DIRTY の印には触れない（② は GPT #127-PG で外した）。kill `v292DfixFLW5Off`。**93-e（OPEN1）で sha `8c62d316`・?cb=`20261107-open1`**：ISO1 の関門が掛かっているあいだは `touchOpened`／`lastOpenedAt` を書かない。fix889 の関門が掛かっているときは解除まで待つ（最大約 60 秒・250 ms ごとに確認）。解除後にだけ書く | `v292Dfix527Off`・`v292DfixFLW5Off` |
 | fix543 | `i36` | 保存（setItem）の失敗を無言にしない。物語の保存失敗はトースト | `v292Dfix543Off` |
@@ -1443,6 +1445,7 @@
 | 413 | fixPRUNE3 | `v292DfixPRUNE3-sys-prune3.js` | index の先頭近く（HEROVOICE1 の後。PRUNE3・`e5d5d30`） | `ee3d8b9e` | 20261115-prune3 | 文章品質・プロンプト | `v292DfixPRUNE3On`（実験・既定 OFF） `v292DfixPRUNE3Off` `v292DfixPRUNE3Parts` |
 | 414 | fixHDRNL1 | `v292DfixHDRNL1-sys-header-newline.js` | index の先頭近く（PRUNE3 の直前。HDRNL1・`e5d5d30`） | `ecbc38cc` | 20261115-hdrnl1 | 文章品質・プロンプト | `v292DfixHDRNL1Off`（kill。既定 ON） |
 | 415 | fixCONTRACT1 | `v292DfixCONTRACT1-scene-contract.js` | index の先頭近く（HEROVOICE1 の直後。CONTRACT1・`9e585fb`） | `31752391` | 20261116-contract1 | 文章品質・プロンプト | `v292DfixCONTRACT1On`（実験・既定 OFF） `v292DfixCONTRACT1Off` |
+| 416 | fixGEN1 | `v292DfixGEN1-gen-budget.js` | index：fix228 の直後（GEN1） | `b57e40f2` | 20261116-gen1r2 | 保存・同期 | `v292DfixGEN1On`（既定 OFF） `v292DfixGEN1Off` |
 
 ## 付録B　ファイルはあるが読み込まれていないもの（＝本番で動いていない）
 
@@ -1925,6 +1928,7 @@
 - `v292DfixHOLDNOTE1Off` — fixHOLDNOTE1（保存停止の知らせを出さない＝従来どおり画面に何も出ない）
 - `v292DfixHOLDNOTE2Off` — fixHOLDNOTE2（状態ごとの保存停止の知らせを出さない＝従来どおり）
 - `v292DfixSTORYSIZE1Off` — fixSTORYSIZE1（物語の大きさを測らない・止めない・知らせない＝従来どおり）
+- `v292DfixGEN1On` / `v292DfixGEN1Off` — fixGEN1（On で __gen_ の予算を有効にする。Off は dryRun も含めて何もしない）
 - `v292DfixF850OrdOff` — fix850（F850Ord。読み込みの順の待ちをしない）
 - `v292Dfix850AOff` — fix850（FIX850A。腕・手の負傷でない動作も従来どおり制約の材料にする）
 - `v292DfixFANOUT1Off` — features, fix80（FANOUT1。土台の同時送信・上限なしの出し直し）

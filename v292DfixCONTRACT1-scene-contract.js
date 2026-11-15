@@ -22,7 +22,8 @@
   'use strict';
   var G = (typeof window !== 'undefined') ? window : globalThis;
   if (G.__v292DfixCONTRACT1) return;
-  var TAG = '[v292DfixCONTRACT1]', VER = 'contract1-20261115-a';
+  var TAG = '[v292DfixCONTRACT1]', VER = 'contract1-20261116-r2';
+  function r2on(){ return ls('v292DfixCONTRACT1R2Off') !== '1'; }   /* ★r2（GPT #127-UR）: '1' で r1 と同じ規則に戻す。毎回評価 */
   function ls(k){ try { return G.localStorage.getItem(k); } catch(e){ return '__ERR__'; } }
   function on(){ var o = ls('v292DfixCONTRACT1Off'); if (o === '__ERR__' || o === '1') return false; return ls('v292DfixCONTRACT1On') === '1'; }
 
@@ -36,6 +37,8 @@
   }
   function sentences(s){ return String(s || '').split(/(?<=[。！？!?])/).map(function(x){ return x.replace(/[」』\s]+$/, '').trim(); }).filter(Boolean); }
   var RE_Q = /(?:[？?]|(?:ですか|ますか|ませんか|でしょうか|のか|んか|かね|かい|だろうか)[。…]*|^(?!(?:そう|そっ|ほう|なるほど|まあ|そりゃ|あ|え|ふん)か)[^。]{3,}[^そっ]か[。…]*)$/;
+  /* ★r2: 「か」で終わらない疑問詞の問い（「どこの子だ」「誰に頼んだんだ」）。疑問詞＋か／も／でも（何か・誰も・何でも）は除く・「なんだ」（＝のだ）は疑問詞にしない・25 字まで */
+  var RE_QWH = /^(?=[^。]{0,25}$)(?:.*?)(?:どこ|誰|だれ|何|なに|なんで|なんて|なぜ|どうして|いつ|どれ|どっち|どちら|いくつ|いくら)(?!か|も|でも|だか|とか)[^。]*(?:だ|だい|の|んだ|んだい)[。…]*$/;
   var RE_REQ = /(?:てくれ|てくれよ|てくれないか|てくれませんか|てください|て下さい|てほしい|て欲しい|ていただけませんか|てもらえませんか|てもらえないか|お願いします|お願いです|お願い)[。！!…]*$/;
   var GROUP = /(あんたら|あんたたち|あんた方|お前さんたち|お前さんら|お前ら|おまえら|お二人|おふたり|二人とも|ふたりとも|三人とも|皆さん|みなさん|みんな|あなたたち|あなた方|君たち|きみたち|お前たち|おまえたち)/;
   var RE_REFUSE = /(?:断る|お断りだ|お断りします|お断りや|(?:出さ|出せ|貸さ|貸せ|通さ|通せ|入れ|乗せ|乗せられ|教えられ|教え|でき)(?:ん|ない|ません|ねぇ|ねえ)|無理だ|無理です|だめだ|駄目だ|ダメだ)(?:よ|ぞ|な|ね|わ|って)*[。！!…]*$/;
@@ -63,6 +66,33 @@
     npcs.concat([ctx.hero]).forEach(function(p){ var re = /([^、。「」\s]{1,12})を「([^」]{1,10})」[^。]{0,8}と呼/g, m; while ((m = re.exec(String(p.desc || '')))){ if (reg(m[1])) (NICK[p.name] = NICK[p.name] || {})[m[2]] = m[1]; } });
     var SUF = '(?:さん|ちゃん|くん|君|先輩|ねえ|姉ちゃん|兄ちゃん)?';
     function headOf(x){ return String(x || '').replace(/^[「『…‥・\s]+/, ''); }
+    /* ★r2: 頭の感動詞（おう、／なあ、 等）を外して見る・「凪か」（名前＋か）も呼びかけに数える */
+    var INTJ = /^(?:おお|ああ|おや|やあ|あら|ほう|おう|まあ|ねえ|なあ|おい|よう|ほら)[、…\s]*/;
+    var UNREG = /^(?:嬢ちゃん|お嬢さん|お嬢ちゃん|兄ちゃん|姉ちゃん|あんた|お前さん|お前|おまえ|君|きみ|あなた|坊主|坊)[、。！!…]/;
+    function vocAt2(x, speaker){
+      var h = headOf(x).replace(INTJ, '');
+      var v = vocAt(h, speaker); if (v) return v;
+      for (var i = 0; i < names.length; i++){ var n = names[i]; if (n === speaker) continue;
+        if (new RegExp('^' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + SUF + 'か(?:[。！!…]|$)').test(h)) return { name: n, word: n + 'か' }; }
+      return null;
+    }
+    /* ★r2: 問いの文に呼びかけが無いとき、同じ話し手が続けて話している間（この回の中・ほかの人の台詞を挟まない）に
+       頭で呼びかけた相手がちょうど 1 人で、途中に別の呼びかけ（登録外の「嬢ちゃん、」「あんた、」等も含む）が無ければ、その人を相手とする */
+    function isRecog(x, speaker){ var h = headOf(x).replace(INTJ, ''); return names.some(function(n){ return n !== speaker && new RegExp('^' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + SUF + 'か[。！!…]*$').test(h); }); }
+    function runAddressee(c, idx, list){
+      var found = [], bad = false, grp = null;
+      for (var j = idx; j >= 0; j--){
+        var d = list[j]; if (!d || d.who !== c.who) break; if (d.bare) { bad = true; break; }
+        var ss = sentences(d.say);
+        ss.forEach(function(x){ var h = headOf(x).replace(INTJ, ''); if (UNREG.test(h)) bad = true;
+          var v = vocAt2(x, c.who); if (v && v.group) grp = v.word; else if (v && found.indexOf(v.name) < 0) found.push(v.name);
+          else if (!v && GROUP.test(h.slice(0, 8))) bad = true; });
+      }
+      if (bad) return null;
+      if (grp && !found.length) return { to: names.filter(function(n){ return n !== c.who; }), how: '同じ話し手の続きの頭の呼びかけ「' + grp + '」', group: true };   // 「お前さんたち、…か」の続きの問い
+      if (grp || found.length !== 1) return null;
+      return { to: [found[0]], how: '同じ話し手の続きの頭の呼びかけ「' + found[0] + '」' };
+    }
     function vocAt(x, speaker){
       var h = headOf(x), gm = h.match(new RegExp('^' + GROUP.source + '[、。！!…？?\\s]'));
       if (gm) return { group: true, word: gm[1] };
@@ -74,6 +104,10 @@
     }
     function addressees(c, idx, list){
       var ss = sentences(c.say), lastS = ss[ss.length - 1] || '', v = vocAt(lastS, c.who) || vocAt(c.say, c.who);
+      if (!v && ctx.r2){
+        if (UNREG.test(headOf(lastS).replace(INTJ, ''))) return null;   // 問いの文の頭が登録外の呼びかけ（嬢ちゃん、等）→ 相手を決めない
+        v = vocAt2(lastS, c.who); if (!v) return runAddressee(c, idx, list);   // 台詞の頭の呼びかけも、続きの中に別の呼びかけが無いかを見てから使う
+      }
       if (!v) return null;   // 呼びかけが無い問いは相手を決めない（直前の話し手を相手と見なすと誤る実例があった）
       if (v.group) return { to: names.filter(function(n){ return n !== c.who; }), how: '呼びかけ「' + v.word + '」', group: true };
       return { to: [v.name], how: '呼びかけ「' + v.word + '」' };
@@ -83,7 +117,8 @@
       // 最後の確定台詞から後ろ向きに、最後の問い・頼みを探す（その後ろに台詞が 1 つまで）
       for (var k = says.length - 1; k >= Math.max(0, says.length - 2); k--){
         var c = says[k]; if (c.bare || !reg(c.who)) break;
-        var ls1 = lastSentence(c.say), kind = RE_Q.test(ls1) ? '問い' : (RE_REQ.test(ls1) ? '頼み' : null);
+        var ls1 = lastSentence(c.say), kind = (RE_Q.test(ls1) || (ctx.r2 && RE_QWH.test(ls1.replace(INTJ, '')))) ? '問い' : (RE_REQ.test(ls1) ? '頼み' : null);
+        if (ctx.r2 && kind && isRecog(ls1, c.who)) kind = null;   // ★r2: 「おお、凪か」（名前＋か）は相手が誰かの確かめ＝問いにしない
         if (!kind) continue;
         var a = addressees(c, k, says); if (!a) break;
         var later = says.slice(k + 1);
@@ -105,10 +140,16 @@
     }
 
     // ---- 1: 直前のやり取り（最後の 1〜2 台詞・話者が確定したものだけ） ----
-    if (sure.length && says[says.length - 1] === sure[sure.length - 1]){
-      var tail = sure.slice(-2), last2 = says.slice(-2);
+    /* ★r2: 最後のカード 1 枚だけが話者の確定しない台詞（問い・頼みの形でない）なら、その前の確定した台詞を出し、その後に 1 つあると書き添える */
+    var trail = 0, sayEnd = says;
+    if (ctx.r2 && says.length >= 2 && says[says.length - 1] !== sure[sure.length - 1]){
+      var lc = says[says.length - 1], lcs = lastSentence(lc.say);
+      if ((lc.bare || !reg(lc.who)) && !RE_Q.test(lcs) && !RE_QWH.test(lcs) && !RE_REQ.test(lcs) && says[says.length - 2] === sure[sure.length - 1]){ trail = 1; sayEnd = says.slice(0, -1); }
+    }
+    if (sure.length && sayEnd[sayEnd.length - 1] === sure[sure.length - 1]){
+      var tail = sure.slice(-2), last2 = sayEnd.slice(-2);
       if (tail.length === 2 && (last2[0] !== tail[0])) tail = tail.slice(-1);
-      var seg = tail.map(function(c){ return lbl(c.who) + '「' + q(c.say) + '」'; }).join(' → ');
+      var seg = tail.map(function(c){ return lbl(c.who) + '「' + q(c.say) + '」'; }).join(' → ') + (trail ? '（このあとに話者の確定していない台詞が 1 つ）' : '');
       if (!pending || tail.length === 2 || tail[0].say !== pending.say){
         items.unshift('直前の回の終わりの台詞：' + seg);
         ev.push({ item: 'last', turn: ti + 1, quotes: tail.map(function(c){ return c.who + ':' + q(c.say); }) });
@@ -176,7 +217,7 @@
         var sure = !!(c && !c._b && !c._bw && mt && (kind === 'say-tag' || kind === 'hero-utterance'));
         return { who: c && c.who, say: c && c.say, bare: !sure }; }) }; });
     var ci = userObj.currentInput || {};
-    return { hero: { name: S.cast.hero.name, desc: S.cast.hero.desc || '' }, npcs: (S.cast.npcs || []).map(function(n){ return { name: n && n.name, desc: n && n.desc || '' }; }),
+    return { r2: r2on(), hero: { name: S.cast.hero.name, desc: S.cast.hero.desc || '' }, npcs: (S.cast.npcs || []).map(function(n){ return { name: n && n.name, desc: n && n.desc || '' }; }),
       turns: turns, cur: { type: ci.type || null, text: ci.text || '' } };
   }
   var last = null, stats = { seen: 0, added: 0, empty: 0, skip: 0, err: 0 };
