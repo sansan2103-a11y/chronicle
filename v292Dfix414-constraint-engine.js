@@ -234,6 +234,10 @@
   function leg1On(){ try { return localStorage.getItem('v292DfixLEG1Off') !== '1'; } catch(e){ return true; } }
   var LEG_RE1 = '(左|右|両)?(太もも|ふくらはぎ|足首|脚|足|膝|脛|腿)';
   var CUT_L1 = /(切り傷|切創|切っ(た|て)|切れ(た|て)|切り裂|切られ)/;
+  /* ★LEG1 r2（2026-11-16・GPT #127-UJ）: 「切った」等（CUT_L1）だけでは付けない。その人の からだ・傷 に重さの手がかり（SEV_L2）があり、
+     部位のまわりに浅い傷の言い方（LIGHT_L2）が無いときだけ「移動が鈍い」。裂傷・深い傷 等（WOUND）と捻挫 等は従来どおり。 */
+  var SEV_L2 = /(深(い|く|手|め)|ざっくり|ぱっくり|大きく(切|裂)|骨が見え|出血|血が(止まらな|止まらず|流れ|滴|したた|溢|あふ|噴|吹き|伝)|血を流|血だまり|血まみれ|血に染|体重を(かけ|乗せ)(られな|ることができな|られず)|荷重|踏ん張れな|踏ん張りが(きか|効か)な|引きず|足を引い|足を引き|庇|かば|片足で|跛|びっこ|歩けな|立てな|よろめ|ふらつ)/;
+  var LIGHT_L2 = /(浅|掠り|かすり|擦りむ|擦り剥|すりむ|擦り傷|小さな|軽い|軽く|軽傷|少し|ちょっと|わずか|僅か|うっすら|薄く|絆創膏|ばんそうこう|大したことな|たいしたことな|程度)/;
   var EYE_D1 = /(?:^|[のがはもで、・\s　両片右左涙])(目|眼)[^。]{0,8}(失|見えな|潰|塞が|血で|かすん|ぼやけ|霞ん)|視界[^。]{0,8}(失|見えな|潰|塞が|血で|かすん|ぼやけ|霞ん)/;
   function legRE(){ return leg1On() ? LEG_RE1 : LEG_RE; }
 
@@ -271,7 +275,7 @@
           if (otherOwnerFRZ1(cl, at, name)) return;
           var hard = /(折れ|骨折|潰れ|切断|貫通)/.test(ctx), spr = SPRAIN_FRZ1.test(ctx);
           if (hard || (spr && !MILD_FRZ1.test(ctx)) || (DISABLE.test(ctx) && (physFRZ1(ctx) || kizuLeg))) add(2, '走行不可・移動は支え必要');
-          else if (((WOUND.test(ctx) || (leg1On() && CUT_L1.test(ctx.slice(Math.max(0, ctx.indexOf(part)))))) && !LIGHT.test(ctx)) || spr) add(2.5, '移動が鈍い');   /* ★LEG1 */
+          else if (((WOUND.test(ctx) || (leg1On() && CUT_L1.test(ctx.slice(Math.max(0, ctx.indexOf(part)))) && SEV_L2.test(bodyClauses.join('。')) && !LIGHT_L2.test(ctx))) && !LIGHT.test(ctx)) || spr) add(2.5, '移動が鈍い');   /* ★LEG1（r2: 重さの手がかりがあり浅い傷でないときだけ） */
           else if (DISABLE.test(ctx) && FREEZE_FRZ1.test(cl)) add(6, t6F1());   /* ★FEAR1 C */
           return;
         }
