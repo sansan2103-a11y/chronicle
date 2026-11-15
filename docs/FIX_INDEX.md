@@ -836,7 +836,7 @@
 #### fix197 / fix523 / fix990 / p8d — 旧アイコンの仕組みと安全装置
 - fix197（`i106`）：AI アイコン（seed 固定・キャラ単位）。再生成（fix403）・サーバー URL 優先（fix400）・正名寄せ（fix424）など多数の追加を内蔵。
 - fix523（`i297`）：アイコンの端末間伝播（Worker の imgmanifest の rev で新しいときだけ上書き）。
-- fix990（`i10`）：Asset v2 必須のアカウントで旧画像の op が 409 を返し続ける空回りを、10 分止める。11-15 の IMGSTOP1（GPT #127-UF ③）から、4096 字を超える本文（絵を積む putimg）も、先頭の JSON の op の値が旧画像 op と完全に一致するときだけ同じく止める（判定できない本文・ほかの op は従来どおり送る）。止める：`v292DfixIMGSTOP1Off`（長い本文は従来どおり素通し）。
+- fix990（`i10`）：Asset v2 必須のアカウントで旧画像の op が 409 を返し続ける空回りを、10 分止める。11-15 の IMGSTOP1（GPT #127-UF ③）から、4096 字を超える本文（絵を積む putimg）も、先頭の JSON の op の値が旧画像 op と完全に一致するときだけ同じく止める（判定できない本文・ほかの op は従来どおり送る）。r3：iso2 が先頭に足す `chrOwnerAcct` の鍵 1 つの後ろの op も同じく完全一致で見る（本番の口座では putimg がこの形で届き、r2 では素通しだった）。止める：`v292DfixIMGSTOP1Off`（長い本文は従来どおり素通し）。
 - p8d（`i14`）：画像生成の送信直前に、人物名や日本語の文がそのまま provider へ出るのを止める（fail-closed）。
 - fix63（`i80`）の fix979b（82b・sha `77b3d9b2`・?cb=`20261101-bundle82-iconux-b`）：会話ログの丸いアイコンの明るさ・コントラストの補正（`brightness(1.12) contrast(1.06)`）を既定で外す（明るい背景の新しい絵の白飛び）。拡大 1.0・目印 `data-f979`・kill `v292Dfix979Off` はそのまま。補正の強さは端末の `v292Dfix979Filter`（`none` 既定／`soft`／`old`＝従来の補正に戻す）。
 
@@ -990,7 +990,7 @@
 | 7 | fix654 | `v292Dfix654-storage-trap.js` | i7 h4 | `9ee9821a` | v292Dfix731 | 保存・同期 | `v292Dfix654Off` |
 | 8 | fix893 | `v292Dfix893-account-cookie-shim.js` | i8 h5 | `c6440593` | 20261111-delall | 認証・アカウント | `v292Dfix893Off` `v292Dfix897Off` |
 | 9 | bav2-beta | `v292Dbav2-beta.js` | i9 h6 | `de95b737` | 20261019-bundle33-b | 認証・アカウント | `v292Dav2On` `v292Dbav2Off` |
-| 10 | fix990 | `v292Dfix990-legacy-img-breaker.js` | i10 | `f7e8777a` | 20261115-holdnote1 | アイコン・画像 | `v292Dfix990Off` `v292DfixIMGSTOP1Off` |
+| 10 | fix990 | `v292Dfix990-legacy-img-breaker.js` | i10 | `b7485bd9` | 20261115-imgstop1r3 | アイコン・画像 | `v292Dfix990Off` `v292DfixIMGSTOP1Off` |
 | 11 | fixS1 | `v292DfixS1-entry-notice.js` | i11 h7 | `980196d5` | 20261019-bundle31-a | 認証・アカウント | `v292DfixS1Off` |
 | 12 | fix946 | `v292Dfix946-img-isolation.js` | i12 | `54d22bd5` | 20261014-iso1c | アイコン・画像 | `v292Dfix946M3Off` `v292Dfix946Off` |
 | 13 | iso2-owner-send-guard | `v292Diso2-owner-send-guard.js` | i13 h8 | `621fc588` | 20261014-iso2b | Vault・非表示 | `v292Dfix946M3Off` `v292Dfix946Off` `v292Diso2Off` |

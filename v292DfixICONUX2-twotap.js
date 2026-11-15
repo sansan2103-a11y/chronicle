@@ -94,7 +94,7 @@
     if (BAD_SEX.test(d)) return { ok: false, why: 'SENSITIVE_DESC' };                  /* 説明文に性的な語 → 近道を使わない（LC1 の案に任せる） */
     var youth = YOUTH.test(d) || YOUTH_X.test(d) || minorAge(d);   /* r3: + YOUTH_X */
     if (youth && BAD_BODY_YOUTH.test(d)) return { ok: false, why: 'YOUTH_BODY_DESC' };   /* 若く見える人物の体の語 → 近道を使わない */
-    var vp = P.visualPart(d); var text = String(vp.text || '');
+    var vp = P.visualPart((typeof P.appx1 === 'function' && P.appx1()) ? String(desc == null ? '' : desc).normalize('NFC') : d); var text = String(vp.text || '');   /* ★APPX1: 改行を残したまま渡す（改行を文の区切りに使う）。句が説明文にそのままある検査（NOT_VERBATIM）は d のまま */
     if (!text) return { ok: false, why: 'NO_VISUAL' };
     var sl = P.slotsOf(text), n = 0;
     for (var i = 0; i < VIS_KINDS.length; i++) if (sl[VIS_KINDS[i]]) n++;

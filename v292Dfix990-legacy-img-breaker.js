@@ -30,11 +30,15 @@
      長い本文は「先頭の JSON の op フィールドの値」が下の旧画像 op のどれかと完全に一致するときだけ対象（{ "op" : "putimg" などの空白の差は許す）。
      判定できない本文（先頭が { でない・最初の鍵が op でない・値に \ などの記号がある・先頭 256 字に収まらない）は従来どおり送る。本文の途中の "putimg" の文字には当たらない。
      kill: localStorage v292DfixIMGSTOP1Off='1'（長い本文は従来どおり素通し＝土台と同じ） */
-  var IMGSTOP1_HEAD = /^\s*\{\s*"op"\s*:\s*"([A-Za-z0-9_.]+)"\s*[,}]/;
+  /* ★IMGSTOP1 r3 (2026-11-15): 本番の口座（acct:）では iso2（v292Diso2-owner-send-guard.js spliceExpect・fix990 より外側）が
+     データを運ぶ op の本文の先頭に {"chrOwnerAcct":"<id>", を足してから fix990 へ渡す＝op が最初の鍵でなくなり、r2 の判定が putimg を見落とした
+     （SMOKE8: putimg 31 回が Worker へ・passed 0）。その 1 つの形だけを足す: 先頭の鍵が chrOwnerAcct（値は JSON の文字列 1 つ）で、
+     2 番目の鍵が op のときも、op の値を完全一致で見る。それ以外の形は従来どおり判定しない（送る）。 */
+  var IMGSTOP1_HEAD = /^\s*\{\s*(?:"chrOwnerAcct"\s*:\s*"(?:[^"\\]|\\.){0,200}"\s*,\s*)?"op"\s*:\s*"([A-Za-z0-9_.]+)"\s*[,}]/;
   function imgstopOff(){ try { return localStorage.getItem('v292DfixIMGSTOP1Off') === '1'; } catch(e){ return false; } }
   function opOf(init){
     try { var b = init && init.body; if (typeof b !== 'string') return null;
-      if (b.length > 4096){ if (imgstopOff()) return null; var mb = IMGSTOP1_HEAD.exec(b.slice(0, 256)); return (mb && OPS.hasOwnProperty(mb[1]) && OPS[mb[1]] === 1) ? mb[1] : null; }
+      if (b.length > 4096){ if (imgstopOff()) return null; var mb = IMGSTOP1_HEAD.exec(b.slice(0, 512)); return (mb && OPS.hasOwnProperty(mb[1]) && OPS[mb[1]] === 1) ? mb[1] : null; }
       var m = /"op"\s*:\s*"([A-Za-z0-9_.]+)"/.exec(b); return m && OPS[m[1]] === 1 ? m[1] : null; } catch(e){ return null; }
   }
   function synth(){

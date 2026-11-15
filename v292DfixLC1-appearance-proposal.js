@@ -145,10 +145,16 @@
   function isVis(c) { return VISUAL_RE.test(c) || ((VIS_ADD_RE.test(c) || VIS_WEAR_RE.test(c) || RE.clothes.test(c) || RE.hair.test(c) || RE.eyes.test(c) || RE.feature.test(c)) && !BAD_SEX.test(c)); }
   function isVisFx(c) { return isVis(c) || (FX_DISTINCT.test(c) && !BAD_SEX.test(c)); }   /* ★ICONFIX1 a ②: 義手・欠損・日焼け・化粧・白濁も見た目の句 */
   function norm(s) { return String(s == null ? '' : s).normalize('NFC').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u2028\u2029\ufeff|]+/g, ' ').replace(/\s+/g, ' ').trim(); }
-  var PERS_RE = /性格|明るく|明るい|おとなし|優しい|優しく|穏やか|勇敢|臆病|無口|冷静|活発|元気|頑固|真面目|不器用|社交的|内気|短気|好奇心|思い|過去|両親|幼い頃|生まれ|育ち|得意|苦手|好き|嫌い|夢|目標|秘密|嘘|事件|出身|恐れ|願い|傷つ|裏切|復讐|守る|助け/;
+  var PERS_RE0 = /性格|明るく|明るい|おとなし|優しい|優しく|穏やか|勇敢|臆病|無口|冷静|活発|元気|頑固|真面目|不器用|社交的|内気|短気|好奇心|思い|過去|両親|幼い頃|生まれ|育ち|得意|苦手|好き|嫌い|夢|目標|秘密|嘘|事件|出身|恐れ|願い|傷つ|裏切|復讐|守る|助け/;
+  /* ★APPX1（laneQUALITY3・2026-11-15）: 外見の下書きのふるいに、口調・呼び方・名前・性格の語を足す。kill: localStorage v292DfixAPPX1Off='1'（毎回評価）→ 今までとバイト一致 */
+  function appx1() { try { return !(W.localStorage && W.localStorage.getItem('v292DfixAPPX1Off') === '1'); } catch (e) { return true; } }
+  var APPX1_RE = /口調|話し方|喋り方|しゃべり方|言葉遣い|言葉づかい|一人称|二人称|口癖|語尾|敬語|丁寧語|ため口|タメ口|標準語|方言|関西弁|博多弁|広島弁|京都弁|訛り|なまり|と呼ぶ|と呼んで|と呼ばれ|呼び捨て|呼び名|名前は|名前が|という名|と名乗|ぶっきらぼう|皮肉屋|毒舌|人懐っこ|人なつっこ|物怖じ|気さく|寡黙|無愛想|照れ屋|負けず嫌い|世話好き|お人好し|面倒見|生意気|几帳面|大雑把|口数|口が悪|人見知り|怖がり|恥ずかしがり|しっかり者|おっとり|のんびり/;
+  var PERS_RE = { test: function (c) { return PERS_RE0.test(c) || (appx1() && APPX1_RE.test(c)); } };   /* PERS_RE.test( の呼び出しはそのまま */
+  /* 改行は文の区切り（句点の無い行が次の行とくっつかない）。「口調：」などの見出しは改行が消えていても別の文 */
+  function appx1Lines(d) { return String(d == null ? '' : d).replace(/([^。！？!?\s])[ \t\u3000]*\r?\n[\s\u3000]*/g, '$1。').replace(/\s*(口調|話し方|一人称|口癖|語尾)\s*[：:]/g, '。$1：').replace(/^[\s。]+/, ''); }
   var ASCII_ONLY = /^[\x00-\x7f]+$/;
   function visualPart(desc) {
-    var s = norm(desc), dropped = [], droppedVisual = [], fx = fxA(), isV0 = fx ? isVisFx : isVis, roles = [], fb = fx2b(), f3 = fx3();   /* ★ICONFIX1 a ★ICONFIX2 b ★ICONFIX3 */
+    var s = norm(appx1() ? appx1Lines(desc) : desc), dropped = [], droppedVisual = [], fx = fxA(), isV0 = fx ? isVisFx : isVis, roles = [], fb = fx2b(), f3 = fx3();   /* ★ICONFIX1 a ★ICONFIX2 b ★ICONFIX3 */
     if (f3) s = fx3Notes(s).marked;   /* ★ICONFIX3 ①: 括弧の中は「設定の注記」の文（先頭に印 \u0002）。髪・瞳・服・顔の特徴の句だけ拾い、役割・種族・持ち物は拾わない */
     var isV = f3 ? function (c) { return isV0(c) || ((FX3_SKIN.test(c) || FX3_MECH.test(c)) && !BAD_SEX.test(c)); } : isV0;   /* 色白・機械の部位も見た目の句 */
     var soft3 = f3 && fx3HumanLooking(s), hid3 = f3 && fx3Hidden(s);   /* ★ICONFIX3 ②: 見た目は人間／正体を隠している */
@@ -306,6 +312,9 @@
       if (humanlike && SPECIES_LOOK.test(c)) { res.rejected.push({ clause: c, why: 'HUMANLIKE' }); return; }
       if (BAD_SEX.test(c) || (youth && (BAD_BODY_YOUTH.test(c) || AI_SEXY.test(c)))) { res.rejected.push({ clause: c, why: 'SENSITIVE' }); return; }   /* ★88-b: 誘う響きの語は、年少者に AI が足すときだけ捨てる（成人の普通の色気・自然な体の描写は通す） */
       if (baseText.indexOf(c) >= 0) { res.rejected.push({ clause: c, why: 'DUPLICATE' }); return; }
+      if (appx1() && APPX1_RE.test(c)) { res.rejected.push({ clause: c, why: 'NOT_LOOK' }); return; }   /* ★APPX1: 口調・呼び方・性格の句は見た目ではない（「語尾」が特徴の枠の「尾」に当たっても捨てる） */
+      if (appx1() && ctx.name && String(ctx.name).split(/[\s\u3000・]+/).some(function (w) { return w.length >= 2 && c.indexOf(w) >= 0; })) { res.rejected.push({ clause: c, why: 'NAME' }); return; }   /* ★APPX1: 名前は見た目ではない */
+      if (appx1() && ctx.desc && (function () { var cl = String(ctx.desc).split(/[。！？!?、，,\n]+/).filter(function (x) { return x.indexOf(c) >= 0; }); return cl.length > 0 && cl.every(function (x) { return APPX1_RE.test(x); }); })()) { res.rejected.push({ clause: c, why: 'NOT_LOOK_SRC' }); return; }   /* ★APPX1: 説明文の口調・名前の句にしか無い語（「名前は霧島涼太」の涼太）は見た目ではない */
       var filled3 = false;
       if (fxOn && !fxSupported(c, fxSrc, g0)) { if (fill3 && fx3FillOk(c, fill3)) filled3 = true; else { res.rejected.push({ clause: c, why: 'UNSUPPORTED' }); return; } }   /* ★ICONFIX3 ③: 材料の足りない人物の 髪・瞳・服 は裏づけ無しで足してよい */   /* ★ICONFIX1 a ①: 説明文に無い見た目は足さない */
       if (fct && fxSrc.indexOf(c) < 0) {   /* ★ICONFIX2 b ③: 変えてはいけない事実（性別・種類）と食い違う句は捨てる */
@@ -505,6 +514,7 @@
     var base = vp.text, fill3 = fx3() ? fx3Fill(base, input.desc) : null;   /* ★ICONFIX3 ③: 材料が足りないときだけ { hair, eyes, clothes } */
     var facts = (fx2b() && !input.confirmed) ? factsOf(input.desc, input.gender) : null;   /* ★ICONFIX2 b */
     var ctx = { gender: input.gender, desc: input.desc, context: input.context };
+    if (appx1() && input.name) ctx.name = input.name;   /* ★APPX1 */
     if (facts) ctx.facts = facts;
     if (fill3) ctx.fill = fill3;
     var missing = missingOf(base);
@@ -544,7 +554,7 @@
     } catch (e) { if (!done) { done = true; fallback('AI_THREW', { detail: String(e && e.message || e).slice(0, 80) }); } }
   }
 
-  var api = { propose: propose, nhPropose: nhPropose, compose: compose, slotsOf: slotsOf, missingOf: missingOf, visualPart: visualPart, genderGuess: genderGuess, buildPrompt: buildPrompt,
+  var api = { appx1: appx1, propose: propose, nhPropose: nhPropose, compose: compose, slotsOf: slotsOf, missingOf: missingOf, visualPart: visualPart, genderGuess: genderGuess, buildPrompt: buildPrompt,
               version: VERSION, stats: function () { return { calls: calls, fx1a: fxA() ? 'fx1a' : 0, fx2b: fx2b() ? 'fx2b' : 0 }; }, SLOT_LABEL: SLOT_LABEL, fxSupported: fxSupported, fxGender: fxGender,
               factsOf: factsOf, enforceFacts: enforceFacts, fx2b: fx2b, fx3: fx3, fx3Fill: fx3Fill, fx3Defaults: fx3Defaults, fx3Thing: fx3Thing, fx3Unbroken: fx3Unbroken, fx3Hidden: fx3Hidden, fx3HumanLooking: fx3HumanLooking };   /* ★ICONFIX3 */   /* ★ICONFIX2 b */
   W.__v292DfixLC1prop = api;

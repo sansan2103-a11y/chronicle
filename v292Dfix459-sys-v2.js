@@ -254,7 +254,7 @@
       var pairs = [];
       for (var i = 0; i < ROLE_WORDS.length; i++){
         var w = ROLE_WORDS[i], hit = [];
-        for (var j = 0; j < list.length; j++){ if (list[j].d.indexOf(w) >= 0) hit.push(list[j].n); }
+        for (var j = 0; j < list.length; j++){ if ((w === '主人' && !flag('v292DfixRW1Off')) ? /主人(?!公)/.test(list[j].d) : list[j].d.indexOf(w) >= 0) hit.push(list[j].n); }   // ★RW1: 「主人公」は役割語「主人」ではない（店の主人・宿の主人・ご主人だけ数える）。kill v292DfixRW1Off='1'
         if (hit.length === 1) pairs.push(w + '＝' + hit[0]);
         if (pairs.length >= 6) break;
       }
@@ -312,6 +312,35 @@
       + '・地の文にMarkdown（**、*、#、行頭の・/-）を使わない。数値の精密さや俯瞰的な分析で距離を作らない。';
   }
 
+  // ★HIDE1（laneQUALITY3・2026-11-15・既定 OFF）: NPC の説明文に隠し事が書かれている物語だけ、【展開】の後ろに 1 文を足す。
+  //   隠し事の無い物語・OFF・kill・例外 → 何も足さない（sys は従来とバイト一致）。主人公の説明文は見ない（プレイヤーが知っている）。
+  //   ON : localStorage v292DfixHIDE1On='1'   kill: v292DfixHIDE1Off='1'（On より優先）。毎回評価・再読み込み不要。
+  //   既定を ON にするときは、下の hide1On() の 1 行を  return !flag('v292DfixHIDE1Off');  に変える。
+  function hide1On(){ return !flag('v292DfixHIDE1Off') && flag('v292DfixHIDE1On'); }
+  // 「隠し事がある」と読む書き方（どれか 1 つに当たれば足す）。当てない例: 隠そうとする・隠れる・隠れ家・隠し味・正体不明・（目的語の無い）黙っている
+  var HIDE1_RES = [
+    /隠して(?:いる|る|いた|おり|き)|隠し(?:通|持っ)/,                                                        // 〜を隠している／隠し持っている
+    /(?:を|は|に|こと|事)(?:誰にも|まだ)?(?:言って|話して|明かして|打ち明けて|教えて|知らせて)(?:い)?ない/,   // 〜には話していない
+    /(?:を|は|こと|事)(?:伏せて|黙って)(?:いる|る)/,                                                         // 〜のことを黙っている
+    /誰にも(?:言|話|教|明か|知られ)/,
+    /正体(?!不明)(?:は|を|が|に)/,                                                                           // 正体は〜／正体を隠す
+    /本当の(?:名前|名|姿|目的|正体|顔|年齢|性別|身分)|本当は|実は/,
+    /秘密|内緒/,
+    /知られたくない|知られてはいけない|気づかれないように|気付かれないように|(?:素性|身分|名前|年齢)を偽|偽名|成りすま|なりすま|のふりをして/
+  ];
+  function hide1Has(desc){ var d = String(desc || ''); for (var i = 0; i < HIDE1_RES.length; i++){ if (HIDE1_RES[i].test(d)) return true; } return false; }
+  var HIDE1_TEXT = '\n・人物の説明で隠し事（隠している・秘密・正体・本当は〜など）とされていることは、プレイヤーの入力で問われるか、本文に出た手がかりで言い逃れできなくなるまで、本人の台詞でも地の文でも明かさない。それまでは目をそらす・言いよどむ・話をそらすなど、態度でにじませる。';
+  var HIDE1_TEXT_F192 = '明かす時が来たら、上の「本音・打ち明けはセリフで」のとおり本人の台詞で明かす（この 1 文は隠し事について「打ち明け・情報の開示」より先に守る）。';
+  function hide1Line(sys){
+    try {
+      if (!hide1On()) return '';
+      var S = window.S || (0,eval)('typeof S!=="undefined"?S:null');
+      var ns = (S && S.cast && Array.isArray(S.cast.npcs)) ? S.cast.npcs : [];
+      if (!ns.some(function(n){ return n && hide1Has(n.desc); })) return '';
+      return HIDE1_TEXT + ((typeof sys === 'string' && sys.indexOf('打ち明け・関係の動き・情報の開示') >= 0) ? HIDE1_TEXT_F192 : '');
+    } catch(e){ return ''; }
+  }
+
   // 【良い1ターンの形】から、C/D/反応と身体 と重複する項目を落とす
   function trimGoodTurn(txt){
     var out = txt;
@@ -356,7 +385,7 @@
     var addon = '';
     if (A) addon += blockA(aSrc);
     if (B) addon += '\n' + blockB();
-    if (C) addon += '\n' + blockC();
+    if (C) addon += '\n' + blockC() + hide1Line(sys);   // ★HIDE1（既定 OFF）
     if (D) addon += '\n' + blockD();
 
     var out = p.head + kept.join('') + addon + '\n';
@@ -395,6 +424,7 @@
     parse: parse,
     last: function(){ return last; },
     last958: function(){ return last958; },
+    hide1: { on: hide1On, has: hide1Has, line: hide1Line },   // ★HIDE1 検証口
     isOff: off
   };
   try { console.log(TAG, 'armed (sys v2 at send boundary)'); } catch(e){}

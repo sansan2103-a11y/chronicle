@@ -26,6 +26,7 @@
     '部長','課長','秘書','弁護士','看守','兵士','傭兵','騎士','魔女','占い師'];
 
   function off(){ try { return localStorage.getItem('v292Dfix465Off') === '1'; } catch(e){ return false; } }
+  function rw1Off(){ try { return localStorage.getItem('v292DfixRW1Off') === '1'; } catch(e){ return false; } }   // ★RW1（fix459 と同じ鍵）
   /* ★fix547(2026-07-25): S の取得は index.html の正式API(fix539)を第一経路にする。
      間接eval 頼みの取得は実機で無言のまま null を返し、判定が丸ごと空振りした前歴がある。
      **第二経路は従来の式をそのまま残す**ので、index.html が古いキャッシュでも挙動は変わらない。
@@ -52,7 +53,7 @@
     var map = {};
     for (var i = 0; i < ROLE_WORDS.length; i++){
       var w = ROLE_WORDS[i], hit = [];
-      for (var j = 0; j < list.length; j++){ if (String(list[j].d || '').indexOf(w) >= 0) hit.push(list[j].n); }
+      for (var j = 0; j < list.length; j++){ var dj = String(list[j].d || ''); if ((w === '主人' && !rw1Off()) ? /主人(?!公)/.test(dj) : dj.indexOf(w) >= 0) hit.push(list[j].n); }   // ★RW1: 「主人公」で「主人」を数えない
       if (hit.length === 1) map[w] = hit[0];      // 一意のときだけ
     }
     return map;
