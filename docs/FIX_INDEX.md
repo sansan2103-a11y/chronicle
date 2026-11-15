@@ -54,15 +54,15 @@
 
 | 分野 | 主な部品（§2 に項目あり） |
 |---|---|
-| 生成の中心・プロンプト | features.js、fix192、fix226、fix379、FLW4、fix459、smrc1、MSW1（Worker）、BF1、fix80、fix247、PRUNE1、PRUNE2、SCENE1（NOW1・FACTS2・STATE2）、ACTOR1、HEROVOICE1、LEAK1・LEAK2・OPT1、NUM1、PLACE1、CAST1・CALL1・SPK3、SEVERE1・DRIVE1・EX192（SEVDRV）、ECHO1（撤去）、CARD80、RETRY1・RETRY2、FANOUT1 |
-| NPC・キャラ状態 | fix77、fix305、fix333、fix414、fix145、fix298、fix277、fix307、fix641、fix853、CP1、NPRES、E64、fix797、F333a・F333b（fix850）、STATEQ1（PH1・SREP1・POSE1）、STATE3、STATE4・ST4B（fix77）、FEAR1・FEAR2・ARM2・CHEAD1（fix414）、FIX850A・F850Ord（fix850） |
-| 話者・会話ログ・編集 | fix66、fix469、IDSPLIT2、fix606、fix611、fix620、fix957、SFL1、SFLTap、EDIT01、EDLOG、EDN（inline）、fix295、SPKW1・SPKW2・QUOTE1、KANA1・FF1（index.html）、SPK2・HB1 |
+| 生成の中心・プロンプト | features.js、fix192、fix226、fix379、FLW4、fix459（RW1・HIDE2）、smrc1、MSW1（Worker）、BF1、fix80、fix247、PRUNE1、PRUNE2、SCENE1（NOW1・FACTS2・STATE2）、ACTOR1、HEROVOICE1、LEAK1・LEAK2・OPT1、NUM1、PLACE1、CAST1・CALL1・SPK3、SEVERE1・DRIVE1・EX192（SEVDRV）、ECHO1（撤去）、CARD80、RETRY1・RETRY2、FANOUT1 |
+| NPC・キャラ状態 | fix77、fix305、fix333、fix414、fix145、fix298、fix277、fix307、fix641、fix853、CP1、NPRES、E64、fix797、F333a・F333b（fix850）、STATEQ1（PH1・SREP1・POSE1）、STATE3、STATE4・ST4B（fix77）、FEAR1・FEAR2・ARM2・CHEAD1・EYE1・LEG1（fix414）、FIX850A・F850Ord（fix850） |
+| 話者・会話ログ・編集 | fix66、fix469、fix465（RW1）、IDSPLIT2、fix606、fix611、fix620、fix957、SFL1、SFLTap、EDIT01、EDLOG、EDN（inline）、fix295、SPKW1・SPKW2・QUOTE1、KANA1・FF1（index.html）、SPK2・HB1 |
 | 記憶 | fix135、fix313、fix314、fix670、fix796、fix793、fix905、fix950/953、RC1 |
 | 保存・同期 | fix246、fix228、fix525、fix527（FLW5）、fix543、fix654、fix399、fix402、fix590、fix826、fix697、fix702、fix705、fix743/750/756、fix781、fix758、fix912、fix945、fix859、fix564/721/726/291、WKRHANG1・INITSLOW1（Worker）、REG1・LSF1（SAVE1）、GC1・GC1b（fix912）、KEY1、SOL1 |
-| 削除・墓標 | DL2、fix933、fix587、fix579、fix602、fix660、fix577、fix710、fix642、JR1、UNPROT（DL2）、SD1・FREE2（DL2）、STORE1b（PURGE1c・P0-B・STUCK1・ZT1・FREE2c/d） |
+| 削除・墓標 | DL2、fix933、fix587、fix579、fix602、fix660、fix577、fix710、fix642、JR1、UNPROT（DL2）、SD1・FREE2（DL2）、STORE1b（PURGE1c・P0-B・STUCK1・ZT1・FREE2c/d・DISCARD1） |
 | Vault・ユーザー分離 | vault2-sendgate、vault2-copygate、vault2-ui、LE4、fix889（BOOTOFF1）、iso2、ISO1、fix946 |
 | 認証・アカウント | fix893、ADMF1、fix328、fix886/890、bav2-beta、FRIEND1・LIMIT1（Worker・管理者画面）、ADMHUB1・ADMBULK1（管理者画面）、MXALL（Worker・管理者画面 `f2258e33`）、鍵 `starticon1`・`idsplit2`（Worker `v46.37`・管理者画面 `752c623a`）、SEC0・SEC1・UNPROT（Worker）、ADM3b（管理者画面）、LIM1（Worker `v46.45-lim1-fc`・ADMF1）、OWNERON1 |
-| アイコン・画像 | av2-data、av2-portrait（FLW1）、av2-migrate-ui、LD1、LC1、ICONUX2、SETAV1、FLW2、ICF、fg3、fix63（fix979b）、fix197、fix523、fix990、p8d、ICONFIX1（Worker）、PUBMODE（Worker・管理者画面）、NDI1、ICF80、MIDICON（OLDMX1）、W-MXREG（Worker・93-i から端末側も）、STARTICON、IMGMODEL1（Worker・管理者画面）、CUSTIMG1（Worker・管理者画面）、DIAG1b（Worker）、ICONQ1（LC1 の外見の案・NH1・Worker。名前は ICONFIX1 で始まる）、ICONFIX2、ICONFIX3、MXREGFIX1（MIDICON） |
+| アイコン・画像 | av2-data、av2-portrait（FLW1）、av2-migrate-ui、LD1、LC1（APPX1）、ICONUX2、SETAV1、FLW2、ICF、fg3、fix63（fix979b）、fix197、fix523、fix990、p8d、ICONFIX1（Worker）、PUBMODE（Worker・管理者画面）、NDI1、ICF80、MIDICON（OLDMX1）、W-MXREG（Worker・93-i から端末側も）、STARTICON、IMGMODEL1（Worker・管理者画面）、CUSTIMG1（Worker・管理者画面）、DIAG1b（Worker）、ICONQ1（LC1 の外見の案・NH1・Worker。名前は ICONFIX1 で始まる）、ICONFIX2、ICONFIX3、MXREGFIX1（MIDICON） |
 | UI・画面 | UI1、IS1、UX72、JMP、FLW3、LE3、fix777、fix243/270、fix880、SETUI1、UI2、XSS1、UI3、LAT1、UI4、ERRNOTE1、HOLDNOTE1 |
 | シナリオ・ホーム | fix819、fix825、fix873、fix335、GENDER1、NEWACCT1・HOMERETRY1（home.html の inline）、SCID2（fix820）、GHOST1、GUIDE1（fix873） |
 | 読み込みを止めた部品 | CLEANUP1・CLEANUP2（§2.12。32 本。ファイルは残る） |
@@ -117,6 +117,9 @@
 #### fix459 — sys の重複クラスタの統合
 - 状態：本番稼働 `i260`・sha `5175518c`・?cb=`20261110-bundle93-l`（93-l で MARKERS に 2 つ足した。前は `8243a236`・?cb=`20261019-bundle31-a`）。役割：話者の同一性・出力形式・展開の進め方などで重複していたブロックを 1 つにまとめる。スイッチ：`v292Dfix459Off`、クラスタ別 `v292Dfix459AOff`〜`DOff`。
 - 93-l：MARKERS に `【世界設定・参照データ】`・`【世界設定ここまで】` を登録（LORE1 のブロックが直前のブロックへ吸収・道連れ削除されないように）。sha `8243a236` → `5175518c`・?cb=`20261110-bundle93-l`。LORE1 が足さないときは組み替えの結果が従来とバイト一致（Local）。
+- RW1（11-15・GitHub `fac7b6e`・既定 ON・kill `v292DfixRW1Off='1'`）：役割名→登録名の対応表（roleMap）で、説明文の「主人公」を役割語「主人」に数えない（店の主人・宿の主人・ご主人は従来どおり）。fix465 も同じ鍵。
+- HIDE1 r1（11-15・GitHub `fac7b6e`・既定 OFF・鍵 `v292DfixHIDE1On`）：隠し事のある物語だけ【展開】に 1 文（+204 字）を足す試験。実 AI の A/B で不採用（ON で切っ掛けの前に告白が早まった）。**HIDE2 で撤去**（HIDE2 を当てた木には HIDE1 のコード・鍵は無い）。
+- HIDE2（laneHIDE2・**候補・既定 OFF**・ON `v292DfixHIDE2On='1'`・kill `v292DfixHIDE2Off='1'` が優先。既定 ON はコードの `hide2On()` の 1 行）：NPC の説明文に「胸にしまっている事実」（隠している・まだ話していない・正体は〜・実は〜の娘 等の決まった書き方）がある物語だけ、fix192 の【良い1ターンの形】4 の「本音・打ち明け・…情報の開示はセリフで」の文を、問われる・証拠を突きつけられる・状況が要する、のどれかが起きてから本人の言動で明かし、それより前に台詞・独白・地の文で先に明かさない、という文に**置き換える**（足さない。+78 字。「秘密」「隠し事」の語は増やさない）。当たらない物語・OFF では sys は従来とバイト一致。検証口 `__v292Dfix459.hide2`。
 
 #### PRUNE1 — 最終 sys の当て布の整理（重複を外す・食い違いをなくす・危機を優先。`v292DfixPRUNE1-sys-prune.js`）
 - 状態：本番稼働（2026-11-11・GitHub `a085c42`）・sha `f2f590d3`・?cb=`20261111-prune1`・版 `prune1-20261111-c`。既定 ON。`index.html` の先頭近く、CP1-final-tap の直後（PRUNE2 の次。fetch を包む部品の内側＝fix459・fix441・fix443・fix514 など sys を書き換える部品がすべて済んだ後に当たる）。`home.html` は読まない。
@@ -358,6 +361,8 @@
 - FEAR2（r1 `3ec9d68` は既定 OFF で出荷 → r2 `3c57fc3` で**全員既定 ON**・kill `v292DfixFEAR2Off='1'`。既定はコードの `FEAR2_ON` の 1 行）：「硬直」「固まる」「〜まま動けない」だけ（姿勢・一瞬の反応）では恐怖の制約を作らない（widen・規則 F の からだ）。r2（kill `v292DfixFEAR2R2Off='1'`＝r1 と同じ）：1 つの文に 固まる・すくむ 等＋動けない・体が言うことをきかない がそろい、恐怖・動揺の文脈があるときは明確な行動不能として残す（「〜たまま」の姿勢の句や「一瞬・一拍」だけなら残さない）。
 - ARM2（既定 ON・kill `v292DfixARM2Off='1'`）：規則 A で、部位の使用不可の根拠が「動かない」だけで、その人の からだ に負傷の語が無く傷の欄も空のときは、部位の使用不可を作らない（FIX850A が外せなかった「拳を胸元まで上げたまま動かなくなった」の型）。
 - CHEAD1（既定 ON・kill `v292DfixCHEAD1Off='1'`）：【制約】の人物の制約がすべて怖さ由来（rank 6）のときは、見出しを「負傷者の行動には…」ではなく怖さ用の文（「恐怖・動揺による能力の低下を行動に反映して描く…」）にする。
+- EYE1（11-16・GitHub `91982fd`・既定 ON・kill `v292DfixEYE1Off='1'`）：規則 D（視覚）の「目」は、語の頭か「の・が・は・も・で・、・両・片・右・左・涙」の後のときだけ数える（「木目がぼやけて」で無傷の人に視覚の制約を付けない）。
+- LEG1（r1 `91982fd`・r2 `09b9b2b`・既定 ON・kill `v292DfixLEG1Off='1'`）：脚の部位に「脛・腿」を足す。「切った・切り傷」等は、その人の からだ・傷 に重さの手がかり（深い・出血が止まらない・体重をかけられない・引きずる・庇う 等）があり、部位のまわりに浅い傷の言い方（浅い・かすり・少し 等）が無いときだけ「移動が鈍い」にする（r2・GPT #127-UJ）。裂傷・深い傷・捻挫などは従来どおり。
 
 ### 2.3 話者・会話ログ・編集
 
@@ -554,6 +559,7 @@
 - PURGE1c（`5b8a837`）：PURGE1（控えまで含めた完全削除）は**既定 OFF のまま**（`v292DfixPURGE1On='1'`・kill `v292DfixPURGE1Off`・Vault の名前だけの削除 `v292DfixPURGE1VaultOn` はこのレーンでは使わない）。段階 1 の QA 条件（未送信の物語は消さない・最後に墓標の題名を '' にする）を足した。P0-B（fix562・fix569・**既定 ON**・kill `v292DfixP0BOff='1'`）：保護判定を名前と凍結した proof だけで決める（ほかの物語の値を読まない）。
 - STUCK1（`e37f802`・**既定 OFF**・`v292DfixSTUCK1On='1'`・kill `v292DfixSTUCK1Off='1'`）：削除の時点で印が DIRTY だった写しを、墓標の hash の一致で証明できたときだけ通す。ZT1（`972330d`・**既定 OFF**・`v292DfixZT1On='1'`・kill `v292DfixZT1Off='1'`）：0 ターンのまま削除した物語を、hash の一致を確かめて通す。
 - FREE2c（`2e6e2c9`・既定 ON・kill `v292DfixFREE2Off='1'`）：シート・dry-run（`free2DryRun`）・explain・実行が同じ判定 judgeOne を通る。公式の削除で立てた墓標は印が CLEAN でも hash の一致を求める。FREE2d（`72ab286`・kill `v292DfixFREE2dOff='1'`）：サーバーの行が memoryV1 を持つときは端末の値も hash に入れる・本文を持たない墓標を覚えて getstory を繰り返さない・getstory は最大 4 本まで同時。
+- DISCARD1（11-16・GitHub `68dec8f`・**手動専用**・UI なし・自動では呼ばれない・kill `v292DfixDISCARD1Off='1'`（fix562 も断る）／`v292DfixSTORE1Off='1'`）：Owner の承認（2026-11-15・GPT #127-UB/UD）による「サーバーで削除済みだが、サーバーの内容と同じと確かめられなかった端末の写し」を捨てる経路。`__v292DfixSTORE1b.discard1DryRun()`（読むだけ）／`.discard1Run({ack:…})`（コードに固定の ack の文字列が一致しないと何もしない）。その場の getstory で墓標（deleted===true）を確かめ直し、Vault・別アカウント・活動中・未同期・旧 id・保護 id は対象外。消すキーは FREE2 の解放と同じ（snapshot・控え・未送信の写しと meta の墓標は残す）。fix562・fix569 は intent `device-discard` を、同じ実行で登録した証明（exact key・値・ack）のときだけ通す。FREE2 の通常の判定は変えない。手順書（RUNBOOK）は作業環境の `outputs/discard1/RUNBOOK.md`（リポジトリには入れていない）。
 - 診断：`window.__v292DfixSTORE1b.status()`／`.dryRun()`（消さない）。
 
 ### 2.7 Vault（物語を隠す）・ユーザー分離（危険領域）
@@ -767,6 +773,7 @@
 #### ICONFIX2 / ICONFIX3 — 外見の下書き・案の直し（11-14・GitHub `2317dbe`・`19fe4f4`・LC1 の外見の案・NH1・STARTICON・LC1 作業欄）
 - ICONFIX2 a（kill `v292DfixICONFIX2aOff='1'`・NH1 と同じ鍵）：人外・混合の下書きで体の作り・材質・持ち物の句を捨てない・種類の札を付ける。b（kill `v292DfixICONFIX2bOff='1'`）：説明文から変えてはいけない事実（性別・種類・材質・持ち物・役割・体格）を取り出し、AI の案に渡して検査する（性別の無い人物に性別を足さない・落ちた事実を戻す）。c（STARTICON・kill `v292DfixICONFIX2cOff='1'`）：結果不明のときもキャラごとに結果を確かめる（120 秒後に 1 回）。t（kill `v292DfixICONFIX2tOff='1'`）：段ごとの時間を status().timing に出す（数字だけ）。
 - ICONFIX3（kill `v292DfixICONFIX3Off='1'`＝今までとバイト一致）：括弧の中の注記を外見に使わない・見た目は人間のアンドロイド等と隠している正体は描かない・材料の足りない人物は髪・服・瞳を足す（足せなければ決まった語）・物や正体の曖昧な存在は人外の札・安全の理由以外で自動の見送りにしない・AI が足したことを正直に知らせる。安全検査（imgsafe 等）は変えない。
+- APPX1（11-15・GitHub `fac7b6e`・既定 ON・kill `v292DfixAPPX1Off='1'`＝今までとバイト一致）：外見の下書き（visualPart・AI の案の受け取り）で、口調・呼び方・名前・性格の語（語尾・一人称・口癖・ため口・「と呼ぶ」・名前は・という名・ぶっきらぼう 等）の句を見た目に数えない（「尻尾」「尾」「燕尾服」は残る）。改行を文の区切りにし、「口調：」の行を別の文にする。AI の句に名前・説明文の口調の句にしか無い語が入れば捨てる。ICONUX2 の近道も改行を残したまま渡す。人外の下書き（NH1）は変えていない。
 
 #### MXREGFIX1 — 途中の自動アイコンが登録の性別と本人の外見の語だけを使う（11-14・GitHub `2e37066`・MIDICON）
 - 既定 ON・kill `v292DfixMXREGFIX1Off='1'`（今までとバイト一致）。登録の性別があれば本文の語で変えない／見た目の語はその人物の名前に掛かるものだけ拾う／名前に掛かる年配の語があれば「老人」を足す。診断 `dryRunReg`（読むだけ）。
@@ -1008,7 +1015,7 @@
 | 25 | fix705 | `v292Dfix705-canonical-read-gate.js` | i25 | `337ec0b1` | 20261019-bundle33-b | 認証・アカウント | `v292Dfix705Off` `v292Dfix705bdOff` `v292Dfix781Off` `v292Dfix837Off` |
 | 26 | fix900 | `v292Dfix900-hydrate-ui-gate.js` | i26 | `48c9765f` | 20260928-ac8 | 保存・同期 | `v292Dfix900Off` |
 | 27 | fix892 | `v292Dfix892-held-input-guard.js` | i27 | `95996398` | 20261011-s1b | 保存・同期 | `v292Dfix892Off` `v292DfixS1BOff` |
-| 28 | fix569 | `v292Dfix569-gc-shadow.js` | i28 h11 | `3d87ed16` | v292Dfix574 | 削除・墓標 | `v292Dfix569Off` `v292Dfix574DenyOff` |
+| 28 | fix569 | `v292Dfix569-gc-shadow.js` | i28 h11 | `7d55ffd2` | 20261116-discard1 | 削除・墓標 | `v292Dfix569Off` `v292Dfix574DenyOff` |
 | 29 | fix826 | `v292Dfix826-revision-coherence.js` | i29 h35 | `11f7f450` | 20260907-fix826 | 保存・同期 | `v292Dfix826Off` |
 | 30 | fix827 | `v292Dfix827-mat-recovery-ux.js` | i30 | `803d894b` | 20260907-fix827 | 保存・同期 | `v292Dfix827Off` |
 | 31 | fix580 | `v292Dfix580-meta-sync-coordinator.js` | i31 | `e9d45e63` | v292Dfix583 | 保存・同期 | `v292Dfix580Off` |
@@ -1029,7 +1036,7 @@
 | 46 | fix860 | `v292Dfix860-story-unlock-ui.js` | i46 h23 | `6de33b75` | 20260916-sp2 | Vault・非表示 | `v292Dfix860Off` |
 | 47 | fix573 | `v292Dfix573-hero-guard.js` | i47 | `c90d8be8` | 20261009-f573b | NPC・キャラ状態 | `v292Dfix573Off` `v292Dfix573bOff` |
 | 48 | fix553 | `v292Dfix553-punct-probe.js` | i48 | `1d54eb16` | 20260913-q119b5 | 文章品質・プロンプト | `v292DQ119PageCanaryOff` `v292DQ119PageCanaryOn` `v292DQ119PhaseBOn` `v292Dfix553Off` |
-| 49 | fix562 | `v292Dfix562-backup-inventory.js` | i49 h13 | `a878f4d0` | v292Dfix735 | 保存・同期 | `v292Dfix562Off` |
+| 49 | fix562 | `v292Dfix562-backup-inventory.js` | i49 h13 | `8bcd7fbb` | 20261116-discard1 | 保存・同期 | `v292Dfix562Off` |
 | 50 | fix564 | `v292Dfix564-snapshot.js` | i50 h14 | `134543bc` | v292Dfix567 | 保存・同期 | `v292Dfix564Off` |
 | 51 | fix726 | `v292Dfix726-export-secret-guard.js` | i51 h15 backup | `fecc81d7` | 20261019-bundle31-a | 保存・同期 | `v292Dfix726Off` |
 | 52 | fix721 | `v292Dfix721-safe-restore.js` | i52 h16 | `62e39f67` | 20260829-fix748 | 保存・同期 | `v292Dfix721Off` |
@@ -1201,7 +1208,7 @@
 | 218 | fix406 | `v292Dfix406-automode.js` | i218 | `4a563296` | v292Dfix417d | UI・画面 | `v292Dfix406Off` |
 | 219 | fix407 | `v292Dfix407-load-noconfirm.js` | i219 | `9287401c` | v292Dfix407 | UI・画面 | `v292Dfix407Off` |
 | 220 | fix409 | `v292Dfix409-handle-merge.js` | i220 | `297d7f30` | 20260901-fix784 | 保存・同期 | `v292Dfix409Off` `v292Dfix409bOff` `v292Dfix409cOff` `v292Dfix783Off` |
-| 221 | fix414 | `v292Dfix414-constraint-engine.js` | i221 | `a91c216b` | 20261111-flow2 | NPC・キャラ状態 | `v292Dfix414Off` `v292Dfix414WidenOff` `v292DfixFRZ1Off` |
+| 221 | fix414 | `v292Dfix414-constraint-engine.js` | i221 | `b48bd473` | 20261116-leg1r2 | NPC・キャラ状態 | `v292Dfix414Off` `v292Dfix414WidenOff` `v292DfixFRZ1Off` `v292DfixEYE1Off` `v292DfixLEG1Off` |
 | 222 | fix77X | `v292Dfix77X-clear.js` | i222 | `71551453` | 20261019-bundle31-a | NPC・キャラ状態 |  |
 | 223 | fix415 | `v292Dfix415-opening-mask.js` | i223 | `93e0d740` | v292Dfix415b | 文章品質・プロンプト | `v292Dfix415Off` |
 | 224 | fix416 | `v292Dfix416-pain-style.js` | i224 | `7e4a98de` | v292Dfix428 | NPC・キャラ状態 | `v292Dfix416Off` `v292Dfix425Off` |
@@ -1240,13 +1247,13 @@
 | 257 | fix453 | `v292Dfix453-src-coalesce.js` | i257 | `b82f3cb8` | v292Dfix453 | 文章品質・プロンプト | `v292Dfix453Off` |
 | 258 | fix454 | `v292Dfix454-dash.js` | i258 | `868cca04` | v292Dfix457 | 文章品質・プロンプト | `v292Dfix454Off` |
 | 259 | fix458 | `v292Dfix458-dash-post.js` | i259 | `5f9a8424` | 20260901-fix784 | 文章品質・プロンプト | `v292Dfix458Off` `v292Dfix625Off` `v292Dfix760Off` `v292Dfix762Off` |
-| 260 | fix459 | `v292Dfix459-sys-v2.js` | i260 | `0f975c5f` | 20261110-bundle93-l | 文章品質・プロンプト | `v292Dfix459AOff` `v292Dfix459BOff` `v292Dfix459COff` `v292Dfix459DOff` |
+| 260 | fix459 | `v292Dfix459-sys-v2.js` | i260 | `b80c365f` | 20261115-rw1（HIDE2 の出荷で更新） | 文章品質・プロンプト | `v292Dfix459AOff` `v292Dfix459BOff` `v292Dfix459COff` `v292Dfix459DOff` `v292DfixRW1Off` `v292DfixHIDE2On` `v292DfixHIDE2Off` |
 | 261 | fix460 | `v292Dfix460-slotgrid.js` | 読み込み停止（CLEANUP2 C2a・GitHub `05da4aa`。元の読込 i261。ファイルは残る） | `7b19dfd7` | v292Dfix460 | 保存・同期 | `v292Dfix460Off` |
 | 262 | fix461 | `v292Dfix461-appearance-en.js` | 読み込み停止（CLEANUP2 C2c・GitHub `05da4aa`。元の読込 i262。ファイルは残る） | `775fcc85` | 20261002-ac36 | アイコン・画像 | `v292Dfix461Off` `v292Dfix461V21Off` `v292Dfix461V21On` |
 | 263 | fix462 | `v292Dfix462-bare-speaker.js` | i263 | `e2c7f062` | 20260829-fix748 | 話者・会話ログ | `v292Dfix462Off` `v292Dfix469Off` |
 | 264 | fix463 | `v292Dfix463-human-guard.js` | i264 | `02f85257` | v292Dfix463 | NPC・キャラ状態 | `v292Dfix463Off` |
 | 265 | fix464 | `v292Dfix464-say-promote.js` | i265 | `518f21b3` | v292Dfix465 | 話者・会話ログ | `v292Dfix464Off` |
-| 266 | fix465 | `v292Dfix465-role-who.js` | i266 | `4754d718` | 20260829-fix748 | 話者・会話ログ | `v292Dfix465Off` |
+| 266 | fix465 | `v292Dfix465-role-who.js` | i266 | `3d89bcc9` | 20261115-rw1 | 話者・会話ログ | `v292Dfix465Off` `v292DfixRW1Off` |
 | 267 | fix466 | `v292Dfix466-dup-say.js` | i267 | `bbe05320` | v292Dfix466 | 話者・会話ログ | `v292Dfix466Off` |
 | 268 | fix467 | `v292Dfix467-readability-rules.js` | i268 | `cf5dcbb3` | v292Dfix468 | 文章品質・プロンプト | `v292Dfix467Off` |
 | 269 | fix468 | `v292Dfix468-gen-timing.js` | 読み込み停止（CLEANUP2 C2b・GitHub `05da4aa`。元の読込 i269。ファイルは残る） | `37f638a7` | v292Dfix468 | UI・画面 | `v292Dfix468Off` |
@@ -1325,7 +1332,7 @@
 | 340 | av2-portrait | `v292Dav2-portrait.js` | i340（86 では i345） | `8c744237` | 20261110-bundle93-k | アイコン・画像 | `v292Dav2pOff` `v292Dfix993Off` `v292DfixB37aOff` `v292DfixFG1cOff` `v292Dav2pRenameOff` |
 | 341 | fixLD1 | `v292DfixLD1-preset-portrait.js` | i341 | `a7a98a65` | 20261101-bundle81-admg-a | アイコン・画像 | `v292DfixD1Off` `v292DfixLD1On` |
 | 342 | fixB37 | `v292DfixB37-onboard.js` | i342 | `899aaaa5` | 20261109-bundle93-j | シナリオ・ホーム | `v292DfixB37bOff` `v292DfixB37gOff` |
-| 343 | fixLC1 | `v292DfixLC1-appearance-proposal.js` | i343（86 では i348） | `05b810a0` | 20261111-iconfix1 | アイコン・画像 | `v292DfixLC1Off` `v292DfixICONFIX1aOff` |
+| 343 | fixLC1 | `v292DfixLC1-appearance-proposal.js` | i343（86 では i348） | `30261b87` | 20261115-rw1 | アイコン・画像 | `v292DfixLC1Off` `v292DfixICONFIX1aOff` `v292DfixAPPX1Off` |
 | 344 | fixLC1 | `v292DfixLC1-workbench.js` | i344（86 では i349） | `f4564ac3` | 20261110-bundle93-k | アイコン・画像 | `v292DfixLC1Off` `v292DfixLC1On` `v292DfixLC1PtrRefreshOff` |
 | 345 | av2-migrate-ui | `v292Dav2-migrate-ui.js` | i345 | `a5dcf137` | 20261109-bundle93-j | アイコン・画像 | `v292Dav2Off` `v292Dav2On` `v292Dav2mOff` |
 | 346 | fg3-artpreset | `v292Dfg3-artpreset.js` | i346 | `5c575d27` | 20261021-bundle37-a | アイコン・画像 | `v292Dfg3Off` `v292DfixB37fOff` |
@@ -1360,7 +1367,7 @@
 
 | # | 番号 | ファイル | 読込（83 の index順） | sha256先頭 | ?cb= | 分野 | スイッチ（例） |
 |---|---|---|---|---|---|---|---|
-| 368 | fixICONUX2 | `v292DfixICONUX2-twotap.js` | i350（86 の番号。LC1-workbench の直後。83 では i349） | `cc6313fa` | 20261102-bundle90-a | アイコン・画像 | `v292DfixICONUXOff` `v292DfixLC1On` |
+| 368 | fixICONUX2 | `v292DfixICONUX2-twotap.js` | i350（86 の番号。LC1-workbench の直後。83 では i349） | `e6faea74` | 20261115-rw1 | アイコン・画像 | `v292DfixICONUXOff` `v292DfixLC1On` |
 | 369 | fixSETAV1 | `v292DfixSETAV1-settings-avatar.js` | i350（ICONUX2 の直後） | `d2146d0e` | 20261101-bundle82-iconux-b | アイコン・画像 | `v292DfixSETAV1Off` |
 | 370 | fixICF | `v292DfixICF-icon-fail-log.js` | i357（UI1 の直後・83） | `e41d22e6` | 20261103-bundle93-a | アイコン・画像 | `v292DfixICFOff` `v292DfixB37aOff` |
 | 371 | fixFLW3 | `v292DfixFLW3-opening-mode.js` | i358（82b では i357＝最後） | `f2e896a4` | 20261101-bundle82-iconux-b | UI・画面 | `v292DfixFLW3Off` |
@@ -1388,7 +1395,7 @@
 | 393 | fixGHOST1 | `v292DfixGHOST1-legacy-slot-ghost.js` | home：fix889 の直後（index では読まない。GHOST1・GitHub `98cf4bc`） | `cf49f461` | 20261111-ghost1 | シナリオ・ホーム | `v292DfixGHOST1Off`（kill。既定 ON） |
 | 394 | fixKEY1 | `v292DfixKEY1-story-key.js` | index・home（KEY1・GitHub `e4d982e`） | `499b6c97` | 20261112-key1 | 保存・同期 | `v292DfixKEY1Off`（kill。既定 ON） |
 | 395 | fixSOL1 | `v292DfixSOL1-story-open-lock.js` | index（KEY1 の直前。SOL1・`e4d982e`） | `4617f25e` | 20261112-store1b | 保存・同期 | `v292DfixSOL1Off`（kill。既定 ON） |
-| 396 | fixSTORE1b | `v292DfixSTORE1b-device-free.js` | home：DL2 の直後（index では読まない。STORE1b・`a46c2f1`〜`72ab286`） | `5ead3be0` | 20261116-free2d | 削除・墓標 | `v292DfixSTORE1Off` `v292DfixFREE2Off` `v292DfixSTUCK1On` `v292DfixZT1On` |
+| 396 | fixSTORE1b | `v292DfixSTORE1b-device-free.js` | home：DL2 の直後（index では読まない。STORE1b・`a46c2f1`〜`72ab286`） | `3498c107` | 20261116-discard1 | 削除・墓標 | `v292DfixSTORE1Off` `v292DfixFREE2Off` `v292DfixSTUCK1On` `v292DfixZT1On` `v292DfixDISCARD1Off` |
 | 397 | fixACTOR1 | `v292DfixACTOR1-input-actor.js` | index：HEROVOICE1 の直後（ACTOR1・`5b8a837`） | `1bb474f0` | 20261114-hv1 | 文章品質・プロンプト | `v292DfixACTOR1Off` `v292DfixACTOR1aOff` `v292DfixACTOR1bOn`（既定 OFF） |
 | 398 | fixLAT1 | `v292DfixLAT1-press-feedback.js` | index（LAT1・`f2b6d56`） | `43ec809d` | 20261112-lat1 | UI・画面 | `v292DfixLAT1Off` |
 | 399 | fixUI3 | `v292DfixUI3-polish.js` | index（UI3・`f2b6d56`） | `17bf53cc` | 20261112-ui3a | UI・画面 | `v292DfixUI3Off` |
@@ -1920,6 +1927,11 @@
 - `v292DfixSTATE4Off` / `v292DfixSTATE4BOff` — fix77, fix192（STATE4・ST4B）
 - `v292DfixFEAR1Off` / `v292DfixFEAR2Off` / `v292DfixFEAR2On` / `v292DfixFEAR2R2Off` / `v292DfixARM2Off` / `v292DfixCHEAD1Off` — fix414（FEAR2 は r2 から既定 ON。FEAR2On は既定を OFF に戻したときだけ意味がある）
 - `v292DfixQUOTE1Off` — index.html（QUOTE1。SPKW1 と同じ範囲で効く）
+- `v292DfixEYE1Off` / `v292DfixLEG1Off` — fix414（EYE1・LEG1 r2。既定 ON）
+- `v292DfixRW1Off` — fix459, fix465（RW1。既定 ON）
+- `v292DfixAPPX1Off` — fixLC1, fixICONUX2（APPX1。既定 ON）
+- `v292DfixHIDE2On` / `v292DfixHIDE2Off` — fix459（HIDE2。候補・既定 OFF。HIDE1 r1 の `v292DfixHIDE1On` / `v292DfixHIDE1Off` は HIDE2 で撤去）
+- `v292DfixDISCARD1Off` — fixSTORE1b, fix562（DISCARD1。手動専用）
 - `v292DfixSTORE1Off` / `v292DfixSTORE1Multi` / `v292DfixSTORE1Dry` — fixSTORE1b
 - `v292DfixSTUCK1On` / `v292DfixSTUCK1Off` / `v292DfixZT1On` / `v292DfixZT1Off` — fixSTORE1b（STUCK1・ZT1。既定 OFF）
 - `v292DfixUI3Off` — fixUI3

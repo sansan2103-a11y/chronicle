@@ -312,33 +312,39 @@
       + '・地の文にMarkdown（**、*、#、行頭の・/-）を使わない。数値の精密さや俯瞰的な分析で距離を作らない。';
   }
 
-  // ★HIDE1（laneQUALITY3・2026-11-15・既定 OFF）: NPC の説明文に隠し事が書かれている物語だけ、【展開】の後ろに 1 文を足す。
-  //   隠し事の無い物語・OFF・kill・例外 → 何も足さない（sys は従来とバイト一致）。主人公の説明文は見ない（プレイヤーが知っている）。
-  //   ON : localStorage v292DfixHIDE1On='1'   kill: v292DfixHIDE1Off='1'（On より優先）。毎回評価・再読み込み不要。
-  //   既定を ON にするときは、下の hide1On() の 1 行を  return !flag('v292DfixHIDE1Off');  に変える。
-  function hide1On(){ return !flag('v292DfixHIDE1Off') && flag('v292DfixHIDE1On'); }
-  // 「隠し事がある」と読む書き方（どれか 1 つに当たれば足す）。当てない例: 隠そうとする・隠れる・隠れ家・隠し味・正体不明・（目的語の無い）黙っている
-  var HIDE1_RES = [
+  // ★HIDE2（laneHIDE2・2026-11-15・既定 OFF・HIDE1 r1 の置き換え。GPT #127-UH）:
+  //   NPC の説明文に「胸にしまっている事実」がある物語だけ、fix192 の【良い1ターンの形】4 の「本音・打ち明け・…情報の開示はセリフで」の文を、
+  //   明かすきっかけと時期をそろえる文に置き換える（足すのではなく置き換え＝字数の増分を小さく・「秘密」「隠し事」の語を増やさない）。
+  //   当たらない物語・OFF・kill・置き換える文が無い・例外 → 何もしない（sys は従来とバイト一致）。主人公の説明文は見ない（プレイヤーが知っている）。
+  //   ON : localStorage v292DfixHIDE2On='1'   kill: v292DfixHIDE2Off='1'（On より優先）。毎回評価・再読み込み不要。
+  //   既定を ON にするときは、下の hide2On() の 1 行を  return !flag('v292DfixHIDE2Off');  に変える。
+  function hide2On(){ return !flag('v292DfixHIDE2Off') && flag('v292DfixHIDE2On'); }
+  // 「胸にしまっている事実がある」と読む書き方（どれか 1 つに当たれば置き換える）。
+  //   当てない例: 隠そうとする・隠れる・隠れ家・隠し味・正体不明・正体を探る・目的語の無い「黙っている」・本当は優しい（性格）・城の秘密を守る／客の秘密を集める（他人の秘密）
+  var HIDE2_RES = [
     /隠して(?:いる|る|いた|おり|き)|隠し(?:通|持っ)/,                                                        // 〜を隠している／隠し持っている
     /(?:を|は|に|こと|事)(?:誰にも|まだ)?(?:言って|話して|明かして|打ち明けて|教えて|知らせて)(?:い)?ない/,   // 〜には話していない
     /(?:を|は|こと|事)(?:伏せて|黙って)(?:いる|る)/,                                                         // 〜のことを黙っている
     /誰にも(?:言|話|教|明か|知られ)/,
-    /正体(?!不明)(?:は|を|が|に)/,                                                                           // 正体は〜／正体を隠す
-    /本当の(?:名前|名|姿|目的|正体|顔|年齢|性別|身分)|本当は|実は/,
-    /秘密|内緒/,
+    /正体(?!不明)(?:は|が|に)|正体を(?:隠|偽|知られ|明かさ|伏せ)/,                                           // 正体は〜（正体を探る・突き止める は当てない）
+    /本当の(?:名前|名|姿|目的|正体|顔|年齢|性別|身分)/,
+    /(?:本当は|実は)[^。\n]{0,20}?(?:娘|息子|兄|姉|弟|妹|父|母|親|夫|妻|子供|子ども|孫|犯人|一員|仲間|手先|スパイ|幽霊|死んで|生きて|人間ではない|人ではない|別人|偽物|本人)/,   // 実は依頼人の娘（本当は優しい は当てない）
+    /秘密を(?:抱え|持っ|持ち|隠|知られ)|秘密にし|内緒にし|内緒で|(?:の|は|が)(?:秘密|内緒)(?:だ|である|です|。|$)/,       // 自分の秘密（城の秘密を守る・客の秘密を集める は当てない）
     /知られたくない|知られてはいけない|気づかれないように|気付かれないように|(?:素性|身分|名前|年齢)を偽|偽名|成りすま|なりすま|のふりをして/
   ];
-  function hide1Has(desc){ var d = String(desc || ''); for (var i = 0; i < HIDE1_RES.length; i++){ if (HIDE1_RES[i].test(d)) return true; } return false; }
-  var HIDE1_TEXT = '\n・人物の説明で隠し事（隠している・秘密・正体・本当は〜など）とされていることは、プレイヤーの入力で問われるか、本文に出た手がかりで言い逃れできなくなるまで、本人の台詞でも地の文でも明かさない。それまでは目をそらす・言いよどむ・話をそらすなど、態度でにじませる。';
-  var HIDE1_TEXT_F192 = '明かす時が来たら、上の「本音・打ち明けはセリフで」のとおり本人の台詞で明かす（この 1 文は隠し事について「打ち明け・情報の開示」より先に守る）。';
-  function hide1Line(sys){
+  function hide2Has(desc){ var d = String(desc || ''); for (var i = 0; i < HIDE2_RES.length; i++){ if (HIDE2_RES[i].test(d)) return true; } return false; }
+  // fix192（v292Dfix192-newengine.js の【良い1ターンの形】4）の文。ちょうど 1 回あるときだけ置き換える。
+  var HIDE2_FROM = 'キャラの本音・打ち明け・関係の動き・情報の開示は、地の文で説明するより、キャラ自身のセリフで語らせることを優先する（地の文は情景・動作・間に徹し、心理と物語の前進はセリフに乗せる）。';
+  var HIDE2_TO = 'キャラの本音・関係の動きは、地の文で説明するより、キャラ自身のセリフで語らせることを優先する（地の文は情景・動作・間に徹し、心理と物語の前進はセリフに乗せる）。人物が胸にしまっている事実は、問われる・証拠を突きつけられる・状況がそれを要する、のどれかが起きてから本人の言動で明かす。それより前に、本人の台詞や独白・地の文で先に明かさない。';
+  function hide2Apply(sys){
     try {
-      if (!hide1On()) return '';
+      if (!hide2On() || typeof sys !== 'string') return sys;
+      var k = sys.indexOf(HIDE2_FROM); if (k < 0 || sys.indexOf(HIDE2_FROM, k + 1) >= 0) return sys;
       var S = window.S || (0,eval)('typeof S!=="undefined"?S:null');
       var ns = (S && S.cast && Array.isArray(S.cast.npcs)) ? S.cast.npcs : [];
-      if (!ns.some(function(n){ return n && hide1Has(n.desc); })) return '';
-      return HIDE1_TEXT + ((typeof sys === 'string' && sys.indexOf('打ち明け・関係の動き・情報の開示') >= 0) ? HIDE1_TEXT_F192 : '');
-    } catch(e){ return ''; }
+      if (!ns.some(function(n){ return n && hide2Has(n.desc); })) return sys;
+      return sys.slice(0, k) + HIDE2_TO + sys.slice(k + HIDE2_FROM.length);
+    } catch(e){ return sys; }
   }
 
   // 【良い1ターンの形】から、C/D/反応と身体 と重複する項目を落とす
@@ -385,10 +391,11 @@
     var addon = '';
     if (A) addon += blockA(aSrc);
     if (B) addon += '\n' + blockB();
-    if (C) addon += '\n' + blockC() + hide1Line(sys);   // ★HIDE1（既定 OFF）
+    if (C) addon += '\n' + blockC();
     if (D) addon += '\n' + blockD();
 
     var out = p.head + kept.join('') + addon + '\n';
+    out = hide2Apply(out);   // ★HIDE2（既定 OFF）: 隠している事実のある物語だけ fix192 の開示の文を置き換える
     last = { before: sys.length, after: out.length, blocksBefore: p.blocks.length, blocksAfter: kept.length + (A?1:0) + (B?1:0) + (C?1:0) + (D?1:0) };
     try { console.log(TAG, 'sys ' + last.before + '→' + last.after + '字 / ' + last.blocksBefore + '→' + last.blocksAfter + 'ブロック'); } catch(e){}
     return out;
@@ -424,7 +431,7 @@
     parse: parse,
     last: function(){ return last; },
     last958: function(){ return last958; },
-    hide1: { on: hide1On, has: hide1Has, line: hide1Line },   // ★HIDE1 検証口
+    hide2: { on: hide2On, has: hide2Has, apply: hide2Apply },   // ★HIDE2 検証口
     isOff: off
   };
   try { console.log(TAG, 'armed (sys v2 at send boundary)'); } catch(e){}
