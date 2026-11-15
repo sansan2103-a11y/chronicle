@@ -312,6 +312,19 @@
       + '・地の文にMarkdown（**、*、#、行頭の・/-）を使わない。数値の精密さや俯瞰的な分析で距離を作らない。';
   }
 
+  // ★BEAT2（laneBEAT2・2026-11-16・実験・既定 OFF）: 1 回の応答で会話の拍を縮めない／主人公の番を NPC が埋めない、の 2 つの腕。
+  //   【展開】の後ろに、鍵のある腕の文だけを足す（足すだけ。既存の文は変えない）。鍵が無い・kill・例外 → 何も足さない（sys は従来とバイト一致）。
+  //   腕 a: localStorage v292DfixBEAT2aOn='1'（答える相手の言葉）  腕 b: v292DfixBEAT2bOn='1'（一拍で返す）  両方 ON 可。
+  //   kill: v292DfixBEAT2Off='1'（両方止める・On より優先）。毎回評価・再読み込み不要。fix459 の C（v292Dfix459COff）を止めていると出ない。
+  var BEAT2A = '\n・登場人物は、相手が実際に口にした言葉・した行動にだけ答える。まだ言われていない拒否・条件・問いを先読みして、それに答える台詞を書かない。';
+  var BEAT2B = '\n・相手の問い・難色・要求が出て、主人公か同行者の返事が要る所まで来たら、そこで区切ってプレイヤーに返す。NPC同士で2往復以上やり取りを先へ進めない。複数人に向けた問いに、NPCが全員を代表して答えない（主人公の答えは書かない）。';
+  function beat2Line(){
+    try {
+      if (flag('v292DfixBEAT2Off')) return '';
+      return (flag('v292DfixBEAT2aOn') ? BEAT2A : '') + (flag('v292DfixBEAT2bOn') ? BEAT2B : '');
+    } catch(e){ return ''; }
+  }
+
   // 【良い1ターンの形】から、C/D/反応と身体 と重複する項目を落とす
   function trimGoodTurn(txt){
     var out = txt;
@@ -356,7 +369,7 @@
     var addon = '';
     if (A) addon += blockA(aSrc);
     if (B) addon += '\n' + blockB();
-    if (C) addon += '\n' + blockC();
+    if (C) addon += '\n' + blockC() + beat2Line();   // ★BEAT2（実験・既定 OFF）
     if (D) addon += '\n' + blockD();
 
     var out = p.head + kept.join('') + addon + '\n';
@@ -395,6 +408,7 @@
     parse: parse,
     last: function(){ return last; },
     last958: function(){ return last958; },
+    beat2: { line: beat2Line, A: BEAT2A, B: BEAT2B },   // ★BEAT2 検証口
     isOff: off
   };
   try { console.log(TAG, 'armed (sys v2 at send boundary)'); } catch(e){}
