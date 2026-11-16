@@ -1977,7 +1977,8 @@
 - `v292DfixBILL1cOff` — fixSTARTICON, fixMIDICON, av2-data（BILL1c・既定 ON の kill。Worker v46.51 の PROVIDER_AUTH_FAILED／PROVIDER_BALANCE_EXHAUSTED を受けたら自動の絵の要求を 10 分止める〔メモリだけ・読み直しで解ける・手動の生成は止めない〕。BILL1c2＝知らせは「閉じる」まで残る帯を 1 回だけ・文言は端末が持ち残高不足と断定しない。GPT #127-VB 3・#127-VF 2）
 - `v292DfixMXSHORT1On` / `v292DfixMXSHORT1Off` — fixMIDICON（MXSHORT1・既定 OFF。独立レビューで別人統合の場面が残るため ON 禁止。Worker 側 CHR_MXSHORT1_ON も未設定）
 - `v292DfixLEAK1TagxOff` — fixLEAK1（TAGX1・既定 ON の kill。行頭が react／state＋who=＋別の欄名= の内部書式の行だけを本文から除く。GPT #127-VB 2(3)）
-- `v292DfixALIAS1On` / `v292DfixALIAS1Off` — fix307（ALIAS1 shadow・既定 OFF。名簿の抽出に別名候補〔最大 3 語〕の欄を足して数えるだけ。名簿・保存・絵・sys には反映しない。記録は件数と理由コードだけ。GPT #127-VF 1）
+- `v292DfixALIAS1On` / `v292DfixALIAS1Off` — fix307（ALIAS1 shadow・既定 OFF。名簿の抽出に別名候補〔最大 3 語〕の欄を足して数えるだけ。名簿・保存・絵・sys には反映しない。記録は件数と理由コードだけ。r3＝ON のときだけ会話の話者名と回数を抽出に添える・測定の数は metrics() で読む。GPT #127-VF 1・#127-VH 2）
+- `v292DfixTMPICON1On` / `v292DfixTMPICON1Off` — av2-portrait（TMPICON1・既定 OFF。絵が無い未登録の話者に、費用 0 の仮アイコン〔顔の無い胸像・呼び名から決まる色・頭の 1 字・「仮」の印〕を表示だけで付ける。生成・Worker への要求・保存なし。外見や性別を設定へ書かない。正式な絵ができたら自動で置き換わる。GPT #127-VH 2）
 - `v292DfixVDEL1Off` — fixDL2（VDEL1・既定 ON の修正の kill。GPT #127-VB 6 の先に塞げる部分: 一般の削除シートは、Vault v2 を解錠中でも v2 で隠した物語を SD1 の getstory より前で断る〔vault2status の hiddenIds をシートを開くときと送る直前に読む・分からなければ断る〕。'1' で従来の動き）
 - `v292DfixVAULTGUARD1Off` — fixSTORE1b（VAULTGUARD1。既定 ON の修正の kill。'1' で、Vault v2 解錠中の隠した物語を通常の getstory 照合から外す守りを止める）
 - `v292DfixMXALIAS1On` / `v292DfixMXALIAS1Off` — fixMIDICON, fix145（AUTOICON1 r2・MXALIAS1。既定 OFF・Owner PC 限定。総称名（例「老人」）と記述名を、出たターンが重なるときだけ同じ控えの絵で表示する。保存はしない。Off が優先）

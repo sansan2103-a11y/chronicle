@@ -76,6 +76,36 @@
     return (phCache[n] = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
   }
 
+
+  /* ---------- ★TMPICON1（GPT #127-VH 2・2026-11-17・既定 OFF: localStorage v292DfixTMPICON1On='1'・kill v292DfixTMPICON1Off='1'。毎回評価） ----------
+     対象: 未登録の話者（UNREGISTERED）で、絵が無い（今は文字の丸 = state 'unreg'）もの。MIDICON の控えの絵を読み込み中・失敗の間も同じ。
+     出さない: 登録キャラ・主役（binding で REGISTERED になる者・登録名と同じ呼び名・登録名で始まる呼び名）、fix487 の汎用ラベル（???・謎の人物・人影・代名詞・怪異 など）。
+     形: 顔の無い共通の胸像（全員同じ形）＋呼び名から決まる色（色相 0〜359・彩度と明るさは固定）＋頭の 1 字。外見・性別・年齢は決めつけず、設定にも書かない。
+     置き換え: 正式な絵（控えの絵・登録後の絵）が来れば pictureFor が別の state を返すので、次の sweep でそのまま正式な絵になる（仮は常にいちばん弱い）。
+     生成・通信・保存はしない（data: の SVG を端末のメモリで作るだけ）。 */
+  var tmpCache = {}, tmpStats = { shown: 0, skipGeneric: 0, skipCast: 0, replaced: 0 };
+  function tmpOn(){ return lsg('v292DfixTMPICON1Off') !== '1' && lsg('v292DfixTMPICON1On') === '1'; }
+  var TMP_GEN = /^([?？\s]+|謎の(人物|声|存在|影)|正体不明.*|誰か|何者か|何か|人影|人の(影|形)|不明(の.*)?|名も無き.*|彼|彼女|それ|あれ|これ|自分|私|僕|俺|あなた|君|お前|奴|やつ|(異形|化け?物|怪物|怪異|妖怪|亡霊|幽鬼|得体の知れない|人ならぬ).*)$/;
+  function tmpGeneric(label){ var k = key(label); if (!k) return true; try { var g = window.__v292Dfix487; if (g && typeof g.isGeneric === 'function' && g.isGeneric(k)) return true; } catch(e){} if (TMP_GEN.test(k)) return true; if (/）\s*$/.test(k) && /(未確認|正体不明)/.test(k)) return true; return false; }
+  function tmpIsCast(m, label){ var k = key(label); if (!k) return true; for (var i = 0; i < m.ents.length; i++){ var n = m.ents[i].name; if (n && (k === n || k.indexOf(n) === 0)) return true; } return false; }
+  function tmpInitial(label){ var a = Array.from ? Array.from(key(label)) : key(label).split(''); for (var i = 0; i < a.length; i++){ if (!/[\s「」『』（）()・、。…"'<>&]/.test(a[i])) return a[i]; } return '・'; }
+  function tmpImage(label){
+    var n = key(label); if (tmpCache[n]) return tmpCache[n];
+    var h = 2166136261; for (var i = 0; i < n.length; i++){ h ^= n.charCodeAt(i); h = (h * 16777619) >>> 0; }
+    var bg = 'hsl(' + (h % 360) + ',45%,40%)', ch = tmpInitial(n);
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" data-tmpicon="1"><rect width="64" height="64" rx="32" fill="' + bg + '"/>' +
+      '<circle cx="32" cy="24" r="11" fill="rgba(255,255,255,.28)"/><path d="M12 58c2-12 10-18 20-18s18 6 20 18z" fill="rgba(255,255,255,.28)"/>' +
+      '<text x="32" y="55" text-anchor="middle" font-size="15" font-weight="bold" font-family="sans-serif" fill="#fff">' + ch + '</text>' +
+      '<circle cx="53" cy="11" r="7" fill="rgba(0,0,0,.45)"/><text x="53" y="15" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#fff">仮</text></svg>';
+    return (tmpCache[n] = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
+  }
+  function tmpApply(m, ident, label, pic){
+    if (!pic || pic.state !== 'unreg' || ident.kind === 'REGISTERED' || !tmpOn()) return pic;
+    if (tmpGeneric(label)){ tmpStats.skipGeneric++; return pic; }
+    if (tmpIsCast(m, label)){ tmpStats.skipCast++; return pic; }
+    return { state: 'unreg', src: tmpImage(label), title: '仮のアイコン（この人物の絵はまだありません）', tmp: true };
+  }
+
   /* ---------- IDB cache: db chr6av2 / store assets (keyPath asset_id); record carries story_id (R15) ---------- */
   var DBN = 'chr6av2', ST = 'assets', dbp = null;
   function idb(){
@@ -209,6 +239,9 @@
       if (mxr.kind === 'REGISTERED' && mxr.id === ident.id){ pic = pictureExtra({ asset_id: mxx.asset_id, label: key(mxl), story_id: m.story_id, fallback: pic }); if (pic.state === 'extra') mxStats.keepWhileNpcEmpty++; }
     }
     if (pic.state === 'extra') mxStats.shown++;
+    pic = tmpApply(m, ident, mxl, pic);   /* ★TMPICON1: 未登録・絵なしの話者だけ、表示だけの仮アイコン（OFF では pic をそのまま返す） */
+    if (pic.tmp){ if (img.getAttribute('data-av2-tmp') !== '1'){ img.setAttribute('data-av2-tmp', '1'); tmpStats.shown++; } }
+    else if (img.hasAttribute('data-av2-tmp')){ img.removeAttribute('data-av2-tmp'); tmpStats.replaced++; }
     if (img.getAttribute('src') !== pic.src){ try { img.onerror = null; img.src = pic.src; stats.set++; } catch(e){} }
     if (img.getAttribute('data-av2') !== pic.state) img.setAttribute('data-av2', pic.state);
     if (ident.kind === 'REGISTERED'){ if (img.getAttribute('data-av2-id') !== ident.id) img.setAttribute('data-av2-id', ident.id); }
@@ -903,7 +936,8 @@
     mxStats: function(){ return JSON.parse(JSON.stringify(mxStats)); },
     renameStats: function(){ return { on: lsg('v292Dav2pRenameOff') !== '1', byName: renameStats.byName }; },   /* ★93-k RENAME1 */
     resolve: function(label){ var m = model(); return m ? resolveLabel(m, label) : null; },
-    placeholderImage: placeholderImage
+    placeholderImage: placeholderImage,
+    tmpicon: { on: tmpOn, image: tmpImage, generic: tmpGeneric, stats: function(){ return JSON.parse(JSON.stringify(tmpStats)); } }   /* ★TMPICON1 */
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
   try { console.log(TAG, 'loaded'); } catch(e){}
