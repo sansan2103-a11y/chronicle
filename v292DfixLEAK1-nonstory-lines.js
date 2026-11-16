@@ -26,7 +26,7 @@
 (function(){
   'use strict';
   if (typeof window !== 'undefined' && window.__v292DfixLEAK1) return;
-  var VER = 'leak1-20261115-r4jkv';
+  var VER = 'leak1-20261116-r5tagx';
   var STRUCT = 'react|state|scene_move|summary';
   // 内部専用ラベル（sys・クライアントに実在する固定の語だけ）
   var LABELS = ['状態ラベル', '移動タグ', '話者タグ', '状態タグ', '反応タグ', 'sayタグ', 'stateタグ', '状態の出力', '出力の形式'];
@@ -91,6 +91,13 @@
   var RX_RNOTE = /^\s*[→⇒]\s*(?:修正|訂正|書き直し?|再出力|やり直し)(?:します|しました|する|版)?\s*[。．.!！]?\s*$/;
   function isJkv(line){ var t = String(line || ''); return t.length <= 200 && (RX_JKV.test(t) || RX_RNOTE.test(t)); }
   function jkvOn(){ return ls('v292DfixLEAK1JkvOff') !== '1'; }
+  /* ★TAGX1（2026-11-16・GPT #127-VB 2(3)・SMOKE21 B3-B2 T5・SMOKE13 B3-N2 T3/T4 の実測）: 山括弧の外れた <react>／<state> の行が本文に残る。
+     形: 行の頭（「」の外）が「react who=… 反応=…」「state who=… からだ=…」＝タグ名・who=・もう 1 つの欄名= の並び。物語の文・台詞にこの並びは出ない。
+     山括弧つきでも同じ（<react who=… の行）。scene_move・summary は対象にしない（正規の経路がある）。「」『』〔 で始まる行・400 字を超える行は対象にしない。
+     止める鍵: v292DfixLEAK1TagxOff='1'（数えるだけに戻す）。適用の鍵（ApplyOff／Off）にも従う。 */
+  var RX_TAGX = /^\s*<?\s*(?:react|state)\s+who\s*[=＝]\s*["“]?[^"”\s=＝]{1,24}["”]?\s+(?:反応|声|からだ|こころ|本能|目的|傷|関係|未解決)\s*[=＝]/;
+  function isTagx(line){ var t = String(line || ''); return t.length <= 400 && !/^\s*[「『〔]/.test(t) && RX_TAGX.test(t); }
+  function tagxOn(){ return ls('v292DfixLEAK1TagxOff') !== '1'; }
   function chkLines(lines){ var strong = false, out = {}; for (var i = 0; i < lines.length; i++){ var t = lines[i]; if (RX_CHK_STRONG.test(t)){ strong = true; out[i] = 1; } else if (RX_CHK_WEAK.test(t)) out[i] = 1; } return strong ? out : {}; }
   /* ★OPT1（SMOKE6 K6-A T1 の実測・kill v292DfixLEAK1OptOff='1'・適用の鍵 ApplyOff／Off にも従う）: 本文の末尾にある、プレイヤーへ選択を促すまとまりを取り除く。
      形は 2 つだけ: ①括弧の見出し行（問いかけ・行動選択・選択肢・次の行動・主人公への …）＋その後ろが箇条書き 2 行以上（と最後の問いかけ 1 行）だけで本文が終わる
@@ -187,7 +194,7 @@
     if (!on() || typeof narr !== 'string') return narr;
     try {
       var info = (result && result.__leak1) || null, ap = applyOn();
-      var lines = narr.split('\n'), kinds = { label: 0, attr: 0, frag: 0, meta: 0, jpmeta: 0, stf: 0, chk: 0, jkv: 0 }, drop = {}, nL = 0, nC = 0, dL = 0, dC = 0, i, chk = chkLines(lines);
+      var lines = narr.split('\n'), kinds = { label: 0, attr: 0, frag: 0, meta: 0, jpmeta: 0, stf: 0, chk: 0, jkv: 0, tagx: 0 }, drop = {}, nL = 0, nC = 0, dL = 0, dC = 0, i, chk = chkLines(lines);
       var memo = info ? info._memo : '', memoAll = info ? (info._memoAll || info._memo) : '', body = info ? info._body : '';
       function rem(x){ return x.length >= 6 && memo && memo.indexOf(x) >= 0 && body.indexOf(x) < 0; }
       for (i = 0; i < lines.length; i++){
@@ -195,6 +202,7 @@
         if (isStf(l)){ k = 'stf'; ok = true; }                                             // ★r3 状態の欄の書き出し
         else if (chk[i]){ k = 'chk'; ok = true; }                                          // ★r3 自己点検の塊
         else if (isKnownLabel(l)){ k = 'label'; ok = true; }                              // 限定 Apply ①
+        else if (isTagx(l)){ k = 'tagx'; ok = tagxOn(); }                                 // ★TAGX1 山括弧の外れた react／state の行
         else if (isJkv(l)){ k = 'jkv'; ok = jkvOn(); }                                     // ★r4 JSON 風の状態の欄の切れ端／訂正メモ（kill: v292DfixLEAK1JkvOff）
         else if (isLabel(l)) k = 'attr';                                                   // 属性の並びの行（数えるだけ）
         else if (isFrag(l)) k = 'frag';                                                    // タグの断片（数えるだけ）
@@ -207,7 +215,7 @@
       _stat.turns++;
       var preCut = info ? info.cut : 0;
       if (nL || preCut || (info && (info.label || info.meta || info.amb))){
-        _stat.hit++; _stat.label += kinds.label + kinds.attr; _stat.frag += kinds.frag; _stat.meta += kinds.meta; _stat.stf = (_stat.stf || 0) + kinds.stf; _stat.chk = (_stat.chk || 0) + kinds.chk; _stat.jkv = (_stat.jkv || 0) + kinds.jkv; if (info && info.amb) _stat.amb++;
+        _stat.hit++; _stat.label += kinds.label + kinds.attr; _stat.frag += kinds.frag; _stat.meta += kinds.meta; _stat.stf = (_stat.stf || 0) + kinds.stf; _stat.chk = (_stat.chk || 0) + kinds.chk; _stat.jkv = (_stat.jkv || 0) + kinds.jkv; _stat.tagx = (_stat.tagx || 0) + kinds.tagx; if (info && info.amb) _stat.amb++;
       }
       if (kinds.jpmeta){ _stat.jpmeta++; _stat.jpChars += jpC; }
       if (nL || preCut || kinds.jpmeta || (info && (info.label || info.meta || info.amb))){
@@ -221,7 +229,7 @@
       if (!ap || !dL) return narr;
       var out = []; for (i = 0; i < lines.length; i++) if (!drop[i]) out.push(lines[i]);
       _stat.removedLines += dL; _stat.removedChars += dC;
-      try { if (plan && Array.isArray(plan.narrative)) plan.narrative = plan.narrative.filter(function(pl){ if (typeof pl !== 'string') return true; if (isKnownLabel(pl)) return false; if (jkvOn() && isJkv(pl)) return false; var y = norm(pl); if (rem(y)) return false; return true; }); } catch(e2){}
+      try { if (plan && Array.isArray(plan.narrative)) plan.narrative = plan.narrative.filter(function(pl){ if (typeof pl !== 'string') return true; if (isKnownLabel(pl)) return false; if (jkvOn() && isJkv(pl)) return false; if (tagxOn() && isTagx(pl)) return false; var y = norm(pl); if (rem(y)) return false; return true; }); } catch(e2){}
       return out.join('\n').replace(/[ \t]*\n{3,}/g, '\n\n').trim();
     } catch(e){ _stat.err++; return narr; }
   }
@@ -229,7 +237,7 @@
 
   var api = { VER: VER, on: on, applyOn: applyOn, pre: pre, gate: gate, optBlock: optBlock,
     log: function(){ return _log.slice(); }, last: function(){ return _last; }, status: function(){ var o = {}; for (var k in _stat) o[k] = _stat[k]; o.on = on(); o.apply = applyOn(); return o; },
-    core: { scanRaw: scanRaw, isJkv: isJkv, isLabel: isLabel, isKnownLabel: isKnownLabel, isFrag: isFrag, engDominant: engDominant, tokenLine: tokenLine, norm: norm, jpMeta: jpMeta, LABELS: LABELS.slice() } };
+    core: { scanRaw: scanRaw, isJkv: isJkv, isTagx: isTagx, isLabel: isLabel, isKnownLabel: isKnownLabel, isFrag: isFrag, engDominant: engDominant, tokenLine: tokenLine, norm: norm, jpMeta: jpMeta, LABELS: LABELS.slice() } };
   if (typeof window !== 'undefined') window.__v292DfixLEAK1 = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

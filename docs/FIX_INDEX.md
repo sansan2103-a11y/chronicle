@@ -1170,7 +1170,7 @@
 | 151 | fix577 | `v292Dfix577-delete-entry-guard.js` | i151 | `08fdce73` | v292Dfix577 | 削除・墓標 | `v292Dfix577Off` |
 | 152 | fix310 | `v292Dfix310-gallery.js` | 読み込み停止（CLEANUP2 C2a・GitHub `05da4aa`。元の読込 i152。ファイルは残る） | `85178fee` | 20261009-p8b2 | アイコン・画像 | `v292DcoverExtOn` `v292Dfix310Off` |
 | 153 | fix933 | `v292Dfix933-beta-delete-off.js` | i153 h27 | `399508fd` | 20261111-delall | 削除・墓標 | `v292Dfix933Off` `v292DfixDELALLOff` |
-| 154 | fixDL2 | `v292DfixDL2-server-delete.js` | i154 h32 | `1b84b0d9` | 20261116-autoclean1r5 | 削除・墓標 | `v292DfixDL2Off` `v292DfixDP3On` `v292DfixDP4Off` |
+| 154 | fixDL2 | `v292DfixDL2-server-delete.js` | i154 h32 | `9f7943ed` | 20261116-vdel1 | 削除・墓標 | `v292DfixDL2Off` `v292DfixDP3On` `v292DfixDP4Off` `v292DfixVDEL1Off` |
 | 155 | fix313 | `v292Dfix313-story-cards.js` | i155 | `1a5ff334` | 20261019-bundle31-a | 記憶 | `v292Dfix313Off` `v292Dfix951Off` `v292Dfix954Off` `v292Dfix954On` |
 | 156 | fix314 | `v292Dfix314-memory.js` | i156 | `977ccdf0` | 20260829-fix748 | 記憶 | `v292Dfix314Off` |
 | 157 | fix315 | `v292Dfix315-see.js` | 読み込み停止（CLEANUP2 C2a・GitHub `05da4aa`。元の読込 i157（86 では i160）。ファイルは残る） | `4864a7ee` | 20261103-bundle91-b | アイコン・画像 | `v292Dfix315On`（91-b から効かない）`v292DfixIMGSAFEOff` |
@@ -1972,6 +1972,12 @@
 - `v292DfixCONTRACT1On` / `v292DfixCONTRACT1Off` — fixCONTRACT1（実験・既定 OFF）
 - `v292DfixDISCARD2Off` — fixSTORE1b, fix562（DISCARD2。手動専用）
 - `v292DfixAUTOCLEAN1On` / `v292DfixAUTOCLEAN1Off` — fixSTORE1b（AUTOCLEAN1。既定 OFF・端末の鍵）
+- `v292DfixHEROACT1On` / `v292DfixHEROACT1Off` / `v292DfixHEROACT1Log` — fixHEROACT1（既定 OFF・数えるだけ。入力に無い主人公の発話・行動を short／decision／unclear に分けて件数とターン番号だけ記録。本文を書き換えず sys にも何も足さない。GPT #127-VB 2）
+- `v292DfixLIM1bOff` — fixSTARTICON（LIM1b・既定 ON の kill。昇格の絵も物語単位の同じ枠で数える。既存の絵の再利用は数えない。GPT #127-VB 4b）
+- `v292DfixBILL1cOff` — fixSTARTICON, fixMIDICON, av2-data（BILL1c・既定 ON の kill。Worker v46.51 の PROVIDER_AUTH_FAILED／PROVIDER_BALANCE_EXHAUSTED を受けたら自動の絵の要求を 10 分止める〔メモリだけ・読み直しで解ける・手動の生成は止めない〕。GPT #127-VB 3）
+- `v292DfixMXSHORT1On` / `v292DfixMXSHORT1Off` — fixMIDICON（MXSHORT1・既定 OFF。独立レビューで別人統合の場面が残るため ON 禁止。Worker 側 CHR_MXSHORT1_ON も未設定）
+- `v292DfixLEAK1TagxOff` — fixLEAK1（TAGX1・既定 ON の kill。行頭が react／state＋who=＋別の欄名= の内部書式の行だけを本文から除く。GPT #127-VB 2(3)）
+- `v292DfixVDEL1Off` — fixDL2（VDEL1・既定 ON の修正の kill。GPT #127-VB 6 の先に塞げる部分: 一般の削除シートは、Vault v2 を解錠中でも v2 で隠した物語を SD1 の getstory より前で断る〔vault2status の hiddenIds をシートを開くときと送る直前に読む・分からなければ断る〕。'1' で従来の動き）
 - `v292DfixVAULTGUARD1Off` — fixSTORE1b（VAULTGUARD1。既定 ON の修正の kill。'1' で、Vault v2 解錠中の隠した物語を通常の getstory 照合から外す守りを止める）
 - `v292DfixMXALIAS1On` / `v292DfixMXALIAS1Off` — fixMIDICON, fix145（AUTOICON1 r2・MXALIAS1。既定 OFF・Owner PC 限定。総称名（例「老人」）と記述名を、出たターンが重なるときだけ同じ控えの絵で表示する。保存はしない。Off が優先）
 - `v292DfixPROMOICON1On` / `v292DfixPROMOICON1Off` — fixSTARTICON, fixMIDICON（AUTOICON1 r2・PROMOICON1。既定 OFF・Owner PC 限定。NPC に昇格したとき、既存の控えの絵があれば写し、無ければ作る。控えの有無が不明なら作らない。推測の外見は確定設定に登録しない。アカウントの LIM1 より緩くならない。Off が優先）

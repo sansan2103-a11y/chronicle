@@ -893,6 +893,25 @@
      sent at most once per invocation; an unknown outcome (network / timeout / 5xx other than 502) is reconciled by ONE more
      portrait.list (read only) — never re-sent. The server side single-flights and refuses when candidates exist. */
   var efBusy = {};
+  var root = window;   /* ★BILL1c: the shared part below reads root */
+  /* ★BILL1c（laneAUTOICON2 r3・2026-11-16・GPT #127-VB 3 と「復旧・再試行再開の経路を残す」。既定 ON・kill: localStorage v292DfixBILL1cOff='1' で今まで（新しいコードを特別扱いしない））:
+     Worker が画像サービスの認証エラー（PROVIDER_AUTH_FAILED）・残高切れ（PROVIDER_BALANCE_EXHAUSTED。HTTP 502・本文の error の欄・retry:false。402 の保留中は held:true）を返したら、その物語では 10 分、
+     STARTICON・MIDICON・PROMOICON1 の「自動の」要求だけを打たない。抑止はこのタブのメモリだけ（保存しない）＝ページの読み直しで解ける。手で押す「絵を作る」「再生成」はここを通らない（止めない）。
+     知らせはこのページで 1 回だけ。旧 Worker はこのコードを返さない → 何も変わらない。同じ部品を av2-data・MIDICON・STARTICON が持ち、先に読み込んだものが window.__v292DfixBILL1 を作る。 */
+  if (!root.__v292DfixBILL1) root.__v292DfixBILL1 = (function () {
+    var HOLD_MS = 10 * 60 * 1000, CODES = { PROVIDER_AUTH_FAILED: 1, PROVIDER_BALANCE_EXHAUSTED: 1 }, ST = {}, noted = false;   /* ST: 物語 ID → { c: コード, at: 時刻 }（メモリだけ） */
+    function on() { try { return root.localStorage.getItem('v292DfixBILL1cOff') !== '1'; } catch (e) { return true; } }
+    function isCode(c) { return on() && !!CODES[c]; }
+    function mark(id, code) { if (!id || !isCode(code)) return; ST[String(id)] = { c: String(code).slice(0, 32), at: Date.now() }; }
+    function stopped(id) { if (!on() || !id) return null; var x = ST[String(id)]; if (!x) return null; if (!(Date.now() - x.at < HOLD_MS)) { delete ST[String(id)]; return null; } return x.c; }
+    function clear(id) { if (id) delete ST[String(id)]; else ST = {}; return true; }   /* 解除の口（補充の後に呼べる。読み直しでも解ける） */
+    function notice() { try { if (noted) return false; noted = true; var d = root.document; if (!d || !d.body || typeof d.createElement !== 'function') return true;
+      var el = d.createElement('div'); el.textContent = '画像を作るサービスが一時的に使えないため、キャラの絵の自動作成を少し止めています。物語はそのまま続けられます。';
+      el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#333;color:#fff;padding:8px 14px;border-radius:6px;font-size:13px;z-index:99999;max-width:90%;';
+      d.body.appendChild(el); root.setTimeout(function () { try { if (el.parentNode) el.parentNode.removeChild(el); } catch (e) {} }, 6000); return true; } catch (e) { return false; } }
+    return { v: 2, HOLD_MS: HOLD_MS, CODES: CODES, on: on, isCode: isCode, mark: mark, stopped: stopped, clear: clear, notice: notice, noted: function () { return noted; } };
+  })();
+  function BILL() { return root.__v292DfixBILL1 || null; }
   function ensureFirst(characterId, opts, cb){
     cb = (typeof cb === 'function') ? cb : function(){};
     opts = isObj(opts) ? opts : {};
@@ -929,6 +948,7 @@
           return done({ ok: false, code: String(j.status || 'UNKNOWN_STATUS'), calls: 1 });   // UNGROUNDED_REQUIRES_EXPLICIT_NEW_DRAW / PROFILE_REVIEW_REQUIRED / CANDIDATES_PENDING / IN_FLIGHT / LOST_RACE
         }
         var code = j && (j.errorCode || j.error);
+        if (!err && BILL() && BILL().isCode(code)) return done({ ok: false, code: code, calls: 1 });   /* ★BILL1c: 画像サービスの認証・残高のコードはそのまま渡す（BUDGET / GENERATION_FAILED に混ぜない） */
         if (!err && st === 402) return done({ ok: false, code: 'BUDGET', calls: 1 });
         if (!err && st === 429) return done({ ok: false, code: 'RATE_LIMITED', calls: 1 });
         if (!err && st === 422 && code === 'PROFILE_NOT_ENGLISH') return done({ ok: false, code: 'PROFILE_NOT_ENGLISH', calls: 0 });   /* ★fix991 (GPT #127-EN B): the Worker stopped before the provider (P8E) — not an unknown outcome */

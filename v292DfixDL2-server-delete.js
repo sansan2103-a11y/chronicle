@@ -170,6 +170,28 @@
       .then(function (r) { return r.ok ? r.json() : null; }, function () { return null; })
       .then(function (j) { return (j && j.ok === true && j.accountId) ? String(j.accountId) : null; }, function () { return null; });
   }
+  /* ★VDEL1（GPT #127-VB 6 の先に塞げる部分・既定 ON・kill v292DfixVDEL1Off='1'）: Vault v2 を解錠している間は fix889 の隠し一覧から外れるため、
+     この一般の削除シートが Vault で隠した物語を断れず、SD1 の送信前の確認が getstory で本文を取り寄せていた（そのあと Worker の deletestory2 は 409 で断る）。
+     そこで VAULTGUARD1 と同じ情報源（vault2status の hiddenIds・本文なし・id だけ）を、シートを開くときと送る直前の両方で読み、隠した id は getstory より前で断る。
+     解錠中なのに隠した id が分からない・不完全・応答の形が違う → 全部断る（fail-closed）。Vault v2 を使っていない（応答が ok でなく、金庫なし）→ 今までどおり。
+     施錠中: 隠した物語はサーバーの一覧に出ないので、今までどおり「一覧に無い物語は削除しない」で断る。隠した id はメモリだけ（記録・画面には出さない）。 */
+  var VD_OFF = 'v292DfixVDEL1Off', VD_MSG = 'Vault で隠した物語は、隠すのをやめてから削除してください。何も変わっていません。', VD_UNK = 'Vault の状態を確認できないため、削除できません（何も送っていません）。';
+  function vdOn() { return lsg(VD_OFF) !== '1'; }
+  function vdUiHasVault() { try { var U = window.__v292Dvault2Ui, s = (U && typeof U.status === 'function') ? U.status() : null; return !!(s && s.hasVault === true); } catch (e) { return true; } }
+  function vdFetch() {
+    if (!vdOn()) return Promise.resolve(null);
+    function mk(state, ids) { var o = null; if (ids) { o = {}; for (var i = 0; i < ids.length; i++) if (ids[i] != null) o[String(ids[i])] = 1; } return { state: state, ids: o }; }
+    return Promise.resolve().then(function () {
+      return fetch('/api/save', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'x-chronicle-csrf': '1' }, body: JSON.stringify({ op: 'vault2status' }) });
+    }).then(function (r) { return r && r.ok ? r.json() : null; }).then(function (j) {
+      if (!j || j.ok !== true) return mk(vdUiHasVault() ? 'unknown' : 'none', null);
+      if (typeof j.unlocked !== 'boolean') return mk('unknown', null);
+      if (j.unlocked !== true) return mk(j.hasVault === true ? 'locked' : 'none', null);
+      if (!Array.isArray(j.hiddenIds) || j.hiddenComplete === false) return mk('unknown', null);
+      return mk('unlocked', j.hiddenIds);
+    }, function () { return mk(vdUiHasVault() ? 'unknown' : 'none', null); });
+  }
+  function vdWhy(id, V) { if (!V) return null; if (V.state === 'unknown') return VD_UNK; if (V.state === 'unlocked' && V.ids && V.ids[String(id)] === 1) return VD_MSG; return null; }
   function listBasis() {
     return new Promise(function (res) {
       var W = W697();
@@ -296,6 +318,7 @@
               deleteOpId: null, result: null, retryable: false, recheck: false, done: false };
     if (PROTECT[r.id] === 1) r.reason = '保護されている物語のため削除できません。';
     else if (vaultHidden(r.id)) r.reason = '隠している物語は削除できません。先に「隠すのをやめる」を行ってください。';
+    else if (M && vdWhy(r.id, M.vd)) { r.reason = vdWhy(r.id, M.vd); st.vdRefused = (st.vdRefused || 0) + 1; }   /* ★VDEL1 */
     /* ★サーバの一覧に無い物語は削除しない。Vault v2 で隠した物語は施錠中の一覧に出ず、getstory も「無い」と同じ形で答えるので、
        「この端末だけの物語」と区別できない（D5）。端末の推測では消さない（D3）。 */
     else if (!srv) r.reason = 'クラウドでこの物語を確認できないため、ここでは削除できません（隠している物語の可能性もあります）。';
@@ -343,9 +366,9 @@
     if (!active()) { blocked('この画面では、いまは物語を一覧から削除できません。物語はそのまま残っています。'); return Promise.resolve(false); }
     if (!allowed()) { blocked('いまは物語の削除を使えません。作った物語は保存されたままです。'); return Promise.resolve(false); }
     var mine = M;
-    return Promise.all([who(), listBasis()]).then(function (x) {
+    return Promise.all([who(), listBasis(), vdFetch()]).then(function (x) {   /* ★VDEL1 */
       if (M !== mine) return false;
-      var a0 = x[0], L = x[1];
+      var a0 = x[0], L = x[1]; M.vd = x[2];
       if (!a0) { blocked('ログインの状態を確認できないため、削除できません（何も送っていません）。'); return false; }
       if (!L.ok) { blocked('サーバーの状態を確認できないため、削除できません（何も送っていません）。'); return false; }
       M.a0 = a0;
@@ -421,6 +444,10 @@
     return Promise.resolve();
   }
   function sendOne(r) {
+    if (vdOn()) return vdFetch().then(function (V) { var w = vdWhy(r.id, V); if (w) { st.vdRefused = (st.vdRefused || 0) + 1; setRes(r, false, w, { code: (V && V.state === 'unknown') ? 'vdel1-unknown' : 'vdel1-hidden' }); return; } return sendOne0(r); });   /* ★VDEL1: 送る直前にもう一度（使い回さない） */
+    return sendOne0(r);
+  }
+  function sendOne0(r) {
     if (sd1On() && r.kind === 'server' && r.basis) {   /* ★SD1 ②: 送る直前に、端末のターンが全部クラウドにあることを確かめる */
       return new Promise(function (res0) {
         sd1Verify(r, function (no) {
@@ -678,7 +705,7 @@
     openDelete: openDelete, openBulk: openBulk, openStuck: openStuck,
     onListshadow: onListshadow, decorate: decorate,
     pendingText: function () { return ''; },
-    status: function () { return { version: VERSION, mode: MODE, off: off(), active: active(), allowed: allowed(), sheetOpen: !!M, sheetKind: M ? M.kind : null, phase: M ? M.phase : null,
+    status: function () { return { vdel1: { on: vdOn(), refused: st.vdRefused || 0 }, version: VERSION, mode: MODE, off: off(), active: active(), allowed: allowed(), sheetOpen: !!M, sheetKind: M ? M.kind : null, phase: M ? M.phase : null,
       rows: M ? M.rows.map(function (r) { return { id: r.id, ready: r.ready, checked: r.checked, kind: r.kind, reason: r.reason, warn: r.warn.slice(), result: r.result, retryable: r.retryable, done: r.done }; }) : null,
       msg: M ? M.msg : null, stuck: stuckCount(), opened: st.opened, sends: st.sends, accepted: st.accepted, reconciles: st.reconciles, receive: JSON.parse(JSON.stringify(st.receive)),
       guardRefused: st.guardRefused, guardClicks: st.guardClicks, wrapped: st.wrapped, log: st.results.slice(),

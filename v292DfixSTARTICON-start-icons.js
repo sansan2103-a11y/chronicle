@@ -68,6 +68,24 @@
   var FX2B_OFF = 'v292DfixICONFIX2bOff', FX2C_OFF = 'v292DfixICONFIX2cOff', FX2T_OFF = 'v292DfixICONFIX2tOff';   /* ★ICONFIX2 */
   var UNK_CHECK_MS = [120000], UNK_SERIAL_MAX = 2, TM_KEEP = 5;   /* ★ICONFIX2 c: 保留キャラの最後の読み直し（結果から 120 秒）／続けて 2 回で止める ★t: 時間の記録は最新 5 物語 */
   var POLL_MS = 1500, STABLE_MS = 3000, AUTO_MAX_MS = 240000, WAIT_MS = 20000, CLEAN_MS = 45000;
+  /* ★BILL1c（laneAUTOICON2 r3・2026-11-16・GPT #127-VB 3 と「復旧・再試行再開の経路を残す」。既定 ON・kill: localStorage v292DfixBILL1cOff='1' で今まで（新しいコードを特別扱いしない））:
+     Worker が画像サービスの認証エラー（PROVIDER_AUTH_FAILED）・残高切れ（PROVIDER_BALANCE_EXHAUSTED。HTTP 502・本文の error の欄・retry:false。402 の保留中は held:true）を返したら、その物語では 10 分、
+     STARTICON・MIDICON・PROMOICON1 の「自動の」要求だけを打たない。抑止はこのタブのメモリだけ（保存しない）＝ページの読み直しで解ける。手で押す「絵を作る」「再生成」はここを通らない（止めない）。
+     知らせはこのページで 1 回だけ。旧 Worker はこのコードを返さない → 何も変わらない。同じ部品を av2-data・MIDICON・STARTICON が持ち、先に読み込んだものが window.__v292DfixBILL1 を作る。 */
+  if (!root.__v292DfixBILL1) root.__v292DfixBILL1 = (function () {
+    var HOLD_MS = 10 * 60 * 1000, CODES = { PROVIDER_AUTH_FAILED: 1, PROVIDER_BALANCE_EXHAUSTED: 1 }, ST = {}, noted = false;   /* ST: 物語 ID → { c: コード, at: 時刻 }（メモリだけ） */
+    function on() { try { return root.localStorage.getItem('v292DfixBILL1cOff') !== '1'; } catch (e) { return true; } }
+    function isCode(c) { return on() && !!CODES[c]; }
+    function mark(id, code) { if (!id || !isCode(code)) return; ST[String(id)] = { c: String(code).slice(0, 32), at: Date.now() }; }
+    function stopped(id) { if (!on() || !id) return null; var x = ST[String(id)]; if (!x) return null; if (!(Date.now() - x.at < HOLD_MS)) { delete ST[String(id)]; return null; } return x.c; }
+    function clear(id) { if (id) delete ST[String(id)]; else ST = {}; return true; }   /* 解除の口（補充の後に呼べる。読み直しでも解ける） */
+    function notice() { try { if (noted) return false; noted = true; var d = root.document; if (!d || !d.body || typeof d.createElement !== 'function') return true;
+      var el = d.createElement('div'); el.textContent = '画像を作るサービスが一時的に使えないため、キャラの絵の自動作成を少し止めています。物語はそのまま続けられます。';
+      el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#333;color:#fff;padding:8px 14px;border-radius:6px;font-size:13px;z-index:99999;max-width:90%;';
+      d.body.appendChild(el); root.setTimeout(function () { try { if (el.parentNode) el.parentNode.removeChild(el); } catch (e) {} }, 6000); return true; } catch (e) { return false; } }
+    return { v: 2, HOLD_MS: HOLD_MS, CODES: CODES, on: on, isCode: isCode, mark: mark, stopped: stopped, clear: clear, notice: notice, noted: function () { return noted; } };
+  })();
+  function BILL() { return root.__v292DfixBILL1 || null; }
   function lsGet(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { root.localStorage.setItem(k, v); return true; } catch (e) { return false; } }
   function ssGet(k) { try { return root.sessionStorage.getItem(k); } catch (e) { return null; } }
@@ -344,11 +362,18 @@
     /* ★ICONFIX2 c: before the chain ends, the characters held after an unknown outcome are looked up again (read only, never re-sent) */
     var endB2 = function (why, hold) { if (!fx2cOn() || why === 'RECHECK') return endB(why, hold); reconcileUnknown(id, a0, function () { endB(why, hold); }); };
     var send = function (c, h, again) {   /* the one billable request for this character (again = the ONE retry after IN_FLIGHT) */
-      soSet(id, function (s) { if (again) { s.r = s.r || {}; s.r[h] = 1; } s.b[h] = 'SENT'; });   /* written BEFORE the call: a page closed mid-call never resends (and never retries twice) */
+      soSet(id, function (s) { if (again) { s.r = s.r || {}; s.r[h] = 1; } s.b[h] = 'SENT'; });
+      if (X.promo && !again) promoSent(id);   /* ★LIM1b: 昇格の絵も物語の枠に数える（送る前に） */   /* written BEFORE the call: a page closed mid-call never resends (and never retries twice) */
       stats.ef++; if (again) stats.ifRetry++; if (inFlight()) stats.sentWhileInFlight++; note({ kind: again ? 'EF_RETRY' : 'EF', hero: c.hero });
       var ti0 = Date.now();
       A().ensureFirst(c.id, {}, function (x) {
         var code = (x && x.code) || 'UNKNOWN';
+        if (BILL() && BILL().isCode(code)) {   /* ★BILL1c r3: 絵は作られていない → この人は送っていない扱いに戻す（記録の stop・HOLD は付けない）。10 分たてばこのページでまた始まる */
+          BILL().mark(id, code); BILL().notice(); stats.efFail++; stats.bill = (stats.bill || 0) + 1; note({ kind: 'EF_BILL', code: code });
+          soSet(id, function (s) { if (again) { s.b[h] = 'IN_FLIGHT'; if (s.r) delete s.r[h]; } else delete s.b[h]; });
+          if (X.promo && !again) promoUnsent(id);   /* ★LIM1b: 送れなかった昇格の絵は数えない */
+          X.bDone = false; return finish('B_BILL');
+        }
         tmC(id, h, function (t) { t.i = Date.now() - ti0; t.code = String(code).slice(0, 24); if (again) t.rt = 1; });   /* ★ICONFIX2 t: the image request (one billable call) */
         if ((code === 'REGISTRATION_IN_PROGRESS') && x && !x.calls && transient < 5) { transient++; soSet(id, function (s) { if (again) { s.b[h] = 'IN_FLIGHT'; if (s.r) delete s.r[h]; } else delete s.b[h]; }); if (again) stats.ifRetry--; return setTimeout(next, 2000); }   /* refused on the device before any request (★93-j: a retry stays a retry) */
         note({ kind: 'EF_RES', code: code, calls: x && x.calls, retry: again ? 1 : 0 });
@@ -522,6 +547,7 @@
       watchReload();
       try { watchReopen(); } catch (eR) {}
       var g = gateWhy(); X.why = g || 'on'; if (g) return;
+      if (BILL() && BILL().stopped(sid())) { X.why = 'bill'; return; }   /* ★BILL1c: 何も送らない */
       var id = sid();
       if (X.story !== id) { X.story = id; X.firstTurns = null; X.okSince = 0; X.pageStop = null; X.bDone = false; X.bCounted = false; }
       var pq = (X.busy || X.needReload) ? null : promoQ(id);   /* ★PROMOICON1: 「NPC に昇格」の後の 1 回（このタブだけ・sessionStorage）。物語の始まりの pageStop より先に見る */
@@ -570,14 +596,23 @@
     if (q.ok) return '';   /* checked and counted once per promotion (the tick comes back until phase A starts) */
     var sc = storyCap(), dc0 = capDayStarts();   /* ★r2: アカウントの LIM1（starticon_story_imgs・starticon_day_stories）より緩くしない。0 なら作らない */
     var perStory = Math.min(PROMO.perStory, sc.npcs), perDay = Math.min(PROMO.perDay, dc0); if (!(perStory > 0) || !(perDay > 0)) return 'PROMO_LIM_ZERO';
-    var r = promoRec(); if (r.n >= perDay) return 'PROMO_DAY_CAP'; if ((r.st[hk(q.story)] || 0) >= perStory) return 'PROMO_STORY_CAP';
+    var r = promoRec(); if (r.n >= perDay) return 'PROMO_DAY_CAP'; if (stCnt(r, q.story).d >= perStory) return 'PROMO_STORY_CAP';
+    if (lim1bOn()){ var tot = (sc.hero ? 1 : 0) + sc.npcs, used = startUsed(q.story) + stCnt(r, q.story).s; if (!(used < tot)) return 'PROMO_STORY_LIM'; }   /* ★LIM1b: 物語の始まりの絵＋昇格の絵で、1 物語の枚数（starticon_story_imgs・行なし 4 枚）を超えない */
     var nm = String(q.name || ''), turns = 0, lines = 0; if (!nm) return 'PROMO_NO_NAME';
     (S.turns || []).forEach(function (t) { var hit = false; if (t && typeof t.narrative === 'string' && t.narrative.indexOf(nm) >= 0) hit = true;
       (Array.isArray(t && t._convSays) ? t._convSays : []).forEach(function (c) { if (c && c.who === nm) { lines++; hit = true; } }); if (hit) turns++; });
     if (turns < 2 && lines < 2) return 'PROMO_FEW';   /* すぐ消える端役には作らない */
-    r.n++; r.st[hk(q.story)] = (r.st[hk(q.story)] || 0) + 1; try { lsSet(PLK, JSON.stringify(r)); } catch (e) {} q.ok = true;   /* counted before anything is sent */
+    r.n++; var c0 = stCnt(r, q.story); c0.d++; r.st[hk(q.story)] = c0; try { lsSet(PLK, JSON.stringify(r)); } catch (e) {} q.ok = true;   /* counted before anything is sent */
     return '';
   }
+  /* ★LIM1b（laneAUTOICON2・GPT #127-VB 4 (b)・既定 ON・kill v292DfixLIM1bOff='1' で r2 と同じ数え方）: 昇格の絵（ensureFirst を送った数）も、物語の始まりの STARTICON の絵と
+     同じ 1 物語の枠に数える。控えの絵を写した（claim）・サーバーに絵があった（EXISTS）・読んだだけ（FILLED・ADOPTED）は数えない。記録は物語ごとに残る（日付で消えない）ので、昇格を繰り返しても枠は増えない。 */
+  function lim1bOn() { return lsGet('v292DfixLIM1bOff') !== '1'; }
+  function stCnt(r, story) { var v = r.st[hk(story)]; if (typeof v === 'number') return { d: v, s: v }; return (v && typeof v === 'object') ? { d: v.d || 0, s: v.s || 0 } : { d: 0, s: 0 }; }   /* r2 の数字の記録は送った数とみなす（多めに数える側） */
+  var NOT_SENT = { NO_PROFILE: 1, FILLED: 1, IF_READ_FAIL: 1, EXISTS: 1, ADOPTED: 1 };
+  function startUsed(story) { var r = rec(), so = r.st[hk(story)]; if (!so || !so.b) return 0; var n = 0; for (var k in so.b) if (Object.prototype.hasOwnProperty.call(so.b, k) && !NOT_SENT[so.b[k]]) n++; return n; }
+  function promoSent(story) { var r = promoRec(), c0 = stCnt(r, story); c0.s++; r.st[hk(story)] = c0; try { lsSet(PLK, JSON.stringify(r)); } catch (e) {} }
+  function promoUnsent(story) { var r = promoRec(), c0 = stCnt(r, story); if (c0.s > 0) c0.s--; r.st[hk(story)] = c0; try { lsSet(PLK, JSON.stringify(r)); } catch (e) {} }   /* ★BILL1c r3 */
   function promoted(name) {   /* fix145 の「NPC に昇格」が呼ぶ。鍵が無ければ何もしない */
     try { if (!promoOn() || killed()) return false; var id = sid(); var nm = String(name || '').normalize('NFC').trim(); if (!id || !nm) return false;
       if (ssGet(PQK)) return false;   /* one at a time */
