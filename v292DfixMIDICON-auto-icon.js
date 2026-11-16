@@ -403,6 +403,26 @@
     return { target: dispKey(t) || t, tnk: tnk, registered: reg, usable: usable }; }
   function aliasOfRegistered(h) { try { return typeof root.__v292AliasFix === 'function' && root.__v292AliasFix(h) !== h; } catch (e) { return false; } }
   function fold(s) { try { var R = root.__v292Dfix307api; if (R && typeof R.fkey764 === 'function') return String(R.fkey764(s)); } catch (e) {} return norm(s); }
+  /* ★MXALIAS1（laneAUTOICON1・2026-11-16・既定 OFF: localStorage v292DfixMXALIAS1On='1'・kill v292DfixMXALIAS1Off='1'。毎回評価）:
+     名簿の呼び名が一般名（老人・少女 等）で、本文の <say who> か会話ログの話者に、その語で終わる記述名（網を手入れする老人）がちょうど 1 つあり、
+     名簿・長期記憶にその語で終わる別の呼び名が無いときだけ、候補を長い記述名にする（名簿の呼び名は表示の別名＝extraFor だけ）。保存・本文・sys には何も書かない。
+     規則（記述名の 3 ターン・見た目・同一性・上限）と Worker の確認はそのまま。 */
+  function alias1On() { return lsGet('v292DfixMXALIAS1Off') !== '1' && lsGet('v292DfixMXALIAS1On') === '1'; }
+  function wiNames() { try { var L = root.__longmem; var a = (L && L.raw && typeof L.raw.loadWorldInfo === 'function') ? L.raw.loadWorldInfo() : []; return (Array.isArray(a) ? a : []).filter(function (e) { return e && e.type === 'character' && typeof e.name === 'string'; }).map(function (e) { return norm(e.name); }); } catch (e) { return []; } }
+  function alias1Of(core, T, cast, bindings, ros, e) {
+    var hs = {}; T.forEach(function (t) { t.says.concat(t.conv || []).forEach(function (w) { var n = norm(w); if (n && n !== core && n.length <= 16 && endsWith(n, core)) hs[n] = 1; }); });
+    var ks = Object.keys(hs).filter(function (n) { return !generic(n) && isDesc(n) && !identityA(cast, bindings, [n]) && !aliasOfRegistered(n); });
+    if (ks.length !== 1) return null;
+    var L = ks[0], tl = [], tc = [];   /* ★r2（例 A）: 出たターンが重なること。記述名より前から一般名だけで出ている人は別人かもしれない → まとめない */
+    T.forEach(function (t, i) { var who = t.says.concat(t.conv || []).map(norm); var hasL = who.indexOf(L) >= 0 || t.text.indexOf(L) >= 0; var rest = t.text.split(L).join('〃');
+      var hasC = who.indexOf(core) >= 0 || rest.indexOf(core) >= 0; if (hasL) tl.push(i); if (hasC) tc.push(i); });
+    if (!tl.length || !tc.length || !tc.some(function (i) { return tl.indexOf(i) >= 0; })) return null;
+    if (tc.some(function (i) { return i < tl[0] - 1; })) return null;
+    if (e && typeof e.firstTurn === 'number' && e.firstTurn < tl[0]) return null;   /* 名簿の初出が記述名より前（迷うのでまとめない） */
+    var others = (ros || []).map(function (e) { return e && typeof e.handle === 'string' ? norm(e.handle) : ''; }).concat(wiNames()).filter(function (n) { return n && n !== core && n !== ks[0] && endsWith(n, core); });
+    if (others.length) return null;   /* 「桟橋の老人」も居る → どちらか決まらない */
+    var dk = dispKey(ks[0]); return dk ? { key: dk, nk: ks[0] } : null;
+  }
   var PERSONISH = /人物|怪異|霊|幽霊|亡霊|妖怪|人|女|男|少女|少年|化け物|怪物|影/, NOT_PERSON = /現象|物体|場所|風景|景色|液体|物音|背景|動物|^物$|^物品/;
   function select(S, r, id, rosterOverride) {
     var T = turnsOf(S), cast = castOf(S), bindings = bindingsOf(S), hero = cast.filter(function (c) { return c.hero; })[0];
@@ -422,6 +442,8 @@
     cands.forEach(function (c) {
       var al = aliasInfo(c.key, c.nk, cast, bindings), disp = null;   /* ★mx3-e */
       if (al && al.usable && !isDesc(c.nk)) { disp = c.key; c = { e: c.e, key: al.target, nk: al.tnk, vars: [] }; stats.aliasSpeaker++; }
+      var al1 = (!disp && alias1On() && generic(c.nk)) ? alias1Of(c.nk, T, cast, bindings, ros, c.e) : null;   /* ★MXALIAS1 */
+      if (al1) { disp = c.key; c = { e: c.e, key: al1.key, nk: al1.nk, vars: [] }; stats.alias1 = (stats.alias1 || 0) + 1; }
       var why = null, desc = isDesc(c.nk), f = [c.nk].concat(c.vars), ev = null, mid = String(c.e.importance || '') === '中';   /* ★mx3-g (GPT #127-QW): 中 needs speaks-in-latest-turn + look word + ≥2 turns */
       var TT = mid ? T.map(function (t) { return { text: t.text, says: t.says.concat(t.conv || []), conv: t.conv }; }) : T;
       var ga = generic(c.nk) ? gaOk(c) : false; if (ga) desc = true;   /* ★iconx1 A */
@@ -704,6 +726,28 @@
       });
   }
   /* ---------- claim after a normal registration (「NPCに昇格」/ fix641) ---------- */
+  /* ★PROMOICON1 r2: 昇格した名前に、この物語の控え（未登録の人物の自動の絵・ch_mx）があるか。あれば mx_claim（写す）を 1 回。新しい絵は作らせない（同じ人に 2 枚を作らない）。
+     このページで控えを読んでいなければ mx_list を 1 回（結果は手元で見るだけ・表示の控えには入れない）。cb({ known, extra, claimed, why })。known=false = 分からない（作らない側）。 */
+  function promoExtra(storyId, name, cid, cb) {
+    var id = String(storyId || ''), n = norm(String(name || '')); if (!id || !n) return cb({ known: false, why: 'NO_NAME' }); if (lsGet(KILL) === '1') return cb({ known: false, why: 'MX_KILLED' });
+    var decide = function (list) {
+      var e = null; for (var i = 0; i < list.length && !e; i++) if (list[i].forms.indexOf(n) >= 0) e = list[i];
+      if (!e) { var al = X.alias[hk(n)]; if (al) for (var k = 0; k < list.length && !e; k++) if (list[k].extra_id === al) e = list[k]; }   /* 名簿の呼び名 → 記述名の控え（mx3-e・MXALIAS1 の表示の別名） */
+      if (!e) return cb({ known: true, extra: null });
+      if (e.claimed_by && e.claimed_by !== cid) return cb({ known: true, extra: e.extra_id, claimed: false, why: 'CLAIMED_BY_OTHER' });
+      if (e.forms.indexOf(n) < 0) return cb({ known: true, extra: e.extra_id, claimed: false, why: 'ALIAS_ONLY' });   /* Worker の mx_claim は呼び名が控えの名前のときだけ（MX_NOT_BOUND）→ 写さず、作らない */
+      stats.claim++; call('portrait.mx_claim', { story_id: id, extra_id: e.extra_id, character_id: cid }, function (res, err) { var rj = res && res.j, st = rj && (rj.status || rj.errorCode) || err;
+        note({ kind: 'PROMO_CLAIM', status: res && res.status, res: st }); var okc = !!(res && res.status === 200 && rj && /CLAIMED|CANDIDATE_PLACED|EXISTS/.test(String(rj.status || '')));
+        if (okc && X.listed && X.story === id) listOnce(id, function () { try { root.__chronicleAv2Portrait.refresh(); } catch (e2) {} });
+        cb({ known: true, extra: e.extra_id, claimed: okc, why: String(st || '').slice(0, 24) }); });
+    };
+    if (X.listed && X.story === id) return decide(X.extras);
+    call('portrait.mx_list', { story_id: id }, function (r, err) { var j = r && r.j;
+      if (r && (r.status === 403 || r.status === 501)) return cb({ known: true, extra: null, why: 'MX_LIST_' + r.status });   /* 控えの機能がこのアカウントで切られている = 写す控えは無い */
+      if (err || !r || r.status !== 200 || !j || !Array.isArray(j.extras)) return cb({ known: false, why: 'MX_LIST_FAIL' });
+      decide(j.extras.filter(function (e) { return e && typeof e.extra_id === 'string' && MX_ID_RE.test(e.extra_id) && typeof e.handle === 'string'; }).map(function (e) {
+        return { extra_id: e.extra_id, claimed_by: (typeof e.claimed_by === 'string' && !MX_ID_RE.test(e.claimed_by)) ? e.claimed_by : null, forms: [norm(e.handle)].concat((Array.isArray(e.vars) ? e.vars : []).map(norm)).filter(Boolean) }; })); });
+  }
   function claimPass() {
     if (gateWhy() || X.stopped || !X.listed || X.busy) return;
     var S = state(); if (!S) return; var id = sid(); if (X.story !== id) return;
@@ -770,7 +814,8 @@
     kick: function () { return runTurn(true); },
     dryRunReg: function (by) { var S = state(), id = sid(); if (!S || !id) return null; return regSelect(S, rec(), id, by || {}); },   /* ★MXREGFIX1: test / diagnosis (reads only, no request) */
     regDryRun: function (by) { var S = state(), id = sid(); if (!S || !id) return null; return regSelect(S, rec(), id, (by && typeof by === 'object') ? by : {}); },   /* ★W-MXREG diagnosis: by = { character_id: 1 } of characters that have a picture */   /* diagnosis / test only (an explicit action): skips the played-turn check; the Worker still requires the figure in its newest turn */
-    __t: { gaOk: gaOk, gaEvidence: gaEvidence, gaAnchors: gaAnchors, rosterCount: rosterCount, slotsU: slotsU, nhApp: nhApp, select: select, aliasInfo: aliasInfo, lastHitOf: lastHitOf, traceRun: traceRun, icfLocal: icfLocal, isRoleish: isRoleish, apposition: apposition, f641Live: f641Live, promotedSoon: promotedSoon, norm: norm, dispKey: dispKey, generic: generic, isDesc: isDesc, vis: vis, axes: axes, evidence: evidence, turnsOf: turnsOf, identityA: identityA, descIdentity: descIdentity, appearanceFrom: appearanceFrom, kindOf: kindOf, hitsIn: hitsIn, tailGender: tailGender }
+    promoExtra: promoExtra,   /* ★PROMOICON1 r2 */
+    __t: { alias1On: alias1On, alias1Of: alias1Of, gaOk: gaOk, gaEvidence: gaEvidence, gaAnchors: gaAnchors, rosterCount: rosterCount, slotsU: slotsU, nhApp: nhApp, select: select, aliasInfo: aliasInfo, lastHitOf: lastHitOf, traceRun: traceRun, icfLocal: icfLocal, isRoleish: isRoleish, apposition: apposition, f641Live: f641Live, promotedSoon: promotedSoon, norm: norm, dispKey: dispKey, generic: generic, isDesc: isDesc, vis: vis, axes: axes, evidence: evidence, turnsOf: turnsOf, identityA: identityA, descIdentity: descIdentity, appearanceFrom: appearanceFrom, kindOf: kindOf, hitsIn: hitsIn, tailGender: tailGender }
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })(typeof window !== 'undefined' ? window : this);

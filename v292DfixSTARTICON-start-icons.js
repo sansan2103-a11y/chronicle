@@ -145,6 +145,7 @@
     var add = function (e, hero) { if (!e || typeof e !== 'object' || typeof e.character_id !== 'string') return; if (e.status === 'DELETED' || e.status === 'DEPARTED') return;
       var nm = String(e.name || '').normalize('NFC').trim(); if (!nm) return; out.push({ id: e.character_id, name: nm, hero: !!hero }); };
     add(c.hero, true); (Array.isArray(c.npcs) ? c.npcs : []).forEach(function (n) { add(n, false); });
+    if (X.promo) return out.filter(function (c) { return !c.hero && hk(c.name) === X.promo.h; });   /* ★PROMOICON1: 昇格した 1 人だけ */
     return out;
   }
   function suggest(cid) { try { var s = A().suggestAppearance(cid); return (s && s.ok) ? s : null; } catch (e) { return null; } }
@@ -173,8 +174,9 @@
   function tmSet(id, fn) { if (!tmOn()) return; try { soSet(id, function (so) { so.tm = so.tm || { c: {} }; so.tm.c = so.tm.c || {}; fn(so.tm); }); } catch (e) {} }
   function tmC(id, h, fn) { tmSet(id, function (tm) { tm.c[h] = tm.c[h] || {}; fn(tm.c[h]); }); }
   function ds(t) { return Math.round(t / 100); }
-  function soOf(id) { var r = rec(); return r.st[hk(id)] || null; }
-  function soSet(id, fn) { var r = rec(), k = hk(id); var so = r.st[k] || { p: null, at: Date.now(), t: [], a: {}, b: {} }; fn(so, r); so.at = Date.now(); r.st[k] = so; recSave(r); return so; }
+  function rk(id) { return X.promo ? 'promo|' + id + '|' + X.promo.h : id; }   /* ★PROMOICON1: 昇格の 1 回は物語の始まりとは別の記録 */
+  function soOf(id) { var r = rec(); return r.st[hk(rk(id))] || null; }
+  function soSet(id, fn) { var r = rec(), k = hk(rk(id)); var so = r.st[k] || { p: null, at: Date.now(), t: [], a: {}, b: {} }; fn(so, r); so.at = Date.now(); r.st[k] = so; recSave(r); return so; }
   function claimB37(id) {   /* B37 の自動案内（LC1 では 👥 が勝手に開く）を「STARTICON が引き受けた」にする。B37 自身の 1 回の印と同じ形 */
     try { var k = 'v292DfixB37onb_' + id; if (lsGet(k)) return; if (lsGet('v292DfixB37bOff') === '1') return; lsSet(k, JSON.stringify({ v: 1, st: 'starticon', at: Date.now() })); note({ kind: 'B37_CLAIMED' }); } catch (e) {}
   }
@@ -228,10 +230,10 @@
       if (!by) { X.pageStop = 'READ_FAIL'; return finish('A_READ_FAIL'); }   /* nothing sent; the next page load may try again */
       if (!same(id, a0)) return finish('A_RECHECK');
       /* targets: no picture on the server yet AND a draft is possible (confirmed appearance, or a description that is not sensitive) — then the cap (hero 1 + NPCs 3) */
-      var cs = chars(), tg = [], npc = 0, skip = {}, sc = storyCap(), xt = {};   /* ★LIM1 ★ICONFIX2 t: xt = extract ms per character */
+      var cs = chars(), tg = [], npc = 0, skip = {}, sc = X.promo ? { hero: false, npcs: Math.min(1, storyCap().npcs), src: 'promo' } : storyCap(), xt = {};   /* ★PROMOICON1: 1 人だけ（r2: アカウントの LIM1 の値も通す）   /* ★LIM1 ★ICONFIX2 t: xt = extract ms per character */
       /* once per story across devices: only the device that created the story (URL new=1) starts with pictures already present; any other device /
          tab starts only when NO character of the story has a picture yet (otherwise another device — or the Owner — already did the start) */
-      if (!isNew && cs.some(function (c) { return by[c.id]; })) { soSet(id, function (so) { so.p = 'done'; so.why = 'OTHER_DEVICE'; }); return finish('A_OTHER_DEVICE'); }
+      if (!X.promo && !isNew && cs.some(function (c) { return by[c.id]; })) { soSet(id, function (so) { so.p = 'done'; so.why = 'OTHER_DEVICE'; }); return finish('A_OTHER_DEVICE'); }
       cs.forEach(function (c) {
         if (by[c.id]) return;
         if (c.hero ? (!sc.hero || tg.some(function (t) { return t.hero; })) : npc >= sc.npcs) return;   /* ★LIM1: sc = { hero: true, npcs: 3 } without a row (as before) */
@@ -245,12 +247,13 @@
             if (!dc.ok && SENSITIVE[dc.why]) why = 'SKIP_' + dc.why;   /* left to the manual 2-tap (the Owner reads the draft) */
             else if (!dc.ok && lsGet(NOAI) === '1') why = 'SKIP_NOAI'; }
         }
+        if (!why && X.promo && !(s && s.current && s.current.appearance) && !(dc && dc.ok)) why = 'PROMO_NOT_DESC';   /* ★PROMOICON1 r2: 説明文の句をそのまま使える人だけ（推測・埋めの外見は登録しない） */
         if (why) { skip[hk(c.id)] = why; stats.skipped++; return; }
         if (!c.hero) npc++; c.dc = dc; tg.push(c); xt[hk(c.id)] = Date.now() - x0;
       });
       if (!tg.length) { soSet(id, function (so) { so.p = 'done'; so.why = 'NOTHING'; so.a = skip; }); return finish('A_NOTHING'); }
       tg.sort(function (a, b) { return (b.hero ? 1 : 0) - (a.hero ? 1 : 0); });
-      soSet(id, function (so, r) { so.p = 'plan'; so.t = tg.map(function (c) { return hk(c.id); }); so.a = skip; r.starts = (r.starts || 0) + 1; });
+      soSet(id, function (so, r) { so.p = 'plan'; so.t = tg.map(function (c) { return hk(c.id); }); so.a = skip; if (!X.promo) r.starts = (r.starts || 0) + 1; });
       stats.plans++; note({ kind: 'PLAN', n: tg.length, hero: tg.some(function (c) { return c.hero; }), skipped: Object.keys(skip).length, cap: sc.src });
       tmSet(id, function (tm) { tm.a0 = ds(X.aT0 || Date.now()); tm.o = ds(X.t0); Object.keys(xt).forEach(function (h) { tm.c[h] = tm.c[h] || {}; tm.c[h].x = xt[h]; }); });   /* ★ICONFIX2 t */
       var i = 0, setAny = false, wrote = false;
@@ -291,7 +294,7 @@
                 if (fc.fatal) { mark('PROPOSE_FACTS_' + String(fc.fatal).slice(0, 16)); return next(); }   /* never an image with a fact missing; the manual 2-tap stays */
               }
             }
-            var g = genderOf(s.gender) || genderOf(res.gender);
+            var g = genderOf(s.gender) || (X.promo ? '' : genderOf(res.gender));   /* ★PROMOICON1 r2: 推測の性別は登録しない */
             var pv = A().previewProfile ? A().previewProfile({ gender: g, appearance: res.appearance || '' }) : { gender: g, appearance: String(res.appearance || '').trim() };
             if (!res.ok || !pv.appearance) { mark('PROPOSE_' + String(res.code || 'EMPTY').slice(0, 24)); return next(); }
             var tcw = Date.now();
@@ -299,6 +302,7 @@
               if (!ok) { mark('NOT_CLEAN'); return endA('NOT_CLEAN'); }
               if (!same(id, a0)) return endA('RECHECK');
               var basis = (res.direct === true || res.aiCalled === false) ? 'desc' : 'ai';   /* ★STARTICON2: unknown → 'ai' (the less trusted label) */
+              if (X.promo && !(res.direct === true && !res.fx3)) { mark('PROMO_NOT_DESC'); return next(); }   /* ★PROMOICON1 r2: 説明文の句そのままでない案（文章 AI・ICONFIX3 の埋め）は確定として書かない */
               stats.sets++; if (inFlight()) stats.sentWhileInFlight++; note({ kind: 'SET', ai: basis === 'ai' });
               var ts0 = Date.now();
               A().setProfile(c.id, { gender: pv.gender, appearance: pv.appearance, ownerConfirmed: true, origin: 'starticon_auto', basis: basis }, function (r2) {
@@ -520,11 +524,24 @@
       var g = gateWhy(); X.why = g || 'on'; if (g) return;
       var id = sid();
       if (X.story !== id) { X.story = id; X.firstTurns = null; X.okSince = 0; X.pageStop = null; X.bDone = false; X.bCounted = false; }
+      var pq = (X.busy || X.needReload) ? null : promoQ(id);   /* ★PROMOICON1: 「NPC に昇格」の後の 1 回（このタブだけ・sessionStorage）。物語の始まりの pageStop より先に見る */
+      if (pq && !X.promo){ X.promo = pq; X.pageStop = null; X.bDone = false; X.bCounted = false; X.okSince = 0; X.t0 = Date.now(); note({ kind: 'PROMO_START' }); }
+      if (!pq && X.promo && !X.busy && !X.needReload) X.promo = null;
       if (X.busy || X.needReload || X.pageStop) return;
       var S = state(); if (!S || !Array.isArray(S.turns)) return;
       if (X.firstTurns === null) X.firstTurns = S.turns.length;
       var so = soOf(id);
-      if (!so) {
+      if (X.promo && so && (so.p === 'done' || so.p === 'stop')) { promoEnd(id, so.why || so.p); return; }
+      if (X.promo && !so) {
+        if (!chars().length) { if (Date.now() - X.promo.at > PROMO.waitMs) promoEnd(id, 'NO_ENTRY'); return; }   /* the registrar has not given the id yet */
+        if (X.promo.mx === undefined) {   /* ★r2: 控えの絵があれば写すだけ（作らない）。分からなければ作らない */
+          X.promo.mx = 'pending'; var Mx = root.__v292DfixMIDICON, pq0 = X.promo; if (!Mx || typeof Mx.promoExtra !== 'function') { promoEnd(id, 'PROMO_NO_MX'); return; }
+          Mx.promoExtra(id, pq0.name, chars()[0].id, function (r) { if (X.promo !== pq0) return; if (!r || !r.known) return promoEnd(id, 'PROMO_MX_' + String((r && r.why) || 'UNKNOWN').slice(0, 16));
+            if (r.extra) return promoEnd(id, r.claimed ? 'PROMO_EXTRA_CLAIMED' : 'PROMO_EXTRA_' + String(r.why || 'SHOWN').slice(0, 16)); pq0.mx = 'none'; });
+          return; }
+        if (X.promo.mx !== 'none') return;
+        var pw = promoWhy(S, X.promo); if (pw) { promoEnd(id, pw); return; }
+      } else if (!so) {
         if (X.firstTurns > CAP.maxTurns) { X.pageStop = 'NOT_START'; return; }   /* an older story (opened with more turns): never automatic */
         if (!isNewStory(id)) { X.pageStop = 'NOT_NEW'; return; }   /* ★STARTICON2 (GPT #127-RI ①): created more than 6 h ago / id without a time → opening it never starts anything */
         if (rec().starts >= capDayStarts()) { X.pageStop = 'DAY_CAP'; return; }   /* ★LIM1: the account's own value (Infinity = no cap); no row = 5 */
@@ -539,6 +556,33 @@
       if (!so) phaseA(id); else phaseB(id);
     } catch (e) { note({ kind: 'TICK_THREW', e: String(e).slice(0, 80) }); X.busy = false; }
   }
+  /* ★PROMOICON1（laneAUTOICON1・2026-11-16・既定 OFF: localStorage v292DfixPROMOICON1On='1' で ON・kill v292DfixPROMOICON1Off='1'。毎回評価）:
+     キャラ一覧の「NPC に昇格」の後、その 1 人について STARTICON と同じ手順（外見の下書き → 外見の登録 → 1 回の再読み込み → ensureFirst）を 1 回だけ。
+     名前が一般名（老人）でもよい。鍵はアカウントの starticon1（STARTICON と同じ。費用・上限・imgsafe・利用権は Worker のまま）＋この端末の鍵。
+     守り: 2 ターン以上の本文に出たか、会話ログの台詞が 2 つ以上の人だけ／この端末で 1 物語 2 人・1 日 5 人まで／送る前に記録・自動の再試行なし（93-j の IN_FLIGHT の 1 回は STARTICON と同じ）／
+     物語の始まりの記録（starts）は数えない。名前は sessionStorage（このタブ）にだけ置き、localStorage には名前のハッシュだけ。 */
+  var PROMO = { waitMs: 10 * 60 * 1000, perStory: 2, perDay: 5 }, PQK = 'v292DfixPROMOICON1_q', PLK = 'v292DfixPROMOICON1_v1';
+  function promoOn() { return lsGet('v292DfixPROMOICON1Off') !== '1' && lsGet('v292DfixPROMOICON1On') === '1'; }
+  function promoRec() { var r = null; try { r = JSON.parse(lsGet(PLK) || 'null'); } catch (e) {} if (!r || r.v !== 1 || r.day !== today()) r = { v: 1, day: today(), n: 0, st: (r && r.st) || {} }; return r; }
+  function promoQ(id) { if (!promoOn()) return null; var q = null; try { q = JSON.parse(ssGet(PQK) || 'null'); } catch (e) {} return (q && q.story === id && typeof q.h === 'string') ? q : null; }
+  function promoEnd(id, why) { note({ kind: 'PROMO_END', why: String(why || '').slice(0, 24) }); X.lastPromo = { why: why, at: Date.now() }; try { root.sessionStorage.removeItem(PQK); } catch (e) {} X.promo = null; X.busy = false; X.bDone = false; X.bCounted = false; }
+  function promoWhy(S, q) {   /* '' = go */
+    if (q.ok) return '';   /* checked and counted once per promotion (the tick comes back until phase A starts) */
+    var sc = storyCap(), dc0 = capDayStarts();   /* ★r2: アカウントの LIM1（starticon_story_imgs・starticon_day_stories）より緩くしない。0 なら作らない */
+    var perStory = Math.min(PROMO.perStory, sc.npcs), perDay = Math.min(PROMO.perDay, dc0); if (!(perStory > 0) || !(perDay > 0)) return 'PROMO_LIM_ZERO';
+    var r = promoRec(); if (r.n >= perDay) return 'PROMO_DAY_CAP'; if ((r.st[hk(q.story)] || 0) >= perStory) return 'PROMO_STORY_CAP';
+    var nm = String(q.name || ''), turns = 0, lines = 0; if (!nm) return 'PROMO_NO_NAME';
+    (S.turns || []).forEach(function (t) { var hit = false; if (t && typeof t.narrative === 'string' && t.narrative.indexOf(nm) >= 0) hit = true;
+      (Array.isArray(t && t._convSays) ? t._convSays : []).forEach(function (c) { if (c && c.who === nm) { lines++; hit = true; } }); if (hit) turns++; });
+    if (turns < 2 && lines < 2) return 'PROMO_FEW';   /* すぐ消える端役には作らない */
+    r.n++; r.st[hk(q.story)] = (r.st[hk(q.story)] || 0) + 1; try { lsSet(PLK, JSON.stringify(r)); } catch (e) {} q.ok = true;   /* counted before anything is sent */
+    return '';
+  }
+  function promoted(name) {   /* fix145 の「NPC に昇格」が呼ぶ。鍵が無ければ何もしない */
+    try { if (!promoOn() || killed()) return false; var id = sid(); var nm = String(name || '').normalize('NFC').trim(); if (!id || !nm) return false;
+      if (ssGet(PQK)) return false;   /* one at a time */
+      root.sessionStorage.setItem(PQK, JSON.stringify({ story: id, h: hk(nm), name: nm, at: Date.now() })); note({ kind: 'PROMO_ASK' }); return true; } catch (e) { return false; }
+  }
   var isIndex = /\/index(\.html)?$/.test(location.pathname) || location.pathname === '/';
   var isNew = (function () { try { return new URLSearchParams(location.search).get('new') === '1'; } catch (e) { return false; } })();   /* = B37: the first open(s) after ▶ start */
   function boot() { if (killed() || !isIndex) return; setInterval(tick, POLL_MS); tick(); }
@@ -552,7 +596,8 @@
         fx2: { facts: fx2bOn(), perChar: fx2cOn(), timing: tmOn() }, timing: (function () { try { return timingOf(id, so); } catch (eT) { return null; } })(),   /* ★ICONFIX2 */
         list: { on: listOn(), reopenPending: !!reopen, screen: screenBusy(listOn()) },   /* ★93-k */
         caps: (function () { var sc = storyCap(), d = capDayStarts(); return { dayStarts: d === Infinity ? -1 : d, hero: sc.hero, npcs: sc.npcs === Infinity ? -1 : sc.npcs, src: sc.src, lim: (root.__v292DfixADMF1 && typeof root.__v292DfixADMF1.limDecide === 'function') ? root.__v292DfixADMF1.limDecide('starticon_day_stories').why : 'no-admf1' }; })() }; },   /* ★LIM1 */
-    __t: { hk: hk, bornMs: bornMs, isNewStory: isNewStory, storyCap: storyCap, capDayStarts: capDayStarts, timingOf: timingOf }
+    promoted: promoted, promoStatus: function () { return { on: promoOn(), q: !!ssGet(PQK), active: !!X.promo, last: X.lastPromo || null, rec: (function () { var r = promoRec(); return { day: r.day, n: r.n }; })() }; },   /* ★PROMOICON1 */
+    __t: { hk: hk, bornMs: bornMs, promoWhy: promoWhy, rk: rk, isNewStory: isNewStory, storyCap: storyCap, capDayStarts: capDayStarts, timingOf: timingOf }
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })(typeof window !== 'undefined' ? window : this);

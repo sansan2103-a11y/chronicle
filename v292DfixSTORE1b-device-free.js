@@ -341,6 +341,7 @@
   }
   function vaultBlock(id, env) {
     if (env && env.vcAllow && env.vcAllow[String(id)] === 1) return vcPassOnly(String(id), env);   /* ★VCLEAN1: この実行で確かめた id だけ（隠し一覧の判定だけを外す。パスコードは見る） */
+    if (env && env.vg && env.vg.ids && env.vg.ids[String(id)] === 1) return 'vault';   /* ★VAULTGUARD1: Vault v2 で隠している（解錠中で fix889 の一覧から外れていても） */
     if (env && env.vcV2 && env.vcV2[String(id)] === 1) return 'vault';   /* ★VCLEAN1（鍵があるときだけ）: Vault v2 で隠している（解錠中は fix889 の一覧から外れるので、v2 の一覧でも見る＝本文を取り寄せる通常の経路へ流さない） */
     var vh = g(env, 'chr6_vault_hidden');
     if (vh != null) {
@@ -416,6 +417,7 @@
   }
   function globalBlock(env) {
     if (!env.key1) return 'key1-unavailable';
+    if (env.vg && env.vg.state === 'unknown') return 'vault2-ids-unknown';   /* ★VAULTGUARD1: 解錠中なのに Vault v2 の隠した id が分からない → 全部止める（getstory をしない） */
     /* R2: Vault の状態が読めない・揃わない → 全部止める（値は読まない） */
     var F = env.vault;
     if (!F || typeof F.isHidden !== 'function' || typeof F.hiddenIds !== 'function' || typeof F.canonState !== 'function') return 'vault-unavailable';
@@ -1559,6 +1561,7 @@
     var c2 = {}; for (var k2 in ctx) if (Object.prototype.hasOwnProperty.call(ctx, k2)) c2[k2] = ctx[k2];
     c2.getStory = function (id) { if (e2.vcSynth && Object.prototype.hasOwnProperty.call(e2.vcSynth, String(id))) return Promise.resolve(JSON.parse(JSON.stringify(e2.vcSynth[String(id)]))); res.queries++; return ctx.getStory(id); };   /* ★VCLEAN1: 確かめた id は通信しない */
     if (vcOnGet(function (kk) { return g(env, kk); })) { e2.vc = true; e2.vcAllow = {}; e2.vcSynth = {}; try { e2.vcUnlocked = typeof env.vcUnlocked === 'function' && env.vcUnlocked() === true; } catch (eU) { e2.vcUnlocked = false; } e2.vcV2 = {}; }   /* ★VCLEAN1 */
+    if (e2.vg && e2.vg.state === 'unknown') { res.failed = 1; res.failedCode = 'vault2-ids-unknown'; res.code = 'stopped'; }   /* ★VAULTGUARD1: 解錠中なのに隠した id が分からない → 何も調べない（getstory 0） */
     return vcPrep(e2, env, res).then(function () { return acWalk(e2, c2, res); }).then(function () {   /* ★VCLEAN1: 鍵が無ければ何もしない */
       if (!res.code) res.code = res.failed ? 'stopped' : 'done';
       var o2 = acLog(env); var run1 = { at: now, freed: res.freed, freedChars: res.freedChars, stories: res.stories, snapshots: res.snapshots, chars: res.chars, failed: res.failed, code: String(res.code) };
@@ -1737,7 +1740,7 @@
               serverEvalP: serverEvalP, serverEvalMeta: serverEvalMeta, surveyP: surveyP, freeOneP: freeOneP,
               /* ★STUCK1 */ STUCK_OFF: STUCK_OFF, staleDirtyLocal: staleDirtyLocal, stuckNeeds: stuckNeeds, stuckProof: stuckProof,
               /* ★STUCK1 r2 */ STUCK_ON: STUCK_ON, SVERSION: SVERSION, FAMILY_CLASS: FAMILY_CLASS, familyClass: familyClass, provenSubset: provenSubset, raceProbe: raceProbe, raceBlock: raceBlock, planByReason: planByReason, COUNT_ONLY: COUNT_ONLY,
-              /* ★AUTOCLEAN1 */ acRunOnce: acRunOnce, AC_DEFAULT_ON: AC_DEFAULT_ON, /* ★r5 */ acDaysGet: acDaysGet, acDaysTxt: acDaysTxt, AC_DAYS_MAX: AC_DAYS_MAX, /* ★r6 */ acDaysParse: acDaysParse, acQaDays: acQaDays, AC_QA_ACK: AC_QA_ACK, /* ★VCLEAN1 */ vcOnGet: vcOnGet, vcCheck: vcCheck, vcHidden: vcHidden, vcDry: vcDry, vaultBlock: vaultBlock, /* ★r4 */ acEarly: acEarly, acPace: acPace, acDayQ: acDayQ, acDryWhy: acDryWhy, acWhyName: acWhyName, AC_DAY_QMAX: AC_DAY_QMAX, AC_PACE_MIN_MS: AC_PACE_MIN_MS, AC_KEEP_DETAIL: AC_KEEP_DETAIL, acOnGet: acOnGet, acServerAge: acServerAge, AC_QMAX: AC_QMAX, AC_DAYS: AC_DAYS, AC_MIN_AGE_MS: AC_MIN_AGE_MS, AC_GAP_MS: AC_GAP_MS, AC_MAX: AC_MAX, d2LocalAt: d2LocalAt,
+              /* ★AUTOCLEAN1 */ acRunOnce: acRunOnce, AC_DEFAULT_ON: AC_DEFAULT_ON, /* ★r5 */ acDaysGet: acDaysGet, acDaysTxt: acDaysTxt, AC_DAYS_MAX: AC_DAYS_MAX, /* ★r6 */ acDaysParse: acDaysParse, acQaDays: acQaDays, AC_QA_ACK: AC_QA_ACK, /* ★VAULTGUARD1 */ VG_OFF: 'v292DfixVAULTGUARD1Off', /* ★VCLEAN1 */ vcOnGet: vcOnGet, vcCheck: vcCheck, vcHidden: vcHidden, vcDry: vcDry, vaultBlock: vaultBlock, /* ★r4 */ acEarly: acEarly, acPace: acPace, acDayQ: acDayQ, acDryWhy: acDryWhy, acWhyName: acWhyName, AC_DAY_QMAX: AC_DAY_QMAX, AC_PACE_MIN_MS: AC_PACE_MIN_MS, AC_KEEP_DETAIL: AC_KEEP_DETAIL, acOnGet: acOnGet, acServerAge: acServerAge, AC_QMAX: AC_QMAX, AC_DAYS: AC_DAYS, AC_MIN_AGE_MS: AC_MIN_AGE_MS, AC_GAP_MS: AC_GAP_MS, AC_MAX: AC_MAX, d2LocalAt: d2LocalAt,
               /* ★DISCARD2 */ d2Owners: d2Owners, d2Plan: d2Plan, d2Local: d2Local, d2Survey: d2Survey, d2One: d2One, d2Run: d2Run, d2Server: d2Server, D2_SKIP: D2_SKIP,
               /* ★DISCARD1 */ d1Local: d1Local, d1Server: d1Server, d1Survey: d1Survey, d1One: d1One, d1Run: d1Run, d1Cat: d1Cat, D1_ACK: D1_ACK, D1_OVERRIDE: D1_OVERRIDE,
               /* ★FREE2c */ judgeOne: judgeOne, /* ★FREE2d */ _memoClear: function () { MEMO = {}; }, tombHashCheck: tombHashCheck, F2_VERSION: F2_VERSION };
@@ -1789,10 +1792,45 @@
       return chain.then(function () { out.why = acWhyOut(out.why); return out; });
     });
   }
+  /* ★VAULTGUARD1（既定 ON・kill v292DfixVAULTGUARD1Off='1'）: Vault v2 を解錠している間、fix889 の refresh は隠した物語を fix889 の隠し一覧から外す（ふつうの一覧に出るため）。
+     そのままだと AUTOCLEAN1／FREE2／DISCARD1／DISCARD2／GEN1c が、それを隠していない物語として getstory で本文を取り寄せてしまう。
+     そこで、入口ごとに vault2status（vault2-ui と同じ op・本文なし・id だけ）を読み、解錠中は v2 の隠した id を Vault 扱いのままにする（理由は f2:vault／s2:vault）。
+     解錠中なのに隠した id が分からない（応答の欠け・hiddenComplete=false・読めない）→ その回は全部止める（globalBlock＝vault2-ids-unknown・getstory は 1 本もしない）。
+     施錠中・Vault v2 が無い → 何も変えない（施錠中は Worker が隠した物語の getstory を 404 にする）。最後の守り: getstory の直前にもう一度確かめる。
+     隠した id はメモリの中だけ（記録・ログには書かない。数だけ status().vaultGuard に出す）。VCLEAN1 の本文なしの照合（vcAllow）はこれより先に通る */
+  var VG_OFF = 'v292DfixVAULTGUARD1Off', VG_TTL_MS = 15000, VG = { state: 'none', ids: null, n: 0, at: 0, ui: null }, vgInflight = null;
+  function vgOn() { return lsg(VG_OFF) !== '1'; }
+  function vgUi() { try { var U = root.__v292Dvault2Ui, s = (U && typeof U.status === 'function') ? U.status() : null; return s ? { hasVault: s.hasVault === true, unlocked: s.unlocked === true, count: (typeof s.hiddenCount === 'number') ? s.hiddenCount : null } : null; } catch (e) { return null; } }
+  function vgUiHasVault() { try { var U = root.__v292Dvault2Ui, s = (U && typeof U.status === 'function') ? U.status() : null; return !!(s && s.hasVault === true); } catch (e) { return true; } }   /* r1 と同じ */
+  function vgUiKey(u) { return u ? (u.unlocked ? 'u' : 'l') + ':' + (u.count == null ? '-' : u.count) : null; }
+  /* vault2status を 1 回読む（本文なし・id だけ）。返り値 { state, ids, n }。r2: unlocked が真偽値でない応答は unknown */
+  function vgFetch() {
+    function mk(state, ids) { var o = null, n = 0; if (ids) { o = {}; for (var i = 0; i < ids.length; i++) if (ids[i] != null) { o[String(ids[i])] = 1; n++; } } return { state: state, ids: o, n: n }; }
+    return Promise.resolve().then(function () {
+      return root.fetch('/api/save', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'x-chronicle-csrf': '1' }, body: JSON.stringify({ op: 'vault2status' }) });
+    }).then(function (r) { return r && r.ok ? r.json() : null; }).then(function (j) {
+      if (!j || j.ok !== true) return mk(vgUiHasVault() ? 'unknown' : 'none', null);   /* 読めない: Vault v2 を使っている端末なら止める（使っていなければ隠したものは無い） */
+      if (typeof j.unlocked !== 'boolean') return mk('unknown', null);                 /* r2: 欄が欠けている・真偽値でない → 証明できない */
+      if (j.unlocked !== true) return mk(j.hasVault === true ? 'locked' : 'none', null);
+      if (!isArr(j.hiddenIds) || j.hiddenComplete === false) return mk('unknown', null);
+      return mk('unlocked', j.hiddenIds);
+    }, function () { return mk(vgUiHasVault() ? 'unknown' : 'none', null); });
+  }
+  /* 入口の判定（シート・dry-run・実行の前）。使い回すのは、15 秒以内で、しかも vault2-ui の status() の unlocked と hiddenCount が覚えた時と同じときだけ（r2） */
+  function vgRefresh() {
+    if (!vgOn()) return Promise.resolve(VG);
+    if (vgInflight) return vgInflight;
+    var u0 = vgUi(), k0 = vgUiKey(u0);
+    if (VG.at && Date.now() - VG.at < VG_TTL_MS && Date.now() >= VG.at && k0 != null && VG.ui === k0) return Promise.resolve(VG);
+    vgInflight = vgFetch().then(function (x) { VG = { state: x.state, ids: x.ids, n: x.n, at: Date.now(), ui: vgUiKey(vgUi()) }; vgInflight = null; return VG; });
+    return vgInflight;
+  }
+  function vgSnap() { return vgOn() ? { state: VG.state, ids: VG.ids } : null; }
+  function vgThen(f) { return vgRefresh().then(function () { return f(); }, function () { return f(); }); }
   function benv() {
     var K = null; try { K = root.__v292DfixKEY1; K = (K && typeof K.enabled === 'function' && K.enabled()) ? K : null; } catch (e) { K = null; }
     var pOn = lsg(PURGE_ON) === '1' && lsg(PURGE_OFF) !== '1';
-    return { ls: root.localStorage, ss: root.sessionStorage, now: function () { return Date.now(); }, key1: K, multi: lsg(MULTI) === '1',
+    return { ls: root.localStorage, ss: root.sessionStorage, now: function () { return Date.now(); }, key1: K, multi: lsg(MULTI) === '1', vg: vgSnap(),   /* ★VAULTGUARD1 */
              purge: pOn, purgeVault: pOn && lsg(PURGE_VAULT) === '1',
              stuck1: lsg(STUCK_ON) === '1' && lsg(STUCK_OFF) !== '1', dirtyProof: dirtyProofB, otherTab: otherTabSeq,   /* ★STUCK1 r2: 既定 OFF */
              zt1: lsg(ZT_ON) === '1' && lsg(ZT_OFF) !== '1',   /* ★ZT1: 既定 OFF */
@@ -1860,8 +1898,11 @@
             return r.ok ? r.json() : null; }, function () { srvClock = null; return null; })
           .then(function (j) { return (j && j.ok === true && j.accountId) ? String(j.accountId) : null; }, function () { return null; });
       },
-      getStory: function (id) { return new Promise(function (res) { var W = root.__v292Dfix697; if (!W || typeof W.getStoryV2Once !== 'function') return res(null);
-        try { W.getStoryV2Once(id, function (x, err) { res(err ? null : x); }); } catch (e) { res(null); } }); },
+      getStory: function (id) { return (vgOn() ? vgFetch() : Promise.resolve(null)).then(function (G) {   /* ★VAULTGUARD1: 最後の守り（本文を取り寄せる前）。r2: 使い回さず毎回読み直す */
+        if (G && G.state === 'unknown') { st.vgBlocked = (st.vgBlocked || 0) + 1; return null; }
+        if (G && G.state === 'unlocked' && G.ids && G.ids[String(id)] === 1) { st.vgBlocked = (st.vgBlocked || 0) + 1; return { status: 404, j: { ok: false } }; }
+        return new Promise(function (res) { var W = root.__v292Dfix697; if (!W || typeof W.getStoryV2Once !== 'function') return res(null);
+        try { W.getStoryV2Once(id, function (x, err) { res(err ? null : x); }); } catch (e) { res(null); } }); }); },
       /* ★PURGE1: 隠した物語の削除済みの確認は、本文を含まない一覧の行（listshadow）だけで行う */
       serverMeta: function (id) { return new Promise(function (res) { var W = root.__v292Dfix697; if (!W || typeof W.listShadowBasisOnce !== 'function') return res(null);
         try { W.listShadowBasisOnce(function (rows, err, status) { if (!rows) return res({ status: status || 0 }); var hit = null; for (var i = 0; i < rows.length; i++) if (rows[i] && String(rows[i].id) === String(id)) { hit = rows[i]; break; } res({ status: 200, row: hit }); }); } catch (e) { res(null); } }); },
@@ -1981,8 +2022,8 @@
               'title-write-failed': '物語のデータは消しましたが、一覧の記録の書き換えができませんでした。もう一度開くと続きを片づけます。' };
   function doFree(id) {
     var mine = M; M.phase = 'running'; M.msg = ''; render();
-    var e = benv();
-    return (e.purge ? freeOneP : freeOne)(id, e, bctx()).then(function (x) {
+    var e = null;
+    return vgThen(function () { e = benv(); return (e.purge ? freeOneP : freeOne)(id, e, bctx()); }).then(function (x) {   /* ★VAULTGUARD1 */
       st.last = { code: x.code, removed: x.removed, chars: x.chars };
       var logRun = e.purge ? { at: Date.now(), v: PVERSION, kind: 'purge', code: x.code, removed: x.removed, chars: x.chars, blind: x.blind }
                            : { at: Date.now(), v: VERSION, kind: 'free', code: x.code, removed: x.removed, chars: x.chars, turnsMatched: x.ok ? x.turnsMatched : undefined };
@@ -1997,8 +2038,8 @@
   }
   function doFreeMany(ids) {
     var mine = M; M.phase = 'running'; M.msg = ''; M.step = [0, ids.length]; render();
-    var e = benv();
-    return freeMany(ids, e, bctx(), function (i, n) { if (M === mine) { M.step = [i, n]; render(); } }).then(function (x) {
+    var e = null;
+    return vgThen(function () { e = benv(); return freeMany(ids, e, bctx(), function (i, n) { if (M === mine) { M.step = [i, n]; render(); } }); }).then(function (x) {   /* ★VAULTGUARD1 */
       st.last = { code: x.code, done: x.done, failed: x.failed, notProcessed: x.notProcessed, failedCode: x.failedCode, removed: x.removed, chars: x.chars };
       st.freed += x.done;
       var logRun = { at: Date.now(), v: e.purge ? PVERSION : VERSION, kind: e.purge ? 'purge-multi' : 'free-multi', code: x.code, total: x.total, done: x.done, failed: x.failed, notProcessed: x.notProcessed,
@@ -2018,8 +2059,7 @@
     render();
     if (!ready()) { M.phase = 'done'; M.msg = 'いまはこの操作を使えません。物語はそのまま残っています。'; render(); return Promise.resolve(false); }
     var mine = M;
-    var be1 = benv();
-    return (be1.purge ? surveyP : survey)(be1, bctx()).then(function (rep) {
+    return vgThen(function () { var be1 = benv(); return (be1.purge ? surveyP : survey)(be1, bctx()); }).then(function (rep) {   /* ★VAULTGUARD1 */
       st.surveys++; st.lastSurvey = logOfSurvey(rep, 'survey');
       if (M !== mine) return false;
       M.rep = rep; M.phase = rep.eligible.length ? 'ready' : 'done';
@@ -2039,7 +2079,8 @@
     } else if (!on && b && b.parentNode) b.parentNode.removeChild(b);
   }
   /* ---- dry-run（v292DfixSTORE1Dry='1' のときだけ。HOME を開いたあと 1 回・消さない・記録だけ） ---- */
-  function dryRun() {
+  function dryRun() { return vgThen(dryRun0); }   /* ★VAULTGUARD1 */
+  function dryRun0() {
     var e = benv();
     if (!ready()) { var r0 = { at: Date.now(), v: VERSION, kind: 'dry', notReady: true }; writeLog(e, r0); st.dry = r0; return Promise.resolve(r0); }
     return (e.purge ? surveyP : survey)(e, bctx()).then(function (rep) { var L = logOfSurvey(rep, 'dry'); L.logWritten = writeLog(e, L); st.dry = L; return L; });
@@ -2110,8 +2151,13 @@
         var ro = { force: opt.force === true }; if (opt.qaDays !== undefined) ro.qaDays = opt.qaDays; if (opt.ack !== undefined) ro.ack = opt.ack;   /* ★r6: QA 操作はその 1 回の引数だけ */
         return acRunOnce(benv(), bctx(), ro).then(function (r) { st.autoclean = { code: r.code, freed: r.freed || 0, stories: r.stories || 0, snapshots: r.snapshots || 0, failed: r.failed || 0, manual: true, gens: r.gens || 0, genChars: r.genChars || 0 }; return r; }); }
       var ds = acDaysGet(lsg); return { days: AC_DAYS, daysKey: ds.key, on: acOnGet(lsg), defaultOn: AC_DEFAULT_ON, last: st.autoclean, log: J(lsg(AC_LOGK) || 'null', null) }; },
-    status: function () { return JSON.parse(JSON.stringify({ version: VERSION, stuck1: { v: SVERSION, on: benv().stuck1 === true }, ready: ready(), opened: st.opened, surveys: st.surveys, freed: st.freed, last: st.last, lastSurvey: st.lastSurvey, dry: st.dry, memLog: memLog })); }
+    status: function () { return JSON.parse(JSON.stringify({ version: VERSION, vaultGuard: { on: vgOn(), state: VG.state, hidden: VG.n, blocked: st.vgBlocked || 0 }, stuck1: { v: SVERSION, on: benv().stuck1 === true }, ready: ready(), opened: st.opened, surveys: st.surveys, freed: st.freed, last: st.last, lastSurvey: st.lastSurvey, dry: st.dry, memLog: memLog })); }
   };
+  (function () {   /* ★VAULTGUARD1: 判定と実行の入口は、先に Vault v2 の隠した id を読む */
+    var A = root.__v292DfixSTORE1b; ['explain', 'planByReason', 'discard2DryRun', 'discard2Run', 'discard1DryRun', 'discard1Run', 'free2DryRun'].forEach(function (k) {
+      var f = A[k]; if (typeof f !== 'function') return; A[k] = function () { var a = arguments, s = this; return vgThen(function () { return f.apply(s, a); }); }; });
+    var ac = A.autoclean; A.autoclean = function (opt) { if (opt && (opt.dryRun === true || opt.run === true)) { var s = this; return vgThen(function () { return ac.call(s, opt); }); } return ac.call(this, opt); };
+  })();
   function boot() {
     decorate();
     try { var mo = new root.MutationObserver(function () { if (!root.document.getElementById('s1bBtn')) decorate(); }); mo.observe(root.document.body, { childList: true, subtree: true }); } catch (e) {}
@@ -2136,7 +2182,7 @@
     try { if (/[?&]story=/.test(String(root.location.search || ''))) { acDone = true; return; } } catch (e) {}
     if (!ready() || !acIdle()) { if (++acTries < AC_TRIES) root.setTimeout(acTick, AC_RETRY_MS); else st.autoclean = { code: 'not-idle' }; return; }
     acDone = true;
-    var go = function () { acRunOnce(benv(), bctx()).then(function (r) { st.autoclean = { code: r.code, freed: r.freed || 0, stories: r.stories || 0, snapshots: r.snapshots || 0, failed: r.failed || 0, gens: r.gens || 0, genChars: r.genChars || 0 }; acChain(r); }, function () { st.autoclean = { code: 'threw' }; }); };
+    var go = function () { vgThen(function () { return acRunOnce(benv(), bctx()); }).then(function (r) { st.autoclean = { code: r.code, freed: r.freed || 0, stories: r.stories || 0, snapshots: r.snapshots || 0, failed: r.failed || 0, gens: r.gens || 0, genChars: r.genChars || 0 }; acChain(r); }, function () { st.autoclean = { code: 'threw' }; }); };
     try { if (typeof root.requestIdleCallback === 'function') root.requestIdleCallback(go, { timeout: 10000 }); else go(); } catch (e) { go(); }
   }
   /* ★AUTOCLEAN1 r4 (b): 鍵 'b' のときだけ。消せて残りがある回のあと、同じ HOME で 1 回だけ続ける（記録の chain で 2 回目は無い。24 時間の上限も acEarly が見る） */
@@ -2144,7 +2190,7 @@
     if (!r || r.code !== 'done' || r.failed || r.more !== true || ((r.freed || 0) + (r.stories || 0)) < 1) return;
     var pc = acPace(benv()); if (!pc.b || !acOnGet(lsg)) return;
     root.setTimeout(function () { if (!acOnGet(lsg) || !ready() || !acIdle()) return;
-      acRunOnce(benv(), bctx(), { chain: true }).then(function (r2) { if (r2 && r2.code !== 'not-due') st.autoclean = { code: r2.code, freed: r2.freed || 0, stories: r2.stories || 0, snapshots: r2.snapshots || 0, failed: r2.failed || 0, gens: r2.gens || 0, genChars: r2.genChars || 0, chain: true }; }, function () {}); }, 5000);
+      vgThen(function () { return acRunOnce(benv(), bctx(), { chain: true }); }).then(function (r2) { if (r2 && r2.code !== 'not-due') st.autoclean = { code: r2.code, freed: r2.freed || 0, stories: r2.stories || 0, snapshots: r2.snapshots || 0, failed: r2.failed || 0, gens: r2.gens || 0, genChars: r2.genChars || 0, chain: true }; }, function () {}); }, 5000);
   }
   function acSchedule() { if (!acOnGet(lsg)) return;   /* r3: OFF の端末では timer も置かない（土台と同じ） */ root.setTimeout(acTick, (+lsg('v292DfixAUTOCLEAN1DelayMs') > 0 ? +lsg('v292DfixAUTOCLEAN1DelayMs') : AC_DELAY_MS)); }
   if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', function () { root.setTimeout(boot, 1500); }); else root.setTimeout(boot, 1500);

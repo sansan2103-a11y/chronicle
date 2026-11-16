@@ -460,6 +460,7 @@
       }
       st.cast.npcs.push({ name: name, desc: desc, appeared: true });
       if (typeof st.save === 'function') (typeof st.saveD==='function'?st.saveD('fix145.promoteToNpc'):st.save());
+      try { var __pi = window.__v292DfixSTARTICON; if (__pi && typeof __pi.promoted === 'function') __pi.promoted(name); } catch(_pi){}   // ★PROMOICON1（既定 OFF・鍵は STARTICON の中）
       try { console.log(TAG, 'promoted to NPC:', name); } catch(_){}
       // re-render modal
       renderModal();
