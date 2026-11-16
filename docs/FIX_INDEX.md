@@ -1974,9 +1974,10 @@
 - `v292DfixAUTOCLEAN1On` / `v292DfixAUTOCLEAN1Off` — fixSTORE1b（AUTOCLEAN1。既定 OFF・端末の鍵）
 - `v292DfixHEROACT1On` / `v292DfixHEROACT1Off` / `v292DfixHEROACT1Log` — fixHEROACT1（既定 OFF・数えるだけ。入力に無い主人公の発話・行動を short／decision／unclear に分けて件数とターン番号だけ記録。本文を書き換えず sys にも何も足さない。GPT #127-VB 2）
 - `v292DfixLIM1bOff` — fixSTARTICON（LIM1b・既定 ON の kill。昇格の絵も物語単位の同じ枠で数える。既存の絵の再利用は数えない。GPT #127-VB 4b）
-- `v292DfixBILL1cOff` — fixSTARTICON, fixMIDICON, av2-data（BILL1c・既定 ON の kill。Worker v46.51 の PROVIDER_AUTH_FAILED／PROVIDER_BALANCE_EXHAUSTED を受けたら自動の絵の要求を 10 分止める〔メモリだけ・読み直しで解ける・手動の生成は止めない〕。GPT #127-VB 3）
+- `v292DfixBILL1cOff` — fixSTARTICON, fixMIDICON, av2-data（BILL1c・既定 ON の kill。Worker v46.51 の PROVIDER_AUTH_FAILED／PROVIDER_BALANCE_EXHAUSTED を受けたら自動の絵の要求を 10 分止める〔メモリだけ・読み直しで解ける・手動の生成は止めない〕。BILL1c2＝知らせは「閉じる」まで残る帯を 1 回だけ・文言は端末が持ち残高不足と断定しない。GPT #127-VB 3・#127-VF 2）
 - `v292DfixMXSHORT1On` / `v292DfixMXSHORT1Off` — fixMIDICON（MXSHORT1・既定 OFF。独立レビューで別人統合の場面が残るため ON 禁止。Worker 側 CHR_MXSHORT1_ON も未設定）
 - `v292DfixLEAK1TagxOff` — fixLEAK1（TAGX1・既定 ON の kill。行頭が react／state＋who=＋別の欄名= の内部書式の行だけを本文から除く。GPT #127-VB 2(3)）
+- `v292DfixALIAS1On` / `v292DfixALIAS1Off` — fix307（ALIAS1 shadow・既定 OFF。名簿の抽出に別名候補〔最大 3 語〕の欄を足して数えるだけ。名簿・保存・絵・sys には反映しない。記録は件数と理由コードだけ。GPT #127-VF 1）
 - `v292DfixVDEL1Off` — fixDL2（VDEL1・既定 ON の修正の kill。GPT #127-VB 6 の先に塞げる部分: 一般の削除シートは、Vault v2 を解錠中でも v2 で隠した物語を SD1 の getstory より前で断る〔vault2status の hiddenIds をシートを開くときと送る直前に読む・分からなければ断る〕。'1' で従来の動き）
 - `v292DfixVAULTGUARD1Off` — fixSTORE1b（VAULTGUARD1。既定 ON の修正の kill。'1' で、Vault v2 解錠中の隠した物語を通常の getstory 照合から外す守りを止める）
 - `v292DfixMXALIAS1On` / `v292DfixMXALIAS1Off` — fixMIDICON, fix145（AUTOICON1 r2・MXALIAS1。既定 OFF・Owner PC 限定。総称名（例「老人」）と記述名を、出たターンが重なるときだけ同じ控えの絵で表示する。保存はしない。Off が優先）

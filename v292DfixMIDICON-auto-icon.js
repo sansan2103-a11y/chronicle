@@ -52,18 +52,37 @@
      Worker が画像サービスの認証エラー（PROVIDER_AUTH_FAILED）・残高切れ（PROVIDER_BALANCE_EXHAUSTED。HTTP 502・本文の error の欄・retry:false。402 の保留中は held:true）を返したら、その物語では 10 分、
      STARTICON・MIDICON・PROMOICON1 の「自動の」要求だけを打たない。抑止はこのタブのメモリだけ（保存しない）＝ページの読み直しで解ける。手で押す「絵を作る」「再生成」はここを通らない（止めない）。
      知らせはこのページで 1 回だけ。旧 Worker はこのコードを返さない → 何も変わらない。同じ部品を av2-data・MIDICON・STARTICON が持ち、先に読み込んだものが window.__v292DfixBILL1 を作る。 */
-  if (!root.__v292DfixBILL1) root.__v292DfixBILL1 = (function () {
-    var HOLD_MS = 10 * 60 * 1000, CODES = { PROVIDER_AUTH_FAILED: 1, PROVIDER_BALANCE_EXHAUSTED: 1 }, ST = {}, noted = false;   /* ST: 物語 ID → { c: コード, at: 時刻 }（メモリだけ） */
+  /* ★BILL1c2（GPT #127-VF 2・2026-11-16）: 知らせを確実に 1 回。一時の帯（6 秒で消えていた）をやめ、閉じるまで残る帯（画面の上・前面）にする。
+     出せたときだけ「出した」と数える（体が無ければ読み込みの後にもう一度）。文言は端末が持つ（Worker の message は使わない・残高不足や自動の復旧を断定しない）。
+     抑止が解けたら（10 分・clear）帯も消す。抑止は今までどおりこのタブのメモリだけ（読み直しで解ける）・手で押す操作は止めない。管理用に最後のコードと held を status() に残す。 */
+  if (!root.__v292DfixBILL1 || !(root.__v292DfixBILL1.v >= 3)) root.__v292DfixBILL1 = (function () {
+    var HOLD_MS = 10 * 60 * 1000, CODES = { PROVIDER_AUTH_FAILED: 1, PROVIDER_BALANCE_EXHAUSTED: 1 }, ST = {}, noted = false, el = null, pend = null, tries = 0, last = null, shownN = 0, closed = false;   /* ST: 物語 ID → { c, at }（メモリだけ） */
+    var TXT = { PROVIDER_BALANCE_EXHAUSTED: '画像サービス側の請求・利用枠の問題で、いまはキャラの絵を作れません。時間をおいてもう一度お試しください。物語はそのまま続けられます。',
+      PROVIDER_AUTH_FAILED: '画像サービスの認証の問題で、いまはキャラの絵を作れません。時間をおいてもう一度お試しください。物語はそのまま続けられます。' };
     function on() { try { return root.localStorage.getItem('v292DfixBILL1cOff') !== '1'; } catch (e) { return true; } }
     function isCode(c) { return on() && !!CODES[c]; }
-    function mark(id, code) { if (!id || !isCode(code)) return; ST[String(id)] = { c: String(code).slice(0, 32), at: Date.now() }; }
-    function stopped(id) { if (!on() || !id) return null; var x = ST[String(id)]; if (!x) return null; if (!(Date.now() - x.at < HOLD_MS)) { delete ST[String(id)]; return null; } return x.c; }
-    function clear(id) { if (id) delete ST[String(id)]; else ST = {}; return true; }   /* 解除の口（補充の後に呼べる。読み直しでも解ける） */
-    function notice() { try { if (noted) return false; noted = true; var d = root.document; if (!d || !d.body || typeof d.createElement !== 'function') return true;
-      var el = d.createElement('div'); el.textContent = '画像を作るサービスが一時的に使えないため、キャラの絵の自動作成を少し止めています。物語はそのまま続けられます。';
-      el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#333;color:#fff;padding:8px 14px;border-radius:6px;font-size:13px;z-index:99999;max-width:90%;';
-      d.body.appendChild(el); root.setTimeout(function () { try { if (el.parentNode) el.parentNode.removeChild(el); } catch (e) {} }, 6000); return true; } catch (e) { return false; } }
-    return { v: 2, HOLD_MS: HOLD_MS, CODES: CODES, on: on, isCode: isCode, mark: mark, stopped: stopped, clear: clear, notice: notice, noted: function () { return noted; } };
+    function mark(id, code, det) { if (!id || !isCode(code)) return; ST[String(id)] = { c: String(code).slice(0, 32), at: Date.now() }; det = det || {}; last = { c: String(code).slice(0, 32), at: Date.now(), held: det.held === true, http: typeof det.http === 'number' ? det.http : null, by: String(det.by || '').slice(0, 12) }; }
+    function anyOn() { for (var k in ST) { if (Date.now() - ST[k].at < HOLD_MS) return true; } return false; }
+    function unshow() { try { if (el && el.parentNode) el.parentNode.removeChild(el); } catch (e) {} el = null; }
+    function stopped(id) { if (!on() || !id) return null; var x = ST[String(id)]; if (!x) return null; if (!(Date.now() - x.at < HOLD_MS)) { delete ST[String(id)]; if (!anyOn()) unshow(); return null; } return x.c; }
+    function clear(id) { if (id) delete ST[String(id)]; else ST = {}; if (!anyOn()) unshow(); return true; }   /* 解除の口（補充の後に呼べる。読み直しでも解ける） */
+    function show(code) {
+      var d = root.document; if (!d || typeof d.createElement !== 'function') return false; var host = d.body || d.documentElement; if (!host || typeof host.appendChild !== 'function') return false;
+      var b = d.createElement('div'); try { b.setAttribute('data-av2-ui', 'bill1-notice'); b.setAttribute('role', 'status'); } catch (e) {}
+      b.style.cssText = 'position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147482000;box-sizing:border-box;width:max-content;max-width:min(560px,calc(100vw - 24px));background:#2b2620;color:#f4ece0;border:1px solid #a07840;border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.6;display:flex;gap:10px;align-items:flex-start;box-shadow:0 4px 16px rgba(0,0,0,.45)';
+      var t = d.createElement('span'); t.textContent = TXT[code] || TXT.PROVIDER_BALANCE_EXHAUSTED; b.appendChild(t);
+      var x = d.createElement('button'); x.textContent = '閉じる'; try { x.setAttribute('type', 'button'); } catch (e) {}
+      x.style.cssText = 'flex:none;background:#4a4030;color:#f4ece0;border:1px solid #a07840;border-radius:6px;padding:2px 10px;font-size:12px;cursor:pointer';
+      x.onclick = function () { closed = true; unshow(); }; b.appendChild(x);
+      host.appendChild(b); el = b; return true; }
+    function notice(code) {   /* このページで 1 回。出せたときだけ noted */
+      try { if (noted || !on()) return false; code = CODES[code] ? code : (last && last.c) || 'PROVIDER_BALANCE_EXHAUSTED';
+        if (show(code)) { noted = true; shownN++; return true; }
+        if (!pend && tries < 20) { pend = code; tries++; var d = root.document, again = function () { var c = pend; pend = null; notice(c); };
+          try { if (d && typeof d.addEventListener === 'function' && d.readyState === 'loading') d.addEventListener('DOMContentLoaded', again); else root.setTimeout(again, 500); } catch (e) {} }
+        return false; } catch (e) { return false; } }
+    function status() { return { v: 3, on: on(), holdMs: HOLD_MS, stories: Object.keys(ST).length, noted: noted, shown: shownN, visible: !!(el && el.parentNode), closed: closed, last: last }; }
+    return { v: 3, HOLD_MS: HOLD_MS, CODES: CODES, TXT: TXT, on: on, isCode: isCode, mark: mark, stopped: stopped, clear: clear, notice: notice, noted: function () { return noted; }, status: status };
   })();
   function BILL() { return root.__v292DfixBILL1 || null; }
   var CAP = { turn: 1, storyDay: 2, storyTotal: 6, storyDesc: 2, acctDay: 5 };
@@ -755,7 +774,7 @@
           listOnce(id, function () { finish('OUTCOME_UNKNOWN', err2); });     /* no resend: read once (the Worker may have made it) */
           return;
         }
-        if (BILL() && BILL().isCode(code)) { BILL().mark(id, code); BILL().notice(); stats.provider++; return finish('PROVIDER_ACCOUNT', code); }   /* ★BILL1c r3: この物語では 10 分だけ自動を打たない（pageStop は付けない・何も記録しない） */
+        if (BILL() && BILL().isCode(code)) { BILL().mark(id, code, { held: !!(rj && rj.held === true), http: st, by: 'midicon' }); BILL().notice(code); stats.provider++; return finish('PROVIDER_ACCOUNT', code); }   /* ★BILL1c r3: この物語では 10 分だけ自動を打たない（pageStop は付けない・何も記録しない） */
         if (st === 200 && rj && (rj.status === 'CREATED' || rj.status === 'EXISTS')) {
           if (rj.status === 'CREATED') { stats.created++; so2.d = (so2.d || 0) + 1; r2.acct = (r2.acct || 0) + 1; recSave(r2); } else stats.exists++;
           if (p.disp && typeof rj.extra_id === 'string' && MX_ID_RE.test(rj.extra_id)) { so2.ak = so2.ak || {}; so2.ak[hk(norm(p.disp))] = rj.extra_id; recSave(r2); X.alias = JSON.parse(JSON.stringify(so2.ak)); }   /* ★mx3-e: the roster handle shows the same picture */
