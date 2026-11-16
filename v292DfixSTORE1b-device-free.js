@@ -340,6 +340,8 @@
       .then(function (why) { if (why == null) { se.dirtyProven = true; if (se.zeroTurn === true) se.zeroTurnProven = true; return null; } return se.zeroTurn === true ? 'zero-turn-unproven' : 'unsynced-unproven'; }, function () { return se.zeroTurn === true ? 'zero-turn-unproven' : 'unsynced-unproven'; });
   }
   function vaultBlock(id, env) {
+    if (env && env.vcAllow && env.vcAllow[String(id)] === 1) return vcPassOnly(String(id), env);   /* ★VCLEAN1: この実行で確かめた id だけ（隠し一覧の判定だけを外す。パスコードは見る） */
+    if (env && env.vcV2 && env.vcV2[String(id)] === 1) return 'vault';   /* ★VCLEAN1（鍵があるときだけ）: Vault v2 で隠している（解錠中は fix889 の一覧から外れるので、v2 の一覧でも見る＝本文を取り寄せる通常の経路へ流さない） */
     var vh = g(env, 'chr6_vault_hidden');
     if (vh != null) {
       var v = J(vh, null); if (!v || typeof v !== 'object' || isArr(v)) return 'vault-cache-unreadable';
@@ -355,6 +357,11 @@
       var hs = F.hiddenIds(); if (!isArr(hs)) return 'vault-state-unknown';
       for (var h = 0; h < hs.length; h++) if (String(hs[h]) === id) return 'vault';
     } catch (e) { return 'vault-check-threw'; }
+    if (g(env, 'chr6_storysess_' + id) != null) return 'passcode';
+    try { if (env.ss && env.ss.getItem('chr6_storysess_' + id) != null) return 'passcode'; } catch (e2) { return 'vault-check-threw'; }
+    return null;
+  }
+  function vcPassOnly(id, env) {
     if (g(env, 'chr6_storysess_' + id) != null) return 'passcode';
     try { if (env.ss && env.ss.getItem('chr6_storysess_' + id) != null) return 'passcode'; } catch (e2) { return 'vault-check-threw'; }
     return null;
@@ -1550,16 +1557,17 @@
     var e2 = {}; for (var k in env) if (Object.prototype.hasOwnProperty.call(env, k)) e2[k] = env[k]; var dd = qa ? qa : { days: AC_DAYS, ms: AC_MIN_AGE_MS }; e2.d2MinAgeMs = dd.ms; e2.only = null; e2.purge = false; e2.acGen = g(env, 'v292DfixGEN1cOn') === '1' && g(env, 'v292DfixGEN1cOff') !== '1';   /* ★GEN1 r4 (c): 専用の On 鍵（既定 OFF）＋ kill。★r5: 日数（鍵が無ければ 7 日） */
     var res = { code: null, freed: 0, freedChars: 0, stories: 0, snapshots: 0, chars: 0, failed: 0, failedCode: null, skipped: {}, queries: 0, why: {}, seen: 0, aged: 0, more: false };   /* ★r4: why・seen・aged・more */
     var c2 = {}; for (var k2 in ctx) if (Object.prototype.hasOwnProperty.call(ctx, k2)) c2[k2] = ctx[k2];
-    c2.getStory = function (id) { res.queries++; return ctx.getStory(id); };
-    return acWalk(e2, c2, res).then(function () {
+    c2.getStory = function (id) { if (e2.vcSynth && Object.prototype.hasOwnProperty.call(e2.vcSynth, String(id))) return Promise.resolve(JSON.parse(JSON.stringify(e2.vcSynth[String(id)]))); res.queries++; return ctx.getStory(id); };   /* ★VCLEAN1: 確かめた id は通信しない */
+    if (vcOnGet(function (kk) { return g(env, kk); })) { e2.vc = true; e2.vcAllow = {}; e2.vcSynth = {}; try { e2.vcUnlocked = typeof env.vcUnlocked === 'function' && env.vcUnlocked() === true; } catch (eU) { e2.vcUnlocked = false; } e2.vcV2 = {}; }   /* ★VCLEAN1 */
+    return vcPrep(e2, env, res).then(function () { return acWalk(e2, c2, res); }).then(function () {   /* ★VCLEAN1: 鍵が無ければ何もしない */
       if (!res.code) res.code = res.failed ? 'stopped' : 'done';
       var o2 = acLog(env); var run1 = { at: now, freed: res.freed, freedChars: res.freedChars, stories: res.stories, snapshots: res.snapshots, chars: res.chars, failed: res.failed, code: String(res.code) };
       if (e2.acGen === true) { run1.gens = res.gens || 0; run1.genChars = res.genChars || 0; }   /* ★GEN1 r4 (c): (c) が On のときだけ。数だけ */
       run1.why = acWhyOut(res.why); run1.seen = res.seen; run1.q = res.queries; run1.aged = res.aged; run1.more = res.more === true;   /* ★AUTOCLEAN1 r4: 理由の名前と数・調べた件数・getstory の本数（鍵名・id・本文は入れない） */
       if (early) run1.early = early; if (early === 'chain') run1.chain = true;
-      if (qa) { run1.qa = true; run1.days = dd.days; } if (forced) run1.forced = true;   /* ★r6: QA 操作の回だけ qa と days（ふつうの回の記録は r4 と同じ） */
+      if (qa) { run1.qa = true; run1.days = dd.days; } if (forced) run1.forced = true; if (e2.vc === true) { run1.vc = { unlocked: e2.vcUnlocked === true, listed: res.vq || 0, proven: res.vcProven || 0 }; }   /* ★VCLEAN1: 鍵があるときだけ・数だけ */   /* ★r6: QA 操作の回だけ qa と days（ふつうの回の記録は r4 と同じ） */
       o2.runs.push(run1); while (o2.runs.length > 20) o2.runs.shift();
-      for (var ri = 0; ri < o2.runs.length - AC_KEEP_DETAIL; ri++) { var rr = o2.runs[ri]; if (rr && typeof rr === 'object') { delete rr.why; delete rr.seen; delete rr.aged; delete rr.more; delete rr.days; delete rr.daysKey; delete rr.qa; } }   /* 内訳は直近 10 回分まで（q は 24 時間の上限の数えに残す） */
+      for (var ri = 0; ri < o2.runs.length - AC_KEEP_DETAIL; ri++) { var rr = o2.runs[ri]; if (rr && typeof rr === 'object') { delete rr.why; delete rr.seen; delete rr.aged; delete rr.more; delete rr.days; delete rr.daysKey; delete rr.qa; delete rr.vc; } }   /* 内訳は直近 10 回分まで（q は 24 時間の上限の数えに残す） */
       try { env.ls.setItem(AC_LOGK, JSON.stringify(o2)); } catch (eW2) {} return res; }, function () { return { code: 'threw' }; });
   }
   var AC_UNKNOWN = { 'server-unreachable': 1, 'server-not-ok': 1, 'server-authority': 1, 'server-rev': 1, 'server-id-mismatch': 1, 'server-partial': 1, 'no-account': 1, 'principal-changed': 1, 'no-server-time': 1 };
@@ -1595,6 +1603,23 @@
       var hasBody = g(e2, 'chr6_slot_' + id) != null;
       if (res.queries + (hasBody ? 3 : 1) > AC_QMAX) { res.budgetLeft = true; res.more = true; return Promise.resolve(); }   /* 問い合わせの上限: この物語は次の実行で */
       idx++; res.seen = idx; mark(id);
+      if (e2.vc === true && vcHidden(id, e2)) {   /* ★VCLEAN1: 隠した物語。解錠していなければ口を呼ばず数えるだけ */
+        if (!e2.vcUnlocked) { acWhy(res, 'vc:locked'); return next(); }
+        if (!hasBody) { acWhy(res, 'vc:no-body'); return next(); }
+        if (!vcMapP) { res.queries++; res.vq = (res.vq || 0) + 1; vcMapP = Promise.resolve(ctx.who()).then(function () { var ids = []; for (var i = 0; i < order.length; i++) if (vcHidden(order[i], e2) && g(e2, 'chr6_slot_' + order[i]) != null) ids.push(String(order[i])); return vcList(e2, ids); }); }
+        return vcMapP.then(function (L) {
+          if (!L.map) { acWhy(res, 'vc:' + L.why); return next(); }
+          return vcCheck(id, L.map[id] || null, e2, ctx).then(function (v) {
+            if (!v.ok) { acWhy(res, 'vc:' + v.why); return next(); }
+            e2.vcAllow[id] = 1; e2.vcSynth[id] = v.synth; res.vcProven = (res.vcProven || 0) + 1;
+            return step1(id, hasBody);
+          });
+        });
+      }
+      return step1(id, hasBody);
+    }
+    var vcMapP = null;
+    function step1(id, hasBody) {
       var step = hasBody ? acStage1One(id, e2, ctx, res) : Promise.resolve({ go2: true });
       return step.then(function (x) {
         if (res.failed) return;
@@ -1633,6 +1658,57 @@
     }
     out.next.q = q; out.why = acWhyOut(out.why); return out;
   }
+  /* ★VCLEAN1（Owner 2026-11-16 12:30・GPT #127-UX 1 条件付き GO・Owner PC 限定）: Vault で隠したまま削除した物語の端末の写しを、7 日後に消す。
+     動くのは、端末の鍵 v292DfixVCLEAN1On='1'（既定 OFF・kill v292DfixVCLEAN1Off='1'）と AUTOCLEAN1 の On があり、HOME の Vault（v2）を解錠しているとき（vault2-ui の status().unlocked）だけ。
+     解錠していない・鍵が無い → Vault の口を 1 回も呼ばない（通信 0）。
+     確かめ: 既存の fix697 listShadowBasisOnce（listshadow を 1 回・本文は返らない。Vault v2 の解錠中は隠した行も返る）の行で、削除済み・削除から 7 日（updatedAt とサーバーの今。日数は常に 7 日・qaDays は効かない）・
+       この端末の全体の hash がサーバーの serverHash と一致（FREE2 と同じ dirtyProof。memoryV1 の有る形・無い形の 2 通り）。題名は hash の入力としてメモリの中だけ。
+     通ったら、その id だけ隠し一覧の判定を外し（vcAllow）、ほかの関門（未同期・送信中・開いている・パスコード・旧 id…）は全部そのまま通す。
+     getstory は呼ばない（本文を取り寄せない）。段 1・段 2・GEN1c の判定に渡すサーバーの答えは、hash で一致を確かめた端末の内容と一覧の行から組む（vcSynth）。
+     記録・dry-run に出すのは件数・字数・理由の名前（vc:*）だけ。id・題名は出さない。 */
+  var VC_ON = 'v292DfixVCLEAN1On', VC_OFF = 'v292DfixVCLEAN1Off';
+  /* Vault v2 の隠した id（解錠中だけ vault2status が返す hiddenIds・メモリだけ）。解錠中は fix889 の一覧から外れるので、これで隠したものを本文を取り寄せる通常の経路へ流さない。
+     解錠していない → 呼ばない。読めない → res に vc:v2-ids-unknown（その実行では VCLEAN1 は何もしない） */
+  function vcPrep(e2, env, res) {
+    if (!(e2.vc === true && e2.vcUnlocked === true) || typeof env.vcV2Hidden !== 'function') return Promise.resolve();
+    res.queries++; res.vq = (res.vq || 0) + 1;
+    return Promise.resolve().then(function () { return env.vcV2Hidden(); }).then(function (a) {
+      if (!isArr(a)) { e2.vcUnlocked = false; acWhy(res, 'vc:v2-ids-unknown'); return; }
+      var o = {}; for (var i = 0; i < a.length; i++) if (a[i] != null) o[String(a[i])] = 1; e2.vcV2 = o; }, function () { e2.vcUnlocked = false; acWhy(res, 'vc:v2-ids-unknown'); });
+  }
+  function vcOnGet(get) { return get(VC_OFF) !== '1' && get(VC_ON) === '1' && acOnGet(get); }
+  function vcHidden(id, env) { if (env.vcAllow && env.vcAllow[String(id)] === 1) return false; return vaultBlock(String(id), env) === 'vault'; }
+  /* 一覧の行と端末の写しで確かめる。返り値 { ok, why, synth }（synth は ok のときだけ・メモリだけ） */
+  function vcCheck(id, row, env, ctx) {
+    function no(w) { return Promise.resolve({ ok: false, why: w }); }
+    if (!row) return no('no-row');                                                             /* 解錠が無効・行が無い → 残す */
+    if (row.locked) return no('passcode');
+    if (row.deleted !== true) return no('live');
+    if ((row.authority !== 'shadow' && row.authority !== 'canonical') || typeof row.rev !== 'number' || !(row.rev >= 1) || !HEX64.test(String(row.serverHash || '')) || typeof row.title !== 'string') return no('bad-row');
+    var now = (ctx && typeof ctx.serverNow === 'function') ? ctx.serverNow() : null;
+    if (!(typeof now === 'number' && isFinite(now) && now > 0)) return no('no-server-time');
+    if (!(typeof row.updatedAt === 'number' && isFinite(row.updatedAt) && row.updatedAt > 0)) return no('no-time');
+    var d = now - row.updatedAt; if (d < 0) return no('bad-time'); if (d < AC_MIN_AGE_MS) return no('too-young');   /* 常に 7 日 */
+    var raw = g(env, 'chr6_slot_' + id); if (raw == null) return no('no-body');                /* 段 2 だけの物語は端末の全体の hash を作れない → 残す */
+    var b = J(raw, null); if (!b || typeof b !== 'object' || isArr(b) || !isArr(b.turns)) return no('body-unreadable');
+    if (typeof env.dirtyProof !== 'function') return no('hash-unproven');
+    var title = row.title, sh = String(row.serverHash);
+    return Promise.resolve().then(function () { return env.dirtyProof(id, title, sh, undefined); }).then(function (w0) {
+      if (w0 == null) return false;
+      return Promise.resolve(env.dirtyProof(id, title, sh, { mem: true })).then(function (w1) { if (w1 == null) return true; throw (w0 === 'content-differs' || w1 === 'content-differs') ? 'hash-mismatch' : 'hash-unproven'; });
+    }).then(function (mem) {
+      var body = J(raw, null);
+      var synth = { status: 200, j: { ok: true, shadow: true, id: id, rev: row.rev, updatedAt: row.updatedAt, deleted: true, authority: row.authority, serverHash: sh, locked: false,
+                                      record: { schema: 2, id: id, title: title, deleted: true, body: body, sidecar: mem ? { memoryV1: null } : {} } } };
+      return { ok: true, synth: synth, mem: mem };
+    }, function (w) { return { ok: false, why: (w === 'hash-mismatch' || w === 'hash-unproven') ? w : 'hash-unproven' }; });
+  }
+  /* 一覧の口を 1 回（この実行で最初に隠した id に着いたときだけ）。返り値 Promise<{ map } | { why }> */
+  function vcList(env, ids) {
+    if (typeof env.vcList !== 'function') return Promise.resolve({ why: 'no-port' });
+    return new Promise(function (res0) { try { env.vcList(ids, function (rows, err) { if (!rows) return res0({ why: err === 'LOCKED' ? 'locked' : 'list-failed' });
+      var m = {}; for (var i = 0; i < rows.length; i++) if (rows[i] && rows[i].id != null) m[String(rows[i].id)] = rows[i]; res0({ map: m }); }); } catch (e) { res0({ why: 'list-failed' }); } });
+  }
   function acStage1One(id, e2, ctx, res) {
     var e3 = {}; for (var k in e2) if (Object.prototype.hasOwnProperty.call(e2, k)) e3[k] = e2[k]; e3.only = [id];
     var unknown = null; e3.onReason = function (sid, w) { if (AC_UNKNOWN[String(w)] === 1 && !unknown) unknown = String(w); };
@@ -1661,7 +1737,7 @@
               serverEvalP: serverEvalP, serverEvalMeta: serverEvalMeta, surveyP: surveyP, freeOneP: freeOneP,
               /* ★STUCK1 */ STUCK_OFF: STUCK_OFF, staleDirtyLocal: staleDirtyLocal, stuckNeeds: stuckNeeds, stuckProof: stuckProof,
               /* ★STUCK1 r2 */ STUCK_ON: STUCK_ON, SVERSION: SVERSION, FAMILY_CLASS: FAMILY_CLASS, familyClass: familyClass, provenSubset: provenSubset, raceProbe: raceProbe, raceBlock: raceBlock, planByReason: planByReason, COUNT_ONLY: COUNT_ONLY,
-              /* ★AUTOCLEAN1 */ acRunOnce: acRunOnce, AC_DEFAULT_ON: AC_DEFAULT_ON, /* ★r5 */ acDaysGet: acDaysGet, acDaysTxt: acDaysTxt, AC_DAYS_MAX: AC_DAYS_MAX, /* ★r6 */ acDaysParse: acDaysParse, acQaDays: acQaDays, AC_QA_ACK: AC_QA_ACK, /* ★r4 */ acEarly: acEarly, acPace: acPace, acDayQ: acDayQ, acDryWhy: acDryWhy, acWhyName: acWhyName, AC_DAY_QMAX: AC_DAY_QMAX, AC_PACE_MIN_MS: AC_PACE_MIN_MS, AC_KEEP_DETAIL: AC_KEEP_DETAIL, acOnGet: acOnGet, acServerAge: acServerAge, AC_QMAX: AC_QMAX, AC_DAYS: AC_DAYS, AC_MIN_AGE_MS: AC_MIN_AGE_MS, AC_GAP_MS: AC_GAP_MS, AC_MAX: AC_MAX, d2LocalAt: d2LocalAt,
+              /* ★AUTOCLEAN1 */ acRunOnce: acRunOnce, AC_DEFAULT_ON: AC_DEFAULT_ON, /* ★r5 */ acDaysGet: acDaysGet, acDaysTxt: acDaysTxt, AC_DAYS_MAX: AC_DAYS_MAX, /* ★r6 */ acDaysParse: acDaysParse, acQaDays: acQaDays, AC_QA_ACK: AC_QA_ACK, /* ★VCLEAN1 */ vcOnGet: vcOnGet, vcCheck: vcCheck, vcHidden: vcHidden, vcDry: vcDry, vaultBlock: vaultBlock, /* ★r4 */ acEarly: acEarly, acPace: acPace, acDayQ: acDayQ, acDryWhy: acDryWhy, acWhyName: acWhyName, AC_DAY_QMAX: AC_DAY_QMAX, AC_PACE_MIN_MS: AC_PACE_MIN_MS, AC_KEEP_DETAIL: AC_KEEP_DETAIL, acOnGet: acOnGet, acServerAge: acServerAge, AC_QMAX: AC_QMAX, AC_DAYS: AC_DAYS, AC_MIN_AGE_MS: AC_MIN_AGE_MS, AC_GAP_MS: AC_GAP_MS, AC_MAX: AC_MAX, d2LocalAt: d2LocalAt,
               /* ★DISCARD2 */ d2Owners: d2Owners, d2Plan: d2Plan, d2Local: d2Local, d2Survey: d2Survey, d2One: d2One, d2Run: d2Run, d2Server: d2Server, D2_SKIP: D2_SKIP,
               /* ★DISCARD1 */ d1Local: d1Local, d1Server: d1Server, d1Survey: d1Survey, d1One: d1One, d1Run: d1Run, d1Cat: d1Cat, D1_ACK: D1_ACK, D1_OVERRIDE: D1_OVERRIDE,
               /* ★FREE2c */ judgeOne: judgeOne, /* ★FREE2d */ _memoClear: function () { MEMO = {}; }, tombHashCheck: tombHashCheck, F2_VERSION: F2_VERSION };
@@ -1684,6 +1760,35 @@
     if (s && s.id) OT.per[s.id] = (OT.per[s.id] || 0) + 1;
   } catch (e0) { OT.all++; } }); } catch (eL) {}
   function otherTabSeq(id) { return OT.all + ':' + (OT.per[String(id)] || 0); }
+  /* ★VCLEAN1 の dry-run の見込み（何も消さない・書かない）。鍵が無い → { on:false }（何も読まない）。解錠していない → 隠した物語の数だけ（口を呼ばない）。
+     解錠中 → 一覧の口を 1 回・端末の中で hash を確かめ、通る見込みの件数と字数（本体と控え。GEN1c が On なら世代も）と理由の数。id・題名は出さない */
+  function vcDry(e4, cx) {
+    if (!vcOnGet(lsg)) return Promise.resolve({ on: false });
+    var e5 = {}; for (var k in e4) if (Object.prototype.hasOwnProperty.call(e4, k)) e5[k] = e4[k]; e5.vcAllow = {}; e5.vcV2 = {};
+    var unl = false; try { unl = typeof e5.vcUnlocked === 'function' && e5.vcUnlocked() === true; } catch (eU) { unl = false; }
+    var pr = { why: {}, queries: 0 }, ee = { vc: true, vcUnlocked: unl };
+    return vcPrep(ee, e5, pr).then(function () { e5.vcV2 = ee.vcV2 || {}; unl = ee.vcUnlocked === true; return vcDry2(e5, cx, unl, pr.why); });
+  }
+  function vcDry2(e5, cx, unl, why0) {
+    var ao = acOrder(e5), ids = [], noBody = 0; for (var i = 0; i < ao.order.length; i++) { var id = String(ao.order[i]); if (!vcHidden(id, e5)) continue; if (g(e5, 'chr6_slot_' + id) == null) noBody++; else ids.push(id); }
+    var out = { on: true, unlocked: unl, hidden: ids.length + noBody, eligible: 0, chars: 0, why: {} }, rw = { why: out.why };
+    for (var w0 in why0) if (Object.prototype.hasOwnProperty.call(why0, w0)) acWhy(rw, w0, why0[w0]);
+    if (noBody) acWhy(rw, 'vc:no-body', noBody);
+    if (!ids.length) { out.why = acWhyOut(out.why); return Promise.resolve(out); }
+    if (!unl) { acWhy(rw, 'vc:locked', ids.length); out.why = acWhyOut(out.why); return Promise.resolve(out); }
+    return vcList(e5, ids).then(function (L) {
+      if (!L.map) { acWhy(rw, 'vc:' + L.why, ids.length); out.why = acWhyOut(out.why); return out; }
+      var ow = d2Owners(e5), chain = Promise.resolve();
+      ids.forEach(function (id) { chain = chain.then(function () { return vcCheck(id, L.map[id] || null, e5, cx).then(function (v) {
+        if (!v.ok) { acWhy(rw, 'vc:' + v.why); return; }
+        var e6 = {}; for (var k6 in e5) if (Object.prototype.hasOwnProperty.call(e5, k6)) e6[k6] = e5[k6]; e6.vcAllow = {}; e6.vcAllow[id] = 1;
+        var lb = localBlock(id, e6); if (lb) { acWhy(rw, 'vc-f2:' + lb); return; }
+        var ch = 0; try { ch = planOne(id, e6).chars + d2Plan(id, e6, ow, d2Refs(e6, ow, id)).chars; } catch (eC) { ch = 0; }
+        out.eligible++; out.chars += ch; acWhy(rw, 'vc:proven');
+      }); }); });
+      return chain.then(function () { out.why = acWhyOut(out.why); return out; });
+    });
+  }
   function benv() {
     var K = null; try { K = root.__v292DfixKEY1; K = (K && typeof K.enabled === 'function' && K.enabled()) ? K : null; } catch (e) { K = null; }
     var pOn = lsg(PURGE_ON) === '1' && lsg(PURGE_OFF) !== '1';
@@ -1695,6 +1800,13 @@
              free2d: lsg('v292DfixFREE2dOff') !== '1',   /* ★FREE2d（kill v292DfixFREE2dOff='1' → FREE2c と同じ） */
              saveBusy: saveBusyB,   /* ★FREE2c: この画面の fix697 がその物語の保存を送っている最中か（FREE2 のときだけ呼ぶ） */
              vault: root.__v292Dfix889 || null, inv: root.__v292Dfix562 || null, gate: root.__v292Dfix569 || null,
+             vcUnlocked: function () { try { var U = root.__v292Dvault2Ui, s = (U && typeof U.status === 'function') ? U.status() : null; return !!(s && s.hasVault === true && s.unlocked === true); } catch (e) { return false; } },   /* ★VCLEAN1: HOME の Vault（v2）を開いている。v1（fix889）の解錠は本番の Worker で休止中（VAULT_V1_DORMANT）なので使わない */
+             vcV2Hidden: function () { try { return root.fetch('/api/save', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'x-chronicle-csrf': '1' }, body: JSON.stringify({ op: 'vault2status' }) })
+               .then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { return (j && j.ok === true && j.unlocked === true && isArr(j.hiddenIds) && j.hiddenComplete !== false) ? j.hiddenIds.map(String) : null; }, function () { return null; }); } catch (e) { return Promise.resolve(null); } },   /* ★VCLEAN1: 解錠中だけ呼ぶ（vault2-ui と同じ op・同じ cookie） */
+             vcList: function (ids, cb) { try { var U = root.__v292Dvault2Ui, s = (U && typeof U.status === 'function') ? U.status() : null; if (!(s && s.hasVault === true && s.unlocked === true)) return cb(null, 'LOCKED');
+               var W = root.__v292Dfix697; if (!W || typeof W.listShadowBasisOnce !== 'function') return cb(null, 'NO_PORT'); var want = {}; for (var i = 0; i < ids.length; i++) want[String(ids[i])] = 1;
+               W.listShadowBasisOnce(function (rows, err) { if (!rows) return cb(null, err || 'LIST_FAIL'); var out = []; for (var j = 0; j < rows.length; j++) { var x = rows[j]; if (!x || want[String(x.id)] !== 1) continue;
+                 out.push({ id: String(x.id), deleted: x.deleted === true, updatedAt: x.updatedAt, serverHash: x.serverHash, rev: x.rev, authority: x.authority, locked: !!x.locked, title: x.title }); } cb(out, null); }); } catch (e) { cb(null, 'THREW'); } },   /* 既存の口（listshadow・本文なし）。解錠中は Vault v2 の cookie で隠した行も返る。頼んだ id の行だけを渡す */
              iso2Foreign: function (id) { try { var I = root.__v292Diso2; if (!I || typeof I.stampOf !== 'function' || typeof I.owner !== 'function') return false;
                var me = I.owner().now, sp = I.stampOf(id, 's'); if (!sp) return false; return !!((sp.c && sp.c !== me) || (sp.w && sp.w !== me)); } catch (e) { return true; } } };
   }
@@ -1992,8 +2104,8 @@
         var e4 = {}; for (var k4 in e) if (Object.prototype.hasOwnProperty.call(e, k4)) e4[k4] = e[k4]; e4.d2MinAgeMs = dd.ms; e4.only = null; e4.purge = false; e4.acGen = gOn;   /* ★AUTOCLEAN1 r4: 実行と同じ env の形 */
         var dw = null; try { dw = acDryWhy(e4); } catch (eDW) { dw = { failed: true }; }
         var pc = acPace(e), early = null; if (!due && (pc.a || pc.b)) early = acEarly(lg, e.now(), 'zero', pc);
-        return Promise.resolve(cx.who()).then(function (a) { var n = cx.serverNow(); return { code: 'dry', on: acOnGet(lsg), account: !!a, serverTime: typeof n === 'number' && n > 0, candidates: c.length, aged: aged.length, due: due, days: dd.days, daysArg: dSrc, daysKey: dk.key, autoDays: AC_DAYS, gen: { on: gOn, candidates: gN, chars: gC },
-          breakdown: dw, pace: { a: pc.a, b: pc.b, early: early, dayQ: acDayQ(lg, e.now()), dayCap: (pc.a || pc.b) ? AC_DAY_QMAX : AC_QMAX } }; }); }
+        return Promise.resolve(cx.who()).then(function (a) { return vcDry(e4, cx).then(function (vcd) { var n = cx.serverNow(); return { code: 'dry', vclean: vcd, on: acOnGet(lsg), account: !!a, serverTime: typeof n === 'number' && n > 0, candidates: c.length, aged: aged.length, due: due, days: dd.days, daysArg: dSrc, daysKey: dk.key, autoDays: AC_DAYS, gen: { on: gOn, candidates: gN, chars: gC },
+          breakdown: dw, pace: { a: pc.a, b: pc.b, early: early, dayQ: acDayQ(lg, e.now()), dayCap: (pc.a || pc.b) ? AC_DAY_QMAX : AC_QMAX } }; }); }); }
       if (opt && opt.run === true) { if (!acOnGet(lsg)) return Promise.resolve({ code: 'off' }); if (!ready()) return Promise.resolve({ notReady: true });
         var ro = { force: opt.force === true }; if (opt.qaDays !== undefined) ro.qaDays = opt.qaDays; if (opt.ack !== undefined) ro.ack = opt.ack;   /* ★r6: QA 操作はその 1 回の引数だけ */
         return acRunOnce(benv(), bctx(), ro).then(function (r) { st.autoclean = { code: r.code, freed: r.freed || 0, stories: r.stories || 0, snapshots: r.snapshots || 0, failed: r.failed || 0, manual: true, gens: r.gens || 0, genChars: r.genChars || 0 }; return r; }); }
