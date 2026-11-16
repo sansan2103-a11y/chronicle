@@ -583,7 +583,7 @@
 - 診断：`window.__v292DfixSTORE1b.status()`／`.dryRun()`（消さない）。
 #### DISCARD2 / AUTOCLEAN1 — 削除済みの物語のスナップショットを捨てる（11-15〜11-16・GitHub `ad76fd4`・`a0e0323`・STORE1b・fix562・fix569）
 - DISCARD2（手動専用・UI なし・自動経路なし。kill `v292DfixDISCARD2Off='1'`〔fix562 も断る〕・`v292DfixSTORE1Off='1'`）：削除済みの物語のスナップショット（`chr6_snap_`／`chr6_snapd_`）だけを捨てる。持ち主の id は KEY1 の完全一致。manifest が読めない・id が合わない・ほかの物語の manifest が指している組は unknown-owner として消さない。本体が残る物語（live）・DISCARD1 の端末側の条件（Vault・墓標の行がちょうど 1・別アカウント・最近開いた・印が CLEAN でない・送信中 等）・story-open の Lock があれば止める。実行は物語ごとに Lock の中で getstory（deleted===true）を取り直し、実体 → manifest の順に fix562（intent `snapshot-discard`）→ fix569 tryDeleteExact で 1 本ずつ。meta の墓標・`chr6_bk_`・`__gen_`・本体・サイドストアには触らない。記録 `v292DfixDISCARD2Log`。FREE2・DISCARD1 は変えない。
-- AUTOCLEAN1（**既定 OFF**・端末の鍵 `v292DfixAUTOCLEAN1On='1'` の端末だけ〔アカウント単位ではない〕・kill `v292DfixAUTOCLEAN1Off='1'` と DISCARD2 の kill が優先。全員 ON はコードの `AC_DEFAULT_ON` の 1 行）：HOME だけで、削除から 7 日たった物語のスナップショットを DISCARD2 と同じ経路で自動で消す。GEN1 r3 (c)（GPT #127-UT 1(c)）から、本体の写しが無い物語の `__gen_` も同じ実行で捨てる（鍵の id の完全一致・iso2 の持ち主の記録が一致・世代に別の物語の指紋なし・Vault／パスコードでない・サーバーの墓標と 7 日。fix562 の DISCARD2 の許可は AUTOCLEAN1 の proof（acGen）のときだけ。手動の DISCARD2 は変わらない。r4：専用の On 鍵 `v292DfixGEN1cOn='1'`（既定 OFF。AUTOCLEAN1 も On の端末だけ）・kill `v292DfixGEN1cOff='1'` が優先。消した世代の数と字数は記録 `v292DfixAUTOCLEAN1Log`（gens・genChars）と `autoclean()` に、見込みは `autoclean({ dryRun:true })` の gen に出る）。本体の写しがある物語の `__gen_` は、もともと段 1（FREE2）で一緒に消える。年齢はサーバーの時計（/api/auth/me の Date）だけで決める。1 日 1 回・1 回の getstory は 6 本まで。記録 `v292DfixAUTOCLEAN1Log`（件数と時刻だけ）。診断 `autoclean()`／`autoclean({ dryRun:true })`（消さない）。
+- AUTOCLEAN1（**既定 OFF**・端末の鍵 `v292DfixAUTOCLEAN1On='1'` の端末だけ〔アカウント単位ではない〕・kill `v292DfixAUTOCLEAN1Off='1'` と DISCARD2 の kill が優先。全員 ON はコードの `AC_DEFAULT_ON` の 1 行）：HOME だけで、削除から 7 日たった物語のスナップショットを DISCARD2 と同じ経路で自動で消す。GEN1 r3 (c)（GPT #127-UT 1(c)）から、本体の写しが無い物語の `__gen_` も同じ実行で捨てる（鍵の id の完全一致・iso2 の持ち主の記録が一致・世代に別の物語の指紋なし・Vault／パスコードでない・サーバーの墓標と 7 日。fix562 の DISCARD2 の許可は AUTOCLEAN1 の proof（acGen）のときだけ。手動の DISCARD2 は変わらない。r4：専用の On 鍵 `v292DfixGEN1cOn='1'`（既定 OFF。AUTOCLEAN1 も On の端末だけ）・kill `v292DfixGEN1cOff='1'` が優先。消した世代の数と字数は記録 `v292DfixAUTOCLEAN1Log`（gens・genChars）と `autoclean()` に、見込みは `autoclean({ dryRun:true })` の gen に出る）。本体の写しがある物語の `__gen_` は、もともと段 1（FREE2）で一緒に消える。年齢はサーバーの時計（/api/auth/me の Date）だけで決める。1 日 1 回・1 回の getstory は 6 本まで。記録 `v292DfixAUTOCLEAN1Log`（件数と時刻だけ）。診断 `autoclean()`／`autoclean({ dryRun:true })`（消さない）。AUTOCLEAN1 r4：記録の各回に、断った理由の名前と数（`why`。段 1 の FREE2 の理由は `f2:`・段 1 のサーバーの答えは `s1:`・段 2 は `s2:`・本体も控えも無い物語は `nothing-held`）・調べた件数（`seen`）・getstory の本数（`q`）・7 日以上の候補の数（`aged`）・残り（`more`）を足す（内訳は直近 10 回分まで・鍵名・id・本文は入れない）。`autoclean({ dryRun:true })` は、サーバーに聞かずに分かる内訳（`breakdown`）と次の 1 回の見込みを返す。進みの見直しは端末の鍵 `v292DfixAUTOCLEAN1Pace`（既定 OFF。`a`＝0 件で終わって残りがある回は、30 分以上あけて次の HOME で続きから・進みの無いまま候補を 1 周したら止める／`b`＝消せて残りがある回のあと、同じ HOME で 1 回だけ続ける／`1`＝両方。どちらも 24 時間の getstory は 18 本まで。鍵が無ければ今までどおり 1 日 1 回・6 本）。
 
 ### 2.7 Vault（物語を隠す）・ユーザー分離（危険領域）
 
@@ -1424,7 +1424,7 @@
 | 393 | fixGHOST1 | `v292DfixGHOST1-legacy-slot-ghost.js` | home：fix889 の直後（index では読まない。GHOST1・GitHub `98cf4bc`） | `cf49f461` | 20261111-ghost1 | シナリオ・ホーム | `v292DfixGHOST1Off`（kill。既定 ON） |
 | 394 | fixKEY1 | `v292DfixKEY1-story-key.js` | index・home（KEY1・GitHub `e4d982e`） | `499b6c97` | 20261112-key1 | 保存・同期 | `v292DfixKEY1Off`（kill。既定 ON） |
 | 395 | fixSOL1 | `v292DfixSOL1-story-open-lock.js` | index（KEY1 の直前。SOL1・`e4d982e`） | `4617f25e` | 20261112-store1b | 保存・同期 | `v292DfixSOL1Off`（kill。既定 ON） |
-| 396 | fixSTORE1b | `v292DfixSTORE1b-device-free.js` | home：DL2 の直後（index では読まない。STORE1b・`a46c2f1`〜`72ab286`） | `9bec7d4c` | 20261116-autoclean1 | 削除・墓標 | `v292DfixSTORE1Off` `v292DfixFREE2Off` `v292DfixSTUCK1On` `v292DfixZT1On` `v292DfixDISCARD1Off` `v292DfixDISCARD2Off` `v292DfixAUTOCLEAN1On`（既定 OFF） |
+| 396 | fixSTORE1b | `v292DfixSTORE1b-device-free.js` | home：DL2 の直後（index では読まない。STORE1b・`a46c2f1`〜`72ab286`） | `c014cfbd` | 20261116-autoclean1r4 | 削除・墓標 | `v292DfixSTORE1Off` `v292DfixFREE2Off` `v292DfixSTUCK1On` `v292DfixZT1On` `v292DfixDISCARD1Off` `v292DfixDISCARD2Off` `v292DfixAUTOCLEAN1On`（既定 OFF） `v292DfixAUTOCLEAN1Pace`（既定 OFF） |
 | 397 | fixACTOR1 | `v292DfixACTOR1-input-actor.js` | index：HEROVOICE1 の直後（ACTOR1・`5b8a837`） | `1bb474f0` | 20261114-hv1 | 文章品質・プロンプト | `v292DfixACTOR1Off` `v292DfixACTOR1aOff` `v292DfixACTOR1bOn`（既定 OFF） |
 | 398 | fixLAT1 | `v292DfixLAT1-press-feedback.js` | index（LAT1・`f2b6d56`） | `43ec809d` | 20261112-lat1 | UI・画面 | `v292DfixLAT1Off` |
 | 399 | fixUI3 | `v292DfixUI3-polish.js` | index（UI3・`f2b6d56`） | `17bf53cc` | 20261112-ui3a | UI・画面 | `v292DfixUI3Off` |
@@ -1972,6 +1972,7 @@
 - `v292DfixCONTRACT1On` / `v292DfixCONTRACT1Off` — fixCONTRACT1（実験・既定 OFF）
 - `v292DfixDISCARD2Off` — fixSTORE1b, fix562（DISCARD2。手動専用）
 - `v292DfixAUTOCLEAN1On` / `v292DfixAUTOCLEAN1Off` — fixSTORE1b（AUTOCLEAN1。既定 OFF・端末の鍵）
+- `v292DfixAUTOCLEAN1Pace` — fixSTORE1b（AUTOCLEAN1 r4 の進みの見直し。既定 OFF。`a`／`b`／`1`。24 時間の getstory は 18 本まで。AUTOCLEAN1 の On と kill が先）
 - `v292DfixEYE1Off` / `v292DfixLEG1Off` — fix414（EYE1・LEG1 r2。既定 ON）
 - `v292DfixRW1Off` — fix459, fix465（RW1。既定 ON）
 - `v292DfixAPPX1Off` — fixLC1, fixICONUX2（APPX1。既定 ON）
