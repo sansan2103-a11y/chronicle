@@ -1004,7 +1004,8 @@
     if (now - at > S1_TTL_MS) return no('proof-stale');
     var k = String(req.key == null ? '' : req.key);
     var so = K1.storyOf(k);
-    if (!so || so.kind !== 'snapshot' || so.id !== sid) return no('key-not-story-snapshot');
+    var genOk = !!(so && so.kind === 'gen' && so.id === sid && p.acGen === true && k === '__gen_chr6_slot_' + sid && lsg('v292DfixGEN1cOff') !== '1' && lsg('v292DfixGEN1cOn') === '1');   /* ★GEN1 r4 (c): AUTOCLEAN1 の proof・専用の On 鍵 */
+    if (!genOk && (!so || so.kind !== 'snapshot' || so.id !== sid)) return no('key-not-story-snapshot');
     if (d2BodyPresent(sid)) return no('story-body-present');
     var it = null, ks = p.keys;
     if (Object.prototype.toString.call(ks) !== '[object Array]') return no('proof-keys-missing');
@@ -1119,7 +1120,8 @@
     var isBk = k.indexOf('chr6_bk_') === 0, isMan = k.indexOf('chr6_snap_') === 0;
     if (intent === D2_INTENT){   /* ★DISCARD2: その物語のスナップショットだけ・本体が無いときだけ「保護しない」。ほかは全部「保護」 */
       var so2 = K1.storyOf(k);
-      if (!so2 || so2.kind !== 'snapshot' || so2.id !== sid) return yes(true, 'not-this-story-snapshot');
+      var gen2 = !!(so2 && so2.kind === 'gen' && so2.id === sid && p.acGen === true && k === '__gen_chr6_slot_' + sid && lsg('v292DfixGEN1cOff') !== '1' && lsg('v292DfixGEN1cOn') === '1');   /* ★GEN1 r4 (c) */
+      if (!gen2 && (!so2 || so2.kind !== 'snapshot' || so2.id !== sid)) return yes(true, 'not-this-story-snapshot');
       if (p0bKeyNamed('chr6_slot_' + sid)) return yes(true, 'story-body-present');
       if (isMan){ var m2 = null; try { m2 = JSON.parse(typeof it.value === 'string' ? it.value : 'null'); } catch(e){ m2 = null; } if (!m2 || String(m2.slotId) !== sid) return yes(true, 'manifest-owner-mismatch'); }
       return yes(false, 'snapshot-of-tombstoned-story'); }

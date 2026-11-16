@@ -494,7 +494,7 @@
 |---|---|---|---|
 | fix246 | `i35` | per-story の付随データ（fix77 状態・longmem・会話ログ抽出など）を `localStorage` の読み書きの段階で物語ごとのキーへ振り分ける | `v292Dfix783Off` |
 | fix228 | `i109` | スロットの自動世代バックアップ（直近 3 世代 `__gen_<slotKey>`）と巻き戻り検知。`window.__v292Restore()` | `v292SlotGenOff` |
-| GEN1 | index（fix228 の直後） | 既定 OFF。__gen_ の合計（キー名＋値の字数）が 400,000（ソフト上限）を超え、かつ保護される分だけでは超えないときだけ、生きた行・開いていない（この画面・active_slot・10 分以内・Web Lock）・同期の印 CLEAN・f911／f697p／rescue／dl2conflict／fix750／fix587 の印なし・Vault／パスコードでない物語の __gen_ を、最後に開いたのが古い順に、1 回の実行で 1 本だけ最新 1 世代へ減らす（キーは消さない）。世代の指紋が別の物語・読めない（所属不明）、削除済みの物語、既定の chr6 は対象外。GPT #127-UR の条件。`dryRun()` は読むだけ（本数と字数だけ）。GPT #127-UN | `v292DfixGEN1On` `v292DfixGEN1Off` |
+| GEN1 | index（fix228 の直後） | 既定 OFF。__gen_ の合計（キー名＋値の字数）が 400,000（ソフト上限）を超え、かつ保護される分だけでは超えないときだけ、生きた行・開いていない（この画面・active_slot・10 分以内・Web Lock）・同期の印 CLEAN・f911／f697p／rescue／dl2conflict／fix750／fix587 の印なし・Vault／パスコードでない物語の __gen_ を、最後に開いたのが古い順に、1 回の実行で 1 本だけ最新 1 世代へ減らす（キーは消さない）。世代の指紋が別の物語・読めない（所属不明）、削除済みの物語、既定の chr6 は対象外。GPT #127-UR の条件。r4（独立レビュー）：旧 id（a・b・c・default・chr6）と形の違う id は対象外・前回の続きから回し、確かめられなかった物語は印・本体・世代が変わるまで聞かない・自動の run は 24 時間に 1 回。r3（GPT #127-UT）：所属は鍵の id の完全一致＋アカウント確定（iso2 の持ち主の記録が一致）だけで認め、記録が無ければ残す。同期は同期の印 CLEAN・lastConfirmed（rev と fingerprint）・端末の内容の V2 hash の一致に加え、既存の getStoryV2Once で rev と serverHash の一致まで確かめる（1 回 3 本まで・数える）。本体の写しが無い・読めない・世代より短いときは世代を全部残す。残すのは最新の有効な 1 世代。`dryRun()` は書き込み 0（Promise・数と理由コードだけ・getstory の本数も返す）。GPT #127-UN | `v292DfixGEN1On` `v292DfixGEN1Off` |
 | fix525 | `i298` | タブの所有権ピン（他タブの切替で自分の物語を他スロットへ書かない） | `v292Dfix525Off` |
 | fix527 | `i60` | 開いている物語の真実を URL の `?story=` にする（`chr6_active_slot` は互換用ミラー）。83 で sha `2ee15cb3`・?cb=`20261101-bundle83-flow-c`：「🏠 ホーム」の押下を先に FLW5 へ渡す。FLW5（83 の番号で `i361`・sha `c3679050`）＝保存が書く形（保存先の妥当な origin を含む）で比べ、意味の無い差（origin・`cast.av2.known.*.appeared`）だけを外して同じなら書かない。DIRTY の印には触れない（② は GPT #127-PG で外した）。kill `v292DfixFLW5Off`。**93-e（OPEN1）で sha `8c62d316`・?cb=`20261107-open1`**：ISO1 の関門が掛かっているあいだは `touchOpened`／`lastOpenedAt` を書かない。fix889 の関門が掛かっているときは解除まで待つ（最大約 60 秒・250 ms ごとに確認）。解除後にだけ書く | `v292Dfix527Off`・`v292DfixFLW5Off` |
 | fix543 | `i36` | 保存（setItem）の失敗を無言にしない。物語の保存失敗はトースト | `v292Dfix543Off` |
@@ -583,7 +583,7 @@
 - 診断：`window.__v292DfixSTORE1b.status()`／`.dryRun()`（消さない）。
 #### DISCARD2 / AUTOCLEAN1 — 削除済みの物語のスナップショットを捨てる（11-15〜11-16・GitHub `ad76fd4`・`a0e0323`・STORE1b・fix562・fix569）
 - DISCARD2（手動専用・UI なし・自動経路なし。kill `v292DfixDISCARD2Off='1'`〔fix562 も断る〕・`v292DfixSTORE1Off='1'`）：削除済みの物語のスナップショット（`chr6_snap_`／`chr6_snapd_`）だけを捨てる。持ち主の id は KEY1 の完全一致。manifest が読めない・id が合わない・ほかの物語の manifest が指している組は unknown-owner として消さない。本体が残る物語（live）・DISCARD1 の端末側の条件（Vault・墓標の行がちょうど 1・別アカウント・最近開いた・印が CLEAN でない・送信中 等）・story-open の Lock があれば止める。実行は物語ごとに Lock の中で getstory（deleted===true）を取り直し、実体 → manifest の順に fix562（intent `snapshot-discard`）→ fix569 tryDeleteExact で 1 本ずつ。meta の墓標・`chr6_bk_`・`__gen_`・本体・サイドストアには触らない。記録 `v292DfixDISCARD2Log`。FREE2・DISCARD1 は変えない。
-- AUTOCLEAN1（**既定 OFF**・端末の鍵 `v292DfixAUTOCLEAN1On='1'` の端末だけ〔アカウント単位ではない〕・kill `v292DfixAUTOCLEAN1Off='1'` と DISCARD2 の kill が優先。全員 ON はコードの `AC_DEFAULT_ON` の 1 行）：HOME だけで、削除から 7 日たった物語のスナップショットを DISCARD2 と同じ経路で自動で消す。年齢はサーバーの時計（/api/auth/me の Date）だけで決める。1 日 1 回・1 回の getstory は 6 本まで。記録 `v292DfixAUTOCLEAN1Log`（件数と時刻だけ）。診断 `autoclean()`／`autoclean({ dryRun:true })`（消さない）。
+- AUTOCLEAN1（**既定 OFF**・端末の鍵 `v292DfixAUTOCLEAN1On='1'` の端末だけ〔アカウント単位ではない〕・kill `v292DfixAUTOCLEAN1Off='1'` と DISCARD2 の kill が優先。全員 ON はコードの `AC_DEFAULT_ON` の 1 行）：HOME だけで、削除から 7 日たった物語のスナップショットを DISCARD2 と同じ経路で自動で消す。GEN1 r3 (c)（GPT #127-UT 1(c)）から、本体の写しが無い物語の `__gen_` も同じ実行で捨てる（鍵の id の完全一致・iso2 の持ち主の記録が一致・世代に別の物語の指紋なし・Vault／パスコードでない・サーバーの墓標と 7 日。fix562 の DISCARD2 の許可は AUTOCLEAN1 の proof（acGen）のときだけ。手動の DISCARD2 は変わらない。r4：専用の On 鍵 `v292DfixGEN1cOn='1'`（既定 OFF。AUTOCLEAN1 も On の端末だけ）・kill `v292DfixGEN1cOff='1'` が優先。消した世代の数と字数は記録 `v292DfixAUTOCLEAN1Log`（gens・genChars）と `autoclean()` に、見込みは `autoclean({ dryRun:true })` の gen に出る）。本体の写しがある物語の `__gen_` は、もともと段 1（FREE2）で一緒に消える。年齢はサーバーの時計（/api/auth/me の Date）だけで決める。1 日 1 回・1 回の getstory は 6 本まで。記録 `v292DfixAUTOCLEAN1Log`（件数と時刻だけ）。診断 `autoclean()`／`autoclean({ dryRun:true })`（消さない）。
 
 ### 2.7 Vault（物語を隠す）・ユーザー分離（危険領域）
 
@@ -1445,7 +1445,7 @@
 | 413 | fixPRUNE3 | `v292DfixPRUNE3-sys-prune3.js` | index の先頭近く（HEROVOICE1 の後。PRUNE3・`e5d5d30`） | `ee3d8b9e` | 20261115-prune3 | 文章品質・プロンプト | `v292DfixPRUNE3On`（実験・既定 OFF） `v292DfixPRUNE3Off` `v292DfixPRUNE3Parts` |
 | 414 | fixHDRNL1 | `v292DfixHDRNL1-sys-header-newline.js` | index の先頭近く（PRUNE3 の直前。HDRNL1・`e5d5d30`） | `ecbc38cc` | 20261115-hdrnl1 | 文章品質・プロンプト | `v292DfixHDRNL1Off`（kill。既定 ON） |
 | 415 | fixCONTRACT1 | `v292DfixCONTRACT1-scene-contract.js` | index の先頭近く（HEROVOICE1 の直後。CONTRACT1・`9e585fb`） | `31752391` | 20261116-contract1 | 文章品質・プロンプト | `v292DfixCONTRACT1On`（実験・既定 OFF） `v292DfixCONTRACT1Off` |
-| 416 | fixGEN1 | `v292DfixGEN1-gen-budget.js` | index：fix228 の直後（GEN1） | `b57e40f2` | 20261116-gen1r2 | 保存・同期 | `v292DfixGEN1On`（既定 OFF） `v292DfixGEN1Off` |
+| 416 | fixGEN1 | `v292DfixGEN1-gen-budget.js` | index：fix228 の直後（GEN1） | `9769f4f2` | 20261116-gen1r4 | 保存・同期 | `v292DfixGEN1On`（既定 OFF） `v292DfixGEN1Off` |
 
 ## 付録B　ファイルはあるが読み込まれていないもの（＝本番で動いていない）
 
@@ -1929,6 +1929,7 @@
 - `v292DfixHOLDNOTE2Off` — fixHOLDNOTE2（状態ごとの保存停止の知らせを出さない＝従来どおり）
 - `v292DfixSTORYSIZE1Off` — fixSTORYSIZE1（物語の大きさを測らない・止めない・知らせない＝従来どおり）
 - `v292DfixGEN1On` / `v292DfixGEN1Off` — fixGEN1（On で __gen_ の予算を有効にする。Off は dryRun も含めて何もしない）
+- `v292DfixGEN1cOn` / `v292DfixGEN1cOff` — fixSTORE1b, fix562（GEN1 (c)。On は既定 OFF で、AUTOCLEAN1 も On のときだけ削除済みの物語の `__gen_` を捨てる。Off が優先）
 - `v292DfixF850OrdOff` — fix850（F850Ord。読み込みの順の待ちをしない）
 - `v292Dfix850AOff` — fix850（FIX850A。腕・手の負傷でない動作も従来どおり制約の材料にする）
 - `v292DfixFANOUT1Off` — features, fix80（FANOUT1。土台の同時送信・上限なしの出し直し）

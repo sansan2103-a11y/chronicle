@@ -1329,7 +1329,23 @@
       gp2.parts.sort(); var order = gp2.parts.concat(gp2.man ? [gp2.man] : []);   /* 実体 → manifest（途中で止まっても manifest が残り、次の実行で続きを片づける） */
       for (var q = 0; q < order.length; q++) { var v = vals[order[q]] !== undefined ? vals[order[q]] : g(env, order[q]); out.keys.push(order[q]); out.vals.push(v); out.chars += order[q].length + (v == null ? 0 : v.length); }
       out.groups++; }
+    if (env.acGen === true && g(env, 'chr6_slot_' + id) == null) { var gk = '__gen_chr6_slot_' + id, gv = g(env, gk);   /* ★GEN1 r3 (c) */
+      if (gv != null) { if (acGenOK(id, env, gv)) { out.keys.push(gk); out.vals.push(gv); out.chars += gk.length + gv.length; out.gen = 1; } else { out.genKept = 1; } } }
     return out;
+  }
+  /* ★GEN1 r3 (c)（GPT #127-UT 1(c)）: AUTOCLEAN1 の段 2 で、本体の写しが無い削除済みの物語の __gen_ も捨てる対象に足す。
+     AUTOCLEAN1 の実行（env.acGen）のときだけ。r4: 専用の On 鍵 v292DfixGEN1cOn='1'（既定 OFF）も要る。鍵 __gen_chr6_slot_<id> の完全一致・アカウントが確定し iso2 の持ち主の記録が一致・
+     世代が読めて別の物語の指紋が無い・Vault／パスコードでない、の全部が確かめられたときだけ。手動の DISCARD2 は変わらない。kill: v292DfixGEN1cOff='1' */
+  function acGenOK(id, env, gv) {
+    try { if (g(env, 'v292DfixGEN1cOff') === '1' || g(env, 'v292DfixGEN1cOn') !== '1') return false; if (vaultBlock(String(id), env)) return false;
+      var I = env.iso2 || (root && root.__v292Diso2); if (!I || typeof I.owner !== 'function' || typeof I.stampOf !== 'function') return false;
+      var o = I.owner(); if (!o || o.bad || typeof o.now !== 'string' || !o.now || !o.docKind || o.docKind === 'anon' || o.docKind === 'conflict' || (o.doc && o.doc !== o.now)) return false;
+      var sp = I.stampOf(id, 's'); if (!sp || typeof sp.c !== 'string' || sp.c !== o.now || (sp.w != null && sp.w !== o.now)) return false;
+      var a = J(gv, null); if (!isArr(a) || !a.length) return false;
+      for (var i = 0; i < a.length; i++) { var x = a[i]; if (!x || typeof x.data !== 'string') return false; var d = J(x.data, null); if (!d || typeof d !== 'object') return false;
+        var c = [d.slotId, d.storyId, d._slot, d.cfg && d.cfg.slotId, d.cfg && d.cfg.storyId, d.scene && d.scene.slotId, d.scene && d.scene.storyId];
+        for (var j = 0; j < c.length; j++) if (typeof c[j] === 'string' && c[j] && c[j] !== String(id) && c[j] !== 'chr6_slot_' + id) return false; }
+      return true; } catch (e) { return false; }
   }
   function d2Local(id, env) {
     if (!ID_RE.test(String(id))) return 'id-shape';
@@ -1403,7 +1419,7 @@
                   var I = env.inv, G = env.gate;
                   if (!I || typeof I.deletePolicy !== 'function' || typeof I.discard2Arm !== 'function' || typeof I.discard2Disarm !== 'function' || typeof I._hash !== 'function') return fin('policy-unavailable');
                   if (!G || typeof G.tryDeleteExact !== 'function') return fin('gate-unavailable');
-                  var proof = { v: 1, kind: 'DISCARD2', ack: D1_ACK, runId: 'd2-' + issuedAt + '-' + (++runSeq), storyId: id, accountId: a0, accountIdAfter: a2,
+                  var proof = { v: 1, kind: 'DISCARD2', ack: D1_ACK, acGen: env.acGen === true, runId: 'd2-' + issuedAt + '-' + (++runSeq), storyId: id, accountId: a0, accountIdAfter: a2,
                                 serverRev: se.rev, serverDeleted: true, authority: se.authority, issuedAt: issuedAt,
                                 keys: pl.keys.map(function (k, j) { return { key: k, bytes: pl.vals[j].length, hash: I._hash(pl.vals[j]), value: pl.vals[j] }; }) };
                   var armed = I.discard2Arm(proof); if (!armed) return fin('arm-refused');
@@ -1419,6 +1435,7 @@
                       var rr = null; try { rr = G.tryDeleteExact({ key: k, expectedBytes: cur.length, expectedHash: b.hash, intent: 'snapshot-discard', path: 'DISCARD2', reason: 'snapshot-discard' }); } catch (eG) { rr = null; }
                       if (!rr || rr.ok !== true || rr.deleted !== true || g(env, k) != null) { out.gateCode = rr && rr.code; return fin('gate-refused'); }
                       out.removed++; out.chars += k.length + cur.length;
+                      if (k.indexOf('__gen_') === 0) { out.genRemoved = (out.genRemoved || 0) + 1; out.genChars = (out.genChars || 0) + k.length + cur.length; }   /* ★GEN1 r4 (c): 数だけ */
                     }
                   } finally { try { I.discard2Disarm(); } catch (eD) {} }
                   out.ok = true; out.groups = pl.groups; return fin('discarded');
@@ -1477,13 +1494,15 @@
     var o = acLog(env), now = env.now();
     if (typeof o.lastTry === 'number' && o.lastTry > 0 && now - o.lastTry < AC_GAP_MS && now >= o.lastTry) return Promise.resolve({ code: 'not-due' });
     o.lastTry = now; try { env.ls.setItem(AC_LOGK, JSON.stringify(o)); } catch (eW) { return Promise.resolve({ code: 'log-unwritable' }); }   /* 記録できなければ動かない（毎回動くのを防ぐ） */
-    var e2 = {}; for (var k in env) if (Object.prototype.hasOwnProperty.call(env, k)) e2[k] = env[k]; e2.d2MinAgeMs = AC_MIN_AGE_MS; e2.only = null; e2.purge = false;
+    var e2 = {}; for (var k in env) if (Object.prototype.hasOwnProperty.call(env, k)) e2[k] = env[k]; e2.d2MinAgeMs = AC_MIN_AGE_MS; e2.only = null; e2.purge = false; e2.acGen = g(env, 'v292DfixGEN1cOn') === '1' && g(env, 'v292DfixGEN1cOff') !== '1';   /* ★GEN1 r4 (c): 専用の On 鍵（既定 OFF）＋ kill */
     var res = { code: null, freed: 0, freedChars: 0, stories: 0, snapshots: 0, chars: 0, failed: 0, failedCode: null, skipped: {}, queries: 0 };
     var c2 = {}; for (var k2 in ctx) if (Object.prototype.hasOwnProperty.call(ctx, k2)) c2[k2] = ctx[k2];
     c2.getStory = function (id) { res.queries++; return ctx.getStory(id); };
     return acWalk(e2, c2, res).then(function () {
       if (!res.code) res.code = res.failed ? 'stopped' : 'done';
-      var o2 = acLog(env); o2.runs.push({ at: now, freed: res.freed, freedChars: res.freedChars, stories: res.stories, snapshots: res.snapshots, chars: res.chars, failed: res.failed, code: String(res.code) }); while (o2.runs.length > 20) o2.runs.shift();
+      var o2 = acLog(env); var run1 = { at: now, freed: res.freed, freedChars: res.freedChars, stories: res.stories, snapshots: res.snapshots, chars: res.chars, failed: res.failed, code: String(res.code) };
+      if (e2.acGen === true) { run1.gens = res.gens || 0; run1.genChars = res.genChars || 0; }   /* ★GEN1 r4 (c): (c) が On のときだけ。数だけ */
+      o2.runs.push(run1); while (o2.runs.length > 20) o2.runs.shift();
       try { env.ls.setItem(AC_LOGK, JSON.stringify(o2)); } catch (eW2) {} return res; }, function () { return { code: 'threw' }; });
   }
   var AC_UNKNOWN = { 'server-unreachable': 1, 'server-not-ok': 1, 'server-authority': 1, 'server-rev': 1, 'server-id-mismatch': 1, 'server-partial': 1, 'no-account': 1, 'principal-changed': 1, 'no-server-time': 1 };
@@ -1512,13 +1531,13 @@
       return step.then(function (x) {
         if (res.failed) return;
         if (x && x.freedNow) touched++;
-        if (!(x && x.go2) || g(e2, 'chr6_slot_' + id) != null || !snapIds[id]) return next();
+        if (!(x && x.go2) || g(e2, 'chr6_slot_' + id) != null || (!snapIds[id] && !(e2.acGen === true && g(e2, '__gen_chr6_slot_' + id) != null))) return next();   /* ★GEN1 r3 (c) */
         if (res.queries + 1 > AC_QMAX) { res.budgetLeft = true; return; }
         var lb = d2Local(id, e2); if (lb) { acSkip(res, d2Cat(lb)); return next(); }
         var o2 = d2Owners(e2), pl = d2Plan(id, e2, o2, d2Refs(e2, o2, id)); if (!pl.keys.length) return next();
         return Promise.resolve(ctx.lockHeld(id)).then(function (h) { if (h !== false) { acSkip(res, 'active'); return next(); }   /* 別のタブで開いている（DISCARD2 の一覧と同じ除外） */
         return d2One(id, e2, ctx).then(function (y) {
-          if (y && y.ok) { res.stories++; res.snapshots += y.groups; res.chars += y.chars; if (!(x && x.freedNow)) touched++; return next(); }
+          if (y && y.ok) { res.stories++; res.snapshots += y.groups; res.chars += y.chars; if (e2.acGen === true) { res.gens = (res.gens || 0) + (y.genRemoved || 0); res.genChars = (res.genChars || 0) + (y.genChars || 0); } if (!(x && x.freedNow)) touched++; return next(); }
           if (y && D2_SKIP[y.code] && !y.removed) { acSkip(res, y.code); return next(); }
           if (y && y.code === 'nothing-left') return next();
           stop((y && y.code) || 'threw'); if (y && y.policyWhy) res.policyWhy = String(y.policyWhy);
@@ -1879,9 +1898,11 @@
       if (opt && opt.dryRun === true) { if (!ready()) return Promise.resolve({ notReady: true }); var e = benv(), cx = bctx();
         var c = candidates(e), aged = c.filter(function (id) { return d2AgeBlock(d2LocalAt(id, e), { d2MinAgeMs: AC_MIN_AGE_MS, now: e.now }) == null; });
         var lg = acLog(e), due = !(typeof lg.lastTry === 'number' && lg.lastTry > 0 && e.now() - lg.lastTry < AC_GAP_MS && e.now() >= lg.lastTry);
-        return Promise.resolve(cx.who()).then(function (a) { var n = cx.serverNow(); return { code: 'dry', on: acOnGet(lsg), account: !!a, serverTime: typeof n === 'number' && n > 0, candidates: c.length, aged: aged.length, due: due, days: AC_DAYS }; }); }
+        var gOn = lsg('v292DfixGEN1cOn') === '1' && lsg('v292DfixGEN1cOff') !== '1', gN = 0, gC = 0;   /* ★GEN1 r4 (c): 見込み（端末の下見だけ。サーバーの墓標と年齢は実行の時に確かめる） */
+        if (gOn) aged.forEach(function (id) { if (g(e, 'chr6_slot_' + id) != null) return; var gk = '__gen_chr6_slot_' + id, gv = g(e, gk); if (gv == null) return; var e3 = {}; for (var kk in e) if (Object.prototype.hasOwnProperty.call(e, kk)) e3[kk] = e[kk]; if (d2Local(id, e3)) return; if (!acGenOK(id, e3, gv)) return; gN++; gC += gk.length + gv.length; });
+        return Promise.resolve(cx.who()).then(function (a) { var n = cx.serverNow(); return { code: 'dry', on: acOnGet(lsg), account: !!a, serverTime: typeof n === 'number' && n > 0, candidates: c.length, aged: aged.length, due: due, days: AC_DAYS, gen: { on: gOn, candidates: gN, chars: gC } }; }); }
       if (opt && opt.run === true) { if (!acOnGet(lsg)) return Promise.resolve({ code: 'off' }); if (!ready()) return Promise.resolve({ notReady: true });
-        return acRunOnce(benv(), bctx()).then(function (r) { st.autoclean = { code: r.code, freed: r.freed || 0, stories: r.stories || 0, snapshots: r.snapshots || 0, failed: r.failed || 0, manual: true }; return r; }); }
+        return acRunOnce(benv(), bctx()).then(function (r) { st.autoclean = { code: r.code, freed: r.freed || 0, stories: r.stories || 0, snapshots: r.snapshots || 0, failed: r.failed || 0, manual: true, gens: r.gens || 0, genChars: r.genChars || 0 }; return r; }); }
       return { days: AC_DAYS, on: acOnGet(lsg), defaultOn: AC_DEFAULT_ON, last: st.autoclean, log: J(lsg(AC_LOGK) || 'null', null) }; },
     status: function () { return JSON.parse(JSON.stringify({ version: VERSION, stuck1: { v: SVERSION, on: benv().stuck1 === true }, ready: ready(), opened: st.opened, surveys: st.surveys, freed: st.freed, last: st.last, lastSurvey: st.lastSurvey, dry: st.dry, memLog: memLog })); }
   };
@@ -1909,7 +1930,7 @@
     try { if (/[?&]story=/.test(String(root.location.search || ''))) { acDone = true; return; } } catch (e) {}
     if (!ready() || !acIdle()) { if (++acTries < AC_TRIES) root.setTimeout(acTick, AC_RETRY_MS); else st.autoclean = { code: 'not-idle' }; return; }
     acDone = true;
-    var go = function () { acRunOnce(benv(), bctx()).then(function (r) { st.autoclean = { code: r.code, freed: r.freed || 0, stories: r.stories || 0, snapshots: r.snapshots || 0, failed: r.failed || 0 }; }, function () { st.autoclean = { code: 'threw' }; }); };
+    var go = function () { acRunOnce(benv(), bctx()).then(function (r) { st.autoclean = { code: r.code, freed: r.freed || 0, stories: r.stories || 0, snapshots: r.snapshots || 0, failed: r.failed || 0, gens: r.gens || 0, genChars: r.genChars || 0 }; }, function () { st.autoclean = { code: 'threw' }; }); };
     try { if (typeof root.requestIdleCallback === 'function') root.requestIdleCallback(go, { timeout: 10000 }); else go(); } catch (e) { go(); }
   }
   function acSchedule() { if (!acOnGet(lsg)) return;   /* r3: OFF の端末では timer も置かない（土台と同じ） */ root.setTimeout(acTick, (+lsg('v292DfixAUTOCLEAN1DelayMs') > 0 ? +lsg('v292DfixAUTOCLEAN1DelayMs') : AC_DELAY_MS)); }
