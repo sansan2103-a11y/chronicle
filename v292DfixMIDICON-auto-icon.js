@@ -388,7 +388,6 @@
     played: {}, seen: {}, seenN: 0, alias: {}, caps: null, mmRetry: {}, mmWait: 0, noCand: null, rosRetry: {} };   /* ★mx3-e: mmRetry[n] = the one re-run of turn n was used; mmWait = not before */   /* ★mx3-c: played[n] = turn n was played on this page (+1 turn with content never seen on this page); seen = content hashes; alias = hash(handle) → extra_id; caps = the Worker's settings */
   function setExtras(id, j) {
     if (!j || !Array.isArray(j.extras)) return;
-    X.mxShort = j.mxShort === true;   /* ★MXSHORT1: the Worker (bill1r2) says it checks `short_tail` itself (true only when ON) */
     X.story = id; X.at = Date.now(); X.listed = true; X.turnCount = (typeof j.turn_count === 'number') ? j.turn_count : null;
     if (j.caps && typeof j.caps === 'object') { var cp = {}; Object.keys(CAP).forEach(function (k) { var v = j.caps[k]; if (typeof v === 'number' && v >= 0 && v === Math.floor(v)) cp[k] = v; }); X.caps = cp; }   /* ★mx3-c: follow the Worker's cap settings */
     X.extras = j.extras.filter(function (e) { return e && typeof e.extra_id === 'string' && MX_ID_RE.test(e.extra_id) && typeof e.asset_id === 'string' && typeof e.handle === 'string'; })
@@ -445,48 +444,6 @@
      名簿の呼び名が一般名（老人・少女 等）で、本文の <say who> か会話ログの話者に、その語で終わる記述名（網を手入れする老人）がちょうど 1 つあり、
      名簿・長期記憶にその語で終わる別の呼び名が無いときだけ、候補を長い記述名にする（名簿の呼び名は表示の別名＝extraFor だけ）。保存・本文・sys には何も書かない。
      規則（記述名の 3 ターン・見た目・同一性・上限）と Worker の確認はそのまま。 */
-  /* ★MXSHORT1（laneAUTOICON2・2026-11-16・GPT #127-VB 4・既定 OFF: localStorage v292DfixMXSHORT1On='1'・kill v292DfixMXSHORT1Off='1'。毎回評価）:
-     名簿の呼び名が記述名 H（網を繕う老人）で、本文・話者では語尾の一般名 c（老人）だけで書かれることが多いとき、次が全部そろえば c の話者と c の文も H の証拠に数える:
-       c が登録キャラの名前・別名でない／名簿に H 以外で c で終わる呼び名（c そのものを含む）が無い／長期記憶と話者に H・c 以外で c で終わる呼び名が無い／
-       H が出たターンと c が出たターンをつなげると途切れない（1 ターンでも空けば別人かもしれない → 数えない）。外見・性別は書かない（数えるのは証拠だけ）。
-     Worker が同じ確認をする版（mx_list の答えの mxShort が true）のときだけ使う。送る項目は mx_ensure の short_tail（c の文字列）。README の契約を参照。
-     r2（Worker のレビューの 3 場面）: H が出た後に「老人がやってきた／現れた」等の新しい登場・「別の／もう一人の／見知らぬ老人」・台詞の中の「あの／その老人」・
-     「別の声／違う声」の回の「老人」の話者 → 別人かもしれないので数えない（迷ったら数えない）。数えるのは地の文（台詞の外）と話者だけ。 */
-  function short1On() { return lsGet('v292DfixMXSHORT1Off') !== '1' && lsGet('v292DfixMXSHORT1On') === '1'; }
-  var SH_NEW = /(?:やってき|やって来|現れ|姿を見せ|姿を現|入ってき|入って来|近づいてき|近づいて来|歩いてき|歩いて来|訪ね|訪れ|来た|来る)/;
-  var SH_OTHER = /(?:別の|もう一人の|もうひとりの|他の|ほかの|見知らぬ|知らない|一人の|ひとりの|新しい|二人目の|若い方の)$/;
-  var SH_REF = /(?:あの|その|例の|向こうの|さっきの|別の)$/;
-  var SH_VOICE = /(?:別の|もう一つの|もうひとつの|違う|知らない|聞き慣れない|聞き覚えのない)声/;
-  function shRaw(t) {   /* 地の文（台詞の外）と、台詞の中身を分ける（narrative の「」・plan の <say>） */
-    var n = (t && typeof t.narrative === 'string') ? t.narrative : '', pn = (t && t.plan && Array.isArray(t.plan.narrative)) ? t.plan.narrative.filter(function (x) { return typeof x === 'string'; }).join('\n') : '';
-    var q = []; n.replace(/「([^」]*)」/g, function (m, a) { q.push(a); return ''; }); pn.replace(/<say\b[^>]*>([\s\S]*?)<\/say>/g, function (m, a) { q.push(a); return ''; });
-    var narr = flat(n.replace(/「[^」]*」/g, '〃') + '\n' + pn.replace(/<say\b[^>]*>[\s\S]*?<\/say>/g, '〃').replace(/<[^>]{0,200}>/g, ''));
-    return { narr: narr, quotes: q.map(flat) };
-  }
-  function short1Of(nk, T, cast, bindings, ros, ST) {
-    var core = ''; for (var i = 1; i < nk.length - 1; i++) { var s = nk.slice(i); if (s.length >= 2 && generic(s)) { core = s; break; } }   /* the longest generic tail */
-    if (!core) return null;
-    if (identityA(cast, bindings, [core]) || aliasOfRegistered(core)) return null;
-    var ok = true;
-    (ros || []).forEach(function (e) { var h = e && typeof e.handle === 'string' ? norm(e.handle) : ''; if (h && h !== nk && endsWith(h, core)) ok = false; });
-    wiNames().forEach(function (h) { if (h && h !== nk && h !== core && endsWith(h, core)) ok = false; });
-    var tl = [], tc = [], raws = (ST || []).map(shRaw);
-    T.forEach(function (t, i2) { var who = t.says.concat(t.conv || []).map(norm), rw = raws[i2] || { narr: t.text, quotes: [] };
-      who.forEach(function (w) { if (w && w !== nk && w !== core && endsWith(w, core)) ok = false; });
-      var rest = rw.narr.split(nk).join('〃'), hasL = who.indexOf(nk) >= 0 || rw.narr.indexOf(nk) >= 0, hasC = who.indexOf(core) >= 0 || rest.indexOf(core) >= 0;
-      var k = rest.indexOf(core);
-      while (k >= 0) { var pre = rest.slice(Math.max(0, k - 8), k), post = rest.slice(k + core.length, k + core.length + 14);
-        if (SH_OTHER.test(pre)) ok = false;                                                              /* 「別の老人」「見知らぬ老人」 */
-        if (tl.length && /^(?:さん|ちゃん)?(?:が|は|も)/.test(post) && SH_NEW.test(post)) ok = false;     /* H の後で「老人がやってきた」＝新しい登場 */
-        k = rest.indexOf(core, k + 1); }
-      rw.quotes.forEach(function (q) { var j = q.indexOf(core); while (j >= 0) { if (SH_REF.test(q.slice(Math.max(0, j - 6), j)) || SH_OTHER.test(q.slice(Math.max(0, j - 8), j))) ok = false; j = q.indexOf(core, j + 1); } });   /* 台詞の「あの老人」 */
-      if (who.indexOf(core) >= 0 && SH_VOICE.test(rw.narr)) ok = false;                                  /* 「別の声」の回の「老人」の話者 */
-      if (hasL) tl.push(i2); if (hasC) tc.push(i2); });
-    if (!ok || !tl.length || !tc.length) return null;
-    var u = tl.concat(tc).filter(function (x, k2, a) { return a.indexOf(x) === k2; }).sort(function (a, b) { return a - b; });
-    for (var j = 1; j < u.length; j++) if (u[j] - u[j - 1] > 1) return null;
-    return core;
-  }
   function alias1On() { return lsGet('v292DfixMXALIAS1Off') !== '1' && lsGet('v292DfixMXALIAS1On') === '1'; }
   function wiNames() { try { var L = root.__longmem; var a = (L && L.raw && typeof L.raw.loadWorldInfo === 'function') ? L.raw.loadWorldInfo() : []; return (Array.isArray(a) ? a : []).filter(function (e) { return e && e.type === 'character' && typeof e.name === 'string'; }).map(function (e) { return norm(e.name); }); } catch (e) { return []; } }
   function alias1Of(core, T, cast, bindings, ros, e) {
@@ -524,8 +481,7 @@
       if (al && al.usable && !isDesc(c.nk)) { disp = c.key; c = { e: c.e, key: al.target, nk: al.tnk, vars: [] }; stats.aliasSpeaker++; }
       var al1 = (!disp && alias1On() && generic(c.nk)) ? alias1Of(c.nk, T, cast, bindings, ros, c.e) : null;   /* ★MXALIAS1 */
       if (al1) { disp = c.key; c = { e: c.e, key: al1.key, nk: al1.nk, vars: [] }; stats.alias1 = (stats.alias1 || 0) + 1; }
-      var sh1 = (!disp && X.mxShort === true && short1On() && !generic(c.nk) && isDesc(c.nk)) ? short1Of(c.nk, T, cast, bindings, ros, S.turns) : null;   /* ★MXSHORT1 */
-      var why = null, desc = isDesc(c.nk), f = [c.nk].concat(c.vars).concat(sh1 ? [sh1] : []), ev = null, mid = String(c.e.importance || '') === '中';   /* ★mx3-g (GPT #127-QW): 中 needs speaks-in-latest-turn + look word + ≥2 turns */
+      var why = null, desc = isDesc(c.nk), f = [c.nk].concat(c.vars), ev = null, mid = String(c.e.importance || '') === '中';   /* ★mx3-g (GPT #127-QW): 中 needs speaks-in-latest-turn + look word + ≥2 turns */
       var TT = mid ? T.map(function (t) { return { text: t.text, says: t.says.concat(t.conv || []), conv: t.conv }; }) : T;
       var ga = generic(c.nk) ? gaOk(c) : false; if (ga) desc = true;   /* ★iconx1 A */
       if (generic(c.nk) && !ga) why = gaWhyLast || 'GENERIC';
@@ -567,7 +523,7 @@
           }
           if (!row.why) {
             var traits = []; if (kind !== 'human') Object.keys(TRAIT_CUE).forEach(function (k) { if (traits.length < 4 && TRAIT_CUE[k].test(cue)) traits.push(k); });
-            C.push({ disp: disp, key: c.key, nk: c.nk, vars: ga ? [] : c.vars, desc: desc, last: ev ? T.length : 0, t: ev.t, lastHit: ga ? T.length - 1 : lastHitOf(T, f, desc), appearance: app, gender: gender, kind: kind, traits: traits }); if (ga) C[C.length - 1].ga = 1; if (sh1) C[C.length - 1].short = sh1;   /* ★MXSHORT1 */
+            C.push({ disp: disp, key: c.key, nk: c.nk, vars: ga ? [] : c.vars, desc: desc, last: ev ? T.length : 0, t: ev.t, lastHit: ga ? T.length - 1 : lastHitOf(T, f, desc), appearance: app, gender: gender, kind: kind, traits: traits }); if (ga) C[C.length - 1].ga = 1;
           }
         }
       }
@@ -764,7 +720,7 @@
   function ensureSend(id, n, p) {   /* ★W-MXREG: the request 2 of the turn, split out so the registered path uses the same answer handling */
       var args = { story_id: id, handle: p.key, expected_turn_count: n, appearance: p.appearance, kind: p.kind };
       if (p.reg) args.character_id = p.character_id;
-      if (p.vars.length) args.variants = p.vars; if (p.short) args.short_tail = p.short;   /* ★MXSHORT1 */ if (p.traits.length) args.traits = p.traits; if (p.gender) args.gender = p.gender;
+      if (p.vars.length) args.variants = p.vars; if (p.traits.length) args.traits = p.traits; if (p.gender) args.gender = p.gender;
       stats.ensure++; note({ kind: 'ENSURE', desc: p.desc, kind2: p.kind, nv: p.vars.length, nt: p.traits.length });
       call('portrait.mx_ensure', args, function (res, err2) {                  /* request 2 of 2 (write) — never resent */
         var rj = res && res.j, st = res && res.status, code = (rj && (rj.errorCode || rj.error)) || null, r2 = rec(), so2 = stOf(r2, id);
@@ -898,7 +854,6 @@
     dryRunReg: function (by) { var S = state(), id = sid(); if (!S || !id) return null; return regSelect(S, rec(), id, by || {}); },   /* ★MXREGFIX1: test / diagnosis (reads only, no request) */
     regDryRun: function (by) { var S = state(), id = sid(); if (!S || !id) return null; return regSelect(S, rec(), id, (by && typeof by === 'object') ? by : {}); },   /* ★W-MXREG diagnosis: by = { character_id: 1 } of characters that have a picture */   /* diagnosis / test only (an explicit action): skips the played-turn check; the Worker still requires the figure in its newest turn */
     promoExtra: promoExtra,   /* ★PROMOICON1 r2 */
-    __t2: { short1Of: short1Of, short1On: short1On, setMxShort: function (v) { X.mxShort = v === true; } },   /* ★MXSHORT1: test only */
     __t: { alias1On: alias1On, alias1Of: alias1Of, gaOk: gaOk, gaEvidence: gaEvidence, gaAnchors: gaAnchors, rosterCount: rosterCount, slotsU: slotsU, nhApp: nhApp, select: select, aliasInfo: aliasInfo, lastHitOf: lastHitOf, traceRun: traceRun, icfLocal: icfLocal, isRoleish: isRoleish, apposition: apposition, f641Live: f641Live, promotedSoon: promotedSoon, norm: norm, dispKey: dispKey, generic: generic, isDesc: isDesc, vis: vis, axes: axes, evidence: evidence, turnsOf: turnsOf, identityA: identityA, descIdentity: descIdentity, appearanceFrom: appearanceFrom, kindOf: kindOf, hitsIn: hitsIn, tailGender: tailGender }
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

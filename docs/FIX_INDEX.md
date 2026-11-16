@@ -250,6 +250,10 @@
 #### ECHO1 — 追加して撤去（11-14）
 - `5a13762` で既定 OFF（鍵 `v292DfixECHO1On`）として追加し、盲検 A/B で効果が無かったため `72a7237`（GPT #127-TR）で撤去した。HEAD のコードに ECHO1 は残っていない。
 
+#### ALIAS1・MXSHORT1・PACE1 — 実験 CLOSED・撤去（11-17）
+- ALIAS1（名簿の抽出に別名候補を足して数える shadow・fix307）と MXSHORT1（記述名の語尾の一般名を MIDICON の証拠に数える・short_tail）は、正しい別名候補 0・誤候補 23 で実験 CLOSED・撤去（GPT #127-VJ 1）。fix307 は ALIAS1 の前（`faed897`）とバイト同じに戻した。MIDICON は MXSHORT1 の部分だけを外した（BILL1c・TMPICON1 以後の変更は残す）。名簿抽出・MIDICON・STARTICON・PROMOICON1・MXALIAS1・LIM1b・BILL1c／BILL1c2・TMPICON1 は変えない。Worker 側の short_tail の受け口は別便。
+- PACE1a／PACE1b（`v292DfixPACE1-objective-presence.js`・既定 OFF の比較用）は不採用（GPT #127-VB 1）。index.html の読み込みとファイルを撤去した。「NPC が早く登場する」問題は未解決のまま（原因側から調べる）。
+
 #### CARD80 — 会話カードの文字数（11-15・GitHub `9a74d7d`・index.html と fix58）
 - 既定 ON・kill `v292DfixCARD80Off='1'`（従来の 80 字・送信バイト同一）。会話カードの台詞は最大 1000 字、主人公の SAY のカードは入力の全文。AI へ渡す recentDialogues は 1 発言 300 字で丸める（fix58 の card80Cap）。
 
@@ -1424,7 +1428,7 @@
 | 393 | fixGHOST1 | `v292DfixGHOST1-legacy-slot-ghost.js` | home：fix889 の直後（index では読まない。GHOST1・GitHub `98cf4bc`） | `cf49f461` | 20261111-ghost1 | シナリオ・ホーム | `v292DfixGHOST1Off`（kill。既定 ON） |
 | 394 | fixKEY1 | `v292DfixKEY1-story-key.js` | index・home（KEY1・GitHub `e4d982e`） | `499b6c97` | 20261112-key1 | 保存・同期 | `v292DfixKEY1Off`（kill。既定 ON） |
 | 395 | fixSOL1 | `v292DfixSOL1-story-open-lock.js` | index（KEY1 の直前。SOL1・`e4d982e`） | `4617f25e` | 20261112-store1b | 保存・同期 | `v292DfixSOL1Off`（kill。既定 ON） |
-| 396 | fixSTORE1b | `v292DfixSTORE1b-device-free.js` | home：DL2 の直後（index では読まない。STORE1b・`a46c2f1`〜`72ab286`） | `acc82dd2` | 20261116-vaultguard1r2 | 削除・墓標 | `v292DfixSTORE1Off` `v292DfixFREE2Off` `v292DfixSTUCK1On` `v292DfixZT1On` `v292DfixDISCARD1Off` `v292DfixDISCARD2Off` `v292DfixAUTOCLEAN1On`（既定 OFF） `v292DfixAUTOCLEAN1Pace`（既定 OFF） `v292DfixAUTOCLEAN1Days`（r6 から効かない） `v292DfixVCLEAN1On`（既定 OFF） |
+| 396 | fixSTORE1b | `v292DfixSTORE1b-device-free.js` | home：DL2 の直後（index では読まない。STORE1b・`a46c2f1`〜`72ab286`） | `69428e64` | 20261117-zt1b4 | 削除・墓標 | `v292DfixSTORE1Off` `v292DfixFREE2Off` `v292DfixSTUCK1On` `v292DfixZT1On` `v292DfixZT1DirtyOn`（既定 OFF） `v292DfixEXTRA1Off` `v292DfixDISCARD1Off` `v292DfixDISCARD2Off` `v292DfixAUTOCLEAN1On`（既定 OFF） `v292DfixAUTOCLEAN1Pace`（既定 OFF） `v292DfixAUTOCLEAN1Days`（r6 から効かない） `v292DfixVCLEAN1On`（既定 OFF） |
 | 397 | fixACTOR1 | `v292DfixACTOR1-input-actor.js` | index：HEROVOICE1 の直後（ACTOR1・`5b8a837`） | `1bb474f0` | 20261114-hv1 | 文章品質・プロンプト | `v292DfixACTOR1Off` `v292DfixACTOR1aOff` `v292DfixACTOR1bOn`（既定 OFF） |
 | 398 | fixLAT1 | `v292DfixLAT1-press-feedback.js` | index（LAT1・`f2b6d56`） | `43ec809d` | 20261112-lat1 | UI・画面 | `v292DfixLAT1Off` |
 | 399 | fixUI3 | `v292DfixUI3-polish.js` | index（UI3・`f2b6d56`） | `17bf53cc` | 20261112-ui3a | UI・画面 | `v292DfixUI3Off` |
@@ -1975,9 +1979,10 @@
 - `v292DfixHEROACT1On` / `v292DfixHEROACT1Off` / `v292DfixHEROACT1Log` — fixHEROACT1（既定 OFF・数えるだけ。入力に無い主人公の発話・行動を short／decision／unclear に分けて件数とターン番号だけ記録。本文を書き換えず sys にも何も足さない。GPT #127-VB 2）
 - `v292DfixLIM1bOff` — fixSTARTICON（LIM1b・既定 ON の kill。昇格の絵も物語単位の同じ枠で数える。既存の絵の再利用は数えない。GPT #127-VB 4b）
 - `v292DfixBILL1cOff` — fixSTARTICON, fixMIDICON, av2-data（BILL1c・既定 ON の kill。Worker v46.51 の PROVIDER_AUTH_FAILED／PROVIDER_BALANCE_EXHAUSTED を受けたら自動の絵の要求を 10 分止める〔メモリだけ・読み直しで解ける・手動の生成は止めない〕。BILL1c2＝知らせは「閉じる」まで残る帯を 1 回だけ・文言は端末が持ち残高不足と断定しない。GPT #127-VB 3・#127-VF 2）
-- `v292DfixMXSHORT1On` / `v292DfixMXSHORT1Off` — fixMIDICON（MXSHORT1・既定 OFF。独立レビューで別人統合の場面が残るため ON 禁止。Worker 側 CHR_MXSHORT1_ON も未設定）
+- `v292DfixMXSHORT1On` / `v292DfixMXSHORT1Off` — （撤去・コードは読まない。MXSHORT1 は実験 CLOSED・端末側を撤去（GPT #127-VJ 1）。Worker 側の short_tail／CHR_MXSHORT1_ON は別便）
 - `v292DfixLEAK1TagxOff` — fixLEAK1（TAGX1・既定 ON の kill。行頭が react／state＋who=＋別の欄名= の内部書式の行だけを本文から除く。GPT #127-VB 2(3)）
-- `v292DfixALIAS1On` / `v292DfixALIAS1Off` — fix307（ALIAS1 shadow・既定 OFF。名簿の抽出に別名候補〔最大 3 語〕の欄を足して数えるだけ。名簿・保存・絵・sys には反映しない。記録は件数と理由コードだけ。r3＝ON のときだけ会話の話者名と回数を抽出に添える・測定の数は metrics() で読む。GPT #127-VF 1・#127-VH 2）
+- `v292DfixALIAS1On` / `v292DfixALIAS1Off` / `v292DfixALIAS1_v1` — （撤去・コードは読まない。ALIAS1 は実験 CLOSED・撤去（GPT #127-VJ 1）。端末に残る `v292DfixALIAS1_v1` の記録は読む部品が無い孤児の鍵。消す処理は入れていない）
+- `v292DfixPACE1aOn` / `v292DfixPACE1bOn` / `v292DfixPACE1Off` — （撤去・コードは読まない。PACE1a/b は不採用・撤去（GPT #127-VB 1））
 - `v292DfixTMPICON1On` / `v292DfixTMPICON1Off` — av2-portrait（TMPICON1・既定 OFF。絵が無い未登録の話者に、費用 0 の仮アイコン〔顔の無い胸像・呼び名から決まる色・頭の 1 字・「仮」の印〕を表示だけで付ける。生成・Worker への要求・保存なし。外見や性別を設定へ書かない。正式な絵ができたら自動で置き換わる。GPT #127-VH 2）
 - `v292DfixVDEL1Off` — fixDL2（VDEL1・既定 ON の修正の kill。GPT #127-VB 6 の先に塞げる部分: 一般の削除シートは、Vault v2 を解錠中でも v2 で隠した物語を SD1 の getstory より前で断る〔vault2status の hiddenIds をシートを開くときと送る直前に読む・分からなければ断る〕。'1' で従来の動き）
 - `v292DfixVAULTGUARD1Off` — fixSTORE1b（VAULTGUARD1。既定 ON の修正の kill。'1' で、Vault v2 解錠中の隠した物語を通常の getstory 照合から外す守りを止める）
@@ -1992,7 +1997,9 @@
 - `v292DfixHIDE2On` / `v292DfixHIDE2Off` — （撤去・コードは読まない。HIDE1・HIDE2 は不採用・撤去（2026-11-15・GPT #127-UL）。対策案としての HIDE1/HIDE2 を閉じただけで、秘密の先漏れの問題自体は未解決（実プレイで再現したら原因側から））
 - `v292DfixDISCARD1Off` — fixSTORE1b, fix562（DISCARD1。手動専用）
 - `v292DfixSTORE1Off` / `v292DfixSTORE1Multi` / `v292DfixSTORE1Dry` — fixSTORE1b
-- `v292DfixSTUCK1On` / `v292DfixSTUCK1Off` / `v292DfixZT1On` / `v292DfixZT1Off` — fixSTORE1b（STUCK1・ZT1。既定 OFF）
+- `v292DfixSTUCK1On` / `v292DfixSTUCK1Off` / `v292DfixZT1On` / `v292DfixZT1Off` — fixSTORE1b（STUCK1・ZT1。既定 OFF。ZT1b〔GPT #127-VJ 3〕: ZT1 の証明は、hash に入らない本体の部分〔HY_CFG_ALLOW 外の cfg・本体の未知の鍵・cast.av2〕が空・既定値・コードが強制する値だけのときに限る。そうでなければ `zero-turn-extra` で残す）
+- `v292DfixEXTRA1Off` — fixSTORE1b（EXTRA1・ZT1b r2。既定 ON の修正の kill。FREE2 の証明・STUCK1・FREE2c の墓標の hash で「一致」と判定した物語も、hash に入らない本体の部分〔HY_CFG_ALLOW 外の cfg・本体の未知の鍵・cast.av2〕が空・既定値・コードが強制する値でなければ `proof-extra` で残す。r3〔GPT #127-VL 1・案 ii〕: 0 ターンでない経路では、削除済みの物語だけの本文に関わらない設定〔provider・model・orModel・artStyle・aiAvatar・debug・showInner・simpleMode・_spiceT・キーは生きている物語が同じ値を持つ写しのときだけ〕を型と範囲を確かめて許す。r4: 写しを探す相手から Vault で隠した物語を VAULTGUARD1 の kill に関係なく外し〔vault2status の hiddenIds と fix889 の一覧〕、集合が分からなければ写しと認めない。読む相手は 1 回 20 本まで。ZT1 は既定値だけ。'1' で従来の動き。ZT1 の証明は印が CLEAN でも class c と印を残す〔ZT1 OFF では無関係〕）
+- `v292DfixZT1DirtyOn` — fixSTORE1b（ZT1b。既定 OFF。'1' のときだけ、印が DIRTY_INTENT / DIRTY_LOCAL の 0 ターンの物語を ZT1 の証明へ回す。無ければ今までどおり 'unsynced'）
 - `v292DfixUI3Off` — fixUI3
 - `v292DfixUI4aOff` / `v292DfixUI4bOff` / `v292DfixUI4cOff` / `v292DfixUI4dOff` — index.html, home.html, fixDL2, fix873 ほか（UI4）
 - `v292Dfix880Off` — fix880, index.html

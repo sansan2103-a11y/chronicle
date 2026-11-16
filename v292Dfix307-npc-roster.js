@@ -172,9 +172,9 @@
 
   function callLLM(transcript, cb){
     var key=getKey(); if(!key){ cb(null); return; }
-    var user=A1.user(buildUserPrompt(transcript));   // ★fix408強化: 総文字数上限+改行1行化(buildExistingLines)　★ALIAS1 r2: ON の回だけ末尾に「会話の話者名」を添える（OFF は同じ文字列）
+    var user=buildUserPrompt(transcript);   // ★fix408強化: 総文字数上限+改行1行化(buildExistingLines)
     var _m=MODEL(); if(!_m){ cb(null); return; }   /* v292Dsmrc1: fail-closed */
-    var _b={ model:_m, temperature:0.2, max_tokens:1200, messages:[{role:'system',content:A1.sys()},{role:'user',content:user}] };   /* ★ALIAS1: OFF（既定）は SYS のまま＝土台とバイト同じ */
+    var _b={ model:_m, temperature:0.2, max_tokens:1200, messages:[{role:'system',content:SYS},{role:'user',content:user}] };
     /* ★v292Dsmrc2b: MODEL-SPECIFIC REQUEST POLICY（effective model = _m = registry.primary()）。
        registry の applyRequestPolicy() を 1 回呼ぶだけ。registry 不在なら従来 body（fail-open）。 */
     try { var _R=window.__CHR_MODEL_REGISTRY; if(_R&&_R.applyRequestPolicy) _R.applyRequestPolicy(_b,_m); }catch(e){}
@@ -292,134 +292,6 @@
     return existing;
   }
 
-
-  /* ============ ★ALIAS1 shadow（laneALIAS1・2026-11-16・GPT #127-VF 1。既定 OFF: localStorage v292DfixALIAS1On='1'・kill v292DfixALIAS1Off='1'。毎回評価） ============
-     ON のとき、名簿の抽出の SYS の末に 1 文を足し、各要素に任意の "別名"（最大 3 語・各 8 字以内）を答えさせる。
-     別名は「数えるだけ」: 名簿（mergeRoster）には別名を取り除いた写しを渡す＝保存・表示・MIDICON・Worker への送信は今までとバイト同じ。
-     採用の候補にするのは、fail-closed の理由が 1 つも無く、かつ明示の根拠（指示語「その／この」＋語・話者の連続・名乗り）があるときだけ。
-     「2 回出た」は REPEAT として別に数えるだけで、候補の条件にしない。
-     既存の抽出を壊さない: ON の回で JSON が読めない（1200 トークンで切れた等）・既存の欄が欠けた → このページでは別名の欄を省く（次からの送信は OFF とバイト同じ）。その回の扱いは今までどおり（読めなければ cursor を戻して 60 秒後）。
-     記録: localStorage 'v292DfixALIAS1_v1' は物語のハッシュごとの件数と理由コードだけ（本文・名前・別名は残さない）。名前つきの明細はこのページのメモリだけ（mem()）。 */
-  var A1 = (function(){
-    var LK='v292DfixALIAS1_v1', ADD='各要素に任意で"別名"の欄を足してよい(書き方: ほかの欄はそのままにして、末尾に "別名":["女"] のように足すだけ)。別名=本文の地の文、または末尾の「会話の話者名」で、この存在が別の呼び方で呼ばれている語(最大3語・各8字以内)。「女」「老人」のような一般的な呼び方でも、その場面でその呼び方がこの存在だけを指しているなら入れてよい。既存台帳の別の行と同じ存在だと本文から分かるときは、その行の呼称を入れてよい。入れない語:同じ場面に同じ呼び方の別の存在がいる・伝聞・回想・夢・写真・電話の向こう・台詞の中だけに出る語。';
-    var omit=false, lastOn=false, MEM={}, SEEN={};
-    function lsG(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
-    function on(){ return lsG('v292DfixALIAS1Off')!=='1' && lsG('v292DfixALIAS1On')==='1'; }
-    /* ★ALIAS1 r2（SMOKE25）: 画面の本文（turn.narrative）は <say> が剥がされている（fix607 の実測）＝抽出の AI は「老人」という話者名を見ていなかった。ON の回だけ、窓の話者名と回数を添える。 */
-    function spk(){ var s=getS(); if(!s||!Array.isArray(s.turns)) return []; var cast=castNames(), n={}, ord=[];
-      s.turns.slice(-WINDOW).forEach(function(t){ var w=[]; try{ if(Array.isArray(t&&t._convSays) && t._convSays.length){ t._convSays.forEach(function(c){ if(c&&c.who) w.push(String(c.who).trim()); }); } else { ((t&&t.plan&&t.plan.narrative)||[]).forEach(function(x){ String(x||'').replace(/<say\s+who="([^"]+)"[^>]*>/g, function(m,v){ w.push(String(v).trim()); return ''; }); }); } }catch(e){}
-        w.forEach(function(v){ if(!v || v.length>12 || cast.indexOf(v)>=0) return; if(!n[v]){ n[v]=0; ord.push(v); } n[v]++; }); });
-      return ord.sort(function(a,b){ return n[b]-n[a]; }).slice(0,12).map(function(v){ return { w: v, n: n[v] }; }); }
-    var lastSpk=0;
-    function user(u){ lastOn = on() && !omit; lastSpk=0; if(!lastOn) return u; var L=[]; try{ L=spk(); }catch(eS){ L=[]; } lastSpk=L.length;   /* ★r3: 話者名の一覧で例外が出ても抽出を止めない */ return L.length ? (u+'\n\n--- 会話の話者名(本文では省かれている・直近の回数) ---\n'+L.map(function(x){ return x.w+'×'+x.n; }).join('、')) : u; }
-    function sys(){ return lastOn ? (SYS+ADD) : SYS; }
-    function hs(s){ var x=2166136261; s=String(s); for(var i=0;i<s.length;i++){ x^=s.charCodeAt(i); x=(x*16777619)>>>0; } return 'a'+x.toString(36); }
-    function rd(){ try{ var r=JSON.parse(lsG(LK)||'null'); return (r&&r.v===1&&r.st&&typeof r.st==='object')?r:{v:1,st:{}}; }catch(e){ return {v:1,st:{}}; } }
-    function bump(sfx, fn){ try{ var r=rd(), k=hs('s'+sfx), c=r.st[k]||{calls:0,items:0,aliases:0,cand:0,noEv:0,rej:{},ev:{},repeat:0,trunc:0,parseFail:0,fieldMiss:0,omitted:0,at:0}; fn(c); c.at=Date.now(); r.st[k]=c; var ks=Object.keys(r.st); if(ks.length>30){ ks.sort(function(a,b){ return (r.st[a].at||0)-(r.st[b].at||0); }); delete r.st[ks[0]]; } localStorage.setItem(LK, JSON.stringify(r)); }catch(e){} }
-    /* ---- 本文（窓の 12 ターン）: 地の文（台詞を除く）・台詞・話者 ---- */
-    function turnsOf(){ var s=getS(); if(!s||!Array.isArray(s.turns)) return []; return s.turns.slice(-WINDOW).map(function(t){
-      var nar=String((t&&t.narrative)||''), q=[], plain=nar.replace(/「[^「」]*」|『[^『』]*』/g, function(m){ q.push(m); return '　'; });
-      var sp=[]; try{ ((t&&t.plan&&t.plan.narrative)||[]).forEach(function(x){ String(x||'').replace(/<say\s+who="([^"]+)"[^>]*>([\s\S]*?)<\/say>/g, function(m,w,b){ sp.push(String(w).trim()); q.push(String(b)); return ''; }); }); }catch(e){}
-      try{ ((t&&t._convSays)||[]).forEach(function(c){ if(c&&c.who) sp.push(String(c.who).trim()); if(c&&c.say) q.push(String(c.say)); }); }catch(e){}
-      return { plain: plain, quotes: q.join('\n'), pl: String((t&&t.playerText)||''), sp: sp.filter(function(x,i,a){ return x && a.indexOf(x)===i; }) }; }); }
-    function sents(t){ return String(t||'').split(/[。！？!?\n]+/).filter(function(x){ return x.trim(); }); }
-    function esc(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
-    var HEAR=/らしい|そうだ|そうな|という話|話では|噂|うわさ|聞いた|聞けば|によると|と言っていた|と言ってた|って話/;
-    var RECALL=/回想|思い出|夢の中|夢で|夢に|写真|記憶|かつて|昔|幼い頃|電話|画面|映像|手紙|テレビ|録音|声だけ/;
-    var EXIT=/去っていった|去って行った|去った|立ち去|帰っていった|帰って行った|帰った|出ていった|出て行った|姿を消|いなくなっ|見えなくなっ|離れていった|別れた|消えていった/;
-    var ARRIVE=/てきた|て来た|来た|来て|来る|現れ|やって来|やってき|訪れ|姿を見せ|入ってき|顔を出|出てき|向こうから/, INTRO=/^(が|も)([^、。をでとへ]{0,6}に)?(い|居)(た|る|ました|ます)/;
-    var MULTI_PRE=/(二人|ふたり|三人|数人|何人|大勢|もう一人|もうひとり|別の|ほかの|他の|違う|見知らぬ|知らない|一人の|ひとりの|新しい)[、の]?$/;
-    var MULTI_POST=/^[がはもを、]?(二人|ふたり|三人|数人|何人)|^(たち|達|ら|同士|ども)/;
-    /* 語 a の、H の一部ではない出現（地の文） */
-    function bareAt(s, a, H){ var out=[], i=-1; while((i=s.indexOf(a,i+1))>=0){ var inH=false, j=-1; while((j=s.indexOf(H,j+1))>=0){ if(i>=j && i+a.length<=j+H.length){ inH=true; break; } } if(!inH) out.push(i); } return out; }
-    function dem(s, i){ return /(その|この|あの)$/.test(s.slice(Math.max(0,i-2), i)); }
-    /* ---- 1 組（呼称 H・別名 a）の判定。理由コード（fail-closed）と根拠コードを返す ---- */
-    function judge(H, a, T, ctx){
-      var rej={}, ev={};
-      if(typeof a!=='string'){ rej.BAD_FORM=1; return {rej:rej, ev:ev}; }
-      a=a.trim(); if(!a || a.length>8 || a===H || /[\s、。,.!?！？「」『』()（）]/.test(a)){ rej.BAD_FORM=1; return {rej:rej, ev:ev}; }
-      ctx.cast.forEach(function(n){ if(n && (n===a || n.indexOf(a)>=0 || a.indexOf(n)>=0)) rej.CAST=1; });
-      ctx.handles.forEach(function(h){ if(h!==H){ if(h===a) rej.SPLIT_HINT=1; else if(h.indexOf(a)>=0 || a.indexOf(h)>=0) rej.GENERIC_CLASH=1; } });   /* ★r2: 別の行の呼称そのもの＝「同じ人が 2 行」の手がかり（候補にはしない・別に数える） */
-      if((ctx.aliasOwners[a]||0)>1) rej.GENERIC_CLASH=1;
-      var hAt=-1, exitAt=null, anyBare=false, anyQuote=false, anyPlayer=false, inSp=false, lastHTurn=-1;
-      T.forEach(function(t, ti){
-        t.sp.forEach(function(w){ if(w!==H && w!==a && w.length>a.length && w.slice(-a.length)===a) rej.GENERIC_CLASH=1; });
-        if(t.quotes.indexOf(a)>=0) anyQuote=true; if(t.pl && t.pl.indexOf(a)>=0) anyPlayer=true;
-        if(t.sp.indexOf(a)>=0){ inSp=true; if(exitAt!==null) rej.AFTER_EXIT=1; if(t.sp.indexOf(H)>=0) rej.SPEAKER_BOTH=1;   /* ★r2: 同じターンに話者 H と話者 a（別人の疑い・CO_PRESENT と分けて数える） */ if(/(別の|違う|知らない|もう一つの|ほかの)声/.test(t.plain)) rej.MULTI=1;
-          if(ti>0 && T[ti-1].sp.indexOf(H)>=0 && t.sp.filter(function(w){ return ctx.cast.indexOf(w)<0; }).length===1 && bareAt(t.plain, a, H).length===0) ev.SPEAKER_CONT=1; }
-        if(t.sp.indexOf(H)>=0 || t.plain.indexOf(H)>=0){ hAt=ti; lastHTurn=ti; }
-        sents(t.plain).forEach(function(s){
-          var hasH=s.indexOf(H)>=0, b=bareAt(s, a, H);
-          if(hasH && EXIT.test(s)){ exitAt=ti; }
-          else if(hasH){ exitAt=null; }
-          if(!b.length) return;
-          anyBare=true;
-          if(hAt<0) rej.NO_ANCHOR=1;
-          if(exitAt!==null && !hasH) rej.AFTER_EXIT=1;
-          if(HEAR.test(s)) rej.HEARSAY=1;
-          if(RECALL.test(s)) rej.RECALL=1;
-          var named=hasH && (new RegExp(esc(H)+'[^。]{0,8}(名は|名を)[「『]?'+esc(a)).test(s) || new RegExp(esc(a)+'[」』]?と名乗').test(s));
-          if(named) ev.NAMED=1;
-          b.forEach(function(i){
-            var pre=s.slice(Math.max(0,i-6), i), post=s.slice(i+a.length);
-            if(MULTI_PRE.test(pre) || MULTI_POST.test(post)) rej.MULTI=1;
-            var d=dem(s, i);
-            if(hasH && !d && !named) rej.CO_PRESENT=1;
-            if(!d && ((/^(が|は|も)/.test(post) && ARRIVE.test(post.slice(0, 16))) || INTRO.test(post))) rej.ARRIVAL=1;   /* 新しい登場・「老人がいた」 */
-            if(!d && /[^そこあ]の$/.test(s.slice(Math.max(0,i-1), i)) && (s.slice(Math.max(0,i-6), i+a.length)).indexOf(H)<0) rej.OTHER_MOD=1;   /* 「向こうの老人」など H と違う修飾 */
-            if(d && (lastHTurn===ti || lastHTurn===ti-1)) ev.DEMONSTRATIVE=1;
-          });
-        });
-        if(/(二人|ふたり|三人|数人)の/.test(t.plain) && t.plain.indexOf(a)>=0) rej.MULTI=1;
-      });
-      if(hAt<0 && !inSp && !anyBare) rej.NO_ANCHOR=1;
-      if(!anyBare && !inSp){ if(anyQuote) rej.IN_QUOTE=1; else if(anyPlayer) rej.IN_PLAYER=1; else rej.NOT_IN_TEXT=1; }   /* ★r2: プレイヤーの入力だけに出る語を分ける */
-      return {rej:rej, ev:ev};
-    }
-    function stripped(arr){ return arr.map(function(it){ if(!it || typeof it!=='object' || !Object.prototype.hasOwnProperty.call(it,'別名')) return it; var o={}; Object.keys(it).forEach(function(k){ if(k!=='別名') o[k]=it[k]; }); return o; }); }
-    /* run() から: 読めなかった回 */
-    function onFail(out, sfx){ if(!lastOn) return; omit=true; var tr=(typeof out==='string' && out.indexOf('[')>=0); bump(sfx, function(c){ c.calls++; if(tr) c.trunc++; else c.parseFail++; c.omitted++; }); }
-    /* run() から: 読めた回。名簿へ渡す配列（別名を除いた写し）を返す */
-    function observe(arr, sfx){
-      try{ apprNote(arr, sfx, lastOn); }catch(eP){}   /* ★r3: 外見の数（メモリだけ・OFF の回も数えるが何も保存しない） */
-      if(!lastOn) return arr;
-      var REQ=['呼称','種別','重要度','外見'], miss=arr.some(function(it){ return !it || typeof it!=='object' || REQ.some(function(k){ return !Object.prototype.hasOwnProperty.call(it,k); }); });
-      if(miss){ omit=true; bump(sfx, function(c){ c.calls++; c.fieldMiss++; c.omitted++; }); return stripped(arr); }
-      var T=turnsOf(), roster=loadRosterRaw().map(function(r){ return r&&r.handle; }).filter(Boolean);
-      var handles=roster.concat(arr.map(function(it){ return String(it['呼称']||'').trim(); }).filter(Boolean)).filter(function(x,i,a){ return a.indexOf(x)===i; });
-      var owners={}; arr.forEach(function(it){ var al=Array.isArray(it['別名'])?it['別名']:[]; al.slice(0,3).forEach(function(a){ if(typeof a==='string'){ a=a.trim(); owners[a]=(owners[a]||0)+1; } }); });
-      var ctx={ cast: castNames(), handles: handles, aliasOwners: owners }, rows=[], mem=MEM[sfx]=MEM[sfx]||[];
-      var splits=[]; handles.forEach(function(x){ handles.forEach(function(y){ if(x!==y && x.length>=2 && y.length>x.length && y.slice(-x.length)===x) splits.push([x,y]); }); });   /* ★r2: 名簿が同じ人を 2 行にしている疑い（「老人」と「網を繕う老人」）を数える */
-      bump(sfx, function(c){
-        c.calls++; c.spk=(c.spk||0)+lastSpk; if(splits.length){ c.split=(c.split||0)+splits.length; }
-        arr.forEach(function(it){ c.items++; var H=String(it['呼称']||'').trim(); var al=it['別名']; if(al==null) return; if(!Array.isArray(al)){ c.rej.BAD_FORM=(c.rej.BAD_FORM||0)+1; return; }
-          if(al.length>3){ c.rej.TOO_MANY=(c.rej.TOO_MANY||0)+1; }
-          al.slice(0,3).forEach(function(a){ c.aliases++; var j=judge(H, a, T, ctx), rk=Object.keys(j.rej), ek=Object.keys(j.ev);
-            rk.forEach(function(k){ c.rej[k]=(c.rej[k]||0)+1; }); ek.forEach(function(k){ c.ev[k]=(c.ev[k]||0)+1; });
-            var key=hs(sfx+'|'+H+'|'+a); if(SEEN[key]) c.repeat++; SEEN[key]=(SEEN[key]||0)+1;
-            var cand=!rk.length && ek.length>0; if(cand) c.cand++; else if(!rk.length) c.noEv++;
-            rows.push({ h: H, a: String(a).slice(0,8), rej: rk, ev: ek, cand: cand, seen: SEEN[key] }); }); });
-      });
-      splits.forEach(function(p){ rows.push({ split: p }); });
-      rows.forEach(function(r){ mem.push(r); }); if(mem.length>40) mem.splice(0, mem.length-40);
-      return stripped(arr);
-    }
-    function status(){ return { on: on(), omit: omit, lastOn: lastOn, rec: rd() }; }
-    /* ★r3: 測定の数（数だけ）。外見の退行は、ON と OFF の回の「外見」の埋まり・字数・「…」/空の数で見る（メモリだけ）＋保存された名簿の外見 */
-    var APM={};
-    function apprStat(arr){ var n=0, f=0, ch=0, el=0; (arr||[]).forEach(function(it){ if(!it||typeof it!=='object') return; n++; var a=String(it['外見']!=null?it['外見']:(it.appr!=null?it.appr:'')).trim(); if(a){ f++; ch+=a.length; } if(!a || a.indexOf('…')>=0 || /^[.・\s]+$/.test(a)) el++; }); return { items:n, filled:f, chars:ch, ellipsisOrEmpty:el }; }
-    function apprNote(arr, sfx, onCall){ var k=(onCall?'on:':'off:')+sfx, m=APM[k]=APM[k]||{ calls:0, items:0, filled:0, chars:0, ellipsisOrEmpty:0 }, a=apprStat(arr); m.calls++; m.items+=a.items; m.filled+=a.filled; m.chars+=a.chars; m.ellipsisOrEmpty+=a.ellipsisOrEmpty; }
-    function metrics(sfx){ sfx=String(sfx==null?'':sfx); var r=rd(), c=r.st[hs('s'+sfx)]||null, rs=[]; try{ rs=JSON.parse(localStorage.getItem('v292Dfix307Roster'+sfx)||'[]')||[]; }catch(e){}
-      var hits=0; if(c){ Object.keys(c.rej||{}).forEach(function(k){ hits+=c.rej[k]; }); }
-      return { calls: c?c.calls:0, aiAliases: c?c.aliases:0, candidates: c?c.cand:0, rejectedAliases: c?Math.max(0, c.aliases-c.cand-c.noEv):0, noEvidence: c?c.noEv:0,
-        rejCodes: c?c.rej:{}, rejCodeHits: hits, evCodes: c?c.ev:{}, repeat: c?c.repeat:0, split: c?(c.split||0):0, spk: c?(c.spk||0):0,
-        autoMerged: 0,   /* shadow: 端末は統合しない。「別人統合」は別人の場面での candidates で数える（README） */
-        truncOrMissing: c?(c.trunc+c.parseFail+c.fieldMiss):0, trunc: c?c.trunc:0, parseFail: c?c.parseFail:0, fieldMiss: c?c.fieldMiss:0, omitted: c?c.omitted:0,
-        apprRoster: apprStat(rs), apprOn: APM['on:'+sfx]||null, apprOff: APM['off:'+sfx]||null }; }
-    return { on: on, sys: sys, user: user, spk: spk, metrics: metrics, onFail: onFail, observe: observe, judge: judge, turnsOf: turnsOf, status: status, mem: function(sfx){ return (MEM[sfx]||[]).slice(); }, ADD: ADD, _reset: function(){ omit=false; MEM={}; SEEN={}; } };
-  })();
-  window.__v292DfixALIAS1 = { status: A1.status, metrics: A1.metrics, mem: A1.mem, judge: A1.judge, turnsOf: A1.turnsOf, on: A1.on };   /* ★ALIAS1: 見るだけ（名前つきの明細はこのページのメモリだけ） */
-
   var _inflight=false, _failAt=0;   /* ★mx3-g: 失敗したら cursor を戻し 60 秒後に再試行／同時実行は 1 本 */
   function run(){
     if(off()) return;
@@ -464,9 +336,8 @@
       if(!s2 || !s2.scene || (s2.scene.loc||null)!==curLoc){ _inflight=false; return; } // 物語が差し替わった（何も書かない・cursor も触らない）
       if(slotSfx()!==sfx){ _inflight=false; return; }                  // アクティブスロットが変わった（何も書かない）
       var arr=parseArr(out);
-      if(!arr){ try{ A1.onFail(out, sfx); }catch(eA){} giveUp(); return; }          // 失敗: cursor を戻して 60 秒後に再試行（★ALIAS1: ON の回なら、このページでは別名の欄を省く）
+      if(!arr){ giveUp(); return; }          // 失敗: cursor を戻して 60 秒後に再試行
       if(staleSc1()){ try{ console.log(TAG,'SC1: 抽出中に本文の履歴が変わったので、この結果は書かない'); }catch(e){} giveUp(); return; }
-      try{ arr=A1.observe(arr, sfx); }catch(eA){}   /* ★ALIAS1 shadow: 数えるだけ。名簿には別名を除いた写しを渡す（OFF の回は同じ配列のまま） */
       /* ★fix748(C5): roster 書込は Class C transaction。network(callLLM) は **この外**で終わっている。 */
       f748RunC('FIX307_ROSTER', function(){
         if(staleSc1()) return { merged: [], w: { skip:true, sc1:'STALE_ASYNC' } };   /* ★v292DfixSC1: lock 待ちの間の取消も見る */

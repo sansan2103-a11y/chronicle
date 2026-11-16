@@ -166,6 +166,114 @@
      この表に無い family・形の分からないキーは c と同じ扱い（消さない） */
   var STUCK_ON = 'v292DfixSTUCK1On', SVERSION = 'STUCK1-r2';
   var ZT_ON = 'v292DfixZT1On', ZT_OFF = 'v292DfixZT1Off';   /* ★ZT1 */
+  /* ★ZT1b（GPT #127-VJ 3・案 a）: hash（fix697 projectionV2 ← fix743 buildSchema2Record）は chr6_slot_ の本体を全部は入れない。
+       入らないもの: cfg のうち HY_CFG_ALLOW（11 本）の外の鍵／本体の cfg・cast・scene・turns・mode 以外の鍵／cast.av2（HOME の __v292Dav2Map.push が外して作り直す）。
+     ZT1 の証明（0 ターンの墓標・印が DIRTY の 0 ターン）は、hash の一致に加えて、hash に入らない部分が「空・コードの既定値・コードが強制する値」だけであることを求める。
+     未知の鍵・一覧に無い値・読めない本体 → 'zero-turn-extra'（残す）。値の比較は === だけ（文字列の '6' と数の 6 は別）。迷うものは許可しない。
+     許可する値の出所（README）: index.html の S.cfg 初期値（provider/key/naiKey/orKey/pollKey/model/debug/showInner）・index.html の simpleMode の既定・
+       fix247 / fix328 / fix336 / fix886 が強制する '__proxy__' と 'openrouter'・fix355 の aiAvatar=true・fix395 の DEFAULT=3 と TARGET=6・fix374 の UNIFIED=6・
+       orModel は '' と HOME のモデル一覧（v292Dsmrc1）の primary() だけ（fix354 / fix370 が入れる値）。
+     DIRTY_INTENT / DIRTY_LOCAL の印の物語は v292DfixZT1DirtyOn='1' のときだけ ZT1 に回す（既定は今までどおり 'unsynced'）。ZT1 OFF のときはどれも読まない。 */
+  var ZT_DIRTY = 'v292DfixZT1DirtyOn', ZT_EXTRA = 'zero-turn-extra';
+  var ZT_TOP = { cfg: 1, cast: 1, scene: 1, turns: 1, mode: 1 };   /* index.html S.save・FLW5 が書く 5 つ（projectionV2 がそのまま入れる。cfg は下の 11 本だけ） */
+  var ZT_CFG_HASHED = { authorNote: 1, bannedPhrases: 1, creepyMode: 1, dialogueLevel: 1, dramaLevel: 1, engineMode: 1, genrePresets: 1, outLen: 1, reactionLevel: 1, toneKey: 1, artPreset: 1 };   /* = fix743 HY_CFG_ALLOW = Worker CHR_CANONICAL_CFG_ALLOW */
+  var ZT_CFG_DEFAULT = { provider: ['anthropic', 'openrouter'], key: [''], naiKey: [''], orKey: ['', '__proxy__'], pollKey: ['', '__proxy__'], model: ['claude-haiku-4-5-20251001'],
+                         debug: [false], showInner: [true], simpleMode: [false], aiAvatar: [true], artStyle: [3, 6] };
+  function ztHas(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+  function zt1Extra(id, env) {
+    var b = J(g(env, 'chr6_slot_' + id), null);
+    if (!b || typeof b !== 'object' || isArr(b)) return ZT_EXTRA;
+    for (var k in b) if (ztHas(b, k) && ZT_TOP[k] !== 1) return ZT_EXTRA;                                   /* 本体の未知の鍵 */
+    var c = b.cfg;
+    if (c != null) {
+      if (typeof c !== 'object' || isArr(c)) return ZT_EXTRA;                                                /* object でない cfg は hash で null になる */
+      for (var k2 in c) {
+        if (!ztHas(c, k2) || ZT_CFG_HASHED[k2] === 1) continue;
+        var al = (k2 === 'orModel') ? [''].concat(isArr(env.zt1Models) ? env.zt1Models : []) : (ztHas(ZT_CFG_DEFAULT, k2) ? ZT_CFG_DEFAULT[k2] : null), ok = false;
+        if (al) for (var i = 0; i < al.length; i++) if (al[i] === c[k2]) { ok = true; break; }
+        if (!ok) return ZT_EXTRA;                                                                             /* hash に入らない設定に、既定でない値か未知の鍵 */
+      }
+    }
+    var ca = b.cast;
+    if (ca && typeof ca === 'object' && !isArr(ca) && ztHas(ca, 'av2')) return ZT_EXTRA;                      /* av2 は push が作り直す（そのままは hash に入らない） */
+    return null;
+  }
+  /* ★EXTRA1（ZT1b r2・既定 ON・kill v292DfixEXTRA1Off='1'）: ZT1 以外の「hash の一致で証明して消す」経路（FREE2 の証明・STUCK1・FREE2c の墓標の hash）にも、
+     zt1Extra と同じ検査を、hash が一致した後に足す。hash に入らない本体の部分（HY_CFG_ALLOW 外の cfg・本体の未知の鍵・cast.av2）が
+     空・既定値・コードが強制する値でなければ 'proof-extra' で残す。一致しなかった物語の理由は今までと同じ（消す対象が減る向きだけ）。
+     本体がもう無い（前回の途中の続きで、印だけ残っている）ときは、hash に入らない部分も無いので見ない。 */
+  var EX_OFF = 'v292DfixEXTRA1Off', EX_WHY = 'proof-extra';
+  /* ★EXTRA1 r3（GPT #127-VL 1・案 ii）: 0 ターンでない FREE2 / STUCK1 / FREE2c では、hash に入らない cfg のうち
+     「削除済みの物語だけのもので、本文に関わらない設定」を、名前を挙げて型・値の範囲・置き場所（その物語の本体の cfg の直下）を確かめて許す。
+     許す鍵と値（README の表）: provider（#cfgProvider の 3 つ）・model（#cfgModel の 2 つ）・orModel（モデル一覧が primary / secondary / 旧 primary / 管理する名前と認めた文字列）・
+       artStyle（0〜7 の整数＝fix338 の LABELS）・aiAvatar（true / false / 0 / 1）・debug / showInner / simpleMode（真偽値）・_spiceT（0 以上でターン数以下の整数＝fix192）・
+       key / naiKey / orKey / pollKey（空・'__proxy__'、または同じ値を生きている物語〔削除済みでなく Vault で隠していない〕の cfg の同じ鍵が持つ＝この物語の写しにすぎない）。
+     それ以外（未知の鍵・型違い・範囲外・入れ子・本体の 5 鍵以外・cast.av2・読めない本体）は今までどおり残す。キーの値は記録・画面・ログに出さない（理由は鍵の名前の種類だけ）。
+     ZT1（0 ターン）は r1/r2 のまま厳密（既定値だけ）。 */
+  var EX1_PROVIDER = ['anthropic', 'openrouter', 'novelai'];                 /* index.html #cfgProvider の option */
+  var EX1_MODEL = ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6'];         /* index.html #cfgModel の option */
+  var EX1_ART_MAX = 7;                                                         /* fix338 LABELS は 8 個（features.js の mkSel は +value で数を入れる） */
+  var EX1_KEYS = { key: 1, naiKey: 1, orKey: 1, pollKey: 1 }, EX1_BOOL = { debug: 1, showInner: 1, simpleMode: 1 };
+  var EX1_NAMES = { provider: 1, model: 1, orModel: 1, artStyle: 1, aiAvatar: 1, debug: 1, showInner: 1, simpleMode: 1, _spiceT: 1, key: 1, naiKey: 1, orKey: 1, pollKey: 1 };
+  function ex1Int(v, lo, hi) { return typeof v === 'number' && isFinite(v) && Math.floor(v) === v && v >= lo && v <= hi; }
+  /* ★EXTRA1 r4（zt1fix3 レビューの注記 1・Owner のルール「Vault で隠した物語は、どの経路でも読まない」）:
+     隠した物語の集合は、VAULTGUARD1 の kill に関係なく、入口ごとに読む vault2status（env.ex1Vault）と fix889 の隠し一覧（vaultBlock）の両方で決める。
+     分かったと言えるのは none（Vault v2 なし）・locked（施錠中＝隠した行はサーバーの一覧にも出ず、fix889 の一覧が持つ）・unlocked（hiddenIds が完全）だけ。
+     それ以外（unknown・読めない・古い・欄の欠け）は「分からない」として、隠した物語かもしれない相手を 1 つも読まない。 */
+  var EX1_READ_MAX = 20;   /* 1 回の実行で、キーの写しを探すために読む相手の本体の数の上限（越えたら写しと認めない） */
+  function exVaultKnown(env) { var V = env && env.ex1Vault; if (!V || typeof V !== 'object') return false;
+    if (V.state === 'none' || V.state === 'locked') return true; return V.state === 'unlocked' && !!V.ids && typeof V.ids === 'object'; }
+  function exHidden(id, env) { if (vaultBlock(id, env)) return true; var V = env.ex1Vault; return !!(V && V.state === 'unlocked' && V.ids && V.ids[String(id)] === 1); }
+  function ex1KeyCopy(k, v, id, env) {   /* 同じ値を、生きている別の物語（Vault で隠していない）の cfg の同じ鍵が持つ。値はメモリの中で比べるだけ */
+    if (typeof v !== 'string' || !v || v.length > 1024) return false;
+    if (!exVaultKnown(env)) return false;                                                     /* 隠した物語の集合が分からない → 写しと認めない */
+    var ctr = env.ex1Ctr || (env.ex1Ctr = { left: EX1_READ_MAX });                            /* 1 回の実行で共有（benv が作る。無ければここで作る） */
+    var needle = JSON.stringify(v).slice(1, -1), m = metaRows(env) || [];
+    for (var i = 0; i < m.length; i++) { var r = m[i]; if (!r || r.deleted === true || r.id == null) continue; var lid = String(r.id); if (lid === id) continue;
+      if (exHidden(lid, env)) continue;                                                       /* 隠した物語は読まない */
+      if (!(ctr.left > 0)) { ctr.capped = true; return false; }                                /* 上限 → 写しと認めない */
+      ctr.left--;
+      var raw = g(env, 'chr6_slot_' + lid);
+      if (typeof raw !== 'string' || raw.indexOf(needle) < 0) { raw = null; continue; }       /* 同じ値の文字列を持つ相手だけ解析する */
+      var c = null; try { var b = JSON.parse(raw); c = (b && typeof b === 'object' && !isArr(b) && b.cfg && typeof b.cfg === 'object' && !isArr(b.cfg) && ztHas(b.cfg, k)) ? b.cfg[k] : null; b = null; } catch (eJ) { c = null; }
+      raw = null;                                                                              /* 本体はここで捨てる（欄の値だけを比べる） */
+      if (c === v) return true; }
+    return false;
+  }
+  function ex1Ok(k, v, nT, id, env) {
+    if (ztHas(ZT_CFG_DEFAULT, k)) { var al = ZT_CFG_DEFAULT[k]; for (var i = 0; i < al.length; i++) if (al[i] === v) return true; }   /* r1 の既定値 */
+    if (k === 'provider') return typeof v === 'string' && EX1_PROVIDER.indexOf(v) >= 0;
+    if (k === 'model') return typeof v === 'string' && EX1_MODEL.indexOf(v) >= 0;
+    if (k === 'orModel' && isArr(env.zt1Models) && env.zt1Models.indexOf(v) >= 0) return true;   /* r1: '' と primary() */
+    if (k === 'orModel') return v === '' || (typeof v === 'string' && v.length <= 200 && /^[A-Za-z0-9._:\/-]+$/.test(v) && typeof env.ex1ModelOk === 'function' && env.ex1ModelOk(v) === true);
+    if (k === 'artStyle') return ex1Int(v, 0, EX1_ART_MAX);
+    if (k === 'aiAvatar') return v === true || v === false || v === 0 || v === 1;
+    if (EX1_BOOL[k] === 1) return typeof v === 'boolean';
+    if (k === '_spiceT') return nT >= 0 && ex1Int(v, 0, nT);
+    if (EX1_KEYS[k] === 1) return v === '' || v === '__proxy__' || ex1KeyCopy(k, v, id, env);
+    return false;
+  }
+  /* null = 許す / 外す理由の種類（鍵の名前だけ。値は入れない） */
+  function ex1Cat(id, env) {
+    var b = J(g(env, 'chr6_slot_' + id), null);
+    if (!b || typeof b !== 'object' || isArr(b)) return 'body:unreadable';
+    for (var k in b) if (ztHas(b, k) && ZT_TOP[k] !== 1) return 'top:unknown';
+    var c = b.cfg, nT = isArr(b.turns) ? b.turns.length : -1;
+    if (c != null) {
+      if (typeof c !== 'object' || isArr(c)) return 'cfg:not-object';
+      for (var k2 in c) { if (!ztHas(c, k2) || ZT_CFG_HASHED[k2] === 1) continue; if (ex1Ok(k2, c[k2], nT, id, env)) continue; return ztHas(EX1_NAMES, k2) ? 'cfg:' + k2 : 'cfg:unknown'; }
+    }
+    var ca = b.cast; if (ca && typeof ca === 'object' && !isArr(ca) && ztHas(ca, 'av2')) return 'cast:av2';
+    return null;
+  }
+  function exPost(id, env, se, need) {
+    if (!env || env.extra1 === false) return null;
+    if ((need && need.zt1 === true) || (se && se.zeroTurn === true)) return null;   /* ZT1 の経路は zt1Extra で先に確かめた */
+    if (g(env, 'chr6_slot_' + id) == null) return null;
+    var cat = ex1Cat(id, env); if (!cat) return null;   /* ★EXTRA1 r3: 名前を挙げた設定だけ許す */
+    if (typeof env.onExtra === 'function') { try { env.onExtra(id, cat, need ? 'subset' : 'full'); } catch (eO) {} }   /* dry-run の数だけ */
+    return EX_WHY;
+  }
   var F2_ON = 'v292DfixFREE2On', F2_OFF = 'v292DfixFREE2Off', F2_KEY = 'v292DfixFREE2_proofs', F2_VERSION = 'FREE2-r3';   /* ★FREE2 */
   var FAMILY_CLASS = {
     'chr6_slot_': 'a', 'chr6_relations_': 'a', 'chr6_char_states_': 'a', 'chr6_char_flags_': 'a', 'chr6_pending_dice_': 'a',
@@ -281,6 +389,7 @@
   /* ★ZT1: 0 ターンの本体で、印が DIRTY_INTENT / DIRTY_LOCAL のまま削除された物語を、墓標の hash の確認へ回してよいか（ローカルの条件だけ） */
   function zt1DirtyLocal(id, env, row, mo) {
     if (env.zt1 !== true || typeof env.dirtyProof !== 'function') return false;
+    if (env.zt1Dirty !== true) return false;   /* ★ZT1b: 印が DIRTY の物語は v292DfixZT1DirtyOn='1' のときだけ（既定は除外） */
     if (!mo || typeof mo !== 'object' || STALE_DIRTY[String(mo.state || '')] !== 1) return false;
     if (mo.inFlightSave) return false;
     if (mo.storyId != null && String(mo.storyId) !== id) return false;
@@ -318,7 +427,8 @@
     for (var i = 0; i < m.length; i++) if (m[i] && String(m[i].id) === id && m[i].deleted === true) { row = m[i]; break; }
     var fp = free2Proof(id, env, row, mk, mo);
     if (fp) return { title: row.title, free2: fp };       /* ★FREE2: 証明つき（STUCK1 / ZT1 の条件より先。証明の hash・rev とも突き合わせる） */
-    return (staleDirtyLocal(id, env, row, mo) || zt1DirtyLocal(id, env, row, mo)) ? { title: row.title } : null;
+    if (staleDirtyLocal(id, env, row, mo)) return { title: row.title };
+    return zt1DirtyLocal(id, env, row, mo) ? { title: row.title, zt1: true } : null;   /* ★ZT1b: ZT1 から来た（zt1Extra を確かめる） */
   }
   /* サーバーの墓標の hash とこの端末の内容が同じか。null = 確認不要か一致 / 理由コード = 一致を確かめられない */
   function stuckProof(id, env, se) {
@@ -326,18 +436,20 @@
     if (!need && se && se.zeroTurn === true) {   /* ★ZT1: 印が CLEAN でも 0 ターンの墓標は hash の一致を必ず確かめる（dirtyProven にはしない） */
       var zr = zt1Row(id, env);
       if (!zr || typeof zr.title !== 'string' || !HEX64.test(String(se.serverHash || ''))) return Promise.resolve('zero-turn-unproven');
+      var zx0 = zt1Extra(id, env); if (zx0) return Promise.resolve(zx0);   /* ★ZT1b */
       return Promise.resolve().then(function () { return env.dirtyProof(id, zr.title, String(se.serverHash), dpo(se)); })
         .then(function (why) { if (why == null) { se.zeroTurnProven = true; return null; } return 'zero-turn-unproven'; }, function () { return 'zero-turn-unproven'; });
     }
     if (!need) return Promise.resolve(null);
+    if (need.zt1 === true || (se && se.zeroTurn === true)) { var zx1 = zt1Extra(id, env); if (zx1) return Promise.resolve(zx1); }   /* ★ZT1b */
     if (!HEX64.test(String(se && se.serverHash || ''))) return Promise.resolve('unsynced-unproven');
     if (need.free2) {   /* ★FREE2: サーバーの墓標が証明の時のまま（hash・rev）で、いまの端末の全体がその hash と同じ。title はサーバーの墓標のもの */
       if (String(se.serverHash) !== need.free2.h || se.rev !== need.free2.rev || typeof se.title !== 'string') return Promise.resolve('unsynced-unproven');
       return Promise.resolve().then(function () { return env.dirtyProof(id, se.title, String(se.serverHash), dpo(se)); })
-        .then(function (why) { if (why == null) { se.dirtyProven = true; se.free2 = true; return null; } return 'unsynced-unproven'; }, function () { return 'unsynced-unproven'; });   /* (dirtyProof の第 4 引数は下で付ける) */
+        .then(function (why) { if (why == null) { var xw0 = exPost(id, env, se, need); if (xw0) return xw0; se.dirtyProven = true; se.free2 = true; return null; } return 'unsynced-unproven'; }, function () { return 'unsynced-unproven'; });   /* (dirtyProof の第 4 引数は下で付ける) */
     }
     return Promise.resolve().then(function () { return env.dirtyProof(id, need.title, String(se.serverHash), dpo(se)); })
-      .then(function (why) { if (why == null) { se.dirtyProven = true; if (se.zeroTurn === true) se.zeroTurnProven = true; return null; } return se.zeroTurn === true ? 'zero-turn-unproven' : 'unsynced-unproven'; }, function () { return se.zeroTurn === true ? 'zero-turn-unproven' : 'unsynced-unproven'; });
+      .then(function (why) { if (why == null) { var xw1 = exPost(id, env, se, need); if (xw1) return xw1; se.dirtyProven = true; if (se.zeroTurn === true) se.zeroTurnProven = true; return null; } return se.zeroTurn === true ? 'zero-turn-unproven' : 'unsynced-unproven'; }, function () { return se.zeroTurn === true ? 'zero-turn-unproven' : 'unsynced-unproven'; });
   }
   function vaultBlock(id, env) {
     if (env && env.vcAllow && env.vcAllow[String(id)] === 1) return vcPassOnly(String(id), env);   /* ★VCLEAN1: この実行で確かめた id だけ（隠し一覧の判定だけを外す。パスコードは見る） */
@@ -433,6 +545,36 @@
     if (isArr(env.only)) out = out.filter(function (x) { return env.only.indexOf(x) >= 0; });   /* ★STUCK1 explain(id): その 1 件だけ */
     return out;
   }
+  /* ★ZT1b r2: 本体が無く、class c（形の分からない family を含む）だけが端末に残る削除済みの物語の数・鍵の数・字数（読むだけ・消さない）。
+     Vault で隠した物語は値を読まずに数だけ飛ばす。同期の印は数えない。 */
+  function cOnlyCount(env) {
+    var out = { stories: 0, keys: 0, chars: 0, vaultSkipped: 0 }, ids = candidates(env);
+    if (env.ex1Vault !== undefined && !exVaultKnown(env)) { out.vaultUnknown = true; return out; }   /* ★r4: 隠した物語の集合が分からない → 1 つも読まない */
+    for (var i = 0; i < ids.length; i++) { var id = ids[i];
+      if (env.ex1Vault !== undefined ? exHidden(id, env) : vaultBlock(id, env)) { out.vaultSkipped++; continue; }
+      var pl = planOne(id, env); if (pl.body !== 'absent') continue;
+      var n = 0, ch = 0;
+      for (var j = 0; j < pl.keys.length; j++) { var k = pl.keys[j]; if (k === 'v292Dfix402_f781g_' + id || pl.vals[j] == null) continue;
+        var s = env.key1 && env.key1.storyOf(k), cls = s ? familyClass(s.family) : 'c'; if (cls === 'c') { n++; ch += k.length + pl.vals[j].length; } }
+      if (n) { out.stories++; out.keys += n; out.chars += ch; } }
+    return out;
+  }
+  /* ★EXTRA1 r3: free2DryRun の中身（読むだけ・消さない・書かない）。proof-extra の物語の数・鍵の名前の種類ごとの数・それで残る字数（見込み） */
+  function f2DryTally(e, cx) {
+    var o = { v: F2_VERSION, on: e.free2 === true, mode: e.purge ? 'purge' : 'r2', at: e.now(), candidates: 0, freeable: { stories: 0, keys: 0, chars: 0, viaProof: 0 }, excluded: { stories: 0, byReason: {} }, global: null,
+              proofExtra: { stories: 0, chars: 0, byKey: {} } };
+    var glob = null, seen = {}; e.onReason = function (sid, w) { if (sid === '*') glob = String(w); };
+    e.onExtra = function (sid, cat, mode) { if (seen[sid]) return; seen[sid] = 1; var P = o.proofExtra; P.stories++; P.byKey[cat] = (P.byKey[cat] || 0) + 1;
+      try { var pl = planOne(sid, e); P.chars += (mode === 'subset') ? applySubset(pl, provenSubset(sid, e, pl)).chars : pl.chars; } catch (eP) {} };
+    return (e.purge ? surveyP : survey)(e, cx).then(function (rep) {
+      o.candidates = rep.candidates || 0; o.global = glob;
+      try { o.cOnly = cOnlyCount(e); } catch (eC) { o.cOnly = null; }
+      o.willKeepC = { stories: 0, chars: 0 }; for (var i0 = 0; i0 < rep.eligible.length; i0++) if (rep.eligible[i0].keptC) { o.willKeepC.stories++; o.willKeepC.chars += +rep.eligible[i0].keptCChars || 0; }
+      for (var i = 0; i < rep.eligible.length; i++) { var x = rep.eligible[i]; o.freeable.stories++; o.freeable.keys += +x.keys || 0; o.freeable.chars += +x.chars || 0; if (x.dirtyProven === true) o.freeable.viaProof++; }
+      for (var k in rep.skipped) if (Object.prototype.hasOwnProperty.call(rep.skipped, k) && k !== glob) { o.excluded.byReason[k] = rep.skipped[k]; o.excluded.stories += rep.skipped[k]; }
+      return o;
+    }, function () { o.failed = true; return o; });
+  }
   function titleOf(id, env) { var m = metaRows(env) || []; for (var i = 0; i < m.length; i++) if (m[i] && String(m[i].id) === id && m[i].deleted === true) return String(m[i].title || m[i].name || '') || null; return null; }
 
   /* ---- 計画（その物語の消すキーと、いまの値）。L1〜L6 を通った物語だけで呼ぶ ---- */
@@ -496,7 +638,7 @@
     if (!st || typeof st !== 'object' || st.source !== 'dl2-delete') return Promise.resolve(null);   /* FREE2 より前の形の墓標: r2 の規則（ターンの一致）のまま */
     if (typeof env.dirtyProof !== 'function' || !HEX64.test(String(se.serverHash || '')) || typeof se.title !== 'string') return Promise.resolve('tomb-hash-unproven');
     return Promise.resolve().then(function () { return env.dirtyProof(id, se.title, String(se.serverHash), dpo(se)); })
-      .then(function (why) { if (why == null) { se.tombHashMatched = true; return null; } return why === 'content-differs' ? 'tomb-hash-mismatch' : 'tomb-hash-unproven'; }, function () { return 'tomb-hash-unproven'; });
+      .then(function (why) { if (why == null) { var xw2 = exPost(id, env, se, null); if (xw2) return xw2; se.tombHashMatched = true; return null; } return why === 'content-differs' ? 'tomb-hash-mismatch' : 'tomb-hash-unproven'; }, function () { return 'tomb-hash-unproven'; });
   }
   /* ★FREE2c: 1 物語の判定（シート・dry-run・explain・実行が同じ関数を通る）。ローカルの関門（localBlock）を通った物語だけで呼ぶ。
      opt.inLock = 実行（その物語の Lock を exclusive で持っている）: Lock の query は飛ばす。opt.pl0 = 計画と同じか（実行のとき）。
@@ -515,7 +657,7 @@
         if (pw) return { why: pw };
         return tombHashCheck(id, env, se).then(function (tw) {
           if (tw) return { why: tw };
-          var pq = se.dirtyProven === true ? applySubset(pl, provenSubset(id, env, pl)) : pl;   /* ★STUCK1 r2: c は残す */
+          var pq = (se.dirtyProven === true || se.zeroTurnProven === true) ? applySubset(pl, provenSubset(id, env, pl)) : pl;   /* ★STUCK1 r2: c は残す（★ZT1b r2: ZT1 の証明は印が CLEAN でも c を残す） */
           if (!pq.keys.length) return { why: 'nothing-left' };
           if (opt.inLock) return { why: null, pl: pl, pq: pq, se: se };
           return Promise.resolve(ctx.lockHeld(id)).then(function (h) {
@@ -547,7 +689,7 @@
       var rows = [], chain = Promise.resolve();
       function rowOf(id, x) { var pl = x.pl, pq = x.pq, se = x.se;
         var o = { id: id, title: titleOf(id, env), turns: pl.turns, keys: pq.keys.length, chars: pq.chars, snapshots: pl.snapshots, backupKept: pl.backupKept, unknownKept: pl.unknownKept, serverRev: se.rev, authority: se.authority, dirtyProven: se.dirtyProven === true };
-        if (se.dirtyProven === true) o.keptC = pq.keptC; return o; }
+        if (se.dirtyProven === true || se.zeroTurnProven === true) { o.keptC = pq.keptC; o.keptCChars = pq.keptCChars; } return o; }   /* ★ZT1b r2 */
       if (env.free2 === true && env.free2d === true) {   /* ★FREE2d: 覚えた墓標は飛ばす・getstory は最大 4 本同時・結果は候補の順 */
         var res = new Array(pass.length), next = 0;
         function worker() { if (next >= pass.length) return Promise.resolve(); var i = next++, id = pass[i];
@@ -602,7 +744,7 @@
       var gb3 = globalBlock(env) || localBlock(id, env); if (gb3) return fin(gb3);
       var now3 = planOne(id, env), sp3 = samePlan(pl, now3); if (sp3) return fin(sp3);
       var rb3 = raceBlock(id, env, rp); if (rb3) return fin(rb3);       /* ★STUCK1 r2: 消す直前（同期・2 つの Lock の中） */
-      if (se.dirtyProven === true) { pl = applySubset(pl, provenSubset(id, env, pl)); if (!pl.keys.length) return fin('nothing-left'); out.keptC = pl.keptC; out.markerKept = pl.markerKept; }
+      if (se.dirtyProven === true || se.zeroTurnProven === true) { pl = applySubset(pl, provenSubset(id, env, pl)); if (!pl.keys.length) return fin('nothing-left'); out.keptC = pl.keptC; out.markerKept = pl.markerKept; }   /* ★ZT1b r2 */
       var I = env.inv, G = env.gate;
       if (!I || typeof I.deletePolicy !== 'function' || typeof I.store1Arm !== 'function' || typeof I.store1Disarm !== 'function' || typeof I._hash !== 'function') return fin('policy-unavailable');
       if (!G || typeof G.tryDeleteExact !== 'function') return fin('gate-unavailable');
@@ -1360,9 +1502,13 @@
     if (!ID_RE.test(String(id))) return 'id-shape';
     if (PROTECT[String(id)] === 1) return 'protected';
     if (g(env, 'chr6_slot_' + id) != null) { var mr = metaRows(env) || [], dl = false; for (var i = 0; i < mr.length; i++) if (mr[i] && String(mr[i].id) === String(id) && mr[i].deleted === true) dl = true; return dl ? 'body-present' : 'live'; }   /* r2: 削除済みだが本体の写しがまだある（FREE2 / DISCARD1 が先） */
-    return d1Local(id, env);
+    var w1 = d1Local(id, env); if (w1) return w1;
+    return cLeft(id, env) ? 'c-kept' : null;   /* ★ZT1b r2: class c が残る間はスナップショットも残す（印が DIRTY のときの 'unsynced' と同じ扱い） */
   }
-  function d2Cat(w) { return (w === 'live' || w === 'body-present') ? w : d1Cat(w); }
+  function cLeft(id, env) { var kf = keysFor(id, env), list = purgeList(kf);
+    for (var i = 0; i < list.length; i++) { var k = list[i]; if (k === 'v292Dfix402_f781g_' + id) continue; var s = env.key1 && env.key1.storyOf(k); if ((s ? familyClass(s.family) : 'c') === 'c') return true; }
+    return false; }
+  function d2Cat(w) { return (w === 'live' || w === 'body-present' || w === 'c-kept') ? w : d1Cat(w); }   /* ★ZT1b r2 */
   /* r2: サーバーの答え。墓標でないと分かった（404・deleted===false・locked）＝その物語は除外して次へ。分からない（401・通信断・欄の欠け）＝全体を止める */
   var D2_SKIP = { 'server-404': 'no-tombstone', 'server-live': 'no-tombstone', 'server-locked': 'vault', 'too-young': 'too-young', 'no-time': 'no-time', 'bad-time': 'no-time' };   /* ★AUTOCLEAN1: 年齢は手動の DISCARD2 では出ない。no-server-time は全体停止 */   /* ★AUTOCLEAN1: 年齢は手動の DISCARD2 では出ない */
   function d2Server(id, r) {
@@ -1739,7 +1885,7 @@
               /* ★PURGE1 */ PURGE_ON: PURGE_ON, PURGE_OFF: PURGE_OFF, PURGE_VAULT: PURGE_VAULT, NOTICE_P: NOTICE_P, keysForP: keysForP, purgeListP: purgeListP, localBlockP: localBlockP, planP: planP,
               serverEvalP: serverEvalP, serverEvalMeta: serverEvalMeta, surveyP: surveyP, freeOneP: freeOneP,
               /* ★STUCK1 */ STUCK_OFF: STUCK_OFF, staleDirtyLocal: staleDirtyLocal, stuckNeeds: stuckNeeds, stuckProof: stuckProof,
-              /* ★STUCK1 r2 */ STUCK_ON: STUCK_ON, SVERSION: SVERSION, FAMILY_CLASS: FAMILY_CLASS, familyClass: familyClass, provenSubset: provenSubset, raceProbe: raceProbe, raceBlock: raceBlock, planByReason: planByReason, COUNT_ONLY: COUNT_ONLY,
+              /* ★STUCK1 r2 */ STUCK_ON: STUCK_ON, SVERSION: SVERSION, FAMILY_CLASS: FAMILY_CLASS, familyClass: familyClass, /* ★ZT1b */ zt1Extra: zt1Extra, /* ★ZT1b r2 */ cOnlyCount: cOnlyCount, exPost: exPost, EX_OFF: EX_OFF, /* ★EXTRA1 r3 */ ex1Cat: ex1Cat, f2DryTally: f2DryTally, EX1_PROVIDER: EX1_PROVIDER, EX1_MODEL: EX1_MODEL, EX1_ART_MAX: EX1_ART_MAX, /* ★r4 */ EX1_READ_MAX: EX1_READ_MAX, exVaultKnown: exVaultKnown, ZT_DIRTY: ZT_DIRTY, ZT_CFG_HASHED: ZT_CFG_HASHED, ZT_CFG_DEFAULT: ZT_CFG_DEFAULT, ZT_TOP: ZT_TOP, provenSubset: provenSubset, raceProbe: raceProbe, raceBlock: raceBlock, planByReason: planByReason, COUNT_ONLY: COUNT_ONLY,
               /* ★AUTOCLEAN1 */ acRunOnce: acRunOnce, AC_DEFAULT_ON: AC_DEFAULT_ON, /* ★r5 */ acDaysGet: acDaysGet, acDaysTxt: acDaysTxt, AC_DAYS_MAX: AC_DAYS_MAX, /* ★r6 */ acDaysParse: acDaysParse, acQaDays: acQaDays, AC_QA_ACK: AC_QA_ACK, /* ★VAULTGUARD1 */ VG_OFF: 'v292DfixVAULTGUARD1Off', /* ★VCLEAN1 */ vcOnGet: vcOnGet, vcCheck: vcCheck, vcHidden: vcHidden, vcDry: vcDry, vaultBlock: vaultBlock, /* ★r4 */ acEarly: acEarly, acPace: acPace, acDayQ: acDayQ, acDryWhy: acDryWhy, acWhyName: acWhyName, AC_DAY_QMAX: AC_DAY_QMAX, AC_PACE_MIN_MS: AC_PACE_MIN_MS, AC_KEEP_DETAIL: AC_KEEP_DETAIL, acOnGet: acOnGet, acServerAge: acServerAge, AC_QMAX: AC_QMAX, AC_DAYS: AC_DAYS, AC_MIN_AGE_MS: AC_MIN_AGE_MS, AC_GAP_MS: AC_GAP_MS, AC_MAX: AC_MAX, d2LocalAt: d2LocalAt,
               /* ★DISCARD2 */ d2Owners: d2Owners, d2Plan: d2Plan, d2Local: d2Local, d2Survey: d2Survey, d2One: d2One, d2Run: d2Run, d2Server: d2Server, D2_SKIP: D2_SKIP,
               /* ★DISCARD1 */ d1Local: d1Local, d1Server: d1Server, d1Survey: d1Survey, d1One: d1One, d1Run: d1Run, d1Cat: d1Cat, D1_ACK: D1_ACK, D1_OVERRIDE: D1_OVERRIDE,
@@ -1826,7 +1972,19 @@
     return vgInflight;
   }
   function vgSnap() { return vgOn() ? { state: VG.state, ids: VG.ids } : null; }
-  function vgThen(f) { return vgRefresh().then(function () { return f(); }, function () { return f(); }); }
+  /* ★EXTRA1 r4: VAULTGUARD1 の kill に関係なく、入口ごとに vault2status を読む（本文なし・id だけ）。使い回しは VAULTGUARD1 と同じ条件（15 秒・vault2-ui の状態が同じ） */
+  var EXV = { state: 'unknown', ids: null, at: 0, ui: null }, exvInflight = null;
+  function exvFresh() { var k0 = vgUiKey(vgUi()); return !!(EXV.at && Date.now() - EXV.at < VG_TTL_MS && Date.now() >= EXV.at && EXV.ui === k0); }
+  function exvRefresh() { if (exvInflight) return exvInflight; if (exvFresh()) return Promise.resolve(EXV);
+    exvInflight = vgFetch().then(function (x) { EXV = { state: x.state, ids: x.ids, at: Date.now(), ui: vgUiKey(vgUi()) }; exvInflight = null; return EXV; },
+                                 function () { EXV = { state: 'unknown', ids: null, at: Date.now(), ui: null }; exvInflight = null; return EXV; });
+    return exvInflight; }
+  function exvSnap() { return exvFresh() ? { state: EXV.state, ids: EXV.ids } : { state: 'unknown', ids: null }; }   /* 古い・未取得 → 分からない */
+  function vgThen(f) { return Promise.all([vgRefresh(), exvRefresh()]).then(function () { return f(); }, function () { return f(); }); }   /* ★r4: exvRefresh も */
+  function ex1ModelOkB(v) { try { var R = root.__CHR_MODEL_REGISTRY; if (!R || typeof v !== 'string' || !v) return false;   /* ★EXTRA1 r3: HOME のモデル一覧が認める名前だけ（一覧が無ければ許さない） */
+      if (typeof R.primary === 'function' && v === R.primary()) return true; if (typeof R.secondary === 'function' && v === R.secondary()) return true;
+      if (typeof R.isLegacyPrimary === 'function' && R.isLegacyPrimary(v) === true) return true; return typeof R.isManaged === 'function' && R.isManaged(v) === true; } catch (e) { return false; } }
+  function zt1ModelsB() { try { var R = root.__CHR_MODEL_REGISTRY, p = (R && typeof R.primary === 'function') ? R.primary() : ''; return (typeof p === 'string' && p) ? [p] : []; } catch (e) { return []; } }   /* ★ZT1b: 読むのは HOME のモデル一覧だけ（localStorage は読まない） */
   function benv() {
     var K = null; try { K = root.__v292DfixKEY1; K = (K && typeof K.enabled === 'function' && K.enabled()) ? K : null; } catch (e) { K = null; }
     var pOn = lsg(PURGE_ON) === '1' && lsg(PURGE_OFF) !== '1';
@@ -1834,6 +1992,8 @@
              purge: pOn, purgeVault: pOn && lsg(PURGE_VAULT) === '1',
              stuck1: lsg(STUCK_ON) === '1' && lsg(STUCK_OFF) !== '1', dirtyProof: dirtyProofB, otherTab: otherTabSeq,   /* ★STUCK1 r2: 既定 OFF */
              zt1: lsg(ZT_ON) === '1' && lsg(ZT_OFF) !== '1',   /* ★ZT1: 既定 OFF */
+             extra1: lsg(EX_OFF) !== '1', ex1ModelOk: ex1ModelOkB, ex1Vault: exvSnap(), ex1Ctr: { left: EX1_READ_MAX },   /* ★r4 */   /* ★EXTRA1: 既定 ON（r3: モデル名の確かめ） */
+             zt1Dirty: lsg(ZT_ON) === '1' && lsg(ZT_OFF) !== '1' && lsg(ZT_DIRTY) === '1', zt1Models: zt1ModelsB(),   /* ★ZT1b（ZT1 OFF のときは ZT_DIRTY を読まない） */
              free2: lsg(F2_OFF) !== '1',   /* ★FREE2c: 既定 ON（kill v292DfixFREE2Off='1'）。v292DfixFREE2On は読まない */
              free2d: lsg('v292DfixFREE2dOff') !== '1',   /* ★FREE2d（kill v292DfixFREE2dOff='1' → FREE2c と同じ） */
              saveBusy: saveBusyB,   /* ★FREE2c: この画面の fix697 がその物語の保存を送っている最中か（FREE2 のときだけ呼ぶ） */
@@ -2121,16 +2281,10 @@
       var e = benv(); return d1Run(opts, e, bctx()).then(function (r) {
         try { var o = J(lsg(D1_LOGK) || 'null', null); if (!o || !isArr(o.runs)) o = { v: 1, runs: [] }; o.runs.push({ at: Date.now(), freed: r.freed, chars: r.chars, failed: r.failed, code: r.code }); while (o.runs.length > 20) o.runs.shift(); root.localStorage.setItem(D1_LOGK, JSON.stringify(o)); r.logWritten = true; } catch (eL) { r.logWritten = false; }
         return r; }); },
-    free2DryRun: function () {
-      var e = benv(), o = { v: F2_VERSION, on: e.free2 === true, mode: e.purge ? 'purge' : 'r2', at: Date.now(), candidates: 0, freeable: { stories: 0, keys: 0, chars: 0, viaProof: 0 }, excluded: { stories: 0, byReason: {} }, global: null };
-      if (!ready()) { o.notReady = true; return Promise.resolve(o); }
-      var glob = null; e.onReason = function (sid, w) { if (sid === '*') glob = String(w); };
-      return (e.purge ? surveyP : survey)(e, bctx()).then(function (rep) {
-        o.candidates = rep.candidates || 0; o.global = glob;
-        for (var i = 0; i < rep.eligible.length; i++) { var x = rep.eligible[i]; o.freeable.stories++; o.freeable.keys += +x.keys || 0; o.freeable.chars += +x.chars || 0; if (x.dirtyProven === true) o.freeable.viaProof++; }
-        for (var k in rep.skipped) if (Object.prototype.hasOwnProperty.call(rep.skipped, k) && k !== glob) { o.excluded.byReason[k] = rep.skipped[k]; o.excluded.stories += rep.skipped[k]; }
-        return o;
-      }, function () { o.failed = true; return o; });
+    free2DryRun: function () {   /* ★EXTRA1 r3: 中身は f2DryTally（r2 の数に proofExtra を足した・読むだけ） */
+      var e = benv();
+      if (!ready()) return Promise.resolve({ v: F2_VERSION, on: e.free2 === true, notReady: true });
+      return f2DryTally(e, bctx());
     },
     /* ★AUTOCLEAN1: autoclean() = 状態（読むだけ）／autoclean({ dryRun:true }) = 何も消さず・記録も書かず（1 日 1 回に数えない）候補の数・7 日以上の数（端末の下見）・サーバーの今が読めたか／
        autoclean({ run:true }) = 自動と同じ 1 回の実行（On の端末だけ・1 日 1 回の制限も同じ） */
@@ -2145,7 +2299,7 @@
         var e4 = {}; for (var k4 in e) if (Object.prototype.hasOwnProperty.call(e, k4)) e4[k4] = e[k4]; e4.d2MinAgeMs = dd.ms; e4.only = null; e4.purge = false; e4.acGen = gOn;   /* ★AUTOCLEAN1 r4: 実行と同じ env の形 */
         var dw = null; try { dw = acDryWhy(e4); } catch (eDW) { dw = { failed: true }; }
         var pc = acPace(e), early = null; if (!due && (pc.a || pc.b)) early = acEarly(lg, e.now(), 'zero', pc);
-        return Promise.resolve(cx.who()).then(function (a) { return vcDry(e4, cx).then(function (vcd) { var n = cx.serverNow(); return { code: 'dry', vclean: vcd, on: acOnGet(lsg), account: !!a, serverTime: typeof n === 'number' && n > 0, candidates: c.length, aged: aged.length, due: due, days: dd.days, daysArg: dSrc, daysKey: dk.key, autoDays: AC_DAYS, gen: { on: gOn, candidates: gN, chars: gC },
+        return Promise.resolve(cx.who()).then(function (a) { return vcDry(e4, cx).then(function (vcd) { var n = cx.serverNow(); var co = null; try { co = cOnlyCount(e4); } catch (eCO) { co = null; } return { code: 'dry', cOnly: co, vclean: vcd, on: acOnGet(lsg), account: !!a, serverTime: typeof n === 'number' && n > 0, candidates: c.length, aged: aged.length, due: due, days: dd.days, daysArg: dSrc, daysKey: dk.key, autoDays: AC_DAYS, gen: { on: gOn, candidates: gN, chars: gC },
           breakdown: dw, pace: { a: pc.a, b: pc.b, early: early, dayQ: acDayQ(lg, e.now()), dayCap: (pc.a || pc.b) ? AC_DAY_QMAX : AC_QMAX } }; }); }); }
       if (opt && opt.run === true) { if (!acOnGet(lsg)) return Promise.resolve({ code: 'off' }); if (!ready()) return Promise.resolve({ notReady: true });
         var ro = { force: opt.force === true }; if (opt.qaDays !== undefined) ro.qaDays = opt.qaDays; if (opt.ack !== undefined) ro.ack = opt.ack;   /* ★r6: QA 操作はその 1 回の引数だけ */
