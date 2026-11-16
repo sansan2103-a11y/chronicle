@@ -254,6 +254,39 @@
     return false;
   }
   /* null = 許す / 外す理由の種類（鍵の名前だけ。値は入れない） */
+  /* ★EXTRA1 r5（SMOKE28: 絵のある物語が全部 'cast:av2' で残った）: cast.av2 = { assetSchema:2 | assetIdPrep:1, sid, bindings, known, retired }（v292Dav2-data D1）。
+     HOME の projectionV2 は fix743 → __v292Dav2Map.push を通るので、hash（＝Worker の墓標と同じ規則）には次が入る:
+       モード（body.assetSchema / assetIdPrep）・bindings（body.bindings）・retired の行（npcs へ足す）・cast に無い id の known（DEPARTED として npcs へ足す）。
+     入らないのは「cast に同じ id の行がある known / retired の写し」だけ。known・retired はサーバーの本体からしか作られない（pull・登録の読み戻し・fixKNW）が、
+     ここでは念のため、その写しが hash に入る cast の行と 1 文字も違わない（stable が同じ）ことを求める。違えば残す。
+     id の無い NPC の名前が bindings にある（push が id を付け直す＝再登場）ときは、どの写しが hash に入るか決まらないので残す。
+     鍵は 6 つだけ・sid はこの物語・モードは 1 つ・bindings は 1〜80 字の名前 → ch_ の id（1024 個まで）・known / retired は ch_ の id ごと。ほかは全部残す。 */
+  var AV2_KEYS = { assetSchema: 1, assetIdPrep: 1, sid: 1, bindings: 1, known: 1, retired: 1 }, AV2_CID = /^ch_[A-Za-z0-9_-]{8,64}$/, AV2_ST = { DEPARTED: 1, DELETED: 1 };
+  function ex1Plain(o) { return !!o && typeof o === 'object' && !isArr(o); }
+  function ex1Av2(id, ca) {
+    var a = ca.av2, i, k;
+    if (!ex1Plain(a)) return 'cast:av2';
+    for (k in a) if (ztHas(a, k) && AV2_KEYS[k] !== 1) return 'cast:av2';
+    var s2 = ztHas(a, 'assetSchema'), pp = ztHas(a, 'assetIdPrep');
+    if (!((s2 && a.assetSchema === 2 && !pp) || (pp && a.assetIdPrep === 1 && !s2))) return 'cast:av2';
+    if (a.sid !== id) return 'cast:av2.sid';
+    var list = [], ents = {}; if (ex1Plain(ca.hero)) list.push(ca.hero); if (isArr(ca.npcs)) for (i = 0; i < ca.npcs.length; i++) if (ex1Plain(ca.npcs[i])) list.push(ca.npcs[i]);
+    for (i = 0; i < list.length; i++) { var cid = list[i].character_id; if (cid === undefined) continue; if (typeof cid !== 'string' || !AV2_CID.test(cid) || ztHas(ents, cid)) return 'cast:av2'; ents[cid] = list[i]; }
+    var bd = ztHas(a, 'bindings') ? a.bindings : {}, nb = 0;
+    if (!ex1Plain(bd)) return 'cast:av2.bindings';
+    for (k in bd) { if (!ztHas(bd, k)) continue; if (++nb > 1024 || !k || k.length > 80 || k !== k.trim() || typeof bd[k] !== 'string' || !AV2_CID.test(bd[k])) return 'cast:av2.bindings'; }
+    for (i = 0; i < list.length; i++) if (list[i].character_id === undefined && typeof list[i].name === 'string' && ztHas(bd, list[i].name)) return 'cast:av2.bindings';   /* 再登場（push が id を付け直す） */
+    var rt = ztHas(a, 'retired') ? a.retired : [], rid = {};
+    if (!isArr(rt)) return 'cast:av2.retired';
+    for (i = 0; i < rt.length; i++) { var r = rt[i]; if (!ex1Plain(r) || typeof r.character_id !== 'string' || !AV2_CID.test(r.character_id) || AV2_ST[r.status] !== 1 || ztHas(rid, r.character_id)) return 'cast:av2.retired';
+      rid[r.character_id] = 1; if (ztHas(ents, r.character_id) && stable(ents[r.character_id]) !== stable(r)) return 'cast:av2.retired'; }
+    var kn = ztHas(a, 'known') ? a.known : {};
+    if (!ex1Plain(kn)) return 'cast:av2.known';
+    for (k in kn) { if (!ztHas(kn, k)) continue; var sn = kn[k];
+      if (!AV2_CID.test(k) || !ex1Plain(sn) || ztHas(sn, 'character_id') || ztHas(rid, k)) return 'cast:av2.known';
+      if (ztHas(ents, k)) { var e0 = {}; for (var f in ents[k]) if (ztHas(ents[k], f) && f !== 'character_id') e0[f] = ents[k][f]; if (stable(e0) !== stable(sn)) return 'cast:av2.known'; } }
+    return null;
+  }
   function ex1Cat(id, env) {
     var b = J(g(env, 'chr6_slot_' + id), null);
     if (!b || typeof b !== 'object' || isArr(b)) return 'body:unreadable';
@@ -263,7 +296,7 @@
       if (typeof c !== 'object' || isArr(c)) return 'cfg:not-object';
       for (var k2 in c) { if (!ztHas(c, k2) || ZT_CFG_HASHED[k2] === 1) continue; if (ex1Ok(k2, c[k2], nT, id, env)) continue; return ztHas(EX1_NAMES, k2) ? 'cfg:' + k2 : 'cfg:unknown'; }
     }
-    var ca = b.cast; if (ca && typeof ca === 'object' && !isArr(ca) && ztHas(ca, 'av2')) return 'cast:av2';
+    var ca = b.cast; if (ca && typeof ca === 'object' && !isArr(ca) && ztHas(ca, 'av2')) { var aw = ex1Av2(id, ca); if (aw) return aw; }   /* ★EXTRA1 r5 */
     return null;
   }
   function exPost(id, env, se, need) {
@@ -1885,7 +1918,7 @@
               /* ★PURGE1 */ PURGE_ON: PURGE_ON, PURGE_OFF: PURGE_OFF, PURGE_VAULT: PURGE_VAULT, NOTICE_P: NOTICE_P, keysForP: keysForP, purgeListP: purgeListP, localBlockP: localBlockP, planP: planP,
               serverEvalP: serverEvalP, serverEvalMeta: serverEvalMeta, surveyP: surveyP, freeOneP: freeOneP,
               /* ★STUCK1 */ STUCK_OFF: STUCK_OFF, staleDirtyLocal: staleDirtyLocal, stuckNeeds: stuckNeeds, stuckProof: stuckProof,
-              /* ★STUCK1 r2 */ STUCK_ON: STUCK_ON, SVERSION: SVERSION, FAMILY_CLASS: FAMILY_CLASS, familyClass: familyClass, /* ★ZT1b */ zt1Extra: zt1Extra, /* ★ZT1b r2 */ cOnlyCount: cOnlyCount, exPost: exPost, EX_OFF: EX_OFF, /* ★EXTRA1 r3 */ ex1Cat: ex1Cat, f2DryTally: f2DryTally, EX1_PROVIDER: EX1_PROVIDER, EX1_MODEL: EX1_MODEL, EX1_ART_MAX: EX1_ART_MAX, /* ★r4 */ EX1_READ_MAX: EX1_READ_MAX, exVaultKnown: exVaultKnown, ZT_DIRTY: ZT_DIRTY, ZT_CFG_HASHED: ZT_CFG_HASHED, ZT_CFG_DEFAULT: ZT_CFG_DEFAULT, ZT_TOP: ZT_TOP, provenSubset: provenSubset, raceProbe: raceProbe, raceBlock: raceBlock, planByReason: planByReason, COUNT_ONLY: COUNT_ONLY,
+              /* ★STUCK1 r2 */ STUCK_ON: STUCK_ON, SVERSION: SVERSION, FAMILY_CLASS: FAMILY_CLASS, familyClass: familyClass, /* ★ZT1b */ zt1Extra: zt1Extra, /* ★ZT1b r2 */ cOnlyCount: cOnlyCount, exPost: exPost, EX_OFF: EX_OFF, /* ★EXTRA1 r3 */ ex1Cat: ex1Cat, f2DryTally: f2DryTally, EX1_PROVIDER: EX1_PROVIDER, EX1_MODEL: EX1_MODEL, EX1_ART_MAX: EX1_ART_MAX, /* ★r5 */ ex1Av2: ex1Av2, /* ★r4 */ EX1_READ_MAX: EX1_READ_MAX, exVaultKnown: exVaultKnown, ZT_DIRTY: ZT_DIRTY, ZT_CFG_HASHED: ZT_CFG_HASHED, ZT_CFG_DEFAULT: ZT_CFG_DEFAULT, ZT_TOP: ZT_TOP, provenSubset: provenSubset, raceProbe: raceProbe, raceBlock: raceBlock, planByReason: planByReason, COUNT_ONLY: COUNT_ONLY,
               /* ★AUTOCLEAN1 */ acRunOnce: acRunOnce, AC_DEFAULT_ON: AC_DEFAULT_ON, /* ★r5 */ acDaysGet: acDaysGet, acDaysTxt: acDaysTxt, AC_DAYS_MAX: AC_DAYS_MAX, /* ★r6 */ acDaysParse: acDaysParse, acQaDays: acQaDays, AC_QA_ACK: AC_QA_ACK, /* ★VAULTGUARD1 */ VG_OFF: 'v292DfixVAULTGUARD1Off', /* ★VCLEAN1 */ vcOnGet: vcOnGet, vcCheck: vcCheck, vcHidden: vcHidden, vcDry: vcDry, vaultBlock: vaultBlock, /* ★r4 */ acEarly: acEarly, acPace: acPace, acDayQ: acDayQ, acDryWhy: acDryWhy, acWhyName: acWhyName, AC_DAY_QMAX: AC_DAY_QMAX, AC_PACE_MIN_MS: AC_PACE_MIN_MS, AC_KEEP_DETAIL: AC_KEEP_DETAIL, acOnGet: acOnGet, acServerAge: acServerAge, AC_QMAX: AC_QMAX, AC_DAYS: AC_DAYS, AC_MIN_AGE_MS: AC_MIN_AGE_MS, AC_GAP_MS: AC_GAP_MS, AC_MAX: AC_MAX, d2LocalAt: d2LocalAt,
               /* ★DISCARD2 */ d2Owners: d2Owners, d2Plan: d2Plan, d2Local: d2Local, d2Survey: d2Survey, d2One: d2One, d2Run: d2Run, d2Server: d2Server, D2_SKIP: D2_SKIP,
               /* ★DISCARD1 */ d1Local: d1Local, d1Server: d1Server, d1Survey: d1Survey, d1One: d1One, d1Run: d1Run, d1Cat: d1Cat, D1_ACK: D1_ACK, D1_OVERRIDE: D1_OVERRIDE,
