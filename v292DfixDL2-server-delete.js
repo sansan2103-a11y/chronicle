@@ -111,8 +111,8 @@
      印が CLEAN の物語は証明が要らない（従来どおりシートに出る）。違った・作れなかった物語は証明なし＝従来どおり対象外。通信は増えない。 */
   var F2_KEY = 'v292DfixFREE2_proofs', F2_MAX = 100;
   function acNote() { try { var A = window.__v292DfixSTORE1b, ac = (A && typeof A.autoclean === 'function') ? A.autoclean() : null;
-    if (!ac || ac.on !== true || !(+ac.days > 0)) return '';
-    return '<p id="dl2auto">削除から ' + (+ac.days) + ' 日たった後、この端末でホームを開いたときに、この端末に残る写しと巻き戻し用の控えを順に自動で消します（サーバーで削除済みと確認できた物語だけ。確認できないときは消しません）。</p>'; } catch (e) { return ''; } }
+    if (!ac || ac.on !== true || !(+ac.days >= 0) || ac.days === null || ac.days === '') return '';   /* ★AUTOCLEAN1 r5: 日数の鍵で 0 日もあり得る（0 のとき行を隠さない） */
+    return '<p id="dl2auto">' + (+ac.days === 0 ? '削除の後' : '削除から ' + (+ac.days) + ' 日たった後') + '、この端末でホームを開いたときに、この端末に残る写しと巻き戻し用の控えを順に自動で消します（サーバーで削除済みと確認できた物語だけ。確認できないときは消しません）。</p>'; } catch (e) { return ''; } }
   function free2On() { return lsg('v292DfixFREE2Off') !== '1'; }   /* ★FREE2c (GPT #127-TV 2): 既定 ON。kill v292DfixFREE2Off='1'。v292DfixFREE2On は読まない */
   var free2 = { tried: 0, recorded: 0, clean: 0, differs: 0, skipped: 0, last: null };
   function free2Note(id, code) { free2.last = { code: code, t: Date.now() }; if (code === 'recorded') free2.recorded++; else if (code === 'clean-no-proof-needed') free2.clean++; else if (code === 'content-differs') free2.differs++; else free2.skipped++; }
