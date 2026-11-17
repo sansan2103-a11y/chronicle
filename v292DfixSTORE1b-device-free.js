@@ -308,6 +308,17 @@
     var ca = b.cast; if (ca && typeof ca === 'object' && !isArr(ca) && ztHas(ca, 'av2')) { var aw = ex1Av2(id, ca); if (aw) return aw; }   /* ★EXTRA1 r5 */
     return null;
   }
+  /* ★ZT1c（GPT #127-VP 1・案 a。SMOKE31: ふつうに作った 0 ターンの物語が全部 zero-turn-extra）: ZT1 の経路（0 ターン）の hash 対象外の検査を、
+     r1 の「既定値だけ」（zt1Extra）から EXTRA1 r6 と同じ許可リスト（ex1Cat）へ切り替える。型・置き場所・値の形を確かめる。
+     コードが入れる固定の印: orKey / pollKey の '__proxy__'（fix247 / fix328 / fix336 / fix886）・provider 'openrouter'（同）・aiAvatar true（fix355）・artStyle 6（fix374 / fix395）。
+     BYOK のキーは EXTRA1 r4 と同じ（生きている物語が同じ値を持つ写しのときだけ・Vault で隠した物語は相手にしない・集合が分からなければ認めない・値は出さない）。
+     cast.av2（開始時の絵）は EXTRA1 r6 の部分集合の規則。_spiceT は 0 ターンなので 0 だけ。外れたら今までどおり 'zero-turn-extra'（理由の種類は dry-run の zeroTurnExtra.byKey）。
+     EXTRA1 の kill（v292DfixEXTRA1Off）とは独立（ZT1 の検査は止めない）。zt1Extra は残す（使わない）。 */
+  function zt1Chk(id, env) {
+    var cat = ex1Cat(id, env); if (!cat) return null;
+    if (typeof env.onExtra === 'function') { try { env.onExtra(id, 'zt:' + cat, 'subset'); } catch (eO) {} }   /* ZT1 の証明は class c を残す（r2）ので subset で数える */
+    return ZT_EXTRA;
+  }
   function exPost(id, env, se, need) {
     if (!env || env.extra1 === false) return null;
     if ((need && need.zt1 === true) || (se && se.zeroTurn === true)) return null;   /* ZT1 の経路は zt1Extra で先に確かめた */
@@ -478,12 +489,12 @@
     if (!need && se && se.zeroTurn === true) {   /* ★ZT1: 印が CLEAN でも 0 ターンの墓標は hash の一致を必ず確かめる（dirtyProven にはしない） */
       var zr = zt1Row(id, env);
       if (!zr || typeof zr.title !== 'string' || !HEX64.test(String(se.serverHash || ''))) return Promise.resolve('zero-turn-unproven');
-      var zx0 = zt1Extra(id, env); if (zx0) return Promise.resolve(zx0);   /* ★ZT1b */
+      var zx0 = zt1Chk(id, env); if (zx0) return Promise.resolve(zx0);   /* ★ZT1b ／ ★ZT1c: EXTRA1 r6 と同じ許可リスト */
       return Promise.resolve().then(function () { return env.dirtyProof(id, zr.title, String(se.serverHash), dpo(se)); })
         .then(function (why) { if (why == null) { se.zeroTurnProven = true; return null; } return 'zero-turn-unproven'; }, function () { return 'zero-turn-unproven'; });
     }
     if (!need) return Promise.resolve(null);
-    if (need.zt1 === true || (se && se.zeroTurn === true)) { var zx1 = zt1Extra(id, env); if (zx1) return Promise.resolve(zx1); }   /* ★ZT1b */
+    if (need.zt1 === true || (se && se.zeroTurn === true)) { var zx1 = zt1Chk(id, env); if (zx1) return Promise.resolve(zx1); }   /* ★ZT1b ／ ★ZT1c */
     if (!HEX64.test(String(se && se.serverHash || ''))) return Promise.resolve('unsynced-unproven');
     if (need.free2) {   /* ★FREE2: サーバーの墓標が証明の時のまま（hash・rev）で、いまの端末の全体がその hash と同じ。title はサーバーの墓標のもの */
       if (String(se.serverHash) !== need.free2.h || se.rev !== need.free2.rev || typeof se.title !== 'string') return Promise.resolve('unsynced-unproven');
@@ -605,9 +616,9 @@
   /* ★EXTRA1 r3: free2DryRun の中身（読むだけ・消さない・書かない）。proof-extra の物語の数・鍵の名前の種類ごとの数・それで残る字数（見込み） */
   function f2DryTally(e, cx) {
     var o = { v: F2_VERSION, on: e.free2 === true, mode: e.purge ? 'purge' : 'r2', at: e.now(), candidates: 0, freeable: { stories: 0, keys: 0, chars: 0, viaProof: 0 }, excluded: { stories: 0, byReason: {} }, global: null,
-              proofExtra: { stories: 0, chars: 0, byKey: {} } };
+              proofExtra: { stories: 0, chars: 0, byKey: {} }, zeroTurnExtra: { stories: 0, chars: 0, byKey: {} } };   /* ★ZT1c: ZT1 の外れ（数だけ） */
     var glob = null, seen = {}; e.onReason = function (sid, w) { if (sid === '*') glob = String(w); };
-    e.onExtra = function (sid, cat, mode) { if (seen[sid]) return; seen[sid] = 1; var P = o.proofExtra; P.stories++; P.byKey[cat] = (P.byKey[cat] || 0) + 1;
+    e.onExtra = function (sid, cat, mode) { if (seen[sid]) return; seen[sid] = 1; var zt = String(cat).indexOf('zt:') === 0, P = zt ? o.zeroTurnExtra : o.proofExtra; if (zt) cat = String(cat).slice(3); P.stories++; P.byKey[cat] = (P.byKey[cat] || 0) + 1;
       try { var pl = planOne(sid, e); P.chars += (mode === 'subset') ? applySubset(pl, provenSubset(sid, e, pl)).chars : pl.chars; } catch (eP) {} };
     return (e.purge ? surveyP : survey)(e, cx).then(function (rep) {
       o.candidates = rep.candidates || 0; o.global = glob;
@@ -1929,7 +1940,7 @@
               /* ★PURGE1 */ PURGE_ON: PURGE_ON, PURGE_OFF: PURGE_OFF, PURGE_VAULT: PURGE_VAULT, NOTICE_P: NOTICE_P, keysForP: keysForP, purgeListP: purgeListP, localBlockP: localBlockP, planP: planP,
               serverEvalP: serverEvalP, serverEvalMeta: serverEvalMeta, surveyP: surveyP, freeOneP: freeOneP,
               /* ★STUCK1 */ STUCK_OFF: STUCK_OFF, staleDirtyLocal: staleDirtyLocal, stuckNeeds: stuckNeeds, stuckProof: stuckProof,
-              /* ★STUCK1 r2 */ STUCK_ON: STUCK_ON, SVERSION: SVERSION, FAMILY_CLASS: FAMILY_CLASS, familyClass: familyClass, /* ★ZT1b */ zt1Extra: zt1Extra, /* ★ZT1b r2 */ cOnlyCount: cOnlyCount, exPost: exPost, EX_OFF: EX_OFF, /* ★EXTRA1 r3 */ ex1Cat: ex1Cat, f2DryTally: f2DryTally, EX1_PROVIDER: EX1_PROVIDER, EX1_MODEL: EX1_MODEL, EX1_ART_MAX: EX1_ART_MAX, /* ★r5 */ ex1Av2: ex1Av2, /* ★r6 */ ex1Sub: ex1Sub, /* ★r4 */ EX1_READ_MAX: EX1_READ_MAX, exVaultKnown: exVaultKnown, ZT_DIRTY: ZT_DIRTY, ZT_CFG_HASHED: ZT_CFG_HASHED, ZT_CFG_DEFAULT: ZT_CFG_DEFAULT, ZT_TOP: ZT_TOP, provenSubset: provenSubset, raceProbe: raceProbe, raceBlock: raceBlock, planByReason: planByReason, COUNT_ONLY: COUNT_ONLY,
+              /* ★STUCK1 r2 */ STUCK_ON: STUCK_ON, SVERSION: SVERSION, FAMILY_CLASS: FAMILY_CLASS, familyClass: familyClass, /* ★ZT1b */ zt1Extra: zt1Extra, /* ★ZT1b r2 */ cOnlyCount: cOnlyCount, exPost: exPost, EX_OFF: EX_OFF, /* ★EXTRA1 r3 */ ex1Cat: ex1Cat, f2DryTally: f2DryTally, EX1_PROVIDER: EX1_PROVIDER, EX1_MODEL: EX1_MODEL, EX1_ART_MAX: EX1_ART_MAX, /* ★r5 */ ex1Av2: ex1Av2, /* ★r6 */ ex1Sub: ex1Sub, /* ★ZT1c */ zt1Chk: zt1Chk, /* ★r4 */ EX1_READ_MAX: EX1_READ_MAX, exVaultKnown: exVaultKnown, ZT_DIRTY: ZT_DIRTY, ZT_CFG_HASHED: ZT_CFG_HASHED, ZT_CFG_DEFAULT: ZT_CFG_DEFAULT, ZT_TOP: ZT_TOP, provenSubset: provenSubset, raceProbe: raceProbe, raceBlock: raceBlock, planByReason: planByReason, COUNT_ONLY: COUNT_ONLY,
               /* ★AUTOCLEAN1 */ acRunOnce: acRunOnce, AC_DEFAULT_ON: AC_DEFAULT_ON, /* ★r5 */ acDaysGet: acDaysGet, acDaysTxt: acDaysTxt, AC_DAYS_MAX: AC_DAYS_MAX, /* ★r6 */ acDaysParse: acDaysParse, acQaDays: acQaDays, AC_QA_ACK: AC_QA_ACK, /* ★VAULTGUARD1 */ VG_OFF: 'v292DfixVAULTGUARD1Off', /* ★VCLEAN1 */ vcOnGet: vcOnGet, vcCheck: vcCheck, vcHidden: vcHidden, vcDry: vcDry, vaultBlock: vaultBlock, /* ★r4 */ acEarly: acEarly, acPace: acPace, acDayQ: acDayQ, acDryWhy: acDryWhy, acWhyName: acWhyName, AC_DAY_QMAX: AC_DAY_QMAX, AC_PACE_MIN_MS: AC_PACE_MIN_MS, AC_KEEP_DETAIL: AC_KEEP_DETAIL, acOnGet: acOnGet, acServerAge: acServerAge, AC_QMAX: AC_QMAX, AC_DAYS: AC_DAYS, AC_MIN_AGE_MS: AC_MIN_AGE_MS, AC_GAP_MS: AC_GAP_MS, AC_MAX: AC_MAX, d2LocalAt: d2LocalAt,
               /* ★DISCARD2 */ d2Owners: d2Owners, d2Plan: d2Plan, d2Local: d2Local, d2Survey: d2Survey, d2One: d2One, d2Run: d2Run, d2Server: d2Server, D2_SKIP: D2_SKIP,
               /* ★DISCARD1 */ d1Local: d1Local, d1Server: d1Server, d1Survey: d1Survey, d1One: d1One, d1Run: d1Run, d1Cat: d1Cat, D1_ACK: D1_ACK, D1_OVERRIDE: D1_OVERRIDE,
