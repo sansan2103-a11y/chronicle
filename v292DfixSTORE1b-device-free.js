@@ -263,6 +263,15 @@
      鍵は 6 つだけ・sid はこの物語・モードは 1 つ・bindings は 1〜80 字の名前 → ch_ の id（1024 個まで）・known / retired は ch_ の id ごと。ほかは全部残す。 */
   var AV2_KEYS = { assetSchema: 1, assetIdPrep: 1, sid: 1, bindings: 1, known: 1, retired: 1 }, AV2_CID = /^ch_[A-Za-z0-9_-]{8,64}$/, AV2_ST = { DEPARTED: 1, DELETED: 1 };
   function ex1Plain(o) { return !!o && typeof o === 'object' && !isArr(o); }
+  /* ★EXTRA1 r6（SMOKE29: 自動で付いた voice が cast の行にだけあり、known の写しに無い 2 本が 'cast:av2.known' で残った）:
+     写し a が、hash に入る cast の行 b の部分集合か。a の鍵は全部 b に（自分の鍵として）あり、値は object なら同じ規則で、それ以外（配列・文字列・数・真偽・null）は stable が同じ。
+     b にだけある鍵は許す（b は hash に入るので、a を消しても hash で証明されていない情報は失われない）。a にだけある鍵・値が違う鍵（古い版の写しなど）があれば残す。深さ 32 まで。 */
+  function ex1Sub(a, b, d) {
+    if (d > 32) return false;
+    if (ex1Plain(a)) { if (!ex1Plain(b)) return false; for (var k in a) { if (!ztHas(a, k)) continue; if (!ztHas(b, k) || !ex1Sub(a[k], b[k], d + 1)) return false; } return true; }
+    return stable(a) === stable(b);
+  }
+  function ex1Nm(s) { try { return (typeof s.normalize === 'function' ? s.normalize('NFC') : s).trim(); } catch (e) { return s; } }   /* v292Dav2-data push と同じ */
   function ex1Av2(id, ca) {
     var a = ca.av2, i, k;
     if (!ex1Plain(a)) return 'cast:av2';
@@ -275,16 +284,16 @@
     var bd = ztHas(a, 'bindings') ? a.bindings : {}, nb = 0;
     if (!ex1Plain(bd)) return 'cast:av2.bindings';
     for (k in bd) { if (!ztHas(bd, k)) continue; if (++nb > 1024 || !k || k.length > 80 || k !== k.trim() || typeof bd[k] !== 'string' || !AV2_CID.test(bd[k])) return 'cast:av2.bindings'; }
-    for (i = 0; i < list.length; i++) if (list[i].character_id === undefined && typeof list[i].name === 'string' && ztHas(bd, list[i].name)) return 'cast:av2.bindings';   /* 再登場（push が id を付け直す） */
+    for (i = 0; i < list.length; i++) if (list[i].character_id === undefined && typeof list[i].name === 'string' && ztHas(bd, ex1Nm(list[i].name))) return 'cast:av2.bindings';   /* 再登場（push が id を付け直す。★r6: push と同じ NFC・前後の空白の正規化） */
     var rt = ztHas(a, 'retired') ? a.retired : [], rid = {};
     if (!isArr(rt)) return 'cast:av2.retired';
     for (i = 0; i < rt.length; i++) { var r = rt[i]; if (!ex1Plain(r) || typeof r.character_id !== 'string' || !AV2_CID.test(r.character_id) || AV2_ST[r.status] !== 1 || ztHas(rid, r.character_id)) return 'cast:av2.retired';
-      rid[r.character_id] = 1; if (ztHas(ents, r.character_id) && stable(ents[r.character_id]) !== stable(r)) return 'cast:av2.retired'; }
+      rid[r.character_id] = 1; if (ztHas(ents, r.character_id) && !ex1Sub(r, ents[r.character_id], 0)) return 'cast:av2.retired'; }   /* ★r6: 写しは cast の行の部分集合 */
     var kn = ztHas(a, 'known') ? a.known : {};
     if (!ex1Plain(kn)) return 'cast:av2.known';
     for (k in kn) { if (!ztHas(kn, k)) continue; var sn = kn[k];
       if (!AV2_CID.test(k) || !ex1Plain(sn) || ztHas(sn, 'character_id') || ztHas(rid, k)) return 'cast:av2.known';
-      if (ztHas(ents, k)) { var e0 = {}; for (var f in ents[k]) if (ztHas(ents[k], f) && f !== 'character_id') e0[f] = ents[k][f]; if (stable(e0) !== stable(sn)) return 'cast:av2.known'; } }
+      if (ztHas(ents, k) && !ex1Sub(sn, ents[k], 0)) return 'cast:av2.known'; }   /* ★r6: 写しは cast の行の部分集合（cast の行にだけある欄＝voice など後から付いた欄は許す） */
     return null;
   }
   function ex1Cat(id, env) {
@@ -1918,7 +1927,7 @@
               /* ★PURGE1 */ PURGE_ON: PURGE_ON, PURGE_OFF: PURGE_OFF, PURGE_VAULT: PURGE_VAULT, NOTICE_P: NOTICE_P, keysForP: keysForP, purgeListP: purgeListP, localBlockP: localBlockP, planP: planP,
               serverEvalP: serverEvalP, serverEvalMeta: serverEvalMeta, surveyP: surveyP, freeOneP: freeOneP,
               /* ★STUCK1 */ STUCK_OFF: STUCK_OFF, staleDirtyLocal: staleDirtyLocal, stuckNeeds: stuckNeeds, stuckProof: stuckProof,
-              /* ★STUCK1 r2 */ STUCK_ON: STUCK_ON, SVERSION: SVERSION, FAMILY_CLASS: FAMILY_CLASS, familyClass: familyClass, /* ★ZT1b */ zt1Extra: zt1Extra, /* ★ZT1b r2 */ cOnlyCount: cOnlyCount, exPost: exPost, EX_OFF: EX_OFF, /* ★EXTRA1 r3 */ ex1Cat: ex1Cat, f2DryTally: f2DryTally, EX1_PROVIDER: EX1_PROVIDER, EX1_MODEL: EX1_MODEL, EX1_ART_MAX: EX1_ART_MAX, /* ★r5 */ ex1Av2: ex1Av2, /* ★r4 */ EX1_READ_MAX: EX1_READ_MAX, exVaultKnown: exVaultKnown, ZT_DIRTY: ZT_DIRTY, ZT_CFG_HASHED: ZT_CFG_HASHED, ZT_CFG_DEFAULT: ZT_CFG_DEFAULT, ZT_TOP: ZT_TOP, provenSubset: provenSubset, raceProbe: raceProbe, raceBlock: raceBlock, planByReason: planByReason, COUNT_ONLY: COUNT_ONLY,
+              /* ★STUCK1 r2 */ STUCK_ON: STUCK_ON, SVERSION: SVERSION, FAMILY_CLASS: FAMILY_CLASS, familyClass: familyClass, /* ★ZT1b */ zt1Extra: zt1Extra, /* ★ZT1b r2 */ cOnlyCount: cOnlyCount, exPost: exPost, EX_OFF: EX_OFF, /* ★EXTRA1 r3 */ ex1Cat: ex1Cat, f2DryTally: f2DryTally, EX1_PROVIDER: EX1_PROVIDER, EX1_MODEL: EX1_MODEL, EX1_ART_MAX: EX1_ART_MAX, /* ★r5 */ ex1Av2: ex1Av2, /* ★r6 */ ex1Sub: ex1Sub, /* ★r4 */ EX1_READ_MAX: EX1_READ_MAX, exVaultKnown: exVaultKnown, ZT_DIRTY: ZT_DIRTY, ZT_CFG_HASHED: ZT_CFG_HASHED, ZT_CFG_DEFAULT: ZT_CFG_DEFAULT, ZT_TOP: ZT_TOP, provenSubset: provenSubset, raceProbe: raceProbe, raceBlock: raceBlock, planByReason: planByReason, COUNT_ONLY: COUNT_ONLY,
               /* ★AUTOCLEAN1 */ acRunOnce: acRunOnce, AC_DEFAULT_ON: AC_DEFAULT_ON, /* ★r5 */ acDaysGet: acDaysGet, acDaysTxt: acDaysTxt, AC_DAYS_MAX: AC_DAYS_MAX, /* ★r6 */ acDaysParse: acDaysParse, acQaDays: acQaDays, AC_QA_ACK: AC_QA_ACK, /* ★VAULTGUARD1 */ VG_OFF: 'v292DfixVAULTGUARD1Off', /* ★VCLEAN1 */ vcOnGet: vcOnGet, vcCheck: vcCheck, vcHidden: vcHidden, vcDry: vcDry, vaultBlock: vaultBlock, /* ★r4 */ acEarly: acEarly, acPace: acPace, acDayQ: acDayQ, acDryWhy: acDryWhy, acWhyName: acWhyName, AC_DAY_QMAX: AC_DAY_QMAX, AC_PACE_MIN_MS: AC_PACE_MIN_MS, AC_KEEP_DETAIL: AC_KEEP_DETAIL, acOnGet: acOnGet, acServerAge: acServerAge, AC_QMAX: AC_QMAX, AC_DAYS: AC_DAYS, AC_MIN_AGE_MS: AC_MIN_AGE_MS, AC_GAP_MS: AC_GAP_MS, AC_MAX: AC_MAX, d2LocalAt: d2LocalAt,
               /* ★DISCARD2 */ d2Owners: d2Owners, d2Plan: d2Plan, d2Local: d2Local, d2Survey: d2Survey, d2One: d2One, d2Run: d2Run, d2Server: d2Server, D2_SKIP: D2_SKIP,
               /* ★DISCARD1 */ d1Local: d1Local, d1Server: d1Server, d1Survey: d1Survey, d1One: d1One, d1Run: d1Run, d1Cat: d1Cat, D1_ACK: D1_ACK, D1_OVERRIDE: D1_OVERRIDE,

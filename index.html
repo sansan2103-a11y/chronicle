@@ -6,7 +6,7 @@
 <script src="v292Dvault2-copygate.js?cb=20261011-ab8"></script>
 <script src="v292DfixCP1-final-tap.js?cb=20261023-bundle43a-r5"></script><!-- CP1 tap r43e (GPT #127-JY/#127-KA/#127-KK/#127-LA/#127-LC): 送信直前の body を CP1 に見せる観測口（送る中身は不変）。読み込み時に v292DfixCP1On='1'（かつ v292DfixCP1Off≠'1'）のときだけ fetch を包む。OFF/kill は何もしない。CP1 を使ったターンの途中でアカウント・物語・Owner 権限が変わった・kill されたときは、その送信を出さない／送信後に変わったら応答を捨てる。止めたターンは自動で送り直さない -->
 <script src="v292DfixHEROVOICE1-hero-voice.js?cb=20261114-hv1b"></script><!-- ★HEROVOICE1（laneHV2・2026-11-14）: 物語ごとの「主人公はどれくらい喋る？」（おまかせ＝既定・今までの動き／よく喋る・反応する／自分からは喋らない）。送信直前に sys の決まった文だけ置き換える（おまかせは触らない＝送信バイト同一）。出口は parsePlan の主人公ロックが lockMode() を聞く。保存は この端末の localStorage v292DfixHEROVOICE1:<物語キー>（物語本体・クラウドには書かない）。kill: v292DfixHEROVOICE1Off='1'。ACTOR1 の内側・CP1-final-tap の外側に置く（CP1 tap は置き換え後を見る）。 -->
-<script src="v292DfixCONTRACT1-scene-contract.js?cb=20261117-extra1r5"></script><!-- ★CONTRACT1（laneCONTRACT1・2026-11-15・GPT #127-UP）: 送信直前に user へ「今回の場面の契約」（直前の台詞・まだ返事が出ていない相手・断った／引き受けた・設定で確定した関係）を数行足す。既定 OFF・v292DfixCONTRACT1On=1 で ON・kill v292DfixCONTRACT1Off -->
+<script src="v292DfixCONTRACT1-scene-contract.js?cb=20261117-extra1r6"></script><!-- ★CONTRACT1（laneCONTRACT1・2026-11-15・GPT #127-UP）: 送信直前に user へ「今回の場面の契約」（直前の台詞・まだ返事が出ていない相手・断った／引き受けた・設定で確定した関係）を数行足す。既定 OFF・v292DfixCONTRACT1On=1 で ON・kill v292DfixCONTRACT1Off -->
 <script src="v292DfixHDRNL1-sys-header-newline.js?cb=20261115-hdrnl1"></script><!-- ★HDRNL1（lanePRUNE3・2026-11-15）: 送信直前に【反応と身体】の見出しが前の行に貼り付く改行抜けを直す（既定 ON・kill v292DfixHDRNL1Off） -->
 <script src="v292DfixPRUNE3-sys-prune3.js?cb=20261115-prune3"></script><!-- ★PRUNE3（lanePRUNE3・2026-11-15）: 送信直前に「進めよ」の重複・待たずに話してよい・続きの回の食い違い・返事の決まりを今ある文の置き換えで整理（既定 OFF・v292DfixPRUNE3On=1 で ON・v292DfixPRUNE3Parts で部分・kill v292DfixPRUNE3Off） -->
 <script src="v292DfixACTOR1-input-actor.js?cb=20261114-hv1"></script><!-- ★ACTOR1（laneQUALA・2026-11-12・GPT #127-SG §D の D5/D4）: 送信直前（fetch 境界）に入力の説明行だけを直す。(a) DO の入力で「登録キャラ名＋が」が主語の部分を「…の主語は美羽（主人公ではない）」と明示し、「他キャラの行動にしない」を外す（証明できないときは何もしない）。STORY の腕は v292DfixACTOR1aStoryOn="1" の端末だけ。(b) 既定 OFF（v292DfixACTOR1bOn="1"）: 台詞の入力が無い回に「主人公の台詞を書かない」1 行を user 末尾の SAY の行の位置へ・食い違う 2 文を sys から外す。kill = localStorage v292DfixACTOR1Off / aOff / bOff ="1"（毎回評価・送信バイト同一）。CP1 tap の直後・PRUNE2 の前（＝PRUNE1/PRUNE2 の後に当たる） -->
@@ -303,7 +303,7 @@
 <script src="v292Dfix892-held-input-guard.js?cb=20261011-s1b"></script>
 <script src="v292DfixLAT1-press-feedback.js?cb=20261112-lat1"></script>
 <script src="v292DfixSTORYSIZE1-story-size.js?cb=20261115-storysize1"></script><!-- ★STORYSIZE1 (GPT #127-UN): 1 物語の大きさの上限（Worker 100 万字・D1 200 万バイト）を保存の直前に測り、注意域は知らせ・危険域は送信と続きを書くを止める・上限を確実に超える本文は送らない（Worker の 413 と同じ形）。kill: v292DfixSTORYSIZE1Off='1' -->
-<script src="v292DfixHOLDNOTE2-hold-kinds.js?cb=20261117-extra1r5"></script><!-- ★HOLDNOTE2 (GPT #127-UF): 状態のために保存が止まったとき（404・状態の食い違い・削除済み・av2 BLOCKED）に状態ごとの知らせを 1 回。表示だけ。kill: v292DfixHOLDNOTE2Off='1' -->
+<script src="v292DfixHOLDNOTE2-hold-kinds.js?cb=20261117-extra1r6"></script><!-- ★HOLDNOTE2 (GPT #127-UF): 状態のために保存が止まったとき（404・状態の食い違い・削除済み・av2 BLOCKED）に状態ごとの知らせを 1 回。表示だけ。kill: v292DfixHOLDNOTE2Off='1' -->
 <script src="v292DfixHOLDNOTE1-hold-note.js?cb=20261115-holdnote1"></script><!-- ★HOLDNOTE1: クラウドへの保存が黙って止まったとき（fix697 canonHold の F924_SKIP・av2 登録の衝突 HOLD）に、入力欄の上に消えない知らせを 1 回。表示だけ。kill: v292DfixHOLDNOTE1Off='1' -->
 <script src="v292DfixERRNOTE1-send-error-note.js?cb=retry2-a"></script><!-- ★ERRNOTE1: 物語の送信がサーバーに断られたとき（HTTP 4xx/5xx）、理由を入力欄の上に出したままにする（既存の知らせは 60 秒で消えていた）。表示だけ（送り直さない・入力・本文・保存・sys・送信の中身に触らない・fetch を包まない）。kill: v292DfixERRNOTE1Off='1'。 -->
 <!-- v292Dfix569: 削除の「影監視」(拒否しない・挙動を1バイトも変えない)。
@@ -352,7 +352,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261117-extra1r5';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261117-extra1r6';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4259,7 +4259,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      default OFF (opt-in=v292Dfix803On / kill=v292Dfix803Off / story=v292Dfix803Story)。fix802 の fire 末尾から onFire で呼ばれる。
      timer 0 / retry 0 / 新 write path 0 / localStorage 書込は fix793.materialize() 経由の v292Dmem1_slot_<sid> のみ -->
 <script src="v292Dfix803-auto-materialize.js?cb=20260930-ac25"></script>
-<script src="v292Dfix697-shadow-story-commit.js?cb=20261117-extra1r5"></script>
+<script src="v292Dfix697-shadow-story-commit.js?cb=20261117-extra1r6"></script>
 <!-- ★fix912 SA-3 S2 in-session reconcile（fix697 の後・kill v292Dfix912Off / v292Dfix911Off） -->
 <script src="v292Dfix912-s2-insession.js?cb=20261114-save1"></script>
 <!-- ★fix729(RULING56/58): rename event → title-only CAS。fix697 の後に置く（transport 依存）。
@@ -4282,7 +4282,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      それらは new Response で応答を作り直すので、後から読み込むと「出口ガード後の本文」しか見えず
      モデルの生出力が取れない。本文は1文字も書き換えない。OFF=v292Dfix553Off -->
 <script src="v292Dfix553-punct-probe.js?cb=20260913-q119b5"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=20261117-extra1r5"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=20261117-extra1r6"></script>
 <script src="v292Dfix564-snapshot.js?cb=20261112-key1"></script>
 <!-- v292Dfix721(STEP4F): SAFE RESTORE ENGINE。fix291のimportAllを委譲で受け、
      NON-DESTRUCTIVE MERGE + default-deny + durable journal + boot rollbackで復元する。
@@ -4623,7 +4623,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <!-- v292Dfix228: スロット自動世代バックアップ(直近3世代)。2026-06-06のクロバー消失事故の恒久保険。
        復元= console で window.__v292Restore() / 一覧= window.__v292Gens() -->
   <script src="v292Dfix228-slot-generations.js?cb=20260901-fix783"></script>
-  <script src="v292DfixGEN1-gen-budget.js?cb=20261117-extra1r5"></script><!-- ★GEN1 (GPT #127-UN・既定 OFF): __gen_ の合計が予算（40 万字）を超えたとき、開いていない・同期済み（CLEAN）・未送信／競合／復旧の印なし・Vault でない物語の __gen_ を 1 回 1 本だけ最新 1 世代に減らす（保護分だけで超えるなら 0 本）。On=v292DfixGEN1On='1'・kill=v292DfixGEN1Off='1'・dryRun=window.__v292DfixGEN1.dryRun() -->
+  <script src="v292DfixGEN1-gen-budget.js?cb=20261117-extra1r6"></script><!-- ★GEN1 (GPT #127-UN・既定 OFF): __gen_ の合計が予算（40 万字）を超えたとき、開いていない・同期済み（CLEAN）・未送信／競合／復旧の印なし・Vault でない物語の __gen_ を 1 回 1 本だけ最新 1 世代に減らす（保護分だけで超えるなら 0 本）。On=v292DfixGEN1On='1'・kill=v292DfixGEN1Off='1'・dryRun=window.__v292DfixGEN1.dryRun() -->
   <!-- v292Dfix237: 別キャラ同一アイコンの根治(運搬URLのalt/seed整合ガード)。OFF=v292AvCarrierGuardOff -->
   <!-- v292Dfix239: 未登録キャラ(少女/店主等)のアイコン怪物化根治(genAsync判定待ちのレース封じ)。OFF=v292NcAvRaceOff -->
   <script src="v292Dfix239-noncast-avatar-race.js?cb=v292Dfix239"></script>
