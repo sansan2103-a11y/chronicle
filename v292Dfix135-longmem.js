@@ -80,6 +80,30 @@
   function saveLastBuild(idx){ if(!_lmCanSave())return; try { localStorage.setItem(LSP_LASTBUILD, String(idx)); } catch(e){} }
 
   // ---------- LLM call ----------
+  /* ★MEM3（laneMEM3・2026-11-17・Local 試作・既定 OFF: localStorage v292DfixMEM3On='1'・kill v292DfixMEM3Off='1'。毎回評価）
+     実測（mem2/AB2_SCORE.md・LONGMEM_GRADE.md）: 作り直しのたびに summary を丸ごと書き直す（300 字・"Replace the previous summary"）ので、
+     T3 の名乗りの勤め先・フルネームのような確定事実が落ち、「確認する」が「確認した」に、古い日時が出来事の行に残る。
+     ON のときだけ、送る指示の 3 か所（summary の欄の説明・events の欄の説明・Rules の 1 文）を書き換える。書式（「確定：」「未定：」の 2 部）で分け、禁止文は足さない。
+     worldinfo の欄の説明・Rules の worldinfo の部分は変えない。送り先・モデル・max_tokens・保存の形（summary は 800 字で切る）も変えない。
+     3 か所のどれかが見つからない（ほかの修正で文が変わった）ときは、何も変えずに送る（mismatch を数える）。 */
+  var M3_SUM_OLD = '  "summary": "Japanese, 300 chars max. The story so far — plot, current situation, character states. Replace the previous summary.",\n';
+  var M3_SUM_NEW = '  "summary": "Japanese, 500 chars max, in two labelled parts. 確定：facts the story text has established — names (full names), affiliations/workplaces, roles, relationships, agreed dates and times, where things are kept — then the plot and the current situation. Keep every such fact from PREVIOUS SUMMARY unless NEW TURNS change it; when a fact changes, write only the new value. 未定：things only planned, promised, guessed or still to be checked (確認する・かもしれない・予定), written as undecided — not as done. Do not decide the protagonist\'s feelings, attitude or choices unless the text states them.",\n';
+  var M3_EV_OLD = '"event": "1 line Japanese: a major event (death/escape/encounter/loss/key decision)"';
+  var M3_EV_NEW = '"event": "1 line Japanese: a major event (death/escape/encounter/loss/key decision) — only what the text says happened; a plan stays a plan"';
+  var M3_RULE_OLD = 'Update/replace previous summary entirely.';
+  var M3_RULE_NEW = 'Rewrite the summary for the current state, but never drop a 確定 fact unless NEW TURNS change it. If NEW TURNS change a value written in an older event (e.g. a date), rewrite that older event with the new value instead of keeping both.';
+  var m3Stat = { prompts: 0, applied: 0, mismatch: 0, addedChars: 0 };
+  function mem3On(){ try { return localStorage.getItem('v292DfixMEM3Off') !== '1' && localStorage.getItem('v292DfixMEM3On') === '1'; } catch(e){ return false; } }
+  function mem3Prompt(p){
+    if (!mem3On()) return p;
+    m3Stat.prompts++;
+    if (p.split(M3_SUM_OLD).length !== 2 || p.split(M3_EV_OLD).length !== 2 || p.split(M3_RULE_OLD).length !== 2){ m3Stat.mismatch++; return p; }
+    var q = p.split(M3_SUM_OLD).join(M3_SUM_NEW).split(M3_EV_OLD).join(M3_EV_NEW).split(M3_RULE_OLD).join(M3_RULE_NEW);
+    m3Stat.applied++; m3Stat.addedChars += q.length - p.length;
+    return q;
+  }
+  window.__v292DfixMEM3 = { on: mem3On, prompt: mem3Prompt, stats: function(){ return JSON.parse(JSON.stringify(m3Stat)); } };
+
   function buildPrompt(prevSummary, prevWorldInfo, prevEvents, newTurns, startIdx){
     var newText = newTurns.map(function(t, i){
       var pt = (t.playerText || '').slice(0, 80);
@@ -98,7 +122,7 @@
     var _authBlock245 = 'AUTHORITATIVE CHARACTER NAMES (these exact names already identify characters in this story — dialogue speakers and known cast):\n' +
       (_authList245.length ? _authList245.map(function(n){ return '- ' + n; }).join('\n') : '(none)') + '\n' +
       'When a person in the narration is one of these, you MUST use that EXACT name. NEVER coin a new descriptive label (e.g. 黒髪の少女, 白いワンピースの少女) for someone already named above. One physical character = exactly ONE name.\n\n';
-    return 'You analyze a Japanese ongoing horror TRPG to maintain long-term memory.\n\n' +
+    return mem3Prompt('You analyze a Japanese ongoing horror TRPG to maintain long-term memory.\n\n' +   /* ★MEM3: OFF は同じ文字列 */
       'PREVIOUS SUMMARY:\n' + (prevSummary || '(none)') + '\n\n' +
       _authBlock245 +
       'KNOWN WORLD INFO:\n' + (prevWorldInfo.length ? prevWorldInfo.map(function(w){return '- ' + w.name + ' (' + w.type + '): ' + w.desc;}).join('\n') : '(none)') + '\n\n' +
@@ -110,7 +134,7 @@
       '  "worldinfo": [ { "name": "Japanese name", "type": "character|place|object|concept", "desc": "1 sentence Japanese: who/what" } ],\n' +
       '  "events": [ { "turnIdx": number, "event": "1 line Japanese: a major event (death/escape/encounter/loss/key decision)", "importance": 1-3 (3=critical) } ]\n' +
       '}\n' +
-      'Rules: Output ONLY the JSON. Update/replace previous summary entirely. Merge new worldinfo entries with old (no duplicates by name; reuse AUTHORITATIVE CHARACTER NAMES verbatim — do not create a second entry under a different label for the same person). Keep worldinfo <= 30 (drop least relevant). Keep events <= 15 (drop low-importance old ones). Use turnIdx values from the [Turn N] markers above.';
+      'Rules: Output ONLY the JSON. Update/replace previous summary entirely. Merge new worldinfo entries with old (no duplicates by name; reuse AUTHORITATIVE CHARACTER NAMES verbatim — do not create a second entry under a different label for the same person). Keep worldinfo <= 30 (drop least relevant). Keep events <= 15 (drop low-importance old ones). Use turnIdx values from the [Turn N] markers above.');
   }
 
   function call(prompt, cb){

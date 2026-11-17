@@ -128,6 +128,28 @@ try {
   check('MEM2: fixtures run in node', false, String(e && e.stack || e).slice(0, 200));
 }
 
+// ---------- 6. unit: MEM3 (long-term memory rebuild prompt; MEM3b notes order), default OFF ----------
+try {
+  const vm = (await import('node:vm')).default;
+  const lm = (ls) => {
+    const L = new Map(Object.entries(Object.assign({ chr6: JSON.stringify({ cfg: { orKey: 'k' } }) }, ls || {}))); const sent = [];
+    class XHR { open() {} setRequestHeader() {} send(b) { sent.push(b); } }
+    const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, JSON, Math, Date, XMLHttpRequest: XHR, addEventListener() {}, document: { hidden: false, addEventListener() {} },
+      localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
+    sb.window = sb; vm.createContext(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' };
+    sb.S = { turns: [0, 1, 2, 3].map(i => ({ playerText: '入力' + i, narrative: '本文' + i + '。高瀬和也は市役所の福祉課のケアマネだと名乗った。' })), scene: { loc: '店' } };
+    vm.runInContext(read('v292Dfix135-longmem.js'), sb); sb.__longmem.rebuild(); return { sb, sent };
+  };
+  const off = lm({}), on = lm({ v292DfixMEM3On: '1' }), kill = lm({ v292DfixMEM3On: '1', v292DfixMEM3Off: '1' });
+  const pOff = JSON.parse(off.sent[0]).messages[0].content, pOn = JSON.parse(on.sent[0]).messages[0].content, pKill = JSON.parse(kill.sent[0]).messages[0].content;
+  check('MEM3: off and kill — the rebuild prompt is unchanged (MEM3 returns the same string)', pOff === pKill && off.sb.__v292DfixMEM3.prompt(pOff) === pOff && !/確定：/.test(pOff), '');
+  const wiLine = (p) => (p.match(/ {2}"worldinfo": [^\n]*\n/) || [''])[0];
+  check('MEM3: on — summary/events/rules rewritten (確定/未定), the worldinfo spec line and its rule are byte-identical', /確定：/.test(pOn) && /未定：/.test(pOn) && !/Update\/replace previous summary entirely/.test(pOn) && wiLine(pOn) === wiLine(pOff) && wiLine(pOff).length > 0 && /Merge new worldinfo entries with old/.test(pOn) && on.sb.__v292DfixMEM3.stats().applied === 1, String(pOn.length - pOff.length));
+  check('MEM3: on — a prompt whose text changed elsewhere is sent unchanged (mismatch counted)', on.sb.__v292DfixMEM3.prompt('other text') === 'other text' && on.sb.__v292DfixMEM3.stats().mismatch === 1, '');
+} catch (e) {
+  check('MEM3: fixtures run in node', false, String(e && e.stack || e).slice(0, 200));
+}
+
 // ---------- report ----------
 const fail = results.filter(r => !r.ok);
 const summary = { site, version: ver, loaded_js: loaded.size, pass: results.length - fail.length, fail: fail.length, results };

@@ -475,6 +475,10 @@
 #### fix135 — 長期記憶（あらすじ・自動ワールド情報・重要イベント）
 - 状態：本番稼働 `i64`。役割：数ターンごとに 1 回の AI 呼び出しで、あらすじ（約 300 字）・登場人物や場所の DB（fix136）・重要イベント（fix137）を作り、端末に保存（fix246 で物語ごとのキー）。`window.__longmem`。fix299 で永続化の欠落を根治した記録あり。
 
+#### MEM3 — 長期記憶の作り直しで事実が落ちる問題（2026-11-17・Local 試作・未出荷・GPT 裁定待ち）
+- MEM3（`v292DfixMEM3On='1'`・kill `v292DfixMEM3Off='1'`・既定 OFF）：fix135 の作り直しの指示のうち、summary の欄の説明・events の欄の説明・Rules の 1 文だけを書き換える（「確定：」「未定：」の 2 部・確定事実は変更が本文に出るまで残す・未定は未定のまま・古い値は新しい値に書き換え・主人公の気持ちや態度を決めない・summary は 500 字まで）。worldinfo の指示は変えない。OFF は送信バイト同一。`__v292DfixMEM3.stats()`。
+- MEM3b（`v292DfixMEM3bOn='1'`・kill `v292DfixMEM3bOff='1'`・既定 OFF・MEM2 腕 A が ON のときだけ）：MEM2 の覚え書きを「あらすじ → 人物の表（読むだけ・6 行まで）→ 出来事」の順に組む（r2：出来事を最低 200 字ぶん先に確保し、あらすじは「確定：」の部を優先して詰める。内訳は `__v292DfixMEM2.last().a.parts`）。保存は変えない。
+
 #### MEM2 — 長期記憶の配線（2026-11-17・未出荷・独立レビュー待ち・GPT #127-VR 1）
 - 背景：fix135 の長期記憶は features.js の build の包みが sys の末尾に足すが、fix192（新エンジン）が `r.sys = buildSys(...)` で作り直すので生成に届いていない（mem1/DIAG.md）。全文が渡るのは fix58 の recentScenes（直近 2 ターン）だけ。
 - 腕 A（`v292DfixMEM2aOn='1'`・kill `v292DfixMEM2aOff='1'`・既定 OFF）：この物語の長期記憶（あらすじ・重要な出来事）を、fix58 userExt の user JSON の `memoryNotes`（earlierFacts の直後）へ「参考の覚え書き」として最大 800 字（新しい出来事を優先）。sys には足さない。タグ・属性らしい文字列は除く。document の権限キー（chr6_slot_<id>）の接尾辞つきキーだけを読み、fix246 が動いていない・fix783 kill・storyId の食い違い・場所の食い違い・リセット後の残り のときは足さない。
@@ -1094,8 +1098,8 @@
 | 61 | fix659 | `v292Dfix659-fork-choice.js` | i61 | `d6e39622` | v292Dfix680 | 保存・同期 | `v292Dfix659Off` |
 | 62 | features | `features.js` | i62 | `6d812ce8` | 20261111-xss1 | 本体（ゲーム中核） | `v292Dfix190Off` `v292Dfix205gOff` `v292Dfix748SaveRefuseOff` `v292Dfix834Off` `v292DfixSAVEUIOff` `v292DfixCLICHE2Off` `v292DfixDEDUPQ1Off` `v292DfixSTATE2Off` |
 | 63 | fixP0 | `v292DfixP0-scenario-blocker.js` | i63 | `7c6d79f0` | v292Dfix680 | シナリオ・ホーム |  |
-| 64 | fix135 | `v292Dfix135-longmem.js` | i64 | `1eb21253` | 20260927-ac3 | 記憶 | `v292Dfix894Off` |
-| 64a | MEM2 | `v292DfixMEM2-longmem-wire.js` | fix135 の直後 | `345bc585` | 20261117-mem2r3 | 記憶 | `v292DfixMEM2aOn` `v292DfixMEM2aOff` `v292DfixMEM2cOn` `v292DfixMEM2cOff` |
+| 64 | fix135 | `v292Dfix135-longmem.js` | i64 | `11cc7df2` | 20261117-mem3r2 | 記憶 | `v292Dfix894Off` `v292DfixMEM3On` `v292DfixMEM3Off` |
+| 64a | MEM2 | `v292DfixMEM2-longmem-wire.js` | fix135 の直後 | `02b9752c` | 20261117-mem3r2 | 記憶 | `v292DfixMEM2aOn` `v292DfixMEM2aOff` `v292DfixMEM2cOn` `v292DfixMEM2cOff` `v292DfixMEM3bOn` `v292DfixMEM3bOff` |
 | 65 | fix138 | `v292Dfix138-continue.js` | i65 | `db8f5e85` | 20260929-ac18 | 記憶 | `v292Drp1Off` |
 | 66 | fix145 | `v292Dfix145-charlist.js` | i66 | `e7b06fd1` | 20261101-bundle79-npres73d4b-on78c | NPC・キャラ状態 | `v292Dfix410Off` `v292Dfix487ListOff` `v292Dfix529Off` `v292Dfix773Off` |
 | 67 | fix777 | `v292Dfix777-icon-lightbox.js` | i67 | `19adb4d6` | 20261021-laneE-a | アイコン・画像 | `v292Dfix777Off` `v292DfixLE2Off` |
