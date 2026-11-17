@@ -322,6 +322,9 @@
   // ---------------------------------------------------------------
   // 2. user payload 書き換え（delta-aware）
   // ---------------------------------------------------------------
+  /* ★MEM2（laneMEM2・GPT #127-VR 1）: 部品 v292DfixMEM2-longmem-wire.js を読むだけ。無い・例外のときは従来どおり */
+  function mem2N(){ try { var M = window.__v292DfixMEM2; var n = (M && typeof M.recentN === 'function') ? M.recentN() : 2; return (n === 4) ? 4 : 2; } catch(e){ return 2; } }
+  function mem2A(parsed, state){ try { var M = window.__v292DfixMEM2; return (M && typeof M.applyA === 'function') ? (M.applyA(parsed, state) || parsed) : parsed; } catch(e){ return parsed; } }
   function userExt(ctx){
     var user = ctx.user;
     try {
@@ -331,7 +334,7 @@
       parsed.storySoFar = buildRollingSummary(state);
 
       var turns = state.turns || [];
-      var recent = turns.slice(-2);
+      var recent = turns.slice(-mem2N());   /* ★MEM2 腕 C（v292DfixMEM2cOn='1'・kill v292DfixMEM2cOff='1'・既定 OFF）: 2 → 4 ターン。OFF・部品なしは 2（従来と同じ） */
       parsed.recentScenes = recent.map(function(t){
         return {
           input: { type: t.inputType, text: t.playerText },
@@ -349,6 +352,7 @@
       delete parsed.recentHistory;
 
       parsed = now1Apply(parsed, state);     /* ★NOW1（kill v292DfixNOW1Off='1'）: recentScenes の直後に nowScene（直前ターンが無ければ何もしない） */
+      parsed = mem2A(parsed, state);         /* ★MEM2 腕 A（v292DfixMEM2aOn='1'・kill v292DfixMEM2aOff='1'・既定 OFF）: この物語の長期記憶を memoryNotes として背景へ（OFF は同じオブジェクト） */
       parsed = facts1Apply(parsed, state);   /* ★FACTS1（kill v292DfixFACTS1Off='1'）: storySoFar の直後に earlierFacts（無ければ何もしない） */
       try { var N1 = window.__v292DfixNUM1Core; if (N1 && N1.on()) parsed = N1.apply(parsed, state, FACTS1_RULE) || parsed; } catch(eN1){}   /* ★NUM1（laneLEAK1・GPT #127-SW 3・鍵 v292DfixNUM1On='1'・kill v292DfixNUM1Off='1'・既定 OFF）: 窓から落ちた序盤のプレイヤー入力の数・約束を earlierFacts.items の先頭に最大 5 行・200 字（v292DfixNUM1-input-ledger.js）。鍵が無ければ何もしない＝送信バイト同一 */
       try { var PL1 = window.__v292DfixPLACE1; if (PL1 && typeof PL1.on === 'function' && PL1.on()) parsed = PL1.apply(parsed, state) || parsed; } catch(ePL1){}   /* ★PLACE1（lanePLACE1・鍵 v292DfixPLACE1On='1'・kill v292DfixPLACE1Off='1'・既定 OFF）: nowScene の直後に whereNow（物のいまの持ち主・置き場所と、その場にいない人の控え。プレイヤーの入力と本文のはっきりした受け渡しから毎回作る・最大 6 行 360 字）（v292DfixPLACE1-where-now.js）。鍵が無ければ何もしない＝送信バイト同一 */

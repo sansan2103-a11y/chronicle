@@ -475,6 +475,13 @@
 #### fix135 — 長期記憶（あらすじ・自動ワールド情報・重要イベント）
 - 状態：本番稼働 `i64`。役割：数ターンごとに 1 回の AI 呼び出しで、あらすじ（約 300 字）・登場人物や場所の DB（fix136）・重要イベント（fix137）を作り、端末に保存（fix246 で物語ごとのキー）。`window.__longmem`。fix299 で永続化の欠落を根治した記録あり。
 
+#### MEM2 — 長期記憶の配線（2026-11-17・未出荷・独立レビュー待ち・GPT #127-VR 1）
+- 背景：fix135 の長期記憶は features.js の build の包みが sys の末尾に足すが、fix192（新エンジン）が `r.sys = buildSys(...)` で作り直すので生成に届いていない（mem1/DIAG.md）。全文が渡るのは fix58 の recentScenes（直近 2 ターン）だけ。
+- 腕 A（`v292DfixMEM2aOn='1'`・kill `v292DfixMEM2aOff='1'`・既定 OFF）：この物語の長期記憶（あらすじ・重要な出来事）を、fix58 userExt の user JSON の `memoryNotes`（earlierFacts の直後）へ「参考の覚え書き」として最大 800 字（新しい出来事を優先）。sys には足さない。タグ・属性らしい文字列は除く。document の権限キー（chr6_slot_<id>）の接尾辞つきキーだけを読み、fix246 が動いていない・fix783 kill・storyId の食い違い・場所の食い違い・リセット後の残り のときは足さない。
+- 腕 C（`v292DfixMEM2cOn='1'`・kill `v292DfixMEM2cOff='1'`・既定 OFF）：recentScenes を 2 → 4 ターン。
+- r2：腕 A は、このページで記憶が空の状態から fix135 によって作られたと MEM2 がメモリだけで確かめた記憶だけを渡す（fix246 が共通鍵 chr6 から移した記憶・前の回の記憶は、このページでは見送る＝NOT_SESSION_BUILT）。fix697 の storyId が読めないときは見送る（ID_UNKNOWN）。日本語の内部の印（【内部】【システム】【指示】・（AIへの指示：…）・[[…]]・LEAK1 の内部ラベル）を除く。r3：括弧の除去は、中身が印の語だけ、または印の語の直後に：/: が続くときだけ（「（メモを取りながら）」「【注目】」は残す）。
+- 計測：`__v292DfixMEM2.stats()`（腕ごとの適用回数・字数・見送り理由）・`.last()`。どちらも OFF のとき送信バイト同一。部品は `v292DfixMEM2-longmem-wire.js`（fix135 の直後に読む）。
+
 #### fix313 — 設定カード（トリガー式の永久の設定）
 - 状態：本番稼働 `i155`。保存：`S.scene.cards[]`（物語の保存に相乗り）。注入：`Planner.build` を外側で包み、常時カード＋直近に語が出たカードを sys 末尾へ。止める：`v292Dfix313Off`。関連：fix951〜954（カード選択・届いたかの検出。fix953 は全体既定 ON）。
 
@@ -1088,6 +1095,7 @@
 | 62 | features | `features.js` | i62 | `6d812ce8` | 20261111-xss1 | 本体（ゲーム中核） | `v292Dfix190Off` `v292Dfix205gOff` `v292Dfix748SaveRefuseOff` `v292Dfix834Off` `v292DfixSAVEUIOff` `v292DfixCLICHE2Off` `v292DfixDEDUPQ1Off` `v292DfixSTATE2Off` |
 | 63 | fixP0 | `v292DfixP0-scenario-blocker.js` | i63 | `7c6d79f0` | v292Dfix680 | シナリオ・ホーム |  |
 | 64 | fix135 | `v292Dfix135-longmem.js` | i64 | `1eb21253` | 20260927-ac3 | 記憶 | `v292Dfix894Off` |
+| 64a | MEM2 | `v292DfixMEM2-longmem-wire.js` | fix135 の直後 | `345bc585` | 20261117-mem2r3 | 記憶 | `v292DfixMEM2aOn` `v292DfixMEM2aOff` `v292DfixMEM2cOn` `v292DfixMEM2cOff` |
 | 65 | fix138 | `v292Dfix138-continue.js` | i65 | `db8f5e85` | 20260929-ac18 | 記憶 | `v292Drp1Off` |
 | 66 | fix145 | `v292Dfix145-charlist.js` | i66 | `e7b06fd1` | 20261101-bundle79-npres73d4b-on78c | NPC・キャラ状態 | `v292Dfix410Off` `v292Dfix487ListOff` `v292Dfix529Off` `v292Dfix773Off` |
 | 67 | fix777 | `v292Dfix777-icon-lightbox.js` | i67 | `19adb4d6` | 20261021-laneE-a | アイコン・画像 | `v292Dfix777Off` `v292DfixLE2Off` |
@@ -1099,7 +1107,7 @@
 | 73 | fix55 | `v292Dfix55-gm-mode.js` | i73 | `f465582c` | v292Dfix55c | 文章品質・プロンプト |  |
 | 74 | fix56 | `v292Dfix56-conversation-log-fix.js` | i74 | `551d0c71` | v292Dfix200 | 話者・会話ログ |  |
 | 75 | fix57 | `v292Dfix57-script-style-dialogue.js` | i75 | `bfea0dfd` | v292Dfix57 | 話者・会話ログ |  |
-| 76 | fix58 | `v292Dfix58-prompt-rebuild.js` | i76 | `1603d3c1` | 20261111-scene1 | 文章品質・プロンプト | `v292DfixFACTS1Off` `v292DfixFACTS2Off` `v292DfixNOW1Off` |
+| 76 | fix58 | `v292Dfix58-prompt-rebuild.js` | i76 | `8febd4cb` | 20261117-mem2r3 | 文章品質・プロンプト | `v292DfixFACTS1Off` `v292DfixFACTS2Off` `v292DfixNOW1Off` `v292DfixMEM2aOn` `v292DfixMEM2cOn` |
 | 77 | fix60 | `v292Dfix60-display-pipeline.js` | i77 | `fc5144f4` | v292Dfix60 | アイコン・画像 |  |
 | 78 | fix59 | `v292Dfix59-hybrid-extractor.js` | i78 | `12c56db5` | v292Dfix59 | NPC・キャラ状態 |  |
 | 79 | fix61 | `v292Dfix61-alpha-strip-protect.js` | i79 | `7cbb4781` | 20260829-fix748 | 文章品質・プロンプト |  |

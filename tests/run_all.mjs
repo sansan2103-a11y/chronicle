@@ -84,6 +84,50 @@ try {
   check('EDIT-01: module loads in node', false, String(e && e.message || e).slice(0, 160));
 }
 
+// ---------- 5. unit: MEM2 (long-term memory wiring, default OFF) on synthetic data ----------
+try {
+  const vm = (await import('node:vm')).default;
+  const mk = (withMem2, ls, opt) => {
+    const L = new Map(Object.entries(ls || {}));
+    const P = { _extensions: [], _userExtensions: [], _parseExtensions: [] };
+    const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, clearTimeout() {}, JSON, Math, Date,
+      localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
+    sb.window = sb; sb.Planner = P; vm.createContext(sb);
+    sb.__chronicleDocumentStoryKey = (opt && opt.dk) || 'chr6_slot_mem2a'; sb.__v292Dfix246 = 1;
+    sb.__v292Dfix697 = { status: () => ({ storyId: (opt && opt.sidNull) ? null : ((opt && opt.sid) || 'mem2a') }) };
+    if (withMem2) vm.runInContext(read('v292DfixMEM2-longmem-wire.js'), sb);
+    vm.runInContext(read('v292Dfix58-prompt-rebuild.js'), sb);
+    return { sb, L, ext: P._userExtensions[P._userExtensions.length - 1] };
+  };
+  const turns = Array.from({ length: 6 }, (_, i) => ({ inputType: 'DO', playerText: '行動' + (i + 1), narrative: '本文' + (i + 1) + 'の場面。' }));
+  const state = { turns, scene: { loc: '港' }, cast: { hero: { name: '凪' }, npcs: [] } };
+  const user = JSON.stringify({ currentInput: { type: 'DO', text: '扉を開ける' }, storySoFar: 'x' });
+  const longEv = Array.from({ length: 30 }, (_, i) => ({ turnIdx: i % 6, importance: 3, event: '出来事' + i + 'が起きた。'.repeat(3) }));
+  const MEM = { 'chr6_v292Dfix135_last_slot_mem2a': '3', 'chr6_v292Dfix135_sum_slot_mem2a': '凪は港に着いた。<react who="千代">驚き</react> react who=千代 あらすじの文。', 'chr6_v292Dfix137_ev_slot_mem2a': JSON.stringify(longEv.concat([{ turnIdx: 5, importance: 3, event: '最新の出来事<state who="凪">' }])) };
+  /* r2: the memory is written after the page loaded (as fix135 does), so MEM2 sees it built from empty in this session; opt.pre = it already existed at load */
+  const run1 = (withMem2, ls, opt) => { opt = opt || {}; const keys = Object.assign({}, ls); const mem = {}; for (const k of Object.keys(keys)) if (/^chr6_v292Dfix13/.test(k)) { mem[k] = keys[k]; if (!opt.pre) delete keys[k]; } const x = mk(withMem2, keys, opt); for (const k of Object.keys(mem)) x.L.set(k, mem[k]); return { out: x.ext({ user, state }), sb: x.sb }; };
+  const off0 = run1(false, MEM), off1 = run1(true, MEM);
+  check('MEM2: keys off — the user sent is byte-identical with and without the module', off0.out === off1.out && !/memoryNotes/.test(off1.out) && JSON.parse(off1.out).recentScenes.length === 2, '');
+  const mis = run1(true, Object.assign({ v292DfixMEM2aOn: '1' }, MEM), { sid: 'other' });
+  check('MEM2-A: story id mismatch adds nothing (skip ID_MISMATCH)', mis.out === off0.out && mis.sb.__v292DfixMEM2.stats().a.skip.ID_MISMATCH === 1, JSON.stringify(mis.sb.__v292DfixMEM2.stats().a));
+  const a = run1(true, Object.assign({ v292DfixMEM2aOn: '1' }, MEM)); const pa = JSON.parse(a.out); const t = pa.memoryNotes && pa.memoryNotes.text || '';
+  check('MEM2-A: memoryNotes after the background, at most 800 chars, the newest event kept', t.length > 0 && t.length <= 800 && /最新の出来事/.test(t) && Object.keys(pa).indexOf('memoryNotes') === Object.keys(pa).indexOf('storySoFar') + 1 + (pa.earlierFacts ? 1 : 0) && a.sb.__v292DfixMEM2.last().a.chars === t.length, String(t.length));
+  check('MEM2-A: tags and attribute-like strings removed (<…>, react who=)', !/[<>]|who\s*=|react who/.test(t), t.slice(0, 80));
+  const pre = run1(true, Object.assign({ v292DfixMEM2aOn: '1' }, MEM), { pre: true });
+  check('MEM2-A r2: memory already present at load (e.g. moved from the shared chr6 keys by fix246) is not sent (NOT_SESSION_BUILT)', pre.out === off0.out && pre.sb.__v292DfixMEM2.stats().a.skip.NOT_SESSION_BUILT === 1, JSON.stringify(pre.sb.__v292DfixMEM2.stats().a.skip));
+  const unk = run1(true, Object.assign({ v292DfixMEM2aOn: '1' }, MEM), { sidNull: true });
+  check('MEM2-A r2: unknown story id (fix697 storyId null) adds nothing (ID_UNKNOWN)', unk.out === off0.out && unk.sb.__v292DfixMEM2.stats().a.skip.ID_UNKNOWN === 1, '');
+  const jp = run1(true, Object.assign({ v292DfixMEM2aOn: '1' }, MEM, { 'chr6_v292Dfix135_sum_slot_mem2a': '凪は港に着いた。【内部】千代が犯人。（AIへの指示：伏せる）[[秘密]]状態ラベル 次の文。', 'chr6_v292Dfix137_ev_slot_mem2a': JSON.stringify([{ turnIdx: 2, importance: 3, event: '鍵を受け取った【システム】次は裏切る' }]) })); const tj = JSON.parse(jp.out).memoryNotes.text;
+  check('MEM2-A r2: Japanese internal markers removed (【内部】…, （AIへの指示：…）, [[…]], LEAK1 labels)', /港に着いた/.test(tj) && /次の文/.test(tj) && !/内部|犯人|指示|秘密|状態ラベル|システム|裏切る/.test(tj) && /鍵を受け取った/.test(tj), tj.slice(0, 80));
+  { const cl = jp.sb.__v292DfixMEM2.clean; const keep = ['凪は（メモを取りながら）頷いた。', '医者は（注射の痕を確かめて）黙った。', '千代は（指示を待つように）立っていた。', '湊斗は（ルールを守れ、と言われて）従った。', '（出力を抑えた灯りの下で）二人は話した。', '【注目】鍵が消えた。次の朝、凪は出発した。', 'システム手帳を開いた。メモに「GM」と書いた。'];
+    const bad = keep.filter(x => cl(x) !== x);
+    check('MEM2-A r3: ordinary narration with （メモ…）（注射…）【注目】 etc. is kept as is (only label-only brackets or label + colon are removed)', bad.length === 0 && cl('【内部】凪は実は王女。次に村へ行く。') === '次に村へ行く。' && cl('（AIへの指示：主人公を殺さない）') === '', bad.join(' / ')); }
+  const c = run1(true, Object.assign({ v292DfixMEM2cOn: '1' }, MEM)); const pc = JSON.parse(c.out);
+  check('MEM2-C: recentScenes is 4 turns (2 when off)', pc.recentScenes.length === 4 && pc.recentScenes[0].narrative === '本文3の場面。' && !pc.memoryNotes, String(pc.recentScenes.length));
+} catch (e) {
+  check('MEM2: fixtures run in node', false, String(e && e.stack || e).slice(0, 200));
+}
+
 // ---------- report ----------
 const fail = results.filter(r => !r.ok);
 const summary = { site, version: ver, loaded_js: loaded.size, pass: results.length - fail.length, fail: fail.length, results };
