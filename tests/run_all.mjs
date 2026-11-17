@@ -171,9 +171,66 @@ try {
       localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
     sb.window = sb; vm.createContext(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.S = { turns: [0, 1, 2].map(i => ({ playerText: 'p', narrative: 'n' + i })), scene: { loc: 'x' } };
     vm.runInContext(read('v292Dfix135-longmem.js'), sb); sb.__longmem.rebuild(); const pr = JSON.parse(sent[0]).messages[0].content;
-    check('MEM3 r5: the rebuild prompt states the protagonist-feelings criterion (not 確定 unless established; guess = 未定) and one part per matter (unsure = 未定)', /feelings that the text has not established are not recorded as a 確定 fact/.test(pr) && /if a guess is needed, treat them as 未定/.test(pr) && /Each matter goes in only one of 確定 and 未定; when unsure whether it has been decided, put it in 未定/.test(pr) && !/Do not decide the protagonist/.test(pr), ''); }
+    check('MEM3 r5 (wording r7): the rebuild prompt keeps the protagonist-feelings criterion (not 確定 unless established; a guess goes in 未定) and one part per matter (if unsure, 未定)', /the protagonist\'s feelings the text has not established \(a guess goes in 未定\)/.test(pr) && /Each matter goes in one part only; if unsure, 未定/.test(pr) && !/Do not decide the protagonist/.test(pr), ''); }
 } catch (e) {
   check('MEM3 r4: fixtures run in node', false, String(e && e.stack || e).slice(0, 200));
+}
+
+// ---------- 8. unit: MEM3 r7 (settings excerpt without GM/secret parts, nothing for Vault stories), default OFF ----------
+try {
+  const vm = (await import('node:vm')).default;
+  const lm7 = (ls, hidden) => { const L = new Map(Object.entries(Object.assign({ chr6: JSON.stringify({ cfg: { orKey: 'k' } }), v292DfixLORE1On: '1' }, ls))); const sent = [];
+    const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, JSON, Math, Date, XMLHttpRequest: class { open() {} setRequestHeader() {} send(b) { sent.push(b); } }, addEventListener() {}, document: { hidden: false, addEventListener() {}, readyState: 'complete' },
+      localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
+    sb.window = sb; vm.createContext(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.__v292Dfix697 = { status: () => ({ storyId: 'r7s' }) }; sb.__v292Dfix889 = { isHidden: () => !!hidden }; sb.__f379reg = [];
+    sb.S = { turns: [0, 1, 2].map(i => ({ playerText: 'p', narrative: 'n' + i })), scene: { loc: 'x', lore: '離島の診療所。鍵はよろず屋の千代が預かる。\n【GM専用】千代は昔の院長の娘で、地下室の鍵も持っている。\nただしこの世界の底には、死者は潮とともに戻る——という隠された理がある。' }, cast: { hero: { name: '朔也', desc: '新任の医師' }, npcs: [{ name: '千代', desc: 'よろず屋の店主。\nGM: 実は院長殺しの犯人。' }, { name: '茂', desc: '漁師。実は千代の兄。無口' }] } };
+    vm.runInContext(read('v292DfixLORE1-world-lore.js'), sb); vm.runInContext(read('v292Dfix135-longmem.js'), sb); sb.__longmem.rebuild(); return { p: JSON.parse(sent[0]).messages[0].content, sb }; };
+  const on = lm7({ v292DfixMEM3On: '1' }), hid = lm7({ v292DfixMEM3On: '1' }, true), off = lm7({});
+  check('MEM3 r7 (r9: no cast lines at all): settings excerpt drops GM sections, cast descriptions, 実は… sentences and the omakase hidden-law sentence; nothing for a Vault-hidden story; off has no block', /- 世界: 離島の診療所。鍵はよろず屋の千代が預かる。/.test(on.p) && !/院長の娘|地下室|犯人|潮とともに|隠された理|千代の兄/.test(on.p) && !/- 千代:|- 茂:|よろず屋の店主|漁師。無口/.test(on.p) && !/ESTABLISHED SETTINGS \(the story setup/.test(hid.p) && hid.sb.__v292DfixMEM3.stats().lastSettings === 0 && !/ESTABLISHED SETTINGS/.test(off.p), on.p.slice(on.p.indexOf('ESTABLISHED SETTINGS ('), on.p.indexOf('ESTABLISHED SETTINGS (') + 160));
+} catch (e) {
+  check('MEM3 r7: fixtures run in node', false, String(e && e.stack || e).slice(0, 200));
+}
+
+// ---------- 8b. unit: MEM3 r9 (only the public lore is passed — no cast descriptions; output copying lore text absent from the story is dropped from worldinfo desc and summary 確定 only), default OFF ----------
+try {
+  const vm = (await import('node:vm')).default;
+  const SECRETS = ['裏設定：真犯人は千代。', '【秘密】真犯人は千代。', '【真相】千代は既に死んでいる。', 'プレイヤーには秘密だが、千代は亡霊である。'];
+  const NSEC = ['千代は朔也の生みの母。', '表向きは店主、裏では密売人。', '店主で、実は朔也の実母。', '本当は朔也の実母。', '正体は十年前に死んだ娘。', '朔也の実母であることを隠している。', '（秘密）朔也の実母。'];
+  const run9 = async () => { const L = new Map(Object.entries({ chr6: JSON.stringify({ cfg: { orKey: 'k' } }), v292DfixMEM3On: '1', v292DfixLORE1On: '1' })); let prompt = '';
+    class XHR { open() {} setRequestHeader() {} send(b) { prompt = JSON.parse(b).messages[0].content; const set = (prompt.match(/ESTABLISHED SETTINGS \(the story setup[^\n]*\n((?:- [^\n]*\n)+)/) || [, ''])[1].split('\n').filter(Boolean).map(l => l.slice(l.indexOf(': ') + 2));
+      const echo = set;   /* 抽出 AI が、見えた設定の要点をそのまま書き写した場合（最悪の形）を真似る */ const out = { summary: '確定：' + echo.join('') + '朔也は診療所に着いた。', worldinfo: [{ name: '千代', type: 'character', desc: 'よろず屋の店主。' + echo.join('') }], events: echo.map((e, i) => ({ turnIdx: 1, event: e, importance: 2 })).concat([{ turnIdx: 2, event: '朔也が診療所の鍵を受け取った', importance: 2 }]) };
+      const self = this; Promise.resolve().then(() => { self.status = 200; self.responseText = JSON.stringify({ choices: [{ message: { content: JSON.stringify(out) } }] }); self.onload(); }); } }
+    const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, JSON, Math, Date, Promise, XMLHttpRequest: XHR, addEventListener() {}, document: { hidden: false, addEventListener() {}, readyState: 'complete' },
+      localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
+    sb.window = sb; vm.createContext(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.__v292Dfix697 = { status: () => ({ storyId: 'r8s' }) }; sb.__v292Dfix889 = { isHidden: () => false }; sb.__f379reg = [];
+    sb.S = { turns: [0, 1, 2].map(i => ({ playerText: 'p', narrative: '朔也は診療所に着いた。千代が診療所の鍵を渡した。' })), scene: { loc: 'x', lore: '離島の診療所。地下室の鍵は井戸の底に沈んでいる。' + SECRETS.join('\n') }, cast: { hero: { name: '朔也', desc: '新任の医師' }, npcs: [{ name: '千代', desc: 'よろず屋の店主。' + NSEC.join('') }] } };
+    vm.runInContext(read('v292DfixLORE1-world-lore.js'), sb); vm.runInContext(read('v292Dfix135-longmem.js'), sb); sb.__longmem.rebuild(); for (let i = 0; i < 6; i++) await new Promise(r => setTimeout(r, 2));
+    return { prompt, L, saved: [L.get('chr6_v292Dfix135_sum'), L.get('chr6_v292Dfix136_wi'), L.get('chr6_v292Dfix137_ev')].join('\n'), st: sb.__v292DfixMEM3.stats() }; };
+  const r = await run9();
+  const leak9 = /真犯人|既に死んで|亡霊|実母|十年前に死んだ|隠している/, leak = /真犯人|既に死んで|亡霊|実母|十年前に死んだ|隠している|井戸の底/;
+  const setPart = r.prompt.slice(r.prompt.indexOf('ESTABLISHED SETTINGS ('), r.prompt.indexOf('NEW TURNS:')); const sum = r.L.get('chr6_v292Dfix135_sum') || '', wi = r.L.get('chr6_v292Dfix136_wi') || '', ev = r.L.get('chr6_v292Dfix137_ev') || '';
+  check('MEM3 r9: no cast description is passed (only the public lore); marked secrets are not passed; lore text absent from the story is dropped from worldinfo desc and summary 確定 only (events kept and counted); story facts stay', !leak9.test(setPart) && !/生みの母|密売人|よろず屋|新任の医師|- 千代|- 朔也/.test(setPart) && /- 世界: 離島の診療所。地下室の鍵は井戸の底/.test(setPart) && !/井戸の底/.test(sum) && !/井戸の底/.test(wi) && /"name":"千代"/.test(wi) && /よろず屋の店主/.test(wi) && /朔也は診療所に着いた/.test(sum) && /朔也が診療所の鍵を受け取った/.test(ev) && /井戸の底/.test(ev) && r.st.filtered.events === 0 && r.st.seenKept.events >= 1 && r.st.filtered.worldinfo >= 1 && r.st.filtered.summary >= 1, JSON.stringify([r.st.filtered, r.st.seenKept]));
+} catch (e) {
+  check('MEM3 r9: fixtures run in node', false, String(e && e.stack || e).slice(0, 200));
+}
+
+// ---------- 8c. unit: MEM3 r10 (settings only while LORE1 actually sends the lore; normalization ignores punctuation/brackets/quotes), default OFF ----------
+try {
+  const vm = (await import('node:vm')).default;
+  const run10 = async (ls, lore, narr, out) => { const L = new Map(Object.entries(Object.assign({ chr6: JSON.stringify({ cfg: { orKey: 'k' } }), v292DfixMEM3On: '1' }, ls))); let prompt = '';
+    class XHR { open() {} setRequestHeader() {} send(b) { prompt = JSON.parse(b).messages[0].content; const self = this; Promise.resolve().then(() => { self.status = 200; self.responseText = JSON.stringify({ choices: [{ message: { content: JSON.stringify(out) } }] }); self.onload(); }); } }
+    const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, JSON, Math, Date, Promise, XMLHttpRequest: XHR, addEventListener() {}, document: { hidden: false, addEventListener() {}, readyState: 'complete' },
+      localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
+    sb.window = sb; vm.createContext(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.__v292Dfix697 = { status: () => ({ storyId: 'r10s' }) }; sb.__v292Dfix889 = { isHidden: () => false }; sb.__f379reg = [];
+    sb.S = { turns: [0, 1, 2].map(i => ({ playerText: 'p', narrative: narr })), scene: { loc: 'x', lore }, cast: { hero: { name: '朔也' }, npcs: [] } };
+    vm.runInContext(read('v292DfixLORE1-world-lore.js'), sb); vm.runInContext(read('v292Dfix135-longmem.js'), sb); sb.__longmem.rebuild(); for (let i = 0; i < 6; i++) await new Promise(r => setTimeout(r, 2));
+    return { prompt, L, st: sb.__v292DfixMEM3.stats() }; };
+  const out = { summary: '確定：図書館は夜九時に閉まる。', worldinfo: [{ name: '図書館', type: 'place', desc: '夜九時に閉まる。' }], events: [] };
+  const sh = await run10({}, '図書館は夜九時に閉まる。', '司書が「図書館は夜九時に閉まるよ」と言った。', out);
+  const on = await run10({ v292DfixLORE1On: '1' }, '図書館は夜九時に閉まる。', '司書が「図書館は夜九時に閉まるよ」と言った。', out);
+  check('MEM3 r10: no settings while LORE1 is in shadow mode (reason LORE1_SHADOW); with LORE1 on, a public fact said as 閉まるよ in the story is kept in 確定 and worldinfo (punctuation-insensitive match)', !/ESTABLISHED SETTINGS \(the story setup/.test(sh.prompt) && sh.st.lastSettingsWhy === 'LORE1_SHADOW' && sh.st.skipWhy.LORE1_SHADOW === 1 && /- 世界: 図書館は夜九時に閉まる。/.test(on.prompt) && /図書館は夜九時に閉まる/.test(on.L.get('chr6_v292Dfix135_sum') || '') && /夜九時に閉まる/.test(on.L.get('chr6_v292Dfix136_wi') || '') && on.st.filtered.summary === 0 && on.st.filtered.worldinfo === 0, JSON.stringify([sh.st.lastSettingsWhy, on.st.filtered]));
+} catch (e) {
+  check('MEM3 r10: fixtures run in node', false, String(e && e.stack || e).slice(0, 200));
 }
 
 // ---------- report ----------

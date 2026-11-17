@@ -89,22 +89,93 @@
   var M3_SUM_OLD = '  "summary": "Japanese, 300 chars max. The story so far — plot, current situation, character states. Replace the previous summary.",\n';
   /* ★MEM3 r3（AB3 の A3 4 本: 「確定」に入った「現在…」の瞬間の状態〔時計の針・残り時間・立ち位置・迷い・やりかけ〕が古いまま渡り、巻き戻り・固まり・聞き直しを 5 件起こした）:
      「確定：」は変わりにくい事実だけの欄、筋は「経過：」の欄（済んだ出来事として）、と書式で分ける。瞬間の状態はどの欄の対象でもない形にする（禁止文の行は足さない） */
-  var M3_SUM_NEW = '  "summary": "Japanese, 500 chars max, in three labelled parts. 確定：lasting facts only — names (full names), affiliations/workplaces, roles, relationships, agreed dates and times and deadlines (e.g. pickup next Friday 18:00, closing at 11), where things are kept and who holds them, settled arrangements. Keep every such fact from PREVIOUS SUMMARY unless NEW TURNS change it; when a fact changes, write only the new value. 経過：the plot so far as finished happenings. The moment-to-moment state of the scene (the current clock time or minutes left, where people are standing, hesitation, a half-done task) belongs to neither part, because it goes out of date by the next turn. 未定：things only planned, promised, guessed or still to be checked (確認する・かもしれない・予定), written as undecided — not as done. Criteria for the parts: the protagonist\'s feelings that the text has not established are not recorded as a 確定 fact; if a guess is needed, treat them as 未定. Each matter goes in only one of 確定 and 未定; when unsure whether it has been decided, put it in 未定.",\n';   /* ★MEM3 r5（GPT #127-VT 2）: 主人公の心情は情報の判定基準として・同じ事柄を両方の欄に書かない（迷えば未定） */
+  /* ★MEM3 r7（r3〜r6 の内容を 1 つの説明に整理して短くした。r6 で足した例外はこれ以上増やさない） */
+  var M3_SUM_NEW = '  "summary": "Japanese, 500 chars max, in three labelled parts. 確定：lasting facts — names (full names), affiliations/workplaces, roles, relationships, agreed dates, times and deadlines (e.g. pickup next Friday 18:00, closing at 11), where things are kept and who holds them, settled arrangements; keep each from PREVIOUS SUMMARY until NEW TURNS change it, then write only the new value. 経過：the plot so far as finished happenings. 未定：what is planned, guessed, still to be checked or said with uncertainty (確認する・かもしれない・たしか・〜だったと思う・予定), written as undecided. The current moment (clock time or minutes left, where people stand, hesitation, a half-done task) goes in no part. Each matter goes in one part only; if unsure, 未定. Never 確定: the protagonist\'s feelings the text has not established (a guess goes in 未定); a point where the text conflicts with ESTABLISHED SETTINGS, unless the text formally changes the setting — put in 未定 only what the text says, as unresolved, and never copy setting content into any field; a false or mistaken statement, recorded as 「Aは〜と言った」.",\n';
   var M3_EV_OLD = '"event": "1 line Japanese: a major event (death/escape/encounter/loss/key decision)"';
   var M3_EV_NEW = '"event": "1 line Japanese: a major event (death/escape/encounter/loss/key decision) — only what the text says happened at that turn, with the values as they were at that turn; a plan stays a plan"';   /* ★MEM3 r3: 出来事は起きたターンの値のまま */
   var M3_RULE_OLD = 'Update/replace previous summary entirely.';
   var M3_RULE_NEW = 'Rewrite the summary for the current state, but never drop a 確定 fact unless NEW TURNS change it. Keep each older event exactly as it was at its own turn; when NEW TURNS change a value (e.g. a date), add a new event at the turn of the change, and update only the summary to the new value.';   /* ★MEM3 r3: 変更は新しい行として・更新はあらすじだけ */
-  var m3Stat = { prompts: 0, applied: 0, mismatch: 0, addedChars: 0 };
+  /* ★MEM3 r6/r7 (b): この物語の設定の要点（読むだけ・今の S だけ）。秘密を渡さないための守り（r7）:
+       ・Vault で隠した物語・物語 id が分からないとき → 何も渡さない（fail-closed）
+       ・lore は改行を潰す前に LORE1 の splitGm で GM の節を外す。LORE1 が無い・失敗 → lore を渡さない
+       ・おまかせの「…という隠された理がある」の文は外す
+       ・人物の説明も splitGm を通す。GM の印（GM・【GM…】・…専用）が残る／判定できない → その人物の説明を渡さない。「実は…」で始まる文は外す
+     上限: lore 200 字・1 人 80 字・人物の合計 300 字（合計 500 字＋見出し）。
+     ★MEM3 r9: 人物の説明は渡さない（上の人物の行と M3_SET_PER・M3_SET_CAST は使われない）。渡すのは lore の公開の部分 200 字だけ。 */
+  var M3_SET_LORE = 200, M3_SET_PER = 80, M3_SET_CAST = 300, m3SetWhy = null;
+  var M3_GMMARK = /(^|[^A-Za-z])(GM|ＧＭ)(?![A-Za-z])|専用】|【\s*(GM|ＧＭ)/;
+  var M3_SECRET = /(ただし)?この世界の底には、[^。\n]*という隠された理がある。?/g;
+  function m3cut(s, n){ s = String(s == null ? '' : s).replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+  function m3vaultHidden(){ try { var f = window.__v292Dfix697; var id = f && f.status ? f.status().storyId : null; if (!id) return true; var V = window.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(String(id)); } catch(e){ return true; } }
+  function m3pub(text){ try { var L = window.__v292DfixLORE1; if (!L || typeof L.splitGm !== 'function') return null; var r = L.splitGm('', String(text == null ? '' : text)); return (r && typeof r.pub === 'string') ? r.pub : null; } catch(e){ return null; } }
+  /* ★r8 (0): 秘密の印を含む文は外す（「実は」は文の途中でも）。GM と書かれていない秘密（裏設定・【秘密】・【真相】・本当は・正体は・隠している 等）への安全側の網 */
+  var M3_SECRETWORD = /裏設定|秘密|真相|本当は|本当の|正体|隠して|隠し事|実は|ネタバレ/;
+  function m3dropSecret(s){ return String(s).split(/(?<=[。！？\n])/).filter(function(x){ return !M3_SECRETWORD.test(x); }).join(''); }
+  /* ★MEM3 r10 (2): LORE1 の状態。'ON' のときだけ渡す。影（SHADOW）・kill（KILL）・Vault（VAULT）・LORE1 が無い（ABSENT）・判定できない（UNKNOWN）・
+     fix459 が見出しを知らず LORE1 が足さない状態（F459）は渡さない */
+  function m3lore1On(){ try { var L = window.__v292DfixLORE1; if (!L || typeof L.mode !== 'function') return 'ABSENT'; var md = L.mode();
+      if (md !== 'on') return (md === 'shadow' || md === 'kill' || md === 'vault') ? md.toUpperCase() : 'UNKNOWN';
+      if (typeof L.f459State === 'function' && L.f459State() === 'unregistered') return 'F459'; return 'ON'; } catch(e){ return 'UNKNOWN'; } }
+  /* ★MEM3 r10 (2): LORE1 が送る範囲（上限 400 字の切り方）に先に合わせてから、こちらの外し方と 200 字の上限を掛ける＝送る文の範囲の内側だけ */
+  function m3cap(s){ if (s == null) return null; try { var L = window.__v292DfixLORE1; if (!L || typeof L.capText !== 'function') return null; var c = L.capText(s); return (c && typeof c.text === 'string') ? c.text : null; } catch(e){ return null; } }
+  function mem3Settings(){
+    m3SetWhy = null;
+    try {
+      if (m3vaultHidden()){ m3SetWhy = 'VAULT_OR_UNKNOWN'; return ''; }
+      var m3L1 = m3lore1On(); if (m3L1 !== 'ON'){ m3SetWhy = 'LORE1_' + m3L1; return ''; }   /* ★MEM3 r10 (2): 本文生成の AI が実際に lore を受け取っているときだけ渡す（fail-closed） */
+      if ((m3Fail[slotSfx()] || 0) >= 2){ m3SetWhy = 'FILTER_STOPPED'; return ''; }   /* ★MEM3 r9 (3): 照合の失敗が 2 回続いた物語は、このページの間 渡さない（通常の MEM3 の作り直しで保存する） */
+      var st = getState(); if (!st) return '';
+      var out = [], lr = st.scene && typeof st.scene.lore === 'string' ? st.scene.lore : '';
+      if (lr){ var lp = m3cap(m3pub(lr)); if (lp == null) m3SetWhy = 'NO_LORE1'; else { lp = m3dropSecret(lp.replace(M3_SECRET, '')); if (!M3_GMMARK.test(lp)){ var lore = m3cut(lp, M3_SET_LORE); if (lore) out.push('- 世界: ' + lore); } else m3SetWhy = 'LORE_GM_LEFT'; } }
+      /* ★MEM3 r9 (1): 人物の説明（主人公・NPC の desc）は渡さない。正体・関係が普通の文で書かれやすく、抽出 AI へ新しく渡る経路になるため。渡すのは lore の公開の部分（200 字）だけ */
+      return out.length ? ('ESTABLISHED SETTINGS (the story setup; reference only, not new events. Copy nothing from this block into any field — summary, worldinfo or events; write only what the story text shows):\n' + out.join('\n') + '\n\n') : '';
+    } catch(e){ m3SetWhy = 'THREW'; return ''; }
+  }
+  /* ★MEM3 r8 (2): 機械的な照合。設定の要点（名前を除いた説明の部分）の 6 字の並びのうち、本文（NEW TURNS と渡した既存の記憶＝送った入力の残り）に無いものを「本文に無い設定の並び」とし、
+     作り直しの出力で、その並びを含む summary の文・events の件・worldinfo の説明の文を落とす（worldinfo は項目を消さず、説明が空になったら前の版の説明に戻す。名前は対象外）。
+     MEM3On かつ設定の要点を渡した回だけ動く。照合が失敗したら、その回の結果は保存しない（作り直しの失敗と同じ扱い・次の作り直しで取り直す）。 */
+  var m3Ctx = null, m3Fail = {};   /* ★r9 (3): 物語（接尾辞）ごとの照合の失敗の連続回数（このページの間だけ） */
+  /* ★MEM3 r10 (1): 正規化で空白に加えて句読点・括弧・引用符も除く（設定側・本文側・出力側とも同じ）。「閉まる。」と「閉まる、と」「閉まるよ」の差で公開の事実を落とさない */
+  var M3_NORM = /[\s　、。，．,.「」『』（）()［］\[\]【】〔〕〈〉《》“”"'‘’・…‥！？!?：:；;]+/g;
+  function m3norm(s){ return String(s == null ? '' : s).replace(M3_NORM, ''); }
+  function m3BadGrams(sb, ref){
+    var r = m3norm(ref), seen = {}, bad = [];
+    String(sb).split('\n').forEach(function(l){ if (!/^- /.test(l)) return; var c = l.indexOf(': '); var t = m3norm(c >= 0 ? l.slice(c + 2) : l.slice(2));
+      for (var i = 0; i + 6 <= t.length; i++){ var g = t.slice(i, i + 6); if (seen[g]) continue; seen[g] = 1; if (!/[ぁ-んァ-ヶ一-龠]{3}/.test(g)) continue; if (r.indexOf(g) < 0) bad.push(g); } });
+    return bad;
+  }
+  function m3Units(s){ return String(s == null ? '' : s).split(/(?<=[。！？!?\n])/); }
+  function m3Hit(u, bad){ var x = m3norm(u); for (var i = 0; i < bad.length; i++) if (x.indexOf(bad[i]) >= 0) return true; return false; }
+  /* ★MEM3 r9 (2): 照合で落とすのは worldinfo の説明の文と summary の「確定」の部の文だけ（r8 は全欄）。events と「経過」「未定」は落とさず、当たった数だけ数える（seenKept）。
+     理由: r9 で渡すのは lore の公開の部分だけ（LORE1 が毎ターン物語の AI に送るのと同じ文）で、AI 側の新しい露出は無い。残る害は、設定の言い回しが
+     長く残る欄（キャラ一覧に出る worldinfo・毎回渡る「確定」）で固まること（AB4 の 2 件の型）。表記ゆれで公開の事実を落とす害を、出来事と経過・未定から無くす。
+     1 回で落とした数（summary＋worldinfo）が 3 以上なら warnMany を数える。 */
+  function mem3Filter(r, prevWI, bad){
+    if (!r || !bad || !bad.length) return r;
+    var n = { summary: 0, worldinfo: 0, events: 0 }, seen = { summary: 0, events: 0 }, sec = '確定';
+    var keep = []; m3Units(r.summary).forEach(function(p){ var lab = /^\s*(確定|経過|未定)：/.exec(p); if (lab) sec = lab[1];
+      if (m3Hit(p, bad)){ if (sec === '確定'){ n.summary++; if (lab) keep.push(lab[1] + '：'); return; } seen.summary++; } keep.push(p); }); r.summary = keep.join('');
+    (r.events || []).forEach(function(e){ if (m3Hit(e && e.event, bad)) seen.events++; });
+    r.worldinfo = (r.worldinfo || []).map(function(w){ var us = m3Units(w.desc), k = us.filter(function(u){ return !m3Hit(u, bad); }); if (k.length === us.length) return w; n.worldinfo += us.length - k.length;
+      var d = k.join('').trim(); if (!d){ var pv = (prevWI || []).filter(function(x){ return x && x.name === w.name; })[0]; d = (pv && pv.desc && !m3Hit(pv.desc, bad)) ? pv.desc : ''; } return { name: w.name, type: w.type, desc: d }; });
+    m3Stat.filtered.summary += n.summary; m3Stat.filtered.worldinfo += n.worldinfo; m3Stat.lastFiltered = n;
+    m3Stat.seenKept.summary += seen.summary; m3Stat.seenKept.events += seen.events; if (n.summary + n.worldinfo >= 3) m3Stat.warnMany++;
+    return r;
+  }
+  var m3Stat = { prompts: 0, applied: 0, mismatch: 0, addedChars: 0, settingsChars: 0, lastAdded: 0, lastSettings: 0, lastSettingsWhy: null, filtered: { summary: 0, worldinfo: 0, events: 0 }, lastFiltered: null, filterErr: 0, discarded: 0, seenKept: { summary: 0, events: 0 }, warnMany: 0, filterStopped: 0, skipWhy: {} };
   function mem3On(){ try { return localStorage.getItem('v292DfixMEM3Off') !== '1' && localStorage.getItem('v292DfixMEM3On') === '1'; } catch(e){ return false; } }
   function mem3Prompt(p){
+    m3Ctx = null;   /* ★r8: 照合の材料はこの回の分だけ */
     if (!mem3On()) return p;
     m3Stat.prompts++;
     if (p.split(M3_SUM_OLD).length !== 2 || p.split(M3_EV_OLD).length !== 2 || p.split(M3_RULE_OLD).length !== 2){ m3Stat.mismatch++; return p; }
     var q = p.split(M3_SUM_OLD).join(M3_SUM_NEW).split(M3_EV_OLD).join(M3_EV_NEW).split(M3_RULE_OLD).join(M3_RULE_NEW);
-    m3Stat.applied++; m3Stat.addedChars += q.length - p.length;
+    var sb = mem3Settings(), ni = q.indexOf('\n\nNEW TURNS:\n');   /* ★MEM3 r6/r7 (b): 設定の要点を NEW TURNS の前に（最初の見出しだけ） */
+    if (sb && ni >= 0){ q = q.slice(0, ni + 2) + sb + q.slice(ni + 2); try { m3Ctx = { sfx: slotSfx(), bad: m3BadGrams(sb, q.slice(0, ni + 2) + q.slice(ni + 2 + sb.length)) }; } catch(eG){ m3Ctx = { sfx: slotSfx(), bad: null }; } }   /* ★r8 (2): 照合の材料（本文に無い設定の並び） */
+    var sl = (sb && ni >= 0) ? sb.length : 0; m3Stat.applied++; m3Stat.addedChars += q.length - p.length; m3Stat.settingsChars += sl; m3Stat.lastAdded = q.length - p.length; m3Stat.lastSettings = sl; m3Stat.lastSettingsWhy = m3SetWhy; if (m3SetWhy === 'FILTER_STOPPED') m3Stat.filterStopped++; if (m3SetWhy) m3Stat.skipWhy[m3SetWhy] = (m3Stat.skipWhy[m3SetWhy] || 0) + 1;
     return q;
   }
-  window.__v292DfixMEM3 = { on: mem3On, prompt: mem3Prompt, stats: function(){ return JSON.parse(JSON.stringify(m3Stat)); } };
+  window.__v292DfixMEM3 = { on: mem3On, prompt: mem3Prompt, settings: mem3Settings, filter: function(r, pw, bad){ return mem3Filter(r, pw, bad); }, badGrams: function(sb, ref){ return m3BadGrams(sb, ref); }, stats: function(){ return JSON.parse(JSON.stringify(m3Stat)); } };
 
   function buildPrompt(prevSummary, prevWorldInfo, prevEvents, newTurns, startIdx){
     var newText = newTurns.map(function(t, i){
@@ -240,6 +311,7 @@
       var s2 = getState();
       if (!s2 || !s2.scene || (s2.scene.loc || null) !== startLoc){ try { console.log(TAG, 'story changed during summarize — discarded (no cross-slot write)'); } catch(_){} return; }
       if (slotSfx() !== startSfx){ try { console.log(TAG, 'active slot changed during summarize — discarded'); } catch(_){} return; }
+      if (m3Ctx){ var m3c = m3Ctx; m3Ctx = null; try { if (!m3c.bad) throw new Error('no grams'); result = mem3Filter(result, prevWI, m3c.bad); m3Fail[m3c.sfx] = 0; } catch(eF){ m3Fail[m3c.sfx] = (m3Fail[m3c.sfx] || 0) + 1; m3Stat.filterErr++; m3Stat.discarded++; try { console.log(TAG, 'MEM3 r8: settings check failed — this rebuild is not saved'); } catch(_){} return; } }   /* ★MEM3 r8 (2): MEM3On かつ設定の要点を渡した回だけ */
       if (!_lmCanSave()){ try { console.log(TAG, 'rebuild OK but save blocked (stale epoch)'); } catch(_){} }
       if (result.summary) saveSummary(result.summary);
       if (result.worldinfo && result.worldinfo.length) saveWorldInfo(result.worldinfo);

@@ -103,8 +103,21 @@
   var lastParts = null;
   var RULE3B = '出来事は起きた順に並ぶ。同じ事柄の行が複数あるときは、番号の大きい（後の）行が今の値。';   /* ★MEM3 r4（r3 の出来事は起きたターンの値のまま＝古い値と新しい値の行が並びうる） */
   /* ★MEM3 r2: あらすじを limit 字に詰める。「確定：…未定：…」の形なら、先に「未定：」の部を削り、「確定：」の部を残す */
+  /* ★MEM3 r6/r7 (c): 「確定：…経過：…未定：…」の形で枠を超えるとき、確定は削らず、残りを経過と未定で分ける（未定に最低 120 字か全文。経過から詰める）。
+     確定だけで枠を超えるときは r5 と同じ詰め方（未定・経過は入らない）。r6 は確定も削って未定の枠を作っていたが、確定（長く有効な事実）を優先する（r7・README）。 */
+  var M3B_PEND_MIN = 120;
+  function trimSum3(sum, limit){
+    var a = sum.indexOf('確定：'), b = sum.indexOf('経過：'), u = sum.indexOf('未定：');
+    if (!(a === 0 && b > a && u > b)) return null;
+    var fx = sum.slice(a, b).replace(/[\s、]+$/, ''), pr = sum.slice(b, u).replace(/[\s、]+$/, ''), pd = sum.slice(u).replace(/[\s、]+$/, '');
+    var rem = limit - fx.length - 2; if (rem < 12) return null;
+    var pdA = Math.min(pd.length, Math.max(Math.min(M3B_PEND_MIN, rem), rem - pr.length - 1)), prA = rem - pdA - 1;
+    var parts = [fx]; if (prA >= 16) parts.push(prA >= pr.length ? pr : trimPlain(pr, prA)); parts.push(pdA >= pd.length ? pd : trimPlain(pd, pdA));
+    var t = parts.join(' '); return t.length > limit ? t.slice(0, limit) : t;
+  }
   function trimSum(sum, limit){
     if (sum.length <= limit) return sum;
+    var t3 = trimSum3(sum, limit); if (t3 != null) return t3;   /* ★MEM3 r6/r7 (c) */
     var u = sum.indexOf('未定：');
     if (u > 0){ var fixed = sum.slice(0, u).replace(/[\s、]+$/, ''); var rest = sum.slice(u); if (fixed.length + 1 <= limit){ var room = limit - fixed.length - 1; return room >= 12 ? (fixed + ' ' + trimPlain(rest, room)) : fixed; } sum = fixed; }
     return trimPlain(sum, limit);
@@ -133,7 +146,7 @@
     var evTxt = pick.length ? head + pick.map(function(e){ return e.line; }).join('') : '';
     var text = [sumTxt, pt, evTxt].filter(Boolean).join('\n'); st.a.m3b = (st.a.m3b || 0) + 1;
     if (text.length > MAX) text = text.slice(0, MAX);
-    lastParts = { sum: { chars: sumTxt.length, kept: sumTxt ? (/未定：/.test(sumTxt) ? 'both' : (/確定：/.test(sumTxt) ? 'fixedOnly' : 'plain')) : 'none' }, people: { chars: pt.length, rows: pt ? rows.length : 0 }, events: { chars: evTxt.length, count: pick.length, available: evs.length }, total: text.length };
+    lastParts = { sum: { chars: sumTxt.length, kept: sumTxt ? (/未定：/.test(sumTxt) ? 'both' : (/確定：/.test(sumTxt) ? 'fixedOnly' : 'plain')) : 'none', pendingChars: sumTxt.indexOf('未定：') >= 0 ? sumTxt.length - sumTxt.indexOf('未定：') : 0 }, people: { chars: pt.length, rows: pt ? rows.length : 0 }, events: { chars: evTxt.length, count: pick.length, available: evs.length }, total: text.length };
     return text;
   }
   /* 本文（最大 800 字）: 新しい出来事を優先して入れ、残りにあらすじ */

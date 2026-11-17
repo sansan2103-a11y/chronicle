@@ -223,6 +223,7 @@
 - OPT1（GitHub `3ec9d68`・既定 ON・kill `v292DfixLEAK1OptOff='1'`・適用の鍵 ApplyOff／Off にも従う）：本文の末尾にある、プレイヤーへ選択を促すまとまりを取り除く。形は 2 つだけ（括弧の見出し行＋箇条書き 2 行以上で本文が終わる／箇条書き 2 行以上＋最後の行が「あなた・プレイヤー …どうする？」で終わる）。途中にあるもの・台詞の中・物語の行が混ざるものは取り除かない。
 - jp_meta（影だけ）：本文の最後の段落が読み手への依頼と書き手視点の語を両方含むときに数えるだけ。取り除かない。
 - 止める：`v292DfixLEAK1ApplyOff='1'`（適用だけ）／`v292DfixLEAK1Off='1'`（影も含め全部）。旧 `v292DfixLEAK1Apply` は読まない。
+- LEAK3（11-17・GPT #127-VV ■4・**既定 OFF**＝数えるだけ。On `v292DfixLEAK3On='1'`・kill `v292DfixLEAK3Off='1'`。`v292DfixLEAK3-internal-lines.js`・LEAK1.gate の入口から呼ぶ・LEAK1 の kill とは独立）：r3（再レビューを受けて絞った）: (i) fix459 の登録の見出しに、その見出し自身の sys の文（先頭 10 字）が同じ行か次の行で続く塊（sys でしか使わない固有の見出しだけの行は、この塊の中だけ）、(ii) 行頭の開き引用符が欠けた「鍵": "値」の断片で、鍵がコードの内部 JSON の鍵（fix135・fix335・fix823）であり、前後 2 行以内に別の内部の印（消す見出しの塊・別の鍵の断片）がある行、を取り除く。固有の見出しの単独の行・物語にも出る見出しだけの行・一致しない見出し＋文・一致しない続きの行・単独の鍵の断片・引用符のそろった JSON の行・推定の鍵（unresolved 等 5 個）・括弧のト書きは数えるだけ。取り除くと本文が空になる回は何もしない。観測 `window.__v292DfixLEAK3.stats()`／`.log()`。
 - 注意：index.html の script タグのコメントは「適用 既定 OFF」のまま（コードの既定は ON）。保存・sys・送信は変えない。
 
 #### NUM1 — 序盤のプレイヤー入力の数・約束を earlierFacts に残す（11-13・GitHub `d24bbd5`・r2 `7338a53`・`v292DfixNUM1-input-ledger.js`）
@@ -478,6 +479,7 @@
 #### MEM3 — 長期記憶の作り直しで事実が落ちる問題（2026-11-17・Local 試作・未出荷・GPT 裁定待ち）
 - MEM3（`v292DfixMEM3On='1'`・kill `v292DfixMEM3Off='1'`・既定 OFF）：fix135 の作り直しの指示のうち、summary の欄の説明・events の欄の説明・Rules の 1 文だけを書き換える（「確定：」「未定：」の 2 部・確定事実は変更が本文に出るまで残す・未定は未定のまま・古い値は新しい値に書き換え・主人公の気持ちや態度を決めない・summary は 500 字まで）。worldinfo の指示は変えない。OFF は送信バイト同一。`__v292DfixMEM3.stats()`。
 - r3・r4（2026-11-17・AB3 の A3 4 本を受けて）：MEM3 の指示で「確定：」を変わりにくい事実だけの欄にし、筋は「経過：」、瞬間の状態（時計の時刻・残り時間・立ち位置・迷い・やりかけ）はどの欄の対象でもない形にした（書式の説明・禁止文の行は足さない）。出来事は起きたターンの値のままで、変更は新しい行・更新はあらすじだけ。r5：本文で確定していない主人公の心情は確定として記録しない（推測が要るなら未定）・同じ事柄を確定と未定の両方に書かない（迷えば未定）。MEM3b ON のとき、覚え書きの rule に「出来事は起きた順。同じ事柄は番号の大きい（後の）行が今の値」を足す。r3 の語の規則で文を外す案（MEM3c）は、レビューで誤って外す 10／22 のため入れていない。
+- r6・r7（GPT #127-VV 2 と r6 のレビュー）：作り直しの入力に、この物語の設定の要点（scene.lore 200 字・主人公と NPC の説明 1 人 80 字・合計 500 字まで・読むだけ）を足す。秘密を渡さない守り：Vault で隠した物語・物語 id が分からないときは渡さない／lore と人物の説明は LORE1 の splitGm で GM の節を外す（LORE1 が無い・GM の印が残るときは渡さない）／「実は…」の文・おまかせの「隠された理」の文を外す。r8：秘密の印（裏設定・秘密・真相・本当は・正体・隠して・実は・ネタバレ）を含む文も外し、「設定の中身を書き写さない」を全部の欄に掛ける。r9：渡すのは lore の公開の部分だけ（人物の説明は渡さない）。r10：渡すのは LORE1 が本文生成の AI へ lore を送っている（mode()='on'）ときだけ（影・OFF・無い・判定できないときは渡さない）。照合の正規化で句読点・括弧・引用符も除く。出力に本文に無い lore の 6 字の並びが出たら、worldinfo の説明の文と summary の「確定」の文だけを落とす（events・経過・未定は落とさず数える。1 回で 3 以上落としたら警告を数える）。照合の失敗はその回を保存せず、2 回続いたらその物語はそのページの間 設定を渡さない。本文が設定と食い違う点は確定に入れず、本文側の記述だけを未定に置く（設定の中身は書き写さない）。あいまいな発言は未定。summary の説明は整理して短くした。MEM3b の覚え書きは、確定を削らず、経過と未定の中で詰める（未定に最低 120 字）。`__v292DfixMEM3.stats()` に settingsChars・lastAdded・lastSettings・lastSettingsWhy。
 - MEM3b（`v292DfixMEM3bOn='1'`・kill `v292DfixMEM3bOff='1'`・既定 OFF・MEM2 腕 A が ON のときだけ）：MEM2 の覚え書きを「あらすじ → 人物の表（読むだけ・6 行まで）→ 出来事」の順に組む（r2：出来事を最低 200 字ぶん先に確保し、あらすじは「確定：」の部を優先して詰める。内訳は `__v292DfixMEM2.last().a.parts`）。保存は変えない。
 
 #### MEM2 — 長期記憶の配線（2026-11-17・未出荷・独立レビュー待ち・GPT #127-VR 1）
@@ -1099,8 +1101,8 @@
 | 61 | fix659 | `v292Dfix659-fork-choice.js` | i61 | `d6e39622` | v292Dfix680 | 保存・同期 | `v292Dfix659Off` |
 | 62 | features | `features.js` | i62 | `6d812ce8` | 20261111-xss1 | 本体（ゲーム中核） | `v292Dfix190Off` `v292Dfix205gOff` `v292Dfix748SaveRefuseOff` `v292Dfix834Off` `v292DfixSAVEUIOff` `v292DfixCLICHE2Off` `v292DfixDEDUPQ1Off` `v292DfixSTATE2Off` |
 | 63 | fixP0 | `v292DfixP0-scenario-blocker.js` | i63 | `7c6d79f0` | v292Dfix680 | シナリオ・ホーム |  |
-| 64 | fix135 | `v292Dfix135-longmem.js` | i64 | `1ac16ec3` | 20261117-mem3r5 | 記憶 | `v292Dfix894Off` `v292DfixMEM3On` `v292DfixMEM3Off` |
-| 64a | MEM2 | `v292DfixMEM2-longmem-wire.js` | fix135 の直後 | `f4ed6ee4` | 20261117-mem3r5 | 記憶 | `v292DfixMEM2aOn` `v292DfixMEM2aOff` `v292DfixMEM2cOn` `v292DfixMEM2cOff` `v292DfixMEM3bOn` `v292DfixMEM3bOff` |
+| 64 | fix135 | `v292Dfix135-longmem.js` | i64 | `111deb0f` | 20261117-mem3r10 | 記憶 | `v292Dfix894Off` `v292DfixMEM3On` `v292DfixMEM3Off` |
+| 64a | MEM2 | `v292DfixMEM2-longmem-wire.js` | fix135 の直後 | `36c182cd` | 20261117-mem3r10 | 記憶 | `v292DfixMEM2aOn` `v292DfixMEM2aOff` `v292DfixMEM2cOn` `v292DfixMEM2cOff` `v292DfixMEM3bOn` `v292DfixMEM3bOff` |
 | 65 | fix138 | `v292Dfix138-continue.js` | i65 | `db8f5e85` | 20260929-ac18 | 記憶 | `v292Drp1Off` |
 | 66 | fix145 | `v292Dfix145-charlist.js` | i66 | `e7b06fd1` | 20261101-bundle79-npres73d4b-on78c | NPC・キャラ状態 | `v292Dfix410Off` `v292Dfix487ListOff` `v292Dfix529Off` `v292Dfix773Off` |
 | 67 | fix777 | `v292Dfix777-icon-lightbox.js` | i67 | `19adb4d6` | 20261021-laneE-a | アイコン・画像 | `v292Dfix777Off` `v292DfixLE2Off` |
@@ -1452,7 +1454,8 @@
 | 401 | fixSEVDRV | `v292DfixSEVDRV-state-judge.js` | index（SEVERE1・DRIVE1・EX192・`ea768d0`） | `a51b8231` | 20261113-sev3 | NPC・キャラ状態 | `v292DfixSEVERE1On` `v292DfixDRIVE1On` `v292DfixEX192On`（どれも既定 OFF） |
 | 402 | fixCAST1 | `v292DfixCAST1-opening-cast.js` | index（CAST1・`ea768d0`） | `e66d817b` | 20261113-cast1 | 文章品質・プロンプト | `v292DfixCAST1On`（既定 OFF） `v292DfixCAST1Off` |
 | 403 | fixCALL1 | `v292DfixCALL1-confirmed-speech.js` | index（CALL1・SPK3・`ea768d0`） | `2afcbfc1` | 20261113-cast1 | 文章品質・プロンプト | `v292DfixCALL1On` `v292DfixSPK3On`（既定 OFF） |
-| 404 | fixLEAK1 | `v292DfixLEAK1-nonstory-lines.js` | index（LEAK1・`d24bbd5`〜`3ec9d68`） | `e6ece310` | 20261116-fear2 | 文章品質・プロンプト | `v292DfixLEAK1Off` `v292DfixLEAK1ApplyOff` `v292DfixLEAK1JkvOff` `v292DfixLEAK1OptOff`（適用は既定 ON） |
+| 404 | fixLEAK1 | `v292DfixLEAK1-nonstory-lines.js` | index（LEAK1・`d24bbd5`〜`3ec9d68`） | `2f503c00` | 20261117-leak3r3 | 文章品質・プロンプト | `v292DfixLEAK1Off` `v292DfixLEAK1ApplyOff` `v292DfixLEAK1JkvOff` `v292DfixLEAK1OptOff`（適用は既定 ON） |
+| 417 | fixLEAK3 | `v292DfixLEAK3-internal-lines.js` | index：LEAK1 の直後（LEAK3） | `e6691dd7` | 20261117-leak3r3 | 文章品質・プロンプト | `v292DfixLEAK3On`（既定 OFF） `v292DfixLEAK3Off` |
 | 405 | fixNUM1 | `v292DfixNUM1-input-ledger.js` | index（NUM1・`d24bbd5`・`7338a53`） | `62478e1a` | 20261113-num2 | 文章品質・プロンプト | `v292DfixNUM1On`（既定 OFF） `v292DfixNUM1Off` |
 | 406 | fixERRNOTE1 | `v292DfixERRNOTE1-send-error-note.js` | index（ERRNOTE1・`4f0f2b1`・`248cc36`） | `bc96a1c8` | retry2-a | UI・画面 | `v292DfixERRNOTE1Off` |
 | 407 | fixHEROVOICE1 | `v292DfixHEROVOICE1-hero-voice.js` | index：ACTOR1 の直前（HEROVOICE1・`747a505`・`85b3be2`） | `e6a8736f` | 20261114-hv1b | 文章品質・プロンプト | `v292DfixHEROVOICE1Off` `v292DfixHEROVOICE1Force` |
@@ -1997,6 +2000,7 @@
 - `v292DfixBILL1cOff` — fixSTARTICON, fixMIDICON, av2-data（BILL1c・既定 ON の kill。Worker v46.51 の PROVIDER_AUTH_FAILED／PROVIDER_BALANCE_EXHAUSTED を受けたら自動の絵の要求を 10 分止める〔メモリだけ・読み直しで解ける・手動の生成は止めない〕。BILL1c2＝知らせは「閉じる」まで残る帯を 1 回だけ・文言は端末が持ち残高不足と断定しない。GPT #127-VB 3・#127-VF 2）
 - `v292DfixMXSHORT1On` / `v292DfixMXSHORT1Off` — （撤去・コードは読まない。MXSHORT1 は実験 CLOSED・端末側を撤去（GPT #127-VJ 1）。Worker 側の short_tail／CHR_MXSHORT1_ON は別便）
 - `v292DfixLEAK1TagxOff` — fixLEAK1（TAGX1・既定 ON の kill。行頭が react／state＋who=＋別の欄名= の内部書式の行だけを本文から除く。GPT #127-VB 2(3)）
+- `v292DfixLEAK3On` / `v292DfixLEAK3Off` — fixLEAK3（On で sys 見出しの復唱・内部 JSON の断片の行を取り除く。既定は数えるだけ。Off は数えることも止める）
 - `v292DfixALIAS1On` / `v292DfixALIAS1Off` / `v292DfixALIAS1_v1` — （撤去・コードは読まない。ALIAS1 は実験 CLOSED・撤去（GPT #127-VJ 1）。端末に残る `v292DfixALIAS1_v1` の記録は読む部品が無い孤児の鍵。消す処理は入れていない）
 - `v292DfixPACE1aOn` / `v292DfixPACE1bOn` / `v292DfixPACE1Off` — （撤去・コードは読まない。PACE1a/b は不採用・撤去（GPT #127-VB 1））
 - `v292DfixTMPICON1On` / `v292DfixTMPICON1Off` — av2-portrait（TMPICON1・既定 OFF。絵が無い未登録の話者に、費用 0 の仮アイコン〔顔の無い胸像・呼び名から決まる色・頭の 1 字・「仮」の印〕を表示だけで付ける。生成・Worker への要求・保存なし。外見や性別を設定へ書かない。正式な絵ができたら自動で置き換わる。GPT #127-VH 2）

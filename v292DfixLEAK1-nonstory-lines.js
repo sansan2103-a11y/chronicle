@@ -191,6 +191,8 @@
 
   // gate(narr, result, plan): 保存・表示の直前（最終境界）。返り値は本文（影=そのまま／適用=明らかな行を除いたもの）。
   function gate(narr, result, plan){
+    /* ★LEAK3（GPT #127-VV ■4・既定 OFF＝影だけ）: sys 見出しの復唱・内部 JSON の断片の行を、LEAK1 の判定より前に除く。LEAK1 の kill とは独立（kill: v292DfixLEAK3Off='1'） */
+    try { var L3 = (typeof window !== 'undefined') ? window.__v292DfixLEAK3 : null; if (L3 && typeof L3.gate === 'function' && typeof narr === 'string'){ var n3 = L3.gate(narr, plan); if (typeof n3 === 'string') narr = n3; } } catch(eL3){}
     if (!on() || typeof narr !== 'string') return narr;
     try {
       var info = (result && result.__leak1) || null, ap = applyOn();
