@@ -494,6 +494,7 @@
         .then(function (why) { if (why == null) { se.zeroTurnProven = true; return null; } return 'zero-turn-unproven'; }, function () { return 'zero-turn-unproven'; });
     }
     if (!need) return Promise.resolve(null);
+    if (se && se.zeroTurn === true && need.zt1 !== true && env.zt1Dirty !== true) return Promise.resolve('zero-turn-dirty');   /* ★ZT1d（SMOKE33）: 0 ターンの墓標（ZT1 が開く経路）では、印が DIRTY の物語は v292DfixZT1DirtyOn のときだけ。STUCK1（staleDirtyLocal）・FREE2 の証明（free2Proof）から来ても同じ */
     if (need.zt1 === true || (se && se.zeroTurn === true)) { var zx1 = zt1Chk(id, env); if (zx1) return Promise.resolve(zx1); }   /* ★ZT1b ／ ★ZT1c */
     if (!HEX64.test(String(se && se.serverHash || ''))) return Promise.resolve('unsynced-unproven');
     if (need.free2) {   /* ★FREE2: サーバーの墓標が証明の時のまま（hash・rev）で、いまの端末の全体がその hash と同じ。title はサーバーの墓標のもの */
